@@ -623,21 +623,16 @@
     gates.push({ key: 'measured-edge', hard: false, pass: ed, why: edWhy });
 
     var fm = cand.formation;
-    if (!fm){
-      gates.push({ key: 'formation', hard: false, pass: null,
-        why: 'formation not run on this candidate — UNCHECKED' });
-    } else if (fm.ok === false){
-      gates.push({ key: 'formation', hard: true, pass: false,
-        why: String(fm.reason || 'live formation refused') });
-    } else if (fm.ok === true){
-      gates.push({ key: 'formation', hard: false, info: true, pass: true,
-        why: 'keep-levels formation'
-          + (isFinite(fin(cand.formationScore)) ? (' · score ' + fin(cand.formationScore)) : '')
-          + (isFinite(fin(cand.fillProb)) ? (' · fill ' + fin(cand.fillProb) + '%') : '') });
-    } else {
-      gates.push({ key: 'formation', hard: false, pass: null,
-        why: String((fm && fm.reason) || 'formation module UNCHECKED') });
-    }
+    var opFmPass = !fm ? null : (fm.ok === false ? false : (fm.ok === true ? true : null));
+    var opFmWhy;
+    if (!fm) opFmWhy = 'formation not run on this candidate — UNCHECKED';
+    else if (fm.ok === false) opFmWhy = String(fm.reason || 'live formation refused');
+    else if (fm.ok === true){
+      opFmWhy = 'keep-levels formation'
+        + (isFinite(fin(cand.formationScore)) ? (' · score ' + fin(cand.formationScore)) : '')
+        + (isFinite(fin(cand.fillProb)) ? (' · fill ' + fin(cand.fillProb) + '%') : '');
+    } else opFmWhy = String((fm && fm.reason) || 'formation module UNCHECKED');
+    gates.push({ key: 'formation', hard: opFmPass === false, info: opFmPass === true, pass: opFmPass, why: opFmWhy });
 
     return gates;
   }

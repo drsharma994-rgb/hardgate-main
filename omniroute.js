@@ -6934,23 +6934,18 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     /* House formation (keepLevels) — live context may refuse. Named levels
        stay the setup; this gate reports the enricher, it does not reprice. */
     var fmEx = extra && extra.formation;
-    if (!fmEx){
-      gates.push({ key: 'formation', hard: false, pass: null,
-        why: 'formation not run on this candidate — UNCHECKED' });
-    } else if (fmEx.ok === false){
-      gates.push({ key: 'formation', hard: true, pass: false,
-        why: String(fmEx.reason || 'live formation refused') });
-    } else if (fmEx.ok === true){
+    var fmPass = !fmEx ? null : (fmEx.ok === false ? false : (fmEx.ok === true ? true : null));
+    var fmWhy;
+    if (!fmEx) fmWhy = 'formation not run on this candidate — UNCHECKED';
+    else if (fmEx.ok === false) fmWhy = String(fmEx.reason || 'live formation refused');
+    else if (fmEx.ok === true){
       var sc = extra.plan && extra.plan.formationScore;
-      gates.push({ key: 'formation', hard: false, info: true, pass: true,
-        why: 'keep-levels formation'
-          + (isFinite(fin(sc)) ? (' · score ' + fin(sc)) : '')
-          + ((extra.plan && isFinite(fin(extra.plan.fillProb)))
-              ? (' · fill ' + fin(extra.plan.fillProb) + '%') : '') });
-    } else {
-      gates.push({ key: 'formation', hard: false, pass: null,
-        why: String((fmEx && fmEx.reason) || 'formation module UNCHECKED') });
-    }
+      fmWhy = 'keep-levels formation'
+        + (isFinite(fin(sc)) ? (' · score ' + fin(sc)) : '')
+        + ((extra.plan && isFinite(fin(extra.plan.fillProb)))
+            ? (' · fill ' + fin(extra.plan.fillProb) + '%') : '');
+    } else fmWhy = String((fmEx && fmEx.reason) || 'formation module UNCHECKED');
+    gates.push({ key: 'formation', hard: fmPass === false, info: fmPass === true, pass: fmPass, why: fmWhy });
 
     return gates;
   }
