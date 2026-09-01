@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v543',
-  pack: 'OMNIPRESENT keep-last + freshness parity; OMNIGOLD auto-scan + remount restore',
-  built: '2026-09-01T18:00:00Z',
-  note: 'OMNIPRESENT no longer blanks #opCards on rescan (lastCardsHtml + opKeepLast), adds OP_FRESH_MS refresh skip, regime/news warmup, remount restore, #opWarn, and fixes mount copy (value-area edges not volume POC). HG_TAB_AUTO_SCAN wires omnipresent and omnigold through refresh() like omniroute. OMNIGOLD adds OG_FRESH_MS, tab-open auto-scan, remount restore, and #ogWarn for failed-rescan messaging.'
+  version: 'hg-v544',
+  pack: 'stale-tab auto-reload + cache-busted build stamp',
+  built: '2026-09-01T15:30:00Z',
+  note: 'build-stamp.js now ships with ?v=HG_CACHE so HTTP cache cannot pin an old version badge. hgBuildApplyFreshness auto-reloads once when the server is ahead (or a waiting SW is ready), re-checks on tab visibility, and paints STALE on hgVerBadge + chipBuild. SW registration calls reg.update() and reloads on controllerchange.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
@@ -132,19 +132,79 @@ function hgRenderBuildChip(el, res){
   }catch(e){ return null; }
 }
 
+function hgRenderVerBadge(res){
+  try{
+    var node = G.document && G.document.getElementById('hgVerBadge');
+    if (!node) return null;
+    var v = String(HG_BUILD.version || '').replace(/^hg-/, '');
+    if (!v){ node.style.display = 'none'; return null; }
+    if (res && res.state === 'stale'){
+      var d = hgBuildDistance(res.loaded, res.live);
+      var behind = (d != null && d > 0) ? ' (' + d + ' behind)' : '';
+      node.textContent = v + ' · STALE' + behind;
+      node.className = 'verbadge verbadge-stale';
+      node.title = (res.reason || 'stale build') + ' — reloading…';
+      return { stale: true };
+    }
+    node.textContent = v;
+    node.className = 'verbadge';
+    var b = HG_BUILD;
+    node.title = HG_BUILD.version + (b.pack ? (' — ' + b.pack) : '') + (b.built ? (' · built ' + b.built) : '');
+    return { stale: false };
+  }catch(e){ return null; }
+}
+
+/** Reload once when the server is ahead. storage + reloadFn injectable for tests. */
+function hgBuildMaybeReload(res, storage, reloadFn){
+  try{
+    if (!res || res.state !== 'stale' || !res.live) return false;
+    var store = storage;
+    if (!store && G.sessionStorage) store = G.sessionStorage;
+    if (!store || typeof store.getItem !== 'function') return false;
+    var key = 'hg_build_reload_' + String(res.live);
+    if (store.getItem(key)) return false;
+    var reload = reloadFn;
+    if (!reload && G.location && typeof G.location.reload === 'function') reload = G.location.reload.bind(G.location);
+    if (typeof reload !== 'function') return false;
+    store.setItem(key, '1');
+    reload();
+    return true;
+  }catch(e){}
+  return false;
+}
+
+function hgBuildApplyFreshness(res){
+  try{
+    if (!res) return res;
+    hgRenderBuildChip(null, res);
+    hgRenderVerBadge(res);
+    G.HG_BUILD_FRESHNESS = res;
+    hgBuildMaybeReload(res);
+    return res;
+  }catch(e){ return res; }
+}
+
 function hgBuildInit(){
   try{
     hgRenderBuildChip(null, null);
+    hgRenderVerBadge(null);
     hgBuildFreshness().then(function(res){
-      hgBuildSwWaiting().then(function(waiting){
+      return hgBuildSwWaiting().then(function(waiting){
         if (waiting && res.state === 'fresh'){
           res = { state: 'stale', loaded: res.loaded, live: res.live,
                   reason: 'a newer build is downloaded and waiting' };
         }
-        hgRenderBuildChip(null, res);
-        G.HG_BUILD_FRESHNESS = res;
+        return hgBuildApplyFreshness(res);
       });
     });
+    if (G.document && typeof G.document.addEventListener === 'function'){
+      G.document.addEventListener('visibilitychange', function(){
+        try{
+          if (!G.document || G.document.visibilityState !== 'visible') return;
+          hgBuildFreshness().then(hgBuildApplyFreshness);
+        }catch(e){}
+      });
+    }
   }catch(e){}
 }
 
@@ -157,6 +217,9 @@ G.hgBuildChipState = hgBuildChipState;
 G.hgBuildFreshness = hgBuildFreshness;
 G.hgBuildSwWaiting = hgBuildSwWaiting;
 G.hgRenderBuildChip = hgRenderBuildChip;
+G.hgRenderVerBadge = hgRenderVerBadge;
+G.hgBuildMaybeReload = hgBuildMaybeReload;
+G.hgBuildApplyFreshness = hgBuildApplyFreshness;
 G.hgBuildInit = hgBuildInit;
 
 try{

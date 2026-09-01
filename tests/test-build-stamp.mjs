@@ -70,6 +70,21 @@ const unk = G.hgBuildChipState({ state: 'unknown', reason: 'network failed' }, {
 eq(unk.cls, 'warn', 'unknown is warn, not bad — offline must not scream STALE');
 ok(unk.text.indexOf('STALE') < 0, 'unknown chip never claims STALE');
 
+/* ---- stale badge + one-shot reload ---- */
+const badgeStale = G.hgBuildChipState({ state: 'stale', loaded: 'hg-v542', live: 'hg-v544', reason: 'r' },
+  { version: 'hg-v542', pack: 'p' });
+ok(badgeStale.text.indexOf('STALE') >= 0 && badgeStale.text.indexOf('2 behind') >= 0,
+  'stale chip counts builds behind');
+
+const store = { data: {}, getItem(k){ return this.data[k] || null; }, setItem(k, v){ this.data[k] = String(v); } };
+let reloaded = false;
+ok(G.hgBuildMaybeReload({ state: 'stale', live: 'hg-v544' }, store, function(){ reloaded = true; }) === true,
+  'first stale -> reload scheduled');
+ok(reloaded, 'reload fn was called');
+ok(store.data['hg_build_reload_hg-v544'] === '1', 'reload key is set');
+ok(G.hgBuildMaybeReload({ state: 'stale', live: 'hg-v544' }, store, function(){ reloaded = true; }) === false,
+  'second call does not loop');
+
 /* ---- freshness over an injected fetch ---- */
 const okRes = (body) => Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(body) });
 
@@ -105,7 +120,9 @@ eq(swVer, G.HG_BUILD.version,
 
 /* ---- wiring: the file must actually be loaded and precached ---- */
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-ok(html.indexOf('<script src="build-stamp.js"></script>') >= 0, 'build-stamp.js has a script tag');
+ok(html.indexOf('build-stamp.js?v=') >= 0, 'build-stamp.js is cache-busted in index.html');
+ok(new RegExp('build-stamp\\.js\\?v=' + G.HG_BUILD.version.replace('hg-v', '')).test(html),
+  'build-stamp.js ?v= matches HG_BUILD version tail');
 ok(html.indexOf('id="chipBuild"') >= 0, 'header has the build chip element');
 ok(sw.indexOf("'./build-stamp.js'") >= 0, 'build-stamp.js is in the sw precache list');
 /* it must load before anything that might read HG_BUILD */
