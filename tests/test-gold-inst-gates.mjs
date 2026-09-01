@@ -151,6 +151,100 @@ console.log('\n== inst filter: sweep without confirmation is rejected; OB trap r
      'thin-volume displacement OB is discarded (' + ((trapOb && trapOb.reason) || '') + ')');
 }
 
+console.log('\n== news-gate: −30 / +15 on CPI NFP FOMC GDP only ==');
+{
+  const W = boot();
+  ok(typeof W.hgGoldNewsIsTier1 === 'function', 'hgGoldNewsIsTier1 exported');
+  ok(typeof W.hgGoldNewsGate === 'function', 'hgGoldNewsGate exported');
+  ok(W.hgGoldNewsIsTier1('US CPI') && W.hgGoldNewsIsTier1('Non-Farm Payrolls')
+      && W.hgGoldNewsIsTier1('FOMC Rate Decision') && W.hgGoldNewsIsTier1('US GDP'),
+     'CPI / NFP / FOMC / GDP are tier-1');
+  ok(!W.hgGoldNewsIsTier1('US Core PCE') && !W.hgGoldNewsIsTier1('ISM Manufacturing'),
+     'Core PCE / ISM are not tier-1 hard locks');
+
+  const now = Date.UTC(2024, 0, 16, 14, 0, 0);
+  const ev = (title, offsetMin) => ({
+    loaded: true,
+    events: [{ title: title, impact: 'high', t: Math.floor((now + offsetMin * 60000) / 1000) }]
+  });
+  const pre = W.hgGoldNewsGate(ev('US CPI', 20), now);
+  ok(pre.lock === true && /NEWS GATE/i.test(pre.reason),
+     'CPI 20 min before release locks (' + pre.reason + ')');
+  const after10 = W.hgGoldNewsGate(ev('US NFP', -10), now);
+  ok(after10.lock === true, 'NFP 10 min after release still locks');
+  const after20 = W.hgGoldNewsGate(ev('US CPI', -20), now);
+  ok(after20.lock === false, 'CPI 20 min after release unlocks');
+  const pce = W.hgGoldNewsGate(ev('US Core PCE', 5), now);
+  ok(pce.lock === false, 'non-tier-1 high-impact does not hard-lock');
+  const miss = W.hgGoldNewsGate(null, now);
+  ok(miss.lock === false && miss.unchecked === true, 'missing news feed fail-open');
+}
+
+console.log('\n== spread lock: >250 points / 2.5 pips ($0.25) kills the entry ==');
+{
+  const W = boot();
+  ok(typeof W.hgGoldSpreadLock === 'function', 'hgGoldSpreadLock exported');
+  const wide = W.hgGoldSpreadLock({ bid: 2400, ask: 2400.30 });
+  ok(wide.lock === true && /SPREAD LOCK/i.test(wide.reason),
+     '0.30 USD spread locks (' + wide.reason + ')');
+  const tight = W.hgGoldSpreadLock({ bid: 2400, ask: 2400.10 });
+  ok(tight.lock === false, '0.10 USD spread is allowed');
+  const l2 = W.hgGoldSpreadLock({ l2OrderBook: { bids: [[2400, 2]], asks: [[2400.40, 2]] } });
+  ok(l2.lock === true, 'L2 ask-bid > 0.25 locks');
+  const miss = W.hgGoldSpreadLock({});
+  ok(miss.lock === false && miss.unchecked === true, 'missing spread fail-open');
+
+  const rows = bars(40, 2400, 900, 2);
+  const sprDrop = W.hgGoldInstFilter(
+    { stratKey: 'vwap', dir: 'long', id: 'vwap|long|2400', strategy: 'VWAP', stamps: [], gateNotes: [] },
+    { rows: rows, nowMs: Date.UTC(2024, 0, 16, 14, 0, 0), scalp: true, bid: 2400, ask: 2400.28 }
+  );
+  ok(sprDrop && sprDrop.dropped === true && /SPREAD LOCK/i.test(sprDrop.reason),
+     'inst filter drops on a wide quote regardless of setup strength');
+}
+
+console.log('\n== MTF matrix: scalp longs need H4+Daily bull; conflict locks scalp ==');
+{
+  const W = boot();
+  ok(typeof W.hgGoldMtfBias === 'function', 'hgGoldMtfBias exported');
+  ok(typeof W.hgGoldMtfMatrix === 'function', 'hgGoldMtfMatrix exported');
+  const bull = emaRows(80, 2000, 1.2, 14400);
+  const bear = emaRows(80, 2800, -1.2, 14400);
+  const both = W.hgGoldMtfMatrix({ rows4h: bull, rows1d: bull });
+  ok(both.h4.bull && both.d1.bull && both.scalpLongOk === true && both.conflict === false,
+     'both HTF bull → scalp longs allowed');
+  const conflict = W.hgGoldMtfMatrix({ rows4h: bear, rows1d: bull });
+  ok(conflict.conflict === true && conflict.scalpLocked === true && conflict.swingOnly === true
+      && conflict.scalpLongOk === false && conflict.scalpShortOk === false,
+     'Daily bull + H4 bear → scalp locked, Gold Wing only');
+  const miss = W.hgGoldMtfMatrix({ rows4h: bull });
+  ok(miss.unchecked === true && miss.scalpLongOk === true && miss.scalpLocked === false,
+     'missing Daily fail-open (do not lock the scalp desk)');
+
+  const rows = bars(40, 2400, 900, 3);
+  const longConflict = W.hgGoldInstFilter(
+    { stratKey: 'vwap', dir: 'long', id: 'vwap|long|2400', strategy: 'VWAP', stamps: [], gateNotes: [] },
+    { rows: rows, nowMs: Date.UTC(2024, 0, 16, 14, 0, 0), scalp: true, rows4h: bear, rows1d: bull }
+  );
+  ok(longConflict && longConflict.dropped === true && /MTF CONFLICT/i.test(longConflict.reason),
+     'scalp long is dropped on HTF conflict');
+  const swingKeep = W.hgGoldInstFilter(
+    { stratKey: 'macro', dir: 'long', id: 'macro|long|2400', strategy: 'MACRO', stamps: [], gateNotes: [] },
+    { rows: rows, nowMs: Date.UTC(2024, 0, 16, 14, 0, 0), scalp: false, hardReject: false,
+      rows4h: bear, rows1d: bull }
+  );
+  ok(swingKeep && !swingKeep.dropped,
+     'Gold Wing is not locked by an HTF conflict');
+  const newsDrop = W.hgGoldInstFilter(
+    { stratKey: 'macro', dir: 'long', id: 'macro|long|2400', strategy: 'MACRO', stamps: [], gateNotes: [] },
+    { rows: rows, nowMs: Date.UTC(2024, 0, 16, 14, 0, 0), scalp: false, hardReject: false,
+      news: { loaded: true, events: [{ title: 'US CPI', impact: 'high',
+        t: Math.floor(Date.UTC(2024, 0, 16, 14, 0, 0) / 1000) + 300 }] } }
+  );
+  ok(newsDrop && newsDrop.dropped === true && /NEWS GATE/i.test(newsDrop.reason),
+     'tier-1 news-gate pauses swing minting too');
+}
+
 console.log('\n== version + no guaranteed-win copy ==');
 {
   const src = read('goldind.js');

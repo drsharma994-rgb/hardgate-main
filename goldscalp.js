@@ -55,9 +55,11 @@ a small reason line — nothing is dropped silently):
      insufficient' reason line.
   4) CHOP — Kaufman ER(20) < 0.25 on 15m closes demotes mean-reversion
      retests (VWAP bounce, OB retest, FVG fill); breakout triggers exempt.
-  5) NEWS-WINDOW VETO — inside a high-impact ±30-min window NO new conviction
-     is issued ('NEWS WINDOW — no new entries' reason line); already-live
-     convictions keep running untouched.
+  5) NEWS-WINDOW VETO — tier-1 US prints (CPI / NFP / FOMC / GDP) lock new
+     convictions 30 min before and 15 min after the release ('NEWS GATE —
+     no new entries' reason line). Other high-impact events still fade the
+     grade via the ±30-min caution window. Already-live convictions keep
+     running untouched.
   6) V2 VOLUME TRIGGERS (goldind.js) — liquidity sweeps require a volume
      climax on the sweep bar; FVG fills require HVN structural support when
      the session volume profile has enough range (>=2.5×ATR). Rejected setups
@@ -70,6 +72,12 @@ a small reason line — nothing is dropped silently):
   9) MACRO CONVICTION LOCK — gold longs are killed when DXY and TNX are
      both bullish (close > EMA50 / RISING). Missing feeds fail-open. This
      kills the signal; it does not mint a booked conviction-lock.js record.
+ 10) SPREAD LOCK — live bid/ask wider than 250 points / 2.5 pips ($0.25)
+     locks the entry gate regardless of setup strength. Missing quotes fail-open.
+ 11) MTF CONFLUENCE — scalp longs require H4 and Daily both bullish
+     (price > EMA20 > EMA50). HTF conflict (Daily bull / H4 bear or the
+     reverse) locks the entire scalp desk and leaves Gold Wing open.
+     Missing H4 or Daily fail-open.
 
 Feeds (in preference order):
   1) window.getGoldCandles (macro.js) — XAUUSDT TradFi perp first, PAXGUSDT
@@ -117,7 +125,7 @@ full (deep-frozen, never throws, null before the first scan):
 var W = (typeof window !== 'undefined') ? window
       : (typeof globalThis !== 'undefined') ? globalThis : {};
 
-var KL_15M = 240, KL_1H = 200, KL_4H = 220;
+var KL_15M = 240, KL_1H = 200, KL_4H = 220, KL_1D = 260;
 
 /* ---------------- tiny helpers ---------------- */
 function esc(s){
@@ -1036,7 +1044,7 @@ function nearestArmed(armed, watchMeta){
    appended whenever it isn't itself the lead and watch data exists. */
 function whySilentText(o){
   var lead = null;
-  if (o.newsVeto) lead = 'high-impact news window ±30 min' + (o.newsVetoTitle ? ' — ' + o.newsVetoTitle : '')
+  if (o.newsVeto) lead = 'NEWS GATE — no new entries 30 min before / 15 min after CPI·NFP·FOMC·GDP' + (o.newsVetoTitle ? ' — ' + o.newsVetoTitle : '')
     + ': new convictions held, issuance resumes after the window';
   else if (o.feedsFailed) lead = 'feeds failed — no 15m klines from any source (macro chain + PAXGUSDT + Delta all quiet)';
   else if (o.kzWeight === 0) lead = 'outside every ICT killzone (' + (o.kzLabel || 'OFF-HOURS')
@@ -1088,7 +1096,7 @@ function paintGoldWeekendPanel(ui, rows, nowMs, bestCandidate){
 
 /* ---------------- data legs (each catch-isolated) ---------------- */
 async function fetchGoldKlines(){
-  var out = { rows15m: [], rows1h: [], rows4h: [], src: {}, mixed: false, source: null, xmSymbol: null };
+  var out = { rows15m: [], rows1h: [], rows4h: [], rows1d: [], src: {}, mixed: false, source: null, xmSymbol: null };
   var srcSet = function(tf, source, rowsKey, rows){
     if (typeof hgGoldSrcAssign === 'function'){ hgGoldSrcAssign(out, tf, source, rowsKey, rows); return; }
     if (!rows || !rows.length || !source) return;
@@ -1113,6 +1121,12 @@ async function fetchGoldKlines(){
         if (xc && xc.rows && xc.rows.length) srcSet('4h', xc.source || 'xm-xauusd', 'rows4h', xc.rows);
       }catch(eXm3){}
     }
+    if (!out.rows1d.length){
+      try{
+        var xd = await xgc('1d', KL_1D);
+        if (xd && xd.rows && xd.rows.length) srcSet('1d', xd.source || 'xm-xauusd', 'rows1d', xd.rows);
+      }catch(eXm4){}
+    }
   }
   var ggc = gfn('getGoldCandles');
   if (ggc){
@@ -1125,6 +1139,9 @@ async function fetchGoldKlines(){
     if (!out.rows4h.length){
       try{ var c = await ggc('4h', KL_4H);  if (c && c.rows && c.rows.length) srcSet('4h', c.source, 'rows4h', c.rows); }catch(e3){}
     }
+    if (!out.rows1d.length){
+      try{ var d = await ggc('1d', KL_1D);  if (d && d.rows && d.rows.length) srcSet('1d', d.source, 'rows1d', d.rows); }catch(e3d){}
+    }
   }
   if (!out.rows15m.length){
     var bk = gfn('binanceKlines');
@@ -1132,6 +1149,13 @@ async function fetchGoldKlines(){
       try{ var p = await bk('PAXGUSDT', '15m', KL_15M); if (p && p.length) srcSet('15m', 'binance-paxg', 'rows15m', p); }catch(e4){}
       try{ var q = await bk('PAXGUSDT', '1h', KL_1H);  if (q && q.length) srcSet('1h', 'binance-paxg', 'rows1h', q); }catch(e5){}
       try{ var z = await bk('PAXGUSDT', '4h', KL_4H);  if (z && z.length) srcSet('4h', 'binance-paxg', 'rows4h', z); }catch(e6){}
+      try{ var zd = await bk('PAXGUSDT', '1d', KL_1D); if (zd && zd.length) srcSet('1d', 'binance-paxg', 'rows1d', zd); }catch(e6d){}
+    }
+  }
+  if (!out.rows1d.length){
+    var bk1d = gfn('binanceKlines');
+    if (bk1d){
+      try{ var z1 = await bk1d('PAXGUSDT', '1d', KL_1D); if (z1 && z1.length) srcSet('1d', 'binance-paxg', 'rows1d', z1); }catch(e1d){}
     }
   }
   if (typeof hgGoldSrcFinalize === 'function') return hgGoldSrcFinalize(out, '15m');
@@ -1338,6 +1362,12 @@ async function runScan(ui, scanSt){
       if (W.__hgGoldL2Book) scalpBundle.l2OrderBook = W.__hgGoldL2Book;
     }
     if (gold && gold.rows1d && gold.rows1d.length) scalpBundle.dailyCandles = gold.rows1d;
+    if (typeof W !== 'undefined' && W && isFinite(W.__hgGoldSpreadUsd)) scalpBundle.spreadUsd = W.__hgGoldSpreadUsd;
+    if (typeof W !== 'undefined' && W && W.__hgGoldQuote){
+      if (isFinite(W.__hgGoldQuote.bid)) scalpBundle.bid = W.__hgGoldQuote.bid;
+      if (isFinite(W.__hgGoldQuote.ask)) scalpBundle.ask = W.__hgGoldQuote.ask;
+      if (isFinite(W.__hgGoldQuote.spreadUsd)) scalpBundle.spreadUsd = W.__hgGoldQuote.spreadUsd;
+    }
     if (gold.src && gold.src['15m']) scalpBundle.candleSource = gold.src['15m'];
     else if (gold.source) scalpBundle.candleSource = gold.source;
     if (gold.rows15m.length){
@@ -1519,15 +1549,21 @@ async function runScan(ui, scanSt){
       goldAlignLevelsToSpot(ranked, klineSpot, liveSpot);
     }
 
-    /* (5) NEWS-WINDOW VETO — inside a high-impact ±30-min window NO new
-       conviction is issued; already-live convictions keep running untouched */
+    /* (5) NEWS-GATE VETO — tier-1 US prints (CPI/NFP/FOMC/GDP) lock new
+       convictions 30 min before / 15 min after; already-live keep running */
     var newsVeto = false, newsVetoTitle = null;
+    var ngFn = gfn('hgGoldNewsGate');
     var ncFn = gfn('goldNewsCaution');
-    if (ncFn && news){
+    if (ngFn && news){
+      try{
+        var ng = ngFn(news, now);
+        if (ng && ng.lock){ newsVeto = true; newsVetoTitle = ng.title || null; }
+      }catch(eV){ newsVeto = false; }
+    } else if (ncFn && news){
       try{
         var nc2 = ncFn(news, now);
         if (nc2 && nc2.caution){ newsVeto = true; newsVetoTitle = nc2.title || null; }
-      }catch(eV){ newsVeto = false; }
+      }catch(eV2){ newsVeto = false; }
     }
 
     /* CONVICTION LOCK — restore issued levels verbatim; transitions only on
@@ -1556,11 +1592,11 @@ async function runScan(ui, scanSt){
       if (vc && vc.vetoed){
         rejectedAll.push({ id: vc.id || null, strategy: vc.strategy || null, stratKey: vc.stratKey || null,
                            dir: vc.dir, venue: vc.venue || null, sym: vc.sym || null,
-                           reason: 'NEWS WINDOW — no new entries, wait 15–30 min after release'
+                           reason: 'NEWS GATE — no new entries, wait 15 min after release'
                                    + (newsVetoTitle ? ' (' + newsVetoTitle + ')' : '') });
       } else if (vc) cards.push(vc);
     }
-    if (newsVeto) legs.push('high-impact news window — new convictions held (existing ones keep running)');
+    if (newsVeto) legs.push('NEWS GATE — new convictions held (existing ones keep running)');
 
     /* MOST PROBABLE = spot-aligned leader when XAUT basis is wide vs spot ref */
     var naiveBest = null;

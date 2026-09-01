@@ -1472,15 +1472,17 @@ function rrShortRows25(){            /* short into a bearish OB with a bullish O
     const sA = C2.goldscalpScan();
     const liveA2 = Object.keys(loadConvictionStore(ls2).live).length;
     assert(liveA2 === 0 && sA.cands.length === 0,
-           'news veto: inside the ±30-min high-impact window NO new conviction is issued');
+           'news veto: inside the tier-1 −30/+15 window NO new conviction is issued');
     assert(sA.rejected.length >= 2
-        && sA.rejected.every(r => /NEWS WINDOW — no new entries, wait 15–30 min after release/.test(r.reason)),
-           'news veto: every held-back setup renders the NEWS WINDOW reason line');
-    assert(M2.stubs['#gsCards'].innerHTML.indexOf('NEWS WINDOW — no new entries') >= 0,
+        && sA.rejected.every(r => /NEWS (GATE|WINDOW) — no new entries/.test(r.reason)),
+           'news veto: every held-back setup renders the NEWS GATE reason line');
+    assert(M2.stubs['#gsCards'].innerHTML.indexOf('NEWS GATE — no new entries') >= 0
+        || M2.stubs['#gsCards'].innerHTML.indexOf('NEWS WINDOW — no new entries') >= 0,
            'news veto: reason lines rendered on the pane (never silently dropped)');
 
     /* already-live conviction keeps running untouched through the window */
-    const det = C2.goldScalpSetups({ rows15m: cloneRows(compLongRows()), now: FIXED });
+    const det = C2.goldScalpSetups({ rows15m: cloneRows(compLongRows()), now: FIXED,
+                                     news: { loaded: true, events: [] } });
     const detSw = det.find(c => c.stratKey === 'sweep');
     const preStore = loadConvictionStore(ls2) || { v: 1, live: {}, history: [] };
     preStore.live[detSw.id] = { id: detSw.id, dir: detSw.dir, strategy: detSw.strategy,
@@ -1493,7 +1495,7 @@ function rrShortRows25(){            /* short into a bearish OB with a bullish O
     assert(liveB2 === 1, 'news veto: nothing new minted even with a live record present (live count flat)');
     assert(sB.cands.length === 1 && sB.cands[0].id === detSw.id && sB.cands[0].locked === true && sB.cands[0].vetoed === false,
            'news veto: the already-live conviction is restored + locked — it keeps running untouched');
-    assert(sB.rejected.length === 1 && /NEWS WINDOW/.test(sB.rejected[0].reason),
+    assert(sB.rejected.length >= 1 && sB.rejected.every(r => /NEWS (GATE|WINDOW)/.test(r.reason)),
            'news veto: the OTHER (not-yet-live) setup is still held back with the reason line');
 
     /* window passes -> issuance resumes */
@@ -1882,7 +1884,8 @@ function fmtLike(n, d){ return Number(n).toLocaleString('en-US', { maximumFracti
   C4.hgNewsState = () => ({ loaded: true, events: [{ title: 'US CPI', impact: 'high', t: Math.floor(OFF_NOW/1000) + 300 }] });
   await tab4.refresh();
   const nScan = C4.goldscalpScan();
-  assert(nScan.whySilent.indexOf('high-impact news window ±30 min — US CPI') === 0
+  assert(nScan.whySilent.indexOf('NEWS GATE') === 0
+      && /US CPI/.test(nScan.whySilent)
       && !/outside every ICT killzone/.test(nScan.whySilent),
          'news window leads even off-session (precedence news > killzone) — got "' + nScan.whySilent + '"');
   delete C4.hgNewsState;

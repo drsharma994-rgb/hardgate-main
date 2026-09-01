@@ -1687,7 +1687,15 @@ function goldScalpSetups(inp){
         rows: rows, nowMs: nowMs, scalp: true,
         macro: inp.macro || null,
         dxyRows: inp.dxyRows || inp.dxyCandles || null,
-        tnxRows: inp.tnxRows || inp.us10yCandles || null
+        tnxRows: inp.tnxRows || inp.us10yCandles || null,
+        news: newsState,
+        rows4h: inp.rows4h,
+        rows1d: inp.dailyCandles || inp.rows1d,
+        l2OrderBook: inp.l2OrderBook,
+        spreadUsd: inp.spreadUsd,
+        spread: inp.spread,
+        bid: inp.bid,
+        ask: inp.ask
       });
       if (inst && inst.dropped){ rejected.push(inst); return; }
       var mv = __gsMicroVeto(c.dir, c.stratKey, D, bundleOpts);
@@ -4433,9 +4441,163 @@ var HardgateGoldEngine = { evaluateScalp: evaluateScalp, evaluateSwing: evaluate
 
 /* =========================================================================
    Institutional gold filters (GOLD SCALP 15m / GOLD SWING 4h execution tape).
-   Not a crypto G1–G7 matrix and not M1/M5. Missing DXY/TNX fail-open.
-   1.5×ATR14 is the STOP FLOOR (structure may widen to the sanity ceiling).
+   Not a crypto G1–G7 matrix and not M1/M5. Missing DXY/TNX / news / spread
+   / HTF rows fail-open. 1.5×ATR14 is the STOP FLOOR (structure may widen).
    ========================================================================= */
+
+/* 250 gold points at 0.001 = $0.25 = 2.5 pips at a 0.10 pip size. */
+var HG_GOLD_SPREAD_MAX_USD = 0.25;
+var HG_GOLD_SPREAD_POINT = 0.001;
+var HG_GOLD_NEWS_BEFORE_MS = 30 * 60 * 1000;
+var HG_GOLD_NEWS_AFTER_MS = 15 * 60 * 1000;
+
+function hgGoldNewsIsTier1(title){
+  try{
+    var s = String(title || '').toUpperCase();
+    if (!s) return false;
+    if (/\bCPI\b/.test(s) || /CONSUMER PRICE/.test(s)) return true;
+    if (/\bNFP\b/.test(s) || /NON[\s-]?FARM/.test(s) || /PAYROLLS/.test(s)) return true;
+    if (/\bFOMC\b/.test(s) || /FED(ERAL)?\s+(FUNDS|RATE|DECISION|MEETING)/.test(s)
+        || /INTEREST RATE DECISION/.test(s)) return true;
+    if (/\bGDP\b/.test(s) || /GROSS DOMESTIC/.test(s)) return true;
+    return false;
+  }catch(e){ return false; }
+}
+
+function hgGoldNewsEvents(news){
+  try{
+    if (!news) return [];
+    if (Array.isArray(news.events)) return news.events;
+    if (Array.isArray(news)) return news;
+    return [];
+  }catch(e){ return []; }
+}
+
+function hgGoldNewsGate(news, nowMs){
+  var out = { lock: false, title: null, reason: null, unchecked: false };
+  try{
+    if (!isFinite(nowMs)) nowMs = Date.now();
+    if (!news){ out.unchecked = true; return out; }
+    var evs = hgGoldNewsEvents(news);
+    if (!evs.length){
+      if (!Array.isArray(news) && !('events' in news)) out.unchecked = true;
+      return out;
+    }
+    var i, ev, t, dt, title;
+    for (i = 0; i < evs.length; i++){
+      ev = evs[i];
+      if (!ev) continue;
+      title = ev.title || ev.name || ev.event || '';
+      if (!hgGoldNewsIsTier1(title)) continue;
+      t = (ev.t != null) ? ev.t : ev.timestamp;
+      t = (+t < 1e12) ? (+t) * 1000 : +t;
+      if (!isFinite(t)) continue;
+      dt = nowMs - t;
+      if (dt >= -HG_GOLD_NEWS_BEFORE_MS && dt <= HG_GOLD_NEWS_AFTER_MS){
+        out.lock = true;
+        out.title = title || null;
+        out.reason = 'NEWS GATE — no new entries, wait 15 min after release'
+          + (out.title ? ' (' + out.title + ')' : '');
+        return out;
+      }
+    }
+    return out;
+  }catch(e){ return { lock: false, title: null, reason: null, unchecked: true }; }
+}
+
+function hgGoldSpreadUsd(src){
+  try{
+    if (src == null) return NaN;
+    if (typeof src === 'number') return +src;
+    if (typeof src !== 'object') return NaN;
+    if (isFinite(src.spreadUsd)) return +src.spreadUsd;
+    if (isFinite(src.spreadPoints)) return +src.spreadPoints * HG_GOLD_SPREAD_POINT;
+    if (isFinite(src.spread)){
+      if (src.spreadUnit === 'points') return +src.spread * HG_GOLD_SPREAD_POINT;
+      return +src.spread;
+    }
+    if (isFinite(src.bid) && isFinite(src.ask)) return Math.abs(+src.ask - +src.bid);
+    var book = src.l2OrderBook || src.book || src;
+    var bids = book.bids || book.bid;
+    var asks = book.asks || book.ask;
+    if (Array.isArray(bids) && Array.isArray(asks) && bids.length && asks.length){
+      var b0 = bids[0], a0 = asks[0];
+      var bp = (typeof b0 === 'number') ? +b0
+        : (b0 && (isFinite(b0.price) ? +b0.price : +b0[0]));
+      var ap = (typeof a0 === 'number') ? +a0
+        : (a0 && (isFinite(a0.price) ? +a0.price : +a0[0]));
+      if (isFinite(bp) && isFinite(ap)) return Math.abs(ap - bp);
+    }
+    return NaN;
+  }catch(e){ return NaN; }
+}
+
+function hgGoldSpreadLock(src){
+  var out = { lock: false, spread: NaN, max: HG_GOLD_SPREAD_MAX_USD, unchecked: false, reason: null };
+  try{
+    var sp = hgGoldSpreadUsd(src);
+    out.spread = sp;
+    if (!isFinite(sp)){ out.unchecked = true; return out; }
+    if (sp > HG_GOLD_SPREAD_MAX_USD){
+      out.lock = true;
+      out.reason = 'SPREAD LOCK — live bid/ask ' + sp.toFixed(3) + ' > '
+        + HG_GOLD_SPREAD_MAX_USD.toFixed(2) + ' (250 points / 2.5 pips)';
+    }
+    return out;
+  }catch(e){
+    return { lock: false, spread: NaN, max: HG_GOLD_SPREAD_MAX_USD, unchecked: true, reason: null };
+  }
+}
+
+function hgGoldMtfBias(rows){
+  var out = { bull: false, bear: false, stacked: null, px: NaN, ema20: NaN, ema50: NaN, unchecked: true };
+  try{
+    rows = __rows(rows);
+    if (!rows || rows.length < 55) return out;
+    var closes = __closes(rows);
+    var e20 = __last(_ema(closes, 20));
+    var e50 = __last(_ema(closes, 50));
+    var px = closes[closes.length - 1];
+    out.px = px; out.ema20 = e20; out.ema50 = e50;
+    if (!isFinite(px) || !isFinite(e20) || !isFinite(e50)) return out;
+    out.unchecked = false;
+    if (px > e20 && e20 > e50){ out.bull = true; out.stacked = 'bull'; }
+    else if (px < e20 && e20 < e50){ out.bear = true; out.stacked = 'bear'; }
+    return out;
+  }catch(e){ return out; }
+}
+
+function hgGoldMtfMatrix(inp){
+  inp = inp || {};
+  var h4 = hgGoldMtfBias(inp.rows4h);
+  var d1 = hgGoldMtfBias(inp.rows1d);
+  var out = {
+    h4: h4, d1: d1,
+    scalpLongOk: true,
+    scalpShortOk: true,
+    scalpLocked: false,
+    swingOnly: false,
+    conflict: false,
+    unchecked: !!(h4.unchecked || d1.unchecked),
+    reason: null
+  };
+  try{
+    if (h4.unchecked || d1.unchecked) return out;
+    out.conflict = !!(h4.bull && d1.bear) || !!(h4.bear && d1.bull);
+    if (out.conflict){
+      out.scalpLocked = true;
+      out.swingOnly = true;
+      out.scalpLongOk = false;
+      out.scalpShortOk = false;
+      out.reason = 'MTF CONFLICT — Daily and H4 disagree; scalp locked, Gold Wing only';
+      return out;
+    }
+    out.scalpLongOk = !!(h4.bull && d1.bull);
+    if (!out.scalpLongOk)
+      out.reason = 'MTF BIAS — scalp longs need H4 and Daily price > EMA20 > EMA50';
+    return out;
+  }catch(e){ return out; }
+}
 
 function hgGoldEma50Above(rows){
   try{
@@ -4709,6 +4871,45 @@ function hgGoldInstFilter(cand, ctx){
     var dir = cand.dir;
     var key = cand.stratKey;
     var scalp = ctx.scalp !== false;
+    var newsG = hgGoldNewsGate(ctx.news, ctx.nowMs);
+    cand.newsGate = newsG;
+    if (newsG.lock){
+      cand.dropped = true;
+      cand.reason = newsG.reason;
+      return cand;
+    }
+    var spr = hgGoldSpreadLock({
+      spreadUsd: ctx.spreadUsd,
+      spread: ctx.spread,
+      spreadPoints: ctx.spreadPoints,
+      spreadUnit: ctx.spreadUnit,
+      bid: ctx.bid,
+      ask: ctx.ask,
+      l2OrderBook: ctx.l2OrderBook
+    });
+    cand.spreadLock = spr;
+    if (spr.lock){
+      cand.dropped = true;
+      cand.reason = spr.reason;
+      return cand;
+    }
+    if (scalp){
+      var mtf = hgGoldMtfMatrix({
+        rows4h: ctx.rows4h,
+        rows1d: ctx.rows1d || ctx.dailyCandles
+      });
+      cand.mtf = mtf;
+      if (mtf.scalpLocked){
+        cand.dropped = true;
+        cand.reason = mtf.reason;
+        return cand;
+      }
+      if (dir === 'long' && mtf.scalpLongOk === false){
+        cand.dropped = true;
+        cand.reason = mtf.reason;
+        return cand;
+      }
+    }
     var sess = hgGoldSessionGate(ctx.nowMs, rows, key, {
       hardReject: scalp && ctx.hardReject !== false,
       violentAsianSweep: ctx.violentAsianSweep
@@ -4879,4 +5080,11 @@ W.hgGoldObVolumeOk = hgGoldObVolumeOk;
 W.hgGoldMacroLock = hgGoldMacroLock;
 W.hgGoldSessionGate = hgGoldSessionGate;
 W.hgGoldInstFilter = hgGoldInstFilter;
+W.hgGoldNewsIsTier1 = hgGoldNewsIsTier1;
+W.hgGoldNewsGate = hgGoldNewsGate;
+W.hgGoldSpreadUsd = hgGoldSpreadUsd;
+W.hgGoldSpreadLock = hgGoldSpreadLock;
+W.hgGoldMtfBias = hgGoldMtfBias;
+W.hgGoldMtfMatrix = hgGoldMtfMatrix;
+W.HG_GOLD_SPREAD_MAX_USD = HG_GOLD_SPREAD_MAX_USD;
 })();

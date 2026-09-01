@@ -47,9 +47,11 @@ tally leg, the detected session is shown as context on the card instead):
 SWING RISK MODEL (all from real values, nothing fabricated): stop 1.5-2x
 ATR14(4h), never tighter, extended to sit beyond the structure (OB edge /
 range edge / 200-EMA) when that is wider, capped at 2x; targets at
-1.5R / 2.5R / 4R. News windows never veto minting at swing horizon (the
-entry zone persists for days) — they cost -2 tally and carry a NEWS-FADE
-stamp instead.
+1.5R / 2.5R / 4R. Generic high-impact news still NEWS-FADE (−2 tally).
+Tier-1 US prints (CPI / NFP / FOMC / GDP) lock NEW swing minting 30 min
+before and 15 min after the release (spread-expansion window). Already-live
+convictions keep running. A live bid/ask wider than 250 points / 2.5 pips
+($0.25) also locks the entry gate. HTF conflict does not block Gold Wing.
 
 goldind.js detector layer is consumed READ-ONLY and every export is
 feature-checked (gfn): goldSweeps / goldOrderBlocks / goldFVG / goldVWAP /
@@ -1592,7 +1594,17 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
         };
         var filt = gfn('hgGoldInstFilter');
         if (filt){
-          cand = filt(cand, { rows: rows4, nowMs: nowMs, scalp: false, hardReject: false, macro: macro }) || cand;
+          cand = filt(cand, {
+            rows: rows4, nowMs: nowMs, scalp: false, hardReject: false,
+            macro: macro,
+            news: (microOpts && microOpts.news) || null,
+            rows4h: rows4,
+            rows1d: rows1d,
+            l2OrderBook: microOpts && microOpts.l2OrderBook,
+            spreadUsd: microOpts && microOpts.spreadUsd,
+            bid: microOpts && microOpts.bid,
+            ask: microOpts && microOpts.ask
+          }) || cand;
         }
         return cand;
       }catch(e){ return null; }
@@ -1925,6 +1937,9 @@ function goldSwingSetups(inp){
     var leg = { rows4h: rows4, rows1d: __rows(inp.rows1d) };
     var microOpts = inp.microOpts || {};
     if (inp.us10yCandles) microOpts.us10yCandles = inp.us10yCandles;
+    if (inp.news) microOpts.news = inp.news;
+    if (isFinite(inp.spreadUsd)) microOpts.spreadUsd = inp.spreadUsd;
+    if (inp.l2OrderBook) microOpts.l2OrderBook = inp.l2OrderBook;
     var got = buildCandidates(leg, nowMs, newsC, inp.macro || null, 'n/a', 'INLINE', 'XAUUSD', microOpts);
     var cvFn = gfn('goldCrossVenueMap');
     var ctx = { now: nowMs, news: newsC, macro: inp.macro || null, goldPro: inp.goldPro || null,
@@ -2172,10 +2187,17 @@ async function runScan(ui, scanSt){
 
     var microOpts = {};
     if (ctx.macro && ctx.macro.us10yCandles) microOpts.us10yCandles = ctx.macro.us10yCandles;
+    if (newsRaw) microOpts.news = newsRaw;
     if (typeof W !== 'undefined' && W){
       if (W.__hgGoldTickBuffer) microOpts.tickBuffer = W.__hgGoldTickBuffer;
       if (W.__hgGoldL2Book) microOpts.l2OrderBook = W.__hgGoldL2Book;
       if (isFinite(W.__hgGoldDomDepth)) microOpts.domDepth = W.__hgGoldDomDepth;
+      if (isFinite(W.__hgGoldSpreadUsd)) microOpts.spreadUsd = W.__hgGoldSpreadUsd;
+      if (W.__hgGoldQuote){
+        if (isFinite(W.__hgGoldQuote.bid)) microOpts.bid = W.__hgGoldQuote.bid;
+        if (isFinite(W.__hgGoldQuote.ask)) microOpts.ask = W.__hgGoldQuote.ask;
+        if (isFinite(W.__hgGoldQuote.spreadUsd)) microOpts.spreadUsd = W.__hgGoldQuote.spreadUsd;
+      }
     }
 
     var cands = [], legs = [], venueRows = {}, rejectedAll = [], i;
