@@ -43,9 +43,13 @@ a small reason line — nothing is dropped silently):
      uses STRUCTURAL confluence only (agreeing reads + killzone weight >= +2);
      macro/news penalties shrink the displayed tally but never suppress the card.
      The Asian-range breakout strategy is allowed its own 00:00-07:00 GMT session.
+     Standard scalp execution in Asia is rejected unless the tape violently
+     sweeps the Asian High/Low (sweep strat). London 08:00 GMT and NY overlap
+     12:00–16:00 GMT are priority-weighted on the tally.
   2) COUNTER-TREND — longs below a FALLING 200-EMA-15m with a bearish 4H
-     EMA50/200 stack (mirrored for shorts) are demoted; a liquidity-sweep
-     trigger is the only sanctioned counter-trend play (exempt).
+     EMA50/200 stack (mirrored for shorts) are demoted; a confirmed
+     liquidity-sweep trigger (MSS + displacement + IFVG) is the only
+     sanctioned counter-trend play (exempt).
   3) MIN R:R — after TP1 snaps to the nearest opposing structure, a realized
      TP1 < 1.2R drops the candidate to a 'structure too close — R:R
      insufficient' reason line.
@@ -58,6 +62,14 @@ a small reason line — nothing is dropped silently):
      climax on the sweep bar; FVG fills require HVN structural support when
      the session volume profile has enough range (>=2.5×ATR). Rejected setups
      name the V2 gate on the .rejected side-channel.
+  7) SMC SWEEP CONFIRM — a liquidity sweep alone is not a setup. The 15m
+     execution tape must print MSS + displacement (≥1.5×ATR) + IFVG/FVG
+     imbalance before the entry gate unlocks.
+  8) VOLUME-WEIGHTED OB — displacement-bar volume must exceed the prior
+     5-bar average or the block is an OB TRAP.
+  9) MACRO CONVICTION LOCK — gold longs are killed when DXY and TNX are
+     both bullish (close > EMA50 / RISING). Missing feeds fail-open. This
+     kills the signal; it does not mint a booked conviction-lock.js record.
 
 Feeds (in preference order):
   1) window.getGoldCandles (macro.js) — XAUUSDT TradFi perp first, PAXGUSDT
@@ -1319,6 +1331,7 @@ async function runScan(ui, scanSt){
     }catch(eVol){}
     setProg(ui, 0.45);
     var scalpBundle = {};
+    if (ctx.macro) scalpBundle.macro = ctx.macro;
     if (ctx.macro && ctx.macro.us10yCandles) scalpBundle.us10yCandles = ctx.macro.us10yCandles;
     if (typeof W !== 'undefined' && W){
       if (W.__hgGoldTickBuffer) scalpBundle.tickBuffer = W.__hgGoldTickBuffer;

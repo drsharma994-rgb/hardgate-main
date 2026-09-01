@@ -1272,6 +1272,7 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
       zone: zone || { lo: D.entry - 0.25*D.a15, hi: D.entry + 0.25*D.a15 },
       why: why, invalidates: invalidates,
       macroHint: D.macroHint || null,
+      stopFloorAtr: 1.5,
       notes: (D.notes || []).concat([lv.stopNote])
     };
   }catch(e){ return null; }
@@ -1682,6 +1683,13 @@ function goldScalpSetups(inp){
     function push(c){
       if (!c) return;
       if (c.dropped){ rejected.push(c); return; }
+      var inst = hgGoldInstFilter(c, {
+        rows: rows, nowMs: nowMs, scalp: true,
+        macro: inp.macro || null,
+        dxyRows: inp.dxyRows || inp.dxyCandles || null,
+        tnxRows: inp.tnxRows || inp.us10yCandles || null
+      });
+      if (inst && inst.dropped){ rejected.push(inst); return; }
       var mv = __gsMicroVeto(c.dir, c.stratKey, D, bundleOpts);
       if (mv){
         if (mv.demote){
@@ -2362,6 +2370,17 @@ function goldRankSetups(cands, ctx){
         var kzName = c.killzone ? String(c.killzone).split(' · ')[0] : 'KILLZONE';
         parts.push({ label: kzName + ' — ICT killzone weight', pts: kzw });
         tally += kzw;
+      }
+      var sessW = isFinite(c.sessionWeight) ? c.sessionWeight : 0;
+      if (isFinite(c.killzoneWeight) && sessW > kzw){
+        var extraSess = sessW - kzw;
+        var sessName = (c.sessionGate && c.sessionGate.session === 'LONDON_OPEN')
+          ? 'London open 08:00 GMT priority'
+          : ((c.sessionGate && c.sessionGate.session === 'NY_OVERLAP')
+            ? 'NY overlap 12:00–16:00 GMT priority'
+            : 'session priority');
+        parts.push({ label: sessName, pts: extraSess, leg: 'session' });
+        tally += extraSess;
       }
       if (news.caution){
         parts.push({ label: 'high-impact news window ±30 min' + (news.title ? ' — ' + news.title : '') + ' (fade risk)', pts: -2 });
@@ -4412,6 +4431,353 @@ function evaluateSwing(h4Data, ctx){
 
 var HardgateGoldEngine = { evaluateScalp: evaluateScalp, evaluateSwing: evaluateSwing };
 
+/* =========================================================================
+   Institutional gold filters (GOLD SCALP 15m / GOLD SWING 4h execution tape).
+   Not a crypto G1–G7 matrix and not M1/M5. Missing DXY/TNX fail-open.
+   1.5×ATR14 is the STOP FLOOR (structure may widen to the sanity ceiling).
+   ========================================================================= */
+
+function hgGoldEma50Above(rows){
+  try{
+    rows = __rows(rows);
+    if (!rows || rows.length < 52) return null;
+    var closes = __closes(rows);
+    var e = _ema(closes, 50);
+    var last = closes[closes.length - 1];
+    var ev = e[e.length - 1];
+    if (!isFinite(last) || !isFinite(ev)) return null;
+    return last > ev;
+  }catch(e){ return null; }
+}
+
+function hgGoldDisplacementBar(rows, dir, look){
+  var out = { ok: false, index: null, range: 0, atr: 0, bars: 0 };
+  try{
+    rows = __rows(rows);
+    if (!rows || rows.length < 16) return out;
+    look = isFinite(look) ? look : 16;
+    var n = rows.length;
+    var aArr = _atr(rows, 14);
+    var lastAtr = aArr[n - 1];
+    if (!isFinite(lastAtr) || !(lastAtr > 0)) return out;
+    out.atr = lastAtr;
+    var start = Math.max(1, n - look);
+    var best = null;
+    var i, len, j, hi, lo, first, last, rng;
+    for (i = start; i < n; i++){
+      for (len = 1; len <= 3; len++){
+        if (i + len > n) continue;
+        hi = -Infinity; lo = Infinity;
+        for (j = i; j < i + len; j++){
+          if (rows[j].h > hi) hi = rows[j].h;
+          if (rows[j].l < lo) lo = rows[j].l;
+        }
+        rng = hi - lo;
+        if (!(rng >= lastAtr * 1.5)) continue;
+        first = rows[i]; last = rows[i + len - 1];
+        var bull = dir === 'long' && last.c > first.o;
+        var bear = dir === 'short' && last.c < first.o;
+        if (!bull && !bear) continue;
+        var cand = { ok: true, index: i + len - 1, startIndex: i, range: rng, atr: lastAtr, bars: len };
+        if (!best || rng > best.range) best = cand;
+      }
+    }
+    if (best) return best;
+    return out;
+  }catch(e){ return out; }
+}
+
+function hgGoldIfvg(rows, dir, afterIndex){
+  var miss = { ok: false, kind: null };
+  try{
+    rows = __rows(rows);
+    if (!rows || rows.length < 5) return miss;
+    var n = rows.length;
+    var start = Math.max(1, isFinite(afterIndex) ? afterIndex : n - 14);
+    var wantBull = dir === 'long';
+    var gaps = goldFVG(rows) || [];
+    var gi, g;
+    for (gi = 0; gi < gaps.length; gi++){
+      g = gaps[gi];
+      if (!g) continue;
+      var aligned = wantBull ? (g.dir === 'bullish') : (g.dir === 'bearish');
+      if (aligned) return { ok: true, kind: 'FVG', gap: g };
+    }
+    for (var i = start; i < n - 1; i++){
+      var a = rows[i - 1], b = rows[i + 1];
+      if (!a || !b) continue;
+      if (wantBull && b.l > a.h) return { ok: true, kind: 'FVG', i: i, top: b.l, bottom: a.h };
+      if (!wantBull && b.h < a.l) return { ok: true, kind: 'FVG', i: i, top: a.l, bottom: b.h };
+    }
+    var last = rows[n - 1];
+    var scanFrom = Math.max(1, n - 18);
+    for (i = scanFrom; i < n - 1; i++){
+      a = rows[i - 1]; b = rows[i + 1];
+      if (!a || !b || !last) continue;
+      if (wantBull && b.h < a.l && last.c > a.l)
+        return { ok: true, kind: 'IFVG', i: i, top: a.l, bottom: b.h };
+      if (!wantBull && b.l > a.h && last.c < a.h)
+        return { ok: true, kind: 'IFVG', i: i, top: b.l, bottom: a.h };
+    }
+    return miss;
+  }catch(e){ return miss; }
+}
+
+function hgGoldSweepConfirmed(rows, dir){
+  var out = { ok: false, mss: false, displacement: false, ifvg: false, reason: '' };
+  try{
+    rows = __rows(rows);
+    if (!rows){
+      out.reason = 'SWEEP BLOCK — need MSS+displacement+IFVG (missing tape)';
+      return out;
+    }
+    var ms = goldMarketStructure(rows);
+    var want = dir === 'long' ? 'bullish' : 'bearish';
+    var mssStruct = !!(ms && (ms.bos || ms.choch) && ms.trend === want);
+    var sw = goldSweeps(rows);
+    var sweepDir = sw && sw.dir ? (sw.dir === 'bullish' ? 'long' : 'short') : null;
+    var sweepReclaim = sweepDir === dir && sw.barsAgo !== null && sw.barsAgo <= 12;
+    var disp = hgGoldDisplacementBar(rows, dir, 16);
+    out.displacement = !!disp.ok;
+    /* A sweep reclaim is the structure shift; it is not enough by itself —
+       displacement + IFVG still have to print after the grab. */
+    out.mss = mssStruct || sweepReclaim;
+    var after = disp.ok ? (isFinite(disp.startIndex) ? disp.startIndex : disp.index) : (rows.length - 10);
+    var ifvg = hgGoldIfvg(rows, dir, after);
+    out.ifvg = !!ifvg.ok;
+    out.ok = out.mss && out.displacement && out.ifvg;
+    if (!out.ok){
+      var miss = [];
+      if (!out.mss) miss.push('MSS');
+      if (!out.displacement) miss.push('displacement');
+      if (!out.ifvg) miss.push('IFVG');
+      out.reason = 'SWEEP BLOCK — need MSS+displacement+IFVG (missing ' + miss.join('+') + ')';
+    }
+    return out;
+  }catch(e){
+    out.reason = 'SWEEP BLOCK — need MSS+displacement+IFVG';
+    return out;
+  }
+}
+
+function hgGoldObVolumeOk(rows, impulseIndex, lookback){
+  var out = { ok: false, trap: false, vol: 0, avg: 0, reason: '', unchecked: false };
+  try{
+    rows = __rows(rows);
+    lookback = lookback || 5;
+    if (!rows || impulseIndex == null || impulseIndex < 0 || impulseIndex >= rows.length){
+      out.trap = true;
+      out.reason = 'OB TRAP — no displacement bar';
+      return out;
+    }
+    var vol = +rows[impulseIndex].v || 0;
+    out.vol = vol;
+    var start = Math.max(0, impulseIndex - lookback);
+    var sum = 0, n = 0, minV = Infinity, maxV = -Infinity;
+    for (var i = start; i < impulseIndex; i++){
+      var v = +rows[i].v || 0;
+      sum += v; n++;
+      if (v < minV) minV = v;
+      if (v > maxV) maxV = v;
+    }
+    out.avg = n ? sum / n : 0;
+    if (n < 3 || !(out.avg > 0)){
+      out.unchecked = true;
+      out.ok = true;
+      return out;
+    }
+    if (isFinite(minV) && isFinite(maxV) && (maxV - minV) < 1e-9 && Math.abs(vol - out.avg) < 1e-9){
+      out.unchecked = true;
+      out.ok = true;
+      return out;
+    }
+    if (vol > out.avg){
+      out.ok = true;
+      return out;
+    }
+    out.trap = true;
+    out.reason = 'OB TRAP — displacement volume ≤ 5-bar average';
+    return out;
+  }catch(e){
+    out.unchecked = true;
+    out.ok = true;
+    return out;
+  }
+}
+
+function hgGoldImpulseVolIndex(rows, disp){
+  try{
+    if (!disp || !disp.ok || !rows) return disp && disp.index;
+    var lo = isFinite(disp.startIndex) ? disp.startIndex : disp.index;
+    var hi = disp.index;
+    if (!isFinite(lo) || !isFinite(hi)) return disp.index;
+    if (lo > hi){ var tmp = lo; lo = hi; hi = tmp; }
+    var maxIdx = hi, maxV = -1;
+    for (var i = lo; i <= hi && i < rows.length; i++){
+      var v = +rows[i].v || 0;
+      if (v >= maxV){ maxV = v; maxIdx = i; }
+    }
+    return maxIdx;
+  }catch(e){ return disp && disp.index; }
+}
+
+function hgGoldMacroLock(dir, ctx){
+  var out = { lock: false, reason: '', dxyBull: null, tnxBull: null, unchecked: false };
+  try{
+    if (dir !== 'long') return out;
+    ctx = ctx || {};
+    var dxyBull = null, tnxBull = null;
+    if (ctx.dxyRows && ctx.dxyRows.length >= 52) dxyBull = hgGoldEma50Above(ctx.dxyRows);
+    else if (ctx.macro && ctx.macro.dxy && ctx.macro.dxy.trend20 === 'RISING') dxyBull = true;
+    else if (ctx.macro && ctx.macro.dxy && ctx.macro.dxy.trend20 === 'FALLING') dxyBull = false;
+    else if (ctx.macro && ctx.macro.trend20 === 'RISING') dxyBull = true;
+    else if (ctx.macro && ctx.macro.trend20 === 'FALLING') dxyBull = false;
+
+    if (ctx.tnxRows && ctx.tnxRows.length >= 52) tnxBull = hgGoldEma50Above(ctx.tnxRows);
+    else if (ctx.macro && ctx.macro.tnxTrend === 'RISING') tnxBull = true;
+    else if (ctx.macro && ctx.macro.tnxTrend === 'FALLING') tnxBull = false;
+
+    out.dxyBull = dxyBull;
+    out.tnxBull = tnxBull;
+    if (dxyBull == null && tnxBull == null){
+      out.unchecked = true;
+      return out;
+    }
+    if (dxyBull === true && tnxBull === true){
+      out.lock = true;
+      out.reason = 'CONVICTION LOCK — DXY+TNX bullish vs gold long';
+    }
+    return out;
+  }catch(e){
+    out.unchecked = true;
+    return out;
+  }
+}
+
+function hgGoldSessionGate(nowMs, rows, stratKey, opt){
+  var out = { ok: true, reject: false, demote: false, weight: 1, reason: '', session: 'OFF', asianSweep: false };
+  try{
+    opt = opt || {};
+    var ms = __toMs(nowMs);
+    if (!isFinite(ms)) ms = Date.now();
+    var d = new Date(ms);
+    var h = d.getUTCHours() + d.getUTCMinutes() / 60;
+    if (h >= 8 && h < 9){ out.session = 'LONDON_OPEN'; out.weight = 3; }
+    else if (h >= 12 && h < 16){ out.session = 'NY_OVERLAP'; out.weight = 3; }
+    else if (h >= 7 && h < 10){ out.session = 'LONDON'; out.weight = 2; }
+    else if (h >= 10 && h < 12){ out.session = 'NY_AM'; out.weight = 2; }
+    else if (h >= 16 && h < 20){ out.session = 'NY_PM'; out.weight = 1; }
+    else if (h >= 0 && h < 7){ out.session = 'ASIAN'; out.weight = 0; }
+    else { out.session = 'OFF'; out.weight = 0; }
+
+    if (out.session !== 'ASIAN') return out;
+
+    var asianStrat = stratKey === 'asian';
+    var violent = !!opt.violentAsianSweep || stratKey === 'sweep';
+    if (asianStrat){
+      out.weight = 1;
+      return out;
+    }
+    if (violent){
+      var box = goldAsianRange(rows);
+      var last = rows && rows.length ? rows[rows.length - 1] : null;
+      var hit = !box || !last || (last.l <= box.lo) || (last.h >= box.hi) || stratKey === 'sweep';
+      if (hit){
+        out.asianSweep = true;
+        out.weight = 1;
+        return out;
+      }
+    }
+    var hard = opt.hardReject !== false;
+    if (!hard){
+      out.demote = true;
+      out.reason = 'ASIA SESSION — standard execution demoted (4h bars span the Asian box)';
+      return out;
+    }
+    out.ok = false;
+    out.reject = true;
+    out.reason = 'ASIA BLOCK — no violent AH/AL sweep';
+    return out;
+  }catch(e){ return out; }
+}
+
+function hgGoldInstFilter(cand, ctx){
+  try{
+    if (!cand) return cand;
+    ctx = ctx || {};
+    var rows = ctx.rows;
+    var dir = cand.dir;
+    var key = cand.stratKey;
+    var scalp = ctx.scalp !== false;
+    var sess = hgGoldSessionGate(ctx.nowMs, rows, key, {
+      hardReject: scalp && ctx.hardReject !== false,
+      violentAsianSweep: ctx.violentAsianSweep
+    });
+    cand.sessionGate = sess;
+    if (isFinite(sess.weight)) cand.sessionWeight = sess.weight;
+    cand.stopFloorAtr = 1.5;
+    if (sess.ok === false){
+      cand.dropped = true;
+      cand.reason = sess.reason;
+      return cand;
+    }
+    if (sess.demote){
+      cand.demoted = true;
+      if (!Array.isArray(cand.stamps)) cand.stamps = [];
+      if (cand.stamps.indexOf('ASIA SESSION') < 0) cand.stamps.push('ASIA SESSION');
+      var gn = Array.isArray(cand.gateNotes) ? cand.gateNotes.slice() : [];
+      gn.push(sess.reason);
+      cand.gateNotes = gn;
+    }
+    var macro = hgGoldMacroLock(dir, {
+      dxyRows: ctx.dxyRows || (ctx.macro && ctx.macro.dxyRows),
+      tnxRows: ctx.tnxRows || (ctx.macro && ctx.macro.tnxRows),
+      macro: ctx.macro
+    });
+    cand.macroLock = macro;
+    if (macro.lock){
+      cand.dropped = true;
+      cand.reason = macro.reason;
+      return cand;
+    }
+    if (key === 'sweep'){
+      var sw = hgGoldSweepConfirmed(rows, dir);
+      cand.sweepConfirm = sw;
+      if (!sw.ok){
+        cand.dropped = true;
+        cand.reason = sw.reason;
+        return cand;
+      }
+      var disp = hgGoldDisplacementBar(rows, dir, 16);
+      if (disp.ok){
+        var volIdx = hgGoldImpulseVolIndex(rows, disp);
+        var volSw = hgGoldObVolumeOk(rows, volIdx, 5);
+        cand.obVol = volSw;
+        if (!volSw.ok){
+          cand.dropped = true;
+          cand.reason = volSw.reason;
+          return cand;
+        }
+      }
+    }
+    if (key === 'ob'){
+      var idx = cand.obImpulseIndex;
+      if (idx == null || idx < 0 || !rows || idx >= rows.length){
+        var d2 = hgGoldDisplacementBar(rows, dir, 20);
+        idx = hgGoldImpulseVolIndex(rows, d2);
+      }
+      var obv = hgGoldObVolumeOk(rows, idx, 5);
+      cand.obVol = obv;
+      if (!obv.ok){
+        cand.dropped = true;
+        cand.reason = obv.reason;
+        return cand;
+      }
+    }
+    return cand;
+  }catch(e){ return cand; }
+}
+
 /* ---------------- exports ---------------- */
 
 W.goldFVG = goldFVG;
@@ -4506,4 +4872,11 @@ W.goldADRFade = goldADRFade;
 W.detectAsianBreakout = detectAsianBreakout;
 W.detectADRFade = detectADRFade;
 W.goldDetectorReads = goldDetectorReads;
+W.hgGoldDisplacementBar = hgGoldDisplacementBar;
+W.hgGoldIfvg = hgGoldIfvg;
+W.hgGoldSweepConfirmed = hgGoldSweepConfirmed;
+W.hgGoldObVolumeOk = hgGoldObVolumeOk;
+W.hgGoldMacroLock = hgGoldMacroLock;
+W.hgGoldSessionGate = hgGoldSessionGate;
+W.hgGoldInstFilter = hgGoldInstFilter;
 })();

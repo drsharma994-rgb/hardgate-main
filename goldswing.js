@@ -1574,7 +1574,7 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
         }
         var conf = [];
         for (var j = 0; j < L.mine.length; j++) conf.push(L.mine[j].label);
-        return {
+        var cand = {
           id: id, strategy: SW_NAME[key], stratKey: key, dir: dir,
           entry: useEntry, pxNow: mark, mark: mark, stop: lv.stop, t1: lv.t1, t2: lv.t2, t3: lv.t3,
           structStop: structStop, snapLvls: snapLvls,
@@ -1584,12 +1584,17 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
           session: sessionTxt || 'n/a',
           newsCaution: !!(newsC && newsC.caution),
           newsStamp: (newsC && newsC.caution) ? SW_NEWS_STAMP + (newsC.title ? ' (' + newsC.title + ')' : '') : null,
-          atr: a4, anchor: anchor,
+          atr: a4, anchor: anchor, stopFloorAtr: 1.5,
           zone: zone || { lo: entry - 0.25*a4, hi: entry + 0.25*a4 },
           why: why, invalidates: invalidates,
           notes: notes.concat([lv.stopNote]),
           venue: venue, sym: sym
         };
+        var filt = gfn('hgGoldInstFilter');
+        if (filt){
+          cand = filt(cand, { rows: rows4, nowMs: nowMs, scalp: false, hardReject: false, macro: macro }) || cand;
+        }
+        return cand;
       }catch(e){ return null; }
     }
 

@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v548',
-  pack: 'OMNI advanced edge rank',
-  built: '2026-09-01T18:40:00Z',
-  note: 'OMNIROUTE / OMNIPRESENT / OMNIGOLD share hgOmniAdvancedEdge: Wilson-lower expectancy vs T1 R plus consensus, tape, fill, cost, formation. Rank and MOST PROBABLE prefer measured edge. Missing data fail-open. Named entries stay put. Not a win probability.'
+  version: 'hg-v549',
+  pack: 'Gold institutional SMC gates',
+  built: '2026-09-01T19:20:00Z',
+  note: 'GOLD SCALP / GOLD SWING: sweep needs MSS+displacement+IFVG on the execution tape; OB displacement volume must beat the 5-bar average; DXY+TNX bullish kills gold longs (fail-open if feeds missing); Asia blocks standard scalp execution unless a violent AH/AL sweep; London 08:00 and NY 12-16 GMT are priority-weighted. 1.5x ATR14 remains the stop floor, not a cap. Not a win probability.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
