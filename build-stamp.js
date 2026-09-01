@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v544',
-  pack: 'stale-tab auto-reload + cache-busted build stamp',
-  built: '2026-09-01T15:30:00Z',
-  note: 'build-stamp.js now ships with ?v=HG_CACHE so HTTP cache cannot pin an old version badge. hgBuildApplyFreshness auto-reloads once when the server is ahead (or a waiting SW is ready), re-checks on tab visibility, and paints STALE on hgVerBadge + chipBuild. SW registration calls reg.update() and reloads on controllerchange.'
+  version: 'hg-v545',
+  pack: 'OMNIROUTE + OMNIPRESENT keep-levels house formation',
+  built: '2026-09-01T16:15:00Z',
+  note: 'OMNIROUTE and OMNIPRESENT run hgFormTicket keepLevels after pricing: fill + formation score + live internet context, without snapping named setup / zone / live entries. Live refuse is a hard formation gate. formation-live warmup on both scans.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

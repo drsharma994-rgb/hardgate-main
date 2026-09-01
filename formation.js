@@ -603,6 +603,55 @@ function hgFormGoldEnrich(hit, ctx, params, dir, mark, a4, rows, style, baseStyl
   return { ok: true, hit: plan, formationScore: plan.formationScore, fillNote: fill.note };
 }
 
+/* Crypto desks that already priced a named setup (OMNIROUTE hit.level,
+   OMNIPRESENT live/zone) must not snap to a generic POI. This path stamps
+   fill + formation score + live internet context and NEVER moves ENTRY /
+   STOP / T1. Live refuse is the only hard fail. */
+function hgFormKeepLevels(hit, ctx, params, dir, mark, a4, rows, style, baseStyle, minRr){
+  var plan = Object.assign({}, hit);
+  var entry0 = +plan.entry, stop0 = +plan.stop, t10 = +(plan.t1 || plan.tp1), t20 = +plan.t2;
+  if (!(isFinite(entry0) && entry0 > 0 && isFinite(stop0)))
+    return { ok: false, reason: 'no named levels to keep', tag: 'formation' };
+  var risk = Math.abs(entry0 - stop0);
+  if (!(risk > 0)) return { ok: false, reason: 'invalid named levels', tag: 'formation' };
+
+  var fillBars = baseStyle === 'scalp' ? params.fillBarsScalp : params.fillBarsSwing;
+  var fill = hgFillProbability(rows, entry0, dir, plan.zone, fillBars);
+  plan.fillProb = fill.pct;
+  plan.fillNote = fill.note;
+  plan.rr = isFinite(t10) ? Math.abs(t10 - entry0) / risk : null;
+  plan.rr1 = plan.rr;
+  plan.rr2 = isFinite(t20) ? Math.abs(t20 - entry0) / risk : null;
+  plan.formationScore = hgFormationScore(plan, ctx);
+  plan.formationParams = params.source;
+  plan.planSrc = plan.planSrc || 'keep-levels';
+
+  if (typeof G.hgLiveFormationApply === 'function'){
+    try{
+      var live = (ctx && ctx.live) || null;
+      if (!live && typeof G.hgLiveFormationSnap === 'function')
+        live = G.hgLiveFormationSnap(plan.sym || hit.sym, dir);
+      var app = G.hgLiveFormationApply(plan, live, { a4: a4, preserveLevels: true, style: baseStyle });
+      if (!app || app.ok === false){
+        return { ok: false, reason: (app && app.reason) || 'live context refused',
+          tag: (app && app.tag) || 'live' };
+      }
+      plan = app.plan || plan;
+      if (isFinite(+plan.liveScoreDelta))
+        plan.formationScore = Math.round((isFinite(+plan.formationScore) ? +plan.formationScore : 0) + +plan.liveScoreDelta);
+    }catch(eKeep){}
+  }
+  /* Named setup is the trade — restore even if a live helper mutated a copy. */
+  plan.entry = entry0;
+  plan.stop = stop0;
+  if (isFinite(t10)) plan.t1 = t10;
+  if (isFinite(t20)) plan.t2 = t20;
+  plan.rr = isFinite(t10) ? Math.abs(t10 - entry0) / risk : plan.rr;
+  plan.rr1 = plan.rr;
+  plan.rr2 = isFinite(t20) ? Math.abs(t20 - entry0) / risk : plan.rr2;
+  return { ok: true, hit: plan, formationScore: plan.formationScore, fillNote: fill.note };
+}
+
 /* --- unified ticket formation pipeline --- */
 function hgFormTicket(hit, ctx){
   ctx = ctx || {};
@@ -630,8 +679,11 @@ function hgFormTicket(hit, ctx){
        then zone entry refinement, structure stop widen, structure targets,
        fill probability, and confluence-weighted formation score — never
        overwrite with generic crypto POI picks. */
-    if (isGold || ctx.preserveLevels){
+    if (isGold){
       return hgFormGoldEnrich(hit, ctx, params, dir, mark, a4, rows, style, baseStyle, minRr);
+    }
+    if (ctx.keepLevels === true || ctx.preserveLevels === true){
+      return hgFormKeepLevels(hit, ctx, params, dir, mark, a4, rows, style, baseStyle, minRr);
     }
 
     var poi = null;
@@ -807,6 +859,7 @@ G.hgRankEntryPOI = hgRankEntryPOI;
 G.hgStructureTargets = hgStructureTargets;
 G.hgFormationScore = hgFormationScore;
 G.hgFormTicket = hgFormTicket;
+G.hgFormKeepLevels = hgFormKeepLevels;
 G.HG_FILL_MIN = HG_FILL_MIN;
 
 })();

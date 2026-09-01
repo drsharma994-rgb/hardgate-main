@@ -80,6 +80,21 @@ console.log('== hgFormTicket shapes a swing hit ==');
   ok(fm.hit.formationScore >= 0, 'formation score stamped');
 }
 
+console.log('== keepLevels preserves named entry/stop/t1 ==');
+{
+  const rows = synthRows(120, 100);
+  const mark = rows[rows.length - 1].c;
+  const hit = { dir: 'long', entry: 95.5, stop: 93, t1: 100.5, t2: 105, rr: 2, mark: mark,
+    planSrc: 'hgOmniPlanForHit', kind: 'VALUE' };
+  const fm = W.hgFormTicket(hit, { rows, style: 'swing', a4: 1.2, keepLevels: true });
+  ok(fm.ok === true, 'keepLevels accepts named hit (' + (fm.reason || 'ok') + ')');
+  ok(Math.abs(fm.hit.entry - 95.5) < 1e-9, 'ENTRY stays the named setup');
+  ok(Math.abs(fm.hit.stop - 93) < 1e-9, 'STOP stays the named invalidation');
+  ok(Math.abs(fm.hit.t1 - 100.5) < 1e-9, 'T1 stays the named target');
+  ok(fm.hit.formationScore >= 0, 'keepLevels stamps formationScore');
+  ok(fm.hit.fillProb != null, 'keepLevels stamps fillProb');
+}
+
 console.log('== wiring in index.html ==');
 {
   ok(/formation\.js/.test(html), 'formation.js script tag');
