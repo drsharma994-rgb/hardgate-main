@@ -21,7 +21,7 @@ var HG_BUILD = {
   version: 'hg-v547',
   pack: 'OMNIGOLD intelligent gold formation',
   built: '2026-09-01T17:10:00Z',
-  note: 'OMNIGOLD hgOgFormTicket locks named ENTRY (ROUND/FVG/Asia), structure-widens STOP then re-clips at 2.5% of gold (never tighten, never a 1000-pt lastSwing), places T1 at the nearest gold magnet that still clears OG_T1_R, stamps MARKET vs LIMIT, scores conviction (killzone/tape/fill/replay). Cost/weekend/thin-fill demote only. Native tickets never go through hgApplyGoldBestLevels.'
+  note: 'OMNIGOLD hgOgFormTicket locks named ENTRY (ROUND/FVG/Asia), structure-widens STOP then re-clips at 2.5% of gold (never tighten, never a 1000-pt lastSwing), places T1 at OG_T1_R of formed risk and names the first gold magnet beyond that print, stamps MARKET vs LIMIT, scores conviction (killzone/tape/fill/replay). Cost/weekend/thin-fill demote only. Native tickets never go through hgApplyGoldBestLevels.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
