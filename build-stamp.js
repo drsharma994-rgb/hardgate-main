@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v550',
-  pack: 'Gold news-gate + spread + MTF confluence',
-  built: '2026-09-01T20:00:00Z',
-  note: 'GOLD SCALP / GOLD SWING: News-gate locks new minting 30m before / 15m after CPI NFP FOMC GDP. Live bid/ask wider than 250 points (2.5 pips / $0.25) locks the entry. Scalp longs need H4 and Daily price > EMA20 > EMA50; HTF conflict locks scalp and leaves Gold Wing open. Missing news/spread/HTF fail-open. 1.5x ATR14 remains the stop floor, not a cap. Not a win probability.'
+  version: 'hg-v551',
+  pack: 'OMNIGOLD native inst-filter',
+  built: '2026-09-01T21:00:00Z',
+  note: 'OMNIGOLD native detectors use the same hgGoldInstFilter stack as GOLD SCALP/SWING (MSS+displacement+IFVG, volume OB, DXY+TNX conviction lock, Asia/London/NY session, news-gate, spread, MTF). One hard inst-filter ledger row. Named ENTRY stays hit.level. goldind absent fail-opens. 1.5x ATR14 remains the stop floor stamp, not a cap. GOLD_STOP_MAX_PCT 0.025 unchanged. Not a win probability.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

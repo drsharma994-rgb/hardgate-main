@@ -106,7 +106,7 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
   ['funding','oi-build','retail-contrarian','taker-flow','book-depth'].forEach(k => {
     ok(keys.indexOf(k) === -1, 'perp gate "' + k + '" is absent — it has no meaning on spot gold');
   });
-  ['session','macro-realrate','dxy-inverse','yield-guard','adr-budget'].forEach(k => {
+  ['session','macro-realrate','dxy-inverse','yield-guard','adr-budget','inst-filter'].forEach(k => {
     ok(keys.indexOf(k) >= 0, 'gold gate "' + k + '" is present');
   });
 
