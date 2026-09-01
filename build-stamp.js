@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v542',
-  pack: 'TOP SETUP widgets rewired to the audited pipeline — fabrication removed',
-  built: '2026-09-01T17:00:00Z',
-  note: 'A user-reported wrong TOP SETUP card exposed two legacy widgets (OMNIGOLD hgOgOpenSetupsWatchPanelHtml, OMNIROUTE omniRenderProTraderPanel) that bypassed every gate: raw unfiltered hg_forward_v1 reads (any tab, any age, gate-failed included), a self-invented confluence over fields the log never stores, a freshness anchor never set on XM feeds so staleness was disabled, invented entries at live price no detector produced, a Refresh button targeting a nonexistent host, dropped direction labels, and an OMNI prefix filter leaking gold into the crypto card. ~630 lines deleted. Both widgets now render ONLY their tab audited TICKET-gated level-fresh picks with direction, real confluence and cost chips, honest stand-asides quoting the gates own distances, and replace-in-place injection. Audit fixed 2 further fatals incl. a freshness re-judge that was not the ledger own check.'
+  version: 'hg-v543',
+  pack: 'OMNIPRESENT keep-last + freshness parity; OMNIGOLD auto-scan + remount restore',
+  built: '2026-09-01T18:00:00Z',
+  note: 'OMNIPRESENT no longer blanks #opCards on rescan (lastCardsHtml + opKeepLast), adds OP_FRESH_MS refresh skip, regime/news warmup, remount restore, #opWarn, and fixes mount copy (value-area edges not volume POC). HG_TAB_AUTO_SCAN wires omnipresent and omnigold through refresh() like omniroute. OMNIGOLD adds OG_FRESH_MS, tab-open auto-scan, remount restore, and #ogWarn for failed-rescan messaging.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

@@ -91,7 +91,9 @@
   var T2_FLOOR_R = 5;       // the runner starts at 5R — the squeezed stop is what buys this
   var T2_CAP_R = 10;        // and stretches to the opposite zone, up to 10R
 
+  var OP_FRESH_MS = 180000;   /* same 3-min skip as omniroute — tab-open / hardRefreshAll must not re-sweep a fresh desk */
   var __op = { busy: false, ran: false, ui: null, lastStat: null, snap: null, lastX20Html: '',
+               lastCardsHtml: '',
                /* hg-v540: the ALL view's exact bytes + the inputs behind them,
                   so PAID-ONLY filters a snapshot and ALL restores verbatim. */
                lastAllView: null, lastView: null };
@@ -673,6 +675,54 @@
 
   function opStat(ui, msg){ try{ if (ui && ui.stat) ui.stat.textContent = msg; }catch(e){} }
 
+  function opRememberPaint(ui){
+    try { if (ui && ui.cards) __op.lastCardsHtml = ui.cards.innerHTML; } catch (eC) {}
+    try { if (ui && ui.x20) __op.lastX20Html = ui.x20.innerHTML; } catch (eX) {}
+  }
+
+  function opKeepLast(ui, why){
+    try {
+      if (ui && ui.cards && __op.lastCardsHtml) ui.cards.innerHTML = __op.lastCardsHtml;
+    } catch (eC) {}
+    try {
+      if (ui && ui.x20 && __op.lastX20Html != null) ui.x20.innerHTML = __op.lastX20Html;
+    } catch (eX) {}
+    if (__op.lastStat) opStat(ui, __op.lastStat);
+    try {
+      if (ui && ui.warn){
+        ui.warn.textContent = 'rescan failed — keeping last scan. ' + String(why || '');
+        ui.warn.style.display = 'block';
+      }
+    } catch (eW) {}
+  }
+
+  function opWarmHooks(ui){
+    function warmNews(){
+      return Promise.resolve().then(function(){
+        var hooks = W.HG_warmups;
+        if (!hooks || !hooks.length) return null;
+        var nw = null, i;
+        for (i = 0; i < hooks.length; i++) if (hooks[i] && hooks[i].id === 'news') nw = hooks[i];
+        if (!nw || typeof nw.run !== 'function') return null;
+        opStat(ui, 'warming news calendar…');
+        return nw.run();
+      }).catch(function(){ return null; });
+    }
+    function warmRegime(){
+      return Promise.resolve().then(function(){
+        if (typeof W.regimeState === 'function' && W.regimeState()) return 'fresh';
+        var hooks = W.HG_warmups;
+        if (!hooks || !hooks.length) return 'no warmup registered';
+        var rg = null, i;
+        for (i = 0; i < hooks.length; i++) if (hooks[i] && hooks[i].id === 'regime') rg = hooks[i];
+        if (!rg || typeof rg.run !== 'function') return 'no regime warmup';
+        opStat(ui, 'warming market regime…');
+        return rg.run();
+      }).catch(function(){ return null; });
+    }
+    return warmRegime().then(function(){ return warmNews(); });
+  }
+
   function runScan(ui){
     if (__op.busy) return Promise.resolve();
     if (!gfn('xuUniverse') || !gfn('xuCandles')){
@@ -681,17 +731,24 @@
     }
     __op.busy = true;
     ui.btn.disabled = true;
-    ui.cards.innerHTML = '';
-    opStat(ui, 'loading universe…');
+    /* Never blank a finished desk to start a rescan — same contract as omniroute. */
+    if (!__op.lastCardsHtml){
+      try { ui.cards.innerHTML = ''; } catch (eClr) {}
+      opStat(ui, 'loading universe…');
+    } else {
+      opStat(ui, 'rescanning… previous results still showing');
+    }
+    try { if (ui.warn) ui.warn.style.display = 'none'; } catch (eWh) {}
     var dropFn = gfn('hgOmniDropForming');
     var gradeFn = gfn('hgOmniGrade');
 
-    return Promise.resolve().then(function (){ return W.xuUniverse(); })
+    return opWarmHooks(ui).then(function (){ return W.xuUniverse(); })
       .catch(function (){ return []; })
       .then(function (uni){
         uni = (uni || []).filter(function (u){ return u && (u.exchange === 'delta' || u.exchange === 'coindcx'); });
         if (!uni.length){
-          opStat(ui, 'universe empty — both venue legs failed. A data problem, not a quiet market.');
+          if (__op.lastCardsHtml) opKeepLast(ui, 'universe empty — both venue legs failed');
+          else opStat(ui, 'universe empty — both venue legs failed. A data problem, not a quiet market.');
           return null;
         }
         /* FULL UNIVERSE — every delta+coindcx contract, the coverage bar
@@ -898,10 +955,13 @@
             opPaintVerdict(ui);
             opApplyShowMode(ui);
           }catch(ePv){}
+          opRememberPaint(ui);
         });
       })
       .catch(function (e){
-        opStat(ui, 'scan failed: ' + ((e && e.message) || e));
+        var msg = (e && e.message) || e;
+        if (__op.lastCardsHtml) opKeepLast(ui, msg);
+        else opStat(ui, 'scan failed: ' + msg);
       })
       .then(function (){
         __op.busy = false;
@@ -1638,13 +1698,14 @@
       '<div class="panel">'
       + '<h2>OMNIPRESENT — the anticipation desk <span>nearest high-confluence reversal zone per contract · tight structural stop · wide targets · triggers at 1h closes</span></h2>'
       + '<div class="note" style="margin-bottom:10px">METHOD — for every contract: cluster the independent levels the whole market can see '
-      + '(swing highs/lows, prior-day extremes, Donchian edges, value area, volume POC, round numbers, AVWAP bands); 3+ sources within a third of an ATR is a ZONE. '
+      + '(swing highs/lows, prior-day extremes, Donchian edges, value-area edges, round numbers, AVWAP bands); 3+ sources within a third of an ATR is a ZONE. '
       + 'Read exhaustion on the approach (RSI divergence, volume climax, ATR stretch, squeeze release). ARMED = you hold the level before price arrives (WATCH — not a ticket); '
       + 'TRIGGERED = swept and rejected, enter at market. Stop sits just beyond the zone — the zone IS the invalidation, which is why it can stay squeezed. '
       + 'TICKET requires 3+ level sources, 2+ exhaustion reads including a real rejection, a daily stack that does not fight the fade, and a running trend only with RSI divergence. '
       + 'Thin zones, one-read “setups”, and an adverse third of the context panel are vetoes. Every triggered plan is forward-logged under OMNIPRESENT. '
       + '<b>Anticipation, not prophecy</b> — these are the levels where reversals have the best structural odds; the forward pool is the judge.</div>'
       + '<div class="note" id="opStat">idle — press RUN.</div>'
+      + '<div class="note warn" id="opWarn" style="display:none"></div>'
       + '<div class="row" style="margin-top:8px"><button class="btn" id="opRun">RUN OMNIPRESENT SCAN</button></div>'
       /* DESK VERDICT + PAID-ONLY toggle (hg-v540) — under the banners, above
          the cards. The strip fills from the live pool at mount and again
@@ -1655,10 +1716,19 @@
       + '<div class="cards" id="opCards" style="margin-top:12px"></div>'
       + '<div id="opX20" style="margin-top:12px"></div>'
       + '</div>';
-    var ui = { btn: el.querySelector('#opRun'), stat: el.querySelector('#opStat'), side: el.querySelector('#opSide'), cards: el.querySelector('#opCards'), x20: el.querySelector('#opX20'),
+    var ui = { btn: el.querySelector('#opRun'), stat: el.querySelector('#opStat'), warn: el.querySelector('#opWarn'),
+               side: el.querySelector('#opSide'), cards: el.querySelector('#opCards'), x20: el.querySelector('#opX20'),
                verdict: el.querySelector('#opVerdict'), showMode: el.querySelector('#opShowMode') };
     if (!ui.btn || !ui.stat || !ui.cards) return;
     __op.ui = ui;
+    /* Remount must not look like a first visit — restore the last completed scan. */
+    if (__op.lastCardsHtml){
+      try { ui.cards.innerHTML = __op.lastCardsHtml; } catch (eM) {}
+      if (__op.lastStat) opStat(ui, __op.lastStat);
+      if (ui.x20 && __op.lastX20Html != null){
+        try { ui.x20.innerHTML = __op.lastX20Html; } catch (eX20) {}
+      }
+    }
     try{ opPaintVerdict(ui); }catch(ePv0){}
     try{ opWireShowToggle(ui, el); }catch(eTg0){}
     /* 20X: restore the last rendered section across remounts (the omniroute
@@ -1677,6 +1747,8 @@
     return Promise.resolve().then(function (){
       if (__op.busy) return 'busy';
       if (!__op.ran) return 'skipped: not run yet';
+      if (__op.snap && isFinite(__op.snap.at) && (Date.now() - __op.snap.at) < OP_FRESH_MS)
+        return 'skipped: fresh';
       var ui = __op.ui;
       if (ui) return runScan(ui).then(function (){ return __op.lastStat || 'rescanned'; });
       return __op.lastStat || 'no ui mounted';
