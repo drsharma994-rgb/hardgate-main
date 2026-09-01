@@ -2160,6 +2160,88 @@ terse status, and never launches a first-time scan on a global refresh.
     return c ? s / c : NaN;
   }
 
+  /* Map a native detector kind onto goldind's institutional stratKey.
+     Sweep families must clear MSS + displacement + IFVG. OB-RETEST is
+     volume-weighted. ASIA-BREAK is allowed inside the Asian box. Every
+     other mechanic still runs news / spread / macro / session / MTF. */
+  function hgOgKindToInstKey(kind){
+    var k = String(kind || '').toUpperCase();
+    if (k === 'ASIA-BREAK') return 'asian';
+    if (k === 'OB-RETEST') return 'ob';
+    if (k === 'KZ-JUDAS' || k === 'SWEEP-V2' || k === 'POOL-SWEEP'
+        || k.indexOf('SWEEP') >= 0)
+      return 'sweep';
+    return 'vwap';
+  }
+
+  function hgOgInstNowMs(extra){
+    extra = extra || {};
+    var ms = fin(extra.nowMs);
+    if (isFinite(ms) && ms > 0) return ms;
+    var sec = fin(extra.nowSec);
+    if (isFinite(sec) && sec > 1e11) return sec;
+    if (isFinite(sec) && sec > 0) return sec * 1000;
+    return NaN;
+  }
+
+  /* Same hgGoldInstFilter stack as GOLD SCALP / GOLD SWING. Fail-open when
+     goldind.js is not loaded (the core omnigold harness does not boot it).
+     Does not move hit.level or rewrite the stop — it only returns a veto. */
+  function hgOgInstFilterHit(hit, rows, extra){
+    extra = extra || {};
+    hit = hit || {};
+    var fn = gfn('hgGoldInstFilter');
+    if (typeof fn !== 'function'){
+      return { dropped: false, reason: 'goldind inst filter not loaded — fail-open', unchecked: true };
+    }
+    var dir = String(hit.dir || extra.dir || '').toLowerCase();
+    var scalp = extra.sessionHard === true;
+    var nowMs = hgOgInstNowMs(extra);
+    var w = W();
+    var quote = extra.quote || extra.spread || (w && w.__hgGoldQuote) || null;
+    var l2 = extra.l2 || extra.l2OrderBook || extra.l2Book || (w && w.__hgGoldL2Book) || null;
+    var cand = {
+      dir: dir,
+      stratKey: hgOgKindToInstKey(hit.kind),
+      why: extra.why || hit.why || '',
+      stamps: [],
+      gateNotes: []
+    };
+    var ctx = {
+      rows: rows,
+      scalp: scalp,
+      hardReject: scalp,
+      macro: extra.macro,
+      dxyRows: extra.dxyRows || (extra.macro && extra.macro.dxyRows),
+      tnxRows: extra.tnxRows || extra.yieldRows
+             || (extra.macro && (extra.macro.tnxRows || extra.macro.us10yRows)),
+      news: extra.news,
+      rows4h: extra.rows4h,
+      rows1d: extra.rows1d || extra.dailyCandles,
+      l2OrderBook: l2,
+      spreadUsd: extra.spreadUsd,
+      spread: extra.spread,
+      bid: extra.bid || (quote && (quote.bid != null ? quote.bid : quote.b)),
+      ask: extra.ask || (quote && (quote.ask != null ? quote.ask : quote.a)),
+      nowMs: nowMs
+    };
+    var r;
+    try { r = fn(cand, ctx); }
+    catch (eInst){
+      return { dropped: false, reason: 'inst filter threw — fail-open', unchecked: true };
+    }
+    r = r || cand;
+    return {
+      dropped: !!r.dropped,
+      reason: r.reason || '',
+      unchecked: false,
+      demoted: !!r.demoted,
+      sessionWeight: r.sessionWeight,
+      stopFloorAtr: r.stopFloorAtr,
+      cand: r
+    };
+  }
+
   /* Gold's ledger. Perp gates (funding, OI, retail, taker) do not exist on
      spot gold and are deliberately absent rather than faked. */
   function hgOgGates(rows, hit, extra){
@@ -3395,6 +3477,29 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     gates.push({ key:'spot-basis', hard:false, info:true, pass: basG, why: basWhy });
 
+    /* Institutional gold filter — same hgGoldInstFilter as GOLD SCALP/SWING.
+       One hard ledger row so the INFO_GATES regex does not swallow eight
+       new keys. goldind absent → fail-open PASS (not UNCHECKED-hard). */
+    var inst = hgOgInstFilterHit(hit, rows, x);
+    var instHard = true, instOk = true, instWhy = 'institutional gold filter OK';
+    if (inst.unchecked){
+      instHard = false;
+      instOk = true;
+      instWhy = inst.reason || 'goldind inst filter not loaded — fail-open';
+    } else if (inst.dropped){
+      instHard = true;
+      instOk = false;
+      instWhy = inst.reason || 'institutional gold filter';
+    } else {
+      instHard = true;
+      instOk = true;
+      instWhy = inst.reason || 'institutional gold filter OK';
+      if (inst.demoted) instWhy = inst.reason || 'ASIA SESSION — swing demote';
+      if (isFinite(fin(inst.sessionWeight)) && fin(inst.sessionWeight) >= 3)
+        instWhy += ' · session weight ' + fin(inst.sessionWeight);
+    }
+    gates.push({ key:'inst-filter', hard: instHard, pass: instOk, why: instWhy });
+
     return gates;
   }
 
@@ -3764,6 +3869,9 @@ terse status, and never launches a first-time scan on a global refresh.
         try { plan = hgOgFormTicket(plan, hit, rows, ex, cfg) || plan; }
         catch (eFmPl) {}
         if (deriveFn) plan = deriveFn(plan);
+        /* Same floor the GOLD tabs use. Native stops stay ATR-based +
+           GOLD_STOP_MAX_PCT clip — this stamp does not tighten them. */
+        if (!isFinite(fin(plan.stopFloorAtr))) plan.stopFloorAtr = 1.5;
       }
       ex.planRisk = (plan && isFinite(fin(plan.risk))) ? fin(plan.risk) : NaN;
       /* Attach only when the engine exists. An absent engine is not a
@@ -8015,47 +8123,68 @@ terse status, and never launches a first-time scan on a global refresh.
         livePx: livePx, marketPx: mktPx, zoneCtx: zoneCtx,
         /* for the spot-basis gate: the tokenised print, and which feed the
            desk itself is on (so it does not price PAXG against PAXG) */
-        paxg: shared.paxg, srcId: got.source
+        paxg: shared.paxg, srcId: got.source,
+        sessionHard: cfg.sessionHard,
+        rows4h: (cfg.tf === '4h') ? rows : (shared.rows4h || null),
+        rows1d: shared.rows1d || null,
+        dxyRows: (shared.macro && (shared.macro.dxyRows || shared.macro.dxyCandles)) || null,
+        tnxRows: shared.yieldRows || (shared.macro && (shared.macro.tnxRows || shared.macro.us10yCandles)) || null,
+        quote: shared.quote || null,
+        l2: shared.l2 || null,
+        spreadUsd: shared.spreadUsd,
+        bid: shared.bid,
+        ask: shared.ask
       };
-      var cands = hgOgEvaluate(rows, hits, extra, cfg);
+      function runEval(){
+        extra.rows4h = extra.rows4h || shared.rows4h || ((cfg.tf === '4h') ? rows : null);
+        extra.rows1d = extra.rows1d || shared.rows1d || null;
+        extra.quote = extra.quote || shared.quote || null;
+        extra.l2 = extra.l2 || shared.l2 || null;
+        extra.bid = extra.bid != null ? extra.bid : shared.bid;
+        extra.ask = extra.ask != null ? extra.ask : shared.ask;
+        extra.spreadUsd = extra.spreadUsd != null ? extra.spreadUsd : shared.spreadUsd;
+        var cands = hgOgEvaluate(rows, hits, extra, cfg);
 
-      /* Record every firing that carries a plan — not only tickets. The
-         in-sample pool measures the raw mechanic, so the forward pool must
-         measure the same thing or the two cannot be compared. The ticket flag
-         rides along so the gates can be judged separately later. */
-      var fwdRecord = gfn('hgFwdRecord');
-      if (fwdRecord && rows.length){
-        var barT = num(rows[rows.length - 1].t);
-        for (var ci = 0; ci < cands.length; ci++){
-          var c = cands[ci];
-          if (!c.plan) continue;
-          try {
-            fwdRecord({
-              tab: 'OMNIGOLD:' + cfg.label, mechanic: c.kind, sym: 'XAUUSD', tf: cfg.tf,
-              dir: c.dir, entry: c.plan.entry, stop: c.plan.stop, t1: c.plan.t1,
-              barT: barT, horizonBars: cfg.horizonBars, ticket: !!(c.grade && c.grade.ticket),
-              /* The A/B/C chip this setup wore when it fired. Written now so
-                 the forward panel can judge the chips rather than trust them:
-                 the grade counts CONFLUENCE, and confluence has never been
-                 shown to predict outcome on gold. c.grade is the gate ledger's
-                 object, so the letter comes off the engine bridge instead. */
-              grade: c.engineGrade || (c.grade && c.grade.letter) || hgOgConfluenceGrade(c) || '',
-              /* the three gates that replicated on both horizons — recorded so
-                 the in-sample 45%-at-2R swing result earns an out-of-sample
-                 verdict rather than being traded on faith */
-              stack3: (function(gs){
-                var keep = { 'regime-fit':1, 'htf-confirm':1, 'hurst-regime':1 };
-                var n = 0, j;
-                for (j = 0; j < (gs || []).length; j++){
-                  if (gs[j] && keep[gs[j].key] && gs[j].pass === true) n++;
-                }
-                return n;
-              })(c.gates)
-            });
-          } catch (e) { var wr = gfn('hgFwdWarn'); if (wr) { try { wr('omnigold:record', e); } catch (eW) {} } }
+        /* Record every firing that carries a plan — not only tickets. The
+           in-sample pool measures the raw mechanic, so the forward pool must
+           measure the same thing or the two cannot be compared. The ticket flag
+           rides along so the gates can be judged separately later. */
+        var fwdRecord = gfn('hgFwdRecord');
+        if (fwdRecord && rows.length){
+          var barT = num(rows[rows.length - 1].t);
+          for (var ci = 0; ci < cands.length; ci++){
+            var c = cands[ci];
+            if (!c.plan) continue;
+            try {
+              fwdRecord({
+                tab: 'OMNIGOLD:' + cfg.label, mechanic: c.kind, sym: 'XAUUSD', tf: cfg.tf,
+                dir: c.dir, entry: c.plan.entry, stop: c.plan.stop, t1: c.plan.t1,
+                barT: barT, horizonBars: cfg.horizonBars, ticket: !!(c.grade && c.grade.ticket),
+                /* The A/B/C chip this setup wore when it fired. Written now so
+                   the forward panel can judge the chips rather than trust them:
+                   the grade counts CONFLUENCE, and confluence has never been
+                   shown to predict outcome on gold. c.grade is the gate ledger's
+                   object, so the letter comes off the engine bridge instead. */
+                grade: c.engineGrade || (c.grade && c.grade.letter) || hgOgConfluenceGrade(c) || '',
+                /* the three gates that replicated on both horizons — recorded so
+                   the in-sample 45%-at-2R swing result earns an out-of-sample
+                   verdict rather than being traded on faith */
+                stack3: (function(gs){
+                  var keep = { 'regime-fit':1, 'htf-confirm':1, 'hurst-regime':1 };
+                  var n = 0, j;
+                  for (j = 0; j < (gs || []).length; j++){
+                    if (gs[j] && keep[gs[j].key] && gs[j].pass === true) n++;
+                  }
+                  return n;
+                })(c.gates)
+              });
+            } catch (e) { var wr = gfn('hgFwdWarn'); if (wr) { try { wr('omnigold:record', e); } catch (eW) {} } }
+          }
         }
+        return { cfg: cfg, rows: rows, source: got.source, cands: cands, pooled: pooled, livePx: livePx };
       }
-      return { cfg: cfg, rows: rows, source: got.source, cands: cands, pooled: pooled, livePx: livePx };
+      if (shared && shared.htfP) return shared.htfP.then(runEval);
+      return runEval();
     }).catch(function(){
       return { cfg: cfg, rows: [], source: null, cands: [], pooled: null };
     });
@@ -8141,9 +8270,27 @@ terse status, and never launches a first-time scan on a global refresh.
                       spot-basis gate. NaN on any failure or timeout — the gate
                       then reads "no PAXG print this scan" rather than waiting or
                       inventing a parity. */
-                   paxg: NaN };
+                   paxg: NaN,
+                   rows4h: null, rows1d: null, quote: null, l2: null };
     try { var kz = gfn('goldKillzone'); if (kz) shared.killzone = kz(Date.now()); } catch (e) {}
     try { var nr = gfn('hgNewsRisk'); if (nr) shared.news = nr('XAUUSD'); } catch (e) {}
+    try {
+      var qw = W();
+      if (qw){
+        if (qw.__hgGoldQuote) shared.quote = qw.__hgGoldQuote;
+        if (qw.__hgGoldL2Book) shared.l2 = qw.__hgGoldL2Book;
+        if (qw.__hgGoldQuote && qw.__hgGoldQuote.bid != null) shared.bid = qw.__hgGoldQuote.bid;
+        if (qw.__hgGoldQuote && qw.__hgGoldQuote.ask != null) shared.ask = qw.__hgGoldQuote.ask;
+      }
+    } catch (eQ) {}
+    /* HTF for the MTF matrix. Fail-open if these miss; do not block the scan. */
+    shared.htfP = Promise.all([
+      hgOgFetchRows('4h', 400).catch(function(){ return { rows: [] }; }),
+      hgOgFetchRows('1d', 260).catch(function(){ return { rows: [] }; })
+    ]).then(function(htf){
+      shared.rows4h = (htf[0] && htf[0].rows) || [];
+      shared.rows1d = (htf[1] && htf[1].rows) || [];
+    }).catch(function(){});
     __og.shared = shared;
 
     return Promise.resolve()
@@ -9420,6 +9567,8 @@ terse status, and never launches a first-time scan on a global refresh.
        still fires and still shows a card, so the miss is invisible. */
     window.hgOgFamilyOf = hgOgFamilyOf;
     window.hgOgGates = hgOgGates;
+    window.hgOgKindToInstKey = hgOgKindToInstKey;
+    window.hgOgInstFilterHit = hgOgInstFilterHit;
 
   /* ==================== RISK SIZING & DRAWDOWN CIRCUIT BREAKER ==================== */
 
