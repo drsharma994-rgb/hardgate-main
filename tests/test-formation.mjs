@@ -80,7 +80,7 @@ console.log('== hgFormTicket shapes a swing hit ==');
   ok(fm.hit.formationScore >= 0, 'formation score stamped');
 }
 
-console.log('== keepLevels preserves named entry/stop/t1 ==');
+console.log('== keepLevels locks ENTRY, never tightens STOP ==');
 {
   const rows = synthRows(120, 100);
   const mark = rows[rows.length - 1].c;
@@ -89,9 +89,11 @@ console.log('== keepLevels preserves named entry/stop/t1 ==');
   const fm = W.hgFormTicket(hit, { rows, style: 'swing', a4: 1.2, keepLevels: true });
   ok(fm.ok === true, 'keepLevels accepts named hit (' + (fm.reason || 'ok') + ')');
   ok(Math.abs(fm.hit.entry - 95.5) < 1e-9, 'ENTRY stays the named setup');
-  ok(Math.abs(fm.hit.stop - 93) < 1e-9, 'STOP stays the named invalidation');
-  ok(Math.abs(fm.hit.t1 - 100.5) < 1e-9, 'T1 stays the named target');
-  ok(fm.hit.formationScore >= 0, 'keepLevels stamps formationScore');
+  ok(fm.hit.stop <= 93 + 1e-9, 'STOP never tighter than the named invalidation');
+  ok(isFinite(fm.hit.t1) && fm.hit.t1 > fm.hit.entry, 'T1 is beyond the named entry');
+  ok(isFinite(fm.hit.rr1) && fm.hit.rr1 >= 2 - 1e-6, 'formed T1 still clears 2R');
+  ok(/MARKET|LIMIT/.test(String(fm.hit.entryType || '')), 'entryType stamped');
+  ok(isFinite(fm.hit.formationScore), 'keepLevels stamps formationScore (' + fm.hit.formationScore + ')');
   ok(fm.hit.fillProb != null, 'keepLevels stamps fillProb');
 }
 

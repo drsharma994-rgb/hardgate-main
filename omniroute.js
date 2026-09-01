@@ -2128,14 +2128,16 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return 'fvg';
   }
 
-  /* House formation on a plan the desk already priced. Named ENTRY/STOP/T1
-     stay put (keepLevels). Live refuse is reported; levels are not invented. */
+  /* House formation on a plan the desk already priced. Named ENTRY stays
+     the setup (hit.level). Stop may widen to structure (never tighten);
+     T1/T2 may snap to liquidity / value-area when they still clear min R:R.
+     Live refuse is reported; thin LIMIT fill demotes the score. */
   function hgOmniFormTicket(plan, hit, rows, extra){
     extra = extra || {};
     if (!plan) return { plan: null, ok: false, reason: 'no plan' };
     var w = (typeof window !== 'undefined') ? window : null;
     var formFn = (w && typeof w.hgFormTicket === 'function') ? w.hgFormTicket : null;
-    var entry0 = fin(plan.entry), stop0 = fin(plan.stop), t10 = fin(plan.t1), t20 = fin(plan.t2);
+    var entry0 = fin(plan.entry);
     if (!formFn){
       plan.formationOk = null;
       plan.formationReason = 'hgFormTicket unavailable — UNCHECKED';
@@ -2169,10 +2171,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       return { plan: plan, ok: false, reason: plan.formationReason, tag: plan.formationTag };
     }
     var formed = fm.hit || plan;
+    /* ENTRY is the named setup. Stop / T1 / T2 keep formed geometry. */
     if (isFinite(entry0)) formed.entry = entry0;
-    if (isFinite(stop0)) formed.stop = stop0;
-    if (isFinite(t10)) formed.t1 = t10;
-    if (isFinite(t20)) formed.t2 = t20;
     formed = hgOmniDerivePlan(formed);
     formed.formationOk = true;
     if (fm.formationScore != null) formed.formationScore = fm.formationScore;
@@ -6931,8 +6931,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     } catch (eLm){ lmOk = null; lmWhy = 'liquidation map threw: ' + ((eLm && eLm.message) || eLm); }
     gates.push({ key:'liq-map', hard:false, info:true, pass: lmOk, why: lmWhy });
 
-    /* House formation (keepLevels) — live context may refuse. Named levels
-       stay the setup; this gate reports the enricher, it does not reprice. */
+    /* House formation (keepLevels) — live context may refuse. Named ENTRY
+       stays the setup; stop/TPs may be the formed geometry. This gate
+       reports the enricher, it does not invent a new trade. */
     var fmEx = extra && extra.formation;
     var fmPass = !fmEx ? null : (fmEx.ok === false ? false : (fmEx.ok === true ? true : null));
     var fmWhy;
@@ -7417,7 +7418,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
            with above the one nothing supports. */
         consensus: hgOmniConsensus(hgOmniConsensusVoters(hits, rows, exForHit), hit),
         family: hgOmniFamilyOf(hit.kind),
-        rr: (plan && isFinite(fin(plan.rr1))) ? fin(plan.rr1) : NaN
+        rr: (plan && isFinite(fin(plan.rr1))) ? fin(plan.rr1) : NaN,
+        formationScore: (plan && isFinite(fin(plan.formationScore))) ? fin(plan.formationScore) : NaN
       });
       } catch (eHit) {
         try { console.warn('omniroute evaluate skipped', item && item.sym, hits[i] && hits[i].kind, eHit); } catch (eHit2) {}
@@ -7483,6 +7485,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       if (bc !== ac) return bc - ac;
       var ae = (a.grade && a.grade.evaluated) || 0, be = (b.grade && b.grade.evaluated) || 0;
       if (be !== ae) return be - ae;
+      /* Formation quality after evidence. R:R is often pinned at the 2R floor
+         and discriminates nothing; the formed score (fill, POI agree, live)
+         is the real difference between two otherwise-equal tickets. */
+      var af = isFinite(fin(a.formationScore)) ? fin(a.formationScore)
+             : (a.plan && isFinite(fin(a.plan.formationScore)) ? fin(a.plan.formationScore) : -1);
+      var bf = isFinite(fin(b.formationScore)) ? fin(b.formationScore)
+             : (b.plan && isFinite(fin(b.plan.formationScore)) ? fin(b.plan.formationScore) : -1);
+      if (bf !== af) return bf - af;
       /* fin(), not isFinite: a cleared R:R is null, and isFinite(null) is true,
          so the raw test would rank an unknown R:R as a real 0 rather than
          sinking it below every setup that has one. */
@@ -8333,8 +8343,13 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         +  '</div>';
     }
     if (c.plan){
-      h += '<div class="plan">ENTRY ' + fmtPx(c.plan.entry) + ' · STOP ' + fmtPx(c.plan.stop)
-        +  ' · T1 ' + fmtPx(c.plan.t1) + ' · T2 ' + fmtPx(c.plan.t2)
+      h += '<div class="plan">ENTRY ' + fmtPx(c.plan.entry)
+        +  (c.plan.entryType ? (' (' + esc(String(c.plan.entryType)) + ')') : '')
+        +  ' · STOP ' + fmtPx(c.plan.stop)
+        +  (c.plan.stopWidened ? ' (structure-wide)' : '')
+        +  ' · T1 ' + fmtPx(c.plan.t1)
+        +  (c.plan.t1Source ? (' ' + esc(String(c.plan.t1Source))) : '')
+        +  ' · T2 ' + fmtPx(c.plan.t2)
         +  ' · <b>R:R ' + fmt(c.plan.rr1, 2) + '</b>'
         +  ' · risk ' + fmt(c.plan.riskPct, 2) + '%</div>';
       if (c.plan.note) h += '<div class="dim">' + esc(c.plan.note) + '</div>';

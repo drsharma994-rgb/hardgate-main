@@ -604,27 +604,169 @@ function hgFormGoldEnrich(hit, ctx, params, dir, mark, a4, rows, style, baseStyl
 }
 
 /* Crypto desks that already priced a named setup (OMNIROUTE hit.level,
-   OMNIPRESENT live/zone) must not snap to a generic POI. This path stamps
-   fill + formation score + live internet context and NEVER moves ENTRY /
-   STOP / T1. Live refuse is the only hard fail. */
+   OMNIPRESENT live/zone) must not snap ENTRY to a generic POI. This path
+   keeps that entry locked, then uses the house formation tools on the
+   rest of the ticket:
+
+     STOP  widen-only via hgStructureStop (never tighten — gold lesson).
+           OMNIPRESENT zone stops stay squeezed: the zone IS invalidation.
+     T1/T2 structure (liquidity / value-area) when they still clear min R:R;
+           mechanical R-multiples otherwise. Never invent a closer target
+           just to dress the card.
+     TYPE  MARKET if live is in the zone, else LIMIT. Thin LIMIT fill
+           demotes the score — never pulls ENTRY closer, never vetoes
+           a VALUE / ARMED wait that is the desk's product.
+     SCORE POI agreement with the named level, fill, live context.
+
+   Live refuse (event / stables / spot-perp) is the only hard fail. */
 function hgFormKeepLevels(hit, ctx, params, dir, mark, a4, rows, style, baseStyle, minRr){
   var plan = Object.assign({}, hit);
   var entry0 = +plan.entry, stop0 = +plan.stop, t10 = +(plan.t1 || plan.tp1), t20 = +plan.t2;
   if (!(isFinite(entry0) && entry0 > 0 && isFinite(stop0)))
     return { ok: false, reason: 'no named levels to keep', tag: 'formation' };
-  var risk = Math.abs(entry0 - stop0);
-  if (!(risk > 0)) return { ok: false, reason: 'invalid named levels', tag: 'formation' };
+  var risk0 = Math.abs(entry0 - stop0);
+  if (!(risk0 > 0)) return { ok: false, reason: 'invalid named levels', tag: 'formation' };
+  if (!(isFinite(a4) && a4 > 0)) a4 = risk0;
+  if (!isFinite(mark)) mark = isFinite(+plan.mark) ? +plan.mark : entry0;
+  var rankBoost = isFinite(ctx && ctx.rankBoost) ? +ctx.rankBoost : 0;
+  var squeezed = /omnipresent|^op-/i.test(String(plan.planSrc || '') + ' ' + String(plan.kind || ''));
+  var stop = stop0;
 
+  /* 1. Structure-widen STOP. Never pull it closer than the named invalidation.
+        Distant lastSwing (runaway trend) is declined — that would destroy
+        the setup-level stop OMNIROUTE priced on purpose. */
+  if (!squeezed && typeof G.hgStructureStop === 'function'){
+    try{
+      var st = G.hgStructureStop(dir, entry0, rows, {
+        look: params.swingLook, buffer: params.buffer, capDist: params.capDist,
+        capMode: 'structure'
+      });
+      if (st && isFinite(st.stop)){
+        var stOk = (dir === 'long') ? (st.stop < entry0 && st.stop < stop)
+                                    : (st.stop > entry0 && st.stop > stop);
+        if (stOk){
+          var widenAtr = Math.abs(st.stop - stop) / a4;
+          var riskAtr = Math.abs(entry0 - st.stop) / a4;
+          if (widenAtr <= 1.0 + 1e-9 && riskAtr <= 3.5 + 1e-9){
+            stop = st.stop;
+            plan.stopWidened = true;
+            plan.stopNote = (plan.stopNote ? plan.stopNote + '; ' : '')
+              + (st.note || 'stop widened to structure');
+          }
+        }
+      }
+    }catch(eSt){}
+  }
+  plan.stop = stop;
+  if (dir === 'long' && stop >= entry0)
+    return { ok: false, reason: 'long stop above entry', tag: 'formation' };
+  if (dir === 'short' && stop <= entry0)
+    return { ok: false, reason: 'short stop below entry', tag: 'formation' };
+
+  var risk = Math.abs(entry0 - stop);
+  if (!(risk > 0)) return { ok: false, reason: 'invalid formed levels', tag: 'formation' };
+
+  /* 2. Structure T1/T2 when they still clear the style floor. Keep the
+        named target if it is further (more honest reward) and still pays. */
+  var t1 = t10, t2 = t20, t1Source = plan.t1Source || 'named', t2Source = plan.t2Source || 'named';
+  var tg = hgStructureTargets(dir, entry0, stop, rows, a4, { minRr: minRr, style: baseStyle });
+  if (tg && isFinite(tg.t1) && tg.rr1 >= minRr - 1e-9){
+    var namedRr = isFinite(t10) ? Math.abs(t10 - entry0) / risk : NaN;
+    var namedFurther = isFinite(namedRr) && namedRr >= minRr - 1e-9
+      && Math.abs(t10 - entry0) >= Math.abs(tg.t1 - entry0) - 1e-9;
+    if (!namedFurther){
+      t1 = tg.t1;
+      t1Source = tg.t1Source || 'structure';
+      plan.targetPolicy = tg.targetPolicy;
+    }
+    if (isFinite(tg.t2)){
+      if (!isFinite(t20) || Math.abs(tg.t2 - entry0) > Math.abs(t20 - entry0)){
+        t2 = tg.t2;
+        t2Source = tg.t2Source || 'structure';
+      }
+    }
+  } else if (!(isFinite(t1) && Math.abs(t1 - entry0) / risk >= minRr - 1e-9)
+             && typeof G.hgPlanFromRisk === 'function'){
+    try{
+      var pr = G.hgPlanFromRisk(dir, entry0, stop, {
+        t1R: baseStyle === 'scalp' ? 1.5 : 2,
+        t2R: baseStyle === 'scalp' ? 2.5 : 3.5,
+        minRr: minRr,
+        targetPolicy: 'R-multiples after structure stop'
+      });
+      if (pr && isFinite(pr.t1)){
+        t1 = pr.t1;
+        t1Source = 'R floor after stop';
+        if (isFinite(pr.t2) && !isFinite(t2)) t2 = pr.t2;
+        plan.targetPolicy = pr.targetPolicy || plan.targetPolicy;
+      }
+    }catch(ePr){}
+  }
+  if (isFinite(t1)) plan.t1 = t1;
+  if (isFinite(t2)) plan.t2 = t2;
+  plan.t1Source = t1Source;
+  plan.t2Source = t2Source;
+  plan.rr = isFinite(t1) ? Math.abs(t1 - entry0) / risk : null;
+  plan.rr1 = plan.rr;
+  plan.rr2 = isFinite(t2) ? Math.abs(t2 - entry0) / risk : null;
+
+  /* 3. Entry TYPE — never move the named price. TRIGGERED fades are market. */
+  if (!plan.zone || !isFinite(+plan.zone.lo) || !isFinite(+plan.zone.hi)){
+    plan.zone = { lo: entry0 - 0.25 * a4, hi: entry0 + 0.25 * a4 };
+  }
+  var triggered = /triggered|op-reject/i.test(String(plan.kind || '') + ' ' + String(plan.status || ''));
+  var inZone = false;
+  if (triggered){
+    plan.entryType = (typeof G.hgFormatEntryType === 'function')
+      ? G.hgFormatEntryType('MARKET', plan.poiLabel || plan.kind || 'live')
+      : 'MARKET @ live';
+    plan.entryGuidance = 'TRIGGERED — live print is the fill';
+    inZone = true;
+  } else if (typeof G.hgRefineEntry === 'function'){
+    var ref = G.hgRefineEntry(mark, entry0, plan.zone, dir);
+    inZone = !!ref.inZone;
+    var label = plan.poiLabel || plan.kind || 'setup';
+    if (typeof G.hgFormatEntryType === 'function'){
+      plan.entryType = ref.inZone ? G.hgFormatEntryType('MARKET', label)
+        : G.hgFormatEntryType('LIMIT', label);
+    } else {
+      plan.entryType = (ref.inZone ? 'MARKET @ ' : 'LIMIT @ ') + label;
+    }
+    plan.entryGuidance = ref.guidance || plan.entryGuidance;
+  }
+
+  /* 4. POI agreement — score the named level against real structure.
+        Never replace ENTRY with the POI. */
+  try{
+    var poi = hgRankEntryPOI(rows, dir, baseStyle, mark, a4, params);
+    if (poi && isFinite(+poi.entry)){
+      var poiAtr = Math.abs(+poi.entry - entry0) / a4;
+      plan.poiAgreeAtr = poiAtr;
+      plan.poiAgreeLabel = poi.label || poi.poi;
+      if (poiAtr <= 0.5){ rankBoost += 8; plan.poiAgree = true; }
+      else if (poiAtr <= 1.0){ rankBoost += 3; plan.poiAgree = true; }
+      else { rankBoost -= 3; plan.poiAgree = false; }
+    }
+  }catch(ePoi){}
+
+  /* 5. Fill history. Do not pull ENTRY closer to chase a thin zone.
+        Demote — do not refuse. VALUE / ARMED tickets live 2–4×ATR from
+        the print on purpose; a fill refuse would empty both desks. */
   var fillBars = baseStyle === 'scalp' ? params.fillBarsScalp : params.fillBarsSwing;
   var fill = hgFillProbability(rows, entry0, dir, plan.zone, fillBars);
   plan.fillProb = fill.pct;
   plan.fillNote = fill.note;
-  plan.rr = isFinite(t10) ? Math.abs(t10 - entry0) / risk : null;
-  plan.rr1 = plan.rr;
-  plan.rr2 = isFinite(t20) ? Math.abs(t20 - entry0) / risk : null;
-  plan.formationScore = hgFormationScore(plan, ctx);
+  var fillPct = isFinite(+fill.pct) ? +fill.pct : null;
+  var isLimit = !inZone && !triggered;
+  if (isLimit && fillPct != null && fillPct < 25){
+    plan.fillPenalty = true;
+    rankBoost -= (fillPct < 10 ? 12 : 8);
+  }
+
   plan.formationParams = params.source;
   plan.planSrc = plan.planSrc || 'keep-levels';
+  ctx = Object.assign({}, ctx, { rankBoost: rankBoost });
+  plan.formationScore = hgFormationScore(plan, ctx);
 
   if (typeof G.hgLiveFormationApply === 'function'){
     try{
@@ -634,21 +776,43 @@ function hgFormKeepLevels(hit, ctx, params, dir, mark, a4, rows, style, baseStyl
       var app = G.hgLiveFormationApply(plan, live, { a4: a4, preserveLevels: true, style: baseStyle });
       if (!app || app.ok === false){
         return { ok: false, reason: (app && app.reason) || 'live context refused',
-          tag: (app && app.tag) || 'live' };
+          tag: (app && app.tag) || 'live', hit: plan };
       }
       plan = app.plan || plan;
-      if (isFinite(+plan.liveScoreDelta))
-        plan.formationScore = Math.round((isFinite(+plan.formationScore) ? +plan.formationScore : 0) + +plan.liveScoreDelta);
     }catch(eKeep){}
   }
-  /* Named setup is the trade — restore even if a live helper mutated a copy. */
+
+  /* 6. Final gates: PROVEN-BAD / cost are refuses. Regime is a demote. */
+  if (typeof G.hgTicketFinalGates === 'function'){
+    try{
+      var fg = G.hgTicketFinalGates(plan, { minRr: minRr, lane: 'crypto', style: baseStyle });
+      if (fg && fg.chips && fg.chips.length){
+        plan.evidenceChips = (plan.evidenceChips || []).concat(fg.chips);
+      }
+      if (fg && fg.ok === false && (fg.tag === 'edge' || fg.tag === 'cost')){
+        return { ok: false, reason: fg.reason || 'final gate refused', tag: fg.tag || 'formation', hit: plan };
+      }
+      if (fg && fg.ok === false && fg.tag === 'regime'){
+        rankBoost -= 10;
+        plan.regimeDemote = fg.reason;
+      }
+    }catch(eFg){}
+  }
+
+  /* Named ENTRY is the trade — restore even if a live helper mutated a copy.
+     Stop / T1 / T2 keep the intelligent geometry computed above. */
   plan.entry = entry0;
-  plan.stop = stop0;
-  if (isFinite(t10)) plan.t1 = t10;
-  if (isFinite(t20)) plan.t2 = t20;
-  plan.rr = isFinite(t10) ? Math.abs(t10 - entry0) / risk : plan.rr;
+  plan.stop = stop;
+  if (isFinite(t1)) plan.t1 = t1;
+  if (isFinite(t2)) plan.t2 = t2;
+  risk = Math.abs(entry0 - stop);
+  plan.rr = isFinite(t1) ? Math.abs(t1 - entry0) / risk : plan.rr;
   plan.rr1 = plan.rr;
-  plan.rr2 = isFinite(t20) ? Math.abs(t20 - entry0) / risk : plan.rr2;
+  plan.rr2 = isFinite(t2) ? Math.abs(t2 - entry0) / risk : plan.rr2;
+  ctx = Object.assign({}, ctx, { rankBoost: rankBoost });
+  plan.formationScore = hgFormationScore(plan, ctx);
+  if (isFinite(+plan.liveScoreDelta))
+    plan.formationScore = Math.round((isFinite(+plan.formationScore) ? +plan.formationScore : 0) + +plan.liveScoreDelta);
   return { ok: true, hit: plan, formationScore: plan.formationScore, fillNote: fill.note };
 }
 

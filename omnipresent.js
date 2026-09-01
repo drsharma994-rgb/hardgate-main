@@ -462,13 +462,24 @@
       cand.fillNote = formed.plan.fillNote;
       cand.evidenceChips = formed.plan.evidenceChips;
       cand.liveNote = formed.plan.liveNote;
+      cand.entryType = formed.plan.entryType;
+      cand.t1Source = formed.plan.t1Source;
       cand.formationOk = formed.ok;
       cand.formationReason = formed.reason;
-      /* keep named levels even if the wrapper copied a mutated plan */
+      /* ENTRY stays live (TRIGGERED) or the zone edge (ARMED). Stop stays
+         the squeezed zone invalidation (keepLevels skips structure-widen
+         on OP-*). T1/T2 may snap to liquidity / value-area. */
       if (isFinite(fin(cand.entry))) formed.plan.entry = cand.entry;
-      if (isFinite(fin(cand.stop))) formed.plan.stop = cand.stop;
-      if (isFinite(fin(cand.t1))) formed.plan.t1 = cand.t1;
-      if (isFinite(fin(cand.t2))) formed.plan.t2 = cand.t2;
+      if (isFinite(fin(formed.plan.t1))){
+        cand.t1 = formed.plan.t1;
+        if (isFinite(fin(formed.plan.t2))) cand.t2 = formed.plan.t2;
+        var riskN = Math.abs(fin(cand.entry) - fin(cand.stop));
+        if (isFinite(riskN) && riskN > 0){
+          cand.rr1 = Math.abs(fin(cand.t1) - fin(cand.entry)) / riskN;
+          cand.rr2 = isFinite(fin(cand.t2)) ? Math.abs(fin(cand.t2) - fin(cand.entry)) / riskN : cand.rr2;
+          cand.risk = riskN;
+        }
+      }
     }
     return cand;
   }
@@ -672,6 +683,9 @@
     if (aTr !== bTr) return aTr > bTr;
     var aS = isFinite(a.score) ? a.score : 0, bS = isFinite(b.score) ? b.score : 0;
     if (aS !== bS) return aS > bS;
+    var aF = isFinite(+a.formationScore) ? +a.formationScore : -1;
+    var bF = isFinite(+b.formationScore) ? +b.formationScore : -1;
+    if (aF !== bF) return aF > bF;
     var aD = (a.zone && isFinite(+a.zone.distAtr)) ? +a.zone.distAtr : 99;
     var bD = (b.zone && isFinite(+b.zone.distAtr)) ? +b.zone.distAtr : 99;
     return aD < bD;
@@ -695,7 +709,9 @@
     one.sort(function (a, b){
       var at = a && a.grade && a.grade.ticket ? 1 : 0, bt = b && b.grade && b.grade.ticket ? 1 : 0;
       if (at !== bt) return bt - at;
-      return ((b && b.score) || 0) - ((a && a.score) || 0);
+      var as = ((b && b.score) || 0) - ((a && a.score) || 0);
+      if (as) return as;
+      return ((b && +b.formationScore) || 0) - ((a && +a.formationScore) || 0);
     });
     var showable = one.filter(opShowable);
     if (side)
@@ -1741,8 +1757,11 @@
     h += '<div>ZONE <b>' + pxF(c.zone.lo) + '–' + pxF(c.zone.hi) + '</b> (' + c.zone.confluence + ' sources: '
        + esc(c.zone.srcs.join(', ')) + ') · ' + c.zone.distAtr.toFixed(1) + 'xATR from market ' + pxF(c.livePx) + '</div>';
     h += '<div>ENTRY <b>' + pxF(c.entry) + '</b>' + (c.status === 'TRIGGERED' ? ' (live)' : ' (at the zone)')
+       + (c.entryType ? (' · ' + esc(String(c.entryType))) : '')
        + ' · SL <b>' + pxF(c.stop) + '</b> (squeezed: zone + ' + STOP_PAD_ATR + 'xATR)'
-       + ' · TP1 <b>' + pxF(c.t1) + '</b> (2R) · TP2 <b>' + pxF(c.t2) + '</b> (' + c.rr2.toFixed(1) + 'R)</div>';
+       + ' · TP1 <b>' + pxF(c.t1) + '</b> (' + (isFinite(fin(c.rr1)) ? fin(c.rr1).toFixed(1) : '2') + 'R'
+       + (c.t1Source ? (' · ' + esc(String(c.t1Source))) : '') + ')'
+       + ' · TP2 <b>' + pxF(c.t2) + '</b> (' + (isFinite(fin(c.rr2)) ? fin(c.rr2).toFixed(1) : '?') + 'R)</div>';
     if (isFinite(fin(c.formationScore)) || isFinite(fin(c.fillProb))
         || (c.evidenceChips && c.evidenceChips.length) || c.liveNote){
       h += '<div class="dim">FORMATION'

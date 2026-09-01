@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v545',
-  pack: 'OMNIROUTE + OMNIPRESENT keep-levels house formation',
-  built: '2026-09-01T16:15:00Z',
-  note: 'OMNIROUTE and OMNIPRESENT run hgFormTicket keepLevels after pricing: fill + formation score + live internet context, without snapping named setup / zone / live entries. Live refuse is a hard formation gate. formation-live warmup on both scans.'
+  version: 'hg-v546',
+  pack: 'OMNIROUTE + OMNIPRESENT intelligent keep-levels formation',
+  built: '2026-09-01T16:45:00Z',
+  note: 'keepLevels locks named ENTRY then structure-widens STOP (never tighten; OMNIPRESENT zone stays squeezed), snaps T1/T2 to liquidity/value-area when they still clear min R:R, stamps MARKET vs LIMIT, scores POI agreement + fill, refuses hopeless LIMIT. Both desks rank by formationScore after consensus.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
