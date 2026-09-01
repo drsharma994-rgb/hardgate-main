@@ -5,37 +5,34 @@
   "lastRunAt": "2026-09-01T00:01:15.447Z",
   "ticket": {
     "long": {
-      "sym": "ZHIPUUSDT",
-      "entry": 153.53564510558158
+      "sym": "B-UNI_USDT",
+      "entry": 5.6202147423120925
     },
-    "short": {
-      "sym": "XAU",
-      "entry": 4471.007996910492
-    }
+    "short": null
   },
   "sniper": {
-    "key": "B-DASH_USDT@44.667038529012;ZHIPUUSDT@153.53564510558158",
+    "key": "B-OP_USDT@0.09370799204832526;B-UNI_USDT@5.6202147423120925",
     "hits": [
       {
-        "sym": "ZHIPUUSDT",
+        "sym": "B-UNI_USDT",
         "dir": "long",
-        "entry": 153.53564510558158,
-        "stop": 151.02677800868292,
-        "t1": 160,
-        "lev": 33,
+        "entry": 5.6202147423120925,
+        "stop": 5.52247186536024,
+        "t1": 5.92,
+        "lev": 32,
         "state": "APPROACHING"
       },
       {
-        "sym": "B-DASH_USDT",
+        "sym": "B-OP_USDT",
         "dir": "long",
-        "entry": 44.667038529012,
-        "stop": 43.33990326979539,
-        "t1": 47.68,
-        "lev": 20,
+        "entry": 0.09370799204832526,
+        "stop": 0.09165265299647712,
+        "t1": 0.09821,
+        "lev": 26,
         "state": "APPROACHING"
       }
     ],
-    "at": "2026-09-01T04:56:59.706Z"
+    "at": "2026-09-01T09:49:49.041Z"
   },
   "squeeze": {
     "key": "B-AAVE_USDT:long;B-ACE_USDT:short;B-BTR_USDT:long;B-CAKE_USDT:long;B-FLOCK_USDT:long;B-ICP_USDT:long;B-LA_USDT:long;B-LIT_USDT:long;B-TNSR_USDT:long;B-TURBO_USDT:long;B-XPL_USDT:long;B-ZBT_USDT:long",
@@ -154,18 +151,18 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-09-01T04:56:59.706Z"
+    "at": "2026-09-01T09:49:49.041Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-09-01T04:56:59.707Z"
+    "at": "2026-09-01T09:49:49.042Z"
   },
   "degraded": {
     "count": 0,
     "since": null,
     "lastErr": null
   },
-  "engineAlertAt": "2026-09-01T04:56:59.707Z",
+  "engineAlertAt": "2026-09-01T09:49:49.042Z",
   "bookExec": {
     "key": "p0|f0",
     "snap": {
@@ -180,7 +177,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-09-01T04:56:59.941Z"
+    "at": "2026-09-01T09:49:49.322Z"
   },
   "bookFill": {
     "key": "u0|p0",
