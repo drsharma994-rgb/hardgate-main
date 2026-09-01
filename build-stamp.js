@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v544',
-  pack: 'stale-tab auto-reload + cache-busted build stamp',
-  built: '2026-09-01T15:30:00Z',
-  note: 'build-stamp.js now ships with ?v=HG_CACHE so HTTP cache cannot pin an old version badge. hgBuildApplyFreshness auto-reloads once when the server is ahead (or a waiting SW is ready), re-checks on tab visibility, and paints STALE on hgVerBadge + chipBuild. SW registration calls reg.update() and reloads on controllerchange.'
+  version: 'hg-v547',
+  pack: 'OMNIGOLD intelligent gold formation',
+  built: '2026-09-01T17:10:00Z',
+  note: 'OMNIGOLD hgOgFormTicket locks named ENTRY (ROUND/FVG/Asia), structure-widens STOP then re-clips at 2.5% of gold (never tighten, never a 1000-pt lastSwing), places T1 at OG_T1_R of formed risk and names the first gold magnet beyond that print, stamps MARKET vs LIMIT, scores conviction (killzone/tape/fill/replay). Cost/weekend/thin-fill demote only. Native tickets never go through hgApplyGoldBestLevels.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

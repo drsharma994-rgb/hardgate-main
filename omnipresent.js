@@ -431,6 +431,59 @@
     return { up: a >= b, e8: a, e13: b, n: closes.length };
   }
 
+  /* Named zone/live levels stay put. Reuses OMNIROUTE's keep-levels wrapper. */
+  function opFormCandidate(cand, rows, livePx){
+    if (!cand) return cand;
+    var formFn = gfn('hgOmniFormTicket');
+    if (!formFn){
+      cand.formationOk = null;
+      cand.formationReason = 'hgOmniFormTicket unavailable — UNCHECKED';
+      return cand;
+    }
+    var plan = {
+      dir: cand.dir, entry: cand.entry, stop: cand.stop, t1: cand.t1, t2: cand.t2,
+      rr1: cand.rr1, rr2: cand.rr2, risk: cand.risk, sym: cand.sym,
+      planSrc: 'omnipresent', kind: cand.status === 'TRIGGERED' ? 'OP-REJECT' : 'OP-ARMED'
+    };
+    var formed;
+    try {
+      formed = formFn(plan, { dir: cand.dir, kind: plan.kind }, rows, {
+        livePx: livePx, atr: cand.atr, sym: cand.sym, style: 'swing'
+      });
+    } catch (eF) {
+      cand.formationOk = null;
+      cand.formationReason = 'formation threw';
+      return cand;
+    }
+    cand.formation = formed;
+    if (formed && formed.plan){
+      cand.formationScore = formed.plan.formationScore;
+      cand.fillProb = formed.plan.fillProb;
+      cand.fillNote = formed.plan.fillNote;
+      cand.evidenceChips = formed.plan.evidenceChips;
+      cand.liveNote = formed.plan.liveNote;
+      cand.entryType = formed.plan.entryType;
+      cand.t1Source = formed.plan.t1Source;
+      cand.formationOk = formed.ok;
+      cand.formationReason = formed.reason;
+      /* ENTRY stays live (TRIGGERED) or the zone edge (ARMED). Stop stays
+         the squeezed zone invalidation (keepLevels skips structure-widen
+         on OP-*). T1/T2 may snap to liquidity / value-area. */
+      if (isFinite(fin(cand.entry))) formed.plan.entry = cand.entry;
+      if (isFinite(fin(formed.plan.t1))){
+        cand.t1 = formed.plan.t1;
+        if (isFinite(fin(formed.plan.t2))) cand.t2 = formed.plan.t2;
+        var riskN = Math.abs(fin(cand.entry) - fin(cand.stop));
+        if (isFinite(riskN) && riskN > 0){
+          cand.rr1 = Math.abs(fin(cand.t1) - fin(cand.entry)) / riskN;
+          cand.rr2 = isFinite(fin(cand.t2)) ? Math.abs(fin(cand.t2) - fin(cand.entry)) / riskN : cand.rr2;
+          cand.risk = riskN;
+        }
+      }
+    }
+    return cand;
+  }
+
   /* ==================== pure: the ledger ==================== */
 
   function opGates(rows, cand, livePx, sym){
@@ -580,6 +633,18 @@
     }
     gates.push({ key: 'measured-edge', hard: false, pass: ed, why: edWhy });
 
+    var fm = cand.formation;
+    var opFmPass = !fm ? null : (fm.ok === false ? false : (fm.ok === true ? true : null));
+    var opFmWhy;
+    if (!fm) opFmWhy = 'formation not run on this candidate — UNCHECKED';
+    else if (fm.ok === false) opFmWhy = String(fm.reason || 'live formation refused');
+    else if (fm.ok === true){
+      opFmWhy = 'keep-levels formation'
+        + (isFinite(fin(cand.formationScore)) ? (' · score ' + fin(cand.formationScore)) : '')
+        + (isFinite(fin(cand.fillProb)) ? (' · fill ' + fin(cand.fillProb) + '%') : '');
+    } else opFmWhy = String((fm && fm.reason) || 'formation module UNCHECKED');
+    gates.push({ key: 'formation', hard: opFmPass === false, info: opFmPass === true, pass: opFmPass, why: opFmWhy });
+
     return gates;
   }
 
@@ -618,6 +683,9 @@
     if (aTr !== bTr) return aTr > bTr;
     var aS = isFinite(a.score) ? a.score : 0, bS = isFinite(b.score) ? b.score : 0;
     if (aS !== bS) return aS > bS;
+    var aF = isFinite(+a.formationScore) ? +a.formationScore : -1;
+    var bF = isFinite(+b.formationScore) ? +b.formationScore : -1;
+    if (aF !== bF) return aF > bF;
     var aD = (a.zone && isFinite(+a.zone.distAtr)) ? +a.zone.distAtr : 99;
     var bD = (b.zone && isFinite(+b.zone.distAtr)) ? +b.zone.distAtr : 99;
     return aD < bD;
@@ -641,7 +709,9 @@
     one.sort(function (a, b){
       var at = a && a.grade && a.grade.ticket ? 1 : 0, bt = b && b.grade && b.grade.ticket ? 1 : 0;
       if (at !== bt) return bt - at;
-      return ((b && b.score) || 0) - ((a && a.score) || 0);
+      var as = ((b && b.score) || 0) - ((a && a.score) || 0);
+      if (as) return as;
+      return ((b && +b.formationScore) || 0) - ((a && +a.formationScore) || 0);
     });
     var showable = one.filter(opShowable);
     if (side)
@@ -720,7 +790,18 @@
         return rg.run();
       }).catch(function(){ return null; });
     }
-    return warmRegime().then(function(){ return warmNews(); });
+    function warmFormationLive(){
+      return Promise.resolve().then(function(){
+        var hooks = W.HG_warmups;
+        if (!hooks || !hooks.length) return null;
+        var fl = null, i;
+        for (i = 0; i < hooks.length; i++) if (hooks[i] && hooks[i].id === 'formation-live') fl = hooks[i];
+        if (!fl || typeof fl.run !== 'function') return null;
+        opStat(ui, 'warming live formation context…');
+        return fl.run();
+      }).catch(function(){ return null; });
+    }
+    return warmRegime().then(function(){ return warmNews(); }).then(function(){ return warmFormationLive(); });
   }
 
   function runScan(ui){
@@ -787,6 +868,7 @@
                     var cands = opAssess(rows, livePx);
                     for (var c = 0; c < cands.length; c++){
                       cands[c].sym = item.sym; cands[c].base = item.base; cands[c].exchange = item.exchange;
+                      opFormCandidate(cands[c], rows, livePx);
                       cands[c].gates = opGates(rows, cands[c], livePx, item.sym);
                       cands[c].grade = gradeFn ? gradeFn(cands[c].gates)
                         : { ticket: false, vetoes: [], verdict: 'grade engine unavailable' };
@@ -1675,8 +1757,21 @@
     h += '<div>ZONE <b>' + pxF(c.zone.lo) + '–' + pxF(c.zone.hi) + '</b> (' + c.zone.confluence + ' sources: '
        + esc(c.zone.srcs.join(', ')) + ') · ' + c.zone.distAtr.toFixed(1) + 'xATR from market ' + pxF(c.livePx) + '</div>';
     h += '<div>ENTRY <b>' + pxF(c.entry) + '</b>' + (c.status === 'TRIGGERED' ? ' (live)' : ' (at the zone)')
+       + (c.entryType ? (' · ' + esc(String(c.entryType))) : '')
        + ' · SL <b>' + pxF(c.stop) + '</b> (squeezed: zone + ' + STOP_PAD_ATR + 'xATR)'
-       + ' · TP1 <b>' + pxF(c.t1) + '</b> (2R) · TP2 <b>' + pxF(c.t2) + '</b> (' + c.rr2.toFixed(1) + 'R)</div>';
+       + ' · TP1 <b>' + pxF(c.t1) + '</b> (' + (isFinite(fin(c.rr1)) ? fin(c.rr1).toFixed(1) : '2') + 'R'
+       + (c.t1Source ? (' · ' + esc(String(c.t1Source))) : '') + ')'
+       + ' · TP2 <b>' + pxF(c.t2) + '</b> (' + (isFinite(fin(c.rr2)) ? fin(c.rr2).toFixed(1) : '?') + 'R)</div>';
+    if (isFinite(fin(c.formationScore)) || isFinite(fin(c.fillProb))
+        || (c.evidenceChips && c.evidenceChips.length) || c.liveNote){
+      h += '<div class="dim">FORMATION'
+        + (isFinite(fin(c.formationScore)) ? (' ' + fin(c.formationScore)) : '')
+        + (isFinite(fin(c.fillProb)) ? (' · fill ' + fin(c.fillProb) + '%') : '')
+        + (c.fillNote ? (' · ' + esc(String(c.fillNote).slice(0, 80))) : '')
+        + ((c.evidenceChips && c.evidenceChips.length) ? (' · ' + esc(c.evidenceChips.join(' · '))) : '')
+        + (c.liveNote ? (' · ' + esc(String(c.liveNote).slice(0, 80))) : '')
+        + '</div>';
+    }
     h += '<div class="dim">trigger: ' + esc(c.trigger) + '</div>';
     h += opCta(c);
     if (c.evidence.length) h += '<div>evidence: ' + esc(c.evidence.join(' · ')) + '</div>';
@@ -1768,6 +1863,7 @@
     window.opOnePerContract = opOnePerContract;
     window.opRankHead = opRankHead;
     window.opNextCloses = opNextCloses;
+    window.opFormCandidate = opFormCandidate;
     /* 20X face — the adapter, the qualify wrapper and the renderer, exported
        so each is testable on a synthetic candidate apart from a live scan. */
     window.opX20Wrap = opX20Wrap;

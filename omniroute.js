@@ -2118,6 +2118,67 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return plan;
   }
 
+  function hgOmniPoiFromKind(kind){
+    var k = String(kind || '').toUpperCase();
+    if (/SWEEP|SPRING|UTAD|VALUE/.test(k)) return 'sweep';
+    if (/FVG|OB|BOS/.test(k)) return 'fvg';
+    if (/AVWAP|VWAP/.test(k)) return 'avwap';
+    if (/ORB|PO3|RANGE/.test(k)) return 'ote';
+    if (/EMA|TREND/.test(k)) return 'ema21';
+    return 'fvg';
+  }
+
+  /* House formation on a plan the desk already priced. Named ENTRY stays
+     the setup (hit.level). Stop may widen to structure (never tighten);
+     T1/T2 may snap to liquidity / value-area when they still clear min R:R.
+     Live refuse is reported; thin LIMIT fill demotes the score. */
+  function hgOmniFormTicket(plan, hit, rows, extra){
+    extra = extra || {};
+    if (!plan) return { plan: null, ok: false, reason: 'no plan' };
+    var w = (typeof window !== 'undefined') ? window : null;
+    var formFn = (w && typeof w.hgFormTicket === 'function') ? w.hgFormTicket : null;
+    var entry0 = fin(plan.entry);
+    if (!formFn){
+      plan.formationOk = null;
+      plan.formationReason = 'hgFormTicket unavailable — UNCHECKED';
+      return { plan: plan, ok: null, reason: plan.formationReason };
+    }
+    var a4 = fin(extra.atr);
+    if (!(isFinite(a4) && a4 > 0)) a4 = atrOf(rows, 14);
+    var hitIn = {}, k;
+    for (k in plan) if (Object.prototype.hasOwnProperty.call(plan, k)) hitIn[k] = plan[k];
+    hitIn.dir = (hit && hit.dir) ? hit.dir : plan.dir;
+    hitIn.sym = extra.sym || plan.sym || hitIn.sym;
+    hitIn.kind = (hit && hit.kind) || plan.kind;
+    hitIn.poi = hgOmniPoiFromKind(hitIn.kind);
+    hitIn.planSrc = plan.planSrc || 'hgOmniPlanForHit';
+    hitIn.mark = extra.livePx;
+    var fm;
+    try {
+      fm = formFn(hitIn, {
+        rows: rows, style: extra.style || 'swing', keepLevels: true,
+        a4: a4, live: extra.live || null
+      });
+    } catch (eF) {
+      plan.formationOk = null;
+      plan.formationReason = 'formation threw: ' + ((eF && eF.message) || eF);
+      return { plan: plan, ok: null, reason: plan.formationReason };
+    }
+    if (!fm || fm.ok === false){
+      plan.formationOk = false;
+      plan.formationReason = (fm && fm.reason) || 'formation refused';
+      plan.formationTag = (fm && fm.tag) || 'formation';
+      return { plan: plan, ok: false, reason: plan.formationReason, tag: plan.formationTag };
+    }
+    var formed = fm.hit || plan;
+    /* ENTRY is the named setup. Stop / T1 / T2 keep formed geometry. */
+    if (isFinite(entry0)) formed.entry = entry0;
+    formed = hgOmniDerivePlan(formed);
+    formed.formationOk = true;
+    if (fm.formationScore != null) formed.formationScore = fm.formationScore;
+    return { plan: formed, ok: true };
+  }
+
   /* Standard normal CDF (Abramowitz & Stegun 26.2.17), inlined so a piece of
      pure arithmetic can never read "unavailable" because a script did not
      load. */
@@ -6870,9 +6931,22 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     } catch (eLm){ lmOk = null; lmWhy = 'liquidation map threw: ' + ((eLm && eLm.message) || eLm); }
     gates.push({ key:'liq-map', hard:false, info:true, pass: lmOk, why: lmWhy });
 
-
-
-
+    /* House formation (keepLevels) — live context may refuse. Named ENTRY
+       stays the setup; stop/TPs may be the formed geometry. This gate
+       reports the enricher, it does not invent a new trade. */
+    var fmEx = extra && extra.formation;
+    var fmPass = !fmEx ? null : (fmEx.ok === false ? false : (fmEx.ok === true ? true : null));
+    var fmWhy;
+    if (!fmEx) fmWhy = 'formation not run on this candidate — UNCHECKED';
+    else if (fmEx.ok === false) fmWhy = String(fmEx.reason || 'live formation refused');
+    else if (fmEx.ok === true){
+      var sc = extra.plan && extra.plan.formationScore;
+      fmWhy = 'keep-levels formation'
+        + (isFinite(fin(sc)) ? (' · score ' + fin(sc)) : '')
+        + ((extra.plan && isFinite(fin(extra.plan.fillProb)))
+            ? (' · fill ' + fin(extra.plan.fillProb) + '%') : '');
+    } else fmWhy = String((fmEx && fmEx.reason) || 'formation module UNCHECKED');
+    gates.push({ key: 'formation', hard: fmPass === false, info: fmPass === true, pass: fmPass, why: fmWhy });
 
     return gates;
   }
@@ -7263,6 +7337,11 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         catch (e) { plan = null; }
       }
       if (plan) plan = hgOmniDerivePlan(plan);
+      if (plan){
+        var formed = hgOmniFormTicket(plan, hit, rows, exForHit);
+        plan = formed.plan || plan;
+        exForHit.formation = formed;
+      }
       /* Attach the plan key ONLY when a plan engine exists. plan-levels
          distinguishes 'the engine ran and produced nothing' (an explicit
          null — a veto) from 'no engine was ever loaded' (no key — UNCHECKED),
@@ -7339,7 +7418,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
            with above the one nothing supports. */
         consensus: hgOmniConsensus(hgOmniConsensusVoters(hits, rows, exForHit), hit),
         family: hgOmniFamilyOf(hit.kind),
-        rr: (plan && isFinite(fin(plan.rr1))) ? fin(plan.rr1) : NaN
+        rr: (plan && isFinite(fin(plan.rr1))) ? fin(plan.rr1) : NaN,
+        formationScore: (plan && isFinite(fin(plan.formationScore))) ? fin(plan.formationScore) : NaN
       });
       } catch (eHit) {
         try { console.warn('omniroute evaluate skipped', item && item.sym, hits[i] && hits[i].kind, eHit); } catch (eHit2) {}
@@ -7405,6 +7485,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       if (bc !== ac) return bc - ac;
       var ae = (a.grade && a.grade.evaluated) || 0, be = (b.grade && b.grade.evaluated) || 0;
       if (be !== ae) return be - ae;
+      /* Formation quality after evidence. R:R is often pinned at the 2R floor
+         and discriminates nothing; the formed score (fill, POI agree, live)
+         is the real difference between two otherwise-equal tickets. */
+      var af = isFinite(fin(a.formationScore)) ? fin(a.formationScore)
+             : (a.plan && isFinite(fin(a.plan.formationScore)) ? fin(a.plan.formationScore) : -1);
+      var bf = isFinite(fin(b.formationScore)) ? fin(b.formationScore)
+             : (b.plan && isFinite(fin(b.plan.formationScore)) ? fin(b.plan.formationScore) : -1);
+      if (bf !== af) return bf - af;
       /* fin(), not isFinite: a cleared R:R is null, and isFinite(null) is true,
          so the raw test would rank an unknown R:R as a real 0 rather than
          sinking it below every setup that has one. */
@@ -8255,8 +8343,13 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         +  '</div>';
     }
     if (c.plan){
-      h += '<div class="plan">ENTRY ' + fmtPx(c.plan.entry) + ' · STOP ' + fmtPx(c.plan.stop)
-        +  ' · T1 ' + fmtPx(c.plan.t1) + ' · T2 ' + fmtPx(c.plan.t2)
+      h += '<div class="plan">ENTRY ' + fmtPx(c.plan.entry)
+        +  (c.plan.entryType ? (' (' + esc(String(c.plan.entryType)) + ')') : '')
+        +  ' · STOP ' + fmtPx(c.plan.stop)
+        +  (c.plan.stopWidened ? ' (structure-wide)' : '')
+        +  ' · T1 ' + fmtPx(c.plan.t1)
+        +  (c.plan.t1Source ? (' ' + esc(String(c.plan.t1Source))) : '')
+        +  ' · T2 ' + fmtPx(c.plan.t2)
         +  ' · <b>R:R ' + fmt(c.plan.rr1, 2) + '</b>'
         +  ' · risk ' + fmt(c.plan.riskPct, 2) + '%</div>';
       if (c.plan.note) h += '<div class="dim">' + esc(c.plan.note) + '</div>';
@@ -8265,6 +8358,16 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
          the card prints; returns '' rather than crashing the card when data
          is missing. */
       try { h += hgOmniSolidityBadgesHtml(c); } catch (eSol) {}
+      if (c.plan && (isFinite(fin(c.plan.formationScore)) || isFinite(fin(c.plan.fillProb))
+          || (c.plan.evidenceChips && c.plan.evidenceChips.length))){
+        h += '<div class="dim">FORMATION'
+          + (isFinite(fin(c.plan.formationScore)) ? (' ' + fin(c.plan.formationScore)) : '')
+          + (isFinite(fin(c.plan.fillProb)) ? (' · fill ' + fin(c.plan.fillProb) + '%') : '')
+          + (c.plan.fillNote ? (' · ' + esc(String(c.plan.fillNote).slice(0, 80))) : '')
+          + ((c.plan.evidenceChips && c.plan.evidenceChips.length)
+              ? (' · ' + esc(c.plan.evidenceChips.join(' · '))) : '')
+          + '</div>';
+      }
       if (typeof window !== 'undefined' && typeof window.hgStrategyTradeDetailHtml === 'function'){
         h += window.hgStrategyTradeDetailHtml(c.plan);
       }
@@ -8846,13 +8949,25 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       });
     }
 
+    function warmFormationLive(){
+      return Promise.resolve().then(function(){
+        var hooks = W.HG_warmups;
+        if (!hooks || !hooks.length) return null;
+        var fl = null, i;
+        for (i = 0; i < hooks.length; i++) if (hooks[i] && hooks[i].id === 'formation-live') fl = hooks[i];
+        if (!fl || typeof fl.run !== 'function') return null;
+        omniSafeStat(ui, 'warming live formation context…');
+        return fl.run();
+      }).catch(function(){ return null; });
+    }
+
     /* A REJECTED xuUniverse() is the same situation as a returned [] — no
        universe — so route it to the same honest message instead of the
        generic catch. The distinction matters to the reader: "no contracts
        came back" is a data-source problem, not a quiet market. Also guards
        a synchronous throw, which .then() alone would not catch. */
     var uniErr = null;
-    return warmRegime().then(warmNews).then(function(){ return W.xuUniverse(); })
+    return warmRegime().then(warmNews).then(warmFormationLive).then(function(){ return W.xuUniverse(); })
       .catch(function(err){ uniErr = omniErrMsg(err); return null; })
       .then(function(uni){
       uni = uni || [];
@@ -10249,6 +10364,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniMarketSideHtml = hgOmniMarketSideHtml;
     window.hgOmniEvaluate = hgOmniEvaluate;
     window.hgOmniPlanForHit = hgOmniPlanForHit;
+    window.hgOmniFormTicket = hgOmniFormTicket;
+    window.hgOmniPoiFromKind = hgOmniPoiFromKind;
     window.hgOmniConsensusVoters = hgOmniConsensusVoters;
     window.hgOmniIsReversion = hgOmniIsReversion;
     /* The scan loop itself, so the stability test can run a full universe

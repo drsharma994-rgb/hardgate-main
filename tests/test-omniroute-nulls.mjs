@@ -345,7 +345,11 @@ for (const [name, mk, gateKey] of fields){
                                bars nor a plan, so UNCHECKED is the honest
                                read. Vol targeting and CVD compute from the
                                candles themselves and do report here. */
-                            'liq-map'];
+                            'liq-map',
+                            /* keep-levels formation is not run unless evaluate
+                               attached extra.formation — a gates-only harness
+                               correctly leaves it UNCHECKED */
+                            'formation'];
   ok(fullUnchecked.every(k => ALLOWED_UNCHECKED.indexOf(k) >= 0),
      'only the family-wise edge read, consensus and the unloadable indicator reads are unchecked ('
      + (fullUnchecked.join(', ') || 'none') + ')');
