@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v538',
-  pack: 'OMNIGOLD venue selector + OMNIPRESENT full-universe sweep',
-  built: '2026-09-01T09:00:00Z',
-  note: 'Two audited changes. (1) OMNIGOLD gains a visible EXECUTION VENUE control (XM XAUUSD default - the venue this desk actually executes on via the MT5 bridge - with PAXG one click away; precedence window override > saved choice > PAXG fallback). At XM the formation floor is 0.16% and 12 gross-negative kinds stay demoted; the 10 fee-only PAXG demotions return. Replay outcomes remain PAXG-measured and every fee-adjacent site says so; banner counts computed live. (2) OMNIPRESENT sweeps the FULL Delta+CoinDCX universe (~531 names, was top-48) with omniroute pacing, live scanned-N/M progress, failures counted not dropped, all zones reachable via expander, forward log covers the shown head only (disclosed).'
+  version: 'hg-v539',
+  pack: 'OMNIPRESENT 20X populated by geometry tier — replay said no quality door',
+  built: '2026-09-01T12:00:00Z',
+  note: 'OMNIPRESENT mechanics replayed offline (8,522 trades, 25 symbols): BOTH zone-rejection kinds measured gross-negative (OP-HIGH-REJECT -0.022R n=4204, OP-LOW-REJECT -0.039R n=4318) and the hard-gated cohort ran WORSE (PF 0.65, n=164) - so the replay-evidence quality door stays shut, computed at runtime from the baked table. The 20X section now populates via a GEOMETRY OK - quality unproven tier (all safety gates pass; warn label carries the mechanic negative replay record), ranked below any forward-paid setups. Audit caught the smoke run silently overwriting the full-run evidence file (shared OUT_PATH, fixed) - the initially reported +0.05 gross for OP-LOW-REJECT was from the corrupted file and inverts in the honest run.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

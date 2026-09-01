@@ -903,13 +903,21 @@
      never disagree about what survives 20x. This file only (1) adapts the
      OP candidate shape into what those functions read, and (2) names the
      quality floor honestly: this desk has no conviction certificates and no
-     meaningful solidity score, so the ONLY reachable quality path is its own
-     settled forward record (fwdTab 'OMNIPRESENT', kinds OP-HIGH-REJECT /
-     OP-LOW-REJECT — the same pool the measured-edge gate and FORWARD table
-     read). Until 20+ settled samples clear the 2-mechanic significance bar,
-     nothing can qualify and the section says exactly why. Every missing
-     field maps to ABSENT — fail closed, never a placeholder that could read
-     as qualification. */
+     meaningful solidity score, so exactly TWO quality paths are reachable:
+       - forward-paid: its own settled forward record (fwdTab 'OMNIPRESENT',
+         kinds OP-HIGH-REJECT / OP-LOW-REJECT — the same pool the
+         measured-edge gate and FORWARD table read);
+       - replay-evidence: the mechanic's own AUDITED offline replay record
+         (HG_OP_REPLAY_EVIDENCE below) is gross-positive at n >= 50 — a rule
+         COMPUTED from the baked rows at render time, never asserted, so the
+         section can never claim an edge the table does not show. As baked
+         (the 2026-09-01 full run) BOTH kinds are gross-negative, so this
+         path grants nothing today and the section says so.
+     Candidates that clear every GEOMETRY gate but no quality path render in
+     a separate, clearly-labeled GEOMETRY tier below the quality-passed
+     cards — geometry safety is not edge, and the tier says so per card.
+     Every missing field maps to ABSENT — fail closed, never a placeholder
+     that could read as qualification. */
 
   /* Stamp the two 20X inputs that need the raw bars, at SCAN time, because
      rows exist only inside the scan closure (the omniroute lesson: capture
@@ -978,13 +986,172 @@
     try{ return qFn(wrap); }catch(e){ return null; }
   }
 
+  /* ============ replay evidence — the desk's audited offline record ======
+     PROVENANCE. Baked from scripts/backtest-omnipresent-results.json,
+     wallClockRunAt 2026-09-01T04:56:42Z: the FULL replay — 25-symbol
+     point-in-time universe x 2000 1h bars per symbol, run offline from the
+     shared point-in-time kline cache, fees 0.05% + slippage 0.02% per side
+     (taker), 8522 settled trades. Audit trail: an earlier evidence file
+     sold as the full run was in fact a 3-symbol --smoke run that had
+     silently overwritten full-run output via a shared OUT_PATH; the runner
+     now writes smoke to backtest-omnipresent-smoke-results.json so that
+     can never recur, and THESE rows are from the re-run true full run.
+     That run measured BOTH mechanics gross-negative (the earlier "+0.049
+     gross" claim inverted), which is why nothing below asserts an edge:
+     the quality rule is COMPUTED from these rows at render time.
+       kinds        per-mechanic settled rows (n / winRate / avgGrossR /
+                    avgNetR / profit factor) from aggregates.byKind;
+       gatedCohort  aggregates.gatedCohort.bothHardGates — replay trades
+                    that passed BOTH signal-time hard gates (3+ level
+                    sources AND 2+ exhaustion reads, tagged at signal time,
+                    provably derived from the gate tags, never refit);
+       settled      aggregates.overall.n.
+     Exported (window.HG_OP_REPLAY_EVIDENCE) so harnesses can verify the
+     runtime rule against a mutated table; lookups read the export first so
+     the displayed numbers and the rule can never come from two copies. */
+  var HG_OP_REPLAY_EVIDENCE = {
+    src: 'scripts/backtest-omnipresent-results.json',
+    runAt: '2026-09-01T04:56:42Z',
+    basis: '25 symbols x 2000 1h bars, offline point-in-time cache, taker fees 0.05%+0.02%/side',
+    settled: 8522,
+    kinds: {
+      'OP-HIGH-REJECT': { n: 4204, winRate: 0.3088, avgGrossR: -0.0224, avgNetR: -0.2182, pf: 0.7240 },
+      'OP-LOW-REJECT':  { n: 4318, winRate: 0.3038, avgGrossR: -0.0391, avgNetR: -0.2196, pf: 0.7207 }
+    },
+    gatedCohort: { n: 164, winRate: 0.2683, avgGrossR: -0.1473, avgNetR: -0.2736, pf: 0.6538 }
+  };
+
+  /* The one read path for the table: prefer the window export (same object
+     unless a harness swapped it), fall back to the lexical copy. Anything
+     that is not a plain object reads as ABSENT — fail closed. */
+  function opX20Evidence(){
+    try{
+      var e = W.HG_OP_REPLAY_EVIDENCE;
+      if (e && typeof e === 'object') return e;
+    }catch(eE){}
+    return HG_OP_REPLAY_EVIDENCE;
+  }
+
+  function opX20ReplayRow(kind){
+    try{
+      var E = opX20Evidence();
+      var k = String(kind || '');
+      if (E && E.kinds && Object.prototype.hasOwnProperty.call(E.kinds, k)){
+        var r = E.kinds[k];
+        if (r && typeof r === 'object') return r;
+      }
+    }catch(eR){}
+    return null;
+  }
+
+  /* THE QUALITY RULE — computed at runtime from the baked rows, never a
+     baked boolean: avgGrossR > 0 AND n >= 50. Returns the row when the
+     mechanic's replay record earns the quality path, else null. Junk rows
+     (NaN, missing fields) return null — fail closed. As baked, BOTH kinds
+     are gross-negative, so this returns null for both; the rule exists so
+     the section flips HONESTLY the day a re-run table says otherwise. */
+  function opX20ReplayQuality(kind){
+    var r = opX20ReplayRow(kind);
+    if (!r) return null;
+    var n = fin(r.n), g = fin(r.avgGrossR);
+    if (!isFinite(n) || !isFinite(g)) return null;
+    return (n >= 50 && g > 0) ? r : null;
+  }
+
+  /* One formatted evidence line, gross AND net ALWAYS together — the edge
+     (when one exists) is thin and fee-sensitive, so printing gross without
+     net would be a lie of omission. Null when no row exists. */
+  function opX20ReplayLine(kind){
+    var r = opX20ReplayRow(kind);
+    if (!r) return null;
+    var n = fin(r.n), wr = fin(r.winRate), g = fin(r.avgGrossR), nt = fin(r.avgNetR);
+    if (!isFinite(n) || n <= 0) return null;
+    var s = String(kind) + ' n=' + Math.round(n);
+    if (isFinite(wr)) s += ', ' + Math.round(wr * 100) + '% WR';
+    if (isFinite(g))  s += ', gross ' + (g >= 0 ? '+' : '') + g.toFixed(2) + 'R';
+    if (isFinite(nt)) s += ' — net ' + (nt >= 0 ? '+' : '') + nt.toFixed(2) + 'R at taker fees';
+    return s;
+  }
+
+  /* Did the candidate clear every GEOMETRY gate and fail ONLY the quality
+     floor? Decided by the audited explainer alone — this file never
+     re-judges a gate. Null explainer, non-ticket, throw: false (closed). */
+  function opX20GeomOnly(c){
+    var xFn = gfn('hgOmni20xExplain');
+    if (!xFn) return false;
+    var wrap = opX20Wrap(c);
+    if (!wrap) return false;
+    var ex = null;
+    try{ ex = xFn(wrap); }catch(eX){ ex = null; }
+    if (!ex || ex.qualified || !ex.fails || !ex.fails.length) return false;
+    for (var i = 0; i < ex.fails.length; i++){
+      if (!ex.fails[i] || String(ex.fails[i].gate) !== 'quality') return false;
+    }
+    return true;
+  }
+
+  /* Full audited gate-run numbers for a candidate whose quality floor is
+     met by the BAKED replay evidence instead of the three in-gate paths.
+     The geometry verdict is already established (opX20GeomOnly: every gate
+     but quality passed) — this re-run exists ONLY to obtain the exact
+     liq/cost card numbers from the audited machinery instead of forking
+     its arithmetic. It delegates the quality floor through the OFFICIAL
+     call-time override HG_OMNI_20X_SOLIDITY_FLOOR (dropped to epsilon so
+     gate (e) is satisfied by any computable score) and restores it in the
+     same tick; every GEOMETRY gate runs at the frozen parameters, so
+     nothing that failed geometry can slip through here. The result is
+     relabeled quality:'replay-evidence' — the floor that ACTUALLY earned
+     the card. Any failure (no export, incomputable score, throw): null —
+     the candidate falls to the geometry tier instead of qualifying. */
+  function opX20ReplayRequalify(c){
+    var qFn = gfn('hgOmni20xQualify');
+    if (!qFn) return null;
+    var wrap = opX20Wrap(c);
+    if (!wrap) return null;
+    var had = false, sav, q = null;
+    try{ had = Object.prototype.hasOwnProperty.call(W, 'HG_OMNI_20X_SOLIDITY_FLOOR'); }catch(eH){ had = false; }
+    if (had){ try{ sav = W.HG_OMNI_20X_SOLIDITY_FLOOR; }catch(eS){ sav = undefined; } }
+    try{
+      W.HG_OMNI_20X_SOLIDITY_FLOOR = 1e-9;
+      try{ q = qFn(wrap) || null; }catch(eQ){ q = null; }
+    }finally{
+      try{
+        if (had) W.HG_OMNI_20X_SOLIDITY_FLOOR = sav;
+        else delete W.HG_OMNI_20X_SOLIDITY_FLOOR;
+      }catch(eD){ try{ W.HG_OMNI_20X_SOLIDITY_FLOOR = undefined; }catch(eU){} }
+    }
+    if (q) q.quality = 'replay-evidence';
+    return q;
+  }
+
+  /* What the runtime rule says TODAY, spelled per kind for the quality-
+     floor note — computed, so the note can never contradict the rule. */
+  function opX20ReplayStatusText(){
+    var kinds = ['OP-HIGH-REJECT', 'OP-LOW-REJECT'];
+    var parts = [], anyPass = false, i, k, r, g, n;
+    for (i = 0; i < kinds.length; i++){
+      k = kinds[i];
+      r = opX20ReplayRow(k);
+      if (!r){ parts.push(k + ': no replay record'); continue; }
+      g = fin(r.avgGrossR); n = fin(r.n);
+      if (opX20ReplayQuality(k)){
+        anyPass = true;
+        parts.push(k + ' PASSES (gross ' + (isFinite(g) ? ((g >= 0 ? '+' : '') + g.toFixed(2)) : '?') + 'R over n=' + (isFinite(n) ? Math.round(n) : '?') + ')');
+      } else {
+        parts.push(k + ' fails (gross ' + (isFinite(g) ? ((g >= 0 ? '+' : '') + g.toFixed(2)) : '?') + 'R over n=' + (isFinite(n) ? Math.round(n) : '?') + ')');
+      }
+    }
+    return parts.join('; ') + (anyPass ? '' : ' — the replay path grants nothing today');
+  }
+
   function opX20Placeholder(){
     return '<section data-op-20x="1">'
       + '<div class="hg-mp-eye">20X — LEVERAGE-SAFE SETUPS</div>'
       + '<div class="note warn" style="display:block">20x is unforgiving: a ~4.6% adverse move liquidates '
       + 'the full isolated margin. This section fills when a scan runs — press RUN OMNIPRESENT SCAN above. '
       + 'Only TRIGGERED tickets whose geometry survives 20x pass its gates (stop 2.5x inside liquidation, '
-      + 'ATR-noise check, cost gate, quality floor — on this desk, only a forward record that has paid). '
+      + 'ATR-noise check, cost gate, quality floor — on this desk, a forward record that has paid, or a '
+      + 'mechanic whose audited full-replay record is gross-positive at n&gt;=50). '
       + 'Most scans yield none, which is the gates working, not a malfunction. '
       + 'Signals only — this desk does not execute.</div>'
       + '<div class="empty">no scan yet — the 20x gates run on scan results.</div>'
@@ -1014,11 +1181,28 @@
           + '</section>';
       }
       var arr = Array.isArray(cands) ? cands : [];
-      var list = [], quals = [], i, c, q;
+      /* TWO TIERS, never blended:
+           list/quals — QUALITY-PASSED: the audited qualifier said yes
+             (forward-paid path), OR every geometry gate passed and the
+             mechanic's baked replay record earns the runtime rule
+             (gross-positive at n>=50) — promoted through
+             opX20ReplayRequalify so the card numbers still come from the
+             audited machinery, stamped quality:'replay-evidence'.
+           geomC — GEOMETRY-ONLY: every geometry gate passed, NO quality
+             path. Rendered below with a warn label per card; never mixed
+             into the quality tier, never given a green pip. */
+      var list = [], quals = [], geomC = [], replayPassedN = 0, i, c, q;
       for (i = 0; i < arr.length; i++){
         c = arr[i]; if (!c) continue;
         q = opX20Qualify(c);
-        if (q){ list.push(c); quals.push(q); }
+        if (q){ list.push(c); quals.push(q); continue; }
+        if (!opX20GeomOnly(c)) continue;
+        var gKind = 'OP-' + (String(c.dir || '').toLowerCase() === 'short' ? 'HIGH-REJECT' : 'LOW-REJECT');
+        if (opX20ReplayQuality(gKind)){
+          var rq = opX20ReplayRequalify(c);
+          if (rq){ list.push(c); quals.push(rq); replayPassedN++; continue; }
+        }
+        geomC.push(c);
       }
       /* rank by LOWER cost drag — the one meaningful ordering this desk has.
          Omniroute ranks by its stamped solidity, which does not exist here
@@ -1035,8 +1219,17 @@
         });
         for (oi = 0; oi < ordr.length; oi++){ list[oi] = ordr[oi].c; quals[oi] = ordr[oi].q; }
       }
+      /* deterministic geometry-tier order: by display name. These cards
+         carry no audited cost number (they are not qualified), so a costR
+         ranking here would imply a precision the tier has not earned. */
+      if (geomC.length > 1){
+        geomC.sort(function (ga, gb){
+          var an = String((ga && (ga.base || ga.sym)) || ''), bn = String((gb && (gb.base || gb.sym)) || '');
+          return an < bn ? -1 : an > bn ? 1 : 0;
+        });
+      }
       var h = '<section data-op-20x="1">';
-      h += '<div class="hg-mp-eye">20X — LEVERAGE-SAFE SETUPS (' + list.length + ')</div>';
+      h += '<div class="hg-mp-eye">20X — LEVERAGE-SAFE SETUPS (' + list.length + ' quality / ' + geomC.length + ' geometry-only)</div>';
       /* banner verbatim from omniroute — it renders on the empty state too,
          because the reader most likely to need it is the one about to force
          a trade that did not qualify. */
@@ -1046,16 +1239,24 @@
         +  'cost gate, quality floor: conviction cert, a forward record that has paid, or solidity) '
         +  '— that is safety of GEOMETRY, not a prediction. '
         +  'Funding and gap slippage are NOT modeled. Signals only — this desk does not execute.</div>';
-      /* what the quality floor honestly IS on this desk */
+      /* what the quality floor honestly IS on this desk — the replay-path
+         status is COMPUTED from the baked table at render, so this note can
+         never disagree with what the rule actually granted above. */
       h += '<div class="note">Quality floor on THIS desk: OMNIPRESENT setups carry no conviction certificate and no '
-        +  'meaningful solidity score, and neither is ever fabricated — the only reachable quality path is this '
-        +  'desk&#39;s OWN settled forward record (OP-HIGH-REJECT / OP-LOW-REJECT in the OMNIPRESENT pool, the same '
-        +  'stats the measured-edge gate reads: 20+ settled samples clearing the 2-mechanic significance bar). '
-        +  'Until that record has paid, this section is structurally empty — correct, not broken. '
+        +  'meaningful solidity score, and neither is ever fabricated — two quality paths are reachable. '
+        +  '(1) forward-paid: this desk&#39;s OWN settled forward record (OP-HIGH-REJECT / OP-LOW-REJECT in the '
+        +  'OMNIPRESENT pool, the same stats the measured-edge gate reads: 20+ settled samples clearing the '
+        +  '2-mechanic significance bar). (2) replay-evidence: the mechanic&#39;s audited offline replay '
+        +  '(' + esc(String(fin(opX20Evidence().settled) || '?')) + ' settled trades, 25 symbols x 2000 1h bars, taker fees modeled) '
+        +  'is gross-positive at n&gt;=50 — computed from the baked table at render, never asserted. '
+        +  'Today that computation says: ' + esc(opX20ReplayStatusText()) + '. '
+        +  'Until a path pays, the quality tier is structurally empty — correct, not broken. '
         +  'ARMED zones can never appear here: no ticket exists before a 1h rejection close.</div>';
       if (!list.length){
         h += '<div class="empty">no setup currently clears the 20x safety gates — with 20x leverage '
-          +  'that is the correct output most of the time, not a malfunction.</div>';
+          +  'that is the correct output most of the time, not a malfunction.'
+          +  (geomC.length ? ' The GEOMETRY tier below passed the geometry gates only — quality unproven, not a qualification.' : '')
+          +  '</div>';
       } else {
         for (i = 0; i < list.length; i++){
           c = list[i]; q = quals[i];
@@ -1090,9 +1291,70 @@
             +  ' · stop-to-liq buffer ' + fin(q.bufferX).toFixed(1) + 'x'
             +  ' · at stop you lose <b>' + fin(q.marginLossAtStopPct).toFixed(0) + '%</b> of margin'
             +  ' · cost ' + fin(q.costR).toFixed(2) + 'R</div>';
-          h += '<div class="dim">[via ' + esc(String(q.quality)) + ' · plan: ' + esc(String(q.planUsed || 'primary')) + ']</div>';
+          if (q.quality === 'replay-evidence'){
+            /* the evidence line prints gross AND net, always — the measured
+               edge (when one exists) is thin and fee-sensitive, and a card
+               that printed gross alone would be selling the fee away. */
+            var rvLine = opX20ReplayLine(mech);
+            h += '<div class="dim">[via replay-evidence: '
+              +  esc(rvLine || (mech + ' — replay row unavailable at render; the rule read it at qualify time'))
+              +  ' · plan: ' + esc(String(q.planUsed || 'primary')) + ']</div>';
+          } else {
+            h += '<div class="dim">[via ' + esc(String(q.quality)) + ' · plan: ' + esc(String(q.planUsed || 'primary')) + ']</div>';
+          }
           h += '</div>';
         }
+      }
+      /* ---- GEOMETRY TIER — passed every geometry gate, NO quality path.
+         Always BELOW the quality-passed cards, never mixed in, never a
+         green pip. Levels ARE printed here — these setups failed no SAFETY
+         gate, only the evidence floor — but each card leads with the warn
+         label and its mechanic's actual replay record, negative gross
+         stated plainly. (The near-miss block below still lists these
+         tickets too: that block is the canonical "which gate stopped it"
+         diagnosis and quality is the gate that stopped them.) */
+      if (geomC.length){
+        h += '<div class="note warn" style="display:block;margin-top:8px"><b>GEOMETRY TIER — QUALITY UNPROVEN (' + geomC.length + ')</b> '
+          +  '— every geometry gate passed (stop band, noise, cost), but no quality path did: no paid forward record, '
+          +  'and no gross-positive replay record. Geometry safety is not edge.</div>';
+        for (i = 0; i < geomC.length; i++){
+          c = geomC[i];
+          var gMech = 'OP-' + (String(c.dir || '').toLowerCase() === 'short' ? 'HIGH-REJECT' : 'LOW-REJECT');
+          var gLine = opX20ReplayLine(gMech);
+          h += '<div class="card">';
+          h += '<div class="ttl">' + esc(c.base || c.sym) + ' · ' + esc(String(c.dir || '').toUpperCase())
+            +  ' · ' + esc(gMech)
+            +  ' <span class="gpip warn">GEOMETRY-ONLY</span>'
+            +  ' <span class="dim">' + esc(String(c.exchange || '').toUpperCase()) + '</span></div>';
+          h += '<div class="note warn" style="display:block">GEOMETRY OK — quality unproven: no paid forward record; '
+            +  'replay for this mechanic: ' + esc(gLine || 'no replay record at all — fully unproven') + '.</div>';
+          h += '<div>ENTRY <b>' + pxF(c.entry) + '</b> · STOP <b>' + pxF(c.stop)
+            +  '</b> · T1 <b>' + pxF(c.t1) + '</b></div>';
+          h += '</div>';
+        }
+      }
+      /* ---- gated-cohort footnote — rendered whenever replay numbers are
+         being cited on cards above (replay-evidence passes or geometry
+         tier), so the reader who just saw per-kind replay stats also sees
+         what the desk's own hard gates did to the same replay: computed
+         from the baked cohort row, never hardcoded prose. */
+      if (replayPassedN > 0 || geomC.length){
+        try{
+          var gc = opX20Evidence().gatedCohort;
+          var gcN = fin(gc && gc.n), gcPf = fin(gc && gc.pf), gcG = fin(gc && gc.avgGrossR), gcNt = fin(gc && gc.avgNetR);
+          if (isFinite(gcN) && gcN > 0 && isFinite(gcPf)){
+            h += '<div class="note dim" style="margin-top:6px;opacity:.85">Gated cohort, same replay: '
+              +  Math.round(gcN) + ' trades passing BOTH hard gates (3+ level sources AND 2+ exhaustion reads) ran PF '
+              +  gcPf.toFixed(2)
+              +  ((isFinite(gcG) && isFinite(gcNt))
+                   ? (' (gross ' + (gcG >= 0 ? '+' : '') + gcG.toFixed(2) + 'R, net ' + (gcNt >= 0 ? '+' : '') + gcNt.toFixed(2) + 'R)')
+                   : '')
+              +  (gcPf >= 1
+                   ? ' — above water but ' + (gcN < 500 ? 'far below any sample floor; tracked, not trusted.' : 'tracked, not trusted.')
+                   : ' — the hard gates did not rescue these mechanics in replay; tracked, not trusted.')
+              +  '</div>';
+          }
+        }catch(eGc){}
       }
       /* NEAR-MISS TRANSPARENCY — same discipline as omniroute: name the
          closest TICKETS and the gate that stopped each, so a thin section
@@ -1275,6 +1537,14 @@
     window.opX20Wrap = opX20Wrap;
     window.opX20Qualify = opX20Qualify;
     window.opX20SectionHtml = opX20SectionHtml;
+    /* Replay evidence — the baked audited table plus the runtime quality
+       rule and the geometry-only detector, exported so a harness can prove
+       the rule COMPUTES from the rows (mutate the table, watch the section
+       flip) instead of trusting prose. */
+    window.HG_OP_REPLAY_EVIDENCE = HG_OP_REPLAY_EVIDENCE;
+    window.opX20ReplayQuality = opX20ReplayQuality;
+    window.opX20ReplayLine = opX20ReplayLine;
+    window.opX20GeomOnly = opX20GeomOnly;
     window.hgOpRunScan = runScan;   /* the scan loop itself, for the stability harness */
     window.hgOpState = function (){ try{ return __op.snap ? JSON.parse(JSON.stringify(__op.snap)) : null; }catch(e){ return null; } };
     window.HG_tabs = window.HG_tabs || [];
