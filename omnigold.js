@@ -325,6 +325,7 @@ terse status, and never launches a first-time scan on a global refresh.
                   them, so PAID-ONLY filters a snapshot and ALL restores
                   verbatim. */
                lastAllView: null, lastView: null };
+  var OG_FRESH_MS = 180000;   /* tab-open / hardRefreshAll skip when scan is still fresh */
 
   function W(){ return (typeof window !== 'undefined') ? window : null; }
   function gfn(name){
@@ -8862,6 +8863,7 @@ terse status, and never launches a first-time scan on a global refresh.
       + '<div class="row"><button class="btn" id="ogRun">RUN GOLD SCAN</button>'
       +   ' <button class="btn" id="ogGrid">R / HORIZON GRID</button></div>'
       + '<div class="note" id="ogStat">idle — press RUN. Fetches two horizons of gold bars, then measures every mechanic on each.</div>'
+      + '<div class="note warn" id="ogWarn" style="display:none"></div>'
       /* DESK VERDICT + PAID-ONLY toggle (hg-v540) — under the banners, above
          the picks. The strip fills from the live pools at mount and again
          after every scan. */
@@ -8897,7 +8899,7 @@ terse status, and never launches a first-time scan on a global refresh.
       + '</div>';
 
     var ui = {
-      btn: el.querySelector('#ogRun'), stat: el.querySelector('#ogStat'),
+      btn: el.querySelector('#ogRun'), stat: el.querySelector('#ogStat'), warn: el.querySelector('#ogWarn'),
       mp: el.querySelector('#ogMp'),
       fwdVerdict: el.querySelector('#ogFwdVerdict'), showMode: el.querySelector('#ogShowMode'),
       verdict: el.querySelector('#ogVerdict'),
@@ -8986,6 +8988,17 @@ terse status, and never launches a first-time scan on a global refresh.
       });
     }
     __og.ui = ui;
+    /* Remount must not look like a first visit — restore the last completed scan. */
+    if (__og.lastCardsHtml){
+      try { ui.cards.innerHTML = __og.lastCardsHtml; } catch (eM) {}
+      if (__og.lastPoolHtml != null){ try { ui.pool.innerHTML = __og.lastPoolHtml; } catch (eP) {} }
+      if (ui.mp && __og.lastMpHtml != null){ try { ui.mp.innerHTML = __og.lastMpHtml; } catch (eMp) {} }
+      if (ui.verdict && __og.lastVerdictHtml != null){ try { ui.verdict.innerHTML = __og.lastVerdictHtml; } catch (eV) {} }
+      if (ui.settledExec && __og.lastSettledExecHtml != null){ try { ui.settledExec.innerHTML = __og.lastSettledExecHtml; } catch (eSe) {} }
+      if (ui.coverage && __og.lastCoverageHtml != null){ try { ui.coverage.innerHTML = __og.lastCoverageHtml; } catch (eCo) {} }
+      if (ui.goldEngines && __og.lastGoldEnginesHtml != null){ try { ui.goldEngines.innerHTML = __og.lastGoldEnginesHtml; } catch (eGe) {} }
+      if (__og.lastStat) ogSafeStat(ui, __og.lastStat);
+    }
     hgOgInjectPickStyles();
     /* TOP SETUP paints honestly at mount: this session's last ledger winner
        when there is one, otherwise the run-a-scan message — never raw logs. */
@@ -9034,6 +9047,8 @@ terse status, and never launches a first-time scan on a global refresh.
     return Promise.resolve().then(function(){
       if (__og.busy) return 'busy';
       if (!__og.ran) return 'skipped: not run yet';
+      if (__og.snap && isFinite(__og.snap.at) && (Date.now() - __og.snap.at) < OG_FRESH_MS)
+        return 'skipped: fresh';
       var ui = __og.ui;
       if (ui) return runScan(ui).then(function(){ return __og.lastStat || 'rescanned'; });
       return __og.lastStat || 'no ui mounted';
