@@ -873,6 +873,143 @@ localStorage. Never throws.
       } catch (e) { return ''; }
     };
 
+    /* ==================== DESK VERDICT + PAID-ONLY (hg-v540) ====================
+       Shared builders for the scanner tabs, kept HERE so the wording, the
+       judging chain and the honest empty states stay identical across desks.
+
+       BAKED REPLAY VERDICTS — fixed offline replay facts per desk. These are
+       NOT live numbers and are never recomputed here: each row is the audited
+       offline replay of RAW DETECTIONS for that desk, cited to the JSON
+       artifact it came from. Only this replay clause is baked — the forward
+       clause of the strip is computed live from the pool at every render.
+       PROVENANCE (read from the artifacts on 2026-09-01):
+         OMNIROUTE    scripts/backtest-omniroute-v531-results.json
+                      (wallClockRunAt 2026-08-30) aggregates.overall:
+                      n=2832, avgNetR=-0.2424 -> ~-0.24R net per raw detection.
+                      (The earlier full run, scripts/backtest-omniroute-results.json,
+                      measured -0.2396 over n=2496 — the same read.)
+         OMNIGOLD     scripts/backtest-omnigold-results.json (2026-08-29)
+                      aggregates.overall: n=7270, avgR_net=-1.346; EVERY tier
+                      in aggregates.byTier is net-negative (best SCAN WEAK
+                      -0.243R, worst ENGINE grade-B-demoted -3.133R).
+         OMNIPRESENT  scripts/backtest-omnipresent-results.json
+                      (wallClockRunAt 2026-09-01) aggregates.byKind: BOTH kinds
+                      net-negative — OP-HIGH-REJECT -0.2182R (n=4204),
+                      OP-LOW-REJECT -0.2196R (n=4318). */
+    var FWD_REPLAY_BAKED = {
+      'OMNIROUTE':   'raw detections replayed NET-NEGATIVE: -0.24R/trade over 2,832 settled (scripts/backtest-omniroute-v531-results.json)',
+      'OMNIGOLD':    'raw detections replayed NET-NEGATIVE in EVERY tier: -1.35R/trade over 7,270 settled (scripts/backtest-omnigold-results.json)',
+      'OMNIPRESENT': 'raw detections replayed NET-NEGATIVE for BOTH kinds: HIGH-REJECT -0.22R (n=4,204), LOW-REJECT -0.22R (n=4,318) (scripts/backtest-omnipresent-results.json)'
+    };
+    W.HG_FWD_REPLAY_BAKED = FWD_REPLAY_BAKED;
+
+    function fwdTabList(tab){
+      var tabs = [], i;
+      if (Object.prototype.toString.call(tab) === '[object Array]'){
+        for (i = 0; i < tab.length; i++) if (tab[i]) tabs.push(String(tab[i]));
+      } else if (tab) tabs.push(String(tab));
+      return tabs;
+    }
+
+    /* Live pool sums for one tab or several (gold splits its record across
+       OMNIGOLD:SCALP + OMNIGOLD:SWING): settled count, open count, and the
+       SHADOW matched-pair as-traded average — the exact bankN /
+       bankActualExpR numbers hgFwdPanelHTML's SHADOW line renders, summed
+       the same way. Computed from the pool AT CALL TIME, never cached and
+       never baked, so the strip moves as pairs settle. */
+    function fwdPoolSums(tab){
+      var tabs = fwdTabList(tab);
+      var settled = 0, open = 0, bn = 0, ba = 0, i, k, pool, p;
+      for (i = 0; i < tabs.length; i++){
+        pool = null;
+        try { pool = W.hgFwdPool(tabs[i]); } catch (eP) { pool = null; }
+        if (!pool || typeof pool !== 'object') continue;
+        for (k in pool){
+          if (!Object.prototype.hasOwnProperty.call(pool, k)) continue;
+          p = pool[k];
+          if (!p) continue;
+          settled += num(p.samples) || 0;
+          open += num(p.open) || 0;
+          if (num(p.bankN) > 0 && isFinite(num(p.bankActualExpR))){
+            bn += num(p.bankN);
+            ba += num(p.bankN) * num(p.bankActualExpR);
+          }
+        }
+      }
+      return { settled: settled, open: open, bankN: bn,
+               asTradedR: bn > 0 ? (ba / bn) : NaN };
+    }
+
+    W.hgFwdSettledCount = function(tab){
+      try { return fwdPoolSums(tab).settled; } catch (e) { return 0; }
+    };
+
+    /* The DESK VERDICT strip: live forward record vs the fixed replay fact,
+       side by side, plus the variance note. All live numbers are computed
+       from the pool at render; only the replay clause comes from the baked
+       map above. Null-safe: an empty pool renders honest text, and any
+       failure returns '' so a strip can never take a tab down. */
+    W.hgFwdDeskVerdictHtml = function(tab){
+      try {
+        var tabs = fwdTabList(tab);
+        if (!tabs.length) return '';
+        var s = fwdPoolSums(tabs);
+        var fwdTxt;
+        if (s.bankN > 0){
+          fwdTxt = 'as traded ' + (s.asTradedR >= 0 ? '+' : '') + s.asTradedR.toFixed(2)
+                 + 'R/trade over ' + s.bankN + ' settled pair' + (s.bankN === 1 ? '' : 's');
+        } else if (s.settled > 0){
+          fwdTxt = s.settled + ' settled, no matched shadow pairs yet';
+        } else {
+          fwdTxt = 'no settled history yet';
+        }
+        var pref = String(tabs[0]).split(':')[0];
+        var replayTxt = FWD_REPLAY_BAKED[pref] || 'no baked replay record for this desk';
+        return '<div class="note" data-hg-desk-verdict="' + esc(tabs.join('+')) + '">'
+          + '<b>DESK VERDICT</b> — forward (this desk’s settled records, tickets and non-tickets alike): ' + esc(fwdTxt)
+          + ' · replay (raw detections): ' + esc(replayTxt)
+          + ' · at ~30% win rates, 2 consecutive stops has ~49% probability — expected variance, not malfunction'
+          + '</div>';
+      } catch (e) { hgFwdWarn('deskverdict', e); return ''; }
+    };
+
+    /* Kinds whose forward ledger currently reads 'has paid' for this tab —
+       THE SAME judgment chain the FORWARD table renders and the 20X quality
+       gates read: hgFwdPool(tab) per mechanic, judged by omniroute's
+       exported hgOmniPoolRead at the panel's 20-sample floor and the
+       family-wise bar over the mechanics this pool actually holds
+       (hgOmniFamilyZ over its key count). Nothing is reimplemented here —
+       hgOmniPoolRead / hgOmniFamilyZ are read from window at call time,
+       because omniroute.js owns that math and already exports both.
+       FAIL CLOSED: absent reader, empty pool, or a throw -> []. */
+    W.hgFwdPaidKinds = function(tab, minRr){
+      try {
+        if (typeof W.hgOmniPoolRead !== 'function') return [];
+        var tabs = fwdTabList(tab);
+        var out = [], ti, i, k;
+        var rr = (isFinite(+minRr) && +minRr > 0) ? +minRr : 2;
+        for (ti = 0; ti < tabs.length; ti++){
+          var pool = null;
+          try { pool = W.hgFwdPool(tabs[ti]); } catch (e1) { pool = null; }
+          if (!pool || typeof pool !== 'object') continue;
+          var keys = [];
+          for (k in pool) if (Object.prototype.hasOwnProperty.call(pool, k)) keys.push(k);
+          if (!keys.length) continue;
+          var barZ = (typeof W.hgOmniFamilyZ === 'function')
+                   ? W.hgOmniFamilyZ(Math.max(1, keys.length)) : 2;
+          for (i = 0; i < keys.length; i++){
+            var p = pool[keys[i]];
+            if (!p || !(num(p.samples) > 0)) continue;
+            var v = null;
+            try { v = W.hgOmniPoolRead(p, rr, 20, barZ); } catch (e2) { v = null; }
+            if (v && v.read === 'has paid' && out.indexOf(keys[i]) < 0) out.push(keys[i]);
+          }
+        }
+        out.sort();
+        return out;
+      } catch (e) { hgFwdWarn('paidkinds', e); return []; }
+    };
+
     W.hgFwdWarn = hgFwdWarn;
     W.hgFwdHealth = hgFwdHealth;
     W.hgFwdHealthHTML = hgFwdHealthHTML;

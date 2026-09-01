@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v540',
-  pack: 'order-flow pillar reads the short side honestly',
-  built: '2026-09-01T14:00:00Z',
-  note: 'hgOmniOrderFlowScore no longer misreads every setup with a truthy hit.dir as long: || bound tighter than ?: in the old direction one-liner, so short setups with honest sell-side flow (negative taker imbalance) scored as counterflow 0 and shorts against net buying were credited as aligned. Direction now comes from hit.dir directly (lowercased), falling back to the plan entry>stop geometry only when no hit.dir exists. Live effect since hg-v533 wired extra.orderFlow from the real Binance taker series. Sigma thresholds (0.5/1.0/2.0) and the sustained-flow bonus are untouched; regression covered in tests/solidity/test_p3_solidity.js.'
+  version: 'hg-v541',
+  pack: 'PAID-ONLY mode + DESK VERDICT — concentrate on what has proven itself',
+  built: '2026-09-01T15:00:00Z',
+  note: 'All three scanner tabs gain SHOW: ALL / PAID-ONLY (per-tab persisted, default ALL — byte-identical to before): PAID-ONLY filters cards and MOST PROBABLE to mechanics whose OWN tab forward ledger reads has-paid at the family-wise bar; hidden setups counted honestly, per-tab pool isolation enforced. A DESK VERDICT strip tops each tab: live forward record of settled tickets (recomputed from the pool every render, SHADOW weighting), the fixed replay verdict on raw detections (cited to the evidence JSONs), and the variance fact that two consecutive stops at ~30% win rates has ~49% probability. Audit fixed 4 fatals. Lands atop the v540 order-flow short-side fix from the companion session.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

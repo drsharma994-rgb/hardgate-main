@@ -320,7 +320,11 @@ terse status, and never launches a first-time scan on a global refresh.
                lastCardsHtml: null, lastPoolHtml: null, lastMpHtml: null,
                lastVerdictHtml: null, lastSettledExecHtml: null, lastCoverageHtml: null, lastGoldEnginesHtml: null,
                correlationRegime: null, lastRegimeUpdate: 0,
-               rollingStats: null, openSetups: [], lastRollingUpdate: 0 };
+               rollingStats: null, openSetups: [], lastRollingUpdate: 0,
+               /* hg-v540: the ALL view's exact bytes + the inputs behind
+                  them, so PAID-ONLY filters a snapshot and ALL restores
+                  verbatim. */
+               lastAllView: null, lastView: null };
 
   function W(){ return (typeof window !== 'undefined') ? window : null; }
   function gfn(name){
@@ -8553,6 +8557,18 @@ terse status, and never launches a first-time scan on a global refresh.
           var emptyTape = hgOgDeskTape(hgOgTapeDir(res.scalp && res.scalp.rows), hgOgTapeDir(res.swing && res.swing.rows));
           /* Counts strip on an empty scan: zeros are the honest counts. */
           try { hgOgPaintCounts(ui, hgOgScanCounts([], [], emptyTape)); } catch (eCt0) {}
+          /* verdict strip refreshes on every scan, empty ones included —
+             settlements may have landed even when nothing fired (hg-v540). */
+          try { hgOgPaintDeskVerdict(ui); } catch (ePvE) {}
+          /* An empty scan is a REAL result — refresh the show-mode snapshot
+             so the SHOW toggle can never restore a previous scan's cards
+             over the honest empty / no-candles state. Nothing to filter, so
+             lastView is null: the empty state is the view under BOTH modes
+             (hg-v540). */
+          try{
+            __og.lastAllView = { cards: ui.cards.innerHTML, mp: ui.mp ? ui.mp.innerHTML : null };
+            __og.lastView = null;
+          }catch(eCap0){}
           return hgOgPaintOgPostScan(ui, res, shared, [], emptyTape);
         }
         /* ONE pick per horizon, marked and floated to the top so the answer
@@ -8751,6 +8767,20 @@ terse status, and never launches a first-time scan on a global refresh.
             throw eRender;
           }
           return hgOgPaintOgPostScan(ui, res, shared, ogCollapsed, deskTape, bridge).then(function(){
+            /* DESK VERDICT + PAID-ONLY (hg-v540): capture the ALL bytes the
+               render above just painted, remember the inputs, refresh the
+               verdict strip from the live pools, then apply the persisted
+               show mode — a DOM no-op when the mode is ALL. */
+            try{
+              __og.lastAllView = { cards: ui.cards.innerHTML, mp: ui.mp ? ui.mp.innerHTML : null };
+              __og.lastView = { collapsed: ogCollapsed,
+                                mpArgs: { pickScalp: pickScalp, pickSwing: pickSwing, tape: deskTape,
+                                          mpBag: mpBag, held: ogHeld,
+                                          watchScalp: watchScalp, watchSwing: watchSwing,
+                                          engineScalp: engineScalp, engineSwing: engineSwing } };
+              hgOgPaintDeskVerdict(ui);
+              hgOgApplyShowMode(ui);
+            }catch(ePv){}
             ogRememberPaint(ui);
             __og.lastStat = ui.stat.textContent;
             if (ui.xmAuto && ui.xmAuto.checked) hgOgXmSendStrongest(ui);
@@ -9130,6 +9160,172 @@ terse status, and never launches a first-time scan on a global refresh.
     }
   }
 
+  /* ==================== PAID-ONLY MODE + DESK VERDICT (hg-v540) ====================
+     ADDITIVE display layer, same shape as the crypto desk's: the scan paints
+     exactly what it painted before, those bytes are captured, and only then
+     is the persisted mode applied — ALL is byte-identical to the pre-toggle
+     desk, PAID-ONLY is a filter over a snapshot. The paid set comes from the
+     shared hgFwdPaidKinds (hg-forward.js) read PER HORIZON POOL — a mechanic
+     that pays on 1h need not pay on 4h, so a card is judged against its own
+     horizon's pool. DEMOTIONS ARE UNTOUCHED: the formation partition removed
+     measured-negative kinds from the tradable list before any of this runs,
+     so a demoted kind can no more appear under PAID-ONLY than under ALL. */
+  var OG_PAID_LS = 'hg_paidonly_OMNIGOLD';
+
+  function hgOgShowMode(){
+    try{
+      if (typeof localStorage === 'undefined') return 'ALL';
+      return localStorage.getItem(OG_PAID_LS) === '1' ? 'PAID' : 'ALL';
+    }catch(e){ return 'ALL'; }
+  }
+  function hgOgShowModeSet(mode){
+    try{
+      if (typeof localStorage === 'undefined') return;
+      if (mode === 'PAID') localStorage.setItem(OG_PAID_LS, '1');
+      else localStorage.removeItem(OG_PAID_LS);
+    }catch(e){}
+  }
+
+  /* Paid kinds per horizon pool, judged at OG_T1_R exactly as this desk's
+     FORWARD tables and hgOgForwardPaid judge. Fail closed to empty sets. */
+  function hgOgPaidSets(){
+    var out = { SCALP: [], SWING: [], union: [] };
+    var fn = gfn('hgFwdPaidKinds');
+    if (!fn) return out;
+    try{ out.SCALP = fn('OMNIGOLD:SCALP', OG_T1_R) || []; }catch(e1){ out.SCALP = []; }
+    try{ out.SWING = fn('OMNIGOLD:SWING', OG_T1_R) || []; }catch(e2){ out.SWING = []; }
+    var i;
+    for (i = 0; i < out.SCALP.length; i++) if (out.union.indexOf(out.SCALP[i]) < 0) out.union.push(out.SCALP[i]);
+    for (i = 0; i < out.SWING.length; i++) if (out.union.indexOf(out.SWING[i]) < 0) out.union.push(out.SWING[i]);
+    out.union.sort();
+    return out;
+  }
+
+  /* Is this card's mechanic paid in ITS OWN horizon's pool? A card with no
+     stated horizon is judged against the union — generous only about WHICH
+     pool, never about the bar. */
+  function hgOgKindPaid(c, sets){
+    if (!c || !c.kind || !sets) return false;
+    var hz = String(c.horizon || '').toUpperCase();
+    var list = (hz === 'SCALP') ? sets.SCALP : (hz === 'SWING') ? sets.SWING : sets.union;
+    return (list || []).indexOf(String(c.kind)) >= 0;
+  }
+
+  function hgOgPaintDeskVerdict(ui){
+    try{
+      var fn = gfn('hgFwdDeskVerdictHtml');
+      if (ui && ui.fwdVerdict && fn)
+        ui.fwdVerdict.innerHTML = fn(['OMNIGOLD:SCALP', 'OMNIGOLD:SWING']) || '';
+    }catch(e){}
+  }
+
+  function hgOgShowToggleHtml(){
+    var mode = hgOgShowMode();
+    return '<div class="note" data-og-showmode="' + esc(mode) + '">SHOW: '
+      + '<button type="button" class="btn" id="ogShowAll"' + (mode === 'ALL' ? ' disabled' : '') + '>ALL</button> '
+      + '<button type="button" class="btn ghost" id="ogShowPaid"' + (mode === 'PAID' ? ' disabled' : '') + '>PAID-ONLY</button>'
+      + ' <span class="dim">PAID-ONLY keeps only setups whose mechanic’s own forward ledger reads ‘has paid’ on its horizon. '
+      + 'Nothing is deleted — ALL restores everything. Demoted kinds stay stood aside on both modes.</span></div>';
+  }
+
+  function hgOgWireShowToggle(ui, el){
+    try{
+      if (!ui || !ui.showMode) return;
+      ui.showMode.innerHTML = hgOgShowToggleHtml();
+      var root = el || ui.showMode;
+      var bAll = root.querySelector ? root.querySelector('#ogShowAll') : null;
+      var bPaid = root.querySelector ? root.querySelector('#ogShowPaid') : null;
+      if (bAll && bAll.addEventListener) bAll.addEventListener('click', function(){
+        hgOgShowModeSet('ALL'); hgOgWireShowToggle(ui, el); hgOgApplyShowMode(ui); ogRememberPaint(ui);
+      });
+      if (bPaid && bPaid.addEventListener) bPaid.addEventListener('click', function(){
+        hgOgShowModeSet('PAID'); hgOgWireShowToggle(ui, el); hgOgApplyShowMode(ui); ogRememberPaint(ui);
+      });
+    }catch(e){}
+  }
+
+  /* The PAID-ONLY card view — a summary of what was hidden and why, then the
+     surviving cards through the SAME setupCard renderer. Dead-level cards
+     keep the ALL view's one-line treatment (a paid mechanic does not revive
+     dead levels). Pure over its inputs, exported for the harness. */
+  function hgOgPaidCardsHtml(cards, sets){
+    var list = (Object.prototype.toString.call(cards) === '[object Array]') ? cards : [];
+    var s = sets || { SCALP: [], SWING: [], union: [] };
+    var kept = [], hidden = 0, i, c;
+    for (i = 0; i < list.length; i++){
+      c = list[i]; if (!c) continue;
+      if (hgOgKindPaid(c, s)) kept.push(c); else hidden++;
+    }
+    var h = '<div class="note warn" data-og-paidonly="1" style="display:block"><b>PAID-ONLY</b> — ';
+    if (!s.union.length){
+      var settled = 0;
+      try{
+        var scFn = gfn('hgFwdSettledCount');
+        if (scFn) settled = scFn(['OMNIGOLD:SCALP', 'OMNIGOLD:SWING']) || 0;
+      }catch(eS){}
+      h += 'no mechanic on this desk currently reads ‘has paid’ on either horizon (pool: '
+        + settled + ' settled across SCALP+SWING) — ' + hidden
+        + ' setup(s) hidden, mechanics without a paid forward record. ';
+    } else {
+      h += hidden + ' setup(s) hidden by PAID-ONLY — mechanics without a paid forward record on their horizon '
+        + '(paid: ' + esc(s.union.join(', ')) + '). ';
+    }
+    h += 'Demoted kinds remain stood aside exactly as under ALL. '
+      + 'Click ALL to restore everything (tape banner, zones, held queue and the stood-aside section render there).</div>';
+    var deadLines = '';
+    for (i = 0; i < kept.length; i++){
+      c = kept[i];
+      var lfG = null, gj;
+      for (gj = 0; gj < (c.gates || []).length; gj++){
+        if (c.gates[gj] && c.gates[gj].key === 'level-fresh'){ lfG = c.gates[gj]; break; }
+      }
+      if (lfG && lfG.pass === false && lfG.info !== true){
+        deadLines += '<div class="dim">' + esc(String(c.kind || '') + ' ' + String(c.dir || '').toUpperCase())
+                  +  ' — levels dead on arrival · card not rendered</div>';
+        continue;
+      }
+      try{ h += setupCard(c); }catch(eC){}
+    }
+    if (deadLines) h += '<div class="note" style="margin-top:10px"><b>DEAD LEVELS:</b>' + deadLines + '</div>';
+    if (!kept.length) h += '<div class="empty">no PAID-ONLY setup this scan.</div>';
+    return h;
+  }
+
+  /* Apply the persisted mode to the last completed paint. ALL restores the
+     captured bytes verbatim; PAID rebuilds cards + MOST PROBABLE from the
+     snapshot, with every pick judged against its own horizon's pool. */
+  function hgOgApplyShowMode(ui){
+    try{
+      if (!ui || !ui.cards) return;
+      var mode = hgOgShowMode();
+      if (mode !== 'PAID'){
+        if (__og.lastAllView){
+          try{ ui.cards.innerHTML = __og.lastAllView.cards; }catch(e1){}
+          try{ if (ui.mp && __og.lastAllView.mp != null) ui.mp.innerHTML = __og.lastAllView.mp; }catch(e2){}
+        }
+        return;
+      }
+      if (!__og.lastView) return;   /* no scan yet — nothing to filter */
+      var sets = hgOgPaidSets();
+      ui.cards.innerHTML = hgOgPaidCardsHtml(__og.lastView.collapsed, sets);
+      try{
+        var a = __og.lastView.mpArgs || {};
+        var pk = function(c){ return (c && hgOgKindPaid(c, sets)) ? c : null; };
+        var pkEng = function(e2, hz){
+          if (!e2) return null;
+          return hgOgKindPaid({ kind: e2.strategy || e2.stratKey, horizon: hz }, sets) ? e2 : null;
+        };
+        var bag = [], bi;
+        for (bi = 0; bi < (a.mpBag || []).length; bi++){
+          if (a.mpBag[bi] && hgOgKindPaid(a.mpBag[bi], sets)) bag.push(a.mpBag[bi]);
+        }
+        hgOgPaintMostProbable(ui, pk(a.pickScalp), pk(a.pickSwing), a.tape, bag, a.held,
+                              pk(a.watchScalp), pk(a.watchSwing),
+                              pkEng(a.engineScalp, 'SCALP'), pkEng(a.engineSwing, 'SWING'));
+      }catch(eMp){}
+    }catch(e){}
+  }
+
   function mountOmnigold(el){
     if (!el) return;
     /* Venue selection FIRST — the desk-stance banner below prices its
@@ -9157,6 +9353,11 @@ terse status, and never launches a first-time scan on a global refresh.
       + '<div class="row"><button class="btn" id="ogRun">RUN GOLD SCAN</button>'
       +   ' <button class="btn" id="ogGrid">R / HORIZON GRID</button></div>'
       + '<div class="note" id="ogStat">idle — press RUN. Fetches two horizons of gold bars, then measures every mechanic on each.</div>'
+      /* DESK VERDICT + PAID-ONLY toggle (hg-v540) — under the banners, above
+         the picks. The strip fills from the live pools at mount and again
+         after every scan. */
+      + '<div id="ogFwdVerdict" style="margin-top:8px"></div>'
+      + '<div id="ogShowMode" style="margin-top:8px"></div>'
       + '<div id="ogMp" style="margin-top:12px"></div>'
       + '<div id="ogVerdict" style="margin-top:12px"></div>'
       + '<div id="ogSettledExec" style="margin-top:12px"></div>'
@@ -9189,6 +9390,7 @@ terse status, and never launches a first-time scan on a global refresh.
     var ui = {
       btn: el.querySelector('#ogRun'), stat: el.querySelector('#ogStat'),
       mp: el.querySelector('#ogMp'),
+      fwdVerdict: el.querySelector('#ogFwdVerdict'), showMode: el.querySelector('#ogShowMode'),
       verdict: el.querySelector('#ogVerdict'),
       settledExec: el.querySelector('#ogSettledExec'),
       coverage: el.querySelector('#ogCoverage'),
@@ -9210,6 +9412,11 @@ terse status, and never launches a first-time scan on a global refresh.
       if (ui.venuePaxg) ui.venuePaxg.addEventListener('click', function(){ hgOgVenueApply(ui, el, 'PAXG'); });
       hgOgVenuePaint(ui);
     } catch (eVc) {}
+
+    /* DESK VERDICT + PAID-ONLY toggle (hg-v540): live pool numbers at mount,
+       before any scan, and the persisted show mode wired. */
+    try { hgOgPaintDeskVerdict(ui); } catch (ePv0) {}
+    try { hgOgWireShowToggle(ui, el); } catch (eTg0) {}
 
     /* THE R/HORIZON GRID, WHICH THIS DESK DID NOT HAVE.
 
@@ -9716,6 +9923,16 @@ terse status, and never launches a first-time scan on a global refresh.
       return txt;
     };
 
+    /* PAID-ONLY + DESK VERDICT (hg-v540) — mode state, the per-horizon paid
+       sets, the filter view and the apply step, exported so the harness
+       proves the filter keeps exactly the paid mechanics per horizon and
+       ALL restores the captured bytes. */
+    window.hgOgShowMode = hgOgShowMode;
+    window.hgOgShowModeSet = hgOgShowModeSet;
+    window.hgOgPaidSets = hgOgPaidSets;
+    window.hgOgKindPaid = hgOgKindPaid;
+    window.hgOgPaidCardsHtml = hgOgPaidCardsHtml;
+    window.hgOgApplyShowMode = hgOgApplyShowMode;
     window.hgOgState = function hgOgState(){
       try { return __og.snap ? JSON.parse(JSON.stringify(__og.snap)) : null; } catch (e) { return null; }
     };

@@ -173,7 +173,11 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
   var __omni = { ui: null, busy: false, ran: false, snap: null, lastStat: '', xsRescued: 0,
                  lastCardsHtml: '', lastPoolHtml: '', lastMpHtml: '', last20xHtml: '', lastApexHtml: '', held: { n: 0 },
-                 openSetups: [] };
+                 openSetups: [],
+                 /* hg-v540: the ALL view's exact bytes + the inputs behind
+                    them, so PAID-ONLY filters a snapshot and ALL restores
+                    verbatim. */
+                 lastAllView: null, lastView: null };
   /* A finished scan is still the desk. Tab-switch auto-scan and the 5-min
      hardRefreshAll used to click RUN, which blanked the cards and then
      often died on a venue blip — "the setup disappears after 1 minute,
@@ -9325,6 +9329,18 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             try { if (ui.apex) ui.apex.innerHTML = hgOmniApexSectionHtml([]); } catch (eApE) {}
             /* 20X: banner + honest empty state even on an empty scan. */
             try { if (ui.x20) ui.x20.innerHTML = hgOmni20xSectionHtml([]); } catch (e20e) {}
+            /* verdict strip refreshes on every scan, empty ones included —
+               settlements may have landed even when nothing fired (hg-v540). */
+            try { hgOmniPaintVerdict(ui); } catch (ePvE) {}
+            /* An empty scan is a REAL result — refresh the show-mode snapshot
+               so the SHOW toggle can never restore a previous scan's cards
+               over the honest empty / data-problem state. Nothing to filter,
+               so lastView is null: the empty state is the view under BOTH
+               modes (hg-v540). */
+            try{
+              __omni.lastAllView = { cards: ui.cards.innerHTML, mp: ui.mp ? ui.mp.innerHTML : null };
+              __omni.lastView = null;
+            }catch(eCap0){}
             omniRememberPaint(ui);
           });
         }
@@ -9518,6 +9534,16 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
           if (row) mpBag.push(row);
         }
         hgOmniPaintMostProbable(ui, few, tape, mpBag, __omni.held);
+        /* DESK VERDICT + PAID-ONLY (hg-v540): capture the ALL bytes the
+           lines above just painted, remember the inputs, refresh the verdict
+           strip from the live pool, then apply the persisted show mode — a
+           DOM no-op when the mode is ALL. */
+        try{
+          __omni.lastAllView = { cards: ui.cards.innerHTML, mp: ui.mp ? ui.mp.innerHTML : null };
+          __omni.lastView = { collapsed: collapsed, few: few, tape: tape, mpBag: mpBag, sideRead: sideRead };
+          hgOmniPaintVerdict(ui);
+          hgOmniApplyShowMode(ui);
+        }catch(ePv){}
         omniRememberPaint(ui);
         });
       }catch(eRender){
@@ -9700,6 +9726,161 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     } catch (e){}
   }
 
+  /* ==================== PAID-ONLY MODE + DESK VERDICT (hg-v540) ====================
+     ADDITIVE display layer. The scan paints exactly what it painted before,
+     those bytes are captured, and only then is the persisted mode applied —
+     so ALL is byte-identical to the pre-toggle desk and PAID-ONLY is a
+     filter over a snapshot, never a different scan. The paid set comes from
+     the shared hgFwdPaidKinds (hg-forward.js), which judges by the exact
+     hgOmniPoolRead chain the FORWARD table and the 20X forward-paid gate
+     already use. Fail closed everywhere. */
+  var OMNI_PAID_LS = 'hg_paidonly_OMNIROUTE';
+
+  function hgOmniShowMode(){
+    try{
+      if (typeof localStorage === 'undefined') return 'ALL';
+      return localStorage.getItem(OMNI_PAID_LS) === '1' ? 'PAID' : 'ALL';
+    }catch(e){ return 'ALL'; }
+  }
+  function hgOmniShowModeSet(mode){
+    try{
+      if (typeof localStorage === 'undefined') return;
+      if (mode === 'PAID') localStorage.setItem(OMNI_PAID_LS, '1');
+      else localStorage.removeItem(OMNI_PAID_LS);
+    }catch(e){}
+  }
+
+  function hgOmniPaidKinds(){
+    var w = (typeof window !== 'undefined') ? window : null;
+    if (!w || typeof w.hgFwdPaidKinds !== 'function') return [];
+    try{ return w.hgFwdPaidKinds('OMNIROUTE', MIN_RR) || []; }catch(e){ return []; }
+  }
+
+  function hgOmniPaintVerdict(ui){
+    try{
+      var w = (typeof window !== 'undefined') ? window : null;
+      if (ui && ui.verdict && w && typeof w.hgFwdDeskVerdictHtml === 'function')
+        ui.verdict.innerHTML = w.hgFwdDeskVerdictHtml('OMNIROUTE') || '';
+    }catch(e){}
+  }
+
+  function hgOmniShowToggleHtml(){
+    var mode = hgOmniShowMode();
+    return '<div class="note" data-omni-showmode="' + esc(mode) + '">SHOW: '
+      + '<button type="button" class="btn" id="omniShowAll"' + (mode === 'ALL' ? ' disabled' : '') + '>ALL</button> '
+      + '<button type="button" class="btn ghost" id="omniShowPaid"' + (mode === 'PAID' ? ' disabled' : '') + '>PAID-ONLY</button>'
+      + ' <span class="dim">PAID-ONLY keeps only setups whose mechanic’s own forward ledger reads ‘has paid’ at the family-wise bar. '
+      + 'Nothing is deleted — ALL restores everything.</span></div>';
+  }
+
+  function hgOmniWireShowToggle(ui, el){
+    try{
+      if (!ui || !ui.showMode) return;
+      ui.showMode.innerHTML = hgOmniShowToggleHtml();
+      var root = el || ui.showMode;
+      var bAll = root.querySelector ? root.querySelector('#omniShowAll') : null;
+      var bPaid = root.querySelector ? root.querySelector('#omniShowPaid') : null;
+      if (bAll && bAll.addEventListener) bAll.addEventListener('click', function(){
+        hgOmniShowModeSet('ALL'); hgOmniWireShowToggle(ui, el); hgOmniApplyShowMode(ui); omniRememberPaint(ui);
+      });
+      if (bPaid && bPaid.addEventListener) bPaid.addEventListener('click', function(){
+        hgOmniShowModeSet('PAID'); hgOmniWireShowToggle(ui, el); hgOmniApplyShowMode(ui); omniRememberPaint(ui);
+      });
+    }catch(e){}
+  }
+
+  /* The PAID-ONLY card view — a summary of what was hidden and why, then the
+     surviving cards through the SAME setupCard renderer. Pure over its
+     inputs, exported for the harness. */
+  function hgOmniPaidCardsHtml(collapsed, sideRead, paidKinds){
+    var paid = (Object.prototype.toString.call(paidKinds) === '[object Array]') ? paidKinds : [];
+    var list = (Object.prototype.toString.call(collapsed) === '[object Array]') ? collapsed : [];
+    var kept = [], hidden = 0, i, c;
+    for (i = 0; i < list.length; i++){
+      c = list[i]; if (!c) continue;
+      if (c.kind && paid.indexOf(String(c.kind)) >= 0) kept.push(c); else hidden++;
+    }
+    var h = '<div class="note warn" data-omni-paidonly="1" style="display:block"><b>PAID-ONLY</b> — ';
+    if (!paid.length){
+      var settled = 0;
+      try{
+        var w = (typeof window !== 'undefined') ? window : null;
+        if (w && typeof w.hgFwdSettledCount === 'function') settled = w.hgFwdSettledCount('OMNIROUTE') || 0;
+      }catch(eS){}
+      h += 'no mechanic on this tab currently reads ‘has paid’ at the family-wise bar (pool: '
+        + settled + ' settled) — ' + hidden + ' setup(s) hidden, mechanics without a paid forward record. ';
+    } else {
+      h += hidden + ' setup(s) hidden by PAID-ONLY — mechanics without a paid forward record '
+        + '(paid: ' + esc(paid.join(', ')) + '). ';
+    }
+    h += '20X and APEX below keep their own gates (already stricter) and are not re-filtered. '
+      + 'Click ALL to restore everything.</div>';
+    /* DEAD LEVELS keep the ALL view's one-line treatment — a paid mechanic
+       does not revive levels the market has left behind. Rendering the full
+       card here would resurrect the exact "dead on arrival, drawn full size"
+       bug the ALL renderer collapsed (reported three times before that
+       landed). Same test as the ALL pass: level-fresh failed and not info. */
+    var deadLines = '', shown = 0, overflowN = 0;
+    for (i = 0; i < kept.length; i++){
+      var lfG = null, gj;
+      for (gj = 0; gj < (kept[i].gates || []).length; gj++){
+        if (kept[i].gates[gj] && kept[i].gates[gj].key === 'level-fresh'){ lfG = kept[i].gates[gj]; break; }
+      }
+      if (lfG && lfG.pass === false && lfG.info !== true){
+        deadLines += '<div class="dim">' + esc(String(kept[i].sym || '') + ' ' + String(kept[i].kind || '')
+                  +  ' ' + String(kept[i].dir || '').toUpperCase())
+                  +  ' — levels dead on arrival · card not rendered</div>';
+        continue;
+      }
+      var isTk = !!(kept[i].grade && kept[i].grade.ticket);
+      if (!isTk && shown >= CARD_RENDER_MAX){ overflowN++; continue; }
+      try{ h += setupCard(kept[i], sideRead); shown++; }catch(eC){}
+    }
+    if (overflowN){
+      h += '<div class="note"><b>' + overflowN + ' more paid setup(s) past the ' + CARD_RENDER_MAX
+        + '-card screen cap</b> — every ticket above rendered in full; switch to ALL for the full overflow list.</div>';
+    }
+    if (deadLines){
+      h += '<div class="note" style="margin-top:10px"><b>DEAD LEVELS — priced off a closed bar the market has left behind:</b>'
+        + deadLines + '</div>';
+    }
+    if (!kept.length) h += '<div class="empty">no PAID-ONLY setup this scan.</div>';
+    return h;
+  }
+
+  /* Apply the persisted mode to the last completed paint. ALL restores the
+     captured bytes verbatim; PAID rebuilds the cards and MOST PROBABLE from
+     the snapshot. 20X and APEX are left exactly as the scan rendered them. */
+  function hgOmniApplyShowMode(ui){
+    try{
+      if (!ui || !ui.cards) return;
+      var mode = hgOmniShowMode();
+      if (mode !== 'PAID'){
+        if (__omni.lastAllView){
+          try{ ui.cards.innerHTML = __omni.lastAllView.cards; }catch(e1){}
+          try{ if (ui.mp && __omni.lastAllView.mp != null) ui.mp.innerHTML = __omni.lastAllView.mp; }catch(e2){}
+        }
+        return;
+      }
+      if (!__omni.lastView) return;   /* no scan yet — nothing to filter */
+      var paid = hgOmniPaidKinds();
+      ui.cards.innerHTML = hgOmniPaidCardsHtml(__omni.lastView.collapsed, __omni.lastView.sideRead, paid);
+      /* MOST PROBABLE follows the same filter. */
+      try{
+        var fewP = [], mpBagP = [], i, c, row;
+        for (i = 0; i < (__omni.lastView.few || []).length; i++){
+          c = __omni.lastView.few[i];
+          if (c && c.kind && paid.indexOf(String(c.kind)) >= 0){
+            fewP.push(c);
+            row = hgOmniMpRow(c);
+            if (row) mpBagP.push(row);
+          }
+        }
+        hgOmniPaintMostProbable(ui, fewP, __omni.lastView.tape, mpBagP, __omni.held);
+      }catch(eMp){}
+    }catch(e){}
+  }
+
   function mountOmniroute(el){
     if (!el) return;
     var cfg = hgOmniLoadCfg();
@@ -9719,6 +9900,11 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       +   ' <button class="btn" id="omniGrid">PARAMETER GRID</button></div>'
       + '<div class="note" id="omniStat">idle — press RUN. Full ledger on every Delta + CoinDCX name (4H + 1H + 15m + confluence), so expect several minutes; progress shows per pass.</div>'
       + '<div class="note warn" id="omniWarn" style="display:none"></div>'
+      /* DESK VERDICT + PAID-ONLY toggle (hg-v540) — under the banners, above
+         the setups. The strip fills from the live pool at mount and again
+         after every scan. */
+      + '<div id="omniVerdict" style="margin-top:8px"></div>'
+      + '<div id="omniShowMode" style="margin-top:8px"></div>'
       + '<div id="omniSide"></div>'
       + '<div id="omniMp" style="margin-top:12px"></div>'
       + '<div id="omniApex" style="margin-top:12px"></div>'
@@ -9753,6 +9939,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     var ui = {
       btn: el.querySelector('#omniRun'), stat: el.querySelector('#omniStat'),
       warn: el.querySelector('#omniWarn'), side: el.querySelector('#omniSide'), cards: el.querySelector('#omniCards'),
+      verdict: el.querySelector('#omniVerdict'), showMode: el.querySelector('#omniShowMode'),
       mp: el.querySelector('#omniMp'),
       apex: el.querySelector('#omniApex'),
       x20: el.querySelector('#omni20x'),
@@ -9826,6 +10013,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       } catch (eX20p) {}
     }
     omniRefreshSide(ui);
+    /* DESK VERDICT + PAID-ONLY toggle (hg-v540): live pool numbers at mount,
+       before any scan, and the persisted show mode wired. */
+    try{ hgOmniPaintVerdict(ui); }catch(ePv0){}
+    try{ hgOmniWireShowToggle(ui, el); }catch(eTg0){}
 
     /* The parameter grid runs on bars the scan already fetched, so it costs
        no network — but it does re-run the walk-forward nine times, so it is a
@@ -10347,6 +10538,15 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniBuildPrompt = hgOmniBuildPrompt;
     window.hgOmniParseModelJson = hgOmniParseModelJson;
     window.hgOmniMapRules = hgOmniMapRules;
+    /* PAID-ONLY + DESK VERDICT (hg-v540) — mode state, the paid-kind read,
+       the filter view and the apply step, exported so the harness proves the
+       filter keeps exactly the paid mechanics and ALL restores the captured
+       bytes. */
+    window.hgOmniShowMode = hgOmniShowMode;
+    window.hgOmniShowModeSet = hgOmniShowModeSet;
+    window.hgOmniPaidKinds = hgOmniPaidKinds;
+    window.hgOmniPaidCardsHtml = hgOmniPaidCardsHtml;
+    window.hgOmniApplyShowMode = hgOmniApplyShowMode;
     window.hgOmniState = function hgOmniState(){
       try { return __omni.snap ? JSON.parse(JSON.stringify(__omni.snap)) : null; } catch (e) { return null; }
     };

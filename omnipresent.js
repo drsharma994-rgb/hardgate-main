@@ -91,7 +91,10 @@
   var T2_FLOOR_R = 5;       // the runner starts at 5R — the squeezed stop is what buys this
   var T2_CAP_R = 10;        // and stretches to the opposite zone, up to 10R
 
-  var __op = { busy: false, ran: false, ui: null, lastStat: null, snap: null, lastX20Html: '' };
+  var __op = { busy: false, ran: false, ui: null, lastStat: null, snap: null, lastX20Html: '',
+               /* hg-v540: the ALL view's exact bytes + the inputs behind them,
+                  so PAID-ONLY filters a snapshot and ALL restores verbatim. */
+               lastAllView: null, lastView: null };
 
   function opSleep(ms){ return new Promise(function (res){ setTimeout(res, ms); }); }
 
@@ -885,6 +888,16 @@
               __op.lastX20Html = x20h;
             }
           }catch(eX20r){}
+          /* DESK VERDICT + PAID-ONLY (hg-v540): capture the ALL bytes the
+             lines above just painted, remember the inputs, refresh the
+             verdict strip from the live pool, then apply the persisted show
+             mode — a DOM no-op when the mode is ALL. */
+          try{
+            __op.lastAllView = { cards: ui.cards.innerHTML, x20: __op.lastX20Html };
+            __op.lastView = { one: ranked.one, top: top, sideRead: sideRead };
+            opPaintVerdict(ui);
+            opApplyShowMode(ui);
+          }catch(ePv){}
         });
       })
       .catch(function (e){
@@ -1163,8 +1176,12 @@
      quality-floor truth, one compact card per qualifier, the honest empty
      state, and near-miss transparency that NEVER prints levels for a setup
      that failed a safety gate. Fed the same collapsed one-per-contract list
-     the desk ranks. */
-  function opX20SectionHtml(cands){
+     the desk ranks.
+     opts (ADDITIVE, hg-v540): { hideGeomTier: true } is the PAID-ONLY view —
+     the GEOMETRY tier's cards are withheld (quality unproven is exactly what
+     PAID-ONLY exists to hide) and replaced by a one-line count. Every caller
+     that omits opts renders byte-identically to before the flag existed. */
+  function opX20SectionHtml(cands, opts){
     try{
       if (!gfn('hgOmni20xParams') || !gfn('hgOmni20xQualify')){
         return '<section data-op-20x="1"><div class="hg-mp-eye">20X — LEVERAGE-SAFE SETUPS</div>'
@@ -1313,7 +1330,13 @@
          stated plainly. (The near-miss block below still lists these
          tickets too: that block is the canonical "which gate stopped it"
          diagnosis and quality is the gate that stopped them.) */
-      if (geomC.length){
+      if (geomC.length && opts && opts.hideGeomTier === true){
+        /* PAID-ONLY: the tier's existence stays on the record (a count is
+           information), its tradable-looking cards do not. */
+        h += '<div class="note warn" data-op-geom-hidden="1" style="display:block;margin-top:8px"><b>GEOMETRY TIER — '
+          +  geomC.length + ' card(s) hidden by PAID-ONLY</b> — these passed geometry gates only; '
+          +  'no quality path (no paid forward record, no gross-positive replay). Switch SHOW to ALL to see them.</div>';
+      } else if (geomC.length){
         h += '<div class="note warn" style="display:block;margin-top:8px"><b>GEOMETRY TIER — QUALITY UNPROVEN (' + geomC.length + ')</b> '
           +  '— every geometry gate passed (stop band, noise, cost), but no quality path did: no paid forward record, '
           +  'and no gross-positive replay record. Geometry safety is not edge.</div>';
@@ -1394,6 +1417,139 @@
     }catch(eSec){
       return '<div class="note warn">20X section failed to render — nothing was judged.</div>';
     }
+  }
+
+  /* ============ PAID-ONLY MODE + DESK VERDICT (hg-v540) ============
+     ADDITIVE display layer. ALL mode is the untouched render: the scan paints
+     exactly what it painted before, those bytes are captured, and only THEN
+     does the persisted mode get applied — so ALL is byte-identical to the
+     pre-toggle desk, and PAID-ONLY is a filter over a snapshot, never a
+     different scan. Fail closed everywhere: a missing shared builder, an
+     empty pool or a throw renders the honest text or nothing, never a pass. */
+  var OP_PAID_LS = 'hg_paidonly_OMNIPRESENT';
+
+  function opShowMode(){
+    try{
+      if (typeof localStorage === 'undefined') return 'ALL';
+      return localStorage.getItem(OP_PAID_LS) === '1' ? 'PAID' : 'ALL';
+    }catch(e){ return 'ALL'; }
+  }
+  function opShowModeSet(mode){
+    try{
+      if (typeof localStorage === 'undefined') return;
+      if (mode === 'PAID') localStorage.setItem(OP_PAID_LS, '1');
+      else localStorage.removeItem(OP_PAID_LS);
+    }catch(e){}
+  }
+
+  /* This desk's paid mechanics — the shared hgFwdPaidKinds read (the exact
+     hgOmniPoolRead chain the FORWARD table and the 20X forward-paid gate
+     judge by), at this desk's own MIN_RR. [] when anything is missing. */
+  function opPaidKinds(){
+    var fn = gfn('hgFwdPaidKinds');
+    if (!fn) return [];
+    try{ return fn('OMNIPRESENT', MIN_RR) || []; }catch(e){ return []; }
+  }
+
+  function opMechOf(c){
+    return 'OP-' + (String(c && c.dir || '').toLowerCase() === 'short' ? 'HIGH-REJECT' : 'LOW-REJECT');
+  }
+
+  function opPaintVerdict(ui){
+    try{
+      var fn = gfn('hgFwdDeskVerdictHtml');
+      if (ui && ui.verdict && fn) ui.verdict.innerHTML = fn('OMNIPRESENT') || '';
+    }catch(e){}
+  }
+
+  function opShowToggleHtml(){
+    var mode = opShowMode();
+    return '<div class="note" data-op-showmode="' + esc(mode) + '">SHOW: '
+      + '<button type="button" class="btn" id="opShowAll"' + (mode === 'ALL' ? ' disabled' : '') + '>ALL</button> '
+      + '<button type="button" class="btn ghost" id="opShowPaid"' + (mode === 'PAID' ? ' disabled' : '') + '>PAID-ONLY</button>'
+      + ' <span class="dim">PAID-ONLY keeps only setups whose mechanic’s own forward ledger reads ‘has paid’. '
+      + 'Nothing is deleted — ALL restores everything.</span></div>';
+  }
+
+  function opWireShowToggle(ui, el){
+    try{
+      if (!ui || !ui.showMode) return;
+      ui.showMode.innerHTML = opShowToggleHtml();
+      var root = el || ui.showMode;
+      var bAll = root.querySelector ? root.querySelector('#opShowAll') : null;
+      var bPaid = root.querySelector ? root.querySelector('#opShowPaid') : null;
+      if (bAll && bAll.addEventListener) bAll.addEventListener('click', function(){
+        opShowModeSet('ALL'); opWireShowToggle(ui, el); opApplyShowMode(ui);
+      });
+      if (bPaid && bPaid.addEventListener) bPaid.addEventListener('click', function(){
+        opShowModeSet('PAID'); opWireShowToggle(ui, el); opApplyShowMode(ui);
+      });
+    }catch(e){}
+  }
+
+  /* The PAID-ONLY card view, built from the same ranked head the ALL view
+     carded. Pure over its inputs, exported for the harness. This desk's pool
+     is young: until a mechanic reads 'has paid' the summary says exactly
+     that, with the live settled count — never a silent blank. */
+  function opPaidCardsHtml(top, sideRead, paidKinds){
+    var paid = (Object.prototype.toString.call(paidKinds) === '[object Array]') ? paidKinds : [];
+    var arr = (Object.prototype.toString.call(top) === '[object Array]') ? top : [];
+    var kept = [], hidden = 0, i, c;
+    for (i = 0; i < arr.length; i++){
+      c = arr[i]; if (!c) continue;
+      if (paid.indexOf(opMechOf(c)) >= 0) kept.push(c); else hidden++;
+    }
+    var settled = 0;
+    try{ var scFn = gfn('hgFwdSettledCount'); if (scFn) settled = scFn('OMNIPRESENT') || 0; }catch(eS){}
+    var h = '<div class="note warn" data-op-paidonly="1" style="display:block"><b>PAID-ONLY</b> — ';
+    if (!paid.length){
+      h += 'no mechanic on this tab has a paid forward record yet (pool: ' + settled + ' settled)'
+        + (hidden ? ' — ' + hidden + ' setup(s) hidden' : '')
+        + ', mechanics without a paid forward record. ';
+    } else {
+      h += hidden + ' setup(s) hidden by PAID-ONLY — mechanics without a paid forward record '
+        + '(paid: ' + esc(paid.join(', ')) + '). ';
+    }
+    h += 'The 20X section below keeps its own gates (already stricter); under PAID-ONLY its '
+      + 'geometry-only tier is hidden. Click ALL to restore everything.</div>';
+    for (i = 0; i < kept.length; i++) h += opCard(kept[i], sideRead);
+    if (!kept.length) h += '<div class="empty">no PAID-ONLY setup this scan.</div>';
+    return h;
+  }
+
+  /* Apply the persisted mode to the last completed paint. ALL restores the
+     captured bytes verbatim; PAID rebuilds cards + 20X from the snapshot. */
+  function opApplyShowMode(ui){
+    try{
+      if (!ui || !ui.cards) return;
+      var mode = opShowMode();
+      if (mode !== 'PAID'){
+        if (__op.lastAllView){
+          try{ ui.cards.innerHTML = __op.lastAllView.cards; }catch(e1){}
+          try{ if (ui.x20 && __op.lastAllView.x20 != null) ui.x20.innerHTML = __op.lastAllView.x20; }catch(e2){}
+        }
+        return;
+      }
+      if (!__op.lastView) return;   /* no scan yet — nothing to filter */
+      var paid = opPaidKinds();
+      ui.cards.innerHTML = opPaidCardsHtml(__op.lastView.top, __op.lastView.sideRead, paid);
+      /* MOST PROBABLE pin follows the same filter. */
+      try{
+        if (typeof W.hgMpPin === 'function'){
+          var keptTop = [], i, c;
+          for (i = 0; i < (__op.lastView.top || []).length; i++){
+            c = __op.lastView.top[i];
+            if (c && paid.indexOf(opMechOf(c)) >= 0) keptTop.push(c);
+          }
+          W.hgMpPin('omnipresent', keptTop, null, ui.cards);
+        }
+      }catch(eMp){}
+      /* 20X keeps its own gates — not re-filtered — but its geometry-only
+         tier (quality unproven by definition) is withheld under PAID-ONLY. */
+      try{
+        if (ui.x20) ui.x20.innerHTML = opX20SectionHtml(__op.lastView.one, { hideGeomTier: true });
+      }catch(eX){}
+    }catch(e){}
   }
 
   /* ==================== render ==================== */
@@ -1490,13 +1646,21 @@
       + '<b>Anticipation, not prophecy</b> — these are the levels where reversals have the best structural odds; the forward pool is the judge.</div>'
       + '<div class="note" id="opStat">idle — press RUN.</div>'
       + '<div class="row" style="margin-top:8px"><button class="btn" id="opRun">RUN OMNIPRESENT SCAN</button></div>'
+      /* DESK VERDICT + PAID-ONLY toggle (hg-v540) — under the banners, above
+         the cards. The strip fills from the live pool at mount and again
+         after every scan. */
+      + '<div id="opVerdict" style="margin-top:8px"></div>'
+      + '<div id="opShowMode" style="margin-top:8px"></div>'
       + '<div id="opSide"></div>'
       + '<div class="cards" id="opCards" style="margin-top:12px"></div>'
       + '<div id="opX20" style="margin-top:12px"></div>'
       + '</div>';
-    var ui = { btn: el.querySelector('#opRun'), stat: el.querySelector('#opStat'), side: el.querySelector('#opSide'), cards: el.querySelector('#opCards'), x20: el.querySelector('#opX20') };
+    var ui = { btn: el.querySelector('#opRun'), stat: el.querySelector('#opStat'), side: el.querySelector('#opSide'), cards: el.querySelector('#opCards'), x20: el.querySelector('#opX20'),
+               verdict: el.querySelector('#opVerdict'), showMode: el.querySelector('#opShowMode') };
     if (!ui.btn || !ui.stat || !ui.cards) return;
     __op.ui = ui;
+    try{ opPaintVerdict(ui); }catch(ePv0){}
+    try{ opWireShowToggle(ui, el); }catch(eTg0){}
     /* 20X: restore the last rendered section across remounts (the omniroute
        last20xHtml idiom), else the pre-scan placeholder. */
     try{ if (ui.x20) ui.x20.innerHTML = __op.lastX20Html || opX20Placeholder(); }catch(eX20m){}
@@ -1545,6 +1709,14 @@
     window.opX20ReplayQuality = opX20ReplayQuality;
     window.opX20ReplayLine = opX20ReplayLine;
     window.opX20GeomOnly = opX20GeomOnly;
+    /* PAID-ONLY + DESK VERDICT (hg-v540) — mode state, the filter view and
+       the apply step, exported so the harness proves the filter keeps
+       exactly the paid mechanics and that ALL restores the captured bytes. */
+    window.opShowMode = opShowMode;
+    window.opShowModeSet = opShowModeSet;
+    window.opPaidKinds = opPaidKinds;
+    window.opPaidCardsHtml = opPaidCardsHtml;
+    window.opApplyShowMode = opApplyShowMode;
     window.hgOpRunScan = runScan;   /* the scan loop itself, for the stability harness */
     window.hgOpState = function (){ try{ return __op.snap ? JSON.parse(JSON.stringify(__op.snap)) : null; }catch(e){ return null; } };
     window.HG_tabs = window.HG_tabs || [];
