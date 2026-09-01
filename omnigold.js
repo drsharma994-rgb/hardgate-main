@@ -5239,9 +5239,26 @@ terse status, and never launches a first-time scan on a global refresh.
      spread; the slippage and reference-spot constants are deliberate
      constants, not knobs.
 
-     VENUE SELECTION. window.HG_OG_VENUE ('XM' | 'PAXG') picks the preset.
-     Absent or unrecognised -> PAXG, the CONSERVATIVE fallback: assuming the
-     expensive venue can only overstate fees, never understate them.
+     VENUE SELECTION (hg-v537: visible control). Precedence, highest first:
+       1. window.HG_OG_VENUE ('XM' | 'PAXG') — the console/test override.
+          If SET it always wins, even over the UI control; anything
+          unrecognised there fails closed to PAXG with the basis saying so.
+       2. The tab's EXECUTION VENUE control — __ogVenueSel, persisted in
+          localStorage under 'hg_og_venue', read back at mount by
+          hgOgVenueInit(). UI DEFAULT: 'XM' — because XM XAUUSD is the venue
+          this desk ACTUALLY EXECUTES on: every SEND TICKET TO XM button and
+          the auto-send path POST to the xm-trader.js MT5 bridge
+          (XM_GOLD_SYMBOL / XM_MT5_URL; render.yaml carries the
+          XM_OMNIGOLD_LIVE / XM_OMNIGOLD_LOTS envs that arm it). PAXG fees
+          (0.26% RT, 13x XM) are fees this desk never pays, and pricing every
+          stop at them at formation killed nearly all gold scalps (stop floor
+          2.08% vs 0.16%) for a cost model belonging to a different venue.
+          PAXG stays one click away on the control.
+       3. Nothing selected (fresh page whose localStorage is unavailable, or
+          a harness that never mounts) -> PAXG, the CONSERVATIVE fallback:
+          assuming the expensive venue can only overstate fees, never
+          understate them. This is unchanged from hg-v533, so every pure-
+          function harness still sees PAXG unless it declares a venue.
      window.HG_OG_RT_COST_PCT keeps its old meaning as the PAXG-preset
      override (hgOgRtCostPct reads it), so nothing that tuned it breaks.
 
@@ -5249,18 +5266,24 @@ terse status, and never launches a first-time scan on a global refresh.
      hgOgVenueCostNoteHtml(): the replay outcomes were measured AT PAXG
      COSTS. A cheaper venue changes the COST arithmetic (fee-R of a stop,
      venue-adjusted net), never the measured outcomes (n, WR, grossR). */
-  var HG_OG_VENUE_DEFAULT = 'PAXG';
+  var HG_OG_VENUE_UI_DEFAULT = 'XM';
+  var HG_OG_VENUE_LS_KEY = 'hg_og_venue';
+  /* The UI-selected venue. '' until hgOgVenueInit()/hgOgSetVenue() runs, so
+     un-mounted contexts keep the PAXG fail-closed behavior they always had. */
+  var __ogVenueSel = '';
   var HG_OG_XM_SPREAD_USD = 0.35;     /* assumed XAUUSD spread, $/oz */
   var HG_OG_XM_SPOT_REF_USD = 3500;   /* conservative LOW spot reference */
   var HG_OG_XM_SLIP_PCT = 0.010;      /* round-trip slippage assumption, % */
 
-  /* -> { venue: 'XM'|'PAXG', rtCostPct, basis }. Never throws; anything
-     unreadable fails closed to the PAXG preset. */
-  function hgOgVenueCost(){
+  /* The cost object for ONE NAMED venue, ignoring the active selection —
+     so the banner can price "what would PAXG demote" while XM is active.
+     -> { venue: 'XM'|'PAXG', rtCostPct, basis }. Anything that is not a
+     well-formed XM preset is the PAXG preset. Never throws. */
+  function hgOgVenuePresetCost(name){
     var w = W();
     var venue = '';
-    try { venue = String((w && w.HG_OG_VENUE) || '').toUpperCase().replace(/^\s+|\s+$/g, ''); }
-    catch (eV) { venue = ''; }
+    try { venue = String(name || '').toUpperCase().replace(/^\s+|\s+$/g, ''); }
+    catch (eN) { venue = ''; }
     if (venue === 'XM'){
       var spread = NaN;
       try { spread = w ? fin(w.HG_OG_XM_SPREAD_USD) : NaN; } catch (eS) { spread = NaN; }
@@ -5284,6 +5307,56 @@ terse status, and never launches a first-time scan on a global refresh.
         + hgOgRtCostPct().toFixed(2) + '% round trip'
         + (venue && venue !== 'PAXG' ? ' (venue "' + venue + '" unrecognised — conservative fallback)' : '')
     };
+  }
+
+  /* -> { venue: 'XM'|'PAXG', rtCostPct, basis } for the ACTIVE venue, per
+     the precedence documented above: window.HG_OG_VENUE override first,
+     then the UI selection, then PAXG fail-closed. Never throws. */
+  function hgOgVenueCost(){
+    var w = W();
+    var venue = '';
+    try { venue = String((w && w.HG_OG_VENUE) || '').toUpperCase().replace(/^\s+|\s+$/g, ''); }
+    catch (eV) { venue = ''; }
+    if (!venue){
+      try { venue = String(__ogVenueSel || '').toUpperCase().replace(/^\s+|\s+$/g, ''); }
+      catch (eU) { venue = ''; }
+    }
+    return hgOgVenuePresetCost(venue);
+  }
+
+  /* Set the UI-selected venue. Only the two known presets are accepted —
+     an unknown name changes nothing (fail closed) and returns false.
+     Persists to localStorage where available; the selection still applies
+     for this page-load when storage is denied. */
+  function hgOgSetVenue(name){
+    var v = '';
+    try { v = String(name || '').toUpperCase().replace(/^\s+|\s+$/g, ''); }
+    catch (eN) { return false; }
+    if (v !== 'XM' && v !== 'PAXG') return false;
+    __ogVenueSel = v;
+    try { localStorage.setItem(HG_OG_VENUE_LS_KEY, v); } catch (eS) {}
+    return true;
+  }
+
+  /* Read the persisted venue selection at mount. A stored valid choice is
+     restored; nothing stored -> the XM UI default (the desk's actual
+     execution venue — see the precedence note above); localStorage itself
+     UNAVAILABLE (throws) -> no selection at all, so hgOgVenueCost stays on
+     the PAXG conservative fallback. Returns the selection ('' when none). */
+  function hgOgVenueInit(){
+    var stored = null, failed = false;
+    try { stored = localStorage.getItem(HG_OG_VENUE_LS_KEY); }
+    catch (eL) { failed = true; }
+    if (failed){
+      __ogVenueSel = '';
+      return '';
+    }
+    var v = '';
+    try { v = String(stored || '').toUpperCase().replace(/^\s+|\s+$/g, ''); }
+    catch (eV) { v = ''; }
+    if (v !== 'XM' && v !== 'PAXG') v = HG_OG_VENUE_UI_DEFAULT;
+    __ogVenueSel = v;
+    return v;
   }
 
   /* One dim line for anywhere replay numbers sit beside venue-cost numbers.
@@ -5578,8 +5651,26 @@ terse status, and never launches a first-time scan on a global refresh.
       + ' — still a net loss). '
       + 'Confluence tiers did not rank outcomes. Every number here is measured, in '
       + E.src + ' + scripts/backtest-omnigold-results.json.';
+    /* ACTIVE-VENUE LINE (hg-v537): the venue the cost machinery is pricing
+       right now, its round trip, and how many baked kinds stand demoted at
+       those costs — with the other preset's count beside it, so switching
+       venue is never a silent change in what the desk stands aside from. */
+    var vline = '';
+    try {
+      var vc = hgOgVenueCost();
+      var nHere = hgOgDemotedKindCount(vc);
+      var other = hgOgVenuePresetCost(vc.venue === 'XM' ? 'PAXG' : 'XM');
+      var nOther = hgOgDemotedKindCount(other);
+      vline = 'venue ' + (vc.venue === 'XM' ? 'XM XAUUSD' : 'PAXG')
+        + ' ~' + fin(vc.rtCostPct).toFixed(3) + '% RT — '
+        + nHere + ' measured-negative kind' + (nHere === 1 ? '' : 's')
+        + ' stood aside; at ' + other.venue + ' costs ('
+        + fin(other.rtCostPct).toFixed(3) + '% RT) it would be ' + nOther;
+    } catch (eVl) { vline = ''; }
     return '<div class="note warn og-replay-banner" data-og-replay-banner="1" '
-      + 'style="margin-bottom:10px;border-left:3px solid #dc2626">' + esc(txt) + '</div>';
+      + 'style="margin-bottom:10px;border-left:3px solid #dc2626">' + esc(txt)
+      + (vline ? '<div class="og-venue-stance" style="margin-top:4px">' + esc(vline) + '</div>' : '')
+      + '</div>';
   }
 
   /* Cost drag of the round trip measured in R. costR = RT% / stop distance %:
@@ -5786,6 +5877,21 @@ terse status, and never launches a first-time scan on a global refresh.
     }
   }
 
+  /* How many baked kinds stand demoted at a venue's costs — the number the
+     desk-stance banner quotes. Counted by running the SAME verdict function
+     the formation gate runs (hgOgKindDemotion) over the baked table, never
+     a hand-kept list, so a re-bake or threshold change moves it. At today's
+     bake: 12 at XM (~0.020% RT), 22 at PAXG (0.26% RT). */
+  function hgOgDemotedKindCount(venueCost){
+    var vc = (venueCost && isFinite(fin(venueCost.rtCostPct))) ? venueCost : hgOgVenueCost();
+    var kinds = HG_OG_REPLAY_EVIDENCE.kinds, k, n = 0;
+    for (k in kinds){
+      if (!Object.prototype.hasOwnProperty.call(kinds, k)) continue;
+      if (hgOgKindDemotion(k, vc)) n++;
+    }
+    return n;
+  }
+
   /* Has this kind's LIVE forward ledger genuinely paid? THE SAME READ the
      FORWARD table renders — hgFwdPool per tab, judged by the same
      hgOmniPoolRead call hgFwdPanelHTML makes for these panels (minRr =
@@ -5939,6 +6045,50 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     h += '</details>';
     return h;
+  }
+
+  /* POPULATION COUNTS for one scan (hg-v537): what formed, what stood
+     aside, and how many desk-order sections a replay-survivor kind leads.
+     'Sections' are hgOgDeskOrder's own ordering classes — ticket state x
+     tape alignment — and a survivor 'leads' one when it is the first card
+     of that class in desk order (the survivor class key sorts it there).
+     Computed from the REAL partitioned scan lists; nothing invented. */
+  function hgOgScanCounts(orderedTradable, demotedCards, tape){
+    var tapeDir = String(tape || '').toLowerCase();
+    function cls(c){
+      return ((c && c.grade && c.grade.ticket) ? 2 : 0)
+        + (((tapeDir === 'long' || tapeDir === 'short')
+            && String((c && c.dir) || '').toLowerCase() === tapeDir) ? 1 : 0);
+    }
+    var seen = {}, led = 0, i, c, k;
+    var list = orderedTradable || [];
+    for (i = 0; i < list.length; i++){
+      c = list[i];
+      if (!c) continue;
+      k = String(cls(c));
+      if (seen[k]) continue;             /* only the FIRST card of a section */
+      seen[k] = true;
+      if (c.replaySurvivor || hgOgIsSurvivor(c.kind)) led++;
+    }
+    return {
+      tradable: list.length,
+      demoted: (demotedCards && demotedCards.length) || 0,
+      survivorLedSections: led
+    };
+  }
+
+  /* The one-line counts strip under the banner. textContent (never
+     innerHTML) so the numbers cannot smuggle markup; hidden until a scan
+     has real counts to show. */
+  function hgOgPaintCounts(ui, counts){
+    if (!ui || !ui.counts || !counts) return;
+    try {
+      ui.counts.style.display = '';
+      ui.counts.textContent = 'tradable setups ' + counts.tradable
+        + ' · demoted ' + counts.demoted
+        + ' · survivors leading ' + counts.survivorLedSections + ' section'
+        + (counts.survivorLedSections === 1 ? '' : 's');
+    } catch (eC) {}
   }
 
   /* ==================== end setup FORMATION (hg-v533) ==================== */
@@ -8401,6 +8551,8 @@ terse status, and never launches a first-time scan on a global refresh.
             hgOgDeskTape(hgOgTapeDir(res.scalp && res.scalp.rows), hgOgTapeDir(res.swing && res.swing.rows)),
             []);
           var emptyTape = hgOgDeskTape(hgOgTapeDir(res.scalp && res.scalp.rows), hgOgTapeDir(res.swing && res.swing.rows));
+          /* Counts strip on an empty scan: zeros are the honest counts. */
+          try { hgOgPaintCounts(ui, hgOgScanCounts([], [], emptyTape)); } catch (eCt0) {}
           return hgOgPaintOgPostScan(ui, res, shared, [], emptyTape);
         }
         /* ONE pick per horizon, marked and floated to the top so the answer
@@ -8473,6 +8625,11 @@ terse status, and never launches a first-time scan on a global refresh.
         if (watchScalp) watchScalp.topWatch = true;
         if (watchSwing) watchSwing.topWatch = true;
         ogCollapsed = hgOgDeskOrder(ogCollapsed, deskTape);
+
+        /* POPULATION COUNTS strip (hg-v537) — from the REAL partition just
+           made: the desk-ordered tradable list and the stood-aside list. */
+        try { hgOgPaintCounts(ui, hgOgScanCounts(ogCollapsed, ogDemotedCards, deskTape)); }
+        catch (eCts) {}
 
         var h = hgOgTapeBannerHtml(scalpTape, swingTape);
         /* The next levels FIRST: the reader asked to hold the high and the
@@ -8905,8 +9062,81 @@ terse status, and never launches a first-time scan on a global refresh.
 
   /* ==================== mount / refresh ==================== */
 
+  /* EXECUTION VENUE control (hg-v537). Sits under the desk-stance banner,
+     beside the scan controls. Formation verdicts are stamped by
+     hgOgEvaluate AT SCAN TIME (the stop floor and the demotion partition
+     live on each card), so a venue change cannot honestly re-price cards
+     already on screen — the control says 'applies on next scan' and the
+     stat line repeats it after a change. The banner and its demotion
+     counts ARE pure reads, so those repaint immediately.
+     Precedence is hgOgVenueCost's: a window.HG_OG_VENUE override wins over
+     this control, and the control says so and disables itself while one is
+     set. */
+  function hgOgVenueControlHtml(){
+    return '<div class="row og-venue-row" style="margin:0 0 8px 0;align-items:center">'
+      + '<span class="note" style="margin:0"><b>EXECUTION VENUE</b> <span class="dim">(applies on next scan)</span>:</span>'
+      + ' <button type="button" class="btn ghost og-venue-btn" id="ogVenueXm" data-og-venue="XM">XM XAUUSD</button>'
+      + ' <button type="button" class="btn ghost og-venue-btn" id="ogVenuePaxg" data-og-venue="PAXG">PAXG</button>'
+      + ' <span class="note dim" id="ogVenueNote" style="font-size:11px;margin:0"></span>'
+      + '</div>'
+      /* POPULATION COUNTS strip (hg-v537) — filled by hgOgPaintCounts after
+         each scan; display:none until there are real counts. */
+      + '<div class="note dim og-counts" id="ogCounts" style="display:none;margin-bottom:8px"></div>';
+  }
+
+  function hgOgVenuePaint(ui){
+    if (!ui) return;
+    var w = W(), ovr = '';
+    try { ovr = String((w && w.HG_OG_VENUE) || '').toUpperCase().replace(/^\s+|\s+$/g, ''); }
+    catch (eO) { ovr = ''; }
+    var vc = hgOgVenueCost();
+    function mark(btn, on){
+      if (!btn) return;
+      try {
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        btn.style.borderColor = on ? '#10b981' : '';
+        btn.style.color = on ? '#10b981' : '';
+        btn.style.fontWeight = on ? 'bold' : '';
+        btn.disabled = !!ovr;
+      } catch (eB) {}
+    }
+    mark(ui.venueXm, vc.venue === 'XM');
+    mark(ui.venuePaxg, vc.venue === 'PAXG');
+    if (ui.venueNote){
+      try {
+        ui.venueNote.textContent = ovr
+          ? ('window.HG_OG_VENUE="' + ovr + '" override active — it wins over this control')
+          : ('active: ' + vc.venue + ' ~' + fin(vc.rtCostPct).toFixed(3) + '% RT');
+      } catch (eN) {}
+    }
+  }
+
+  function hgOgVenueApply(ui, el, name){
+    if (!hgOgSetVenue(name)) return;
+    hgOgVenuePaint(ui);
+    /* The banner's venue line is a pure read — repaint it in place. */
+    try {
+      var b = el && el.querySelector ? el.querySelector('[data-og-replay-banner]') : null;
+      if (b) b.outerHTML = hgOgDeskStanceBannerHtml();
+    } catch (eR) {}
+    /* Cards on screen still carry the OLD venue's formation stamps — say
+       so instead of quietly showing mixed arithmetic. */
+    if (__og.ran && ui && ui.stat){
+      try {
+        ui.stat.textContent = (__og.lastStat || '')
+          + '  ·  venue changed to ' + String(name).toUpperCase()
+          + ' — press RUN GOLD SCAN to re-price formation at its costs';
+      } catch (eS) {}
+    }
+  }
+
   function mountOmnigold(el){
     if (!el) return;
+    /* Venue selection FIRST — the desk-stance banner below prices its
+       demotion counts at the active venue, so the persisted choice (or the
+       XM default; PAXG when storage is unavailable) must be applied before
+       any HTML is built. */
+    hgOgVenueInit();
     el.innerHTML =
       '<div class="panel">'
       + '<h2>OmniGold — gold desk setups <span>XAUUSD · scalp ' + HORIZONS.scalp.tf + ' + swing ' + HORIZONS.swing.tf
@@ -8921,6 +9151,9 @@ terse status, and never launches a first-time scan on a global refresh.
          the replay's verdict on this tab's own labels, in the reader's
          face where the scan button is, not in a footnote below a card. */
       + hgOgDeskStanceBannerHtml()
+      /* EXECUTION VENUE control + counts strip (hg-v537) — see
+         hgOgVenueControlHtml for why changes apply on the next scan. */
+      + hgOgVenueControlHtml()
       + '<div class="row"><button class="btn" id="ogRun">RUN GOLD SCAN</button>'
       +   ' <button class="btn" id="ogGrid">R / HORIZON GRID</button></div>'
       + '<div class="note" id="ogStat">idle — press RUN. Fetches two horizons of gold bars, then measures every mechanic on each.</div>'
@@ -8964,9 +9197,19 @@ terse status, and never launches a first-time scan on a global refresh.
       grid: el.querySelector('#ogGrid'), gridOut: el.querySelector('#ogGridOut'),
       xmStat: el.querySelector('#ogXmStat'), xmSend: el.querySelector('#ogXmSend'),
       xmRefresh: el.querySelector('#ogXmRefresh'), xmAuto: el.querySelector('#ogXmAuto'),
-      xmBt: el.querySelector('#ogXmBt'), xmBtOut: el.querySelector('#ogXmBtOut')
+      xmBt: el.querySelector('#ogXmBt'), xmBtOut: el.querySelector('#ogXmBtOut'),
+      venueXm: el.querySelector('#ogVenueXm'), venuePaxg: el.querySelector('#ogVenuePaxg'),
+      venueNote: el.querySelector('#ogVenueNote'), counts: el.querySelector('#ogCounts')
     };
     if (!ui.btn || !ui.stat || !ui.cards || !ui.pool) return;
+
+    /* EXECUTION VENUE wiring (hg-v537). Fail-open on a missing element —
+       an older shell without the control keeps every previous behavior. */
+    try {
+      if (ui.venueXm) ui.venueXm.addEventListener('click', function(){ hgOgVenueApply(ui, el, 'XM'); });
+      if (ui.venuePaxg) ui.venuePaxg.addEventListener('click', function(){ hgOgVenueApply(ui, el, 'PAXG'); });
+      hgOgVenuePaint(ui);
+    } catch (eVc) {}
 
     /* THE R/HORIZON GRID, WHICH THIS DESK DID NOT HAVE.
 
@@ -9378,6 +9621,16 @@ terse status, and never launches a first-time scan on a global refresh.
        there); the PAXG preset stays tunable via HG_OG_RT_COST_PCT. */
     window.hgOgVenueCost = hgOgVenueCost;
     window.hgOgVenueCostNoteHtml = hgOgVenueCostNoteHtml;
+    /* VENUE control internals (hg-v537) — exported so the selection
+       precedence (override > UI selection > PAXG fail-closed), the per-venue
+       demotion counts, and the counts strip are testable without a mount. */
+    window.hgOgVenuePresetCost = hgOgVenuePresetCost;
+    window.hgOgSetVenue = hgOgSetVenue;
+    window.hgOgVenueInit = hgOgVenueInit;
+    window.hgOgDemotedKindCount = hgOgDemotedKindCount;
+    window.hgOgScanCounts = hgOgScanCounts;
+    window.hgOgPaintCounts = hgOgPaintCounts;
+    window.hgOgVenueControlHtml = hgOgVenueControlHtml;
     window.hgOgVenueNetR = hgOgVenueNetR;
     window.hgOgKindDemotion = hgOgKindDemotion;
     window.hgOgForwardPaid = hgOgForwardPaid;

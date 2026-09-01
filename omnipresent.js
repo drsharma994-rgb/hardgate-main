@@ -74,11 +74,15 @@
   }
   function pxF(n){ var v = fin(n); return isFinite(v) ? (v >= 100 ? v.toFixed(2) : v.toFixed(4)) : '—'; }
 
-  var OMNI_TOP = 48;        // contracts scanned (universe order = venue turnover order)
+  var OMNI_TOP = 0;         // 0 = FULL universe: every delta+coindcx contract xuUniverse
+                            // returns, the same coverage promise omniroute makes ("no
+                            // top-N cap"). ESCAPE HATCH: window.HG_OP_TOP = N (any
+                            // finite N > 0) restores a head cap for users who want the
+                            // old faster 48-name scan — documented, read at scan time.
   var TF = '1h';            // near-future = hours, not days
   var BARS = 400;
-  var CHUNK = 4;            // gentle on the venue legs, same as omniroute pass 1
-  var CHUNK_DELAY = 80;
+  var CHUNK = 4;            // gentle on the venue legs, same as omniroute pass 1 (CHUNK=4)
+  var CHUNK_DELAY = 80;     // ms between batches — omniroute's CHUNK_DELAY_MS=80 idiom
   var SHOW = 6;             // "only the most probable" — the ranked head, not the pile
   var ZONE_TOL_ATR = 0.35;  // level sources within this agree on one zone
   var ARM_MAX_ATR = 3.0;    // a zone further than this is not "near future"
@@ -687,33 +691,72 @@
           opStat(ui, 'universe empty — both venue legs failed. A data problem, not a quiet market.');
           return null;
         }
-        var list = uni.slice(0, OMNI_TOP);
+        /* FULL UNIVERSE — every delta+coindcx contract, the coverage bar
+           omniroute already holds this app to. Pacing is unchanged and is
+           omniroute pass 1's exact rhythm (CHUNK=4 concurrent fetches,
+           80ms between batches — omniroute.js CHUNK / CHUNK_DELAY_MS), so
+           ~531 names is the same proxy load profile a full omniroute sweep
+           already survives; it just takes minutes instead of seconds, and
+           the status line counts every name as it lands. window.HG_OP_TOP
+           is the documented escape hatch back to a capped head. */
+        var capN = fin(W.HG_OP_TOP);
+        if (!(capN > 0)) capN = OMNI_TOP;
+        var list = (capN > 0) ? uni.slice(0, capN) : uni;
         var found = [], done = 0, failed = 0;
 
         function step(i){
           if (i >= list.length) return Promise.resolve();
           var slice = list.slice(i, i + CHUNK);
           return Promise.all(slice.map(function (item){
+            /* COUNT IN == COUNTED OUT. done bumps exactly once per name, on
+               the shared tail below, whether the fetch failed OR processing
+               threw. The old shape (done++ at the top of the success handler
+               plus done++ in a trailing .catch) double-counted a name whose
+               PROCESSING threw after its fetch landed — the counter could
+               read "scanned 10 / 9" on a 531-name sweep — and a failing
+               LAST name never printed the final tick at all. The two-arg
+               .then splits fetch failure from processing; the processing
+               body is try/caught so nothing it throws can escape this name. */
             return Promise.resolve().then(function (){ return W.xuCandles(item, TF, BARS); })
               .then(function (rows){
+                try{
+                  var livePx = (rows && rows.length) ? fin(rows[rows.length - 1].c) : NaN;
+                  rows = dropFn ? dropFn(rows, TF) : rows;
+                  if (rows && rows.length >= 120){
+                    if (gfn('hgFwdResolve')){ try{ W.hgFwdResolve(item.sym, null, rows); }catch(e){} }
+                    var cands = opAssess(rows, livePx);
+                    for (var c = 0; c < cands.length; c++){
+                      cands[c].sym = item.sym; cands[c].base = item.base; cands[c].exchange = item.exchange;
+                      cands[c].gates = opGates(rows, cands[c], livePx, item.sym);
+                      cands[c].grade = gradeFn ? gradeFn(cands[c].gates)
+                        : { ticket: false, vetoes: [], verdict: 'grade engine unavailable' };
+                      cands[c].livePx = livePx;
+                      /* 20X stamps (atr1hPct + the ticket re-plan) MUST happen
+                         here, while rows are still in scope — the omniroute
+                         lesson this file already records at opX20Stamp. */
+                      opX20Stamp(cands[c], rows);
+                      found.push(cands[c]);
+                    }
+                  }
+                }catch(eProc){ failed++; }
+                /* MEMORY — full-universe sanity. This desk is single-pass:
+                   unlike omniroute there is no held[] of tapes to null out
+                   later. The bars live only inside THIS closure; the only
+                   survivors are the compact candidate objects above (zone,
+                   gates, scalars — never rows). The explicit release mirrors
+                   omniroute's held[j].rows = null idiom so a 531-name scan
+                   holds at most CHUNK tapes at once, and stays honest even
+                   if a future edit captures this closure. */
+                rows = null;
+              }, function (){ failed++; })
+              .then(function (){
                 done++;
-                if (done % 6 === 0 || done === list.length) opStat(ui, 'scanning ' + done + '/' + list.length + ' — ' + found.length + ' zones armed');
-                var livePx = (rows && rows.length) ? fin(rows[rows.length - 1].c) : NaN;
-                rows = dropFn ? dropFn(rows, TF) : rows;
-                if (!rows || rows.length < 120) return;
-                if (gfn('hgFwdResolve')){ try{ W.hgFwdResolve(item.sym, null, rows); }catch(e){} }
-                var cands = opAssess(rows, livePx);
-                for (var c = 0; c < cands.length; c++){
-                  cands[c].sym = item.sym; cands[c].base = item.base; cands[c].exchange = item.exchange;
-                  cands[c].gates = opGates(rows, cands[c], livePx, item.sym);
-                  cands[c].grade = gradeFn ? gradeFn(cands[c].gates)
-                    : { ticket: false, vetoes: [], verdict: 'grade engine unavailable' };
-                  cands[c].livePx = livePx;
-                  opX20Stamp(cands[c], rows);
-                  found.push(cands[c]);
-                }
-              })
-              .catch(function (){ done++; failed++; });
+                if (done % 5 === 0 || done === list.length)
+                  opStat(ui, 'scanned ' + done + ' / ' + list.length + ' contracts'
+                    + (capN > 0 ? ' (HG_OP_TOP cap)' : ' (full universe)')
+                    + ' — ' + found.length + ' zone(s) found'
+                    + (failed ? ' · ' + failed + ' failed (counted, not dropped)' : ''));
+              });
           })).then(function (){
             if (i + CHUNK >= list.length) return;
             return opSleep(CHUNK_DELAY).then(function (){ return step(i + CHUNK); });
@@ -721,7 +764,8 @@
         }
 
         return step(0).then(function (){
-          return { found: found, scanned: list.length, failed: failed };
+          return { found: found, scanned: list.length, failed: failed,
+                   uniN: uni.length, capN: (capN > 0 ? capN : 0) };
         });
       })
       .then(function (res){
@@ -733,15 +777,28 @@
           __op.snap = { at: Date.now(), rows: res.found };
           var trig = top.filter(function (c){ return c.status === 'TRIGGERED'; }).length;
           var tick = top.filter(function (c){ return c.grade && c.grade.ticket; }).length;
-          __op.lastStat = res.found.length + ' zone(s) across ' + res.scanned + ' contracts · showing '
-                        + top.length + ' · one side per contract'
+          __op.lastStat = res.found.length + ' zone(s) across ' + res.scanned + ' contracts — '
+                        + (res.capN ? ('HG_OP_TOP cap: ' + res.scanned + ' of ' + res.uniN + ' in the universe')
+                                    : 'full universe')
+                        + ' · top ' + top.length + ' shown, all ' + ranked.one.length + ' kept (expander below)'
+                        + ' · one side per contract'
                         + (ranked.side ? (' · tape ' + ranked.side) : '')
                         + ' · ' + trig + ' triggered · ' + tick + ' ticket(s)'
                         + (res.failed ? ' · ' + res.failed + ' feeds failed' : '');
           opStat(ui, __op.lastStat);
 
           /* forward-log / Telegram only the shown head — alerting the
-             against-tape side of the same name is the bug this collapses. */
+             against-tape side of the same name is the bug this collapses.
+             FULL-UNIVERSE DECISION (deliberate, unchanged semantics):
+             recording every TRIGGERED zone across ~531 names could write
+             tens-to-hundreds of records per scan into hg-forward's
+             4000-record pool, which prunes OLDEST-FIRST (hgFwdAdd folds
+             pruned outcomes into an aggregate, so evidence is never
+             destroyed — but per-record detail from other desks would churn
+             out within days of repeated full scans). The shown head
+             (<= SHOW per scan) is what this desk actually recommends, so
+             it is the only thing its forward record judges — same rule as
+             before the cap was removed, now stated on the coverage line. */
           if (gfn('hgFwdRecordScan')){
             var fwd = top.filter(function (c){ return c.status === 'TRIGGERED'; })
               .map(function (c){ return { sym: c.sym, dir: c.dir, entry: c.entry, stop: c.stop, t1: c.t1,
@@ -767,7 +824,51 @@
           var h = '', closes = opNextCloses(Date.now(), 3);
           h += '<div class="note">Triggers evaluate at 1h bar closes: <b>' + closes.join(' · ') + '</b>'
             + ' — highest-frequency reversal windows: London 07–10 UTC, New York 13–16 UTC.</div>';
+          /* COVERAGE — the honesty line: what was scanned, what is shown,
+             where the rest lives. Nothing scanned is invisible. */
+          h += '<div class="note">' + res.scanned + ' contracts scanned — '
+            + (res.capN ? esc('HG_OP_TOP cap: ' + res.scanned + ' of ' + res.uniN + ' in the universe')
+                        : 'full universe, no cap')
+            + '; top ' + top.length + ' shown, all ' + ranked.one.length
+            + ' zone(s) kept in the ALL ZONES section below.'
+            + ' Forward log + alerts cover the shown head only.</div>';
           for (var i = 0; i < top.length; i++) h += opCard(top[i], sideRead);
+          /* ALL-ZONES EXPANDER — omniroute's overflow discipline (a count
+             plus one line per setup, capped at 200 rendered lines) wearing
+             the app's <details> idiom (omnigold's demoted-kinds section).
+             The full one-per-contract ranked list, top head included so
+             the list is complete on its own; every entry also lives in
+             hgOpState()'s snapshot. Same honesty rule as omniroute's
+             near-miss block: no zone band is printed on a VETOED row —
+             tradable numbers under a veto turn a warning into a
+             suggestion. */
+          var allZ = ranked.one || [];
+          if (allZ.length){
+            h += '<details class="note" data-op-all-zones="1" style="margin-top:10px">'
+              + '<summary style="cursor:pointer"><b>ALL ' + allZ.length + ' ZONE(S) — full ranked list</b>'
+              + ' <span class="dim">(one side per contract · top ' + top.length + ' carded above)</span></summary>';
+            var zLim = Math.min(allZ.length, 200), zi, zc, zb, zVeto;
+            for (zi = 0; zi < zLim; zi++){
+              zc = allZ[zi];
+              if (!zc) continue;
+              zVeto = !!(zc.grade && zc.grade.vetoes && zc.grade.vetoes.length && !(zc.grade.ticket));
+              zb = (zc.grade && zc.grade.ticket) ? 'TICKET' : (zVeto ? 'VETO' : 'WATCH');
+              h += '<div class="dim">' + esc(String(zc.base || zc.sym || '?'))
+                + ' ' + esc(String(zc.dir || '').toUpperCase())
+                + ' · ' + esc(String(zc.status || '')) + ' · ' + zb
+                + (zVeto
+                    ? (' — ' + esc(String(zc.grade.vetoes[0]))
+                       + (zc.grade.vetoes.length > 1 ? ' +' + (zc.grade.vetoes.length - 1) : '')
+                       + ' · levels withheld')
+                    : (' · zone ' + pxF(zc.zone && zc.zone.lo) + '–' + pxF(zc.zone && zc.zone.hi)))
+                + ' · ' + ((zc.zone && isFinite(+zc.zone.distAtr)) ? (+zc.zone.distAtr).toFixed(1) : '—') + 'xATR away'
+                + ' · score ' + (isFinite(+zc.score) ? (+zc.score).toFixed(0) : '—')
+                + '</div>';
+            }
+            if (allZ.length > zLim)
+              h += '<div class="dim">…and ' + (allZ.length - zLim) + ' more — still ranked, 20X-judged and kept in hgOpState().</div>';
+            h += '</details>';
+          }
           var empty = (ranked.side)
             ? ('<div class="empty">no ' + ranked.side.toUpperCase()
                + ' zone in range — TAKE ' + (ranked.side === 'long' ? 'LONGS' : 'SHORTS')

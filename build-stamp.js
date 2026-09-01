@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v537',
-  pack: 'OMNIPRESENT gets a 20X face — same audited gates, own forward record',
-  built: '2026-09-01T12:00:00Z',
-  note: 'OMNIPRESENT 20X — LEVERAGE-SAFE SETUPS section. All leverage math reuses the audited omniroute exports (hgOmni20xQualify/GateRun/Replan/Explain, hgOmniCostDrag) through an adapter (opX20Wrap) that maps the OP candidate shape (top-level entry/stop/t1) into {plan:{...}}; atr1hPct and the 1h re-plan are stamped at scan time while the bars exist. Quality floor honesty: OP has no conviction certs and no meaningful solidity, so the ONLY quality path is its own settled forward record — hgOmni20xForwardPaid now reads the candidate-named pool (c.fwdTab, default OMNIROUTE = bit-identical for existing callers), so OP-HIGH-REJECT/OP-LOW-REJECT are judged against the OMNIPRESENT pool with the same 20-sample/familyZ(2) bar the measured-edge gate uses. Section is structurally empty until that record pays, and says so; near-misses never print levels; ARMED can never appear (no ticket without a 1h rejection close). hgOmni20xParams window-exported so the OP banner prints the same frozen numbers omniroute judges with.'
+  version: 'hg-v538',
+  pack: 'OMNIGOLD venue selector + OMNIPRESENT full-universe sweep',
+  built: '2026-09-01T09:00:00Z',
+  note: 'Two audited changes. (1) OMNIGOLD gains a visible EXECUTION VENUE control (XM XAUUSD default - the venue this desk actually executes on via the MT5 bridge - with PAXG one click away; precedence window override > saved choice > PAXG fallback). At XM the formation floor is 0.16% and 12 gross-negative kinds stay demoted; the 10 fee-only PAXG demotions return. Replay outcomes remain PAXG-measured and every fee-adjacent site says so; banner counts computed live. (2) OMNIPRESENT sweeps the FULL Delta+CoinDCX universe (~531 names, was top-48) with omniroute pacing, live scanned-N/M progress, failures counted not dropped, all zones reachable via expander, forward log covers the shown head only (disclosed).'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
