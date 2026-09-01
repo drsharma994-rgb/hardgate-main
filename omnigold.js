@@ -27,7 +27,10 @@ GOLD TAPE IS GOLD, NOT THE CRYPTO CASCADE.
 MOST PROBABLE SETUPS sit at the top of the tab: up to one SCALP and
   one SWING tape-aligned TICKET, ranked on a balanced score of
   independent mechanic families + indicator info-reads (ema-stack,
-  rsi-zone, session-vwap, adx, hurst, …) + coverage + proximity.
+  rsi-zone, session-vwap, adx, hurst, …) + coverage + proximity +
+  formationScore (hgOgFormTicket: named ENTRY locked, structure-wide
+  stop clipped at 2.5% of gold, T1 at OG_T1_R of formed risk with the
+  first gold magnet named beyond it).
   That score is not a win probability. Against-tape cards still
   render; they sink. Empty pick = stand aside.
 
@@ -3428,6 +3431,296 @@ terse status, and never launches a first-time scan on a global refresh.
     }catch(e){ return null; }
   }
 
+  /* ==================== gold-native ticket formation ====================
+     The printed trade IS the mechanic. ENTRY stays hit.level (ROUND / FVG /
+     Asia). Formation then uses gold maths on stop, targets, type and score:
+
+       STOP  widen-only via structure, then re-clip at GOLD_STOP_MAX_PCT.
+             Never tighten. A lastSwing 1000 pts away is not this setup.
+       T1    OG_T1_R of formed risk (walk-forward measures here). First
+             gold magnet beyond that print is named on the card.
+       TYPE  MARKET when live is inside 0.25×ATR of the named entry; else LIMIT.
+       SCORE conviction 0–100. Cost / thin fill / weekend DEMOTE. Never
+             refuse a placeable plan — that verdict is hgOgFormation's.
+
+     Native tickets must not go through hgApplyGoldBestLevels or
+     hgFormTicket({style:'gold-*'}): both can move the named entry. */
+
+  function hgOgRewardPts(dir, entry, px){
+    var e = fin(entry), p = fin(px);
+    if (!isFinite(e) || !isFinite(p)) return NaN;
+    return (dir === 'long') ? (p - e) : (e - p);
+  }
+
+  function hgOgNextRound(entry, step, dir){
+    var e = fin(entry), s = fin(step);
+    if (!(isFinite(e) && s > 0)) return NaN;
+    if (dir === 'long'){
+      var up = Math.ceil((e + 1e-6) / s) * s;
+      if (Math.abs(up - e) < 1e-6) up += s;
+      return up;
+    }
+    var dn = Math.floor((e - 1e-6) / s) * s;
+    if (Math.abs(dn - e) < 1e-6) dn -= s;
+    return dn;
+  }
+
+  function hgOgGoldMagnets(dir, entry, rows, extra){
+    extra = extra || {};
+    var out = [], seen = {};
+    function put(px, src){
+      var v = fin(px);
+      if (!isFinite(v) || v <= 0) return;
+      var rew = hgOgRewardPts(dir, entry, v);
+      if (!(rew > 0.05)) return;
+      var k = v.toFixed(2) + '|' + src;
+      if (seen[k]) return;
+      seen[k] = 1;
+      out.push({ px: v, src: src, rew: rew });
+    }
+    var steps = [5, 10, 25, 50], i;
+    for (i = 0; i < steps.length; i++) put(hgOgNextRound(entry, steps[i], dir), 'ROUND-' + steps[i]);
+    var adr = extra.adr;
+    if (!adr && rows) adr = hgOgAdr(rows, 14);
+    if (adr){
+      if (isFinite(fin(adr.adr))){
+        if (isFinite(fin(adr.todayLo))) put(fin(adr.todayLo) + fin(adr.adr), 'ADR-CEILING');
+        if (isFinite(fin(adr.todayHi))) put(fin(adr.todayHi) - fin(adr.adr), 'ADR-FLOOR');
+      }
+      put(adr.todayHi, 'DAY-HIGH');
+      put(adr.todayLo, 'DAY-LOW');
+    }
+    var asia = extra.asia || hgOgAsiaRange(rows, extra.nowSec);
+    if (asia){
+      put(asia.hi, 'ASIA-HIGH');
+      put(asia.lo, 'ASIA-LOW');
+    }
+    var zc = extra.zoneCtx;
+    if (Array.isArray(zc)){
+      var zi, z, zz;
+      for (zi = 0; zi < zc.length; zi++){
+        zz = zc[zi];
+        z = (zz && zz.zone) ? zz.zone : zz;
+        if (!z) continue;
+        put(z.hi, 'ZONE-HIGH');
+        put(z.lo, 'ZONE-LOW');
+      }
+    }
+    var live = fin(extra.livePx);
+    if (!(live > 0)) live = entry;
+    try {
+      var zl = hgOgZoneLevels(rows, live);
+      if (zl){
+        var side = (dir === 'long') ? zl.above : zl.below, j;
+        for (j = 0; j < (side || []).length; j++){
+          if (side[j]) put(side[j].px, side[j].src || 'ZONE');
+        }
+      }
+    } catch (eZ) {}
+    return out;
+  }
+
+  function hgOgPickMagnet(magnets, risk, minR, maxR){
+    if (!magnets || !magnets.length || !(risk > 0)) return null;
+    var lo = minR * risk, hi = maxR * risk;
+    var best = null, i, m;
+    for (i = 0; i < magnets.length; i++){
+      m = magnets[i];
+      if (!m || !(m.rew >= lo - 1e-9) || m.rew > hi + 1e-9) continue;
+      if (!best || m.rew < best.rew) best = m;
+    }
+    return best;
+  }
+
+  function hgOgFormTicket(plan, hit, rows, extra, cfg){
+    extra = extra || {};
+    cfg = cfg || {};
+    if (!plan || !hit) return plan;
+    var dir = String(hit.dir || plan.dir || '').toLowerCase();
+    if (dir !== 'long' && dir !== 'short') return plan;
+    var entry = fin(plan.entry);
+    var stop0 = fin(plan.stop);
+    if (!(isFinite(entry) && entry > 0) || !isFinite(stop0)) return plan;
+    var minRr = isFinite(fin(cfg.minRr)) ? fin(cfg.minRr) : 1.5;
+    var live = fin(extra.livePx);
+    var a = atrOf(rows, 14);
+    if (!(isFinite(a) && a > 0)) a = entry * 0.003;
+
+    /* 1. ENTRY locked. */
+    plan.entry = entry;
+    plan.dir = dir;
+
+    /* 2. STOP: structure-widen at most 1×ATR extra, then 2.5% clip.
+          Never pull it closer than the setup-level invalidation. */
+    var stop = stop0;
+    var stopFn = gfn('hgStructureStop');
+    if (stopFn){
+      try {
+        var st = stopFn(dir, entry, rows, {
+          atrLen: 14, look: 20, buffer: 0, capMode: 'structure'
+        });
+        if (st && isFinite(st.stop)){
+          var wider = (dir === 'long') ? (st.stop < stop && st.stop < entry)
+                                       : (st.stop > stop && st.stop > entry);
+          if (wider){
+            var widenAtr = Math.abs(st.stop - stop) / a;
+            if (widenAtr <= 1.0 + 1e-9){
+              var clipped = hgOgClipStop(dir, entry, st.stop);
+              if (isFinite(clipped)){
+                var stillWider = (dir === 'long') ? (clipped <= stop) : (clipped >= stop);
+                var stillValid = (dir === 'long') ? (clipped < entry) : (clipped > entry);
+                if (stillWider && stillValid){
+                  stop = clipped;
+                  plan.stopWidened = true;
+                  plan.stopSource = st.note || 'structure';
+                  plan.stopNote = (plan.stopNote ? plan.stopNote + '; ' : '')
+                    + (st.note || 'stop widened to structure, clipped at 2.5% of gold');
+                }
+              }
+            }
+          }
+        }
+      } catch (eSt) {}
+    }
+    var clipped0 = hgOgClipStop(dir, entry, stop);
+    if (isFinite(clipped0)) stop = clipped0;
+    if (dir === 'long' && stop > stop0) stop = stop0;
+    if (dir === 'short' && stop < stop0) stop = stop0;
+    plan.stop = stop;
+
+    var risk = Math.abs(entry - stop);
+    if (!(risk > 0)){
+      plan.stop = stop0;
+      stop = stop0;
+      risk = Math.abs(entry - stop0);
+    }
+    if (!(risk > 0)) return plan;
+
+    /* 3. T1 is ALWAYS OG_T1_R of formed risk. Walk-forward and the card
+          measure the same number; snapping T1 to a 2.5R round would
+          reprint the original defect (measure 2R, print something harder).
+          Gold magnets are named as the first liquidity BEYOND that 2R
+          print, and T2 may sit on one when it still pays. */
+    var magnets = hgOgGoldMagnets(dir, entry, rows, extra);
+    var t1, t2, t1Source = 'R-multiple';
+    var fromRisk = gfn('hgPlanFromRisk');
+    if (fromRisk){
+      try {
+        var mech = fromRisk(dir, entry, stop, {
+          t1R: OG_T1_R, t2R: OG_T2_R, minRr: minRr,
+          targetPolicy: 'R-multiples of formed gold risk'
+        });
+        if (mech && isFinite(fin(mech.t1))){
+          t1 = fin(mech.t1);
+          if (isFinite(fin(mech.t2))) t2 = fin(mech.t2);
+        }
+      } catch (eR) {}
+    }
+    if (!isFinite(t1)) t1 = (dir === 'long') ? entry + OG_T1_R * risk : entry - OG_T1_R * risk;
+    if (!isFinite(t2)) t2 = (dir === 'long') ? entry + OG_T2_R * risk : entry - OG_T2_R * risk;
+
+    var magBeyond = hgOgPickMagnet(magnets, risk, OG_T1_R, OG_T2_R + 1.25);
+    if (magBeyond && isFinite(magBeyond.px)){
+      plan.t1Magnet = magBeyond.px;
+      plan.t1MagnetSrc = magBeyond.src;
+      plan.t1MagnetR = magBeyond.rew / risk;
+      t1Source = 'R-multiple · toward ' + magBeyond.src;
+    }
+    var magT2 = hgOgPickMagnet(magnets, risk, Math.max(OG_T2_R * 0.95, OG_T1_R + 0.5), OG_T2_R + 1.5);
+    if (magT2 && isFinite(magT2.px)){
+      var t2Ahead = (dir === 'long') ? (magT2.px > t1) : (magT2.px < t1);
+      if (t2Ahead){ t2 = magT2.px; plan.t2Source = magT2.src; }
+    }
+    if ((dir === 'long') ? t2 <= t1 : t2 >= t1){
+      t2 = (dir === 'long') ? entry + OG_T2_R * risk : entry - OG_T2_R * risk;
+      if ((dir === 'long') ? t2 <= t1 : t2 >= t1)
+        t2 = (dir === 'long') ? t1 + 0.5 * risk : t1 - 0.5 * risk;
+      if (!plan.t2Source) plan.t2Source = 'R-multiple';
+    }
+
+    plan.t1 = t1;
+    plan.t2 = t2;
+    plan.t1Source = t1Source;
+    plan.rr1 = Math.abs(t1 - entry) / risk;
+    plan.rr2 = Math.abs(t2 - entry) / risk;
+    plan.rr = plan.rr1;
+    plan.risk = risk;
+    plan.riskPct = (entry > 0) ? (risk / entry * 100) : null;
+    plan.formedBy = 'hgOgFormTicket';
+
+    /* 4. TYPE + fill. Thin LIMIT demotes — it does not chase live gold. */
+    var gapAtr = (isFinite(live) && live > 0 && a > 0) ? Math.abs(live - entry) / a : NaN;
+    var atMarket = isFinite(gapAtr) && gapAtr <= 0.25;
+    var kind = String(hit.kind || 'SETUP');
+    plan.entryType = (atMarket ? 'MARKET @ ' : 'LIMIT @ ') + kind;
+    if (atMarket) plan.fillProb = 90;
+    else if (isFinite(gapAtr)){
+      plan.fillProb = Math.max(5, Math.round(100 / (1 + gapAtr)));
+      if (gapAtr > 1.5) plan.fillDemote = true;
+    }
+    var fillFn = gfn('hgFillProbability');
+    if (fillFn && !atMarket){
+      try {
+        var fill = fillFn(rows, entry, dir, null, 12);
+        if (fill && isFinite(+fill.pct)){
+          plan.fillProb = +fill.pct;
+          plan.fillNote = fill.note;
+          if (plan.fillProb < 35) plan.fillDemote = true;
+        }
+      } catch (eF) {}
+    }
+
+    /* 5. Conviction. Demote on cost / weekend / thin fill / against-tape.
+          Never return null for a placeable plan. */
+    var score = 48;
+    var parts = [];
+    if (/ROUND/i.test(kind) || Math.abs(entry - Math.round(entry / 10) * 10) < 0.51){
+      score += 10; parts.push('round');
+    }
+    if (/FVG|ASIA|KZ-JUDAS|SWEEP|SPRING/i.test(kind)){ score += 6; parts.push('named-poi'); }
+    var kz = extra.killzone && String(extra.killzone.zone || extra.killzone.label || '').toLowerCase();
+    if (/london|new.?york|\bny\b/.test(kz)){ score += 12; parts.push('killzone'); }
+    else if (/asia/.test(kz)){ score += 3; parts.push('asia-session'); }
+    else if (kz){ score -= 4; parts.push('off-killzone'); }
+    var tape = hgOgTapeDir(rows);
+    if (tape === dir){ score += 10; parts.push('with-tape'); }
+    else if (tape && tape !== dir){ score -= 14; parts.push('against-tape'); }
+    if (atMarket){ score += 10; parts.push('at-market'); }
+    else if (plan.fillDemote){ score -= 10; parts.push('thin-fill'); }
+    if (hgOgIsSurvivor(kind)){ score += 8; parts.push('replay-survivor'); }
+    if (plan.t1Magnet){ score += 6; parts.push('magnet-t1'); }
+    if (plan.stopWidened){ score += 3; parts.push('structure-stop'); }
+    if (plan.momentumStop === true){ score -= 6; parts.push('vol-stop'); }
+
+    var wkFn = gfn('hgInGoldWeekend');
+    var nowSec = fin(extra.nowSec);
+    if (wkFn && isFinite(nowSec) && nowSec > 0){
+      try {
+        if (wkFn(nowSec)){ score -= 16; parts.push('weekend'); plan.weekendDemote = true; }
+        else {
+          var secsFn = gfn('hgSecsToGoldWeekend');
+          var secsLeft = secsFn ? fin(secsFn(nowSec)) : NaN;
+          if (isFinite(secsLeft) && secsLeft >= 0 && secsLeft < 8 * 3600){
+            score -= 8; parts.push('near-weekend');
+          }
+        }
+      } catch (eWk) {}
+    }
+    try {
+      var drag = hgOgCostDrag(plan);
+      if (drag && isFinite(drag.costR) && drag.costR > 0.15){
+        score -= Math.min(22, Math.round(drag.costR * 50));
+        plan.costDemote = true;
+        parts.push('cost');
+      }
+    } catch (eC) {}
+    if (score < 0) score = 0;
+    if (score > 100) score = 100;
+    plan.formationScore = Math.round(score);
+    plan.formationParts = parts;
+    return plan;
+  }
+
   /* Grade + plan for one horizon. Reuses omniroute's grade/derive so the
      ticket rule and the R:R correction stay in one place. */
   function hgOgEvaluate(rows, hits, extra, cfg){
@@ -3464,7 +3757,14 @@ terse status, and never launches a first-time scan on a global refresh.
       var plan = null;
       try { plan = hgOgPlanForHit(hit, rows, ex, cfg); }
       catch (e) { plan = null; }
-      if (plan && deriveFn) plan = deriveFn(plan);
+      /* Gold-native formation AFTER the named entry is priced. Never send
+         native detector tickets through hgApplyGoldBestLevels / hgFormTicket
+         gold-style — those move ROUND-MAGNET / FVG-FILL off hit.level. */
+      if (plan){
+        try { plan = hgOgFormTicket(plan, hit, rows, ex, cfg) || plan; }
+        catch (eFmPl) {}
+        if (deriveFn) plan = deriveFn(plan);
+      }
       ex.planRisk = (plan && isFinite(fin(plan.risk))) ? fin(plan.risk) : NaN;
       /* Attach only when the engine exists. An absent engine is not a
          declined plan — stamping plan:null vetoed the whole desk in
@@ -3495,6 +3795,7 @@ terse status, and never launches a first-time scan on a global refresh.
         horizon: cfg.label, kind: hit.kind, dir: hit.dir, level: hit.level, why: hit.why,
         gates: gates, grade: grade, plan: plan,
         formation: formation,
+        formationScore: (plan && isFinite(fin(plan.formationScore))) ? fin(plan.formationScore) : NaN,
         replaySurvivor: hgOgIsSurvivor(hit.kind),
         /* Carried on the candidate so the ranker can put the setup the rest
            of the desk agrees with above the one nothing supports. */
@@ -7411,6 +7712,19 @@ terse status, and never launches a first-time scan on a global refresh.
       if (t1Note) h += '<div class="dim og-t1-readout">' + esc(t1Note) + '</div>';
       var mktNote = hgOgEntryMarketNote(c, c.plan);
       if (mktNote) h += '<div class="dim og-market-note">' + esc(mktNote) + '</div>';
+      var formScore = isFinite(fin(c.formationScore)) ? fin(c.formationScore)
+                    : (c.plan && isFinite(fin(c.plan.formationScore)) ? fin(c.plan.formationScore) : NaN);
+      if (c.plan.entryType || c.plan.stopWidened || c.plan.t1Source || isFinite(formScore)){
+        h += '<div class="dim og-form-line">'
+          + (c.plan.entryType ? esc(c.plan.entryType) : 'formed')
+          + (c.plan.stopWidened ? ' · structure-wide stop' : '')
+          + (c.plan.t1Source ? ' · T1 ' + esc(String(c.plan.t1Source)) : '')
+          + (isFinite(fin(c.plan.t1Magnet)) ? (' @ ' + fmtPx(c.plan.t1Magnet)) : '')
+          + (isFinite(formScore) ? ' · conviction ' + Math.round(formScore) : '')
+          + (c.plan.costDemote ? ' · cost demote' : '')
+          + (c.plan.fillDemote ? ' · thin fill' : '')
+          + '</div>';
+      }
       if (c.plan.note) h += '<div class="dim">' + esc(c.plan.note) + '</div>';
       /* The same levels in the reader's instrument. Only when the factor is
          real and the basis is worth mentioning — a broker-bridge feed, a
@@ -9285,6 +9599,7 @@ terse status, and never launches a first-time scan on a global refresh.
     window.ogTradeKey = ogTradeKey;
     window.hgOgEvaluate = hgOgEvaluate;
     window.hgOgPlanForHit = hgOgPlanForHit;
+    window.hgOgFormTicket = hgOgFormTicket;
     window.hgOgXmSlim = hgOgXmSlim;
     window.hgOgXmStrongest = hgOgXmStrongest;
     window.hgOgXmRunBacktest = hgOgXmRunBacktest;

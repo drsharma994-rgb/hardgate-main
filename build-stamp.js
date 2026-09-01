@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v546',
-  pack: 'OMNIROUTE + OMNIPRESENT intelligent keep-levels formation',
-  built: '2026-09-01T16:45:00Z',
-  note: 'keepLevels locks named ENTRY then structure-widens STOP (never tighten; OMNIPRESENT zone stays squeezed), snaps T1/T2 to liquidity/value-area when they still clear min R:R, stamps MARKET vs LIMIT, scores POI agreement + fill, refuses hopeless LIMIT. Both desks rank by formationScore after consensus.'
+  version: 'hg-v547',
+  pack: 'OMNIGOLD intelligent gold formation',
+  built: '2026-09-01T17:10:00Z',
+  note: 'OMNIGOLD hgOgFormTicket locks named ENTRY (ROUND/FVG/Asia), structure-widens STOP then re-clips at 2.5% of gold (never tighten, never a 1000-pt lastSwing), places T1 at the nearest gold magnet that still clears OG_T1_R, stamps MARKET vs LIMIT, scores conviction (killzone/tape/fill/replay). Cost/weekend/thin-fill demote only. Native tickets never go through hgApplyGoldBestLevels.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
