@@ -184,7 +184,12 @@ console.log('\n== a dead card is not RENDERED as a trade ==');
      'under a heading naming the cause');
   ok(/lfG\.pass === false && lfG\.info !== true/.test(GOLD),
      'only a REAL veto collapses — AGAINST resting-order plans still render in full');
-  ok(GOLD.indexOf('levels dead on arrival') > GOLD.indexOf('var ogSeen'),
+  /* Anchor on the RENDER site, not the first mention of the phrase: hg-v542's
+     TOP SETUP rewire added hgOgTopSetupFresh (a pure pre-render freshness
+     re-judge) whose fallback string carries the same words far earlier in the
+     file. What must stay true is that the CARD's collapse runs after the
+     duplicate collapse. */
+  ok(GOLD.indexOf('card not rendered') > GOLD.indexOf('var ogSeen'),
      'applied after the duplicate collapse, so the surviving card is the one judged');
   ok(/'level-fresh': 'the market has moved past the levels/.test(GOLD),
      'and the desk read can name it when it dominates');

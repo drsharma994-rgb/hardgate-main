@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v541',
-  pack: 'PAID-ONLY mode + DESK VERDICT — concentrate on what has proven itself',
-  built: '2026-09-01T15:00:00Z',
-  note: 'All three scanner tabs gain SHOW: ALL / PAID-ONLY (per-tab persisted, default ALL — byte-identical to before): PAID-ONLY filters cards and MOST PROBABLE to mechanics whose OWN tab forward ledger reads has-paid at the family-wise bar; hidden setups counted honestly, per-tab pool isolation enforced. A DESK VERDICT strip tops each tab: live forward record of settled tickets (recomputed from the pool every render, SHADOW weighting), the fixed replay verdict on raw detections (cited to the evidence JSONs), and the variance fact that two consecutive stops at ~30% win rates has ~49% probability. Audit fixed 4 fatals. Lands atop the v540 order-flow short-side fix from the companion session.'
+  version: 'hg-v542',
+  pack: 'TOP SETUP widgets rewired to the audited pipeline — fabrication removed',
+  built: '2026-09-01T17:00:00Z',
+  note: 'A user-reported wrong TOP SETUP card exposed two legacy widgets (OMNIGOLD hgOgOpenSetupsWatchPanelHtml, OMNIROUTE omniRenderProTraderPanel) that bypassed every gate: raw unfiltered hg_forward_v1 reads (any tab, any age, gate-failed included), a self-invented confluence over fields the log never stores, a freshness anchor never set on XM feeds so staleness was disabled, invented entries at live price no detector produced, a Refresh button targeting a nonexistent host, dropped direction labels, and an OMNI prefix filter leaking gold into the crypto card. ~630 lines deleted. Both widgets now render ONLY their tab audited TICKET-gated level-fresh picks with direction, real confluence and cost chips, honest stand-asides quoting the gates own distances, and replace-in-place injection. Audit fixed 2 further fatals incl. a freshness re-judge that was not the ledger own check.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

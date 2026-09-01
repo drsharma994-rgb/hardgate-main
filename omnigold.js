@@ -320,7 +320,7 @@ terse status, and never launches a first-time scan on a global refresh.
                lastCardsHtml: null, lastPoolHtml: null, lastMpHtml: null,
                lastVerdictHtml: null, lastSettledExecHtml: null, lastCoverageHtml: null, lastGoldEnginesHtml: null,
                correlationRegime: null, lastRegimeUpdate: 0,
-               rollingStats: null, openSetups: [], lastRollingUpdate: 0,
+               rollingStats: null, topSetupView: null, lastRollingUpdate: 0,
                /* hg-v540: the ALL view's exact bytes + the inputs behind
                   them, so PAID-ONLY filters a snapshot and ALL restores
                   verbatim. */
@@ -4700,338 +4700,207 @@ terse status, and never launches a first-time scan on a global refresh.
     return Math.min(100, composite);
   }
 
-  /* Smart Setup Refresh: Detect stale and regenerate fresh ones */
-  function hgOgIsSetupStale(setup, livePrice){
-    if (!setup || !livePrice) return false;
-    var entry = fin(setup.entry);
-    if (!isFinite(entry)) return false;
+  /* ==================== TOP SETUP — from the gate ledger (hg-v541) ====================
 
-    /* Setup is stale if price moved significantly away from entry */
-    var distance = Math.abs(livePrice - entry);
-    var entryDist = Math.abs(setup.t1 - entry) || 0;
+     REPLACES the old open-setups watch suite, which was fed from RAW
+     hg_forward_v1 records — any tab, any age, TICKET or not (the recorder
+     deliberately logs every firing that carries a plan) — scored by a
+     self-invented confluence formula over checklist fields the forward log
+     never stores, "regenerated" to invented levels when price drifted, and
+     judged against a spot anchor frozen at scan time. None of that survives
+     here: the card sources EXCLUSIVELY from this tab's audited pipeline —
+     the same hgOgPickFor() TICKET winner that MOST PROBABLE renders — and
+     when that pipeline offers nothing, the card says so instead of showing
+     anything. */
 
-    /* Stale if price moved more than 30% of the target distance OR entry already hit */
-    return distance > (entryDist * 0.3) || Math.abs(livePrice - entry) > Math.abs(setup.stop - entry);
+  /* The single best gate-passed pick across both horizons: TICKET only,
+     FORMED only, tape-aligned by construction (hgOgPickFor already refuses
+     against-tape). Ranked by the same balance score the desk order uses;
+     nearest-to-market breaks the tie. Pure; exported for the harness. */
+  function hgOgTopSetupPick(mpArgs){
+    if (!mpArgs) return null;
+    var pool = [], i, c;
+    var cand = [mpArgs.pickScalp, mpArgs.pickSwing];
+    for (i = 0; i < cand.length; i++){
+      c = cand[i];
+      if (!c || !c.plan) continue;
+      if (!(c.grade && c.grade.ticket)) continue;          /* gate-passed only */
+      if (c.formation && c.formation.formed === false) continue;
+      pool.push(c);
+    }
+    if (!pool.length) return null;
+    var tape = String(mpArgs.tape || '').toLowerCase();
+    pool.sort(function(a, b){
+      var sa = hgOgBalanceScore(a, tape), sb = hgOgBalanceScore(b, tape);
+      if (sb !== sa) return sb - sa;
+      var da = isFinite(fin(a.distAtr)) ? a.distAtr : 99;
+      var db = isFinite(fin(b.distAtr)) ? b.distAtr : 99;
+      return da - db;
+    });
+    return pool[0];
   }
 
-  /* Regenerate setup based on current price levels */
-  function hgOgRegenerateSetup(oldSetup, livePrice){
-    if (!oldSetup || !livePrice) return oldSetup;
-
-    var oldEntry = fin(oldSetup.entry);
-    var oldStop = fin(oldSetup.stop);
-    var oldT1 = fin(oldSetup.t1);
-
-    if (!isFinite(oldEntry) || !isFinite(oldStop)) return oldSetup;
-
-    /* Calculate old risk/reward ratio */
-    var oldRisk = Math.abs(oldStop - oldEntry);
-    var oldReward = Math.abs(oldT1 - oldEntry);
-    var oldRR = oldRisk > 0 ? oldReward / oldRisk : 2.0;
-
-    /* Detect if old setup was SHORT or LONG */
-    var wasShort = oldEntry > oldT1;
-
-    /* Generate new levels based on current price and old R:R */
-    var newStop = wasShort
-      ? livePrice + oldRisk  /* SHORT: stop above current price */
-      : livePrice - oldRisk; /* LONG: stop below current price */
-
-    var newT1 = wasShort
-      ? livePrice - (oldRisk * oldRR)  /* SHORT: target below */
-      : livePrice + (oldRisk * oldRR); /* LONG: target above */
-
-    return {
-      entry: livePrice,
-      t1: newT1,
-      stop: newStop,
-      mechanic: oldSetup.mechanic,
-      symbol: oldSetup.symbol,
-      gateConf: oldSetup.gateConf,
-      isRegenerated: true,
-      originalEntry: oldEntry,
-      regeneratedAt: Date.now() / 1000
-    };
-  }
-
-  /* Real-time setup status updater — instant response to price changes */
-  function hgOgUpdateSetupStatus(setup, livePrice){
-    if (!setup || !livePrice) return setup;
-
-    var entry = fin(setup.entry);
-    var tp = fin(setup.t1);
-    var sl = fin(setup.stop);
-    var status = 'active';
-    var isClosed = false;
-
-    if (livePrice > 0 && isFinite(entry) && isFinite(tp) && isFinite(sl)){
-      if (entry > tp){  /* SHORT: entry > TP, stop > entry */
-        /* SHORT: sell at entry, profit if goes down to TP, stop if goes up to SL */
-        if (livePrice >= sl) { status = 'stopped'; isClosed = true; }  /* Price rose to/past stop */
-        else if (livePrice <= tp) { status = 'profit'; isClosed = true; }  /* Price fell to/past target */
-        else if (livePrice > entry) { status = 'pending'; }  /* Price above entry, waiting to come down */
-        else { status = 'active'; }  /* Price between TP and entry = in SHORT trade */
-      } else {  /* LONG: entry < TP, stop < entry */
-        /* LONG: buy at entry, profit if goes up to TP, stop if goes down to SL */
-        if (livePrice <= sl) { status = 'stopped'; isClosed = true; }  /* Price fell to/past stop */
-        else if (livePrice >= tp) { status = 'profit'; isClosed = true; }  /* Price rose to/past target */
-        else if (livePrice < entry) { status = 'pending'; }  /* Price below entry, waiting to come up */
-        else { status = 'active'; }  /* Price between entry and TP = in LONG trade */
+  /* The card ledger's own level-fresh judgement, re-read before render.
+     The stamped 'level-fresh' gate from hgOgEvaluate is the verdict of
+     record: hard fail = DEAD ON ARRIVAL (belt-and-braces — a hard fail
+     vetoes the ticket in hgOmniGrade, so it can never reach this card),
+     info fail = stale resting levels (the gate's own why carries the
+     points and ×ATR IT measured — entry gap against the horizon's own
+     ATR), PASS = fresh. THE STAMP IS NEVER RE-DERIVED OR OVERRIDDEN:
+     the card's anchor (topSetupView.mkt) is frozen at scan time, so
+     nothing available at render is fresher than what the gate judged —
+     and the pick's distAtr is a DIFFERENT measure (|anchor − level| over
+     the scalp rows' ATR, from hgOgRefreshDistAtr) that must not be
+     passed off as the ledger's. The one re-check on a stamped pick is
+     the crossed-stop test against the frozen anchor — the gate's exact
+     test, and tighten-only (it can turn PASS into DOA when the anchor
+     landed beyond the stop, never un-stale a stamp). Only when the gate
+     is UNCHECKED (no live price ever reached the evaluator) does the
+     card judge the anchor pass's distAtr against the same 1.5×
+     tolerance, saying exactly which measure it used. Fail-closed
+     everywhere else: no stamp and no derivable distance = not fresh.
+     Pure; exported for the harness. */
+  function hgOgTopSetupFresh(pick, mktPx){
+    if (!pick || !pick.plan) return { ok: false, why: 'no plan to judge' };
+    var g = null, i;
+    for (i = 0; i < (pick.gates || []).length; i++){
+      if (pick.gates[i] && pick.gates[i].key === 'level-fresh'){ g = pick.gates[i]; break; }
+    }
+    if (g && g.pass === false && g.info !== true){
+      return { ok: false, doa: true, why: String(g.why || 'levels dead on arrival') };
+    }
+    var px = fin(mktPx);
+    var e = fin(pick.plan.entry), s = fin(pick.plan.stop);
+    /* Crossed-stop re-check against the scan's frozen anchor — the gate's
+       exact test, tighten-only. Catches an anchor that settled beyond the
+       stop after the evaluator's own price read (XM/Delta feed alignment). */
+    if (px > 0 && isFinite(e) && isFinite(s)){
+      var crossed = (String(pick.dir || '').toLowerCase() === 'short') ? (px >= s) : (px <= s);
+      if (crossed){
+        return { ok: false, doa: true,
+                 why: 'the market (' + px.toFixed(2) + ') is already '
+                    + Math.abs(px - s).toFixed(0) + ' points beyond the stop (' + s.toFixed(2)
+                    + ') — these levels were priced off a bar the market has left behind' };
       }
     }
-
-    setup.tradeStatus = status;
-    setup.isClosed = isClosed;
-    return setup;
+    /* The stamped gate is the ledger's own verdict at the scan's price, and
+       the anchor here is frozen at that same scan — nothing at render time
+       is better informed, so the stamp carries. */
+    if (g && g.pass === false){
+      return { ok: false, stale: true, why: String(g.why || 'levels stale at scan time') };
+    }
+    if (g && g.pass === true){
+      return { ok: true, why: String(g.why || 'level-fresh passed at scan time') };
+    }
+    /* UNCHECKED — no live price ever reached the evaluator, so there is no
+       ledger verdict to carry. If the scan's anchor pass left a distance
+       behind (hgOgRefreshDistAtr), judge THAT against the same 1.5×
+       tolerance, named as what it is; otherwise fail closed. */
+    var dAtr = fin(pick.distAtr);
+    if (px > 0 && isFinite(dAtr) && isFinite(e)){
+      if (dAtr > 1.5){
+        return { ok: false, stale: true,
+                 why: 'the ledger never judged these levels (no live price reached the evaluator); '
+                    + 'the scan anchor (' + px.toFixed(2) + ') sits ' + Math.abs(px - e).toFixed(0)
+                    + ' points from entry ' + e.toFixed(2) + ' and the setup level is ' + dAtr.toFixed(1)
+                    + '×ATR away — beyond the 1.5×ATR level-fresh tolerance' };
+      }
+      return { ok: true,
+               why: 'level-fresh was UNCHECKED at scan (no live price reached the evaluator); '
+                  + 'the scan anchor (' + px.toFixed(2) + ') sits ' + Math.abs(px - e).toFixed(0)
+                  + ' points from entry, setup level ' + dAtr.toFixed(1) + '×ATR away — within the 1.5×ATR tolerance' };
+    }
+    return { ok: false, why: 'no live price to judge freshness — standing aside rather than trusting old levels' };
   }
 
-  function hgOgUpdateOpenSetups(){
+  function hgOgTopSetupAgeText(atMs){
+    var at = fin(atMs);
+    if (!(at > 0)) return '';
+    var mins = Math.max(0, Math.round((Date.now() - at) / 60000));
+    if (mins < 1) return 'scanned just now';
+    if (mins < 60) return 'scanned ' + mins + 'm ago';
+    return 'scanned ' + Math.floor(mins / 60) + 'h' + (mins % 60) + 'm ago';
+  }
+
+  /* TOP SETUP panel. Renders EXACTLY what the pipeline offers:
+       - the gate-passed, level-fresh MOST PROBABLE winner, with LONG/SHORT
+         printed at the entry and the same confluence badge / cost chip /
+         replay lines the MOST PROBABLE card carries (hgOgMpHorizonHtml IS
+         that renderer), or
+       - an honest stand-aside naming why: nothing cleared, levels stale
+         (distance stated), or no scan yet.
+     Pure over its inputs; exported for the harness. */
+  function hgOgTopSetupPanelHtml(mpArgs, mktPx, scanAtMs){
+    var h = '<section class="hg-mp og-open-watch-panel" data-og-watch="1" aria-label="Top setup">';
+    h += '<div class="hg-mp-eye">🏆 TOP SETUP · GATE LEDGER WINNER</div>';
+    var age = hgOgTopSetupAgeText(scanAtMs);
+    h += '<div class="hg-mp-head">XAUUSD <span>the MOST PROBABLE ticket, level-fresh checked'
+      +  (age ? ' · ' + esc(age) : '') + '</span>'
+      +  ' <button type="button" class="btn" data-og-ts-refresh="1"'
+      +  ' style="padding:2px 10px;font-size:0.8em;margin-left:8px"'
+      +  ' onclick="window.hgOgManualRefresh && window.hgOgManualRefresh()">🔄 Refresh</button></div>';
+    if (!mpArgs){
+      h += '<div class="hg-mp-note warn">No scan yet — run a gold scan. This card only shows a setup that cleared the full gate ledger; it never reads raw logs.</div>';
+      return h + '</section>';
+    }
+    var tape = String(mpArgs.tape || '').toLowerCase();
+    var pick = hgOgTopSetupPick(mpArgs);
+    if (!pick){
+      h += '<div class="hg-mp-note warn">No gate-passed setup at current price — standing aside. '
+        +  esc(hgOgMpNoneWhy(tape, mpArgs.held)) + '</div>';
+      return h + '</section>';
+    }
+    var freshRead = hgOgTopSetupFresh(pick, mktPx);
+    if (!freshRead.ok){
+      h += '<div class="hg-mp-note warn">'
+        +  (freshRead.doa ? 'Ticket levels are DEAD ON ARRIVAL' : 'No gate-passed setup at current price')
+        +  ' — standing aside. ' + esc(freshRead.why) + '. Run a scan for fresh levels.</div>';
+      return h + '</section>';
+    }
+    var dir = String(pick.dir || '').toLowerCase();
+    h += '<div style="margin:10px 0 2px 0;font-weight:bold">'
+      +  '<span style="display:inline-block;padding:2px 10px;border-radius:12px;font-weight:bold;color:#fff;background:'
+      +  (dir === 'short' ? '#dc2626' : '#16a34a') + '">' + (dir === 'short' ? 'SHORT' : 'LONG') + '</span>'
+      +  ' XAUUSD · ENTRY ' + esc(fmtPx(pick.plan.entry))
+      +  ' · ' + esc(String(pick.horizon || '')) + ' · ' + esc(String(pick.kind || '')) + '</div>';
+    h += '<div class="hg-mp-note dim">' + esc(freshRead.why) + '</div>';
+    h += hgOgMpHorizonHtml(pick.horizon || 'SCALP', pick, tape, null, mpArgs.held, null);
+    return h + '</section>';
+  }
+
+  /* Replace-in-place injector: ONE [data-*] section per host, never stacked.
+     The old panels were prepended blind on every rescan and piled up. */
+  function hgOgInjectSection(host, attr, html){
+    if (!host) return;
     try {
-      var now = Date.now() / 1000;
-      var open = [];
-      var barTMap = {};  /* Map barT -> count for correlation detection */
-      var evidenceCache = {};  /* Cache evidence lookups */
-      var livePrice = fin(__og.spotAnchor) || 0;  /* Current market price */
-
-      /* Get ALL records from forward log, including open ones */
-      if (typeof localStorage === 'undefined'){
-        __og.openSetups = [];
-        return;
+      var old = host.querySelector ? host.querySelector('[' + attr + ']') : null;
+      if (old){
+        if (html) old.outerHTML = html;
+        else if (old.parentNode) old.parentNode.removeChild(old);
+      } else if (html && host.insertAdjacentHTML){
+        host.insertAdjacentHTML('afterbegin', html);
       }
-      var raw = localStorage.getItem('hg_forward_v1');
-      if (!raw){
-        __og.openSetups = [];
-        return;
-      }
-      var allRecs = JSON.parse(raw);
-      if (!Array.isArray(allRecs)) allRecs = [];
-
-      /* TWO-PASS approach to avoid hanging on large datasets:
-         Pass 1: Lightweight filter (no expensive scoring)
-         Pass 2: Heavy scoring only on top N results */
-
-      var candidates = [];  /* First pass: lightweight filter */
-
-      /* PASS 1: Quick filter without expensive calculations */
-      allRecs.forEach(function(rec){
-        if (!rec || !rec.barT || !rec.entry) return;
-        if (rec.state && rec.state !== 'open') return;
-
-        var age = now - rec.barT;
-        if (age < 0) age = 0;
-        barTMap[rec.barT] = (barTMap[rec.barT] || 0) + 1;
-
-        /* Quick status check (no expensive regenerate yet) */
-        var entry = fin(rec.entry);
-        var tp = fin(rec.t1);
-        var sl = fin(rec.stop);
-        var status = 'active';
-        var isClosed = false;
-
-        if (livePrice > 0 && entry > 0){
-          if (entry > tp){
-            if (livePrice >= sl) { status = 'stopped'; isClosed = true; }
-            else if (livePrice <= tp) { status = 'profit'; isClosed = true; }
-            else if (livePrice >= entry) { status = 'active'; }
-            else { status = 'pending'; }
-          } else {
-            if (livePrice <= sl) { status = 'stopped'; isClosed = true; }
-            else if (livePrice >= tp) { status = 'profit'; isClosed = true; }
-            else if (livePrice <= entry) { status = 'active'; }
-            else { status = 'pending'; }
-          }
-        }
-
-        /* Skip old closed setups */
-        if (isClosed && age > 300) return;
-
-        candidates.push({ rec: rec, status: status, age: age, gateConf: fin(rec.stack3) || 0 });
-      });
-
-      /* Sort by gate confluence (fast sort for quick ranking) */
-      candidates.sort(function(a, b){ return b.gateConf - a.gateConf; });
-
-      /* PASS 2: Heavy scoring only on top 20 candidates */
-      candidates.slice(0, 20).forEach(function(cand){
-        var rec = cand.rec;
-        var status = cand.status;
-
-        /* Now do expensive operations only on top candidates */
-        var isStale = hgOgIsSetupStale(rec, livePrice);
-        var regenerated = null;
-
-        if (isStale && livePrice > 0){
-          regenerated = hgOgRegenerateSetup(rec, livePrice);
-          rec = Object.assign({}, rec, regenerated);
-        }
-
-        var mechKey = rec.mechanic || 'default';
-        var evidence = evidenceCache[mechKey];
-        if (!evidence){
-          evidence = hgOgSettledEvidence({ mechanic: rec.mechanic, dir: rec.dir, kind: rec.mechanic });
-          evidenceCache[mechKey] = evidence;
-        }
-
-        var checks = {
-          htfRegime: rec.htf_confirm === true || (rec.gates && rec.gates.some(function(g){ return g.key === 'htf-confirm' && g.pass; })),
-          gate1h: rec.regime_fit === true || (rec.gates && rec.gates.some(function(g){ return g.key === 'regime-fit' && g.pass; })),
-          corrNorm: rec.corrRegime !== 'EXTREME',
-          drawdownOk: true,
-          riskReward: fin(rec.t1 - rec.entry) / fin(rec.stop - rec.entry) >= 1.5 || isNaN(fin(rec.t1 - rec.entry))
-        };
-        var checksPass = Object.keys(checks).filter(function(k){ return checks[k]; }).length;
-
-        var setupObj = {
-          barT: rec.barT,
-          entry: fin(rec.entry),
-          t1: fin(rec.t1),
-          stop: fin(rec.stop),
-          age: cand.age,
-          pnl: isFinite(fin(rec.r)) ? fin(rec.r) : NaN,
-          status: rec.state || 'open',
-          tradeStatus: status,
-          mechanic: rec.mechanic,
-          tab: rec.tab,
-          gateConf: cand.gateConf,
-          evidence: evidence,
-          wilsonLo: (evidence && evidence.wilson) ? evidence.wilson.lo : NaN,
-          confidence: (evidence && evidence.wilson) ? evidence.wilson : null,
-          checks: checks,
-          checksPass: checksPass,
-          readyToEnter: checksPass === 5,
-          corrRegime: rec.corrRegime || 'NORMAL',
-          isRegenerated: regenerated ? true : false,
-          originalEntry: regenerated ? regenerated.originalEntry : fin(rec.entry),
-          isStale: isStale
-        };
-
-        setupObj.technicalScore = hgOgTechnicalScore(setupObj);
-        setupObj.sentimentScore = hgOgSentimentScore(setupObj.corrRegime);
-        setupObj.fundamentalScore = hgOgFundamentalScore(setupObj.age, setupObj.corrRegime);
-        setupObj.compositeScore = hgOgCompositeScore(setupObj, setupObj.corrRegime);
-
-        /* Multi-factor confluence score (0-100): True setup quality across all dimensions */
-        var confluenceResult = hgOgAdvancedConfluenceScore(setupObj);
-        setupObj.confluenceScore = confluenceResult.score;
-        setupObj.confluenceFactors = confluenceResult.factors;
-        setupObj.confluenceInterpretation = confluenceResult.interpretation;
-
-        open.push(setupObj);
-      });
-
-      /* Final sort: Confluence score first (multi-factor), then composite, then gates */
-      open.sort(function(a, b){
-        if (b.confluenceScore !== a.confluenceScore) return b.confluenceScore - a.confluenceScore;
-        if (b.compositeScore !== a.compositeScore) return b.compositeScore - a.compositeScore;
-        if (b.gateConf !== a.gateConf) return b.gateConf - a.gateConf;
-        return b.age - a.age;
-      });
-
-      /* Detect correlation clustering: 2+ setups fired from same barT */
-      open.forEach(function(setup){
-        setup.isCorrelated = (barTMap[setup.barT] || 0) >= 2;
-      });
-
-      /* Calculate daily equity curve */
-      var dailyPnL = {};
-      open.forEach(function(setup){
-        if (!isNaN(setup.pnl) && isFinite(setup.pnl)){
-          var date = new Date(setup.barT * 1000).toISOString().split('T')[0];
-          dailyPnL[date] = (dailyPnL[date] || 0) + setup.pnl;
-        }
-      });
-      __og.dailyPnL = dailyPnL;
-
-      __og.openSetups = open;
-
-      /* Immediately update status with current price (don't wait for poller) */
-      if (livePrice > 0){
-        __og.openSetups.forEach(function(setup){
-          hgOgUpdateSetupStatus(setup, livePrice);
-        });
-      }
-
-      /* Polling disabled: was causing app hangs even after removing repaint.
-         Users can manually refresh via the Refresh button instead. */
-    } catch (e){
-      __og.openSetups = [];
-    }
+    } catch (eInj) {}
   }
 
-  /* Real-time status poller — updates every 2 seconds with proper cleanup */
-  function hgOgStartStatusPoller(){
-    /* Clear existing poller to prevent duplicates */
-    if (__og.statusPollerInterval){
-      clearInterval(__og.statusPollerInterval);
-    }
-    if (__og.statusPollerTimeout){
-      clearTimeout(__og.statusPollerTimeout);
-    }
-
-    __og.statusPollerActive = true;
-    var pollCount = 0;
-
-    __og.statusPollerInterval = setInterval(function(){
-      try {
-        var livePrice = fin(__og.spotAnchor) || 0;
-
-        /* Stop if no setups or no valid price */
-        if (!__og.openSetups || !__og.openSetups.length || livePrice <= 0){
-          return;
-        }
-
-        /* Limit: only update top 5 setups to reduce CPU load */
-        var toUpdate = __og.openSetups.slice(0, 5);
-
-        /* Update statuses silently (no repaint) — user can click Refresh button to see updates */
-        toUpdate.forEach(function(setup){
-          hgOgUpdateSetupStatus(setup, livePrice);
-        });
-
-        /* Removed automatic repaint: DOM thrashing was causing hangs.
-           Status updates happen silently in memory.
-           User clicks "Refresh" button to see latest display. */
-      } catch (e){
-        /* Log but don't crash */
-        if (typeof console !== 'undefined') console.error('Status poller error:', e);
-      }
-    }, 2000);  /* Update every 2 seconds (reduced from 1 for efficiency) */
-
-    /* Auto-stop poller after 10 minutes to free resources */
-    __og.statusPollerTimeout = setTimeout(function(){
-      if (__og.statusPollerInterval){
-        clearInterval(__og.statusPollerInterval);
-        __og.statusPollerInterval = null;
-      }
-      __og.statusPollerActive = false;
-    }, 10 * 60 * 1000);
+  function hgOgPaintTopSetup(ui){
+    var host = (ui && ui.mp) || (ui && ui.cards);
+    if (!host) return;
+    var v = __og.topSetupView || null;
+    var html;
+    try { html = hgOgTopSetupPanelHtml(v, v ? v.mkt : NaN, v ? v.at : NaN); }
+    catch (eTs){ html = ''; }
+    hgOgInjectSection(host, 'data-og-watch', html);
   }
 
-  /* Stop poller when tab becomes inactive */
-  function hgOgStopStatusPoller(){
-    if (__og.statusPollerInterval){
-      clearInterval(__og.statusPollerInterval);
-      __og.statusPollerInterval = null;
-    }
-    if (__og.statusPollerTimeout){
-      clearTimeout(__og.statusPollerTimeout);
-      __og.statusPollerTimeout = null;
-    }
-    __og.statusPollerActive = false;
-  }
-
-  /* Manual refresh callback for button clicks */
+  /* Manual refresh — re-pulls from the PIPELINE snapshot (never a price
+     fetch, never raw logs): repaints the TOP SETUP card from the last
+     completed scan's picks, or paints the honest run-a-scan message. */
   function hgOgManualRefresh(){
     try {
-      /* Update setups with current price */
-      hgOgUpdateOpenSetups();
-
-      /* Repaint UI immediately */
       var ui = __og.ui;
-      if (ui && ui.openWatchPanel && __og.openSetups){
-        ui.openWatchPanel.innerHTML = hgOgOpenSetupsWatchPanelHtml(__og.openSetups);
-      }
-
+      if (!ui) return false;
+      hgOgPaintTopSetup(ui);
       return true;
     } catch (e){
       if (typeof console !== 'undefined') console.error('Refresh failed:', e);
@@ -5043,6 +4912,7 @@ terse status, and never launches a first-time scan on a global refresh.
   if (typeof window !== 'undefined'){
     window.hgOgManualRefresh = hgOgManualRefresh;
   }
+
 
   /* MULTI-FACTOR CONFLUENCE SCORING — Advanced setup quality assessment */
   function hgOgAdvancedConfluenceScore(setup){
@@ -6099,192 +5969,6 @@ terse status, and never launches a first-time scan on a global refresh.
 
   /* ==================== end replay evidence + cost drag ==================== */
 
-  /* Market Conditions Score Display — 3D scoring */
-  function hgOgRenderMarketConditionsScore(setup){
-    if (!setup) return '';
-    var html = '<div style="margin:12px 0;padding:8px;border:1px solid var(--hr);border-radius:4px;background:var(--bg-muted,rgba(0,0,0,0.02))">';
-    html += '<div style="font-weight:bold;margin-bottom:8px">🎯 MARKET QUALITY SCORE (Current Conditions)</div>';
-
-    /* Composite score bar */
-    var compScore = fin(setup.compositeScore) || 0;
-    var compColor = compScore >= 70 ? '#22c55e' : compScore >= 50 ? '#f59e0b' : '#dc2626';
-    html += '<div style="margin-bottom:8px">';
-    html += '<div style="font-weight:bold;color:' + compColor + '">Overall: ' + compScore.toFixed(0) + '/100</div>';
-    html += '<div style="height:20px;background:rgba(0,0,0,0.05);border-radius:3px;overflow:hidden;margin-top:4px">';
-    html += '<div style="height:100%;width:' + compScore + '%;background:' + compColor + ';transition:width 0.3s"></div>';
-    html += '</div></div>';
-
-    /* 3D Dimension breakdown */
-    var techScore = fin(setup.technicalScore) || 0;
-    var sentScore = fin(setup.sentimentScore) || 0;
-    var fundScore = fin(setup.fundamentalScore) || 0;
-
-    html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px">';
-
-    /* Technical */
-    var techColor = techScore >= 70 ? '#22c55e' : techScore >= 50 ? '#f59e0b' : '#dc2626';
-    html += '<div style="border:1px solid ' + techColor + '33;border-radius:3px;padding:6px;background:' + techColor + '11">';
-    html += '<div style="font-size:0.85em;font-weight:bold;color:' + techColor + '">Technical</div>';
-    html += '<div style="font-size:1.2em;font-weight:bold;margin:4px 0">' + techScore.toFixed(0) + '</div>';
-    html += '<div style="font-size:0.75em;color:var(--fg-muted,#666)">Gates + Structure</div>';
-    html += '</div>';
-
-    /* Sentiment */
-    var sentColor = sentScore >= 70 ? '#22c55e' : sentScore >= 50 ? '#f59e0b' : '#dc2626';
-    html += '<div style="border:1px solid ' + sentColor + '33;border-radius:3px;padding:6px;background:' + sentColor + '11">';
-    html += '<div style="font-size:0.85em;font-weight:bold;color:' + sentColor + '">Sentiment</div>';
-    html += '<div style="font-size:1.2em;font-weight:bold;margin:4px 0">' + sentScore.toFixed(0) + '</div>';
-    html += '<div style="font-size:0.75em;color:var(--fg-muted,#666)">' + setup.corrRegime + '</div>';
-    html += '</div>';
-
-    /* Fundamental */
-    var fundColor = fundScore >= 70 ? '#22c55e' : fundScore >= 50 ? '#f59e0b' : '#dc2626';
-    html += '<div style="border:1px solid ' + fundColor + '33;border-radius:3px;padding:6px;background:' + fundColor + '11">';
-    html += '<div style="font-size:0.85em;font-weight:bold;color:' + fundColor + '">Fundamental</div>';
-    html += '<div style="font-size:1.2em;font-weight:bold;margin:4px 0">' + fundScore.toFixed(0) + '</div>';
-    html += '<div style="font-size:0.75em;color:var(--fg-muted,#666)">News Risk</div>';
-    html += '</div>';
-
-    html += '</div>';
-    html += '</div>';
-    return html;
-  }
-
-  /* Pro-trader feature: Setup Quality Filter + Confidence Display */
-  function hgOgRenderSetupFilter(setupList){
-    if (!setupList || setupList.length === 0) return '';
-    var html = '<div style="margin:12px 0;padding:8px;border:1px solid var(--hr);border-radius:4px;background:var(--bg-muted,rgba(0,0,0,0.02))">';
-    var byConf = { 3: [], 2: [], 1: [], 0: [] };
-    setupList.forEach(function(s){ if (byConf[s.gateConf]) byConf[s.gateConf].push(s); });
-
-    [3, 2, 1, 0].forEach(function(conf){
-      var sets = byConf[conf];
-      if (!sets || sets.length === 0) return;
-      var label = conf === 3 ? 'PRIME (3-gate)' : conf + '-gate';
-      var icon = conf === 3 ? '★' : '◆';
-      var color = conf === 3 ? '#22c55e' : conf === 2 ? '#f59e0b' : '#8b5cf6';
-      html += '<div style="margin:6px 0;padding:4px;border-left:3px solid ' + color + '">';
-      html += '<strong style="color:' + color + '">' + icon + ' ' + label + ' (' + sets.length + ')</strong>';
-      sets.slice(0, 3).forEach(function(s){
-        var wilson = s.confidence ? (s.confidence.lo * 100).toFixed(1) + '%' : '—';
-        html += '<div style="margin:2px 0 2px 8px;font-size:0.85em">';
-        html += '<span>' + (s.mechanic || 'setup') + '</span> ';
-        html += '<span style="float:right;background:rgba(' + (color === '#22c55e' ? '34,197,94' : color === '#f59e0b' ? '245,158,11' : '139,92,246') + ',0.2);padding:1px 4px;border-radius:2px">' + wilson + '</span>';
-        html += '</div>';
-      });
-      html += '</div>';
-    });
-    html += '</div>';
-    return html;
-  }
-
-  /* Pre-Entry Checklist: 5 conditions guard */
-  function hgOgRenderChecklist(setup){
-    if (!setup) return '';
-    var checks = setup.checks || {};
-    var html = '<div style="margin:12px 0;padding:8px;border:1px solid var(--hr);border-radius:4px;background:var(--bg-muted,rgba(0,0,0,0.02))">';
-    html += '<div style="font-weight:bold;margin-bottom:6px;color:#f59e0b">📋 PRE-ENTRY GUARD</div>';
-    var items = [
-      { key: 'htfRegime', label: 'HTF regime confirmed', icon: '↗' },
-      { key: 'gate1h', label: '1h gate replicated', icon: '▲' },
-      { key: 'corrNorm', label: 'Correlation NORMAL (not EXTREME)', icon: '↔' },
-      { key: 'drawdownOk', label: 'Drawdown buffer > -2%', icon: '📊' },
-      { key: 'riskReward', label: 'Risk/Reward ≥ 1.5R', icon: '⚖' }
-    ];
-    items.forEach(function(item){
-      var passed = checks[item.key];
-      var color = passed ? '#22c55e' : '#dc2626';
-      var symbol = passed ? '✓' : '✗';
-      html += '<div style="margin:3px 0;color:' + color + '"><span style="font-weight:bold">' + symbol + '</span> ' + item.label + '</div>';
-    });
-    var allPass = setup.readyToEnter;
-    var verdictColor = allPass ? '#22c55e' : '#f59e0b';
-    var verdictText = allPass ? '✓ READY TO ENTER' : '⚠ ' + (5 - setup.checksPass) + ' CONDITIONS MISSING';
-    html += '<div style="margin-top:8px;padding:6px;background:' + verdictColor + '33;border:1px solid ' + verdictColor + ';border-radius:3px;font-weight:bold;text-align:center;color:' + verdictColor + '">';
-    html += verdictText + '</div></div>';
-    return html;
-  }
-
-  /* Win Rate Confidence: Wilson lower bound on rolling stats */
-  function hgOgRenderConfidence(evidence){
-    if (!evidence || !evidence.wilson) return '';
-    var w = evidence.wilson;
-    var pct = (w.lo * 100).toFixed(1);
-    var color = w.lo >= 0.55 ? '#22c55e' : w.lo >= 0.50 ? '#f59e0b' : '#dc2626';
-    var html = '<div style="margin:12px 0;padding:8px;border:1px solid var(--hr);border-radius:4px">';
-    html += '<div style="font-weight:bold;margin-bottom:6px">📊 WIN RATE CONFIDENCE (Wilson LB)</div>';
-    html += '<div style="height:30px;background:' + color + '33;border:2px solid ' + color + ';border-radius:4px;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:1.1em;color:' + color + '">';
-    html += pct + '% (' + evidence.samples + ' samples)';
-    html += '</div>';
-    html += '<div style="margin-top:4px;font-size:0.85em;color:var(--fg-muted,#666)">';
-    html += 'Raw hit rate: ' + (evidence.hit * 100).toFixed(1) + '% · Confidence: ' + (w.lo >= 0.55 ? 'HIGH ✓' : w.lo >= 0.50 ? 'MEDIUM ⚠' : 'LOW ✗');
-    html += '</div></div>';
-    return html;
-  }
-
-  /* Equity Curve: Daily P&L smoothed */
-  function hgOgRenderEquityCurve(dailyPnL){
-    if (!dailyPnL || Object.keys(dailyPnL).length === 0) return '';
-    var dates = Object.keys(dailyPnL).sort();
-    var values = dates.map(function(d){ return dailyPnL[d]; });
-    var cumul = [];
-    var sum = 0;
-    values.forEach(function(v){ sum += v; cumul.push(sum); });
-    var maxD = Math.max.apply(null, cumul);
-    var minD = Math.min.apply(null, cumul);
-    var range = maxD - minD || 1;
-    var maxDD = Math.abs(minD - maxD);
-    var lastVal = cumul[cumul.length - 1];
-    var html = '<div style="margin:12px 0;padding:8px;border:1px solid var(--hr);border-radius:4px;background:var(--bg-muted,rgba(0,0,0,0.02))">';
-    html += '<div style="font-weight:bold;margin-bottom:6px">📈 DAILY EQUITY CURVE</div>';
-    html += '<div style="display:flex;height:60px;gap:2px;align-items:flex-end;background:rgba(0,0,0,0.05);padding:4px;border-radius:3px;overflow-x:auto">';
-    cumul.slice(-20).forEach(function(v, i){
-      var norm = Math.max(1, (v - minD) / range * 100);
-      var color = v >= 0 ? '#22c55e' : '#dc2626';
-      html += '<div style="flex:1;min-width:8px;height:' + norm + '%;background:' + color + ';border-radius:1px;cursor:help" title="' + (v > 0 ? '+' : '') + v.toFixed(2) + 'R"></div>';
-    });
-    html += '</div>';
-    html += '<div style="display:flex;gap:12px;margin-top:6px;font-size:0.85em">';
-    html += '<div>Total P&L: <strong style="color:' + (lastVal > 0 ? '#22c55e' : '#dc2626') + '">' + (lastVal > 0 ? '+' : '') + lastVal.toFixed(2) + 'R</strong></div>';
-    html += '<div>Max Drawdown: <strong style="color:#dc2626">' + (-maxDD).toFixed(2) + 'R</strong></div>';
-    html += '<div>Win Days: <strong>' + values.filter(function(v){ return v > 0; }).length + '</strong></div>';
-    html += '</div></div>';
-    return html;
-  }
-
-  /* Gate Matrix: Which gates fired on 4h vs 1h */
-  function hgOgRenderGateMatrix(setupList){
-    if (!setupList || setupList.length === 0) return '';
-    var html = '<div style="margin:12px 0;padding:8px;border:1px solid var(--hr);border-radius:4px;background:var(--bg-muted,rgba(0,0,0,0.02))">';
-    html += '<div style="font-weight:bold;margin-bottom:6px">🎯 GATE MATRIX (4h vs 1h)</div>';
-    html += '<div style="overflow-x:auto">';
-    html += '<table style="width:100%;border-collapse:collapse;font-size:0.85em">';
-    html += '<tr style="border-bottom:2px solid var(--hr)">';
-    html += '<th style="text-align:left;padding:4px">Mechanic</th>';
-    html += '<th style="text-align:center;padding:4px">4h HTF</th>';
-    html += '<th style="text-align:center;padding:4px">1h Gate</th>';
-    html += '<th style="text-align:center;padding:4px">Confluence</th>';
-    html += '<th style="text-align:center;padding:4px">Ready</th>';
-    html += '</tr>';
-    setupList.slice(0, 5).forEach(function(s){
-      var has4h = s.checks.htfRegime;
-      var has1h = s.checks.gate1h;
-      var conf = s.gateConf === 3 ? '★★★ PRIME' : s.gateConf === 2 ? '★★ HIGH' : '★ LOW';
-      var color4h = has4h ? '#22c55e' : '#dc2626';
-      var color1h = has1h ? '#22c55e' : '#dc2626';
-      var colorReady = s.readyToEnter ? '#22c55e' : '#f59e0b';
-      html += '<tr style="border-bottom:1px solid var(--hr)">';
-      html += '<td style="padding:4px">' + (s.mechanic || 'setup').substring(0, 12) + '</td>';
-      html += '<td style="text-align:center;padding:4px;color:' + color4h + ';font-weight:bold">' + (has4h ? '✓' : '✗') + '</td>';
-      html += '<td style="text-align:center;padding:4px;color:' + color1h + ';font-weight:bold">' + (has1h ? '✓' : '✗') + '</td>';
-      html += '<td style="text-align:center;padding:4px">' + conf + '</td>';
-      html += '<td style="text-align:center;padding:4px;color:' + colorReady + ';font-weight:bold">' + (s.readyToEnter ? '✓' : '⚠') + '</td>';
-      html += '</tr>';
-    });
-    html += '</table></div></div>';
-    return html;
-  }
-
   function hgOgSettledEvidence(row){
     if (!row) return null;
     var horizon = String(row.horizon || 'SWING').toUpperCase();
@@ -6499,188 +6183,6 @@ terse status, and never launches a first-time scan on a global refresh.
 
     h += '</section>';
     return h;
-  }
-
-  function hgOgOpenSetupsWatchPanelHtml(setups){
-    if (!setups || !setups.length) return '';
-    var h = '<section class="hg-mp og-open-watch-panel" data-og-watch="1" aria-label="Open setups watch">';
-    h += '<div class="hg-mp-eye">OMNIGOLD PRO-TRADER SUITE</div>';
-
-    /* 1. SETUP QUALITY FILTER — by gate confluence */
-    h += hgOgRenderSetupFilter(setups);
-
-    /* 2. MARKET CONDITIONS SCORE — 3D rating under current conditions */
-    var topSetup = setups.length > 0 ? setups[0] : null;
-
-    /* QUALITY GATE: Show setups with confluence ≥50 (FAIR+)
-       Allows visibility into all ratings: WEAK/FAIR/STRONG/EXCEPTIONAL
-       Traders see full spectrum and choose based on confluence score */
-    var qualityGatePass = topSetup && fin(topSetup.confluenceScore) >= 50;
-
-    if (topSetup && qualityGatePass){
-      h += '<div style="margin:16px 0 8px 0;padding-bottom:8px;border-bottom:2px solid var(--hr);font-weight:bold;color:var(--fg-muted,#666)">🏆 TOP SETUP (Best for Current Conditions)</div>';
-
-      /* PRICE LEVELS — Entry, TP, SL */
-      if (isFinite(fin(topSetup.entry)) && isFinite(fin(topSetup.t1)) && isFinite(fin(topSetup.stop))){
-        var entry = fin(topSetup.entry);
-        var tp = fin(topSetup.t1);
-        var sl = fin(topSetup.stop);
-        var riskPts = Math.abs(sl - entry);
-        var profitPts = Math.abs(tp - entry);
-        var rr = riskPts > 0 ? (profitPts / riskPts).toFixed(2) : 'N/A';
-
-        /* Setup status badge */
-        var tradeStatus = topSetup.tradeStatus || 'active';
-        var statusColor = tradeStatus === 'profit' ? '#22c55e' : tradeStatus === 'stopped' ? '#dc2626' : tradeStatus === 'pending' ? '#f59e0b' : '#3b82f6';
-        var statusLabel = tradeStatus === 'profit' ? '✓ TARGET HIT' : tradeStatus === 'stopped' ? '✗ STOPPED OUT' : tradeStatus === 'pending' ? '⏳ PENDING ENTRY' : '▶ ACTIVE';
-        var regeneratedLabel = topSetup.isRegenerated ? '🔄 REGENERATED' : '';
-
-        h += '<div style="margin:12px 0;padding:12px;border:2px solid ' + statusColor + ';border-radius:4px;background:rgba(34,197,94,0.1)">';
-        h += '<div style="display:flex;gap:4px;align-items:center;margin-bottom:8px;flex-wrap:wrap">';
-        if (regeneratedLabel) h += '<div style="background:#10b981;color:white;padding:2px 8px;border-radius:12px;font-size:0.75em;font-weight:bold">' + regeneratedLabel + '</div>';
-        h += '<div style="background:' + statusColor + ';color:white;padding:2px 8px;border-radius:12px;font-size:0.75em;font-weight:bold">' + statusLabel + '</div>';
-        h += '<button class="btn" style="padding:4px 12px;font-size:0.75em;background:#3b82f6;color:white;border:none;border-radius:6px;cursor:pointer;margin-left:auto" onclick="window.hgOgManualRefresh && window.hgOgManualRefresh()">🔄 Refresh</button>';
-        h += '</div>';
-        h += '<div style="font-weight:bold;margin-bottom:8px;color:#22c55e">📍 PRICE LEVELS' + (topSetup.isRegenerated ? ' (Updated for Current Price)' : '') + '</div>';
-        h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">';
-
-        h += '<div style="padding:8px;background:rgba(34,197,94,0.2);border-radius:3px;border-left:3px solid #22c55e">';
-        h += '<div style="font-size:0.8em;color:var(--fg-muted,#666);margin-bottom:2px">ENTRY</div>';
-        h += '<div style="font-size:1.3em;font-weight:bold;color:#22c55e">' + entry.toFixed(2) + '</div>';
-        h += '</div>';
-
-        h += '<div style="padding:8px;background:rgba(34,197,94,0.2);border-radius:3px;border-left:3px solid #22c55e">';
-        h += '<div style="font-size:0.8em;color:var(--fg-muted,#666);margin-bottom:2px">TAKE PROFIT (T1)</div>';
-        h += '<div style="font-size:1.3em;font-weight:bold;color:#22c55e">' + tp.toFixed(2) + '</div>';
-        h += '</div>';
-
-        h += '<div style="padding:8px;background:rgba(220,38,38,0.15);border-radius:3px;border-left:3px solid #dc2626">';
-        h += '<div style="font-size:0.8em;color:var(--fg-muted,#666);margin-bottom:2px">STOP LOSS</div>';
-        h += '<div style="font-size:1.3em;font-weight:bold;color:#dc2626">' + sl.toFixed(2) + '</div>';
-        h += '</div>';
-
-        h += '</div>';
-
-        h += '<div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:0.85em">';
-        h += '<div><span style="color:var(--fg-muted,#666)">Risk:</span> <strong>' + riskPts.toFixed(2) + ' pts</strong></div>';
-        h += '<div><span style="color:var(--fg-muted,#666)">Profit:</span> <strong style="color:#22c55e">' + profitPts.toFixed(2) + ' pts</strong></div>';
-        h += '<div><span style="color:var(--fg-muted,#666)">R:R:</span> <strong style="color:#22c55e">1:' + rr + '</strong></div>';
-        h += '</div>';
-
-        h += '</div>';
-      }
-
-      /* Display multi-factor confluence breakdown FIRST (most important) */
-      h += hgOgRenderConfluenceBreakdown(topSetup);
-
-      /* Then market conditions and checklist */
-      h += hgOgRenderMarketConditionsScore(topSetup);
-      h += hgOgRenderChecklist(topSetup);
-      h += hgOgRenderConfidence(topSetup.evidence);
-    } else {
-      /* No trade-ready setups: show why */
-      h += '<div style="margin:12px 0;padding:12px;border:2px solid #f59e0b;border-radius:4px;background:rgba(245,158,11,0.1)">';
-      h += '<div style="color:#f59e0b;font-weight:bold;margin-bottom:8px">⏸️ NO TRADE-READY SETUPS</div>';
-      if (topSetup){
-        var reason = '';
-        if (fin(topSetup.compositeScore) < 70) reason = 'Market quality score ' + fin(topSetup.compositeScore).toFixed(0) + '/100 (need ≥70)';
-        if (topSetup.checksPass < 4) reason = 'Pre-entry checks ' + topSetup.checksPass + '/5 passing (need ≥4 for multi-indicator confirmation)';
-        h += '<div style="color:var(--fg-muted,#666);font-size:0.9em">' + (reason || 'Quality threshold not met') + '</div>';
-      } else {
-        h += '<div style="color:var(--fg-muted,#666);font-size:0.9em">No open setups tracked. Run a scan to find opportunities.</div>';
-      }
-      h += '</div>';
-    }
-
-    /* 3. EQUITY CURVE — Daily P&L */
-    if (__og.dailyPnL && Object.keys(__og.dailyPnL).length > 0){
-      h += '<div style="margin:16px 0 8px 0;padding-bottom:8px;border-bottom:2px solid var(--hr);font-weight:bold;color:var(--fg-muted,#666)">DAILY PERFORMANCE</div>';
-      h += hgOgRenderEquityCurve(__og.dailyPnL);
-    }
-
-    /* 4. GATE MATRIX — 4h vs 1h confluence */
-    h += '<div style="margin:16px 0 8px 0;padding-bottom:8px;border-bottom:2px solid var(--hr);font-weight:bold;color:var(--fg-muted,#666)">MULTI-TIMEFRAME GATE CONFLUENCE</div>';
-    h += hgOgRenderGateMatrix(setups);
-
-    h += '<div class="hg-mp-head">XAUUSD <span>active trades · time since entry · status</span></div>';
-
-    /* Show only most recent 5 open setups */
-    var toShow = setups.slice(0, 5);
-    if (!toShow.length){
-      h += '<div class="hg-mp-note">No open setups currently tracked.</div>';
-    } else {
-      h += '<div class="hg-mp-note">' + esc(String(setups.length)) + ' open setup'
-        + (setups.length !== 1 ? 's' : '') + ' · showing most recent 5</div>';
-      h += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.9em">';
-      h += '<tr style="border-bottom:1px solid var(--hr)">';
-      h += '<th style="text-align:left;padding:4px">Setup</th>';
-      h += '<th style="text-align:center;padding:4px">Market Score</th>';
-      h += '<th style="text-align:center;padding:4px">Confluence</th>';
-      h += '<th style="text-align:right;padding:4px">Open Since</th>';
-      h += '<th style="text-align:right;padding:4px">P&L</th>';
-      h += '<th style="text-align:center;padding:4px">Trade Status</th>';
-      h += '</tr>';
-
-      toShow.forEach(function(setup, idx){
-        var ageMinutes = Math.floor(setup.age / 60);
-        var ageHours = Math.floor(setup.age / 3600);
-        var ageDays = Math.floor(setup.age / 86400);
-        var ageStr = ageDays > 0 ? (ageDays + 'd')
-                   : ageHours > 0 ? (ageHours + 'h' + (ageMinutes % 60) + 'm')
-                   : (ageMinutes + 'm');
-
-        var ageClass = setup.age > 4 * 3600 ? ' style="color:var(--err,#dc2626)"' : '';
-        var mechLabel = esc(String(setup.mechanic || '—'));
-        var confBadge = setup.gateConf === 3 ? '★★★' : (setup.gateConf === 2 ? '★★' : '★');
-        var readyBadge = setup.readyToEnter ? '✓' : '⚠';
-
-        /* Market score color */
-        var mktScore = fin(setup.compositeScore) || 0;
-        var mktColor = mktScore >= 70 ? '#22c55e' : mktScore >= 50 ? '#f59e0b' : '#dc2626';
-
-        /* Trade status badge */
-        var tradeStatus = setup.tradeStatus || 'active';
-        var tradeStatusLabel = tradeStatus === 'profit' ? '✓ PROFIT' : tradeStatus === 'stopped' ? '✗ SL' : tradeStatus === 'pending' ? '⏳ PENDING' : '▶ ACTIVE';
-        var tradeStatusColor = tradeStatus === 'profit' ? '#22c55e' : tradeStatus === 'stopped' ? '#dc2626' : tradeStatus === 'pending' ? '#f59e0b' : '#3b82f6';
-
-        /* HIGHLIGHT THE BEST SETUP (index 0) with golden background and border */
-        var isBest = idx === 0;
-        var rowStyle = isBest
-          ? 'background:linear-gradient(90deg, rgba(34,197,94,0.15) 0%, rgba(34,197,94,0.05) 100%);border:2px solid #22c55e;border-bottom:2px solid #22c55e;box-shadow:0 0 12px rgba(34,197,94,0.2)'
-          : 'border-bottom:1px solid var(--hr)';
-
-        h += '<tr style="' + rowStyle + '">';
-        h += '<td style="padding:4px">' + (isBest ? '🏆 ' : '') + mechLabel
-          + (setup.isCorrelated ? ' <b>⚠</b>' : '') + '</td>';
-        h += '<td style="text-align:center;padding:4px;color:' + mktColor + ';font-weight:bold">' + mktScore.toFixed(0) + '/100' + (isBest ? ' ⭐ BEST' : '') + '</td>';
-        h += '<td style="text-align:center;padding:4px">' + confBadge + '</td>';
-        h += '<td style="text-align:right;padding:4px"' + ageClass + '>'
-          + (setup.age > 4 * 3600 ? '⏱ ' : '') + esc(ageStr) + '</td>';
-        h += '<td style="text-align:right;padding:4px">'
-          + (isFinite(setup.pnl) ? (setup.pnl > 0 ? '+' : '') + esc(setup.pnl.toFixed(2)) + 'R' : '—')
-          + '</td>';
-        h += '<td style="text-align:center;padding:4px;color:' + tradeStatusColor + ';font-weight:bold">' + tradeStatusLabel + '</td>';
-        h += '</tr>';
-      });
-      h += '</table></div>';
-    }
-
-    h += '</section>';
-    return h;
-  }
-
-  function hgOgPaintRollingConfidence(ui, stats){
-    var host = ui && ui.rollingPanel;
-    if (!host) return;
-    try { host.innerHTML = hgOgRollingConfidencePanelHtml(stats); }
-    catch (eRc){ host.innerHTML = ''; }
-  }
-
-  function hgOgPaintOpenWatch(ui, setups){
-    var host = ui && ui.openWatchPanel;
-    if (!host) return;
-    try { host.innerHTML = hgOgOpenSetupsWatchPanelHtml(setups); }
-    catch (eOw){ host.innerHTML = ''; }
   }
 
   function hgOgPaintSettledExecute(ui, bag){
@@ -7529,18 +7031,25 @@ terse status, and never launches a first-time scan on a global refresh.
     hgOgPaintSettledExecute(ui, hgOgPickSettledExecutes(ogCollapsed || [], deskTape));
     /* Paint regime watch panel with correlation data */
     hgOgPaintRegimeWatch(ui, __og.correlationRegime);
-    /* Update rolling performance tracking and open setups watch */
+    /* Update rolling performance tracking */
     hgOgUpdateRollingStats();
-    hgOgUpdateOpenSetups();
-    /* Inject rolling confidence and open watch panels above MOST PROBABLE */
+    /* TOP SETUP + rolling confidence above MOST PROBABLE — replace-in-place
+       (data-og-watch / data-og-rolling), never stacked on rescan. The TOP
+       SETUP view is the SAME hgOgPickFor() winner MOST PROBABLE renders,
+       frozen with the spot anchor it was judged against so the level-fresh
+       re-check judges the same picture the ledger did. */
     try {
-      var host = (ui && ui.mp) || (ui && ui.cards);
-      if (host && host.insertAdjacentHTML){
-        var openHtml = hgOgOpenSetupsWatchPanelHtml(__og.openSetups);
-        var rollingHtml = hgOgRollingConfidencePanelHtml(__og.rollingStats);
-        if (openHtml) host.insertAdjacentHTML('afterbegin', openHtml);
-        if (rollingHtml) host.insertAdjacentHTML('afterbegin', rollingHtml);
-      }
+      __og.topSetupView = {
+        pickScalp: hgOgPickFor(ogCollapsed || [], HORIZONS.scalp.label, deskTape),
+        pickSwing: hgOgPickFor(ogCollapsed || [], HORIZONS.swing.label, deskTape),
+        tape: deskTape || null,
+        held: __og.held || null,
+        mkt: fin(__og.spotAnchor),
+        at: Date.now()
+      };
+      hgOgPaintTopSetup(ui);
+      var hostRc = (ui && ui.mp) || (ui && ui.cards);
+      hgOgInjectSection(hostRc, 'data-og-rolling', hgOgRollingConfidencePanelHtml(__og.rollingStats));
     } catch (eRoll) {}
     var bridgeP = bridgeIn ? Promise.resolve(bridgeIn)
       : hgOgRunGoldTabEngines(shared, res.scalp.rows, res.swing.rows);
@@ -9478,6 +8987,9 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     __og.ui = ui;
     hgOgInjectPickStyles();
+    /* TOP SETUP paints honestly at mount: this session's last ledger winner
+       when there is one, otherwise the run-a-scan message — never raw logs. */
+    try { hgOgPaintTopSetup(ui); } catch (eTs0) {}
     try {
       var autoOn = false;
       try { autoOn = localStorage.getItem('hg_og_xm_auto') === '1'; } catch (eA) {}
@@ -9519,9 +9031,6 @@ terse status, and never launches a first-time scan on a global refresh.
   }
 
   function refreshOmnigold(){
-    /* Stop existing poller before refresh to prevent hangs */
-    hgOgStopStatusPoller();
-
     return Promise.resolve().then(function(){
       if (__og.busy) return 'busy';
       if (!__og.ran) return 'skipped: not run yet';
@@ -9794,6 +9303,14 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgBalanceParts = hgOgBalanceParts;
     window.hgOgDeskOrder = hgOgDeskOrder;
     window.hgOgMostProbablePanelHtml = hgOgMostProbablePanelHtml;
+    /* TOP SETUP — gate-ledger-fed card (hg-v541); exported so the pick,
+       the level-fresh re-check and the stand-aside copy are testable
+       without a mount. */
+    window.hgOgTopSetupPick = hgOgTopSetupPick;
+    window.hgOgTopSetupFresh = hgOgTopSetupFresh;
+    window.hgOgTopSetupPanelHtml = hgOgTopSetupPanelHtml;
+    window.hgOgPaintTopSetup = hgOgPaintTopSetup;
+    window.hgOgInjectSection = hgOgInjectSection;
     window.hgOgNormalizeGrade = hgOgNormalizeGrade;
     window.hgOgGradeChipHtml = hgOgGradeChipHtml;
     window.hgOgGradeLegendHtml = hgOgGradeLegendHtml;

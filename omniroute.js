@@ -173,7 +173,12 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
   var __omni = { ui: null, busy: false, ran: false, snap: null, lastStat: '', xsRescued: 0,
                  lastCardsHtml: '', lastPoolHtml: '', lastMpHtml: '', last20xHtml: '', lastApexHtml: '', held: { n: 0 },
-                 openSetups: [],
+                 /* hg-v541: the TOP SETUP card's own pipeline snapshot. Set on
+                    EVERY completed scan — the empty ones included, so a card
+                    from an earlier scan can never outlive a later scan that
+                    found nothing (lastView goes null on an empty scan for the
+                    SHOW toggle and cannot carry this). */
+                 topSetupView: null,
                  /* hg-v540: the ALL view's exact bytes + the inputs behind
                     them, so PAID-ONLY filters a snapshot and ALL restores
                     verbatim. */
@@ -9341,6 +9346,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
               __omni.lastAllView = { cards: ui.cards.innerHTML, mp: ui.mp ? ui.mp.innerHTML : null };
               __omni.lastView = null;
             }catch(eCap0){}
+            /* TOP SETUP follows THIS scan too: an empty scan is a real
+               result, and a ticket from an earlier scan must not keep
+               standing on the card while the desk above says nothing
+               fired (hg-v541). */
+            try{
+              __omni.topSetupView = { few: [], tape: tape0, at: Date.now() };
+              omniPaintProTrader(ui);
+            }catch(ePtE){}
             omniRememberPaint(ui);
           });
         }
@@ -9540,10 +9553,17 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
            DOM no-op when the mode is ALL. */
         try{
           __omni.lastAllView = { cards: ui.cards.innerHTML, mp: ui.mp ? ui.mp.innerHTML : null };
-          __omni.lastView = { collapsed: collapsed, few: few, tape: tape, mpBag: mpBag, sideRead: sideRead };
+          __omni.lastView = { collapsed: collapsed, few: few, tape: tape, mpBag: mpBag, sideRead: sideRead,
+                              at: Date.now() };
           hgOmniPaintVerdict(ui);
           hgOmniApplyShowMode(ui);
         }catch(ePv){}
+        /* TOP SETUP follows the snapshot it just captured — the ledger's own
+           few, level-fresh checked; never raw logs. */
+        try{
+          __omni.topSetupView = { few: few, tape: tape, at: Date.now() };
+          omniPaintProTrader(ui);
+        }catch(ePt){}
         omniRememberPaint(ui);
         });
       }catch(eRender){
@@ -9607,121 +9627,113 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
   /* ==================== mount / refresh ==================== */
 
-  /* Render crypto pro-trader panel with AI intelligence */
-  function omniRenderProTraderPanel(setups){
-    if (!setups || !setups.length) return '<div style="padding:8px;color:var(--fg-muted,#999)">No open crypto setups tracked.</div>';
+  /* ==================== TOP SETUP — from the gate ledger (hg-v541) ====================
 
-    var html = '<div style="padding:8px">';
-    html += '<div style="font-weight:bold;margin-bottom:8px;font-size:1.1em">🚀 AI-ENHANCED OMNI PRO-TRADER CRYPTO</div>';
+     REPLACES the "AI-enhanced pro-trader" panel, which read RAW hg_forward_v1
+     records (its 'OMNI' substring tab filter even matched OMNIGOLD:* — gold
+     leaked into the crypto card), hardcoded livePrice = 0 so statuses could
+     never change, fabricated Wilson-lo 0.50 evidence per mechanic, and scored
+     checklist fields the forward log never stores. None of that survives:
+     this card sources EXCLUSIVELY from the tab's graded pipeline — the same
+     hgOmniPickFew() TICKET list MOST PROBABLE renders — and stands aside
+     honestly when that list is empty or the levels have gone stale. */
 
-    var top = setups[0];
-    if (top){
-      var aiRegime = top.aiRegime || { volatility: 'NORMAL', trend: 'RANGING', momentum: 'WEAK', quality: 50 };
-      var aiQuality = fin(top.aiSignalQuality) || 50;
-      var aiRisk = top.aiRiskAssessment || { riskScore: 50, riskLevel: 'MEDIUM', tradeability: false };
-      var aiPos = top.aiPositioning || {};
-      var tradeable = aiRisk.tradeability;
-      var tradeColor = tradeable ? '#22c55e' : '#dc2626';
-
-      html += '<div style="margin:8px 0;padding:8px;background:#3b82f633;border-left:3px solid ' + tradeColor + ';border-radius:3px">';
-      html += '<div style="font-weight:bold;margin-bottom:4px">🏆 TOP SETUP: ' + esc(String(top.symbol || top.mechanic)) + ' — ' + (tradeable ? '✓ TRADEABLE' : '✗ TOO RISKY') + '</div>';
-
-      if (isFinite(fin(top.entry)) && isFinite(fin(top.t1)) && isFinite(fin(top.stop))){
-        var entry = fin(top.entry), tp = fin(top.t1), sl = fin(top.stop);
-        var risk = Math.abs(sl - entry), profit = Math.abs(tp - entry), rr = risk > 0 ? (profit/risk).toFixed(2) : 'N/A';
-        var tradeStatus = top.tradeStatus || 'active';
-        var statusLabel = tradeStatus === 'profit' ? '✓ PROFIT' : tradeStatus === 'stopped' ? '✗ STOPPED' : '▶ ACTIVE';
-        var statusColor = tradeStatus === 'profit' ? '#22c55e' : tradeStatus === 'stopped' ? '#dc2626' : '#3b82f6';
-
-        html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:0.85em;margin:6px 0">';
-        html += '<div><span style="color:var(--fg-muted,#666)">Entry:</span> <b>' + entry.toFixed(8) + '</b></div>';
-        html += '<div><span style="color:var(--fg-muted,#666)">TP:</span> <b style="color:#22c55e">' + tp.toFixed(8) + '</b></div>';
-        html += '<div><span style="color:var(--fg-muted,#666)">SL:</span> <b style="color:#dc2626">' + sl.toFixed(8) + '</b></div>';
-        html += '</div>';
-
-        html += '<div style="display:flex;gap:8px;font-size:0.85em;margin:4px 0">';
-        html += '<div><span style="color:var(--fg-muted,#666)">Risk:</span> <b>' + risk.toFixed(8) + '</b></div>';
-        html += '<div><span style="color:var(--fg-muted,#666)">Profit:</span> <b style="color:#22c55e">' + profit.toFixed(8) + '</b></div>';
-        html += '<div><span style="color:var(--fg-muted,#666)">R:R:</span> <b style="color:#3b82f6">1:' + rr + '</b></div>';
-        html += '<div style="margin-left:auto;color:' + statusColor + ';font-weight:bold;background:' + statusColor + '22;padding:2px 6px;border-radius:3px">' + statusLabel + '</div>';
-        html += '</div>';
-      }
-
-      var comp = fin(top.compositeScore) || 0, tech = fin(top.technicalScore) || 0, sent = fin(top.sentimentScore) || 0, fund = fin(top.fundamentalScore) || 0;
-      html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;font-size:0.8em;margin-top:6px;margin-bottom:8px">';
-      html += '<div style="border:1px solid #3b82f633;padding:4px;text-align:center"><div style="font-weight:bold;color:#3b82f6">' + comp.toFixed(0) + '</div><div style="color:var(--fg-muted,#666);font-size:0.75em">Overall</div></div>';
-      html += '<div style="border:1px solid #3b82f633;padding:4px;text-align:center"><div style="font-weight:bold;color:#8b5cf6">' + tech.toFixed(0) + '</div><div style="color:var(--fg-muted,#666);font-size:0.75em">Technical</div></div>';
-      html += '<div style="border:1px solid #3b82f633;padding:4px;text-align:center"><div style="font-weight:bold;color:#f59e0b">' + sent.toFixed(0) + '</div><div style="color:var(--fg-muted,#666);font-size:0.75em">Sentiment</div></div>';
-      html += '<div style="border:1px solid #3b82f633;padding:4px;text-align:center"><div style="font-weight:bold;color:#06b6d4">' + fund.toFixed(0) + '</div><div style="color:var(--fg-muted,#666);font-size:0.75em">Fundamental</div></div>';
-      html += '</div>';
-
-      /* AI INTELLIGENCE DISPLAY */
-      html += '<div style="margin:8px 0;padding:8px;background:#10b98133;border:1px solid #10b981;border-radius:3px">';
-      html += '<div style="font-weight:bold;margin-bottom:6px;color:#10b981">🧠 AI MARKET INTELLIGENCE</div>';
-
-      /* Market Regime */
-      html += '<div style="font-size:0.85em;margin-bottom:6px">';
-      html += '<div style="color:var(--fg-muted,#666)">Market Regime:</div>';
-      html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin-top:2px">';
-      html += '<div style="text-align:center;padding:3px;background:#10b98122;border-radius:2px;font-size:0.75em"><div style="font-weight:bold">' + aiRegime.volatility + '</div><div>Volatility</div></div>';
-      html += '<div style="text-align:center;padding:3px;background:#10b98122;border-radius:2px;font-size:0.75em"><div style="font-weight:bold">' + aiRegime.trend + '</div><div>Trend</div></div>';
-      html += '<div style="text-align:center;padding:3px;background:#10b98122;border-radius:2px;font-size:0.75em"><div style="font-weight:bold">' + aiRegime.momentum + '</div><div>Momentum</div></div>';
-      html += '<div style="text-align:center;padding:3px;background:#10b98122;border-radius:2px;font-size:0.75em"><div style="font-weight:bold">' + aiRegime.quality.toFixed(0) + '</div><div>Quality</div></div>';
-      html += '</div></div>';
-
-      /* AI Signal Quality & Risk */
-      html += '<div style="font-size:0.85em;display:grid;grid-template-columns:1fr 1fr;gap:6px">';
-      var sigColor = aiQuality >= 70 ? '#22c55e' : aiQuality >= 50 ? '#f59e0b' : '#dc2626';
-      var riskColor = aiRisk.riskScore <= 20 ? '#22c55e' : aiRisk.riskScore <= 35 ? '#f59e0b' : '#dc2626';
-      html += '<div style="padding:4px;border:1px solid ' + sigColor + '33;background:' + sigColor + '11;border-radius:2px"><div style="color:' + sigColor + ';font-weight:bold">' + aiQuality.toFixed(0) + '</div><div style="font-size:0.75em;color:var(--fg-muted,#666)">Signal Quality</div></div>';
-      html += '<div style="padding:4px;border:1px solid ' + riskColor + '33;background:' + riskColor + '11;border-radius:2px"><div style="color:' + riskColor + ';font-weight:bold">' + aiRisk.riskLevel + '</div><div style="font-size:0.75em;color:var(--fg-muted,#666)">Risk Level (' + aiRisk.riskScore + ')</div></div>';
-      html += '</div>';
-
-      /* Position Sizing AI */
-      if (aiPos.recommended){
-        html += '<div style="font-size:0.85em;margin-top:6px;padding:4px;background:#f59e0b22;border-left:3px solid #f59e0b;border-radius:2px">';
-        html += '<div style="color:var(--fg-muted,#666)">💰 AI Position Sizing:</div>';
-        html += '<div style="font-weight:bold;color:#f59e0b">Risk ' + aiPos.riskPercent + '% of account</div>';
-        html += '</div>';
-      }
-
-      /* AI Risk Warnings */
-      if (aiRisk.risks && aiRisk.risks.length > 0){
-        html += '<div style="font-size:0.85em;margin-top:6px;padding:4px;background:#dc262622;border-left:3px solid #dc2626;border-radius:2px">';
-        aiRisk.risks.forEach(function(r){ html += '<div>' + r + '</div>'; });
-        html += '</div>';
-      }
-
-      html += '</div>';
-
-      html += '<div style="display:grid;grid-template-columns:repeat(5, 1fr);gap:4px;font-size:0.75em;margin-top:6px">';
-      var checks = top.checks || {};
-      var items = [
-        {key: 'htfRegime', label: '4h Regime'},
-        {key: 'gate1h', label: '1h Gate'},
-        {key: 'corrNorm', label: 'Corr Normal'},
-        {key: 'drawdownOk', label: 'Drawdown'},
-        {key: 'riskReward', label: 'R:R'}
-      ];
-      items.forEach(function(item){
-        var passed = checks[item.key];
-        var color = passed ? '#22c55e' : '#dc2626';
-        html += '<div style="text-align:center;padding:3px;border:1px solid ' + color + '33;color:' + color + ';font-weight:bold">' + (passed ? '✓' : '✗') + ' ' + item.label + '</div>';
-      });
-      html += '</div>';
-
-      html += '</div>';
+  /* The card ledger's own level-fresh judgement, re-read before render.
+     SAME check the card pass uses to collapse dead cards (the stamped
+     'level-fresh' gate, judged against THIS pair's own live price at scan
+     time): hard fail = DEAD ON ARRIVAL, info fail = stale resting levels
+     (the gate's why carries the distance), PASS = fresh. The 1.5×ATR
+     tolerance lives in the gate itself — no new threshold here. Fail-closed:
+     no stamped verdict means not fresh. Pure; exported for the harness. */
+  function omniTopSetupFresh(pick){
+    if (!pick || !pick.plan) return { ok: false, why: 'no plan to judge' };
+    var g = null, i;
+    for (i = 0; i < (pick.gates || []).length; i++){
+      if (pick.gates[i] && pick.gates[i].key === 'level-fresh'){ g = pick.gates[i]; break; }
     }
-
-    html += '<div style="margin-top:8px;font-size:0.85em;color:var(--fg-muted,#666)">' + (setups.length || 0) + ' open crypto setup' + (setups.length !== 1 ? 's' : '') + ' tracked</div>';
-    html += '</div>';
-    return html;
+    if (g && g.pass === false && g.info !== true){
+      return { ok: false, doa: true, why: String(g.why || 'levels dead on arrival') };
+    }
+    if (g && g.pass === false){
+      return { ok: false, stale: true, why: String(g.why || 'levels stale against the pair’s live price') };
+    }
+    if (g && g.pass === true){
+      return { ok: true, why: String(g.why || 'level-fresh passed against the pair’s live price') };
+    }
+    return { ok: false, why: 'no live price was recorded for this pair — standing aside rather than trusting unjudged levels' };
   }
 
-  function omniPaintProTrader(ui, setups){
+  function omniTopSetupAgeText(atMs){
+    var at = fin(atMs);
+    if (!(at > 0)) return '';
+    var mins = Math.max(0, Math.round((Date.now() - at) / 60000));
+    if (mins < 1) return 'scanned just now';
+    if (mins < 60) return 'scanned ' + mins + 'm ago';
+    return 'scanned ' + Math.floor(mins / 60) + 'h' + (mins % 60) + 'm ago';
+  }
+
+  /* TOP SETUP panel. Renders EXACTLY what the pipeline offers: the first
+     level-fresh ticket from the MOST PROBABLE few (already tape-aligned,
+     TICKET-only, deduped, desk-ordered), with LONG/SHORT printed at the
+     entry and the tab's own solidity + cost + conviction badge row
+     (hgOmniSolidityBadgesHtml — the same chips the ledger cards carry).
+     Anything less is an honest stand-aside naming why. Pure over its
+     inputs; exported for the harness. */
+  function omniTopSetupPanelHtml(view, held){
+    var h = '<div style="padding:8px" data-omni-top-setup="1">';
+    h += '<div style="font-weight:bold;margin-bottom:4px;font-size:1.1em">🏆 TOP SETUP · GATE LEDGER WINNER</div>';
+    var tail = '<div class="row" style="margin-top:8px">'
+      + '<button type="button" class="btn" data-omni-ts-refresh="1">🔄 Refresh</button></div></div>';
+    if (!view){
+      h += '<div class="hg-mp-note warn">No scan yet — run the full scan. This card only shows a ticket that cleared the full gate ledger; it never reads raw logs.</div>';
+      return h + tail;
+    }
+    var age = omniTopSetupAgeText(view.at);
+    var tape = String(view.tape || '').toLowerCase();
+    var few = view.few || [];
+    var top = null, freshRead = null, firstBad = null, i, c;
+    for (i = 0; i < few.length; i++){
+      c = few[i];
+      if (!c || !c.plan || !(c.grade && c.grade.ticket)) continue;
+      var fr = omniTopSetupFresh(c);
+      if (fr.ok){ top = c; freshRead = fr; break; }
+      if (!firstBad) firstBad = { c: c, fr: fr };
+    }
+    if (!top){
+      if (firstBad){
+        h += '<div class="hg-mp-note warn">No gate-passed setup at current price — standing aside. Best ticket ('
+          + esc(String(firstBad.c.sym || firstBad.c.base || '')) + ' '
+          + esc(String(firstBad.c.dir || '').toUpperCase()) + ') is '
+          + (firstBad.fr.doa ? 'dead on arrival' : 'stale') + ': ' + esc(firstBad.fr.why)
+          + '. Run a scan for fresh levels.</div>';
+      } else {
+        h += '<div class="hg-mp-note warn">No gate-passed setup at current price — standing aside. '
+          + esc(hgOmniMpNoneWhy(tape, held)) + '</div>';
+      }
+      if (age) h += '<div class="dim" style="margin-top:4px">' + esc(age) + '</div>';
+      return h + tail;
+    }
+    var dir = String(top.dir || '').toLowerCase();
+    h += '<div style="margin:6px 0;font-weight:bold">'
+      + '<span style="display:inline-block;padding:2px 10px;border-radius:12px;font-weight:bold;color:#fff;background:'
+      + (dir === 'short' ? '#dc2626' : '#16a34a') + '">' + (dir === 'short' ? 'SHORT' : 'LONG') + '</span> '
+      + esc(String(top.sym || top.base || '')) + ' · ENTRY ' + esc(fmtPx(top.plan.entry))
+      + ' · ' + esc(String(top.kind || '')) + '</div>';
+    h += '<div class="hg-mp-note dim">' + esc(freshRead.why) + (age ? ' · ' + esc(age) : '') + '</div>';
+    h += hgOmniMpOneHtml(top);
+    h += hgOmniSolidityBadgesHtml(top);
+    return h + tail;
+  }
+
+  function omniPaintProTrader(ui){
     try {
-      if (ui && ui.proTrader){
-        ui.proTrader.innerHTML = omniRenderProTraderPanel(setups);
+      if (!ui || !ui.proTrader) return;
+      ui.proTrader.innerHTML = omniTopSetupPanelHtml(__omni.topSetupView || null, __omni.held || null);
+      var btn = ui.proTrader.querySelector ? ui.proTrader.querySelector('[data-omni-ts-refresh]') : null;
+      if (btn && btn.addEventListener){
+        /* Refresh re-pulls from the pipeline snapshot — never raw logs. With
+           no completed scan it repaints the honest run-a-scan message. */
+        btn.addEventListener('click', function(){ omniPaintProTrader(ui); });
       }
     } catch (e){}
   }
@@ -9955,6 +9967,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     };
     if (!ui.btn || !ui.stat || !ui.cards) return;
     __omni.ui = ui;
+    /* TOP SETUP paints honestly at mount: this session's last ledger winner
+       when there is one, otherwise the run-a-scan message — never raw logs. */
+    try { omniPaintProTrader(ui); } catch (ePt0) {}
     /* Remount must not look like a first visit. The last completed scan is
        still the desk until a newer one successfully replaces it. */
     if (__omni.lastCardsHtml){
@@ -10075,291 +10090,11 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
   /* House contract: async, never throws, terse status. Never launches a
      first-time universe sweep on a global refresh. */
-  /* ===== AI-ENHANCED PRO-TRADER CRYPTO SUITE ===== */
-
-  /* AI Market Intelligence: Detect market regime */
-  function omniAIDetectMarketRegime(volatility, trend, momentum){
-    volatility = fin(volatility) || 1.0;
-    trend = String(trend || 'ranging').toLowerCase();
-    momentum = fin(momentum) || 0;
-
-    var regime = {
-      volatility: volatility > 1.5 ? 'HIGH' : volatility < 0.7 ? 'LOW' : 'NORMAL',
-      trend: trend === 'strong_up' ? 'IMPULSE_UP' : trend === 'strong_down' ? 'IMPULSE_DOWN' : 'RANGING',
-      momentum: Math.abs(momentum) > 0.7 ? 'STRONG' : 'WEAK',
-      quality: 0
-    };
-
-    /* Calculate regime quality (0-100) */
-    if (regime.volatility === 'NORMAL' && regime.momentum === 'STRONG'){
-      regime.quality = 85;  /* Perfect setup conditions */
-    } else if ((regime.volatility === 'NORMAL' || regime.volatility === 'HIGH') && regime.trend !== 'RANGING'){
-      regime.quality = 75;  /* Good trending conditions */
-    } else if (regime.volatility === 'LOW' && regime.trend === 'RANGING'){
-      regime.quality = 60;  /* Stable but low movement */
-    } else if (regime.volatility === 'HIGH' && regime.trend === 'RANGING'){
-      regime.quality = 30;  /* Dangerous chop */
-    } else {
-      regime.quality = 50;  /* Neutral */
-    }
-
-    return regime;
-  }
-
-  /* AI Risk Management: Dynamic position sizing */
-  function omniAICalculatePositionSize(account, risk, volatility, confidence){
-    account = fin(account) || 10000;
-    risk = fin(risk) || 0.01;  /* 1% default risk */
-    volatility = fin(volatility) || 1.0;
-    confidence = fin(confidence) || 0.5;
-
-    /* Base position: account * risk / entry_risk */
-    var baseSize = account * risk;
-
-    /* Kelly Criterion adjustment: size *= (2*confidence - 1) */
-    var kellyFactor = Math.max(0.5, Math.min(2.0, (2 * confidence) - 1));
-
-    /* Volatility adjustment: lower vol = larger position */
-    var volFactor = Math.min(2.0, 1.5 / volatility);
-
-    var positionSize = baseSize * kellyFactor * volFactor;
-
-    return {
-      baseSize: baseSize,
-      kellyAdjusted: baseSize * kellyFactor,
-      volAdjusted: baseSize * kellyFactor * volFactor,
-      recommended: Math.max(account * 0.001, Math.min(account * 0.1, positionSize)),
-      riskPercent: (positionSize / account * 100).toFixed(2)
-    };
-  }
-
-  /* AI Entry/Exit Intelligence: Smart levels based on regime */
-  function omniAISmartLevels(entry, stop, regime, confidence){
-    entry = fin(entry) || 0;
-    stop = fin(stop) || 0;
-    regime = regime || { volatility: 'NORMAL', momentum: 'WEAK', quality: 50 };
-    confidence = fin(confidence) || 0.5;
-
-    var risk = Math.abs(stop - entry);
-    if (risk === 0) return { entry: entry, tp1: entry, tp2: entry, tp3: entry, trail: false };
-
-    /* Volatility-adjusted take profit levels */
-    var volMultiplier = regime.volatility === 'HIGH' ? 1.2 : regime.volatility === 'LOW' ? 0.8 : 1.0;
-    var momentumMultiplier = regime.momentum === 'STRONG' ? 1.5 : 1.0;
-
-    var baseRR = 2.0;
-    var tp1Distance = risk * baseRR * volMultiplier * 0.5;  /* Half target at 1R */
-    var tp2Distance = risk * baseRR * volMultiplier;        /* 2R mid-point */
-    var tp3Distance = risk * baseRR * volMultiplier * momentumMultiplier * 1.5;  /* 3R+ for strong momentum */
-
-    var isLong = entry > stop;
-    var tp1 = isLong ? entry + tp1Distance : entry - tp1Distance;
-    var tp2 = isLong ? entry + tp2Distance : entry - tp2Distance;
-    var tp3 = isLong ? entry + tp3Distance : entry - tp3Distance;
-
-    return {
-      entry: entry, stop: stop, risk: risk,
-      tp1: tp1, tp2: tp2, tp3: tp3,
-      tp1Pct: ((tp1Distance / entry) * 100).toFixed(2),
-      tp2Pct: ((tp2Distance / entry) * 100).toFixed(2),
-      tp3Pct: ((tp3Distance / entry) * 100).toFixed(2),
-      trailingStop: regime.momentum === 'STRONG',  /* Trail in strong trends */
-      partialProfitAt: 'TP1'  /* Take first 50% at TP1 */
-    };
-  }
-
-  /* AI Signal Quality Scoring */
-  function omniAISignalQuality(setup, regime, confidence){
-    setup = setup || {};
-    regime = regime || { quality: 50 };
-    confidence = fin(confidence) || 0.5;
-
-    var score = 0;
-
-    /* Confluence points: multiple conditions aligned */
-    var confluenceCount = 0;
-    if (setup.htfRegime === true) confluenceCount++;
-    if (setup.gate1h === true) confluenceCount++;
-    if (setup.corrNorm === true) confluenceCount++;
-    confluenceCount += setup.gateConf || 0;
-
-    score += Math.min(40, confluenceCount * 8);  /* 40 pts for confluence */
-
-    /* Regime quality alignment */
-    score += regime.quality * 0.4;  /* 40 pts max from regime */
-
-    /* Historical confidence (Wilson LB) */
-    score += confidence * 100 * 0.2;  /* 20 pts max from win rate */
-
-    return Math.min(100, score);
-  }
-
-  /* AI Risk Assessment */
-  function omniAIRiskAssessment(setup, regime, age){
-    setup = setup || {};
-    regime = regime || { volatility: 'NORMAL' };
-    age = fin(age) || 0;
-
-    var risks = [];
-    var riskScore = 0;
-
-    /* Volatility risk */
-    if (regime.volatility === 'HIGH'){
-      risks.push('⚠ HIGH volatility: slippage risk');
-      riskScore += 15;
-    }
-
-    /* Age risk: stale setups */
-    if (age > 2 * 3600){  /* 2 hours old */
-      risks.push('⚠ Stale setup (' + Math.floor(age/60) + 'm old): may be invalidated');
-      riskScore += 10;
-    }
-
-    /* One-sided market risk */
-    if (regime.momentum === 'STRONG'){
-      risks.push('⚠ Strong momentum: potential for stop hunts');
-      riskScore += 8;
-    }
-
-    /* Liquidity risk: incomplete price levels */
-    if (!isFinite(fin(setup.stop)) || !isFinite(fin(setup.t1))){
-      risks.push('✗ Missing price levels: cannot trade');
-      riskScore += 30;
-    }
-
-    return {
-      riskScore: riskScore,  /* 0-100, higher = more risk */
-      riskLevel: riskScore > 30 ? 'HIGH' : riskScore > 15 ? 'MEDIUM' : 'LOW',
-      risks: risks,
-      tradeability: riskScore < 40  /* Can trade if risk < 40 */
-    };
-  }
-
-  /* Update open crypto setups from forward log */
-  function omniUpdateOpenSetups(){
-    try {
-      var now = Date.now() / 1000;
-      var open = [];
-      var barTMap = {};
-      var evidenceCache = {};
-      var livePrice = 0;  /* Crypto would need specific pair price */
-
-      if (typeof localStorage === 'undefined'){
-        __omni.openSetups = [];
-        return;
-      }
-
-      var raw = localStorage.getItem('hg_forward_v1');
-      if (!raw){
-        __omni.openSetups = [];
-        return;
-      }
-
-      var allRecs = JSON.parse(raw);
-      if (!Array.isArray(allRecs)) allRecs = [];
-
-      allRecs.forEach(function(rec){
-        if (!rec || !rec.barT || !rec.entry) return;
-        if (rec.state && rec.state !== 'open') return;
-        if (rec.tab && rec.tab.indexOf('OMNI') === -1) return;  /* Only crypto */
-
-        var age = now - rec.barT;
-        if (age < 0) age = 0;
-
-        barTMap[rec.barT] = (barTMap[rec.barT] || 0) + 1;
-
-        var entry = fin(rec.entry);
-        var tp = fin(rec.t1);
-        var sl = fin(rec.stop);
-        var status = 'active';
-        var isClosed = false;
-
-        if (livePrice > 0 && entry > 0){
-          if (entry > tp){  /* SHORT */
-            if (livePrice >= sl) { status = 'stopped'; isClosed = true; }
-            else if (livePrice <= tp) { status = 'profit'; isClosed = true; }
-            else if (livePrice < entry) { status = 'pending'; }
-            else { status = 'active'; }
-          } else {  /* LONG */
-            if (livePrice <= sl) { status = 'stopped'; isClosed = true; }
-            else if (livePrice >= tp) { status = 'profit'; isClosed = true; }
-            else if (livePrice > entry) { status = 'pending'; }
-            else { status = 'active'; }
-          }
-        }
-
-        if (isClosed && age > 300) return;
-
-        var gateConf = fin(rec.stack3) || 0;
-        var mechKey = rec.mechanic || 'default';
-        var evidence = evidenceCache[mechKey];
-        if (!evidence){
-          evidence = { wilson: { lo: 0.50, hi: 0.70, p: 0.60 }, samples: 0, hit: 0.60, source: 'crypto' };
-          evidenceCache[mechKey] = evidence;
-        }
-
-        var checks = {
-          htfRegime: rec.htf_confirm === true,
-          gate1h: rec.regime_fit === true,
-          corrNorm: rec.corrRegime !== 'EXTREME',
-          drawdownOk: true,
-          riskReward: fin(rec.t1 - rec.entry) / fin(rec.stop - rec.entry) >= 1.5 || isNaN(fin(rec.t1 - rec.entry))
-        };
-        var checksPass = Object.keys(checks).filter(function(k){ return checks[k]; }).length;
-
-        var techScore = (gateConf / 3 * 40) + (checks.htfRegime ? 30 : 0) + 30;
-        var sentScore = 60;  /* Default neutral for crypto */
-        var fundScore = age < 30 * 60 ? 65 : age > 4 * 3600 ? 35 : 50;
-        var composite = (techScore * 0.4) + (sentScore * 0.35) + (fundScore * 0.25);
-
-        /* AI Market Intelligence */
-        var aiRegime = omniAIDetectMarketRegime(1.0, 'ranging', 0.3);
-        var aiSignalQuality = omniAISignalQuality(checks, aiRegime, evidence.hit || 0.5);
-        var aiRiskAssess = omniAIRiskAssessment(rec, aiRegime, age);
-        var aiPositioning = omniAICalculatePositionSize(10000, 0.02, 1.0, evidence.hit || 0.5);
-        var aiSmartLevels = omniAISmartLevels(entry, sl, aiRegime, evidence.hit || 0.5);
-
-        open.push({
-          barT: rec.barT, entry: entry, t1: tp, stop: sl, age: age,
-          pnl: isFinite(fin(rec.r)) ? fin(rec.r) : NaN,
-          status: rec.state || 'open', tradeStatus: status,
-          mechanic: rec.mechanic || rec.symbol || '—',
-          symbol: rec.symbol || '—',
-          gateConf: gateConf,
-          evidence: evidence,
-          checks: checks, checksPass: checksPass, readyToEnter: checksPass === 5,
-          technicalScore: Math.min(100, techScore),
-          sentimentScore: sentScore,
-          fundamentalScore: Math.min(100, fundScore),
-          compositeScore: Math.min(100, composite),
-          corrRegime: rec.corrRegime || 'NORMAL',
-          isCorrelated: barTMap[rec.barT] >= 2,
-          /* AI Intelligence */
-          aiRegime: aiRegime,
-          aiSignalQuality: aiSignalQuality,
-          aiRiskAssessment: aiRiskAssess,
-          aiPositioning: aiPositioning,
-          aiSmartLevels: aiSmartLevels,
-          aiTradeability: aiRiskAssess.tradeability
-        });
-      });
-
-      open.sort(function(a, b){
-        if (b.compositeScore !== a.compositeScore) return b.compositeScore - a.compositeScore;
-        if (b.gateConf !== a.gateConf) return b.gateConf - a.gateConf;
-        return b.age - a.age;
-      });
-
-      __omni.openSetups = open;
-    } catch (e){
-      __omni.openSetups = [];
-    }
-  }
-
   function refreshOmniroute(){
-    omniUpdateOpenSetups();  /* Update pro-trader setups */
-    var ui = __omni.ui;
-    if (ui) omniPaintProTrader(ui, __omni.openSetups);  /* Paint pro-trader panel */
+    /* TOP SETUP repaints from the pipeline snapshot — honest run-a-scan
+       message when no scan has completed, never a raw-log read. */
+    var ui0 = __omni.ui;
+    if (ui0) omniPaintProTrader(ui0);
 
     return Promise.resolve().then(function(){
       if (__omni.busy) return 'busy';
@@ -10368,8 +10103,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         return 'skipped: fresh';
       var ui = __omni.ui;
       if (ui) return runScan(ui).then(function(){
-        omniUpdateOpenSetups();
-        if (ui) omniPaintProTrader(ui, __omni.openSetups);
+        omniPaintProTrader(ui);
         return __omni.lastStat || 'rescanned';
       });
       return __omni.lastStat || 'no ui mounted';
@@ -10527,6 +10261,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniPickFew = hgOmniPickFew;
     window.hgOmniHouseHits = hgOmniHouseHits;
     window.hgOmniMostProbablePanelHtml = hgOmniMostProbablePanelHtml;
+    /* TOP SETUP — gate-ledger-fed card (hg-v541); exported so the freshness
+       re-read and the stand-aside copy are testable without a mount. */
+    window.omniTopSetupFresh = omniTopSetupFresh;
+    window.omniTopSetupPanelHtml = omniTopSetupPanelHtml;
     /* research half */
     window.hgOmniGateInventory = hgOmniGateInventory;
     window.hgOmniRoster = hgOmniRoster;
