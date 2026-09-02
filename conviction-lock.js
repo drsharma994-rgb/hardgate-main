@@ -482,7 +482,10 @@ function clMergeCompatible(aKey, bKey){
     var p7a = a.indexOf('p7') === 0;
     var p7b = b.indexOf('p7') === 0;
     return p7a === p7b;
-  }catch(e){ return true; }
+  }catch(e){
+    /* Fail closed: on fault, refuse cross-merge (safer than silent allow). */
+    return false;
+  }
 }
 
 function clStratKeyOf(recOrCand){
