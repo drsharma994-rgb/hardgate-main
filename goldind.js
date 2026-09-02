@@ -1084,7 +1084,15 @@ var GST_NAME = {
   p5open: 'S25 OPEN-TYPE RECOGNITION',
   p5news: 'S27 POST-NEWS SPIKE FADE',
   p5ker: 'S23 KER REGIME GATE',
-  p5bias: 'S28 PHYSICAL WEEKLY BIAS'
+  p5bias: 'S28 PHYSICAL WEEKLY BIAS',
+  p6comp: 'S30 SESSION-COMPOSITE PULLBACK',
+  p6zfade: 'S33 Z-SCORE MEAN REVERSION',
+  p6smt: 'S36 SMT-CONFIRMED SWEEP (vs DXY)',
+  p6fail: 'S37 FAILED-SWEEP CONTINUATION',
+  p6hold: 'S29 TIME-BASED HOLD EXTENSION',
+  p6corr: 'S32 GOLD–BTC CORRELATION RULE',
+  p6event: 'S35 EVENT-WEEK TEMPLATE',
+  p6ladder: 'S38 NAKED-POC LADDER'
 };
 
 /* limit-at-zone entry: when price has extended beyond the setup zone, anchor
@@ -2043,6 +2051,48 @@ function goldScalpSetups(inp){
         }
       }
     }catch(eP5){}
+
+    /* --- 1e3) PART6 S29–S38 time/composites/z/SMT/failed-sweep --- */
+    try{
+      if (!D.__part6){
+        D.__part6 = hgGoldPart6Engine(rows, {
+          newsGate: newsState ? hgGoldNewsGate(newsState, nowMs) : null,
+          now: nowMs,
+          dxyRows: (opts && (opts.dxyRows || opts.dxyCandles)) || null,
+          btcRows: (opts && opts.btcRows) || null,
+          events: (opts && opts.events) || null,
+          dom: (opts && opts.dom) || null,
+          skew: (opts && opts.skew) || null
+        });
+      }
+      var p6 = D.__part6;
+      if (p6 && p6.strategies && p6.strategies.length){
+        var p6Live = { p6comp: 1, p6zfade: 1, p6smt: 1, p6fail: 1 };
+        var p6j, p6hit;
+        for (p6j = 0; p6j < p6.strategies.length; p6j++){
+          p6hit = p6.strategies[p6j];
+          if (!p6hit || !p6hit.dir || !p6Live[p6hit.key]) continue;
+          if (p6hit.grade !== 'forming' && p6hit.grade !== 'confirmed') continue;
+          var p6Stop = (p6hit.plan && isFinite(p6hit.plan.stop)) ? p6hit.plan.stop
+            : (p6hit.dir === 'long' ? entry - 1.2 * a15 : entry + 1.2 * a15);
+          var p6Cand = __gsCand(p6hit.key, p6hit.dir, D, p6Stop, __gsSnapLvls(D, p6hit.dir),
+            p6hit.why, 'Part6 invalidation — structure break against the setup',
+            undefined, isFinite(p6hit.level) ? p6hit.level : undefined);
+          if (p6Cand){
+            if (p6hit.plan){
+              if (isFinite(p6hit.plan.t1)) p6Cand.t1 = p6hit.plan.t1;
+              if (isFinite(p6hit.plan.t2)) p6Cand.t2 = p6hit.plan.t2;
+              if (isFinite(p6hit.plan.stop)) p6Cand.stop = p6hit.plan.stop;
+            }
+            if (!Array.isArray(p6Cand.stamps)) p6Cand.stamps = [];
+            p6Cand.stamps.push('PART6 ' + String(p6hit.key).toUpperCase());
+            if (p6.eventTpl) hgGoldPart6ApplyEventFilter(p6Cand, p6.eventTpl);
+            if (p6.corr) hgGoldPart6ApplyCorrFilter(p6Cand, p6.corr);
+            push(p6Cand);
+          }
+        }
+      }
+    }catch(eP6){}
 
     /* --- 1f) SMC liquidity cluster + swept index (smart-money-concepts port) --- */
     try{
@@ -3266,6 +3316,21 @@ function goldRankSetups(cands, ctx){
           if (ctx.__p5eng.bias) hgGoldPart5ApplyWeeklyBiasFilter(rc, ctx.__p5eng.bias);
         }
       }catch(eP5f){}
+      try{
+        if (!ctx.__p6eng && typeof hgGoldPart6Engine === 'function'){
+          ctx.__p6eng = hgGoldPart6Engine(ctx.rows15m || ctx.rows || ctx.rows4h, {
+            newsGate: ctx.newsGate || null,
+            now: ctx.now || Date.now(),
+            dxyRows: ctx.dxyRows || ctx.dxyCandles || null,
+            btcRows: ctx.btcRows || null,
+            events: ctx.events || null
+          });
+        }
+        if (ctx.__p6eng){
+          if (ctx.__p6eng.eventTpl) hgGoldPart6ApplyEventFilter(rc, ctx.__p6eng.eventTpl);
+          if (ctx.__p6eng.corr) hgGoldPart6ApplyCorrFilter(rc, ctx.__p6eng.corr);
+        }
+      }catch(eP6f){}
       ranked.push(rc);
     }
     var gOrd = { A: 0, B: 1, C: 2 };
@@ -9885,6 +9950,660 @@ function hgGoldPart5Html(p5){
 }
 
 /* =========================================================================
+   GOLD PART 6 — Time stats / session composites / z·Hurst / S29–S38 (hg-v570)
+   One vote per family. Nothing here turns NO ENTRY into ENTER.
+   S31 skew + S34 DOM stay UNCHECKED without opts.skew / opts.dom.
+========================================================================= */
+
+var HG_GOLD_P6_Z_N = 20;
+var HG_GOLD_P6_Z_GATE = 2.0;
+var HG_GOLD_P6_HURST_N = 100;
+var HG_GOLD_P6_AC_N = 60;
+var HG_GOLD_P6_CORR_N = 20;
+var HG_GOLD_P6_NY_HI_SHARE = 0.30;
+
+function hgGoldPart6SessionSlice(rows, startH, endH, lookDays){
+  try{
+    rows = __rows(rows);
+    if (!rows || !rows.length) return [];
+    lookDays = lookDays || 20;
+    var lastT = rows[rows.length - 1].t;
+    if (!isFinite(lastT)) return [];
+    var cut = lastT - lookDays * 86400;
+    var out = [], i, h;
+    for (i = 0; i < rows.length; i++){
+      if (!(rows[i].t >= cut)) continue;
+      h = ((rows[i].t % 86400) + 86400) % 86400 / 3600;
+      if (h >= startH && h < endH) out.push(rows[i]);
+    }
+    return out;
+  }catch(e){ return []; }
+}
+
+function hgGoldPart6TimeStats(rows){
+  var out = {
+    ok: false, highHist: null, lowHist: null, nyHighShare: NaN,
+    londonLowDone: false, rangeDoneBeforeNy: false, why: ''
+  };
+  try{
+    rows = __rows(rows);
+    if (!rows || rows.length < 48){ out.why = 'short series'; return out; }
+    var byDay = {}, i, k, h;
+    for (i = 0; i < rows.length; i++){
+      if (!isFinite(rows[i].t)) continue;
+      /* session day keyed at 22:00 UTC boundary */
+      var adj = rows[i].t - 22 * 3600;
+      k = String(Math.floor(adj / 86400));
+      if (!byDay[k]) byDay[k] = { hi: rows[i].h, lo: rows[i].l, hiH: NaN, loH: NaN, hiT: rows[i].t, loT: rows[i].t };
+      else {
+        if (rows[i].h > byDay[k].hi){ byDay[k].hi = rows[i].h; byDay[k].hiT = rows[i].t; }
+        if (rows[i].l < byDay[k].lo){ byDay[k].lo = rows[i].l; byDay[k].loT = rows[i].t; }
+      }
+    }
+    var keys = Object.keys(byDay).sort();
+    if (keys.length < 10){ out.why = 'need ≥10 sessions'; return out; }
+    var take = keys.slice(-Math.min(250, keys.length));
+    var highHist = new Array(24), lowHist = new Array(24), j;
+    for (j = 0; j < 24; j++){ highHist[j] = 0; lowHist[j] = 0; }
+    for (i = 0; i < take.length; i++){
+      var d = byDay[take[i]];
+      if (isFinite(d.hiT)) highHist[new Date((d.hiT < 1e12 ? d.hiT * 1000 : d.hiT)).getUTCHours()]++;
+      if (isFinite(d.loT)) lowHist[new Date((d.loT < 1e12 ? d.loT * 1000 : d.loT)).getUTCHours()]++;
+    }
+    var nS = take.length, nyHi = 0;
+    for (j = 12; j <= 15; j++) nyHi += highHist[j];
+    out.ok = true;
+    out.highHist = highHist; out.lowHist = lowHist;
+    out.nyHighShare = nyHi / nS;
+    /* Today so far */
+    var today = byDay[keys[keys.length - 1]];
+    var nowH = new Date((rows[rows.length - 1].t < 1e12 ? rows[rows.length - 1].t * 1000 : rows[rows.length - 1].t)).getUTCHours();
+    if (today && nowH < 12){
+      var loH = isFinite(today.loT) ? new Date((today.loT < 1e12 ? today.loT * 1000 : today.loT)).getUTCHours() : -1;
+      out.londonLowDone = loH >= 7 && loH <= 9;
+    }
+    if (today && nowH >= 12){
+      var hiH2 = isFinite(today.hiT) ? new Date((today.hiT < 1e12 ? today.hiT * 1000 : today.hiT)).getUTCHours() : 99;
+      var loH2 = isFinite(today.loT) ? new Date((today.loT < 1e12 ? today.loT * 1000 : today.loT)).getUTCHours() : 99;
+      out.rangeDoneBeforeNy = hiH2 < 12 && loH2 < 12;
+    }
+    out.why = 'NY high-share ' + (out.nyHighShare * 100).toFixed(0) + '%'
+      + (out.londonLowDone ? ' · London low done' : '')
+      + (out.rangeDoneBeforeNy ? ' · range done pre-NY' : '');
+    return out;
+  }catch(e){ out.why = 'time-stats error'; return out; }
+}
+
+function hgGoldPart6SessionComposites(rows){
+  var out = {
+    ok: false, ny: null, london: null, nyAboveLondon: null, why: ''
+  };
+  try{
+    rows = __rows(rows);
+    var nyRows = hgGoldPart6SessionSlice(rows, 12, 21, 20);
+    var ldnRows = hgGoldPart6SessionSlice(rows, 7, 16, 20);
+    out.ny = nyRows.length >= 20 ? goldVolumeProfile(nyRows, Math.min(200, nyRows.length), 40) : null;
+    out.london = ldnRows.length >= 20 ? goldVolumeProfile(ldnRows, Math.min(200, ldnRows.length), 40) : null;
+    if (!out.ny && !out.london){ out.why = 'session composites unread'; return out; }
+    out.ok = true;
+    if (out.ny && out.london && isFinite(out.ny.pocPrice) && isFinite(out.london.pocPrice)){
+      out.nyAboveLondon = out.ny.pocPrice > out.london.pocPrice;
+    }
+    out.why = (out.ny ? ('NY POC ' + out.ny.pocPrice.toFixed(2)) : 'NY n/a')
+      + ' · ' + (out.london ? ('LDN POC ' + out.london.pocPrice.toFixed(2)) : 'LDN n/a')
+      + (out.nyAboveLondon === true ? ' · NY above London' : (out.nyAboveLondon === false ? ' · London above NY' : ''));
+    return out;
+  }catch(e){ out.why = 'composite error'; return out; }
+}
+
+function hgGoldPart6ZScore(rows){
+  var out = { ok: false, z: NaN, mean: NaN, std: NaN, why: '' };
+  try{
+    rows = __rows(rows);
+    if (!rows || rows.length < HG_GOLD_P6_Z_N + 5){ out.why = 'short series'; return out; }
+    /* Daily closes: one close per UTC day */
+    var byDay = {}, keys = [], i, k;
+    for (i = 0; i < rows.length; i++){
+      if (!isFinite(rows[i].t) || !isFinite(rows[i].c)) continue;
+      k = String(Math.floor(rows[i].t / 86400));
+      if (!byDay[k]) keys.push(k);
+      byDay[k] = rows[i].c;
+    }
+    if (keys.length < HG_GOLD_P6_Z_N){ out.why = 'need 20 daily closes'; return out; }
+    var take = keys.slice(-HG_GOLD_P6_Z_N);
+    var sum = 0, j;
+    for (j = 0; j < take.length; j++) sum += byDay[take[j]];
+    var mean = sum / take.length;
+    var vsum = 0;
+    for (j = 0; j < take.length; j++) vsum += Math.pow(byDay[take[j]] - mean, 2);
+    var std = Math.sqrt(vsum / take.length);
+    if (!(std > 0)){ out.why = 'zero variance'; return out; }
+    out.ok = true; out.mean = mean; out.std = std;
+    out.z = (byDay[take[take.length - 1]] - mean) / std;
+    out.why = 'z20 ' + out.z.toFixed(2);
+    return out;
+  }catch(e){ out.why = 'z error'; return out; }
+}
+
+function hgGoldPart6Autocorr(rows){
+  var out = { ok: false, ac1: NaN, regime: 'mixed', why: '' };
+  try{
+    rows = __rows(rows);
+    var byDay = {}, keys = [], i, k;
+    for (i = 0; i < rows.length; i++){
+      if (!isFinite(rows[i].t) || !isFinite(rows[i].c)) continue;
+      k = String(Math.floor(rows[i].t / 86400));
+      if (!byDay[k]) keys.push(k);
+      byDay[k] = rows[i].c;
+    }
+    if (keys.length < HG_GOLD_P6_AC_N + 2){ out.why = 'need 60 sessions'; return out; }
+    var take = keys.slice(-(HG_GOLD_P6_AC_N + 1));
+    var rets = [], j;
+    for (j = 1; j < take.length; j++){
+      var a = byDay[take[j - 1]], b = byDay[take[j]];
+      if (a > 0 && b > 0) rets.push(Math.log(b / a));
+    }
+    if (rets.length < 20) return out;
+    var mean = 0; for (j = 0; j < rets.length; j++) mean += rets[j]; mean /= rets.length;
+    var num = 0, den = 0;
+    for (j = 1; j < rets.length; j++){
+      num += (rets[j] - mean) * (rets[j - 1] - mean);
+      den += Math.pow(rets[j] - mean, 2);
+    }
+    if (!(den > 0)) return out;
+    out.ok = true; out.ac1 = num / den;
+    out.regime = out.ac1 > 0.05 ? 'momentum' : (out.ac1 < -0.05 ? 'meanrev' : 'mixed');
+    out.why = 'ac1 ' + out.ac1.toFixed(2) + ' · ' + out.regime;
+    return out;
+  }catch(e){ return out; }
+}
+
+function hgGoldPart6Hurst(rows){
+  var out = { ok: false, H: NaN, regime: 'random', why: '' };
+  try{
+    rows = __rows(rows);
+    var byDay = {}, keys = [], i, k;
+    for (i = 0; i < rows.length; i++){
+      if (!isFinite(rows[i].t) || !isFinite(rows[i].c)) continue;
+      k = String(Math.floor(rows[i].t / 86400));
+      if (!byDay[k]) keys.push(k);
+      byDay[k] = rows[i].c;
+    }
+    if (keys.length < 40){ out.why = 'need ≥40 sessions'; return out; }
+    var take = keys.slice(-Math.min(HG_GOLD_P6_HURST_N, keys.length));
+    var rets = [], j;
+    for (j = 1; j < take.length; j++){
+      var a = byDay[take[j - 1]], b = byDay[take[j]];
+      if (a > 0 && b > 0) rets.push(Math.log(b / a));
+    }
+    if (rets.length < 30) return out;
+    /* R/S estimate */
+    var mean = 0; for (j = 0; j < rets.length; j++) mean += rets[j]; mean /= rets.length;
+    var cum = 0, mx = -Infinity, mn = Infinity, sq = 0;
+    for (j = 0; j < rets.length; j++){
+      cum += rets[j] - mean;
+      if (cum > mx) mx = cum; if (cum < mn) mn = cum;
+      sq += Math.pow(rets[j] - mean, 2);
+    }
+    var S = Math.sqrt(sq / rets.length);
+    var R = mx - mn;
+    if (!(S > 0) || !(R > 0)) return out;
+    out.ok = true;
+    out.H = Math.log(R / S) / Math.log(rets.length);
+    if (out.H > 0.55) out.regime = 'trending';
+    else if (out.H < 0.45) out.regime = 'meanrev';
+    else out.regime = 'random';
+    out.why = 'Hurst ' + out.H.toFixed(2) + ' · ' + out.regime;
+    return out;
+  }catch(e){ return out; }
+}
+
+function hgGoldPart6Corr(goldRows, otherRows){
+  var out = { ok: false, corr: NaN, why: '' };
+  try{
+    goldRows = __rows(goldRows); otherRows = __rows(otherRows);
+    if (!goldRows || !otherRows || goldRows.length < 30 || otherRows.length < 30){
+      out.why = 'pair unread'; return out;
+    }
+    function daily(rows){
+      var m = {}, ks = [], i, k;
+      for (i = 0; i < rows.length; i++){
+        if (!isFinite(rows[i].t) || !isFinite(rows[i].c)) continue;
+        k = String(Math.floor(rows[i].t / 86400));
+        if (!m[k]) ks.push(k);
+        m[k] = rows[i].c;
+      }
+      return { m: m, ks: ks };
+    }
+    var g = daily(goldRows), o = daily(otherRows);
+    var shared = [], i;
+    for (i = 0; i < g.ks.length; i++){
+      if (o.m[g.ks[i]] != null) shared.push(g.ks[i]);
+    }
+    if (shared.length < HG_GOLD_P6_CORR_N + 1){ out.why = 'insufficient overlap'; return out; }
+    shared = shared.slice(-(HG_GOLD_P6_CORR_N + 1));
+    var rg = [], ro = [], j;
+    for (j = 1; j < shared.length; j++){
+      var g0 = g.m[shared[j - 1]], g1 = g.m[shared[j]];
+      var o0 = o.m[shared[j - 1]], o1 = o.m[shared[j]];
+      if (g0 > 0 && g1 > 0 && o0 > 0 && o1 > 0){
+        rg.push(Math.log(g1 / g0)); ro.push(Math.log(o1 / o0));
+      }
+    }
+    if (rg.length < 10) return out;
+    var mg = 0, mo = 0; for (j = 0; j < rg.length; j++){ mg += rg[j]; mo += ro[j]; }
+    mg /= rg.length; mo /= ro.length;
+    var num = 0, dg = 0, ddo = 0;
+    for (j = 0; j < rg.length; j++){
+      num += (rg[j] - mg) * (ro[j] - mo);
+      dg += Math.pow(rg[j] - mg, 2);
+      ddo += Math.pow(ro[j] - mo, 2);
+    }
+    if (!(dg > 0) || !(ddo > 0)) return out;
+    out.ok = true; out.corr = num / Math.sqrt(dg * ddo);
+    out.why = 'corr20 ' + out.corr.toFixed(2);
+    return out;
+  }catch(e){ return out; }
+}
+
+/** S30 — pullback to London-only HVN on NY trend / value day. */
+function hgGoldPart6SessionPullback(rows, comps, ker){
+  var out = {
+    ok: false, dir: null, grade: 'watch', entry: NaN, stop: NaN, t1: NaN, why: ''
+  };
+  try{
+    rows = __rows(rows);
+    if (!rows || !comps || !comps.london || !comps.london.hvns || !comps.london.hvns.length) return out;
+    if (ker && ker.regime === 'CHOP'){ out.why = 'S30 needs non-CHOP'; return out; }
+    var last = rows[rows.length - 1];
+    var atrs = _atr(rows, 14);
+    var atr = atrs[atrs.length - 1];
+    if (!(atr > 0)) return out;
+    var nowH = new Date((last.t < 1e12 ? last.t * 1000 : last.t)).getUTCHours();
+    if (nowH < 12 || nowH >= 21){ out.why = 'S30 NY session only'; return out; }
+    var hv = comps.london.hvns;
+    var i, best = NaN, bestDist = Infinity;
+    for (i = 0; i < hv.length; i++){
+      var d = Math.abs(last.c - hv[i]);
+      if (d < bestDist){ bestDist = d; best = hv[i]; }
+    }
+    if (!(bestDist <= 0.5 * atr)){ out.why = 'no London HVN within 0.5 ATR'; return out; }
+    var rejLong = last.l <= best + 0.15 * atr && last.c > last.o && last.c >= best;
+    var rejShort = last.h >= best - 0.15 * atr && last.c < last.o && last.c <= best;
+    if (!rejLong && !rejShort){
+      out.ok = true; out.grade = 'forming';
+      out.dir = (comps.nyAboveLondon ? 'long' : 'short');
+      out.entry = best; out.stop = best - (out.dir === 'long' ? 0.35 * atr : -0.35 * atr);
+      out.t1 = (comps.ny && isFinite(comps.ny.pocPrice)) ? comps.ny.pocPrice : best + (out.dir === 'long' ? 1.5 * atr : -1.5 * atr);
+      out.why = 'S30 London HVN ' + best.toFixed(2) + ' — waiting 1H rejection';
+      return out;
+    }
+    out.ok = true;
+    out.dir = rejLong ? 'long' : 'short';
+    out.grade = 'confirmed';
+    out.entry = last.c;
+    out.stop = rejLong ? best - 0.35 * atr : best + 0.35 * atr;
+    out.t1 = (comps.ny && isFinite(comps.ny.pocPrice)) ? comps.ny.pocPrice
+      : (rejLong ? best + 1.5 * atr : best - 1.5 * atr);
+    out.why = 'S30 session-composite pullback ' + out.dir.toUpperCase()
+      + ' @ London HVN ' + best.toFixed(2);
+    return out;
+  }catch(e){ return out; }
+}
+
+/** S33 — |z20|≥2 fade at HVN when KER CHOP / ac≤0. */
+function hgGoldPart6ZFade(rows, zsc, ker, ac, comps){
+  var out = {
+    ok: false, dir: null, grade: 'watch', entry: NaN, stop: NaN, t1: NaN, why: ''
+  };
+  try{
+    rows = __rows(rows);
+    if (!rows || !zsc || !zsc.ok || !(Math.abs(zsc.z) >= HG_GOLD_P6_Z_GATE)) return out;
+    if (ker && ker.regime === 'TREND'){ out.why = 'S33 disabled when KER TREND'; return out; }
+    if (ac && ac.ok && ac.ac1 > 0){ out.why = 'S33 needs ac1 ≤ 0'; return out; }
+    var last = rows[rows.length - 1];
+    var atrs = _atr(rows, 14);
+    var atr = atrs[atrs.length - 1];
+    if (!(atr > 0)) return out;
+    var vprof = goldVolumeProfile(rows, 100, 50);
+    var tol = Math.max(atr * 0.35, (vprof && vprof.binSize) || 1);
+    function atNode(px){
+      if (!vprof) return false;
+      if (isFinite(vprof.pocPrice) && Math.abs(px - vprof.pocPrice) <= tol) return true;
+      var hv = vprof.hvns || [], i;
+      for (i = 0; i < hv.length; i++) if (Math.abs(px - hv[i]) <= tol) return true;
+      return false;
+    }
+    if (!atNode(last.c)){ out.why = 'z extreme but not at HVN/nPOC'; return out; }
+    var nowH = new Date((last.t < 1e12 ? last.t * 1000 : last.t)).getUTCHours();
+    if (nowH < 7 || nowH >= 21){ out.why = 'S33 London/NY only'; return out; }
+    var dir = zsc.z > 0 ? 'short' : 'long';
+    var rej = (dir === 'short') ? (last.c < last.o) : (last.c > last.o);
+    out.ok = true; out.dir = dir;
+    out.grade = rej ? 'confirmed' : 'forming';
+    out.entry = last.c;
+    out.stop = dir === 'short' ? last.h + 0.25 * atr : last.l - 0.25 * atr;
+    var tCand = isFinite(zsc.mean) ? zsc.mean : NaN;
+    if (comps && comps.ny && isFinite(comps.ny.pocPrice)){
+      if (!isFinite(tCand) || Math.abs(comps.ny.pocPrice - last.c) < Math.abs(tCand - last.c))
+        tCand = comps.ny.pocPrice;
+    }
+    out.t1 = tCand;
+    out.why = 'S33 z-fade ' + dir.toUpperCase() + ' · z=' + zsc.z.toFixed(2);
+    return out;
+  }catch(e){ return out; }
+}
+
+/** S36 — gold sweep with DXY failing the mirror sweep (SMT). */
+function hgGoldPart6SmtSweep(rows, dxyRows){
+  var out = {
+    ok: false, dir: null, grade: 'watch', entry: NaN, stop: NaN, t1: NaN, why: ''
+  };
+  try{
+    rows = __rows(rows); dxyRows = __rows(dxyRows);
+    if (!rows || rows.length < 40) return out;
+    if (!dxyRows || dxyRows.length < 20){ out.why = 'DXY unread — S36 unchecked'; return out; }
+    var atrs = _atr(rows, 14);
+    var atr = atrs[atrs.length - 1];
+    if (!(atr > 0)) return out;
+    /* Asia box on gold */
+    var asia = typeof goldAsianRange === 'function' ? goldAsianRange(rows) : null;
+    if (!asia || !(asia.hi > asia.lo)){ out.why = 'Asia range unread'; return out; }
+    var last = rows[rows.length - 1];
+    var prev = rows[rows.length - 2];
+    var sweptLo = (last.l < asia.lo && last.c > asia.lo) || (prev && prev.l < asia.lo && last.c > asia.lo);
+    var sweptHi = (last.h > asia.hi && last.c < asia.hi) || (prev && prev.h > asia.hi && last.c < asia.hi);
+    if (!sweptLo && !sweptHi){ out.why = 'no Asia sweep reclaim'; return out; }
+    /* Align DXY last bars by time */
+    var dLast = dxyRows[dxyRows.length - 1];
+    var dPrev = dxyRows[dxyRows.length - 2];
+    var dAsiaHi = -Infinity, dAsiaLo = Infinity, i;
+    var day0 = Math.floor(last.t / 86400);
+    for (i = Math.max(0, dxyRows.length - 48); i < dxyRows.length; i++){
+      if (Math.floor(dxyRows[i].t / 86400) !== day0) continue;
+      var hh = ((dxyRows[i].t % 86400) + 86400) % 86400 / 3600;
+      if (hh >= 0 && hh < 7){
+        if (dxyRows[i].h > dAsiaHi) dAsiaHi = dxyRows[i].h;
+        if (dxyRows[i].l < dAsiaLo) dAsiaLo = dxyRows[i].l;
+      }
+    }
+    if (!(dAsiaHi > dAsiaLo)){ out.why = 'DXY Asia box unread'; return out; }
+    var dxyFailedHigh = !(dLast.h > dAsiaHi + 0.05 || (dPrev && dPrev.h > dAsiaHi + 0.05));
+    var dxyFailedLow = !(dLast.l < dAsiaLo - 0.05 || (dPrev && dPrev.l < dAsiaLo - 0.05));
+    if (sweptLo && dxyFailedHigh){
+      out.ok = true; out.dir = 'long'; out.grade = 'confirmed';
+      out.entry = last.c; out.stop = Math.min(last.l, asia.lo) - 0.2 * atr;
+      out.t1 = asia.hi; out.why = 'S36 SMT LONG — gold Asia-low sweep, DXY failed Asia high';
+      return out;
+    }
+    if (sweptHi && dxyFailedLow){
+      out.ok = true; out.dir = 'short'; out.grade = 'confirmed';
+      out.entry = last.c; out.stop = Math.max(last.h, asia.hi) + 0.2 * atr;
+      out.t1 = asia.lo; out.why = 'S36 SMT SHORT — gold Asia-high sweep, DXY failed Asia low';
+      return out;
+    }
+    out.why = 'sweep without SMT confirm';
+    return out;
+  }catch(e){ return out; }
+}
+
+/** S37 — failed-sweep continuation (second chance after stop-style close). */
+function hgGoldPart6FailedSweep(rows){
+  var out = {
+    ok: false, dir: null, grade: 'watch', entry: NaN, stop: NaN, t1: NaN, why: ''
+  };
+  try{
+    rows = __rows(rows);
+    if (!rows || rows.length < 50) return out;
+    var atrs = _atr(rows, 14);
+    var atr = atrs[atrs.length - 1];
+    if (!(atr > 0)) return out;
+    var vprof = goldVolumeProfile(rows, 100, 50);
+    var asia = typeof goldAsianRange === 'function' ? goldAsianRange(rows) : null;
+    if (!asia || !(asia.hi > asia.lo)) return out;
+    /* Find recent reclaim then failure within last 8 bars */
+    var i, springI = -1, springDir = null, wick = NaN, reclaim = NaN;
+    for (i = rows.length - 8; i < rows.length - 1; i++){
+      if (i < 1) continue;
+      var b = rows[i];
+      if (b.l < asia.lo && b.c > asia.lo){
+        springI = i; springDir = 'long'; wick = b.l; reclaim = b.c;
+      } else if (b.h > asia.hi && b.c < asia.hi){
+        springI = i; springDir = 'short'; wick = b.h; reclaim = b.c;
+      }
+    }
+    if (springI < 0 || !springDir){ out.why = 'no recent reclaim to fail'; return out; }
+    var last = rows[rows.length - 1];
+    var failed = false;
+    if (springDir === 'long' && last.c < wick) failed = true;
+    if (springDir === 'short' && last.c > wick) failed = true;
+    if (!failed){
+      out.ok = true; out.dir = springDir === 'long' ? 'short' : 'long';
+      out.grade = 'forming'; out.entry = reclaim; out.stop = reclaim;
+      out.why = 'S37 watching failed-sweep after reclaim @ ' + reclaim.toFixed(2);
+      return out;
+    }
+    var contDir = springDir === 'long' ? 'short' : 'long';
+    var t1 = NaN;
+    if (vprof && vprof.hvns && vprof.hvns.length){
+      var best = NaN, bestD = Infinity, hi;
+      for (hi = 0; hi < vprof.hvns.length; hi++){
+        var px = vprof.hvns[hi];
+        if (contDir === 'short' && px < wick){
+          var d = wick - px; if (d < bestD && d > 0.5 * atr){ bestD = d; best = px; }
+        }
+        if (contDir === 'long' && px > wick){
+          var d2 = px - wick; if (d2 < bestD && d2 > 0.5 * atr){ bestD = d2; best = px; }
+        }
+      }
+      t1 = best;
+    }
+    if (!isFinite(t1)) t1 = contDir === 'short' ? wick - 2 * atr : wick + 2 * atr;
+    var R = Math.abs(last.c - reclaim);
+    if (!(R > 0) || Math.abs(t1 - last.c) / R < 2.0){
+      out.why = 'S37 RR < 2.0 to next HVN'; return out;
+    }
+    out.ok = true; out.dir = contDir; out.grade = 'confirmed';
+    out.entry = last.c; out.stop = reclaim + (contDir === 'short' ? 0.2 * atr : -0.2 * atr);
+    out.t1 = t1;
+    out.why = 'S37 failed-sweep continuation ' + contDir.toUpperCase()
+      + ' after stop through ' + wick.toFixed(2);
+    return out;
+  }catch(e){ return out; }
+}
+
+function hgGoldPart6EventTemplate(opts){
+  var out = {
+    ok: false, kind: 'none', dayRule: '', disabled: {}, halfSize: false, why: ''
+  };
+  try{
+    opts = opts || {};
+    var ev = opts.events || opts.eventWeek || null;
+    if (!ev || typeof ev !== 'object'){
+      out.why = 'S35 no event-week calendar — permissions open';
+      return out;
+    }
+    out.ok = true;
+    out.kind = String(ev.kind || ev.type || 'custom').toUpperCase();
+    var day = String(ev.day || ev.weekday || '').toUpperCase();
+    out.dayRule = day;
+    if (out.kind === 'NFP'){
+      if (day === 'THU'){ out.halfSize = true; out.disabled = { p6ladder: 1 }; out.why = 'NFP Thu — half size, no S7 runners'; }
+      else if (day === 'FRI'){ out.disabled = { cont: 1 }; out.why = 'NFP Fri — post-lockout S27 only'; }
+      else out.why = 'NFP week · ' + day;
+    } else if (out.kind === 'FOMC'){
+      if (day === 'MON' || day === 'TUE'){ out.disabled = { breakout: 1 }; out.why = 'FOMC pre — rotational only'; }
+      else if (day === 'WED'){ out.disabled = { allNew: 1 }; out.why = 'FOMC Wed lockout window'; }
+      else if (day === 'THU'){ out.why = 'FOMC Thu — trend-day join preferred'; }
+      else out.why = 'FOMC week · ' + day;
+    } else if (out.kind === 'CPI'){
+      out.why = 'CPI day — T1 only pre-release; S27 post';
+    } else {
+      out.why = 'S35 ' + out.kind + ' · ' + day;
+    }
+    return out;
+  }catch(e){ return out; }
+}
+
+function hgGoldPart6ApplyEventFilter(cand, tpl){
+  try{
+    if (!cand || !tpl || !tpl.ok) return cand;
+    if (!Array.isArray(cand.stamps)) cand.stamps = [];
+    if (tpl.halfSize){
+      cand.halfSize = true;
+      if (cand.stamps.indexOf('S35 HALF') < 0) cand.stamps.push('S35 HALF');
+    }
+    if (tpl.disabled && tpl.disabled.allNew){
+      cand.demoted = true;
+      if (cand.stamps.indexOf('S35 LOCKOUT') < 0) cand.stamps.push('S35 LOCKOUT');
+    }
+    if (tpl.why && cand.stamps.indexOf('S35') < 0) cand.stamps.push('S35 ' + tpl.kind);
+    return cand;
+  }catch(e){ return cand; }
+}
+
+function hgGoldPart6ApplyCorrFilter(cand, corr){
+  try{
+    if (!cand || !corr || !corr.ok) return cand;
+    if (!Array.isArray(cand.stamps)) cand.stamps = [];
+    if (corr.corr > 0.6){
+      if (cand.stamps.indexOf('S32 ONE-BET') < 0) cand.stamps.push('S32 ONE-BET');
+      cand.notes = cand.notes || [];
+      cand.notes.push('gold–BTC corr>0.6 — combined risk ≤1.5%');
+    } else if (corr.corr < -0.2){
+      if (cand.stamps.indexOf('S32 DIVERSIFY') < 0) cand.stamps.push('S32 DIVERSIFY');
+    }
+    return cand;
+  }catch(e){ return cand; }
+}
+
+function hgGoldPart6Engine(rows, opts){
+  var out = {
+    ok: false, time: null, comps: null, z: null, ac: null, hurst: null, corr: null,
+    pull: null, zfade: null, smt: null, fail: null, eventTpl: null,
+    strategies: [],
+    unchecked: ['S31 options skew', 'S34 DOM walls', 'retail L/S'],
+    why: ''
+  };
+  try{
+    opts = opts || {};
+    rows = __rows(rows);
+    if (!rows || rows.length < 40){ out.why = 'need ≥40 bars'; return out; }
+    if (opts.newsGate && opts.newsGate.lock){
+      out.why = 'news lockout — Part6 entries paused';
+      return out;
+    }
+    if (!opts.skew) out.unchecked.push('25Δ RR');
+    if (!opts.dom){ /* already listed */ }
+    else {
+      var ix = out.unchecked.indexOf('S34 DOM walls');
+      if (ix >= 0) out.unchecked.splice(ix, 1);
+    }
+
+    out.time = hgGoldPart6TimeStats(rows);
+    out.comps = hgGoldPart6SessionComposites(rows);
+    out.z = hgGoldPart6ZScore(rows);
+    out.ac = hgGoldPart6Autocorr(rows);
+    out.hurst = hgGoldPart6Hurst(rows);
+    out.corr = opts.btcRows ? hgGoldPart6Corr(rows, opts.btcRows) : { ok: false, why: 'BTC unread' };
+    if (!out.corr.ok) out.unchecked.push('gold–BTC corr');
+
+    var ker = typeof hgGoldPart5KerRegime === 'function' ? hgGoldPart5KerRegime(rows) : null;
+    out.pull = hgGoldPart6SessionPullback(rows, out.comps, ker);
+    out.zfade = hgGoldPart6ZFade(rows, out.z, ker, out.ac, out.comps);
+    out.smt = hgGoldPart6SmtSweep(rows, opts.dxyRows || opts.dxyCandles);
+    if (out.smt && /unread|unchecked/i.test(out.smt.why || '')) out.unchecked.push('S36 DXY');
+    out.fail = hgGoldPart6FailedSweep(rows);
+    out.eventTpl = hgGoldPart6EventTemplate(opts);
+
+    function pushS(key, dir, level, grade, why, plan){
+      out.strategies.push({
+        key: key, dir: dir, level: level, grade: grade || 'watch', why: why, plan: plan || null
+      });
+    }
+
+    if (out.time && out.time.ok){
+      var holdWhy = 'S29 ';
+      if (out.time.nyHighShare >= HG_GOLD_P6_NY_HI_SHARE && out.time.londonLowDone)
+        holdWhy += 'extend London long hold to 16:00 UTC (NY high cluster)';
+      else if (out.time.nyHighShare < HG_GOLD_P6_NY_HI_SHARE)
+        holdWhy += 'NY high cluster <30% in YOUR data — S29 inactive';
+      else holdWhy += out.time.why;
+      pushS('p6hold', null, NaN, 'frame', holdWhy);
+    }
+    if (out.pull && out.pull.ok && out.pull.dir){
+      pushS('p6comp', out.pull.dir, out.pull.entry, out.pull.grade, out.pull.why, {
+        stop: out.pull.stop, t1: out.pull.t1
+      });
+    }
+    if (out.zfade && out.zfade.ok && out.zfade.dir){
+      pushS('p6zfade', out.zfade.dir, out.zfade.entry, out.zfade.grade, out.zfade.why, {
+        stop: out.zfade.stop, t1: out.zfade.t1
+      });
+    }
+    if (out.smt && out.smt.ok && out.smt.dir && out.smt.grade !== 'watch'){
+      pushS('p6smt', out.smt.dir, out.smt.entry, out.smt.grade, out.smt.why, {
+        stop: out.smt.stop, t1: out.smt.t1
+      });
+    }
+    if (out.fail && out.fail.ok && out.fail.dir && out.fail.grade !== 'watch'){
+      pushS('p6fail', out.fail.dir, out.fail.entry, out.fail.grade, out.fail.why, {
+        stop: out.fail.stop, t1: out.fail.t1
+      });
+    }
+    if (out.corr && (out.corr.ok || out.corr.why))
+      pushS('p6corr', null, NaN, 'frame', out.corr.ok ? ('S32 ' + out.corr.why) : ('S32 ' + out.corr.why));
+    if (out.eventTpl && out.eventTpl.why)
+      pushS('p6event', null, NaN, 'frame', out.eventTpl.why);
+    if (out.hurst && out.hurst.ok)
+      pushS('p6ladder', null, NaN, 'frame',
+        'S38 ' + out.hurst.why + (out.hurst.regime === 'random' ? ' — cap runners at T2' : ''));
+
+    if (opts.skew && typeof opts.skew === 'object'){
+      var rr = +opts.skew.rr25;
+      if (isFinite(rr)){
+        pushS('p6skew', null, NaN, 'frame',
+          'S31 RR25 ' + rr.toFixed(2) + (opts.skew.flipped ? ' · flipped' : '') + ' — permission overlay only');
+      }
+    }
+
+    out.ok = out.strategies.some(function(x){
+      return x && (x.grade === 'forming' || x.grade === 'confirmed' || x.grade === 'frame');
+    });
+    out.why = out.ok
+      ? (out.strategies.length + ' Part6 hit(s) · unchecked: ' + out.unchecked.join(', '))
+      : ('no Part6 trigger · unchecked: ' + out.unchecked.join(', '));
+    return out;
+  }catch(e){ out.why = 'Part6 engine error'; return out; }
+}
+
+function hgGoldPart6Html(p6){
+  try{
+    if (!p6 || !(p6.ok || (p6.time && p6.time.ok) || (p6.z && p6.z.ok))) return '';
+    var h = '<div class="note" data-hg-gold-part6="1" style="margin-top:8px">';
+    h += '<b>PART6 S29–S38</b>';
+    if (p6.z && p6.z.ok) h += ' · z ' + p6.z.z.toFixed(2);
+    if (p6.hurst && p6.hurst.ok) h += ' · H ' + p6.hurst.H.toFixed(2);
+    if (p6.time && p6.time.ok && isFinite(p6.time.nyHighShare))
+      h += ' · NY-hi ' + (p6.time.nyHighShare * 100).toFixed(0) + '%';
+    if (p6.unchecked && p6.unchecked.length)
+      h += '<div class="dim" style="margin-top:2px">unchecked: ' + p6.unchecked.join(', ') + '</div>';
+    var i, s, n = Math.min(6, (p6.strategies || []).length);
+    for (i = 0; i < n; i++){
+      s = p6.strategies[i];
+      h += '<div style="margin-top:4px"><b>' + String(s.key).toUpperCase() + '</b>'
+        + (s.dir ? (' ' + String(s.dir).toUpperCase()) : '')
+        + (s.grade ? (' · ' + s.grade) : '')
+        + (isFinite(s.level) ? (' @ ' + (+s.level).toFixed(2)) : '')
+        + ' — ' + String(s.why || '').replace(/[<>&]/g, '') + '</div>';
+    }
+    if (p6.why) h += '<div class="dim" style="margin-top:4px">' + String(p6.why).replace(/[<>&]/g, '') + '</div>';
+    h += '</div>';
+    return h;
+  }catch(e){ return ''; }
+}
+
+/* =========================================================================
    NY VOLUME EXHAUSTION (hg-v556) — two-volume test for New York gold sweeps.
    Raid RVOL≥1.5 + reclaim, then takeover RVOL≥1.2 + MSS + VWAP. Same-session
    RVOL baseline (not just last-20). CVD labeled PROXY when not COMEX.
@@ -10570,6 +11289,15 @@ function hgGoldFormingStack(inp){
       now: inp.now || Date.now(),
       physical: inp.physical || null
     });
+    out.part6 = hgGoldPart6Engine(rows, {
+      newsGate: inp.newsGate || (inp.news ? hgGoldNewsGate(inp.news, inp.now || Date.now()) : null),
+      now: inp.now || Date.now(),
+      dxyRows: inp.dxyRows || inp.dxyCandles || null,
+      btcRows: inp.btcRows || null,
+      events: inp.events || null,
+      skew: inp.skew || null,
+      dom: inp.dom || null
+    });
     out.smcLiq = hgGoldSmcLiquidity(rows, {});
     out.smcLiq._n = rows.length;
     out.smcHit = hgGoldSmcLiquidityHit(rows, {
@@ -10967,6 +11695,9 @@ function hgGoldFormingStackHtml(stack){
     if (stack.part5){
       h += hgGoldPart5Html(stack.part5);
     }
+    if (stack.part6){
+      h += hgGoldPart6Html(stack.part6);
+    }
     if (stack.smcLiq){
       h += hgGoldSmcLiquidityHtml(stack.smcLiq);
     }
@@ -11196,6 +11927,22 @@ W.hgGoldPart5ApplyRegimeFilter = hgGoldPart5ApplyRegimeFilter;
 W.hgGoldPart5ApplyWeeklyBiasFilter = hgGoldPart5ApplyWeeklyBiasFilter;
 W.hgGoldPart5Engine = hgGoldPart5Engine;
 W.hgGoldPart5Html = hgGoldPart5Html;
+W.HG_GOLD_P6_Z_GATE = HG_GOLD_P6_Z_GATE;
+W.hgGoldPart6TimeStats = hgGoldPart6TimeStats;
+W.hgGoldPart6SessionComposites = hgGoldPart6SessionComposites;
+W.hgGoldPart6ZScore = hgGoldPart6ZScore;
+W.hgGoldPart6Autocorr = hgGoldPart6Autocorr;
+W.hgGoldPart6Hurst = hgGoldPart6Hurst;
+W.hgGoldPart6Corr = hgGoldPart6Corr;
+W.hgGoldPart6SessionPullback = hgGoldPart6SessionPullback;
+W.hgGoldPart6ZFade = hgGoldPart6ZFade;
+W.hgGoldPart6SmtSweep = hgGoldPart6SmtSweep;
+W.hgGoldPart6FailedSweep = hgGoldPart6FailedSweep;
+W.hgGoldPart6EventTemplate = hgGoldPart6EventTemplate;
+W.hgGoldPart6ApplyEventFilter = hgGoldPart6ApplyEventFilter;
+W.hgGoldPart6ApplyCorrFilter = hgGoldPart6ApplyCorrFilter;
+W.hgGoldPart6Engine = hgGoldPart6Engine;
+W.hgGoldPart6Html = hgGoldPart6Html;
 W.hgGoldVpTargets = hgGoldVpTargets;
 W.hgGoldVpTargetsHtml = hgGoldVpTargetsHtml;
 W.hgGoldVpBundle = hgGoldVpBundle;

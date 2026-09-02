@@ -1245,7 +1245,11 @@ var SW_NAME = {
   p5turt:   'S20 TURTLE-SOUP FAILED EXTREME',
   p5vwap:   'S22 SESSION VWAP 2σ REVERSION',
   p5drive:  'S24 THREE-DRIVE EXHAUSTION',
-  p5news:   'S27 POST-NEWS SPIKE FADE'
+  p5news:   'S27 POST-NEWS SPIKE FADE',
+  p6comp:   'S30 SESSION-COMPOSITE PULLBACK',
+  p6zfade:  'S33 Z-SCORE MEAN REVERSION',
+  p6smt:    'S36 SMT-CONFIRMED SWEEP (vs DXY)',
+  p6fail:   'S37 FAILED-SWEEP CONTINUATION'
 };
 var SW_NEWS_STAMP = 'NEWS WINDOW — expect a fade around the release; swing levels unchanged (size accordingly)';
 
@@ -1990,6 +1994,70 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
         }
       }catch(eP5c){}
     }
+
+    /* 12) Part6 S30 / S33 / S36 / S37 — confirmed-only mint */
+    var p6FnCand = gfn('hgGoldPart6Engine');
+    var p6EvFilt = gfn('hgGoldPart6ApplyEventFilter');
+    var p6CorrFilt = gfn('hgGoldPart6ApplyCorrFilter');
+    if (p6FnCand){
+      try{
+        var p6EngCand = p6FnCand(rows4, {
+          newsGate: (microOpts && microOpts.news)
+            ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(microOpts.news, nowMs) : null)
+            : null,
+          now: nowMs,
+          dxyRows: microOpts && (microOpts.dxyRows || microOpts.dxyCandles),
+          btcRows: microOpts && microOpts.btcRows,
+          events: microOpts && microOpts.events
+        });
+        if (p6EngCand && p6EngCand.strategies && p6EngCand.strategies.length){
+          var p6Live = { p6comp: 1, p6zfade: 1, p6smt: 1, p6fail: 1 };
+          var p6j, p6hit, p6Stop, p6Cand, p6Entry;
+          for (p6j = 0; p6j < p6EngCand.strategies.length; p6j++){
+            p6hit = p6EngCand.strategies[p6j];
+            if (!p6hit || !p6hit.dir || !p6Live[p6hit.key]) continue;
+            if (p6hit.grade !== 'confirmed') continue;
+            if (!isFinite(p6hit.level) && !(p6hit.plan && isFinite(p6hit.plan.entry))) continue;
+            p6Entry = isFinite(p6hit.level) ? p6hit.level
+              : (p6hit.plan && p6hit.plan.entry);
+            p6Stop = (p6hit.plan && isFinite(p6hit.plan.stop)) ? p6hit.plan.stop
+              : (p6hit.dir === 'long' ? p6Entry - 1.5 * a4 : p6Entry + 1.5 * a4);
+            p6Cand = mkCand(p6hit.key, p6hit.dir, p6Stop, p6Stop, undefined,
+              p6hit.why, 'Part6 invalidation — structure break against the setup',
+              { side: p6hit.dir, tag: p6hit.key, label: p6hit.why });
+            if (!p6Cand || p6Cand.dropped){
+              p6Cand = {
+                id: p6hit.key + '|' + p6hit.dir + '|' + Math.round(p6Entry),
+                strategy: SW_NAME[p6hit.key] || p6hit.key,
+                stratKey: p6hit.key, dir: p6hit.dir,
+                entry: p6Entry, pxNow: entry, mark: entry, stop: p6Stop,
+                t1: (p6hit.plan && isFinite(p6hit.plan.t1)) ? p6hit.plan.t1 : NaN,
+                t2: (p6hit.plan && isFinite(p6hit.plan.t2)) ? p6hit.plan.t2 : NaN,
+                rr: NaN, grade: 'B', agree: 2, oppose: 0, atr: a4,
+                reads: { long: p6hit.dir === 'long' ? 2 : 0, short: p6hit.dir === 'short' ? 2 : 0 },
+                venue: venue, sym: sym, session: sessionTxt || 'n/a',
+                why: p6hit.why,
+                invalidates: 'close beyond ' + p6Stop.toFixed(2),
+                stamps: ['PART6 ' + String(p6hit.key).toUpperCase()],
+                demoted: false, notes: []
+              };
+            } else {
+              if (isFinite(p6Entry)) p6Cand.entry = p6Entry;
+              if (p6hit.plan){
+                if (isFinite(p6hit.plan.t1)) p6Cand.t1 = p6hit.plan.t1;
+                if (isFinite(p6hit.plan.t2)) p6Cand.t2 = p6hit.plan.t2;
+                if (isFinite(p6hit.plan.stop)) p6Cand.stop = p6hit.plan.stop;
+              }
+              if (!Array.isArray(p6Cand.stamps)) p6Cand.stamps = [];
+              p6Cand.stamps.push('PART6 ' + String(p6hit.key).toUpperCase());
+            }
+            if (p6EvFilt && p6EngCand.eventTpl) p6EvFilt(p6Cand, p6EngCand.eventTpl);
+            if (p6CorrFilt && p6EngCand.corr) p6CorrFilt(p6Cand, p6EngCand.corr);
+            push(p6Cand);
+          }
+        }
+      }catch(eP6c){}
+    }
   }catch(e){}
   return out;
 }
@@ -2600,6 +2668,24 @@ async function runScan(ui, scanSt){
               if (p5Reg && p5Eng.ker) p5Reg(got[p5si], p5Eng.ker);
               if (p5Bias && p5Eng.bias) p5Bias(got[p5si], p5Eng.bias);
               if (p5Eng.ok && got[p5si].stamps.indexOf('PART5') < 0) got[p5si].stamps.push('PART5');
+            }
+          }
+        }
+        var p6Fn = gfn('hgGoldPart6Engine');
+        var p6Ev = gfn('hgGoldPart6ApplyEventFilter');
+        var p6Corr = gfn('hgGoldPart6ApplyCorrFilter');
+        if (p6Fn && got.length){
+          var p6Eng = p6Fn(gold.rows4h, {
+            newsGate: newsRaw ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(newsRaw, now) : null) : null,
+            now: now
+          });
+          if (p6Eng){
+            for (var p6si = 0; p6si < got.length; p6si++){
+              if (!got[p6si]) continue;
+              if (!Array.isArray(got[p6si].stamps)) got[p6si].stamps = [];
+              if (p6Ev && p6Eng.eventTpl) p6Ev(got[p6si], p6Eng.eventTpl);
+              if (p6Corr && p6Eng.corr) p6Corr(got[p6si], p6Eng.corr);
+              if (p6Eng.ok && got[p6si].stamps.indexOf('PART6') < 0) got[p6si].stamps.push('PART6');
             }
           }
         }

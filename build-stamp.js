@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v569',
-  pack: 'Part5 S19–S28 physical/regime',
-  built: '2026-09-02T18:00:00Z',
-  note: 'Part5 S19–S28: Wyckoff/turtle/VWAP fade/three-drive/news spike live on OMNIGOLD + GOLD SCALP/SWING; S23 KER + S28 weekly bias as filters; S21/S26 + physical feeds unchecked without data. Sacred contracts unchanged.'
+  version: 'hg-v570',
+  pack: 'Part6 S29–S38 time/composites',
+  built: '2026-09-02T20:00:00Z',
+  note: 'Part6 S29–S38: session-composite pullback / z-fade / SMT / failed-sweep live on OMNIGOLD + GOLD SCALP/SWING; time-stats + Hurst/ac frames; S31 skew + S34 DOM unchecked. Sacred contracts unchanged.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

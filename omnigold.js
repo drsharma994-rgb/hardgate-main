@@ -321,7 +321,9 @@ terse status, and never launches a first-time scan on a global refresh.
                       /* Part4 S9–S18 live directional forming hits (S13/S16 unchecked) */
                       'P4-NR7','P4-ADRX','P4-LAF',
                       /* Part5 S19–S28 live directional (S21/S26 + physical feeds unchecked) */
-                      'P5-WYCK','P5-TURT','P5-VWAP','P5-DRIVE','P5-NEWS'];
+                      'P5-WYCK','P5-TURT','P5-VWAP','P5-DRIVE','P5-NEWS',
+                      /* Part6 S29–S38 live directional (S31/S34 unchecked without skew/DOM) */
+                      'P6-COMP','P6-ZFADE','P6-SMT','P6-FAIL'];
 
   var __og = { ui: null, busy: false, ran: false, snap: null, lastStat: '', src: null, shared: null, btBusy: false,
                lastCardsHtml: null, lastPoolHtml: null, lastMpHtml: null,
@@ -764,6 +766,10 @@ terse status, and never launches a first-time scan on a global refresh.
     d = hgOgPart5ByKind(rows, 'P5-VWAP', opts); if (d) out.push(d);
     d = hgOgPart5ByKind(rows, 'P5-DRIVE', opts); if (d) out.push(d);
     d = hgOgPart5ByKind(rows, 'P5-NEWS', opts); if (d) out.push(d);
+    d = hgOgPart6ByKind(rows, 'P6-COMP', opts); if (d) out.push(d);
+    d = hgOgPart6ByKind(rows, 'P6-ZFADE', opts); if (d) out.push(d);
+    d = hgOgPart6ByKind(rows, 'P6-SMT', opts); if (d) out.push(d);
+    d = hgOgPart6ByKind(rows, 'P6-FAIL', opts); if (d) out.push(d);
     return out;
   }
 
@@ -1905,6 +1911,62 @@ terse status, and never launches a first-time scan on a global refresh.
     return null;
   }
 
+  /* Part6 S29–S38 — session composite / z-fade / SMT / failed-sweep.
+     S31 skew + S34 DOM unchecked without feeds. S29/S32/S35/S38 are frames. */
+  var OG_P6_KIND = {
+    p6comp: 'P6-COMP',
+    p6zfade: 'P6-ZFADE',
+    p6smt: 'P6-SMT',
+    p6fail: 'P6-FAIL'
+  };
+  function hgOgPart6Hits(rows, opts){
+    var f = gfn('hgGoldPart6Engine');
+    if (!f || !rows || rows.length < 40) return null;
+    opts = opts || {};
+    var eng = null;
+    try {
+      eng = f(rows, {
+        newsGate: opts.newsGate || null,
+        now: opts.nowSec ? opts.nowSec * 1000 : opts.now,
+        dxyRows: opts.dxyRows || opts.dxyCandles || null,
+        btcRows: opts.btcRows || null,
+        events: opts.events || null,
+        skew: opts.skew || null,
+        dom: opts.dom || null
+      });
+    } catch (e) { return null; }
+    if (!eng || !eng.strategies || !eng.strategies.length) return null;
+    var out = [], i, s, kind, lv, stop, t1, t2;
+    for (i = 0; i < eng.strategies.length; i++){
+      s = eng.strategies[i];
+      if (!s || !s.dir || (s.grade !== 'forming' && s.grade !== 'confirmed')) continue;
+      kind = OG_P6_KIND[s.key];
+      if (!kind) continue;
+      lv = fin(s.level);
+      if (!isFinite(lv) && s.plan) lv = fin(s.plan.entry);
+      if (!isFinite(lv)) continue;
+      stop = (s.plan && isFinite(s.plan.stop)) ? s.plan.stop : NaN;
+      t1 = (s.plan && isFinite(s.plan.t1)) ? s.plan.t1 : NaN;
+      t2 = (s.plan && isFinite(s.plan.t2)) ? s.plan.t2 : NaN;
+      out.push({
+        kind: kind, dir: s.dir, level: lv,
+        stop: stop, t1: t1, t2: t2,
+        part6: s, part6Engine: eng,
+        why: String(s.why || kind)
+      });
+    }
+    return out.length ? out : null;
+  }
+  function hgOgPart6ByKind(rows, wantKind, opts){
+    var hits = hgOgPart6Hits(rows, opts);
+    if (!hits) return null;
+    var i;
+    for (i = 0; i < hits.length; i++){
+      if (hits[i] && hits[i].kind === wantKind) return hits[i];
+    }
+    return null;
+  }
+
   /* ==================== consensus across mechanics ====================
 
      THE DEFECT THIS EXISTS FOR: on 42% of tapes the desk graded a LONG
@@ -1992,6 +2054,10 @@ terse status, and never launches a first-time scan on a global refresh.
     'P5-VWAP':'FLOW',
     'P5-DRIVE':'STRUCTURE',
     'P5-NEWS':'SWEEP',
+    'P6-COMP':'FLOW',
+    'P6-ZFADE':'REVERSION',
+    'P6-SMT':'SWEEP',
+    'P6-FAIL':'SWEEP',
     /* An unmitigated order block is an unfilled inefficiency being revisited,
        which is FVG-FILL's idea with a different name for the zone. */
     'OB-RETEST':'IMBALANCE',
@@ -2338,6 +2404,10 @@ terse status, and never launches a first-time scan on a global refresh.
     if (k === 'P5-VWAP') return 'p5vwap';
     if (k === 'P5-DRIVE') return 'p5drive';
     if (k === 'P5-NEWS') return 'p5news';
+    if (k === 'P6-COMP') return 'p6comp';
+    if (k === 'P6-ZFADE') return 'p6zfade';
+    if (k === 'P6-SMT') return 'p6smt';
+    if (k === 'P6-FAIL') return 'p6fail';
     if (k === 'KZ-JUDAS' || k === 'SWEEP-V2' || k === 'POOL-SWEEP'
         || k.indexOf('SWEEP') >= 0)
       return 'sweep';
@@ -8288,7 +8358,11 @@ terse status, and never launches a first-time scan on a global refresh.
           'P5-TURT':         function(r){ return hgOgPart5ByKind(r, 'P5-TURT'); },
           'P5-VWAP':         function(r){ return hgOgPart5ByKind(r, 'P5-VWAP'); },
           'P5-DRIVE':        function(r){ return hgOgPart5ByKind(r, 'P5-DRIVE'); },
-          'P5-NEWS':         function(r){ return hgOgPart5ByKind(r, 'P5-NEWS'); }
+          'P5-NEWS':         function(r){ return hgOgPart5ByKind(r, 'P5-NEWS'); },
+          'P6-COMP':         function(r){ return hgOgPart6ByKind(r, 'P6-COMP'); },
+          'P6-ZFADE':        function(r){ return hgOgPart6ByKind(r, 'P6-ZFADE'); },
+          'P6-SMT':          function(r){ return hgOgPart6ByKind(r, 'P6-SMT'); },
+          'P6-FAIL':         function(r){ return hgOgPart6ByKind(r, 'P6-FAIL'); }
         };
         var k;
         for (k in fns) if (Object.prototype.hasOwnProperty.call(fns, k)){
