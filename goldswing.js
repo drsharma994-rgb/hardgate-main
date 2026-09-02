@@ -1233,7 +1233,10 @@ var SW_NAME = {
   fvg:      '4H FVG FILL',
   bos:      '4H BOS / CHOCH ALIGNMENT',
   ribbon:   '4H EMA RIBBON PULLBACK',
-  vpbook:   'VP PLAYBOOK AMD (ENTER/WAIT)'
+  vpbook:   'VP PLAYBOOK AMD (ENTER/WAIT)',
+  p4nr7:    'S12 NR7 / RANGE CONTRACTION BREAKOUT',
+  p4adrx:   'S14 ADR EXHAUSTION FADE (PART4)',
+  p4laf:    'S17 LOOK-ABOVE-AND-FAIL'
 };
 var SW_NEWS_STAMP = 'NEWS WINDOW — expect a fade around the release; swing levels unchanged (size accordingly)';
 
@@ -1852,6 +1855,65 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
           push(vpCand);
         }
       }catch(eVp){}
+    }
+
+    /* 10) Part4 S12 / S14 / S17 — mint forming+dir (parity with SCALP) */
+    var p4FnCand = gfn('hgGoldPart4Engine');
+    var p4FiltCand = gfn('hgGoldPart4ApplyDiscountFilter');
+    if (p4FnCand){
+      try{
+        var p4EngCand = p4FnCand(rows4, {
+          newsGate: (microOpts && microOpts.news)
+            ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(microOpts.news, nowMs) : null)
+            : null
+        });
+        if (p4EngCand && p4EngCand.strategies && p4EngCand.strategies.length){
+          var p4Live = { p4nr7: 1, p4adrx: 1, p4laf: 1 };
+          var p4j, p4hit, p4Stop, p4Cand;
+          for (p4j = 0; p4j < p4EngCand.strategies.length; p4j++){
+            p4hit = p4EngCand.strategies[p4j];
+            if (!p4hit || !p4hit.dir || !p4Live[p4hit.key]) continue;
+            if (p4hit.grade !== 'forming' && p4hit.grade !== 'confirmed') continue;
+            if (!isFinite(p4hit.level) && !(p4hit.plan && isFinite(p4hit.plan.entry))) continue;
+            var p4Entry = isFinite(p4hit.level) ? p4hit.level
+              : (p4hit.plan && p4hit.plan.entry);
+            p4Stop = (p4hit.plan && isFinite(p4hit.plan.stop)) ? p4hit.plan.stop
+              : (p4hit.dir === 'long' ? p4Entry - 1.5 * a4 : p4Entry + 1.5 * a4);
+            p4Cand = mkCand(p4hit.key, p4hit.dir, p4Stop, p4Stop, undefined,
+              p4hit.why, 'Part4 invalidation — structure break against the setup',
+              { side: p4hit.dir, tag: p4hit.key, label: p4hit.why });
+            if (!p4Cand || p4Cand.dropped){
+              /* Soft tally may drop a lone Part4 hit — mint with agree=2 so
+                 playbook-grade strategies still surface (same as vpbook). */
+              p4Cand = {
+                id: p4hit.key + '|' + p4hit.dir + '|' + Math.round(p4Entry),
+                strategy: SW_NAME[p4hit.key] || p4hit.key,
+                stratKey: p4hit.key, dir: p4hit.dir,
+                entry: p4Entry, pxNow: entry, mark: entry, stop: p4Stop,
+                t1: (p4hit.plan && isFinite(p4hit.plan.t1)) ? p4hit.plan.t1 : NaN,
+                t2: (p4hit.plan && isFinite(p4hit.plan.t2)) ? p4hit.plan.t2 : NaN,
+                rr: NaN, grade: 'B', agree: 2, oppose: 0, atr: a4,
+                venue: venue, sym: sym, session: sessionTxt || 'n/a',
+                why: p4hit.why,
+                invalidates: 'close beyond ' + p4Stop.toFixed(2),
+                stamps: ['PART4 ' + String(p4hit.key).toUpperCase()],
+                demoted: false, notes: []
+              };
+            } else {
+              if (isFinite(p4Entry)) p4Cand.entry = p4Entry;
+              if (p4hit.plan){
+                if (isFinite(p4hit.plan.t1)) p4Cand.t1 = p4hit.plan.t1;
+                if (isFinite(p4hit.plan.t2)) p4Cand.t2 = p4hit.plan.t2;
+                if (isFinite(p4hit.plan.stop)) p4Cand.stop = p4hit.plan.stop;
+              }
+              if (!Array.isArray(p4Cand.stamps)) p4Cand.stamps = [];
+              p4Cand.stamps.push('PART4 ' + String(p4hit.key).toUpperCase());
+            }
+            if (p4FiltCand && p4EngCand.pd) p4FiltCand(p4Cand, p4EngCand.pd);
+            push(p4Cand);
+          }
+        }
+      }catch(eP4c){}
     }
   }catch(e){}
   return out;

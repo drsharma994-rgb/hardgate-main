@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v567',
-  pack: 'VP playbook OMNIGOLD + §4.1 nodes',
-  built: '2026-09-02T15:10:00Z',
-  note: 'VP Playbook forms setups on OMNIGOLD (VP-PLAYBOOK mechanic), GOLD SCALP (vpbook), GOLD SWING (ENTER mint). HVN/LVN use §4.1 quantitative rules. Contract size GC/MGC from fixed $ risk. Sacred contracts unchanged.'
+  version: 'hg-v568',
+  pack: 'Part4 OMNIGOLD + SWING mint',
+  built: '2026-09-02T16:00:00Z',
+  note: 'Part4 S12/S14/S17 form live setups on OMNIGOLD (P4-NR7/P4-ADRX/P4-LAF), GOLD SCALP (existing mint), GOLD SWING (mint parity). S9 stays P/D filter; S13 silver + S16 footprint unchecked. Sacred contracts unchanged.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

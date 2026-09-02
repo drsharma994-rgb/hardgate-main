@@ -317,7 +317,9 @@ terse status, and never launches a first-time scan on a global refresh.
                       'ICHI-KUMO','STOCHRSI-TURN','CCI-EXTREME','RIBBON-PULLBACK',
                       'HA-FLIP','VWAP-BAND','PD-EQUILIBRIUM','ER-IGNITION',
                       'STRUCT-BOS','SWEEP-V2','OB-RETEST','OU-REVERT',
-                      'MFI-SQUAT','DI-CROSS','FVG-HVN','VP-PLAYBOOK'];
+                      'MFI-SQUAT','DI-CROSS','FVG-HVN','VP-PLAYBOOK',
+                      /* Part4 S9–S18 live directional forming hits (S13/S16 unchecked) */
+                      'P4-NR7','P4-ADRX','P4-LAF'];
 
   var __og = { ui: null, busy: false, ran: false, snap: null, lastStat: '', src: null, shared: null, btBusy: false,
                lastCardsHtml: null, lastPoolHtml: null, lastMpHtml: null,
@@ -750,6 +752,12 @@ terse status, and never launches a first-time scan on a global refresh.
     d = hgOgDiCross(rows);         if (d) out.push(d);
     d = hgOgFvgHvn(rows);          if (d) out.push(d);
     d = hgOgVpPlaybook(rows, opts); if (d) out.push(d);
+    /* Part4 S12 / S14 / S17 — forming+dir only; S9 stays a filter, S13/S16 unchecked */
+    var p4hits = hgOgPart4Hits(rows, opts);
+    if (p4hits && p4hits.length){
+      var p4i;
+      for (p4i = 0; p4i < p4hits.length; p4i++) if (p4hits[p4i]) out.push(p4hits[p4i]);
+    }
     return out;
   }
 
@@ -1786,6 +1794,57 @@ terse status, and never launches a first-time scan on a global refresh.
     };
   }
 
+  /* Part4 S9–S18 — live directional forming strategies as native OMNIGOLD
+     mechanics. S9 remains a premium/discount filter (not a ticket). S13 silver
+     and S16 footprint stay unchecked without XAG / bid-ask feeds. */
+  var OG_P4_KIND = {
+    p4nr7: 'P4-NR7',
+    p4adrx: 'P4-ADRX',
+    p4laf: 'P4-LAF'
+  };
+  function hgOgPart4Hits(rows, opts){
+    var f = gfn('hgGoldPart4Engine');
+    if (!f || !rows || rows.length < 40) return null;
+    opts = opts || {};
+    var eng = null;
+    try {
+      eng = f(rows, {
+        newsGate: opts.newsGate || null,
+        asia: opts.asia || null
+      });
+    } catch (e) { return null; }
+    if (!eng || !eng.strategies || !eng.strategies.length) return null;
+    var out = [], i, s, kind, lv, stop, t1, t2;
+    for (i = 0; i < eng.strategies.length; i++){
+      s = eng.strategies[i];
+      if (!s || !s.dir || (s.grade !== 'forming' && s.grade !== 'confirmed')) continue;
+      kind = OG_P4_KIND[s.key];
+      if (!kind) continue; /* frame/watch keys stay off the ticket board */
+      lv = fin(s.level);
+      if (!isFinite(lv) && s.plan) lv = fin(s.plan.entry);
+      if (!isFinite(lv)) continue;
+      stop = (s.plan && isFinite(s.plan.stop)) ? s.plan.stop : NaN;
+      t1 = (s.plan && isFinite(s.plan.t1)) ? s.plan.t1 : NaN;
+      t2 = (s.plan && isFinite(s.plan.t2)) ? s.plan.t2 : NaN;
+      out.push({
+        kind: kind, dir: s.dir, level: lv,
+        stop: stop, t1: t1, t2: t2,
+        part4: s, part4Engine: eng,
+        why: String(s.why || kind)
+      });
+    }
+    return out.length ? out : null;
+  }
+  function hgOgPart4ByKind(rows, wantKind, opts){
+    var hits = hgOgPart4Hits(rows, opts);
+    if (!hits) return null;
+    var i;
+    for (i = 0; i < hits.length; i++){
+      if (hits[i] && hits[i].kind === wantKind) return hits[i];
+    }
+    return null;
+  }
+
   /* ==================== consensus across mechanics ====================
 
      THE DEFECT THIS EXISTS FOR: on 42% of tapes the desk graded a LONG
@@ -1864,6 +1923,10 @@ terse status, and never launches a first-time scan on a global refresh.
     'VWAP-BAND':'REVERSION', 'PD-EQUILIBRIUM':'REVERSION', 'OU-REVERT':'REVERSION',
     'SWEEP-V2':'SWEEP',
     'VP-PLAYBOOK':'SWEEP',
+    /* Part4 live strategies — one vote per family still applies */
+    'P4-NR7':'TREND',
+    'P4-ADRX':'REVERSION',
+    'P4-LAF':'SWEEP',
     /* An unmitigated order block is an unfilled inefficiency being revisited,
        which is FVG-FILL's idea with a different name for the zone. */
     'OB-RETEST':'IMBALANCE',
@@ -2202,6 +2265,9 @@ terse status, and never launches a first-time scan on a global refresh.
     if (k === 'ASIA-BREAK') return 'asian';
     if (k === 'OB-RETEST') return 'ob';
     if (k === 'VP-PLAYBOOK') return 'vpbook';
+    if (k === 'P4-NR7') return 'p4nr7';
+    if (k === 'P4-ADRX') return 'p4adrx';
+    if (k === 'P4-LAF') return 'p4laf';
     if (k === 'KZ-JUDAS' || k === 'SWEEP-V2' || k === 'POOL-SWEEP'
         || k.indexOf('SWEEP') >= 0)
       return 'sweep';
@@ -8144,7 +8210,10 @@ terse status, and never launches a first-time scan on a global refresh.
           'MFI-SQUAT':       function(r){ return hgOgMfiSquat(r); },
           'DI-CROSS':        function(r){ return hgOgDiCross(r); },
           'FVG-HVN':         function(r){ return hgOgFvgHvn(r); },
-          'VP-PLAYBOOK':     function(r){ return hgOgVpPlaybook(r); }
+          'VP-PLAYBOOK':     function(r){ return hgOgVpPlaybook(r); },
+          'P4-NR7':          function(r){ return hgOgPart4ByKind(r, 'P4-NR7'); },
+          'P4-ADRX':         function(r){ return hgOgPart4ByKind(r, 'P4-ADRX'); },
+          'P4-LAF':          function(r){ return hgOgPart4ByKind(r, 'P4-LAF'); }
         };
         var k;
         for (k in fns) if (Object.prototype.hasOwnProperty.call(fns, k)){
