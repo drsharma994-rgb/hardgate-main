@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v555',
-  pack: 'OMNIGOLD native inst-filter',
-  built: '2026-09-01T21:00:00Z',
-  note: 'OMNIGOLD native detectors use the same hgGoldInstFilter stack as GOLD SCALP/SWING (MSS+displacement+IFVG, volume OB, DXY+TNX conviction lock, Asia/London/NY session, news-gate, spread, MTF). One hard inst-filter ledger row. Named ENTRY stays hit.level. goldind absent fail-opens. 1.5x ATR14 remains the stop floor stamp, not a cap. GOLD_STOP_MAX_PCT 0.025 unchanged. Not a win probability.'
+  version: 'hg-v556',
+  pack: 'NY volume exhaustion',
+  built: '2026-09-02T01:50:00Z',
+  note: 'NY gold sweep two-volume exhaustion: same-session RVOL, raid≥1.5 + takeover≥1.2 + MSS/VWAP, OPEN/MID/LATE timing, score 75/65, CVD PROXY on XAUT/PAXG/spot. Mints nyexh on SCALP; SWING stamp/demote; forming panel on OMNIGOLD. Sacred contracts unchanged (OMNIGOLD ENTRY=hit.level; gold stop 1.5×ATR floor).'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

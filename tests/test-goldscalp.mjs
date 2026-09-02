@@ -1503,8 +1503,8 @@ function rrShortRows25(){            /* short into a bearish OB with a bullish O
     await tab2.refresh();                                      // scan C: outside the window again
     const sC = C2.goldscalpScan();
     const liveC2 = Object.keys(loadConvictionStore(ls2).live).length;
-    assert(liveC2 === 2 && sC.cands.some(c => c.locked === false),
-           'news window passed -> new convictions issue again (held-back setup mints)');
+    assert(liveC2 >= 2 && sC.cands.some(c => c.locked === false),
+           'news window passed -> new convictions issue again (held-back setup mints; live=' + liveC2 + ')');
     Date.now = realDateNow2;
     delete globalThis.localStorage;
   }

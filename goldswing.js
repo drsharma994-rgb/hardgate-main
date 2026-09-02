@@ -2305,6 +2305,28 @@ async function runScan(ui, scanSt){
             }
           }
         }
+        var nyFn = gfn('hgGoldNyExhaustion');
+        if (nyFn && got.length){
+          var nyEng = nyFn(gold.rows4h, {
+            regime: null,
+            newsGate: newsRaw ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(newsRaw, now) : null) : null,
+            now: now
+          });
+          if (nyEng && nyEng.dir){
+            for (var ni = 0; ni < got.length; ni++){
+              if (!got[ni]) continue;
+              if (!Array.isArray(got[ni].stamps)) got[ni].stamps = [];
+              if (got[ni].dir === nyEng.dir && (nyEng.confirmed || nyEng.tier === 'alert')){
+                if (got[ni].stamps.indexOf('NY EXHAUSTION') < 0) got[ni].stamps.push('NY EXHAUSTION');
+                got[ni].nyExhScore = nyEng.score;
+                if (got[ni].stamps.indexOf('CVD PROXY') < 0) got[ni].stamps.push('CVD PROXY');
+              } else if (got[ni].dir && nyEng.dir && got[ni].dir !== nyEng.dir && nyEng.confirmed){
+                got[ni].demoted = true;
+                if (got[ni].stamps.indexOf('NY EXH OPPOSE') < 0) got[ni].stamps.push('NY EXH OPPOSE');
+              }
+            }
+          }
+        }
       }catch(ePn){}
       collectWatch(gold, v);
       for (i = 0; i < got.length; i++) cands.push(got[i]);

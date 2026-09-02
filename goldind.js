@@ -1064,7 +1064,8 @@ var GST_NAME = {
   eqlo:   'EQUAL LOWS (STOP CLUSTER)',
   oitrap: 'OI-TRAP REVERSAL',
   fundext: 'FUNDING EXTREME',
-  liqsweep: 'GOLD LIQUIDITY SWEEP'
+  liqsweep: 'GOLD LIQUIDITY SWEEP',
+  nyexh: 'NY VOLUME EXHAUSTION'
 };
 
 /* limit-at-zone entry: when price has extended beyond the setup zone, anchor
@@ -1787,6 +1788,38 @@ function goldScalpSetups(inp){
         }
       }
     }catch(eEng){}
+
+    /* --- 1c) NY VOLUME EXHAUSTION (two-volume test · session RVOL · MSS) --- */
+    try{
+      if (!D.__nyExh){
+        D.__nyExh = hgGoldNyExhaustion(rows, {
+          regime: D.__formingRegime || hgGoldFormingRegime({ rows: rows, macro: inp.macro }),
+          newsGate: newsState ? hgGoldNewsGate(newsState, nowMs) : null,
+          now: nowMs
+        });
+      }
+      var nyx = D.__nyExh;
+      if (nyx && (nyx.confirmed || nyx.tier === 'alert' || nyx.tier === 'watch') && nyx.dir){
+        var nyStop = (nyx.plan && isFinite(nyx.plan.stop)) ? nyx.plan.stop : nyx.level;
+        var nyCand = __gsCand('nyexh', nyx.dir, D, nyStop, __gsSnapLvls(D, nyx.dir),
+          nyx.why + ' — NY two-volume exhaustion (raid RVOL≥1.5 + takeover)',
+          're-accept beyond swept level or 5m close through far side of reversal OB cancels',
+          undefined, nyx.level);
+        if (nyCand){
+          nyCand.nyExhScore = nyx.score;
+          nyCand.nyExhTier = nyx.tier;
+          if (nyx.plan){
+            if (isFinite(nyx.plan.t1)) nyCand.t1 = nyx.plan.t1;
+            if (isFinite(nyx.plan.stop)) nyCand.stop = nyx.plan.stop;
+          }
+          if (!Array.isArray(nyCand.stamps)) nyCand.stamps = [];
+          nyCand.stamps.push('NY EXH ' + String(nyx.score) + '/' + String(nyx.tier || '').toUpperCase());
+          if (nyx.cvdNote) nyCand.stamps.push('CVD PROXY');
+          if (nyx.tier === 'watch' && !nyx.confirmed) nyCand.demoted = true;
+          push(nyCand);
+        }
+      }
+    }catch(eNy){}
 
     /* --- 2) order-block / breaker retest (robust: active zones + structure alignment) --- */
     var obRetestDone = false;
@@ -5840,6 +5873,387 @@ function hgGoldSweepEngineHtml(eng){
   }catch(e){ return ''; }
 }
 
+/* =========================================================================
+   NY VOLUME EXHAUSTION (hg-v556) — two-volume test for New York gold sweeps.
+   Raid RVOL≥1.5 + reclaim, then takeover RVOL≥1.2 + MSS + VWAP. Same-session
+   RVOL baseline (not just last-20). CVD labeled PROXY when not COMEX.
+========================================================================= */
+
+var HG_GOLD_NY_RAID_ATR = 0.15;
+var HG_GOLD_NY_RAID_RVOL = 1.50;
+var HG_GOLD_NY_TAKE_RVOL = 1.20;
+var HG_GOLD_NY_BLOWOFF_RVOL = 2.50;
+var HG_GOLD_NY_ALERT = 75;
+var HG_GOLD_NY_WATCH = 65;
+var HG_GOLD_NY_SESSIONS = 20;
+
+/** New York gold blocks in UTC (aligns with existing NY_OVERLAP ~12–16/17). */
+function hgGoldNyBlock(nowMs){
+  var out = { block: 'OFF', label: 'outside NY', weight: 0, hourUTC: NaN };
+  try{
+    var ms = __toMs(nowMs); if (!isFinite(ms)) ms = Date.now();
+    var h = new Date(ms).getUTCHours() + new Date(ms).getUTCMinutes() / 60;
+    out.hourUTC = h;
+    if (h >= 12 && h < 13.5){
+      out.block = 'OPEN'; out.weight = 1;
+      out.label = 'NY open — wait completed close + MSS; do not fade first spike';
+    } else if (h >= 13.5 && h < 15.5){
+      out.block = 'MID'; out.weight = 3;
+      out.label = 'NY mid — preferred sweep-reclaim / OB-FVG window';
+    } else if (h >= 15.5 && h < 17.5){
+      out.block = 'LATE'; out.weight = 2;
+      out.label = 'NY late — require stronger structure; liquidity thins';
+    } else {
+      out.block = 'OFF'; out.weight = 0;
+      out.label = 'outside NY session window';
+    }
+    return out;
+  }catch(e){ return out; }
+}
+
+/**
+ * Same-session RVOL: compare bar volume to the average of the same UTC
+ * time-of-day slot over the preceding N sessions (not a rolling 20-bar mean).
+ */
+function hgGoldSessionRvol(rows, idx, opts){
+  var out = { rvol: NaN, baseline: NaN, samples: 0, unchecked: true, mode: 'session' };
+  try{
+    opts = opts || {};
+    rows = __rows(rows);
+    if (!rows || idx < 0 || idx >= rows.length) return out;
+    var v = +rows[idx].v;
+    if (!isFinite(v) || !(v > 0)) return out;
+    var barSec = opts.barSec;
+    if (!isFinite(barSec) || barSec <= 0){
+      barSec = (rows.length >= 3 && isFinite(rows[idx].t) && isFinite(rows[idx - 1].t))
+        ? Math.max(60, Math.abs(rows[idx].t - rows[idx - 1].t)) : 900;
+    }
+    var t = rows[idx].t;
+    if (!isFinite(t)) return out;
+    var slot = ((t % 86400) + 86400) % 86400;
+    var maxSessions = opts.sessions || HG_GOLD_NY_SESSIONS;
+    var sum = 0, n = 0, i, ti, si, daySeen = {}, dayKey, days = 0;
+    for (i = idx - 1; i >= 0 && days < maxSessions; i--){
+      ti = rows[i].t;
+      if (!isFinite(ti) || !(rows[i].v > 0)) continue;
+      si = ((ti % 86400) + 86400) % 86400;
+      if (Math.abs(si - slot) > barSec * 0.55 && Math.abs(si - slot) < 86400 - barSec * 0.55) continue;
+      dayKey = String(Math.floor(ti / 86400));
+      if (daySeen[dayKey]) continue;
+      daySeen[dayKey] = true;
+      days++;
+      sum += +rows[i].v;
+      n++;
+    }
+    if (n < 3){
+      /* Fall back to rolling 20-bar mean so thin history still works. */
+      var roll = hgGoldBarRvol(rows, idx, 20);
+      out.rvol = roll;
+      out.mode = 'rolling-fallback';
+      out.unchecked = !isFinite(roll);
+      out.samples = 0;
+      return out;
+    }
+    out.baseline = sum / n;
+    out.samples = n;
+    out.rvol = v / out.baseline;
+    out.unchecked = false;
+    return out;
+  }catch(e){ return out; }
+}
+
+function hgGoldNyRvolSignature(raidRvol, takeRvol, extended, mssOk){
+  if (isFinite(raidRvol) && raidRvol < 1.2)
+    return { key: 'weak-fake', label: 'WEAK FAKE WICK', fade: false };
+  if (extended && isFinite(raidRvol) && raidRvol >= 1.5)
+    return { key: 'breakout', label: 'REAL BREAKOUT — do not fade', fade: false };
+  if (isFinite(raidRvol) && raidRvol >= HG_GOLD_NY_BLOWOFF_RVOL)
+    return { key: 'blowoff', label: 'BLOW-OFF EXHAUSTION — wait structure', fade: !!mssOk };
+  if (isFinite(raidRvol) && raidRvol >= HG_GOLD_NY_RAID_RVOL
+      && isFinite(takeRvol) && takeRvol >= HG_GOLD_NY_TAKE_RVOL && mssOk)
+    return { key: 'genuine', label: 'GENUINE REVERSAL SWEEP', fade: true };
+  if (isFinite(raidRvol) && raidRvol >= HG_GOLD_NY_RAID_RVOL
+      && (!isFinite(takeRvol) || takeRvol < 1.0) && !mssOk)
+    return { key: 'dead', label: 'DEAD RESPONSE — stand aside', fade: false };
+  if (isFinite(raidRvol) && raidRvol >= 1.5 && !extended)
+    return { key: 'absorption', label: 'ABSORPTION / FAILED AUCTION', fade: !!mssOk };
+  return { key: 'mixed', label: 'MIXED — incomplete two-volume test', fade: false };
+}
+
+/**
+ * NY volume-exhaustion detector (two-volume test) + 100-pt score + plan.
+ */
+function hgGoldNyExhaustion(rows, opts){
+  var out = {
+    ok: false, confirmed: false, dir: null, level: NaN, score: 0, tier: 'ignore',
+    block: null, signature: null, raid: null, takeover: null, plan: null,
+    parts: {}, why: '', cvdNote: 'CVD/order-flow is PROXY on XAUT/PAXG/spot — not COMEX GC'
+  };
+  try{
+    opts = opts || {};
+    rows = __rows(rows);
+    if (!rows || rows.length < 40){ out.why = 'need ≥40 bars'; return out; }
+    var nowMs = opts.now || (isFinite(rows[rows.length - 1].t) ? rows[rows.length - 1].t * 1000 : Date.now());
+    out.block = hgGoldNyBlock(nowMs);
+    var atrs = _atr(rows, 14);
+    var atr = atrs[atrs.length - 1];
+    if (!(isFinite(atr) && atr > 0)){ out.why = 'ATR unread'; return out; }
+
+    var map = opts.map || hgGoldLiquidityMap(rows, opts);
+    if (!map.levels || !map.levels.length){ out.why = 'no marked liquidity'; return out; }
+
+    /* Prefer London high/low + PDH/PDL + equals for NY raids */
+    var prefer = map.levels.filter(function(L){
+      return L.kind === 'pdh' || L.kind === 'pdl' || L.kind === 'equal'
+        || L.kind === 'asia' || L.kind === 'pivot';
+    });
+    if (!prefer.length) prefer = map.levels;
+
+    var n = rows.length;
+    var look = Math.min(6, n - 2);
+    var best = null;
+    var li, bi, L, dir, raidIdx, takeIdx, bar, breach, raidR, takeR, wickFrac, closeInside;
+    var failExtend, mss, vwap, sig, extended;
+
+    for (li = 0; li < prefer.length; li++){
+      L = prefer[li];
+      var dirs = [];
+      if (L.side === 'sell-side' || /LOW/i.test(L.label || '') || L.kind === 'pdl') dirs = ['long'];
+      else if (L.side === 'buy-side' || /HIGH/i.test(L.label || '') || L.kind === 'pdh') dirs = ['short'];
+      else dirs = ['long', 'short'];
+
+      for (var di = 0; di < dirs.length; di++){
+        dir = dirs[di];
+        for (bi = n - look; bi < n; bi++){
+          if (bi < 1) continue;
+          bar = rows[bi];
+          breach = (dir === 'long') ? (L.level - bar.l) : (bar.h - L.level);
+          if (!(breach >= HG_GOLD_NY_RAID_ATR * atr)) continue;
+          closeInside = (dir === 'long') ? (bar.c > L.level) : (bar.c < L.level);
+          if (!closeInside) continue;
+          var range = bar.h - bar.l;
+          wickFrac = range > 0
+            ? ((dir === 'long') ? ((Math.min(bar.o, bar.c) - bar.l) / range)
+                               : ((bar.h - Math.max(bar.o, bar.c)) / range))
+            : 0;
+          raidR = hgGoldSessionRvol(rows, bi, opts);
+          if (!(isFinite(raidR.rvol) && raidR.rvol >= HG_GOLD_NY_RAID_RVOL)) continue;
+
+          raidIdx = bi;
+          /* Takeover window: next 1–3 bars after raid (or raid itself if last) */
+          takeIdx = Math.min(n - 1, raidIdx + 1);
+          var takeEnd = Math.min(n - 1, raidIdx + 3);
+          failExtend = true;
+          var extreme = (dir === 'long') ? bar.l : bar.h;
+          var tj;
+          for (tj = raidIdx + 1; tj <= takeEnd; tj++){
+            if (dir === 'long' && rows[tj].l < extreme - 0.05 * atr) failExtend = false;
+            if (dir === 'short' && rows[tj].h > extreme + 0.05 * atr) failExtend = false;
+          }
+          /* If raid is the last bar, treat fail-extend as pending (soft pass) */
+          if (raidIdx === n - 1) failExtend = true;
+
+          takeR = hgGoldSessionRvol(rows, takeIdx, opts);
+          /* Prefer highest RVOL takeover bar in window */
+          for (tj = raidIdx; tj <= takeEnd; tj++){
+            var tr = hgGoldSessionRvol(rows, tj, opts);
+            if (isFinite(tr.rvol) && (!isFinite(takeR.rvol) || tr.rvol > takeR.rvol)){
+              takeR = tr; takeIdx = tj;
+            }
+          }
+
+          mss = hgGoldSweepMss(rows, dir);
+          vwap = hgGoldSweepVwap(rows, dir);
+          extended = !failExtend && !closeInside;
+          /* Breakout: closes and holds outside */
+          if (!closeInside && isFinite(raidR.rvol) && raidR.rvol >= 1.5) extended = true;
+
+          sig = hgGoldNyRvolSignature(raidR.rvol, takeR.rvol, !failExtend && (takeIdx > raidIdx && (
+            (dir === 'long' && rows[takeIdx].c < L.level) ||
+            (dir === 'short' && rows[takeIdx].c > L.level)
+          )), !!(mss && mss.ok));
+
+          var cand = {
+            dir: dir, level: L.level, label: L.label, levelKind: L.kind,
+            raidIdx: raidIdx, takeIdx: takeIdx,
+            raidRvol: raidR.rvol, takeRvol: takeR.rvol,
+            raidMode: raidR.mode, breachAtr: breach / atr,
+            wickFrac: wickFrac, failExtend: failExtend,
+            mss: mss, vwap: vwap, atr: atr, signature: sig,
+            extreme: extreme
+          };
+          var sc = hgGoldNyExhaustionScore(cand, {
+            block: out.block, regime: opts.regime, newsGate: opts.newsGate
+          });
+          cand.score = sc.score; cand.tier = sc.tier; cand.parts = sc.parts;
+          cand.confirmed = sc.confirmed; cand.why = sc.why; cand.plan = sc.plan;
+          if (!best || cand.score > best.score) best = cand;
+        }
+      }
+    }
+
+    if (!best){
+      out.why = (out.block.block === 'OFF')
+        ? 'outside NY window / no climactic raid'
+        : 'no NY two-volume exhaustion this bar (need raid RVOL≥1.5 + reclaim)';
+      out.block = out.block;
+      return out;
+    }
+
+    out.dir = best.dir;
+    out.level = best.level;
+    out.score = best.score;
+    out.tier = best.tier;
+    out.parts = best.parts;
+    out.confirmed = !!best.confirmed;
+    out.ok = out.confirmed || out.tier === 'watch' || out.tier === 'alert';
+    out.signature = best.signature;
+    out.raid = {
+      idx: best.raidIdx, rvol: best.raidRvol, mode: best.raidMode,
+      breachAtr: best.breachAtr, wickFrac: best.wickFrac
+    };
+    out.takeover = {
+      idx: best.takeIdx, rvol: best.takeRvol,
+      failExtend: best.failExtend, mss: best.mss, vwap: best.vwap
+    };
+    out.plan = best.plan;
+    out.why = best.why;
+    /* Opening block: never alert without MSS even if score high */
+    if (out.block.block === 'OPEN' && !(best.mss && best.mss.ok) && out.tier === 'alert'){
+      out.tier = 'watch';
+      out.confirmed = false;
+      out.why += ' · NY OPEN — demoted to watch until MSS prints';
+    }
+    return out;
+  }catch(e){ out.why = 'ny-exhaustion error'; return out; }
+}
+
+function hgGoldNyExhaustionScore(hit, opts){
+  var out = { score: 0, tier: 'ignore', confirmed: false, parts: {}, why: '', plan: null };
+  try{
+    opts = opts || {};
+    var p = { liquidity: 0, raid: 0, rejection: 0, failExtend: 0, takeover: 0, vwapLoc: 0, safety: 0 };
+    var k = hit.levelKind || '';
+    if (k === 'pdh' || k === 'pdl' || k === 'asia') p.liquidity = 20;
+    else if (k === 'equal') p.liquidity = 18;
+    else if (k === 'pivot') p.liquidity = 14;
+    else p.liquidity = 8;
+
+    if (isFinite(hit.breachAtr) && hit.breachAtr >= HG_GOLD_NY_RAID_ATR
+        && isFinite(hit.raidRvol) && hit.raidRvol >= HG_GOLD_NY_RAID_RVOL){
+      p.raid = (hit.raidRvol >= HG_GOLD_NY_BLOWOFF_RVOL) ? 20 : 16;
+    } else if (isFinite(hit.raidRvol) && hit.raidRvol >= 1.2){
+      p.raid = 8;
+    }
+
+    if (isFinite(hit.wickFrac) && hit.wickFrac >= 0.45) p.rejection = 15;
+    else if (isFinite(hit.wickFrac) && hit.wickFrac >= 0.30) p.rejection = 10;
+    else p.rejection = 4;
+
+    if (hit.failExtend) p.failExtend = 10;
+    else p.failExtend = 0;
+
+    var takeOk = isFinite(hit.takeRvol) && hit.takeRvol >= HG_GOLD_NY_TAKE_RVOL;
+    var mssOk = !!(hit.mss && hit.mss.ok);
+    if (takeOk && mssOk) p.takeover = 20;
+    else if (takeOk || mssOk) p.takeover = 10;
+    else p.takeover = 0;
+
+    if (hit.vwap && hit.vwap.ok) p.vwapLoc = 10;
+    else if (hit.vwap && hit.vwap.unchecked) p.vwapLoc = 5;
+    else if (k === 'pdh' || k === 'pdl' || k === 'equal' || k === 'asia') p.vwapLoc = 4;
+
+    var newsLock = !!(opts.newsGate && opts.newsGate.lock);
+    var block = opts.block || {};
+    if (!newsLock){
+      if (block.block === 'MID') p.safety = 5;
+      else if (block.block === 'LATE') p.safety = 4;
+      else if (block.block === 'OPEN') p.safety = 2;
+      else p.safety = 1;
+      if (opts.regime && opts.regime.style === 'trend' && opts.regime.vol && opts.regime.vol.regime === 'expansion')
+        p.safety = Math.max(0, p.safety - 2); /* fade caution in powerful trend */
+    } else {
+      p.safety = 0;
+    }
+
+    out.parts = p;
+    out.score = Math.max(0, Math.min(100,
+      p.liquidity + p.raid + p.rejection + p.failExtend + p.takeover + p.vwapLoc + p.safety));
+
+    var sigOk = hit.signature && (hit.signature.key === 'genuine' || hit.signature.key === 'blowoff' || hit.signature.key === 'absorption');
+    out.confirmed = !!(sigOk && takeOk && mssOk && hit.failExtend && out.score >= HG_GOLD_NY_WATCH && !newsLock);
+    if (hit.signature && hit.signature.key === 'breakout'){
+      out.tier = 'ignore';
+      out.confirmed = false;
+      out.why = 'REAL BREAKOUT — RVOL stayed elevated outside level; do not fade';
+      return out;
+    }
+    if (hit.signature && hit.signature.key === 'dead'){
+      out.tier = 'ignore';
+      out.why = hit.signature.label;
+      return out;
+    }
+    if (out.score >= HG_GOLD_NY_ALERT && out.confirmed) out.tier = 'alert';
+    else if (out.score >= HG_GOLD_NY_WATCH) out.tier = 'watch';
+    else out.tier = 'ignore';
+
+    /* Plan geometry */
+    var buf = hit.atr * ((block.block === 'LATE') ? 0.25 : 0.15);
+    var stop = (hit.dir === 'long') ? (hit.extreme - buf) : (hit.extreme + buf);
+    var vwapPx = (hit.vwap && isFinite(hit.vwap.vwap)) ? hit.vwap.vwap : NaN;
+    out.plan = {
+      entry: 'retest of 1–5m OB/FVG from reversal displacement (not chase)',
+      stop: stop,
+      t1: isFinite(vwapPx) ? vwapPx : hit.level,
+      t2Label: 'opposing session liquidity (Asia/London/PDH-PDL)',
+      cancel: 're-accept beyond swept level or 5m close through far side of reversal OB',
+      bufferAtr: buf / hit.atr
+    };
+
+    out.why = (out.confirmed ? 'NY EXHAUSTION CONFIRMED ' : 'NY EXHAUSTION ')
+      + String(hit.dir || '').toUpperCase() + ' @ ' + (isFinite(hit.level) ? hit.level.toFixed(2) : '—')
+      + ' · score ' + out.score + '/' + out.tier.toUpperCase()
+      + (hit.signature ? (' · ' + hit.signature.label) : '')
+      + ' · raid RVOL ' + (isFinite(hit.raidRvol) ? hit.raidRvol.toFixed(2) : '—')
+      + ' · take RVOL ' + (isFinite(hit.takeRvol) ? hit.takeRvol.toFixed(2) : '—');
+    if (block.label) out.why += ' · ' + block.block;
+    return out;
+  }catch(e){ out.why = 'score error'; return out; }
+}
+
+function hgGoldNyExhaustionHtml(exh){
+  try{
+    if (!exh || !(exh.ok || exh.score > 0)) return '';
+    var h = '<div class="note" data-hg-gold-ny-exh="1" style="margin-top:8px">';
+    h += '<b>NY EXHAUSTION</b> · ' + String(exh.tier || 'ignore').toUpperCase()
+      + ' · score ' + (isFinite(exh.score) ? exh.score : '—') + '/100';
+    if (exh.dir) h += ' · ' + String(exh.dir).toUpperCase();
+    if (isFinite(exh.level)) h += ' @ ' + (+exh.level).toFixed(2);
+    if (exh.signature && exh.signature.label)
+      h += ' · ' + String(exh.signature.label).replace(/[<>&]/g, '');
+    if (exh.block && exh.block.block)
+      h += ' · ' + exh.block.block;
+    if (exh.why) h += '<div class="dim" style="margin-top:4px">' + String(exh.why).replace(/[<>&]/g, '') + '</div>';
+    if (exh.raid || exh.takeover){
+      h += '<div class="dim" style="margin-top:2px">raid RVOL '
+        + (exh.raid && isFinite(exh.raid.rvol) ? exh.raid.rvol.toFixed(2) : '—')
+        + (exh.raid && exh.raid.mode === 'session' ? ' (session)' : ' (fallback)')
+        + ' · take RVOL '
+        + (exh.takeover && isFinite(exh.takeover.rvol) ? exh.takeover.rvol.toFixed(2) : '—')
+        + '</div>';
+    }
+    if (exh.plan && isFinite(exh.plan.stop)){
+      h += '<div class="dim" style="margin-top:2px">stop beyond extreme '
+        + (+exh.plan.stop).toFixed(2)
+        + ' · TP1 VWAP/level · ' + String(exh.plan.entry || '').replace(/[<>&]/g, '')
+        + '</div>';
+    }
+    h += '<div class="dim" style="margin-top:2px">' + String(exh.cvdNote || '').replace(/[<>&]/g, '') + '</div>';
+    h += '</div>';
+    return h;
+  }catch(e){ return ''; }
+}
+
 function hgGoldSessionAtrBuffer(rows, nowMs){
   var out = { atr: NaN, session: 'OFF', bufferMult: 0.20, stopBuffer: NaN };
   try{
@@ -6042,7 +6456,7 @@ function hgGoldApplyFormingRegime(cand, regime){
     if (!cand || !regime) return cand;
     var key = cand.stratKey || '';
     var cont = { ribbon:1, bosalign:1, macro:1, wkbreak:1, pullback:1, openrange:1 };
-    var mrev = { vwap:1, vwapband:1, adrfade:1, fvg:1, stochrsi:1, sweep:1, liqsweep:1, oitrap:1 };
+    var mrev = { vwap:1, vwapband:1, adrfade:1, fvg:1, stochrsi:1, sweep:1, liqsweep:1, nyexh:1, oitrap:1 };
     if (key === 'rsidiv'){
       cand.demoted = true;
       if (!Array.isArray(cand.stamps)) cand.stamps = [];
@@ -6115,6 +6529,11 @@ function hgGoldFormingStack(inp){
     out.sweepEngine = hgGoldSweepEngine(rows, {
       regime: out.regime,
       newsGate: inp.newsGate || (inp.news ? hgGoldNewsGate(inp.news, inp.now || Date.now()) : null)
+    });
+    out.nyExhaustion = hgGoldNyExhaustion(rows, {
+      regime: out.regime,
+      newsGate: inp.newsGate || (inp.news ? hgGoldNewsGate(inp.news, inp.now || Date.now()) : null),
+      now: inp.now || Date.now()
     });
 
     function watch(key, state, level, condition, reason, dir, family){
@@ -6232,12 +6651,33 @@ function hgGoldFormingStack(inp){
         out.sweepEngine.why, null, out.sweepEngine.dir, 'trigger');
     }
 
+    if (out.nyExhaustion && (out.nyExhaustion.confirmed || out.nyExhaustion.tier === 'watch' || out.nyExhaustion.tier === 'alert')){
+      var nyInv = (out.nyExhaustion.plan && isFinite(out.nyExhaustion.plan.stop))
+        ? out.nyExhaustion.plan.stop
+        : (isFinite(out.nyExhaustion.level)
+          ? (out.nyExhaustion.level + (out.nyExhaustion.dir === 'long' ? -1 : 1) * (out.sessionBuf.stopBuffer || 0))
+          : NaN);
+      out.strategies.push({
+        key: 'ny-exhaustion', dir: out.nyExhaustion.dir, level: out.nyExhaustion.level,
+        grade: out.nyExhaustion.confirmed ? 'confirmed' : 'watch',
+        score: out.nyExhaustion.score, tier: out.nyExhaustion.tier,
+        why: out.nyExhaustion.why,
+        invalidates: nyInv,
+        plan: out.nyExhaustion.plan || null
+      });
+      watch('nyexh', 'armed', out.nyExhaustion.level,
+        out.nyExhaustion.why, null, out.nyExhaustion.dir, 'trigger');
+    }
+
     out.note = (out.regime && out.regime.why) || '';
     if (out.strategies.length){
       out.note = (out.note ? out.note + ' · ' : '') + out.strategies.length + ' forming strategy hit(s)';
     }
     if (out.sweepEngine && out.sweepEngine.score >= HG_GOLD_SWEEP_WATCH){
       out.note = (out.note ? out.note + ' · ' : '') + 'sweep ' + out.sweepEngine.score + '/' + out.sweepEngine.tier;
+    }
+    if (out.nyExhaustion && out.nyExhaustion.score >= HG_GOLD_NY_WATCH){
+      out.note = (out.note ? out.note + ' · ' : '') + 'ny-exh ' + out.nyExhaustion.score + '/' + out.nyExhaustion.tier;
     }
     return out;
   }catch(e){
@@ -6269,6 +6709,9 @@ function hgGoldFormingStackHtml(stack){
     }
     if (stack.sweepEngine){
       h += hgGoldSweepEngineHtml(stack.sweepEngine);
+    }
+    if (stack.nyExhaustion){
+      h += hgGoldNyExhaustionHtml(stack.nyExhaustion);
     }
     if (stack.note) h += '<div class="dim" style="margin-top:4px">' + String(stack.note).replace(/[<>&]/g, '') + '</div>';
     var i, s;
@@ -6400,6 +6843,17 @@ W.hgGoldSweepEngine = hgGoldSweepEngine;
 W.hgGoldSweepConfidence = hgGoldSweepConfidence;
 W.hgGoldSweepEngineHtml = hgGoldSweepEngineHtml;
 W.hgGoldSweepMss = hgGoldSweepMss;
+W.HG_GOLD_NY_RAID_ATR = HG_GOLD_NY_RAID_ATR;
+W.HG_GOLD_NY_RAID_RVOL = HG_GOLD_NY_RAID_RVOL;
+W.HG_GOLD_NY_TAKE_RVOL = HG_GOLD_NY_TAKE_RVOL;
+W.HG_GOLD_NY_ALERT = HG_GOLD_NY_ALERT;
+W.HG_GOLD_NY_WATCH = HG_GOLD_NY_WATCH;
+W.hgGoldNyBlock = hgGoldNyBlock;
+W.hgGoldSessionRvol = hgGoldSessionRvol;
+W.hgGoldNyRvolSignature = hgGoldNyRvolSignature;
+W.hgGoldNyExhaustion = hgGoldNyExhaustion;
+W.hgGoldNyExhaustionScore = hgGoldNyExhaustionScore;
+W.hgGoldNyExhaustionHtml = hgGoldNyExhaustionHtml;
 W.hgGoldSessionAtrBuffer = hgGoldSessionAtrBuffer;
 W.hgGoldApplyFormingRegime = hgGoldApplyFormingRegime;
 W.hgGoldFormingStack = hgGoldFormingStack;
