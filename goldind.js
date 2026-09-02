@@ -1061,7 +1061,9 @@ var GST_NAME = {
   hvn:      'HVN / VOLUME NODE RETEST',
   pdraid: 'PRIOR-DAY LIQUIDITY RAID',
   eqhi:   'EQUAL HIGHS (STOP CLUSTER)',
-  eqlo:   'EQUAL LOWS (STOP CLUSTER)'
+  eqlo:   'EQUAL LOWS (STOP CLUSTER)',
+  oitrap: 'OI-TRAP REVERSAL',
+  fundext: 'FUNDING EXTREME'
 };
 
 /* limit-at-zone entry: when price has extended beyond the setup zone, anchor
@@ -1713,6 +1715,13 @@ function goldScalpSetups(inp){
           });
         }
         hgGoldApplyFormingRegime(c, D.__formingRegime);
+        if (!D.__oiTrap && (inp.oiRows || inp.deltaOi || (inp.perpNative && inp.perpNative.oi))){
+          D.__oiTrap = hgGoldOiTrap(rows, inp.oiRows || inp.deltaOi || inp.perpNative.oi, {});
+        }
+        if (!D.__fundExt && (inp.fundingRows || inp.deltaFunding || (inp.perpNative && inp.perpNative.funding))){
+          D.__fundExt = hgGoldFundingExtreme(inp.fundingRows || inp.deltaFunding || inp.perpNative.funding, {});
+        }
+        hgGoldApplyPerpNative(c, D.__oiTrap, D.__fundExt);
       }catch(eFr){}
       var mv = __gsMicroVeto(c.dir, c.stratKey, D, bundleOpts);
       if (mv){
@@ -1914,6 +1923,21 @@ function goldScalpSetups(inp){
         'a 15m close beyond the divergence pivot ' + (isFinite(piv) ? piv.toFixed(2) : 'extreme') + ' confirms continuation instead of exhaustion',
         undefined, piv));
     }
+
+    /* --- 7b) Delta OI-trap reversal (perp-native) --- */
+    try{
+      var oiSeries = inp.oiRows || inp.deltaOi || (inp.perpNative && inp.perpNative.oi) || null;
+      var oiHit = hgGoldOiTrap(rows, oiSeries, {});
+      D.__oiTrap = oiHit;
+      if (oiHit && oiHit.ok && oiHit.dir){
+        push(__gsCand('oitrap', oiHit.dir, D, oiHit.level, __gsSnapLvls(D, oiHit.dir),
+          oiHit.why + ' — Delta XAUT OI history (perp-native edge)',
+          'a 15m close back beyond the failed extreme ' + (isFinite(oiHit.level) ? oiHit.level.toFixed(2) : '') + ' re-opens the trap',
+          undefined, oiHit.level));
+      }
+      var fundSeries = inp.fundingRows || inp.deltaFunding || (inp.perpNative && inp.perpNative.funding) || null;
+      D.__fundExt = hgGoldFundingExtreme(fundSeries, {});
+    }catch(eOi){}
 
     /* === v54 GOLD MASTERCLASS strategy candidates === */
     /* --- 8) VWAP Band mean-reversion (2σ/3σ) — ONLY in chop or when ADX<25 --- */
@@ -4512,8 +4536,14 @@ function hgGoldNewsGate(news, nowMs){
     if (!isFinite(nowMs)) nowMs = Date.now();
     if (!news){ out.unchecked = true; return out; }
     var evs = hgGoldNewsEvents(news);
+    /* Official Fed calendar FOMC decision/press events (merged by callers). */
+    if (Array.isArray(news.fomc)){
+      for (var fi = 0; fi < news.fomc.length; fi++){
+        if (news.fomc[fi]) evs.push(news.fomc[fi]);
+      }
+    }
     if (!evs.length){
-      if (!Array.isArray(news) && !('events' in news)) out.unchecked = true;
+      if (!Array.isArray(news) && !('events' in news) && !('fomc' in news)) out.unchecked = true;
       return out;
     }
     var i, ev, t, dt, title;
@@ -4521,7 +4551,7 @@ function hgGoldNewsGate(news, nowMs){
       ev = evs[i];
       if (!ev) continue;
       title = ev.title || ev.name || ev.event || '';
-      if (!hgGoldNewsIsTier1(title)) continue;
+      if (!hgGoldNewsIsTier1(title) && !ev.fomcDecision) continue;
       t = (ev.t != null) ? ev.t : ev.timestamp;
       t = (+t < 1e12) ? (+t) * 1000 : +t;
       if (!isFinite(t)) continue;
@@ -4529,13 +4559,26 @@ function hgGoldNewsGate(news, nowMs){
       if (dt >= -HG_GOLD_NEWS_BEFORE_MS && dt <= HG_GOLD_NEWS_AFTER_MS){
         out.lock = true;
         out.title = title || null;
-        out.reason = 'NEWS GATE — no new entries, wait 15 min after release'
+        out.reason = (ev.fomcDecision ? 'FOMC GATE — Fed calendar hard block' : 'NEWS GATE — no new entries, wait 15 min after release')
           + (out.title ? ' (' + out.title + ')' : '');
         return out;
       }
     }
     return out;
   }catch(e){ return { lock: false, title: null, reason: null, unchecked: true }; }
+}
+
+/** Merge Fed calendar FOMC decision events into a news object for hgGoldNewsGate. */
+function hgGoldMergeFedFomc(news, fedCal){
+  try{
+    var base = news && typeof news === 'object' && !Array.isArray(news)
+      ? Object.assign({}, news) : { events: hgGoldNewsEvents(news) };
+    var fomc = [];
+    if (fedCal && Array.isArray(fedCal.fomc)) fomc = fedCal.fomc.slice();
+    else if (Array.isArray(fedCal)) fomc = fedCal.slice();
+    base.fomc = fomc;
+    return base;
+  }catch(e){ return news; }
 }
 
 function hgGoldSpreadUsd(src){
@@ -5104,30 +5147,74 @@ function hgGoldDxyCorr(goldRows, dxyRows, win){
 }
 
 function hgGoldRealYieldBias(macro){
-  var out = { bias: 'neutral', dir: null, unchecked: true, reason: '' };
+  var out = { bias: 'neutral', dir: null, unchecked: true, reason: '', source: null };
   try{
     macro = macro || {};
-    var trend = String(macro.tnxTrend || macro.realYieldTrend || macro.us10yTrend || '').toUpperCase();
+    /* Prefer measured FRED DFII10 when present (daily bias gate). */
+    var rr = macro.realRateMeasured;
+    if (rr && rr.measured && rr.trend){
+      var tr0 = String(rr.trend).toUpperCase();
+      out.source = 'fred-dfii10';
+      if (tr0.indexOf('FALL') >= 0){
+        out.bias = 'gold-supportive'; out.dir = 'long'; out.unchecked = false;
+        out.reason = 'FRED DFII10 falling — real-yield opportunity cost easing';
+        return out;
+      }
+      if (tr0.indexOf('RISE') >= 0){
+        out.bias = 'gold-headwind'; out.dir = 'short'; out.unchecked = false;
+        out.reason = 'FRED DFII10 rising — gold opportunity cost rising';
+        return out;
+      }
+    }
     var tip = macro.dfii10Trend || macro.tipsTrend || '';
     tip = String(tip).toUpperCase();
     if (tip.indexOf('FALL') >= 0 || tip === 'DOWN'){
       out.bias = 'gold-supportive'; out.dir = 'long'; out.unchecked = false;
+      out.source = 'dfii10Trend';
       out.reason = 'real yields falling — opportunity-cost headwind easing';
       return out;
     }
     if (tip.indexOf('RISE') >= 0 || tip === 'UP'){
       out.bias = 'gold-headwind'; out.dir = 'short'; out.unchecked = false;
+      out.source = 'dfii10Trend';
       out.reason = 'real yields rising — gold opportunity cost rising';
       return out;
     }
+    var trend = String(macro.tnxTrend || macro.realYieldTrend || macro.us10yTrend || '').toUpperCase();
     if (trend.indexOf('FALL') >= 0){
       out.bias = 'gold-supportive'; out.dir = 'long'; out.unchecked = false;
+      out.source = 'us10y-proxy';
       out.reason = 'US10Y trend falling (proxy when TIPS unread)';
       return out;
     }
     if (trend.indexOf('RISE') >= 0){
       out.bias = 'gold-headwind'; out.dir = 'short'; out.unchecked = false;
+      out.source = 'us10y-proxy';
       out.reason = 'US10Y trend rising (proxy when TIPS unread)';
+      return out;
+    }
+    return out;
+  }catch(e){ return out; }
+}
+
+/** Fed trade-weighted dollar (DTWEXBGS) daily bias — slow filter, not a trigger. */
+function hgGoldDollarBias(macro){
+  var out = { bias: 'neutral', dir: null, unchecked: true, reason: '', source: null };
+  try{
+    macro = macro || {};
+    var off = macro.dxyOfficial || macro.dtwexbgs || null;
+    var trend = '';
+    if (off && off.trend20){ trend = String(off.trend20).toUpperCase(); out.source = 'fred-dtwexbgs'; }
+    else if (macro.dxy && macro.dxy.trend20){ trend = String(macro.dxy.trend20).toUpperCase(); out.source = 'dxy-proxy'; }
+    else if (macro.dxyTrend){ trend = String(macro.dxyTrend).toUpperCase(); out.source = 'dxyTrend'; }
+    if (trend.indexOf('FALL') >= 0 || trend === 'DOWN'){
+      out.bias = 'gold-supportive'; out.dir = 'long'; out.unchecked = false;
+      out.reason = 'dollar softening (' + out.source + ') — gold long bias';
+      return out;
+    }
+    if (trend.indexOf('RIS') >= 0 || trend === 'UP'){
+      out.bias = 'gold-headwind'; out.dir = 'short'; out.unchecked = false;
+      out.reason = 'dollar firming (' + out.source + ') — gold long headwind';
       return out;
     }
     return out;
@@ -5138,7 +5225,7 @@ function hgGoldRealYieldBias(macro){
 function hgGoldFormingRegime(inp){
   inp = inp || {};
   var out = {
-    er: NaN, style: 'mixed', vol: null, dxy: null, yieldBias: null,
+    er: NaN, style: 'mixed', vol: null, dxy: null, yieldBias: null, dollarBias: null,
     allowContinuation: true, allowMeanRev: true, ok: true, why: '', stamps: []
   };
   try{
@@ -5148,6 +5235,7 @@ function hgGoldFormingRegime(inp){
     out.vol = hgGoldAtrVolPercentile(rows, 14, 100);
     out.dxy = hgGoldDxyCorr(rows, inp.dxyRows || (inp.macro && inp.macro.dxyRows), 20);
     out.yieldBias = hgGoldRealYieldBias(inp.macro);
+    out.dollarBias = hgGoldDollarBias(inp.macro);
     if (isFinite(out.er)){
       if (out.er < HG_GOLD_FORM_ER_MR){
         out.style = 'mean-rev';
@@ -5175,6 +5263,9 @@ function hgGoldFormingRegime(inp){
     }
     if (out.yieldBias && !out.yieldBias.unchecked && out.yieldBias.reason){
       out.stamps.push(out.yieldBias.bias === 'gold-supportive' ? 'REAL YIELD FALLING' : 'REAL YIELD RISING');
+    }
+    if (out.dollarBias && !out.dollarBias.unchecked && out.dollarBias.reason){
+      out.stamps.push(out.dollarBias.bias === 'gold-supportive' ? 'DOLLAR SOFT' : 'DOLLAR FIRM');
     }
     return out;
   }catch(e){ return out; }
@@ -5324,6 +5415,186 @@ function hgGoldSessionAtrBuffer(rows, nowMs){
   }catch(e){ return out; }
 }
 
+/* ---- Perp-native edge (Delta OI / funding history) ----
+   Price extreme + sharp OI build, then fail back inside → trapped OI fuels
+   the reversal. Funding extreme frames the day (slow), not a bar trigger. */
+
+var HG_GOLD_OI_TRAP_LOOK = 8;
+var HG_GOLD_OI_TRAP_BUILD_PCT = 0.04;   /* +4% OI over look window */
+var HG_GOLD_OI_TRAP_FAIL_ATR = 0.15;    /* reclaim inside prior extreme by ≥0.15×ATR */
+var HG_GOLD_FUND_EXT_ABS = 0.05;        /* |funding %| mean extreme (Delta percent units) */
+var HG_GOLD_FUND_EXT_BARS = 24;         /* ~1 day of 1h funding candles */
+
+function hgGoldSeriesCloseAt(series, tSec){
+  try{
+    if (!series || !series.length || !isFinite(tSec)) return NaN;
+    var best = NaN, bestDt = Infinity, i, dt;
+    for (i = 0; i < series.length; i++){
+      dt = Math.abs(series[i].t - tSec);
+      if (dt < bestDt){ bestDt = dt; best = series[i].c; }
+    }
+    /* Allow up to 2h mismatch when aligning 15m price to 1h OI. */
+    return (bestDt <= 7200 && isFinite(best)) ? best : NaN;
+  }catch(e){ return NaN; }
+}
+
+/**
+ * OI-trap reversal: price prints a new extreme while OI builds sharply, then
+ * fails back inside. dir = reversal direction (fade the failed extreme).
+ */
+function hgGoldOiTrap(priceRows, oiRows, opts){
+  var out = {
+    ok: false, dir: null, level: NaN, oiBuildPct: NaN, why: '', unchecked: false
+  };
+  try{
+    opts = opts || {};
+    priceRows = __rows(priceRows);
+    oiRows = __rows(oiRows);
+    var look = opts.look || HG_GOLD_OI_TRAP_LOOK;
+    var buildMin = isFinite(opts.buildPct) ? opts.buildPct : HG_GOLD_OI_TRAP_BUILD_PCT;
+    if (!priceRows || priceRows.length < look + 3){
+      out.unchecked = true; out.why = 'need ≥' + (look + 3) + ' price bars'; return out;
+    }
+    if (!oiRows || oiRows.length < 3){
+      out.unchecked = true; out.why = 'OI history unread (Delta OI:SYMBOL)'; return out;
+    }
+    var n = priceRows.length;
+    var atrs = _atr(priceRows, 14);
+    var atr = atrs && atrs.length ? atrs[n - 1] : NaN;
+    if (!(isFinite(atr) && atr > 0)){ out.why = 'ATR unread'; return out; }
+
+    var win = priceRows.slice(n - look - 1, n - 1);
+    var priorHi = -Infinity, priorLo = Infinity, wi;
+    for (wi = 0; wi < win.length; wi++){
+      if (win[wi].h > priorHi) priorHi = win[wi].h;
+      if (win[wi].l < priorLo) priorLo = win[wi].l;
+    }
+    if (!(priorHi > priorLo)){ out.why = 'prior window flat'; return out; }
+
+    var bar = priceRows[n - 1];
+    var oiNow = hgGoldSeriesCloseAt(oiRows, bar.t);
+    var oiPrev = hgGoldSeriesCloseAt(oiRows, priceRows[n - 1 - look].t);
+    if (!(isFinite(oiNow) && isFinite(oiPrev) && oiPrev > 0)){
+      out.unchecked = true; out.why = 'OI not alignable to price timestamps'; return out;
+    }
+    out.oiBuildPct = (oiNow - oiPrev) / oiPrev;
+    if (!(out.oiBuildPct >= buildMin)){
+      out.why = 'OI build ' + (100 * out.oiBuildPct).toFixed(1) + '% < '
+        + (100 * buildMin).toFixed(0) + '% — no trapped fuel';
+      return out;
+    }
+
+    /* High extreme + OI build + close back below prior high → short trap */
+    if (bar.h >= priorHi && bar.c < priorHi - HG_GOLD_OI_TRAP_FAIL_ATR * atr){
+      out.ok = true; out.dir = 'short'; out.level = priorHi;
+      out.why = 'OI-trap short — new high on +'
+        + (100 * out.oiBuildPct).toFixed(1) + '% OI, failed back inside '
+        + priorHi.toFixed(2);
+      return out;
+    }
+    /* Low extreme + OI build + close back above prior low → long trap */
+    if (bar.l <= priorLo && bar.c > priorLo + HG_GOLD_OI_TRAP_FAIL_ATR * atr){
+      out.ok = true; out.dir = 'long'; out.level = priorLo;
+      out.why = 'OI-trap long — new low on +'
+        + (100 * out.oiBuildPct).toFixed(1) + '% OI, failed back inside '
+        + priorLo.toFixed(2);
+      return out;
+    }
+    out.why = 'OI built but price has not failed back inside the prior extreme';
+    return out;
+  }catch(e){ out.why = 'oi-trap error'; return out; }
+}
+
+/**
+ * Funding extreme — slow day-frame signal from Delta FUNDING:SYMBOL history.
+ * Positive extreme → longs crowded → favor shorts; negative → favor longs.
+ */
+function hgGoldFundingExtreme(fundingRows, opts){
+  var out = {
+    ok: false, dir: null, meanPct: NaN, extreme: false, why: '', unchecked: false
+  };
+  try{
+    opts = opts || {};
+    fundingRows = __rows(fundingRows);
+    var bars = opts.bars || HG_GOLD_FUND_EXT_BARS;
+    var thr = isFinite(opts.threshold) ? opts.threshold : HG_GOLD_FUND_EXT_ABS;
+    if (!fundingRows || fundingRows.length < Math.min(6, bars)){
+      out.unchecked = true; out.why = 'funding history unread (Delta FUNDING:SYMBOL)'; return out;
+    }
+    var slice = fundingRows.slice(-bars);
+    var sum = 0, n = 0, i;
+    for (i = 0; i < slice.length; i++){
+      if (isFinite(slice[i].c)){ sum += slice[i].c; n++; }
+    }
+    if (!n){ out.unchecked = true; out.why = 'funding closes empty'; return out; }
+    out.meanPct = sum / n;
+    if (out.meanPct >= thr){
+      out.ok = true; out.extreme = true; out.dir = 'short';
+      out.why = 'funding extreme +' + out.meanPct.toFixed(3)
+        + '% — longs crowded; fade / short bias for the session';
+      return out;
+    }
+    if (out.meanPct <= -thr){
+      out.ok = true; out.extreme = true; out.dir = 'long';
+      out.why = 'funding extreme ' + out.meanPct.toFixed(3)
+        + '% — shorts crowded; long bias for the session';
+      return out;
+    }
+    out.why = 'funding mean ' + out.meanPct.toFixed(3) + '% inside ±' + thr + '% — no crowd extreme';
+    return out;
+  }catch(e){ out.why = 'funding-extreme error'; return out; }
+}
+
+/** Demote candidates fighting a live OI-trap or funding-extreme bias. */
+function hgGoldApplyPerpNative(cand, oiTrap, fundExt){
+  try{
+    if (!cand) return cand;
+    if (!Array.isArray(cand.stamps)) cand.stamps = [];
+    var gn = Array.isArray(cand.gateNotes) ? cand.gateNotes.slice() : [];
+    if (oiTrap && oiTrap.ok && oiTrap.dir && cand.dir && oiTrap.dir !== cand.dir
+        && cand.stratKey !== 'oitrap'){
+      cand.demoted = true;
+      if (cand.stamps.indexOf('OI TRAP OPPOSE') < 0) cand.stamps.push('OI TRAP OPPOSE');
+      gn.push(oiTrap.why || 'against live OI-trap reversal');
+    }
+    if (fundExt && fundExt.ok && fundExt.dir && cand.dir && fundExt.dir !== cand.dir
+        && cand.stratKey !== 'fundext' && cand.stratKey !== 'oitrap'){
+      cand.demoted = true;
+      if (cand.stamps.indexOf('FUNDING EXTREME') < 0) cand.stamps.push('FUNDING EXTREME');
+      gn.push(fundExt.why || 'against crowded funding extreme');
+    }
+    if (oiTrap && oiTrap.ok && oiTrap.dir === cand.dir){
+      if (cand.stamps.indexOf('OI TRAP') < 0) cand.stamps.push('OI TRAP');
+    }
+    cand.gateNotes = gn;
+    return cand;
+  }catch(e){ return cand; }
+}
+
+/**
+ * Browser helper — GET /api/delta/perp-history (same-origin; no third-party SDK).
+ */
+function hgGoldLoadDeltaPerp(opts){
+  opts = opts || {};
+  var symbol = String(opts.symbol || 'XAUTUSD').toUpperCase();
+  var resolution = String(opts.resolution || '1h');
+  var lookbackHours = isFinite(opts.lookbackHours) ? opts.lookbackHours : 168;
+  var url = '/api/delta/perp-history?symbol=' + encodeURIComponent(symbol)
+    + '&resolution=' + encodeURIComponent(resolution)
+    + '&lookbackHours=' + encodeURIComponent(String(lookbackHours));
+  return fetch(url, { method: 'GET', credentials: 'same-origin' })
+    .then(function(r){ return r.json(); })
+    .then(function(j){ return j || { ok: false }; })
+    .catch(function(e){ return { ok: false, error: (e && e.message) || String(e) }; });
+}
+
+function hgGoldLoadFedCalendar(){
+  return fetch('/api/fed-calendar', { method: 'GET', credentials: 'same-origin' })
+    .then(function(r){ return r.json(); })
+    .then(function(j){ return j || { ok: false }; })
+    .catch(function(e){ return { ok: false, error: (e && e.message) || String(e) }; });
+}
+
 function hgGoldApplyFormingRegime(cand, regime){
   try{
     if (!cand || !regime) return cand;
@@ -5396,6 +5667,9 @@ function hgGoldFormingStack(inp){
     out.asia = goldAsianRange(rows);
     out.equals = hgGoldEqualExtremes(rows, 0.12);
     out.sessionBuf = hgGoldSessionAtrBuffer(rows, inp.now || Date.now());
+    out.oiTrap = hgGoldOiTrap(rows, inp.oiRows || inp.deltaOi || (inp.perpNative && inp.perpNative.oi), {});
+    out.fundingExtreme = hgGoldFundingExtreme(
+      inp.fundingRows || inp.deltaFunding || (inp.perpNative && inp.perpNative.funding), {});
 
     function watch(key, state, level, condition, reason, dir, family){
       out.watches.push({
@@ -5472,6 +5746,32 @@ function hgGoldFormingStack(inp){
       }
     }
 
+    /* Layer 3 — perp-native OI trap + funding extreme (Delta history) */
+    if (out.oiTrap && out.oiTrap.ok){
+      out.strategies.push({
+        key: 'oi-trap', dir: out.oiTrap.dir, level: out.oiTrap.level, grade: 'forming',
+        why: out.oiTrap.why,
+        invalidates: isFinite(out.oiTrap.level)
+          ? (out.oiTrap.level + (out.oiTrap.dir === 'long' ? -1 : 1) * (out.sessionBuf.stopBuffer || 0))
+          : NaN
+      });
+      watch('oitrap', 'armed', out.oiTrap.level, out.oiTrap.why, null, out.oiTrap.dir, 'trigger');
+    } else if (out.oiTrap && out.oiTrap.unchecked){
+      watch('oitrap', 'idle', null, '', out.oiTrap.why || 'OI unread', null, 'trigger');
+    } else {
+      watch('oitrap', 'idle', null, '', (out.oiTrap && out.oiTrap.why) || 'no OI-trap this bar', null, 'trigger');
+    }
+    if (out.fundingExtreme && out.fundingExtreme.ok){
+      out.strategies.push({
+        key: 'funding-extreme', dir: out.fundingExtreme.dir, level: NaN, grade: 'frame',
+        why: out.fundingExtreme.why
+      });
+      watch('fundext', 'armed', null, out.fundingExtreme.why, null, out.fundingExtreme.dir, 'trigger');
+    } else {
+      watch('fundext', 'idle', null, '',
+        (out.fundingExtreme && out.fundingExtreme.why) || 'funding not extreme', null, 'trigger');
+    }
+
     out.note = (out.regime && out.regime.why) || '';
     if (out.strategies.length){
       out.note = (out.note ? out.note + ' · ' : '') + out.strategies.length + ' forming strategy hit(s)';
@@ -5495,6 +5795,14 @@ function hgGoldFormingStackHtml(stack){
         h += ' · vol ' + stack.regime.vol.regime;
       if (stack.regime.stamps && stack.regime.stamps.length)
         h += ' · ' + stack.regime.stamps.join(' · ');
+    }
+    if (stack.oiTrap && stack.oiTrap.ok){
+      h += '<div style="margin-top:4px"><b>OI-TRAP ' + String(stack.oiTrap.dir || '').toUpperCase() + '</b> — '
+        + String(stack.oiTrap.why || '').replace(/[<>&]/g, '') + '</div>';
+    }
+    if (stack.fundingExtreme && stack.fundingExtreme.ok){
+      h += '<div style="margin-top:4px"><b>FUNDING EXTREME</b> — '
+        + String(stack.fundingExtreme.why || '').replace(/[<>&]/g, '') + '</div>';
     }
     if (stack.note) h += '<div class="dim" style="margin-top:4px">' + String(stack.note).replace(/[<>&]/g, '') + '</div>';
     var i, s;
@@ -5627,8 +5935,15 @@ W.hgGoldFormingStack = hgGoldFormingStack;
 W.hgGoldFormingStackHtml = hgGoldFormingStackHtml;
 W.hgGoldBarRvol = hgGoldBarRvol;
 W.hgGoldRealYieldBias = hgGoldRealYieldBias;
+W.hgGoldDollarBias = hgGoldDollarBias;
 W.hgGoldNewsIsTier1 = hgGoldNewsIsTier1;
 W.hgGoldNewsGate = hgGoldNewsGate;
+W.hgGoldMergeFedFomc = hgGoldMergeFedFomc;
+W.hgGoldOiTrap = hgGoldOiTrap;
+W.hgGoldFundingExtreme = hgGoldFundingExtreme;
+W.hgGoldApplyPerpNative = hgGoldApplyPerpNative;
+W.hgGoldLoadDeltaPerp = hgGoldLoadDeltaPerp;
+W.hgGoldLoadFedCalendar = hgGoldLoadFedCalendar;
 W.hgGoldSpreadUsd = hgGoldSpreadUsd;
 W.hgGoldSpreadLock = hgGoldSpreadLock;
 W.hgGoldMtfBias = hgGoldMtfBias;

@@ -2167,12 +2167,38 @@ async function runScan(ui, scanSt){
 
     /* ranking context legs — every one optional, every one catch-isolated */
     var ctx = { now: now, news: newsC, season: season, macro: null, spot: null, fng: null,
-                fundingRate: null, style: 'goldswing' };
+                fundingRate: null, style: 'goldswing', perpNative: null };
     var gm = gfn('getGoldMacro');
     if (gm){
       setStat(ui, 'reading macro tilt (DXY · US10Y · gold/silver ratio)…');
       try{ ctx.macro = await gm(); }catch(eM){ ctx.macro = null; }
     }
+    try{
+      var loadP = gfn('hgGoldLoadDeltaPerp');
+      var loadF = gfn('hgGoldLoadFedCalendar');
+      var mergeF = gfn('hgGoldMergeFedFomc');
+      var waits = [];
+      if (loadP){
+        waits.push(Promise.resolve().then(function(){ return loadP({ symbol: 'XAUTUSD', resolution: '1h' }); })
+          .then(function(j){ ctx.perpNative = j; }).catch(function(){}));
+      }
+      if (loadF){
+        waits.push(Promise.resolve().then(function(){ return loadF(); })
+          .then(function(j){
+            if (mergeF && j && j.ok){
+              newsRaw = mergeF(newsRaw || {}, j);
+              newsC = newsRaw;
+              ctx.news = newsC;
+            }
+          }).catch(function(){}));
+      }
+      if (waits.length){
+        await Promise.race([
+          Promise.all(waits),
+          new Promise(function(r){ setTimeout(r, 8000); })
+        ]);
+      }
+    }catch(ePerp){}
     var gss = gfn('goldspotState');
     if (gss){ try{ ctx.spot = gss(); }catch(eS0){ ctx.spot = null; } }
     try{ if (typeof S !== 'undefined' && S && S.fng) ctx.fng = S.fng; }catch(eF){ ctx.fng = null; }
@@ -2189,6 +2215,11 @@ async function runScan(ui, scanSt){
     var microOpts = {};
     if (ctx.macro && ctx.macro.us10yCandles) microOpts.us10yCandles = ctx.macro.us10yCandles;
     if (newsRaw) microOpts.news = newsRaw;
+    if (ctx.perpNative && ctx.perpNative.ok){
+      microOpts.perpNative = ctx.perpNative;
+      microOpts.oiRows = ctx.perpNative.oi;
+      microOpts.fundingRows = ctx.perpNative.funding;
+    }
     if (typeof W !== 'undefined' && W){
       if (W.__hgGoldTickBuffer) microOpts.tickBuffer = W.__hgGoldTickBuffer;
       if (W.__hgGoldL2Book) microOpts.l2OrderBook = W.__hgGoldL2Book;
@@ -2245,6 +2276,16 @@ async function runScan(ui, scanSt){
         : ((gold.source === 'binance-paxg') ? 'PAXGUSDT' : 'XAUUSDT');
       venueRows[v] = { rows4h: gold.rows4h };
       var got = buildCandidates(gold, now, newsC, ctx.macro, sessionTxt, v, sym1, microOpts);
+      try{
+        var oiFn = gfn('hgGoldOiTrap');
+        var fundFn = gfn('hgGoldFundingExtreme');
+        var applyP = gfn('hgGoldApplyPerpNative');
+        if (applyP && ctx.perpNative && ctx.perpNative.ok){
+          var oiHit = oiFn ? oiFn(gold.rows4h, ctx.perpNative.oi, {}) : null;
+          var fundHit = fundFn ? fundFn(ctx.perpNative.funding, {}) : null;
+          for (var pi = 0; pi < got.length; pi++) applyP(got[pi], oiHit, fundHit);
+        }
+      }catch(ePn){}
       collectWatch(gold, v);
       for (i = 0; i < got.length; i++) cands.push(got[i]);
       for (i = 0; i < (got.rejected || []).length; i++) rejectedAll.push(got.rejected[i]);
@@ -2451,7 +2492,10 @@ async function runScan(ui, scanSt){
         if (!fsFn || !fhFn) return '';
         return fhFn(fsFn({
           rows15m: gold.rows4h, rows4h: gold.rows4h, macro: ctx.macro,
-          dxyRows: ctx.macro && ctx.macro.dxyRows, now: now
+          dxyRows: ctx.macro && ctx.macro.dxyRows, now: now,
+          perpNative: ctx.perpNative,
+          oiRows: ctx.perpNative && ctx.perpNative.oi,
+          fundingRows: ctx.perpNative && ctx.perpNative.funding
         }));
       }catch(eFs){ return ''; }
     }

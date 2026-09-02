@@ -1299,7 +1299,8 @@ async function runScan(ui, scanSt){
     var season = seasonFn ? seasonFn(now) : null;
 
     /* ranking context legs — every one optional, every one catch-isolated */
-    var ctx = { now: now, news: news, season: season, macro: null, spot: null, fng: null, style: 'goldscalp' };
+    var ctx = { now: now, news: news, season: season, macro: null, spot: null, fng: null, style: 'goldscalp',
+                perpNative: null };
     var gm = gfn('getGoldMacro');
     if (gm){
       setStat(ui, 'reading macro tilt (DXY · US10Y · gold/silver ratio)…');
@@ -1310,6 +1311,30 @@ async function runScan(ui, scanSt){
         ]);
       }catch(eM){ ctx.macro = null; }
     }
+    /* Delta OI/funding history + Fed FOMC calendar (public, same-origin APIs) */
+    try{
+      var loadP = gfn('hgGoldLoadDeltaPerp');
+      var loadF = gfn('hgGoldLoadFedCalendar');
+      var mergeF = gfn('hgGoldMergeFedFomc');
+      var waits = [];
+      if (loadP){
+        waits.push(Promise.resolve().then(function(){ return loadP({ symbol: 'XAUTUSD', resolution: '1h' }); })
+          .then(function(j){ ctx.perpNative = j; }).catch(function(){}));
+      }
+      if (loadF){
+        waits.push(Promise.resolve().then(function(){ return loadF(); })
+          .then(function(j){
+            if (mergeF && j && j.ok) news = mergeF(news || {}, j);
+            ctx.news = news;
+          }).catch(function(){}));
+      }
+      if (waits.length){
+        await Promise.race([
+          Promise.all(waits),
+          new Promise(function(r){ setTimeout(r, 8000); })
+        ]);
+      }
+    }catch(ePerp){}
     var gss = gfn('goldspotState');
     if (gss){ try{ ctx.spot = gss(); }catch(eS0){ ctx.spot = null; } }
     try{ if (typeof S !== 'undefined' && S && S.fng) ctx.fng = S.fng; }catch(eF){ ctx.fng = null; }
@@ -1378,6 +1403,11 @@ async function runScan(ui, scanSt){
     }
     if (gold.src && gold.src['15m']) scalpBundle.candleSource = gold.src['15m'];
     else if (gold.source) scalpBundle.candleSource = gold.source;
+    if (ctx.perpNative && ctx.perpNative.ok){
+      scalpBundle.perpNative = ctx.perpNative;
+      scalpBundle.oiRows = ctx.perpNative.oi;
+      scalpBundle.fundingRows = ctx.perpNative.funding;
+    }
     if (gold.rows15m.length){
       var v = (gold.source === 'xm-xauusd') ? venueLabel(gold.source)
         : (stRoute ? stGoldVenueLabel(gold.source) : venueLabel(gold.source));
@@ -1683,7 +1713,10 @@ async function runScan(ui, scanSt){
         if (!fsFn || !fhFn) return '';
         return fhFn(fsFn({
           rows15m: gold.rows15m, rows4h: gold.rows4h, macro: ctx.macro,
-          dxyRows: ctx.macro && ctx.macro.dxyRows, now: now
+          dxyRows: ctx.macro && ctx.macro.dxyRows, now: now,
+          perpNative: ctx.perpNative,
+          oiRows: ctx.perpNative && ctx.perpNative.oi,
+          fundingRows: ctx.perpNative && ctx.perpNative.funding
         }));
       }catch(eFs){ return ''; }
     }

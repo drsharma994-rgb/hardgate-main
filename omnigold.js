@@ -7453,23 +7453,26 @@ terse status, and never launches a first-time scan on a global refresh.
        back to the tab's stored desk-tape read; nothing else changes. */
     var host = ui && ui.goldEngines;
     if (!host) return;
-    try {
-      var formHtml = '';
       try {
-        var fsFn = gfn('hgGoldFormingStack');
-        var fhFn = gfn('hgGoldFormingStackHtml');
-        if (fsFn && fhFn && __og && __og.lastRows){
-          formHtml = fhFn(fsFn({
-            rows15m: __og.lastRows.m15 || __og.lastRows.scalp || [],
-            rows4h: __og.lastRows.swing || [],
-            macro: __og.shared && __og.shared.macro,
-            dxyRows: __og.shared && __og.shared.macro && __og.shared.macro.dxyRows,
-            now: Date.now()
-          }));
-        }
-      } catch (eForm) { formHtml = ''; }
-      host.innerHTML = formHtml + hgOgGoldEnginesPanelHtml(bridge, tapeDir);
-    }
+        var formHtml = '';
+        try {
+          var fsFn = gfn('hgGoldFormingStack');
+          var fhFn = gfn('hgGoldFormingStackHtml');
+          if (fsFn && fhFn && __og && __og.lastRows){
+            formHtml = fhFn(fsFn({
+              rows15m: __og.lastRows.m15 || __og.lastRows.scalp || [],
+              rows4h: __og.lastRows.swing || [],
+              macro: __og.shared && __og.shared.macro,
+              dxyRows: __og.shared && __og.shared.macro && __og.shared.macro.dxyRows,
+              now: Date.now(),
+              perpNative: __og.perpNative || null,
+              oiRows: __og.perpNative && __og.perpNative.oi,
+              fundingRows: __og.perpNative && __og.perpNative.funding
+            }));
+          }
+        } catch (eForm) { formHtml = ''; }
+        host.innerHTML = formHtml + hgOgGoldEnginesPanelHtml(bridge, tapeDir);
+      }
     catch (eGe){ host.innerHTML = ''; }
   }
 
@@ -8330,6 +8333,27 @@ terse status, and never launches a first-time scan on a global refresh.
         shared.macro = m || null;
         shared.yieldRows = (m && m.us10yRows) ? m.us10yRows : null;
         shared.nowSec = Date.now() / 1000;
+        /* Delta OI/funding + Fed FOMC calendar — bounded, fail-open */
+        return Promise.race([
+          Promise.all([
+            Promise.resolve().then(function(){
+              var lp = gfn('hgGoldLoadDeltaPerp');
+              return lp ? lp({ symbol: 'XAUTUSD', resolution: '1h' }) : null;
+            }).catch(function(){ return null; }),
+            Promise.resolve().then(function(){
+              var lf = gfn('hgGoldLoadFedCalendar');
+              return lf ? lf() : null;
+            }).catch(function(){ return null; })
+          ]).then(function(pair){
+            __og.perpNative = pair[0] || null;
+            shared.perpNative = __og.perpNative;
+            var mergeF = gfn('hgGoldMergeFedFomc');
+            if (mergeF && pair[1] && pair[1].ok){
+              shared.news = mergeF(shared.news || {}, pair[1]);
+            }
+          }),
+          new Promise(function(r){ setTimeout(r, 8000); })
+        ]).then(function(){
         return hgOgResolveLiveSpot(NaN).then(function(sp){
           if (isFinite(sp) && sp > 0) shared.liveSpotPx = sp;
           return Promise.race([
@@ -8343,6 +8367,7 @@ terse status, and never launches a first-time scan on a global refresh.
             if (pk && pk.length) shared.paxg = fin(pk[pk.length - 1].c);
           } catch (ePk){ shared.paxg = NaN; }
           return scanHorizon(HORIZONS.scalp, shared, ui);
+        });
         });
         });
       })
