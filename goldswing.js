@@ -2280,10 +2280,30 @@ async function runScan(ui, scanSt){
         var oiFn = gfn('hgGoldOiTrap');
         var fundFn = gfn('hgGoldFundingExtreme');
         var applyP = gfn('hgGoldApplyPerpNative');
+        var sweepFn = gfn('hgGoldSweepEngine');
         if (applyP && ctx.perpNative && ctx.perpNative.ok){
           var oiHit = oiFn ? oiFn(gold.rows4h, ctx.perpNative.oi, {}) : null;
           var fundHit = fundFn ? fundFn(ctx.perpNative.funding, {}) : null;
           for (var pi = 0; pi < got.length; pi++) applyP(got[pi], oiHit, fundHit);
+        }
+        if (sweepFn && got.length){
+          var swEng = sweepFn(gold.rows4h, {
+            regime: null,
+            newsGate: newsRaw ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(newsRaw, now) : null) : null
+          });
+          if (swEng && swEng.dir){
+            for (var si = 0; si < got.length; si++){
+              if (!got[si]) continue;
+              if (!Array.isArray(got[si].stamps)) got[si].stamps = [];
+              if (got[si].dir === swEng.dir && (swEng.confirmed || swEng.tier === 'alert')){
+                if (got[si].stamps.indexOf('LIQ SWEEP') < 0) got[si].stamps.push('LIQ SWEEP');
+                got[si].sweepScore = swEng.score;
+              } else if (got[si].dir && swEng.dir && got[si].dir !== swEng.dir && swEng.confirmed){
+                got[si].demoted = true;
+                if (got[si].stamps.indexOf('SWEEP OPPOSE') < 0) got[si].stamps.push('SWEEP OPPOSE');
+              }
+            }
+          }
         }
       }catch(ePn){}
       collectWatch(gold, v);

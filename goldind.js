@@ -1063,7 +1063,8 @@ var GST_NAME = {
   eqhi:   'EQUAL HIGHS (STOP CLUSTER)',
   eqlo:   'EQUAL LOWS (STOP CLUSTER)',
   oitrap: 'OI-TRAP REVERSAL',
-  fundext: 'FUNDING EXTREME'
+  fundext: 'FUNDING EXTREME',
+  liqsweep: 'GOLD LIQUIDITY SWEEP'
 };
 
 /* limit-at-zone entry: when price has extended beyond the setup zone, anchor
@@ -1761,6 +1762,31 @@ function goldScalpSetups(inp){
           undefined, sw.level));
       }
     }
+
+    /* --- 1b) five-leg GOLD SWEEP ENGINE (map·wick·MSS·VWAP·RVOL) --- */
+    try{
+      if (!D.__sweepEngine){
+        D.__sweepEngine = hgGoldSweepEngine(rows, {
+          regime: D.__formingRegime || hgGoldFormingRegime({ rows: rows, macro: inp.macro }),
+          newsGate: newsState ? hgGoldNewsGate(newsState, nowMs) : null
+        });
+      }
+      var eng = D.__sweepEngine;
+      if (eng && (eng.confirmed || eng.tier === 'alert' || eng.tier === 'watch') && eng.dir){
+        var engCand = __gsCand('liqsweep', eng.dir, D, eng.level, __gsSnapLvls(D, eng.dir),
+          eng.why + ' — five-leg liquidity sweep engine',
+          'a 15m close back beyond ' + (isFinite(eng.level) ? eng.level.toFixed(2) : 'the swept level') + ' negates the reclaim',
+          undefined, eng.level);
+        if (engCand){
+          engCand.sweepScore = eng.score;
+          engCand.sweepTier = eng.tier;
+          if (!Array.isArray(engCand.stamps)) engCand.stamps = [];
+          engCand.stamps.push('SWEEP ' + String(eng.score) + '/' + String(eng.tier || '').toUpperCase());
+          if (eng.tier === 'watch' && !eng.confirmed) engCand.demoted = true;
+          push(engCand);
+        }
+      }
+    }catch(eEng){}
 
     /* --- 2) order-block / breaker retest (robust: active zones + structure alignment) --- */
     var obRetestDone = false;
@@ -5370,7 +5396,7 @@ function hgGoldSweepDisplacement(rows, level, dir, opt){
     var breach = long ? (level - bar.l) : (bar.h - level);
     out.breachAtr = breach / atr;
     if (!(breach >= minBreach)){
-      out.why = 'wick breach < ' + HG_GOLD_FORM_SWEEP_ATR + '×ATR — not a stop raid';
+      out.why = 'wick breach < ' + (isFinite(opt.minAtr) ? opt.minAtr : HG_GOLD_FORM_SWEEP_ATR) + '×ATR — not a stop raid';
       return out;
     }
     out.potential = true;
@@ -5396,6 +5422,422 @@ function hgGoldSweepDisplacement(rows, level, dir, opt){
       + ' · breach ' + out.breachAtr.toFixed(2) + '×ATR';
     return out;
   }catch(e){ return out; }
+}
+
+/* =========================================================================
+   GOLD LIQUIDITY SWEEP ENGINE (hg-v555) — five components for SCALP/SWING/
+   OMNIGOLD: liquidity map · ATR wick reclaim · MSS/CHoCH · VWAP · RVOL.
+   RSI stays FOLKLORE (not scored). Thin-perp VP is location hint only.
+   Confidence: 75+ alert · 65–74 watch · <65 ignore.
+========================================================================= */
+
+var HG_GOLD_SWEEP_ATR_MIN = 0.10;
+var HG_GOLD_SWEEP_ATR_IDEAL = 0.25;
+var HG_GOLD_SWEEP_RVOL_MIN = 1.20;
+var HG_GOLD_SWEEP_ALERT = 75;
+var HG_GOLD_SWEEP_WATCH = 65;
+var HG_GOLD_SWEEP_EQ_TOL = 0.12;
+
+function hgGoldRoundLevels(px, atr){
+  var out = [];
+  try{
+    if (!isFinite(px) || !(px > 0)) return out;
+    var step = (isFinite(atr) && atr > 5) ? 10 : 5;
+    var base = Math.round(px / step) * step;
+    out.push({ level: base, kind: 'round', label: 'ROUND ' + base.toFixed(0) });
+    out.push({ level: base + step, kind: 'round', label: 'ROUND ' + (base + step).toFixed(0) });
+    out.push({ level: base - step, kind: 'round', label: 'ROUND ' + (base - step).toFixed(0) });
+    return out;
+  }catch(e){ return out; }
+}
+
+function hgGoldPivotLevels(rows, leftBars, rightBars){
+  var out = { highs: [], lows: [] };
+  try{
+    rows = __rows(rows);
+    leftBars = leftBars || 3;
+    rightBars = rightBars || 3;
+    if (!rows || rows.length < leftBars + rightBars + 3) return out;
+    var i, j, okH, okL;
+    for (i = leftBars; i < rows.length - rightBars; i++){
+      okH = true; okL = true;
+      for (j = 1; j <= leftBars; j++){
+        if (!(rows[i].h >= rows[i - j].h)) okH = false;
+        if (!(rows[i].l <= rows[i - j].l)) okL = false;
+      }
+      for (j = 1; j <= rightBars; j++){
+        if (!(rows[i].h >= rows[i + j].h)) okH = false;
+        if (!(rows[i].l <= rows[i + j].l)) okL = false;
+      }
+      if (okH) out.highs.push({ level: rows[i].h, i: i, kind: 'pivot', label: '15m/1h PIVOT H' });
+      if (okL) out.lows.push({ level: rows[i].l, i: i, kind: 'pivot', label: '15m/1h PIVOT L' });
+    }
+    out.highs = out.highs.slice(-6);
+    out.lows = out.lows.slice(-6);
+    return out;
+  }catch(e){ return out; }
+}
+
+/** Liquidity-level map: Asia · PDH/PDL · equals · pivots · round numbers. */
+function hgGoldLiquidityMap(rows, opts){
+  var out = { levels: [], atr: NaN, asia: null, priorDay: null, equals: null };
+  try{
+    opts = opts || {};
+    rows = __rows(rows);
+    if (!rows || rows.length < 30) return out;
+    var atrs = _atr(rows, 14);
+    out.atr = atrs[atrs.length - 1];
+    var px = rows[rows.length - 1].c;
+    out.asia = goldAsianRange(rows);
+    out.priorDay = hgGoldPriorDayLevels(rows);
+    out.equals = hgGoldEqualExtremes(rows, opts.eqTol || HG_GOLD_SWEEP_EQ_TOL);
+    var piv = hgGoldPivotLevels(rows, opts.pivotL || 3, opts.pivotR || 3);
+    function add(level, kind, label, side){
+      if (!isFinite(level)) return;
+      out.levels.push({ level: level, kind: kind, label: label, side: side || null });
+    }
+    if (out.asia && isFinite(out.asia.hi)){
+      add(out.asia.hi, 'asia', 'ASIA HIGH', 'buy-side');
+      add(out.asia.lo, 'asia', 'ASIA LOW', 'sell-side');
+    }
+    if (out.priorDay && out.priorDay.ok){
+      add(out.priorDay.hi, 'pdh', 'PRIOR DAY HIGH', 'buy-side');
+      add(out.priorDay.lo, 'pdl', 'PRIOR DAY LOW', 'sell-side');
+    }
+    var ei;
+    for (ei = 0; ei < (out.equals.highs || []).length; ei++)
+      add(out.equals.highs[ei].level, 'equal', 'EQUAL HIGHS', 'buy-side');
+    for (ei = 0; ei < (out.equals.lows || []).length; ei++)
+      add(out.equals.lows[ei].level, 'equal', 'EQUAL LOWS', 'sell-side');
+    for (ei = 0; ei < piv.highs.length; ei++)
+      add(piv.highs[ei].level, 'pivot', piv.highs[ei].label, 'buy-side');
+    for (ei = 0; ei < piv.lows.length; ei++)
+      add(piv.lows[ei].level, 'pivot', piv.lows[ei].label, 'sell-side');
+    var rnd = hgGoldRoundLevels(px, out.atr);
+    for (ei = 0; ei < rnd.length; ei++)
+      add(rnd[ei].level, 'round', rnd[ei].label, null);
+    /* Deduplicate near-identical levels within 0.05×ATR */
+    var tol = (isFinite(out.atr) ? out.atr : 1) * 0.05;
+    var uniq = [], ui, uj, keep;
+    for (ui = 0; ui < out.levels.length; ui++){
+      keep = true;
+      for (uj = 0; uj < uniq.length; uj++){
+        if (Math.abs(uniq[uj].level - out.levels[ui].level) <= tol){
+          /* Prefer session/prior-day over round/pivot duplicates */
+          var rank = { asia: 5, pdh: 5, pdl: 5, equal: 4, pivot: 3, round: 1 };
+          if ((rank[out.levels[ui].kind] || 0) > (rank[uniq[uj].kind] || 0))
+            uniq[uj] = out.levels[ui];
+          keep = false; break;
+        }
+      }
+      if (keep) uniq.push(out.levels[ui]);
+    }
+    out.levels = uniq;
+    return out;
+  }catch(e){ return out; }
+}
+
+/** Post-sweep MSS/CHoCH: break nearest opposing swing after reclaim. */
+function hgGoldSweepMss(rows, dir){
+  var out = { ok: false, kind: null, why: '' };
+  try{
+    rows = __rows(rows);
+    dir = (dir === 'short') ? 'short' : 'long';
+    if (!rows || rows.length < 30){ out.why = 'need ≥30 bars for MSS'; return out; }
+    var bos = goldBOS(rows);
+    var ms = (typeof goldMarketStructure === 'function') ? goldMarketStructure(rows) : null;
+    if (dir === 'long'){
+      if (bos && (bos.bos === 'bullish' || bos.choch === 'bullish')){
+        out.ok = true; out.kind = bos.bos === 'bullish' ? 'BOS' : 'CHoCH';
+        out.why = out.kind + ' bullish after sell-side sweep';
+        return out;
+      }
+      if (ms && (ms.bos === 'bullish' || ms.choch === 'bullish' || ms.trend === 'bullish')){
+        out.ok = true; out.kind = 'MSS';
+        out.why = 'market structure bullish after sell-side sweep';
+        return out;
+      }
+    } else {
+      if (bos && (bos.bos === 'bearish' || bos.choch === 'bearish')){
+        out.ok = true; out.kind = bos.bos === 'bearish' ? 'BOS' : 'CHoCH';
+        out.why = out.kind + ' bearish after buy-side sweep';
+        return out;
+      }
+      if (ms && (ms.bos === 'bearish' || ms.choch === 'bearish' || ms.trend === 'bearish')){
+        out.ok = true; out.kind = 'MSS';
+        out.why = 'market structure bearish after buy-side sweep';
+        return out;
+      }
+    }
+    out.why = 'no post-sweep MSS/CHoCH yet — wick is potential only';
+    return out;
+  }catch(e){ out.why = 'MSS unread'; return out; }
+}
+
+function hgGoldSweepVwap(rows, dir){
+  var out = { ok: false, vwap: NaN, why: '', unchecked: false };
+  try{
+    rows = __rows(rows);
+    dir = (dir === 'short') ? 'short' : 'long';
+    var ai = goldSessionAnchor(rows);
+    var vw = goldVWAP(rows, ai >= 0 ? ai : 0);
+    if (!vw || !isFinite(vw.value)){
+      out.unchecked = true; out.why = 'session VWAP unread — skip VWAP leg'; return out;
+    }
+    out.vwap = vw.value;
+    var px = rows[rows.length - 1].c;
+    if (dir === 'long'){
+      out.ok = px >= vw.value;
+      out.why = out.ok
+        ? ('reclaimed/holds session VWAP ' + vw.value.toFixed(2))
+        : ('still below session VWAP ' + vw.value.toFixed(2) + ' — no acceptance');
+    } else {
+      out.ok = px <= vw.value;
+      out.why = out.ok
+        ? ('rejects/holds below session VWAP ' + vw.value.toFixed(2))
+        : ('still above session VWAP ' + vw.value.toFixed(2) + ' — no rejection');
+    }
+    return out;
+  }catch(e){ out.unchecked = true; out.why = 'VWAP error'; return out; }
+}
+
+function hgGoldSweepFalseFilters(rows, hit, opts){
+  var out = { reject: false, reasons: [] };
+  try{
+    opts = opts || {};
+    rows = __rows(rows);
+    if (!hit) return out;
+    /* Mid-range sweeps are weak (centre of broad range). */
+    var pd = goldPremiumDiscount(rows);
+    if (pd && pd.zone === 'NEUTRAL' && hit.levelKind !== 'asia' && hit.levelKind !== 'pdh' && hit.levelKind !== 'pdl' && hit.levelKind !== 'equal'){
+      out.reasons.push('mid-range sweep away from session/HTF liquidity');
+    }
+    var regime = opts.regime || null;
+    if (regime && regime.vol && regime.vol.regime === 'drift' && isFinite(hit.rvol) && hit.rvol < HG_GOLD_SWEEP_RVOL_MIN){
+      out.reject = true;
+      out.reasons.push('low ATR drift + weak RVOL — random wick, not a stop raid');
+    }
+    if (opts.newsGate && opts.newsGate.lock){
+      out.reject = true;
+      out.reasons.push(opts.newsGate.reason || 'news/FOMC window — headline spike risk');
+    }
+    /* Level already repeatedly tested (3+ touches in last 40 bars). */
+    if (rows && isFinite(hit.level)){
+      var touches = 0, ti, atr = hit.atr || 1, tol = 0.15 * atr;
+      for (ti = Math.max(0, rows.length - 40); ti < rows.length - 1; ti++){
+        if (Math.abs(rows[ti].h - hit.level) <= tol || Math.abs(rows[ti].l - hit.level) <= tol) touches++;
+      }
+      if (touches >= 4){
+        out.reasons.push('level repeatedly tested (' + touches + '×) — resting liquidity may be thin');
+      }
+    }
+    return out;
+  }catch(e){ return out; }
+}
+
+/**
+ * Full five-leg sweep engine. A wick alone is potential; confirmed needs
+ * reclaim + MSS + (VWAP when readable) + RVOL.
+ */
+function hgGoldSweepEngine(rows, opts){
+  var out = {
+    ok: false, confirmed: false, potential: false, dir: null, level: NaN,
+    levelKind: null, label: null, score: 0, tier: 'ignore', parts: {},
+    why: '', map: null, wick: null, mss: null, vwap: null, rvol: NaN, atr: NaN
+  };
+  try{
+    opts = opts || {};
+    rows = __rows(rows);
+    if (!rows || rows.length < 35){ out.why = 'need ≥35 bars'; return out; }
+    var map = hgGoldLiquidityMap(rows, opts);
+    out.map = map;
+    out.atr = map.atr;
+    if (!map.levels.length){ out.why = 'no marked liquidity levels'; return out; }
+
+    var best = null, li;
+    for (li = 0; li < map.levels.length; li++){
+      var L = map.levels[li];
+      var tryDirs = [];
+      if (L.side === 'sell-side' || L.kind === 'pdl' || L.kind === 'asia' && /LOW/i.test(L.label))
+        tryDirs.push('long');
+      else if (L.side === 'buy-side' || L.kind === 'pdh' || /HIGH/i.test(L.label))
+        tryDirs.push('short');
+      else {
+        /* Round / ambiguous — try both; nearest side wins via breach */
+        var bar0 = rows[rows.length - 1];
+        if (bar0.l <= L.level) tryDirs.push('long');
+        if (bar0.h >= L.level) tryDirs.push('short');
+      }
+      var di;
+      for (di = 0; di < tryDirs.length; di++){
+        var dir = tryDirs[di];
+        var wick = hgGoldSweepDisplacement(rows, L.level, dir, {
+          minAtr: HG_GOLD_SWEEP_ATR_MIN,
+          rvolMin: 0 /* score RVOL separately so potential wicks still surface */
+        });
+        if (!wick.potential && !wick.ok) continue;
+        var mss = hgGoldSweepMss(rows, dir);
+        var vwap = hgGoldSweepVwap(rows, dir);
+        var rvol = wick.rvol;
+        var cand = {
+          dir: dir, level: L.level, levelKind: L.kind, label: L.label,
+          wick: wick, mss: mss, vwap: vwap, rvol: rvol, atr: map.atr,
+          potential: !!wick.potential, reclaim: !!wick.closeReclaim
+        };
+        var conf = hgGoldSweepConfidence(cand, {
+          regime: opts.regime, newsGate: opts.newsGate, rows: rows
+        });
+        cand.score = conf.score;
+        cand.tier = conf.tier;
+        cand.parts = conf.parts;
+        cand.confirmed = conf.confirmed;
+        cand.why = conf.why;
+        cand.filters = conf.filters;
+        if (!best || cand.score > best.score) best = cand;
+      }
+    }
+    if (!best){ out.why = 'no ATR-sized sweep of a marked level this bar'; return out; }
+    out.dir = best.dir;
+    out.level = best.level;
+    out.levelKind = best.levelKind;
+    out.label = best.label;
+    out.wick = best.wick;
+    out.mss = best.mss;
+    out.vwap = best.vwap;
+    out.rvol = best.rvol;
+    out.score = best.score;
+    out.tier = best.tier;
+    out.parts = best.parts;
+    out.potential = !!best.potential;
+    out.confirmed = !!best.confirmed;
+    out.ok = out.confirmed || (out.tier === 'watch' || out.tier === 'alert');
+    out.why = best.why;
+    out.filters = best.filters;
+    return out;
+  }catch(e){ out.why = 'sweep engine error'; return out; }
+}
+
+/**
+ * 100-pt Gold Sweep Confidence.
+ * Liquidity 25 · Sweep quality 20 · Structure 20 · VWAP/location 15 ·
+ * Participation 10 · Regime/news 10. RSI not scored (FOLKLORE).
+ */
+function hgGoldSweepConfidence(hit, opts){
+  var out = {
+    score: 0, tier: 'ignore', confirmed: false, parts: {}, why: '', filters: null
+  };
+  try{
+    opts = opts || {};
+    if (!hit || !hit.dir){ out.why = 'no sweep hit'; return out; }
+    var p = {
+      liquidity: 0, sweep: 0, structure: 0, vwapLoc: 0, participation: 0, regimeNews: 0
+    };
+    /* Liquidity quality — 25 */
+    var k = hit.levelKind || '';
+    if (k === 'asia' || k === 'pdh' || k === 'pdl') p.liquidity = 25;
+    else if (k === 'equal') p.liquidity = 22;
+    else if (k === 'pivot') p.liquidity = 16;
+    else if (k === 'round') p.liquidity = 10;
+    else p.liquidity = 8;
+
+    /* Sweep quality — 20 */
+    var ba = hit.wick && hit.wick.breachAtr;
+    if (hit.wick && hit.wick.closeReclaim && isFinite(ba)){
+      if (ba >= HG_GOLD_SWEEP_ATR_IDEAL) p.sweep = 20;
+      else if (ba >= HG_GOLD_SWEEP_ATR_MIN) p.sweep = 14;
+      else p.sweep = 6;
+      if (hit.wick.disp) p.sweep = Math.min(20, p.sweep + 3);
+    } else if (hit.wick && hit.wick.potential){
+      p.sweep = 8;
+    }
+
+    /* Structure — 20 */
+    if (hit.mss && hit.mss.ok) p.structure = 20;
+    else if (hit.wick && hit.wick.closeReclaim) p.structure = 6;
+
+    /* VWAP / location — 15 (VP thin = hint only, small bump if near Asia/PDH) */
+    if (hit.vwap && hit.vwap.ok) p.vwapLoc = 15;
+    else if (hit.vwap && hit.vwap.unchecked) p.vwapLoc = 8; /* fail-open half credit */
+    else if (k === 'asia' || k === 'pdh' || k === 'pdl' || k === 'equal') p.vwapLoc = 6;
+
+    /* Participation — 10 */
+    if (isFinite(hit.rvol)){
+      if (hit.rvol >= 1.5) p.participation = 10;
+      else if (hit.rvol >= HG_GOLD_SWEEP_RVOL_MIN) p.participation = 8;
+      else if (hit.rvol >= 1.0) p.participation = 4;
+      else p.participation = 0;
+    } else {
+      p.participation = 5; /* unread volume — neutral, not a free pass */
+    }
+
+    /* Regime / news — 10 */
+    var regime = opts.regime;
+    var newsOk = !(opts.newsGate && opts.newsGate.lock);
+    if (newsOk){
+      if (regime && regime.vol && regime.vol.regime === 'expansion') p.regimeNews = 10;
+      else if (regime && regime.style === 'mean-rev') p.regimeNews = 9; /* sweeps like MR */
+      else if (regime && regime.vol && regime.vol.regime === 'drift') p.regimeNews = 3;
+      else p.regimeNews = 7;
+    } else {
+      p.regimeNews = 0;
+    }
+
+    var filters = hgGoldSweepFalseFilters(opts.rows, hit, opts);
+    out.filters = filters;
+    if (filters && filters.reject){
+      out.parts = p;
+      out.score = Math.min(64, p.liquidity + p.sweep + p.structure + p.vwapLoc + p.participation + p.regimeNews);
+      out.tier = 'ignore';
+      out.why = 'filtered — ' + (filters.reasons || []).join('; ');
+      return out;
+    }
+    /* Soft penalties for caution reasons */
+    var soft = (filters && filters.reasons && filters.reasons.length) ? Math.min(8, filters.reasons.length * 3) : 0;
+
+    out.parts = p;
+    out.score = Math.max(0, Math.min(100,
+      p.liquidity + p.sweep + p.structure + p.vwapLoc + p.participation + p.regimeNews - soft));
+    out.confirmed = !!(hit.wick && hit.wick.closeReclaim && hit.mss && hit.mss.ok
+      && (hit.vwap && (hit.vwap.ok || hit.vwap.unchecked))
+      && (!isFinite(hit.rvol) || hit.rvol >= HG_GOLD_SWEEP_RVOL_MIN)
+      && out.score >= HG_GOLD_SWEEP_WATCH);
+    if (out.score >= HG_GOLD_SWEEP_ALERT && out.confirmed) out.tier = 'alert';
+    else if (out.score >= HG_GOLD_SWEEP_WATCH) out.tier = 'watch';
+    else out.tier = 'ignore';
+
+    out.why = (out.confirmed ? 'CONFIRMED ' : (hit.wick && hit.wick.closeReclaim ? 'POTENTIAL ' : ''))
+      + String(hit.dir || '').toUpperCase() + ' sweep @ ' + (isFinite(hit.level) ? hit.level.toFixed(2) : '—')
+      + ' (' + (hit.label || hit.levelKind || 'level') + ') · score ' + out.score
+      + '/' + out.tier.toUpperCase();
+    if (hit.mss && hit.mss.ok) out.why += ' · ' + hit.mss.why;
+    if (hit.vwap && hit.vwap.ok) out.why += ' · VWAP ok';
+    if (isFinite(hit.rvol)) out.why += ' · RVOL ' + hit.rvol.toFixed(2);
+    if (soft) out.why += ' · caution −' + soft;
+    return out;
+  }catch(e){ out.why = 'confidence error'; return out; }
+}
+
+function hgGoldSweepEngineHtml(eng){
+  try{
+    if (!eng || !(eng.ok || eng.potential || eng.score > 0)) return '';
+    var h = '<div class="note" data-hg-gold-sweep="1" style="margin-top:8px">';
+    h += '<b>GOLD SWEEP</b> · ' + String(eng.tier || 'ignore').toUpperCase()
+      + ' · score ' + (isFinite(eng.score) ? eng.score : '—') + '/100';
+    if (eng.dir) h += ' · ' + String(eng.dir).toUpperCase();
+    if (isFinite(eng.level)) h += ' @ ' + (+eng.level).toFixed(2);
+    if (eng.label) h += ' · ' + String(eng.label).replace(/[<>&]/g, '');
+    if (eng.why) h += '<div class="dim" style="margin-top:4px">' + String(eng.why).replace(/[<>&]/g, '') + '</div>';
+    if (eng.parts){
+      h += '<div class="dim" style="margin-top:2px">liq ' + (eng.parts.liquidity || 0)
+        + ' · wick ' + (eng.parts.sweep || 0)
+        + ' · mss ' + (eng.parts.structure || 0)
+        + ' · vwap ' + (eng.parts.vwapLoc || 0)
+        + ' · rvol ' + (eng.parts.participation || 0)
+        + ' · regime ' + (eng.parts.regimeNews || 0) + '</div>';
+    }
+    h += '</div>';
+    return h;
+  }catch(e){ return ''; }
 }
 
 function hgGoldSessionAtrBuffer(rows, nowMs){
@@ -5600,7 +6042,7 @@ function hgGoldApplyFormingRegime(cand, regime){
     if (!cand || !regime) return cand;
     var key = cand.stratKey || '';
     var cont = { ribbon:1, bosalign:1, macro:1, wkbreak:1, pullback:1, openrange:1 };
-    var mrev = { vwap:1, vwapband:1, adrfade:1, fvg:1, stochrsi:1 };
+    var mrev = { vwap:1, vwapband:1, adrfade:1, fvg:1, stochrsi:1, sweep:1, liqsweep:1, oitrap:1 };
     if (key === 'rsidiv'){
       cand.demoted = true;
       if (!Array.isArray(cand.stamps)) cand.stamps = [];
@@ -5670,6 +6112,10 @@ function hgGoldFormingStack(inp){
     out.oiTrap = hgGoldOiTrap(rows, inp.oiRows || inp.deltaOi || (inp.perpNative && inp.perpNative.oi), {});
     out.fundingExtreme = hgGoldFundingExtreme(
       inp.fundingRows || inp.deltaFunding || (inp.perpNative && inp.perpNative.funding), {});
+    out.sweepEngine = hgGoldSweepEngine(rows, {
+      regime: out.regime,
+      newsGate: inp.newsGate || (inp.news ? hgGoldNewsGate(inp.news, inp.now || Date.now()) : null)
+    });
 
     function watch(key, state, level, condition, reason, dir, family){
       out.watches.push({
@@ -5772,9 +6218,26 @@ function hgGoldFormingStack(inp){
         (out.fundingExtreme && out.fundingExtreme.why) || 'funding not extreme', null, 'trigger');
     }
 
+    if (out.sweepEngine && (out.sweepEngine.confirmed || out.sweepEngine.tier === 'watch' || out.sweepEngine.tier === 'alert')){
+      out.strategies.push({
+        key: 'liq-sweep', dir: out.sweepEngine.dir, level: out.sweepEngine.level,
+        grade: out.sweepEngine.confirmed ? 'confirmed' : 'watch',
+        score: out.sweepEngine.score, tier: out.sweepEngine.tier,
+        why: out.sweepEngine.why,
+        invalidates: isFinite(out.sweepEngine.level)
+          ? (out.sweepEngine.level + (out.sweepEngine.dir === 'long' ? -1 : 1) * (out.sessionBuf.stopBuffer || 0))
+          : NaN
+      });
+      watch('liqsweep', out.sweepEngine.confirmed ? 'armed' : 'armed', out.sweepEngine.level,
+        out.sweepEngine.why, null, out.sweepEngine.dir, 'trigger');
+    }
+
     out.note = (out.regime && out.regime.why) || '';
     if (out.strategies.length){
       out.note = (out.note ? out.note + ' · ' : '') + out.strategies.length + ' forming strategy hit(s)';
+    }
+    if (out.sweepEngine && out.sweepEngine.score >= HG_GOLD_SWEEP_WATCH){
+      out.note = (out.note ? out.note + ' · ' : '') + 'sweep ' + out.sweepEngine.score + '/' + out.sweepEngine.tier;
     }
     return out;
   }catch(e){
@@ -5803,6 +6266,9 @@ function hgGoldFormingStackHtml(stack){
     if (stack.fundingExtreme && stack.fundingExtreme.ok){
       h += '<div style="margin-top:4px"><b>FUNDING EXTREME</b> — '
         + String(stack.fundingExtreme.why || '').replace(/[<>&]/g, '') + '</div>';
+    }
+    if (stack.sweepEngine){
+      h += hgGoldSweepEngineHtml(stack.sweepEngine);
     }
     if (stack.note) h += '<div class="dim" style="margin-top:4px">' + String(stack.note).replace(/[<>&]/g, '') + '</div>';
     var i, s;
@@ -5929,6 +6395,11 @@ W.hgGoldFormingRegime = hgGoldFormingRegime;
 W.hgGoldPriorDayLevels = hgGoldPriorDayLevels;
 W.hgGoldEqualExtremes = hgGoldEqualExtremes;
 W.hgGoldSweepDisplacement = hgGoldSweepDisplacement;
+W.hgGoldLiquidityMap = hgGoldLiquidityMap;
+W.hgGoldSweepEngine = hgGoldSweepEngine;
+W.hgGoldSweepConfidence = hgGoldSweepConfidence;
+W.hgGoldSweepEngineHtml = hgGoldSweepEngineHtml;
+W.hgGoldSweepMss = hgGoldSweepMss;
 W.hgGoldSessionAtrBuffer = hgGoldSessionAtrBuffer;
 W.hgGoldApplyFormingRegime = hgGoldApplyFormingRegime;
 W.hgGoldFormingStack = hgGoldFormingStack;
