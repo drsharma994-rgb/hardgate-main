@@ -1047,6 +1047,7 @@ function whySilentText(o){
   if (o.newsVeto) lead = 'NEWS GATE — no new entries 30 min before / 15 min after CPI·NFP·FOMC·GDP' + (o.newsVetoTitle ? ' — ' + o.newsVetoTitle : '')
     + ': new convictions held, issuance resumes after the window';
   else if (o.feedsFailed) lead = 'feeds failed — no 15m klines from any source (macro chain + PAXGUSDT + Delta all quiet)';
+  else if (o.asiaSession) lead = 'ASIA SESSION (00:00–07:00 GMT) — only ASIAN RANGE breakout or a violent AH/AL sweep may lead; other strategies are demoted (ASIA SESSION) and cannot lead';
   else if (o.kzWeight === 0) lead = 'outside every ICT killzone (' + (o.kzLabel || 'OFF-HOURS')
     + ') — detections are demoted by the off-session gate and held to a +2 tally bar';
   else if (o.liveN > 0) lead = o.liveN + ' live conviction' + (o.liveN === 1 ? '' : 's')
@@ -1280,14 +1281,16 @@ async function runScan(ui, scanSt){
   var t0 = Date.now();
   try{
     if (ui && ui.btn) ui.btn.disabled = true;
-    if (ui && ui.cards) ui.cards.innerHTML = '';
+    /* Keep last cards while rescanning — wiping #gsCards at start left a blank
+       desk for the whole macro+klines wait (and hardRefresh races looked empty). */
+    var hadCards = !!(ui && ui.cards && ui.cards.innerHTML && ui.cards.innerHTML.length);
     if (ui && ui.empty) ui.empty.style.display = 'none';
     setProg(ui, 0);
     var setupsFn = gfn('goldScalpSetups'), setupFn = gfn('goldScalpSetup');
     var rankFn = gfn('goldRankSetups');
     if (!setupsFn && !setupFn){ setStat(ui, 'goldind.js not loaded — the detector engine is missing (check script order).', true); return 'error: goldind missing'; }
 
-    setStat(ui, 'pulling gold klines 15m/1h/4h…');
+    setStat(ui, hadCards ? 'rescanning… previous results still showing' : 'pulling gold klines 15m/1h/4h…');
     var now = Date.now();
     var news = null;
     var ns = gfn('hgNewsState');
@@ -1300,7 +1303,12 @@ async function runScan(ui, scanSt){
     var gm = gfn('getGoldMacro');
     if (gm){
       setStat(ui, 'reading macro tilt (DXY · US10Y · gold/silver ratio)…');
-      try{ ctx.macro = await gm(); }catch(eM){ ctx.macro = null; }
+      try{
+        ctx.macro = await Promise.race([
+          Promise.resolve().then(function(){ return gm(); }),
+          new Promise(function(r){ setTimeout(function(){ r(null); }, 12000); })
+        ]);
+      }catch(eM){ ctx.macro = null; }
     }
     var gss = gfn('goldspotState');
     if (gss){ try{ ctx.spot = gss(); }catch(eS0){ ctx.spot = null; } }
@@ -1638,17 +1646,18 @@ async function runScan(ui, scanSt){
        Session context for the killzone case (same goldKillzone the gates use). */
     var whySilent = null;
     if (!display.length){
-      var kzW = null, kzL = null;
+      var kzW = null, kzL = null, asiaSession = false;
       var kzFn2 = gfn('goldKillzone');
       if (kzFn2){
         try{
           var kz2 = kzFn2(now);
-          if (kz2){ kzW = kz2.weight; kzL = kz2.label; }
+          if (kz2){ kzW = kz2.weight; kzL = kz2.label; asiaSession = kz2.zone === 'ASIAN'; }
         }catch(eK2){}
       }
       whySilent = whySilentText({
         newsVeto: newsVeto, newsVetoTitle: newsVetoTitle,
         feedsFailed: !gold.rows15m.length,
+        asiaSession: asiaSession,
         kzWeight: kzW, kzLabel: kzL,
         liveN: liveN, armed: armedAll, watchMeta: watchMeta
       });
