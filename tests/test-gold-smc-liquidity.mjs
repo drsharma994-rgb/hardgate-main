@@ -185,9 +185,10 @@ console.log('\n== stamp ==');
   const stamp = fs.readFileSync(root + 'build-stamp.js', 'utf8');
   const sw = fs.readFileSync(root + 'sw.js', 'utf8');
   const idx = fs.readFileSync(root + 'index.html', 'utf8');
-  ok(/hg-v564/.test(stamp), 'build-stamp hg-v564');
-  ok(/HG_CACHE\s*=\s*'hg-v564'/.test(sw), 'sw.js hg-v564');
-  ok(/goldind\.js\?v=564/.test(idx), 'index.html goldind ?v=564');
+  const ver = (stamp.match(/version:\s*'([^']+)'/) || [])[1];
+  ok(/^hg-v\d+$/.test(ver || ''), 'build-stamp version (' + ver + ')');
+  ok(new RegExp("HG_CACHE\\s*=\\s*'" + ver + "'").test(sw), 'sw.js matches stamp');
+  ok(new RegExp('goldind\\.js\\?v=' + String(ver).replace('hg-v', '')).test(idx), 'index goldind ?v=');
 }
 
 console.log('\n' + (failed ? 'FAILED ' + failed : 'ALL PASSED') + ' (' + passed + ' assertions)');

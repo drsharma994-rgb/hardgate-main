@@ -112,7 +112,8 @@ console.log('\n== desk wiring ==');
 {
   const gi = fs.readFileSync(root + 'goldind.js', 'utf8');
   const gs = fs.readFileSync(root + 'goldswing.js', 'utf8');
-  ok(/vpbook/.test(gi) && /VP PLAYBOOK/.test(gi), 'scalp mint vpbook');
+  ok(/__gsCand\('vpbook'/.test(gi) || /'vpbook'/.test(gi), 'scalp mint vpbook');
+  ok(/VP PLAYBOOK|hgGoldVpPlaybook/.test(gi), 'VP playbook engine present');
   ok(/VP ENTER/.test(gs), 'swing stamps VP ENTER');
   ok(/omnigold|forming/i.test(gi), 'shared forming path covers omnigold');
 }
@@ -122,10 +123,11 @@ console.log('\n== stamp ==');
   const stamp = fs.readFileSync(root + 'build-stamp.js', 'utf8');
   const sw = fs.readFileSync(root + 'sw.js', 'utf8');
   const idx = fs.readFileSync(root + 'index.html', 'utf8');
-  ok(/hg-v565/.test(stamp), 'build-stamp hg-v565');
-  ok(/HG_CACHE\s*=\s*'hg-v565'/.test(sw), 'sw.js hg-v565');
-  ok(/goldind\.js\?v=565/.test(idx), 'index goldind ?v=565');
-  ok(/build-stamp\.js\?v=565/.test(idx), 'index build-stamp ?v=565');
+  const ver = (stamp.match(/version:\s*'([^']+)'/) || [])[1];
+  ok(/^hg-v\d+$/.test(ver || ''), 'build-stamp version (' + ver + ')');
+  ok(new RegExp("HG_CACHE\\s*=\\s*'" + ver + "'").test(sw), 'sw.js matches stamp');
+  ok(new RegExp('goldind\\.js\\?v=' + String(ver).replace('hg-v', '')).test(idx), 'index goldind ?v=');
+  ok(new RegExp('build-stamp\\.js\\?v=' + String(ver).replace('hg-v', '')).test(idx), 'index build-stamp ?v=');
 }
 
 console.log('\n' + (failed ? 'FAILED ' + failed : 'ALL PASSED') + ' (' + passed + ' assertions)');
