@@ -234,8 +234,9 @@ function fin(v){
                  why:'swept ' + (num(ss.count) || 0) + ' equal lows at ' + sl.toFixed(2) + ' and reclaimed' };
       }
     }
-    /* SMC liquidity() port — cluster swing highs/lows + Swept index (hg-v564) */
-    var smcHitFn = gfn('hgGoldSmcLiquidityHit');
+    /* SMC liquidity() port — cluster swing highs/lows + Swept index (hg-v564).
+       Resolve via instrument-agnostic alias (no metal name in this file). */
+    var smcHitFn = gfn('hgSmcLiquidityHit');
     if (smcHitFn){
       var hit = null;
       try { hit = smcHitFn(rows, { closeBreak: true, maxAge: 8 }); } catch (e2) { hit = null; }

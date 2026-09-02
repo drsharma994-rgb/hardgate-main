@@ -92,7 +92,7 @@ console.log('\n== liquidity clustering + swept ==');
     ok(typeof any.unswept === 'boolean', 'unswept flag');
     ok(any.dirAfterSweep === 'short' || any.dirAfterSweep === 'long', 'dirAfterSweep set');
   } else {
-    ok(true, 'no cluster on this tape (acceptable — algorithm ran)');
+    ok(Array.isArray(smc.pools), 'no cluster on this tape (acceptable — algorithm ran)');
   }
 }
 
@@ -176,7 +176,7 @@ console.log('\n== OMNIGOLD EQH/EQL via SMC fallback ==');
   if (hit && /SMC/i.test(hit.why || '')){
     ok(/EQH-SWEEP|EQL-SWEEP/.test(hit.kind), 'SMC path maps to EQH/EQL kind');
   } else {
-    ok(true, 'classic pool path or no fire (ok)');
+    ok(hit === null || (hit && typeof hit.kind === 'string'), 'classic pool path or no fire (ok)');
   }
 }
 

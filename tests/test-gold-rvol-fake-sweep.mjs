@@ -185,7 +185,8 @@ console.log('\n== scalp tighten (1.30 / 0.15 ATR) ==');
   if (isFinite(scalp.sweepRvol) && scalp.sweepRvol < 1.30 && !scalp.stage1){
     ok(!scalp.ok, 'scalp rejects sub-1.30 when measured RVOL low');
   } else {
-    ok(true, 'scalp path ran (measured RVOL ' + scalp.sweepRvol + ')');
+    ok(scalp && typeof scalp.why === 'string',
+      'scalp path ran (measured RVOL ' + scalp.sweepRvol + ')');
   }
   ok(typeof swing.why === 'string', 'swing path still returns why');
 }

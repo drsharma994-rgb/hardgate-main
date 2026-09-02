@@ -4472,6 +4472,9 @@ function goldVolumeProfile(rows, lookback, bins){
     var meanVol = 0;
     for (i = 0; i < bins; i++) meanVol += profile[i];
     meanVol /= bins;
+    var varSum = 0;
+    for (i = 0; i < bins; i++) varSum += Math.pow(profile[i] - meanVol, 2);
+    var stdDev = Math.sqrt(varSum / bins);
     /* Playbook §4.1 quantitative nodes (not mean±σ folklore):
          HVN: local max, V≥1.5×Vavg AND V≥0.40×Vmax, separated by ≥1 LVN
          LVN: local min, V≤0.50×Vavg, trough spans ≥2 consecutive rows */
@@ -4526,16 +4529,31 @@ function goldVolumeProfile(rows, lookback, bins){
     for (i = 0; i < bins; i++){
       if (!isLocalMax[i]) continue;
       if (!(profile[i] >= hvnMinAvg && profile[i] >= hvnMinMax)) continue;
-      /* Separated from nearest prior HVN by at least one LVN bin */
+      /* Separated from nearest prior HVN by at least one LVN bin
+         (empty / zero-volume bins also count — no-trade corridors). */
       if (lastHvnI >= 0){
         var sep = false, s;
         for (s = lastHvnI + 1; s < i; s++){
-          if (lvnMask[s]){ sep = true; break; }
+          if (lvnMask[s] || !(profile[s] > 0)){ sep = true; break; }
         }
         if (!sep) continue;
       }
       hvns.push(minPrice + i * binSize + binSize / 2);
       lastHvnI = i;
+    }
+    /* Soft HVNs (mean+σ local peaks) always merged for FVG launchpad /
+       support helpers. Playbook ENTER uses hvnsStrict (§4.1 only). */
+    var hvnsStrict = hvns.slice();
+    var softThresh = meanVol + stdDev;
+    for (i = 0; i < bins; i++){
+      if (!isLocalMax[i]) continue;
+      if (!(profile[i] > softThresh)) continue;
+      var softMid = minPrice + i * binSize + binSize / 2;
+      var nearStrict = false, hi;
+      for (hi = 0; hi < hvns.length; hi++){
+        if (Math.abs(hvns[hi] - softMid) < binSize){ nearStrict = true; break; }
+      }
+      if (!nearStrict) hvns.push(softMid);
     }
 
     /* Value area (~70% of volume) expanding from POC — standard VP convention */
@@ -4556,7 +4574,7 @@ function goldVolumeProfile(rows, lookback, bins){
     var val = minPrice + loI * binSize;
 
     return {
-      pocPrice: pocPrice, hvns: hvns, lvns: lvns, binSize: binSize,
+      pocPrice: pocPrice, hvns: hvns, hvnsStrict: hvnsStrict, lvns: lvns, binSize: binSize,
       minPrice: minPrice, maxPrice: maxPrice, bars: slice.length, totalVol: totalVol,
       profileHigh: maxPrice, profileLow: minPrice,
       vah: vah, val: val, valueAreaPct: 0.70,
@@ -5143,9 +5161,10 @@ function hgGoldVpLocationGrade(opts){
     if (isFinite(vprof.vah) && Math.abs(entry - vprof.vah) <= tol) atVa = true;
     if (isFinite(vprof.val) && Math.abs(entry - vprof.val) <= tol) atVa = true;
     var i;
-    if (vprof.hvns){
-      for (i = 0; i < vprof.hvns.length; i++){
-        if (Math.abs(entry - vprof.hvns[i]) <= tol){ atHvn = true; break; }
+    var playbookHvns = (Array.isArray(vprof.hvnsStrict)) ? vprof.hvnsStrict : vprof.hvns;
+    if (playbookHvns){
+      for (i = 0; i < playbookHvns.length; i++){
+        if (Math.abs(entry - playbookHvns[i]) <= tol){ atHvn = true; break; }
       }
     }
     if (vprof.lvns){
@@ -10271,6 +10290,7 @@ W.hgGoldEqualExtremes = hgGoldEqualExtremes;
 W.hgGoldSmcSwingHighsLows = hgGoldSmcSwingHighsLows;
 W.hgGoldSmcLiquidity = hgGoldSmcLiquidity;
 W.hgGoldSmcLiquidityHit = hgGoldSmcLiquidityHit;
+W.hgSmcLiquidityHit = hgGoldSmcLiquidityHit;
 W.hgGoldSmcBosChoch = hgGoldSmcBosChoch;
 W.hgGoldSmcLiquidityHtml = hgGoldSmcLiquidityHtml;
 W.HG_GOLD_SMC_RANGE_PCT = HG_GOLD_SMC_RANGE_PCT;

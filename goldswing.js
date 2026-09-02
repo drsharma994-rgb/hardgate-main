@@ -976,7 +976,11 @@ function cardHTML(c, isBest, season){
     + '<div class="gsw-strat"' + gswSt(GSW_STRAT) + '>' + esc(c.strategy) + (isBest ? ' · ★ MOST PROBABLE' : '') + '</div>'
     + '<div class="mini"' + gswSt(GSW_MINI) + '>'
     + '<span class="k"' + gswSt(GSW_K) + '>venue</span><span' + gswSt(GSW_V) + '>' + esc(c.venue) + (c.sym ? ' · ' + esc(c.sym) : '') + '</span>'
-    + '<span class="k"' + gswSt(GSW_K) + '>reads</span><span' + gswSt(GSW_V) + '>' + c.reads.long + ' long / ' + c.reads.short + ' short · ' + tallyNum + '</span>'
+    + '<span class="k"' + gswSt(GSW_K) + '>reads</span><span' + gswSt(GSW_V) + '>'
+      + ((c.reads && isFinite(c.reads.long)) ? c.reads.long : (c.dir === 'long' && isFinite(c.agree) ? c.agree : 0))
+      + ' long / '
+      + ((c.reads && isFinite(c.reads.short)) ? c.reads.short : (c.dir === 'short' && isFinite(c.agree) ? c.agree : 0))
+      + ' short · ' + tallyNum + '</span>'
     + '<span class="k"' + gswSt(GSW_K) + '>session</span><span' + gswSt(GSW_V) + '>' + esc(c.session || 'n/a') + ' (context — swing entries are not session-gated)</span>'
     + '<span class="k"' + gswSt(GSW_K) + '>ATR14 4h</span><span' + gswSt(GSW_V) + '>' + pxF(c.atr) + '</span>'
     + '<span class="k"' + gswSt(GSW_K) + '>R:R</span><span' + gswSt(GSW_V) + '>1 : ' + fmtF(c.rr, 1) + ' (T1) · 1 : ' + fmtF(c.rr2, 1) + ' (T2) · 1 : ' + fmtF(c.rr3, 1) + ' (T3)</span>'
@@ -1832,6 +1836,7 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
                 : (vpRisk > 0 && isFinite(vpb.t1) ? Math.abs(vpb.t1 - vpb.entry) / vpRisk : NaN),
               grade: (vpb.grade && vpb.grade.grade === 'A') ? 'A' : 'B',
               agree: 2, oppose: 0, atr: a4,
+              reads: { long: vpb.dir === 'long' ? 2 : 0, short: vpb.dir === 'short' ? 2 : 0 },
               venue: venue, sym: sym, session: sessionTxt || 'n/a',
               why: vpb.why + ' — VP playbook gates ' + vpb.gatesPass + '/12',
               invalidates: 'close beyond ' + vpStop.toFixed(2),
@@ -1873,7 +1878,9 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
           for (p4j = 0; p4j < p4EngCand.strategies.length; p4j++){
             p4hit = p4EngCand.strategies[p4j];
             if (!p4hit || !p4hit.dir || !p4Live[p4hit.key]) continue;
-            if (p4hit.grade !== 'forming' && p4hit.grade !== 'confirmed') continue;
+            /* Ticket mint: confirmed only. Forming stays on the forming panel /
+               PART4 stamps — soft-minting forming fabricated quiet-tape cands. */
+            if (p4hit.grade !== 'confirmed') continue;
             if (!isFinite(p4hit.level) && !(p4hit.plan && isFinite(p4hit.plan.entry))) continue;
             var p4Entry = isFinite(p4hit.level) ? p4hit.level
               : (p4hit.plan && p4hit.plan.entry);
@@ -1883,8 +1890,8 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
               p4hit.why, 'Part4 invalidation — structure break against the setup',
               { side: p4hit.dir, tag: p4hit.key, label: p4hit.why });
             if (!p4Cand || p4Cand.dropped){
-              /* Soft tally may drop a lone Part4 hit — mint with agree=2 so
-                 playbook-grade strategies still surface (same as vpbook). */
+              /* Soft tally may drop a lone confirmed Part4 hit — mint with
+                 agree=2 so playbook-grade strategies still surface. */
               p4Cand = {
                 id: p4hit.key + '|' + p4hit.dir + '|' + Math.round(p4Entry),
                 strategy: SW_NAME[p4hit.key] || p4hit.key,
@@ -1893,6 +1900,7 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
                 t1: (p4hit.plan && isFinite(p4hit.plan.t1)) ? p4hit.plan.t1 : NaN,
                 t2: (p4hit.plan && isFinite(p4hit.plan.t2)) ? p4hit.plan.t2 : NaN,
                 rr: NaN, grade: 'B', agree: 2, oppose: 0, atr: a4,
+                reads: { long: p4hit.dir === 'long' ? 2 : 0, short: p4hit.dir === 'short' ? 2 : 0 },
                 venue: venue, sym: sym, session: sessionTxt || 'n/a',
                 why: p4hit.why,
                 invalidates: 'close beyond ' + p4Stop.toFixed(2),

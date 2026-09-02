@@ -88,8 +88,10 @@ console.log('\n== Regime: Kaufman ER is the sole separator ==');
   const rTrend = W.hgGoldFormingRegime({ rows: trend });
   ok(rChop.style === 'mean-rev' || rChop.er < 0.35, 'chop → mean-rev / low ER (er=' + rChop.er + ')');
   ok(rTrend.style === 'trend' || rTrend.er >= 0.55, 'directional → trend / high ER (er=' + rTrend.er + ')');
-  ok(rChop.allowContinuation === false || rChop.style !== 'mean-rev' || true,
-     'mean-rev regime exposes allowContinuation flag');
+  ok(rChop.allowContinuation === false || rChop.style !== 'mean-rev',
+     'mean-rev regime exposes allowContinuation=false');
+  ok(typeof rChop.allowContinuation === 'boolean',
+     'allowContinuation flag is a boolean on chop read');
 }
 
 console.log('\n== Sweep + displacement + RVOL ==');

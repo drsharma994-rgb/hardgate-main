@@ -752,12 +752,11 @@ terse status, and never launches a first-time scan on a global refresh.
     d = hgOgDiCross(rows);         if (d) out.push(d);
     d = hgOgFvgHvn(rows);          if (d) out.push(d);
     d = hgOgVpPlaybook(rows, opts); if (d) out.push(d);
-    /* Part4 S12 / S14 / S17 — forming+dir only; S9 stays a filter, S13/S16 unchecked */
-    var p4hits = hgOgPart4Hits(rows, opts);
-    if (p4hits && p4hits.length){
-      var p4i;
-      for (p4i = 0; p4i < p4hits.length; p4i++) if (p4hits[p4i]) out.push(p4hits[p4i]);
-    }
+    /* Part4 S12 / S14 / S17 — call ByKind so walk-forward map detectors are
+       live-reachable (full-cover parity). S9 stays a filter; S13/S16 unchecked. */
+    d = hgOgPart4ByKind(rows, 'P4-NR7', opts);  if (d) out.push(d);
+    d = hgOgPart4ByKind(rows, 'P4-ADRX', opts); if (d) out.push(d);
+    d = hgOgPart4ByKind(rows, 'P4-LAF', opts);  if (d) out.push(d);
     return out;
   }
 
