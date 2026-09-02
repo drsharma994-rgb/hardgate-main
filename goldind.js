@@ -29,7 +29,7 @@ Exports (all on window):
                              volume + low range = manipulation/breakout watch)
   goldVolSqueeze(rows)     — Bollinger-inside-Keltner squeeze + the expansion
                              close outside the bands
-  goldAsianRange(rows)     — 00:00-07:00 GMT box + London breakout state
+  goldAsianRange(rows)     — 00:00-08:00 UTC box + London breakout state
   goldRSIGold(rows)        — RSI(14) with gold 75/25 extremes + price/RSI
                              divergence (exhaustion)
   goldCCI(rows)            — CCI(20) +/-100 extremes + zero-line cross
@@ -381,7 +381,7 @@ function goldKillzone(d){
     if (h >= 13 && h < 17){ zone = 'OVERLAP'; weight = 3; label = 'LONDON/NY OVERLAP'; }
     else if (h >= 7 && h < 10){ zone = 'LONDON'; weight = 2; label = 'LONDON KILLZONE'; }
     else if (h >= 10 && h < 13){ zone = 'NY_AM'; weight = 1; label = 'NY AM'; }
-    else if (h >= 0 && h < 7){ zone = 'ASIAN'; weight = 0; label = 'ASIAN RANGE'; }
+    else if (h >= 0 && h < 8){ zone = 'ASIAN'; weight = 0; label = 'ASIAN RANGE'; }
     return { zone: zone, weight: weight, hourGMT: Math.floor(h), label: label };
   }catch(e){ return { zone: 'OFF', weight: 0, hourGMT: NaN, label: 'OFF-HOURS' }; }
 }
@@ -597,8 +597,8 @@ function goldVolSqueeze(rows, opts){
 }
 
 /* ======================= 10) Asian Range Breakout =======================
-   Box = 00:00-07:00 GMT high/low of the LAST bar's UTC day; trade the
-   London-volume breakout. Needs candle timestamps.
+   Box = 00:00-08:00 UTC high/low of the LAST bar's UTC day (forming-layer
+   Asia window); trade the London-volume breakout. Needs candle timestamps.
    -> {hi, lo, mid, state:'LONG_BREAK'|'SHORT_BREAK'|'INSIDE'|'BUILDING', dayIso, bars} | null. */
 function goldAsianRange(rows){
   try{
@@ -606,7 +606,7 @@ function goldAsianRange(rows){
     if (!rows || rows.length < 3) return null;
     var n = rows.length, tl = rows[n-1].t;
     if (!isFinite(tl)) return null;
-    var ds = Math.floor(tl/86400)*86400, boxEnd = ds + 7*3600;
+    var ds = Math.floor(tl/86400)*86400, boxEnd = ds + 8*3600;
     var hi = -Infinity, lo = Infinity, bars = 0;
     for (var i = 0; i < n; i++){
       var t = rows[i].t;
@@ -1015,7 +1015,7 @@ function goldScalpSetup(inp){
    Each candidate is ONE strategy-specific setup composed from the detectors
    above — liquidity-sweep reversal, order-block/breaker retest, FVG fill,
    session-VWAP bounce/rejection, EMA 20/50/200 ribbon pullback, Asian-range
-   (00:00-07:00 GMT) breakout, modified-RSI(75/25) divergence — with entry,
+   (00:00-08:00 UTC) breakout, modified-RSI(75/25) divergence — with entry,
    an ATR-based stop (1.5-2x ATR14 15m, never tighter), TP1 1.5R / TP2 2.5R
    snapped to opposing structure when one sits between entry and target
    (>=1.2R), a deterministic STRUCTURAL conviction id (strategy|dir|anchor:
@@ -1058,7 +1058,10 @@ var GST_NAME = {
   openrange: 'OPENING RANGE BREAKOUT',
   adrfade: 'ADR EXHAUSTION FADE',
   bosalign: 'BOS ALIGNMENT ENTRY',
-  hvn:      'HVN / VOLUME NODE RETEST'
+  hvn:      'HVN / VOLUME NODE RETEST',
+  pdraid: 'PRIOR-DAY LIQUIDITY RAID',
+  eqhi:   'EQUAL HIGHS (STOP CLUSTER)',
+  eqlo:   'EQUAL LOWS (STOP CLUSTER)'
 };
 
 /* limit-at-zone entry: when price has extended beyond the setup zone, anchor
@@ -1176,7 +1179,7 @@ function __gsSnapLvls(D, dir){
    FALLING 200-EMA-15m with a bearish 4H EMA50/200 stack (mirrored for
    shorts; a liquidity-sweep trigger is the only sanctioned counter-trend
    play); OFF-SESSION — detected outside every ICT killzone (killzone
-   weight 0; the Asian-range strategy is allowed its own 00:00-07:00 GMT
+   weight 0; the Asian-range strategy is allowed its own 00:00-08:00 UTC
    session) and held to a +2 higher tally bar in goldRankSetups; CHOP —
    Kaufman ER(20) < 0.25 demotes mean-reversion retests (VWAP/OB/FVG).
    Grade = agreeing reads + killzone weight with a one-letter news
@@ -1702,6 +1705,15 @@ function goldScalpSetups(inp){
         ask: inp.ask
       });
       if (inst && inst.dropped){ rejected.push(inst); return; }
+      try{
+        if (!D.__formingRegime){
+          D.__formingRegime = hgGoldFormingRegime({
+            rows: rows, macro: inp.macro || null,
+            dxyRows: inp.dxyRows || inp.dxyCandles || (inp.macro && inp.macro.dxyRows) || null
+          });
+        }
+        hgGoldApplyFormingRegime(c, D.__formingRegime);
+      }catch(eFr){}
       var mv = __gsMicroVeto(c.dir, c.stratKey, D, bundleOpts);
       if (mv){
         if (mv.demote){
@@ -1869,7 +1881,7 @@ function goldScalpSetups(inp){
         rb.e20));
     }
 
-    /* --- 6) Asian-range (00:00-07:00 GMT) breakout — robust: volume-validated --- */
+    /* --- 6) Asian-range (00:00-08:00 UTC) breakout — robust: volume-validated --- */
     var asianDone = false;
     if (D.scalpEval && D.scalpEval.asianSetup && D.scalpEval.asianSetup.trigger){
       var ab = D.scalpEval.asianSetup;
@@ -1887,7 +1899,7 @@ function goldScalpSetups(inp){
       var adir = (asian.state === 'LONG_BREAK') ? 'long' : 'short';
       push(__gsCand('asian', adir, D, (adir === 'long' ? asian.hi : asian.lo), __gsSnapLvls(D, adir),
         'London-volume breakout ' + (adir === 'long' ? 'above' : 'below') + ' the Asian box ' + asian.lo.toFixed(2) + '–' + asian.hi.toFixed(2)
-          + ' (' + asian.dayIso + ', 00:00–07:00 GMT) — range expansion underway',
+          + ' (' + asian.dayIso + ', 00:00–08:00 UTC) — range expansion underway',
         'a 15m close back inside the Asian range (' + asian.lo.toFixed(2) + '–' + asian.hi.toFixed(2) + ') negates the breakout',
         undefined, (adir === 'long' ? asian.hi : asian.lo)));
     }
@@ -2138,38 +2150,55 @@ function goldWatch(inp){
       emit('ribbon', 'idle', null, '', 'ribbon ' + (rb.mode || 'NONE') + ' — no directional 20/50/200 stack to pull back into');
     }
 
-    /* 6) Asian range — the 00:00–07:00 GMT box; fires on the London break
-       + close outside. Honest idle when no box exists (e.g. 4h/1d rows). */
+    /* 6) Asian range — the 00:00–08:00 UTC box; fires on London sweep + reclaim
+       + displacement/RVOL (forming-layer primary). Honest idle when no box exists
+       (e.g. 4h/1d rows). */
     var asian = D.asian;
     if (asian && isFinite(asian.hi) && isFinite(asian.lo)){
       var aNearLow = Math.abs(entry - asian.lo) <= Math.abs(asian.hi - entry);
       emit('asian', 'armed', aNearLow ? asian.lo : asian.hi,
-        'armed 00:00–07:00 GMT: box ' + asian.lo.toFixed(2) + '–' + asian.hi.toFixed(2) + ' (' + asian.dayIso
-          + (asian.state === 'BUILDING' ? ', still building' : '') + ') — fires on a London break + close outside', null,
+        'armed 00:00–08:00 UTC: box ' + asian.lo.toFixed(2) + '–' + asian.hi.toFixed(2) + ' (' + asian.dayIso
+          + (asian.state === 'BUILDING' ? ', still building' : '') + ') — fires on a London sweep + reclaim (displacement + RVOL)', null,
         aNearLow ? 'long' : 'short');
-    } else emit('asian', 'idle', null, '', 'no Asian-range box yet (needs >=3 bars inside 00:00–07:00 GMT) — no levels available');
+    } else emit('asian', 'idle', null, '', 'no Asian-range box yet (needs >=3 bars inside 00:00–08:00 UTC) — no levels available');
 
-    /* 7) RSI 75/25 divergence — always watching while RSI is computable;
-       the pivot to beat is carried when one exists. */
+    /* 7) RSI 75/25 divergence — FOLKLORE: shown as idle/info only.
+       Does not arm a forming entry (no defended mechanism; double-counts momentum). */
     var rg = D.rg;
     if (rg && isFinite(rg.rsi)){
-      var pivHi = (typeof rg.pivotHigh === 'number' && isFinite(rg.pivotHigh)) ? rg.pivotHigh : NaN;
-      var pivLo = (typeof rg.pivotLow === 'number' && isFinite(rg.pivotLow)) ? rg.pivotLow : NaN;
-      var piv = isFinite(pivHi) ? pivHi : pivLo;
-      emit('rsidiv', 'armed', piv,
-        'RSI now ' + rg.rsi.toFixed(1) + ' — fires on a fresh price extreme with a lower RSI extreme (75/25 divergence)'
-          + (isFinite(piv) ? '; pivot to beat ' + piv.toFixed(2) : ' — no levels available yet (no confirmed pivot)'), null);
-    } else emit('rsidiv', 'idle', null, '', 'no levels available (RSI(14) not computable on these bars)');
+      emit('rsidiv', 'idle', null, '',
+        'FOLKLORE — RSI ' + rg.rsi.toFixed(1) + ' is informational only; not a forming confluence leg');
+    } else emit('rsidiv', 'idle', null, '', 'FOLKLORE — RSI unread; excluded from forming confluence');
 
-    /* 8) HVN / volume-node — nearest high-volume node from the session profile */
+    /* 8) HVN / volume-node — thin-venue informational only (not a forming lead) */
     if (D.vpOk && isFinite(D.nearestHVN)){
-      emit('hvn', 'armed', D.nearestHVN,
-        'watching HVN at ' + D.nearestHVN.toFixed(2) + ' (session volume profile) — fires on a retest within 0.5×ATR'
-          + (D.volSpike ? ' with a volume-climax bar' : ''), null);
+      emit('hvn', 'idle', D.nearestHVN,
+        '',
+        'THIN VP — HVN ' + D.nearestHVN.toFixed(2) + ' is a target hint only on this venue feed');
     } else if (D.vpOk && D.vprof && isFinite(D.vprof.pocPrice)){
-      emit('hvn', 'armed', D.vprof.pocPrice,
-        'watching session POC at ' + D.vprof.pocPrice.toFixed(2) + ' — fires on a retest within 0.75×ATR', null);
+      emit('hvn', 'idle', D.vprof.pocPrice,
+        '',
+        'THIN VP — session POC ' + D.vprof.pocPrice.toFixed(2) + ' is informational only');
     } else emit('hvn', 'idle', null, '', 'no volume profile yet (needs >=3 bars with range and volume)');
+
+    /* 9) Forming-layer structure watches (Asia 00–08 / PDH-PDL / equal extremes) */
+    try{
+      var stack = hgGoldFormingStack({
+        rows15m: rows, rows4h: __rows(inp.rows4h), macro: inp.macro,
+        dxyRows: inp.dxyRows, now: inp.now
+      });
+      var wi;
+      for (wi = 0; wi < (stack.watches || []).length; wi++){
+        var ww = stack.watches[wi];
+        if (!ww || ww.stratKey === 'asian') continue; /* asian already emitted above */
+        out.push({
+          stratKey: ww.stratKey, strategy: ww.strategy || ww.stratKey,
+          dir: ww.dir || null, state: ww.state === 'armed' ? 'armed' : 'idle',
+          level: ww.level, condition: ww.condition || '', reason: ww.reason || null,
+          formingLayer: true
+        });
+      }
+    }catch(eFs){}
 
     return out;
   }catch(e){ return []; }
@@ -2775,7 +2804,7 @@ function getMarketSession(timestampGMT){
 }
 
 /* Walk back from `currentIndex` (default last) up to 50 bars for today's
-   00:00–07:00 GMT high/low. -> {asianHigh, asianLow, valid, hi, lo}. */
+   00:00–08:00 UTC high/low. -> {asianHigh, asianLow, valid, hi, lo}. */
 function calculateAsianRange(candles, currentIndex){
   var invalid = { asianHigh: NaN, asianLow: NaN, valid: false, hi: NaN, lo: NaN };
   try{
@@ -2790,7 +2819,7 @@ function calculateAsianRange(candles, currentIndex){
       var r = candles[i];
       if (!r || !isFinite(r.t)) continue;
       var hour = new Date(__toMs(r.t)).getUTCHours();
-      if (hour >= 0 && hour < 7){
+      if (hour >= 0 && hour < 8){
         inRange = true;
         if (isFinite(r.h) && r.h > asianHigh) asianHigh = r.h;
         if (isFinite(r.l) && r.l < asianLow) asianLow = r.l;
@@ -4833,7 +4862,7 @@ function hgGoldSessionGate(nowMs, rows, stratKey, opt){
     else if (h >= 7 && h < 10){ out.session = 'LONDON'; out.weight = 2; }
     else if (h >= 10 && h < 12){ out.session = 'NY_AM'; out.weight = 2; }
     else if (h >= 16 && h < 20){ out.session = 'NY_PM'; out.weight = 1; }
-    else if (h >= 0 && h < 7){ out.session = 'ASIAN'; out.weight = 0; }
+    else if (h >= 0 && h < 8){ out.session = 'ASIAN'; out.weight = 0; }
     else { out.session = 'OFF'; out.weight = 0; }
 
     if (out.session !== 'ASIAN') return out;
@@ -4983,6 +5012,508 @@ function hgGoldInstFilter(cand, ctx){
   }catch(e){ return cand; }
 }
 
+/* =========================================================================
+   FORMING LAYERS (hg-v553) — shared stack for GOLD SCALP / GOLD SWING /
+   OMNIGOLD. Regime gates everything. Structure + sweep+displacement triggers
+   mint forming watches. RSI divergence is FOLKLORE (never confluence). Thin
+   venue volume-profile is informational only. Fix-time reversion is demoted.
+   Asia box is 00:00–08:00 UTC. Redundancy: Kaufman ER is the sole regime
+   separator (vol percentile labels only; ADX/BB not co-scored).
+========================================================================= */
+
+var HG_GOLD_FORM_ER_MR = 0.30;
+var HG_GOLD_FORM_ER_TREND = 0.60;
+var HG_GOLD_FORM_SWEEP_ATR = 0.15;
+var HG_GOLD_FORM_RVOL_MIN = 1.25;
+var HG_GOLD_FORM_RVOL_ASIA = 1.50;
+
+function hgGoldAtrVolPercentile(rows, period, trail){
+  var out = { atr: NaN, pctile: NaN, regime: 'unchecked' };
+  try{
+    rows = __rows(rows);
+    period = period || 14;
+    trail = trail || 100;
+    if (!rows || rows.length < period + 5) return out;
+    var atrs = _atr(rows, period);
+    var cur = atrs[atrs.length - 1];
+    if (!isFinite(cur) || !(cur > 0)) return out;
+    out.atr = cur;
+    var start = Math.max(period, atrs.length - trail);
+    var below = 0, n = 0, i;
+    for (i = start; i < atrs.length; i++){
+      if (!isFinite(atrs[i]) || !(atrs[i] > 0)) continue;
+      n++;
+      if (atrs[i] <= cur) below++;
+    }
+    if (!n) return out;
+    out.pctile = below / n;
+    out.regime = (out.pctile >= 0.75) ? 'expansion' : ((out.pctile <= 0.25) ? 'drift' : 'normal');
+    return out;
+  }catch(e){ return out; }
+}
+
+function hgGoldReturns(rows){
+  var out = [];
+  try{
+    rows = __rows(rows);
+    if (!rows || rows.length < 3) return out;
+    var i, a, b;
+    for (i = 1; i < rows.length; i++){
+      a = rows[i - 1].c; b = rows[i].c;
+      if (isFinite(a) && a > 0 && isFinite(b) && b > 0) out.push((b - a) / a);
+    }
+  }catch(e){}
+  return out;
+}
+
+function hgGoldRollingCorr(a, b, win){
+  try{
+    win = win || 20;
+    if (!a || !b || a.length < win || b.length < win) return NaN;
+    var n = Math.min(a.length, b.length);
+    var xa = a.slice(n - win), xb = b.slice(n - win);
+    var i, ma = 0, mb = 0;
+    for (i = 0; i < win; i++){ ma += xa[i]; mb += xb[i]; }
+    ma /= win; mb /= win;
+    var num = 0, da = 0, db = 0;
+    for (i = 0; i < win; i++){
+      var va = xa[i] - ma, vb = xb[i] - mb;
+      num += va * vb; da += va * va; db += vb * vb;
+    }
+    if (!(da > 0) || !(db > 0)) return NaN;
+    return num / Math.sqrt(da * db);
+  }catch(e){ return NaN; }
+}
+
+function hgGoldDxyCorr(goldRows, dxyRows, win){
+  var out = { corr: NaN, prior: NaN, breakdown: false, unchecked: true };
+  try{
+    win = win || 20;
+    var g = hgGoldReturns(goldRows), d = hgGoldReturns(dxyRows);
+    if (g.length < win + 5 || d.length < win + 5) return out;
+    out.corr = hgGoldRollingCorr(g, d, win);
+    out.prior = hgGoldRollingCorr(g.slice(0, g.length - 5), d.slice(0, d.length - 5), win);
+    out.unchecked = !(isFinite(out.corr));
+    /* Breakdown: |corr| was meaningful and collapsed, or sign flipped hard. */
+    if (isFinite(out.corr) && isFinite(out.prior)){
+      out.breakdown = (Math.abs(out.prior) >= 0.35 && Math.abs(out.corr) < 0.15)
+        || (out.prior * out.corr < 0 && Math.abs(out.prior) >= 0.30);
+    }
+    return out;
+  }catch(e){ return out; }
+}
+
+function hgGoldRealYieldBias(macro){
+  var out = { bias: 'neutral', dir: null, unchecked: true, reason: '' };
+  try{
+    macro = macro || {};
+    var trend = String(macro.tnxTrend || macro.realYieldTrend || macro.us10yTrend || '').toUpperCase();
+    var tip = macro.dfii10Trend || macro.tipsTrend || '';
+    tip = String(tip).toUpperCase();
+    if (tip.indexOf('FALL') >= 0 || tip === 'DOWN'){
+      out.bias = 'gold-supportive'; out.dir = 'long'; out.unchecked = false;
+      out.reason = 'real yields falling — opportunity-cost headwind easing';
+      return out;
+    }
+    if (tip.indexOf('RISE') >= 0 || tip === 'UP'){
+      out.bias = 'gold-headwind'; out.dir = 'short'; out.unchecked = false;
+      out.reason = 'real yields rising — gold opportunity cost rising';
+      return out;
+    }
+    if (trend.indexOf('FALL') >= 0){
+      out.bias = 'gold-supportive'; out.dir = 'long'; out.unchecked = false;
+      out.reason = 'US10Y trend falling (proxy when TIPS unread)';
+      return out;
+    }
+    if (trend.indexOf('RISE') >= 0){
+      out.bias = 'gold-headwind'; out.dir = 'short'; out.unchecked = false;
+      out.reason = 'US10Y trend rising (proxy when TIPS unread)';
+      return out;
+    }
+    return out;
+  }catch(e){ return out; }
+}
+
+/* Sole regime separator = Kaufman ER. Vol percentile is a label only. */
+function hgGoldFormingRegime(inp){
+  inp = inp || {};
+  var out = {
+    er: NaN, style: 'mixed', vol: null, dxy: null, yieldBias: null,
+    allowContinuation: true, allowMeanRev: true, ok: true, why: '', stamps: []
+  };
+  try{
+    var rows = __rows(inp.rows || inp.rows15m || inp.rows4h);
+    var ker = calculateKaufmanER(rows, 20);
+    out.er = ker && isFinite(ker.er) ? ker.er : NaN;
+    out.vol = hgGoldAtrVolPercentile(rows, 14, 100);
+    out.dxy = hgGoldDxyCorr(rows, inp.dxyRows || (inp.macro && inp.macro.dxyRows), 20);
+    out.yieldBias = hgGoldRealYieldBias(inp.macro);
+    if (isFinite(out.er)){
+      if (out.er < HG_GOLD_FORM_ER_MR){
+        out.style = 'mean-rev';
+        out.allowContinuation = false;
+        out.why = 'ER ' + out.er.toFixed(2) + ' < ' + HG_GOLD_FORM_ER_MR + ' — mean-reversion setups only';
+        out.stamps.push('REGIME MR');
+      } else if (out.er >= HG_GOLD_FORM_ER_TREND){
+        out.style = 'trend';
+        out.allowMeanRev = false;
+        out.why = 'ER ' + out.er.toFixed(2) + ' ≥ ' + HG_GOLD_FORM_ER_TREND + ' — continuation setups only';
+        out.stamps.push('REGIME TREND');
+      } else {
+        out.style = 'mixed';
+        out.why = 'ER ' + out.er.toFixed(2) + ' mixed — both families allowed with demotion';
+      }
+    } else {
+      out.why = 'ER unread — fail-open';
+      out.stamps.push('REGIME UNCHECKED');
+    }
+    if (out.vol && out.vol.regime === 'expansion') out.stamps.push('VOL EXPANSION');
+    if (out.vol && out.vol.regime === 'drift') out.stamps.push('VOL DRIFT');
+    if (out.dxy && out.dxy.breakdown){
+      out.stamps.push('DXY DECOUPLE');
+      out.why += (out.why ? ' · ' : '') + 'gold–DXY correlation broke down — dollar signals quiet';
+    }
+    if (out.yieldBias && !out.yieldBias.unchecked && out.yieldBias.reason){
+      out.stamps.push(out.yieldBias.bias === 'gold-supportive' ? 'REAL YIELD FALLING' : 'REAL YIELD RISING');
+    }
+    return out;
+  }catch(e){ return out; }
+}
+
+function hgGoldPriorDayLevels(rows){
+  var out = { hi: NaN, lo: NaN, close: NaN, ok: false };
+  try{
+    rows = __rows(rows);
+    if (!rows || rows.length < 10) return out;
+    var last = rows[rows.length - 1];
+    if (!last || !isFinite(last.t)) return out;
+    var day = Math.floor(last.t / 86400);
+    var prev = day - 1;
+    var hi = -Infinity, lo = Infinity, c = NaN, i, saw = false;
+    for (i = 0; i < rows.length; i++){
+      var r = rows[i];
+      if (!r || !isFinite(r.t)) continue;
+      if (Math.floor(r.t / 86400) !== prev) continue;
+      saw = true;
+      if (r.h > hi) hi = r.h;
+      if (r.l < lo) lo = r.l;
+      c = r.c;
+    }
+    if (!saw || !(hi > lo)) return out;
+    out.hi = hi; out.lo = lo; out.close = c; out.ok = true;
+    return out;
+  }catch(e){ return out; }
+}
+
+function hgGoldEqualExtremes(rows, atrMul){
+  var out = { highs: [], lows: [] };
+  try{
+    rows = __rows(rows);
+    atrMul = isFinite(atrMul) ? atrMul : 0.12;
+    if (!rows || rows.length < 40) return out;
+    var atrs = _atr(rows, 14);
+    var atr = atrs[atrs.length - 1];
+    if (!isFinite(atr) || !(atr > 0)) return out;
+    var tol = atr * atrMul;
+    var pivH = [], pivL = [], i, j;
+    for (i = 2; i < rows.length - 2; i++){
+      if (rows[i].h >= rows[i-1].h && rows[i].h >= rows[i-2].h
+          && rows[i].h >= rows[i+1].h && rows[i].h >= rows[i+2].h)
+        pivH.push({ i: i, v: rows[i].h });
+      if (rows[i].l <= rows[i-1].l && rows[i].l <= rows[i-2].l
+          && rows[i].l <= rows[i+1].l && rows[i].l <= rows[i+2].l)
+        pivL.push({ i: i, v: rows[i].l });
+    }
+    function cluster(list, dest){
+      for (i = 0; i < list.length; i++){
+        for (j = i + 1; j < list.length; j++){
+          if (Math.abs(list[i].v - list[j].v) <= tol && Math.abs(list[i].i - list[j].i) >= 3){
+            dest.push({ level: (list[i].v + list[j].v) / 2, a: list[i].i, b: list[j].i });
+            return;
+          }
+        }
+      }
+    }
+    cluster(pivH.slice(-8), out.highs);
+    cluster(pivL.slice(-8), out.lows);
+    return out;
+  }catch(e){ return out; }
+}
+
+function hgGoldBarRvol(rows, idx, win){
+  try{
+    rows = __rows(rows);
+    win = win || 20;
+    if (!rows || idx < 0 || idx >= rows.length) return NaN;
+    var v = rows[idx].v;
+    if (!isFinite(v) || !(v > 0)) return NaN;
+    var start = Math.max(0, idx - win), sum = 0, n = 0, i;
+    for (i = start; i < idx; i++){
+      if (isFinite(rows[i].v) && rows[i].v > 0){ sum += rows[i].v; n++; }
+    }
+    if (!n) return NaN;
+    return v / (sum / n);
+  }catch(e){ return NaN; }
+}
+
+/* Sweep + displacement: wick through pool, close back inside, RVOL gate.
+   Displacement counted once (FVG created by the same bar is not a second vote). */
+function hgGoldSweepDisplacement(rows, level, dir, opt){
+  var out = {
+    ok: false, potential: false, rvol: NaN, breachAtr: NaN,
+    disp: false, closeReclaim: false, why: ''
+  };
+  try{
+    opt = opt || {};
+    rows = __rows(rows);
+    if (!rows || rows.length < 25 || !isFinite(level)) return out;
+    var atrs = _atr(rows, 14);
+    var atr = atrs[atrs.length - 1];
+    if (!isFinite(atr) || !(atr > 0)) return out;
+    var minBreach = (isFinite(opt.minAtr) ? opt.minAtr : HG_GOLD_FORM_SWEEP_ATR) * atr;
+    var rvolMin = isFinite(opt.rvolMin) ? opt.rvolMin : HG_GOLD_FORM_RVOL_MIN;
+    var bar = rows[rows.length - 1];
+    var rvol = hgGoldBarRvol(rows, rows.length - 1, 20);
+    out.rvol = rvol;
+    var long = String(dir).toLowerCase() === 'long';
+    var breach = long ? (level - bar.l) : (bar.h - level);
+    out.breachAtr = breach / atr;
+    if (!(breach >= minBreach)){
+      out.why = 'wick breach < ' + HG_GOLD_FORM_SWEEP_ATR + '×ATR — not a stop raid';
+      return out;
+    }
+    out.potential = true;
+    out.closeReclaim = long ? (bar.c > level) : (bar.c < level);
+    if (!out.closeReclaim){
+      out.why = 'wick through level but close accepted outside — breakout risk, not a reclaim';
+      return out;
+    }
+    var range = bar.h - bar.l;
+    out.disp = isFinite(range) && range >= 1.2 * atr
+      && (long ? (bar.c > bar.o) : (bar.c < bar.o));
+    if (isFinite(rvol) && rvol < rvolMin){
+      out.why = 'RVOL ' + rvol.toFixed(2) + ' < ' + rvolMin + ' — low-participation wick';
+      return out;
+    }
+    if (!out.disp){
+      out.why = 'reclaim without displacement body — wait for wide-range close';
+      return out;
+    }
+    out.ok = true;
+    out.why = 'sweep + displacement'
+      + (isFinite(rvol) ? (' · RVOL ' + rvol.toFixed(2)) : '')
+      + ' · breach ' + out.breachAtr.toFixed(2) + '×ATR';
+    return out;
+  }catch(e){ return out; }
+}
+
+function hgGoldSessionAtrBuffer(rows, nowMs){
+  var out = { atr: NaN, session: 'OFF', bufferMult: 0.20, stopBuffer: NaN };
+  try{
+    rows = __rows(rows);
+    var atrs = _atr(rows, 14);
+    out.atr = atrs && atrs.length ? atrs[atrs.length - 1] : NaN;
+    var ms = __toMs(nowMs); if (!isFinite(ms)) ms = Date.now();
+    var h = new Date(ms).getUTCHours() + new Date(ms).getUTCMinutes() / 60;
+    if (h >= 0 && h < 8){ out.session = 'ASIAN'; out.bufferMult = 0.10; }
+    else if (h >= 12 && h < 16){ out.session = 'NY_OVERLAP'; out.bufferMult = 0.25; }
+    else if (h >= 7 && h < 12){ out.session = 'LONDON'; out.bufferMult = 0.20; }
+    else { out.session = 'OFF'; out.bufferMult = 0.15; }
+    if (isFinite(out.atr)) out.stopBuffer = out.atr * out.bufferMult;
+    return out;
+  }catch(e){ return out; }
+}
+
+function hgGoldApplyFormingRegime(cand, regime){
+  try{
+    if (!cand || !regime) return cand;
+    var key = cand.stratKey || '';
+    var cont = { ribbon:1, bosalign:1, macro:1, wkbreak:1, pullback:1, openrange:1 };
+    var mrev = { vwap:1, vwapband:1, adrfade:1, fvg:1, stochrsi:1 };
+    if (key === 'rsidiv'){
+      cand.demoted = true;
+      if (!Array.isArray(cand.stamps)) cand.stamps = [];
+      if (cand.stamps.indexOf('FOLKLORE') < 0) cand.stamps.push('FOLKLORE');
+      var gn = Array.isArray(cand.gateNotes) ? cand.gateNotes.slice() : [];
+      gn.push('RSI divergence — no defended mechanism; excluded from confluence (forming-layer drop)');
+      cand.gateNotes = gn;
+      return cand;
+    }
+    if (key === 'hvn' || key === 'poc'){
+      cand.demoted = true;
+      if (!Array.isArray(cand.stamps)) cand.stamps = [];
+      if (cand.stamps.indexOf('THIN VP') < 0) cand.stamps.push('THIN VP');
+      var gn2 = Array.isArray(cand.gateNotes) ? cand.gateNotes.slice() : [];
+      gn2.push('volume-profile on a thin perp/spot proxy — informational target only, not confluence');
+      cand.gateNotes = gn2;
+      return cand;
+    }
+    if (!regime.allowContinuation && cont[key]){
+      cand.demoted = true;
+      if (!Array.isArray(cand.stamps)) cand.stamps = [];
+      if (cand.stamps.indexOf('REGIME MR') < 0) cand.stamps.push('REGIME MR');
+      var gn3 = Array.isArray(cand.gateNotes) ? cand.gateNotes.slice() : [];
+      gn3.push(regime.why || 'continuation blocked in mean-reversion regime');
+      cand.gateNotes = gn3;
+    }
+    if (!regime.allowMeanRev && mrev[key]){
+      cand.demoted = true;
+      if (!Array.isArray(cand.stamps)) cand.stamps = [];
+      if (cand.stamps.indexOf('REGIME TREND') < 0) cand.stamps.push('REGIME TREND');
+      var gn4 = Array.isArray(cand.gateNotes) ? cand.gateNotes.slice() : [];
+      gn4.push(regime.why || 'mean-reversion blocked in trend regime');
+      cand.gateNotes = gn4;
+    }
+    /* HTF pullback continuation: require yield agreement when ER is trending */
+    if (regime.style === 'trend' && regime.yieldBias && !regime.yieldBias.unchecked
+        && regime.yieldBias.dir && cand.dir && regime.yieldBias.dir !== cand.dir
+        && cont[key]){
+      cand.demoted = true;
+      if (!Array.isArray(cand.stamps)) cand.stamps = [];
+      if (cand.stamps.indexOf('REAL YIELD OPPOSE') < 0) cand.stamps.push('REAL YIELD OPPOSE');
+    }
+    return cand;
+  }catch(e){ return cand; }
+}
+
+/* Unified forming readout for SCALP / SWING / OMNIGOLD panels. */
+function hgGoldFormingStack(inp){
+  var out = {
+    regime: null, priorDay: null, asia: null, equals: null, sessionBuf: null,
+    watches: [], strategies: [], note: ''
+  };
+  try{
+    inp = inp || {};
+    var rows = __rows(inp.rows15m || inp.rows || inp.rows4h);
+    if (!rows || rows.length < 30){
+      out.note = 'need ≥30 bars for forming stack';
+      return out;
+    }
+    out.regime = hgGoldFormingRegime({
+      rows: rows, macro: inp.macro, dxyRows: inp.dxyRows || (inp.macro && inp.macro.dxyRows)
+    });
+    out.priorDay = hgGoldPriorDayLevels(rows);
+    out.asia = goldAsianRange(rows);
+    out.equals = hgGoldEqualExtremes(rows, 0.12);
+    out.sessionBuf = hgGoldSessionAtrBuffer(rows, inp.now || Date.now());
+
+    function watch(key, state, level, condition, reason, dir, family){
+      out.watches.push({
+        stratKey: key, strategy: GST_NAME[key] || key, family: family || 'structure',
+        state: state, level: level, condition: condition || '', reason: reason || null, dir: dir || null
+      });
+    }
+
+    /* Layer 2 — Asia / PDH-PDL / equal extremes */
+    if (out.asia && isFinite(out.asia.hi)){
+      var aNear = Math.abs(rows[rows.length-1].c - out.asia.lo) <= Math.abs(out.asia.hi - rows[rows.length-1].c);
+      watch('asian', 'armed', aNear ? out.asia.lo : out.asia.hi,
+        'Asia 00:00–08:00 UTC box ' + out.asia.lo.toFixed(2) + '–' + out.asia.hi.toFixed(2)
+          + ' — London sweep→reclaim is the primary gold forming setup',
+        null, aNear ? 'long' : 'short', 'structure');
+    } else watch('asian', 'idle', null, '', 'Asia box not ready', null, 'structure');
+
+    if (out.priorDay && out.priorDay.ok){
+      var px = rows[rows.length-1].c;
+      var useLo = Math.abs(px - out.priorDay.lo) <= Math.abs(out.priorDay.hi - px);
+      watch('pdraid', 'armed', useLo ? out.priorDay.lo : out.priorDay.hi,
+        'Prior-day ' + (useLo ? 'low' : 'high') + ' ' + (useLo ? out.priorDay.lo : out.priorDay.hi).toFixed(2)
+          + ' — NY 13:00–16:00 UTC liquidity raid watch',
+        null, useLo ? 'long' : 'short', 'structure');
+    } else watch('pdraid', 'idle', null, '', 'prior-day H/L unread', null, 'structure');
+
+    if (out.equals.highs.length){
+      watch('eqhi', 'armed', out.equals.highs[0].level,
+        'Equal highs ~' + out.equals.highs[0].level.toFixed(2) + ' — clustered stops',
+        null, 'short', 'structure');
+    }
+    if (out.equals.lows.length){
+      watch('eqlo', 'armed', out.equals.lows[0].level,
+        'Equal lows ~' + out.equals.lows[0].level.toFixed(2) + ' — clustered stops',
+        null, 'long', 'structure');
+    }
+
+    /* Layer 3/5 — Asia sweep→London + PDH raid confirmation status */
+    if (out.asia && isFinite(out.asia.lo)){
+      var sdL = hgGoldSweepDisplacement(rows, out.asia.lo, 'long', {
+        rvolMin: (out.sessionBuf && out.sessionBuf.session === 'ASIAN') ? HG_GOLD_FORM_RVOL_ASIA : HG_GOLD_FORM_RVOL_MIN
+      });
+      var sdH = hgGoldSweepDisplacement(rows, out.asia.hi, 'short', {
+        rvolMin: (out.sessionBuf && out.sessionBuf.session === 'ASIAN') ? HG_GOLD_FORM_RVOL_ASIA : HG_GOLD_FORM_RVOL_MIN
+      });
+      if (sdL.ok){
+        out.strategies.push({
+          key: 'asia-london', dir: 'long', level: out.asia.lo, grade: 'forming',
+          why: 'Asia low swept + displacement reclaim — ' + sdL.why,
+          invalidates: out.asia.lo - (out.sessionBuf.stopBuffer || 0),
+          t1: out.asia.hi, t2: (out.priorDay && out.priorDay.ok) ? out.priorDay.hi : NaN
+        });
+      } else if (sdH.ok){
+        out.strategies.push({
+          key: 'asia-london', dir: 'short', level: out.asia.hi, grade: 'forming',
+          why: 'Asia high swept + displacement reclaim — ' + sdH.why,
+          invalidates: out.asia.hi + (out.sessionBuf.stopBuffer || 0),
+          t1: out.asia.lo, t2: (out.priorDay && out.priorDay.ok) ? out.priorDay.lo : NaN
+        });
+      }
+    }
+    if (out.priorDay && out.priorDay.ok){
+      var pdL = hgGoldSweepDisplacement(rows, out.priorDay.lo, 'long');
+      var pdH = hgGoldSweepDisplacement(rows, out.priorDay.hi, 'short');
+      if (pdL.ok || pdH.ok){
+        var pdOk = pdL.ok ? pdL : pdH;
+        out.strategies.push({
+          key: 'pdh-pdl-ny', dir: pdL.ok ? 'long' : 'short',
+          level: pdL.ok ? out.priorDay.lo : out.priorDay.hi, grade: 'forming',
+          why: 'Prior-day liquidity raid — ' + pdOk.why,
+          invalidates: (pdL.ok ? out.priorDay.lo : out.priorDay.hi)
+            + (pdL.ok ? -1 : 1) * (out.sessionBuf.stopBuffer || 0)
+        });
+      }
+    }
+
+    out.note = (out.regime && out.regime.why) || '';
+    if (out.strategies.length){
+      out.note = (out.note ? out.note + ' · ' : '') + out.strategies.length + ' forming strategy hit(s)';
+    }
+    return out;
+  }catch(e){
+    out.note = 'forming stack error';
+    return out;
+  }
+}
+
+function hgGoldFormingStackHtml(stack){
+  try{
+    stack = stack || {};
+    var h = '<div class="note" data-hg-gold-forming="1" style="margin-top:10px">';
+    h += '<b>FORMING LAYERS</b>';
+    if (stack.regime){
+      h += ' · ER ' + (isFinite(stack.regime.er) ? stack.regime.er.toFixed(2) : '—')
+        + ' · ' + String(stack.regime.style || 'mixed').toUpperCase();
+      if (stack.regime.vol && stack.regime.vol.regime)
+        h += ' · vol ' + stack.regime.vol.regime;
+      if (stack.regime.stamps && stack.regime.stamps.length)
+        h += ' · ' + stack.regime.stamps.join(' · ');
+    }
+    if (stack.note) h += '<div class="dim" style="margin-top:4px">' + String(stack.note).replace(/[<>&]/g, '') + '</div>';
+    var i, s;
+    for (i = 0; i < (stack.strategies || []).length && i < 3; i++){
+      s = stack.strategies[i];
+      h += '<div style="margin-top:6px"><b>' + String(s.key).toUpperCase() + ' ' + String(s.dir || '').toUpperCase() + '</b>'
+        + (isFinite(s.level) ? (' @ ' + (+s.level).toFixed(2)) : '')
+        + ' — ' + String(s.why || '').replace(/[<>&]/g, '')
+        + (isFinite(s.invalidates) ? (' · invalidation ' + (+s.invalidates).toFixed(2)) : '')
+        + '</div>';
+    }
+    if (!(stack.strategies && stack.strategies.length)){
+      h += '<div class="dim" style="margin-top:4px">no Asia/London or prior-day raid confirmed this bar — watches stay armed below</div>';
+    }
+    h += '</div>';
+    return h;
+  }catch(e){ return ''; }
+}
+
 /* ---------------- exports ---------------- */
 
 W.goldFVG = goldFVG;
@@ -5084,6 +5615,18 @@ W.hgGoldObVolumeOk = hgGoldObVolumeOk;
 W.hgGoldMacroLock = hgGoldMacroLock;
 W.hgGoldSessionGate = hgGoldSessionGate;
 W.hgGoldInstFilter = hgGoldInstFilter;
+W.hgGoldAtrVolPercentile = hgGoldAtrVolPercentile;
+W.hgGoldDxyCorr = hgGoldDxyCorr;
+W.hgGoldFormingRegime = hgGoldFormingRegime;
+W.hgGoldPriorDayLevels = hgGoldPriorDayLevels;
+W.hgGoldEqualExtremes = hgGoldEqualExtremes;
+W.hgGoldSweepDisplacement = hgGoldSweepDisplacement;
+W.hgGoldSessionAtrBuffer = hgGoldSessionAtrBuffer;
+W.hgGoldApplyFormingRegime = hgGoldApplyFormingRegime;
+W.hgGoldFormingStack = hgGoldFormingStack;
+W.hgGoldFormingStackHtml = hgGoldFormingStackHtml;
+W.hgGoldBarRvol = hgGoldBarRvol;
+W.hgGoldRealYieldBias = hgGoldRealYieldBias;
 W.hgGoldNewsIsTier1 = hgGoldNewsIsTier1;
 W.hgGoldNewsGate = hgGoldNewsGate;
 W.hgGoldSpreadUsd = hgGoldSpreadUsd;

@@ -7453,7 +7453,23 @@ terse status, and never launches a first-time scan on a global refresh.
        back to the tab's stored desk-tape read; nothing else changes. */
     var host = ui && ui.goldEngines;
     if (!host) return;
-    try { host.innerHTML = hgOgGoldEnginesPanelHtml(bridge, tapeDir); }
+    try {
+      var formHtml = '';
+      try {
+        var fsFn = gfn('hgGoldFormingStack');
+        var fhFn = gfn('hgGoldFormingStackHtml');
+        if (fsFn && fhFn && __og && __og.lastRows){
+          formHtml = fhFn(fsFn({
+            rows15m: __og.lastRows.m15 || __og.lastRows.scalp || [],
+            rows4h: __og.lastRows.swing || [],
+            macro: __og.shared && __og.shared.macro,
+            dxyRows: __og.shared && __og.shared.macro && __og.shared.macro.dxyRows,
+            now: Date.now()
+          }));
+        }
+      } catch (eForm) { formHtml = ''; }
+      host.innerHTML = formHtml + hgOgGoldEnginesPanelHtml(bridge, tapeDir);
+    }
     catch (eGe){ host.innerHTML = ''; }
   }
 
@@ -8437,6 +8453,11 @@ terse status, and never launches a first-time scan on a global refresh.
         /* Bars kept for the R/horizon grid — it re-runs the walk-forward on
            what the scan already fetched, so it costs no network. */
         __og.gridRows = { scalp: res.scalp.rows || [], swing: res.swing.rows || [] };
+        __og.lastRows = {
+          scalp: res.scalp.rows || [],
+          swing: res.swing.rows || [],
+          m15: (res.scalp && res.scalp.rows) || []
+        };
         __og.ran = true;
         __og.src = { scalp: res.scalp.source, swing: res.swing.source };
 

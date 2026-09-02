@@ -1676,11 +1676,23 @@ async function runScan(ui, scanSt){
       }
     }catch(eAu){}
     /* render */
+    function formingLayersHtml(){
+      try{
+        var fsFn = gfn('hgGoldFormingStack');
+        var fhFn = gfn('hgGoldFormingStackHtml');
+        if (!fsFn || !fhFn) return '';
+        return fhFn(fsFn({
+          rows15m: gold.rows15m, rows4h: gold.rows4h, macro: ctx.macro,
+          dxyRows: ctx.macro && ctx.macro.dxyRows, now: now
+        }));
+      }catch(eFs){ return ''; }
+    }
     if (ui && ui.cards && ui.empty){
       if (display.length){
         ui.empty.style.display = 'none';
         ui.cards.innerHTML = basisHtml + mixedBanner + aplusPack.panel + bannerHTML(displayBest, display)
           + display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note); }).join('')
+          + formingLayersHtml()
           + formingNowHTML(armedAll)
           + rejectedHTML(rejectedAll)
           + historyHTML(lock.store.history);
@@ -1689,6 +1701,7 @@ async function runScan(ui, scanSt){
            then the watch panel, then the held-back reason lines */
         ui.empty.style.display = 'none';
         ui.cards.innerHTML = basisHtml + mixedBanner + (whySilent ? whySilentHTML(whySilent) : '')
+          + formingLayersHtml()
           + rejectedHTML(rejectedAll)
           + formingNowHTML(armedAll)
           + historyHTML(lock.store.history);

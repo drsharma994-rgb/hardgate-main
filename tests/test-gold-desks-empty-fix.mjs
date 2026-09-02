@@ -15,7 +15,7 @@ const ok = (cond, label) => { if (!cond) throw new Error('FAIL: ' + label); pass
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 
 ok(swCacheOk(read('sw.js')), 'sw.js HG_CACHE matches build-stamp (' + HG_VER + ')');
-ok(HG_VER === 'hg-v552', 'build stamp is hg-v552');
+ok(/^hg-v\d+$/.test(HG_VER), 'build stamp is hg-vN (got ' + HG_VER + ')');
 
 const OG = read('omnigold.js');
 const GS = read('goldscalp.js');

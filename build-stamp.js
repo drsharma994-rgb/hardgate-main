@@ -18,7 +18,7 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v552',
+  version: 'hg-v553',
   pack: 'OMNIGOLD native inst-filter',
   built: '2026-09-01T21:00:00Z',
   note: 'OMNIGOLD native detectors use the same hgGoldInstFilter stack as GOLD SCALP/SWING (MSS+displacement+IFVG, volume OB, DXY+TNX conviction lock, Asia/London/NY session, news-gate, spread, MTF). One hard inst-filter ledger row. Named ENTRY stays hit.level. goldind absent fail-opens. 1.5x ATR14 remains the stop floor stamp, not a cap. GOLD_STOP_MAX_PCT 0.025 unchanged. Not a win probability.'

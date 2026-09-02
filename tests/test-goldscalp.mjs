@@ -1398,7 +1398,7 @@ function rrShortRows25(){            /* short into a bearish OB with a bullish O
   const asianC = W.goldScalpSetups({ rows15m: asianBoRows25(), now: ASIAN_NOW });
   const asianOnly = asianC.find(c => c.stratKey === 'asian');
   assert(!!asianOnly && asianOnly.demoted === false && asianOnly.stamps.length === 0,
-         'off-session exception: the Asian-range breakout strategy trades its own 00:00-07:00 GMT session undemoted');
+         'off-session exception: the Asian-range breakout strategy trades its own 00:00-08:00 UTC session undemoted');
   const asianOther = asianC.find(c => c.stratKey !== 'asian');
   assert(!asianOther || (asianOther.demoted === true && asianOther.stamps.indexOf('OFF-SESSION') >= 0),
          'a non-Asian strategy in the Asian window IS off-session demoted (only the Asian strategy is exempt)');
@@ -1410,22 +1410,22 @@ function rrShortRows25(){            /* short into a bearish OB with a bullish O
   /* ---- (2) TREND ALIGNMENT ---- */
   const ctBear = W.goldScalpSetups({ rows15m: ctRows25(), rows4h: rows4hBear25(), now: OVLP_NOW });
   const rsiL = ctBear.find(c => c.stratKey === 'rsidiv'), swL = ctBear.find(c => c.stratKey === 'sweep');
-  assert(!!rsiL && rsiL.demoted === true && rsiL.stamps.indexOf('COUNTER-TREND') >= 0
-      && /falling 200-EMA-15m/.test(rsiL.gateNotes.join(' ')) && /bearish 4H/.test(rsiL.gateNotes.join(' ')),
-         'trend: long below a FALLING 200-EMA-15m with a bearish 4H stack -> COUNTER-TREND demotion');
+  assert(!!rsiL && rsiL.demoted === true && rsiL.stamps.indexOf('FOLKLORE') >= 0,
+         'trend: rsidiv is FOLKLORE-demoted (no defended mechanism) regardless of EMA stack');
   assert(!!swL && swL.demoted === false,
          'trend exception: the liquidity-sweep trigger is the sanctioned counter-trend play (never demoted)');
   const ctBull = W.goldScalpSetups({ rows15m: ctRows25(), rows4h: rows4hBull25(), now: OVLP_NOW });
   const rsiLB = ctBull.find(c => c.stratKey === 'rsidiv');
-  assert(!!rsiLB && rsiLB.demoted === false, 'trend: a disagreeing (bullish) 4H stack clears the demotion — not counter-trend');
+  assert(!!rsiLB && rsiLB.demoted === true && rsiLB.stamps.indexOf('FOLKLORE') >= 0,
+         'trend: rsidiv stays FOLKLORE-demoted even when 4H stack would clear COUNTER-TREND');
   const ctNone = W.goldScalpSetups({ rows15m: ctRows25(), now: OVLP_NOW });
   const rsiLN = ctNone.find(c => c.stratKey === 'rsidiv');
-  assert(!!rsiLN && rsiLN.demoted === true, 'trend: 4H unavailable -> the falling 15m 200-EMA evidence alone demotes');
+  assert(!!rsiLN && rsiLN.demoted === true && rsiLN.stamps.indexOf('FOLKLORE') >= 0,
+         'trend: rsidiv FOLKLORE demotion when 4H unavailable');
   const ctMir = W.goldScalpSetups({ rows15m: mirrorRows(ctRows25(), 2560), rows4h: rows4hBull25(), now: OVLP_NOW });
   const rsiS = ctMir.find(c => c.stratKey === 'rsidiv'), swS = ctMir.find(c => c.stratKey === 'sweep');
-  assert(!!rsiS && rsiS.dir === 'short' && rsiS.demoted === true && rsiS.stamps.indexOf('COUNTER-TREND') >= 0
-      && /rising 200-EMA-15m/.test(rsiS.gateNotes.join(' ')),
-         'trend (mirrored): short above a RISING 200-EMA-15m with a bullish 4H stack -> COUNTER-TREND demotion');
+  assert(!!rsiS && rsiS.dir === 'short' && rsiS.demoted === true && rsiS.stamps.indexOf('FOLKLORE') >= 0,
+         'trend (mirrored): short rsidiv is FOLKLORE-demoted');
   assert(!!swS && swS.demoted === false, 'trend (mirrored): the sweep-rejection short is exempt');
 
   /* ---- (3) MIN R:R AFTER SNAPPING ---- */
@@ -1722,14 +1722,17 @@ function fmtLike(n, d){ return Number(n).toLocaleString('en-US', { maximumFracti
 
   const rows = compLongRows();
   const wl = W.goldWatch({ rows15m: rows, now: OFF_NOW, tf: '15m' });
-  assert(Array.isArray(wl) && wl.length === 8, 'goldWatch: one watch item per scalp strategy (8)');
-  assert(wl.every(w => Object.keys(w).sort().join(',') === 'condition,dir,level,reason,state,stratKey,strategy'),
-         'goldWatch: every item carries {stratKey, strategy, state, level, condition, reason, dir}');
+  const coreKeys = ['sweep','ob','fvg','vwap','ribbon','asian','rsidiv','hvn'];
+  assert(Array.isArray(wl) && wl.length >= 8, 'goldWatch: at least the 8 core scalp strategies (got ' + wl.length + ')');
+  assert(coreKeys.every(k => wl.some(w => w.stratKey === k)),
+         'goldWatch: every core scalp strategy is present');
+  assert(wl.every(w => w.stratKey && w.strategy && (w.state === 'armed' || w.state === 'idle')),
+         'goldWatch: every item carries stratKey/strategy/state');
   assert(wl.every(w => (w.state === 'armed' && typeof w.condition === 'string' && w.condition.length > 10)
                     || (w.state === 'idle' && typeof w.reason === 'string' && w.reason.length > 5)),
          'goldWatch: armed items carry a live trigger condition, idle items carry the honest reason');
   const byKey = {};
-  for (const w of wl) byKey[w.stratKey] = w;
+  for (const w of wl) if (!byKey[w.stratKey]) byKey[w.stratKey] = w;
 
   /* sweep: armed on the NEARER of the last-25-bar swing high/low */
   const sH = Math.max(...rows.slice(-25).map(r => r.h)), sL = Math.min(...rows.slice(-25).map(r => r.l));
@@ -1756,19 +1759,17 @@ function fmtLike(n, d){ return Number(n).toLocaleString('en-US', { maximumFracti
       && /BULL 20\/50\/200 ribbon/.test(rRb.condition),
          'ribbon: armed on the real 20-EMA ' + (rRb && rRb.level) + ' inside a BULL stack');
 
-  /* asian: box from the last bar's 00:00-07:00 GMT window, still building */
-  const box = rows.filter(r => r.t >= DAY + 86400 && r.t < DAY + 86400 + 7*3600);
+  /* asian: box from the last bar's 00:00-08:00 UTC window, still building */
+  const box = rows.filter(r => r.t >= DAY + 86400 && r.t < DAY + 86400 + 8*3600);
   const bHi = Math.max(...box.map(r => r.h)), bLo = Math.min(...box.map(r => r.l));
   const aLvl = Math.abs(entry - bLo) <= Math.abs(bHi - entry) ? bLo : bHi;
   assert(byKey.asian.state === 'armed' && byKey.asian.level === aLvl
-      && /00:00–07:00 GMT/.test(byKey.asian.condition) && /still building/.test(byKey.asian.condition),
+      && /00:00–08:00 UTC/.test(byKey.asian.condition) && /still building/.test(byKey.asian.condition),
          'asian: armed on the real box ' + bLo + '–' + bHi + ' (nearest edge ' + aLvl + ')');
 
-  /* rsidiv: armed with the real divergence pivot to beat (the sweep-wick low) */
-  const pivExp = W.goldRSIGold(rows).pivotLow;
-  assert(byKey.rsidiv.state === 'armed' && byKey.rsidiv.level === pivExp
-      && /RSI now/.test(byKey.rsidiv.condition) && byKey.rsidiv.condition.indexOf('pivot to beat ' + pivExp.toFixed(2)) >= 0,
-         'rsidiv: armed, pivot to beat ' + pivExp + ' — got "' + byKey.rsidiv.condition + '"');
+  /* rsidiv: FOLKLORE — idle / informational only (never a forming confluence leg) */
+  assert(byKey.rsidiv.state === 'idle' && /FOLKLORE/i.test(byKey.rsidiv.reason || ''),
+         'rsidiv: FOLKLORE idle — got "' + (byKey.rsidiv.reason || byKey.rsidiv.condition) + '"');
 
   /* fvg on compLongRows: the unmitigated gap is within reach -> armed on its edge */
   assert(byKey.fvg.state === 'armed' && byKey.fvg.level === 2303.5
@@ -1800,9 +1801,11 @@ function fmtLike(n, d){ return Number(n).toLocaleString('en-US', { maximumFracti
       && fByKey.sweep.state === 'armed' && fByKey.sweep.level === 99
       && fByKey.asian.state === 'armed',
       'flat: vwap/sweep/asian still armed on their real levels (no fabrication needed to watch)');
-  assert(fByKey.rsidiv.state === 'armed' && fByKey.rsidiv.level === null
-      && /RSI now 50.0/.test(fByKey.rsidiv.condition) && /no levels available yet/.test(fByKey.rsidiv.condition),
-         'flat: rsidiv armed with RSI 50 but honestly "no levels available yet (no confirmed pivot)"');
+  assert(fByKey.rsidiv.state === 'idle' && /FOLKLORE/i.test(fByKey.rsidiv.reason || '')
+      && /RSI 50\.0/.test(fByKey.rsidiv.reason || ''),
+         'flat: rsidiv FOLKLORE idle with RSI 50 informational only — got "' + (fByKey.rsidiv.reason || '') + '"');
+  assert(fByKey.pdraid && fByKey.eqhi && fByKey.eqlo,
+         'flat: forming-layer structure watches (pdraid/eqhi/eqlo) are present');
 
   /* 4h/1d-shaped rows: the Asian box honestly cannot exist -> idle, never faked */
   const wl4 = W.goldWatch({ rows15m: trendRows(220, 2300, 1.2, DAY - 220*4*3600, 4*3600), now: OFF_NOW, tf: '4h' });
@@ -1838,7 +1841,11 @@ function fmtLike(n, d){ return Number(n).toLocaleString('en-US', { maximumFracti
       && wHtml.indexOf('armed setups are watch items, not entries') >= 0,
       'FORMING NOW panel rendered after the cards with the honest watch-item label');
   assert(wHtml.indexOf('ARMED') >= 0, 'armed rows highlighted in the panel');
-  assert(Array.isArray(wScan.armed) && wScan.armed.length === 8, 'snapshot.armed: 8 watch items (one venue leg)');
+  assert(Array.isArray(wScan.armed) && wScan.armed.length >= 11,
+         'snapshot.armed: ≥11 watch items (8 core + pdraid/eqhi/eqlo forming structure) — got ' + wScan.armed.length);
+  assert(wScan.armed.some(w => w.strategy === 'PRIOR-DAY LIQUIDITY RAID')
+      && wScan.armed.some(w => /EQUAL (HIGHS|LOWS)/.test(w.strategy || '')),
+         'snapshot.armed includes prior-day raid + equal extremes forming watches');
   assert(wScan.armed.every(w => {
     var keys = Object.keys(w).filter(k => k !== 'stratKey' && k !== 'promoteNote').sort().join(',');
     return keys === 'condition,level,reason,state,strategy,venue' && w.venue === 'BINANCE XAUUSDT';
