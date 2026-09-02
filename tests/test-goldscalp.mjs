@@ -1615,9 +1615,11 @@ function vwapRows26(){
          'merge: overlapping setup merges into the live conviction (re-confirmed, original issuedAt kept)');
   assert(!!obM && obM.entry === 99.5 && obM.stop === 98.0 && obM.t1 === 101.5 && obM.t2 === 103.0,
          'merge: the ORIGINAL levels stand — no re-pick, no second card');
-  assert(!!storeM && !storeM.live['ob|long|99'] && Object.keys(storeM.live).length === 1
+  assert(!!storeM && !storeM.live['ob|long|99'] && !!storeM.live['sweep|long|99']
       && storeM.live['sweep|long|99'].lastConfirmedAt === FIXED,
          'merge: nothing new minted; live conviction\'s lastConfirmedAt refreshed');
+  assert(!(Object.keys(storeM.live).some(function(k){ return k.indexOf('ob|') === 0; })),
+         'merge: OB candidate did not mint a second classic lock');
   assert(M3.stubs['#gsCards'].innerHTML.indexOf('conviction re-confirmed · original levels stand') >= 0,
          'merge: the card says "conviction re-confirmed · original levels stand"');
 
@@ -1633,11 +1635,13 @@ function vwapRows26(){
   const s4 = C3.goldscalpScan();
   const obF = s4.cands.find(c => c.id === 'ob|long|99');
   const storeF = loadConvictionStore(ls3);
-  assert(!!obF && !obF.merged && obF.locked === false && Object.keys(storeF.live).length === 2
-      && !!storeF.live['ob|long|99'],
+  assert(!!obF && !obF.merged && obF.locked === false && !!storeF.live['ob|long|99']
+      && !!storeF.live['sweep|long|100'],
          'merge guard: anchor beyond 0.5×ATR (Δ 1.0) -> normal new conviction, no merge');
   assert(M3.stubs['#gsCards'].innerHTML.indexOf('conviction re-confirmed · original levels stand') < 0,
          'merge guard: no re-confirmed line on a genuinely new conviction');
+  assert(!(s4.cands || []).some(function(c){ return c && c.merged && String(c.stratKey || '').indexOf('p7') === 0; }),
+         'Part7 scalp module does not cross-merge into classic live locks');
 
   /* merge guards: different direction -> normal new evaluation */
   const seedDir = { v: 1, live: {}, history: [] };
@@ -1650,7 +1654,7 @@ function vwapRows26(){
   await tab3.refresh();
   const s5 = C3.goldscalpScan();
   const obD = s5.cands.find(c => c.id === 'ob|long|99');
-  assert(!!obD && !obD.merged && obD.locked === false && Object.keys(loadConvictionStore(ls3).live).length === 2,
+  assert(!!obD && !obD.merged && obD.locked === false && !!loadConvictionStore(ls3).live['ob|long|99'],
          'merge guard: different direction -> normal new conviction, no merge');
 
   /* merge guards: different symbol -> normal new evaluation */
@@ -1664,7 +1668,7 @@ function vwapRows26(){
   await tab3.refresh();
   const s6 = C3.goldscalpScan();
   const obS = s6.cands.find(c => c.id === 'ob|long|99');
-  assert(!!obS && !obS.merged && obS.locked === false && Object.keys(loadConvictionStore(ls3).live).length === 2,
+  assert(!!obS && !obS.merged && obS.locked === false && !!loadConvictionStore(ls3).live['ob|long|99'],
          'merge guard: different symbol -> normal new conviction, no merge');
 
   Date.now = realDateNow3;

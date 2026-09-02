@@ -142,6 +142,7 @@ ConvictionLockManager.prototype.lockConviction = function(setup, currentTime, cu
       sameType = existingSetup.type === setup.type;
       if (setup.sym && existingSetup.sym && existingSetup.sym !== setup.sym) continue;
       if (!sameDirection || !sameType) continue;
+      if (!clMergeCompatible(clStratKeyOf(existingSetup), clStratKeyOf(setup))) continue;
       if (!isFinite(currentATR) || !(currentATR > 0)
           || !isFinite(existingSetup.levels.anchor) || !isFinite(setup.levels.anchor)) continue;
       anchorDistance = Math.abs(existingSetup.levels.anchor - setup.levels.anchor);
@@ -428,6 +429,7 @@ function applyHardgateConvictionLock(store, ranked, venueRows, nowMs, opts){
             if (!Object.prototype.hasOwnProperty.call(store.live, storageKey)) continue;
             var lr = store.live[storageKey];
             if (!lr || lr.dir !== c.dir || lr.sym !== c.sym) continue;
+            if (!clMergeCompatible(clStratKeyOf(lr), clStratKeyOf(c))) continue;
             if (!isFinite(lr.anchor) || !isFinite(c.anchor) || !isFinite(atr)) continue;
             if (Math.abs(lr.anchor - c.anchor) <= 0.5 * atr){
               mergedRec = lr;
@@ -467,6 +469,30 @@ function applyHardgateConvictionLock(store, ranked, venueRows, nowMs, opts){
   }catch(e){ /* never throw */ }
 
   return { store: store, transitions: transitions };
+}
+
+/** Cross-strategy merge is intentional for classic scalp families (sweep↔ob
+ *  same zone), but Part7's separated scalp module must not re-confirm a
+ *  classic live lock (or vice versa) — different playbooks, same price. */
+function clMergeCompatible(aKey, bKey){
+  try{
+    var a = String(aKey || '');
+    var b = String(bKey || '');
+    if (!a || !b) return true;
+    var p7a = a.indexOf('p7') === 0;
+    var p7b = b.indexOf('p7') === 0;
+    return p7a === p7b;
+  }catch(e){ return true; }
+}
+
+function clStratKeyOf(recOrCand){
+  try{
+    if (!recOrCand) return '';
+    if (recOrCand.stratKey) return String(recOrCand.stratKey);
+    var id = String(recOrCand.id || '');
+    var pipe = id.indexOf('|');
+    return pipe > 0 ? id.slice(0, pipe) : id;
+  }catch(e){ return ''; }
 }
 
 /** Restore a live conviction record as a display card (gold tabs + Telegram snap). */
