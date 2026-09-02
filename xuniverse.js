@@ -18,9 +18,11 @@ EXPORTS (all on window, all feature-checkable, none ever throw):
       and on Delta rows that omit the fields — never fabricated --
       alsoOn:string|null }>>
       Fetches BOTH legs with per-leg Promise.allSettled degradation: one
-      exchange down -> the other's full list with an honest note. Total
-      outage -> the last good cached universe when one exists (stale-data
-      note), else []. 15-minute cache; force === true bypasses it.
+      exchange down -> the other's full list with an honest note. Delta
+      abort/timeout with a prior cache.deltaRows reuses those rows and
+      notes "last good Delta" — never invents contracts. Total outage ->
+      the last good cached universe when one exists (stale-data note),
+      else []. 15-minute cache; force === true bypasses it.
   window.xuCandles(item, tf, n) -> Promise<rows [{t,o,h,l,c,v}] asc>
       Routes by item.exchange. Delta: direct GET (CORS-proven by the app),
       t = bar-open time in SECONDS. CoinDCX: same-origin /api/proxy wrap,
@@ -79,6 +81,10 @@ EXPORTS (all on window, all feature-checkable, none ever throw):
   window.xuUniverseNote() -> string | null
       The degradation note from the last xuUniverse call, null when both
       legs were healthy.
+  window.xuErrMsg(e) -> string
+      Maps AbortError / "aborted without reason" to `timeout >Nms`. Other
+      errors stay verbatim. Used by universe notes so Chromium abort noise
+      never reaches the desk.
 
 DATA PATHS (verified against index.html ~line 744-786):
   Delta perps:   GET https://api.india.delta.exchange/v2/tickers?contract_types=perpetual_futures
@@ -97,8 +103,11 @@ DATA PATHS (verified against index.html ~line 744-786):
   DELTA_RES = {'15m':'15m','1h':'1h','2h':'2h','4h':'4h','1d':'1d'}
   CDCX_RES  = {'15m':'15','1h':'60','2h':'120','4h':'240','1d':'1D'}
 
-Every fetch carries a 12s AbortController timeout (feature-checked — plain
-fetch when AbortController is unavailable). Classic script, no build step.
+Every fetch carries a 12s AbortController timeout (20s for the Delta tickers
+list). AbortError is mapped to `timeout >Nms` — Chromium's "signal is aborted
+without reason" never reaches the desk. Delta retries abort/timeout three
+times; a live miss reuses last-good Delta rows when the cache has them.
+Classic script, no build step.
 Loads BEFORE engine.js / brain.js so they can feature-check
 typeof window.xuUniverse === 'function' and degrade to today's behavior
 when this module is absent. Never throws at load.
@@ -152,6 +161,8 @@ var SEC_PER   = {'15m':900,'1h':3600,'2h':7200,'4h':14400,'1d':86400};
 
 var CACHE_MS     = 15 * 60 * 1000; // 15-minute universe cache
 var FETCH_TIMEOUT = 12000;         // 12s abort per network leg
+var DELTA_TICKER_TIMEOUT = 20000;  // tickers payload is ~270KB; 12s was aborting under proxy load
+var DELTA_FETCH_TRIES = 3;
 
 /* ---------------- module-local state ---------------- */
 var cache = null;   // {rows, at, deltaCount, cdcxCount, note}
@@ -189,13 +200,21 @@ function numOrNull(x){
   return isFinite(n) ? n : null;
 }
 
-/* 12s abort timeout, feature-checked; plain fetch when AbortController or
-   fetch itself is missing (missing fetch rejects so allSettled degrades). */
-function timedFetch(url){
+/* Abort timeout, feature-checked; plain fetch when AbortController or
+   fetch itself is missing (missing fetch rejects so allSettled degrades).
+   abort(reason) when the runtime accepts it so the rejection is "timeout >Nms"
+   instead of Chromium's empty-reason AbortError. */
+function timedFetch(url, ms){
   if (typeof fetch !== 'function') return Promise.reject(new Error('fetch unavailable'));
+  var wait = (isFinite(+ms) && +ms > 0) ? Math.floor(+ms) : FETCH_TIMEOUT;
   if (typeof AbortController !== 'function') return fetch(url);
   var ctl = new AbortController();
-  var to = setTimeout(function(){ try{ ctl.abort(); }catch(e){} }, FETCH_TIMEOUT);
+  var to = setTimeout(function(){
+    try{
+      var reason = new Error('timeout >' + wait + 'ms');
+      try{ ctl.abort(reason); }catch(e){ ctl.abort(); }
+    }catch(e){}
+  }, wait);
   return fetch(url, { signal: ctl.signal }).then(function(r){
     clearTimeout(to);
     return r;
@@ -203,6 +222,21 @@ function timedFetch(url){
     clearTimeout(to);
     throw err;
   });
+}
+
+function isTimeoutErr(e){
+  if (!e) return false;
+  if (e.name === 'AbortError' || e.code === 20) return true;
+  var msg = e.message ? String(e.message) : String(e);
+  return /timeout\s*>|aborted without reason|The user aborted|AbortError|The operation was aborted/i.test(msg);
+}
+function errMsg(e){
+  if (!e) return 'unknown error';
+  var msg = e.message ? String(e.message) : String(e);
+  var already = msg.match(/timeout\s*>(\d+)ms/i);
+  if (already) return 'timeout >' + already[1] + 'ms';
+  if (isTimeoutErr(e)) return 'timeout >' + FETCH_TIMEOUT + 'ms';
+  return msg;
 }
 
 /* ---------------- base-asset mapping ----------------
@@ -424,13 +458,32 @@ function xuNormBinanceExt(tickers, coveredBases){
   }catch(e){ return []; }
 }
 
-/* Same-origin proxy first — browser CORS blocks direct Delta REST on Render. */
+/* Same-origin proxy first — browser CORS blocks direct Delta REST on Render.
+   Abort/timeout retries (3) with backoff. HTTP 429/4xx/5xx fail fast — the
+   proxy bucket is 60s, so a short retry only doubles the pressure. */
+function isDeltaTickersUrl(url){
+  return String(url).indexOf('/v2/tickers') >= 0;
+}
 async function deltaFetch(url){
-  var r = await timedFetch(DELTA_PROXY(url));
-  if (r && r.ok) return r;
-  r = await timedFetch(url);
-  if (r && r.ok) return r;
-  throw new Error('Delta HTTP ' + (r ? r.status : '?'));
+  var wait = isDeltaTickersUrl(url) ? DELTA_TICKER_TIMEOUT : FETCH_TIMEOUT;
+  var lastErr = null;
+  for (var attempt = 0; attempt < DELTA_FETCH_TRIES; attempt++){
+    try{
+      var r = await timedFetch(DELTA_PROXY(url), wait);
+      if (r && r.ok) return r;
+    }catch(e){ lastErr = e; }
+    try{
+      var r2 = await timedFetch(url, wait);
+      if (r2 && r2.ok) return r2;
+      lastErr = new Error('Delta HTTP ' + (r2 ? r2.status : '?'));
+    }catch(e2){ lastErr = e2; }
+    if (attempt < DELTA_FETCH_TRIES - 1 && isTimeoutErr(lastErr)){
+      await new Promise(function(ok){ setTimeout(ok, Math.min(4000, 300 * Math.pow(2, attempt))); });
+      continue;
+    }
+    throw lastErr || new Error('Delta fetch failed');
+  }
+  throw lastErr || new Error('Delta fetch failed');
 }
 
 /* ---------------- network legs ---------------- */
@@ -497,7 +550,14 @@ async function xuUniverse(force){
         lastNote = note;
         return [];
       }
-      if (d.status !== 'fulfilled') note = 'delta leg failed: ' + errMsg(d.reason) + ' — CoinDCX contracts only, no Delta funding/OI data';
+      if (d.status !== 'fulfilled'){
+        if (cache && cache.deltaRows && cache.deltaRows.length){
+          dRows = cache.deltaRows.slice();
+          note = 'delta leg failed: ' + errMsg(d.reason) + ' — using last good Delta universe from ' + new Date(cache.at).toISOString();
+        } else {
+          note = 'delta leg failed: ' + errMsg(d.reason) + ' — CoinDCX contracts only, no Delta funding/OI data';
+        }
+      }
       if (c.status !== 'fulfilled') note = 'coindcx leg failed: ' + errMsg(c.reason) + ' — Delta India contracts only';
       if (st.status !== 'fulfilled') note = (note ? note + '; ' : '') + 'startrader leg failed: ' + errMsg(st.reason);
       if (bn.status !== 'fulfilled') note = (note ? note + '; ' : '') + 'binance extension leg failed: ' + errMsg(bn.reason);
@@ -523,8 +583,6 @@ async function xuUniverse(force){
     return (cache && cache.rows) ? cache.rows : [];
   }
 }
-function errMsg(e){ return (e && e.message) ? e.message : String(e); }
-
 /* ---------------- Binance candle fallback ----------------
    Thin venue listings (mostly CoinDCX) often return empty/too-few candles,
    which excludes them from every gate/vote. When the venue leg cannot fill
@@ -759,6 +817,7 @@ try{
   G.xuPositioning = xuPositioning;
   G.xuState = xuState;
   G.xuUniverseNote = xuUniverseNote;
+  G.xuErrMsg = errMsg;
 }catch(e){}
 
 })();

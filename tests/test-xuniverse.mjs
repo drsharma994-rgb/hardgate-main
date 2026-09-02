@@ -752,6 +752,112 @@ const BINANCE_CANDLES = [
          'fallback: concurrent fallbacks share ONE perp-universe fetch (in-flight guard), got ' + bs3.calls.perp);
 }
 
+/* =========================================================================
+   7) Delta abort honesty — timeout mapping, retry, last-good reuse
+========================================================================= */
+function abortErr(msg){
+  const e = new Error(msg || 'signal is aborted without reason');
+  e.name = 'AbortError';
+  e.code = 20;
+  return e;
+}
+{
+  const w = loadModule(makeCtx());
+  assert(typeof w.xuErrMsg === 'function', 'errMsg: xuErrMsg exported for honest abort mapping');
+  const mapped = (typeof w.xuErrMsg === 'function') ? w.xuErrMsg(abortErr('signal is aborted without reason')) : '';
+  assert(/timeout\s*>\d+ms/.test(mapped), 'errMsg: Chromium AbortError maps to timeout >Nms, got "' + mapped + '"');
+  assert(mapped.indexOf('aborted without reason') < 0,
+         'errMsg: Chromium abort string never leaks into the note');
+  if (typeof w.xuErrMsg === 'function'){
+    assert(w.xuErrMsg(new Error('timeout >20000ms')) === 'timeout >20000ms',
+           'errMsg: already-honest timeout reason is kept');
+    assert(w.xuErrMsg(new Error('Delta HTTP 503')) === 'Delta HTTP 503',
+           'errMsg: non-abort errors stay verbatim');
+  }
+}
+{
+  /* Abort then success on retry — Delta rows present, no degrade note */
+  let n = 0;
+  const f = async function(url){
+    f.urls.push(String(url));
+    const raw = String(url);
+    if (raw.indexOf('delta.exchange') >= 0 || decodeURIComponent(raw).indexOf('delta.exchange') >= 0){
+      n++;
+      if (n <= 2) throw abortErr();
+      return { ok: true, status: 200, json: async function(){ return DELTA_BODY; } };
+    }
+    if (raw.indexOf('/api/coindcx/instruments') >= 0)
+      return { ok: true, status: 200, json: async function(){ return { ok: true, data: CDCX_BODY }; } };
+    if (raw.indexOf('/api/coindcx/marks') >= 0)
+      return { ok: true, status: 200, json: async function(){ return { ok: true, data: {} }; } };
+    return { ok: false, status: 404, json: async function(){ return null; } };
+  };
+  f.urls = [];
+  const w = loadModule(makeCtx({ fetch: f, AbortController: AbortController }));
+  const uni = await w.xuUniverse();
+  const hasDelta = uni.some(function(r){ return r.exchange === 'delta'; });
+  assert(hasDelta && uni.length === 9, 'retry: abort then success keeps the combined 9-contract universe (got ' + uni.length + ')');
+  assert(n >= 3, 'retry: Delta tickers retried after AbortError (attempts=' + n + ')');
+  assert(w.xuUniverseNote() === null, 'retry: recovered Delta leg leaves the note null, got "' + w.xuUniverseNote() + '"');
+}
+{
+  /* Abort with no recovery and no cache — CoinDCX-only + timeout note, not Chromium noise */
+  const f = fetchRecorder([
+    { match: 'api.india.delta.exchange/v2/tickers', fail: true, failMsg: 'signal is aborted without reason', failName: 'AbortError' },
+    { match: '/api/coindcx/instruments', body: CDCX_BODY },
+    { match: '/api/coindcx/marks', body: {} }
+  ]);
+  const orig = f;
+  const wrapped = async function(url){
+    wrapped.urls.push(String(url));
+    const raw = String(url);
+    const dec = (function(){ try{ return decodeURIComponent(raw); }catch(e){ return raw; } })();
+    if (raw.indexOf('delta.exchange') >= 0 || dec.indexOf('delta.exchange') >= 0){
+      throw abortErr();
+    }
+    return orig(url);
+  };
+  wrapped.urls = [];
+  const w = loadModule(makeCtx({ fetch: wrapped, AbortController: AbortController }));
+  const uni = await w.xuUniverse();
+  assert(uni.length === 6 && uni.every(function(r){ return r.exchange === 'coindcx'; }),
+         'abort: no cache -> CoinDCX-only universe (got ' + uni.length + ')');
+  const note = w.xuUniverseNote() || '';
+  assert(note.indexOf('delta leg failed') === 0, 'abort: note still names the delta leg, got "' + note + '"');
+  assert(/timeout\s*>\d+ms/.test(note), 'abort: note says timeout, not Chromium abort noise, got "' + note + '"');
+  assert(note.indexOf('aborted without reason') < 0, 'abort: Chromium string is not shown to the desk');
+}
+{
+  /* Last-good Delta reuse: healthy cache, then force-refetch Delta abort */
+  const good = fetchRecorder([
+    { match: 'api.india.delta.exchange/v2/tickers', body: DELTA_BODY },
+    { match: '/api/coindcx/instruments', body: CDCX_BODY },
+    { match: '/api/coindcx/marks', body: {} }
+  ]);
+  const ctx = makeCtx({ fetch: good, AbortController: AbortController });
+  const w = loadModule(ctx);
+  await w.xuUniverse();
+  const dead = async function(url){
+    const raw = String(url);
+    const dec = (function(){ try{ return decodeURIComponent(raw); }catch(e){ return raw; } })();
+    if (raw.indexOf('delta.exchange') >= 0 || dec.indexOf('delta.exchange') >= 0) throw abortErr();
+    if (raw.indexOf('/api/coindcx/instruments') >= 0)
+      return { ok: true, status: 200, json: async function(){ return { ok: true, data: CDCX_BODY }; } };
+    if (raw.indexOf('/api/coindcx/marks') >= 0)
+      return { ok: true, status: 200, json: async function(){ return { ok: true, data: {} }; } };
+    return { ok: false, status: 404, json: async function(){ return null; } };
+  };
+  ctx.fetch = dead;
+  const uni = await w.xuUniverse(true);
+  const deltaKept = uni.filter(function(r){ return r.exchange === 'delta'; });
+  assert(deltaKept.length >= 1 && uni.length === 9,
+         'stale-delta: last-good Delta rows stay in the universe after a live abort (delta=' + deltaKept.length + ', n=' + uni.length + ')');
+  const note = w.xuUniverseNote() || '';
+  assert(note.indexOf('last good Delta') >= 0, 'stale-delta: note names last-good Delta reuse, got "' + note + '"');
+  assert(/timeout\s*>\d+ms/.test(note), 'stale-delta: reason is timeout, got "' + note + '"');
+  assert(w.xuState().delta === 6, 'stale-delta: xuState.delta keeps the last-good count, got ' + (w.xuState() && w.xuState().delta));
+}
+
 /* ---------------- summary ---------------- */
 console.log('');
 console.log(pass + ' passed, ' + fail + ' failed');

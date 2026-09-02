@@ -228,9 +228,9 @@ assert(/\?diag=1/.test(blocks[0]), 'and the first of them is the ?diag=1 probe, 
    must load after binance.js and before engine.js so consumers find it */
 const tagOf = f => '<script src="' + f + '"></script>';
 const iBinance = html.indexOf(tagOf('binance.js'));
-const iXuniverse = html.indexOf(tagOf('xuniverse.js'));
+const iXuniverse = html.search(/<script src="xuniverse\.js(\?v=\d+)?"><\/script>/);
 const iEngine = html.indexOf(tagOf('engine.js'));
-assert(iXuniverse !== -1, 'index.html includes <script src="xuniverse.js"></script>');
+assert(iXuniverse !== -1, 'index.html includes xuniverse.js script tag (optional ?v= pin)');
 assert(iBinance !== -1 && iEngine !== -1 && iBinance < iXuniverse && iXuniverse < iEngine,
   'xuniverse.js tag ordered after binance.js and before engine.js');
 

@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v579',
-  pack: 'Catalog feed — every desk walks the inventory',
-  built: '2026-09-02T22:15:00Z',
-  note: 'hgCryptoCatalogFeed + hgGoldCatalogFeed walk every mapped indicator/strategy on OMNIROUTE, OMNIPRESENT, SWING, SCALP, OMNIGOLD, GOLD SCALP, GOLD SWING. USED vs UNCHECKED. Never invent ENTER. Never flip dir.'
+  version: 'hg-v580',
+  pack: 'Delta abort — timeout honesty + last-good universe',
+  built: '2026-09-02T23:20:00Z',
+  note: 'Delta tickers retry abort/timeout (20s, 3 tries). Chromium "aborted without reason" maps to timeout >Nms. Last-good Delta rows reused when the live leg dies. MARKET PICTURE reads CoinDCX/xuCandles/Binance when Delta 4H misses — unread, never an invented lean.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

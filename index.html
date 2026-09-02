@@ -810,7 +810,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 </main>
 
 
-<script src="build-stamp.js?v=579"></script>
+<script src="build-stamp.js?v=580"></script>
 <script src="hghost.js"></script>
 <script src="indicators.js"></script>
 <script src="indicators2.js"></script>
@@ -851,16 +851,16 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="meanrev.js"></script>
 <script src="liqs.js"></script>
 <!-- xuniverse.js: no-tab IIFE library (combined Delta India + CoinDCX contract universe) consumed by engine.js/brain.js; registers no HG_tabs entry -->
-<script src="xuniverse.js"></script>
+<script src="xuniverse.js?v=580"></script>
 <!-- hg-forward.js: the out-of-sample accumulator. Loads BEFORE any tab that
      records into it; every consumer feature-checks it, so load order is
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=579"></script>
+<script src="hg-mechanics.js?v=580"></script>
 <script src="./hg-gates.js?v=559"></script>
-<script src="crypto-catalog.js?v=579"></script>
-<script src="omniroute.js?v=579"></script>
+<script src="crypto-catalog.js?v=580"></script>
+<script src="omniroute.js?v=580"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
 <script src="edge.js?v=559"></script>
@@ -873,16 +873,16 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- conviction-lock.js: ConvictionLockManager (anti-repaint lifecycle) -->
 <script src="conviction-lock.js"></script>
 <!-- goldind.js + goldscalp.js: GOLD SCALP tab (pure SMC/ICT + indicator detectors, then the tab) — after indicators2/binance/macro/xuniverse/news, before brain.js -->
-<script src="goldind.js?v=579"></script>
-<script src="gold-catalog.js?v=579"></script>
+<script src="goldind.js?v=580"></script>
+<script src="gold-catalog.js?v=580"></script>
 <script src="macro-feeds.js"></script>
-<script src="goldscalp.js?v=579"></script>
+<script src="goldscalp.js?v=580"></script>
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
-<script src="goldswing.js?v=579"></script>
+<script src="goldswing.js?v=580"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
-<script src="omnigold.js?v=579"></script>
+<script src="omnigold.js?v=580"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
-<script src="omnipresent.js?v=579"></script>
+<script src="omnipresent.js?v=580"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
 <script src="contract-report.js"></script>
 <!-- omnibtc-engines.js: SMART $ / OI FLOW / fade / COIL / DIV / TRAP / SMC / STAR TRADER + on-chain evidence. Loads BEFORE omnibtc.js so the tab can feature-check it. -->
@@ -915,14 +915,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js?v=559"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=579"></script>
+<script src="supersetup.js?v=580"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=579"></script>
-<script src="super-gold.js?v=579"></script>
-<script src="super-best.js?v=579"></script>
-<script src="super-sniper.js?v=579"></script>
-<script src="super-book.js?v=579"></script>
-<script src="super-calibrate.js?v=579"></script>
+<script src="super-desk-common.js?v=580"></script>
+<script src="super-gold.js?v=580"></script>
+<script src="super-best.js?v=580"></script>
+<script src="super-sniper.js?v=580"></script>
+<script src="super-book.js?v=580"></script>
+<script src="super-calibrate.js?v=580"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -8894,27 +8894,64 @@ async function runGoldBacktest(){
   }
 }
 
+function hgMarketPictureLean(closes){
+  try{
+    if (!closes || closes.length < 50) return null;
+    if (typeof ema !== 'function') return null;
+    const e9 = ema(closes, 9), e21 = ema(closes, 21), e50 = ema(closes, 50);
+    const a = e9[e9.length - 1], b = e21[e21.length - 1], c = e50[e50.length - 1];
+    if (!(isFinite(a) && isFinite(b) && isFinite(c))) return null;
+    return (a > b && b > c) ? 'long' : ((a < b && b < c) ? 'short' : 'mixed');
+  }catch(e){ return null; }
+}
+async function hgMarketPictureBars(label, deltaSym){
+  const base = String(label || '').toUpperCase();
+  const cdcxSym = 'B-' + base + '_USDT';
+  async function take(fn){
+    try{
+      const rows = await fn();
+      if (Array.isArray(rows) && rows.length >= 50) return rows;
+    }catch(e){}
+    return null;
+  }
+  let rows = await take(function(){ return getCandlesFor('delta', deltaSym, '4h', 260); });
+  if (rows) return rows;
+  if (typeof xuCandles === 'function'){
+    rows = await take(function(){ return xuCandles({ sym: deltaSym, base: base, exchange: 'delta' }, '4h', 260); });
+    if (rows) return rows;
+    rows = await take(function(){ return xuCandles({ sym: cdcxSym, base: base, exchange: 'coindcx' }, '4h', 260); });
+    if (rows) return rows;
+  }
+  rows = await take(function(){ return getCandlesFor('coindcx', cdcxSym, '4h', 260); });
+  if (rows) return rows;
+  if (typeof binanceKlines === 'function'){
+    rows = await take(function(){ return binanceKlines(base + 'USDT', '4h', 80); });
+    if (rows) return rows;
+  }
+  return null;
+}
+
 async function marketPictureCheck(){
   const assets = [['BTC','BTCUSD'],['ETH','ETHUSD'],['SOL','SOLUSD']];
   let longs=0, shorts=0, mixed=0; const detail=[];
   for (const [label, sym] of assets){
     try{
-      const rows = await getCandlesFor('delta', sym, '4h', 260);
-      const c = rows.map(r=>r.c);
-      const e9=last(ema(c,9)), e21=last(ema(c,21)), e50=last(ema(c,50));
-      let dir = e9>e21&&e21>e50 ? 'long' : (e9<e21&&e21<e50 ? 'short' : 'mixed');
+      const rows = await hgMarketPictureBars(label, sym);
+      const dir = hgMarketPictureLean(rows ? rows.map(r=>r.c) : []);
+      if (!dir){ mixed++; detail.push(label+':unread'); continue; }
       if (dir==='long') longs++; else if (dir==='short') shorts++; else mixed++;
       detail.push(label+':'+dir);
-    }catch(e){ mixed++; detail.push(label+':err'); }
+    }catch(e){ mixed++; detail.push(label+':unread'); }
   }
   try{
     const g = await getXAUCandles('4h',300);
-    const c = g.map(r=>r.c);
-    const e9=last(ema(c,9)), e21=last(ema(c,21)), e50=last(ema(c,50));
-    let dir = e9>e21&&e21>e50 ? 'long' : (e9<e21&&e21<e50 ? 'short' : 'mixed');
-    if (dir==='long') longs++; else if (dir==='short') shorts++; else mixed++;
-    detail.push('GOLD:'+dir);
-  }catch(e){ mixed++; detail.push('GOLD:err'); }
+    const dir = hgMarketPictureLean(g ? g.map(r=>r.c) : []);
+    if (!dir){ mixed++; detail.push('GOLD:unread'); }
+    else {
+      if (dir==='long') longs++; else if (dir==='short') shorts++; else mixed++;
+      detail.push('GOLD:'+dir);
+    }
+  }catch(e){ mixed++; detail.push('GOLD:unread'); }
   const total = longs+shorts+mixed;
   let verdict;
   if (longs>shorts && longs>=Math.ceil(total/2)+1) verdict='LONG-LEANING';

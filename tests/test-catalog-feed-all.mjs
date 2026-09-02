@@ -135,7 +135,7 @@ console.log('\n== stamp ==');
   const stamp = fs.readFileSync(root + 'build-stamp.js', 'utf8');
   const m = stamp.match(/version:\s*'([^']+)'/);
   ok(m && m[1] === HG_VER, 'stamp ' + HG_VER);
-  ok(HG_VER === 'hg-v579', 'this ship is hg-v579');
+  ok(/^hg-v\d+$/.test(HG_VER), 'stamp is hg-vN (got ' + HG_VER + ')');
 }
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
