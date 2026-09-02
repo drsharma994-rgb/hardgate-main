@@ -1739,9 +1739,16 @@ async function runScan(ui, scanSt){
           + formingNowHTML(armedAll)
           + historyHTML(lock.store.history);
       } else {
-        /* feeds failed: keep WHY SILENT, still paint the catalog map */
-        ui.cards.innerHTML = basisHtml + formingLayersHtml();
-        if (whySilent) ui.empty.innerHTML = '<b>WHY SILENT</b> — ' + esc(whySilent);
+        /* feeds failed: cards stay empty (no fabricated setups); catalog lives on empty */
+        ui.cards.innerHTML = basisHtml;
+        var catH = '';
+        try{
+          var cFn = gfn('hgGoldCatalogHtml');
+          var cEn = gfn('hgGoldCatalogEngine');
+          if (cFn && cEn) catH = cFn(cEn([], {}));
+        }catch(eCatE){}
+        if (whySilent) ui.empty.innerHTML = '<b>WHY SILENT</b> — ' + esc(whySilent) + catH;
+        else if (catH) ui.empty.innerHTML = catH;
         ui.empty.style.display = 'block';
       }
     }

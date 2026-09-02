@@ -30,10 +30,10 @@ console.log('== files ==');
   const html = fs.readFileSync(root + 'index.html', 'utf8');
   ok(/hgGoldCatalogEngine/.test(gi) && /hgGoldCatalogApplyVerdict/.test(gi), 'SCALP applies catalog');
   ok(/hgGoldCatalogHtml/.test(gi), 'forming stack HTML');
-  ok(/formingLayersHtml\(\)/.test(gs) && /feeds failed: keep WHY SILENT/.test(gs),
-    'SWING empty path still paints catalog');
-  ok(/formingLayersHtml\(\)/.test(gsc) && /feeds failed: keep WHY SILENT/.test(gsc),
-    'SCALP empty path still paints catalog');
+  ok(/feeds failed: cards stay empty/.test(gs) && /hgGoldCatalogHtml/.test(gs),
+    'SWING empty path paints catalog on empty, not cards');
+  ok(/feeds failed: cards stay empty/.test(gsc) && /hgGoldCatalogHtml/.test(gsc),
+    'SCALP empty path paints catalog on empty, not cards');
   ok(/catFnM/.test(gsc) && /catFnM/.test(gs), 'SCALP+SWING paint catalog on mount');
   ok(/hgGoldCatalogApplyVerdict/.test(gs), 'SWING applies catalog');
   ok(/hgGoldCatalogApplyVerdict/.test(og) && /catalogExclude/.test(og), 'OMNIGOLD formation catalog');
