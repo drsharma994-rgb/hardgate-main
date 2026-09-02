@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v575',
-  pack: 'Gold Part8 S49–S58 quant microstructure',
-  built: '2026-09-02T16:45:00Z',
-  note: 'Part8: BVC/VPIN/ILLIQ/residual/cluster/range-bar/geo/term/bayes on SCALP+SWING+OMNIGOLD. Filters demote only — never invent ENTER.'
+  version: 'hg-v576',
+  pack: 'Gold Part9 S59–S66 trader/SPRT/funding final',
+  built: '2026-09-02T17:15:00Z',
+  note: 'Part9 final: trader-state/SPRT/bootstrap/volume-bars/funding/premium-fade/freeze on SCALP+SWING+OMNIGOLD. Permission/size only — never invent ENTER.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

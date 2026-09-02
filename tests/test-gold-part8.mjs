@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* HARDGATE — Gold Part8 S49–S58 quantitative microstructure (hg-v575) */
+/* HARDGATE — Gold Part8 S49–S58 quantitative microstructure (hg-v576) */
 import fs from 'fs';
 import path from 'path';
 import vm from 'vm';
@@ -123,7 +123,7 @@ console.log('\n== stamp ==');
   const stamp = fs.readFileSync(root + 'build-stamp.js', 'utf8');
   const sw = fs.readFileSync(root + 'sw.js', 'utf8');
   const m = stamp.match(/version\s*:\s*['"]([^'"]+)['"]/);
-  ok(m && m[1] === 'hg-v575', 'build-stamp hg-v575 (got ' + (m && m[1]) + ')');
+  ok(m && m[1] === 'hg-v576', 'build-stamp hg-v576 (got ' + (m && m[1]) + ')');
   ok(swCacheOk(sw), 'sw.js matches');
 }
 

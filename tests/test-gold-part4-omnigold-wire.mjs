@@ -98,11 +98,11 @@ console.log('\n== stamp ==');
   const sw = fs.readFileSync(root + 'sw.js', 'utf8');
   const html = fs.readFileSync(root + 'index.html', 'utf8');
   const m = stamp.match(/version:\s*'([^']+)'/);
-  ok(m && m[1] === 'hg-v575', 'build-stamp version (got ' + (m && m[1]) + ')');
-  ok(sw.indexOf("HG_CACHE = 'hg-v575'") >= 0, 'sw.js matches stamp');
-  ok(/goldind\.js\?v=575/.test(html), 'index goldind ?v=');
-  ok(/goldswing\.js\?v=575/.test(html), 'index goldswing ?v=');
-  ok(/omnigold\.js\?v=575/.test(html), 'index omnigold ?v=');
+  ok(m && m[1] === 'hg-v576', 'build-stamp version (got ' + (m && m[1]) + ')');
+  ok(sw.indexOf("HG_CACHE = 'hg-v576'") >= 0, 'sw.js matches stamp');
+  ok(/goldind\.js\?v=576/.test(html), 'index goldind ?v=');
+  ok(/goldswing\.js\?v=576/.test(html), 'index goldswing ?v=');
+  ok(/omnigold\.js\?v=576/.test(html), 'index omnigold ?v=');
 }
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');

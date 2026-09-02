@@ -1255,7 +1255,9 @@ var SW_NAME = {
   p8resid:  'S51 MACRO-RESIDUAL MOMENTUM',
   p8range:  'S52 RANGE-BAR S0 SWEEP',
   p8geo:    'S53 GEOPOLITICAL SPIKE FADE',
-  p8vpinbo: 'S54 VPIN-TIMED CONTRACTION BREAK'
+  p8vpinbo: 'S54 VPIN-TIMED CONTRACTION BREAK',
+  p9volbar: 'S62 VOLUME-BAR S0 SWEEP',
+  p9prem:   'S65 PERP-PREMIUM FADE'
 };
 var SW_NEWS_STAMP = 'NEWS WINDOW — expect a fade around the release; swing levels unchanged (size accordingly)';
 
@@ -2217,6 +2219,105 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
           }
         }
       }catch(eP8c){}
+    }
+
+    /* 15) Part9 S62/S65 — confirmed-only live tickets + trader/SPRT/funding filters */
+    var p9FnCand = gfn('hgGoldPart9Engine');
+    if (p9FnCand){
+      try{
+        var p9EngCand = p9FnCand(rows4, {
+          newsGate: (microOpts && microOpts.news)
+            ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(microOpts.news, nowMs) : null)
+            : null,
+          now: nowMs,
+          venue: venue || 'XAUTUSD',
+          fundingRate: microOpts && microOpts.fundingRate,
+          traderJournal: microOpts && microOpts.traderJournal,
+          sprtHits: microOpts && microOpts.sprtHits,
+          rMultiples: microOpts && microOpts.rMultiples,
+          premiumSeries: microOpts && microOpts.premiumSeries,
+          premium: microOpts && microOpts.premium,
+          indexLast: microOpts && microOpts.indexLast,
+          indexAtExtreme: !!(microOpts && microOpts.indexAtExtreme),
+          plan: microOpts && microOpts.runnerPlan,
+          nPayments: microOpts && microOpts.nPayments,
+          holdHours: microOpts && microOpts.holdHours
+        });
+        var p9Tilt = gfn('hgGoldPart9ApplyTraderState');
+        var p9Sprt = gfn('hgGoldPart9ApplySprt');
+        var p9Fund = gfn('hgGoldPart9ApplyFundingWindow');
+        var p9Carry = gfn('hgGoldPart9ApplyCarryGate');
+        if (p9EngCand){
+          var p9qi;
+          for (p9qi = 0; p9qi < out.length; p9qi++){
+            if (!out[p9qi] || out[p9qi].dropped) continue;
+            if (p9Tilt) p9Tilt(out[p9qi], p9EngCand.trader);
+            if (p9Sprt) p9Sprt(out[p9qi], p9EngCand.sprt);
+            if (p9Fund) p9Fund(out[p9qi], {
+              ok: !!(p9EngCand.funding && p9EngCand.funding.ok),
+              fundingRate: microOpts && microOpts.fundingRate,
+              venue: venue || 'XAUTUSD',
+              nowMs: nowMs
+            });
+            if (p9Carry && p9EngCand.carry) p9Carry(out[p9qi], p9EngCand.carry);
+          }
+        }
+        if (p9EngCand && p9EngCand.strategies && p9EngCand.strategies.length){
+          var p9Live = { p9volbar: 1, p9prem: 1 };
+          var p9j, p9hit, p9Stop, p9Cand, p9Entry;
+          for (p9j = 0; p9j < p9EngCand.strategies.length; p9j++){
+            p9hit = p9EngCand.strategies[p9j];
+            if (!p9hit || !p9hit.dir || !p9Live[p9hit.key]) continue;
+            if (p9hit.grade !== 'confirmed') continue;
+            if (!isFinite(p9hit.level) && !(p9hit.plan && isFinite(p9hit.plan.entry))) continue;
+            p9Entry = isFinite(p9hit.level) ? p9hit.level
+              : (p9hit.plan && p9hit.plan.entry);
+            p9Stop = (p9hit.plan && isFinite(p9hit.plan.stop)) ? p9hit.plan.stop
+              : (p9hit.dir === 'long' ? p9Entry - 1.5 * a4 : p9Entry + 1.5 * a4);
+            p9Cand = mkCand(p9hit.key, p9hit.dir, p9Stop, p9Stop, undefined,
+              p9hit.why, 'Part9 invalidation — structure break against the setup',
+              { side: p9hit.dir, tag: p9hit.key, label: p9hit.why });
+            if (!p9Cand || p9Cand.dropped){
+              p9Cand = {
+                id: p9hit.key + '|' + p9hit.dir + '|' + Math.round(p9Entry),
+                strategy: SW_NAME[p9hit.key] || p9hit.key,
+                stratKey: p9hit.key, dir: p9hit.dir,
+                entry: p9Entry, pxNow: entry, mark: entry, stop: p9Stop,
+                t1: (p9hit.plan && isFinite(p9hit.plan.t1)) ? p9hit.plan.t1 : NaN,
+                t2: NaN,
+                rr: NaN, grade: 'B', agree: 2, oppose: 0, atr: a4,
+                reads: { long: p9hit.dir === 'long' ? 2 : 0, short: p9hit.dir === 'short' ? 2 : 0 },
+                venue: venue, sym: sym, session: sessionTxt || 'n/a',
+                why: p9hit.why,
+                invalidates: 'close beyond ' + p9Stop.toFixed(2),
+                stamps: ['PART9 ' + String(p9hit.key).toUpperCase()],
+                demoted: !!(p9hit.plan && p9hit.plan.halfSize), notes: []
+              };
+            } else {
+              if (isFinite(p9Entry)) p9Cand.entry = p9Entry;
+              if (p9hit.plan){
+                if (isFinite(p9hit.plan.t1)) p9Cand.t1 = p9hit.plan.t1;
+                if (isFinite(p9hit.plan.stop)) p9Cand.stop = p9hit.plan.stop;
+                if (p9hit.plan.halfSize){
+                  p9Cand.sizeMult = (isFinite(p9Cand.sizeMult) ? p9Cand.sizeMult : 1) * 0.5;
+                  p9Cand.demoted = true;
+                }
+              }
+              if (!Array.isArray(p9Cand.stamps)) p9Cand.stamps = [];
+              p9Cand.stamps.push('PART9 ' + String(p9hit.key).toUpperCase());
+            }
+            if (p9Tilt) p9Tilt(p9Cand, p9EngCand.trader);
+            if (p9Sprt) p9Sprt(p9Cand, p9EngCand.sprt);
+            if (p9Fund) p9Fund(p9Cand, {
+              ok: !!(p9EngCand.funding && p9EngCand.funding.ok),
+              fundingRate: microOpts && microOpts.fundingRate,
+              venue: venue || 'XAUTUSD',
+              nowMs: nowMs
+            });
+            push(p9Cand);
+          }
+        }
+      }catch(eP9c){}
     }
   }catch(e){}
   return out;

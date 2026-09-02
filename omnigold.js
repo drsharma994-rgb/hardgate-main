@@ -326,7 +326,8 @@ terse status, and never launches a first-time scan on a global refresh.
                       'P6-COMP','P6-ZFADE','P6-SMT','P6-FAIL',
                       /* Part7 S39–S48 — separated scalp + ratio (S40 MCX-native; options frames) */
                       'P7-SCALP','P7-RATIO',
-                      'P8-RESID','P8-RANGE','P8-GEO','P8-VPINBO'];
+                      'P8-RESID','P8-RANGE','P8-GEO','P8-VPINBO',
+                      'P9-VOLBAR','P9-PREM'];
 
   var __og = { ui: null, busy: false, ran: false, snap: null, lastStat: '', src: null, shared: null, btBusy: false,
                lastCardsHtml: null, lastPoolHtml: null, lastMpHtml: null,
@@ -779,6 +780,8 @@ terse status, and never launches a first-time scan on a global refresh.
     d = hgOgPart8ByKind(rows, 'P8-RANGE', opts); if (d) out.push(d);
     d = hgOgPart8ByKind(rows, 'P8-GEO', opts); if (d) out.push(d);
     d = hgOgPart8ByKind(rows, 'P8-VPINBO', opts); if (d) out.push(d);
+    d = hgOgPart9ByKind(rows, 'P9-VOLBAR', opts); if (d) out.push(d);
+    d = hgOgPart9ByKind(rows, 'P9-PREM', opts); if (d) out.push(d);
     return out;
   }
 
@@ -2091,6 +2094,67 @@ terse status, and never launches a first-time scan on a global refresh.
     return null;
   }
 
+  /* Part9 S59–S66 — trader/SPRT/funding frames + live volume-bar / premium fade.
+     S59/S60/S61/S63/S64/S66 are permission/meta (never invent ENTER). */
+  var OG_P9_KIND = {
+    p9volbar: 'P9-VOLBAR',
+    p9prem: 'P9-PREM'
+  };
+  function hgOgPart9Hits(rows, opts){
+    var f = gfn('hgGoldPart9Engine');
+    if (!f || !rows || rows.length < 40) return null;
+    opts = opts || {};
+    var eng = null;
+    try {
+      eng = f(rows, {
+        newsGate: opts.newsGate || null,
+        now: opts.nowSec ? opts.nowSec * 1000 : opts.now,
+        venue: opts.venue || 'XAUTUSD',
+        fundingRate: opts.fundingRate,
+        traderJournal: opts.traderJournal || null,
+        sprtHits: opts.sprtHits || null,
+        rMultiples: opts.rMultiples || null,
+        premiumSeries: opts.premiumSeries || null,
+        premium: opts.premium,
+        indexLast: opts.indexLast,
+        indexAtExtreme: !!opts.indexAtExtreme,
+        plan: opts.runnerPlan || opts.plan || null,
+        nPayments: opts.nPayments,
+        holdHours: opts.holdHours
+      });
+    } catch (e) { return null; }
+    if (!eng || !eng.strategies || !eng.strategies.length) return null;
+    var out = [], i, s, kind, lv, stop, t1, t2;
+    for (i = 0; i < eng.strategies.length; i++){
+      s = eng.strategies[i];
+      if (!s || !s.dir || (s.grade !== 'forming' && s.grade !== 'confirmed')) continue;
+      kind = OG_P9_KIND[s.key];
+      if (!kind) continue;
+      lv = fin(s.level);
+      if (!isFinite(lv) && s.plan) lv = fin(s.plan.entry);
+      if (!isFinite(lv)) continue;
+      stop = (s.plan && isFinite(s.plan.stop)) ? s.plan.stop : NaN;
+      t1 = (s.plan && isFinite(s.plan.t1)) ? s.plan.t1 : NaN;
+      t2 = (s.plan && isFinite(s.plan.t2)) ? s.plan.t2 : NaN;
+      out.push({
+        kind: kind, dir: s.dir, level: lv,
+        stop: stop, t1: t1, t2: t2,
+        part9: s, part9Engine: eng,
+        why: String(s.why || kind)
+      });
+    }
+    return out.length ? out : null;
+  }
+  function hgOgPart9ByKind(rows, wantKind, opts){
+    var hits = hgOgPart9Hits(rows, opts);
+    if (!hits) return null;
+    var i;
+    for (i = 0; i < hits.length; i++){
+      if (hits[i] && hits[i].kind === wantKind) return hits[i];
+    }
+    return null;
+  }
+
   /* ==================== consensus across mechanics ====================
 
      THE DEFECT THIS EXISTS FOR: on 42% of tapes the desk graded a LONG
@@ -2190,6 +2254,9 @@ terse status, and never launches a first-time scan on a global refresh.
     'P8-RANGE':'SWEEP',
     'P8-GEO':'SWEEP',
     'P8-VPINBO':'TREND',
+    /* Part9 — volume-bar is Sweep (parallel S0); premium fade is Fade/reversion. */
+    'P9-VOLBAR':'SWEEP',
+    'P9-PREM':'REVERSION',
     /* An unmitigated order block is an unfilled inefficiency being revisited,
        which is FVG-FILL's idea with a different name for the zone. */
     'OB-RETEST':'IMBALANCE',
@@ -2546,6 +2613,8 @@ terse status, and never launches a first-time scan on a global refresh.
     if (k === 'P8-RANGE') return 'p8range';
     if (k === 'P8-GEO') return 'p8geo';
     if (k === 'P8-VPINBO') return 'p8vpinbo';
+    if (k === 'P9-VOLBAR') return 'p9volbar';
+    if (k === 'P9-PREM') return 'p9prem';
     if (k === 'KZ-JUDAS' || k === 'SWEEP-V2' || k === 'POOL-SWEEP'
         || k.indexOf('SWEEP') >= 0)
       return 'sweep';
@@ -8555,7 +8624,9 @@ terse status, and never launches a first-time scan on a global refresh.
           'P8-RESID':        function(r){ return hgOgPart8ByKind(r, 'P8-RESID'); },
           'P8-RANGE':        function(r){ return hgOgPart8ByKind(r, 'P8-RANGE'); },
           'P8-GEO':          function(r){ return hgOgPart8ByKind(r, 'P8-GEO'); },
-          'P8-VPINBO':       function(r){ return hgOgPart8ByKind(r, 'P8-VPINBO'); }
+          'P8-VPINBO':       function(r){ return hgOgPart8ByKind(r, 'P8-VPINBO'); },
+          'P9-VOLBAR':       function(r){ return hgOgPart9ByKind(r, 'P9-VOLBAR'); },
+          'P9-PREM':         function(r){ return hgOgPart9ByKind(r, 'P9-PREM'); }
         };
         var k;
         for (k in fns) if (Object.prototype.hasOwnProperty.call(fns, k)){
