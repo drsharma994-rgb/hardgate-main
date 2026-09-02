@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v559',
-  pack: 'Gold core confluence score',
-  built: '2026-09-02T03:00:00Z',
-  note: '100-pt gold confluence (HTF25/loc20/mom15/vol10/flow10/macro10/trig10). Tiers A85/GOOD75/WATCH65. COT weekly caution only. Wired into goldRankSetups + forming panel. Sacred contracts unchanged.'
+  version: 'hg-v560',
+  pack: 'Gold advanced sweep→OB',
+  built: '2026-09-02T04:00:00Z',
+  note: 'Advanced gold sweep→OB: HTF location + liquidity raid + MSS then fresh OB/FVG. Modes reversal/continuation/london-trap/ny-cont|rev. Quality ≥7/10 + R:R≥2.0 alerts. News lockout. Wired SCALP/SWING/OMNIGOLD forming. Sacred contracts unchanged.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

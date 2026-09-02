@@ -2327,6 +2327,30 @@ async function runScan(ui, scanSt){
             }
           }
         }
+        var sobFn = gfn('hgGoldSweepOb');
+        if (sobFn && got.length){
+          var sobEng = sobFn(gold.rows4h, {
+            regime: null,
+            newsGate: newsRaw ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(newsRaw, now) : null) : null,
+            now: now,
+            rows4h: gold.rows4h,
+            rows1h: gold.rows1h || gold.rows4h
+          });
+          if (sobEng && sobEng.dir){
+            for (var soi = 0; soi < got.length; soi++){
+              if (!got[soi]) continue;
+              if (!Array.isArray(got[soi].stamps)) got[soi].stamps = [];
+              if (got[soi].dir === sobEng.dir && (sobEng.confirmed || sobEng.tier === 'alert')){
+                if (got[soi].stamps.indexOf('SWEEP→OB') < 0) got[soi].stamps.push('SWEEP→OB');
+                got[soi].sweepObScore = sobEng.quality ? sobEng.quality.score : sobEng.score;
+                got[soi].sweepObMode = sobEng.mode;
+              } else if (got[soi].dir && sobEng.dir && got[soi].dir !== sobEng.dir && sobEng.confirmed){
+                got[soi].demoted = true;
+                if (got[soi].stamps.indexOf('SWEEP→OB OPPOSE') < 0) got[soi].stamps.push('SWEEP→OB OPPOSE');
+              }
+            }
+          }
+        }
       }catch(ePn){}
       collectWatch(gold, v);
       for (i = 0; i < got.length; i++) cands.push(got[i]);

@@ -1065,7 +1065,8 @@ var GST_NAME = {
   oitrap: 'OI-TRAP REVERSAL',
   fundext: 'FUNDING EXTREME',
   liqsweep: 'GOLD LIQUIDITY SWEEP',
-  nyexh: 'NY VOLUME EXHAUSTION'
+  nyexh: 'NY VOLUME EXHAUSTION',
+  sweepob: 'SWEEP→OB (MSS + FRESH OB/FVG)'
 };
 
 /* limit-at-zone entry: when price has extended beyond the setup zone, anchor
@@ -1876,6 +1877,45 @@ function goldScalpSetups(inp){
       }
     }catch(eNy){}
 
+    /* --- 1d) ADVANCED SWEEP→OB (HTF location + raid + MSS + fresh OB/FVG) --- */
+    try{
+      if (!D.__sweepOb){
+        D.__sweepOb = hgGoldSweepOb(rows, {
+          regime: D.__formingRegime || hgGoldFormingRegime({ rows: rows, macro: inp.macro }),
+          newsGate: newsState ? hgGoldNewsGate(newsState, nowMs) : null,
+          now: nowMs,
+          rows4h: __rows(inp.rows4h),
+          rows1h: __rows(inp.rows1h),
+          sweep: D.__sweepEngine || null
+        });
+      }
+      var sob = D.__sweepOb;
+      if (sob && (sob.confirmed || sob.tier === 'alert' || sob.tier === 'watch') && sob.dir){
+        var sobStop = (sob.plan && isFinite(sob.plan.stop)) ? sob.plan.stop
+          : (isFinite(sob.stop) ? sob.stop : sob.sweepLevel);
+        var sobZone = sob.obZone ? { lo: sob.obZone.lo, hi: sob.obZone.hi } : null;
+        var sobCand = __gsCand('sweepob', sob.dir, D, sobStop, __gsSnapLvls(D, sob.dir),
+          sob.why + ' — HTF + liquidity raid + MSS then fresh OB/FVG (Q≥7 · R:R≥2)',
+          'close through far side of OB or re-accept beyond swept level cancels',
+          sobZone, isFinite(sob.entry) ? sob.entry : undefined);
+        if (sobCand){
+          sobCand.sweepObScore = sob.quality ? sob.quality.score : Math.round((sob.score || 0) / 10);
+          sobCand.sweepObTier = sob.tier;
+          sobCand.sweepObMode = sob.mode;
+          if (isFinite(sob.entry)) sobCand.entry = sob.entry;
+          if (isFinite(sob.t1)) sobCand.t1 = sob.t1;
+          if (isFinite(sob.t2)) sobCand.t2 = sob.t2;
+          if (isFinite(sob.stop)) sobCand.stop = sob.stop;
+          if (!Array.isArray(sobCand.stamps)) sobCand.stamps = [];
+          sobCand.stamps.push('SWEEP→OB Q'
+            + (sob.quality ? sob.quality.score : '?') + '/10'
+            + (sob.mode ? (' · ' + String(sob.mode).toUpperCase()) : ''));
+          if (sob.tier === 'watch' && !sob.confirmed) sobCand.demoted = true;
+          push(sobCand);
+        }
+      }
+    }catch(eSob){}
+
     /* --- 2) order-block / breaker retest (robust: active zones + structure alignment) --- */
     var obRetestDone = false;
     if (D.obRetest && D.obRetest.trigger){
@@ -2587,7 +2627,7 @@ function hgGoldConfluenceScore(cand, ctx){
       } else p.location += 2;
     }
     var key = cand.stratKey || '';
-    if (/sweep|liqsweep|nyexh|ob|asian|pdraid|eqhi|eqlo|hvn|vwap|fvg/i.test(key)){
+    if (/sweep|liqsweep|nyexh|sweepob|ob|asian|pdraid|eqhi|eqlo|hvn|vwap|fvg/i.test(key)){
       p.location += 7; tools.push('S/R / liquidity location');
     } else p.location += 2;
     if (cand.vpTargets && cand.vpTargets.ok){
@@ -2635,7 +2675,7 @@ function hgGoldConfluenceScore(cand, ctx){
     /* --- Volatility regime (10) — ADX trend vs chop --- */
     var adx = ctx.adx || (rows ? goldADX(rows) : null);
     var adxV = adx && isFinite(adx.adx) ? adx.adx : (adx && isFinite(adx.value) ? adx.value : NaN);
-    var mrevKeys = { vwap:1, vwapband:1, adrfade:1, fvg:1, sweep:1, liqsweep:1, nyexh:1 };
+    var mrevKeys = { vwap:1, vwapband:1, adrfade:1, fvg:1, sweep:1, liqsweep:1, nyexh:1, sweepob:1 };
     var contKeys = { ribbon:1, bosalign:1, openrange:1, asian:1 };
     if (isFinite(adxV)){
       tools.push('ADX ' + adxV.toFixed(0));
@@ -2652,7 +2692,7 @@ function hgGoldConfluenceScore(cand, ctx){
     /* --- Volume / order flow (10) --- */
     if (cand.sweepScore >= 75 || cand.nyExhScore >= 75) p.volume += 8;
     else if (cand.sweepScore >= 65 || cand.nyExhScore >= 65) p.volume += 5;
-    else if (/sweep|liqsweep|nyexh|oitrap/i.test(key)) p.volume += 4;
+    else if (/sweep|liqsweep|nyexh|sweepob|oitrap/i.test(key)) p.volume += 4;
     if (cand.vpTargets && cand.vpTargets.confirmed) p.volume += 2;
     if (ctx.rvol && ctx.rvol >= 1.25) p.volume += 2;
     p.volume = Math.min(10, p.volume);
@@ -2687,9 +2727,9 @@ function hgGoldConfluenceScore(cand, ctx){
     p.macro = Math.min(10, p.macro);
 
     /* --- Entry trigger (10) --- */
-    if (/sweep|liqsweep|nyexh/i.test(key) && (cand.confirmed || cand.sweepTier === 'alert' || cand.nyExhTier === 'alert'))
+    if (/sweep|liqsweep|nyexh|sweepob/i.test(key) && (cand.confirmed || cand.sweepTier === 'alert' || cand.nyExhTier === 'alert' || cand.sweepObTier === 'alert'))
       p.trigger += 10;
-    else if (/sweep|liqsweep|nyexh|ob|fvg|openrange|asian|bosalign/i.test(key))
+    else if (/sweep|liqsweep|nyexh|sweepob|ob|fvg|openrange|asian|bosalign/i.test(key))
       p.trigger += 7;
     else if (/ribbon|vwap|stochrsi|hvn/i.test(key))
       p.trigger += 5;
@@ -6691,6 +6731,391 @@ function hgGoldSweepEngineHtml(eng){
 }
 
 /* =========================================================================
+   ADVANCED SWEEP → ORDER BLOCK (hg-v560)
+   HTF location + liquidity raid + MSS, then entry on fresh OB/FVG retrace.
+   Modes: reversal · continuation · london-trap · ny-rev / ny-cont.
+   Quality ≥7/10 to alert; R:R ≥2.0 for alert path. News lockout vetoes.
+========================================================================= */
+
+var HG_GOLD_SWEEPOB_ALERT_Q = 7;
+var HG_GOLD_SWEEPOB_RR_ALERT = 2.0;
+var HG_GOLD_SWEEPOB_BUF_ATR = 0.15;
+
+function hgGoldHtfBias(rows4h, rows1h){
+  var out = { dir: null, label: 'no HTF bias', atDemand: false, atSupply: false };
+  try{
+    var rows = __rows(rows4h) || __rows(rows1h);
+    if (!rows || rows.length < 40) return out;
+    var ms = goldMarketStructure(rows);
+    var rb = goldRibbon(rows);
+    if (ms && /bull/i.test(ms.trend || '')){ out.dir = 'long'; out.label = 'HTF bullish'; }
+    else if (ms && /bear/i.test(ms.trend || '')){ out.dir = 'short'; out.label = 'HTF bearish'; }
+    if (rb && rb.mode === 'BULL' && out.dir !== 'short'){ out.dir = 'long'; out.label = (out.label === 'no HTF bias') ? 'EMA bullish' : out.label + '+EMA'; }
+    if (rb && rb.mode === 'BEAR' && out.dir !== 'long'){ out.dir = 'short'; out.label = (out.label === 'no HTF bias') ? 'EMA bearish' : out.label + '+EMA'; }
+    /* Premium/discount via mid of recent range */
+    var i, hi = -Infinity, lo = Infinity;
+    for (i = Math.max(0, rows.length - 40); i < rows.length; i++){
+      if (rows[i].h > hi) hi = rows[i].h;
+      if (rows[i].l < lo) lo = rows[i].l;
+    }
+    var mid = (hi + lo) / 2, px = rows[rows.length - 1].c;
+    if (isFinite(mid) && isFinite(px)){
+      out.atDemand = px <= mid;
+      out.atSupply = px >= mid;
+    }
+    return out;
+  }catch(e){ return out; }
+}
+
+/** Fresh displacement OB: last opposing candle before BOS displacement, unmitigated. */
+function hgGoldFreshOb(rows, dir){
+  var out = { ok: false, zone: null, entry50: NaN, bodyLo: NaN, bodyHi: NaN, why: '' };
+  try{
+    rows = __rows(rows);
+    if (!rows || rows.length < 30){ out.why = 'short series'; return out; }
+    var obs = goldOrderBlocks(rows);
+    if (!obs){ out.why = 'no OB'; return out; }
+    var list = (dir === 'long') ? obs.bullish : obs.bearish;
+    if (!list || !list.length){ out.why = 'no fresh ' + dir + ' OB'; return out; }
+    /* Prefer youngest unmitigated (already filtered) with age ≤ 12 bars */
+    var z = null, i;
+    for (i = 0; i < list.length; i++){
+      if (list[i].age <= 12){ z = list[i]; break; }
+    }
+    if (!z) z = list[0];
+    if (z.age > 20){ out.why = 'OB too old (' + z.age + ' bars)'; return out; }
+    var obBar = rows[z.i];
+    var bodyLo = Math.min(obBar.o, obBar.c);
+    var bodyHi = Math.max(obBar.o, obBar.c);
+    out.ok = true;
+    out.zone = { lo: z.bottom, hi: z.top, age: z.age, i: z.i };
+    out.bodyLo = bodyLo;
+    out.bodyHi = bodyHi;
+    out.entry50 = (bodyLo + bodyHi) / 2; /* refined 50% of body */
+    out.why = 'fresh ' + dir + ' OB ' + z.bottom.toFixed(2) + '–' + z.top.toFixed(2)
+      + ' (age ' + z.age + ')';
+    return out;
+  }catch(e){ out.why = 'ob error'; return out; }
+}
+
+function hgGoldFreshFvg(rows, dir){
+  var out = { ok: false, zone: null, why: '' };
+  try{
+    var gaps = typeof goldFVG === 'function' ? goldFVG(rows) : null;
+    if (!gaps || !gaps.length){ out.why = 'no FVG'; return out; }
+    var want = (dir === 'long') ? 'bullish' : 'bearish';
+    var i, g;
+    for (i = 0; i < gaps.length; i++){
+      g = gaps[i];
+      if (g.dir === want || g.type === want || (dir === 'long' && g.bullish) || (dir === 'short' && g.bearish)){
+        var lo = isFinite(g.bottom) ? g.bottom : g.lo;
+        var hi = isFinite(g.top) ? g.top : g.hi;
+        if (isFinite(lo) && isFinite(hi)){
+          out.ok = true;
+          out.zone = { lo: lo, hi: hi };
+          out.why = 'fresh ' + dir + ' FVG ' + lo.toFixed(2) + '–' + hi.toFixed(2);
+          return out;
+        }
+      }
+    }
+    out.why = 'no matching FVG';
+    return out;
+  }catch(e){ return out; }
+}
+
+/**
+ * 10-filter quality score for sweep→OB (alert at ≥7).
+ */
+function hgGoldSweepObQuality(hit, opts){
+  var out = { score: 0, max: 10, pass: false, parts: {}, why: '' };
+  try{
+    opts = opts || {};
+    var p = {
+      htf: 0, liquidity: 0, reclaim: 0, mss: 0, entryLoc: 0,
+      vwap: 0, volatility: 0, volume: 0, macro: 0, rr: 0
+    };
+    if (hit.htfOk) p.htf = 1;
+    if (hit.sweepOk) p.liquidity = 1;
+    if (hit.reclaimOk) p.reclaim = 1;
+    if (hit.mssOk) p.mss = 1;
+    if (hit.entryOk) p.entryLoc = 1;
+    if (hit.vwapOk) p.vwap = 1;
+    if (hit.volOk) p.volatility = 1;
+    if (hit.volumeOk) p.volume = 1;
+    if (hit.macroOk) p.macro = 1;
+    if (hit.rrOk) p.rr = 1;
+    out.parts = p;
+    out.score = p.htf + p.liquidity + p.reclaim + p.mss + p.entryLoc
+      + p.vwap + p.volatility + p.volume + p.macro + p.rr;
+    out.pass = out.score >= HG_GOLD_SWEEPOB_ALERT_Q;
+    out.why = out.score + '/10'
+      + (out.pass ? ' PASS' : ' below alert bar')
+      + (hit.mode ? (' · ' + hit.mode) : '');
+    return out;
+  }catch(e){ return out; }
+}
+
+/**
+ * Advanced sweep→OB detector.
+ */
+function hgGoldSweepOb(rows, opts){
+  var out = {
+    ok: false, confirmed: false, dir: null, mode: null, score: 0, tier: 'ignore',
+    sweepLevel: NaN, sweepLabel: null, obZone: null, entry: NaN, stop: NaN,
+    t1: NaN, t2: NaN, rr: NaN, quality: null, plan: null, why: '', alertFields: null
+  };
+  try{
+    opts = opts || {};
+    rows = __rows(rows);
+    if (!rows || rows.length < 40){ out.why = 'need ≥40 bars'; return out; }
+    var nowMs = opts.now || (isFinite(rows[rows.length - 1].t) ? rows[rows.length - 1].t * 1000 : Date.now());
+    var newsGate = opts.newsGate || (opts.news ? hgGoldNewsGate(opts.news, nowMs) : null);
+    if (newsGate && newsGate.lock){
+      out.why = 'tier-1 US news lockout — skip sweep-OB';
+      out.tier = 'ignore';
+      return out;
+    }
+
+    var atrs = _atr(rows, 14);
+    var atr = atrs[atrs.length - 1];
+    if (!(isFinite(atr) && atr > 0)){ out.why = 'ATR unread'; return out; }
+
+    var htf = hgGoldHtfBias(opts.rows4h || rows, opts.rows1h);
+    var sweep = opts.sweep || hgGoldSweepEngine(rows, {
+      regime: opts.regime, newsGate: newsGate
+    });
+    if (!sweep || !sweep.dir || !(sweep.confirmed || sweep.tier === 'alert' || sweep.tier === 'watch')){
+      out.why = 'no confirmed/watch liquidity sweep';
+      return out;
+    }
+
+    var dir = sweep.dir;
+    var mode = 'reversal';
+
+    /* London trap: Asia box swept during London hours */
+    var asia = goldAsianRange(rows);
+    var sess = typeof goldKillzone === 'function' ? goldKillzone(nowMs) : null;
+    var hUTC = new Date(nowMs).getUTCHours() + new Date(nowMs).getUTCMinutes() / 60;
+    var isLondon = hUTC >= 7 && hUTC < 12;
+    var isNy = hUTC >= 12 && hUTC < 17;
+    if (asia && isFinite(asia.hi) && isFinite(asia.lo) && isLondon){
+      if ((dir === 'long' && Math.abs(sweep.level - asia.lo) < atr * 0.35)
+          || (dir === 'short' && Math.abs(sweep.level - asia.hi) < atr * 0.35)){
+        mode = 'london-trap';
+      }
+    }
+    /* Continuation: sweep against HTF then MSS back with trend */
+    if (htf.dir && sweep.mss && sweep.mss.ok){
+      if (htf.dir === dir && mode === 'reversal'){
+        /* sweep direction matches HTF → continuation after counter-sweep reclaim */
+        mode = isNy ? 'ny-cont' : 'continuation';
+      } else if (htf.dir !== dir && isNy){
+        mode = 'ny-rev';
+      }
+    }
+    /* NY open: require completed reclaim (already in sweep) — demote first-spike */
+    if (isNy && hUTC < 13.5 && !(sweep.mss && sweep.mss.ok)){
+      out.why = 'NY open — wait completed MSS before sweep-OB';
+      out.tier = 'watch';
+      out.dir = dir;
+      out.mode = 'ny-open-wait';
+      return out;
+    }
+
+    /* ADX: reject weak chop for reversal/continuation (range MR exempt — not this model) */
+    var adx = goldADX(rows);
+    var adxV = adx && isFinite(adx.adx) ? adx.adx : NaN;
+    var volOk = !(isFinite(adxV) && adxV < 15);
+    if (!volOk && mode !== 'london-trap'){
+      /* still allow watch but not alert */
+    }
+
+    var ob = hgGoldFreshOb(rows, dir);
+    var fvg = hgGoldFreshFvg(rows, dir);
+    var entryZone = ob.ok ? ob : fvg;
+    if (!entryZone.ok){
+      out.why = 'sweep ok but no fresh OB/FVG for entry — ' + (ob.why || fvg.why || '');
+      out.dir = dir;
+      out.mode = mode;
+      out.sweepLevel = sweep.level;
+      out.tier = 'watch';
+      return out;
+    }
+
+    var extreme = (dir === 'long')
+      ? (sweep.wick && isFinite(sweep.wick.extreme) ? sweep.wick.extreme : sweep.level - atr * 0.2)
+      : (sweep.wick && isFinite(sweep.wick.extreme) ? sweep.wick.extreme : sweep.level + atr * 0.2);
+    /* Prefer actual bar extreme from last sweep */
+    var bi, bar;
+    for (bi = rows.length - 1; bi >= Math.max(0, rows.length - 6); bi--){
+      bar = rows[bi];
+      if (dir === 'long' && bar.l < sweep.level){ extreme = Math.min(extreme, bar.l); break; }
+      if (dir === 'short' && bar.h > sweep.level){ extreme = Math.max(extreme, bar.h); break; }
+    }
+    var buf = atr * HG_GOLD_SWEEPOB_BUF_ATR;
+    var stop = (dir === 'long') ? (extreme - buf) : (extreme + buf);
+
+    var entry = ob.ok && isFinite(ob.entry50) ? ob.entry50
+      : ((entryZone.zone.lo + entryZone.zone.hi) / 2);
+    /* Price must be interacting with zone or just displaced from it */
+    var px = rows[rows.length - 1].c;
+    var inZone = px >= entryZone.zone.lo - atr * 0.15 && px <= entryZone.zone.hi + atr * 0.15;
+    var nearZone = dir === 'long'
+      ? (px >= entryZone.zone.lo - atr * 0.5 && px <= entryZone.zone.hi + atr)
+      : (px <= entryZone.zone.hi + atr * 0.5 && px >= entryZone.zone.lo - atr);
+    if (!inZone && !nearZone){
+      out.why = 'waiting for retrace into OB/FVG ' + entryZone.zone.lo.toFixed(2) + '–' + entryZone.zone.hi.toFixed(2);
+      out.dir = dir;
+      out.mode = mode;
+      out.sweepLevel = sweep.level;
+      out.obZone = entryZone.zone;
+      out.entry = entry;
+      out.stop = stop;
+      out.tier = 'watch';
+      out.ok = true;
+      return out;
+    }
+
+    var vw = goldVWAP(rows);
+    var vwapOk = false;
+    if (vw && isFinite(vw.vwap)){
+      vwapOk = (dir === 'long' && px >= vw.vwap) || (dir === 'short' && px <= vw.vwap);
+    } else {
+      vwapOk = true; /* fail-open half — mark unchecked via quality soft */
+    }
+
+    /* Targets */
+    var map = sweep.map || hgGoldLiquidityMap(rows, opts);
+    var t1 = (vw && isFinite(vw.vwap)) ? vw.vwap : NaN;
+    var t2 = NaN;
+    if (dir === 'long'){
+      if (!isFinite(t1) || (dir === 'long' && t1 <= entry)) t1 = entry + atr * 1.0;
+      if (asia && isFinite(asia.hi)) t2 = asia.hi;
+      if (map && map.priorDay && isFinite(map.priorDay.hi)) t2 = map.priorDay.hi;
+      if (mode === 'london-trap' && asia && isFinite(asia.lo) && isFinite(asia.hi)){
+        t1 = (asia.lo + asia.hi) / 2;
+        t2 = asia.hi;
+      }
+    } else {
+      if (!isFinite(t1) || t1 >= entry) t1 = entry - atr * 1.0;
+      if (asia && isFinite(asia.lo)) t2 = asia.lo;
+      if (map && map.priorDay && isFinite(map.priorDay.lo)) t2 = map.priorDay.lo;
+      if (mode === 'london-trap' && asia && isFinite(asia.lo) && isFinite(asia.hi)){
+        t1 = (asia.lo + asia.hi) / 2;
+        t2 = asia.lo;
+      }
+    }
+
+    var risk = Math.abs(entry - stop);
+    var rr = (risk > 0 && isFinite(t1)) ? Math.abs(t1 - entry) / risk : NaN;
+    var rr2 = (risk > 0 && isFinite(t2)) ? Math.abs(t2 - entry) / risk : rr;
+    var rrUse = Math.max(rr || 0, rr2 || 0);
+
+    /* HTF: reversal needs location agreement; continuation needs trend agree */
+    var htfOk = false;
+    if (mode === 'continuation' || mode === 'ny-cont'){
+      htfOk = !!(htf.dir && htf.dir === dir);
+    } else {
+      htfOk = !!(htf.dir === dir || (dir === 'long' && htf.atDemand) || (dir === 'short' && htf.atSupply) || !htf.dir);
+    }
+
+    var volumeOk = isFinite(sweep.rvol) ? sweep.rvol >= 1.2 : true;
+    var hit = {
+      mode: mode,
+      htfOk: htfOk,
+      sweepOk: !!(sweep.confirmed || sweep.tier === 'alert' || sweep.tier === 'watch'),
+      reclaimOk: !!(sweep.wick && sweep.wick.closeReclaim) || !!sweep.confirmed,
+      mssOk: !!(sweep.mss && sweep.mss.ok),
+      entryOk: !!(entryZone.ok && (inZone || nearZone)),
+      vwapOk: vwapOk,
+      volOk: volOk || mode === 'london-trap',
+      volumeOk: volumeOk,
+      macroOk: !(newsGate && newsGate.lock),
+      rrOk: isFinite(rrUse) && rrUse >= HG_GOLD_SWEEPOB_RR_ALERT
+    };
+    var q = hgGoldSweepObQuality(hit, opts);
+
+    out.dir = dir;
+    out.mode = mode;
+    out.sweepLevel = sweep.level;
+    out.sweepLabel = sweep.label || sweep.levelKind;
+    out.obZone = entryZone.zone;
+    out.entry = entry;
+    out.stop = stop;
+    out.t1 = t1;
+    out.t2 = t2;
+    out.rr = rrUse;
+    out.quality = q;
+    out.score = q.score * 10; /* 0–100 mirror */
+    out.confirmed = !!(q.pass && hit.mssOk && hit.reclaimOk && hit.entryOk && hit.rrOk);
+    out.ok = out.confirmed || q.score >= 5;
+    out.tier = out.confirmed ? 'alert' : (q.score >= 5 ? 'watch' : 'ignore');
+    out.plan = {
+      entryModel: 'balanced — retrace into OB/FVG after MSS (50% body preferred)',
+      stop: stop,
+      stopNote: 'beyond sweep extreme + ' + HG_GOLD_SWEEPOB_BUF_ATR + '×ATR',
+      t1: t1, t2: t2,
+      cancel: 'close through far side of OB or re-accept beyond swept level'
+    };
+    out.alertFields = {
+      direction: dir,
+      sweepLevel: sweep.level,
+      sweptLiquidity: sweep.label || sweep.levelKind,
+      htfOb: htf.label,
+      entryOb: entryZone.zone,
+      invalidation: stop,
+      atrBuffer: buf,
+      tp1: t1, tp2: t2,
+      liveScore: q.score + '/10',
+      session: isNy ? 'NY' : (isLondon ? 'LONDON' : 'OTHER'),
+      mode: mode,
+      rr: isFinite(rrUse) ? +rrUse.toFixed(2) : null
+    };
+    out.why = (out.confirmed ? 'SWEEP-OB ALERT ' : 'SWEEP-OB ')
+      + dir.toUpperCase() + ' · ' + mode
+      + ' · Q ' + q.score + '/10'
+      + ' · sweep @ ' + (isFinite(sweep.level) ? sweep.level.toFixed(2) : '—')
+      + ' · entry OB/FVG ' + entryZone.zone.lo.toFixed(2) + '–' + entryZone.zone.hi.toFixed(2)
+      + (isFinite(rrUse) ? (' · ' + rrUse.toFixed(2) + 'R') : '');
+    return out;
+  }catch(e){ out.why = 'sweep-ob error'; return out; }
+}
+
+function hgGoldSweepObHtml(sob){
+  try{
+    if (!sob || !(sob.ok || sob.score > 0 || sob.tier === 'watch')) return '';
+    var h = '<div class="note" data-hg-gold-sweepob="1" style="margin-top:8px">';
+    h += '<b>SWEEP→OB</b> · ' + String(sob.tier || 'ignore').toUpperCase();
+    if (sob.quality) h += ' · Q ' + sob.quality.score + '/10';
+    if (sob.dir) h += ' · ' + String(sob.dir).toUpperCase();
+    if (sob.mode) h += ' · ' + String(sob.mode);
+    if (isFinite(sob.sweepLevel)) h += ' · sweep ' + (+sob.sweepLevel).toFixed(2);
+    if (sob.obZone){
+      h += '<div class="dim" style="margin-top:4px">entry zone '
+        + (+sob.obZone.lo).toFixed(2) + '–' + (+sob.obZone.hi).toFixed(2);
+      if (isFinite(sob.entry)) h += ' · entry ~' + (+sob.entry).toFixed(2);
+      if (isFinite(sob.stop)) h += ' · stop ' + (+sob.stop).toFixed(2);
+      if (isFinite(sob.t1)) h += ' · TP1 ' + (+sob.t1).toFixed(2);
+      if (isFinite(sob.t2)) h += ' · TP2 ' + (+sob.t2).toFixed(2);
+      if (isFinite(sob.rr)) h += ' · ' + (+sob.rr).toFixed(2) + 'R';
+      h += '</div>';
+    }
+    if (sob.quality && sob.quality.parts){
+      var p = sob.quality.parts;
+      h += '<div class="dim" style="margin-top:2px">htf ' + p.htf
+        + ' · liq ' + p.liquidity + ' · reclaim ' + p.reclaim
+        + ' · mss ' + p.mss + ' · entry ' + p.entryLoc
+        + ' · vwap ' + p.vwap + ' · vol ' + p.volatility
+        + ' · rvol ' + p.volume + ' · macro ' + p.macro
+        + ' · rr ' + p.rr + '</div>';
+    }
+    if (sob.why) h += '<div class="dim" style="margin-top:2px">' + String(sob.why).replace(/[<>&]/g, '') + '</div>';
+    h += '</div>';
+    return h;
+  }catch(e){ return ''; }
+}
+
+/* =========================================================================
    NY VOLUME EXHAUSTION (hg-v556) — two-volume test for New York gold sweeps.
    Raid RVOL≥1.5 + reclaim, then takeover RVOL≥1.2 + MSS + VWAP. Same-session
    RVOL baseline (not just last-20). CVD labeled PROXY when not COMEX.
@@ -7273,7 +7698,7 @@ function hgGoldApplyFormingRegime(cand, regime){
     if (!cand || !regime) return cand;
     var key = cand.stratKey || '';
     var cont = { ribbon:1, bosalign:1, macro:1, wkbreak:1, pullback:1, openrange:1 };
-    var mrev = { vwap:1, vwapband:1, adrfade:1, fvg:1, stochrsi:1, sweep:1, liqsweep:1, nyexh:1, oitrap:1 };
+    var mrev = { vwap:1, vwapband:1, adrfade:1, fvg:1, stochrsi:1, sweep:1, liqsweep:1, nyexh:1, sweepob:1, oitrap:1 };
     if (key === 'rsidiv'){
       cand.demoted = true;
       if (!Array.isArray(cand.stamps)) cand.stamps = [];
@@ -7352,12 +7777,22 @@ function hgGoldFormingStack(inp){
       newsGate: inp.newsGate || (inp.news ? hgGoldNewsGate(inp.news, inp.now || Date.now()) : null),
       now: inp.now || Date.now()
     });
+    out.sweepOb = hgGoldSweepOb(rows, {
+      regime: out.regime,
+      newsGate: inp.newsGate || (inp.news ? hgGoldNewsGate(inp.news, inp.now || Date.now()) : null),
+      now: inp.now || Date.now(),
+      rows4h: __rows(inp.rows4h),
+      rows1h: __rows(inp.rows1h),
+      sweep: out.sweepEngine
+    });
     out.vprof = goldVolumeProfile(rows, 100, 50);
     out.vpBundle = typeof hgGoldVpBundle === 'function' ? hgGoldVpBundle(rows, { now: inp.now }) : null;
     out.vpTargets = null;
     try{
       var lead = null;
-      if (out.nyExhaustion && out.nyExhaustion.ok && out.nyExhaustion.dir) lead = out.nyExhaustion;
+      if (out.sweepOb && out.sweepOb.ok && out.sweepOb.dir && (out.sweepOb.confirmed || out.sweepOb.tier === 'alert'))
+        lead = out.sweepOb;
+      else if (out.nyExhaustion && out.nyExhaustion.ok && out.nyExhaustion.dir) lead = out.nyExhaustion;
       else if (out.sweepEngine && out.sweepEngine.dir && (out.sweepEngine.ok || out.sweepEngine.score > 0))
         lead = out.sweepEngine;
       var vpSrc = (out.vpBundle && out.vpBundle.session) || out.vprof;
@@ -7526,6 +7961,26 @@ function hgGoldFormingStack(inp){
         out.nyExhaustion.why, null, out.nyExhaustion.dir, 'trigger');
     }
 
+    if (out.sweepOb && (out.sweepOb.confirmed || out.sweepOb.tier === 'watch' || out.sweepOb.tier === 'alert')){
+      var sobInv = (out.sweepOb.plan && isFinite(out.sweepOb.plan.stop))
+        ? out.sweepOb.plan.stop
+        : (isFinite(out.sweepOb.stop) ? out.sweepOb.stop : NaN);
+      out.strategies.push({
+        key: 'sweep-ob', dir: out.sweepOb.dir,
+        level: isFinite(out.sweepOb.entry) ? out.sweepOb.entry : out.sweepOb.sweepLevel,
+        grade: out.sweepOb.confirmed ? 'confirmed' : 'watch',
+        score: out.sweepOb.quality ? out.sweepOb.quality.score : out.sweepOb.score,
+        tier: out.sweepOb.tier,
+        why: out.sweepOb.why,
+        invalidates: sobInv,
+        plan: out.sweepOb.plan || null,
+        mode: out.sweepOb.mode
+      });
+      watch('sweepob', 'armed',
+        isFinite(out.sweepOb.entry) ? out.sweepOb.entry : out.sweepOb.sweepLevel,
+        out.sweepOb.why, null, out.sweepOb.dir, 'trigger');
+    }
+
     out.note = (out.regime && out.regime.why) || '';
     if (out.strategies.length){
       out.note = (out.note ? out.note + ' · ' : '') + out.strategies.length + ' forming strategy hit(s)';
@@ -7535,6 +7990,9 @@ function hgGoldFormingStack(inp){
     }
     if (out.nyExhaustion && out.nyExhaustion.score >= HG_GOLD_NY_WATCH){
       out.note = (out.note ? out.note + ' · ' : '') + 'ny-exh ' + out.nyExhaustion.score + '/' + out.nyExhaustion.tier;
+    }
+    if (out.sweepOb && out.sweepOb.quality && out.sweepOb.quality.score >= 5){
+      out.note = (out.note ? out.note + ' · ' : '') + 'sweep→ob Q' + out.sweepOb.quality.score + '/10/' + out.sweepOb.tier;
     }
 
     /* Core confluence score for the lead forming strategy */
@@ -7549,10 +8007,12 @@ function hgGoldFormingStack(inp){
           confirmed: out.strategies[0].grade === 'confirmed',
           sweepScore: out.sweepEngine && out.sweepEngine.score,
           nyExhScore: out.nyExhaustion && out.nyExhaustion.score,
+          sweepObScore: out.sweepOb && out.sweepOb.quality && out.sweepOb.quality.score,
           vpTargets: out.vpTargets
         };
         if (/liq.?sweep/i.test(out.strategies[0].key || '')) leadCand.stratKey = 'liqsweep';
         if (/ny.?exh/i.test(out.strategies[0].key || '')) leadCand.stratKey = 'nyexh';
+        if (/sweep.?ob/i.test(out.strategies[0].key || '')) leadCand.stratKey = 'sweepob';
       }
       if (leadCand && leadCand.dir){
         out.confluence = hgGoldConfluenceScore(leadCand, {
@@ -7601,6 +8061,9 @@ function hgGoldFormingStackHtml(stack){
     }
     if (stack.nyExhaustion){
       h += hgGoldNyExhaustionHtml(stack.nyExhaustion);
+    }
+    if (stack.sweepOb){
+      h += hgGoldSweepObHtml(stack.sweepOb);
     }
     if (stack.vpTargets && typeof hgGoldVpTargetsHtml === 'function'){
       h += hgGoldVpTargetsHtml(stack.vpTargets);
@@ -7749,6 +8212,15 @@ W.hgGoldNyRvolSignature = hgGoldNyRvolSignature;
 W.hgGoldNyExhaustion = hgGoldNyExhaustion;
 W.hgGoldNyExhaustionScore = hgGoldNyExhaustionScore;
 W.hgGoldNyExhaustionHtml = hgGoldNyExhaustionHtml;
+W.HG_GOLD_SWEEPOB_ALERT_Q = HG_GOLD_SWEEPOB_ALERT_Q;
+W.HG_GOLD_SWEEPOB_RR_ALERT = HG_GOLD_SWEEPOB_RR_ALERT;
+W.HG_GOLD_SWEEPOB_BUF_ATR = HG_GOLD_SWEEPOB_BUF_ATR;
+W.hgGoldHtfBias = hgGoldHtfBias;
+W.hgGoldFreshOb = hgGoldFreshOb;
+W.hgGoldFreshFvg = hgGoldFreshFvg;
+W.hgGoldSweepObQuality = hgGoldSweepObQuality;
+W.hgGoldSweepOb = hgGoldSweepOb;
+W.hgGoldSweepObHtml = hgGoldSweepObHtml;
 W.hgGoldVpTargets = hgGoldVpTargets;
 W.hgGoldVpTargetsHtml = hgGoldVpTargetsHtml;
 W.hgGoldVpBundle = hgGoldVpBundle;
