@@ -1009,7 +1009,15 @@ function checkCandShape(c, key, dir, msg){
     return rows;
   }
   const fc = W.goldScalpSetups({ rows15m: fvgRows(), now: OFF_NOW });
-  checkCandShape(fc.find(c => c.stratKey === 'fvg'), 'fvg', 'long', 'FVG fill');
+  /* hg-v574: SCALP FVG FILL is fee-toxic in the omnigold ENGINE replay
+     (net −4.85R, n=27) — suppress from cards, keep in rejected with reason. */
+  const fvgCand = fc.find(c => c.stratKey === 'fvg');
+  const fvgDrop = (fc.rejected || []).find(r => r.stratKey === 'fvg');
+  assert(!fvgCand, 'FVG fill: suppressed by replay edge (not a tradable card)');
+  assert(!!fvgDrop && fvgDrop.dir === 'long', 'FVG fill: appears in rejected channel');
+  assert(/EDGE SUPPRESS/.test((fvgDrop.stamps || []).join(' '))
+      || /fee-toxic|replay net|FVG FILL/.test(String(fvgDrop.reason || '')),
+         'FVG fill: EDGE SUPPRESS / fee-toxic reason (' + (fvgDrop.reason || '') + ')');
 
   /* --- order-block retest: displacement origin retested with CCI washed --- */
   function obRows(){
@@ -1397,8 +1405,12 @@ function rrShortRows25(){            /* short into a bearish OB with a bullish O
          'off-session structural bar: macro/news shrink tally but off-hours setups still render demoted');
   const asianC = W.goldScalpSetups({ rows15m: asianBoRows25(), now: ASIAN_NOW });
   const asianOnly = asianC.find(c => c.stratKey === 'asian');
-  assert(!!asianOnly && asianOnly.demoted === false && asianOnly.stamps.length === 0,
-         'off-session exception: the Asian-range breakout strategy trades its own 00:00-08:00 UTC session undemoted');
+  /* Session exception still clears OFF-SESSION, but hg-v574 EDGE DEMOTE
+     (replay net −1.71R) keeps Asian from leading even in its own window. */
+  assert(!!asianOnly && asianOnly.stamps.indexOf('OFF-SESSION') < 0,
+         'off-session exception: Asian-range strategy is not stamped OFF-SESSION in 00:00-08:00 UTC');
+  assert(asianOnly.demoted === true && asianOnly.stamps.indexOf('EDGE DEMOTE') >= 0,
+         'asian session: EDGE DEMOTE from replay — never undemoted MOST PROBABLE');
   const asianOther = asianC.find(c => c.stratKey !== 'asian');
   assert(!asianOther || (asianOther.demoted === true && asianOther.stamps.indexOf('OFF-SESSION') >= 0),
          'a non-Asian strategy in the Asian window IS off-session demoted (only the Asian strategy is exempt)');
@@ -1412,8 +1424,12 @@ function rrShortRows25(){            /* short into a bearish OB with a bullish O
   const rsiL = ctBear.find(c => c.stratKey === 'rsidiv'), swL = ctBear.find(c => c.stratKey === 'sweep');
   assert(!!rsiL && rsiL.demoted === true && rsiL.stamps.indexOf('FOLKLORE') >= 0,
          'trend: rsidiv is FOLKLORE-demoted (no defended mechanism) regardless of EMA stack');
-  assert(!!swL && swL.demoted === false,
-         'trend exception: the liquidity-sweep trigger is the sanctioned counter-trend play (never demoted)');
+  /* Sweep stays the COUNTER-TREND exemption, but hg-v574 EDGE DEMOTE
+     (scalp sweep net −1.48R) means it paints demoted and never leads. */
+  assert(!!swL && swL.stamps.indexOf('COUNTER-TREND') < 0,
+         'trend exception: liquidity-sweep is not COUNTER-TREND demoted');
+  assert(swL.demoted === true && swL.stamps.indexOf('EDGE DEMOTE') >= 0,
+         'trend: scalp sweep is EDGE DEMOTE from replay (prefer SWING sweep)');
   const ctBull = W.goldScalpSetups({ rows15m: ctRows25(), rows4h: rows4hBull25(), now: OVLP_NOW });
   const rsiLB = ctBull.find(c => c.stratKey === 'rsidiv');
   assert(!!rsiLB && rsiLB.demoted === true && rsiLB.stamps.indexOf('FOLKLORE') >= 0,
@@ -1426,7 +1442,9 @@ function rrShortRows25(){            /* short into a bearish OB with a bullish O
   const rsiS = ctMir.find(c => c.stratKey === 'rsidiv'), swS = ctMir.find(c => c.stratKey === 'sweep');
   assert(!!rsiS && rsiS.dir === 'short' && rsiS.demoted === true && rsiS.stamps.indexOf('FOLKLORE') >= 0,
          'trend (mirrored): short rsidiv is FOLKLORE-demoted');
-  assert(!!swS && swS.demoted === false, 'trend (mirrored): the sweep-rejection short is exempt');
+  assert(!!swS && swS.stamps.indexOf('COUNTER-TREND') < 0
+      && swS.demoted === true && swS.stamps.indexOf('EDGE DEMOTE') >= 0,
+         'trend (mirrored): sweep-rejection short is COUNTER-TREND-exempt but EDGE DEMOTE');
 
   /* ---- (3) MIN R:R AFTER SNAPPING ---- */
   const rrC = W.goldScalpSetups({ rows15m: rrShortRows25(), now: OVLP_NOW });
