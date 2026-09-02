@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v562',
-  pack: 'Gold Part4 S9–S18 strategies',
-  built: '2026-09-02T06:00:00Z',
-  note: 'Part4 gold strategies: S9 P/D filter, S11 gap, S12 NR7, S14 ADR>120% fade, S15 poor/excess, S17 look-above-fail, S18 Asia SD. S13/S16 unchecked (no XAG/footprint). Wired SCALP/SWING/OMNIGOLD. Sacred contracts unchanged.'
+  version: 'hg-v563',
+  pack: 'Gold RVOL scalp tighten',
+  built: '2026-09-02T07:00:00Z',
+  note: 'RVOL fake-sweep scalp tighten: alert floor 1.30 + Asia 1.50, breach ≥0.15×ATR, close-in-third quality, multi-bar breakout reject, drift filter, COMEX PROXY volume note. SCALP desks pass mode=scalp into sweep engine. Sacred contracts unchanged.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

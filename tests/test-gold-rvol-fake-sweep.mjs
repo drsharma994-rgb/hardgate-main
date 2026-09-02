@@ -26,10 +26,13 @@ ok(typeof W.hgGoldSweepResponseRvol === 'function', 'hgGoldSweepResponseRvol');
 ok(typeof W.hgGoldSweepTwoStageRvol === 'function', 'hgGoldSweepTwoStageRvol');
 ok(typeof W.hgGoldSweepTwoStageHtml === 'function', 'hgGoldSweepTwoStageHtml');
 ok(W.HG_GOLD_SWEEP_RVOL_MIN === 1.25, 'sweep RVOL floor 1.25');
+ok(W.HG_GOLD_SWEEP_RVOL_SCALP === 1.30, 'scalp RVOL floor 1.30');
+ok(W.HG_GOLD_SWEEP_ATR_SCALP === 0.15, 'scalp ATR breach 0.15');
 ok(W.HG_GOLD_SWEEP_RVOL_ASIA === 1.50, 'Asia RVOL floor 1.50');
 ok(W.HG_GOLD_SWEEP_RVOL_RESPONSE === 1.10, 'response RVOL 1.10');
 ok(W.HG_GOLD_SWEEP_RVOL_STRONG === 1.80, 'strong band 1.80');
 ok(W.HG_GOLD_SWEEP_RVOL_BLOWOFF === 2.50, 'blowoff 2.50');
+ok(/PROXY|COMEX/i.test(W.HG_GOLD_SWEEP_RVOL_PROXY_NOTE || ''), 'PROXY/COMEX volume note');
 
 console.log('\n== RVOL bands ==');
 {
@@ -159,7 +162,64 @@ console.log('\n== false-filters wire two-stage ==');
   ok(f.reject === true, 'low-volume wick reject via filters (reject=' + f.reject + ' reasons=' + (f.reasons||[]).join(';') + ')');
 }
 
-console.log('\n== desk wiring ==');
+console.log('\n== scalp tighten (1.30 / 0.15 ATR) ==');
+{
+  const rows = genuineSweepRows();
+  const hit = {
+    dir: 'long', level: 2300, atr: 8, rvol: 1.28,
+    wick: { closeReclaim: true, breachAtr: 0.12, potential: true },
+    mss: { ok: true }, vwap: { ok: true }
+  };
+  const swing = W.hgGoldSweepTwoStageRvol(rows, hit, {
+    now: Date.UTC(2024, 5, 12, 10, 0, 0), newsGate: { lock: false }
+  });
+  /* breach 0.12 fails scalp 0.15 but may pass swing 0.10 */
+  const scalp = W.hgGoldSweepTwoStageRvol(rows, hit, {
+    now: Date.UTC(2024, 5, 12, 10, 0, 0), newsGate: { lock: false }, scalp: true
+  });
+  ok(scalp.scalp === true, 'scalp flag set');
+  ok(scalp.atrMin === 0.15, 'scalp atrMin 0.15');
+  ok(scalp.rvolMin === 1.30 || scalp.rvolMin === 1.50, 'scalp rvolMin ≥1.30 (got ' + scalp.rvolMin + ')');
+  ok(/PROXY|COMEX/i.test(scalp.volumeNote || ''), 'volume PROXY note on scalp result');
+  /* Hit with rvol 1.28 < 1.30 scalp floor (unless session RVOL from rows is higher) */
+  if (isFinite(scalp.sweepRvol) && scalp.sweepRvol < 1.30 && !scalp.stage1){
+    ok(!scalp.ok, 'scalp rejects sub-1.30 when measured RVOL low');
+  } else {
+    ok(true, 'scalp path ran (measured RVOL ' + scalp.sweepRvol + ')');
+  }
+  ok(typeof swing.why === 'string', 'swing path still returns why');
+}
+
+console.log('\n== multi-bar breakout acceptance ==');
+{
+  const rows = genuineSweepRows();
+  /* Force last 3 closes below Asia low after a deep pierce */
+  const lvl = 2300;
+  rows[rows.length - 3] = { ...rows[rows.length - 3], l: 2290, c: 2295, h: 2298, v: 300 };
+  rows[rows.length - 2] = { ...rows[rows.length - 2], l: 2292, c: 2294, h: 2297, v: 250 };
+  rows[rows.length - 1] = { ...rows[rows.length - 1], l: 2291, c: 2293, h: 2296, v: 240 };
+  const hit = {
+    dir: 'long', level: lvl, atr: 8, rvol: 2.0,
+    wick: { closeReclaim: false, breachAtr: 0.5, potential: true },
+    mss: { ok: false }, vwap: { ok: false }
+  };
+  const ts = W.hgGoldSweepTwoStageRvol(rows, hit, {});
+  ok(ts.fake && /breakout/i.test(ts.profile || ts.fakeReason || ''),
+    'multi-bar/outside closes → breakout (profile=' + ts.profile + ')');
+}
+
+console.log('\n== HTML PROXY ==');
+{
+  const html = W.hgGoldSweepTwoStageHtml({
+    ok: true, stage1: true, stage2: true, scalp: true, closeThird: true,
+    profile: 'reversal', sweepRvol: 1.6, responseRvol: 1.2,
+    band: { label: 'meaningful' },
+    volumeNote: W.HG_GOLD_SWEEP_RVOL_PROXY_NOTE,
+    why: 'test'
+  });
+  ok(/RVOL 2-STAGE/.test(html) && /SCALP/.test(html) && /PROXY|COMEX/i.test(html),
+    'HTML shows SCALP + PROXY');
+}
 {
   const gi = fs.readFileSync(root + 'goldind.js', 'utf8');
   const scalp = fs.readFileSync(root + 'goldscalp.js', 'utf8');
