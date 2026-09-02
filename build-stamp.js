@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v570',
-  pack: 'Part6 S29–S38 time/composites',
+  version: 'hg-v571',
+  pack: 'Part7 S39–S48 scalp/expression',
   built: '2026-09-02T20:00:00Z',
-  note: 'Part6 S29–S38: session-composite pullback / z-fade / SMT / failed-sweep live on OMNIGOLD + GOLD SCALP/SWING; time-stats + Hurst/ac frames; S31 skew + S34 DOM unchecked. Sacred contracts unchanged.'
+  note: 'Part7 S39–S48: separated 15m scalp module + S43 gold/silver ratio live on OMNIGOLD + GOLD SCALP; SWING confirmed-only ratio; MCX/options/sizing/exit frames; S40 MCX-native. Sacred contracts unchanged.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

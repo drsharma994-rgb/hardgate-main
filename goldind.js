@@ -1092,7 +1092,16 @@ var GST_NAME = {
   p6hold: 'S29 TIME-BASED HOLD EXTENSION',
   p6corr: 'S32 GOLD–BTC CORRELATION RULE',
   p6event: 'S35 EVENT-WEEK TEMPLATE',
-  p6ladder: 'S38 NAKED-POC LADDER'
+  p6ladder: 'S38 NAKED-POC LADDER',
+  p7scalp: 'P7 SCALP MODULE (15m SEPARATED)',
+  p7gap: 'S40 MCX OPEN-GAP FADE',
+  p7ratio: 'S43 GOLD/SILVER RATIO PAIR',
+  p7mcx: 'S39 MCX INR EXPRESSION',
+  p7opt: 'S41/S42 OPTIONS EXPRESSION',
+  p7size: 'S44/S45 SIZING FAMILY',
+  p7exit: 'S46 EXIT A/B (E1–E4)',
+  p7hedge: 'S47 USDINR HEDGE',
+  p7season: 'S48 SEASONAL WINDOW'
 };
 
 /* limit-at-zone entry: when price has extended beyond the setup zone, anchor
@@ -2093,6 +2102,50 @@ function goldScalpSetups(inp){
         }
       }
     }catch(eP6){}
+
+    /* --- 1e4) PART7 S39–S48 · separated scalp + ratio (gap is MCX-native) --- */
+    try{
+      if (!D.__part7){
+        D.__part7 = hgGoldPart7Engine(rows, {
+          newsGate: newsState ? hgGoldNewsGate(newsState, nowMs) : null,
+          now: nowMs,
+          usdInr: (opts && opts.usdInr) || null,
+          kToday: (opts && opts.kToday) || null,
+          silverRows: (opts && opts.silverRows) || null,
+          mcxRows: (opts && opts.mcxRows) || null,
+          priorDay: (opts && opts.priorDay) || null,
+          tradesToday: (opts && opts.tradesToday) || 0,
+          swingWarmSameSide: !!(opts && opts.swingWarmSameSide)
+        });
+      }
+      var p7 = D.__part7;
+      if (p7 && p7.strategies && p7.strategies.length){
+        /* p7gap stays MCX-native — never mint as XAUUSD ticket */
+        var p7Live = { p7scalp: 1, p7ratio: 1 };
+        var p7j, p7hit;
+        for (p7j = 0; p7j < p7.strategies.length; p7j++){
+          p7hit = p7.strategies[p7j];
+          if (!p7hit || !p7hit.dir || !p7Live[p7hit.key]) continue;
+          if (p7hit.grade !== 'forming' && p7hit.grade !== 'confirmed') continue;
+          var p7Stop = (p7hit.plan && isFinite(p7hit.plan.stop)) ? p7hit.plan.stop
+            : (p7hit.dir === 'long' ? entry - 1.2 * a15 : entry + 1.2 * a15);
+          var p7Cand = __gsCand(p7hit.key, p7hit.dir, D, p7Stop, __gsSnapLvls(D, p7hit.dir),
+            p7hit.why, 'Part7 invalidation — structure break against the setup',
+            undefined, isFinite(p7hit.level) ? p7hit.level : undefined);
+          if (p7Cand){
+            if (p7hit.plan){
+              if (isFinite(p7hit.plan.t1)) p7Cand.t1 = p7hit.plan.t1;
+              if (isFinite(p7hit.plan.t2)) p7Cand.t2 = p7hit.plan.t2;
+              if (isFinite(p7hit.plan.stop)) p7Cand.stop = p7hit.plan.stop;
+            }
+            if (!Array.isArray(p7Cand.stamps)) p7Cand.stamps = [];
+            p7Cand.stamps.push('PART7 ' + String(p7hit.key).toUpperCase());
+            if (p7.season && p7.season.active) p7Cand.stamps.push('S48 SEASONAL');
+            push(p7Cand);
+          }
+        }
+      }
+    }catch(eP7){}
 
     /* --- 1f) SMC liquidity cluster + swept index (smart-money-concepts port) --- */
     try{
@@ -10604,6 +10657,499 @@ function hgGoldPart6Html(p6){
 }
 
 /* =========================================================================
+   GOLD PART 7 — Expression / sizing / exit / MCX / separated scalp (hg-v571)
+   One vote per family. Nothing here turns NO ENTRY into ENTER.
+   S40/S43 need opts.mcxRows / opts.silverRows. Options IV / DOM stay unchecked.
+========================================================================= */
+
+var HG_GOLD_P7_OZ_G = 31.1035;
+var HG_GOLD_P7_SCALP_RR = 1.5;
+var HG_GOLD_P7_SCALP_ATR_R = 1.5;
+var HG_GOLD_P7_GAP_PCT = 0.004;
+var HG_GOLD_P7_SEASON_MONTHS = { 9:1, 10:1, 11:1, 12:1, 1:1, 2:1 };
+
+/** Import-parity theoretical INR for 10g (duty factor measured, not baked). */
+function hgGoldPart7McxParity(xauUsd, usdInr, kToday){
+  var out = { ok: false, theoretical: NaN, k: NaN, premium: NaN, why: '' };
+  try{
+    xauUsd = +xauUsd; usdInr = +usdInr; kToday = +kToday;
+    if (!(xauUsd > 0) || !(usdInr > 0)){ out.why = 'need XAUUSD + USDINR'; return out; }
+    out.theoretical = (xauUsd / HG_GOLD_P7_OZ_G) * 10 * usdInr;
+    if (isFinite(kToday) && kToday > 0){
+      out.k = kToday;
+      out.ok = true;
+      out.why = 'parity ₹' + out.theoretical.toFixed(1) + ' · k ' + kToday.toFixed(4);
+    } else {
+      out.ok = true; out.k = NaN;
+      out.why = 'parity ₹' + out.theoretical.toFixed(1) + ' · k unread (measure GOLDM/theoretical)';
+    }
+    return out;
+  }catch(e){ out.why = 'parity error'; return out; }
+}
+
+function hgGoldPart7LevelInr(levelUsd, usdInr, kToday){
+  try{
+    levelUsd = +levelUsd; usdInr = +usdInr; kToday = +kToday;
+    if (!(levelUsd > 0) || !(usdInr > 0)) return NaN;
+    var k = (isFinite(kToday) && kToday > 0) ? kToday : 1;
+    return (levelUsd / HG_GOLD_P7_OZ_G) * 10 * usdInr * k;
+  }catch(e){ return NaN; }
+}
+
+/** S39 — convert a GC/XAU plan into GOLDM levels (expression, not a new signal). */
+function hgGoldPart7McxExpress(plan, opts){
+  var out = { ok: false, instrument: 'GOLDM', entry: NaN, stop: NaN, t1: NaN, sizeMult: 0.8, why: '' };
+  try{
+    opts = opts || {}; plan = plan || {};
+    var usdInr = +opts.usdInr, k = +opts.kToday;
+    if (!(usdInr > 0)){ out.why = 'S39 USDINR unread'; return out; }
+    if (!isFinite(plan.entry)){ out.why = 'S39 need GC entry'; return out; }
+    out.entry = hgGoldPart7LevelInr(plan.entry, usdInr, k);
+    out.stop = isFinite(plan.stop) ? hgGoldPart7LevelInr(plan.stop, usdInr, k) : NaN;
+    out.t1 = isFinite(plan.t1) ? hgGoldPart7LevelInr(plan.t1, usdInr, k) : NaN;
+    out.ok = isFinite(out.entry);
+    out.sizeMult = 0.8;
+    out.why = 'S39 GOLDM @ ₹' + out.entry.toFixed(1) + ' (−20% size for INR noise)'
+      + (opts.usdinrAgainst ? ' · USDINR against — prefer GC' : '');
+    if (opts.usdinrAgainst) out.ok = false;
+    return out;
+  }catch(e){ return out; }
+}
+
+/** S40 — MCX open-gap fade (MCX-native; needs opts.mcxRows). */
+function hgGoldPart7McxGapFade(mcxRows, opts){
+  var out = {
+    ok: false, dir: null, grade: 'watch', entry: NaN, stop: NaN, t1: NaN, why: ''
+  };
+  try{
+    opts = opts || {};
+    mcxRows = __rows(mcxRows);
+    if (!mcxRows || mcxRows.length < 30){ out.why = 'S40 MCX unread'; return out; }
+    var last = mcxRows[mcxRows.length - 1];
+    var prev = mcxRows[mcxRows.length - 2];
+    if (!prev || !(prev.c > 0) || !(last.o > 0)) return out;
+    var gap = (last.o - prev.c) / prev.c;
+    if (Math.abs(gap) < HG_GOLD_P7_GAP_PCT){ out.why = 'S40 gap < 0.4%'; return out; }
+    var parity = opts.parityInr;
+    var atrs = _atr(mcxRows, 14);
+    var atr = atrs[atrs.length - 1];
+    if (!(atr > 0)) return out;
+    var rej = gap > 0 ? (last.c < last.o && last.c < last.o - 0.1 * atr)
+                      : (last.c > last.o && last.c > last.o + 0.1 * atr);
+    out.ok = true;
+    out.dir = gap > 0 ? 'short' : 'long';
+    out.grade = rej ? 'confirmed' : 'forming';
+    out.entry = last.c;
+    out.stop = gap > 0 ? Math.max(last.h, last.o) * 1.0015 : Math.min(last.l, last.o) * 0.9985;
+    out.t1 = isFinite(parity) ? parity : (gap > 0 ? prev.c : prev.c);
+    var R = Math.abs(out.entry - out.stop);
+    if (R > 0 && Math.abs(out.t1 - out.entry) / R < 2.0 && rej){
+      out.grade = 'watch'; out.why = 'S40 RR < 2.0 to parity'; return out;
+    }
+    out.why = 'S40 MCX gap ' + (gap * 100).toFixed(2) + '% fade ' + out.dir.toUpperCase();
+    return out;
+  }catch(e){ out.why = 'S40 error'; return out; }
+}
+
+/** S41/S42 — options expression recommendation (never enters on options alone). */
+function hgGoldPart7OptionsExpress(plan, opts){
+  var out = { ok: false, mode: 'none', why: '', debit: false, credit: false };
+  try{
+    opts = opts || {}; plan = plan || {};
+    var gvzSpread = +opts.gvzMinusRealized;
+    var newsInHold = !!opts.newsInHold;
+    var deepWick = !!(plan.R && plan.atr && plan.R > 0.6 * plan.atr);
+    var scalp = !!opts.scalp;
+    if (scalp){ out.why = 'S41 skip — scalp hold too short for theta'; return out; }
+    if (isFinite(gvzSpread) && gvzSpread > 5){
+      out.ok = true; out.credit = true; out.mode = 'credit';
+      out.why = 'S42 credit spread candidate — GVZ−realized > +5 (half size)';
+      return out;
+    }
+    if (newsInHold || deepWick || (isFinite(gvzSpread) && gvzSpread < -3)){
+      out.ok = true; out.debit = true; out.mode = 'debit';
+      out.why = 'S41 debit spread — '
+        + (newsInHold ? 'news in hold' : (deepWick ? 'deep wick' : 'options cheap'));
+      return out;
+    }
+    out.why = 'S41/S42 no options overlay (use outright)';
+    return out;
+  }catch(e){ return out; }
+}
+
+/** S43 — gold/silver ratio mean-reversion pair (needs silver rows). */
+function hgGoldPart7RatioPair(goldRows, silverRows){
+  var out = {
+    ok: false, dir: null, grade: 'watch', entry: NaN, stop: NaN, t1: NaN,
+    ratio: NaN, why: ''
+  };
+  try{
+    goldRows = __rows(goldRows); silverRows = __rows(silverRows);
+    if (!goldRows || !silverRows || goldRows.length < 40 || silverRows.length < 40){
+      out.why = 'S43 silver unread'; return out;
+    }
+    function daily(rows){
+      var m = {}, ks = [], i, k;
+      for (i = 0; i < rows.length; i++){
+        if (!isFinite(rows[i].t) || !isFinite(rows[i].c)) continue;
+        k = String(Math.floor(rows[i].t / 86400));
+        if (!m[k]) ks.push(k);
+        m[k] = rows[i].c;
+      }
+      return { m: m, ks: ks };
+    }
+    var g = daily(goldRows), s = daily(silverRows);
+    var shared = [], i;
+    for (i = 0; i < g.ks.length; i++) if (s.m[g.ks[i]] != null) shared.push(g.ks[i]);
+    if (shared.length < 60){ out.why = 'S43 need ≥60 overlap days'; return out; }
+    var ratios = [], j;
+    for (j = 0; j < shared.length; j++) ratios.push(g.m[shared[j]] / s.m[shared[j]]);
+    var cur = ratios[ratios.length - 1];
+    var sorted = ratios.slice().sort(function(a,b){ return a - b; });
+    var p5 = sorted[Math.floor(sorted.length * 0.05)];
+    var p95 = sorted[Math.floor(sorted.length * 0.95)];
+    var mean = 0; for (j = 0; j < ratios.length; j++) mean += ratios[j]; mean /= ratios.length;
+    out.ratio = cur;
+    /* Ticket levels are gold USD (last close ± ATR); ratio stays advisory. */
+    var gLast = goldRows[goldRows.length - 1];
+    var gatrs = _atr(goldRows, 14);
+    var gAtr = gatrs[gatrs.length - 1] || (gLast.c * 0.005);
+    if (cur >= p95){
+      out.ok = true; out.dir = 'short'; /* short gold / long silver */
+      out.grade = 'confirmed';
+      out.entry = gLast.c;
+      out.stop = gLast.c + 1.5 * gAtr;
+      out.t1 = gLast.c - 2.0 * gAtr;
+      out.why = 'S43 ratio ' + cur.toFixed(1) + ' ≥ p95 — long silver / short gold';
+    } else if (cur <= p5){
+      out.ok = true; out.dir = 'long';
+      out.grade = 'confirmed';
+      out.entry = gLast.c;
+      out.stop = gLast.c - 1.5 * gAtr;
+      out.t1 = gLast.c + 2.0 * gAtr;
+      out.why = 'S43 ratio ' + cur.toFixed(1) + ' ≤ p5 — long gold / short silver';
+    } else {
+      out.why = 'S43 ratio ' + cur.toFixed(1) + ' inside band';
+    }
+    return out;
+  }catch(e){ out.why = 'S43 error'; return out; }
+}
+
+/** S44/S45 — sizing multipliers (shadow / advisory). */
+function hgGoldPart7Sizing(opts){
+  var out = {
+    ok: true, fixed: 1, volTarget: 1, equityCurve: 1, pick: 1, why: ''
+  };
+  try{
+    opts = opts || {};
+    var equity = +opts.equity || 10000;
+    var R = +opts.R || 10;
+    var pointValue = +opts.pointValue || 1;
+    var daily1s = +opts.daily1s;
+    out.fixed = 1;
+    if (isFinite(daily1s) && daily1s > 0 && R > 0){
+      var vtContracts = (0.004 * equity) / (daily1s * pointValue);
+      var ffContracts = (0.01 * equity) / (R * pointValue);
+      if (ffContracts > 0) out.volTarget = Math.min(1.25, vtContracts / ffContracts);
+    }
+    if (isFinite(opts.equityMa20) && isFinite(opts.equityNow) && opts.equityNow < opts.equityMa20)
+      out.equityCurve = 0.5;
+    out.pick = Math.min(out.fixed, out.volTarget, out.equityCurve);
+    out.why = 'S44/S45 size× ' + out.pick.toFixed(2)
+      + ' (vol ' + out.volTarget.toFixed(2) + ' · curve ' + out.equityCurve.toFixed(2) + ')';
+    return out;
+  }catch(e){ return out; }
+}
+
+/** S46 — exit family shadow labels (E2 live default). */
+function hgGoldPart7ExitAb(plan){
+  var out = {
+    ok: true, live: 'E2', shadows: ['E1', 'E3', 'E4'], why: ''
+  };
+  try{
+    plan = plan || {};
+    out.why = 'S46 live E2 structural'
+      + (isFinite(plan.t1) ? (' T1 ' + (+plan.t1).toFixed(2)) : '')
+      + ' · shadow E1 fixed-RR / E3 ATR trail / E4 time-decay';
+    return out;
+  }catch(e){ return out; }
+}
+
+/** S48 — seasonal window context for S28 (never a standalone entry). */
+function hgGoldPart7Seasonal(nowMs){
+  var out = { ok: false, active: false, why: '' };
+  try{
+    var ms = isFinite(nowMs) ? __toMs(nowMs) : Date.now();
+    var m = new Date(ms).getUTCMonth() + 1;
+    out.active = !!HG_GOLD_P7_SEASON_MONTHS[m];
+    out.ok = true;
+    out.why = out.active
+      ? 'S48 festival/CNY window active — S28 long context +1 if Indian premium'
+      : 'S48 outside seasonal window';
+    return out;
+  }catch(e){ return out; }
+}
+
+/**
+ * Separated 15m scalp module (Part 7 §7). Own gates s1–s9.
+ * Never shares candidates with swing by only shrinking TP/SL.
+ */
+function hgGoldPart7ScalpModule(rows15, opts){
+  var out = {
+    ok: false, dir: null, grade: 'watch', entry: NaN, stop: NaN, t1: NaN, t2: NaN,
+    gates: {}, why: '', module: 'SCALP15'
+  };
+  try{
+    opts = opts || {};
+    rows15 = __rows(rows15);
+    if (!rows15 || rows15.length < 40){ out.why = 'scalp need ≥40×15m'; return out; }
+    var last = rows15[rows15.length - 1];
+    var ms = isFinite(opts.now) ? __toMs(opts.now) : ((last.t < 1e12) ? last.t * 1000 : last.t);
+    var h = new Date(ms).getUTCHours() + new Date(ms).getUTCMinutes() / 60;
+    /* s6 window: London/NY overlap 12–16 UTC */
+    out.gates.s6_window = (h >= 12 && h < 16);
+    if (!out.gates.s6_window){ out.why = 'scalp outside 12–16 UTC overlap'; return out; }
+    if (opts.newsGate && opts.newsGate.lock){ out.why = 'scalp news lockout'; return out; }
+    if (opts.swingWarmSameSide){ out.why = 'scalp suppressed — swing S0 warming same side'; return out; }
+    if (opts.tradesToday >= 3){ out.why = 'scalp s9 — 3 trades already'; return out; }
+
+    var atrs = _atr(rows15, 14);
+    var atr = atrs[atrs.length - 1];
+    if (!(atr > 0)) return out;
+
+    var vwap = null;
+    try{
+      var a = typeof hgGoldPart5SessionAnchor === 'function' ? hgGoldPart5SessionAnchor(rows15, ms) : 0;
+      var bands = typeof goldVWAPBands === 'function' ? goldVWAPBands(rows15, a) : null;
+      if (bands && isFinite(bands.value)) vwap = bands;
+    }catch(eV){}
+
+    var vprof = goldVolumeProfile(rows15, 80, 40);
+    var inNode = false;
+    if (vprof){
+      var tol = Math.max(atr * 0.4, vprof.binSize || 1);
+      if (isFinite(vprof.pocPrice) && Math.abs(last.c - vprof.pocPrice) <= tol) inNode = true;
+      if (isFinite(vprof.vah) && Math.abs(last.c - vprof.vah) <= tol) inNode = true;
+      if (isFinite(vprof.val) && Math.abs(last.c - vprof.val) <= tol) inNode = true;
+      var hv = vprof.hvns || [], hi;
+      for (hi = 0; hi < hv.length; hi++) if (Math.abs(last.c - hv[hi]) <= tol) inNode = true;
+    }
+    out.gates.s1_context = inNode || !!(opts.priorDay && (
+      (isFinite(opts.priorDay.hi) && Math.abs(last.c - opts.priorDay.hi) <= 0.5 * atr) ||
+      (isFinite(opts.priorDay.lo) && Math.abs(last.c - opts.priorDay.lo) <= 0.5 * atr) ||
+      (isFinite(opts.priorDay.poc) && Math.abs(last.c - opts.priorDay.poc) <= 0.5 * atr)
+    ));
+
+    /* s2/s3 sweep of prior 15m swing / VWAP±1σ */
+    var poolHi = rows15[rows15.length - 3] ? rows15[rows15.length - 3].h : last.h;
+    var poolLo = rows15[rows15.length - 3] ? rows15[rows15.length - 3].l : last.l;
+    var i;
+    for (i = rows15.length - 8; i < rows15.length - 1; i++){
+      if (i < 0) continue;
+      if (rows15[i].h > poolHi) poolHi = rows15[i].h;
+      if (rows15[i].l < poolLo) poolLo = rows15[i].l;
+    }
+    if (vwap && isFinite(vwap.upper1)) poolHi = Math.max(poolHi, vwap.upper1);
+    if (vwap && isFinite(vwap.lower1)) poolLo = Math.min(poolLo, vwap.lower1);
+    var pen = 0.15 * atr;
+    var prev = rows15[rows15.length - 2];
+    var sweptLo = (last.l <= poolLo - pen && last.c > poolLo) ||
+      (prev && prev.l <= poolLo - pen && last.c > poolLo);
+    var sweptHi = (last.h >= poolHi + pen && last.c < poolHi) ||
+      (prev && prev.h >= poolHi + pen && last.c < poolHi);
+    out.gates.s2_sweep = !!(sweptLo || sweptHi);
+    out.gates.s3_reclaim = out.gates.s2_sweep;
+
+    /* s4 CVD divergence — PROXY when no footprint; require volume climax stand-in */
+    var avgV = 0, nV = 0;
+    for (i = rows15.length - 21; i < rows15.length - 1; i++){
+      if (i >= 0 && rows15[i].v > 0){ avgV += rows15[i].v; nV++; }
+    }
+    avgV = nV ? avgV / nV : 0;
+    var climax = avgV > 0 && last.v >= 1.2 * avgV;
+    var body = Math.abs(last.c - last.o);
+    var range = last.h - last.l;
+    var absorb = range > 0 && body <= 0.45 * range && climax;
+    out.gates.s4_flow = !!(absorb || climax);
+    out.gates.s4_proxy = true;
+
+    var rvol = typeof hgGoldBarRvol === 'function' ? hgGoldBarRvol(rows15, rows15.length - 1, 20) : NaN;
+    out.gates.s5_rvol = isFinite(rvol) ? rvol >= 1.0 : climax;
+
+    var dir = sweptLo ? 'long' : (sweptHi ? 'short' : null);
+    if (!dir){ out.why = 'scalp no sweep reclaim'; return out; }
+
+    var entry = last.c;
+    var stop = dir === 'long' ? Math.min(last.l, poolLo) - 0.05 * atr
+                              : Math.max(last.h, poolHi) + 0.05 * atr;
+    var R = Math.abs(entry - stop);
+    out.gates.s8_risk = R <= HG_GOLD_P7_SCALP_ATR_R * atr;
+    var t1 = (vwap && isFinite(vwap.value)) ? vwap.value
+      : (dir === 'long' ? entry + HG_GOLD_P7_SCALP_RR * R : entry - HG_GOLD_P7_SCALP_RR * R);
+    var rr = R > 0 ? Math.abs(t1 - entry) / R : 0;
+    out.gates.s7_rr = rr >= HG_GOLD_P7_SCALP_RR;
+    out.gates.s9_count = !(opts.tradesToday >= 3);
+
+    var pass = out.gates.s1_context && out.gates.s2_sweep && out.gates.s3_reclaim
+      && out.gates.s4_flow && out.gates.s5_rvol && out.gates.s6_window
+      && out.gates.s7_rr && out.gates.s8_risk && out.gates.s9_count;
+
+    out.ok = true;
+    out.dir = dir;
+    out.entry = entry; out.stop = stop; out.t1 = t1;
+    out.t2 = (vwap && isFinite(vwap.upper1) && dir === 'long') ? vwap.upper1
+      : ((vwap && isFinite(vwap.lower1) && dir === 'short') ? vwap.lower1
+        : (dir === 'long' ? entry + 2 * R : entry - 2 * R));
+    out.grade = pass ? 'confirmed' : 'forming';
+    var failed = [];
+    Object.keys(out.gates).forEach(function(k){ if (!out.gates[k] && k.indexOf('proxy') < 0) failed.push(k); });
+    out.why = pass
+      ? ('P7 scalp ' + dir.toUpperCase() + ' · RR ' + rr.toFixed(2) + ' · flow PROXY')
+      : ('P7 scalp forming — fail ' + (failed.join(',') || 'gates'));
+    return out;
+  }catch(e){ out.why = 'scalp module error'; return out; }
+}
+
+function hgGoldPart7ExpressionTree(signal, opts){
+  var out = { ok: true, instrument: 'GC/MGC', mode: 'outright', why: '' };
+  try{
+    opts = opts || {}; signal = signal || {};
+    if (opts.newsInHold || (isFinite(opts.gvzMinusRealized) && opts.gvzMinusRealized < -3)){
+      out.instrument = 'OG/MGC options'; out.mode = 'debit-spread';
+      out.why = 'tree → S41 debit spread';
+      return out;
+    }
+    if (opts.accountInr && opts.mcxOpen && !opts.usdinrAgainst){
+      out.instrument = 'GOLDM'; out.mode = 'mcx'; out.why = 'tree → S39 GOLDM −20% size';
+      return out;
+    }
+    if (opts.overnight){ out.why = 'tree → GC/MGC outright (no MCX overnight gap)'; return out; }
+    out.why = 'tree → outright on most liquid venue';
+    return out;
+  }catch(e){ return out; }
+}
+
+function hgGoldPart7Engine(rows, opts){
+  var out = {
+    ok: false, scalp: null, gap: null, ratio: null, mcx: null, opt: null,
+    sizing: null, exitAb: null, season: null, tree: null, strategies: [],
+    unchecked: ['S41/S42 options IV', 'S42 credit (needs GVZ)', 'calendar spread'],
+    why: ''
+  };
+  try{
+    opts = opts || {};
+    rows = __rows(rows);
+    if (!rows || rows.length < 30){ out.why = 'need ≥30 bars'; return out; }
+    if (opts.newsGate && opts.newsGate.lock){
+      out.why = 'news lockout — Part7 entries paused';
+      return out;
+    }
+
+    out.scalp = hgGoldPart7ScalpModule(rows, {
+      now: opts.now, newsGate: opts.newsGate,
+      priorDay: opts.priorDay, tradesToday: opts.tradesToday,
+      swingWarmSameSide: opts.swingWarmSameSide
+    });
+    out.gap = opts.mcxRows
+      ? hgGoldPart7McxGapFade(opts.mcxRows, { parityInr: opts.parityInr })
+      : { ok: false, why: 'S40 MCX unread' };
+    if (!opts.mcxRows) out.unchecked.push('S40 MCX gap');
+    out.ratio = opts.silverRows
+      ? hgGoldPart7RatioPair(rows, opts.silverRows)
+      : { ok: false, why: 'S43 silver unread' };
+    if (!opts.silverRows) out.unchecked.push('S43 gold/silver');
+
+    var last = rows[rows.length - 1];
+    var parity = hgGoldPart7McxParity(last.c, opts.usdInr, opts.kToday);
+    out.mcx = hgGoldPart7McxExpress(
+      { entry: last.c, stop: last.c * 0.995, t1: last.c * 1.01 },
+      { usdInr: opts.usdInr, kToday: opts.kToday, usdinrAgainst: opts.usdinrAgainst }
+    );
+    if (!isFinite(+opts.usdInr)) out.unchecked.push('S39 USDINR');
+    out.opt = hgGoldPart7OptionsExpress(
+      { entry: last.c, R: NaN, atr: NaN },
+      { gvzMinusRealized: opts.gvzMinusRealized, newsInHold: opts.newsInHold, scalp: false }
+    );
+    out.sizing = hgGoldPart7Sizing(opts);
+    out.exitAb = hgGoldPart7ExitAb({ t1: last.c });
+    out.season = hgGoldPart7Seasonal(opts.now);
+    out.tree = hgGoldPart7ExpressionTree({}, opts);
+
+    function pushS(key, dir, level, grade, why, plan){
+      out.strategies.push({
+        key: key, dir: dir, level: level, grade: grade || 'watch', why: why, plan: plan || null
+      });
+    }
+
+    if (out.scalp && out.scalp.ok && out.scalp.dir && (out.scalp.grade === 'forming' || out.scalp.grade === 'confirmed')){
+      pushS('p7scalp', out.scalp.dir, out.scalp.entry, out.scalp.grade, out.scalp.why, {
+        stop: out.scalp.stop, t1: out.scalp.t1, t2: out.scalp.t2, module: 'SCALP15'
+      });
+    }
+    if (out.gap && out.gap.ok && out.gap.dir && out.gap.grade !== 'watch'){
+      pushS('p7gap', out.gap.dir, out.gap.entry, out.gap.grade, out.gap.why, {
+        stop: out.gap.stop, t1: out.gap.t1
+      });
+    }
+    if (out.ratio && out.ratio.ok && out.ratio.dir){
+      pushS('p7ratio', out.ratio.dir, out.ratio.entry, out.ratio.grade, out.ratio.why, {
+        stop: out.ratio.stop, t1: out.ratio.t1
+      });
+    }
+    if (out.mcx && (out.mcx.ok || out.mcx.why))
+      pushS('p7mcx', null, out.mcx.entry, 'frame', out.mcx.why || 'S39');
+    if (out.opt && out.opt.why) pushS('p7opt', null, NaN, 'frame', out.opt.why);
+    if (out.sizing) pushS('p7size', null, NaN, 'frame', out.sizing.why);
+    if (out.exitAb) pushS('p7exit', null, NaN, 'frame', out.exitAb.why);
+    if (out.season && out.season.ok) pushS('p7season', null, NaN, 'frame', out.season.why);
+    if (parity && parity.why) pushS('p7mcx', null, parity.theoretical, 'frame', 'parity · ' + parity.why);
+    if (out.tree) pushS('p7opt', null, NaN, 'frame', out.tree.why);
+
+    /* Deduplicate frame keys keeping first */
+    var seen = {}, uniq = [], ui;
+    for (ui = 0; ui < out.strategies.length; ui++){
+      var sk = out.strategies[ui];
+      var id = sk.key + '|' + (sk.grade || '') + '|' + (sk.why || '').slice(0, 40);
+      if (seen[id]) continue;
+      seen[id] = 1; uniq.push(sk);
+    }
+    out.strategies = uniq;
+
+    out.ok = out.strategies.some(function(x){
+      return x && (x.grade === 'forming' || x.grade === 'confirmed' || x.grade === 'frame');
+    });
+    out.why = out.ok
+      ? (out.strategies.length + ' Part7 hit(s) · unchecked: ' + out.unchecked.join(', '))
+      : ('no Part7 trigger · unchecked: ' + out.unchecked.join(', '));
+    return out;
+  }catch(e){ out.why = 'Part7 engine error'; return out; }
+}
+
+function hgGoldPart7Html(p7){
+  try{
+    if (!p7 || !(p7.ok || (p7.scalp && p7.scalp.why) || (p7.season && p7.season.ok))) return '';
+    var h = '<div class="note" data-hg-gold-part7="1" style="margin-top:8px">';
+    h += '<b>PART7 S39–S48 · SCALP MODULE</b>';
+    if (p7.scalp && p7.scalp.dir) h += ' · scalp ' + String(p7.scalp.dir).toUpperCase() + ' ' + p7.scalp.grade;
+    if (p7.season && p7.season.active) h += ' · seasonal';
+    if (p7.unchecked && p7.unchecked.length)
+      h += '<div class="dim" style="margin-top:2px">unchecked: ' + p7.unchecked.join(', ') + '</div>';
+    var i, s, n = Math.min(6, (p7.strategies || []).length);
+    for (i = 0; i < n; i++){
+      s = p7.strategies[i];
+      h += '<div style="margin-top:4px"><b>' + String(s.key).toUpperCase() + '</b>'
+        + (s.dir ? (' ' + String(s.dir).toUpperCase()) : '')
+        + (s.grade ? (' · ' + s.grade) : '')
+        + (isFinite(s.level) ? (' @ ' + (+s.level).toFixed(2)) : '')
+        + ' — ' + String(s.why || '').replace(/[<>&]/g, '') + '</div>';
+    }
+    if (p7.why) h += '<div class="dim" style="margin-top:4px">' + String(p7.why).replace(/[<>&]/g, '') + '</div>';
+    h += '</div>';
+    return h;
+  }catch(e){ return ''; }
+}
+
+/* =========================================================================
    NY VOLUME EXHAUSTION (hg-v556) — two-volume test for New York gold sweeps.
    Raid RVOL≥1.5 + reclaim, then takeover RVOL≥1.2 + MSS + VWAP. Same-session
    RVOL baseline (not just last-20). CVD labeled PROXY when not COMEX.
@@ -11298,6 +11844,17 @@ function hgGoldFormingStack(inp){
       skew: inp.skew || null,
       dom: inp.dom || null
     });
+    out.part7 = hgGoldPart7Engine(rows, {
+      newsGate: inp.newsGate || (inp.news ? hgGoldNewsGate(inp.news, inp.now || Date.now()) : null),
+      now: inp.now || Date.now(),
+      usdInr: inp.usdInr || null,
+      kToday: inp.kToday || null,
+      silverRows: inp.silverRows || null,
+      mcxRows: inp.mcxRows || null,
+      priorDay: inp.priorDay || null,
+      gvzMinusRealized: inp.gvzMinusRealized,
+      newsInHold: inp.newsInHold
+    });
     out.smcLiq = hgGoldSmcLiquidity(rows, {});
     out.smcLiq._n = rows.length;
     out.smcHit = hgGoldSmcLiquidityHit(rows, {
@@ -11698,6 +12255,9 @@ function hgGoldFormingStackHtml(stack){
     if (stack.part6){
       h += hgGoldPart6Html(stack.part6);
     }
+    if (stack.part7){
+      h += hgGoldPart7Html(stack.part7);
+    }
     if (stack.smcLiq){
       h += hgGoldSmcLiquidityHtml(stack.smcLiq);
     }
@@ -11943,6 +12503,21 @@ W.hgGoldPart6ApplyEventFilter = hgGoldPart6ApplyEventFilter;
 W.hgGoldPart6ApplyCorrFilter = hgGoldPart6ApplyCorrFilter;
 W.hgGoldPart6Engine = hgGoldPart6Engine;
 W.hgGoldPart6Html = hgGoldPart6Html;
+W.HG_GOLD_P7_SCALP_RR = HG_GOLD_P7_SCALP_RR;
+W.HG_GOLD_P7_GAP_PCT = HG_GOLD_P7_GAP_PCT;
+W.hgGoldPart7McxParity = hgGoldPart7McxParity;
+W.hgGoldPart7LevelInr = hgGoldPart7LevelInr;
+W.hgGoldPart7McxExpress = hgGoldPart7McxExpress;
+W.hgGoldPart7McxGapFade = hgGoldPart7McxGapFade;
+W.hgGoldPart7OptionsExpress = hgGoldPart7OptionsExpress;
+W.hgGoldPart7RatioPair = hgGoldPart7RatioPair;
+W.hgGoldPart7Sizing = hgGoldPart7Sizing;
+W.hgGoldPart7ExitAb = hgGoldPart7ExitAb;
+W.hgGoldPart7Seasonal = hgGoldPart7Seasonal;
+W.hgGoldPart7ScalpModule = hgGoldPart7ScalpModule;
+W.hgGoldPart7ExpressionTree = hgGoldPart7ExpressionTree;
+W.hgGoldPart7Engine = hgGoldPart7Engine;
+W.hgGoldPart7Html = hgGoldPart7Html;
 W.hgGoldVpTargets = hgGoldVpTargets;
 W.hgGoldVpTargetsHtml = hgGoldVpTargetsHtml;
 W.hgGoldVpBundle = hgGoldVpBundle;

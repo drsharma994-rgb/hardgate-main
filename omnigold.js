@@ -323,7 +323,9 @@ terse status, and never launches a first-time scan on a global refresh.
                       /* Part5 S19–S28 live directional (S21/S26 + physical feeds unchecked) */
                       'P5-WYCK','P5-TURT','P5-VWAP','P5-DRIVE','P5-NEWS',
                       /* Part6 S29–S38 live directional (S31/S34 unchecked without skew/DOM) */
-                      'P6-COMP','P6-ZFADE','P6-SMT','P6-FAIL'];
+                      'P6-COMP','P6-ZFADE','P6-SMT','P6-FAIL',
+                      /* Part7 S39–S48 — separated scalp + ratio (S40 MCX-native; options frames) */
+                      'P7-SCALP','P7-RATIO'];
 
   var __og = { ui: null, busy: false, ran: false, snap: null, lastStat: '', src: null, shared: null, btBusy: false,
                lastCardsHtml: null, lastPoolHtml: null, lastMpHtml: null,
@@ -770,6 +772,8 @@ terse status, and never launches a first-time scan on a global refresh.
     d = hgOgPart6ByKind(rows, 'P6-ZFADE', opts); if (d) out.push(d);
     d = hgOgPart6ByKind(rows, 'P6-SMT', opts); if (d) out.push(d);
     d = hgOgPart6ByKind(rows, 'P6-FAIL', opts); if (d) out.push(d);
+    d = hgOgPart7ByKind(rows, 'P7-SCALP', opts); if (d) out.push(d);
+    d = hgOgPart7ByKind(rows, 'P7-RATIO', opts); if (d) out.push(d);
     return out;
   }
 
@@ -1967,6 +1971,62 @@ terse status, and never launches a first-time scan on a global refresh.
     return null;
   }
 
+  /* Part7 S39–S48 — separated 15m scalp + gold/silver ratio.
+     S40 MCX gap is venue-native (not XAUUSD tickets). S41–S48 frames. */
+  var OG_P7_KIND = {
+    p7scalp: 'P7-SCALP',
+    p7ratio: 'P7-RATIO'
+  };
+  function hgOgPart7Hits(rows, opts){
+    var f = gfn('hgGoldPart7Engine');
+    if (!f || !rows || rows.length < 40) return null;
+    opts = opts || {};
+    var eng = null;
+    try {
+      eng = f(rows, {
+        newsGate: opts.newsGate || null,
+        now: opts.nowSec ? opts.nowSec * 1000 : opts.now,
+        usdInr: opts.usdInr || null,
+        kToday: opts.kToday || null,
+        silverRows: opts.silverRows || null,
+        mcxRows: opts.mcxRows || null,
+        priorDay: opts.priorDay || null,
+        gvzMinusRealized: opts.gvzMinusRealized,
+        newsInHold: opts.newsInHold
+      });
+    } catch (e) { return null; }
+    if (!eng || !eng.strategies || !eng.strategies.length) return null;
+    var out = [], i, s, kind, lv, stop, t1, t2;
+    for (i = 0; i < eng.strategies.length; i++){
+      s = eng.strategies[i];
+      if (!s || !s.dir || (s.grade !== 'forming' && s.grade !== 'confirmed')) continue;
+      kind = OG_P7_KIND[s.key];
+      if (!kind) continue;
+      lv = fin(s.level);
+      if (!isFinite(lv) && s.plan) lv = fin(s.plan.entry);
+      if (!isFinite(lv)) continue;
+      stop = (s.plan && isFinite(s.plan.stop)) ? s.plan.stop : NaN;
+      t1 = (s.plan && isFinite(s.plan.t1)) ? s.plan.t1 : NaN;
+      t2 = (s.plan && isFinite(s.plan.t2)) ? s.plan.t2 : NaN;
+      out.push({
+        kind: kind, dir: s.dir, level: lv,
+        stop: stop, t1: t1, t2: t2,
+        part7: s, part7Engine: eng,
+        why: String(s.why || kind)
+      });
+    }
+    return out.length ? out : null;
+  }
+  function hgOgPart7ByKind(rows, wantKind, opts){
+    var hits = hgOgPart7Hits(rows, opts);
+    if (!hits) return null;
+    var i;
+    for (i = 0; i < hits.length; i++){
+      if (hits[i] && hits[i].kind === wantKind) return hits[i];
+    }
+    return null;
+  }
+
   /* ==================== consensus across mechanics ====================
 
      THE DEFECT THIS EXISTS FOR: on 42% of tapes the desk graded a LONG
@@ -2058,6 +2118,8 @@ terse status, and never launches a first-time scan on a global refresh.
     'P6-ZFADE':'REVERSION',
     'P6-SMT':'SWEEP',
     'P6-FAIL':'SWEEP',
+    'P7-SCALP':'FLOW',
+    'P7-RATIO':'INTERMARKET',
     /* An unmitigated order block is an unfilled inefficiency being revisited,
        which is FVG-FILL's idea with a different name for the zone. */
     'OB-RETEST':'IMBALANCE',
@@ -2408,6 +2470,8 @@ terse status, and never launches a first-time scan on a global refresh.
     if (k === 'P6-ZFADE') return 'p6zfade';
     if (k === 'P6-SMT') return 'p6smt';
     if (k === 'P6-FAIL') return 'p6fail';
+    if (k === 'P7-SCALP') return 'p7scalp';
+    if (k === 'P7-RATIO') return 'p7ratio';
     if (k === 'KZ-JUDAS' || k === 'SWEEP-V2' || k === 'POOL-SWEEP'
         || k.indexOf('SWEEP') >= 0)
       return 'sweep';
@@ -8362,7 +8426,9 @@ terse status, and never launches a first-time scan on a global refresh.
           'P6-COMP':         function(r){ return hgOgPart6ByKind(r, 'P6-COMP'); },
           'P6-ZFADE':        function(r){ return hgOgPart6ByKind(r, 'P6-ZFADE'); },
           'P6-SMT':          function(r){ return hgOgPart6ByKind(r, 'P6-SMT'); },
-          'P6-FAIL':         function(r){ return hgOgPart6ByKind(r, 'P6-FAIL'); }
+          'P6-FAIL':         function(r){ return hgOgPart6ByKind(r, 'P6-FAIL'); },
+          'P7-SCALP':        function(r){ return hgOgPart7ByKind(r, 'P7-SCALP'); },
+          'P7-RATIO':        function(r){ return hgOgPart7ByKind(r, 'P7-RATIO'); }
         };
         var k;
         for (k in fns) if (Object.prototype.hasOwnProperty.call(fns, k)){

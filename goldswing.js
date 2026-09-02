@@ -1249,7 +1249,9 @@ var SW_NAME = {
   p6comp:   'S30 SESSION-COMPOSITE PULLBACK',
   p6zfade:  'S33 Z-SCORE MEAN REVERSION',
   p6smt:    'S36 SMT-CONFIRMED SWEEP (vs DXY)',
-  p6fail:   'S37 FAILED-SWEEP CONTINUATION'
+  p6fail:   'S37 FAILED-SWEEP CONTINUATION',
+  p7ratio:  'S43 GOLD/SILVER RATIO PAIR',
+  p7gap:    'S40 MCX OPEN-GAP FADE (MCX-NATIVE)'
 };
 var SW_NEWS_STAMP = 'NEWS WINDOW — expect a fade around the release; swing levels unchanged (size accordingly)';
 
@@ -2058,6 +2060,70 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
         }
       }catch(eP6c){}
     }
+
+    /* 13) Part7 S43 ratio — confirmed-only; p7scalp is SCALP-module only */
+    var p7FnCand = gfn('hgGoldPart7Engine');
+    if (p7FnCand){
+      try{
+        var p7EngCand = p7FnCand(rows4, {
+          newsGate: (microOpts && microOpts.news)
+            ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(microOpts.news, nowMs) : null)
+            : null,
+          now: nowMs,
+          silverRows: microOpts && microOpts.silverRows,
+          usdInr: microOpts && microOpts.usdInr,
+          kToday: microOpts && microOpts.kToday
+        });
+        if (p7EngCand && p7EngCand.strategies && p7EngCand.strategies.length){
+          var p7Live = { p7ratio: 1 };
+          var p7j, p7hit, p7Stop, p7Cand, p7Entry;
+          for (p7j = 0; p7j < p7EngCand.strategies.length; p7j++){
+            p7hit = p7EngCand.strategies[p7j];
+            if (!p7hit || !p7hit.dir || !p7Live[p7hit.key]) continue;
+            if (p7hit.grade !== 'confirmed') continue;
+            if (!isFinite(p7hit.level) && !(p7hit.plan && isFinite(p7hit.plan.entry))) continue;
+            p7Entry = isFinite(p7hit.level) ? p7hit.level
+              : (p7hit.plan && p7hit.plan.entry);
+            p7Stop = (p7hit.plan && isFinite(p7hit.plan.stop)) ? p7hit.plan.stop
+              : (p7hit.dir === 'long' ? p7Entry - 1.5 * a4 : p7Entry + 1.5 * a4);
+            p7Cand = mkCand(p7hit.key, p7hit.dir, p7Stop, p7Stop, undefined,
+              p7hit.why, 'Part7 invalidation — structure break against the setup',
+              { side: p7hit.dir, tag: p7hit.key, label: p7hit.why });
+            if (!p7Cand || p7Cand.dropped){
+              p7Cand = {
+                id: p7hit.key + '|' + p7hit.dir + '|' + Math.round(p7Entry),
+                strategy: SW_NAME[p7hit.key] || p7hit.key,
+                stratKey: p7hit.key, dir: p7hit.dir,
+                entry: p7Entry, pxNow: entry, mark: entry, stop: p7Stop,
+                t1: (p7hit.plan && isFinite(p7hit.plan.t1)) ? p7hit.plan.t1 : NaN,
+                t2: (p7hit.plan && isFinite(p7hit.plan.t2)) ? p7hit.plan.t2 : NaN,
+                rr: NaN, grade: 'B', agree: 2, oppose: 0, atr: a4,
+                reads: { long: p7hit.dir === 'long' ? 2 : 0, short: p7hit.dir === 'short' ? 2 : 0 },
+                venue: venue, sym: sym, session: sessionTxt || 'n/a',
+                why: p7hit.why,
+                invalidates: 'close beyond ' + p7Stop.toFixed(2),
+                stamps: ['PART7 ' + String(p7hit.key).toUpperCase()],
+                demoted: false, notes: []
+              };
+            } else {
+              if (isFinite(p7Entry)) p7Cand.entry = p7Entry;
+              if (p7hit.plan){
+                if (isFinite(p7hit.plan.t1)) p7Cand.t1 = p7hit.plan.t1;
+                if (isFinite(p7hit.plan.t2)) p7Cand.t2 = p7hit.plan.t2;
+                if (isFinite(p7hit.plan.stop)) p7Cand.stop = p7hit.plan.stop;
+              }
+              if (!Array.isArray(p7Cand.stamps)) p7Cand.stamps = [];
+              p7Cand.stamps.push('PART7 ' + String(p7hit.key).toUpperCase());
+            }
+            if (p7EngCand.season && p7EngCand.season.active){
+              if (!Array.isArray(p7Cand.stamps)) p7Cand.stamps = [];
+              p7Cand.stamps.push('S48 SEASONAL');
+            }
+            push(p7Cand);
+          }
+        }
+      }catch(eP7c){}
+    }
   }catch(e){}
   return out;
 }
@@ -2686,6 +2752,25 @@ async function runScan(ui, scanSt){
               if (p6Ev && p6Eng.eventTpl) p6Ev(got[p6si], p6Eng.eventTpl);
               if (p6Corr && p6Eng.corr) p6Corr(got[p6si], p6Eng.corr);
               if (p6Eng.ok && got[p6si].stamps.indexOf('PART6') < 0) got[p6si].stamps.push('PART6');
+            }
+          }
+        }
+        var p7Fn = gfn('hgGoldPart7Engine');
+        if (p7Fn && got.length){
+          var p7Eng = p7Fn(gold.rows4h, {
+            newsGate: newsRaw ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(newsRaw, now) : null) : null,
+            now: now,
+            silverRows: microOpts && microOpts.silverRows,
+            usdInr: microOpts && microOpts.usdInr
+          });
+          if (p7Eng){
+            for (var p7si = 0; p7si < got.length; p7si++){
+              if (!got[p7si]) continue;
+              if (!Array.isArray(got[p7si].stamps)) got[p7si].stamps = [];
+              if (p7Eng.ok && got[p7si].stamps.indexOf('PART7') < 0) got[p7si].stamps.push('PART7');
+              if (p7Eng.season && p7Eng.season.active
+                && got[p7si].stamps.indexOf('S48 SEASONAL') < 0)
+                got[p7si].stamps.push('S48 SEASONAL');
             }
           }
         }
