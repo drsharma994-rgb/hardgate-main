@@ -7711,7 +7711,10 @@ terse status, and never launches a first-time scan on a global refresh.
         rows1d: d1,
         now: Date.now(),
         macro: shared && shared.macro,
-        news: shared && shared.news
+        news: shared && shared.news,
+        silverRows: shared && shared.silverRows,
+        usdInr: shared && shared.usdInr,
+        usdInrTrend: shared && shared.usdInrTrend
       };
       var gpsFn = gfn('goldProState');
       if (gpsFn){ try { inp.goldPro = gpsFn(); } catch (eGp){} }
@@ -8455,7 +8458,14 @@ terse status, and never launches a first-time scan on a global refresh.
         catch (e) { var wf = gfn('hgFwdWarn'); if (wf) { try { wf('omnigold:resolve', e); } catch (eW) {} } }
       }
 
-      var hits = hgOgDetect(rows, { nowSec: shared.nowSec });
+      var hits = hgOgDetect(rows, {
+        nowSec: shared.nowSec,
+        silverRows: shared.silverRows || null,
+        usdInr: shared.usdInr,
+        usdInrTrend: shared.usdInrTrend,
+        newsGate: shared.news ? null : null,
+        accountInr: true
+      });
       /* the anticipation zones, computed once per horizon and handed to the
          ledger so zone-anchor can place every mechanic against real
          structure (best-effort: an absent engine reads UNCHECKED) */
@@ -8481,6 +8491,9 @@ terse status, and never launches a first-time scan on a global refresh.
         rows1d: shared.rows1d || null,
         dxyRows: (shared.macro && (shared.macro.dxyRows || shared.macro.dxyCandles)) || null,
         tnxRows: shared.yieldRows || (shared.macro && (shared.macro.tnxRows || shared.macro.us10yCandles)) || null,
+        silverRows: shared.silverRows || null,
+        usdInr: shared.usdInr,
+        usdInrTrend: shared.usdInrTrend,
         quote: shared.quote || null,
         l2: shared.l2 || null,
         spreadUsd: shared.spreadUsd,
@@ -8496,6 +8509,33 @@ terse status, and never launches a first-time scan on a global refresh.
         extra.ask = extra.ask != null ? extra.ask : shared.ask;
         extra.spreadUsd = extra.spreadUsd != null ? extra.spreadUsd : shared.spreadUsd;
         var cands = hgOgEvaluate(rows, hits, extra, cfg);
+
+        /* Part7 expression stamps (instrument / size / exit / hedge) — frames only. */
+        try{
+          var p7FnOg = gfn('hgGoldPart7Engine');
+          var p7ApplyOg = gfn('hgGoldPart7ApplyExpression');
+          if (p7FnOg && p7ApplyOg && cands && cands.length){
+            var p7EngOg = p7FnOg(rows, {
+              now: shared.nowSec ? shared.nowSec * 1000 : Date.now(),
+              silverRows: shared.silverRows || extra.silverRows,
+              usdInr: shared.usdInr != null ? shared.usdInr : extra.usdInr,
+              usdInrTrend: shared.usdInrTrend || extra.usdInrTrend,
+              scalp: cfg.sessionHard === true,
+              accountInr: true,
+              holdDays: cfg.sessionHard ? 0 : 2,
+              goldDir: (cands[0] && cands[0].dir) || 'long'
+            });
+            if (p7EngOg){
+              for (var p7oi = 0; p7oi < cands.length; p7oi++){
+                if (!cands[p7oi]) continue;
+                if (!Array.isArray(cands[p7oi].stamps)) cands[p7oi].stamps = [];
+                if (p7EngOg.ok && cands[p7oi].stamps.indexOf('PART7') < 0)
+                  cands[p7oi].stamps.push('PART7');
+                p7ApplyOg(cands[p7oi], p7EngOg);
+              }
+            }
+          }
+        }catch(eP7og){}
 
         /* Record every firing that carries a plan — not only tickets. The
            in-sample pool measures the raw mechanic, so the forward pool must
@@ -8651,10 +8691,37 @@ terse status, and never launches a first-time scan on a global refresh.
       .then(function(m){
         shared.macro = m || null;
         shared.yieldRows = (m && m.us10yRows) ? m.us10yRows : null;
+        if (m && isFinite(m.usdInr)){
+          shared.usdInr = m.usdInr;
+          shared.usdInrTrend = m.usdInrTrend || null;
+        }
         shared.nowSec = Date.now() / 1000;
+        /* Part7 silver series — bounded, fail-open */
+        var silverP = Promise.resolve().then(function(){
+          var gs = gfn('getSilverCandles');
+          return gs ? gs('4h', 120) : null;
+        }).catch(function(){ return null; }).then(function(xag){
+          if (xag && xag.rows && xag.rows.length){
+            shared.silverRows = xag.rows;
+            try{
+              var ww = W();
+              if (ww) ww.__hgXagCandles = xag.rows;
+            }catch(eX){}
+          }
+        });
+        var inrP = (!(isFinite(shared.usdInr)) && gfn('getUsdInr'))
+          ? Promise.resolve().then(function(){ return gfn('getUsdInr')(); }).catch(function(){ return null; })
+              .then(function(inr){
+                if (inr && isFinite(inr.value)){
+                  shared.usdInr = inr.value;
+                  shared.usdInrTrend = inr.trend20 || null;
+                }
+              })
+          : Promise.resolve();
         /* Delta OI/funding + Fed FOMC calendar — bounded, fail-open */
         return Promise.race([
           Promise.all([
+            silverP, inrP,
             Promise.resolve().then(function(){
               var lp = gfn('hgGoldLoadDeltaPerp');
               return lp ? lp({ symbol: 'XAUTUSD', resolution: '1h' }) : null;
@@ -8664,11 +8731,12 @@ terse status, and never launches a first-time scan on a global refresh.
               return lf ? lf() : null;
             }).catch(function(){ return null; })
           ]).then(function(pair){
-            __og.perpNative = pair[0] || null;
+            /* pair[0]=silver void, pair[1]=inr void, pair[2]=perp, pair[3]=fed */
+            __og.perpNative = pair[2] || null;
             shared.perpNative = __og.perpNative;
             var mergeF = gfn('hgGoldMergeFedFomc');
-            if (mergeF && pair[1] && pair[1].ok){
-              shared.news = mergeF(shared.news || {}, pair[1]);
+            if (mergeF && pair[3] && pair[3].ok){
+              shared.news = mergeF(shared.news || {}, pair[3]);
             }
           }),
           new Promise(function(r){ setTimeout(r, 8000); })

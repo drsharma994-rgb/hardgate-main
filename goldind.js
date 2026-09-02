@@ -2141,6 +2141,7 @@ function goldScalpSetups(inp){
             if (!Array.isArray(p7Cand.stamps)) p7Cand.stamps = [];
             p7Cand.stamps.push('PART7 ' + String(p7hit.key).toUpperCase());
             if (p7.season && p7.season.active) p7Cand.stamps.push('S48 SEASONAL');
+            hgGoldPart7ApplyExpression(p7Cand, p7);
             push(p7Cand);
           }
         }
@@ -11020,6 +11021,146 @@ function hgGoldPart7ScalpModule(rows15, opts){
   }catch(e){ out.why = 'scalp module error'; return out; }
 }
 
+/** S47 — USDINR-hedged gold swing hygiene (frame only; never a gold call). */
+function hgGoldPart7UsdinrHedge(opts){
+  var out = {
+    ok: false, mode: 'none', hedge: false, why: '', grade: 'frame'
+  };
+  try{
+    opts = opts || {};
+    var hold = +opts.holdDays;
+    if (!(hold >= 2)){
+      out.why = 'S47 idle — hedge only runners held ≥2 days';
+      return out;
+    }
+    var dir = String(opts.goldDir || '').toLowerCase();
+    var against = !!opts.usdinrAgainst;
+    if (!against && opts.usdInrTrend){
+      against = hgGoldPart7UsdinrAgainst(dir, { trend20: opts.usdInrTrend });
+    }
+    if (!against){
+      out.why = 'S47 no currency hedge needed (USDINR not against gold ' + (dir || 'leg') + ')';
+      return out;
+    }
+    out.ok = true;
+    out.hedge = true;
+    out.mode = opts.accountInr ? 'replace-partial-GOLDM' : 'USDINR-short';
+    out.why = 'S47 hedge — gold ' + (dir || '?').toUpperCase()
+      + ' runner ≥' + hold + 'd · USDINR against → ' + out.mode
+      + ' (100% notional; unwind with gold)';
+    return out;
+  }catch(e){ out.why = 'S47 error'; return out; }
+}
+
+/** True when USDINR trend runs against a gold direction for MCX/INR P&L. */
+function hgGoldPart7UsdinrAgainst(goldDir, meta){
+  try{
+    meta = meta || {};
+    if (meta.usdinrAgainst === true) return true;
+    var dir = String(goldDir || '').toLowerCase();
+    var tr = String(meta.trend20 || meta.usdInrTrend || '').toUpperCase();
+    /* INR strengthen (USDINR FALLING) hurts MCX long; INR weaken hurts MCX short. */
+    if (dir === 'long' && tr === 'FALLING') return true;
+    if (dir === 'short' && tr === 'RISING') return true;
+    return false;
+  }catch(e){ return false; }
+}
+
+/**
+ * Resolve Part7 feeds from opts + window caches. Never invents numbers —
+ * missing legs stay null so the engine can mark UNCHECKED honestly.
+ */
+function hgGoldPart7ResolveFeeds(opts){
+  var out = {
+    usdInr: null, usdInrTrend: null, kToday: null,
+    silverRows: null, mcxRows: null, gvzMinusRealized: NaN,
+    accountInr: false, mcxOpen: false, newsInHold: false
+  };
+  try{
+    opts = opts || {};
+    var Wref = (typeof window !== 'undefined') ? window : null;
+    out.usdInr = isFinite(+opts.usdInr) ? +opts.usdInr
+      : (opts.macro && isFinite(+opts.macro.usdInr) ? +opts.macro.usdInr
+        : (Wref && Wref.__hgUsdInr && isFinite(+Wref.__hgUsdInr.value) ? +Wref.__hgUsdInr.value : null));
+    out.usdInrTrend = opts.usdInrTrend
+      || (opts.macro && opts.macro.usdInrTrend)
+      || (Wref && Wref.__hgUsdInr && Wref.__hgUsdInr.trend20)
+      || null;
+    out.kToday = isFinite(+opts.kToday) ? +opts.kToday
+      : (Wref && isFinite(+Wref.__hgMcxK) ? +Wref.__hgMcxK : null);
+    out.silverRows = opts.silverRows || opts.xagCandles
+      || (Wref && (Wref.__hgXagCandles || Wref.__hgSilverRows)) || null;
+    out.mcxRows = opts.mcxRows || (Wref && Wref.__hgMcxRows) || null;
+    out.gvzMinusRealized = isFinite(+opts.gvzMinusRealized) ? +opts.gvzMinusRealized : NaN;
+    out.accountInr = opts.accountInr != null ? !!opts.accountInr : true; /* HARDGATE India desk default */
+    out.mcxOpen = opts.mcxOpen != null ? !!opts.mcxOpen : hgGoldPart7McxSessionOpen(opts.now);
+    out.newsInHold = !!opts.newsInHold;
+    if (opts.usdinrAgainst != null) out.usdinrAgainst = !!opts.usdinrAgainst;
+    else out.usdinrAgainst = false;
+    return out;
+  }catch(e){ return out; }
+}
+
+/** MCX session open flag (09:00–23:30 IST ≈ 03:30–18:00 UTC summer approx). */
+function hgGoldPart7McxSessionOpen(nowMs){
+  try{
+    var ms = isFinite(nowMs) ? __toMs(nowMs) : Date.now();
+    var h = new Date(ms).getUTCHours() + new Date(ms).getUTCMinutes() / 60;
+    /* Conservative: 03:30–18:25 UTC covers IST open→close in DST and std. */
+    return h >= 3.5 && h < 18.5;
+  }catch(e){ return false; }
+}
+
+/**
+ * Stamp expression / sizing / exit / hedge / seasonal onto an existing
+ * candidate. Never invents dir, never upgrades demoted→leader, never
+ * converts XAUUSD entry into INR (S39 stays a note + sizeMult).
+ */
+function hgGoldPart7ApplyExpression(cand, eng){
+  try{
+    if (!cand || !eng) return cand;
+    if (!Array.isArray(cand.stamps)) cand.stamps = [];
+    cand.notes = cand.notes || [];
+    function stamp(s){
+      if (!s) return;
+      if (cand.stamps.indexOf(s) < 0) cand.stamps.push(s);
+    }
+    if (eng.tree && eng.tree.why){
+      stamp('TREE ' + String(eng.tree.mode || 'outright').toUpperCase());
+      if (eng.tree.instrument){
+        cand.expression = eng.tree.instrument;
+        cand.notes.push(eng.tree.why);
+      }
+    }
+    if (eng.mcx && eng.mcx.ok && isFinite(eng.mcx.entry)){
+      stamp('S39 GOLDM');
+      cand.sizeMult = (isFinite(cand.sizeMult) ? cand.sizeMult : 1) * (eng.mcx.sizeMult || 0.8);
+      cand.notes.push(eng.mcx.why);
+      cand.mcxLevels = { entry: eng.mcx.entry, stop: eng.mcx.stop, t1: eng.mcx.t1 };
+    } else if (eng.mcx && eng.mcx.why && /against|prefer GC/i.test(eng.mcx.why)){
+      stamp('S39 PREFER GC');
+    }
+    if (eng.opt && eng.opt.debit){ stamp('S41 DEBIT'); cand.optionMode = 'debit'; }
+    if (eng.opt && eng.opt.credit){
+      stamp('S42 CREDIT');
+      cand.halfSize = true;
+      cand.optionMode = 'credit';
+    }
+    if (eng.sizing && eng.sizing.ok){
+      stamp('S44/S45 SIZE×' + (+eng.sizing.pick).toFixed(2));
+      cand.sizeMult = (isFinite(cand.sizeMult) ? cand.sizeMult : 1) * (eng.sizing.pick || 1);
+      cand.notes.push(eng.sizing.why);
+    }
+    if (eng.exitAb && eng.exitAb.live) stamp('S46 ' + eng.exitAb.live);
+    if (eng.season && eng.season.active) stamp('S48 SEASONAL');
+    if (eng.hedge && eng.hedge.hedge){
+      stamp('S47 HEDGE');
+      cand.notes.push(eng.hedge.why);
+    }
+    return cand;
+  }catch(e){ return cand; }
+}
+
 function hgGoldPart7ExpressionTree(signal, opts){
   var out = { ok: true, instrument: 'GC/MGC', mode: 'outright', why: '' };
   try{
@@ -11033,6 +11174,10 @@ function hgGoldPart7ExpressionTree(signal, opts){
       out.instrument = 'GOLDM'; out.mode = 'mcx'; out.why = 'tree → S39 GOLDM −20% size';
       return out;
     }
+    if (opts.usdinrAgainst && opts.accountInr){
+      out.why = 'tree → GC/MGC outright (USDINR against MCX)';
+      return out;
+    }
     if (opts.overnight){ out.why = 'tree → GC/MGC outright (no MCX overnight gap)'; return out; }
     out.why = 'tree → outright on most liquid venue';
     return out;
@@ -11042,7 +11187,8 @@ function hgGoldPart7ExpressionTree(signal, opts){
 function hgGoldPart7Engine(rows, opts){
   var out = {
     ok: false, scalp: null, gap: null, ratio: null, mcx: null, opt: null,
-    sizing: null, exitAb: null, season: null, tree: null, strategies: [],
+    sizing: null, exitAb: null, season: null, tree: null, hedge: null,
+    feeds: null, strategies: [],
     unchecked: ['S41/S42 options IV', 'S42 credit (needs GVZ)', 'calendar spread'],
     why: ''
   };
@@ -11053,6 +11199,22 @@ function hgGoldPart7Engine(rows, opts){
     if (opts.newsGate && opts.newsGate.lock){
       out.why = 'news lockout — Part7 entries paused';
       return out;
+    }
+
+    var feeds = hgGoldPart7ResolveFeeds(opts);
+    out.feeds = feeds;
+    /* Merge resolved feeds into local opts without inventing when absent. */
+    if (!isFinite(+opts.usdInr) && isFinite(feeds.usdInr)) opts.usdInr = feeds.usdInr;
+    if (!opts.usdInrTrend && feeds.usdInrTrend) opts.usdInrTrend = feeds.usdInrTrend;
+    if (!opts.silverRows && feeds.silverRows) opts.silverRows = feeds.silverRows;
+    if (!opts.mcxRows && feeds.mcxRows) opts.mcxRows = feeds.mcxRows;
+    if (!isFinite(+opts.kToday) && isFinite(feeds.kToday)) opts.kToday = feeds.kToday;
+    if (!isFinite(+opts.gvzMinusRealized) && isFinite(feeds.gvzMinusRealized))
+      opts.gvzMinusRealized = feeds.gvzMinusRealized;
+    if (opts.accountInr == null) opts.accountInr = feeds.accountInr;
+    if (opts.mcxOpen == null) opts.mcxOpen = feeds.mcxOpen;
+    if (opts.usdinrAgainst == null && feeds.usdInrTrend){
+      opts.usdinrAgainst = hgGoldPart7UsdinrAgainst(opts.goldDir || 'long', feeds);
     }
 
     out.scalp = hgGoldPart7ScalpModule(rows, {
@@ -11078,12 +11240,26 @@ function hgGoldPart7Engine(rows, opts){
     if (!isFinite(+opts.usdInr)) out.unchecked.push('S39 USDINR');
     out.opt = hgGoldPart7OptionsExpress(
       { entry: last.c, R: NaN, atr: NaN },
-      { gvzMinusRealized: opts.gvzMinusRealized, newsInHold: opts.newsInHold, scalp: false }
+      { gvzMinusRealized: opts.gvzMinusRealized, newsInHold: opts.newsInHold || feeds.newsInHold, scalp: !!opts.scalp }
     );
     out.sizing = hgGoldPart7Sizing(opts);
     out.exitAb = hgGoldPart7ExitAb({ t1: last.c });
     out.season = hgGoldPart7Seasonal(opts.now);
-    out.tree = hgGoldPart7ExpressionTree({}, opts);
+    out.tree = hgGoldPart7ExpressionTree({}, {
+      newsInHold: opts.newsInHold || feeds.newsInHold,
+      gvzMinusRealized: opts.gvzMinusRealized,
+      accountInr: opts.accountInr,
+      mcxOpen: opts.mcxOpen,
+      usdinrAgainst: opts.usdinrAgainst,
+      overnight: opts.overnight
+    });
+    out.hedge = hgGoldPart7UsdinrHedge({
+      holdDays: opts.holdDays,
+      goldDir: opts.goldDir || 'long',
+      usdinrAgainst: opts.usdinrAgainst,
+      usdInrTrend: opts.usdInrTrend || feeds.usdInrTrend,
+      accountInr: opts.accountInr
+    });
 
     function pushS(key, dir, level, grade, why, plan){
       out.strategies.push({
@@ -11112,6 +11288,7 @@ function hgGoldPart7Engine(rows, opts){
     if (out.sizing) pushS('p7size', null, NaN, 'frame', out.sizing.why);
     if (out.exitAb) pushS('p7exit', null, NaN, 'frame', out.exitAb.why);
     if (out.season && out.season.ok) pushS('p7season', null, NaN, 'frame', out.season.why);
+    if (out.hedge && out.hedge.why) pushS('p7hedge', null, NaN, 'frame', out.hedge.why);
     if (parity && parity.why) pushS('p7mcx', null, parity.theoretical, 'frame', 'parity · ' + parity.why);
     if (out.tree) pushS('p7opt', null, NaN, 'frame', out.tree.why);
 
@@ -12526,6 +12703,11 @@ W.hgGoldPart7ExitAb = hgGoldPart7ExitAb;
 W.hgGoldPart7Seasonal = hgGoldPart7Seasonal;
 W.hgGoldPart7ScalpModule = hgGoldPart7ScalpModule;
 W.hgGoldPart7ExpressionTree = hgGoldPart7ExpressionTree;
+W.hgGoldPart7UsdinrHedge = hgGoldPart7UsdinrHedge;
+W.hgGoldPart7UsdinrAgainst = hgGoldPart7UsdinrAgainst;
+W.hgGoldPart7ResolveFeeds = hgGoldPart7ResolveFeeds;
+W.hgGoldPart7McxSessionOpen = hgGoldPart7McxSessionOpen;
+W.hgGoldPart7ApplyExpression = hgGoldPart7ApplyExpression;
 W.hgGoldPart7Engine = hgGoldPart7Engine;
 W.hgGoldPart7Html = hgGoldPart7Html;
 W.hgGoldVpTargets = hgGoldVpTargets;

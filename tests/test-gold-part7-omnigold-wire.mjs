@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* HARDGATE — Part7 S39–S48 OMNIGOLD + SCALP/SWING mint wire (hg-v572) */
+/* HARDGATE — Part7 S39–S48 OMNIGOLD + SCALP/SWING mint wire (hg-v573) */
 import fs from 'fs';
 import path from 'path';
 import vm from 'vm';
@@ -41,6 +41,9 @@ console.log('\n== OMNIGOLD wiring ==');
   ok(/'P7-SCALP':\s*function/.test(og) && /'P7-RATIO':\s*function/.test(og), 'backtest map');
   ok(/k === 'P7-SCALP'/.test(og) && /return 'p7scalp'/.test(og), 'inst key p7scalp');
   ok(/k === 'P7-RATIO'/.test(og) && /return 'p7ratio'/.test(og), 'inst key p7ratio');
+  ok(/shared\.silverRows|silverRows:\s*shared/.test(og), 'OMNIGOLD shared silverRows');
+  ok(/getUsdInr|shared\.usdInr/.test(og), 'OMNIGOLD usdInr feed');
+  ok(/hgGoldPart7ApplyExpression/.test(og), 'OMNIGOLD applies expression');
 }
 
 console.log('\n== SWING mint parity (confirmed-only ratio; no scalp module) ==');
@@ -52,6 +55,8 @@ console.log('\n== SWING mint parity (confirmed-only ratio; no scalp module) ==')
   ok(/p7hit\.grade !== 'confirmed'/.test(gs), 'SWING confirmed-only gate');
   ok(/stamps\.push\('PART7/.test(gs), 'PART7 stamp on mint');
   ok(/reads:\s*\{\s*long:/.test(gs), 'soft-mint includes reads');
+  ok(/getSilverCandles|silverRows/.test(gs), 'SWING loads silver feed');
+  ok(/hgGoldPart7ApplyExpression/.test(gs), 'SWING applies expression');
 }
 
 console.log('\n== SCALP mint ==');
@@ -64,6 +69,11 @@ console.log('\n== SCALP mint ==');
   ok(/unchecked:[\s\S]*S40 MCX gap/.test(gi) || /S40 MCX unread/.test(gi), 'S40 unchecked path');
   ok(/out\.part7 = hgGoldPart7Engine/.test(gi), 'forming stack stamps part7');
   ok(/hgGoldPart7Html\(stack\.part7\)/.test(gi), 'forming stack HTML');
+  const sc = fs.readFileSync(root + 'goldscalp.js', 'utf8');
+  ok(/hgGoldPart7ApplyExpression/.test(gi), 'engine ApplyExpression');
+  ok(/getSilverCandles|silverRows/.test(sc), 'SCALP loads silver feed');
+  ok(/getUsdInr|usdInr/.test(sc), 'SCALP loads USDINR');
+  ok(/hgGoldPart7ApplyExpression/.test(sc), 'SCALP applies expression on ranked');
 }
 
 console.log('\n== runtime detect smoke ==');
@@ -75,6 +85,8 @@ console.log('\n== runtime detect smoke ==');
   }
   const eng = W.hgGoldPart7Engine(rows, { now: rows[rows.length - 1].t * 1000 });
   ok(eng && (eng.ok || eng.why), 'engine runs on flat tape');
+  ok(typeof W.hgGoldPart7ApplyExpression === 'function', 'ApplyExpression live');
+  ok(typeof W.hgGoldPart7UsdinrHedge === 'function', 'S47 hedge live');
   vm.runInThisContext(fs.readFileSync(root + 'omnigold.js', 'utf8'), { filename: 'omnigold.js' });
   ok(typeof W.hgOgDetect === 'function', 'hgOgDetect loaded');
   const hits = W.hgOgDetect(rows) || [];
@@ -88,11 +100,11 @@ console.log('\n== stamp ==');
   const sw = fs.readFileSync(root + 'sw.js', 'utf8');
   const html = fs.readFileSync(root + 'index.html', 'utf8');
   const m = stamp.match(/version:\s*'([^']+)'/);
-  ok(m && m[1] === 'hg-v572', 'build-stamp version (got ' + (m && m[1]) + ')');
-  ok(sw.indexOf("HG_CACHE = 'hg-v572'") >= 0, 'sw.js matches stamp');
-  ok(/goldind\.js\?v=572/.test(html), 'index goldind ?v=');
-  ok(/goldswing\.js\?v=572/.test(html), 'index goldswing ?v=');
-  ok(/omnigold\.js\?v=572/.test(html), 'index omnigold ?v=');
+  ok(m && m[1] === 'hg-v573', 'build-stamp version (got ' + (m && m[1]) + ')');
+  ok(sw.indexOf("HG_CACHE = 'hg-v573'") >= 0, 'sw.js matches stamp');
+  ok(/goldind\.js\?v=573/.test(html), 'index goldind ?v=');
+  ok(/goldswing\.js\?v=573/.test(html), 'index goldswing ?v=');
+  ok(/omnigold\.js\?v=573/.test(html), 'index omnigold ?v=');
 }
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');

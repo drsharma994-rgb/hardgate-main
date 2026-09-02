@@ -79,8 +79,8 @@ console.log('\n== stamp ==');
   const stamp = fs.readFileSync(root + 'build-stamp.js', 'utf8');
   const sw = fs.readFileSync(root + 'sw.js', 'utf8');
   const m = stamp.match(/version:\s*'([^']+)'/);
-  ok(m && m[1] === 'hg-v572', 'build-stamp hg-v572 (got ' + (m && m[1]) + ')');
-  ok(sw.indexOf("HG_CACHE = 'hg-v572'") >= 0, 'sw.js matches');
+  ok(m && m[1] === 'hg-v573', 'build-stamp hg-v573 (got ' + (m && m[1]) + ')');
+  ok(sw.indexOf("HG_CACHE = 'hg-v573'") >= 0, 'sw.js matches');
 }
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');

@@ -49,6 +49,33 @@ console.log('\n== MCX parity + expression frames ==');
   ok(!blocked.ok, 'S39 blocked when USDINR against');
 }
 
+console.log('\n== S47 hedge + expression apply ==');
+{
+  const idle = W.hgGoldPart7UsdinrHedge({ holdDays: 1, goldDir: 'long', usdinrAgainst: true });
+  ok(/≥2|idle/i.test(idle.why || ''), 'S47 idle under 2d');
+  const hedge = W.hgGoldPart7UsdinrHedge({
+    holdDays: 3, goldDir: 'long', usdinrAgainst: true, accountInr: true
+  });
+  ok(hedge.ok && hedge.hedge && /S47/.test(hedge.why), 'S47 hedge fires for multi-day');
+  ok(W.hgGoldPart7UsdinrAgainst('long', { trend20: 'FALLING' }) === true, 'USDINR FALLING against long');
+  ok(W.hgGoldPart7UsdinrAgainst('long', { trend20: 'RISING' }) === false, 'USDINR RISING not against long');
+  const feeds = W.hgGoldPart7ResolveFeeds({ usdInr: 83.2, usdInrTrend: 'FALLING' });
+  ok(feeds.usdInr === 83.2, 'resolve feeds usdInr');
+  const eng = W.hgGoldPart7Engine(bars(80, 2300), {
+    now: Date.now(), usdInr: 83.5, kToday: 1.01, accountInr: true, mcxOpen: true
+  });
+  const cand = { dir: 'long', stamps: [], notes: [], demoted: false };
+  W.hgGoldPart7ApplyExpression(cand, eng);
+  ok(cand.stamps.some(s => /TREE|S39|S46|S44/i.test(s)), 'expression stamps applied (' + cand.stamps.join(',') + ')');
+  ok(cand.dir === 'long', 'expression never flips dir');
+  ok(!cand.demoted, 'expression does not demote by itself');
+  const engH = W.hgGoldPart7Engine(bars(80, 2300), {
+    now: Date.now(), holdDays: 3, goldDir: 'long', usdinrAgainst: true, usdInr: 83
+  });
+  ok((engH.strategies || []).some(s => s.key === 'p7hedge'), 'engine pushes p7hedge frame');
+  ok(!(engH.strategies || []).some(s => s.grade === 'frame' && s.dir), 'frames still never invent dir');
+}
+
 console.log('\n== sizing / exit / seasonal ==');
 {
   const sz = W.hgGoldPart7Sizing({ equity: 10000, R: 10, daily1s: 8, pointValue: 1 });

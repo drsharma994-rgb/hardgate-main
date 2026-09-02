@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v572',
-  pack: 'GOLD SCALP populate MTF demote',
-  built: '2026-09-02T20:00:00Z',
-  note: 'GOLD SCALP: MTF bias/conflict demotes (hardReject:false) so demoted cards still populate; Part5–7 mint uses inp. Sacred contracts unchanged.'
+  version: 'hg-v573',
+  pack: 'Part7 complete feeds+expression',
+  built: '2026-09-02T22:30:00Z',
+  note: 'Part7 complete: USDINR/silver feeds, S47 hedge, expression stamps on SCALP/SWING/OMNIGOLD. Sacred: frames no dir, S40 MCX-native.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

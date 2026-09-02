@@ -79,6 +79,40 @@ function fmtNum(n, dp){
   return (n === null || n === undefined || !isFinite(n)) ? 'n/a' : (+n).toFixed(dp);
 }
 
+/* USDINR spot from Frankfurter (1 USD = x INR). Cached 6h. Used by Part7
+   S39 MCX expression / S47 hedge — never invents a rate. */
+async function getUsdInr(){
+  try{
+    const hit = __macroCacheGet('usdinr', DXY_CACHE_MS); if (hit !== undefined) return hit;
+    const latest = await __macroFetchJson(FRANKFURTER_API + '/v1/latest?base=USD&symbols=INR');
+    if (!latest || !latest.rates || !(+latest.rates.INR > 0)) return null;
+    const value = +latest.rates.INR;
+    let trend20 = 'FLAT', change20Pct = null;
+    const toD = new Date(latest.date + 'T00:00:00Z');
+    if (!isNaN(toD)){
+      const fromIso = new Date(toD.getTime() - 31 * 86400000).toISOString().slice(0, 10);
+      const range = await __macroFetchJson(FRANKFURTER_API + '/v1/' + fromIso + '..' + latest.date
+        + '?base=USD&symbols=INR');
+      if (range && range.rates){
+        const dates = Object.keys(range.rates).sort();
+        if (dates.length >= 2){
+          const first = +range.rates[dates[0]].INR;
+          const lastR = +range.rates[dates[dates.length - 1]].INR;
+          if (first > 0 && lastR > 0){
+            change20Pct = (lastR / first - 1) * 100;
+            trend20 = change20Pct > 0.3 ? 'RISING' : (change20Pct < -0.3 ? 'FALLING' : 'FLAT');
+          }
+        }
+      }
+    }
+    const out = { value: value, date: latest.date, trend20: trend20, change20Pct: change20Pct, source: 'frankfurter' };
+    try{
+      if (typeof window !== 'undefined') window.__hgUsdInr = out;
+    }catch(eW){}
+    return __macroCachePut('usdinr', out);
+  }catch(e){ return null; }
+}
+
 /* ICE DXY: 50.14348112 × EURUSD^-0.576 × USDJPY^0.136 × GBPUSD^-0.119
    × USDCAD^0.091 × USDSEK^0.042 × USDCHF^0.036
    Frankfurter rates are USD-based (1 USD = x CCY), so EURUSD = 1/rates.EUR etc. */
@@ -649,6 +683,17 @@ async function getGoldMacro(){
       }catch(e){}
     }
 
+    // USDINR for Part7 MCX expression / hedge (Frankfurter). Nullable.
+    let usdInr = null, usdInrTrend = null, usdInrChange20Pct = null;
+    try{
+      const inr = await getUsdInr();
+      if (inr && isFinite(inr.value)){
+        usdInr = inr.value;
+        usdInrTrend = inr.trend20 || null;
+        usdInrChange20Pct = inr.change20Pct;
+      }
+    }catch(eInr){}
+
     // Gold for the ratio: candle-chain last close (XAUUSDT -> PAXG -> TD -> Yahoo),
     // else gold-api.com XAU spot.
     let goldPx = null;
@@ -704,6 +749,9 @@ async function getGoldMacro(){
       realYieldTrend: realYield ? realYield.trend20 : null,
       realYieldChange20Pct: realYield ? realYield.change20Pct : null,
       silver: silver,
+      usdInr: usdInr,
+      usdInrTrend: usdInrTrend,
+      usdInrChange20Pct: usdInrChange20Pct,
       goldPx: goldPx,
       goldSilverRatio: goldSilverRatio,
       realRateHint: realRateHint,
@@ -714,7 +762,8 @@ async function getGoldMacro(){
   }catch(e){
     return { dxy: null, dxyOfficial: null, tnx: null, tnxTrend: null, tnxChange20Pct: null,
              tnxSource: null, realYield10Y: null, realYieldTrend: null, realYieldChange20Pct: null,
-             silver: null, goldPx: null, goldSilverRatio: null, realRateHint: 'NEUTRAL',
+             silver: null, usdInr: null, usdInrTrend: null, usdInrChange20Pct: null,
+             goldPx: null, goldSilverRatio: null, realRateHint: 'NEUTRAL',
              realRateMeasured: null, realRateSource: 'hint' };
   }
 }
@@ -745,5 +794,6 @@ if (typeof window !== 'undefined'){
   window.macroGoldPlan = macroGoldPlan;
   window.getGoldMacroCached = getGoldMacroCached;
   window.getSilverCandles = getSilverCandles;
+  window.getUsdInr = getUsdInr;
   window.getUST10YCandles = getUST10YCandles;
 }

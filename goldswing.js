@@ -2119,6 +2119,8 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
               if (!Array.isArray(p7Cand.stamps)) p7Cand.stamps = [];
               p7Cand.stamps.push('S48 SEASONAL');
             }
+            var p7ApplyMint = gfn('hgGoldPart7ApplyExpression');
+            if (p7ApplyMint) p7ApplyMint(p7Cand, p7EngCand);
             push(p7Cand);
           }
         }
@@ -2546,12 +2548,43 @@ async function runScan(ui, scanSt){
 
     var microOpts = {};
     if (ctx.macro && ctx.macro.us10yCandles) microOpts.us10yCandles = ctx.macro.us10yCandles;
+    if (ctx.macro && ctx.macro.dxyRows) microOpts.dxyRows = ctx.macro.dxyRows;
+    if (ctx.macro && isFinite(ctx.macro.usdInr)){
+      microOpts.usdInr = ctx.macro.usdInr;
+      microOpts.usdInrTrend = ctx.macro.usdInrTrend || null;
+    }
     if (newsRaw) microOpts.news = newsRaw;
     if (ctx.perpNative && ctx.perpNative.ok){
       microOpts.perpNative = ctx.perpNative;
       microOpts.oiRows = ctx.perpNative.oi;
       microOpts.fundingRows = ctx.perpNative.funding;
     }
+    /* Part7 feeds — silver + USDINR (bounded, fail-open). */
+    try{
+      var waitsP7s = [];
+      if (typeof getSilverCandles === 'function'){
+        waitsP7s.push(getSilverCandles('4h', 120).then(function(xag){
+          if (xag && xag.rows && xag.rows.length){
+            microOpts.silverRows = xag.rows;
+            try{ if (typeof W !== 'undefined' && W) W.__hgXagCandles = xag.rows; }catch(eC){}
+          }
+        }).catch(function(){}));
+      }
+      if (!(isFinite(microOpts.usdInr)) && typeof getUsdInr === 'function'){
+        waitsP7s.push(getUsdInr().then(function(inr){
+          if (inr && isFinite(inr.value)){
+            microOpts.usdInr = inr.value;
+            microOpts.usdInrTrend = inr.trend20 || null;
+          }
+        }).catch(function(){}));
+      }
+      if (waitsP7s.length){
+        await Promise.race([
+          Promise.all(waitsP7s),
+          new Promise(function(r){ setTimeout(r, 6000); })
+        ]);
+      }
+    }catch(eP7sf){}
     if (typeof W !== 'undefined' && W){
       if (W.__hgGoldTickBuffer) microOpts.tickBuffer = W.__hgGoldTickBuffer;
       if (W.__hgGoldL2Book) microOpts.l2OrderBook = W.__hgGoldL2Book;
@@ -2756,19 +2789,27 @@ async function runScan(ui, scanSt){
           }
         }
         var p7Fn = gfn('hgGoldPart7Engine');
+        var p7Apply = gfn('hgGoldPart7ApplyExpression');
         if (p7Fn && got.length){
           var p7Eng = p7Fn(gold.rows4h, {
             newsGate: newsRaw ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(newsRaw, now) : null) : null,
             now: now,
             silverRows: microOpts && microOpts.silverRows,
-            usdInr: microOpts && microOpts.usdInr
+            usdInr: microOpts && microOpts.usdInr,
+            usdInrTrend: microOpts && microOpts.usdInrTrend,
+            kToday: microOpts && microOpts.kToday,
+            mcxRows: microOpts && microOpts.mcxRows,
+            holdDays: 2,
+            goldDir: (got[0] && got[0].dir) || 'long',
+            accountInr: true
           });
           if (p7Eng){
             for (var p7si = 0; p7si < got.length; p7si++){
               if (!got[p7si]) continue;
               if (!Array.isArray(got[p7si].stamps)) got[p7si].stamps = [];
               if (p7Eng.ok && got[p7si].stamps.indexOf('PART7') < 0) got[p7si].stamps.push('PART7');
-              if (p7Eng.season && p7Eng.season.active
+              if (p7Apply) p7Apply(got[p7si], p7Eng);
+              else if (p7Eng.season && p7Eng.season.active
                 && got[p7si].stamps.indexOf('S48 SEASONAL') < 0)
                 got[p7si].stamps.push('S48 SEASONAL');
             }
