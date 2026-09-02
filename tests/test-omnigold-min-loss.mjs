@@ -177,7 +177,7 @@ console.log('\n== 5. gold weekend is a veto when the scan is inside the closure 
   const none = gate('weekend-exposure', { dir: 'long', kind: 'MMOVE' }, {});
   ok(none && none.pass === null, 'with no clock the gate is UNCHECKED, never a quiet pass');
 
-  ok(/hgOgDetect\(rows,\s*\{\s*nowSec:\s*shared\.nowSec\s*\}\)/.test(GOLD),
+  ok(/hgOgDetect\(rows,\s*\{[\s\S]*?nowSec:\s*shared\.nowSec/.test(GOLD),
      'detect uses the scan clock so Asia/prior-day boxes are not dated off a stale last bar');
 }
 

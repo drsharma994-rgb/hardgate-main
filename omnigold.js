@@ -8463,7 +8463,6 @@ terse status, and never launches a first-time scan on a global refresh.
         silverRows: shared.silverRows || null,
         usdInr: shared.usdInr,
         usdInrTrend: shared.usdInrTrend,
-        newsGate: shared.news ? null : null,
         accountInr: true
       });
       /* the anticipation zones, computed once per horizon and handed to the
