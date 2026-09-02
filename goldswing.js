@@ -1240,7 +1240,12 @@ var SW_NAME = {
   vpbook:   'VP PLAYBOOK AMD (ENTER/WAIT)',
   p4nr7:    'S12 NR7 / RANGE CONTRACTION BREAKOUT',
   p4adrx:   'S14 ADR EXHAUSTION FADE (PART4)',
-  p4laf:    'S17 LOOK-ABOVE-AND-FAIL'
+  p4laf:    'S17 LOOK-ABOVE-AND-FAIL',
+  p5wyck:   'S19 WYCKOFF SPRING/UPTHRUST TEST',
+  p5turt:   'S20 TURTLE-SOUP FAILED EXTREME',
+  p5vwap:   'S22 SESSION VWAP 2σ REVERSION',
+  p5drive:  'S24 THREE-DRIVE EXHAUSTION',
+  p5news:   'S27 POST-NEWS SPIKE FADE'
 };
 var SW_NEWS_STAMP = 'NEWS WINDOW — expect a fade around the release; swing levels unchanged (size accordingly)';
 
@@ -1923,6 +1928,68 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
         }
       }catch(eP4c){}
     }
+
+    /* 11) Part5 S19 / S20 / S22 / S24 / S27 — confirmed-only mint (forming panel) */
+    var p5FnCand = gfn('hgGoldPart5Engine');
+    var p5RegFilt = gfn('hgGoldPart5ApplyRegimeFilter');
+    var p5BiasFilt = gfn('hgGoldPart5ApplyWeeklyBiasFilter');
+    if (p5FnCand){
+      try{
+        var p5EngCand = p5FnCand(rows4, {
+          newsGate: (microOpts && microOpts.news)
+            ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(microOpts.news, nowMs) : null)
+            : null,
+          now: nowMs,
+          physical: microOpts && microOpts.physical
+        });
+        if (p5EngCand && p5EngCand.strategies && p5EngCand.strategies.length){
+          var p5Live = { p5wyck: 1, p5turt: 1, p5vwap: 1, p5drive: 1, p5news: 1 };
+          var p5j, p5hit, p5Stop, p5Cand, p5Entry;
+          for (p5j = 0; p5j < p5EngCand.strategies.length; p5j++){
+            p5hit = p5EngCand.strategies[p5j];
+            if (!p5hit || !p5hit.dir || !p5Live[p5hit.key]) continue;
+            if (p5hit.grade !== 'confirmed') continue;
+            if (!isFinite(p5hit.level) && !(p5hit.plan && isFinite(p5hit.plan.entry))) continue;
+            p5Entry = isFinite(p5hit.level) ? p5hit.level
+              : (p5hit.plan && p5hit.plan.entry);
+            p5Stop = (p5hit.plan && isFinite(p5hit.plan.stop)) ? p5hit.plan.stop
+              : (p5hit.dir === 'long' ? p5Entry - 1.5 * a4 : p5Entry + 1.5 * a4);
+            p5Cand = mkCand(p5hit.key, p5hit.dir, p5Stop, p5Stop, undefined,
+              p5hit.why, 'Part5 invalidation — structure break against the setup',
+              { side: p5hit.dir, tag: p5hit.key, label: p5hit.why });
+            if (!p5Cand || p5Cand.dropped){
+              p5Cand = {
+                id: p5hit.key + '|' + p5hit.dir + '|' + Math.round(p5Entry),
+                strategy: SW_NAME[p5hit.key] || p5hit.key,
+                stratKey: p5hit.key, dir: p5hit.dir,
+                entry: p5Entry, pxNow: entry, mark: entry, stop: p5Stop,
+                t1: (p5hit.plan && isFinite(p5hit.plan.t1)) ? p5hit.plan.t1 : NaN,
+                t2: (p5hit.plan && isFinite(p5hit.plan.t2)) ? p5hit.plan.t2 : NaN,
+                rr: NaN, grade: 'B', agree: 2, oppose: 0, atr: a4,
+                reads: { long: p5hit.dir === 'long' ? 2 : 0, short: p5hit.dir === 'short' ? 2 : 0 },
+                venue: venue, sym: sym, session: sessionTxt || 'n/a',
+                why: p5hit.why,
+                invalidates: 'close beyond ' + p5Stop.toFixed(2),
+                stamps: ['PART5 ' + String(p5hit.key).toUpperCase()],
+                demoted: false, notes: []
+              };
+            } else {
+              if (isFinite(p5Entry)) p5Cand.entry = p5Entry;
+              if (p5hit.plan){
+                if (isFinite(p5hit.plan.t1)) p5Cand.t1 = p5hit.plan.t1;
+                if (isFinite(p5hit.plan.t2)) p5Cand.t2 = p5hit.plan.t2;
+                if (isFinite(p5hit.plan.stop)) p5Cand.stop = p5hit.plan.stop;
+              }
+              if (!Array.isArray(p5Cand.stamps)) p5Cand.stamps = [];
+              p5Cand.stamps.push('PART5 ' + String(p5hit.key).toUpperCase());
+            }
+            if (p5RegFilt && p5EngCand.ker) p5RegFilt(p5Cand, p5EngCand.ker);
+            if (p5BiasFilt && p5EngCand.bias) p5BiasFilt(p5Cand, p5EngCand.bias);
+            push(p5Cand);
+          }
+        }
+      }catch(eP5c){}
+    }
   }catch(e){}
   return out;
 }
@@ -2515,6 +2582,24 @@ async function runScan(ui, scanSt){
               if (!Array.isArray(got[p4si].stamps)) got[p4si].stamps = [];
               if (p4Filt && p4Eng.pd) p4Filt(got[p4si], p4Eng.pd);
               if (p4Eng.ok && got[p4si].stamps.indexOf('PART4') < 0) got[p4si].stamps.push('PART4');
+            }
+          }
+        }
+        var p5Fn = gfn('hgGoldPart5Engine');
+        var p5Reg = gfn('hgGoldPart5ApplyRegimeFilter');
+        var p5Bias = gfn('hgGoldPart5ApplyWeeklyBiasFilter');
+        if (p5Fn && got.length){
+          var p5Eng = p5Fn(gold.rows4h, {
+            newsGate: newsRaw ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(newsRaw, now) : null) : null,
+            now: now
+          });
+          if (p5Eng){
+            for (var p5si = 0; p5si < got.length; p5si++){
+              if (!got[p5si]) continue;
+              if (!Array.isArray(got[p5si].stamps)) got[p5si].stamps = [];
+              if (p5Reg && p5Eng.ker) p5Reg(got[p5si], p5Eng.ker);
+              if (p5Bias && p5Eng.bias) p5Bias(got[p5si], p5Eng.bias);
+              if (p5Eng.ok && got[p5si].stamps.indexOf('PART5') < 0) got[p5si].stamps.push('PART5');
             }
           }
         }

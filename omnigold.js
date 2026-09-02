@@ -319,7 +319,9 @@ terse status, and never launches a first-time scan on a global refresh.
                       'STRUCT-BOS','SWEEP-V2','OB-RETEST','OU-REVERT',
                       'MFI-SQUAT','DI-CROSS','FVG-HVN','VP-PLAYBOOK',
                       /* Part4 S9–S18 live directional forming hits (S13/S16 unchecked) */
-                      'P4-NR7','P4-ADRX','P4-LAF'];
+                      'P4-NR7','P4-ADRX','P4-LAF',
+                      /* Part5 S19–S28 live directional (S21/S26 + physical feeds unchecked) */
+                      'P5-WYCK','P5-TURT','P5-VWAP','P5-DRIVE','P5-NEWS'];
 
   var __og = { ui: null, busy: false, ran: false, snap: null, lastStat: '', src: null, shared: null, btBusy: false,
                lastCardsHtml: null, lastPoolHtml: null, lastMpHtml: null,
@@ -757,6 +759,11 @@ terse status, and never launches a first-time scan on a global refresh.
     d = hgOgPart4ByKind(rows, 'P4-NR7', opts);  if (d) out.push(d);
     d = hgOgPart4ByKind(rows, 'P4-ADRX', opts); if (d) out.push(d);
     d = hgOgPart4ByKind(rows, 'P4-LAF', opts);  if (d) out.push(d);
+    d = hgOgPart5ByKind(rows, 'P5-WYCK', opts); if (d) out.push(d);
+    d = hgOgPart5ByKind(rows, 'P5-TURT', opts); if (d) out.push(d);
+    d = hgOgPart5ByKind(rows, 'P5-VWAP', opts); if (d) out.push(d);
+    d = hgOgPart5ByKind(rows, 'P5-DRIVE', opts); if (d) out.push(d);
+    d = hgOgPart5ByKind(rows, 'P5-NEWS', opts); if (d) out.push(d);
     return out;
   }
 
@@ -1844,6 +1851,60 @@ terse status, and never launches a first-time scan on a global refresh.
     return null;
   }
 
+  /* Part5 S19–S28 — Wyckoff / turtle / VWAP fade / three-drive / news spike.
+     S23 KER + S28 weekly bias are filters (not tickets). S21/S26 unchecked
+     without GVZ / options OI. Physical feeds unchecked without opts.physical. */
+  var OG_P5_KIND = {
+    p5wyck: 'P5-WYCK',
+    p5turt: 'P5-TURT',
+    p5vwap: 'P5-VWAP',
+    p5drive: 'P5-DRIVE',
+    p5news: 'P5-NEWS'
+  };
+  function hgOgPart5Hits(rows, opts){
+    var f = gfn('hgGoldPart5Engine');
+    if (!f || !rows || rows.length < 40) return null;
+    opts = opts || {};
+    var eng = null;
+    try {
+      eng = f(rows, {
+        newsGate: opts.newsGate || null,
+        now: opts.nowSec ? opts.nowSec * 1000 : opts.now,
+        physical: opts.physical || null
+      });
+    } catch (e) { return null; }
+    if (!eng || !eng.strategies || !eng.strategies.length) return null;
+    var out = [], i, s, kind, lv, stop, t1, t2;
+    for (i = 0; i < eng.strategies.length; i++){
+      s = eng.strategies[i];
+      if (!s || !s.dir || (s.grade !== 'forming' && s.grade !== 'confirmed')) continue;
+      kind = OG_P5_KIND[s.key];
+      if (!kind) continue;
+      lv = fin(s.level);
+      if (!isFinite(lv) && s.plan) lv = fin(s.plan.entry);
+      if (!isFinite(lv)) continue;
+      stop = (s.plan && isFinite(s.plan.stop)) ? s.plan.stop : NaN;
+      t1 = (s.plan && isFinite(s.plan.t1)) ? s.plan.t1 : NaN;
+      t2 = (s.plan && isFinite(s.plan.t2)) ? s.plan.t2 : NaN;
+      out.push({
+        kind: kind, dir: s.dir, level: lv,
+        stop: stop, t1: t1, t2: t2,
+        part5: s, part5Engine: eng,
+        why: String(s.why || kind)
+      });
+    }
+    return out.length ? out : null;
+  }
+  function hgOgPart5ByKind(rows, wantKind, opts){
+    var hits = hgOgPart5Hits(rows, opts);
+    if (!hits) return null;
+    var i;
+    for (i = 0; i < hits.length; i++){
+      if (hits[i] && hits[i].kind === wantKind) return hits[i];
+    }
+    return null;
+  }
+
   /* ==================== consensus across mechanics ====================
 
      THE DEFECT THIS EXISTS FOR: on 42% of tapes the desk graded a LONG
@@ -1926,6 +1987,11 @@ terse status, and never launches a first-time scan on a global refresh.
     'P4-NR7':'TREND',
     'P4-ADRX':'REVERSION',
     'P4-LAF':'SWEEP',
+    'P5-WYCK':'STRUCTURE',
+    'P5-TURT':'SWEEP',
+    'P5-VWAP':'FLOW',
+    'P5-DRIVE':'STRUCTURE',
+    'P5-NEWS':'SWEEP',
     /* An unmitigated order block is an unfilled inefficiency being revisited,
        which is FVG-FILL's idea with a different name for the zone. */
     'OB-RETEST':'IMBALANCE',
@@ -2267,6 +2333,11 @@ terse status, and never launches a first-time scan on a global refresh.
     if (k === 'P4-NR7') return 'p4nr7';
     if (k === 'P4-ADRX') return 'p4adrx';
     if (k === 'P4-LAF') return 'p4laf';
+    if (k === 'P5-WYCK') return 'p5wyck';
+    if (k === 'P5-TURT') return 'p5turt';
+    if (k === 'P5-VWAP') return 'p5vwap';
+    if (k === 'P5-DRIVE') return 'p5drive';
+    if (k === 'P5-NEWS') return 'p5news';
     if (k === 'KZ-JUDAS' || k === 'SWEEP-V2' || k === 'POOL-SWEEP'
         || k.indexOf('SWEEP') >= 0)
       return 'sweep';
@@ -8212,7 +8283,12 @@ terse status, and never launches a first-time scan on a global refresh.
           'VP-PLAYBOOK':     function(r){ return hgOgVpPlaybook(r); },
           'P4-NR7':          function(r){ return hgOgPart4ByKind(r, 'P4-NR7'); },
           'P4-ADRX':         function(r){ return hgOgPart4ByKind(r, 'P4-ADRX'); },
-          'P4-LAF':          function(r){ return hgOgPart4ByKind(r, 'P4-LAF'); }
+          'P4-LAF':          function(r){ return hgOgPart4ByKind(r, 'P4-LAF'); },
+          'P5-WYCK':         function(r){ return hgOgPart5ByKind(r, 'P5-WYCK'); },
+          'P5-TURT':         function(r){ return hgOgPart5ByKind(r, 'P5-TURT'); },
+          'P5-VWAP':         function(r){ return hgOgPart5ByKind(r, 'P5-VWAP'); },
+          'P5-DRIVE':        function(r){ return hgOgPart5ByKind(r, 'P5-DRIVE'); },
+          'P5-NEWS':         function(r){ return hgOgPart5ByKind(r, 'P5-NEWS'); }
         };
         var k;
         for (k in fns) if (Object.prototype.hasOwnProperty.call(fns, k)){

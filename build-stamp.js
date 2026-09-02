@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v568',
-  pack: 'Part4 OMNIGOLD + SWING mint',
-  built: '2026-09-02T16:00:00Z',
-  note: 'Part4 S12/S14/S17 form live setups on OMNIGOLD (P4-NR7/P4-ADRX/P4-LAF), GOLD SCALP (existing mint), GOLD SWING (mint parity). S9 stays P/D filter; S13 silver + S16 footprint unchecked. Sacred contracts unchanged.'
+  version: 'hg-v569',
+  pack: 'Part5 S19–S28 physical/regime',
+  built: '2026-09-02T18:00:00Z',
+  note: 'Part5 S19–S28: Wyckoff/turtle/VWAP fade/three-drive/news spike live on OMNIGOLD + GOLD SCALP/SWING; S23 KER + S28 weekly bias as filters; S21/S26 + physical feeds unchecked without data. Sacred contracts unchanged.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
