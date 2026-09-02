@@ -485,6 +485,18 @@
       var stampOp = gfn('hgOmniStampEdge');
       if (stampOp) stampOp(cand, { livePx: livePx });
     } catch (eOpEdge) {}
+    /* Crypto Master Catalog: permission/size/lead only. Never flip dir.
+       Unknown kinds (OP-ARMED / OP-REJECT) fail-open as S0. */
+    try {
+      var catApply = gfn('hgCryptoCatalogApplyVerdict');
+      if (catApply){
+        catApply(cand);
+        if (cand.catalogExclude){
+          cand.formationOk = false;
+          cand.formationReason = 'catalog ' + (cand.catalogVerdict || 'exclude');
+        }
+      }
+    } catch (eCat) {}
     return cand;
   }
 
@@ -1607,11 +1619,22 @@
     return 'OP-' + (String(c && c.dir || '').toLowerCase() === 'short' ? 'HIGH-REJECT' : 'LOW-REJECT');
   }
 
+  function opPaintCatalog(ui){
+    try{
+      if (!ui || !ui.catalog) return;
+      var htmlFn = gfn('hgCryptoCatalogHtml');
+      var engFn = gfn('hgCryptoCatalogEngine');
+      if (!htmlFn || !engFn) return;
+      ui.catalog.innerHTML = htmlFn(engFn([], {}));
+    }catch(e){}
+  }
+
   function opPaintVerdict(ui){
     try{
       var fn = gfn('hgFwdDeskVerdictHtml');
       if (ui && ui.verdict && fn) ui.verdict.innerHTML = fn('OMNIPRESENT') || '';
     }catch(e){}
+    opPaintCatalog(ui);
   }
 
   function opShowToggleHtml(){
@@ -1817,6 +1840,7 @@
          the cards. The strip fills from the live pool at mount and again
          after every scan. */
       + '<div id="opVerdict" style="margin-top:8px"></div>'
+      + '<div id="opCatalog" style="margin-top:8px"></div>'
       + '<div id="opShowMode" style="margin-top:8px"></div>'
       + '<div id="opSide"></div>'
       + '<div class="cards" id="opCards" style="margin-top:12px"></div>'
@@ -1824,7 +1848,8 @@
       + '</div>';
     var ui = { btn: el.querySelector('#opRun'), stat: el.querySelector('#opStat'), warn: el.querySelector('#opWarn'),
                side: el.querySelector('#opSide'), cards: el.querySelector('#opCards'), x20: el.querySelector('#opX20'),
-               verdict: el.querySelector('#opVerdict'), showMode: el.querySelector('#opShowMode') };
+               verdict: el.querySelector('#opVerdict'), catalog: el.querySelector('#opCatalog'),
+               showMode: el.querySelector('#opShowMode') };
     if (!ui.btn || !ui.stat || !ui.cards) return;
     __op.ui = ui;
     /* Remount must not look like a first visit — restore the last completed scan. */

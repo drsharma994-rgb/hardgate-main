@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v577',
-  pack: 'Gold Master Catalog v1.0 — map, one vote/family',
-  built: '2026-09-02T17:45:00Z',
-  note: 'Master Catalog v1.0 on SCALP+SWING+OMNIGOLD: CORE/OPTIONAL/REDUNDANT/NON-FALSIFIABLE map. One vote per family. Never invent ENTER.'
+  version: 'hg-v578',
+  pack: 'Crypto Master Catalog v1.0 — OMNIROUTE+OMNIPRESENT',
+  built: '2026-09-02T18:45:00Z',
+  note: 'Crypto Master Catalog v1.0 on OMNIROUTE+OMNIPRESENT: 118 indicators, 85 strategies, live Cascade/S19/S20. One vote per family. Never invent ENTER. CME gap RETIRED.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

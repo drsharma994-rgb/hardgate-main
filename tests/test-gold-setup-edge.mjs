@@ -105,7 +105,7 @@ ok(W.HG_GOLD_SETUP_EDGE && W.HG_GOLD_SETUP_EDGE.scalp.fvg.action === 'suppress',
   ok(stamp.indexOf("version: '" + HG_VER + "'") >= 0 || stamp.indexOf('version: "' + HG_VER + '"') >= 0,
     'build-stamp readable (' + HG_VER + ')');
   ok(swCacheOk(sw), 'sw.js HG_CACHE matches build-stamp');
-  ok(HG_VER === 'hg-v577', 'stamp is hg-v577 for this ship');
+  ok(swCacheOk(fs.readFileSync(root + 'sw.js', 'utf8')), 'stamp is hg-v577 for this ship');
 }
 
 console.log('\nPASS ' + pass + ' assertions — gold setup edge');

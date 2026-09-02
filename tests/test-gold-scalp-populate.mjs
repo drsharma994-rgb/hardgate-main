@@ -6,6 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import vm from 'vm';
 import { fileURLToPath } from 'url';
+import { HG_VER, swCacheOk } from './helpers/build-version.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..') + '/';
@@ -79,8 +80,8 @@ console.log('\n== stamp ==');
   const stamp = fs.readFileSync(root + 'build-stamp.js', 'utf8');
   const sw = fs.readFileSync(root + 'sw.js', 'utf8');
   const m = stamp.match(/version:\s*'([^']+)'/);
-  ok(m && m[1] === 'hg-v577', 'build-stamp hg-v577 (got ' + (m && m[1]) + ')');
-  ok(sw.indexOf("HG_CACHE = 'hg-v577'") >= 0, 'sw.js matches');
+  ok(m && m[1] === HG_VER, 'build-stamp hg-v577 (got ' + (m && m[1]) + ')');
+  ok(swCacheOk(sw), 'sw.js matches');
 }
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');

@@ -2177,6 +2177,22 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     formed.formationOk = true;
     if (fm.formationScore != null) formed.formationScore = fm.formationScore;
     hgOmniStampEdge({ plan: formed, dir: formed.dir }, extra);
+    /* Crypto Master Catalog: permission/size/lead only. Never flip dir.
+       RETIRED / REDUNDANT / NON_FALSIFIABLE / AVOID refuse formation. */
+    var catApply = (w && typeof w.hgCryptoCatalogApplyVerdict === 'function')
+      ? w.hgCryptoCatalogApplyVerdict : null;
+    if (catApply){
+      try {
+        catApply(formed);
+        if (formed.catalogExclude){
+          plan.formationOk = false;
+          plan.formationReason = 'catalog ' + (formed.catalogVerdict || 'exclude');
+          plan.catalogExclude = true;
+          plan.catalogVerdict = formed.catalogVerdict;
+          return { plan: plan, ok: false, reason: plan.formationReason };
+        }
+      } catch (eCat) {}
+    }
     return { plan: formed, ok: true };
   }
 
@@ -10047,12 +10063,24 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     try{ return w.hgFwdPaidKinds('OMNIROUTE', MIN_RR) || []; }catch(e){ return []; }
   }
 
+  function hgOmniPaintCatalog(ui){
+    try{
+      if (!ui || !ui.catalog) return;
+      var w = (typeof window !== 'undefined') ? window : null;
+      var htmlFn = w && typeof w.hgCryptoCatalogHtml === 'function' ? w.hgCryptoCatalogHtml : null;
+      var engFn = w && typeof w.hgCryptoCatalogEngine === 'function' ? w.hgCryptoCatalogEngine : null;
+      if (!htmlFn || !engFn) return;
+      ui.catalog.innerHTML = htmlFn(engFn([], {}));
+    }catch(e){}
+  }
+
   function hgOmniPaintVerdict(ui){
     try{
       var w = (typeof window !== 'undefined') ? window : null;
       if (ui && ui.verdict && w && typeof w.hgFwdDeskVerdictHtml === 'function')
         ui.verdict.innerHTML = w.hgFwdDeskVerdictHtml('OMNIROUTE') || '';
     }catch(e){}
+    hgOmniPaintCatalog(ui);
   }
 
   function hgOmniShowToggleHtml(){
@@ -10195,6 +10223,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
          the setups. The strip fills from the live pool at mount and again
          after every scan. */
       + '<div id="omniVerdict" style="margin-top:8px"></div>'
+      + '<div id="omniCatalog" style="margin-top:8px"></div>'
       + '<div id="omniShowMode" style="margin-top:8px"></div>'
       + '<div id="omniSide"></div>'
       + '<div id="omniMp" style="margin-top:12px"></div>'
@@ -10230,7 +10259,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     var ui = {
       btn: el.querySelector('#omniRun'), stat: el.querySelector('#omniStat'),
       warn: el.querySelector('#omniWarn'), side: el.querySelector('#omniSide'), cards: el.querySelector('#omniCards'),
-      verdict: el.querySelector('#omniVerdict'), showMode: el.querySelector('#omniShowMode'),
+      verdict: el.querySelector('#omniVerdict'), catalog: el.querySelector('#omniCatalog'),
+      showMode: el.querySelector('#omniShowMode'),
       mp: el.querySelector('#omniMp'),
       apex: el.querySelector('#omniApex'),
       x20: el.querySelector('#omni20x'),

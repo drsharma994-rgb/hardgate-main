@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import vm from 'vm';
 import { fileURLToPath } from 'url';
+import { HG_VER, swCacheOk } from './helpers/build-version.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..') + '/';
@@ -64,8 +65,8 @@ console.log('\n== stamp ==');
   const sw = fs.readFileSync(root + 'sw.js', 'utf8');
   const html = fs.readFileSync(root + 'index.html', 'utf8');
   const m = stamp.match(/version:\s*'([^']+)'/);
-  ok(m && m[1] === 'hg-v577', 'stamp (got ' + (m && m[1]) + ')');
-  ok(sw.indexOf("HG_CACHE = 'hg-v577'") >= 0, 'sw cache');
+  ok(m && m[1] === HG_VER, 'stamp (got ' + (m && m[1]) + ')');
+  ok(swCacheOk(sw), 'sw cache');
   ok(/goldind\.js\?v=577/.test(html) && /omnigold\.js\?v=577/.test(html), 'index ?v=577');
 }
 
