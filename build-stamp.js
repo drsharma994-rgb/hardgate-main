@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v558',
-  pack: 'VP triple profiles + auction targets',
-  built: '2026-09-02T02:45:00Z',
-  note: 'Session/weekly/anchored VP bundle, naked POC, failed-auction/value-breakout/V2V scenarios, profile stops 0.15–0.25×ATR, dashboard SESSION/WEEKLY/LIQUIDITY/CONFIRMATION/TARGETS. CONFIRMED at MSS+1.5R. Thin-venue note. Sacred contracts unchanged.'
+  version: 'hg-v559',
+  pack: 'Gold core confluence score',
+  built: '2026-09-02T03:00:00Z',
+  note: '100-pt gold confluence (HTF25/loc20/mom15/vol10/flow10/macro10/trig10). Tiers A85/GOOD75/WATCH65. COT weekly caution only. Wired into goldRankSetups + forming panel. Sacred contracts unchanged.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

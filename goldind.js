@@ -2510,6 +2510,266 @@ function gdRr(v){
   return (typeof n === 'number' && isFinite(n)) ? n : NaN;
 }
 
+/* =========================================================================
+   GOLD CONFLUENCE SCORE (hg-v559) — 100-pt core stack, not an indicator pile.
+   HTF structure 25 · Location 20 · Momentum 15 · Vol regime 10 ·
+   Volume/OF 10 · Macro 10 · Entry trigger 10.
+   Tiers: A 85–100 · GOOD 75–84 · WATCH 65–74 · NO TRADE <65.
+   COT is weekly sentiment only (lagged) — never a live entry trigger.
+========================================================================= */
+var HG_GOLD_CONF_A = 85;
+var HG_GOLD_CONF_GOOD = 75;
+var HG_GOLD_CONF_WATCH = 65;
+
+function hgGoldConfluenceTier(score){
+  if (!(isFinite(score))) return 'NO_TRADE';
+  if (score >= HG_GOLD_CONF_A) return 'A';
+  if (score >= HG_GOLD_CONF_GOOD) return 'GOOD';
+  if (score >= HG_GOLD_CONF_WATCH) return 'WATCH';
+  return 'NO_TRADE';
+}
+
+/**
+ * Score one gold candidate against the core confluence stack.
+ * ctx may include: rows15m/rows4h/rows1h, macro, news, cot, adx, vwap, vprof, regime.
+ */
+function hgGoldConfluenceScore(cand, ctx){
+  var out = {
+    ok: false, score: 0, tier: 'NO_TRADE', alertOk: false, parts: {},
+    why: '', tools: [], cotNote: 'COT is weekly CFTC positioning (lagged) — risk filter only, not an entry'
+  };
+  try{
+    cand = cand || {};
+    ctx = ctx || {};
+    var dir = (cand.dir === 'short') ? 'short' : ((cand.dir === 'long') ? 'long' : null);
+    if (!dir){ out.why = 'need long/short direction'; return out; }
+
+    var p = { htf: 0, location: 0, momentum: 0, volRegime: 0, volume: 0, macro: 0, trigger: 0 };
+    var tools = [];
+
+    /* --- HTF structure (25) --- */
+    var rows4h = __rows(ctx.rows4h);
+    var rows1h = __rows(ctx.rows1h);
+    var rows = __rows(ctx.rows15m || ctx.rows);
+    var mstruct = ctx.mstruct || (rows4h && rows4h.length >= 30 ? goldMarketStructure(rows4h) : null);
+    var rb4 = ctx.rb4 || (rows4h && rows4h.length ? goldRibbon(rows4h) : null);
+    var trendOk = false;
+    if (mstruct && mstruct.trend){
+      if ((dir === 'long' && /bull/i.test(mstruct.trend)) || (dir === 'short' && /bear/i.test(mstruct.trend))){
+        p.htf += 12; trendOk = true; tools.push('structure ' + mstruct.trend);
+      } else if (mstruct.trend === 'neutral'){
+        p.htf += 4;
+      }
+    }
+    if (rb4 && rb4.mode){
+      var rbBull = rb4.mode === 'BULL' || (rb4.above50 === true && rb4.above200 === true)
+        || (isFinite(rb4.e50) && isFinite(rb4.e200) && rb4.e50 > rb4.e200 && rb4.above50);
+      var rbBear = rb4.mode === 'BEAR' || (rb4.above50 === false && rb4.above200 === false)
+        || (isFinite(rb4.e50) && isFinite(rb4.e200) && rb4.e50 < rb4.e200 && rb4.above50 === false);
+      if ((dir === 'long' && rbBull) || (dir === 'short' && rbBear)){
+        p.htf += 8; tools.push('EMA50/200 bias');
+      } else if (rb4.sellOnly && dir === 'long'){
+        p.htf = Math.max(0, p.htf - 4);
+      } else if (rb4.mode === 'MIXED' && ((dir === 'long' && rb4.above50) || (dir === 'short' && rb4.above50 === false))){
+        p.htf += 4; tools.push('EMA50 bias');
+      }
+    }
+    if (cand.agree >= 2) p.htf += 5;
+    else if (cand.agree >= 1) p.htf += 2;
+    p.htf = Math.min(25, p.htf);
+
+    /* --- Location (20) — VWAP, S/R, VP, Fib overlap --- */
+    var vw = ctx.vwap || (rows ? goldVWAP(rows) : null);
+    if (vw && isFinite(vw.vwap) && isFinite(cand.entry)){
+      var aboveVw = cand.entry >= vw.vwap;
+      if ((dir === 'long' && aboveVw) || (dir === 'short' && !aboveVw)){
+        p.location += 7; tools.push('VWAP align');
+      } else p.location += 2;
+    }
+    var key = cand.stratKey || '';
+    if (/sweep|liqsweep|nyexh|ob|asian|pdraid|eqhi|eqlo|hvn|vwap|fvg/i.test(key)){
+      p.location += 7; tools.push('S/R / liquidity location');
+    } else p.location += 2;
+    if (cand.vpTargets && cand.vpTargets.ok){
+      p.location += cand.vpTargets.confirmed ? 6 : 3;
+      tools.push('VP targets');
+    } else if (ctx.vprof && isFinite(ctx.vprof.pocPrice)){
+      p.location += 2;
+    }
+    p.location = Math.min(20, p.location);
+
+    /* --- Momentum (15) — EMA align, RSI regime, MACD --- */
+    var rb = ctx.rb || (rows ? goldRibbon(rows) : null);
+    if (rb && rb.mode){
+      var mBull = /bull|up|buy/i.test(rb.mode);
+      var mBear = /bear|down|sell/i.test(rb.mode);
+      if ((dir === 'long' && mBull) || (dir === 'short' && mBear)){
+        p.momentum += 6; tools.push('EMA ribbon');
+      } else p.momentum += 1;
+    }
+    var rsiRows = rows || rows1h;
+    if (rsiRows && typeof _rsi === 'function'){
+      try{
+        var rs = _rsi(rsiRows.map(function(r){ return r.c; }), (key === 'stochrsi' || /scalp/i.test(cand.tf || '')) ? 5 : 14);
+        var rv = rs && rs.length ? rs[rs.length - 1] : NaN;
+        if (isFinite(rv)){
+          if ((dir === 'long' && rv >= 50 && rv < 75) || (dir === 'short' && rv <= 50 && rv > 25)){
+            p.momentum += 5; tools.push('RSI regime');
+          } else if ((dir === 'long' && rv >= 40) || (dir === 'short' && rv <= 60)){
+            p.momentum += 2;
+          }
+        }
+      }catch(_r){}
+    }
+    /* MACD zero-line direction if available via goldScalpEval / ctx */
+    if (ctx.macd){
+      var md = ctx.macd;
+      if ((dir === 'long' && md.hist > 0) || (dir === 'short' && md.hist < 0)){
+        p.momentum += 4; tools.push('MACD');
+      }
+    } else if (cand.agree >= 2){
+      p.momentum += 2;
+    }
+    p.momentum = Math.min(15, p.momentum);
+
+    /* --- Volatility regime (10) — ADX trend vs chop --- */
+    var adx = ctx.adx || (rows ? goldADX(rows) : null);
+    var adxV = adx && isFinite(adx.adx) ? adx.adx : (adx && isFinite(adx.value) ? adx.value : NaN);
+    var mrevKeys = { vwap:1, vwapband:1, adrfade:1, fvg:1, sweep:1, liqsweep:1, nyexh:1 };
+    var contKeys = { ribbon:1, bosalign:1, openrange:1, asian:1 };
+    if (isFinite(adxV)){
+      tools.push('ADX ' + adxV.toFixed(0));
+      if (adxV >= 20 && contKeys[key]) p.volRegime += 10;
+      else if (adxV >= 20 && !mrevKeys[key]) p.volRegime += 8;
+      else if (adxV < 15 && mrevKeys[key]) p.volRegime += 10; /* range strategies */
+      else if (adxV < 15 && contKeys[key]) p.volRegime += 2; /* trend strat in chop */
+      else p.volRegime += 5;
+    } else {
+      p.volRegime += 5; /* unread — neutral */
+    }
+    p.volRegime = Math.min(10, p.volRegime);
+
+    /* --- Volume / order flow (10) --- */
+    if (cand.sweepScore >= 75 || cand.nyExhScore >= 75) p.volume += 8;
+    else if (cand.sweepScore >= 65 || cand.nyExhScore >= 65) p.volume += 5;
+    else if (/sweep|liqsweep|nyexh|oitrap/i.test(key)) p.volume += 4;
+    if (cand.vpTargets && cand.vpTargets.confirmed) p.volume += 2;
+    if (ctx.rvol && ctx.rvol >= 1.25) p.volume += 2;
+    p.volume = Math.min(10, p.volume);
+    if (p.volume > 0) tools.push('volume/participation');
+
+    /* --- Macro (10) — DXY / real yields / news / COT caution --- */
+    var macro = ctx.macro || null;
+    var newsLock = !!(ctx.newsGate && ctx.newsGate.lock) || !!(ctx.news && ctx.news.caution);
+    if (newsLock){
+      p.macro = 0; tools.push('news lockout');
+    } else {
+      p.macro += 4; /* no lockout baseline */
+      var hint = macro && macro.realRateHint;
+      if (hint === 'TAILWIND' || hint === 'HEADWIND'){
+        var favors = (hint === 'TAILWIND') ? 'long' : 'short';
+        p.macro += (dir === favors) ? 4 : 0;
+        tools.push('real-yield ' + hint.toLowerCase());
+      } else {
+        p.macro += 2; /* unchecked */
+      }
+      var cot = ctx.cot || (typeof window !== 'undefined' ? window.__hgGoldCot : null);
+      if (cot && cot.crowding){
+        if ((cot.crowding === 'SPEC CROWDED LONG' && dir === 'long')
+            || (cot.crowding === 'SPEC CROWDED SHORT' && dir === 'short')){
+          p.macro = Math.max(0, p.macro - 3); /* weekly caution — not an entry */
+          tools.push('COT crowded (caution)');
+        } else {
+          p.macro += 1;
+        }
+      }
+    }
+    p.macro = Math.min(10, p.macro);
+
+    /* --- Entry trigger (10) --- */
+    if (/sweep|liqsweep|nyexh/i.test(key) && (cand.confirmed || cand.sweepTier === 'alert' || cand.nyExhTier === 'alert'))
+      p.trigger += 10;
+    else if (/sweep|liqsweep|nyexh|ob|fvg|openrange|asian|bosalign/i.test(key))
+      p.trigger += 7;
+    else if (/ribbon|vwap|stochrsi|hvn/i.test(key))
+      p.trigger += 5;
+    else p.trigger += 3;
+    if (cand.demoted) p.trigger = Math.max(0, p.trigger - 3);
+    p.trigger = Math.min(10, p.trigger);
+
+    out.parts = p;
+    out.tools = tools;
+    out.score = Math.max(0, Math.min(100,
+      p.htf + p.location + p.momentum + p.volRegime + p.volume + p.macro + p.trigger));
+    out.tier = hgGoldConfluenceTier(out.score);
+    out.alertOk = out.score >= HG_GOLD_CONF_GOOD && out.tier !== 'NO_TRADE' && !newsLock;
+    out.ok = true;
+    out.why = 'CONF ' + out.score + '/' + out.tier
+      + ' · HTF ' + p.htf + ' · loc ' + p.location + ' · mom ' + p.momentum
+      + ' · vol ' + p.volRegime + ' · flow ' + p.volume + ' · macro ' + p.macro
+      + ' · trig ' + p.trigger;
+    if (out.alertOk) out.why += ' · ALERT OK';
+    else if (out.tier === 'WATCH') out.why += ' · watchlist only';
+    else if (out.tier === 'NO_TRADE') out.why += ' · below trade bar';
+    return out;
+  }catch(e){ out.why = 'confluence score error'; return out; }
+}
+
+function hgGoldConfluenceHtml(sc){
+  try{
+    if (!sc || !sc.ok) return '';
+    var h = '<div class="note" data-hg-gold-conf="1" style="margin-top:8px">';
+    h += '<b>GOLD CONFLUENCE</b> · ' + (isFinite(sc.score) ? sc.score : '—') + '/100 · '
+      + String(sc.tier || '').replace(/_/g, ' ');
+    if (sc.alertOk) h += ' · <b>ALERT</b>';
+    if (sc.parts){
+      h += '<div class="dim" style="margin-top:2px">HTF ' + (sc.parts.htf || 0)
+        + ' · loc ' + (sc.parts.location || 0)
+        + ' · mom ' + (sc.parts.momentum || 0)
+        + ' · vol ' + (sc.parts.volRegime || 0)
+        + ' · flow ' + (sc.parts.volume || 0)
+        + ' · macro ' + (sc.parts.macro || 0)
+        + ' · trig ' + (sc.parts.trigger || 0) + '</div>';
+    }
+    if (sc.tools && sc.tools.length){
+      h += '<div class="dim" style="margin-top:2px">core: '
+        + sc.tools.slice(0, 6).map(function(t){ return String(t).replace(/[<>&]/g, ''); }).join(' · ')
+        + '</div>';
+    }
+    h += '<div class="dim" style="margin-top:2px">' + String(sc.cotNote || '').replace(/[<>&]/g, '') + '</div>';
+    if (sc.why) h += '<div class="dim" style="margin-top:2px">' + String(sc.why).replace(/[<>&]/g, '') + '</div>';
+    h += '</div>';
+    return h;
+  }catch(e){ return ''; }
+}
+
+/**
+ * Apply confluence score onto a candidate (mutates). Stamps tiers.
+ * Does NOT hard-demote — NO_TRADE only blocks alerts (confAlertOk=false).
+ * Existing quality-gate demotions remain authoritative for MOST PROBABLE.
+ */
+function hgGoldApplyConfluence(cand, ctx){
+  try{
+    if (!cand) return cand;
+    var sc = hgGoldConfluenceScore(cand, ctx);
+    cand.confScore = sc.score;
+    cand.confTier = sc.tier;
+    cand.confAlertOk = !!sc.alertOk;
+    cand.confluenceScore = sc;
+    if (!Array.isArray(cand.stamps)) cand.stamps = [];
+    var stamp = 'CONF ' + sc.score + '/' + sc.tier;
+    if (cand.stamps.indexOf(stamp) < 0) cand.stamps.push(stamp);
+    if (sc.tier === 'NO_TRADE'){
+      if (cand.stamps.indexOf('CONF NO TRADE') < 0) cand.stamps.push('CONF NO TRADE');
+    } else if (sc.tier === 'WATCH'){
+      if (cand.stamps.indexOf('CONF WATCH') < 0) cand.stamps.push('CONF WATCH');
+    } else if ((sc.tier === 'A' || sc.tier === 'GOOD') && sc.alertOk){
+      if (cand.stamps.indexOf('CONF ALERT') < 0) cand.stamps.push('CONF ALERT');
+    }
+    return cand;
+  }catch(e){ return cand; }
+}
+
 function goldRankSetups(cands, ctx){
   var out = { ranked: [], best: null, rejected: [] };
   try{
@@ -2738,6 +2998,23 @@ function goldRankSetups(cands, ctx){
           window.hgSetupSolidityApply(rc, { asset: 'gold', tally: tally, grade: rc.grade });
         }
       }catch(eSol){}
+      try{
+        hgGoldApplyConfluence(rc, {
+          rows15m: ctx.rows15m || ctx.rows, rows4h: ctx.rows4h, rows1h: ctx.rows1h,
+          macro: macro, news: news, newsGate: ctx.newsGate,
+          cot: ctx.cot || (typeof window !== 'undefined' ? window.__hgGoldCot : null),
+          vwap: ctx.vwap, vprof: ctx.vprof, adx: ctx.adx, rb: ctx.rb, rb4: ctx.rb4,
+          mstruct: ctx.mstruct, rvol: ctx.rvol, macd: ctx.macd
+        });
+        if (rc.confluenceScore && rc.confluenceScore.ok){
+          parts.push({
+            label: 'core confluence ' + rc.confScore + '/' + rc.confTier
+              + (rc.confAlertOk ? ' · alert ok' : ''),
+            pts: 0, leg: 'confluence'
+          });
+          rc.tallyParts = parts;
+        }
+      }catch(eConf){}
       ranked.push(rc);
     }
     var gOrd = { A: 0, B: 1, C: 2 };
@@ -2751,6 +3028,9 @@ function goldRankSetups(cands, ctx){
       var sx = isFinite(x.solidityScore) ? x.solidityScore : 0;
       var sy = isFinite(y.solidityScore) ? y.solidityScore : 0;
       if (sy !== sx) return sy - sx;
+      var cx = isFinite(x.confScore) ? x.confScore : 0;
+      var cy = isFinite(y.confScore) ? y.confScore : 0;
+      if (cy !== cx) return cy - cx;
       var kx = isFinite(x.killzoneWeight) ? x.killzoneWeight : 0;
       var ky = isFinite(y.killzoneWeight) ? y.killzoneWeight : 0;
       if (ky !== kx) return ky - kx;
@@ -7256,6 +7536,38 @@ function hgGoldFormingStack(inp){
     if (out.nyExhaustion && out.nyExhaustion.score >= HG_GOLD_NY_WATCH){
       out.note = (out.note ? out.note + ' · ' : '') + 'ny-exh ' + out.nyExhaustion.score + '/' + out.nyExhaustion.tier;
     }
+
+    /* Core confluence score for the lead forming strategy */
+    try{
+      var leadCand = null;
+      if (out.strategies && out.strategies.length){
+        leadCand = {
+          dir: out.strategies[0].dir,
+          stratKey: (out.strategies[0].key || '').replace(/-/g, ''),
+          entry: rows[rows.length - 1].c,
+          agree: 2,
+          confirmed: out.strategies[0].grade === 'confirmed',
+          sweepScore: out.sweepEngine && out.sweepEngine.score,
+          nyExhScore: out.nyExhaustion && out.nyExhaustion.score,
+          vpTargets: out.vpTargets
+        };
+        if (/liq.?sweep/i.test(out.strategies[0].key || '')) leadCand.stratKey = 'liqsweep';
+        if (/ny.?exh/i.test(out.strategies[0].key || '')) leadCand.stratKey = 'nyexh';
+      }
+      if (leadCand && leadCand.dir){
+        out.confluence = hgGoldConfluenceScore(leadCand, {
+          rows15m: rows, rows4h: __rows(inp.rows4h), macro: inp.macro,
+          newsGate: inp.newsGate || (inp.news ? hgGoldNewsGate(inp.news, inp.now || Date.now()) : null),
+          cot: inp.cot || (typeof window !== 'undefined' ? window.__hgGoldCot : null),
+          vprof: out.vprof, regime: out.regime
+        });
+        if (out.confluence && out.confluence.ok){
+          out.note = (out.note ? out.note + ' · ' : '')
+            + 'conf ' + out.confluence.score + '/' + out.confluence.tier;
+        }
+      }
+    }catch(_cf){}
+
     return out;
   }catch(e){
     out.note = 'forming stack error';
@@ -7292,6 +7604,9 @@ function hgGoldFormingStackHtml(stack){
     }
     if (stack.vpTargets && typeof hgGoldVpTargetsHtml === 'function'){
       h += hgGoldVpTargetsHtml(stack.vpTargets);
+    }
+    if (stack.confluence && typeof hgGoldConfluenceHtml === 'function'){
+      h += hgGoldConfluenceHtml(stack.confluence);
     }
     if (stack.note) h += '<div class="dim" style="margin-top:4px">' + String(stack.note).replace(/[<>&]/g, '') + '</div>';
     var i, s;
@@ -7440,6 +7755,13 @@ W.hgGoldVpBundle = hgGoldVpBundle;
 W.hgGoldVpAuction = hgGoldVpAuction;
 W.hgGoldVpStop = hgGoldVpStop;
 W.hgGoldVpSlice = hgGoldVpSlice;
+W.HG_GOLD_CONF_A = HG_GOLD_CONF_A;
+W.HG_GOLD_CONF_GOOD = HG_GOLD_CONF_GOOD;
+W.HG_GOLD_CONF_WATCH = HG_GOLD_CONF_WATCH;
+W.hgGoldConfluenceTier = hgGoldConfluenceTier;
+W.hgGoldConfluenceScore = hgGoldConfluenceScore;
+W.hgGoldConfluenceHtml = hgGoldConfluenceHtml;
+W.hgGoldApplyConfluence = hgGoldApplyConfluence;
 W.hgGoldSessionAtrBuffer = hgGoldSessionAtrBuffer;
 W.hgGoldApplyFormingRegime = hgGoldApplyFormingRegime;
 W.hgGoldFormingStack = hgGoldFormingStack;
