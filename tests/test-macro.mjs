@@ -243,7 +243,8 @@ async function macroOnly(setR, klines){
 console.log('\n== Part 4: getGoldMacro shape, realRateHint, Yahoo last resort ==');
 {
   const SHAPE = ['dfii10Rows', 'dxy', 'dxyOfficial', 'goldPx', 'goldSilverRatio', 'realRateHint', 'realRateMeasured', 'realRateSource',
-    'realYield10Y', 'realYieldChange20Pct', 'realYieldTrend', 'silver', 'tnx', 'tnxChange20Pct', 'tnxSource', 'tnxTrend'];
+    'realYield10Y', 'realYieldChange20Pct', 'realYieldTrend', 'silver', 'tnx', 'tnxChange20Pct', 'tnxSource', 'tnxTrend',
+    'usdInr', 'usdInrChange20Pct', 'usdInrTrend'];
 
   const m = await macroOnly(macroRoutes('falling', FALLING_YIELDS, 50), async () => synthRows(10, 4000));
   assert(Object.keys(m).sort().join('|') === SHAPE.join('|'), 'exact return shape keys: ' + SHAPE.join(', '));

@@ -1390,6 +1390,37 @@ async function runScan(ui, scanSt){
     var scalpBundle = {};
     if (ctx.macro) scalpBundle.macro = ctx.macro;
     if (ctx.macro && ctx.macro.us10yCandles) scalpBundle.us10yCandles = ctx.macro.us10yCandles;
+    if (ctx.macro && ctx.macro.dxyRows) scalpBundle.dxyRows = ctx.macro.dxyRows;
+    if (ctx.macro && isFinite(ctx.macro.usdInr)){
+      scalpBundle.usdInr = ctx.macro.usdInr;
+      scalpBundle.usdInrTrend = ctx.macro.usdInrTrend || null;
+    }
+    /* Part7 feeds — silver + USDINR (bounded, fail-open). */
+    try{
+      var waitsP7 = [];
+      if (typeof getSilverCandles === 'function'){
+        waitsP7.push(getSilverCandles('4h', 120).then(function(xag){
+          if (xag && xag.rows && xag.rows.length){
+            scalpBundle.silverRows = xag.rows;
+            try{ if (typeof W !== 'undefined' && W) W.__hgXagCandles = xag.rows; }catch(eC){}
+          }
+        }).catch(function(){}));
+      }
+      if (!(isFinite(scalpBundle.usdInr)) && typeof getUsdInr === 'function'){
+        waitsP7.push(getUsdInr().then(function(inr){
+          if (inr && isFinite(inr.value)){
+            scalpBundle.usdInr = inr.value;
+            scalpBundle.usdInrTrend = inr.trend20 || null;
+          }
+        }).catch(function(){}));
+      }
+      if (waitsP7.length){
+        await Promise.race([
+          Promise.all(waitsP7),
+          new Promise(function(r){ setTimeout(r, 6000); })
+        ]);
+      }
+    }catch(eP7f){}
     if (typeof W !== 'undefined' && W){
       if (W.__hgGoldTickBuffer) scalpBundle.tickBuffer = W.__hgGoldTickBuffer;
       if (W.__hgGoldL2Book) scalpBundle.l2OrderBook = W.__hgGoldL2Book;
@@ -1490,6 +1521,33 @@ async function runScan(ui, scanSt){
       legs.push('goldRankSetups unavailable — ordered by grade/killzone only');
     }
     goldAnnotateXautBasis(ranked, spotRef);
+
+    /* Part7 expression stamps on every ranked candidate (instrument / size / exit). */
+    try{
+      var p7FnSc = gfn('hgGoldPart7Engine');
+      var p7ApplySc = gfn('hgGoldPart7ApplyExpression');
+      if (p7FnSc && p7ApplySc && ranked.length && gold.rows15m && gold.rows15m.length){
+        var p7EngSc = p7FnSc(gold.rows15m, {
+          newsGate: news ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(news, now) : null) : null,
+          now: now,
+          silverRows: scalpBundle.silverRows,
+          usdInr: scalpBundle.usdInr,
+          usdInrTrend: scalpBundle.usdInrTrend,
+          scalp: true,
+          accountInr: true,
+          goldDir: (ranked[0] && ranked[0].dir) || 'long'
+        });
+        if (p7EngSc){
+          for (var p7sci = 0; p7sci < ranked.length; p7sci++){
+            if (!ranked[p7sci]) continue;
+            if (!Array.isArray(ranked[p7sci].stamps)) ranked[p7sci].stamps = [];
+            if (p7EngSc.ok && ranked[p7sci].stamps.indexOf('PART7') < 0)
+              ranked[p7sci].stamps.push('PART7');
+            p7ApplySc(ranked[p7sci], p7EngSc);
+          }
+        }
+      }
+    }catch(eP7sc){}
 
     var filterFn = gfn('hgFilterGoldPostGate');
     if (filterFn){
@@ -1714,6 +1772,9 @@ async function runScan(ui, scanSt){
         return fhFn(fsFn({
           rows15m: gold.rows15m, rows4h: gold.rows4h, macro: ctx.macro,
           dxyRows: ctx.macro && ctx.macro.dxyRows, now: now,
+          silverRows: scalpBundle && scalpBundle.silverRows,
+          usdInr: scalpBundle && scalpBundle.usdInr,
+          usdInrTrend: scalpBundle && scalpBundle.usdInrTrend,
           perpNative: ctx.perpNative,
           oiRows: ctx.perpNative && ctx.perpNative.oi,
           fundingRows: ctx.perpNative && ctx.perpNative.funding
