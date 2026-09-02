@@ -1685,6 +1685,10 @@ function goldScalpSetups(inp){
       if (c.dropped){ rejected.push(c); return; }
       var inst = hgGoldInstFilter(c, {
         rows: rows, nowMs: nowMs, scalp: true,
+        /* Asia demotes (ASIA SESSION stamp) instead of hard-dropping — demoted
+           cards still paint on GOLD SCALP; they can never lead. OMNIGOLD native
+           tickets keep sessionHard hard-reject via hgOgInstFilterHit. */
+        hardReject: false,
         macro: inp.macro || null,
         dxyRows: inp.dxyRows || inp.dxyCandles || null,
         tnxRows: inp.tnxRows || inp.us10yCandles || null,

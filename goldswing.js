@@ -2108,7 +2108,8 @@ async function runScan(ui, scanSt){
   var t0 = Date.now();
   try{
     if (ui && ui.btn) ui.btn.disabled = true;
-    if (ui && ui.cards) ui.cards.innerHTML = '';
+    /* Keep last cards while rescanning — same race as GOLD SCALP. */
+    var hadCards = !!(ui && ui.cards && ui.cards.innerHTML && ui.cards.innerHTML.length);
     if (ui && ui.empty) ui.empty.style.display = 'none';
     setProg(ui, 0);
     var stRouteEarly = !!(scanSt && scanSt.useStartraderRouting);
@@ -2122,7 +2123,7 @@ async function runScan(ui, scanSt){
       return 'error: no klines layer';
     }
 
-    setStat(ui, 'pulling gold klines 4h/1d…');
+    setStat(ui, hadCards ? 'rescanning… previous results still showing' : 'pulling gold klines 4h/1d…');
     var now = Date.now();
     var newsRaw = null;
     var ns = gfn('hgNewsState');
