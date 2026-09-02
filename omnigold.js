@@ -7380,10 +7380,24 @@ terse status, and never launches a first-time scan on a global refresh.
     if (!setupsFn && !swingFn){
       return Promise.resolve({ ok: false, why: 'goldScalpSetups / goldSwingSetups unavailable — load goldind.js + goldswing.js' });
     }
-    return Promise.all([
-      hgOgFetchRows('15m', 500),
-      hgOgFetchRows('1d', 400)
-    ]).then(function(extra){
+    /* Bound the extra 15m/1d fetch so MOST PROBABLE + GOLD ENGINES never
+       stay blank while a slow/geo-blocked candle leg hangs the bridge. */
+    var fetchP = Promise.all([
+      Promise.resolve().then(function(){ return hgOgFetchRows('15m', 500); })
+        .catch(function(){ return { rows: [] }; }),
+      Promise.resolve().then(function(){ return hgOgFetchRows('1d', 400); })
+        .catch(function(){ return { rows: [] }; })
+    ]);
+    var timed = Promise.race([
+      fetchP,
+      new Promise(function(resolve){
+        setTimeout(function(){ resolve({ __timeout: true }); }, 8000);
+      })
+    ]);
+    return timed.then(function(extra){
+      if (extra && extra.__timeout){
+        return { ok: false, why: 'GOLD SCALP/SWING engines timed out waiting for 15m/1d candles — cards still show OMNIGOLD native reads' };
+      }
       var m15 = (extra[0] && extra[0].rows) || [];
       var d1 = (extra[1] && extra[1].rows) || [];
       var inp = {
@@ -8548,6 +8562,9 @@ terse status, and never launches a first-time scan on a global refresh.
             __og.lastAllView = { cards: ui.cards.innerHTML, mp: ui.mp ? ui.mp.innerHTML : null };
             __og.lastView = null;
           }catch(eCap0){}
+          try {
+            hgOgPaintGoldEngines(ui, { ok: false, why: 'loading GOLD SCALP / GOLD SWING engines…' }, emptyTape);
+          } catch (eGeE) {}
           return hgOgPaintOgPostScan(ui, res, shared, [], emptyTape);
         }
         /* ONE pick per horizon, marked and floated to the top so the answer
@@ -8735,6 +8752,15 @@ terse status, and never launches a first-time scan on a global refresh.
           }
         } catch (eHeld){ ogHeld = { n: 0, level: NaN, from: NaN, tf: HORIZONS.scalp.tf }; }
         __og.held = ogHeld;
+        /* Paint MOST PROBABLE + a loading engines strip BEFORE the gold-tab
+           bridge fetch. A hung 15m/1d re-fetch used to leave #ogMp and
+           #ogGoldEngines blank even when VETO cards already painted. */
+        try {
+          hgOgPaintMostProbable(ui, pickScalp, pickSwing, deskTape, mpBag, ogHeld, watchScalp, watchSwing, null, null);
+        } catch (eMp0) {}
+        try {
+          hgOgPaintGoldEngines(ui, { ok: false, why: 'loading GOLD SCALP / GOLD SWING engines…' }, deskTape);
+        } catch (eGe0) {}
         return hgOgRunGoldTabEngines(shared, res.scalp.rows, res.swing.rows).then(function(bridge){
           __og.bridge = bridge;
           var engineScalp = !pickScalp ? hgOgPickGoldEngineForMp(bridge, HORIZONS.scalp.label, deskTape) : null;
