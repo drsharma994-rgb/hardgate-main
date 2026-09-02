@@ -2383,6 +2383,27 @@ async function runScan(ui, scanSt){
             }
           }
         }
+        var vpPbFn = gfn('hgGoldVpPlaybook');
+        if (vpPbFn && got.length){
+          var vpPb = vpPbFn(gold.rows4h, {
+            now: now,
+            newsGate: newsRaw ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(newsRaw, now) : null) : null,
+            rows4h: gold.rows4h
+          });
+          if (vpPb && vpPb.ok){
+            for (var vpi = 0; vpi < got.length; vpi++){
+              if (!got[vpi]) continue;
+              if (!Array.isArray(got[vpi].stamps)) got[vpi].stamps = [];
+              if (vpPb.decision === 'ENTER' && got[vpi].dir === vpPb.dir){
+                if (got[vpi].stamps.indexOf('VP ENTER') < 0) got[vpi].stamps.push('VP ENTER');
+                if (vpPb.halfSize) got[vpi].demoted = true;
+              } else if (vpPb.decision === 'NO ENTRY' && vpPb.dir && got[vpi].dir === vpPb.dir
+                  && vpPb.gatesPass < 8){
+                if (got[vpi].stamps.indexOf('VP BLOCK') < 0) got[vpi].stamps.push('VP BLOCK');
+              }
+            }
+          }
+        }
       }catch(ePn){}
       collectWatch(gold, v);
       for (i = 0; i < got.length; i++) cands.push(got[i]);

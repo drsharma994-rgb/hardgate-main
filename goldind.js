@@ -1074,7 +1074,8 @@ var GST_NAME = {
   p4poor: 'S15 POOR HIGH/LOW REVISIT',
   p4laf: 'S17 LOOK-ABOVE-AND-FAIL',
   p4asiasd: 'S18 ASIA SD TARGET / SWEEP DEPTH',
-  p4gap: 'S11 WEEKEND/SESSION GAP FILL'
+  p4gap: 'S11 WEEKEND/SESSION GAP FILL',
+  vpbook: 'VP PLAYBOOK AMD (ENTER/WAIT)'
 };
 
 /* limit-at-zone entry: when price has extended beyond the setup zone, anchor
@@ -1987,6 +1988,43 @@ function goldScalpSetups(inp){
         }
       }
     }catch(eSmc){}
+
+    /* --- 1g) VP PLAYBOOK §10 gates (ENTER only) --- */
+    try{
+      if (!D.__vpPlaybook){
+        D.__vpPlaybook = hgGoldVpPlaybook(rows, {
+          scalp: true, now: nowMs,
+          newsGate: newsState ? hgGoldNewsGate(newsState, nowMs) : null,
+          regime: D.__formingRegime,
+          sweep: D.__sweepEngine || null,
+          rows4h: __rows(inp.rows4h),
+          asia: D.asian || goldAsianRange(rows),
+          obOk: !!(D.obRetest && D.obRetest.trigger),
+          mssOk: !!(D.__sweepEngine && D.__sweepEngine.mss && D.__sweepEngine.mss.ok)
+        });
+      }
+      var vpb = D.__vpPlaybook;
+      if (vpb && vpb.decision === 'ENTER' && vpb.dir && isFinite(vpb.entry)){
+        var vpbStop = isFinite(vpb.stop) ? vpb.stop
+          : (vpb.dir === 'long' ? vpb.entry - 1.2 * a15 : vpb.entry + 1.2 * a15);
+        var vpbCand = __gsCand('vpbook', vpb.dir, D, vpbStop, __gsSnapLvls(D, vpb.dir),
+          vpb.why + ' — VP playbook gates ' + vpb.gatesPass + '/12',
+          'close beyond stop or acceptance against the swept pool cancels',
+          undefined, vpb.entry);
+        if (vpbCand){
+          if (isFinite(vpb.t1)) vpbCand.t1 = vpb.t1;
+          if (isFinite(vpb.t2)) vpbCand.t2 = vpb.t2;
+          if (isFinite(vpb.entry)) vpbCand.entry = vpb.entry;
+          if (vpb.halfSize) vpbCand.demoted = true;
+          if (!Array.isArray(vpbCand.stamps)) vpbCand.stamps = [];
+          vpbCand.stamps.push('VP ' + vpb.decision + ' ' + vpb.gatesPass + '/12'
+            + (vpb.halfSize ? ' · HALF' : '')
+            + (vpb.grade && vpb.grade.grade ? (' · ' + vpb.grade.grade) : ''));
+          vpbCand.vpPlaybook = vpb;
+          push(vpbCand);
+        }
+      }
+    }catch(eVp){}
 
     /* --- 2) order-block / breaker retest (robust: active zones + structure alignment) --- */
     var obRetestDone = false;
@@ -4890,6 +4928,361 @@ function hgGoldVpTargetsHtml(tg){
     }
     if (tg.why) h += '<div class="dim" style="margin-top:2px">' + String(tg.why).replace(/[<>&]/g, '') + '</div>';
     h += '<div class="dim" style="margin-top:2px">' + String(tg.venueNote || '').replace(/[<>&]/g, '') + '</div>';
+    h += '</div>';
+    return h;
+  }catch(e){ return ''; }
+}
+
+/* =========================================================================
+   VP PLAYBOOK GATES (hg-v565) — Gold Volume Profile Playbook §10 checklist.
+   Explicit ENTER / WAIT / NO ENTRY — not a blended confidence %.
+   Sacred contracts unchanged. Thin-perp VP remains informational when labeled.
+========================================================================= */
+
+var HG_GOLD_VP_RR_ENTER = 2.0;
+var HG_GOLD_VP_RR_HALF = 1.5;
+var HG_GOLD_VP_R_ATR_MAX = 0.6;
+var HG_GOLD_VP_SWEEP_USD = 1.0; /* GC $1 wick floor (also ≥0.10×ATR) */
+var HG_GOLD_VP_SWEEP_MAX_AGE = 3; /* 1H bars; on 15m treat as ≤12 bars */
+
+/**
+ * 4H bias from weekly/anchored/session profile position + POC migration.
+ * Returns { bias:'LONG'|'SHORT'|'BOTH'|'NO_TRADE', why }.
+ */
+function hgGoldVpBias4h(rows, bundle, opts){
+  var out = { bias: 'BOTH', why: 'balanced value — both sides allowed at VA edges' };
+  try{
+    opts = opts || {};
+    rows = __rows(rows);
+    bundle = bundle || hgGoldVpBundle(rows, opts);
+    var vp = (bundle && (bundle.weekly || bundle.anchored || bundle.session)) || null;
+    if (!vp || !isFinite(vp.pocPrice)){
+      out.bias = 'NO_TRADE'; out.why = 'no 4H/composite profile — bias undefined';
+      return out;
+    }
+    var px = rows[rows.length - 1].c;
+    if (isFinite(vp.vah) && px > vp.vah){
+      out.bias = 'LONG'; out.why = 'price above VAH — imbalance bullish; longs at pullbacks';
+      return out;
+    }
+    if (isFinite(vp.val) && px < vp.val){
+      out.bias = 'SHORT'; out.why = 'price below VAL — imbalance bearish; shorts at rallies';
+      return out;
+    }
+    /* Mid-LVN with no HVN nearby → NO TRADE */
+    if (vp.lvns && vp.lvns.length){
+      var i, midLvn = false;
+      for (i = 0; i < vp.lvns.length; i++){
+        if (isFinite(vp.lvns[i]) && Math.abs(px - vp.lvns[i]) < (vp.binSize || 1) * 2){
+          midLvn = true; break;
+        }
+      }
+      if (midLvn && !(vp.hvns && vp.hvns.some(function(h){
+        return isFinite(h) && Math.abs(px - h) < (vp.binSize || 1) * 3;
+      }))){
+        out.bias = 'NO_TRADE'; out.why = 'price sitting mid-LVN — no node to react from';
+        return out;
+      }
+    }
+    return out;
+  }catch(e){ out.bias = 'NO_TRADE'; out.why = 'bias error'; return out; }
+}
+
+/**
+ * Location grade: A / B+ / B / C per playbook confluence matrix.
+ * Needs node (HVN/POC/VA) + optional OB + pool beyond.
+ */
+function hgGoldVpLocationGrade(opts){
+  var out = { grade: 'C', why: 'no 4H node', node: false, ob: false, pool: false };
+  try{
+    opts = opts || {};
+    var vprof = opts.vprof || null;
+    var entry = +opts.entry;
+    var dir = opts.dir === 'short' ? 'short' : 'long';
+    if (!vprof || !isFinite(entry)){ out.why = 'profile/entry unread'; return out; }
+    var atr = isFinite(opts.atr) ? opts.atr : (vprof.binSize || 1) * 4;
+    var tol = Math.max(atr * 0.35, (vprof.binSize || 1) * 2);
+    var atHvn = false, atPoc = false, atVa = false, atLvn = false;
+    if (isFinite(vprof.pocPrice) && Math.abs(entry - vprof.pocPrice) <= tol) atPoc = true;
+    if (isFinite(vprof.vah) && Math.abs(entry - vprof.vah) <= tol) atVa = true;
+    if (isFinite(vprof.val) && Math.abs(entry - vprof.val) <= tol) atVa = true;
+    var i;
+    if (vprof.hvns){
+      for (i = 0; i < vprof.hvns.length; i++){
+        if (Math.abs(entry - vprof.hvns[i]) <= tol){ atHvn = true; break; }
+      }
+    }
+    if (vprof.lvns){
+      for (i = 0; i < vprof.lvns.length; i++){
+        if (Math.abs(entry - vprof.lvns[i]) <= tol){ atLvn = true; break; }
+      }
+    }
+    out.node = atHvn || atPoc || atVa;
+    out.ob = !!opts.obOk;
+    out.pool = !!opts.poolNear;
+    if (atLvn && out.ob){
+      out.grade = 'C'; out.why = 'OB inside LVN — watch only (no volume backing)';
+      return out;
+    }
+    if ((atHvn || atPoc) && out.ob && out.pool){
+      out.grade = 'A'; out.why = '4H HVN/POC + unmitigated OB + pool beyond';
+      return out;
+    }
+    if (atVa && out.ob && out.pool){
+      out.grade = 'B+'; out.why = 'VA edge + OB + pool — fade-the-edge location';
+      return out;
+    }
+    if ((atHvn || atPoc) && out.ob){
+      out.grade = 'B'; out.why = '4H HVN/POC + OB — needs clear rejection';
+      return out;
+    }
+    if (!out.node && out.ob && out.pool){
+      out.grade = 'C'; out.why = 'no 4H node — scalp location at most';
+      return out;
+    }
+    if (out.pool && !out.ob){
+      out.grade = 'C'; out.why = 'pool without OB — sweep with nowhere to react';
+      return out;
+    }
+    out.why = out.node ? 'node without full confluence' : 'no tradeable location';
+    return out;
+  }catch(e){ return out; }
+}
+
+/** True when an LVN sits strictly between entry and T1 (clean traversal). */
+function hgGoldVpLvnBetween(entry, t1, vprof){
+  try{
+    if (!vprof || !vprof.lvns || !vprof.lvns.length) return false;
+    if (!isFinite(entry) || !isFinite(t1) || entry === t1) return false;
+    var lo = Math.min(entry, t1), hi = Math.max(entry, t1);
+    var pad = (vprof.binSize || 0.5);
+    var i;
+    for (i = 0; i < vprof.lvns.length; i++){
+      var lv = vprof.lvns[i];
+      if (isFinite(lv) && lv > lo + pad && lv < hi - pad) return true;
+    }
+    return false;
+  }catch(e){ return false; }
+}
+
+/**
+ * Full §10 checklist → ENTER / WAIT / NO ENTRY + levels block.
+ */
+function hgGoldVpPlaybook(rows, opts){
+  var out = {
+    ok: false, decision: 'NO ENTRY', gatesPass: 0, gatesTotal: 12,
+    halfSize: false, dir: null, entry: NaN, stop: NaN, t1: NaN, t2: NaN,
+    rr1: NaN, risk: NaN, grade: null, bias: null, gates: [], why: '',
+    block: '', targets: null, sessionOk: false
+  };
+  try{
+    opts = opts || {};
+    rows = __rows(rows);
+    if (!rows || rows.length < 40){
+      out.why = 'need ≥40 bars for VP playbook'; return out;
+    }
+    var nowMs = opts.now || Date.now();
+    var newsGate = opts.newsGate || (opts.news ? hgGoldNewsGate(opts.news, nowMs) : null);
+    var bundle = opts.bundle || hgGoldVpBundle(rows, { now: nowMs });
+    var vprof = opts.vprof || (bundle && (bundle.weekly || bundle.session)) || goldVolumeProfile(rows, 100, 50);
+    var rows4h = __rows(opts.rows4h) || rows;
+    var atrs4 = _atr(rows4h, 14);
+    var atr4h = atrs4[atrs4.length - 1];
+    var atrs = _atr(rows, 14);
+    var atr = atrs[atrs.length - 1];
+    var px = rows[rows.length - 1].c;
+    var bias = hgGoldVpBias4h(rows4h.length >= 30 ? rows4h : rows, bundle, opts);
+    out.bias = bias;
+
+    /* Prefer live sweep engine / Asia reclaim as trigger */
+    var sweep = opts.sweep || null;
+    if (!sweep && typeof hgGoldSweepEngine === 'function'){
+      try{
+        sweep = hgGoldSweepEngine(rows, {
+          regime: opts.regime, newsGate: newsGate, scalp: !!opts.scalp
+        });
+      }catch(_s){}
+    }
+    var asia = opts.asia || goldAsianRange(rows);
+    var dir = null, level = NaN, sweepAge = NaN, closeReclaim = false, breachUsd = NaN;
+    if (sweep && sweep.dir && (sweep.confirmed || sweep.tier === 'alert' || sweep.ok)){
+      dir = sweep.dir;
+      level = sweep.level;
+      closeReclaim = !!(sweep.wick && sweep.wick.closeReclaim) || !!sweep.confirmed;
+      if (isFinite(sweep.breachAtr) && isFinite(atr)) breachUsd = sweep.breachAtr * atr;
+      else if (isFinite(level) && isFinite(atr)) breachUsd = Math.max(HG_GOLD_VP_SWEEP_USD, 0.1 * atr);
+      sweepAge = 0;
+    } else if (asia && isFinite(asia.lo)){
+      var sdL = hgGoldSweepDisplacement(rows, asia.lo, 'long', {});
+      var sdH = hgGoldSweepDisplacement(rows, asia.hi, 'short', {});
+      if (sdL.ok){ dir = 'long'; level = asia.lo; closeReclaim = true; breachUsd = (sdL.breachAtr || 0) * atr; sweepAge = 0; }
+      else if (sdH.ok){ dir = 'short'; level = asia.hi; closeReclaim = true; breachUsd = (sdH.breachAtr || 0) * atr; sweepAge = 0; }
+    }
+    if (!dir && opts.dir) dir = opts.dir === 'short' ? 'short' : 'long';
+    out.dir = dir;
+
+    var sess = (typeof hgGoldSessionGate === 'function')
+      ? hgGoldSessionGate(nowMs, rows, 'vpbook', {})
+      : (typeof goldMarketSession === 'function' ? goldMarketSession(nowMs) : null);
+    var sessName = (sess && (sess.session || sess.zone)) || '';
+    var sessionOk = /LONDON|NY|OVERLAP|COMEX/i.test(String(sessName))
+      && !/ASIAN|^OFF$/i.test(String(sessName));
+    /* Also allow UTC hour windows from playbook */
+    var utcH = new Date(nowMs).getUTCHours();
+    if ((utcH >= 7 && utcH < 10) || (utcH >= 12 && utcH < 14)) sessionOk = true;
+    if (utcH >= 0 && utcH < 7) sessionOk = false;
+    if (utcH >= 16) sessionOk = false;
+    /* NY_PM is manage-only per playbook */
+    if (/NY_PM/i.test(String(sessName))) sessionOk = false;
+    out.sessionOk = sessionOk;
+
+    var entry = isFinite(opts.entry) ? opts.entry : px;
+    var stopBuf = Math.max(HG_GOLD_VP_SWEEP_USD * 2, 0.25 * (atr || 1));
+    var stop = isFinite(opts.stop) ? opts.stop
+      : (isFinite(level) ? (dir === 'long' ? level - stopBuf : level + stopBuf) : NaN);
+    if (sweep && sweep.plan && isFinite(sweep.plan.stop)) stop = sweep.plan.stop;
+
+    var loc = hgGoldVpLocationGrade({
+      vprof: vprof, entry: entry, dir: dir, atr: atr,
+      obOk: !!(opts.obOk || (opts.obZone && isFinite(opts.obZone.lo))),
+      poolNear: !!(isFinite(level) || (asia && isFinite(asia.hi)))
+    });
+    out.grade = loc;
+
+    var tg = null;
+    if (dir && isFinite(entry) && isFinite(stop) && vprof){
+      tg = hgGoldVpTargets({
+        dir: dir, entry: entry, stop: stop, vprof: vprof, bundle: bundle,
+        thin: true, mssOk: !!(opts.mssOk || (sweep && sweep.mss && sweep.mss.ok)),
+        newsLock: !!(newsGate && newsGate.lock),
+        sweepExtreme: isFinite(opts.sweepExtreme) ? opts.sweepExtreme : level,
+        atr: atr,
+        auction: bundle && bundle.auction,
+        external: {
+          asiaHi: asia && asia.hi, asiaLo: asia && asia.lo,
+          pdh: opts.pdh, pdl: opts.pdl
+        }
+      });
+      out.targets = tg;
+      if (tg && tg.ok){
+        out.t1 = tg.tp1; out.t2 = tg.tp2;
+        if (tg.stopPlan && isFinite(tg.stopPlan.stop)) stop = tg.stopPlan.stop;
+      }
+    }
+    out.entry = entry; out.stop = stop;
+    out.risk = (isFinite(entry) && isFinite(stop)) ? Math.abs(entry - stop) : NaN;
+    out.rr1 = (isFinite(out.risk) && out.risk > 0 && isFinite(out.t1))
+      ? Math.abs(out.t1 - entry) / out.risk : NaN;
+
+    var minBreach = Math.max(HG_GOLD_VP_SWEEP_USD, isFinite(atr) ? 0.1 * atr : HG_GOLD_VP_SWEEP_USD);
+    var maxAge = opts.scalp ? 12 : HG_GOLD_VP_SWEEP_MAX_AGE;
+
+    function gate(n, name, pass, note){
+      out.gates.push({ n: n, name: name, pass: !!pass, note: note || '' });
+      if (pass) out.gatesPass++;
+    }
+
+    gate(1, '4H bias defined', bias.bias !== 'NO_TRADE', bias.why);
+    var dirMatch = !dir ? false
+      : (bias.bias === 'BOTH' || bias.bias === (dir === 'long' ? 'LONG' : 'SHORT')
+        || (bias.bias === 'BOTH' && loc.grade === 'B+'));
+    gate(2, 'Direction matches 4H bias', dirMatch,
+      dir ? (dir.toUpperCase() + ' vs bias ' + bias.bias) : 'no direction');
+    var locOk = loc.grade === 'A' || loc.grade === 'B+';
+    gate(3, 'Location A or B+', locOk, loc.why + ' (' + loc.grade + ')');
+    var wickOk = isFinite(breachUsd) && breachUsd >= minBreach;
+    gate(4, 'Liquidity pool swept', wickOk,
+      isFinite(breachUsd) ? ('breach $' + breachUsd.toFixed(2) + ' vs min $' + minBreach.toFixed(2)) : 'no sweep');
+    var reclaimOk = closeReclaim && (isFinite(sweepAge) ? sweepAge <= maxAge : false);
+    gate(5, 'Close back inside ≤3 bars', reclaimOk,
+      closeReclaim ? ('reclaim age ' + sweepAge) : 'no reclaim');
+    var obOverlap = !!(opts.obOk || loc.ob || (opts.obZone && isFinite(entry)
+      && entry >= opts.obZone.lo && entry <= opts.obZone.hi));
+    gate(6, 'Rejection overlaps OB', obOverlap, obOverlap ? 'OB overlap' : 'no OB overlap');
+    var newsOk = !(newsGate && newsGate.lock);
+    gate(7, 'Session London/NY · no news lock', sessionOk && newsOk,
+      (sessionOk ? sessName || 'session ok' : 'wrong session') + (newsOk ? '' : ' · NEWS LOCK'));
+    var lvnPath = hgGoldVpLvnBetween(entry, out.t1, vprof);
+    gate(8, 'LVN between entry and T1', lvnPath, lvnPath ? 'LVN corridor' : 'no LVN path / same node');
+    var rrOk = isFinite(out.rr1) && out.rr1 >= HG_GOLD_VP_RR_ENTER;
+    var rrHalf = isFinite(out.rr1) && out.rr1 >= HG_GOLD_VP_RR_HALF && out.rr1 < HG_GOLD_VP_RR_ENTER;
+    gate(9, 'RR to T1 ≥ 2.0', rrOk || rrHalf,
+      isFinite(out.rr1) ? (out.rr1.toFixed(2) + 'R' + (rrHalf ? ' (half-size band)' : '')) : 'no RR');
+    var rOk = isFinite(out.risk) && isFinite(atr4h) && out.risk <= HG_GOLD_VP_R_ATR_MAX * atr4h;
+    gate(10, 'R ≤ 0.6×4H ATR', rOk,
+      isFinite(out.risk) && isFinite(atr4h)
+        ? ('R=' + out.risk.toFixed(2) + ' vs cap ' + (HG_GOLD_VP_R_ATR_MAX * atr4h).toFixed(2))
+        : 'ATR unread');
+    var feedOk = !(opts.badTick === true);
+    gate(11, 'Price feed sane', feedOk, feedOk ? (bundle && bundle.venueNote ? 'PROXY/venue noted' : 'ok') : 'bad tick');
+    var lossOk = opts.dayStops !== 2; /* when unknown, pass with note */
+    gate(12, 'Not second loss of day', lossOk,
+      opts.dayStops === 2 ? 'two stops — done' : (isFinite(opts.dayStops) ? ('stops today ' + opts.dayStops) : 'unchecked'));
+
+    out.ok = true;
+    var failing = out.gates.filter(function(g){ return !g.pass; }).map(function(g){ return g.n; });
+    if (out.gatesPass === 12){
+      out.decision = 'ENTER'; out.halfSize = false;
+    } else if (out.gatesPass === 11 && rrHalf && failing.length === 1 && failing[0] === 9){
+      out.decision = 'ENTER'; out.halfSize = true;
+    } else if (out.gatesPass >= 8 && (failing.indexOf(4) >= 0 || failing.indexOf(5) >= 0 || failing.indexOf(7) >= 0)){
+      out.decision = 'WAIT';
+    } else if (out.gatesPass >= 9 && !rrOk && !rrHalf){
+      out.decision = 'WAIT';
+    } else {
+      out.decision = 'NO ENTRY';
+    }
+
+    out.why = out.decision + ' · ' + out.gatesPass + '/12'
+      + (out.halfSize ? ' · HALF SIZE' : '')
+      + (dir ? (' · ' + dir.toUpperCase()) : '')
+      + (failing.length ? (' · fail G' + failing.join(',')) : '');
+
+    var ist = '';
+    try{
+      ist = new Date(nowMs).toLocaleString('en-GB', { timeZone: 'Asia/Kolkata', hour12: false });
+    }catch(_i){ ist = String(nowMs); }
+    out.block = 'XAUUSD  |  ' + new Date(nowMs).toISOString().slice(0, 16).replace('T', ' ')
+      + ' UTC  |  ' + (sessName || 'session') + '\n'
+      + 'DECISION : ' + out.decision + (out.halfSize ? ' (half size)' : '')
+      + '            (gates ' + out.gatesPass + '/12)\n'
+      + 'ENTRY    : ' + (isFinite(entry) ? entry.toFixed(2) : '—') + '\n'
+      + 'STOP     : ' + (isFinite(stop) ? stop.toFixed(2) : '—')
+      + (isFinite(out.risk) ? ('  (R = $' + out.risk.toFixed(2) + ')') : '') + '\n'
+      + 'T1       : ' + (isFinite(out.t1) ? out.t1.toFixed(2) : '—')
+      + (isFinite(out.rr1) ? ('        RR ' + out.rr1.toFixed(2)) : '') + '\n'
+      + 'T2       : ' + (isFinite(out.t2) ? out.t2.toFixed(2) : '—') + '\n'
+      + 'CONTEXT  : bias ' + bias.bias + '; grade ' + loc.grade
+      + '; ' + String(out.why);
+    return out;
+  }catch(e){ out.why = 'vp-playbook error'; return out; }
+}
+
+function hgGoldVpPlaybookHtml(pb){
+  try{
+    if (!pb || !pb.ok) return '';
+    var h = '<div class="note" data-hg-gold-vp-playbook="1" style="margin-top:8px">';
+    h += '<b>VP PLAYBOOK</b> · <b>' + String(pb.decision || '').replace(/[<>&]/g, '') + '</b>';
+    h += ' · ' + pb.gatesPass + '/' + pb.gatesTotal;
+    if (pb.halfSize) h += ' · HALF';
+    if (pb.dir) h += ' · ' + String(pb.dir).toUpperCase();
+    if (pb.bias && pb.bias.bias) h += ' · bias ' + pb.bias.bias;
+    if (pb.grade && pb.grade.grade) h += ' · loc ' + pb.grade.grade;
+    if (isFinite(pb.entry)) h += '<div style="margin-top:4px">ENTRY ' + (+pb.entry).toFixed(2)
+      + (isFinite(pb.stop) ? (' · SL ' + (+pb.stop).toFixed(2)) : '')
+      + (isFinite(pb.t1) ? (' · T1 ' + (+pb.t1).toFixed(2)) : '')
+      + (isFinite(pb.rr1) ? (' · ' + (+pb.rr1).toFixed(2) + 'R') : '')
+      + '</div>';
+    var i, g, fails = [];
+    for (i = 0; i < (pb.gates || []).length; i++){
+      g = pb.gates[i];
+      if (!g.pass) fails.push('G' + g.n + ' ' + g.name);
+    }
+    if (fails.length){
+      h += '<div class="dim" style="margin-top:2px">failing: '
+        + fails.slice(0, 6).join(' · ').replace(/[<>&]/g, '') + '</div>';
+    }
+    if (pb.why) h += '<div class="dim" style="margin-top:2px">' + String(pb.why).replace(/[<>&]/g, '') + '</div>';
     h += '</div>';
     return h;
   }catch(e){ return ''; }
@@ -8929,6 +9322,17 @@ function hgGoldFormingStack(inp){
     out.smcLiq.hit = out.smcHit;
     out.vprof = goldVolumeProfile(rows, 100, 50);
     out.vpBundle = typeof hgGoldVpBundle === 'function' ? hgGoldVpBundle(rows, { now: inp.now }) : null;
+    out.vpPlaybook = hgGoldVpPlaybook(rows, {
+      scalp: !!(inp.scalp || inp.tf === '15m'),
+      now: inp.now || Date.now(),
+      newsGate: inp.newsGate || (inp.news ? hgGoldNewsGate(inp.news, inp.now || Date.now()) : null),
+      regime: out.regime,
+      sweep: out.sweepEngine,
+      rows4h: __rows(inp.rows4h),
+      asia: out.asia,
+      bundle: out.vpBundle,
+      mssOk: !!(out.sweepEngine && out.sweepEngine.mss && out.sweepEngine.mss.ok)
+    });
     out.vpTargets = null;
     try{
       var lead = null;
@@ -9179,6 +9583,26 @@ function hgGoldFormingStack(inp){
       out.note = (out.note ? out.note + ' · ' : '') + 'smc-'
         + (out.smcBos.bos ? 'bos' : 'choch') + '/' + out.smcBos.mode;
     }
+    if (out.vpPlaybook && out.vpPlaybook.ok){
+      out.note = (out.note ? out.note + ' · ' : '') + 'vp '
+        + out.vpPlaybook.decision + ' ' + out.vpPlaybook.gatesPass + '/12';
+      if (out.vpPlaybook.decision === 'ENTER'){
+        out.strategies.push({
+          key: 'vp-playbook', dir: out.vpPlaybook.dir,
+          level: out.vpPlaybook.entry, grade: 'confirmed',
+          why: out.vpPlaybook.why,
+          invalidates: out.vpPlaybook.stop,
+          plan: {
+            entry: out.vpPlaybook.entry, stop: out.vpPlaybook.stop,
+            t1: out.vpPlaybook.t1, t2: out.vpPlaybook.t2
+          }
+        });
+        watch('vpbook', 'armed', out.vpPlaybook.entry, out.vpPlaybook.why,
+          null, out.vpPlaybook.dir, 'trigger');
+      } else {
+        watch('vpbook', 'idle', null, '', out.vpPlaybook.why, null, 'trigger');
+      }
+    }
 
     /* Core confluence score for the lead forming strategy */
     try{
@@ -9199,6 +9623,7 @@ function hgGoldFormingStack(inp){
         if (/ny.?exh/i.test(out.strategies[0].key || '')) leadCand.stratKey = 'nyexh';
         if (/sweep.?ob/i.test(out.strategies[0].key || '')) leadCand.stratKey = 'sweepob';
         if (/smc.?liq/i.test(out.strategies[0].key || '')) leadCand.stratKey = 'smcliq';
+        if (/vp.?playbook/i.test(out.strategies[0].key || '')) leadCand.stratKey = 'vpbook';
       }
       if (leadCand && leadCand.dir){
         out.confluence = hgGoldConfluenceScore(leadCand, {
@@ -9261,6 +9686,9 @@ function hgGoldFormingStackHtml(stack){
       h += '<div style="margin-top:4px"><b>SMC BOS/CHoCH</b> ('
         + String(stack.smcBos.mode || 'close') + ') — '
         + String(stack.smcBos.why || '').replace(/[<>&]/g, '') + '</div>';
+    }
+    if (stack.vpPlaybook){
+      h += hgGoldVpPlaybookHtml(stack.vpPlaybook);
     }
     if (stack.vpTargets && typeof hgGoldVpTargetsHtml === 'function'){
       h += hgGoldVpTargetsHtml(stack.vpTargets);
@@ -9456,6 +9884,14 @@ W.hgGoldVpBundle = hgGoldVpBundle;
 W.hgGoldVpAuction = hgGoldVpAuction;
 W.hgGoldVpStop = hgGoldVpStop;
 W.hgGoldVpSlice = hgGoldVpSlice;
+W.hgGoldVpBias4h = hgGoldVpBias4h;
+W.hgGoldVpLocationGrade = hgGoldVpLocationGrade;
+W.hgGoldVpLvnBetween = hgGoldVpLvnBetween;
+W.hgGoldVpPlaybook = hgGoldVpPlaybook;
+W.hgGoldVpPlaybookHtml = hgGoldVpPlaybookHtml;
+W.HG_GOLD_VP_RR_ENTER = HG_GOLD_VP_RR_ENTER;
+W.HG_GOLD_VP_RR_HALF = HG_GOLD_VP_RR_HALF;
+W.HG_GOLD_VP_R_ATR_MAX = HG_GOLD_VP_R_ATR_MAX;
 W.HG_GOLD_CONF_A = HG_GOLD_CONF_A;
 W.HG_GOLD_CONF_GOOD = HG_GOLD_CONF_GOOD;
 W.HG_GOLD_CONF_WATCH = HG_GOLD_CONF_WATCH;

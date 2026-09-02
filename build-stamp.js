@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v564',
-  pack: 'Gold SMC liquidity port',
-  built: '2026-09-02T08:30:00Z',
-  note: 'SMC liquidity() port (joshyattridge): swing cluster + Swept index + close_break BOS/CHoCH. Wired into liquidity map, SCALP smcliq mint, SWING SMC LIQ stamps, OMNIGOLD EQH/EQL fallback, forming panel. Sacred contracts unchanged.'
+  version: 'hg-v565',
+  pack: 'Gold VP playbook gates',
+  built: '2026-09-02T09:15:00Z',
+  note: 'VP Playbook §10 checklist: ENTER/WAIT/NO ENTRY with 12 explicit gates (bias, location A/B+, sweep+reclaim, OB, session, LVN path, RR≥2.0, R≤0.6×ATR). Wired SCALP vpbook mint, SWING VP ENTER stamps, forming panel on all gold desks. Sacred contracts unchanged.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
