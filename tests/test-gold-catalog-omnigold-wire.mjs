@@ -25,13 +25,23 @@ console.log('== files ==');
 {
   const gi = fs.readFileSync(root + 'goldind.js', 'utf8');
   const gs = fs.readFileSync(root + 'goldswing.js', 'utf8');
+  const gsc = fs.readFileSync(root + 'goldscalp.js', 'utf8');
   const og = fs.readFileSync(root + 'omnigold.js', 'utf8');
   const html = fs.readFileSync(root + 'index.html', 'utf8');
   ok(/hgGoldCatalogEngine/.test(gi) && /hgGoldCatalogApplyVerdict/.test(gi), 'SCALP applies catalog');
   ok(/hgGoldCatalogHtml/.test(gi), 'forming stack HTML');
+  ok(/formingLayersHtml\(\)/.test(gs) && /feeds failed: keep WHY SILENT/.test(gs),
+    'SWING empty path still paints catalog');
+  ok(/formingLayersHtml\(\)/.test(gsc) && /feeds failed: keep WHY SILENT/.test(gsc),
+    'SCALP empty path still paints catalog');
+  ok(/catFnM/.test(gsc) && /catFnM/.test(gs), 'SCALP+SWING paint catalog on mount');
   ok(/hgGoldCatalogApplyVerdict/.test(gs), 'SWING applies catalog');
   ok(/hgGoldCatalogApplyVerdict/.test(og) && /catalogExclude/.test(og), 'OMNIGOLD formation catalog');
   ok(/hgGoldCatalogHtml/.test(og), 'OMNIGOLD coverage paints catalog');
+  ok(/catFn0/.test(og) && /ui\.coverage\.innerHTML = catHtml0/.test(og),
+    'OMNIGOLD paints catalog on mount');
+  ok(/catHtmlM\(catFnM/.test(gsc) && /catHtmlM\(catFnM/.test(gs),
+    'SCALP+SWING mount writes catalog HTML');
   ok(/gold-catalog\.js\?v=577/.test(html), 'index loads gold-catalog.js');
 }
 

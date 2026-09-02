@@ -9998,6 +9998,13 @@ terse status, and never launches a first-time scan on a global refresh.
     };
     if (!ui.btn || !ui.stat || !ui.cards || !ui.pool) return;
 
+    /* Master Catalog map is visible before the first scan (feeds may fail). */
+    try {
+      var catFn0 = gfn('hgGoldCatalogEngine');
+      var catHtml0 = gfn('hgGoldCatalogHtml');
+      if (ui.coverage && catFn0 && catHtml0) ui.coverage.innerHTML = catHtml0(catFn0([], {}));
+    } catch (eCat0) {}
+
     /* EXECUTION VENUE wiring (hg-v537). Fail-open on a missing element —
        an older shell without the control keeps every previous behavior. */
     try {

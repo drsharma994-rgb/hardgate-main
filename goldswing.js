@@ -3253,8 +3253,8 @@ async function runScan(ui, scanSt){
           + formingNowHTML(armedAll)
           + historyHTML(lock.store.history);
       } else {
-        /* literally nothing (feeds failed): the empty state carries the reason */
-        ui.cards.innerHTML = basisHtml;
+        /* feeds failed: keep WHY SILENT, still paint the catalog map */
+        ui.cards.innerHTML = basisHtml + formingLayersHtml();
         if (whySilent) ui.empty.innerHTML = '<b>WHY SILENT</b> — ' + esc(whySilent);
         ui.empty.style.display = 'block';
       }
@@ -3360,6 +3360,11 @@ function goldswingMountInto(el, scanSt, cfg){
     if (missing.length) setStat(ui, 'missing: ' + missing.join(', ') + '.', true);
 
     if (ui.btn) ui.btn.addEventListener('click', function(){ return runScan(ui, scanSt); });
+    try{
+      var catFnM = gfn('hgGoldCatalogEngine');
+      var catHtmlM = gfn('hgGoldCatalogHtml');
+      if (ui.cards && catFnM && catHtmlM) ui.cards.innerHTML = catHtmlM(catFnM([], {}));
+    }catch(eCatM){}
     try{
       if (typeof hgSetupPaintDesk === 'function'){
         hgSetupPaintDesk(p + 'Desk', { kind: cfg.deskKind || 'goldswing', tab: cfg.deskTab || 'GOLD SWING',
