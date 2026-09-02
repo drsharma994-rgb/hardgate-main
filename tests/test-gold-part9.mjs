@@ -149,12 +149,11 @@ console.log('\n== S65 / S62 / frames never invent dir ==');
     fundingRate: 0,
     now: Date.UTC(2024, 5, 3, 10, 0) /* outside funding windows IST */
   });
-  /* May or may not fire depending on KER — either way must not invent without gates */
-  if (fade.ok){
-    ok(fade.dir === 'short' && fade.halfSize, 'premium fade short half size');
-  } else {
-    ok(true, 'premium fade gated off honestly: ' + fade.why);
-  }
+  /* KER gate is honest — either fires short half-size or explains KER veto */
+  ok(fade.ok
+    ? (fade.dir === 'short' && fade.halfSize === true)
+    : /KER|unread|reject|funding|extreme|premium/i.test(String(fade.why || '')),
+    fade.ok ? 'premium fade short half size' : ('premium fade gated: ' + fade.why));
   const html = W.hgGoldPart9Html(eng);
   ok(typeof html === 'string' && /PART9/i.test(html), 'html renders');
   const locked = W.hgGoldPart9Engine(rows, { newsGate: { lock: true } });
@@ -174,7 +173,6 @@ console.log('\n== stamp ==');
   const m = stamp.match(/version\s*:\s*['"]([^'"]+)['"]/);
   ok(m && m[1] === 'hg-v576', 'build-stamp hg-v576 (got ' + (m && m[1]) + ')');
   ok(swCacheOk(sw), 'sw.js matches');
-  ok(typeof HG_VER === 'function' || true, 'helper loaded');
 }
 
 if (failed){ console.log('\n' + failed + ' failed, ' + passed + ' passed'); process.exit(1); }

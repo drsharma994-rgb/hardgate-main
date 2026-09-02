@@ -117,7 +117,9 @@ console.log('\n== the gold desk passes the R its samples were MEASURED at ==');
   ok(!/poolFn\(\[stats\]\)/.test(og), 'omnigold never calls the pooler without a multiple');
   const poolArg = /poolFn\(\[stats\],\s*([A-Za-z_$][\w.$]*)\)/.exec(og);
   ok(!!poolArg, 'omnigold passes an explicit multiple to the pooler');
-  const btArg = /rMult:\s*([A-Za-z_$][\w.$]*)/.exec(og);
+  /* Word-boundary: bare /rMult:/ also matches the trailing "rMult:" inside
+     opts.tfHourMult (Part8/Part9 detector opts) — that is not the walk-forward. */
+  const btArg = /\brMult:\s*([A-Za-z_$][\w.$]*)/.exec(og);
   ok(!!btArg, 'omnigold passes an explicit multiple to the walk-forward');
   ok(poolArg[1] === btArg[1],
      'the pool prices at the SAME multiple the walk-forward measured at (both ' +
