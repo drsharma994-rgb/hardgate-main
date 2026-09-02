@@ -2801,6 +2801,21 @@ function goldScalpSetups(inp){
         { lo: hvn - 0.25*a15, hi: hvn + 0.25*a15 }, hvn));
     }
 
+    /* Master Catalog v1.0 — verdict stamps; REDUNDANT/AVOID never lead. */
+    try{
+      var catFn = (typeof hgGoldCatalogEngine === 'function') ? hgGoldCatalogEngine
+        : (W && typeof W.hgGoldCatalogEngine === 'function' ? W.hgGoldCatalogEngine : null);
+      var catApply = (typeof hgGoldCatalogApplyVerdict === 'function') ? hgGoldCatalogApplyVerdict
+        : (W && typeof W.hgGoldCatalogApplyVerdict === 'function' ? W.hgGoldCatalogApplyVerdict : null);
+      if (catFn && catApply){
+        D.__catalog = catFn(rows, { now: nowMs });
+        var ci;
+        for (ci = 0; ci < out.length; ci++){
+          if (out[ci] && !out[ci].dropped) catApply(out[ci], D.__catalog);
+        }
+      }
+    }catch(eCat){}
+
     return out;
   }catch(e){ return []; }
 }
@@ -13721,6 +13736,10 @@ function hgGoldFormingStack(inp){
       resolvedRows: inp.resolvedRows,
       pendingChange: inp.pendingChange || null
     });
+    out.catalog = (typeof hgGoldCatalogEngine === 'function')
+      ? hgGoldCatalogEngine(rows, { now: inp.now || Date.now() })
+      : ((W && typeof W.hgGoldCatalogEngine === 'function')
+        ? W.hgGoldCatalogEngine(rows, { now: inp.now || Date.now() }) : null);
     out.smcLiq = hgGoldSmcLiquidity(rows, {});
     out.smcLiq._n = rows.length;
     out.smcHit = hgGoldSmcLiquidityHit(rows, {
@@ -14129,6 +14148,10 @@ function hgGoldFormingStackHtml(stack){
     }
     if (stack.part9){
       h += hgGoldPart9Html(stack.part9);
+    }
+    if (stack.catalog){
+      h += (typeof hgGoldCatalogHtml === 'function' ? hgGoldCatalogHtml(stack.catalog)
+        : (W && typeof W.hgGoldCatalogHtml === 'function' ? W.hgGoldCatalogHtml(stack.catalog) : ''));
     }
     if (stack.smcLiq){
       h += hgGoldSmcLiquidityHtml(stack.smcLiq);

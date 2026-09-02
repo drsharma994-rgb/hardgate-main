@@ -6774,6 +6774,22 @@ terse status, and never launches a first-time scan on a global refresh.
           out.edgeBoost = probe.edgeBoost;
           out.edge = probe.edge;
         }
+        var catApply = wEdge && typeof wEdge.hgGoldCatalogApplyVerdict === 'function'
+          ? wEdge.hgGoldCatalogApplyVerdict : null;
+        if (catApply){
+          probe.kind = kind;
+          catApply(probe, null);
+          if (probe.catalogExclude){
+            out.formed = false;
+            out.catalogExclude = true;
+            out.catalogVerdict = probe.catalogVerdict;
+            out.reasons.push('catalog ' + (probe.catalogVerdict || 'exclude')
+              + ' — REDUNDANT / NON-FALSIFIABLE / AVOID never ENTER');
+          } else if (probe.catalogVerdict){
+            out.catalogVerdict = probe.catalogVerdict;
+            out.catalogFamily = probe.catalogFamily;
+          }
+        }
       }
     }catch(eEdge){ /* edge bake optional — stop floor / kind demotion still bind */ }
     return out;
@@ -7354,7 +7370,15 @@ terse status, and never launches a first-time scan on a global refresh.
   function hgOgPaintScanCoverage(ui, scalpCov, swingCov){
     var host = ui && ui.coverage;
     if (!host) return;
-    try { host.innerHTML = hgOgScanCoveragePanelHtml(scalpCov, swingCov); }
+    try {
+      var html = hgOgScanCoveragePanelHtml(scalpCov, swingCov);
+      var catFn = gfn('hgGoldCatalogEngine');
+      var catHtml = gfn('hgGoldCatalogHtml');
+      if (catFn && catHtml){
+        try { html += catHtml(catFn([], {})); } catch (eCat) {}
+      }
+      host.innerHTML = html;
+    }
     catch (eCov){ host.innerHTML = ''; }
   }
 

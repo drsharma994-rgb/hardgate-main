@@ -2319,6 +2319,19 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
         }
       }catch(eP9c){}
     }
+
+    /* Master Catalog v1.0 — verdict stamps; never invents ENTER. */
+    try{
+      var catFnSw = gfn('hgGoldCatalogEngine');
+      var catApplySw = gfn('hgGoldCatalogApplyVerdict');
+      if (catFnSw && catApplySw){
+        var catEng = catFnSw(rows4, { now: nowMs });
+        var csi;
+        for (csi = 0; csi < out.length; csi++){
+          if (out[csi] && !out[csi].dropped) catApplySw(out[csi], catEng);
+        }
+      }
+    }catch(eCatSw){}
   }catch(e){}
   return out;
 }
