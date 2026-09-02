@@ -89,8 +89,8 @@ console.log('\n== stamp ==');
   const m = stamp.match(/version:\s*'([^']+)'/);
   ok(m && m[1] === 'hg-v574', 'build-stamp version (got ' + (m && m[1]) + ')');
   ok(sw.indexOf("HG_CACHE = 'hg-v574'") >= 0, 'sw.js matches stamp');
-  ok(/goldind\.js\?v=572/.test(html), 'index goldind ?v=');
-  ok(/omnigold\.js\?v=572/.test(html) || /omnigold\.js\?v=/.test(html), 'index omnigold ?v=');
+  ok(/goldind\.js\?v=574/.test(html), 'index goldind ?v=');
+  ok(/omnigold\.js\?v=574/.test(html) || /omnigold\.js\?v=/.test(html), 'index omnigold ?v=');
 }
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');

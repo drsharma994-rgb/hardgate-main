@@ -70,36 +70,47 @@ console.log('\n== pick gold engine respects tape (aligned first) ==');
   ok(longPick && longPick.dir === 'long', 'tape-aligned long wins over higher-tally opposite');
 }
 
-console.log('\n== demoted grade B + against tape still surfaces ==');
+console.log('\n== demoted grade B never leads ENGINE MP (hg-v574) ==');
 {
   const W = boot();
-  /* hg-v533 FORMATION floor: this fixture's 12-point stop on 4628 is a
-     0.26% stop — at the conservative PAXG default venue the round trip is
-     1.0R of 1R and the setup rightly does NOT form. The subject of THIS
-     test is the against-tape/demoted-grade surfacing, and the desk executes
-     gold on XM, so the fixture now declares its venue (XM ~0.020% RT ->
-     0.08R of 1R, forms). The PAXG-default refusal is asserted in its own
-     block at the end of this file. */
+  /* Replay EDGE DEMOTE + demoted flag: demoted ENGINE setups never become
+     MOST PROBABLE (aligned or against-tape). XM venue so stop floor is not
+     the refusal reason — demotion/edge is. */
   W.HG_OG_VENUE = 'XM';
   const bridge = {
     ok: true,
     scalp: {
       ranked: [{
-        dir: 'short', strategy: 'LIQUIDITY SWEEP REVERSAL', entry: 4628, stop: 4640, t1: 4610,
-        grade: 'B', tally: 6, demoted: true
+        dir: 'short', strategy: 'LIQUIDITY SWEEP REVERSAL', stratKey: 'sweep',
+        entry: 4628, stop: 4640, t1: 4610,
+        grade: 'B', tally: 6, demoted: true, stamps: ['EDGE DEMOTE']
       }],
-      best: { dir: 'short', strategy: 'LIQUIDITY SWEEP REVERSAL', entry: 4628, stop: 4640, t1: 4610,
-        grade: 'B', tally: 6, demoted: true }
+      best: { dir: 'short', strategy: 'LIQUIDITY SWEEP REVERSAL', stratKey: 'sweep',
+        entry: 4628, stop: 4640, t1: 4610,
+        grade: 'B', tally: 6, demoted: true, stamps: ['EDGE DEMOTE'] }
     },
     swing: { ranked: [], best: null }
   };
   const pick = W.hgOgPickGoldEngineFor(bridge, 'SCALP', 'long');
-  ok(pick && pick.dir === 'short', 'against-tape short when tape is long');
-  ok(pick.engineAgainstTape, 'flagged against tape');
-  ok(pick.engineDemoted, 'demoted carried');
-  const html = W.hgOgMostProbablePanelHtml(null, null, 'long', null, null, null, pick, null);
+  ok(pick === null, 'demoted EDGE DEMOTE sweep never leads against-tape MP');
+  /* Against-tape still works for a clean (non-demoted, non-toxic) kind. */
+  const bridge2 = {
+    ok: true,
+    scalp: {
+      ranked: [{
+        dir: 'short', strategy: 'RSI 75/25 DIVERGENCE', stratKey: 'rsidiv',
+        entry: 4628, stop: 4640, t1: 4610, grade: 'B', tally: 6
+      }],
+      best: null
+    },
+    swing: { ranked: [], best: null }
+  };
+  const pick2 = W.hgOgPickGoldEngineFor(bridge2, 'SCALP', 'long');
+  ok(pick2 && pick2.dir === 'short', 'against-tape short when tape is long (clean kind)');
+  ok(pick2.engineAgainstTape, 'flagged against tape');
+  const html = W.hgOgMostProbablePanelHtml(null, null, 'long', null, null, null, pick2, null);
   ok(/AGAINST GOLD TAPE/.test(html), 'against-tape label in MP');
-  ok(/LIQUIDITY SWEEP/.test(html), 'strategy in MP');
+  ok(/RSI/.test(html), 'strategy in MP');
 }
 
 console.log('\n== MOST PROBABLE panel shows engine tier ==');
@@ -133,17 +144,20 @@ console.log('\n== grade C fallback when no A/B ==');
   const W = boot();
   /* hg-v533: same venue declaration as the demoted-grade-B block above —
      the 11-point stop on 4627 (0.24% stop) only forms at XM costs; the
-     grade-C fallback mechanics are what this block is about. */
+     grade-C fallback mechanics are what this block is about.
+     hg-v574: use a non-EDGE-toxic kind (not FVG FILL suppress / not demoted). */
   W.HG_OG_VENUE = 'XM';
   const bridge = {
     ok: true,
     scalp: {
       ranked: [{
-        dir: 'short', strategy: 'FVG FILL', entry: 4627, stop: 4638, t1: 4612,
-        grade: 'C', tally: 4, demoted: true
+        dir: 'short', strategy: 'RSI 75/25 DIVERGENCE', stratKey: 'rsidiv',
+        entry: 4627, stop: 4638, t1: 4612,
+        grade: 'C', tally: 4
       }],
-      best: { dir: 'short', strategy: 'FVG FILL', entry: 4627, stop: 4638, t1: 4612,
-        grade: 'C', tally: 4, demoted: true }
+      best: { dir: 'short', strategy: 'RSI 75/25 DIVERGENCE', stratKey: 'rsidiv',
+        entry: 4627, stop: 4638, t1: 4612,
+        grade: 'C', tally: 4 }
     },
     swing: { ranked: [], best: null }
   };
