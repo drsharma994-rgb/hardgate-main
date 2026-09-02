@@ -4472,17 +4472,70 @@ function goldVolumeProfile(rows, lookback, bins){
     var meanVol = 0;
     for (i = 0; i < bins; i++) meanVol += profile[i];
     meanVol /= bins;
-    var varSum = 0;
-    for (i = 0; i < bins; i++) varSum += Math.pow(profile[i] - meanVol, 2);
-    var stdDev = Math.sqrt(varSum / bins);
-    var hvnThreshold = meanVol + stdDev;
-    var hvns = [];
-    var lvns = [];
-    var lvnThreshold = Math.max(0, meanVol - 0.5 * stdDev);
+    /* Playbook §4.1 quantitative nodes (not mean±σ folklore):
+         HVN: local max, V≥1.5×Vavg AND V≥0.40×Vmax, separated by ≥1 LVN
+         LVN: local min, V≤0.50×Vavg, trough spans ≥2 consecutive rows */
+    var hvnMinAvg = 1.5 * meanVol;
+    var hvnMinMax = 0.40 * maxVol;
+    var lvnMax = 0.50 * meanVol;
+    var isLocalMax = new Array(bins);
+    var isLocalMin = new Array(bins);
     for (i = 0; i < bins; i++){
-      var mid = minPrice + i * binSize + binSize / 2;
-      if (profile[i] > hvnThreshold) hvns.push(mid);
-      else if (profile[i] > 0 && profile[i] <= lvnThreshold) lvns.push(mid);
+      var left = i > 0 ? profile[i - 1] : profile[i];
+      var right = i < bins - 1 ? profile[i + 1] : profile[i];
+      isLocalMax[i] = profile[i] >= left && profile[i] >= right && profile[i] > 0;
+      isLocalMin[i] = profile[i] <= left && profile[i] <= right;
+    }
+    var lvns = [];
+    var lvnMask = new Array(bins);
+    for (i = 0; i < bins; i++) lvnMask[i] = false;
+    i = 0;
+    while (i < bins){
+      if (profile[i] > 0 && profile[i] <= lvnMax && isLocalMin[i]){
+        var j = i;
+        while (j + 1 < bins && profile[j + 1] > 0 && profile[j + 1] <= lvnMax) j++;
+        if ((j - i + 1) >= 2 || (isLocalMin[i] && profile[i] <= lvnMax * 0.85)){
+          /* Require ≥2 consecutive rows when possible; allow single deep trough
+             only when flanked by higher bins (local min already true). Playbook
+             prefers ≥2 — mark contiguous run when length≥2. */
+          if ((j - i + 1) >= 2){
+            var k;
+            for (k = i; k <= j; k++){
+              lvnMask[k] = true;
+              lvns.push(minPrice + k * binSize + binSize / 2);
+            }
+          }
+        }
+        i = j + 1;
+        continue;
+      }
+      i++;
+    }
+    /* If no 2-row troughs found, fall back to single-bin local mins ≤0.5×avg
+       so thin profiles still expose LVN corridors for gate 8. */
+    if (!lvns.length){
+      for (i = 0; i < bins; i++){
+        if (profile[i] > 0 && profile[i] <= lvnMax && isLocalMin[i]){
+          lvnMask[i] = true;
+          lvns.push(minPrice + i * binSize + binSize / 2);
+        }
+      }
+    }
+    var hvns = [];
+    var lastHvnI = -999;
+    for (i = 0; i < bins; i++){
+      if (!isLocalMax[i]) continue;
+      if (!(profile[i] >= hvnMinAvg && profile[i] >= hvnMinMax)) continue;
+      /* Separated from nearest prior HVN by at least one LVN bin */
+      if (lastHvnI >= 0){
+        var sep = false, s;
+        for (s = lastHvnI + 1; s < i; s++){
+          if (lvnMask[s]){ sep = true; break; }
+        }
+        if (!sep) continue;
+      }
+      hvns.push(minPrice + i * binSize + binSize / 2);
+      lastHvnI = i;
     }
 
     /* Value area (~70% of volume) expanding from POC — standard VP convention */
@@ -4980,6 +5033,53 @@ var HG_GOLD_VP_RR_HALF = 1.5;
 var HG_GOLD_VP_R_ATR_MAX = 0.6;
 var HG_GOLD_VP_SWEEP_USD = 1.0; /* GC $1 wick floor (also ≥0.10×ATR) */
 var HG_GOLD_VP_SWEEP_MAX_AGE = 3; /* 1H bars; on 15m treat as ≤12 bars */
+var HG_GOLD_VP_GC_POINT = 100;   /* $ per $1 move on GC (100 oz) */
+var HG_GOLD_VP_MGC_POINT = 10;   /* $ per $1 move on MGC (10 oz) */
+var HG_GOLD_VP_DEFAULT_EQUITY = 50000;
+var HG_GOLD_VP_RISK_PCT = 0.01;
+
+/**
+ * Playbook §9.3 — contracts from fixed $ risk ÷ (stop distance × point value).
+ * Leverage is an OUTPUT, never an input.
+ * -> { riskUsd, riskPts, gc, mgc, pick, why }
+ */
+function hgGoldVpContractSize(riskPts, opts){
+  var out = {
+    ok: false, riskUsd: NaN, riskPts: NaN, gc: 0, mgc: 0,
+    pick: null, notionalGc: NaN, notionalMgc: NaN, why: ''
+  };
+  try{
+    opts = opts || {};
+    var equity = isFinite(opts.equity) ? opts.equity : HG_GOLD_VP_DEFAULT_EQUITY;
+    var riskPct = isFinite(opts.riskPct) ? opts.riskPct : HG_GOLD_VP_RISK_PCT;
+    if (opts.halfSize) riskPct *= 0.5;
+    var riskUsd = isFinite(opts.riskUsd) ? opts.riskUsd : (equity * riskPct);
+    riskPts = Math.abs(+riskPts);
+    if (!(riskPts > 0) || !(riskUsd > 0)){
+      out.why = 'need positive risk distance and $ risk';
+      out.pick = '—';
+      return out;
+    }
+    var gc = riskUsd / (riskPts * HG_GOLD_VP_GC_POINT);
+    var mgc = riskUsd / (riskPts * HG_GOLD_VP_MGC_POINT);
+    out.ok = true;
+    out.riskUsd = riskUsd;
+    out.riskPts = riskPts;
+    out.gc = Math.floor(gc * 100) / 100;
+    out.mgc = Math.floor(mgc);
+    out.pick = (gc >= 1) ? ('GC×' + Math.floor(gc))
+      : (out.mgc >= 1 ? ('MGC×' + out.mgc) : 'sub-lot — reduce risk or widen? no: use smaller account risk');
+    if (gc < 1 && out.mgc >= 1) out.pick = 'MGC×' + out.mgc + ' (GC fractional ' + out.gc.toFixed(2) + ')';
+    var px = isFinite(opts.entry) ? opts.entry : NaN;
+    if (isFinite(px)){
+      out.notionalGc = Math.floor(gc) * 100 * px;
+      out.notionalMgc = out.mgc * 10 * px;
+    }
+    out.why = 'risk $' + riskUsd.toFixed(0) + ' ÷ R $' + riskPts.toFixed(2)
+      + ' → ' + out.pick;
+    return out;
+  }catch(e){ out.why = 'size error'; return out; }
+}
 
 /**
  * 4H bias from weekly/anchored/session profile position + POC migration.
@@ -5274,6 +5374,11 @@ function hgGoldVpPlaybook(rows, opts){
       + (dir ? (' · ' + dir.toUpperCase()) : '')
       + (failing.length ? (' · fail G' + failing.join(',')) : '');
 
+    out.size = hgGoldVpContractSize(out.risk, {
+      halfSize: out.halfSize, entry: entry,
+      equity: opts.equity, riskPct: opts.riskPct, riskUsd: opts.riskUsd
+    });
+
     var ist = '';
     try{
       ist = new Date(nowMs).toLocaleString('en-GB', { timeZone: 'Asia/Kolkata', hour12: false });
@@ -5288,6 +5393,8 @@ function hgGoldVpPlaybook(rows, opts){
       + 'T1       : ' + (isFinite(out.t1) ? out.t1.toFixed(2) : '—')
       + (isFinite(out.rr1) ? ('        RR ' + out.rr1.toFixed(2)) : '') + '\n'
       + 'T2       : ' + (isFinite(out.t2) ? out.t2.toFixed(2) : '—') + '\n'
+      + 'SIZE     : ' + (out.size && out.size.pick ? out.size.pick : '—')
+      + (out.size && isFinite(out.size.riskUsd) ? ('  (risk $' + out.size.riskUsd.toFixed(0) + ')') : '') + '\n'
       + 'CONTEXT  : bias ' + bias.bias + '; grade ' + loc.grade
       + '; ' + String(out.why);
     return out;
@@ -5309,6 +5416,11 @@ function hgGoldVpPlaybookHtml(pb){
       + (isFinite(pb.t1) ? (' · T1 ' + (+pb.t1).toFixed(2)) : '')
       + (isFinite(pb.rr1) ? (' · ' + (+pb.rr1).toFixed(2) + 'R') : '')
       + '</div>';
+    if (pb.size && pb.size.ok && pb.size.pick){
+      h += '<div class="dim" style="margin-top:2px">SIZE ' + String(pb.size.pick).replace(/[<>&]/g, '')
+        + (isFinite(pb.size.riskUsd) ? (' · risk $' + (+pb.size.riskUsd).toFixed(0)) : '')
+        + '</div>';
+    }
     var i, g, fails = [];
     for (i = 0; i < (pb.gates || []).length; i++){
       g = pb.gates[i];
@@ -10237,9 +10349,12 @@ W.hgGoldVpLocationGrade = hgGoldVpLocationGrade;
 W.hgGoldVpLvnBetween = hgGoldVpLvnBetween;
 W.hgGoldVpPlaybook = hgGoldVpPlaybook;
 W.hgGoldVpPlaybookHtml = hgGoldVpPlaybookHtml;
+W.hgGoldVpContractSize = hgGoldVpContractSize;
 W.HG_GOLD_VP_RR_ENTER = HG_GOLD_VP_RR_ENTER;
 W.HG_GOLD_VP_RR_HALF = HG_GOLD_VP_RR_HALF;
 W.HG_GOLD_VP_R_ATR_MAX = HG_GOLD_VP_R_ATR_MAX;
+W.HG_GOLD_VP_GC_POINT = HG_GOLD_VP_GC_POINT;
+W.HG_GOLD_VP_MGC_POINT = HG_GOLD_VP_MGC_POINT;
 W.HG_GOLD_CONF_A = HG_GOLD_CONF_A;
 W.HG_GOLD_CONF_GOOD = HG_GOLD_CONF_GOOD;
 W.HG_GOLD_CONF_WATCH = HG_GOLD_CONF_WATCH;

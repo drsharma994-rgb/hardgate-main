@@ -317,7 +317,7 @@ terse status, and never launches a first-time scan on a global refresh.
                       'ICHI-KUMO','STOCHRSI-TURN','CCI-EXTREME','RIBBON-PULLBACK',
                       'HA-FLIP','VWAP-BAND','PD-EQUILIBRIUM','ER-IGNITION',
                       'STRUCT-BOS','SWEEP-V2','OB-RETEST','OU-REVERT',
-                      'MFI-SQUAT','DI-CROSS','FVG-HVN'];
+                      'MFI-SQUAT','DI-CROSS','FVG-HVN','VP-PLAYBOOK'];
 
   var __og = { ui: null, busy: false, ran: false, snap: null, lastStat: '', src: null, shared: null, btBusy: false,
                lastCardsHtml: null, lastPoolHtml: null, lastMpHtml: null,
@@ -749,6 +749,7 @@ terse status, and never launches a first-time scan on a global refresh.
     d = hgOgMfiSquat(rows);        if (d) out.push(d);
     d = hgOgDiCross(rows);         if (d) out.push(d);
     d = hgOgFvgHvn(rows);          if (d) out.push(d);
+    d = hgOgVpPlaybook(rows, opts); if (d) out.push(d);
     return out;
   }
 
@@ -1754,6 +1755,37 @@ terse status, and never launches a first-time scan on a global refresh.
                + span + ' opened on a high-volume node' };
   }
 
+  /* VP-PLAYBOOK. Gold Volume Profile Playbook §10 — explicit ENTER/WAIT/NO ENTRY
+     gates (bias, location A/B+, sweep+reclaim, OB, session, LVN path, RR≥2.0).
+     Fires only on ENTER so OMNIGOLD tickets are playbook-clean, not score-blended. */
+  function hgOgVpPlaybook(rows, opts){
+    var f = gfn('hgGoldVpPlaybook');
+    if (!f || !rows || rows.length < 40) return null;
+    opts = opts || {};
+    var pb = null;
+    try {
+      pb = f(rows, {
+        now: isFinite(opts.nowSec) ? (opts.nowSec > 1e12 ? opts.nowSec : opts.nowSec * 1000) : Date.now(),
+        scalp: false,
+        news: opts.news || null
+      });
+    } catch (e) { return null; }
+    if (!pb || pb.decision !== 'ENTER' || !pb.dir || !isFinite(pb.entry)) return null;
+    var lv = fin(pb.entry);
+    if (!isFinite(lv)) return null;
+    return {
+      kind: 'VP-PLAYBOOK', dir: pb.dir, level: lv,
+      stop: isFinite(pb.stop) ? pb.stop : NaN,
+      t1: isFinite(pb.t1) ? pb.t1 : NaN,
+      t2: isFinite(pb.t2) ? pb.t2 : NaN,
+      vpPlaybook: pb,
+      why: 'VP playbook ' + pb.decision + ' ' + pb.gatesPass + '/12'
+        + (pb.halfSize ? ' half-size' : '')
+        + (pb.grade && pb.grade.grade ? (' loc ' + pb.grade.grade) : '')
+        + (pb.size && pb.size.pick ? (' · ' + pb.size.pick) : '')
+    };
+  }
+
   /* ==================== consensus across mechanics ====================
 
      THE DEFECT THIS EXISTS FOR: on 42% of tapes the desk graded a LONG
@@ -1831,6 +1863,7 @@ terse status, and never launches a first-time scan on a global refresh.
     'STOCHRSI-TURN':'REVERSION', 'CCI-EXTREME':'REVERSION',
     'VWAP-BAND':'REVERSION', 'PD-EQUILIBRIUM':'REVERSION', 'OU-REVERT':'REVERSION',
     'SWEEP-V2':'SWEEP',
+    'VP-PLAYBOOK':'SWEEP',
     /* An unmitigated order block is an unfilled inefficiency being revisited,
        which is FVG-FILL's idea with a different name for the zone. */
     'OB-RETEST':'IMBALANCE',
@@ -2168,6 +2201,7 @@ terse status, and never launches a first-time scan on a global refresh.
     var k = String(kind || '').toUpperCase();
     if (k === 'ASIA-BREAK') return 'asian';
     if (k === 'OB-RETEST') return 'ob';
+    if (k === 'VP-PLAYBOOK') return 'vpbook';
     if (k === 'KZ-JUDAS' || k === 'SWEEP-V2' || k === 'POOL-SWEEP'
         || k.indexOf('SWEEP') >= 0)
       return 'sweep';
@@ -8109,7 +8143,8 @@ terse status, and never launches a first-time scan on a global refresh.
           'OU-REVERT':       function(r){ return hgOgOuRevert(r); },
           'MFI-SQUAT':       function(r){ return hgOgMfiSquat(r); },
           'DI-CROSS':        function(r){ return hgOgDiCross(r); },
-          'FVG-HVN':         function(r){ return hgOgFvgHvn(r); }
+          'FVG-HVN':         function(r){ return hgOgFvgHvn(r); },
+          'VP-PLAYBOOK':     function(r){ return hgOgVpPlaybook(r); }
         };
         var k;
         for (k in fns) if (Object.prototype.hasOwnProperty.call(fns, k)){

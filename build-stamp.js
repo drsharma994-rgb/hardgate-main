@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v566',
-  pack: 'Gold session Silver Bullet twin',
-  built: '2026-09-02T14:30:00Z',
-  note: 'Session-bounded Asia→London/NY Silver Bullet twin: time-windowed sweep+reclaim into OB/FVG (hgGoldSessionBoundSweep). SCALP silverb mint, SWING SILVER BULLET stamps, forming panel. vectorbt stays out-of-repo research only. Sacred contracts unchanged.'
+  version: 'hg-v567',
+  pack: 'VP playbook OMNIGOLD + §4.1 nodes',
+  built: '2026-09-02T15:10:00Z',
+  note: 'VP Playbook forms setups on OMNIGOLD (VP-PLAYBOOK mechanic), GOLD SCALP (vpbook), GOLD SWING (ENTER mint). HVN/LVN use §4.1 quantitative rules. Contract size GC/MGC from fixed $ risk. Sacred contracts unchanged.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

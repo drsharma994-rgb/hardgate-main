@@ -1232,7 +1232,8 @@ var SW_NAME = {
   sweep:    '4H LIQUIDITY SWEEP REVERSAL',
   fvg:      '4H FVG FILL',
   bos:      '4H BOS / CHOCH ALIGNMENT',
-  ribbon:   '4H EMA RIBBON PULLBACK'
+  ribbon:   '4H EMA RIBBON PULLBACK',
+  vpbook:   'VP PLAYBOOK AMD (ENTER/WAIT)'
 };
 var SW_NEWS_STAMP = 'NEWS WINDOW — expect a fade around the release; swing levels unchanged (size accordingly)';
 
@@ -1791,6 +1792,66 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
           }
         }
       }catch(eRb){}
+    }
+
+    /* 9) VP Playbook §10 — ENTER only (explicit gates replace soft tally) */
+    var vpFn = gfn('hgGoldVpPlaybook');
+    if (vpFn){
+      try{
+        var vpb = vpFn(rows4, {
+          now: nowMs,
+          newsGate: (microOpts && microOpts.news)
+            ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(microOpts.news, nowMs) : null)
+            : null,
+          rows4h: rows4,
+          obOk: !!(obRetest4 && obRetest4.trigger)
+        });
+        if (vpb && vpb.decision === 'ENTER' && vpb.dir && isFinite(vpb.entry)){
+          var vpStop = isFinite(vpb.stop) ? vpb.stop
+            : (vpb.dir === 'long' ? vpb.entry - 1.5 * a4 : vpb.entry + 1.5 * a4);
+          var vpRisk = Math.abs(vpb.entry - vpStop);
+          var vpCand = mkCand('vpbook', vpb.dir, vpStop, vpStop, undefined,
+            vpb.why + ' — VP playbook gates ' + vpb.gatesPass + '/12'
+              + (vpb.size && vpb.size.pick ? (' · ' + vpb.size.pick) : ''),
+            'close beyond stop or acceptance against the swept pool cancels',
+            { side: vpb.dir, tag: 'vpbook',
+              label: 'VP playbook ' + vpb.decision + ' ' + vpb.gatesPass + '/12' });
+          if (!vpCand || vpCand.dropped){
+            /* Soft tally may reject a lone ENTER — mint directly: §10 gates
+               are the checklist, not agree-count. */
+            vpCand = {
+              id: 'vpbook|' + vpb.dir + '|' + Math.round(vpb.entry),
+              strategy: SW_NAME.vpbook, stratKey: 'vpbook', dir: vpb.dir,
+              entry: vpb.entry, pxNow: entry, mark: entry, stop: vpStop,
+              t1: isFinite(vpb.t1) ? vpb.t1 : NaN,
+              t2: isFinite(vpb.t2) ? vpb.t2 : NaN,
+              rr: isFinite(vpb.rr1) ? vpb.rr1
+                : (vpRisk > 0 && isFinite(vpb.t1) ? Math.abs(vpb.t1 - vpb.entry) / vpRisk : NaN),
+              grade: (vpb.grade && vpb.grade.grade === 'A') ? 'A' : 'B',
+              agree: 2, oppose: 0, atr: a4,
+              venue: venue, sym: sym, session: sessionTxt || 'n/a',
+              why: vpb.why + ' — VP playbook gates ' + vpb.gatesPass + '/12',
+              invalidates: 'close beyond ' + vpStop.toFixed(2),
+              stamps: ['VP ENTER ' + vpb.gatesPass + '/12'
+                + (vpb.halfSize ? ' · HALF' : '')],
+              vpPlaybook: vpb,
+              demoted: !!vpb.halfSize,
+              notes: []
+            };
+          } else {
+            if (isFinite(vpb.entry)) vpCand.entry = vpb.entry;
+            if (isFinite(vpb.t1)) vpCand.t1 = vpb.t1;
+            if (isFinite(vpb.t2)) vpCand.t2 = vpb.t2;
+            if (isFinite(vpb.stop)) vpCand.stop = vpb.stop;
+            if (vpb.halfSize) vpCand.demoted = true;
+            if (!Array.isArray(vpCand.stamps)) vpCand.stamps = [];
+            vpCand.stamps.push('VP ENTER ' + vpb.gatesPass + '/12'
+              + (vpb.halfSize ? ' · HALF' : ''));
+            vpCand.vpPlaybook = vpb;
+          }
+          push(vpCand);
+        }
+      }catch(eVp){}
     }
   }catch(e){}
   return out;
