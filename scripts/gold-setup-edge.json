@@ -1,0 +1,29 @@
+{
+  "source": "scripts/backtest-omnigold-results.json",
+  "settledScan": 7270,
+  "settledEngine": 277,
+  "overallNetR": -1.346,
+  "note": "No kind is net-profitable after 0.26% PAXG RT fees at scale. Actions use gross direction + fee toxicity. suppress = reject from cards; demote = show but never MOST PROBABLE; prefer = rank boost.",
+  "scalp": {
+    "fvg": { "n": 27, "gross": -0.003, "net": -4.853, "action": "suppress" },
+    "hvn": { "n": 65, "gross": -0.038, "net": -3.071, "action": "suppress" },
+    "ribbon": { "n": 21, "gross": 0.297, "net": -4.74, "action": "suppress" },
+    "openrange": { "n": 69, "gross": 0.22, "net": -1.798, "action": "demote" },
+    "vwap": { "n": 6, "gross": 0.239, "net": -2.092, "action": "demote" },
+    "asian": { "n": 8, "gross": -0.063, "net": -1.713, "action": "demote" },
+    "sweep": { "n": 12, "gross": 0.25, "net": -1.478, "action": "demote" },
+    "bosalign": { "n": 31, "gross": 0.29, "net": -1.18, "action": "demote" },
+    "ob": { "n": 7, "gross": -0.286, "net": -1.37, "action": "demote" },
+    "silverb": { "n": 0, "gross": null, "net": null, "action": "demote" },
+    "vwapband": { "n": 2, "gross": -1.0, "net": -4.226, "action": "suppress" }
+  },
+  "swing": {
+    "sweep": { "n": 5, "gross": 0.375, "net": 0.154, "action": "prefer" },
+    "weekly": { "n": 6, "gross": 0.54, "net": 0.341, "action": "prefer" },
+    "fvg": { "n": 6, "gross": -0.167, "net": -0.522, "action": "demote" },
+    "ribbon": { "n": 4, "gross": -0.008, "net": -0.25, "action": "demote" },
+    "ob": { "n": 1, "gross": -1.0, "net": -1.357, "action": "demote" }
+  },
+  "omnigoldPrefer": ["STRUCT-BOS", "BOS-RETEST", "SQUEEZE-FIRE", "CUSUM-SHIFT", "MMOVE", "HA-FLIP", "INSIDE-BREAK", "ORB", "FVG-FILL"],
+  "omnigoldSuppressExtra": []
+}

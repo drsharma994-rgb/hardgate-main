@@ -18,7 +18,7 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v572',
+  version: 'hg-v574',
   pack: 'GOLD SCALP populate MTF demote',
   built: '2026-09-02T20:00:00Z',
   note: 'GOLD SCALP: MTF bias/conflict demotes (hardReject:false) so demoted cards still populate; Part5–7 mint uses inp. Sacred contracts unchanged.'

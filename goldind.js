@@ -1104,6 +1104,147 @@ var GST_NAME = {
   p7season: 'S48 SEASONAL WINDOW'
 };
 
+/**
+ * Baked setup-edge table from scripts/backtest-omnigold-results.json
+ * (ENGINE 277 settled + SCAN 7270). Overall net expectancy ≈ −1.35R after
+ * 0.26% PAXG RT — almost nothing is fee-positive. Actions:
+ *   suppress — reject (QUALITY GATES / not tradable)
+ *   demote   — paint but never MOST PROBABLE
+ *   prefer   — rank boost when gross+ and rare net+
+ * Re-bake: node scripts/backtest-omnigold.mjs then refresh gold-setup-edge.json.
+ */
+var HG_GOLD_SETUP_EDGE = {
+  scalp: {
+    fvg: { n: 27, gross: -0.003, net: -4.853, action: 'suppress',
+      why: 'SCALP FVG FILL replay net −4.85R (n=27) — fee-toxic + no direction edge' },
+    hvn: { n: 65, gross: -0.038, net: -3.071, action: 'suppress',
+      why: 'SCALP HVN retest replay net −3.07R (n=65)' },
+    ribbon: { n: 21, gross: 0.297, net: -4.74, action: 'suppress',
+      why: 'SCALP EMA ribbon gross+ but net −4.74R (n=21) — stops/fees eat the edge' },
+    vwapband: { n: 2, gross: -1, net: -4.226, action: 'suppress',
+      why: 'SCALP VWAP-band MR replay all losses in sample' },
+    openrange: { n: 69, gross: 0.22, net: -1.798, action: 'demote',
+      why: 'SCALP ORB gross+ but net −1.80R (n=69) — demote, never lead' },
+    vwap: { n: 6, gross: 0.239, net: -2.092, action: 'demote',
+      why: 'SCALP VWAP bounce net −2.09R (n=6)' },
+    asian: { n: 8, gross: -0.063, net: -1.713, action: 'demote',
+      why: 'SCALP Asian breakout net −1.71R (n=8)' },
+    sweep: { n: 12, gross: 0.25, net: -1.478, action: 'demote',
+      why: 'SCALP liquidity sweep net −1.48R (n=12) — prefer SWING sweep instead' },
+    bosalign: { n: 31, gross: 0.29, net: -1.18, action: 'demote',
+      why: 'SCALP BOS align net −1.18R (n=31)' },
+    ob: { n: 7, gross: -0.286, net: -1.37, action: 'demote',
+      why: 'SCALP OB/breaker net −1.37R (n=7)' },
+    silverb: { n: 0, gross: NaN, net: NaN, action: 'demote',
+      why: 'SESSION SILVER BULLET has 0 settled replay trades — unproven, never lead' }
+  },
+  swing: {
+    sweep: { n: 5, gross: 0.375, net: 0.154, action: 'prefer',
+      why: 'SWING 4H liquidity sweep net +0.15R (n=5) — rare fee-survivor' },
+    weekly: { n: 6, gross: 0.54, net: 0.341, action: 'prefer',
+      why: 'SWING weekly range breakout net +0.34R (n=6)' },
+    fvg: { n: 6, gross: -0.167, net: -0.522, action: 'demote',
+      why: 'SWING 4H FVG fill net −0.52R (n=6)' },
+    ribbon: { n: 4, gross: -0.008, net: -0.25, action: 'demote',
+      why: 'SWING 4H ribbon net −0.25R (n=4)' },
+    ob: { n: 1, gross: -1, net: -1.357, action: 'demote',
+      why: 'SWING 4H OB retest lost in sample' }
+  }
+};
+
+/** Plan geometry must match direction — stop on risk side, T1 on reward side. */
+function hgGoldPlanSidesOk(cand){
+  var out = { ok: true, why: '' };
+  try{
+    if (!cand || (cand.dir !== 'long' && cand.dir !== 'short')) return out;
+    var e = +cand.entry, s = +cand.stop, t1 = +cand.t1;
+    if (!isFinite(e) || !isFinite(s)){
+      out.ok = false; out.why = 'missing entry/stop'; return out;
+    }
+    if (cand.dir === 'short'){
+      if (!(s > e)){ out.ok = false; out.why = 'SHORT stop must sit ABOVE entry (got stop ' + s + ' vs entry ' + e + ')'; return out; }
+      if (isFinite(t1) && !(t1 < e)){ out.ok = false; out.why = 'SHORT TP1 must sit BELOW entry'; return out; }
+    } else {
+      if (!(s < e)){ out.ok = false; out.why = 'LONG stop must sit BELOW entry (got stop ' + s + ' vs entry ' + e + ')'; return out; }
+      if (isFinite(t1) && !(t1 > e)){ out.ok = false; out.why = 'LONG TP1 must sit ABOVE entry'; return out; }
+    }
+    return out;
+  }catch(e){ out.ok = false; out.why = 'plan-sides check error'; return out; }
+}
+
+/**
+ * Apply baked replay edge to a gold candidate.
+ * opts.scalp / opts.swing select the table. Never invents levels.
+ * suppress → dropped+reason; demote → demoted stamp; prefer → edgeBoost.
+ * Wrong-side stop/TP always suppresses (geometry bug, not an edge call).
+ */
+function hgGoldSetupEdgeApply(cand, opts){
+  try{
+    if (!cand) return cand;
+    opts = opts || {};
+    var sides = hgGoldPlanSidesOk(cand);
+    if (!sides.ok){
+      cand.dropped = true;
+      cand.reason = sides.why || 'plan sides invalid';
+      if (!Array.isArray(cand.stamps)) cand.stamps = [];
+      if (cand.stamps.indexOf('BAD PLAN SIDES') < 0) cand.stamps.push('BAD PLAN SIDES');
+      return cand;
+    }
+    var table = opts.swing ? HG_GOLD_SETUP_EDGE.swing : HG_GOLD_SETUP_EDGE.scalp;
+    var key = String(cand.stratKey || '');
+    var row = table && table[key];
+    /* Swing stratKey aliases — table keys are evidence labels, not all SW_NAME keys. */
+    if (!row && opts.swing && table){
+      if (key === 'wkbreak') row = table.weekly;
+      else if (key === 'pullback') row = table.ribbon;
+      else if (key === 'bos') row = { action: 'prefer', why: 'SWING 4H BOS thin survivor (n=2 net +)', n: 2, net: 1.2, gross: 1.5 };
+    }
+    if (!row){
+      /* Map human strategy labels from OMNIGOLD ENGINE bridge. */
+      var lab = String(cand.strategy || cand.kind || '').toUpperCase();
+      if (/FVG FILL/.test(lab) && !/^4H/.test(lab)) row = HG_GOLD_SETUP_EDGE.scalp.fvg;
+      else if (/4H FVG/.test(lab)) row = HG_GOLD_SETUP_EDGE.swing.fvg;
+      else if (/HVN|VOLUME NODE/.test(lab)) row = HG_GOLD_SETUP_EDGE.scalp.hvn;
+      else if (/EMA RIBBON/.test(lab) && !/^4H/.test(lab)) row = HG_GOLD_SETUP_EDGE.scalp.ribbon;
+      else if (/4H EMA RIBBON|4H TREND PULLBACK/.test(lab)) row = HG_GOLD_SETUP_EDGE.swing.ribbon;
+      else if (/OPENING RANGE/.test(lab)) row = HG_GOLD_SETUP_EDGE.scalp.openrange;
+      else if (/SESSION VWAP/.test(lab)) row = HG_GOLD_SETUP_EDGE.scalp.vwap;
+      else if (/ASIAN RANGE/.test(lab)) row = HG_GOLD_SETUP_EDGE.scalp.asian;
+      else if (/4H LIQUIDITY SWEEP/.test(lab)) row = HG_GOLD_SETUP_EDGE.swing.sweep;
+      else if (/LIQUIDITY SWEEP/.test(lab)) row = HG_GOLD_SETUP_EDGE.scalp.sweep;
+      else if (/BOS ALIGNMENT|4H BOS/.test(lab)) row = opts.swing ? { action: 'prefer', why: 'SWING BOS thin survivor', n: 2, net: 1.2, gross: 1.5 } : HG_GOLD_SETUP_EDGE.scalp.bosalign;
+      else if (/ORDER BLOCK/.test(lab) && !/^4H/.test(lab)) row = HG_GOLD_SETUP_EDGE.scalp.ob;
+      else if (/4H ORDER BLOCK/.test(lab)) row = HG_GOLD_SETUP_EDGE.swing.ob;
+      else if (/WEEKLY RANGE/.test(lab)) row = HG_GOLD_SETUP_EDGE.swing.weekly;
+      else if (/SILVER BULLET/.test(lab)) row = HG_GOLD_SETUP_EDGE.scalp.silverb;
+      else if (/VWAP BAND/.test(lab)) row = HG_GOLD_SETUP_EDGE.scalp.vwapband;
+    }
+    if (!row || !row.action) return cand;
+    if (!Array.isArray(cand.stamps)) cand.stamps = [];
+    cand.edge = { action: row.action, n: row.n, gross: row.gross, net: row.net, why: row.why };
+    if (row.action === 'suppress'){
+      cand.dropped = true;
+      cand.reason = row.why || ('replay suppress ' + key);
+      if (cand.stamps.indexOf('EDGE SUPPRESS') < 0) cand.stamps.push('EDGE SUPPRESS');
+      return cand;
+    }
+    if (row.action === 'demote'){
+      cand.demoted = true;
+      if (cand.stamps.indexOf('EDGE DEMOTE') < 0) cand.stamps.push('EDGE DEMOTE');
+      var gn = Array.isArray(cand.gateNotes) ? cand.gateNotes.slice() : [];
+      gn.push(row.why || 'measured-negative in gold replay');
+      cand.gateNotes = gn;
+      return cand;
+    }
+    if (row.action === 'prefer'){
+      cand.edgeBoost = (isFinite(cand.edgeBoost) ? cand.edgeBoost : 0) + 2;
+      if (cand.stamps.indexOf('EDGE PREFER') < 0) cand.stamps.push('EDGE PREFER');
+      return cand;
+    }
+    return cand;
+  }catch(e){ return cand; }
+}
+
 /* limit-at-zone entry: when price has extended beyond the setup zone, anchor
    the entry at the structural edge instead of the last 15m close. */
 function __gsEntryFromZone(dir, mark, zone, anchor){
@@ -1777,6 +1918,9 @@ function goldScalpSetups(inp){
           return;
         }
       }
+      /* Replay edge + plan-side geometry (suppress toxic SCALP kinds; fix bogus SHORT/LONG sides). */
+      hgGoldSetupEdgeApply(c, { scalp: true });
+      if (c.dropped){ rejected.push(c); return; }
       if (!seen[c.id]){ seen[c.id] = true; out.push(c); }
     }
     var tol = 0.5*a15;
@@ -3295,6 +3439,11 @@ function goldRankSetups(cands, ctx){
           tally -= 1;
         }
       }catch(eCot){}
+      /* Replay edge prefer boost (SWING survivors / never upgrades demoted to lead). */
+      if (isFinite(c.edgeBoost) && c.edgeBoost > 0 && !c.demoted){
+        parts.push({ label: 'replay EDGE PREFER +' + c.edgeBoost + ' (fee-survivor kind)', pts: c.edgeBoost });
+        tally += c.edgeBoost;
+      }
       /* (1) OFF-SESSION tally bar: demoted off-session candidates must clear
          +2 on STRUCTURAL confluence (agreeing reads + killzone weight only).
          Macro/news/positioning penalties shrink the displayed tally and can
@@ -12324,6 +12473,9 @@ W.goldScalpSetups = goldScalpSetups;
 W.goldScalpLevels = __gsLevels;
 W.goldWatch = goldWatch;
 W.goldRankSetups = goldRankSetups;
+W.HG_GOLD_SETUP_EDGE = HG_GOLD_SETUP_EDGE;
+W.hgGoldPlanSidesOk = hgGoldPlanSidesOk;
+W.hgGoldSetupEdgeApply = hgGoldSetupEdgeApply;
 W.goldCrossVenueMap = goldCrossVenueMap;
 W.goldWatchPromote = goldWatchPromote;
 W.hgGoldInlineBridge = hgGoldInlineBridge;

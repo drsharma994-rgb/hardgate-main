@@ -1625,6 +1625,9 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
             ask: microOpts && microOpts.ask
           }) || cand;
         }
+        /* Replay edge + plan-side geometry (prefer fee-survivors; demote toxic; reject wrong-side stops). */
+        var edgeFn = gfn('hgGoldSetupEdgeApply');
+        if (edgeFn) edgeFn(cand, { swing: true });
         return cand;
       }catch(e){ return null; }
     }

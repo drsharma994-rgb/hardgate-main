@@ -4198,7 +4198,7 @@ terse status, and never launches a first-time scan on a global refresh.
          is built, and stamped on the card. A throwing check is a
          fail-closed not-formed, never a silently tradable card. */
       var formation;
-      try { formation = hgOgFormation({ kind: hit.kind, horizon: cfg.label, plan: plan }); }
+      try { formation = hgOgFormation({ kind: hit.kind, horizon: cfg.label, plan: plan, dir: hit.dir }); }
       catch (eFm) {
         formation = { formed: false, drag: null, failClosed: true,
           reasons: ['formation check threw — fail closed: ' + ((eFm && eFm.message) || eFm)] };
@@ -4208,7 +4208,8 @@ terse status, and never launches a first-time scan on a global refresh.
         gates: gates, grade: grade, plan: plan,
         formation: formation,
         formationScore: (plan && isFinite(fin(plan.formationScore))) ? fin(plan.formationScore) : NaN,
-        replaySurvivor: hgOgIsSurvivor(hit.kind),
+        replaySurvivor: hgOgIsSurvivor(hit.kind) || !!(formation && formation.edgePrefer),
+        edgePrefer: !!(formation && formation.edgePrefer),
         /* Carried on the candidate so the ranker can put the setup the rest
            of the desk agrees with above the one nothing supports. */
         consensus: hgOgConsensus(hgOgConsensusVoters(hits, rows, ex), hit),
@@ -6593,6 +6594,45 @@ terse status, and never launches a first-time scan on a global refresh.
           + '-trade replay: ' + dem.reasons.join('; '));
       }
     }
+    /* ENGINE / gold-tab edge bake (hg-v574): plan sides + suppress/demote/prefer
+       from scripts/gold-setup-edge.json. Does not invent levels. Demote/suppress
+       stand aside from tradable formation (never MOST PROBABLE / engine lead). */
+    try{
+      var wEdge = W();
+      var edgeApply = wEdge && typeof wEdge.hgGoldSetupEdgeApply === 'function'
+        ? wEdge.hgGoldSetupEdgeApply : null;
+      if (edgeApply && out.formed !== false){
+        var plan = setup.plan || {};
+        var horizon = String(setup.horizon || '').toUpperCase();
+        var isSwing = horizon === 'SWING'
+          || /^4H\b/.test(String(kind).toUpperCase())
+          || /WEEKLY|SWING/.test(String(kind).toUpperCase());
+        var probe = {
+          dir: setup.dir,
+          entry: isFinite(fin(plan.entry)) ? fin(plan.entry) : fin(setup.entry),
+          stop: isFinite(fin(plan.stop)) ? fin(plan.stop) : fin(setup.stop),
+          t1: isFinite(fin(plan.t1)) ? fin(plan.t1) : fin(setup.t1),
+          strategy: kind,
+          stratKey: setup.stratKey || '',
+          stamps: [],
+          demoted: !!setup.demoted
+        };
+        edgeApply(probe, isSwing ? { swing: true } : { scalp: true });
+        if (probe.dropped){
+          out.formed = false;
+          out.edgeSuppress = probe.edge || { action: 'suppress', why: probe.reason };
+          out.reasons.push(probe.reason || 'gold setup edge suppress');
+        } else if (probe.demoted && probe.edge && probe.edge.action === 'demote'){
+          out.formed = false;
+          out.edgeDemote = probe.edge;
+          out.reasons.push(probe.edge.why || 'gold setup edge demote');
+        } else if (probe.edgeBoost > 0 && probe.edge && probe.edge.action === 'prefer'){
+          out.edgePrefer = true;
+          out.edgeBoost = probe.edgeBoost;
+          out.edge = probe.edge;
+        }
+      }
+    }catch(eEdge){ /* edge bake optional — stop floor / kind demotion still bind */ }
     return out;
   }
 
@@ -7286,6 +7326,8 @@ terse status, and never launches a first-time scan on a global refresh.
       horizon: horizon,
       kind: String(setup.strategy || setup.stratKey || 'GOLD-ENGINE'),
       dir: setup.dir,
+      stratKey: setup.stratKey || '',
+      demoted: !!setup.demoted,
       plan: {
         entry: fin(setup.entry),
         stop: fin(setup.stop),
@@ -7319,6 +7361,8 @@ terse status, and never launches a first-time scan on a global refresh.
       for (i = 0; i < ranked.length; i++){
         c = ranked[i];
         if (!hgOgGoldEngineGradeOk(c, gradeOpts)) continue;
+        /* EDGE DEMOTE / suppress from gold tabs never leads the ENGINE pick. */
+        if (c.demoted || c.dropped) continue;
         /* FORMATION live-check (hg-v533): engine setups carry no stamp.
            A not-formed setup is never an engine pick — its row still
            renders (levelless) on the engines panel. Fail closed on throw. */
@@ -7328,6 +7372,7 @@ terse status, and never launches a first-time scan on a global refresh.
         if (alignedOnly && (tapeDir === 'long' || tapeDir === 'short')){
           if (String(c.dir || '').toLowerCase() !== tapeDir) continue;
         }
+        if (fm && fm.edgePrefer){ c.edgePrefer = true; c.edgeBoost = fm.edgeBoost; }
         pool.push(c);
       }
       if (!pool.length) return pool;
@@ -7339,6 +7384,10 @@ terse status, and never launches a first-time scan on a global refresh.
         if (gb === 'B' && ga === 'C') return 1;
         if (a.demoted && !b.demoted) return 1;
         if (b.demoted && !a.demoted) return -1;
+        /* Prefer fee-survivor ENGINE kinds (SWING sweep / weekly) over peers. */
+        var ea = (a.edgePrefer || a.edgeBoost > 0) ? 1 : 0;
+        var eb = (b.edgePrefer || b.edgeBoost > 0) ? 1 : 0;
+        if (ea !== eb) return eb - ea;
         return (fin(b.tally) || 0) - (fin(a.tally) || 0);
       });
       return pool;
