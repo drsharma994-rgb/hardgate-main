@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v563',
-  pack: 'Gold RVOL scalp tighten',
-  built: '2026-09-02T07:00:00Z',
-  note: 'RVOL fake-sweep scalp tighten: alert floor 1.30 + Asia 1.50, breach ≥0.15×ATR, close-in-third quality, multi-bar breakout reject, drift filter, COMEX PROXY volume note. SCALP desks pass mode=scalp into sweep engine. Sacred contracts unchanged.'
+  version: 'hg-v564',
+  pack: 'Gold SMC liquidity port',
+  built: '2026-09-02T08:30:00Z',
+  note: 'SMC liquidity() port (joshyattridge): swing cluster + Swept index + close_break BOS/CHoCH. Wired into liquidity map, SCALP smcliq mint, SWING SMC LIQ stamps, OMNIGOLD EQH/EQL fallback, forming panel. Sacred contracts unchanged.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

@@ -213,24 +213,41 @@ function fin(v){
   function hgMechPoolSweep(rows){
     if (!rows || rows.length < 30) return null;
     var f = gfn('findLiquidityPools');
-    if (!f) return null;
-    var pools;
-    try { pools = f(rows); } catch (e) { return null; }
-    if (!pools) return null;
+    var pools = null;
+    if (f){
+      try { pools = f(rows); } catch (e) { pools = null; }
+    }
     var n = rows.length - 1;
     var h = num(rows[n].h), l = num(rows[n].l), c = num(rows[n].c);
     if (!isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
     var rng = h - l;
     if (!(rng > 0)) return null;
-    var bs = pools.buySide, ss = pools.sellSide;
-    var bl = bs ? num(bs.level) : NaN, sl = ss ? num(ss.level) : NaN;
-    if (isFinite(bl) && h > bl && c < bl && (h - bl) >= rng * 0.2){
-      return { kind:'EQH-SWEEP', dir:'short', level: bl,
-               why:'swept ' + (num(bs.count) || 0) + ' equal highs at ' + bl.toFixed(2) + ' and closed back below' };
+    if (pools){
+      var bs = pools.buySide, ss = pools.sellSide;
+      var bl = bs ? num(bs.level) : NaN, sl = ss ? num(ss.level) : NaN;
+      if (isFinite(bl) && h > bl && c < bl && (h - bl) >= rng * 0.2){
+        return { kind:'EQH-SWEEP', dir:'short', level: bl,
+                 why:'swept ' + (num(bs.count) || 0) + ' equal highs at ' + bl.toFixed(2) + ' and closed back below' };
+      }
+      if (isFinite(sl) && l < sl && c > sl && (sl - l) >= rng * 0.2){
+        return { kind:'EQL-SWEEP', dir:'long', level: sl,
+                 why:'swept ' + (num(ss.count) || 0) + ' equal lows at ' + sl.toFixed(2) + ' and reclaimed' };
+      }
     }
-    if (isFinite(sl) && l < sl && c > sl && (sl - l) >= rng * 0.2){
-      return { kind:'EQL-SWEEP', dir:'long', level: sl,
-               why:'swept ' + (num(ss.count) || 0) + ' equal lows at ' + sl.toFixed(2) + ' and reclaimed' };
+    /* SMC liquidity() port — cluster swing highs/lows + Swept index (hg-v564) */
+    var smcHitFn = gfn('hgGoldSmcLiquidityHit');
+    if (smcHitFn){
+      var hit = null;
+      try { hit = smcHitFn(rows, { closeBreak: true, maxAge: 8 }); } catch (e2) { hit = null; }
+      if (hit && hit.ok && hit.dir && isFinite(num(hit.level))){
+        return {
+          kind: hit.dir === 'short' ? 'EQH-SWEEP' : 'EQL-SWEEP',
+          dir: hit.dir,
+          level: num(hit.level),
+          why: 'SMC liquidity cluster swept + close reclaim @ ' + num(hit.level).toFixed(2)
+            + (isFinite(num(hit.sweptAge)) ? (' · age ' + num(hit.sweptAge)) : '')
+        };
+      }
     }
     return null;
   }

@@ -808,7 +808,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 </main>
 
 
-<script src="build-stamp.js?v=563"></script>
+<script src="build-stamp.js?v=564"></script>
 <script src="hghost.js"></script>
 <script src="indicators.js"></script>
 <script src="indicators2.js"></script>
@@ -855,7 +855,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=559"></script>
+<script src="hg-mechanics.js?v=564"></script>
 <script src="./hg-gates.js?v=559"></script>
 <script src="omniroute.js?v=559"></script>
 <script src="desk-scan-universe.js"></script>
@@ -870,11 +870,11 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- conviction-lock.js: ConvictionLockManager (anti-repaint lifecycle) -->
 <script src="conviction-lock.js"></script>
 <!-- goldind.js + goldscalp.js: GOLD SCALP tab (pure SMC/ICT + indicator detectors, then the tab) — after indicators2/binance/macro/xuniverse/news, before brain.js -->
-<script src="goldind.js?v=563"></script>
+<script src="goldind.js?v=564"></script>
 <script src="macro-feeds.js"></script>
 <script src="goldscalp.js?v=563"></script>
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
-<script src="goldswing.js?v=563"></script>
+<script src="goldswing.js?v=564"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
 <script src="omnigold.js?v=563"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->

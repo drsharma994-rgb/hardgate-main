@@ -2366,6 +2366,23 @@ async function runScan(ui, scanSt){
             }
           }
         }
+        var smcHitFn = gfn('hgGoldSmcLiquidityHit');
+        if (smcHitFn && got.length){
+          var smcHit = smcHitFn(gold.rows4h, { closeBreak: true, maxAge: 12 });
+          if (smcHit && smcHit.ok && smcHit.dir){
+            for (var smci = 0; smci < got.length; smci++){
+              if (!got[smci]) continue;
+              if (!Array.isArray(got[smci].stamps)) got[smci].stamps = [];
+              if (got[smci].dir === smcHit.dir){
+                if (got[smci].stamps.indexOf('SMC LIQ') < 0) got[smci].stamps.push('SMC LIQ');
+                got[smci].smcSweptAge = smcHit.sweptAge;
+              } else if (got[smci].dir && got[smci].dir !== smcHit.dir){
+                got[smci].demoted = true;
+                if (got[smci].stamps.indexOf('SMC LIQ OPPOSE') < 0) got[smci].stamps.push('SMC LIQ OPPOSE');
+              }
+            }
+          }
+        }
       }catch(ePn){}
       collectWatch(gold, v);
       for (i = 0; i < got.length; i++) cands.push(got[i]);

@@ -1062,6 +1062,7 @@ var GST_NAME = {
   pdraid: 'PRIOR-DAY LIQUIDITY RAID',
   eqhi:   'EQUAL HIGHS (STOP CLUSTER)',
   eqlo:   'EQUAL LOWS (STOP CLUSTER)',
+  smcliq: 'SMC LIQUIDITY POOL (CLUSTER + SWEPT)',
   oitrap: 'OI-TRAP REVERSAL',
   fundext: 'FUNDING EXTREME',
   liqsweep: 'GOLD LIQUIDITY SWEEP',
@@ -1960,6 +1961,33 @@ function goldScalpSetups(inp){
       }
     }catch(eP4){}
 
+    /* --- 1f) SMC liquidity cluster + swept index (smart-money-concepts port) --- */
+    try{
+      if (!D.__smcLiq){
+        D.__smcLiq = hgGoldSmcLiquidity(rows, {});
+        D.__smcHit = hgGoldSmcLiquidityHit(rows, { smc: D.__smcLiq, closeBreak: true });
+      }
+      var smcHit = D.__smcHit;
+      if (smcHit && smcHit.ok && smcHit.dir && isFinite(smcHit.level)){
+        var smcStop = smcHit.dir === 'long'
+          ? smcHit.level - 1.2 * a15
+          : smcHit.level + 1.2 * a15;
+        var smcCand = __gsCand('smcliq', smcHit.dir, D, smcStop, __gsSnapLvls(D, smcHit.dir),
+          smcHit.why + ' — SMC liquidity() cluster + Swept index + close reclaim',
+          'a 15m close back beyond ' + smcHit.level.toFixed(2) + ' negates the SMC reclaim',
+          undefined, smcHit.level);
+        if (smcCand){
+          smcCand.smcSweptAge = smcHit.sweptAge;
+          smcCand.smcPoolCount = smcHit.pool ? smcHit.pool.count : NaN;
+          if (!Array.isArray(smcCand.stamps)) smcCand.stamps = [];
+          smcCand.stamps.push('SMC LIQ'
+            + (isFinite(smcHit.sweptAge) ? (' · age ' + smcHit.sweptAge) : '')
+            + (smcHit.pool && smcHit.pool.count ? (' · n=' + smcHit.pool.count) : ''));
+          push(smcCand);
+        }
+      }
+    }catch(eSmc){}
+
     /* --- 2) order-block / breaker retest (robust: active zones + structure alignment) --- */
     var obRetestDone = false;
     if (D.obRetest && D.obRetest.trigger){
@@ -2671,7 +2699,7 @@ function hgGoldConfluenceScore(cand, ctx){
       } else p.location += 2;
     }
     var key = cand.stratKey || '';
-    if (/sweep|liqsweep|nyexh|sweepob|ob|asian|pdraid|eqhi|eqlo|hvn|vwap|fvg/i.test(key)){
+    if (/sweep|liqsweep|nyexh|sweepob|smcliq|ob|asian|pdraid|eqhi|eqlo|hvn|vwap|fvg/i.test(key)){
       p.location += 7; tools.push('S/R / liquidity location');
     } else p.location += 2;
     if (cand.vpTargets && cand.vpTargets.ok){
@@ -2719,7 +2747,7 @@ function hgGoldConfluenceScore(cand, ctx){
     /* --- Volatility regime (10) — ADX trend vs chop --- */
     var adx = ctx.adx || (rows ? goldADX(rows) : null);
     var adxV = adx && isFinite(adx.adx) ? adx.adx : (adx && isFinite(adx.value) ? adx.value : NaN);
-    var mrevKeys = { vwap:1, vwapband:1, adrfade:1, fvg:1, sweep:1, liqsweep:1, nyexh:1, sweepob:1 };
+    var mrevKeys = { vwap:1, vwapband:1, adrfade:1, fvg:1, sweep:1, liqsweep:1, nyexh:1, sweepob:1, smcliq:1 };
     var contKeys = { ribbon:1, bosalign:1, openrange:1, asian:1 };
     if (isFinite(adxV)){
       tools.push('ADX ' + adxV.toFixed(0));
@@ -2736,7 +2764,7 @@ function hgGoldConfluenceScore(cand, ctx){
     /* --- Volume / order flow (10) --- */
     if (cand.sweepScore >= 75 || cand.nyExhScore >= 75) p.volume += 8;
     else if (cand.sweepScore >= 65 || cand.nyExhScore >= 65) p.volume += 5;
-    else if (/sweep|liqsweep|nyexh|sweepob|oitrap/i.test(key)) p.volume += 4;
+    else if (/sweep|liqsweep|nyexh|sweepob|smcliq|oitrap/i.test(key)) p.volume += 4;
     if (cand.vpTargets && cand.vpTargets.confirmed) p.volume += 2;
     if (ctx.rvol && ctx.rvol >= 1.25) p.volume += 2;
     p.volume = Math.min(10, p.volume);
@@ -2771,9 +2799,9 @@ function hgGoldConfluenceScore(cand, ctx){
     p.macro = Math.min(10, p.macro);
 
     /* --- Entry trigger (10) --- */
-    if (/sweep|liqsweep|nyexh|sweepob/i.test(key) && (cand.confirmed || cand.sweepTier === 'alert' || cand.nyExhTier === 'alert' || cand.sweepObTier === 'alert'))
+    if (/sweep|liqsweep|nyexh|sweepob|smcliq/i.test(key) && (cand.confirmed || cand.sweepTier === 'alert' || cand.nyExhTier === 'alert' || cand.sweepObTier === 'alert' || isFinite(cand.smcSweptAge)))
       p.trigger += 10;
-    else if (/sweep|liqsweep|nyexh|sweepob|ob|fvg|openrange|asian|bosalign/i.test(key))
+    else if (/sweep|liqsweep|nyexh|sweepob|smcliq|ob|fvg|openrange|asian|bosalign/i.test(key))
       p.trigger += 7;
     else if (/ribbon|vwap|stochrsi|hvn/i.test(key))
       p.trigger += 5;
@@ -6297,6 +6325,362 @@ function hgGoldEqualExtremes(rows, atrMul){
   }catch(e){ return out; }
 }
 
+/* =========================================================================
+   SMC LIQUIDITY (hg-v564) — port of joshyattridge/smart-money-concepts
+   `swing_highs_lows` + `liquidity` (browser JS; no Python import).
+   Clusters swing highs/lows within rangePercent of the full H–L range;
+   returns Level · End · Swept index (0 = unswept).
+   bos_choch close_break: displacement vs wick — see hgGoldSmcBosChoch.
+========================================================================= */
+
+var HG_GOLD_SMC_RANGE_PCT = 0.01;
+var HG_GOLD_SMC_SWING_LEN = 50;
+var HG_GOLD_SMC_SWEPT_MAX_AGE = 8; /* bars since Swept for live reclaim setups */
+
+/**
+ * Fractal swings matching SMC swing_highs_lows(swing_length).
+ * Returns { highLow: Float32Array|null[], level: Float32Array|null[], swings: [{i,highLow,level}] }.
+ * highLow: +1 swing high, −1 swing low.
+ */
+function hgGoldSmcSwingHighsLows(rows, swingLength){
+  var empty = { highLow: [], level: [], swings: [] };
+  try{
+    rows = __rows(rows);
+    if (!rows || rows.length < 10) return empty;
+    var n = rows.length;
+    var win = Math.max(2, Math.floor(isFinite(swingLength) ? swingLength : HG_GOLD_SMC_SWING_LEN) * 2);
+    var half = Math.floor(win / 2);
+    if (n < win + 1) return empty;
+    var highLow = new Array(n);
+    var level = new Array(n);
+    var i, j, k, hiMax, loMin, ok;
+    for (i = 0; i < n; i++){ highLow[i] = NaN; level[i] = NaN; }
+    for (i = half; i < n - half; i++){
+      hiMax = -Infinity; loMin = Infinity;
+      for (j = i - half; j <= i + half; j++){
+        if (rows[j].h > hiMax) hiMax = rows[j].h;
+        if (rows[j].l < loMin) loMin = rows[j].l;
+      }
+      if (rows[i].h === hiMax){ highLow[i] = 1; level[i] = rows[i].h; }
+      else if (rows[i].l === loMin){ highLow[i] = -1; level[i] = rows[i].l; }
+    }
+    /* Drop consecutive same-side swings, keep the more extreme */
+    while (true){
+      var positions = [];
+      for (i = 0; i < n; i++) if (!isNaN(highLow[i])) positions.push(i);
+      if (positions.length < 2) break;
+      var remove = new Array(positions.length);
+      for (i = 0; i < remove.length; i++) remove[i] = false;
+      var changed = false;
+      for (k = 0; k < positions.length - 1; k++){
+        var a = positions[k], b = positions[k + 1];
+        if (highLow[a] === 1 && highLow[b] === 1){
+          if (rows[a].h < rows[b].h){ remove[k] = true; changed = true; }
+          else { remove[k + 1] = true; changed = true; }
+        } else if (highLow[a] === -1 && highLow[b] === -1){
+          if (rows[a].l > rows[b].l){ remove[k] = true; changed = true; }
+          else { remove[k + 1] = true; changed = true; }
+        }
+      }
+      if (!changed) break;
+      for (k = 0; k < positions.length; k++){
+        if (remove[k]){ highLow[positions[k]] = NaN; level[positions[k]] = NaN; }
+      }
+    }
+    /* SMC end-point flip (same as upstream) */
+    positions = [];
+    for (i = 0; i < n; i++) if (!isNaN(highLow[i])) positions.push(i);
+    if (positions.length){
+      if (highLow[positions[0]] === 1){ highLow[0] = -1; level[0] = rows[0].l; }
+      if (highLow[positions[0]] === -1){ highLow[0] = 1; level[0] = rows[0].h; }
+      /* re-read after possible overwrite of index 0 */
+      positions = [];
+      for (i = 0; i < n; i++) if (!isNaN(highLow[i])) positions.push(i);
+      if (positions.length){
+        var lastP = positions[positions.length - 1];
+        if (highLow[lastP] === -1){ highLow[n - 1] = 1; level[n - 1] = rows[n - 1].h; }
+        if (highLow[lastP] === 1){ highLow[n - 1] = -1; level[n - 1] = rows[n - 1].l; }
+      }
+    }
+    var swings = [];
+    for (i = 0; i < n; i++){
+      if (!isNaN(highLow[i])){
+        swings.push({ i: i, highLow: highLow[i], level: level[i] });
+      }
+    }
+    return { highLow: highLow, level: level, swings: swings };
+  }catch(e){ return empty; }
+}
+
+/**
+ * Cluster equal highs/lows within rangePercent of full chart range.
+ * Liquidity +1 = buy-side (equal highs); −1 = sell-side (equal lows).
+ * Swept = candle index that took the pool (0 = still unswept).
+ */
+function hgGoldSmcLiquidity(rows, opts){
+  var out = {
+    ok: false, pools: [], unswept: [], swept: [],
+    rangePercent: HG_GOLD_SMC_RANGE_PCT, pipRange: NaN, swingLength: HG_GOLD_SMC_SWING_LEN
+  };
+  try{
+    opts = opts || {};
+    rows = __rows(rows);
+    if (!rows || rows.length < 40) return out;
+    var rangePct = isFinite(opts.rangePercent) ? opts.rangePercent : HG_GOLD_SMC_RANGE_PCT;
+    var swingLen = isFinite(opts.swingLength) ? opts.swingLength : HG_GOLD_SMC_SWING_LEN;
+    out.rangePercent = rangePct;
+    out.swingLength = swingLen;
+    var shl = opts.swings || hgGoldSmcSwingHighsLows(rows, swingLen);
+    if (!shl || !shl.highLow || !shl.highLow.length) return out;
+    var n = rows.length;
+    var hiMax = -Infinity, loMin = Infinity, i;
+    for (i = 0; i < n; i++){
+      if (rows[i].h > hiMax) hiMax = rows[i].h;
+      if (rows[i].l < loMin) loMin = rows[i].l;
+    }
+    if (!(hiMax > loMin)) return out;
+    var pipRange = (hiMax - loMin) * rangePct;
+    out.pipRange = pipRange;
+    var shlHL = shl.highLow.slice();
+    var shlLevel = shl.level.slice();
+
+    function collect(sideSign){
+      var indices = [];
+      for (i = 0; i < n; i++) if (shlHL[i] === sideSign) indices.push(i);
+      var ii, jj, start, group, groupEnd, swept, cStart, rangeLow, rangeHigh, anchor;
+      for (ii = 0; ii < indices.length; ii++){
+        i = indices[ii];
+        if (shlHL[i] !== sideSign) continue;
+        anchor = shlLevel[i];
+        rangeLow = anchor - pipRange;
+        rangeHigh = anchor + pipRange;
+        group = [anchor];
+        groupEnd = i;
+        swept = 0;
+        cStart = i + 1;
+        if (cStart < n){
+          if (sideSign === 1){
+            for (jj = cStart; jj < n; jj++){
+              if (rows[jj].h >= rangeHigh){ swept = jj; break; }
+            }
+          } else {
+            for (jj = cStart; jj < n; jj++){
+              if (rows[jj].l <= rangeLow){ swept = jj; break; }
+            }
+          }
+        }
+        for (jj = 0; jj < indices.length; jj++){
+          var j = indices[jj];
+          if (j <= i) continue;
+          if (swept && j >= swept) break;
+          if (shlHL[j] === sideSign && shlLevel[j] >= rangeLow && shlLevel[j] <= rangeHigh){
+            group.push(shlLevel[j]);
+            groupEnd = j;
+            shlHL[j] = 0;
+          }
+        }
+        if (group.length > 1){
+          var sum = 0, g;
+          for (g = 0; g < group.length; g++) sum += group[g];
+          var avg = sum / group.length;
+          var pool = {
+            liquidity: sideSign,
+            side: sideSign === 1 ? 'buy-side' : 'sell-side',
+            level: avg,
+            startIdx: i,
+            endIdx: groupEnd,
+            sweptIdx: swept || 0,
+            count: group.length,
+            unswept: !(swept > 0),
+            dirAfterSweep: sideSign === 1 ? 'short' : 'long'
+          };
+          out.pools.push(pool);
+          if (pool.unswept) out.unswept.push(pool);
+          else out.swept.push(pool);
+        }
+      }
+    }
+    collect(1);
+    collect(-1);
+    out.ok = out.pools.length > 0;
+    return out;
+  }catch(e){ return out; }
+}
+
+/**
+ * Live setup from a recently swept SMC pool + close reclaim.
+ * closeBreak mirrors bos_choch: when true, reclaim needs close back inside;
+ * when false, a wick back inside is enough (weaker).
+ */
+function hgGoldSmcLiquidityHit(rows, opts){
+  var out = {
+    ok: false, potential: false, dir: null, level: NaN, pool: null,
+    sweptAge: NaN, closeReclaim: false, closeBreak: true, why: ''
+  };
+  try{
+    opts = opts || {};
+    rows = __rows(rows);
+    if (!rows || rows.length < 40){ out.why = 'need ≥40 bars'; return out; }
+    var closeBreak = opts.closeBreak !== false;
+    out.closeBreak = closeBreak;
+    var maxAge = isFinite(opts.maxAge) ? opts.maxAge : HG_GOLD_SMC_SWEPT_MAX_AGE;
+    var smc = opts.smc || hgGoldSmcLiquidity(rows, opts);
+    if (!smc || !smc.swept || !smc.swept.length){
+      out.why = 'no swept SMC liquidity cluster';
+      return out;
+    }
+    var n = rows.length;
+    var best = null, bi, age, pool, px = rows[n - 1];
+    for (bi = 0; bi < smc.swept.length; bi++){
+      pool = smc.swept[bi];
+      if (!(pool.sweptIdx > 0)) continue;
+      age = n - 1 - pool.sweptIdx;
+      if (age < 0 || age > maxAge) continue;
+      if (!best || age < best.sweptAge){
+        best = {
+          pool: pool, sweptAge: age, dir: pool.dirAfterSweep, level: pool.level
+        };
+      }
+    }
+    if (!best){
+      out.why = 'swept pools older than ' + maxAge + ' bars';
+      return out;
+    }
+    out.potential = true;
+    out.dir = best.dir;
+    out.level = best.level;
+    out.pool = best.pool;
+    out.sweptAge = best.sweptAge;
+    /* close_break=true → displacement reclaim (close back inside).
+       close_break=false → wick reclaim (weaker — high/low only). */
+    if (best.dir === 'long'){
+      out.closeReclaim = closeBreak
+        ? (px.c > best.level)
+        : (px.l < best.level && px.h > best.level);
+    } else {
+      out.closeReclaim = closeBreak
+        ? (px.c < best.level)
+        : (px.h > best.level && px.l < best.level);
+    }
+    if (!out.closeReclaim){
+      out.why = (closeBreak ? 'close' : 'wick') + ' has not reclaimed SMC pool '
+        + best.level.toFixed(2) + ' after sweep (age ' + best.sweptAge + ')';
+      return out;
+    }
+    out.ok = true;
+    out.why = 'SMC ' + best.pool.side + ' pool ~' + best.level.toFixed(2)
+      + ' · n=' + best.pool.count
+      + ' · swept ' + best.sweptAge + ' bar(s) ago'
+      + ' · ' + (closeBreak ? 'close' : 'wick') + ' reclaim → ' + String(best.dir).toUpperCase();
+    return out;
+  }catch(e){ out.why = 'SMC liquidity hit error'; return out; }
+}
+
+/**
+ * Lightweight BOS/CHoCH break-mode helper (SMC bos_choch close_break flag).
+ * closeBreak=true → structure break by close (displacement).
+ * closeBreak=false → structure break by high/low wick (weaker).
+ */
+function hgGoldSmcBosChoch(rows, opts){
+  var out = {
+    ok: false, bos: null, choch: null, level: NaN, brokenIdx: -1,
+    closeBreak: true, mode: 'close', why: ''
+  };
+  try{
+    opts = opts || {};
+    rows = __rows(rows);
+    if (!rows || rows.length < 30){ out.why = 'need ≥30 bars'; return out; }
+    var closeBreak = opts.closeBreak !== false;
+    out.closeBreak = closeBreak;
+    out.mode = closeBreak ? 'close' : 'wick';
+    var swingLen = isFinite(opts.swingLength) ? opts.swingLength : 20;
+    var shl = opts.swings || hgGoldSmcSwingHighsLows(rows, swingLen);
+    var swings = (shl && shl.swings) ? shl.swings : [];
+    if (swings.length < 4){ out.why = 'need ≥4 SMC swings'; return out; }
+    var n = rows.length;
+    var last4 = swings.slice(-4);
+    var hl = last4.map(function(s){ return s.highLow; });
+    var lv = last4.map(function(s){ return s.level; });
+    var bullSeq = hl[0] === -1 && hl[1] === 1 && hl[2] === -1 && hl[3] === 1;
+    var bearSeq = hl[0] === 1 && hl[1] === -1 && hl[2] === 1 && hl[3] === -1;
+    var breakLevel = NaN, kind = null, sign = 0;
+    if (bullSeq && lv[0] < lv[2] && lv[2] < lv[1] && lv[1] < lv[3]){
+      /* HH + HL continuation → bullish BOS of prior swing high */
+      kind = 'bos'; sign = 1; breakLevel = lv[1];
+    } else if (bearSeq && lv[0] > lv[2] && lv[2] > lv[1] && lv[1] > lv[3]){
+      kind = 'bos'; sign = -1; breakLevel = lv[1];
+    } else if (bullSeq && lv[3] > lv[1] && lv[1] > lv[0] && lv[0] > lv[2]){
+      kind = 'choch'; sign = 1; breakLevel = lv[1];
+    } else if (bearSeq && lv[3] < lv[1] && lv[1] < lv[0] && lv[0] < lv[2]){
+      kind = 'choch'; sign = -1; breakLevel = lv[1];
+    }
+    if (!kind || !isFinite(breakLevel)){
+      out.why = 'no SMC BOS/CHoCH pattern in last 4 swings';
+      return out;
+    }
+    var start = last4[2].i + 1, bi, broken = -1;
+    for (bi = start; bi < n; bi++){
+      if (sign > 0){
+        if (closeBreak ? (rows[bi].c > breakLevel) : (rows[bi].h > breakLevel)){ broken = bi; break; }
+      } else {
+        if (closeBreak ? (rows[bi].c < breakLevel) : (rows[bi].l < breakLevel)){ broken = bi; break; }
+      }
+    }
+    if (broken < 0){
+      out.why = 'SMC ' + kind.toUpperCase() + ' level ' + breakLevel.toFixed(2)
+        + ' not yet broken (' + out.mode + ')';
+      out.level = breakLevel;
+      return out;
+    }
+    out.ok = true;
+    out.level = breakLevel;
+    out.brokenIdx = broken;
+    if (kind === 'bos') out.bos = sign > 0 ? 'bullish' : 'bearish';
+    else out.choch = sign > 0 ? 'bullish' : 'bearish';
+    out.why = 'SMC ' + (out.bos || out.choch) + ' ' + kind.toUpperCase()
+      + ' @ ' + breakLevel.toFixed(2) + ' · ' + out.mode + ' break'
+      + ' · age ' + (n - 1 - broken);
+    return out;
+  }catch(e){ out.why = 'SMC BOS/CHoCH error'; return out; }
+}
+
+function hgGoldSmcLiquidityHtml(smc){
+  try{
+    smc = smc || {};
+    var h = '<div class="note" data-hg-gold-smcliq="1" style="margin-top:8px">';
+    h += '<b>SMC LIQUIDITY</b>';
+    if (isFinite(smc.rangePercent))
+      h += ' · band ' + (smc.rangePercent * 100).toFixed(1) + '% of range';
+    if (isFinite(smc.pipRange))
+      h += ' · ±' + smc.pipRange.toFixed(2);
+    if (!(smc.pools && smc.pools.length)){
+      h += '<div class="dim" style="margin-top:4px">no clustered swing pools</div></div>';
+      return h;
+    }
+    var i, p, shown = 0;
+    for (i = 0; i < smc.pools.length && shown < 4; i++){
+      p = smc.pools[i];
+      h += '<div style="margin-top:4px">'
+        + String(p.side || '').toUpperCase()
+        + ' · n=' + p.count
+        + ' · ' + (+p.level).toFixed(2)
+        + (        p.unswept
+          ? ' · <b>UNSWEPT</b>'
+          : (' · <b>SWEPT</b> idx ' + p.sweptIdx
+            + (isFinite(smc._n) ? (' (age ' + (smc._n - 1 - p.sweptIdx) + ')') : '')))
+        + (p.dirAfterSweep ? (' → ' + String(p.dirAfterSweep).toUpperCase() + ' on reclaim') : '')
+        + '</div>';
+      shown++;
+    }
+    if (smc.hit && smc.hit.ok){
+      h += '<div style="margin-top:4px"><b>HIT ' + String(smc.hit.dir || '').toUpperCase() + '</b> — '
+        + String(smc.hit.why || '').replace(/[<>&]/g, '') + '</div>';
+    }
+    h += '</div>';
+    return h;
+  }catch(e){ return ''; }
+}
+
 function hgGoldBarRvol(rows, idx, win){
   try{
     rows = __rows(rows);
@@ -6426,9 +6810,9 @@ function hgGoldPivotLevels(rows, leftBars, rightBars){
   }catch(e){ return out; }
 }
 
-/** Liquidity-level map: Asia · PDH/PDL · equals · pivots · round numbers. */
+/** Liquidity-level map: Asia · PDH/PDL · equals · SMC clusters · pivots · round numbers. */
 function hgGoldLiquidityMap(rows, opts){
-  var out = { levels: [], atr: NaN, asia: null, priorDay: null, equals: null };
+  var out = { levels: [], atr: NaN, asia: null, priorDay: null, equals: null, smc: null };
   try{
     opts = opts || {};
     rows = __rows(rows);
@@ -6439,10 +6823,17 @@ function hgGoldLiquidityMap(rows, opts){
     out.asia = goldAsianRange(rows);
     out.priorDay = hgGoldPriorDayLevels(rows);
     out.equals = hgGoldEqualExtremes(rows, opts.eqTol || HG_GOLD_SWEEP_EQ_TOL);
+    out.smc = hgGoldSmcLiquidity(rows, {
+      rangePercent: opts.smcRangePercent || HG_GOLD_SMC_RANGE_PCT,
+      swingLength: opts.smcSwingLength || HG_GOLD_SMC_SWING_LEN
+    });
+    out.smc._n = rows.length;
     var piv = hgGoldPivotLevels(rows, opts.pivotL || 3, opts.pivotR || 3);
-    function add(level, kind, label, side){
+    function add(level, kind, label, side, extra){
       if (!isFinite(level)) return;
-      out.levels.push({ level: level, kind: kind, label: label, side: side || null });
+      var row = { level: level, kind: kind, label: label, side: side || null };
+      if (extra) for (var ek in extra) if (Object.prototype.hasOwnProperty.call(extra, ek)) row[ek] = extra[ek];
+      out.levels.push(row);
     }
     if (out.asia && isFinite(out.asia.hi)){
       add(out.asia.hi, 'asia', 'ASIA HIGH', 'buy-side');
@@ -6457,6 +6848,16 @@ function hgGoldLiquidityMap(rows, opts){
       add(out.equals.highs[ei].level, 'equal', 'EQUAL HIGHS', 'buy-side');
     for (ei = 0; ei < (out.equals.lows || []).length; ei++)
       add(out.equals.lows[ei].level, 'equal', 'EQUAL LOWS', 'sell-side');
+    if (out.smc && out.smc.pools){
+      for (ei = 0; ei < out.smc.pools.length; ei++){
+        var sp = out.smc.pools[ei];
+        add(sp.level, 'smc',
+          'SMC ' + (sp.side === 'buy-side' ? 'EQ HIGH' : 'EQ LOW')
+            + (sp.unswept ? ' UNSWEPT' : ' SWEPT'),
+          sp.side,
+          { sweptIdx: sp.sweptIdx, endIdx: sp.endIdx, count: sp.count, unswept: sp.unswept });
+      }
+    }
     for (ei = 0; ei < piv.highs.length; ei++)
       add(piv.highs[ei].level, 'pivot', piv.highs[ei].label, 'buy-side');
     for (ei = 0; ei < piv.lows.length; ei++)
@@ -6471,8 +6872,8 @@ function hgGoldLiquidityMap(rows, opts){
       keep = true;
       for (uj = 0; uj < uniq.length; uj++){
         if (Math.abs(uniq[uj].level - out.levels[ui].level) <= tol){
-          /* Prefer session/prior-day over round/pivot duplicates */
-          var rank = { asia: 5, pdh: 5, pdl: 5, equal: 4, pivot: 3, round: 1 };
+          /* Prefer session/prior-day / SMC over round/pivot duplicates */
+          var rank = { asia: 5, pdh: 5, pdl: 5, smc: 5, equal: 4, pivot: 3, round: 1 };
           if ((rank[out.levels[ui].kind] || 0) > (rank[uniq[uj].kind] || 0))
             uniq[uj] = out.levels[ui];
           keep = false; break;
@@ -8425,7 +8826,7 @@ function hgGoldApplyFormingRegime(cand, regime){
     if (!cand || !regime) return cand;
     var key = cand.stratKey || '';
     var cont = { ribbon:1, bosalign:1, macro:1, wkbreak:1, pullback:1, openrange:1 };
-    var mrev = { vwap:1, vwapband:1, adrfade:1, fvg:1, stochrsi:1, sweep:1, liqsweep:1, nyexh:1, sweepob:1, oitrap:1 };
+    var mrev = { vwap:1, vwapband:1, adrfade:1, fvg:1, stochrsi:1, sweep:1, liqsweep:1, nyexh:1, sweepob:1, smcliq:1, oitrap:1 };
     if (key === 'rsidiv'){
       cand.demoted = true;
       if (!Array.isArray(cand.stamps)) cand.stamps = [];
@@ -8518,6 +8919,14 @@ function hgGoldFormingStack(inp){
       asia: out.asia,
       newsGate: inp.newsGate || (inp.news ? hgGoldNewsGate(inp.news, inp.now || Date.now()) : null)
     });
+    out.smcLiq = hgGoldSmcLiquidity(rows, {});
+    out.smcLiq._n = rows.length;
+    out.smcHit = hgGoldSmcLiquidityHit(rows, {
+      smc: out.smcLiq, closeBreak: true,
+      maxAge: (inp.scalp || inp.tf === '15m') ? HG_GOLD_SMC_SWEPT_MAX_AGE : 12
+    });
+    out.smcBos = hgGoldSmcBosChoch(rows, { closeBreak: true, swingLength: 20 });
+    out.smcLiq.hit = out.smcHit;
     out.vprof = goldVolumeProfile(rows, 100, 50);
     out.vpBundle = typeof hgGoldVpBundle === 'function' ? hgGoldVpBundle(rows, { now: inp.now }) : null;
     out.vpTargets = null;
@@ -8595,6 +9004,19 @@ function hgGoldFormingStack(inp){
       watch('eqlo', 'armed', out.equals.lows[0].level,
         'Equal lows ~' + out.equals.lows[0].level.toFixed(2) + ' — clustered stops',
         null, 'long', 'structure');
+    }
+    if (out.smcLiq && out.smcLiq.ok){
+      var smcWatch = (out.smcLiq.unswept && out.smcLiq.unswept[0])
+        || (out.smcLiq.pools && out.smcLiq.pools[0]);
+      if (smcWatch){
+        watch('smcliq', out.smcHit && out.smcHit.ok ? 'armed' : 'armed', smcWatch.level,
+          'SMC liquidity cluster n=' + smcWatch.count + ' @ ' + smcWatch.level.toFixed(2)
+            + (smcWatch.unswept ? ' UNSWEPT' : ' SWEPT')
+            + ' · band ' + ((out.smcLiq.rangePercent || 0) * 100).toFixed(1) + '%',
+          null, smcWatch.dirAfterSweep || null, 'structure');
+      }
+    } else {
+      watch('smcliq', 'idle', null, '', 'no SMC swing clusters', null, 'structure');
     }
 
     /* Layer 3/5 — Asia sweep→London + PDH raid confirmation status */
@@ -8741,6 +9163,22 @@ function hgGoldFormingStack(inp){
         }
       }
     }
+    if (out.smcHit && out.smcHit.ok){
+      out.strategies.push({
+        key: 'smc-liq', dir: out.smcHit.dir, level: out.smcHit.level,
+        grade: 'forming', why: out.smcHit.why,
+        invalidates: isFinite(out.smcHit.level)
+          ? (out.smcHit.level + (out.smcHit.dir === 'long' ? -1 : 1)
+            * (out.sessionBuf && out.sessionBuf.stopBuffer || 0))
+          : NaN
+      });
+      out.note = (out.note ? out.note + ' · ' : '') + 'smc-liq '
+        + String(out.smcHit.dir || '').toUpperCase();
+    }
+    if (out.smcBos && out.smcBos.ok){
+      out.note = (out.note ? out.note + ' · ' : '') + 'smc-'
+        + (out.smcBos.bos ? 'bos' : 'choch') + '/' + out.smcBos.mode;
+    }
 
     /* Core confluence score for the lead forming strategy */
     try{
@@ -8760,6 +9198,7 @@ function hgGoldFormingStack(inp){
         if (/liq.?sweep/i.test(out.strategies[0].key || '')) leadCand.stratKey = 'liqsweep';
         if (/ny.?exh/i.test(out.strategies[0].key || '')) leadCand.stratKey = 'nyexh';
         if (/sweep.?ob/i.test(out.strategies[0].key || '')) leadCand.stratKey = 'sweepob';
+        if (/smc.?liq/i.test(out.strategies[0].key || '')) leadCand.stratKey = 'smcliq';
       }
       if (leadCand && leadCand.dir){
         out.confluence = hgGoldConfluenceScore(leadCand, {
@@ -8814,6 +9253,14 @@ function hgGoldFormingStackHtml(stack){
     }
     if (stack.part4){
       h += hgGoldPart4Html(stack.part4);
+    }
+    if (stack.smcLiq){
+      h += hgGoldSmcLiquidityHtml(stack.smcLiq);
+    }
+    if (stack.smcBos && stack.smcBos.ok){
+      h += '<div style="margin-top:4px"><b>SMC BOS/CHoCH</b> ('
+        + String(stack.smcBos.mode || 'close') + ') — '
+        + String(stack.smcBos.why || '').replace(/[<>&]/g, '') + '</div>';
     }
     if (stack.vpTargets && typeof hgGoldVpTargetsHtml === 'function'){
       h += hgGoldVpTargetsHtml(stack.vpTargets);
@@ -8945,6 +9392,14 @@ W.hgGoldDxyCorr = hgGoldDxyCorr;
 W.hgGoldFormingRegime = hgGoldFormingRegime;
 W.hgGoldPriorDayLevels = hgGoldPriorDayLevels;
 W.hgGoldEqualExtremes = hgGoldEqualExtremes;
+W.hgGoldSmcSwingHighsLows = hgGoldSmcSwingHighsLows;
+W.hgGoldSmcLiquidity = hgGoldSmcLiquidity;
+W.hgGoldSmcLiquidityHit = hgGoldSmcLiquidityHit;
+W.hgGoldSmcBosChoch = hgGoldSmcBosChoch;
+W.hgGoldSmcLiquidityHtml = hgGoldSmcLiquidityHtml;
+W.HG_GOLD_SMC_RANGE_PCT = HG_GOLD_SMC_RANGE_PCT;
+W.HG_GOLD_SMC_SWING_LEN = HG_GOLD_SMC_SWING_LEN;
+W.HG_GOLD_SMC_SWEPT_MAX_AGE = HG_GOLD_SMC_SWEPT_MAX_AGE;
 W.hgGoldSweepDisplacement = hgGoldSweepDisplacement;
 W.hgGoldLiquidityMap = hgGoldLiquidityMap;
 W.hgGoldSweepEngine = hgGoldSweepEngine;
