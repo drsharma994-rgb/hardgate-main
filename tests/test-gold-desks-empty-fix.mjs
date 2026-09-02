@@ -43,6 +43,8 @@ ok(/asiaSession/.test(GS) && /ASIA SESSION \(00:00–07:00 GMT\)/.test(GS),
    'WHY SILENT names Asia when the session is ASIAN');
 ok(/hardReject:\s*false/.test(GI.slice(GI.indexOf('function push(c)'), GI.indexOf('function push(c)') + 800)),
    'goldScalpSetups Asia demotes (hardReject:false) instead of silent drop');
+ok(/MTF BIAS|MTF CONFLICT/.test(GI) && /hardReject === false/.test(GI),
+   'MTF bias demotes on hardReject:false (populate path)');
 
 console.log('\n== GOLD SWING keep-last ==');
 ok(/previous results still showing/.test(GW),

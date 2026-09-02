@@ -227,7 +227,15 @@ console.log('\n== MTF matrix: scalp longs need H4+Daily bull; conflict locks sca
     { rows: rows, nowMs: Date.UTC(2024, 0, 16, 14, 0, 0), scalp: true, rows4h: bear, rows1d: bull }
   );
   ok(longConflict && longConflict.dropped === true && /MTF CONFLICT/i.test(longConflict.reason),
-     'scalp long is dropped on HTF conflict');
+     'scalp long is dropped on HTF conflict when hardReject is default (OMNIGOLD-hard)');
+  const longConflictDemote = W.hgGoldInstFilter(
+    { stratKey: 'vwap', dir: 'long', id: 'vwap|long|2400', strategy: 'VWAP', stamps: [], gateNotes: [] },
+    { rows: rows, nowMs: Date.UTC(2024, 0, 16, 14, 0, 0), scalp: true, hardReject: false,
+      rows4h: bear, rows1d: bull }
+  );
+  ok(longConflictDemote && !longConflictDemote.dropped && longConflictDemote.demoted
+      && (longConflictDemote.stamps || []).some(function(s){ return /MTF/i.test(s); }),
+     'GOLD SCALP hardReject:false demotes MTF conflict so cards still populate');
   const swingKeep = W.hgGoldInstFilter(
     { stratKey: 'macro', dir: 'long', id: 'macro|long|2400', strategy: 'MACRO', stamps: [], gateNotes: [] },
     { rows: rows, nowMs: Date.UTC(2024, 0, 16, 14, 0, 0), scalp: false, hardReject: false,

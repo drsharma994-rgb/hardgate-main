@@ -2029,7 +2029,7 @@ function goldScalpSetups(inp){
         D.__part5 = hgGoldPart5Engine(rows, {
           newsGate: newsState ? hgGoldNewsGate(newsState, nowMs) : null,
           now: nowMs,
-          physical: (opts && opts.physical) || null
+          physical: (inp && inp.physical) || null
         });
       }
       var p5 = D.__part5;
@@ -2067,11 +2067,11 @@ function goldScalpSetups(inp){
         D.__part6 = hgGoldPart6Engine(rows, {
           newsGate: newsState ? hgGoldNewsGate(newsState, nowMs) : null,
           now: nowMs,
-          dxyRows: (opts && (opts.dxyRows || opts.dxyCandles)) || null,
-          btcRows: (opts && opts.btcRows) || null,
-          events: (opts && opts.events) || null,
-          dom: (opts && opts.dom) || null,
-          skew: (opts && opts.skew) || null
+          dxyRows: (inp && (inp.dxyRows || inp.dxyCandles)) || null,
+          btcRows: (inp && inp.btcRows) || null,
+          events: (inp && inp.events) || null,
+          dom: (inp && inp.dom) || null,
+          skew: (inp && inp.skew) || null
         });
       }
       var p6 = D.__part6;
@@ -2109,13 +2109,13 @@ function goldScalpSetups(inp){
         D.__part7 = hgGoldPart7Engine(rows, {
           newsGate: newsState ? hgGoldNewsGate(newsState, nowMs) : null,
           now: nowMs,
-          usdInr: (opts && opts.usdInr) || null,
-          kToday: (opts && opts.kToday) || null,
-          silverRows: (opts && opts.silverRows) || null,
-          mcxRows: (opts && opts.mcxRows) || null,
-          priorDay: (opts && opts.priorDay) || null,
-          tradesToday: (opts && opts.tradesToday) || 0,
-          swingWarmSameSide: !!(opts && opts.swingWarmSameSide)
+          usdInr: (inp && inp.usdInr) || null,
+          kToday: (inp && inp.kToday) || null,
+          silverRows: (inp && inp.silverRows) || null,
+          mcxRows: (inp && inp.mcxRows) || null,
+          priorDay: (inp && inp.priorDay) || null,
+          tradesToday: (inp && inp.tradesToday) || 0,
+          swingWarmSameSide: !!(inp && inp.swingWarmSameSide)
         });
       }
       var p7 = D.__part7;
@@ -6706,15 +6706,25 @@ function hgGoldInstFilter(cand, ctx){
         rows1d: ctx.rows1d || ctx.dailyCandles
       });
       cand.mtf = mtf;
-      if (mtf.scalpLocked){
-        cand.dropped = true;
-        cand.reason = mtf.reason;
-        return cand;
-      }
-      if (dir === 'long' && mtf.scalpLongOk === false){
-        cand.dropped = true;
-        cand.reason = mtf.reason;
-        return cand;
+      var mtfBlock = !!(mtf.scalpLocked || (dir === 'long' && mtf.scalpLongOk === false));
+      if (mtfBlock){
+        /* GOLD SCALP (hardReject:false): demote so cards still populate —
+           MTF cannot lead, but the desk must not go blank. OMNIGOLD / hard
+           path keeps the hard drop. */
+        if (ctx.hardReject === false){
+          cand.demoted = true;
+          if (!Array.isArray(cand.stamps)) cand.stamps = [];
+          var mtfStamp = mtf.scalpLocked ? 'MTF CONFLICT' : 'MTF BIAS';
+          if (cand.stamps.indexOf(mtfStamp) < 0) cand.stamps.push(mtfStamp);
+          var gnM = Array.isArray(cand.gateNotes) ? cand.gateNotes.slice() : [];
+          gnM.push(mtf.reason || mtfStamp);
+          cand.gateNotes = gnM;
+          cand.reason = mtf.reason;
+        } else {
+          cand.dropped = true;
+          cand.reason = mtf.reason;
+          return cand;
+        }
       }
     }
     var sess = hgGoldSessionGate(ctx.nowMs, rows, key, {
