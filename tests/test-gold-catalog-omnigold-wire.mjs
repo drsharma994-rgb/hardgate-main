@@ -43,7 +43,7 @@ console.log('== files ==');
     'OMNIGOLD paints catalog on mount');
   ok(/catHtmlM\(catFnM/.test(gsc) && /catHtmlM\(catFnM/.test(gs),
     'SCALP+SWING mount writes catalog HTML');
-  ok(/gold-catalog\.js\?v=577/.test(html), 'index loads gold-catalog.js');
+  ok(/gold-catalog\.js\?v=578/.test(html), 'index loads gold-catalog.js');
 }
 
 console.log('\n== runtime ==');
@@ -67,7 +67,7 @@ console.log('\n== stamp ==');
   const m = stamp.match(/version:\s*'([^']+)'/);
   ok(m && m[1] === HG_VER, 'stamp (got ' + (m && m[1]) + ')');
   ok(swCacheOk(sw), 'sw cache');
-  ok(/goldind\.js\?v=577/.test(html) && /omnigold\.js\?v=577/.test(html), 'index ?v=577');
+  ok(/goldind\.js\?v=578/.test(html) && /omnigold\.js\?v=578/.test(html), 'index ?v=578');
 }
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
