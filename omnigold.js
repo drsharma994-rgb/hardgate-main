@@ -325,7 +325,8 @@ terse status, and never launches a first-time scan on a global refresh.
                       /* Part6 S29–S38 live directional (S31/S34 unchecked without skew/DOM) */
                       'P6-COMP','P6-ZFADE','P6-SMT','P6-FAIL',
                       /* Part7 S39–S48 — separated scalp + ratio (S40 MCX-native; options frames) */
-                      'P7-SCALP','P7-RATIO'];
+                      'P7-SCALP','P7-RATIO',
+                      'P8-RESID','P8-RANGE','P8-GEO','P8-VPINBO'];
 
   var __og = { ui: null, busy: false, ran: false, snap: null, lastStat: '', src: null, shared: null, btBusy: false,
                lastCardsHtml: null, lastPoolHtml: null, lastMpHtml: null,
@@ -774,6 +775,10 @@ terse status, and never launches a first-time scan on a global refresh.
     d = hgOgPart6ByKind(rows, 'P6-FAIL', opts); if (d) out.push(d);
     d = hgOgPart7ByKind(rows, 'P7-SCALP', opts); if (d) out.push(d);
     d = hgOgPart7ByKind(rows, 'P7-RATIO', opts); if (d) out.push(d);
+    d = hgOgPart8ByKind(rows, 'P8-RESID', opts); if (d) out.push(d);
+    d = hgOgPart8ByKind(rows, 'P8-RANGE', opts); if (d) out.push(d);
+    d = hgOgPart8ByKind(rows, 'P8-GEO', opts); if (d) out.push(d);
+    d = hgOgPart8ByKind(rows, 'P8-VPINBO', opts); if (d) out.push(d);
     return out;
   }
 
@@ -2027,6 +2032,65 @@ terse status, and never launches a first-time scan on a global refresh.
     return null;
   }
 
+  /* Part8 S49–S58 — quant microstructure. Live: residual / range-bar / geo / VPIN-BO.
+     S49/S50/S55/S56/S57/S58 are upgrades/frames (one Flow-family vote). */
+  var OG_P8_KIND = {
+    p8resid: 'P8-RESID',
+    p8range: 'P8-RANGE',
+    p8geo: 'P8-GEO',
+    p8vpinbo: 'P8-VPINBO'
+  };
+  function hgOgPart8Hits(rows, opts){
+    var f = gfn('hgGoldPart8Engine');
+    if (!f || !rows || rows.length < 40) return null;
+    opts = opts || {};
+    var eng = null;
+    try {
+      eng = f(rows, {
+        newsGate: opts.newsGate || null,
+        now: opts.nowSec ? opts.nowSec * 1000 : opts.now,
+        calendarEvent: !!opts.calendarEvent,
+        headlineCounts: opts.headlineCounts || null,
+        residSeries: opts.residSeries || null,
+        rGold: opts.rGold || null, rDxy: opts.rDxy || null,
+        dReal: opts.dReal || null, rSpx: opts.rSpx || null, rOil: opts.rOil || null,
+        weeklyIv: opts.weeklyIv, gvz: opts.gvz,
+        journal: opts.gateJournal || opts.journal || null,
+        tfHourMult: opts.tfHourMult
+      });
+    } catch (e) { return null; }
+    if (!eng || !eng.strategies || !eng.strategies.length) return null;
+    var out = [], i, s, kind, lv, stop, t1, t2;
+    for (i = 0; i < eng.strategies.length; i++){
+      s = eng.strategies[i];
+      if (!s || !s.dir || (s.grade !== 'forming' && s.grade !== 'confirmed')) continue;
+      kind = OG_P8_KIND[s.key];
+      if (!kind) continue;
+      lv = fin(s.level);
+      if (!isFinite(lv) && s.plan) lv = fin(s.plan.entry);
+      if (!isFinite(lv)) continue;
+      stop = (s.plan && isFinite(s.plan.stop)) ? s.plan.stop : NaN;
+      t1 = (s.plan && isFinite(s.plan.t1)) ? s.plan.t1 : NaN;
+      t2 = (s.plan && isFinite(s.plan.t2)) ? s.plan.t2 : NaN;
+      out.push({
+        kind: kind, dir: s.dir, level: lv,
+        stop: stop, t1: t1, t2: t2,
+        part8: s, part8Engine: eng,
+        why: String(s.why || kind)
+      });
+    }
+    return out.length ? out : null;
+  }
+  function hgOgPart8ByKind(rows, wantKind, opts){
+    var hits = hgOgPart8Hits(rows, opts);
+    if (!hits) return null;
+    var i;
+    for (i = 0; i < hits.length; i++){
+      if (hits[i] && hits[i].kind === wantKind) return hits[i];
+    }
+    return null;
+  }
+
   /* ==================== consensus across mechanics ====================
 
      THE DEFECT THIS EXISTS FOR: on 42% of tapes the desk graded a LONG
@@ -2120,6 +2184,12 @@ terse status, and never launches a first-time scan on a global refresh.
     'P6-FAIL':'SWEEP',
     'P7-SCALP':'FLOW',
     'P7-RATIO':'INTERMARKET',
+    /* Part8 — residual is Macro; range/geo are Sweep; VPIN-timed break is Trend.
+       BVC/VPIN/ILLIQ upgrades share the existing FLOW vote (not separate). */
+    'P8-RESID':'MACRO',
+    'P8-RANGE':'SWEEP',
+    'P8-GEO':'SWEEP',
+    'P8-VPINBO':'TREND',
     /* An unmitigated order block is an unfilled inefficiency being revisited,
        which is FVG-FILL's idea with a different name for the zone. */
     'OB-RETEST':'IMBALANCE',
@@ -2472,6 +2542,10 @@ terse status, and never launches a first-time scan on a global refresh.
     if (k === 'P6-FAIL') return 'p6fail';
     if (k === 'P7-SCALP') return 'p7scalp';
     if (k === 'P7-RATIO') return 'p7ratio';
+    if (k === 'P8-RESID') return 'p8resid';
+    if (k === 'P8-RANGE') return 'p8range';
+    if (k === 'P8-GEO') return 'p8geo';
+    if (k === 'P8-VPINBO') return 'p8vpinbo';
     if (k === 'KZ-JUDAS' || k === 'SWEEP-V2' || k === 'POOL-SWEEP'
         || k.indexOf('SWEEP') >= 0)
       return 'sweep';
@@ -8477,7 +8551,11 @@ terse status, and never launches a first-time scan on a global refresh.
           'P6-SMT':          function(r){ return hgOgPart6ByKind(r, 'P6-SMT'); },
           'P6-FAIL':         function(r){ return hgOgPart6ByKind(r, 'P6-FAIL'); },
           'P7-SCALP':        function(r){ return hgOgPart7ByKind(r, 'P7-SCALP'); },
-          'P7-RATIO':        function(r){ return hgOgPart7ByKind(r, 'P7-RATIO'); }
+          'P7-RATIO':        function(r){ return hgOgPart7ByKind(r, 'P7-RATIO'); },
+          'P8-RESID':        function(r){ return hgOgPart8ByKind(r, 'P8-RESID'); },
+          'P8-RANGE':        function(r){ return hgOgPart8ByKind(r, 'P8-RANGE'); },
+          'P8-GEO':          function(r){ return hgOgPart8ByKind(r, 'P8-GEO'); },
+          'P8-VPINBO':       function(r){ return hgOgPart8ByKind(r, 'P8-VPINBO'); }
         };
         var k;
         for (k in fns) if (Object.prototype.hasOwnProperty.call(fns, k)){

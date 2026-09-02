@@ -1251,7 +1251,11 @@ var SW_NAME = {
   p6smt:    'S36 SMT-CONFIRMED SWEEP (vs DXY)',
   p6fail:   'S37 FAILED-SWEEP CONTINUATION',
   p7ratio:  'S43 GOLD/SILVER RATIO PAIR',
-  p7gap:    'S40 MCX OPEN-GAP FADE (MCX-NATIVE)'
+  p7gap:    'S40 MCX OPEN-GAP FADE (MCX-NATIVE)',
+  p8resid:  'S51 MACRO-RESIDUAL MOMENTUM',
+  p8range:  'S52 RANGE-BAR S0 SWEEP',
+  p8geo:    'S53 GEOPOLITICAL SPIKE FADE',
+  p8vpinbo: 'S54 VPIN-TIMED CONTRACTION BREAK'
 };
 var SW_NEWS_STAMP = 'NEWS WINDOW — expect a fade around the release; swing levels unchanged (size accordingly)';
 
@@ -2126,6 +2130,93 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
           }
         }
       }catch(eP7c){}
+    }
+
+    /* 14) Part8 S51/S52/S53/S54 — confirmed-only live tickets + Flow filters */
+    var p8FnCand = gfn('hgGoldPart8Engine');
+    if (p8FnCand){
+      try{
+        var p8EngCand = p8FnCand(rows4, {
+          newsGate: (microOpts && microOpts.news)
+            ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(microOpts.news, nowMs) : null)
+            : null,
+          now: nowMs,
+          calendarEvent: !!(microOpts && microOpts.calendarEvent),
+          headlineCounts: microOpts && microOpts.headlineCounts,
+          residSeries: microOpts && microOpts.residSeries,
+          rGold: microOpts && microOpts.rGold,
+          rDxy: microOpts && microOpts.rDxy,
+          weeklyIv: microOpts && microOpts.weeklyIv,
+          gvz: microOpts && microOpts.gvz,
+          journal: microOpts && microOpts.gateJournal,
+          tfHourMult: 1
+        });
+        var p8Bvc = gfn('hgGoldPart8ApplyBvcBoost');
+        var p8Vpin = gfn('hgGoldPart8ApplyVpinFilter');
+        var p8Illiq = gfn('hgGoldPart8ApplyIlliqScale');
+        var p8Clus = gfn('hgGoldPart8ApplyClusterFilter');
+        if (p8EngCand){
+          var qi;
+          for (qi = 0; qi < out.length; qi++){
+            if (!out[qi] || out[qi].dropped) continue;
+            if (p8Vpin) p8Vpin(out[qi], p8EngCand.vpin);
+            if (p8Illiq) p8Illiq(out[qi], p8EngCand.illiq);
+            if (p8Clus) p8Clus(out[qi], p8EngCand.cluster);
+            if (p8Bvc && /sweep|p5wyck|p5turt|p6smt|p6fail/.test(String(out[qi].stratKey || ''))){
+              var bdiv = out[qi].dir === 'long' ? p8EngCand.bvcDivLong : p8EngCand.bvcDivShort;
+              p8Bvc(out[qi], bdiv);
+            }
+          }
+        }
+        if (p8EngCand && p8EngCand.strategies && p8EngCand.strategies.length){
+          var p8Live = { p8resid: 1, p8range: 1, p8geo: 1, p8vpinbo: 1 };
+          var p8j, p8hit, p8Stop, p8Cand, p8Entry;
+          for (p8j = 0; p8j < p8EngCand.strategies.length; p8j++){
+            p8hit = p8EngCand.strategies[p8j];
+            if (!p8hit || !p8hit.dir || !p8Live[p8hit.key]) continue;
+            if (p8hit.grade !== 'confirmed') continue;
+            if (!isFinite(p8hit.level) && !(p8hit.plan && isFinite(p8hit.plan.entry))) continue;
+            p8Entry = isFinite(p8hit.level) ? p8hit.level
+              : (p8hit.plan && p8hit.plan.entry);
+            p8Stop = (p8hit.plan && isFinite(p8hit.plan.stop)) ? p8hit.plan.stop
+              : (p8hit.dir === 'long' ? p8Entry - 1.5 * a4 : p8Entry + 1.5 * a4);
+            p8Cand = mkCand(p8hit.key, p8hit.dir, p8Stop, p8Stop, undefined,
+              p8hit.why, 'Part8 invalidation — structure break against the setup',
+              { side: p8hit.dir, tag: p8hit.key, label: p8hit.why });
+            if (!p8Cand || p8Cand.dropped){
+              p8Cand = {
+                id: p8hit.key + '|' + p8hit.dir + '|' + Math.round(p8Entry),
+                strategy: SW_NAME[p8hit.key] || p8hit.key,
+                stratKey: p8hit.key, dir: p8hit.dir,
+                entry: p8Entry, pxNow: entry, mark: entry, stop: p8Stop,
+                t1: (p8hit.plan && isFinite(p8hit.plan.t1)) ? p8hit.plan.t1 : NaN,
+                t2: (p8hit.plan && isFinite(p8hit.plan.t2)) ? p8hit.plan.t2 : NaN,
+                rr: NaN, grade: 'B', agree: 2, oppose: 0, atr: a4,
+                reads: { long: p8hit.dir === 'long' ? 2 : 0, short: p8hit.dir === 'short' ? 2 : 0 },
+                venue: venue, sym: sym, session: sessionTxt || 'n/a',
+                why: p8hit.why,
+                invalidates: 'close beyond ' + p8Stop.toFixed(2),
+                stamps: ['PART8 ' + String(p8hit.key).toUpperCase()],
+                demoted: false, notes: []
+              };
+            } else {
+              if (isFinite(p8Entry)) p8Cand.entry = p8Entry;
+              if (p8hit.plan){
+                if (isFinite(p8hit.plan.t1)) p8Cand.t1 = p8hit.plan.t1;
+                if (isFinite(p8hit.plan.t2)) p8Cand.t2 = p8hit.plan.t2;
+                if (isFinite(p8hit.plan.stop)) p8Cand.stop = p8hit.plan.stop;
+                if (p8hit.plan.noT2) p8Cand.t2 = NaN;
+              }
+              if (!Array.isArray(p8Cand.stamps)) p8Cand.stamps = [];
+              p8Cand.stamps.push('PART8 ' + String(p8hit.key).toUpperCase());
+            }
+            if (p8Vpin) p8Vpin(p8Cand, p8EngCand.vpin);
+            if (p8Illiq) p8Illiq(p8Cand, p8EngCand.illiq);
+            if (p8Clus) p8Clus(p8Cand, p8EngCand.cluster);
+            push(p8Cand);
+          }
+        }
+      }catch(eP8c){}
     }
   }catch(e){}
   return out;

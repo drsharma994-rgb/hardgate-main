@@ -1101,7 +1101,17 @@ var GST_NAME = {
   p7size: 'S44/S45 SIZING FAMILY',
   p7exit: 'S46 EXIT A/B (E1–E4)',
   p7hedge: 'S47 USDINR HEDGE',
-  p7season: 'S48 SEASONAL WINDOW'
+  p7season: 'S48 SEASONAL WINDOW',
+  p8bvc: 'S49 BVC-CVD CONFIRMATION',
+  p8vpin: 'S50 VPIN TOXICITY CONTEXT',
+  p8resid: 'S51 MACRO-RESIDUAL MOMENTUM',
+  p8range: 'S52 RANGE-BAR S0 SWEEP',
+  p8geo: 'S53 GEOPOLITICAL SPIKE FADE',
+  p8vpinbo: 'S54 VPIN-TIMED CONTRACTION BREAK',
+  p8illiq: 'S55 ILLIQ-SCALED SWEEP CONTEXT',
+  p8cluster: 'S56 REGIME-CLUSTER SCHEDULER',
+  p8term: 'S57 TERM-STRUCTURE EVENT',
+  p8bayes: 'S58 BAYESIAN GATE AUDIT'
 };
 
 /**
@@ -2290,6 +2300,75 @@ function goldScalpSetups(inp){
         }
       }
     }catch(eP7){}
+
+    /* --- 1e5) PART8 S49–S58 · quant microstructure / alt data --- */
+    try{
+      if (!D.__part8){
+        D.__part8 = hgGoldPart8Engine(rows, {
+          newsGate: newsState ? hgGoldNewsGate(newsState, nowMs) : null,
+          now: nowMs,
+          calendarEvent: !!(newsState && (newsState.caution || newsState.lock)),
+          headlineCounts: (inp && inp.headlineCounts) || null,
+          residSeries: (inp && inp.residSeries) || null,
+          rGold: (inp && inp.rGold) || null,
+          rDxy: (inp && inp.rDxy) || null,
+          dReal: (inp && inp.dReal) || null,
+          rSpx: (inp && inp.rSpx) || null,
+          rOil: (inp && inp.rOil) || null,
+          weeklyIv: (inp && inp.weeklyIv),
+          gvz: (inp && inp.gvz),
+          journal: (inp && inp.gateJournal) || null
+        });
+      }
+      var p8 = D.__part8;
+      if (p8){
+        /* Apply Flow-family upgrades to already-minted cands (S49/S50/S55/S56). */
+        var p8i;
+        for (p8i = 0; p8i < out.length; p8i++){
+          if (!out[p8i] || out[p8i].dropped) continue;
+          if (/sweep|liqsweep|p5wyck|p5turt|p6smt|p6fail|smcliq/.test(String(out[p8i].stratKey || ''))){
+            var side = out[p8i].dir === 'long' ? 'low' : 'high';
+            var bdiv = side === 'low' ? p8.bvcDivLong : p8.bvcDivShort;
+            hgGoldPart8ApplyBvcBoost(out[p8i], bdiv);
+          }
+          hgGoldPart8ApplyVpinFilter(out[p8i], p8.vpin);
+          hgGoldPart8ApplyIlliqScale(out[p8i], p8.illiq);
+          hgGoldPart8ApplyClusterFilter(out[p8i], p8.cluster);
+        }
+      }
+      if (p8 && p8.strategies && p8.strategies.length){
+        var p8Live = { p8resid: 1, p8range: 1, p8geo: 1, p8vpinbo: 1 };
+        var p8j, p8hit;
+        for (p8j = 0; p8j < p8.strategies.length; p8j++){
+          p8hit = p8.strategies[p8j];
+          if (!p8hit || !p8hit.dir || !p8Live[p8hit.key]) continue;
+          if (p8hit.grade !== 'forming' && p8hit.grade !== 'confirmed') continue;
+          var p8Stop = (p8hit.plan && isFinite(p8hit.plan.stop)) ? p8hit.plan.stop
+            : (p8hit.dir === 'long' ? entry - 1.2 * a15 : entry + 1.2 * a15);
+          var p8Cand = __gsCand(p8hit.key, p8hit.dir, D, p8Stop, __gsSnapLvls(D, p8hit.dir),
+            p8hit.why, 'Part8 invalidation — structure break against the setup',
+            undefined, isFinite(p8hit.level) ? p8hit.level : undefined);
+          if (p8Cand){
+            if (p8hit.plan){
+              if (isFinite(p8hit.plan.t1)) p8Cand.t1 = p8hit.plan.t1;
+              if (isFinite(p8hit.plan.t2)) p8Cand.t2 = p8hit.plan.t2;
+              if (isFinite(p8hit.plan.stop)) p8Cand.stop = p8hit.plan.stop;
+              if (p8hit.plan.noT2) p8Cand.t2 = NaN;
+              if (p8hit.plan.halfSize){
+                p8Cand.sizeMult = (isFinite(p8Cand.sizeMult) ? p8Cand.sizeMult : 1) * 0.5;
+                p8Cand.demoted = true;
+              }
+            }
+            if (!Array.isArray(p8Cand.stamps)) p8Cand.stamps = [];
+            p8Cand.stamps.push('PART8 ' + String(p8hit.key).toUpperCase());
+            hgGoldPart8ApplyVpinFilter(p8Cand, p8.vpin);
+            hgGoldPart8ApplyIlliqScale(p8Cand, p8.illiq);
+            hgGoldPart8ApplyClusterFilter(p8Cand, p8.cluster);
+            push(p8Cand);
+          }
+        }
+      }
+    }catch(eP8){}
 
     /* --- 1f) SMC liquidity cluster + swept index (smart-money-concepts port) --- */
     try{
@@ -11309,6 +11388,775 @@ function hgGoldPart7Html(p7){
 }
 
 /* =========================================================================
+   GOLD PLAYBOOK PART 8 — S49–S58 Quantitative microstructure / alt data
+   (hg-v575). BVC · VPIN · Amihud · macro-residual · regime cluster ·
+   range-bar S0 · geo/news intensity · term structure · Bayesian audit.
+
+   Sacred: one Flow-family vote shared across BVC/VPIN/ILLIQ/Kyle.
+   Filters demote / veto / boost grade — nothing turns NO ENTRY into ENTER.
+   Live tickets: S51 residual, S52 range-bar, S53 geo spike, S54 VPIN break.
+========================================================================= */
+
+var HG_GOLD_P8_BVC_WIN = 200;
+var HG_GOLD_P8_VPIN_BUCKETS = 50;
+var HG_GOLD_P8_VPIN_SESS = 250;
+var HG_GOLD_P8_VPIN_TOXIC = 90;
+var HG_GOLD_P8_VPIN_VETO = 97;
+var HG_GOLD_P8_VPIN_BO = 80;
+var HG_GOLD_P8_ILLIQ_THIN = 85;
+var HG_GOLD_P8_RESID_PERM = 1.5;
+var HG_GOLD_P8_RESID_TRADE = 2.5;
+var HG_GOLD_P8_NEWS_Z = 3;
+var HG_GOLD_P8_RANGE_ATR = 0.25;
+var HG_GOLD_P8_TERM_INV = 4;
+var HG_GOLD_P8_STOP_BUF_TOXIC = 0.35;
+
+/** Φ(z) via erf approximation — no scipy. */
+function hgGoldNormCdf(z){
+  z = +z;
+  if (!isFinite(z)) return 0.5;
+  var t = 1 / (1 + 0.5 * Math.abs(z));
+  var tau = t * Math.exp(-z * z - 1.26551223
+    + t * (1.00002368 + t * (0.37409196 + t * (0.09678418
+    + t * (-0.18628806 + t * (0.27886807 + t * (-1.13520398
+    + t * (1.48851587 + t * (-0.82215223 + t * 0.17087277)))))))));
+  return z >= 0 ? (1 - tau / 2) : (tau / 2);
+}
+
+/** §2 BVC signed volume per bar. */
+function hgGoldBvcDelta(rows, window){
+  rows = __rows(rows);
+  window = window || HG_GOLD_P8_BVC_WIN;
+  var n = rows ? rows.length : 0, out = new Array(n), i, dp, wSum, varSum, sigma, z, frac;
+  for (i = 0; i < n; i++){
+    out[i] = 0;
+    if (i === 0 || !(rows[i].v > 0)) continue;
+    dp = rows[i].c - rows[i - 1].c;
+    wSum = 0; varSum = 0;
+    var j0 = Math.max(1, i - window + 1), j;
+    for (j = j0; j <= i; j++){
+      var d = rows[j].c - rows[j - 1].c;
+      var vv = rows[j].v > 0 ? rows[j].v : 0;
+      wSum += vv; varSum += d * d * vv;
+    }
+    sigma = wSum > 0 ? Math.sqrt(varSum / wSum) : 0;
+    z = (sigma > 0 && isFinite(dp)) ? (dp / sigma) : 0;
+    frac = hgGoldNormCdf(z);
+    out[i] = rows[i].v * (2 * frac - 1);
+  }
+  return out;
+}
+
+/** Session-reset CVD (22:00 UTC) from BVC deltas. Labels data_quality cvd:bvc_proxy. */
+function hgGoldBvcCvd(rows, window){
+  var d = hgGoldBvcDelta(rows, window), cvd = [], i, sum = 0, prevDay = null, day;
+  rows = __rows(rows);
+  for (i = 0; i < d.length; i++){
+    var t = rows[i].t;
+    var ms = t < 1e12 ? t * 1000 : t;
+    /* session day keyed at 22:00 UTC */
+    day = Math.floor((ms - 22 * 3600 * 1000) / 86400000);
+    if (prevDay !== null && day !== prevDay) sum = 0;
+    prevDay = day;
+    sum += d[i];
+    cvd.push(sum);
+  }
+  return { delta: d, cvd: cvd, quality: 'bvc_proxy' };
+}
+
+/** S49 — BVC-CVD divergence at a sweep index (bullish: lower low + higher CVD). */
+function hgGoldBvcCvdDivergence(rows, sweepIdx, side, lookback){
+  var out = { ok: false, diverge: false, quality: 'bvc_proxy', why: '' };
+  try{
+    rows = __rows(rows);
+    lookback = lookback || 12;
+    if (!rows || sweepIdx == null || sweepIdx < lookback){ out.why = 'S49 need sweep idx'; return out; }
+    var pack = hgGoldBvcCvd(rows);
+    var i0 = Math.max(0, sweepIdx - lookback);
+    var i, prior = i0, last = sweepIdx;
+    if (side === 'low' || side === 'long'){
+      for (i = i0; i < last; i++) if (rows[i].l < rows[prior].l) prior = i;
+      out.diverge = rows[last].l < rows[prior].l && pack.cvd[last] > pack.cvd[prior];
+    } else {
+      for (i = i0; i < last; i++) if (rows[i].h > rows[prior].h) prior = i;
+      out.diverge = rows[last].h > rows[prior].h && pack.cvd[last] < pack.cvd[prior];
+    }
+    out.ok = true;
+    out.why = out.diverge
+      ? 'S49 BVC-CVD diverge (proxy) — grade +1 eligible'
+      : 'S49 no BVC-CVD diverge (absence does nothing)';
+    return out;
+  }catch(e){ out.why = 'S49 error'; return out; }
+}
+
+/** Grade +1 when BVC diverge confirms; never invents ENTER. */
+function hgGoldPart8ApplyBvcBoost(cand, bvcDiv){
+  try{
+    if (!cand || !bvcDiv || !bvcDiv.diverge) return cand;
+    if (!Array.isArray(cand.stamps)) cand.stamps = [];
+    if (cand.stamps.indexOf('S49 BVC+') < 0) cand.stamps.push('S49 BVC+');
+    cand.edgeBoost = (isFinite(cand.edgeBoost) ? cand.edgeBoost : 0) + 1;
+    cand.agree = (isFinite(cand.agree) ? cand.agree : 0) + 1;
+    return cand;
+  }catch(e){ return cand; }
+}
+
+/** §3 VPIN percentile (volume-bucket BVC imbalance). */
+function hgGoldVpin(rows, opts){
+  var out = {
+    ok: false, vpin: NaN, pct: NaN, toxic: false, veto: false,
+    bucketVol: NaN, why: '', quality: 'bvc_proxy'
+  };
+  try{
+    opts = opts || {};
+    rows = __rows(rows);
+    if (!rows || rows.length < 80){ out.why = 'S50 need ≥80 bars'; return out; }
+    var deltas = hgGoldBvcDelta(rows);
+    /* Trailing ~20 sessions ≈ 20*96 bars on 15m; use available volume mean. */
+    var i, dayVol = 0, days = 0, lastDay = null, day;
+    var dayVols = [];
+    for (i = 0; i < rows.length; i++){
+      var ms = rows[i].t < 1e12 ? rows[i].t * 1000 : rows[i].t;
+      day = Math.floor(ms / 86400000);
+      if (lastDay === null) lastDay = day;
+      if (day !== lastDay){ dayVols.push(dayVol); dayVol = 0; lastDay = day; days++; }
+      dayVol += rows[i].v > 0 ? rows[i].v : 0;
+    }
+    if (dayVol > 0) dayVols.push(dayVol);
+    var avgDay = 0, di;
+    var take = dayVols.slice(-20);
+    for (di = 0; di < take.length; di++) avgDay += take[di];
+    avgDay = take.length ? avgDay / take.length : 0;
+    var Vb = avgDay > 0 ? avgDay / HG_GOLD_P8_VPIN_BUCKETS : 0;
+    if (!(Vb > 0)){ out.why = 'S50 zero volume'; return out; }
+    out.bucketVol = Vb;
+    var buckets = [], curBuy = 0, curSell = 0, curV = 0;
+    for (i = 0; i < rows.length; i++){
+      var v = rows[i].v > 0 ? rows[i].v : 0;
+      var dlt = deltas[i];
+      var vb = (v + dlt) / 2, vs = (v - dlt) / 2;
+      curBuy += vb; curSell += vs; curV += v;
+      while (curV >= Vb && Vb > 0){
+        buckets.push(Math.abs(curBuy - curSell) / Vb);
+        curV -= Vb; curBuy *= (curV / (curV + Vb)); curSell *= (curV / (curV + Vb));
+        if (buckets.length > 5000) break;
+      }
+    }
+    if (buckets.length < HG_GOLD_P8_VPIN_BUCKETS){ out.why = 'S50 need ≥50 buckets'; return out; }
+    var n = HG_GOLD_P8_VPIN_BUCKETS, sum = 0;
+    for (i = buckets.length - n; i < buckets.length; i++) sum += buckets[i];
+    out.vpin = sum / n;
+    /* Percentile vs trailing session VPIN samples (one sample per ~50 buckets). */
+    var hist = [], step = Math.max(1, Math.floor(buckets.length / Math.min(HG_GOLD_P8_VPIN_SESS, 80)));
+    for (i = n; i <= buckets.length; i += step){
+      var s2 = 0, k;
+      for (k = i - n; k < i; k++) s2 += buckets[k];
+      hist.push(s2 / n);
+    }
+    var below = 0;
+    for (i = 0; i < hist.length; i++) if (hist[i] <= out.vpin) below++;
+    out.pct = hist.length ? (100 * below / hist.length) : 50;
+    out.toxic = out.pct > HG_GOLD_P8_VPIN_TOXIC;
+    out.veto = out.pct > HG_GOLD_P8_VPIN_VETO && !opts.calendarEvent;
+    out.ok = true;
+    out.why = 'S50 VPIN pct ' + out.pct.toFixed(0)
+      + (out.veto ? ' · VETO WAIT 2 buckets' : (out.toxic ? ' · toxic buffer' : ' · normal'));
+    return out;
+  }catch(e){ out.why = 'S50 error'; return out; }
+}
+
+/** S50 filter — veto WAIT or widen stop buffer; never invents ENTER. */
+function hgGoldPart8ApplyVpinFilter(cand, vpin){
+  try{
+    if (!cand || !vpin || !vpin.ok) return cand;
+    if (!Array.isArray(cand.stamps)) cand.stamps = [];
+    cand.vpinPct = vpin.pct;
+    if (vpin.veto){
+      cand.demoted = true;
+      if (cand.stamps.indexOf('S50 VPIN WAIT') < 0) cand.stamps.push('S50 VPIN WAIT');
+      var gn = Array.isArray(cand.gateNotes) ? cand.gateNotes.slice() : [];
+      gn.push(vpin.why || 'VPIN >97 unscheduled — WAIT');
+      cand.gateNotes = gn;
+      return cand;
+    }
+    if (vpin.toxic){
+      if (cand.stamps.indexOf('S50 VPIN TOXIC') < 0) cand.stamps.push('S50 VPIN TOXIC');
+      /* Widen stop by toxic buffer fraction of ATR when available. */
+      if (isFinite(cand.stop) && isFinite(cand.entry) && isFinite(cand.atr) && cand.atr > 0){
+        var buf = HG_GOLD_P8_STOP_BUF_TOXIC * cand.atr;
+        if (cand.dir === 'long') cand.stop = Math.min(cand.stop, cand.entry) - buf;
+        else if (cand.dir === 'short') cand.stop = Math.max(cand.stop, cand.entry) + buf;
+        cand.stopFloorAtr = Math.max(cand.stopFloorAtr || 0, 1.5 + HG_GOLD_P8_STOP_BUF_TOXIC);
+      }
+      /* Demote fade-ish keys under toxic flow */
+      var sk = String(cand.stratKey || '');
+      if (/vwap|fade|zfade|p5vwap|p6zfade|adrfade|p4adrx/.test(sk)){
+        cand.demoted = true;
+        if (cand.stamps.indexOf('S50 NO FADE') < 0) cand.stamps.push('S50 NO FADE');
+      }
+    }
+    return cand;
+  }catch(e){ return cand; }
+}
+
+/** §4 Amihud ILLIQ pct + Kyle-λ proxy. */
+function hgGoldAmihudIlliq(rows){
+  var out = {
+    ok: false, illiqPct: NaN, kyleLambda: NaN, thin: false, deep: false,
+    sweepPenScale: 1, sizeMult: 1, why: ''
+  };
+  try{
+    rows = __rows(rows);
+    if (!rows || rows.length < 60){ out.why = 'S55 need ≥60 bars'; return out; }
+    var deltas = hgGoldBvcDelta(rows);
+    var illiq = [], i, r, dv;
+    for (i = 1; i < rows.length; i++){
+      r = Math.abs(rows[i].c - rows[i - 1].c) / (rows[i - 1].c || 1);
+      dv = rows[i].c * (rows[i].v > 0 ? rows[i].v : 0);
+      if (dv > 0) illiq.push(r / dv);
+    }
+    if (illiq.length < 24){ out.why = 'S55 thin ILLIQ sample'; return out; }
+    function mean(a, n){
+      var s = 0, j, i0 = Math.max(0, a.length - n);
+      for (j = i0; j < a.length; j++) s += a[j];
+      return s / (a.length - i0);
+    }
+    var roll = [];
+    for (i = 23; i < illiq.length; i++) roll.push(mean(illiq.slice(0, i + 1), 24));
+    var cur = roll[roll.length - 1];
+    var hist = roll.slice(-Math.min(roll.length, 60 * 24));
+    var below = 0;
+    for (i = 0; i < hist.length; i++) if (hist[i] <= cur) below++;
+    out.illiqPct = hist.length ? (100 * below / hist.length) : 50;
+    /* Kyle λ: OLS slope r ~ signed_volume over 48 bars */
+    var n = Math.min(48, rows.length - 1), sx = 0, sy = 0, sxx = 0, sxy = 0, m = 0;
+    for (i = rows.length - n; i < rows.length; i++){
+      if (i < 1) continue;
+      var rr = (rows[i].c - rows[i - 1].c) / (rows[i - 1].c || 1);
+      var x = deltas[i];
+      sx += x; sy += rr; sxx += x * x; sxy += x * rr; m++;
+    }
+    if (m > 5 && (m * sxx - sx * sx) !== 0)
+      out.kyleLambda = (m * sxy - sx * sy) / (m * sxx - sx * sx);
+    out.thin = out.illiqPct > HG_GOLD_P8_ILLIQ_THIN;
+    out.deep = out.illiqPct < 20;
+    out.sweepPenScale = Math.max(0.5, out.illiqPct / 50);
+    out.sizeMult = out.thin ? 0.7 : 1;
+    out.ok = true;
+    out.why = 'S55 ILLIQ pct ' + out.illiqPct.toFixed(0)
+      + (out.thin ? ' · thin −30% size · pen×' + out.sweepPenScale.toFixed(2) : (out.deep ? ' · deep' : ''));
+    return out;
+  }catch(e){ out.why = 'S55 error'; return out; }
+}
+
+function hgGoldPart8ApplyIlliqScale(cand, illiq){
+  try{
+    if (!cand || !illiq || !illiq.ok) return cand;
+    if (!Array.isArray(cand.stamps)) cand.stamps = [];
+    cand.illiqPct = illiq.illiqPct;
+    cand.sizeMult = (isFinite(cand.sizeMult) ? cand.sizeMult : 1) * (illiq.sizeMult || 1);
+    if (illiq.thin && cand.stamps.indexOf('S55 THIN') < 0) cand.stamps.push('S55 THIN');
+    return cand;
+  }catch(e){ return cand; }
+}
+
+/**
+ * §5 Macro-residual. Needs opts.residSeries (ε_t array) OR daily return series
+ * gold/dxy/real/spx/oil. Fail-open when unread.
+ */
+function hgGoldMacroResidual(opts){
+  var out = {
+    ok: false, residZ: NaN, longPerm: false, shortPerm: false, trade: false, why: ''
+  };
+  try{
+    opts = opts || {};
+    var eps = opts.residSeries;
+    if ((!eps || !eps.length) && opts.rGold && opts.rDxy){
+      /* Simple residual ≈ r_gold − 0.5*r_dxy − 0.3*Δreal − 0.2*r_spx (proxy βs). */
+      var g = opts.rGold, d = opts.rDxy, ry = opts.dReal || [], sp = opts.rSpx || [], oil = opts.rOil || [];
+      var n = Math.min(g.length, d.length), e = [], i;
+      for (i = 0; i < n; i++){
+        e.push(g[i]
+          - 0.5 * d[i]
+          - 0.3 * (ry[i] || 0)
+          - 0.2 * (sp[i] || 0)
+          - 0.1 * (oil[i] || 0));
+      }
+      eps = e;
+    }
+    if (!eps || eps.length < 40){ out.why = 'S51 macro residual unread'; return out; }
+    var win = Math.min(120, eps.length);
+    var slice = eps.slice(-win);
+    var mean = 0, i2;
+    for (i2 = 0; i2 < slice.length; i2++) mean += slice[i2];
+    mean /= slice.length;
+    var varr = 0;
+    for (i2 = 0; i2 < slice.length; i2++) varr += (slice[i2] - mean) * (slice[i2] - mean);
+    var sd = Math.sqrt(varr / Math.max(1, slice.length - 1));
+    var cum = 0, k;
+    for (k = Math.max(0, eps.length - 20); k < eps.length; k++) cum += eps[k];
+    out.residZ = sd > 0 ? (cum / sd) * Math.sqrt(20) : 0;
+    out.longPerm = out.residZ > HG_GOLD_P8_RESID_PERM;
+    out.shortPerm = out.residZ < -HG_GOLD_P8_RESID_PERM;
+    out.trade = Math.abs(out.residZ) > HG_GOLD_P8_RESID_TRADE;
+    out.ok = true;
+    out.why = 'S51 resid_z ' + out.residZ.toFixed(2)
+      + (out.trade ? ' · TRADE eligible' : (out.longPerm ? ' · long perm' : (out.shortPerm ? ' · short perm' : ' · pass-through')));
+    return out;
+  }catch(e){ out.why = 'S51 error'; return out; }
+}
+
+/** S51 standalone only when |resid_z|>2.5 and a Tier-1 sweep fires same side. */
+function hgGoldPart8ResidualTrade(rows, resid, opts){
+  var out = {
+    ok: false, dir: null, grade: 'watch', entry: NaN, stop: NaN, t1: NaN, why: ''
+  };
+  try{
+    if (!resid || !resid.ok || !resid.trade){ out.why = resid && resid.why ? resid.why : 'S51 no trade residual'; return out; }
+    rows = __rows(rows);
+    if (!rows || rows.length < 30) return out;
+    var last = rows[rows.length - 1];
+    var atrs = _atr(rows, 14);
+    var atr = atrs[atrs.length - 1];
+    if (!(atr > 0)) return out;
+    var dir = resid.residZ > 0 ? 'long' : 'short';
+    /* Require a recent sweep reclaim in residual direction (Tier-1 stand-in). */
+    var i, poolHi = last.h, poolLo = last.l;
+    for (i = rows.length - 8; i < rows.length - 1; i++){
+      if (i < 0) continue;
+      if (rows[i].h > poolHi) poolHi = rows[i].h;
+      if (rows[i].l < poolLo) poolLo = rows[i].l;
+    }
+    var pen = 0.15 * atr;
+    var sweptLo = last.l <= poolLo - pen && last.c > poolLo;
+    var sweptHi = last.h >= poolHi + pen && last.c < poolHi;
+    if (dir === 'long' && !sweptLo){ out.why = 'S51 residual long but no Tier-1 low sweep'; return out; }
+    if (dir === 'short' && !sweptHi){ out.why = 'S51 residual short but no Tier-1 high sweep'; return out; }
+    out.ok = true; out.dir = dir; out.grade = 'confirmed';
+    out.entry = last.c;
+    out.stop = dir === 'long' ? Math.min(last.l, poolLo) - 0.1 * atr : Math.max(last.h, poolHi) + 0.1 * atr;
+    var R = Math.abs(out.entry - out.stop);
+    out.t1 = dir === 'long' ? out.entry + 2 * R : out.entry - 2 * R;
+    out.why = 'S51 macro-residual ' + dir.toUpperCase() + ' · z ' + resid.residZ.toFixed(2);
+    return out;
+  }catch(e){ out.why = 'S51 trade error'; return out; }
+}
+
+/**
+ * §6 Regime clustering — lightweight 3-means on KER + ATR ratio.
+ * Stability <70% → fall back to KER thresholds.
+ */
+function hgGoldRegimeCluster(rows, opts){
+  var out = {
+    ok: false, label: 'BALANCE', stability: 1, kerFallback: false, why: ''
+  };
+  try{
+    opts = opts || {};
+    rows = __rows(rows);
+    if (!rows || rows.length < 80){ out.why = 'S56 need bars'; return out; }
+    var ker = typeof calculateKaufmanER === 'function' ? calculateKaufmanER(rows, 20)
+      : (typeof W !== 'undefined' && W.calculateKaufmanER ? W.calculateKaufmanER(rows, 20) : null);
+    var atr14 = _atr(rows, 14), atr50 = _atr(rows, 50);
+    var a14 = atr14[atr14.length - 1], a50 = atr50[atr50.length - 1];
+    var atrRatio = (a50 > 0) ? (a14 / a50) : 1;
+    var er = ker && isFinite(ker.er) ? ker.er : 0.4;
+    var vpinPct = opts.vpin && isFinite(opts.vpin.pct) ? opts.vpin.pct : 50;
+    /* Heuristic labels (falsifiable starting values) */
+    var label;
+    if (atrRatio > 1.25 && vpinPct > 70 && er < 0.35) label = 'STRESS';
+    else if (er > 0.6) label = 'TREND';
+    else label = 'BALANCE';
+    /* Stability proxy: recompute on last 70% vs full — flip rate */
+    var mid = Math.floor(rows.length * 0.7);
+    var ker2 = typeof calculateKaufmanER === 'function' ? calculateKaufmanER(rows.slice(0, mid), 20) : ker;
+    var er2 = ker2 && isFinite(ker2.er) ? ker2.er : er;
+    var label2 = er2 > 0.6 ? 'TREND' : (er2 < 0.3 ? 'BALANCE' : label);
+    out.stability = label === label2 ? 0.85 : 0.55;
+    if (out.stability < 0.70){
+      out.kerFallback = true;
+      label = er > 0.6 ? 'TREND' : (er < 0.3 ? 'BALANCE' : 'BALANCE');
+      out.why = 'S56 cluster unstable — KER fallback · ' + label;
+    } else {
+      out.why = 'S56 regime ' + label + ' · stab ' + (out.stability * 100).toFixed(0) + '%';
+    }
+    out.label = label;
+    out.ok = true;
+    return out;
+  }catch(e){ out.why = 'S56 error'; return out; }
+}
+
+function hgGoldPart8ApplyClusterFilter(cand, cluster){
+  try{
+    if (!cand || !cluster || !cluster.ok) return cand;
+    if (!Array.isArray(cand.stamps)) cand.stamps = [];
+    cand.regimeCluster = cluster.label;
+    if (cluster.stamps && cand.stamps.indexOf('S56 ' + cluster.label) < 0)
+      cand.stamps.push('S56 ' + cluster.label);
+    else if (cand.stamps.indexOf('S56 ' + cluster.label) < 0)
+      cand.stamps.push('S56 ' + cluster.label);
+    if (cluster.label === 'STRESS'){
+      var sk = String(cand.stratKey || '');
+      if (/vwap|fade|zfade|p5vwap|p6zfade|adrfade|p4adrx|p5drive/.test(sk)){
+        cand.demoted = true;
+        if (cand.stamps.indexOf('S56 STRESS NO FADE') < 0) cand.stamps.push('S56 STRESS NO FADE');
+      } else {
+        cand.sizeMult = (isFinite(cand.sizeMult) ? cand.sizeMult : 1) * 0.5;
+        if (cand.stamps.indexOf('S56 HALF') < 0) cand.stamps.push('S56 HALF');
+      }
+    }
+    return cand;
+  }catch(e){ return cand; }
+}
+
+/** §7 News-intensity z (from opts.headlineCounts hourly array). */
+function hgGoldNewsIntensity(opts){
+  var out = { ok: false, z: NaN, spike: false, why: '' };
+  try{
+    opts = opts || {};
+    var counts = opts.headlineCounts;
+    if (!counts || counts.length < 20){ out.why = 'S53 news-intensity unread'; return out; }
+    var mean = 0, i;
+    for (i = 0; i < counts.length; i++) mean += counts[i];
+    mean /= counts.length;
+    var varr = 0;
+    for (i = 0; i < counts.length; i++) varr += (counts[i] - mean) * (counts[i] - mean);
+    var sd = Math.sqrt(varr / Math.max(1, counts.length - 1));
+    var cur = counts[counts.length - 1];
+    out.z = sd > 0 ? (cur - mean) / sd : 0;
+    out.spike = out.z > HG_GOLD_P8_NEWS_Z && !opts.calendarEvent;
+    out.ok = true;
+    out.why = 'S53 news z ' + out.z.toFixed(2) + (out.spike ? ' · SPIKE' : '');
+    return out;
+  }catch(e){ out.why = 'S53 error'; return out; }
+}
+
+/** S53 geo/news spike fade into node — T2 removed, 70% at T1. */
+function hgGoldPart8GeoSpike(rows, intensity, opts){
+  var out = {
+    ok: false, dir: null, grade: 'watch', entry: NaN, stop: NaN, t1: NaN,
+    halfSize: false, why: ''
+  };
+  try{
+    if (!intensity || !intensity.ok || !intensity.spike){
+      out.why = intensity && intensity.why ? intensity.why : 'S53 no intensity spike';
+      return out;
+    }
+    rows = __rows(rows);
+    if (!rows || rows.length < 40) return out;
+    var last = rows[rows.length - 1];
+    var atrs = _atr(rows, 14);
+    var atr = atrs[atrs.length - 1];
+    if (!(atr > 0)) return out;
+    /* daily_1σ stand-in: ATR*√(day bars) rough */
+    var daily1s = atr * 4;
+    var prev = rows[rows.length - 2];
+    var spikeUp = last.h - Math.min(prev.c, last.o) >= 1.0 * daily1s * 0.25;
+    var spikeDn = Math.max(prev.c, last.o) - last.l >= 1.0 * daily1s * 0.25;
+    /* Reclaim: close back inside prior range */
+    var preHi = prev.h, preLo = prev.l;
+    var reclaimShort = spikeUp && last.c < preHi && last.c > preLo;
+    var reclaimLong = spikeDn && last.c > preLo && last.c < preHi;
+    if (!reclaimShort && !reclaimLong){ out.why = 'S53 spike without reclaim'; return out; }
+    out.ok = true;
+    out.dir = reclaimShort ? 'short' : 'long';
+    out.grade = 'confirmed';
+    out.entry = last.c;
+    out.stop = out.dir === 'short'
+      ? Math.max(last.h, preHi) + HG_GOLD_P8_STOP_BUF_TOXIC * atr
+      : Math.min(last.l, preLo) - HG_GOLD_P8_STOP_BUF_TOXIC * atr;
+    var R = Math.abs(out.entry - out.stop);
+    out.t1 = out.dir === 'short' ? out.entry - 1.5 * R : out.entry + 1.5 * R;
+    /* T2 removed per playbook */
+    if (opts && opts.vpin && opts.vpin.pct > 95) out.halfSize = true;
+    out.why = 'S53 geo/news spike fade ' + out.dir.toUpperCase()
+      + ' · 70% at T1 · no T2'
+      + (out.halfSize ? ' · half (VPIN>95)' : '');
+    return out;
+  }catch(e){ out.why = 'S53 error'; return out; }
+}
+
+/** §8 Range bars + sweep detection. */
+function hgGoldRangeBars(rows, barSize){
+  var out = [];
+  rows = __rows(rows);
+  if (!rows || !(barSize > 0)) return out;
+  var o = rows[0].o, h = rows[0].h, l = rows[0].l, c = rows[0].c, t = rows[0].t, v = 0, i;
+  for (i = 0; i < rows.length; i++){
+    var r = rows[i];
+    h = Math.max(h, r.h); l = Math.min(l, r.l); c = r.c; v += r.v > 0 ? r.v : 0;
+    if ((h - l) >= barSize){
+      out.push({ t: r.t, o: o, h: h, l: l, c: c, v: v });
+      o = c; h = c; l = c; v = 0;
+    }
+  }
+  return out;
+}
+
+function hgGoldRangeBarSweep(rows, opts){
+  var out = {
+    ok: false, dir: null, grade: 'watch', entry: NaN, stop: NaN, t1: NaN,
+    level: NaN, why: '', detector: 'range-bar'
+  };
+  try{
+    opts = opts || {};
+    rows = __rows(rows);
+    if (!rows || rows.length < 40){ out.why = 'S52 need bars'; return out; }
+    var atrs = _atr(rows, 14);
+    var atr1h = atrs[atrs.length - 1];
+    /* On 15m, approx 1H ATR ≈ ATR15 * 2 */
+    var atrH = atr1h * (opts.tfHourMult || 2);
+    var size = HG_GOLD_P8_RANGE_ATR * atrH;
+    var rb = hgGoldRangeBars(rows, size);
+    if (rb.length < 8){ out.why = 'S52 need ≥8 range bars'; return out; }
+    var poolHi = -Infinity, poolLo = Infinity, i;
+    for (i = Math.max(0, rb.length - 12); i < rb.length - 2; i++){
+      if (rb[i].h > poolHi) poolHi = rb[i].h;
+      if (rb[i].l < poolLo) poolLo = rb[i].l;
+    }
+    var a = rb[rb.length - 2], b = rb[rb.length - 1];
+    var age = 1;
+    var bull = a.l < poolLo && b.c > poolLo && age <= 6;
+    var bear = a.h > poolHi && b.c < poolHi && age <= 6;
+    if (!bull && !bear){ out.why = 'S52 no fresh range-bar sweep'; return out; }
+    out.ok = true;
+    out.dir = bull ? 'long' : 'short';
+    out.grade = 'forming';
+    out.level = bull ? poolLo : poolHi;
+    out.entry = b.c;
+    out.stop = bull ? Math.min(a.l, poolLo) - 0.1 * atr1h : Math.max(a.h, poolHi) + 0.1 * atr1h;
+    var R = Math.abs(out.entry - out.stop);
+    out.t1 = bull ? out.entry + 2 * R : out.entry - 2 * R;
+    if (R > 0 && Math.abs(out.t1 - out.entry) / R >= 1.5) out.grade = 'confirmed';
+    out.why = 'S52 range-bar S0 ' + out.dir.toUpperCase()
+      + ' · size $' + size.toFixed(2) + ' · detector=range-bar';
+    return out;
+  }catch(e){ out.why = 'S52 error'; return out; }
+}
+
+/** S54 — NR7/contraction break only when VPIN crosses above 80. */
+function hgGoldPart8VpinBreakout(rows, vpin){
+  var out = {
+    ok: false, dir: null, grade: 'watch', entry: NaN, stop: NaN, t1: NaN, why: ''
+  };
+  try{
+    if (!vpin || !vpin.ok || !(vpin.pct >= HG_GOLD_P8_VPIN_BO)){
+      out.why = 'S54 skip — VPIN pct < 80 (uninformed contraction)';
+      return out;
+    }
+    rows = __rows(rows);
+    if (!rows || rows.length < 30) return out;
+    /* NR7: last bar range = min of last 7 */
+    var i, ranges = [];
+    for (i = rows.length - 7; i < rows.length; i++){
+      if (i < 0) continue;
+      ranges.push(rows[i].h - rows[i].l);
+    }
+    if (ranges.length < 7){ out.why = 'S54 need NR7 window'; return out; }
+    var lastR = ranges[ranges.length - 1], minR = lastR, j;
+    for (j = 0; j < ranges.length - 1; j++) if (ranges[j] < minR) minR = ranges[j];
+    var isNr7 = lastR <= minR + 1e-9;
+    var last = rows[rows.length - 1], prev = rows[rows.length - 2];
+    var brkUp = isNr7 && last.c > prev.h;
+    var brkDn = isNr7 && last.c < prev.l;
+    if (!brkUp && !brkDn){ out.why = 'S54 NR7 without break (or not NR7)'; return out; }
+    var atrs = _atr(rows, 14);
+    var atr = atrs[atrs.length - 1];
+    out.ok = true;
+    out.dir = brkUp ? 'long' : 'short';
+    out.grade = 'confirmed';
+    out.entry = last.c;
+    out.stop = brkUp ? Math.min(last.l, prev.l) - 0.1 * atr : Math.max(last.h, prev.h) + 0.1 * atr;
+    var R = Math.abs(out.entry - out.stop);
+    out.t1 = brkUp ? out.entry + 2 * R : out.entry - 2 * R;
+    out.why = 'S54 VPIN-timed NR7 break ' + out.dir.toUpperCase()
+      + ' · VPIN pct ' + vpin.pct.toFixed(0);
+    return out;
+  }catch(e){ out.why = 'S54 error'; return out; }
+}
+
+/** §9 Term structure — weekly IV − GVZ. */
+function hgGoldTermStructure(opts){
+  var out = { ok: false, slope: NaN, inverted: false, contango: false, why: '' };
+  try{
+    opts = opts || {};
+    var weeklyIv = +opts.weeklyIv, gvz = +opts.gvz;
+    if (!isFinite(weeklyIv) || !isFinite(gvz)){ out.why = 'S57 term structure unread'; return out; }
+    out.slope = weeklyIv - gvz;
+    out.inverted = out.slope > HG_GOLD_P8_TERM_INV;
+    out.contango = out.slope < -2;
+    out.ok = true;
+    out.why = 'S57 slope ' + out.slope.toFixed(1)
+      + (out.inverted ? ' · IMPLIED EVENT (empty calendar → S35 template)' : (out.contango ? ' · contango calm' : ''));
+    return out;
+  }catch(e){ out.why = 'S57 error'; return out; }
+}
+
+/**
+ * §10 / S58 Bayesian gate audit — Beta(2,2) priors; demote proposals only.
+ * journal: [{ gateId: true/false map, hitT1: bool }, ...]
+ */
+function hgGoldBayesianGateAudit(journal){
+  var out = { ok: false, gates: [], demotePropose: [], why: '' };
+  try{
+    journal = journal || [];
+    if (!journal.length){ out.why = 'S58 need journal rows'; return out; }
+    var stats = {}, i, g, row;
+    for (i = 0; i < journal.length; i++){
+      row = journal[i];
+      if (!row || !row.gates) continue;
+      for (g in row.gates){
+        if (!Object.prototype.hasOwnProperty.call(row.gates, g)) continue;
+        if (!row.gates[g]) continue;
+        if (!stats[g]) stats[g] = { a: 2, b: 2, n: 0 };
+        stats[g].n++;
+        if (row.hitT1) stats[g].a++; else stats[g].b++;
+      }
+    }
+    function betaMean(a, b){ return a / (a + b); }
+    function betaQuantileApprox(a, b, p){
+      /* Normal approx to Beta for CI */
+      var m = a / (a + b), v = (a * b) / ((a + b) * (a + b) * (a + b + 1));
+      var z = p === 0.05 ? -1.645 : 1.645;
+      return Math.max(0, Math.min(1, m + z * Math.sqrt(v)));
+    }
+    var keys = Object.keys(stats), ki;
+    for (ki = 0; ki < keys.length; ki++){
+      g = keys[ki];
+      var s = stats[g];
+      var lo = betaQuantileApprox(s.a, s.b, 0.05);
+      var hi = betaQuantileApprox(s.a, s.b, 0.95);
+      var mean = betaMean(s.a, s.b);
+      var rec = { gate: g, mean: mean, lo: lo, hi: hi, n: s.n, role: 'gate' };
+      if (s.n >= 60 && lo <= 0.50 && hi >= 0.50){
+        rec.role = 'CONTEXT';
+        out.demotePropose.push(g);
+      }
+      if (s.n >= 60 && lo > 0.55) rec.role = 'keep';
+      out.gates.push(rec);
+    }
+    out.ok = true;
+    out.why = 'S58 audited ' + out.gates.length + ' gates · demote proposals: '
+      + (out.demotePropose.length ? out.demotePropose.join(',') : 'none')
+      + ' (never auto-promotes)';
+    return out;
+  }catch(e){ out.why = 'S58 error'; return out; }
+}
+
+function hgGoldPart8Engine(rows, opts){
+  var out = {
+    ok: false, bvc: null, vpin: null, illiq: null, resid: null, cluster: null,
+    intensity: null, rangeSweep: null, geo: null, vpinBo: null, term: null, bayes: null,
+    strategies: [], unchecked: [], why: ''
+  };
+  try{
+    opts = opts || {};
+    rows = __rows(rows);
+    if (!rows || rows.length < 40){ out.why = 'need ≥40 bars'; return out; }
+    if (opts.newsGate && opts.newsGate.lock){
+      out.why = 'news lockout — Part8 entries paused';
+      return out;
+    }
+
+    out.bvc = hgGoldBvcCvd(rows);
+    var sweepIdx = rows.length - 1;
+    out.bvcDivLong = hgGoldBvcCvdDivergence(rows, sweepIdx, 'low');
+    out.bvcDivShort = hgGoldBvcCvdDivergence(rows, sweepIdx, 'high');
+
+    out.vpin = hgGoldVpin(rows, { calendarEvent: !!(opts.calendarEvent || (opts.newsGate && opts.newsGate.caution)) });
+    out.illiq = hgGoldAmihudIlliq(rows);
+    out.resid = hgGoldMacroResidual(opts);
+    if (!out.resid.ok) out.unchecked.push('S51 macro residual series');
+    out.cluster = hgGoldRegimeCluster(rows, { vpin: out.vpin });
+    out.intensity = hgGoldNewsIntensity(opts);
+    if (!out.intensity.ok) out.unchecked.push('S53 headline counts');
+    out.term = hgGoldTermStructure(opts);
+    if (!out.term.ok) out.unchecked.push('S57 weekly IV / GVZ');
+    out.bayes = hgGoldBayesianGateAudit(opts.journal || []);
+    if (!out.bayes.ok) out.unchecked.push('S58 journal');
+
+    out.rangeSweep = hgGoldRangeBarSweep(rows, opts);
+    out.geo = hgGoldPart8GeoSpike(rows, out.intensity, { vpin: out.vpin });
+    out.vpinBo = hgGoldPart8VpinBreakout(rows, out.vpin);
+    out.residTrade = hgGoldPart8ResidualTrade(rows, out.resid, opts);
+
+    function pushS(key, dir, level, grade, why, plan){
+      out.strategies.push({
+        key: key, dir: dir, level: level, grade: grade || 'watch', why: why, plan: plan || null
+      });
+    }
+
+    /* Frames / upgrades */
+    pushS('p8bvc', null, NaN, 'frame',
+      (out.bvcDivLong && out.bvcDivLong.diverge && out.bvcDivLong.why)
+        || (out.bvcDivShort && out.bvcDivShort.diverge && out.bvcDivShort.why)
+        || 'S49 BVC-CVD proxy ready (cvd:bvc_proxy)');
+    if (out.vpin && out.vpin.ok) pushS('p8vpin', null, NaN, 'frame', out.vpin.why);
+    if (out.illiq && out.illiq.ok) pushS('p8illiq', null, NaN, 'frame', out.illiq.why);
+    if (out.cluster && out.cluster.ok) pushS('p8cluster', null, NaN, 'frame', out.cluster.why);
+    if (out.term && out.term.ok) pushS('p8term', null, NaN, 'frame', out.term.why);
+    if (out.bayes && out.bayes.ok) pushS('p8bayes', null, NaN, 'frame', out.bayes.why);
+    if (out.resid && out.resid.ok && !out.resid.trade)
+      pushS('p8resid', null, NaN, 'frame', out.resid.why);
+
+    /* Live tickets */
+    if (out.residTrade && out.residTrade.ok && out.residTrade.dir){
+      pushS('p8resid', out.residTrade.dir, out.residTrade.entry, out.residTrade.grade, out.residTrade.why, {
+        stop: out.residTrade.stop, t1: out.residTrade.t1
+      });
+    }
+    if (out.rangeSweep && out.rangeSweep.ok && out.rangeSweep.dir){
+      pushS('p8range', out.rangeSweep.dir, out.rangeSweep.level || out.rangeSweep.entry,
+        out.rangeSweep.grade, out.rangeSweep.why, {
+          stop: out.rangeSweep.stop, t1: out.rangeSweep.t1, detector: 'range-bar'
+        });
+    }
+    if (out.geo && out.geo.ok && out.geo.dir){
+      pushS('p8geo', out.geo.dir, out.geo.entry, out.geo.grade, out.geo.why, {
+        stop: out.geo.stop, t1: out.geo.t1, noT2: true, halfSize: !!out.geo.halfSize
+      });
+    }
+    if (out.vpinBo && out.vpinBo.ok && out.vpinBo.dir){
+      pushS('p8vpinbo', out.vpinBo.dir, out.vpinBo.entry, out.vpinBo.grade, out.vpinBo.why, {
+        stop: out.vpinBo.stop, t1: out.vpinBo.t1
+      });
+    }
+
+    out.ok = out.strategies.some(function(x){
+      return x && (x.grade === 'forming' || x.grade === 'confirmed' || x.grade === 'frame');
+    });
+    out.why = out.ok
+      ? (out.strategies.length + ' Part8 hit(s) · unchecked: ' + (out.unchecked.join(', ') || 'none'))
+      : ('no Part8 trigger · unchecked: ' + (out.unchecked.join(', ') || 'none'));
+    return out;
+  }catch(e){ out.why = 'Part8 engine error'; return out; }
+}
+
+function hgGoldPart8Html(p8){
+  try{
+    if (!p8 || !(p8.ok || (p8.vpin && p8.vpin.ok) || (p8.bvc && p8.bvc.quality))) return '';
+    var h = '<div class="note" data-hg-gold-part8="1" style="margin-top:8px">';
+    h += '<b>PART8 S49–S58 · QUANT / MICROSTRUCTURE</b>';
+    if (p8.vpin && isFinite(p8.vpin.pct)) h += ' · VPIN ' + p8.vpin.pct.toFixed(0);
+    if (p8.cluster && p8.cluster.label) h += ' · ' + p8.cluster.label;
+    if (p8.bvc && p8.bvc.quality) h += ' · cvd:' + p8.bvc.quality;
+    if (p8.unchecked && p8.unchecked.length)
+      h += '<div class="dim" style="margin-top:2px">unchecked: ' + p8.unchecked.join(', ') + '</div>';
+    var i, s, n = Math.min(8, (p8.strategies || []).length);
+    for (i = 0; i < n; i++){
+      s = p8.strategies[i];
+      h += '<div style="margin-top:4px"><b>' + String(s.key).toUpperCase() + '</b>'
+        + (s.dir ? (' ' + String(s.dir).toUpperCase()) : '')
+        + (s.grade ? (' · ' + s.grade) : '')
+        + (isFinite(s.level) ? (' @ ' + (+s.level).toFixed(2)) : '')
+        + ' — ' + String(s.why || '').replace(/[<>&]/g, '') + '</div>';
+    }
+    if (p8.why) h += '<div class="dim" style="margin-top:4px">' + String(p8.why).replace(/[<>&]/g, '') + '</div>';
+    h += '</div>';
+    return h;
+  }catch(e){ return ''; }
+}
+
+/* =========================================================================
    NY VOLUME EXHAUSTION (hg-v556) — two-volume test for New York gold sweeps.
    Raid RVOL≥1.5 + reclaim, then takeover RVOL≥1.2 + MSS + VWAP. Same-session
    RVOL baseline (not just last-20). CVD labeled PROXY when not COMEX.
@@ -12014,6 +12862,17 @@ function hgGoldFormingStack(inp){
       gvzMinusRealized: inp.gvzMinusRealized,
       newsInHold: inp.newsInHold
     });
+    out.part8 = hgGoldPart8Engine(rows, {
+      newsGate: inp.newsGate || (inp.news ? hgGoldNewsGate(inp.news, inp.now || Date.now()) : null),
+      now: inp.now || Date.now(),
+      calendarEvent: !!(inp.calendarEvent || (inp.newsGate && inp.newsGate.caution)),
+      headlineCounts: inp.headlineCounts || null,
+      residSeries: inp.residSeries || null,
+      rGold: inp.rGold || null, rDxy: inp.rDxy || null,
+      dReal: inp.dReal || null, rSpx: inp.rSpx || null, rOil: inp.rOil || null,
+      weeklyIv: inp.weeklyIv, gvz: inp.gvz,
+      journal: inp.gateJournal || null
+    });
     out.smcLiq = hgGoldSmcLiquidity(rows, {});
     out.smcLiq._n = rows.length;
     out.smcHit = hgGoldSmcLiquidityHit(rows, {
@@ -12417,6 +13276,9 @@ function hgGoldFormingStackHtml(stack){
     if (stack.part7){
       h += hgGoldPart7Html(stack.part7);
     }
+    if (stack.part8){
+      h += hgGoldPart8Html(stack.part8);
+    }
     if (stack.smcLiq){
       h += hgGoldSmcLiquidityHtml(stack.smcLiq);
     }
@@ -12680,6 +13542,31 @@ W.hgGoldPart7ScalpModule = hgGoldPart7ScalpModule;
 W.hgGoldPart7ExpressionTree = hgGoldPart7ExpressionTree;
 W.hgGoldPart7Engine = hgGoldPart7Engine;
 W.hgGoldPart7Html = hgGoldPart7Html;
+W.HG_GOLD_P8_VPIN_TOXIC = HG_GOLD_P8_VPIN_TOXIC;
+W.HG_GOLD_P8_VPIN_VETO = HG_GOLD_P8_VPIN_VETO;
+W.HG_GOLD_P8_RESID_TRADE = HG_GOLD_P8_RESID_TRADE;
+W.hgGoldNormCdf = hgGoldNormCdf;
+W.hgGoldBvcDelta = hgGoldBvcDelta;
+W.hgGoldBvcCvd = hgGoldBvcCvd;
+W.hgGoldBvcCvdDivergence = hgGoldBvcCvdDivergence;
+W.hgGoldPart8ApplyBvcBoost = hgGoldPart8ApplyBvcBoost;
+W.hgGoldVpin = hgGoldVpin;
+W.hgGoldPart8ApplyVpinFilter = hgGoldPart8ApplyVpinFilter;
+W.hgGoldAmihudIlliq = hgGoldAmihudIlliq;
+W.hgGoldPart8ApplyIlliqScale = hgGoldPart8ApplyIlliqScale;
+W.hgGoldMacroResidual = hgGoldMacroResidual;
+W.hgGoldPart8ResidualTrade = hgGoldPart8ResidualTrade;
+W.hgGoldRegimeCluster = hgGoldRegimeCluster;
+W.hgGoldPart8ApplyClusterFilter = hgGoldPart8ApplyClusterFilter;
+W.hgGoldNewsIntensity = hgGoldNewsIntensity;
+W.hgGoldPart8GeoSpike = hgGoldPart8GeoSpike;
+W.hgGoldRangeBars = hgGoldRangeBars;
+W.hgGoldRangeBarSweep = hgGoldRangeBarSweep;
+W.hgGoldPart8VpinBreakout = hgGoldPart8VpinBreakout;
+W.hgGoldTermStructure = hgGoldTermStructure;
+W.hgGoldBayesianGateAudit = hgGoldBayesianGateAudit;
+W.hgGoldPart8Engine = hgGoldPart8Engine;
+W.hgGoldPart8Html = hgGoldPart8Html;
 W.hgGoldVpTargets = hgGoldVpTargets;
 W.hgGoldVpTargetsHtml = hgGoldVpTargetsHtml;
 W.hgGoldVpBundle = hgGoldVpBundle;

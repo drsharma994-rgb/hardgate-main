@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* HARDGATE — Part5 S19–S28 OMNIGOLD + SCALP/SWING mint wire (hg-v574) */
+/* HARDGATE — Part5 S19–S28 OMNIGOLD + SCALP/SWING mint wire (hg-v575) */
 import fs from 'fs';
 import path from 'path';
 import vm from 'vm';
@@ -110,11 +110,11 @@ console.log('\n== stamp ==');
   const sw = fs.readFileSync(root + 'sw.js', 'utf8');
   const html = fs.readFileSync(root + 'index.html', 'utf8');
   const m = stamp.match(/version:\s*'([^']+)'/);
-  ok(m && m[1] === 'hg-v574', 'build-stamp version (got ' + (m && m[1]) + ')');
-  ok(sw.indexOf("HG_CACHE = 'hg-v574'") >= 0, 'sw.js matches stamp');
-  ok(/goldind\.js\?v=574/.test(html), 'index goldind ?v=');
-  ok(/goldswing\.js\?v=574/.test(html), 'index goldswing ?v=');
-  ok(/omnigold\.js\?v=574/.test(html), 'index omnigold ?v=');
+  ok(m && m[1] === 'hg-v575', 'build-stamp version (got ' + (m && m[1]) + ')');
+  ok(sw.indexOf("HG_CACHE = 'hg-v575'") >= 0, 'sw.js matches stamp');
+  ok(/goldind\.js\?v=575/.test(html), 'index goldind ?v=');
+  ok(/goldswing\.js\?v=575/.test(html), 'index goldswing ?v=');
+  ok(/omnigold\.js\?v=575/.test(html), 'index omnigold ?v=');
 }
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
