@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v565',
-  pack: 'Gold VP playbook gates',
-  built: '2026-09-02T09:15:00Z',
-  note: 'VP Playbook §10 checklist: ENTER/WAIT/NO ENTRY with 12 explicit gates (bias, location A/B+, sweep+reclaim, OB, session, LVN path, RR≥2.0, R≤0.6×ATR). Wired SCALP vpbook mint, SWING VP ENTER stamps, forming panel on all gold desks. Sacred contracts unchanged.'
+  version: 'hg-v566',
+  pack: 'Gold session Silver Bullet twin',
+  built: '2026-09-02T14:30:00Z',
+  note: 'Session-bounded Asia→London/NY Silver Bullet twin: time-windowed sweep+reclaim into OB/FVG (hgGoldSessionBoundSweep). SCALP silverb mint, SWING SILVER BULLET stamps, forming panel. vectorbt stays out-of-repo research only. Sacred contracts unchanged.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
