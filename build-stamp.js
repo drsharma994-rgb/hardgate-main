@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v560',
-  pack: 'Gold advanced sweep→OB',
-  built: '2026-09-02T04:00:00Z',
-  note: 'Advanced gold sweep→OB: HTF location + liquidity raid + MSS then fresh OB/FVG. Modes reversal/continuation/london-trap/ny-cont|rev. Quality ≥7/10 + R:R≥2.0 alerts. News lockout. Wired SCALP/SWING/OMNIGOLD forming. Sacred contracts unchanged.'
+  version: 'hg-v561',
+  pack: 'Gold RVOL fake-sweep filter',
+  built: '2026-09-02T05:00:00Z',
+  note: 'Two-stage RVOL fake-sweep gate: stage1 raid≥1.25 (Asia 1.50) + reclaim; stage2 response≥1.10. Rejects low-volume wicks, breakout acceptance, news blowoff>2.5, dead response. Wired into sweep engine confidence + forming panel. Sacred contracts unchanged.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
