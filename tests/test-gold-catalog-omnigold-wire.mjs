@@ -29,6 +29,7 @@ console.log('== files ==');
   const gsc = fs.readFileSync(root + 'goldscalp.js', 'utf8');
   const og = fs.readFileSync(root + 'omnigold.js', 'utf8');
   const html = fs.readFileSync(root + 'index.html', 'utf8');
+  const V = HG_VER.replace(/^hg-v/, '');
   ok(/hgGoldCatalogEngine/.test(gi) && /hgGoldCatalogApplyVerdict/.test(gi), 'SCALP applies catalog');
   ok(/hgGoldCatalogHtml/.test(gi), 'forming stack HTML');
   ok(/feeds failed: cards stay empty/.test(gs) && /hgGoldCatalogHtml/.test(gs),
@@ -43,7 +44,7 @@ console.log('== files ==');
     'OMNIGOLD paints catalog on mount');
   ok(/catHtmlM\(catFnM/.test(gsc) && /catHtmlM\(catFnM/.test(gs),
     'SCALP+SWING mount writes catalog HTML');
-  ok(/gold-catalog\.js\?v=578/.test(html), 'index loads gold-catalog.js');
+  ok(new RegExp('gold-catalog\\.js\\?v=' + V).test(html), 'index loads gold-catalog.js');
 }
 
 console.log('\n== runtime ==');
@@ -64,10 +65,11 @@ console.log('\n== stamp ==');
   const stamp = fs.readFileSync(root + 'build-stamp.js', 'utf8');
   const sw = fs.readFileSync(root + 'sw.js', 'utf8');
   const html = fs.readFileSync(root + 'index.html', 'utf8');
+  const V = HG_VER.replace(/^hg-v/, '');
   const m = stamp.match(/version:\s*'([^']+)'/);
   ok(m && m[1] === HG_VER, 'stamp (got ' + (m && m[1]) + ')');
   ok(swCacheOk(sw), 'sw cache');
-  ok(/goldind\.js\?v=578/.test(html) && /omnigold\.js\?v=578/.test(html), 'index ?v=578');
+  ok(new RegExp('goldind\\.js\\?v=' + V).test(html) && new RegExp('omnigold\\.js\\?v=' + V).test(html), 'index ?v= matches stamp');
 }
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');

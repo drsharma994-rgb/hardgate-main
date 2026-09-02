@@ -98,6 +98,12 @@ console.log('\n== engine frames ==');
   ok(eng.linreg && eng.linreg.ok, 'linreg OPTIONAL frame');
   const html = W.hgGoldCatalogHtml(eng);
   ok(/MASTER CATALOG/i.test(html) && /LIVE SET/.test(html), 'html renders live set');
+  ok(typeof W.hgGoldCatalogFeed === 'function', 'feed export');
+  const feed = W.hgGoldCatalogFeed(rows, {});
+  ok(feed.totalInd === 184 && feed.totalStrat === 20, 'feed walks 184 + 20');
+  ok(feed.usedN + feed.uncheckedN + feed.excludedN === 204, 'every item USED/UNCHECKED/EXCLUDE');
+  ok(feed.usedN >= 1 && feed.enter === false, 'some USED, never ENTER');
+  ok(/USED/.test(html), 'html names USED count');
 }
 
 console.log('\n== stamp ==');

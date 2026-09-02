@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* HARDGATE — Crypto Master Catalog v1.0 (hg-v578) */
+/* HARDGATE — Crypto Master Catalog v1.0 */
 import fs from 'fs';
 import path from 'path';
 import vm from 'vm';
@@ -96,7 +96,7 @@ console.log('\n== stamp ==');
   const sw = fs.readFileSync(root + 'sw.js', 'utf8');
   const m = stamp.match(/version\s*:\s*['"]([^'"]+)['"]/);
   ok(m && m[1] === HG_VER, 'build-stamp ' + HG_VER + ' (got ' + (m && m[1]) + ')');
-  ok(HG_VER === 'hg-v578', 'this ship is hg-v578');
+  ok(/^hg-v\d+$/.test(HG_VER), 'stamp is hg-vNNN (got ' + HG_VER + ')');
   ok(swCacheOk(sw), 'sw.js matches');
   ok(sw.indexOf('crypto-catalog.js') >= 0, 'HG_SHELL precaches crypto-catalog.js');
 }

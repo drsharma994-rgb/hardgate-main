@@ -87,12 +87,13 @@ console.log('\n== stamp ==');
   const stamp = fs.readFileSync(root + 'build-stamp.js', 'utf8');
   const sw = fs.readFileSync(root + 'sw.js', 'utf8');
   const html = fs.readFileSync(root + 'index.html', 'utf8');
+  const V = HG_VER.replace(/^hg-v/, '');
   const m = stamp.match(/version:\s*'([^']+)'/);
   ok(m && m[1] === HG_VER, 'build-stamp version (got ' + (m && m[1]) + ')');
   ok(swCacheOk(sw), 'sw.js matches stamp');
-  ok(/goldind\.js\?v=578/.test(html), 'index goldind ?v=');
-  ok(/goldswing\.js\?v=578/.test(html), 'index goldswing ?v=');
-  ok(/omnigold\.js\?v=578/.test(html), 'index omnigold ?v=');
+  ok(new RegExp('goldind\\.js\\?v=' + V).test(html), 'index goldind ?v=');
+  ok(new RegExp('goldswing\\.js\\?v=' + V).test(html), 'index goldswing ?v=');
+  ok(new RegExp('omnigold\\.js\\?v=' + V).test(html), 'index omnigold ?v=');
 }
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');

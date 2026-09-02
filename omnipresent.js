@@ -490,7 +490,7 @@
     try {
       var catApply = gfn('hgCryptoCatalogApplyVerdict');
       if (catApply){
-        catApply(cand);
+        catApply(cand, null, { rows: rows, dir: cand.dir, desk: 'OMNIPRESENT', kind: cand.kind });
         if (cand.catalogExclude){
           cand.formationOk = false;
           cand.formationReason = 'catalog ' + (cand.catalogVerdict || 'exclude');

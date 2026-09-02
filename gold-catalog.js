@@ -386,6 +386,110 @@
     }catch(e){ out.why = 'CAT AWR error'; return out; }
   }
 
+  function goldKer20(rows){
+    if (!rows || rows.length < 21) return NaN;
+    var net = Math.abs(+rows[rows.length - 1].c - +rows[rows.length - 21].c);
+    var path = 0, i;
+    for (i = rows.length - 20; i < rows.length; i++)
+      path += Math.abs(+rows[i].c - +rows[i - 1].c);
+    return path > 0 ? net / path : NaN;
+  }
+  function goldRsi14(rows){
+    if (!rows || rows.length < 15) return NaN;
+    var g = 0, l = 0, i, d;
+    for (i = rows.length - 14; i < rows.length; i++){
+      d = +rows[i].c - +rows[i - 1].c;
+      if (d >= 0) g += d; else l -= d;
+    }
+    if (l === 0) return 100;
+    return 100 - 100 / (1 + (g / 14) / (l / 14));
+  }
+  function goldAtrN(rows, n){
+    if (!rows || rows.length < n + 1) return NaN;
+    var s = 0, i, tr, prev;
+    for (i = rows.length - n; i < rows.length; i++){
+      prev = +rows[i - 1].c;
+      tr = Math.max(+rows[i].h - +rows[i].l, Math.abs(+rows[i].h - prev), Math.abs(+rows[i].l - prev));
+      s += tr;
+    }
+    return s / n;
+  }
+  function goldRvol20(rows){
+    if (!rows || rows.length < 21) return NaN;
+    var s = 0, i;
+    for (i = rows.length - 21; i < rows.length - 1; i++) s += +rows[i].v || 0;
+    var mean = s / 20;
+    return mean > 0 ? (+rows[rows.length - 1].v || 0) / mean : NaN;
+  }
+
+  /* Walk all 184 indicators + 20 L1 maps. USED = wired on GOLD SCALP /
+     GOLD SWING / OMNIGOLD, or bar-computable this print. UNCHECKED = mapped,
+     no tape. EXCLUDE never ENTER. Never invents dir. */
+  function hgGoldCatalogFeed(rows, opts){
+    opts = opts || {};
+    var used = [], unchecked = [], excluded = [];
+    var hasBars = rows && rows.length >= 20;
+    var linreg = (rows && rows.length >= 40) ? hgGoldCatalogLinreg(rows, 50) : null;
+    var crsi = (rows && rows.length >= 40) ? hgGoldCatalogConnorsRsi(rows) : null;
+    var awr = (rows && rows.length >= 30) ? hgGoldCatalogAwr(rows) : null;
+    var ker = goldKer20(rows);
+    var rsi = goldRsi14(rows);
+    var atr = goldAtrN(rows, 14);
+    var atr50 = goldAtrN(rows, 50);
+    var rvol = goldRvol20(rows);
+    var i, r, status, note;
+    function push(bucket, rec, st, why){
+      bucket.push({
+        id: rec.id, name: rec.name, family: rec.family || rec.tf || '',
+        class: rec.verdict, wire: rec.wire || '', status: st, note: why || ''
+      });
+    }
+    for (i = 0; i < I.length; i++){
+      r = recOf(I[i]);
+      status = 'UNCHECKED';
+      note = 'mapped, no tape this bar';
+      if (r.verdict === 'REDUNDANT' || r.verdict === 'NON_FALSIFIABLE' || r.verdict === 'AVOID'){
+        push(excluded, r, 'EXCLUDE', r.verdict + ' — never ENTER');
+        continue;
+      }
+      if (r.wire){
+        status = 'USED';
+        note = 'wired · ' + r.wire;
+      }
+      if (r.id === 44 && linreg && linreg.ok){ status = 'USED'; note = linreg.why; }
+      else if (r.id === 47 && isFinite(ker)){ status = 'USED'; note = 'KER20=' + ker.toFixed(2); }
+      else if (r.id === 54 && isFinite(rsi)){ status = 'USED'; note = 'RSI14=' + rsi.toFixed(1); }
+      else if (r.id === 66 && crsi && crsi.ok){ status = 'USED'; note = crsi.why; }
+      else if (r.id === 72 && isFinite(atr)){ status = 'USED'; note = 'ATR14=' + atr.toFixed(2); }
+      else if (r.id === 73 && isFinite(atr) && isFinite(atr50) && atr50 > 0){
+        status = 'USED'; note = 'ATR regime ' + (atr / atr50).toFixed(2);
+      }
+      else if (r.id === 75 && awr && awr.ok){ status = 'USED'; note = awr.why; }
+      else if (r.id === 95 && isFinite(rvol)){ status = 'USED'; note = 'RVOL20=' + rvol.toFixed(2); }
+      if (status === 'USED') push(used, r, status, note);
+      else push(unchecked, r, status, note);
+    }
+    for (i = 0; i < STRAT.length; i++){
+      r = { id: STRAT[i][0], name: STRAT[i][1], tf: STRAT[i][2], sRef: STRAT[i][3],
+            verdict: STRAT[i][4], wire: STRAT[i][5], family: 'L1' };
+      if (r.verdict === 'AVOID' || r.verdict === 'REDUNDANT' || r.verdict === 'NON_FALSIFIABLE'){
+        push(excluded, r, 'EXCLUDE', r.verdict + ' — never ENTER');
+        continue;
+      }
+      if (r.wire) push(used, r, 'USED', 'wired · ' + r.wire);
+      else push(unchecked, r, 'UNCHECKED', r.sRef || 'mapped L1');
+    }
+    void opts;
+    return {
+      used: used, unchecked: unchecked, excluded: excluded,
+      usedN: used.length, uncheckedN: unchecked.length, excludedN: excluded.length,
+      totalInd: I.length, totalStrat: STRAT.length,
+      liveSet: HG_GOLD_CATALOG_LIVE.slice(),
+      enter: false,
+      note: 'USED = wired on GOLD SCALP / GOLD SWING / OMNIGOLD or computed this bar. UNCHECKED = mapped, tape insufficient. EXCLUDE never ENTER.'
+    };
+  }
+
   function hgGoldCatalogEngine(rows, opts){
     var out = {
       ok: true, ver: HG_GOLD_CATALOG_VER, nInd: I.length, nStrat: STRAT.length,
@@ -424,8 +528,13 @@
       if (out.linreg && out.linreg.ok) pushS('catlinreg', 'frame', out.linreg.why);
       if (out.crsi && out.crsi.ok) pushS('catcrsi', 'frame', out.crsi.why);
       if (out.awr && out.awr.ok) pushS('catawr', 'frame', out.awr.why);
+      out.feed = hgGoldCatalogFeed(rows, opts);
+      out.usedN = out.feed.usedN;
+      out.uncheckedN = out.feed.uncheckedN;
+      out.excludedN = out.feed.excludedN;
       out.why = 'Master Catalog v' + HG_GOLD_CATALOG_VER + ' · ' + I.length
-        + ' indicators · ' + STRAT.length + ' L1 maps · freeze S66';
+        + ' indicators · ' + STRAT.length + ' L1 maps · freeze S66'
+        + ' · USED ' + out.usedN + ' · UNCHECKED ' + out.uncheckedN;
       return out;
     }catch(e){ out.ok = false; out.why = 'catalog engine error'; return out; }
   }
@@ -456,6 +565,10 @@
         gn.push(up);
         cand.gateNotes = gn;
       }
+      var feed = (cat && cat.feed) ? cat.feed : hgGoldCatalogFeed(null, {});
+      cand.catalogFeed = feed;
+      cand.catalogUsedN = feed.usedN;
+      cand.catalogUncheckedN = feed.uncheckedN;
       if (!rec) return cand;
       cand.catalogVerdict = rec.verdict;
       cand.catalogFamily = rec.family;
@@ -485,6 +598,9 @@
       h += ' · ' + cat.nInd + ' indicators · ' + cat.nStrat + ' L1 maps';
       h += ' · CORE ' + cat.core + ' · OPT ' + cat.optional
         + ' · REDUN ' + cat.redundant + ' · EXCL ' + cat.excluded;
+      if (cat.usedN != null){
+        h += ' · <b>USED ' + cat.usedN + '</b> · UNCHECKED ' + cat.uncheckedN;
+      }
       h += '<div class="dim" style="margin-top:2px">LIVE SET '
         + (cat.live || []).join(' · ')
         + ' · schedulers ' + (cat.sched || []).join('/')
@@ -528,6 +644,7 @@
   W.hgGoldCatalogConnorsRsi = hgGoldCatalogConnorsRsi;
   W.hgGoldCatalogAwr = hgGoldCatalogAwr;
   W.hgGoldCatalogEngine = hgGoldCatalogEngine;
+  W.hgGoldCatalogFeed = hgGoldCatalogFeed;
   W.hgGoldCatalogApplyVerdict = hgGoldCatalogApplyVerdict;
   W.hgGoldCatalogHtml = hgGoldCatalogHtml;
 })(typeof window !== 'undefined' ? window : globalThis);

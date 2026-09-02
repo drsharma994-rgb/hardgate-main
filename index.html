@@ -459,6 +459,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
   </div>
   <div class="note" style="margin-bottom:10px">Gates: G1 4H EMA cascade aligned (9&gt;21&gt;50 or inverse) with real spread — |EMA21−EMA50| ≥ 0.25×ATR, so flat-tape cascades don't count · G2 price on correct side of 4H EMA200 (HTF proxy) · G3 RSI-14 not exhausted (blocks &gt;70 long / &lt;30 short) · G4 |funding| ≤ 0.05% and not paying against you · G5 volume expansion vs 20-bar mean · G6 structural R:R ≥ 2 from last swing · G7 no opposing CUSUM event in last 20 bars (the one feature your own walk-forward validated OOS, AUC ≈0.58). All gates on CLOSED bars only — nothing repaints. Zero results is a valid, honest result. Each card shows <b>regime</b> — the 4H tape read (STRONG TREND / WEAK TREND / RANGE / COMPRESSION / VOLATILE EXPANSION), same as EDGE and DIVERGENCE.</div>
   <div id="swingDesk"></div>
+  <div id="swingCatalog" class="muted" style="font-size:11px;margin:6px 0 8px"></div>
   <div class="cards" id="swingCards"></div>
   <div id="swingDiagOut"></div>
   <div id="swingWatch"></div>
@@ -479,6 +480,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
   </div>
   <div class="note" style="margin-bottom:10px">Gates: G1 1H EMA cascade sets direction · G2 15m EMA9/21 pullback-and-reclaim in that direction · G3 15m RSI in 40–65 band (long) / 35–60 (short), no chasing exhaustion · G4 funding clean · G5 ≥ 25 min to funding settlement (00:00/08:00/16:00 UTC = 5:30/13:30/21:30 IST) · G6 ATR-based 2R target inside recent range. Scalps are invalid if you can't be filled early — entry is the reclaim close, not a market chase.</div>
   <div id="scalpDesk"></div>
+  <div id="scalpCatalog" class="muted" style="font-size:11px;margin:6px 0 8px"></div>
   <div class="cards" id="scalpCards"></div>
   <div id="scalpWatch"></div>
   <div class="empty" id="scalpEmpty" style="display:none">No CLEAN scalp triggers right now.</div>
@@ -808,7 +810,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 </main>
 
 
-<script src="build-stamp.js?v=578"></script>
+<script src="build-stamp.js?v=579"></script>
 <script src="hghost.js"></script>
 <script src="indicators.js"></script>
 <script src="indicators2.js"></script>
@@ -855,10 +857,10 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=578"></script>
+<script src="hg-mechanics.js?v=579"></script>
 <script src="./hg-gates.js?v=559"></script>
-<script src="crypto-catalog.js?v=578"></script>
-<script src="omniroute.js?v=578"></script>
+<script src="crypto-catalog.js?v=579"></script>
+<script src="omniroute.js?v=579"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
 <script src="edge.js?v=559"></script>
@@ -871,16 +873,16 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- conviction-lock.js: ConvictionLockManager (anti-repaint lifecycle) -->
 <script src="conviction-lock.js"></script>
 <!-- goldind.js + goldscalp.js: GOLD SCALP tab (pure SMC/ICT + indicator detectors, then the tab) — after indicators2/binance/macro/xuniverse/news, before brain.js -->
-<script src="goldind.js?v=578"></script>
-<script src="gold-catalog.js?v=578"></script>
+<script src="goldind.js?v=579"></script>
+<script src="gold-catalog.js?v=579"></script>
 <script src="macro-feeds.js"></script>
-<script src="goldscalp.js?v=578"></script>
+<script src="goldscalp.js?v=579"></script>
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
-<script src="goldswing.js?v=578"></script>
+<script src="goldswing.js?v=579"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
-<script src="omnigold.js?v=578"></script>
+<script src="omnigold.js?v=579"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
-<script src="omnipresent.js?v=578"></script>
+<script src="omnipresent.js?v=579"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
 <script src="contract-report.js"></script>
 <!-- omnibtc-engines.js: SMART $ / OI FLOW / fade / COIL / DIV / TRAP / SMC / STAR TRADER + on-chain evidence. Loads BEFORE omnibtc.js so the tab can feature-check it. -->
@@ -913,14 +915,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js?v=559"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=578"></script>
+<script src="supersetup.js?v=579"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=578"></script>
-<script src="super-gold.js?v=578"></script>
-<script src="super-best.js?v=578"></script>
-<script src="super-sniper.js?v=578"></script>
-<script src="super-book.js?v=578"></script>
-<script src="super-calibrate.js?v=578"></script>
+<script src="super-desk-common.js?v=579"></script>
+<script src="super-gold.js?v=579"></script>
+<script src="super-best.js?v=579"></script>
+<script src="super-sniper.js?v=579"></script>
+<script src="super-book.js?v=579"></script>
+<script src="super-calibrate.js?v=579"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -4850,6 +4852,10 @@ async function runScanLeg(kind, opts){
   const N = hgScanUniverseN(opts, $(isSwing ? 'swingN' : 'scalpN'));
   const minTurn = isSwing ? (+$('swingTurn').value || 0) : 0;
   const cardsEl = $(isSwing ? 'swingCards' : 'scalpCards'), emptyEl = $(isSwing ? 'swingEmpty' : 'scalpEmpty'), statEl = $(isSwing ? 'swingStat' : 'scalpStat');
+  try{
+    if (typeof hgCryptoCatalogPaint === 'function')
+      hgCryptoCatalogPaint(isSwing ? 'swingCatalog' : 'scalpCatalog', { desk: isSwing ? 'SWING' : 'SCALP' });
+  }catch(eCatP){}
   const btn = $(isSwing ? 'swingRun' : 'scalpRun');
   let newsGate = { blackout: false, caution: false };
   try{

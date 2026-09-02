@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* HARDGATE — Crypto Master Catalog wire on OMNIROUTE + OMNIPRESENT (hg-v578) */
+/* HARDGATE — Crypto Master Catalog wire on OMNIROUTE + OMNIPRESENT */
 import fs from 'fs';
 import path from 'path';
 import vm from 'vm';
@@ -34,12 +34,13 @@ console.log('== files ==');
   ok(/id="opCatalog"/.test(op), 'OMNIPRESENT dedicated catalog host');
   ok(!/ui\.cards\.innerHTML = htmlFn/.test(op), 'OMNIPRESENT does not write catalog into cards');
 
-  ok(/crypto-catalog\.js\?v=578/.test(html), 'index loads crypto-catalog.js?v=578');
-  ok(/<script src="crypto-catalog\.js\?v=578"><\/script>\s*<script src="omniroute\.js/.test(html),
+  const V = HG_VER.replace(/^hg-v/, '');
+  ok(new RegExp('crypto-catalog\\.js\\?v=' + V).test(html), 'index loads crypto-catalog.js');
+  ok(new RegExp('<script src="crypto-catalog\\.js\\?v=' + V + '"><\\/script>\\s*<script src="omniroute\\.js').test(html),
     'catalog script loads before omniroute.js');
-  ok(/omniroute\.js\?v=578/.test(html) && /omnipresent\.js\?v=578/.test(html),
-    'desk scripts cache-busted to 578');
-  ok(sw.indexOf("HG_CACHE = 'hg-v578'") >= 0 || swCacheOk(sw), 'sw cache 578');
+  ok(new RegExp('omniroute\\.js\\?v=' + V).test(html) && new RegExp('omnipresent\\.js\\?v=' + V).test(html),
+    'desk scripts cache-busted to stamp');
+  ok(swCacheOk(sw), 'sw cache matches stamp');
   ok(sw.indexOf('./crypto-catalog.js') >= 0, 'HG_SHELL includes crypto-catalog.js');
 }
 
@@ -60,7 +61,7 @@ console.log('\n== stamp ==');
   const stamp = fs.readFileSync(root + 'build-stamp.js', 'utf8');
   const m = stamp.match(/version:\s*'([^']+)'/);
   ok(m && m[1] === HG_VER, 'stamp (got ' + (m && m[1]) + ')');
-  ok(HG_VER === 'hg-v578', 'this ship is hg-v578');
+  ok(/^hg-v\d+$/.test(HG_VER), 'stamp is hg-vNNN (got ' + HG_VER + ')');
 }
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');

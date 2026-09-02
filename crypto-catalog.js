@@ -259,7 +259,7 @@
   function inventory(){
     return {
       version: '1.0',
-      stamp: 'hg-v578',
+      stamp: 'hg-v579',
       indicators: IND.map(recInd),
       strategies: STRAT.map(recSt),
       families: FAMILIES.slice(),
@@ -306,6 +306,262 @@
     return v === 'RETIRED' || v === 'REDUNDANT' || v === 'NON_FALSIFIABLE' || v === 'AVOID';
   }
 
+  function lastRow(rows){
+    return rows && rows.length ? rows[rows.length - 1] : null;
+  }
+  function closesOf(rows){
+    var o = [], i;
+    if (!rows) return o;
+    for (i = 0; i < rows.length; i++) o.push(+rows[i].c);
+    return o;
+  }
+  function emaLast(closes, n){
+    if (!closes || closes.length < n) return NaN;
+    var k = 2 / (n + 1), e = closes[0], i;
+    for (i = 1; i < closes.length; i++) e = closes[i] * k + e * (1 - k);
+    return e;
+  }
+  function rsi14(closes){
+    if (!closes || closes.length < 15) return NaN;
+    var g = 0, l = 0, i, d;
+    for (i = closes.length - 14; i < closes.length; i++){
+      d = closes[i] - closes[i - 1];
+      if (d >= 0) g += d; else l -= d;
+    }
+    if (l === 0) return 100;
+    return 100 - 100 / (1 + (g / 14) / (l / 14));
+  }
+  function atr14(rows){
+    if (!rows || rows.length < 15) return NaN;
+    var s = 0, i, tr, prev;
+    for (i = rows.length - 14; i < rows.length; i++){
+      prev = +rows[i - 1].c;
+      tr = Math.max(+rows[i].h - +rows[i].l, Math.abs(+rows[i].h - prev), Math.abs(+rows[i].l - prev));
+      s += tr;
+    }
+    return s / 14;
+  }
+  function atrN(rows, n){
+    if (!rows || rows.length < n + 1) return NaN;
+    var s = 0, i, tr, prev;
+    for (i = rows.length - n; i < rows.length; i++){
+      prev = +rows[i - 1].c;
+      tr = Math.max(+rows[i].h - +rows[i].l, Math.abs(+rows[i].h - prev), Math.abs(+rows[i].l - prev));
+      s += tr;
+    }
+    return s / n;
+  }
+  function ker20(closes){
+    if (!closes || closes.length < 21) return NaN;
+    var net = Math.abs(closes[closes.length - 1] - closes[closes.length - 21]);
+    var path = 0, i;
+    for (i = closes.length - 20; i < closes.length; i++) path += Math.abs(closes[i] - closes[i - 1]);
+    return path > 0 ? net / path : NaN;
+  }
+  function rvol20(rows){
+    if (!rows || rows.length < 21) return NaN;
+    var s = 0, i;
+    for (i = rows.length - 21; i < rows.length - 1; i++) s += +rows[i].v || 0;
+    var mean = s / 20;
+    return mean > 0 ? (+rows[rows.length - 1].v || 0) / mean : NaN;
+  }
+  function adrUsedPct(rows){
+    if (!rows || rows.length < 11) return NaN;
+    var s = 0, i;
+    for (i = rows.length - 11; i < rows.length - 1; i++) s += Math.max(0, +rows[i].h - +rows[i].l);
+    var adr = s / 10;
+    var last = lastRow(rows);
+    if (!(adr > 0) || !last) return NaN;
+    return ((+last.h - +last.l) / adr) * 100;
+  }
+  function sessionName(now){
+    var utcH = now.getUTCHours() + now.getUTCMinutes() / 60;
+    if (utcH >= 0 && utcH < 8) return 'Asia';
+    if (utcH >= 7 && utcH < 16) return utcH >= 13.5 ? 'London/US overlap' : 'London';
+    if (utcH >= 13.5 && utcH < 20) return 'US';
+    return 'off-session';
+  }
+  function inFundWindow(now){
+    var utcH = now.getUTCHours(), utcM = now.getUTCMinutes();
+    var fundHours = [0, 8, 16], i, mins;
+    for (i = 0; i < fundHours.length; i++){
+      mins = (utcH * 60 + utcM) - fundHours[i] * 60;
+      if (mins >= -20 && mins < 0) return true;
+    }
+    return false;
+  }
+
+  /* Walk every mapped indicator + strategy. USED = computed or live-set/rule
+     this bar. UNCHECKED = mapped, bars/tape insufficient. EXCLUDE = never a
+     vote. Frames never invent dir. One vote per family. */
+  function hgCryptoCatalogFeed(rows, extra){
+    extra = extra || {};
+    var now = extra.now instanceof Date ? extra.now : new Date(extra.now || Date.now());
+    var dir = extra.dir || extra.side || '';
+    var closes = closesOf(rows);
+    var hasBars = closes.length >= 21;
+    var used = [], unchecked = [], excluded = [];
+    var familyVotes = {};
+    var frames = [];
+    var rsi = rsi14(closes);
+    var ker = ker20(closes);
+    var atr = atr14(rows);
+    var atr50 = atrN(rows, 50);
+    var rvol = rvol20(rows);
+    var adr = extra.adrUsedPct != null ? Number(extra.adrUsedPct) : adrUsedPct(rows);
+    var weekend = now.getUTCDay() === 6 || now.getUTCDay() === 0;
+    var fundWin = inFundWindow(now);
+    var sess = sessionName(now);
+    var e21 = emaLast(closes, 21);
+    var e55 = emaLast(closes, 55);
+    var last = lastRow(rows);
+    var lastC = last ? +last.c : NaN;
+    var c20 = closes.length >= 21 ? closes[closes.length - 21] : NaN;
+    var structUp = isFinite(lastC) && isFinite(c20) && lastC > c20;
+    var structDn = isFinite(lastC) && isFinite(c20) && lastC < c20;
+
+    function pushFam(family, vote){
+      if (!family || familyVotes[family]) return;
+      if (vote) familyVotes[family] = vote;
+    }
+    function recPush(bucket, item, status, note, align){
+      bucket.push({
+        id: item.id, name: item.name, family: item.family || '',
+        class: item.verdict, status: status, note: note || '', align: align || ''
+      });
+    }
+
+    var inv = inventory();
+    var i, item, status, note, align, vote;
+    for (i = 0; i < inv.indicators.length; i++){
+      item = inv.indicators[i];
+      status = 'UNCHECKED';
+      note = 'mapped, no tape this bar';
+      align = '';
+      if (isBlockVerdict(item.verdict)){
+        recPush(excluded, item, 'EXCLUDE', item.verdict + ' — never ENTER');
+        continue;
+      }
+      if (item.id === 1 && hasBars){
+        status = 'USED';
+        note = structUp ? 'HH/HL bias up vs 20 bars' : (structDn ? 'LH/LL bias down vs 20 bars' : 'structure flat');
+        if (dir === 'long') align = structUp ? 'agree' : (structDn ? 'oppose' : 'stamp');
+        else if (dir === 'short') align = structDn ? 'agree' : (structUp ? 'oppose' : 'stamp');
+        else align = 'stamp';
+      } else if (item.id === 18 && hasBars && isFinite(e21) && isFinite(e55)){
+        status = 'USED';
+        note = 'EMA21 ' + (e21 > e55 ? '>' : '≤') + ' EMA55 (slope only)';
+        if (dir === 'long') align = e21 > e55 ? 'agree' : 'oppose';
+        else if (dir === 'short') align = e21 < e55 ? 'agree' : 'oppose';
+        else align = 'stamp';
+      } else if (item.id === 26 && isFinite(ker)){
+        status = 'USED';
+        note = 'KER20=' + ker.toFixed(2);
+        align = 'stamp';
+      } else if (item.id === 30 && isFinite(rsi)){
+        status = 'USED';
+        note = 'RSI14=' + rsi.toFixed(1) + ' · 68/32 exhaustion stamp only';
+        if (dir === 'long' && rsi > 68) align = 'oppose';
+        else if (dir === 'short' && rsi < 32) align = 'oppose';
+        else align = 'stamp';
+      } else if (item.id === 35 && isFinite(atr)){
+        status = 'USED';
+        note = 'ATR14=' + atr.toFixed(4);
+        align = 'stamp';
+      } else if (item.id === 36 && isFinite(atr) && isFinite(atr50) && atr50 > 0){
+        status = 'USED';
+        note = 'ATR regime ' + (atr / atr50).toFixed(2);
+        align = 'stamp';
+      } else if (item.id === 37 && isFinite(adr)){
+        status = 'USED';
+        note = 'ADR used ' + adr.toFixed(0) + '%';
+        align = 'stamp';
+      } else if (item.id === 46 && isFinite(rvol)){
+        status = 'USED';
+        note = 'RVOL20=' + rvol.toFixed(2);
+        align = 'stamp';
+      } else if (item.id === 100){
+        status = 'USED';
+        note = 'session ' + sess;
+        align = 'stamp';
+      } else if (item.id === 101){
+        status = 'USED';
+        note = fundWin ? '20-min pre-funding window' : 'outside funding window';
+        align = 'stamp';
+      } else if (item.id === 103){
+        status = 'USED';
+        note = weekend ? 'weekend Sat–Sun UTC (frame)' : 'weekday';
+        align = 'stamp';
+      } else if (item.id === 105 && isFinite(ker)){
+        status = 'USED';
+        note = 'KER regime ' + ker.toFixed(2);
+        align = 'stamp';
+      } else if (item.wire === 'CORE' && (item.sRef === 'CASCADE' || LIVE.indexOf(item.sRef) >= 0
+        || SCHED.indexOf(item.sRef) >= 0 || RULES.indexOf(item.sRef) >= 0)){
+        status = 'USED';
+        note = 'live/rule map · ' + (item.sRef || item.wire);
+        align = 'stamp';
+      }
+      if (status === 'USED'){
+        recPush(used, item, status, note, align);
+        vote = (item.verdict === 'CORE') ? (align || 'stamp') : null;
+        if (vote) pushFam(item.family, vote);
+      } else {
+        recPush(unchecked, item, status, note);
+      }
+    }
+
+    for (i = 0; i < inv.strategies.length; i++){
+      item = inv.strategies[i];
+      item.family = item.family || 'Strategy';
+      if (isBlockVerdict(item.verdict)){
+        recPush(excluded, item, 'EXCLUDE', (item.note || item.verdict) + ' — never ENTER');
+        continue;
+      }
+      if (LIVE.indexOf(item.equiv) >= 0 || SCHED.indexOf(item.equiv) >= 0 || RULES.indexOf(item.equiv) >= 0
+        || item.equiv === 'CASCADE' || item.equiv === 'S0'){
+        recPush(used, item, 'USED', 'live/scheduler/rule · ' + (item.equiv || item.name), 'stamp');
+      } else {
+        recPush(unchecked, item, 'UNCHECKED', item.note || 'mapped, LEAD until SPRT / 100-row cap');
+      }
+    }
+
+    if (weekend){
+      frames.push({
+        id: 'C-WEEKEND', family: 'Time', verdict: 'CORE', dir: null,
+        note: 'Weekend regime (Sat–Sun UTC): swing half size, scalp OFF, stop buffers ×1.5. Frame only — never ENTER.'
+      });
+    }
+    if (fundWin){
+      frames.push({
+        id: 'C-FUND-WINDOW', family: 'Time', verdict: 'CORE', dir: null,
+        note: '20-min pre-funding window (Delta IST stamps). Paying-side WAIT. Frame only — never ENTER.'
+      });
+    }
+    if (isFinite(adr) && adr > 120){
+      frames.push({
+        id: 'C-ADR', family: 'Volatility', verdict: 'CORE', dir: null,
+        note: 'ADR used > 120% — no continuation. Frame only.'
+      });
+    }
+
+    return {
+      used: used,
+      unchecked: unchecked,
+      excluded: excluded,
+      usedN: used.length,
+      uncheckedN: unchecked.length,
+      excludedN: excluded.length,
+      totalInd: inv.indicators.length,
+      totalStrat: inv.strategies.length,
+      familyVotes: familyVotes,
+      frames: frames,
+      liveSet: LIVE.slice(),
+      enter: false,
+      note: 'USED = computed or live-set/rule this bar. UNCHECKED = mapped, tape insufficient. EXCLUDE never ENTER. One vote per family. Never invents dir.'
+    };
+  }
+
   /* OPTIONAL frames only. Never invent dir / ENTER. */
   function hgCryptoCatalogEngine(rows, opts){
     opts = opts || {};
@@ -340,28 +596,54 @@
         note: 'ADR used > 120% — no continuation. Frame only.'
       });
     }
+    var feed = hgCryptoCatalogFeed(rows, opts);
+    if (feed.frames && feed.frames.length){
+      for (i = 0; i < feed.frames.length; i++){
+        if (!frames.some(function (f){ return f.id === feed.frames[i].id; }))
+          frames.push(feed.frames[i]);
+      }
+    }
     void rows;
     return {
       version: '1.0',
-      stamp: 'hg-v578',
+      stamp: 'hg-v579',
       live: LIVE.slice(),
       schedulers: SCHED.slice(),
       rules: RULES.slice(),
       tiers: TIERS.slice(),
       frames: frames,
+      feed: feed,
+      usedN: feed.usedN,
+      uncheckedN: feed.uncheckedN,
+      excludedN: feed.excludedN,
       inventory: inventory(),
       enter: false
     };
   }
 
-  function hgCryptoCatalogApplyVerdict(cand, cat){
+  function hgCryptoCatalogApplyVerdict(cand, cat, extra){
     if (!cand) return cand;
-    cat = cat || hgCryptoCatalogEngine([], {});
-    var kind = cand.kind || (cand.plan && cand.plan.kind) || '';
+    extra = extra || {};
+    cat = cat || hgCryptoCatalogEngine(extra.rows || [], extra);
+    var kind = cand.kind || (cand.plan && cand.plan.kind) || extra.kind || '';
     var wire = wireForKind(kind);
     var st = findStrat(wire);
     var verdict = wire === 'RETIRED' ? 'RETIRED' : wire === 'AVOID' ? 'AVOID' : (st && st.verdict) || '';
     var prevDir = cand.dir != null ? cand.dir : (cand.plan && cand.plan.plan && cand.plan.plan.dir);
+    var feedOpts = {
+      now: extra.now, dir: prevDir || extra.dir || extra.side,
+      side: extra.side || prevDir, desk: extra.desk,
+      cascade: extra.cascade, fr: extra.fr, btcDir: extra.btcDir,
+      liq: extra.liq, barAge: extra.barAge, volZ: extra.volZ,
+      adrUsedPct: extra.adrUsedPct
+    };
+    var feed = (cat && cat.feed) ? cat.feed : hgCryptoCatalogFeed(extra.rows || [], feedOpts);
+    cand.catalogFeed = feed;
+    cand.catalogUsedN = feed.usedN;
+    cand.catalogUncheckedN = feed.uncheckedN;
+    cand.catalogExcludedN = feed.excludedN;
+    cand.catalogFamilyVotes = feed.familyVotes;
+    cand.catalogFrames = feed.frames;
     if (isBlockVerdict(verdict)){
       cand.demoted = true;
       cand.catalogExclude = true;
@@ -370,6 +652,11 @@
       if (cand.plan && cand.plan.plan){
         cand.plan.plan.demoted = true;
         cand.plan.plan.catalogExclude = true;
+      }
+      /* Sacred: never flip dir, even on exclude. */
+      if (prevDir != null){
+        if (cand.dir != null) cand.dir = prevDir;
+        if (cand.plan && cand.plan.plan && cand.plan.plan.dir != null) cand.plan.plan.dir = prevDir;
       }
       return cand;
     }
@@ -427,7 +714,7 @@
     }).join('');
     return ''
       + '<div class="panel" data-hg-crypto-catalog="1" style="margin-top:10px">'
-      + '<div class="lbl">CRYPTO MASTER CATALOG v1.0 · ' + esc(inv.stamp || 'hg-v578') + '</div>'
+      + '<div class="lbl">CRYPTO MASTER CATALOG v1.0 · ' + esc(inv.stamp || 'hg-v579') + '</div>'
       + '<div class="note">Venues: Delta India + CoinDCX perps. Swing 4H/1H · Scalp 5m/1m. '
       + esc(inv.doctrine) + '. <b>never ENTER</b> from this panel — map only.</div>'
       + '<div class="note"><b>LIVE SET</b> ' + live
@@ -436,6 +723,8 @@
       + '<div class="note">Alert tiers: ' + esc(tiers) + '</div>'
       + '<div class="note">Families (one vote each): ' + famBits + '</div>'
       + '<div class="note">Indicators ' + inv.indicators.length + ' · strategies ' + inv.strategies.length
+      + (cat.usedN != null ? (' · <b>USED ' + cat.usedN + '</b> · UNCHECKED ' + cat.uncheckedN
+        + ' · EXCL ' + (cat.excludedN || 0)) : '')
       + ' · CME weekend gap <b>RETIRED</b> (CME BTC 24/7 since 29 May 2026).</div>'
       + '<div class="note"><b>SCALP MODULE</b> 5m/1m · US 13:30–15:30 UTC · London 07:00–09:00 UTC · '
       + 'hold ≤60 min · native CVD required · weekend OFF · suppressed if Cascade is WARMING/ALERT/FIRE same symbol/side.</div>'
@@ -453,10 +742,35 @@
   W.HG_CRYPTO_CATALOG_SCHED = SCHED;
   W.HG_CRYPTO_CATALOG_RULES = RULES;
   W.HG_CRYPTO_CATALOG_EXCLUDE = EXCLUDED;
+  function hgCryptoCatalogPaint(hostId, extra){
+    try{
+      var doc = typeof document !== 'undefined' ? document : null;
+      if (!doc) return false;
+      var el = typeof hostId === 'string' ? doc.getElementById(hostId) : hostId;
+      if (!el) return false;
+      el.innerHTML = hgCryptoCatalogHtml(hgCryptoCatalogEngine([], extra || {}));
+      return true;
+    }catch(e){ return false; }
+  }
+
   W.hgCryptoCatalogInventory = inventory;
   W.hgCryptoCatalogEngine = hgCryptoCatalogEngine;
+  W.hgCryptoCatalogFeed = hgCryptoCatalogFeed;
   W.hgCryptoCatalogApplyVerdict = hgCryptoCatalogApplyVerdict;
   W.hgCryptoCatalogHtml = hgCryptoCatalogHtml;
+  W.hgCryptoCatalogPaint = hgCryptoCatalogPaint;
   W.hgCryptoCatalogById = byId;
   W.hgCryptoCatalogKindMap = KIND_MAP;
+
+  try{
+    if (typeof document !== 'undefined'){
+      function paintSwingScalpHosts(){
+        hgCryptoCatalogPaint('swingCatalog', { desk: 'SWING' });
+        hgCryptoCatalogPaint('scalpCatalog', { desk: 'SCALP' });
+      }
+      if (document.readyState === 'loading')
+        document.addEventListener('DOMContentLoaded', paintSwingScalpHosts);
+      else paintSwingScalpHosts();
+    }
+  }catch(ePaint){}
 })(typeof window !== 'undefined' ? window : globalThis);

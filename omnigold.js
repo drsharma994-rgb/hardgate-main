@@ -6778,7 +6778,11 @@ terse status, and never launches a first-time scan on a global refresh.
           ? wEdge.hgGoldCatalogApplyVerdict : null;
         if (catApply){
           probe.kind = kind;
-          catApply(probe, null);
+          var catRows = setup.rows || setup.rows15m || setup.rows4h || [];
+          var catEngFn = wEdge && typeof wEdge.hgGoldCatalogEngine === 'function'
+            ? wEdge.hgGoldCatalogEngine : null;
+          var catEng = catEngFn ? catEngFn(catRows, {}) : null;
+          catApply(probe, catEng);
           if (probe.catalogExclude){
             out.formed = false;
             out.catalogExclude = true;

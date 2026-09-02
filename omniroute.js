@@ -2183,7 +2183,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       ? w.hgCryptoCatalogApplyVerdict : null;
     if (catApply){
       try {
-        catApply(formed);
+        catApply(formed, extra.catalogEng || null, {
+          rows: rows, dir: formed.dir, desk: 'OMNIROUTE', kind: formed.kind || (plan && plan.kind)
+        });
         if (formed.catalogExclude){
           plan.formationOk = false;
           plan.formationReason = 'catalog ' + (formed.catalogVerdict || 'exclude');
@@ -7415,6 +7417,15 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
        the same exBySym entry. Fail-closed: absent data attaches nothing. */
     extra = extra || {};
     try { hgOmniAttachSolidityFeeds(rows, extra); } catch (eFeeds) {}
+    try {
+      var wCat = (typeof window !== 'undefined') ? window : null;
+      var catEngFn = wCat && typeof wCat.hgCryptoCatalogEngine === 'function'
+        ? wCat.hgCryptoCatalogEngine : null;
+      if (catEngFn && !extra.catalogEng){
+        extra.catalogEng = catEngFn(rows, extra);
+        extra.catalogFeed = extra.catalogEng.feed || null;
+      }
+    } catch (eCatEng) {}
     if (!hits.length){
       /* No engine named a trade. Do not invent a ticket — but still run
          the indicator ledger on this name so quiet contracts are not a

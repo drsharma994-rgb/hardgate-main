@@ -484,6 +484,14 @@
     if (typeof hgSetupStackAttach === 'function'){
       hgSetupStackAttach(out, { style: 'swing', rows4h: rows, ticker: ticker, gatesPassed: 7, gatesTotal: 7, clean: true });
     }
+    try{
+      var catApplySw = (typeof hgCryptoCatalogApplyVerdict === 'function')
+        ? hgCryptoCatalogApplyVerdict
+        : (G && typeof G.hgCryptoCatalogApplyVerdict === 'function' ? G.hgCryptoCatalogApplyVerdict : null);
+      if (catApplySw && out){
+        catApplySw(out, null, { rows: rows, dir: out.dir, desk: 'SWING', cascade: true });
+      }
+    }catch(eCatSw){}
     return out;
   }
 
@@ -510,6 +518,14 @@
     if (typeof hgSetupStackAttach === 'function'){
       hgSetupStackAttach(out, { style: 'scalp', rows4h: h1, rows1h: h1, rows: m15, ticker: ticker, gatesPassed: m.passed, gatesTotal: m.gatesTotal, clean: true });
     }
+    try{
+      var catApplySc = (typeof hgCryptoCatalogApplyVerdict === 'function')
+        ? hgCryptoCatalogApplyVerdict
+        : (G && typeof G.hgCryptoCatalogApplyVerdict === 'function' ? G.hgCryptoCatalogApplyVerdict : null);
+      if (catApplySc && out){
+        catApplySc(out, null, { rows: m15, dir: out.dir, desk: 'SCALP', cascade: true });
+      }
+    }catch(eCatSc){}
     return out;
   }
 
