@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v561',
-  pack: 'Gold RVOL fake-sweep filter',
-  built: '2026-09-02T05:00:00Z',
-  note: 'Two-stage RVOL fake-sweep gate: stage1 raid≥1.25 (Asia 1.50) + reclaim; stage2 response≥1.10. Rejects low-volume wicks, breakout acceptance, news blowoff>2.5, dead response. Wired into sweep engine confidence + forming panel. Sacred contracts unchanged.'
+  version: 'hg-v562',
+  pack: 'Gold Part4 S9–S18 strategies',
+  built: '2026-09-02T06:00:00Z',
+  note: 'Part4 gold strategies: S9 P/D filter, S11 gap, S12 NR7, S14 ADR>120% fade, S15 poor/excess, S17 look-above-fail, S18 Asia SD. S13/S16 unchecked (no XAG/footprint). Wired SCALP/SWING/OMNIGOLD. Sacred contracts unchanged.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

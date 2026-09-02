@@ -2351,6 +2351,21 @@ async function runScan(ui, scanSt){
             }
           }
         }
+        var p4Fn = gfn('hgGoldPart4Engine');
+        var p4Filt = gfn('hgGoldPart4ApplyDiscountFilter');
+        if (p4Fn && got.length){
+          var p4Eng = p4Fn(gold.rows4h, {
+            newsGate: newsRaw ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(newsRaw, now) : null) : null
+          });
+          if (p4Eng){
+            for (var p4si = 0; p4si < got.length; p4si++){
+              if (!got[p4si]) continue;
+              if (!Array.isArray(got[p4si].stamps)) got[p4si].stamps = [];
+              if (p4Filt && p4Eng.pd) p4Filt(got[p4si], p4Eng.pd);
+              if (p4Eng.ok && got[p4si].stamps.indexOf('PART4') < 0) got[p4si].stamps.push('PART4');
+            }
+          }
+        }
       }catch(ePn){}
       collectWatch(gold, v);
       for (i = 0; i < got.length; i++) cands.push(got[i]);
