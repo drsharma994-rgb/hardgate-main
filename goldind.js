@@ -1783,6 +1783,29 @@ function goldScalpSetups(inp){
           engCand.sweepTier = eng.tier;
           if (!Array.isArray(engCand.stamps)) engCand.stamps = [];
           engCand.stamps.push('SWEEP ' + String(eng.score) + '/' + String(eng.tier || '').toUpperCase());
+          try{
+            var vpSw = goldVolumeProfile(rows, 100, 50);
+            if (vpSw){
+              var tgSw = hgGoldVpTargets({
+                dir: eng.dir, entry: entry,
+                stop: isFinite(eng.level) ? eng.level + (eng.dir === 'long' ? -1 : 1) * a15 : NaN,
+                vprof: vpSw, thin: true,
+                mssOk: !!(eng.mss && eng.mss.ok) || !!eng.confirmed,
+                vwap: (D.vw && isFinite(D.vw.vwap)) ? D.vw.vwap : NaN,
+                external: {
+                  asiaHi: D.asian && D.asian.hi, asiaLo: D.asian && D.asian.lo
+                }
+              });
+              if (tgSw && tgSw.ok){
+                engCand.vpTargets = tgSw;
+                if (isFinite(tgSw.tp1)) engCand.t1 = tgSw.tp1;
+                if (isFinite(tgSw.tp2)) engCand.t2 = tgSw.tp2;
+                if (tgSw.confirmed) engCand.stamps.push('VP TARGET CONFIRMED');
+                else engCand.stamps.push('VP TARGETS');
+                engCand.stamps.push('THIN VP');
+              }
+            }
+          }catch(_vpSw){}
           if (eng.tier === 'watch' && !eng.confirmed) engCand.demoted = true;
           push(engCand);
         }
@@ -1812,6 +1835,29 @@ function goldScalpSetups(inp){
             if (isFinite(nyx.plan.t1)) nyCand.t1 = nyx.plan.t1;
             if (isFinite(nyx.plan.stop)) nyCand.stop = nyx.plan.stop;
           }
+          try{
+            var vpNy = goldVolumeProfile(rows, 100, 50);
+            if (vpNy){
+              var tgNy = hgGoldVpTargets({
+                dir: nyx.dir, entry: entry, stop: nyStop, vprof: vpNy, thin: true,
+                mssOk: !!(nyx.takeover && nyx.takeover.mss && nyx.takeover.mss.ok) || !!nyx.confirmed,
+                vwap: (D.vw && isFinite(D.vw.vwap)) ? D.vw.vwap : NaN,
+                external: {
+                  asiaHi: D.asian && D.asian.hi, asiaLo: D.asian && D.asian.lo,
+                  pdh: D.__priorDay && D.__priorDay.hi, pdl: D.__priorDay && D.__priorDay.lo
+                }
+              });
+              if (tgNy && tgNy.ok){
+                nyCand.vpTargets = tgNy;
+                if (isFinite(tgNy.tp1)) nyCand.t1 = tgNy.tp1;
+                if (isFinite(tgNy.tp2)) nyCand.t2 = tgNy.tp2;
+                if (!Array.isArray(nyCand.stamps)) nyCand.stamps = [];
+                if (tgNy.confirmed) nyCand.stamps.push('VP TARGET CONFIRMED');
+                else nyCand.stamps.push('VP TARGETS');
+                nyCand.stamps.push('THIN VP');
+              }
+            }
+          }catch(_vpNy){}
           if (!Array.isArray(nyCand.stamps)) nyCand.stamps = [];
           nyCand.stamps.push('NY EXH ' + String(nyx.score) + '/' + String(nyx.tier || '').toUpperCase());
           if (nyx.cvdNote) nyCand.stamps.push('CVD PROXY');
@@ -3950,14 +3996,194 @@ function goldVolumeProfile(rows, lookback, bins){
     var stdDev = Math.sqrt(varSum / bins);
     var hvnThreshold = meanVol + stdDev;
     var hvns = [];
+    var lvns = [];
+    var lvnThreshold = Math.max(0, meanVol - 0.5 * stdDev);
     for (i = 0; i < bins; i++){
-      if (profile[i] > hvnThreshold){
-        hvns.push(minPrice + i * binSize + binSize / 2);
+      var mid = minPrice + i * binSize + binSize / 2;
+      if (profile[i] > hvnThreshold) hvns.push(mid);
+      else if (profile[i] > 0 && profile[i] <= lvnThreshold) lvns.push(mid);
+    }
+
+    /* Value area (~70% of volume) expanding from POC — standard VP convention */
+    var targetVol = totalVol * 0.70;
+    var loI = pocIndex, hiI = pocIndex, covered = profile[pocIndex];
+    while (covered < targetVol && (loI > 0 || hiI < bins - 1)){
+      var addLo = (loI > 0) ? profile[loI - 1] : -1;
+      var addHi = (hiI < bins - 1) ? profile[hiI + 1] : -1;
+      if (addHi >= addLo){
+        if (hiI >= bins - 1){ if (loI <= 0) break; loI--; covered += profile[loI]; }
+        else { hiI++; covered += profile[hiI]; }
+      } else {
+        if (loI <= 0){ if (hiI >= bins - 1) break; hiI++; covered += profile[hiI]; }
+        else { loI--; covered += profile[loI]; }
       }
     }
-    return { pocPrice: pocPrice, hvns: hvns, binSize: binSize,
-             minPrice: minPrice, maxPrice: maxPrice, bars: slice.length, totalVol: totalVol };
+    var vah = minPrice + (hiI + 1) * binSize;
+    var val = minPrice + loI * binSize;
+
+    return {
+      pocPrice: pocPrice, hvns: hvns, lvns: lvns, binSize: binSize,
+      minPrice: minPrice, maxPrice: maxPrice, bars: slice.length, totalVol: totalVol,
+      profileHigh: maxPrice, profileLow: minPrice,
+      vah: vah, val: val, valueAreaPct: 0.70,
+      bins: bins, profile: profile,
+      venueNote: 'VP from this feed is venue activity (XAUT/PAXG/spot/proxy) — not full COMEX GC'
+    };
   }catch(e){ return null; }
+}
+
+/**
+ * Post-sweep / directional target ladder from volume profile + external liquidity.
+ * Prefer nearest opposing profile/liquidity level; require ≥1.5R for "confirmed" badge.
+ */
+function hgGoldVpTargets(opts){
+  var out = {
+    ok: false, dir: null, confirmed: false, thin: true,
+    tp1: NaN, tp2: NaN, tp3: NaN, labels: [], why: '', parts: {},
+    venueNote: 'VP from this feed is venue activity — map COMEX levels when available'
+  };
+  try{
+    opts = opts || {};
+    var dir = (opts.dir === 'short') ? 'short' : 'long';
+    out.dir = dir;
+    var entry = +opts.entry, stop = +opts.stop;
+    var vprof = opts.vprof;
+    if (!vprof || !isFinite(vprof.pocPrice)){ out.why = 'no volume profile'; return out; }
+    out.thin = opts.thin !== false; /* default thin-venue caution */
+    out.venueNote = vprof.venueNote || out.venueNote;
+
+    var risk = (isFinite(entry) && isFinite(stop)) ? Math.abs(entry - stop) : NaN;
+    var candidates = [];
+    function add(level, label, pri){
+      if (!isFinite(level)) return;
+      if (dir === 'long' && isFinite(entry) && !(level > entry)) return;
+      if (dir === 'short' && isFinite(entry) && !(level < entry)) return;
+      candidates.push({ level: level, label: label, pri: pri || 50 });
+    }
+
+    /* Priority: external liquidity → major profile → LVN far edge → HTF */
+    var ext = opts.external || {};
+    if (dir === 'long'){
+      add(ext.asiaHi || ext.londonHi, 'Asia/London high', 10);
+      add(ext.pdh, 'prior-day high', 12);
+      add(ext.eqHi, 'equal highs', 14);
+      add(vprof.pocPrice, 'session POC', 20);
+      if (vprof.hvns && vprof.hvns.length){
+        var hn, nearestHvn = NaN;
+        for (hn = 0; hn < vprof.hvns.length; hn++){
+          if (vprof.hvns[hn] > entry && (!isFinite(nearestHvn) || vprof.hvns[hn] < nearestHvn))
+            nearestHvn = vprof.hvns[hn];
+        }
+        add(nearestHvn, 'nearest HVN', 22);
+      }
+      add(vprof.vah, 'VAH', 24);
+      if (vprof.lvns && vprof.lvns.length){
+        var ln, farLvn = NaN;
+        for (ln = 0; ln < vprof.lvns.length; ln++){
+          if (vprof.lvns[ln] > entry && (!isFinite(farLvn) || vprof.lvns[ln] > farLvn))
+            farLvn = vprof.lvns[ln];
+        }
+        add(farLvn, 'LVN far edge', 30);
+      }
+      add(vprof.profileHigh, 'profile high', 35);
+      add(opts.vwap, 'session VWAP', 18);
+    } else {
+      add(ext.asiaLo || ext.londonLo, 'Asia/London low', 10);
+      add(ext.pdl, 'prior-day low', 12);
+      add(ext.eqLo, 'equal lows', 14);
+      add(vprof.pocPrice, 'session POC', 20);
+      if (vprof.hvns && vprof.hvns.length){
+        var hn2, nearestHvn2 = NaN;
+        for (hn2 = 0; hn2 < vprof.hvns.length; hn2++){
+          if (vprof.hvns[hn2] < entry && (!isFinite(nearestHvn2) || vprof.hvns[hn2] > nearestHvn2))
+            nearestHvn2 = vprof.hvns[hn2];
+        }
+        add(nearestHvn2, 'nearest HVN', 22);
+      }
+      add(vprof.val, 'VAL', 24);
+      if (vprof.lvns && vprof.lvns.length){
+        var ln2, farLvn2 = NaN;
+        for (ln2 = 0; ln2 < vprof.lvns.length; ln2++){
+          if (vprof.lvns[ln2] < entry && (!isFinite(farLvn2) || vprof.lvns[ln2] < farLvn2))
+            farLvn2 = vprof.lvns[ln2];
+        }
+        add(farLvn2, 'LVN far edge', 30);
+      }
+      add(vprof.profileLow, 'profile low', 35);
+      add(opts.vwap, 'session VWAP', 18);
+    }
+
+    candidates.sort(function(a, b){
+      var da = Math.abs(a.level - entry), db = Math.abs(b.level - entry);
+      if (a.pri !== b.pri) return a.pri - b.pri;
+      return da - db;
+    });
+
+    /* Deduplicate near-identical levels */
+    var picked = [], pi, pj, tooClose;
+    for (pi = 0; pi < candidates.length && picked.length < 3; pi++){
+      tooClose = false;
+      for (pj = 0; pj < picked.length; pj++){
+        if (Math.abs(candidates[pi].level - picked[pj].level) < (vprof.binSize || 0.5)){
+          tooClose = true; break;
+        }
+      }
+      if (!tooClose) picked.push(candidates[pi]);
+    }
+
+    if (!picked.length){ out.why = 'no opposing profile/liquidity targets beyond entry'; return out; }
+
+    out.tp1 = picked[0].level;
+    out.tp2 = picked.length > 1 ? picked[1].level : NaN;
+    out.tp3 = picked.length > 2 ? picked[2].level : NaN;
+    out.labels = picked.map(function(p){ return p.label + ' @ ' + p.level.toFixed(2); });
+    out.ok = true;
+    out.parts = {
+      poc: vprof.pocPrice, vah: vprof.vah, val: vprof.val,
+      profileHigh: vprof.profileHigh, profileLow: vprof.profileLow
+    };
+
+    var rr1 = (isFinite(risk) && risk > 0) ? Math.abs(out.tp1 - entry) / risk : NaN;
+    var mssOk = !!opts.mssOk;
+    out.confirmed = !!(mssOk && isFinite(rr1) && rr1 >= 1.5 && !opts.newsLock);
+    out.why = (out.confirmed ? 'PROFILE TARGET CONFIRMED' : 'PROFILE TARGETS')
+      + ' ' + dir.toUpperCase()
+      + ' · TP1 ' + out.labels[0]
+      + (isFinite(rr1) ? (' · ' + rr1.toFixed(2) + 'R') : '')
+      + (out.thin ? ' · THIN VP hint' : '');
+    if (!mssOk) out.why += ' · need MSS agree for confirmed badge';
+    return out;
+  }catch(e){ out.why = 'vp-targets error'; return out; }
+}
+
+function hgGoldVpTargetsHtml(tg){
+  try{
+    if (!tg || !tg.ok) return '';
+    var h = '<div class="note" data-hg-gold-vp-tg="1" style="margin-top:8px">';
+    h += '<b>VP TARGETS</b>';
+    if (tg.confirmed) h += ' · <b>CONFIRMED</b>';
+    else h += ' · hint';
+    if (tg.dir) h += ' · ' + String(tg.dir).toUpperCase();
+    if (tg.parts){
+      h += '<div class="dim" style="margin-top:2px">POC '
+        + (isFinite(tg.parts.poc) ? (+tg.parts.poc).toFixed(2) : '—')
+        + ' · VAH ' + (isFinite(tg.parts.vah) ? (+tg.parts.vah).toFixed(2) : '—')
+        + ' · VAL ' + (isFinite(tg.parts.val) ? (+tg.parts.val).toFixed(2) : '—')
+        + '</div>';
+    }
+    if (tg.labels && tg.labels.length){
+      h += '<div style="margin-top:4px">';
+      var i;
+      for (i = 0; i < tg.labels.length; i++){
+        h += (i ? ' · ' : '') + '<b>TP' + (i + 1) + '</b> ' + String(tg.labels[i]).replace(/[<>&]/g, '');
+      }
+      h += '</div>';
+    }
+    if (tg.why) h += '<div class="dim" style="margin-top:2px">' + String(tg.why).replace(/[<>&]/g, '') + '</div>';
+    h += '<div class="dim" style="margin-top:2px">' + String(tg.venueNote || '').replace(/[<>&]/g, '') + '</div>';
+    h += '</div>';
+    return h;
+  }catch(e){ return ''; }
 }
 
 /* V2 trigger helpers — volume-validated sweep + HVN-backed FVG (never throw). */
@@ -6535,6 +6761,38 @@ function hgGoldFormingStack(inp){
       newsGate: inp.newsGate || (inp.news ? hgGoldNewsGate(inp.news, inp.now || Date.now()) : null),
       now: inp.now || Date.now()
     });
+    out.vprof = goldVolumeProfile(rows, 100, 50);
+    out.vpTargets = null;
+    try{
+      var lead = null;
+      if (out.nyExhaustion && out.nyExhaustion.ok && out.nyExhaustion.dir) lead = out.nyExhaustion;
+      else if (out.sweepEngine && out.sweepEngine.dir && (out.sweepEngine.ok || out.sweepEngine.score > 0))
+        lead = out.sweepEngine;
+      if (lead && out.vprof){
+        var px = rows[rows.length - 1].c;
+        var stopGuess = (lead.plan && isFinite(lead.plan.stop)) ? lead.plan.stop
+          : (isFinite(lead.level) ? lead.level + (lead.dir === 'long' ? -1 : 1) * (out.sessionBuf.stopBuffer || 0) : NaN);
+        var vw = null;
+        try{ vw = goldVWAP(rows); }catch(_v){}
+        out.vpTargets = hgGoldVpTargets({
+          dir: lead.dir,
+          entry: px,
+          stop: stopGuess,
+          vprof: out.vprof,
+          thin: true,
+          mssOk: !!(lead.mss && lead.mss.ok) || !!(lead.takeover && lead.takeover.mss && lead.takeover.mss.ok)
+            || !!(lead.confirmed),
+          newsLock: !!(inp.newsGate && inp.newsGate.lock),
+          vwap: vw && isFinite(vw.vwap) ? vw.vwap : NaN,
+          external: {
+            asiaHi: out.asia && out.asia.hi, asiaLo: out.asia && out.asia.lo,
+            pdh: out.priorDay && out.priorDay.hi, pdl: out.priorDay && out.priorDay.lo,
+            eqHi: out.equals && out.equals.highs && out.equals.highs[0] && out.equals.highs[0].level,
+            eqLo: out.equals && out.equals.lows && out.equals.lows[0] && out.equals.lows[0].level
+          }
+        });
+      }
+    }catch(_vp){}
 
     function watch(key, state, level, condition, reason, dir, family){
       out.watches.push({
@@ -6713,6 +6971,9 @@ function hgGoldFormingStackHtml(stack){
     if (stack.nyExhaustion){
       h += hgGoldNyExhaustionHtml(stack.nyExhaustion);
     }
+    if (stack.vpTargets && typeof hgGoldVpTargetsHtml === 'function'){
+      h += hgGoldVpTargetsHtml(stack.vpTargets);
+    }
     if (stack.note) h += '<div class="dim" style="margin-top:4px">' + String(stack.note).replace(/[<>&]/g, '') + '</div>';
     var i, s;
     for (i = 0; i < (stack.strategies || []).length && i < 3; i++){
@@ -6854,6 +7115,8 @@ W.hgGoldNyRvolSignature = hgGoldNyRvolSignature;
 W.hgGoldNyExhaustion = hgGoldNyExhaustion;
 W.hgGoldNyExhaustionScore = hgGoldNyExhaustionScore;
 W.hgGoldNyExhaustionHtml = hgGoldNyExhaustionHtml;
+W.hgGoldVpTargets = hgGoldVpTargets;
+W.hgGoldVpTargetsHtml = hgGoldVpTargetsHtml;
 W.hgGoldSessionAtrBuffer = hgGoldSessionAtrBuffer;
 W.hgGoldApplyFormingRegime = hgGoldApplyFormingRegime;
 W.hgGoldFormingStack = hgGoldFormingStack;

@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v556',
-  pack: 'NY volume exhaustion',
-  built: '2026-09-02T01:50:00Z',
-  note: 'NY gold sweep two-volume exhaustion: same-session RVOL, raid≥1.5 + takeover≥1.2 + MSS/VWAP, OPEN/MID/LATE timing, score 75/65, CVD PROXY on XAUT/PAXG/spot. Mints nyexh on SCALP; SWING stamp/demote; forming panel on OMNIGOLD. Sacred contracts unchanged (OMNIGOLD ENTRY=hit.level; gold stop 1.5×ATR floor).'
+  version: 'hg-v557',
+  pack: 'VP liquidity targets',
+  built: '2026-09-02T02:20:00Z',
+  note: 'Volume-profile target ladder: POC/VAH/VAL/HVN/LVN/profile H-L on goldVolumeProfile; post-sweep TP1–TP3 via hgGoldVpTargets (≥1.5R + MSS = CONFIRMED). Thin-venue note. Wired into forming + liqsweep/nyexh cards. Sacred contracts unchanged.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
