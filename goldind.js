@@ -1784,14 +1784,17 @@ function goldScalpSetups(inp){
           if (!Array.isArray(engCand.stamps)) engCand.stamps = [];
           engCand.stamps.push('SWEEP ' + String(eng.score) + '/' + String(eng.tier || '').toUpperCase());
           try{
-            var vpSw = goldVolumeProfile(rows, 100, 50);
-            if (vpSw){
+            var vpSw = typeof hgGoldVpBundle === 'function' ? hgGoldVpBundle(rows, {}) : null;
+            var vpSwProf = (vpSw && vpSw.session) || goldVolumeProfile(rows, 100, 50);
+            if (vpSwProf){
               var tgSw = hgGoldVpTargets({
                 dir: eng.dir, entry: entry,
                 stop: isFinite(eng.level) ? eng.level + (eng.dir === 'long' ? -1 : 1) * a15 : NaN,
-                vprof: vpSw, thin: true,
+                vprof: vpSwProf, bundle: vpSw, thin: true,
                 mssOk: !!(eng.mss && eng.mss.ok) || !!eng.confirmed,
                 vwap: (D.vw && isFinite(D.vw.vwap)) ? D.vw.vwap : NaN,
+                sweepExtreme: eng.level, atr: a15,
+                auction: vpSw && vpSw.auction,
                 external: {
                   asiaHi: D.asian && D.asian.hi, asiaLo: D.asian && D.asian.lo
                 }
@@ -1800,6 +1803,7 @@ function goldScalpSetups(inp){
                 engCand.vpTargets = tgSw;
                 if (isFinite(tgSw.tp1)) engCand.t1 = tgSw.tp1;
                 if (isFinite(tgSw.tp2)) engCand.t2 = tgSw.tp2;
+                if (tgSw.stopPlan && isFinite(tgSw.stopPlan.stop)) engCand.stop = tgSw.stopPlan.stop;
                 if (tgSw.confirmed) engCand.stamps.push('VP TARGET CONFIRMED');
                 else engCand.stamps.push('VP TARGETS');
                 engCand.stamps.push('THIN VP');
@@ -1836,12 +1840,16 @@ function goldScalpSetups(inp){
             if (isFinite(nyx.plan.stop)) nyCand.stop = nyx.plan.stop;
           }
           try{
-            var vpNy = goldVolumeProfile(rows, 100, 50);
+            var vpNyB = typeof hgGoldVpBundle === 'function' ? hgGoldVpBundle(rows, { now: nowMs }) : null;
+            var vpNy = (vpNyB && vpNyB.session) || goldVolumeProfile(rows, 100, 50);
             if (vpNy){
               var tgNy = hgGoldVpTargets({
-                dir: nyx.dir, entry: entry, stop: nyStop, vprof: vpNy, thin: true,
+                dir: nyx.dir, entry: entry, stop: nyStop, vprof: vpNy, bundle: vpNyB, thin: true,
                 mssOk: !!(nyx.takeover && nyx.takeover.mss && nyx.takeover.mss.ok) || !!nyx.confirmed,
                 vwap: (D.vw && isFinite(D.vw.vwap)) ? D.vw.vwap : NaN,
+                sweepExtreme: (nyx.raid && isFinite(nyx.level)) ? nyx.level : nyx.level,
+                atr: a15,
+                auction: vpNyB && vpNyB.auction,
                 external: {
                   asiaHi: D.asian && D.asian.hi, asiaLo: D.asian && D.asian.lo,
                   pdh: D.__priorDay && D.__priorDay.hi, pdl: D.__priorDay && D.__priorDay.lo
@@ -1851,6 +1859,7 @@ function goldScalpSetups(inp){
                 nyCand.vpTargets = tgNy;
                 if (isFinite(tgNy.tp1)) nyCand.t1 = tgNy.tp1;
                 if (isFinite(tgNy.tp2)) nyCand.t2 = tgNy.tp2;
+                if (tgNy.stopPlan && isFinite(tgNy.stopPlan.stop)) nyCand.stop = tgNy.stopPlan.stop;
                 if (!Array.isArray(nyCand.stamps)) nyCand.stamps = [];
                 if (tgNy.confirmed) nyCand.stamps.push('VP TARGET CONFIRMED');
                 else nyCand.stamps.push('VP TARGETS');
@@ -4032,6 +4041,231 @@ function goldVolumeProfile(rows, lookback, bins){
   }catch(e){ return null; }
 }
 
+/** Slice rows for a named profile window. */
+function hgGoldVpSlice(rows, mode, opts){
+  opts = opts || {};
+  rows = __rows(rows);
+  if (!rows || !rows.length) return [];
+  var nowMs = opts.now || (isFinite(rows[rows.length - 1].t) ? rows[rows.length - 1].t * 1000 : Date.now());
+  var lastT = rows[rows.length - 1].t;
+  var i, out = [];
+  if (mode === 'session'){
+    /* Session: from 00:00 UTC of the current gold day (Globex-aligned day key) */
+    var day0 = Math.floor(lastT / 86400) * 86400;
+    for (i = 0; i < rows.length; i++){
+      if (rows[i].t >= day0) out.push(rows[i]);
+    }
+    return out.length >= 3 ? out : rows.slice(-Math.min(96, rows.length));
+  }
+  if (mode === 'weekly'){
+    var week0 = lastT - 5 * 86400;
+    for (i = 0; i < rows.length; i++){
+      if (rows[i].t >= week0) out.push(rows[i]);
+    }
+    return out.length >= 10 ? out : rows.slice(-Math.min(480, rows.length));
+  }
+  if (mode === 'anchored'){
+    /* Anchor from prior-day extreme or last large impulse (≥1.2×ATR body) */
+    var atrs = _atr(rows, 14);
+    var atr = atrs && atrs.length ? atrs[atrs.length - 1] : NaN;
+    var anchorIdx = Math.max(0, rows.length - 40);
+    var pd = typeof hgGoldPriorDayLevels === 'function' ? hgGoldPriorDayLevels(rows) : null;
+    if (pd && pd.ok){
+      for (i = rows.length - 2; i >= Math.max(0, rows.length - 120); i--){
+        if (isFinite(pd.hi) && Math.abs(rows[i].h - pd.hi) < (atr || 1) * 0.15){ anchorIdx = i; break; }
+        if (isFinite(pd.lo) && Math.abs(rows[i].l - pd.lo) < (atr || 1) * 0.15){ anchorIdx = i; break; }
+      }
+    }
+    if (isFinite(atr) && atr > 0){
+      for (i = rows.length - 2; i >= Math.max(0, rows.length - 80); i--){
+        var body = Math.abs(rows[i].c - rows[i].o);
+        if (body >= 1.2 * atr){ anchorIdx = i; break; }
+      }
+    }
+    return rows.slice(anchorIdx);
+  }
+  return rows.slice(-100);
+}
+
+/**
+ * Triple gold VP bundle: session · weekly composite · anchored event.
+ * Also finds naked POC (prior-session POC not revisited).
+ */
+function hgGoldVpBundle(rows, opts){
+  var out = {
+    ok: false, session: null, weekly: null, anchored: null,
+    nakedPoc: null, singlePrints: [], auction: null, why: '',
+    venueNote: 'VP from this feed is venue activity — not full COMEX GC'
+  };
+  try{
+    opts = opts || {};
+    rows = __rows(rows);
+    if (!rows || rows.length < 20){ out.why = 'need ≥20 bars'; return out; }
+
+    var sessRows = hgGoldVpSlice(rows, 'session', opts);
+    var weekRows = hgGoldVpSlice(rows, 'weekly', opts);
+    var ancRows = hgGoldVpSlice(rows, 'anchored', opts);
+
+    out.session = goldVolumeProfile(sessRows, sessRows.length, opts.bins || 40);
+    out.weekly = goldVolumeProfile(weekRows, weekRows.length, opts.bins || 50);
+    out.anchored = goldVolumeProfile(ancRows, ancRows.length, opts.bins || 40);
+    if (out.session) out.session.kind = 'session';
+    if (out.weekly) out.weekly.kind = 'weekly';
+    if (out.anchored) out.anchored.kind = 'anchored';
+
+    /* Naked POC: prior-day session POC not traded through on the current day */
+    try{
+      var lastT = rows[rows.length - 1].t;
+      var prevDay0 = Math.floor(lastT / 86400) * 86400 - 86400;
+      var prevDay1 = prevDay0 + 86400;
+      var prior = [];
+      var i;
+      for (i = 0; i < rows.length; i++){
+        if (rows[i].t >= prevDay0 && rows[i].t < prevDay1) prior.push(rows[i]);
+      }
+      if (prior.length >= 8){
+        var priorVp = goldVolumeProfile(prior, prior.length, 40);
+        if (priorVp && isFinite(priorVp.pocPrice)){
+          var touched = false;
+          var day0 = prevDay1;
+          for (i = 0; i < rows.length; i++){
+            if (rows[i].t < day0) continue;
+            if (rows[i].l <= priorVp.pocPrice && rows[i].h >= priorVp.pocPrice){ touched = true; break; }
+          }
+          if (!touched){
+            out.nakedPoc = {
+              level: priorVp.pocPrice, kind: 'naked-poc',
+              label: 'NAKED POC (prior session)', untested: true
+            };
+          }
+        }
+      }
+    }catch(_np){}
+
+    /* Single prints: consecutive LVN bins (thin auction corridor) */
+    try{
+      var vp = out.session || out.weekly;
+      if (vp && vp.lvns && vp.lvns.length){
+        out.singlePrints = vp.lvns.slice(0, 6).map(function(l){
+          return { level: l, label: 'single-print / LVN corridor' };
+        });
+      }
+    }catch(_sp){}
+
+    out.auction = hgGoldVpAuction(rows, out.session || out.weekly, opts);
+    out.ok = !!(out.session || out.weekly || out.anchored);
+    out.why = out.ok
+      ? ('VP bundle · sess ' + (out.session ? 'ok' : '—')
+        + ' · week ' + (out.weekly ? 'ok' : '—')
+        + ' · anc ' + (out.anchored ? 'ok' : '—')
+        + (out.nakedPoc ? ' · naked POC' : '')
+        + (out.auction && out.auction.key ? (' · ' + out.auction.key) : ''))
+      : 'no usable profiles';
+    return out;
+  }catch(e){ out.why = 'vp-bundle error'; return out; }
+}
+
+/**
+ * Auction scenario: value-to-value · value-breakout · failed-auction.
+ */
+function hgGoldVpAuction(rows, vprof, opts){
+  var out = { key: 'none', label: 'no auction read', dir: null, why: '' };
+  try{
+    opts = opts || {};
+    rows = __rows(rows);
+    if (!rows || !vprof || !isFinite(vprof.vah) || !isFinite(vprof.val)) return out;
+    var n = rows.length;
+    var cur = rows[n - 1];
+    var prev = rows[n - 2] || cur;
+    var atrs = _atr(rows, 14);
+    var atr = atrs[atrs.length - 1];
+    var rvol = typeof hgGoldSessionRvol === 'function'
+      ? hgGoldSessionRvol(rows, n - 1, opts).rvol
+      : (typeof hgGoldBarRvol === 'function' ? hgGoldBarRvol(rows, n - 1, 20) : NaN);
+
+    var outsideHigh = cur.h > vprof.vah;
+    var outsideLow = cur.l < vprof.val;
+    var closeInside = cur.c <= vprof.vah && cur.c >= vprof.val;
+    var closeAbove = cur.c > vprof.vah;
+    var closeBelow = cur.c < vprof.val;
+    var holdOut = false;
+    if (n >= 3){
+      holdOut = (closeAbove && rows[n - 2].c > vprof.vah) || (closeBelow && rows[n - 2].c < vprof.val);
+    }
+
+    /* Failed auction: wick outside value, close back inside, preferably high RVOL */
+    if ((outsideHigh || outsideLow) && closeInside){
+      out.key = 'failed-auction';
+      out.dir = outsideLow ? 'long' : 'short';
+      out.label = 'FAILED AUCTION — reclaim inside value';
+      out.why = (outsideLow ? 'swept below VAL' : 'swept above VAH')
+        + ' · close back inside'
+        + (isFinite(rvol) ? (' · RVOL ' + rvol.toFixed(2)) : '');
+      out.targetHint = 'POC first, then opposite value edge';
+      return out;
+    }
+
+    /* Value breakout acceptance: close + hold outside with participation */
+    if ((closeAbove || closeBelow) && holdOut && isFinite(rvol) && rvol >= 1.5){
+      out.key = 'value-breakout';
+      out.dir = closeAbove ? 'long' : 'short';
+      out.label = 'VALUE BREAKOUT — do not fade';
+      out.why = 'held outside ' + (closeAbove ? 'VAH' : 'VAL') + ' · RVOL ' + rvol.toFixed(2);
+      out.targetHint = 'next HVN / LVN far edge / profile extreme / external liquidity';
+      return out;
+    }
+
+    /* Value-to-value rotation: rejection at edge back toward POC (range) */
+    var adxOk = true;
+    try{
+      if (typeof goldADX === 'function'){
+        var adx = goldADX(rows);
+        if (adx && isFinite(adx.adx) && adx.adx >= 25) adxOk = false; /* trend — skip V2V */
+      }
+    }catch(_a){}
+    if (adxOk && closeInside){
+      if (prev.h > vprof.vah && cur.c < vprof.vah){
+        out.key = 'value-to-value'; out.dir = 'short';
+        out.label = 'VALUE-TO-VALUE — reject VAH → POC';
+        out.why = 'rejected above VAH · rotation toward POC/VAL';
+        out.targetHint = 'POC first, then VAL if POC accepts';
+        return out;
+      }
+      if (prev.l < vprof.val && cur.c > vprof.val){
+        out.key = 'value-to-value'; out.dir = 'long';
+        out.label = 'VALUE-TO-VALUE — reject VAL → POC';
+        out.why = 'rejected below VAL · rotation toward POC/VAH';
+        out.targetHint = 'POC first, then VAH if POC accepts';
+        return out;
+      }
+    }
+
+    out.why = 'inside value / no clear auction model';
+    return out;
+  }catch(e){ return out; }
+}
+
+/**
+ * Profile-aware invalidation: stop beyond sweep extreme (not merely VAH/VAL)
+ * plus 0.10–0.25×ATR buffer.
+ */
+function hgGoldVpStop(opts){
+  var out = { stop: NaN, buffer: NaN, why: '' };
+  try{
+    opts = opts || {};
+    var dir = (opts.dir === 'short') ? 'short' : 'long';
+    var extreme = +opts.extreme;
+    var atr = +opts.atr;
+    if (!(isFinite(extreme) && isFinite(atr) && atr > 0)){ out.why = 'need extreme + ATR'; return out; }
+    var mult = isFinite(opts.bufferMult) ? opts.bufferMult : 0.15;
+    if (opts.lateSession) mult = 0.25;
+    out.buffer = atr * mult;
+    out.stop = (dir === 'long') ? (extreme - out.buffer) : (extreme + out.buffer);
+    out.why = 'stop beyond sweep extreme + ' + mult.toFixed(2) + '×ATR (not merely VAH/VAL)';
+    return out;
+  }catch(e){ return out; }
+}
+
 /**
  * Post-sweep / directional target ladder from volume profile + external liquidity.
  * Prefer nearest opposing profile/liquidity level; require ≥1.5R for "confirmed" badge.
@@ -4040,6 +4274,7 @@ function hgGoldVpTargets(opts){
   var out = {
     ok: false, dir: null, confirmed: false, thin: true,
     tp1: NaN, tp2: NaN, tp3: NaN, labels: [], why: '', parts: {},
+    auction: null, stopPlan: null, dashboard: null,
     venueNote: 'VP from this feed is venue activity — map COMEX levels when available'
   };
   try{
@@ -4047,10 +4282,13 @@ function hgGoldVpTargets(opts){
     var dir = (opts.dir === 'short') ? 'short' : 'long';
     out.dir = dir;
     var entry = +opts.entry, stop = +opts.stop;
-    var vprof = opts.vprof;
+    var bundle = opts.bundle || null;
+    var vprof = opts.vprof || (bundle && (bundle.session || bundle.weekly)) || null;
+    var weekly = (bundle && bundle.weekly) || opts.weekly || null;
     if (!vprof || !isFinite(vprof.pocPrice)){ out.why = 'no volume profile'; return out; }
-    out.thin = opts.thin !== false; /* default thin-venue caution */
+    out.thin = opts.thin !== false;
     out.venueNote = vprof.venueNote || out.venueNote;
+    out.auction = opts.auction || (bundle && bundle.auction) || null;
 
     var risk = (isFinite(entry) && isFinite(stop)) ? Math.abs(entry - stop) : NaN;
     var candidates = [];
@@ -4061,56 +4299,90 @@ function hgGoldVpTargets(opts){
       candidates.push({ level: level, label: label, pri: pri || 50 });
     }
 
-    /* Priority: external liquidity → major profile → LVN far edge → HTF */
     var ext = opts.external || {};
+    var auctionKey = out.auction && out.auction.key;
+
+    /* Failed auction / VAL reclaim → POC first (playbook) */
+    var sweepBelowVal = isFinite(vprof.val) && isFinite(opts.sweepExtreme) && opts.sweepExtreme < vprof.val;
+    var sweepAboveVah = isFinite(vprof.vah) && isFinite(opts.sweepExtreme) && opts.sweepExtreme > vprof.vah;
+
     if (dir === 'long'){
-      add(ext.asiaHi || ext.londonHi, 'Asia/London high', 10);
-      add(ext.pdh, 'prior-day high', 12);
-      add(ext.eqHi, 'equal highs', 14);
-      add(vprof.pocPrice, 'session POC', 20);
+      /* Priority order from playbook */
+      if (auctionKey === 'failed-auction' || sweepBelowVal){
+        /* Next magnet above entry: POC → VAH → profile high */
+        if (isFinite(vprof.pocPrice) && vprof.pocPrice > entry + 1e-9)
+          add(vprof.pocPrice, 'session POC (VAL reclaim)', 5);
+        else if (isFinite(vprof.vah) && vprof.vah > entry + 1e-9)
+          add(vprof.vah, 'VAH (past POC)', 5);
+        add(opts.vwap, 'session VWAP', 6);
+      } else {
+        add(opts.vwap, 'session VWAP', 8);
+        add(vprof.pocPrice, 'session POC', 10);
+      }
       if (vprof.hvns && vprof.hvns.length){
         var hn, nearestHvn = NaN;
         for (hn = 0; hn < vprof.hvns.length; hn++){
           if (vprof.hvns[hn] > entry && (!isFinite(nearestHvn) || vprof.hvns[hn] < nearestHvn))
             nearestHvn = vprof.hvns[hn];
         }
-        add(nearestHvn, 'nearest HVN', 22);
+        add(nearestHvn, 'nearest HVN (brake)', 12);
       }
-      add(vprof.vah, 'VAH', 24);
+      add(vprof.vah, 'VAH', 16);
       if (vprof.lvns && vprof.lvns.length){
         var ln, farLvn = NaN;
         for (ln = 0; ln < vprof.lvns.length; ln++){
           if (vprof.lvns[ln] > entry && (!isFinite(farLvn) || vprof.lvns[ln] > farLvn))
             farLvn = vprof.lvns[ln];
         }
-        add(farLvn, 'LVN far edge', 30);
+        add(farLvn, 'LVN far edge (corridor)', 22);
       }
-      add(vprof.profileHigh, 'profile high', 35);
-      add(opts.vwap, 'session VWAP', 18);
+      if (bundle && bundle.nakedPoc) add(bundle.nakedPoc.level, 'naked POC', 14);
+      if (weekly && isFinite(weekly.pocPrice)) add(weekly.pocPrice, 'weekly composite POC', 18);
+      add(ext.asiaHi || ext.londonHi, 'Asia/London high', 24);
+      add(ext.pdh, 'prior-day high', 26);
+      add(ext.eqHi, 'equal highs', 28);
+      add(vprof.profileHigh, 'profile high', 30);
     } else {
-      add(ext.asiaLo || ext.londonLo, 'Asia/London low', 10);
-      add(ext.pdl, 'prior-day low', 12);
-      add(ext.eqLo, 'equal lows', 14);
-      add(vprof.pocPrice, 'session POC', 20);
+      if (auctionKey === 'failed-auction' || sweepAboveVah){
+        if (isFinite(vprof.pocPrice) && vprof.pocPrice < entry - 1e-9)
+          add(vprof.pocPrice, 'session POC (VAH reclaim)', 5);
+        else if (isFinite(vprof.val) && vprof.val < entry - 1e-9)
+          add(vprof.val, 'VAL (past POC)', 5);
+        add(opts.vwap, 'session VWAP', 6);
+      } else {
+        add(opts.vwap, 'session VWAP', 8);
+        add(vprof.pocPrice, 'session POC', 10);
+      }
       if (vprof.hvns && vprof.hvns.length){
         var hn2, nearestHvn2 = NaN;
         for (hn2 = 0; hn2 < vprof.hvns.length; hn2++){
           if (vprof.hvns[hn2] < entry && (!isFinite(nearestHvn2) || vprof.hvns[hn2] > nearestHvn2))
             nearestHvn2 = vprof.hvns[hn2];
         }
-        add(nearestHvn2, 'nearest HVN', 22);
+        add(nearestHvn2, 'nearest HVN (brake)', 12);
       }
-      add(vprof.val, 'VAL', 24);
+      add(vprof.val, 'VAL', 16);
       if (vprof.lvns && vprof.lvns.length){
         var ln2, farLvn2 = NaN;
         for (ln2 = 0; ln2 < vprof.lvns.length; ln2++){
           if (vprof.lvns[ln2] < entry && (!isFinite(farLvn2) || vprof.lvns[ln2] < farLvn2))
             farLvn2 = vprof.lvns[ln2];
         }
-        add(farLvn2, 'LVN far edge', 30);
+        add(farLvn2, 'LVN far edge (corridor)', 22);
       }
-      add(vprof.profileLow, 'profile low', 35);
-      add(opts.vwap, 'session VWAP', 18);
+      if (bundle && bundle.nakedPoc) add(bundle.nakedPoc.level, 'naked POC', 14);
+      if (weekly && isFinite(weekly.pocPrice)) add(weekly.pocPrice, 'weekly composite POC', 18);
+      add(ext.asiaLo || ext.londonLo, 'Asia/London low', 24);
+      add(ext.pdl, 'prior-day low', 26);
+      add(ext.eqLo, 'equal lows', 28);
+      add(vprof.profileLow, 'profile low', 30);
+    }
+
+    /* Do not fade value-breakout — retarget continuation instead */
+    if (auctionKey === 'value-breakout' && out.auction && out.auction.dir === dir){
+      candidates = candidates.filter(function(c){
+        return !/POC \(VA[LH] reclaim\)|VALUE-TO-VALUE/i.test(c.label);
+      });
     }
 
     candidates.sort(function(a, b){
@@ -4119,7 +4391,6 @@ function hgGoldVpTargets(opts){
       return da - db;
     });
 
-    /* Deduplicate near-identical levels */
     var picked = [], pi, pj, tooClose;
     for (pi = 0; pi < candidates.length && picked.length < 3; pi++){
       tooClose = false;
@@ -4140,18 +4411,48 @@ function hgGoldVpTargets(opts){
     out.ok = true;
     out.parts = {
       poc: vprof.pocPrice, vah: vprof.vah, val: vprof.val,
-      profileHigh: vprof.profileHigh, profileLow: vprof.profileLow
+      profileHigh: vprof.profileHigh, profileLow: vprof.profileLow,
+      weeklyPoc: weekly && weekly.pocPrice, nakedPoc: bundle && bundle.nakedPoc && bundle.nakedPoc.level
     };
 
-    var rr1 = (isFinite(risk) && risk > 0) ? Math.abs(out.tp1 - entry) / risk : NaN;
+    if (isFinite(opts.sweepExtreme) && isFinite(opts.atr)){
+      out.stopPlan = hgGoldVpStop({
+        dir: dir, extreme: opts.sweepExtreme, atr: opts.atr, lateSession: opts.lateSession
+      });
+      if (out.stopPlan && isFinite(out.stopPlan.stop) && !isFinite(stop)) stop = out.stopPlan.stop;
+    }
+
+    var rr1 = (isFinite(risk) && risk > 0) ? Math.abs(out.tp1 - entry) / risk
+      : (out.stopPlan && isFinite(out.stopPlan.stop)
+        ? Math.abs(out.tp1 - entry) / Math.abs(entry - out.stopPlan.stop) : NaN);
     var mssOk = !!opts.mssOk;
-    out.confirmed = !!(mssOk && isFinite(rr1) && rr1 >= 1.5 && !opts.newsLock);
+    out.confirmed = !!(mssOk && isFinite(rr1) && rr1 >= 1.5 && !opts.newsLock
+      && auctionKey !== 'value-breakout');
     out.why = (out.confirmed ? 'PROFILE TARGET CONFIRMED' : 'PROFILE TARGETS')
       + ' ' + dir.toUpperCase()
       + ' · TP1 ' + out.labels[0]
       + (isFinite(rr1) ? (' · ' + rr1.toFixed(2) + 'R') : '')
       + (out.thin ? ' · THIN VP hint' : '');
+    if (auctionKey && auctionKey !== 'none') out.why += ' · ' + auctionKey;
     if (!mssOk) out.why += ' · need MSS agree for confirmed badge';
+
+    out.dashboard = {
+      session: 'POC ' + (isFinite(vprof.pocPrice) ? vprof.pocPrice.toFixed(2) : '—')
+        + ' / VAH ' + (isFinite(vprof.vah) ? vprof.vah.toFixed(2) : '—')
+        + ' / VAL ' + (isFinite(vprof.val) ? vprof.val.toFixed(2) : '—')
+        + ' / Hi ' + (isFinite(vprof.profileHigh) ? vprof.profileHigh.toFixed(2) : '—')
+        + ' / Lo ' + (isFinite(vprof.profileLow) ? vprof.profileLow.toFixed(2) : '—'),
+      weekly: weekly
+        ? ('Composite POC ' + (isFinite(weekly.pocPrice) ? weekly.pocPrice.toFixed(2) : '—')
+          + ' · HVN ' + ((weekly.hvns && weekly.hvns[0]) ? weekly.hvns[0].toFixed(2) : '—')
+          + ' · LVN ' + ((weekly.lvns && weekly.lvns[0]) ? weekly.lvns[0].toFixed(2) : '—'))
+        : '—',
+      liquidity: 'PDH/PDL · Asia H-L · London H-L · Equal H-L'
+        + (bundle && bundle.nakedPoc ? (' · naked POC ' + bundle.nakedPoc.level.toFixed(2)) : ''),
+      confirmation: 'Session VWAP / RVOL / MSS / Sweep'
+        + (auctionKey && auctionKey !== 'none' ? (' / ' + auctionKey) : ''),
+      targets: out.labels.join(' · ')
+    };
     return out;
   }catch(e){ out.why = 'vp-targets error'; return out; }
 }
@@ -4164,20 +4465,30 @@ function hgGoldVpTargetsHtml(tg){
     if (tg.confirmed) h += ' · <b>CONFIRMED</b>';
     else h += ' · hint';
     if (tg.dir) h += ' · ' + String(tg.dir).toUpperCase();
-    if (tg.parts){
-      h += '<div class="dim" style="margin-top:2px">POC '
-        + (isFinite(tg.parts.poc) ? (+tg.parts.poc).toFixed(2) : '—')
-        + ' · VAH ' + (isFinite(tg.parts.vah) ? (+tg.parts.vah).toFixed(2) : '—')
-        + ' · VAL ' + (isFinite(tg.parts.val) ? (+tg.parts.val).toFixed(2) : '—')
-        + '</div>';
-    }
-    if (tg.labels && tg.labels.length){
+    if (tg.auction && tg.auction.key && tg.auction.key !== 'none')
+      h += ' · ' + String(tg.auction.label || tg.auction.key).replace(/[<>&]/g, '');
+    if (tg.dashboard){
+      h += '<div class="dim" style="margin-top:4px"><b>SESSION</b> '
+        + String(tg.dashboard.session).replace(/[<>&]/g, '') + '</div>';
+      h += '<div class="dim"><b>WEEKLY</b> '
+        + String(tg.dashboard.weekly).replace(/[<>&]/g, '') + '</div>';
+      h += '<div class="dim"><b>LIQUIDITY</b> '
+        + String(tg.dashboard.liquidity).replace(/[<>&]/g, '') + '</div>';
+      h += '<div class="dim"><b>CONFIRMATION</b> '
+        + String(tg.dashboard.confirmation).replace(/[<>&]/g, '') + '</div>';
+      h += '<div style="margin-top:4px"><b>TARGETS</b> '
+        + String(tg.dashboard.targets).replace(/[<>&]/g, '') + '</div>';
+    } else if (tg.labels && tg.labels.length){
       h += '<div style="margin-top:4px">';
       var i;
       for (i = 0; i < tg.labels.length; i++){
         h += (i ? ' · ' : '') + '<b>TP' + (i + 1) + '</b> ' + String(tg.labels[i]).replace(/[<>&]/g, '');
       }
       h += '</div>';
+    }
+    if (tg.stopPlan && isFinite(tg.stopPlan.stop)){
+      h += '<div class="dim" style="margin-top:2px">stop '
+        + (+tg.stopPlan.stop).toFixed(2) + ' — ' + String(tg.stopPlan.why || '').replace(/[<>&]/g, '') + '</div>';
     }
     if (tg.why) h += '<div class="dim" style="margin-top:2px">' + String(tg.why).replace(/[<>&]/g, '') + '</div>';
     h += '<div class="dim" style="margin-top:2px">' + String(tg.venueNote || '').replace(/[<>&]/g, '') + '</div>';
@@ -6762,28 +7073,36 @@ function hgGoldFormingStack(inp){
       now: inp.now || Date.now()
     });
     out.vprof = goldVolumeProfile(rows, 100, 50);
+    out.vpBundle = typeof hgGoldVpBundle === 'function' ? hgGoldVpBundle(rows, { now: inp.now }) : null;
     out.vpTargets = null;
     try{
       var lead = null;
       if (out.nyExhaustion && out.nyExhaustion.ok && out.nyExhaustion.dir) lead = out.nyExhaustion;
       else if (out.sweepEngine && out.sweepEngine.dir && (out.sweepEngine.ok || out.sweepEngine.score > 0))
         lead = out.sweepEngine;
-      if (lead && out.vprof){
+      var vpSrc = (out.vpBundle && out.vpBundle.session) || out.vprof;
+      if (lead && vpSrc){
         var px = rows[rows.length - 1].c;
         var stopGuess = (lead.plan && isFinite(lead.plan.stop)) ? lead.plan.stop
           : (isFinite(lead.level) ? lead.level + (lead.dir === 'long' ? -1 : 1) * (out.sessionBuf.stopBuffer || 0) : NaN);
         var vw = null;
         try{ vw = goldVWAP(rows); }catch(_v){}
+        var atrsVp = _atr(rows, 14);
         out.vpTargets = hgGoldVpTargets({
           dir: lead.dir,
           entry: px,
           stop: stopGuess,
-          vprof: out.vprof,
+          vprof: vpSrc,
+          bundle: out.vpBundle,
           thin: true,
           mssOk: !!(lead.mss && lead.mss.ok) || !!(lead.takeover && lead.takeover.mss && lead.takeover.mss.ok)
             || !!(lead.confirmed),
           newsLock: !!(inp.newsGate && inp.newsGate.lock),
           vwap: vw && isFinite(vw.vwap) ? vw.vwap : NaN,
+          sweepExtreme: (lead.raid && isFinite(lead.raid.extreme)) ? lead.raid.extreme
+            : (lead.takeover && isFinite(lead.extreme) ? lead.extreme : lead.level),
+          atr: atrsVp && atrsVp.length ? atrsVp[atrsVp.length - 1] : NaN,
+          auction: out.vpBundle && out.vpBundle.auction,
           external: {
             asiaHi: out.asia && out.asia.hi, asiaLo: out.asia && out.asia.lo,
             pdh: out.priorDay && out.priorDay.hi, pdl: out.priorDay && out.priorDay.lo,
@@ -7117,6 +7436,10 @@ W.hgGoldNyExhaustionScore = hgGoldNyExhaustionScore;
 W.hgGoldNyExhaustionHtml = hgGoldNyExhaustionHtml;
 W.hgGoldVpTargets = hgGoldVpTargets;
 W.hgGoldVpTargetsHtml = hgGoldVpTargetsHtml;
+W.hgGoldVpBundle = hgGoldVpBundle;
+W.hgGoldVpAuction = hgGoldVpAuction;
+W.hgGoldVpStop = hgGoldVpStop;
+W.hgGoldVpSlice = hgGoldVpSlice;
 W.hgGoldSessionAtrBuffer = hgGoldSessionAtrBuffer;
 W.hgGoldApplyFormingRegime = hgGoldApplyFormingRegime;
 W.hgGoldFormingStack = hgGoldFormingStack;

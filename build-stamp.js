@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v557',
-  pack: 'VP liquidity targets',
-  built: '2026-09-02T02:20:00Z',
-  note: 'Volume-profile target ladder: POC/VAH/VAL/HVN/LVN/profile H-L on goldVolumeProfile; post-sweep TP1–TP3 via hgGoldVpTargets (≥1.5R + MSS = CONFIRMED). Thin-venue note. Wired into forming + liqsweep/nyexh cards. Sacred contracts unchanged.'
+  version: 'hg-v558',
+  pack: 'VP triple profiles + auction targets',
+  built: '2026-09-02T02:45:00Z',
+  note: 'Session/weekly/anchored VP bundle, naked POC, failed-auction/value-breakout/V2V scenarios, profile stops 0.15–0.25×ATR, dashboard SESSION/WEEKLY/LIQUIDITY/CONFIRMATION/TARGETS. CONFIRMED at MSS+1.5R. Thin-venue note. Sacred contracts unchanged.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
