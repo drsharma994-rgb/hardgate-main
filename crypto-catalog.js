@@ -791,7 +791,7 @@
     }
     var fv = (norm && norm.catalogFamilyVotes) || (feed && feed.familyVotes) || {};
     for (k in fv){
-      if (Object.prototype.hasOwnProperty.call(fv, k) && fv[k] === 'agree') add(k, k + ' agrees');
+      if (Object.prototype.hasOwnProperty.call(fv, k) && fv[k] === 'agree') add(k, 'agrees');
     }
     var used = (feed && feed.used) || (norm && norm.catalogFeed && norm.catalogFeed.used) || [];
     for (i = 0; i < used.length; i++){
@@ -908,7 +908,7 @@
           h += '<div style="margin-top:6px;font-size:12px">';
           for (fi = 0; fi < fams.length; fi++){
             h += (fi ? ' · ' : '') + '<b>' + uniEsc(fams[fi].family) + '</b>'
-              + (fams[fi].name ? (' ' + uniEsc(fams[fi].name)) : '');
+              + (fams[fi].name && fams[fi].name !== fams[fi].family ? (' ' + uniEsc(fams[fi].name)) : '');
           }
           h += '</div>';
         }
