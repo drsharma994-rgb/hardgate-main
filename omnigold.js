@@ -5696,7 +5696,122 @@ terse status, and never launches a first-time scan on a global refresh.
     return 'scanned ' + Math.floor(mins / 60) + 'h' + (mins % 60) + 'm ago';
   }
 
+  /* Confirmed activation verdict for the OMNIGOLD tab.
+     ACTIVATED only when the same pick TOP SETUP already uses is a
+     gate-passed, formed, level-fresh, tape-aligned TICKET. Everything
+     else is NOT ACTIVATED. A scan that finds nothing is CONFIRMED
+     (the miss is the read). No scan is UNCONFIRMED. Never invents a
+     ticket, never flips dir, never loosens the tape rule. Pure. */
+  function hgOgSetupActivation(mpArgs, mktPx){
+    var tape = String((mpArgs && mpArgs.tape) || '').toLowerCase();
+    var held = mpArgs && mpArgs.held;
+    var checks = [];
+    function push(key, pass, why){
+      checks.push({ key: key, pass: pass, why: String(why || '') });
+    }
+    if (!mpArgs){
+      push('scan', false, 'no scan yet');
+      push('ticket', false, 'no ticket');
+      push('formed', false, 'not judged');
+      push('level-fresh', false, 'not judged');
+      push('tape', null, 'unread');
+      return {
+        activated: false,
+        state: 'NOT_ACTIVATED',
+        confirm: 'UNCONFIRMED',
+        why: 'No scan yet — run a gold scan. Activation is confirmed only after the gate ledger clears a ticket.',
+        checks: checks,
+        pick: null
+      };
+    }
+    push('scan', true, 'scan complete');
+    var pick = hgOgTopSetupPick(mpArgs);
+    if (!pick){
+      var tapeWhy = tape === 'long'
+        ? 'gold tape UP — SHORT is not the setup'
+        : tape === 'short'
+          ? 'gold tape DOWN — LONG is not the setup'
+          : 'tape unread — no side invented';
+      push('ticket', false, 'no gate-passed ticket');
+      push('formed', false, 'no formed winner');
+      push('level-fresh', false, 'no levels to confirm');
+      push('tape', (tape === 'long' || tape === 'short') ? true : null, tapeWhy);
+      return {
+        activated: false,
+        state: 'NOT_ACTIVATED',
+        confirm: 'CONFIRMED',
+        why: hgOgMpNoneWhy(tape, held),
+        checks: checks,
+        pick: null
+      };
+    }
+    var formed = !(pick.formation && pick.formation.formed === false);
+    var dir = String(pick.dir || '').toLowerCase();
+    var tapeOk = !(tape === 'long' || tape === 'short') || dir === tape;
+    var fresh = hgOgTopSetupFresh(pick, mktPx);
+    push('ticket', !!(pick.grade && pick.grade.ticket),
+         (pick.grade && pick.grade.ticket) ? 'gate ledger TICKET' : 'not a TICKET');
+    push('formed', formed, formed ? 'formation formed' : 'did not form');
+    push('level-fresh', !!fresh.ok, fresh.why || (fresh.ok ? 'levels fresh' : 'levels not fresh'));
+    push('tape', tapeOk,
+         tapeOk
+           ? ('with gold tape ' + (tape || dir).toUpperCase())
+           : ('against gold tape ' + tape.toUpperCase()));
+    var activated = !!(pick.grade && pick.grade.ticket) && formed && !!(fresh && fresh.ok) && tapeOk;
+    var why;
+    if (activated){
+      why = String(dir || '').toUpperCase() + ' ' + String(pick.horizon || '') + ' ' + String(pick.kind || '')
+          + ' — gate ledger + formation + level-fresh + tape confirmed.';
+    } else if (fresh && !fresh.ok){
+      why = (fresh.doa ? 'Ticket levels are DEAD ON ARRIVAL' : 'Levels failed freshness')
+          + ' — ' + String(fresh.why || 'standing aside');
+    } else {
+      why = hgOgMpNoneWhy(tape, held);
+    }
+    return {
+      activated: activated,
+      state: activated ? 'ACTIVATED' : 'NOT_ACTIVATED',
+      confirm: 'CONFIRMED',
+      why: why,
+      checks: checks,
+      pick: pick,
+      fresh: fresh
+    };
+  }
+
+  function hgOgSetupActivationHtml(act){
+    act = act || { activated: false, state: 'NOT_ACTIVATED', confirm: 'UNCONFIRMED',
+                   why: 'No activation read.', checks: [] };
+    var on = !!act.activated;
+    var conf = String(act.confirm || (on ? 'CONFIRMED' : 'UNCONFIRMED'));
+    var cls = on ? 'ok' : 'veto';
+    var edge = on ? 'var(--long)' : 'var(--veto)';
+    var h = '<div class="note og-setup-activation" data-og-activation="1" data-og-activated="'
+      + (on ? '1' : '0') + '" role="status" aria-live="polite"'
+      + ' style="display:block;margin:8px 0;padding:8px 10px;border-left:3px solid ' + edge + '">';
+    h += '<div style="font-weight:bold;margin-bottom:4px">'
+      + '<span class="gpip ' + cls + '">SETUP ' + (on ? 'ACTIVATED' : 'NOT ACTIVATED') + '</span>'
+      + ' · <span class="gpip ' + (conf === 'CONFIRMED' ? 'ok' : 'na') + '">' + esc(conf) + '</span>'
+      + '</div>';
+    h += '<div>' + esc(act.why || '') + '</div>';
+    var i, c, mark;
+    if (act.checks && act.checks.length){
+      h += '<div class="og-setup-activation-checks" style="margin-top:6px">';
+      for (i = 0; i < act.checks.length; i++){
+        c = act.checks[i];
+        if (!c) continue;
+        mark = (c.pass === true) ? 'ok' : (c.pass === false ? 'veto' : 'na');
+        h += '<span class="gpip ' + mark + '" title="' + esc(c.why || '') + '">'
+          + esc(String(c.key || '')) + '</span> ';
+      }
+      h += '</div>';
+    }
+    return h + '</div>';
+  }
+
   /* TOP SETUP panel. Renders EXACTLY what the pipeline offers:
+       - a confirmed SETUP ACTIVATED / NOT ACTIVATED banner (same pick
+         the gate ledger already uses — never an invented ticket), then
        - the gate-passed, level-fresh MOST PROBABLE winner, with LONG/SHORT
          printed at the entry and the same confluence badge / cost chip /
          replay lines the MOST PROBABLE card carries (hgOgMpHorizonHtml IS
@@ -5713,6 +5828,8 @@ terse status, and never launches a first-time scan on a global refresh.
       +  ' <button type="button" class="btn" data-og-ts-refresh="1"'
       +  ' style="padding:2px 10px;font-size:0.8em;margin-left:8px"'
       +  ' onclick="window.hgOgManualRefresh && window.hgOgManualRefresh()">🔄 Refresh</button></div>';
+    var act = hgOgSetupActivation(mpArgs, mktPx);
+    h += hgOgSetupActivationHtml(act);
     if (!mpArgs){
       h += '<div class="hg-mp-note warn">No scan yet — run a gold scan. This card only shows a setup that cleared the full gate ledger; it never reads raw logs.</div>';
       return h + '</section>';
@@ -10589,6 +10706,8 @@ terse status, and never launches a first-time scan on a global refresh.
        without a mount. */
     window.hgOgTopSetupPick = hgOgTopSetupPick;
     window.hgOgTopSetupFresh = hgOgTopSetupFresh;
+    window.hgOgSetupActivation = hgOgSetupActivation;
+    window.hgOgSetupActivationHtml = hgOgSetupActivationHtml;
     window.hgOgTopSetupPanelHtml = hgOgTopSetupPanelHtml;
     window.hgOgPaintTopSetup = hgOgPaintTopSetup;
     window.hgOgInjectSection = hgOgInjectSection;
