@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v585',
-  pack: 'MOST PROBABLE letter and 0-100 agree',
-  built: '2026-09-03T07:00:00Z',
-  note: 'Desk B is STRONG 70/100, not 0/100 WEAK. The 0-100 badge uses the same letter as the header chip. VETO / not-trade-ready unchanged.'
+  version: 'hg-v586',
+  pack: 'OMNIROUTE + OMNIPRESENT combined catalog setup',
+  built: '2026-09-03T08:40:00Z',
+  note: 'All Master Catalog strategies + indicators form one confluence card on OMNIROUTE and OMNIPRESENT. Confirmed only with ≥2 CORE families on an existing ticket. Never invents dir or levels.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
