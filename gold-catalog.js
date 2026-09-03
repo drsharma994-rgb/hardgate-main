@@ -864,7 +864,8 @@
         + (confirmed ? '1' : '0') + '" data-horizon="' + uniEsc(uni.horizon || '')
         + '" role="region" aria-label="'
         + (confirmed ? 'Confirmed combined gold setup' : 'Combined gold setup stand aside')
-        + '" style="margin:12px 0;padding:14px 16px;border:1px solid #FDE68A;'
+        + '" style="grid-column:1/-1;display:block;width:100%;box-sizing:border-box;'
+        + 'margin:12px 0;padding:14px 16px;border:1px solid #FDE68A;'
         + 'border-radius:10px;background:linear-gradient(180deg,#FFFFFF,#FFFBEB);color:#020617">';
       h += '<div style="font-size:10px;letter-spacing:.28em;font-weight:800;color:#A67C12">'
         + (confirmed ? 'CONFIRMED COMBINED SETUP' : 'COMBINED SETUP · STAND ASIDE')

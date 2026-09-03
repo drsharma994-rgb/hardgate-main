@@ -8150,7 +8150,7 @@ terse status, and never launches a first-time scan on a global refresh.
       if (!compose || !htmlFn) return '';
       var tapes = (__og && __og.tape) || {};
       var rows = (__og && __og.lastRows) || {};
-      return '<div data-hg-gold-uniform-desk="1">'
+      return '<div data-hg-gold-uniform-desk="1" style="grid-column:1/-1;display:block;width:100%">';
         + htmlFn(compose(hgOgUniformCands('SCALP'), {
             horizon: 'SCALP', tape: tapes.scalp, rows: rows.scalp || rows.m15 || []
           }))

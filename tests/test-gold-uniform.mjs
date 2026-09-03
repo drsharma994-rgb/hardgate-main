@@ -119,6 +119,7 @@ console.log('\n== HTML is uniform and honest ==');
   const uni = W.hgGoldUniformCompose([many], { horizon: 'SCALP', tape: 'LONG' });
   const html = W.hgGoldUniformHtml(uni);
   ok(/data-hg-gold-uniform="1"/.test(html), 'shared data-hg-gold-uniform pin');
+  ok(/grid-column:1\/-1/.test(html), 'full-width lead in the cards grid');
   ok(/CONFIRMED COMBINED SETUP/.test(html), 'confirmed title');
   ok(!/confirmed profitable/i.test(html), 'never prints confirmed profitable as a forecast');
   ok(/not a win probability/i.test(html), 'subtitle is not a win probability');
