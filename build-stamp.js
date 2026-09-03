@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v584',
-  pack: 'OmniGold engine rows print catalog ENTRY / STOP / T1',
-  built: '2026-09-03T06:15:00Z',
-  note: 'GOLD SCALP / SWING engine cards show the existing plan levels even when formation fails the fee floor. Labeled not a ticket / not bookable. Never invents dir or missing levels.'
+  version: 'hg-v585',
+  pack: 'MOST PROBABLE letter and 0-100 agree',
+  built: '2026-09-03T07:00:00Z',
+  note: 'Desk B is STRONG 70/100, not 0/100 WEAK. The 0-100 badge uses the same letter as the header chip. VETO / not-trade-ready unchanged.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

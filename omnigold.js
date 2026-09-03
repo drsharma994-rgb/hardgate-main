@@ -5244,7 +5244,7 @@ terse status, and never launches a first-time scan on a global refresh.
          COST QUARANTINE: heavy/fatal fee tiers print COSTS FIRST above
          the badge; a fatal tier suppresses the medal entirely — the
          score stays, as plain text. */
-      var confResult = hgOgAdvancedConfluenceScore(row);
+      var confResult = hgOgAdvancedConfluenceScore(row, tape);
       var confScore = typeof confResult === 'number' ? confResult : (confResult && fin(confResult.score));
       if (isFinite(fin(confScore))){
         var confFromGrade = (typeof confResult === 'number');
@@ -5784,8 +5784,19 @@ terse status, and never launches a first-time scan on a global refresh.
   }
 
 
+  /* Letter → spectrum band. Same cuts the header chip already uses:
+     A ≥85, B 70–84 STRONG, C 50–69 FAIR, D <50 WEAK. */
+  function hgOgLetterConfluenceScore(letter){
+    var g = String(letter || '').toUpperCase();
+    if (g === 'A') return 85;
+    if (g === 'B') return 70;
+    if (g === 'C') return 55;
+    if (g === 'D') return 30;
+    return NaN;
+  }
+
   /* MULTI-FACTOR CONFLUENCE SCORING — Advanced setup quality assessment */
-  function hgOgAdvancedConfluenceScore(setup){
+  function hgOgAdvancedConfluenceScore(setup, tape){
     if (!setup) return { score: 0, factors: [] };
     var factors = [];
     var totalScore = 0;
@@ -5801,6 +5812,26 @@ terse status, and never launches a first-time scan on a global refresh.
       if (setup.engineDemoted) baseFromGrade -= 10;  /* Penalize demoted */
       if (setup.engineTally && setup.engineTally < 5) baseFromGrade -= 5;  /* Low tally penalty */
       return baseFromGrade;  /* Return scalar for engine setups */
+    }
+
+    /* DESK LETTER IS THE CARD'S REAL CONFLUENCE (hg-v585).
+       MOST PROBABLE / WATCH picks stamp the letter via hgOgConfluenceGrade
+       (indicator quartiles) but never stamp gateConf / checksPass /
+       compositeScore / age. Feeding them to the scan arithmetic below
+       printed 0/100 WEAK next to a B. Use the same letter the header
+       already shows. Object (not scalar) so the badge stays STRONG/FAIR/
+       WEAK — not the engine GRADE-A CLASS path. */
+    var deskLetter = '';
+    try { deskLetter = hgOgConfluenceGrade(setup, tape); } catch (eLetter){ deskLetter = ''; }
+    var fromLetter = hgOgLetterConfluenceScore(deskLetter);
+    if (isFinite(fromLetter)){
+      return {
+        score: fromLetter,
+        maxScore: 100,
+        factors: factors,
+        interpretation: fromLetter >= 85 ? 'EXCEPTIONAL' : fromLetter >= 70 ? 'STRONG' : fromLetter >= 50 ? 'FAIR' : 'WEAK',
+        fromDeskLetter: deskLetter
+      };
     }
 
     /* 1. TREND CONFLUENCE (25 pts max) — Multi-MA alignment */
@@ -10552,6 +10583,8 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgTapeDir = hgOgTapeDir;
     window.hgOgTapeFlipLevel = hgOgTapeFlipLevel;
     window.hgOgConfluenceGrade = hgOgConfluenceGrade;  /* the card letter, testable */
+    window.hgOgLetterConfluenceScore = hgOgLetterConfluenceScore;
+    window.hgOgAdvancedConfluenceScore = hgOgAdvancedConfluenceScore;  /* 0-100 agrees with the letter (hg-v585) */
     window.hgOgDeskTape = hgOgDeskTape;
     window.hgOgTapeBannerHtml = hgOgTapeBannerHtml;
     window.hgOgZoneLevels = hgOgZoneLevels;   /* the desk's own anticipation levels, testable */

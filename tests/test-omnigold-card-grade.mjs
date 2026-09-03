@@ -131,4 +131,52 @@ console.log('\n== a VETO still outranks any letter ==');
      'and the letter is recorded forward, so whether A beats C gets answered out-of-sample');
 }
 
+console.log('\n== the 0-100 badge agrees with the letter (hg-v585) ==');
+{
+  /* Live bug: ORB printed "B 52/55 checks" next to "0/100 WEAK". The letter
+     is the real desk confluence (indicator quartiles). The 0-100 came from
+     hgOgAdvancedConfluenceScore reading gateConf/checksPass/compositeScore
+     that a MOST PROBABLE / WATCH pick never stamps — so it scored 0.
+     Same letter, same band. Never B + WEAK. */
+  ok(typeof W.hgOgAdvancedConfluenceScore === 'function',
+     'hgOgAdvancedConfluenceScore is exported');
+  const scoreOf = (c) => {
+    const r = W.hgOgAdvancedConfluenceScore(c);
+    return (typeof r === 'number') ? r : (r && r.score);
+  };
+  const A = mk(0, 0, 34, 3);
+  const B = mk(0, 0, 31, 6);
+  const C = mk(0, 0, 28, 9);
+  const D = mk(0, 0, 24, 13);
+  ok(W.hgOgConfluenceGrade(A) === 'A' && scoreOf(A) >= 85,
+     'A letter maps to the GRADE-A / ≥85 band, not 0');
+  ok(W.hgOgConfluenceGrade(B) === 'B' && scoreOf(B) >= 70 && scoreOf(B) < 85,
+     'B letter maps to STRONG 70-84, not 0/100 WEAK (got ' + scoreOf(B) + ')');
+  ok(W.hgOgConfluenceGrade(C) === 'C' && scoreOf(C) >= 50 && scoreOf(C) < 70,
+     'C letter maps to FAIR 50-69 (got ' + scoreOf(C) + ')');
+  ok(W.hgOgConfluenceGrade(D) === 'D' && scoreOf(D) < 50,
+     'D letter maps to WEAK <50 (got ' + scoreOf(D) + ')');
+
+  /* The live paste: 52/55 checks, 29/37 indicators, one family, VETO watch.
+     Whatever letter that evidence earns, the 0-100 must sit in the same
+     band — never 0 WEAK beside a B (or C). */
+  const live = mk(1, 0, 29, 8);
+  live.grade = { ticket: false, total: 55, evaluated: 52 };
+  const liveLetter = W.hgOgConfluenceGrade(live);
+  const liveScore = scoreOf(live);
+  ok(liveLetter && isFinite(liveScore) && liveScore > 0,
+     'live ORB-shaped watch has a letter and a non-zero score (' + liveLetter + ' / ' + liveScore + ')');
+  const liveBand = liveScore >= 85 ? 'A' : liveScore >= 70 ? 'B' : liveScore >= 50 ? 'C' : 'D';
+  ok(liveBand === liveLetter,
+     'live ORB letter ' + liveLetter + ' and ' + liveScore + '/100 band ' + liveBand + ' agree');
+
+  const html = W.hgOgMpHorizonHtml('SCALP', null, 'long', B, null, null);
+  ok(/og-grade-b/.test(html), 'MOST PROBABLE watch row still prints the B chip');
+  ok(/70\/100/.test(html), 'and the 0-100 reads 70, not 0');
+  ok(/STRONG/.test(html) && !/[^0-9]0\/100/.test(html),
+     'B watch is STRONG — not 0/100 WEAK');
+  ok(/VETO/.test(html) && /not trade-ready/.test(html),
+     'VETO / not-trade-ready honesty is unchanged');
+}
+
 console.log('\nomnigold card grade: ' + passed + ' checks passed');
