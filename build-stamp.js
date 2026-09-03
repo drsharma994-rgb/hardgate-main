@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v587',
-  pack: 'OMNIPRESENT T2 runner beyond T1',
-  built: '2026-09-03T09:10:00Z',
-  note: 'T2 is the runner. When formation snaps T1 past T2, the two existing prices swap (nearer = T1, farther = T2). Never invents a new level. Live B-TAO_USDT 8R/5R inversion is the fixture.'
+  version: 'hg-v588',
+  pack: 'Catalog winning combination on every contract',
+  built: '2026-09-03T09:40:00Z',
+  note: 'OMNIROUTE + OMNIPRESENT score the Master Catalog LONG vs SHORT on every scanned contract. The combination with the most agreeing families / indicators / strategies wins and completes the setup only from an existing legal ticket. Tie or watch-only winner stands aside. Never invents dir or levels.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

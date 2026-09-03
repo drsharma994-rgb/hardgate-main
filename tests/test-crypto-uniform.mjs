@@ -1,9 +1,11 @@
 #!/usr/bin/env node
-/* HARDGATE — uniform combined crypto setup (hg-v586)
+/* HARDGATE — uniform combined crypto setup (hg-v588)
    Same composer + same card on OMNIROUTE + OMNIPRESENT.
-   Uses the Master Catalog (118 indicators + 85 strategies): one vote per
-   CORE family. Never invents dir or levels. Confirmed only when ≥2 CORE
-   families agree on an existing ticket. Not a win probability. */
+   Every scanned contract is scored LONG vs SHORT from the Master Catalog
+   (118 indicators + 85 strategies). One vote per CORE family. The
+   combination with the most agrees wins and completes the setup only from
+   an existing legal ticket. Never invents dir or levels. Not a win
+   probability. */
 import fs from 'fs';
 import path from 'path';
 import vm from 'vm';
@@ -117,6 +119,102 @@ console.log('\n== both desks paint the composer ==');
     'OMNIPRESENT paints the crypto uniform card');
   ok(/data-hg-crypto-uniform/.test(or) || /hgOmniUniformLeadHtml/.test(or),
     'OMNIROUTE lead helper or pin');
+  ok(/if \(snapRows\[i\]\) cands\.push\(snapRows\[i\]\)/.test(or),
+    'OMNIROUTE feeds every snap row into the composer, not tickets only');
+  ok(/opUniformLeadHtml\(ranked\.one/.test(op),
+    'OMNIPRESENT feeds every ranked contract into the composer, not the carded top only');
+  ok(/opUniformLeadHtml\(__op\.lastView\.one/.test(op),
+    'OMNIPRESENT remount still composes from the full ranked list');
+}
+
+console.log('\n== applyVerdict scores both sides ==');
+{
+  const blank = { dir: 'long', kind: 'PO3' };
+  W.hgCryptoCatalogApplyVerdict(blank, null);
+  ok(blank.dir === 'long', 'applyVerdict never flips dir while scoring the other side');
+  ok(blank.catalogSides && typeof blank.catalogSides.long === 'object'
+    && typeof blank.catalogSides.short === 'object',
+    'applyVerdict stamps LONG and SHORT combination tallies');
+}
+
+console.log('\n== winning combination across every contract ==');
+{
+  ok(typeof W.hgCryptoCatalogScoreSides === 'function', 'hgCryptoCatalogScoreSides exported');
+  const scored = W.hgCryptoCatalogScoreSides([], {
+    long:  { nFam: 3, nInd: 8, nStrat: 4, n: 3084, families: ['Structure', 'Trend', 'Flow'] },
+    short: { nFam: 1, nInd: 2, nStrat: 0, n: 1020, families: ['Momentum'] }
+  });
+  ok(scored.winner === 'long' && scored.margin === 3084 - 1020,
+    'scoreSides picks the combination with more families / indicators / strategies');
+
+  const weak = longTicket({
+    sym: 'ETHUSD',
+    catalogFamilyVotes: { Structure: 'agree' },
+    catalogSides: {
+      winner: 'long',
+      long:  { nFam: 1, nInd: 2, nStrat: 1, n: 1000, families: ['Structure'] },
+      short: { nFam: 0, nInd: 0, nStrat: 0, n: 0, families: [] }
+    }
+  });
+  const strong = longTicket({
+    sym: 'BTCUSD',
+    catalogFamilyVotes: { Structure: 'agree', Trend: 'agree', Flow: 'agree' },
+    catalogSides: {
+      winner: 'long',
+      long:  { nFam: 3, nInd: 8, nStrat: 4, n: 3084, families: ['Structure', 'Trend', 'Flow'] },
+      short: { nFam: 1, nInd: 2, nStrat: 0, n: 1020, families: ['Momentum'] }
+    }
+  });
+  const uni = W.hgCryptoUniformCompose([weak, strong], { desk: 'OMNIROUTE', tape: 'LONG' });
+  ok(uni && uni.setup && uni.setup.sym === 'BTCUSD',
+    'the combination with more agreeing families/indicators/strategies wins');
+  ok(uni.confirmed, 'winner with a legal ticket completes the setup');
+  ok(uni.tally && uni.tally.long && uni.tally.long.nFam === 3,
+    'tally records how many families made the winning side');
+  ok(+uni.setup.t2 === 140, 'complete setup copies T2 from the winning ticket');
+
+  const watchWin = longTicket({
+    sym: 'SOLUSD',
+    grade: { ticket: false, evaluated: 6, total: 10 },
+    catalogSides: {
+      winner: 'long',
+      long:  { nFam: 5, nInd: 12, nStrat: 6, n: 5126, families: ['Structure'] },
+      short: { nFam: 0, nInd: 0, nStrat: 0, n: 0, families: [] }
+    }
+  });
+  const aside = W.hgCryptoUniformCompose([watchWin, weak], { desk: 'OMNIPRESENT', tape: 'LONG' });
+  ok(aside && !aside.confirmed,
+    'a watch-only winner does not invent a complete setup');
+  ok(aside.tally && aside.tally.winner === 'long' && aside.tally.long.nFam === 5,
+    'stand-aside still names the winning combination counts');
+
+  const tied = longTicket({
+    catalogSides: {
+      winner: '',
+      tie: true,
+      long:  { nFam: 2, nInd: 4, nStrat: 2, n: 2042, families: ['Structure', 'Trend'] },
+      short: { nFam: 2, nInd: 4, nStrat: 2, n: 2042, families: ['Flow', 'Momentum'] }
+    }
+  });
+  const tieU = W.hgCryptoUniformCompose([tied], { desk: 'OMNIROUTE', tape: '' });
+  ok(tieU && !tieU.confirmed && !tieU.setup, 'tied LONG vs SHORT combination stands aside');
+  ok(/LONG and SHORT combinations tie/i.test(String(tieU.why || '')),
+    'tie names both combinations instead of picking one');
+}
+
+console.log('\n== HTML names the winning combination ==');
+{
+  const strong = longTicket({
+    catalogSides: {
+      winner: 'long',
+      long:  { nFam: 3, nInd: 8, nStrat: 4, n: 3084, families: ['Structure', 'Trend', 'Flow'] },
+      short: { nFam: 1, nInd: 2, nStrat: 0, n: 1020, families: ['Momentum'] }
+    }
+  });
+  const html = W.hgCryptoUniformHtml(W.hgCryptoUniformCompose([strong], { desk: 'OMNIROUTE', tape: 'LONG' }));
+  ok(/WINNING COMBINATION|winning combination/i.test(html), 'card names the winning combination');
+  ok(/3/.test(html) && /8/.test(html) && /4/.test(html), 'card prints family / indicator / strategy counts');
+  ok(/140/.test(html), 'complete setup prints T2 from the ticket');
 }
 
 console.log('\n== stamp ==');
