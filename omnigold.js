@@ -8099,6 +8099,68 @@ terse status, and never launches a first-time scan on a global refresh.
     return h;
   }
 
+  function hgOgCardAsUniformCand(c, horizon){
+    if (!c || !c.plan) return null;
+    var hz = String(c.horizon || '').toUpperCase();
+    if (hz && hz !== String(horizon || '').toUpperCase()) return null;
+    var letter = '';
+    if (c.grade && c.grade.letter) letter = c.grade.letter;
+    else if (c.grade && c.grade.ticket) letter = 'A';
+    else letter = 'C';
+    var fams = (c.consensus && (c.consensus.families || c.consensus.alsoKinds)) || [];
+    return {
+      dir: c.dir,
+      entry: c.plan.entry,
+      stop: c.plan.stop,
+      t1: c.plan.t1,
+      t2: c.plan.t2,
+      grade: letter,
+      strategy: c.kind,
+      stratKey: c.kind,
+      kind: c.kind,
+      tally: c.consensus && c.consensus.score,
+      demoted: !(c.grade && c.grade.ticket),
+      dropped: !!(c.formation && c.formation.formed === false),
+      confluence: Array.isArray(fams) ? fams : []
+    };
+  }
+
+  function hgOgUniformCands(horizon){
+    var out = [], i, r;
+    var bridge = __og && __og.bridge;
+    var bucket = (bridge && bridge.ok)
+      ? ((String(horizon).toUpperCase() === 'SWING') ? bridge.swing : bridge.scalp)
+      : null;
+    if (bucket && bucket.best) out.push(bucket.best);
+    var ranked = (bucket && bucket.ranked) || [];
+    for (i = 0; i < ranked.length; i++) if (ranked[i]) out.push(ranked[i]);
+    var cards = (__og && __og.uniformCards)
+      || (__og && __og.lastView && __og.lastView.collapsed) || [];
+    for (i = 0; i < cards.length; i++){
+      r = hgOgCardAsUniformCand(cards[i], horizon);
+      if (r) out.push(r);
+    }
+    return out;
+  }
+
+  function hgOgUniformLeadHtml(){
+    try{
+      var compose = gfn('hgGoldUniformCompose');
+      var htmlFn = gfn('hgGoldUniformHtml');
+      if (!compose || !htmlFn) return '';
+      var tapes = (__og && __og.tape) || {};
+      var rows = (__og && __og.lastRows) || {};
+      return '<div data-hg-gold-uniform-desk="1" style="grid-column:1/-1;display:block;width:100%">';
+        + htmlFn(compose(hgOgUniformCands('SCALP'), {
+            horizon: 'SCALP', tape: tapes.scalp, rows: rows.scalp || rows.m15 || []
+          }))
+        + htmlFn(compose(hgOgUniformCands('SWING'), {
+            horizon: 'SWING', tape: tapes.swing, rows: rows.swing || []
+          }))
+        + '</div>';
+    }catch(e){ return ''; }
+  }
+
   function hgOgPaintMostProbable(ui, pickScalp, pickSwing, tape, mpBag, held, watchScalp, watchSwing, engineScalp, engineSwing, tapes){
     var host = (ui && ui.mp) || (ui && ui.cards);
     if (!host) return;
@@ -8114,6 +8176,14 @@ terse status, and never launches a first-time scan on a global refresh.
       else if (host.insertAdjacentHTML) host.insertAdjacentHTML('afterbegin', dual);
       else host.innerHTML = dual + (host.innerHTML || '');
     } catch (eDual) {}
+    try {
+      var uni = hgOgUniformLeadHtml();
+      if (!uni) return;
+      var oldUni = host.querySelector ? host.querySelector('[data-hg-gold-uniform-desk]') : null;
+      if (oldUni) oldUni.outerHTML = uni;
+      else if (host.insertAdjacentHTML) host.insertAdjacentHTML('afterbegin', uni);
+      else host.innerHTML = uni + (host.innerHTML || '');
+    } catch (eUni) {}
   }
 
   function hgOgMpRow(c){
@@ -9145,9 +9215,11 @@ terse status, and never launches a first-time scan on a global refresh.
           ui.cards.innerHTML = (!res.scalp.rows.length && !res.swing.rows.length)
             ? '<div class="note warn">No gold candles were returned by any source, so nothing could be scanned. Check the XM bridge / spot proxy before reading anything into this.</div>'
             : '<div class="empty">no gold setup fired on either horizon. That is a normal result — the detectors are meant to be quiet.</div>';
-          hgOgPaintMostProbable(ui, null, null,
-            hgOgDeskTape(hgOgTapeDir(res.scalp && res.scalp.rows), hgOgTapeDir(res.swing && res.swing.rows)),
-            []);
+          var emptyScalpTape = hgOgTapeDir(res.scalp && res.scalp.rows);
+          var emptySwingTape = hgOgTapeDir(res.swing && res.swing.rows);
+          __og.tape = { scalp: emptyScalpTape, swing: emptySwingTape, desk: hgOgDeskTape(emptyScalpTape, emptySwingTape) };
+          __og.uniformCards = [];
+          hgOgPaintMostProbable(ui, null, null, __og.tape.desk, []);
           var emptyTape = hgOgDeskTape(hgOgTapeDir(res.scalp && res.scalp.rows), hgOgTapeDir(res.swing && res.swing.rows));
           /* Counts strip on an empty scan: zeros are the honest counts. */
           try { hgOgPaintCounts(ui, hgOgScanCounts([], [], emptyTape)); } catch (eCt0) {}
@@ -9355,6 +9427,7 @@ terse status, and never launches a first-time scan on a global refresh.
           }
         } catch (eHeld){ ogHeld = { n: 0, level: NaN, from: NaN, tf: HORIZONS.scalp.tf }; }
         __og.held = ogHeld;
+        __og.uniformCards = ogCollapsed;
         /* Paint MOST PROBABLE + a loading engines strip BEFORE the gold-tab
            bridge fetch. A hung 15m/1d re-fetch used to leave #ogMp and
            #ogGoldEngines blank even when VETO cards already painted. */

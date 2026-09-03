@@ -630,6 +630,293 @@
     }catch(e){ return ''; }
   }
 
+  function uniEsc(s){
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function uniNorm(s){
+    return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  }
+  function uniDir(d){
+    var s = String(d || '').toLowerCase();
+    if (s === 'long' || s === 'buy' || s === 'up') return 'long';
+    if (s === 'short' || s === 'sell' || s === 'down') return 'short';
+    return '';
+  }
+  function goldEmaLast(rows, n){
+    if (!rows || rows.length < n) return NaN;
+    var i, v, s = 0, e;
+    for (i = 0; i < n; i++){
+      v = +rows[i].c;
+      if (!isFinite(v)) return NaN;
+      s += v;
+    }
+    e = s / n;
+    var k = 2 / (n + 1);
+    for (i = n; i < rows.length; i++){
+      v = +rows[i].c;
+      if (!isFinite(v)) continue;
+      e = (v - e) * k + e;
+    }
+    return e;
+  }
+
+  /** Same stack-agreement as OmniGold tape: last vs EMA21 AND EMA21 vs EMA50.
+      A dip in an UP stack is unread, not SHORT. Never invents a side. */
+  function hgGoldUniformTape(rows){
+    try{
+      if (!rows || rows.length < 55) return '';
+      var last = rows[rows.length - 1];
+      if (!last || !isFinite(+last.c)) return '';
+      var e21 = goldEmaLast(rows, 21);
+      var e50 = goldEmaLast(rows, 50);
+      if (!isFinite(e21)) return '';
+      var below = last.c < e21, above = last.c > e21;
+      var downStack = !isFinite(e50) || e21 < e50;
+      var upStack = !isFinite(e50) || e21 > e50;
+      if (below && downStack) return 'SHORT';
+      if (above && upStack) return 'LONG';
+      return '';
+    }catch(e){ return ''; }
+  }
+
+  function uniSidesOk(c){
+    var fn = (typeof W.hgGoldPlanSidesOk === 'function') ? W.hgGoldPlanSidesOk
+      : (typeof hgGoldPlanSidesOk === 'function' ? hgGoldPlanSidesOk : null);
+    if (fn){
+      try{
+        var r = fn(c);
+        if (r && r.ok === false) return false;
+        return true;
+      }catch(e){ return false; }
+    }
+    var dir = uniDir(c.dir), e = +c.entry, s = +c.stop, t1 = +c.t1;
+    if (!dir || !isFinite(e) || !isFinite(s)) return false;
+    if (dir === 'short'){
+      if (!(s > e)) return false;
+      if (isFinite(t1) && !(t1 < e)) return false;
+    } else {
+      if (!(s < e)) return false;
+      if (isFinite(t1) && !(t1 > e)) return false;
+    }
+    return true;
+  }
+
+  function uniGradeLetter(c){
+    var g = c && c.grade;
+    if (g && typeof g === 'object') g = g.letter || (g.ticket ? 'A' : '');
+    return String(g || '').toUpperCase();
+  }
+
+  function uniHints(c){
+    var bits = [], i, x;
+    function add(v){
+      if (v == null) return;
+      var s = String(v);
+      if (s) bits.push(s);
+    }
+    add(c.stratKey); add(c.kind); add(c.strategy); add(c.play);
+    if (Array.isArray(c.confluence))
+      for (i = 0; i < c.confluence.length; i++) add(c.confluence[i]);
+    if (Array.isArray(c.tallyParts))
+      for (i = 0; i < c.tallyParts.length; i++){
+        x = c.tallyParts[i];
+        if (x){ add(x.label); add(x.leg); }
+      }
+    if (Array.isArray(c.stamps))
+      for (i = 0; i < c.stamps.length; i++) add(c.stamps[i]);
+    return bits;
+  }
+
+  function uniWireHits(rec, tokens){
+    if (!rec || rec.verdict !== 'CORE') return false;
+    var w = uniNorm(rec.wire), name = uniNorm(rec.name), sref = uniNorm(rec.sRef);
+    var i, t;
+    for (i = 0; i < tokens.length; i++){
+      t = uniNorm(tokens[i]);
+      if (!t) continue;
+      if (w && (t === w || t.indexOf(w) >= 0 || (t.length >= 4 && w.indexOf(t) >= 0))) return true;
+      if (name && t.length >= 5 && (t.indexOf(name) >= 0 || name.indexOf(t) >= 0)) return true;
+      if (sref && sref.length >= 4 && t.indexOf(sref) >= 0) return true;
+      if (w === 'ribbon' && (t.indexOf('ribbon') >= 0 || t.indexOf('ema') >= 0)) return true;
+      if (w === 'rsidiv' && t.indexOf('rsi') >= 0) return true;
+      if (w === 'sweep' && (t.indexOf('sweep') >= 0 || t.indexOf('raid') >= 0)) return true;
+      if (w === 'ob' && (t === 'ob' || t.indexOf('orderblock') >= 0 || t.indexOf('breaker') >= 0)) return true;
+      if (w === 'adrfade' && t.indexOf('adr') >= 0) return true;
+      if (w === 'p5wyck' && (t.indexOf('s19') >= 0 || t.indexOf('wyck') >= 0 || t.indexOf('spring') >= 0 || t.indexOf('utad') >= 0)) return true;
+      if (w === 'p5turt' && (t.indexOf('s20') >= 0 || t.indexOf('turt') >= 0 || t.indexOf('nyopen') >= 0)) return true;
+      if (w === 'vpbook' && (t.indexOf('sessionsweep') >= 0 || t.indexOf('po3') >= 0 || t === 's0')) return true;
+    }
+    return false;
+  }
+
+  function uniFamilyHits(c){
+    var tokens = uniHints(c);
+    var seen = {}, hits = [], i, r, fam;
+    for (i = 0; i < I.length; i++){
+      r = recOf(I[i]);
+      if (!uniWireHits(r, tokens)) continue;
+      fam = String(r.family || '').trim();
+      if (!fam || seen[fam]) continue;
+      seen[fam] = 1;
+      hits.push({ family: fam, name: r.name, id: r.id, wire: r.wire || '' });
+    }
+    return hits;
+  }
+
+  function uniPaid(kind, horizon){
+    try{
+      var fn = (typeof W.hgOgForwardPaid === 'function') ? W.hgOgForwardPaid : null;
+      if (!fn) return false;
+      var rec = fn(kind, horizon);
+      if (rec === true) return true;
+      if (rec && (rec.paid === true || rec.hasPaid === true || rec.read === 'has paid')) return true;
+      return false;
+    }catch(e){ return false; }
+  }
+
+  /**
+   * Combine catalog strategies + indicators onto one existing engine plan.
+   * Never invents dir or levels. Confirmed = pick + ≥2 CORE families +
+   * sides OK + not demoted + grade A/B. paid = forward ledger only.
+   */
+  function hgGoldUniformCompose(cands, opts){
+    opts = opts || {};
+    var horizon = String(opts.horizon || '').toUpperCase() || 'SCALP';
+    var tape = uniDir(opts.tape);
+    var feed = null;
+    try{ feed = hgGoldCatalogFeed(opts.rows || null, opts); }catch(eF){ feed = null; }
+    var out = {
+      ok: false, confirmed: false, paid: false, horizon: horizon,
+      tape: tape ? tape.toUpperCase() : '', setup: null,
+      families: [], indicators: [], strategies: [],
+      catalog: feed, why: 'no qualifying combined setup'
+    };
+    try{
+      if (!Array.isArray(cands) || !cands.length){
+        out.why = 'no engine candidates — stand aside';
+        return out;
+      }
+      var best = null, bestHits = [], bestScore = -1, i, c, dir, g, hits, score;
+      for (i = 0; i < cands.length; i++){
+        c = cands[i];
+        if (!c || c.dropped) continue;
+        if (c.catalogExclude) continue;
+        if (c.demoted && !c.locked) continue;
+        dir = uniDir(c.dir);
+        if (!dir) continue;
+        if (!isFinite(+c.entry) || !isFinite(+c.stop) || !isFinite(+c.t1)) continue;
+        if (!uniSidesOk(c)) continue;
+        if (tape && dir !== tape) continue;
+        g = uniGradeLetter(c);
+        if (g !== 'A' && g !== 'B' && g !== 'CLEAN' && !c.locked) continue;
+        hits = uniFamilyHits(c);
+        score = hits.length * 1000 + (isFinite(+c.tally) ? +c.tally : 0) * 10
+          + (g === 'A' || g === 'CLEAN' ? 2 : (g === 'B' ? 1 : 0));
+        if (score > bestScore){
+          bestScore = score;
+          best = c;
+          bestHits = hits;
+        }
+      }
+      if (!best){
+        out.why = tape
+          ? ('no tape-aligned engine plan on ' + horizon + ' — stand aside')
+          : ('no legal engine plan on ' + horizon + ' — stand aside');
+        return out;
+      }
+      out.setup = best;
+      out.families = bestHits;
+      out.indicators = bestHits.map(function(h){ return h.name; });
+      out.strategies = [];
+      if (best.strategy) out.strategies.push(best.strategy);
+      if (best.stratKey && out.strategies.indexOf(best.stratKey) < 0)
+        out.strategies.push(best.stratKey);
+      var live = HG_GOLD_CATALOG_LIVE, li;
+      for (li = 0; li < live.length; li++){
+        if (String(best.kind || '').indexOf(live[li]) >= 0
+            || (Array.isArray(best.stamps) ? best.stamps.join(' ') : String(best.stamps || '')).indexOf(live[li]) >= 0
+            || String(best.strategy || '').indexOf(live[li]) >= 0){
+          if (out.strategies.indexOf(live[li]) < 0) out.strategies.push(live[li]);
+        }
+      }
+      var g2 = uniGradeLetter(best);
+      var confirmGrade = (g2 === 'A' || g2 === 'B' || g2 === 'CLEAN');
+      out.ok = true;
+      out.confirmed = !!(bestHits.length >= 2 && confirmGrade && !best.demoted && !best.catalogExclude);
+      out.paid = uniPaid(best.kind || best.stratKey || best.strategy, horizon);
+      out.why = out.confirmed
+        ? (bestHits.length + ' CORE families agree · one vote each · levels from the engine plan')
+        : (bestHits.length < 2
+            ? 'fewer than 2 CORE families agree — not a confirmed combined setup'
+            : 'engine plan present but not confirmed (grade / demote)');
+      return out;
+    }catch(e){
+      out.why = 'uniform compose error — stand aside';
+      return out;
+    }
+  }
+
+  function hgGoldUniformHtml(uni){
+    try{
+      if (!uni) return '';
+      var confirmed = !!uni.confirmed;
+      var h = '<section class="note hg-gold-uniform" data-hg-gold-uniform="1" data-confirmed="'
+        + (confirmed ? '1' : '0') + '" data-horizon="' + uniEsc(uni.horizon || '')
+        + '" role="region" aria-label="'
+        + (confirmed ? 'Confirmed combined gold setup' : 'Combined gold setup stand aside')
+        + '" style="grid-column:1/-1;display:block;width:100%;box-sizing:border-box;'
+        + 'margin:12px 0;padding:14px 16px;border:1px solid #FDE68A;'
+        + 'border-radius:10px;background:linear-gradient(180deg,#FFFFFF,#FFFBEB);color:#020617">';
+      h += '<div style="font-size:10px;letter-spacing:.28em;font-weight:800;color:#A67C12">'
+        + (confirmed ? 'CONFIRMED COMBINED SETUP' : 'COMBINED SETUP · STAND ASIDE')
+        + '</div>';
+      h += '<div class="dim" style="margin-top:4px;font-size:12px;line-height:1.45">'
+        + 'Strategies + indicators from the gold catalog, one vote per family. '
+        + 'Same card on GOLD SCALP · GOLD SWING · OMNIGOLD. Not a win probability.';
+      if (uni.horizon) h += ' · ' + uniEsc(uni.horizon);
+      if (uni.tape) h += ' · tape ' + uniEsc(uni.tape);
+      h += '</div>';
+      if (confirmed && uni.setup){
+        var s = uni.setup;
+        var dir = String(s.dir || '').toUpperCase();
+        h += '<div style="margin-top:8px;font-weight:800;font-size:18px;color:#A67C12">'
+          + uniEsc(dir) + (s.grade ? (' · GRADE ' + uniEsc(typeof s.grade === 'object' ? (s.grade.letter || '') : s.grade)) : '')
+          + ' <span style="font-size:12px;font-weight:600;color:#0F172A">'
+          + uniEsc(s.strategy || s.stratKey || 'SETUP') + '</span></div>';
+        if (uni.paid){
+          h += '<div style="margin-top:6px;font-size:12px;font-weight:700;color:#166534">'
+            + 'PAID — forward ledger has paid on this horizon — measured</div>';
+        }
+        var fams = uni.families || [], fi;
+        if (fams.length){
+          h += '<div style="margin-top:6px;font-size:12px">';
+          for (fi = 0; fi < fams.length; fi++){
+            h += (fi ? ' · ' : '') + '<b>' + uniEsc(fams[fi].family) + '</b>'
+              + (fams[fi].name ? (' ' + uniEsc(fams[fi].name)) : '');
+          }
+          h += '</div>';
+        }
+        h += '<div class="dim" style="margin-top:4px;font-size:12px">'
+          + (uni.indicators ? uni.indicators.length : 0) + ' agreeing CORE indicators'
+          + (uni.strategies && uni.strategies.length ? (' · ' + uni.strategies.length + ' strategies') : '')
+          + '</div>';
+        h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-top:10px">';
+        h += '<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:8px 10px"><i style="display:block;font-style:normal;font-size:9px;letter-spacing:.16em;font-weight:700">ENTRY</i><b style="display:block;font-size:16px;color:#A67C12">'
+          + uniEsc(s.entry) + '</b></div>';
+        h += '<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:8px 10px"><i style="display:block;font-style:normal;font-size:9px;letter-spacing:.16em;font-weight:700">STOP</i><b style="display:block;font-size:16px;color:#A67C12">'
+          + uniEsc(s.stop) + '</b></div>';
+        h += '<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:8px 10px"><i style="display:block;font-style:normal;font-size:9px;letter-spacing:.16em;font-weight:700">T1</i><b style="display:block;font-size:16px;color:#A67C12">'
+          + uniEsc(s.t1) + '</b></div>';
+        h += '</div>';
+      } else {
+        h += '<div style="margin-top:8px;font-size:13px;font-weight:600">'
+          + uniEsc(uni.why || 'stand aside') + '</div>';
+      }
+      h += '</section>';
+      return h;
+    }catch(e){ return ''; }
+  }
+
   W.HG_GOLD_CATALOG_VER = HG_GOLD_CATALOG_VER;
   W.HG_GOLD_CATALOG_LIVE = HG_GOLD_CATALOG_LIVE;
   W.HG_GOLD_CATALOG_SCHED = HG_GOLD_CATALOG_SCHED;
@@ -647,4 +934,7 @@
   W.hgGoldCatalogFeed = hgGoldCatalogFeed;
   W.hgGoldCatalogApplyVerdict = hgGoldCatalogApplyVerdict;
   W.hgGoldCatalogHtml = hgGoldCatalogHtml;
+  W.hgGoldUniformTape = hgGoldUniformTape;
+  W.hgGoldUniformCompose = hgGoldUniformCompose;
+  W.hgGoldUniformHtml = hgGoldUniformHtml;
 })(typeof window !== 'undefined' ? window : globalThis);

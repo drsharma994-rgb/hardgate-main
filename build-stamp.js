@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v582',
-  pack: 'OmniGold tape honesty — pullback ≠ going down',
-  built: '2026-09-03T04:10:00Z',
-  note: 'A 5-bar dip in an UP stack is unread, not SHORT. Mixed 1h/4h tape is MIXED. Each horizon pick follows that horizon so LONG GOLD SCALP/SWING catalog setups can lead when 4h gold is up. No side invented.'
+  version: 'hg-v583',
+  pack: 'Uniform combined gold setup — SCALP / SWING / OMNIGOLD',
+  built: '2026-09-03T05:10:00Z',
+  note: 'One composer, one card. Confirmed only when ≥2 CORE catalog families agree on an existing engine plan. Never invents dir or levels. PAID is the forward ledger only — not a profit forecast.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

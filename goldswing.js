@@ -130,6 +130,17 @@ function gfn(name){
   try{ if (typeof globalThis !== 'undefined' && typeof globalThis[name] === 'function') return globalThis[name]; }catch(e){}
   return null;
 }
+/** Same CONFIRMED COMBINED SETUP card as GOLD SCALP / OMNIGOLD. */
+function goldUniformPanelHtml(cands, rows, horizon){
+  try{
+    var compose = gfn('hgGoldUniformCompose');
+    var htmlFn = gfn('hgGoldUniformHtml');
+    if (!compose || !htmlFn) return '';
+    var tapeFn = gfn('hgGoldUniformTape');
+    var tape = tapeFn ? tapeFn(rows) : '';
+    return htmlFn(compose(cands || [], { rows: rows, horizon: horizon || 'SWING', tape: tape }));
+  }catch(e){ return ''; }
+}
 
 var SRC_LABEL = { 'binance-xau': 'BINANCE XAUUSDT', 'binance-paxg': 'BINANCE PAXGUSDT',
                   'twelvedata': 'TWELVE DATA XAU/USD', 'yahoo': 'YAHOO GC=F',
@@ -3110,6 +3121,7 @@ async function runScan(ui, scanSt){
 
     var basisHtml = stRoute ? stGoldBasisHtml() : '';
     var mixedBanner = goldMixedFeedBannerHtml(gold);
+    var uniHtml = goldUniformPanelHtml(display, gold.rows4h, 'SWING');
     paintGoldWeekendPanel(ui, gold.rows4h, now, displayBest);
     var aplusCtx = goldBuildAPlusCtx(ctx, gold, now, newsC);
     var aplusPack = goldEvalAPlusBatch(ranked, aplusCtx);
@@ -3137,7 +3149,7 @@ async function runScan(ui, scanSt){
     if (ui && ui.cards && ui.empty){
       if (display.length){
         ui.empty.style.display = 'none';
-        ui.cards.innerHTML = basisHtml + mixedBanner + aplusPack.panel + bannerHTML(displayBest, display)
+        ui.cards.innerHTML = basisHtml + mixedBanner + aplusPack.panel + uniHtml + bannerHTML(displayBest, display)
           + display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note); }).join('')
           + formingLayersHtml()
           + formingNowHTML(armedAll)
@@ -3147,14 +3159,14 @@ async function runScan(ui, scanSt){
         /* zero qualifying candidates but something to show: WHY SILENT leads,
            then the watch panel, then the held-back reason lines */
         ui.empty.style.display = 'none';
-        ui.cards.innerHTML = basisHtml + mixedBanner + (whySilent ? whySilentHTML(whySilent) : '')
+        ui.cards.innerHTML = basisHtml + mixedBanner + uniHtml + (whySilent ? whySilentHTML(whySilent) : '')
           + formingLayersHtml()
           + rejectedHTML(rejectedAll)
           + formingNowHTML(armedAll)
           + historyHTML(lock.store.history);
       } else {
         /* feeds failed: cards stay empty (no fabricated setups); catalog lives on empty */
-        ui.cards.innerHTML = basisHtml;
+        ui.cards.innerHTML = basisHtml + uniHtml;
         var catH = '';
         try{
           var cFn = gfn('hgGoldCatalogHtml');
@@ -3185,7 +3197,7 @@ async function runScan(ui, scanSt){
           if (typeof visionRefreshGw === 'function'){
             visionRefreshGw({
               scanSt: scanSt, scanGen: visionGen, ui: ui, display: display, displayBest: displayBest,
-              basisHtml: basisHtml, bannerHTML: bannerHTML, cardHTML: cardHTML,
+              basisHtml: basisHtml + mixedBanner + aplusPack.panel + uniHtml, bannerHTML: bannerHTML, cardHTML: cardHTML,
               formingNowHTML: formingNowHTML, rejectedHTML: rejectedHTML, historyHTML: historyHTML,
               armedAll: armedAll, rejectedAll: rejectedAll, history: lock.store.history,
               seasonNote: season && season.note,
