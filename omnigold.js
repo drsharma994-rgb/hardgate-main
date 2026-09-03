@@ -5034,7 +5034,16 @@ terse status, and never launches a first-time scan on a global refresh.
       base = 'gold is going up — a SHORT is not the setup. Standing aside is the position when no long ticket cleared.';
     else
       base = 'nothing on this horizon cleared the ledger this scan. Standing aside is the position.';
-    if (!held || !held.n) return base;
+    if (!held || !held.n){
+      /* Field report: "why short setups are not shown?" when the card
+         only said a SHORT is not the setup. That reads as hidden.
+         When nothing opposite cleared, say so — shorts are not erased. */
+      if (tape === 'long')
+        return base + ' No SHORT ticket cleared either — shorts are not hidden.';
+      if (tape === 'short')
+        return base + ' No LONG ticket cleared either — longs are not hidden.';
+      return base;
+    }
     var side = (tape === 'short') ? 'LONG' : 'SHORT';
     var s = base + ' ' + held.n + ' ticket' + (held.n === 1 ? '' : 's')
           + ' cleared the ledger and ' + (held.n === 1 ? 'is' : 'are') + ' HELD — all '
@@ -5836,9 +5845,11 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     var tape = String(mpArgs.tape || '').toLowerCase();
     var pick = hgOgTopSetupPick(mpArgs);
+    var heldCards = mpArgs.heldCards || [];
     if (!pick){
       h += '<div class="hg-mp-note warn">No gate-passed setup at current price — standing aside. '
         +  esc(hgOgMpNoneWhy(tape, mpArgs.held)) + '</div>';
+      h += hgOgOppositeAsideHtml(tape, heldCards);
       return h + '</section>';
     }
     var freshRead = hgOgTopSetupFresh(pick, mktPx);
@@ -5846,6 +5857,7 @@ terse status, and never launches a first-time scan on a global refresh.
       h += '<div class="hg-mp-note warn">'
         +  (freshRead.doa ? 'Ticket levels are DEAD ON ARRIVAL' : 'No gate-passed setup at current price')
         +  ' — standing aside. ' + esc(freshRead.why) + '. Run a scan for fresh levels.</div>';
+      h += hgOgOppositeAsideHtml(tape, heldCards);
       return h + '</section>';
     }
     var dir = String(pick.dir || '').toLowerCase();
@@ -5856,6 +5868,7 @@ terse status, and never launches a first-time scan on a global refresh.
       +  ' · ' + esc(String(pick.horizon || '')) + ' · ' + esc(String(pick.kind || '')) + '</div>';
     h += '<div class="hg-mp-note dim">' + esc(freshRead.why) + '</div>';
     h += hgOgMpHorizonHtml(pick.horizon || 'SCALP', pick, tape, null, mpArgs.held, null);
+    h += hgOgOppositeAsideHtml(tape, heldCards);
     return h + '</section>';
   }
 
@@ -8225,6 +8238,7 @@ terse status, and never launches a first-time scan on a global refresh.
           (__og.tape && __og.tape.swing) || deskTape),
         tape: deskTape || null,
         held: __og.held || null,
+        heldCards: hgOgHeldCards(ogCollapsed || [], deskTape),
         mkt: fin(__og.spotAnchor),
         at: Date.now()
       };
@@ -8520,6 +8534,50 @@ terse status, and never launches a first-time scan on a global refresh.
       picked.tapeWatch = true;
     }
     return picked;
+  }
+
+  /* Opposite-side TICKETS the tape is holding. Same filter the card
+     loop already uses: gate-passed, formed, plan in hand, dir !== tape.
+     Empty when tape is unread — no side is invented. Pure. */
+  function hgOgHeldCards(cards, tape){
+    tape = String(tape || '').toLowerCase();
+    if (tape !== 'long' && tape !== 'short') return [];
+    var out = [], i, c;
+    for (i = 0; i < (cards || []).length; i++){
+      c = cards[i];
+      if (!c || !c.plan) continue;
+      if (!(c.grade && c.grade.ticket)) continue;
+      if (c.formation && c.formation.formed === false) continue;
+      if (String(c.dir || '').toLowerCase() === tape) continue;
+      out.push(c);
+    }
+    return out;
+  }
+
+  /* TOP SETUP visibility for the other side. Against-tape tickets stay
+     HELD / NOT ACTIVATED (replay: with-tape +0.121R, against-tape −0.280R).
+     When none exist the card says they are not hidden. Never invents
+     levels. Pure over its inputs. */
+  function hgOgOppositeAsideHtml(tape, heldCards){
+    tape = String(tape || '').toLowerCase();
+    if (tape !== 'long' && tape !== 'short') return '';
+    var other = (tape === 'long') ? 'SHORT' : 'LONG';
+    var n = (heldCards && heldCards.length) || 0;
+    var h = '<div class="note og-opposite-aside" data-og-opposite="1" role="status"'
+      + ' style="display:block;margin:8px 0;padding:8px 10px;border-left:3px solid var(--veto)">';
+    if (n){
+      h += '<b>' + other + ' SETUPS ARE SHOWN — HELD, NOT ACTIVATED</b> — gold tape is '
+        + (tape === 'long' ? 'UP' : 'DOWN') + ', so a ' + other
+        + ' is not the activated setup (against-tape replay −0.280R vs with-tape +0.121R). '
+        + 'They stay queued until the tape flips.';
+      h += hgOgHeldQueueHtml(heldCards, tape);
+    } else {
+      h += '<b>NO ' + other + ' TICKET THIS SCAN</b> — ' + other.toLowerCase()
+        + 's are not hidden. None cleared the gate ledger. The stand-aside is no '
+        + (tape === 'long' ? 'LONG' : 'SHORT') + ' ticket and no ' + other
+        + ' ticket, not a missing side.';
+    }
+    return h + '</div>';
   }
 
   function hgOgHeldQueueHtml(cards, tape){
@@ -9548,13 +9606,12 @@ terse status, and never launches a first-time scan on a global refresh.
            cause. AGAINST (a genuine resting-order plan at real structure)
            still renders in full — those levels are meant to be far. */
         var deadLines = '';
-        var heldCards = [];
+        var heldCards = hgOgHeldCards(ogCollapsed, deskTape);
         for (i = 0; i < ogCollapsed.length; i++){
           var cCard = ogCollapsed[i];
           if ((deskTape === 'long' || deskTape === 'short')
               && cCard && cCard.grade && cCard.grade.ticket
               && String(cCard.dir || '').toLowerCase() !== deskTape){
-            heldCards.push(cCard);
             continue;
           }
           var lfG = null, gj;
@@ -9601,11 +9658,9 @@ terse status, and never launches a first-time scan on a global refresh.
         var ogHeld = { n: 0, level: NaN, from: NaN, tf: HORIZONS.scalp.tf };
         try {
           if (deskTape === 'long' || deskTape === 'short'){
-            for (var hj = 0; hj < ogCollapsed.length; hj++){
-              var hc = ogCollapsed[hj];
-              if (hc && hc.plan && hc.grade && hc.grade.ticket
-                  && String(hc.dir || '').toLowerCase() !== deskTape) ogHeld.n++;
-            }
+            /* Same list TOP SETUP paints — never a held count that
+               disagrees with the opposite-side panel. */
+            ogHeld.n = heldCards.length;
             /* Name the level on whichever horizon is actually blocking. Scalp
                is checked first: it is the faster of the two and the one a
                reader watching a 1h chart can act on. */
@@ -10696,6 +10751,8 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgGoldEnginesPanelHtml = hgOgGoldEnginesPanelHtml;
     window.hgOgPaintOgPostScan = hgOgPaintOgPostScan;
     window.hgOgHeldQueueHtml = hgOgHeldQueueHtml;
+    window.hgOgHeldCards = hgOgHeldCards;
+    window.hgOgOppositeAsideHtml = hgOgOppositeAsideHtml;
     window.hgOgInfoNet = hgOgInfoNet;
     window.hgOgBalanceScore = hgOgBalanceScore;
     window.hgOgBalanceParts = hgOgBalanceParts;
