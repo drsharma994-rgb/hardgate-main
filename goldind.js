@@ -3499,12 +3499,14 @@ function goldRankSetups(cands, ctx){
                             reason: c.reason || 'failed a quality gate' });
         continue;
       }
-      var sideGate = hgGoldPlanSidesOk(c);
-      if (!sideGate.ok){
-        out.rejected.push({ id: c.id || null, strategy: c.strategy || null, stratKey: c.stratKey || null,
-                            dir: c.dir, venue: c.venue || null, sym: c.sym || null,
-                            reason: sideGate.why || 'plan sides invalid' });
-        continue;
+      if (isFinite(+c.entry) && isFinite(+c.stop) && isFinite(+c.t1)){
+        var sideGate = hgGoldPlanSidesOk(c);
+        if (!sideGate.ok){
+          out.rejected.push({ id: c.id || null, strategy: c.strategy || null, stratKey: c.stratKey || null,
+                              dir: c.dir, venue: c.venue || null, sym: c.sym || null,
+                              reason: sideGate.why || 'plan sides invalid' });
+          continue;
+        }
       }
       var parts = [], tally = 0;
       var agree = isFinite(c.agree) ? c.agree

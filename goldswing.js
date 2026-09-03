@@ -2406,7 +2406,8 @@ function rankSetups(cands, ctx){
                             reason: c.reason || 'failed a quality gate' });
         continue;
       }
-      if (typeof W !== 'undefined' && typeof W.hgGoldPlanSidesOk === 'function'){
+      if (typeof W !== 'undefined' && typeof W.hgGoldPlanSidesOk === 'function'
+          && isFinite(+c.entry) && isFinite(+c.stop) && isFinite(+c.t1)){
         var sideGate = W.hgGoldPlanSidesOk(c);
         if (!sideGate.ok){
           out.rejected.push({ id: c.id || null, strategy: c.strategy || null, stratKey: c.stratKey || null,
