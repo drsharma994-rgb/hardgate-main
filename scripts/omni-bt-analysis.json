@@ -1,0 +1,1178 @@
+{
+  "generated": "2026-09-03T18:11:38.385Z",
+  "limitations": [
+    "OMNIROUTE harness is 1h; live desk scans 4h. Directional evidence only.",
+    "OMNIPRESENT replay measures RAW TRIGGERED zones, not the live shown-head ranking.",
+    "Live opGates (trend / news / context / measured-edge) are not fully replayed offline.",
+    "Fees 0.05% + 0.02%/side; both-touch bar = loss; fill required.",
+    "Never loosen G1–G7. Never invent dir or levels. Demote / tighten only."
+  ],
+  "omniroute": {
+    "source": "scripts/backtest-omniroute-v531-results.json",
+    "runAt": "2026-08-30T09:34:30.165Z",
+    "overall": {
+      "n": 2832,
+      "wins": 737,
+      "losses": 1811,
+      "timeouts": 284,
+      "winRate": 0.2602,
+      "avgGrossR": -0.0843,
+      "avgNetR": -0.2424,
+      "expectancyNetR": -0.2424,
+      "profitFactor": 0.6828,
+      "maxDrawdownR": 687.2455
+    },
+    "cohorts": {
+      "conviction": {
+        "conviction": {
+          "n": 336,
+          "wins": 81,
+          "losses": 239,
+          "timeouts": 16,
+          "winRate": 0.2411,
+          "avgGrossR": -0.2008,
+          "avgNetR": -0.2632,
+          "expectancyNetR": -0.2632,
+          "profitFactor": 0.653,
+          "maxDrawdownR": 99.8747
+        },
+        "legacy": {
+          "n": 2496,
+          "wins": 656,
+          "losses": 1572,
+          "timeouts": 268,
+          "winRate": 0.2628,
+          "avgGrossR": -0.0686,
+          "avgNetR": -0.2396,
+          "expectancyNetR": -0.2396,
+          "profitFactor": 0.6867,
+          "maxDrawdownR": 600.4445
+        }
+      },
+      "cluster": {
+        "clustered": {
+          "n": 554,
+          "wins": 139,
+          "losses": 379,
+          "timeouts": 36,
+          "winRate": 0.2509,
+          "avgGrossR": -0.1584,
+          "avgNetR": -0.3067,
+          "expectancyNetR": -0.3067,
+          "profitFactor": 0.6168,
+          "maxDrawdownR": 169.8963
+        },
+        "solo": {
+          "n": 2278,
+          "wins": 598,
+          "losses": 1432,
+          "timeouts": 248,
+          "winRate": 0.2625,
+          "avgGrossR": -0.0662,
+          "avgNetR": -0.2268,
+          "expectancyNetR": -0.2268,
+          "profitFactor": 0.6998,
+          "maxDrawdownR": 519.7471
+        }
+      },
+      "withTrend": {
+        "withTrend": {
+          "n": 752,
+          "wins": 188,
+          "losses": 469,
+          "timeouts": 95,
+          "winRate": 0.25,
+          "avgGrossR": -0.0707,
+          "avgNetR": -0.1909,
+          "expectancyNetR": -0.1909,
+          "profitFactor": 0.7344,
+          "maxDrawdownR": 160.4195
+        },
+        "againstOrUnknown": {
+          "n": 2080,
+          "wins": 549,
+          "losses": 1342,
+          "timeouts": 189,
+          "winRate": 0.2639,
+          "avgGrossR": -0.0892,
+          "avgNetR": -0.261,
+          "expectancyNetR": -0.261,
+          "profitFactor": 0.6656,
+          "maxDrawdownR": 544.0236
+        }
+      },
+      "stopBand20x": {
+        "inBand": {
+          "n": 468,
+          "wins": 132,
+          "losses": 323,
+          "timeouts": 13,
+          "winRate": 0.2821,
+          "avgGrossR": -0.1198,
+          "avgNetR": -0.2188,
+          "expectancyNetR": -0.2188,
+          "profitFactor": 0.7133,
+          "maxDrawdownR": 129.745
+        },
+        "outside": {
+          "n": 2364,
+          "wins": 605,
+          "losses": 1488,
+          "timeouts": 271,
+          "winRate": 0.2559,
+          "avgGrossR": -0.0772,
+          "avgNetR": -0.2471,
+          "expectancyNetR": -0.2471,
+          "profitFactor": 0.6767,
+          "maxDrawdownR": 585.932
+        }
+      }
+    },
+    "byTier": {
+      "weak": {
+        "n": 2107,
+        "wins": 558,
+        "losses": 1343,
+        "timeouts": 206,
+        "winRate": 0.2648,
+        "avgGrossR": -0.0741,
+        "avgNetR": -0.2321,
+        "expectancyNetR": -0.2321,
+        "profitFactor": 0.6947,
+        "maxDrawdownR": 489.8611
+      },
+      "fair": {
+        "n": 724,
+        "wins": 179,
+        "losses": 467,
+        "timeouts": 78,
+        "winRate": 0.2472,
+        "avgGrossR": -0.1126,
+        "avgNetR": -0.2711,
+        "expectancyNetR": -0.2711,
+        "profitFactor": 0.6503,
+        "maxDrawdownR": 197.5995
+      },
+      "solid": {
+        "n": 1,
+        "wins": 0,
+        "losses": 1,
+        "timeouts": 0,
+        "winRate": 0,
+        "avgGrossR": -1,
+        "avgNetR": -1.1776,
+        "expectancyNetR": -1.1776,
+        "profitFactor": 0,
+        "maxDrawdownR": 1.1776
+      }
+    },
+    "byQuartile": {
+      "Q1": {
+        "n": 761,
+        "wins": 193,
+        "losses": 493,
+        "timeouts": 75,
+        "winRate": 0.2536,
+        "avgGrossR": -0.1121,
+        "avgNetR": -0.2566,
+        "expectancyNetR": -0.2566,
+        "profitFactor": 0.666,
+        "maxDrawdownR": 200.5425
+      },
+      "Q2": {
+        "n": 702,
+        "wins": 189,
+        "losses": 449,
+        "timeouts": 64,
+        "winRate": 0.2692,
+        "avgGrossR": -0.0661,
+        "avgNetR": -0.2384,
+        "expectancyNetR": -0.2384,
+        "profitFactor": 0.6899,
+        "maxDrawdownR": 169.9483
+      },
+      "Q3": {
+        "n": 691,
+        "wins": 189,
+        "losses": 427,
+        "timeouts": 75,
+        "winRate": 0.2735,
+        "avgGrossR": -0.0303,
+        "avgNetR": -0.1874,
+        "expectancyNetR": -0.1874,
+        "profitFactor": 0.7454,
+        "maxDrawdownR": 146.1858
+      },
+      "Q4": {
+        "n": 678,
+        "wins": 166,
+        "losses": 442,
+        "timeouts": 70,
+        "winRate": 0.2448,
+        "avgGrossR": -0.1269,
+        "avgNetR": -0.2866,
+        "expectancyNetR": -0.2866,
+        "profitFactor": 0.6339,
+        "maxDrawdownR": 195.6582
+      }
+    },
+    "finding": {
+      "headline": "Overall n=2832 WR 26.0% avgNetR −0.24R PF 0.68. Prefer kinds (n≥50, gross+ and net+) are +0.10R. Dropping toxic kinds (n≥50, gross≤−0.05) takes the rest to −0.015R. Solidity / conviction / cluster do not forecast wins.",
+      "actions": [
+        "Prefer AVWAP-RECLAIM, CUSUM-SHIFT, DONCHIAN-DRIVE, MMOVE, NR7-BREAK — stamp replay-survivor and rank first among tickets.",
+        "Demote n≥50 gross-negative kinds from formation (PIN-REJECT, THREE-BAR, RSI-DIVERGE, ENGULF-LEVEL, HTF-PULLBACK, UTAD, EQH-SWEEP, SPRING, SWEEP-RECLAIM, EQL-SWEEP, BOS-RETEST, AVWAP-DEFEND, TREND-RECLAIM, FVG-FILL) unless the live forward ledger reads has paid.",
+        "Do not suppress ORB (n=206, gross +0.056, net −0.011 — near even).",
+        "Do not treat higher solidity as a win forecast (fair worse than weak; Q4 worst).",
+        "Conviction cohort worse than legacy — do not boost conviction for MOST PROBABLE.",
+        "Never invent tickets for quiet contracts."
+      ]
+    },
+    "prefer": [
+      {
+        "kind": "AVWAP-RECLAIM",
+        "n": 71,
+        "wins": 30,
+        "losses": 34,
+        "timeouts": 7,
+        "winRate": 0.4225,
+        "avgGrossR": 0.4421,
+        "avgNetR": 0.364,
+        "expectancyNetR": 0.364,
+        "profitFactor": 1.6965,
+        "maxDrawdownR": 8.3463
+      },
+      {
+        "kind": "CUSUM-SHIFT",
+        "n": 77,
+        "wins": 23,
+        "losses": 35,
+        "timeouts": 19,
+        "winRate": 0.2987,
+        "avgGrossR": 0.1687,
+        "avgNetR": 0.0854,
+        "expectancyNetR": 0.0854,
+        "profitFactor": 1.1557,
+        "maxDrawdownR": 14.4247
+      },
+      {
+        "kind": "DONCHIAN-DRIVE",
+        "n": 53,
+        "wins": 20,
+        "losses": 33,
+        "timeouts": 0,
+        "winRate": 0.3774,
+        "avgGrossR": 0.1321,
+        "avgNetR": 0.0717,
+        "expectancyNetR": 0.0717,
+        "profitFactor": 1.1085,
+        "maxDrawdownR": 15.2264
+      },
+      {
+        "kind": "MMOVE",
+        "n": 188,
+        "wins": 59,
+        "losses": 103,
+        "timeouts": 26,
+        "winRate": 0.3138,
+        "avgGrossR": 0.134,
+        "avgNetR": 0.0578,
+        "expectancyNetR": 0.0578,
+        "profitFactor": 1.095,
+        "maxDrawdownR": 21.3255
+      },
+      {
+        "kind": "NR7-BREAK",
+        "n": 150,
+        "wins": 48,
+        "losses": 79,
+        "timeouts": 23,
+        "winRate": 0.32,
+        "avgGrossR": 0.1356,
+        "avgNetR": 0.0522,
+        "expectancyNetR": 0.0522,
+        "profitFactor": 1.0853,
+        "maxDrawdownR": 17.0446
+      }
+    ],
+    "demote": [
+      {
+        "kind": "FVG-FILL",
+        "n": 184,
+        "wins": 44,
+        "losses": 114,
+        "timeouts": 26,
+        "winRate": 0.2391,
+        "avgGrossR": -0.0833,
+        "avgNetR": -0.1902,
+        "expectancyNetR": -0.1902,
+        "profitFactor": 0.7282,
+        "maxDrawdownR": 37.3456
+      },
+      {
+        "kind": "TREND-RECLAIM",
+        "n": 109,
+        "wins": 26,
+        "losses": 73,
+        "timeouts": 10,
+        "winRate": 0.2385,
+        "avgGrossR": -0.1457,
+        "avgNetR": -0.2448,
+        "expectancyNetR": -0.2448,
+        "profitFactor": 0.6767,
+        "maxDrawdownR": 38.1691
+      },
+      {
+        "kind": "AVWAP-DEFEND",
+        "n": 66,
+        "wins": 18,
+        "losses": 48,
+        "timeouts": 0,
+        "winRate": 0.2727,
+        "avgGrossR": -0.1818,
+        "avgNetR": -0.2561,
+        "expectancyNetR": -0.2561,
+        "profitFactor": 0.6727,
+        "maxDrawdownR": 24.2787
+      },
+      {
+        "kind": "BOS-RETEST",
+        "n": 137,
+        "wins": 24,
+        "losses": 89,
+        "timeouts": 24,
+        "winRate": 0.1752,
+        "avgGrossR": -0.2214,
+        "avgNetR": -0.2847,
+        "expectancyNetR": -0.2847,
+        "profitFactor": 0.5994,
+        "maxDrawdownR": 45.187
+      },
+      {
+        "kind": "EQL-SWEEP",
+        "n": 111,
+        "wins": 33,
+        "losses": 77,
+        "timeouts": 1,
+        "winRate": 0.2973,
+        "avgGrossR": -0.0984,
+        "avgNetR": -0.2903,
+        "expectancyNetR": -0.2903,
+        "profitFactor": 0.6471,
+        "maxDrawdownR": 33.1913
+      },
+      {
+        "kind": "SWEEP-RECLAIM",
+        "n": 120,
+        "wins": 28,
+        "losses": 88,
+        "timeouts": 4,
+        "winRate": 0.2333,
+        "avgGrossR": -0.2496,
+        "avgNetR": -0.3085,
+        "expectancyNetR": -0.3085,
+        "profitFactor": 0.6042,
+        "maxDrawdownR": 46.2075
+      },
+      {
+        "kind": "SPRING",
+        "n": 100,
+        "wins": 29,
+        "losses": 70,
+        "timeouts": 1,
+        "winRate": 0.29,
+        "avgGrossR": -0.1184,
+        "avgNetR": -0.319,
+        "expectancyNetR": -0.319,
+        "profitFactor": 0.6257,
+        "maxDrawdownR": 33.3672
+      },
+      {
+        "kind": "EQH-SWEEP",
+        "n": 119,
+        "wins": 34,
+        "losses": 84,
+        "timeouts": 1,
+        "winRate": 0.2857,
+        "avgGrossR": -0.1335,
+        "avgNetR": -0.3604,
+        "expectancyNetR": -0.3604,
+        "profitFactor": 0.5895,
+        "maxDrawdownR": 54.1426
+      },
+      {
+        "kind": "UTAD",
+        "n": 135,
+        "wins": 35,
+        "losses": 100,
+        "timeouts": 0,
+        "winRate": 0.2593,
+        "avgGrossR": -0.2222,
+        "avgNetR": -0.4681,
+        "expectancyNetR": -0.4681,
+        "profitFactor": 0.4881,
+        "maxDrawdownR": 69.0259
+      },
+      {
+        "kind": "HTF-PULLBACK",
+        "n": 55,
+        "wins": 9,
+        "losses": 44,
+        "timeouts": 2,
+        "winRate": 0.1636,
+        "avgGrossR": -0.4433,
+        "avgNetR": -0.5085,
+        "expectancyNetR": -0.5085,
+        "profitFactor": 0.4033,
+        "maxDrawdownR": 27.9673
+      },
+      {
+        "kind": "ENGULF-LEVEL",
+        "n": 55,
+        "wins": 14,
+        "losses": 41,
+        "timeouts": 0,
+        "winRate": 0.2545,
+        "avgGrossR": -0.2364,
+        "avgNetR": -0.6009,
+        "expectancyNetR": -0.6009,
+        "profitFactor": 0.4363,
+        "maxDrawdownR": 33.0473
+      },
+      {
+        "kind": "RSI-DIVERGE",
+        "n": 58,
+        "wins": 14,
+        "losses": 44,
+        "timeouts": 0,
+        "winRate": 0.2414,
+        "avgGrossR": -0.2759,
+        "avgNetR": -0.6224,
+        "expectancyNetR": -0.6224,
+        "profitFactor": 0.3928,
+        "maxDrawdownR": 36.5532
+      },
+      {
+        "kind": "THREE-BAR",
+        "n": 161,
+        "wins": 40,
+        "losses": 121,
+        "timeouts": 0,
+        "winRate": 0.2484,
+        "avgGrossR": -0.2547,
+        "avgNetR": -0.7878,
+        "expectancyNetR": -0.7878,
+        "profitFactor": 0.3139,
+        "maxDrawdownR": 128.6914
+      },
+      {
+        "kind": "PIN-REJECT",
+        "n": 115,
+        "wins": 20,
+        "losses": 95,
+        "timeouts": 0,
+        "winRate": 0.1739,
+        "avgGrossR": -0.4783,
+        "avgNetR": -1.0284,
+        "expectancyNetR": -1.0284,
+        "profitFactor": 0.187,
+        "maxDrawdownR": 120.0958
+      }
+    ],
+    "byMechanic": [
+      {
+        "kind": "AVWAP-RECLAIM",
+        "n": 71,
+        "wins": 30,
+        "losses": 34,
+        "timeouts": 7,
+        "winRate": 0.4225,
+        "avgGrossR": 0.4421,
+        "avgNetR": 0.364,
+        "expectancyNetR": 0.364,
+        "profitFactor": 1.6965,
+        "maxDrawdownR": 8.3463
+      },
+      {
+        "kind": "CUSUM-SHIFT",
+        "n": 77,
+        "wins": 23,
+        "losses": 35,
+        "timeouts": 19,
+        "winRate": 0.2987,
+        "avgGrossR": 0.1687,
+        "avgNetR": 0.0854,
+        "expectancyNetR": 0.0854,
+        "profitFactor": 1.1557,
+        "maxDrawdownR": 14.4247
+      },
+      {
+        "kind": "DONCHIAN-DRIVE",
+        "n": 53,
+        "wins": 20,
+        "losses": 33,
+        "timeouts": 0,
+        "winRate": 0.3774,
+        "avgGrossR": 0.1321,
+        "avgNetR": 0.0717,
+        "expectancyNetR": 0.0717,
+        "profitFactor": 1.1085,
+        "maxDrawdownR": 15.2264
+      },
+      {
+        "kind": "VOL-EXPANSION",
+        "n": 22,
+        "wins": 4,
+        "losses": 8,
+        "timeouts": 10,
+        "winRate": 0.1818,
+        "avgGrossR": 0.0911,
+        "avgNetR": 0.0603,
+        "expectancyNetR": 0.0603,
+        "profitFactor": 1.1389,
+        "maxDrawdownR": 3.4396
+      },
+      {
+        "kind": "MMOVE",
+        "n": 188,
+        "wins": 59,
+        "losses": 103,
+        "timeouts": 26,
+        "winRate": 0.3138,
+        "avgGrossR": 0.134,
+        "avgNetR": 0.0578,
+        "expectancyNetR": 0.0578,
+        "profitFactor": 1.095,
+        "maxDrawdownR": 21.3255
+      },
+      {
+        "kind": "NR7-BREAK",
+        "n": 150,
+        "wins": 48,
+        "losses": 79,
+        "timeouts": 23,
+        "winRate": 0.32,
+        "avgGrossR": 0.1356,
+        "avgNetR": 0.0522,
+        "expectancyNetR": 0.0522,
+        "profitFactor": 1.0853,
+        "maxDrawdownR": 17.0446
+      },
+      {
+        "kind": "ORB",
+        "n": 206,
+        "wins": 50,
+        "losses": 102,
+        "timeouts": 54,
+        "winRate": 0.2427,
+        "avgGrossR": 0.0564,
+        "avgNetR": -0.0114,
+        "expectancyNetR": -0.0114,
+        "profitFactor": 0.9797,
+        "maxDrawdownR": 21.2577
+      },
+      {
+        "kind": "VWAP-REVERT",
+        "n": 336,
+        "wins": 90,
+        "losses": 200,
+        "timeouts": 46,
+        "winRate": 0.2679,
+        "avgGrossR": -0.0051,
+        "avgNetR": -0.0748,
+        "expectancyNetR": -0.0748,
+        "profitFactor": 0.8851,
+        "maxDrawdownR": 36.3387
+      },
+      {
+        "kind": "SQUEEZE-FIRE",
+        "n": 50,
+        "wins": 11,
+        "losses": 29,
+        "timeouts": 10,
+        "winRate": 0.22,
+        "avgGrossR": -0.0398,
+        "avgNetR": -0.0989,
+        "expectancyNetR": -0.0989,
+        "profitFactor": 0.8439,
+        "maxDrawdownR": 12.399
+      },
+      {
+        "kind": "EXHAUST-REVERT",
+        "n": 26,
+        "wins": 3,
+        "losses": 14,
+        "timeouts": 9,
+        "winRate": 0.1154,
+        "avgGrossR": -0.1197,
+        "avgNetR": -0.1683,
+        "expectancyNetR": -0.1683,
+        "profitFactor": 0.7109,
+        "maxDrawdownR": 7.5037
+      },
+      {
+        "kind": "ABSORB",
+        "n": 3,
+        "wins": 1,
+        "losses": 2,
+        "timeouts": 0,
+        "winRate": 0.3333,
+        "avgGrossR": 0,
+        "avgNetR": -0.1824,
+        "expectancyNetR": -0.1824,
+        "profitFactor": 0.7365,
+        "maxDrawdownR": 2.0766
+      },
+      {
+        "kind": "FVG-FILL",
+        "n": 184,
+        "wins": 44,
+        "losses": 114,
+        "timeouts": 26,
+        "winRate": 0.2391,
+        "avgGrossR": -0.0833,
+        "avgNetR": -0.1902,
+        "expectancyNetR": -0.1902,
+        "profitFactor": 0.7282,
+        "maxDrawdownR": 37.3456
+      },
+      {
+        "kind": "PO3",
+        "n": 73,
+        "wins": 22,
+        "losses": 48,
+        "timeouts": 3,
+        "winRate": 0.3014,
+        "avgGrossR": -0.0443,
+        "avgNetR": -0.2229,
+        "expectancyNetR": -0.2229,
+        "profitFactor": 0.7141,
+        "maxDrawdownR": 20.6239
+      },
+      {
+        "kind": "TREND-RECLAIM",
+        "n": 109,
+        "wins": 26,
+        "losses": 73,
+        "timeouts": 10,
+        "winRate": 0.2385,
+        "avgGrossR": -0.1457,
+        "avgNetR": -0.2448,
+        "expectancyNetR": -0.2448,
+        "profitFactor": 0.6767,
+        "maxDrawdownR": 38.1691
+      },
+      {
+        "kind": "AVWAP-DEFEND",
+        "n": 66,
+        "wins": 18,
+        "losses": 48,
+        "timeouts": 0,
+        "winRate": 0.2727,
+        "avgGrossR": -0.1818,
+        "avgNetR": -0.2561,
+        "expectancyNetR": -0.2561,
+        "profitFactor": 0.6727,
+        "maxDrawdownR": 24.2787
+      },
+      {
+        "kind": "BOS-RETEST",
+        "n": 137,
+        "wins": 24,
+        "losses": 89,
+        "timeouts": 24,
+        "winRate": 0.1752,
+        "avgGrossR": -0.2214,
+        "avgNetR": -0.2847,
+        "expectancyNetR": -0.2847,
+        "profitFactor": 0.5994,
+        "maxDrawdownR": 45.187
+      },
+      {
+        "kind": "EQL-SWEEP",
+        "n": 111,
+        "wins": 33,
+        "losses": 77,
+        "timeouts": 1,
+        "winRate": 0.2973,
+        "avgGrossR": -0.0984,
+        "avgNetR": -0.2903,
+        "expectancyNetR": -0.2903,
+        "profitFactor": 0.6471,
+        "maxDrawdownR": 33.1913
+      },
+      {
+        "kind": "SWEEP-RECLAIM",
+        "n": 120,
+        "wins": 28,
+        "losses": 88,
+        "timeouts": 4,
+        "winRate": 0.2333,
+        "avgGrossR": -0.2496,
+        "avgNetR": -0.3085,
+        "expectancyNetR": -0.3085,
+        "profitFactor": 0.6042,
+        "maxDrawdownR": 46.2075
+      },
+      {
+        "kind": "SPRING",
+        "n": 100,
+        "wins": 29,
+        "losses": 70,
+        "timeouts": 1,
+        "winRate": 0.29,
+        "avgGrossR": -0.1184,
+        "avgNetR": -0.319,
+        "expectancyNetR": -0.319,
+        "profitFactor": 0.6257,
+        "maxDrawdownR": 33.3672
+      },
+      {
+        "kind": "EQH-SWEEP",
+        "n": 119,
+        "wins": 34,
+        "losses": 84,
+        "timeouts": 1,
+        "winRate": 0.2857,
+        "avgGrossR": -0.1335,
+        "avgNetR": -0.3604,
+        "expectancyNetR": -0.3604,
+        "profitFactor": 0.5895,
+        "maxDrawdownR": 54.1426
+      },
+      {
+        "kind": "COMPRESSION-BREAK",
+        "n": 16,
+        "wins": 3,
+        "losses": 12,
+        "timeouts": 1,
+        "winRate": 0.1875,
+        "avgGrossR": -0.3126,
+        "avgNetR": -0.3742,
+        "expectancyNetR": -0.3742,
+        "profitFactor": 0.5292,
+        "maxDrawdownR": 6.3642
+      },
+      {
+        "kind": "POC-REVERT",
+        "n": 24,
+        "wins": 2,
+        "losses": 15,
+        "timeouts": 7,
+        "winRate": 0.0833,
+        "avgGrossR": -0.4019,
+        "avgNetR": -0.4322,
+        "expectancyNetR": -0.4322,
+        "profitFactor": 0.4056,
+        "maxDrawdownR": 11.825
+      },
+      {
+        "kind": "UTAD",
+        "n": 135,
+        "wins": 35,
+        "losses": 100,
+        "timeouts": 0,
+        "winRate": 0.2593,
+        "avgGrossR": -0.2222,
+        "avgNetR": -0.4681,
+        "expectancyNetR": -0.4681,
+        "profitFactor": 0.4881,
+        "maxDrawdownR": 69.0259
+      },
+      {
+        "kind": "VALUE",
+        "n": 12,
+        "wins": 3,
+        "losses": 9,
+        "timeouts": 0,
+        "winRate": 0.25,
+        "avgGrossR": -0.25,
+        "avgNetR": -0.4765,
+        "expectancyNetR": -0.4765,
+        "profitFactor": 0.4525,
+        "maxDrawdownR": 7.5126
+      },
+      {
+        "kind": "HTF-PULLBACK",
+        "n": 55,
+        "wins": 9,
+        "losses": 44,
+        "timeouts": 2,
+        "winRate": 0.1636,
+        "avgGrossR": -0.4433,
+        "avgNetR": -0.5085,
+        "expectancyNetR": -0.5085,
+        "profitFactor": 0.4033,
+        "maxDrawdownR": 27.9673
+      },
+      {
+        "kind": "ENGULF-LEVEL",
+        "n": 55,
+        "wins": 14,
+        "losses": 41,
+        "timeouts": 0,
+        "winRate": 0.2545,
+        "avgGrossR": -0.2364,
+        "avgNetR": -0.6009,
+        "expectancyNetR": -0.6009,
+        "profitFactor": 0.4363,
+        "maxDrawdownR": 33.0473
+      },
+      {
+        "kind": "RSI-DIVERGE",
+        "n": 58,
+        "wins": 14,
+        "losses": 44,
+        "timeouts": 0,
+        "winRate": 0.2414,
+        "avgGrossR": -0.2759,
+        "avgNetR": -0.6224,
+        "expectancyNetR": -0.6224,
+        "profitFactor": 0.3928,
+        "maxDrawdownR": 36.5532
+      },
+      {
+        "kind": "THREE-BAR",
+        "n": 161,
+        "wins": 40,
+        "losses": 121,
+        "timeouts": 0,
+        "winRate": 0.2484,
+        "avgGrossR": -0.2547,
+        "avgNetR": -0.7878,
+        "expectancyNetR": -0.7878,
+        "profitFactor": 0.3139,
+        "maxDrawdownR": 128.6914
+      },
+      {
+        "kind": "PIN-REJECT",
+        "n": 115,
+        "wins": 20,
+        "losses": 95,
+        "timeouts": 0,
+        "winRate": 0.1739,
+        "avgGrossR": -0.4783,
+        "avgNetR": -1.0284,
+        "expectancyNetR": -1.0284,
+        "profitFactor": 0.187,
+        "maxDrawdownR": 120.0958
+      }
+    ],
+    "counterfactual": {
+      "preferOnly": {
+        "k": "prefer-only",
+        "n": 539,
+        "winRate": 0.334,
+        "avgGrossR": 0.1798,
+        "avgNetR": 0.1019
+      },
+      "dropToxic": {
+        "k": "kept",
+        "n": 1307,
+        "winRate": 0.2823,
+        "avgGrossR": 0.0634,
+        "avgNetR": -0.0149
+      },
+      "rest": {
+        "k": "rest",
+        "n": 2293,
+        "winRate": 0.2429,
+        "avgGrossR": -0.1463,
+        "avgNetR": -0.3233
+      }
+    }
+  },
+  "omnipresent": {
+    "source": "scripts/backtest-omnipresent-results.json",
+    "runAt": "2026-09-01T04:56:42.383Z",
+    "overall": {
+      "n": 8522,
+      "wins": 2610,
+      "losses": 5589,
+      "timeouts": 323,
+      "winRate": 0.3063,
+      "avgGrossR": -0.0309,
+      "avgNetR": -0.2189,
+      "medianCostR": 0.1197,
+      "profitFactor": 0.7223,
+      "maxDrawdownR": 1868.223
+    },
+    "byKind": {
+      "OP-HIGH-REJECT": {
+        "n": 4204,
+        "wins": 1298,
+        "losses": 2747,
+        "timeouts": 159,
+        "winRate": 0.3088,
+        "avgGrossR": -0.0224,
+        "avgNetR": -0.2182,
+        "medianCostR": 0.1248,
+        "profitFactor": 0.724,
+        "maxDrawdownR": 930.7455
+      },
+      "OP-LOW-REJECT": {
+        "n": 4318,
+        "wins": 1312,
+        "losses": 2842,
+        "timeouts": 164,
+        "winRate": 0.3038,
+        "avgGrossR": -0.0391,
+        "avgNetR": -0.2196,
+        "medianCostR": 0.1153,
+        "profitFactor": 0.7207,
+        "maxDrawdownR": 968.8443
+      }
+    },
+    "gatedCohort": {
+      "bothHardGates": {
+        "n": 164,
+        "wins": 44,
+        "losses": 114,
+        "timeouts": 6,
+        "winRate": 0.2683,
+        "avgGrossR": -0.1473,
+        "avgNetR": -0.2736,
+        "medianCostR": 0.0903,
+        "profitFactor": 0.6538,
+        "maxDrawdownR": 48.5423
+      },
+      "rest": {
+        "n": 8358,
+        "wins": 2566,
+        "losses": 5475,
+        "timeouts": 317,
+        "winRate": 0.307,
+        "avgGrossR": -0.0286,
+        "avgNetR": -0.2178,
+        "medianCostR": 0.1207,
+        "profitFactor": 0.7237,
+        "maxDrawdownR": 1825.4991
+      }
+    },
+    "byKindGated": {
+      "OP-HIGH-REJECT": {
+        "n": 73,
+        "wins": 17,
+        "losses": 53,
+        "timeouts": 3,
+        "winRate": 0.2329,
+        "avgGrossR": -0.2571,
+        "avgNetR": -0.3944,
+        "medianCostR": 0.0982,
+        "profitFactor": 0.5301,
+        "maxDrawdownR": 33.1705
+      },
+      "OP-LOW-REJECT": {
+        "n": 91,
+        "wins": 27,
+        "losses": 61,
+        "timeouts": 3,
+        "winRate": 0.2967,
+        "avgGrossR": -0.0592,
+        "avgNetR": -0.1768,
+        "medianCostR": 0.0871,
+        "profitFactor": 0.7647,
+        "maxDrawdownR": 23.8593
+      }
+    },
+    "finding": {
+      "headline": "Both fade kinds are net-negative at scale (−0.22R). The 3+ source AND 2+ exhaustion gated cohort is worse (−0.27R). Tight stops (costR≥0.20) lose −0.49R. Gold perps (XAU/XAG) are the worst symbols.",
+      "actions": [
+        "Do not claim replay quality / 20X replay-evidence — both kinds fail gross+ at n≥50.",
+        "Do not loosen 3+ confluence or 2+ exhaustion — gated is worse, not better.",
+        "Tighten: hard-veto costR > 0.20 (fee-toxic squeezed stops).",
+        "Tighten: stand XAU/XAG/PAXG aside from TICKET on this fade desk.",
+        "Among remaining tickets, prefer lower costR / wider stop. ARMED stays WATCH and nearer.",
+        "Do not invent a third mechanic."
+      ]
+    },
+    "slices": {
+      "byConfluence": [
+        {
+          "k": "c7",
+          "n": 3,
+          "winRate": 0.6667,
+          "avgGrossR": 1,
+          "avgNetR": 0.9438
+        },
+        {
+          "k": "c6",
+          "n": 13,
+          "winRate": 0.3846,
+          "avgGrossR": 0.3172,
+          "avgNetR": 0.2371
+        },
+        {
+          "k": "c5",
+          "n": 130,
+          "winRate": 0.2846,
+          "avgGrossR": -0.0208,
+          "avgNetR": -0.1017
+        },
+        {
+          "k": "c3",
+          "n": 2068,
+          "winRate": 0.3254,
+          "avgGrossR": 0.035,
+          "avgNetR": -0.1219
+        },
+        {
+          "k": "c4",
+          "n": 591,
+          "winRate": 0.286,
+          "avgGrossR": -0.0244,
+          "avgNetR": -0.1414
+        },
+        {
+          "k": "c2",
+          "n": 5717,
+          "winRate": 0.3016,
+          "avgGrossR": -0.057,
+          "avgNetR": -0.2663
+        }
+      ],
+      "byEvidenceN": [
+        {
+          "k": "e3",
+          "n": 29,
+          "winRate": 0.4138,
+          "avgGrossR": 0.2414,
+          "avgNetR": 0.0592
+        },
+        {
+          "k": "e1",
+          "n": 2668,
+          "winRate": 0.2972,
+          "avgGrossR": -0.0349,
+          "avgNetR": -0.2101
+        },
+        {
+          "k": "e0",
+          "n": 5254,
+          "winRate": 0.3127,
+          "avgGrossR": -0.0225,
+          "avgNetR": -0.2214
+        },
+        {
+          "k": "e2",
+          "n": 570,
+          "winRate": 0.2842,
+          "avgGrossR": -0.1016,
+          "avgNetR": -0.2489
+        },
+        {
+          "k": "e4",
+          "n": 1,
+          "winRate": 0,
+          "avgGrossR": -1,
+          "avgNetR": -1.4081
+        }
+      ],
+      "byGates": [
+        {
+          "k": "C3/e-",
+          "n": 2641,
+          "winRate": 0.3188,
+          "avgGrossR": 0.0328,
+          "avgNetR": -0.1128
+        },
+        {
+          "k": "c-/E2",
+          "n": 436,
+          "winRate": 0.2982,
+          "avgGrossR": -0.0637,
+          "avgNetR": -0.2217
+        },
+        {
+          "k": "c-/e-",
+          "n": 5281,
+          "winRate": 0.3018,
+          "avgGrossR": -0.0564,
+          "avgNetR": -0.27
+        },
+        {
+          "k": "C3/E2",
+          "n": 164,
+          "winRate": 0.2683,
+          "avgGrossR": -0.1473,
+          "avgNetR": -0.2736
+        }
+      ],
+      "byDistAtr": [
+        {
+          "k": "d>=0.6",
+          "n": 2073,
+          "winRate": 0.2943,
+          "avgGrossR": 0.039,
+          "avgNetR": -0.0718
+        },
+        {
+          "k": "d<0.6",
+          "n": 1503,
+          "winRate": 0.3034,
+          "avgGrossR": -0.0623,
+          "avgNetR": -0.2227
+        },
+        {
+          "k": "d<0.15",
+          "n": 2780,
+          "winRate": 0.3248,
+          "avgGrossR": -0.0154,
+          "avgNetR": -0.2726
+        },
+        {
+          "k": "d<0.35",
+          "n": 2166,
+          "winRate": 0.2959,
+          "avgGrossR": -0.0959,
+          "avgNetR": -0.2881
+        }
+      ],
+      "byCostR": [
+        {
+          "k": "cost<0.08",
+          "n": 2878,
+          "winRate": 0.2978,
+          "avgGrossR": -0.0007,
+          "avgNetR": -0.0465
+        },
+        {
+          "k": "cost<0.20",
+          "n": 1725,
+          "winRate": 0.3281,
+          "avgGrossR": 0.0055,
+          "avgNetR": -0.149
+        },
+        {
+          "k": "cost<0.12",
+          "n": 1387,
+          "winRate": 0.2942,
+          "avgGrossR": -0.0678,
+          "avgNetR": -0.1665
+        },
+        {
+          "k": "cost>=0.20",
+          "n": 2532,
+          "winRate": 0.3077,
+          "avgGrossR": -0.0698,
+          "avgNetR": -0.4911
+        }
+      ],
+      "goldVsRest": [
+        {
+          "k": "crypto",
+          "n": 7958,
+          "winRate": 0.3066,
+          "avgGrossR": -0.0312,
+          "avgNetR": -0.1965
+        },
+        {
+          "k": "gold",
+          "n": 564,
+          "winRate": 0.3014,
+          "avgGrossR": -0.0261,
+          "avgNetR": -0.5345
+        }
+      ]
+    }
+  }
+}
