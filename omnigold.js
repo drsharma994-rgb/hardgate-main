@@ -4246,6 +4246,9 @@ terse status, and never launches a first-time scan on a global refresh.
     if (atMarket){ score += 10; parts.push('at-market'); }
     else if (plan.fillDemote){ score -= 10; parts.push('thin-fill'); }
     if (hgOgIsSurvivor(kind)){ score += 8; parts.push('replay-survivor'); }
+    if (hgOgSwingPrefer(kind, extra.horizon || extra.deskHorizon || cfg.label)){
+      score += 8; parts.push('swing-replay-prefer');
+    }
     if (plan.t1Magnet){ score += 6; parts.push('magnet-t1'); }
     if (plan.stopWidened){ score += 3; parts.push('structure-stop'); }
     if (plan.momentumStop === true){ score -= 6; parts.push('vol-stop'); }
@@ -4971,7 +4974,8 @@ terse status, and never launches a first-time scan on a global refresh.
             && String((c && c.dir) || '').toLowerCase() === tapeDir) ? 1 : 0);
     }
     function surv(c){
-      return (c && (c.replaySurvivor || hgOgIsSurvivor(c.kind))) ? 1 : 0;
+      return (c && (c.replaySurvivor || hgOgIsSurvivor(c.kind)
+        || hgOgSwingPrefer(c.kind, c.horizon))) ? 1 : 0;
     }
     return (list || []).slice().sort(function(a, b){
       if (!!a.topPick !== !!b.topPick) return a.topPick ? -1 : 1;
@@ -6590,14 +6594,14 @@ terse status, and never launches a first-time scan on a global refresh.
   var HG_OG_FORM_COST_R_MAX = 0.125;
 
   /* Measured-toxic kind demotion thresholds, applied to the baked per-kind
-     replay rows (n >= 100 so one regime cannot condemn a kind):
+     replay rows (n >= 50 so mid-sample losers cannot hide under n<100):
        grossR <= -0.05          direction measured wrong at scale, costs aside
        venue-adj netR <= -0.5   still toxic after re-pricing fees at the venue
      venue-adjusted netR = avgGrossR - (venueRt / 0.26) * medianCostR:
      the kind's median fee load was measured at the 0.26% PAXG round trip,
      so a venue's fee load is that median scaled by the round-trip ratio;
      gross outcomes are measured facts and are NOT rescaled. */
-  var HG_OG_DEMOTE_MIN_N = 100;
+  var HG_OG_DEMOTE_MIN_N = 50;
   var HG_OG_DEMOTE_GROSS_R = -0.05;
   var HG_OG_DEMOTE_VENUE_NET_R = -0.5;
 
@@ -6621,8 +6625,12 @@ terse status, and never launches a first-time scan on a global refresh.
      evidence claim and only measured evidence can make it).
      Else { kind, n, winRate, grossR, paxgNetR, medCostR, venueNetR, venue,
             reasons[] }. */
-  function hgOgKindDemotion(kind, venueCost){
+  function hgOgKindDemotion(kind, venueCost, horizon){
     try{
+      /* SWING-only prefer list paid net+ on 4h. Pooled rows can still be
+         gross-negative because SCALP dragged them — do not stand the
+         SWING desk aside for a 1h loss. */
+      if (hgOgSwingPrefer(kind, horizon)) return null;
       var ev = hgOgReplayEvidence(kind);
       if (!ev || !isFinite(fin(ev.avgGrossR))) return null;   /* kinds only carry gross */
       if (!(fin(ev.n) >= HG_OG_DEMOTE_MIN_N)) return null;
@@ -6656,7 +6664,10 @@ terse status, and never launches a first-time scan on a global refresh.
      desk-stance banner quotes. Counted by running the SAME verdict function
      the formation gate runs (hgOgKindDemotion) over the baked table, never
      a hand-kept list, so a re-bake or threshold change moves it. At today's
-     bake: 12 at XM (~0.020% RT), 22 at PAXG (0.26% RT). */
+     bake: 18 at XM (~0.020% RT), 33 at PAXG (0.26% RT) after n-floor 100→50
+     (hg-v589: mid-sample losers such as PDL-SWEEP / ER-IGNITION / ASIA-BREAK
+     can no longer hide under n<100). SWING-prefer kinds are exempt on the
+     4h desk when that horizon paid. */
   function hgOgDemotedKindCount(venueCost){
     var vc = (venueCost && isFinite(fin(venueCost.rtCostPct))) ? venueCost : hgOgVenueCost();
     var kinds = HG_OG_REPLAY_EVIDENCE.kinds, k, n = 0;
@@ -6723,6 +6734,19 @@ terse status, and never launches a first-time scan on a global refresh.
     __ogSurvivors = out;
     return out.slice();
   }
+  /* SWING-horizon kinds that paid net+ in the 7,270-trade replay with
+     n>=15. Ranking / score only — never invents a ticket. SCALP must not
+     inherit this list (same names lose on 1h). */
+  var HG_OG_SWING_PREFER = [
+    'BOS-RETEST', 'INSIDE-BREAK', 'RIBBON-PULLBACK',
+    'STRUCT-BOS', 'NR7-BREAK', 'AVWAP-RECLAIM'
+  ];
+  function hgOgSwingPrefer(kind, horizon){
+    if (String(horizon || '').toUpperCase() !== 'SWING') return false;
+    if (kind === null || kind === undefined) return false;
+    var key = String(kind).toUpperCase().replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
+    return HG_OG_SWING_PREFER.indexOf(key) >= 0;
+  }
   function hgOgIsSurvivor(kind){
     if (kind === null || kind === undefined) return false;
     var key = String(kind).toUpperCase().replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
@@ -6761,7 +6785,7 @@ terse status, and never launches a first-time scan on a global refresh.
         + 'R of 1R before the idea speaks (' + vc.venue + ' '
         + fin(vc.rtCostPct).toFixed(3) + '% RT vs ' + drag.stopPct.toFixed(2) + '% stop)');
     }
-    var dem = kind ? hgOgKindDemotion(kind, vc) : null;
+    var dem = kind ? hgOgKindDemotion(kind, vc, setup.horizon) : null;
     if (dem){
       var paid = hgOgForwardPaid(kind, setup.horizon);
       if (paid){
@@ -10619,6 +10643,8 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgForwardPaid = hgOgForwardPaid;
     window.hgOgSurvivorKinds = hgOgSurvivorKinds;
     window.hgOgIsSurvivor = hgOgIsSurvivor;
+    window.hgOgSwingPrefer = hgOgSwingPrefer;
+    window.HG_OG_SWING_PREFER = HG_OG_SWING_PREFER;
     window.hgOgFormation = hgOgFormation;
     window.hgOgDemotedSectionHtml = hgOgDemotedSectionHtml;
     window.HG_OG_FORM_COST_R_MAX = HG_OG_FORM_COST_R_MAX;

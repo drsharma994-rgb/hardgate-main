@@ -1,0 +1,700 @@
+{
+  "source": "scripts/backtest-omnigold-results.json",
+  "generated": "2026-09-03T14:17:11.360Z",
+  "window": {
+    "from": "2026-03-15T23:00:00.000Z",
+    "to": "2026-08-29T13:00:00.000Z"
+  },
+  "settled": 7270,
+  "limitations": [
+    "SAME-BAR FILL->TARGET OPTIMISM (inherited from lib ogXmBotWalkTrade semantics): 641 of 2294 wins settle on the fill bar itself; 522 of them are LIMIT/STOP fills where OHLC cannot prove the entry touch preceded the target print — all resolved pro-strategy at full R. Overall win rate 31.6% -> 26.3% if ambiguous same-bar wins are excluded; absolute win rates carry that much upward slack. Stop+target both-touch bars ARE counted as losses (708 here).",
+    "OUTCOME SEMANTICS ARE LIB SEMANTICS, NOT DESK-PANEL SEMANTICS: resolution follows lib/omnigold-xm-bot-backtest.mjs (fill required, stop-first, unfilled != loss) plus a 96-bar MTM timeout and per-(kind,dir) dedup. The desk panel hgOgUpdateSetupStatus (omnigold.js:4694) is LOOSER (profit/stopped on a live-price cross, no fill requirement), so these numbers are not comparable to the desk panel readout.",
+    "PORTFOLIO-LEVEL STATS ARE NOT ATTAINABLE: profitFactor / sumR_net / maxDD_R pool every signal at 1R with unlimited simultaneous positions (dozens of concurrent trades across ~55 kinds x 2 dirs, no capital constraint). No account can hold that book. Read per-trade expectancy (avgR_net) and the per-kind rows; ignore the pooled equity-curve numbers.",
+    "CONFLUENCE SCORE IS TWO INCOMMENSURABLE REGIMES (scan 0-100 multi-factor, hard-capped ~78 offline; engine grade scalars 85/75/70/60/45/35). Tier and quartile tables are therefore reported per source and must not be pooled. SCAN win% by ascending tier: SCAN WEAK 34% (n=330) -> SCAN FAIR 31% (n=5422) -> SCAN STRONG 30% (n=1241) — NOT monotonic in score on this sample. SCAN win% by ascending quartile: Q1(<=53) 35% (n=2704) -> Q2(<=58) 23% (n=1110) -> Q3(<=67) 31% (n=1938) -> Q4(>67) 30% (n=1241) — NOT monotonic in score on this sample. Do not read these tables as \"higher confluence predicts wins\" unless the within-regime gradient supports it."
+  ],
+  "cohorts": {
+    "overall": {
+      "n": 7270,
+      "unfilled": 1453,
+      "winRate": 0.316,
+      "avgR_gross": 0.001,
+      "avgR_net": -1.346,
+      "expectancy_net": -1.346,
+      "profitFactor": 0.21,
+      "sumR_net": -9783.39,
+      "maxDD_R": 9783.39
+    },
+    "bySource": {
+      "ENGINE:SCALP": {
+        "n": 250,
+        "unfilled": 10,
+        "winRate": 0.452,
+        "avgR_gross": 0.123,
+        "avgR_net": -2.603,
+        "expectancy_net": -2.603,
+        "profitFactor": 0.07,
+        "sumR_net": -650.83,
+        "maxDD_R": 650.83
+      },
+      "ENGINE:SWING": {
+        "n": 27,
+        "unfilled": 3,
+        "winRate": 0.37,
+        "avgR_gross": 0.195,
+        "avgR_net": -0.056,
+        "expectancy_net": -0.056,
+        "profitFactor": 0.9,
+        "sumR_net": -1.52,
+        "maxDD_R": 5.18
+      },
+      "SCAN:SCALP": {
+        "n": 5466,
+        "unfilled": 1117,
+        "winRate": 0.304,
+        "avgR_gross": -0.012,
+        "avgR_net": -1.524,
+        "expectancy_net": -1.524,
+        "profitFactor": 0.17,
+        "sumR_net": -8332.48,
+        "maxDD_R": 8336.19
+      },
+      "SCAN:SWING": {
+        "n": 1527,
+        "unfilled": 323,
+        "winRate": 0.335,
+        "avgR_gross": 0.024,
+        "avgR_net": -0.523,
+        "expectancy_net": -0.523,
+        "profitFactor": 0.5,
+        "sumR_net": -798.57,
+        "maxDD_R": 803.97
+      }
+    },
+    "computed": {
+      "ENGINE:SCALP": {
+        "n": 250,
+        "winRate": 0.452,
+        "avgGross": 0.123,
+        "avgNet": -2.603
+      },
+      "ENGINE:SWING": {
+        "n": 27,
+        "winRate": 0.37,
+        "avgGross": 0.195,
+        "avgNet": -0.056
+      },
+      "SCAN:SCALP": {
+        "n": 5466,
+        "winRate": 0.304,
+        "avgGross": -0.012,
+        "avgNet": -1.524
+      },
+      "SCAN:SWING": {
+        "n": 1527,
+        "winRate": 0.335,
+        "avgGross": 0.024,
+        "avgNet": -0.523
+      }
+    }
+  },
+  "finding": {
+    "headline": "After 0.26% PAXG round-trip fees, no large cohort is net-positive. ENGINE:SWING is nearest breakeven (−0.056R, PF 0.90). ENGINE:SCALP wins more often (45%) but loses −2.60R/trade because stops are fee-toxic. SCAN:SWING (−0.52R) beats SCAN:SCALP (−1.52R).",
+    "actions": [
+      "GOLD SCALP: suppress OPENING RANGE (n=69, net −1.80R) — largest remaining ENGINE scalp book that was only demoted.",
+      "OMNIGOLD: drop kind-demotion floor from n=100 to n=50 so PDL-SWEEP, ER-IGNITION, ASIA-BREAK, NY-OPEN-DRIVE, VWAP-BAND, VWAP-REVERT and other mid-sample losers cannot form.",
+      "GOLD SWING: keep prefer on 4H sweep / weekly (the only net+ engine rows). Do not invent tickets for quiet contracts.",
+      "Never loosen G1–G7. Never flip dir. Demote/suppress only."
+    ]
+  },
+  "scalpWorst": [
+    {
+      "kind": "PD-EQUILIBRIUM",
+      "n": 253,
+      "winRate": 0.316,
+      "avgGross": -0.051,
+      "avgNet": -5.889
+    },
+    {
+      "kind": "FVG FILL",
+      "n": 27,
+      "winRate": 0.407,
+      "avgGross": -0.003,
+      "avgNet": -4.853
+    },
+    {
+      "kind": "THREE-BAR",
+      "n": 227,
+      "winRate": 0.352,
+      "avgGross": 0.057,
+      "avgNet": -4.788
+    },
+    {
+      "kind": "EMA RIBBON PULLBACK",
+      "n": 21,
+      "winRate": 0.524,
+      "avgGross": 0.297,
+      "avgNet": -4.74
+    },
+    {
+      "kind": "PIN-REJECT",
+      "n": 157,
+      "winRate": 0.357,
+      "avgGross": 0.07,
+      "avgNet": -4.632
+    },
+    {
+      "kind": "ENGULF-LEVEL",
+      "n": 98,
+      "winRate": 0.378,
+      "avgGross": 0.133,
+      "avgNet": -3.698
+    },
+    {
+      "kind": "RSI-DIVERGE",
+      "n": 40,
+      "winRate": 0.35,
+      "avgGross": 0.066,
+      "avgNet": -3.142
+    },
+    {
+      "kind": "ABSORB",
+      "n": 14,
+      "winRate": 0.357,
+      "avgGross": 0.071,
+      "avgNet": -3.079
+    },
+    {
+      "kind": "HVN / VOLUME NODE RETEST",
+      "n": 65,
+      "winRate": 0.385,
+      "avgGross": -0.038,
+      "avgNet": -3.071
+    },
+    {
+      "kind": "OB-RETEST",
+      "n": 13,
+      "winRate": 0.308,
+      "avgGross": -0.077,
+      "avgNet": -2.338
+    },
+    {
+      "kind": "KZ-JUDAS",
+      "n": 158,
+      "winRate": 0.297,
+      "avgGross": -0.108,
+      "avgNet": -2.206
+    },
+    {
+      "kind": "SWEEP-V2",
+      "n": 155,
+      "winRate": 0.316,
+      "avgGross": -0.052,
+      "avgNet": -2.159
+    },
+    {
+      "kind": "SESSION VWAP BOUNCE / REJECTION",
+      "n": 6,
+      "winRate": 0.5,
+      "avgGross": 0.239,
+      "avgNet": -2.092
+    },
+    {
+      "kind": "OPENING RANGE BREAKOUT",
+      "n": 69,
+      "winRate": 0.493,
+      "avgGross": 0.22,
+      "avgNet": -1.798
+    },
+    {
+      "kind": "SPRING",
+      "n": 106,
+      "winRate": 0.283,
+      "avgGross": -0.151,
+      "avgNet": -1.769
+    }
+  ],
+  "scalpBest": [
+    {
+      "kind": "CUSUM-SHIFT",
+      "n": 40,
+      "winRate": 0.325,
+      "avgGross": 0.176,
+      "avgNet": -0.133
+    },
+    {
+      "kind": "STRUCT-BOS",
+      "n": 83,
+      "winRate": 0.277,
+      "avgGross": 0.114,
+      "avgNet": -0.26
+    },
+    {
+      "kind": "VOL-EXPANSION",
+      "n": 26,
+      "winRate": 0.192,
+      "avgGross": -0.016,
+      "avgNet": -0.268
+    },
+    {
+      "kind": "MMOVE",
+      "n": 162,
+      "winRate": 0.296,
+      "avgGross": 0.086,
+      "avgNet": -0.285
+    },
+    {
+      "kind": "SQUEEZE-FIRE",
+      "n": 41,
+      "winRate": 0.293,
+      "avgGross": 0.121,
+      "avgNet": -0.364
+    },
+    {
+      "kind": "PWL-SWEEP",
+      "n": 12,
+      "winRate": 0.417,
+      "avgGross": 0.403,
+      "avgNet": -0.382
+    },
+    {
+      "kind": "ORB",
+      "n": 108,
+      "winRate": 0.259,
+      "avgGross": -0.011,
+      "avgNet": -0.423
+    },
+    {
+      "kind": "NY-OPEN-DRIVE",
+      "n": 62,
+      "winRate": 0.177,
+      "avgGross": -0.106,
+      "avgNet": -0.433
+    }
+  ],
+  "swingWorst": [
+    {
+      "kind": "THREE-BAR",
+      "n": 56,
+      "winRate": 0.286,
+      "avgGross": -0.143,
+      "avgNet": -1.919
+    },
+    {
+      "kind": "PD-EQUILIBRIUM",
+      "n": 54,
+      "winRate": 0.204,
+      "avgGross": -0.389,
+      "avgNet": -1.888
+    },
+    {
+      "kind": "ABSORB",
+      "n": 3,
+      "winRate": 0,
+      "avgGross": -1,
+      "avgNet": -1.801
+    },
+    {
+      "kind": "PIN-REJECT",
+      "n": 38,
+      "winRate": 0.368,
+      "avgGross": 0.105,
+      "avgNet": -1.484
+    },
+    {
+      "kind": "ENGULF-LEVEL",
+      "n": 17,
+      "winRate": 0.294,
+      "avgGross": -0.118,
+      "avgNet": -1.351
+    },
+    {
+      "kind": "PDL-SWEEP",
+      "n": 24,
+      "winRate": 0.167,
+      "avgGross": -0.5,
+      "avgNet": -1.241
+    },
+    {
+      "kind": "RSI-DIVERGE",
+      "n": 11,
+      "winRate": 0.364,
+      "avgGross": 0.091,
+      "avgNet": -1.186
+    },
+    {
+      "kind": "ADR-FADE",
+      "n": 74,
+      "winRate": 0.27,
+      "avgGross": -0.189,
+      "avgNet": -1.148
+    },
+    {
+      "kind": "VWAP-BAND",
+      "n": 21,
+      "winRate": 0.143,
+      "avgGross": -0.571,
+      "avgNet": -1.009
+    },
+    {
+      "kind": "SWEEP-V2",
+      "n": 50,
+      "winRate": 0.34,
+      "avgGross": 0.02,
+      "avgNet": -0.763
+    },
+    {
+      "kind": "ER-IGNITION",
+      "n": 17,
+      "winRate": 0.235,
+      "avgGross": -0.294,
+      "avgNet": -0.712
+    },
+    {
+      "kind": "PIVOT-REJECT",
+      "n": 61,
+      "winRate": 0.328,
+      "avgGross": -0.016,
+      "avgNet": -0.684
+    }
+  ],
+  "swingBest": [
+    {
+      "kind": "OB-RETEST",
+      "n": 3,
+      "winRate": 0.667,
+      "avgGross": 1,
+      "avgNet": 0.808
+    },
+    {
+      "kind": "BOS-RETEST",
+      "n": 15,
+      "winRate": 0.6,
+      "avgGross": 0.874,
+      "avgNet": 0.716
+    },
+    {
+      "kind": "WEEKLY RANGE BREAKOUT",
+      "n": 6,
+      "winRate": 0.5,
+      "avgGross": 0.54,
+      "avgNet": 0.341
+    },
+    {
+      "kind": "INSIDE-BREAK",
+      "n": 25,
+      "winRate": 0.48,
+      "avgGross": 0.514,
+      "avgNet": 0.337
+    },
+    {
+      "kind": "RIBBON-PULLBACK",
+      "n": 21,
+      "winRate": 0.381,
+      "avgGross": 0.435,
+      "avgNet": 0.269
+    },
+    {
+      "kind": "STRUCT-BOS",
+      "n": 21,
+      "winRate": 0.429,
+      "avgGross": 0.367,
+      "avgNet": 0.218
+    },
+    {
+      "kind": "NR7-BREAK",
+      "n": 28,
+      "winRate": 0.429,
+      "avgGross": 0.388,
+      "avgNet": 0.212
+    },
+    {
+      "kind": "AVWAP-RECLAIM",
+      "n": 26,
+      "winRate": 0.462,
+      "avgGross": 0.385,
+      "avgNet": 0.195
+    }
+  ],
+  "newlyDemotableAtN50": [
+    {
+      "kind": "PD-EQUILIBRIUM",
+      "n": 253,
+      "winRate": 0.316,
+      "avgGross": -0.051,
+      "avgNet": -5.889
+    },
+    {
+      "kind": "THREE-BAR",
+      "n": 227,
+      "winRate": 0.352,
+      "avgGross": 0.057,
+      "avgNet": -4.788
+    },
+    {
+      "kind": "PIN-REJECT",
+      "n": 157,
+      "winRate": 0.357,
+      "avgGross": 0.07,
+      "avgNet": -4.632
+    },
+    {
+      "kind": "ENGULF-LEVEL",
+      "n": 98,
+      "winRate": 0.378,
+      "avgGross": 0.133,
+      "avgNet": -3.698
+    },
+    {
+      "kind": "HVN / VOLUME NODE RETEST",
+      "n": 65,
+      "winRate": 0.385,
+      "avgGross": -0.038,
+      "avgNet": -3.071
+    },
+    {
+      "kind": "KZ-JUDAS",
+      "n": 158,
+      "winRate": 0.297,
+      "avgGross": -0.108,
+      "avgNet": -2.206
+    },
+    {
+      "kind": "SWEEP-V2",
+      "n": 155,
+      "winRate": 0.316,
+      "avgGross": -0.052,
+      "avgNet": -2.159
+    },
+    {
+      "kind": "THREE-BAR",
+      "n": 56,
+      "winRate": 0.286,
+      "avgGross": -0.143,
+      "avgNet": -1.919
+    },
+    {
+      "kind": "PD-EQUILIBRIUM",
+      "n": 54,
+      "winRate": 0.204,
+      "avgGross": -0.389,
+      "avgNet": -1.888
+    },
+    {
+      "kind": "OPENING RANGE BREAKOUT",
+      "n": 69,
+      "winRate": 0.493,
+      "avgGross": 0.22,
+      "avgNet": -1.798
+    },
+    {
+      "kind": "SPRING",
+      "n": 106,
+      "winRate": 0.283,
+      "avgGross": -0.151,
+      "avgNet": -1.769
+    },
+    {
+      "kind": "PDL-SWEEP",
+      "n": 52,
+      "winRate": 0.212,
+      "avgGross": -0.365,
+      "avgNet": -1.748
+    },
+    {
+      "kind": "UTAD",
+      "n": 89,
+      "winRate": 0.315,
+      "avgGross": -0.056,
+      "avgNet": -1.743
+    },
+    {
+      "kind": "ER-IGNITION",
+      "n": 63,
+      "winRate": 0.254,
+      "avgGross": -0.238,
+      "avgNet": -1.575
+    },
+    {
+      "kind": "ADR-FADE",
+      "n": 168,
+      "winRate": 0.369,
+      "avgGross": 0.107,
+      "avgNet": -1.533
+    },
+    {
+      "kind": "PDH-SWEEP",
+      "n": 54,
+      "winRate": 0.315,
+      "avgGross": -0.035,
+      "avgNet": -1.455
+    },
+    {
+      "kind": "PIVOT-REJECT",
+      "n": 116,
+      "winRate": 0.284,
+      "avgGross": -0.136,
+      "avgNet": -1.379
+    },
+    {
+      "kind": "VWAP-BAND",
+      "n": 50,
+      "winRate": 0.3,
+      "avgGross": -0.1,
+      "avgNet": -1.304
+    },
+    {
+      "kind": "EMA50-HOLD",
+      "n": 94,
+      "winRate": 0.266,
+      "avgGross": -0.121,
+      "avgNet": -1.284
+    },
+    {
+      "kind": "CCI-EXTREME",
+      "n": 301,
+      "winRate": 0.309,
+      "avgGross": -0.05,
+      "avgNet": -1.242
+    },
+    {
+      "kind": "ADR-FADE",
+      "n": 74,
+      "winRate": 0.27,
+      "avgGross": -0.189,
+      "avgNet": -1.148
+    },
+    {
+      "kind": "PO3",
+      "n": 124,
+      "winRate": 0.298,
+      "avgGross": -0.053,
+      "avgNet": -0.932
+    },
+    {
+      "kind": "ROUND-MAGNET",
+      "n": 559,
+      "winRate": 0.377,
+      "avgGross": 0.144,
+      "avgNet": -0.897
+    },
+    {
+      "kind": "FVG-HVN",
+      "n": 119,
+      "winRate": 0.218,
+      "avgGross": -0.219,
+      "avgNet": -0.858
+    },
+    {
+      "kind": "STOCHRSI-TURN",
+      "n": 380,
+      "winRate": 0.334,
+      "avgGross": 0.048,
+      "avgNet": -0.855
+    },
+    {
+      "kind": "MFI-SQUAT",
+      "n": 88,
+      "winRate": 0.273,
+      "avgGross": -0.032,
+      "avgNet": -0.786
+    },
+    {
+      "kind": "SWEEP-V2",
+      "n": 50,
+      "winRate": 0.34,
+      "avgGross": 0.02,
+      "avgNet": -0.763
+    },
+    {
+      "kind": "FIB-618",
+      "n": 93,
+      "winRate": 0.269,
+      "avgGross": -0.124,
+      "avgNet": -0.746
+    },
+    {
+      "kind": "WEEKLY-OPEN",
+      "n": 86,
+      "winRate": 0.36,
+      "avgGross": 0.109,
+      "avgNet": -0.712
+    },
+    {
+      "kind": "NR7-BREAK",
+      "n": 115,
+      "winRate": 0.217,
+      "avgGross": -0.222,
+      "avgNet": -0.71
+    },
+    {
+      "kind": "PIVOT-REJECT",
+      "n": 61,
+      "winRate": 0.328,
+      "avgGross": -0.016,
+      "avgNet": -0.684
+    },
+    {
+      "kind": "RIBBON-PULLBACK",
+      "n": 81,
+      "winRate": 0.21,
+      "avgGross": -0.229,
+      "avgNet": -0.633
+    },
+    {
+      "kind": "INSIDE-BREAK",
+      "n": 101,
+      "winRate": 0.257,
+      "avgGross": -0.072,
+      "avgNet": -0.575
+    },
+    {
+      "kind": "WEEKLY-OPEN",
+      "n": 64,
+      "winRate": 0.344,
+      "avgGross": 0.031,
+      "avgNet": -0.555
+    },
+    {
+      "kind": "LONDON-FIX",
+      "n": 92,
+      "winRate": 0.228,
+      "avgGross": -0.055,
+      "avgNet": -0.549
+    },
+    {
+      "kind": "AVWAP-RECLAIM",
+      "n": 91,
+      "winRate": 0.308,
+      "avgGross": -0.007,
+      "avgNet": -0.531
+    },
+    {
+      "kind": "BOS-RETEST",
+      "n": 72,
+      "winRate": 0.264,
+      "avgGross": -0.047,
+      "avgNet": -0.511
+    },
+    {
+      "kind": "ICHI-KUMO",
+      "n": 85,
+      "winRate": 0.235,
+      "avgGross": -0.101,
+      "avgNet": -0.497
+    },
+    {
+      "kind": "ASIA-BREAK",
+      "n": 91,
+      "winRate": 0.22,
+      "avgGross": -0.068,
+      "avgNet": -0.463
+    },
+    {
+      "kind": "NY-OPEN-DRIVE",
+      "n": 62,
+      "winRate": 0.177,
+      "avgGross": -0.106,
+      "avgNet": -0.433
+    }
+  ]
+}

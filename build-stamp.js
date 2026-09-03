@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v588',
-  pack: 'Catalog winning combination on every contract',
-  built: '2026-09-03T09:40:00Z',
-  note: 'OMNIROUTE + OMNIPRESENT score the Master Catalog LONG vs SHORT on every scanned contract. The combination with the most agreeing families / indicators / strategies wins and completes the setup only from an existing legal ticket. Tie or watch-only winner stands aside. Never invents dir or levels.'
+  version: 'hg-v589',
+  pack: 'Gold replay: suppress toxic SCALP, prefer paying SWING',
+  built: '2026-09-03T14:20:00Z',
+  note: '7,270-trade OMNIGOLD/SCALP/SWING replay. SCALP ORB suppressed (n=69 net −1.80R). Kind-demotion floor n=100→50. SWING prefer BOS-RETEST / INSIDE-BREAK / RIBBON-PULLBACK / STRUCT-BOS / NR7-BREAK / AVWAP-RECLAIM. Never invents dir or levels.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
