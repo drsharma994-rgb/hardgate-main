@@ -644,6 +644,18 @@
     cand.catalogExcludedN = feed.excludedN;
     cand.catalogFamilyVotes = feed.familyVotes;
     cand.catalogFrames = feed.frames;
+    try{
+      var sideDir = String(prevDir || extra.dir || extra.side || '').toLowerCase();
+      var thisTally = hgCryptoCatalogTally(feed, sideDir === 'short' ? 'short' : 'long');
+      var otherFeed = hgCryptoCatalogFeed(extra.rows || [], Object.assign({}, feedOpts, {
+        dir: sideDir === 'short' ? 'long' : 'short',
+        side: sideDir === 'short' ? 'long' : 'short'
+      }));
+      cand.catalogSides = hgCryptoCatalogScoreSides(null, sideDir === 'short'
+        ? { shortFeed: feed, longFeed: otherFeed }
+        : { longFeed: feed, shortFeed: otherFeed });
+      void thisTally;
+    }catch(eSides){ cand.catalogSides = cand.catalogSides || null; }
     if (isBlockVerdict(verdict)){
       cand.demoted = true;
       cand.catalogExclude = true;
@@ -778,6 +790,7 @@
       catalogExclude: !!c.catalogExclude,
       catalogFamilyVotes: c.catalogFamilyVotes || (c.catalogFeed && c.catalogFeed.familyVotes) || null,
       catalogFeed: c.catalogFeed || null,
+      catalogSides: c.catalogSides || null,
       consensus: c.consensus || null
     };
   }
@@ -803,10 +816,90 @@
     return hits;
   }
 
+  function catIsStrat(item){
+    if (!item) return false;
+    if (String(item.family || '') === 'Strategy') return true;
+    var id = String(item.id || item.equiv || '');
+    return /^S\d|^C\d|^CASCADE|^BTC-|^LIQ-|^FUND-|^RSI-/.test(id);
+  }
+
+  function hgCryptoCatalogTally(feed, dir){
+    var out = { dir: dir || '', nFam: 0, nInd: 0, nStrat: 0, n: 0, families: [] };
+    var seen = {}, fv, k, used, i, item, fam;
+    fv = (feed && feed.familyVotes) || {};
+    for (k in fv){
+      if (!Object.prototype.hasOwnProperty.call(fv, k)) continue;
+      if (fv[k] !== 'agree') continue;
+      fam = String(k || '').trim();
+      if (!fam || seen[fam]) continue;
+      seen[fam] = 1;
+      out.families.push(fam);
+      out.nFam++;
+    }
+    used = (feed && feed.used) || [];
+    for (i = 0; i < used.length; i++){
+      item = used[i];
+      if (!item || item.align !== 'agree') continue;
+      if (catIsStrat(item)) out.nStrat++;
+      else out.nInd++;
+      fam = String(item.family || '').trim();
+      if (fam && !seen[fam] && (item.class === 'CORE' || item.verdict === 'CORE')){
+        seen[fam] = 1;
+        out.families.push(fam);
+        out.nFam++;
+      }
+    }
+    out.n = out.nFam * 1000 + out.nInd * 10 + out.nStrat;
+    return out;
+  }
+
+  /* Score LONG vs SHORT on one contract from the Master Catalog.
+     One vote per family. Never invents dir. Winner = more agreeing
+     families, then indicators, then strategies. Tie = no side. */
+  function hgCryptoCatalogScoreSides(rows, extra){
+    extra = extra || {};
+    var longFeed = extra.longFeed || null;
+    var shortFeed = extra.shortFeed || null;
+    try{
+      if (!longFeed) longFeed = hgCryptoCatalogFeed(rows || extra.rows || [], Object.assign({}, extra, { dir: 'long', side: 'long' }));
+    }catch(eL){ longFeed = longFeed || { used: [], familyVotes: {} }; }
+    try{
+      if (!shortFeed) shortFeed = hgCryptoCatalogFeed(rows || extra.rows || [], Object.assign({}, extra, { dir: 'short', side: 'short' }));
+    }catch(eS){ shortFeed = shortFeed || { used: [], familyVotes: {} }; }
+    var longT = extra.long || hgCryptoCatalogTally(longFeed, 'long');
+    var shortT = extra.short || hgCryptoCatalogTally(shortFeed, 'short');
+    var winner = '';
+    if (longT.n > shortT.n) winner = 'long';
+    else if (shortT.n > longT.n) winner = 'short';
+    return {
+      long: longT, short: shortT, winner: winner,
+      tie: !winner, margin: Math.abs((longT.n || 0) - (shortT.n || 0)),
+      longFeed: longFeed, shortFeed: shortFeed
+    };
+  }
+
+  function uniSidesOf(n){
+    if (n && n.catalogSides && typeof n.catalogSides === 'object') return n.catalogSides;
+    var here = hgCryptoCatalogTally(n && n.catalogFeed, n && n.dir);
+    if (n && n.catalogFamilyVotes && !here.nFam){
+      here = hgCryptoCatalogTally({ familyVotes: n.catalogFamilyVotes, used: (n.catalogFeed && n.catalogFeed.used) || [] }, n.dir);
+    }
+    var empty = { nFam: 0, nInd: 0, nStrat: 0, n: 0, families: [] };
+    var longT = (n && n.dir === 'short') ? empty : here;
+    var shortT = (n && n.dir === 'short') ? here : empty;
+    if (n && n.dir === 'short') shortT.dir = 'short';
+    else if (longT) longT.dir = 'long';
+    var winner = '';
+    if (longT.n > shortT.n) winner = 'long';
+    else if (shortT.n > longT.n) winner = 'short';
+    return { long: longT, short: shortT, winner: winner, tie: !winner, margin: Math.abs(longT.n - shortT.n) };
+  }
+
   /**
-   * Combine Master Catalog strategies + indicators onto one existing ticket.
-   * Never invents dir or levels. Confirmed = ticket + ≥2 CORE families +
-   * sides OK + not excluded + tape-aligned. One vote per family.
+   * Every contract is scored LONG vs SHORT from the Master Catalog.
+   * The combination with the most agreeing families / indicators /
+   * strategies wins. A complete setup is printed only when that winner
+   * already has a legal ticket. Never invents dir or levels.
    */
   function hgCryptoUniformCompose(cands, opts){
     opts = opts || {};
@@ -820,36 +913,58 @@
       ok: false, confirmed: false, desk: desk,
       tape: tape ? tape.toUpperCase() : '', setup: null,
       families: [], indicators: [], strategies: [],
-      catalog: feed, why: 'no qualifying combined setup'
+      tally: null, catalog: feed, why: 'no qualifying combined setup'
     };
     try{
       if (!Array.isArray(cands) || !cands.length){
         out.why = 'no engine candidates — stand aside';
         return out;
       }
-      var best = null, bestHits = [], bestScore = -1, i, n, hits, score;
+      var voteBest = null, voteScore = -1, voteSides = null, tieSides = null;
+      var i, n, hits, score, sides, win, winT;
       for (i = 0; i < cands.length; i++){
         n = uniNormCand(cands[i]);
         if (!n || n.dropped) continue;
         if (n.catalogExclude) continue;
-        if (n.demoted && !n.ticket) continue;
-        if (!n.ticket) continue;
-        if (!uniSidesOk(n)) continue;
-        if (tape && n.dir !== tape) continue;
-        hits = uniFamilyHits(n, n.catalogFeed || feed);
-        score = hits.length * 1000 + (n.ticket ? 10 : 0);
-        if (score > bestScore){
-          bestScore = score;
-          best = n;
-          bestHits = hits;
+        sides = uniSidesOf(n);
+        if (sides && sides.tie && !tieSides) tieSides = sides;
+        win = sides && sides.winner;
+        if (!win || sides.tie) continue;
+        if (n.dir && n.dir !== win) continue;
+        if (tape && win !== tape) continue;
+        winT = win === 'short' ? sides.short : sides.long;
+        score = (winT && winT.n) || 0;
+        if (score > voteScore){
+          voteScore = score;
+          voteBest = n;
+          voteSides = sides;
         }
       }
-      if (!best){
+      out.tally = voteSides || tieSides || null;
+      if (!voteBest){
+        if (tieSides && tieSides.tie){
+          out.why = 'LONG and SHORT combinations tie — stand aside';
+          return out;
+        }
         out.why = tape
-          ? ('no tape-aligned ticket on ' + desk + ' — stand aside')
-          : ('no legal ticket on ' + desk + ' — stand aside');
+          ? ('no tape-aligned winning combination on ' + desk + ' — stand aside')
+          : ('no winning combination on ' + desk + ' — stand aside');
         return out;
       }
+      hits = uniFamilyHits(voteBest, voteBest.catalogFeed || feed);
+      if (!voteBest.ticket || !uniSidesOk(voteBest) || (voteBest.demoted && !voteBest.ticket)){
+        out.families = hits;
+        out.why = (voteBest.sym ? (voteBest.sym + ' ') : '')
+          + String(voteSides.winner || '').toUpperCase()
+          + ' wins the combination ('
+          + ((voteSides.winner === 'short' ? voteSides.short : voteSides.long) || {}).nFam + ' families · '
+          + ((voteSides.winner === 'short' ? voteSides.short : voteSides.long) || {}).nInd + ' indicators · '
+          + ((voteSides.winner === 'short' ? voteSides.short : voteSides.long) || {}).nStrat + ' strategies)'
+          + ' — no legal ticket, stand aside';
+        return out;
+      }
+      var best = voteBest;
+      var bestHits = hits;
       out.setup = {
         dir: best.dir, entry: best.entry, stop: best.stop, t1: best.t1, t2: best.t2,
         kind: best.kind, strategy: best.strategy, stratKey: best.stratKey,
@@ -863,8 +978,12 @@
         out.strategies.push(best.strategy);
       out.ok = true;
       out.confirmed = !!(bestHits.length >= 2 && best.ticket && !best.catalogExclude);
+      var winLbl = out.tally && out.tally.winner ? String(out.tally.winner).toUpperCase() : '';
+      var winN = out.tally ? (out.tally.winner === 'short' ? out.tally.short : out.tally.long) : null;
       out.why = out.confirmed
-        ? (bestHits.length + ' CORE families agree · one vote each · levels from the ticket')
+        ? ('winning combination ' + (best.sym ? best.sym + ' ' : '') + winLbl
+          + ' · ' + (winN ? (winN.nFam + ' families · ' + winN.nInd + ' indicators · ' + winN.nStrat + ' strategies') : (bestHits.length + ' CORE families'))
+          + ' · levels from the ticket')
         : (bestHits.length < 2
             ? 'fewer than 2 CORE families agree — not a confirmed combined setup'
             : 'ticket present but not confirmed (exclude / families)');
@@ -892,10 +1011,24 @@
         + '</div>';
       h += '<div class="dim" style="margin-top:4px;font-size:12px;line-height:1.45">'
         + 'All strategies + indicators fed on <b>OMNIROUTE</b> and <b>OMNIPRESENT</b> '
-        + '(Master Catalog · one vote per family). Same card on both desks. Not a win probability.';
+        + 'score every contract both ways. The winning combination completes the setup. '
+        + 'One vote per family. Same card on both desks. Not a win probability.';
       if (uni.desk) h += ' · ' + desk;
       if (uni.tape) h += ' · tape ' + uniEsc(uni.tape);
       h += '</div>';
+      var ty = uni.tally || null;
+      var tLong = ty && ty.long ? ty.long : null;
+      var tShort = ty && ty.short ? ty.short : null;
+      if (ty){
+        h += '<div style="margin-top:8px;font-size:12px;font-weight:700;letter-spacing:.08em;color:#1D4ED8">WINNING COMBINATION'
+          + (ty.winner ? (' · ' + uniEsc(String(ty.winner).toUpperCase())) : ' · TIE')
+          + '</div>';
+        h += '<div class="dim" style="margin-top:4px;font-size:12px">LONG '
+          + (tLong ? (tLong.nFam + ' families · ' + tLong.nInd + ' indicators · ' + tLong.nStrat + ' strategies') : '0 · 0 · 0')
+          + ' vs SHORT '
+          + (tShort ? (tShort.nFam + ' families · ' + tShort.nInd + ' indicators · ' + tShort.nStrat + ' strategies') : '0 · 0 · 0')
+          + '</div>';
+      }
       if (confirmed && uni.setup){
         var s = uni.setup;
         var dir = String(s.dir || '').toUpperCase();
@@ -912,10 +1045,6 @@
           }
           h += '</div>';
         }
-        h += '<div class="dim" style="margin-top:4px;font-size:12px">'
-          + (uni.indicators ? uni.indicators.length : 0) + ' agreeing CORE families'
-          + (uni.strategies && uni.strategies.length ? (' · ' + uni.strategies.length + ' strategies') : '')
-          + '</div>';
         h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-top:10px">';
         h += '<div style="background:#EFF6FF;border:1px solid #93C5FD;border-radius:8px;padding:8px 10px"><i style="display:block;font-style:normal;font-size:9px;letter-spacing:.16em;font-weight:700">ENTRY</i><b style="display:block;font-size:16px;color:#1D4ED8">'
           + uniEsc(s.entry) + '</b></div>';
@@ -923,6 +1052,10 @@
           + uniEsc(s.stop) + '</b></div>';
         h += '<div style="background:#EFF6FF;border:1px solid #93C5FD;border-radius:8px;padding:8px 10px"><i style="display:block;font-style:normal;font-size:9px;letter-spacing:.16em;font-weight:700">T1</i><b style="display:block;font-size:16px;color:#1D4ED8">'
           + uniEsc(s.t1) + '</b></div>';
+        if (s.t2 != null && s.t2 !== ''){
+          h += '<div style="background:#EFF6FF;border:1px solid #93C5FD;border-radius:8px;padding:8px 10px"><i style="display:block;font-style:normal;font-size:9px;letter-spacing:.16em;font-weight:700">T2</i><b style="display:block;font-size:16px;color:#1D4ED8">'
+            + uniEsc(s.t2) + '</b></div>';
+        }
         h += '</div>';
       } else {
         h += '<div style="margin-top:8px;font-size:13px;font-weight:600">'
@@ -962,6 +1095,8 @@
   W.hgCryptoCatalogKindMap = KIND_MAP;
   W.hgCryptoUniformCompose = hgCryptoUniformCompose;
   W.hgCryptoUniformHtml = hgCryptoUniformHtml;
+  W.hgCryptoCatalogScoreSides = hgCryptoCatalogScoreSides;
+  W.hgCryptoCatalogTally = hgCryptoCatalogTally;
 
   try{
     if (typeof document !== 'undefined'){

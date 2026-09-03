@@ -8031,7 +8031,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       if (few && few.length) for (i = 0; i < few.length; i++) if (few[i]) cands.push(few[i]);
       snapRows = (__omni.snap && __omni.snap.rows) || [];
       for (i = 0; i < snapRows.length; i++){
-        if (snapRows[i] && snapRows[i].grade && snapRows[i].grade.ticket) cands.push(snapRows[i]);
+        if (snapRows[i]) cands.push(snapRows[i]);
       }
       return '<div data-hg-crypto-uniform-desk="1" style="grid-column:1/-1;display:block;width:100%">'
         + htmlFn(compose(cands, { desk: 'OMNIROUTE', tape: tape }))
