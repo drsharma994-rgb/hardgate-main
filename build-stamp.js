@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v590',
-  pack: 'OMNIROUTE+OMNIPRESENT replay apply',
-  built: '2026-09-03T18:30:00Z',
-  note: '2,832-trade OMNIROUTE 1h replay + 8,522-trade OMNIPRESENT fade replay. Demote n≥50 gross≤−0.05 kinds from formation unless the live forward ledger has paid. Prefer AVWAP-RECLAIM / CUSUM-SHIFT / DONCHIAN-DRIVE / MMOVE / NR7-BREAK. OP stands aside costR>0.20 TRIGGERED tickets and gold perps. Never invents dir or levels. Never loosens 3+/2+ or G1–G7.'
+  version: 'hg-v591',
+  pack: 'OMNIGOLD setup activation confirmation',
+  built: '2026-09-03T19:20:00Z',
+  note: 'OMNIGOLD TOP SETUP paints SETUP ACTIVATED / NOT ACTIVATED with a confirmed checklist (scan · ticket · formed · level-fresh · tape). Activation is the same gate-passed formed level-fresh tape-aligned TICKET the ledger already uses. Never invents dir or levels. Never loosens gold tape or G1–G7.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
