@@ -67,6 +67,8 @@ function gbValidPlan(plan, minRr){
   if (!fin(entry) || entry <= 0 || !fin(stop) || !fin(t1)) return false;
   var risk = Math.abs(entry - stop);
   if (!(risk > 0)) return false;
+  if (plan.dir === 'long' && !(stop < entry && t1 > entry)) return false;
+  if (plan.dir === 'short' && !(stop > entry && t1 < entry)) return false;
   /* Derived here, never read from plan.rr1. This gate used to PREFER the
      plan's own rr1, which meant a minimum-R:R floor could be cleared by a
      ratio measured against levels the plan no longer had — the gate testing

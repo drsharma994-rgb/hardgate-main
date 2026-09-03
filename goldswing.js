@@ -232,6 +232,24 @@ async function goldLiveSpotRef(klineHint){
   }catch(e){ return NaN; }
 }
 
+function goldPurgeBadGeometry(store){
+  if (!store || !store.live) return 0;
+  var sidesFn = (typeof W !== 'undefined' && typeof W.hgGoldPlanSidesOk === 'function')
+    ? W.hgGoldPlanSidesOk : null;
+  if (!sidesFn) return 0;
+  var n = 0, id, rec, chk;
+  for (id in store.live){
+    if (!Object.prototype.hasOwnProperty.call(store.live, id)) continue;
+    rec = store.live[id];
+    if (!rec) continue;
+    chk = sidesFn({ dir: rec.dir, entry: rec.entry, stop: rec.stop, t1: rec.t1 });
+    if (!chk || !chk.ok){
+      delete store.live[id];
+      n++;
+    }
+  }
+  return n;
+}
 function goldPurgeStaleConvictions(store, liveSpot){
   if (!store || !store.live || !isFinite(liveSpot) || !(liveSpot > 0)) return 0;
   var n = 0;
@@ -555,6 +573,10 @@ function applyConviction(ranked, venueRows, nowMs){
 function __cardFromLiveRec(rec){
   if (!rec || !rec.id || (rec.dir !== 'long' && rec.dir !== 'short')) return null;
   if (!isFinite(rec.entry) || !isFinite(rec.stop) || !isFinite(rec.t1)) return null;
+  if (typeof W !== 'undefined' && typeof W.hgGoldPlanSidesOk === 'function'){
+    var sides = W.hgGoldPlanSidesOk(rec);
+    if (!sides || !sides.ok) return null;
+  }
   var risk = Math.abs(rec.entry - rec.stop);
   var card = {
     id: rec.id,
@@ -1541,6 +1563,18 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
       if (c.dropped){ out.rejected.push(c); return; }
       if (!seen[c.id]){ seen[c.id] = true; out.push(c); }
     }
+    function bindPart(cand, hit, partLabel){
+      var bindFn = gfn('hgGoldBindEnginePlan');
+      var bound = bindFn ? bindFn(cand, hit, {
+        atr: a4, mark: entry, venue: venue, sym: sym, session: sessionTxt,
+        strategy: SW_NAME[hit.key] || hit.key,
+        stamps: [partLabel]
+      }) : (cand && !cand.dropped ? cand : null);
+      if (!bound) return null;
+      if (!Array.isArray(bound.stamps)) bound.stamps = [];
+      if (bound.stamps.indexOf(partLabel) < 0) bound.stamps.push(partLabel);
+      return bound;
+    }
     function ledger(dir, triggerRead){
       var longEv = [], shortEv = [], j;
       for (j = 0; j < reads.length; j++) (reads[j].side === 'long' ? longEv : shortEv).push(reads[j]);
@@ -1909,34 +1943,8 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
             p4Cand = mkCand(p4hit.key, p4hit.dir, p4Stop, p4Stop, undefined,
               p4hit.why, 'Part4 invalidation — structure break against the setup',
               { side: p4hit.dir, tag: p4hit.key, label: p4hit.why });
-            if (!p4Cand || p4Cand.dropped){
-              /* Soft tally may drop a lone confirmed Part4 hit — mint with
-                 agree=2 so playbook-grade strategies still surface. */
-              p4Cand = {
-                id: p4hit.key + '|' + p4hit.dir + '|' + Math.round(p4Entry),
-                strategy: SW_NAME[p4hit.key] || p4hit.key,
-                stratKey: p4hit.key, dir: p4hit.dir,
-                entry: p4Entry, pxNow: entry, mark: entry, stop: p4Stop,
-                t1: (p4hit.plan && isFinite(p4hit.plan.t1)) ? p4hit.plan.t1 : NaN,
-                t2: (p4hit.plan && isFinite(p4hit.plan.t2)) ? p4hit.plan.t2 : NaN,
-                rr: NaN, grade: 'B', agree: 2, oppose: 0, atr: a4,
-                reads: { long: p4hit.dir === 'long' ? 2 : 0, short: p4hit.dir === 'short' ? 2 : 0 },
-                venue: venue, sym: sym, session: sessionTxt || 'n/a',
-                why: p4hit.why,
-                invalidates: 'close beyond ' + p4Stop.toFixed(2),
-                stamps: ['PART4 ' + String(p4hit.key).toUpperCase()],
-                demoted: false, notes: []
-              };
-            } else {
-              if (isFinite(p4Entry)) p4Cand.entry = p4Entry;
-              if (p4hit.plan){
-                if (isFinite(p4hit.plan.t1)) p4Cand.t1 = p4hit.plan.t1;
-                if (isFinite(p4hit.plan.t2)) p4Cand.t2 = p4hit.plan.t2;
-                if (isFinite(p4hit.plan.stop)) p4Cand.stop = p4hit.plan.stop;
-              }
-              if (!Array.isArray(p4Cand.stamps)) p4Cand.stamps = [];
-              p4Cand.stamps.push('PART4 ' + String(p4hit.key).toUpperCase());
-            }
+            p4Cand = bindPart(p4Cand, p4hit, 'PART4 ' + String(p4hit.key).toUpperCase());
+            if (!p4Cand) continue;
             if (p4FiltCand && p4EngCand.pd) p4FiltCand(p4Cand, p4EngCand.pd);
             push(p4Cand);
           }
@@ -1972,32 +1980,8 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
             p5Cand = mkCand(p5hit.key, p5hit.dir, p5Stop, p5Stop, undefined,
               p5hit.why, 'Part5 invalidation — structure break against the setup',
               { side: p5hit.dir, tag: p5hit.key, label: p5hit.why });
-            if (!p5Cand || p5Cand.dropped){
-              p5Cand = {
-                id: p5hit.key + '|' + p5hit.dir + '|' + Math.round(p5Entry),
-                strategy: SW_NAME[p5hit.key] || p5hit.key,
-                stratKey: p5hit.key, dir: p5hit.dir,
-                entry: p5Entry, pxNow: entry, mark: entry, stop: p5Stop,
-                t1: (p5hit.plan && isFinite(p5hit.plan.t1)) ? p5hit.plan.t1 : NaN,
-                t2: (p5hit.plan && isFinite(p5hit.plan.t2)) ? p5hit.plan.t2 : NaN,
-                rr: NaN, grade: 'B', agree: 2, oppose: 0, atr: a4,
-                reads: { long: p5hit.dir === 'long' ? 2 : 0, short: p5hit.dir === 'short' ? 2 : 0 },
-                venue: venue, sym: sym, session: sessionTxt || 'n/a',
-                why: p5hit.why,
-                invalidates: 'close beyond ' + p5Stop.toFixed(2),
-                stamps: ['PART5 ' + String(p5hit.key).toUpperCase()],
-                demoted: false, notes: []
-              };
-            } else {
-              if (isFinite(p5Entry)) p5Cand.entry = p5Entry;
-              if (p5hit.plan){
-                if (isFinite(p5hit.plan.t1)) p5Cand.t1 = p5hit.plan.t1;
-                if (isFinite(p5hit.plan.t2)) p5Cand.t2 = p5hit.plan.t2;
-                if (isFinite(p5hit.plan.stop)) p5Cand.stop = p5hit.plan.stop;
-              }
-              if (!Array.isArray(p5Cand.stamps)) p5Cand.stamps = [];
-              p5Cand.stamps.push('PART5 ' + String(p5hit.key).toUpperCase());
-            }
+            p5Cand = bindPart(p5Cand, p5hit, 'PART5 ' + String(p5hit.key).toUpperCase());
+            if (!p5Cand) continue;
             if (p5RegFilt && p5EngCand.ker) p5RegFilt(p5Cand, p5EngCand.ker);
             if (p5BiasFilt && p5EngCand.bias) p5BiasFilt(p5Cand, p5EngCand.bias);
             push(p5Cand);
@@ -2036,32 +2020,8 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
             p6Cand = mkCand(p6hit.key, p6hit.dir, p6Stop, p6Stop, undefined,
               p6hit.why, 'Part6 invalidation — structure break against the setup',
               { side: p6hit.dir, tag: p6hit.key, label: p6hit.why });
-            if (!p6Cand || p6Cand.dropped){
-              p6Cand = {
-                id: p6hit.key + '|' + p6hit.dir + '|' + Math.round(p6Entry),
-                strategy: SW_NAME[p6hit.key] || p6hit.key,
-                stratKey: p6hit.key, dir: p6hit.dir,
-                entry: p6Entry, pxNow: entry, mark: entry, stop: p6Stop,
-                t1: (p6hit.plan && isFinite(p6hit.plan.t1)) ? p6hit.plan.t1 : NaN,
-                t2: (p6hit.plan && isFinite(p6hit.plan.t2)) ? p6hit.plan.t2 : NaN,
-                rr: NaN, grade: 'B', agree: 2, oppose: 0, atr: a4,
-                reads: { long: p6hit.dir === 'long' ? 2 : 0, short: p6hit.dir === 'short' ? 2 : 0 },
-                venue: venue, sym: sym, session: sessionTxt || 'n/a',
-                why: p6hit.why,
-                invalidates: 'close beyond ' + p6Stop.toFixed(2),
-                stamps: ['PART6 ' + String(p6hit.key).toUpperCase()],
-                demoted: false, notes: []
-              };
-            } else {
-              if (isFinite(p6Entry)) p6Cand.entry = p6Entry;
-              if (p6hit.plan){
-                if (isFinite(p6hit.plan.t1)) p6Cand.t1 = p6hit.plan.t1;
-                if (isFinite(p6hit.plan.t2)) p6Cand.t2 = p6hit.plan.t2;
-                if (isFinite(p6hit.plan.stop)) p6Cand.stop = p6hit.plan.stop;
-              }
-              if (!Array.isArray(p6Cand.stamps)) p6Cand.stamps = [];
-              p6Cand.stamps.push('PART6 ' + String(p6hit.key).toUpperCase());
-            }
+            p6Cand = bindPart(p6Cand, p6hit, 'PART6 ' + String(p6hit.key).toUpperCase());
+            if (!p6Cand) continue;
             if (p6EvFilt && p6EngCand.eventTpl) p6EvFilt(p6Cand, p6EngCand.eventTpl);
             if (p6CorrFilt && p6EngCand.corr) p6CorrFilt(p6Cand, p6EngCand.corr);
             push(p6Cand);
@@ -2098,32 +2058,8 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
             p7Cand = mkCand(p7hit.key, p7hit.dir, p7Stop, p7Stop, undefined,
               p7hit.why, 'Part7 invalidation — structure break against the setup',
               { side: p7hit.dir, tag: p7hit.key, label: p7hit.why });
-            if (!p7Cand || p7Cand.dropped){
-              p7Cand = {
-                id: p7hit.key + '|' + p7hit.dir + '|' + Math.round(p7Entry),
-                strategy: SW_NAME[p7hit.key] || p7hit.key,
-                stratKey: p7hit.key, dir: p7hit.dir,
-                entry: p7Entry, pxNow: entry, mark: entry, stop: p7Stop,
-                t1: (p7hit.plan && isFinite(p7hit.plan.t1)) ? p7hit.plan.t1 : NaN,
-                t2: (p7hit.plan && isFinite(p7hit.plan.t2)) ? p7hit.plan.t2 : NaN,
-                rr: NaN, grade: 'B', agree: 2, oppose: 0, atr: a4,
-                reads: { long: p7hit.dir === 'long' ? 2 : 0, short: p7hit.dir === 'short' ? 2 : 0 },
-                venue: venue, sym: sym, session: sessionTxt || 'n/a',
-                why: p7hit.why,
-                invalidates: 'close beyond ' + p7Stop.toFixed(2),
-                stamps: ['PART7 ' + String(p7hit.key).toUpperCase()],
-                demoted: false, notes: []
-              };
-            } else {
-              if (isFinite(p7Entry)) p7Cand.entry = p7Entry;
-              if (p7hit.plan){
-                if (isFinite(p7hit.plan.t1)) p7Cand.t1 = p7hit.plan.t1;
-                if (isFinite(p7hit.plan.t2)) p7Cand.t2 = p7hit.plan.t2;
-                if (isFinite(p7hit.plan.stop)) p7Cand.stop = p7hit.plan.stop;
-              }
-              if (!Array.isArray(p7Cand.stamps)) p7Cand.stamps = [];
-              p7Cand.stamps.push('PART7 ' + String(p7hit.key).toUpperCase());
-            }
+            p7Cand = bindPart(p7Cand, p7hit, 'PART7 ' + String(p7hit.key).toUpperCase());
+            if (!p7Cand) continue;
             if (p7EngCand.season && p7EngCand.season.active){
               if (!Array.isArray(p7Cand.stamps)) p7Cand.stamps = [];
               p7Cand.stamps.push('S48 SEASONAL');
@@ -2185,33 +2121,8 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
             p8Cand = mkCand(p8hit.key, p8hit.dir, p8Stop, p8Stop, undefined,
               p8hit.why, 'Part8 invalidation — structure break against the setup',
               { side: p8hit.dir, tag: p8hit.key, label: p8hit.why });
-            if (!p8Cand || p8Cand.dropped){
-              p8Cand = {
-                id: p8hit.key + '|' + p8hit.dir + '|' + Math.round(p8Entry),
-                strategy: SW_NAME[p8hit.key] || p8hit.key,
-                stratKey: p8hit.key, dir: p8hit.dir,
-                entry: p8Entry, pxNow: entry, mark: entry, stop: p8Stop,
-                t1: (p8hit.plan && isFinite(p8hit.plan.t1)) ? p8hit.plan.t1 : NaN,
-                t2: (p8hit.plan && isFinite(p8hit.plan.t2)) ? p8hit.plan.t2 : NaN,
-                rr: NaN, grade: 'B', agree: 2, oppose: 0, atr: a4,
-                reads: { long: p8hit.dir === 'long' ? 2 : 0, short: p8hit.dir === 'short' ? 2 : 0 },
-                venue: venue, sym: sym, session: sessionTxt || 'n/a',
-                why: p8hit.why,
-                invalidates: 'close beyond ' + p8Stop.toFixed(2),
-                stamps: ['PART8 ' + String(p8hit.key).toUpperCase()],
-                demoted: false, notes: []
-              };
-            } else {
-              if (isFinite(p8Entry)) p8Cand.entry = p8Entry;
-              if (p8hit.plan){
-                if (isFinite(p8hit.plan.t1)) p8Cand.t1 = p8hit.plan.t1;
-                if (isFinite(p8hit.plan.t2)) p8Cand.t2 = p8hit.plan.t2;
-                if (isFinite(p8hit.plan.stop)) p8Cand.stop = p8hit.plan.stop;
-                if (p8hit.plan.noT2) p8Cand.t2 = NaN;
-              }
-              if (!Array.isArray(p8Cand.stamps)) p8Cand.stamps = [];
-              p8Cand.stamps.push('PART8 ' + String(p8hit.key).toUpperCase());
-            }
+            p8Cand = bindPart(p8Cand, p8hit, 'PART8 ' + String(p8hit.key).toUpperCase());
+            if (!p8Cand) continue;
             if (p8Vpin) p8Vpin(p8Cand, p8EngCand.vpin);
             if (p8Illiq) p8Illiq(p8Cand, p8EngCand.illiq);
             if (p8Clus) p8Clus(p8Cand, p8EngCand.cluster);
@@ -2277,34 +2188,11 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
             p9Cand = mkCand(p9hit.key, p9hit.dir, p9Stop, p9Stop, undefined,
               p9hit.why, 'Part9 invalidation — structure break against the setup',
               { side: p9hit.dir, tag: p9hit.key, label: p9hit.why });
-            if (!p9Cand || p9Cand.dropped){
-              p9Cand = {
-                id: p9hit.key + '|' + p9hit.dir + '|' + Math.round(p9Entry),
-                strategy: SW_NAME[p9hit.key] || p9hit.key,
-                stratKey: p9hit.key, dir: p9hit.dir,
-                entry: p9Entry, pxNow: entry, mark: entry, stop: p9Stop,
-                t1: (p9hit.plan && isFinite(p9hit.plan.t1)) ? p9hit.plan.t1 : NaN,
-                t2: NaN,
-                rr: NaN, grade: 'B', agree: 2, oppose: 0, atr: a4,
-                reads: { long: p9hit.dir === 'long' ? 2 : 0, short: p9hit.dir === 'short' ? 2 : 0 },
-                venue: venue, sym: sym, session: sessionTxt || 'n/a',
-                why: p9hit.why,
-                invalidates: 'close beyond ' + p9Stop.toFixed(2),
-                stamps: ['PART9 ' + String(p9hit.key).toUpperCase()],
-                demoted: !!(p9hit.plan && p9hit.plan.halfSize), notes: []
-              };
-            } else {
-              if (isFinite(p9Entry)) p9Cand.entry = p9Entry;
-              if (p9hit.plan){
-                if (isFinite(p9hit.plan.t1)) p9Cand.t1 = p9hit.plan.t1;
-                if (isFinite(p9hit.plan.stop)) p9Cand.stop = p9hit.plan.stop;
-                if (p9hit.plan.halfSize){
-                  p9Cand.sizeMult = (isFinite(p9Cand.sizeMult) ? p9Cand.sizeMult : 1) * 0.5;
-                  p9Cand.demoted = true;
-                }
-              }
-              if (!Array.isArray(p9Cand.stamps)) p9Cand.stamps = [];
-              p9Cand.stamps.push('PART9 ' + String(p9hit.key).toUpperCase());
+            p9Cand = bindPart(p9Cand, p9hit, 'PART9 ' + String(p9hit.key).toUpperCase());
+            if (!p9Cand) continue;
+            if (p9hit.plan && p9hit.plan.halfSize){
+              p9Cand.sizeMult = (isFinite(p9Cand.sizeMult) ? p9Cand.sizeMult : 1) * 0.5;
+              p9Cand.demoted = true;
             }
             if (p9Tilt) p9Tilt(p9Cand, p9EngCand.trader);
             if (p9Sprt) p9Sprt(p9Cand, p9EngCand.sprt);
@@ -2517,6 +2405,15 @@ function rankSetups(cands, ctx){
                             dir: c.dir, venue: c.venue || null, sym: c.sym || null,
                             reason: c.reason || 'failed a quality gate' });
         continue;
+      }
+      if (typeof W !== 'undefined' && typeof W.hgGoldPlanSidesOk === 'function'){
+        var sideGate = W.hgGoldPlanSidesOk(c);
+        if (!sideGate.ok){
+          out.rejected.push({ id: c.id || null, strategy: c.strategy || null, stratKey: c.stratKey || null,
+                              dir: c.dir, venue: c.venue || null, sym: c.sym || null,
+                              reason: sideGate.why || 'plan sides invalid' });
+          continue;
+        }
       }
       var parts = [], tally = 0;
       var agree = isFinite(c.agree) ? c.agree : 0;
@@ -3056,8 +2953,10 @@ async function runScan(ui, scanSt){
     }
     var convPre = loadConvictions();
     var purged = goldPurgeStaleConvictions(convPre, liveSpot);
-    if (purged) saveConvictions(convPre);
+    var geoN = goldPurgeBadGeometry(convPre);
+    if (purged || geoN) saveConvictions(convPre);
     if (purged) legs.push('cleared ' + purged + ' stale conviction' + (purged === 1 ? '' : 's') + ' (XAUT / off-spot locks)');
+    if (geoN) legs.push('cleared ' + geoN + ' illegal-geometry conviction' + (geoN === 1 ? '' : 's') + ' (TP1 on the risk side)');
     var rk = rankSetups(cands, ctx);
     var ranked = rk.ranked, best = rk.best;
     for (i = 0; i < (rk.rejected || []).length; i++) rejectedAll.push(rk.rejected[i]);
@@ -3431,6 +3330,8 @@ async function gwWarm(){
 /* ---------------- registration ---------------- */
 W.goldSwingLevels = __swLevels;
 W.goldSwingSetups = goldSwingSetups;
+W.goldPurgeBadGeometry = goldPurgeBadGeometry;
+W.goldSwingCardFromLiveRec = __cardFromLiveRec;
 W.goldswingState = function(){
   try{ return __snap ? __stateView(__snap) : null; }catch(e){ return null; }
 };

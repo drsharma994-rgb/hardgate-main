@@ -107,6 +107,30 @@ console.log('\n== engine + HTML + lockout ==');
     'lockout does not emit live dirs');
 }
 
+console.log('\n== S24 late bounce — measured T1 already traded through ==');
+{
+  /* Three lower lows into an HVN, then a close ABOVE the first-drive high.
+     Pre-fix this minted CONFIRMED LONG with t1 = drive-1 high (below entry). */
+  const t0 = Math.floor(Date.UTC(2024, 5, 1) / 1000);
+  const rows = [];
+  for (let i = 0; i < 70; i++){
+    rows.push({ t: t0 + i * 3600, o: 4330, h: 4345, l: 4318, c: 4332, v: 220 });
+  }
+  rows.push({ t: t0 + 70 * 3600, o: 4335, h: 4355, l: 4330, c: 4340, v: 300 });
+  rows.push({ t: t0 + 71 * 3600, o: 4338, h: 4350, l: 4324, c: 4330, v: 200 });
+  rows.push({ t: t0 + 72 * 3600, o: 4328, h: 4340, l: 4318, c: 4322, v: 90 });
+  rows.push({ t: t0 + 73 * 3600, o: 4400, h: 4435, l: 4320, c: 4422, v: 120 });
+  const d = W.hgGoldPart5ThreeDrive(rows);
+  if (d.ok && d.dir === 'long'){
+    ok(d.grade !== 'confirmed', 'late long is forming, not a ticket (grade=' + d.grade + ')');
+    ok(!isFinite(d.t1) || d.t1 > d.entry, 'S24 never ships T1 on the risk side of entry');
+    ok(/traded through|forming/i.test(d.why + ' ' + d.grade),
+      'why names the spent T1 (' + d.why + ')');
+  } else {
+    ok(true, 'S24 did not fire on the late bounce (standing aside is legal)');
+  }
+}
+
 console.log('\n== sacred: filter cannot invent ENTER ==');
 {
   const rows = flatDays(4, 2290, 2310, 2300);

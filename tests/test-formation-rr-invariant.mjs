@@ -179,6 +179,10 @@ console.log('\n== the min-R:R gates derive rather than trust a stored ratio ==')
   ok(W.gbValidPlan(liar, 2) === false, 'gold: the same plan is rejected by a 2R floor');
   ok(W.gbValidPlan({ entry: 100, stop: 98, t1: 106 }, 2) === true, 'gold: a genuine 3R plan still passes');
   ok(W.blValidPlan({ entry: 100, stop: 98, t1: 106 }, 'swing') === true, 'crypto: a genuine 3R plan still passes');
+  ok(W.gbValidPlan({ dir: 'long', entry: 4422.3, stop: 4319.6, t1: 4382.4 }, 0.3) === false,
+    'gold: LONG with TP1 below entry fails even when abs() R:R clears the floor');
+  ok(W.gbValidPlan({ dir: 'short', entry: 4422.3, stop: 4319.6, t1: 4382.4 }, 0.3) === false,
+    'gold: SHORT with stop below entry fails signed-side check');
 }
 
 console.log('\n== a null level cannot be read as price zero by the gates ==');

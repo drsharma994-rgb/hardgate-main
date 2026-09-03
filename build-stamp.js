@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v580',
-  pack: 'Delta abort — timeout honesty + last-good universe',
-  built: '2026-09-02T23:20:00Z',
-  note: 'Delta tickers retry abort/timeout (20s, 3 tries). Chromium "aborted without reason" maps to timeout >Nms. Last-good Delta rows reused when the live leg dies. MARKET PICTURE reads CoinDCX/xuCandles/Binance when Delta 4H misses — unread, never an invented lean.'
+  version: 'hg-v581',
+  pack: 'Gold swing TP1 sides — no LONG with target below entry',
+  built: '2026-09-03T03:10:00Z',
+  note: 'S24 measured T1 already traded through becomes forming, not a ticket. Engine plans bind only when stop/T1 sit on the correct side of entry. Conviction restore and rank reject the v580 GOLD SWING paste (LONG TP1 between stop and entry).'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

@@ -716,7 +716,7 @@ console.log('== 9) conviction lock lifecycle ==');
   ls.removeItem('hgGoldswingConviction');
   ls.setItem('hgGoldswingConviction', JSON.stringify({ v: 1, live: {
     'pullback|long|7777': { id: 'pullback|long|7777', dir: 'long', strategy: '4H TREND PULLBACK (EMA50/200)',
-                            entry: 99999, stop: 1, t1: 99999, t2: 99999, t3: 99999,
+                            entry: 2400, stop: 1, t1: 99999, t2: 99999, t3: 99999,
                             venue: 'BINANCE XAUUSDT', sym: 'XAUUSDT', issuedAt: Date.now() - 4*24*3600*1000, tally: 3 } }, history: [] }));
   await tab.refresh();
   assert(!!loadConvictionStore(ls).live['pullback|long|7777'], 'structure 4 days old is still inside the 5-day TTL');
@@ -999,6 +999,32 @@ function fmtLike14(n, d){ return Number(n).toLocaleString('en-US', { maximumFrac
 
   Date.now = realDateNow;
   cleanup();
+}
+
+console.log('== 16) wrong-side TP1 cannot lock or lead ==');
+{
+  const W = loadEnv(true);
+  const src = fs.readFileSync(root + 'goldswing.js', 'utf8');
+  assert(typeof W.goldPurgeBadGeometry === 'function', 'goldPurgeBadGeometry export');
+  assert(typeof W.goldSwingCardFromLiveRec === 'function', 'goldSwingCardFromLiveRec export');
+  assert(!/p5Cand\.t1\s*=\s*p5hit\.plan\.t1/.test(src),
+    'Part5 no longer blindly overwrites house T1 with engine T1');
+  assert(/hgGoldBindEnginePlan/.test(src), 'Part4–9 bind through hgGoldBindEnginePlan');
+  const store = {
+    live: {
+      'BINANCE XAUUSDT|p5drive|long|4422': {
+        id: 'p5drive|long|4422', dir: 'long', strategy: 'S24 THREE-DRIVE EXHAUSTION',
+        entry: 4422.3, stop: 4319.6, t1: 4382.4, t2: 4699.9, t3: 4866.5,
+        venue: 'BINANCE XAUUSDT', sym: 'XAUUSDT', issuedAt: MAR_NOW, grade: 'C', agree: 2
+      }
+    },
+    history: []
+  };
+  assert(W.goldSwingCardFromLiveRec(store.live['BINANCE XAUUSDT|p5drive|long|4422']) == null,
+    'locked LONG with TP1 below entry does not restore as a card');
+  const n = W.goldPurgeBadGeometry(store);
+  assert(n === 1 && !store.live['BINANCE XAUUSDT|p5drive|long|4422'],
+    'purge deletes the locked wrong-side S24 conviction');
 }
 
 console.log('\n' + pass + ' assertions passed' + (fail ? ', ' + fail + ' FAILED' : ''));

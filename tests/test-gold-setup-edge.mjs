@@ -30,6 +30,8 @@ ok(Array.isArray(edgeJson.omnigoldPrefer) && edgeJson.omnigoldPrefer.length >= 5
 const W = loadGoldind();
 ok(typeof W.hgGoldSetupEdgeApply === 'function', 'hgGoldSetupEdgeApply export');
 ok(typeof W.hgGoldPlanSidesOk === 'function', 'hgGoldPlanSidesOk export');
+ok(typeof W.hgGoldTakeEnginePlan === 'function', 'hgGoldTakeEnginePlan export');
+ok(typeof W.hgGoldBindEnginePlan === 'function', 'hgGoldBindEnginePlan export');
 ok(W.HG_GOLD_SETUP_EDGE && W.HG_GOLD_SETUP_EDGE.scalp.fvg.action === 'suppress', 'HG_GOLD_SETUP_EDGE table');
 
 /* Plan sides: SHORT stop below entry is illegal. */
@@ -74,6 +76,39 @@ ok(W.HG_GOLD_SETUP_EDGE && W.HG_GOLD_SETUP_EDGE.scalp.fvg.action === 'suppress',
   ok(c.edgeBoost >= 2, 'wkbreak → weekly prefer');
 }
 
+/* v581 — production GOLD SWING paste: LONG S24 TP1 sat BETWEEN stop and entry.
+   abs() printed 0.4R. House T1 must survive; rank must reject the bad card. */
+{
+  const house = { dir: 'long', entry: 4422.3, stop: 4319.6, t1: 4576.4, t2: 4699.9,
+    stratKey: 'p5drive', strategy: 'S24 THREE-DRIVE EXHAUSTION', grade: 'C', agree: 2 };
+  const engine = { entry: 4422.3, stop: 4319.6, t1: 4382.4, t2: 4699.9 };
+  ok(W.hgGoldPlanSidesOk({ dir: 'long', entry: 4422.3, stop: 4319.6, t1: 4382.4 }).ok === false,
+    'user ticket: LONG TP1 below entry is illegal');
+  ok(W.hgGoldTakeEnginePlan(house, engine) === false, 'takeEnginePlan refuses wrong-side T1');
+  ok(house.t1 === 4576.4, 'house T1 kept when engine T1 is on the risk side');
+  const r = W.goldRankSetups([{
+    id: 'p5drive|long|4422', dir: 'long', entry: 4422.3, stop: 4319.6, t1: 4382.4,
+    stratKey: 'p5drive', strategy: 'S24 THREE-DRIVE EXHAUSTION', grade: 'C',
+    agree: 4, oppose: 0, atr: 33
+  }], {});
+  ok(!r.best, 'wrong-side T1 cannot be MOST PROBABLE');
+  ok((r.rejected || []).some(x => /TP1|sides|ABOVE/i.test(String(x.reason || ''))),
+    'ranker names the side fault (' + JSON.stringify((r.rejected || [])[0]) + ')');
+
+  const goodHouse = { dir: 'long', entry: 4422.3, stop: 4319.6, t1: 4576.4, t2: 4699.9,
+    stratKey: 'p5drive', strategy: 'S24' };
+  const bound = W.hgGoldBindEnginePlan(goodHouse, {
+    key: 'p5drive', dir: 'long', level: 4422.3, why: 'S24',
+    plan: engine
+  }, { atr: 33, mark: 4422.3, venue: 'BINANCE XAUUSDT', sym: 'XAUUSDT' });
+  ok(bound && bound.t1 === 4576.4, 'bind keeps house T1 when engine T1 is illegal');
+  const resurrect = W.hgGoldBindEnginePlan({ dropped: true }, {
+    key: 'p5drive', dir: 'long', level: 4422.3, why: 'S24',
+    plan: engine
+  }, { atr: 33, mark: 4422.3, strategy: 'S24 THREE-DRIVE EXHAUSTION' });
+  ok(resurrect == null, 'bind does not resurrect a fallback card with TP1 below entry');
+}
+
 /* Demoted never gets prefer boost in goldRankSetups */
 {
   const dem = { id: 'd1', dir: 'long', entry: 2650, stop: 2640, t1: 2670, stratKey: 'openrange',
@@ -105,7 +140,7 @@ ok(W.HG_GOLD_SETUP_EDGE && W.HG_GOLD_SETUP_EDGE.scalp.fvg.action === 'suppress',
   ok(stamp.indexOf("version: '" + HG_VER + "'") >= 0 || stamp.indexOf('version: "' + HG_VER + '"') >= 0,
     'build-stamp readable (' + HG_VER + ')');
   ok(swCacheOk(sw), 'sw.js HG_CACHE matches build-stamp');
-  ok(swCacheOk(fs.readFileSync(root + 'sw.js', 'utf8')), 'stamp is hg-v577 for this ship');
+  ok(swCacheOk(fs.readFileSync(root + 'sw.js', 'utf8')), 'sw.js HG_CACHE matches build-stamp');
 }
 
 console.log('\nPASS ' + pass + ' assertions — gold setup edge');

@@ -1190,6 +1190,69 @@ function hgGoldPlanSidesOk(cand){
   }catch(e){ out.ok = false; out.why = 'plan-sides check error'; return out; }
 }
 
+/** Copy engine entry/stop/T1 onto a house card only when the bundle stays legal.
+ *  Wrong-side T1 (LONG TP1 below entry) is refused — house levels stay. */
+function hgGoldTakeEnginePlan(cand, plan){
+  if (!cand || !plan) return false;
+  var trial = {
+    dir: cand.dir,
+    entry: isFinite(+plan.entry) ? +plan.entry : cand.entry,
+    stop: isFinite(+plan.stop) ? +plan.stop : cand.stop,
+    t1: isFinite(+plan.t1) ? +plan.t1 : cand.t1
+  };
+  var sides = hgGoldPlanSidesOk(trial);
+  if (!sides.ok) return false;
+  if (isFinite(+plan.entry)) cand.entry = +plan.entry;
+  if (isFinite(+plan.stop)) cand.stop = +plan.stop;
+  if (isFinite(+plan.t1)) cand.t1 = +plan.t1;
+  if (isFinite(+plan.t2)){
+    var t2 = +plan.t2;
+    var t2ok = (cand.dir === 'long') ? (t2 > cand.entry) : (t2 < cand.entry);
+    if (t2ok) cand.t2 = t2;
+  }
+  return true;
+}
+
+/** Bind a Part4–9 engine hit onto a house card, or mint a fallback only when
+ *  sides are legal. Never resurrects a ticket with TP1 on the risk side. */
+function hgGoldBindEnginePlan(cand, hit, ctx){
+  ctx = ctx || {};
+  var a = isFinite(+ctx.atr) ? +ctx.atr : NaN;
+  var mark = isFinite(+ctx.mark) ? +ctx.mark : NaN;
+  if (!hit || (hit.dir !== 'long' && hit.dir !== 'short')) return null;
+  var entryPx = isFinite(hit.level) ? +hit.level
+    : (hit.plan && isFinite(hit.plan.entry) ? +hit.plan.entry : NaN);
+  var stopPx = (hit.plan && isFinite(hit.plan.stop)) ? +hit.plan.stop
+    : (hit.dir === 'long' ? entryPx - 1.5 * a : entryPx + 1.5 * a);
+  if (cand && !cand.dropped){
+    if (isFinite(entryPx)){
+      var trialE = { dir: cand.dir, entry: entryPx, stop: cand.stop, t1: cand.t1 };
+      if (hgGoldPlanSidesOk(trialE).ok) cand.entry = entryPx;
+    }
+    if (hit.plan) hgGoldTakeEnginePlan(cand, hit.plan);
+    if (hit.plan && hit.plan.noT2) cand.t2 = NaN;
+    return hgGoldPlanSidesOk(cand).ok ? cand : null;
+  }
+  if (!isFinite(entryPx) || !isFinite(stopPx)) return null;
+  var fb = {
+    id: (hit.key || 'eng') + '|' + hit.dir + '|' + Math.round(entryPx),
+    strategy: ctx.strategy || hit.key,
+    stratKey: hit.key, dir: hit.dir,
+    entry: entryPx, pxNow: mark, mark: mark, stop: stopPx,
+    t1: (hit.plan && isFinite(hit.plan.t1)) ? +hit.plan.t1 : NaN,
+    t2: (hit.plan && isFinite(hit.plan.t2)) ? +hit.plan.t2 : NaN,
+    rr: NaN, grade: 'B', agree: 2, oppose: 0, atr: a,
+    reads: { long: hit.dir === 'long' ? 2 : 0, short: hit.dir === 'short' ? 2 : 0 },
+    venue: ctx.venue || null, sym: ctx.sym || null, session: ctx.session || 'n/a',
+    why: hit.why || '',
+    invalidates: 'close beyond ' + stopPx.toFixed(2),
+    stamps: Array.isArray(ctx.stamps) ? ctx.stamps.slice() : [],
+    demoted: !!(hit.plan && hit.plan.halfSize), notes: []
+  };
+  if (hit.plan && hit.plan.noT2) fb.t2 = NaN;
+  return hgGoldPlanSidesOk(fb).ok ? fb : null;
+}
+
 /**
  * Apply baked replay edge to a gold candidate.
  * opts.scalp / opts.swing select the table. Never invents levels.
@@ -2171,11 +2234,7 @@ function goldScalpSetups(inp){
             p4hit.why, 'Part4 invalidation — structure break against the setup',
             undefined, isFinite(p4hit.level) ? p4hit.level : undefined);
           if (p4Cand){
-            if (p4hit.plan){
-              if (isFinite(p4hit.plan.t1)) p4Cand.t1 = p4hit.plan.t1;
-              if (isFinite(p4hit.plan.t2)) p4Cand.t2 = p4hit.plan.t2;
-              if (isFinite(p4hit.plan.stop)) p4Cand.stop = p4hit.plan.stop;
-            }
+            if (p4hit.plan) hgGoldTakeEnginePlan(p4Cand, p4hit.plan);
             if (!Array.isArray(p4Cand.stamps)) p4Cand.stamps = [];
             p4Cand.stamps.push('PART4 ' + String(p4hit.key).toUpperCase());
             if (p4.pd) hgGoldPart4ApplyDiscountFilter(p4Cand, p4.pd);
@@ -2208,11 +2267,7 @@ function goldScalpSetups(inp){
             p5hit.why, 'Part5 invalidation — structure break against the setup',
             undefined, isFinite(p5hit.level) ? p5hit.level : undefined);
           if (p5Cand){
-            if (p5hit.plan){
-              if (isFinite(p5hit.plan.t1)) p5Cand.t1 = p5hit.plan.t1;
-              if (isFinite(p5hit.plan.t2)) p5Cand.t2 = p5hit.plan.t2;
-              if (isFinite(p5hit.plan.stop)) p5Cand.stop = p5hit.plan.stop;
-            }
+            if (p5hit.plan) hgGoldTakeEnginePlan(p5Cand, p5hit.plan);
             if (!Array.isArray(p5Cand.stamps)) p5Cand.stamps = [];
             p5Cand.stamps.push('PART5 ' + String(p5hit.key).toUpperCase());
             if (p5.ker) hgGoldPart5ApplyRegimeFilter(p5Cand, p5.ker);
@@ -2250,11 +2305,7 @@ function goldScalpSetups(inp){
             p6hit.why, 'Part6 invalidation — structure break against the setup',
             undefined, isFinite(p6hit.level) ? p6hit.level : undefined);
           if (p6Cand){
-            if (p6hit.plan){
-              if (isFinite(p6hit.plan.t1)) p6Cand.t1 = p6hit.plan.t1;
-              if (isFinite(p6hit.plan.t2)) p6Cand.t2 = p6hit.plan.t2;
-              if (isFinite(p6hit.plan.stop)) p6Cand.stop = p6hit.plan.stop;
-            }
+            if (p6hit.plan) hgGoldTakeEnginePlan(p6Cand, p6hit.plan);
             if (!Array.isArray(p6Cand.stamps)) p6Cand.stamps = [];
             p6Cand.stamps.push('PART6 ' + String(p6hit.key).toUpperCase());
             if (p6.eventTpl) hgGoldPart6ApplyEventFilter(p6Cand, p6.eventTpl);
@@ -2295,11 +2346,7 @@ function goldScalpSetups(inp){
             p7hit.why, 'Part7 invalidation — structure break against the setup',
             undefined, isFinite(p7hit.level) ? p7hit.level : undefined);
           if (p7Cand){
-            if (p7hit.plan){
-              if (isFinite(p7hit.plan.t1)) p7Cand.t1 = p7hit.plan.t1;
-              if (isFinite(p7hit.plan.t2)) p7Cand.t2 = p7hit.plan.t2;
-              if (isFinite(p7hit.plan.stop)) p7Cand.stop = p7hit.plan.stop;
-            }
+            if (p7hit.plan) hgGoldTakeEnginePlan(p7Cand, p7hit.plan);
             if (!Array.isArray(p7Cand.stamps)) p7Cand.stamps = [];
             p7Cand.stamps.push('PART7 ' + String(p7hit.key).toUpperCase());
             if (p7.season && p7.season.active) p7Cand.stamps.push('S48 SEASONAL');
@@ -2358,9 +2405,7 @@ function goldScalpSetups(inp){
             undefined, isFinite(p8hit.level) ? p8hit.level : undefined);
           if (p8Cand){
             if (p8hit.plan){
-              if (isFinite(p8hit.plan.t1)) p8Cand.t1 = p8hit.plan.t1;
-              if (isFinite(p8hit.plan.t2)) p8Cand.t2 = p8hit.plan.t2;
-              if (isFinite(p8hit.plan.stop)) p8Cand.stop = p8hit.plan.stop;
+              hgGoldTakeEnginePlan(p8Cand, p8hit.plan);
               if (p8hit.plan.noT2) p8Cand.t2 = NaN;
               if (p8hit.plan.halfSize){
                 p8Cand.sizeMult = (isFinite(p8Cand.sizeMult) ? p8Cand.sizeMult : 1) * 0.5;
@@ -2431,9 +2476,7 @@ function goldScalpSetups(inp){
             undefined, isFinite(p9hit.level) ? p9hit.level : undefined);
           if (p9Cand){
             if (p9hit.plan){
-              if (isFinite(p9hit.plan.t1)) p9Cand.t1 = p9hit.plan.t1;
-              if (isFinite(p9hit.plan.t2)) p9Cand.t2 = p9hit.plan.t2;
-              if (isFinite(p9hit.plan.stop)) p9Cand.stop = p9hit.plan.stop;
+              hgGoldTakeEnginePlan(p9Cand, p9hit.plan);
               if (p9hit.plan.halfSize){
                 p9Cand.sizeMult = (isFinite(p9Cand.sizeMult) ? p9Cand.sizeMult : 1) * 0.5;
                 p9Cand.demoted = true;
@@ -3454,6 +3497,13 @@ function goldRankSetups(cands, ctx){
         out.rejected.push({ id: c.id || null, strategy: c.strategy || null, stratKey: c.stratKey || null,
                             dir: c.dir, venue: c.venue || null, sym: c.sym || null,
                             reason: c.reason || 'failed a quality gate' });
+        continue;
+      }
+      var sideGate = hgGoldPlanSidesOk(c);
+      if (!sideGate.ok){
+        out.rejected.push({ id: c.id || null, strategy: c.strategy || null, stratKey: c.stratKey || null,
+                            dir: c.dir, venue: c.venue || null, sym: c.sym || null,
+                            reason: sideGate.why || 'plan sides invalid' });
         continue;
       }
       var parts = [], tally = 0;
@@ -10012,6 +10062,11 @@ function hgGoldPart5ThreeDrive(rows){
         out.t1 = shortD[0].l; out.t2 = NaN;
         out.grade = rejS ? 'confirmed' : 'forming';
         out.why = 'S24 three-drive SHORT exhaustion into HVN @ ' + shortD[2].h.toFixed(2);
+        if (!(isFinite(out.t1) && out.t1 < out.entry)){
+          out.grade = 'forming';
+          out.t1 = NaN;
+          out.why += ' — measured T1 already traded through';
+        }
         return out;
       }
     }
@@ -10024,6 +10079,11 @@ function hgGoldPart5ThreeDrive(rows){
         out.t1 = longD[0].h; out.t2 = NaN;
         out.grade = rejL ? 'confirmed' : 'forming';
         out.why = 'S24 three-drive LONG exhaustion into HVN @ ' + longD[2].l.toFixed(2);
+        if (!(isFinite(out.t1) && out.t1 > out.entry)){
+          out.grade = 'forming';
+          out.t1 = NaN;
+          out.why += ' — measured T1 already traded through';
+        }
         return out;
       }
     }
@@ -14211,6 +14271,8 @@ W.goldWatch = goldWatch;
 W.goldRankSetups = goldRankSetups;
 W.HG_GOLD_SETUP_EDGE = HG_GOLD_SETUP_EDGE;
 W.hgGoldPlanSidesOk = hgGoldPlanSidesOk;
+W.hgGoldTakeEnginePlan = hgGoldTakeEnginePlan;
+W.hgGoldBindEnginePlan = hgGoldBindEnginePlan;
 W.hgGoldSetupEdgeApply = hgGoldSetupEdgeApply;
 W.goldCrossVenueMap = goldCrossVenueMap;
 W.goldWatchPromote = goldWatchPromote;
