@@ -8021,6 +8021,24 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     };
   }
 
+  function hgOmniUniformLeadHtml(few, tape){
+    try {
+      var wU = (typeof window !== 'undefined') ? window : null;
+      var compose = wU && typeof wU.hgCryptoUniformCompose === 'function' ? wU.hgCryptoUniformCompose : null;
+      var htmlFn = wU && typeof wU.hgCryptoUniformHtml === 'function' ? wU.hgCryptoUniformHtml : null;
+      if (!compose || !htmlFn) return '';
+      var cands = [], i, snapRows;
+      if (few && few.length) for (i = 0; i < few.length; i++) if (few[i]) cands.push(few[i]);
+      snapRows = (__omni.snap && __omni.snap.rows) || [];
+      for (i = 0; i < snapRows.length; i++){
+        if (snapRows[i] && snapRows[i].grade && snapRows[i].grade.ticket) cands.push(snapRows[i]);
+      }
+      return '<div data-hg-crypto-uniform-desk="1" style="grid-column:1/-1;display:block;width:100%">'
+        + htmlFn(compose(cands, { desk: 'OMNIROUTE', tape: tape }))
+        + '</div>';
+    } catch (eUniH) { return ''; }
+  }
+
   function hgOmniPaintMostProbable(ui, few, tape, mpBag, held){
     var host = (ui && ui.mp) || (ui && ui.cards);
     if (!host) return;
@@ -8036,6 +8054,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       else if (host.insertAdjacentHTML) host.insertAdjacentHTML('afterbegin', dual);
       else host.innerHTML = dual + (host.innerHTML || '');
     } catch (eDual) {}
+    try {
+      var uni = hgOmniUniformLeadHtml(few, tape);
+      if (!uni) return;
+      var oldUni = host.querySelector ? host.querySelector('[data-hg-crypto-uniform-desk]') : null;
+      if (oldUni) oldUni.outerHTML = uni;
+      else if (host.insertAdjacentHTML) host.insertAdjacentHTML('afterbegin', uni);
+      else host.innerHTML = uni + (host.innerHTML || '');
+    } catch (eUni) {}
   }
 
   /* ==================== coverage matrix (research half) ==================== */

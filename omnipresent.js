@@ -1038,7 +1038,7 @@
                + ' zone in range — TAKE ' + (ranked.side === 'long' ? 'LONGS' : 'SHORTS')
                + ' stands; the other side is not shown.</div>')
             : ('<div class="empty">no zone within ' + ARM_MAX_ATR + 'xATR of any market — the detectors are meant to be quiet when nothing is near.</div>');
-          ui.cards.innerHTML = h || empty;
+          ui.cards.innerHTML = opUniformLeadHtml(top, ranked.side || (sideRead && sideRead.side)) + (h || empty);
           try { if (typeof W.hgMpPin === 'function') W.hgMpPin('omnipresent', top, null, ui.cards); } catch (eMp) {}
           /* 20X — judged on the same collapsed one-per-contract list the
              desk ranks; kept for remount restore. */
@@ -1629,6 +1629,17 @@
     }catch(e){}
   }
 
+  function opUniformLeadHtml(cands, tape){
+    try{
+      var compose = gfn('hgCryptoUniformCompose');
+      var htmlFn = gfn('hgCryptoUniformHtml');
+      if (!compose || !htmlFn) return '';
+      return '<div data-hg-crypto-uniform-desk="1" style="grid-column:1/-1;display:block;width:100%">'
+        + htmlFn(compose(cands || [], { desk: 'OMNIPRESENT', tape: tape }))
+        + '</div>';
+    }catch(e){ return ''; }
+  }
+
   function opPaintVerdict(ui){
     try{
       var fn = gfn('hgFwdDeskVerdictHtml');
@@ -1707,7 +1718,8 @@
       }
       if (!__op.lastView) return;   /* no scan yet — nothing to filter */
       var paid = opPaidKinds();
-      ui.cards.innerHTML = opPaidCardsHtml(__op.lastView.top, __op.lastView.sideRead, paid);
+      ui.cards.innerHTML = opUniformLeadHtml(__op.lastView.top, __op.lastView.sideRead && __op.lastView.sideRead.side)
+        + opPaidCardsHtml(__op.lastView.top, __op.lastView.sideRead, paid);
       /* MOST PROBABLE pin follows the same filter. */
       try{
         if (typeof W.hgMpPin === 'function'){

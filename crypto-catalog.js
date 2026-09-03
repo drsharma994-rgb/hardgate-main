@@ -734,6 +734,205 @@
       + '</div>';
   }
 
+  function uniNum(v){
+    if (v === null || v === undefined || v === '') return NaN;
+    var n = +v;
+    return isFinite(n) ? n : NaN;
+  }
+  function uniDir(v){
+    var d = String(v || '').toLowerCase();
+    return (d === 'long' || d === 'short') ? d : '';
+  }
+  function uniEsc(s){
+    return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  function uniSidesOk(c){
+    var dir = uniDir(c && c.dir);
+    var e = uniNum(c && c.entry), s = uniNum(c && c.stop), t1 = uniNum(c && c.t1);
+    if (!dir || !isFinite(e) || !isFinite(s)) return false;
+    if (dir === 'short') return (s > e) && (!isFinite(t1) || t1 < e);
+    return (s < e) && (!isFinite(t1) || t1 > e);
+  }
+  function uniNormCand(c){
+    if (!c) return null;
+    var p = c.plan || {};
+    var dir = uniDir(c.dir || p.dir);
+    var entry = uniNum(c.entry != null ? c.entry : p.entry);
+    var stop = uniNum(c.stop != null ? c.stop : p.stop);
+    var t1 = uniNum(c.t1 != null ? c.t1 : p.t1);
+    var t2 = uniNum(c.t2 != null ? c.t2 : p.t2);
+    if (!dir || !isFinite(entry) || !isFinite(stop)) return null;
+    return {
+      dest: c, dir: dir, entry: entry, stop: stop, t1: t1, t2: t2,
+      kind: c.kind || p.kind || '',
+      sym: c.sym || c.base || '',
+      strategy: c.strategy || c.kind || p.kind || '',
+      stratKey: c.stratKey || c.kind || '',
+      grade: c.grade,
+      ticket: !!(c.grade && (c.grade.ticket === true || c.grade.letter === 'A' || c.grade.letter === 'B'))
+        || String(c.grade || '').toUpperCase() === 'A'
+        || String(c.grade || '').toUpperCase() === 'B'
+        || c.ticket === true,
+      demoted: !!(c.demoted || c.catalogExclude),
+      dropped: !!c.dropped,
+      catalogExclude: !!c.catalogExclude,
+      catalogFamilyVotes: c.catalogFamilyVotes || (c.catalogFeed && c.catalogFeed.familyVotes) || null,
+      catalogFeed: c.catalogFeed || null,
+      consensus: c.consensus || null
+    };
+  }
+  function uniFamilyHits(norm, feed){
+    var seen = {}, hits = [], fam, k, item, i;
+    function add(family, name, id){
+      fam = String(family || '').trim();
+      if (!fam || seen[fam]) return;
+      seen[fam] = 1;
+      hits.push({ family: fam, name: name || fam, id: id || '' });
+    }
+    var fv = (norm && norm.catalogFamilyVotes) || (feed && feed.familyVotes) || {};
+    for (k in fv){
+      if (Object.prototype.hasOwnProperty.call(fv, k) && fv[k] === 'agree') add(k, k + ' agrees');
+    }
+    var used = (feed && feed.used) || (norm && norm.catalogFeed && norm.catalogFeed.used) || [];
+    for (i = 0; i < used.length; i++){
+      item = used[i];
+      if (!item) continue;
+      if ((item.class === 'CORE' || item.verdict === 'CORE') && item.align === 'agree')
+        add(item.family, item.name, item.id);
+    }
+    return hits;
+  }
+
+  /**
+   * Combine Master Catalog strategies + indicators onto one existing ticket.
+   * Never invents dir or levels. Confirmed = ticket + ≥2 CORE families +
+   * sides OK + not excluded + tape-aligned. One vote per family.
+   */
+  function hgCryptoUniformCompose(cands, opts){
+    opts = opts || {};
+    var desk = String(opts.desk || 'OMNIROUTE').toUpperCase();
+    var tape = uniDir(opts.tape);
+    var feed = (opts.feed && typeof opts.feed === 'object') ? opts.feed : null;
+    try{
+      if (!feed && opts.rows) feed = hgCryptoCatalogFeed(opts.rows, opts);
+    }catch(eF){ feed = feed || null; }
+    var out = {
+      ok: false, confirmed: false, desk: desk,
+      tape: tape ? tape.toUpperCase() : '', setup: null,
+      families: [], indicators: [], strategies: [],
+      catalog: feed, why: 'no qualifying combined setup'
+    };
+    try{
+      if (!Array.isArray(cands) || !cands.length){
+        out.why = 'no engine candidates — stand aside';
+        return out;
+      }
+      var best = null, bestHits = [], bestScore = -1, i, n, hits, score;
+      for (i = 0; i < cands.length; i++){
+        n = uniNormCand(cands[i]);
+        if (!n || n.dropped) continue;
+        if (n.catalogExclude) continue;
+        if (n.demoted && !n.ticket) continue;
+        if (!n.ticket) continue;
+        if (!uniSidesOk(n)) continue;
+        if (tape && n.dir !== tape) continue;
+        hits = uniFamilyHits(n, n.catalogFeed || feed);
+        score = hits.length * 1000 + (n.ticket ? 10 : 0);
+        if (score > bestScore){
+          bestScore = score;
+          best = n;
+          bestHits = hits;
+        }
+      }
+      if (!best){
+        out.why = tape
+          ? ('no tape-aligned ticket on ' + desk + ' — stand aside')
+          : ('no legal ticket on ' + desk + ' — stand aside');
+        return out;
+      }
+      out.setup = {
+        dir: best.dir, entry: best.entry, stop: best.stop, t1: best.t1, t2: best.t2,
+        kind: best.kind, strategy: best.strategy, stratKey: best.stratKey,
+        sym: best.sym, grade: best.grade, ticket: true
+      };
+      out.families = bestHits;
+      out.indicators = bestHits.map(function(h){ return h.name; });
+      out.strategies = [];
+      if (best.kind) out.strategies.push(best.kind);
+      if (best.strategy && out.strategies.indexOf(best.strategy) < 0)
+        out.strategies.push(best.strategy);
+      out.ok = true;
+      out.confirmed = !!(bestHits.length >= 2 && best.ticket && !best.catalogExclude);
+      out.why = out.confirmed
+        ? (bestHits.length + ' CORE families agree · one vote each · levels from the ticket')
+        : (bestHits.length < 2
+            ? 'fewer than 2 CORE families agree — not a confirmed combined setup'
+            : 'ticket present but not confirmed (exclude / families)');
+      return out;
+    }catch(e){
+      out.why = 'uniform compose error — stand aside';
+      return out;
+    }
+  }
+
+  function hgCryptoUniformHtml(uni){
+    try{
+      if (!uni) return '';
+      var confirmed = !!uni.confirmed;
+      var desk = uniEsc(uni.desk || 'OMNIROUTE');
+      var h = '<section class="note hg-crypto-uniform" data-hg-crypto-uniform="1" data-confirmed="'
+        + (confirmed ? '1' : '0') + '" data-desk="' + desk
+        + '" role="region" aria-label="'
+        + (confirmed ? 'Confirmed combined crypto setup' : 'Combined crypto setup stand aside')
+        + '" style="grid-column:1/-1;display:block;width:100%;box-sizing:border-box;'
+        + 'margin:12px 0;padding:14px 16px;border:1px solid #93C5FD;'
+        + 'border-radius:10px;background:linear-gradient(180deg,#FFFFFF,#EFF6FF);color:#020617">';
+      h += '<div style="font-size:10px;letter-spacing:.28em;font-weight:800;color:#1D4ED8">'
+        + (confirmed ? 'CONFIRMED COMBINED SETUP' : 'COMBINED SETUP · STAND ASIDE')
+        + '</div>';
+      h += '<div class="dim" style="margin-top:4px;font-size:12px;line-height:1.45">'
+        + 'All strategies + indicators fed on <b>OMNIROUTE</b> and <b>OMNIPRESENT</b> '
+        + '(Master Catalog · one vote per family). Same card on both desks. Not a win probability.';
+      if (uni.desk) h += ' · ' + desk;
+      if (uni.tape) h += ' · tape ' + uniEsc(uni.tape);
+      h += '</div>';
+      if (confirmed && uni.setup){
+        var s = uni.setup;
+        var dir = String(s.dir || '').toUpperCase();
+        h += '<div style="margin-top:8px;font-weight:800;font-size:18px;color:#1D4ED8">'
+          + uniEsc(s.sym ? (s.sym + ' ') : '') + uniEsc(dir)
+          + ' <span style="font-size:12px;font-weight:600;color:#0F172A">'
+          + uniEsc(s.strategy || s.kind || 'SETUP') + '</span></div>';
+        var fams = uni.families || [], fi;
+        if (fams.length){
+          h += '<div style="margin-top:6px;font-size:12px">';
+          for (fi = 0; fi < fams.length; fi++){
+            h += (fi ? ' · ' : '') + '<b>' + uniEsc(fams[fi].family) + '</b>'
+              + (fams[fi].name ? (' ' + uniEsc(fams[fi].name)) : '');
+          }
+          h += '</div>';
+        }
+        h += '<div class="dim" style="margin-top:4px;font-size:12px">'
+          + (uni.indicators ? uni.indicators.length : 0) + ' agreeing CORE families'
+          + (uni.strategies && uni.strategies.length ? (' · ' + uni.strategies.length + ' strategies') : '')
+          + '</div>';
+        h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-top:10px">';
+        h += '<div style="background:#EFF6FF;border:1px solid #93C5FD;border-radius:8px;padding:8px 10px"><i style="display:block;font-style:normal;font-size:9px;letter-spacing:.16em;font-weight:700">ENTRY</i><b style="display:block;font-size:16px;color:#1D4ED8">'
+          + uniEsc(s.entry) + '</b></div>';
+        h += '<div style="background:#EFF6FF;border:1px solid #93C5FD;border-radius:8px;padding:8px 10px"><i style="display:block;font-style:normal;font-size:9px;letter-spacing:.16em;font-weight:700">STOP</i><b style="display:block;font-size:16px;color:#1D4ED8">'
+          + uniEsc(s.stop) + '</b></div>';
+        h += '<div style="background:#EFF6FF;border:1px solid #93C5FD;border-radius:8px;padding:8px 10px"><i style="display:block;font-style:normal;font-size:9px;letter-spacing:.16em;font-weight:700">T1</i><b style="display:block;font-size:16px;color:#1D4ED8">'
+          + uniEsc(s.t1) + '</b></div>';
+        h += '</div>';
+      } else {
+        h += '<div style="margin-top:8px;font-size:13px;font-weight:600">'
+          + uniEsc(uni.why || 'stand aside') + '</div>';
+      }
+      h += '</section>';
+      return h;
+    }catch(e){ return ''; }
+  }
+
   W.HG_CRYPTO_CATALOG = inventory();
   W.HG_CRYPTO_CATALOG_VER = '1.0';
   W.HG_CRYPTO_CATALOG_IND = IND;
@@ -761,6 +960,8 @@
   W.hgCryptoCatalogPaint = hgCryptoCatalogPaint;
   W.hgCryptoCatalogById = byId;
   W.hgCryptoCatalogKindMap = KIND_MAP;
+  W.hgCryptoUniformCompose = hgCryptoUniformCompose;
+  W.hgCryptoUniformHtml = hgCryptoUniformHtml;
 
   try{
     if (typeof document !== 'undefined'){
