@@ -7596,6 +7596,40 @@ terse status, and never launches a first-time scan on a global refresh.
     return hgOgPickGoldEngineFor(bridge, horizon, tapeDir, { allowC: true });
   }
 
+  function hgOgEngineSidesOk(c){
+    var dir = String((c && c.dir) || '').toLowerCase();
+    var e = fin(c && c.entry), s = fin(c && c.stop), t1 = fin(c && c.t1);
+    if ((dir !== 'long' && dir !== 'short') || !isFinite(e) || !isFinite(s)) return false;
+    var fn = gfn('hgGoldPlanSidesOk');
+    if (fn){
+      try{
+        var r = fn(c);
+        return !!(r && r.ok);
+      }catch(eS){}
+    }
+    if (dir === 'short') return (s > e) && (!isFinite(t1) || t1 < e);
+    return (s < e) && (!isFinite(t1) || t1 > e);
+  }
+
+  /* Catalog ENTRY / STOP / T1 already on the engine row. Never invents
+     missing levels. notFormed = print the plan, label it not a ticket. */
+  function hgOgEngineLevelsGridHtml(c, opts){
+    opts = opts || {};
+    if (!c || !hgOgEngineSidesOk(c)) return '';
+    var h = '<div class="hg-mp-grid" data-og-engine-levels="' + (opts.notFormed ? 'plan' : '1') + '">';
+    h += '<div><i>ENTRY</i><b>' + fmtPx(c.entry) + '</b></div>';
+    h += '<div><i>STOP</i><b>' + fmtPx(c.stop) + '</b></div>';
+    h += '<div><i>T1</i><b>' + fmtPx(c.t1) + '</b></div>';
+    if (isFinite(fin(c.t2))) h += '<div><i>T2</i><b>' + fmtPx(c.t2) + '</b></div>';
+    if (isFinite(fin(c.rr))) h += '<div><i>R:R</i><b>' + fin(c.rr).toFixed(2) + '</b></div>';
+    h += '</div>';
+    if (opts.notFormed){
+      h += '<div class="dim og-engine-plan-note">Engine plan — not a ticket, not bookable. '
+        + 'Fees eat the stop; see MEASURED-NEGATIVE KINDS.</div>';
+    }
+    return h;
+  }
+
   function hgOgGoldEngineRowHtml(c, tier, horizon){
     /* horizon is an ADDITIVE optional arg ('SCALP'/'SWING') — callers that
        omit it just lose the scalp cost-drag caution line, nothing else. */
@@ -7611,28 +7645,22 @@ terse status, and never launches a first-time scan on a global refresh.
       + (c.formationScore ? (' · formation ' + fin(c.formationScore)) : '')
       + (tier === 'best' ? ' · <b>tab best</b>' : '') + '</div>';
     if (isFinite(fin(c.entry)) && isFinite(fin(c.stop))){
-      /* FORMATION (hg-v533): a not-formed engine setup keeps its row —
-         parity, nothing vanishes — but loses its levels grid. Printing
-         ENTRY/STOP on a setup the desk stood aside on is how a reader
-         takes the trade anyway. Fail closed: a throwing check hides the
-         levels, never shows them. */
+      /* FORMATION (hg-v533 / hg-v584): not-formed stays visible and still
+         prints the catalog ENTRY / STOP / T1 so the reader can see the
+         plan. It is labeled not a ticket / not bookable — never ENTER. */
       var rowFm = null;
       try { rowFm = hgOgFormation(c); } catch (eRf){ rowFm = { formed: false, reasons: ['formation check threw — fail closed'] }; }
       if (rowFm && rowFm.formed === false){
         h += '<div class="hg-mp-note warn og-engine-not-formed">did not FORM — '
           + esc((rowFm.reasons && rowFm.reasons.length) ? rowFm.reasons.join(' · ') : 'stood aside')
-          + '. No levels printed; see MEASURED-NEGATIVE KINDS.</div>';
+          + '. Engine plan below is the catalog levels — not a ticket, not bookable.</div>';
+        h += hgOgEngineLevelsGridHtml(c, { notFormed: true });
         h += hgOgReplayLineHtml(c.strategy || c.stratKey);
         h += hgOgVenueCostNoteHtml();
         h += '</div>';
         return h;
       }
-      h += '<div class="hg-mp-grid">';
-      h += '<div><i>ENTRY</i><b>' + fmtPx(c.entry) + '</b></div>';
-      h += '<div><i>STOP</i><b>' + fmtPx(c.stop) + '</b></div>';
-      h += '<div><i>T1</i><b>' + fmtPx(c.t1) + '</b></div>';
-      if (isFinite(fin(c.rr))) h += '<div><i>R:R</i><b>' + fin(c.rr).toFixed(2) + '</b></div>';
-      h += '</div>';
+      h += hgOgEngineLevelsGridHtml(c, {});
       /* Replay evidence + cost drag (ADDITIVE) — only where entry+stop render. */
       var engCostChip = hgOgCostChipHtml(c);
       if (engCostChip) h += '<div style="margin-top:2px">' + engCostChip + hgOgVenueCostNoteHtml() + '</div>';
@@ -10491,7 +10519,7 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgBridgeSetupToPick = hgOgBridgeSetupToPick;
     window.hgOgPickGoldEngineFor = hgOgPickGoldEngineFor;
     window.hgOgPickGoldEngineForMp = hgOgPickGoldEngineForMp;
-    window.hgOgGoldEngineRowHtml = hgOgGoldEngineRowHtml;  /* levelless when not formed (hg-v533) — testable */
+    window.hgOgGoldEngineRowHtml = hgOgGoldEngineRowHtml;  /* catalog levels print even when not formed (hg-v584) — not a ticket */
     window.hgOgEngineGradeBannerHtml = hgOgEngineGradeBannerHtml;
     window.hgOgGoldEnginesPanelHtml = hgOgGoldEnginesPanelHtml;
     window.hgOgPaintOgPostScan = hgOgPaintOgPostScan;

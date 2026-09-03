@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v583',
-  pack: 'Uniform combined gold setup — SCALP / SWING / OMNIGOLD',
-  built: '2026-09-03T05:10:00Z',
-  note: 'One composer, one card. Confirmed only when ≥2 CORE catalog families agree on an existing engine plan. Never invents dir or levels. PAID is the forward ledger only — not a profit forecast.'
+  version: 'hg-v584',
+  pack: 'OmniGold engine rows print catalog ENTRY / STOP / T1',
+  built: '2026-09-03T06:15:00Z',
+  note: 'GOLD SCALP / SWING engine cards show the existing plan levels even when formation fails the fee floor. Labeled not a ticket / not bookable. Never invents dir or missing levels.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

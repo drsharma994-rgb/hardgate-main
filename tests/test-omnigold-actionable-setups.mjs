@@ -197,8 +197,9 @@ console.log('\n== FORMATION floor at PAXG default refuses the tight-stop engine 
 {
   /* The same fixture the demoted-grade-B block declares XM for: at the
      conservative PAXG default (0.26% RT) a 0.26% stop pays 1.0R of 1R in
-     fees — the pick gate must refuse it, and its row must render WITHOUT
-     levels. This is the behavior a reader took real losses without. */
+     fees — the pick gate must refuse it as a ticket. The engine row still
+     prints the catalog ENTRY / STOP / T1 so the reader can see the plan,
+     labeled not a ticket / not bookable. */
   const W = boot();
   const row = { dir: 'short', strategy: 'LIQUIDITY SWEEP REVERSAL', entry: 4628, stop: 4640, t1: 4610,
     grade: 'B', tally: 6, demoted: true };
@@ -209,8 +210,16 @@ console.log('\n== FORMATION floor at PAXG default refuses the tight-stop engine 
   ok(fm && fm.formed === false && /stop inside 8x the venue round-trip/.test(fm.reasons.join(' ')),
      'formation names the 8x venue round-trip floor');
   const rowHtml = W.hgOgGoldEngineRowHtml(row, 'best', 'SCALP');
-  ok(/did not FORM/.test(rowHtml) && !/ENTRY/.test(rowHtml),
-     'engine row stays visible but levelless when not formed');
+  ok(/did not FORM/.test(rowHtml), 'engine row stays visible and names the formation miss');
+  ok(/ENTRY/.test(rowHtml) && /4628\.00/.test(rowHtml) && /4640\.00/.test(rowHtml) && /4610\.00/.test(rowHtml),
+     'existing engine ENTRY / STOP / T1 still print — not invented, not hidden');
+  ok(/not a ticket/.test(rowHtml) && /not bookable/.test(rowHtml),
+     'levels are labeled not a ticket / not bookable');
+  ok(!/bookBtn|ADD TO BOOK|SEND TO TRADE/.test(rowHtml),
+     'unformed engine row does not hand off to book');
+  const noLv = W.hgOgGoldEngineRowHtml({ dir: 'long', strategy: 'FVG FILL', grade: 'A', tally: 8 }, 'best', 'SCALP');
+  ok(/FVG FILL/.test(noLv) && !/<i>ENTRY<\/i>/.test(noLv),
+     'no levels invented when the engine plan has none');
 }
 
 console.log('\n== wiring exports ==');
