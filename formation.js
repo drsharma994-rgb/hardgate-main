@@ -21,6 +21,53 @@ function _last(arr){
   return (arr && arr.length) ? arr[arr.length - 1] : NaN;
 }
 
+/* T2 is the runner. It must sit strictly beyond T1 in the trade direction.
+   Formation can snap T1 to a farther structure pool and leave a closer
+   named T2 (live: T1 8R / T2 5R on B-TAO_USDT). Reorder existing prices
+   (nearer = T1, farther = T2). Never invent a new level. Drop T2 when it
+   is equal to T1 or on the wrong side of entry. */
+function hgOrderRunnerTargets(dir, entry, t1, t2){
+  dir = String(dir || '').toLowerCase();
+  var a = +t1, b = +t2, e = +entry;
+  var out = { t1: a, t2: b, swapped: false, dropped: false };
+  if (!isFinite(a)) return out;
+  if (!isFinite(b)){ out.t2 = NaN; return out; }
+  var long = dir !== 'short';
+  if (!isFinite(e) || (long ? !(b > e) : !(b < e))){
+    out.t2 = NaN;
+    out.dropped = true;
+    return out;
+  }
+  if (long ? (b > a) : (b < a)) return out;
+  if (Math.abs(b - a) < 1e-12){
+    out.t2 = NaN;
+    out.dropped = true;
+    return out;
+  }
+  out.t1 = b;
+  out.t2 = a;
+  out.swapped = true;
+  return out;
+}
+
+function hgApplyRunnerOrder(plan, dir, entry){
+  if (!plan) return plan;
+  var o = hgOrderRunnerTargets(dir || plan.dir, entry != null ? entry : plan.entry, plan.t1, plan.t2);
+  if (o.swapped){
+    var tmp = plan.t1Source;
+    plan.t1Source = plan.t2Source;
+    plan.t2Source = tmp;
+  }
+  if (isFinite(o.t1)) plan.t1 = o.t1;
+  if (o.dropped || !isFinite(o.t2)){
+    plan.t2 = null;
+    if (o.dropped) plan.t2Source = '';
+  } else {
+    plan.t2 = o.t2;
+  }
+  return o;
+}
+
 /* --- calibrated params: ledger stop sweep + optional CALIBRATE lookback --- */
 function hgFormationParams(){
   var p = {
@@ -706,6 +753,11 @@ function hgFormKeepLevels(hit, ctx, params, dir, mark, a4, rows, style, baseStyl
   if (isFinite(t2)) plan.t2 = t2;
   plan.t1Source = t1Source;
   plan.t2Source = t2Source;
+  hgApplyRunnerOrder(plan, dir, entry0);
+  t1 = plan.t1;
+  t2 = plan.t2;
+  t1Source = plan.t1Source;
+  t2Source = plan.t2Source;
   plan.rr = isFinite(t1) ? Math.abs(t1 - entry0) / risk : null;
   plan.rr1 = plan.rr;
   plan.rr2 = isFinite(t2) ? Math.abs(t2 - entry0) / risk : null;
@@ -807,6 +859,9 @@ function hgFormKeepLevels(hit, ctx, params, dir, mark, a4, rows, style, baseStyl
   plan.stop = stop;
   if (isFinite(t1)) plan.t1 = t1;
   if (isFinite(t2)) plan.t2 = t2;
+  hgApplyRunnerOrder(plan, dir, entry0);
+  t1 = plan.t1;
+  t2 = plan.t2;
   risk = Math.abs(entry0 - stop);
   plan.rr = isFinite(t1) ? Math.abs(t1 - entry0) / risk : plan.rr;
   plan.rr1 = plan.rr;
@@ -919,6 +974,7 @@ function hgFormTicket(hit, ctx){
        plan goes on carrying the ORIGINAL hit's targets and ratios against a
        new entry and a new stop. Derived from the final levels, on every
        path, after post-enrich has had its say. */
+    hgApplyRunnerOrder(plan, dir, plan.entry);
     var fRisk = (isFinite(+plan.entry) && isFinite(+plan.stop))
       ? Math.abs(+plan.entry - +plan.stop) : NaN;
     if (isFinite(fRisk) && fRisk > 0){
@@ -1026,6 +1082,8 @@ G.hgStructureTargets = hgStructureTargets;
 G.hgFormationScore = hgFormationScore;
 G.hgFormTicket = hgFormTicket;
 G.hgFormKeepLevels = hgFormKeepLevels;
+G.hgOrderRunnerTargets = hgOrderRunnerTargets;
+G.hgApplyRunnerOrder = hgApplyRunnerOrder;
 G.HG_FILL_MIN = HG_FILL_MIN;
 
 })();

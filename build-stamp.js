@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v586',
-  pack: 'OMNIROUTE + OMNIPRESENT combined catalog setup',
-  built: '2026-09-03T08:40:00Z',
-  note: 'All Master Catalog strategies + indicators form one confluence card on OMNIROUTE and OMNIPRESENT. Confirmed only with ≥2 CORE families on an existing ticket. Never invents dir or levels.'
+  version: 'hg-v587',
+  pack: 'OMNIPRESENT T2 runner beyond T1',
+  built: '2026-09-03T09:10:00Z',
+  note: 'T2 is the runner. When formation snaps T1 past T2, the two existing prices swap (nearer = T1, farther = T2). Never invents a new level. Live B-TAO_USDT 8R/5R inversion is the fixture.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
