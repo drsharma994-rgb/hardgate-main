@@ -149,6 +149,17 @@ function gfn(name){
   try{ if (typeof globalThis !== 'undefined' && typeof globalThis[name] === 'function') return globalThis[name]; }catch(e){}
   return null;
 }
+/** Same CONFIRMED COMBINED SETUP card as GOLD SWING / OMNIGOLD. */
+function goldUniformPanelHtml(cands, rows, horizon){
+  try{
+    var compose = gfn('hgGoldUniformCompose');
+    var htmlFn = gfn('hgGoldUniformHtml');
+    if (!compose || !htmlFn) return '';
+    var tapeFn = gfn('hgGoldUniformTape');
+    var tape = tapeFn ? tapeFn(rows) : '';
+    return htmlFn(compose(cands || [], { rows: rows, horizon: horizon || 'SCALP', tape: tape }));
+  }catch(e){ return ''; }
+}
 function signed(n, d){ return (n > 0 ? '+' : '') + fmtF(n, d); }
 
 /* local ATR copy (identical math to goldind.js's own fallback — goldind.js
@@ -1695,6 +1706,8 @@ async function runScan(ui, scanSt){
 
     var basisHtml = stRoute ? stGoldBasisHtml() : '';
     var mixedBanner = goldMixedFeedBannerHtml(gold);
+    var uniRows = gold.rows15m.length ? gold.rows15m : (gold.rows1h || []);
+    var uniHtml = goldUniformPanelHtml(display, uniRows, 'SCALP');
     var wkRows = gold.rows4h.length ? gold.rows4h : gold.rows15m;
     paintGoldWeekendPanel(ui, wkRows, now, displayBest);
     var aplusCtx = goldBuildAPlusCtx(ctx, gold, now, news);
@@ -1723,7 +1736,7 @@ async function runScan(ui, scanSt){
     if (ui && ui.cards && ui.empty){
       if (display.length){
         ui.empty.style.display = 'none';
-        ui.cards.innerHTML = basisHtml + mixedBanner + aplusPack.panel + bannerHTML(displayBest, display)
+        ui.cards.innerHTML = basisHtml + mixedBanner + aplusPack.panel + uniHtml + bannerHTML(displayBest, display)
           + display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note); }).join('')
           + formingLayersHtml()
           + formingNowHTML(armedAll)
@@ -1733,14 +1746,14 @@ async function runScan(ui, scanSt){
         /* zero qualifying candidates but something to show: WHY SILENT leads,
            then the watch panel, then the held-back reason lines */
         ui.empty.style.display = 'none';
-        ui.cards.innerHTML = basisHtml + mixedBanner + (whySilent ? whySilentHTML(whySilent) : '')
+        ui.cards.innerHTML = basisHtml + mixedBanner + uniHtml + (whySilent ? whySilentHTML(whySilent) : '')
           + formingLayersHtml()
           + rejectedHTML(rejectedAll)
           + formingNowHTML(armedAll)
           + historyHTML(lock.store.history);
       } else {
         /* feeds failed: cards stay empty (no fabricated setups); catalog lives on empty */
-        ui.cards.innerHTML = basisHtml;
+        ui.cards.innerHTML = basisHtml + uniHtml;
         var catH = '';
         try{
           var cFn = gfn('hgGoldCatalogHtml');
@@ -1771,7 +1784,7 @@ async function runScan(ui, scanSt){
           if (typeof visionRefresh === 'function'){
             visionRefresh({
               scanSt: scanSt, scanGen: visionGen, ui: ui, display: display, displayBest: displayBest,
-              basisHtml: basisHtml, bannerHTML: bannerHTML, cardHTML: cardHTML,
+              basisHtml: basisHtml + mixedBanner + aplusPack.panel + uniHtml, bannerHTML: bannerHTML, cardHTML: cardHTML,
               formingNowHTML: formingNowHTML, rejectedHTML: rejectedHTML, historyHTML: historyHTML,
               armedAll: armedAll, rejectedAll: rejectedAll, history: lock.store.history,
               seasonNote: season && season.note,
