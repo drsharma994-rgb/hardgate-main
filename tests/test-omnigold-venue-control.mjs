@@ -16,7 +16,7 @@
                   other venue's, and the counts strip is real populations
 
    plus the end-to-end consequence on the real detect->evaluate chain:
-   scalp stops of 0.2-1% FORM at XM, the demotion list is exactly the 12
+   scalp stops of 0.2-1% FORM at XM, the demotion list is exactly the 18
    gross-negative kinds, survivors sort first, and the stood-aside section
    prints the numbers.
 
@@ -70,14 +70,15 @@ function boot(lsMode){
   return ctx;
 }
 
-/* The 12 kinds the replay measured gross-negative at scale (grossR <= -0.05,
-   n >= 100) — demoted at ANY venue, because direction was wrong before fees.
-   The 10 more that PAXG's 0.26% RT alone demotes (venue-net <= -0.5R) must
-   NOT be demoted at XM. Derived from the baked table, checked literally here
-   so a silent re-bake moves a test, not just a banner. */
-const GROSS_NEGATIVE_12 = ['SPRING', 'LONDON-FIX', 'FVG-HVN', 'NR7-BREAK', 'MFI-SQUAT',
-  'PIVOT-REJECT', 'KZ-JUDAS', 'FIB-618', 'PD-EQUILIBRIUM', 'RIBBON-PULLBACK',
-  'ICHI-KUMO', 'EMA50-HOLD'].sort();
+/* The 18 kinds the replay measured gross-negative at scale (grossR <= -0.05,
+   n >= 50) — demoted at ANY venue, because direction was wrong before fees.
+   The extra PAXG-only names (venue-net <= -0.5R) must NOT be demoted at XM.
+   Derived from the baked table, checked literally here so a silent re-bake
+   moves a test, not just a banner. hg-v589 dropped the n-floor 100→50. */
+const GROSS_NEGATIVE_18 = ['ASIA-BREAK', 'EMA50-HOLD', 'ER-IGNITION', 'FIB-618',
+  'FVG-HVN', 'ICHI-KUMO', 'KZ-JUDAS', 'LONDON-FIX', 'MFI-SQUAT', 'NR7-BREAK',
+  'NY-OPEN-DRIVE', 'PD-EQUILIBRIUM', 'PDL-SWEEP', 'PIVOT-REJECT',
+  'RIBBON-PULLBACK', 'SPRING', 'VWAP-BAND', 'VWAP-REVERT'].sort();
 
 console.log('== precedence: override > UI selection > PAXG fail-closed ==');
 {
@@ -111,7 +112,7 @@ console.log('\n== localStorage UNAVAILABLE -> PAXG, the conservative fallback ==
      'an explicit in-page choice still applies for this load, unpersisted');
 }
 
-console.log('\n== per-venue demotion counts: 12 at XM, 22 at PAXG ==');
+console.log('\n== per-venue demotion counts: 18 at XM, 33 at PAXG ==');
 {
   const W = boot();
   const xm = W.hgOgVenuePresetCost('XM'), paxg = W.hgOgVenuePresetCost('PAXG');
@@ -120,16 +121,22 @@ console.log('\n== per-venue demotion counts: 12 at XM, 22 at PAXG ==');
   const kinds = Object.keys(W.HG_OG_REPLAY_EVIDENCE.kinds);
   const demXm = kinds.filter(k => W.hgOgKindDemotion(k, xm)).sort();
   const demPaxg = kinds.filter(k => W.hgOgKindDemotion(k, paxg)).sort();
-  ok(W.hgOgDemotedKindCount(xm) === 12 && demXm.length === 12, '12 kinds stand demoted at XM costs');
-  ok(W.hgOgDemotedKindCount(paxg) === 22 && demPaxg.length === 22, '22 at PAXG costs');
-  ok(JSON.stringify(demXm) === JSON.stringify(GROSS_NEGATIVE_12),
-     'the XM 12 are exactly the gross-negative kinds — cheap fees clear no wrong direction');
+  ok(W.hgOgDemotedKindCount(xm) === 18 && demXm.length === 18, '18 kinds stand demoted at XM costs');
+  ok(W.hgOgDemotedKindCount(paxg) === 33 && demPaxg.length === 33, '33 at PAXG costs');
+  ok(JSON.stringify(demXm) === JSON.stringify(GROSS_NEGATIVE_18),
+     'the XM 18 are exactly the gross-negative kinds — cheap fees clear no wrong direction');
   ok(demXm.every(k => demPaxg.includes(k)), 'every XM demotion is also a PAXG demotion (fees only add)');
   demXm.forEach(k => {
     const d = W.hgOgKindDemotion(k, xm);
     ok(d.reasons.some(r => /grossR .* direction measured wrong at scale/.test(r)),
        k + ' demoted at XM for measured direction, not fees');
   });
+  ok(!W.hgOgKindDemotion('RIBBON-PULLBACK', xm, 'SWING'),
+     'RIBBON-PULLBACK is not demoted on SWING — that horizon paid');
+  ok(!!W.hgOgKindDemotion('RIBBON-PULLBACK', xm, 'SCALP'),
+     'RIBBON-PULLBACK stays demoted on SCALP');
+  ok(W.hgOgSwingPrefer('BOS-RETEST', 'SWING') && !W.hgOgSwingPrefer('BOS-RETEST', 'SCALP'),
+     'BOS-RETEST prefer is SWING-only');
 }
 
 console.log('\n== desk-stance banner names the ACTIVE venue and both counts ==');
@@ -137,12 +144,12 @@ console.log('\n== desk-stance banner names the ACTIVE venue and both counts ==')
   const W = boot();
   W.hgOgVenueInit();                                   /* -> XM default */
   const atXm = W.hgOgDeskStanceBannerHtml();
-  ok(/venue XM XAUUSD ~0\.020% RT — 12 measured-negative kinds stood aside; at PAXG costs \(0\.260% RT\) it would be 22/.test(atXm),
-     'XM banner line: 12 stood aside, 22 at PAXG costs');
+  ok(/venue XM XAUUSD ~0\.020% RT — 18 measured-negative kinds stood aside; at PAXG costs \(0\.260% RT\) it would be 33/.test(atXm),
+     'XM banner line: 18 stood aside, 33 at PAXG costs');
   W.hgOgSetVenue('PAXG');
   const atPaxg = W.hgOgDeskStanceBannerHtml();
-  ok(/venue PAXG ~0\.260% RT — 22 measured-negative kinds stood aside; at XM costs \(0\.020% RT\) it would be 12/.test(atPaxg),
-     'PAXG banner line: 22 stood aside, 12 at XM costs');
+  ok(/venue PAXG ~0\.260% RT — 33 measured-negative kinds stood aside; at XM costs \(0\.020% RT\) it would be 18/.test(atPaxg),
+     'PAXG banner line: 33 stood aside, 18 at XM costs');
 }
 
 console.log('\n== disclosure integrity at the XM default ==');
@@ -169,7 +176,7 @@ console.log('\n== mount: control present, XM applied, counts strip reserved ==')
   ok(/applies on next scan/.test(el.innerHTML), 'labeled honestly: formation stamps re-price on the next scan');
   ok(/id="ogCounts"/.test(el.innerHTML), 'population counts strip reserved under the banner');
   ok(W.hgOgVenueCost().venue === 'XM', 'mount applied the XM default (nothing stored)');
-  ok(/venue XM XAUUSD ~0\.020% RT — 12 measured-negative kinds/.test(el.innerHTML),
+  ok(/venue XM XAUUSD ~0\.020% RT — 18 measured-negative kinds/.test(el.innerHTML),
      'the banner in the mounted tab prices the XM default');
 }
 
@@ -251,7 +258,7 @@ console.log('\n== END TO END at the XM default: the real detect->evaluate chain 
         demoted — the population PAXG's 2.08% floor used to kill wholesale. */
   const scalpTight = all.filter(c => c.horizon === 'SCALP'
     && isFinite(stopPct(c)) && stopPct(c) >= 0.2 && stopPct(c) <= 1.0
-    && !GROSS_NEGATIVE_12.includes(String(c.kind).toUpperCase()));
+    && !GROSS_NEGATIVE_18.includes(String(c.kind).toUpperCase()));
   ok(scalpTight.length > 0, 'the battery produced scalps with 0.2-1% stops (' + scalpTight.length + ')');
   const refused = scalpTight.filter(c => c.formation && c.formation.formed === false);
   ok(refused.length === 0, 'every one of them FORMS at XM costs'
@@ -268,8 +275,8 @@ console.log('\n== END TO END at the XM default: the real detect->evaluate chain 
     .filter(c => c.formation.kindDemotion)
     .map(c => String(c.kind).toUpperCase()))].sort();
   ok(demKinds.length > 0, 'the battery hit demoted kinds (' + demKinds.join(', ') + ')');
-  ok(demKinds.every(k => GROSS_NEGATIVE_12.includes(k)),
-     'every demotion stamped at XM is in the gross-negative 12 — none of PAXG\'s 10 fee-only demotions');
+  ok(demKinds.every(k => GROSS_NEGATIVE_18.includes(k)),
+     'every demotion stamped at XM is in the gross-negative 18 — none of PAXG\'s fee-only demotions');
 
   /* 3. Survivors sort first: in desk order, any section containing a
         survivor is LED by one. */

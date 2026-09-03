@@ -51,13 +51,12 @@ ok(W.HG_GOLD_SETUP_EDGE && W.HG_GOLD_SETUP_EDGE.scalp.fvg.action === 'suppress',
   ok((c.stamps || []).indexOf('EDGE SUPPRESS') >= 0, 'EDGE SUPPRESS stamp');
 }
 
-/* SCALP ORB demote (not suppress) */
+/* SCALP ORB suppress (hg-v589: n=69 net −1.80R ENGINE scalp) */
 {
   const c = { dir: 'long', entry: 2650, stop: 2640, t1: 2670, stratKey: 'openrange', strategy: 'OPENING RANGE BREAKOUT' };
   W.hgGoldSetupEdgeApply(c, { scalp: true });
-  ok(!c.dropped, 'ORB not suppressed');
-  ok(c.demoted === true, 'ORB demoted');
-  ok((c.stamps || []).indexOf('EDGE DEMOTE') >= 0, 'EDGE DEMOTE stamp');
+  ok(c.dropped === true, 'ORB suppressed — fee-toxic ENGINE scalp');
+  ok((c.stamps || []).indexOf('EDGE SUPPRESS') >= 0, 'EDGE SUPPRESS stamp');
 }
 
 /* SWING sweep prefer */
