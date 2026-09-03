@@ -17,12 +17,14 @@ duplicating its bugs.
 
 GOLD TAPE IS GOLD, NOT THE CRYPTO CASCADE.
   STRONGEST / MOST PROBABLE / NEXT GOLD LEVELS / XM strongest follow
-  gold's own bars (last vs EMA21, EMA21 vs EMA50, recent closes). When
-  either horizon is down, the desk tape is down: a LONG is not the
-  setup — even a 4H UP lean, even a fade that cleared the trend gate
-  as "counter-trend, which is what this setup IS". No short is
-  invented. Unread tape does not empty the desk. Crypto MARKET PICTURE
-  is BTC/ETH/SOL/GOLD and is the wrong instrument for this call.
+  gold's own bars (last vs EMA21 AND EMA21 vs EMA50). A 5-bar dip
+  below EMA21 while the stack is still up is unread, not SHORT — that
+  lie hid every LONG GOLD SCALP/SWING catalog setup on a rally
+  (hg-v582). Each horizon's pick follows THAT horizon's tape. When
+  scalp and swing disagree the desk tape is MIXED: the tab will not
+  say "gold is going down" while 4h is up. No side is invented.
+  Unread tape does not empty the desk. Crypto MARKET PICTURE is
+  BTC/ETH/SOL/GOLD and is the wrong instrument for this call.
 
 MOST PROBABLE SETUPS sit at the top of the tab: up to one SCALP and
   one SWING tape-aligned TICKET, ranked on a balanced score of
@@ -2496,32 +2498,33 @@ terse status, and never launches a first-time scan on a global refresh.
 
   /* Gold's own direction. Not crypto MARKET PICTURE (that majority is
      BTC/ETH/SOL/GOLD and can stay LONG-LEANING while XAU is dropping).
-     Short when price is below EMA21 and the stack or the last few closes
-     are also down. Empty string = unread, not a guessed side. */
+     Side requires the EMA stack to agree: last below EMA21 AND EMA21
+     below EMA50 is SHORT; last above EMA21 AND EMA21 above EMA50 is
+     LONG. A 5-bar dip under EMA21 while the stack is still up is a
+     pullback — unread — not "gold is going down". Empty = unread. */
   function hgOgTapeDir(rows){
     try{
       if (!rows || rows.length < 55) return '';
       var closes = closesOf(rows);
       if (closes.length < 55) return '';
       var last = closes[closes.length - 1];
-      var ago = closes[closes.length - 6];
       var e21 = emaOf(closes, 21);
       var e50 = emaOf(closes, 50);
       if (!isFinite(last) || !isFinite(e21) || !isFinite(e50)) return '';
       var below = last < e21, above = last > e21;
       var downStack = e21 < e50, upStack = e21 > e50;
-      var falling = isFinite(ago) && last < ago;
-      var rising = isFinite(ago) && last > ago;
-      if (below && (downStack || falling)) return 'short';
-      if (above && (upStack || rising)) return 'long';
+      if (below && downStack) return 'short';
+      if (above && upStack) return 'long';
       return '';
     }catch(e){ return ''; }
   }
-  /* One side for the whole tab. Scalp DOWN + swing UP is still DOWN:
-     the 1h drop is what the reader is looking at, and selling the 4H
-     long is the original complaint. Empty = both unread. */
+  /* One side for the whole tab only when both horizons agree (or one is
+     unread). Scalp DOWN + swing UP is MIXED — not "gold is going down".
+     Each horizon's pick still follows that horizon's own tape. Empty =
+     mixed or both unread. */
   function hgOgDeskTape(scalpDir, swingDir){
     var a = String(scalpDir || ''), b = String(swingDir || '');
+    if (a && b && a !== b) return '';
     if (a === 'short' || b === 'short') return 'short';
     if (a === 'long' || b === 'long') return 'long';
     return '';
@@ -2533,12 +2536,15 @@ terse status, and never launches a first-time scan on a global refresh.
   }
   function hgOgTapeBannerHtml(scalpDir, swingDir){
     var desk = hgOgDeskTape(scalpDir, swingDir);
+    var a = String(scalpDir || ''), b = String(swingDir || '');
     var h = '<div class="note og-tape" role="status"><b>GOLD TAPE</b> — gold\'s own bars, not the crypto cascade. ';
     h += 'Scalp ' + hgOgTapeLabel(scalpDir) + ' · Swing ' + hgOgTapeLabel(swingDir) + '.';
     if (desk === 'short')
       h += ' Gold is going down — this tab will not pick a LONG.';
     else if (desk === 'long')
       h += ' Gold is going up — this tab will not pick a SHORT.';
+    else if (a && b && a !== b)
+      h += ' Mixed tape — each horizon follows its own bars; this tab will not call gold down while swing is up.';
     h += '</div>';
     return h;
   }
@@ -4985,21 +4991,20 @@ terse status, and never launches a first-time scan on a global refresh.
   }
 
   /* The price a CLOSED bar must print for hgOgTapeDir(rows) to read `want`.
-     Mirrors that function exactly rather than approximating it: 'long' needs
-     close above EMA21 AND (EMA21 over EMA50 OR rising versus five bars back),
-     so when the stack is not yet up the bar must clear the older close too.
-     NaN when it cannot be stated. The level moves as the EMA does — it is a
-     reading of now, not a standing order. */
+     Mirrors that function: side requires the stack. 'long' is close above
+     EMA21 when EMA21 is already over EMA50; 'short' is close below EMA21
+     when the stack is already down. One bar cannot invent a stack cross,
+     so the level is NaN when the stack disagrees — honest empty, not a
+     fake release. The level moves as the EMA does. */
   function hgOgTapeFlipLevel(rows, want){
     try{
       if (!rows || rows.length < 55) return NaN;
       var closes = closesOf(rows);
       if (closes.length < 55) return NaN;
       var e21 = emaOf(closes, 21), e50 = emaOf(closes, 50);
-      var ago = closes[closes.length - 6];
-      if (!isFinite(e21) || !isFinite(e50) || !isFinite(ago)) return NaN;
-      if (want === 'long')  return (e21 > e50) ? e21 : Math.max(e21, ago);
-      if (want === 'short') return (e21 < e50) ? e21 : Math.min(e21, ago);
+      if (!isFinite(e21) || !isFinite(e50)) return NaN;
+      if (want === 'long')  return (e21 > e50) ? e21 : NaN;
+      if (want === 'short') return (e21 < e50) ? e21 : NaN;
       return NaN;
     }catch(e){ return NaN; }
   }
@@ -8014,8 +8019,10 @@ terse status, and never launches a first-time scan on a global refresh.
        re-check judges the same picture the ledger did. */
     try {
       __og.topSetupView = {
-        pickScalp: hgOgPickFor(ogCollapsed || [], HORIZONS.scalp.label, deskTape),
-        pickSwing: hgOgPickFor(ogCollapsed || [], HORIZONS.swing.label, deskTape),
+        pickScalp: hgOgPickFor(ogCollapsed || [], HORIZONS.scalp.label,
+          (__og.tape && __og.tape.scalp) || deskTape),
+        pickSwing: hgOgPickFor(ogCollapsed || [], HORIZONS.swing.label,
+          (__og.tape && __og.tape.swing) || deskTape),
         tape: deskTape || null,
         held: __og.held || null,
         mkt: fin(__og.spotAnchor),
@@ -8030,12 +8037,15 @@ terse status, and never launches a first-time scan on a global refresh.
     return bridgeP.then(function(bridge){
       __og.bridge = bridge;
       hgOgPaintGoldEngines(ui, bridge, deskTape);
-      hgOgPaintScalpVerdict(ui, hgOgPickScalpVerdict(ogCollapsed || [], bridge, deskTape));
+      hgOgPaintScalpVerdict(ui, hgOgPickScalpVerdict(ogCollapsed || [], bridge,
+        (__og.tape && __og.tape.scalp) || deskTape));
     });
   }
 
-  function hgOgMostProbablePanelHtml(pickScalp, pickSwing, tape, held, watchScalp, watchSwing, engineScalp, engineSwing){
+  function hgOgMostProbablePanelHtml(pickScalp, pickSwing, tape, held, watchScalp, watchSwing, engineScalp, engineSwing, tapes){
     tape = String(tape || '').toLowerCase();
+    var scalpT = (tapes && tapes.scalp != null) ? String(tapes.scalp).toLowerCase() : tape;
+    var swingT = (tapes && tapes.swing != null) ? String(tapes.swing).toLowerCase() : tape;
     var anyTrade = (pickScalp && pickScalp.plan) || (pickSwing && pickSwing.plan);
     var anyWatch = (watchScalp && watchScalp.plan) || (watchSwing && watchSwing.plan);
     var anyEngine = (engineScalp && engineScalp.plan) || (engineSwing && engineSwing.plan);
@@ -8083,13 +8093,13 @@ terse status, and never launches a first-time scan on a global refresh.
     /* Replay footnote (ADDITIVE): the OOS verdict on this very legend. */
     h += hgOgConfluenceFitNoteHtml();
     h += '</div>';
-    h += hgOgMpHorizonHtml('SCALP', pickScalp, tape, watchScalp, held, engineScalp);
-    h += hgOgMpHorizonHtml('SWING', pickSwing, tape, watchSwing, held, engineSwing);
+    h += hgOgMpHorizonHtml('SCALP', pickScalp, scalpT, watchScalp, held, engineScalp);
+    h += hgOgMpHorizonHtml('SWING', pickSwing, swingT, watchSwing, held, engineSwing);
     h += '</section>';
     return h;
   }
 
-  function hgOgPaintMostProbable(ui, pickScalp, pickSwing, tape, mpBag, held, watchScalp, watchSwing, engineScalp, engineSwing){
+  function hgOgPaintMostProbable(ui, pickScalp, pickSwing, tape, mpBag, held, watchScalp, watchSwing, engineScalp, engineSwing, tapes){
     var host = (ui && ui.mp) || (ui && ui.cards);
     if (!host) return;
     try {
@@ -8097,7 +8107,7 @@ terse status, and never launches a first-time scan on a global refresh.
       if (wPin && typeof wPin.hgMpPin === 'function') wPin.hgMpPin('omnigold', mpBag || [], tape || null, host);
     } catch (eMp) {}
     try {
-      var dual = hgOgMostProbablePanelHtml(pickScalp, pickSwing, tape, held, watchScalp, watchSwing, engineScalp, engineSwing);
+      var dual = hgOgMostProbablePanelHtml(pickScalp, pickSwing, tape, held, watchScalp, watchSwing, engineScalp, engineSwing, tapes);
       var oldMp = host.querySelector ? host.querySelector('[data-hg-mp]') : null;
       if (!dual) return;
       if (oldMp) oldMp.outerHTML = dual;
@@ -9219,10 +9229,10 @@ terse status, and never launches a first-time scan on a global refresh.
           ui.stat.textContent = __og.lastStat + warn;
         }
 
-        var pickScalp = hgOgPickFor(ogCollapsed, HORIZONS.scalp.label, deskTape);
-        var pickSwing = hgOgPickFor(ogCollapsed, HORIZONS.swing.label, deskTape);
-        var watchScalp = pickScalp ? null : hgOgPickWatchFor(ogCollapsed, HORIZONS.scalp.label, deskTape);
-        var watchSwing = pickSwing ? null : hgOgPickWatchFor(ogCollapsed, HORIZONS.swing.label, deskTape);
+        var pickScalp = hgOgPickFor(ogCollapsed, HORIZONS.scalp.label, scalpTape);
+        var pickSwing = hgOgPickFor(ogCollapsed, HORIZONS.swing.label, swingTape);
+        var watchScalp = pickScalp ? null : hgOgPickWatchFor(ogCollapsed, HORIZONS.scalp.label, scalpTape);
+        var watchSwing = pickSwing ? null : hgOgPickWatchFor(ogCollapsed, HORIZONS.swing.label, swingTape);
         if (pickScalp) pickScalp.topPick = true;
         if (pickSwing) pickSwing.topPick = true;
         if (watchScalp) watchScalp.topWatch = true;
@@ -9242,12 +9252,14 @@ terse status, and never launches a first-time scan on a global refresh.
             h += hgOgZonesPanel(res.scalp.rows, res.scalp.livePx, deskTape);
           }
         } catch (eZp) {}
-        [[HORIZONS.scalp.label, pickScalp, watchScalp], [HORIZONS.swing.label, pickSwing, watchSwing]].forEach(function(pair){
+        var hzTapes = { scalp: scalpTape, swing: swingTape };
+        [[HORIZONS.scalp.label, pickScalp, watchScalp, scalpTape], [HORIZONS.swing.label, pickSwing, watchSwing, swingTape]].forEach(function(pair){
           if (pair[1] || pair[2]) return;
+          var hzTape = String(pair[3] || '');
           var noneWhy = 'nothing on that horizon cleared the ledger this scan. That is a result, not a gap — the alternative would be promoting a setup the desk already vetoed.';
-          if (deskTape === 'short')
+          if (hzTape === 'short')
             noneWhy = 'gold is going down — a LONG is not the setup. Standing aside is the position when no short ticket cleared.';
-          else if (deskTape === 'long')
+          else if (hzTape === 'long')
             noneWhy = 'gold is going up — a SHORT is not the setup. Standing aside is the position when no long ticket cleared.';
           h += '<div class="note og-pick-none">No ' + esc(pair[0]) + ' pick: ' + noneWhy + '</div>';
         });
@@ -9347,17 +9359,17 @@ terse status, and never launches a first-time scan on a global refresh.
            bridge fetch. A hung 15m/1d re-fetch used to leave #ogMp and
            #ogGoldEngines blank even when VETO cards already painted. */
         try {
-          hgOgPaintMostProbable(ui, pickScalp, pickSwing, deskTape, mpBag, ogHeld, watchScalp, watchSwing, null, null);
+          hgOgPaintMostProbable(ui, pickScalp, pickSwing, deskTape, mpBag, ogHeld, watchScalp, watchSwing, null, null, hzTapes);
         } catch (eMp0) {}
         try {
           hgOgPaintGoldEngines(ui, { ok: false, why: 'loading GOLD SCALP / GOLD SWING engines…' }, deskTape);
         } catch (eGe0) {}
         return hgOgRunGoldTabEngines(shared, res.scalp.rows, res.swing.rows).then(function(bridge){
           __og.bridge = bridge;
-          var engineScalp = !pickScalp ? hgOgPickGoldEngineForMp(bridge, HORIZONS.scalp.label, deskTape) : null;
-          var engineSwing = !pickSwing ? hgOgPickGoldEngineForMp(bridge, HORIZONS.swing.label, deskTape) : null;
+          var engineScalp = !pickScalp ? hgOgPickGoldEngineForMp(bridge, HORIZONS.scalp.label, scalpTape) : null;
+          var engineSwing = !pickSwing ? hgOgPickGoldEngineForMp(bridge, HORIZONS.swing.label, swingTape) : null;
           try {
-            hgOgPaintMostProbable(ui, pickScalp, pickSwing, deskTape, mpBag, ogHeld, watchScalp, watchSwing, engineScalp, engineSwing);
+            hgOgPaintMostProbable(ui, pickScalp, pickSwing, deskTape, mpBag, ogHeld, watchScalp, watchSwing, engineScalp, engineSwing, hzTapes);
           } catch (eRender) {
             if (__og.lastCardsHtml) ogKeepLast(ui, 'scan finished but mostProbable render failed: ' + ((eRender && eRender.message) || eRender));
             throw eRender;
@@ -9371,6 +9383,7 @@ terse status, and never launches a first-time scan on a global refresh.
               __og.lastAllView = { cards: ui.cards.innerHTML, mp: ui.mp ? ui.mp.innerHTML : null };
               __og.lastView = { collapsed: ogCollapsed,
                                 mpArgs: { pickScalp: pickScalp, pickSwing: pickSwing, tape: deskTape,
+                                          tapes: hzTapes,
                                           mpBag: mpBag, held: ogHeld,
                                           watchScalp: watchScalp, watchSwing: watchSwing,
                                           engineScalp: engineScalp, engineSwing: engineSwing } };
@@ -9917,7 +9930,8 @@ terse status, and never launches a first-time scan on a global refresh.
         }
         hgOgPaintMostProbable(ui, pk(a.pickScalp), pk(a.pickSwing), a.tape, bag, a.held,
                               pk(a.watchScalp), pk(a.watchSwing),
-                              pkEng(a.engineScalp, 'SCALP'), pkEng(a.engineSwing, 'SWING'));
+                              pkEng(a.engineScalp, 'SCALP'), pkEng(a.engineSwing, 'SWING'),
+                              a.tapes);
       }catch(eMp){}
     }catch(e){}
   }
