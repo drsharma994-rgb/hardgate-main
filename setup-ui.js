@@ -100,6 +100,25 @@ function hgSetupDeskBannerHTML(opts){
     + '</div>';
 }
 
+function suOrderRunner(dir, entry, t1, t2){
+  if (typeof W.hgOrderRunnerTargets === 'function'){
+    try{ return W.hgOrderRunnerTargets(dir, entry, t1, t2); }catch(e){}
+  }
+  dir = String(dir || '').toLowerCase();
+  var a = +t1, b = +t2, e = +entry;
+  var out = { t1: a, t2: b, swapped: false, dropped: false };
+  if (!isFinite(a)) return out;
+  if (!isFinite(b)){ out.t2 = NaN; return out; }
+  var long = dir !== 'short';
+  if (!isFinite(e) || (long ? !(b > e) : !(b < e))){
+    out.t2 = NaN; out.dropped = true; return out;
+  }
+  if (long ? (b > a) : (b < a)) return out;
+  if (Math.abs(b - a) < 1e-12){ out.t2 = NaN; out.dropped = true; return out; }
+  out.t1 = b; out.t2 = a; out.swapped = true;
+  return out;
+}
+
 function hgMpPx(n){
   if (typeof W.px === 'function'){
     try{ return W.px(n); }catch(e){}
@@ -124,8 +143,16 @@ function hgMostProbablePanelHTML(kind, pick){
     var tab = kind ? String(kind).toUpperCase() : 'SCAN';
     var dir = String(row.dir || '').toLowerCase();
     var dirLbl = dir ? dir.toUpperCase() : '—';
+    /* T2 is the runner — never print a closer T2 than T1. Swap existing
+       prices; do not invent a new level. Incoming row.rr may be the
+       inverted 8R-first / 5R-runner pair, so R labels are re-derived. */
+    var ord = suOrderRunner(dir, e, t1, t2);
+    if (ord){
+      if (isFinite(+ord.t1)) t1 = +ord.t1;
+      t2 = (ord.dropped || !isFinite(+ord.t2)) ? NaN : +ord.t2;
+    }
     var risk = Math.abs(e - s);
-    var rr = isFinite(+row.rr) ? +row.rr : (risk > 0 ? Math.abs(t1 - e) / risk : NaN);
+    var rr = risk > 0 && isFinite(t1) ? Math.abs(t1 - e) / risk : NaN;
     var rr2 = isFinite(t2) && risk > 0 ? Math.abs(t2 - e) / risk : NaN;
     var venue = row.venue || row.venueTag || '';
     var passed = row.gatesPassed != null ? row.gatesPassed : row.passed;

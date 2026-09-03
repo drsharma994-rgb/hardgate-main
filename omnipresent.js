@@ -473,6 +473,24 @@
       if (isFinite(fin(formed.plan.t1))){
         cand.t1 = formed.plan.t1;
         if (isFinite(fin(formed.plan.t2))) cand.t2 = formed.plan.t2;
+        if (formed.plan.t1Source) cand.t1Source = formed.plan.t1Source;
+        if (formed.plan.t2Source) cand.t2Source = formed.plan.t2Source;
+        /* Formation can snap T1 past the named T2 (8R first take, 5R
+           "runner"). Reorder existing prices — never invent a new level. */
+        var orderFn = gfn('hgOrderRunnerTargets');
+        if (orderFn){
+          var ord = orderFn(cand.dir, cand.entry, cand.t1, cand.t2);
+          if (ord){
+            if (isFinite(fin(ord.t1))) cand.t1 = ord.t1;
+            if (ord.dropped || !isFinite(fin(ord.t2))) cand.t2 = null;
+            else cand.t2 = ord.t2;
+            if (ord.swapped){
+              var tmpSrc = cand.t1Source;
+              cand.t1Source = cand.t2Source;
+              cand.t2Source = tmpSrc;
+            }
+          }
+        }
         var riskN = Math.abs(fin(cand.entry) - fin(cand.stop));
         if (isFinite(riskN) && riskN > 0){
           cand.rr1 = Math.abs(fin(cand.t1) - fin(cand.entry)) / riskN;
@@ -1801,12 +1819,26 @@
        + '</div>';
     h += '<div>ZONE <b>' + pxF(c.zone.lo) + '–' + pxF(c.zone.hi) + '</b> (' + c.zone.confluence + ' sources: '
        + esc(c.zone.srcs.join(', ')) + ') · ' + c.zone.distAtr.toFixed(1) + 'xATR from market ' + pxF(c.livePx) + '</div>';
+    var showT1 = c.t1, showT2 = c.t2, showRr1 = c.rr1, showRr2 = c.rr2;
+    var orderCard = gfn('hgOrderRunnerTargets');
+    if (orderCard){
+      var oc = orderCard(c.dir, c.entry, c.t1, c.t2);
+      if (oc && isFinite(fin(oc.t1))){
+        showT1 = oc.t1;
+        showT2 = (oc.dropped || !isFinite(fin(oc.t2))) ? NaN : oc.t2;
+        var rC = Math.abs(fin(c.entry) - fin(c.stop));
+        if (rC > 0){
+          showRr1 = Math.abs(fin(showT1) - fin(c.entry)) / rC;
+          showRr2 = isFinite(fin(showT2)) ? Math.abs(fin(showT2) - fin(c.entry)) / rC : NaN;
+        }
+      }
+    }
     h += '<div>ENTRY <b>' + pxF(c.entry) + '</b>' + (c.status === 'TRIGGERED' ? ' (live)' : ' (at the zone)')
        + (c.entryType ? (' · ' + esc(String(c.entryType))) : '')
        + ' · SL <b>' + pxF(c.stop) + '</b> (squeezed: zone + ' + STOP_PAD_ATR + 'xATR)'
-       + ' · TP1 <b>' + pxF(c.t1) + '</b> (' + (isFinite(fin(c.rr1)) ? fin(c.rr1).toFixed(1) : '2') + 'R'
+       + ' · TP1 <b>' + pxF(showT1) + '</b> (' + (isFinite(fin(showRr1)) ? fin(showRr1).toFixed(1) : '2') + 'R'
        + (c.t1Source ? (' · ' + esc(String(c.t1Source))) : '') + ')'
-       + ' · TP2 <b>' + pxF(c.t2) + '</b> (' + (isFinite(fin(c.rr2)) ? fin(c.rr2).toFixed(1) : '?') + 'R)</div>';
+       + ' · TP2 <b>' + pxF(showT2) + '</b> (' + (isFinite(fin(showRr2)) ? fin(showRr2).toFixed(1) : '?') + 'R)</div>';
     if (isFinite(fin(c.formationScore)) || isFinite(fin(c.fillProb))
         || (c.evidenceChips && c.evidenceChips.length) || c.liveNote){
       h += '<div class="dim">FORMATION'
