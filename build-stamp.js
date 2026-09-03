@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v589',
-  pack: 'Gold replay: suppress toxic SCALP, prefer paying SWING',
-  built: '2026-09-03T14:20:00Z',
-  note: '7,270-trade OMNIGOLD/SCALP/SWING replay. SCALP ORB suppressed (n=69 net −1.80R). Kind-demotion floor n=100→50. SWING prefer BOS-RETEST / INSIDE-BREAK / RIBBON-PULLBACK / STRUCT-BOS / NR7-BREAK / AVWAP-RECLAIM. Never invents dir or levels.'
+  version: 'hg-v590',
+  pack: 'OMNIROUTE+OMNIPRESENT replay apply',
+  built: '2026-09-03T18:30:00Z',
+  note: '2,832-trade OMNIROUTE 1h replay + 8,522-trade OMNIPRESENT fade replay. Demote n≥50 gross≤−0.05 kinds from formation unless the live forward ledger has paid. Prefer AVWAP-RECLAIM / CUSUM-SHIFT / DONCHIAN-DRIVE / MMOVE / NR7-BREAK. OP stands aside costR>0.20 TRIGGERED tickets and gold perps. Never invents dir or levels. Never loosens 3+/2+ or G1–G7.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

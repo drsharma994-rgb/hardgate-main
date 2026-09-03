@@ -503,6 +503,10 @@
       var stampOp = gfn('hgOmniStampEdge');
       if (stampOp) stampOp(cand, { livePx: livePx });
     } catch (eOpEdge) {}
+    try {
+      var dragF = opCostDrag(cand);
+      if (dragF && isFinite(fin(dragF.costR))) cand.costR = fin(dragF.costR);
+    } catch (eCost) {}
     /* Crypto Master Catalog: permission/size/lead only. Never flip dir.
        Unknown kinds (OP-ARMED / OP-REJECT) fail-open as S0. */
     try {
@@ -581,6 +585,49 @@
       : (rr1n >= MIN_RR
         ? { key: 'min-rr', hard: true, pass: true, why: 'T1 pays ' + rr1n.toFixed(1) + 'R off the squeezed stop' }
         : { key: 'min-rr', hard: true, pass: false, why: 'T1 pays only ' + rr1n.toFixed(1) + 'R — under the ' + MIN_RR + 'R floor' }));
+
+    /* Cost geometry (hg-v590). Replay: costR>=0.20 loses −0.49R vs −0.05R
+       under 0.08. TRIGGERED tickets with toxic cost stand aside. ARMED
+       keeps the level as WATCH and reports AGAINST. Never loosens 3+/2+. */
+    var drag = opCostDrag(cand);
+    var costR = drag ? fin(drag.costR) : NaN;
+    if (isFinite(costR)) cand.costR = costR;
+    var costCeil = HG_OP_COST_TOXIC_R;
+    try{
+      var evC = opX20Evidence();
+      if (evC && evC.costToxic && isFinite(fin(evC.costToxic.thresholdR)))
+        costCeil = fin(evC.costToxic.thresholdR);
+    }catch(eCeil){}
+    if (!isFinite(costR)){
+      gates.push({ key: 'cost-geometry', hard: false, pass: null,
+        why: 'cost drag UNCHECKED — no entry/stop geometry' });
+    } else if (costR > costCeil){
+      var costWhy = 'cost ' + costR.toFixed(2) + 'R of every trade to fees (stop too tight vs '
+        + (drag && isFinite(fin(drag.rtCostPct)) ? fin(drag.rtCostPct).toFixed(2) : '0.14')
+        + '% RT) — replay costR>' + costCeil.toFixed(2) + ' lost −0.49R';
+      if (cand.status === 'TRIGGERED'){
+        gates.push({ key: 'cost-geometry', hard: true, pass: false, why: costWhy });
+      } else {
+        gates.push({ key: 'cost-geometry', hard: false, info: true, pass: false, why: costWhy });
+      }
+    } else {
+      gates.push({ key: 'cost-geometry', hard: true, pass: true,
+        why: 'cost ' + costR.toFixed(2) + 'R — inside the ' + costCeil.toFixed(2) + 'R replay ceiling' });
+    }
+
+    /* Gold venue (hg-v590). XAU/XAG/PAXG lost −0.53R on this fade desk.
+       TRIGGERED stands aside; ARMED remains a watch with an AGAINST note. */
+    if (opReplayGoldSym(sym || cand.sym)){
+      var goldWhy = 'gold perp on a crypto fade desk — replay XAU/XAG/PAXG net −0.53R';
+      if (cand.status === 'TRIGGERED'){
+        gates.push({ key: 'replay-venue', hard: true, pass: false, why: goldWhy });
+      } else {
+        gates.push({ key: 'replay-venue', hard: false, info: true, pass: false, why: goldWhy });
+      }
+    } else {
+      gates.push({ key: 'replay-venue', hard: true, pass: true,
+        why: 'not a gold perp — crypto fade book applies' });
+    }
 
     var newsFn = gfn('hgNewsRisk');
     if (newsFn){
@@ -715,6 +762,16 @@
     if (aC !== bC) return aC > bC;
     var aTr = a.status === 'TRIGGERED' ? 1 : 0, bTr = b.status === 'TRIGGERED' ? 1 : 0;
     if (aTr !== bTr) return aTr > bTr;
+    /* Tickets: replay said lower costR / wider stop lost less. ARMED
+       watches still prefer nearer — that is the anticipation job. */
+    if (aT && bT){
+      var aCost = isFinite(fin(a.costR)) ? fin(a.costR) : 99;
+      var bCost = isFinite(fin(b.costR)) ? fin(b.costR) : 99;
+      if (aCost !== bCost) return aCost < bCost;
+      var aW = (a.zone && isFinite(+a.zone.distAtr)) ? +a.zone.distAtr : -1;
+      var bW = (b.zone && isFinite(+b.zone.distAtr)) ? +b.zone.distAtr : -1;
+      if (aW !== bW) return aW > bW;
+    }
     var aS = isFinite(a.score) ? a.score : 0, bS = isFinite(b.score) ? b.score : 0;
     if (aS !== bS) return aS > bS;
     var aF = isFinite(+a.formationScore) ? +a.formationScore : -1;
@@ -746,6 +803,11 @@
     one.sort(function (a, b){
       var at = a && a.grade && a.grade.ticket ? 1 : 0, bt = b && b.grade && b.grade.ticket ? 1 : 0;
       if (at !== bt) return bt - at;
+      if (at && bt){
+        var ac = isFinite(fin(a.costR)) ? fin(a.costR) : 99;
+        var bc = isFinite(fin(b.costR)) ? fin(b.costR) : 99;
+        if (ac !== bc) return ac - bc;
+      }
       var as = ((b && b.score) || 0) - ((a && a.score) || 0);
       if (as) return as;
       var ae = isFinite(+a.edgeScore) ? +a.edgeScore : -1;
@@ -1213,8 +1275,51 @@
       'OP-HIGH-REJECT': { n: 4204, winRate: 0.3088, avgGrossR: -0.0224, avgNetR: -0.2182, pf: 0.7240 },
       'OP-LOW-REJECT':  { n: 4318, winRate: 0.3038, avgGrossR: -0.0391, avgNetR: -0.2196, pf: 0.7207 }
     },
-    gatedCohort: { n: 164, winRate: 0.2683, avgGrossR: -0.1473, avgNetR: -0.2736, pf: 0.6538 }
+    gatedCohort: { n: 164, winRate: 0.2683, avgGrossR: -0.1473, avgNetR: -0.2736, pf: 0.6538 },
+    /* hg-v590 slices — tighten tickets, never loosen 3+/2+ */
+    costToxic: { thresholdR: 0.20, n: 2532, avgNetR: -0.4911 },
+    goldVenue: { n: 564, avgNetR: -0.5345, note: 'XAU/XAG/PAXG perps on this fade desk' }
   };
+
+  var HG_OP_COST_TOXIC_R = 0.20;
+
+  function opReplayGoldSym(sym){
+    return /XAU|XAG|PAXG|XAUT/.test(String(sym || '').toUpperCase());
+  }
+
+  function opCostDrag(cand){
+    var fn = gfn('hgOmniCostDrag');
+    if (!fn || !cand) return null;
+    try{
+      return fn({ plan: { entry: cand.entry, stop: cand.stop } }) || null;
+    }catch(e){ return null; }
+  }
+
+  function opDeskStanceBannerHtml(){
+    var E = opX20Evidence();
+    var hi = E && E.kinds && E.kinds['OP-HIGH-REJECT'];
+    var lo = E && E.kinds && E.kinds['OP-LOW-REJECT'];
+    var gc = E && E.gatedCohort;
+    var ct = E && E.costToxic;
+    var gv = E && E.goldVenue;
+    var txt = 'BOTH fade kinds net-negative at scale'
+      + (hi && isFinite(fin(hi.avgNetR)) ? (' — HIGH-REJECT ' + fin(hi.avgNetR).toFixed(2) + 'R') : '')
+      + (lo && isFinite(fin(lo.avgNetR)) ? (', LOW-REJECT ' + fin(lo.avgNetR).toFixed(2) + 'R') : '')
+      + ' over ' + (E && E.settled ? E.settled : 8522) + ' settled ('
+      + (E && E.src ? E.src : 'scripts/backtest-omnipresent-results.json') + '). '
+      + 'Gated 3+ sources AND 2+ exhaustion is worse'
+      + (gc && isFinite(fin(gc.avgNetR)) ? (' (' + fin(gc.avgNetR).toFixed(2) + 'R) — not loosened.') : '.')
+      + ' Tight stops (costR>'
+      + (ct && isFinite(fin(ct.thresholdR)) ? fin(ct.thresholdR).toFixed(2) : '0.20')
+      + ') lose '
+      + (ct && isFinite(fin(ct.avgNetR)) ? fin(ct.avgNetR).toFixed(2) : '-0.49')
+      + 'R — TRIGGERED tickets with that geometry stand aside. '
+      + 'Gold perps (XAU/XAG/PAXG) lose '
+      + (gv && isFinite(fin(gv.avgNetR)) ? fin(gv.avgNetR).toFixed(2) : '-0.53')
+      + 'R — stood aside from TICKET. ARMED stays WATCH. No third mechanic.';
+    return '<div class="note warn" data-op-replay-stance="1" style="display:block;margin-bottom:10px">'
+      + '<b>REPLAY STANCE</b> — ' + esc(txt) + '</div>';
+  }
 
   /* The one read path for the table: prefer the window export (same object
      unless a harness swapped it), fall back to the lexical copy. Anything
@@ -1877,6 +1982,7 @@
       + 'TICKET requires 3+ level sources, 2+ exhaustion reads including a real rejection, a daily stack that does not fight the fade, and a running trend only with RSI divergence. '
       + 'Thin zones, one-read “setups”, and an adverse third of the context panel are vetoes. Every triggered plan is forward-logged under OMNIPRESENT. '
       + '<b>Anticipation, not prophecy</b> — these are the levels where reversals have the best structural odds; the forward pool is the judge.</div>'
+      + opDeskStanceBannerHtml()
       + '<div class="note" id="opStat">idle — press RUN.</div>'
       + '<div class="note warn" id="opWarn" style="display:none"></div>'
       + '<div class="row" style="margin-top:8px"><button class="btn" id="opRun">RUN OMNIPRESENT SCAN</button></div>'
@@ -1940,6 +2046,7 @@
     window.opAssess = opAssess;
     window.opGates = opGates;
     window.opShowable = opShowable;
+    window.opBetterCand = opBetterCand;
     window.opOnePerContract = opOnePerContract;
     window.opRankHead = opRankHead;
     window.opNextCloses = opNextCloses;
@@ -1954,6 +2061,9 @@
        the rule COMPUTES from the rows (mutate the table, watch the section
        flip) instead of trusting prose. */
     window.HG_OP_REPLAY_EVIDENCE = HG_OP_REPLAY_EVIDENCE;
+    window.opReplayGoldSym = opReplayGoldSym;
+    window.opCostDrag = opCostDrag;
+    window.opDeskStanceBannerHtml = opDeskStanceBannerHtml;
     window.opX20ReplayQuality = opX20ReplayQuality;
     window.opX20ReplayLine = opX20ReplayLine;
     window.opX20GeomOnly = opX20GeomOnly;

@@ -2135,6 +2135,17 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   function hgOmniFormTicket(plan, hit, rows, extra){
     extra = extra || {};
     if (!plan) return { plan: null, ok: false, reason: 'no plan' };
+    /* Replay demotion runs even when hgFormTicket is absent — a toxic kind
+       cannot hide behind a missing enricher. Prefer stamp waits for the
+       formed plan so survivor rides the levels that will print. */
+    var earlyKind = String((hit && hit.kind) || plan.kind || '');
+    var earlyDem = hgOmniKindDemotion(earlyKind);
+    if (earlyDem && !hgOmniReplayForwardPaid(earlyKind)){
+      plan.formationOk = false;
+      plan.formationReason = 'replay-demoted: ' + earlyDem.reasons.join('; ');
+      plan.kindDemotion = earlyDem;
+      return { plan: plan, ok: false, reason: plan.formationReason, tag: 'replay-kind' };
+    }
     var w = (typeof window !== 'undefined') ? window : null;
     var formFn = (w && typeof w.hgFormTicket === 'function') ? w.hgFormTicket : null;
     var entry0 = fin(plan.entry);
@@ -2195,7 +2206,178 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         }
       } catch (eCat) {}
     }
+    /* Replay kind apply (hg-v590). Demoted kinds do not form unless the
+       live forward ledger reads "has paid". Prefer kinds stamp survivor.
+       Never invents levels or direction. */
+    var replayKind = String((hit && hit.kind) || formed.kind || (plan && plan.kind) || '');
+    var dem = hgOmniKindDemotion(replayKind);
+    if (dem){
+      var paid = hgOmniReplayForwardPaid(replayKind);
+      if (paid){
+        formed.unDemoted = { demotion: dem, forward: paid };
+      } else {
+        formed.formationOk = false;
+        formed.formationReason = 'replay-demoted: ' + dem.reasons.join('; ');
+        formed.kindDemotion = dem;
+        return { plan: formed, ok: false, reason: formed.formationReason, tag: 'replay-kind' };
+      }
+    } else if (hgOmniKindPrefer(replayKind)){
+      formed.replaySurvivor = true;
+    }
     return { plan: formed, ok: true };
+  }
+
+  /* ==================== OMNIROUTE REPLAY EDGE (hg-v590) ====================
+     Baked from scripts/backtest-omniroute-v531-results.json (2,832 settled,
+     25-symbol point-in-time 1h universe, 0.05%+0.02%/side). Live desk scans
+     4h — directional evidence only. Demote/prefer are COMPUTED from these
+     rows at call time (n / avgGrossR / avgNetR), never a hand-kept list.
+       DEMOTE  n>=50 AND avgGrossR <= -0.05  → formation refuses
+       PREFER  n>=50 AND avgGrossR > 0 AND avgNetR > 0 → replay-survivor
+     ORB is near-even (gross +0.056, net −0.011) — not demoted, not preferred.
+     House extras with no baked row fail-open. Never invents tickets. */
+
+  var HG_OMNI_REPLAY_EVIDENCE = {
+    src: 'scripts/backtest-omniroute-v531-results.json',
+    runAt: '2026-08-30T09:34:30Z',
+    basis: '25 symbols × 2000 1h bars, point-in-time cache, taker 0.05%+0.02%/side',
+    settled: 2832,
+    overall: { n: 2832, winRate: 0.2602, avgGrossR: -0.0843, avgNetR: -0.2424, pf: 0.6828 },
+    demoteMinN: 50,
+    demoteGrossR: -0.05,
+    preferMinN: 50,
+    kinds: {
+      'AVWAP-RECLAIM': { n: 71, winRate: 0.4225, avgGrossR: 0.4421, avgNetR: 0.3640, pf: 1.6965 },
+      'CUSUM-SHIFT': { n: 77, winRate: 0.2987, avgGrossR: 0.1687, avgNetR: 0.0854, pf: 1.1557 },
+      'DONCHIAN-DRIVE': { n: 53, winRate: 0.3774, avgGrossR: 0.1321, avgNetR: 0.0717, pf: 1.1085 },
+      'VOL-EXPANSION': { n: 22, winRate: 0.1818, avgGrossR: 0.0911, avgNetR: 0.0603, pf: 1.1389 },
+      'MMOVE': { n: 188, winRate: 0.3138, avgGrossR: 0.1340, avgNetR: 0.0578, pf: 1.0950 },
+      'NR7-BREAK': { n: 150, winRate: 0.3200, avgGrossR: 0.1356, avgNetR: 0.0522, pf: 1.0853 },
+      'ORB': { n: 206, winRate: 0.2427, avgGrossR: 0.0564, avgNetR: -0.0114, pf: 0.9797 },
+      'VWAP-REVERT': { n: 336, winRate: 0.2679, avgGrossR: -0.0051, avgNetR: -0.0748, pf: 0.8851 },
+      'SQUEEZE-FIRE': { n: 50, winRate: 0.2200, avgGrossR: -0.0398, avgNetR: -0.0989, pf: 0.8439 },
+      'EXHAUST-REVERT': { n: 26, winRate: 0.1154, avgGrossR: -0.1197, avgNetR: -0.1683, pf: 0.7109 },
+      'ABSORB': { n: 3, winRate: 0.3333, avgGrossR: 0.0000, avgNetR: -0.1824, pf: 0.7365 },
+      'FVG-FILL': { n: 184, winRate: 0.2391, avgGrossR: -0.0833, avgNetR: -0.1902, pf: 0.7282 },
+      'PO3': { n: 73, winRate: 0.3014, avgGrossR: -0.0443, avgNetR: -0.2229, pf: 0.7141 },
+      'TREND-RECLAIM': { n: 109, winRate: 0.2385, avgGrossR: -0.1457, avgNetR: -0.2448, pf: 0.6767 },
+      'AVWAP-DEFEND': { n: 66, winRate: 0.2727, avgGrossR: -0.1818, avgNetR: -0.2561, pf: 0.6727 },
+      'BOS-RETEST': { n: 137, winRate: 0.1752, avgGrossR: -0.2214, avgNetR: -0.2847, pf: 0.5994 },
+      'EQL-SWEEP': { n: 111, winRate: 0.2973, avgGrossR: -0.0984, avgNetR: -0.2903, pf: 0.6471 },
+      'SWEEP-RECLAIM': { n: 120, winRate: 0.2333, avgGrossR: -0.2496, avgNetR: -0.3085, pf: 0.6042 },
+      'SPRING': { n: 100, winRate: 0.2900, avgGrossR: -0.1184, avgNetR: -0.3190, pf: 0.6257 },
+      'EQH-SWEEP': { n: 119, winRate: 0.2857, avgGrossR: -0.1335, avgNetR: -0.3604, pf: 0.5895 },
+      'COMPRESSION-BREAK': { n: 16, winRate: 0.1875, avgGrossR: -0.3126, avgNetR: -0.3742, pf: 0.5292 },
+      'POC-REVERT': { n: 24, winRate: 0.0833, avgGrossR: -0.4019, avgNetR: -0.4322, pf: 0.4056 },
+      'UTAD': { n: 135, winRate: 0.2593, avgGrossR: -0.2222, avgNetR: -0.4681, pf: 0.4881 },
+      'VALUE': { n: 12, winRate: 0.2500, avgGrossR: -0.2500, avgNetR: -0.4765, pf: 0.4525 },
+      'HTF-PULLBACK': { n: 55, winRate: 0.1636, avgGrossR: -0.4433, avgNetR: -0.5085, pf: 0.4033 },
+      'ENGULF-LEVEL': { n: 55, winRate: 0.2545, avgGrossR: -0.2364, avgNetR: -0.6009, pf: 0.4363 },
+      'RSI-DIVERGE': { n: 58, winRate: 0.2414, avgGrossR: -0.2759, avgNetR: -0.6224, pf: 0.3928 },
+      'THREE-BAR': { n: 161, winRate: 0.2484, avgGrossR: -0.2547, avgNetR: -0.7878, pf: 0.3139 },
+      'PIN-REJECT': { n: 115, winRate: 0.1739, avgGrossR: -0.4783, avgNetR: -1.0284, pf: 0.1870 }
+    }
+  };
+
+  function hgOmniReplayEvidence(kind){
+    try{
+      var E = (typeof window !== 'undefined' && window.HG_OMNI_REPLAY_EVIDENCE)
+        ? window.HG_OMNI_REPLAY_EVIDENCE : HG_OMNI_REPLAY_EVIDENCE;
+      var k = String(kind || '').toUpperCase();
+      if (!k || !E || !E.kinds || !Object.prototype.hasOwnProperty.call(E.kinds, k)) return null;
+      var r = E.kinds[k];
+      return (r && typeof r === 'object') ? r : null;
+    }catch(eE){ return null; }
+  }
+
+  function hgOmniKindDemotion(kind){
+    try{
+      var ev = hgOmniReplayEvidence(kind);
+      if (!ev || !isFinite(fin(ev.avgGrossR))) return null;
+      var E = (typeof window !== 'undefined' && window.HG_OMNI_REPLAY_EVIDENCE)
+        ? window.HG_OMNI_REPLAY_EVIDENCE : HG_OMNI_REPLAY_EVIDENCE;
+      var minN = isFinite(fin(E.demoteMinN)) ? fin(E.demoteMinN) : 50;
+      var floor = isFinite(fin(E.demoteGrossR)) ? fin(E.demoteGrossR) : -0.05;
+      if (!(fin(ev.n) >= minN)) return null;
+      if (!(fin(ev.avgGrossR) <= floor)) return null;
+      return {
+        kind: String(kind).toUpperCase(),
+        n: ev.n, winRate: ev.winRate,
+        grossR: ev.avgGrossR, netR: ev.avgNetR, pf: ev.pf,
+        reasons: ['grossR ' + fin(ev.avgGrossR).toFixed(3) + ' <= ' + floor
+          + ' at n=' + ev.n + ' — direction measured wrong at scale regardless of costs']
+      };
+    }catch(eKd){ return null; }
+  }
+
+  function hgOmniKindPrefer(kind){
+    try{
+      var ev = hgOmniReplayEvidence(kind);
+      if (!ev) return false;
+      var E = (typeof window !== 'undefined' && window.HG_OMNI_REPLAY_EVIDENCE)
+        ? window.HG_OMNI_REPLAY_EVIDENCE : HG_OMNI_REPLAY_EVIDENCE;
+      var minN = isFinite(fin(E.preferMinN)) ? fin(E.preferMinN) : 50;
+      return (fin(ev.n) >= minN)
+        && isFinite(fin(ev.avgGrossR)) && fin(ev.avgGrossR) > 0
+        && isFinite(fin(ev.avgNetR)) && fin(ev.avgNetR) > 0;
+    }catch(eKp){ return false; }
+  }
+
+  function hgOmniPreferKinds(){
+    var E = (typeof window !== 'undefined' && window.HG_OMNI_REPLAY_EVIDENCE)
+      ? window.HG_OMNI_REPLAY_EVIDENCE : HG_OMNI_REPLAY_EVIDENCE;
+    var out = [], k;
+    if (!E || !E.kinds) return out;
+    for (k in E.kinds){
+      if (!Object.prototype.hasOwnProperty.call(E.kinds, k)) continue;
+      if (hgOmniKindPrefer(k)) out.push(k);
+    }
+    out.sort();
+    return out;
+  }
+
+  function hgOmniDemotedKindCount(){
+    var E = (typeof window !== 'undefined' && window.HG_OMNI_REPLAY_EVIDENCE)
+      ? window.HG_OMNI_REPLAY_EVIDENCE : HG_OMNI_REPLAY_EVIDENCE;
+    var n = 0, k;
+    if (!E || !E.kinds) return 0;
+    for (k in E.kinds){
+      if (!Object.prototype.hasOwnProperty.call(E.kinds, k)) continue;
+      if (hgOmniKindDemotion(k)) n++;
+    }
+    return n;
+  }
+
+  /* Same forward-paid read the 20X quality path uses. Fail closed.
+     Window export first so a harness can stub the read. */
+  function hgOmniReplayForwardPaid(kind){
+    try{
+      var w = (typeof window !== 'undefined') ? window : null;
+      var fn = (w && typeof w.hgOmni20xForwardPaid === 'function')
+        ? w.hgOmni20xForwardPaid : hgOmni20xForwardPaid;
+      var v = fn({ kind: String(kind || ''), fwdTab: 'OMNIROUTE' });
+      if (v && v.read === 'has paid') return v;
+    }catch(eFp){}
+    return null;
+  }
+
+  function hgOmniDeskStanceBannerHtml(){
+    var E = (typeof window !== 'undefined' && window.HG_OMNI_REPLAY_EVIDENCE)
+      ? window.HG_OMNI_REPLAY_EVIDENCE : HG_OMNI_REPLAY_EVIDENCE;
+    var nDem = hgOmniDemotedKindCount();
+    var prefer = hgOmniPreferKinds();
+    var ov = E.overall || {};
+    var txt = 'REPLAY VERDICT (' + (E.settled || 2832) + ' settled 1h trades in '
+      + (E.src || 'scripts/backtest-omniroute-v531-results.json') + '): overall '
+      + (isFinite(fin(ov.avgNetR)) ? fin(ov.avgNetR).toFixed(2) : '-0.24') + 'R net, PF '
+      + (isFinite(fin(ov.pf)) ? fin(ov.pf).toFixed(2) : '0.68') + '. '
+      + nDem + ' kinds stood aside (n≥50 and gross≤−0.05). '
+      + 'Prefer ' + (prefer.length ? prefer.join(', ') : 'none')
+      + ' — the only net-positive book at scale. '
+      + 'ORB is near-even, not suppressed. Solidity and conviction do not forecast wins. '
+      + 'Harness is 1h; live scan is 4h — directional evidence only. Never invents tickets.';
+    return '<div class="note warn" data-omni-replay-stance="1" style="display:block;margin-bottom:10px">'
+      + '<b>REPLAY STANCE</b> — ' + esc(txt) + '</div>';
   }
 
   /* Standard normal CDF (Abramowitz & Stegun 26.2.17), inlined so a piece of
@@ -7585,7 +7767,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         consensus: hgOmniConsensus(hgOmniConsensusVoters(hits, rows, exForHit), hit),
         family: hgOmniFamilyOf(hit.kind),
         rr: (plan && isFinite(fin(plan.rr1))) ? fin(plan.rr1) : NaN,
-        formationScore: (plan && isFinite(fin(plan.formationScore))) ? fin(plan.formationScore) : NaN
+        formationScore: (plan && isFinite(fin(plan.formationScore))) ? fin(plan.formationScore) : NaN,
+        replaySurvivor: !!(plan && plan.replaySurvivor) || hgOmniKindPrefer(hit.kind),
+        kindDemotion: (plan && plan.kindDemotion) || hgOmniKindDemotion(hit.kind) || null
       });
       try { hgOmniStampEdge(out[out.length - 1], { fwd: exForHit.fwd, stats: exForHit.stats }); }
       catch (eEdge) {}
@@ -7865,6 +8049,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     var ticketN = (c && c.grade && c.grade.ticket) ? 1 : 0;
     var edgeN = 0;
     if (c && isFinite(fin(c.edgeScore))) edgeN = Math.max(0, Math.min(100, fin(c.edgeScore))) / 100;
+    var preferN = (c && (c.replaySurvivor === true || hgOmniKindPrefer(c.kind))) ? 1 : 0;
+    var demoteN = (c && hgOmniKindDemotion(c.kind) && !(c.unDemoted)) ? 1 : 0;
     var score = 100 * tapeScore
               + 120 * ticketN
               + 30 * family
@@ -7872,7 +8058,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
               + 12 * coverage
               + 10 * alsoNorm
               + 10 * near
-              + 8 * edgeN;
+              + 8 * edgeN
+              + 18 * preferN
+              - 25 * demoteN;
     return {
       score: score, family: family, infoRatio: infoRatio, coverage: coverage,
       alsoNorm: alsoNorm, near: near, tapeScore: tapeScore,
@@ -7907,6 +8095,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     for (i = 0; i < ranked.length; i++){
       c = ranked[i];
       if (!c || !c.plan || !(c.grade && c.grade.ticket)) continue;
+      /* Demoted kinds never MOST PROBABLE (or HELD) unless the live
+         forward ledger un-demoted them. Formation already refuses them;
+         this is the last line so a synthetic ticket cannot sneak in. */
+      if ((c.kindDemotion || hgOmniKindDemotion(c.kind)) && !c.unDemoted) continue;
       if (String(c.dir || '').toLowerCase() !== tape){
         var hSym = String(c.sym || c.base || '');
         if (hSym && !heldSeen[hSym]){
@@ -10252,6 +10444,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       + '<b>A single veto stands it aside</b>; vetoed cards still render so you can see why. A contract missing a data source reads UNCHECKED, never PASS. '
       + 'Levels come from the house plan engine at a ' + MIN_RR + 'R floor. <b>MOST PROBABLE SETUPS</b> lead the tab: up to three tape-aligned tickets, ranked on a balance of mechanic families and indicator reads — not a win probability. Extra house engines vote and never claim 7/7 CLEAN. '
       + 'The measurement below is in-sample on a short window: it tells you which detector has paid <i>on the bars just read</i>, which is a floor, not a promise.</div>'
+      + hgOmniDeskStanceBannerHtml()
       + '<div class="row"><button class="btn" id="omniRun">RUN FULL SCAN (ALL CONTRACTS)</button>'
       +   ' <button class="btn" id="omniGrid">PARAMETER GRID</button></div>'
       + '<div class="note" id="omniStat">idle — press RUN. Full ledger on every Delta + CoinDCX name (4H + 1H + 15m + confluence), so expect several minutes; progress shows per pass.</div>'
@@ -10596,6 +10789,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniEvaluate = hgOmniEvaluate;
     window.hgOmniPlanForHit = hgOmniPlanForHit;
     window.hgOmniFormTicket = hgOmniFormTicket;
+    window.HG_OMNI_REPLAY_EVIDENCE = HG_OMNI_REPLAY_EVIDENCE;
+    window.hgOmniReplayEvidence = hgOmniReplayEvidence;
+    window.hgOmniKindDemotion = hgOmniKindDemotion;
+    window.hgOmniKindPrefer = hgOmniKindPrefer;
+    window.hgOmniPreferKinds = hgOmniPreferKinds;
+    window.hgOmniDemotedKindCount = hgOmniDemotedKindCount;
+    window.hgOmniReplayForwardPaid = hgOmniReplayForwardPaid;
+    window.hgOmniDeskStanceBannerHtml = hgOmniDeskStanceBannerHtml;
     window.hgOmniWilsonLower = hgOmniWilsonLower;
     window.hgOmniAdvancedEdge = hgOmniAdvancedEdge;
     window.hgOmniStampEdge = hgOmniStampEdge;
