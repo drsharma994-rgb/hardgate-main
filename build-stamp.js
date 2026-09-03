@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v591',
-  pack: 'OMNIGOLD setup activation confirmation',
-  built: '2026-09-03T19:20:00Z',
-  note: 'OMNIGOLD TOP SETUP paints SETUP ACTIVATED / NOT ACTIVATED with a confirmed checklist (scan · ticket · formed · level-fresh · tape). Activation is the same gate-passed formed level-fresh tape-aligned TICKET the ledger already uses. Never invents dir or levels. Never loosens gold tape or G1–G7.'
+  version: 'hg-v592',
+  pack: 'OMNIGOLD opposite-side shorts shown as HELD',
+  built: '2026-09-03T19:55:00Z',
+  note: 'TOP SETUP lists against-tape tickets (shorts on an UP tape) as HELD · NOT ACTIVATED with ENTRY/STOP/T1. When none cleared, the card says shorts are not hidden. Never invents dir or levels. Never loosens gold tape or G1–G7.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
