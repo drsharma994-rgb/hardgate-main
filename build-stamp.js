@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v581',
-  pack: 'Gold swing TP1 sides — no LONG with target below entry',
-  built: '2026-09-03T03:10:00Z',
-  note: 'S24 measured T1 already traded through becomes forming, not a ticket. Engine plans bind only when stop/T1 sit on the correct side of entry. Conviction restore and rank reject the v580 GOLD SWING paste (LONG TP1 between stop and entry).'
+  version: 'hg-v582',
+  pack: 'OmniGold tape honesty — pullback ≠ going down',
+  built: '2026-09-03T04:10:00Z',
+  note: 'A 5-bar dip in an UP stack is unread, not SHORT. Mixed 1h/4h tape is MIXED. Each horizon pick follows that horizon so LONG GOLD SCALP/SWING catalog setups can lead when 4h gold is up. No side invented.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

@@ -54,31 +54,42 @@ ok(typeof W.hgOgTapeDir === 'function', 'hgOgTapeDir is exported');
 const T0 = 1700000000 - (1700000000 % 86400);
 const B = (i, o, h, l, c) => ({ t: T0 + i * 3600, o, h, l, c, v: 1000 });
 
-console.log('\n== the release level is the price that actually flips the tape ==');
+console.log('\n== a late dip in an UP stack is not SHORT — release level is for a real down stack ==');
 {
-  /* An uptrend that has just dipped under its EMA21 — the live shape. */
-  const rows = [];
+  /* The live +2.7% shape: rise, then a late dip under EMA21. Stack stays up.
+     Calling this SHORT was the v582 field report (SHORT ADR-FADE on a rally). */
+  const dip = [];
   let p = 2000;
   for (let i = 0; i < 200; i++){
-    p += (i < 190) ? 1.2 : -6;                    /* rise, then a late dip */
-    rows.push(B(i, p, p + 2, p - 2, p));
+    p += (i < 190) ? 1.2 : -6;
+    dip.push(B(i, p, p + 2, p - 2, p));
   }
-  const dir = W.hgOgTapeDir(rows);
-  ok(dir === 'short', 'the tape reads short after the dip (' + dir + ')');
-  const lvl = W.hgOgTapeFlipLevel(rows, 'long');
-  ok(isFinite(lvl), 'a release level is produced (' + lvl.toFixed(2) + ')');
-  const now = rows[rows.length - 1].c;
-  ok(lvl > now, 'and it sits above the current close (' + now.toFixed(2) + ')');
+  ok(W.hgOgTapeDir(dip) !== 'short',
+     'late dip in an up stack is not SHORT (got ' + JSON.stringify(W.hgOgTapeDir(dip)) + ')');
 
-  /* THE ASSERTION THAT MATTERS: printing that level really does flip it.
-     A number that does not flip the tape would be worse than none — the
-     reader would watch it, see it hit, and still get no ticket. */
-  const at = rows.concat([B(200, lvl, lvl + 1, lvl - 1, lvl + 0.01)]);
-  ok(W.hgOgTapeDir(at) === 'long',
-     'a closed bar printing just above the level flips the tape to long');
-  const below = rows.concat([B(200, lvl, lvl, lvl - 2, lvl - 0.5)]);
-  ok(W.hgOgTapeDir(below) !== 'long',
-     'and a bar just below it does NOT — the level is the boundary, not a guess');
+  /* A genuine down stack: falling gold. Flip-to-long is named only when the
+     stack is already up; one close cannot invent an up stack, so a falling
+     series has no long-release level — honest empty, not a fake number. */
+  const fall = [];
+  let q = 3600;
+  for (let i = 0; i < 80; i++){
+    q -= 2.4;
+    fall.push(B(i, q + 2.4, q + 3.2, q - 0.8, q));
+  }
+  ok(W.hgOgTapeDir(fall) === 'short', 'a falling series with down stack is SHORT');
+  const rise = [];
+  let r = 2400;
+  for (let i = 0; i < 80; i++){
+    r += 2.4;
+    rise.push(B(i, r - 2.4, r + 0.8, r - 3.2, r));
+  }
+  ok(W.hgOgTapeDir(rise) === 'long', 'a rising series with up stack is LONG');
+  ok(!isFinite(W.hgOgTapeFlipLevel(rise, 'short')),
+     'one close cannot flip an up stack to SHORT — no fake release level');
+  ok(!isFinite(W.hgOgTapeFlipLevel(fall, 'long')),
+     'one close cannot flip a down stack to LONG — no fake release level');
+  const stay = W.hgOgTapeFlipLevel(rise, 'long');
+  ok(isFinite(stay), 'already-long tape names EMA21 as the long boundary');
 }
 
 console.log('\n== the copy reports held tickets and the level ==');
@@ -116,13 +127,14 @@ console.log('\n== it degrades rather than lying ==');
   ok(!isFinite(W.hgOgTapeFlipLevel(null, 'long')), 'null bars are handled');
 }
 
-console.log('\n== the tape rule itself is untouched ==');
+console.log('\n== the tape rule itself is honest about mixed horizons ==');
 {
   const SRC = fs.readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
-  /* short-wins is the documented asymmetry and the measured-good one; this
-     change must not have quietly relaxed it while improving the copy. */
-  ok(/if \(a === 'short' \|\| b === 'short'\) return 'short';/.test(SRC),
-     'hgOgDeskTape still lets short win outright');
+  /* Mixed horizons used to let SHORT win and then say "gold is going down".
+     That hid LONG catalog/engine setups on a rally. Disagree → empty desk
+     tape. A long is still not invented when the horizon itself is short. */
+  ok(W.hgOgDeskTape('short', 'long') === '',
+     'scalp DOWN + swing UP is MIXED, not desk SHORT');
   ok(/if \(!aligned\.length\) return null;/.test(SRC),
      'hgOgPickFor still refuses to invent the other side');
   ok(typeof W.hgOgPickWatchFor === 'function', 'hgOgPickWatchFor is exported');
