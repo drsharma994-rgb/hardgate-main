@@ -415,6 +415,7 @@ function publishState(cands){
 
 /* ---------------- diagnostic surface (full last scan) ---------------- */
 var __scanSnap = null;
+var __lastDeskTape = '';
 function publishScan(ranked, best, history, at, rejected, armed, whySilent){
   try{
     var cands = [];
@@ -491,7 +492,7 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
                  condition: w0.condition || '', reason: w0.reason || null,
                  promoteNote: w0.promoteNote || null });
     }
-    __scanSnap = { cands: cands, bestId: best ? (best.id || null) : null, history: hist, rejected: rej,
+    __scanSnap = { cands: cands, bestId: best ? (best.id || null) : null, history: hist, rejected: rej, tape: __lastDeskTape || '',
                    armed: arm, whySilent: (typeof whySilent === 'string' && whySilent) ? whySilent : null, at: at };
   }catch(e){ /* snapshotting must never break the scan */ }
 }
@@ -1722,6 +1723,7 @@ async function runScan(ui, scanSt){
     if (!displayBest && display.length) displayBest = display[0];
     var uniRows = gold.rows15m.length ? gold.rows15m : (gold.rows1h || []);
     var deskTape = goldUniformTapeOf(uniRows);
+    __lastDeskTape = deskTape || '';   /* published with the scan snapshot so OMNIGOLD holds the same side */
     displayBest = goldTapeAlignedBest(displayBest, display, deskTape);
     goldStampTape(display, deskTape);
 
