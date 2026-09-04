@@ -8412,12 +8412,16 @@ terse status, and never launches a first-time scan on a global refresh.
       if (!compose || !htmlFn) return '';
       var tapes = (__og && __og.tape) || {};
       var rows = (__og && __og.lastRows) || {};
-      return '<div data-hg-gold-uniform-desk="1" style="grid-column:1/-1;display:block;width:100%">';
+      /* A stray semicolon after the opening tag used to return ONLY that tag,
+         so the combined / HELD card never painted on OMNIGOLD (v593–v601).
+         heldStyle 'dark' = the enlarged, dark-highlighted held trade cards the
+         desk asked for; same compose, same levels, same against-tape rule. */
+      return '<div data-hg-gold-uniform-desk="1" style="grid-column:1/-1;display:block;width:100%">'
         + htmlFn(compose(hgOgUniformCands('SCALP'), {
-            horizon: 'SCALP', tape: tapes.scalp, rows: rows.scalp || rows.m15 || []
+            horizon: 'SCALP', tape: tapes.scalp, rows: rows.scalp || rows.m15 || [], heldStyle: 'dark', heldMax: 3
           }))
         + htmlFn(compose(hgOgUniformCands('SWING'), {
-            horizon: 'SWING', tape: tapes.swing, rows: rows.swing || []
+            horizon: 'SWING', tape: tapes.swing, rows: rows.swing || [], heldStyle: 'dark', heldMax: 3
           }))
         + '</div>';
     }catch(e){ return ''; }

@@ -244,5 +244,45 @@ console.log('\n== stamp ==');
     && new RegExp('omnigold\\.js\\?v=' + V).test(html), 'three gold tabs pinned');
 }
 
+console.log('== OMNIGOLD held trades: enlarged dark cards, same mechanics ==');
+{
+  /* mirrors the live GOLD SCALP screen: tape SHORT, the LONG grade-A S52/S0 plan is the opposite-side (held) trade */
+  const alignedShort = longPlan({ dir: 'short', entry: 4480, stop: 4486, t1: 4468, grade: 'A', strategy: 'ORDER BLOCK RETEST', stratKey: 'ob', tally: 7 });
+  const longA = longPlan({ dir: 'long', entry: 4471.29, stop: 4467.831491712059, t1: 4478.207016575882, grade: 'A', strategy: 'S52 RANGE-BAR', stratKey: 'S0 SWEEP', tally: 8, locked: true, why: 'range-bar sweep of the session low, reclaim pending' });
+  const longB = longPlan({ dir: 'long', entry: 4460, stop: 4455, t1: 4472, grade: 'B', strategy: 'FVG FILL', stratKey: 'fvg', tally: 5 });
+  const longC = longPlan({ dir: 'long', entry: 4450, stop: 4445, t1: 4462, grade: 'C', strategy: 'VWAP BOUNCE', stratKey: 'vwap', tally: 2 });
+  const light = W.hgGoldUniformCompose([alignedShort, longA, longB, longC], { horizon: 'SCALP', tape: 'SHORT' });
+  ok(light.heldStyle === 'light' && light.heldMax === 1 && light.held === longA, 'default (GOLD SCALP / SWING): light style, best opposite-side plan on held');
+  ok(Array.isArray(light.heldAll) && light.heldAll.length === 2 && light.heldAll[0] === longA && light.heldAll[1] === longB, 'heldAll keeps every opposite-side A/B plan, best first (grade C excluded — same rule as before)');
+  const lightHtml = W.hgGoldUniformHtml(light);
+  ok(/data-hg-gold-uniform-held="1"/.test(lightHtml) && !/data-hg-gold-uniform-held-dark/.test(lightHtml) && /4467\.83</.test(lightHtml) && !/4467\.831491712059/.test(lightHtml), 'light card unchanged for the gold desks, prices to 2 decimals');
+  const dark = W.hgGoldUniformCompose([alignedShort, longA, longB, longC], { horizon: 'SCALP', tape: 'SHORT', heldStyle: 'dark', heldMax: 3 });
+  ok(dark.heldStyle === 'dark' && dark.heldMax === 3 && dark.held === longA, 'OMNIGOLD compose: dark style, up to 3 held plans, same best pick');
+  const html = W.hgGoldUniformHtml(dark);
+  ok(/data-hg-gold-uniform-held-dark="1"/.test(html) && (html.match(/data-hg-gold-uniform-held="1"/g) || []).length === 2, 'dark block paints one card per held plan (2 of max 3)');
+  ok(/HELD TRADES · SCALP · against gold tape SHORT · 2 plans/.test(html), 'header names horizon, tape and plan count');
+  ok(/HELD · NOT CONFIRMED/.test(html) && /Against gold tape — shown as a trade, not the confirmed combined setup/.test(html), 'against-tape rule text is unchanged — held is never confirmed');
+  ok(/font-size:26px[^>]*>LONG/.test(html) && /font-size:24px[^>]*>4471\.29</.test(html), 'enlarged: 26px direction, 24px price cells');
+  ok(/background:linear-gradient\(180deg,#0B1220,#111827\)/.test(html) && /border-left:6px solid #22C55E/.test(html), 'dark highlighted card with a green accent for the long');
+  ok(/>4471\.29</.test(html) && />4467\.83</.test(html) && />4478\.21</.test(html), 'ENTRY / STOP / T1 verbatim from the engine plan, 2 decimals');
+  ok(/SL\$ 3\.46 below entry/.test(html) && /2\.00R · \$6\.92 away/.test(html), 'derived readouts: SL$ 3.46 and 2.00R to T1');
+  ok(/S52 RANGE-BAR/.test(html) && /S0 SWEEP/.test(html) && /GRADE A/.test(html) && /CONVICTION-LOCKED/.test(html), 'strategy / grade / lock chips carried');
+  ok(/range-bar sweep of the session low/.test(html), 'engine why line carried');
+  ok(!/win[ -]?rate|probability|confidence\s*%/i.test(html.replace(/Not a win probability/g, '')), 'no probability language beyond the standing disclaimer');
+  const aligned = W.hgGoldUniformCompose([alignedShort], { horizon: 'SCALP', tape: 'SHORT', heldStyle: 'dark', heldMax: 3 });
+  ok(!/data-hg-gold-uniform-held-dark/.test(W.hgGoldUniformHtml(aligned)) && aligned.heldAll.length === 0, 'no opposite-side plan → no held block, nothing invented');
+  const noTape = W.hgGoldUniformCompose([alignedShort, longA], { horizon: 'SWING', tape: '', heldStyle: 'dark' });
+  ok(noTape.heldAll.length === 0 && noTape.setup, 'tape unread → nothing is held (every side is aligned), best plan leads as before');
+}
+
+console.log('== OMNIGOLD wiring: the uniform card actually returns its HTML ==');
+{
+  const og = fs.readFileSync(root + 'omnigold.js', 'utf8');
+  const fn = og.slice(og.indexOf('function hgOgUniformLeadHtml'), og.indexOf('function hgOgPaintMostProbable'));
+  ok(/return '<div data-hg-gold-uniform-desk="1"[^\n]*">'\s*\n\s*\+ htmlFn\(/.test(fn), 'return concatenates the SCALP + SWING cards (the stray semicolon that returned only the opening tag is gone)');
+  ok(!/">';\s*\n\s*\+ htmlFn/.test(fn), 'no dead-code "+ htmlFn" after a terminated return');
+  ok(/heldStyle: 'dark', heldMax: 3/.test(fn) && (fn.match(/heldStyle: 'dark'/g) || []).length === 2, 'OMNIGOLD asks for dark enlarged held cards on both horizons');
+}
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 if (failed) process.exit(1);

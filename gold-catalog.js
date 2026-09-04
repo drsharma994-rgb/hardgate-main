@@ -808,7 +808,9 @@
     try{ feed = hgGoldCatalogFeed(opts.rows || null, opts); }catch(eF){ feed = null; }
     var out = {
       ok: false, confirmed: false, paid: false, horizon: horizon,
-      tape: tape ? tape.toUpperCase() : '', setup: null, held: null,
+      tape: tape ? tape.toUpperCase() : '', setup: null, held: null, heldAll: [],
+      heldStyle: opts.heldStyle === 'dark' ? 'dark' : 'light',
+      heldMax: isFinite(+opts.heldMax) ? Math.max(1, Math.floor(+opts.heldMax)) : 1,
       families: [], indicators: [], strategies: [],
       catalog: feed, why: 'no qualifying combined setup'
     };
@@ -818,7 +820,7 @@
         return out;
       }
       var best = null, bestHits = [], bestScore = -1;
-      var held = null, heldHits = [], heldScore = -1;
+      var held = null, heldHits = [], heldScore = -1, heldList = [];
       var i, c, dir, g, hits, score, aligned;
       for (i = 0; i < cands.length; i++){
         c = cands[i];
@@ -839,14 +841,22 @@
           bestScore = score;
           best = c;
           bestHits = hits;
-        } else if (!aligned && score > heldScore){
-          heldScore = score;
-          held = c;
-          heldHits = hits;
+        } else if (!aligned){
+          heldList.push({ c: c, hits: hits, score: score });
+          if (score > heldScore){
+            heldScore = score;
+            held = c;
+            heldHits = hits;
+          }
         }
       }
       out.held = held;
       if (held && heldHits.length) out.heldFamilies = heldHits;
+      /* every opposite-side A/B plan, best first — same mechanics, same levels;
+         the desk decides how many to paint (heldMax) */
+      heldList.sort(function(a, b){ return b.score - a.score; });
+      out.heldAll = heldList.map(function(x){ return x.c; });
+      out.heldAllFamilies = heldList.map(function(x){ return x.hits; });
       if (!best){
         out.why = tape
           ? ('no tape-aligned engine plan on ' + horizon + ' — stand aside')
@@ -883,6 +893,64 @@
       out.why = 'uniform compose error — stand aside';
       return out;
     }
+  }
+
+  /* Held-trade cards, OMNIGOLD style: enlarged, dark, highlighted. Same
+     mechanics as the GOLD SCALP / SWING held card — the opposite-side grade
+     A/B engine plans hgGoldUniformCompose already selected, same ENTRY / STOP /
+     T1 verbatim, same against-tape rule (shown as a trade, never confirmed).
+     Adds what a trader reads off the small card by hand: R to T1, stop and
+     target distances, the strategy chips (e.g. S52 RANGE-BAR · S0 SWEEP). */
+  function uniHeldDarkHtml(uni){
+    var list = Array.isArray(uni.heldAll) && uni.heldAll.length ? uni.heldAll : (uni.held ? [uni.held] : []);
+    list = list.filter(function(c){ return c && isFinite(+c.entry) && isFinite(+c.stop) && isFinite(+c.t1); }).slice(0, uni.heldMax || 1);
+    if (!list.length) return '';
+    var h = '<div data-hg-gold-uniform-held-dark="1" style="margin-top:14px">';
+    h += '<div style="font-size:11px;letter-spacing:.26em;font-weight:800;color:#F59E0B">HELD TRADES · ' + uniEsc(uni.horizon || '')
+      + ' · against gold tape ' + uniEsc(uni.tape || 'UNREAD') + ' · ' + list.length + ' plan' + (list.length === 1 ? '' : 's') + '</div>';
+    var fams = Array.isArray(uni.heldAllFamilies) ? uni.heldAllFamilies : [];
+    list.forEach(function(hs, idx){
+      var hdir = String(hs.dir || '').toUpperCase(), isLong = hdir === 'LONG';
+      var entry = +hs.entry, stop = +hs.stop, t1 = +hs.t1, risk = Math.abs(entry - stop), rr = risk > 0 ? Math.abs(t1 - entry) / risk : NaN;
+      var accent = isLong ? '#22C55E' : '#F87171';
+      var chips = [];
+      if (hs.grade) chips.push('GRADE ' + (typeof hs.grade === 'object' ? (hs.grade.letter || '') : hs.grade));
+      if (hs.strategy) chips.push(String(hs.strategy));
+      if (hs.stratKey && String(hs.stratKey) !== String(hs.strategy)) chips.push(String(hs.stratKey));
+      if (isFinite(+hs.tally)) chips.push('tally ' + (+hs.tally));
+      if (hs.locked) chips.push('CONVICTION-LOCKED');
+      var fam = fams[idx] || (idx === 0 && uni.heldFamilies) || [];
+      if (fam && fam.length) chips.push(fam.length + ' CORE famil' + (fam.length === 1 ? 'y' : 'ies'));
+      h += '<div data-hg-gold-uniform-held="1" role="status" style="margin-top:10px;padding:16px 18px;border-radius:14px;'
+        + 'background:linear-gradient(180deg,#0B1220,#111827);border:1px solid #334155;border-left:6px solid ' + accent + ';'
+        + 'box-shadow:0 10px 30px -14px rgba(0,0,0,.8);color:#F8FAFC">';
+      h += '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px">'
+        + '<span style="font-size:11px;letter-spacing:.22em;font-weight:800;color:#FCA5A5">HELD · NOT CONFIRMED</span>'
+        + '<span style="font-size:11px;color:#94A3B8">#' + (idx + 1) + '</span></div>';
+      h += '<div style="margin-top:8px;font-weight:900;font-size:26px;line-height:1.1;color:' + accent + '">' + uniEsc(hdir)
+        + ' <span style="font-size:20px;color:#F8FAFC">XAUUSD</span></div>';
+      h += '<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">' + chips.map(function(t){
+        return '<span style="display:inline-block;padding:3px 9px;border-radius:999px;background:#1F2937;border:1px solid #475569;font-size:12px;font-weight:700;color:#E5E7EB">' + uniEsc(t) + '</span>';
+      }).join('') + '</div>';
+      h += '<div style="margin-top:8px;font-size:13px;color:#CBD5E1">Against gold tape — shown as a trade, not the confirmed combined setup. Same mechanics as the GOLD ' + uniEsc(uni.horizon || '') + ' card: engine plan · grade A/B · levels verbatim.</div>';
+      h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:14px">';
+      function cell(label, val, sub){
+        return '<div style="background:#0F172A;border:1px solid #334155;border-radius:12px;padding:12px 14px">'
+          + '<i style="display:block;font-style:normal;font-size:10px;letter-spacing:.2em;font-weight:800;color:#94A3B8">' + label + '</i>'
+          + '<b style="display:block;margin-top:4px;font-size:24px;line-height:1.1;color:#F8FAFC">' + val + '</b>'
+          + (sub ? '<u style="display:block;margin-top:4px;text-decoration:none;font-size:11px;color:#94A3B8">' + sub + '</u>' : '') + '</div>';
+      }
+      h += cell('ENTRY', uniPx(entry), isLong ? 'buy zone · limit' : 'sell zone · limit');
+      h += cell('STOP', uniPx(stop), 'SL$ ' + uniPx(risk) + (isLong ? ' below' : ' above') + ' entry');
+      h += cell('T1', uniPx(t1), (isFinite(rr) ? uniPx(rr) + 'R' : 'RR unavailable') + ' · $' + uniPx(Math.abs(t1 - entry)) + ' away');
+      if (isFinite(+hs.t2)) h += cell('T2', uniPx(+hs.t2), risk > 0 ? uniPx(Math.abs(+hs.t2 - entry) / risk) + 'R' : '');
+      h += '</div>';
+      if (hs.why) h += '<div style="margin-top:10px;font-size:12px;color:#CBD5E1">' + uniEsc(hs.why) + '</div>';
+      if (hs.invalidates) h += '<div style="margin-top:4px;font-size:12px;color:#94A3B8">invalidates: ' + uniEsc(hs.invalidates) + '</div>';
+      h += '</div>';
+    });
+    h += '</div>';
+    return h;
   }
 
   function hgGoldUniformHtml(uni){
@@ -941,7 +1009,9 @@
         h += '<div style="margin-top:8px;font-size:13px;font-weight:600">'
           + uniEsc(uni.why || 'stand aside') + '</div>';
       }
-      if (uni.held && isFinite(+uni.held.entry) && isFinite(+uni.held.stop) && isFinite(+uni.held.t1)){
+      if (uni.heldStyle === 'dark'){
+        h += uniHeldDarkHtml(uni);
+      } else if (uni.held && isFinite(+uni.held.entry) && isFinite(+uni.held.stop) && isFinite(+uni.held.t1)){
         var hs = uni.held;
         var hdir = String(hs.dir || '').toUpperCase();
         h += '<div data-hg-gold-uniform-held="1" role="status"'
