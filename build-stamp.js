@@ -18,9 +18,9 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v606',
-  pack: 'OMNIGOLD 1 — gate-led grades, BVC CVD, real-yield + hour-stat proxies',
-  built: '2026-09-04T15:20:00Z',
+  version: 'hg-v607',
+  pack: 'Replay-guided setup tighten — SCALP demote, PO3/OP cost, OG1 SL$ floor',
+  built: '2026-09-04T17:40:00Z',
   note: 'gold-seven-step.js: Playbook Parts 1–9 + Master Catalog seven-step readout — closed 1H/4H bars (4H derived @22:00 UTC), VP POC/VAH/VAL/HVN/LVN, Asia/PDH/PDL/PWH/PWL/EQ pools, fresh OBs, ATR/ADR/RSI/EMA/KER, DST sessions, news lockout, strategy eligibility, 4H bias, rule-based confluence rank, 12 core gates + G14, entry/stop/T1/T2/size/venue basis, TRIGGERED/WAIT/EXPIRED. IST with UTC. No win rates. Against-tape candidates HELD.'
 };
 

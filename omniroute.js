@@ -2227,14 +2227,16 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return { plan: formed, ok: true };
   }
 
-  /* ==================== OMNIROUTE REPLAY EDGE (hg-v590) ====================
+  /* ==================== OMNIROUTE REPLAY EDGE (hg-v590 / hg-v607) ==========
      Baked from scripts/backtest-omniroute-v531-results.json (2,832 settled,
      25-symbol point-in-time 1h universe, 0.05%+0.02%/side). Live desk scans
      4h — directional evidence only. Demote/prefer are COMPUTED from these
      rows at call time (n / avgGrossR / avgNetR), never a hand-kept list.
-       DEMOTE  n>=50 AND avgGrossR <= -0.05  → formation refuses
+       DEMOTE  n>=50 AND (avgGrossR <= -0.05
+                OR (avgGrossR < 0 AND avgNetR <= -0.20))  → formation refuses
        PREFER  n>=50 AND avgGrossR > 0 AND avgNetR > 0 → replay-survivor
      ORB is near-even (gross +0.056, net −0.011) — not demoted, not preferred.
+     PO3 (n=73, gross −0.044, net −0.223) is net-toxic — demoted at hg-v607.
      House extras with no baked row fail-open. Never invents tickets. */
 
   var HG_OMNI_REPLAY_EVIDENCE = {
@@ -2245,6 +2247,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     overall: { n: 2832, winRate: 0.2602, avgGrossR: -0.0843, avgNetR: -0.2424, pf: 0.6828 },
     demoteMinN: 50,
     demoteGrossR: -0.05,
+    demoteNetR: -0.20,
     preferMinN: 50,
     kinds: {
       'AVWAP-RECLAIM': { n: 71, winRate: 0.4225, avgGrossR: 0.4421, avgNetR: 0.3640, pf: 1.6965 },
@@ -2298,14 +2301,25 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         ? window.HG_OMNI_REPLAY_EVIDENCE : HG_OMNI_REPLAY_EVIDENCE;
       var minN = isFinite(fin(E.demoteMinN)) ? fin(E.demoteMinN) : 50;
       var floor = isFinite(fin(E.demoteGrossR)) ? fin(E.demoteGrossR) : -0.05;
+      var netFloor = isFinite(fin(E.demoteNetR)) ? fin(E.demoteNetR) : -0.20;
       if (!(fin(ev.n) >= minN)) return null;
-      if (!(fin(ev.avgGrossR) <= floor)) return null;
+      var reasons = [];
+      if (fin(ev.avgGrossR) <= floor){
+        reasons.push('grossR ' + fin(ev.avgGrossR).toFixed(3) + ' <= ' + floor
+          + ' at n=' + ev.n + ' — direction measured wrong at scale regardless of costs');
+      }
+      /* n≥50, already losing before fees, and still ≤ −0.20R after fees
+         (PO3 class). Does not catch near-even books (ORB, VWAP-REVERT). */
+      if (fin(ev.avgGrossR) < 0 && isFinite(fin(ev.avgNetR)) && fin(ev.avgNetR) <= netFloor){
+        reasons.push('netR ' + fin(ev.avgNetR).toFixed(3) + ' <= ' + netFloor
+          + ' with gross < 0 at n=' + ev.n + ' — fee-and-direction toxic');
+      }
+      if (!reasons.length) return null;
       return {
         kind: String(kind).toUpperCase(),
         n: ev.n, winRate: ev.winRate,
         grossR: ev.avgGrossR, netR: ev.avgNetR, pf: ev.pf,
-        reasons: ['grossR ' + fin(ev.avgGrossR).toFixed(3) + ' <= ' + floor
-          + ' at n=' + ev.n + ' — direction measured wrong at scale regardless of costs']
+        reasons: reasons
       };
     }catch(eKd){ return null; }
   }
@@ -2371,7 +2385,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       + (E.src || 'scripts/backtest-omniroute-v531-results.json') + '): overall '
       + (isFinite(fin(ov.avgNetR)) ? fin(ov.avgNetR).toFixed(2) : '-0.24') + 'R net, PF '
       + (isFinite(fin(ov.pf)) ? fin(ov.pf).toFixed(2) : '0.68') + '. '
-      + nDem + ' kinds stood aside (n≥50 and gross≤−0.05). '
+      + nDem + ' kinds stood aside (n≥50 and gross≤−0.05, or gross<0 and net≤−0.20). '
       + 'Prefer ' + (prefer.length ? prefer.join(', ') : 'none')
       + ' — the only net-positive book at scale. '
       + 'ORB is near-even, not suppressed. Solidity and conviction do not forecast wins. '

@@ -6,7 +6,7 @@
      2. Toxic kinds refuse formation unless the live forward ledger has paid.
      3. VALUE (n=12) and ORB (near-even) still form.
      4. OMNIPRESENT replay quality still grants nothing (both kinds gross−).
-     5. TRIGGERED costR>0.20 is a hard veto; ARMED is AGAINST/WATCH.
+     5. TRIGGERED costR>0.12 is a hard veto; ARMED is AGAINST/WATCH.
      6. Gold perps stand aside from TRIGGERED; ARMED stays a watch note.
      7. Banners cite the replay artifacts. No invented tickets / no loosened
         3+ / 2+ gates.
@@ -67,7 +67,7 @@ function tape(n, seed, start){
 }
 
 const EXPECT_DEMOTE = ['AVWAP-DEFEND','BOS-RETEST','ENGULF-LEVEL','EQH-SWEEP',
-  'EQL-SWEEP','FVG-FILL','HTF-PULLBACK','PIN-REJECT','RSI-DIVERGE','SPRING',
+  'EQL-SWEEP','FVG-FILL','HTF-PULLBACK','PIN-REJECT','PO3','RSI-DIVERGE','SPRING',
   'SWEEP-RECLAIM','THREE-BAR','TREND-RECLAIM','UTAD'].sort();
 const EXPECT_PREFER = ['AVWAP-RECLAIM','CUSUM-SHIFT','DONCHIAN-DRIVE','MMOVE','NR7-BREAK'].sort();
 
@@ -76,6 +76,7 @@ console.log('== baked table matches v531 artifact ==');
   const W = boot();
   const E = W.HG_OMNI_REPLAY_EVIDENCE;
   ok(E && E.settled === 2832, 'OMNIROUTE bake settled=2832');
+  ok(E.demoteNetR === -0.20, 'hg-v607 net-toxic floor −0.20');
   ok(/backtest-omniroute-v531-results/.test(E.src), 'cites v531 JSON');
   const art = JSON.parse(read('scripts/backtest-omniroute-v531-results.json'));
   ok(Math.abs(art.aggregates.overall.avgNetR - E.overall.avgNetR) < 1e-4, 'overall avgNetR matches artifact');
@@ -95,10 +96,10 @@ console.log('\n== prefer / demote are computed from the table ==');
      'prefer kinds: ' + prefer.join(', '));
   ok(JSON.stringify(demote) === JSON.stringify(EXPECT_DEMOTE),
      'demote kinds: ' + demote.join(', '));
-  ok(W.hgOmniDemotedKindCount() === 14, '14 kinds demoted');
+  ok(W.hgOmniDemotedKindCount() === 15, '15 kinds demoted (14 gross-toxic + PO3 net-toxic)');
   ok(!W.hgOmniKindDemotion('ORB'), 'ORB near-even is not demoted');
   ok(!W.hgOmniKindPrefer('ORB'), 'ORB is not preferred');
-  ok(!W.hgOmniKindDemotion('PO3'), 'PO3 gross −0.044 is above the −0.05 floor');
+  ok(!!W.hgOmniKindDemotion('PO3'), 'PO3 n=73 gross<0 net −0.22 is net-toxic');
   ok(!W.hgOmniKindPrefer('VOL-EXPANSION'), 'VOL-EXPANSION n=22 is under the prefer floor');
   ok(!W.hgOmniKindDemotion('EDGE'), 'house extras with no baked row fail-open');
   ok(!W.hgOmniKindDemotion('VALUE'), 'VALUE n=12 is under the demote floor');
@@ -168,7 +169,7 @@ console.log('\n== OMNIROUTE banner cites the replay ==');
   const html = W.hgOmniDeskStanceBannerHtml();
   ok(/REPLAY STANCE/.test(html) && /backtest-omniroute-v531-results/.test(html),
      'banner cites v531');
-  ok(/14 kinds stood aside/.test(html), 'banner names the demotion count');
+  ok(/15 kinds stood aside/.test(html), 'banner names the demotion count');
   ok(/AVWAP-RECLAIM/.test(html) && /MMOVE/.test(html), 'banner names prefer kinds');
   ok(/Never invents tickets/.test(html), 'banner says it does not invent tickets');
 }
@@ -179,7 +180,7 @@ console.log('\n== OMNIPRESENT replay quality still grants nothing ==');
   ok(W.opX20ReplayQuality('OP-HIGH-REJECT') == null, 'HIGH-REJECT is not replay-quality');
   ok(W.opX20ReplayQuality('OP-LOW-REJECT') == null, 'LOW-REJECT is not replay-quality');
   const E = W.HG_OP_REPLAY_EVIDENCE;
-  ok(E.settled === 8522 && E.costToxic && E.costToxic.thresholdR === 0.20, 'costToxic baked');
+  ok(E.settled === 8522 && E.costToxic && E.costToxic.thresholdR === 0.12, 'costToxic baked at 0.12');
   ok(E.goldVenue && E.goldVenue.n === 564, 'goldVenue baked');
 }
 
@@ -203,7 +204,7 @@ console.log('\n== OMNIPRESENT cost-geometry + gold venue ==');
   const tight = Object.assign({}, wide, { entry: 110, stop: 110.08, risk: 0.08, rr1: 2 });
   const gTight = (W.opGates(rows, tight, 110, 'TESTUSD') || []).filter(g => g.key === 'cost-geometry')[0];
   ok(gTight && gTight.pass === false && gTight.hard === true,
-     'tight TRIGGERED costR>0.20 is a HARD veto');
+     'tight TRIGGERED costR>0.12 is a HARD veto');
 
   const armedTight = Object.assign({}, tight, { status: 'ARMED' });
   const gArmed = (W.opGates(rows, armedTight, 109, 'TESTUSD') || []).filter(g => g.key === 'cost-geometry')[0];
