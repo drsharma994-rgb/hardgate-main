@@ -221,12 +221,28 @@
       /* FRED DFII10 = 10Y TIPS real yield, newest first in the macro layer */
       ry = mac.dfii10Rows.slice(0, 5).map(function(r){ return fin(r && r.value); }).filter(isFinite).reverse(); rySrc = 'FRED DFII10';
     }
-    var ryTrend = ry.length >= 3 ? (ry[ry.length - 1] < ry[0] - 0.02 ? 'FALLING' : ry[ry.length - 1] > ry[0] + 0.02 ? 'RISING' : 'FLAT') : 'unavailable';
-    L('10Y real yield (TIPS) 5 sessions', ry.length >= 3 ? 'live' : 'unavailable', ryTrend + (ry.length ? ' (' + ry.map(function(v){ return v.toFixed(2); }).join(' → ') + ')' : '') + (rySrc ? ' · ' + rySrc : ''));
+    var ryTrend = ry.length >= 3 ? (ry[ry.length - 1] < ry[0] - 0.02 ? 'FALLING' : ry[ry.length - 1] > ry[0] + 0.02 ? 'RISING' : 'FLAT') : 'unavailable', ryState = ry.length >= 3 ? 'live' : 'unavailable';
+    if (ryTrend === 'unavailable' && mac.realYieldTrend && /FALLING|RISING|FLAT/.test(String(mac.realYieldTrend))){
+      /* the macro layer's 10Y TIPS 20-day trend (Treasury CSV / FRED) — a proxy for the 3–5 session read, named as such */
+      ryTrend = String(mac.realYieldTrend); ryState = 'proxy'; rySrc = '20-day trend proxy (' + (mac.realRateSource && mac.realRateSource !== 'hint' ? mac.realRateSource : 'treasury-tips') + ')' + (has(mac.realYield10Y) ? ' · level ' + num(mac.realYield10Y, 2) + '%' : '');
+    }
+    L('10Y real yield (TIPS) 5 sessions', ryState, ryTrend + (ry.length ? ' (' + ry.map(function(v){ return v.toFixed(2); }).join(' → ') + ')' : '') + (rySrc ? ' · ' + rySrc : ''));
     L('2Y yield Δ', has(inp.twoYDelta) ? 'live' : 'unavailable', has(inp.twoYDelta) ? num(inp.twoYDelta, 3) : '');
     L('FedWatch implied path Δ today', has(inp.fedwatchDelta) ? 'live' : 'unavailable', has(inp.fedwatchDelta) ? num(inp.fedwatchDelta, 2) + ' cuts' : '');
-    var cvd = Array.isArray(inp.cvd15m) ? inp.cvd15m : null;
-    L('CVD (' + (inp.cvdSource || 'none') + ')', cvd ? 'live' : 'unavailable', cvd ? cvd.length + ' × 15m deltas' : 'no taker delta / footprint / BVC supplied');
+    var cvd = Array.isArray(inp.cvd15m) ? inp.cvd15m : null, cvdSource = inp.cvdSource || 'supplied', cvdState = cvd ? 'live' : 'unavailable';
+    if (!cvd && rows15All.length >= 40 && rows15All.some(function(r){ return r.v > 0; })){
+      /* S49 Bulk Volume Classification on the 15m bars — the CVD proxy the spec allows when no taker delta is fed (label: BVC proxy) */
+      var bvcFn = gfn('hgGoldBvcDelta');
+      if (bvcFn){
+        try{
+          var dl = bvcFn(rows15All, 20), acc = 0, k;
+          cvd = [];
+          for (k = 0; k < dl.length; k++){ acc += isFinite(dl[k]) ? dl[k] : 0; cvd.push(acc); }
+          cvdSource = 'BVC proxy (computed from the 15m bars)'; cvdState = 'proxy';
+        }catch(eB){ cvd = null; }
+      }
+    }
+    L('CVD (' + cvdSource + ')', cvdState, cvd ? cvd.length + ' × 15m deltas' + (cvdState === 'proxy' ? ' · bulk volume classification, not exchange taker data' : '') : 'no taker delta / footprint supplied and no 15m volume for a BVC proxy');
     var dr = g.dealingRange(rows4h), vp4h = dr ? g.volProfile(dr.rows, g.ROW_USD) : g.volProfile(rows4h.slice(-60), g.ROW_USD);
     var prevSess = null, pocs = g.sessionPocs(rows1h, 3);
     if (rows1h.length){
@@ -272,8 +288,27 @@
     L('ML signal', ml ? 'live' : 'unavailable', ml ? (ml.name + ' ' + up(ml.dir) + ' · age ' + num(ml.age, 0) + ' × 15m') : '');
     var news = g.newsRead(inp.news, nowMs);
     L('economic calendar (tiers)', news.available ? 'live' : 'unavailable', news.next ? ('next ' + news.next + ' T' + news.nextTier + ' ' + g.istUtc(news.nextMs)) : (news.available ? 'no Tier 1/2 ahead' : ''));
-    var hist = inp.hourHist && typeof inp.hourHist === 'object' ? inp.hourHist : null;
-    L('hour-of-day H/L histogram', hist ? 'live' : 'unavailable', hist ? 'supplied' : '');
+    var hist = inp.hourHist && typeof inp.hourHist === 'object' ? inp.hourHist : null, histState = hist ? 'live' : 'unavailable', histNote = hist ? 'supplied' : '';
+    if (!hist && rows1hAll.length >= 200){
+      /* S29 hour-of-day statistics computed from the loaded sessions: for every
+         full UTC day, the IST hour that printed the session high and the low */
+      var byDay = {}, dOrd = [], hi, dk;
+      for (hi = 0; hi < rows1hAll.length; hi++){ dk = g.dayKey(rows1hAll[hi].t); if (!byDay[dk]){ byDay[dk] = []; dOrd.push(dk); } byDay[dk].push(rows1hAll[hi]); }
+      var hH = {}, hL = {}, nDays = 0;
+      dOrd.forEach(function(k){
+        var bars = byDay[k]; if (bars.length < 18) return;
+        var bh = bars[0], bl = bars[0], q;
+        for (q = 1; q < bars.length; q++){ if (bars[q].h > bh.h) bh = bars[q]; if (bars[q].l < bl.l) bl = bars[q]; }
+        var hrH = Math.floor(g.tzHour(bh.t * 1000, 'Asia/Kolkata')), hrL = Math.floor(g.tzHour(bl.t * 1000, 'Asia/Kolkata'));
+        hH[hrH] = (hH[hrH] || 0) + 1; hL[hrL] = (hL[hrL] || 0) + 1; nDays++;
+      });
+      if (nDays >= 8){
+        hist = {}; var hh;
+        for (hh = 0; hh < 24; hh++) hist[hh] = { highs: 100 * (hH[hh] || 0) / nDays, lows: 100 * (hL[hh] || 0) / nDays };
+        histState = 'proxy'; histNote = 'computed from ' + nDays + ' loaded sessions (not the trader\'s own histogram)';
+      }
+    }
+    L('hour-of-day H/L histogram', histState, histNote);
     var tr = inp.trader || {};
     var reviewOnly = !!(tr.reviewOnly || tr.OVR === 'REVIEW_ONLY' || tr.LOAD === 'REVIEW_ONLY');
     var reduced = !!(tr.reduced || ['PDI', 'LAT', 'RVG', 'LOAD', 'OVR'].some(function(k){ return up(tr[k]) === 'REDUCED' || up(tr[k]) === 'AMBER'; }));
@@ -898,25 +933,35 @@
   function hgOg1Text(r){ return r && r.summary ? r.summary.join('\n') : ''; }
 
   /* ---------------- grade ladder (rule-based, never a probability) ----------------
-       A   score ≥ 14 · gates ≥ 11 · 4+ families · RR ≥ 2.0 · location A/B+ · reclaim closed · with tape
-       B+  score ≥ 12 · gates ≥ 10 · 4+ families · RR ≥ 1.5
-       B   score ≥ 10 · gates ≥ 9 · RR ≥ 1.5
-       C   score ≥ 7  or gates ≥ 7 — watch, not trade-ready
-       D   everything else — structure only
+     Gate-led, matrix-refined — the Playbook's 12 core gates are the trade
+     permission ("the gates win"); the 20-point matrix ranks quality and sizing.
+       A   gates 12/12 (VALID) · location A/B+ · RR ≥ 2.0 · reclaim closed · matrix ≥ 10 with a 4-family spread
+       B+  gates ≥ 11 (VALID / VALID-HALF) · RR ≥ 1.5 · matrix ≥ 8 or location A
+       B   gates ≥ 11 · RR ≥ 1.5                 — the Playbook's VALID-HALF trade (half size)
+           or matrix ≥ 10 · gates ≥ 9 · RR ≥ 1.5 — strong overlay, one core gate short
+       C   gates ≥ 9 or matrix ≥ 7               — watch, not trade-ready
+       D   everything else                       — structure only
      Any active veto or HELD (against tape) caps the grade at C. */
   function hgOg1Grade(c){
     var m = c && c.matrix ? c.matrix : { score: 0, families: [], spreadOk: false, held: false }, gp = c && c.gates ? c.gates.pass : 0;
-    var rr = c ? c.rr1 : NaN, loc = c ? c.grade : 'C', why = [];
-    var grade = 'D';
-    if (m.score >= 14 && gp >= 11 && m.spreadOk && has(rr) && rr >= 2 && (loc === 'A' || loc === 'B+') && c.reclaimed) grade = 'A';
-    else if (m.score >= 12 && gp >= 10 && m.spreadOk && has(rr) && rr >= 1.5) grade = 'B+';
-    else if (m.score >= 10 && gp >= 9 && has(rr) && rr >= 1.5) grade = 'B';
-    else if (m.score >= 7 || gp >= 7) grade = 'C';
-    why.push('matrix ' + m.score + '/20 · gates ' + gp + '/12 · families ' + (m.families || []).length + (m.spreadOk ? '' : ' (spread fail)') + ' · RR ' + num(rr, 1) + ' · location ' + loc + ' · reclaim ' + (c && c.reclaimed ? 'closed' : 'pending'));
+    var rr = c ? c.rr1 : NaN, loc = c ? c.grade : 'C', why = [], rrOk = has(rr) && rr >= 1.5;
+    var grade = 'D', basis = '';
+    if (gp >= 12 && (loc === 'A' || loc === 'B+') && has(rr) && rr >= 2 && c.reclaimed && m.score >= 10 && m.spreadOk){ grade = 'A'; basis = '12/12 gates VALID · location ' + loc + ' · RR ≥ 2 · matrix ≥ 10 with spread'; }
+    else if (gp >= 11 && rrOk && (m.score >= 8 || loc === 'A')){ grade = 'B+'; basis = gp + '/12 gates · RR ≥ 1.5 · ' + (loc === 'A' ? 'location A' : 'matrix ≥ 8'); }
+    else if (gp >= 11 && rrOk){ grade = 'B'; basis = gp + '/12 gates — Playbook VALID' + (gp === 12 ? '' : '-HALF') + ' trade · matrix ' + m.score + '/20 is the overlay, half size'; }
+    else if (m.score >= 10 && gp >= 9 && rrOk){ grade = 'B'; basis = 'matrix ' + m.score + '/20 · gates ' + gp + '/12 (one core gate short of VALID-HALF)'; }
+    else if (gp >= 9 || m.score >= 7){ grade = 'C'; basis = 'gates ' + gp + '/12 · matrix ' + m.score + '/20 — watch'; }
+    else basis = 'gates ' + gp + '/12 · matrix ' + m.score + '/20 — structure only';
+    why.push(basis);
+    why.push('matrix ' + m.score + '/20' + (has(m.reachable) && m.reachable < 20 ? ' (reachable ' + m.reachable + ')' : '') + ' · gates ' + gp + '/12 · families ' + (m.families || []).length + (m.spreadOk ? '' : ' (spread fail)') + ' · RR ' + num(rr, 1) + ' · location ' + loc + ' · reclaim ' + (c && c.reclaimed ? 'closed' : 'pending'));
     if (m.held && grade !== 'D'){ if (grade === 'A' || grade === 'B+' || grade === 'B') grade = 'C'; why.push('capped at C — against the desk gold tape (HELD)'); }
-    var next = grade === 'A' ? null : grade === 'B+' ? 'A needs score ≥ 14, gates ≥ 11, RR ≥ 2.0, location A/B+' : grade === 'B' ? 'B+ needs score ≥ 12, gates ≥ 10 and a 4-family spread' : grade === 'C' ? 'B needs score ≥ 10, gates ≥ 9, RR ≥ 1.5' : 'C needs score ≥ 7 or gates ≥ 7';
+    var next = grade === 'A' ? null
+      : grade === 'B+' ? 'A needs 12/12 gates, RR ≥ 2.0, location A/B+, matrix ≥ 10 with a 4-family spread'
+      : grade === 'B' ? 'B+ needs gates ≥ 11 with matrix ≥ 8 or location A'
+      : grade === 'C' ? 'B needs gates ≥ 11 with RR ≥ 1.5 (Playbook VALID-HALF), or matrix ≥ 10 with gates ≥ 9'
+      : 'C needs gates ≥ 9 or matrix ≥ 7';
     if (next) why.push('next grade: ' + next);
-    return { grade: grade, why: why, tradeReady: grade === 'A' || grade === 'B+' || grade === 'B' };
+    return { grade: grade, why: why, tradeReady: grade === 'A' || grade === 'B+' || grade === 'B', size: grade === 'A' ? 'full' : (grade === 'B+' || grade === 'B') ? 'half' : 'none' };
   }
   var GRADE_RANK = { A: 5, 'B+': 4, B: 3, C: 2, D: 1 };
 
@@ -996,7 +1041,7 @@
     var h = '<div class="og1-card og1-card-' + esc(c.dir) + (v && v.qualifies ? ' og1-card-q' : '') + (isBest ? ' og1-card-best' : '') + '"' + (isBest ? ' data-og1-best="' + c.bestRank + '"' : '') + '>';
     h += '<div class="og1-card-head">' + (isBest ? '<span class="og1-best-badge">BEST #' + c.bestRank + '</span> ' : '') + '<b class="og1-dir">' + esc(up(c.dir)) + '</b> <b>XAUUSD</b> · ' + esc(horizon) + ' · <b>' + esc(c.sid) + '</b> ' + esc(c.name) + ' <span class="dim">— ' + esc(c.kind) + '</span></div>';
     var gi = c.gradeInfo || hgOg1Grade(c);
-    h += '<div class="og1-card-chips">' + '<span class="og1-grade og1-grade-' + esc(gi.grade.replace('+', 'p')) + '">' + esc(gi.grade) + '</span>' + verdictChip(v) + tag('SCORE ' + m.score + '/20') + tag('gates ' + g7.pass + '/12') + tag('location ' + c.grade) + (has(c.rr1) ? tag('RR ' + num(c.rr1, 1)) : tag('RR unavailable')) + tag('families ' + (m.families || []).length) + (c.reclaimed ? tag('reclaim closed · age ' + c.age) : tag('reclaim pending · age ' + c.age)) + '</div>';
+    h += '<div class="og1-card-chips">' + '<span class="og1-grade og1-grade-' + esc(gi.grade.replace('+', 'p')) + '">' + esc(gi.grade) + '</span>' + verdictChip(v) + (gi.tradeReady && !(v && v.qualifies) ? tag('gates permit ' + gi.size + ' size · matrix overlay below 10') : '') + tag('SCORE ' + m.score + '/20') + tag('gates ' + g7.pass + '/12') + tag('location ' + c.grade) + (has(c.rr1) ? tag('RR ' + num(c.rr1, 1)) : tag('RR unavailable')) + tag('families ' + (m.families || []).length) + (c.reclaimed ? tag('reclaim closed · age ' + c.age) : tag('reclaim pending · age ' + c.age)) + '</div>';
     h += '<div class="og1-levels"><div><i>ENTRY</i><b>' + px(c.entry) + '</b><u>' + (c.dir === 'long' ? 'BUY ZONE' : 'SELL ZONE') + '</u></div><div><i>STOP</i><b>' + px(c.stop) + '</b><u>SL$ ' + num(c.risk) + '</u></div><div><i>TP1</i><b>' + px(c.t1) + '</b><u>' + esc(c.t1Label) + '</u></div><div><i>TP2</i><b>' + px(c.t2) + '</b><u>' + esc(c.t2Label) + '</u></div></div>';
     h += '<div class="dim og1-card-why">' + esc(v ? v.why : '') + (v && v.missing && v.missing.length ? ' · missing ' + esc(v.missing.slice(0, 3).map(function(x){ return x.name + ' +' + x.pts; }).join(', ')) : '') + '</div>';
     h += '<div class="dim">context ' + esc(ctxLabel) + ' · execution ' + esc(tfLabel) + ' · stop beyond ' + px(c.wick) + ' + $' + num(c.buf) + ' · invalidates on two ' + esc(tfLabel) + ' closes ' + (c.dir === 'long' ? 'below ' : 'above ') + px(c.level) + '</div>';
