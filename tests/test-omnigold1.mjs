@@ -221,7 +221,8 @@ console.log('== SCALP horizon + setup cards ==');
   const html = W.hgOg1CardsHtml([{ horizon: 'SWING', r: rW }, { horizon: 'SCALP', r: rS }]);
   ok(/data-hg-og1-setups="1"/.test(html) && /SWING SETUPS/.test(html) && /SCALP SETUPS/.test(html), 'cards panel prints SWING SETUPS and SCALP SETUPS');
   const nCards = (html.match(/og1-card /g) || []).length;
-  ok(nCards === rW.candidates.length + rS.candidates.length, 'one card per candidate across both horizons (' + nCards + ')');
+  const total = rW.candidates.length + rS.candidates.length;
+  ok(nCards === total + Math.min(3, total), 'one card per candidate across both horizons + the top 3 repeated in the BEST ribbon (' + nCards + ')');
   if (nCards){
     ok(/ENTRY<\/i><b>\d/.test(html) && /STOP<\/i><b>\d/.test(html) && /TP1<\/i><b>/.test(html), 'cards print ENTRY / STOP / TP1 / TP2');
     ok(/SCORE \d+\/20/.test(html) && /gates \d+\/12/.test(html), 'cards carry matrix score and gate tally');
@@ -273,6 +274,34 @@ console.log('== grade ladder + MOST PROBABLE per horizon ==');
   const cards = W.hgOg1CardsHtml([{ horizon: 'SWING', r: rW }, { horizon: 'SCALP', r: rS }]);
   ok((cards.match(/data-hg-og1-mp=/g) || []).length === 2, 'cards panel carries one MOST PROBABLE banner per horizon');
   ok((cards.match(/og1-grade og1-grade-[ABCD]p?"/g) || []).length >= rW.candidates.length + rS.candidates.length, 'every card carries a grade badge');
+}
+
+console.log('== BEST SETUPS across horizons ==');
+{
+  const W = boot();
+  const d = sweepDay();
+  const m15 = []; let p = 4493;
+  for (let i = 0; i < 200; i++){ const t = Math.floor(d.now / 1000 / 900) * 900 - (200 - i) * 900; const c = p + Math.sin(i / 9) * 0.8; m15.push({ t, o: p, h: Math.max(p, c) + 1.2, l: Math.min(p, c) - 1.2, c, v: 40 + (i % 5) * 5 }); p = c; }
+  const last = m15[m15.length - 1]; last.l = Math.min(...m15.slice(-60, -1).map(r => r.l)) - 2.5; last.c = last.o + 0.8;
+  const base = { rows1h: d.rows, rows15m: m15, now: d.now, feed: 'delta-xaut', venue: 'Delta XAUTUSD', equity: 50000, stopsToday: 0 };
+  const runs = [{ horizon: 'SWING', r: W.hgOg1Engine(base) }, { horizon: 'SCALP', r: W.hgOg1Engine(Object.assign({}, base, { horizon: 'SCALP' })) }];
+  const bs = W.hgOg1BestSetups(runs, 3);
+  const all = runs[0].r.candidates.length + runs[1].r.candidates.length;
+  ok(bs.total === all && bs.best.length === Math.min(3, all) && bs.best.length > 0, 'ranks every candidate from both horizons and keeps the top 3 (' + bs.best.length + ' of ' + all + ')');
+  ok(bs.best.every((c, i) => c.bestRank === i + 1 && c.horizon), 'BEST #1..#3 stamped with their horizon');
+  const rankKey = c => [(c.verdict.qualifies ? 1 : 0), { A: 5, 'B+': 4, B: 3, C: 2, D: 1 }[c.gradeInfo.grade], c.matrix.score, c.gates.pass, c.rr1 || 0];
+  ok(bs.best.every((c, i, a) => i === 0 || rankKey(a[i - 1]).join('|') >= rankKey(c).join('|') || (rankKey(a[i - 1])[0] > rankKey(c)[0]) || (rankKey(a[i - 1])[0] === rankKey(c)[0] && rankKey(a[i - 1])[1] >= rankKey(c)[1])), 'ordered by qualification → grade → score');
+  ok(bs.best.every(c => !c.matrix.held), 'against-tape candidates never make BEST');
+  ok(typeof bs.tradeReady === 'number', 'reports how many of the best are trade-ready (grade B or better)');
+  const html = W.hgOg1CardsHtml(runs);
+  ok(/data-hg-og1-best="1"/.test(html) && /BEST SETUPS/.test(html), 'cards panel opens with the BEST SETUPS ribbon');
+  ok((html.match(/BEST #1/g) || []).length === 2 && (html.match(/data-og1-best="1"/g) || []).length === 2, 'BEST #1 appears in the ribbon and highlighted again in its horizon list');
+  ok(html.indexOf('data-hg-og1-best="1"') < html.indexOf('SWING SETUPS'), 'BEST ribbon sits above the horizon panels');
+  ok(bs.tradeReady > 0 ? /trade-ready \(grade B or better\)/.test(html) : /none trade-ready/.test(html), 'ribbon states trade-readiness honestly');
+  const heldRuns = [{ horizon: 'SWING', r: W.hgOg1Engine(Object.assign({}, base, { tape: runs[0].r.sections.s2.best.dir === 'long' ? 'DOWN' : 'UP' })) }];
+  const none = W.hgOg1BestSetups(heldRuns, 3);
+  ok(none.best.length === 0 && /none — SWING: /.test(W.hgOg1BestHtml(none, heldRuns)), 'all-held run → no best setup invented, reason printed');
+  ok(!/win[ -]?rate|(?<!not a )probability|confidence\s*%/i.test(html), 'BEST ribbon has no probability language');
 }
 
 console.log('== gates win over the matrix ==');

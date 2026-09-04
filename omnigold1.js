@@ -956,8 +956,9 @@
   }
   function candCard(c, horizon, ctxLabel, tfLabel){
     var m = c.matrix || { score: 0, families: [] }, v = c.verdict || null, g7 = c.gates || { pass: 0 };
-    var h = '<div class="og1-card og1-card-' + esc(c.dir) + (v && v.qualifies ? ' og1-card-q' : '') + '">';
-    h += '<div class="og1-card-head"><b class="og1-dir">' + esc(up(c.dir)) + '</b> <b>XAUUSD</b> · ' + esc(horizon) + ' · <b>' + esc(c.sid) + '</b> ' + esc(c.name) + ' <span class="dim">— ' + esc(c.kind) + '</span></div>';
+    var isBest = c.bestRank > 0;
+    var h = '<div class="og1-card og1-card-' + esc(c.dir) + (v && v.qualifies ? ' og1-card-q' : '') + (isBest ? ' og1-card-best' : '') + '"' + (isBest ? ' data-og1-best="' + c.bestRank + '"' : '') + '>';
+    h += '<div class="og1-card-head">' + (isBest ? '<span class="og1-best-badge">BEST #' + c.bestRank + '</span> ' : '') + '<b class="og1-dir">' + esc(up(c.dir)) + '</b> <b>XAUUSD</b> · ' + esc(horizon) + ' · <b>' + esc(c.sid) + '</b> ' + esc(c.name) + ' <span class="dim">— ' + esc(c.kind) + '</span></div>';
     var gi = c.gradeInfo || hgOg1Grade(c);
     h += '<div class="og1-card-chips">' + '<span class="og1-grade og1-grade-' + esc(gi.grade.replace('+', 'p')) + '">' + esc(gi.grade) + '</span>' + verdictChip(v) + tag('SCORE ' + m.score + '/20') + tag('gates ' + g7.pass + '/12') + tag('location ' + c.grade) + (has(c.rr1) ? tag('RR ' + num(c.rr1, 1)) : tag('RR unavailable')) + tag('families ' + (m.families || []).length) + (c.reclaimed ? tag('reclaim closed · age ' + c.age) : tag('reclaim pending · age ' + c.age)) + '</div>';
     h += '<div class="og1-levels"><div><i>ENTRY</i><b>' + px(c.entry) + '</b><u>' + (c.dir === 'long' ? 'BUY ZONE' : 'SELL ZONE') + '</u></div><div><i>STOP</i><b>' + px(c.stop) + '</b><u>SL$ ' + num(c.risk) + '</u></div><div><i>TP1</i><b>' + px(c.t1) + '</b><u>' + esc(c.t1Label) + '</u></div><div><i>TP2</i><b>' + px(c.t2) + '</b><u>' + esc(c.t2Label) + '</u></div></div>';
@@ -984,9 +985,56 @@
     });
     return { html: h, n: n };
   }
+  /* ---------------- BEST SETUPS across both horizons ----------------
+     Rank every tape-aligned candidate from SWING + SCALP together:
+     qualifying first, then grade, matrix score, gates, RR. Top N are stamped
+     BEST #n and highlighted wherever they appear. Held / vetoed / unavailable
+     runs contribute nothing — a best setup is never invented. */
+  function hgOg1BestSetups(runs, n){
+    n = n || 3;
+    var pool = [];
+    (runs || []).forEach(function(run){
+      var r = run && run.r;
+      if (!r || !r.ok || !Array.isArray(r.candidates)) return;
+      if (r.sections.s0 && !r.sections.s0.clear) return;
+      r.candidates.forEach(function(c){
+        if (!c || (c.matrix && c.matrix.held)) return;
+        if (!c.gradeInfo) c.gradeInfo = hgOg1Grade(c);
+        c.horizon = run.horizon;
+        pool.push(c);
+      });
+    });
+    pool.sort(function(a, b){
+      var q = ((b.verdict && b.verdict.qualifies) ? 1 : 0) - ((a.verdict && a.verdict.qualifies) ? 1 : 0); if (q) return q;
+      var g = GRADE_RANK[b.gradeInfo.grade] - GRADE_RANK[a.gradeInfo.grade]; if (g) return g;
+      if (b.matrix.score !== a.matrix.score) return b.matrix.score - a.matrix.score;
+      if (b.gates.pass !== a.gates.pass) return b.gates.pass - a.gates.pass;
+      return (b.rr1 || 0) - (a.rr1 || 0);
+    });
+    pool.forEach(function(c){ c.bestRank = 0; });
+    var best = pool.slice(0, n);
+    best.forEach(function(c, i){ c.bestRank = i + 1; });
+    return { best: best, total: pool.length, tradeReady: best.filter(function(c){ return c.gradeInfo.tradeReady; }).length };
+  }
+  function hgOg1BestHtml(bs, runs){
+    var h = '<div class="og1-best" data-hg-og1-best="1"><div class="og1-setups-head"><b>BEST SETUPS</b> <span class="dim">· across SWING + SCALP · ranked by qualification → grade → matrix score → gates → RR</span></div>';
+    if (!bs || !bs.best.length){
+      var why = [];
+      (runs || []).forEach(function(run){ var r = run.r; if (!r || !r.ok) why.push(run.horizon + ': DATA_UNAVAILABLE'); else if (r.sections.s0 && !r.sections.s0.clear) why.push(run.horizon + ': VETO ACTIVE'); else if (r.sections.s1 && r.sections.s1.noPermitted) why.push(run.horizon + ': no permitted direction'); else if (!(r.candidates || []).length) why.push(run.horizon + ': no swept pool'); else why.push(run.horizon + ': every candidate HELD against tape'); });
+      h += '<div class="dim">none — ' + esc(why.join(' · ') || 'no runs') + '</div></div>';
+      return h;
+    }
+    h += '<div class="dim" style="margin-bottom:4px">' + bs.total + ' candidate(s) scored · ' + (bs.tradeReady ? bs.tradeReady + ' trade-ready (grade B or better)' : '<b>none trade-ready</b> — best available shown by grade; treat as watch items') + '</div>';
+    h += bs.best.map(function(c){ return candCard(c, c.horizon, c.horizon === 'SCALP' ? '1H' : '4H', c.horizon === 'SCALP' ? '15m' : '1H'); }).join('');
+    h += '</div>';
+    return h;
+  }
+
   function hgOg1CardsHtml(runs){
     /* runs: [{ horizon, r }] — r from hgOg1Engine */
     var h = '<div class="og1-setups" data-hg-og1-setups="1">';
+    var bs = hgOg1BestSetups(runs, 3);
+    h += hgOg1BestHtml(bs, runs);
     (runs || []).forEach(function(run){
       var r = run.r, hz = run.horizon, ctxLabel = hz === 'SCALP' ? '1H' : '4H', tfLabel = hz === 'SCALP' ? '15m' : '1H';
       h += '<div class="og1-setups-head"><b>' + esc(hz) + ' SETUPS</b> <span class="dim">· context ' + ctxLabel + ' · execution ' + tfLabel + '</span></div>';
@@ -1023,6 +1071,7 @@
     + '.og1-hz{margin-top:12px}.og1-hz summary{cursor:pointer;font-weight:700}'
     + '.og1-mp{border:1px solid var(--line,#345);border-left:4px solid var(--gold,#c90);border-radius:8px;padding:8px 10px;margin:6px 0 8px;background:var(--panel,transparent)}.og1-mp-head{font-size:13px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}'
     + '.og1-grade{display:inline-block;min-width:26px;text-align:center;padding:1px 6px;border-radius:5px;font-weight:800;font-size:12px;border:1px solid var(--line,#345)}.og1-grade-A{background:var(--good,#0a7);color:#fff}.og1-grade-Bp{background:#2a8;color:#fff}.og1-grade-B{background:#6a6;color:#fff}.og1-grade-C{background:var(--warn,#c90);color:#fff}.og1-grade-D{opacity:.7}.og1-grade-none{opacity:.5}'
+    + '.og1-best{margin-top:8px;padding:8px 10px;border:1px solid var(--gold,#c90);border-radius:10px;background:var(--panel,transparent)}.og1-card-best{box-shadow:0 0 0 2px var(--gold,#c90)}.og1-best-badge{display:inline-block;padding:0 7px;border-radius:5px;background:var(--gold,#c90);color:#fff;font-weight:800;font-size:11px}'
     + '.og1-study{margin-top:6px;font-size:11px}.og1-study summary{cursor:pointer;font-weight:700}.og1-study dl{margin:4px 0 0;display:grid;grid-template-columns:150px 1fr;gap:3px 8px}.og1-study dt{opacity:.7}.og1-study dd{margin:0}';
   var __st = { busy: false, ui: null, last: null, hasRun: false };
   function lsGet(k, d){ try{ var v = W.localStorage && W.localStorage.getItem(k); return v == null ? d : v; }catch(e){ return d; } }
@@ -1077,7 +1126,8 @@
           + '<details class="og1-hz"><summary>SCALP — Sections 0–8 (1H context · 15m execution)</summary>' + hgOg1Html(rScalp) + '</details>';
       }
       function lineOf(x, hz){ return hz + ' ' + (x.ok ? ((x.sections.s0 && x.sections.s0.clear ? 'veto clear · ' : 'VETO ACTIVE · ') + (x.sections.s3 ? x.sections.s3.decision : '') + ' · ' + ((x.candidates || []).length) + ' setup(s)') : 'DATA_UNAVAILABLE — ' + x.why); }
-      setStat(lineOf(rSwing, 'SWING') + ' | ' + lineOf(rScalp, 'SCALP') + (inp.__extraErr ? ' · ' + inp.__extraErr : '') + ' · ' + new Date().toISOString().slice(11, 19) + ' UTC');
+      var bsStat = hgOg1BestSetups([{ horizon: 'SWING', r: rSwing }, { horizon: 'SCALP', r: rScalp }], 3);
+      setStat('BEST ' + (bsStat.best.length ? bsStat.best.map(function(c){ return '#' + c.bestRank + ' ' + up(c.dir) + ' ' + c.horizon + ' ' + c.sid + ' grade ' + c.gradeInfo.grade; }).join(' · ') : 'none') + ' | ' + lineOf(rSwing, 'SWING') + ' | ' + lineOf(rScalp, 'SCALP') + (inp.__extraErr ? ' · ' + inp.__extraErr : '') + ' · ' + new Date().toISOString().slice(11, 19) + ' UTC');
       try{ W.__hgOg1Last = r; W.__hgOg1LastScalp = rScalp; }catch(e){}
       return 'refreshed';
     }catch(e){ setStat('scan failed: ' + (e && e.message ? e.message : String(e))); return 'error: ' + (e && e.message); }
@@ -1112,6 +1162,8 @@
   W.hgOg1Text = hgOg1Text;
   W.hgOg1CardsHtml = hgOg1CardsHtml;
   W.hgOg1Grade = hgOg1Grade;
+  W.hgOg1BestSetups = hgOg1BestSetups;
+  W.hgOg1BestHtml = hgOg1BestHtml;
   W.hgOg1MostProbable = hgOg1MostProbable;
   W.hgOg1MostProbableHtml = hgOg1MostProbableHtml;
   W.omnigold1ScalpState = function(){ return __st.lastScalp; };
