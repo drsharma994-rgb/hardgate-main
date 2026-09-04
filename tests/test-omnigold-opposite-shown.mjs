@@ -195,8 +195,18 @@ console.log('\npassed: ' + passed);
   const og = fs.readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
   ok(/function hgOgDeskSnapshotCands\(horizon\)/.test(og) && /gfn\(String\(horizon\)\.toUpperCase\(\) === 'SWING' \? 'goldswingScan' : 'goldscalpScan'\)/.test(og), 'OMNIGOLD reads the GOLD SCALP / SWING scan snapshots (locked plans included)');
   ok(/var snap = hgOgDeskSnapshotCands\(horizon\);\s*\n\s*for \(i = 0; i < snap\.length; i\+\+\) out\.push\(snap\[i\]\);/.test(og), 'snapshot plans join the uniform candidate list');
-  ok(/Date\.now\(\) - fin\(snap\.at\) > 30 \* 60000\) return \[\];/.test(og), 'snapshots older than 30 minutes are ignored');
+  ok(/Date\.now\(\) - fin\(snap\.at\) > 30 \* 60000\) return null;/.test(og), 'snapshots older than 30 minutes are ignored');
   ok(/function hgOgUniformTape\(horizon\)/.test(og) && /gfn\('hgGoldUniformTape'\)/.test(og), 'tape falls back to the shared EMA21/50 read when the desk read is unread');
   ok(/window\.hgOgUniformDebug = function/.test(og), 'debug getter exported for live inspection');
+}
+
+/* ---- hg-v605: desk tape travels with the snapshot; OMNIGOLD repaints the card live ---- */
+{
+  const og = read('omnigold.js'), gs = read('goldscalp.js'), gw = read('goldswing.js');
+  ok(/__lastDeskTape = deskTape \|\| '';/.test(gs) && /tape: __lastDeskTape \|\| '',/.test(gs), 'GOLD SCALP publishes its desk tape with the scan snapshot');
+  ok(/__lastDeskTape = deskTape \|\| '';/.test(gw) && /tape: __lastDeskTape \|\| '',/.test(gw), 'GOLD SWING publishes its desk tape with the scan snapshot');
+  ok(/var snap = hgOgDeskSnapshot\(horizon\);\s*\n\s*var st = snap && String\(snap\.tape \|\| ''\)\.toLowerCase\(\);\s*\n\s*if \(st === 'long' \|\| st === 'short'\) return st;/.test(og), 'OMNIGOLD uses the desk snapshot tape first — the held verdict matches the desk');
+  ok(/function hgOgRepaintUniform\(\)/.test(og) && /setInterval\(function\(\)\{ try \{ hgOgRepaintUniform\(\); \} catch \(e\)\{\} \}, 30000\)/.test(og) && /function mountOmnigold\(el\)\{\s*\n\s*if \(!el\) return;\s*\n\s*hgOgStartUniformTimer\(\);/.test(og), 'OMNIGOLD repaints the combined / held card every 30 s — timer starts on mount, never at module load');
+  ok(/if \(__og\.__uniSig === sig\) return false;/.test(og), 'repaint is replace-in-place and idempotent (signature guard)');
 }
 console.log('passed:', passed);

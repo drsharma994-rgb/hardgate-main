@@ -8392,11 +8392,8 @@ terse status, and never launches a first-time scan on a global refresh.
      emits. Same objects the desks paint (dir · grade · strategy · entry /
      stop / t1 · locked · why), taken within the last 30 minutes. */
   function hgOgDeskSnapshotCands(horizon){
-    var fn = gfn(String(horizon).toUpperCase() === 'SWING' ? 'goldswingScan' : 'goldscalpScan');
-    if (!fn) return [];
-    var snap = null; try { snap = fn(); } catch (e){ snap = null; }
+    var snap = hgOgDeskSnapshot(horizon);
     if (!snap || !Array.isArray(snap.cands) || !snap.cands.length) return [];
-    if (isFinite(fin(snap.at)) && Date.now() - fin(snap.at) > 30 * 60000) return [];
     var out = [], i, c;
     for (i = 0; i < snap.cands.length; i++){
       c = snap.cands[i];
@@ -8435,15 +8432,57 @@ terse status, and never launches a first-time scan on a global refresh.
      GOLD SWING use on their own rows (hgGoldUniformTape), so the three tabs
      hold the same side. An unread tape holds nothing — that hid every
      opposite-side plan on OMNIGOLD. */
+  function hgOgDeskSnapshot(horizon){
+    var fn = gfn(String(horizon).toUpperCase() === 'SWING' ? 'goldswingScan' : 'goldscalpScan');
+    if (!fn) return null;
+    var snap = null; try { snap = fn(); } catch (e){ snap = null; }
+    if (!snap) return null;
+    if (isFinite(fin(snap.at)) && Date.now() - fin(snap.at) > 30 * 60000) return null;
+    return snap;
+  }
   function hgOgUniformTape(horizon){
     var tapes = (__og && __og.tape) || {};
     var rows = (__og && __og.lastRows) || {};
+    /* the desk that owns the plan owns the tape: GOLD SCALP / SWING publish
+       theirs with the scan snapshot, so the held verdict is the same on both tabs */
+    var snap = hgOgDeskSnapshot(horizon);
+    var st = snap && String(snap.tape || '').toLowerCase();
+    if (st === 'long' || st === 'short') return st;
     var stored = String(horizon).toUpperCase() === 'SWING' ? tapes.swing : tapes.scalp;
     if (stored === 'long' || stored === 'short') return stored;
     var tf = gfn('hgGoldUniformTape');
     var r = String(horizon).toUpperCase() === 'SWING' ? (rows.swing || []) : (rows.scalp || rows.m15 || []);
     if (!tf || !r.length) return stored || '';
     try { return tf(r) || stored || ''; } catch (e){ return stored || ''; }
+  }
+  /* Repaint the combined / held card from the LIVE desk snapshots without a
+     full OMNIGOLD rescan. GOLD SCALP / SWING scan on their own clocks; a plan
+     they issue between two OMNIGOLD scans used to stay invisible here for up to
+     ten minutes. Cheap (compose + html) and replace-in-place. */
+  function hgOgRepaintUniform(){
+    try {
+      var ui = __og && __og.ui;
+      var host = (ui && ui.mp) || (ui && ui.cards);
+      if (!host || !host.querySelector) return false;
+      var old = host.querySelector('[data-hg-gold-uniform-desk]');
+      if (!old) return false;
+      var uni = hgOgUniformLeadHtml();
+      if (!uni) return false;
+      var sig = uni.replace(/\d{2}:\d{2}:\d{2}/g, '');
+      if (__og.__uniSig === sig) return false;
+      __og.__uniSig = sig;
+      old.outerHTML = uni;
+      return true;
+    } catch (e){ return false; }
+  }
+  window.hgOgRepaintUniform = hgOgRepaintUniform;
+  /* The 30 s repaint timer starts when the tab is MOUNTED in a real page —
+     never at module load, where it would keep a Node test process alive. */
+  function hgOgStartUniformTimer(){
+    try {
+      if (typeof setInterval !== 'function' || __og.__uniTimer) return;
+      __og.__uniTimer = setInterval(function(){ try { hgOgRepaintUniform(); } catch (e){} }, 30000);
+    } catch (eT){}
   }
   window.hgOgUniformDebug = function(){
     var b = (__og && __og.bridge) || null;
@@ -10358,6 +10397,7 @@ terse status, and never launches a first-time scan on a global refresh.
 
   function mountOmnigold(el){
     if (!el) return;
+    hgOgStartUniformTimer();
     /* Venue selection FIRST — the desk-stance banner below prices its
        demotion counts at the active venue, so the persisted choice (or the
        XM default; PAXG when storage is unavailable) must be applied before
