@@ -1820,7 +1820,7 @@ async function runScan(ui, scanSt){
           + formingNowHTML(armedAll)
           + historyHTML(lock.store.history);
       } else {
-        /* feeds failed / nothing armed: cards stay empty (no fabricated setups);
+        /* feeds failed: cards stay empty (no fabricated setups);
            the 7-step readout still prints — NO SETUP or DATA_UNAVAILABLE is
            itself the answer the playbook asks for. Catalog lives on empty. */
         ui.cards.innerHTML = basisHtml + uniHtml + sevenStepHtml();
