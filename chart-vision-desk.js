@@ -484,10 +484,18 @@ function hgChartVisionRefreshGoldCards(opts){
   if (!opts.ui || !opts.ui.cards || !opts.display || !opts.display.length) return;
   if (typeof opts.cardHTML !== 'function') return;
   try{
+    /* formingLayersHTML: the desk's 7-STEP + FORMING LAYERS block. It sits
+       between the cards and FORMING NOW in the desk's own render, so the
+       vision repaint must carry it or the panels vanish a few seconds after
+       every scan (they did — that is how this parameter came to exist). */
+    var layers = '';
+    if (typeof opts.formingLayersHTML === 'function'){ try{ layers = opts.formingLayersHTML() || ''; }catch(eL){ layers = ''; } }
+    else if (typeof opts.formingLayersHTML === 'string') layers = opts.formingLayersHTML;
     opts.ui.cards.innerHTML = (opts.basisHtml || '') + (typeof opts.bannerHTML === 'function' ? opts.bannerHTML(opts.displayBest, opts.display) : '')
       + opts.display.map(function(c){
         return opts.cardHTML(c, !!(opts.displayBest && c.id === opts.displayBest.id), opts.seasonNote);
       }).join('')
+      + layers
       + (typeof opts.formingNowHTML === 'function' ? opts.formingNowHTML(opts.armedAll || []) : '')
       + (typeof opts.rejectedHTML === 'function' ? opts.rejectedHTML(opts.rejectedAll || []) : '')
       + (typeof opts.historyHTML === 'function' ? opts.historyHTML(opts.history || []) : '');

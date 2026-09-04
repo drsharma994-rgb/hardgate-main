@@ -1411,6 +1411,21 @@ async function runScan(ui, scanSt){
     var stRoute = !!(scanSt && scanSt.useStartraderRouting);
     /* leg 1: primary gold feed */
     var gold = stRoute ? await fetchStartraderGoldKlines() : await fetchGoldKlines();
+    /* Deeper 1H leg for the 7-step engine (400 × 1H) when the scalp feed carried
+       fewer — catch-isolated, 8s cap, never blocks the 15m scan. */
+    try{
+      var load1h = gfn('hgGoldSevenStepLoad1h');
+      if (load1h && (!gold.rows1h || gold.rows1h.length < 400)){
+        var leg1h = await Promise.race([
+          Promise.resolve().then(function(){ return load1h(400); }),
+          new Promise(function(r){ setTimeout(function(){ r(null); }, 8000); })
+        ]);
+        if (leg1h && leg1h.rows && leg1h.rows.length > (gold.rows1h ? gold.rows1h.length : 0)){
+          gold.rows1h = leg1h.rows;
+          if (gold.src) gold.src['1h'] = leg1h.source;
+        }
+      }
+    }catch(e1h){}
     /* Settle open gold records with the bars just fetched, BEFORE this scan
        records anything — so a setup can never be settled by the bar it was
        written on. Placed here rather than in publishScan because that
@@ -1752,19 +1767,39 @@ async function runScan(ui, scanSt){
       }
     }catch(eAu){}
     /* render */
+    function sevenStepHtml(){
+      /* Gold Playbook 7-step readout — 4H context, 1H execution, closed bars only.
+         Same desk tape as the uniform card: against-tape candidates stay HELD. */
+      try{
+        var sevenFn = gfn('hgGoldSevenStepPanel');
+        if (!sevenFn) return '';
+        var feed1h = (gold.src && (gold.src['1h'] || gold.src['15m'])) || gold.source || 'unavailable';
+        var basis = NaN;
+        try{ if (typeof S !== 'undefined' && S && isFinite(+S.goldBasisPct)) basis = +S.goldBasisPct; }catch(eB){}
+        return sevenFn({
+          rows1h: gold.rows1h || [], rows15m: gold.rows15m, rows4h: gold.rows4h, now: now,
+          feed: feed1h, venue: (feed1h === 'delta-xaut') ? 'analysis feed' : 'Delta XAUTUSD', basisPct: basis,
+          macro: ctx.macro, dxyRows: ctx.macro && ctx.macro.dxyRows, news: ctx.news,
+          perpNative: ctx.perpNative, fundingRate: ctx.fundingRate, tape: deskTape
+        });
+      }catch(eSeven){ return ''; }
+    }
     function formingLayersHtml(){
+      /* two independent panels — a throw in one must not blank the other */
+      var seven = sevenStepHtml();
+      var forming = '';
       try{
         var fsFn = gfn('hgGoldFormingStack');
         var fhFn = gfn('hgGoldFormingStackHtml');
-        if (!fsFn || !fhFn) return '';
-        return fhFn(fsFn({
+        if (fsFn && fhFn) forming = fhFn(fsFn({
           rows15m: gold.rows15m, rows4h: gold.rows4h, macro: ctx.macro,
           dxyRows: ctx.macro && ctx.macro.dxyRows, now: now,
           perpNative: ctx.perpNative,
           oiRows: ctx.perpNative && ctx.perpNative.oi,
           fundingRows: ctx.perpNative && ctx.perpNative.funding
-        }));
-      }catch(eFs){ return ''; }
+        })) || '';
+      }catch(eFs){ forming = ''; }
+      return seven + forming;
     }
     if (ui && ui.cards && ui.empty){
       if (display.length){
@@ -1785,8 +1820,10 @@ async function runScan(ui, scanSt){
           + formingNowHTML(armedAll)
           + historyHTML(lock.store.history);
       } else {
-        /* feeds failed: cards stay empty (no fabricated setups); catalog lives on empty */
-        ui.cards.innerHTML = basisHtml + uniHtml;
+        /* feeds failed: cards stay empty (no fabricated setups);
+           the 7-step readout still prints — NO SETUP or DATA_UNAVAILABLE is
+           itself the answer the playbook asks for. Catalog lives on empty. */
+        ui.cards.innerHTML = basisHtml + uniHtml + sevenStepHtml();
         var catH = '';
         try{
           var cFn = gfn('hgGoldCatalogHtml');
@@ -1819,6 +1856,7 @@ async function runScan(ui, scanSt){
               scanSt: scanSt, scanGen: visionGen, ui: ui, display: display, displayBest: displayBest,
               basisHtml: basisHtml + mixedBanner + aplusPack.panel + uniHtml, bannerHTML: bannerHTML, cardHTML: cardHTML,
               formingNowHTML: formingNowHTML, rejectedHTML: rejectedHTML, historyHTML: historyHTML,
+              formingLayersHTML: formingLayersHtml,
               armedAll: armedAll, rejectedAll: rejectedAll, history: lock.store.history,
               seasonNote: season && season.note,
             });
