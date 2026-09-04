@@ -633,6 +633,10 @@
   function uniEsc(s){
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
+  /* price cell: two decimals; anything absent prints as unavailable, never 0.00 */
+  function uniPx(v){
+    return (v != null && v !== '' && typeof v !== 'boolean' && isFinite(+v)) ? (+v).toFixed(2) : 'unavailable';
+  }
   function uniNorm(s){
     return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
   }
@@ -954,11 +958,11 @@
           + 'Against gold tape — shown as a trade, not the confirmed combined setup.</div>';
         h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-top:10px">';
         h += '<div style="background:#FFFFFF;border:1px solid #FECACA;border-radius:8px;padding:8px 10px"><i style="display:block;font-style:normal;font-size:9px;letter-spacing:.16em;font-weight:700">ENTRY</i><b style="display:block;font-size:16px;color:#991B1B">'
-          + uniEsc(hs.entry) + '</b></div>';
+          + uniPx(hs.entry) + '</b></div>';
         h += '<div style="background:#FFFFFF;border:1px solid #FECACA;border-radius:8px;padding:8px 10px"><i style="display:block;font-style:normal;font-size:9px;letter-spacing:.16em;font-weight:700">STOP</i><b style="display:block;font-size:16px;color:#991B1B">'
-          + uniEsc(hs.stop) + '</b></div>';
+          + uniPx(hs.stop) + '</b></div>';
         h += '<div style="background:#FFFFFF;border:1px solid #FECACA;border-radius:8px;padding:8px 10px"><i style="display:block;font-style:normal;font-size:9px;letter-spacing:.16em;font-weight:700">T1</i><b style="display:block;font-size:16px;color:#991B1B">'
-          + uniEsc(hs.t1) + '</b></div>';
+          + uniPx(hs.t1) + '</b></div>';
         h += '</div></div>';
       }
       h += '</section>';
