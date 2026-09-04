@@ -233,6 +233,48 @@ console.log('== SCALP horizon + setup cards ==');
   ok(/hgOg1Engine\(Object\.assign\(\{\}, inp, \{ horizon: 'SCALP' \}\)\)/.test(read('omnigold1.js')) && /hgOg1CardsHtml\(\[\{ horizon: 'SWING'/.test(read('omnigold1.js')), 'tab scan runs both horizons and paints the cards first');
 }
 
+console.log('== grade ladder + MOST PROBABLE per horizon ==');
+{
+  const W = boot();
+  const mk = (score, gates, rr, loc, fams, held, reclaimed, qualifies) => ({ dir: 'long', sid: 'S0', name: 'AMD sweep-reclaim', kind: 'Asia low', entry: 4490, stop: 4484, t1: 4490 + 6 * rr, t2: 4520, rr1: rr, rr2: 5, risk: 6, wick: 4486, buf: 2, level: 4488, age: 0,
+    grade: loc, gradeWhy: 'test', reclaimed, matrix: { score, families: Array.from({ length: fams }, (_, i) => 'F' + i), spreadOk: fams >= 4, held, rows: [] }, gates: { pass: gates, gates: [] }, verdict: { qualifies, decision: qualifies ? 'SETUP QUALIFIES' : 'NO SETUP', why: '' } });
+  ok(W.hgOg1Grade(mk(15, 11, 2.2, 'A', 5, false, true, true)).grade === 'A', 'A: score ≥ 14 · gates ≥ 11 · spread · RR ≥ 2 · location A · reclaim closed');
+  ok(W.hgOg1Grade(mk(15, 11, 2.2, 'B', 5, false, true, true)).grade === 'B+', 'location B blocks A → B+');
+  ok(W.hgOg1Grade(mk(12, 10, 1.6, 'B', 4, false, true, true)).grade === 'B+', 'B+: score ≥ 12 · gates ≥ 10 · spread · RR ≥ 1.5');
+  ok(W.hgOg1Grade(mk(12, 10, 1.6, 'B', 3, false, true, true)).grade === 'B', 'spread fail drops B+ to B');
+  ok(W.hgOg1Grade(mk(10, 9, 1.5, 'C', 3, false, false, false)).grade === 'B', 'B: score ≥ 10 · gates ≥ 9 · RR ≥ 1.5');
+  ok(W.hgOg1Grade(mk(7, 5, 1.0, 'C', 2, false, false, false)).grade === 'C', 'C: score ≥ 7 — watch grade');
+  ok(W.hgOg1Grade(mk(3, 6, 0.5, 'C', 2, false, false, false)).grade === 'D', 'D: structure only');
+  const capped = W.hgOg1Grade(mk(15, 11, 2.2, 'A', 5, true, true, true));
+  ok(capped.grade === 'C' && capped.why.some(w => /against the desk gold tape/.test(w)), 'HELD against tape caps the grade at C');
+  ok(W.hgOg1Grade(mk(12, 10, 1.6, 'B', 4, false, true, true)).why.some(w => /next grade: A needs/.test(w)), 'grade basis names what the next grade needs');
+  ok(!W.hgOg1Grade(mk(7, 5, 1.0, 'C', 2, false, false, false)).tradeReady && W.hgOg1Grade(mk(10, 9, 1.5, 'C', 3, false, false, false)).tradeReady, 'trade-ready from B upward');
+
+  const d = sweepDay();
+  const m15 = []; let p = 4493;
+  for (let i = 0; i < 200; i++){ const t = Math.floor(d.now / 1000 / 900) * 900 - (200 - i) * 900; const c = p + Math.sin(i / 9) * 0.8; m15.push({ t, o: p, h: Math.max(p, c) + 1.2, l: Math.min(p, c) - 1.2, c, v: 40 + (i % 5) * 5 }); p = c; }
+  const last = m15[m15.length - 1]; last.l = Math.min(...m15.slice(-60, -1).map(r => r.l)) - 2.5; last.c = last.o + 0.8;
+  const base = { rows1h: d.rows, rows15m: m15, now: d.now, feed: 'delta-xaut', venue: 'Delta XAUTUSD', equity: 50000, stopsToday: 0 };
+  const rW = W.hgOg1Engine(base), rS = W.hgOg1Engine(Object.assign({}, base, { horizon: 'SCALP' }));
+  for (const [hz, r] of [['SWING', rW], ['SCALP', rS]]){
+    const mp = W.hgOg1MostProbable(r);
+    ok(mp && mp.cand && mp.grade && /^(A|B\+|B|C|D)$/.test(mp.grade.grade), hz + ' MOST PROBABLE picks a candidate with a grade (' + mp.grade.grade + ')');
+    ok(!mp.cand.matrix.held, hz + ' MOST PROBABLE is never an against-tape candidate');
+    ok(r.candidates.every(c => (c.verdict.qualifies ? 1 : 0) <= (mp.cand.verdict.qualifies ? 1 : 0)), hz + ' a qualifying candidate always outranks a non-qualifying one');
+    ok(mp.study.length >= 14 && mp.study.every(s => s.h && typeof s.t === 'string' && s.t.length > 0), hz + ' detail study covers ≥ 14 headings with text');
+    ok(!mp.study.some(s => /undefined/.test(s.t)), hz + ' study never prints undefined');
+    ok(mp.study.some(s => s.h === 'Gates (12 core)') && mp.study.some(s => s.h === 'What upgrades it') && mp.study.some(s => s.h === 'Plan') && mp.study.some(s => s.h === 'Trigger'), hz + ' study includes gates, upgrade path, plan, trigger');
+    const html = W.hgOg1MostProbableHtml({ horizon: hz, r });
+    ok(new RegExp('data-hg-og1-mp="' + hz + '"').test(html) && /MOST PROBABLE · /.test(html) && /og1-grade og1-grade-[ABCD]p?"/.test(html) && /DETAIL STUDY/.test(html), hz + ' MOST PROBABLE banner renders with grade badge + detail study');
+    ok(!/win[ -]?rate|(?<!not a )probability|confidence\s*%/i.test(html), hz + ' banner has no probability language');
+  }
+  const heldRun = W.hgOg1Engine(Object.assign({}, base, { tape: rW.sections.s2.best.dir === 'long' ? 'DOWN' : 'UP' }));
+  ok(W.hgOg1MostProbable(heldRun) === null && /HELD|no swept pool|NO PERMITTED/.test(W.hgOg1MostProbableHtml({ horizon: 'SWING', r: heldRun })), 'against-tape run → no MOST PROBABLE, reason printed');
+  const cards = W.hgOg1CardsHtml([{ horizon: 'SWING', r: rW }, { horizon: 'SCALP', r: rS }]);
+  ok((cards.match(/data-hg-og1-mp=/g) || []).length === 2, 'cards panel carries one MOST PROBABLE banner per horizon');
+  ok((cards.match(/og1-grade og1-grade-[ABCD]p?"/g) || []).length >= rW.candidates.length + rS.candidates.length, 'every card carries a grade badge');
+}
+
 console.log('== gates win over the matrix ==');
 {
   ok(/MATRIX\/GATE CONFLICT/.test(read('omnigold1.js')), 'MATRIX/GATE CONFLICT path present — gates override a qualifying matrix');
