@@ -8190,12 +8190,59 @@ terse status, and never launches a first-time scan on a global refresh.
     });
   }
 
+  /* Gold Playbook 7-step readout on OMNIGOLD. Paints at once from the bars the
+     scan already holds (15m → 1H aggregation, closed bars only), then swaps in
+     the 400 × 1H leg when it arrives. Same desk tape as MOST PROBABLE, so an
+     against-tape candidate is HELD here exactly as it is there. */
+  function hgOgSevenStepInputs(rows1h, feed){
+    var tape = (__og.tape && (__og.tape.desk || __og.tape.swing)) || null;
+    var basis = NaN;
+    try { if (typeof S !== 'undefined' && S && isFinite(+S.goldBasisPct)) basis = +S.goldBasisPct; } catch (eB){}
+    var shared = __og.shared || {};
+    return {
+      rows1h: rows1h || [],
+      rows15m: (__og.lastRows && (__og.lastRows.m15 || __og.lastRows.scalp)) || [],
+      rows4h: (__og.lastRows && __og.lastRows.swing) || [],
+      now: Date.now(),
+      feed: feed || (__og.src && (__og.src.swing || __og.src.scalp)) || 'unavailable',
+      venue: (feed === 'delta-xaut') ? 'analysis feed' : 'Delta XAUTUSD',
+      basisPct: basis,
+      macro: shared.macro, dxyRows: shared.macro && shared.macro.dxyRows, news: shared.news,
+      perpNative: __og.perpNative || null,
+      tape: tape === 'long' ? 'UP' : tape === 'short' ? 'DOWN' : null
+    };
+  }
+  function hgOgSevenStepHtml(rows1h, feed){
+    try {
+      var fn = gfn('hgGoldSevenStepPanel');
+      if (!fn || !__og || !__og.lastRows) return '';
+      return fn(hgOgSevenStepInputs(rows1h, feed));
+    } catch (eSeven){ return ''; }
+  }
+  function hgOgRefreshSevenStep(host){
+    var load = gfn('hgGoldSevenStepLoad1h');
+    if (!load || !host) return;
+    var stamp = __og.__sevenStamp = (__og.__sevenStamp || 0) + 1;
+    try {
+      Promise.resolve().then(function(){ return load(400); }).then(function(leg){
+        if (!leg || !leg.rows || !leg.rows.length) return;
+        if (stamp !== __og.__sevenStamp) return;
+        var slot = host.querySelector ? host.querySelector('[data-og-seven-host="1"]') : null;
+        if (!slot) return;
+        __og.rows1h = leg.rows;
+        __og.src1h = leg.source || null;
+        slot.innerHTML = hgOgSevenStepHtml(leg.rows, leg.source);
+      }).catch(function(){});
+    } catch (eLoad){}
+  }
+
   function hgOgPaintGoldEngines(ui, bridge, tapeDir){
     /* tapeDir is ADDITIVE optional — omitted, the APEX head block falls
        back to the tab's stored desk-tape read; nothing else changes. */
     var host = ui && ui.goldEngines;
     if (!host) return;
       try {
+        var sevenHtml = '<div data-og-seven-host="1">' + hgOgSevenStepHtml(__og.rows1h || [], __og.src1h || null) + '</div>';
         var formHtml = '';
         try {
           var fsFn = gfn('hgGoldFormingStack');
@@ -8213,7 +8260,8 @@ terse status, and never launches a first-time scan on a global refresh.
             }));
           }
         } catch (eForm) { formHtml = ''; }
-        host.innerHTML = formHtml + hgOgGoldEnginesPanelHtml(bridge, tapeDir);
+        host.innerHTML = sevenHtml + formHtml + hgOgGoldEnginesPanelHtml(bridge, tapeDir);
+        hgOgRefreshSevenStep(host);
       }
     catch (eGe){ host.innerHTML = ''; }
   }

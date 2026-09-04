@@ -361,6 +361,11 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Quiet candle TTL is **720s** so cache spans the 10-min boundary. G1–G7 unchanged.
 - Tests: `tests/test-scan-every-10m.mjs`, `tests/test-hard-refresh.mjs`.
 
+### Gold 7-step setup engine — hg-v594
+- **`gold-seven-step.js`** — Playbook Parts 1–9 + Master Catalog readout on **OMNIGOLD / GOLD SCALP / GOLD SWING** (`hgGoldSevenStep(inp)` → `hgGoldSevenStepHtml` / `hgGoldSevenStepText` / `hgGoldSevenStepPanel`). STEP 1 indicators + strategy eligibility → STEP 2 4H bias (LONG / SHORT / BOTH / NO TRADE, RSI veto) → STEP 3 candidates ranked by **rule-based confluence rank** (gates passed · location grade · RR · one vote per family) → STEP 4 best fit (hard vetoes, ≥10/12 core gates or NO SETUP) → STEP 5 entry/stop/T1/T2/size/venue basis → STEP 6 checklist VALID / VALID-HALF / INVALID + sanity a–f → STEP 7 **TRIGGERED / WAIT / EXPIRED** on the last closed 1H bar.
+- **Closed candles only** (`hgGoldSevenStepClosedRows`); 4H derived from 1H aligned to **22:00 UTC** when the feed has no 4H leg. Stale feed (> 2h), < 60 × 1H bars, day-sized hole, or venue basis > ±1.5% → **DATA_UNAVAILABLE** and stop. Missing legs print **unavailable** — never estimated. **No win rate / probability / confidence %.** IST with UTC in brackets; DST via `Intl`.
+- Desks pass `tape` (same `hgGoldUniformTape` / `__og.tape.desk` read as the uniform card); against-tape candidates are **HELD**, never best fit. `hgGoldSevenStepLoad1h(400)` fetches the 1H leg (GOLD SWING adds it; GOLD SCALP deepens its 200-bar leg; OMNIGOLD paints from 15m→1H then swaps in the 400-bar leg). Tests: **`tests/test-gold-seven-step.mjs`**.
+
 ### Auto hard refresh — hg-v267
 - **`goldscalpRefresh` / `goldswingRefresh`:** run a headless scan when the tab was never opened (stub UI, same path as `gsWarm`/`gwWarm`) so a background cycle never skips gold tabs cold.
 

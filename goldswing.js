@@ -2729,6 +2729,22 @@ async function runScan(ui, scanSt){
     var stRoute = !!(scanSt && scanSt.useStartraderRouting);
     /* leg 1: primary gold feed */
     var gold = stRoute ? await fetchStartraderGoldKlines() : await fetchGoldKlines();
+    /* 1H execution leg for the 7-step engine (400 × 1H) — catch-isolated, 8s cap,
+       never blocks the 4H swing scan. */
+    try{
+      var load1h = gfn('hgGoldSevenStepLoad1h');
+      if (load1h){
+        var leg1h = await Promise.race([
+          Promise.resolve().then(function(){ return load1h(400); }),
+          new Promise(function(r){ setTimeout(function(){ r(null); }, 8000); })
+        ]);
+        if (leg1h && leg1h.rows && leg1h.rows.length){
+          gold.rows1h = leg1h.rows;
+          if (gold.src) gold.src['1h'] = leg1h.source;
+          gold.basis1h = leg1h.basisPct;
+        }
+      }
+    }catch(e1h){}
     /* Settle open gold records with the bars just fetched, BEFORE this scan
        records anything — so a setup can never be settled by the bar it was
        written on. Placed here rather than in publishScan because that
@@ -3165,12 +3181,30 @@ async function runScan(ui, scanSt){
       }
     }catch(eAu){}
     /* render */
+    function sevenStepHtml(){
+      /* Gold Playbook 7-step readout — 4H context, 1H execution, closed bars only.
+         Feeds the same tape the uniform card uses so an against-tape candidate
+         is HELD here exactly as it is there. */
+      try{
+        var sevenFn = gfn('hgGoldSevenStepPanel');
+        if (!sevenFn) return '';
+        var feed1h = (gold.src && (gold.src['1h'] || gold.src['4h'])) || gold.source || 'unavailable';
+        var basis = NaN;
+        try{ if (typeof S !== 'undefined' && S && isFinite(+S.goldBasisPct)) basis = +S.goldBasisPct; }catch(eB){}
+        return sevenFn({
+          rows1h: gold.rows1h || [], rows4h: gold.rows4h, now: now,
+          feed: feed1h, venue: (feed1h === 'delta-xaut') ? 'analysis feed' : 'Delta XAUTUSD', basisPct: basis,
+          macro: ctx.macro, dxyRows: ctx.macro && ctx.macro.dxyRows, news: ctx.news,
+          perpNative: ctx.perpNative, fundingRate: ctx.fundingRate, tape: deskTape
+        });
+      }catch(eSeven){ return ''; }
+    }
     function formingLayersHtml(){
       try{
         var fsFn = gfn('hgGoldFormingStack');
         var fhFn = gfn('hgGoldFormingStackHtml');
-        if (!fsFn || !fhFn) return '';
-        return fhFn(fsFn({
+        if (!fsFn || !fhFn) return sevenStepHtml();
+        return sevenStepHtml() + fhFn(fsFn({
           rows15m: gold.rows4h, rows4h: gold.rows4h, macro: ctx.macro,
           dxyRows: ctx.macro && ctx.macro.dxyRows, now: now,
           perpNative: ctx.perpNative,
