@@ -212,6 +212,12 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 5. **Tests** — `tests/test-<tab>.mjs`, `tests/test-handoff-coverage.mjs`; run `npm test`
 6. **Ship** — bump cache in `sw.js` / script `?v=` when needed
 
+### Gold shorts shown as HELD (hg-v593)
+- OMNIGOLD card grid paints opposite-side tickets (shorts on an UP tape) as full `setupCard`s stamped **AGAINST GOLD TAPE** — not a dim queue.
+- Shared uniform card (`hgGoldUniformCompose` / `hgGoldUniformHtml`) keeps the tape-aligned plan as **CONFIRMED COMBINED SETUP** and lists the best opposite-side A/B plan as **HELD · NOT CONFIRMED** with ENTRY / STOP / T1.
+- GOLD SCALP / GOLD SWING tape-align **MOST PROBABLE** (`hgGoldUniformAlignedBest`) and stamp opposite cards **AGAINST GOLD TAPE · HELD**. Against-tape shorts are never MOST PROBABLE / SETUP ACTIVATED / CONFIRMED COMBINED.
+- Tests: `tests/test-gold-uniform.mjs`, `tests/test-omnigold-opposite-shown.mjs`.
+
 ### Gold tabs (GOLD SCALP / GOLD SWING) — hg-v266 / hg-v550
 - Both tabs use `hgApplyGoldBestLevels` + `hgGoldPostApplyRefresh` after `goldRankSetups` to snap entry/stop/TPs and re-sync **grade from tally** (A≥8, B≥5, else C) plus structural R:R tally legs.
 - **Scalp** min R:R 1.2 at build; **swing** build gate stays 1.2 on the 1.5R ladder, but formation enforces **2.0R** via `HG_GOLD_SWING_MIN_RR`.

@@ -156,6 +156,25 @@ console.log('\n== a live LONG still shows held shorts underneath ==');
   ok(/3410/.test(html) && /HELD/.test(html), 'the short is still listed as held');
 }
 
+console.log('\n== card grid paints opposite-side tickets as cards ==');
+{
+  ok(!/String\(cCard\.dir \|\| ''\)\.toLowerCase\(\) !== deskTape/.test(GOLD),
+     'card loop no longer skips opposite-side tickets');
+  ok(/h \+= setupCard\(cCard\)/.test(GOLD), 'surviving cards still go through setupCard');
+  const loop = GOLD.slice(GOLD.indexOf('var deadLines'), GOLD.indexOf('MEASURED-NEGATIVE KINDS'));
+  ok(!/hgOgHeldQueueHtml\(heldCards/.test(loop),
+     'card grid does not re-list held tickets as a dim queue once they are cards');
+  const W = boot();
+  ok(typeof W.hgOgSetupCard === 'function', 'setupCard is exported for the opposite-side card');
+  const html = W.hgOgSetupCard(ticket(), 'long');
+  ok(/AGAINST GOLD TAPE/.test(html), 'SHORT card on an UP tape is stamped AGAINST GOLD TAPE');
+  ok(/3410/.test(html) && /3430/.test(html) && /3370/.test(html),
+     'SHORT card prints ENTRY / STOP / T1');
+  ok(/SHORT/.test(html) && /ORB/.test(html), 'SHORT mechanic is named on the card');
+  ok(W.hgOgPickFor([ticket()], 'SCALP', 'long') === null,
+     'painting the SHORT card does not make it the SCALP pick');
+}
+
 console.log('\n== wiring + honesty + stamp ==');
 {
   ok(/heldCards:\s*hgOgHeldCards/.test(GOLD) || /heldCards:\s*hgOgHeldCards\(/.test(GOLD),

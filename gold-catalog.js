@@ -774,10 +774,27 @@
     }catch(e){ return false; }
   }
 
+  /** First non-demoted tape-aligned candidate. Against-tape never leads. */
+  function hgGoldUniformAlignedBest(cands, tape){
+    tape = uniDir(tape);
+    if (!Array.isArray(cands)) return null;
+    var i, c, d;
+    for (i = 0; i < cands.length; i++){
+      c = cands[i];
+      if (!c || c.demoted || c.vetoed || c.dropped) continue;
+      d = uniDir(c.dir);
+      if (!d) continue;
+      if (tape && d !== tape) continue;
+      return c;
+    }
+    return null;
+  }
+
   /**
    * Combine catalog strategies + indicators onto one existing engine plan.
    * Never invents dir or levels. Confirmed = pick + ≥2 CORE families +
    * sides OK + not demoted + grade A/B. paid = forward ledger only.
+   * Opposite-side A/B plans are kept on `held` — shown, never confirmed.
    */
   function hgGoldUniformCompose(cands, opts){
     opts = opts || {};
@@ -787,7 +804,7 @@
     try{ feed = hgGoldCatalogFeed(opts.rows || null, opts); }catch(eF){ feed = null; }
     var out = {
       ok: false, confirmed: false, paid: false, horizon: horizon,
-      tape: tape ? tape.toUpperCase() : '', setup: null,
+      tape: tape ? tape.toUpperCase() : '', setup: null, held: null,
       families: [], indicators: [], strategies: [],
       catalog: feed, why: 'no qualifying combined setup'
     };
@@ -796,7 +813,9 @@
         out.why = 'no engine candidates — stand aside';
         return out;
       }
-      var best = null, bestHits = [], bestScore = -1, i, c, dir, g, hits, score;
+      var best = null, bestHits = [], bestScore = -1;
+      var held = null, heldHits = [], heldScore = -1;
+      var i, c, dir, g, hits, score, aligned;
       for (i = 0; i < cands.length; i++){
         c = cands[i];
         if (!c || c.dropped) continue;
@@ -806,18 +825,24 @@
         if (!dir) continue;
         if (!isFinite(+c.entry) || !isFinite(+c.stop) || !isFinite(+c.t1)) continue;
         if (!uniSidesOk(c)) continue;
-        if (tape && dir !== tape) continue;
         g = uniGradeLetter(c);
         if (g !== 'A' && g !== 'B' && g !== 'CLEAN' && !c.locked) continue;
         hits = uniFamilyHits(c);
         score = hits.length * 1000 + (isFinite(+c.tally) ? +c.tally : 0) * 10
           + (g === 'A' || g === 'CLEAN' ? 2 : (g === 'B' ? 1 : 0));
-        if (score > bestScore){
+        aligned = !tape || dir === tape;
+        if (aligned && score > bestScore){
           bestScore = score;
           best = c;
           bestHits = hits;
+        } else if (!aligned && score > heldScore){
+          heldScore = score;
+          held = c;
+          heldHits = hits;
         }
       }
+      out.held = held;
+      if (held && heldHits.length) out.heldFamilies = heldHits;
       if (!best){
         out.why = tape
           ? ('no tape-aligned engine plan on ' + horizon + ' — stand aside')
@@ -912,6 +937,30 @@
         h += '<div style="margin-top:8px;font-size:13px;font-weight:600">'
           + uniEsc(uni.why || 'stand aside') + '</div>';
       }
+      if (uni.held && isFinite(+uni.held.entry) && isFinite(+uni.held.stop) && isFinite(+uni.held.t1)){
+        var hs = uni.held;
+        var hdir = String(hs.dir || '').toUpperCase();
+        h += '<div data-hg-gold-uniform-held="1" role="status"'
+          + ' style="margin-top:12px;padding:10px 12px;border-left:3px solid #B91C1C;'
+          + 'background:#FEF2F2;border-radius:8px">';
+        h += '<div style="font-size:10px;letter-spacing:.22em;font-weight:800;color:#991B1B">'
+          + 'HELD · NOT CONFIRMED</div>';
+        h += '<div style="margin-top:6px;font-weight:800;font-size:16px;color:#991B1B">'
+          + uniEsc(hdir)
+          + (hs.grade ? (' · GRADE ' + uniEsc(typeof hs.grade === 'object' ? (hs.grade.letter || '') : hs.grade)) : '')
+          + ' <span style="font-size:12px;font-weight:600;color:#0F172A">'
+          + uniEsc(hs.strategy || hs.stratKey || 'SETUP') + '</span></div>';
+        h += '<div class="dim" style="margin-top:4px;font-size:12px">'
+          + 'Against gold tape — shown as a trade, not the confirmed combined setup.</div>';
+        h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-top:10px">';
+        h += '<div style="background:#FFFFFF;border:1px solid #FECACA;border-radius:8px;padding:8px 10px"><i style="display:block;font-style:normal;font-size:9px;letter-spacing:.16em;font-weight:700">ENTRY</i><b style="display:block;font-size:16px;color:#991B1B">'
+          + uniEsc(hs.entry) + '</b></div>';
+        h += '<div style="background:#FFFFFF;border:1px solid #FECACA;border-radius:8px;padding:8px 10px"><i style="display:block;font-style:normal;font-size:9px;letter-spacing:.16em;font-weight:700">STOP</i><b style="display:block;font-size:16px;color:#991B1B">'
+          + uniEsc(hs.stop) + '</b></div>';
+        h += '<div style="background:#FFFFFF;border:1px solid #FECACA;border-radius:8px;padding:8px 10px"><i style="display:block;font-style:normal;font-size:9px;letter-spacing:.16em;font-weight:700">T1</i><b style="display:block;font-size:16px;color:#991B1B">'
+          + uniEsc(hs.t1) + '</b></div>';
+        h += '</div></div>';
+      }
       h += '</section>';
       return h;
     }catch(e){ return ''; }
@@ -935,6 +984,7 @@
   W.hgGoldCatalogApplyVerdict = hgGoldCatalogApplyVerdict;
   W.hgGoldCatalogHtml = hgGoldCatalogHtml;
   W.hgGoldUniformTape = hgGoldUniformTape;
+  W.hgGoldUniformAlignedBest = hgGoldUniformAlignedBest;
   W.hgGoldUniformCompose = hgGoldUniformCompose;
   W.hgGoldUniformHtml = hgGoldUniformHtml;
 })(typeof window !== 'undefined' ? window : globalThis);

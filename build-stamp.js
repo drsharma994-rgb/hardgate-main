@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v592',
-  pack: 'OMNIGOLD opposite-side shorts shown as HELD',
-  built: '2026-09-03T19:55:00Z',
-  note: 'TOP SETUP lists against-tape tickets (shorts on an UP tape) as HELD · NOT ACTIVATED with ENTRY/STOP/T1. When none cleared, the card says shorts are not hidden. Never invents dir or levels. Never loosens gold tape or G1–G7.'
+  version: 'hg-v593',
+  pack: 'Gold desks show short trades as HELD',
+  built: '2026-09-04T01:40:00Z',
+  note: 'OMNIGOLD + GOLD SCALP + GOLD SWING paint opposite-side shorts as visible HELD trades with ENTRY/STOP/T1. Against-tape shorts are never MOST PROBABLE, SETUP ACTIVATED, or CONFIRMED COMBINED. Never invents dir or levels. Never loosens gold tape or G1–G7.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

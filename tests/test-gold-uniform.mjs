@@ -39,6 +39,7 @@ console.log('== exports ==');
 ok(typeof W.hgGoldUniformCompose === 'function', 'hgGoldUniformCompose exported');
 ok(typeof W.hgGoldUniformHtml === 'function', 'hgGoldUniformHtml exported');
 ok(typeof W.hgGoldUniformTape === 'function', 'hgGoldUniformTape exported');
+ok(typeof W.hgGoldUniformAlignedBest === 'function', 'hgGoldUniformAlignedBest exported');
 
 console.log('\n== never invents dir or levels ==');
 {
@@ -153,6 +154,67 @@ console.log('\n== tape helper matches stack-agreement ==');
     'a 1-bar dip in an UP stack is not SHORT (got ' + tapePull + ')');
 }
 
+function shortPlan(extra){
+  return Object.assign({
+    dir: 'short', entry: 2410, stop: 2430, t1: 2360, t2: 2330,
+    grade: 'A', tally: 8, strategy: 'ADR EXHAUSTION FADE',
+    stratKey: 'adrfade', kind: 'ADR-FADE',
+    confluence: ['ADR fade', 'EMA ribbon pullback', 'RSI divergence'],
+    stamps: ['CATALOG LIVE']
+  }, extra || {});
+}
+
+console.log('\n== opposite-side SHORT is held, never confirmed ==');
+{
+  const long = longPlan();
+  const short = shortPlan();
+  const uni = W.hgGoldUniformCompose([long, short], { horizon: 'SCALP', tape: 'LONG' });
+  ok(uni && uni.confirmed && uni.setup && uni.setup.dir === 'long',
+    'confirmed combined setup stays LONG on an UP tape');
+  ok(uni.setup.entry === 2400 && uni.setup.stop === 2380 && uni.setup.t1 === 2450,
+    'confirmed levels stay the LONG engine plan');
+  ok(uni.held && uni.held.dir === 'short',
+    'compose keeps the legal SHORT as held (got ' + (uni.held && uni.held.dir) + ')');
+  ok(uni.held.entry === 2410 && uni.held.stop === 2430 && uni.held.t1 === 2360,
+    'held SHORT copies engine levels verbatim — does not invent a short');
+  ok(uni.held !== uni.setup, 'held is a different plan than the confirmed setup');
+
+  const html = W.hgGoldUniformHtml(uni);
+  ok(/CONFIRMED COMBINED SETUP/.test(html), 'confirmed title still prints for the LONG');
+  ok(/data-hg-gold-uniform-held="1"/.test(html), 'held SHORT block is tagged');
+  ok(/HELD/.test(html) && /NOT CONFIRMED/.test(html),
+    'held SHORT is labeled HELD · NOT CONFIRMED');
+  ok(/2410/.test(html) && /2430/.test(html) && /2360/.test(html),
+    'held SHORT ENTRY / STOP / T1 are printed');
+  ok(/SHORT/.test(html), 'the word SHORT appears on the shared card');
+  const heldChunk = html.split('data-hg-gold-uniform-held')[1] || '';
+  ok(!/CONFIRMED COMBINED SETUP/.test(heldChunk),
+    'held block never claims CONFIRMED COMBINED SETUP');
+  ok(!/SETUP ACTIVATED/.test(html), 'uniform card never claims SETUP ACTIVATED');
+
+  const onlyShort = W.hgGoldUniformCompose([short], { horizon: 'SCALP', tape: 'LONG' });
+  ok(onlyShort && !onlyShort.confirmed && !onlyShort.setup,
+    'a lone SHORT on an UP tape is not confirmed and does not invent a LONG');
+  ok(onlyShort.held && onlyShort.held.dir === 'short' && onlyShort.held.entry === 2410,
+    'the lone SHORT is still held with its own levels');
+  const onlyHtml = W.hgGoldUniformHtml(onlyShort);
+  ok(/STAND ASIDE/.test(onlyHtml) && /2410/.test(onlyHtml) && /HELD/.test(onlyHtml),
+    'stand-aside still names the held SHORT trade');
+  ok(!/CONFIRMED COMBINED SETUP/.test(onlyHtml),
+    'lone against-tape SHORT is not titled confirmed');
+
+  const noOpp = W.hgGoldUniformCompose([long], { horizon: 'SCALP', tape: 'LONG' });
+  ok(!noOpp.held, 'no held SHORT is invented when none exists');
+  const noOppHtml = W.hgGoldUniformHtml(noOpp);
+  ok(!/data-hg-gold-uniform-held/.test(noOppHtml),
+    'held block is omitted when there is no opposite plan');
+
+  const aligned = W.hgGoldUniformAlignedBest([short, long], 'LONG');
+  ok(aligned && aligned.dir === 'long', 'alignedBest on UP tape is the LONG, not the SHORT');
+  const alignedNone = W.hgGoldUniformAlignedBest([short], 'LONG');
+  ok(!alignedNone, 'alignedBest returns null when only a SHORT exists on an UP tape');
+}
+
 console.log('\n== three gold tabs share the composer ==');
 {
   const gs = fs.readFileSync(root + 'goldscalp.js', 'utf8');
@@ -161,6 +223,10 @@ console.log('\n== three gold tabs share the composer ==');
   ok(/hgGoldUniformCompose/.test(gs) && /hgGoldUniformHtml/.test(gs), 'GOLD SCALP wires composer');
   ok(/hgGoldUniformCompose/.test(gw) && /hgGoldUniformHtml/.test(gw), 'GOLD SWING wires composer');
   ok(/hgGoldUniformCompose/.test(og) && /hgGoldUniformHtml/.test(og), 'OMNIGOLD wires composer');
+  ok(/hgGoldUniformAlignedBest/.test(gs) && /AGAINST GOLD TAPE/.test(gs),
+    'GOLD SCALP tape-aligns MOST PROBABLE and stamps opposite cards');
+  ok(/hgGoldUniformAlignedBest/.test(gw) && /AGAINST GOLD TAPE/.test(gw),
+    'GOLD SWING tape-aligns MOST PROBABLE and stamps opposite cards');
 }
 
 console.log('\n== stamp ==');

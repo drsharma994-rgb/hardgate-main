@@ -150,15 +150,43 @@ function gfn(name){
   return null;
 }
 /** Same CONFIRMED COMBINED SETUP card as GOLD SWING / OMNIGOLD. */
-function goldUniformPanelHtml(cands, rows, horizon){
+function goldUniformTapeOf(rows){
+  var tapeFn = gfn('hgGoldUniformTape');
+  return tapeFn ? tapeFn(rows) : '';
+}
+function goldUniformPanelHtml(cands, rows, horizon, tape){
   try{
     var compose = gfn('hgGoldUniformCompose');
     var htmlFn = gfn('hgGoldUniformHtml');
     if (!compose || !htmlFn) return '';
-    var tapeFn = gfn('hgGoldUniformTape');
-    var tape = tapeFn ? tapeFn(rows) : '';
+    if (tape == null) tape = goldUniformTapeOf(rows);
     return htmlFn(compose(cands || [], { rows: rows, horizon: horizon || 'SCALP', tape: tape }));
   }catch(e){ return ''; }
+}
+function goldTapeAlignedBest(displayBest, display, tape){
+  var alignFn = gfn('hgGoldUniformAlignedBest');
+  if (!tape || !alignFn) return displayBest;
+  var aligned = alignFn(display || [], tape);
+  if (displayBest && String(displayBest.dir || '').toLowerCase() !== String(tape).toLowerCase())
+    return aligned || null;
+  if (!displayBest) return aligned || null;
+  return displayBest;
+}
+function goldStampTape(display, tape){
+  var t = String(tape || '').toLowerCase();
+  var i;
+  if (!Array.isArray(display)) return;
+  for (i = 0; i < display.length; i++){
+    if (display[i]) display[i].goldTape = t;
+  }
+}
+function goldTapeChipHtml(c, tape){
+  var t = String(tape || (c && c.goldTape) || '').toLowerCase();
+  var d = String(c && c.dir || '').toLowerCase();
+  if ((t !== 'long' && t !== 'short') || (d !== 'long' && d !== 'short')) return '';
+  return d === t
+    ? '<span class="gpip ok"' + gsxPipAttr(true) + '>WITH GOLD TAPE</span>'
+    : '<span class="gpip"' + gsxPipAttr(false) + '>AGAINST GOLD TAPE · HELD</span>';
 }
 function signed(n, d){ return (n > 0 ? '+' : '') + fmtF(n, d); }
 
@@ -838,7 +866,8 @@ function bannerHTML(best, ranked){
     + '</div></div>';
 }
 
-function cardHTML(c, isBest, season){
+function cardHTML(c, isBest, season, tape){
+  tape = tape || (c && c.goldTape) || '';
   var dirUp = c.dir.toUpperCase();
   var gradeCls = c.grade === 'A' ? 'ok' : '';
   var chips = (c.confluence || []).map(function(x){ return '<span class="gpip ok"' + gsxPipAttr(true) + '>' + esc(x) + '</span>'; }).join('');
@@ -938,6 +967,7 @@ function cardHTML(c, isBest, season){
     + '<div class="gates">'
     + '<span class="gpip ' + gradeCls + '"' + gsxPipAttr(gradeCls === 'ok') + '>GRADE ' + c.grade + '</span>'
     + '<span class="gpip"' + gsxPipAttr(false) + '>' + esc(c.killzone) + '</span>'
+    + goldTapeChipHtml(c, tape)
     + chips + metaChips
     + '</div>'
     + tallyChips(c)
@@ -1675,6 +1705,10 @@ async function runScan(ui, scanSt){
       }
     }
     if (!displayBest && display.length) displayBest = display[0];
+    var uniRows = gold.rows15m.length ? gold.rows15m : (gold.rows1h || []);
+    var deskTape = goldUniformTapeOf(uniRows);
+    displayBest = goldTapeAlignedBest(displayBest, display, deskTape);
+    goldStampTape(display, deskTape);
 
     if (lock.transitions.length){
       legs.push(lock.transitions.length + ' conviction' + (lock.transitions.length === 1 ? '' : 's')
@@ -1706,8 +1740,7 @@ async function runScan(ui, scanSt){
 
     var basisHtml = stRoute ? stGoldBasisHtml() : '';
     var mixedBanner = goldMixedFeedBannerHtml(gold);
-    var uniRows = gold.rows15m.length ? gold.rows15m : (gold.rows1h || []);
-    var uniHtml = goldUniformPanelHtml(display, uniRows, 'SCALP');
+    var uniHtml = goldUniformPanelHtml(display, uniRows, 'SCALP', deskTape);
     var wkRows = gold.rows4h.length ? gold.rows4h : gold.rows15m;
     paintGoldWeekendPanel(ui, wkRows, now, displayBest);
     var aplusCtx = goldBuildAPlusCtx(ctx, gold, now, news);
@@ -1737,7 +1770,7 @@ async function runScan(ui, scanSt){
       if (display.length){
         ui.empty.style.display = 'none';
         ui.cards.innerHTML = basisHtml + mixedBanner + aplusPack.panel + uniHtml + bannerHTML(displayBest, display)
-          + display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note); }).join('')
+          + display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note, deskTape); }).join('')
           + formingLayersHtml()
           + formingNowHTML(armedAll)
           + rejectedHTML(rejectedAll)
