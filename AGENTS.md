@@ -361,6 +361,14 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Quiet candle TTL is **720s** so cache spans the 10-min boundary. G1–G7 unchanged.
 - Tests: `tests/test-scan-every-10m.mjs`, `tests/test-hard-refresh.mjs`.
 
+### Replay-guided setup tighten — hg-v607
+- **Backtest evidence** from committed books (`scripts/backtest-omnigold-results.json`, `backtest-omniroute-v531-results.json`, `backtest-omnipresent-results.json`) plus a new **OMNIGOLD 1** replay harness (`scripts/backtest-omnigold1.mjs`) that walks `hgOg1Replay` with zero lookahead.
+- **GOLD SCALP / SWING:** ORB / FVG / HVN / ribbon stay **suppress**. VWAP / Asian / scalp sweep / BOS / OB stay **demote** (never MOST PROBABLE or OMNIGOLD ENGINE lead). SWING 4H sweep + weekly stay **prefer**.
+- **OMNIROUTE:** demote also when n≥50, gross&lt;0 and net≤−0.20 (catches **PO3**). ORB / VALUE still form. Prefer list unchanged (AVWAP-RECLAIM, CUSUM-SHIFT, DONCHIAN-DRIVE, MMOVE, NR7-BREAK).
+- **OMNIPRESENT:** cost ceiling **0.20 → 0.12**. Gold perps still stand aside. 3+/2+ gates not loosened.
+- **OMNIGOLD 1:** QUALIFIES needs SL$ ≥ $5 (XM 0.125R cost floor); sweep G5 fails closed without ≥0.5×ATR displacement; BEST / MOST PROBABLE prefer trade-ready; forward log records only trade-ready / qualifying. PAXG 1h replay (2000 bars): SL$≥$5 + disp 0.5 is least-bad (−0.245R vs raw −0.275R); gated+bias worse — attached as measured lines, not a QUALIFIES gate.
+- Never loosen G1–G7. Never invent direction. Tests: `tests/test-gold-setup-edge.mjs`, `tests/test-omni-replay-edge.mjs`, `tests/test-omnigold1.mjs`.
+
 ### Gold 7-step setup engine — hg-v594
 - **`gold-seven-step.js`** — Playbook Parts 1–9 + Master Catalog readout on **OMNIGOLD / GOLD SCALP / GOLD SWING** (`hgGoldSevenStep(inp)` → `hgGoldSevenStepHtml` / `hgGoldSevenStepText` / `hgGoldSevenStepPanel`). STEP 1 indicators + strategy eligibility → STEP 2 4H bias (LONG / SHORT / BOTH / NO TRADE, RSI veto) → STEP 3 candidates ranked by **rule-based confluence rank** (gates passed · location grade · RR · one vote per family) → STEP 4 best fit (hard vetoes, ≥10/12 core gates or NO SETUP) → STEP 5 entry/stop/T1/T2/size/venue basis → STEP 6 checklist VALID / VALID-HALF / INVALID + sanity a–f → STEP 7 **TRIGGERED / WAIT / EXPIRED** on the last closed 1H bar.
 - **Closed candles only** (`hgGoldSevenStepClosedRows`); 4H derived from 1H aligned to **22:00 UTC** when the feed has no 4H leg. Stale feed (> 2h), < 60 × 1H bars, day-sized hole, or venue basis > ±1.5% → **DATA_UNAVAILABLE** and stop. Missing legs print **unavailable** — never estimated. **No win rate / probability / confidence %.** IST with UTC in brackets; DST via `Intl`.

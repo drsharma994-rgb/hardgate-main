@@ -3,7 +3,7 @@
   "settledScan": 7270,
   "settledEngine": 277,
   "overallNetR": -1.346,
-  "note": "No large cohort is net-profitable after 0.26% PAXG RT. hg-v589: SCALP ORB suppress (n=69 net −1.80R). OMNIGOLD demote floor n=100→50. SWING prefer BOS-RETEST / INSIDE-BREAK / RIBBON-PULLBACK / STRUCT-BOS / NR7-BREAK / AVWAP-RECLAIM (n≥15 net+). suppress = reject; demote = never MOST PROBABLE; prefer = rank boost.",
+  "note": "No large cohort is net-profitable after 0.26% PAXG RT. hg-v589: SCALP ORB/FVG/HVN/ribbon suppress. hg-v607: VWAP/Asian/scalp-sweep/BOS/OB stay demote (never MOST PROBABLE / ENGINE lead; n<50 so they still paint). SWING prefer 4H sweep + weekly. suppress = reject; demote = never lead; prefer = rank boost.",
   "scalp": {
     "fvg": { "n": 27, "gross": -0.003, "net": -4.853, "action": "suppress" },
     "hvn": { "n": 65, "gross": -0.038, "net": -3.071, "action": "suppress" },

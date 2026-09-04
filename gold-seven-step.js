@@ -727,7 +727,9 @@
     gate(3, 'Location A or B+', loc.grade === 'A' || loc.grade === 'B+', loc.grade + ' — ' + loc.why);
     var minBreach = Math.max(0.5, 0.05 * atr);
     gate(4, 'Liquidity pool swept', isFinite(c.breach) && c.breach >= minBreach, isFinite(c.breach) ? (c.kind + ' breach $' + num(c.breach) + ' (min $' + num(minBreach) + ')') : 'no sweep');
-    var dispAtr = c.sweep ? fin(c.sweep.displacementAtr) : NaN, dispOk = !isFinite(dispAtr) || dispAtr >= 0.5;
+    var dispAtr = c.sweep ? fin(c.sweep.displacementAtr) : NaN;
+    /* Sweep class fails closed: missing displacement is not a pass. */
+    var dispOk = !c.sweep || (isFinite(dispAtr) && dispAtr >= 0.5);
     gate(5, 'Close back inside ≤ 3 bars with displacement ≥ 0.5 × ATR', c.reclaimed && c.age <= MAX_SWEEP_AGE && dispOk,
       c.reclaimed ? ('reclaim closed, sweep age ' + c.age + (isFinite(dispAtr) ? ' · displacement ' + num(dispAtr, 2) + ' × ATR' + (dispOk ? '' : ' (weak — no follow-through)') : '')) : 'reclaim not closed');
     gate(6, 'Rejection overlaps OB', obOk, ob ? ((obSrc || 'OB') + ' ' + px(ob.lo) + '–' + px(ob.hi) + (obOk ? ' overlaps entry' : ' does not overlap entry')) : 'no ' + dir + ' OB (no sweep candle, no fresh block)');

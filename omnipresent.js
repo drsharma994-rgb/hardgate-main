@@ -586,9 +586,9 @@
         ? { key: 'min-rr', hard: true, pass: true, why: 'T1 pays ' + rr1n.toFixed(1) + 'R off the squeezed stop' }
         : { key: 'min-rr', hard: true, pass: false, why: 'T1 pays only ' + rr1n.toFixed(1) + 'R — under the ' + MIN_RR + 'R floor' }));
 
-    /* Cost geometry (hg-v590). Replay: costR>=0.20 loses −0.49R vs −0.05R
-       under 0.08. TRIGGERED tickets with toxic cost stand aside. ARMED
-       keeps the level as WATCH and reports AGAINST. Never loosens 3+/2+. */
+    /* Cost geometry (hg-v590 / tightened hg-v607). Replay: costR>=0.20
+       loses −0.49R; the 0.12–0.20 band still −0.15R. TRIGGERED tickets
+       above 0.12R stand aside. ARMED stays WATCH. Never loosens 3+/2+. */
     var drag = opCostDrag(cand);
     var costR = drag ? fin(drag.costR) : NaN;
     if (isFinite(costR)) cand.costR = costR;
@@ -1277,11 +1277,11 @@
     },
     gatedCohort: { n: 164, winRate: 0.2683, avgGrossR: -0.1473, avgNetR: -0.2736, pf: 0.6538 },
     /* hg-v590 slices — tighten tickets, never loosen 3+/2+ */
-    costToxic: { thresholdR: 0.20, n: 2532, avgNetR: -0.4911 },
+    costToxic: { thresholdR: 0.12, n: 2532, avgNetR: -0.4911, note: 'hg-v607: ceiling 0.20→0.12; ≥0.20 lost −0.49R, 0.12–0.20 still −0.15R' },
     goldVenue: { n: 564, avgNetR: -0.5345, note: 'XAU/XAG/PAXG perps on this fade desk' }
   };
 
-  var HG_OP_COST_TOXIC_R = 0.20;
+  var HG_OP_COST_TOXIC_R = 0.12;
 
   function opReplayGoldSym(sym){
     return /XAU|XAG|PAXG|XAUT/.test(String(sym || '').toUpperCase());
@@ -1310,7 +1310,7 @@
       + 'Gated 3+ sources AND 2+ exhaustion is worse'
       + (gc && isFinite(fin(gc.avgNetR)) ? (' (' + fin(gc.avgNetR).toFixed(2) + 'R) — not loosened.') : '.')
       + ' Tight stops (costR>'
-      + (ct && isFinite(fin(ct.thresholdR)) ? fin(ct.thresholdR).toFixed(2) : '0.20')
+      + (ct && isFinite(fin(ct.thresholdR)) ? fin(ct.thresholdR).toFixed(2) : '0.12')
       + ') lose '
       + (ct && isFinite(fin(ct.avgNetR)) ? fin(ct.avgNetR).toFixed(2) : '-0.49')
       + 'R — TRIGGERED tickets with that geometry stand aside. '

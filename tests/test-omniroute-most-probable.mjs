@@ -139,7 +139,7 @@ console.log('== pick few: tape-aligned tickets, distinct symbols, never invent =
     consensus: { nAgree: 3, nAgainst: 0, nSplit: 0, agree: ['TREND'], against: [], split: [] }
   });
   const sol = ticket({
-    sym: 'SOLUSD', base: 'SOL', kind: 'PO3',
+    sym: 'SOLUSD', base: 'SOL', kind: 'NR7-BREAK',
     plan: { entry: 180, stop: 170, t1: 200, t2: 210, rr1: 2 },
     consensus: { nAgree: 2, nAgainst: 0, nSplit: 0, agree: ['TREND'], against: [], split: [] }
   });

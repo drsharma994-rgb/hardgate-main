@@ -59,6 +59,23 @@ ok(W.HG_GOLD_SETUP_EDGE && W.HG_GOLD_SETUP_EDGE.scalp.fvg.action === 'suppress',
   ok((c.stamps || []).indexOf('EDGE SUPPRESS') >= 0, 'EDGE SUPPRESS stamp');
 }
 
+/* hg-v607: remaining fee-toxic ENGINE scalp kinds stay demote (never lead) */
+{
+  const keys = [
+    ['bosalign', 'BOS ALIGNMENT'],
+    ['sweep', 'LIQUIDITY SWEEP REVERSAL'],
+    ['asian', 'ASIAN RANGE BREAKOUT'],
+    ['vwap', 'SESSION VWAP BOUNCE'],
+    ['ob', 'ORDER BLOCK RETEST']
+  ];
+  for (const [key, lab] of keys){
+    const c = { dir: 'long', entry: 2650, stop: 2640, t1: 2670, stratKey: key, strategy: lab };
+    W.hgGoldSetupEdgeApply(c, { scalp: true });
+    ok(c.demoted === true && !c.dropped, 'SCALP ' + key + ' demoted — never MOST PROBABLE / ENGINE lead');
+    ok((c.stamps || []).indexOf('EDGE DEMOTE') >= 0, key + ' EDGE DEMOTE stamp');
+  }
+}
+
 /* SWING sweep prefer */
 {
   const c = { dir: 'long', entry: 2650, stop: 2600, t1: 2750, stratKey: 'sweep', strategy: '4H LIQUIDITY SWEEP REVERSAL' };
