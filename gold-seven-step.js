@@ -620,8 +620,15 @@
     for (i = 0; i < vp.lvns.length; i++) if (vp.lvns[i] > lo + vp.binSize / 2 && vp.lvns[i] < hi - vp.binSize / 2) return true;
     return false;
   }
-  /** T1 = near edge of first HVN / VAH / VAL / naked POC beyond entry across an LVN; T2 = next node. */
-  function targets(ctx, entry, dir){
+  /** Playbook target rule: T1 = near edge of the first HVN / VAH / VAL / naked
+      POC that lies ACROSS an LVN from entry (the auction has to traverse thin
+      volume to reach it); T2 = the next node beyond T1. A node touching the
+      entry's own volume shelf is not a target — that was the bug that priced
+      every card at 0.3R. Fallbacks, in order: first node ≥ 1.5R away when the
+      risk is known (so the RR band is at least reachable), else the nearest
+      node — and the RR gate then fails honestly. opts.risk optional. */
+  function targets(ctx, entry, dir, opts){
+    opts = opts || {};
     var vp = ctx.vp4h, cands = [], i;
     function add(level, label){
       if (!isFinite(level)) return;
@@ -636,6 +643,7 @@
     if (ctx.nakedPoc) add(ctx.nakedPoc.level, 'naked POC ' + ctx.nakedPoc.day);
     if (ctx.asia){ add(ctx.asia.hi, 'Asia high'); add(ctx.asia.lo, 'Asia low'); }
     if (ctx.pd){ add(ctx.pd.hi, 'PDH'); add(ctx.pd.lo, 'PDL'); }
+    if (ctx.pw){ add(ctx.pw.hi, 'PWH'); add(ctx.pw.lo, 'PWL'); }
     cands.sort(function(a, b){ return dir === 'long' ? a.level - b.level : b.level - a.level; });
     /* dedupe within one row */
     var out = [];
@@ -643,7 +651,14 @@
       if (out.length && Math.abs(out[out.length - 1].level - cands[i].level) < ROW_USD) continue;
       out.push(cands[i]);
     }
-    return { t1: out[0] || null, t2: out[1] || null, ladder: out.slice(0, 4) };
+    var risk = isFinite(opts.risk) && opts.risk > 0 ? opts.risk : NaN;
+    var t1i = -1, rule = 'none';
+    for (i = 0; i < out.length; i++){ if (lvnBetween(entry, out[i].level, vp)){ t1i = i; rule = 'first node across an LVN'; break; } }
+    if (t1i < 0 && isFinite(risk)){ for (i = 0; i < out.length; i++){ if (Math.abs(out[i].level - entry) >= 1.5 * risk){ t1i = i; rule = 'first node ≥ 1.5R (no LVN corridor)'; break; } } }
+    if (t1i < 0 && out.length){ t1i = 0; rule = 'nearest node (no LVN corridor, none ≥ 1.5R)'; }
+    var t1 = t1i >= 0 ? out[t1i] : null, t2 = t1i >= 0 ? (out[t1i + 1] || null) : null;
+    if (t1) t1.rule = rule;
+    return { t1: t1, t2: t2, ladder: out.slice(0, 5), rule: rule };
   }
 
   function buildCandidate(ctx, src){
@@ -654,7 +669,7 @@
     var wick = isFinite(src.wick) ? src.wick : level;
     var stop = isFinite(src.stop) ? src.stop : (dir === 'long' ? wick - buf : wick + buf);
     var risk = Math.abs(entry - stop);
-    var tg = targets(ctx, entry, dir);
+    var tg = targets(ctx, entry, dir, { risk: risk });
     var t1 = tg.t1 ? tg.t1.level : NaN, t2 = tg.t2 ? tg.t2.level : NaN;
     if (isFinite(src.t1)) t1 = src.t1;
     var rr1 = risk > 0 && isFinite(t1) ? Math.abs(t1 - entry) / risk : NaN;
@@ -680,7 +695,9 @@
     gate(3, 'Location A or B+', loc.grade === 'A' || loc.grade === 'B+', loc.grade + ' — ' + loc.why);
     var minBreach = Math.max(0.5, 0.05 * atr);
     gate(4, 'Liquidity pool swept', isFinite(c.breach) && c.breach >= minBreach, isFinite(c.breach) ? (c.kind + ' breach $' + num(c.breach) + ' (min $' + num(minBreach) + ')') : 'no sweep');
-    gate(5, 'Close back inside ≤ 3 bars', c.reclaimed && c.age <= MAX_SWEEP_AGE, c.reclaimed ? ('reclaim closed, sweep age ' + c.age) : 'reclaim not closed');
+    var dispAtr = c.sweep ? fin(c.sweep.displacementAtr) : NaN, dispOk = !isFinite(dispAtr) || dispAtr >= 0.5;
+    gate(5, 'Close back inside ≤ 3 bars with displacement ≥ 0.5 × ATR', c.reclaimed && c.age <= MAX_SWEEP_AGE && dispOk,
+      c.reclaimed ? ('reclaim closed, sweep age ' + c.age + (isFinite(dispAtr) ? ' · displacement ' + num(dispAtr, 2) + ' × ATR' + (dispOk ? '' : ' (weak — no follow-through)') : '')) : 'reclaim not closed');
     gate(6, 'Rejection overlaps OB', obOk, ob ? ('OB ' + px(ob.lo) + '–' + px(ob.hi) + (obOk ? ' overlaps entry' : ' does not overlap entry')) : 'no fresh ' + dir + ' OB');
     gate(7, 'Session London/NY · no news lock', ctx.session.tradeable && !ctx.news.lock, ctx.session.label + (ctx.news.lock ? ' · NEWS LOCK' : ''));
     var lvn = lvnBetween(entry, t1, ctx.vp4h);
@@ -980,8 +997,10 @@
       if (sw.acceptance){
         if (eligIds.S37){
           var cdir = sw.dir === 'long' ? 'short' : 'long';
+          /* continuation through the failed pool: the stop belongs beyond the
+             pool the reclaim failed at, not beyond the last bar's wick */
           srcs.push({ sid: 'S37', name: 'failed-sweep continuation through ' + sw.pool.kind, dir: cdir, level: sw.pool.level, kind: sw.pool.kind + ' acceptance',
-                      wick: cdir === 'short' ? rows1h[rows1h.length - 1].h : rows1h[rows1h.length - 1].l, age: sw.age, reclaimed: true, acceptance: true, breach: sw.breach, continuation: true });
+                      wick: sw.pool.level, age: sw.age, reclaimed: true, acceptance: true, breach: sw.breach, continuation: true });
         }
         continue;
       }

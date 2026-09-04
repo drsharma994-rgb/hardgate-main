@@ -140,7 +140,12 @@
     gate(3, 'location A / B+', c.grade === 'A' || c.grade === 'B+', c.grade + ' — ' + c.gradeWhy);
     var minBreach = Math.max(1, 0.25 * ctx.atr1h);
     gate(4, 'pool swept', has(c.breach) && c.breach >= minBreach, has(c.breach) ? (c.kind + ' by $' + num(c.breach) + ' (min $' + num(minBreach) + ')') : 'no sweep');
-    gate(5, 'reclaim ≤ 3 bars, no acceptance', c.reclaimed && c.age <= g.MAX_SWEEP_AGE && !c.acceptance, c.reclaimed ? ('age ' + c.age + (c.acceptance ? ' · acceptance' : '')) : 'reclaim not closed');
+    /* a wick-and-close-back with no follow-through is a trap, not a reclaim:
+       the 2-month replay stops 47 of 59 such trades; requiring ≥ 0.5 × ATR of
+       displacement on the reclaim bar removes most of them */
+    var dispOk = !has(c.displacementAtr) || c.displacementAtr >= 0.5;
+    gate(5, 'reclaim ≤ 3 bars · displacement ≥ 0.5 × ATR · no acceptance', c.reclaimed && c.age <= g.MAX_SWEEP_AGE && !c.acceptance && dispOk,
+      c.reclaimed ? ('age ' + c.age + (has(c.displacementAtr) ? ' · displacement ' + num(c.displacementAtr, 2) + ' × ATR' + (dispOk ? '' : ' (weak — no follow-through)') : '') + (c.acceptance ? ' · acceptance' : '')) : 'reclaim not closed');
     gate(6, 'body in OB', c.obOk, c.ob ? ('OB ' + px(c.ob.lo) + '–' + px(c.ob.hi)) : 'no fresh ' + c.dir + ' OB');
     gate(7, 'session window · no lockout', ctx.session.tradeable && !ctx.news.lock, ctx.session.label + (ctx.news.lock ? ' · LOCKOUT' : ''));
     gate(8, 'LVN path', c.lvnPath, c.lvnPath ? 'LVN between entry and TP1' : 'no LVN path');
@@ -204,10 +209,20 @@
       var de = g.emaSeries(g.closes(dxyRows), 20), dn = de.length, dsRel = de[dn - 1] > 0 ? (de[dn - 1] - de[dn - 4]) / de[dn - 1] : NaN;
       dxy4h = !isFinite(dsRel) ? 'unavailable' : dsRel > 0.0005 ? 'UP' : dsRel < -0.0005 ? 'DOWN' : 'FLAT';
     }
-    L('DXY 24h / 4H trend', dxy.state, dxy.dir + (has(dxy.chgPct) ? ' ' + num(dxy.chgPct) + '% 24h' : '') + ' · 4H ' + dxy4h);
-    var ry = Array.isArray(inp.realYield5d) ? inp.realYield5d.map(fin).filter(isFinite) : [];
+    var mac = inp.macro || {}, dxySrc = dxy4h === 'unavailable' ? '' : 'EMA20 slope on the supplied DXY bars';
+    if (dxy4h === 'unavailable' && mac.dxy && mac.dxy.trend20){
+      /* the app's macro layer carries the DXY 20-day trend (FRED / Yahoo); a proxy for the 4H read, named as such */
+      dxy4h = mac.dxy.trend20 === 'RISING' ? 'UP' : mac.dxy.trend20 === 'FALLING' ? 'DOWN' : 'FLAT'; dxySrc = '20-day trend proxy (' + (mac.dxy.source || 'macro') + ')';
+      if (dxy.state === 'unavailable') dxy = { state: 'proxy', dir: dxy4h, chgPct: fin(mac.dxy.change20Pct), value: fin(mac.dxy.value) };
+    }
+    L('DXY 24h / 4H trend', dxy.state, dxy.dir + (has(dxy.chgPct) ? ' ' + num(dxy.chgPct) + '%' : '') + ' · 4H ' + dxy4h + (dxySrc ? ' (' + dxySrc + ')' : ''));
+    var ry = Array.isArray(inp.realYield5d) ? inp.realYield5d.map(fin).filter(isFinite) : [], rySrc = ry.length ? 'supplied' : '';
+    if (ry.length < 3 && Array.isArray(mac.dfii10Rows) && mac.dfii10Rows.length >= 3){
+      /* FRED DFII10 = 10Y TIPS real yield, newest first in the macro layer */
+      ry = mac.dfii10Rows.slice(0, 5).map(function(r){ return fin(r && r.value); }).filter(isFinite).reverse(); rySrc = 'FRED DFII10';
+    }
     var ryTrend = ry.length >= 3 ? (ry[ry.length - 1] < ry[0] - 0.02 ? 'FALLING' : ry[ry.length - 1] > ry[0] + 0.02 ? 'RISING' : 'FLAT') : 'unavailable';
-    L('10Y real yield (TIPS) 5 sessions', ry.length >= 3 ? 'live' : 'unavailable', ryTrend + (ry.length ? ' (' + ry.map(function(v){ return v.toFixed(2); }).join(' → ') + ')' : ''));
+    L('10Y real yield (TIPS) 5 sessions', ry.length >= 3 ? 'live' : 'unavailable', ryTrend + (ry.length ? ' (' + ry.map(function(v){ return v.toFixed(2); }).join(' → ') + ')' : '') + (rySrc ? ' · ' + rySrc : ''));
     L('2Y yield Δ', has(inp.twoYDelta) ? 'live' : 'unavailable', has(inp.twoYDelta) ? num(inp.twoYDelta, 3) : '');
     L('FedWatch implied path Δ today', has(inp.fedwatchDelta) ? 'live' : 'unavailable', has(inp.fedwatchDelta) ? num(inp.fedwatchDelta, 2) + ' cuts' : '');
     var cvd = Array.isArray(inp.cvd15m) ? inp.cvd15m : null;
@@ -280,7 +295,7 @@
     var ctx = { rows1h: rows1h, rows15: rows15, rows4h: rows4h, atr1h: atr1h, atr4h: atr4h, session: session, news: news, stopsToday: stopsToday,
                 feedOk: true, feedWhy: feed + ' · last closed ' + TF_LABEL + ' ' + g.fmtHM(lastExecCloseMs, 'UTC') + ' UTC', tf: TF, tfLabel: TF_LABEL, ctxLabel: CTX_LABEL, horizon: horizon, lastPx: lastPx, vp4h: vp4h, dr: dr, prevSess: prevSess, composite: composite,
                 naked: naked, vw: vw, atrRegime: atrRegime, adr: adr, rsi4h: rsi4h, st1h: st1h, emaSlope: emaSlope, ker: ker, regime: regime, kerCrossed: kerCrossed,
-                dxy: dxy, dxy4h: dxy4h, ryTrend: ryTrend, cot: cot, fund: fund, oi: oi, walls: walls, wk: wk, wkAvail: wkAvail, ml: ml, gvz: gvz, implied: implied, rv20: rv20,
+                dxy: dxy, dxy4h: dxy4h, dxySrc: dxySrc, ryTrend: ryTrend, rySrc: rySrc, cot: cot, fund: fund, oi: oi, walls: walls, wk: wk, wkAvail: wkAvail, ml: ml, gvz: gvz, implied: implied, rv20: rv20,
                 cvd: cvd, hist: hist, spread: spread, spreadAvg: spreadAvg, rvol: rvolThisHour(rows1h), illiq: fin(inp.illiqPct), dom: inp.dom || null,
                 pocs: pocs, pocStep: g.pocStep(pocs), asia: g.asiaRange(rows1h, nowMs), pd: g.priorDay(rows1h), pw: g.priorWeek(rows1h), eq: g.equalExtremes(rows1h, g.EQ_TOL_USD),
                 obs: g.freshObs(rows1h, atr1h), monday: mondayRange(rows1h), equity: fin(inp.equity), baseRiskPct: has(inp.baseRiskPct) ? +inp.baseRiskPct : 1, tape: null,
@@ -386,12 +401,12 @@
       var sw = sweeps[si];
       if (sw.acceptance){
         var cdir = sw.dir === 'long' ? 'short' : 'long';
-        if (permitted.indexOf(cdir) >= 0) cands.push(buildCand(ctx, { sid: 'S37', dir: cdir, level: sw.pool.level, kind: sw.pool.kind + ' acceptance', wick: cdir === 'short' ? rows1h[rows1h.length - 1].h : rows1h[rows1h.length - 1].l, age: sw.age, reclaimed: true, acceptance: true, breach: sw.breach, cls: 'sweep', second: true }));
+        if (permitted.indexOf(cdir) >= 0) cands.push(buildCand(ctx, { sid: 'S37', dir: cdir, level: sw.pool.level, kind: sw.pool.kind + ' acceptance', wick: sw.pool.level, age: sw.age, reclaimed: true, acceptance: true, breach: sw.breach, cls: 'sweep', second: true }));
         continue;
       }
       if (permitted.indexOf(sw.dir) < 0) continue;
       var sid = sw.pool.sid === 'S19' ? (ctx.pocStep === 'FLAT' ? 'S19' : 'S0') : sw.pool.sid;
-      cands.push(buildCand(ctx, { sid: sid, dir: sw.dir, level: sw.pool.level, kind: sw.pool.kind, wick: sw.wick, age: sw.age, reclaimed: sw.reclaimed, breach: sw.breach, cls: CLASS_OF[sid] || 'sweep' }));
+      cands.push(buildCand(ctx, { sid: sid, dir: sw.dir, level: sw.pool.level, kind: sw.pool.kind, wick: sw.wick, age: sw.age, reclaimed: sw.reclaimed, breach: sw.breach, displacementAtr: sw.displacementAtr, cls: CLASS_OF[sid] || 'sweep' }));
     }
     /* continuation candidate in TREND: pullback to the session POC in bias direction */
     if (regime === 'TREND' && vp4h && permitted.length === 1){
@@ -435,6 +450,8 @@
 
     /* ---------------- SECTION 8 ---------------- */
     out.sections.s8 = trigger(ctx, best, s3, out.sections.s5, out.sections.s6, out.sections.s7, out.sections.s4);
+    out.replay = inp.replay === false ? null : hgOg1Replay(rows1h, rows4h, { tfLabel: TF_LABEL });
+    out.replayGated = inp.replay === false ? null : hgOg1Replay(rows1h, rows4h, { tfLabel: TF_LABEL, gated: true, ctxTf: scalp ? HOUR : H4, minDisp: 0.5 });
     out.summary = summaryBlock(out, ctx, best);
     return out;
   }
@@ -452,16 +469,16 @@
     var wick = has(src.wick) ? +src.wick : src.level;
     var stop = dir === 'long' ? wick - buf : wick + buf;
     var risk = Math.abs(entry - stop);
-    var tg = g.targets(ctx, entry, dir);
+    var tg = g.targets(ctx, entry, dir, { risk: risk });
     var t1 = tg.t1 ? tg.t1.level : NaN, t2 = tg.t2 ? tg.t2.level : NaN;
     var rr1 = risk > 0 && has(t1) ? Math.abs(t1 - entry) / risk : NaN, rr2 = risk > 0 && has(t2) ? Math.abs(t2 - entry) / risk : NaN;
     var ob = dir === 'long' ? ctx.obs.bull : ctx.obs.bear;
     var obOk = !!(ob && entry >= ob.lo - atr * 0.1 && entry <= ob.hi + atr * 0.1);
     var loc = g.locationGrade(ctx, entry, dir, obOk, true);
     var c = { sid: src.sid, name: NAME_OF[src.sid] || src.sid, cls: src.cls, dir: dir, level: src.level, kind: src.kind, entry: entry, stop: stop, wick: wick, risk: risk, buf: buf, bufNote: bufNote,
-              t1: t1, t2: t2, t1Label: tg.t1 ? tg.t1.label : 'unavailable', t2Label: tg.t2 ? tg.t2.label : 'unavailable', rr1: rr1, rr2: rr2,
+              t1: t1, t2: t2, t1Label: tg.t1 ? tg.t1.label : 'unavailable', t2Label: tg.t2 ? tg.t2.label : 'unavailable', t1Rule: tg.rule, rr1: rr1, rr2: rr2,
               grade: loc.grade, gradeWhy: loc.why, obOk: obOk, ob: ob, age: has(src.age) ? +src.age : NaN, reclaimed: !!src.reclaimed, acceptance: !!src.acceptance,
-              breach: fin(src.breach), second: !!src.second, lvnPath: g.lvnBetween(entry, t1, ctx.vp4h), crowded: crowded };
+              breach: fin(src.breach), displacementAtr: fin(src.displacementAtr), second: !!src.second, lvnPath: g.lvnBetween(entry, t1, ctx.vp4h), crowded: crowded };
     c.gates = coreGates(ctx, c);
     return c;
   }
@@ -478,7 +495,7 @@
     var isFade = c && c.cls === 'fade', isCont = c && (c.cls === 'continuation' || c.cls === 'breakout');
     /* A1 macro */
     var macroOk = dir === 'long' ? (ctx.dxy4h === 'DOWN' && ctx.ryTrend === 'FALLING') : (ctx.dxy4h === 'UP' && ctx.ryTrend === 'RISING');
-    var macroEv = 'DXY 4H ' + ctx.dxy4h + ' · 10Y real yield ' + ctx.ryTrend;
+    var macroEv = 'DXY 4H ' + ctx.dxy4h + (ctx.dxySrc ? ' [' + ctx.dxySrc + ']' : '') + ' · 10Y real yield ' + ctx.ryTrend + (ctx.rySrc ? ' [' + ctx.rySrc + ']' : '');
     if (has(ctx.corr60) && ctx.corr60 > -0.3) macroEv += ' · macro link weak this quarter (60d corr ' + num(ctx.corr60) + ')';
     add('A', 2, 'Intermarket / Macro Driver', 'Macro', macroOk, macroEv, ctx.dxy4h === 'unavailable' || ctx.ryTrend === 'unavailable');
     /* A2 delta */
@@ -511,8 +528,8 @@
     var mlOk = !!(ctx.ml && ctx.ml.dir === dir && has(ctx.ml.age) && ctx.ml.age <= 3);
     add('A', 1, 'Algorithmic Momentum (ML)', 'Statistical', mlOk, ctx.ml ? (ctx.ml.name + ' ' + up(ctx.ml.dir) + ' age ' + num(ctx.ml.age, 0)) : 'ML signal unavailable', !ctx.ml);
     /* A6 sweep */
-    var swOk = !!(c && has(c.breach) && c.breach >= Math.max(1, 0.25 * ctx.atr1h) && c.obOk && c.reclaimed && c.age <= g.MAX_SWEEP_AGE);
-    add('A', 1, 'Structural Liquidity Sweep (SMC)', 'Structure', swOk, c ? (c.kind + ' swept $' + num(c.breach) + (c.obOk ? ' · OB mitigated' : ' · no OB mitigation') + (c.reclaimed ? ' · closed back inside' : ' · not reclaimed') + ' · age ' + c.age) : 'no swept pool');
+    var swOk = !!(c && has(c.breach) && c.breach >= Math.max(1, 0.25 * ctx.atr1h) && c.obOk && c.reclaimed && c.age <= g.MAX_SWEEP_AGE && (!has(c.displacementAtr) || c.displacementAtr >= 0.5));
+    add('A', 1, 'Structural Liquidity Sweep (SMC)', 'Structure', swOk, c ? (c.kind + ' swept $' + num(c.breach) + (c.obOk ? ' · OB mitigated' : ' · no OB mitigation') + (c.reclaimed ? ' · closed back inside' : ' · not reclaimed') + ' · age ' + c.age + (has(c.displacementAtr) ? ' · displacement ' + num(c.displacementAtr, 2) + ' × ATR' : '')) : 'no swept pool');
     /* A7 session */
     var ny = ctx.session.nyHour, lon = ctx.session.lonHour;
     var overlap = ny >= 8 && ny < 11, londonOpen = lon >= 8 && lon < 10.5;
@@ -985,6 +1002,120 @@
     });
     return { html: h, n: n };
   }
+  /* ---------------- in-sample rule replay ----------------
+     Walks the loaded execution bars and fires the same S0 / S20 sweep→reclaim
+     rule the cards use (pool swept ≥ max($1, 0.25×ATR), close back inside on
+     that bar), prices it exactly as buildCand does (entry = pool + offset,
+     stop = wick − buffer, TP1 by the target rule) and resolves each fill on
+     later bars: stop first → −1R, TP1 first → +RR, neither inside 24 bars →
+     flat exit at close. Reports counts and R — never a win rate. It is the
+     SAME history the levels were read from, so it is a sanity check of the
+     rule's pricing, not a forecast. */
+  function hgOg1Replay(exec, ctxRows, opts){
+    var g = G7(); opts = opts || {};
+    var gated = !!opts.gated, ctxTf = opts.ctxTf || (opts.tfLabel === '15m' ? 3600 : 14400), execTf = opts.tfLabel === '15m' ? 900 : 3600;
+    var out = { gated: gated, signals: 0, filled: 0, resolved: 0, tp1: 0, stopped: 0, flat: 0, sumR: 0, expR: NaN, avgWinR: NaN, bars: exec ? exec.length : 0, note: '', rejected: { session: 0, rr: 0, rcap: 0 } };
+    try{
+      if (!exec || exec.length < 120){ out.note = 'need ≥ 120 execution bars'; return out; }
+      var i, k, wins = 0, winR = 0, step = 1, start = 100;
+      for (i = start; i < exec.length - 2; i += step){
+        var sl = exec.slice(0, i + 1), atr = g.atrN(sl, 14);
+        if (!(atr > 0)) continue;
+        var barCloseMs = (sl[sl.length - 1].t + execTf) * 1000, cx = null, atrCtx = NaN, atrRegime = 'normal';
+        if (gated){
+          cx = (ctxRows || []).filter(function(r){ return r.t + ctxTf <= barCloseMs / 1000; });
+          atrCtx = g.atrN(cx, 14); var a50 = g.atrN(cx, 50);
+          if (a50 > 0 && atrCtx > 0) atrRegime = atrCtx / a50 > 1.25 ? 'expanded' : atrCtx / a50 < 0.8 ? 'compressed' : 'normal';
+        }
+        var pc = { asia: g.asiaRange(sl, sl[sl.length - 1].t * 1000 + 3600000), pd: g.priorDay(sl), pw: g.priorWeek(sl), eq: g.equalExtremes(sl, g.EQ_TOL_USD), donchian: null, vp4h: null };
+        var dn = sl.slice(-21, -1), dh = -Infinity, dl = Infinity, di; for (di = 0; di < dn.length; di++){ dh = Math.max(dh, dn[di].h); dl = Math.min(dl, dn[di].l); }
+        if (dn.length >= 20) pc.donchian = { hi: dh, lo: dl };
+        var pools = g.pools(pc), pi, fired = null;
+        for (pi = 0; pi < pools.length; pi++){
+          var sw = g.sweepRead(sl, pools[pi], atr);
+          if (!sw || sw.age !== 0 || !sw.reclaimed || sw.acceptance) continue;
+          if (!(sw.breach >= Math.max(1, 0.25 * atr))) continue;
+          if (isFinite(opts.minDisp) && !(sw.displacementAtr >= opts.minDisp)) continue;
+          fired = sw; break;
+        }
+        if (!fired) continue;
+        out.signals++;
+        var bufMult = isFinite(opts.bufMult) ? opts.bufMult : (gated && atrRegime === 'expanded' ? 0.35 : 0.25);
+        var dir = fired.dir, buf = Math.max(g.STOP_BUF_MIN_USD, bufMult * atr), off = Math.max(g.STOP_BUF_MIN_USD, 0.1 * atr);
+        var entry = dir === 'long' ? fired.pool.level + off : fired.pool.level - off;
+        var stop = dir === 'long' ? fired.wick - buf : fired.wick + buf, risk = Math.abs(entry - stop);
+        var vp = g.volProfile(gated && cx && cx.length >= 20 ? cx.slice(-60) : sl.slice(-60), g.ROW_USD);
+        var tg = g.targets({ vp4h: vp, atr1h: atr, asia: pc.asia, pd: pc.pd, pw: pc.pw, nakedPoc: null }, entry, dir, { risk: risk });
+        if (!tg.t1 || !(risk > 0)) continue;
+        var t1 = tg.t1.level, rr = Math.abs(t1 - entry) / risk;
+        if (gated){
+          /* the gates the desk trades through that a bar can judge: G7 session window,
+             G9 RR ≥ 1.5, G10 R ≤ 0.6 × context ATR */
+          var sess = g.goldSession(barCloseMs);
+          if (!sess.tradeable){ out.rejected.session++; continue; }
+          if (rr < 1.5){ out.rejected.rr++; continue; }
+          if (atrCtx > 0 && risk > 0.6 * atrCtx){ out.rejected.rcap++; continue; }
+        }
+        /* fill: price must come back to the entry within 6 bars */
+        var fillAt = -1;
+        for (k = i + 1; k < Math.min(exec.length, i + 7); k++){ if (exec[k].l <= entry && exec[k].h >= entry){ fillAt = k; break; } }
+        if (fillAt < 0) continue;
+        out.filled++;
+        var res = null;
+        for (k = fillAt; k < Math.min(exec.length, fillAt + 24); k++){
+          var b = exec[k];
+          var hitStop = dir === 'long' ? b.l <= stop : b.h >= stop, hitT1 = dir === 'long' ? b.h >= t1 : b.l <= t1;
+          if (hitStop && hitT1){ res = -1; break; } /* same bar both ways — stop counts (conservative) */
+          if (hitStop){ res = -1; break; }
+          if (hitT1){ res = rr; break; }
+        }
+        if (res === null){
+          if (fillAt + 24 >= exec.length) continue; /* still open — not resolved */
+          var last = exec[Math.min(exec.length - 1, fillAt + 23)];
+          res = (dir === 'long' ? last.c - entry : entry - last.c) / risk; out.flat++;
+        } else if (res < 0) out.stopped++; else { out.tp1++; wins++; winR += res; }
+        out.resolved++; out.sumR += res;
+        i += 3; /* one signal per cluster */
+      }
+      out.expR = out.resolved ? out.sumR / out.resolved : NaN;
+      out.avgWinR = wins ? winR / wins : NaN;
+      out.note = out.resolved ? ('in-sample replay of the ' + (gated ? 'GATED ' : 'raw ') + 'sweep→reclaim rule on the loaded ' + (opts.tfLabel || 'exec') + ' bars — a pricing sanity check, not a forecast') : 'no resolved replay rows on the loaded bars';
+      return out;
+    }catch(e){ out.note = 'replay error'; return out; }
+  }
+  function replayLine(rp, tfLabel){
+    if (!rp) return '';
+    var head = tfLabel + (rp.gated ? ' GATED replay' : ' raw replay');
+    var rej = rp.gated && rp.rejected ? ' · rejected by gates: session ' + rp.rejected.session + ', RR ' + rp.rejected.rr + ', R-cap ' + rp.rejected.rcap : '';
+    if (!rp.resolved) return head + ': ' + rp.signals + ' signal(s), ' + rp.filled + ' filled, 0 resolved' + rej + ' — ' + rp.note;
+    return head + ' (in-sample, n=' + rp.resolved + '): expectancy ' + (rp.expR >= 0 ? '+' : '') + num(rp.expR, 2) + 'R per trade · TP1 ' + rp.tp1 + ' · stopped ' + rp.stopped + ' · flat ' + rp.flat + ' · avg win ' + num(rp.avgWinR, 2) + 'R · ' + rp.signals + ' signals / ' + rp.filled + ' filled' + rej;
+  }
+
+  /* ---------------- forward log: record trade-ready setups, read measured R ---------------- */
+  function hgOg1ForwardRecord(runs){
+    var rec = gfn('hgFwdRecordScan'), out = { recorded: 0, tickets: 0 };
+    if (!rec) return out;
+    (runs || []).forEach(function(run){
+      var r = run.r; if (!r || !r.ok || !Array.isArray(r.candidates)) return;
+      if (r.sections.s0 && !r.sections.s0.clear) return;
+      var tf = run.horizon === 'SCALP' ? '15m' : '1h';
+      var list = r.candidates.filter(function(c){ return c && !(c.matrix && c.matrix.held) && has(c.entry) && has(c.stop) && has(c.t1); }).map(function(c){
+        var gi = c.gradeInfo || hgOg1Grade(c);
+        return { sym: 'XAUUSD', dir: c.dir, entry: c.entry, stop: c.stop, t1: c.t1, mechanic: c.sid + '-' + run.horizon, grade: gi.grade, ticket: !!(c.verdict && c.verdict.qualifies) };
+      });
+      if (!list.length) return;
+      out.tickets += list.filter(function(x){ return x.ticket; }).length;
+      try{ out.recorded += rec('omnigold1', tf, list, { horizonBars: run.horizon === 'SCALP' ? 24 : 20 }) || 0; }catch(e){}
+    });
+    return out;
+  }
+  function forwardLine(){
+    var st = gfn('hgFwdStats'); if (!st) return 'forward log: unavailable — hg-forward.js not loaded';
+    var s = null; try{ s = st('omnigold1', null, false); }catch(e){ s = null; }
+    if (!s || !s.samples) return 'forward log: no OMNIGOLD 1 rows yet — every scan records its candidates; R accrues as they resolve out of sample';
+    return 'forward log (out-of-sample): ' + s.samples + ' recorded · ' + (s.wins + s.losses) + ' resolved · ' + (s.open || 0) + ' open · expectancy ' + (has(s.expR) ? (s.expR >= 0 ? '+' : '') + num(s.expR, 2) + 'R' : 'unavailable') + ' · avg RR ' + num(s.avgRr, 2);
+  }
+
   /* ---------------- BEST SETUPS across both horizons ----------------
      Rank every tape-aligned candidate from SWING + SCALP together:
      qualifying first, then grade, matrix score, gates, RR. Top N are stamped
@@ -1026,8 +1157,20 @@
     }
     h += '<div class="dim" style="margin-bottom:4px">' + bs.total + ' candidate(s) scored · ' + (bs.tradeReady ? bs.tradeReady + ' trade-ready (grade B or better)' : '<b>none trade-ready</b> — best available shown by grade; treat as watch items') + '</div>';
     h += bs.best.map(function(c){ return candCard(c, c.horizon, c.horizon === 'SCALP' ? '1H' : '4H', c.horizon === 'SCALP' ? '15m' : '1H'); }).join('');
+    h += measuredHtml(runs);
     h += '</div>';
     return h;
+  }
+  function measuredHtml(runs){
+    var lines = [];
+    (runs || []).forEach(function(run){
+      var r = run.r, tf = run.horizon === 'SCALP' ? '15m' : '1H';
+      if (r && r.replay) lines.push(replayLine(r.replay, tf));
+      if (r && r.replayGated) lines.push(replayLine(r.replayGated, tf));
+    });
+    var fl = forwardLine(); if (fl) lines.push(fl);
+    if (!lines.length) return '';
+    return '<div class="og1-measured dim"><b>MEASURED, NOT CLAIMED</b> · ' + lines.map(esc).join('<br>') + '</div>';
   }
 
   function hgOg1CardsHtml(runs){
@@ -1072,6 +1215,7 @@
     + '.og1-mp{border:1px solid var(--line,#345);border-left:4px solid var(--gold,#c90);border-radius:8px;padding:8px 10px;margin:6px 0 8px;background:var(--panel,transparent)}.og1-mp-head{font-size:13px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}'
     + '.og1-grade{display:inline-block;min-width:26px;text-align:center;padding:1px 6px;border-radius:5px;font-weight:800;font-size:12px;border:1px solid var(--line,#345)}.og1-grade-A{background:var(--good,#0a7);color:#fff}.og1-grade-Bp{background:#2a8;color:#fff}.og1-grade-B{background:#6a6;color:#fff}.og1-grade-C{background:var(--warn,#c90);color:#fff}.og1-grade-D{opacity:.7}.og1-grade-none{opacity:.5}'
     + '.og1-best{margin-top:8px;padding:8px 10px;border:1px solid var(--gold,#c90);border-radius:10px;background:var(--panel,transparent)}.og1-card-best{box-shadow:0 0 0 2px var(--gold,#c90)}.og1-best-badge{display:inline-block;padding:0 7px;border-radius:5px;background:var(--gold,#c90);color:#fff;font-weight:800;font-size:11px}'
+    + '.og1-measured{margin-top:8px;padding-top:6px;border-top:1px dashed var(--line,#345)}'
     + '.og1-study{margin-top:6px;font-size:11px}.og1-study summary{cursor:pointer;font-weight:700}.og1-study dl{margin:4px 0 0;display:grid;grid-template-columns:150px 1fr;gap:3px 8px}.og1-study dt{opacity:.7}.og1-study dd{margin:0}';
   var __st = { busy: false, ui: null, last: null, hasRun: false };
   function lsGet(k, d){ try{ var v = W.localStorage && W.localStorage.getItem(k); return v == null ? d : v; }catch(e){ return d; } }
@@ -1116,8 +1260,10 @@
       if (ui && ui.btn) ui.btn.disabled = true;
       var inp = await loadInputs(ui, setStat);
       setStat('scoring SWING (4H/1H) and SCALP (1H/15m) setups…');
+      try{ var res = gfn('hgFwdResolve'); if (res && inp.rows1h && inp.rows1h.length) res('XAUUSD', null, inp.rows1h); }catch(eR){}
       var rSwing = hgOg1Engine(Object.assign({}, inp, { horizon: 'SWING' }));
       var rScalp = hgOg1Engine(Object.assign({}, inp, { horizon: 'SCALP' }));
+      try{ __st.lastFwd = hgOg1ForwardRecord([{ horizon: 'SWING', r: rSwing }, { horizon: 'SCALP', r: rScalp }]); }catch(eF){}
       var r = rSwing;
       __st.last = r; __st.lastScalp = rScalp; __st.hasRun = true;
       if (ui && ui.out){
@@ -1163,6 +1309,8 @@
   W.hgOg1CardsHtml = hgOg1CardsHtml;
   W.hgOg1Grade = hgOg1Grade;
   W.hgOg1BestSetups = hgOg1BestSetups;
+  W.hgOg1Replay = hgOg1Replay;
+  W.hgOg1ForwardRecord = hgOg1ForwardRecord;
   W.hgOg1BestHtml = hgOg1BestHtml;
   W.hgOg1MostProbable = hgOg1MostProbable;
   W.hgOg1MostProbableHtml = hgOg1MostProbableHtml;

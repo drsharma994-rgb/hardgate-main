@@ -304,6 +304,37 @@ console.log('== BEST SETUPS across horizons ==');
   ok(!/win[ -]?rate|(?<!not a )probability|confidence\s*%/i.test(html), 'BEST ribbon has no probability language');
 }
 
+console.log('== audit fixes: target rule · S37 stop · macro feeds · displacement gate · replay · forward log ==');
+{
+  const W = boot();
+  const d = sweepDay();
+  const base = { rows1h: d.rows, rows15m: d.m15, now: d.now, feed: 'delta-xaut', venue: 'Delta XAUTUSD', equity: 50000, stopsToday: 0 };
+  const r = W.hgOg1Engine(Object.assign({}, base, { macro: { dxy: { trend20: 'FALLING', source: 'fred', value: 97.2, change20Pct: -1.1 }, dfii10Rows: [{ value: 1.83 }, { value: 1.85 }, { value: 1.86 }, { value: 1.88 }, { value: 1.90 }] } }));
+  ok(r.candidates.length > 0 && r.candidates.every(c => typeof c.t1Rule === 'string' && /across an LVN|≥ 1\.5R|nearest node/.test(c.t1Rule)), 'every candidate names the target rule that chose TP1');
+  ok(r.candidates.some(c => c.rr1 >= 1.5), 'target rule reaches ≥ 1.5R (nearest-node pricing gave 0.3R)');
+  const s37 = r.candidates.find(c => c.sid === 'S37');
+  ok(s37 && Math.abs(s37.wick - s37.level) < 1e-9 && (s37.dir === 'short' ? s37.stop > s37.level : s37.stop < s37.level), 'S37 stop sits beyond the failed pool, not the last bar');
+  const macroRow = r.sections.s2.best.rows.find(x => x.name === 'Intermarket / Macro Driver');
+  ok(/DXY 4H DOWN \[20-day trend proxy \(fred\)\]/.test(macroRow.evidence) && /real yield FALLING \[FRED DFII10\]/.test(macroRow.evidence), 'macro component reads the app\'s DXY 20d trend (labelled proxy) and FRED DFII10 real yields');
+  ok(r.sections.s0.load.find(l => /DXY/.test(l.name)).state === 'proxy' && r.sections.s0.load.find(l => /real yield/.test(l.name)).state === 'live', 'Section 0 labels DXY proxy and TIPS live');
+  ok(r.candidates.filter(c => c.sid !== 'S37').every(c => has(c.displacementAtr)), 'sweep candidates carry the reclaim displacement (× ATR)');
+  ok(/displacement ≥ 0\.5 × ATR/.test(r.candidates[0].gates.gates.find(g => g.n === 5).name), 'gate 5 names the displacement requirement');
+  /* replay */
+  ok(r.replay && typeof r.replay.resolved === 'number' && r.replayGated && r.replayGated.gated === true && r.replayGated.rejected, 'engine attaches raw + gated in-sample replays');
+  const rp = W.hgOg1Replay(W.HG_GOLD7.closedRows(d.rows, 3600, d.now), [], { tfLabel: '1H' });
+  ok(rp.signals >= rp.filled && rp.filled >= rp.resolved && rp.resolved === rp.tp1 + rp.stopped + rp.flat, 'replay counts are consistent (signals ≥ filled ≥ resolved = tp1 + stopped + flat)');
+  ok(!isFinite(rp.expR) || Math.abs(rp.sumR / Math.max(1, rp.resolved) - rp.expR) < 1e-9, 'expectancy = sum R / resolved');
+  const cards = W.hgOg1CardsHtml([{ horizon: 'SWING', r }]);
+  ok(/MEASURED, NOT CLAIMED/.test(cards) && /raw replay/.test(cards) && /GATED replay/.test(cards) && /forward log/.test(cards), 'BEST ribbon prints measured replay + forward-log lines');
+  ok(!/win[ -]?rate|(?<!not a )probability|confidence\s*%|hit rate/i.test(cards), 'measured block reports R and counts, never a win rate');
+  /* forward log recording */
+  const recs = [];
+  W.hgFwdRecordScan = (tab, tf, cands, opts) => { recs.push({ tab, tf, n: cands.length, tickets: cands.filter(c => c.ticket).length, opts }); return cands.length; };
+  const fr = W.hgOg1ForwardRecord([{ horizon: 'SWING', r }]);
+  ok(recs.length === 1 && recs[0].tab === 'omnigold1' && recs[0].tf === '1h' && recs[0].n === r.candidates.filter(c => !c.matrix.held).length && fr.recorded === recs[0].n, 'every tape-aligned candidate is recorded to the forward log under omnigold1 · 1h');
+  ok(recs[0].tickets === r.candidates.filter(c => c.verdict.qualifies && !c.matrix.held).length, 'only qualifying setups are flagged as tickets in the log');
+}
+
 console.log('== gates win over the matrix ==');
 {
   ok(/MATRIX\/GATE CONFLICT/.test(read('omnigold1.js')), 'MATRIX/GATE CONFLICT path present — gates override a qualifying matrix');

@@ -179,7 +179,16 @@ console.log('== sweep → reclaim candidate, levels, tape rule ==');
   const cands = r.steps.s3.candidates;
   const long = cands.find(c => c.dir === 'long' && /Asia low/.test(c.kind));
   ok(!!long, 'S0 LONG candidate from the Asia-low sweep');
-  ok(long.gates.find(g => g.n === 4).pass && long.gates.find(g => g.n === 5).pass, 'G4 pool swept + G5 reclaim closed ≤ 3 bars pass');
+  ok(long.gates.find(g => g.n === 4).pass && long.gates.find(g => g.n === 5).pass, 'G4 pool swept + G5 reclaim closed ≤ 3 bars with displacement pass');
+  ok(long.sweep && long.sweep.displacementAtr >= 0.5 && /displacement \d/.test(long.gates.find(g => g.n === 5).note), 'G5 note prints the reclaim displacement (× ATR)');
+  {
+    /* same day, but the reclaim bar closes only 0.4 above the pool — a wick-and-close-back with no follow-through */
+    const weak = rows.map(x => Object.assign({}, x));
+    const lw = weak[weak.length - 1]; lw.o = 4490.2; lw.h = 4491; lw.l = 4488.5; lw.c = 4490.4; /* wick→close 1.9 ≈ 0.23 × ATR */
+    const rw = W.hgGoldSevenStep({ rows1h: weak, now, feed: 'synthetic-xau', equity: 50000 });
+    const wc = rw.steps.s3.candidates.find(c => c.dir === 'long' && /Asia low/.test(c.kind));
+    ok(wc && wc.sweep.displacementAtr < 0.5 && !wc.gates.find(g => g.n === 5).pass && /weak — no follow-through/.test(wc.gates.find(g => g.n === 5).note), 'reclaim without ≥ 0.5 × ATR displacement fails G5 and says why (2-month replay: 47/59 such trades stopped)');
+  }
   ok(long.age === 0 && long.reclaimed === true, 'sweep age 0 on the last closed bar, reclaim closed');
   ok(long.wick === 4486 && long.stop < 4486, 'stop sits beyond the sweep wick (4486) with buffer');
   ok(Math.abs(long.stop - (4486 - Math.max(2, 0.25 * r.steps.s1.atr1h))) < 1e-9, 'buffer = max($2, 0.25 × 1H ATR)');
