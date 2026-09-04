@@ -216,7 +216,10 @@ console.log('== sweep → reclaim candidate, levels, tape rule ==');
   /* account size missing → asks, never guesses */
   const r4 = W.hgGoldSevenStep({ rows1h: rows, now, feed: 'synthetic-xau' });
   if (r4.steps.s5) ok(/account size missing/.test(r4.steps.s5.size.pick) && /per \$10,000/.test(r4.steps.s5.size.per10k), 'size asks for account size when missing');
-  else ok(true, 'no best fit — size question not reached');
+  else ok(r4.steps.s4.noSetup === true && r4.steps.s4.closest.length >= 1 && !/GC×|MGC×|\boz\b/.test(JSON.stringify(r4.steps)), 'no best fit → NO SETUP path, no size invented');
+  /* null-safe formatting: absent values print "unavailable", never 0.00 */
+  const htmlNull = W.hgGoldSevenStepHtml(W.hgGoldSevenStep({ rows1h: rows, now, feed: 'synthetic-xau', gvz: null, cotPct: null }));
+  ok(!/GVZ 0\.0/.test(htmlNull) && /GVZ .*unavailable/.test(htmlNull), 'null GVZ / COT print unavailable, not 0.00');
 }
 
 console.log('== EXPIRED on acceptance + S37 second chance ==');
@@ -250,6 +253,34 @@ console.log('== with the real gold engines loaded ==');
   const html = W.hgGoldSevenStepPanel({ rows1h: rows, now, feed: 'synthetic-xau' });
   ok(/GOLD 7-STEP SETUP ENGINE/.test(html), 'panel helper renders');
   ok(W.hgGoldSevenStepPanel(null) === '' || /DATA_UNAVAILABLE/.test(W.hgGoldSevenStepPanel(null)), 'panel helper never throws on null');
+}
+
+console.log('== vision repaint keeps the 7-STEP + FORMING LAYERS block ==');
+{
+  /* hgChartVisionRefreshGoldCards rebuilds the card container a few seconds
+     after every GOLD SCALP / SWING scan. It used to drop FORMING LAYERS (and
+     would have dropped this panel) because nobody handed it the block. */
+  const ctx = { console, Math, Date, isFinite, isNaN, JSON, Array, Object, Number, String, Promise, RegExp, setTimeout, Infinity, NaN };
+  ctx.window = ctx; ctx.globalThis = ctx; ctx.document = { createElement: () => ({ style: {} }), getElementById: () => null, querySelector: () => null, querySelectorAll: () => [] };
+  vm.createContext(ctx);
+  vm.runInContext(read('chart-vision-desk.js'), ctx, { filename: 'chart-vision-desk.js' });
+  ok(typeof ctx.hgChartVisionRefreshGoldCards === 'function', 'hgChartVisionRefreshGoldCards exported');
+  const cards = { innerHTML: 'OLD' };
+  ctx.hgChartVisionRefreshGoldCards({
+    ui: { cards }, display: [{ id: 1 }], displayBest: { id: 1 },
+    basisHtml: '<b>basis</b>', bannerHTML: () => '<i>banner</i>', cardHTML: () => '<div class="card">card</div>',
+    formingLayersHTML: () => '<div data-hg-gold-seven="1">seven</div><div data-hg-gold-forming="1">forming</div>',
+    formingNowHTML: () => '<div>forming-now</div>', rejectedHTML: () => '', historyHTML: () => ''
+  });
+  ok(/data-hg-gold-seven="1"/.test(cards.innerHTML) && /data-hg-gold-forming="1"/.test(cards.innerHTML), 'repaint carries the 7-STEP + FORMING LAYERS block');
+  ok(cards.innerHTML.indexOf('class="card"') < cards.innerHTML.indexOf('data-hg-gold-seven') && cards.innerHTML.indexOf('data-hg-gold-seven') < cards.innerHTML.indexOf('forming-now'), 'block sits between the cards and FORMING NOW, same as the desk render');
+  const cards2 = { innerHTML: 'OLD' };
+  ctx.hgChartVisionRefreshGoldCards({ ui: { cards: cards2 }, display: [{ id: 1 }], cardHTML: () => 'c', formingLayersHTML: () => { throw new Error('boom'); } });
+  ok(cards2.innerHTML === 'c', 'a throwing layers block does not blank the cards');
+  const gs = read('goldscalp.js'), gw = read('goldswing.js');
+  ok(/formingLayersHTML:\s*formingLayersHtml/.test(gs) && /formingLayersHTML:\s*formingLayersHtml/.test(gw), 'GOLD SCALP + GOLD SWING hand the block to the vision repaint');
+  ok(/var seven = sevenStepHtml\(\);[\s\S]*?return seven \+ forming;/.test(gs) && /var seven = sevenStepHtml\(\);[\s\S]*?return seven \+ forming;/.test(gw), 'seven-step render is isolated from a forming-stack throw on both desks');
+  ok(/basisHtml \+ uniHtml \+ sevenStepHtml\(\)/.test(gs) && /basisHtml \+ uniHtml \+ sevenStepHtml\(\)/.test(gw), 'feeds-failed / nothing-armed branch still prints the 7-step readout');
 }
 
 console.log('== desks wired + deploy stamp ==');

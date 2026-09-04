@@ -49,8 +49,10 @@
       return c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&amp;';
     });
   }
-  function px(x){ return isFinite(x) ? (+x).toFixed(2) : 'unavailable'; }
-  function num(x, d){ return isFinite(x) ? (+x).toFixed(d == null ? 2 : d) : 'unavailable'; }
+  /* null / '' / undefined are absences, never 0.00 — the guard test enforces this */
+  function isNum(x){ return x != null && x !== '' && typeof x !== 'boolean' && isFinite(+x); }
+  function px(x){ return isNum(x) ? (+x).toFixed(2) : 'unavailable'; }
+  function num(x, d){ return isNum(x) ? (+x).toFixed(d == null ? 2 : d) : 'unavailable'; }
   function up(s){ return String(s || '').toUpperCase(); }
 
   /* ---------------- rows ---------------- */
@@ -343,19 +345,22 @@
   }
   function zoneTxt(z){ return z.map(function(o){ return px(o.lo) + '–' + px(o.hi); }).join(', ') || 'none'; }
 
-  /** Dealing range = last confirmed 4H swing low ↔ swing high. */
+  /** Dealing range = last confirmed 4H swing low ↔ swing high. When price has
+      already left that box the range is being extended, so the profile runs
+      from the older pivot to the last closed bar and the box grows with it. */
   function dealingRange(rows4h){
     var pv = pivots(rows4h, 2);
     if (!pv.highs.length || !pv.lows.length) return null;
     var H = pv.highs[pv.highs.length - 1], L = pv.lows[pv.lows.length - 1];
-    var a = Math.min(H.i, L.i), b = Math.max(H.i, L.i);
-    var pxNow = rows4h[rows4h.length - 1].c;
-    var hi = Math.max(H.v, L.v) === H.v ? H.v : L.v, lo = L.v;
-    if (!(hi > lo)){ hi = Math.max(H.v, L.v); lo = Math.min(H.v, L.v); }
+    var a = Math.min(H.i, L.i), n = rows4h.length;
+    var pxNow = rows4h[n - 1].c;
+    var hi = H.v, lo = L.v, i;
+    for (i = a; i < n; i++){ if (rows4h[i].h > hi) hi = rows4h[i].h; if (rows4h[i].l < lo) lo = rows4h[i].l; }
+    if (!(hi > lo)) return null;
     var eq = (hi + lo) / 2;
-    return { hi: hi, lo: lo, eq: eq, fromI: a, toI: b, rows: rows4h.slice(a, b + 1),
+    return { hi: hi, lo: lo, eq: eq, fromI: a, toI: n - 1, rows: rows4h.slice(a),
              half: pxNow > eq ? 'PREMIUM' : 'DISCOUNT', pct: (pxNow - lo) / (hi - lo),
-             lastHighT: H.t, lastLowT: L.t };
+             lastHighT: H.t, lastLowT: L.t, extended: pxNow > H.v || pxNow < L.v };
   }
 
   /* ---------------- sessions / days ---------------- */

@@ -3200,18 +3200,21 @@ async function runScan(ui, scanSt){
       }catch(eSeven){ return ''; }
     }
     function formingLayersHtml(){
+      /* two independent panels — a throw in one must not blank the other */
+      var seven = sevenStepHtml();
+      var forming = '';
       try{
         var fsFn = gfn('hgGoldFormingStack');
         var fhFn = gfn('hgGoldFormingStackHtml');
-        if (!fsFn || !fhFn) return sevenStepHtml();
-        return sevenStepHtml() + fhFn(fsFn({
+        if (fsFn && fhFn) forming = fhFn(fsFn({
           rows15m: gold.rows4h, rows4h: gold.rows4h, macro: ctx.macro,
           dxyRows: ctx.macro && ctx.macro.dxyRows, now: now,
           perpNative: ctx.perpNative,
           oiRows: ctx.perpNative && ctx.perpNative.oi,
           fundingRows: ctx.perpNative && ctx.perpNative.funding
-        }));
-      }catch(eFs){ return ''; }
+        })) || '';
+      }catch(eFs){ forming = ''; }
+      return seven + forming;
     }
     if (ui && ui.cards && ui.empty){
       if (display.length){
@@ -3232,8 +3235,10 @@ async function runScan(ui, scanSt){
           + formingNowHTML(armedAll)
           + historyHTML(lock.store.history);
       } else {
-        /* feeds failed: cards stay empty (no fabricated setups); catalog lives on empty */
-        ui.cards.innerHTML = basisHtml + uniHtml;
+        /* feeds failed / nothing armed: cards stay empty (no fabricated setups);
+           the 7-step readout still prints — NO SETUP or DATA_UNAVAILABLE is
+           itself the answer the playbook asks for. Catalog lives on empty. */
+        ui.cards.innerHTML = basisHtml + uniHtml + sevenStepHtml();
         var catH = '';
         try{
           var cFn = gfn('hgGoldCatalogHtml');
@@ -3266,6 +3271,7 @@ async function runScan(ui, scanSt){
               scanSt: scanSt, scanGen: visionGen, ui: ui, display: display, displayBest: displayBest,
               basisHtml: basisHtml + mixedBanner + aplusPack.panel + uniHtml, bannerHTML: bannerHTML, cardHTML: cardHTML,
               formingNowHTML: formingNowHTML, rejectedHTML: rejectedHTML, historyHTML: historyHTML,
+              formingLayersHTML: formingLayersHtml,
               armedAll: armedAll, rejectedAll: rejectedAll, history: lock.store.history,
               seasonNote: season && season.note,
             });
