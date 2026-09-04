@@ -1,0 +1,303 @@
+{
+  "generated": "2026-09-04T17:34:40.400Z",
+  "symbol": "PAXGUSDT",
+  "bars": {
+    "h1": 2000,
+    "h4": 501,
+    "from": "2026-06-13T09:00:00.000Z",
+    "to": "2026-09-04T16:00:00.000Z"
+  },
+  "note": "in-sample sweep→reclaim pricing sanity — not a forecast. Same hgOg1Replay the tab attaches.",
+  "variants": {
+    "raw": {
+      "gated": false,
+      "signals": 100,
+      "filled": 81,
+      "resolved": 81,
+      "tp1": 16,
+      "stopped": 61,
+      "flat": 4,
+      "expR": -0.2753,
+      "avgWinR": 1.7978,
+      "rejected": {
+        "session": 0,
+        "rr": 0,
+        "rcap": 0
+      },
+      "minRisk": null,
+      "minDisp": null,
+      "byDir": {
+        "long": {
+          "n": 39,
+          "sumR": -19.060014486707544
+        },
+        "short": {
+          "n": 42,
+          "sumR": -3.242408401042926
+        }
+      }
+    },
+    "minRisk5": {
+      "gated": false,
+      "signals": 100,
+      "filled": 80,
+      "resolved": 80,
+      "tp1": 16,
+      "stopped": 60,
+      "flat": 4,
+      "expR": -0.2663,
+      "avgWinR": 1.7978,
+      "rejected": {
+        "session": 0,
+        "rr": 0,
+        "rcap": 0,
+        "risk": 1
+      },
+      "minRisk": 5,
+      "minDisp": null,
+      "byDir": {
+        "long": {
+          "n": 39,
+          "sumR": -19.060014486707544
+        },
+        "short": {
+          "n": 41,
+          "sumR": -2.242408401042926
+        }
+      }
+    },
+    "minDisp0.5": {
+      "gated": false,
+      "signals": 91,
+      "filled": 71,
+      "resolved": 71,
+      "tp1": 13,
+      "stopped": 54,
+      "flat": 4,
+      "expR": -0.2561,
+      "avgWinR": 1.991,
+      "rejected": {
+        "session": 0,
+        "rr": 0,
+        "rcap": 0
+      },
+      "minRisk": null,
+      "minDisp": 0.5,
+      "byDir": {
+        "long": {
+          "n": 37,
+          "sumR": -11.708463331872265
+        },
+        "short": {
+          "n": 34,
+          "sumR": -6.474787842111193
+        }
+      }
+    },
+    "minRisk5+disp0.5": {
+      "gated": false,
+      "signals": 91,
+      "filled": 70,
+      "resolved": 70,
+      "tp1": 13,
+      "stopped": 53,
+      "flat": 4,
+      "expR": -0.2455,
+      "avgWinR": 1.991,
+      "rejected": {
+        "session": 0,
+        "rr": 0,
+        "rcap": 0,
+        "risk": 1
+      },
+      "minRisk": 5,
+      "minDisp": 0.5,
+      "byDir": {
+        "long": {
+          "n": 37,
+          "sumR": -11.708463331872265
+        },
+        "short": {
+          "n": 33,
+          "sumR": -5.474787842111193
+        }
+      }
+    },
+    "gated": {
+      "gated": true,
+      "signals": 107,
+      "filled": 24,
+      "resolved": 23,
+      "tp1": 1,
+      "stopped": 19,
+      "flat": 3,
+      "expR": -0.3458,
+      "avgWinR": 1.9308,
+      "rejected": {
+        "session": 57,
+        "rr": 2,
+        "rcap": 16
+      },
+      "minRisk": null,
+      "minDisp": 0.5,
+      "byDir": {
+        "long": {
+          "n": 9,
+          "sumR": -6.397976391231108
+        },
+        "short": {
+          "n": 14,
+          "sumR": -1.556421385459366
+        }
+      }
+    },
+    "gated+bias": {
+      "gated": true,
+      "signals": 112,
+      "filled": 11,
+      "resolved": 10,
+      "tp1": 0,
+      "stopped": 8,
+      "flat": 2,
+      "expR": -0.6472,
+      "avgWinR": null,
+      "rejected": {
+        "session": 18,
+        "rr": 1,
+        "rcap": 5,
+        "bias": 75
+      },
+      "minRisk": null,
+      "minDisp": 0.5,
+      "byDir": {
+        "long": {
+          "n": 4,
+          "sumR": -1.3979763912311074
+        },
+        "short": {
+          "n": 6,
+          "sumR": -5.073967622045803
+        }
+      }
+    },
+    "gated+bias+ob": {
+      "gated": true,
+      "signals": 117,
+      "filled": 0,
+      "resolved": 0,
+      "tp1": 0,
+      "stopped": 0,
+      "flat": 0,
+      "expR": null,
+      "avgWinR": null,
+      "rejected": {
+        "session": 20,
+        "rr": 1,
+        "rcap": 5,
+        "ob": 16,
+        "bias": 75
+      },
+      "minRisk": null,
+      "minDisp": 0.5,
+      "byDir": null
+    },
+    "gated+bias+node": {
+      "gated": true,
+      "signals": 115,
+      "filled": 3,
+      "resolved": 3,
+      "tp1": 0,
+      "stopped": 2,
+      "flat": 1,
+      "expR": -0.6913,
+      "avgWinR": null,
+      "rejected": {
+        "session": 20,
+        "rr": 1,
+        "rcap": 5,
+        "node": 11,
+        "bias": 75
+      },
+      "minRisk": null,
+      "minDisp": 0.5,
+      "byDir": {
+        "long": {
+          "n": 0,
+          "sumR": 0
+        },
+        "short": {
+          "n": 3,
+          "sumR": -2.0739676220458034
+        }
+      }
+    },
+    "disp0.75": {
+      "gated": true,
+      "signals": 91,
+      "filled": 6,
+      "resolved": 5,
+      "tp1": 0,
+      "stopped": 5,
+      "flat": 0,
+      "expR": -1,
+      "avgWinR": null,
+      "rejected": {
+        "session": 17,
+        "rr": 1,
+        "rcap": 4,
+        "bias": 61
+      },
+      "minRisk": null,
+      "minDisp": 0.75,
+      "byDir": {
+        "long": {
+          "n": 2,
+          "sumR": -2
+        },
+        "short": {
+          "n": 3,
+          "sumR": -3
+        }
+      }
+    },
+    "disp1.00": {
+      "gated": true,
+      "signals": 76,
+      "filled": 5,
+      "resolved": 4,
+      "tp1": 0,
+      "stopped": 4,
+      "flat": 0,
+      "expR": -1,
+      "avgWinR": null,
+      "rejected": {
+        "session": 14,
+        "rr": 1,
+        "rcap": 4,
+        "bias": 51
+      },
+      "minRisk": null,
+      "minDisp": 1,
+      "byDir": {
+        "long": {
+          "n": 2,
+          "sumR": -2
+        },
+        "short": {
+          "n": 2,
+          "sumR": -2
+        }
+      }
+    }
+  },
+  "bestNamed": "minRisk5+disp0.5",
+  "apply": {
+    "liveQualifies": "SL$ ≥ $5 + G5 displacement ≥ 0.5 ATR (minRisk5+disp0.5 least-bad vs raw). gated+bias is worse — attached as measured lines, not a QUALIFIES gate.",
+    "neverLoosen": [
+      "G1-G12",
+      "displacement ≥ 0.5 × ATR",
+      "RR 1.5 floor",
+      "SL$ ≥ $5"
+    ]
+  }
+}

@@ -1,0 +1,97 @@
+{
+  "generated": "2026-09-04T17:41:28.446Z",
+  "limitations": [
+    "Counterfactual on committed replay books — not a new walk.",
+    "Gold book is PAXG 0.26% RT (Aug 2026). Venue XM is cheaper.",
+    "Never loosen G1–G7. Never invent dir. Demote/suppress/tighten only."
+  ],
+  "gold": {
+    "raw": {
+      "n": 7270,
+      "winRate": 0.3155,
+      "avgGross": 0.0007,
+      "avgNet": -1.3457
+    },
+    "bySource": {
+      "ENGINE:SCALP": {
+        "n": 250,
+        "winRate": 0.452,
+        "avgGross": 0.1231,
+        "avgNet": -2.6033
+      },
+      "ENGINE:SWING": {
+        "n": 27,
+        "winRate": 0.3704,
+        "avgGross": 0.1953,
+        "avgNet": -0.0561
+      },
+      "SCAN:SCALP": {
+        "n": 5466,
+        "winRate": 0.3035,
+        "avgGross": -0.0124,
+        "avgNet": -1.5244
+      },
+      "SCAN:SWING": {
+        "n": 1527,
+        "winRate": 0.3353,
+        "avgGross": 0.0241,
+        "avgNet": -0.523
+      }
+    },
+    "afterEngineScalpSuppress": {
+      "n": 7024,
+      "winRate": 0.3108,
+      "avgGross": -0.0035,
+      "avgNet": -1.3011
+    },
+    "engineScalpAfter": {
+      "n": 4,
+      "winRate": 0.5,
+      "avgGross": 0.25,
+      "avgNet": -1.5955
+    }
+  },
+  "omniroute": {
+    "raw": {
+      "n": 2832,
+      "winRate": 0.2602,
+      "avgGross": -0.0843,
+      "avgNet": -0.2424
+    },
+    "preferOnly": {
+      "n": 539,
+      "winRate": 0.334,
+      "avgGross": 0.1798,
+      "avgNet": 0.1019
+    },
+    "dropGrossAndNetToxic": {
+      "n": 1234,
+      "winRate": 0.2812,
+      "avgGross": 0.0697,
+      "avgNet": -0.0026
+    },
+    "newlyNetToxic": [
+      "PO3"
+    ]
+  },
+  "omnipresent": {
+    "raw": {
+      "n": 8522,
+      "winRate": 0.3063,
+      "avgGross": -0.0309,
+      "avgNet": -0.2189
+    },
+    "costLe12AndNotGold": {
+      "n": 4215,
+      "winRate": 0.2975,
+      "avgGross": -0.023,
+      "avgNet": -0.0857
+    }
+  },
+  "actions": [
+    "GOLD SCALP: keep ORB / FVG / HVN / ribbon suppress. VWAP / Asian / scalp sweep / BOS / OB stay demote (never MOST PROBABLE / ENGINE lead) — full suppress emptied ENGINE:SCALP to n=4.",
+    "OMNIROUTE: also stand aside n≥50 gross<0 AND net≤−0.20 (catches PO3). Prefer-only stays +0.10R.",
+    "OMNIPRESENT: tighten cost ceiling 0.20 → 0.12 (cost≥0.20 loses −0.49R). Gold perps still aside.",
+    "OMNIGOLD 1: QUALIFIES needs SL$ ≥ $5; G5 fails closed without ≥0.5×ATR displacement; BEST prefers trade-ready. Replay: minRisk5+disp0.5 least-bad (−0.245R vs raw −0.275R); do not require gated+bias for QUALIFIES."
+  ]
+}
