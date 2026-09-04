@@ -189,3 +189,14 @@ console.log('\n== wiring + honesty + stamp ==');
 }
 
 console.log('\npassed: ' + passed);
+
+/* ---- hg-v604: GOLD SCALP / SWING desk snapshots reach OMNIGOLD's uniform card ---- */
+{
+  const og = fs.readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
+  ok(/function hgOgDeskSnapshotCands\(horizon\)/.test(og) && /gfn\(String\(horizon\)\.toUpperCase\(\) === 'SWING' \? 'goldswingScan' : 'goldscalpScan'\)/.test(og), 'OMNIGOLD reads the GOLD SCALP / SWING scan snapshots (locked plans included)');
+  ok(/var snap = hgOgDeskSnapshotCands\(horizon\);\s*\n\s*for \(i = 0; i < snap\.length; i\+\+\) out\.push\(snap\[i\]\);/.test(og), 'snapshot plans join the uniform candidate list');
+  ok(/Date\.now\(\) - fin\(snap\.at\) > 30 \* 60000\) return \[\];/.test(og), 'snapshots older than 30 minutes are ignored');
+  ok(/function hgOgUniformTape\(horizon\)/.test(og) && /gfn\('hgGoldUniformTape'\)/.test(og), 'tape falls back to the shared EMA21/50 read when the desk read is unread');
+  ok(/window\.hgOgUniformDebug = function/.test(og), 'debug getter exported for live inspection');
+}
+console.log('passed:', passed);
