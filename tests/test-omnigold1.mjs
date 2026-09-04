@@ -16,6 +16,7 @@ import { swCacheOk, HG_VER } from './helpers/build-version.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url)) + '/..';
 let passed = 0;
+const has = x => x != null && x !== '' && isFinite(+x);
 const ok = (cond, label) => { if (!cond) throw new Error('FAIL: ' + label); passed++; console.log('  ok —', label); };
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 
@@ -195,6 +196,41 @@ console.log('== Sections 5–8 when a setup qualifies (forced by supplied reads)
     ok(r.sections.s8.state === 'WAIT' && /next re-scan|close must/.test((r.sections.s8.nextClose || '') + r.sections.s8.nextRescan), 'Trigger Watch line names the next close / re-scan in IST');
   }
   ok(!/win[ -]?rate|(?<!not a )probability|confidence\s*%/i.test(W.hgOg1Html(r)), 'still no probability language with full legs');
+}
+
+console.log('== SCALP horizon + setup cards ==');
+{
+  const W = boot();
+  const d = sweepDay();
+  /* 15m series with a sweep of the last-60-bar low on the final closed bar */
+  const m15 = []; let p = 4493;
+  for (let i = 0; i < 200; i++){ const t = Math.floor(d.now / 1000 / 900) * 900 - (200 - i) * 900; const c = p + Math.sin(i / 9) * 0.8; m15.push({ t, o: p, h: Math.max(p, c) + 1.2, l: Math.min(p, c) - 1.2, c, v: 40 + (i % 5) * 5 }); p = c; }
+  const last = m15[m15.length - 1]; last.l = Math.min(...m15.slice(-60, -1).map(r => r.l)) - 2.5; last.c = last.o + 0.8;
+  const base = { rows1h: d.rows, rows15m: m15, now: d.now, feed: 'delta-xaut', venue: 'Delta XAUTUSD', equity: 50000, stopsToday: 0 };
+  const rS = W.hgOg1Engine(Object.assign({}, base, { horizon: 'SCALP' }));
+  const rW = W.hgOg1Engine(base);
+  ok(rS.ok && rS.horizon === 'SCALP' && rW.horizon === 'SWING', 'engine runs per horizon (SCALP · SWING)');
+  const hz = rS.sections.s0.load.find(l => l.name === 'horizon');
+  ok(hz && /context 1H .* execution 15m \(200 bars\)/.test(hz.note), 'SCALP reads 1H context and 15m execution bars');
+  ok(rS.sections.s0.veto.find(v => v.n === 3).state !== 'VETO', 'staleness clock still runs on the 1H leg, not the 15m bar');
+  ok(Array.isArray(rS.candidates) && Array.isArray(rW.candidates), 'both runs expose their candidate lists');
+  ok(rS.candidates.every(c => c.matrix && typeof c.matrix.score === 'number' && c.verdict && c.gates && has(c.entry) && has(c.stop)), 'every SCALP candidate carries matrix score, verdict, gates and levels');
+  ok(rS.candidates.length === 0 || rS.candidates.every((c, i, a) => i === 0 || a[i - 1].matrix.score >= c.matrix.score), 'candidates ranked by matrix score');
+  ok(/Bias 1H /.test(rS.summary[1]) && /Bias 4H /.test(rW.summary[1]), 'summary names the context bar per horizon');
+  ok(/two consecutive 15m closes|15m close back|15m closed back|15m retest|15m close must/.test(JSON.stringify(rS.sections.s5 || rS.sections.s8)), 'SCALP conditions speak in 15m bars');
+  const html = W.hgOg1CardsHtml([{ horizon: 'SWING', r: rW }, { horizon: 'SCALP', r: rS }]);
+  ok(/data-hg-og1-setups="1"/.test(html) && /SWING SETUPS/.test(html) && /SCALP SETUPS/.test(html), 'cards panel prints SWING SETUPS and SCALP SETUPS');
+  const nCards = (html.match(/og1-card /g) || []).length;
+  ok(nCards === rW.candidates.length + rS.candidates.length, 'one card per candidate across both horizons (' + nCards + ')');
+  if (nCards){
+    ok(/ENTRY<\/i><b>\d/.test(html) && /STOP<\/i><b>\d/.test(html) && /TP1<\/i><b>/.test(html), 'cards print ENTRY / STOP / TP1 / TP2');
+    ok(/SCORE \d+\/20/.test(html) && /gates \d+\/12/.test(html), 'cards carry matrix score and gate tally');
+    ok(/QUALIFIES|HALF SIZE|NO SETUP|HELD/.test(html), 'cards carry the verdict chip');
+  }
+  ok(!/win[ -]?rate|(?<!not a )probability|confidence\s*%/i.test(html), 'cards carry no probability language');
+  const empty = W.hgOg1CardsHtml([{ horizon: 'SCALP', r: W.hgOg1Engine({ rows1h: series(d.now, 30), now: d.now, horizon: 'SCALP' }) }]);
+  ok(/DATA_UNAVAILABLE/.test(empty), 'cards panel states DATA_UNAVAILABLE instead of inventing setups');
+  ok(/hgOg1Engine\(Object\.assign\(\{\}, inp, \{ horizon: 'SCALP' \}\)\)/.test(read('omnigold1.js')) && /hgOg1CardsHtml\(\[\{ horizon: 'SWING'/.test(read('omnigold1.js')), 'tab scan runs both horizons and paints the cards first');
 }
 
 console.log('== gates win over the matrix ==');

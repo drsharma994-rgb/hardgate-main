@@ -145,7 +145,7 @@
     gate(7, 'session window · no lockout', ctx.session.tradeable && !ctx.news.lock, ctx.session.label + (ctx.news.lock ? ' · LOCKOUT' : ''));
     gate(8, 'LVN path', c.lvnPath, c.lvnPath ? 'LVN between entry and TP1' : 'no LVN path');
     gate(9, 'RR ≥ 2', has(c.rr1) && c.rr1 >= 1.5, has(c.rr1) ? (num(c.rr1) + 'R' + (c.rr1 < 2 ? ' (half band)' : '')) : 'no TP1');
-    gate(10, 'R ≤ 0.6 × 4H ATR', c.risk <= 0.6 * ctx.atr4h, 'R $' + num(c.risk) + ' vs $' + num(0.6 * ctx.atr4h));
+    gate(10, 'R ≤ 0.6 × ' + (ctx.ctxLabel || '4H') + ' ATR', c.risk <= 0.6 * ctx.atr4h, 'R $' + num(c.risk) + ' vs $' + num(0.6 * ctx.atr4h));
     gate(11, 'feed sane', ctx.feedOk, ctx.feedWhy);
     gate(12, '< 2 stops today', !(ctx.stopsToday >= 2), has(ctx.stopsToday) ? ('stops ' + ctx.stopsToday) : 'stops today unavailable — passes with note');
     return { gates: gates, pass: pass, halfBand: has(c.rr1) && c.rr1 >= 1.5 && c.rr1 < 2 };
@@ -158,25 +158,43 @@
     inp = inp || {};
     var g = G7();
     var nowMs = has(inp.now) ? +inp.now : Date.now();
-    var out = { ok: false, status: 'DATA_UNAVAILABLE', why: '', now: nowMs, sections: {}, summary: [],
+    /* horizon: SWING = 4H context / 1H execution (default) · SCALP = 1H context / 15m execution.
+       Same veto stack, matrix, gates and trigger — only the bar the rules read changes. */
+    var horizon = up(inp.horizon) === 'SCALP' ? 'SCALP' : 'SWING';
+    var out = { ok: false, status: 'DATA_UNAVAILABLE', why: '', now: nowMs, horizon: horizon, sections: {}, summary: [],
                 disclaimer: 'Rule-based confluence score and gate checklist, not a probability or advice. I enter only on my own review.' };
     if (!g){ out.why = 'gold-seven-step.js not loaded (HG_GOLD7 missing)'; out.summary = ['DATA_UNAVAILABLE — ' + out.why, out.disclaimer]; return out; }
     out.nowIst = g.istUtcDay(nowMs);
 
     /* ---------------- SECTION 0 — data load ---------------- */
-    var rows1h = g.closedRows(inp.rows1h, HOUR, nowMs);
-    var rows15 = g.closedRows(inp.rows15m, 900, nowMs);
-    var rows4h = g.closedRows(inp.rows4h, H4, nowMs), derived4h = false;
-    if (rows4h.length < 60 && rows1h.length >= 8){ rows4h = g.derive4h(rows1h, nowMs); derived4h = true; }
+    var rows1hAll = g.closedRows(inp.rows1h, HOUR, nowMs);
+    var rows15All = g.closedRows(inp.rows15m, 900, nowMs);
+    var rows4hAll = g.closedRows(inp.rows4h, H4, nowMs), derived4h = false;
+    if (rows4hAll.length < 60 && rows1hAll.length >= 8){ rows4hAll = g.derive4h(rows1hAll, nowMs); derived4h = true; }
+    if (!rows1hAll.length && rows15All.length){
+      /* 1H from 15m when the feed carried no 1H leg — closed buckets only */
+      var bk = {}, ord = [], bi;
+      for (bi = 0; bi < rows15All.length; bi++){ var r0 = rows15All[bi], b0 = Math.floor(r0.t / HOUR) * HOUR; if (!bk[b0]){ bk[b0] = { t: b0, o: r0.o, h: r0.h, l: r0.l, c: r0.c, v: r0.v, n: 1 }; ord.push(b0); } else { var kk = bk[b0]; if (r0.h > kk.h) kk.h = r0.h; if (r0.l < kk.l) kk.l = r0.l; kk.c = r0.c; kk.v += r0.v; kk.n++; } }
+      for (bi = 0; bi < ord.length; bi++) if (bk[ord[bi]].n === 4) rows1hAll.push(bk[ord[bi]]);
+      rows1hAll = g.closedRows(rows1hAll, HOUR, nowMs);
+    }
+    /* execution / context rows for this horizon (the rest of the engine reads these names) */
+    var scalp = horizon === 'SCALP';
+    var rows1h = scalp ? rows15All : rows1hAll;       /* execution bars */
+    var rows4h = scalp ? rows1hAll : rows4hAll;       /* context bars */
+    var rows15 = rows15All;
+    var TF = scalp ? 900 : HOUR, TF_LABEL = scalp ? '15m' : '1H', CTX_LABEL = scalp ? '1H' : '4H';
     var feed = String(inp.feed || 'unavailable'), venue = String(inp.venue || 'analysis feed');
     var basisPct = fin(inp.basisPct), basisUsd = has(inp.basisUsd) ? +inp.basisUsd : (has(basisPct) && rows1h.length ? basisPct / 100 * rows1h[rows1h.length - 1].c : NaN);
     var basisMean5d = fin(inp.basisUsd5dMean);
-    var lastCloseMs = rows1h.length ? (rows1h[rows1h.length - 1].t + HOUR) * 1000 : NaN;
+    var lastCloseMs = rows1hAll.length ? (rows1hAll[rows1hAll.length - 1].t + HOUR) * 1000 : NaN;   /* 1H leg — the staleness clock */
+    var lastExecCloseMs = rows1h.length ? (rows1h[rows1h.length - 1].t + TF) * 1000 : NaN;          /* execution bar */
     var load = [];
     function L(name, state, note){ load.push({ name: name, state: state, note: note || '' }); }
-    L('1H OHLCV', rows1h.length ? 'live' : 'unavailable', rows1h.length + ' closed bars · ' + feed);
-    L('15m OHLCV', rows15.length ? 'live' : 'unavailable', rows15.length + ' closed bars');
-    L('4H', rows4h.length ? (derived4h ? 'derived' : 'live') : 'unavailable', rows4h.length + ' bars' + (derived4h ? ' derived from 1H @ 22:00 UTC' : ''));
+    L('1H OHLCV', rows1hAll.length ? 'live' : 'unavailable', rows1hAll.length + ' closed bars · ' + feed);
+    L('15m OHLCV', rows15All.length ? 'live' : 'unavailable', rows15All.length + ' closed bars');
+    L('4H', rows4hAll.length ? (derived4h ? 'derived' : 'live') : 'unavailable', rows4hAll.length + ' bars' + (derived4h ? ' derived from 1H @ 22:00 UTC' : ''));
+    L('horizon', 'live', horizon + ' — context ' + CTX_LABEL + ' (' + rows4h.length + ' bars) · execution ' + TF_LABEL + ' (' + rows1h.length + ' bars)');
     var bid = fin(inp.bid), ask = fin(inp.ask), spread = has(inp.spreadUsd) ? +inp.spreadUsd : (has(bid) && has(ask) ? ask - bid : NaN), spreadAvg = fin(inp.spreadAvgHour);
     L('bid/ask + 20d avg spread', has(spread) ? (has(spreadAvg) ? 'live' : 'partial') : 'unavailable', has(spread) ? ('spread $' + num(spread) + (has(spreadAvg) ? ' vs avg $' + num(spreadAvg) : ' · 20d average unavailable')) : 'no quote');
     var dxy = g.dxyRead(inp), dxyRows = g.normRows(inp.dxyRows || (inp.macro && inp.macro.dxyRows));
@@ -250,8 +268,8 @@
     L('stops taken today · weekly P&L', has(stopsToday) ? 'live' : 'unavailable', (has(stopsToday) ? stopsToday + ' stops' : 'stops unavailable') + (has(weeklyLoss) ? ' · week ' + num(weeklyLoss, 1) + '%' : ''));
 
     /* hard data requirement */
-    if (rows1h.length < 60){
-      out.why = 'need ≥ 60 closed 1H bars (have ' + rows1h.length + ')';
+    if (rows1h.length < 60 || rows1hAll.length < 60){
+      out.why = rows1hAll.length < 60 ? ('need ≥ 60 closed 1H bars (have ' + rows1hAll.length + ')') : ('need ≥ 60 closed ' + TF_LABEL + ' bars for the ' + horizon + ' horizon (have ' + rows1h.length + ')');
       out.sections.s0 = { load: load, veto: null };
       out.summary = ['XAUUSD ' + feed + ' | ' + out.nowIst + ' | DATA_UNAVAILABLE — ' + out.why, out.disclaimer];
       return out;
@@ -260,7 +278,7 @@
     /* ---------------- SECTION 0 — veto stack ---------------- */
     var session = g.goldSession(nowMs);
     var ctx = { rows1h: rows1h, rows15: rows15, rows4h: rows4h, atr1h: atr1h, atr4h: atr4h, session: session, news: news, stopsToday: stopsToday,
-                feedOk: true, feedWhy: feed + ' · last closed 1H ' + g.fmtHM(lastCloseMs, 'UTC') + ' UTC', lastPx: lastPx, vp4h: vp4h, dr: dr, prevSess: prevSess, composite: composite,
+                feedOk: true, feedWhy: feed + ' · last closed ' + TF_LABEL + ' ' + g.fmtHM(lastExecCloseMs, 'UTC') + ' UTC', tf: TF, tfLabel: TF_LABEL, ctxLabel: CTX_LABEL, horizon: horizon, lastPx: lastPx, vp4h: vp4h, dr: dr, prevSess: prevSess, composite: composite,
                 naked: naked, vw: vw, atrRegime: atrRegime, adr: adr, rsi4h: rsi4h, st1h: st1h, emaSlope: emaSlope, ker: ker, regime: regime, kerCrossed: kerCrossed,
                 dxy: dxy, dxy4h: dxy4h, ryTrend: ryTrend, cot: cot, fund: fund, oi: oi, walls: walls, wk: wk, wkAvail: wkAvail, ml: ml, gvz: gvz, implied: implied, rv20: rv20,
                 cvd: cvd, hist: hist, spread: spread, spreadAvg: spreadAvg, rvol: rvolThisHour(rows1h), illiq: fin(inp.illiqPct), dom: inp.dom || null,
@@ -382,15 +400,22 @@
       var closedRight = pdir === 'long' ? last.c > poc : last.c < poc;
       if (touched && closedRight) cands.push(buildCand(ctx, { sid: 'S3', dir: pdir, level: poc, kind: '4H POC pullback', wick: pdir === 'long' ? last.l : last.h, age: 0, reclaimed: true, breach: NaN, cls: 'continuation', entry: pdir === 'long' ? poc + Math.max(1, 0.1 * atr1h) : poc - Math.max(1, 0.1 * atr1h) }));
     }
-    /* ---------------- SECTION 2 — score each permitted direction ---------------- */
+    /* ---------------- SECTION 2 — score every candidate, then each permitted direction ---------------- */
+    var ci;
+    for (ci = 0; ci < cands.length; ci++){
+      cands[ci].matrix = scoreMatrix(ctx, cands[ci].dir, cands[ci], cands);
+      cands[ci].verdict = decide(ctx, cands[ci].matrix);
+    }
+    cands.sort(function(a, b){ return (b.matrix.score - a.matrix.score) || (b.gates.pass - a.gates.pass) || (g.gradeRank(b.grade) - g.gradeRank(a.grade)) || ((b.rr1 || 0) - (a.rr1 || 0)); });
+    for (ci = 0; ci < cands.length; ci++) cands[ci].rank = ci + 1;
     var scored = permitted.map(function(d){
       var cs = cands.filter(function(c){ return c.dir === d; });
-      cs.sort(function(a, b){ return (b.gates.pass - a.gates.pass) || (g.gradeRank(b.grade) - g.gradeRank(a.grade)) || ((b.rr1 || 0) - (a.rr1 || 0)); });
-      return scoreMatrix(ctx, d, cs[0] || null, cs);
+      return cs.length ? cs[0].matrix : scoreMatrix(ctx, d, null, []);
     });
     scored.sort(function(a, b){ return b.score - a.score; });
     var best = scored[0];
     out.sections.s2 = { scored: scored, best: best };
+    out.candidates = cands;
 
     /* ---------------- SECTION 3 — decision ---------------- */
     var s3 = decide(ctx, best);
@@ -530,7 +555,7 @@
     /* B5 time statistics */
     var timeOk = false, timeEv = 'hour-of-day histogram unavailable';
     if (ctx.hist){
-      var hrIst = Math.floor(g.tzHour(ctx.rows1h[ctx.rows1h.length - 1].t * 1000 + HOUR * 1000, 'Asia/Kolkata'));
+      var hrIst = Math.floor(g.tzHour(ctx.rows1h[ctx.rows1h.length - 1].t * 1000 + ctx.tf * 1000, 'Asia/Kolkata'));
       var pct = fin(ctx.hist[hrIst] != null ? (dir === 'long' ? (ctx.hist[hrIst].lows != null ? ctx.hist[hrIst].lows : ctx.hist[hrIst]) : (ctx.hist[hrIst].highs != null ? ctx.hist[hrIst].highs : ctx.hist[hrIst])) : NaN);
       timeOk = has(pct) && pct >= 30; timeEv = 'histogram ' + num(pct, 0) + '% of session ' + (dir === 'long' ? 'lows' : 'highs') + ' in the coming window (S29)';
     }
@@ -618,7 +643,7 @@
 
   /* ---------------- SECTION 5 ---------------- */
   function levels(ctx, best, s3, s4){
-    var g = G7(), c = best.cand, nextClose = (ctx.rows1h[ctx.rows1h.length - 1].t + 2 * HOUR) * 1000;
+    var g = G7(), c = best.cand, nextClose = (ctx.rows1h[ctx.rows1h.length - 1].t + 2 * ctx.tf) * 1000;
     var t2 = c.t2, t2Note = c.t2Label;
     if (has(ctx.composite && ctx.composite.pocPrice) && has(t2) && Math.abs(ctx.composite.pocPrice - c.entry) <= ctx.atr1h && ((c.dir === 'long' && ctx.composite.pocPrice < t2) || (c.dir === 'short' && ctx.composite.pocPrice > t2))){ t2 = ctx.composite.pocPrice; t2Note = 'capped at composite POC'; }
     var removeT2 = (has(ctx.oi.chgPct) && ctx.oi.chgPct < -2 && ((c.dir === 'long' && ctx.fund.value > 0) || false)) || ctx.atrRegime === 'compressed' || ctx.walls.some(function(w){ return Math.abs(w.level - c.t1) <= 1; });
@@ -631,11 +656,11 @@
     var ivrv = has(ctx.gvz) && has(ctx.rv20) ? ctx.gvz - ctx.rv20 : NaN;
     var expression = t1InHold ? 'option debit spread preferable (S41) — Tier-1 event inside the hold window' : (has(ivrv) && ivrv < -3) ? 'option debit spread preferable (S41) — GVZ − realized ' + num(ivrv, 1) + ' < −3' : 'outright position (no S41 trigger' + (has(ivrv) ? '' : '; GVZ/RV unavailable') + ')';
     return {
-      dir: c.dir, entry: c.entry, entryCondition: c.sid === 'S37' ? ('1H retest of ' + px(c.level) + ' after acceptance → limit ' + px(c.entry)) : (c.reclaimed ? ('1H closed back ' + (c.dir === 'long' ? 'above ' : 'below ') + px(c.level) + ' (' + c.kind + ') → limit ' + px(c.entry)) : ('1H close back ' + (c.dir === 'long' ? 'above ' : 'below ') + px(c.level) + ' at ' + g.istUtc(nextClose) + ' → limit ' + px(c.entry))),
+      dir: c.dir, entry: c.entry, entryCondition: c.sid === 'S37' ? (ctx.tfLabel + ' retest of ' + px(c.level) + ' after acceptance → limit ' + px(c.entry)) : (c.reclaimed ? (ctx.tfLabel + ' closed back ' + (c.dir === 'long' ? 'above ' : 'below ') + px(c.level) + ' (' + c.kind + ') → limit ' + px(c.entry)) : (ctx.tfLabel + ' close back ' + (c.dir === 'long' ? 'above ' : 'below ') + px(c.level) + ' at ' + g.istUtc(nextClose) + ' → limit ' + px(c.entry))),
       stop: c.stop, sl: c.risk, stopWhy: 'beyond ' + (c.sid === 'S3' ? 'far edge of the node' : 'sweep wick ' + px(c.wick)) + ' + buffer $' + num(c.buf) + ' (' + c.bufNote + ')' + (has(ctx.gcRoll) ? '' : ' · GC roll-week coverage unavailable'),
       t1: c.t1, t1Label: c.t1Label, rr1: c.rr1, rrVerdict: rrVerdict, t2: t2, t2Label: t2Note, rr2: c.risk > 0 && has(t2) ? Math.abs(t2 - c.entry) / c.risk : NaN, removeT2: removeT2,
       management: mgmt, timeStop: (c.sid === 'S7' || c.sid === 'S17') ? 'runner may hold with stop under each session POC; intraday portion London close ' + g.istUtc(holdEnd) : 'London close ' + g.istUtc(holdEnd),
-      invalidation: 'two consecutive 1H closes ' + (c.dir === 'long' ? 'below ' : 'above ') + px(c.level) + ' (acceptance) or sweep age > 3 bars',
+      invalidation: 'two consecutive ' + ctx.tfLabel + ' closes ' + (c.dir === 'long' ? 'below ' : 'above ') + px(c.level) + ' (acceptance) or sweep age > 3 bars',
       venue: conv, expression: expression
     };
   }
@@ -701,11 +726,11 @@
     return (next === lon ? 'London open ' : next === ny ? 'NY open ' : 'daily context ') + g.istUtcDay(next);
   }
   function trigger(ctx, best, s3, s5, s6, s7, s4){
-    var g = G7(), out = { state: 'WAIT', reason: '', line: '', nextRescan: nextRescan(ctx.rows1h[ctx.rows1h.length - 1].t * 1000 + HOUR * 1000 + 1) };
-    var last = ctx.rows1h[ctx.rows1h.length - 1], nextClose = (last.t + 2 * HOUR) * 1000;
+    var g = G7(), out = { state: 'WAIT', reason: '', line: '', nextRescan: nextRescan(ctx.rows1h[ctx.rows1h.length - 1].t * 1000 + ctx.tf * 1000 + 1) };
+    var last = ctx.rows1h[ctx.rows1h.length - 1], nextClose = (last.t + 2 * ctx.tf) * 1000;
     if (!best || !best.cand || !s3.qualifies){
       out.state = 'WAIT'; out.reason = (s3.decision || 'NO SETUP') + ' — ' + s3.why;
-      if (best && best.cand){ var c0 = best.cand; out.nextClose = 'the ' + g.istUtc(nextClose) + ' close must ' + (c0.reclaimed ? 'hold ' : 'close back ') + (c0.dir === 'long' ? 'above ' : 'below ') + px(c0.level) + (s3.missing && s3.missing.length ? ' · missing: ' + s3.missing.slice(0, 3).map(function(m){ return m.name + ' (+' + m.pts + ')'; }).join(', ') : ''); }
+      if (best && best.cand){ var c0 = best.cand; out.nextClose = 'the ' + g.istUtc(nextClose) + ' ' + ctx.tfLabel + ' close must ' + (c0.reclaimed ? 'hold ' : 'close back ') + (c0.dir === 'long' ? 'above ' : 'below ') + px(c0.level) + (s3.missing && s3.missing.length ? ' · missing: ' + s3.missing.slice(0, 3).map(function(m){ return m.name + ' (+' + m.pts + ')'; }).join(', ') : ''); }
       out.s37 = ctx.acceptance ? 'S37 second-chance eligible (acceptance printed)' : 'S37 not eligible';
       return out;
     }
@@ -719,12 +744,12 @@
     if (expired){ out.state = 'EXPIRED'; out.reason = expired; out.s37 = ctx.acceptance ? ('S37 second-chance eligible — continuation ' + (c.dir === 'long' ? 'SHORT' : 'LONG') + ' through ' + px(c.level)) : 'S37 not eligible (no acceptance)'; return out; }
     if (c.reclaimed && has(distSl) && distSl <= 0.25 && c.age <= g.MAX_SWEEP_AGE && valid){
       out.state = 'TRIGGERED';
-      out.reason = 'entry condition closed on the ' + g.istUtc((last.t + HOUR) * 1000) + ' bar · ' + num(distSl) + ' × SL$ from entry · sweep age ' + c.age + ' · veto clear · gates ' + s7.result;
+      out.reason = 'entry condition closed on the ' + g.istUtc((last.t + ctx.tf) * 1000) + ' ' + ctx.tfLabel + ' bar · ' + num(distSl) + ' × SL$ from entry · sweep age ' + c.age + ' · veto clear · gates ' + s7.result;
       out.line = 'Enter ' + up(c.dir) + ' at ' + px(c.entry) + ' | Stop ' + px(c.stop) + ' | TP1 ' + px(s5.t1) + ' | TP2 ' + (s5.removeT2 ? 'removed' : px(s5.t2)) + ' | Size ' + (s6 ? s6.pick : 'unavailable') + ' | Time stop ' + g.fmtHM(ctx.session.londonCloseMs, 'Asia/Kolkata') + ' IST | Template ' + s4.primary + '.';
       return out;
     }
     out.state = 'WAIT';
-    if (!c.reclaimed) out.reason = 'sweep wick ' + px(c.wick) + ' printed ' + c.age + ' bar(s) ago; the ' + g.istUtc(nextClose) + ' 1H close must be ' + (c.dir === 'long' ? 'above ' : 'below ') + px(c.level);
+    if (!c.reclaimed) out.reason = 'sweep wick ' + px(c.wick) + ' printed ' + c.age + ' bar(s) ago; the ' + g.istUtc(nextClose) + ' ' + ctx.tfLabel + ' close must be ' + (c.dir === 'long' ? 'above ' : 'below ') + px(c.level);
     else if (!valid) out.reason = 'reclaim closed but gates ' + (s7 ? s7.result + ' (' + s7.failing.join(', ') + ')' : 'unread') + ' — need them on the ' + g.istUtc(nextClose) + ' close';
     else out.reason = 'price ' + num(distSl) + ' × SL$ from entry ' + px(c.entry) + ' (> 0.25) — wait for the retest into ' + px(c.entry) + ' before ' + g.istUtc(nextClose);
     return out;
@@ -736,7 +761,7 @@
     var L = [];
     L.push('XAUUSD ' + (out.sections.feed || ctx.feedWhy.split(' · ')[0]) + '→' + ctx.venue + (has(ctx.basisPct) ? ' basis ' + num(ctx.basisPct) + '%' : ' basis unavailable') + ' | ' + out.nowIst + ' | Session ' + ctx.session.label + ' | Regime ' + ctx.regime + ' | Day type ' + (s1 ? s1.dayType : 'n/a') + ' | VETO ' + (s0.clear ? 'CLEAR ' + s0.passed + '/10' : 'ACTIVE: ' + s0.active.map(function(v){ return v.name; }).join(' · ')));
     if (!s0.clear){ L.push('SCORE = 0. NO TRADE.'); L.push(out.disclaimer); return L; }
-    L.push('Bias 4H ' + s1.bias.bias + (s1.bias.transition ? ' (TRANSITION → WAIT)' : '') + ' | Weekly permission ' + s1.weekly.perm + ' | Trader state ' + s1.traderState + (s1.held.length ? ' | HELD ' + s1.held.map(up).join('/') + ' (against tape)' : ''));
+    L.push('Bias ' + (ctx.ctxLabel || '4H') + ' ' + s1.bias.bias + (s1.bias.transition ? ' (TRANSITION → WAIT)' : '') + ' | Weekly permission ' + s1.weekly.perm + ' | Trader state ' + s1.traderState + (s1.held.length ? ' | HELD ' + s1.held.map(up).join('/') + ' (against tape)' : ''));
     if (!best){ L.push('NO PERMITTED DIRECTION — ' + s3.why); L.push('TRIGGER: WAIT — next re-scan ' + s8.nextRescan); L.push(out.disclaimer); return L; }
     var R = best.rows, gotOf = function(n){ var r = R.find(function(x){ return x.name === n; }); return r ? r.got : 0; };
     L.push('SCORE ' + best.score + '/20 (A: Macro ' + gotOf('Intermarket / Macro Driver') + ' Delta ' + gotOf('Order Flow & Delta Divergence') + ' VPOC ' + gotOf('Volume Profile & VPOC/HVN Rejection') + ' VWAP/Z ' + gotOf('Statistical Positioning (VWAP / Z)') + ' ML ' + gotOf('Algorithmic Momentum (ML)') + ' Sweep ' + gotOf('Structural Liquidity Sweep (SMC)') + ' Session ' + gotOf('Session Volatility Filter')
@@ -764,7 +789,7 @@
       if (!r) return '';
       var g = G7();
       var h = '<div class="note og1-root" data-hg-og1="1">';
-      h += '<div class="og1-head"><b>OMNIGOLD 1 · INSTITUTIONAL GOLD SETUP ENGINE</b> · 4H context / 1H + 15m execution · ' + esc(r.nowIst || '') + '</div>';
+      h += '<div class="og1-head"><b>OMNIGOLD 1 · INSTITUTIONAL GOLD SETUP ENGINE · ' + esc(r.horizon || 'SWING') + '</b> · ' + (r.horizon === 'SCALP' ? '1H context / 15m execution' : '4H context / 1H execution') + ' · ' + esc(r.nowIst || '') + '</div>';
       if (!r.ok){ h += '<div class="og1-veto"><b>DATA_UNAVAILABLE</b> — ' + esc(r.why) + '</div><div class="dim">' + esc(r.disclaimer) + '</div></div>'; return h; }
       var S = r.sections, s0 = S.s0;
       function sec(n, title){ return '<div class="og1-sec"><b>SECTION ' + n + ' — ' + esc(title) + '</b></div>'; }
@@ -836,6 +861,63 @@
   }
   function hgOg1Text(r){ return r && r.summary ? r.summary.join('\n') : ''; }
 
+  /* ---------------- setup cards: SCALP + SWING from the engine, plus desk-bridged setups ---------------- */
+  function verdictChip(v){
+    if (!v) return tag('unscored');
+    if (v.decision.indexOf('HELD') === 0) return tag('HELD');
+    if (v.qualifies && v.tier === 'full') return tag('QUALIFIES');
+    if (v.qualifies) return tag('HALF SIZE');
+    return tag('NO SETUP');
+  }
+  function candCard(c, horizon, ctxLabel, tfLabel){
+    var m = c.matrix || { score: 0, families: [] }, v = c.verdict || null, g7 = c.gates || { pass: 0 };
+    var h = '<div class="og1-card og1-card-' + esc(c.dir) + (v && v.qualifies ? ' og1-card-q' : '') + '">';
+    h += '<div class="og1-card-head"><b class="og1-dir">' + esc(up(c.dir)) + '</b> <b>XAUUSD</b> · ' + esc(horizon) + ' · <b>' + esc(c.sid) + '</b> ' + esc(c.name) + ' <span class="dim">— ' + esc(c.kind) + '</span></div>';
+    h += '<div class="og1-card-chips">' + verdictChip(v) + tag('SCORE ' + m.score + '/20') + tag('gates ' + g7.pass + '/12') + tag('location ' + c.grade) + (has(c.rr1) ? tag('RR ' + num(c.rr1, 1)) : tag('RR unavailable')) + tag('families ' + (m.families || []).length) + (c.reclaimed ? tag('reclaim closed · age ' + c.age) : tag('reclaim pending · age ' + c.age)) + '</div>';
+    h += '<div class="og1-levels"><div><i>ENTRY</i><b>' + px(c.entry) + '</b><u>' + (c.dir === 'long' ? 'BUY ZONE' : 'SELL ZONE') + '</u></div><div><i>STOP</i><b>' + px(c.stop) + '</b><u>SL$ ' + num(c.risk) + '</u></div><div><i>TP1</i><b>' + px(c.t1) + '</b><u>' + esc(c.t1Label) + '</u></div><div><i>TP2</i><b>' + px(c.t2) + '</b><u>' + esc(c.t2Label) + '</u></div></div>';
+    h += '<div class="dim og1-card-why">' + esc(v ? v.why : '') + (v && v.missing && v.missing.length ? ' · missing ' + esc(v.missing.slice(0, 3).map(function(x){ return x.name + ' +' + x.pts; }).join(', ')) : '') + '</div>';
+    h += '<div class="dim">context ' + esc(ctxLabel) + ' · execution ' + esc(tfLabel) + ' · stop beyond ' + px(c.wick) + ' + $' + num(c.buf) + ' · invalidates on two ' + esc(tfLabel) + ' closes ' + (c.dir === 'long' ? 'below ' : 'above ') + px(c.level) + '</div>';
+    h += '</div>';
+    return h;
+  }
+  function bridgeCards(horizon){
+    /* GOLD SCALP / GOLD SWING desks, when they have scanned in the last 30 min */
+    var fn = gfn(horizon === 'SCALP' ? 'goldscalpScan' : 'goldswingScan');
+    if (!fn) return { html: '', n: 0 };
+    var snap = null; try{ snap = fn(); }catch(e){ snap = null; }
+    if (!snap || !Array.isArray(snap.cands) || !snap.cands.length) return { html: '', n: 0 };
+    if (has(snap.at) && Date.now() - snap.at > 30 * 60000) return { html: '', n: 0 };
+    var h = '', n = 0;
+    snap.cands.slice(0, 6).forEach(function(c){
+      if (!c || !c.dir || !has(c.entry)) return;
+      n++;
+      h += '<div class="og1-card og1-card-' + esc(String(c.dir).toLowerCase()) + ' og1-card-bridge"><div class="og1-card-head"><b class="og1-dir">' + esc(up(c.dir)) + '</b> <b>XAUUSD</b> · ' + esc(horizon) + ' · <b>' + esc(c.strategy || c.stratKey || 'desk setup') + '</b> <span class="dim">— GOLD ' + esc(horizon) + ' desk' + (c.id === snap.bestId ? ' · MOST PROBABLE' : '') + '</span></div>';
+      h += '<div class="og1-card-chips">' + tag('desk grade ' + (c.grade || '—')) + (has(c.tally) ? tag('tally ' + c.tally) : '') + (has(c.rr) ? tag('RR ' + num(c.rr, 1)) : '') + (c.locked ? tag('conviction-locked') : '') + '</div>';
+      h += '<div class="og1-levels"><div><i>ENTRY</i><b>' + px(c.entry) + '</b><u>' + (String(c.dir).toLowerCase() === 'long' ? 'BUY ZONE' : 'SELL ZONE') + '</u></div><div><i>STOP</i><b>' + px(c.stop) + '</b><u>SL$ ' + num(Math.abs(c.entry - c.stop)) + '</u></div><div><i>TP1</i><b>' + px(c.t1) + '</b><u>desk</u></div><div><i>TP2</i><b>' + px(c.t2) + '</b><u>desk</u></div></div>';
+      h += '<div class="dim og1-card-why">' + esc(c.why || '') + '</div><div class="dim">bridged from the GOLD ' + esc(horizon) + ' desk — not scored by the 20-point matrix; run that desk for its own gates</div></div>';
+    });
+    return { html: h, n: n };
+  }
+  function hgOg1CardsHtml(runs){
+    /* runs: [{ horizon, r }] — r from hgOg1Engine */
+    var h = '<div class="og1-setups" data-hg-og1-setups="1">';
+    (runs || []).forEach(function(run){
+      var r = run.r, hz = run.horizon, ctxLabel = hz === 'SCALP' ? '1H' : '4H', tfLabel = hz === 'SCALP' ? '15m' : '1H';
+      h += '<div class="og1-setups-head"><b>' + esc(hz) + ' SETUPS</b> <span class="dim">· context ' + ctxLabel + ' · execution ' + tfLabel + '</span></div>';
+      var cands = (r && r.ok && Array.isArray(r.candidates)) ? r.candidates : [];
+      var s0 = r && r.sections && r.sections.s0, s1 = r && r.sections && r.sections.s1;
+      if (!r || !r.ok) h += '<div class="dim">DATA_UNAVAILABLE — ' + esc(r ? r.why : 'no run') + '</div>';
+      else if (s0 && !s0.clear) h += '<div class="dim">VETO ACTIVE — ' + esc(s0.active.map(function(v){ return v.name; }).join(' · ')) + ' · SCORE = 0 · NO TRADE</div>';
+      else if (s1 && s1.noPermitted) h += '<div class="dim">NO PERMITTED DIRECTION — ' + esc(r.sections.s3.why) + '</div>';
+      else if (!cands.length) h += '<div class="dim">no swept pool on the last 4 closed ' + tfLabel + ' bars — nothing to price · next re-scan ' + esc(r.sections.s8 ? r.sections.s8.nextRescan : '') + '</div>';
+      else h += cands.map(function(c){ return candCard(c, hz, ctxLabel, tfLabel); }).join('');
+      var br = bridgeCards(hz);
+      if (br.n) h += '<div class="dim" style="margin-top:4px">GOLD ' + esc(hz) + ' desk setups (bridged)</div>' + br.html;
+    });
+    h += '</div>';
+    return h;
+  }
+
   /* ================================================================== */
   /*                                TAB                                 */
   /* ================================================================== */
@@ -844,7 +926,13 @@
     + '.og1-tag{display:inline-block;padding:0 5px;border:1px solid var(--line,#345);border-radius:3px;font-size:10px;margin-right:4px}'
     + '.og1-live,.og1-pass{color:var(--good,#0a7)}.og1-unavailable{opacity:.6}.og1-veto{color:var(--bad,#c33)}.og1-partial,.og1-derived{color:var(--warn,#c90)}'
     + '.og1-tbl{width:100%;border-collapse:collapse;font-size:11px;margin-top:4px}.og1-tbl th{text-align:left;opacity:.7}.og1-tbl td{padding:1px 4px;vertical-align:top}.og1-got td{color:inherit}.og1-miss td{opacity:.75}'
-    + '.og1-pre{white-space:pre-wrap;font-size:11px;margin-top:8px}.og1-inputs{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:11px;margin-top:6px}.og1-inputs input,.og1-inputs select{width:110px}.og1-inputs textarea{width:100%;min-height:54px;font-size:11px}';
+    + '.og1-pre{white-space:pre-wrap;font-size:11px;margin-top:8px}.og1-inputs{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:11px;margin-top:6px}.og1-inputs input,.og1-inputs select{width:110px}.og1-inputs textarea{width:100%;min-height:54px;font-size:11px}'
+    + '.og1-setups{margin-top:10px}.og1-setups-head{margin:10px 0 4px;font-size:13px}.og1-card{border:1px solid var(--line,#345);border-radius:8px;padding:8px 10px;margin:6px 0;background:var(--panel,transparent)}'
+    + '.og1-card-long{border-left:3px solid var(--good,#0a7)}.og1-card-short{border-left:3px solid var(--bad,#c33)}.og1-card-q{box-shadow:0 0 0 1px var(--good,#0a7) inset}.og1-card-bridge{opacity:.9;border-style:dashed}'
+    + '.og1-card-head{font-size:13px}.og1-dir{display:inline-block;padding:0 6px;border-radius:4px;background:var(--line,#345)}.og1-card-chips{margin:4px 0}.og1-card-why{margin-top:3px}'
+    + '.og1-levels{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:6px 0;font-size:11px}.og1-levels div{display:flex;flex-direction:column}.og1-levels i{opacity:.6;font-style:normal;font-size:10px}.og1-levels b{font-size:14px}.og1-levels u{text-decoration:none;opacity:.7;font-size:10px}'
+    + '.og1-tag.og1-qualifies{color:var(--good,#0a7);font-weight:700}.og1-tag.og1-halfsize{color:var(--warn,#c90);font-weight:700}.og1-tag.og1-held{color:var(--warn,#c90)}.og1-tag.og1-nosetup{opacity:.7}'
+    + '.og1-hz{margin-top:12px}.og1-hz summary{cursor:pointer;font-weight:700}';
   var __st = { busy: false, ui: null, last: null, hasRun: false };
   function lsGet(k, d){ try{ var v = W.localStorage && W.localStorage.getItem(k); return v == null ? d : v; }catch(e){ return d; } }
   function lsSet(k, v){ try{ if (W.localStorage) W.localStorage.setItem(k, String(v)); }catch(e){} }
@@ -887,11 +975,19 @@
     try{
       if (ui && ui.btn) ui.btn.disabled = true;
       var inp = await loadInputs(ui, setStat);
-      var r = hgOg1Engine(inp);
-      __st.last = r; __st.hasRun = true;
-      if (ui && ui.out) ui.out.innerHTML = hgOg1Html(r);
-      setStat((r.ok ? (r.sections.s0 && r.sections.s0.clear ? 'VETO CLEAR · ' : 'VETO ACTIVE · ') + (r.sections.s3 ? r.sections.s3.decision : '') : 'DATA_UNAVAILABLE — ' + r.why) + (inp.__extraErr ? ' · ' + inp.__extraErr : '') + ' · ' + new Date().toISOString().slice(11, 19) + ' UTC');
-      try{ W.__hgOg1Last = r; }catch(e){}
+      setStat('scoring SWING (4H/1H) and SCALP (1H/15m) setups…');
+      var rSwing = hgOg1Engine(Object.assign({}, inp, { horizon: 'SWING' }));
+      var rScalp = hgOg1Engine(Object.assign({}, inp, { horizon: 'SCALP' }));
+      var r = rSwing;
+      __st.last = r; __st.lastScalp = rScalp; __st.hasRun = true;
+      if (ui && ui.out){
+        ui.out.innerHTML = hgOg1CardsHtml([{ horizon: 'SWING', r: rSwing }, { horizon: 'SCALP', r: rScalp }])
+          + '<details class="og1-hz" open><summary>SWING — Sections 0–8 (4H context · 1H execution)</summary>' + hgOg1Html(rSwing) + '</details>'
+          + '<details class="og1-hz"><summary>SCALP — Sections 0–8 (1H context · 15m execution)</summary>' + hgOg1Html(rScalp) + '</details>';
+      }
+      function lineOf(x, hz){ return hz + ' ' + (x.ok ? ((x.sections.s0 && x.sections.s0.clear ? 'veto clear · ' : 'VETO ACTIVE · ') + (x.sections.s3 ? x.sections.s3.decision : '') + ' · ' + ((x.candidates || []).length) + ' setup(s)') : 'DATA_UNAVAILABLE — ' + x.why); }
+      setStat(lineOf(rSwing, 'SWING') + ' | ' + lineOf(rScalp, 'SCALP') + (inp.__extraErr ? ' · ' + inp.__extraErr : '') + ' · ' + new Date().toISOString().slice(11, 19) + ' UTC');
+      try{ W.__hgOg1Last = r; W.__hgOg1LastScalp = rScalp; }catch(e){}
       return 'refreshed';
     }catch(e){ setStat('scan failed: ' + (e && e.message ? e.message : String(e))); return 'error: ' + (e && e.message); }
     finally{ __st.busy = false; if (ui && ui.btn) ui.btn.disabled = false; }
@@ -899,7 +995,7 @@
   function mount(el){
     if (!el) return;
     el.innerHTML = '<style>' + CSS + '</style>'
-      + '<div class="panel"><h2>OMNIGOLD 1 <span>institutional gold setup engine · veto stack → regime → 20-point matrix → strategy → levels → V-Mod size → 12-gate cross-check → trigger</span></h2>'
+      + '<div class="panel"><h2>OMNIGOLD 1 <span>institutional gold setup engine · SCALP (1H/15m) + SWING (4H/1H) setups · veto stack → regime → 20-point matrix → strategy → levels → V-Mod size → 12-gate cross-check → trigger</span></h2>'
       + '<div class="row"><button class="btn" id="og1Run">RUN SCAN</button> <span class="note" id="og1Stat">idle — Sections 0–8 print in order; closed candles only; unavailable data is named, never estimated; no win-rate or probability anywhere.</span></div>'
       + '<div class="og1-inputs"><label>Account $ <input id="og1Equity" type="number" step="100" value="' + esc(lsGet('hg_gold_equity', '')) + '"></label>'
       + '<label>Base risk % <input id="og1Risk" type="number" step="0.1" value="' + esc(lsGet('hg_og1_risk', '1')) + '"></label>'
@@ -923,6 +1019,8 @@
   W.hgOg1Engine = hgOg1Engine;
   W.hgOg1Html = hgOg1Html;
   W.hgOg1Text = hgOg1Text;
+  W.hgOg1CardsHtml = hgOg1CardsHtml;
+  W.omnigold1ScalpState = function(){ return __st.lastScalp; };
   W.hgOg1RunScan = function(){ return __st.ui ? runScan(__st.ui) : Promise.resolve('skipped: not mounted'); };
   W.omnigold1State = function(){ return __st.last; };
   W.HG_OG1_CLASS_OF = CLASS_OF;
