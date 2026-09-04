@@ -8387,6 +8387,29 @@ terse status, and never launches a first-time scan on a global refresh.
     };
   }
 
+  /* GOLD SCALP / GOLD SWING desk snapshots: the plans those tabs are showing
+     right now, including CONVICTION-LOCKED ones a fresh engine run no longer
+     emits. Same objects the desks paint (dir · grade · strategy · entry /
+     stop / t1 · locked · why), taken within the last 30 minutes. */
+  function hgOgDeskSnapshotCands(horizon){
+    var fn = gfn(String(horizon).toUpperCase() === 'SWING' ? 'goldswingScan' : 'goldscalpScan');
+    if (!fn) return [];
+    var snap = null; try { snap = fn(); } catch (e){ snap = null; }
+    if (!snap || !Array.isArray(snap.cands) || !snap.cands.length) return [];
+    if (isFinite(fin(snap.at)) && Date.now() - fin(snap.at) > 30 * 60000) return [];
+    var out = [], i, c;
+    for (i = 0; i < snap.cands.length; i++){
+      c = snap.cands[i];
+      if (!c || !c.dir || !isFinite(fin(c.entry)) || !isFinite(fin(c.stop)) || !isFinite(fin(c.t1))) continue;
+      out.push({ dir: c.dir, entry: fin(c.entry), stop: fin(c.stop), t1: fin(c.t1), t2: fin(c.t2), grade: c.grade || null,
+                 strategy: c.strategy || null, stratKey: c.stratKey || null, kind: c.stratKey || c.strategy || null,
+                 tally: c.tally, locked: !!c.locked, why: c.why || null, invalidates: c.invalidates || null,
+                 confluence: Array.isArray(c.tallyParts) ? c.tallyParts.map(function(p){ return p && p.label; }).filter(Boolean) : [],
+                 deskSnapshot: true });
+    }
+    return out;
+  }
+
   function hgOgUniformCands(horizon){
     var out = [], i, r;
     var bridge = __og && __og.bridge;
@@ -8396,6 +8419,8 @@ terse status, and never launches a first-time scan on a global refresh.
     if (bucket && bucket.best) out.push(bucket.best);
     var ranked = (bucket && bucket.ranked) || [];
     for (i = 0; i < ranked.length; i++) if (ranked[i]) out.push(ranked[i]);
+    var snap = hgOgDeskSnapshotCands(horizon);
+    for (i = 0; i < snap.length; i++) out.push(snap[i]);
     var cards = (__og && __og.uniformCards)
       || (__og && __og.lastView && __og.lastView.collapsed) || [];
     for (i = 0; i < cards.length; i++){
@@ -8405,12 +8430,35 @@ terse status, and never launches a first-time scan on a global refresh.
     return out;
   }
 
+  /* Tape for the uniform card: the desk's stored read first; when that is
+     unread (mixed stack) fall back to the SAME EMA21/50 read GOLD SCALP and
+     GOLD SWING use on their own rows (hgGoldUniformTape), so the three tabs
+     hold the same side. An unread tape holds nothing — that hid every
+     opposite-side plan on OMNIGOLD. */
+  function hgOgUniformTape(horizon){
+    var tapes = (__og && __og.tape) || {};
+    var rows = (__og && __og.lastRows) || {};
+    var stored = String(horizon).toUpperCase() === 'SWING' ? tapes.swing : tapes.scalp;
+    if (stored === 'long' || stored === 'short') return stored;
+    var tf = gfn('hgGoldUniformTape');
+    var r = String(horizon).toUpperCase() === 'SWING' ? (rows.swing || []) : (rows.scalp || rows.m15 || []);
+    if (!tf || !r.length) return stored || '';
+    try { return tf(r) || stored || ''; } catch (e){ return stored || ''; }
+  }
+  window.hgOgUniformDebug = function(){
+    var b = (__og && __og.bridge) || null;
+    return { tape: { scalp: hgOgUniformTape('SCALP'), swing: hgOgUniformTape('SWING'), stored: (__og && __og.tape) || null },
+             bridge: b ? { ok: !!b.ok, why: b.why || '', scalpRanked: (b.scalp && b.scalp.ranked ? b.scalp.ranked.length : 0), scalpBest: !!(b.scalp && b.scalp.best), swingRanked: (b.swing && b.swing.ranked ? b.swing.ranked.length : 0) } : null,
+             src: (__og && __og.src) || null,
+             scalp: hgOgUniformCands('SCALP'), swing: hgOgUniformCands('SWING') };
+  };
+
   function hgOgUniformLeadHtml(){
     try{
       var compose = gfn('hgGoldUniformCompose');
       var htmlFn = gfn('hgGoldUniformHtml');
       if (!compose || !htmlFn) return '';
-      var tapes = (__og && __og.tape) || {};
+      var tapes = { scalp: hgOgUniformTape('SCALP'), swing: hgOgUniformTape('SWING') };
       var rows = (__og && __og.lastRows) || {};
       /* A stray semicolon after the opening tag used to return ONLY that tag,
          so the combined / HELD card never painted on OMNIGOLD (v593–v601).
