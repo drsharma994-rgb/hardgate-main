@@ -131,15 +131,43 @@ function gfn(name){
   return null;
 }
 /** Same CONFIRMED COMBINED SETUP card as GOLD SCALP / OMNIGOLD. */
-function goldUniformPanelHtml(cands, rows, horizon){
+function goldUniformTapeOf(rows){
+  var tapeFn = gfn('hgGoldUniformTape');
+  return tapeFn ? tapeFn(rows) : '';
+}
+function goldUniformPanelHtml(cands, rows, horizon, tape){
   try{
     var compose = gfn('hgGoldUniformCompose');
     var htmlFn = gfn('hgGoldUniformHtml');
     if (!compose || !htmlFn) return '';
-    var tapeFn = gfn('hgGoldUniformTape');
-    var tape = tapeFn ? tapeFn(rows) : '';
+    if (tape == null) tape = goldUniformTapeOf(rows);
     return htmlFn(compose(cands || [], { rows: rows, horizon: horizon || 'SWING', tape: tape }));
   }catch(e){ return ''; }
+}
+function goldTapeAlignedBest(displayBest, display, tape){
+  var alignFn = gfn('hgGoldUniformAlignedBest');
+  if (!tape || !alignFn) return displayBest;
+  var aligned = alignFn(display || [], tape);
+  if (displayBest && String(displayBest.dir || '').toLowerCase() !== String(tape).toLowerCase())
+    return aligned || null;
+  if (!displayBest) return aligned || null;
+  return displayBest;
+}
+function goldStampTape(display, tape){
+  var t = String(tape || '').toLowerCase();
+  var i;
+  if (!Array.isArray(display)) return;
+  for (i = 0; i < display.length; i++){
+    if (display[i]) display[i].goldTape = t;
+  }
+}
+function goldTapeChipHtml(c, tape){
+  var t = String(tape || (c && c.goldTape) || '').toLowerCase();
+  var d = String(c && c.dir || '').toLowerCase();
+  if ((t !== 'long' && t !== 'short') || (d !== 'long' && d !== 'short')) return '';
+  return d === t
+    ? '<span class="gpip ok"' + gswPipAttr(true) + '>WITH GOLD TAPE</span>'
+    : '<span class="gpip"' + gswPipAttr(false) + '>AGAINST GOLD TAPE · HELD</span>';
 }
 
 var SRC_LABEL = { 'binance-xau': 'BINANCE XAUUSDT', 'binance-paxg': 'BINANCE PAXGUSDT',
@@ -943,7 +971,8 @@ function bannerHTML(best, ranked){
     + '</div></div>';
 }
 
-function cardHTML(c, isBest, season){
+function cardHTML(c, isBest, season, tape){
+  tape = tape || (c && c.goldTape) || '';
   var dirUp = c.dir.toUpperCase();
   var gradeCls = c.grade === 'A' ? 'ok' : '';
   var chips = (c.confluence || []).map(function(x){ return '<span class="gpip ok"' + gswPipAttr(true) + '>' + esc(x) + '</span>'; }).join('');
@@ -1020,6 +1049,7 @@ function cardHTML(c, isBest, season){
     + '</div>'
     + '<div class="gates">'
     + '<span class="gpip ' + gradeCls + '"' + gswPipAttr(gradeCls === 'ok') + '>GRADE ' + c.grade + '</span>'
+    + goldTapeChipHtml(c, tape)
     + chips + metaChips
     + '</div>'
     + tallyChips(c)
@@ -3091,6 +3121,9 @@ async function runScan(ui, scanSt){
     }
     var displayBest = best;
     if (!displayBest && display.length) displayBest = display[0];
+    var deskTape = goldUniformTapeOf(gold.rows4h);
+    displayBest = goldTapeAlignedBest(displayBest, display, deskTape);
+    goldStampTape(display, deskTape);
     if (newsC && newsC.caution){
       for (var dix = 0; dix < display.length; dix++){
         var dc = display[dix];
@@ -3121,7 +3154,7 @@ async function runScan(ui, scanSt){
 
     var basisHtml = stRoute ? stGoldBasisHtml() : '';
     var mixedBanner = goldMixedFeedBannerHtml(gold);
-    var uniHtml = goldUniformPanelHtml(display, gold.rows4h, 'SWING');
+    var uniHtml = goldUniformPanelHtml(display, gold.rows4h, 'SWING', deskTape);
     paintGoldWeekendPanel(ui, gold.rows4h, now, displayBest);
     var aplusCtx = goldBuildAPlusCtx(ctx, gold, now, newsC);
     var aplusPack = goldEvalAPlusBatch(ranked, aplusCtx);
@@ -3150,7 +3183,7 @@ async function runScan(ui, scanSt){
       if (display.length){
         ui.empty.style.display = 'none';
         ui.cards.innerHTML = basisHtml + mixedBanner + aplusPack.panel + uniHtml + bannerHTML(displayBest, display)
-          + display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note); }).join('')
+          + display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note, deskTape); }).join('')
           + formingLayersHtml()
           + formingNowHTML(armedAll)
           + rejectedHTML(rejectedAll)

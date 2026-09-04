@@ -9609,11 +9609,6 @@ terse status, and never launches a first-time scan on a global refresh.
         var heldCards = hgOgHeldCards(ogCollapsed, deskTape);
         for (i = 0; i < ogCollapsed.length; i++){
           var cCard = ogCollapsed[i];
-          if ((deskTape === 'long' || deskTape === 'short')
-              && cCard && cCard.grade && cCard.grade.ticket
-              && String(cCard.dir || '').toLowerCase() !== deskTape){
-            continue;
-          }
           var lfG = null, gj;
           for (gj = 0; gj < (cCard.gates || []).length; gj++){
             if (cCard.gates[gj] && cCard.gates[gj].key === 'level-fresh'){ lfG = cCard.gates[gj]; break; }
@@ -9629,9 +9624,6 @@ terse status, and never launches a first-time scan on a global refresh.
         if (deadLines){
           h += '<div class="note" style="margin-top:10px"><b>DEAD LEVELS — priced off a closed bar the market has left behind:</b>'
             +  deadLines + '</div>';
-        }
-        if (heldCards.length){
-          h += hgOgHeldQueueHtml(heldCards, deskTape);
         }
         /* MEASURED-NEGATIVE KINDS — stood aside (hg-v533). Every setup that
            fired but did not FORM renders here: visible, with its replay row
@@ -10750,6 +10742,14 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgEngineGradeBannerHtml = hgOgEngineGradeBannerHtml;
     window.hgOgGoldEnginesPanelHtml = hgOgGoldEnginesPanelHtml;
     window.hgOgPaintOgPostScan = hgOgPaintOgPostScan;
+    window.hgOgSetupCard = function(c, tape){
+      var prev = __og.tape;
+      if (tape === 'long' || tape === 'short'){
+        __og.tape = { desk: tape, scalp: tape, swing: tape };
+      }
+      try { return setupCard(c); }
+      finally { if (tape === 'long' || tape === 'short') __og.tape = prev; }
+    };
     window.hgOgHeldQueueHtml = hgOgHeldQueueHtml;
     window.hgOgHeldCards = hgOgHeldCards;
     window.hgOgOppositeAsideHtml = hgOgOppositeAsideHtml;
