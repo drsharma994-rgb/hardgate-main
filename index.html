@@ -810,7 +810,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 </main>
 
 
-  <script src="build-stamp.js?v=594"></script>
+  <script src="build-stamp.js?v=595"></script>
 <script src="hghost.js"></script>
 <script src="indicators.js"></script>
 <script src="indicators2.js"></script>
@@ -851,16 +851,16 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="meanrev.js"></script>
 <script src="liqs.js"></script>
 <!-- xuniverse.js: no-tab IIFE library (combined Delta India + CoinDCX contract universe) consumed by engine.js/brain.js; registers no HG_tabs entry -->
-<script src="xuniverse.js?v=594"></script>
+<script src="xuniverse.js?v=595"></script>
 <!-- hg-forward.js: the out-of-sample accumulator. Loads BEFORE any tab that
      records into it; every consumer feature-checks it, so load order is
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=594"></script>
+<script src="hg-mechanics.js?v=595"></script>
 <script src="./hg-gates.js?v=559"></script>
-<script src="crypto-catalog.js?v=594"></script>
-<script src="omniroute.js?v=594"></script>
+<script src="crypto-catalog.js?v=595"></script>
+<script src="omniroute.js?v=595"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
 <script src="edge.js?v=559"></script>
@@ -873,18 +873,20 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- conviction-lock.js: ConvictionLockManager (anti-repaint lifecycle) -->
 <script src="conviction-lock.js"></script>
 <!-- goldind.js + goldscalp.js: GOLD SCALP tab (pure SMC/ICT + indicator detectors, then the tab) — after indicators2/binance/macro/xuniverse/news, before brain.js -->
-<script src="goldind.js?v=594"></script>
-<script src="gold-catalog.js?v=594"></script>
+<script src="goldind.js?v=595"></script>
+<script src="gold-catalog.js?v=595"></script>
 <!-- gold-seven-step.js: Gold Playbook 7-step setup engine (closed 1H/4H bars → bias → candidates → best fit → levels → checklist → TRIGGERED/WAIT/EXPIRED). Loads after goldind.js + gold-catalog.js (feature-checked), before the gold desks that render it. -->
-<script src="gold-seven-step.js?v=594"></script>
+<script src="gold-seven-step.js?v=595"></script>
 <script src="macro-feeds.js"></script>
-<script src="goldscalp.js?v=594"></script>
+<script src="goldscalp.js?v=595"></script>
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
-<script src="goldswing.js?v=594"></script>
+<script src="goldswing.js?v=595"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
-<script src="omnigold.js?v=594"></script>
+<script src="omnigold.js?v=595"></script>
+<!-- omnigold1.js: OMNIGOLD 1 tab — institutional 20-point gold setup engine (veto stack → regime → matrix → strategy → levels → V-Mod size → 12-gate cross-check → trigger). Reuses gold-seven-step.js helpers (HG_GOLD7); loads after it and after omnigold.js. -->
+<script src="omnigold1.js?v=595"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
-<script src="omnipresent.js?v=594"></script>
+<script src="omnipresent.js?v=595"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
 <script src="contract-report.js"></script>
 <!-- omnibtc-engines.js: SMART $ / OI FLOW / fade / COIL / DIV / TRAP / SMC / STAR TRADER + on-chain evidence. Loads BEFORE omnibtc.js so the tab can feature-check it. -->
@@ -914,17 +916,17 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="reliability.js"></script>
 <!-- formation-live.js: internet context for formation. Confirm / demote / refuse. Never invents levels. Loads BEFORE formation.js so hgFormTicket can feature-check it. -->
 <script src="formation-live.js?v=559"></script>
-<script src="formation.js?v=594"></script>
+<script src="formation.js?v=595"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=594"></script>
+<script src="supersetup.js?v=595"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=594"></script>
-<script src="super-gold.js?v=594"></script>
-<script src="super-best.js?v=594"></script>
-<script src="super-sniper.js?v=594"></script>
-<script src="super-book.js?v=594"></script>
-<script src="super-calibrate.js?v=594"></script>
+<script src="super-desk-common.js?v=595"></script>
+<script src="super-gold.js?v=595"></script>
+<script src="super-best.js?v=595"></script>
+<script src="super-sniper.js?v=595"></script>
+<script src="super-book.js?v=595"></script>
+<script src="super-calibrate.js?v=595"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -2994,7 +2996,7 @@ async function runObScanLeg(opts){
 const HG_NAV_GROUPS = [
   { id:'overview',   label:'COMMAND',  tabs:['brain','book','trade','log','news','bias','regime','trendmx','rotation','execute','startrader'] },
   { id:'crypto',     label:'CRYPTO',   tabs:['omnibtc','omnipresent','omniroute','best','swing','scalp','edge','smart','squeeze','reversalsniper','smc','ob','trap','div','coil','apex','oiflow','liqs','onchain','chartvision','carry','venueprem','termbasis'] },
-  { id:'gold',       label:'GOLD',     tabs:['super-gold','omnigold','goldswing','goldscalp','gold','goldpro','goldspot','goldcoint','goldpine','signallog'] },
+  { id:'gold',       label:'GOLD',     tabs:['super-gold','omnigold','omnigold1','goldswing','goldscalp','gold','goldpro','goldspot','goldcoint','goldpine','signallog'] },
   { id:'strategies', label:'MODELS',   tabs:['super-setup','super-best','super-sniper','super-book','super-calibrate','pine','pine-msb','pine-sqz','pine-smf','pine-ht','pine-smc','pine-cipher','pine-rf','pine-nw','pine-avwap','strats','meanrev','formationlab','scorecard','reliability'] },
   { id:'tools',      label:'TOOLS',    tabs:['risk','basis','search','finder','tradeos','hey','aiagent'] },
 ];
@@ -3596,7 +3598,7 @@ function scheduleTabAutoScan(t){
   const seq = ++__hgTabScanSeq;
   const t0 = Date.now();
   const mustScan = (t === 'swing' || t === 'scalp' || t === 'best' || t === 'edge'
-    || t === 'omnigold' || t === 'goldscalp' || t === 'goldswing');
+    || t === 'omnigold' || t === 'omnigold1' || t === 'goldscalp' || t === 'goldswing');
   function blocked(){
     return __hgTabScanBusy
       || (typeof isManualScanBusy === 'function' && isManualScanBusy())

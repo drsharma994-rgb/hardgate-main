@@ -1352,4 +1352,20 @@
   W.hgGoldSevenStepDerive4h = derive4h;
   W.hgGoldSevenStepSession = goldSession;
   W.hgGoldSevenStepIst = istUtc;
+  /* Shared evidence helpers for sibling gold desks (OMNIGOLD 1 matrix). Pure,
+     closed-bar, "unavailable"-honest — one implementation, one set of tests. */
+  W.HG_GOLD7 = {
+    normRows: normRows, closedRows: closedRows, derive4h: derive4h,
+    emaSeries: emaSeries, rsi14: rsi14, atrN: atrN, ker20: ker20, pivots: pivots, closes: closes,
+    tzHour: tzHour, tzOffsetHours: tzOffsetHours, fmtHM: fmtHM, fmtDay: fmtDay, istUtc: istUtc, istUtcDay: istUtcDay,
+    nextLocalHourMs: nextLocalHourMs, todayLocalHourMs: todayLocalHourMs, goldSession: goldSession,
+    isTier1: isTier1, newsRead: newsRead,
+    volProfile: volProfile, zones: zones, zoneTxt: zoneTxt, dealingRange: dealingRange,
+    dayKey: dayKey, sessionPocs: sessionPocs, pocStep: pocStep, asiaRange: asiaRange, priorDay: priorDay, priorWeek: priorWeek,
+    equalExtremes: equalExtremes, freshObs: freshObs, adr10: adr10, structure1h: structure1h,
+    pools: pools, sweepRead: sweepRead, gradeRank: gradeRank, locationGrade: locationGrade, lvnBetween: lvnBetween, targets: targets,
+    dxyRead: dxyRead, fundingRead: fundingRead, oiRead: oiRead, scalarRead: scalarRead,
+    px: px, num: num, esc: esc, isNum: isNum, up: up,
+    ROW_USD: ROW_USD, EQ_TOL_USD: EQ_TOL_USD, STOP_BUF_MIN_USD: STOP_BUF_MIN_USD, MAX_SWEEP_AGE: MAX_SWEEP_AGE
+  };
 })(typeof window !== 'undefined' ? window : globalThis);
