@@ -146,7 +146,7 @@
     var dispOk = !has(c.displacementAtr) || c.displacementAtr >= 0.5;
     gate(5, 'reclaim ≤ 3 bars · displacement ≥ 0.5 × ATR · no acceptance', c.reclaimed && c.age <= g.MAX_SWEEP_AGE && !c.acceptance && dispOk,
       c.reclaimed ? ('age ' + c.age + (has(c.displacementAtr) ? ' · displacement ' + num(c.displacementAtr, 2) + ' × ATR' + (dispOk ? '' : ' (weak — no follow-through)') : '') + (c.acceptance ? ' · acceptance' : '')) : 'reclaim not closed');
-    gate(6, 'body in OB', c.obOk, c.ob ? ('OB ' + px(c.ob.lo) + '–' + px(c.ob.hi)) : 'no fresh ' + c.dir + ' OB');
+    gate(6, 'body in OB', c.obOk, c.ob ? ((c.obSrc || 'OB') + ' ' + px(c.ob.lo) + '–' + px(c.ob.hi) + (c.obOk ? '' : ' — entry outside')) : 'no ' + c.dir + ' OB (no sweep candle, no fresh block)');
     gate(7, 'session window · no lockout', ctx.session.tradeable && !ctx.news.lock, ctx.session.label + (ctx.news.lock ? ' · LOCKOUT' : ''));
     gate(8, 'LVN path', c.lvnPath, c.lvnPath ? 'LVN between entry and TP1' : 'no LVN path');
     gate(9, 'RR ≥ 2', has(c.rr1) && c.rr1 >= 1.5, has(c.rr1) ? (num(c.rr1) + 'R' + (c.rr1 < 2 ? ' (half band)' : '')) : 'no TP1');
@@ -406,7 +406,7 @@
       }
       if (permitted.indexOf(sw.dir) < 0) continue;
       var sid = sw.pool.sid === 'S19' ? (ctx.pocStep === 'FLAT' ? 'S19' : 'S0') : sw.pool.sid;
-      cands.push(buildCand(ctx, { sid: sid, dir: sw.dir, level: sw.pool.level, kind: sw.pool.kind, wick: sw.wick, age: sw.age, reclaimed: sw.reclaimed, breach: sw.breach, displacementAtr: sw.displacementAtr, cls: CLASS_OF[sid] || 'sweep' }));
+      cands.push(buildCand(ctx, { sid: sid, dir: sw.dir, level: sw.pool.level, kind: sw.pool.kind, wick: sw.wick, age: sw.age, reclaimed: sw.reclaimed, breach: sw.breach, displacementAtr: sw.displacementAtr, sweepI: sw.sweepI, cls: CLASS_OF[sid] || 'sweep' }));
     }
     /* continuation candidate in TREND: pullback to the session POC in bias direction */
     if (regime === 'TREND' && vp4h && permitted.length === 1){
@@ -466,18 +466,29 @@
     if (crowded){ buf *= 1.5; bufNote += ' · +50% COT crowded against'; }
     var entryOff = Math.max(g.STOP_BUF_MIN_USD, 0.1 * atr);
     var entry = has(src.entry) ? +src.entry : (dir === 'long' ? src.level + entryOff : src.level - entryOff);
+    /* retest limit inside the sweep candle (order block), never beyond the pool */
+    var sbZone = has(src.sweepI) ? g.sweepOb(ctx.rows1h, +src.sweepI, dir) : null;
+    if (sbZone && !has(src.entry)){
+      if (dir === 'long') entry = Math.min(entry, sbZone.hi); else entry = Math.max(entry, sbZone.lo);
+    }
     var wick = has(src.wick) ? +src.wick : src.level;
     var stop = dir === 'long' ? wick - buf : wick + buf;
     var risk = Math.abs(entry - stop);
     var tg = g.targets(ctx, entry, dir, { risk: risk });
     var t1 = tg.t1 ? tg.t1.level : NaN, t2 = tg.t2 ? tg.t2.level : NaN;
     var rr1 = risk > 0 && has(t1) ? Math.abs(t1 - entry) / risk : NaN, rr2 = risk > 0 && has(t2) ? Math.abs(t2 - entry) / risk : NaN;
-    var ob = dir === 'long' ? ctx.obs.bull : ctx.obs.bear;
+    /* sweep-candle OB (Playbook P1 §6.1) — see gold-seven-step.js buildCandidate */
+    var ob = dir === 'long' ? ctx.obs.bull : ctx.obs.bear, obSrc = ob ? 'fresh OB' : null;
+    if (sbZone){
+      var inSb = entry >= sbZone.lo - atr * 0.1 && entry <= sbZone.hi + atr * 0.1;
+      var inFresh = !!(ob && entry >= ob.lo - atr * 0.1 && entry <= ob.hi + atr * 0.1);
+      if (inSb && !inFresh){ ob = { lo: sbZone.lo, hi: sbZone.hi, age: src.age, mid: (sbZone.lo + sbZone.hi) / 2 }; obSrc = 'sweep-candle OB'; }
+    }
     var obOk = !!(ob && entry >= ob.lo - atr * 0.1 && entry <= ob.hi + atr * 0.1);
     var loc = g.locationGrade(ctx, entry, dir, obOk, true);
     var c = { sid: src.sid, name: NAME_OF[src.sid] || src.sid, cls: src.cls, dir: dir, level: src.level, kind: src.kind, entry: entry, stop: stop, wick: wick, risk: risk, buf: buf, bufNote: bufNote,
               t1: t1, t2: t2, t1Label: tg.t1 ? tg.t1.label : 'unavailable', t2Label: tg.t2 ? tg.t2.label : 'unavailable', t1Rule: tg.rule, rr1: rr1, rr2: rr2,
-              grade: loc.grade, gradeWhy: loc.why, obOk: obOk, ob: ob, age: has(src.age) ? +src.age : NaN, reclaimed: !!src.reclaimed, acceptance: !!src.acceptance,
+              grade: loc.grade, gradeWhy: loc.why, obOk: obOk, ob: ob, obSrc: obSrc, age: has(src.age) ? +src.age : NaN, reclaimed: !!src.reclaimed, acceptance: !!src.acceptance,
               breach: fin(src.breach), displacementAtr: fin(src.displacementAtr), second: !!src.second, lvnPath: g.lvnBetween(entry, t1, ctx.vp4h), crowded: crowded };
     c.gates = coreGates(ctx, c);
     return c;
@@ -609,7 +620,10 @@
     }
     add('B', 1, 'Clean Path', 'Volume Profile', pathOk, pathEv);
     var famList = Object.keys(fams);
+    var unavailRows = rows.filter(function(r){ return r.unavailable && !r.got; });
+    var unavailPts = unavailRows.reduce(function(a, r){ return a + r.pts; }, 0);
     return { dir: dir, cand: c, cands: all, rows: rows, score: score, families: famList, spreadOk: famList.length >= 4, mlPts: mlOk ? 1 : 0,
+             reachable: 20 - unavailPts, unavailPts: unavailPts, unavailable: unavailRows.map(function(r){ return r.name + ' +' + r.pts; }),
              held: !!(ctx.tape && ctx.tape !== dir) };
   }
 
@@ -624,6 +638,11 @@
       if (has(rr) && rr >= 2){ s3.decision = 'SETUP QUALIFIES — HALF SIZE'; s3.tier = 'half'; s3.qualifies = true; s3.why = sc + '/20 in 10–11 band with RR ' + num(rr) + ' ≥ 2.0'; }
       else { s3.why = sc + '/20 in 10–11 band but RR ' + num(rr) + ' < 2.0'; }
     } else s3.why = sc + '/20 < 10';
+    if (best.unavailPts){
+      s3.reachable = best.reachable;
+      s3.why += ' · max reachable with the data on hand ' + best.reachable + '/20 (' + best.unavailPts + ' pts on unavailable legs: ' + best.unavailable.join(', ') + ')';
+      if (best.reachable < 12) s3.dataLimited = true;
+    }
     /* ML inflation guard */
     if (best.mlPts && ((s3.tier === 'full' && sc - 1 < 12) || (s3.tier === 'half' && sc - 1 < 10))){
       s3.mlGuard = true;
@@ -783,7 +802,7 @@
     var R = best.rows, gotOf = function(n){ var r = R.find(function(x){ return x.name === n; }); return r ? r.got : 0; };
     L.push('SCORE ' + best.score + '/20 (A: Macro ' + gotOf('Intermarket / Macro Driver') + ' Delta ' + gotOf('Order Flow & Delta Divergence') + ' VPOC ' + gotOf('Volume Profile & VPOC/HVN Rejection') + ' VWAP/Z ' + gotOf('Statistical Positioning (VWAP / Z)') + ' ML ' + gotOf('Algorithmic Momentum (ML)') + ' Sweep ' + gotOf('Structural Liquidity Sweep (SMC)') + ' Session ' + gotOf('Session Volatility Filter')
       + ' | B: Trend ' + gotOf('Trend & Location Alignment') + ' Positioning ' + gotOf('Positioning & Physical') + ' Vol ' + gotOf('Volatility & Target Realism') + ' Composite ' + gotOf('Composite Structure') + ' Time ' + gotOf('Time Statistics') + ' Regime ' + gotOf('Regime Fit') + ' Exec ' + gotOf('Execution Quality') + ' Path ' + gotOf('Clean Path') + ')');
-    L.push('Families contributing ' + best.families.length + (best.spreadOk ? '' : ' (SPREAD FAIL)') + ' | DECISION ' + s3.decision + ' | ' + (s4 && s4.primary ? 'PRIMARY ' + s4.primary + ' ' + s4.name + (s4.also.length ? ' | also ' + s4.also.join(', ') : '') + ' | target ' + s4.target : 'hypothesis ' + up(best.dir) + (best.cand ? ' ' + best.cand.sid + ' ' + best.cand.kind : ' — no swept pool')));
+    L.push('Families contributing ' + best.families.length + (best.spreadOk ? '' : ' (SPREAD FAIL)') + (best.unavailPts ? ' | reachable ' + best.reachable + '/20' : '') + ' | DECISION ' + s3.decision + ' | ' + (s4 && s4.primary ? 'PRIMARY ' + s4.primary + ' ' + s4.name + (s4.also.length ? ' | also ' + s4.also.join(', ') : '') + ' | target ' + s4.target : 'hypothesis ' + up(best.dir) + (best.cand ? ' ' + best.cand.sid + ' ' + best.cand.kind : ' — no swept pool')));
     if (s5){
       L.push('ENTRY ' + px(s5.entry) + ' on ' + s5.entryCondition + ' | STOP ' + px(s5.stop) + ' (SL$ ' + num(s5.sl) + ') | TP1 ' + px(s5.t1) + ' RR ' + num(s5.rr1) + ' | TP2 ' + (s5.removeT2 ? 'removed' : px(s5.t2) + ' RR ' + num(s5.rr2)) + ' | time stop ' + s5.timeStop.replace(/^London close /, ''));
       L.push('V-Mod raw ' + num(s6.vmodRaw) + ' clamped ' + num(s6.vmod) + ' | Adjusted risk $' + num(s6.adjustedRisk, 0) + ' | Size ' + s6.pick + ' (mult ' + s6.multLabel + ') | Leverage ' + num(s6.leverage, 1) + 'x | Liq clearance ' + (ctx.isPerp ? 'unavailable' : 'n/a'));
@@ -1043,11 +1062,23 @@
         var bufMult = isFinite(opts.bufMult) ? opts.bufMult : (gated && atrRegime === 'expanded' ? 0.35 : 0.25);
         var dir = fired.dir, buf = Math.max(g.STOP_BUF_MIN_USD, bufMult * atr), off = Math.max(g.STOP_BUF_MIN_USD, 0.1 * atr);
         var entry = dir === 'long' ? fired.pool.level + off : fired.pool.level - off;
+        var obZ = g.sweepOb(sl, fired.sweepI, dir);
+        if (obZ){ entry = dir === 'long' ? Math.min(entry, obZ.hi) : Math.max(entry, obZ.lo); } /* same clamp as the cards */
         var stop = dir === 'long' ? fired.wick - buf : fired.wick + buf, risk = Math.abs(entry - stop);
         var vp = g.volProfile(gated && cx && cx.length >= 20 ? cx.slice(-60) : sl.slice(-60), g.ROW_USD);
         var tg = g.targets({ vp4h: vp, atr1h: atr, asia: pc.asia, pd: pc.pd, pw: pc.pw, nakedPoc: null }, entry, dir, { risk: risk });
         if (!tg.t1 || !(risk > 0)) continue;
         var t1 = tg.t1.level, rr = Math.abs(t1 - entry) / risk;
+        if (gated || opts.biasSide){
+          var cxb = cx || (ctxRows || []).filter(function(r){ return r.t + ctxTf <= barCloseMs / 1000; });
+          if (opts.biasSide && cxb.length >= 60){
+            /* G2 as a bar can judge it: EMA20/50 slope on the context bars must point the trade's way */
+            var e20 = g.emaSeries(g.closes(cxb), 20), e50 = g.emaSeries(g.closes(cxb), 50), nn = e20.length;
+            var s20 = e20[nn - 1] - e20[nn - 4], s50 = e50[nn - 1] - e50[nn - 4];
+            var slopeDir = (s20 > 0 && s50 > 0) ? 'long' : (s20 < 0 && s50 < 0) ? 'short' : null;
+            if (slopeDir !== dir){ out.rejected.bias = (out.rejected.bias || 0) + 1; continue; }
+          }
+        }
         if (gated){
           /* the gates the desk trades through that a bar can judge: G7 session window,
              G9 RR ≥ 1.5, G10 R ≤ 0.6 × context ATR */
@@ -1056,6 +1087,21 @@
           if (rr < 1.5){ out.rejected.rr++; continue; }
           if (atrCtx > 0 && risk > 0.6 * atrCtx){ out.rejected.rcap++; continue; }
         }
+        if (opts.needOb || opts.needNode){
+          /* G6 body in a fresh OB · G3 entry on a context node (POC / HVN / VA edge) */
+          var obs = g.freshObs(sl, atr), ob = dir === 'long' ? obs.bull : obs.bear;
+          var obOk = !!(ob && entry >= ob.lo - atr * 0.1 && entry <= ob.hi + atr * 0.1);
+          if (opts.needOb && !obOk){ out.rejected.ob = (out.rejected.ob || 0) + 1; continue; }
+          if (opts.needNode){
+            var tolN = Math.max(atr * 0.35, (vp ? vp.binSize : 1) * 2), node = false;
+            if (vp){
+              if (Math.abs(entry - vp.pocPrice) <= tolN || Math.abs(entry - vp.vah) <= tolN || Math.abs(entry - vp.val) <= tolN) node = true;
+              (vp.hvnsStrict && vp.hvnsStrict.length ? vp.hvnsStrict : (vp.hvns || [])).forEach(function(hv){ if (Math.abs(entry - hv) <= tolN) node = true; });
+            }
+            if (!node){ out.rejected.node = (out.rejected.node || 0) + 1; continue; }
+          }
+        }
+        if (!out.byDir) out.byDir = { long: { n: 0, sumR: 0 }, short: { n: 0, sumR: 0 } };
         /* fill: price must come back to the entry within 6 bars */
         var fillAt = -1;
         for (k = i + 1; k < Math.min(exec.length, i + 7); k++){ if (exec[k].l <= entry && exec[k].h >= entry){ fillAt = k; break; } }
@@ -1075,6 +1121,7 @@
           res = (dir === 'long' ? last.c - entry : entry - last.c) / risk; out.flat++;
         } else if (res < 0) out.stopped++; else { out.tp1++; wins++; winR += res; }
         out.resolved++; out.sumR += res;
+        out.byDir[dir].n++; out.byDir[dir].sumR += res;
         i += 3; /* one signal per cluster */
       }
       out.expR = out.resolved ? out.sumR / out.resolved : NaN;
@@ -1155,7 +1202,9 @@
       h += '<div class="dim">none — ' + esc(why.join(' · ') || 'no runs') + '</div></div>';
       return h;
     }
-    h += '<div class="dim" style="margin-bottom:4px">' + bs.total + ' candidate(s) scored · ' + (bs.tradeReady ? bs.tradeReady + ' trade-ready (grade B or better)' : '<b>none trade-ready</b> — best available shown by grade; treat as watch items') + '</div>';
+    var ceil = bs.best[0] && bs.best[0].matrix ? bs.best[0].matrix.reachable : NaN;
+    h += '<div class="dim" style="margin-bottom:4px">' + bs.total + ' candidate(s) scored · ' + (bs.tradeReady ? bs.tradeReady + ' trade-ready (grade B or better)' : '<b>none trade-ready</b> — best available shown by grade; treat as watch items')
+      + (has(ceil) && ceil < 20 ? ' · <b>data ceiling ' + ceil + '/20</b> — ' + (20 - ceil) + ' matrix points sit on legs the app cannot fetch (paste them in the DATA BLOCK to score them)' + (ceil < 12 ? '; QUALIFIES (≥ 12) is unreachable until they are supplied' : '') : '') + '</div>';
     h += bs.best.map(function(c){ return candCard(c, c.horizon, c.horizon === 'SCALP' ? '1H' : '4H', c.horizon === 'SCALP' ? '15m' : '1H'); }).join('');
     h += measuredHtml(runs);
     h += '</div>';

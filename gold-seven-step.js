@@ -589,6 +589,22 @@
     return out;
   }
 
+  /** Order block of a sweep setup (Playbook P1 §6.1): the last opposing candle
+      between the sweep bar and the reclaim bar (exclusive) — the origin the
+      displacement left. Falls back to the sweep candle itself. Zone = wick to
+      body top (long) / body bottom to wick (short). */
+  function sweepOb(rows, sweepI, dir){
+    if (!rows || !isFinite(sweepI) || sweepI < 0 || sweepI >= rows.length) return null;
+    var n = rows.length, k, bar = null;
+    for (k = n - 2; k >= sweepI; k--){
+      var b = rows[k];
+      if ((dir === 'long' && b.c < b.o) || (dir === 'short' && b.c > b.o)){ bar = b; break; }
+    }
+    if (!bar) bar = rows[sweepI];
+    return dir === 'long' ? { lo: bar.l, hi: Math.max(bar.o, bar.c), i: k >= sweepI ? k : sweepI }
+                          : { lo: Math.min(bar.o, bar.c), hi: bar.h, i: k >= sweepI ? k : sweepI };
+  }
+
   /* ---------------- gates (12 core, per Playbook §10) ---------------- */
   function gradeRank(g){ return g === 'A' ? 4 : g === 'B+' ? 3 : g === 'B' ? 2 : 1; }
   function locationGrade(ctx, entry, dir, obOk, poolNear){
@@ -666,6 +682,12 @@
     var buf = Math.max(STOP_BUF_MIN_USD, 0.25 * atr);
     var entryOff = Math.max(STOP_BUF_MIN_USD, 0.1 * atr);
     var entry = isFinite(src.entry) ? src.entry : (dir === 'long' ? level + entryOff : level - entryOff);
+    /* the retest limit belongs INSIDE the sweep candle (the order block), never
+       beyond the pool: clamp pool+offset into [pool, sweep-candle body top] */
+    var sbZone = src.sweep && isFinite(src.sweep.sweepI) ? sweepOb(ctx.rows1h, src.sweep.sweepI, dir) : null;
+    if (sbZone && !isFinite(src.entry)){
+      if (dir === 'long') entry = Math.min(entry, sbZone.hi); else entry = Math.max(entry, sbZone.lo);
+    }
     var wick = isFinite(src.wick) ? src.wick : level;
     var stop = isFinite(src.stop) ? src.stop : (dir === 'long' ? wick - buf : wick + buf);
     var risk = Math.abs(entry - stop);
@@ -674,14 +696,24 @@
     if (isFinite(src.t1)) t1 = src.t1;
     var rr1 = risk > 0 && isFinite(t1) ? Math.abs(t1 - entry) / risk : NaN;
     var rr2 = risk > 0 && isFinite(t2) ? Math.abs(t2 - entry) / risk : NaN;
-    var ob = dir === 'long' ? ctx.obs.bull : ctx.obs.bear;
+    /* Order block for a sweep setup (Playbook P1 §6.1): the candle that took
+       the pool is the last opposing candle before the displacement reclaim, so
+       ITS wick+body is the block the retest must land in. A detector that
+       waits for a separate ≥1.5×ATR displacement bar rejected 71 of 72 real
+       sweeps and made G6 / location A unreachable. */
+    var ob = dir === 'long' ? ctx.obs.bull : ctx.obs.bear, obSrc = ob ? 'fresh OB' : null;
+    if (sbZone){
+      var inSb = entry >= sbZone.lo - atr * 0.1 && entry <= sbZone.hi + atr * 0.1;
+      var inFresh = !!(ob && entry >= ob.lo - atr * 0.1 && entry <= ob.hi + atr * 0.1);
+      if (inSb && !inFresh){ ob = { lo: sbZone.lo, hi: sbZone.hi, age: src.age, mid: (sbZone.lo + sbZone.hi) / 2 }; obSrc = 'sweep-candle OB'; }
+    }
     var obOk = !!(ob && entry >= ob.lo - atr * 0.1 && entry <= ob.hi + atr * 0.1);
     var loc = locationGrade(ctx, entry, dir, obOk, true);
     var c = {
       sid: src.sid, name: src.name, dir: dir, level: level, kind: src.kind, entry: entry, stop: stop, wick: wick,
       risk: risk, t1: t1, t2: t2, t1Label: tg.t1 ? tg.t1.label : (isFinite(src.t1) ? 'engine T1' : 'unavailable'),
       t2Label: tg.t2 ? tg.t2.label : 'unavailable', rr1: rr1, rr2: rr2, grade: loc.grade, gradeWhy: loc.why,
-      obOk: obOk, ob: ob, sweep: src.sweep || null, age: isFinite(src.age) ? src.age : NaN,
+      obOk: obOk, ob: ob, obSrc: obSrc, sweep: src.sweep || null, age: isFinite(src.age) ? src.age : NaN,
       reclaimed: !!src.reclaimed, acceptance: !!src.acceptance, breach: fin(src.breach), engine: src.engine || 'local',
       gates: [], gatesPass: 0, families: null, vetoes: [], held: false
     };
@@ -698,7 +730,7 @@
     var dispAtr = c.sweep ? fin(c.sweep.displacementAtr) : NaN, dispOk = !isFinite(dispAtr) || dispAtr >= 0.5;
     gate(5, 'Close back inside ≤ 3 bars with displacement ≥ 0.5 × ATR', c.reclaimed && c.age <= MAX_SWEEP_AGE && dispOk,
       c.reclaimed ? ('reclaim closed, sweep age ' + c.age + (isFinite(dispAtr) ? ' · displacement ' + num(dispAtr, 2) + ' × ATR' + (dispOk ? '' : ' (weak — no follow-through)') : '')) : 'reclaim not closed');
-    gate(6, 'Rejection overlaps OB', obOk, ob ? ('OB ' + px(ob.lo) + '–' + px(ob.hi) + (obOk ? ' overlaps entry' : ' does not overlap entry')) : 'no fresh ' + dir + ' OB');
+    gate(6, 'Rejection overlaps OB', obOk, ob ? ((obSrc || 'OB') + ' ' + px(ob.lo) + '–' + px(ob.hi) + (obOk ? ' overlaps entry' : ' does not overlap entry')) : 'no ' + dir + ' OB (no sweep candle, no fresh block)');
     gate(7, 'Session London/NY · no news lock', ctx.session.tradeable && !ctx.news.lock, ctx.session.label + (ctx.news.lock ? ' · NEWS LOCK' : ''));
     var lvn = lvnBetween(entry, t1, ctx.vp4h);
     gate(8, 'LVN between entry and T1', lvn, lvn ? 'LVN corridor between entry and T1' : 'no LVN path / same node');
@@ -1382,7 +1414,7 @@
     volProfile: volProfile, zones: zones, zoneTxt: zoneTxt, dealingRange: dealingRange,
     dayKey: dayKey, sessionPocs: sessionPocs, pocStep: pocStep, asiaRange: asiaRange, priorDay: priorDay, priorWeek: priorWeek,
     equalExtremes: equalExtremes, freshObs: freshObs, adr10: adr10, structure1h: structure1h,
-    pools: pools, sweepRead: sweepRead, gradeRank: gradeRank, locationGrade: locationGrade, lvnBetween: lvnBetween, targets: targets,
+    pools: pools, sweepRead: sweepRead, sweepOb: sweepOb, gradeRank: gradeRank, locationGrade: locationGrade, lvnBetween: lvnBetween, targets: targets,
     dxyRead: dxyRead, fundingRead: fundingRead, oiRead: oiRead, scalarRead: scalarRead,
     px: px, num: num, esc: esc, isNum: isNum, up: up,
     ROW_USD: ROW_USD, EQ_TOL_USD: EQ_TOL_USD, STOP_BUF_MIN_USD: STOP_BUF_MIN_USD, MAX_SWEEP_AGE: MAX_SWEEP_AGE

@@ -361,3 +361,31 @@ console.log('== wiring + deploy stamp ==');
 }
 
 console.log('\nall ok —', passed, 'assertions');
+
+console.log('== data ceiling + sweep-candle OB ==');
+{
+  const W = boot();
+  const d = sweepDay();
+  const base = { rows1h: d.rows, rows15m: d.m15, now: d.now, feed: 'delta-xaut', venue: 'Delta XAUTUSD', equity: 50000, stopsToday: 0 };
+  const r = W.hgOg1Engine(base);
+  const m = r.sections.s2.best;
+  ok(typeof m.reachable === 'number' && m.reachable === 20 - m.unavailPts && m.reachable < 20, 'matrix reports the reachable ceiling given unavailable legs (' + m.reachable + '/20)');
+  ok(/max reachable with the data on hand \d+\/20/.test(r.sections.s3.why), 'decision names the data ceiling');
+  ok(/reachable \d+\/20/.test(r.summary[3]), 'summary line carries the reachable score');
+  const cards = W.hgOg1CardsHtml([{ horizon: 'SWING', r }]);
+  ok(/data ceiling \d+\/20/.test(cards), 'BEST ribbon states the data ceiling');
+  const full = W.hgOg1Engine(Object.assign({}, base, { cvd15m: Array.from({ length: 200 }, (_, i) => i), cvdSource: 'test', gvz: 18, cotPct: 50, realYield5d: [1.9, 1.88, 1.86, 1.85, 1.83], ml: { dir: m.dir, barAge: 1 }, hourHist: { 19: 40 }, rvol: 1.1, spreadUsd: 0.3, spreadAvgHour: 0.3, weekly: { shanghai: m.dir === 'long' ? 'positive' : 'negative' }, dxyRows: d.rows.map(x => ({ t: x.t, o: 100, h: 100.1, l: 99.9, c: 100 + (m.dir === 'long' ? -1 : 1) * (x.t % 97) / 5000, v: 1 })) }));
+  ok(full.sections.s2 && full.sections.s2.best.reachable === 20, 'with every leg supplied the ceiling is 20/20');
+  const g = W.HG_GOLD7;
+  const rows = g.closedRows(d.rows, 3600, d.now), n = rows.length;
+  const ob = g.sweepOb(rows, n - 1, 'long');
+  ok(ob && ob.lo === rows[n - 1].l && ob.hi === Math.max(rows[n - 1].o, rows[n - 1].c), 'sweep-candle OB = wick to body top of the sweep bar when the reclaim is on that bar');
+  const rows2 = rows.concat([{ t: rows[n - 1].t + 3600, o: 4493, h: 4499, l: 4492, c: 4498, v: 300 }]);
+  const ob2 = g.sweepOb(rows2, n - 1, 'long');
+  ok(ob2 && ob2.i === n - 1 && ob2.lo === rows[n - 1].l, 'with a later reclaim bar the OB is the last down candle before it (the sweep bar here)');
+  const s7 = W.hgGoldSevenStep({ rows1h: d.rows, now: d.now, feed: 'x' });
+  const c0 = s7.steps.s3.candidates.find(c => c.dir === 'long' && /Asia low/.test(c.kind));
+  ok(c0 && c0.obSrc && c0.gates.find(gg => gg.n === 6).pass && c0.entry <= Math.max(rows[n - 1].o, rows[n - 1].c) + 1e-9 && c0.entry >= c0.level - 1e-9 - 10, 'seven-step: Asia-low sweep now carries an OB, passes G6, and the entry sits inside the block');
+}
+
+console.log('\nall ok (cont.) —', passed, 'assertions');
