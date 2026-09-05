@@ -400,6 +400,98 @@ console.log('\n== OMNIROUTE full-ledger discipline on BTC ==');
     'a quiet OMNIROUTE pass is logged — indicator ledger ran, no invented ticket');
 }
 
+console.log('\n== OMNIROUTE principal first, then a BTC result ==');
+{
+  const W = boot();
+  ok(typeof W.hgObtcReplayKind === 'function', 'hgObtcReplayKind exported');
+  ok(W.hgObtcReplayKind('REVERSAL SNIPER') === 'PIN-REJECT', 'SNIPER → PIN-REJECT');
+  ok(W.hgObtcReplayKind('SMC ChoCh') === 'FVG-FILL', 'SMC → FVG-FILL');
+  ok(W.hgObtcReplayKind('SQUEEZE fired') === 'SQUEEZE-FIRE', 'SQUEEZE → SQUEEZE-FIRE');
+  ok(W.hgObtcReplayKind('SCALP clean plan') === 'NR7-BREAK', 'SCALP → NR7-BREAK');
+  ok(W.hgObtcReplayKind('MEAN REVERSION') === 'VWAP-REVERT', 'MR → VWAP-REVERT');
+  ok(W.hgObtcReplayKind('OMNIROUTE · CUSUM-SHIFT', 'CUSUM-SHIFT') === 'CUSUM-SHIFT',
+    'named OMNIROUTE kind is not remapped into a prefer');
+
+  const swing = {
+    sym: 'BTCUSD', dir: 'long', entry: 100, stop: 98, t1: 104, t2: 106,
+    clean: true, passed: 7, gatesTotal: 7, engine: 'SWING clean plan', venue: 'delta'
+  };
+  const sniper = {
+    sym: 'BTCUSD', dir: 'long', entry: 100, stop: 97, t1: 106,
+    clean: true, passed: 7, engine: 'REVERSAL SNIPER', venue: 'delta'
+  };
+  const smc = {
+    sym: 'BTCUSD', dir: 'short', entry: 99, stop: 101, t1: 95,
+    clean: true, passed: 7, engine: 'SMC ChoCh', venue: 'delta'
+  };
+  const pinHit = W.hgObtcApplyOmniPrincipal(Object.assign({}, sniper));
+  ok(pinHit.pickable === false && /replay-demoted|desk-edge/.test(pinHit.reason),
+    'SNIPER principal is not pickable');
+  ok(W.hgObtcPick([sniper]) === null, 'SNIPER CLEAN cannot win MOST PROBABLE');
+  ok(W.hgObtcPick([smc]) === null, 'SMC CLEAN cannot win MOST PROBABLE');
+  const mixed = W.hgObtcPick([sniper, smc, swing]);
+  ok(mixed && mixed.row && mixed.row.engine === 'SWING clean plan',
+    'after principal, SWING is the result — toxic analogues are dropped');
+  ok(mixed.tier === 'clean', 'surviving SWING stays CLEAN');
+
+  const refused = W.hgObtcCandidateFromOmniHit({
+    kind: 'PIN-REJECT',
+    grade: { ticket: true },
+    plan: { dir: 'long', entry: 100, stop: 98, t1: 104, formationOk: false, kind: 'PIN-REJECT' }
+  }, { symbol: 'BTCUSD', exchange: 'delta' });
+  ok(refused === null, 'OMNIROUTE formation refuse is not a result');
+
+  const demotedHit = W.hgObtcCandidateFromOmniHit({
+    kind: 'PIN-REJECT',
+    kindDemotion: { reasons: ['gross toxic'] },
+    grade: { ticket: true },
+    plan: { dir: 'long', entry: 100, stop: 98, t1: 104, formationOk: true, kind: 'PIN-REJECT' }
+  }, { symbol: 'BTCUSD', exchange: 'delta' });
+  ok(demotedHit === null, 'OMNIROUTE replay-demote is not a result');
+
+  const ticket = W.hgObtcCandidateFromOmniHit({
+    kind: 'CUSUM-SHIFT',
+    grade: { ticket: true },
+    plan: { dir: 'long', entry: 100, stop: 98, t1: 104, formationOk: true, kind: 'CUSUM-SHIFT',
+            source: 'OMNIROUTE', passed: 7, detail: 'CLEAN 7/7' }
+  }, { symbol: 'BTCUSD', exchange: 'delta' });
+  ok(ticket && ticket.kind === 'CUSUM-SHIFT' && ticket.clean === true,
+    'OMNIROUTE ticket that clears the principal becomes a BTC result');
+  const fromOmni = W.hgObtcPick([ticket]);
+  ok(fromOmni && fromOmni.tier === 'clean' && (fromOmni.row.kind === 'CUSUM-SHIFT' || fromOmni.row.omniKind === 'CUSUM-SHIFT'),
+    'cleared OMNIROUTE ticket can be the MOST PROBABLE');
+
+  const watchHit = W.hgObtcCandidateFromOmniHit({
+    kind: 'CUSUM-SHIFT',
+    grade: { ticket: false },
+    plan: { dir: 'long', entry: 100, stop: 98, t1: 104, formationOk: true, kind: 'CUSUM-SHIFT' }
+  }, { symbol: 'BTCUSD', exchange: 'delta' });
+  ok(watchHit && watchHit.clean === false && watchHit.near === true,
+    'OMNIROUTE WATCH that cleared formation is a watch result, not a ticket');
+
+  W.hgOmniKindDemotion = function(k){
+    return String(k).toUpperCase() === 'NR7-BREAK' ? { reasons: ['day-aside'] } : null;
+  };
+  const scalp = {
+    sym: 'BTCUSD', dir: 'short', entry: 99, stop: 101, t1: 95,
+    clean: true, engine: 'SCALP clean plan', venue: 'delta'
+  };
+  ok(W.hgObtcPick([scalp]) === null,
+    'nightly-aside SCALP (NR7 analogue) cannot win after principal');
+  ok(W.hgObtcPick([scalp, swing]) && W.hgObtcPick([scalp, swing]).row.engine === 'SWING clean plan',
+    'aside SCALP loses to a surviving SWING');
+
+  const src = read('omnibtc.js');
+  ok(/OMNIROUTE PRINCIPAL/.test(src), 'desk names the OMNIROUTE principal');
+  ok(/hgObtcApplyOmniPrincipal/.test(src), 'pick path applies the principal');
+  ok(/hgObtcCandidateFromOmniHit/.test(src), 'OMNIROUTE hits go through the principal converter');
+  const el = { innerHTML: '', querySelector(){ return { disabled:false, textContent:'', innerHTML:'',
+    style:{}, addEventListener(){}, setAttribute(){} }; } };
+  const tab = (W.HG_tabs || []).find(t => t.id === 'omnibtc');
+  tab.mount(el);
+  ok(/OMNIROUTE PRINCIPAL/.test(el.innerHTML), 'mount paints the principal banner');
+}
+
 console.log('\n== coverage matrix + contract-report omniinfo wiring ==');
 {
   const src = read('omnibtc.js');
