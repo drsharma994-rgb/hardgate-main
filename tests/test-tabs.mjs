@@ -267,7 +267,7 @@ assert(REQUIRED_TABS.every(([id]) => run('HG_TAB_MODS[' + JSON.stringify(id) + '
 /* ---------------- group model ---------------- */
 const EXPECTED_GROUPS = {
   overview:   ['brain', 'book', 'trade', 'log', 'news', 'bias', 'regime', 'trendmx', 'rotation', 'execute', 'startrader'],
-  crypto:     ['omnibtc', 'omnipresent', 'omniroute', 'best', 'swing', 'scalp', 'edge', 'smart', 'squeeze', 'reversalsniper', 'smc', 'ob', 'trap', 'div', 'coil', 'apex', 'oiflow', 'liqs', 'onchain', 'chartvision', 'carry', 'venueprem', 'termbasis'],
+  crypto:     ['omnibtc', 'omnipresent', 'omniroute', 'dexscreener', 'best', 'swing', 'scalp', 'edge', 'smart', 'squeeze', 'reversalsniper', 'smc', 'ob', 'trap', 'div', 'coil', 'apex', 'oiflow', 'liqs', 'onchain', 'chartvision', 'carry', 'venueprem', 'termbasis'],
   gold:       ['super-gold', 'omnigold', 'omnigold1', 'goldswing', 'goldscalp', 'gold', 'goldpro', 'goldspot', 'goldcoint', 'goldpine', 'signallog'],
   strategies: ['super-setup', 'super-best', 'super-sniper', 'super-book', 'super-calibrate', 'pine', 'pine-msb', 'pine-sqz', 'pine-smf', 'pine-ht', 'pine-smc', 'pine-cipher', 'pine-rf', 'pine-nw', 'pine-avwap', 'strats', 'meanrev', 'formationlab', 'scorecard', 'reliability'],
   tools:      ['risk', 'basis', 'search', 'finder', 'tradeos', 'hey', 'aiagent']
@@ -280,7 +280,7 @@ assert(Object.keys(EXPECTED_GROUPS).every(gid =>
   run("HG_NAV_GROUPS.filter(function(g){ return g.id===" + JSON.stringify(gid) + "; })[0].tabs.join(',')") === EXPECTED_GROUPS[gid].join(',')),
   'group membership matches the spec (incl. not-yet-registered brain/strats/meanrev — groups render with missing ids)');
 const ID2GROUP = { squeeze:'crypto', trendmx:'overview', oiflow:'crypto', liqs:'crypto', chartvision:'crypto', regime:'overview',
-                   carry:'crypto', venueprem:'crypto', termbasis:'crypto', goldpro:'gold', goldcoint:'gold', strats:'strategies', meanrev:'strategies', 'super-setup':'strategies', 'super-best':'strategies', 'super-sniper':'strategies', 'super-book':'strategies', 'super-calibrate':'strategies', reversalsniper:'crypto', edge:'crypto', pine:'strategies', 'pine-msb':'strategies', 'pine-sqz':'strategies', 'pine-smf':'strategies', 'pine-ht':'strategies', 'pine-smc':'strategies', 'pine-cipher':'strategies', 'pine-rf':'strategies', 'pine-nw':'strategies', 'pine-avwap':'strategies',
+                   carry:'crypto', venueprem:'crypto', termbasis:'crypto', goldpro:'gold', goldcoint:'gold', strats:'strategies', meanrev:'strategies', 'super-setup':'strategies', 'super-best':'strategies', 'super-sniper':'strategies', 'super-book':'strategies', 'super-calibrate':'strategies', reversalsniper:'crypto', edge:'crypto', dexscreener:'crypto', pine:'strategies', 'pine-msb':'strategies', 'pine-sqz':'strategies', 'pine-smf':'strategies', 'pine-ht':'strategies', 'pine-smc':'strategies', 'pine-cipher':'strategies', 'pine-rf':'strategies', 'pine-nw':'strategies', 'pine-avwap':'strategies',
                    scorecard:'strategies', reliability:'strategies', formationlab:'strategies',
                    brain:'overview', startrader:'overview', execute:'overview', news:'overview', rotation:'overview', onchain:'crypto', goldspot:'gold' };
 assert(Object.keys(ID2GROUP).every(id => run('HG_TAB_GROUP[' + JSON.stringify(id) + ']') === ID2GROUP[id]),

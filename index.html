@@ -811,7 +811,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 </main>
 
 
-  <script src="build-stamp.js?v=614"></script>
+  <script src="build-stamp.js?v=615"></script>
 <script src="hghost.js"></script>
 <script src="indicators.js"></script>
 <script src="indicators2.js"></script>
@@ -861,7 +861,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="hg-mechanics.js?v=614"></script>
 <script src="./hg-gates.js?v=559"></script>
 <script src="crypto-catalog.js?v=614"></script>
-<script src="omniroute.js?v=614"></script>
+<script src="omniroute.js?v=615"></script>
+<script src="dex-screener.js?v=615"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
 <script src="edge.js?v=559"></script>
@@ -3001,7 +3002,7 @@ async function runObScanLeg(opts){
    gold lane → conviction desks / pine / lab → utilities. */
 const HG_NAV_GROUPS = [
   { id:'overview',   label:'COMMAND',  tabs:['brain','book','trade','log','news','bias','regime','trendmx','rotation','execute','startrader'] },
-  { id:'crypto',     label:'CRYPTO',   tabs:['omnibtc','omnipresent','omniroute','best','swing','scalp','edge','smart','squeeze','reversalsniper','smc','ob','trap','div','coil','apex','oiflow','liqs','onchain','chartvision','carry','venueprem','termbasis'] },
+  { id:'crypto',     label:'CRYPTO',   tabs:['omnibtc','omnipresent','omniroute','dexscreener','best','swing','scalp','edge','smart','squeeze','reversalsniper','smc','ob','trap','div','coil','apex','oiflow','liqs','onchain','chartvision','carry','venueprem','termbasis'] },
   { id:'gold',       label:'GOLD',     tabs:['super-gold','omnigold','omnigold1','goldswing','goldscalp','gold','goldpro','goldspot','goldcoint','goldpine','signallog'] },
   { id:'strategies', label:'MODELS',   tabs:['super-setup','super-best','super-sniper','super-book','super-calibrate','pine','pine-msb','pine-sqz','pine-smf','pine-ht','pine-smc','pine-cipher','pine-rf','pine-nw','pine-avwap','strats','meanrev','formationlab','scorecard','reliability'] },
   { id:'tools',      label:'TOOLS',    tabs:['risk','basis','search','finder','tradeos','hey','aiagent'] },
@@ -3420,6 +3421,21 @@ const HG_TAB_AUTO_SCAN = {
     }
     if (runBtn && !runBtn.disabled) runBtn.click();
   },
+  dexscreener: async function(){
+    const pane = document.getElementById('tab_dexscreener');
+    const runBtn = pane && pane.querySelector('#dexRun');
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.dexscreener : null;
+    if (mod && typeof mod.refresh === 'function'){
+      const st = await mod.refresh();
+      const sl = String(st || '').toLowerCase();
+      if (sl.indexOf('skipped: not run yet') === 0){
+        if (runBtn && !runBtn.disabled) runBtn.click();
+        return 'refreshed';
+      }
+      return st || 'refreshed';
+    }
+    if (runBtn && !runBtn.disabled) runBtn.click();
+  },
   omnipresent: async function(){
     const pane = document.getElementById('tab_omnipresent');
     const runBtn = pane && pane.querySelector('#opRun');
@@ -3489,6 +3505,7 @@ const HG_SCAN_RUN_BTN = {
   'pine-nw': '#pineNwRun',
   'pine-avwap': '#pineAvwapRun',
   omniroute: '#omniRun',
+  dexscreener: '#dexRun',
   omnipresent: '#opRun',
   omnigold: '#ogRun',
   omnibtc: '#obtcRun'

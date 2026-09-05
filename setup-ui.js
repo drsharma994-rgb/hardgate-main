@@ -213,7 +213,7 @@ var HG_MP_HOST = {
   smart: 'smartCards', basis: 'basisCards', search: 'searchOut', finder: 'finderOut',
   gold: 'goldSetupOut', 'gold-setup': 'goldSetupOut',
   squeeze: 'sqCards', reversalsniper: 'rsCards',
-  omnipresent: 'opCards', omniroute: 'omniCards', omnigold: 'ogCards',
+  omnipresent: 'opCards', omniroute: 'omniCards', dexscreener: 'dexCards', omnigold: 'ogCards',
   omnibtc: 'obtcCards',
   oiflow: 'oiflowCards', carry: 'carryCards', termbasis: 'tbCards',
   venueprem: 'hgVenueCards', brain: 'brainCards', startrader: 'stCards',

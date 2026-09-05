@@ -10913,6 +10913,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniShowModeSet = hgOmniShowModeSet;
     window.hgOmniPaidKinds = hgOmniPaidKinds;
     window.hgOmniPaidCardsHtml = hgOmniPaidCardsHtml;
+    window.hgOmniSetupCard = setupCard;
     window.hgOmniApplyShowMode = hgOmniApplyShowMode;
     window.hgOmniState = function hgOmniState(){
       try { return __omni.snap ? JSON.parse(JSON.stringify(__omni.snap)) : null; } catch (e) { return null; }

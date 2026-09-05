@@ -20,7 +20,7 @@
   var HG_TAB_DAY_PAINT_IDS = [
     'swing', 'scalp', 'best', 'edge', 'smart', 'squeeze', 'reversalsniper', 'smc', 'ob',
     'trap', 'div', 'coil', 'apex', 'oiflow', 'liqs', 'onchain', 'chartvision', 'carry',
-    'venueprem', 'termbasis', 'omniroute', 'omnipresent', 'omnigold1', 'omnibtc'
+    'venueprem', 'termbasis', 'omniroute', 'dexscreener', 'omnipresent', 'omnigold1', 'omnibtc'
   ];
 
   function fin(x){ var n = +x; return isFinite(n) ? n : NaN; }

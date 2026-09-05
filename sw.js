@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v614';
+const HG_CACHE = 'hg-v615';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -21,7 +21,7 @@ const HG_SHELL = [
   './hghost.js',
   './indicators.js', './indicators2.js', './store.js', './binance.js', './spot-perp.js', './startrader.js', './xm-trader.js', './bybit.js', './deribit-vol.js', './positioning.js', './cryptowatch.js', './macro.js', './openbb-desk.js', './ccxt-desk.js', './trading-stack.js', './worldmonitor-desk.js', './chart-vision-desk.js', './chartvision-tab.js', './hey-desk.js', './atomic-agent-desk.js', './ai-agent.js', './agent-alerts.js',
   './setup-ui.js', './setup-solidity.js', './plans.js', './setup-stack.js', './gate-replay-oos.js', './cryptogates.js',
-  './squeeze.js', './trendtable.js', './oiflow.js', './regime.js', './carry.js', './hg-forward.js', './hg-mechanics.js', './hg-gates.js', './hg-plan.js', './crypto-catalog.js', './omniroute.js', './omnigold.js', './omnigold1.js', './omnipresent.js', './formation-nightly.js', './formation-nightly-boot.js', './desk-formation-edge.js', './contract-report.js', './omnibtc-engines.js', './omnibtc.js', './termbasis.js',
+  './squeeze.js', './trendtable.js', './oiflow.js', './regime.js', './carry.js', './hg-forward.js', './hg-mechanics.js', './hg-gates.js', './hg-plan.js', './crypto-catalog.js', './omniroute.js', './dex-screener.js', './omnigold.js', './omnigold1.js', './omnipresent.js', './formation-nightly.js', './formation-nightly-boot.js', './desk-formation-edge.js', './contract-report.js', './omnibtc-engines.js', './omnibtc.js', './termbasis.js',
   './goldpro.js', './strats.js', './meanrev.js', './supersetup.js', './super-desk-common.js', './super-gold.js', './super-best.js', './super-sniper.js', './super-book.js', './super-calibrate.js', './reversalsniper.js', './edge.js', './startradertab.js', './book-routing.js', './api-client.js', './tradeos.js', './hey-lens.js', './book.js', './execute.js', './liqs.js', './xuniverse.js', './desk-scan-universe.js',
   /* Vendored third-party libraries. Previously loaded from unpkg/jsdelivr, so
      the offline shell covered 126 local files and then broke on charts. */

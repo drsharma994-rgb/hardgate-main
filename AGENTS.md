@@ -361,6 +361,11 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Quiet candle TTL is **720s** so cache spans the 10-min boundary. G1–G7 unchanged.
 - Tests: `tests/test-scan-every-10m.mjs`, `tests/test-hard-refresh.mjs`.
 
+### DEX SCREENER tab — hg-v615
+- New **DEX SCREENER** tab in the CRYPTO nav group: scans **meme perps** (DOGE, PEPE, WIF, BONK, FLOKI, TRUMP, PUMP, …) on Delta + CoinDCX for **OMNIROUTE explosive setups** — SQUEEZE-FIRE, NR7-BREAK, VOL-EXPANSION, compression breaks, measured moves.
+- Ranked by breakout momentum (7d change + turnover + mechanic weight). Overextended names (+18% 7d) are penalised. Uses `hgOmniEvaluate` + nightly day book; exports `hgOmniSetupCard` for shared card HTML.
+- Tests: `tests/test-dex-screener.mjs`.
+
 ### Every tab applies nightly day book — hg-v614
 - Re-ran the **960-bar** nightly rebake for **2026-09-05** and ship it synchronously via `formation-nightly-boot.js` so tabs do not miss the day book on first paint.
 - `hgTabFormationDayPaint` / `hgTabFormationDayHtml` paint the nightly + desk-edge banners on **SWING / SCALP / BEST / EDGE / SMART $ / SQUEEZE / SNIPER / SMC / OB / TRAP / DIV / COIL / APEX / OI FLOW / LIQS / ON-CHAIN / CHART VISION / CARRY / VENUE / TERM BASIS / OMNIROUTE / OMNIPRESENT / OMNIGOLD 1 / OMNIBTC**.
