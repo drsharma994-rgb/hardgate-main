@@ -120,6 +120,12 @@ console.log('== aliases + nightly aside tightens ==');
   W.hgOmniNightlyAside = function(kind){ return String(kind) === 'SQUEEZE-FIRE' ? { kind: kind } : null; };
   const sq = W.hgDeskFormationEdgeApply({ dir: 'long', tier: 'clean' }, { tab: 'squeeze' });
   ok(sq.deskEdgeAction === 'suppress', 'nightly aside of SQUEEZE-FIRE tightens watch → suppress');
+
+  W.hgOmniNightlyAside = function(kind){ return String(kind) === 'MMOVE' ? { kind: kind } : null; };
+  W.hgDeskNightlyBestKinds = function(){ return ['AVWAP-RECLAIM', 'CUSUM-SHIFT', 'DONCHIAN-DRIVE', 'NR7-BREAK']; };
+  W.hgMechRunAll = function(){ return [{ kind: 'MMOVE', dir: 'long' }]; };
+  const swing = W.hgDeskFormationEdgeApply({ dir: 'long', tier: 'clean', rows: [{ c: 1 }] }, { tab: 'swing', rows: [{ c: 1 }] });
+  ok(swing.deskEdgeBest !== true, 'BEST confirm skips a day-aside MMOVE');
 }
 
 console.log('== wiring + stamp ==');

@@ -1,4 +1,4 @@
-/* HARDGATE — desk formation edge (hg-v609).
+/* HARDGATE — desk formation edge (hg-v610).
    Maps SWING / SCALP / EDGE / SMART $ / SQUEEZE / SNIPER / SMC / OB / TRAP /
    DIV / COIL / APEX / OI FLOW / LIQS / ON-CHAIN / CHART VISION / CARRY /
    VENUE / TERM BASIS onto the OMNIROUTE v531 measured book and the five
@@ -218,6 +218,13 @@
           if (!h) continue;
           k = up(h.kind || h.mechanic || h.name);
           if (BEST_KINDS.indexOf(k) < 0) continue;
+          if (nightlyAside(k)) continue;
+          try{
+            if (typeof W.hgDeskNightlyBestKinds === 'function'){
+              var allow = W.hgDeskNightlyBestKinds();
+              if (Array.isArray(allow) && allow.indexOf(k) < 0) continue;
+            }
+          }catch(eAllow){}
           if (low(h.dir || h.side) !== d) continue;
           if (out.kinds.indexOf(k) < 0) out.kinds.push(k);
         }
@@ -285,8 +292,21 @@
         best = hgDeskFormationBestConfirm(rows, dir);
       }
       var action = looked.action;
+      try{
+        var nightDesk = (typeof W.hgDeskNightlyAction === 'function')
+          ? W.hgDeskNightlyAction(looked.tab)
+          : (W.HG_FORMATION_NIGHTLY && W.HG_FORMATION_NIGHTLY.desk
+            && W.HG_FORMATION_NIGHTLY.desk.byTab
+            && W.HG_FORMATION_NIGHTLY.desk.byTab[looked.tab]);
+        if (nightDesk && nightDesk.action){
+          var na = nightDesk.action;
+          if (na === 'suppress' || na === 'demote') action = tighter(action, na);
+          else if (na === 'prefer' && (action === 'watch' || action === 'prefer')) action = 'prefer';
+        }
+      }catch(eNight){}
       /* BEST confirm never un-suppresses a toxic analogue. It only boosts
-         fail-open / prefer / demote-watch ranks. */
+         fail-open / prefer / demote-watch ranks. Nightly asides also skip
+         BEST kinds so a day-toxic prefer kind cannot rank-boost a desk. */
       if (action === 'watch' && best.ok) action = 'prefer';
       cand.deskEdgeTab = looked.tab;
       cand.deskEdgeAction = action;

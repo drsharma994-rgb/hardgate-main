@@ -1,8 +1,8 @@
 /* HARDGATE — nightly formation overlay (browser).
    Fetches /api/formation-nightly (fallback: committed scripts/formation-nightly.json)
-   and retunes OMNIROUTE / OMNIPRESENT / OMNIGOLD 1 formation for the UTC day.
-   Adds asides and tightens floors only. Never loosens G1–G7 or baked demotes.
-   Never invents tickets or direction. */
+   and retunes OMNIROUTE / OMNIPRESENT / OMNIGOLD 1 + 19 desk tabs from the
+   rolling 40-day book. Adds asides and tightens floors only. Never loosens
+   G1–G7, baked demotes, or baked desk suppress. Never invents tickets. */
 (function(){
   'use strict';
   var W = (typeof window !== 'undefined') ? window : globalThis;
@@ -37,9 +37,18 @@
     var cost = j.omnipresent && isFinite(fin(j.omnipresent.costCeilingR))
       ? fin(j.omnipresent.costCeilingR).toFixed(2) : '0.12';
     var og = j.omnigold1 || {};
+    var desk = j.desk || {};
+    var tighten = desk.tighten || [];
+    var deskBit = tighten.length
+      ? 'desk tighten ' + tighten.map(function(id){
+          var row = desk.byTab && desk.byTab[id];
+          return (row && row.label ? row.label : id) + '→' + (row && row.action ? row.action : 'tighten');
+        }).join(', ')
+      : 'desk tighten none';
     return 'NIGHTLY FORMATION ' + j.dayUtc
       + ' — OMNIROUTE aside ' + (aside.length ? aside.join(', ') : 'none')
       + ' · prefer ' + (prefer.length ? prefer.join(', ') : 'none')
+      + ' · ' + deskBit
       + ' · OMNIPRESENT cost≤' + cost + 'R'
       + (j.omnipresent && j.omnipresent.standAsideTriggered ? ' · TRIGGERED stands aside (day fade book toxic)' : '')
       + ' · OG1 ' + (og.bestNamed || 'floors')
@@ -99,6 +108,24 @@
     }catch(eP){ return false; }
   }
 
+  function hgDeskNightlyAction(tab){
+    try{
+      var N = W.HG_FORMATION_NIGHTLY;
+      if (!N || !N.desk || !N.desk.byTab) return null;
+      var id = String(tab || '').toLowerCase();
+      return N.desk.byTab[id] || null;
+    }catch(eD){ return null; }
+  }
+
+  function hgDeskNightlyBestKinds(){
+    try{
+      var N = W.HG_FORMATION_NIGHTLY;
+      if (N && N.desk && Array.isArray(N.desk.bestConfirmKinds))
+        return N.desk.bestConfirmKinds.slice();
+    }catch(eB){}
+    return ['AVWAP-RECLAIM', 'CUSUM-SHIFT', 'DONCHIAN-DRIVE', 'MMOVE', 'NR7-BREAK'];
+  }
+
   async function hgFormationNightlyLoad(){
     var urls = ['/api/formation-nightly', 'scripts/formation-nightly.json'];
     var i, lastErr = null;
@@ -118,6 +145,8 @@
   W.hgFormationNightlyLoad = hgFormationNightlyLoad;
   W.hgOmniNightlyAside = hgOmniNightlyAside;
   W.hgOmniNightlyPrefer = hgOmniNightlyPrefer;
+  W.hgDeskNightlyAction = hgDeskNightlyAction;
+  W.hgDeskNightlyBestKinds = hgDeskNightlyBestKinds;
   W.HG_OG1_FORM_EDGE = W.HG_OG1_FORM_EDGE || { minRisk: 5, minDisp: 0.5, gated: false, biasSide: false };
 
   if (typeof W.setTimeout === 'function'){
