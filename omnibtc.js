@@ -17,7 +17,7 @@ invoked (squeeze, PINE and structure were listed and never wired):
   LIQUIDITY FLUSH .......... liqFlushSetup
   SQUEEZE .................. squeezeClassify -> squeezeGateEval -> squeezePlan
   TREND MATRIX ............. trendScore -> trendmxGateEval -> trendmxPlan
-  OMNIROUTE ................ hgOmniEvaluate
+  OMNIROUTE ................ hgOmniEvaluate, then OMNIROUTE principal
   CONTRACT REPORT .......... hgContractReportRun (every gate + indicator)
   20-gate indicator bank ... hgStrategyRefine
   SMART $ / OI FLOW ........ classify + setup (omnibtc-engines.js)
@@ -40,6 +40,15 @@ snap — they are not invented here from an empty board.
 Structure (FVG / order blocks) is deliberately NOT listed as an engine: those
 are detectors that feed the planners above, not producers of a ticket.
 
+OMNIROUTE PRINCIPAL FIRST. Every house row (including OMNIROUTE hits)
+must clear the same floors the OMNIROUTE tab uses before it is a result:
+  replay demote / nightly aside / analogue map (SNIPER→PIN-REJECT,
+  SMC→FVG-FILL, SQUEEZE→SQUEEZE-FIRE, SCALP→NR7-BREAK, MR→VWAP-REVERT)
+  / desk-edge suppress+demote. OMNIROUTE hits also need grade.ticket
+  and formationOk !== false. The map never invents a prefer. Survivors
+  then collapse to one MOST PROBABLE. Aside is the result when nothing
+  clears.
+
 WHAT IT WILL NOT DO.
   - It will not invent a new BTC strategy.
   - It will not mint ENTRY / STOP / T1. Levels come from existing engines.
@@ -47,9 +56,11 @@ WHAT IT WILL NOT DO.
   - It will not use contract-report's "derived structure" fallback (that
     path writes numbers when no engine produced a ticket).
   - It will not loosen G1–G7.
+  - It will not MOST-PROBABLE a replay-demoted or desk-suppressed analogue.
 
-ONE SETUP. CLEAN with real levels wins. Else the best 6/7 NEAR (watch,
-not a ticket). Else WAIT. Standing aside is the position.
+ONE SETUP. After the OMNIROUTE principal: CLEAN with real levels wins.
+Else the best 6/7 NEAR (watch, not a ticket). Else WAIT. Standing aside
+is the position.
 
 VENUES. Delta BTCUSD and CoinDCX B-BTC_USDT when dual-scan is on (the
 house default). Both legs feed one pick — two venues, still one card.
@@ -113,6 +124,161 @@ a global hard refresh.
     if (!row) return false;
     var e = fin(row.entry), s = fin(row.stop), t1 = fin(row.t1);
     return isFinite(e) && e > 0 && isFinite(s) && s > 0 && e !== s && isFinite(t1) && t1 > 0;
+  }
+
+  /* Same analogue map OMNIROUTE uses (hg-v612). Local copy so the BTC
+     desk cannot fail-open when omniroute.js has not loaded yet. */
+  var HG_OBTC_KIND_ALIAS = {
+    SNIPER: 'PIN-REJECT',
+    REVERSALSNIPER: 'PIN-REJECT',
+    'REVERSAL-SNIPER': 'PIN-REJECT',
+    'HOUSE-SQUEEZE': 'SQUEEZE-FIRE',
+    SQUEEZE: 'SQUEEZE-FIRE',
+    SMC: 'FVG-FILL',
+    SCALP: 'NR7-BREAK',
+    MR: 'VWAP-REVERT'
+  };
+  var HG_OBTC_BAKED_ACTION = {
+    'PIN-REJECT': 'suppress',
+    'FVG-FILL': 'suppress',
+    'RSI-DIVERGE': 'suppress',
+    'THREE-BAR': 'suppress',
+    UTAD: 'suppress',
+    'SWEEP-RECLAIM': 'demote',
+    'EQH-SWEEP': 'demote',
+    'EQL-SWEEP': 'demote',
+    PO3: 'demote'
+  };
+
+  function hgObtcForwardPaid(kind){
+    try{
+      if (gfn('hgOmniReplayForwardPaid')){
+        var v = W.hgOmniReplayForwardPaid(kind);
+        if (v && v.read === 'has paid') return true;
+      }
+    }catch(eFp){}
+    return false;
+  }
+
+  function hgObtcReplayKind(engine, kind){
+    var raw = String(kind || '').toUpperCase().trim();
+    if (!raw){
+      var eng = String(engine || '').toUpperCase();
+      var named = eng.match(/OMNIROUTE\s*[·.:-]\s*([A-Z0-9-]+)/);
+      if (named) raw = named[1];
+      else if (/SNIPER|PIN-REJECT|PIN REJECT/.test(eng)) raw = 'SNIPER';
+      else if (/\bSMC\b|CHOCH/.test(eng)) raw = 'SMC';
+      else if (/SQUEEZE/.test(eng)) raw = 'HOUSE-SQUEEZE';
+      else if (/SCALP/.test(eng)) raw = 'SCALP';
+      else if (/MEAN REVERSION|\bMR\b/.test(eng)) raw = 'MR';
+      else if (/DIV|RSI-DIVERGE/.test(eng)) raw = 'RSI-DIVERGE';
+      else if (/TRAP|SWEEP/.test(eng)) raw = 'SWEEP-RECLAIM';
+      else raw = eng.replace(/^OMNIROUTE\s*[·.:-]\s*/, '').split(/\s+/)[0] || '';
+    }
+    if (gfn('hgOmniReplayKind')) return W.hgOmniReplayKind(raw);
+    return HG_OBTC_KIND_ALIAS[raw] || raw;
+  }
+
+  function hgObtcEngineTab(engine, kind){
+    var raw = String(engine || kind || '').toUpperCase();
+    if (/SNIPER|PIN-REJECT/.test(raw)) return 'reversalsniper';
+    if (/\bSMC\b|CHOCH|FVG-FILL/.test(raw)) return 'smc';
+    if (/SQUEEZE/.test(raw)) return 'squeeze';
+    if (/SCALP/.test(raw)) return 'scalp';
+    if (/DIV|RSI-DIVERGE/.test(raw)) return 'divergence';
+    if (/TRAP|SWEEP/.test(raw)) return 'trap';
+    if (/SWING/.test(raw)) return 'swing';
+    if (/\bEDGE\b/.test(raw)) return 'edge';
+    if (/COIL/.test(raw)) return 'coil';
+    if (/OI FLOW|OIFLOW/.test(raw)) return 'oiflow';
+    if (/SMART/.test(raw)) return 'smart';
+    if (/FUND/.test(raw)) return 'fund-fade';
+    if (/FLUSH|LIQS/.test(raw)) return 'liqs';
+    return '';
+  }
+
+  function hgObtcStampAside(row, reason, action){
+    row.clean = false;
+    row.near = false;
+    row.nearClean = true;
+    row.forming = false;
+    row.watchOnly = true;
+    row.ticket = false;
+    row.demoted = true;
+    row.omniPrincipal = reason;
+    row.omniPickable = false;
+    if (action) row.deskEdgeAction = row.deskEdgeAction || action;
+    return row;
+  }
+
+  /* OMNIROUTE tab floors, then a result. Never invents prefer. */
+  function hgObtcApplyOmniPrincipal(row, opts){
+    opts = opts || {};
+    if (!row || typeof row !== 'object') return { row: null, pickable: false, reason: 'no row' };
+    var kind = hgObtcReplayKind(row.engine || row.strategy, row.kind);
+    var tab = hgObtcEngineTab(row.engine || row.strategy, kind);
+    if (kind && !row.kind) row.kind = kind;
+    row.omniKind = kind;
+    row.omniPickable = true;
+    row.omniPrincipal = 'pass';
+
+    if (gfn('hgOmniKindDemotion')){
+      try{
+        var dem = W.hgOmniKindDemotion(kind);
+        if (dem && !hgObtcForwardPaid(kind)){
+          hgObtcStampAside(row, 'replay-demoted', 'suppress');
+          row.kindDemotion = dem;
+          row.formationOk = false;
+          return { row: row, pickable: false, reason: 'replay-demoted' };
+        }
+      }catch(eD){}
+    } else if (HG_OBTC_BAKED_ACTION[kind] && !hgObtcForwardPaid(kind)){
+      hgObtcStampAside(row, 'replay-demoted', HG_OBTC_BAKED_ACTION[kind]);
+      return { row: row, pickable: false, reason: 'replay-demoted' };
+    }
+
+    if (tab && gfn('hgDeskFormationEdgeApply')){
+      try{
+        W.hgDeskFormationEdgeApply(row, {
+          tab: tab, kind: kind, rows: opts.rows || row._rows, dir: row.dir
+        });
+        if (row.deskEdgeAction === 'suppress' || row.deskEdgeAction === 'demote'){
+          hgObtcStampAside(row, 'desk-edge-' + row.deskEdgeAction, row.deskEdgeAction);
+          return { row: row, pickable: false, reason: row.omniPrincipal };
+        }
+      }catch(eE){}
+    } else if (HG_OBTC_BAKED_ACTION[kind] && !hgObtcForwardPaid(kind)){
+      hgObtcStampAside(row, 'desk-edge-' + HG_OBTC_BAKED_ACTION[kind], HG_OBTC_BAKED_ACTION[kind]);
+      return { row: row, pickable: false, reason: row.omniPrincipal };
+    }
+
+    return { row: row, pickable: true, reason: 'pass' };
+  }
+
+  function hgObtcCandidateFromOmniHit(hit, ticker){
+    if (!hit) return null;
+    var plan = (hit.plan && typeof hit.plan === 'object') ? hit.plan : null;
+    if (!plan) return null;
+    var kind = hit.kind || plan.kind || '';
+    var grade = hit.grade || {};
+    var formedOk = plan.formationOk;
+    var demoted = !!(hit.kindDemotion || plan.kindDemotion);
+    if (formedOk === false) return null;
+    if (demoted && !hgObtcForwardPaid(kind)) return null;
+    var c = hgObtcCandidateFromSignal(plan, ticker, { engine: 'OMNIROUTE · ' + (kind || 'hit') });
+    if (!c) return null;
+    c.kind = kind;
+    if (kind) c.engine = 'OMNIROUTE · ' + kind;
+    if (grade.ticket !== true){
+      c.clean = false;
+      c.near = true;
+      c.nearClean = true;
+      c.watchOnly = true;
+      c.ticket = false;
+    }
+    var app = hgObtcApplyOmniPrincipal(c);
+    if (!app.pickable) return null;
+    return c;
   }
 
   function hgObtcCandidateFromSignal(r, ticker, opts){
@@ -192,6 +358,9 @@ a global hard refresh.
       if (!n || !hgObtcIsBtc(n.sym) || !hgObtcHasLevels(n)) continue;
       n.engine = raw.engine || raw.strategy || n.engine;
       n.strategy = raw.strategy || raw.engine || n.strategy;
+      n.kind = raw.kind || n.kind;
+      n.omniKind = raw.omniKind || n.omniKind;
+      n.omniPrincipal = raw.omniPrincipal || n.omniPrincipal;
       n.venue = raw.venue || n.venue;
       n.passed = n.passed != null ? n.passed : raw.passed;
       n.gatesPassed = n.gatesPassed != null ? n.gatesPassed : raw.gatesPassed;
@@ -211,13 +380,25 @@ a global hard refresh.
           if (evApp && evApp.row) n = evApp.row;
         }catch(eEv){}
       }
+      n.engine = n.engine || raw.engine;
+      n.strategy = n.strategy || raw.strategy;
+      n.kind = n.kind || raw.kind;
+      var prin = hgObtcApplyOmniPrincipal(n, { rows: raw._rows || n._rows });
+      if (!prin.pickable) continue;
       btc.push(n);
     }
     if (!btc.length) return null;
     var pick = gfn('hgPickMostProbableAny') ? W.hgPickMostProbableAny(btc) : { row: btc[0], tier: 'clean', source: 'clean' };
     if (!pick || !pick.row || !hgObtcIsBtc(pick.row.sym) || !hgObtcHasLevels(pick.row)) return null;
-    pick.row.engine = pick.row.engine || btc[0].engine;
+    var win = btc.filter(function(r){
+      return r && r.sym === pick.row.sym && r.dir === pick.row.dir
+        && r.entry === pick.row.entry && r.stop === pick.row.stop;
+    })[0] || btc[0];
+    pick.row.engine = pick.row.engine || win.engine;
     pick.row.strategy = pick.row.strategy || pick.row.engine;
+    pick.row.kind = pick.row.kind || win.kind;
+    pick.row.omniKind = pick.row.omniKind || win.omniKind;
+    pick.row.omniPrincipal = pick.row.omniPrincipal || win.omniPrincipal;
     return pick;
   }
 
@@ -274,7 +455,10 @@ a global hard refresh.
       if (!hit) return;
       if (hit.dir && hit.entry != null && hit.t1 == null && hit.tp != null) hit.t1 = hit.tp;
       var c = hgObtcCandidateFromSignal(hit, ticker, { engine: name });
-      if (c) out.push(c);
+      if (c){
+        hgObtcApplyOmniPrincipal(c);
+        out.push(c);
+      }
     }catch(e){}
   }
 
@@ -400,13 +584,19 @@ a global hard refresh.
             }
           } else {
             omni.forEach(function(hit){
-              var plan = hit && (hit.plan || hit);
-              var c = hgObtcCandidateFromSignal(plan, ticker, { engine: (hit && hit.kind) || 'OMNIROUTE' });
+              var c = hgObtcCandidateFromOmniHit(hit, ticker);
               if (c) out.push(c);
               if (ledger){
+                var why = c
+                  ? (c.clean ? 'OMNIROUTE ticket after principal' : 'OMNIROUTE watch after principal')
+                  : (hit && hit.plan && hit.plan.formationOk === false
+                    ? 'formation refused — not a result'
+                    : (hit && (hit.kindDemotion || (hit.plan && hit.plan.kindDemotion))
+                      ? 'replay-demoted — not a result'
+                      : 'mechanic fired but no honest levels on BTC'));
                 ledger.push({ name: 'OMNIROUTE · ' + (hit && hit.kind ? hit.kind : 'hit'),
-                  state: c ? 'signal' : 'idle', dir: c && c.dir,
-                  detail: c ? 'levelled ticket' : 'mechanic fired but no honest levels on BTC' });
+                  state: c ? (c.clean ? 'signal' : 'watch') : 'idle', dir: c && c.dir,
+                  detail: why });
               }
             });
           }
@@ -425,8 +615,24 @@ a global hard refresh.
   }
 
   function waitHtml(){
-    return '<div class="note" role="status">WAIT — no house engine produced a BTC ticket with real ENTRY / STOP / T1. '
+    return '<div class="note" role="status">WAIT — after the OMNIROUTE principal, no BTC ticket with real ENTRY / STOP / T1 survived. '
       + 'Standing aside is the position. Nothing was invented.</div>';
+  }
+
+  function hgObtcPrincipalBannerHtml(){
+    var html = '';
+    try{
+      if (gfn('hgOmniDeskStanceBannerHtml')) html += W.hgOmniDeskStanceBannerHtml() || '';
+    }catch(eB){}
+    try{
+      if (gfn('hgFormationNightlyBannerHtml')) html += W.hgFormationNightlyBannerHtml() || '';
+    }catch(eN){}
+    html += '<div class="note warn" data-obtc-omni-principal="1" style="display:block;margin-bottom:10px">'
+      + '<b>OMNIROUTE PRINCIPAL</b> — OMNIBTC applies the OMNIROUTE tab floors first '
+      + '(replay demote, nightly aside, analogue map, desk-edge suppress/demote), then keeps one BTC result. '
+      + 'SNIPER→PIN-REJECT, SMC→FVG-FILL, SQUEEZE→SQUEEZE-FIRE, SCALP→NR7-BREAK, MR→VWAP-REVERT. '
+      + 'The map never invents a prefer. G1–G7 stay closed.</div>';
+    return html;
   }
 
   function detailHtml(pick, omniInfo){
@@ -732,14 +938,14 @@ a global hard refresh.
     if (!el) return;
     el.innerHTML =
       '<div class="panel">'
-      + '<h2>OMNIBTC — Bitcoin only <span>every house strategy + indicator bank · one MOST PROBABLE setup</span></h2>'
-      + '<div class="note" style="margin-bottom:10px">BTC is the whole universe. SWING, SCALP, EDGE, PINE, squeeze, '
-      + 'mean-reversion, sniper, liquidity, SMART $, OI FLOW, funding-fade, COIL, DIV, TRAP, SMC, STAR TRADER, '
-      + '<b>OMNIROUTE (full ledger on 4H + 1H + 15m)</b> and the SEARCH full report all read the same coin on Delta and CoinDCX. '
-      + 'ONCHAIN / TERM / CARRY confirm, demote or refuse — they never mint levels. '
-      + 'Vol targeting · CVD · liquidation map INFO reads ride on the contract report and the winner card. '
-      + 'The desk then keeps <b>one</b> setup: 7/7 CLEAN with real ENTRY / STOP / T1 wins; otherwise the nearest watch; '
-      + 'otherwise WAIT. Extra engines never claim 7/7. G1–G7 stay as they are.</div>'
+      + '<h2>OMNIBTC — Bitcoin only <span>OMNIROUTE principal first · then one MOST PROBABLE</span></h2>'
+      + '<div class="note" style="margin-bottom:10px">BTC is the whole universe. House engines still read the coin — '
+      + 'SWING, SCALP, EDGE, PINE, squeeze, mean-reversion, sniper, liquidity, SMART $, OI FLOW, funding-fade, '
+      + 'COIL, DIV, TRAP, SMC, STAR TRADER, <b>OMNIROUTE (full ledger on 4H + 1H + 15m)</b> and the SEARCH report. '
+      + 'The OMNIROUTE tab principal runs first: replay demote, nightly aside, analogue map, desk-edge suppress/demote. '
+      + 'Only survivors become a result. Then the desk keeps <b>one</b> setup: 7/7 CLEAN with real ENTRY / STOP / T1; '
+      + 'otherwise the nearest watch; otherwise WAIT. Extra engines never claim 7/7. G1–G7 stay as they are.</div>'
+      + hgObtcPrincipalBannerHtml()
       + '<div class="note" id="obtcStat" aria-live="polite">idle — press SCAN BTC.</div>'
       + '<div class="row" style="margin-top:8px"><button type="button" class="btn" id="obtcRun">SCAN BTC</button></div>'
       + '<div class="cards" id="obtcCards" style="margin-top:12px"></div>'
@@ -779,6 +985,10 @@ a global hard refresh.
   W.hgObtcFilterUniverse = hgObtcFilterUniverse;
   W.hgObtcCandidateFromSignal = hgObtcCandidateFromSignal;
   W.hgObtcCandidatesFromReport = hgObtcCandidatesFromReport;
+  W.hgObtcReplayKind = hgObtcReplayKind;
+  W.hgObtcApplyOmniPrincipal = hgObtcApplyOmniPrincipal;
+  W.hgObtcCandidateFromOmniHit = hgObtcCandidateFromOmniHit;
+  W.hgObtcPrincipalBannerHtml = hgObtcPrincipalBannerHtml;
   W.hgObtcPick = hgObtcPick;
   W.hgObtcDefaultLegs = hgObtcDefaultLegs;
   W.hgObtcRunScan = hgObtcRunScan;

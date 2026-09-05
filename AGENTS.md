@@ -361,6 +361,11 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Quiet candle TTL is **720s** so cache spans the 10-min boundary. G1–G7 unchanged.
 - Tests: `tests/test-scan-every-10m.mjs`, `tests/test-hard-refresh.mjs`.
 
+### OMNIBTC applies OMNIROUTE principal first — hg-v613
+- OMNIBTC used to harvest any levelled house row (SNIPER / SMC / SCALP / MR / raw OMNIROUTE watches) and pick MOST PROBABLE. It now applies the **OMNIROUTE tab floors first**, then keeps one BTC result.
+- Floors: replay demote, nightly aside, analogue map (SNIPER→PIN-REJECT, SMC→FVG-FILL, SQUEEZE→SQUEEZE-FIRE, SCALP→NR7-BREAK, MR→VWAP-REVERT), desk-edge suppress/demote. OMNIROUTE hits also need `grade.ticket` and `formationOk !== false`. The map never invents a prefer. G1–G7 unchanged.
+- Tests: `tests/test-omnibtc.mjs`.
+
 ### OMNIROUTE house extras follow analogue floors — hg-v612
 - House extras had no v531 row, so **SNIPER / SMC / SQUEEZE / SCALP / MR** fail-opened on OMNIROUTE even after the replay book stood their analogues aside. They now map **SNIPER→PIN-REJECT, SMC→FVG-FILL, HOUSE-SQUEEZE→SQUEEZE-FIRE, SCALP→NR7-BREAK, MR→VWAP-REVERT**. Demote / nightly aside only — the map never invents a prefer.
 - Nightly 40-day asides still apply on top (AVWAP-RECLAIM / MMOVE / NR7-BREAK / ORB / VALUE lost on that window). Formation refuses those kinds. G1–G7 unchanged.
