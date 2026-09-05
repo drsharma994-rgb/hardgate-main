@@ -7,7 +7,36 @@
   'use strict';
   var W = (typeof window !== 'undefined') ? window : globalThis;
 
+  var HG_TAB_DAY_HOSTS = {
+    swing: 'swingDesk', scalp: 'scalpDesk', best: 'bestDesk',
+    edge: 'edgeDay', smart: 'smartDay', squeeze: 'squeezeDay',
+    reversalsniper: 'rsDay', smc: 'smcDay', ob: 'obDay', trap: 'trapDay',
+    div: 'divDay', coil: 'coilDay', apex: 'apexDay', oiflow: 'oiflowDay',
+    liqs: 'liqsDay', onchain: 'onchainDay', chartvision: 'chartvisionDay',
+    carry: 'carryDay', venueprem: 'venuepremDay', termbasis: 'termbasisDay',
+    omniroute: 'omniDay', omnipresent: 'opDay', omnigold1: 'og1Day', omnibtc: 'obtcDay'
+  };
+
+  var HG_TAB_DAY_PAINT_IDS = [
+    'swing', 'scalp', 'best', 'edge', 'smart', 'squeeze', 'reversalsniper', 'smc', 'ob',
+    'trap', 'div', 'coil', 'apex', 'oiflow', 'liqs', 'onchain', 'chartvision', 'carry',
+    'venueprem', 'termbasis', 'omniroute', 'omnipresent', 'omnigold1', 'omnibtc'
+  ];
+
   function fin(x){ var n = +x; return isFinite(n) ? n : NaN; }
+
+  function esc(s){
+    return String(s === null || s === undefined ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function resolveDeskTab(tab){
+    try{
+      if (typeof W.hgDeskFormationResolveTab === 'function')
+        return W.hgDeskFormationResolveTab(tab) || String(tab || '').toLowerCase();
+    }catch(eR){}
+    return String(tab || '').toLowerCase();
+  }
 
   function clampOpCost(night){
     var baked = 0.12;
@@ -56,6 +85,13 @@
       + ' — demote/tighten only, never loosens G1–G7.';
   }
 
+  function repaintAllTabDays(){
+    var i;
+    for (i = 0; i < HG_TAB_DAY_PAINT_IDS.length; i++){
+      try{ hgTabFormationDayPaint(HG_TAB_DAY_PAINT_IDS[i]); }catch(eP){}
+    }
+  }
+
   function hgFormationNightlyApply(j){
     if (!j || typeof j !== 'object') return null;
     W.HG_FORMATION_NIGHTLY = j;
@@ -75,13 +111,44 @@
         W.HG_OP_REPLAY_EVIDENCE = copy;
       }
     }catch(eOp){}
+    try{ repaintAllTabDays(); }catch(eRp){}
     return j;
   }
 
   function hgFormationNightlyBannerHtml(){
     var j = W.HG_FORMATION_NIGHTLY;
     return '<div class="note warn" data-hg-nightly-formation="1" style="display:block;margin-bottom:10px">'
-      + '<b>NIGHTLY</b> — ' + String(bannerText(j)).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</div>';
+      + '<b>NIGHTLY</b> — ' + esc(bannerText(j)) + '</div>';
+  }
+
+  function hgTabFormationDayHtml(tab){
+    var html = '';
+    try{ html += hgFormationNightlyBannerHtml() || ''; }catch(eN){}
+    try{
+      if (typeof W.hgDeskFormationEdgeBannerHtml === 'function')
+        html += W.hgDeskFormationEdgeBannerHtml(tab) || '';
+    }catch(eD){}
+    return html;
+  }
+
+  function hgTabFormationDayPaint(tab){
+    if (!tab || !W.document) return null;
+    var id = String(tab);
+    var pane = W.document.getElementById('tab_' + id);
+    if (!pane) return null;
+    var hostId = HG_TAB_DAY_HOSTS[id] || (id + 'Day');
+    var host = W.document.getElementById(hostId);
+    if (!host){
+      host = W.document.createElement('div');
+      host.id = hostId;
+      host.className = 'hg-tab-day-host';
+      var panel = pane.querySelector('.panel');
+      if (panel && panel.parentNode) panel.parentNode.insertBefore(host, panel.nextSibling);
+      else pane.insertBefore(host, pane.firstChild);
+    }
+    var html = hgTabFormationDayHtml(id);
+    host.innerHTML = html || '';
+    return host;
   }
 
   function hgOmniNightlyAside(kind){
@@ -112,8 +179,8 @@
     try{
       var N = W.HG_FORMATION_NIGHTLY;
       if (!N || !N.desk || !N.desk.byTab) return null;
-      var id = String(tab || '').toLowerCase();
-      return N.desk.byTab[id] || null;
+      var id = resolveDeskTab(tab);
+      return id ? (N.desk.byTab[id] || null) : null;
     }catch(eD){ return null; }
   }
 
@@ -124,6 +191,14 @@
         return N.desk.bestConfirmKinds.slice();
     }catch(eB){}
     return ['AVWAP-RECLAIM', 'CUSUM-SHIFT', 'DONCHIAN-DRIVE', 'MMOVE', 'NR7-BREAK'];
+  }
+
+  function syncBootstrap(){
+    try{
+      if (W.HG_FORMATION_NIGHTLY && W.HG_FORMATION_NIGHTLY.dayUtc) return W.HG_FORMATION_NIGHTLY;
+      if (W.HG_FORMATION_NIGHTLY_BOOT) return hgFormationNightlyApply(W.HG_FORMATION_NIGHTLY_BOOT);
+    }catch(eS){}
+    return null;
   }
 
   async function hgFormationNightlyLoad(){
@@ -140,14 +215,31 @@
     return { ok: false, error: lastErr || 'no nightly book' };
   }
 
+  function hgFormationNightlyWarm(){
+    return hgFormationNightlyLoad().then(function(j){
+      return (j && j.dayUtc) ? 'fresh' : (j && j.error ? j.error : 'no book');
+    }).catch(function(e){
+      return (e && e.message) || 'nightly load failed';
+    });
+  }
+
+  W.HG_TAB_DAY_HOSTS = HG_TAB_DAY_HOSTS;
   W.hgFormationNightlyApply = hgFormationNightlyApply;
   W.hgFormationNightlyBannerHtml = hgFormationNightlyBannerHtml;
+  W.hgTabFormationDayHtml = hgTabFormationDayHtml;
+  W.hgTabFormationDayPaint = hgTabFormationDayPaint;
   W.hgFormationNightlyLoad = hgFormationNightlyLoad;
+  W.hgFormationNightlyWarm = hgFormationNightlyWarm;
   W.hgOmniNightlyAside = hgOmniNightlyAside;
   W.hgOmniNightlyPrefer = hgOmniNightlyPrefer;
   W.hgDeskNightlyAction = hgDeskNightlyAction;
   W.hgDeskNightlyBestKinds = hgDeskNightlyBestKinds;
   W.HG_OG1_FORM_EDGE = W.HG_OG1_FORM_EDGE || { minRisk: 5, minDisp: 0.5, gated: false, biasSide: false };
+
+  syncBootstrap();
+
+  W.HG_warmups = W.HG_warmups || [];
+  W.HG_warmups.push({ id: 'formation-nightly', label: 'NIGHTLY FORMATION', run: hgFormationNightlyWarm });
 
   if (typeof W.setTimeout === 'function'){
     try{ W.setTimeout(function(){ hgFormationNightlyLoad(); }, 80); }catch(eLoad){}

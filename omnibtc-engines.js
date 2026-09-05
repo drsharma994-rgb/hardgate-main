@@ -344,6 +344,26 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
 
     function take(name, row, idleDetail){
       if (row && hasLevels(row)){
+        var refused = false;
+        if (gfn('hgObtcApplyOmniPrincipal')){
+          var app = W.hgObtcApplyOmniPrincipal(row);
+          if (!app || !app.pickable) refused = true;
+        } else if (gfn('hgDeskFormationEdgeApply')){
+          var tab = 'coil';
+          var n = String(name || '').toUpperCase();
+          if (/DIV/.test(n)) tab = 'divergence';
+          else if (/TRAP/.test(n)) tab = 'trap';
+          else if (/SMART/.test(n)) tab = 'smart';
+          else if (/OI FLOW/.test(n)) tab = 'oiflow';
+          else if (/SMC/.test(n)) tab = 'smc';
+          else if (/FUNDING/.test(n)) tab = 'fund-fade';
+          W.hgDeskFormationEdgeApply(row, { tab: tab, dir: row.dir });
+          if (row.deskEdgeAction === 'suppress' || row.deskEdgeAction === 'demote') refused = true;
+        }
+        if (refused){
+          ledger.push(ledgerRow(name, 'idle', row.dir, 'day book refused — ' + (row.deskEdgeWhy || row.omniPrincipal || 'principal')));
+          return;
+        }
         out.push(row);
         ledger.push(ledgerRow(name, 'signal', row.dir, row.detail || row.engine));
       } else {

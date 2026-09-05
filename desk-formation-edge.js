@@ -38,7 +38,8 @@
     carry: 'carry',
     venueprem: 'venueprem', venue: 'venueprem',
     termbasis: 'termbasis',
-    'fund-fade': 'fund-fade'
+    'fund-fade': 'fund-fade',
+    best: 'swing'
   };
 
   var DESKS = {

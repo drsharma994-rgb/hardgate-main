@@ -361,6 +361,13 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Quiet candle TTL is **720s** so cache spans the 10-min boundary. G1–G7 unchanged.
 - Tests: `tests/test-scan-every-10m.mjs`, `tests/test-hard-refresh.mjs`.
 
+### Every tab applies nightly day book — hg-v614
+- Re-ran the **960-bar** nightly rebake for **2026-09-05** and ship it synchronously via `formation-nightly-boot.js` so tabs do not miss the day book on first paint.
+- `hgTabFormationDayPaint` / `hgTabFormationDayHtml` paint the nightly + desk-edge banners on **SWING / SCALP / BEST / EDGE / SMART $ / SQUEEZE / SNIPER / SMC / OB / TRAP / DIV / COIL / APEX / OI FLOW / LIQS / ON-CHAIN / CHART VISION / CARRY / VENUE / TERM BASIS / OMNIROUTE / OMNIPRESENT / OMNIGOLD 1 / OMNIBTC**.
+- SWING / SCALP scans refuse day-suppressed CLEAN tickets (SCALP / SQUEEZE / TRAP / DIV / coil-expansion on today's book). Demoted rows route to NEAR watch, not MOST PROBABLE.
+- OMNIBTC extra engines (COIL / DIV / TRAP / SMC / SMART $ / OI FLOW) apply the same day principal before entering the bag.
+- Tests: `tests/test-formation-nightly.mjs`, `tests/test-desk-formation-edge.mjs`.
+
 ### OMNIBTC applies OMNIROUTE principal first — hg-v613
 - OMNIBTC used to harvest any levelled house row (SNIPER / SMC / SCALP / MR / raw OMNIROUTE watches) and pick MOST PROBABLE. It now applies the **OMNIROUTE tab floors first**, then keeps one BTC result.
 - Floors: replay demote, nightly aside, analogue map (SNIPER→PIN-REJECT, SMC→FVG-FILL, SQUEEZE→SQUEEZE-FIRE, SCALP→NR7-BREAK, MR→VWAP-REVERT), desk-edge suppress/demote. OMNIROUTE hits also need `grade.ticket` and `formationOk !== false`. The map never invents a prefer. G1–G7 unchanged.

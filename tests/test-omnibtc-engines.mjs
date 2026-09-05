@@ -71,8 +71,11 @@ console.log('== extra engines never claim 7/7 CLEAN ==');
     'OI FLOW reaches the bag when classify + setup fire');
   ok(run.candidates.some(function(c){ return /funding fade/i.test(c.engine || ''); }),
     'funding fade is opted in deliberately, not via swingTryClean');
-  ok(run.candidates.some(function(c){ return /SMC/.test(c.engine || ''); }),
-    'SMC ChoCh with levels is a watch, not a derived invent');
+  ok(!run.candidates.some(function(c){ return /SMC/.test(c.engine || ''); }),
+    'SMC ChoCh is refused by OMNIROUTE principal — baked FVG-FILL suppress');
+  ok(run.ledger.some(function(r){
+    return r.name === 'SMC ChoCh' && r.state === 'idle' && /refused|principal/i.test(r.detail || '');
+  }), 'SMC refusal is logged idle, not invented as a second ticket');
   ok(run.candidates.some(function(c){ return /STAR TRADER/.test(c.engine || ''); }),
     'STAR TRADER synthesis with a plan is read');
   const st = run.candidates.filter(function(c){ return /STAR TRADER/.test(c.engine || ''); })[0];

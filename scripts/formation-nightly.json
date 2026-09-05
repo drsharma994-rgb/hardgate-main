@@ -1,5 +1,5 @@
 {
-  "asOf": "2026-09-05T16:27:59.853Z",
+  "asOf": "2026-09-05T19:36:44.169Z",
   "dayUtc": "2026-09-05",
   "src": "nightly-formation-rebake",
   "neverLoosen": [
@@ -18,9 +18,9 @@
         "avgNet": -0.2054
       },
       "PO3": {
-        "n": 78,
-        "avgGross": 0.0385,
-        "avgNet": -0.1215
+        "n": 77,
+        "avgGross": 0.0909,
+        "avgNet": -0.0691
       },
       "ORB": {
         "n": 64,
@@ -34,13 +34,13 @@
       },
       "VALUE": {
         "n": 36,
-        "avgGross": -0.1667,
-        "avgNet": -0.3267
+        "avgGross": 0.0833,
+        "avgNet": -0.0767
       },
       "MMOVE": {
-        "n": 96,
-        "avgGross": -0.1875,
-        "avgNet": -0.3475
+        "n": 100,
+        "avgGross": -0.19,
+        "avgNet": -0.35
       },
       "HTF-PULLBACK": {
         "n": 2,
@@ -63,14 +63,14 @@
         "avgNet": -0.4933
       },
       "TREND-RECLAIM": {
-        "n": 59,
-        "avgGross": -0.2373,
-        "avgNet": -0.3973
+        "n": 58,
+        "avgGross": -0.2241,
+        "avgNet": -0.3841
       },
       "FVG-FILL": {
-        "n": 72,
-        "avgGross": 0.0417,
-        "avgNet": -0.1183
+        "n": 73,
+        "avgGross": 0.0274,
+        "avgNet": -0.1326
       },
       "BOS-RETEST": {
         "n": 40,
@@ -98,14 +98,14 @@
         "avgNet": -0.2369
       },
       "AVWAP-RECLAIM": {
-        "n": 44,
-        "avgGross": -0.1818,
-        "avgNet": -0.3418
+        "n": 45,
+        "avgGross": -0.1333,
+        "avgNet": -0.2933
       },
       "CUSUM-SHIFT": {
-        "n": 8,
-        "avgGross": 0.875,
-        "avgNet": 0.715
+        "n": 7,
+        "avgGross": 0.7143,
+        "avgNet": 0.5543
       },
       "VOL-EXPANSION": {
         "n": 6,
@@ -118,19 +118,19 @@
         "avgNet": -0.4677
       },
       "ENGULF-LEVEL": {
-        "n": 41,
-        "avgGross": -0.1951,
-        "avgNet": -0.3551
+        "n": 40,
+        "avgGross": -0.175,
+        "avgNet": -0.335
       },
       "POC-REVERT": {
-        "n": 50,
-        "avgGross": 0.02,
-        "avgNet": -0.14
+        "n": 48,
+        "avgGross": -0.0625,
+        "avgNet": -0.2225
       },
       "THREE-BAR": {
-        "n": 77,
-        "avgGross": -0.2597,
-        "avgNet": -0.4197
+        "n": 81,
+        "avgGross": -0.2222,
+        "avgNet": -0.3822
       }
     },
     "dayAside": [
@@ -142,24 +142,23 @@
       "NR7-BREAK",
       "ORB",
       "PIN-REJECT",
+      "POC-REVERT",
       "RSI-DIVERGE",
       "SPRING",
       "SQUEEZE-FIRE",
       "THREE-BAR",
       "TREND-RECLAIM",
-      "VALUE",
       "VWAP-REVERT"
     ],
     "dayPrefer": [
-      "CUSUM-SHIFT",
       "EQL-SWEEP"
     ]
   },
   "omnipresent": {
     "fadeBag": {
-      "n": 242,
-      "avgGross": -0.219,
-      "avgNet": -0.379
+      "n": 240,
+      "avgGross": -0.2,
+      "avgNet": -0.36
     },
     "costCeilingR": 0.08,
     "standAsideTriggered": true,

@@ -717,6 +717,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
     <div class="note">How this ranks — and how it refuses to lie: every candidate must first pass ALL seven swing hard gates (cascade+spread, HTF side, RSI, funding, volume, R:R≥2, no opposing CUSUM). That is binary; nothing "almost" passes. Institutional + time-decay vetoes drop stale momentum (&gt;6 bars, &lt;1 ATR displacement), CVD severe divergence, and L2 spoof traps before ranking. Survivors are scored across <b>9 independent evidence families</b> (F1–F9) plus R1/R2 robustness. ≥5/9 families required for #1 when a strong pool exists. WAIT is a first-class answer. The #1 panel shows <b>4H regime</b> (STRONG TREND / WEAK TREND / …) — per-symbol tape context, not the market-wide REGIME tab.</div>
     <div class="prog" id="bestProg"><i></i></div>
   </div>
+  <div id="bestDesk"></div>
   <div id="bestOut"><div class="empty">Run FIND BEST.</div></div>
 </section>
 
@@ -810,7 +811,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 </main>
 
 
-  <script src="build-stamp.js?v=613"></script>
+  <script src="build-stamp.js?v=614"></script>
 <script src="hghost.js"></script>
 <script src="indicators.js"></script>
 <script src="indicators2.js"></script>
@@ -851,16 +852,16 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="meanrev.js"></script>
 <script src="liqs.js"></script>
 <!-- xuniverse.js: no-tab IIFE library (combined Delta India + CoinDCX contract universe) consumed by engine.js/brain.js; registers no HG_tabs entry -->
-<script src="xuniverse.js?v=613"></script>
+<script src="xuniverse.js?v=614"></script>
 <!-- hg-forward.js: the out-of-sample accumulator. Loads BEFORE any tab that
      records into it; every consumer feature-checks it, so load order is
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=613"></script>
+<script src="hg-mechanics.js?v=614"></script>
 <script src="./hg-gates.js?v=559"></script>
-<script src="crypto-catalog.js?v=613"></script>
-<script src="omniroute.js?v=613"></script>
+<script src="crypto-catalog.js?v=614"></script>
+<script src="omniroute.js?v=614"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
 <script src="edge.js?v=559"></script>
@@ -873,30 +874,31 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- conviction-lock.js: ConvictionLockManager (anti-repaint lifecycle) -->
 <script src="conviction-lock.js"></script>
 <!-- goldind.js + goldscalp.js: GOLD SCALP tab (pure SMC/ICT + indicator detectors, then the tab) — after indicators2/binance/macro/xuniverse/news, before brain.js -->
-<script src="goldind.js?v=613"></script>
-<script src="gold-catalog.js?v=613"></script>
+<script src="goldind.js?v=614"></script>
+<script src="gold-catalog.js?v=614"></script>
 <!-- gold-seven-step.js: Gold Playbook 7-step setup engine (closed 1H/4H bars → bias → candidates → best fit → levels → checklist → TRIGGERED/WAIT/EXPIRED). Loads after goldind.js + gold-catalog.js (feature-checked), before the gold desks that render it. -->
-<script src="gold-seven-step.js?v=613"></script>
+<script src="gold-seven-step.js?v=614"></script>
 <script src="macro-feeds.js"></script>
-<script src="goldscalp.js?v=613"></script>
+<script src="goldscalp.js?v=614"></script>
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
-<script src="goldswing.js?v=613"></script>
+<script src="goldswing.js?v=614"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
-<script src="omnigold.js?v=613"></script>
+<script src="omnigold.js?v=614"></script>
 <!-- omnigold1.js: OMNIGOLD 1 tab — institutional 20-point gold setup engine (veto stack → regime → matrix → strategy → levels → V-Mod size → 12-gate cross-check → trigger). Reuses gold-seven-step.js helpers (HG_GOLD7); loads after it and after omnigold.js. -->
-<script src="omnigold1.js?v=613"></script>
+<script src="omnigold1.js?v=614"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
-<script src="omnipresent.js?v=613"></script>
+<script src="omnipresent.js?v=614"></script>
 <!-- formation-nightly.js: after 21:00 UTC, retunes OMNIROUTE / OMNIPRESENT / OMNIGOLD 1 + 19 desks from the rolling 40-day book. Demote/tighten only. -->
-<script src="formation-nightly.js?v=613"></script>
+<script src="formation-nightly.js?v=614"></script>
+<script src="formation-nightly-boot.js?v=614"></script>
 <!-- desk-formation-edge.js: OMNIROUTE v531 + BEST kinds + nightly desk overlay retune SWING/SCALP/EDGE/SMART$/SQUEEZE/SNIPER/SMC/OB/TRAP/DIV/COIL/APEX/OIFLOW/LIQS/ON-CHAIN/CHART VISION/CARRY/VENUE/TERM BASIS. Demote/suppress/prefer only. -->
-<script src="desk-formation-edge.js?v=613"></script>
+<script src="desk-formation-edge.js?v=614"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
 <script src="contract-report.js"></script>
 <!-- omnibtc-engines.js: SMART $ / OI FLOW / fade / COIL / DIV / TRAP / SMC / STAR TRADER + on-chain evidence. Loads BEFORE omnibtc.js so the tab can feature-check it. -->
-<script src="omnibtc-engines.js?v=613"></script>
+<script src="omnibtc-engines.js?v=614"></script>
 <!-- omnibtc.js: OMNIBTC tab. BTC only — every house engine + indicator bank, then one MOST PROBABLE. Loads AFTER contract-report.js (hgContractReportRun) and the engines it calls; every one is feature-checked. -->
-<script src="omnibtc.js?v=613"></script>
+<script src="omnibtc.js?v=614"></script>
 <script src="hggateflip.js"></script>
 <script src="brainrobust.js"></script>
 <script src="braininvalidation.js"></script>
@@ -920,17 +922,17 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="reliability.js"></script>
 <!-- formation-live.js: internet context for formation. Confirm / demote / refuse. Never invents levels. Loads BEFORE formation.js so hgFormTicket can feature-check it. -->
 <script src="formation-live.js?v=559"></script>
-<script src="formation.js?v=613"></script>
+<script src="formation.js?v=614"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=613"></script>
+<script src="supersetup.js?v=614"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=613"></script>
-<script src="super-gold.js?v=613"></script>
-<script src="super-best.js?v=613"></script>
-<script src="super-sniper.js?v=613"></script>
-<script src="super-book.js?v=613"></script>
-<script src="super-calibrate.js?v=613"></script>
+<script src="super-desk-common.js?v=614"></script>
+<script src="super-gold.js?v=614"></script>
+<script src="super-best.js?v=614"></script>
+<script src="super-sniper.js?v=614"></script>
+<script src="super-book.js?v=614"></script>
+<script src="super-calibrate.js?v=614"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -3123,6 +3125,7 @@ function showTab(t){
     if (typeof hgMaybeSyncCryptoDeskFromSnap === 'function') hgMaybeSyncCryptoDeskFromSnap(t);
     if (typeof scanLastHint === 'function') scanLastHint(t);
   }
+  if (typeof hgTabFormationDayPaint === 'function') hgTabFormationDayPaint(t);
   if (t === 'super-setup'){
     try{
       if (typeof window.superSetupRepaint === 'function') window.superSetupRepaint();
@@ -4500,6 +4503,29 @@ function hgApplyCryptoPostGate(hit, qv){
     hit.postGateChecked = true;
   }
 }
+/** Apply the committed nightly desk row + baked replay edge. Returns false when
+   the day book suppresses/demotes a would-be CLEAN ticket. */
+function hgDeskDayApplyHit(hit, tab, rows){
+  if (!hit || typeof hgDeskFormationEdgeApply !== 'function') return true;
+  hgDeskFormationEdgeApply(hit, { tab: tab, rows: rows, dir: hit.dir });
+  if (typeof hgDeskFormationEdgeTradeable === 'function')
+    return hgDeskFormationEdgeTradeable(hit, true);
+  return hit.deskEdgeAction !== 'suppress' && hit.deskEdgeAction !== 'demote';
+}
+function hgDeskDayRouteNear(hit, t, venueTag, tab, cardsEl, quiet, nearCands, nearFoundRef){
+  if (!hit || !(hit.nearClean || hit.demoted || hit.deskEdgeAction === 'demote')) return false;
+  nearCands.push(Object.assign({ sym: t.symbol, venueTag: venueTag }, hit));
+  nearFoundRef.n++;
+  if (!quiet){
+    if (nearFoundRef.n === 1){
+      const nearHdr = (typeof hgSetupNearHeaderHTML === 'function')
+        ? hgSetupNearHeaderHTML(1, tab) : '<div class="note warn" style="margin:10px 0 6px"><b>NEAR CLEAN (6/7)</b> — watch only.</div>';
+      cardsEl.insertAdjacentHTML('beforeend', nearHdr);
+    }
+    renderNearCleanCard(t, hit, cardsEl, tab, venueTag);
+  }
+  return true;
+}
 function hgRankCryptoCands(cands){
   const side = hgTapeSideFromPicture();
   if (typeof hgRankCryptoSetups === 'function'){
@@ -4564,6 +4590,7 @@ function hgCryptoDeskHasCards(kind){
 }
 function hgPaintCryptoDeskFromSnap(kind){
   if (typeof isManualScanBusy === 'function' && isManualScanBusy()) return;
+  if (typeof hgTabFormationDayPaint === 'function') hgTabFormationDayPaint(kind);
   const isSwing = kind === 'swing';
   const snap = isSwing ? __hgSwingScan : __hgScalpScan;
   const cardsEl = $(isSwing ? 'swingCards' : 'scalpCards');
@@ -4573,7 +4600,9 @@ function hgPaintCryptoDeskFromSnap(kind){
   if (typeof hgSetupInjectStyles === 'function') hgSetupInjectStyles();
   if (snap.audit && typeof hgPaintScanFunnel === 'function') hgPaintScanFunnel(kind, snap.audit);
   if (kind === 'swing' && snap.audit && typeof hgPaintGateReplayPanel === 'function') hgPaintGateReplayPanel(snap.audit);
-  const cands = (snap && Array.isArray(snap.cands)) ? snap.cands : [];
+  const cands = (snap && Array.isArray(snap.cands)) ? snap.cands.filter(function(c){
+    return c && c.deskEdgeAction !== 'suppress' && c.deskEdgeAction !== 'demote' && !c.demoted;
+  }) : [];
   const near = (snap && Array.isArray(snap.nearCands)) ? snap.nearCands : [];
   const side = typeof hgTapeSideFromPicture === 'function' ? hgTapeSideFromPicture() : null;
   const pick = (typeof hgPickMostProbable === 'function')
@@ -5036,9 +5065,12 @@ async function runScanLeg(kind, opts){
                 }
                 Object.assign(hit, fm.hit);
               }
-              if (typeof hgDeskFormationEdgeApply === 'function'){
-                hgDeskFormationEdgeApply(hit, { tab: 'swing', rows: rows, dir: hit.dir });
+              if (!hgDeskDayApplyHit(hit, 'swing', rows)){
                 if (hit.deskEdgeAction === 'suppress') return;
+                var nearRefS = { n: nearFound };
+                if (hgDeskDayRouteNear(hit, t, venueTag, 'swing', cardsEl, quiet, nearCands, nearRefS)) return;
+                nearFound = nearRefS.n;
+                return;
               }
               found++;
               cands.push(hgCryptoCandRow(t, hit, venueTag, hit));
@@ -5121,9 +5153,12 @@ async function runScanLeg(kind, opts){
                 }
                 Object.assign(hit, fm.hit);
               }
-              if (typeof hgDeskFormationEdgeApply === 'function'){
-                hgDeskFormationEdgeApply(hit, { tab: 'scalp', rows: h1, dir: hit.dir });
+              if (!hgDeskDayApplyHit(hit, 'scalp', h1)){
                 if (hit.deskEdgeAction === 'suppress') return;
+                var nearRefC = { n: nearFound };
+                if (hgDeskDayRouteNear(hit, t, venueTag, 'scalp', cardsEl, quiet, nearCands, nearRefC)) return;
+                nearFound = nearRefC.n;
+                return;
               }
               found++;
               cands.push(hgCryptoCandRow(t, hit, venueTag, hit));

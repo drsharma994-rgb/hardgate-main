@@ -215,16 +215,32 @@ console.log('== live desk overlay honours extra nightly tighten ==');
   ok(/desk tighten/.test(W.hgFormationNightlyBannerHtml()), 'banner mentions desk tighten');
 }
 
+console.log('== tab day paint + boot ==');
+{
+  const night = JSON.parse(read('scripts/formation-nightly.json'));
+  const W = bootDesks(night);
+  ok(typeof W.hgTabFormationDayHtml === 'function', 'hgTabFormationDayHtml exported');
+  ok(typeof W.hgTabFormationDayPaint === 'function', 'hgTabFormationDayPaint exported');
+  const html = W.hgTabFormationDayHtml('scalp');
+  ok(/NIGHTLY FORMATION/.test(html), 'tab html includes nightly banner');
+  ok(/SCALP SCAN/.test(html), 'tab html includes desk banner');
+  ok(W.hgDeskNightlyAction('div').action === 'suppress', 'div alias resolves divergence day row');
+  ok(fs.existsSync(path.join(ROOT, 'formation-nightly-boot.js')), 'formation-nightly-boot.js exists');
+  ok(/HG_FORMATION_NIGHTLY_BOOT/.test(read('formation-nightly-boot.js')), 'boot embeds committed book');
+}
+
 console.log('== wiring + stamp ==');
 {
   const html = read('index.html');
   ok(/formation-nightly\.js\?v=/.test(html), 'index loads formation-nightly.js');
+  ok(/formation-nightly-boot\.js\?v=/.test(html), 'index loads formation-nightly-boot.js');
   ok(/omnigold1\.js/.test(html) && html.indexOf('formation-nightly.js') > html.indexOf('omnigold1.js'),
      'nightly overlay loads after OMNIGOLD 1');
   ok(/omnipresent\.js/.test(html) && html.indexOf('formation-nightly.js') > html.indexOf('omnipresent.js'),
      'nightly overlay loads after OMNIPRESENT');
   ok(swCacheOk(read('sw.js')), 'sw.js HG_CACHE matches ' + HG_VER);
   ok(/formation-nightly\.js/.test(read('sw.js')), 'sw.js precaches formation-nightly.js');
+  ok(/formation-nightly-boot\.js/.test(read('sw.js')), 'sw.js precaches formation-nightly-boot.js');
   ok(/formation-nightly/.test(read('scripts/server.mjs')), 'server mounts formation-nightly API');
   ok(fs.existsSync(path.join(ROOT, 'scripts/nightly-formation-rebake.mjs')), 'rebake harness exists');
   ok(fs.existsSync(path.join(ROOT, '.github/workflows/formation-nightly.yml')), 'nightly workflow exists');

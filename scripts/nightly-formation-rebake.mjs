@@ -140,7 +140,15 @@ function writeApply(j){
     fs.mkdirSync(path.dirname(OUT_DATA), { recursive: true });
     fs.writeFileSync(OUT_DATA, text);
   }catch(e){ /* data/ may be read-only */ }
-  console.log('wrote', OUT_SCRIPTS);
+  const bootPath = path.join(ROOT, 'formation-nightly-boot.js');
+  const boot = '/* HARDGATE — committed nightly book. Auto-written by nightly-formation-rebake.mjs. Do not hand-edit. */\n'
+    + '(function(){\n\'use strict\';\n'
+    + 'var W=(typeof window!==\'undefined\')?window:globalThis;\n'
+    + 'W.HG_FORMATION_NIGHTLY_BOOT=' + JSON.stringify(j) + ';\n'
+    + 'if(typeof W.hgFormationNightlyApply===\'function\')W.hgFormationNightlyApply(W.HG_FORMATION_NIGHTLY_BOOT);\n'
+    + '})();\n';
+  fs.writeFileSync(bootPath, boot);
+  console.log('wrote', OUT_SCRIPTS, '+ formation-nightly-boot.js');
   return j;
 }
 
