@@ -361,9 +361,14 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Quiet candle TTL is **720s** so cache spans the 10-min boundary. G1–G7 unchanged.
 - Tests: `tests/test-scan-every-10m.mjs`, `tests/test-hard-refresh.mjs`.
 
+### REVERSAL SNIPER watch-only — hg-v611
+- **PIN-REJECT** n=115 net −1.03R (worst v531 bounce book). The tab still printed SEND TO TRADE PLAN / ADD TO BOOK after a demote stamp — those were the four stop-outs. Baked action is now **suppress**. Cards stay WATCH (levels visible). No trade handoff, no MOST PROBABLE, no SUPER SNIPER send, forward log `ticket: false`.
+- BEST confirm cannot un-suppress. Nightly can only keep suppress. G1–G7 unchanged.
+- Tests: `tests/test-reversalsniper.mjs`, `tests/test-desk-formation-edge.mjs`, `tests/test-super-sniper.mjs`.
+
 ### Desk formation edge — hg-v609
 - **OMNIROUTE BEST kinds** (AVWAP-RECLAIM, CUSUM-SHIFT, DONCHIAN-DRIVE, MMOVE, NR7-BREAK — the only v531 net-positive book, +0.10R prefer-only vs −0.24R overall) retune formation on **SWING SCAN, SCALP SCAN, EDGE, SMART $, SQUEEZE, REVERSAL SNIPER, SMC (FVG), ORDER BLOCKS, LIQUIDITY TRAP, DIVERGENCE, COIL, APEX, OI FLOW, LIQS, ON-CHAIN, CHART VISION, CARRY, VENUE, TERM BASIS**.
-- **What changes:** DIVERGENCE / SMC FVG **suppress** trade-ready tickets (RSI-DIVERGE −0.62R, FVG-FILL −0.19R). TRAP / SNIPER **demote** (sweep family / PIN-REJECT). SCALP + coil-expansion **prefer** NR7-BREAK. Fail-open desks get a BEST-confirm rank boost when a prefer kind or catalog tally agrees. Nightly asides can tighten further.
+- **What changes:** DIVERGENCE / SMC FVG / **REVERSAL SNIPER** **suppress** trade-ready tickets (RSI-DIVERGE −0.62R, FVG-FILL −0.19R, PIN-REJECT −1.03R). TRAP **demote** (sweep family). SCALP + coil-expansion **prefer** NR7-BREAK. Fail-open desks get a BEST-confirm rank boost when a prefer kind or catalog tally agrees. Nightly asides can tighten further.
 - **What does not change:** G1–G7, 7/7 SWING CLEAN, OMNIPRESENT 3+/2+, baked OMNIROUTE demotes. Never invents direction or tickets. House extras with no baked row stay fail-open.
 - Tests: `tests/test-desk-formation-edge.mjs`. Overlay: `desk-formation-edge.js`.
 

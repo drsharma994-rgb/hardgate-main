@@ -35,6 +35,20 @@ W.reversalSniperScan = function(){
 const snap = W.buildSnapFromRsScan(W, { balance: 1000, riskPct: 1 }, { allowStale: true });
 ok(snap.cands.length === 1 && snap.cands[0].minimalLossPass, 'sniper row passes desk');
 
+W.reversalSniperScan = function(){
+  return {
+    at: Date.now(),
+    cands: [{
+      id: 'rs|ETH|1', sym: 'ETHUSD', dir: 'long', entry: 100, stop: 99, t1: 102,
+      conviction: 8, lev: 35, rr: 2, deskEdgeAction: 'suppress', ticket: false, demoted: true
+    }]
+  };
+};
+const blocked = W.buildSnapFromRsScan(W, { balance: 1000, riskPct: 1 }, { allowStale: true });
+ok(blocked.cands.length === 1 && blocked.cands[0].minimalLossPass === false,
+  'PIN-REJECT suppress cannot SEND TO TRADE PLAN');
+ok(blocked.cands[0].watchOnly === true, 'suppressed sniper stays watch-only on SUPER SNIPER');
+
 const rsSrc = fs.readFileSync(path.join(root, 'reversalsniper.js'), 'utf8');
 ok(/rsRunScan/.test(rsSrc), 'reversalsniper exports headless rsRunScan');
 

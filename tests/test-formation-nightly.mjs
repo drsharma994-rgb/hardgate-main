@@ -131,7 +131,7 @@ console.log('== desk nightly tighten-only ==');
   ok(empty.byTab.smc.action === 'suppress', 'empty book keeps SMC suppress');
   ok(empty.byTab.divergence.action === 'suppress', 'empty book keeps DIVERGENCE suppress');
   ok(empty.byTab.trap.action === 'demote', 'empty book keeps TRAP demote');
-  ok(empty.byTab.reversalsniper.action === 'demote', 'empty book keeps SNIPER demote');
+  ok(empty.byTab.reversalsniper.action === 'suppress', 'empty book keeps SNIPER suppress');
   ok(empty.byTab.squeeze.action === 'watch', 'empty book keeps SQUEEZE watch');
   ok(empty.byTab.swing.action === 'watch', 'empty book keeps SWING fail-open');
   ok(empty.tighten.length === 0, 'empty book adds no extra desk tighten');

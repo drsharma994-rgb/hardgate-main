@@ -59,7 +59,8 @@ console.log('== toxic analogues suppress / demote ==');
   ok(W.hgDeskFormationEdgeTradeable(trap, true) === false, 'demote is not MOST PROBABLE / tradeable');
 
   const sniper = W.hgDeskFormationEdgeApply({ dir: 'long', tier: 'clean' }, { tab: 'reversalsniper' });
-  ok(sniper.deskEdgeAction === 'demote', 'SNIPER → PIN-REJECT demote');
+  ok(sniper.deskEdgeAction === 'suppress', 'SNIPER → PIN-REJECT suppress');
+  ok(W.hgDeskFormationEdgeTradeable(sniper, true) === false, 'SNIPER suppress is not tradeable');
 }
 
 console.log('== fail-open desks do not invent suppress ==');
