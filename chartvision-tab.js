@@ -95,7 +95,7 @@ function cvEvalSwing(item, rows4h){
   if (!hit) hit = cvFallbackPlan(m, rows4h);
   if (!hit || !hit.dir) return null;
 
-  return {
+  var out = {
     sym: item.sym,
     exchange: item.exchange,
     alsoOn: item.alsoOn,
@@ -121,6 +121,10 @@ function cvEvalSwing(item, rows4h){
     fundingPct: ticker.fundingPct,
     turnoverUsd: ticker.turnoverUsd
   };
+  if (typeof W.hgDeskFormationEdgeApply === 'function'){
+    W.hgDeskFormationEdgeApply(out, { tab: 'chartvision', rows: rows4h, dir: out.dir });
+  }
+  return out;
 }
 
 function cvEvalScalp(item, h1, m15){
@@ -145,7 +149,7 @@ function cvEvalScalp(item, h1, m15){
   }
   if (!hit || !hit.dir) return null;
 
-  return {
+  var out = {
     sym: item.sym,
     exchange: item.exchange,
     alsoOn: item.alsoOn,
@@ -169,6 +173,10 @@ function cvEvalScalp(item, h1, m15){
     fundingPct: ticker.fundingPct,
     turnoverUsd: ticker.turnoverUsd
   };
+  if (typeof W.hgDeskFormationEdgeApply === 'function'){
+    W.hgDeskFormationEdgeApply(out, { tab: 'chartvision', rows: h1, dir: out.dir });
+  }
+  return out;
 }
 
 function cvSort(a, b){

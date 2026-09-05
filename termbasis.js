@@ -74,7 +74,11 @@ the user runs a scan once.
       var t2 = dir === 'short' ? entry - 2 * risk : entry + 2 * risk;
       var sym = String(row.pair || '').replace(/USDT$/i, 'USD');
       if (!sym) return null;
-      return { sym: sym, dir: dir, entry: entry, stop: stop, t1: t1, t2: t2, regime: c.regime };
+      var plan = { sym: sym, dir: dir, entry: entry, stop: stop, t1: t1, t2: t2, regime: c.regime };
+      if (typeof hgDeskFormationEdgeApply === 'function'){
+        hgDeskFormationEdgeApply(plan, { tab: 'termbasis', dir: dir });
+      }
+      return plan;
     }catch(e){ return null; }
   }
 

@@ -69,6 +69,9 @@ function renderCard(snap){
   var p = snap.prem;
   var z = snap.z || {};
   var h = '<div class="card"><div class="chead"><span class="k">DELTA vs BINANCE PRICE</span></div>';
+  if (typeof hgDeskFormationEdgeBannerHtml === 'function'){
+    h += hgDeskFormationEdgeBannerHtml('venueprem');
+  }
   h += '<div class="note warn" style="margin-bottom:8px">PRICE premium on the venue you trade by hand — separate from CARRY (funding). '
     + esc(snap.note) + '</div>';
   h += '<div class="kv"><span class="k">Symbol</span><span class="v">' + esc(snap.sym) + '</span></div>';

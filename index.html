@@ -810,7 +810,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 </main>
 
 
-  <script src="build-stamp.js?v=608"></script>
+  <script src="build-stamp.js?v=609"></script>
 <script src="hghost.js"></script>
 <script src="indicators.js"></script>
 <script src="indicators2.js"></script>
@@ -851,16 +851,16 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="meanrev.js"></script>
 <script src="liqs.js"></script>
 <!-- xuniverse.js: no-tab IIFE library (combined Delta India + CoinDCX contract universe) consumed by engine.js/brain.js; registers no HG_tabs entry -->
-<script src="xuniverse.js?v=608"></script>
+<script src="xuniverse.js?v=609"></script>
 <!-- hg-forward.js: the out-of-sample accumulator. Loads BEFORE any tab that
      records into it; every consumer feature-checks it, so load order is
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=608"></script>
+<script src="hg-mechanics.js?v=609"></script>
 <script src="./hg-gates.js?v=559"></script>
-<script src="crypto-catalog.js?v=608"></script>
-<script src="omniroute.js?v=608"></script>
+<script src="crypto-catalog.js?v=609"></script>
+<script src="omniroute.js?v=609"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
 <script src="edge.js?v=559"></script>
@@ -873,22 +873,24 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- conviction-lock.js: ConvictionLockManager (anti-repaint lifecycle) -->
 <script src="conviction-lock.js"></script>
 <!-- goldind.js + goldscalp.js: GOLD SCALP tab (pure SMC/ICT + indicator detectors, then the tab) — after indicators2/binance/macro/xuniverse/news, before brain.js -->
-<script src="goldind.js?v=608"></script>
-<script src="gold-catalog.js?v=608"></script>
+<script src="goldind.js?v=609"></script>
+<script src="gold-catalog.js?v=609"></script>
 <!-- gold-seven-step.js: Gold Playbook 7-step setup engine (closed 1H/4H bars → bias → candidates → best fit → levels → checklist → TRIGGERED/WAIT/EXPIRED). Loads after goldind.js + gold-catalog.js (feature-checked), before the gold desks that render it. -->
-<script src="gold-seven-step.js?v=608"></script>
+<script src="gold-seven-step.js?v=609"></script>
 <script src="macro-feeds.js"></script>
-<script src="goldscalp.js?v=608"></script>
+<script src="goldscalp.js?v=609"></script>
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
-<script src="goldswing.js?v=608"></script>
+<script src="goldswing.js?v=609"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
-<script src="omnigold.js?v=608"></script>
+<script src="omnigold.js?v=609"></script>
 <!-- omnigold1.js: OMNIGOLD 1 tab — institutional 20-point gold setup engine (veto stack → regime → matrix → strategy → levels → V-Mod size → 12-gate cross-check → trigger). Reuses gold-seven-step.js helpers (HG_GOLD7); loads after it and after omnigold.js. -->
-<script src="omnigold1.js?v=608"></script>
+<script src="omnigold1.js?v=609"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
-<script src="omnipresent.js?v=608"></script>
+<script src="omnipresent.js?v=609"></script>
 <!-- formation-nightly.js: after 21:00 UTC, retunes OMNIROUTE / OMNIPRESENT / OMNIGOLD 1 from the day's book. Demote/tighten only. -->
-<script src="formation-nightly.js?v=608"></script>
+<script src="formation-nightly.js?v=609"></script>
+<!-- desk-formation-edge.js: OMNIROUTE v531 + BEST kinds retune SWING/SCALP/EDGE/SMART$/SQUEEZE/SNIPER/SMC/OB/TRAP/DIV/COIL/APEX/OIFLOW/LIQS/ON-CHAIN/CHART VISION/CARRY/VENUE/TERM BASIS. Demote/suppress/prefer only. -->
+<script src="desk-formation-edge.js?v=609"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
 <script src="contract-report.js"></script>
 <!-- omnibtc-engines.js: SMART $ / OI FLOW / fade / COIL / DIV / TRAP / SMC / STAR TRADER + on-chain evidence. Loads BEFORE omnibtc.js so the tab can feature-check it. -->
@@ -918,17 +920,17 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="reliability.js"></script>
 <!-- formation-live.js: internet context for formation. Confirm / demote / refuse. Never invents levels. Loads BEFORE formation.js so hgFormTicket can feature-check it. -->
 <script src="formation-live.js?v=559"></script>
-<script src="formation.js?v=608"></script>
+<script src="formation.js?v=609"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=608"></script>
+<script src="supersetup.js?v=609"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=608"></script>
-<script src="super-gold.js?v=608"></script>
-<script src="super-best.js?v=608"></script>
-<script src="super-sniper.js?v=608"></script>
-<script src="super-book.js?v=608"></script>
-<script src="super-calibrate.js?v=608"></script>
+<script src="super-desk-common.js?v=609"></script>
+<script src="super-gold.js?v=609"></script>
+<script src="super-best.js?v=609"></script>
+<script src="super-sniper.js?v=609"></script>
+<script src="super-book.js?v=609"></script>
+<script src="super-calibrate.js?v=609"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -1937,7 +1939,7 @@ async function runCoilScanLeg(opts){
           (pl ? planBlockExact(pl, pl.note) : 'levels unavailable — size down')
             + '<br>Wait for price to sweep below '+px(coilLow)+', then manually bid the reclaim. Do not buy inside the chop.',
           pl?pl.entry:coilLow, pl?pl.stop:coilLow*0.95, pl?pl.t1:coilHigh, null,
-          Object.assign({ scanner: 'coil', strategy: 'coil', t2: pl ? pl.t2 : null, tier: 'forming', stack: coilStack,
+          Object.assign({ scanner: 'coil', strategy: 'coil', t2: pl ? pl.t2 : null, tier: 'forming', stack: coilStack, rows: rows,
             strategyConfirm: pl && pl.strategyConfirm, strategyWith: pl && pl.strategyWith, strategyAgainst: pl && pl.strategyAgainst },
             (typeof hgStrategyBookFields === 'function' && pl) ? hgStrategyBookFields(pl) : {})));
       }catch(e){}
@@ -2098,7 +2100,7 @@ async function runDivScanLeg(opts){
        ["funding", t.fundingPct!==null?fmt(t.fundingPct,4)+"%":"n/a"],["regime",reg.label]],
       ["G1 pivot structure","G2 span>=10 bars","G3 funding","G4 no opposing CUSUM","G5 R:R>=2"],
       planBlockExact(plObj, plObj.note), entry, stop, t1, null,
-      Object.assign({ scanner: 'divergence', strategy: 'divergence', t2: t2, stack: divStack,
+      Object.assign({ scanner: 'divergence', strategy: 'divergence', t2: t2, stack: divStack, rows: rows,
         strategyConfirm: plObj.strategyConfirm, strategyWith: plObj.strategyWith, strategyAgainst: plObj.strategyAgainst },
         (typeof hgStrategyBookFields === 'function') ? hgStrategyBookFields(plObj) : {})));
         logSetup(t.symbol, dir, "div", entry, stop, t1);
@@ -2707,7 +2709,7 @@ async function runApexScanLeg(opts){
         (pl ? planBlockExact(pl, pl.note) : 'levels unavailable — size down')
           + '<br>MANUAL TRIGGER: do not buy yet. Pull up a 15m chart of BTC. The exact minute BTC prints a bullish reclaim or sweeps a local low, buy this asset.',
         pl?pl.entry:r.mark, pl?pl.stop:r.e50, pl?pl.t1:r.mark*1.05, null,
-        Object.assign({ scanner: 'apex', strategy: 'apex', t2: pl ? pl.t2 : null, tier: 'forming', stack: apexStack,
+        Object.assign({ scanner: 'apex', strategy: 'apex', t2: pl ? pl.t2 : null, tier: 'forming', stack: apexStack, rows: r.rows,
           strategyConfirm: pl && pl.strategyConfirm, strategyWith: pl && pl.strategyWith, strategyAgainst: pl && pl.strategyAgainst },
           (typeof hgStrategyBookFields === 'function' && pl) ? hgStrategyBookFields(pl) : {})));
     });
@@ -2813,7 +2815,7 @@ __cardsHtml.push(cardHTML(hgCardVenueSym(t.symbol, venueTag), dir,
 ['G1 '+fmt(outerSD,1)+' SD extreme','G2 reclaimed '+fmt(innerSD,1)+' SD','G3 momentum exhausted at sweep'],
 planBlockExact(trapPl, trapPl.note)
 + `<br>Dynamic mean reversion: bands auto-scaled to ${fmt(outerSD,1)} SD based on this asset's volatility. Momentum exhaustion (RSI ${fmt(rsiAtSweep,1)}) is read at the moment of the extreme wick, not after price already reclaimed.`,
-trapPl.entry, trapPl.stop, trapPl.t1, null, Object.assign({ scanner: 'liq-trap', strategy: 'liq-trap', t2: trapPl.t2, stack: trapStack,
+trapPl.entry, trapPl.stop, trapPl.t1, null, Object.assign({ scanner: 'liq-trap', strategy: 'liq-trap', t2: trapPl.t2, stack: trapStack, rows: rows,
   strategyConfirm: trapPl.strategyConfirm, strategyWith: trapPl.strategyWith, strategyAgainst: trapPl.strategyAgainst },
   (typeof hgStrategyBookFields === 'function') ? hgStrategyBookFields(trapPl) : {})));
 }catch(e){}
@@ -2901,7 +2903,7 @@ async function runSmcScanLeg(opts){
         ], ['G1 Displacement (FVG)', 'G2 Unmitigated', 'G3 Price inside POI', 'G4 HTF Trend Aligned'],
         planBlockExact(smcPl, smcPl.note)
         + '<br>SMC TAP: price has pulled back into a 4H institutional imbalance. Drop to a 5m/15m chart, wait for a local sweep or Change of Character (CHOCH) in your direction, then execute.', smcPl.entry, smcPl.stop, smcPl.t1, null,
-        Object.assign({ scanner: 'smc', strategy: 'smc', t2: smcPl.t2, tier: 'near', stack: smcStack,
+        Object.assign({ scanner: 'smc', strategy: 'smc', t2: smcPl.t2, tier: 'near', stack: smcStack, rows: rows,
           strategyConfirm: smcPl.strategyConfirm, strategyWith: smcPl.strategyWith, strategyAgainst: smcPl.strategyAgainst },
           (typeof hgStrategyBookFields === 'function') ? hgStrategyBookFields(smcPl) : {})));
       } catch(e) { /* skip this symbol */ }
@@ -2976,7 +2978,7 @@ async function runObScanLeg(opts){
         ], ['G1 Valid Order Block', 'G2 Unmitigated', 'G3 Price inside OB', 'G4 HTF Trend Aligned'],
         planBlockExact(obPl, obPl.note)
         + '<br>ORDER BLOCK TAP: price has pulled back into an unmitigated 4H order block. Drop to a 5m/15m chart, wait for a local sweep or Change of Character (CHOCH) in your direction, then execute.', obPl.entry, obPl.stop, obPl.t1, null,
-        Object.assign({ scanner: 'ob', strategy: 'ob', t2: obPl.t2, tier: 'near', stack: obStack,
+        Object.assign({ scanner: 'ob', strategy: 'ob', t2: obPl.t2, tier: 'near', stack: obStack, rows: rows,
           strategyConfirm: obPl.strategyConfirm, strategyWith: obPl.strategyWith, strategyAgainst: obPl.strategyAgainst },
           (typeof hgStrategyBookFields === 'function') ? hgStrategyBookFields(obPl) : {})));
       } catch(e) { /* skip this symbol */ }
@@ -3975,6 +3977,28 @@ function inlineScanStack(dir, sym, rows, opts){
 function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId, bookMeta){
   const symHtml = String(sym).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   bookMeta = bookMeta || {};
+  try {
+    if (typeof hgDeskFormationEdgeApply === 'function'){
+      var _edgeCand = {
+        dir: dir, entry: entry, stop: stop, t1: t1,
+        kind: bookMeta.strategy || bookMeta.scanner,
+        scanner: bookMeta.scanner, strategy: bookMeta.strategy,
+        tier: bookMeta.tier, rows: bookMeta.rows
+      };
+      hgDeskFormationEdgeApply(_edgeCand, { tab: bookMeta.scanner, kind: bookMeta.strategy, rows: bookMeta.rows, dir: dir });
+      if (_edgeCand.deskEdgeAction){
+        bookMeta.deskEdgeAction = _edgeCand.deskEdgeAction;
+        bookMeta.deskEdgeWhy = _edgeCand.deskEdgeWhy;
+        bookMeta.deskEdgeBest = _edgeCand.deskEdgeBest;
+        if (_edgeCand.stamps) bookMeta.stamps = (bookMeta.stamps || []).concat(_edgeCand.stamps);
+        if (_edgeCand.demoted) bookMeta.demoted = true;
+        if ((_edgeCand.deskEdgeAction === 'suppress' || _edgeCand.deskEdgeAction === 'demote')
+            && String(bookMeta.tier || 'clean').toLowerCase() === 'clean'){
+          bookMeta.tier = 'near';
+        }
+      }
+    }
+  } catch (eDeskEdge) {}
   const tier = (bookMeta.tier || 'clean').toLowerCase();
   const tierCls = tier === 'near' ? ' tier-near' : (tier === 'forming' ? ' tier-forming' : '');
   const tierLabel = (typeof hgSetupTierLabel === 'function') ? hgSetupTierLabel(tier) : (tier === 'near' ? 'NEAR' : 'CLEAN');
@@ -3986,6 +4010,12 @@ function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId, bookMet
         postGateUnchecked: bookMeta.postGateUnchecked,
         postGateUncheckedReasons: bookMeta.postGateUncheckedReasons,
         demoted: bookMeta.demoted
+      })
+    : '';
+  const deskEdgeBanner = (bookMeta.deskEdgeWhy && typeof hgDeskFormationEdgeBannerHtml === 'function')
+    ? hgDeskFormationEdgeBannerHtml({
+        scanner: bookMeta.scanner, tab: bookMeta.scanner, kind: bookMeta.strategy,
+        deskEdgeTab: bookMeta.scanner, deskEdgeWhy: bookMeta.deskEdgeWhy
       })
     : '';
   const tradeMeta = { t2: bookMeta.t2, stack: bookMeta.stack, scanner: scanId, strategy: stratId, venue: bookMeta.venue };
@@ -4051,6 +4081,7 @@ function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId, bookMet
     <div class="mini">${mini.map(([k,v])=>`<span class="k">${k}</span><span>${v}</span>`).join('')}</div>
     ${stackHtml}
     ${postGateBanner}
+    ${deskEdgeBanner}
     <div class="gates">${gates.map(g=>`<span class="gpip ok">${g}</span>`).join('')}</div>
     <div class="plan">${plan}</div>
     ${strategyDetail}
@@ -4437,6 +4468,14 @@ function hgCryptoCandRow(t, hit, venueTag, vetoMeta){
   }
   if (typeof hgCryptoRankBoost === 'function'){
     row.rankBoost = hgCryptoRankBoost(t.symbol, hit.dir, hit.rr, vetoMeta || {});
+  }
+  if (hit && (hit.deskEdgeAction || hit.edgeBoost || hit.demoted)){
+    row.deskEdgeAction = hit.deskEdgeAction;
+    row.deskEdgeWhy = hit.deskEdgeWhy;
+    row.edgeBoost = hit.edgeBoost;
+    row.demoted = !!hit.demoted;
+    row.rankBoost = (row.rankBoost || 0) + (hit.rankBoost || 0);
+    if (hit.stamps) row.stamps = (row.stamps || []).concat(hit.stamps);
   }
   row.id = hgCryptoSetupId(row);
   return row;
@@ -4990,12 +5029,16 @@ async function runScanLeg(kind, opts){
                 hgApplyCryptoPostGate(hit, qv);
               }
               if (typeof hgFormTicket === 'function'){
-                const fm = hgFormTicket(hit, { rows: rows, style: 'swing', ticker: tScan, a4: hit.a4 });
+                const fm = hgFormTicket(hit, { rows: rows, style: 'swing', ticker: tScan, a4: hit.a4, tab: 'swing' });
                 if (!fm.ok){
                   audit.qualitySkip[fm.tag || 'formation'] = (audit.qualitySkip[fm.tag || 'formation'] || 0) + 1;
                   return;
                 }
                 Object.assign(hit, fm.hit);
+              }
+              if (typeof hgDeskFormationEdgeApply === 'function'){
+                hgDeskFormationEdgeApply(hit, { tab: 'swing', rows: rows, dir: hit.dir });
+                if (hit.deskEdgeAction === 'suppress') return;
               }
               found++;
               cands.push(hgCryptoCandRow(t, hit, venueTag, hit));
@@ -5071,12 +5114,16 @@ async function runScanLeg(kind, opts){
                 hgApplyCryptoPostGate(hit, qv);
               }
               if (typeof hgFormTicket === 'function'){
-                const fm = hgFormTicket(hit, { rows: h1, m15: m15, style: 'scalp', ticker: tScan, a: hit.a });
+                const fm = hgFormTicket(hit, { rows: h1, m15: m15, style: 'scalp', ticker: tScan, a: hit.a, tab: 'scalp' });
                 if (!fm.ok){
                   audit.qualitySkip[fm.tag || 'formation'] = (audit.qualitySkip[fm.tag || 'formation'] || 0) + 1;
                   return;
                 }
                 Object.assign(hit, fm.hit);
+              }
+              if (typeof hgDeskFormationEdgeApply === 'function'){
+                hgDeskFormationEdgeApply(hit, { tab: 'scalp', rows: h1, dir: hit.dir });
+                if (hit.deskEdgeAction === 'suppress') return;
               }
               found++;
               cands.push(hgCryptoCandRow(t, hit, venueTag, hit));

@@ -18,9 +18,9 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v608',
-  pack: 'Nightly formation rebake — OMNIROUTE / OMNIPRESENT / OMNIGOLD 1',
-  built: '2026-09-05T06:20:00Z',
+  version: 'hg-v609',
+  pack: 'Desk formation edge — OMNIROUTE BEST on 19 crypto tabs',
+  built: '2026-09-05T07:10:00Z',
   note: 'gold-seven-step.js: Playbook Parts 1–9 + Master Catalog seven-step readout — closed 1H/4H bars (4H derived @22:00 UTC), VP POC/VAH/VAL/HVN/LVN, Asia/PDH/PDL/PWH/PWL/EQ pools, fresh OBs, ATR/ADR/RSI/EMA/KER, DST sessions, news lockout, strategy eligibility, 4H bias, rule-based confluence rank, 12 core gates + G14, entry/stop/T1/T2/size/venue basis, TRIGGERED/WAIT/EXPIRED. IST with UTC. No win rates. Against-tape candidates HELD.'
 };
 

@@ -334,7 +334,12 @@ function oiflowSetup(cls, rows4h, rows1h){
         cls: { dir: dirLow, longEv: cls.longEv, shortEv: cls.shortEv, regime: cls.regime, score: cls.score, total: cls.total },
         allowFade: true,
       });
-      if (bl && bl.ok && bl.plan) return bl.plan;
+      if (bl && bl.ok && bl.plan){
+        if (typeof hgDeskFormationEdgeApply === 'function'){
+          hgDeskFormationEdgeApply(bl.plan, { tab: 'oiflow', rows: rows4h, dir: dirLow });
+        }
+        return bl.plan;
+      }
       if (bl && bl.veto) return null;
     }
     if (typeof smartSetup === 'function'){
@@ -343,6 +348,9 @@ function oiflowSetup(cls, rows4h, rows1h){
                         rows4h, rows1h) || null;
       if (setup && typeof hgApplyExactEntry === 'function'){
         setup = hgApplyExactEntry(setup, rows4h, { rows1h: rows1h, style: setup.type || 'swing', preferEdge: true }) || setup;
+      }
+      if (setup && typeof hgDeskFormationEdgeApply === 'function'){
+        hgDeskFormationEdgeApply(setup, { tab: 'oiflow', rows: rows4h, dir: dirLow });
       }
       return setup;
     }
