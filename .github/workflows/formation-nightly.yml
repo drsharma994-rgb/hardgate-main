@@ -1,6 +1,6 @@
 # HARDGATE nightly formation rebake.
-# After London close (~21:30 UTC) walk the day's 1h bars and retune
-# OMNIROUTE / OMNIPRESENT / OMNIGOLD 1 formation (demote/tighten only).
+# After London close (~21:30 UTC) walk the rolling 40-day 1h book and retune
+# OMNIROUTE / OMNIPRESENT / OMNIGOLD 1 + 19 desk tabs (demote/tighten only).
 name: HARDGATE Nightly Formation
 
 on:
@@ -27,7 +27,7 @@ jobs:
           node-version: '22'
 
       - name: Rebake the day book
-        run: node scripts/nightly-formation-rebake.mjs --bars=120
+        run: node scripts/nightly-formation-rebake.mjs --bars=960
 
       - name: Commit the overlay if it changed
         run: |

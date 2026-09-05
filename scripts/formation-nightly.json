@@ -1,88 +1,168 @@
 {
-  "asOf": "2026-09-05T06:08:33.820Z",
+  "asOf": "2026-09-05T16:27:59.853Z",
   "dayUtc": "2026-09-05",
   "src": "nightly-formation-rebake",
   "neverLoosen": [
     "G1-G7",
     "OMNIPRESENT 3+/2+",
     "baked OMNIROUTE demotes",
+    "baked desk suppress/demote",
     "OG1 SL$ >= $5",
     "OG1 displacement >= 0.5 ATR"
   ],
   "omniroute": {
     "dayBags": {
-      "MMOVE": {
-        "n": 2,
-        "avgGross": -1,
-        "avgNet": -1.16
-      },
-      "VWAP-REVERT": {
-        "n": 2,
-        "avgGross": -1,
-        "avgNet": -1.16
-      },
-      "ENGULF-LEVEL": {
-        "n": 3,
-        "avgGross": -1,
-        "avgNet": -1.16
-      },
-      "THREE-BAR": {
-        "n": 4,
-        "avgGross": -1,
-        "avgNet": -1.16
-      },
       "SPRING": {
-        "n": 3,
-        "avgGross": 1,
-        "avgNet": 0.84
+        "n": 66,
+        "avgGross": -0.0454,
+        "avgNet": -0.2054
       },
       "PO3": {
-        "n": 1,
-        "avgGross": -1,
-        "avgNet": -1.16
+        "n": 78,
+        "avgGross": 0.0385,
+        "avgNet": -0.1215
       },
       "ORB": {
+        "n": 64,
+        "avgGross": -0.2969,
+        "avgNet": -0.4569
+      },
+      "ABSORB": {
         "n": 2,
         "avgGross": -1,
         "avgNet": -1.16
+      },
+      "VALUE": {
+        "n": 36,
+        "avgGross": -0.1667,
+        "avgNet": -0.3267
+      },
+      "MMOVE": {
+        "n": 96,
+        "avgGross": -0.1875,
+        "avgNet": -0.3475
+      },
+      "HTF-PULLBACK": {
+        "n": 2,
+        "avgGross": -1,
+        "avgNet": -1.16
+      },
+      "EXHAUST-REVERT": {
+        "n": 2,
+        "avgGross": 0.5,
+        "avgNet": 0.34
+      },
+      "VWAP-REVERT": {
+        "n": 74,
+        "avgGross": -0.3514,
+        "avgNet": -0.5114
+      },
+      "NR7-BREAK": {
+        "n": 45,
+        "avgGross": -0.3333,
+        "avgNet": -0.4933
+      },
+      "TREND-RECLAIM": {
+        "n": 59,
+        "avgGross": -0.2373,
+        "avgNet": -0.3973
       },
       "FVG-FILL": {
-        "n": 2,
-        "avgGross": -1,
-        "avgNet": -1.16
+        "n": 72,
+        "avgGross": 0.0417,
+        "avgNet": -0.1183
       },
       "BOS-RETEST": {
-        "n": 1,
-        "avgGross": -1,
-        "avgNet": -1.16
+        "n": 40,
+        "avgGross": -0.1,
+        "avgNet": -0.26
       },
       "EQH-SWEEP": {
-        "n": 2,
-        "avgGross": 2,
-        "avgNet": 1.84
+        "n": 25,
+        "avgGross": -0.04,
+        "avgNet": -0.2
+      },
+      "EQL-SWEEP": {
+        "n": 20,
+        "avgGross": 0.2,
+        "avgNet": 0.04
+      },
+      "SQUEEZE-FIRE": {
+        "n": 24,
+        "avgGross": -0.125,
+        "avgNet": -0.285
+      },
+      "RSI-DIVERGE": {
+        "n": 13,
+        "avgGross": -0.0769,
+        "avgNet": -0.2369
+      },
+      "AVWAP-RECLAIM": {
+        "n": 44,
+        "avgGross": -0.1818,
+        "avgNet": -0.3418
       },
       "CUSUM-SHIFT": {
-        "n": 1,
-        "avgGross": -1,
-        "avgNet": -1.16
+        "n": 8,
+        "avgGross": 0.875,
+        "avgNet": 0.715
+      },
+      "VOL-EXPANSION": {
+        "n": 6,
+        "avgGross": -0.5,
+        "avgNet": -0.66
       },
       "PIN-REJECT": {
-        "n": 1,
-        "avgGross": -1,
-        "avgNet": -1.16
+        "n": 65,
+        "avgGross": -0.3077,
+        "avgNet": -0.4677
+      },
+      "ENGULF-LEVEL": {
+        "n": 41,
+        "avgGross": -0.1951,
+        "avgNet": -0.3551
+      },
+      "POC-REVERT": {
+        "n": 50,
+        "avgGross": 0.02,
+        "avgNet": -0.14
+      },
+      "THREE-BAR": {
+        "n": 77,
+        "avgGross": -0.2597,
+        "avgNet": -0.4197
       }
     },
-    "dayAside": [],
-    "dayPrefer": []
+    "dayAside": [
+      "AVWAP-RECLAIM",
+      "BOS-RETEST",
+      "ENGULF-LEVEL",
+      "EQH-SWEEP",
+      "MMOVE",
+      "NR7-BREAK",
+      "ORB",
+      "PIN-REJECT",
+      "RSI-DIVERGE",
+      "SPRING",
+      "SQUEEZE-FIRE",
+      "THREE-BAR",
+      "TREND-RECLAIM",
+      "VALUE",
+      "VWAP-REVERT"
+    ],
+    "dayPrefer": [
+      "CUSUM-SHIFT",
+      "EQL-SWEEP"
+    ]
   },
   "omnipresent": {
     "fadeBag": {
-      "n": 3,
-      "avgGross": -1,
-      "avgNet": -1.16
+      "n": 242,
+      "avgGross": -0.219,
+      "avgNet": -0.379
     },
-    "costCeilingR": 0.12,
-    "standAsideTriggered": false,
+    "costCeilingR": 0.08,
+    "standAsideTriggered": true,
     "goldAside": true
   },
   "omnigold1": {
@@ -90,9 +170,203 @@
     "minDisp": 0.5,
     "gated": false,
     "biasSide": false,
-    "bestNamed": "raw",
-    "dayExpR": -0.4355
+    "bestNamed": "minRisk5",
+    "dayExpR": -0.6294
   },
-  "note": "Day book retunes which setups form tomorrow. Baked toxic kinds stay stood aside. Never invents tickets.",
-  "bars": 120
+  "desk": {
+    "suppress": [
+      "coil-expansion",
+      "divergence",
+      "reversalsniper",
+      "scalp",
+      "smc",
+      "squeeze",
+      "trap"
+    ],
+    "demote": [],
+    "prefer": [],
+    "tighten": [
+      "coil-expansion",
+      "reversalsniper",
+      "scalp",
+      "squeeze",
+      "trap"
+    ],
+    "bestConfirmKinds": [
+      "CUSUM-SHIFT",
+      "DONCHIAN-DRIVE"
+    ],
+    "byTab": {
+      "swing": {
+        "action": "watch",
+        "baked": "watch",
+        "analogue": null,
+        "label": "SWING SCAN",
+        "extra": false,
+        "why": "fail-open"
+      },
+      "scalp": {
+        "action": "suppress",
+        "baked": "prefer",
+        "analogue": "NR7-BREAK",
+        "label": "SCALP SCAN",
+        "extra": true,
+        "why": "NR7-BREAK day-aside — desk suppress"
+      },
+      "edge": {
+        "action": "watch",
+        "baked": "watch",
+        "analogue": null,
+        "label": "EDGE",
+        "extra": false,
+        "why": "fail-open"
+      },
+      "smart": {
+        "action": "watch",
+        "baked": "watch",
+        "analogue": null,
+        "label": "SMART $",
+        "extra": false,
+        "why": "fail-open"
+      },
+      "squeeze": {
+        "action": "suppress",
+        "baked": "watch",
+        "analogue": "SQUEEZE-FIRE",
+        "label": "SQUEEZE",
+        "extra": true,
+        "why": "SQUEEZE-FIRE day-aside — desk suppress"
+      },
+      "reversalsniper": {
+        "action": "suppress",
+        "baked": "demote",
+        "analogue": "PIN-REJECT",
+        "label": "REVERSAL SNIPER",
+        "extra": true,
+        "why": "PIN-REJECT day-aside — desk suppress"
+      },
+      "smc": {
+        "action": "suppress",
+        "baked": "suppress",
+        "analogue": null,
+        "label": "SMC (FVG)",
+        "extra": false,
+        "why": "baked suppress"
+      },
+      "ob": {
+        "action": "watch",
+        "baked": "watch",
+        "analogue": null,
+        "label": "ORDER BLOCKS",
+        "extra": false,
+        "why": "fail-open"
+      },
+      "trap": {
+        "action": "suppress",
+        "baked": "demote",
+        "analogue": "EQH-SWEEP",
+        "label": "LIQUIDITY TRAP",
+        "extra": true,
+        "why": "EQH-SWEEP day-aside — desk suppress"
+      },
+      "divergence": {
+        "action": "suppress",
+        "baked": "suppress",
+        "analogue": "RSI-DIVERGE",
+        "label": "DIVERGENCE",
+        "extra": false,
+        "why": "RSI-DIVERGE day-aside — desk suppress"
+      },
+      "coil": {
+        "action": "watch",
+        "baked": "watch",
+        "analogue": null,
+        "label": "COIL WATCHLIST",
+        "extra": false,
+        "why": "fail-open"
+      },
+      "coil-expansion": {
+        "action": "suppress",
+        "baked": "prefer",
+        "analogue": "NR7-BREAK",
+        "label": "COIL EXPANSION",
+        "extra": true,
+        "why": "NR7-BREAK day-aside — desk suppress"
+      },
+      "apex": {
+        "action": "watch",
+        "baked": "watch",
+        "analogue": null,
+        "label": "APEX (RS)",
+        "extra": false,
+        "why": "fail-open"
+      },
+      "oiflow": {
+        "action": "watch",
+        "baked": "watch",
+        "analogue": null,
+        "label": "OI FLOW",
+        "extra": false,
+        "why": "fail-open"
+      },
+      "liqs": {
+        "action": "watch",
+        "baked": "watch",
+        "analogue": null,
+        "label": "LIQS",
+        "extra": false,
+        "why": "fail-open"
+      },
+      "onchain": {
+        "action": "watch",
+        "baked": "watch",
+        "analogue": null,
+        "label": "ON-CHAIN",
+        "extra": false,
+        "why": "fail-open"
+      },
+      "chartvision": {
+        "action": "watch",
+        "baked": "watch",
+        "analogue": null,
+        "label": "CHART VISION",
+        "extra": false,
+        "why": "fail-open"
+      },
+      "carry": {
+        "action": "watch",
+        "baked": "watch",
+        "analogue": null,
+        "label": "CARRY",
+        "extra": false,
+        "why": "fail-open"
+      },
+      "venueprem": {
+        "action": "watch",
+        "baked": "watch",
+        "analogue": null,
+        "label": "VENUE",
+        "extra": false,
+        "why": "fail-open"
+      },
+      "termbasis": {
+        "action": "watch",
+        "baked": "watch",
+        "analogue": null,
+        "label": "TERM BASIS",
+        "extra": false,
+        "why": "fail-open"
+      },
+      "fund-fade": {
+        "action": "watch",
+        "baked": "watch",
+        "analogue": null,
+        "label": "FUND-FADE",
+        "extra": false,
+        "why": "fail-open"
+      }
+    }
+  },
+  "note": "Rolling 40-day book retunes which setups form tomorrow across OMNIROUTE / OMNIPRESENT / OMNIGOLD 1 and the 19 desk tabs. Baked toxic kinds stay stood aside. Never invents tickets.",
+  "bars": 960
 }

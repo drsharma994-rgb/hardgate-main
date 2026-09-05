@@ -367,11 +367,11 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - **What does not change:** G1–G7, 7/7 SWING CLEAN, OMNIPRESENT 3+/2+, baked OMNIROUTE demotes. Never invents direction or tickets. House extras with no baked row stay fail-open.
 - Tests: `tests/test-desk-formation-edge.mjs`. Overlay: `desk-formation-edge.js`.
 
-### Nightly formation rebake — hg-v608
-- **Every night after 21:00 UTC** (London close) the day's closed 1h bars retune **OMNIROUTE / OMNIPRESENT / OMNIGOLD 1** formation. Scheduler: `scripts/formation-nightly-watch.mjs` on Render + `.github/workflows/formation-nightly.yml` backup. Overlay: `scripts/formation-nightly.json` served at `GET /api/formation-nightly`.
-- **What changes:** day-toxic kinds (n≥8, gross≤−0.05 or net≤−0.20) **stand aside**; day-survivors (gross+ and net+) **prefer**; OMNIPRESENT cost ceiling may **tighten** (never above baked 0.12); a toxic fade day stands TRIGGERED aside (ARMED stays WATCH); OMNIGOLD 1 picks the day's least-bad tighten-only filter (`raw` / `minRisk5` / `minDisp0.5` / `minRisk5+disp0.5`) but **never** drops SL$ &lt; $5 or displacement &lt; 0.5×ATR.
-- **What does not change:** G1–G7, OMNIPRESENT 3+/2+, baked OMNIROUTE demotes, gold-perp aside. Never invents direction or tickets. `gated+bias` is not a QUALIFIES gate.
-- Tests: `tests/test-formation-nightly.mjs`. Rebake: `node scripts/nightly-formation-rebake.mjs --bars=120`.
+### Nightly formation rebake — hg-v610
+- **Every night after 21:00 UTC** (London close) a rolling **960 closed 1h bars** (~40 days; the first-night 120-bar walk never hit n≥8) retune **OMNIROUTE / OMNIPRESENT / OMNIGOLD 1** and the **19 desk tabs** (SWING / SCALP / EDGE / SMART $ / SQUEEZE / SNIPER / SMC / OB / TRAP / DIV / COIL / APEX / OI FLOW / LIQS / ON-CHAIN / CHART VISION / CARRY / VENUE / TERM BASIS). Scheduler: `scripts/formation-nightly-watch.mjs` on Render + `.github/workflows/formation-nightly.yml` backup. Overlay: `scripts/formation-nightly.json` served at `GET /api/formation-nightly`.
+- **What changes:** day-toxic kinds (n≥8, gross≤−0.05 or net≤−0.20) **stand aside**; day-survivors (gross+ and net+) **prefer**; matching desk analogues **tighten** (watch→suppress, prefer→suppress) and BEST-confirm drops aside kinds; OMNIPRESENT cost ceiling may **tighten** (never above baked 0.12); a toxic fade day stands TRIGGERED aside (ARMED stays WATCH); OMNIGOLD 1 picks the day's least-bad tighten-only filter (`raw` / `minRisk5` / `minDisp0.5` / `minRisk5+disp0.5`) but **never** drops SL$ &lt; $5 or displacement &lt; 0.5×ATR.
+- **What does not change:** G1–G7, OMNIPRESENT 3+/2+, baked OMNIROUTE demotes, baked desk suppress/demote (DIVERGENCE / SMC / TRAP / SNIPER), gold-perp aside. A green day-prefer cannot un-suppress a baked-toxic desk. Never invents direction or tickets. `gated+bias` is not a QUALIFIES gate.
+- Tests: `tests/test-formation-nightly.mjs`. Rebake: `node scripts/nightly-formation-rebake.mjs --bars=960`.
 
 ### Replay-guided setup tighten — hg-v607
 - **Backtest evidence** from committed books (`scripts/backtest-omnigold-results.json`, `backtest-omniroute-v531-results.json`, `backtest-omnipresent-results.json`) plus a new **OMNIGOLD 1** replay harness (`scripts/backtest-omnigold1.mjs`) that walks `hgOg1Replay` with zero lookahead.

@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 /* HARDGATE — nightly formation rebake.
-   Walks the last N closed 1h bars (default 120 ≈ five crypto/gold days) through
+   Walks the last N closed 1h bars (default 960 ≈ 40 crypto/gold days) through
    the live detectors, then writes scripts/formation-nightly.json.
-   Demote / prefer / cost / OG1 floors only. Never loosens G1–G7.
+   Demote / prefer / cost / OG1 floors / 19-desk tighten only. Never loosens G1–G7.
 
-   Run: node scripts/nightly-formation-rebake.mjs [--bars=120] [--offline] */
+   Run: node scripts/nightly-formation-rebake.mjs [--bars=960] [--offline] */
 import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildNightlyApply, statsFromBacktestAll } from '../lib/formation-nightly.mjs';
+import { buildNightlyApply, statsFromBacktestAll, DEFAULT_NIGHTLY_BARS } from '../lib/formation-nightly.mjs';
 
 const ROOT = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 const CACHE_DIR = path.join(ROOT, 'scripts', '.bt-cache');
@@ -19,7 +19,7 @@ const HOSTS = ['https://data-api.binance.vision', 'https://api.binance.com'];
 const argv = process.argv.slice(2);
 const opt = (n, d) => { const a = argv.find(x => x.startsWith(n + '=')); return a ? a.split('=')[1] : d; };
 const OFFLINE = argv.includes('--offline');
-const BARS = +opt('--bars', 120);
+const BARS = +opt('--bars', DEFAULT_NIGHTLY_BARS);
 const CRYPTO = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
 
 function bootOmni(){
@@ -78,7 +78,7 @@ async function fetch1h(sym, need){
       const j = JSON.parse(fs.readFileSync(file, 'utf8'));
       const rows = j.rows || j;
       const fresh = j.fetchedAt && (Date.now() - j.fetchedAt) < 2 * 3600 * 1000;
-      if (fresh && Array.isArray(rows) && rows.length >= Math.min(need, 24))
+      if (fresh && Array.isArray(rows) && rows.length >= need)
         return rows.slice(-need);
     }catch(e){ /* refetch */ }
   }
