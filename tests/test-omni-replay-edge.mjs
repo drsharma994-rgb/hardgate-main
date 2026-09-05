@@ -144,6 +144,49 @@ console.log('\n== formation refuses toxic kinds, keeps VALUE ==');
   const few = W.hgOmniPickFew([pinTicket, prefTicket], 'long', 3);
   ok(few.length === 1 && few[0].kind === 'MMOVE',
      'demoted PIN-REJECT never MOST PROBABLE even as a synthetic ticket');
+
+  ok(W.hgOmniReplayKind('SNIPER') === 'PIN-REJECT', 'house SNIPER maps to PIN-REJECT');
+  ok(W.hgOmniReplayKind('SMC') === 'FVG-FILL', 'house SMC maps to FVG-FILL');
+  ok(W.hgOmniReplayKind('HOUSE-SQUEEZE') === 'SQUEEZE-FIRE', 'house squeeze maps to SQUEEZE-FIRE');
+  ok(W.hgOmniReplayKind('SCALP') === 'NR7-BREAK', 'house SCALP maps to NR7-BREAK');
+  ok(W.hgOmniReplayKind('MR') === 'VWAP-REVERT', 'house MR maps to VWAP-REVERT');
+  ok(!!W.hgOmniKindDemotion('SNIPER'), 'house SNIPER inherits PIN-REJECT demote');
+  ok(!!W.hgOmniKindDemotion('SMC'), 'house SMC inherits FVG-FILL demote');
+  ok(!W.hgOmniKindPrefer('SNIPER'), 'alias map does not invent a SNIPER prefer');
+
+  const snHit = { kind: 'SNIPER', dir: 'long', level: LIVE - 200, why: 'bounce' };
+  const snPl = { dir: 'long', entry: LIVE - 200, stop: LIVE - 800, t1: LIVE + 400, rr1: 2 };
+  const snForm = W.hgOmniFormTicket(snPl, snHit, rows, { livePx: LIVE, sym: 'ETHUSD' });
+  ok(snForm && snForm.ok === false, 'house SNIPER formation refuses');
+  ok(/replay-demoted/.test(String(snForm.reason || '')), 'SNIPER refuse names replay-demoted');
+  ok(W.hgOmniHouseRawAllowed('SNIPER', { dir: 'long', entry: LIVE, conviction: 8 }) === false,
+     'house SNIPER raw is not allowed onto the extra-vote list');
+  ok(W.hgOmniHouseHits(rows, { sym: 'ETHUSD' }, {}).filter(function(h){ return h && h.kind === 'SNIPER'; }).length === 0,
+     'hgOmniHouseHits does not emit a SNIPER extra');
+}
+
+console.log('\n== nightly 40-day book asides BEST kinds that lost ==');
+{
+  const W = boot();
+  vm.runInContext(read('formation-nightly.js'), W, { filename: 'formation-nightly.js' });
+  const night = JSON.parse(read('scripts/formation-nightly.json'));
+  W.hgFormationNightlyApply(night);
+  ok(!!W.hgOmniKindDemotion('AVWAP-RECLAIM'), 'AVWAP-RECLAIM day-aside on 40-day book');
+  ok(!!W.hgOmniKindDemotion('MMOVE'), 'MMOVE day-aside on 40-day book');
+  ok(!!W.hgOmniKindDemotion('NR7-BREAK'), 'NR7-BREAK day-aside on 40-day book');
+  ok(!!W.hgOmniKindDemotion('ORB'), 'ORB day-aside on 40-day book');
+  ok(!!W.hgOmniKindDemotion('VALUE'), 'VALUE n=36 day-aside (baked n<50)');
+  ok(!!W.hgOmniKindDemotion('SCALP'), 'house SCALP follows NR7 day-aside');
+  ok(!!W.hgOmniKindDemotion('HOUSE-SQUEEZE'), 'house squeeze follows SQUEEZE-FIRE day-aside');
+  ok(!!W.hgOmniKindDemotion('MR'), 'house MR follows VWAP-REVERT day-aside');
+  ok(!W.hgOmniKindPrefer('AVWAP-RECLAIM'), 'day-aside BEST kind is not preferred');
+  ok(W.hgOmniKindPrefer('CUSUM-SHIFT') === true, 'CUSUM-SHIFT stays preferred (day-prefer / baked)');
+  const rows = tape(180, 11, 60000);
+  const LIVE = rows[rows.length - 1].c;
+  const avHit = { kind: 'AVWAP-RECLAIM', dir: 'long', level: LIVE - 300, why: 'avwap' };
+  const avPl = { dir: 'long', entry: LIVE - 300, stop: LIVE - 900, t1: LIVE + 500, rr1: 2 };
+  const avForm = W.hgOmniFormTicket(avPl, avHit, rows, { livePx: LIVE, sym: 'BTCUSD' });
+  ok(avForm && avForm.ok === false, 'AVWAP-RECLAIM formation refuses on the day-aside book');
 }
 
 console.log('\n== forward-paid un-demotes ==');
@@ -172,6 +215,7 @@ console.log('\n== OMNIROUTE banner cites the replay ==');
   ok(/15 kinds stood aside/.test(html), 'banner names the demotion count');
   ok(/AVWAP-RECLAIM/.test(html) && /MMOVE/.test(html), 'banner names prefer kinds');
   ok(/Never invents tickets/.test(html), 'banner says it does not invent tickets');
+  ok(/SNIPER→PIN-REJECT/.test(html), 'banner names house-extra analogue map');
 }
 
 console.log('\n== OMNIPRESENT replay quality still grants nothing ==');

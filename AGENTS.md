@@ -361,6 +361,11 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Quiet candle TTL is **720s** so cache spans the 10-min boundary. G1–G7 unchanged.
 - Tests: `tests/test-scan-every-10m.mjs`, `tests/test-hard-refresh.mjs`.
 
+### OMNIROUTE house extras follow analogue floors — hg-v612
+- House extras had no v531 row, so **SNIPER / SMC / SQUEEZE / SCALP / MR** fail-opened on OMNIROUTE even after the replay book stood their analogues aside. They now map **SNIPER→PIN-REJECT, SMC→FVG-FILL, HOUSE-SQUEEZE→SQUEEZE-FIRE, SCALP→NR7-BREAK, MR→VWAP-REVERT**. Demote / nightly aside only — the map never invents a prefer.
+- Nightly 40-day asides still apply on top (AVWAP-RECLAIM / MMOVE / NR7-BREAK / ORB / VALUE lost on that window). Formation refuses those kinds. G1–G7 unchanged.
+- Tests: `tests/test-omni-replay-edge.mjs`.
+
 ### REVERSAL SNIPER watch-only — hg-v611
 - **PIN-REJECT** n=115 net −1.03R (worst v531 bounce book). The tab still printed SEND TO TRADE PLAN / ADD TO BOOK after a demote stamp — those were the four stop-outs. Baked action is now **suppress**. Cards stay WATCH (levels visible). No trade handoff, no MOST PROBABLE, no SUPER SNIPER send, forward log `ticket: false`.
 - BEST confirm cannot un-suppress. Nightly can only keep suppress. G1–G7 unchanged.

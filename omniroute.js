@@ -2138,7 +2138,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     /* Replay demotion runs even when hgFormTicket is absent — a toxic kind
        cannot hide behind a missing enricher. Prefer stamp waits for the
        formed plan so survivor rides the levels that will print. */
-    var earlyKind = String((hit && hit.kind) || plan.kind || '');
+    var earlyKind = hgOmniReplayKind((hit && hit.kind) || plan.kind || '');
     var earlyDem = hgOmniKindDemotion(earlyKind);
     if (earlyDem && !hgOmniReplayForwardPaid(earlyKind)){
       plan.formationOk = false;
@@ -2206,10 +2206,12 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         }
       } catch (eCat) {}
     }
-    /* Replay kind apply (hg-v590). Demoted kinds do not form unless the
-       live forward ledger reads "has paid". Prefer kinds stamp survivor.
+    /* Replay kind apply (hg-v590 / hg-v612). Demoted kinds do not form
+       unless the live forward ledger reads "has paid". House extras map
+       onto their measured analogue (SNIPER→PIN-REJECT) so they cannot
+       fail-open a toxic book. Prefer kinds stamp survivor.
        Never invents levels or direction. */
-    var replayKind = String((hit && hit.kind) || formed.kind || (plan && plan.kind) || '');
+    var replayKind = hgOmniReplayKind((hit && hit.kind) || formed.kind || (plan && plan.kind) || '');
     var dem = hgOmniKindDemotion(replayKind);
     if (dem){
       var paid = hgOmniReplayForwardPaid(replayKind);
@@ -2282,6 +2284,25 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     }
   };
 
+  /* House extras have no v531 row of their own. Map them onto the
+     measured analogue so SNIPER cannot fail-open a PIN-REJECT ticket.
+     Prefer never uses this map — only demote / nightly aside. */
+  var HG_OMNI_KIND_ALIAS = {
+    SNIPER: 'PIN-REJECT',
+    REVERSALSNIPER: 'PIN-REJECT',
+    'REVERSAL-SNIPER': 'PIN-REJECT',
+    'HOUSE-SQUEEZE': 'SQUEEZE-FIRE',
+    SQUEEZE: 'SQUEEZE-FIRE',
+    SMC: 'FVG-FILL',
+    SCALP: 'NR7-BREAK',
+    MR: 'VWAP-REVERT'
+  };
+
+  function hgOmniReplayKind(kind){
+    var k = String(kind || '').toUpperCase();
+    return HG_OMNI_KIND_ALIAS[k] || k;
+  }
+
   function hgOmniReplayEvidence(kind){
     try{
       var E = (typeof window !== 'undefined' && window.HG_OMNI_REPLAY_EVIDENCE)
@@ -2295,14 +2316,16 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
   function hgOmniKindDemotion(kind){
     try{
-      var ev = hgOmniReplayEvidence(kind);
+      var rawKind = String(kind || '').toUpperCase();
+      var mapped = hgOmniReplayKind(rawKind);
+      var ev = hgOmniReplayEvidence(mapped);
       var E = (typeof window !== 'undefined' && window.HG_OMNI_REPLAY_EVIDENCE)
         ? window.HG_OMNI_REPLAY_EVIDENCE : HG_OMNI_REPLAY_EVIDENCE;
       var minN = isFinite(fin(E.demoteMinN)) ? fin(E.demoteMinN) : 50;
       var floor = isFinite(fin(E.demoteGrossR)) ? fin(E.demoteGrossR) : -0.05;
       var netFloor = isFinite(fin(E.demoteNetR)) ? fin(E.demoteNetR) : -0.20;
       if (!ev || !isFinite(fin(ev.avgGrossR)) || !(fin(ev.n) >= minN))
-        return hgOmniNightlyAsideKind(kind);
+        return hgOmniNightlyAsideKind(mapped) || hgOmniNightlyAsideKind(rawKind);
       var reasons = [];
       if (fin(ev.avgGrossR) <= floor){
         reasons.push('grossR ' + fin(ev.avgGrossR).toFixed(3) + ' <= ' + floor
@@ -2315,18 +2338,18 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
           + ' with gross < 0 at n=' + ev.n + ' — fee-and-direction toxic');
       }
       if (!reasons.length){
-        var nightMiss = hgOmniNightlyAsideKind(kind);
+        var nightMiss = hgOmniNightlyAsideKind(mapped) || hgOmniNightlyAsideKind(rawKind);
         return nightMiss || null;
       }
       return {
-        kind: String(kind).toUpperCase(),
+        kind: mapped,
         n: ev.n, winRate: ev.winRate,
         grossR: ev.avgGrossR, netR: ev.avgNetR, pf: ev.pf,
         reasons: reasons
       };
     }catch(eKd){
       try{
-        var nightErr = hgOmniNightlyAsideKind(kind);
+        var nightErr = hgOmniNightlyAsideKind(hgOmniReplayKind(kind)) || hgOmniNightlyAsideKind(kind);
         if (nightErr) return nightErr;
       }catch(eN2){}
       return null;
@@ -2408,7 +2431,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       + nDem + ' kinds stood aside (n≥50 and gross≤−0.05, or gross<0 and net≤−0.20). '
       + 'Prefer ' + (prefer.length ? prefer.join(', ') : 'none')
       + ' — the only net-positive book at scale. '
-      + 'ORB is near-even, not suppressed. Solidity and conviction do not forecast wins. '
+      + 'ORB is near-even on the long book, not suppressed. House extras follow their analogue '
+      + '(SNIPER→PIN-REJECT, SMC→FVG-FILL, SQUEEZE→SQUEEZE-FIRE, SCALP→NR7-BREAK, MR→VWAP-REVERT). '
+      + 'Nightly asides add to baked demotes. Solidity and conviction do not forecast wins. '
       + 'Harness is 1h; live scan is 4h — directional evidence only. Never invents tickets.';
     var night = '';
     try{
@@ -7909,7 +7934,18 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return (w && typeof w[name] === 'function') ? w[name] : null;
   }
 
+  function hgOmniHouseRawAllowed(kind, raw){
+    if (!raw || typeof raw !== 'object') return false;
+    if (raw.ticket === false || raw.watchOnly === true) return false;
+    if (raw.deskEdgeAction === 'suppress' || raw.deskEdgeAction === 'demote') return false;
+    if (raw.formationOk === false) return false;
+    var dem = hgOmniKindDemotion(kind);
+    if (dem && !hgOmniReplayForwardPaid(hgOmniReplayKind(kind))) return false;
+    return true;
+  }
+
   function hgOmniHouseHit(kind, raw, why){
+    if (!hgOmniHouseRawAllowed(kind, raw)) return null;
     if (!raw || typeof raw !== 'object') return null;
     var dir = String(raw.dir || '').toLowerCase();
     if (dir === 'buy' || dir === 'l') dir = 'long';
@@ -7955,9 +7991,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         daily = extra.htfRows || extra.daily || hgOmniResample(rows, 86400);
         raw = fn(rows, daily);
         if (raw && raw.state === 'FIRED_LONG')
-          push({ kind:'HOUSE-SQUEEZE', dir:'long', level: px, why:'TTM squeeze fire long — extra vote, not 7/7 CLEAN', extra:true });
+          push(hgOmniHouseHit('HOUSE-SQUEEZE', { dir:'long', entry: px }, 'TTM squeeze fire long — extra vote, not 7/7 CLEAN'));
         else if (raw && raw.state === 'FIRED_SHORT')
-          push({ kind:'HOUSE-SQUEEZE', dir:'short', level: px, why:'TTM squeeze fire short — extra vote, not 7/7 CLEAN', extra:true });
+          push(hgOmniHouseHit('HOUSE-SQUEEZE', { dir:'short', entry: px }, 'TTM squeeze fire short — extra vote, not 7/7 CLEAN'));
       } catch (e3) {}
     }
     fn = omniGfn('rsAssess');
@@ -10830,6 +10866,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniFormTicket = hgOmniFormTicket;
     window.HG_OMNI_REPLAY_EVIDENCE = HG_OMNI_REPLAY_EVIDENCE;
     window.hgOmniReplayEvidence = hgOmniReplayEvidence;
+    window.hgOmniReplayKind = hgOmniReplayKind;
+    window.hgOmniHouseRawAllowed = hgOmniHouseRawAllowed;
     window.hgOmniKindDemotion = hgOmniKindDemotion;
     window.hgOmniKindPrefer = hgOmniKindPrefer;
     window.hgOmniPreferKinds = hgOmniPreferKinds;

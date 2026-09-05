@@ -263,7 +263,7 @@ console.log('== house extra hits never claim 7/7 and do not throw when engines a
   ok(wired.some(h => h.kind === 'EDGE'), 'EDGE reaches the bag when the engine fires');
   ok(wired.some(h => h.kind === 'MR'), 'mean-rev reaches the bag');
   ok(wired.some(h => h.kind === 'HOUSE-SQUEEZE'), 'squeeze fire reaches the bag');
-  ok(wired.some(h => h.kind === 'SNIPER'), 'sniper reaches the bag');
+  ok(!wired.some(h => h.kind === 'SNIPER'), 'SNIPER extra is refused — PIN-REJECT analogue');
   ok(wired.some(h => h.kind === 'SWING'), 'house SWING vote reaches the bag');
   ok(wired.every(h => h.clean !== true && h.extra === true),
      'a 7/7 SWING return is stripped to an extra vote — 7/7 stays on the SWING tab');
