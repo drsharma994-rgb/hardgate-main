@@ -629,6 +629,21 @@
         why: 'not a gold perp — crypto fade book applies' });
     }
 
+    /* Nightly day-book (hg-v608): a toxic fade day stands TRIGGERED aside.
+       ARMED stays WATCH. Never loosens 3+/2+. */
+    try{
+      var night = (typeof window !== 'undefined') ? window.HG_FORMATION_NIGHTLY : null;
+      if (night && night.omnipresent && night.omnipresent.standAsideTriggered){
+        var dayWhy = 'nightly day fade book toxic on ' + (night.dayUtc || 'UTC day')
+          + ' — TRIGGERED stands aside until the next rebake';
+        if (cand.status === 'TRIGGERED'){
+          gates.push({ key: 'replay-day', hard: true, pass: false, why: dayWhy });
+        } else {
+          gates.push({ key: 'replay-day', hard: false, info: true, pass: false, why: dayWhy });
+        }
+      }
+    }catch(eDay){}
+
     var newsFn = gfn('hgNewsRisk');
     if (newsFn){
       try{
@@ -1317,8 +1332,13 @@
       + 'Gold perps (XAU/XAG/PAXG) lose '
       + (gv && isFinite(fin(gv.avgNetR)) ? fin(gv.avgNetR).toFixed(2) : '-0.53')
       + 'R — stood aside from TICKET. ARMED stays WATCH. No third mechanic.';
+    var nightH = '';
+    try{
+      if (typeof window !== 'undefined' && typeof window.hgFormationNightlyBannerHtml === 'function')
+        nightH = window.hgFormationNightlyBannerHtml() || '';
+    }catch(eNb){ nightH = ''; }
     return '<div class="note warn" data-op-replay-stance="1" style="display:block;margin-bottom:10px">'
-      + '<b>REPLAY STANCE</b> — ' + esc(txt) + '</div>';
+      + '<b>REPLAY STANCE</b> — ' + esc(txt) + '</div>' + nightH;
   }
 
   /* The one read path for the table: prefer the window export (same object

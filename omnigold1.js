@@ -29,6 +29,13 @@
   function px(x){ return has(x) ? (+x).toFixed(2) : 'unavailable'; }
   function num(x, d){ return has(x) ? (+x).toFixed(d == null ? 2 : d) : 'unavailable'; }
   function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+  function og1FormEdge(){
+    var e = (W && W.HG_OG1_FORM_EDGE) || {};
+    return {
+      minRisk: Math.max(5, isFinite(fin(e.minRisk)) ? fin(e.minRisk) : 5),
+      minDisp: Math.max(0.5, isFinite(fin(e.minDisp)) ? fin(e.minDisp) : 0.5)
+    };
+  }
 
   /* ---------------- strategy families (Section 1 / 4) ---------------- */
   var CLASS_OF = {
@@ -144,8 +151,9 @@
        the 2-month replay stops 47 of 59 such trades; requiring ≥ 0.5 × ATR of
        displacement on the reclaim bar removes most of them */
     var isSweep = c.cls === 'sweep' || c.cls === 'composite';
-    var dispOk = !isSweep || (has(c.displacementAtr) && c.displacementAtr >= 0.5);
-    gate(5, 'reclaim ≤ 3 bars · displacement ≥ 0.5 × ATR · no acceptance', c.reclaimed && c.age <= g.MAX_SWEEP_AGE && !c.acceptance && dispOk,
+    var minDisp = og1FormEdge().minDisp;
+    var dispOk = !isSweep || (has(c.displacementAtr) && c.displacementAtr >= minDisp);
+    gate(5, 'reclaim ≤ 3 bars · displacement ≥ ' + minDisp + ' × ATR · no acceptance', c.reclaimed && c.age <= g.MAX_SWEEP_AGE && !c.acceptance && dispOk,
       c.reclaimed ? ('age ' + c.age + (has(c.displacementAtr) ? ' · displacement ' + num(c.displacementAtr, 2) + ' × ATR' + (dispOk ? '' : ' (weak — no follow-through)') : '') + (c.acceptance ? ' · acceptance' : '')) : 'reclaim not closed');
     gate(6, 'body in OB', c.obOk, c.ob ? ((c.obSrc || 'OB') + ' ' + px(c.ob.lo) + '–' + px(c.ob.hi) + (c.obOk ? '' : ' — entry outside')) : 'no ' + c.dir + ' OB (no sweep candle, no fresh block)');
     gate(7, 'session window · no lockout', ctx.session.tradeable && !ctx.news.lock, ctx.session.label + (ctx.news.lock ? ' · LOCKOUT' : ''));
@@ -692,9 +700,11 @@
     if (best.held){ s3.qualifies = false; s3.decision = 'HELD — against gold tape'; s3.why += ' · desk tape opposes this direction'; }
     /* Cost floor (hg-v607): SL$ < $5 is > 0.125R of the XM $0.60 round-trip
        — the same 0.125R bar OMNIGOLD formation uses. Watch cards still paint. */
-    if (s3.qualifies && best.cand && has(best.cand.risk) && best.cand.risk < 5){
+    var minRisk = og1FormEdge().minRisk;
+    if (s3.qualifies && best.cand && has(best.cand.risk) && best.cand.risk < minRisk){
       s3.qualifies = false; s3.tier = null; s3.decision = 'NO SETUP';
-      s3.why += ' · cost floor: SL$ ' + num(best.cand.risk) + ' < $5 is fee-toxic at XM $0.60 RT (costR > 0.125)';
+      s3.why += ' · cost floor: SL$ ' + num(best.cand.risk) + ' < $' + num(minRisk)
+        + ' is fee-toxic at XM $0.60 RT (nightly floor, never below $5)';
     }
     return s3;
   }
@@ -1282,6 +1292,12 @@
       if (r && r.replayBias) lines.push(replayLine(r.replayBias, tf));
     });
     var fl = forwardLine(); if (fl) lines.push(fl);
+    try{
+      if (typeof W.hgFormationNightlyBannerHtml === 'function'){
+        var nb = W.hgFormationNightlyBannerHtml();
+        if (nb) return '<div class="og1-measured dim"><b>MEASURED, NOT CLAIMED</b> · ' + lines.map(esc).join('<br>') + '</div>' + nb;
+      }
+    }catch(eNb){}
     if (!lines.length) return '';
     return '<div class="og1-measured dim"><b>MEASURED, NOT CLAIMED</b> · ' + lines.map(esc).join('<br>') + '</div>';
   }

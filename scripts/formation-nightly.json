@@ -1,0 +1,98 @@
+{
+  "asOf": "2026-09-05T06:08:33.820Z",
+  "dayUtc": "2026-09-05",
+  "src": "nightly-formation-rebake",
+  "neverLoosen": [
+    "G1-G7",
+    "OMNIPRESENT 3+/2+",
+    "baked OMNIROUTE demotes",
+    "OG1 SL$ >= $5",
+    "OG1 displacement >= 0.5 ATR"
+  ],
+  "omniroute": {
+    "dayBags": {
+      "MMOVE": {
+        "n": 2,
+        "avgGross": -1,
+        "avgNet": -1.16
+      },
+      "VWAP-REVERT": {
+        "n": 2,
+        "avgGross": -1,
+        "avgNet": -1.16
+      },
+      "ENGULF-LEVEL": {
+        "n": 3,
+        "avgGross": -1,
+        "avgNet": -1.16
+      },
+      "THREE-BAR": {
+        "n": 4,
+        "avgGross": -1,
+        "avgNet": -1.16
+      },
+      "SPRING": {
+        "n": 3,
+        "avgGross": 1,
+        "avgNet": 0.84
+      },
+      "PO3": {
+        "n": 1,
+        "avgGross": -1,
+        "avgNet": -1.16
+      },
+      "ORB": {
+        "n": 2,
+        "avgGross": -1,
+        "avgNet": -1.16
+      },
+      "FVG-FILL": {
+        "n": 2,
+        "avgGross": -1,
+        "avgNet": -1.16
+      },
+      "BOS-RETEST": {
+        "n": 1,
+        "avgGross": -1,
+        "avgNet": -1.16
+      },
+      "EQH-SWEEP": {
+        "n": 2,
+        "avgGross": 2,
+        "avgNet": 1.84
+      },
+      "CUSUM-SHIFT": {
+        "n": 1,
+        "avgGross": -1,
+        "avgNet": -1.16
+      },
+      "PIN-REJECT": {
+        "n": 1,
+        "avgGross": -1,
+        "avgNet": -1.16
+      }
+    },
+    "dayAside": [],
+    "dayPrefer": []
+  },
+  "omnipresent": {
+    "fadeBag": {
+      "n": 3,
+      "avgGross": -1,
+      "avgNet": -1.16
+    },
+    "costCeilingR": 0.12,
+    "standAsideTriggered": false,
+    "goldAside": true
+  },
+  "omnigold1": {
+    "minRisk": 5,
+    "minDisp": 0.5,
+    "gated": false,
+    "biasSide": false,
+    "bestNamed": "raw",
+    "dayExpR": -0.4355
+  },
+  "note": "Day book retunes which setups form tomorrow. Baked toxic kinds stay stood aside. Never invents tickets.",
+  "bars": 120
+}

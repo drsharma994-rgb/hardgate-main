@@ -1,8 +1,10 @@
 .vercel
 scripts/.squeeze-watch-state.json
 scripts/.book-digest-state.json
+scripts/.formation-nightly-state.json
 data/paperbook.json
 data/shadow-book.json
+data/formation-nightly.json
 snapshots/
 node_modules/
 android/.gradle/

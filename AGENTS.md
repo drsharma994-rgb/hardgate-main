@@ -361,6 +361,12 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Quiet candle TTL is **720s** so cache spans the 10-min boundary. G1–G7 unchanged.
 - Tests: `tests/test-scan-every-10m.mjs`, `tests/test-hard-refresh.mjs`.
 
+### Nightly formation rebake — hg-v608
+- **Every night after 21:00 UTC** (London close) the day's closed 1h bars retune **OMNIROUTE / OMNIPRESENT / OMNIGOLD 1** formation. Scheduler: `scripts/formation-nightly-watch.mjs` on Render + `.github/workflows/formation-nightly.yml` backup. Overlay: `scripts/formation-nightly.json` served at `GET /api/formation-nightly`.
+- **What changes:** day-toxic kinds (n≥8, gross≤−0.05 or net≤−0.20) **stand aside**; day-survivors (gross+ and net+) **prefer**; OMNIPRESENT cost ceiling may **tighten** (never above baked 0.12); a toxic fade day stands TRIGGERED aside (ARMED stays WATCH); OMNIGOLD 1 picks the day's least-bad tighten-only filter (`raw` / `minRisk5` / `minDisp0.5` / `minRisk5+disp0.5`) but **never** drops SL$ &lt; $5 or displacement &lt; 0.5×ATR.
+- **What does not change:** G1–G7, OMNIPRESENT 3+/2+, baked OMNIROUTE demotes, gold-perp aside. Never invents direction or tickets. `gated+bias` is not a QUALIFIES gate.
+- Tests: `tests/test-formation-nightly.mjs`. Rebake: `node scripts/nightly-formation-rebake.mjs --bars=120`.
+
 ### Replay-guided setup tighten — hg-v607
 - **Backtest evidence** from committed books (`scripts/backtest-omnigold-results.json`, `backtest-omniroute-v531-results.json`, `backtest-omnipresent-results.json`) plus a new **OMNIGOLD 1** replay harness (`scripts/backtest-omnigold1.mjs`) that walks `hgOg1Replay` with zero lookahead.
 - **GOLD SCALP / SWING:** ORB / FVG / HVN / ribbon stay **suppress**. VWAP / Asian / scalp sweep / BOS / OB stay **demote** (never MOST PROBABLE or OMNIGOLD ENGINE lead). SWING 4H sweep + weekly stay **prefer**.

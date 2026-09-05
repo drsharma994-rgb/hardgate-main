@@ -2296,13 +2296,13 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   function hgOmniKindDemotion(kind){
     try{
       var ev = hgOmniReplayEvidence(kind);
-      if (!ev || !isFinite(fin(ev.avgGrossR))) return null;
       var E = (typeof window !== 'undefined' && window.HG_OMNI_REPLAY_EVIDENCE)
         ? window.HG_OMNI_REPLAY_EVIDENCE : HG_OMNI_REPLAY_EVIDENCE;
       var minN = isFinite(fin(E.demoteMinN)) ? fin(E.demoteMinN) : 50;
       var floor = isFinite(fin(E.demoteGrossR)) ? fin(E.demoteGrossR) : -0.05;
       var netFloor = isFinite(fin(E.demoteNetR)) ? fin(E.demoteNetR) : -0.20;
-      if (!(fin(ev.n) >= minN)) return null;
+      if (!ev || !isFinite(fin(ev.avgGrossR)) || !(fin(ev.n) >= minN))
+        return hgOmniNightlyAsideKind(kind);
       var reasons = [];
       if (fin(ev.avgGrossR) <= floor){
         reasons.push('grossR ' + fin(ev.avgGrossR).toFixed(3) + ' <= ' + floor
@@ -2314,26 +2314,46 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         reasons.push('netR ' + fin(ev.avgNetR).toFixed(3) + ' <= ' + netFloor
           + ' with gross < 0 at n=' + ev.n + ' — fee-and-direction toxic');
       }
-      if (!reasons.length) return null;
+      if (!reasons.length){
+        var nightMiss = hgOmniNightlyAsideKind(kind);
+        return nightMiss || null;
+      }
       return {
         kind: String(kind).toUpperCase(),
         n: ev.n, winRate: ev.winRate,
         grossR: ev.avgGrossR, netR: ev.avgNetR, pf: ev.pf,
         reasons: reasons
       };
-    }catch(eKd){ return null; }
+    }catch(eKd){
+      try{
+        var nightErr = hgOmniNightlyAsideKind(kind);
+        if (nightErr) return nightErr;
+      }catch(eN2){}
+      return null;
+    }
+  }
+
+  function hgOmniNightlyAsideKind(kind){
+    try{
+      var fn = (typeof window !== 'undefined' && typeof window.hgOmniNightlyAside === 'function')
+        ? window.hgOmniNightlyAside : null;
+      return fn ? fn(kind) : null;
+    }catch(eNa){ return null; }
   }
 
   function hgOmniKindPrefer(kind){
     try{
+      if (hgOmniKindDemotion(kind)) return false;
       var ev = hgOmniReplayEvidence(kind);
-      if (!ev) return false;
       var E = (typeof window !== 'undefined' && window.HG_OMNI_REPLAY_EVIDENCE)
         ? window.HG_OMNI_REPLAY_EVIDENCE : HG_OMNI_REPLAY_EVIDENCE;
       var minN = isFinite(fin(E.preferMinN)) ? fin(E.preferMinN) : 50;
-      return (fin(ev.n) >= minN)
+      if (ev && (fin(ev.n) >= minN)
         && isFinite(fin(ev.avgGrossR)) && fin(ev.avgGrossR) > 0
-        && isFinite(fin(ev.avgNetR)) && fin(ev.avgNetR) > 0;
+        && isFinite(fin(ev.avgNetR)) && fin(ev.avgNetR) > 0) return true;
+      var night = (typeof window !== 'undefined' && typeof window.hgOmniNightlyPrefer === 'function')
+        ? window.hgOmniNightlyPrefer(kind) : false;
+      return !!night;
     }catch(eKp){ return false; }
   }
 
@@ -2390,8 +2410,13 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       + ' — the only net-positive book at scale. '
       + 'ORB is near-even, not suppressed. Solidity and conviction do not forecast wins. '
       + 'Harness is 1h; live scan is 4h — directional evidence only. Never invents tickets.';
+    var night = '';
+    try{
+      if (typeof window !== 'undefined' && typeof window.hgFormationNightlyBannerHtml === 'function')
+        night = window.hgFormationNightlyBannerHtml() || '';
+    }catch(eNb){ night = ''; }
     return '<div class="note warn" data-omni-replay-stance="1" style="display:block;margin-bottom:10px">'
-      + '<b>REPLAY STANCE</b> — ' + esc(txt) + '</div>';
+      + '<b>REPLAY STANCE</b> — ' + esc(txt) + '</div>' + night;
   }
 
   /* Standard normal CDF (Abramowitz & Stegun 26.2.17), inlined so a piece of
