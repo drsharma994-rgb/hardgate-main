@@ -187,7 +187,6 @@
     "prefer": [],
     "tighten": [
       "coil-expansion",
-      "reversalsniper",
       "scalp",
       "squeeze",
       "trap"
@@ -239,10 +238,10 @@
       },
       "reversalsniper": {
         "action": "suppress",
-        "baked": "demote",
+        "baked": "suppress",
         "analogue": "PIN-REJECT",
         "label": "REVERSAL SNIPER",
-        "extra": true,
+        "extra": false,
         "why": "PIN-REJECT day-aside — desk suppress"
       },
       "smc": {

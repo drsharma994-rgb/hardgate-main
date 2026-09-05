@@ -8,8 +8,10 @@ safe — stop ≤ ~1.9% from entry).
 Every card shows exact ENTRY · STOP · TP1 · TP2, a transparent conviction
 score, and a per-symbol mini-backtest when mean-reversion rules apply.
 
-Honest mandate: this tab stacks the odds — it does NOT guarantee the stop
-never gets hit. Same liquidation-clearance math as BRAIN SNIPER / TRADE PLAN.
+Honest mandate: PIN-REJECT lost −1.03R at n=115. Bounce tickets stand
+aside — WATCH only, never SEND TO TRADE PLAN / ADD TO BOOK. Same
+liquidation-clearance math as BRAIN SNIPER / TRADE PLAN if a future
+overlay ever un-suppresses (it cannot loosen the baked floor).
 
 Pure exports (never throw):
   rsMaxSafeLev(entry, stop, mmr?)
@@ -134,6 +136,17 @@ function rsBuildPlan(entry, stop, rr1, rr2){
       rr1: rr1, rr2: rr2, lev: lev
     };
   }catch(e){ return null; }
+}
+
+function rsTradeable(setup){
+  try{
+    if (!setup) return false;
+    if (typeof W.hgDeskFormationEdgeTradeable === 'function')
+      return !!W.hgDeskFormationEdgeTradeable(setup, true);
+    if (setup.deskEdgeAction === 'suppress' || setup.deskEdgeAction === 'demote') return false;
+    if (setup.ticket === false || setup.demoted) return false;
+    return true;
+  }catch(e){ return false; }
 }
 
 function rsConviction(setup){
@@ -277,6 +290,14 @@ function rsAssess(rows, opts){
     if (typeof W.hgDeskFormationEdgeApply === 'function'){
       W.hgDeskFormationEdgeApply(setup, { tab: 'reversalsniper', rows: rows, dir: 'long' });
     }
+    if (setup.deskEdgeAction === 'suppress' || setup.deskEdgeAction === 'demote' || setup.ticket === false){
+      setup.ticket = false;
+      setup.formationOk = false;
+      setup.watchOnly = true;
+      setup.demoted = true;
+      setup.nearClean = true;
+      if (setup.tier === 'clean') setup.tier = 'near';
+    }
     return setup;
   }catch(e){ return null; }
 }
@@ -376,17 +397,22 @@ function cardHTML(r){
   }
 
   var safeChip = (typeof hgSafeLevChip === 'function') ? hgSafeLevChip(s.entry, s.stop) : '';
-  var tradeOnclick = (typeof hgToTradePlanOnclickAttr === 'function')
+  var tradeable = rsTradeable(s);
+  var tradeOnclick = tradeable && (typeof hgToTradePlanOnclickAttr === 'function')
     ? hgToTradePlanOnclickAttr(symLab, 'long', s.entry, s.stop, s.t1, { t2: s.t2, scanner: 'reversalsniper', strategy: 'reversalsniper' })
     : '';
   var tradeBtn = tradeOnclick
     ? '<button class="toTrade" onclick="' + tradeOnclick + '">SEND TO TRADE PLAN →</button>' : '';
-  var bookBtn = (typeof bookBtnHTML === 'function')
+  var bookBtn = (tradeable && typeof bookBtnHTML === 'function')
     ? bookBtnHTML(symLab, 'long', s.entry, s.stop, s.t1, { scanner: 'reversalsniper', strategy: 'reversalsniper', t2: s.t2 }) : '';
+  var edgeWhy = s.deskEdgeWhy || 'PIN-REJECT n=115 net −1.03R — bounce tickets stand aside';
+  var watchNote = tradeable ? ''
+    : '<div class="note warn" style="margin-top:6px"><b>WATCH ONLY</b> — ' + esc(edgeWhy)
+      + '. Not a ticket. No SEND TO TRADE PLAN / ADD TO BOOK.</div>';
 
-  return '<div class="card long' + (r.best ? ' best' : '') + '">'
+  return '<div class="card long' + (r.best && tradeable ? ' best' : '') + '">'
     + '<div class="chead"><span class="sym">' + esc(symLab) + venueChip + '</span>'
-    + '<span class="dir">LONG · REVERSAL SNIPER · conviction ' + s.conviction + '</span>'
+    + '<span class="dir">LONG · REVERSAL SNIPER · ' + (tradeable ? 'conviction ' + s.conviction : 'WATCH') + '</span>'
     + (typeof hgBookStampChip === 'function' ? hgBookStampChip(r.sym, 'long', { scanner: 'reversalsniper', strategy: 'reversalsniper' }) : '')
     + '</div>'
     + '<div class="mini">'
@@ -408,8 +434,10 @@ function cardHTML(r){
     + safeChip + '</div>'
     + (s.entryGuidance ? '<div class="note">' + esc(s.entryGuidance) + '</div>' : '')
     + stackHtml
-    + '<div class="note warn" style="margin-top:6px">SNIPER GRADE — stop ≤ ~1.9% enables ≥30× max-safe leverage. '
-    + 'This stacks reversal confluence; <b>stops can still be hit</b>. Size below max safe.</div>'
+    + (tradeable
+      ? '<div class="note warn" style="margin-top:6px">SNIPER GRADE — stop ≤ ~1.9% enables ≥30× max-safe leverage. '
+        + 'This stacks reversal confluence; <b>stops can still be hit</b>. Size below max safe.</div>'
+      : watchNote)
     + '<div class="plan">' + record + '</div>'
     + tradeBtn + bookBtn
     + '</div>';
@@ -438,9 +466,14 @@ function publishRsDeskSnap(results){
         triggers: s.triggers,
         rows: r.rows || null,
         venueTag: r.item && r.item.venue ? r.item.venue : null,
-        tier: 'clean',
+        tier: rsTradeable(s) ? (s.tier || 'clean') : 'near',
+        demoted: !!s.demoted,
+        deskEdgeAction: s.deskEdgeAction || null,
+        ticket: rsTradeable(s),
+        watchOnly: !rsTradeable(s),
+        stamps: Array.isArray(s.stamps) ? s.stamps.slice() : [],
         scanner: 'reversalsniper',
-        best: !!r.best
+        best: !!(r.best && rsTradeable(s))
       };
     });
     __rs.snap = {
@@ -462,7 +495,7 @@ function publishRsDeskSnap(results){
           return c && c.dir && isFinite(+c.entry) && isFinite(+c.stop) && isFinite(+c.t1);
         }).map(function(c){
           return { sym: c.sym, dir: c.dir, entry: +c.entry, stop: +c.stop, t1: +c.t1,
-                   mechanic: 'SNIPER-BOUNCE', ticket: !!c.conviction };
+                   mechanic: 'SNIPER-BOUNCE', ticket: !!(c.ticket && c.conviction) };
         });
         if (fwd.length) W.hgFwdRecordScan('REVERSALSNIPER', '4h', fwd, { horizonBars: 20 });
       }
@@ -508,7 +541,11 @@ async function rsRunScan(opts){
       if (ci + CHUNK < uni.length) await sleep(CHUNK_SLEEP_MS);
     }
     results.sort(function(a, b){ return b.setup.conviction - a.setup.conviction; });
-    if (results.length) results[0].best = true;
+    var lead = null;
+    for (var li = 0; li < results.length; li++){
+      if (rsTradeable(results[li].setup)){ lead = results[li]; break; }
+    }
+    if (lead) lead.best = true;
     publishRsDeskSnap(results);
     status = results.length ? 'refreshed' : 'empty';
     return { status: status, results: results, failed: failed, uniLen: uniLen, venueNote: venueNote };
@@ -525,9 +562,11 @@ function mount(el){
   el.innerHTML = '<div class="panel">'
     + '<h2>Reversal Sniper <span>long bounces after a down move · Delta India + CoinDCX full universe · '
     + '≥' + MIN_LEV + '× max-safe leverage · 4H</span></h2>'
+    + (typeof W.hgDeskFormationEdgeBannerHtml === 'function' ? W.hgDeskFormationEdgeBannerHtml('reversalsniper') : '')
+    + (typeof W.hgFormationNightlyBannerHtml === 'function' ? W.hgFormationNightlyBannerHtml() : '')
     + '<div class="note" style="margin-bottom:8px">Scans every Delta India + CoinDCX USDT perpetual (≥ $'
     + fmtF(MIN_TURNOVER / 1e6, 0) + 'M turnover when known). Conviction = agreeing triggers + paying mean-rev backtest. '
-    + '<b>Nothing here guarantees the stop holds</b> — use TRADE PLAN clearance gates.</div>'
+    + '<b>PIN-REJECT lost −1.03R at n=115 — bounce tickets stand aside (WATCH only)</b>.</div>'
     + '<div class="row"><button class="btn" id="rsRun">SCAN REVERSALS</button>'
     + '<span class="note" id="rsStat">idle — full Delta + CoinDCX universe · conviction ≥ ' + MIN_CONVICTION
     + ' · lev ≥ ' + MIN_LEV + '×</span></div>'
@@ -584,11 +623,22 @@ function mount(el){
       });
       status = pack.status || status;
       var results = pack.results || [];
+      var tradeableN = 0;
+      for (var ti = 0; ti < results.length; ti++){
+        if (rsTradeable(results[ti].setup)) tradeableN++;
+      }
       if (results.length){
-        cardsEl.innerHTML = '<div class="note ok" style="margin-bottom:8px">★ '
-          + esc(results[0].sym) + ' — highest conviction (' + results[0].setup.conviction + ')</div>'
-          + results.map(cardHTML).join('');
-        try { if (typeof W.hgMpPin === 'function') W.hgMpPin('reversalsniper', results, null, cardsEl); } catch (eMp) {}
+        var head = tradeableN
+          ? '<div class="note ok" style="margin-bottom:8px">★ '
+            + esc((function(){ for (var i = 0; i < results.length; i++){ if (rsTradeable(results[i].setup)) return results[i].sym; } return results[0].sym; })())
+            + ' — highest conviction among tickets</div>'
+          : '<div class="note warn" style="margin-bottom:8px">WATCH ONLY — PIN-REJECT n=115 net −1.03R. '
+            + results.length + ' bounce print' + (results.length === 1 ? '' : 's')
+            + ' · none are tickets · no SEND TO TRADE PLAN / ADD TO BOOK.</div>';
+        cardsEl.innerHTML = head + results.map(cardHTML).join('');
+        try {
+          if (tradeableN && typeof W.hgMpPin === 'function') W.hgMpPin('reversalsniper', results, null, cardsEl);
+        } catch (eMp) {}
       } else {
         emptyEl.style.display = 'block';
         emptyEl.textContent = 'No sniper-grade long reversals right now — need post-drop (≥2%) + sweep/mean-rev/RSI(2) confluence, stop tight enough for ≥'
@@ -598,7 +648,8 @@ function mount(el){
         setStat(pack.note || 'Delta + CoinDCX universe unavailable — check xuniverse.js / network', true);
         return pack.status;
       }
-      setStat(results.length + ' sniper-grade reversal' + (results.length === 1 ? '' : 's')
+      setStat(results.length + ' bounce print' + (results.length === 1 ? '' : 's')
+        + (tradeableN ? (' · ' + tradeableN + ' ticket') : ' · 0 tickets (watch only)')
         + ' · ' + (pack.uniLen || 0) + ' contracts scanned (' + (pack.venueNote || '') + ') · '
         + (pack.failed || 0) + ' fetch failures · '
         + new Date().toISOString().slice(11, 19) + ' UTC');
@@ -631,6 +682,8 @@ W.rsMaxSafeLev = rsMaxSafeLev;
 W.rsAssess = rsAssess;
 W.rsBacktest = rsBacktest;
 W.rsConviction = rsConviction;
+W.rsTradeable = rsTradeable;
+W.rsCardHTML = cardHTML;
 W.publishRsDeskSnap = publishRsDeskSnap;
 W.rsRunScan = rsRunScan;
 W.reversalSniperScan = function(){ return __rs.snap; };

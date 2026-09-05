@@ -54,8 +54,23 @@ function tapeOversold(){
 }
 const hit = W.rsAssess(tapeOversold());
 ok(hit && hit.conviction >= 4 && hit.lev >= 30, 'rsAssess: oversold dump tape yields sniper setup');
+ok(typeof W.rsTradeable === 'function', 'rsTradeable exported');
+ok(W.rsTradeable(hit) === true, 'without desk-edge overlay a formed setup stays fail-open');
 ok(/Delta.*CoinDCX.*full universe/i.test(readFileSync(path.join(root, 'reversalsniper.js'), 'utf8')),
    'reversalsniper scans Delta + CoinDCX full universe');
+
+/* Desk-edge overlay: PIN-REJECT suppress — bounce is watch only. */
+vm.runInContext(readFileSync(path.join(root, 'desk-formation-edge.js'), 'utf8'), ctx, { filename: 'desk-formation-edge.js' });
+const watched = W.rsAssess(tapeOversold());
+ok(watched && watched.deskEdgeAction === 'suppress', 'desk-edge stamps PIN-REJECT suppress');
+ok(watched.watchOnly === true && watched.ticket === false, 'suppressed bounce is watch-only');
+ok(W.rsTradeable(watched) === false, 'rsTradeable refuses a suppressed bounce');
+ok(typeof W.rsCardHTML === 'function', 'rsCardHTML exported');
+const card = W.rsCardHTML({ setup: watched, item: { sym: 'ETHUSD' }, sym: 'ETHUSD', best: true });
+ok(/WATCH ONLY/.test(card), 'card says WATCH ONLY');
+ok(!/<button class="toTrade"/.test(card), 'card has no SEND TO TRADE PLAN button');
+ok(!/onclick="addToBook/.test(card) && !/class="bookBtn"/.test(card), 'card has no ADD TO BOOK button');
+ok(!/class="card long best"/.test(card), 'watch card is not MOST PROBABLE / best');
 
 console.log('\n' + pass + ' passed' + (fail ? ', ' + fail + ' FAILED' : ''));
 process.exit(fail ? 1 : 0);

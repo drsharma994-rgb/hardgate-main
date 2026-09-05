@@ -1,4 +1,4 @@
-/* HARDGATE — desk formation edge (hg-v610).
+/* HARDGATE — desk formation edge (hg-v611).
    Maps SWING / SCALP / EDGE / SMART $ / SQUEEZE / SNIPER / SMC / OB / TRAP /
    DIV / COIL / APEX / OI FLOW / LIQS / ON-CHAIN / CHART VISION / CARRY /
    VENUE / TERM BASIS onto the OMNIROUTE v531 measured book and the five
@@ -68,12 +68,12 @@
       note: 'SQUEEZE-FIRE is near-even (gross > −0.05). Forms, does not prefer.'
     },
     reversalsniper: {
-      label: 'REVERSAL SNIPER', ticket: true, bestConfirmBoost: true,
+      label: 'REVERSAL SNIPER', ticket: false, bestConfirmBoost: false,
       analogues: [
-        { kind: 'PIN-REJECT', n: 115, gross: -0.4783, net: -1.0284, action: 'demote' },
+        { kind: 'PIN-REJECT', n: 115, gross: -0.4783, net: -1.0284, action: 'suppress' },
         { kind: 'EXHAUST-REVERT', n: 26, gross: -0.1197, net: -0.1683, action: 'watch' }
       ],
-      note: 'PIN-REJECT lost −1.03R at n=115. Bounce tickets never lead.'
+      note: 'PIN-REJECT lost −1.03R at n=115. Bounce tickets stand aside — watch only.'
     },
     smc: {
       label: 'SMC (FVG)', ticket: true, bestConfirmBoost: false,
