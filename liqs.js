@@ -416,6 +416,9 @@ function liqFlushSetup(snap, rowsOpt, opts){
     setup.t2    = (dir === 'short') ? entry - SETUP_RR2*risk : entry + SETUP_RR2*risk;
     setup.riskPct = risk/entry*100;
     setup.note  = bufNote + ' · ENTRY = last 1h close (current mark)';
+    if (typeof hgDeskFormationEdgeApply === 'function'){
+      hgDeskFormationEdgeApply(setup, { tab: 'liqs', rows: rowsOpt, dir: dir });
+    }
     return setup;
   }catch(e){ return null; }
 }

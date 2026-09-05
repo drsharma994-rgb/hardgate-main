@@ -327,6 +327,13 @@ function hgCmpSetupQuality(a, b, side){
     var bW = String(b.dir || '').toLowerCase() === side ? 1 : 0;
     if (aW !== bW) return bW - aW;
   }
+  var aEdge = (a.deskEdgeAction === 'suppress' || a.dropped) ? 0
+    : (a.demoted || a.deskEdgeAction === 'demote') ? 1
+    : (a.edgeBoost || a.deskEdgeAction === 'prefer') ? 3 : 2;
+  var bEdge = (b.deskEdgeAction === 'suppress' || b.dropped) ? 0
+    : (b.demoted || b.deskEdgeAction === 'demote') ? 1
+    : (b.edgeBoost || b.deskEdgeAction === 'prefer') ? 3 : 2;
+  if (aEdge !== bEdge) return bEdge - aEdge;
   var aC = a.postGateUnchecked ? 0 : (a.postGateChecked ? 2 : 1);
   var bC = b.postGateUnchecked ? 0 : (b.postGateChecked ? 2 : 1);
   if (aC !== bC) return bC - aC;
@@ -356,7 +363,10 @@ function hgRankCryptoSetups(cands, side){
   var best = null, i, c;
   for (i = 0; i < sorted.length; i++){
     c = sorted[i];
-    if (c && !c.postGateUnchecked && c.solidityBookOk !== false){ best = c; break; }
+    if (c && !c.postGateUnchecked && c.solidityBookOk !== false
+        && !c.demoted && !c.dropped && c.deskEdgeAction !== 'suppress' && c.deskEdgeAction !== 'demote'){
+      best = c; break;
+    }
   }
   if (!best && sorted.length) best = sorted[0];
   return { cands: sorted, best: best };
@@ -419,7 +429,11 @@ function hgNormalizeSetupRow(raw){
     gatesTotal: raw.gatesTotal || nest.gatesTotal || 7,
     missing: raw.missing || nest.missing,
     nearClean: !!(raw.nearClean || nest.nearClean),
-    postGateUnchecked: !!raw.postGateUnchecked
+    postGateUnchecked: !!raw.postGateUnchecked,
+    demoted: !!(raw.demoted || nest.demoted),
+    deskEdgeAction: raw.deskEdgeAction || nest.deskEdgeAction || '',
+    edgeBoost: !!(raw.edgeBoost || nest.edgeBoost),
+    rankBoost: raw.rankBoost != null ? raw.rankBoost : nest.rankBoost
   };
   if (isFinite(t2) && t2 > 0) row.t2 = t2;
   if (!hgSetupHasLevels(row)) return null;
@@ -506,7 +520,8 @@ function hgPickMostProbable(cands, nearCands, side, closest){
   if (ranked.cands && ranked.cands.length){
     for (var i = 0; i < ranked.cands.length; i++){
       var c = ranked.cands[i];
-      if (c && hgSetupHasLevels(c) && !c.nearClean && c.solidityBookOk !== false && !c.postGateUnchecked){
+      if (c && hgSetupHasLevels(c) && !c.nearClean && c.solidityBookOk !== false && !c.postGateUnchecked
+          && !c.demoted && c.deskEdgeAction !== 'suppress' && c.deskEdgeAction !== 'demote'){
         best = c;
         break;
       }

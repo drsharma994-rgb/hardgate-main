@@ -274,6 +274,9 @@ function rsAssess(rows, opts){
 
     setup.conviction = rsConviction(setup);
     if (setup.conviction < MIN_CONVICTION) return null;
+    if (typeof W.hgDeskFormationEdgeApply === 'function'){
+      W.hgDeskFormationEdgeApply(setup, { tab: 'reversalsniper', rows: rows, dir: 'long' });
+    }
     return setup;
   }catch(e){ return null; }
 }

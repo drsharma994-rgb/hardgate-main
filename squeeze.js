@@ -326,11 +326,19 @@ function squeezePlan(inp){
         tab: 'squeeze', style: 'swing', dir: dir, gate: gate,
       }));
       if (bl && bl.ok && bl.plan && sqValidSetup(bl.plan)){
-        return sqAttachMeta(_squeezeAttachStack(bl.plan, inp), bl.gate || gate, { formationScore: bl.formationScore });
+        var sqOut = sqAttachMeta(_squeezeAttachStack(bl.plan, inp), bl.gate || gate, { formationScore: bl.formationScore });
+        if (sqOut && typeof hgDeskFormationEdgeApply === 'function'){
+          hgDeskFormationEdgeApply(sqOut, { tab: 'squeeze', rows: inp.rows4h, dir: dir });
+        }
+        return sqOut;
       }
       if (bl && bl.veto) return null;
     }
-    return squeezePlanLegacy(inp);
+    var legacy = squeezePlanLegacy(inp);
+    if (legacy && typeof hgDeskFormationEdgeApply === 'function'){
+      hgDeskFormationEdgeApply(legacy, { tab: 'squeeze', rows: inp.rows4h, dir: dir });
+    }
+    return legacy;
   }catch(e){ return null; }
 }
 

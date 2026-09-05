@@ -14,6 +14,8 @@ import { startSqueezeWatch, squeezeWatchStatus } from './squeeze-watch.mjs';
 import { startAgentWatch, agentWatchStatus } from '../lib/agent-watch.mjs';
 import { startGhDispatch, ghDispatchStatus } from './gh-dispatch.mjs';
 import { startBookDigestWatch, bookDigestWatchStatus } from './book-digest-watch.mjs';
+import { startFormationNightlyWatch, formationNightlyWatchStatus } from './formation-nightly-watch.mjs';
+import { createFormationNightlyApi } from '../lib/formation-nightly-api.mjs';
 import { createPaperbookApi } from '../lib/paperbook-api.mjs';
 import { createExecuteApi } from '../lib/execute-api.mjs';
 import { createNotifyApi } from '../lib/notify-api.mjs';
@@ -41,6 +43,7 @@ const fedCalendarHandler = require('../api/fed-calendar.js');
 const ROOT = fileURLToPath(new URL('../', import.meta.url));   /* repo root (trailing sep) */
 const PORT = +(process.env.PORT || 10000);
 const paperbookHandler = createPaperbookApi(ROOT);
+const formationNightlyHandler = createFormationNightlyApi();
 const executeHandler = createExecuteApi();
 const notifyHandler = createNotifyApi();
 const tradeosHandler = createTradeosMcpApi();
@@ -166,6 +169,15 @@ const server = http.createServer(async (req, res) => {
       res.statusCode = 200;
       return res.end(JSON.stringify(bookDigestWatchStatus()));
     }
+    if (u.pathname === '/api/formation-nightly' || u.pathname.indexOf('/api/formation-nightly/') === 0){
+      if (u.pathname === '/api/formation-nightly/watch'){
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-store');
+        res.statusCode = 200;
+        return res.end(JSON.stringify(formationNightlyWatchStatus()));
+      }
+      return formationNightlyHandler(req, res);
+    }
     if (u.pathname === '/api/book' || u.pathname.indexOf('/api/book/') === 0){
       return paperbookHandler(req, res);
     }
@@ -281,6 +293,7 @@ startAgentWatch();
 startGhDispatch();
 
 startBookDigestWatch();
+startFormationNightlyWatch();
 
 /* Optional co-located daemon (dev / single-service): HARDGATE_DAEMON_AUTOSTART=1 */
 if (process.env.HARDGATE_DAEMON_AUTOSTART === '1' || process.env.HARDGATE_DAEMON_AUTOSTART === 'true'){

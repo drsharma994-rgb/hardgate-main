@@ -361,6 +361,18 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Quiet candle TTL is **720s** so cache spans the 10-min boundary. G1–G7 unchanged.
 - Tests: `tests/test-scan-every-10m.mjs`, `tests/test-hard-refresh.mjs`.
 
+### Desk formation edge — hg-v609
+- **OMNIROUTE BEST kinds** (AVWAP-RECLAIM, CUSUM-SHIFT, DONCHIAN-DRIVE, MMOVE, NR7-BREAK — the only v531 net-positive book, +0.10R prefer-only vs −0.24R overall) retune formation on **SWING SCAN, SCALP SCAN, EDGE, SMART $, SQUEEZE, REVERSAL SNIPER, SMC (FVG), ORDER BLOCKS, LIQUIDITY TRAP, DIVERGENCE, COIL, APEX, OI FLOW, LIQS, ON-CHAIN, CHART VISION, CARRY, VENUE, TERM BASIS**.
+- **What changes:** DIVERGENCE / SMC FVG **suppress** trade-ready tickets (RSI-DIVERGE −0.62R, FVG-FILL −0.19R). TRAP / SNIPER **demote** (sweep family / PIN-REJECT). SCALP + coil-expansion **prefer** NR7-BREAK. Fail-open desks get a BEST-confirm rank boost when a prefer kind or catalog tally agrees. Nightly asides can tighten further.
+- **What does not change:** G1–G7, 7/7 SWING CLEAN, OMNIPRESENT 3+/2+, baked OMNIROUTE demotes. Never invents direction or tickets. House extras with no baked row stay fail-open.
+- Tests: `tests/test-desk-formation-edge.mjs`. Overlay: `desk-formation-edge.js`.
+
+### Nightly formation rebake — hg-v608
+- **Every night after 21:00 UTC** (London close) the day's closed 1h bars retune **OMNIROUTE / OMNIPRESENT / OMNIGOLD 1** formation. Scheduler: `scripts/formation-nightly-watch.mjs` on Render + `.github/workflows/formation-nightly.yml` backup. Overlay: `scripts/formation-nightly.json` served at `GET /api/formation-nightly`.
+- **What changes:** day-toxic kinds (n≥8, gross≤−0.05 or net≤−0.20) **stand aside**; day-survivors (gross+ and net+) **prefer**; OMNIPRESENT cost ceiling may **tighten** (never above baked 0.12); a toxic fade day stands TRIGGERED aside (ARMED stays WATCH); OMNIGOLD 1 picks the day's least-bad tighten-only filter (`raw` / `minRisk5` / `minDisp0.5` / `minRisk5+disp0.5`) but **never** drops SL$ &lt; $5 or displacement &lt; 0.5×ATR.
+- **What does not change:** G1–G7, OMNIPRESENT 3+/2+, baked OMNIROUTE demotes, gold-perp aside. Never invents direction or tickets. `gated+bias` is not a QUALIFIES gate.
+- Tests: `tests/test-formation-nightly.mjs`. Rebake: `node scripts/nightly-formation-rebake.mjs --bars=120`.
+
 ### Replay-guided setup tighten — hg-v607
 - **Backtest evidence** from committed books (`scripts/backtest-omnigold-results.json`, `backtest-omniroute-v531-results.json`, `backtest-omnipresent-results.json`) plus a new **OMNIGOLD 1** replay harness (`scripts/backtest-omnigold1.mjs`) that walks `hgOg1Replay` with zero lookahead.
 - **GOLD SCALP / SWING:** ORB / FVG / HVN / ribbon stay **suppress**. VWAP / Asian / scalp sweep / BOS / OB stay **demote** (never MOST PROBABLE or OMNIGOLD ENGINE lead). SWING 4H sweep + weekly stay **prefer**.

@@ -691,6 +691,9 @@ is in flight it reports 'busy' (overlaps never double-fetch).
                 : ((kRows[kRows.length - 1] && isFinite(kRows[kRows.length - 1].c)) ? kRows[kRows.length - 1].c : NaN);
               c.rows4h = kRows;
               c.levels = carryPlan({ entry: mark, atr: a4, spreadAPR: c.sp.spreadAPR, intervalHours: c.bin.intervalHours });
+              if (c.levels && typeof hgDeskFormationEdgeApply === 'function'){
+                hgDeskFormationEdgeApply(c.levels, { tab: 'carry', rows: kRows });
+              }
             }
           }catch(e){ /* c.levels stays unset -> honest fallback on the card */ }
         }));

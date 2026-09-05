@@ -413,6 +413,9 @@ function render(el){
     + '<button class="btn" id="ocRun">REFRESH ON-CHAIN</button>'
     + '<span class="note" id="ocStat">' + esc(stat) + '</span>'
     + '</div></div>';
+  if (typeof hgDeskFormationEdgeBannerHtml === 'function'){
+    html += hgDeskFormationEdgeBannerHtml('onchain');
+  }
 
   html += '<div class="grid2">';
 

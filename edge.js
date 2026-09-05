@@ -949,6 +949,9 @@ function edgeAssess(rows, item, candleSrc){
       var mac = W.hgMacroAllowsCrypto(item && item.sym, sig.dir);
       if (mac && mac.allow === false) return null;
     }
+    if (typeof W.hgDeskFormationEdgeApply === 'function'){
+      W.hgDeskFormationEdgeApply(plan, { tab: 'edge', rows: rows, dir: sig.dir });
+    }
     return { sig: sig, enrich: en, plan: plan, tally: en.tally, parts: en.parts };
   }catch(e){ return null; }
 }
