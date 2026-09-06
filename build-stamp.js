@@ -18,9 +18,9 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v622',
-  pack: 'OMNI strategy bridge — COMMAND tabs (BRAIN/BOOK/TRADE/LOG/NEWS/BIAS/REGIME/TRENDMX/ROTATION/GATES/STAR)',
-  built: '2026-09-06T07:35:00Z',
+  version: 'hg-v623',
+  pack: 'NIGHTLY formation schedule — all nav tabs (GOLD + TOOLS paint + 21:00 UTC reload)',
+  built: '2026-09-06T14:10:00Z',
   note: 'gold-seven-step.js: Playbook Parts 1–9 + Master Catalog seven-step readout — closed 1H/4H bars (4H derived @22:00 UTC), VP POC/VAH/VAL/HVN/LVN, Asia/PDH/PDL/PWH/PWL/EQ pools, fresh OBs, ATR/ADR/RSI/EMA/KER, DST sessions, news lockout, strategy eligibility, 4H bias, rule-based confluence rank, 12 core gates + G14, entry/stop/T1/T2/size/venue basis, TRIGGERED/WAIT/EXPIRED. IST with UTC. No win rates. Against-tape candidates HELD.'
 };
 

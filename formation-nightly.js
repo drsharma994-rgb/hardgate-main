@@ -1,8 +1,9 @@
 /* HARDGATE — nightly formation overlay (browser).
    Fetches /api/formation-nightly (fallback: committed scripts/formation-nightly.json)
-   and retunes OMNIROUTE / OMNIPRESENT / OMNIGOLD 1 + 19 desk tabs from the
-   rolling 40-day book. Adds asides and tightens floors only. Never loosens
-   G1–G7, baked demotes, or baked desk suppress. Never invents tickets. */
+   and retunes OMNIROUTE / OMNIPRESENT / OMNIGOLD 1 + all desk tabs from the
+   rolling 40-day book. After 21:00 UTC, reloads once per UTC day and repaints
+   every nav tab. Adds asides and tightens floors only. Never loosens G1–G7,
+   baked demotes, or baked desk suppress. Never invents tickets. */
 (function(){
   'use strict';
   var W = (typeof window !== 'undefined') ? window : globalThis;
@@ -26,7 +27,12 @@
     scorecard: 'scoreDay', reliability: 'relDay',
     brain: 'brainDay', book: 'bookDay', trade: 'tradeDay', log: 'logDay',
     news: 'newsDay', bias: 'biasDay', regime: 'regimeDay', trendmx: 'trendmxDay',
-    rotation: 'rotationDay', execute: 'executeDay', startrader: 'starDay'
+    rotation: 'rotationDay', execute: 'executeDay', startrader: 'starDay',
+    'super-gold': 'sgDay', omnigold: 'ogDay', goldswing: 'gswDay', goldscalp: 'gscDay',
+    gold: 'goldDay', goldpro: 'gproDay', goldspot: 'gspotDay', goldcoint: 'gcointDay',
+    goldpine: 'gpineDay', signallog: 'slogDay',
+    risk: 'riskDay', basis: 'basisDay', search: 'searchDay', finder: 'finderDay',
+    tradeos: 'tosDay', hey: 'heyDay', aiagent: 'aiDay'
   };
 
   var HG_TAB_DAY_PAINT_IDS = [
@@ -37,8 +43,13 @@
     'pine', 'pine-msb', 'pine-sqz', 'pine-smf', 'pine-ht', 'pine-smc', 'pine-cipher', 'pine-rf', 'pine-nw', 'pine-avwap',
     'strats', 'meanrev', 'formationlab', 'scorecard', 'reliability',
     'brain', 'book', 'trade', 'log', 'news', 'bias', 'regime', 'trendmx',
-    'rotation', 'execute', 'startrader'
+    'rotation', 'execute', 'startrader',
+    'super-gold', 'omnigold', 'goldswing', 'goldscalp', 'gold', 'goldpro', 'goldspot', 'goldcoint', 'goldpine', 'signallog',
+    'risk', 'basis', 'search', 'finder', 'tradeos', 'hey', 'aiagent'
   ];
+
+  var NIGHTLY_HOUR_UTC = 21;
+  var __hgNightlyScheduleBusy = false;
 
   function fin(x){ var n = +x; return isFinite(n) ? n : NaN; }
 
@@ -102,10 +113,56 @@
       + ' — demote/tighten only, never loosens G1–G7.';
   }
 
+  function utcDayKey(ms){
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+
+  function nightlyDue(lastAt, now){
+    var t = now instanceof Date ? now.getTime() : +now;
+    if (!isFinite(t)) return false;
+    var d = new Date(t);
+    if (d.getUTCHours() < NIGHTLY_HOUR_UTC) return false;
+    if (!lastAt) return true;
+    var prev = Date.parse(lastAt);
+    if (!isFinite(prev)) return true;
+    return utcDayKey(prev) !== utcDayKey(t);
+  }
+
+  function hgCollectTabDayPaintIds(){
+    var seen = {}, out = [], i, g, tabs, id;
+    function add(x){
+      id = String(x || '');
+      if (!id || seen[id]) return;
+      seen[id] = true;
+      out.push(id);
+    }
+    for (i = 0; i < HG_TAB_DAY_PAINT_IDS.length; i++) add(HG_TAB_DAY_PAINT_IDS[i]);
+    try{
+      if (W.HG_NAV_GROUPS && W.HG_NAV_GROUPS.length){
+        for (g = 0; g < W.HG_NAV_GROUPS.length; g++){
+          tabs = W.HG_NAV_GROUPS[g] && W.HG_NAV_GROUPS[g].tabs;
+          if (!tabs) continue;
+          for (i = 0; i < tabs.length; i++) add(tabs[i]);
+        }
+      }
+    }catch(eNav){}
+    try{
+      if (W.HG_TAB_MODS){
+        for (id in W.HG_TAB_MODS) if (Object.prototype.hasOwnProperty.call(W.HG_TAB_MODS, id)) add(id);
+      }
+    }catch(eMods){}
+    try{
+      if (W.HG_tabs && W.HG_tabs.length){
+        for (i = 0; i < W.HG_tabs.length; i++) add(W.HG_tabs[i] && W.HG_tabs[i].id);
+      }
+    }catch(eTabs){}
+    return out;
+  }
+
   function repaintAllTabDays(){
-    var i;
-    for (i = 0; i < HG_TAB_DAY_PAINT_IDS.length; i++){
-      try{ hgTabFormationDayPaint(HG_TAB_DAY_PAINT_IDS[i]); }catch(eP){}
+    var ids = hgCollectTabDayPaintIds(), i;
+    for (i = 0; i < ids.length; i++){
+      try{ hgTabFormationDayPaint(ids[i]); }catch(eP){}
     }
   }
 
@@ -240,8 +297,29 @@
     });
   }
 
+  function hgFormationNightlyScheduleTick(){
+    if (__hgNightlyScheduleBusy) return;
+    try{
+      var j = W.HG_FORMATION_NIGHTLY;
+      var applied = (j && j.asOf) ? j.asOf : null;
+      if (!nightlyDue(applied, new Date())) return;
+      __hgNightlyScheduleBusy = true;
+      hgFormationNightlyLoad().finally(function(){
+        __hgNightlyScheduleBusy = false;
+      });
+    }catch(eTick){ __hgNightlyScheduleBusy = false; }
+  }
+
+  function hgFormationNightlyScheduleArm(){
+    if (typeof W.setInterval !== 'function') return;
+    try{ W.setInterval(hgFormationNightlyScheduleTick, 60000); }catch(eArm){}
+    try{ W.setTimeout(hgFormationNightlyScheduleTick, 5000); }catch(eSoon){}
+  }
+
   W.HG_TAB_DAY_HOSTS = HG_TAB_DAY_HOSTS;
   W.HG_TAB_DAY_PAINT_IDS = HG_TAB_DAY_PAINT_IDS;
+  W.hgCollectTabDayPaintIds = hgCollectTabDayPaintIds;
+  W.hgFormationNightlyScheduleTick = hgFormationNightlyScheduleTick;
   W.hgFormationNightlyApply = hgFormationNightlyApply;
   W.hgFormationNightlyBannerHtml = hgFormationNightlyBannerHtml;
   W.hgTabFormationDayHtml = hgTabFormationDayHtml;
@@ -261,5 +339,8 @@
 
   if (typeof W.setTimeout === 'function'){
     try{ W.setTimeout(function(){ hgFormationNightlyLoad(); }, 80); }catch(eLoad){}
+  }
+  if (typeof W.location !== 'undefined' && W.location){
+    hgFormationNightlyScheduleArm();
   }
 })();

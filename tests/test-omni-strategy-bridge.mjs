@@ -13,7 +13,7 @@ const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 function boot(extra){
   const ctx = { console: { log(){}, warn(){}, error(){} }, Math, Date, isFinite, isNaN,
     parseFloat, parseInt, JSON, Array, Object, Number, String, Promise, RegExp, Error,
-    setTimeout, clearTimeout };
+    setTimeout, clearTimeout, setInterval, clearInterval };
   ctx.window = ctx; ctx.globalThis = ctx; ctx.HG_tabs = []; ctx.HG_warmups = [];
   ctx.localStorage = { getItem: () => null, setItem(){}, removeItem(){} };
   ctx.document = { createElement: () => ({ style: {}, innerHTML: '', appendChild(){}, setAttribute(){} }),
@@ -43,10 +43,6 @@ console.log('== tab kind map covers COMMAND desks ==');
   }
 }
 
-console.log('== build stamp / sw cache ==');
-ok(HG_VER === 'hg-v622', 'HG_VER is hg-v622');
-ok(swCacheOk(read('sw.js')), 'sw.js HG_CACHE matches build stamp');
-
 console.log('== tab kind map covers MODELS desks ==');
 {
   const W = boot();
@@ -60,6 +56,21 @@ console.log('== tab kind map covers MODELS desks ==');
     ok(!!W.hgOmniPrincipalDesk(t), t + ' desk resolves');
   }
   ok(W.hgOmniPrincipalTabForScript('msb-ob') === 'pine-msb', 'script → tab map');
+}
+
+console.log('== tab kind map covers GOLD + TOOLS desks ==');
+{
+  const W = boot();
+  const tabs = [
+    'super-gold', 'omnigold', 'omnigold1', 'goldswing', 'goldscalp', 'gold', 'goldpro',
+    'goldspot', 'goldcoint', 'goldpine', 'signallog',
+    'risk', 'basis', 'search', 'finder', 'tradeos', 'hey', 'aiagent'
+  ];
+  for (const t of tabs){
+    const kind = W.hgOmniPrincipalKind(t, '');
+    ok(!!kind, t + ' → ' + kind);
+    ok(!!W.hgOmniPrincipalDesk(t), t + ' desk resolves');
+  }
 }
 
 console.log('== replay demote on toxic analogues ==');
@@ -96,16 +107,28 @@ console.log('== super-desk-common applies demote effects ==');
   ok(hit.minimalLossPass === false, 'demote clears min-loss pass');
 }
 
-console.log('== formation nightly paints MODELS tabs ==');
+console.log('== formation nightly paints all nav tabs ==');
 {
   const W = boot();
   const ids = W.HG_TAB_DAY_PAINT_IDS || [];
-  ok(ids.indexOf('super-setup') >= 0, 'super-setup in paint list');
-  ok(ids.indexOf('pine-msb') >= 0, 'pine-msb in paint list');
-  ok(ids.indexOf('formationlab') >= 0, 'formationlab in paint list');
-  ok(ids.indexOf('brain') >= 0, 'brain in paint list');
-  ok(ids.indexOf('execute') >= 0, 'execute in paint list');
-  ok(ids.indexOf('startrader') >= 0, 'startrader in paint list');
+  const navTabs = [
+    'brain', 'book', 'trade', 'log', 'news', 'bias', 'regime', 'trendmx', 'rotation', 'execute', 'startrader',
+    'combi', 'omnibtc', 'omnipresent', 'omniroute', 'dexscreener', 'setupconfirm', 'best', 'swing', 'scalp',
+    'edge', 'smart', 'squeeze', 'reversalsniper', 'smc', 'ob', 'trap', 'div', 'coil', 'apex', 'oiflow', 'liqs',
+    'onchain', 'chartvision', 'carry', 'venueprem', 'termbasis',
+    'super-setup', 'super-best', 'super-sniper', 'super-book', 'super-calibrate',
+    'pine', 'pine-msb', 'pine-sqz', 'strats', 'meanrev', 'formationlab', 'scorecard', 'reliability',
+    'super-gold', 'omnigold', 'omnigold1', 'goldswing', 'goldscalp', 'gold', 'goldpro', 'goldspot', 'goldcoint',
+    'goldpine', 'signallog',
+    'risk', 'basis', 'search', 'finder', 'tradeos', 'hey', 'aiagent'
+  ];
+  for (const t of navTabs) ok(ids.indexOf(t) >= 0, t + ' in paint list');
+  ok(typeof W.hgCollectTabDayPaintIds === 'function', 'hgCollectTabDayPaintIds export');
+  ok(typeof W.hgFormationNightlyScheduleTick === 'function', 'nightly schedule tick export');
 }
+
+console.log('== build stamp / sw cache ==');
+ok(HG_VER === 'hg-v623', 'HG_VER is hg-v623');
+ok(swCacheOk(read('sw.js')), 'sw.js HG_CACHE matches build stamp');
 
 console.log('\n' + pass + ' passed');

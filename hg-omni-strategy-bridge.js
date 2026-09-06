@@ -2,7 +2,7 @@
    HARDGATE — hg-omni-strategy-bridge.js
    Shares OMNIROUTE mechanic registry + replay/nightly principal across
    SUPER / PINE / MODELS / COMMAND (BRAIN / BOOK / TRADE / LOG / NEWS / BIAS /
-   REGIME / TREND MATRIX / ROTATION / GATES / STAR TRADER) tabs.
+   REGIME / TREND MATRIX / ROTATION / GATES / STAR TRADER) / GOLD / TOOLS tabs.
 
    Applies v531 replay demotes, formation nightly day-aside/prefer, and
    desk-formation-edge analogues. Demote/suppress only — never loosens G1–G7.
@@ -26,7 +26,12 @@ var TAB_DESK = {
   'scorecard': 'swing', 'reliability': 'swing',
   'brain': 'swing', 'book': 'swing', 'trade': 'swing', 'log': 'swing',
   'news': 'edge', 'bias': 'swing', 'regime': 'edge', 'trendmx': 'swing',
-  'rotation': 'smart', 'execute': 'swing', 'startrader': 'swing'
+  'rotation': 'smart', 'execute': 'swing', 'startrader': 'swing',
+  'super-gold': 'swing', 'omnigold': 'swing', 'omnigold1': 'swing',
+  'goldswing': 'swing', 'goldscalp': 'scalp', 'gold': 'swing', 'goldpro': 'swing',
+  'goldspot': 'swing', 'goldcoint': 'divergence', 'goldpine': 'edge', 'signallog': 'swing',
+  'risk': 'swing', 'basis': 'termbasis', 'search': 'edge', 'finder': 'swing',
+  'tradeos': 'swing', 'hey': 'edge', 'aiagent': 'edge'
 };
 
 var SCRIPT_TAB = {
@@ -47,8 +52,14 @@ var TAB_KIND = {
   'scorecard': 'MMOVE', 'reliability': 'MMOVE',
   'brain': 'MMOVE', 'book': 'MMOVE', 'trade': 'TREND-RECLAIM', 'log': 'MMOVE',
   'news': 'ORB', 'bias': 'HTF-PULLBACK', 'regime': 'COMPRESSION-BREAK',
-  'trendmx': 'DONCHIAN-DRIVE', 'rotation': 'CUSUM-SHIFT', 'execute': 'TREND-RECLAIM',
-  'startrader': 'DONCHIAN-DRIVE'
+  'trendmx': 'DONCHIAN-DRIVE',   'rotation': 'CUSUM-SHIFT', 'execute': 'TREND-RECLAIM',
+  'startrader': 'DONCHIAN-DRIVE',
+  'super-gold': 'AVWAP-RECLAIM', 'omnigold': 'MMOVE', 'omnigold1': 'AVWAP-RECLAIM',
+  'goldswing': 'HTF-PULLBACK', 'goldscalp': 'NR7-BREAK', 'gold': 'MMOVE',
+  'goldpro': 'AVWAP-RECLAIM', 'goldspot': 'VALUE', 'goldcoint': 'VWAP-REVERT',
+  'goldpine': 'CUSUM-SHIFT', 'signallog': 'MMOVE',
+  'risk': 'MMOVE', 'basis': 'FUND-FADE', 'search': 'ORB', 'finder': 'TREND-RECLAIM',
+  'tradeos': 'MMOVE', 'hey': 'ORB', 'aiagent': 'MMOVE'
 };
 
 var SCRIPT_KIND = {
