@@ -361,6 +361,10 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Quiet candle TTL is **720s** so cache spans the 10-min boundary. G1–G7 unchanged.
 - Tests: `tests/test-scan-every-10m.mjs`, `tests/test-hard-refresh.mjs`.
 
+### SETUP CONFIRM tab — hg-v616
+- New **SETUP CONFIRM** desk in CRYPTO: reads SWING / SCALP / EDGE / BEST / SMART $ / SQUEEZE / OI FLOW / BRAIN / DEX / OMNIROUTE snapshots and only surfaces setups where **3+ desks** agree with **2+ CLEAN** tickets. Hard blockers: desk suppress, post-gate veto, macro, direction conflict, stale scans. TRIPLE STACK bonus. Never invents levels.
+- Tests: `tests/test-setup-confirm.mjs`.
+
 ### DEX SCREENER tab — hg-v615
 - New **DEX SCREENER** tab in the CRYPTO nav group: scans **meme perps** (DOGE, PEPE, WIF, BONK, FLOKI, TRUMP, PUMP, …) on Delta + CoinDCX for **OMNIROUTE explosive setups** — SQUEEZE-FIRE, NR7-BREAK, VOL-EXPANSION, compression breaks, measured moves.
 - Ranked by breakout momentum (7d change + turnover + mechanic weight). Overextended names (+18% 7d) are penalised. Uses `hgOmniEvaluate` + nightly day book; exports `hgOmniSetupCard` for shared card HTML.
