@@ -141,7 +141,7 @@ console.log('== wiring ==');
   ok(/setup-confirm\.js/.test(html), 'index loads setup-confirm.js');
   ok(/setupconfirm/.test(html), 'nav includes setupconfirm');
   ok(/\.\/setup-confirm\.js/.test(sw), 'sw precaches setup-confirm.js');
-  ok(/const HG_CACHE = 'hg-v616'/.test(sw) || /const HG_CACHE = 'hg-v617'/.test(sw) || /const HG_CACHE = 'hg-v618'/.test(sw), 'sw HG_CACHE current');
+  ok(/const HG_CACHE = 'hg-v616'/.test(sw) || /const HG_CACHE = 'hg-v617'/.test(sw) || /const HG_CACHE = 'hg-v618'/.test(sw) || /const HG_CACHE = 'hg-v619'/.test(sw), 'sw HG_CACHE current');
   ok(/setupconfirm:\s*'cfCards'/.test(read('setup-ui.js')), 'HG_MP_HOST maps setupconfirm');
 }
 

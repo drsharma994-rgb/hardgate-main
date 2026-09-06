@@ -656,6 +656,7 @@ W.hgConfirmAggregate = cfAggregate;
 W.hgConfirmKey = cfKey;
 W.hgConfirmTapeChg24 = cfTapeChg24;
 W.hgConfirmAssignTier = cfAssignTier;
+W.hgConfirmGlobalBlockers = cfGlobalBlockers;
 W.hgSetupConfirmScan = function(opts){ return cfRunScan(__cf.ui, opts || {}); };
 W.setupConfirmState = function(){
   try{ return __cf.snap ? JSON.parse(JSON.stringify(__cf.snap)) : null; }catch(e){ return null; }

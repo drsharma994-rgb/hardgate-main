@@ -5,6 +5,8 @@
 
    Read-only aggregator — never invents levels. Harvests module scan snaps,
    SETUP CONFIRM sources, and inline-tab cards captured via hgMpSnapHarvest.
+   Ranks with structural spine + confirm tiers; blocks chase / suppress /
+   direction conflict before pinning MOST PROBABLE.
    ========================================================================= */
 (function(){
 'use strict';
@@ -14,6 +16,11 @@ var W = (typeof window !== 'undefined') ? window : this;
 var SHOW_MAX = 20;
 var AUTO_WARM_MS = 10 * 60 * 1000;
 var MIN_AGREE_SOURCES = 2;
+var MIN_BOOK_SOURCES = 2;
+var MIN_BOOK_CLEAN = 2;
+var CHASE_CHG24 = 15;
+var STRUCTURAL_IDS = { swing: 1, scalp: 1, edge: 1, best: 1 };
+var TIER_RANK = { PRIME: 7, CONFIRMED: 6, STRONG: 5, AGREE: 4, BUILDING: 3, WATCH: 2, SOLO: 1, BLOCKED: 0 };
 
 var __cb = { busy: false, ran: false, ui: null, snap: null, lastCardsHtml: '' };
 
@@ -53,12 +60,16 @@ function cbNormRow(raw, meta){
   return row;
 }
 
-function cbCollect(snap){
-  return gfn('hgCollectSetupRows') ? W.hgCollectSetupRows(snap) : [];
+function cbRowOk(row){
+  if (!row || !row.sym || !row.dir) return false;
+  if (row.deskEdgeAction === 'suppress' || row.deskEdgeAction === 'demote') return false;
+  if (row.postGateVeto || row.dropped) return false;
+  if (gfn('hgSetupHasLevels') && !W.hgSetupHasLevels(row)) return false;
+  return true;
 }
 
 function cbHarvestExtra(){
-  var bag = [], i, j, s, rows, r, row, lv;
+  var bag = [], i, s, rows, r, row, lv;
 
   if (gfn('hgObtcState')){
     try{
@@ -71,7 +82,7 @@ function cbHarvestExtra(){
           source: 'omnibtc', label: 'OMNIBTC', weight: 2.5, at: s.at,
           clean: !!r.clean, near: !!r.near
         });
-        if (row) bag.push(row);
+        if (row && cbRowOk(row)) bag.push(row);
       }
     }catch(eOb){}
   }
@@ -87,7 +98,7 @@ function cbHarvestExtra(){
           source: 'omnipresent', label: 'OMNIPRESENT', weight: 2, at: s.at,
           clean: !!(r.grade && r.grade.ticket), near: r.status === 'TRIGGERED' && !(r.grade && r.grade.ticket)
         });
-        if (row) bag.push(row);
+        if (row && cbRowOk(row)) bag.push(row);
       }
     }catch(eOp){}
   }
@@ -103,7 +114,7 @@ function cbHarvestExtra(){
           source: 'reversalsniper', label: 'REV SNIPER', weight: 2, at: s.at,
           clean: !!(r.setup && r.setup.ticket), near: true
         });
-        if (row) bag.push(row);
+        if (row && cbRowOk(row)) bag.push(row);
       }
     }catch(eRs){}
   }
@@ -115,7 +126,7 @@ function cbHarvestExtra(){
         row = cbNormRow(s.setup, {
           source: 'liqs', label: 'LIQS', weight: 1.5, at: s.at, clean: !!s.setup.ticket
         });
-        if (row) bag.push(row);
+        if (row && cbRowOk(row)) bag.push(row);
       }
     }catch(eLq){}
   }
@@ -131,7 +142,7 @@ function cbHarvestExtra(){
           source: 'chartvision', label: 'CHART VISION', weight: 1.5, at: s.at,
           clean: !!r.clean7, near: !r.clean7
         });
-        if (row) bag.push(row);
+        if (row && cbRowOk(row)) bag.push(row);
       }
     }catch(eCv){}
   }
@@ -146,7 +157,7 @@ function cbHarvestExtra(){
           dir: lv.dir || 'short',
           entry: lv.entry, stop: lv.stop, t1: lv.t1, t2: lv.t2
         }, { source: 'carry', label: 'CARRY', weight: 1, at: s.at, clean: true });
-        if (row) bag.push(row);
+        if (row && cbRowOk(row)) bag.push(row);
       }
     }catch(eCr){}
   }
@@ -158,7 +169,7 @@ function cbHarvestExtra(){
         row = cbNormRow(s, {
           source: 'venueprem', label: 'VENUE', weight: 1, at: s.at, clean: true
         });
-        if (row) bag.push(row);
+        if (row && cbRowOk(row)) bag.push(row);
       }
     }catch(eVp){}
   }
@@ -173,7 +184,7 @@ function cbHarvestExtra(){
         row = cbNormRow(Object.assign({ sym: r.pair || r.sym }, r.plan), {
           source: 'termbasis', label: 'TERM BASIS', weight: 1, at: s.at, clean: !!r.ticket
         });
-        if (row) bag.push(row);
+        if (row && cbRowOk(row)) bag.push(row);
       }
     }catch(eTb){}
   }
@@ -185,7 +196,7 @@ function cbHarvestExtra(){
         row = cbNormRow(s.setup, {
           source: 'onchain', label: 'ON-CHAIN', weight: 1, at: s.at, clean: !!s.setup.ticket
         });
-        if (row) bag.push(row);
+        if (row && cbRowOk(row)) bag.push(row);
       }
     }catch(eOc){}
   }
@@ -205,7 +216,7 @@ function cbHarvestAll(){
   var out = [];
   for (i = 0; i < bag.length; i++){
     row = bag[i];
-    if (!row || !row.sym || !row.dir) continue;
+    if (!cbRowOk(row)) continue;
     k = (row.source || '') + '|' + cbKey(row.sym, row.dir);
     if (seen[k]) continue;
     seen[k] = true;
@@ -224,14 +235,31 @@ function cbScoreHit(row){
   return w * 0.35;
 }
 
-function cbPickLeader(hits){
-  var clean = [], near = [], i;
+function cbStructuralClean(hits){
+  var n = 0, i;
+  for (i = 0; i < hits.length; i++){
+    if (hits[i].clean && STRUCTURAL_IDS[hits[i].source]) n++;
+  }
+  return n;
+}
+
+function cbHasSpine(g){
+  return !!(g.triple || (g.sources.swing && g.sources.edge) || cbStructuralClean(g.hits) >= 2);
+}
+
+function cbPickLeader(hits, sym, dir){
+  var clean = [], near = [], i, side;
   for (i = 0; i < hits.length; i++){
     if (hits[i].clean) clean.push(hits[i]);
     else if (hits[i].near || hits[i].nearClean) near.push(hits[i]);
   }
+  side = gfn('hgTapeSideFromPicture') ? W.hgTapeSideFromPicture() : (dir || null);
+  if (gfn('hgRankCryptoSetups')){
+    var ranked = W.hgRankCryptoSetups(clean.concat(near), side);
+    if (ranked && ranked.best) return ranked.best;
+  }
   if (gfn('hgPickMostProbable')){
-    var pick = W.hgPickMostProbable(clean, near, hits[0] && hits[0].dir, null);
+    var pick = W.hgPickMostProbable(clean, near, dir, null);
     if (pick && pick.row) return pick.row;
   }
   return clean[0] || near[0] || hits[0] || null;
@@ -259,11 +287,14 @@ function cbGroup(bag){
   for (k in map){
     if (!Object.prototype.hasOwnProperty.call(map, k)) continue;
     g = map[k];
-    g.leader = cbPickLeader(g.hits);
+    g.leader = cbPickLeader(g.hits, g.sym, g.dir);
     g.triple = gfn('hgTripleStackMatch') ? W.hgTripleStackMatch(g.sym, g.dir) : null;
     if (g.triple) g.score += 2;
-    if (g.sourceCount >= 4 && g.cleanCount >= 2) g.badge = 'STRONG';
-    else if (g.sourceCount >= MIN_AGREE_SOURCES) g.badge = 'AGREE';
+    g.structuralClean = cbStructuralClean(g.hits);
+    g.spine = cbHasSpine(g);
+    if (g.spine) g.score += 1.5;
+    if (g.sourceCount >= 4 && g.cleanCount >= 2 && g.spine) g.badge = 'STRONG';
+    else if (g.sourceCount >= MIN_AGREE_SOURCES && g.cleanCount >= 1) g.badge = 'AGREE';
     else g.badge = 'SOLO';
     g.sourceList = Object.keys(g.sources).map(function(id){
       var h = g.sources[id];
@@ -271,77 +302,156 @@ function cbGroup(bag){
     });
     out.push(g);
   }
-  out.sort(function(a, b){
+  return cbEnrich(out, bag);
+}
+
+function cbEnrich(groups, bag){
+  var confirmMap = {}, i, g, cf, agg;
+  if (gfn('hgConfirmAggregate')){
+    try{
+      agg = W.hgConfirmAggregate(bag);
+      for (i = 0; i < agg.length; i++) confirmMap[agg[i].key] = agg[i];
+    }catch(eA){}
+  }
+  for (i = 0; i < groups.length; i++){
+    g = groups[i];
+    cf = confirmMap[g.key];
+    if (cf){
+      g.confirmTier = cf.tier;
+      g.blockers = (cf.blockers || []).slice();
+      g.needs = (cf.needs || []).slice();
+      g.structuralClean = cf.structuralClean != null ? cf.structuralClean : g.structuralClean;
+      g.spine = !!(cf.triple || g.spine);
+      if (cf.tier === 'PRIME' || cf.tier === 'CONFIRMED') g.badge = cf.tier;
+      else if (cf.tier === 'BLOCKED') g.badge = 'BLOCKED';
+      else if (cf.tier === 'BUILDING' && g.badge === 'SOLO') g.badge = 'BUILDING';
+    } else {
+      g.blockers = [];
+      g.needs = [];
+      g.confirmTier = g.badge;
+    }
+    g.combiTier = (g.blockers && g.blockers.length) ? 'BLOCKED' : (g.confirmTier || g.badge);
+    g.tradeable = cbIsTradeable(g);
+  }
+  return cbSort(groups);
+}
+
+function cbIsTradeable(g){
+  if (!g || g.blockers && g.blockers.length) return false;
+  if (g.combiTier === 'BLOCKED') return false;
+  if (g.combiTier === 'PRIME' || g.combiTier === 'CONFIRMED') return true;
+  if (g.badge === 'STRONG' && g.spine && g.cleanCount >= MIN_BOOK_CLEAN) return true;
+  if (g.sourceCount >= MIN_BOOK_SOURCES && g.cleanCount >= MIN_BOOK_CLEAN && g.spine) return true;
+  return false;
+}
+
+function cbSort(groups){
+  return groups.sort(function(a, b){
+    var ta = TIER_RANK[a.combiTier] || TIER_RANK[a.badge] || 0;
+    var tb = TIER_RANK[b.combiTier] || TIER_RANK[b.badge] || 0;
+    if (tb !== ta) return tb - ta;
+    if (b.tradeable !== a.tradeable) return (b.tradeable ? 1 : 0) - (a.tradeable ? 1 : 0);
     if (b.sourceCount !== a.sourceCount) return b.sourceCount - a.sourceCount;
     if (b.cleanCount !== a.cleanCount) return b.cleanCount - a.cleanCount;
     if (b.score !== a.score) return b.score - a.score;
     return 0;
   });
-  return out;
 }
 
 function cbPickGlobal(groups, bag){
-  var i, g, pick, confirmTier = null;
-  if (gfn('hgConfirmAggregate')){
-    try{
-      var agg = W.hgConfirmAggregate(bag);
-      for (i = 0; i < agg.length; i++){
-        if (agg[i].tier === 'PRIME' || agg[i].tier === 'CONFIRMED'){
-          if (agg[i].leader){
-            return {
-              row: agg[i].leader, tier: agg[i].tier === 'PRIME' ? 'clean' : 'clean',
-              source: 'combi', meta: agg[i], confirmTier: agg[i].tier
-            };
-          }
-        }
-      }
-    }catch(eA){}
-  }
+  var i, g, tradeable = [];
   for (i = 0; i < groups.length; i++){
     g = groups[i];
-    if (g.sourceCount >= MIN_AGREE_SOURCES && g.cleanCount >= 1 && g.leader){
-      return { row: g.leader, tier: g.cleanCount >= 2 ? 'clean' : 'near', source: 'combi', meta: g };
+    if (!g.tradeable || !g.leader) continue;
+    if (g.combiTier === 'PRIME') return { row: g.leader, tier: 'clean', source: 'combi', meta: g, confirmTier: 'PRIME' };
+    tradeable.push(g);
+  }
+  for (i = 0; i < tradeable.length; i++){
+    g = tradeable[i];
+    if (g.combiTier === 'CONFIRMED') return { row: g.leader, tier: 'clean', source: 'combi', meta: g, confirmTier: 'CONFIRMED' };
+  }
+  for (i = 0; i < tradeable.length; i++){
+    g = tradeable[i];
+    if (g.badge === 'STRONG' && g.spine && g.cleanCount >= MIN_BOOK_CLEAN){
+      return { row: g.leader, tier: 'clean', source: 'combi', meta: g };
     }
   }
-  if (gfn('hgPickMostProbableAny')){
-    pick = W.hgPickMostProbableAny(bag, gfn('hgTapeSideFromPicture') ? W.hgTapeSideFromPicture() : null);
-    if (pick && pick.row) return pick;
-  }
-  if (groups.length && groups[0].leader){
-    return { row: groups[0].leader, tier: groups[0].cleanCount ? 'clean' : 'near', source: 'combi', meta: groups[0] };
+  for (i = 0; i < tradeable.length; i++){
+    g = tradeable[i];
+    if (g.sourceCount >= MIN_BOOK_SOURCES && g.cleanCount >= MIN_BOOK_CLEAN && g.spine){
+      return { row: g.leader, tier: g.cleanCount >= 2 ? 'clean' : 'near', source: 'combi', meta: g };
+    }
   }
   return null;
 }
 
-function cbBadgePill(badge){
-  if (badge === 'STRONG') return '<span class="gpip ok">STRONG AGREE</span>';
-  if (badge === 'AGREE') return '<span class="gpip ok">MULTI-DESK</span>';
+function cbTierPill(g){
+  var tier = g.combiTier || g.badge || 'SOLO';
+  if (tier === 'PRIME') return '<span class="gpip ok">PRIME</span>';
+  if (tier === 'CONFIRMED') return '<span class="gpip ok">CONFIRMED</span>';
+  if (tier === 'STRONG') return '<span class="gpip ok">STRONG AGREE</span>';
+  if (tier === 'AGREE') return '<span class="gpip ok">MULTI-DESK</span>';
+  if (tier === 'BUILDING') return '<span class="gpip" style="color:#b45309;border-color:rgba(180,83,9,.45)">BUILDING</span>';
+  if (tier === 'BLOCKED') return '<span class="gpip bad">BLOCKED</span>';
+  if (tier === 'WATCH') return '<span class="gpip">WATCH</span>';
   return '<span class="gpip">SOLO</span>';
 }
 
 function cbCardHtml(g){
   var leader = g.leader || {};
-  var h = '<div class="card">';
+  var rr = '';
+  if (isFinite(fin(leader.rr))) rr = ' · RR ' + fin(leader.rr).toFixed(1);
+  else if (leader.entry && leader.stop && leader.t1){
+    var risk = Math.abs(fin(leader.entry) - fin(leader.stop));
+    var rew = Math.abs(fin(leader.t1) - fin(leader.entry));
+    if (risk > 0 && isFinite(rew)) rr = ' · RR ' + (rew / risk).toFixed(1);
+  }
+  var h = '<div class="card' + (g.combiTier === 'BLOCKED' ? ' tier-blocked' : '') + '">';
   h += '<div class="ttl">' + esc(g.sym) + ' · ' + esc(String(g.dir || '').toUpperCase()) + ' '
-    + cbBadgePill(g.badge) + ' <span class="dim">score ' + g.score.toFixed(1)
-    + ' · ' + g.sourceCount + ' desks · ' + g.cleanCount + ' CLEAN</span></div>';
+    + cbTierPill(g) + ' <span class="dim">score ' + g.score.toFixed(1)
+    + ' · ' + g.sourceCount + ' desks · ' + g.cleanCount + ' CLEAN' + rr + '</span></div>';
   if (g.triple){
     h += '<div class="dim"><span class="gpip ok">TRIPLE STACK</span> SWING + EDGE + BRAIN agree</div>';
+  } else if (g.spine){
+    h += '<div class="dim"><span class="gpip ok">STRUCTURAL SPINE</span> swing/edge/best structural agreement</div>';
   }
   h += '<div class="dim">Desks: ' + esc(g.sourceList.join(' · ')) + '</div>';
+  if (g.needs && g.needs.length && !g.tradeable){
+    h += '<div class="dim">Needs: ' + esc(g.needs.join(' · ')) + '</div>';
+  }
+  if (gfn('hgStrategyConfirmChipHtml') && leader.strategyConfirm){
+    h += '<div style="margin-top:4px">' + W.hgStrategyConfirmChipHtml(leader.strategyConfirm, leader.strategyWith, leader.strategyAgainst) + '</div>';
+  }
+  if (g.blockers && g.blockers.length){
+    h += '<div class="note warn" style="margin-top:6px"><b>BLOCKED</b> — ' + esc(g.blockers.join(' · ')) + '</div>';
+  }
   if (leader.entry && leader.stop && leader.t1){
     h += '<div class="plan">ENTRY ' + esc(String(leader.entry)) + ' · STOP ' + esc(String(leader.stop))
       + ' · T1 ' + esc(String(leader.t1))
       + (leader.t2 ? (' · T2 ' + esc(String(leader.t2))) : '')
       + ' · leader ' + esc(leader.sourceLabel || leader.source || 'desk') + '</div>';
   }
-  if (g.sourceCount >= MIN_AGREE_SOURCES && g.cleanCount >= 1 && gfn('bookBtnHTML') && leader.entry){
+  if (gfn('hgStrategyTradeDetailHtml') && leader.entry){
+    try{ h += W.hgStrategyTradeDetailHtml(leader); }catch(eD){}
+  }
+  if (g.tradeable && gfn('bookBtnHTML') && leader.entry){
     h += '<div class="row" style="margin-top:8px">' + W.bookBtnHTML(g.sym, g.dir, leader.entry, leader.stop, leader.t1, {
-      scanner: 'combi', strategy: 'multi-desk combi', tier: g.cleanCount >= 2 ? 'clean' : 'near', confirmed: g.cleanCount >= 2
+      scanner: 'combi', strategy: 'multi-desk combi', tier: g.cleanCount >= 2 ? 'clean' : 'near',
+      confirmed: g.combiTier === 'PRIME' || g.combiTier === 'CONFIRMED'
     }) + '</div>';
+  } else if (!g.tradeable && g.combiTier !== 'BLOCKED'){
+    h += '<div class="note" style="margin-top:6px">Standing aside — need structural spine + '
+      + MIN_BOOK_SOURCES + '+ desks, ' + MIN_BOOK_CLEAN + '+ CLEAN, or SETUP CONFIRM PRIME/CONFIRMED.</div>';
   }
   h += '</div>';
   return h;
+}
+
+function cbGlobalBlockers(){
+  if (gfn('hgConfirmGlobalBlockers')){
+    try{ return W.hgConfirmGlobalBlockers(); }catch(e){}
+  }
+  return [];
 }
 
 async function cbWarmDesks(){
@@ -363,18 +473,29 @@ async function cbRunScan(ui, opts){
     var stale = !__cb.snap || !__cb.snap.at || (Date.now() - __cb.snap.at > AUTO_WARM_MS);
     if (opts.warm || (stale && !opts.noWarm)) await cbWarmDesks();
     if (ui && ui.stat) ui.stat.textContent = 'merging desk snapshots…';
+    var globalBlock = cbGlobalBlockers();
+    if (ui && ui.global){
+      ui.global.innerHTML = globalBlock.length
+        ? '<div class="note warn" style="margin-bottom:8px"><b>HOUSE HALT</b> — ' + esc(globalBlock.join(' · ')) + '</div>'
+        : '';
+    }
     var bag = cbHarvestAll();
     var groups = cbGroup(bag);
-    var globalPick = cbPickGlobal(groups, bag);
-    var strong = groups.filter(function(g){ return g.badge === 'STRONG'; });
-    var agree = groups.filter(function(g){ return g.badge === 'AGREE' || g.badge === 'STRONG'; });
+    var globalPick = globalBlock.length ? null : cbPickGlobal(groups, bag);
+    var tradeable = groups.filter(function(g){ return g.tradeable; });
+    var prime = groups.filter(function(g){ return g.combiTier === 'PRIME'; });
+    var confirmed = groups.filter(function(g){ return g.combiTier === 'CONFIRMED'; });
+    var strong = groups.filter(function(g){ return g.badge === 'STRONG' || g.combiTier === 'STRONG'; });
     __cb.snap = {
       at: Date.now(),
       harvested: bag.length,
       groups: groups,
       globalPick: globalPick,
+      tradeable: tradeable.length,
+      prime: prime.length,
+      confirmed: confirmed.length,
       strong: strong.length,
-      agree: agree.length
+      globalBlockers: globalBlock
     };
     __cb.ran = true;
     var show = groups.slice(0, SHOW_MAX);
@@ -382,6 +503,9 @@ async function cbRunScan(ui, opts){
     if (!groups.length){
       html = '<div class="empty">No desk snapshots yet — press <b>WARM DESKS</b> or run scans on SWING / EDGE / OMNIROUTE first.</div>';
     } else {
+      if (!tradeable.length){
+        html += '<div class="note warn" style="margin-bottom:8px">No tradeable combi leader yet — need structural spine + multi-desk CLEAN agreement (or SETUP CONFIRM PRIME/CONFIRMED).</div>';
+      }
       for (var i = 0; i < show.length; i++) html += cbCardHtml(show[i]);
     }
     if (ui && ui.cards){
@@ -390,7 +514,7 @@ async function cbRunScan(ui, opts){
     }
     if (ui && ui.stat){
       ui.stat.textContent = (globalPick && globalPick.row ? (globalPick.row.sym + ' ' + String(globalPick.row.dir || '').toUpperCase() + ' · ') : '')
-        + strong.length + ' STRONG · ' + agree.length + ' multi-desk · '
+        + prime.length + ' PRIME · ' + confirmed.length + ' CONFIRMED · ' + tradeable.length + ' tradeable · '
         + groups.length + ' setups from ' + bag.length + ' desk rows';
     }
     if (gfn('hgPinMostProbablePanel') && globalPick && globalPick.row && ui && ui.cards){
@@ -409,10 +533,11 @@ function mountCombi(el){
   el.innerHTML =
     '<div class="panel">'
     + '<h2>Combi <span>all desks merged · one most probable setup</span></h2>'
-    + '<div class="note hg-lead" style="margin-bottom:10px">Cross-tab <b>merger</b> — harvests every published desk snapshot (SWING, SCALP, EDGE, BEST, SMART $, '
-    + 'SQUEEZE, OI FLOW, BRAIN, DEX, OMNIROUTE, OMNIBTC, OMNIPRESENT, REV SNIPER, SMC, OB, TRAP, DIV, COIL, APEX, LIQS, CARRY, …) '
-    + 'and ranks by multi-desk agreement. Pins the <b>MOST PROBABLE</b> ticket at the top — prefers PRIME/CONFIRMED when SETUP CONFIRM agrees. '
-    + 'No invented levels.</div>'
+    + '<div class="note hg-lead" style="margin-bottom:10px">Cross-tab <b>merger</b> — harvests every published desk snapshot, ranks by structural spine '
+    + '(SWING+EDGE / TRIPLE STACK / 2 structural CLEAN) + multi-desk agreement, and applies SETUP CONFIRM blockers '
+    + '(±' + CHASE_CHG24 + '% chase, suppress, direction conflict, BRAIN aside, news lockout). '
+    + 'Pins <b>MOST PROBABLE</b> only when PRIME / CONFIRMED / STRONG+spine — never a solo noise ticket. No invented levels.</div>'
+    + '<div id="combiGlobal"></div>'
     + '<div class="row"><button class="btn" id="combiRun">MERGE DESKS</button>'
     + '<button class="btn secondary" id="combiWarm">WARM DESKS</button>'
     + '<span class="note" id="combiStat">idle — warm desks or merge from existing scans</span></div>'
@@ -422,7 +547,8 @@ function mountCombi(el){
     btn: el.querySelector('#combiRun'),
     warm: el.querySelector('#combiWarm'),
     stat: el.querySelector('#combiStat'),
-    cards: el.querySelector('#combiCards')
+    cards: el.querySelector('#combiCards'),
+    global: el.querySelector('#combiGlobal')
   };
   __cb.ui = ui;
   if (ui.btn) ui.btn.addEventListener('click', function(){ cbRunScan(ui, {}); });
@@ -446,7 +572,9 @@ function refreshCombi(opts){
 
 W.hgCombiHarvest = cbHarvestAll;
 W.hgCombiGroup = cbGroup;
+W.hgCombiEnrich = cbEnrich;
 W.hgCombiPickGlobal = cbPickGlobal;
+W.hgCombiIsTradeable = cbIsTradeable;
 W.hgCombiScan = function(opts){ return cbRunScan(__cb.ui, opts || {}); };
 W.combiState = function(){
   try{ return __cb.snap ? JSON.parse(JSON.stringify(__cb.snap)) : null; }catch(e){ return null; }
