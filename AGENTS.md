@@ -361,6 +361,10 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Quiet candle TTL is **720s** so cache spans the 10-min boundary. G1–G7 unchanged.
 - Tests: `tests/test-scan-every-10m.mjs`, `tests/test-hard-refresh.mjs`.
 
+### COMBI tab — hg-v618
+- New **COMBI** desk in CRYPTO (first tab): merges every published desk snapshot — SWING / SCALP / EDGE / BEST / SMART $ / SQUEEZE / OI FLOW / BRAIN / DEX / OMNIROUTE / OMNIBTC / OMNIPRESENT / REV SNIPER / SMC / OB / TRAP / DIV / COIL / APEX / LIQS / CARRY / VENUE / TERM BASIS / ON-CHAIN — and ranks by multi-desk agreement. Pins **MOST PROBABLE** at top; prefers PRIME/CONFIRMED when SETUP CONFIRM agrees. Inline tabs captured via `hgMpSnapHarvest`. Never invents levels.
+- Tests: `tests/test-combi.mjs`.
+
 ### SETUP CONFIRM tightened — hg-v617
 - **Structural spine required:** SWING+EDGE both present, TRIPLE STACK, or 2 structural CLEAN (swing/scalp/edge/best) before CONFIRMED.
 - **PRIME tier:** TRIPLE STACK + 4 desks + 3 CLEAN — highest conviction handoff.

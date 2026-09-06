@@ -213,7 +213,7 @@ var HG_MP_HOST = {
   smart: 'smartCards', basis: 'basisCards', search: 'searchOut', finder: 'finderOut',
   gold: 'goldSetupOut', 'gold-setup': 'goldSetupOut',
   squeeze: 'sqCards', reversalsniper: 'rsCards',
-  omnipresent: 'opCards', omniroute: 'omniCards', dexscreener: 'dexCards', setupconfirm: 'cfCards', omnigold: 'ogCards',
+  omnipresent: 'opCards', omniroute: 'omniCards', dexscreener: 'dexCards', setupconfirm: 'cfCards', combi: 'combiCards', omnigold: 'ogCards',
   omnibtc: 'obtcCards',
   oiflow: 'oiflowCards', carry: 'carryCards', termbasis: 'tbCards',
   venueprem: 'hgVenueCards', brain: 'brainCards', startrader: 'stCards',
@@ -274,6 +274,7 @@ function hgMpPin(kind, payload, side, host){
 
 var __hgMpNotes = {};
 var __hgMpFlushT = {};
+var __hgMpSnapRegistry = {};
 var HG_MP_SKIP_AUTO = {
   swing: 1, scalp: 1, edge: 1, best: 1,
   goldscalp: 1, goldswing: 1, 'gold-scalp': 1, 'gold-swing': 1
@@ -305,11 +306,47 @@ function hgMpNoteCard(sym, dir, entry, stop, t1, bookMeta){
     if (typeof W.hgSetupHasLevels === 'function' && !W.hgSetupHasLevels(row)) return;
     if (!__hgMpNotes[kind]) __hgMpNotes[kind] = [];
     __hgMpNotes[kind].push(row);
+    if (!__hgMpSnapRegistry[kind]) __hgMpSnapRegistry[kind] = { at: 0, rows: [] };
+    __hgMpSnapRegistry[kind].at = Date.now();
+    __hgMpSnapRegistry[kind].rows.push(Object.assign({}, row, { sym: sym }));
     if (typeof setTimeout === 'function'){
       if (__hgMpFlushT[kind]) clearTimeout(__hgMpFlushT[kind]);
       __hgMpFlushT[kind] = setTimeout(function(){ hgMpFlush(kind); }, 0);
     }
   }catch(e){}
+}
+
+function hgMpSnapHarvest(){
+  try{
+    var bag = [], kinds = Object.keys(__hgMpSnapRegistry), i, j, kind, pack, row, norm, labels;
+    labels = {
+      smc: 'SMC', ob: 'OB', trap: 'TRAP', div: 'DIV', coil: 'COIL', apex: 'APEX',
+      smart: 'SMART $', basis: 'BASIS', finder: 'FINDER', gold: 'GOLD'
+    };
+    for (i = 0; i < kinds.length; i++){
+      kind = kinds[i];
+      pack = __hgMpSnapRegistry[kind];
+      if (!pack || !pack.rows) continue;
+      for (j = 0; j < pack.rows.length; j++){
+        row = pack.rows[j];
+        norm = (typeof W.hgNormalizeSetupRow === 'function') ? W.hgNormalizeSetupRow(row) : null;
+        if (!norm) continue;
+        norm.source = kind;
+        norm.sourceLabel = labels[kind] || String(kind || '').toUpperCase();
+        norm.sourceWeight = 1.5;
+        norm.sourceAt = pack.at || 0;
+        if (row.tier === 'clean' || row.clean || row.confirmed) norm.clean = true;
+        else if (row.tier === 'near' || row.near) { norm.near = true; norm.clean = false; }
+        else if (row.tier === 'forming' || row.forming) { norm.forming = true; norm.clean = false; }
+        bag.push(norm);
+      }
+    }
+    return bag;
+  }catch(e){ return []; }
+}
+
+function hgMpSnapClear(){
+  __hgMpSnapRegistry = {};
 }
 
 function hgMpFlush(kind){
@@ -728,6 +765,8 @@ W.HG_MP_HOST = HG_MP_HOST;
 W.hgMpHost = hgMpHost;
 W.hgMpPin = hgMpPin;
 W.hgMpNoteCard = hgMpNoteCard;
+W.hgMpSnapHarvest = hgMpSnapHarvest;
+W.hgMpSnapClear = hgMpSnapClear;
 W.hgMpFlush = hgMpFlush;
 W.hgMpCanonKind = hgMpCanonKind;
 W.hgMpPx = hgMpPx;

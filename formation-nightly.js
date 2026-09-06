@@ -14,13 +14,14 @@
     div: 'divDay', coil: 'coilDay', apex: 'apexDay', oiflow: 'oiflowDay',
     liqs: 'liqsDay', onchain: 'onchainDay', chartvision: 'chartvisionDay',
     carry: 'carryDay', venueprem: 'venuepremDay', termbasis: 'termbasisDay',
-    omniroute: 'omniDay', omnipresent: 'opDay', omnigold1: 'og1Day', omnibtc: 'obtcDay'
+    omniroute: 'omniDay', dexscreener: 'dexDay', setupconfirm: 'cfDay', combi: 'combiDay',
+    omnipresent: 'opDay', omnigold1: 'og1Day', omnibtc: 'obtcDay'
   };
 
   var HG_TAB_DAY_PAINT_IDS = [
     'swing', 'scalp', 'best', 'edge', 'smart', 'squeeze', 'reversalsniper', 'smc', 'ob',
     'trap', 'div', 'coil', 'apex', 'oiflow', 'liqs', 'onchain', 'chartvision', 'carry',
-    'venueprem', 'termbasis', 'omniroute', 'dexscreener', 'setupconfirm', 'omnipresent', 'omnigold1', 'omnibtc'
+    'venueprem', 'termbasis', 'omniroute', 'dexscreener', 'setupconfirm', 'combi', 'omnipresent', 'omnigold1', 'omnibtc'
   ];
 
   function fin(x){ var n = +x; return isFinite(n) ? n : NaN; }
