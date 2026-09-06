@@ -63,7 +63,7 @@ function mount(el){
     + '<div class="empty">Press RUN NW SCAN after EDGE has run.</div></div></div>';
   var ui = { btn: el.querySelector('#pineNwRun'), stat: el.querySelector('#pineNwStat'), prog: el.querySelector('#pineNwProg'),
     out: el.querySelector('#pineNwOut'), funnelEl: el.querySelector('#pineNwFunnel') };
-  W.pineSubMountDesk(el.querySelector('#pineNwDesk'), 'PINE NW');
+  W.pineSubMountDesk(el.querySelector('#pineNwDesk'), 'PINE NW', 'pine-nw');
   async function runScan(opts){
     return W.pineSubRunScan({
       ui: ui, state: __tab, snap: __snap, script: NW_SCRIPT, signalFn: signalFromResult, cardFn: cardHTML,

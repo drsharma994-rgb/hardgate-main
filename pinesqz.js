@@ -38,7 +38,7 @@ function mount(el){
     + '<div class="empty">Press RUN SQZ SCAN after EDGE has run.</div></div></div>';
   var ui = { btn: el.querySelector('#pineSqzRun'), stat: el.querySelector('#pineSqzStat'), prog: el.querySelector('#pineSqzProg'),
     out: el.querySelector('#pineSqzOut'), funnelEl: el.querySelector('#pineSqzFunnel') };
-  if (typeof W.pineSubMountDesk === 'function') W.pineSubMountDesk(el.querySelector('#pineSqzDesk'), 'PINE SQZ');
+  if (typeof W.pineSubMountDesk === 'function') W.pineSubMountDesk(el.querySelector('#pineSqzDesk'), 'PINE SQZ', 'pine-sqz');
   async function runScan(opts){
     return W.pineSubRunScan({
       ui: ui, state: __tab, snap: __snap, script: SQZ_SCRIPT, signalFn: signalFromResult, cardFn: cardHTML,

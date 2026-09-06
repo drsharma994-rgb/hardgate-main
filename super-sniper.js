@@ -78,15 +78,19 @@ function enrichSuperSniperRow(c, riskOpts){
   hit.riskReason = hit.minimalLossPass ? 'PASS'
     : (hit.sniperPass ? 'Conviction OK — check lev clearance' : 'Pack 18 or conviction block');
 
-  var edgeBlock = hit.deskEdgeAction === 'suppress' || hit.deskEdgeAction === 'demote'
-    || hit.ticket === false || hit.watchOnly === true || hit.demoted === true;
-  if (edgeBlock){
-    hit.tier = 'near';
-    hit.sniperPass = false;
-    hit.minimalLossPass = false;
-    hit.watchOnly = true;
-    hit.ticket = false;
-    hit.riskReason = 'PIN-REJECT replay — bounce tickets stand aside';
+  if (typeof W.hgSuperDeskApplyOmniPrincipal === 'function'){
+    W.hgSuperDeskApplyOmniPrincipal(hit, TAB_ID, { rows: hit.rows || c.rows });
+  } else {
+    var edgeBlock = hit.deskEdgeAction === 'suppress' || hit.deskEdgeAction === 'demote'
+      || hit.ticket === false || hit.watchOnly === true || hit.demoted === true;
+    if (edgeBlock){
+      hit.tier = 'near';
+      hit.sniperPass = false;
+      hit.minimalLossPass = false;
+      hit.watchOnly = true;
+      hit.ticket = false;
+      hit.riskReason = 'PIN-REJECT replay — bounce tickets stand aside';
+    }
   }
 
   return hit;

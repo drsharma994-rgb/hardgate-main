@@ -381,7 +381,7 @@ function cardHTML(r){
     + '<span class="dir">' + dirUp + ' · MEAN REV · exp ' + fmtSignedR(bt.expR) + '</span>'
     + (typeof hgBookStampChip === 'function' ? hgBookStampChip(r.sym, sig.dir, { scanner: 'meanrev', strategy: 'meanrev' }) : '')
     + '</div>'
-    + '<div class="mini">'
+    + (r.omniDemoted ? '<div class="note warn">OMNI replay — VWAP-REVERT / divergence desk stands aside on this day book.</div>' : '')
     + '<span class="k">last</span><span>' + pxF(st.last) + '</span>'
     + '<span class="k">rsi(' + RSI_LEN + ')</span><span>' + fmtF(st.rsi2, 1) + '</span>'
     + '<span class="k">%B(' + BB_LEN + ',' + BB_MULT + ')</span><span>' + fmtF(st.pctB, 2) + '</span>'
@@ -510,7 +510,7 @@ function mount(el){
             var exLow = lowest(rows.map(function(r){ return r.l; }), EXT_LEN)[k];
             var exHigh = highest(rows.map(function(r){ return r.h; }), EXT_LEN)[k];
             var tick = { symbol: sym, turnoverUsd: item.turnoverUsd, mark: rows[k].c, chg24: null };
-            results.push({
+            var row = {
               sym: sym, sig: sig, bt: bt, tick: tick, rows: rows, venue: item.exchange || null,
               contextRead: cx ? cx.read : null, contextAdverse: !!(cx && cx.adverse),
               stats: {
@@ -522,7 +522,18 @@ function mount(el){
                 extreme: (sig.dir === 'long') ? exLow : exHigh,
                 oppBand: (sig.dir === 'long') ? bbArr.upper[k] : bbArr.lower[k]
               }
-            });
+            };
+            if (typeof W.hgOmniPrincipalApply === 'function'){
+              try{
+                var lv0 = meanrevPlan({ dir: sig.dir, entry: sig.entry, extreme: row.stats.extreme,
+                  atr: row.stats.atr, mean: sig.target, oppBand: row.stats.oppBand });
+                if (lv0){
+                  W.hgOmniPrincipalApply(lv0, { tab: 'meanrev', rows: rows, strategy: 'meanrev' });
+                  if (lv0.demoted || lv0.deskEdgeAction === 'suppress') row.omniDemoted = true;
+                }
+              }catch(eOm){}
+            }
+            results.push(row);
           }catch(e){ failed++; }
         }));
         setProg(Math.min(1, (ci + chunk.length) / uni.length));

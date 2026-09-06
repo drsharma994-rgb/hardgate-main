@@ -223,6 +223,7 @@ function mountFormationLab(el){
       + '<div class="note">Robust setup formation validation inspired by MLFinLab, QuantStats, and TradingAgents. '
       + 'Meta-labels filter primary signals; purged CV prevents lookahead in gate calibration; '
       + 'the tear sheet proves edge with honest R-multiples from SCORECARD.</div>'
+      + (typeof W.hgOmniPrincipalNoteHtml === 'function' ? (W.hgOmniPrincipalNoteHtml('formationlab') || '') : '')
       + '<div class="note" id="flabStat" style="margin-top:6px">ready</div>'
       + '<div id="flabRoot" style="margin-top:10px"></div>'
       + '</div>';

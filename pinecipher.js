@@ -41,7 +41,7 @@ function mount(el){
     + '<div class="empty">Press RUN CIPHER SCAN after EDGE has run.</div></div></div>';
   var ui = { btn: el.querySelector('#pineCipherRun'), stat: el.querySelector('#pineCipherStat'), prog: el.querySelector('#pineCipherProg'),
     out: el.querySelector('#pineCipherOut'), funnelEl: el.querySelector('#pineCipherFunnel') };
-  W.pineSubMountDesk(el.querySelector('#pineCipherDesk'), 'PINE CIPHER');
+  W.pineSubMountDesk(el.querySelector('#pineCipherDesk'), 'PINE CIPHER', 'pine-cipher');
   async function runScan(opts){
     return W.pineSubRunScan({
       ui: ui, state: __tab, snap: __snap, script: CIPHER_SCRIPT, signalFn: signalFromResult, cardFn: cardHTML,

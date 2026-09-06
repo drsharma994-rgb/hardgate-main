@@ -62,7 +62,7 @@ function mount(el){
     + '<div class="empty">Press RUN AVWAP SCAN after EDGE has run.</div></div></div>';
   var ui = { btn: el.querySelector('#pineAvwapRun'), stat: el.querySelector('#pineAvwapStat'), prog: el.querySelector('#pineAvwapProg'),
     out: el.querySelector('#pineAvwapOut'), funnelEl: el.querySelector('#pineAvwapFunnel') };
-  W.pineSubMountDesk(el.querySelector('#pineAvwapDesk'), 'PINE AVWAP');
+  W.pineSubMountDesk(el.querySelector('#pineAvwapDesk'), 'PINE AVWAP', 'pine-avwap');
   async function runScan(opts){
     return W.pineSubRunScan({
       ui: ui, state: __tab, snap: __snap, script: AVWAP_SCRIPT, signalFn: signalFromResult, cardFn: cardHTML,

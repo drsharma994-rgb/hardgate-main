@@ -41,7 +41,7 @@ function positionInvalidNear(p){
 function enrichBookRow(p, summary){
   if (!p) return null;
   var dir = String(p.dir || p.side || '').toLowerCase();
-  return {
+  var row = {
     id: String(p.id || [p.sym, dir, p.entry].join('|')),
     sym: p.sym || p.symbol,
     dir: dir,
@@ -57,6 +57,10 @@ function enrichBookRow(p, summary){
     heatPct: summary && summary.heatPct,
     tier: 'open'
   };
+  if (typeof W.hgSuperDeskApplyOmniPrincipal === 'function'){
+    W.hgSuperDeskApplyOmniPrincipal(row, TAB_ID, { strategy: row.scanner });
+  }
+  return row;
 }
 
 function buildSnapFromBook(win){

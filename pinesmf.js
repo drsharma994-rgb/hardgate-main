@@ -37,7 +37,7 @@ function mount(el){
     + '<div class="empty">Press RUN SMF SCAN after EDGE has run.</div></div></div>';
   var ui = { btn: el.querySelector('#pineSmfRun'), stat: el.querySelector('#pineSmfStat'), prog: el.querySelector('#pineSmfProg'),
     out: el.querySelector('#pineSmfOut'), funnelEl: el.querySelector('#pineSmfFunnel') };
-  W.pineSubMountDesk(el.querySelector('#pineSmfDesk'), 'PINE SMF');
+  W.pineSubMountDesk(el.querySelector('#pineSmfDesk'), 'PINE SMF', 'pine-smf');
   async function runScan(opts){
     return W.pineSubRunScan({
       ui: ui, state: __tab, snap: __snap, script: SMF_SCRIPT, signalFn: signalFromResult, cardFn: cardHTML,

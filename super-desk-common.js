@@ -73,6 +73,48 @@ function hgSuperDeskEnrichChartVision(rows, opts){
   });
 }
 
+function hgSuperDeskOmniDemoteEffects(hit){
+  if (!hit) return hit;
+  var blocked = hit.demoted === true
+    || hit.deskEdgeAction === 'suppress' || hit.deskEdgeAction === 'demote'
+    || hit.omniPrincipal === 'replay-demoted' || hit.nightlyAside === true
+    || (hit.omniPrincipal && String(hit.omniPrincipal).indexOf('desk-edge-') === 0);
+  if (!blocked) return hit;
+  if (hit.tier === 'clean') hit.tier = 'near';
+  hit.minimalLossPass = false;
+  hit.sniperPass = false;
+  hit.clean = false;
+  hit.near = true;
+  hit.nearWatch = true;
+  hit.watchOnly = true;
+  hit.ticket = false;
+  if (!hit.riskReason || hit.riskReason === 'PASS'){
+    hit.riskReason = hit.deskEdgeAnalogue
+      ? (hit.deskEdgeAnalogue + ' replay — stand aside')
+      : 'OMNI principal demote';
+  }
+  return hit;
+}
+
+function hgSuperDeskApplyOmniPrincipal(hit, tab, opts){
+  if (!hit || typeof W.hgOmniPrincipalApply !== 'function') return hit;
+  opts = opts || {};
+  try{
+    W.hgOmniPrincipalApply(hit, Object.assign({
+      tab: tab || hit.tab || hit.scanner
+    }, opts));
+    hgSuperDeskOmniDemoteEffects(hit);
+  }catch(e){}
+  return hit;
+}
+
+function hgSuperDeskOmniBanner(tab){
+  if (typeof W.hgOmniPrincipalBanner === 'function'){
+    try{ return W.hgOmniPrincipalBanner(tab) || ''; }catch(e){}
+  }
+  return '';
+}
+
 function hgSuperDeskVisionBlock(row){
   if (!row || typeof W.hgChartVisionCardBlock !== 'function') return '';
   try{ return W.hgChartVisionCardBlock(row) || ''; }catch(e){ return ''; }
@@ -153,6 +195,8 @@ W.hgSuperDeskScorecardLink = hgSuperDeskScorecardLink;
 W.hgSuperDeskBindScorecard = hgSuperDeskBindScorecard;
 W.hgSuperDeskValidationHtml = hgSuperDeskValidationHtml;
 W.hgSuperDeskEnrichChartVision = hgSuperDeskEnrichChartVision;
+W.hgSuperDeskApplyOmniPrincipal = hgSuperDeskApplyOmniPrincipal;
+W.hgSuperDeskOmniBanner = hgSuperDeskOmniBanner;
 W.hgSuperDeskVisionBlock = hgSuperDeskVisionBlock;
 W.hgSuperDeskMergeSnap = hgSuperDeskMergeSnap;
 W.hgSuperDeskInjectStyles = hgSuperDeskInjectStyles;

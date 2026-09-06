@@ -827,6 +827,7 @@ function mountStrats(el){
   el.innerHTML =
     '<div class="panel">' +
       '<h2>STRATEGY LAB <span>3 classic backtests · any binance perp · closed bars only</span></h2>' +
+      (typeof W.hgOmniPrincipalNoteHtml === 'function' ? (W.hgOmniPrincipalNoteHtml('strats') || '') : '') +
       '<div class="row">' +
         '<input id="sgSym" value="BTCUSDT" style="width:120px;text-transform:uppercase" spellcheck="false">' +
         '<button class="chip on" data-tf="4h">4H</button>' +

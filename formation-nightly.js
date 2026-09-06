@@ -15,13 +15,24 @@
     liqs: 'liqsDay', onchain: 'onchainDay', chartvision: 'chartvisionDay',
     carry: 'carryDay', venueprem: 'venuepremDay', termbasis: 'termbasisDay',
     omniroute: 'omniDay', dexscreener: 'dexDay', setupconfirm: 'cfDay', combi: 'combiDay',
-    omnipresent: 'opDay', omnigold1: 'og1Day', omnibtc: 'obtcDay'
+    omnipresent: 'opDay', omnigold1: 'og1Day', omnibtc: 'obtcDay',
+    'super-setup': 'ssDay', 'super-best': 'sbDay', 'super-sniper': 'ssnDay',
+    'super-book': 'sbookDay', 'super-calibrate': 'scalDay',
+    pine: 'pineDay', 'pine-msb': 'pineMsbDay', 'pine-sqz': 'pineSqzDay',
+    'pine-smf': 'pineSmfDay', 'pine-ht': 'pineHtDay', 'pine-smc': 'pineSmcDay',
+    'pine-cipher': 'pineCipherDay', 'pine-rf': 'pineRfDay', 'pine-nw': 'pineNwDay',
+    'pine-avwap': 'pineAvwapDay',
+    strats: 'stratsDay', meanrev: 'meanrevDay', formationlab: 'flabDay',
+    scorecard: 'scoreDay', reliability: 'relDay'
   };
 
   var HG_TAB_DAY_PAINT_IDS = [
     'swing', 'scalp', 'best', 'edge', 'smart', 'squeeze', 'reversalsniper', 'smc', 'ob',
     'trap', 'div', 'coil', 'apex', 'oiflow', 'liqs', 'onchain', 'chartvision', 'carry',
-    'venueprem', 'termbasis', 'omniroute', 'dexscreener', 'setupconfirm', 'combi', 'omnipresent', 'omnigold1', 'omnibtc'
+    'venueprem', 'termbasis', 'omniroute', 'dexscreener', 'setupconfirm', 'combi', 'omnipresent', 'omnigold1', 'omnibtc',
+    'super-setup', 'super-best', 'super-sniper', 'super-book', 'super-calibrate',
+    'pine', 'pine-msb', 'pine-sqz', 'pine-smf', 'pine-ht', 'pine-smc', 'pine-cipher', 'pine-rf', 'pine-nw', 'pine-avwap',
+    'strats', 'meanrev', 'formationlab', 'scorecard', 'reliability'
   ];
 
   function fin(x){ var n = +x; return isFinite(n) ? n : NaN; }
@@ -225,6 +236,7 @@
   }
 
   W.HG_TAB_DAY_HOSTS = HG_TAB_DAY_HOSTS;
+  W.HG_TAB_DAY_PAINT_IDS = HG_TAB_DAY_PAINT_IDS;
   W.hgFormationNightlyApply = hgFormationNightlyApply;
   W.hgFormationNightlyBannerHtml = hgFormationNightlyBannerHtml;
   W.hgTabFormationDayHtml = hgTabFormationDayHtml;

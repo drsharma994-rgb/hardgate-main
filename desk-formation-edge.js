@@ -39,7 +39,14 @@
     venueprem: 'venueprem', venue: 'venueprem',
     termbasis: 'termbasis',
     'fund-fade': 'fund-fade',
-    best: 'swing'
+    best: 'swing',
+    'super-setup': 'swing', 'super-best': 'swing', 'super-sniper': 'reversalsniper',
+    'super-book': 'swing', 'super-calibrate': 'swing',
+    pine: 'edge', 'pine-msb': 'smc', 'pine-sqz': 'squeeze', 'pine-smf': 'smart',
+    'pine-ht': 'edge', 'pine-smc': 'smc', 'pine-cipher': 'edge', 'pine-rf': 'edge',
+    'pine-nw': 'coil', 'pine-avwap': 'edge',
+    strats: 'swing', meanrev: 'divergence', formationlab: 'swing',
+    scorecard: 'swing', reliability: 'swing'
   };
 
   var DESKS = {

@@ -168,6 +168,7 @@ function mountReliability(el){
     if (!el) return;
     el.innerHTML = '<div class="panel"><h2>RELIABILITY <span>calibration over your ledger — Brier, gate lift, tier check</span></h2>'
       + '<div class="note">Read-only measurement on localStorage hg_score_v1. This tab never writes the ledger.</div>'
+      + (typeof W.hgOmniPrincipalNoteHtml === 'function' ? (W.hgOmniPrincipalNoteHtml('reliability') || '') : '')
       + '<div class="note" id="relStat">loaded from stored ledger</div>'
       + '<div id="relBody"></div></div>';
     __rel.ui = { el: el, root: el.querySelector('#relBody'), stat: el.querySelector('#relStat') };

@@ -39,7 +39,7 @@ function mount(el){
     + '<div class="empty">Press RUN HT SCAN after EDGE has run.</div></div></div>';
   var ui = { btn: el.querySelector('#pineHtRun'), stat: el.querySelector('#pineHtStat'), prog: el.querySelector('#pineHtProg'),
     out: el.querySelector('#pineHtOut'), funnelEl: el.querySelector('#pineHtFunnel') };
-  W.pineSubMountDesk(el.querySelector('#pineHtDesk'), 'PINE HT');
+  W.pineSubMountDesk(el.querySelector('#pineHtDesk'), 'PINE HT', 'pine-ht');
   async function runScan(opts){
     return W.pineSubRunScan({
       ui: ui, state: __tab, snap: __snap, script: HT_SCRIPT, signalFn: signalFromResult, cardFn: cardHTML,

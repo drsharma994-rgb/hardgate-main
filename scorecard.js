@@ -1578,6 +1578,7 @@ function mountScorecard(el){
       '<div class="panel">'
       + '<h2>Scorecard — the engine\'s real record <span>gates, not scores · every recorded setup settled against 1h candles · SL −1R · T1 +2R · T2 +3.5R · T1-then-stop +1R · 14-day expiry marked to market</span></h2>'
       + '<div class="note">Evidence, not signals. The BRAIN and EXECUTE tabs log their setups here; this tab walks each one forward on 1h candles and settles it to an honest R-multiple. The BY-LAYER table is the point — which voting layers actually make money, measured. Numbers below 5 settled trades are anecdote, not evidence.</div>'
+      + (typeof G.hgOmniPrincipalNoteHtml === 'function' ? (G.hgOmniPrincipalNoteHtml('scorecard') || '') : '')
       + '<div class="note warn" id="scoreWarn" style="display:none;margin-top:6px"></div>'
       + '<div class="note" id="scoreStat" style="margin-top:6px">idle — ledger loaded from this browser; press RE-SETTLE to check open trades against fresh 1h candles.</div>'
       + '<div class="row" style="margin-top:8px"><button class="btn" id="scoreRun">RE-SETTLE NOW</button>'

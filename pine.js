@@ -232,6 +232,15 @@ function signalFromScript(item, script, res, rows){
   });
   sig.rr = Math.abs(sig.t1 - sig.entry) / Math.abs(sig.entry - sig.stop);
   if (!isFresh && !isRecent && !isContext) return null;
+  if (typeof W.hgOmniPrincipalApply === 'function'){
+    try{
+      W.hgOmniPrincipalApply(sig, { tab: 'pine', rows: rows, strategy: script.id });
+      if (sig.demoted || sig.deskEdgeAction === 'suppress' || sig.deskEdgeAction === 'demote'){
+        sig.edgeTicket = false;
+        sig.edgeForming = true;
+      }
+    }catch(eOm){}
+  }
   return sig;
 }
 
@@ -678,7 +687,8 @@ function mount(el){
   try{
     var pineDesk = el.querySelector('#pineDesk');
     if (pineDesk && typeof W.hgSetupDeskBannerHTML === 'function'){
-      pineDesk.innerHTML = W.hgSetupDeskBannerHTML({ kind: 'pine', tab: 'PINE', note: 'NEW = CLEAN ticket · RECENT/ALIGNED = FORMING/NEAR watch tiers.' });
+      pineDesk.innerHTML = W.hgSetupDeskBannerHTML({ kind: 'pine', tab: 'PINE', note: 'NEW = CLEAN ticket · RECENT/ALIGNED = FORMING/NEAR watch tiers.' })
+        + (typeof W.hgOmniPrincipalNoteHtml === 'function' ? (W.hgOmniPrincipalNoteHtml('pine') || '') : '');
     }
     if (typeof W.hgSetupInjectStyles === 'function') W.hgSetupInjectStyles();
   }catch(eP){}

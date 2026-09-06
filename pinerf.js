@@ -38,7 +38,7 @@ function mount(el){
     + '<div class="empty">Press RUN RF SCAN after EDGE has run.</div></div></div>';
   var ui = { btn: el.querySelector('#pineRfRun'), stat: el.querySelector('#pineRfStat'), prog: el.querySelector('#pineRfProg'),
     out: el.querySelector('#pineRfOut'), funnelEl: el.querySelector('#pineRfFunnel') };
-  W.pineSubMountDesk(el.querySelector('#pineRfDesk'), 'PINE RF');
+  W.pineSubMountDesk(el.querySelector('#pineRfDesk'), 'PINE RF', 'pine-rf');
   async function runScan(opts){
     return W.pineSubRunScan({
       ui: ui, state: __tab, snap: __snap, script: RF_SCRIPT, signalFn: signalFromResult, cardFn: cardHTML,

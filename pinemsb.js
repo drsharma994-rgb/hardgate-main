@@ -94,7 +94,7 @@ function mount(el){
   var out = el.querySelector('#pineMsbOut');
   var funnelEl = el.querySelector('#pineMsbFunnel');
   if (typeof W.pineSubMountDesk === 'function'){
-    W.pineSubMountDesk(el.querySelector('#pineMsbDesk'), 'PINE MSB/OB');
+    W.pineSubMountDesk(el.querySelector('#pineMsbDesk'), 'PINE MSB/OB', 'pine-msb');
   }
 
   function setProg(p){

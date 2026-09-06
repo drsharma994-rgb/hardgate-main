@@ -756,6 +756,9 @@ function enrichSuperSetupRow(c, tier, riskOpts, meta){
   hit.qty = calc.qty;
   hit.impliedLev = calc.impliedLev;
   hit.missing = Array.isArray(c.missing) ? c.missing.slice() : [];
+  if (typeof W.hgSuperDeskApplyOmniPrincipal === 'function'){
+    W.hgSuperDeskApplyOmniPrincipal(hit, TAB_ID, { rows: hit.rows || c.rows || c.rows4h });
+  }
   return hit;
 }
 

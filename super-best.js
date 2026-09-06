@@ -147,6 +147,9 @@ function enrichSuperBestRow(c, tier, riskOpts, meta){
       if (hit.minimalLossPass) hit.riskReason = 'PASS';
     }catch(e0){}
   }
+  if (typeof W.hgSuperDeskApplyOmniPrincipal === 'function'){
+    W.hgSuperDeskApplyOmniPrincipal(hit, TAB_ID, { rows: hit.rows || c.rows });
+  }
   return hit;
 }
 

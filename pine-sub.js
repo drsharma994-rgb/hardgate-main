@@ -39,7 +39,7 @@ function pineSubRunScript(script, rows){
   }catch(e){ return null; }
 }
 
-function pineSubEnrichSignal(sig, item, res){
+function pineSubEnrichSignal(sig, item, res, opts){
   if (!sig || !item || !res) return null;
   var isFresh = !!(sig.isNew || res.newLong || res.newShort);
   sig.isNew = isFresh;
@@ -88,6 +88,17 @@ function pineSubEnrichSignal(sig, item, res){
       }
     }catch(eW){}
     return null;
+  }
+  if (typeof W.hgOmniPrincipalApply === 'function'){
+    try{
+      var omniTab = (opts && opts.tab) || sig.tab
+        || (typeof W.hgOmniPrincipalTabForScript === 'function' ? W.hgOmniPrincipalTabForScript(sig.scriptId) : '');
+      W.hgOmniPrincipalApply(sig, { tab: omniTab, rows: sig.rows, strategy: sig.scriptId });
+      if (sig.demoted || sig.deskEdgeAction === 'suppress' || sig.deskEdgeAction === 'demote'){
+        sig.edgeTicket = false;
+        sig.edgeForming = true;
+      }
+    }catch(eOm){}
   }
   return sig;
 }
@@ -143,16 +154,21 @@ function pineSubCardHTML(sig, opts){
   return '';
 }
 
-function pineSubMountDesk(el, tabLabel){
+function pineSubMountDesk(el, tabLabel, tabId){
   try{
     if (!el) return;
+    var html = '';
     if (typeof W.hgSetupDeskBannerHTML === 'function'){
-      el.innerHTML = W.hgSetupDeskBannerHTML({
+      html += W.hgSetupDeskBannerHTML({
         kind: 'pine',
         tab: tabLabel || 'PINE',
         note: 'NEW = CLEAN ticket · RECENT/ALIGNED = FORMING/NEAR — same tiers as main PINE tab.'
       });
     }
+    if (typeof W.hgOmniPrincipalNoteHtml === 'function'){
+      html += W.hgOmniPrincipalNoteHtml(tabId || '') || '';
+    }
+    el.innerHTML = html;
     if (typeof W.hgSetupInjectStyles === 'function') W.hgSetupInjectStyles();
   }catch(e){}
 }
