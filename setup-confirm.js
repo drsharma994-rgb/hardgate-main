@@ -14,10 +14,13 @@
 var W = (typeof window !== 'undefined') ? window : this;
 
 var FRESH_MS = 25 * 60 * 1000;
+var AUTO_WARM_MS = 10 * 60 * 1000;
 var MIN_CONFIRM_SOURCES = 3;
 var MIN_CONFIRM_CLEAN = 2;
-var MIN_CONFIRM_SCORE = 7;
+var MIN_CONFIRM_SCORE = 8;
+var CHASE_CHG24 = 15;
 var SHOW_MAX = 18;
+var STRUCTURAL_IDS = { swing: 1, scalp: 1, edge: 1, best: 1 };
 
 var __cf = { busy: false, ran: false, ui: null, snap: null, lastCardsHtml: '' };
 
@@ -218,6 +221,127 @@ function cfHarvestAll(){
   return bag;
 }
 
+function cfTapeChg24(sym){
+  try{
+    var want = gfn('hgNormSym') ? W.hgNormSym(sym) : String(sym || '').toUpperCase();
+    var base = gfn('hgCryptoBase') ? W.hgCryptoBase(sym) : want;
+    var lists = [];
+    if (W.S && Array.isArray(W.S.tickers)) lists.push(W.S.tickers);
+    if (W.S && W.S.state && Array.isArray(W.S.state.tickers)) lists.push(W.S.state.tickers);
+    if (Array.isArray(W.tickers)) lists.push(W.tickers);
+    var li, i, t, rawSym, chg;
+    for (li = 0; li < lists.length; li++){
+      for (i = 0; i < lists[li].length; i++){
+        t = lists[li][i];
+        if (!t) continue;
+        rawSym = String(t.symbol || t.sym || '').toUpperCase();
+        if (gfn('hgNormSym') && W.hgNormSym(rawSym) === want) chg = fin(t.chg24 != null ? t.chg24 : t.change24h);
+        else if (gfn('hgCryptoBase') && W.hgCryptoBase(rawSym) === base) chg = fin(t.chg24 != null ? t.chg24 : t.change24h);
+        else if (rawSym === want || rawSym === base) chg = fin(t.chg24 != null ? t.chg24 : t.change24h);
+        if (isFinite(chg)) return chg;
+      }
+    }
+  }catch(e){}
+  return null;
+}
+
+function cfBrainLookup(sym, dir){
+  var bl = gfn('__hgBrainLast') ? W.__hgBrainLast() : null;
+  if (!bl || !bl.rows) return null;
+  var want = gfn('hgNormSym') ? W.hgNormSym(sym) : String(sym || '').toUpperCase();
+  var i, r;
+  for (i = 0; i < bl.rows.length; i++){
+    r = bl.rows[i];
+    if (!r || !r.dir) continue;
+    if (gfn('hgNormSym') && W.hgNormSym(r.sym) !== want) continue;
+    if (dir && String(r.dir).toLowerCase() !== String(dir).toLowerCase()) continue;
+    return r;
+  }
+  return null;
+}
+
+function cfGlobalBlockers(){
+  var blockers = [];
+  if (gfn('hgStandDownState')){
+    try{
+      var recs = gfn('hgScoreRecords') ? W.hgScoreRecords() : [];
+      var sd = W.hgStandDownState(recs);
+      if (sd && sd.tripped){
+        blockers.push('STAND DOWN — ' + ((sd.reasons || []).join(' · ') || 'drawdown limit'));
+      }
+    }catch(eSd){}
+  }
+  if (gfn('superBookScan')){
+    try{
+      var sb = W.superBookScan();
+      if (sb && sb.deskMeta && sb.deskMeta.dailyLossHalt){
+        blockers.push('SUPER BOOK daily-loss halt — no new risk today');
+      }
+    }catch(eSb){}
+  }
+  return blockers;
+}
+
+function cfStructuralClean(hits){
+  var n = 0, i;
+  for (i = 0; i < hits.length; i++){
+    if (hits[i].clean && STRUCTURAL_IDS[hits[i].source]) n++;
+  }
+  return n;
+}
+
+function cfLeaderBlockers(group){
+  var blockers = [], br, news, leader = group.leader;
+  br = cfBrainLookup(group.sym, group.dir);
+  if (br && String(br.tier || '').toUpperCase() === 'ASIDE'){
+    blockers.push('BRAIN ASIDE on this symbol');
+  }
+  var brOpp = cfBrainLookup(group.sym, group.dir === 'long' ? 'short' : 'long');
+  if (brOpp && (brOpp.tier === 'PRIME' || brOpp.tier === 'HIGH')){
+    blockers.push('BRAIN favours the opposite side (' + String(brOpp.tier) + ')');
+  }
+  if (gfn('hgNewsRisk')){
+    try{
+      news = W.hgNewsRisk(group.sym);
+      if (news && news.lockout) blockers.push('news lockout — ' + (news.reason || 'event window'));
+    }catch(eN){}
+  }
+  if (leader && String(leader.strategyConfirm || '').toUpperCase() === 'ADVERSE'){
+    blockers.push('strategy context ADVERSE on leader plan');
+  }
+  if (leader && leader.postGateVeto){
+    blockers.push('post-gate veto on leader plan');
+  }
+  return blockers;
+}
+
+function cfAssignTier(g){
+  if (g.blockers.length) return 'BLOCKED';
+  var sc = cfStructuralClean(g.hits);
+  var hasSwing = !!g.sources.swing;
+  var hasEdge = !!g.sources.edge;
+  var spine = !!(g.triple || (hasSwing && hasEdge) || sc >= 2);
+  g.structuralClean = sc;
+  g.needs = [];
+  if (!spine){
+    g.needs.push('SWING+EDGE both present, TRIPLE STACK, or 2 structural CLEAN (swing/scalp/edge/best)');
+  }
+  if (sc < 1) g.needs.push('at least 1 structural desk CLEAN (swing / scalp / edge / best)');
+  if (g.sourceCount < MIN_CONFIRM_SOURCES) g.needs.push(MIN_CONFIRM_SOURCES + '+ independent desks');
+  if (g.cleanCount < MIN_CONFIRM_CLEAN) g.needs.push(MIN_CONFIRM_CLEAN + '+ CLEAN tickets');
+  if (g.score < MIN_CONFIRM_SCORE) g.needs.push('score ≥ ' + MIN_CONFIRM_SCORE);
+  if (!spine || sc < 1){
+    if (g.sourceCount >= 2 && g.score >= 4) return 'BUILDING';
+    return 'WATCH';
+  }
+  if (g.sourceCount >= MIN_CONFIRM_SOURCES && g.cleanCount >= MIN_CONFIRM_CLEAN && g.score >= MIN_CONFIRM_SCORE){
+    if (g.triple && g.sourceCount >= 4 && g.cleanCount >= 3) return 'PRIME';
+    return 'CONFIRMED';
+  }
+  if (g.sourceCount >= 2 && g.score >= 4) return 'BUILDING';
+  return 'WATCH';
+}
+
 function cfScoreHit(row){
   var w = fin(row.sourceWeight) || 1;
   if (row.deskEdgeAction === 'suppress') return 0;
@@ -261,6 +385,14 @@ function cfHardBlockers(group){
   }
   if (Object.keys(freshSources).length < 2){
     blockers.push('stale — fewer than 2 fresh desk scans (run SWING / EDGE / BRAIN)');
+  }
+  var chg = cfTapeChg24(group.sym);
+  if (chg !== null){
+    if (group.dir === 'long' && chg >= CHASE_CHG24){
+      blockers.push('overextended +' + chg.toFixed(1) + '% 24h');
+    } else if (group.dir === 'short' && chg <= -CHASE_CHG24){
+      blockers.push('overextended ' + chg.toFixed(1) + '% 24h');
+    }
   }
   return blockers;
 }
@@ -325,24 +457,16 @@ function cfAggregate(bag){
     if (row.clean) g.cleanCount++;
     g.sourceCount++;
   }
-  var out = [], k;
+  var out = [], k, globalBlock = cfGlobalBlockers();
   for (k in map){
     if (!Object.prototype.hasOwnProperty.call(map, k)) continue;
     g = map[k];
-    g.blockers = cfHardBlockers(g);
+    g.blockers = cfHardBlockers(g).concat(globalBlock);
     g.triple = gfn('hgTripleStackMatch') ? W.hgTripleStackMatch(g.sym, g.dir) : null;
     if (g.triple) g.score += 2;
     g.leader = cfPickLeader(g.hits);
-    if (g.blockers.length){
-      g.tier = 'BLOCKED';
-    } else if (g.sourceCount >= MIN_CONFIRM_SOURCES && g.cleanCount >= MIN_CONFIRM_CLEAN
-        && g.score >= MIN_CONFIRM_SCORE){
-      g.tier = 'CONFIRMED';
-    } else if (g.sourceCount >= 2 && g.score >= 4){
-      g.tier = 'BUILDING';
-    } else {
-      g.tier = 'WATCH';
-    }
+    g.blockers = g.blockers.concat(cfLeaderBlockers(g));
+    g.tier = cfAssignTier(g);
     g.sourceList = Object.keys(g.sources).map(function(id){
       var h = g.sources[id];
       return (h.sourceLabel || id) + (h.clean ? ' CLEAN' : (h.near ? ' NEAR' : ' watch'));
@@ -351,7 +475,7 @@ function cfAggregate(bag){
   }
   cfApplySymConflicts(out);
   out.sort(function(a, b){
-    var rank = { CONFIRMED: 3, BUILDING: 2, WATCH: 1, BLOCKED: 0 };
+    var rank = { PRIME: 4, CONFIRMED: 3, BUILDING: 2, WATCH: 1, BLOCKED: 0 };
     var ta = rank[a.tier] || 0, tb = rank[b.tier] || 0;
     if (tb !== ta) return tb - ta;
     if (b.score !== a.score) return b.score - a.score;
@@ -361,6 +485,7 @@ function cfAggregate(bag){
 }
 
 function cfTierPill(tier){
+  if (tier === 'PRIME') return '<span class="gpip ok">PRIME CONFIRM</span>';
   if (tier === 'CONFIRMED') return '<span class="gpip ok">CONFIRMED</span>';
   if (tier === 'BUILDING') return '<span class="gpip" style="color:#b45309;border-color:rgba(180,83,9,.45)">BUILDING</span>';
   if (tier === 'BLOCKED') return '<span class="gpip bad">BLOCKED</span>';
@@ -377,6 +502,12 @@ function cfCardHtml(g){
     h += '<div class="dim"><span class="gpip ok">TRIPLE STACK</span> SWING + EDGE + BRAIN agree</div>';
   }
   h += '<div class="dim">Desks: ' + esc(g.sourceList.join(' · ')) + '</div>';
+  if (g.needs && g.needs.length && g.tier !== 'PRIME' && g.tier !== 'CONFIRMED'){
+    h += '<div class="dim">Needs: ' + esc(g.needs.join(' · ')) + '</div>';
+  }
+  if (gfn('hgStrategyConfirmChipHtml') && leader.strategyConfirm){
+    h += '<div style="margin-top:4px">' + W.hgStrategyConfirmChipHtml(leader.strategyConfirm, leader.strategyWith, leader.strategyAgainst) + '</div>';
+  }
   if (g.blockers && g.blockers.length){
     h += '<div class="note warn" style="margin-top:6px"><b>BLOCKED</b> — ' + esc(g.blockers.join(' · ')) + '</div>';
   }
@@ -389,14 +520,14 @@ function cfCardHtml(g){
   if (gfn('hgStrategyTradeDetailHtml') && leader.entry){
     try{ h += W.hgStrategyTradeDetailHtml(leader); }catch(eD){}
   }
-  if (g.tier === 'CONFIRMED' && gfn('bookBtnHTML') && leader.entry){
+  if ((g.tier === 'PRIME' || g.tier === 'CONFIRMED') && gfn('bookBtnHTML') && leader.entry){
     h += '<div class="row" style="margin-top:8px">' + W.bookBtnHTML(g.sym, g.dir, leader.entry, leader.stop, leader.t1, {
       scanner: 'setupconfirm', strategy: 'multi-desk confirm', tier: 'clean', confirmed: true
     }) + '</div>';
-  } else if (g.tier !== 'CONFIRMED'){
-    h += '<div class="note" style="margin-top:6px">Standing aside — need '
-      + MIN_CONFIRM_SOURCES + '+ desks with ' + MIN_CONFIRM_CLEAN + '+ CLEAN and score ≥ '
-      + MIN_CONFIRM_SCORE + ' before this desk hands off a ticket.</div>';
+  } else if (g.tier !== 'PRIME' && g.tier !== 'CONFIRMED'){
+    h += '<div class="note" style="margin-top:6px">Standing aside — structural spine (SWING+EDGE / TRIPLE STACK / 2 structural CLEAN) '
+      + 'plus ' + MIN_CONFIRM_SOURCES + ' desks, ' + MIN_CONFIRM_CLEAN + ' CLEAN, score ≥ '
+      + MIN_CONFIRM_SCORE + ' required before handoff.</div>';
   }
   h += '</div>';
   return h;
@@ -418,21 +549,33 @@ async function cfRunScan(ui, opts){
   __cf.busy = true;
   if (ui && ui.btn) ui.btn.disabled = true;
   try{
-    if (opts.warm) await cfWarmDesks();
+    var stale = !__cf.snap || !__cf.snap.at || (Date.now() - __cf.snap.at > AUTO_WARM_MS);
+    if (opts.warm || (stale && !opts.noWarm)) await cfWarmDesks();
     if (ui && ui.stat) ui.stat.textContent = 'reading desk snapshots…';
+    var globalBlock = cfGlobalBlockers();
+    if (ui && ui.global){
+      ui.global.innerHTML = globalBlock.length
+        ? '<div class="note warn" style="margin-bottom:8px"><b>HOUSE HALT</b> — ' + esc(globalBlock.join(' · ')) + '</div>'
+        : '';
+    }
     var bag = cfHarvestAll();
     var groups = cfAggregate(bag);
+    var prime = groups.filter(function(g){ return g.tier === 'PRIME'; });
     var confirmed = groups.filter(function(g){ return g.tier === 'CONFIRMED'; });
     var building = groups.filter(function(g){ return g.tier === 'BUILDING'; });
     __cf.snap = {
       at: Date.now(),
       harvested: bag.length,
       groups: groups,
+      prime: prime.length,
       confirmed: confirmed.length,
-      building: building.length
+      building: building.length,
+      globalBlockers: globalBlock
     };
     __cf.ran = true;
-    var show = groups.filter(function(g){ return g.tier === 'CONFIRMED' || g.tier === 'BUILDING'; }).slice(0, SHOW_MAX);
+    var show = groups.filter(function(g){
+      return g.tier === 'PRIME' || g.tier === 'CONFIRMED' || g.tier === 'BUILDING';
+    }).slice(0, SHOW_MAX);
     if (!show.length) show = groups.slice(0, SHOW_MAX);
     var html = '';
     if (!groups.length){
@@ -445,12 +588,13 @@ async function cfRunScan(ui, opts){
       __cf.lastCardsHtml = html;
     }
     if (ui && ui.stat){
-      ui.stat.textContent = confirmed.length + ' CONFIRMED · ' + building.length + ' BUILDING · '
-        + groups.length + ' sym/dir groups from ' + bag.length + ' desk rows';
+      ui.stat.textContent = prime.length + ' PRIME · ' + confirmed.length + ' CONFIRMED · ' + building.length
+        + ' BUILDING · ' + groups.length + ' groups from ' + bag.length + ' desk rows';
     }
-    if (gfn('hgPinMostProbablePanel') && confirmed.length && confirmed[0].leader){
+    var tradeable = prime.length ? prime : confirmed;
+    if (gfn('hgPinMostProbablePanel') && tradeable.length && tradeable[0].leader){
       try{
-        var lead = confirmed[0].leader;
+        var lead = tradeable[0].leader;
         W.hgPinMostProbablePanel(ui.cards, 'setupconfirm', {
           row: lead, tier: 'clean', source: 'setup-confirm'
         });
@@ -469,13 +613,14 @@ function mountSetupConfirm(el){
   el.innerHTML =
     '<div class="panel">'
     + '<h2>Setup Confirm <span>multi-desk agreement before you size · stop chasing single-tab noise</span></h2>'
-    + '<div class="note hg-lead" style="margin-bottom:10px">This desk does <b>not</b> run its own indicator scan. It reads what '
-    + '<b>SWING, SCALP, EDGE, BEST, SMART $, SQUEEZE, OI FLOW, BRAIN, DEX SCREENER, and OMNIROUTE</b> already published '
-    + 'and only surfaces setups where <b>' + MIN_CONFIRM_SOURCES + '+ independent desks</b> agree on the same symbol and direction '
-    + 'with <b>' + MIN_CONFIRM_CLEAN + '+ CLEAN</b> tickets. Desk suppress, post-gate vetoes, macro headwinds, stale scans, '
-    + 'and direction conflicts <b>block</b> the handoff. TRIPLE STACK (SWING+EDGE+BRAIN) adds a bonus. No invented levels.</div>'
+    + '<div class="note hg-lead" style="margin-bottom:10px">Cross-desk <b>confirmation gate</b> — not another scanner. Reads published snaps and only hands off when '
+    + '<b>SWING+EDGE agree</b> (or TRIPLE STACK, or 2 structural CLEAN) plus <b>' + MIN_CONFIRM_SOURCES + '+ desks</b>, '
+    + '<b>' + MIN_CONFIRM_CLEAN + '+ CLEAN</b>, score <b>≥ ' + MIN_CONFIRM_SCORE + '</b>. Blocks: desk suppress, post-gate, BRAIN aside, '
+    + '±' + CHASE_CHG24 + '% 24h chase, macro, news lockout, stand-down, direction conflict, stale data. '
+    + '<b>PRIME</b> = TRIPLE STACK + 4 desks + 3 CLEAN. Auto-warms stale desks on confirm. No invented levels.</div>'
+    + '<div id="cfGlobal"></div>'
     + '<div class="row"><button class="btn" id="cfRun">CONFIRM SETUPS</button>'
-    + '<button class="btn secondary" id="cfWarm">WARM DESKS</button>'
+    + '<button class="btn secondary" id="cfWarm">FORCE WARM</button>'
     + '<span class="note" id="cfStat">idle — warm desks or confirm from existing scans</span></div>'
     + '<div class="cards" id="cfCards"></div>'
     + '</div>';
@@ -483,12 +628,17 @@ function mountSetupConfirm(el){
     btn: el.querySelector('#cfRun'),
     warm: el.querySelector('#cfWarm'),
     stat: el.querySelector('#cfStat'),
-    cards: el.querySelector('#cfCards')
+    cards: el.querySelector('#cfCards'),
+    global: el.querySelector('#cfGlobal')
   };
   __cf.ui = ui;
   if (ui.btn) ui.btn.addEventListener('click', function(){ cfRunScan(ui, {}); });
-  if (ui.warm) ui.warm.addEventListener('click', function(){ cfRunScan(ui, { warm: true }); });
+  if (ui.warm) ui.warm.addEventListener('click', function(){ cfRunScan(ui, { warm: true, noWarm: false }); });
   if (gfn('hgTabFormationDayPaint')) W.hgTabFormationDayPaint('setupconfirm');
+  setTimeout(function(){
+    if (__cf.busy || __cf.ran) return;
+    cfRunScan(ui, {});
+  }, 600);
 }
 
 function refreshSetupConfirm(opts){
@@ -504,6 +654,8 @@ function refreshSetupConfirm(opts){
 W.hgConfirmHarvest = cfHarvestAll;
 W.hgConfirmAggregate = cfAggregate;
 W.hgConfirmKey = cfKey;
+W.hgConfirmTapeChg24 = cfTapeChg24;
+W.hgConfirmAssignTier = cfAssignTier;
 W.hgSetupConfirmScan = function(opts){ return cfRunScan(__cf.ui, opts || {}); };
 W.setupConfirmState = function(){
   try{ return __cf.snap ? JSON.parse(JSON.stringify(__cf.snap)) : null; }catch(e){ return null; }

@@ -361,6 +361,12 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Quiet candle TTL is **720s** so cache spans the 10-min boundary. G1–G7 unchanged.
 - Tests: `tests/test-scan-every-10m.mjs`, `tests/test-hard-refresh.mjs`.
 
+### SETUP CONFIRM tightened — hg-v617
+- **Structural spine required:** SWING+EDGE both present, TRIPLE STACK, or 2 structural CLEAN (swing/scalp/edge/best) before CONFIRMED.
+- **PRIME tier:** TRIPLE STACK + 4 desks + 3 CLEAN — highest conviction handoff.
+- Score floor raised to **8**; blocks ±15% 24h chase, BRAIN aside/opposite, news lockout, stand-down, SUPER BOOK halt.
+- Auto-warms stale desks on first open / confirm. Tests: `tests/test-setup-confirm.mjs`.
+
 ### SETUP CONFIRM tab — hg-v616
 - New **SETUP CONFIRM** desk in CRYPTO: reads SWING / SCALP / EDGE / BEST / SMART $ / SQUEEZE / OI FLOW / BRAIN / DEX / OMNIROUTE snapshots and only surfaces setups where **3+ desks** agree with **2+ CLEAN** tickets. Hard blockers: desk suppress, post-gate veto, macro, direction conflict, stale scans. TRIPLE STACK bonus. Never invents levels.
 - Tests: `tests/test-setup-confirm.mjs`.

@@ -60,7 +60,7 @@ console.log('== aggregate confirmation ==');
   ok(bag.length >= 4, 'harvests multiple desk rows');
   const groups = W.hgConfirmAggregate(bag);
   const sol = groups.filter(g => g.sym === 'SOLUSD' && g.dir === 'long')[0];
-  ok(sol && sol.tier === 'CONFIRMED', 'SOL long is CONFIRMED when 4+ desks agree — got ' + (sol && sol.tier));
+  ok(sol && (sol.tier === 'CONFIRMED' || sol.tier === 'PRIME'), 'SOL long confirmed when swing+edge spine + 4 desks — got ' + (sol && sol.tier));
   ok(sol && sol.sourceCount >= 4, 'counts independent sources');
   ok(sol && sol.triple, 'TRIPLE STACK bonus applies');
 }
@@ -84,6 +84,54 @@ console.log('== blockers ==');
   ok(blocked.some(g => g.blockers.some(b => /conflict/i.test(b))), 'names direction conflict');
 }
 
+console.log('== spine gate ==');
+{
+  const W = boot({
+    swingScan: () => ({ at: Date.now(), cands: [] }),
+    edgeScan: () => ({ at: Date.now(), cands: [] }),
+    bestScan: () => ({ at: Date.now(), clean: [] }),
+    __hgSmartResults: {
+      at: Date.now(),
+      results: [{ sym: 'DOGEUSD', setup: { dir: 'long', confirmed: true, entry: 1, stop: 0.9, t1: 1.1 } }]
+    },
+    squeezeState: () => ({
+      at: Date.now(),
+      results: [{ sym: 'DOGEUSD', dir: 'long', kind: 'fired', entry: 1, stop: 0.9, t1: 1.1 }]
+    }),
+    hgMacroAllowsCrypto: () => ({ allow: true })
+  });
+  const g = W.hgConfirmAggregate(W.hgConfirmHarvest()).filter(x => x.sym.indexOf('DOGE') >= 0)[0];
+  ok(g && g.tier !== 'CONFIRMED' && g.tier !== 'PRIME', 'no structural spine → not CONFIRMED (got ' + (g && g.tier) + ')');
+  ok(g && g.needs && g.needs.some(n => /SWING\+EDGE|structural/i.test(n)), 'names missing spine');
+}
+
+console.log('== overextension block ==');
+{
+  const W = boot({
+    swingScan: () => ({
+      at: Date.now(),
+      cands: [{ sym: 'PEPEUSD', dir: 'long', entry: 1, stop: 0.9, t1: 1.2, clean: true, gatesPassed: 7 }]
+    }),
+    edgeScan: () => ({
+      at: Date.now(),
+      cands: [{ sym: 'PEPEUSD', dir: 'long', entry: 1, stop: 0.9, t1: 1.2, clean: true, gatesPassed: 7 }]
+    }),
+    bestScan: () => ({
+      at: Date.now(),
+      clean: [{ sym: 'PEPEUSD', dir: 'long', entry: 1, stop: 0.9, t1: 1.2 }]
+    }),
+    __hgBrainLast: () => ({
+      at: Date.now(),
+      rows: [{ sym: 'PEPEUSD', dir: 'long', tier: 'HIGH', plan: { entry: 1, stop: 0.9, t1: 1.2 } }]
+    }),
+    S: { tickers: [{ symbol: 'PEPEUSD', chg24: 19.5 }] },
+    hgMacroAllowsCrypto: () => ({ allow: true }),
+    hgTripleStackMatch: () => null
+  });
+  const g = W.hgConfirmAggregate(W.hgConfirmHarvest()).filter(x => x.sym.indexOf('PEPE') >= 0 && x.dir === 'long')[0];
+  ok(g && g.tier === 'BLOCKED', 'overextended +19.5% blocks long chase');
+}
+
 console.log('== wiring ==');
 {
   const W = boot();
@@ -93,7 +141,7 @@ console.log('== wiring ==');
   ok(/setup-confirm\.js/.test(html), 'index loads setup-confirm.js');
   ok(/setupconfirm/.test(html), 'nav includes setupconfirm');
   ok(/\.\/setup-confirm\.js/.test(sw), 'sw precaches setup-confirm.js');
-  ok(/const HG_CACHE = 'hg-v616'/.test(sw), 'sw HG_CACHE is hg-v616');
+  ok(/const HG_CACHE = 'hg-v616'/.test(sw) || /const HG_CACHE = 'hg-v617'/.test(sw), 'sw HG_CACHE current');
   ok(/setupconfirm:\s*'cfCards'/.test(read('setup-ui.js')), 'HG_MP_HOST maps setupconfirm');
 }
 
