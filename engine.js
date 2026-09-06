@@ -725,6 +725,22 @@ function gateCandidate(inp){
     if (res.swingClean !== undefined) res.plan.swingClean = res.swingClean;
     if (!res.plan.planSrc) res.plan.planSrc = 'engine';
     if (typeof hgPlanMetaLabel === 'function') res.plan.metaLabel = hgPlanMetaLabel(res.plan);
+    if (typeof G.hgOmniPrincipalApply === 'function'){
+      try{
+        var omniWrap = Object.assign({}, res.plan, {
+          dir: res.dir, scanner: 'execute', strategy: 'execute', sym: sym, rows4h: rows4h
+        });
+        G.hgOmniPrincipalApply(omniWrap, { tab: 'execute', rows: rows4h, strategy: 'execute' });
+        if (omniWrap.demoted || omniWrap.deskEdgeAction === 'suppress' || omniWrap.omniPrincipal === 'replay-demoted'){
+          return die(5, 'OMNI replay — ' + (omniWrap.deskEdgeAnalogue || omniWrap.omniKind || 'analogue') + ' stands aside (v531/nightly)');
+        }
+        if (omniWrap.deskEdgeAction === 'demote' && res.conviction === 'STRONG'){
+          res.conviction = 'MODERATE';
+          res.contextNote = (res.contextNote ? res.contextNote + ' · ' : '')
+            + 'OMNI desk-edge demote — conviction knocked to MODERATE';
+        }
+      }catch(eOm){}
+    }
   }
   res.riskPct = suggestedRiskPct(res.conviction, res.plan);
   if (res.turnoverUnverified === true && typeof res.riskPct === 'number' && isFinite(res.riskPct))
@@ -1552,6 +1568,7 @@ function mount(el){
     el.innerHTML =
       '<div class="panel">'
       + '<h2>GATES — master gate engine <span>6-stage funnel · gates, not scores · every verdict shows its trail</span></h2>'
+      + (typeof G.hgOmniPrincipalNoteHtml === 'function' ? (G.hgOmniPrincipalNoteHtml('execute') || '') : '')
       + '<div class="row"><button class="btn" id="engineRun">RUN THE GATES</button>'
       + '<button class="btn" id="engineQuick" title="cached universe, no refetch — re-gates only last scan’s survivors + new listings on fresh candles; everything else keeps its verdict">QUICK RESCAN</button>'
       + '<span class="note" id="engineStat"></span></div>'

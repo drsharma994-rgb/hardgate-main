@@ -23,7 +23,10 @@
     'pine-cipher': 'pineCipherDay', 'pine-rf': 'pineRfDay', 'pine-nw': 'pineNwDay',
     'pine-avwap': 'pineAvwapDay',
     strats: 'stratsDay', meanrev: 'meanrevDay', formationlab: 'flabDay',
-    scorecard: 'scoreDay', reliability: 'relDay'
+    scorecard: 'scoreDay', reliability: 'relDay',
+    brain: 'brainDay', book: 'bookDay', trade: 'tradeDay', log: 'logDay',
+    news: 'newsDay', bias: 'biasDay', regime: 'regimeDay', trendmx: 'trendmxDay',
+    rotation: 'rotationDay', execute: 'executeDay', startrader: 'starDay'
   };
 
   var HG_TAB_DAY_PAINT_IDS = [
@@ -32,7 +35,9 @@
     'venueprem', 'termbasis', 'omniroute', 'dexscreener', 'setupconfirm', 'combi', 'omnipresent', 'omnigold1', 'omnibtc',
     'super-setup', 'super-best', 'super-sniper', 'super-book', 'super-calibrate',
     'pine', 'pine-msb', 'pine-sqz', 'pine-smf', 'pine-ht', 'pine-smc', 'pine-cipher', 'pine-rf', 'pine-nw', 'pine-avwap',
-    'strats', 'meanrev', 'formationlab', 'scorecard', 'reliability'
+    'strats', 'meanrev', 'formationlab', 'scorecard', 'reliability',
+    'brain', 'book', 'trade', 'log', 'news', 'bias', 'regime', 'trendmx',
+    'rotation', 'execute', 'startrader'
   ];
 
   function fin(x){ var n = +x; return isFinite(n) ? n : NaN; }

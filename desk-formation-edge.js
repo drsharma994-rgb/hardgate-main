@@ -46,7 +46,10 @@
     'pine-ht': 'edge', 'pine-smc': 'smc', 'pine-cipher': 'edge', 'pine-rf': 'edge',
     'pine-nw': 'coil', 'pine-avwap': 'edge',
     strats: 'swing', meanrev: 'divergence', formationlab: 'swing',
-    scorecard: 'swing', reliability: 'swing'
+    scorecard: 'swing', reliability: 'swing',
+    brain: 'swing', book: 'swing', trade: 'swing', log: 'swing',
+    news: 'edge', bias: 'swing', regime: 'edge', trendmx: 'swing',
+    rotation: 'smart', execute: 'swing', startrader: 'swing'
   };
 
   var DESKS = {

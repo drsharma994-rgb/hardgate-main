@@ -432,6 +432,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <section id="tab_bias" class="tabpane on">
   <div class="panel">
     <h2>Daily Direction <span>fundamental + technical + sentiment, each gate shown, no composite score</span></h2>
+    <div id="biasOmniDay"></div>
     <div class="row" style="margin-bottom:10px">
       <div class="row" id="biasChips"></div>
       <input id="biasSym" placeholder="symbol e.g. BTCUSD" style="width:150px">
@@ -754,6 +755,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <section id="tab_log" class="tabpane">
   <div class="panel">
     <h2>Setup Log <span>every CLEAN setup auto-logs · outcomes graded against candle history · stored in this browser (localStorage)</span></h2>
+    <div id="logOmniDay"></div>
     <div class="row" style="margin-bottom:10px">
       <button class="btn" id="logCheck" onclick="checkOutcomes()">CHECK OUTCOMES</button>
       <button class="btn ghost" onclick="exportLog()">EXPORT JSON</button>
@@ -811,7 +813,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 </main>
 
 
-  <script src="build-stamp.js?v=620"></script>
+  <script src="build-stamp.js?v=622"></script>
 <script src="hghost.js"></script>
 <script src="indicators.js"></script>
 <script src="indicators2.js"></script>
@@ -863,8 +865,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="crypto-catalog.js?v=614"></script>
 <script src="omniroute.js?v=615"></script>
 <script src="dex-screener.js?v=615"></script>
-<script src="setup-confirm.js?v=620"></script>
-<script src="combi.js?v=620"></script>
+<script src="setup-confirm.js?v=622"></script>
+<script src="combi.js?v=622"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
 <script src="edge.js?v=559"></script>
@@ -895,8 +897,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation-nightly.js?v=614"></script>
 <script src="formation-nightly-boot.js?v=614"></script>
 <!-- desk-formation-edge.js: OMNIROUTE v531 + BEST kinds + nightly desk overlay retune SWING/SCALP/EDGE/SMART$/SQUEEZE/SNIPER/SMC/OB/TRAP/DIV/COIL/APEX/OIFLOW/LIQS/ON-CHAIN/CHART VISION/CARRY/VENUE/TERM BASIS. Demote/suppress/prefer only. -->
-<script src="desk-formation-edge.js?v=621"></script>
-<script src="hg-omni-strategy-bridge.js?v=621"></script>
+<script src="desk-formation-edge.js?v=622"></script>
+<script src="hg-omni-strategy-bridge.js?v=622"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
 <script src="contract-report.js"></script>
 <!-- omnibtc-engines.js: SMART $ / OI FLOW / fade / COIL / DIV / TRAP / SMC / STAR TRADER + on-chain evidence. Loads BEFORE omnibtc.js so the tab can feature-check it. -->
@@ -931,7 +933,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="best-levels.js"></script>
 <script src="supersetup.js?v=614"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=621"></script>
+<script src="super-desk-common.js?v=622"></script>
 <script src="super-gold.js?v=614"></script>
 <script src="super-best.js?v=614"></script>
 <script src="super-sniper.js?v=614"></script>
@@ -3186,9 +3188,11 @@ function showTab(t){
       td.innerHTML = hgSetupDeskBannerHTML({
         kind: 'trade', tab: 'TRADE PLAN',
         note: 'SEND TO TRADE PLAN from any CLEAN card carries FTS stack + scanner id into sizing and ADD TO BOOK.'
-      });
+      }) + (typeof hgOmniPrincipalNoteHtml === 'function' ? (hgOmniPrincipalNoteHtml('trade') || '') : '');
     }
   }
+  if (t === 'log' && typeof hgTabFormationDayPaint === 'function') hgTabFormationDayPaint('log');
+  if (t === 'bias' && typeof hgTabFormationDayPaint === 'function') hgTabFormationDayPaint('bias');
 }
 
 /* Auto-scan Delta + CoinDCX when opening a tab (default on). */

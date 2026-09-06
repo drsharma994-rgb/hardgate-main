@@ -562,6 +562,23 @@ function stSynthesize(contract, rows4h, rows1h, rows15m, ticker, ctx){
         try{ W.hgStrategyRefine(plan, rows4h, { style: 'startrader', kind: 'startrader' }); }catch(eRf){}
       }
     }
+    if (plan && typeof W.hgOmniPrincipalApply === 'function'){
+      try{
+        var stOmni = Object.assign({}, plan, {
+          dir: dir, sym: contract.sym, scanner: 'startrader',
+          strategy: plan.planSrc || plan.src || 'startrader'
+        });
+        W.hgOmniPrincipalApply(stOmni, { tab: 'startrader', rows: rows4h, strategy: stOmni.strategy });
+        if (stOmni.demoted || stOmni.deskEdgeAction === 'suppress' || stOmni.omniPrincipal === 'replay-demoted'){
+          tier = 'WATCH';
+          planDraft = true;
+          plan.omniDemoted = true;
+        } else if (stOmni.deskEdgeAction === 'demote' && tier === 'PRIME'){
+          tier = 'HIGH';
+          plan.omniDemoted = true;
+        }
+      }catch(eOm){}
+    }
 
     return {
       sym: contract.sym,
@@ -713,6 +730,7 @@ function mount(el){
     + '<div id="stPaneMain">'
     + '<div class="panel">'
     + '<h2>STAR TRADER <span>crypto · metals · commodities · indices · forex · ETFs · shares · multi-factor confluence</span></h2>'
+    + (typeof W.hgOmniPrincipalNoteHtml === 'function' ? (W.hgOmniPrincipalNoteHtml('startrader') || '') : '')
     + '<div class="note" style="margin-bottom:10px">Scans the full STARTRADER CFD universe with every gate the app ships: '
     + '<b>SWING</b> · <b>SCALP</b> · <b>EDGE</b> · <b>SQUEEZE</b> · <b>MEAN REV</b> plus '
     + '<b>NEWS</b> · <b>REGIME</b> · <b>SENTIMENT</b> (F&amp;G) · <b>MACRO</b> (DXY/yields for USD assets) · '

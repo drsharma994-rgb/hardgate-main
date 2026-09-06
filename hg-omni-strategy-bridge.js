@@ -1,7 +1,8 @@
 /* =========================================================================
    HARDGATE — hg-omni-strategy-bridge.js
    Shares OMNIROUTE mechanic registry + replay/nightly principal across
-   SUPER / PINE / STRATEGY LAB / MEAN REV / FORMATION LAB / SCORECARD tabs.
+   SUPER / PINE / MODELS / COMMAND (BRAIN / BOOK / TRADE / LOG / NEWS / BIAS /
+   REGIME / TREND MATRIX / ROTATION / GATES / STAR TRADER) tabs.
 
    Applies v531 replay demotes, formation nightly day-aside/prefer, and
    desk-formation-edge analogues. Demote/suppress only — never loosens G1–G7.
@@ -22,7 +23,10 @@ var TAB_DESK = {
   'pine-ht': 'edge', 'pine-smc': 'smc', 'pine-cipher': 'edge', 'pine-rf': 'edge',
   'pine-nw': 'coil', 'pine-avwap': 'edge',
   'strats': 'swing', 'meanrev': 'divergence', 'formationlab': 'swing',
-  'scorecard': 'swing', 'reliability': 'swing'
+  'scorecard': 'swing', 'reliability': 'swing',
+  'brain': 'swing', 'book': 'swing', 'trade': 'swing', 'log': 'swing',
+  'news': 'edge', 'bias': 'swing', 'regime': 'edge', 'trendmx': 'swing',
+  'rotation': 'smart', 'execute': 'swing', 'startrader': 'swing'
 };
 
 var SCRIPT_TAB = {
@@ -40,7 +44,11 @@ var TAB_KIND = {
   'pine-cipher': 'VOL-EXPANSION', 'pine-rf': 'DONCHIAN-DRIVE', 'pine-nw': 'NR7-BREAK',
   'pine-avwap': 'AVWAP-RECLAIM',
   'strats': 'TREND-RECLAIM', 'meanrev': 'VWAP-REVERT', 'formationlab': 'BOS-RETEST',
-  'scorecard': 'MMOVE', 'reliability': 'MMOVE'
+  'scorecard': 'MMOVE', 'reliability': 'MMOVE',
+  'brain': 'MMOVE', 'book': 'MMOVE', 'trade': 'TREND-RECLAIM', 'log': 'MMOVE',
+  'news': 'ORB', 'bias': 'HTF-PULLBACK', 'regime': 'COMPRESSION-BREAK',
+  'trendmx': 'DONCHIAN-DRIVE', 'rotation': 'CUSUM-SHIFT', 'execute': 'TREND-RECLAIM',
+  'startrader': 'DONCHIAN-DRIVE'
 };
 
 var SCRIPT_KIND = {
@@ -157,6 +165,29 @@ function hgOmniPrincipalApply(cand, opts){
   }
 
   if (!cand.omniPrincipal) cand.omniPrincipal = 'pass';
+  hgOmniPrincipalDemoteEffects(cand, opts);
+  return cand;
+}
+
+function hgOmniPrincipalDemoteEffects(cand, opts){
+  if (!cand || typeof cand !== 'object') return cand;
+  opts = opts || {};
+  var blocked = cand.demoted === true
+    || cand.deskEdgeAction === 'suppress' || cand.deskEdgeAction === 'demote'
+    || cand.omniPrincipal === 'replay-demoted' || cand.nightlyAside === true
+    || (cand.omniPrincipal && String(cand.omniPrincipal).indexOf('desk-edge-') === 0);
+  if (!blocked) return cand;
+  cand.omniDemoted = true;
+  if (opts.stripClean === false) return cand;
+  cand.clean = false;
+  cand.near = true;
+  cand.nearWatch = true;
+  cand.watchOnly = true;
+  cand.ticket = false;
+  cand.minimalLossPass = false;
+  if (cand.tier === 'clean' || cand.tier === 'PRIME' || cand.tier === 'HIGH'){
+    cand.tier = opts.tierDemote || 'near';
+  }
   return cand;
 }
 
@@ -220,6 +251,7 @@ W.hgOmniPrincipalDesk = hgOmniPrincipalDesk;
 W.hgOmniPrincipalTabForScript = hgOmniPrincipalTabForScript;
 W.hgOmniPrincipalKind = hgOmniPrincipalKind;
 W.hgOmniPrincipalApply = hgOmniPrincipalApply;
+W.hgOmniPrincipalDemoteEffects = hgOmniPrincipalDemoteEffects;
 W.hgOmniPrincipalRows = hgOmniPrincipalRows;
 W.hgOmniPrincipalBanner = hgOmniPrincipalBanner;
 W.hgOmniPrincipalReplayNote = hgOmniPrincipalReplayNote;

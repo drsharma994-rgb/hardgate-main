@@ -1666,6 +1666,7 @@ function mount(el){
   el.innerHTML =
     '<div class="panel">'
     + '<h2>PAPER FUND BOOK <span>multi-fund · risk limits · paper fills at plan entry</span></h2>'
+    + (typeof W.hgOmniPrincipalNoteHtml === 'function' ? (W.hgOmniPrincipalNoteHtml('book') || '') : '')
     + '<div class="row" style="align-items:center;gap:8px;margin-bottom:8px">'
     + '<label class="note">Fund <select id="bookFundSel" class="bookFundSel"></select></label>'
     + '<button class="btn ghost" id="bookNewFund" title="Create a new paper fund book">+ FUND</button>'

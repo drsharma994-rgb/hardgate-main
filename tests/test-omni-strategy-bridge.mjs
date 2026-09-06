@@ -29,8 +29,22 @@ function boot(extra){
   return ctx;
 }
 
+console.log('== tab kind map covers COMMAND desks ==');
+{
+  const W = boot();
+  const tabs = [
+    'brain', 'book', 'trade', 'log', 'news', 'bias', 'regime', 'trendmx',
+    'rotation', 'execute', 'startrader'
+  ];
+  for (const t of tabs){
+    const kind = W.hgOmniPrincipalKind(t, '');
+    ok(!!kind, t + ' → ' + kind);
+    ok(!!W.hgOmniPrincipalDesk(t), t + ' desk resolves');
+  }
+}
+
 console.log('== build stamp / sw cache ==');
-ok(HG_VER === 'hg-v621', 'HG_VER is hg-v621');
+ok(HG_VER === 'hg-v622', 'HG_VER is hg-v622');
 ok(swCacheOk(read('sw.js')), 'sw.js HG_CACHE matches build stamp');
 
 console.log('== tab kind map covers MODELS desks ==');
@@ -89,7 +103,9 @@ console.log('== formation nightly paints MODELS tabs ==');
   ok(ids.indexOf('super-setup') >= 0, 'super-setup in paint list');
   ok(ids.indexOf('pine-msb') >= 0, 'pine-msb in paint list');
   ok(ids.indexOf('formationlab') >= 0, 'formationlab in paint list');
-  ok(ids.indexOf('scorecard') >= 0, 'scorecard in paint list');
+  ok(ids.indexOf('brain') >= 0, 'brain in paint list');
+  ok(ids.indexOf('execute') >= 0, 'execute in paint list');
+  ok(ids.indexOf('startrader') >= 0, 'startrader in paint list');
 }
 
 console.log('\n' + pass + ' passed');

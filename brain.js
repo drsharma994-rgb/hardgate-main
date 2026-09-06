@@ -1916,6 +1916,34 @@ function judgeCrypto(cand, snap){
   return row;
 }
 
+function brainApplyOmniPrincipal(row){
+  if (!row || typeof G.hgOmniPrincipalApply !== 'function') return row;
+  try{
+    var plan = row.plan;
+    var dir = row.dec && row.dec.dir;
+    if (!plan || !dir) return row;
+    var wrap = Object.assign({}, plan, {
+      dir: dir, sym: row.sym, scanner: 'brain', strategy: plan.src || plan.planSrc || 'brain',
+      rows: row.rows
+    });
+    G.hgOmniPrincipalApply(wrap, { tab: 'brain', rows: row.rows, strategy: wrap.strategy });
+    if (wrap.demoted || wrap.deskEdgeAction === 'suppress' || wrap.omniPrincipal === 'replay-demoted'){
+      row.omniDemoted = true;
+      if (row.dec && row.dec.tier !== 'ASIDE'){
+        row.dec.gatedFrom = row.dec.tier;
+        row.dec.tier = 'ASIDE';
+        row.dec.reasons.unshift('OMNI replay — ' + (wrap.deskEdgeAnalogue || wrap.omniKind || 'analogue') + ' stands aside');
+      }
+    } else if (wrap.deskEdgeAction === 'demote' && row.dec){
+      row.omniDemoted = true;
+      if (row.dec.tier === 'PRIME') row.dec.tier = 'HIGH';
+      else if (row.dec.tier === 'HIGH') row.dec.tier = 'WATCH';
+      row.dec.reasons.push('OMNI desk-edge demote — ' + (wrap.deskEdgeAnalogue || wrap.omniKind || ''));
+    }
+  }catch(e){}
+  return row;
+}
+
 function judgeGold(snap){
   var col = brainCollect({
     sym: 'XAU', lane: 'gold',
@@ -5394,6 +5422,7 @@ async function runBrain(el){
           var gotx = (planSet[sx].lane === 'gold') ? await goldPlan(planSet[sx], snap)
                                                    : await cryptoPlanXu(planSet[sx], snap);
           planSet[sx].plan = gotx.plan; planSet[sx].rows = gotx.rows;
+          brainApplyOmniPrincipal(planSet[sx]);
         }catch(e){ planSet[sx].plan = null; planSet[sx].rows = null; }
       }
       attachBrainStacks(rows);
@@ -5407,6 +5436,7 @@ async function runBrain(el){
           var got = (setups[s].lane === 'gold') ? await goldPlan(setups[s], snap)
                                                 : await cryptoPlan(setups[s], snap);
           setups[s].plan = got.plan; setups[s].rows = got.rows;
+          brainApplyOmniPrincipal(setups[s]);
         }catch(e){ setups[s].plan = null; setups[s].rows = null; }
       }
       attachBrainStacks(setups);
@@ -5733,6 +5763,7 @@ async function runQuick(el){
           var gotx = (qPlanSet[sx].lane === 'gold') ? await goldPlan(qPlanSet[sx], snap)
                                                     : await cryptoPlanXu(qPlanSet[sx], snap);
           qPlanSet[sx].plan = gotx.plan; qPlanSet[sx].rows = gotx.rows;
+          brainApplyOmniPrincipal(qPlanSet[sx]);
         }catch(e){ qPlanSet[sx].plan = null; qPlanSet[sx].rows = null; }
       }
     }else{
@@ -5749,6 +5780,7 @@ async function runQuick(el){
             setups[ls].plan = enginePlanFor(setups[ls], snap) || (prior && prior.plan) || null;
             setups[ls].rows = (prior && prior.rows) || null;
           }
+          brainApplyOmniPrincipal(setups[ls]);
         }catch(e){ setups[ls].plan = null; setups[ls].rows = null; }
       }
     }
@@ -5977,6 +6009,7 @@ function mount(el){
     el.innerHTML =
       '<div class="panel">'
       + '<h2>BRAIN — meta-intelligence <span>reads every layer · evidence agreement, not scores</span></h2>'
+      + (typeof G.hgOmniPrincipalNoteHtml === 'function' ? (G.hgOmniPrincipalNoteHtml('brain') || '') : '')
       + '<div class="row"><button class="btn" id="brainRun">RUN SYNTHESIS</button>'
       + '<button class="btn" id="brainQuick" title="recheck the last scan’s watch set against fresh layers — cached universe, new listings judged on arrival">QUICK RESCAN</button>'
       + '<button class="btn" id="brainWarm" title="run every layer tab’s scan (news, regime, rotation, on-chain, OI flow, squeeze, engine) in sequence, then auto-run the synthesis — one click instead of eight">WARM UP LAYERS</button>'

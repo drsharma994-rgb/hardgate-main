@@ -301,6 +301,14 @@ function trendmxAttachMeta(plan, gate, extra){
   }
   if (extra && extra.formationScore != null) plan.formationScore = extra.formationScore;
   if (!plan.planSrc) plan.planSrc = 'trendmx';
+  if (typeof W.hgOmniPrincipalApply === 'function'){
+    try{
+      W.hgOmniPrincipalApply(plan, {
+        tab: 'trendmx', rows: extra && extra.rows4h, strategy: 'trendmx', dir: plan.dir
+      });
+      if (plan.demoted || plan.deskEdgeAction === 'suppress') plan.omniDemoted = true;
+    }catch(eOm){}
+  }
   return plan;
 }
 
@@ -321,7 +329,7 @@ function trendmxPlan(inp){
         tab: 'trendmx', style: 'swing', dir: dir, gate: gate,
       }));
       if (bl && bl.ok && bl.plan && tmValidSetup(bl.plan)){
-        return trendmxAttachMeta(bl.plan, bl.gate || gate, { formationScore: bl.formationScore });
+        return trendmxAttachMeta(bl.plan, bl.gate || gate, { formationScore: bl.formationScore, rows4h: inp.rows4h });
       }
       if (bl && bl.veto) return null;
     }
@@ -645,6 +653,7 @@ function trendmxCompPipsHtml(comps){
 
 function trendmxRowTier(r, plan){
   if (!r) return 'forming';
+  if (plan && plan.omniDemoted) return 'near';
   if (r.gate && r.gate.veto) return 'forming';
   if (plan && tmValidSetup(plan) && r.gate && r.gate.clean7) return 'clean';
   if (r.gate && r.gate.nearClean) return 'near';
@@ -964,6 +973,7 @@ function mountTrendMatrix(el){
   el.innerHTML =
     '<div class="panel hg-panel">' +
       '<h2>TREND MATRIX <span>advanced multi-TF desk · full universe (Delta + CoinDCX + Binance · ≥ $' + floorM + 'M turnover)</span></h2>' +
+      (typeof W.hgOmniPrincipalNoteHtml === 'function' ? (W.hgOmniPrincipalNoteHtml('trendmx') || '') : '') +
       '<div id="trendmxDesk"></div>' +
       '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · golden cross Telegram every 15m.</div>' +
       '<div class="row" style="margin-top:10px">' +

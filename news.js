@@ -482,6 +482,7 @@ function renderNews(el){
   /* ---- header row ---- */
   html += '<div class="panel">'
     + '<h2>NEWS INTELLIGENCE <span>macro calendar · headline impact · sentiment</span></h2>'
+    + (typeof W.hgOmniPrincipalNoteHtml === 'function' ? (W.hgOmniPrincipalNoteHtml('news') || '') : '')
     + '<div class="row">'
     +   '<button class="btn" id="newsRun">REFRESH NEWS</button>'
     +   '<span class="note" id="newsStat">' + (NEWS.loaded

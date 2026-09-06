@@ -753,6 +753,7 @@ function mountRegime(el){
   el.innerHTML =
     '<div class="panel">' +
       '<h2>MARKET REGIME <span>risk-on / risk-off composite · 8 gauges</span></h2>' +
+      (typeof W.hgOmniPrincipalNoteHtml === 'function' ? (W.hgOmniPrincipalNoteHtml('regime') || '') : '') +
       '<div class="row">' +
         '<button class="btn" id="regimeRun">REFRESH</button>' +
         '<span class="note" id="regimeStat">auto-runs on open</span>' +
