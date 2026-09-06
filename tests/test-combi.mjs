@@ -96,7 +96,7 @@ console.log('== overextension blocks tradeable ==');
   const pepe = groups.filter(g => g.sym.indexOf('PEPE') >= 0 && g.dir === 'long')[0];
   ok(pepe && pepe.combiTier === 'BLOCKED', 'overextended PEPE blocked');
   ok(pepe && !pepe.tradeable, 'overextended PEPE not tradeable');
-  ok(!W.hgCombiPickGlobal(groups, bag), 'no global pick when only blocked chase');
+  ok(!W.hgCombiPickLeader(groups, bag), 'no leader when only blocked chase');
 }
 
 console.log('== inline snap harvest ==');
@@ -119,6 +119,26 @@ console.log('== inline snap harvest ==');
   ok(snapBag.length === 1 && snapBag[0].source === 'smc', 'hgMpSnapHarvest captures inline SMC card');
 }
 
+console.log('== best-available fallback ==');
+{
+  const W = boot({
+    swingScan: () => ({
+      at: Date.now(),
+      cands: [{ sym: 'ETHUSD', dir: 'long', entry: 200, stop: 195, t1: 210, clean: true, gatesPassed: 7 }]
+    }),
+    edgeScan: () => ({
+      at: Date.now(),
+      cands: [{ sym: 'ETHUSD', dir: 'long', entry: 201, stop: 196, t1: 212, clean: true, gatesPassed: 7 }]
+    }),
+    hgMacroAllowsCrypto: () => ({ allow: true }),
+    hgTripleStackMatch: () => null
+  });
+  const bag = W.hgCombiHarvest();
+  const groups = W.hgCombiGroup(bag);
+  const pick = W.hgCombiPickLeader(groups, bag);
+  ok(pick && pick.row && pick.row.sym === 'ETHUSD', 'leader pins ETH when spine + 2 desks');
+}
+
 console.log('== wiring ==');
 {
   const W = boot();
@@ -128,7 +148,7 @@ console.log('== wiring ==');
   ok(/combi\.js/.test(html), 'index loads combi.js');
   ok(/'combi'/.test(html), 'nav includes combi');
   ok(/\.\/combi\.js/.test(sw), 'sw precaches combi.js');
-  ok(/const HG_CACHE = 'hg-v619'/.test(sw), 'sw HG_CACHE current');
+  ok(/const HG_CACHE = 'hg-v620'/.test(sw), 'sw HG_CACHE current');
   ok(/combi:\s*'combiCards'/.test(read('setup-ui.js')), 'HG_MP_HOST maps combi');
 }
 

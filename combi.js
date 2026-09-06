@@ -17,10 +17,17 @@ var SHOW_MAX = 20;
 var AUTO_WARM_MS = 10 * 60 * 1000;
 var MIN_AGREE_SOURCES = 2;
 var MIN_BOOK_SOURCES = 2;
-var MIN_BOOK_CLEAN = 2;
+var MIN_BOOK_CLEAN = 1;
 var CHASE_CHG24 = 15;
 var STRUCTURAL_IDS = { swing: 1, scalp: 1, edge: 1, best: 1 };
 var TIER_RANK = { PRIME: 7, CONFIRMED: 6, STRONG: 5, AGREE: 4, BUILDING: 3, WATCH: 2, SOLO: 1, BLOCKED: 0 };
+var CB_POPULATE_IDS = [
+  'swing', 'scalp', 'edge', 'best', 'smart', 'squeeze', 'oiflow', 'brain',
+  'omniroute', 'dexscreener', 'omnibtc', 'omnipresent', 'reversalsniper',
+  'smc', 'ob', 'trap', 'div', 'coil', 'apex',
+  'liqs', 'chartvision', 'carry', 'venueprem', 'termbasis', 'onchain'
+];
+var CB_POPULATE_CHUNK = 4;
 
 var __cb = { busy: false, ran: false, ui: null, snap: null, lastCardsHtml: '' };
 
@@ -342,6 +349,8 @@ function cbIsTradeable(g){
   if (g.combiTier === 'PRIME' || g.combiTier === 'CONFIRMED') return true;
   if (g.badge === 'STRONG' && g.spine && g.cleanCount >= MIN_BOOK_CLEAN) return true;
   if (g.sourceCount >= MIN_BOOK_SOURCES && g.cleanCount >= MIN_BOOK_CLEAN && g.spine) return true;
+  if (g.combiTier === 'BUILDING' && g.spine && g.sourceCount >= MIN_AGREE_SOURCES && g.cleanCount >= 1) return true;
+  if (g.badge === 'AGREE' && g.spine && g.cleanCount >= 1) return true;
   return false;
 }
 
@@ -383,6 +392,33 @@ function cbPickGlobal(groups, bag){
     }
   }
   return null;
+}
+
+function cbPickBestAvailable(groups){
+  var i, g, best = null, bestScore = -1, s;
+  for (i = 0; i < groups.length; i++){
+    g = groups[i];
+    if (g.blockers && g.blockers.length) continue;
+    if (g.combiTier === 'BLOCKED') continue;
+    if (!g.leader) continue;
+    if (gfn('hgSetupHasLevels') && !W.hgSetupHasLevels(g.leader)) continue;
+    s = g.score + g.sourceCount * 2 + g.cleanCount * 3 + (g.spine ? 4 : 0) + (g.triple ? 3 : 0);
+    if (s > bestScore){ bestScore = s; best = g; }
+  }
+  if (!best) return null;
+  return {
+    row: best.leader,
+    tier: best.cleanCount >= MIN_BOOK_CLEAN ? 'near' : 'forming',
+    source: 'combi',
+    meta: best,
+    fallback: true
+  };
+}
+
+function cbPickLeaderCombined(groups, bag){
+  var pick = cbPickGlobal(groups, bag);
+  if (pick && pick.row) return pick;
+  return cbPickBestAvailable(groups);
 }
 
 function cbTierPill(g){
@@ -454,6 +490,27 @@ function cbGlobalBlockers(){
   return [];
 }
 
+async function cbPopulateDesks(ui){
+  var scanFn = gfn('hgScanOneTab') ? W.hgScanOneTab : null;
+  var i, chunk, slice, done = 0;
+  if (!scanFn){
+    await cbWarmDesks();
+    return 0;
+  }
+  for (i = 0; i < CB_POPULATE_IDS.length; i += CB_POPULATE_CHUNK){
+    chunk = CB_POPULATE_IDS.slice(i, i + CB_POPULATE_CHUNK);
+    if (ui && ui.stat){
+      ui.stat.textContent = 'populating desks ' + Math.min(i + CB_POPULATE_CHUNK, CB_POPULATE_IDS.length)
+        + '/' + CB_POPULATE_IDS.length + '…';
+    }
+    await Promise.all(chunk.map(function(id){
+      return Promise.resolve(scanFn(id, { quiet: true })).catch(function(){ return 'error'; });
+    }));
+    done += chunk.length;
+  }
+  return done;
+}
+
 async function cbWarmDesks(){
   var jobs = [];
   if (gfn('cryptoScanWarm')) jobs.push(W.cryptoScanWarm('swing'));
@@ -471,17 +528,25 @@ async function cbRunScan(ui, opts){
   if (ui && ui.btn) ui.btn.disabled = true;
   try{
     var stale = !__cb.snap || !__cb.snap.at || (Date.now() - __cb.snap.at > AUTO_WARM_MS);
-    if (opts.warm || (stale && !opts.noWarm)) await cbWarmDesks();
+    var needsPopulate = !!(opts.populate || opts.warm || !__cb.ran || stale);
+    if (needsPopulate){
+      if (ui && ui.stat) ui.stat.textContent = 'populating desk snapshots…';
+      await cbPopulateDesks(ui);
+    }
     if (ui && ui.stat) ui.stat.textContent = 'merging desk snapshots…';
+    var bag = cbHarvestAll();
+    if (!bag.length && needsPopulate){
+      await cbWarmDesks();
+      bag = cbHarvestAll();
+    }
+    var groups = cbGroup(bag);
     var globalBlock = cbGlobalBlockers();
     if (ui && ui.global){
       ui.global.innerHTML = globalBlock.length
         ? '<div class="note warn" style="margin-bottom:8px"><b>HOUSE HALT</b> — ' + esc(globalBlock.join(' · ')) + '</div>'
         : '';
     }
-    var bag = cbHarvestAll();
-    var groups = cbGroup(bag);
-    var globalPick = globalBlock.length ? null : cbPickGlobal(groups, bag);
+    var globalPick = globalBlock.length ? null : cbPickLeaderCombined(groups, bag);
     var tradeable = groups.filter(function(g){ return g.tradeable; });
     var prime = groups.filter(function(g){ return g.combiTier === 'PRIME'; });
     var confirmed = groups.filter(function(g){ return g.combiTier === 'CONFIRMED'; });
@@ -495,16 +560,19 @@ async function cbRunScan(ui, opts){
       prime: prime.length,
       confirmed: confirmed.length,
       strong: strong.length,
-      globalBlockers: globalBlock
+      globalBlockers: globalBlock,
+      populated: needsPopulate
     };
     __cb.ran = true;
     var show = groups.slice(0, SHOW_MAX);
     var html = '';
     if (!groups.length){
-      html = '<div class="empty">No desk snapshots yet — press <b>WARM DESKS</b> or run scans on SWING / EDGE / OMNIROUTE first.</div>';
+      html = '<div class="empty">No desk snapshots yet — press <b>POPULATE DESKS</b> to warm SWING / EDGE / OMNIROUTE and merge again.</div>';
     } else {
-      if (!tradeable.length){
-        html += '<div class="note warn" style="margin-bottom:8px">No tradeable combi leader yet — need structural spine + multi-desk CLEAN agreement (or SETUP CONFIRM PRIME/CONFIRMED).</div>';
+      if (globalPick && globalPick.fallback){
+        html += '<div class="note" style="margin-bottom:8px">Best available leader pinned — desks populated; PRIME/CONFIRMED agreement still building on weaker names.</div>';
+      } else if (!tradeable.length && !globalPick){
+        html += '<div class="note warn" style="margin-bottom:8px">No leader yet — press <b>POPULATE DESKS</b> to warm all crypto tabs, then merge again.</div>';
       }
       for (var i = 0; i < show.length; i++) html += cbCardHtml(show[i]);
     }
@@ -536,11 +604,11 @@ function mountCombi(el){
     + '<div class="note hg-lead" style="margin-bottom:10px">Cross-tab <b>merger</b> — harvests every published desk snapshot, ranks by structural spine '
     + '(SWING+EDGE / TRIPLE STACK / 2 structural CLEAN) + multi-desk agreement, and applies SETUP CONFIRM blockers '
     + '(±' + CHASE_CHG24 + '% chase, suppress, direction conflict, BRAIN aside, news lockout). '
-    + 'Pins <b>MOST PROBABLE</b> only when PRIME / CONFIRMED / STRONG+spine — never a solo noise ticket. No invented levels.</div>'
+    + 'Pins <b>MOST PROBABLE</b> when PRIME / CONFIRMED / STRONG+spine; auto-populates all crypto desks on open. No invented levels.</div>'
     + '<div id="combiGlobal"></div>'
     + '<div class="row"><button class="btn" id="combiRun">MERGE DESKS</button>'
-    + '<button class="btn secondary" id="combiWarm">WARM DESKS</button>'
-    + '<span class="note" id="combiStat">idle — warm desks or merge from existing scans</span></div>'
+    + '<button class="btn secondary" id="combiWarm">POPULATE DESKS</button>'
+    + '<span class="note" id="combiStat">idle — auto-populates on open</span></div>'
     + '<div class="cards" id="combiCards"></div>'
     + '</div>';
   var ui = {
@@ -551,12 +619,12 @@ function mountCombi(el){
     global: el.querySelector('#combiGlobal')
   };
   __cb.ui = ui;
-  if (ui.btn) ui.btn.addEventListener('click', function(){ cbRunScan(ui, {}); });
-  if (ui.warm) ui.warm.addEventListener('click', function(){ cbRunScan(ui, { warm: true }); });
+  if (ui.btn) ui.btn.addEventListener('click', function(){ cbRunScan(ui, { populate: true }); });
+  if (ui.warm) ui.warm.addEventListener('click', function(){ cbRunScan(ui, { warm: true, populate: true }); });
   if (gfn('hgTabFormationDayPaint')) W.hgTabFormationDayPaint('combi');
   setTimeout(function(){
     if (__cb.busy || __cb.ran) return;
-    cbRunScan(ui, {});
+    cbRunScan(ui, { populate: true });
   }, 700);
 }
 
@@ -574,6 +642,9 @@ W.hgCombiHarvest = cbHarvestAll;
 W.hgCombiGroup = cbGroup;
 W.hgCombiEnrich = cbEnrich;
 W.hgCombiPickGlobal = cbPickGlobal;
+W.hgCombiPickBestAvailable = cbPickBestAvailable;
+W.hgCombiPickLeader = cbPickLeaderCombined;
+W.hgCombiPopulate = cbPopulateDesks;
 W.hgCombiIsTradeable = cbIsTradeable;
 W.hgCombiScan = function(opts){ return cbRunScan(__cb.ui, opts || {}); };
 W.combiState = function(){

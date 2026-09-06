@@ -361,6 +361,12 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Quiet candle TTL is **720s** so cache spans the 10-min boundary. G1–G7 unchanged.
 - Tests: `tests/test-scan-every-10m.mjs`, `tests/test-hard-refresh.mjs`.
 
+### COMBI auto-populate — hg-v620
+- **POPULATE DESKS** warms all 25 crypto tabs (SWING → ON-CHAIN) via `hgScanOneTab` on open / merge / warm click.
+- **Best-available fallback** pins a leader when strict PRIME/CONFIRMED is not ready yet (blocked names excluded).
+- Relaxed tradeable gate: BUILDING / AGREE + spine + 1 CLEAN can book with near tier.
+- Tests: `tests/test-combi.mjs`.
+
 ### COMBI improved — hg-v619
 - **Structural spine scoring:** SWING+EDGE, TRIPLE STACK, or 2 structural CLEAN boost rank; spine required for tradeable handoff.
 - **SETUP CONFIRM integration:** merges confirm tiers (PRIME/CONFIRMED/BLOCKED), blockers (±15% chase, suppress, direction conflict, BRAIN aside, news lockout), and needs chips.
