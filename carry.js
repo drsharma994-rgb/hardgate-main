@@ -13,7 +13,8 @@ LEG A (Binance USD-M perps): all-symbols /fapi/v1/premiumIndex, top 30 by
   cap the card/row is flagged 'at cap — squeeze crowded'.
 LEG B (Delta India): /v2/tickers?contract_types=perpetual_futures —
   funding_rate is ALREADY percent units per 8h interval (NO *100, same
-  convention as the index.html Delta adapter). APR = rate*3*365.
+  convention as the index.html Delta adapter). APR = carryAnnualize(rate, 8)
+  (8h assumed until Delta exposes per-contract cadence; flagged deltaIntervalAssumed).
 Symbols matched by base asset (BTCUSD ~ BTCUSDT; strip USD/USDT suffix).
 Cross-venue cards when |deltaAPR - binanceAPR| >= 25%: short the perp on the
 higher-funding venue, long the perp on the lower one, collect the spread.
@@ -37,22 +38,24 @@ is in flight it reports 'busy' (overlaps never double-fetch).
 (function(){
 
   /* ============================ pure core ============================ */
-  /* Both inputs are funding rates in PERCENT units per 8h interval.
-     APR = rate * 3 * 365 (three 8h funding prints per day).
-     Carry construction: SHORT the perp on the venue with the HIGHER rate
-     (collect its funding), LONG the perp on the LOWER-rate venue — the
-     spread captured per 8h is |rDelta - rBinance| regardless of signs
-     (a long on a negative-funding venue also collects). Ties break to
-     'delta' deterministically. Returns null on any non-finite input. */
+  var DELTA_FUNDING_INTERVAL_HOURS = 8; /* Delta India perp convention; no fundingInfo API at runtime */
+  var DELTA_INTERVAL_ASSUMED = true;
+  /* Both inputs are funding rates in PERCENT units per their venue print interval.
+     Binance: carryAnnualize(rate, intervalHours). Delta: same helper with 8h
+     until Delta exposes per-contract cadence. Carry construction: SHORT the
+     perp on the venue with the HIGHER APR (collect funding), LONG the lower.
+     Returns null on any non-finite input. */
   function carrySpread(deltaRatePct8h, binanceRatePct8h){
     if (typeof deltaRatePct8h !== 'number' || typeof binanceRatePct8h !== 'number') return null;
     if (!isFinite(deltaRatePct8h) || !isFinite(binanceRatePct8h)) return null;
-    const deltaAPR = deltaRatePct8h * 3 * 365;
-    const binanceAPR = binanceRatePct8h * 3 * 365;
+    const deltaAPR = carryAnnualize(deltaRatePct8h, DELTA_FUNDING_INTERVAL_HOURS);
+    const binanceAPR = carryAnnualize(binanceRatePct8h, DELTA_FUNDING_INTERVAL_HOURS);
+    if (deltaAPR === null || binanceAPR === null) return null;
     const spreadAPR = Math.abs(deltaAPR - binanceAPR);
     const shortVenue = (deltaAPR >= binanceAPR) ? 'delta' : 'binance';
     const longVenue = (shortVenue === 'delta') ? 'binance' : 'delta';
-    return { deltaAPR: deltaAPR, binanceAPR: binanceAPR, spreadAPR: spreadAPR, shortVenue: shortVenue, longVenue: longVenue };
+    return { deltaAPR: deltaAPR, binanceAPR: binanceAPR, spreadAPR: spreadAPR, shortVenue: shortVenue, longVenue: longVenue,
+             deltaIntervalHours: DELTA_FUNDING_INTERVAL_HOURS, deltaIntervalAssumed: DELTA_INTERVAL_ASSUMED };
   }
 
   /* APR annualization is per-symbol: a funding print lands every
@@ -66,20 +69,20 @@ is in flight it reports 'busy' (overlaps never double-fetch).
     return ratePctPerPrint * (24/intervalHours) * 365;
   }
 
-  /* Interval-aware carrySpread: same construction and same result shape,
-     but the binance leg is a PER-PRINT rate annualized with the symbol's
-     own funding interval. The delta leg stays 8h (Delta India convention).
-     carrySpread(a, b) === carrySpreadInt(a, b, 8) — the 8h case is unchanged. */
+  /* Interval-aware carrySpread: binance leg uses fundingInfo cadence; delta
+     leg uses DELTA_FUNDING_INTERVAL_HOURS until a Delta fundingInfo exists. */
   function carrySpreadInt(deltaRatePct8h, binanceRatePctPerPrint, binanceIntervalHours){
     if (typeof deltaRatePct8h !== 'number' || typeof binanceRatePctPerPrint !== 'number') return null;
     if (!isFinite(deltaRatePct8h) || !isFinite(binanceRatePctPerPrint)) return null;
     const binanceAPR = carryAnnualize(binanceRatePctPerPrint, binanceIntervalHours);
     if (binanceAPR === null) return null;
-    const deltaAPR = deltaRatePct8h * 3 * 365;
+    const deltaAPR = carryAnnualize(deltaRatePct8h, DELTA_FUNDING_INTERVAL_HOURS);
+    if (deltaAPR === null) return null;
     const spreadAPR = Math.abs(deltaAPR - binanceAPR);
     const shortVenue = (deltaAPR >= binanceAPR) ? 'delta' : 'binance';
     const longVenue = (shortVenue === 'delta') ? 'binance' : 'delta';
-    return { deltaAPR: deltaAPR, binanceAPR: binanceAPR, spreadAPR: spreadAPR, shortVenue: shortVenue, longVenue: longVenue };
+    return { deltaAPR: deltaAPR, binanceAPR: binanceAPR, spreadAPR: spreadAPR, shortVenue: shortVenue, longVenue: longVenue,
+             deltaIntervalHours: DELTA_FUNDING_INTERVAL_HOURS, deltaIntervalAssumed: DELTA_INTERVAL_ASSUMED };
   }
 
   /* Generalized two-venue carry spread. Rates are percent per print at each

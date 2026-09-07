@@ -13,11 +13,11 @@ Eight gauges, rendered as a ledger with BULL/BEAR/N-A stamps:
   R8 STABLECOIN FLOWS   DeFiLlama total mcap, 7d delta vs ±0.5% band      ±1/0
 
 Score >= +3 RISK-ON · <= -3 RISK-OFF · else MIXED — SELECTIVE.
-Thresholds stay ±3 with 7 scored components: ±3/7 ≈ 43% agreement — a
-clear plurality of gauges, same bar as before (±3/6 = 50%, N/A holes
-already score 0). Jumping to ±4 (57%) would make regime calls too rare
-on a dashboard whose sources fail often. N/A gauges score 0 — an honest
-dashboard shows holes.
+Eight gauges rendered; R7 gold is informational only (scored:false). Seven
+scored components (R1–R6, R8) → theoretical max |score| = 7, not 6.
+Thresholds stay ±3: ±3/7 ≈ 43% agreement — a clear plurality of gauges.
+Jumping to ±4 (57%) would make regime calls too rare on a dashboard whose
+sources fail often. N/A gauges score 0 — an honest dashboard shows holes.
 
 Classic script, no build step. Loads after indicators.js / indicators2.js /
 binance.js / macro.js. Exposes ONLY window.regimeVerdict and

@@ -13,11 +13,11 @@ busy-guarded, and never triggers a first-time full-universe scan on its own).
 Strategy
   PRIMARY  — ttmSqueeze(4h):
              (a) fired within the last 3 bars (firedAgo 0..2) + momentum
-                 sign => FIRED_LONG / FIRED_SHORT candidate, only full
-                 marks when the 1D trend agrees (close vs ema20 AND ema20
-                 vs ema50 side; disagreement marks the card AGAINST TREND
-                 and ranks it lower) and the fire-bar participation
-                 volZ(4h,20) >= 0.5 (noted if unmet, never a hard veto);
+                 sign => FIRED_LONG / FIRED_SHORT only when the last CLOSED
+                 1D bar agrees (close vs ema20 AND ema20 vs ema50); opposing
+                 or unknown 1D trend hard-vetoes the fire (state NONE);
+                 volZ(4h,20) >= 0.5 on the fire bar is noted if unmet,
+                 never a hard veto;
              (b) squeeze ON for >= 3 consecutive bars right now =>
                  BUILDING watchlist card (no direction).
   SECONDARY— Donchian(20) 4h breakout on the last bar:
@@ -87,6 +87,18 @@ var MIN_TURNOVER  = (typeof W.hgDeskMinTurnover === 'function') ? W.hgDeskMinTur
 var KL_4H_LIMIT   = 220, KL_1D_LIMIT = 120, KL_1H_LIMIT = 120;
 var CHUNK         = 5, CHUNK_SLEEP_MS = 120;
 
+function sqDropForming(rows, tf){
+  if (!Array.isArray(rows) || !rows.length) return rows || [];
+  if (typeof W.hgOmniDropForming === 'function') return W.hgOmniDropForming(rows, tf);
+  if (typeof W.dropForming === 'function') return W.dropForming(rows, tf);
+  var sec = { '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400 }[tf];
+  if (!sec) return rows;
+  var last = rows[rows.length - 1];
+  if (!last || !isFinite(last.t)) return rows;
+  var now = (typeof W.nowSec === 'function') ? W.nowSec() : (Date.now() / 1000);
+  return (now - last.t < sec) ? rows.slice(0, -1) : rows;
+}
+
 function sqVenueChip(item){
   return (typeof W.hgDeskVenueChipHTML === 'function') ? W.hgDeskVenueChipHTML(item) : '';
 }
@@ -112,11 +124,12 @@ function fmtF(n, d){
 }
 
 /* ---------------- pure classification ---------------- */
-/* 1D trend side: close vs ema20 AND ema20 vs ema50.
-   Returns 'UP' | 'DOWN' | 'MIXED' | null (unknown / insufficient data). */
+/* 1D trend side on the last CLOSED daily bar: close vs ema20 AND ema20 vs ema50.
+   Caller must pass dropForming(rows1d,'1d') first. Returns 'UP'|'DOWN'|'MIXED'|null. */
 function dailyTrend(rows1d){
   if (typeof ema !== 'function') return null;
-  if (!Array.isArray(rows1d) || rows1d.length < 2) return null;
+  rows1d = sqDropForming(rows1d, '1d');
+  if (!Array.isArray(rows1d) || rows1d.length < 55) return null;
   var closes = new Array(rows1d.length);
   for (var i = 0; i < rows1d.length; i++){
     var r = rows1d[i];
@@ -138,6 +151,7 @@ function noneResult(dBreak){
 function squeezeClassify(rows4h, rows1d){
   if (typeof ttmSqueeze !== 'function' || typeof donchian !== 'function' ||
       typeof volZ !== 'function' || typeof ema !== 'function') return noneResult();
+  rows4h = sqDropForming(rows4h, '4h');
   if (!Array.isArray(rows4h) || rows4h.length < 2) return noneResult();
   var n = rows4h.length;
   var last = rows4h[n-1];
@@ -145,41 +159,46 @@ function squeezeClassify(rows4h, rows1d){
 
   var ttm = ttmSqueeze(rows4h);
 
-  /* most recent fire inside the last FIRE_WINDOW bars (indices n-FIRE_WINDOW .. n-1) */
+  /* most recent fire inside the last FIRE_WINDOW closed bars */
   var firedIdx = -1;
   for (var i = Math.max(0, n - FIRE_WINDOW); i < n; i++){ if (ttm.fired[i]) firedIdx = i; }
   var firedAgo = (firedIdx >= 0) ? (n - 1 - firedIdx) : null;
 
-  /* donchian breakout on the last bar, gated by current-bar participation */
+  /* donchian breakout on the last closed bar, gated by participation */
   var dBreak = null;
   var vzNow = volZ(rows4h, VOLZ_LOOK);
   var dc = donchian(rows4h, DC_LEN);
-  if (isFinite(dc.up[n-2]) && isFinite(dc.lo[n-2]) && isFinite(vzNow) && vzNow >= DC_BREAK_Z){
+  if (n >= 3 && isFinite(dc.up[n-2]) && isFinite(dc.lo[n-2]) && isFinite(vzNow) && vzNow >= DC_BREAK_Z){
     if (last.c > dc.up[n-2]) dBreak = 'LONG';
     else if (last.c < dc.lo[n-2]) dBreak = 'SHORT';
   }
 
   var trend = dailyTrend(rows1d);
 
-  /* (a) fired within the window + momentum sign => directional candidate.
-     Fire takes precedence over BUILDING when both are present. */
+  /* (a) fired within the window + momentum sign + 1D trend hard gate */
   if (firedIdx >= 0){
     var mom = ttm.momentum[firedIdx];
     var out = { state:'NONE', firedAgo:firedAgo, momentum:mom, trendAgree:null,
                 volZ: volZ(rows4h.slice(0, firedIdx+1), VOLZ_LOOK), donchianBreak:dBreak };
     if (isFinite(mom) && mom > 0){
+      if (trend !== 'UP'){
+        out.trendAgree = (trend === null) ? null : false;
+        return out;
+      }
       var swBias = (typeof hgConfirmedCascade === 'function') ? hgConfirmedCascade(rows4h, 'swing') : null;
       if (swBias && swBias.dir === 'short'){ out.state = 'NONE'; return out; }
       out.state = 'FIRED_LONG';
-      out.trendAgree = (trend === null) ? null : (trend === 'UP');
+      out.trendAgree = true;
     } else if (isFinite(mom) && mom < 0){
+      if (trend !== 'DOWN'){
+        out.trendAgree = (trend === null) ? null : false;
+        return out;
+      }
       var swBiasS = (typeof hgConfirmedCascade === 'function') ? hgConfirmedCascade(rows4h, 'swing') : null;
       if (swBiasS && swBiasS.dir === 'long'){ out.state = 'NONE'; return out; }
       out.state = 'FIRED_SHORT';
-      out.trendAgree = (trend === null) ? null : (trend === 'DOWN');
+      out.trendAgree = true;
     }
-    /* momentum exactly 0 / NaN: directionless fire -> state stays NONE,
-       but firedAgo/momentum are still reported for observability. */
     return out;
   }
 
@@ -947,8 +966,10 @@ async function squeezeScanCore(hooks){
         var rows4h = null, rows1d = [];
         try{ rows4h = await fetchK(item, '4h', KL_4H_LIMIT); }catch(e4){ rows4h = null; }
         if (!rows4h || !rows4h.length){ failed++; return; }
+        rows4h = sqDropForming(rows4h, '4h');
+        if (rows4h.length < 2){ failed++; return; }
         try{ rows1d = await fetchK(item, '1d', KL_1D_LIMIT); }catch(e1d){ rows1d = []; }
-        rows1d = rows1d || [];
+        rows1d = sqDropForming(rows1d || [], '1d');
         var cls = squeezeClassify(rows4h, rows1d);
         var tick = {
           turnoverUsd: item.turnoverUsd, mark: item.mark, fundingPct: item.fundingPct,

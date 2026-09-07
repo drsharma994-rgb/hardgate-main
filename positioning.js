@@ -100,7 +100,11 @@ function escPos(s){
 /* Unified positioning classifier — shared by SMART $ (smartClassify) and OI FLOW
    (oiflowClassify). Accepts chg24/pxChg, oiChgPct/oiChg, fundingPct, fundingZ,
    retailLongPct/longPct, topLongPct, takerRatio/takerAvg. Returns lowercase dir
-   for smartSetup plus optional dirUpper for legacy OI FLOW cards. */
+   for smartSetup plus optional dirUpper for legacy OI FLOW cards.
+   topLongPct = Binance topLongShortPositionRatio (position-weighted); retailLongPct
+   = globalLongShortAccountRatio (account-weighted). The smart-$ diff is directionally
+   sound but unit-asymmetric on whale-heavy books — treat the 15pp threshold as a
+   heuristic, not a calibrated spread. */
 function hgPositioningClassify(d, opts){
   opts = opts || {};
   d = d || {};

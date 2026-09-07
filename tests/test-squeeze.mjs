@@ -135,11 +135,15 @@ const fIdx = ttmFull.fired.findIndex(Boolean);
   assert(full[mm-1].c > dcCheck.up[mm-2] && at3.donchianBreak === null,
          'price above donchian up but volZ 0 < 1 -> donchianBreak null (vol gate, deadzone)');
 
-  assert(sq(full.slice(0, fIdx+1), dDn).trendAgree === false, 'FIRED_LONG + downtrend 1d -> AGAINST TREND (false)');
-  assert(sq(full.slice(0, fIdx+1), dMix).trendAgree === false, 'FIRED_LONG + mixed 1d -> trendAgree false');
-  assert(sq(full.slice(0, fIdx+1), null).trendAgree === null, 'FIRED_LONG + missing 1d -> trendAgree null');
-  assert(sq(full.slice(0, fIdx+1), trendRows(30, 50, 0.5, 0)).trendAgree === null,
-         'FIRED_LONG + short 1d (<50 bars, ema50 NaN) -> trendAgree null');
+  const rDn = sq(full.slice(0, fIdx+1), dDn);
+  assert(rDn.state === 'NONE' && rDn.trendAgree === false, 'FIRED_LONG + downtrend 1d -> hard veto (NONE, trendAgree false)');
+  const rMix = sq(full.slice(0, fIdx+1), dMix);
+  assert(rMix.state === 'NONE' && rMix.trendAgree === false, 'FIRED_LONG + mixed 1d -> hard veto (NONE, trendAgree false)');
+  const rNull = sq(full.slice(0, fIdx+1), null);
+  assert(rNull.state === 'NONE' && rNull.trendAgree === null, 'FIRED_LONG + missing 1d -> hard veto (NONE, trendAgree null)');
+  const rShort = sq(full.slice(0, fIdx+1), trendRows(30, 50, 0.5, 0));
+  assert(rShort.state === 'NONE' && rShort.trendAgree === null,
+         'FIRED_LONG + short 1d (<55 bars) -> hard veto (NONE, trendAgree null)');
 }
 
 /* ---------------- 6) FIRED_SHORT + trend matrix (real indicators) ---------------- */
@@ -150,9 +154,12 @@ const fIdx = ttmFull.fired.findIndex(Boolean);
   const sDn = sq(fullS.slice(0, fS+1), dDn);
   assert(sDn.state === 'FIRED_SHORT' && sDn.momentum < 0, 'downtrend expansion -> FIRED_SHORT, momentum < 0');
   assert(sDn.trendAgree === true, 'FIRED_SHORT + downtrend 1d -> trendAgree true');
-  assert(sq(fullS.slice(0, fS+1), dUp).trendAgree === false, 'FIRED_SHORT + uptrend 1d -> AGAINST TREND (false)');
-  assert(sq(fullS.slice(0, fS+1), dMix).trendAgree === false, 'FIRED_SHORT + mixed 1d -> trendAgree false');
-  assert(sq(fullS.slice(0, fS+1), null).trendAgree === null, 'FIRED_SHORT + missing 1d -> trendAgree null');
+  const sUp = sq(fullS.slice(0, fS+1), dUp);
+  assert(sUp.state === 'NONE' && sUp.trendAgree === false, 'FIRED_SHORT + uptrend 1d -> hard veto (NONE, trendAgree false)');
+  const sMix = sq(fullS.slice(0, fS+1), dMix);
+  assert(sMix.state === 'NONE' && sMix.trendAgree === false, 'FIRED_SHORT + mixed 1d -> hard veto (NONE, trendAgree false)');
+  const sNull = sq(fullS.slice(0, fS+1), null);
+  assert(sNull.state === 'NONE' && sNull.trendAgree === null, 'FIRED_SHORT + missing 1d -> hard veto (NONE, trendAgree null)');
 }
 
 /* ---------------- 7) fire-bar volZ: crafted volumes, NaN volumes, fired+break combo ---------------- */
@@ -254,12 +261,15 @@ const fIdx = ttmFull.fired.findIndex(Boolean);
   assert(sq(flat60, dUp).state === 'BUILDING', 'stub: on-run of 5 -> BUILDING (momentum sign irrelevant)');
 
   stub(60, [59], [58], {58: -3});
-  r = sq(flat60, dUp);
-  assert(r.state === 'FIRED_SHORT' && r.firedAgo === 1, 'fire takes precedence over a fresh on-bar');
+  r = sq(flat60, dDn);
+  assert(r.state === 'FIRED_SHORT' && r.firedAgo === 1, 'fire takes precedence over a fresh on-bar (1D downtrend required)');
 
   stub(60, [], [57, 59], {57: 5, 59: -2});
+  r = sq(flat60, dDn);
+  assert(r.state === 'FIRED_SHORT' && r.firedAgo === 0, 'multiple fires in window -> most recent wins (1D downtrend)');
   r = sq(flat60, dUp);
-  assert(r.state === 'FIRED_SHORT' && r.firedAgo === 0, 'multiple fires in window -> most recent wins');
+  assert(r.state === 'NONE' && r.firedAgo === 0 && r.trendAgree === false,
+         'negative-momentum fire on 1D uptrend -> hard veto despite recent fire');
 
   G.ttmSqueeze = realTtm;
   assert(sq(flat60, dUp).state === 'BUILDING', 'stub removed -> real ttmSqueeze classifies again');

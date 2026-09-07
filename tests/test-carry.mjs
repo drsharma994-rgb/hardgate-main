@@ -187,10 +187,11 @@ console.log('--- carrySpread: direction branches ---');
   approx(r.spreadAPR, 2190, 1e-9, 'extreme rates: ±1095% APR, spread 2190');
   assert(r.shortVenue === 'delta', 'extreme positive delta -> short delta');
 
-  // exact key set
+  // exact key set (delta interval metadata exposed for observability)
   assert(JSON.stringify(Object.keys(r).sort()) ===
-    JSON.stringify(['binanceAPR', 'deltaAPR', 'longVenue', 'shortVenue', 'spreadAPR']),
-    'result has exactly the five contracted keys');
+    JSON.stringify(['binanceAPR', 'deltaAPR', 'deltaIntervalAssumed', 'deltaIntervalHours', 'longVenue', 'shortVenue', 'spreadAPR']),
+    'result has the contracted keys incl. delta interval metadata');
+  assert(r.deltaIntervalHours === 8 && r.deltaIntervalAssumed === true, 'delta leg documents 8h assumed cadence');
 }
 
 console.log('--- carrySpread: invalid inputs -> null ---');

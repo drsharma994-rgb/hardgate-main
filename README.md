@@ -31,7 +31,7 @@ modules that register on `window.HG_tabs` and get a nav button + pane at boot, m
 | **SQUEEZE** | TTM-squeeze + Donchian-breakout scanner on the Binance perp universe: 4H fire signals filtered by 1D trend, participation and momentum marks |
 | **TREND MATRIX** | Multi-timeframe trend dashboard for the top 60 Binance perps: 1D trend, EMA50/200 cross, 4H cascade, Ichimoku cloud, ADX strength — composite −5..+5 |
 | **OI FLOW** | Deep positioning scanner on the top 40 Binance perps: funding z-score, OI 24h Δ, price 24h Δ, taker flow, retail long% — squeeze/crowding classification |
-| **REGIME** | Market-wide RISK-ON / RISK-OFF dashboard: 7 gauges (BTC 1D trend, ETH/BTC slope, BTC dominance, Fear & Greed, DXY, US 10Y, gold) — score ±6, ≥±3 calls the regime |
+| **REGIME** | Market-wide RISK-ON / RISK-OFF dashboard: 8 gauges (R7 gold informational only); 7 scored (R1–R6, R8 stablecoin flows) — max ±7, ≥±3 calls the regime |
 | **CARRY** | Delta-neutral funding carry: Binance vs Delta India funding APR side by side, cross-venue spread cards when the gap ≥ 25% annualized |
 | **GOLD PRO** | Professional gold context: 1D/4H structure, gold-stamped macro ledger (DXY, 10Y, real-rate hint, gold/silver ratio, PAXG positioning), 60-day gold–DXY correlation |
 | **EDGE** | SWING-aligned entry scanner (Delta + CoinDCX): only setups that match 4H cascade + EMA200 — EMA21 pullback, sweep+reclaim/fail, aligned range edge; structure, funding, liquidity confluence — min 2R, safe **USE** leverage |
