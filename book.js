@@ -435,7 +435,22 @@ async function addToBook(opts){
       }
       /* Increment 7 — segregated fund heat limits */
       if (typeof W.hgSegregatedFundLimits === 'function'){
-        var fundCfg = { fundId: body.fund || bookFundId(), heatCapPct: BOOK_MAX_HEAT_PCT };
+        var fundId = body.fund || bookFundId();
+        var fundCfgRaw = (typeof W.hgInc567FundConfig === 'function') ? W.hgInc567FundConfig(fundId) : null;
+        var fundCfg = {
+          fundId: fundId,
+          heatCapPct: (fundCfgRaw && isFinite(+fundCfgRaw.heatCapPct)) ? +fundCfgRaw.heatCapPct : BOOK_MAX_HEAT_PCT,
+          allowedStrategies: (fundCfgRaw && fundCfgRaw.allowedStrategies) ? fundCfgRaw.allowedStrategies : null
+        };
+        if (fundCfg.allowedStrategies && fundCfg.allowedStrategies.length){
+          var sk = String(body.strategy || body.setupKind || '').toUpperCase();
+          var okStrat = fundCfg.allowedStrategies.some(function(s){
+            return String(s).toUpperCase() === sk || sk.indexOf(String(s).toUpperCase()) >= 0;
+          });
+          if (!okStrat){
+            return { ok: false, veto: true, reasons: ['FUND MANDATE — strategy ' + sk + ' not allowed in ' + fundId] };
+          }
+        }
         var fundSt = { equity: navH, currentHeatUsd: isFinite(heatH) && navH > 0 ? heatH * navH : 0 };
         var fundLim = W.hgSegregatedFundLimits(fundCfg, fundSt);
         if (!fundLim.canOpenTrade){

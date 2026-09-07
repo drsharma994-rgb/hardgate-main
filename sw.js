@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v639';
+const HG_CACHE = 'hg-v640';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -26,9 +26,14 @@ const HG_SHELL = [
   /* Vendored third-party libraries. Previously loaded from unpkg/jsdelivr, so
      the offline shell covered 126 local files and then broke on charts. */
   './vendor/lightweight-charts-4.2.0.js', './vendor/emailjs-browser-4.4.1.js',
-  './engine.js', './news.js', './onchain.js', './onchain-alt-data.js', './structure-core.js', './portfolio-allocation.js', './inc567-data-core.js', './recon-tab.js', './rotation.js', './goldspot.js',
+  './onchain.js', './onchain-alt-data.js', './exchange_netflow.js', './lth_sth.js', './whale_alerts.js',
+  './structure-core.js', './structure/swings.js', './structure/fvg.js', './structure/order_blocks.js', './structure/divergence_regular.js',
+  './primitives/cusum.js', './primitives/tsmom.js', './primitives/ema_cascade.js',
+  './portfolio-allocation.js', './inc567-data-core.js', './inc567-config-loader.js', './inc567-regime-panels.js',
+  './recon-tab.js', './setup-activation.js', './rotation.js', './goldspot.js',
   './gold-session.js', './goldind.js', './gold-catalog.js', './gold-seven-step.js', './goldscalp.js', './goldswing.js', './pinegoldmath.js', './goldpine.js', './signallog.js',
   './data/setup-profile.json', './data/regime-profile.json',
+  './data/strategy-weights.json', './data/strategy-regime-state.json', './data/fund-config.json',
   './conviction-lock.js', './macro-feeds.js', './venuepremium.js', './formation-live.js',
   './hgalert.js', './tabalerts.js', './hggateflip.js', './brainrobust.js', './braininvalidation.js', './gstack-brain.js', './brain.js', './scorecard.js', './fixpack13-core.js', './fixpack14-core.js', './fixpack15-core.js', './fixpack16-core.js', './fixpack17-core.js', './crypto-position-risk.js', './risk-tab.js', './reliability.js', './goldcoint.js', './structure-levels.js', './formation.js', './freqtrade-formation.js', './best-levels.js', './gold-best-levels.js', './walkforward-ui.js', './formation-instr-ui.js', './meta-label.js', './tear-sheet.js', './purged-cv.js', './agent-debate.js', './formation-lab.js',
   './pinemath.js', './pinegate.js', './pine.js', './pine-sub.js', './pinemsb.js', './pinesqz.js', './pinesmf.js', './pineht.js', './pinesmc.js', './pinecipher.js', './pinerf.js', './pinenw.js', './pineavwap.js'

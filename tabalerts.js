@@ -1195,6 +1195,25 @@ W.hgTabAlertsRunGold = function(opts){
 };
 W.hgTrendmxCrossAlertsRun = function(opts){ return hgTrendmxCrossAlertsRun(opts || {}); };
 
+var LS_TETHER_PRINT = 'hg_tether_print_alert_v1';
+async function hgTabAlertsOnchainAlt(){
+  try{
+    if (typeof W.hgOnchainAltFetch === 'function') await W.hgOnchainAltFetch();
+    var snap = (typeof W.hgOnchainAltState === 'function') ? W.hgOnchainAltState() : null;
+    if (!snap || !snap.tetherPrint || !snap.tetherPrint.alert) return null;
+    var amt = snap.tetherPrint.amountUsd || 0;
+    var key = 'tether|' + amt;
+    var ls = (typeof localStorage !== 'undefined') ? localStorage : null;
+    if (ls && ls.getItem(LS_TETHER_PRINT) === key) return null;
+    if (ls) ls.setItem(LS_TETHER_PRINT, key);
+    var txt = snap.tetherPrint.message || ('Tether print $' + (amt/1e9).toFixed(1) + 'B in 24h');
+    var push = gfn('sendAlertPush');
+    if (push) await push('HARDGATE TETHER PRINT', txt, { priority: 5 });
+    return txt;
+  }catch(e){ return null; }
+}
+W.hgTabAlertsOnchainAlt = hgTabAlertsOnchainAlt;
+
 /* Node test / CI exports */
 if (typeof module !== 'undefined' && module.exports){
   module.exports = { hgTabAlertsCollect, hgTabAlertsCollectGold, hgTabAlertsFresh, hgTabAlertsFormat,

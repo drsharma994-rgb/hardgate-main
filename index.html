@@ -699,6 +699,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
     <div class="prog" id="smartProg"><i></i></div>
   </div>
   <div id="smartDesk"></div>
+  <div id="smartWhale"></div>
   <div id="smartGold"></div>
   <div class="cards" id="smartCards"></div>
   <div class="empty" id="smartEmpty" style="display:none">No positioning edges right now — the market is balanced.</div>
@@ -813,7 +814,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 </main>
 
 
-  <script src="build-stamp.js?v=639"></script>
+  <script src="build-stamp.js?v=640"></script>
   <script src="hg-setup-core.js"></script>
 <script src="hghost.js"></script>
 <script src="indicators.js"></script>
@@ -880,10 +881,22 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="engine.js"></script>
 <script src="news.js"></script>
 <script src="onchain.js"></script>
-<script src="onchain-alt-data.js?v=638"></script>
+<script src="onchain-alt-data.js?v=640"></script>
+<script src="exchange_netflow.js"></script>
+<script src="lth_sth.js"></script>
 <script src="structure-core.js?v=638"></script>
-<script src="portfolio-allocation.js?v=638"></script>
-<script src="inc567-data-core.js?v=638"></script>
+<script src="structure/swings.js"></script>
+<script src="structure/fvg.js"></script>
+<script src="structure/order_blocks.js"></script>
+<script src="structure/divergence_regular.js"></script>
+<script src="primitives/cusum.js"></script>
+<script src="primitives/tsmom.js"></script>
+<script src="primitives/ema_cascade.js"></script>
+<script src="portfolio-allocation.js?v=640"></script>
+<script src="inc567-data-core.js?v=640"></script>
+<script src="inc567-config-loader.js"></script>
+<script src="inc567-regime-panels.js"></script>
+<script src="whale_alerts.js"></script>
 <script src="rotation.js"></script>
 <script src="goldspot.js"></script>
 <!-- conviction-lock.js: ConvictionLockManager (anti-repaint lifecycle) -->
@@ -2331,6 +2344,19 @@ function smartClassify(d){
     else if (d.takerRatio <= 0.9) shortEv.push('taker buy/sell ' + d.takerRatio.toFixed(2) + ' (≤0.9) — aggressive sellers');
   }
   const dir = longEv.length > shortEv.length ? 'long' : (shortEv.length > longEv.length ? 'short' : null);
+  try{
+    if (typeof hgOnchainAltState === 'function'){
+      var alt = hgOnchainAltState();
+      if (alt && alt.netflowZ && isFinite(alt.netflowZ.z)){
+        var nz = alt.netflowZ.z;
+        if (nz > 2 && d.fundingPct !== null && d.fundingPct > 0.03){
+          regime.push('distribution-crowded (netflow z>2 + funding)');
+          shortEv.push('exchange inflow spike + crowded funding — liquidation risk');
+        }
+        if (nz < -1.5) regime.push('exchange outflow accumulation (supply squeeze)');
+      }
+    }
+  }catch(eNf){}
   return { dir: dir, longEv: longEv, shortEv: shortEv, regime: regime,
            score: Math.abs(longEv.length - shortEv.length), total: longEv.length + shortEv.length };
 }
@@ -2629,7 +2655,8 @@ async function runSmartScan(opts){
   opts = opts || {};
   const quiet = !!opts.quiet;
   const btn = $('smartRun'), cardsEl = $('smartCards'), emptyEl = $('smartEmpty'), statEl = $('smartStat'), goldEl = $('smartGold');
-  if (!quiet){ btn.disabled = true; cardsEl.innerHTML = ''; goldEl.innerHTML = ''; emptyEl.style.display = 'none'; }
+  const whaleEl = $('smartWhale');
+  if (!quiet){ btn.disabled = true; cardsEl.innerHTML = ''; goldEl.innerHTML = ''; if (whaleEl) whaleEl.innerHTML = ''; emptyEl.style.display = 'none'; }
   const t0 = Date.now();
   try{
     if (!quiet) statEl.textContent = 'loading Binance perp universe…';
@@ -2639,6 +2666,13 @@ async function runSmartScan(opts){
     const scr = smartScreenCandidates(perps, ticks);
     const uni = scr.universe;
     let cands = scr.candidates;
+    try{
+      if (typeof hgOnchainAltFetch === 'function') await hgOnchainAltFetch(true);
+      if (whaleEl && typeof hgWhaleTickerHtml === 'function'){
+        const altSnap = (typeof hgOnchainAltState === 'function') ? hgOnchainAltState() : null;
+        whaleEl.innerHTML = hgWhaleTickerHtml(altSnap && altSnap.whaleTxs);
+      }
+    }catch(eWh){}
     /* +COINDCX mode: every CoinDCX contract with a Binance twin joins the scan
        through the twin; contracts without one are named on the stat line */
     let cdcxInfo = null;
@@ -8249,6 +8283,7 @@ async function runAlertCycle(){
     }catch(e){ console.error('HARDGATE gold alert leg failed', e); }
     /* all tab setups — SWING/SCALP/EDGE/PINE/BRAIN/GOLD/SMART/… every 10 min */
     try{ await runTabSetupAlerts(); }catch(e){ console.error('HARDGATE tab setup alerts failed', e); }
+    try{ if (typeof hgTabAlertsOnchainAlt === 'function') await hgTabAlertsOnchainAlt(); }catch(e){ console.error('HARDGATE on-chain alt alerts failed', e); }
     /* TREND MATRIX fresh ⚡GOLDEN crosses — own 15-min scan + Telegram (one msg per coin) */
     try{ await runTrendmxCrossAlerts(); }catch(e){ console.error('HARDGATE trend matrix cross alerts failed', e); }
     S.lastAlertCheck = Date.now();

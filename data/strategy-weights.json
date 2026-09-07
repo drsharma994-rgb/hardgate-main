@@ -1,0 +1,17 @@
+{
+  "updated": "2026-09-08T00:00:00Z",
+  "note": "Sharpe^1.5 normalized weights — refreshed weekly from book closed trades when hgStrategyWeightsFromBook runs",
+  "weights": {
+    "SWING": 0.18,
+    "SCALP": 0.12,
+    "EDGE": 0.15,
+    "SMC": 0.10,
+    "OB": 0.10,
+    "DIV": 0.08,
+    "TRAP": 0.07,
+    "SMART": 0.08,
+    "BEST": 0.12
+  },
+  "floor": 0.05,
+  "ceiling": 0.35
+}

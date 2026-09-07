@@ -369,6 +369,7 @@ async function rgFetchStablecoins(){
     var arr = j && (j.peggedAssets || j); /* tolerate wrapped and bare-array payloads */
     if (!Array.isArray(arr) || !arr.length) return null;
     var now = 0, wk = 0, mo = 0, n = 0;
+    var usdtNow = 0, usdtDay = 0;
     for (var i = 0; i < arr.length; i++){
       var a = arr[i];
       if (!a || typeof a !== 'object') continue;
@@ -376,6 +377,11 @@ async function rgFetchStablecoins(){
       wk  += rgPegUsd(a.circulatingPrevWeek);
       mo  += rgPegUsd(a.circulatingPrevMonth);
       n++;
+      var sym = (typeof a.symbol === 'string') ? a.symbol.toUpperCase() : '';
+      if (sym === 'USDT'){
+        usdtNow += rgPegUsd(a.circulating);
+        usdtDay += rgPegUsd(a.circulatingPrevDay || a.circulatingPrevWeek);
+      }
     }
     if (!n || !(now > 0)) return null;
     var usdt = 0, usdc = 0;
@@ -388,7 +394,9 @@ async function rgFetchStablecoins(){
       else if (sym === 'USDC') usdc += peg;
     }
     var out = { totalUSD: now, delta7dUSD: null, delta30dUSD: null,
-                usdtUSD: usdt > 0 ? usdt : null, usdcUSD: usdc > 0 ? usdc : null };
+                usdtUSD: usdt > 0 ? usdt : null, usdcUSD: usdc > 0 ? usdc : null,
+                usdtMint24h: (usdtNow > 0 && usdtDay > 0) ? (usdtNow - usdtDay) : null,
+                usdtDayAgoUSD: usdtDay > 0 ? usdtDay : null };
     if (wk > 0) out.delta7dUSD = now - wk;   /* no valid week-ago baseline => null */
     if (mo > 0) out.delta30dUSD = now - mo;
     /* Increment 5 — track consecutive contraction days for cadence gate */
@@ -511,22 +519,28 @@ function regimeVerdict(components){
     else                   push('R7','HEDGE DEMAND · GOLD (XAU PERP)','gold at 200EMA', pxTxt + ' · AT 200EMA — no hedge edge', 'NA', 0, true);
   })();
 
-  /* R8 — STABLECOIN FLOWS (DeFiLlama aggregate): 7d mcap delta vs ±0.5% band.
-     Dry powder IN = risk-on (+1), liquidity DRAINING = risk-off (-1). */
+  /* R8 — STABLECOIN FLOWS: 7d band + 30d slope (Increment 5 printing cadence). */
   (function(){
     var s = components.stable;
     if (!s){ push('R8','DRY POWDER','stables','data unavailable','NA',0,true); return; }
     var tot = rgToNum(s.totalUSD), d7 = rgToNum(s.delta7dUSD), d30 = rgToNum(s.delta30dUSD);
-    var wk = (isFinite(tot) && isFinite(d7)) ? tot - d7 : NaN; /* week-ago baseline */
+    var wk = (isFinite(tot) && isFinite(d7)) ? tot - d7 : NaN;
     if (!isFinite(tot) || !(tot > 0) || !isFinite(d7) || !(wk > 0)){
       push('R8','DRY POWDER','stables','data unavailable','NA',0,true); return;
     }
     var pct7 = (d7 / wk) * 100;
+    var moBase = (isFinite(d30) && isFinite(tot) && tot > d30) ? (tot - d30) : NaN;
+    var pct30 = (isFinite(d30) && isFinite(moBase) && moBase > 0) ? (d30 / moBase) * 100 : 0;
     var txt = 'STABLECOINS ' + rgUsd(tot) + ' · 7D ' + rgUsdSigned(d7);
-    var tail = ' · 30D ' + (isFinite(d30) ? rgUsdSigned(d30) : 'n/a');
-    if (pct7 > 0.5)       push('R8','DRY POWDER','dry powder in',  txt + ' (INFLOWS)'  + tail + ' — dry powder entering, risk-on',   'BULL',  1, true);
-    else if (pct7 < -0.5) push('R8','DRY POWDER','dry powder out', txt + ' (DRAINING)' + tail + ' — liquidity draining, risk-off',  'BEAR', -1, true);
-    else                  push('R8','DRY POWDER','stables flat',   txt + ' (FLAT)'     + tail + ' — inside ±0.5% band, no flow edge', 'NA',   0, true);
+    var tail = ' · 30D slope ' + (isFinite(pct30) ? (pct30 >= 0 ? '+' : '') + rgNum(pct30, 2) + '%' : 'n/a');
+    var score = 0;
+    if (pct7 > 0.5) score = 1;
+    else if (pct7 < -0.5) score = -1;
+    if (pct30 > 1.0 && score >= 0) score = 1;
+    else if (pct30 < -1.0 && score <= 0) score = -1;
+    var stamp = score > 0 ? 'BULL' : (score < 0 ? 'BEAR' : 'NA');
+    var detail = txt + tail + (pct30 > 1.0 ? ' — printing cadence expanding' : (pct30 < -1.0 ? ' — fuel draining' : ' — flat cadence'));
+    push('R8','DRY POWDER', score > 0 ? 'dry powder in' : (score < 0 ? 'dry powder out' : 'stables flat'), detail, stamp, score, true);
   })();
 
   /* R9 — DVOL slope (Deribit): rising -1 expansion risk, falling +1 */
@@ -541,6 +555,19 @@ function regimeVerdict(components){
     if (slope === 'RISING')      push('R9','DVOL SLOPE (BTC)','DVOL rising', txt + ' · vol expanding — tighten R:R', 'BEAR', -1, true);
     else if (slope === 'FALLING') push('R9','DVOL SLOPE (BTC)','DVOL falling', txt + ' · vol compressing — range-friendly', 'BULL', 1, true);
     else                          push('R9','DVOL SLOPE (BTC)','DVOL flat', txt + ' · no vol edge', 'NA', 0, true);
+  })();
+
+  /* R10 — EXCHANGE NETFLOW (Increment 5): 7d BTC netflow z-score */
+  (function(){
+    var nf = components.netflow;
+    if (!nf || !isFinite(+nf.z)){
+      push('R10','EXCHANGE NETFLOW','netflow','data unavailable (set GLASSNODE_API_KEY)','NA',0,true); return;
+    }
+    var z = +nf.z;
+    var txt = (nf.regimeLabel || 'NETFLOW') + ' · z=' + rgNum(z, 2) + ' · latest ' + rgUsdSigned(nf.latest);
+    if (z > 2.0)      push('R10','EXCHANGE NETFLOW','inflow heavy', txt + ' — coins to exchanges, risk-off tilt', 'BEAR', -1, true);
+    else if (z < -2.0) push('R10','EXCHANGE NETFLOW','outflow squeeze', txt + ' — supply leaving exchanges, risk-on tilt', 'BULL', 1, true);
+    else               push('R10','EXCHANGE NETFLOW','netflow balanced', txt + ' — inside ±2σ', 'NA', 0, true);
   })();
 
   /* ---------------- aggregate ---------------- */
@@ -715,9 +742,10 @@ function rgRender(out, v, meta){
           '<div class="vwhy">' + rgEsc(v.why) + '</div></div>';
   html += '<div class="note" style="margin-top:8px">' + (RG_MEANING[v.cls] || RG_MEANING.aside) + '</div>';
   html += rgPlaybookHTML(v);
+  if (typeof W.hgInc567RegimePanelsHtml === 'function') html += W.hgInc567RegimePanelsHtml();
   if (typeof W.hgHurstRS === 'function' && typeof W.hgFamilyRouter === 'function'
-      && components && components.btc && Array.isArray(components.btc.closes)){
-    var hurst = W.hgHurstRS(components.btc.closes);
+      && __rgLastComponents && __rgLastComponents.btc && Array.isArray(__rgLastComponents.btc.closes)){
+    var hurst = W.hgHurstRS(__rgLastComponents.btc.closes);
     var route = W.hgFamilyRouter({ hurst: hurst, adx: null, regimeScore: v.score });
     try{ W.__hgFamilyRoute = route; }catch(eFR){}
     html += '<div class="panel" style="margin-top:10px"><h2>STRATEGY FAMILY ROUTER <span>Hurst on BTC 1D · context only</span></h2>';
@@ -744,6 +772,7 @@ var rgTab = { els: null, busy: false, hasRun: false };
    re-runs never touch it — the previous good snapshot keeps its original
    `at`. The getter hands out DEEP-FROZEN deep copies and never throws. */
 var __rgSnap = null;
+var __rgLastComponents = null;
 function __rgStateView(v){
   if (v === null || typeof v !== 'object') return v;
   var out = Array.isArray(v) ? [] : {};
@@ -756,6 +785,7 @@ function __rgStateView(v){
 }
 function setRgSnapshot(v, components){
   try{
+    __rgLastComponents = components || null;
     if (!v || typeof v !== 'object') return;
     var pb = null;
     try{ pb = regimePlaybook(v); }catch(ePb){ pb = null; }
@@ -808,7 +838,7 @@ async function rgRun(els){
   rgTab.busy = true;
   if (els.run) els.run.disabled = true;
   rgSetProg(els.prog, 0.08);
-  if (els.stat) els.stat.textContent = 'scanning 8 gauges…';
+    if (els.stat) els.stat.textContent = 'scanning 10 gauges…';
   try{
     /* chunk 1: binance klines family + DXY (token-bucket paced upstream) */
     var c1 = await Promise.all([ rgFetchBtc(), rgFetchEthBtc(), rgFetchGold(), rgFetchDxy() ]);
@@ -820,16 +850,26 @@ async function rgRun(els){
 
     var components = {
       btc: c1[0], ethbtc: c1[1], gold: c1[2], dxy: c1[3],
-      btcd: c2[0], fedliq: c2[1], us10y: c2[2], stable: c2[3], dvol: c2[4]
+      btcd: c2[0], fedliq: c2[1], us10y: c2[2], stable: c2[3], dvol: c2[4],
+      netflow: null
     };
+    if (typeof W.hgOnchainAltFetch === 'function'){
+      try{
+        await W.hgOnchainAltFetch(true);
+        var alt = (typeof W.hgOnchainAltState === 'function') ? W.hgOnchainAltState() : null;
+        if (alt && alt.netflowZ) components.netflow = alt.netflowZ;
+      }catch(eAlt){}
+    }
     var fails = 0;
-    Object.keys(components).forEach(function(k){ if (!components[k]) fails++; });
+    ['btc','ethbtc','gold','dxy','btcd','fedliq','us10y','stable','dvol'].forEach(function(k){
+      if (!components[k]) fails++;
+    });
 
     var v = regimeVerdict(components);
-    rgRender(els.out, v, { fails: fails, total: 9 });
+    rgRender(els.out, v, { fails: fails, total: 10 });
     setRgSnapshot(v, components); /* BRAIN: cache the successful scan (catch path below never reaches here) */
     if (els.stat) els.stat.textContent = 'updated ' + new Date().toISOString().slice(11, 19) +
-      ' UTC · ' + (9 - fails) + '/9 sources ok · cached 60s (stables 10m · Fed liq 1h)';
+      ' UTC · ' + (10 - fails) + '/10 sources ok · cached 60s (stables 10m · Fed liq 1h)';
     rgSetProg(els.prog, 1);
     setTimeout(function(){ rgSetProg(els.prog, null); }, 600);
   }catch(e){
@@ -847,7 +887,7 @@ function mountRegime(el){
   if (!el) return;
   el.innerHTML =
     '<div class="panel">' +
-      '<h2>MARKET REGIME <span>risk-on / risk-off composite · 9 gauges</span></h2>' +
+      '<h2>MARKET REGIME <span>risk-on / risk-off composite · 10 gauges</span></h2>' +
       (typeof W.hgOmniPrincipalNoteHtml === 'function' ? (W.hgOmniPrincipalNoteHtml('regime') || '') : '') +
       '<div class="row">' +
         '<button class="btn" id="regimeRun">REFRESH</button>' +

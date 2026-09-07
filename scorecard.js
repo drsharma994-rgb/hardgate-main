@@ -1332,6 +1332,7 @@ function render(ui){
     if (ui.board) ui.board.innerHTML = boardHtml(st);
     if (ui.breaks){
       var breaks = '';
+      if (typeof G.hgInc567StrategyWeightsPanelHtml === 'function') breaks += G.hgInc567StrategyWeightsPanelHtml();
       if (typeof G.hgValidationPanelHtml === 'function') breaks += G.hgValidationPanelHtml(store);
       if (typeof G.hgFormationPanelHtml === 'function') breaks += G.hgFormationPanelHtml(store);
       breaks += breakdownsHtml(st);

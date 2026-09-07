@@ -1,0 +1,21 @@
+{
+  "updated": "2026-09-08T00:00:00Z",
+  "funds": [
+    {
+      "id": "main",
+      "label": "Main Crypto",
+      "heatCapPct": 0.06,
+      "riskFraction": 0.01,
+      "allowedStrategies": ["SWING", "SCALP", "EDGE", "SMC", "OB", "DIV", "TRAP", "SMART", "BEST"],
+      "universe": "crypto"
+    },
+    {
+      "id": "gold",
+      "label": "Gold Only",
+      "heatCapPct": 0.04,
+      "riskFraction": 0.008,
+      "allowedStrategies": ["GOLD-SWING", "GOLD-SCALP", "GOLD-SETUP"],
+      "universe": "gold"
+    }
+  ]
+}

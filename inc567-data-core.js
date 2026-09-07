@@ -64,8 +64,12 @@ async function hgOnchainAltFetch(force){
         snap.stableCadence = G.hgAnalyzeStableCadence(
           st.totalUSD, st.delta7dUSD, st.delta30dUSD, hgStableContractionDays()
         );
-        if (typeof G.hgDetectTetherPrint === 'function' && fin(st.usdtUSD)){
-          snap.tetherPrint = G.hgDetectTetherPrint(st.usdtMint24h || null);
+        if (typeof G.hgDetectTetherPrint === 'function'){
+          var mint24 = fin(st.usdtMint24h);
+          if (mint24 === null && fin(st.usdtUSD) && fin(st.usdtDayAgoUSD)){
+            mint24 = st.usdtUSD - st.usdtDayAgoUSD;
+          }
+          snap.tetherPrint = G.hgDetectTetherPrint(mint24);
         }
       }
     }catch(eRg){ notes.push('stable: ' + (eRg && eRg.message || eRg)); }
@@ -171,8 +175,30 @@ G.hgOnchainAltFetch = hgOnchainAltFetch;
 G.hgOnchainAltState = hgOnchainAltState;
 G.hgOnchainAltGate = hgOnchainAltGate;
 G.hgStableContractionDays = hgStableContractionDays;
+G.hgStableContractionTrack = hgStableContractionTrack;
 G.hgStrategySharpesFromBook = hgStrategySharpesFromBook;
 G.hgStrategyWeightsFromBook = hgStrategyWeightsFromBook;
 G.hgRegimeStrategyActive = hgRegimeStrategyActive;
+
+function hgInc567StrategyWeightsPanelHtml(){
+  var weights = G.HG_STRATEGY_WEIGHTS;
+  if ((!weights || !Object.keys(weights).length) && typeof G.hgStrategyWeightsFromBook === 'function'){
+    try{
+      var snap = (G.__book && G.__book.snap) ? G.__book.snap : null;
+      weights = G.hgStrategyWeightsFromBook(snap);
+    }catch(e){}
+  }
+  if (!weights || !Object.keys(weights).length){
+    return '<div class="panel" style="margin-top:10px"><h2>STRATEGY ALLOCATION <span>Increment 7</span></h2><div class="note">No weights yet — close trades in BOOK or edit data/strategy-weights.json</div></div>';
+  }
+  var esc = function(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); };
+  var chips = Object.keys(weights).sort(function(a,b){ return (weights[b]||0)-(weights[a]||0); }).map(function(k){
+    var w = (+weights[k] * 100).toFixed(1);
+    return '<span class="gpip ok" title="Sharpe-weighted budget share">' + esc(k) + ' ' + w + '%</span>';
+  }).join(' ');
+  return '<div class="panel hg-strategy-weights" style="margin-top:10px"><h2>STRATEGY ALLOCATION <span>Sharpe^1.5 weights · floor 5% · cap 35%</span></h2><div class="gates">' + chips + '</div></div>';
+}
+
+G.hgInc567StrategyWeightsPanelHtml = hgInc567StrategyWeightsPanelHtml;
 
 })();

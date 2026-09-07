@@ -49,6 +49,42 @@ async function fetchGlassnodeLth(key){
   }catch(e){ return null; }
 }
 
+async function fetchWhaleAlertTxs(apiKey){
+  try{
+    if (!apiKey) return [];
+    var url = 'https://api.whale-alert.io/v1/transactions?api_key=' + encodeURIComponent(apiKey)
+      + '&min_value=10000000&limit=25';
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort(); }, UPSTREAM_TIMEOUT_MS);
+    var res = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!res.ok) return [];
+    var j = await res.json();
+    var txs = (j && j.transactions) || [];
+    var now = Date.now();
+    return txs.map(function(tx){
+      if (!tx) return null;
+      var usd = isFinite(+tx.amount_usd) ? +tx.amount_usd : null;
+      var fromOwner = tx.from && tx.from.owner ? String(tx.from.owner) : '';
+      var toOwner = tx.to && tx.to.owner ? String(tx.to.owner) : '';
+      var fromType = tx.from && tx.from.owner_type ? String(tx.from.owner_type) : '';
+      var toType = tx.to && tx.to.owner_type ? String(tx.to.owner_type) : '';
+      var isDeposit = toType === 'exchange' || /binance|coinbase|kraken|okx|bybit/i.test(toOwner);
+      var isWithdrawal = fromType === 'exchange' || /binance|coinbase|kraken|okx|bybit/i.test(fromOwner);
+      return {
+        asset: (tx.symbol || tx.blockchain || 'BTC').toString().toUpperCase(),
+        usdValue: usd,
+        amountUsd: usd,
+        timestamp: tx.timestamp ? (+tx.timestamp * 1000) : now,
+        fromLabel: fromOwner || fromType || 'unknown',
+        toLabel: toOwner || toType || 'unknown',
+        isExchangeDeposit: isDeposit,
+        isExchangeWithdrawal: isWithdrawal
+      };
+    }).filter(Boolean);
+  }catch(e){ return []; }
+}
+
 module.exports = async (req, res) => {
   if (req.method === 'OPTIONS'){
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -61,9 +97,11 @@ module.exports = async (req, res) => {
   if (req.method !== 'GET') return sendJson(res, 405, { error: 'method not allowed' });
 
   var key = process.env.GLASSNODE_API_KEY;
+  var whaleKey = process.env.WHALE_ALERT_API_KEY;
   var notes = [];
   var flows7d = null;
   var lth = null;
+  var whaleTxs = [];
 
   if (key){
     flows7d = await fetchGlassnodeNetflows(key);
@@ -74,10 +112,14 @@ module.exports = async (req, res) => {
     notes.push('GLASSNODE_API_KEY not configured — netflow/LTH unavailable');
   }
 
+  whaleTxs = await fetchWhaleAlertTxs(whaleKey);
+  if (!whaleKey) notes.push('WHALE_ALERT_API_KEY not configured — whale ticker empty');
+  else if (!whaleTxs.length) notes.push('whale-alert returned no ≥$10M txs');
+
   return sendJson(res, 200, {
     ok: true,
     flows7d: flows7d,
-    whaleTxs: [],
+    whaleTxs: whaleTxs,
     lth: lth ? {
       lthPct: lth.lthSupply,
       sthPct: null,
