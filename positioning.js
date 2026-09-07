@@ -120,6 +120,7 @@ function hgPositioningClassify(d, opts){
   var retailLongPct = num(d.retailLongPct); if (retailLongPct === null) retailLongPct = num(d.longPct);
   var topLongPct = num(d.topLongPct);
   var takerRatio = num(d.takerRatio); if (takerRatio === null) takerRatio = num(d.takerAvg);
+  var rr25d = num(d.rr25d);
 
   var longEv = [], shortEv = [], regime = [];
   var up = pxChg !== null && pxChg >= pxDead, dn = pxChg !== null && pxChg <= -pxDead;
@@ -188,6 +189,17 @@ function hgPositioningClassify(d, opts){
     } else {
       if (takerRatio >= tBuy) longEv.push('taker buy/sell ' + takerRatio.toFixed(2) + ' (≥' + tBuy + ') — aggressive buyers');
       else if (takerRatio <= tSell) shortEv.push('taker buy/sell ' + takerRatio.toFixed(2) + ' (≤' + tSell + ') — aggressive sellers');
+    }
+  }
+
+  if (rr25d !== null){
+    var rrExt = (opts.rr25dExtreme !== undefined) ? +opts.rr25dExtreme : 8;
+    if (rr25d >= rrExt){
+      regime.push('options skew calls-rich (25Δ RR)');
+      shortEv.push('Deribit 25Δ RR +' + rr25d.toFixed(1) + ' — calls crowded');
+    } else if (rr25d <= -rrExt){
+      regime.push('options skew puts-rich (25Δ RR)');
+      longEv.push('Deribit 25Δ RR ' + rr25d.toFixed(1) + ' — puts crowded');
     }
   }
 

@@ -96,6 +96,12 @@ ok(r.dir === 'long' && r.longEv.some(e => e.includes('aggressive buyers')), 'tak
 r = C({ chg24: 0, oiChgPct: 0, fundingPct: 0.01, retailLongPct: 50, topLongPct: 50, takerRatio: 0.8 });
 ok(r.dir === 'short' && r.shortEv.some(e => e.includes('aggressive sellers')), 'taker 0.80 → SHORT');
 
+r = C({ chg24: 0, oiChgPct: 0, fundingPct: 0.01, retailLongPct: 50, topLongPct: 50, takerRatio: 1.0, rr25d: 10 });
+ok(r.dir === 'short' && r.shortEv.some(e => e.includes('25Δ RR')), 'Deribit 25Δ RR +10 → calls crowded SHORT');
+
+r = C({ chg24: 0, oiChgPct: 0, fundingPct: 0.01, retailLongPct: 50, topLongPct: 50, takerRatio: 1.0, rr25d: -9 });
+ok(r.dir === 'long' && r.longEv.some(e => e.includes('25Δ RR')), 'Deribit 25Δ RR −9 → puts crowded LONG');
+
 r = C({ chg24: 0.1, oiChgPct: 0.5, fundingPct: 0.01, retailLongPct: 50, topLongPct: 52, takerRatio: 1.0 });
 ok(r.dir === null && r.total === 0, 'inside deadzones → no direction, no fabricated evidence');
 

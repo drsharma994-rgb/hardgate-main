@@ -110,7 +110,9 @@ Optional single-process dev: `HARDGATE_DAEMON_AUTOSTART=1` forks `app.js` from `
 | `EXECUTE_FILL_POLL_URL` | Broker fill polling endpoint |
 | `BOOK_EXECUTE_FILL_SECRET` | Webhook auth for fill updates |
 | `BOOK_MAX_DAILY_LOSS_PCT` | Daily loss halt threshold (default 2%) |
-| `FRED_API_KEY` | `/api/fred` macro series (DGS10, DTWEXBGS, DFII10) |
+| `FRED_API_KEY` | `/api/fred` macro series (DGS10, DTWEXBGS, DFII10, WALCL, WTREGEN, RRPONTSYD for REGIME fed-liquidity gauge) |
+| `COINALYZE_API_KEY` | `/api/coinalyze` aggregated cross-venue OI (SMART $, OI FLOW, SQUEEZE) — free tier covers top ~50 perps |
+| `COINGLASS_API_KEY` | `/api/coinglass` liquidation clusters (LIQUIDITY TRAP, TRADE PLAN SL check, SMC/OB confluence) — free tier = 4h refresh on majors |
 | `TRADEOS_ACCESS_TOKEN` | TradeOS MCP OAuth bearer for `/api/tradeos/*` (run `npx -y @tradeos/tradeos-mcp oauth`) |
 | `HARDGATE_FT_EDGE_GATE` | Enable Freqtrade expectancy gate on daemon formation (default off) |
 | `HARDGATE_FT_PROTECT` | Enable Freqtrade cooldown + stoploss guard on formation (default off) |

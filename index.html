@@ -813,7 +813,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 </main>
 
 
-  <script src="build-stamp.js?v=628"></script>
+  <script src="build-stamp.js?v=634"></script>
 <script src="hghost.js"></script>
 <script src="indicators.js"></script>
 <script src="indicators2.js"></script>
@@ -2303,6 +2303,16 @@ async function smartScanSymbol(sym, tick){
   const oiFirst = (oih && oih.series && oih.series.length >= 2) ? oih.series[0].oi : null;
   const oiChgPct = (czChg && isFinite(czChg.chgPct)) ? czChg.chgPct
     : ((oiNow !== null && oiFirst && oiFirst > 0) ? (oiNow/oiFirst - 1)*100 : null);
+  const binOiFirst = (oih && oih.series && oih.series.length >= 2) ? oih.series[0].oi : null;
+  const binOiLast = (oih && oih.series && oih.series.length) ? oih.series[oih.series.length - 1].oi : null;
+  const binanceOiChgPct = (binOiFirst && binOiLast && binOiFirst > 0) ? (binOiLast / binOiFirst - 1) * 100 : null;
+  const baseAsset = key.replace(/USDT$/, '');
+  let deribit = null;
+  if (baseAsset === 'BTC' || baseAsset === 'ETH'){
+    try{
+      if (typeof deribitOptionsSnapshot === 'function') deribit = await deribitOptionsSnapshot(baseAsset);
+    }catch(e){}
+  }
   const out = {
     sym: sym, tick: tick,
     markPrice: (fnd && isFinite(fnd.markPrice)) ? fnd.markPrice : (tick ? tick.mark : NaN),
@@ -2312,6 +2322,8 @@ async function smartScanSymbol(sym, tick){
     oiSource: czChg ? 'coinalyze-agg' : (oih ? 'binance-only' : null),
     binanceOIUsd: czOi ? czOi.binanceOIUsd : null,
     binanceOISharePct: czOi ? czOi.binanceSharePct : null,
+    binanceOiChgPct: binanceOiChgPct,
+    deribit: deribit,
     retailLongPct: (ls && ls.latest) ? ls.latest.longPct : null,
     topLongPct: (top && top.latest) ? top.latest.longPct : null,
     takerRatio: (tk && tk.latest) ? tk.latest.buySellRatio : null,
@@ -2341,7 +2353,8 @@ async function smartScanSymbolWithCross(sym, tick){
 
 function smartClsInput(r){
   return { chg24: r.tick ? r.tick.chg24 : null, oiChgPct: r.oiChgPct, fundingPct: r.fundingPct,
-           retailLongPct: r.retailLongPct, topLongPct: r.topLongPct, takerRatio: r.takerRatio };
+           retailLongPct: r.retailLongPct, topLongPct: r.topLongPct, takerRatio: r.takerRatio,
+           rr25d: (r.deribit && r.deribit.rr25d && isFinite(r.deribit.rr25d.rr25d)) ? r.deribit.rr25d.rr25d : null };
 }
 
 /* Setup builder — PURE (testable like smartClassify). cls = smartClassify result,
@@ -2500,7 +2513,11 @@ function smartCardHTML(r){
     + '<span class="k">mark</span><span>' + px(r.markPrice) + '</span>'
     + '<span class="k">24h change</span><span>' + (r.tick && r.tick.chg24 !== null ? pct(r.tick.chg24, 2) : '—') + '</span>'
     + '<span class="k">funding 8h</span><span>' + (r.fundingPct !== null ? fmt(r.fundingPct, 4) + '%' : 'n/a') + '</span>'
-    + '<span class="k">OI 24h Δ</span><span>' + (r.oiChgPct !== null ? pct(r.oiChgPct, 1) : 'n/a') + (r.oiUsd ? ' · $' + fmt(r.oiUsd/1e6, 0) + 'M' : '') + '</span>'
+    + '<span class="k">OI 24h Δ</span><span>' + (r.oiChgPct !== null ? pct(r.oiChgPct, 1) : 'n/a')
+      + (r.oiSource === 'coinalyze-agg' && r.binanceOiChgPct !== null && Math.abs(r.oiChgPct - r.binanceOiChgPct) >= 1
+        ? ' · agg vs Bin ' + pct(r.binanceOiChgPct, 1) : '')
+      + (r.oiUsd ? ' · $' + fmt(r.oiUsd/1e6, 0) + 'M' : '')
+      + (r.binanceOISharePct !== null ? ' · Bin ' + fmt(r.binanceOISharePct, 0) + '% agg' : '') + '</span>'
     + '<span class="k">retail long</span><span>' + (r.retailLongPct !== null ? fmt(r.retailLongPct, 1) + '%' : 'n/a') + '</span>'
     + '<span class="k">top traders long</span><span>' + (r.topLongPct !== null ? fmt(r.topLongPct, 1) + '%' : 'n/a') + '</span>'
     + '<span class="k">taker buy/sell</span><span>' + (r.takerRatio !== null ? fmt(r.takerRatio, 2) : 'n/a') + '</span>'
@@ -2955,6 +2972,18 @@ async function runSmcScanLeg(opts){
         if (dir === 'long' ? !(t1 > p) : !(t1 < p)) t1 = dir === 'long' ? p + 2*risk : p - 2*risk;   // liquidity target must lie beyond entry
         let t2 = dir === 'long' ? p + 3.5*risk : p - 3.5*risk;
         if (dir === 'long' ? t2 < t1 : t2 > t1) t2 = t1;   // T2 never behind T1
+        var smcTier = 'near';
+        var smcCgTag = '';
+        if (!isGold && typeof coinglassClusters === 'function' && typeof coinglassConfluenceTag === 'function'){
+          try{
+            var smcCg = await coinglassClusters(t.symbol);
+            if (smcCg && smcCg.clusters){
+              var smcLvl = (fvg.top + fvg.bottom) / 2;
+              var smcTag = coinglassConfluenceTag(smcCg.clusters, smcLvl, 1000000);
+              if (smcTag){ smcCgTag = smcTag + ' CONFLUENCE'; smcTier = 'clean'; }
+            }
+          }catch(e){}
+        }
         var smcPl = applyExactEntry({ dir: dir, type: 'SWING', entry: p, stop: stop, t1: t1, t2: t2,
           note: 'structural stop behind the FVG; T1 = nearest liquidity' }, rows,
           { poiLevel: (fvg.top + fvg.bottom) / 2, poiLabel: 'FVG mid', preferEdge: true, refineLevels: true });
@@ -2965,8 +2994,9 @@ async function runSmcScanLeg(opts){
           ['Struct Stop', px(stop)], ['Target Liq', px(t1)]
         ], ['G1 Displacement (FVG)', 'G2 Unmitigated', 'G3 Price inside POI', 'G4 HTF Trend Aligned'],
         planBlockExact(smcPl, smcPl.note)
+        + (smcCgTag ? '<br><span class="gpip ok">' + smcCgTag + '</span>' : '')
         + '<br>SMC TAP: price has pulled back into a 4H institutional imbalance. Drop to a 5m/15m chart, wait for a local sweep or Change of Character (CHOCH) in your direction, then execute.', smcPl.entry, smcPl.stop, smcPl.t1, null,
-        Object.assign({ scanner: 'smc', strategy: 'smc', t2: smcPl.t2, tier: 'near', stack: smcStack, rows: rows,
+        Object.assign({ scanner: 'smc', strategy: 'smc', t2: smcPl.t2, tier: smcTier, stack: smcStack, rows: rows,
           strategyConfirm: smcPl.strategyConfirm, strategyWith: smcPl.strategyWith, strategyAgainst: smcPl.strategyAgainst },
           (typeof hgStrategyBookFields === 'function') ? hgStrategyBookFields(smcPl) : {})));
       } catch(e) { /* skip this symbol */ }
@@ -3030,6 +3060,17 @@ async function runObScanLeg(opts){
         let t2 = dir === 'long' ? p + 3.5*risk : p - 3.5*risk;
         if (dir === 'long' ? t2 < t1 : t2 > t1) t2 = t1;   // T2 never behind T1
         var obEntry = dir === 'long' ? ob.bottom + (ob.top - ob.bottom) * 0.382 : ob.top - (ob.top - ob.bottom) * 0.382;
+        var obTier = 'near';
+        var obCgTag = '';
+        if (!isGold && typeof coinglassClusters === 'function' && typeof coinglassConfluenceTag === 'function'){
+          try{
+            var obCg = await coinglassClusters(t.symbol);
+            if (obCg && obCg.clusters){
+              var obTag = coinglassConfluenceTag(obCg.clusters, obEntry, 1000000);
+              if (obTag){ obCgTag = obTag + ' CONFLUENCE'; obTier = 'clean'; }
+            }
+          }catch(e){}
+        }
         var obPl = applyExactEntry({ dir: dir, type: 'SWING', entry: p, stop: stop, t1: t1, t2: t2,
           note: 'structural stop behind the OB; T1 = nearest liquidity' }, rows,
           { poiLevel: obEntry, poiLabel: 'OB edge', preferEdge: true, refineLevels: true });
@@ -3040,8 +3081,9 @@ async function runObScanLeg(opts){
           ['Struct Stop', px(stop)], ['Liquidity Target', target ? `${px(target.level)} (x${target.count})` : px(t1)]
         ], ['G1 Valid Order Block', 'G2 Unmitigated', 'G3 Price inside OB', 'G4 HTF Trend Aligned'],
         planBlockExact(obPl, obPl.note)
+        + (obCgTag ? '<br><span class="gpip ok">' + obCgTag + '</span>' : '')
         + '<br>ORDER BLOCK TAP: price has pulled back into an unmitigated 4H order block. Drop to a 5m/15m chart, wait for a local sweep or Change of Character (CHOCH) in your direction, then execute.', obPl.entry, obPl.stop, obPl.t1, null,
-        Object.assign({ scanner: 'ob', strategy: 'ob', t2: obPl.t2, tier: 'near', stack: obStack, rows: rows,
+        Object.assign({ scanner: 'ob', strategy: 'ob', t2: obPl.t2, tier: obTier, stack: obStack, rows: rows,
           strategyConfirm: obPl.strategyConfirm, strategyWith: obPl.strategyWith, strategyAgainst: obPl.strategyAgainst },
           (typeof hgStrategyBookFields === 'function') ? hgStrategyBookFields(obPl) : {})));
       } catch(e) { /* skip this symbol */ }
