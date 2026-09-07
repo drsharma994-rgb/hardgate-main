@@ -220,17 +220,40 @@
 
     var a4 = last(atr(rows, 14));
     var gates = [];
+    /* PACK 2 (Increment 1): parallel to `gates[]` we build `gateMeta[]` via
+       hgGateResult so downstream consumers (super-best, plans, LOG) can read
+       degrade discipline (na→veto by default) and structured detail. The
+       existing 2-tuple format is preserved so nothing currently reading
+       gates[i][1] as a boolean breaks. */
+    var gateMeta = [];
+    var GR = (typeof G.hgGateResult === 'function') ? G.hgGateResult : null;
+    function pushGate(id, label, ok, detail, opts){
+      gates.push([label, ok]);
+      if (GR){
+        var st = (ok === true) ? 'pass' : (ok === false) ? 'veto' : 'na';
+        gateMeta.push(GR(id, label, st, detail || '', opts || {}));
+      }
+    }
+
     var g1 = isFinite(a4) && Math.abs(e21 - e50) >= CG_G1_SPREAD_ATR * a4;
-    gates.push(['G1 cascade+spread', g1]);
+    pushGate('G1', 'G1 cascade+spread', g1,
+      isFinite(a4) ? 'spread ' + (Math.abs(e21 - e50) / a4).toFixed(2) + ' ATR (≥' + CG_G1_SPREAD_ATR + ')' : 'atr n/a',
+      { degradeMode: 'veto' });
     var g2 = dir === 'long' ? p > e200 : p < e200;
-    gates.push(['G2 HTF side', g2]);
+    pushGate('G2', 'G2 HTF side', g2,
+      (dir === 'long' ? 'p ' + p.toFixed(6) + ' vs EMA200 ' : 'p ' + p.toFixed(6) + ' vs EMA200 ') + (isFinite(e200) ? e200.toFixed(6) : 'n/a'),
+      { degradeMode: 'veto' });
     var g3 = !((dir === 'long' && r14 > 70) || (dir === 'short' && r14 < 30));
-    gates.push(['G3 RSI', g3]);
+    pushGate('G3', 'G3 RSI', g3,
+      'RSI ' + (isFinite(r14) ? r14.toFixed(1) : 'n/a'),
+      { degradeMode: 'veto' });
     var g4 = true;
+    var g4Detail = '';
     var fundMissing = !(ticker && ticker.fundingPct !== null && isFinite(ticker.fundingPct));
     if (!fundMissing && typeof G.hgFundingGateDirectional === 'function'){
       var fg = G.hgFundingGateDirectional(ticker.fundingPct, dir, { degradeMode: 'veto', against: CG_FUND_DIR, sanity: CG_FUND_SANITY });
       g4 = fg.pass;
+      g4Detail = 'funding ' + ticker.fundingPct.toFixed(4) + '%';
     } else if (!fundMissing){
       var fr = ticker.fundingPct;
       /* DIRECTIONAL. The old |fr| <= 0.05 cap vetoed a LONG at funding -0.06%
@@ -240,12 +263,18 @@
          check for a broken feed. */
       var frAgainst = (dir === 'long' && fr >= CG_FUND_DIR) || (dir === 'short' && fr <= -CG_FUND_DIR);
       g4 = isFinite(fr) && Math.abs(fr) <= CG_FUND_SANITY && !frAgainst;
+      g4Detail = 'funding ' + fr.toFixed(4) + '%';
     } else if (ticker && (ticker.exchange === 'coindcx' || ticker.exchange === 'cdcx' || ticker.noFunding)){
       g4 = true; /* CoinDCX has no funding — allowed to degrade; R:R floor raised below */
+      g4Detail = 'no funding feed (CoinDCX) — R:R floor raised';
     } else {
       g4 = false; /* missing funding on a venue that should have it → veto */
+      g4Detail = 'missing funding on a venue that should have it';
     }
-    gates.push(['G4 funding', g4]);
+    /* CoinDCX legitimately degrades to pass; everything else with missing
+       funding degrades to veto. This is the Increment 1 na→veto contract. */
+    pushGate('G4', 'G4 funding', g4, g4Detail,
+      { degradeMode: (ticker && (ticker.exchange === 'coindcx' || ticker.exchange === 'cdcx' || ticker.noFunding)) ? 'pass' : 'veto' });
     var g5r = (typeof hgSwingG5OK === 'function')
       ? hgSwingG5OK(dir, rows, c, r14, vz)
       : (function(){
@@ -262,7 +291,9 @@
           return { ok: ok, closeOK: closeOK, quiet: !volOK && ok };
         })();
     var g5 = g5r.ok;
-    gates.push(['G5 vol+wick', g5]);
+    pushGate('G5', 'G5 vol+wick', g5,
+      'vz ' + (isFinite(vz) ? vz.toFixed(2) : 'n/a') + ' ≥ ' + CG_G5_VZ_MIN + (g5r.quiet ? ' (quiet OK)' : ''),
+      { degradeMode: 'veto' });
     var stop = lastSwing(rows, dir, swingLook);
     var entry = p;
     /* G6 is a VETO, never an adjustment. The stop stays where structure put it;
@@ -298,7 +329,9 @@
     var expectedMove = a4 * expAtr;
     var dynamicRR = (isFinite(a4) && a4 > 0 && risk > 0) ? expectedMove / risk : 0;
     var g6 = dynamicRR >= rrMin;
-    gates.push(['G6 ATR-capacity R:R≥' + (isFinite(rrMin) ? rrMin.toFixed(1) : CG_SWING_RR_MIN), g6]);
+    pushGate('G6', 'G6 ATR-capacity R:R≥' + (isFinite(rrMin) ? rrMin.toFixed(1) : CG_SWING_RR_MIN), g6,
+      'R:R ' + (isFinite(dynamicRR) ? dynamicRR.toFixed(2) : 'n/a') + ' (need ≥ ' + rrMin.toFixed(1) + ')',
+      { degradeMode: 'veto' });
     var ev = null;
     if (typeof G.hgPrimitiveCusum === 'function'){
       try{
@@ -310,7 +343,9 @@
     }
     if (!ev) ev = cusumLast(c.slice(-120), 1);
     var g7 = !(ev && ev.barsAgo <= 20 && ev.dir !== dir);
-    gates.push(['G7 CUSUM', g7]);
+    pushGate('G7', 'G7 CUSUM', g7,
+      ev ? ('cusum ' + ev.dir + ' ' + ev.barsAgo + ' bars ago') : 'no recent event',
+      { degradeMode: 'pass' });   /* CUSUM absence is OK — nothing to fight */
     var passed = gates.filter(function(g){ return g[1]; }).length;
     var distToAnchor = isFinite(a4) ? Math.abs(p - e21) / a4 : NaN;
     var anchorOK = isFinite(distToAnchor) && distToAnchor <= CG_SWING_ANCHOR_ATR;
@@ -358,7 +393,7 @@
        CG_SWING_ANCHOR_ATR - distToAnchor < 0.25, true);
     var tightList = margins.filter(function(x){ return x.ok && x.tight && !x.implied; });
     return {
-      dir: dir, gates: gates, passed: passed, gatesTotal: 7,
+      dir: dir, gates: gates, gateMeta: gateMeta, passed: passed, gatesTotal: 7,
       level: isFinite(e21) ? e21 : p, clean: clean,
       p: p, e9: e9, e21: e21, a4: a4, r14: r14, vz: vz,
       stop: stop, entry: entry, risk: risk, expectedMove: expectedMove,
