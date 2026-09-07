@@ -27,9 +27,6 @@ var TAB_DESK = {
   'brain': 'swing', 'book': 'swing', 'trade': 'swing', 'log': 'swing',
   'news': 'edge', 'bias': 'swing', 'regime': 'edge', 'trendmx': 'swing',
   'rotation': 'smart', 'execute': 'swing', 'startrader': 'swing',
-  'super-gold': 'swing', 'omnigold': 'swing', 'omnigold1': 'swing',
-  'goldswing': 'swing', 'goldscalp': 'scalp', 'gold': 'swing', 'goldpro': 'swing',
-  'goldspot': 'swing', 'goldcoint': 'divergence', 'goldpine': 'edge', 'signallog': 'swing',
   'risk': 'swing', 'basis': 'termbasis', 'search': 'edge', 'finder': 'swing',
   'tradeos': 'swing', 'hey': 'edge', 'aiagent': 'edge'
 };
@@ -54,10 +51,6 @@ var TAB_KIND = {
   'news': 'ORB', 'bias': 'HTF-PULLBACK', 'regime': 'COMPRESSION-BREAK',
   'trendmx': 'DONCHIAN-DRIVE',   'rotation': 'CUSUM-SHIFT', 'execute': 'TREND-RECLAIM',
   'startrader': 'DONCHIAN-DRIVE',
-  'super-gold': 'AVWAP-RECLAIM', 'omnigold': 'MMOVE', 'omnigold1': 'AVWAP-RECLAIM',
-  'goldswing': 'HTF-PULLBACK', 'goldscalp': 'NR7-BREAK', 'gold': 'MMOVE',
-  'goldpro': 'AVWAP-RECLAIM', 'goldspot': 'VALUE', 'goldcoint': 'VWAP-REVERT',
-  'goldpine': 'CUSUM-SHIFT', 'signallog': 'MMOVE',
   'risk': 'MMOVE', 'basis': 'FUND-FADE', 'search': 'ORB', 'finder': 'TREND-RECLAIM',
   'tradeos': 'MMOVE', 'hey': 'ORB', 'aiagent': 'MMOVE'
 };

@@ -58,14 +58,27 @@ console.log('== tab kind map covers MODELS desks ==');
   ok(W.hgOmniPrincipalTabForScript('msb-ob') === 'pine-msb', 'script → tab map');
 }
 
-console.log('== tab kind map covers GOLD + TOOLS desks ==');
+console.log('== gold tabs skip crypto desk nightly banners ==');
 {
   const W = boot();
-  const tabs = [
-    'super-gold', 'omnigold', 'omnigold1', 'goldswing', 'goldscalp', 'gold', 'goldpro',
-    'goldspot', 'goldcoint', 'goldpine', 'signallog',
-    'risk', 'basis', 'search', 'finder', 'tradeos', 'hey', 'aiagent'
+  const goldTabs = [
+    'super-gold', 'omnigold', 'goldswing', 'goldscalp', 'gold', 'goldpro',
+    'goldspot', 'goldcoint', 'goldpine', 'signallog'
   ];
+  for (const t of goldTabs){
+    ok(!!W.HG_GOLD_TAB_IDS[t], t + ' flagged as gold tab');
+    ok(!W.hgOmniPrincipalKind(t, ''), t + ' has no crypto OMNI kind');
+    const html = W.hgTabFormationDayHtml(t);
+    ok(/OG1/.test(html), t + ' gold nightly mentions OG1');
+    ok(!/SWING SCAN|SCALP SCAN|OMNIROUTE BEST/.test(html), t + ' skips crypto desk banner');
+  }
+  ok(W.hgTabFormationDayPaint('omnigold1') === null, 'omnigold1 skips external paint');
+}
+
+console.log('== tab kind map covers TOOLS desks ==');
+{
+  const W = boot();
+  const tabs = ['risk', 'basis', 'search', 'finder', 'tradeos', 'hey', 'aiagent'];
   for (const t of tabs){
     const kind = W.hgOmniPrincipalKind(t, '');
     ok(!!kind, t + ' → ' + kind);
@@ -128,7 +141,7 @@ console.log('== formation nightly paints all nav tabs ==');
 }
 
 console.log('== build stamp / sw cache ==');
-ok(HG_VER === 'hg-v623', 'HG_VER is hg-v623');
+ok(HG_VER === 'hg-v624', 'HG_VER is hg-v624');
 ok(swCacheOk(read('sw.js')), 'sw.js HG_CACHE matches build stamp');
 
 console.log('\n' + pass + ' passed');

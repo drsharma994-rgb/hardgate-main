@@ -51,6 +51,12 @@
   var NIGHTLY_HOUR_UTC = 21;
   var __hgNightlyScheduleBusy = false;
 
+  /* Gold lane — OG1 nightly only. Never crypto desk-edge / OMNIROUTE swing-scalp banners. */
+  var HG_GOLD_TAB_IDS = {
+    'super-gold': 1, omnigold: 1, omnigold1: 1, goldswing: 1, goldscalp: 1, gold: 1,
+    goldpro: 1, goldspot: 1, goldcoint: 1, goldpine: 1, signallog: 1
+  };
+
   function fin(x){ var n = +x; return isFinite(n) ? n : NaN; }
 
   function esc(s){
@@ -189,6 +195,24 @@
     return j;
   }
 
+  function isGoldTab(tab){
+    return !!HG_GOLD_TAB_IDS[String(tab || '')];
+  }
+
+  function hgFormationNightlyGoldBannerHtml(){
+    var j = W.HG_FORMATION_NIGHTLY;
+    if (!j || !j.dayUtc) return '';
+    var og = j.omnigold1 || {};
+    var op = j.omnipresent || {};
+    var text = 'NIGHTLY FORMATION ' + j.dayUtc
+      + ' · OG1 ' + (og.bestNamed || 'floors')
+      + ' (SL$≥' + (og.minRisk || 5) + ' · disp≥' + (og.minDisp || 0.5) + '×ATR)'
+      + (op.goldAside ? ' · gold perps stand aside when fade book toxic' : '')
+      + ' — demote/tighten only, never loosens G1–G7.';
+    return '<div class="note warn" data-hg-nightly-formation="1" style="display:block;margin-bottom:10px">'
+      + '<b>NIGHTLY</b> — ' + esc(text) + '</div>';
+  }
+
   function hgFormationNightlyBannerHtml(){
     var j = W.HG_FORMATION_NIGHTLY;
     return '<div class="note warn" data-hg-nightly-formation="1" style="display:block;margin-bottom:10px">'
@@ -197,17 +221,25 @@
 
   function hgTabFormationDayHtml(tab){
     var html = '';
-    try{ html += hgFormationNightlyBannerHtml() || ''; }catch(eN){}
+    var id = String(tab || '');
     try{
-      if (typeof W.hgDeskFormationEdgeBannerHtml === 'function')
-        html += W.hgDeskFormationEdgeBannerHtml(tab) || '';
-    }catch(eD){}
+      html += isGoldTab(id)
+        ? (hgFormationNightlyGoldBannerHtml() || '')
+        : (hgFormationNightlyBannerHtml() || '');
+    }catch(eN){}
+    if (!isGoldTab(id)){
+      try{
+        if (typeof W.hgDeskFormationEdgeBannerHtml === 'function')
+          html += W.hgDeskFormationEdgeBannerHtml(tab) || '';
+      }catch(eD){}
+    }
     return html;
   }
 
   function hgTabFormationDayPaint(tab){
     if (!tab || !W.document) return null;
     var id = String(tab);
+    if (id === 'omnigold1') return null; /* tab renders nightly in measured block */
     var pane = W.document.getElementById('tab_' + id);
     if (!pane) return null;
     var hostId = HG_TAB_DAY_HOSTS[id] || (id + 'Day');
@@ -318,6 +350,8 @@
 
   W.HG_TAB_DAY_HOSTS = HG_TAB_DAY_HOSTS;
   W.HG_TAB_DAY_PAINT_IDS = HG_TAB_DAY_PAINT_IDS;
+  W.hgFormationNightlyGoldBannerHtml = hgFormationNightlyGoldBannerHtml;
+  W.HG_GOLD_TAB_IDS = HG_GOLD_TAB_IDS;
   W.hgCollectTabDayPaintIds = hgCollectTabDayPaintIds;
   W.hgFormationNightlyScheduleTick = hgFormationNightlyScheduleTick;
   W.hgFormationNightlyApply = hgFormationNightlyApply;
