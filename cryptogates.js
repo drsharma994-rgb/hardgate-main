@@ -683,7 +683,12 @@
       sym: ticker && ticker.symbol, dir: lv.dir, passed: m.passed, gatesPassed: m.passed,
       gatesTotal: m.gatesTotal, missing: missing, rows: m.rows, r14: m.r14, vz: m.vz, mark: lv.mark,
       level: m.level, dynamicRR: lv.rr, nearClean: true,
-      entry: lv.entry, stop: lv.stop, t1: lv.t1, t2: lv.t2, rr: lv.rr
+      entry: lv.entry, stop: lv.stop, t1: lv.t1, t2: lv.t2, rr: lv.rr,
+      /* v649: propagate the gate ledger onto NEAR objects too (v645-addendum
+         only covered swingTryClean). Without this, cswing/cscalp rows in the
+         SIGNAL LOG have empty NOTE columns because c.gateMeta is undefined
+         and c.strategy/c.stratKey are also absent on NEAR rows. */
+      gateMeta: m.gateMeta
     };
     if (typeof hgSetupStackAttach === 'function'){
       hgSetupStackAttach(near, { style: 'swing', rows4h: rows, ticker: ticker, nearClean: true, gatesPassed: m.passed, gatesTotal: m.gatesTotal });
@@ -714,7 +719,9 @@
       sym: ticker && ticker.symbol, dir: m.dir, passed: m.passed, gatesPassed: m.passed,
       gatesTotal: m.gatesTotal, missing: missing, rows: m.m15 || m15, r14: m.r15, vz: null, mark: m.mark,
       level: m.level, dynamicRR: m.dynamicRR, nearClean: true,
-      entry: m.entry, stop: m.stop, t1: m.t1, t2: m.t2, rr: m.dynamicRR
+      entry: m.entry, stop: m.stop, t1: m.t1, t2: m.t2, rr: m.dynamicRR,
+      /* v649: propagate gate ledger onto SCALP NEAR (see swingTryNear) */
+      gateMeta: m.gateMeta
     };
     if (typeof hgSetupStackAttach === 'function'){
       hgSetupStackAttach(near, { style: 'scalp', rows4h: h1, rows: m15, ticker: ticker, nearClean: true, gatesPassed: m.passed, gatesTotal: m.gatesTotal });
