@@ -9,7 +9,7 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var GB_REF = 'hgFormGold + opencrypto OB/FVG + MTF + regime + vision veto';
 var HG_GOLD_SCALP_MIN_RR = 1.2;
-var HG_GOLD_SWING_MIN_RR = 2.0;
+var HG_GOLD_SWING_MIN_RR = 1.5;
 var HG_GOLD_HIGH_VOL_MIN_RR = 1.5;
 
 function fin(v){ return typeof v === 'number' && isFinite(v); }
@@ -536,10 +536,10 @@ function hgGoldRefreshTallyRr(c){
   return c;
 }
 
-/** Grade from confluence score — same thresholds as goldind __gsCand (A≥8, B≥5). */
+/** Grade from confluence score — same thresholds as goldind __gsCand (A≥7, B≥5). */
 function hgGoldGradeFromScore(score, newsCaution){
   var s = fin(+score) ? +score : 0;
-  var grade = (s >= 8) ? 'A' : ((s >= 5) ? 'B' : 'C');
+  var grade = (s >= 7) ? 'A' : ((s >= 5) ? 'B' : 'C');
   if (newsCaution){
     if (grade === 'A') grade = 'B';
     else if (grade === 'B') grade = 'C';

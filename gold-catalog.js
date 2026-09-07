@@ -778,20 +778,21 @@
     }catch(e){ return false; }
   }
 
-  /** First non-demoted tape-aligned candidate. Against-tape never leads. */
+  /** First non-demoted tape-aligned candidate; demoted aligned as fallback. */
   function hgGoldUniformAlignedBest(cands, tape){
     tape = uniDir(tape);
     if (!Array.isArray(cands)) return null;
-    var i, c, d;
+    var i, c, d, demotedFallback = null;
     for (i = 0; i < cands.length; i++){
       c = cands[i];
-      if (!c || c.demoted || c.vetoed || c.dropped) continue;
+      if (!c || c.vetoed || c.dropped) continue;
       d = uniDir(c.dir);
       if (!d) continue;
       if (tape && d !== tape) continue;
-      return c;
+      if (!c.demoted) return c;
+      if (!demotedFallback) demotedFallback = c;
     }
-    return null;
+    return demotedFallback;
   }
 
   /**

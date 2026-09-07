@@ -770,7 +770,7 @@ var NEWS_STAMP = 'NEWS WINDOW — wait 15–30 min after release, let the sweep 
    the normal bar (0); an OFF-SESSION-demoted candidate must clear +2 above
    the normal bar to render at all. */
 var GS_TALLY_BAR = 0;
-var GS_OFFSESSION_BAR = GS_TALLY_BAR + 2;
+var GS_OFFSESSION_BAR = GS_TALLY_BAR + 1;
 
 function __newsCaution(news, nowMs){
   try{
@@ -988,7 +988,7 @@ function goldScalpSetup(inp){
 
     /* --- grade: read count + killzone weight; news downgrades one letter --- */
     var score = count + kz.weight;
-    var grade = (score >= 8) ? 'A' : ((score >= 5) ? 'B' : 'C');
+    var grade = (score >= 7) ? 'A' : ((score >= 5) ? 'B' : 'C');
     if (news.caution) grade = (grade === 'A') ? 'B' : 'C';
 
     var confluence = [];
@@ -1135,14 +1135,14 @@ var HG_GOLD_SETUP_EDGE = {
   scalp: {
     fvg: { n: 27, gross: -0.003, net: -4.853, action: 'suppress',
       why: 'SCALP FVG FILL replay net −4.85R (n=27) — fee-toxic + no direction edge' },
-    hvn: { n: 65, gross: -0.038, net: -3.071, action: 'suppress',
-      why: 'SCALP HVN retest replay net −3.07R (n=65)' },
-    ribbon: { n: 21, gross: 0.297, net: -4.74, action: 'suppress',
-      why: 'SCALP EMA ribbon gross+ but net −4.74R (n=21) — stops/fees eat the edge' },
+    hvn: { n: 65, gross: -0.038, net: -3.071, action: 'demote',
+      why: 'SCALP HVN retest replay net −3.07R (n=65) — never MOST PROBABLE / ENGINE lead' },
+    ribbon: { n: 21, gross: 0.297, net: -4.74, action: 'demote',
+      why: 'SCALP EMA ribbon gross+ but net −4.74R (n=21) — never MOST PROBABLE / ENGINE lead' },
     vwapband: { n: 2, gross: -1, net: -4.226, action: 'suppress',
       why: 'SCALP VWAP-band MR replay all losses in sample' },
-    openrange: { n: 69, gross: 0.22, net: -1.798, action: 'suppress',
-      why: 'SCALP ORB replay net −1.80R (n=69) — fee-toxic ENGINE scalp, suppress' },
+    openrange: { n: 69, gross: 0.22, net: -1.798, action: 'demote',
+      why: 'SCALP ORB replay net −1.80R (n=69) — never MOST PROBABLE / ENGINE lead' },
     vwap: { n: 6, gross: 0.239, net: -2.092, action: 'demote',
       why: 'SCALP VWAP bounce net −2.09R (n=6) — never MOST PROBABLE / ENGINE lead' },
     asian: { n: 8, gross: -0.063, net: -1.713, action: 'demote',
@@ -1516,7 +1516,7 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
       gateNotes.push('Kaufman ER ' + D.er.toFixed(2) + ' < 0.25 — overlapping chop; mean-reversion retests demoted');
     }
     var score = myEv.length + D.kz.weight;
-    var grade = (score >= 8) ? 'A' : ((score >= 5) ? 'B' : 'C');
+    var grade = (score >= 7) ? 'A' : ((score >= 5) ? 'B' : 'C');
     if (D.news.caution) grade = (grade === 'A') ? 'B' : 'C';
     var conf = [];
     for (i = 0; i < myEv.length; i++) conf.push(myEv[i].label);
@@ -3704,7 +3704,7 @@ function goldRankSetups(cands, ctx){
         if (gradeFn){
           rc.grade = gradeFn(tally, !!(news.caution || c.newsCaution));
         } else {
-          rc.grade = (tally >= 8) ? 'A' : ((tally >= 5) ? 'B' : 'C');
+          rc.grade = (tally >= 7) ? 'A' : ((tally >= 5) ? 'B' : 'C');
           if ((news.caution || c.newsCaution) && rc.grade === 'A') rc.grade = 'B';
           else if ((news.caution || c.newsCaution) && rc.grade === 'B') rc.grade = 'C';
         }

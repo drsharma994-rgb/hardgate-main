@@ -35,7 +35,7 @@ ok(evalIdle.ready === false && /SUPER GOLD/.test(evalIdle.reason || ''), 'evalua
 
 ok(W.goldCandTier({ grade: 'A', demoted: false, vetoed: false }) === 'clean', 'grade A → clean');
 ok(W.goldCandTier({ grade: 'B' }) === 'near', 'grade B → near');
-ok(W.goldCandTier({ grade: 'C' }) === null, 'grade C skipped');
+ok(W.goldCandTier({ grade: 'C' }) === 'near', 'grade C → near');
 ok(W.goldCandTier({ grade: 'A', demoted: true }) === 'near', 'demoted A → near');
 ok(W.goldCandTier({ grade: 'A', vetoed: true }) === null, 'vetoed skipped');
 

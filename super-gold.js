@@ -154,6 +154,7 @@ function goldCandTier(c){
   if (c.demoted) return 'near';
   if (g === 'A') return 'clean';
   if (g === 'B') return 'near';
+  if (g === 'C') return 'near';
   return null;
 }
 

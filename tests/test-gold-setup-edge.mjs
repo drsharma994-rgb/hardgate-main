@@ -51,12 +51,12 @@ ok(W.HG_GOLD_SETUP_EDGE && W.HG_GOLD_SETUP_EDGE.scalp.fvg.action === 'suppress',
   ok((c.stamps || []).indexOf('EDGE SUPPRESS') >= 0, 'EDGE SUPPRESS stamp');
 }
 
-/* SCALP ORB suppress (hg-v589: n=69 net −1.80R ENGINE scalp) */
+/* SCALP ORB demote (hg-v626: paint + OMNIGOLD eligible, never ENGINE lead) */
 {
   const c = { dir: 'long', entry: 2650, stop: 2640, t1: 2670, stratKey: 'openrange', strategy: 'OPENING RANGE BREAKOUT' };
   W.hgGoldSetupEdgeApply(c, { scalp: true });
-  ok(c.dropped === true, 'ORB suppressed — fee-toxic ENGINE scalp');
-  ok((c.stamps || []).indexOf('EDGE SUPPRESS') >= 0, 'EDGE SUPPRESS stamp');
+  ok(c.demoted === true && !c.dropped, 'ORB demoted — never MOST PROBABLE / ENGINE lead');
+  ok((c.stamps || []).indexOf('EDGE DEMOTE') >= 0, 'ORB EDGE DEMOTE stamp');
 }
 
 /* hg-v607: remaining fee-toxic ENGINE scalp kinds stay demote (never lead) */
@@ -147,6 +147,17 @@ ok(W.HG_GOLD_SETUP_EDGE && W.HG_GOLD_SETUP_EDGE.scalp.fvg.action === 'suppress',
   ok(/hgGoldSetupEdgeApply/.test(swing) && /swing:\s*true/.test(swing), 'SWING mkCand wires edge apply');
   ok(/edgeSuppress|edgeDemote|edgePrefer/.test(og), 'OMNIGOLD formation stamps edge verdict');
   ok(/c\.demoted\s*\|\|\s*c\.dropped/.test(og), 'OMNIGOLD engine pick skips demoted/dropped');
+}
+
+/* hg-v626: edge demote keeps formation eligible (unlike suppress) */
+{
+  const edgeJson = JSON.parse(fs.readFileSync(root + 'scripts/gold-setup-edge.json', 'utf8'));
+  ok(edgeJson.scalp.openrange.action === 'demote', 'evidence json: ORB demote');
+  const og = fs.readFileSync(root + 'omnigold.js', 'utf8');
+  ok(/probe\.demoted && probe\.edge && probe\.edge\.action === 'demote'/.test(og),
+    'OMNIGOLD formation stamps edge demote');
+  ok(!/out\.formed = false;\s*\n\s*out\.edgeDemote/.test(og),
+    'edge demote no longer sets formed=false');
 }
 
 /* Stamp */

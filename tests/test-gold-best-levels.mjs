@@ -40,7 +40,7 @@ ok(typeof W.hgGoldMtfGate === 'function', 'hgGoldMtfGate export');
 ok(typeof W.hgGoldPoiQuality === 'function', 'hgGoldPoiQuality export');
 ok(typeof W.hgGoldRegime === 'function', 'hgGoldRegime export');
 ok(W.HG_GOLD_SCALP_MIN_RR === 1.2, 'scalp min R:R 1.2');
-ok(W.HG_GOLD_SWING_MIN_RR === 2.0, 'swing min R:R 2.0');
+ok(W.HG_GOLD_SWING_MIN_RR === 1.5, 'swing min R:R 1.5');
 
 console.log('== phase 2 MTF ==');
 {

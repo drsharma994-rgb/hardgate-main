@@ -88,11 +88,16 @@ console.log('\n== far VETO watch is not MOST PROBABLE ==');
   const W = boot();
   const far = { horizon: 'SCALP', kind: 'ORB', dir: 'short',
     grade: { ticket: false, vetoes: ['x'] },
-    plan: { entry: 4633.59, stop: 4699.3, t1: 4502.17 }, distAtr: 2.4 };
+    plan: { entry: 4633.59, stop: 4699.3, t1: 4502.17 }, distAtr: 4.2 };
   const near = { horizon: 'SCALP', kind: 'MMOVE', dir: 'short',
     grade: { ticket: false, vetoes: ['y'] },
     plan: { entry: 4598, stop: 4660, t1: 4470 }, distAtr: 0.5 };
-  ok(W.hgOgPickWatchFor([far], 'SCALP', 'short') === null, 'ORB 2.4×ATR off market stays out of MP');
+  ok(W.hgOgPickWatchFor([far], 'SCALP', 'short') === null, 'ORB 4.2×ATR off market stays out of MP');
+  const mid = { horizon: 'SCALP', kind: 'MMOVE', dir: 'short',
+    grade: { ticket: false, vetoes: ['z'] },
+    plan: { entry: 4610, stop: 4660, t1: 4520 }, distAtr: 3.2 };
+  const midWatch = W.hgOgPickWatchFor([mid], 'SCALP', 'short');
+  ok(midWatch && midWatch.plan.entry === 4610, '3.2×ATR WATCH still shown inside scalp ceiling');
   const p = W.hgOgPickWatchFor([near, far], 'SCALP', 'short');
   ok(p && p.plan.entry === 4598, 'near watch still shown (' + (p && p.plan.entry) + ')');
 }

@@ -248,8 +248,21 @@ terse status, and never launches a first-time scan on a global refresh.
   var GOLD_STOP_MAX_PCT = 0.025;
   /* STRONGEST prefers a ticket whose named level is actually in reach.
      A 4H FVG 6×ATR behind the market is a real limit, not the trade to
-     float first when a sweep 1.5×ATR away already has a ticket. */
-  var GOLD_NEAR_ATR = 2;
+     float first when a sweep 1.5×ATR away already has a ticket.
+     hg-v626: horizon-specific reach — swing levels sit farther from spot
+     than scalp ORB/VWAP; a single 2×ATR cap hid good weekly/sweep tickets. */
+  var GOLD_NEAR_ATR_SCALP = 2.5;
+  var GOLD_NEAR_ATR_SWING = 3.5;
+  var GOLD_WATCH_MAX_ATR_SCALP = 4.0;
+  var GOLD_WATCH_MAX_ATR_SWING = 5.5;
+  function hgOgNearAtrFor(horizon){
+    var h = String(horizon || '').toUpperCase();
+    return (h === 'SWING') ? GOLD_NEAR_ATR_SWING : GOLD_NEAR_ATR_SCALP;
+  }
+  function hgOgWatchMaxAtrFor(horizon){
+    var h = String(horizon || '').toUpperCase();
+    return (h === 'SWING') ? GOLD_WATCH_MAX_ATR_SWING : GOLD_WATCH_MAX_ATR_SCALP;
+  }
   /* SETTLED EXECUTE — only promote setups whose cleared TICKETS have a
      measured forward win rate with Wilson 95% CI lower bound >= 95%.
      Requires enough settled out-of-sample tickets; most mechanics never
@@ -4282,7 +4295,9 @@ terse status, and never launches a first-time scan on a global refresh.
     else if (tape && tape !== dir){ score -= 14; parts.push('against-tape'); }
     if (atMarket){ score += 10; parts.push('at-market'); }
     else if (plan.fillDemote){ score -= 10; parts.push('thin-fill'); }
-    if (plan.fillPathCross){ score -= 18; parts.push('fill-path-crosses-t1'); plan.fillDemote = true; }
+    /* fill-path is an info gate on the ledger — do not demote formation here;
+       limit retests above/below market are valid structure, not thin-fill. */
+    if (plan.fillPathCross){ parts.push('fill-path-crosses-t1'); }
     if (hgOgIsSurvivor(kind)){ score += 8; parts.push('replay-survivor'); }
     if (hgOgSwingPrefer(kind, extra.horizon || extra.deskHorizon || cfg.label)){
       score += 8; parts.push('swing-replay-prefer');
@@ -5008,9 +5023,10 @@ terse status, and never launches a first-time scan on a global refresh.
     var alsoNorm = Math.min(also, 4) / 4;
     var horizon = (c && c.horizonAgree) ? 1 : 0;
     var dist = (c && isFinite(fin(c.distAtr))) ? fin(c.distAtr) : 99;
+    var nearCap = hgOgNearAtrFor(c && c.horizon);
     var near = 1;
-    if (isFinite(dist) && dist > GOLD_NEAR_ATR){
-      near = Math.max(0, 1 - (dist - GOLD_NEAR_ATR) / 4);
+    if (isFinite(dist) && dist > nearCap){
+      near = Math.max(0, 1 - (dist - nearCap) / 4);
     }
     var dir = String((c && c.dir) || '').toLowerCase();
     var tapeDir = String(tape || '').toLowerCase();
@@ -5021,6 +5037,7 @@ terse status, and never launches a first-time scan on a global refresh.
     var ticketN = (c && c.grade && c.grade.ticket) ? 1 : 0;
     var edgeN = 0;
     if (c && isFinite(fin(c.edgeScore))) edgeN = Math.max(0, Math.min(100, fin(c.edgeScore))) / 100;
+    var edgeDemoteN = (c && c.formation && c.formation.edgeDemote) ? -0.35 : 0;
     var score = 100 * tapeScore
               + 120 * ticketN
               + 30 * family
@@ -5029,7 +5046,8 @@ terse status, and never launches a first-time scan on a global refresh.
               + 10 * alsoNorm
               + 8 * horizon
               + 10 * near
-              + 8 * edgeN;
+              + 8 * edgeN
+              + 15 * edgeDemoteN;
     return {
       score: score, family: family, infoRatio: infoRatio, coverage: coverage,
       alsoNorm: alsoNorm, horizon: horizon, near: near, tapeScore: tapeScore,
@@ -7037,7 +7055,8 @@ terse status, and never launches a first-time scan on a global refresh.
           out.edgeSuppress = probe.edge || { action: 'suppress', why: probe.reason };
           out.reasons.push(probe.reason || 'gold setup edge suppress');
         } else if (probe.demoted && probe.edge && probe.edge.action === 'demote'){
-          out.formed = false;
+          /* Demote paints and ranks below survivors — unlike suppress it is not
+             a formation kill. ORB/HVN/ribbon are fee-weak, not geometry-broken. */
           out.edgeDemote = probe.edge;
           out.reasons.push(probe.edge.why || 'gold setup edge demote');
         } else if (probe.edgeBoost > 0 && probe.edge && probe.edge.action === 'prefer'){
@@ -8686,11 +8705,12 @@ terse status, and never launches a first-time scan on a global refresh.
       if (!aligned.length) return null;
       pool = aligned;
     }
+    var nearAtr = hgOgNearAtrFor(horizon);
     var near = [], anyDist = false;
     for (i = 0; i < pool.length; i++){
       if (isFinite(fin(pool[i].distAtr))){
         anyDist = true;
-        if (pool[i].distAtr <= GOLD_NEAR_ATR) near.push(pool[i]);
+        if (pool[i].distAtr <= nearAtr) near.push(pool[i]);
       }
     }
     if (anyDist && near.length) pool = near;
@@ -8729,17 +8749,22 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     var pool = structural.length ? structural : vol;
     if (!pool.length) return null;
-    var near = [], anyDist = false;
+    var nearAtr = hgOgNearAtrFor(horizon);
+    var watchMax = hgOgWatchMaxAtrFor(horizon);
+    var near = [], inReach = [], anyDist = false;
     for (i = 0; i < pool.length; i++){
       if (isFinite(fin(pool[i].distAtr))){
         anyDist = true;
-        if (pool[i].distAtr <= GOLD_NEAR_ATR) near.push(pool[i]);
+        if (pool[i].distAtr <= nearAtr) near.push(pool[i]);
+        else if (pool[i].distAtr <= watchMax) inReach.push(pool[i]);
       }
     }
-    /* A far limit level is not the desk's "most probable" read — stand aside
-       instead of showing ORB @ 4633 when gold prints 4597. */
-    if (anyDist && !near.length) return null;
-    if (anyDist && near.length) pool = near;
+    /* Beyond watchMax stand aside (ORB @ 4633 when gold prints 4597). Inside
+       the horizon ceiling, prefer near levels but still show a far WATCH. */
+    if (anyDist){
+      if (!near.length && !inReach.length) return null;
+      pool = near.length ? near : inReach;
+    }
     pool = pool.slice().sort(function(a, b){
       var sa = hgOgBalanceScore(a, tapeDir);
       var sb = hgOgBalanceScore(b, tapeDir);
