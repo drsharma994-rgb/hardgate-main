@@ -633,7 +633,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
       <span class="statuschip" id="goldDataSrc">DATA <b>—</b></span>
       <span class="note" id="goldStat"></span>
     </div>
-    <div class="note">Gold logic: swing side follows the 4H/1D hard gates (same discipline as crypto, no exceptions for the shiny metal). Scalps only fire inside London (12:30–15:30 IST) or NY (17:30–20:30 IST) kill zones, and only on a sweep of the Asian range or prior-day high/low followed by a closed-bar reclaim — the Judas pattern you already trade. Fear &amp; Greed is crypto sentiment and is deliberately NOT applied here. DXY, 10Y yields and the real-rate hint now load automatically into MACRO (AUTO) below — nullable Yahoo legs degrade to “—” and never break the ledgers; the event calendar stays manual homework.</div>
+    <div class="note">Gold logic: swing side follows the 4H/1D hard gates (same discipline as crypto, no exceptions for the shiny metal). Scalps only fire inside London (07:00–10:00 London local) or NY (12:00–15:00 New York local) kill zones, and only on a sweep of the Asian range or prior-day high/low followed by a closed-bar reclaim — the Judas pattern you already trade. Fear &amp; Greed is crypto sentiment and is deliberately NOT applied here. DXY, 10Y yields and the real-rate hint now load automatically into MACRO (AUTO) below — nullable Yahoo legs degrade to “—” and never break the ledgers; the event calendar stays manual homework.</div>
     <div class="prog" id="goldProg"><i></i></div>
   </div>
   
@@ -671,11 +671,11 @@ table tr:hover td{background:rgba(201,146,26,.06)}
   <details class="panel" style="margin-top:10px">
     <summary style="cursor:pointer;font-family:var(--disp);letter-spacing:.14em;font-size:13px">GOLD CHEAT SHEET <span style="color:var(--mut);font-size:10px;letter-spacing:0">behavioral notes — click to expand</span></summary>
     <div style="margin-top:8px">
-      <div class="note">• London open (07:00 UTC) often sweeps the Asia range — watch for the Judas reclaim.</div>
-      <div class="note">• NY morning (12:00–14:00 UTC) = highest liquidity + cleanest moves.</div>
-      <div class="note">• NY afternoon (15:00–21:00 UTC) = chop / low volume. Reduce size.</div>
+      <div class="note">• London open (07:00–10:00 London local) often sweeps the Asia range — watch for the Judas reclaim.</div>
+      <div class="note">• NY morning (10:00–13:00 New York local) = highest liquidity + cleanest moves.</div>
+      <div class="note">• NY afternoon (15:00–21:00 New York local) = chop / low volume. Reduce size.</div>
       <div class="note">• NFP week (first Friday): widen stops, expect false breaks Wed–Thu.</div>
-      <div class="note">• London Fix (15:00 UTC) and NY Close (21:00 UTC) = spike risk. Avoid entries 15 min before/after.</div>
+      <div class="note">• London Fix (15:00–15:30 London local) and NY Close (16:00–16:30 New York local) = spike risk. Avoid entries 15 min before/after.</div>
       <div class="note">• Gold is anti-correlated to DXY and real yields. When both rise together, gold is trapped — range likely.</div>
       <div class="note">• Bollinger squeeze on 4H often precedes $15–$30 moves within 24h.</div>
       <div class="note">• Mean reversion works best at Asia high/low + London kill zone. Trend continuation works best in NY morning.</div>
@@ -878,8 +878,10 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="goldspot.js"></script>
 <!-- conviction-lock.js: ConvictionLockManager (anti-repaint lifecycle) -->
 <script src="conviction-lock.js"></script>
+<!-- gold-session.js: DST-aware London/NY session helpers (shared by goldKillzone, GOLD tab, Fix/Close) -->
+<script src="gold-session.js?v=629"></script>
 <!-- goldind.js + goldscalp.js: GOLD SCALP tab (pure SMC/ICT + indicator detectors, then the tab) — after indicators2/binance/macro/xuniverse/news, before brain.js -->
-<script src="goldind.js?v=626"></script>
+<script src="goldind.js?v=629"></script>
 <script src="gold-catalog.js?v=626"></script>
 <!-- gold-seven-step.js: Gold Playbook 7-step setup engine (closed 1H/4H bars → bias → candidates → best fit → levels → checklist → TRIGGERED/WAIT/EXPIRED). Loads after goldind.js + gold-catalog.js (feature-checked), before the gold desks that render it. -->
 <script src="gold-seven-step.js?v=614"></script>
@@ -1178,7 +1180,7 @@ function hgScanWholeExchange(opts, checkboxEl){
 
 const DELTA = 'https://api.india.delta.exchange';
 const CDCX_PUB = 'https://public.coindcx.com';
-const TWELVEDATA_KEY = localStorage.getItem('hg_td_key') || 'de260a776e5d49d091d7a49bf9d17be5';
+const TWELVEDATA_KEY = localStorage.getItem('hg_td_key') || '';
 const CDCX_API = 'https://api.coindcx.com';
 /* EXECUTE BRACKET — execute.js + Render /api/execute proxy (EXECUTE_BACKEND_URL env).
    Optional desk override: window.HG_EXECUTE_BACKEND_OVERRIDE or Settings → Execute URL */
@@ -5675,12 +5677,17 @@ liq est   ${px(liq)}  (${fmt(clearance,2)}× stop clearance)`;
    ============================================================================= */
 const GOLD_SYM = 'XAUTUSD';
 function goldSession(){
+  if (typeof hgGoldScalpSession === 'function') return hgGoldScalpSession();
   const d = new Date();
   const h = d.getUTCHours() + d.getUTCMinutes()/60;
-  if (h>=7  && h<10) return {name:'LONDON KZ', kz:true};   // 12:30–15:30 IST
-  if (h>=12 && h<15) return {name:'NY KZ', kz:true};        // 17:30–20:30 IST
+  if (h>=7  && h<10) return {name:'LONDON KZ', kz:true};
+  if (h>=12 && h<15) return {name:'NY KZ', kz:true};
   if (h>=0  && h<7)  return {name:'ASIA (range builds)', kz:false};
   return {name:'OFF-SESSION', kz:false};
+}
+function goldSetupClosed(rows, res){
+  if (typeof hgOmniDropForming === 'function') return hgOmniDropForming(rows, res);
+  return dropForming(rows, res);
 }
 function utcDayStart(){ const d=new Date(); return Math.floor(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate())/1000); }
 
@@ -5725,7 +5732,8 @@ async function runGold(){
       `9/21/50 → ${casc.toUpperCase()} · |21−50| ${isFinite(a4)?fmt(Math.abs(e21-e50)/a4,2):'—'}×ATR (need ≥0.25)`]);
     sg.push(['GS2','1D side agrees (close vs 1D EMA50)', casc!=='mixed'&&casc===dSide?'pass':'veto', `1D → ${dSide.toUpperCase()}`]);
     const rsiVeto=(casc==='long'&&r4>70)||(casc==='short'&&r4<30);
-    sg.push(['GS3','4H RSI exhaustion guard', rsiVeto?'veto':'pass', `RSI14 ${fmt(r4,1)}`]);
+    sg.push(['GS3','4H RSI exhaustion guard', casc==='mixed'?'na':(rsiVeto?'veto':'pass'),
+      casc==='mixed' ? `RSI14 ${fmt(r4,1)} · cascade mixed — RSI untested` : `RSI14 ${fmt(r4,1)}`]);
     let gs4='na', gs4d='funding n/a on this feed';
     if (fr!==null){
       const bad = Math.abs(fr)>0.05-1e-9 || (casc==='long'&&fr>=0.04) || (casc==='short'&&fr<=-0.04);
@@ -5977,8 +5985,14 @@ function camarilla(d1){ if(!d1||!d1.length) return {h1:NaN,h2:NaN,h3:NaN,h4:NaN,
 function wyckoffPhase(rows){ if(rows.length<60) return {phase:"unknown",label:"UNKNOWN"}; const c=rows.map(function(r){return r.c;}),n=c.length; const bb=bollinger(c,20,2); const vols=rows.slice(-20).map(function(r){return r.v||0;}).filter(function(v){return v>0;}); const avgVol=vols.length?vols.reduce(function(a,b){return a+b;},0)/vols.length:0; const recentVol=rows.slice(-5).map(function(r){return r.v||0;}).filter(function(v){return v>0;}); const rVol=recentVol.length?recentVol.reduce(function(a,b){return a+b;},0)/recentVol.length:0; const inRange=Math.abs(c[n-1]-bb.mid[n-1])/bb.mid[n-1]<0.02; const spring=c[n-1]<bb.lower[n-1]&&c[n-2]>c[n-1]&&c[n-1]>rows[n-1].l; if(spring) return {phase:"spring",label:"WYCKOFF SPRING"}; if(inRange&&rVol<avgVol*0.7) return {phase:"compression",label:"COMPRESSION"}; if(c[n-1]>bb.upper[n-1]&&rVol>avgVol*1.3) return {phase:"markup",label:"MARKUP"}; if(c[n-1]<bb.lower[n-1]&&rVol>avgVol*1.3) return {phase:"markdown",label:"MARKDOWN"}; return {phase:"neutral",label:"NEUTRAL"}; }
 function isNFPWeek(){ const d=new Date(); const firstDay=new Date(d.getFullYear(),d.getMonth(),1); const firstFriday=1+((5-firstDay.getDay()+7)%7); const nfpDay=new Date(d.getFullYear(),d.getMonth(),firstFriday); const diff=Math.floor((d-nfpDay)/86400000); return diff>=-1&&diff<=1; }
 function isEventWindow(){ const d=new Date(); const day=d.getUTCDay(),hour=d.getUTCHours(); if(day===5&&isNFPWeek()&&hour>=12&&hour<=15) return {active:true,event:"NFP WINDOW"}; if(day===3&&hour>=18&&hour<=21) return {active:false,event:"POSSIBLE FOMC"}; return {active:false,event:"none"}; }
-function isLondonFix(){ const d=new Date(); return d.getUTCHours()===15&&d.getUTCMinutes()<=30; }
-function isNYClose(){ const d=new Date(); return d.getUTCHours()===21&&d.getUTCMinutes()<=30; }
+function isLondonFix(){
+  if (typeof hgIsLondonFix === 'function') return hgIsLondonFix();
+  const d=new Date(); return d.getUTCHours()===15&&d.getUTCMinutes()<=30;
+}
+function isNYClose(){
+  if (typeof hgIsNYClose === 'function') return hgIsNYClose();
+  const d=new Date(); return d.getUTCHours()===21&&d.getUTCMinutes()<=30;
+}
 function bollingerBB(vals,p,mult){ p=p||20;mult=mult||2; const bb=bollinger(vals,p,mult); const n=vals.length; const up=bb.upper[n-1],lo=bb.lower[n-1]; const pctB=(isFinite(up)&&isFinite(lo)&&up!==lo)?(vals[n-1]-lo)/(up-lo):NaN; const widths=bb.widthPct.filter(isFinite); const bw=widths.length?widths[widths.length-1]:NaN; const avgW=widths.length>20?widths.slice(-20).reduce(function(a,b){return a+b;},0)/20:NaN; return {pctB:pctB,bw:bw,avgW:avgW,squeeze:isFinite(bw)&&isFinite(avgW)&&bw<avgW*0.8}; }
 function stochastic(vals,highs,lows,p,k,d){ p=p||14;k=k||3;d=d||3; const n=vals.length; const kRaw=new Array(n).fill(NaN); for(let i=p-1;i<n;i++){ let hh=-Infinity,ll=Infinity; for(let j=i-p+1;j<=i;j++){ hh=Math.max(hh,highs[j]); ll=Math.min(ll,lows[j]); } if(hh!==ll) kRaw[i]=100*(vals[i]-ll)/(hh-ll); } const kLine=nanEma(kRaw,k); return {k:kLine,d:nanEma(kLine,d)}; }
 function fisherTransform(vals,p){ p=p||10; const n=vals.length; const out=new Array(n).fill(NaN); let v1=0; for(let i=0;i<n;i++){ let hi=-Infinity,lo=Infinity; for(let j=Math.max(0,i-p+1);j<=i;j++){ hi=Math.max(hi,vals[j]); lo=Math.min(lo,vals[j]); } if(hi!==lo){ const v=0.5*2*((vals[i]-lo)/(hi-lo)-0.5)+0.5*v1; v1=Math.max(-0.999,Math.min(0.999,v)); out[i]=0.5*Math.log((1+v1)/(1-v1)); } } return out; }
@@ -6592,10 +6606,10 @@ async function runGoldSetup(){
     const macroP = (typeof getGoldMacro === 'function') ? getGoldMacro().catch(function(){ return null; }) : Promise.resolve(null);
     const fundP  = (typeof binanceFunding === 'function') ? binanceFunding('XAUUSDT').catch(function(){ return null; }) : Promise.resolve(null);
     const lsP    = (typeof binanceLongShort === 'function') ? binanceLongShort('XAUUSDT', '1h', 30).catch(function(){ return null; }) : Promise.resolve(null);
-    const d1 = await getXAUCandles('1d', 260);
-    const h4 = await getXAUCandles('4h', 300);
+    const d1 = goldSetupClosed(await getXAUCandles('1d', 260), '1d');
+    const h4 = goldSetupClosed(await getXAUCandles('4h', 300), '4h');
     setProg('goldSetupProg', 0.45);
-    const m15 = await getXAUCandles('15m', 120);   /* session/Asia context; also warms the shared cache for EVALUATE GOLD */
+    const m15 = goldSetupClosed(await getXAUCandles('15m', 120), '15m');   /* session/Asia context; also warms the shared cache for EVALUATE GOLD */
     let gs = null;
     if (typeof evalGoldSwing === 'function'){ try{ gs = await evalGoldSwing(); }catch(e){ gs = null; } }
     const macro = await macroP, fund = await fundP, lsr = await lsP;
@@ -7956,6 +7970,7 @@ const key = 'tdc|' + base + '|' + res + '|' + count;
 const hit = S.candleCache[key];
 if (hit && (nowSec()-hit.at) < 300) return hit.rows;   // cache hits are free — no quota spend, no throttle
 await tdThrottle(); trackCall('td');                    // quota is spent from here on
+if (!TWELVEDATA_KEY) throw new Error('Twelve Data API key not configured — set your key in Settings → Twelve Data');
 const intervalMap = {'15m':'15min','1h':'1h','2h':'2h','4h':'4h','1d':'1day'};
 const interval = intervalMap[res];
 if (!interval) throw new Error('unsupported interval: ' + res);
@@ -8769,8 +8784,8 @@ async function evalScalpSingle(sym, exch, tickerFundingPct, minsToFunding){
 }
 
 async function evalGoldSwing(){
-  const d1 = await getXAUCandles('1d',260);
-  const h4 = await getXAUCandles('4h',300);
+  const d1 = goldSetupClosed(await getXAUCandles('1d',260), '1d');
+  const h4 = goldSetupClosed(await getXAUCandles('4h',300), '4h');
   if (d1.length<60||h4.length<210) return {error:'not enough XAUTUSD history'};
   const c4=h4.map(r=>r.c), c1=d1.map(r=>r.c);
   const e9=last(ema(c4,9)), e21=last(ema(c4,21)), e50=last(ema(c4,50));
@@ -8784,8 +8799,21 @@ async function evalGoldSwing(){
   sg.push(['GS1','4H EMA cascade with real spread', casc!=='mixed'&&spreadOk?'pass':'veto', `9/21/50 \u2192 ${casc.toUpperCase()}`]);
   sg.push(['GS2','1D side agrees', casc!=='mixed'&&casc===dSide?'pass':'veto', `1D \u2192 ${dSide.toUpperCase()}`]);
   const rsiVeto=(casc==='long'&&r4>70)||(casc==='short'&&r4<30);
-  sg.push(['GS3','4H RSI exhaustion guard', rsiVeto?'veto':'pass', `RSI14 ${fmt(r4,1)}`]);
-  sg.push(['GS4','Funding clean','na','funding n/a on this feed']);
+  sg.push(['GS3','4H RSI exhaustion guard', casc==='mixed'?'na':(rsiVeto?'veto':'pass'),
+    casc==='mixed' ? `RSI14 ${fmt(r4,1)} \u00b7 cascade mixed` : `RSI14 ${fmt(r4,1)}`]);
+  let gs4='na', gs4d='funding n/a on this feed';
+  try{
+    if (typeof binanceFunding === 'function'){
+      const xauFund = await binanceFunding('XAUUSDT').catch(function(){ return null; });
+      const fr = (xauFund && isFinite(xauFund.fundingPct)) ? xauFund.fundingPct : null;
+      if (fr !== null){
+        const bad = Math.abs(fr)>0.05-1e-9 || (casc==='long'&&fr>=0.04) || (casc==='short'&&fr<=-0.04);
+        gs4 = bad?'veto':'pass';
+        gs4d = 'XAUUSDT perp ' + fmt(fr,4) + '%/interval (Binance crowd read)';
+      }
+    }
+  }catch(e){}
+  sg.push(['GS4','Funding clean (crowding veto)', gs4, gs4d]);
   const r30g=roc(c1,30), r90g=roc(c1,90);
   let gs5='na';
   if (casc!=='mixed' && isFinite(r30g) && isFinite(r90g)){
@@ -9395,7 +9423,7 @@ function saveTdKey(){
   const v = ($('tdKeyInput').value||'').trim();
   try{
     if (v) localStorage.setItem('hg_td_key', v); else localStorage.removeItem('hg_td_key');
-    $('tdKeyStat').textContent = v ? 'saved \u00b7 takes effect on reload' : 'override cleared \u00b7 built-in key active on reload';
+    $('tdKeyStat').textContent = v ? 'saved \u00b7 takes effect on reload' : 'override cleared \u00b7 Twelve Data disabled until you set a key';
   }catch(e){ $('tdKeyStat').textContent = 'save failed: ' + e.message; }
 }
 try{ const __tdk = localStorage.getItem('hg_td_key'); if (__tdk && $('tdKeyInput')) $('tdKeyInput').value = __tdk; }catch(e){}

@@ -178,8 +178,7 @@ async function fetchSilverData(){
                : (typeof G.goldSMTDivergence === 'function') ? G.goldSMTDivergence : null;
     if (!detect) return null;
 
-    var idx = Math.min(xau.length, xag.length) - 1;
-    var smtResult = detect(xau, xag, idx, 15);
+    var smtResult = detect(xau, xag, undefined, 15);
     var out = __mapSmtForBrain(smtResult);
     out.source = src;
     return out;

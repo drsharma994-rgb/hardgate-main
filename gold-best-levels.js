@@ -129,15 +129,17 @@ function hgGoldRegime(rows, style){
   }catch(e){ return out; }
 }
 
-/** Phase 4 — Silver Bullet / ICT killzone boost (London 8–9, NY 15–16 UTC). */
+/** Phase 4 — Silver Bullet / ICT killzone boost (London 10–11, NY 10–11 local). */
 function hgGoldSessionBoost(nowMs, stratKey){
   try{
+    var G = (typeof window !== 'undefined') ? window : globalThis;
+    var sb = (typeof G.hgGoldSilverBulletBoost === 'function')
+      ? G.hgGoldSilverBulletBoost(nowMs) : null;
+    var k = String(stratKey || '').toLowerCase();
+    if (sb && (sb.inLondon || sb.inNy) && (k === 'ob' || k === 'fvg' || k === 'sweep' || k === 'vwap')) return 6;
+    if (sb && sb.inOverlap) return 3;
     var d = new Date(nowMs || Date.now());
     var h = d.getUTCHours() + d.getUTCMinutes() / 60;
-    var k = String(stratKey || '').toLowerCase();
-    var inLondon = h >= 8 && h < 9;
-    var inNy = h >= 15 && h < 16;
-    if ((inLondon || inNy) && (k === 'ob' || k === 'fvg' || k === 'sweep' || k === 'vwap')) return 6;
     if (h >= 13 && h < 17) return 3;
     return 0;
   }catch(e){ return 0; }

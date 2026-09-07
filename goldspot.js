@@ -129,6 +129,8 @@ function goldBasisSignal(inp){
   try{
     inp = inp || {};
     var spot = +inp.spot, perp = +inp.perp;
+    var perpSym = inp.perpSymbol || null;
+    var paxgProxy = inp.perpDegraded === true || perpSym === 'PAXGUSDT';
     if (!isFinite(spot) || !(spot > 0) || !isFinite(perp) || !(perp > 0)){
       return { basisPct: null, verdict: 'unavailable',
                evidence: ['spot or perp price missing/invalid — basis cannot be computed'] };
@@ -136,17 +138,19 @@ function goldBasisSignal(inp){
     var basisPct = Math.round(((perp - spot) / spot * 100) * 10000) / 10000;
     var verdict, evidence = [];
     if (basisPct > BASIS_PREMIUM){
-      verdict = 'longs-crowding';
-      evidence.push('perp premium ' + signed(basisPct, 3) + '% > +' + BASIS_PREMIUM
-        + '% threshold — leveraged longs crowding; fade risk for fresh longs');
+      verdict = paxgProxy ? 'paxg-premium' : 'longs-crowding';
+      evidence.push((paxgProxy ? 'PAXG perp vs XAU spot premium ' : 'perp premium ')
+        + signed(basisPct, 3) + '% > +' + BASIS_PREMIUM
+        + '% threshold' + (paxgProxy ? ' — mostly PAXG token spread, not XAUUSDT crowding' : ' — leveraged longs crowding; fade risk for fresh longs'));
     } else if (basisPct < BASIS_DISCOUNT){
-      verdict = 'shorts-crowding';
-      evidence.push('perp discount ' + signed(basisPct, 3) + '% < ' + BASIS_DISCOUNT
-        + '% threshold — shorts crowding; squeeze fuel for a bounce');
+      verdict = paxgProxy ? 'paxg-discount' : 'shorts-crowding';
+      evidence.push((paxgProxy ? 'PAXG perp vs XAU spot discount ' : 'perp discount ')
+        + signed(basisPct, 3) + '% < ' + BASIS_DISCOUNT
+        + '% threshold' + (paxgProxy ? ' — PAXG token spread, not pure XAUUSDT shorts crowding' : ' — shorts crowding; squeeze fuel for a bounce'));
     } else {
       verdict = 'balanced';
       evidence.push('basis ' + signed(basisPct, 3) + '% inside ±' + BASIS_PREMIUM
-        + '% band — no leveraged crowding edge');
+        + '% band — no leveraged crowding edge' + (paxgProxy ? ' (PAXG proxy leg)' : ''));
     }
     var fRaw = inp.funding;
     var fPct = null, fHours = null;
@@ -254,9 +258,12 @@ function renderBasisPanel(data, sig){
   var bCls = sig.basisPct === null ? '' : (sig.basisPct > BASIS_PREMIUM ? 'neg' : (sig.basisPct < BASIS_DISCOUNT ? 'pos' : ''));
   h += '<div class="row" style="margin-top:10px"><span class="big ' + bCls + '">' + signed(sig.basisPct, 3) + '%</span>'
      + '<span class="statuschip">basis <b>' + esc(sig.verdict.toUpperCase().replace('-', ' ')) + '</b></span></div>';
-  var vCls = sig.verdict === 'longs-crowding' ? 'short' : (sig.verdict === 'shorts-crowding' ? 'long' : 'aside');
-  var vWord = sig.verdict === 'longs-crowding' ? 'PERP PREMIUM — LONGS CROWDING'
-            : (sig.verdict === 'shorts-crowding' ? 'PERP DISCOUNT — SHORTS CROWDING' : 'BALANCED BASIS');
+  var vCls = (sig.verdict === 'longs-crowding' || sig.verdict === 'paxg-premium') ? 'short'
+           : ((sig.verdict === 'shorts-crowding' || sig.verdict === 'paxg-discount') ? 'long' : 'aside');
+  var vWord = sig.verdict === 'paxg-premium' ? 'PAXG PREMIUM — TOKEN SPREAD (NOT XAU CROWDING)'
+            : (sig.verdict === 'paxg-discount' ? 'PAXG DISCOUNT — TOKEN SPREAD (NOT XAU CROWDING)'
+            : (sig.verdict === 'longs-crowding' ? 'PERP PREMIUM — LONGS CROWDING'
+            : (sig.verdict === 'shorts-crowding' ? 'PERP DISCOUNT — SHORTS CROWDING' : 'BALANCED BASIS')));
   h += '<div class="verdict ' + vCls + '"><span class="vword" style="font-size:15px">' + esc(vWord) + '</span>'
      + '<span class="vwhy">' + esc(sig.evidence.join(' ')) + '</span></div>';
   h += '<div class="note" style="margin-top:8px">premium &gt; +' + BASIS_PREMIUM + '% = leveraged longs crowding (fade risk for longs) · '
@@ -338,7 +345,9 @@ async function runGoldSpot(ui, opts){
         var sig = goldBasisSignal({
           spot: data.spot ? data.spot.price : null,
           perp: data.perp ? data.perp.mark : null,
-          funding: funding
+          funding: funding,
+          perpSymbol: data.perp ? data.perp.symbol : null,
+          perpDegraded: !!(data.perp && data.perp.degraded)
         });
         if (status === 'refreshed') setGsSnapshot(sig); /* BRAIN: only a successful run overwrites the snapshot */
         var degraded = [];

@@ -240,9 +240,9 @@ assert(fetchCalls[2].indexOf('/api/proxy?url=') === 0
        'scenario C: proxy fallback targets the encoded gold-api URL');
 assert(ui.out.innerHTML.indexOf('GOLD-API PROXY') > -1 && ui.out.innerHTML.indexOf('PAXGUSDT (fallback)') > -1,
        'scenario C: chips show GOLD-API PROXY + PAXGUSDT (fallback)');
-assert(ui.out.innerHTML.indexOf('PERP DISCOUNT') > -1 && ui.out.innerHTML.indexOf('SHORTS CROWDING') > -1
+assert(ui.out.innerHTML.indexOf('PAXG DISCOUNT') > -1 && ui.out.innerHTML.indexOf('TOKEN SPREAD') > -1
        && ui.out.innerHTML.indexOf('(assumed 8h)') > -1,
-       'scenario C: -0.167% basis => PERP DISCOUNT — SHORTS CROWDING, funding assumed 8h');
+       'scenario C: -0.167% basis => PAXG DISCOUNT — TOKEN SPREAD (not XAU crowding), funding assumed 8h');
 
 /* ---- scenario D: busy guard ---- */
 let resolvers = [];

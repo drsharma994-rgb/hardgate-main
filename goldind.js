@@ -373,6 +373,8 @@ function goldSweeps(rows){
    (1), Asian range-building and off-hours (0). */
 function goldKillzone(d){
   try{
+    var G = (typeof window !== 'undefined') ? window : globalThis;
+    if (typeof G.hgGoldKillzoneRead === 'function') return G.hgGoldKillzoneRead(d);
     var ms = __toMs(d);
     if (!isFinite(ms)) return { zone: 'OFF', weight: 0, hourGMT: NaN, label: 'OFF-HOURS' };
     var dt = new Date(ms);
@@ -4285,37 +4287,55 @@ function handleOrderUpdate(activeSetup, exchangeOrderStatus){
 /* ================= gold–silver SMT · yield guard · CVD/OB ===================
    Logical modules: gold-silver-smt.js · yield-guard.js · CVD divergence. */
 
+function __smtAlignIdx(xag, tSec, maxSkew){
+  maxSkew = (isFinite(maxSkew) && maxSkew > 0) ? maxSkew : 480;
+  if (!xag || !xag.length || !isFinite(tSec)) return -1;
+  var best = -1, bestD = Infinity, i;
+  for (i = xag.length - 1; i >= 0; i--){
+    if (!xag[i] || !isFinite(xag[i].t)) continue;
+    var d = Math.abs(xag[i].t - tSec);
+    if (d <= maxSkew && d < bestD){ bestD = d; best = i; }
+  }
+  return best;
+}
+
 function detectSMTDivergence(xauCandles, xagCandles, index, lookback){
   var no = { smtActive: false };
   try{
     lookback = lookback || 15;
     var xau = __rows(xauCandles), xag = __rows(xagCandles);
     if (!xau || !xag || xau.length < 2 || xag.length < 2) return no;
-    if (index === undefined || index === null){
-      index = Math.min(xau.length, xag.length) - 1;
-    }
+    if (index === undefined || index === null) index = xau.length - 1;
     index = Math.floor(index);
-    if (index < 1 || index >= xau.length || index >= xag.length) return no;
+    if (index < 1 || index >= xau.length) return no;
+    var xauCur = xau[index];
+    if (!xauCur || !isFinite(xauCur.t) || !isFinite(xauCur.h)) return no;
+    var xagIdx = __smtAlignIdx(xag, xauCur.t);
+    if (xagIdx < 0) return no;
+    var xagCur = xag[xagIdx];
+    if (!xagCur || !isFinite(xagCur.h)) return no;
     var start = Math.max(0, index - lookback);
     if (start >= index) return no;
-    var xauCur = xau[index], xagCur = xag[index];
-    if (!xauCur || !xagCur || !isFinite(xauCur.h) || !isFinite(xagCur.h)) return no;
     var xauPriorHigh = -Infinity, xagPriorHigh = -Infinity;
     var xauPriorLow = Infinity, xagPriorLow = Infinity;
-    var i;
+    var i, j, pairs = 0;
     for (i = start; i < index; i++){
-      if (xau[i] && isFinite(xau[i].h)) xauPriorHigh = Math.max(xauPriorHigh, xau[i].h);
-      if (xag[i] && isFinite(xag[i].h)) xagPriorHigh = Math.max(xagPriorHigh, xag[i].h);
-      if (xau[i] && isFinite(xau[i].l)) xauPriorLow = Math.min(xauPriorLow, xau[i].l);
-      if (xag[i] && isFinite(xag[i].l)) xagPriorLow = Math.min(xagPriorLow, xag[i].l);
+      if (!xau[i] || !isFinite(xau[i].t)) continue;
+      j = __smtAlignIdx(xag, xau[i].t);
+      if (j < 0) continue;
+      pairs++;
+      if (isFinite(xau[i].h)) xauPriorHigh = Math.max(xauPriorHigh, xau[i].h);
+      if (isFinite(xag[j].h)) xagPriorHigh = Math.max(xagPriorHigh, xag[j].h);
+      if (isFinite(xau[i].l)) xauPriorLow = Math.min(xauPriorLow, xau[i].l);
+      if (isFinite(xag[j].l)) xagPriorLow = Math.min(xagPriorLow, xag[j].l);
     }
-    if (!isFinite(xauPriorHigh) || !isFinite(xagPriorHigh)
+    if (pairs < 2 || !isFinite(xauPriorHigh) || !isFinite(xagPriorHigh)
         || !isFinite(xauPriorLow) || !isFinite(xagPriorLow)) return no;
     if (xauCur.h > xauPriorHigh && xagCur.h <= xagPriorHigh){
-      return { smtActive: true, type: 'BEARISH_SMT', signal: 'SHORT_GOLD', direction: 'short' };
+      return { smtActive: true, type: 'BEARISH_SMT', signal: 'SHORT_GOLD', direction: 'short', aligned: true };
     }
     if (xauCur.l < xauPriorLow && xagCur.l >= xagPriorLow){
-      return { smtActive: true, type: 'BULLISH_SMT', signal: 'LONG_GOLD', direction: 'long' };
+      return { smtActive: true, type: 'BULLISH_SMT', signal: 'LONG_GOLD', direction: 'long', aligned: true };
     }
     return no;
   }catch(e){ return no; }
@@ -4328,12 +4348,13 @@ function validateYieldCorrelation(us10yCandles, goldSetupDirection){
     if (!rows || rows.length < 5) return ok;
     var cur = rows[rows.length - 1].c;
     var prior = rows[rows.length - 5].c;
-    if (!isFinite(cur) || !isFinite(prior)) return ok;
+    if (!isFinite(cur) || !isFinite(prior) || !(prior > 0)) return ok;
+    var chgPct = (cur - prior) / prior * 100;
     var dir = String(goldSetupDirection || '').toLowerCase();
-    if (dir === 'long' && cur > prior){
+    if (dir === 'long' && chgPct >= 0.05){
       return { valid: false, reason: 'MACRO VETO: US10Y Yields are spiking. Do not buy Gold.' };
     }
-    if (dir === 'short' && cur < prior){
+    if (dir === 'short' && chgPct <= -0.05){
       return { valid: false, reason: 'MACRO VETO: US10Y Yields are dropping. Do not short Gold.' };
     }
     return ok;

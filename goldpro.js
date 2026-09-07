@@ -535,6 +535,7 @@ async function fetchGoldCot(){
 }
 
 async function runGoldPro(ui){
+  var W = (typeof window !== 'undefined') ? window : null;
   if (!ui) return 'skipped: no ui';
   if (ui.running || __gp.busy) return 'busy';
   ui.running = true;
