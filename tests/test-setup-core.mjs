@@ -1,7 +1,8 @@
 /* HARDGATE — hg-setup-core pure module tests */
 import {
   gateResult, getClosedCandles, alignBarsByTime, quantPrice, alertKey,
-  postCostRr, calcTradeSizing, fundingGateDirectional, universeFilter, regimeOverlay
+  postCostRr, calcTradeSizing, fundingGateDirectional, universeFilter, regimeOverlay,
+  planMinRrGate
 } from '../lib/hg-setup-core.mjs';
 
 let n = 0;
@@ -42,5 +43,9 @@ ok(uni.length === 1 && uni[0].symbol === 'BTCUSDT', 'filters illiquid symbols');
 console.log('== regimeOverlay ==');
 var ro = regimeOverlay(-4, 'long');
 ok(ro.extraConfluence === 1, 'risk-off requires extra confluence for longs');
+
+console.log('== planMinRrGate ==');
+var pmg = planMinRrGate(100, 95, 110, 2.0, {});
+ok(pmg.pass === true || pmg.state === 'veto', 'planMinRrGate returns gate tuple');
 
 console.log('\nsetup-core: ' + n + ' passed');

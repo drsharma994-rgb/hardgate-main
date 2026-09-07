@@ -465,7 +465,7 @@ function mount(el){
       setStat('loading Delta + CoinDCX desk universe…');
       var items = [];
       if (typeof hgDeskLoadDeltaCoinDCX === 'function'){
-        var desk = await hgDeskLoadDeltaCoinDCX({ force: true, minTurnover: MIN_TURNOVER, includeUnknown: true });
+        var desk = await hgDeskLoadDeltaCoinDCX({ force: true, minTurnover: MIN_TURNOVER, includeUnknown: false });
         items = (desk && desk.items) ? desk.items : [];
       } else if (typeof binancePerpUniverse === 'function' && typeof binanceTickers24h === 'function'){
         var res0 = await Promise.all([binancePerpUniverse(), binanceTickers24h()]);

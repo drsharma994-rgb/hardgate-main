@@ -278,6 +278,37 @@ async function hgPostGateSetupVeto(ticker, hit, rows, style, getCandles){
         }
       }catch(eDiv){ unchecked.push('hidden divergence: ' + (eDiv && eDiv.message || eDiv)); }
     }
+    if (typeof G.hgRegimeOverlay === 'function' && typeof G.hgRegimeResolveState === 'function'){
+      try{
+        var rsOv = G.hgRegimeResolveState();
+        var ov = G.hgRegimeOverlay(rsOv && !rsOv.dark ? rsOv.score : 0, dir);
+        if (ov && ov.extraConfluence > 0){
+          var gp = fin(hit.gatesPassed) || fin(hit.passed) || 0;
+          var need = 7 + ov.extraConfluence;
+          if (gp > 0 && gp < need){
+            return { ok: false, reason: ov.note || 'regime overlay — extra confluence required', tag: 'regime-overlay' };
+          }
+          hit.regimeOverlayNote = ov.note;
+        } else if (ov && ov.extraConfluence < 0){
+          hit.regimeOverlayBonus = true;
+        }
+      }catch(eOv){ unchecked.push('regime overlay: ' + (eOv && eOv.message || eOv)); }
+    }
+    if (typeof G.hgSetupCalibrationEval === 'function'){
+      try{
+        var refRows = null;
+        if (typeof G.hgSetupCrossVenueRows === 'function') refRows = await G.hgSetupCrossVenueRows(sym);
+        var cal = G.hgSetupCalibrationEval({
+          setupKind: style, sym: sym, dir: dir, rows: rows, refRows: refRows,
+          famScore: hit.gatesPassed || hit.passed, gatesPassed: hit.gatesPassed || hit.passed,
+          tapeRegime: (typeof G.hgTapeRegimeLabel === 'function') ? G.hgTapeRegimeLabel(rows) : 'n/a',
+          rr: hit.rr || hit.rr1, regimeScore: (typeof G.hgRegimeResolveState === 'function') ? (G.hgRegimeResolveState().score || 0) : 0
+        });
+        hit.calibration = cal;
+        hit.confluenceTier = cal.tier;
+        if (cal && cal.veto) return { ok: false, reason: (cal.reasons && cal.reasons[0]) || 'setup calibration veto', tag: 'calibration' };
+      }catch(eCal){ unchecked.push('calibration: ' + (eCal && eCal.message || eCal)); }
+    }
     var rsEdge = null;
     if (!hgIsBtcSymbol(sym) && style.indexOf('gold') < 0 && typeof hgRelStrength === 'function' && typeof getCandles === 'function'){
       var look = (typeof G.HG_RS_LOOK === 'number') ? G.HG_RS_LOOK : 30;
@@ -2037,7 +2068,14 @@ function hgTicketFinalGates(plan, ctx){
       if (rs.dark) chips.push('regime dark');
       else chips.push('regime ' + adj.regimeLabel);
       var rr1 = isFinite(plan.rr1) ? plan.rr1 : (isFinite(plan.rr) ? plan.rr : null);
-      if (rr1 !== null && rr1 < adj.thresholds.minRR){
+      if (typeof G.hgPlanMinRrGate === 'function' && isFinite(plan.entry) && isFinite(plan.stop)){
+        var tp = isFinite(plan.t1) ? plan.t1 : (plan.dir === 'long' ? plan.entry + 2 * Math.abs(plan.entry - plan.stop) : plan.entry - 2 * Math.abs(plan.entry - plan.stop));
+        var costGate = G.hgPlanMinRrGate(plan.entry, plan.stop, tp, adj.thresholds.minRR, { fundingApr: ctx.fundingApr || 0 });
+        if (costGate && !costGate.pass){
+          return { ok: false, tag: 'cost-rr', reason: 'VETO — ' + (costGate.detail || 'post-cost R:R below floor') };
+        }
+        if (costGate && costGate.detail) chips.push(costGate.detail);
+      } else if (rr1 !== null && rr1 < adj.thresholds.minRR){
         return {
           ok: false, tag: 'regime',
           reason: 'VETO — minRR ' + adj.thresholds.minRR.toFixed(1) + ' required in ' + adj.regimeLabel

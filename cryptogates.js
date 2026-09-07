@@ -228,7 +228,10 @@
     gates.push(['G3 RSI', g3]);
     var g4 = true;
     var fundMissing = !(ticker && ticker.fundingPct !== null && isFinite(ticker.fundingPct));
-    if (!fundMissing){
+    if (!fundMissing && typeof G.hgFundingGateDirectional === 'function'){
+      var fg = G.hgFundingGateDirectional(ticker.fundingPct, dir, { degradeMode: 'veto', against: CG_FUND_DIR, sanity: CG_FUND_SANITY });
+      g4 = fg.pass;
+    } else if (!fundMissing){
       var fr = ticker.fundingPct;
       /* DIRECTIONAL. The old |fr| <= 0.05 cap vetoed a LONG at funding -0.06%
          — shorts paying you, on a setup where short crowding is squeeze fuel.

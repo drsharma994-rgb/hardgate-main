@@ -814,7 +814,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 </main>
 
 
-  <script src="build-stamp.js?v=642"></script>
+  <script src="build-stamp.js?v=643"></script>
   <script src="hg-setup-core.js"></script>
 <script src="hghost.js"></script>
 <script src="indicators.js"></script>
@@ -1676,7 +1676,13 @@ async function getCandlesFor(exch, sym, res, count, opts){
   if (hit && (nowSec()-hit.at) < ttl) return hit.rows;
   let raw = exch==='delta' ? await candlesDelta(sym,res,count)
     : (exch==='startrader' ? await candlesStartrader(sym,res,count) : await candlesCdcx(sym,res,count));
-  const closed = dropForming(raw, res);
+  let closed;
+  if (!opts.forming && typeof getClosedCandles === 'function'){
+    const pack = getClosedCandles(raw, res, nowSec());
+    closed = pack.stale && pack.rows.length === 0 ? [] : pack.rows;
+  } else {
+    closed = dropForming(raw, res);
+  }
   const out = opts.forming ? raw : closed;
   S.candleCache[key] = {rows: out, at: nowSec()};
   S.candleCache[`${exch}|${sym}|${res}|${count}|C`] = { rows: closed, at: nowSec() };
@@ -4433,6 +4439,7 @@ function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId, bookMet
   const hiddenDivChip = (bookMeta.hiddenDivConfluence || (Array.isArray(bookMeta.stamps) && bookMeta.stamps.indexOf('HIDDEN DIV CONFLUENCE') >= 0))
     ? ' <span class="stamp pass">HIDDEN DIV</span>' : '';
   const regimePausedChip = bookMeta.regimePaused ? ' <span class="stamp bad">REGIME PAUSED</span>' : '';
+  const confTierChip = bookMeta.confluenceTier ? ' <span class="stamp ' + (bookMeta.confluenceTier === 1 ? 'pass' : (bookMeta.confluenceTier === 2 ? 'warn' : 'na')) + '">TIER ' + bookMeta.confluenceTier + '</span>' : '';
   const strategyDetail = (typeof hgStrategyTradeDetailHtml === 'function')
     ? hgStrategyTradeDetailHtml(bookMeta, { skipChip: true })
     : '';
@@ -4442,7 +4449,7 @@ function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId, bookMet
   const entryData = isFinite(entry) ? ` data-hg-setup-entry="${entry}"` : '';
   const stopData = isFinite(stop) ? ` data-hg-setup-stop="${stop}"` : '';
   return `<div class="card ${dir}${tierCls}" data-hg-setup-sym="${symHtml}" data-hg-setup-dir="${dir}"${entryData}${stopData}>
-    <div class="chead">${actDot}${venueHtml}<span class="sym">${symHtml}</span><span class="dir">${dir.toUpperCase()} · ${tierLabel}</span>${bookStamp}${tripleChip}${visionChipHtml}${confirmChip}${hiddenDivChip}${regimePausedChip}</div>
+    <div class="chead">${actDot}${venueHtml}<span class="sym">${symHtml}</span><span class="dir">${dir.toUpperCase()} · ${tierLabel}</span>${bookStamp}${tripleChip}${visionChipHtml}${confirmChip}${hiddenDivChip}${regimePausedChip}${confTierChip}</div>
     <div class="mini">${mini.map(([k,v])=>`<span class="k">${k}</span><span>${v}</span>`).join('')}</div>
     ${stackHtml}
     ${postGateBanner}
@@ -7817,7 +7824,7 @@ async function runCascadeCore(uni, opts){
   // Apply Master Vetoes (drop stale momentum and CVD traps from final pool)
   clean = clean.filter(s => !s.veto);
 
-  clean.sort((a,b)=> (b.profitBoost||0)-(a.profitBoost||0) || b.famScore-a.famScore || b.robScore-a.robScore
+  clean.sort((a,b)=> (a.confluenceTier||3)-(b.confluenceTier||3) || (b.profitBoost||0)-(a.profitBoost||0) || b.famScore-a.famScore || b.robScore-a.robScore
     || ((b.rsEdge||0)-(a.rsEdge||0)) || b.rr-a.rr);
   return {clean, near, closest, breadth:{bull:breadthBull, total:breadthTotal}, funnel:funnel};
 }

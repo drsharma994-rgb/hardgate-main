@@ -23,7 +23,7 @@ directional signals only.
 
 ENTRY SHAPE (one object per logged signal):
   { t (ISO string), source ('brain'|'scalp'|'swing'), sym, dir
-    ('long'|'short'), tierOrGrade, entry, stop, t1, note }
+    ('long'|'short'), tierOrGrade, entry, stop, t1, maeR, mfeR, note }
 De-dup within a snapshot round: the same source+sym+dir logs once per round.
 
 PERSISTENCE: localStorage 'hgSignalLog', probed softly (memory-only when
@@ -134,8 +134,32 @@ function normEntry(e){
     entry: numOrNull(e.entry),
     stop: numOrNull(e.stop),
     t1: numOrNull(e.t1),
+    maeR: numOrNull(e.maeR),
+    mfeR: numOrNull(e.mfeR),
     note: (e.note === null || e.note === undefined) ? '' : String(e.note).slice(0, 140)
   };
+}
+function hydrateMfeMae(entry){
+  try{
+    if (!entry || !entry.sym || !entry.dir) return entry;
+    if (entry.maeR !== null && entry.mfeR !== null) return entry;
+    var recs = (typeof W.hgScoreRecords === 'function') ? W.hgScoreRecords() : [];
+    if (!Array.isArray(recs) || !recs.length) return entry;
+    var sym = String(entry.sym).toUpperCase();
+    var dir = String(entry.dir).toLowerCase();
+    for (var i = 0; i < recs.length; i++){
+      var r = recs[i];
+      if (!r) continue;
+      var rs = String(r.sym || r.symbol || '').toUpperCase();
+      var rd = String(r.dir || r.side || '').toLowerCase();
+      if (rs === sym && rd === dir){
+        if (entry.maeR === null && r.maeR != null) entry.maeR = numOrNull(r.maeR);
+        if (entry.mfeR === null && r.mfeR != null) entry.mfeR = numOrNull(r.mfeR);
+        break;
+      }
+    }
+  }catch(e){}
+  return entry;
 }
 function loadJournal(){
   try{
@@ -279,12 +303,13 @@ function snapshotRound(){
         var key = SOURCES[s] + '|' + r.sym + '|' + r.dir;   /* de-dup within the round */
         if (seen[key]) continue;
         seen[key] = 1;
-        fresh.push({
+        fresh.push(hydrateMfeMae({
           t: iso, source: SOURCES[s], sym: r.sym, dir: r.dir,
           tierOrGrade: (r.tierOrGrade === null || r.tierOrGrade === undefined) ? null : String(r.tierOrGrade),
           entry: numOrNull(r.entry), stop: numOrNull(r.stop), t1: numOrNull(r.t1),
+          maeR: numOrNull(r.maeR), mfeR: numOrNull(r.mfeR),
           note: String(r.note || '').slice(0, 140)
-        });
+        }));
       }
     }
     if (fresh.length){
@@ -325,12 +350,14 @@ function tableHTML(j){
       + '<td class="sl-n">' + esc(fmtP(e.entry)) + '</td>'
       + '<td class="sl-n">' + esc(fmtP(e.stop)) + '</td>'
       + '<td class="sl-n">' + esc(fmtP(e.t1)) + '</td>'
+      + '<td class="sl-n">' + esc(e.maeR !== null ? fmtP(e.maeR) + 'R' : '—') + '</td>'
+      + '<td class="sl-n">' + esc(e.mfeR !== null ? fmtP(e.mfeR) + 'R' : '—') + '</td>'
       + '<td class="sl-note">' + esc(e.note || '—') + '</td>'
       + '</tr>');
   }
   return '<table class="sl-table"><thead><tr>'
     + '<th>TIME</th><th>SOURCE</th><th>SYMBOL</th><th>DIR</th><th>TIER/GRADE</th>'
-    + '<th>ENTRY</th><th>STOP</th><th>TP1</th><th>NOTE</th>'
+    + '<th>ENTRY</th><th>STOP</th><th>TP1</th><th>MAE</th><th>MFE</th><th>NOTE</th>'
     + '</tr></thead><tbody>' + rows.join('') + '</tbody></table>';
 }
 

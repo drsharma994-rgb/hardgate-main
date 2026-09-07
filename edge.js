@@ -455,10 +455,12 @@ function planFromRisk(dir, entry, stop, t1Hint, t2Hint){
   rew1 = (dir === 'long') ? (t1 - entry) : (entry - t1);
   if (!(rew1 > 0)) return null;
   var rr = rew1 / risk;
-  /* A structural target that falls short of MIN_RR is a REJECT, not a target
-     to be pushed further out. Moving T1 to manufacture the minimum is what
-     made every EDGE ticket read '2.00R'. */
-  if (rr < MIN_RR) return null;
+  /* Post-cost R:R gate — fee/slip/funding drag must clear MIN_RR */
+  if (typeof W.hgPostCostRr === 'function'){
+    var pc = W.hgPostCostRr(entry, stop, t1, {});
+    if (pc && pc.rr < MIN_RR) return null;
+    if (pc) rr = pc.rr;
+  } else if (rr < MIN_RR) return null;
   var t2 = t2Hint;
   if (!isFinite(t2) || (dir === 'long' ? t2 <= t1 : t2 >= t1)){
     t2 = (dir === 'long') ? entry + 3.5 * risk : entry - 3.5 * risk;
@@ -865,6 +867,18 @@ function edgeEnrich(sig, rows, item, candleSrc){
           }
         }
       }catch(eDiv){}
+    }
+
+    if (typeof W.hgRegimeOverlay === 'function' && typeof W.hgRegimeResolveState === 'function'){
+      try{
+        var rsE = W.hgRegimeResolveState();
+        var ovE = W.hgRegimeOverlay(rsE && !rsE.dark ? rsE.score : 0, dir);
+        if (ovE && ovE.note){
+          out.parts.push({ label: ovE.note, pts: ovE.extraConfluence > 0 ? -1 : (ovE.extraConfluence < 0 ? 1 : 0) });
+          if (ovE.extraConfluence > 0) out.tally -= 1;
+          else if (ovE.extraConfluence < 0) out.tally += 1;
+        }
+      }catch(eOv){}
     }
 
     if (typeof W.hgStructureGate === 'function'){
@@ -1304,7 +1318,13 @@ async function edgeScanList(list, fetchCandles, hooks){
         var leg = await fetchCandles(item, TF, KL_LIMIT);
         var rows = leg && leg.rows;
         var src = (leg && leg.src) ? leg.src : (item.exchange || 'unknown');
-        rows = edgeDropForming(rows, TF);
+        if (typeof W.getClosedCandles === 'function' && rows && rows.length){
+          var closedPack = W.getClosedCandles(rows, TF);
+          if (closedPack.stale && !closedPack.rows.length){ skipped++; return; }
+          rows = closedPack.rows;
+        } else {
+          rows = edgeDropForming(rows, TF);
+        }
         if (!rows || rows.length < 210){ skipped++; return; }
         var bias = edgeSwingBias(rows);
         if (!bias){ noBias++; return; }
@@ -1451,7 +1471,7 @@ function mount(el){
     try{
       var uni = null, note = null;
       if (typeof W.hgDeskLoadDeltaCoinDCX === 'function'){
-        var desk = await W.hgDeskLoadDeltaCoinDCX({ force: true, minTurnover: MIN_TURNOVER, includeUnknown: true });
+        var desk = await W.hgDeskLoadDeltaCoinDCX({ force: true, minTurnover: MIN_TURNOVER, includeUnknown: false });
         uni = desk && desk.items ? desk.items : [];
         note = desk && desk.note ? desk.note : note;
       }

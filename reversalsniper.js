@@ -312,7 +312,7 @@ async function rsLoadUniverse(force){
     var loadFn = (typeof W.hgDeskLoadDeltaCoinDCX === 'function') ? W.hgDeskLoadDeltaCoinDCX
       : ((typeof W.hgDeskLoadUniverse === 'function') ? W.hgDeskLoadUniverse : null);
     if (loadFn){
-      var u = await loadFn({ force: !!force, minTurnover: MIN_TURNOVER, includeUnknown: true });
+      var u = await loadFn({ force: !!force, minTurnover: MIN_TURNOVER, includeUnknown: false });
       var items = (u.items || []).filter(function(it){ return it && rsIsDeskVenue(it.exchange); });
       if (MAX_UNIVERSE > 0) items = items.slice(0, MAX_UNIVERSE);
       return {

@@ -113,6 +113,7 @@ function enrichSuperBestRowLite(c, tier, riskOpts, meta){
     tier: tier,
     scanner: meta.scanner || 'best',
     famScore: c.famScore,
+    confluenceTier: c.confluenceTier || (typeof W.hgSetupConfluenceTier === 'function' ? W.hgSetupConfluenceTier(c.sym, c.dir) : null),
     robScore: c.robScore,
     stack: c.stack || null,
     rows: c.rows || null,
@@ -578,6 +579,7 @@ function mount(el){
         + '<strong>' + String(r.sym || '—') + ' · ' + String(r.dir || '').toUpperCase() + '</strong>'
         + '<span><span class="hg-pill clean">BEST CLEAN</span> '
         + '<span class="hg-pill">' + (r.famScore != null ? r.famScore + '/9 fam' : '7/7') + '</span> '
+        + (r.confluenceTier ? '<span class="hg-pill">TIER ' + r.confluenceTier + '</span> ' : '')
         + '<span class="hg-pill ' + pill.cls + '">' + pill.label + '</span></span></div>'
         + '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:8px;font:600 11px var(--mono,monospace)">'
         + '<div>ENTRY<br/>' + fmt(r.entry, 6) + '</div>'

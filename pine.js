@@ -582,7 +582,7 @@ async function pineDeskFallbackEligible(limit){
   try{
     var loadFn = (typeof W.hgDeskLoadDeltaCoinDCX === 'function') ? W.hgDeskLoadDeltaCoinDCX : null;
     if (!loadFn) return out;
-    var u = await loadFn({ minTurnover: 5e6, includeUnknown: true });
+    var u = await loadFn({ minTurnover: 5e6, includeUnknown: false });
     var items = (u.items || []).slice(0, limit);
     for (var i = 0; i < items.length; i++){
       var it = items[i];

@@ -220,12 +220,51 @@
     return gateResult('FUND', 'Funding', bad ? 'veto' : 'pass', 'funding ' + fundingPct.toFixed(4) + '%/interval', opts);
   }
 
+  /** Post-cost min R:R — returns gateResult tuple for plan builders. */
+  function planMinRrGate(entry, stop, tp, minRr, opts){
+    minRr = fin(minRr); if (minRr === null) minRr = 2.0;
+    var pc = postCostRr(entry, stop, tp, opts);
+    if (!pc) return gateResult('COST_RR', 'Post-cost R:R', 'veto', 'cannot compute cost-adjusted R:R', { degradeMode: 'veto' });
+    var pass = pc.rr >= minRr;
+    return gateResult('COST_RR', 'Post-cost R:R', pass ? 'pass' : 'veto',
+      (pass ? 'net ' : 'net ') + pc.rr.toFixed(2) + 'R (gross ' + pc.grossRr.toFixed(2) + 'R, cost ' + (pc.costUsd / entry * 100).toFixed(3) + '%)',
+      { degradeMode: 'veto', grossRr: pc.grossRr, netRr: pc.rr, costUsd: pc.costUsd });
+  }
+
+  var __closedSymCache = {};
+  function cacheKey(sym, tf){ return String(sym || '').toUpperCase() + '|' + String(tf || ''); }
+
+  /** Fetch + cache closed bars by (sym, tf). Rejects stale (>2×TF). */
+  async function fetchClosedCandles(sym, tf, fetchRows, opts){
+    opts = opts || {};
+    sym = String(sym || '');
+    tf = String(tf || '4h');
+    var key = cacheKey(sym, tf);
+    var now = fin(opts.nowSec);
+    if (now === null) now = Math.floor(Date.now() / 1000);
+    var hit = __closedSymCache[key];
+    if (!opts.force && hit && hit.rows && hit.rows.length && (now - hit.at) < (TF_SEC[tf] || 3600)){
+      return { rows: hit.rows, stale: hit.stale, cached: true };
+    }
+    var raw = [];
+    try{
+      if (typeof fetchRows === 'function') raw = await fetchRows(sym, tf, opts.limit || 200);
+      else if (Array.isArray(fetchRows)) raw = fetchRows;
+    }catch(e){ raw = []; }
+    var pack = getClosedCandles(raw, tf, now);
+    if (pack.stale && opts.rejectStale) return { rows: [], stale: true, rejected: true };
+    __closedSymCache[key] = { rows: pack.rows, stale: pack.stale, at: now, closedBarTs: pack.rows.length ? pack.rows[pack.rows.length - 1].t : null };
+    return { rows: pack.rows, stale: pack.stale, cached: false, dropped: pack.dropped };
+  }
+
   G.hgGateResult = gateResult;
   G.getClosedCandles = getClosedCandles;
+  G.hgFetchClosedCandles = fetchClosedCandles;
   G.hgAlignBarsByTime = alignBarsByTime;
   G.hgQuantPrice = quantPrice;
   G.hgAlertKey = alertKey;
   G.hgPostCostRr = postCostRr;
+  G.hgPlanMinRrGate = planMinRrGate;
   G.hgSessionFundingGate = sessionFundingGate;
   G.hgRegimeOverlay = regimeOverlay;
   G.hgUniverseFilter = universeFilter;

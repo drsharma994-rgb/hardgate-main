@@ -368,6 +368,11 @@ is in flight it reports 'busy' (overlaps never double-fetch).
       map[__baseOf(t.symbol)] = {
         symbol: t.symbol,
         pct8h: fr,
+        intervalHours: (function(){
+          var ih = parseFloat(t.funding_interval_hours != null ? t.funding_interval_hours : (t.funding_interval != null ? t.funding_interval : NaN));
+          return (isFinite(ih) && ih > 0) ? ih : DELTA_FUNDING_INTERVAL_HOURS;
+        })(),
+        intervalAssumed: !(isFinite(parseFloat(t.funding_interval_hours)) && parseFloat(t.funding_interval_hours) > 0),
         turnoverUsd: parseFloat(t.turnover_usd !== undefined && t.turnover_usd !== null ? t.turnover_usd : (t.turnover || 0))
       };
     }
@@ -638,8 +643,11 @@ is in flight it reports 'busy' (overlaps never double-fetch).
           const d = delta[r.base];
           if (!d || r.avg8hPct === null) continue;
           matched++;
+          const dInt = (d.intervalHours > 0) ? d.intervalHours : DELTA_FUNDING_INTERVAL_HOURS;
           const sp = carrySpreadInt(d.pct8h, r.avg8hPct, r.intervalHours);
           if (!sp) continue;
+          sp.deltaIntervalHours = dInt;
+          sp.deltaIntervalAssumed = !!d.intervalAssumed;
           offerCard({ base: r.base, pair: 'bin-delta', bin: r, del: d, sp: sp });
         }
       }
@@ -654,7 +662,8 @@ is in flight it reports 'busy' (overlaps never double-fetch).
           offerCard({ base: r2.base, pair: 'bin-bybit', bin: r2, byb: b, sp: spB });
           if (delta && delta[r2.base]){
             const d2 = delta[r2.base];
-            const spD = carrySpreadPair(d2.pct8h, b.pct8h, 'delta', 'bybit', 8, 8);
+            const dInt2 = (d2.intervalHours > 0) ? d2.intervalHours : DELTA_FUNDING_INTERVAL_HOURS;
+            const spD = carrySpreadPair(d2.pct8h, b.pct8h, 'delta', 'bybit', dInt2, 8);
             if (spD){
               spD.deltaAPR = spD.aprA; spD.bybitAPR = spD.aprB;
               offerCard({ base: r2.base, pair: 'delta-bybit', bin: r2, del: d2, byb: b, sp: spD });

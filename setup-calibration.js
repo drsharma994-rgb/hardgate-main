@@ -464,6 +464,14 @@ async function hgSetupCrossVenueRows(sym){
 
 function hgSetupCalibrationBoot(){
   hgSetupProfileLoad();
+  try{
+    var prof = hgSetupProfileGet();
+    var empty = !prof || !prof.setups || !Object.keys(prof.setups).some(function(k){
+      var b = prof.setups[k] && prof.setups[k].all;
+      return b && b.n > 0;
+    });
+    if (empty) hgSetupProfileRefresh();
+  }catch(e){}
   if (typeof fetch === 'function'){
     fetch('./data/regime-profile.json', { cache:'no-store' }).then(function(r){ return r.ok ? r.json() : null; })
       .then(function(j){ if (j) SC_REGIME_PROFILE = j; }).catch(function(){});

@@ -147,8 +147,8 @@ console.log('== 2) all three sources stubbed ==');
   const es = W.signallogEntries();
   assert(es.length === 5, 'journal holds 5 entries');
   const keys = Object.keys(es[0]).sort();
-  assert(JSON.stringify(keys) === JSON.stringify(['dir','entry','note','source','stop','sym','t','t1','tierOrGrade']),
-         'entry shape exact: t, source, sym, dir, tierOrGrade, entry, stop, t1, note');
+  assert(JSON.stringify(keys) === JSON.stringify(['dir','entry','maeR','mfeR','note','source','stop','sym','t','t1','tierOrGrade']),
+         'entry shape exact: t, source, sym, dir, tierOrGrade, entry, stop, t1, maeR, mfeR, note');
   assert(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(es[0].t), 't is an ISO string ("' + es[0].t + '")');
   assert(es.every(e => e.t === es[0].t), 'one timestamp shared across the whole snapshot round');
 
