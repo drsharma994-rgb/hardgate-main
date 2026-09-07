@@ -183,6 +183,22 @@ console.log('\n== T1 readout on cards names R, pts, and horizon window ==');
   ok(/24×1h window/.test(html), 'MOST PROBABLE T1 cell carries the readout');
 }
 
+console.log('\n== T2 runner readout + limit short fill-path ==');
+{
+  const ctx = bootOg();
+  const plan = { dir: 'short', entry: 4426.66, stop: 4435.59, t1: 4408.80, t2: 4395.40,
+    risk: 8.93, rr2: 3.5, t2Source: 'R-multiple' };
+  const t2s = ctx.hgOgRunnerReadout(plan, 'SWING');
+  ok(/T2 · 3\.5R/.test(t2s), 'T2 names 3.5R (' + t2s + ')');
+  ok(/20×4h runner/.test(t2s), 'T2 names swing horizon (' + t2s + ')');
+  const note = ctx.hgOgEntryMarketNote({ dir: 'short', livePx: 4403.80 }, plan);
+  ok(/T1 between market and entry/.test(note), 'market note flags fill-path cross (' + note + ')');
+  ok(/T2 4395\.40/.test(note) && /below market/.test(note), 'market note names T2 distance from market');
+  const gates = ctx.hgOgGates([], { dir: 'short' }, { plan: plan, marketPx: 4403.80 });
+  const fp = gates.find(g => g && g.key === 'fill-path');
+  ok(fp && fp.pass === false, 'fill-path gate AGAINST when T1 between market and entry');
+}
+
 function bootOg(){
   const ctx = { console, Math, Date, isFinite, isNaN, parseFloat, parseInt, JSON, Array, Object,
                 Number, String, Promise, RegExp, setTimeout, clearTimeout, Float64Array, Infinity, NaN };

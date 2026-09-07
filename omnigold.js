@@ -2848,6 +2848,33 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     gates.push({ key:'level-fresh', hard:false, info: lfInfo, pass: lfOk, why: lfWhy });
 
+    /* FILL-PATH — a limit ticket whose retest route crosses T1 before the
+       entry can fill is not a coherent resting-order plan. Example: SHORT
+       limit above market with T1 sitting between market and entry — the
+       rally to fill crosses TP1 first. */
+    var fpOk = null, fpWhy = 'fill path not judged';
+    if (plHas && plObj && isFinite(lfPx) && lfPx > 0){
+      var fpE = fin(plObj.entry), fpT1 = fin(plObj.t1);
+      if (isFinite(fpE) && isFinite(fpT1)){
+        if (hit.dir === 'short' && lfPx < fpE && fpT1 > lfPx && fpT1 < fpE){
+          fpOk = false;
+          fpWhy = 'T1 ' + fpT1.toFixed(2) + ' sits between market ' + lfPx.toFixed(2)
+                + ' and entry ' + fpE.toFixed(2) + ' — retest crosses TP1 before the limit fills';
+        } else if (hit.dir === 'long' && lfPx > fpE && fpT1 < lfPx && fpT1 > fpE){
+          fpOk = false;
+          fpWhy = 'T1 ' + fpT1.toFixed(2) + ' sits between market ' + lfPx.toFixed(2)
+                + ' and entry ' + fpE.toFixed(2) + ' — retest dips through TP1 before the limit fills';
+        } else {
+          fpOk = true;
+          fpWhy = 'retest path does not cross T1 before entry';
+        }
+      }
+    } else if (plObj && plObj.fillPathCross === true){
+      fpOk = false;
+      fpWhy = 'retest path crosses T1 before the limit can fill';
+    }
+    gates.push({ key:'fill-path', hard:false, info:true, pass: fpOk, why: fpWhy });
+
     /* MOMENTUM-STOP — a volatility stop, not structure. Continuation
        mechanics may still RECEIVE one from the plan engine (otherwise a
        runaway tape has no levels at all). The ledger flags it AGAINST
@@ -4184,13 +4211,18 @@ terse status, and never launches a first-time scan on a global refresh.
       plan.t1MagnetR = magBeyond.rew / risk;
       t1Source = 'R-multiple · toward ' + magBeyond.src;
     }
-    var magT2 = hgOgPickMagnet(magnets, risk, Math.max(OG_T2_R * 0.95, OG_T1_R + 0.5), OG_T2_R + 1.5);
+    var magT2 = hgOgPickMagnet(magnets, risk, OG_T2_R, OG_T2_R + 1.5);
+    var t2Floor = (dir === 'long') ? entry + OG_T2_R * risk : entry - OG_T2_R * risk;
+    if (!isFinite(t2)) t2 = t2Floor;
+    if (dir === 'long' && t2 < t2Floor) t2 = t2Floor;
+    if (dir === 'short' && t2 > t2Floor) t2 = t2Floor;
     if (magT2 && isFinite(magT2.px)){
       var t2Ahead = (dir === 'long') ? (magT2.px > t1) : (magT2.px < t1);
-      if (t2Ahead){ t2 = magT2.px; plan.t2Source = magT2.src; }
+      var beyondFloor = (dir === 'long') ? (magT2.px >= t2Floor - 1e-9) : (magT2.px <= t2Floor + 1e-9);
+      if (t2Ahead && beyondFloor){ t2 = magT2.px; plan.t2Source = magT2.src; }
     }
     if ((dir === 'long') ? t2 <= t1 : t2 >= t1){
-      t2 = (dir === 'long') ? entry + OG_T2_R * risk : entry - OG_T2_R * risk;
+      t2 = t2Floor;
       if ((dir === 'long') ? t2 <= t1 : t2 >= t1)
         t2 = (dir === 'long') ? t1 + 0.5 * risk : t1 - 0.5 * risk;
       if (!plan.t2Source) plan.t2Source = 'R-multiple';
@@ -4205,10 +4237,15 @@ terse status, and never launches a first-time scan on a global refresh.
     plan.risk = risk;
     plan.riskPct = (entry > 0) ? (risk / entry * 100) : null;
     plan.formedBy = 'hgOgFormTicket';
+    plan.fillPathCross = false;
 
     /* 4. TYPE + fill. Thin LIMIT demotes — it does not chase live gold. */
     var gapAtr = (isFinite(live) && live > 0 && a > 0) ? Math.abs(live - entry) / a : NaN;
     var atMarket = isFinite(gapAtr) && gapAtr <= 0.25;
+    if (isFinite(live) && live > 0 && !atMarket){
+      if (dir === 'short' && entry > live && t1 > live && t1 < entry) plan.fillPathCross = true;
+      else if (dir === 'long' && entry < live && t1 < live && t1 > entry) plan.fillPathCross = true;
+    }
     var kind = String(hit.kind || 'SETUP');
     plan.entryType = (atMarket ? 'MARKET @ ' : 'LIMIT @ ') + kind;
     if (atMarket) plan.fillProb = 90;
@@ -4245,6 +4282,7 @@ terse status, and never launches a first-time scan on a global refresh.
     else if (tape && tape !== dir){ score -= 14; parts.push('against-tape'); }
     if (atMarket){ score += 10; parts.push('at-market'); }
     else if (plan.fillDemote){ score -= 10; parts.push('thin-fill'); }
+    if (plan.fillPathCross){ score -= 18; parts.push('fill-path-crosses-t1'); plan.fillDemote = true; }
     if (hgOgIsSurvivor(kind)){ score += 8; parts.push('replay-survivor'); }
     if (hgOgSwingPrefer(kind, extra.horizon || extra.deskHorizon || cfg.label)){
       score += 8; parts.push('swing-replay-prefer');
@@ -4552,22 +4590,38 @@ terse status, and never launches a first-time scan on a global refresh.
   function hgOgEntryMarketNote(row, plan){
     var mkt = fin(__og.spotAnchor) || fin(row && row.livePx);
     var e = plan && fin(plan.entry);
+    var t1 = plan && fin(plan.t1);
+    var t2 = plan && fin(plan.t2);
     if (!(mkt > 0) || !(e > 0)) return '';
     var gap = mkt - e;
     var pts = Math.abs(gap);
-    if (pts < 0.5) return 'MARKET ' + fmtPx(mkt) + ' · at entry';
+    var bits = ['MARKET ' + fmtPx(mkt)];
+    if (pts < 0.5) return bits.join('') + ' · at entry';
     var dir = String(row.dir || '').toLowerCase();
     if (dir === 'short'){
-      return 'MARKET ' + fmtPx(mkt) + (gap < 0
-        ? ' · +' + pts.toFixed(0) + ' pts below entry · limit retest · not a market short'
-        : ' · +' + pts.toFixed(0) + ' pts above entry');
+      bits.push(gap < 0
+        ? '+' + pts.toFixed(0) + ' pts below entry · limit retest · not a market short'
+        : '+' + pts.toFixed(0) + ' pts above entry');
+      if (gap < 0 && isFinite(t1) && t1 > mkt && t1 < e){
+        bits.push('T1 between market and entry — retest crosses TP1 before fill');
+      }
+      if (isFinite(t2) && t2 < mkt){
+        bits.push('T2 ' + fmtPx(t2) + ' · ' + Math.abs(mkt - t2).toFixed(0) + ' pts below market');
+      }
+    } else if (dir === 'long'){
+      bits.push(gap > 0
+        ? '+' + pts.toFixed(0) + ' pts above entry · limit retest · not a market long'
+        : '+' + pts.toFixed(0) + ' pts below entry');
+      if (gap > 0 && isFinite(t1) && t1 < mkt && t1 > e){
+        bits.push('T1 between market and entry — retest crosses TP1 before fill');
+      }
+      if (isFinite(t2) && t2 > mkt){
+        bits.push('T2 ' + fmtPx(t2) + ' · ' + Math.abs(t2 - mkt).toFixed(0) + ' pts above market');
+      }
+    } else {
+      bits.push(pts.toFixed(0) + ' pts from entry');
     }
-    if (dir === 'long'){
-      return 'MARKET ' + fmtPx(mkt) + (gap > 0
-        ? ' · +' + pts.toFixed(0) + ' pts above entry · limit retest · not a market long'
-        : ' · +' + pts.toFixed(0) + ' pts below entry');
-    }
-    return 'MARKET ' + fmtPx(mkt) + ' · ' + pts.toFixed(0) + ' pts from entry';
+    return bits.join(' · ');
   }
 
   /* ==================== anticipation: the next gold levels ==================== */
@@ -4724,6 +4778,32 @@ terse status, and never launches a first-time scan on a global refresh.
       return 'T1 · ' + fmt(t1R, 1) + 'R · ' + rew.toFixed(0) + ' pts · '
            + pct.toFixed(2) + '% · ' + bars + '×' + tf + ' window';
     } catch (e){ return ''; }
+  }
+
+  function hgOgRunnerReadout(plan, horizonLabel){
+    if (!plan) return 'runner';
+    try {
+      var e = fin(plan.entry), t2 = fin(plan.t2);
+      var dir = String(plan.dir || '').toLowerCase();
+      if (!(e > 0) || !(t2 > 0) || (dir !== 'long' && dir !== 'short')) return 'runner';
+      var risk = fin(plan.risk);
+      if (!(risk > 0)){
+        var s = fin(plan.stop);
+        if (isFinite(s)) risk = (dir === 'long') ? (e - s) : (s - e);
+      }
+      if (!(risk > 0)) return 'runner';
+      var rew = (dir === 'long') ? (t2 - e) : (e - t2);
+      if (!(rew > 0)) return 'wrong side';
+      var t2R = fin(plan.rr2);
+      if (!(t2R > 0)) t2R = rew / risk;
+      var hz = hgOgHorizonCfg(horizonLabel);
+      var bars = hz.horizonBars || 24;
+      var tf = hz.tf || '1h';
+      var pct = (rew / e) * 100;
+      var src = plan.t2Source ? (' · ' + plan.t2Source) : '';
+      return 'T2 · ' + fmt(t2R, 1) + 'R · ' + rew.toFixed(0) + ' pts · '
+           + pct.toFixed(2) + '% · ' + bars + '×' + tf + ' runner' + src;
+    } catch (e){ return 'runner'; }
   }
   function fmt(n, d){ var v = fin(n); return isFinite(v) ? v.toFixed(d == null ? 2 : d) : '—'; }
 
@@ -5301,7 +5381,8 @@ terse status, and never launches a first-time scan on a global refresh.
       h += '<div><i>ENTRY</i><b>' + fmtPx(p.entry) + '</b><u>' + (String(row.dir).toLowerCase() === 'short' ? 'SELL ZONE' : 'BUY ZONE') + '</u></div>';
       h += '<div><i>STOP</i><b>' + fmtPx(p.stop) + '</b><u>invalidation</u></div>';
       h += '<div><i>T1</i><b>' + fmtPx(p.t1) + '</b><u>' + esc(hgOgTargetReadout(Object.assign({ dir: row.dir }, p), label) || 'take profit') + '</u></div>';
-      h += '<div><i>T2</i><b>' + (isFinite(fin(p.t2)) ? fmtPx(p.t2) : '—') + '</b><u>runner</u></div>';
+      h += '<div><i>T2</i><b>' + (isFinite(fin(p.t2)) ? fmtPx(p.t2) : '—') + '</b><u>'
+        + esc(hgOgRunnerReadout(Object.assign({ dir: row.dir }, p), label) || 'runner') + '</u></div>';
       h += '</div>';
       var mktNote = hgOgEntryMarketNote(row, p);
       if (mktNote) h += '<div class="hg-mp-note dim">' + esc(mktNote) + '</div>';
@@ -10913,6 +10994,7 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgGradeLegendHtml = hgOgGradeLegendHtml;
     window.hgOgMpHorizonHtml = hgOgMpHorizonHtml;
     window.hgOgTargetReadout = hgOgTargetReadout;
+    window.hgOgRunnerReadout = hgOgRunnerReadout;
     window.hgOgHorizonCfg = hgOgHorizonCfg;
     window.hgOgAlignPlansToSpot = hgOgAlignPlansToSpot;
     window.hgOgFetchRows = hgOgFetchRows;
