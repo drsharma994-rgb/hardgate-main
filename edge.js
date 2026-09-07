@@ -196,32 +196,87 @@ function edgeSwingRead(rows){
   }catch(e){ return out; }
 }
 
-/* Mandatory bias: SWING G1 cascade+spread + G2 HTF + G3 RSI (cryptogates parity) */
+/* Mandatory bias: SWING G1 cascade+spread + G2 HTF + G3 RSI (cryptogates parity)
+
+   PACK 2 (Increment 1) — EDGE has no traditional gate array; its "hard gates"
+   are inline early-exits. Slice 3 preserves that architecture (no behaviour
+   change) but publishes an edgeGateMeta[] via hgGateResult so downstream
+   consumers can see WHICH gate blocked a symbol and WHY.
+
+   The five EDGE hard gates:
+     EG1  history       veto  (need ≥ 210 bars for 200-EMA + swing lookback)
+     EG2  cascade dir   veto  (no EMA9/21/50 cascade = no directional bias)
+     EG3  HTF agree     veto  (LTF cascade must not fight HTF)
+     EG4  swing gates   veto  (SWING G1/G2/G3 all must pass from cryptogates)
+     EG5  regime        veto  (volatile regime stands aside) */
 function edgeSwingBias(rows){
+  var GRE = (typeof W !== 'undefined' && typeof W.hgGateResult === 'function') ? W.hgGateResult
+          : (typeof globalThis !== 'undefined' && typeof globalThis.hgGateResult === 'function') ? globalThis.hgGateResult
+          : null;
+  var meta = [];
+  function em(id, label, ok, detail, opts){
+    if (!GRE) return;
+    var st = (ok === true) ? 'pass' : (ok === false) ? 'veto' : 'na';
+    meta.push(GRE(id, label, st, detail || '', opts || { degradeMode: 'veto' }));
+  }
+  function fail(id, label, detail){
+    em(id, label, false, detail, { degradeMode: 'veto' });
+    /* BACKWARDS-COMPAT: all 6 callers do `if (!bias) return ...` so we must
+       still return null on veto. Publish the gate ledger on the module for
+       consumers that want to inspect why the last bias was blocked. */
+    edgeSwingBias.lastVetoMeta = meta.slice();
+    edgeSwingBias.lastVetoBlockedBy = id;
+    return null;
+  }
   try{
-    if (!rows || rows.length < 210) return null;
+    if (!rows || rows.length < 210){
+      return fail('EG1', 'EG1 history ≥ 210 bars', 'rows=' + (rows ? rows.length : 0));
+    }
+    em('EG1', 'EG1 history ≥ 210 bars', true, 'rows=' + rows.length);
     var sw = edgeSwingRead(rows);
-    if (!sw.dir) return null;
-    if (sw.htf && sw.htf !== sw.dir) return null;
+    if (!sw.dir){
+      return fail('EG2', 'EG2 EMA cascade direction', 'no aligned EMA9/21/50 cascade');
+    }
+    em('EG2', 'EG2 EMA cascade direction', true, 'cascade ' + sw.dir);
+    if (sw.htf && sw.htf !== sw.dir){
+      return fail('EG3', 'EG3 HTF agreement', 'HTF ' + sw.htf + ' vs LTF ' + sw.dir);
+    }
+    em('EG3', 'EG3 HTF agreement', true, 'HTF ' + (sw.htf || 'n/a') + ' == LTF ' + sw.dir);
     var passed = null, clean = false, anchorLevel = null;
     var g5 = null, g6 = null, dynamicRR = null;
     if (typeof swingGateMatrix === 'function'){
       var m = swingGateMatrix(rows, null);
-      if (!m || !m.dir || m.dir !== sw.dir) return null;
-      if (!m.gates[0][1] || !m.gates[1][1] || !m.gates[2][1]) return null;
+      if (!m || !m.dir || m.dir !== sw.dir){
+        return fail('EG4', 'EG4 SWING gates G1/G2/G3', 'SWING matrix returned null or dir mismatch');
+      }
+      if (!m.gates[0][1] || !m.gates[1][1] || !m.gates[2][1]){
+        var blocks = [];
+        if (!m.gates[0][1]) blocks.push('G1');
+        if (!m.gates[1][1]) blocks.push('G2');
+        if (!m.gates[2][1]) blocks.push('G3');
+        return fail('EG4', 'EG4 SWING gates G1/G2/G3', 'SWING ' + blocks.join('+') + ' failed');
+      }
+      em('EG4', 'EG4 SWING gates G1/G2/G3', true, 'SWING ' + m.passed + '/7 · G1+G2+G3 all pass');
       passed = m.passed;
       clean = m.clean === true;
       anchorLevel = isFinite(m.level) ? m.level : null;
       g5 = m.gates[4] ? m.gates[4][1] : null;
       g6 = m.gates[5] ? m.gates[5][1] : null;
       dynamicRR = isFinite(m.dynamicRR) ? m.dynamicRR : null;
+    } else {
+      em('EG4', 'EG4 SWING gates G1/G2/G3', 'na', 'swingGateMatrix unavailable',
+         { degradeMode: 'veto' });
     }
     var reg = (typeof detectRegime === 'function') ? detectRegime(rows) : null;
-    if (reg && reg.regime === 'volatile') return null;
+    if (reg && reg.regime === 'volatile'){
+      return fail('EG5', 'EG5 regime stand-aside', 'regime=volatile');
+    }
+    em('EG5', 'EG5 regime stand-aside', true, 'regime=' + (reg ? reg.regime : 'n/a'));
     return {
       dir: sw.dir, swing: sw, regime: reg ? reg.label : 'n/a',
       swingPassed: passed, swingClean: clean, anchorLevel: anchorLevel,
-      g5: g5, g6: g6, dynamicRR: dynamicRR
+      g5: g5, g6: g6, dynamicRR: dynamicRR,
+      gateMeta: meta
     };
   }catch(e){ return null; }
 }
