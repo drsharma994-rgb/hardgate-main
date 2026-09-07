@@ -279,7 +279,7 @@ module.exports = async (req, res) => {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), UPSTREAM_TIMEOUT_MS);
   try{
-    const upstream = await fetch(target.toString(), {
+    let upstream = await fetch(target.toString(), {
       method: 'GET',
       signal: ctrl.signal,
       redirect: 'follow',
@@ -289,6 +289,32 @@ module.exports = async (req, res) => {
         'Accept': '*/*',
       },
     });
+
+    /* GEO-BLOCK RESCUE: some deploy regions (e.g. the pplx.app sandbox) sit
+       inside Binance's 'restricted' territory and get HTTP 451 on every
+       fapi.binance.com request. When that happens, retry once through the
+       Render mirror at hardgate-main.onrender.com, which runs in an allowed
+       region. Only trigger on 451 (or 403 for spot), and only for binance.com
+       hosts. Wall-clock cost of the extra hop is ~250ms. Opt out by unsetting
+       HG_GEO_FALLBACK. */
+    if (upstream && (upstream.status === 451 || upstream.status === 403)
+        && /(^|\.)binance\.com$/.test(target.hostname)
+        && process.env.HG_GEO_FALLBACK !== '0'){
+      try{
+        const mirrorHost = process.env.HG_GEO_FALLBACK_HOST || 'hardgate-main.onrender.com';
+        const mirrorUrl = 'https://' + mirrorHost + '/api/proxy?url=' + encodeURIComponent(target.toString());
+        const rescue = await fetch(mirrorUrl, {
+          method: 'GET',
+          signal: ctrl.signal,
+          redirect: 'follow',
+          headers: { 'Accept': '*/*' },
+        });
+        if (rescue && rescue.ok){
+          upstream = rescue;
+        }
+      }catch(e){ /* keep the 451; not worth failing louder */ }
+    }
+
     const text = await upstream.text();
     const ctype = upstream.headers.get('content-type') || 'text/plain; charset=utf-8';
     const urlKey = target.toString();
