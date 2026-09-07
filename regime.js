@@ -391,6 +391,10 @@ async function rgFetchStablecoins(){
                 usdtUSD: usdt > 0 ? usdt : null, usdcUSD: usdc > 0 ? usdc : null };
     if (wk > 0) out.delta7dUSD = now - wk;   /* no valid week-ago baseline => null */
     if (mo > 0) out.delta30dUSD = now - mo;
+    /* Increment 5 — track consecutive contraction days for cadence gate */
+    if (typeof W !== 'undefined' && typeof W.hgStableContractionTrack === 'function'){
+      try{ W.hgStableContractionTrack(out.delta7dUSD); }catch(eTr){}
+    }
     return rgCachePut(key, out);
   }catch(e){ return null; }
 }

@@ -487,16 +487,34 @@ function primitiveEmaCascade(closes, periods){
   };
 }
 
-G.detectSwings = detectSwings;
-G.detectFvg = detectFvg;
-G.detectOrderBlocks = detectOrderBlocks;
-G.detectDivergences = detectDivergences;
-G.primitiveCusum = primitiveCusum;
-G.primitiveTsmom = primitiveTsmom;
-G.primitiveEmaCascade = primitiveEmaCascade;
+/* hg-prefixed exports — crypto scans use these; goldind.js keeps its own goldSwings aliases */
+G.hgDetectSwings = detectSwings;
+G.hgDetectFvg = detectFvg;
+G.hgDetectOrderBlocks = detectOrderBlocks;
+G.hgDetectDivergences = detectDivergences;
+G.hgPrimitiveCusum = primitiveCusum;
+G.hgPrimitiveTsmom = primitiveTsmom;
+G.hgPrimitiveEmaCascade = primitiveEmaCascade;
+/* unprefixed only when goldind has not yet loaded (tests / early boot) */
+if (!G.detectSwings || G.detectSwings === detectSwings){
+  G.detectSwings = detectSwings;
+  G.detectFvg = detectFvg;
+  G.detectOrderBlocks = detectOrderBlocks;
+  G.detectDivergences = detectDivergences;
+  G.primitiveCusum = primitiveCusum;
+  G.primitiveTsmom = primitiveTsmom;
+  G.primitiveEmaCascade = primitiveEmaCascade;
+}
 
 if (typeof module !== 'undefined' && module.exports){
   module.exports = {
+    hgDetectSwings: detectSwings,
+    hgDetectFvg: detectFvg,
+    hgDetectOrderBlocks: detectOrderBlocks,
+    hgDetectDivergences: detectDivergences,
+    hgPrimitiveCusum: primitiveCusum,
+    hgPrimitiveTsmom: primitiveTsmom,
+    hgPrimitiveEmaCascade: primitiveEmaCascade,
     detectSwings: detectSwings,
     detectFvg: detectFvg,
     detectOrderBlocks: detectOrderBlocks,

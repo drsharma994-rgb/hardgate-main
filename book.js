@@ -400,11 +400,48 @@ async function addToBook(opts){
     if (!body.sym || !body.dir || !isFinite(body.entry) || !isFinite(body.stop)){
       return { ok: false, reason: 'invalid plan' };
     }
+    /* Increment 5 — whale distribution veto before book intent */
+    if (typeof W.hgOnchainAltFetch === 'function' && typeof W.hgWhaleFlowAnalysis === 'function'){
+      try{
+        if (!W.hgOnchainAltState()) await W.hgOnchainAltFetch();
+        var altSnap = W.hgOnchainAltState();
+        if (altSnap && altSnap.whaleTxs && altSnap.whaleTxs.length){
+          var whV = W.hgWhaleFlowAnalysis(altSnap.whaleTxs, body.sym);
+          if (whV.vetoDistribution && body.dir === 'long'){
+            return { ok: false, veto: true, reasons: ['WHALE DISTRIBUTION — >$25M exchange inflow (24h)'] };
+          }
+        }
+      }catch(eWh){}
+    }
+    /* Increment 7 — regime-conditional strategy pause */
+    if (typeof W.hgRegimeStrategyActive === 'function'){
+      var stratAct = W.hgRegimeStrategyActive(body.strategy || body.setupKind || 'swing');
+      if (stratAct && stratAct.active === false){
+        return { ok: false, veto: true, reasons: [stratAct.reason || stratAct.status || 'REGIME PAUSED'] };
+      }
+    }
     if (bookApiOn() && __book && __book.desk){
       var navH = +__book.desk.navUsd;
       var heatH = +__book.desk.heatPct;
       var riskPctH = Math.abs(body.entry - body.stop) / body.entry;
       var newRiskUsdH = (isFinite(navH) && navH > 0 && isFinite(riskPctH)) ? navH * riskPctH : 0;
+      /* Increment 7 — dynamic drawdown risk scalar */
+      var peakNav = (typeof W.hgBookPeakNav === 'function') ? W.hgBookPeakNav() : navH;
+      if (typeof W.hgDynamicDrawdownRisk === 'function' && isFinite(navH) && navH > 0){
+        var ddRisk = W.hgDynamicDrawdownRisk(navH, peakNav, 1.0);
+        if (!ddRisk.allowedNewEntries){
+          return { ok: false, veto: true, reasons: ['DRAWDOWN HALT — ' + ddRisk.state + ' (' + ddRisk.ddPct.toFixed(1) + '% DD)'] };
+        }
+      }
+      /* Increment 7 — segregated fund heat limits */
+      if (typeof W.hgSegregatedFundLimits === 'function'){
+        var fundCfg = { fundId: body.fund || bookFundId(), heatCapPct: BOOK_MAX_HEAT_PCT };
+        var fundSt = { equity: navH, currentHeatUsd: isFinite(heatH) && navH > 0 ? heatH * navH : 0 };
+        var fundLim = W.hgSegregatedFundLimits(fundCfg, fundSt);
+        if (!fundLim.canOpenTrade){
+          return { ok: false, veto: true, reasons: ['FUND HEAT CAP — $' + fundLim.availableHeatUsd.toFixed(0) + ' available of $' + fundLim.maxHeatUsd.toFixed(0)] };
+        }
+      }
       if (isFinite(navH) && navH > 0 && isFinite(heatH)
           && (heatH + (newRiskUsdH / navH)) > BOOK_MAX_HEAT_PCT + 1e-6){
         return { ok: false, veto: true,
@@ -2234,12 +2271,24 @@ function bookRefresh(){
 
 function bookState(){ return __book.snap; }
 
+function bookPeakNav(){
+  try{
+    var snap = __book.snap;
+    var nav = snap && snap.desk ? +snap.desk.navUsd : NaN;
+    var key = 'hg_book_peak_nav_v1';
+    var peak = parseFloat(localStorage.getItem(key) || '0');
+    if (isFinite(nav) && nav > peak) { peak = nav; localStorage.setItem(key, String(peak)); }
+    return isFinite(peak) && peak > 0 ? peak : (isFinite(nav) ? nav : 10000);
+  }catch(e){ return 10000; }
+}
+
 W.bookContractsCell = bookContractsCell;
 W.addToBook = addToBook;
 W.bookBtnHTML = bookBtnHTML;
 W.bookRefreshMarks = bookRefreshMarks;
 W.bookPull = bookPull;
 W.bookState = bookState;
+W.hgBookPeakNav = bookPeakNav;
 W.heatBarHTML = heatBarHTML;
 W.bookManagePosition = bookManagePosition;
 W.bookLivePosition = bookLivePosition;

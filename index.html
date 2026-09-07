@@ -813,7 +813,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 </main>
 
 
-  <script src="build-stamp.js?v=637"></script>
+  <script src="build-stamp.js?v=638"></script>
   <script src="hg-setup-core.js"></script>
 <script src="hghost.js"></script>
 <script src="indicators.js"></script>
@@ -868,21 +868,22 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
 <script src="hg-mechanics.js?v=614"></script>
 <script src="./hg-gates.js?v=559"></script>
-<script src="crypto-catalog.js?v=637"></script>
-<script src="omniroute.js?v=637"></script>
+<script src="crypto-catalog.js?v=638"></script>
+<script src="omniroute.js?v=638"></script>
 <script src="dex-screener.js?v=615"></script>
-<script src="setup-confirm.js?v=637"></script>
-<script src="combi.js?v=637"></script>
+<script src="setup-confirm.js?v=638"></script>
+<script src="combi.js?v=638"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
-<script src="edge.js?v=637"></script>
+<script src="edge.js?v=638"></script>
 <script src="startradertab.js?v=40"></script>
 <script src="engine.js"></script>
 <script src="news.js"></script>
 <script src="onchain.js"></script>
-<script src="onchain-alt-data.js"></script>
-<script src="structure-core.js"></script>
-<script src="portfolio-allocation.js"></script>
+<script src="onchain-alt-data.js?v=638"></script>
+<script src="structure-core.js?v=638"></script>
+<script src="portfolio-allocation.js?v=638"></script>
+<script src="inc567-data-core.js?v=638"></script>
 <script src="rotation.js"></script>
 <script src="goldspot.js"></script>
 <!-- conviction-lock.js: ConvictionLockManager (anti-repaint lifecycle) -->
@@ -890,26 +891,26 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- gold-session.js: DST-aware London/NY session helpers (shared by goldKillzone, GOLD tab, Fix/Close) -->
 <script src="gold-session.js?v=629"></script>
 <!-- goldind.js + goldscalp.js: GOLD SCALP tab (pure SMC/ICT + indicator detectors, then the tab) — after indicators2/binance/macro/xuniverse/news, before brain.js -->
-<script src="goldind.js?v=637"></script>
-<script src="gold-catalog.js?v=637"></script>
+<script src="goldind.js?v=638"></script>
+<script src="gold-catalog.js?v=638"></script>
 <!-- gold-seven-step.js: Gold Playbook 7-step setup engine (closed 1H/4H bars → bias → candidates → best fit → levels → checklist → TRIGGERED/WAIT/EXPIRED). Loads after goldind.js + gold-catalog.js (feature-checked), before the gold desks that render it. -->
-<script src="gold-seven-step.js?v=637"></script>
+<script src="gold-seven-step.js?v=638"></script>
 <script src="macro-feeds.js"></script>
-<script src="goldscalp.js?v=637"></script>
+<script src="goldscalp.js?v=638"></script>
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
-<script src="goldswing.js?v=637"></script>
+<script src="goldswing.js?v=638"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
-<script src="omnigold.js?v=637"></script>
+<script src="omnigold.js?v=638"></script>
 <!-- omnigold1.js: OMNIGOLD 1 tab — institutional 20-point gold setup engine (veto stack → regime → matrix → strategy → levels → V-Mod size → 12-gate cross-check → trigger). Reuses gold-seven-step.js helpers (HG_GOLD7); loads after it and after omnigold.js. -->
-<script src="omnigold1.js?v=637"></script>
+<script src="omnigold1.js?v=638"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
-<script src="omnipresent.js?v=637"></script>
+<script src="omnipresent.js?v=638"></script>
 <!-- formation-nightly.js: after 21:00 UTC, retunes OMNIROUTE / OMNIPRESENT / OMNIGOLD 1 + all desk tabs from the rolling 40-day book. Demote/tighten only. -->
-<script src="formation-nightly.js?v=637"></script>
-<script src="formation-nightly-boot.js?v=637"></script>
+<script src="formation-nightly.js?v=638"></script>
+<script src="formation-nightly-boot.js?v=638"></script>
 <!-- desk-formation-edge.js: OMNIROUTE v531 + BEST kinds + nightly desk overlay retune SWING/SCALP/EDGE/SMART$/SQUEEZE/SNIPER/SMC/OB/TRAP/DIV/COIL/APEX/OIFLOW/LIQS/ON-CHAIN/CHART VISION/CARRY/VENUE/TERM BASIS. Demote/suppress/prefer only. -->
-<script src="desk-formation-edge.js?v=637"></script>
-<script src="hg-omni-strategy-bridge.js?v=637"></script>
+<script src="desk-formation-edge.js?v=638"></script>
+<script src="hg-omni-strategy-bridge.js?v=638"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
 <script src="contract-report.js"></script>
 <!-- omnibtc-engines.js: SMART $ / OI FLOW / fade / COIL / DIV / TRAP / SMC / STAR TRADER + on-chain evidence. Loads BEFORE omnibtc.js so the tab can feature-check it. -->
@@ -936,6 +937,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="fixpack17-core.js"></script>
 <script src="crypto-position-risk.js"></script>
 <script src="risk-tab.js"></script>
+<script src="recon-tab.js?v=638"></script>
 <script src="venuepremium.js"></script>
 <script src="reliability.js"></script>
 <!-- formation-live.js: internet context for formation. Confirm / demote / refuse. Never invents levels. Loads BEFORE formation.js so hgFormTicket can feature-check it. -->
@@ -943,14 +945,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js?v=614"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=637"></script>
-<script src="gold-best-levels.js?v=637"></script>
-<script src="super-desk-common.js?v=637"></script>
-<script src="super-gold.js?v=637"></script>
-<script src="super-best.js?v=637"></script>
-<script src="super-sniper.js?v=637"></script>
-<script src="super-book.js?v=637"></script>
-<script src="super-calibrate.js?v=637"></script>
+<script src="supersetup.js?v=638"></script>
+<script src="gold-best-levels.js?v=638"></script>
+<script src="super-desk-common.js?v=638"></script>
+<script src="super-gold.js?v=638"></script>
+<script src="super-best.js?v=638"></script>
+<script src="super-sniper.js?v=638"></script>
+<script src="super-book.js?v=638"></script>
+<script src="super-calibrate.js?v=638"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -2108,10 +2110,29 @@ async function runDivScanLeg(opts){
         const c = rows.map(function(r){ return r.c; });
         const n = c.length;
         const rv = rsi(c,14);
+        let dir=null, kindLabel=null, pivA=null, pivB=null;
+        if (typeof hgDetectDivergences === 'function'){
+          const divRes = hgDetectDivergences(rows, { rsiPeriod: 14 });
+          function pickDiv(list){
+            for (let di = list.length - 1; di >= 0; di--){
+              const d = list[di];
+              if (!d || d.span < 10 || d.span > 40) continue;
+              if ((n-1-d.p2.i) > 15) continue;
+              return d;
+            }
+            return null;
+          }
+          const d = pickDiv(divRes.regular) || pickDiv(divRes.hidden);
+          if (d){
+            dir = d.side;
+            kindLabel = d.type.split('-').map(function(w){ return w.charAt(0).toUpperCase()+w.slice(1); }).join(' ');
+            pivA = { i: d.p1.i, v: d.p1.px };
+            pivB = { i: d.p2.i, v: d.p2.px };
+          }
+        } else {
         const pivots = findPivots(c,3);
         const highs = pivots.filter(function(p){ return p.type==="high"; });
         const lows = pivots.filter(function(p){ return p.type==="low"; });
-        let dir=null, kindLabel=null, pivA=null, pivB=null;
         if (highs.length>=2){
           const h1=highs[highs.length-2], h2=highs[highs.length-1];
           if (h2.i-h1.i>=10 && isFinite(rv[h1.i]) && isFinite(rv[h2.i])){
@@ -2126,9 +2147,10 @@ async function runDivScanLeg(opts){
             else if (l2.v>l1.v && rv[l2.i]<rv[l1.i]){ dir="long"; kindLabel="Hidden Bullish"; pivA=l1; pivB=l2; }
           }
         }
+        }
         if (!dir) continue;
         if ((n-1-pivB.i) > 15) continue;
-        const ev = cusumLast(c,1);
+        const ev = (typeof hgPrimitiveCusum === 'function') ? hgPrimitiveCusum(c, 1) : cusumLast(c,1);
         if (ev && ev.barsAgo<=10){
           if ((dir==="long" && ev.dir==="short") || (dir==="short" && ev.dir==="long")) continue;
         }
@@ -2981,6 +3003,19 @@ async function runSmcScanLeg(opts){
           return side === 'long' ? bar2.c > bar2.o : bar2.c < bar2.o;
         }
         let fvg = null, dir = null;
+        if (typeof hgDetectFvg === 'function'){
+          const fvgList = hgDetectFvg(rows, { atrLen: 14 });
+          for (let fi = fvgList.length - 1; fi >= 0; fi--){
+            const f = fvgList[fi];
+            if (!f || f.state === 'invalidated') continue;
+            const age = rows.length - 1 - f.idx;
+            if (age > 30) continue;
+            const isBull = f.dir === 'bullish';
+            const isBear = f.dir === 'bearish';
+            if (isBull && p > e200 && p <= f.top && p >= f.bottom){ fvg = { top: f.top, bottom: f.bottom, age: age }; dir = 'long'; break; }
+            if (isBear && p < e200 && p <= f.top && p >= f.bottom){ fvg = { top: f.top, bottom: f.bottom, age: age }; dir = 'short'; break; }
+          }
+        } else {
         for (let j = rows.length - 2; j >= Math.max(2, rows.length - 30); j--){
           const bar1 = rows[j-2], bar2 = rows[j-1], bar3 = rows[j];
           if (!bar1 || !bar2 || !bar3) continue;
@@ -2999,6 +3034,7 @@ async function runSmcScanLeg(opts){
             }
             if (!mitigated && p < e200){ fvg = { top: gapHigh, bottom: gapLow, age: rows.length-1-j }; dir = 'short'; break; }
           }
+        }
         }
         if (!fvg) continue;
         const isTapping = p <= fvg.top && p >= fvg.bottom;
@@ -3083,10 +3119,21 @@ async function runObScanLeg(opts){
         const p = c[c.length-1];
         const e200 = last(ema(c, 200));
         let dir = null, ob = null;
+        if (typeof hgDetectOrderBlocks === 'function' && typeof hgDetectSwings === 'function'){
+          const swRes = hgDetectSwings(rows, { left: 3, right: 3 });
+          const obList = hgDetectOrderBlocks(rows, swRes);
+          for (let oi = obList.length - 1; oi >= 0; oi--){
+            const o = obList[oi];
+            if (!o || o.state === 'invalidated') continue;
+            if (o.type === 'demand' && p >= o.bottom && p <= o.top && p > e200){ dir = 'long'; ob = { top: o.top, bottom: o.bottom, highQualityTap: o.highQualityTap }; break; }
+            if (o.type === 'supply' && p >= o.bottom && p <= o.top && p < e200){ dir = 'short'; ob = { top: o.top, bottom: o.bottom, highQualityTap: o.highQualityTap }; break; }
+          }
+        } else {
         const obLong = findOrderBlock(rows, 'long');
         const obShort = findOrderBlock(rows, 'short');
         if (obLong && p >= obLong.bottom && p <= obLong.top && p > e200){ dir = 'long'; ob = obLong; }
         else if (obShort && p >= obShort.bottom && p <= obShort.top && p < e200){ dir = 'short'; ob = obShort; }
+        }
         if (!dir) continue;
         found++;
         const lp = findLiquidityPools(rows);
@@ -3145,7 +3192,7 @@ const HG_NAV_GROUPS = [
   { id:'crypto',     label:'CRYPTO',   tabs:['combi','omnibtc','omnipresent','omniroute','dexscreener','setupconfirm','best','swing','scalp','edge','smart','squeeze','reversalsniper','smc','ob','trap','div','coil','apex','oiflow','liqs','onchain','chartvision','carry','venueprem','termbasis'] },
   { id:'gold',       label:'GOLD',     tabs:['super-gold','omnigold','omnigold1','goldswing','goldscalp','gold','goldpro','goldspot','goldcoint','goldpine','signallog'] },
   { id:'strategies', label:'MODELS',   tabs:['super-setup','super-best','super-sniper','super-book','super-calibrate','pine','pine-msb','pine-sqz','pine-smf','pine-ht','pine-smc','pine-cipher','pine-rf','pine-nw','pine-avwap','strats','meanrev','formationlab','scorecard','reliability'] },
-  { id:'tools',      label:'TOOLS',    tabs:['risk','basis','search','finder','tradeos','hey','aiagent'] },
+  { id:'tools',      label:'TOOLS',    tabs:['risk','recon','basis','search','finder','tradeos','hey','aiagent'] },
 ];
 const HG_TAB_GROUP = {};
 HG_NAV_GROUPS.forEach(function(g){ g.tabs.forEach(function(t){ HG_TAB_GROUP[t] = g.id; }); });
@@ -3656,6 +3703,17 @@ const HG_TAB_AUTO_SCAN = {
   book: async function(){
     if (typeof superBookRefresh === 'function') await superBookRefresh();
     else if (typeof bookRefresh === 'function') await bookRefresh();
+  },
+  recon: async function(){
+    if (typeof bookRefresh === 'function') await bookRefresh();
+    var tab = (typeof HG_tabs !== 'undefined' && HG_tabs) ? HG_tabs.find(function(t){ return t && t.id === 'recon'; }) : null;
+    if (tab && typeof tab.refresh === 'function') return tab.refresh();
+  },
+  regime: async function(){
+    if (typeof hgOnchainAltFetch === 'function') await hgOnchainAltFetch(true);
+    var pane = document.getElementById('tab_regime');
+    var runBtn = pane && pane.querySelector('#regimeRun');
+    if (runBtn && !runBtn.disabled) runBtn.click();
   }
 };
 const HG_SCAN_RUN_BTN = {
@@ -5704,8 +5762,35 @@ function planTrade(){
 async function planTradeAsync(){
   hgEnsureContractSpecs();
   const side=$('tSide').value, entry=+$('tEntry').value, stop=+$('tStop').value;
-  const eq=+$('tEq').value, riskPct=+$('tRisk').value, mmr=(+$('tMmr').value||0.5)/100;
+  const eq=+$('tEq').value;
+  let riskPct=+$('tRisk').value;
+  const mmr=(+$('tMmr').value||0.5)/100;
   const symVal = $('tSym').value || '';
+  /* Increment 7 — correlation-adjusted Kelly sizing suggestion */
+  var kellyNote = '';
+  try{
+    if (typeof hgCorrelationKellySize === 'function' && symVal){
+      var openLog = loadLog().filter(function(e){ return e.status === 'open'; });
+      var activePos = openLog.map(function(e){ return { sym: e.sym, dir: e.dir }; });
+      var seriesBySym = {};
+      for (var pi = 0; pi < activePos.length + 1; pi++){
+        var ps = pi < activePos.length ? activePos[pi].sym : symVal;
+        try{
+          var prow = await getCandles(ps, '1d', 90);
+          if (prow && prow.length >= 21) seriesBySym[ps] = prow;
+        }catch(eC){}
+      }
+      var corrMat = (typeof hgCorrMatrix === 'function') ? hgCorrMatrix(seriesBySym) : null;
+      var t1Est = $('tT1').value ? +$('tT1').value : (side==='long' ? entry+2*Math.abs(entry-stop) : entry-2*Math.abs(entry-stop));
+      var rrEst = Math.abs(t1Est-entry)/Math.abs(entry-stop);
+      var kellyRes = hgCorrelationKellySize({ sym: symVal, dir: side, winRate: 0.52, winLossRatio: rrEst }, activePos, corrMat);
+      if (kellyRes && isFinite(kellyRes.targetRiskPct) && !document.getElementById('tRisk').dataset.userOverride){
+        riskPct = kellyRes.targetRiskPct;
+        $('tRisk').value = riskPct;
+        kellyNote = 'Kelly sizing: ' + kellyRes.targetRiskPct + '% (corr disc ' + (kellyRes.correlationDiscount || 1).toFixed(2) + ')';
+      }
+    }
+  }catch(eKelly){}
   const scaleOut=Math.min(100,Math.max(0,+$('tScale').value||50));
   const out=$('tradeOut');
   if (!(entry>0&&stop>0&&eq>0&&riskPct>0)){ out.innerHTML='<div class="empty">Fill entry, stop, equity, and risk %.</div>'; return; }

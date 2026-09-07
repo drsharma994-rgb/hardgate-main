@@ -246,6 +246,16 @@ async function hgPostGateSetupVeto(ticker, hit, rows, style, getCandles){
     var flow = await hgAssessFlowTrap(sym, dir, fr, tf);
     if (flow.veto) return { ok: false, reason: flow.reason || 'flow trap', tag: 'flow', flowDetail: flow.flowDetail };
     if (flow.flowNA) unchecked.push('flow trap: ' + (flow.flowDetail || 'no flow legs'));
+    /* Increment 5 — on-chain alt netflow / whale veto (honest degrade when snap missing) */
+    if (typeof G.hgOnchainAltGate === 'function'){
+      try{
+        if (typeof G.hgOnchainAltFetch === 'function' && !G.hgOnchainAltState()) await G.hgOnchainAltFetch();
+        var altG = G.hgOnchainAltGate(sym, dir);
+        if (altG && altG.pass === false) return { ok: false, reason: altG.note || 'on-chain alt veto', tag: 'onchain-alt' };
+        if (altG && altG.bonus) hit.onchainAltBonus = true;
+        if (altG && altG.tightenRr) hit.tightenRr = (hit.tightenRr || 0) + altG.tightenRr;
+      }catch(eAlt){ unchecked.push('on-chain alt: ' + (eAlt && eAlt.message || eAlt)); }
+    }
     var rsEdge = null;
     if (!hgIsBtcSymbol(sym) && style.indexOf('gold') < 0 && typeof hgRelStrength === 'function' && typeof getCandles === 'function'){
       var look = (typeof G.HG_RS_LOOK === 'number') ? G.HG_RS_LOOK : 30;
