@@ -4052,15 +4052,27 @@ async function runBias(){
     const casc4 = e9>e21 && e21>e50 ? 'long' : (e9<e21 && e21<e50 ? 'short' : 'mixed');
 
     // ---- gates ----
+    /* PACK 2 (Increment 1): parallel gMeta[] published via hgGateResult so
+       downstream consumers (LOG, digest, future scorecards) get structured
+       gate detail with per-gate degrade discipline. Existing g[] 4-tuple
+       shape is unchanged — nothing reading g[i][2] as a string breaks.
+       BIAS is an advisory verdict, so 'na' is legitimate and preserved for
+       T3, T5, T6, S1, S2, F1, B1 when their inputs are absent. */
     const g=[];
+    const gMeta=[];
+    const GRB = (typeof hgGateResult === 'function') ? hgGateResult : null;
+    function gp(id, label, state, detail, opts){
+      g.push([id, label, state, detail]);
+      if (GRB) gMeta.push(GRB(id, label, state, detail, opts || { degradeMode: 'na' }));
+    }
     const t1 = dailyDir!=='mixed';
-    g.push(['T1','1D structure (close vs EMA50, EMA50 vs EMA200)', t1?'pass':'veto', `close ${px(pd)} · EMA50 ${px(e50d)} · EMA200 ${isNaN(e200d)?'n/a':px(e200d)} → ${dailyDir.toUpperCase()}`]);
+    gp('T1','1D structure (close vs EMA50, EMA50 vs EMA200)', t1?'pass':'veto', `close ${px(pd)} · EMA50 ${px(e50d)} · EMA200 ${isNaN(e200d)?'n/a':px(e200d)} → ${dailyDir.toUpperCase()}`, { degradeMode: 'veto' });
     const t2 = casc4!=='mixed' && casc4===dailyDir;
-    g.push(['T2','4H EMA cascade agrees with 1D', t2?'pass':'veto', `EMA9/21/50 → ${casc4.toUpperCase()}`]);
+    gp('T2','4H EMA cascade agrees with 1D', t2?'pass':'veto', `EMA9/21/50 → ${casc4.toUpperCase()}`, { degradeMode: 'veto' });
     const t3 = (dailyDir==='long'&&mh1>0)||(dailyDir==='short'&&mh1<0);
-    g.push(['T3','1H MACD momentum aligned (timing only, not a veto)', dailyDir==='mixed'?'na':(t3?'pass':'na'), `hist ${fmt(mh1,4)}`]);
+    gp('T3','1H MACD momentum aligned (timing only, not a veto)', dailyDir==='mixed'?'na':(t3?'pass':'na'), `hist ${fmt(mh1,4)}`, { degradeMode: 'na' });
     const t4veto = (dailyDir==='long'&&r4>70)||(dailyDir==='short'&&r4<30);
-    g.push(['T4','4H RSI exhaustion guard', t4veto?'veto':'pass', `RSI14 ${fmt(r4,1)} (block: >70 into longs, <30 into shorts)`]);
+    gp('T4','4H RSI exhaustion guard', t4veto?'veto':'pass', `RSI14 ${fmt(r4,1)} (block: >70 into longs, <30 into shorts)`, { degradeMode: 'veto' });
     let s1='na', s1d='funding unavailable on this feed';
     if (fr!==null){
       const extreme = Math.abs(fr) > 0.05 - 1e-9; // Delta clamp is ±0.05% — at clamp = crowded
@@ -4075,23 +4087,23 @@ async function runBias(){
       const agree = (Math.sign(r30)===want?1:0)+(Math.sign(r90)===want?1:0);
       t5 = agree===2?'pass':agree===0?'veto':'na';
     }
-    g.push(['T5','TSMOM 30/90d sign agreement (Moskowitz–Ooi–Pedersen 2012)', t5, t5d]);
+    gp('T5','TSMOM 30/90d sign agreement (Moskowitz–Ooi–Pedersen 2012)', t5, t5d, { degradeMode: 'na' });
     const ev1d = cusumLast(c1.slice(-120), 1);
     let t6='na', t6d='no recent event';
     if (ev1d && ev1d.barsAgo<=10 && dailyDir!=='mixed'){
       t6 = ev1d.dir===dailyDir?'pass':'veto';
       t6d = `${ev1d.dir.toUpperCase()} event ${ev1d.barsAgo} bars ago (1D)`;
     } else if (ev1d){ t6d = `${ev1d.dir.toUpperCase()} event ${ev1d.barsAgo} bars ago (stale)`; }
-    g.push(['T6','CUSUM event alignment — your walk-forward\'s top feature (OOS AUC ≈0.58)', t6, t6d]);
-    g.push(['S1','Funding cleanliness (crowding veto)', s1, s1d]);
+    gp('T6','CUSUM event alignment — your walk-forward\'s top feature (OOS AUC ≈0.58)', t6, t6d, { degradeMode: 'na' });
+    gp('S1','Funding cleanliness (crowding veto)', s1, s1d, { degradeMode: 'na' });
     let s2='na', s2d='F&G unavailable';
     if (S.fng){ const v=S.fng.v;
       const veto=(dailyDir==='long'&&v>=80)||(dailyDir==='short'&&v<=20);
       s2 = veto?'veto':'pass'; s2d = `${v} ${S.fng.c} (block fresh longs ≥80, fresh shorts ≤20)`;
     }
-    g.push(['S2','Sentiment extreme guard (Fear & Greed)', s2, s2d]);
-    g.push(['F1','Macro context (informational — judge it yourself)', 'na',
-      `BTC.D ${S.dom!==null?S.dom.toFixed(1)+'%':'n/a'}${sym.includes('XAUT')?' · gold: check DXY, real yields, event calendar manually':''}`]);
+    gp('S2','Sentiment extreme guard (Fear & Greed)', s2, s2d, { degradeMode: 'na' });
+    gp('F1','Macro context (informational — judge it yourself)', 'na',
+      `BTC.D ${S.dom!==null?S.dom.toFixed(1)+'%':'n/a'}${sym.includes('XAUT')?' · gold: check DXY, real yields, event calendar manually':''}`, { degradeMode: 'info' });
 
     const vetoed = g.some(x=>x[2]==='veto');
     const verdict = vetoed||dailyDir==='mixed' ? 'aside' : dailyDir;
@@ -4125,9 +4137,9 @@ async function runBias(){
           b1Det = `${bSym}: insufficient Binance history`;
         }
       }
-      g.push(['B1','BINANCE CONFIRM — same trend read on Binance perp (informational only)', b1State, b1Det]);
+      gp('B1','BINANCE CONFIRM — same trend read on Binance perp (informational only)', b1State, b1Det, { degradeMode: 'na' });
     }catch(e){
-      g.push(['B1','BINANCE CONFIRM — same trend read on Binance perp (informational only)','na','Binance fetch failed: '+e.message]);
+      gp('B1','BINANCE CONFIRM — same trend read on Binance perp (informational only)','na','Binance fetch failed: '+e.message, { degradeMode: 'na' });
     }
 
     out.innerHTML = `
