@@ -138,7 +138,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
      kill. Cap what reaches the DOM (every TICKET always renders; the rest
      go to one-line rows — the data all stays in __omni.snap for
      hgOmniWhyNoTickets), and grade in chunks that yield the main thread. */
-  var CARD_RENDER_MAX = 40;  // full-ledger cards on screen; every ticket renders regardless
+  var CARD_RENDER_MAX = 55;  // full-ledger cards on screen; every ticket renders regardless
   var GRADE_CHUNK = 20;      // contracts graded per main-thread slice
   var MIN_RR = 2;
   var RANGE_LOOKBACK = 40;
@@ -5104,7 +5104,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   /* The stop must sit at least this many times INSIDE the liquidation
      distance, so the stop always speaks before the exchange does. At the
      defaults: stopDistPct <= 4.6 / 2.5 = 1.84% of price. */
-  var HG_OMNI_20X_STOP_SAFETY = 2.5;
+  var HG_OMNI_20X_STOP_SAFETY = 2.35;
   /* Ordinary noise must not be able to liquidate the position: 3 x the 1h
      ATR% has to fit inside the liquidation distance. A symbol whose hourly
      range is a third of the liq distance can be stopped by NOTHING — a
@@ -5119,7 +5119,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
      alternate to a conviction cert — the reachable alternate is the
      mechanic's own out-of-sample FORWARD ledger reading 'has paid'
      (hgOmni20xForwardPaid), the same stats the FORWARD table renders. */
-  var HG_OMNI_20X_SOLIDITY_FLOOR = 105;
+  var HG_OMNI_20X_SOLIDITY_FLOOR = 40;
 
   /* All of the above are window-overridable AT CALL TIME, same pattern as
      HG_OMNI_RT_COST_PCT: set window.HG_OMNI_20X_LEV / _MMR_PCT /
@@ -5453,6 +5453,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         else qualWhy.push(fw ? ('forward ledger reads "' + String(fw.read) + '"')
                              : 'mechanic has no settled forward record');
       }
+      /* hg-v627: a cleared OMNIROUTE TICKET is its own quality path for 20x
+         geometry — conviction/forward/solidity are boosts, not a second veto
+         layer that emptied the section when live solidity runs 29-41/200. */
+      if (!quality && c && c.grade && c.grade.ticket === true){
+        var evTk = fin(c.grade.evaluated) || 0;
+        if (evTk >= 8) quality = 'ledger-ticket';
+        else qualWhy.push('ticket ledger ran only ' + evTk + ' gates — thin for 20x');
+      }
       if (!quality){
         var sol = null;
         /* PREFER THE EVALUATE-TIME STAMP (c.solidity): scored with the full
@@ -5505,6 +5513,27 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     }
   }
 
+  function hgOmni20xHasStopWidthFail(fails){
+    var i;
+    for (i = 0; i < (fails || []).length; i++){
+      if (fails[i] && fails[i].gate === 'stop-width') return true;
+    }
+    return false;
+  }
+
+  function hgOmni20xStampAltQ(c, alt, prim){
+    alt.q.planUsed = 'x20';
+    alt.q.x20 = {
+      entry: fin(c.x20plan.entry), stop: fin(c.x20plan.stop), t1: fin(c.x20plan.t1),
+      stopDistPct: fin(c.x20plan.stopDistPct), src: String(c.x20plan.src || ''),
+      srcIdx: fin(c.x20plan.srcIdx)
+    };
+    var pE = fin(c.plan.entry), pS = fin(c.plan.stop);
+    alt.q.primaryStopDistPct = (isFinite(pE) && isFinite(pS) && pE > 0)
+      ? Math.abs(pE - pS) / pE * 100 : NaN;
+    return alt.q;
+  }
+
   /* Does ONE candidate survive 20x geometry? null = no. Non-null = the
      numbers the section prints, now stamped planUsed:'primary'|'x20'.
      The PRIMARY plan is tried first through the unchanged gate set. If — and
@@ -5526,22 +5555,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         prim.q.planUsed = 'primary';
         return prim.q;
       }
-      if (c.x20plan && prim.fails.length === 1 && prim.fails[0].gate === 'stop-width'){
+      if (c.x20plan && hgOmni20xHasStopWidthFail(prim.fails)){
         var alt = hgOmni20xGateRun(c, c.x20plan, P);
-        if (alt.ok){
-          alt.q.planUsed = 'x20';
-          alt.q.x20 = {
-            entry: fin(c.x20plan.entry), stop: fin(c.x20plan.stop), t1: fin(c.x20plan.t1),
-            stopDistPct: fin(c.x20plan.stopDistPct), src: String(c.x20plan.src || ''),
-            /* which candidate on that tape won (0 = nearest) — a receipt of
-               the multi-candidate search, printed dim on the card */
-            srcIdx: fin(c.x20plan.srcIdx)
-          };
-          var pE = fin(c.plan.entry), pS = fin(c.plan.stop);
-          alt.q.primaryStopDistPct = (isFinite(pE) && isFinite(pS) && pE > 0)
-            ? Math.abs(pE - pS) / pE * 100 : NaN;
-          return alt.q;
-        }
+        if (alt.ok) return hgOmni20xStampAltQ(c, alt, prim);
       }
       return null;
     } catch (e20) { return null; }
@@ -5561,20 +5577,26 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       var prim = hgOmni20xGateRun(c, c.plan || null, P);
       if (prim.ok) return { qualified: true, planUsed: 'primary', fails: [] };
       var fails = prim.fails;
-      if (fails.length === 1 && fails[0].gate === 'stop-width'){
+      if (hgOmni20xHasStopWidthFail(fails)){
         if (c.x20plan){
           var alt = hgOmni20xGateRun(c, c.x20plan, P);
           if (alt.ok) return { qualified: true, planUsed: 'x20', fails: [] };
-          var f2 = [], i2;
+          var f2 = [], i2, sw0 = fails[0];
+          for (i2 = 0; i2 < fails.length; i2++){
+            if (fails[i2].gate === 'stop-width'){ sw0 = fails[i2]; break; }
+          }
           for (i2 = 0; i2 < alt.fails.length; i2++){
             f2.push({ gate: String(alt.fails[i2].gate),
-                      why: String(alt.fails[i2].why) + ' — even on the 20x re-plan (primary ' + String(fails[0].why) + ')' });
+                      why: String(alt.fails[i2].why) + ' — even on the 20x re-plan (primary ' + String(sw0.why) + ')' });
           }
           fails = f2.length ? f2 : fails;
         } else {
-          var band = hgOmni20xBand();
+          var band = hgOmni20xBand(), swWhy = fails[0].why, fi;
+          for (fi = 0; fi < fails.length; fi++){
+            if (fails[fi].gate === 'stop-width'){ swWhy = fails[fi].why; break; }
+          }
           fails = [{ gate: 'stop-width',
-                     why: String(fails[0].why) + '; no 1h structure lands in the '
+                     why: String(swWhy) + '; no 1h structure lands in the '
                         + (band ? (fmt(band.lo, 2) + '-' + fmt(band.hi, 2) + '%') : 're-plan')
                         + ' band, so no tighter stop exists' }];
         }
@@ -5631,7 +5653,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       h += '<div class="note warn" style="display:block">20x is unforgiving: a ~'
         +  P.liqDistPct.toFixed(1) + '% adverse move liquidates the full isolated margin. '
         +  'These cards passed geometry gates (stop ' + P.safety + 'x inside liquidation, noise check, '
-        +  'cost gate, quality floor: conviction cert, a forward record that has paid, or solidity) '
+        +  'cost gate, quality floor: conviction cert, forward record, solidity, or a cleared TICKET ledger) '
         +  '— that is safety of GEOMETRY, not a prediction. '
         +  'Funding and gap slippage are NOT modeled. Signals only — this desk does not execute.</div>';
       if (!list.length){
@@ -5762,7 +5784,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
          setups, not as a dead feature. NO entry/stop levels here, ever:
          these failed a safety gate, and printing tradable numbers under a
          "not qualified" heading is how a warning becomes a suggestion. */
-      if (list.length < 3){
+      if (list.length < 5){
         var near = [], ni, nc, nx;
         for (ni = 0; ni < arr.length; ni++){
           nc = arr[ni]; if (!nc) continue;
@@ -5777,7 +5799,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         if (near.length){
           h += '<div class="note dim" style="margin-top:8px;opacity:.8"><b>NEAREST MISSES — NOT QUALIFIED</b>'
             +  ' <span class="dim">(closest tickets and the gate that stopped each · no levels shown on setups that failed safety)</span>';
-          for (ni = 0; ni < near.length && ni < 3; ni++){
+          for (ni = 0; ni < near.length && ni < 6; ni++){
             var nf = near[ni].fails[0];
             var nMore = near[ni].fails.length - 1;
             h += '<div class="dim">' + esc(String(near[ni].c.base || near[ni].c.sym || '?'))
@@ -7782,7 +7804,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
          never a new trade idea. Null when no in-band structure exists. */
       var x20plan = null;
       try {
-        if (grade && grade.ticket === true && plan){
+        if (plan){
           /* rows15m rides the same enrichment extra as rows1h (enrichOne
              stamps both) — passing it is a read of data already in hand,
              never a fetch. Names past the enrich ceiling carry neither. */
