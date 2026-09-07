@@ -206,6 +206,47 @@ function firstEvidence(r){
   return '';
 }
 
+/* PACK 2 slice 4 — gate summary consumer.
+   Reads a gateMeta[] array (as published by hgGateResult in slices 1-3)
+   and returns a compact string like "7/7 pass" or
+   "5/7 · blocked: G2 sweep/reclaim, G6 vol+wick commit". Returns '' when
+   input is not a gateMeta array so callers can concatenate safely. */
+function gateSummary(meta){
+  try{
+    if (!Array.isArray(meta) || !meta.length) return '';
+    var pass = 0, blocked = [];
+    for (var i = 0; i < meta.length; i++){
+      var g = meta[i];
+      if (!g || typeof g !== 'object') continue;
+      if (g.state === 'pass') pass++;
+      else if (g.state === 'veto'){
+        var lbl = (typeof g.label === 'string' && g.label) ? g.label : (g.id || '?');
+        /* strip 'G1 ' / 'EG1 ' style prefixes so the block reason reads short */
+        blocked.push(lbl.replace(/^E?G\d+\s+/, ''));
+      }
+    }
+    var total = meta.length;
+    var head = pass + '/' + total + (pass === total ? ' pass' : '');
+    if (!blocked.length) return head;
+    /* Trim: keep the first two block reasons — note column is width-capped. */
+    var top = blocked.slice(0, 2).join(', ');
+    var more = blocked.length > 2 ? (' +' + (blocked.length - 2)) : '';
+    return head + ' · blocked: ' + top + more;
+  }catch(e){ return ''; }
+}
+
+/* PACK 2 slice 4 — EDGE veto surfacing.
+   edge.js edgeSwingBias() returns null on veto but stashes the block
+   reason on the function itself. Read that and format a short note. */
+function edgeVetoNote(){
+  try{
+    var fn = null;
+    try{ if (typeof W.edgeSwingBias === 'function') fn = W.edgeSwingBias; }catch(e){}
+    if (!fn || !fn.lastVetoBlockedBy) return '';
+    return 'EDGE blocked at ' + fn.lastVetoBlockedBy;
+  }catch(e){ return ''; }
+}
+
 /* brain: window.__hgBrainLast() -> synthesis rows (sym, dir, tier, evidence
    count, plan entry/stop/t1 when present). tierOrGrade = tier. */
 function pullBrain(){
@@ -223,11 +264,15 @@ function pullBrain(){
     var sym = r.sym || r.symbol;
     if (!dir || !sym) continue;
     var plan = (r.plan && typeof r.plan === 'object') ? r.plan : r;
+    /* PACK 2 slice 4: prepend gate summary to note when gateMeta is present */
+    var gs = gateSummary(r.gateMeta || (plan && plan.gateMeta));
+    var baseNote = firstEvidence(r);
+    var note = gs ? (baseNote ? (gs + ' · ' + baseNote) : gs) : baseNote;
     out.push({
       sym: String(sym), dir: dir,
       tierOrGrade: (r.tier !== null && r.tier !== undefined) ? r.tier : r.grade,
       entry: plan.entry, stop: plan.stop, t1: plan.t1,
-      note: firstEvidence(r)
+      note: note
     });
   }
   return { live: true, rows: out };
@@ -248,11 +293,15 @@ function pullScan(fnName){
     var dir = normDir(c.dir);
     var sym = c.sym || c.symbol || c.venue;
     if (!dir || !sym) continue;
+    /* PACK 2 slice 4: prepend gate summary to note when gateMeta is present */
+    var gs = gateSummary(c.gateMeta);
+    var baseNote = c.strategy || c.stratKey || '';
+    var note = gs ? (baseNote ? (gs + ' · ' + baseNote) : gs) : baseNote;
     out.push({
       sym: String(sym), dir: dir,
       tierOrGrade: (c.grade !== null && c.grade !== undefined) ? c.grade : c.tier,
       entry: c.entry, stop: c.stop, t1: c.t1,
-      note: c.strategy || c.stratKey || ''
+      note: note
     });
   }
   return { live: true, rows: out };
@@ -492,6 +541,10 @@ W.signallogSnapshot = function(){
 W.signallogEntries = function(){
   try{ return frozenView(__journal); }catch(e){ return []; }
 };
+/* PACK 2 slice 4: publish gate consumer helpers so tabalerts, digest, and
+   future consumers can format gate ledgers consistently. */
+W.hgGateSummary = gateSummary;
+W.hgEdgeVetoNote = edgeVetoNote;
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'signallog', label: 'SIGNAL LOG', mount: mount, refresh: signallogRefresh });
 ensureTimer();

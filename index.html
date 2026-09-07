@@ -815,7 +815,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 </main>
 
 
-  <script src="build-stamp.js?v=644"></script>
+  <script src="build-stamp.js?v=645"></script>
   <script src="hg-setup-core.js"></script>
 <script src="hghost.js"></script>
 <script src="indicators.js"></script>
@@ -4836,6 +4836,12 @@ function hgCryptoSetupId(c){
 function hgCryptoCandRow(t, hit, venueTag, vetoMeta){
   const row = { sym: t.symbol, dir: hit.dir, entry: hit.entry, stop: hit.stop, t1: hit.t1, t2: hit.t2, rr: hit.rr,
     venueTag: venueTag || '', venue: venueTag || '', turnoverUsd: t.turnoverUsd || 0 };
+  /* PACK 2 slice 4 addendum — propagate the gate ledger from the try-clean
+     output onto the published cand row so SIGNAL LOG can render per-gate
+     summaries via W.hgGateSummary. */
+  if (hit && Array.isArray(hit.gateMeta) && hit.gateMeta.length){
+    row.gateMeta = hit.gateMeta;
+  }
   if (vetoMeta){
     row.rsEdge = vetoMeta.rsEdge;
     row.flowOk = vetoMeta.flowOk;

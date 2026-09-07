@@ -575,7 +575,12 @@
       /* clearance travels WITH the ticket: 58% of 7/7 CLEAN setups scrape at
          least one binding gate, and the badge alone cannot show which. */
       margins: m.margins, tightCount: m.tightCount, tightGates: m.tightGates,
-      bindingTotal: m.bindingTotal };
+      bindingTotal: m.bindingTotal,
+      /* PACK 2 slice 4 addendum — propagate the gate ledger so downstream
+         consumers (SIGNAL LOG, LOG, digest, tabalerts) can render per-gate
+         detail via W.hgGateSummary. Slice 4 wired the readers but the
+         writers were dropping this field on the floor. */
+      gateMeta: m.gateMeta };
     if (typeof hgEnrichSwingClean === 'function'){
       var enriched = hgEnrichSwingClean(out, rows, m);
       if (enriched) out = enriched;
@@ -611,7 +616,9 @@
     var out = { sym: ticker && ticker.symbol, dir: m.dir, entry: m.entry, stop: m.stop,
       t1: m.t1, t2: m.t2, rr: m.dynamicRR, m15: m.m15, r15: m.r15, a: m.a,
       swept: m.swept, reclaimed: m.reclaimed, sweepLevel: sweepLevel,
-      e21: m.e21, mark: m.mark || m.entry };
+      e21: m.e21, mark: m.mark || m.entry,
+      /* PACK 2 slice 4 addendum — propagate the gate ledger (see swingTryClean) */
+      gateMeta: m.gateMeta };
     if (typeof hgEnrichScalpExact === 'function'){
       var enriched = hgEnrichScalpExact(out, m15, {});
       if (enriched) out = enriched;
