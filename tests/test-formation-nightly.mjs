@@ -7,6 +7,7 @@ import { HG_VER, swCacheOk } from './helpers/build-version.mjs';
 import {
   nightlyDue, dayAsideKinds, dayPreferKinds, tightenCostCeil, pickOg1Apply,
   buildNightlyApply, clampOg1Floors, nightlyBannerText, statsFromBacktestAll,
+  mergeAsideKinds, RECENT_DAY_BARS, RECENT_DAY_MIN_N,
   buildDeskNightly, mergeDeskAction, tighterAction,
   BAKED_OP_COST_CEIL, BAKED_OG1_MIN_RISK, BAKED_OG1_MIN_DISP, NIGHTLY_HOUR_UTC,
   DEFAULT_NIGHTLY_BARS, DAY_MIN_N
@@ -123,6 +124,16 @@ console.log('== statsFromBacktestAll ==');
   ok(bags.PO3.n === 10 && bags.PO3.avgGross === -0.2, 'maps expR to avgGross');
   ok(bags.ORB && bags.ORB.n === 2, 'thin kinds stay in the bag; aside still requires n≥8');
   ok(!dayAsideKinds(bags).includes('ORB'), 'n=2 never asides');
+}
+
+console.log('== recent 48h overlay merges into day aside ==');
+{
+  const base = { PO3: { n: 10, avgGross: -0.08, avgNet: -0.22 } };
+  const recent = { ORB: { n: 5, avgGross: -0.30, avgNet: -0.45 } };
+  const aside = mergeAsideKinds(dayAsideKinds(base), dayAsideKinds(recent, RECENT_DAY_MIN_N));
+  ok(aside.indexOf('PO3') >= 0, '40d PO3 still aside');
+  ok(aside.indexOf('ORB') >= 0, 'last48h ORB n=5 aside at minN=4');
+  ok(RECENT_DAY_BARS === 48, 'recent window is 48h');
 }
 
 console.log('== desk nightly tighten-only ==');

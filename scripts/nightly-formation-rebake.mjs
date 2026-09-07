@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildNightlyApply, statsFromBacktestAll, DEFAULT_NIGHTLY_BARS } from '../lib/formation-nightly.mjs';
+import { buildNightlyApply, statsFromBacktestAll, DEFAULT_NIGHTLY_BARS, RECENT_DAY_BARS } from '../lib/formation-nightly.mjs';
 
 const ROOT = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 const CACHE_DIR = path.join(ROOT, 'scripts', '.bt-cache');
@@ -157,20 +157,29 @@ export async function rebakeNightly(opts){
   const asOf = new Date().toISOString();
   const dayUtc = asOf.slice(0, 10);
   let orBags = {};
+  let orRecentBags = {};
   let og1Variants = {};
   const notes = [];
   try{
     const omni = bootOmni();
     const per = [];
+    const recentPer = [];
     for (const sym of CRYPTO){
       try{
         const rows = await fetch1h(sym, Math.max(bars, 80));
         const all = omni.hgOmniBacktestAll(rows, { warm: 45, horizon: 12, rMult: 2 });
         per.push(statsFromBacktestAll(all));
+        if (rows.length >= RECENT_DAY_BARS + 24){
+          const slice = rows.slice(-RECENT_DAY_BARS);
+          const recentAll = omni.hgOmniBacktestAll(slice, { warm: 20, horizon: 8, rMult: 2 });
+          recentPer.push(statsFromBacktestAll(recentAll));
+          console.log('  omni recent', sym, Object.keys(recentAll).filter(k => recentAll[k] && recentAll[k].samples).length, 'kinds (last ' + RECENT_DAY_BARS + 'h)');
+        }
         console.log('  omni', sym, Object.keys(all).filter(k => all[k] && all[k].samples).length, 'kinds');
       }catch(e){ notes.push(sym + ': ' + ((e && e.message) || e)); }
     }
     orBags = mergeBags(per);
+    orRecentBags = mergeBags(recentPer);
   }catch(e){ notes.push('omni: ' + ((e && e.message) || e)); }
 
   try{
@@ -194,7 +203,7 @@ export async function rebakeNightly(opts){
   }catch(e){ notes.push('og1: ' + ((e && e.message) || e)); }
 
   const apply = buildNightlyApply({
-    asOf, dayUtc, omnirouteBags: orBags, og1Variants
+    asOf, dayUtc, omnirouteBags: orBags, omnirouteRecentBags: orRecentBags, og1Variants
   });
   if (notes.length) apply.fetchNotes = notes;
   apply.bars = bars;

@@ -96,6 +96,7 @@
   function bannerText(j){
     if (!j || !j.dayUtc) return 'NIGHTLY FORMATION: baked replay floors — no day book yet.';
     var aside = (j.omniroute && j.omniroute.dayAside) || [];
+    var recentAside = (j.omniroute && j.omniroute.recentDayAside) || [];
     var prefer = (j.omniroute && j.omniroute.dayPrefer) || [];
     var cost = j.omnipresent && isFinite(fin(j.omnipresent.costCeilingR))
       ? fin(j.omnipresent.costCeilingR).toFixed(2) : '0.12';
@@ -110,6 +111,7 @@
       : 'desk tighten none';
     return 'NIGHTLY FORMATION ' + j.dayUtc
       + ' — OMNIROUTE aside ' + (aside.length ? aside.join(', ') : 'none')
+      + (recentAside.length ? (' · last48h +' + recentAside.join(', ')) : '')
       + ' · prefer ' + (prefer.length ? prefer.join(', ') : 'none')
       + ' · ' + deskBit
       + ' · OMNIPRESENT cost≤' + cost + 'R'
