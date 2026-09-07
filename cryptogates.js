@@ -471,6 +471,19 @@
     var expectedMove = a * 2.5;
     var dynamicRR = risk > 0 ? expectedMove / risk : 0;
     var g7 = dynamicRR >= CG_SCALP_RR_MIN;
+
+    /* PACK 2 (Increment 1) — SCALP gate ledger mirrors SWING: parallel
+       gateMeta[] via hgGateResult with per-gate degrade discipline. The
+       existing gates[] 2-tuple shape is unchanged so nothing reading
+       g[1] as a boolean today breaks. */
+    var GR2 = (typeof G.hgGateResult === 'function') ? G.hgGateResult : null;
+    var gateMeta = [];
+    function metaPush(id, label, ok, detail, opts){
+      if (!GR2) return;
+      var st = (ok === true) ? 'pass' : (ok === false) ? 'veto' : 'na';
+      gateMeta.push(GR2(id, label, st, detail || '', opts || {}));
+    }
+
     var gates = [
       ['G1 1H trend (' + dir + ')', true],
       ['G2 sweep/reclaim · ORB · VWAP', g2],
@@ -480,11 +493,43 @@
       ['G6 vol+wick commit', g6],
       ['G7 ' + CG_SCALP_RR_MIN + 'R vol-capped', g7]
     ];
+    /* SCALP-specific degrade modes:
+       - G1 1H trend: pass by construction (dir=null returned early above)
+       - G2 trigger:  veto (no trigger = no trade)
+       - G3 RSI:      veto (band is protective)
+       - G4 funding:  veto by default; 'pass' when ticker lacks fundingPct
+                      and venue explicitly disclaims it (CoinDCX no-funding)
+       - G5 settle:   pass when minsToFunding null (Delta between windows)
+       - G6 vol+wick: veto (structural commit gate)
+       - G7 R:R:      veto (must clear 1.5R vol-capped floor) */
+    var scalpNoFundingVenue = !!(ticker && (ticker.exchange === 'coindcx' || ticker.exchange === 'cdcx' || ticker.noFunding));
+    var fundMissingScalp = !(ticker && ticker.fundingPct !== null && isFinite(ticker.fundingPct));
+    metaPush('G1', 'G1 1H trend (' + dir + ')', true,
+      'EMA9/21/50 cascade ' + dir, { degradeMode: 'veto' });
+    metaPush('G2', 'G2 sweep/reclaim · ORB · VWAP', g2, g2Detail,
+      { degradeMode: 'veto' });
+    metaPush('G3', 'G3 RSI band', g3,
+      'RSI15 ' + (isFinite(r15) ? r15.toFixed(1) : 'n/a'),
+      { degradeMode: 'veto' });
+    metaPush('G4', 'G4 funding', g4,
+      fundMissingScalp ? (scalpNoFundingVenue ? 'no funding feed (CoinDCX)' : 'missing funding on a venue that should have it')
+                       : ('funding ' + ticker.fundingPct.toFixed(4) + '%'),
+      { degradeMode: scalpNoFundingVenue ? 'pass' : 'veto' });
+    metaPush('G5', 'G5 settle>25m', g4b,
+      (minsToFunding == null || !isFinite(minsToFunding)) ? 'not near settlement window' : (Math.round(minsToFunding) + ' min to funding'),
+      { degradeMode: 'pass' });   /* null = not in a settlement window = OK to trade */
+    metaPush('G6', 'G6 vol+wick commit', g6,
+      'vz ' + (isFinite(vz) ? vz.toFixed(2) : 'n/a') + ' · close@' + (closePos * 100).toFixed(0) + '%',
+      { degradeMode: 'veto' });
+    metaPush('G7', 'G7 ' + CG_SCALP_RR_MIN + 'R vol-capped', g7,
+      'R:R ' + (isFinite(dynamicRR) ? dynamicRR.toFixed(2) : 'n/a') + ' (need ≥' + CG_SCALP_RR_MIN + ')',
+      { degradeMode: 'veto' });
+
     var passed = gates.filter(function(g){ return g[1]; }).length;
     var t1 = dir === 'long' ? entry + expectedMove : entry - expectedMove;
     var t2 = dir === 'long' ? entry + (a * 4) : entry - (a * 4);
     return {
-      dir: dir, gates: gates, passed: passed, gatesTotal: 7,
+      dir: dir, gates: gates, gateMeta: gateMeta, passed: passed, gatesTotal: 7,
       level: entry, clean: passed >= 7,
       entry: entry, stop: stop, t1: t1, t2: t2, dynamicRR: dynamicRR,
       r15: r15, a: a, m15: m15, h1: h1, swept: swept, reclaimed: reclaimed,
