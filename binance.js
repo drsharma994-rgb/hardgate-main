@@ -266,7 +266,16 @@ async function binanceTickers24h(){
     const key = 'tickers24h';
     const hit = __binCacheGet(key); if (hit !== undefined) return hit;
     const raw = await __binFetchJson(BINANCE_FAPI + '/fapi/v1/ticker/24hr');
-    if (!Array.isArray(raw)) return null;
+    /* v647: when Binance is unreachable (geo-block + Render mirror rate-banned
+       simultaneously — happened on 09-07 with a shared-IP -1003 ban), fall
+       back to OKX SWAP tickers reshaped to Binance's Universe naming. That
+       keeps SMART $ producing setups on the top ~200 symbols instead of a
+       blank scan card. Reshape: OKX 'BTC-USDT-SWAP' -> 'BTCUSDT'. */
+    if (!Array.isArray(raw)){
+      const okx = await __binOkxTickersFallback();
+      if (okx) return __binCachePut(key, okx);
+      return null;
+    }
     const map = {};
     for (let i = 0; i < raw.length; i++){
       const d = raw[i];
@@ -279,6 +288,37 @@ async function binanceTickers24h(){
       };
     }
     return __binCachePut(key, map);
+  }catch(e){ return null; }
+}
+
+/* v647 OKX SWAP fallback for binanceTickers24h. OKX is reachable from most
+   regions Binance blocks (verified from the pplx.app sandbox 09-07). We
+   reshape OKX SWAP tickers to look like Binance /fapi/v1/ticker/24hr so
+   SMART $ can operate on the top ~200 symbols when Binance is unreachable.
+   Goes through /api/proxy so CORS is handled the same way as any other
+   third-party fetch. */
+async function __binOkxTickersFallback(){
+  try{
+    const url = '/api/proxy?url=' + encodeURIComponent('https://www.okx.com/api/v5/market/tickers?instType=SWAP');
+    const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!r.ok) return null;
+    const j = await r.json();
+    const list = (j && Array.isArray(j.data)) ? j.data : [];
+    if (!list.length) return null;
+    const map = {};
+    for (let i = 0; i < list.length; i++){
+      const t = list[i]; if (!t || !t.instId) continue;
+      const m = t.instId.match(/^([A-Z0-9]+)-USDT-SWAP$/);
+      if (!m) continue;
+      const sym = m[1] + 'USDT';                          /* BTC-USDT-SWAP -> BTCUSDT */
+      const last = +t.last, open24 = +t.open24h;
+      const chg = (isFinite(last) && isFinite(open24) && open24 > 0)
+        ? ((last - open24) / open24 * 100) : 0;
+      /* volCcy24h is quote-currency volume (USDT); some fields need fallback */
+      const turnover = +t.volCcy24h || (+t.vol24h * (isFinite(last) ? last : 0)) || 0;
+      map[sym] = { symbol: sym, mark: last, chg24: chg, turnoverUsd: turnover, __okxFallback: true };
+    }
+    return Object.keys(map).length ? map : null;
   }catch(e){ return null; }
 }
 

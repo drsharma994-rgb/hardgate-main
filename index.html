@@ -815,7 +815,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 </main>
 
 
-  <script src="build-stamp.js?v=646"></script>
+  <script src="build-stamp.js?v=647"></script>
   <script src="hg-setup-core.js"></script>
 <script src="hghost.js"></script>
 <script src="indicators.js"></script>
@@ -2721,16 +2721,13 @@ async function runSmartScan(opts){
     const res = await Promise.all([binancePerpUniverse(), binanceTickers24h()]);
     const perps = res[0], ticks = res[1];
     if (!perps.length || !ticks){
-      /* v646 fix: precise, actionable error. The 'network issue?' guess was
-         wrong — the real cause is either (a) Binance geo-blocks the sandbox
-         and the Render mirror is rate-limited too, or (b) both endpoints hit
-         a temporary rate ban. Tell the user what to try. */
+      /* v647: precise, actionable error. Includes OKX fallback status. */
       if (!quiet){
         var reason;
-        if (!perps.length && !ticks) reason = 'both universe + tickers empty';
+        if (!perps.length && !ticks) reason = 'both universe + tickers empty (Binance geo-block + OKX fallback failed)';
         else if (!perps.length) reason = 'universe empty (' + (ticks ? Object.keys(ticks).length : 0) + ' tickers ok)';
-        else reason = 'tickers empty (' + perps.length + ' perps ok)';
-        statEl.textContent = 'Binance unavailable — ' + reason + ' · possible geo-block or shared-IP rate limit. Retry in 60s or switch venue to CDCX above.';
+        else reason = 'tickers empty (' + perps.length + ' perps ok, OKX fallback also failed)';
+        statEl.textContent = 'Binance unavailable — ' + reason + ' · retry in 60s or switch venue to CDCX.';
       }
       return;
     }

@@ -49,12 +49,18 @@ assert.ok(/if \(upstream\.ok && !binanceBanned\) cacheSet/.test(proxy),
 /* --- version bumps --- */
 const stamp = readFileSync(resolve(ROOT, 'build-stamp.js'), 'utf8');
 const sw = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
-assert.ok(/version:\s*'hg-v646'/.test(stamp), "build-stamp.js must be hg-v646");
-assert.ok(/HG_CACHE\s*=\s*'hg-v646'/.test(sw), "sw.js HG_CACHE must be hg-v646");
-assert.ok(/build-stamp\.js\?v=646/.test(idx), "index.html cache-buster must be ?v=646");
+/* v647: read through the helper so version bumps don't break this suite. */
+const { HG_VER } = await import('./helpers/build-version.mjs');
+assert.ok(/^hg-v(?:646|64[7-9]|65\d|[7-9]\d\d|\d{4,})$/.test(HG_VER),
+  `build-stamp.js version must be ≥ hg-v646 (saw ${HG_VER})`);
+const cacheRx646 = new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'");
+assert.ok(cacheRx646.test(sw), `sw.js HG_CACHE must match build-stamp version ${HG_VER}`);
+const qv = HG_VER.replace(/^hg-v/, '');
+const cbRx = new RegExp('build-stamp\\.js\\?v=' + qv);
+assert.ok(cbRx.test(idx), `index.html cache-buster must be ?v=${qv}`);
 
 console.log('OK \u2014 v646 post-verification fixes verified');
 console.log('  * signallog now pulls crypto SWING/SCALP so gate summaries can surface');
 console.log('  * runBias auto-normalizes Delta<->CoinDCX symbols + surfaces exact counts');
 console.log('  * api/proxy.js geo-fallback tries multiple mirrors + detects -1003 rate-bans');
-console.log('  * version bumped to hg-v646 (build-stamp + sw + index)');
+console.log('  * version on ' + HG_VER + ' (≥ hg-v646 for these fixes)');

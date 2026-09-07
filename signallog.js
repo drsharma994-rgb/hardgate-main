@@ -188,7 +188,16 @@ function saveJournal(){
 function rowsFrom(val){
   if (Array.isArray(val)) return val;
   if (val && typeof val === 'object'){
-    var keys = ['cands', 'rows', 'results', 'cards', 'setups'];
+    /* v647: merge cands + nearCands so NEAR (6/7) crypto rows also enter the
+       log. NEAR rows are exactly where gate summaries are most useful — they
+       show which single gate is blocking ("6/7 · blocked: vol+wick"). Without
+       this, in most market conditions (0 CLEAN, many NEAR) the log stays
+       100% BRAIN and Pack 2's whole point is invisible. */
+    var out = [];
+    if (Array.isArray(val.cands)) out = out.concat(val.cands);
+    if (Array.isArray(val.nearCands)) out = out.concat(val.nearCands);
+    if (out.length) return out;
+    var keys = ['rows', 'results', 'cards', 'setups'];
     for (var i = 0; i < keys.length; i++){
       if (Array.isArray(val[keys[i]])) return val[keys[i]];
     }
