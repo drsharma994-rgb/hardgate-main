@@ -47,7 +47,7 @@ assert(W.HG_tabs[0].id === 'regime' && W.HG_tabs[0].label === 'REGIME' && typeof
 
 /* rows helper: verdict with only the named component set, rest null */
 function verdictWith(patch){
-  const base = { btc: null, ethbtc: null, btcd: null, fng: null, dxy: null, us10y: null, gold: null, stable: null };
+  const base = { btc: null, ethbtc: null, btcd: null, fedliq: null, dxy: null, us10y: null, gold: null, stable: null, dvol: null };
   return regimeVerdict(Object.assign(base, patch || {}));
 }
 
@@ -131,33 +131,22 @@ function verdictWith(patch){
   assert(v.rows[2].stamp === 'NA' && v.rows[2].score === 0, 'R3: non-numeric pct => NA/0');
 }
 
-/* ---------------- 4) R4 Fear & Greed deadzone ---------------- */
+/* ---------------- 4) R4 Fed net liquidity ---------------- */
 {
-  let v = verdictWith({ fng: { value: 61, classification: 'Greed', change: 4 } });
-  assert(v.rows[3].stamp === 'BULL' && v.rows[3].score === 1 && v.rows[3].detail.indexOf('GREED 61') > -1
-         && v.rows[3].detail.indexOf('(+4 d/d)') > -1,
-         'R4: 61 > 60 => BULL/+1 with classification + d/d change');
+  let v = verdictWith({ fedliq: { wowPct: 0.25, detail: 'net liq expanding' } });
+  assert(v.rows[3].stamp === 'BULL' && v.rows[3].score === 1 && v.rows[3].id === 'R4',
+         'R4: wowPct > 0.15% => BULL/+1');
 
-  v = verdictWith({ fng: { value: 60, classification: 'Greed', change: 1 } });
-  assert(v.rows[3].stamp === 'NA' && v.rows[3].score === 0, 'R4: exactly 60 boundary => NA/0');
+  v = verdictWith({ fedliq: { wowPct: -0.2, detail: 'net liq draining' } });
+  assert(v.rows[3].stamp === 'BEAR' && v.rows[3].score === -1,
+         'R4: wowPct < -0.15% => BEAR/-1');
 
-  v = verdictWith({ fng: { value: 25, classification: 'Fear', change: -2 } });
-  assert(v.rows[3].stamp === 'NA' && v.rows[3].score === 0, 'R4: exactly 25 boundary => NA/0');
+  v = verdictWith({ fedliq: { wowPct: 0.05, detail: 'flat' } });
+  assert(v.rows[3].stamp === 'NA' && v.rows[3].score === 0,
+         'R4: inside band => NA/0');
 
-  v = verdictWith({ fng: { value: 24, classification: 'Extreme Fear', change: -6 } });
-  assert(v.rows[3].stamp === 'BEAR' && v.rows[3].score === -1 && v.rows[3].detail.indexOf('EXTREME FEAR 24') > -1
-         && v.rows[3].detail.indexOf('(-6 d/d)') > -1,
-         'R4: 24 < 25 => BEAR/-1');
-
-  v = verdictWith({ fng: { value: '72', classification: 'Greed', change: null } });
-  assert(v.rows[3].stamp === 'BULL' && v.rows[3].score === 1 && v.rows[3].detail.indexOf('d/d') === -1,
-         'R4: string "72" coerced; null change omits d/d text');
-
-  v = verdictWith({ fng: null });
+  v = verdictWith({ fedliq: null });
   assert(v.rows[3].stamp === 'NA' && v.rows[3].score === 0, 'R4: null => NA/0');
-
-  v = verdictWith({ fng: { value: NaN } });
-  assert(v.rows[3].stamp === 'NA' && v.rows[3].score === 0, 'R4: NaN value => NA/0');
 }
 
 /* ---------------- 5) R5 DXY trend ---------------- */
@@ -217,8 +206,8 @@ function verdictWith(patch){
   /* gold never moves the aggregate score */
   const withGold = verdictWith({ btc: { close: 7e4, ema50: 6.2e4, ema200: 6e4 }, gold: { close: 2500, ema200: 2400 } });
   const noGold   = verdictWith({ btc: { close: 7e4, ema50: 6.2e4, ema200: 6e4 }, gold: null });
-  assert(withGold.score === noGold.score && withGold.scoredTotal === 7,
-         'R7: gold informational — aggregate score identical with/without it, scoredTotal stays 7');
+  assert(withGold.score === noGold.score && withGold.scoredTotal === 8,
+         'R7: gold informational — aggregate score identical with/without it, scoredTotal stays 8');
 }
 
 /* ---------------- 7b) R8 STABLECOIN FLOWS — dry powder, ±0.5% band ---------------- */
@@ -277,35 +266,36 @@ function verdictWith(patch){
     btc:    { close: 7e4, ema50: 6.2e4, ema200: 6e4 },
     ethbtc: { ema20Now: 0.052, ema20Prev: 0.05 },
     btcd:   { pct: 45 },
-    fng:    { value: 75, classification: 'Greed', change: 3 },
+    fedliq: { wowPct: 0.25, detail: 'net liq expanding' },
     dxy:    { value: 102, trend20: 'FALLING' },
     us10y:  { value: 4.0, trend: 'FALLING' },
     gold:   { close: 2500, ema200: 2400 },
-    stable: { totalUSD: 101e9, delta7dUSD: 1e9, delta30dUSD: 2e9 }
+    stable: { totalUSD: 101e9, delta7dUSD: 1e9, delta30dUSD: 2e9 },
+    dvol:   { dvol: 55, slope: { slope: 'FALLING', chg: -3 } }
   });
-  assert(allOn.score === 7 && allOn.word === 'RISK-ON' && allOn.cls === 'long' && allOn.scoredTotal === 7
-         && allOn.why.indexOf('+1 BTC trend up') > -1 && allOn.why.indexOf('greed 75') > -1
-         && allOn.why.indexOf('+1 dry powder in') > -1,
-         'aggregate: all seven risk-on => score 7, RISK-ON, cls long, drivers listed (incl. dry powder)');
+  assert(allOn.score === 8 && allOn.word === 'RISK-ON' && allOn.cls === 'long' && allOn.scoredTotal === 8
+         && allOn.why.indexOf('+1 BTC trend up') > -1 && allOn.why.indexOf('+1 dry powder in') > -1,
+         'aggregate: all eight risk-on => score 8, RISK-ON, cls long, drivers listed');
 
   const allOff = regimeVerdict({
     btc:    { close: 5e4, ema50: 5.8e4, ema200: 6e4 },
     ethbtc: { ema20Now: 0.048, ema20Prev: 0.05 },
     btcd:   { pct: 58 },
-    fng:    { value: 12, classification: 'Extreme Fear', change: -5 },
+    fedliq: { wowPct: -0.25, detail: 'net liq draining' },
     dxy:    { value: 106, trend20: 'RISING' },
     us10y:  { value: 4.8, trend: 'RISING' },
     gold:   { close: 2300, ema200: 2400 },
-    stable: { totalUSD: 99e9, delta7dUSD: -1e9, delta30dUSD: -2e9 }
+    stable: { totalUSD: 99e9, delta7dUSD: -1e9, delta30dUSD: -2e9 },
+    dvol:   { dvol: 75, slope: { slope: 'RISING', chg: 3 } }
   });
-  assert(allOff.score === -7 && allOff.word === 'RISK-OFF' && allOff.cls === 'short' && allOff.scoredTotal === 7,
-         'aggregate: all seven risk-off => score -7, RISK-OFF, cls short');
+  assert(allOff.score === -8 && allOff.word === 'RISK-OFF' && allOff.cls === 'short' && allOff.scoredTotal === 8,
+         'aggregate: all eight risk-off => score -8, RISK-OFF, cls short');
 
   const plus3 = regimeVerdict({ // exactly +3 boundary => RISK-ON
     btc: { close: 7e4, ema50: 6.2e4, ema200: 6e4 },
     ethbtc: { ema20Now: 0.052, ema20Prev: 0.05 },
     dxy: { value: 102, trend20: 'FALLING' },
-    btcd: { pct: 52 }, fng: { value: 50 }, us10y: { value: 4.3, trend: 'FLAT' }, gold: null, stable: null
+    btcd: { pct: 52 }, fedliq: { wowPct: 0 }, us10y: { value: 4.3, trend: 'FLAT' }, gold: null, stable: null, dvol: null
   });
   assert(plus3.score === 3 && plus3.word === 'RISK-ON', 'aggregate: score exactly +3 boundary => RISK-ON');
 
@@ -313,7 +303,7 @@ function verdictWith(patch){
     btc: { close: 5e4, ema50: 5.8e4, ema200: 6e4 },
     ethbtc: { ema20Now: 0.048, ema20Prev: 0.05 },
     dxy: { value: 106, trend20: 'RISING' },
-    btcd: { pct: 52 }, fng: { value: 50 }, us10y: { value: 4.3, trend: 'FLAT' }, gold: null, stable: null
+    btcd: { pct: 52 }, fedliq: { wowPct: 0 }, us10y: { value: 4.3, trend: 'FLAT' }, gold: null, stable: null, dvol: null
   });
   assert(minus3.score === -3 && minus3.word === 'RISK-OFF', 'aggregate: score exactly -3 boundary => RISK-OFF');
 
@@ -321,7 +311,7 @@ function verdictWith(patch){
     btc: { close: 7e4, ema50: 6.2e4, ema200: 6e4 },
     ethbtc: { ema20Now: 0.052, ema20Prev: 0.05 },
     stable: { totalUSD: 101e9, delta7dUSD: 1e9 },
-    btcd: { pct: 52 }, fng: { value: 50 }, dxy: { value: 104, trend20: 'FLAT' },
+    btcd: { pct: 52 }, fedliq: { wowPct: 0 }, dxy: { value: 104, trend20: 'FLAT' },
     us10y: { value: 4.3, trend: 'FLAT' }, gold: null
   });
   assert(plus3Stable.score === 3 && plus3Stable.word === 'RISK-ON',
@@ -331,7 +321,7 @@ function verdictWith(patch){
     btc: { close: 5e4, ema50: 5.8e4, ema200: 6e4 },
     ethbtc: { ema20Now: 0.048, ema20Prev: 0.05 },
     stable: { totalUSD: 99e9, delta7dUSD: -1e9 },
-    btcd: { pct: 52 }, fng: { value: 50 }, dxy: { value: 104, trend20: 'FLAT' },
+    btcd: { pct: 52 }, fedliq: { wowPct: 0 }, dxy: { value: 104, trend20: 'FLAT' },
     us10y: { value: 4.3, trend: 'FLAT' }, gold: null
   });
   assert(minus3Stable.score === -3 && minus3Stable.word === 'RISK-OFF',
@@ -341,17 +331,17 @@ function verdictWith(patch){
     btc: { close: 7e4, ema50: 6.2e4, ema200: 6e4 },
     ethbtc: { ema20Now: 0.052, ema20Prev: 0.05 },
     stable: { totalUSD: 100.2e9, delta7dUSD: 0.2e9 },
-    btcd: null, fng: null, dxy: null, us10y: null, gold: null
+    btcd: null, fedliq: null, dxy: null, us10y: null, gold: null, dvol: null
   });
   assert(plus2.score === 2 && plus2.word === 'MIXED — SELECTIVE' && plus2.cls === 'aside',
          'aggregate: score +2 (inside deadzone, stables flat) => MIXED — SELECTIVE, cls aside');
 
   const allNull = regimeVerdict({
-    btc: null, ethbtc: null, btcd: null, fng: null, dxy: null, us10y: null, gold: null, stable: null
+    btc: null, ethbtc: null, btcd: null, fedliq: null, dxy: null, us10y: null, gold: null, stable: null, dvol: null
   });
-  assert(allNull.score === 0 && allNull.word === 'MIXED — SELECTIVE' && allNull.rows.length === 8
-         && allNull.why.indexOf('no directional drivers') > -1 && allNull.scoredTotal === 7,
-         'aggregate: all sources null => score 0, MIXED, 8 rows, honest "no directional drivers"');
+  assert(allNull.score === 0 && allNull.word === 'MIXED — SELECTIVE' && allNull.rows.length === 9
+         && allNull.why.indexOf('no directional drivers') > -1 && allNull.scoredTotal === 8,
+         'aggregate: all sources null => score 0, MIXED, 9 rows, honest "no directional drivers"');
 
   let threw = false;
   try { regimeVerdict(null); regimeVerdict(undefined); regimeVerdict({}); }
@@ -359,8 +349,8 @@ function verdictWith(patch){
   assert(!threw, 'aggregate: null/undefined/empty argument never throws');
 
   const mixedWhy = allOn.why + ' | ' + allNull.why;
-  assert(allOn.why.indexOf('score +7/7') === 0 && allOff.why.indexOf('score -7/7') === 0,
-         'aggregate: why string opens with signed score out of 7');
+  assert(allOn.why.indexOf('score +8/8') === 0 && allOff.why.indexOf('score -8/8') === 0,
+         'aggregate: why string opens with signed score out of 8');
   assert(mixedWhy.length > 0, 'aggregate: why strings built');
 }
 
@@ -408,7 +398,7 @@ const autoOk = await waitForScan('auto-run');
 assert(autoOk, 'auto-run on mount completes (all sources fail fast, no hang)');
 assert(outNode.innerHTML.indexOf('class="empty"') > -1 && outNode.innerHTML.indexOf('note warn') > -1,
        'all-sources-down render: .note warn + .empty (graceful, no throw)');
-assert(statNode.textContent.indexOf('0/8 sources ok') > -1, 'status line reports 0/8 sources ok');
+assert(statNode.textContent.indexOf('0/9 sources ok') > -1, 'status line reports 0/9 sources ok');
 assert(typeof runNode._click === 'function', 'REFRESH button has a click handler');
 
 runNode._click();
@@ -439,8 +429,8 @@ async function clickAndWait(target){
   };
   sandbox.ema = (arr) => arr.map(() => arr[arr.length - 1] - 100); // close > ema => BULL legs
 
-  const ok = await clickAndWait('2/8 sources ok'); // btc + gold hit stubs, six sources still dead
-  assert(ok, 'stubbed scan completes with 2/8 sources ok (btc + gold)');
+  const ok = await clickAndWait('2/9 sources ok'); // btc + gold hit stubs, seven sources still dead
+  assert(ok, 'stubbed scan completes with 2/9 sources ok (btc + gold)');
   assert(klineCalls.some(c => c.indexOf('XAUUSDT|1d|') === 0), 'gold leg calls binanceKlines("XAUUSDT", "1d", …)');
   assert(!klineCalls.some(c => c.indexOf('PAXGUSDT') > -1), 'gold leg never calls PAXGUSDT anymore');
   assert(klineCalls.some(c => c.indexOf('BTCUSDT|1d|') === 0), 'btc leg still calls binanceKlines("BTCUSDT", "1d", …)');
@@ -452,7 +442,7 @@ async function clickAndWait(target){
 {
   /* 11a) null payload => honest NA row, no throw (nothing cached yet, so this really fetches) */
   sandbox.fetch = async () => ({ ok: true, status: 200, json: async () => null });
-  let ok = await clickAndWait('2/8 sources ok');
+  let ok = await clickAndWait('2/9 sources ok');
   assert(ok && outNode.innerHTML.indexOf('DRY POWDER') > -1 && outNode.innerHTML.indexOf('data unavailable') > -1,
          'R8: null payload => DRY POWDER row renders NA "data unavailable", scan survives');
 
@@ -471,8 +461,8 @@ async function clickAndWait(target){
       return { ok: true, status: 200, json: async () => llamaPayload };
     return { ok: false, status: 503, json: async () => null };
   };
-  ok = await clickAndWait('3/8 sources ok'); // btc + gold + stablecoins
-  assert(ok, 'stubbed scan completes with 3/8 sources ok (btc + gold + stablecoins)');
+  ok = await clickAndWait('3/9 sources ok'); // btc + gold + stablecoins
+  assert(ok, 'stubbed scan completes with 3/9 sources ok (btc + gold + stablecoins)');
   assert(outNode.innerHTML.indexOf('DRY POWDER') > -1
          && outNode.innerHTML.indexOf('STABLECOINS $100.0B') > -1
          && outNode.innerHTML.indexOf('(INFLOWS)') > -1,
@@ -497,7 +487,7 @@ const pbOn  = regimePlaybook(regimeVerdict({
   btc:    { close: 7e4, ema50: 6.2e4, ema200: 6e4 },
   ethbtc: { ema20Now: 0.052, ema20Prev: 0.05 },
   btcd:   { pct: 45 },
-  fng:    { value: 75, classification: 'Greed', change: 3 },
+  fedliq: { wowPct: 0.25, detail: 'net liq expanding' },
   dxy:    { value: 102, trend20: 'FALLING' },
   us10y:  { value: 4.0, trend: 'FALLING' },
   gold:   { close: 2500, ema200: 2400 },
@@ -507,14 +497,14 @@ const pbOff = regimePlaybook(regimeVerdict({
   btc:    { close: 5e4, ema50: 5.8e4, ema200: 6e4 },
   ethbtc: { ema20Now: 0.048, ema20Prev: 0.05 },
   btcd:   { pct: 58 },
-  fng:    { value: 12, classification: 'Extreme Fear', change: -5 },
+  fedliq: { wowPct: -0.25, detail: 'net liq draining' },
   dxy:    { value: 106, trend20: 'RISING' },
   us10y:  { value: 4.8, trend: 'RISING' },
   gold:   { close: 2300, ema200: 2400 },
   stable: { totalUSD: 99e9, delta7dUSD: -1e9, delta30dUSD: -2e9 }
 }));
 const pbZero = regimePlaybook(regimeVerdict({
-  btc: null, ethbtc: null, btcd: null, fng: null, dxy: null, us10y: null, gold: null, stable: null
+  btc: null, ethbtc: null, btcd: null, fedliq: null, dxy: null, us10y: null, gold: null, stable: null, dvol: null
 }));
 const pbLean = regimePlaybook(verdictWith({
   btc: { close: 7e4, ema50: 6.2e4, ema200: 6e4 },
@@ -530,7 +520,7 @@ assert(pbLean && regimePlaybook(verdictWith({ btc: { close: 5e4, ema50: 5.8e4, e
        'playbook: MIXED score -1 inside deadzone => bias BOTH');
 
 /* position-size guidance from |score| */
-assert(pbOn.size === 'full' && pbOff.size === 'full', 'playbook: |score| 7 => FULL size both directions');
+assert(pbOn.size === 'full' && pbOff.size === 'full', 'playbook: |score| 8 => FULL size both directions');
 assert(regimePlaybook(verdictWith({
   btc: { close: 7e4, ema50: 6.2e4, ema200: 6e4 },
   ethbtc: { ema20Now: 0.052, ema20Prev: 0.05 },
@@ -570,7 +560,7 @@ assert(pbOnFlat.bias === 'LONG-ONLY' && pbOnFlat.setups.some(s => s.indexOf('mea
        'playbook: RISK-ON with FLAT stables => mean-revert substitute, no carry offer');
 assert(pbOff.setups.some(s => s.indexOf('trend-follow') >= 0), 'playbook: RISK-OFF prefers trend-follow shorts');
 assert(pbOff.setups.some(s => s.indexOf('mean-revert') >= 0),
-       'playbook: RISK-OFF + R4 fear stretch => quarter-size mean-revert bounce note');
+       'playbook: RISK-OFF + R4 liquidity drain => quarter-size mean-revert bounce note');
 assert(pbZero.setups.some(s => s.toLowerCase().indexOf('stand aside') >= 0)
        && pbZero.setups.some(s => s.indexOf('mean-revert') >= 0),
        'playbook: STAND-ASIDE regime => stand-aside first, mean-revert only if forced');
@@ -599,8 +589,8 @@ assert(pbDerived && pbDerived.cls === 'long' && pbDerived.bias === 'LONG-ONLY' &
 /* ---------------- 13) playbook panel in the rendered dashboard ---------------- */
 console.log('== playbook panel: rendered from live scan state ==');
 /* current stub state (btc+gold ok, stables cached inflow, rest dead) => score +2 MIXED */
-let okMix = await clickAndWait('3/8 sources ok');
-assert(okMix, 'playbook UI: MIXED scan completes (3/8 sources ok)');
+let okMix = await clickAndWait('3/9 sources ok');
+assert(okMix, 'playbook UI: MIXED scan completes (3/9 sources ok)');
 assert(outNode.innerHTML.indexOf('PLAYBOOK') > -1 && outNode.innerHTML.indexOf('INVALIDATION —') > -1,
        'playbook UI: PLAYBOOK card + INVALIDATION plan line rendered');
 assert(outNode.innerHTML.indexOf('BOTH') > -1 && outNode.innerHTML.indexOf('QUARTER') > -1,
@@ -608,24 +598,43 @@ assert(outNode.innerHTML.indexOf('BOTH') > -1 && outNode.innerHTML.indexOf('QUAR
 assert(outNode.innerHTML.indexOf('mean-revert') > -1 && outNode.innerHTML.indexOf('gpip') > -1,
        'playbook UI: setup pills rendered as .gpip chips');
 
-/* now stub every source risk-on => score +7 RISK-ON full/long */
+/* now stub every source risk-on => score +8 RISK-ON full/long */
+sandbox.deribitOptionsSnapshot = async () => ({
+  dvol: { dvol: 55, dvolPrev: 58 },
+  dvolSlope: { slope: 'FALLING', chg: -3 },
+  rr25d: { rr25d: 2, extreme: false },
+  gammaFlip: null
+});
 sandbox.ema = (arr) => arr.map(v => v * 0.99); // rising series => rising ema legs
 sandbox.getDXY = async () => ({ value: 102, trend20: 'FALLING', change20Pct: -0.8 });
 sandbox.getGoldMacro = async () => ({ tnx: 4.0, tnxTrend: 'FALLING' });
 const ethbtcKlines = [];
 for (let i = 0; i < 40; i++) ethbtcKlines.push([0, 0, 0, 0, 0.05 + i * 0.001, 0, 0, 0, 0, 0, 0, 0]);
+const fredObs = {
+  WALCL: [{ date: '2024-01-01', value: 8000000 }, { date: '2024-01-08', value: 8015000 }],
+  WTREGEN: [{ date: '2024-01-01', value: 700000 }, { date: '2024-01-08', value: 710000 }],
+  RRPONTSYD: [{ date: '2024-01-01', value: 500 }, { date: '2024-01-08', value: 480 }],
+};
 sandbox.fetch = async (url) => {
   const u = String(url);
+  if (u.indexOf('/api/fred') > -1){
+    const m = u.match(/series=([^&]+)/i);
+    const series = m ? decodeURIComponent(m[1]) : 'WALCL';
+    return { ok: true, status: 200, json: async () => ({ observations: fredObs[series] || fredObs.WALCL }) };
+  }
   if (u.indexOf('coingecko.com') > -1)
     return { ok: true, status: 200, json: async () => ({ data: { market_cap_percentage: { btc: 45 } } }) };
-  if (u.indexOf('alternative.me') > -1)
-    return { ok: true, status: 200, json: async () => ({ data: [{ value: '75', value_classification: 'Greed' }] }) };
+  if (u.indexOf('stablecoins.llama.fi') > -1)
+    return { ok: true, status: 200, json: async () => ({ peggedAssets: [
+      { symbol: 'USDT', circulating: { peggedUSD: 60e9 }, circulatingPrevWeek: { peggedUSD: 59.4e9 } },
+      { symbol: 'USDC', circulating: { peggedUSD: 41e9 }, circulatingPrevWeek: { peggedUSD: 40.5e9 } }
+    ] }) };
   if (u.indexOf('api.binance.com') > -1)
     return { ok: true, status: 200, json: async () => ethbtcKlines };
   return { ok: false, status: 503, json: async () => null };
 };
-let okOn = await clickAndWait('8/8 sources ok');
-assert(okOn, 'playbook UI: fully-stubbed RISK-ON scan completes (8/8 sources ok)');
+let okOn = await clickAndWait('9/9 sources ok');
+assert(okOn, 'playbook UI: fully-stubbed RISK-ON scan completes (9/9 sources ok)');
 assert(outNode.innerHTML.indexOf('LONG-ONLY') > -1 && outNode.innerHTML.indexOf('FULL') > -1
        && outNode.innerHTML.indexOf('card long') > -1,
        'playbook UI: RISK-ON renders LONG-ONLY at FULL size on a .card.long');
@@ -681,29 +690,20 @@ console.log('== hard refresh: registration, refreshed/busy/skipped paths, never 
   }
   assert(settled2 && rgFetchCalls > 0, 'fixture: auto-run completes against the slow dead fetch stub');
 
-  /* post-run refresh re-scans exactly once: 3 fetch-backed gauges here
-     (BTC dominance, F&G, stables — klines/ema/DXY/macro globals absent) */
+  /* post-run refresh re-scans exactly once: fetch-backed gauges here
+     (BTC dominance, Fed liq x3, stables — klines/ema/DXY/macro globals absent) */
   const beforeCalls = rgFetchCalls;
   r2 = await tab2.refresh();
-  /* NOT an exact count. Since the geo-block fallback landed, one gauge makes
-     up to TWO fetches — direct, then the same-origin proxy — so a raw fetch
-     count measures the transport rather than the re-scan. Three gauges fetch
-     here, so a re-scan is somewhere between +3 and +6; what this protects is
-     that a refresh re-scans ONCE, not that it makes a particular number of
-     network calls. */
   const delta = rgFetchCalls - beforeCalls;
-  assert(r2 === 'refreshed' && delta >= 3 && delta <= 6,
+  assert(r2 === 'refreshed' && delta >= 3 && delta <= 12,
          'post-run refresh re-scans exactly once -> "refreshed" (fetch calls ' + beforeCalls + ' -> ' + rgFetchCalls + ', delta ' + delta + ')');
 
   /* busy guard: overlapping refresh adds zero fetches */
   const p1 = tab2.refresh();
   const rBusy = await tab2.refresh();
   const rDone = await p1;
-  /* The guarantee is that the OVERLAPPING call was refused, not a fetch
-     count: exactly one further scan must have run, so the delta doubles at
-     most from the single-scan case above. */
   const delta2 = rgFetchCalls - beforeCalls;
-  assert(rBusy === 'busy' && rDone === 'refreshed' && delta2 >= 6 && delta2 <= 12,
+  assert(rBusy === 'busy' && rDone === 'refreshed' && delta2 >= 6 && delta2 <= 24,
          'overlapping refresh is busy-guarded — in-flight scan completes, no double-fetch (calls '
          + rgFetchCalls + ', delta ' + delta2 + ')');
 
@@ -738,12 +738,26 @@ console.log('== BRAIN state getter (window.regimeState) ==');
     binanceKlines: async () => rows260,
     getDXY: async () => ({ value: 102, trend20: 'FALLING', change20Pct: -0.8 }),
     getGoldMacro: async () => ({ tnx: 4.0, tnxTrend: 'FALLING' }),
+    deribitOptionsSnapshot: async () => ({
+      dvol: { dvol: 55, dvolPrev: 58 },
+      dvolSlope: { slope: 'FALLING', chg: -3 },
+      rr25d: { rr25d: 2, extreme: false },
+      gammaFlip: null
+    }),
     fetch: async (url) => {
       const u = String(url);
+      if (u.indexOf('/api/fred') > -1){
+        const m = u.match(/series=([^&]+)/i);
+        const series = m ? decodeURIComponent(m[1]) : 'WALCL';
+        const obs = {
+          WALCL: [{ date: '2024-01-01', value: 8000000 }, { date: '2024-01-08', value: 8015000 }],
+          WTREGEN: [{ date: '2024-01-01', value: 700000 }, { date: '2024-01-08', value: 710000 }],
+          RRPONTSYD: [{ date: '2024-01-01', value: 500 }, { date: '2024-01-08', value: 480 }],
+        };
+        return { ok: true, status: 200, json: async () => ({ observations: obs[series] || obs.WALCL }) };
+      }
       if (u.indexOf('coingecko.com') > -1)
         return { ok: true, status: 200, json: async () => ({ data: { market_cap_percentage: { btc: 45 } } }) };
-      if (u.indexOf('alternative.me') > -1)
-        return { ok: true, status: 200, json: async () => ({ data: [{ value: '75', value_classification: 'Greed' }] }) };
       if (u.indexOf('api.binance.com') > -1)
         return { ok: true, status: 200, json: async () => ethbtcKlines3 };
       if (u.indexOf('stablecoins.llama.fi') > -1)
@@ -764,16 +778,16 @@ console.log('== BRAIN state getter (window.regimeState) ==');
   const stat3 = el3._nodes['#regimeStat'], out3 = el3._nodes['#regimeOut'], run3 = el3._nodes['#regimeRun'];
   let settled3 = false;
   for (let i = 0; i < 200; i++){
-    if (run3.disabled === false && (stat3.textContent || '').indexOf('8/8 sources ok') > -1){ settled3 = true; break; }
+    if (run3.disabled === false && (stat3.textContent || '').indexOf('9/9 sources ok') > -1){ settled3 = true; break; }
     await new Promise(r => setTimeout(r, 25));
   }
-  assert(settled3, 'state: fully-stubbed RISK-ON scan completes (8/8 sources ok)');
+  assert(settled3, 'state: fully-stubbed RISK-ON scan completes (9/9 sources ok)');
 
   const st = W3.regimeState();
   assert(st && typeof st === 'object' && typeof st.at === 'number' && isFinite(st.at),
          'state: populated after the successful scan ({label, score, playbook, at})');
-  assert(st.label === 'RISK-ON' && st.score === 7,
-         'state: label + score come from the regimeVerdict result (RISK-ON, 7)');
+  assert(st.label === 'RISK-ON' && st.score === 8,
+         'state: label + score come from the regimeVerdict result (RISK-ON, 8)');
   assert(st.playbook && st.playbook.regime === 'RISK-ON' && st.playbook.bias === 'LONG-ONLY'
          && st.playbook.cls === 'long' && Array.isArray(st.playbook.setups),
          'state: playbook is the window.regimePlaybook output (bias LONG-ONLY, setups array)');
@@ -795,7 +809,7 @@ console.log('== BRAIN state getter (window.regimeState) ==');
   Object.defineProperty(out3, 'innerHTML', desc3);
   const st3 = W3.regimeState();
   assert(!rfThrew, 'state: failing re-run never rejects the refresh');
-  assert(st3 && st3.at === st.at && st3.label === 'RISK-ON' && st3.score === 7,
+  assert(st3 && st3.at === st.at && st3.label === 'RISK-ON' && st3.score === 8,
          'state: stale-good snapshot preserved after the failing re-run (same at, same content)');
 
   /* sabotaged internals: getter degrades to null, never throws, then recovers */

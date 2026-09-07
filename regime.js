@@ -6,16 +6,16 @@ Eight gauges, rendered as a ledger with BULL/BEAR/N-A stamps:
   R1 BTC 1d trend       close vs EMA200 (+ EMA50/200 golden|death cross)  ±1
   R2 ETH/BTC 1d ratio   EMA20 slope over 5 bars (alt-strength proxy)      ±1
   R3 BTC dominance      <50% alt-favorable · >55% risk-off · else 0       ±1/0
-  R4 Fear & Greed       >60 greed +1 · <25 fear -1 · 25-60 neutral        ±1/0
+  R4 Fed net liquidity WALCL−TGA−RRP WoW >+0.15% +1 · <-0.15% -1   ±1/0
   R5 DXY                20d trend FALLING +1 · RISING -1                  ±1/0
   R6 US 10Y yield       20d trend FALLING +1 · RISING -1                  ±1/0
   R7 GOLD (XAU PERP)    close vs EMA200 — HEDGE DEMAND, informational only
   R8 STABLECOIN FLOWS   DeFiLlama total mcap, 7d delta vs ±0.5% band      ±1/0
+  R9 DVOL SLOPE         Deribit DVOL rising -1 · falling +1 · flat 0     ±1/0
 
 Score >= +3 RISK-ON · <= -3 RISK-OFF · else MIXED — SELECTIVE.
-Eight gauges rendered; R7 gold is informational only (scored:false). Seven
-scored components (R1–R6, R8) → theoretical max |score| = 7, not 6.
-Thresholds stay ±3: ±3/7 ≈ 43% agreement — a clear plurality of gauges.
+Nine gauges rendered; R7 gold is informational only (scored:false). Eight
+scored components (R1–R6, R8–R9) → theoretical max |score| = 8.
 Jumping to ±4 (57%) would make regime calls too rare on a dashboard whose
 sources fail often. N/A gauges score 0 — an honest dashboard shows holes.
 
@@ -198,6 +198,87 @@ async function rgFetchFng(){
   }catch(e){ return null; }
 }
 
+async function rgFetchFedLiquidity(){
+  try{
+    if (typeof fetch !== 'function') return null;
+    var key = 'rg|fedliq', hit = rgCacheGet(key, 60*60*1000); if (hit !== undefined) return hit;
+    async function fredObs(series, limit){
+      try{
+        var res = await fetch('/api/fred?series=' + encodeURIComponent(series) + '&limit=' + (limit || 60));
+        if (!res.ok) return null;
+        var j = await res.json();
+        return j && j.observations ? j.observations : null;
+      }catch(e){ return null; }
+    }
+    var walcl = await fredObs('WALCL', 60);
+    var tga = await fredObs('WTREGEN', 60);
+    var rrp = await fredObs('RRPONTSYD', 60);
+    if (!walcl || !tga || !rrp) return null;
+    function parseObs(obs){
+      var out = [];
+      for (var i = 0; i < (obs || []).length; i++){
+        var o = obs[i], v = +o.value, t = Date.parse(String(o.date || ''));
+        if (isFinite(v) && isFinite(t)) out.push({ dateMs: t, value: v });
+      }
+      out.sort(function(a, b){ return a.dateMs - b.dateMs; });
+      return out;
+    }
+    var w = parseObs(walcl), tg = parseObs(tga), rp = parseObs(rrp);
+    if (!w.length) return null;
+    function nearest(series, t){
+      var best = null, bestD = Infinity;
+      for (var i = 0; i < series.length; i++){
+        var d = Math.abs(series[i].dateMs - t);
+        if (d < bestD){ bestD = d; best = series[i]; }
+      }
+      return (bestD <= 8 * 86400000) ? best : null;
+    }
+    var points = [];
+    for (var j = 0; j < w.length; j++){
+      var row = w[j];
+      var tRow = nearest(tg, row.dateMs), rRow = nearest(rp, row.dateMs);
+      if (!tRow || !rRow) continue;
+      points.push({
+        dateMs: row.dateMs,
+        netLiquidityM: row.value - tRow.value - (rRow.value * 1000),
+        walclM: row.value,
+        tgaM: tRow.value,
+        rrpB: rRow.value,
+      });
+    }
+    if (points.length < 2) return null;
+    var last = points[points.length - 1], prev = points[points.length - 2];
+    var wow = last.netLiquidityM - prev.netLiquidityM;
+    var wowPct = (Math.abs(prev.netLiquidityM) > 0) ? (wow / Math.abs(prev.netLiquidityM)) * 100 : null;
+    return rgCachePut(key, {
+      netM: last.netLiquidityM,
+      wowM: wow,
+      wowPct: wowPct,
+      detail: 'net liq ' + rgUsd(last.netLiquidityM / 1e6) + 'M · WoW ' + rgUsdSigned(wow / 1e3) + 'B'
+        + (wowPct !== null ? ' (' + (wowPct >= 0 ? '+' : '') + rgNum(wowPct, 2) + '%)' : ''),
+      points: points.length
+    });
+  }catch(e){ return null; }
+}
+
+async function rgFetchDvol(){
+  try{
+    if (typeof deribitOptionsSnapshot !== 'function') return null;
+    var key = 'rg|dvol', hit = rgCacheGet(key); if (hit !== undefined) return hit;
+    var s = await deribitOptionsSnapshot('BTC');
+    if (!s || !s.dvol || !isFinite(s.dvol.dvol)) return null;
+    var slope = s.dvolSlope || (typeof deribitDvolSlope === 'function'
+      ? deribitDvolSlope(s.dvol.dvol, s.dvol.dvolPrev) : null);
+    return rgCachePut(key, {
+      dvol: s.dvol.dvol,
+      dvolPrev: s.dvol.dvolPrev,
+      slope: slope,
+      rr25d: s.rr25d || null,
+      gammaFlip: s.gammaFlip || null,
+    });
+  }catch(e){ return null; }
+}
+
 async function rgFetchDxy(){
   try{
     var key = 'rg|dxy', hit = rgCacheGet(key); if (hit !== undefined) return hit;
@@ -317,9 +398,10 @@ async function rgFetchStablecoins(){
 
 /* ---------------- PURE verdict / classifier ----------------
    components: { btc:{close,ema50,ema200}, ethbtc:{ema20Now,ema20Prev,last},
-     btcd:{pct}, fng:{value,classification,change}, dxy:{value,trend20,change20Pct},
+     btcd:{pct}, fedliq:{netM,wowM,wowPct,detail}, fng:{value,classification,change},
+     dxy:{value,trend20,change20Pct},
      us10y:{value,trend}, gold:{close,ema200},
-     stable:{totalUSD,delta7dUSD,delta30dUSD} }  — every entry nullable.
+     stable:{totalUSD,delta7dUSD,delta30dUSD}, dvol:{dvol,dvolPrev,slope,rr25d} }  — every entry nullable.
    Returns { score, word, why, cls, rows, scoredTotal }. Never throws.     */
 function regimeVerdict(components){
   components = components || {};
@@ -375,19 +457,15 @@ function regimeVerdict(components){
     else             push('R3','BTC DOMINANCE','BTC.D',               txt + ' · 50–55 mid-zone — no alt edge',           'NA',    0, true);
   })();
 
-  /* R4 — Fear & Greed: >60 greed +1, <25 fear -1, 25-60 neutral */
+  /* R4 — Fed net liquidity (WALCL − TGA − RRP): WoW expansion +1, drain -1 */
   (function(){
-    var f = components.fng;
-    if (!f){ push('R4','FEAR & GREED','F&G','data unavailable','NA',0,true); return; }
-    var v = rgToNum(f.value);
-    if (!isFinite(v)){ push('R4','FEAR & GREED','F&G','data unavailable','NA',0,true); return; }
-    var cls = f.classification ? String(f.classification).toUpperCase()
-                               : (v > 60 ? 'GREED' : (v < 25 ? 'FEAR' : 'NEUTRAL'));
-    var chg = rgToNum(f.change);
-    var txt = cls + ' ' + rgNum(v, 0) + (isFinite(chg) ? ' (' + (chg >= 0 ? '+' : '') + rgNum(chg, 0) + ' d/d)' : '');
-    if (v > 60)      push('R4','FEAR & GREED','greed ' + rgNum(v, 0), txt + ' · risk appetite high',    'BULL',  1, true);
-    else if (v < 25) push('R4','FEAR & GREED','fear '  + rgNum(v, 0), txt + ' · risk appetite frozen',  'BEAR', -1, true);
-    else             push('R4','FEAR & GREED','F&G',                  txt + ' · 25–60 neutral zone',    'NA',    0, true);
+    var f = components.fedliq;
+    if (!f){ push('R4','FED NET LIQUIDITY','Fed liq','data unavailable','NA',0,true); return; }
+    var wowPct = rgToNum(f.wowPct);
+    var txt = f.detail ? String(f.detail) : ('net liq WoW ' + (isFinite(wowPct) ? rgNum(wowPct, 2) + '%' : 'n/a'));
+    if (isFinite(wowPct) && wowPct > 0.15)      push('R4','FED NET LIQUIDITY','liquidity in',  txt + ' · expanding — QE/RRP/TGA tailwind', 'BULL',  1, true);
+    else if (isFinite(wowPct) && wowPct < -0.15) push('R4','FED NET LIQUIDITY','liquidity out', txt + ' · draining — QT/TGA/RRP headwind', 'BEAR', -1, true);
+    else                                         push('R4','FED NET LIQUIDITY','Fed liq flat',  txt + ' · inside ±0.15% WoW band', 'NA', 0, true);
   })();
 
   /* R5 — DXY 20-day trend: FALLING +1 (tailwind), RISING -1 (headwind) */
@@ -446,6 +524,20 @@ function regimeVerdict(components){
     if (pct7 > 0.5)       push('R8','DRY POWDER','dry powder in',  txt + ' (INFLOWS)'  + tail + ' — dry powder entering, risk-on',   'BULL',  1, true);
     else if (pct7 < -0.5) push('R8','DRY POWDER','dry powder out', txt + ' (DRAINING)' + tail + ' — liquidity draining, risk-off',  'BEAR', -1, true);
     else                  push('R8','DRY POWDER','stables flat',   txt + ' (FLAT)'     + tail + ' — inside ±0.5% band, no flow edge', 'NA',   0, true);
+  })();
+
+  /* R9 — DVOL slope (Deribit): rising -1 expansion risk, falling +1 */
+  (function(){
+    var d = components.dvol;
+    if (!d){ push('R9','DVOL SLOPE (BTC)','DVOL','data unavailable','NA',0,true); return; }
+    var v = rgToNum(d.dvol);
+    var slope = d.slope && d.slope.slope ? String(d.slope.slope).toUpperCase() : '';
+    var chg = d.slope && isFinite(+d.slope.chg) ? +d.slope.chg : null;
+    var txt = 'DVOL ' + (isFinite(v) ? rgNum(v, 1) : 'n/a')
+      + (chg !== null ? ' (' + (chg >= 0 ? '+' : '') + rgNum(chg, 1) + ')' : '');
+    if (slope === 'RISING')      push('R9','DVOL SLOPE (BTC)','DVOL rising', txt + ' · vol expanding — tighten R:R', 'BEAR', -1, true);
+    else if (slope === 'FALLING') push('R9','DVOL SLOPE (BTC)','DVOL falling', txt + ' · vol compressing — range-friendly', 'BULL', 1, true);
+    else                          push('R9','DVOL SLOPE (BTC)','DVOL flat', txt + ' · no vol edge', 'NA', 0, true);
   })();
 
   /* ---------------- aggregate ---------------- */
@@ -720,21 +812,21 @@ async function rgRun(els){
     rgSetProg(els.prog, 0.45);
     await rgSleep(250); // gentle pacing before the external APIs
     /* chunk 2: CoinGecko + alternative.me + macro + DeFiLlama stablecoins */
-    var c2 = await Promise.all([ rgFetchBtcDominance(), rgFetchFng(), rgFetchUs10y(), rgFetchStablecoins() ]);
+    var c2 = await Promise.all([ rgFetchBtcDominance(), rgFetchFedLiquidity(), rgFetchUs10y(), rgFetchStablecoins(), rgFetchDvol() ]);
     rgSetProg(els.prog, 0.85);
 
     var components = {
       btc: c1[0], ethbtc: c1[1], gold: c1[2], dxy: c1[3],
-      btcd: c2[0], fng: c2[1], us10y: c2[2], stable: c2[3]
+      btcd: c2[0], fedliq: c2[1], us10y: c2[2], stable: c2[3], dvol: c2[4]
     };
     var fails = 0;
     Object.keys(components).forEach(function(k){ if (!components[k]) fails++; });
 
     var v = regimeVerdict(components);
-    rgRender(els.out, v, { fails: fails, total: 8 });
+    rgRender(els.out, v, { fails: fails, total: 9 });
     setRgSnapshot(v, components); /* BRAIN: cache the successful scan (catch path below never reaches here) */
     if (els.stat) els.stat.textContent = 'updated ' + new Date().toISOString().slice(11, 19) +
-      ' UTC · ' + (8 - fails) + '/8 sources ok · cached 60s (stables 10m)';
+      ' UTC · ' + (9 - fails) + '/9 sources ok · cached 60s (stables 10m · Fed liq 1h)';
     rgSetProg(els.prog, 1);
     setTimeout(function(){ rgSetProg(els.prog, null); }, 600);
   }catch(e){
@@ -752,7 +844,7 @@ function mountRegime(el){
   if (!el) return;
   el.innerHTML =
     '<div class="panel">' +
-      '<h2>MARKET REGIME <span>risk-on / risk-off composite · 8 gauges</span></h2>' +
+      '<h2>MARKET REGIME <span>risk-on / risk-off composite · 9 gauges</span></h2>' +
       (typeof W.hgOmniPrincipalNoteHtml === 'function' ? (W.hgOmniPrincipalNoteHtml('regime') || '') : '') +
       '<div class="row">' +
         '<button class="btn" id="regimeRun">REFRESH</button>' +
@@ -761,8 +853,8 @@ function mountRegime(el){
       '<div class="prog" id="regimeProg"><i></i></div>' +
       '<div id="regimeOut" style="margin-top:10px"></div>' +
       '<div class="note" style="margin-top:10px">Scored gauges (±1 each): BTC vs 200EMA · ETH/BTC EMA20 slope · ' +
-      'BTC dominance (&lt;50% alt-favorable, &gt;55% risk-off) · Fear &amp; Greed (&gt;60 / &lt;25) · ' +
-      'DXY 20-day trend · US10Y 20-day trend · stablecoin flows (7d mcap Δ vs ±0.5% band — DeFiLlama dry powder). ' +
+      'BTC dominance (&lt;50% alt-favorable, &gt;55% risk-off) · Fed net liquidity (WALCL−TGA−RRP WoW) · ' +
+      'DXY 20-day trend · US10Y 20-day trend · stablecoin flows (7d mcap Δ vs ±0.5% band) · DVOL slope (Deribit). ' +
       'Gold (XAU perp) is informational (hedge demand). ' +
       'Score ≥ +3 RISK-ON · ≤ −3 RISK-OFF · between = MIXED. N/A scores 0 — an honest dashboard shows holes.</div>' +
     '</div>';

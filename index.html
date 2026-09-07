@@ -819,10 +819,15 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="indicators2.js"></script>
 <script src="store.js"></script>
 <script src="binance.js"></script>
+<script src="inc4-data-core.js"></script>
+<script src="coinalyze.js"></script>
+<script src="coinglass.js"></script>
+<script src="borrow-rates.js"></script>
 <script src="spot-perp.js"></script>
 <script src="startrader.js"></script>
 <script src="bybit.js"></script>
 <script src="deribit-vol.js"></script>
+<script src="liquidity-gate.js"></script>
 <script src="positioning.js"></script>
 <script src="gate-replay-oos.js"></script>
 <script src="cryptogates.js"></script>
@@ -2282,25 +2287,31 @@ async function smartScanSymbol(sym, tick){
   }catch(e){}
   const res = await Promise.all([
     binanceFunding(sym), binanceOIHistory(sym, '1h', 25),
+    (typeof coinalyzeAggOI === 'function') ? coinalyzeAggOI(sym) : Promise.resolve(null),
+    (typeof coinalyzeOIChg === 'function') ? coinalyzeOIChg(sym, 24) : Promise.resolve(null),
     binanceLongShort(sym, '1h', 2), binanceTopTraders(sym, '1h', 2), binanceTakerRatio(sym, '1h', 2)
   ]);
-  const fnd = res[0], oih = res[1], ls = res[2], top = res[3], tk = res[4];
-  if (!fnd && !oih && !ls && !top && !tk) return null;
+  const fnd = res[0], oih = res[1], czOi = res[2], czChg = res[3], ls = res[4], top = res[5], tk = res[6];
+  if (!fnd && !oih && !czOi && !ls && !top && !tk) return null;
   /* klines for the setup builder — a kline failure must NOT kill the symbol;
      positioning data alone still earns a context card (setup = null). */
   const kls = await Promise.all([
     binanceKlines(sym, '4h', 120).catch(function(){ return []; }),
     binanceKlines(sym, '1h', 120).catch(function(){ return []; })
   ]);
-  const oiNow = (oih && oih.latest) ? oih.latest.oi : null;
+  const oiNow = (czOi && czOi.aggOIUsd) ? czOi.aggOIUsd : ((oih && oih.latest) ? oih.latest.oi : null);
   const oiFirst = (oih && oih.series && oih.series.length >= 2) ? oih.series[0].oi : null;
-  const oiChgPct = (oiNow !== null && oiFirst && oiFirst > 0) ? (oiNow/oiFirst - 1)*100 : null;
+  const oiChgPct = (czChg && isFinite(czChg.chgPct)) ? czChg.chgPct
+    : ((oiNow !== null && oiFirst && oiFirst > 0) ? (oiNow/oiFirst - 1)*100 : null);
   const out = {
     sym: sym, tick: tick,
     markPrice: (fnd && isFinite(fnd.markPrice)) ? fnd.markPrice : (tick ? tick.mark : NaN),
     fundingPct: fnd ? fnd.fundingPct : null,
-    oiUsd: (oih && oih.latest) ? oih.latest.oiUsd : null,
+    oiUsd: (czOi && czOi.aggOIUsd) ? czOi.aggOIUsd : ((oih && oih.latest) ? oih.latest.oiUsd : null),
     oiChgPct: oiChgPct,
+    oiSource: czChg ? 'coinalyze-agg' : (oih ? 'binance-only' : null),
+    binanceOIUsd: czOi ? czOi.binanceOIUsd : null,
+    binanceOISharePct: czOi ? czOi.binanceSharePct : null,
     retailLongPct: (ls && ls.latest) ? ls.latest.longPct : null,
     topLongPct: (top && top.latest) ? top.latest.longPct : null,
     takerRatio: (tk && tk.latest) ? tk.latest.buySellRatio : null,
@@ -2826,6 +2837,23 @@ const room=Math.abs(t1-p);
 const rr=room/risk;
 if (rr<1.5) continue;
 
+var trapLiqTag = '';
+try{
+  if (typeof coinglassClusters === 'function'){
+    var cgTrap = await coinglassClusters(t.symbol);
+    var sweptPx = dir==='long' ? rows[sweptLowAt].l : rows[sweptHighAt].h;
+    if (cgTrap && cgTrap.clusters && cgTrap.clusters.length){
+      for (var cgi = 0; cgi < cgTrap.clusters.length; cgi++){
+        var cl = cgTrap.clusters[cgi];
+        if (cl && cl.notionalUsd >= 500000 && Math.abs(cl.price - sweptPx) / sweptPx <= 0.002){
+          trapLiqTag = 'HIGH-QUALITY TRAP · $' + (cl.notionalUsd/1e6).toFixed(1) + 'M liq cluster at sweep';
+          break;
+        }
+      }
+    }
+  }
+}catch(eTrapLiq){}
+
 found++;
 const t2 = dir==='long' ? uOuter : lOuter;   // stretch target: opposite extreme band, beyond the mean
 var trapPl = applyExactEntry({ dir: dir, type: 'SCALP', entry: p, stop: stop, t1: t1, t2: t2,
@@ -2838,7 +2866,7 @@ __cardsHtml.push(cardHTML(hgCardVenueSym(t.symbol, venueTag), dir,
 [fmt(outerSD,1)+' SD swept ('+(rows.length-1-(dir==='long'?sweptLowAt:sweptHighAt))+'b ago)', dir==='long'?px(rows[sweptLowAt].l):px(rows[sweptHighAt].h)],
 [fmt(innerSD,1)+' SD reclaimed now', dir==='long'?px(lInner):px(uInner)],
 ['target (mean)',px(t1)]],
-['G1 '+fmt(outerSD,1)+' SD extreme','G2 reclaimed '+fmt(innerSD,1)+' SD','G3 momentum exhausted at sweep'],
+['G1 '+fmt(outerSD,1)+' SD extreme','G2 reclaimed '+fmt(innerSD,1)+' SD','G3 momentum exhausted at sweep'].concat(trapLiqTag ? [trapLiqTag] : []),
 planBlockExact(trapPl, trapPl.note)
 + `<br>Dynamic mean reversion: bands auto-scaled to ${fmt(outerSD,1)} SD based on this asset's volatility. Momentum exhaustion (RSI ${fmt(rsiAtSweep,1)}) is read at the moment of the extreme wick, not after price already reclaimed.`,
 trapPl.entry, trapPl.stop, trapPl.t1, null, Object.assign({ scanner: 'liq-trap', strategy: 'liq-trap', t2: trapPl.t2, stack: trapStack, rows: rows,
@@ -5588,9 +5616,16 @@ function hgQtyToContracts(sym, coinQty){
            coinActual: lots * spec.cv, shortfallPct: raw > 0 ? (1 - lots / raw) * 100 : 0 };
 }
 function planTrade(){
+  planTradeAsync().catch(function(e){
+    var out = $('tradeOut');
+    if (out) out.innerHTML = '<div class="empty">plan failed: ' + String(e && e.message || e) + '</div>';
+  });
+}
+async function planTradeAsync(){
   hgEnsureContractSpecs();
   const side=$('tSide').value, entry=+$('tEntry').value, stop=+$('tStop').value;
   const eq=+$('tEq').value, riskPct=+$('tRisk').value, mmr=(+$('tMmr').value||0.5)/100;
+  const symVal = $('tSym').value || '';
   const scaleOut=Math.min(100,Math.max(0,+$('tScale').value||50));
   const out=$('tradeOut');
   if (!(entry>0&&stop>0&&eq>0&&riskPct>0)){ out.innerHTML='<div class="empty">Fill entry, stop, equity, and risk %.</div>'; return; }
@@ -5636,6 +5671,41 @@ function planTrade(){
   const checksDone = [...document.querySelectorAll('#tCheck .ck')].every(c=>c.checked);
   g.push(['P5','Discipline checklist complete', checksDone?'pass':'veto', checksDone?'':'tick every box on the left — SKYAI/HYPE/GOAT were checklist failures, not signal failures']);
 
+  var liqWarn = '', cgStopWarn = '', gammaWarn = '';
+  try{
+    if (symVal && typeof hgLiquidityToStop === 'function'){
+      var liq = await hgLiquidityToStop(symVal, side, entry, stop, notional);
+      if (liq && liq.slippageProne){
+        liqWarn = liq.note || 'thin book on path to stop';
+        g.push(['P6','Liquidity-to-stop ratio', 'veto', liqWarn]);
+      } else if (liq && liq.note){
+        g.push(['P6','Liquidity-to-stop ratio', 'pass', liq.note]);
+      }
+    }
+  }catch(eLiq){}
+  try{
+    if (symVal && typeof coinglassClusters === 'function' && typeof coinglassStopWarn === 'function'){
+      var cg = await coinglassClusters(symVal);
+      var sw = cg && cg.clusters ? coinglassStopWarn(cg.clusters, stop, 500000) : null;
+      if (sw && sw.warn){
+        cgStopWarn = sw.note;
+        g.push(['P7','Stop vs liquidation cluster', 'veto', cgStopWarn + ' — move stop 0.1×ATR beyond cluster']);
+      }
+    }
+  }catch(eCg){}
+  try{
+    if (typeof deribitOptionsSnapshot === 'function'){
+      var opt = await deribitOptionsSnapshot(/BTC/i.test(symVal) ? 'BTC' : 'ETH');
+      if (opt && opt.gammaFlip && opt.gammaFlip.nearFlip){
+        gammaWarn = 'entry within 1% of gamma flip ~' + fmt(opt.gammaFlip.level, 0);
+        g.push(['P8','Near Deribit gamma flip', 'veto', gammaWarn]);
+      }
+      if (opt && opt.rr25d && opt.rr25d.extreme){
+        g.push(['P9','25Δ risk reversal extreme', 'veto', 'RR ' + fmt(opt.rr25d.rr25d, 1) + ' · ' + (opt.rr25d.bias || '')]);
+      }
+    }
+  }catch(eOpt){}
+
   const vet = g.some(x=>x[2]==='veto');
   var handoff = (typeof hgTradeHandoffFor === 'function')
     ? hgTradeHandoffFor($('tSym').value || '', side, entry, stop) : null;
@@ -5645,7 +5715,6 @@ function planTrade(){
     ? '<div class="note" style="margin-bottom:8px">' + (handoff.source === 'book' ? 'MANAGE from book · ' : 'Handoff from ')
       + String(handoff.scanner || handoff.strategy).replace(/&/g,'&amp;').replace(/</g,'&lt;')
       + (handoff.stack && handoff.stack.summary ? ' · FTS carried' : '') + '</div>' : '';
-  var symVal = $('tSym').value || '';
   var tradeBookMeta = { scanner: 'trade-plan', strategy: 'trade-plan', t2: t2, scalePct: scaleOut };
   if (handoff){
     if (handoff.stack) tradeBookMeta.stack = handoff.stack;

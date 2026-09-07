@@ -1,7 +1,7 @@
 /* =========================================================================
 HARDGATE — deribit-vol.js
-Deribit public DVOL (volatility index) — no API key.
-BTC/ETH implied-vol regime for BRAIN context votes. Never throws; caches 5m.
+Deribit public DVOL + 25Δ risk reversal + gamma flip levels.
+BTC/ETH implied-vol regime for REGIME / SMART $ / TRADE PLAN. Never throws.
 ========================================================================= */
 'use strict';
 
@@ -9,6 +9,7 @@ var DERIBIT_API = 'https://www.deribit.com/api/v2/public';
 var __DV_CACHE = new Map();
 var DV_CACHE_MS = 5 * 60 * 1000;
 var __dvSnap = null;
+var __optSnap = null;
 
 async function __dvFetchJson(path, timeoutMs){
   var ctrl = new AbortController();
@@ -80,6 +81,81 @@ async function deribitVolSnapshot(currency){
   }catch(e){ return null; }
 }
 
+/** Options chain snapshot: 25Δ RR + gamma-by-strike. */
+async function deribitOptionsSnapshot(currency){
+  try{
+    currency = (currency || 'BTC').toUpperCase();
+    var key = 'opt|' + currency;
+    var hit = __dvCacheGet(key);
+    if (hit !== undefined) return hit;
+
+    var dvol = await deribitVolSnapshot(currency);
+    var idx = await __dvFetchJson('/get_index_price?index_name=' + encodeURIComponent(currency.toLowerCase() + '_usd'));
+    var spot = idx && isFinite(+idx.index_price) ? +idx.index_price : null;
+    var books = await __dvFetchJson('/get_book_summary_by_currency?currency=' + encodeURIComponent(currency) + '&kind=option');
+    if (!Array.isArray(books) || !books.length) return null;
+
+    var bestCall = null, bestPut = null, gammaByStrike = {};
+    for (var i = 0; i < books.length; i++){
+      var b = books[i];
+      if (!b || !b.instrument_name) continue;
+      var name = String(b.instrument_name);
+      var isCall = name.indexOf('-C') >= 0 || name.endsWith('C');
+      var isPut = name.indexOf('-P') >= 0 || name.endsWith('P');
+      var iv = isFinite(+b.mark_iv) ? +b.mark_iv : null;
+      var delta = isFinite(+b.delta) ? Math.abs(+b.delta) : null;
+      var strike = isFinite(+b.underlying_price) ? null : (function(){
+        var parts = name.split('-');
+        return parts.length >= 3 ? +parts[2] : NaN;
+      })();
+      if (!isFinite(strike)){
+        var m = name.match(/-(\d+(?:\.\d+)?)-[CP]$/);
+        strike = m ? +m[1] : NaN;
+      }
+      var oi = isFinite(+b.open_interest) ? +b.open_interest : 0;
+      if (isFinite(strike)){
+        gammaByStrike[strike] = (gammaByStrike[strike] || 0) + (isCall ? oi : -oi);
+      }
+      if (iv !== null && delta !== null && delta >= 0.2 && delta <= 0.35){
+        if (isCall && (!bestCall || Math.abs(delta - 0.25) < Math.abs(bestCall.delta - 0.25))){
+          bestCall = { iv: iv, delta: delta, strike: strike };
+        }
+        if (isPut && (!bestPut || Math.abs(delta - 0.25) < Math.abs(bestPut.delta - 0.25))){
+          bestPut = { iv: iv, delta: delta, strike: strike };
+        }
+      }
+    }
+
+    var rr = null;
+    if (typeof deribitRiskReversal === 'function' && bestCall && bestPut){
+      rr = deribitRiskReversal(bestCall.iv, bestPut.iv);
+    } else if (bestCall && bestPut){
+      rr = { rr25d: bestCall.iv - bestPut.iv, callIv: bestCall.iv, putIv: bestPut.iv };
+    }
+
+    var gamma = null;
+    if (typeof deribitGammaFlip === 'function'){
+      gamma = deribitGammaFlip(gammaByStrike, spot);
+    }
+
+    var slope = (typeof deribitDvolSlope === 'function' && dvol)
+      ? deribitDvolSlope(dvol.dvol, dvol.dvolPrev)
+      : null;
+
+    var out = {
+      currency: currency,
+      spot: spot,
+      dvol: dvol,
+      rr25d: rr,
+      gammaFlip: gamma,
+      dvolSlope: slope,
+      at: Date.now(),
+    };
+    __optSnap = out;
+    return __dvCachePut(key, out);
+  }catch(e){ return null; }
+}
+
 /** BRAIN-readable frozen snapshot (BTC primary). */
 function deribitVolState(){
   try{
@@ -94,10 +170,27 @@ function deribitVolState(){
   }catch(e){ return null; }
 }
 
+function deribitOptionsState(){
+  try{
+    if (!__optSnap) return null;
+    return Object.freeze({
+      currency: __optSnap.currency,
+      spot: __optSnap.spot,
+      rr25d: __optSnap.rr25d,
+      gammaFlip: __optSnap.gammaFlip,
+      dvolSlope: __optSnap.dvolSlope,
+      at: __optSnap.at,
+    });
+  }catch(e){ return null; }
+}
+
 async function deribitVolWarm(){
   try{
-    var s = await deribitVolSnapshot('BTC');
-    return s ? ('dvol ' + s.dvol.toFixed(1) + ' (' + s.regime + ')') : 'dvol dark';
+    var s = await deribitOptionsSnapshot('BTC');
+    if (!s || !s.dvol) return 'dvol dark';
+    var line = 'dvol ' + s.dvol.dvol.toFixed(1);
+    if (s.rr25d && isFinite(s.rr25d.rr25d)) line += ' · 25Δ RR ' + s.rr25d.rr25d.toFixed(1);
+    return line;
   }catch(e){ return 'dvol error'; }
 }
 
@@ -105,6 +198,8 @@ var W = (typeof window !== 'undefined') ? window : globalThis;
 W.deribitVolSnapshot = deribitVolSnapshot;
 W.deribitVolState = deribitVolState;
 W.deribitVolClassify = deribitVolClassify;
+W.deribitOptionsSnapshot = deribitOptionsSnapshot;
+W.deribitOptionsState = deribitOptionsState;
 W.deribitVolWarm = deribitVolWarm;
 W.HG_warmups = W.HG_warmups || [];
 W.HG_warmups.push({ id: 'dvol', label: 'DVOL', run: deribitVolWarm });

@@ -393,14 +393,42 @@ function goldCotAssess(series){
   var below = 0;
   for (var i = 0; i < sorted.length; i++){ if (sorted[i] <= latest.specNetPctOi) below++; }
   var pct = sorted.length ? below / sorted.length : null;
+  var sum = 0, ss = 0;
+  for (var j = 0; j < hist.length; j++) sum += hist[j];
+  var mean = hist.length ? sum / hist.length : null;
+  for (var k = 0; k < hist.length; k++) ss += (hist[k] - mean) * (hist[k] - mean);
+  var std = hist.length ? Math.sqrt(ss / hist.length) : null;
+  var z = (std > 0 && mean !== null) ? (latest.specNetPctOi - mean) / std : null;
   var crowding = 'NEUTRAL';
-  if (pct !== null && pct >= 0.9) crowding = 'SPEC CROWDED LONG';
+  if (z !== null && z >= 2) crowding = 'SPEC CROWDED LONG';
+  else if (z !== null && z <= -2) crowding = 'SPEC CROWDED SHORT';
+  else if (pct !== null && pct >= 0.9) crowding = 'SPEC CROWDED LONG';
   else if (pct !== null && pct <= 0.1) crowding = 'SPEC CROWDED SHORT';
   return {
-    specNetPctOi: latest.specNetPctOi, percentile: pct, crowding: crowding,
+    specNetPctOi: latest.specNetPctOi, zScore: z, percentile: pct, crowding: crowding,
     wow: series.length >= 2 ? latest.specNetPctOi - series[1].specNetPctOi : null,
     reportDate: latest.date, note: 'CFTC managed money · weekly Tue as-of',
   };
+}
+
+function goldCotGate(assess, dir){
+  try{
+    assess = assess || {};
+    dir = String(dir || '').toLowerCase();
+    var z = fin(assess.zScore);
+    var out = { veto: false, bonus: false, tag: null, note: '', zScore: z };
+    if (z === null) return out;
+    if (z > 2 && dir === 'long'){ out.veto = true; out.note = 'COT crowded long veto (z=' + z.toFixed(2) + ')'; }
+    else if (z < -2 && dir === 'long'){ out.bonus = true; out.note = 'COT crowded short bonus (z=' + z.toFixed(2) + ')'; }
+    else if (z < -2 && dir === 'short'){ out.veto = true; out.note = 'COT crowded short veto (z=' + z.toFixed(2) + ')'; }
+    else if (z > 2 && dir === 'short'){ out.bonus = true; out.note = 'COT crowded long bonus (z=' + z.toFixed(2) + ')'; }
+    var rd = assess.reportDate;
+    if (rd && Math.abs(z) >= 2){
+      var age = (Date.now() - rd) / 86400000;
+      if (age >= 0 && age <= 5) out.tag = 'COT EXTREME';
+    }
+    return out;
+  }catch(e){ return { veto: false, bonus: false, tag: null, note: '' }; }
 }
 
 G.hgRelBuckets = relBuckets;
@@ -419,5 +447,6 @@ G.hgStandDownCfgLoad = hgStandDownCfgLoad;
 G.hgStandDownCfgSave = hgStandDownCfgSave;
 G.hgGoldCotParse = goldCotParse;
 G.hgGoldCotAssess = goldCotAssess;
+G.hgGoldCotGate = goldCotGate;
 
 })();

@@ -236,15 +236,17 @@ async function oiflowScanSymbol(sym, tick){
       (typeof binanceFunding   === 'function') ? binanceFunding(sym)              : Promise.resolve(null),
       fundingZscore(sym),
       (typeof binanceOIHistory  === 'function') ? binanceOIHistory(sym, '1h', 25) : Promise.resolve(null),
+      (typeof coinalyzeOIChg    === 'function') ? coinalyzeOIChg(sym, 24)         : Promise.resolve(null),
       (typeof binanceTakerRatio === 'function') ? binanceTakerRatio(sym, '1h', 24): Promise.resolve(null),
       (typeof binanceLongShort  === 'function') ? binanceLongShort(sym, '1h', 1)  : Promise.resolve(null)
     ]);
-    var fnd = legs[0], fz = legs[1], oih = legs[2], tk = legs[3], ls = legs[4];
-    if (!fnd && fz === null && !oih && !tk && !ls) return null;
+    var fnd = legs[0], fz = legs[1], oih = legs[2], aggOi = legs[3], tk = legs[4], ls = legs[5];
+    if (!fnd && fz === null && !oih && !aggOi && !tk && !ls) return null;
 
-    /* OI 24h: pct change first-to-last finite print */
-    var oiChg = null;
-    if (oih && oih.series && oih.series.length >= 2){
+    /* OI 24h: prefer Coinalyze aggregated; fallback Binance-only */
+    var oiChg = null, oiSource = null;
+    if (aggOi && isFinite(aggOi.chgPct)){ oiChg = aggOi.chgPct; oiSource = 'coinalyze-agg'; }
+    else if (oih && oih.series && oih.series.length >= 2){
       var first = null, last = null;
       for (var i = 0; i < oih.series.length; i++){
         if (isFinite(oih.series[i].oi)){
@@ -253,6 +255,7 @@ async function oiflowScanSymbol(sym, tick){
         }
       }
       if (first !== null && first > 0 && last !== null) oiChg = (last/first - 1)*100;
+      oiSource = 'binance-only';
     }
 
     /* taker: mean buySellRatio over the 24 hourly prints */
@@ -273,6 +276,7 @@ async function oiflowScanSymbol(sym, tick){
       fundingPct: (fnd && isFinite(fnd.fundingPct)) ? fnd.fundingPct : null,
       fundingZ:   fz,
       oiChg:      oiChg,
+      oiSource:   oiSource,
       pxChg:      (tick && isFinite(tick.chg24)) ? tick.chg24 : null,
       takerAvg:   takerAvg,
       longPct:    (ls && ls.latest && isFinite(ls.latest.longPct)) ? ls.latest.longPct : null,

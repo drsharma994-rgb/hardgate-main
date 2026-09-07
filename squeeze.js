@@ -971,6 +971,22 @@ async function squeezeScanCore(hooks){
         try{ rows1d = await fetchK(item, '1d', KL_1D_LIMIT); }catch(e1d){ rows1d = []; }
         rows1d = sqDropForming(rows1d || [], '1d');
         var cls = squeezeClassify(rows4h, rows1d);
+        if ((cls.state === 'FIRED_LONG' || cls.state === 'FIRED_SHORT') && typeof coinalyzeOIChg === 'function'){
+          try{
+            var bSym = (typeof W.hgDeskBinanceSym === 'function') ? W.hgDeskBinanceSym(item) : sym;
+            var aggOi = await coinalyzeOIChg(bSym, 24);
+            cls.aggOIChgPct = aggOi ? aggOi.chgPct : null;
+            var n4 = rows4h.length, pxUp = n4 >= 2 && rows4h[n4-1].c > rows4h[n4-2].c;
+            var pxDn = n4 >= 2 && rows4h[n4-1].c < rows4h[n4-2].c;
+            if (aggOi && isFinite(aggOi.chgPct)){
+              if (cls.state === 'FIRED_LONG' && !(aggOi.chgPct > 0 && pxUp)){
+                cls.state = 'NONE'; cls.aggOIVeto = 'agg OI not rising with price';
+              } else if (cls.state === 'FIRED_SHORT' && !(aggOi.chgPct > 0 && pxDn)){
+                cls.state = 'NONE'; cls.aggOIVeto = 'agg OI not rising with price';
+              }
+            }
+          }catch(eOi){}
+        }
         var tick = {
           turnoverUsd: item.turnoverUsd, mark: item.mark, fundingPct: item.fundingPct,
           chg24: null

@@ -6,7 +6,9 @@
 const FRED_API = 'https://api.stlouisfed.org/fred/series/observations';
 const UPSTREAM_TIMEOUT_MS = 15000;
 const ALLOWED_SERIES = new Set([
-  'DGS10', 'DGS2', 'DFII10', 'T10YIE', 'DTWEXBGS', 'DTWEXAFEGS', 'FEDFUNDS'
+  'DGS10', 'DGS2', 'DFII10', 'T10YIE', 'DTWEXBGS', 'DTWEXAFEGS', 'FEDFUNDS',
+  /* Increment 4 — Fed net liquidity (H.4.1 + RRP + TGA) */
+  'WALCL', 'WTREGEN', 'RRPONTSYD',
 ]);
 
 function sendJson(res, status, obj){

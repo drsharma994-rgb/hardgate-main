@@ -36,6 +36,8 @@ import { hgAssertCcxtBoot } from '../lib/hardgate-executor.mjs';
 const require = createRequire(import.meta.url);
 const proxyHandler = require('../api/proxy.js');
 const fredHandler = require('../api/fred.js');
+const coinalyzeHandler = require('../api/coinalyze.js');
+const coinglassHandler = require('../api/coinglass.js');
 const newsCalendarHandler = require('../api/news-calendar.js');
 const deltaPerpHistoryHandler = require('../api/delta-perp-history.js');
 const fedCalendarHandler = require('../api/fed-calendar.js');
@@ -140,6 +142,8 @@ const server = http.createServer(async (req, res) => {
     const u = new URL(req.url || '/', 'http://localhost');
     if (u.pathname === '/api/proxy') return proxyHandler(req, res);
     if (u.pathname === '/api/fred') return fredHandler(req, res);
+    if (u.pathname === '/api/coinalyze') return coinalyzeHandler(req, res);
+    if (u.pathname === '/api/coinglass') return coinglassHandler(req, res);
     if (u.pathname === '/api/news/calendar') return newsCalendarHandler(req, res);
     if (u.pathname === '/api/delta/perp-history') return deltaPerpHistoryHandler(req, res);
     if (u.pathname === '/api/fed-calendar') return fedCalendarHandler(req, res);

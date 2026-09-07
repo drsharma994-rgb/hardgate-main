@@ -3387,6 +3387,19 @@ function hgGoldConfluenceScore(cand, ctx){
           p.macro += 1;
         }
       }
+      if (typeof hgGoldCotGate === 'function'){
+        var cotGate = hgGoldCotGate(cot, dir);
+        if (cotGate && cotGate.veto){
+          p.macro = 0;
+          tools.push('COT extreme veto');
+          out.cotVeto = true;
+          out.cotGateNote = cotGate.note;
+        } else if (cotGate && cotGate.bonus){
+          p.macro = Math.min(10, p.macro + 2);
+          tools.push('COT contrarian bonus');
+        }
+        if (cotGate && cotGate.tag) tools.push(cotGate.tag);
+      }
     }
     p.macro = Math.min(10, p.macro);
 

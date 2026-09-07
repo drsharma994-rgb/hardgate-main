@@ -39,6 +39,8 @@ const ALLOWED_HOSTS = new Set([
   'api.coingecko.com',
   'api.alternative.me',
   'stablecoins.llama.fi',
+  'yields.llama.fi',
+  'api.llama.fi',
 ]);
 
 const UPSTREAM_TIMEOUT_MS = 15000;

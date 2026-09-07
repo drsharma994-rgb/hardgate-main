@@ -624,7 +624,7 @@ is in flight it reports 'busy' (overlaps never double-fetch).
       __prog(ui, 0.85);
 
       /* ---- match by base asset + spread cards (best pair per base) ---- */
-      const cards = [];
+      let cards = [];
       const byBase = {};
       function offerCard(card){
         if (!card || !card.base || !card.sp) return;
@@ -663,6 +663,24 @@ is in flight it reports 'busy' (overlaps never double-fetch).
         }
       }
       for (const bk in byBase){ if (Object.prototype.hasOwnProperty.call(byBase, bk)) cards.push(byBase[bk]); }
+      if (cards.length && typeof borrowRateForBase === 'function'){
+        for (let bj = 0; bj < cards.length; bj += CHUNK){
+          const chunkB = cards.slice(bj, bj + CHUNK);
+          await Promise.all(chunkB.map(async function(c){
+            try{
+              const br = await borrowRateForBase(c.base);
+              if (!br || !isFinite(br.aprPct) || !c.sp) return;
+              c.sp.borrowApr = br.aprPct;
+              c.sp.grossSpreadAPR = c.sp.spreadAPR;
+              c.sp.netSpreadAPR = Math.max(0, c.sp.spreadAPR - br.aprPct);
+              c.sp.spreadAPR = c.sp.netSpreadAPR;
+              c.borrowNote = 'net of ~' + F(br.aprPct, 1) + '% borrow (' + (br.source || 'margin') + ')';
+            }catch(eBr){}
+          }));
+          if (bj + CHUNK < cards.length) await __sleep(CHUNK_SLEEP_MS);
+        }
+        cards = cards.filter(function(c){ return c.sp && c.sp.spreadAPR >= SPREAD_MIN_APR; });
+      }
       cards.sort(function(a, b){ return b.sp.spreadAPR - a.sp.spreadAPR; });
 
       if (cards.length && typeof bybitFunding === 'function'){
@@ -850,6 +868,12 @@ is in flight it reports 'busy' (overlaps never double-fetch).
     window.carrySpreadPair = carrySpreadPair;
     window.carryBybitCrossCheck = carryBybitCrossCheck;
     window.carryPlan = carryPlan;             // per-card execution levels (SL/TP audit)
+    window.carryNetSpread = function(grossApr, borrowApr){
+      if (typeof carryNetApr === 'function') return carryNetApr(grossApr, borrowApr);
+      if (!isFinite(grossApr)) return null;
+      if (!isFinite(borrowApr)) return { netApr: grossApr, grossApr: grossApr, borrowApr: null };
+      return { netApr: grossApr - borrowApr, grossApr: grossApr, borrowApr: borrowApr };
+    };
     window.carryBookBtn = carryBookBtn;       // paper book CTA (short carry leg → macro fund)
     window.carryTradeBtn = carryTradeBtn;     // TRADE PLAN handoff (short carry leg)
     window.carryState = function carryState(){

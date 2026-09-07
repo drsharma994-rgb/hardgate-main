@@ -627,7 +627,7 @@ async function binanceSpotSymbols(){
   }catch(e){ return null; }
 }
 
-/* GET /fapi/v1/depth?symbol&limit=20 -> {bidUsd, askUsd} top-of-book totals —
+/* GET /fapi/v1/depth?symbol&limit=20 -> {bidUsd, askUsd, bids, asks} top-of-book —
    order-book imbalance reads (proxy context for the same asset elsewhere).
    null on any failure; 60s cached. */
 async function binanceDepth(symbol, limit){
@@ -649,10 +649,15 @@ async function binanceDepth(symbol, limit){
       }
       return usd;
     };
-    const out = { bidUsd: tot(j.bids), askUsd: tot(j.asks) };
+    const out = { bidUsd: tot(j.bids), askUsd: tot(j.asks), bids: j.bids, asks: j.asks };
     if (!(out.bidUsd >= 0) || !(out.askUsd >= 0)) return null;
     return __binCachePut(key, out);
   }catch(e){ return null; }
+}
+
+/* Full L2 book snapshot alias for liquidity-to-stop gate. */
+async function binanceDepthBook(symbol, limit){
+  return binanceDepth(symbol, limit);
 }
 
 /* Which path Binance data is coming in on, for the UI to state plainly rather
