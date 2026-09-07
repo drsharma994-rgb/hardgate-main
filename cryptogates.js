@@ -227,7 +227,8 @@
     var g3 = !((dir === 'long' && r14 > 70) || (dir === 'short' && r14 < 30));
     gates.push(['G3 RSI', g3]);
     var g4 = true;
-    if (ticker && ticker.fundingPct !== null){
+    var fundMissing = !(ticker && ticker.fundingPct !== null && isFinite(ticker.fundingPct));
+    if (!fundMissing){
       var fr = ticker.fundingPct;
       /* DIRECTIONAL. The old |fr| <= 0.05 cap vetoed a LONG at funding -0.06%
          — shorts paying you, on a setup where short crowding is squeeze fuel.
@@ -236,6 +237,10 @@
          check for a broken feed. */
       var frAgainst = (dir === 'long' && fr >= CG_FUND_DIR) || (dir === 'short' && fr <= -CG_FUND_DIR);
       g4 = isFinite(fr) && Math.abs(fr) <= CG_FUND_SANITY && !frAgainst;
+    } else if (ticker && (ticker.exchange === 'coindcx' || ticker.exchange === 'cdcx' || ticker.noFunding)){
+      g4 = true; /* CoinDCX has no funding — allowed to degrade; R:R floor raised below */
+    } else {
+      g4 = false; /* missing funding on a venue that should have it → veto */
     }
     gates.push(['G4 funding', g4]);
     var g5r = (typeof hgSwingG5OK === 'function')
@@ -271,6 +276,9 @@
       }catch(e){}
     }
     var rrMin = CG_SWING_RR_MIN;
+    if (fundMissing && ticker && (ticker.exchange === 'coindcx' || ticker.exchange === 'cdcx' || ticker.noFunding)){
+      rrMin = Math.max(rrMin, 2.5);
+    }
     if (typeof G.hgRegimeResolveState === 'function' && typeof G.hgRegimeAdjust === 'function'){
       try{
         var rsAdj = G.hgRegimeAdjust({ minRR: CG_SWING_RR_MIN }, G.hgRegimeResolveState().score, 'crypto');

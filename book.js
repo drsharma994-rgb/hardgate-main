@@ -400,6 +400,19 @@ async function addToBook(opts){
     if (!body.sym || !body.dir || !isFinite(body.entry) || !isFinite(body.stop)){
       return { ok: false, reason: 'invalid plan' };
     }
+    if (bookApiOn() && __book && __book.desk){
+      var navH = +__book.desk.navUsd;
+      var heatH = +__book.desk.heatPct;
+      var riskPctH = Math.abs(body.entry - body.stop) / body.entry;
+      var newRiskUsdH = (isFinite(navH) && navH > 0 && isFinite(riskPctH)) ? navH * riskPctH : 0;
+      if (isFinite(navH) && navH > 0 && isFinite(heatH)
+          && (heatH + (newRiskUsdH / navH)) > BOOK_MAX_HEAT_PCT + 1e-6){
+        return { ok: false, veto: true,
+          reasons: ['PORTFOLIO HEAT — ' + (heatH * 100).toFixed(1) + '% + new '
+            + (newRiskUsdH / navH * 100).toFixed(1) + '% exceeds '
+            + (BOOK_MAX_HEAT_PCT * 100).toFixed(0) + '% cap'] };
+      }
+    }
     if ((opts.scanner === 'brain' || opts.strategy === 'brain')
         && typeof W.brainLiveModeOn === 'function' && W.brainLiveModeOn()
         && typeof W.brainLiveEligible === 'function' && opts._brainRow){

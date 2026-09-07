@@ -813,7 +813,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 </main>
 
 
-  <script src="build-stamp.js?v=634"></script>
+  <script src="build-stamp.js?v=635"></script>
+  <script src="hg-setup-core.js"></script>
 <script src="hghost.js"></script>
 <script src="indicators.js"></script>
 <script src="indicators2.js"></script>
@@ -867,14 +868,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
 <script src="hg-mechanics.js?v=614"></script>
 <script src="./hg-gates.js?v=559"></script>
-<script src="crypto-catalog.js?v=614"></script>
-<script src="omniroute.js?v=627"></script>
+<script src="crypto-catalog.js?v=635"></script>
+<script src="omniroute.js?v=635"></script>
 <script src="dex-screener.js?v=615"></script>
-<script src="setup-confirm.js?v=622"></script>
-<script src="combi.js?v=622"></script>
+<script src="setup-confirm.js?v=635"></script>
+<script src="combi.js?v=635"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
-<script src="edge.js?v=559"></script>
+<script src="edge.js?v=635"></script>
 <script src="startradertab.js?v=40"></script>
 <script src="engine.js"></script>
 <script src="news.js"></script>
@@ -886,26 +887,26 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- gold-session.js: DST-aware London/NY session helpers (shared by goldKillzone, GOLD tab, Fix/Close) -->
 <script src="gold-session.js?v=629"></script>
 <!-- goldind.js + goldscalp.js: GOLD SCALP tab (pure SMC/ICT + indicator detectors, then the tab) — after indicators2/binance/macro/xuniverse/news, before brain.js -->
-<script src="goldind.js?v=629"></script>
-<script src="gold-catalog.js?v=626"></script>
+<script src="goldind.js?v=635"></script>
+<script src="gold-catalog.js?v=635"></script>
 <!-- gold-seven-step.js: Gold Playbook 7-step setup engine (closed 1H/4H bars → bias → candidates → best fit → levels → checklist → TRIGGERED/WAIT/EXPIRED). Loads after goldind.js + gold-catalog.js (feature-checked), before the gold desks that render it. -->
-<script src="gold-seven-step.js?v=614"></script>
+<script src="gold-seven-step.js?v=635"></script>
 <script src="macro-feeds.js"></script>
-<script src="goldscalp.js?v=626"></script>
+<script src="goldscalp.js?v=635"></script>
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
-<script src="goldswing.js?v=626"></script>
+<script src="goldswing.js?v=635"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
-<script src="omnigold.js?v=626"></script>
+<script src="omnigold.js?v=635"></script>
 <!-- omnigold1.js: OMNIGOLD 1 tab — institutional 20-point gold setup engine (veto stack → regime → matrix → strategy → levels → V-Mod size → 12-gate cross-check → trigger). Reuses gold-seven-step.js helpers (HG_GOLD7); loads after it and after omnigold.js. -->
-<script src="omnigold1.js?v=614"></script>
+<script src="omnigold1.js?v=635"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
-<script src="omnipresent.js?v=614"></script>
+<script src="omnipresent.js?v=635"></script>
 <!-- formation-nightly.js: after 21:00 UTC, retunes OMNIROUTE / OMNIPRESENT / OMNIGOLD 1 + all desk tabs from the rolling 40-day book. Demote/tighten only. -->
-<script src="formation-nightly.js?v=628"></script>
-<script src="formation-nightly-boot.js?v=628"></script>
+<script src="formation-nightly.js?v=635"></script>
+<script src="formation-nightly-boot.js?v=635"></script>
 <!-- desk-formation-edge.js: OMNIROUTE v531 + BEST kinds + nightly desk overlay retune SWING/SCALP/EDGE/SMART$/SQUEEZE/SNIPER/SMC/OB/TRAP/DIV/COIL/APEX/OIFLOW/LIQS/ON-CHAIN/CHART VISION/CARRY/VENUE/TERM BASIS. Demote/suppress/prefer only. -->
-<script src="desk-formation-edge.js?v=622"></script>
-<script src="hg-omni-strategy-bridge.js?v=622"></script>
+<script src="desk-formation-edge.js?v=635"></script>
+<script src="hg-omni-strategy-bridge.js?v=635"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
 <script src="contract-report.js"></script>
 <!-- omnibtc-engines.js: SMART $ / OI FLOW / fade / COIL / DIV / TRAP / SMC / STAR TRADER + on-chain evidence. Loads BEFORE omnibtc.js so the tab can feature-check it. -->
@@ -939,14 +940,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js?v=614"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=614"></script>
-<script src="gold-best-levels.js?v=626"></script>
-<script src="super-desk-common.js?v=622"></script>
-<script src="super-gold.js?v=626"></script>
-<script src="super-best.js?v=614"></script>
-<script src="super-sniper.js?v=614"></script>
-<script src="super-book.js?v=614"></script>
-<script src="super-calibrate.js?v=614"></script>
+<script src="supersetup.js?v=635"></script>
+<script src="gold-best-levels.js?v=635"></script>
+<script src="super-desk-common.js?v=635"></script>
+<script src="super-gold.js?v=635"></script>
+<script src="super-best.js?v=635"></script>
+<script src="super-sniper.js?v=635"></script>
+<script src="super-book.js?v=635"></script>
+<script src="super-calibrate.js?v=635"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -1141,6 +1142,7 @@ function hgDualScanEntry(fn, opts){
 }
 async function hgDualCryptoScanLoop(fn, opts){
   opts = opts || {};
+  if (typeof hgPrimeBinanceTurnover === 'function') await hgPrimeBinanceTurnover();
   if (opts._singleLeg || opts.singleExchange || !hgDualScanEnabled()) return fn(opts);
   for (let i = 0; i < HG_DUAL_CRYPTO_EX.length; i++){
     await withExchange(HG_DUAL_CRYPTO_EX[i], () => fn(Object.assign({}, opts, {
@@ -1182,6 +1184,16 @@ function hgScanUniverseN(opts, inputEl){
 }
 function hgBoundScanUniverse(tickers, opts){
   opts = opts || {};
+  if (typeof hgUniverseFilter === 'function'){
+    var twinMap = (typeof S !== 'undefined' && S.__hgBinanceTurnover) ? S.__hgBinanceTurnover : {};
+    var filtered = hgUniverseFilter(tickers, {
+      minTurnoverUsd: isFinite(+opts.minTurn) ? +opts.minTurn : 0,
+      maxSpreadBps: 80,
+      twinTurnoverMap: twinMap,
+      cap: opts.scanAll ? null : hgScanUniverseN(opts, null)
+    });
+    if (filtered && filtered.length) return filtered;
+  }
   var uni = Array.isArray(tickers) ? tickers.slice() : [];
   var scanAll = !!opts.scanAll;
   var n = hgScanUniverseN(opts, null);
@@ -1191,6 +1203,15 @@ function hgBoundScanUniverse(tickers, opts){
   if (scanAll) return uni;
   if (ex === 'delta' || ex === 'startrader'){
     uni = uni.filter(function(t){ return (t.turnoverUsd || 0) >= minTurn; });
+  } else if (ex === 'coindcx' || ex === 'cdcx'){
+    var twin = (typeof S !== 'undefined' && S.__hgBinanceTurnover) ? S.__hgBinanceTurnover : {};
+    uni = uni.filter(function(t){
+      var to = t.turnoverUsd || 0;
+      if (to >= minTurn) return true;
+      var base = String(t.symbol || '').replace(/^B-/i, '').replace(/_USDT$/i, '');
+      var bt = twin[base + 'USDT'];
+      return isFinite(bt) && bt >= minTurn;
+    });
   }
   return uni.slice(0, n);
 }
@@ -1584,10 +1605,24 @@ async function getTickers(){
   try { const t = await loadTickersCdcx(); S.cdcxBlocked=false; return t; }
   catch(e){ S.cdcxBlocked=true; throw e; }
 }
+async function hgPrimeBinanceTurnover(){
+  if (typeof binanceFuturesTickers !== 'function') return;
+  try{
+    var rows = await binanceFuturesTickers();
+    S.__hgBinanceTurnover = {};
+    (rows || []).forEach(function(r){
+      if (r && r.symbol) S.__hgBinanceTurnover[String(r.symbol)] = r.turnoverUsd || 0;
+    });
+  }catch(e){}
+}
 /* Drop the still-forming bar: gates must only ever see CLOSED candles.
    Evaluating a partial bar repaints — a cascade that exists at 14:37 can
    vanish by 16:00. Candle t = bar open time, so forming iff now-t < duration. */
 function dropForming(rows, res){
+  if (typeof getClosedCandles === 'function'){
+    var closed = getClosedCandles(rows, res, nowSec());
+    return (closed && closed.rows) ? closed.rows : rows;
+  }
   const sec = {'15m':900,'1h':3600,'2h':7200,'4h':14400,'1d':86400}[res];
   if (!rows.length || !sec) return rows;
   return (nowSec() - rows[rows.length-1].t < sec) ? rows.slice(0,-1) : rows;
@@ -8045,6 +8080,9 @@ async function sendGoldAlertEmail(g){
    Entry rounded to 8 dp then trailing zeros stripped for stable keys. */
 function bestAlertKey(w){
   if (!w || !w.t || !w.t.symbol || !w.dir) return null;
+  if (typeof hgAlertKey === 'function'){
+    return hgAlertKey([w.t.symbol, w.dir, w.entry, w.stop, w.t1], 6);
+  }
   const e = +w.entry;
   if (!Number.isFinite(e)) return null;
   const entryPart = String(parseFloat(e.toFixed(8)));
@@ -8142,7 +8180,10 @@ function toggleAlerts(){
 
 let S_SEARCH_CACHE = null;
 function searchBase(sym, ex){
-  return ex==='delta' ? sym.replace(/USD$/,'') : sym.replace(/^B-/,'').replace(/_USDT$/,'');
+  sym = String(sym || '').trim();
+  var s = sym.toUpperCase();
+  if (ex === 'delta') return s.replace(/USDT$/i, '').replace(/USD$/i, '');
+  return s.replace(/^B-/i, '').replace(/\.P$/i, '').replace(/_USDT$/i, '').replace(/-USDT$/i, '').replace(/USDT$/i, '');
 }
 
 async function getCryptoCandlesTD(base, res, count){
@@ -8981,15 +9022,22 @@ async function evalGoldSwing(){
   const rsiVeto=(casc==='long'&&r4>70)||(casc==='short'&&r4<30);
   sg.push(['GS3','4H RSI exhaustion guard', casc==='mixed'?'na':(rsiVeto?'veto':'pass'),
     casc==='mixed' ? `RSI14 ${fmt(r4,1)} \u00b7 cascade mixed` : `RSI14 ${fmt(r4,1)}`]);
-  let gs4='na', gs4d='funding n/a on this feed';
+  let gs4='veto', gs4d='funding n/a on this feed — gate fails closed';
   try{
-    if (typeof binanceFunding === 'function'){
+    if (casc === 'mixed'){ gs4 = 'na'; gs4d = 'cascade mixed — funding gate n/a'; }
+    else if (typeof binanceFunding === 'function'){
       const xauFund = await binanceFunding('XAUUSDT').catch(function(){ return null; });
       const fr = (xauFund && isFinite(xauFund.fundingPct)) ? xauFund.fundingPct : null;
       if (fr !== null){
-        const bad = Math.abs(fr)>0.05-1e-9 || (casc==='long'&&fr>=0.04) || (casc==='short'&&fr<=-0.04);
-        gs4 = bad?'veto':'pass';
-        gs4d = 'XAUUSDT perp ' + fmt(fr,4) + '%/interval (Binance crowd read)';
+        if (typeof hgFundingGateDirectional === 'function'){
+          var gf2 = hgFundingGateDirectional(fr, casc, { degradeMode: 'veto' });
+          gs4 = gf2.pass ? 'pass' : 'veto';
+          gs4d = 'XAUUSDT perp ' + fmt(fr,4) + '%/interval — ' + (gf2.detail || '');
+        } else {
+          const bad = Math.abs(fr)>0.05-1e-9 || (casc==='long'&&fr>=0.04) || (casc==='short'&&fr<=-0.04);
+          gs4 = bad?'veto':'pass';
+          gs4d = 'XAUUSDT perp ' + fmt(fr,4) + '%/interval (Binance crowd read)';
+        }
       }
     }
   }catch(e){}

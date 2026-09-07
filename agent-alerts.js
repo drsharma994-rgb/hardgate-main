@@ -73,6 +73,9 @@ function isGreatSetup(s){
 }
 
 function setupKey(s){
+  if (typeof hgAlertKey === 'function'){
+    return 'AIAGENT:' + hgAlertKey([s.sym, s.dir, s.entry], 6);
+  }
   return 'AIAGENT:' + String(s.sym || '') + ':' + String(s.dir || '') + '@' + (+s.entry);
 }
 

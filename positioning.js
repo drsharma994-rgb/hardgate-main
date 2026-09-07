@@ -156,6 +156,22 @@ function hgPositioningClassify(d, opts){
     }
   }
 
+  if (oiChg !== null && fundingPct !== null){
+    if (oiUp && fundExtreme && fundingPct > 0){
+      regime.push('rising OI + crowded long funding');
+      shortEv.push('OI+funding: new longs crowded — fade/squeeze-down risk');
+    } else if (oiUp && fundExtreme && fundingPct < 0){
+      regime.push('rising OI + shorts paying');
+      longEv.push('OI+funding: fresh shorts building while shorts pay');
+    } else if (oiDn && fundExtreme && fundingPct < 0){
+      regime.push('falling OI + crowded shorts');
+      longEv.push('OI+funding: short flush / squeeze-up watch');
+    } else if (oiDn && fundExtreme && fundingPct > 0){
+      regime.push('falling OI + longs paying');
+      shortEv.push('OI+funding: long liquidation with longs still paying');
+    }
+  }
+
   if (retailLongPct !== null){
     if (retailLongPct >= RETAIL_EXTREME_HI){
       regime.push(opts.style === 'oiflow' ? 'retail extremely long' : 'retail extremely long');

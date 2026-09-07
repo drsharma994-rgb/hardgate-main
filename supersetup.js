@@ -1438,6 +1438,42 @@ function setupSignalKey(ev){
 /** Risk-first sizing + approval gate. Accepts tpRR or rr. Pure — never throws. */
 function calcTrade(opts){
   opts = opts || {};
+  if (typeof W.hgCalcTradeSizing === 'function'){
+    var sized = W.hgCalcTradeSizing({
+      balance: N(opts.balance),
+      riskPct: N(opts.riskPct),
+      entry: N(opts.entry),
+      stop: N(opts.stop),
+      tpRR: N(opts.tpRR != null ? opts.tpRR : (opts.rr != null ? opts.rr : 2)),
+      maxLeverage: N(opts.maxLeverage != null ? opts.maxLeverage : 5),
+      feePct: N(opts.feePct != null ? opts.feePct : 0.06),
+      slipPct: N(opts.slipPct != null ? opts.slipPct : 0.05),
+      inverse: opts.inverse === true || opts.contractType === 'inverse'
+        || /inverse/i.test(String(opts.marginType || '')),
+      contractType: opts.contractType || opts.marginType || 'linear'
+    });
+    if (sized && typeof sized === 'object'){
+      var tpPrice = N(opts.tpPrice);
+      var tp = Number.isFinite(tpPrice) ? tpPrice : sized.tp;
+      return {
+        ok: sized.ok,
+        reason: sized.ok ? 'PASS' : sized.reason,
+        riskDollars: sized.riskUsd,
+        riskUsd: sized.riskUsd,
+        stopDist: Math.abs(N(opts.entry) - N(opts.stop)),
+        positionUnits: sized.qty,
+        qty: sized.qty,
+        notional: sized.notionalUsd,
+        impliedLeverage: sized.impliedLeverage,
+        impliedLev: sized.impliedLeverage,
+        tp: tp,
+        rr: N(opts.tpRR != null ? opts.tpRR : (opts.rr != null ? opts.rr : 2)),
+        feeBuffer: Math.max(0, (sized.effectiveRiskUsd || 0) - (sized.riskUsd || 0)),
+        effectiveRisk: sized.effectiveRiskUsd,
+        inverse: sized.inverse === true
+      };
+    }
+  }
   var balance = N(opts.balance);
   var riskPct = N(opts.riskPct);
   var entry = N(opts.entry);

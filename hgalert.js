@@ -212,6 +212,20 @@ var __ui       = null;                   /* bell DOM, null when headless */
 var __panelOpen = false;
 
 var __lastChime = { brain: 0, gold: 0, ticket: 0, sniper: 0 }; /* per-class throttle clocks */
+(function(){
+  try{
+    var raw = localStorage.getItem('hg_last_chime');
+    if (raw){
+      var o = JSON.parse(raw);
+      if (o && typeof o === 'object'){
+        for (var k in o){ if (Object.prototype.hasOwnProperty.call(o, k)) __lastChime[k] = o[k]; }
+      }
+    }
+  }catch(e){}
+})();
+function __persistChime(){
+  try{ localStorage.setItem('hg_last_chime', JSON.stringify(__lastChime)); }catch(e){}
+}
 var __lastBrainKey = null;               /* last-alerted sym+tier set (null = armed) */
 var __lastBrainTrigAt = 0;               /* last brain trigger (chimed or consumed) */
 var __goldArmed = true;                  /* gold crossing latch (re-arms below threshold) */
@@ -328,6 +342,7 @@ function tryChime(cls){
   if (now - (__lastChime[cls] || 0) < CHIME_GAP_MS) return 'throttled';
   if (!playChime()) return 'silent';
   __lastChime[cls] = now;
+  __persistChime();
   return 'played';
 }
 
@@ -459,6 +474,7 @@ function onTicket(snap){
       return 'throttled';
     }
     __lastChime.ticket = now;
+    __persistChime();
     var suffix;
     if (__muted){ suffix = ' (muted)'; }
     else if (playChime()){ suffix = ''; }
@@ -541,6 +557,7 @@ function onSniper(hits){
       return 'throttled';
     }
     __lastChime.sniper = now;
+    __persistChime();
     var suffix;
     if (__muted){ suffix = ' (muted)'; }
     else if (playChime()){ suffix = ''; }
@@ -630,6 +647,7 @@ function onSqueeze(hits){
       return 'throttled';
     }
     __lastChime.squeeze = now;
+    __persistChime();
     var suffix;
     if (__muted){ suffix = ' (muted)'; }
     else if (playChime()){ suffix = ''; }
@@ -717,6 +735,7 @@ function onZones(list, tab){
       return 'throttled';
     }
     __lastChime.zones = now;
+    __persistChime();
     var suffix;
     if (__muted){ suffix = ' (muted)'; }
     else if (playChime()){ suffix = ''; }

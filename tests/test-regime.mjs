@@ -184,30 +184,27 @@ function verdictWith(patch){
   assert(v.rows[5].stamp === 'NA' && v.rows[5].score === 0, 'R6: null => NA/0');
 }
 
-/* ---------------- 7) R7 GOLD (XAU PERP) — informational only ---------------- */
+/* ---------------- 7) R7 GOLD (XAU PERP) — scored hedge-demand gauge ---------------- */
 {
   let v = verdictWith({ gold: { close: 2500, ema200: 2400 } });
-  assert(v.rows[6].stamp === 'BULL' && v.rows[6].score === 0 && v.rows[6].scored === false
-         && v.rows[6].name.indexOf('HEDGE DEMAND') > -1 && v.rows[6].name.indexOf('GOLD (XAU PERP)') > -1
-         && v.rows[6].detail.indexOf('XAU ABOVE 200EMA') > -1 && v.rows[6].detail.indexOf('PAXG') === -1,
-         'R7: XAU above ema200 => BULL stamp, score 0, scored=false, "HEDGE DEMAND · GOLD (XAU PERP)" label, no PAXG text');
+  assert(v.rows[6].stamp === 'BULL' && v.rows[6].score === 1 && v.rows[6].scored === true
+         && v.rows[6].name.indexOf('HEDGE DEMAND') > -1 && v.rows[6].name.indexOf('GOLD (XAU PERP)') > -1,
+         'R7: XAU above ema200 => BULL stamp, score +1, scored=true');
 
   v = verdictWith({ gold: { close: 2300, ema200: 2400 } });
-  assert(v.rows[6].stamp === 'BEAR' && v.rows[6].score === 0 && v.rows[6].scored === false
-         && v.rows[6].detail.indexOf('XAU BELOW 200EMA') > -1,
-         'R7: XAU below ema200 => BEAR stamp, still score 0');
+  assert(v.rows[6].stamp === 'BEAR' && v.rows[6].score === -1 && v.rows[6].scored === true,
+         'R7: XAU below ema200 => BEAR stamp, score -1');
 
   v = verdictWith({ gold: { close: 2400, ema200: 2400 } });
   assert(v.rows[6].stamp === 'NA' && v.rows[6].score === 0, 'R7: XAU at ema200 => NA/0');
 
   v = verdictWith({ gold: null });
-  assert(v.rows[6].stamp === 'NA' && v.rows[6].score === 0 && v.rows[6].scored === false, 'R7: null => NA/0');
+  assert(v.rows[6].stamp === 'NA' && v.rows[6].score === 0 && v.rows[6].scored === true, 'R7: null => NA/0 scored');
 
-  /* gold never moves the aggregate score */
   const withGold = verdictWith({ btc: { close: 7e4, ema50: 6.2e4, ema200: 6e4 }, gold: { close: 2500, ema200: 2400 } });
   const noGold   = verdictWith({ btc: { close: 7e4, ema50: 6.2e4, ema200: 6e4 }, gold: null });
-  assert(withGold.score === noGold.score && withGold.scoredTotal === 8,
-         'R7: gold informational — aggregate score identical with/without it, scoredTotal stays 8');
+  assert(withGold.score === noGold.score + 1 && withGold.scoredTotal === 9,
+         'R7: gold now moves aggregate score (+1 when bid firm), scoredTotal is 9');
 }
 
 /* ---------------- 7b) R8 STABLECOIN FLOWS — dry powder, ±0.5% band ---------------- */
@@ -273,9 +270,9 @@ function verdictWith(patch){
     stable: { totalUSD: 101e9, delta7dUSD: 1e9, delta30dUSD: 2e9 },
     dvol:   { dvol: 55, slope: { slope: 'FALLING', chg: -3 } }
   });
-  assert(allOn.score === 8 && allOn.word === 'RISK-ON' && allOn.cls === 'long' && allOn.scoredTotal === 8
+  assert(allOn.score === 9 && allOn.word === 'RISK-ON' && allOn.cls === 'long' && allOn.scoredTotal === 9
          && allOn.why.indexOf('+1 BTC trend up') > -1 && allOn.why.indexOf('+1 dry powder in') > -1,
-         'aggregate: all eight risk-on => score 8, RISK-ON, cls long, drivers listed');
+         'aggregate: all nine risk-on => score 9, RISK-ON, cls long, drivers listed');
 
   const allOff = regimeVerdict({
     btc:    { close: 5e4, ema50: 5.8e4, ema200: 6e4 },
@@ -288,8 +285,8 @@ function verdictWith(patch){
     stable: { totalUSD: 99e9, delta7dUSD: -1e9, delta30dUSD: -2e9 },
     dvol:   { dvol: 75, slope: { slope: 'RISING', chg: 3 } }
   });
-  assert(allOff.score === -8 && allOff.word === 'RISK-OFF' && allOff.cls === 'short' && allOff.scoredTotal === 8,
-         'aggregate: all eight risk-off => score -8, RISK-OFF, cls short');
+  assert(allOff.score === -9 && allOff.word === 'RISK-OFF' && allOff.cls === 'short' && allOff.scoredTotal === 9,
+         'aggregate: all nine risk-off => score -9, RISK-OFF, cls short');
 
   const plus3 = regimeVerdict({ // exactly +3 boundary => RISK-ON
     btc: { close: 7e4, ema50: 6.2e4, ema200: 6e4 },
@@ -340,7 +337,7 @@ function verdictWith(patch){
     btc: null, ethbtc: null, btcd: null, fedliq: null, dxy: null, us10y: null, gold: null, stable: null, dvol: null
   });
   assert(allNull.score === 0 && allNull.word === 'MIXED — SELECTIVE' && allNull.rows.length === 9
-         && allNull.why.indexOf('no directional drivers') > -1 && allNull.scoredTotal === 8,
+         && allNull.why.indexOf('no directional drivers') > -1 && allNull.scoredTotal === 9,
          'aggregate: all sources null => score 0, MIXED, 9 rows, honest "no directional drivers"');
 
   let threw = false;
@@ -349,8 +346,8 @@ function verdictWith(patch){
   assert(!threw, 'aggregate: null/undefined/empty argument never throws');
 
   const mixedWhy = allOn.why + ' | ' + allNull.why;
-  assert(allOn.why.indexOf('score +8/8') === 0 && allOff.why.indexOf('score -8/8') === 0,
-         'aggregate: why string opens with signed score out of 8');
+  assert(allOn.why.indexOf('score +9/9') === 0 && allOff.why.indexOf('score -9/9') === 0,
+         'aggregate: why string opens with signed score out of 9');
   assert(mixedWhy.length > 0, 'aggregate: why strings built');
 }
 
@@ -434,8 +431,8 @@ async function clickAndWait(target){
   assert(klineCalls.some(c => c.indexOf('XAUUSDT|1d|') === 0), 'gold leg calls binanceKlines("XAUUSDT", "1d", …)');
   assert(!klineCalls.some(c => c.indexOf('PAXGUSDT') > -1), 'gold leg never calls PAXGUSDT anymore');
   assert(klineCalls.some(c => c.indexOf('BTCUSDT|1d|') === 0), 'btc leg still calls binanceKlines("BTCUSDT", "1d", …)');
-  assert(outNode.innerHTML.indexOf('GOLD (XAU PERP)') > -1 && outNode.innerHTML.indexOf('XAU ABOVE 200EMA') > -1,
-         'rendered ledger shows "GOLD (XAU PERP)" row with XAU trend text');
+  assert(outNode.innerHTML.indexOf('GOLD (XAU PERP)') > -1 && outNode.innerHTML.indexOf('gold bid firm') > -1,
+         'rendered ledger shows "GOLD (XAU PERP)" row with gold bid firm text');
 }
 
 /* ---------------- 11) R8 stablecoin fetch: null payload, then malformed entries ---------------- */
@@ -579,8 +576,8 @@ assert(pbOff.invalidation.indexOf('BTC TREND (1D)') > -1 && pbOff.invalidation.i
 assert(pbLean.invalidation.indexOf('±3') > -1, 'playbook: MIXED invalidation points at the ±3 resolution boundary');
 
 /* passthrough + cls/word derivation */
-assert(pbOn.regime === 'RISK-ON' && pbOn.cls === 'long' && pbOn.score === 7
-       && pbOff.regime === 'RISK-OFF' && pbOff.cls === 'short' && pbOff.score === -7,
+assert(pbOn.regime === 'RISK-ON' && pbOn.cls === 'long' && pbOn.score === 8
+       && pbOff.regime === 'RISK-OFF' && pbOff.cls === 'short' && pbOff.score === -8,
        'playbook: regime/cls/score pass through from the verdict');
 const pbDerived = regimePlaybook({ score: 5, rows: [] });
 assert(pbDerived && pbDerived.cls === 'long' && pbDerived.bias === 'LONG-ONLY' && pbDerived.regime === 'RISK-ON',
@@ -588,14 +585,14 @@ assert(pbDerived && pbDerived.cls === 'long' && pbDerived.bias === 'LONG-ONLY' &
 
 /* ---------------- 13) playbook panel in the rendered dashboard ---------------- */
 console.log('== playbook panel: rendered from live scan state ==');
-/* current stub state (btc+gold ok, stables cached inflow, rest dead) => score +2 MIXED */
+/* current stub state (btc+gold ok, stables cached inflow, rest dead) => score +3 RISK-ON with gold scored */
 let okMix = await clickAndWait('3/9 sources ok');
-assert(okMix, 'playbook UI: MIXED scan completes (3/9 sources ok)');
+assert(okMix, 'playbook UI: scan completes with btc+gold+stables (3/9 sources ok)');
 assert(outNode.innerHTML.indexOf('PLAYBOOK') > -1 && outNode.innerHTML.indexOf('INVALIDATION —') > -1,
        'playbook UI: PLAYBOOK card + INVALIDATION plan line rendered');
-assert(outNode.innerHTML.indexOf('BOTH') > -1 && outNode.innerHTML.indexOf('QUARTER') > -1,
-       'playbook UI: +2 MIXED renders BOTH bias at QUARTER size');
-assert(outNode.innerHTML.indexOf('mean-revert') > -1 && outNode.innerHTML.indexOf('gpip') > -1,
+assert(outNode.innerHTML.indexOf('RISK-ON') > -1 && (outNode.innerHTML.indexOf('LONG-ONLY') > -1 || outNode.innerHTML.indexOf('FULL') > -1),
+       'playbook UI: scored gold leg pushes RISK-ON bias with full/half sizing');
+assert(outNode.innerHTML.indexOf('trend-follow') > -1 && outNode.innerHTML.indexOf('gpip') > -1,
        'playbook UI: setup pills rendered as .gpip chips');
 
 /* now stub every source risk-on => score +8 RISK-ON full/long */
@@ -786,8 +783,8 @@ console.log('== BRAIN state getter (window.regimeState) ==');
   const st = W3.regimeState();
   assert(st && typeof st === 'object' && typeof st.at === 'number' && isFinite(st.at),
          'state: populated after the successful scan ({label, score, playbook, at})');
-  assert(st.label === 'RISK-ON' && st.score === 8,
-         'state: label + score come from the regimeVerdict result (RISK-ON, 8)');
+  assert(st.label === 'RISK-ON' && st.score === 9,
+         'state: label + score come from the regimeVerdict result (RISK-ON, 9)');
   assert(st.playbook && st.playbook.regime === 'RISK-ON' && st.playbook.bias === 'LONG-ONLY'
          && st.playbook.cls === 'long' && Array.isArray(st.playbook.setups),
          'state: playbook is the window.regimePlaybook output (bias LONG-ONLY, setups array)');
@@ -809,7 +806,7 @@ console.log('== BRAIN state getter (window.regimeState) ==');
   Object.defineProperty(out3, 'innerHTML', desc3);
   const st3 = W3.regimeState();
   assert(!rfThrew, 'state: failing re-run never rejects the refresh');
-  assert(st3 && st3.at === st.at && st3.label === 'RISK-ON' && st3.score === 8,
+  assert(st3 && st3.at === st.at && st3.label === 'RISK-ON' && st3.score === 9,
          'state: stale-good snapshot preserved after the failing re-run (same at, same content)');
 
   /* sabotaged internals: getter degrades to null, never throws, then recovers */

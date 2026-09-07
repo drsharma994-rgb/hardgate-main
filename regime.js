@@ -494,18 +494,18 @@ function regimeVerdict(components){
     else                       push('R6','US 10Y YIELD','yields',         txt + ' · ' + (tr || 'FLAT') + ' — no yield edge', 'NA', 0, true);
   })();
 
-  /* R7 — GOLD (XAU PERP) vs 200EMA: HEDGE DEMAND, informational only, never scored */
+  /* R7 — GOLD (XAU PERP) vs 200EMA: hedge demand gauge (now scored) */
   (function(){
     var g = components.gold;
-    if (!g){ push('R7','HEDGE DEMAND · GOLD (XAU PERP)','gold','data unavailable · informational — not scored','NA',0,false); return; }
+    if (!g){ push('R7','HEDGE DEMAND · GOLD (XAU PERP)','gold','data unavailable','NA',0,true); return; }
     var close = rgToNum(g.close), e200 = rgToNum(g.ema200);
     if (!isFinite(close) || !isFinite(e200)){
-      push('R7','HEDGE DEMAND · GOLD (XAU PERP)','gold','data unavailable · informational — not scored','NA',0,false); return;
+      push('R7','HEDGE DEMAND · GOLD (XAU PERP)','gold','data unavailable','NA',0,true); return;
     }
-    var pxTxt = 'XAU close ' + rgNum(close) + ' · ema200 ' + rgNum(e200) + ' · informational — not scored';
-    if (close > e200)      push('R7','HEDGE DEMAND · GOLD (XAU PERP)','gold','XAU ABOVE 200EMA · hedge bid firm · ' + pxTxt, 'BULL', 0, false);
-    else if (close < e200) push('R7','HEDGE DEMAND · GOLD (XAU PERP)','gold','XAU BELOW 200EMA · hedge bid soft · ' + pxTxt, 'BEAR', 0, false);
-    else                   push('R7','HEDGE DEMAND · GOLD (XAU PERP)','gold','XAU AT 200EMA · ' + pxTxt, 'NA', 0, false);
+    var pxTxt = 'XAU close ' + rgNum(close) + ' · ema200 ' + rgNum(e200);
+    if (close > e200)      push('R7','HEDGE DEMAND · GOLD (XAU PERP)','gold bid firm', pxTxt + ' · ABOVE 200EMA — hedge bid firm', 'BULL',  1, true);
+    else if (close < e200) push('R7','HEDGE DEMAND · GOLD (XAU PERP)','gold bid soft', pxTxt + ' · BELOW 200EMA — hedge bid soft', 'BEAR', -1, true);
+    else                   push('R7','HEDGE DEMAND · GOLD (XAU PERP)','gold at 200EMA', pxTxt + ' · AT 200EMA — no hedge edge', 'NA', 0, true);
   })();
 
   /* R8 — STABLECOIN FLOWS (DeFiLlama aggregate): 7d mcap delta vs ±0.5% band.

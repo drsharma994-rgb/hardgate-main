@@ -91,12 +91,14 @@ function edgeDropForming(rows, res){
   }catch(e){ return rows || []; }
 }
 
-function edgeMaxSafeLev(entry, stop){
+function edgeMaxSafeLev(entry, stop, venueMax){
   try{
     entry = +entry; stop = +stop;
     if (!(isFinite(entry) && isFinite(stop)) || entry <= 0 || entry === stop) return 1;
     var sd = Math.abs(entry - stop) / entry;
-    return Math.max(1, Math.min(100, Math.floor(1 / (sd * 1.5 + 0.005))));
+    var raw = Math.floor(1 / (sd * 1.5 + 0.005));
+    var cap = isFinite(+venueMax) && +venueMax > 0 ? +venueMax : 50;
+    return Math.max(1, Math.min(cap, raw));
   }catch(e){ return 1; }
 }
 
@@ -484,7 +486,7 @@ function trySetupAt(A, i, biasDir){
       if (isFinite(rsi) && (rsi > 68 || rsi < 32)) return null;
 
       /* 1) EMA21 pullback — primary trend entry */
-      if (isFinite(e21) && l <= e21 + tol && c >= e21 - tol * 0.5){
+      if (isFinite(e21) && l <= e21 + tol && c >= e21){
         var hold = isFinite(closePos) && closePos >= 0.52 && isFinite(o) && c >= o;
         var pbOk = !isFinite(pb) || pb <= 0.55;
         if (hold && pbOk){
@@ -500,7 +502,7 @@ function trySetupAt(A, i, biasDir){
 
       /* 2) EMA9 pullback when extended from fast MA (swingTryClean parity) */
       if (isFinite(e9) && isFinite(e21) && Math.abs(c - e9) / at > EMA9_PULL_ATR){
-        if (l <= e9 + tol && c >= e9 - tol * 0.5 && isFinite(closePos) && closePos >= 0.5){
+        if (l <= e9 + tol && c >= e9 && isFinite(closePos) && closePos >= 0.5){
           extremeL = isFinite(A.loExt[i]) ? A.loExt[i] : l;
           stopL = Math.min(extremeL, l) - STOP_ATR * at;
           pL = finalizeSetup('long', A, i, {
@@ -576,7 +578,7 @@ function trySetupAt(A, i, biasDir){
       if (isFinite(rsi) && (rsi < 32 || rsi > 68)) return null;
 
       /* 1) EMA21 rally rejection */
-      if (isFinite(e21) && h >= e21 - tol && c <= e21 + tol * 0.5){
+      if (isFinite(e21) && h >= e21 - tol && c <= e21){
         var reject = isFinite(closePos) && closePos <= 0.48 && isFinite(o) && c <= o;
         var pbHiOk = !isFinite(pb) || pb >= 0.45;
         if (reject && pbHiOk){
@@ -592,7 +594,7 @@ function trySetupAt(A, i, biasDir){
 
       /* 2) EMA9 rejection when extended from fast MA */
       if (isFinite(e9) && isFinite(e21) && Math.abs(c - e9) / at > EMA9_PULL_ATR){
-        if (h >= e9 - tol && c <= e9 + tol * 0.5 && isFinite(closePos) && closePos <= 0.5){
+        if (h >= e9 - tol && c <= e9 && isFinite(closePos) && closePos <= 0.5){
           extremeH = isFinite(A.hiExt[i]) ? A.hiExt[i] : h;
           stopS = Math.max(extremeH, h) + STOP_ATR * at;
           pS = finalizeSetup('short', A, i, {
@@ -930,16 +932,37 @@ function edgeFlowChip(en){
   return '<span class="statuschip warn" title="No Binance taker/L2 — CVD and OBI vetoes not applied">FLOW N/A</span>';
 }
 
+function edgeCascadeAge(rows){
+  try{
+    if (!rows || rows.length < 55 || typeof ema !== 'function') return null;
+    var sw = edgeSwingRead(rows);
+    if (!sw.rawDir) return null;
+    var closes = new Array(rows.length), i;
+    for (i = 0; i < rows.length; i++) closes[i] = rows[i].c;
+    var e9a = ema(closes, 9), e21a = ema(closes, 21), e50a = ema(closes, 50);
+    var age = 0;
+    for (i = rows.length - 1; i >= 0; i--){
+      var rd = null;
+      if (e9a[i] > e21a[i] && e21a[i] > e50a[i]) rd = 'long';
+      else if (e9a[i] < e21a[i] && e21a[i] < e50a[i]) rd = 'short';
+      if (rd !== sw.rawDir) break;
+      age++;
+    }
+    return age;
+  }catch(e){ return null; }
+}
+
 function edgeAssess(rows, item, candleSrc){
   try{
     var sig = edgeSignal(rows);
     if (!sig) return null;
     if (isFinite(sig.barAge) && sig.barAge > 0) return null;
+    var cascAge = edgeCascadeAge(rows);
+    if (cascAge !== null && (cascAge < 3 || cascAge > 40)) return null;
     var biasPre = edgeSwingBias(rows);
     if (biasPre && (biasPre.g5 !== true || biasPre.g6 !== true)) return null;
     var en = edgeEnrich(sig, rows, item, candleSrc);
     if (en.veto) return null;
-    if (en.tally < MIN_TALLY) return null;
     var plan = edgePlan(sig);
     if (!plan) return null;
     if (typeof W.hgStrategyRefine === 'function'){
@@ -952,7 +975,8 @@ function edgeAssess(rows, item, candleSrc){
     if (typeof W.hgDeskFormationEdgeApply === 'function'){
       W.hgDeskFormationEdgeApply(plan, { tab: 'edge', rows: rows, dir: sig.dir });
     }
-    return { sig: sig, enrich: en, plan: plan, tally: en.tally, parts: en.parts };
+    return { sig: sig, enrich: en, plan: plan, tally: en.tally, parts: en.parts,
+      weakTally: en.tally < MIN_TALLY };
   }catch(e){ return null; }
 }
 
@@ -1308,14 +1332,15 @@ async function edgeScanList(list, fetchCandles, hooks){
         found.push({
           item: item, sym: item.sym, sig: assessed.sig, plan: assessed.plan,
           enrich: assessed.enrich, tally: assessed.tally, bt: bt, candleSrc: src,
-          stack: assessed.stack || null, rows4h: rows
+          stack: assessed.stack || null, rows4h: rows, weakTally: assessed.weakTally === true
         });
       }catch(e){ skipped++; }
     }));
     await sleep(CHUNK_SLEEP_MS);
   }
   found.sort(function(a, b){
-    return (b.tally - a.tally) || (b.bt.expR - a.bt.expR) || (b.sig.rr - a.sig.rr);
+    var wa = a.weakTally ? 1 : 0, wb = b.weakTally ? 1 : 0;
+    return (wa - wb) || (b.tally - a.tally) || (b.bt.expR - a.bt.expR) || (b.sig.rr - a.sig.rr);
   });
   /* FORWARD LOG, keyed by TRIGGER rather than by symbol. EDGE already
      backtests non-overlapping (edgeBacktest resumes at exitJ + 1, which is

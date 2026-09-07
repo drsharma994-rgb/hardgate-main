@@ -26,7 +26,7 @@ function goldCotGate(assess, dir){
       if (age >= 0 && age <= 5) out.tag = 'COT EXTREME';
     }
     return out;
-  }catch(e){ return { veto: false, bonus: false, tag: null, note: '' }; }
+  }catch(e){ return { veto: false, bonus: false, tag: null, note: '', unchecked: true, reason: 'goldCotGate threw' }; }
 }
 
 function coinalyzeSymbolsForBase(base){
