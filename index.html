@@ -813,7 +813,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 </main>
 
 
-  <script src="build-stamp.js?v=638"></script>
+  <script src="build-stamp.js?v=639"></script>
   <script src="hg-setup-core.js"></script>
 <script src="hghost.js"></script>
 <script src="indicators.js"></script>
@@ -968,6 +968,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="ai-agent.js"></script>
 <script src="agent-alerts.js"></script>
 <script src="book.js?v=56"></script>
+<script src="setup-activation.js"></script>
 <script src="execute.js?v=56"></script>
 <script src="pinemath.js"></script>
 <script src="pinegoldmath.js"></script>
@@ -1458,7 +1459,7 @@ setInterval(tickClock, 1000);
    ticker: {symbol, mark, fundingPct(per interval, % units), oiUsd, turnoverUsd, chg24}
    candles(sym, res, count): asc [{t,o,h,l,c,v}]  res in {'15m','1h','4h','1d'} */
 
-let wsTickers = {}; let deltaWS = null; let wsRetryMs = 1000; function updateTradePlanPriceUI(symbol, mark){ const symEl=$('tSym'); if(symEl && symEl.value===symbol){ const entryEl=$('tEntry'); if(entryEl && document.activeElement!==entryEl){ entryEl.value = mark; } } }
+let wsTickers = {}; try{ window.wsTickers = wsTickers; }catch(e){} let deltaWS = null; let wsRetryMs = 1000; function updateTradePlanPriceUI(symbol, mark){ const symEl=$('tSym'); if(symEl && symEl.value===symbol){ const entryEl=$('tEntry'); if(entryEl && document.activeElement!==entryEl){ entryEl.value = mark; } } }
 Store.subscribe('PRICE_UPDATE', function(d){ updateTradePlanPriceUI(d.symbol, d.price); }); function initDeltaWS(){
   try{
     if (deltaWS && (deltaWS.readyState===WebSocket.OPEN || deltaWS.readyState===WebSocket.CONNECTING)) return;
@@ -4328,8 +4329,13 @@ function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId, bookMet
   const strategyDetail = (typeof hgStrategyTradeDetailHtml === 'function')
     ? hgStrategyTradeDetailHtml(bookMeta, { skipChip: true })
     : '';
-  return `<div class="card ${dir}${tierCls}">
-    <div class="chead">${venueHtml}<span class="sym">${symHtml}</span><span class="dir">${dir.toUpperCase()} · ${tierLabel}</span>${bookStamp}${tripleChip}${visionChipHtml}${confirmChip}</div>
+  const actDot = (typeof hgSetupActivatedDotHtml === 'function')
+    ? hgSetupActivatedDotHtml(sym, dir, entry, stop, bookMeta, plan)
+    : '';
+  const entryData = isFinite(entry) ? ` data-hg-setup-entry="${entry}"` : '';
+  const stopData = isFinite(stop) ? ` data-hg-setup-stop="${stop}"` : '';
+  return `<div class="card ${dir}${tierCls}" data-hg-setup-sym="${symHtml}" data-hg-setup-dir="${dir}"${entryData}${stopData}>
+    <div class="chead">${actDot}${venueHtml}<span class="sym">${symHtml}</span><span class="dir">${dir.toUpperCase()} · ${tierLabel}</span>${bookStamp}${tripleChip}${visionChipHtml}${confirmChip}</div>
     <div class="mini">${mini.map(([k,v])=>`<span class="k">${k}</span><span>${v}</span>`).join('')}</div>
     ${stackHtml}
     ${postGateBanner}

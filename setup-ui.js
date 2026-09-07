@@ -405,17 +405,21 @@ function hgSetupEmptyHTML(opts){
 
 function hgSetupCardHead(sym, dir, tier, extraBadges, venue, bookMeta){
   tier = String(tier || 'clean').toLowerCase();
+  bookMeta = bookMeta || {};
   var symHtml = suEsc(sym);
   var venueHtml = venue ? '<span class="stamp na">' + suEsc(venue) + '</span> ' : '';
   var tierLabel = hgSetupTierLabel(tier);
   var badges = (extraBadges || []).join('');
+  var actDot = (typeof W.hgSetupActivatedDotHtml === 'function')
+    ? W.hgSetupActivatedDotHtml(sym, dir, bookMeta.entry, bookMeta.stop, bookMeta, bookMeta.plan)
+    : '';
   var bookStamp = (bookMeta && typeof W.hgBookStampChip === 'function')
     ? W.hgBookStampChip(sym, dir, bookMeta) : '';
   var confirmChip = (typeof W.hgStrategyConfirmChipHtml === 'function')
     ? W.hgStrategyConfirmChipHtml(bookMeta && bookMeta.strategyConfirm, bookMeta && bookMeta.strategyWith,
         bookMeta && bookMeta.strategyAgainst)
     : '';
-  return venueHtml + '<span class="sym">' + symHtml + '</span>'
+  return actDot + venueHtml + '<span class="sym">' + symHtml + '</span>'
     + '<span class="dir">' + suEsc(String(dir || '').toUpperCase()) + ' · ' + tierLabel + '</span>'
     + bookStamp + badges + confirmChip;
 }
@@ -452,6 +456,8 @@ function hgSetupCardHTML(setup){
   var chartId = setup.chartId || '';
   var bookMeta = setup.bookMeta || {};
   bookMeta.tier = tier;
+  bookMeta.entry = entry;
+  bookMeta.stop = stop;
   if (!bookMeta.strategyConfirm && setup.strategyConfirm){
     bookMeta.strategyConfirm = setup.strategyConfirm;
     bookMeta.strategyWith = setup.strategyWith;
@@ -500,7 +506,9 @@ function hgSetupCardHTML(setup){
   var tradeBtn = (tier === 'clean' && onclickAttr)
     ? '<button class="toTrade" onclick="' + onclickAttr + '">SEND TO TRADE PLAN →</button>' : '';
 
-  return '<div class="card ' + suEsc(dir) + tierCls + '">'
+  var entryAttr = isFinite(entry) ? ' data-hg-setup-entry="' + suEsc(String(entry)) + '"' : '';
+  var stopAttr = isFinite(stop) ? ' data-hg-setup-stop="' + suEsc(String(stop)) + '"' : '';
+  return '<div class="card ' + suEsc(dir) + tierCls + '" data-hg-setup-sym="' + symHtml + '" data-hg-setup-dir="' + suEsc(dir) + '"' + entryAttr + stopAttr + '>'
     + '<div class="chead">' + hgSetupCardHead(sym, dir, tier, [tripleChip], bookMeta.venue, bookMeta) + '</div>'
     + (miniHtml ? '<div class="mini">' + miniHtml + '</div>' : '')
     + (gateHtml ? '<div class="gates">' + gateHtml + '</div>' : '')

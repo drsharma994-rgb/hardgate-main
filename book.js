@@ -613,6 +613,7 @@ function hgBookStampRepaintDom(){
       try{ meta = JSON.parse(metaRaw); }catch(e){}
       n.innerHTML = hgBookStampHTML(sym, dir, bookResolveFund(meta));
     }
+    if (typeof W.hgSetupActivationRefreshDom === 'function') W.hgSetupActivationRefreshDom();
   }catch(e){}
 }
 
@@ -637,6 +638,7 @@ function hgBookStampRefreshThrottled(force){
   __hgBookKeysRefreshAt = now;
   return bookRefreshOpenKeys().then(function(keys){
     hgBookStampRepaintDom();
+    if (typeof W.hgSetupActivationRefreshDom === 'function') W.hgSetupActivationRefreshDom();
     return keys;
   });
 }
