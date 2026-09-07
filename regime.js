@@ -742,6 +742,7 @@ function rgRender(out, v, meta){
           '<div class="vwhy">' + rgEsc(v.why) + '</div></div>';
   html += '<div class="note" style="margin-top:8px">' + (RG_MEANING[v.cls] || RG_MEANING.aside) + '</div>';
   html += rgPlaybookHTML(v);
+  if (typeof W.hgRegimeTransitionBannerHtml === 'function') html += W.hgRegimeTransitionBannerHtml();
   if (typeof W.hgInc567RegimePanelsHtml === 'function') html += W.hgInc567RegimePanelsHtml();
   if (typeof W.hgHurstRS === 'function' && typeof W.hgFamilyRouter === 'function'
       && __rgLastComponents && __rgLastComponents.btc && Array.isArray(__rgLastComponents.btc.closes)){
@@ -867,6 +868,7 @@ async function rgRun(els){
 
     var v = regimeVerdict(components);
     rgRender(els.out, v, { fails: fails, total: 10 });
+    try{ hgRegimeTransitionPush(v.score); }catch(eRt){}
     setRgSnapshot(v, components); /* BRAIN: cache the successful scan (catch path below never reaches here) */
     if (els.stat) els.stat.textContent = 'updated ' + new Date().toISOString().slice(11, 19) +
       ' UTC · ' + (10 - fails) + '/10 sources ok · cached 60s (stables 10m · Fed liq 1h)';

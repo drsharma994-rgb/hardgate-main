@@ -929,6 +929,11 @@ function hgBrainInvAlertsMaybeRun(root){
 async function hgTabAlertsRun(opts){
   opts = opts || {};
   var root = opts.window || W;
+  try{
+    if (typeof root.hgAlertMarkOutcomes === 'function' && typeof root.hgAlertOutcomeMarkFromTickers === 'function'){
+      root.hgAlertMarkOutcomes(root.hgAlertOutcomeMarkFromTickers);
+    }
+  }catch(eOut){}
   var lastRunKey = opts.goldOnly ? LS_GOLD_LAST_RUN : LS_LAST_RUN;
   if (!tabAlertsShouldRun(root, !!opts.force, lastRunKey)){
     return { pushed: 0, fresh: [], keys: loadKeys(root), status: 'throttled-5m', invalidation: 0 };

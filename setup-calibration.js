@@ -266,10 +266,45 @@ function scTripleWitnessGate(dir, retailLongPct, topLongPct, takerRatio){
 
 function scTimeStopMaxBars(setupKind, profileRow, profile){
   var med = profileRow && fin(profileRow.medianWinBars);
-  if (med !== null && med > 0) return Math.max(2, Math.round(med * 2));
-  var defs = (profile && profile.timeStopDefaults) || SC_EMBED_PROFILE.timeStopDefaults || {};
-  var d = defs[scNormalizeSetupKind(setupKind)] || defs.swing || {};
-  return fin(d.bars) || 48;
+  var bars;
+  if (med !== null && med > 0) bars = Math.max(2, Math.round(med * 2));
+  else {
+    var defs = (profile && profile.timeStopDefaults) || SC_EMBED_PROFILE.timeStopDefaults || {};
+    var d = defs[scNormalizeSetupKind(setupKind)] || defs.swing || {};
+    bars = fin(d.bars) || 48;
+  }
+  try{
+    if (typeof G.hgRegimeTransitionModifiers === 'function'){
+      var rt = G.hgRegimeTransitionModifiers();
+      if (rt && rt.halveTimeStop) bars = Math.max(2, Math.round(bars / 2));
+    }
+  }catch(e){}
+  return bars;
+}
+
+function scExecutionDragSuspend(setupKind){
+  var kind = scNormalizeSetupKind(setupKind);
+  var recs = [];
+  try{ if (typeof loadLog === 'function') recs = loadLog().filter(function(r){ return r && (r.status === 'closed' || r.status === 'settled'); }); }catch(e){}
+  try{ if (!recs.length && typeof G.hgScoreRecords === 'function') recs = G.hgScoreRecords(); }catch(e){}
+  var ideal = [], real = [];
+  (recs || []).forEach(function(r){
+    var sk = scNormalizeSetupKind(r.setupKind || r.strategy || r.scanner || 'swing');
+    if (sk !== kind) return;
+    if (isFinite(r.idealR)) ideal.push(+r.idealR);
+    else if (isFinite(r.r)) ideal.push(+r.r);
+    if (isFinite(r.realisticR)) real.push(+r.realisticR);
+  });
+  if (!ideal.length) return { suspend: false, n: 0, idealExpectancy: null, realisticExpectancy: null, executionDrag: null };
+  var idealExp = ideal.reduce(function(a, c){ return a + c; }, 0) / ideal.length;
+  var realExp = real.length ? real.reduce(function(a, c){ return a + c; }, 0) / real.length : null;
+  return {
+    n: ideal.length,
+    idealExpectancy: idealExp,
+    realisticExpectancy: realExp,
+    executionDrag: realExp !== null ? idealExp - realExp : null,
+    suspend: idealExp > 0 && realExp !== null && realExp < 0
+  };
 }
 
 function scResolveRegimeScore(){
@@ -373,6 +408,37 @@ function hgSetupCalibrationEval(ctx){
     if (ctx.requireTripleWitness && !tw.pass) out.veto = true;
   }
 
+  var drag = scExecutionDragSuspend(kind);
+  out.executionDrag = drag;
+  if (drag && drag.suspend){
+    out.veto = true;
+    out.reasons.push('execution-drag suspend (realistic EV < 0, ideal EV > 0)');
+  }
+
+  try{
+    if (typeof G.hgRegimeTransitionModifiers === 'function'){
+      var rtm = G.hgRegimeTransitionModifiers();
+      if (rtm && rtm.active){
+        out.regimeTransition = rtm;
+        if (rtm.minRr && fin(ctx.rr) !== null && ctx.rr < rtm.minRr){
+          out.veto = true;
+          out.reasons.push('REGIME TRANSITION — R:R below ' + rtm.minRr);
+        }
+        if (rtm.requireCrossVenue && ctx.rows && ctx.refRows){
+          var cvRt = scCrossVenueSwingGate(ctx.dir, ctx.rows, ctx.refRows);
+          if (cvRt && cvRt.pass === false){
+            out.veto = true;
+            out.reasons.push('REGIME TRANSITION — cross-venue disagreement');
+          }
+        }
+        if ((kind === 'meanrev' || kind === 'smc-fvg') && rtm.meanRevBonus && out.tier > 1){
+          out.tier = out.tier - 1;
+          out.meanRevBonus = true;
+        }
+      }
+    }
+  }catch(eRt){}
+
   return out;
 }
 
@@ -426,6 +492,7 @@ G.scVolAdaptiveRr = scVolAdaptiveRr;
 G.scCrossVenueSwingGate = scCrossVenueSwingGate;
 G.scTripleWitnessGate = scTripleWitnessGate;
 G.scGoldBasisGate = scGoldBasisGate;
+G.scExecutionDragSuspend = scExecutionDragSuspend;
 
 try{
   if (G.document){

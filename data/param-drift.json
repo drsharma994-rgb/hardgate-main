@@ -1,0 +1,115 @@
+{
+  "updatedAt": 1788807592891,
+  "weekKey": "2026-09-07",
+  "tradeCount": 0,
+  "params": {
+    "rrMin": 2,
+    "timeStopScalpBars": 12,
+    "timeStopSwingBars": 60,
+    "macroVetoAbs": 3,
+    "atrStopMult": 1.5
+  },
+  "proposed": {
+    "rrMin": 1.6,
+    "timeStopScalpBars": 9.6,
+    "timeStopSwingBars": 48,
+    "macroVetoAbs": 2.4,
+    "atrStopMult": 1.2
+  },
+  "provenance": {
+    "rrMin": {
+      "baseline": 2,
+      "sweepBest": {
+        "value": 1.6,
+        "step": -0.2,
+        "expectancy": 0
+      },
+      "adopted": 2,
+      "proposed": 1.6
+    },
+    "timeStopScalpBars": {
+      "baseline": 12,
+      "sweepBest": {
+        "value": 9.600000000000001,
+        "step": -0.2,
+        "expectancy": 0
+      },
+      "adopted": 12,
+      "proposed": 9.6
+    },
+    "timeStopSwingBars": {
+      "baseline": 60,
+      "sweepBest": {
+        "value": 48,
+        "step": -0.2,
+        "expectancy": 0
+      },
+      "adopted": 60,
+      "proposed": 48
+    },
+    "macroVetoAbs": {
+      "baseline": 3,
+      "sweepBest": {
+        "value": 2.4000000000000004,
+        "step": -0.2,
+        "expectancy": 0
+      },
+      "adopted": 3,
+      "proposed": 2.4
+    },
+    "atrStopMult": {
+      "baseline": 1.5,
+      "sweepBest": {
+        "value": 1.2000000000000002,
+        "step": -0.2,
+        "expectancy": 0
+      },
+      "adopted": 1.5,
+      "proposed": 1.2
+    }
+  },
+  "adoptionHistory": [
+    {
+      "key": "rrMin",
+      "weekKey": "2026-09-07",
+      "dir": -1,
+      "value": 1.6,
+      "pending": true
+    },
+    {
+      "key": "timeStopScalpBars",
+      "weekKey": "2026-09-07",
+      "dir": -1,
+      "value": 9.6,
+      "pending": true
+    },
+    {
+      "key": "timeStopSwingBars",
+      "weekKey": "2026-09-07",
+      "dir": -1,
+      "value": 48,
+      "pending": true
+    },
+    {
+      "key": "macroVetoAbs",
+      "weekKey": "2026-09-07",
+      "dir": -1,
+      "value": 2.4,
+      "pending": true
+    },
+    {
+      "key": "atrStopMult",
+      "weekKey": "2026-09-07",
+      "dir": -1,
+      "value": 1.2,
+      "pending": true
+    }
+  ],
+  "baselines": {
+    "rrMin": 2,
+    "timeStopScalpBars": 12,
+    "timeStopSwingBars": 60,
+    "macroVetoAbs": 3,
+    "atrStopMult": 1.5
+  }
+}

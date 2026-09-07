@@ -119,6 +119,20 @@ function alertPlanBlock(sym, dir, entry, stop, t1, t2){
   if (t2 !== null && t2 !== undefined && isFinite(+t2)) lines.push('TAKE PROFIT 2: ' + alertFmtPx(t2));
   return lines.join('\n');
 }
+function alertPushGate(meta){
+  try{
+    var should = gfn('hgAlertShouldPush');
+    if (!should) return { allow: true };
+    meta = meta || {};
+    return should(meta.setup || meta.scanner || 'hgalert', meta.regime || 'MIXED', meta.tier || 'clean');
+  }catch(e){ return { allow: true }; }
+}
+function alertRecordFire(meta){
+  try{
+    var rec = gfn('hgAlertRecordFire');
+    if (rec) rec(meta || {});
+  }catch(e){}
+}
 function sniperTelegramBlocks(hits){
   var blocks = [];
   for (var i = 0; i < hits.length && blocks.length < 5; i++){
@@ -490,15 +504,20 @@ function onTicket(snap){
       + offHoursTag()
       + '\nhttps://hardgate-main.onrender.com/';
     try{
+      var gateT = alertPushGate({ setup: 'ticket', scanner: 'ticket' });
+      if (gateT && gateT.allow === false){ suffix += ' · precision block'; }
+      else {
+      alertRecordFire({ setup: 'ticket', scanner: 'ticket', regime: 'MIXED', tier: 'clean' });
       var tg = gfn('sendTelegram');
       if (tg){
         suffix += ' · telegram';
         Promise.resolve(tg(tickTxt)).then(function(r){
-          if (r !== true){ var nt = gfn('sendAlertPush'); if (nt) nt('HARDGATE entry ticket changed', tickTxt); }
-        }).catch(function(){ var nt = gfn('sendAlertPush'); if (nt) nt('HARDGATE entry ticket changed', tickTxt); });
+          if (r !== true){ var nt = gfn('sendAlertPush'); if (nt) nt('HARDGATE entry ticket changed', tickTxt, { setup: 'ticket', scanner: 'ticket' }); }
+        }).catch(function(){ var nt = gfn('sendAlertPush'); if (nt) nt('HARDGATE entry ticket changed', tickTxt, { setup: 'ticket', scanner: 'ticket' }); });
       }else{
         var nt2 = gfn('sendAlertPush');
-        if (nt2){ nt2('HARDGATE entry ticket changed', tickTxt); suffix += ' · ntfy'; }
+        if (nt2){ nt2('HARDGATE entry ticket changed', tickTxt, { setup: 'ticket', scanner: 'ticket' }); suffix += ' · ntfy'; }
+      }
       }
     }catch(e){ suffix += ' · push failed'; }
     __lastTicketLine = line + suffix;
@@ -580,11 +599,17 @@ function onSniper(hits){
       + offHoursTag()
       + '\nhttps://hardgate-main.onrender.com/';
     try{
+      var gateS = alertPushGate({ setup: 'sniper', scanner: 'sniper', tier: 'clean' });
+      if (gateS && gateS.allow === false){ suffix += ' · precision block'; }
+      else {
+      var top = hits[0] || {};
+      alertRecordFire({ setup: 'sniper', scanner: 'sniper', sym: top.sym, dir: top.dir, entry: top.entry, regime: 'MIXED', tier: 'clean', mark: top.entry });
       var tg = gfn('sendTelegram');
       if (tg){ suffix += ' · telegram'; Promise.resolve(tg(txt)).then(function(r){
-        if (r !== true){ var nt = gfn('sendAlertPush'); if (nt) nt('HARDGATE SNIPER SETUP', txt, { priority: 5 }); }
-      }).catch(function(){ var nt = gfn('sendAlertPush'); if (nt) nt('HARDGATE SNIPER SETUP', txt, { priority: 5 }); }); }
-      else { var nt2 = gfn('sendAlertPush'); if (nt2){ nt2('HARDGATE SNIPER SETUP', txt, { priority: 5 }); suffix += ' · ntfy p5'; } }
+        if (r !== true){ var nt = gfn('sendAlertPush'); if (nt) nt('HARDGATE SNIPER SETUP', txt, { priority: 5, setup: 'sniper', scanner: 'sniper', sym: top.sym, dir: top.dir }); }
+      }).catch(function(){ var nt = gfn('sendAlertPush'); if (nt) nt('HARDGATE SNIPER SETUP', txt, { priority: 5, setup: 'sniper', scanner: 'sniper', sym: top.sym, dir: top.dir }); }); }
+      else { var nt2 = gfn('sendAlertPush'); if (nt2){ nt2('HARDGATE SNIPER SETUP', txt, { priority: 5, setup: 'sniper', scanner: 'sniper', sym: top.sym, dir: top.dir }); suffix += ' · ntfy p5'; } }
+      }
     }catch(e){}
     __lastSniperLine = line + suffix;
     renderUI();

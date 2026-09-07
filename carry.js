@@ -639,7 +639,7 @@ is in flight it reports 'busy' (overlaps never double-fetch).
           if (!d || r.avg8hPct === null) continue;
           matched++;
           const sp = carrySpreadInt(d.pct8h, r.avg8hPct, r.intervalHours);
-          if (!sp || sp.spreadAPR < SPREAD_MIN_APR) continue;
+          if (!sp) continue;
           offerCard({ base: r.base, pair: 'bin-delta', bin: r, del: d, sp: sp });
         }
       }
@@ -649,13 +649,13 @@ is in flight it reports 'busy' (overlaps never double-fetch).
           const b = bybit[r2.base];
           if (!b || r2.avg8hPct === null || b.pct8h === null) continue;
           const spB = carrySpreadPair(r2.avg8hPct, b.pct8h, 'binance', 'bybit', r2.intervalHours, 8);
-          if (!spB || spB.spreadAPR < SPREAD_MIN_APR) continue;
+          if (!spB) continue;
           spB.binanceAPR = spB.aprA; spB.bybitAPR = spB.aprB;
           offerCard({ base: r2.base, pair: 'bin-bybit', bin: r2, byb: b, sp: spB });
           if (delta && delta[r2.base]){
             const d2 = delta[r2.base];
             const spD = carrySpreadPair(d2.pct8h, b.pct8h, 'delta', 'bybit', 8, 8);
-            if (spD && spD.spreadAPR >= SPREAD_MIN_APR){
+            if (spD){
               spD.deltaAPR = spD.aprA; spD.bybitAPR = spD.aprB;
               offerCard({ base: r2.base, pair: 'delta-bybit', bin: r2, del: d2, byb: b, sp: spD });
             }

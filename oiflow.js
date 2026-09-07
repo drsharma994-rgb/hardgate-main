@@ -474,6 +474,7 @@ function cardHTML(r){
     + '<div class="gates">'
     + cls.evidence.map(function(g){ return '<span class="gpip ok">' + g + '</span>'; }).join('')
     + contra.map(function(g){ return '<span class="gpip">' + g + '</span>'; }).join('')
+    + (r.bookImb && r.bookImb.tag ? '<span class="gpip' + (r.bookImb.withSetup ? ' ok' : '') + '">' + r.bookImb.tag + '</span>' : '')
     + '</div>'
     + '<div class="plan">' + planTxt + '</div>'
     + (s && s.confirmed && typeof hgChartVisionCardBlock === 'function' ? hgChartVisionCardBlock(r) : '')
@@ -661,6 +662,14 @@ async function runScan(el){
       var tb = b.setup ? (b.setup.confirmed ? 0 : 1) : 2;
       return (ta - tb) || (b.cls.score - a.cls.score) || ((b.turnoverUsd || 0) - (a.turnoverUsd || 0));
     });
+    if (typeof G.hgBookImbalanceConfluence === 'function'){
+      await Promise.all(results.map(async function(r){
+        if (!r.setup || !r.setup.dir) return;
+        try{
+          r.bookImb = await G.hgBookImbalanceConfluence(r.sym, r.setup.dir);
+        }catch(eBi){}
+      }));
+    }
     cards.innerHTML = results.map(cardHTML).join('');
     try { if (typeof G.hgMpPin === 'function') G.hgMpPin('oiflow', results, null, cards); } catch (eMp) {}
     paintCharts(cards, results);

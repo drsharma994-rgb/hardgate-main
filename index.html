@@ -814,7 +814,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 </main>
 
 
-  <script src="build-stamp.js?v=640"></script>
+  <script src="build-stamp.js?v=641"></script>
   <script src="hg-setup-core.js"></script>
 <script src="hghost.js"></script>
 <script src="indicators.js"></script>
@@ -893,7 +893,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="primitives/tsmom.js"></script>
 <script src="primitives/ema_cascade.js"></script>
 <script src="portfolio-allocation.js?v=640"></script>
-<script src="inc567-data-core.js?v=640"></script>
+<script src="inc567-data-core.js?v=641"></script>
+<script src="inc34-data-core.js?v=641"></script>
 <script src="inc567-config-loader.js"></script>
 <script src="inc567-regime-panels.js"></script>
 <script src="whale_alerts.js"></script>
@@ -2612,7 +2613,8 @@ function smartCardHTML(r){
     + '</div>'
     + (r.cross && typeof positioningCrossHTML === 'function' ? positioningCrossHTML(r.cross) : '')
     + '<div class="gates">' + ev.map(function(g){ return '<span class="gpip ok">' + g + '</span>'; }).join('')
-      + contra.map(function(g){ return '<span class="gpip">' + g + '</span>'; }).join('') + '</div>'
+      + contra.map(function(g){ return '<span class="gpip">' + g + '</span>'; }).join('')
+      + (r.bookImb && r.bookImb.tag ? '<span class="gpip' + (r.bookImb.withSetup ? ' ok' : '') + '">' + r.bookImb.tag + '</span>' : '') + '</div>'
     + (s && s.stack && typeof hgSetupStackMiniHtml === 'function' ? hgSetupStackMiniHtml(s.stack) : '')
     + '<div class="plan">' + planTxt + '</div>'
     + ((s && typeof hgStrategyTradeDetailHtml === 'function') ? hgStrategyTradeDetailHtml(s, { skipChip: true }) : '')
@@ -2719,6 +2721,14 @@ async function runSmartScan(opts){
       return (ta - tb) || (b.cls.score - a.cls.score) || (b.cls.total - a.cls.total)
           || ((b.tick ? b.tick.turnoverUsd : 0) - (a.tick ? a.tick.turnoverUsd : 0));
     });
+    if (typeof hgBookImbalanceConfluence === 'function'){
+      await Promise.all(results.map(async function(r){
+        if (!r.setup || !r.setup.dir) return;
+        try{
+          r.bookImb = await hgBookImbalanceConfluence(r.venueSym || r.sym, r.setup.dir);
+        }catch(eBi){}
+      }));
+    }
     if (!quiet){
       try{
         const gxTick = ticks['XAUUSDT'] || { symbol: 'XAUUSDT', mark: NaN, chg24: null, turnoverUsd: 0 };
@@ -5854,6 +5864,9 @@ async function planTradeAsync(){
   const t2 = $('tT2').value ? +$('tT2').value : (side==='long'?entry+3*riskUnit:entry-3*riskUnit);
   const rr = Math.abs(t1-entry)/riskUnit;
   const t1Valid = t1Given && (side==='long' ? t1 > entry : t1 < entry);
+  try{ if (typeof hgInc34LoadConfigs === 'function') await hgInc34LoadConfigs(); }catch(eInc){}
+  var rtMod = (typeof hgRegimeTransitionModifiers === 'function') ? hgRegimeTransitionModifiers() : null;
+  var minRr = (rtMod && rtMod.minRr) ? rtMod.minRr : 2;
 
   var betSizeLine = '';
   try{
@@ -5867,7 +5880,7 @@ async function planTradeAsync(){
 
   const g=[];
   g.push(['P1','Stop on the correct side of entry', dirOk?'pass':'veto', dirOk?'':'stop must be '+(side==='long'?'below':'above')+' entry']);
-  g.push(['P2','R:R ≥ 2 to a REAL T1', (t1Valid && rr>=2)?'pass':'veto',
+  g.push(['P2','R:R ≥ ' + minRr + ' to a REAL T1', (t1Valid && rr>=minRr)?'pass':'veto',
     t1Valid ? `${fmt(rr,2)}R to T1 ${px(t1)} — never move the stop to fix this; move the trade`
             : 'enter a structural T1 — a blank field auto-fills 2R and would fake this gate']);
   g.push(['P3','Liquidation clearance auto-scaled (>= 1.5x stop)', clearance>=1.45?'pass':'veto',
@@ -5910,6 +5923,33 @@ async function planTradeAsync(){
       }
     }
   }catch(eOpt){}
+  try{
+    if (symVal && typeof hgSymbolTierGate === 'function'){
+      var tierPassed = (handoff && handoff.gatesPassed != null) ? handoff.gatesPassed : 6;
+      var tierTotal = (handoff && handoff.gatesTotal != null) ? handoff.gatesTotal : 7;
+      var tierGate = hgSymbolTierGate(symVal, tierPassed, tierTotal);
+      if (tierGate && tierGate.veto) g.push(['P4b','Symbol quality tier', 'veto', tierGate.note]);
+    }
+  }catch(eTier){}
+  try{
+    if (rtMod && rtMod.requireCrossVenue && symVal && typeof hgSetupCrossVenueRows === 'function' && typeof scCrossVenueSwingGate === 'function'){
+      var refRowsTp = await hgSetupCrossVenueRows(symVal);
+      var rowsTp = await getCandles(symVal, '4h', 120);
+      if (refRowsTp && rowsTp && rowsTp.length >= 55){
+        var cvRt = scCrossVenueSwingGate(side, rowsTp, refRowsTp);
+        if (cvRt && cvRt.pass === false) g.push(['P4c','Regime transition cross-venue', 'veto', rtMod.note || 'cross-venue required']);
+      }
+    }
+  }catch(eRt){}
+  try{
+    if (symVal && typeof hgBookImbalanceConfluence === 'function'){
+      var bib = await hgBookImbalanceConfluence(symVal, side);
+      if (bib && bib.tag){
+        if (bib.withSetup) g.push(['P6b','Book imbalance confluence', 'pass', bib.tag]);
+        else if (bib.caution) g.push(['P6b','Book imbalance caution', 'veto', bib.tag + ' opposes setup']);
+      }
+    }
+  }catch(eBi){}
 
   const vet = g.some(x=>x[2]==='veto');
   var handoff = (typeof hgTradeHandoffFor === 'function')
@@ -7244,6 +7284,39 @@ function bestProfitBoost(s){
   }catch(e){ return 0; }
 }
 
+async function bestInc34Prepare(clean){
+  if (!clean || !clean.length) return clean;
+  try{ if (typeof hgInc34LoadConfigs === 'function') await hgInc34LoadConfigs(); }catch(e){}
+  var out = clean.slice();
+  if (typeof hgSymbolTierGate === 'function'){
+    out = out.filter(function(s){
+      if (!s || !s.t) return false;
+      var gate = hgSymbolTierGate(s.t.symbol, s.famScore, s.famMax || 9);
+      if (gate && gate.veto){ s.tierVeto = gate.note; return false; }
+      return true;
+    });
+  }
+  if (typeof hgCorrDedupeCandidates === 'function' && out.length > 1){
+    try{
+      var seriesBySym = {}, syms = [];
+      out.forEach(function(s){ if (s.t && syms.indexOf(s.t.symbol) < 0) syms.push(s.t.symbol); });
+      for (var si = 0; si < syms.length; si++){
+        try{
+          var drows = await getCandles(syms[si], '1d', 35);
+          if (drows && drows.length >= 21) seriesBySym[syms[si]] = drows.map(function(r){ return r.c; });
+        }catch(eC){}
+      }
+      var wrapped = out.map(function(s){
+        return { sym: s.t.symbol, dir: s.dir, score: s.famScore, famScore: s.famScore,
+          turnoverUsd: s.t.turnoverUsd, t: s.t, _w: s };
+      });
+      var deduped = hgCorrDedupeCandidates(wrapped, seriesBySym, { corrThr: 0.7 });
+      out = deduped.map(function(c){ return c._w || c; });
+    }catch(eD){}
+  }
+  return out.length ? out : clean;
+}
+
 function bestSortPool(clean){
   /* Bars scale with the denominator so adding F10 does not silently LOOSEN
      selection: 7/9 = 0.778 becomes 8/10 = 0.80, 6/9 = 0.667 becomes 7/10 = 0.70.
@@ -7350,6 +7423,7 @@ async function runCascadeCore(uni, opts){
             if (refRows && refRows.length >= 55){
               const cv = scCrossVenueSwingGate(tc.dir, rows, refRows);
               if (cv && cv.pass === false) return;
+              tc.refRows = refRows;
             }
           }catch(eCv){}
         }
@@ -7595,8 +7669,8 @@ async function runCascadeCore(uni, opts){
     if (typeof hgSetupCalibrationEval === 'function'){
       const rs = (typeof hgRegimeResolveState === 'function') ? hgRegimeResolveState() : null;
       const cal = hgSetupCalibrationEval({
-        setupKind: 'swing', sym: s.t.symbol, dir: s.dir, rows: s.rows,
-        famScore: s.famScore, famMax: s.famMax, tapeRegime: s.tapeRegime,
+        setupKind: 'swing', sym: s.t.symbol, dir: s.dir, rows: s.rows, refRows: s.hit && s.hit.refRows,
+        famScore: s.famScore, famMax: s.famMax, tapeRegime: s.tapeRegime, rr: s.rr,
         regimeScore: rs ? rs.score : 0,
         sessionOverlap: bestSessionActive(),
         retailLongPct: null, topLongPct: null, takerRatio: null
@@ -7752,7 +7826,7 @@ async function runBest(opts){
         if ($('bestStat')) $('bestStat').textContent='done · 0 CLEAN · dual venue scan · ' + (bestFunnel.cleanRaw || 0) + ' passed gates · ' + ((bestFunnel.vetoStale||0)+(bestFunnel.vetoTrap||0)) + ' vetoed';
         return;
       }
-      const pool = bestSortPool(clean);
+      const pool = bestSortPool(await bestInc34Prepare(clean));
       const w = pool[0];
       const symLabel = (w._venueLabel ? '[' + w._venueLabel + '] ' : '') + w.t.symbol;
       const breadthPct = breadth.total>=10 ? (breadth.bull/breadth.total*100) : 50;
@@ -7825,7 +7899,7 @@ async function runBest(opts){
       $('bestStat').textContent='done · 0 CLEAN · ' + (bestFunnel && bestFunnel.cleanRaw ? bestFunnel.cleanRaw + ' passed gates · ' : '') + ((bestFunnel && (bestFunnel.vetoStale+bestFunnel.vetoTrap)) || 0) + ' vetoed';
       return;
     }
-    const pool = bestSortPool(clean);
+    const pool = bestSortPool(await bestInc34Prepare(clean));
     const w = pool[0];
     const breadthPct = breadth.total>=10 ? (breadth.bull/breadth.total*100) : 50;
     const regimeDir = breadth.total>=10 ? (breadthPct<=20?'bear':(breadthPct>=80?'bull':null)) : null;
@@ -7901,6 +7975,16 @@ function armAlertCycle(){
    row (hg_ntfy_topic); no topic configured = silent skip, never throws.
    opts.priority: ntfy 1-5 (default 4; sniper-grade alerts use 5). */
 async function sendAlertPush(title, body, opts){
+  opts = opts || {};
+  try{
+    if (typeof hgAlertShouldPush === 'function'){
+      var route = hgAlertShouldPush(opts.setup || opts.scanner || 'alert', opts.regime || 'MIXED', opts.tier || 'clean');
+      if (route && route.allow === false) return;
+      if (typeof hgAlertRecordFire === 'function'){
+        hgAlertRecordFire({ sym: opts.sym, dir: opts.dir, setup: opts.setup || opts.scanner, regime: opts.regime, tier: opts.tier, mark: opts.mark });
+      }
+    }
+  }catch(eAp){}
   let topic = null;
   try{ topic = localStorage.getItem('hg_ntfy_topic'); }catch(e){}
   if (!topic) return;
@@ -8237,7 +8321,8 @@ async function runBestAlertCycle(){
         await sendAlertPush('HARDGATE BEST (Strategies): ' + w.t.symbol + ' ' + w.dir.toUpperCase(),
           hgTelegramPlanBlock({ sym: w.t.symbol, dir: w.dir, entry: w.entry, stop: w.stop, t1: t1 })
             + '\nVenue: ' + (ex === 'delta' ? 'Delta India' : 'CoinDCX')
-            + '\n' + w.famScore + '/' + (w.famMax||9) + ' families · ' + fmt(w.rr, 2) + 'R');
+            + '\n' + w.famScore + '/' + (w.famMax||9) + ' families · ' + fmt(w.rr, 2) + 'R',
+          { setup: 'best', scanner: 'best', sym: w.t.symbol, dir: w.dir, regime: bestTapeRegimeLabel(w), tier: 'clean', mark: w.t.mark || w.entry });
         S.lastAlertKey[ex] = key;
       } else if (!key){
         S.lastAlertKey[ex] = null;
@@ -8252,6 +8337,11 @@ async function runAlertCycle(){
      which then blocks every manual scan ('alert cycle stuck'). A busy flag
      older than 4 minutes is treated as dead and force-cleared; the
      lastAlertKey dedupe absorbs any overlap. */
+  try{
+    if (typeof hgAlertMarkOutcomes === 'function' && typeof hgAlertOutcomeMarkFromTickers === 'function'){
+      hgAlertMarkOutcomes(hgAlertOutcomeMarkFromTickers);
+    }
+  }catch(eOut){}
   if (S.alertBusy){
     if (S.alertBusySince && Date.now() - S.alertBusySince > 4*60*1000){ S.alertBusy = false; }
     else return;
