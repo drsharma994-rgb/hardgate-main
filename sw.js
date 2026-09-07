@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v636';
+const HG_CACHE = 'hg-v637';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -26,7 +26,7 @@ const HG_SHELL = [
   /* Vendored third-party libraries. Previously loaded from unpkg/jsdelivr, so
      the offline shell covered 126 local files and then broke on charts. */
   './vendor/lightweight-charts-4.2.0.js', './vendor/emailjs-browser-4.4.1.js',
-  './engine.js', './news.js', './onchain.js', './rotation.js', './goldspot.js',
+  './engine.js', './news.js', './onchain.js', './onchain-alt-data.js', './structure-core.js', './portfolio-allocation.js', './rotation.js', './goldspot.js',
   './gold-session.js', './goldind.js', './gold-catalog.js', './gold-seven-step.js', './goldscalp.js', './goldswing.js', './pinegoldmath.js', './goldpine.js', './signallog.js',
   './data/setup-profile.json', './data/regime-profile.json',
   './conviction-lock.js', './macro-feeds.js', './venuepremium.js', './formation-live.js',
