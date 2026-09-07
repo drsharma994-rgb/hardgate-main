@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v631';
+const HG_CACHE = 'hg-v632';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -20,7 +20,7 @@ const HG_SHELL = [
   './build-stamp.js',
   './hghost.js',
   './indicators.js', './indicators2.js', './store.js', './binance.js', './spot-perp.js', './startrader.js', './xm-trader.js', './bybit.js', './deribit-vol.js', './positioning.js', './cryptowatch.js', './macro.js', './openbb-desk.js', './ccxt-desk.js', './trading-stack.js', './worldmonitor-desk.js', './chart-vision-desk.js', './chartvision-tab.js', './hey-desk.js', './atomic-agent-desk.js', './ai-agent.js', './agent-alerts.js',
-  './setup-ui.js', './setup-solidity.js', './plans.js', './setup-stack.js', './gate-replay-oos.js', './cryptogates.js',
+  './setup-ui.js', './setup-solidity.js', './setup-calibration.js', './plans.js', './setup-stack.js', './gate-replay-oos.js', './cryptogates.js',
   './squeeze.js', './trendtable.js', './oiflow.js', './regime.js', './carry.js', './hg-forward.js', './hg-mechanics.js', './hg-gates.js', './hg-plan.js', './crypto-catalog.js', './omniroute.js', './dex-screener.js', './setup-confirm.js', './combi.js', './omnigold.js', './omnigold1.js', './omnipresent.js', './formation-nightly.js', './formation-nightly-boot.js', './desk-formation-edge.js', './hg-omni-strategy-bridge.js', './contract-report.js', './omnibtc-engines.js', './omnibtc.js', './termbasis.js',
   './goldpro.js', './strats.js', './meanrev.js', './supersetup.js', './super-desk-common.js', './super-gold.js', './super-best.js', './super-sniper.js', './super-book.js', './super-calibrate.js', './reversalsniper.js', './edge.js', './startradertab.js', './book-routing.js', './api-client.js', './tradeos.js', './hey-lens.js', './book.js', './execute.js', './liqs.js', './xuniverse.js', './desk-scan-universe.js',
   /* Vendored third-party libraries. Previously loaded from unpkg/jsdelivr, so
@@ -28,6 +28,7 @@ const HG_SHELL = [
   './vendor/lightweight-charts-4.2.0.js', './vendor/emailjs-browser-4.4.1.js',
   './engine.js', './news.js', './onchain.js', './rotation.js', './goldspot.js',
   './gold-session.js', './goldind.js', './gold-catalog.js', './gold-seven-step.js', './goldscalp.js', './goldswing.js', './pinegoldmath.js', './goldpine.js', './signallog.js',
+  './data/setup-profile.json', './data/regime-profile.json',
   './conviction-lock.js', './macro-feeds.js', './venuepremium.js', './formation-live.js',
   './hgalert.js', './tabalerts.js', './hggateflip.js', './brainrobust.js', './braininvalidation.js', './gstack-brain.js', './brain.js', './scorecard.js', './fixpack13-core.js', './fixpack14-core.js', './fixpack15-core.js', './fixpack16-core.js', './fixpack17-core.js', './crypto-position-risk.js', './risk-tab.js', './reliability.js', './goldcoint.js', './structure-levels.js', './formation.js', './freqtrade-formation.js', './best-levels.js', './gold-best-levels.js', './walkforward-ui.js', './formation-instr-ui.js', './meta-label.js', './tear-sheet.js', './purged-cv.js', './agent-debate.js', './formation-lab.js',
   './pinemath.js', './pinegate.js', './pine.js', './pine-sub.js', './pinemsb.js', './pinesqz.js', './pinesmf.js', './pineht.js', './pinesmc.js', './pinecipher.js', './pinerf.js', './pinenw.js', './pineavwap.js'

@@ -389,6 +389,10 @@ async function addToBook(opts){
       fund: bookResolveFund(opts),
       layers: bookMetaLayers(opts),
       scalePct: isFinite(opts.scalePct) ? +opts.scalePct : null,
+      setupKind: opts.setupKind || opts.strategy || opts.kind || null,
+      res: opts.res || (String(opts.kind || '').indexOf('scalp') >= 0 ? '15m' : '4h'),
+      timeStopBars: (typeof W.hgSetupTimeStopBars === 'function')
+        ? W.hgSetupTimeStopBars(opts.setupKind || opts.strategy || opts.kind || 'swing') : null,
       newsBlackout: false,
       /* fix pack 17 — carried for measurement only; the API body ignores it. */
       gateStates: (opts.gateStates && typeof opts.gateStates === 'object') ? opts.gateStates : null,

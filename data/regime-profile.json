@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "note": "Regime-conditional gate tightening — each setup declares home turf; gates tighten outside it.",
+  "setups": {
+    "swing": {
+      "homeRegime": "trend",
+      "macro": { "fullStrengthMinAbs": 3, "extraConfluenceMinAbs": 1, "vetoMaxAbs": 0.99 }
+    },
+    "best": {
+      "homeRegime": "trend",
+      "macro": { "fullStrengthMinAbs": 3, "extraConfluenceMinAbs": 1, "vetoMaxAbs": 0.99 }
+    },
+    "edge": {
+      "homeRegime": "trend",
+      "macro": { "fullStrengthMinAbs": 3, "extraConfluenceMinAbs": 1, "vetoMaxAbs": 0.99 }
+    },
+    "scalp": {
+      "homeRegime": "trend",
+      "macro": { "fullStrengthMinAbs": 2, "extraConfluenceMinAbs": 1, "vetoMaxAbs": 0.5 }
+    },
+    "meanrev": {
+      "homeRegime": "chop",
+      "macro": { "fullStrengthMinAbs": 3, "extraConfluenceMinAbs": 1, "vetoMaxAbs": 99 }
+    },
+    "trap": {
+      "homeRegime": "chop",
+      "macro": { "fullStrengthMinAbs": 3, "extraConfluenceMinAbs": 1, "vetoMaxAbs": 99 }
+    },
+    "squeeze": {
+      "homeRegime": "chop",
+      "macro": { "fullStrengthMinAbs": 2, "extraConfluenceMinAbs": 1, "vetoMaxAbs": 1 }
+    },
+    "judas": {
+      "homeRegime": "session",
+      "sessionOverlapOnly": true,
+      "macro": { "fullStrengthMinAbs": 0, "extraConfluenceMinAbs": 0, "vetoMaxAbs": 0 }
+    },
+    "gold-scalp": {
+      "homeRegime": "session",
+      "sessionOverlapOnly": true,
+      "macro": { "fullStrengthMinAbs": 0, "extraConfluenceMinAbs": 0, "vetoMaxAbs": 0 }
+    },
+    "gold-swing": {
+      "homeRegime": "trend",
+      "macro": { "fullStrengthMinAbs": 2, "extraConfluenceMinAbs": 1, "vetoMaxAbs": 0.99 },
+      "goldDxyBetaFlipVeto": true
+    },
+    "smc-fvg": {
+      "homeRegime": "trend",
+      "macro": { "fullStrengthMinAbs": 2, "extraConfluenceMinAbs": 1, "vetoMaxAbs": 0.99 }
+    },
+    "ob": {
+      "homeRegime": "trend",
+      "macro": { "fullStrengthMinAbs": 2, "extraConfluenceMinAbs": 1, "vetoMaxAbs": 0.99 }
+    }
+  }
+}

@@ -922,6 +922,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="fixpack13-core.js"></script>
 <script src="fixpack14-core.js"></script>
 <script src="fixpack15-core.js"></script>
+<script src="setup-calibration.js"></script>
 <script src="fixpack16-core.js"></script>
 <script src="fixpack17-core.js"></script>
 <script src="crypto-position-risk.js"></script>
@@ -6974,8 +6975,17 @@ function bestSortPool(clean){
      selection: 7/9 = 0.778 becomes 8/10 = 0.80, 6/9 = 0.667 becomes 7/10 = 0.70.
      A symbol whose F10 could not be measured keeps famMax 9 and the old bars. */
   const bar = (s, nine, ten) => ((s.famMax || 9) >= 10 ? ten : nine);
-  const strong = clean.filter(s => s.famScore >= bar(s, 7, 8) && s.robScore >= 1);
-  return strong.length ? strong : clean.filter(s => s.famScore >= bar(s, 6, 7) && s.robScore >= 1);
+  let pool = clean.filter(s => s.famScore >= bar(s, 7, 8) && s.robScore >= 1);
+  if (!pool.length) pool = clean.filter(s => s.famScore >= bar(s, 6, 7) && s.robScore >= 1);
+  /* Increment 2 — profile EV + confluence tier: BEST surfaces Tier 1–2 only */
+  pool = pool.filter(function(s){
+    if (s.profileAnn && s.profileAnn.allowBest === false) return false;
+    if (s.confluenceTier && s.confluenceTier >= 3) return false;
+    return true;
+  });
+  return pool.length ? pool : clean.filter(function(s){
+    return (!s.profileAnn || s.profileAnn.allowBest !== false) && (!s.confluenceTier || s.confluenceTier < 3);
+  });
 }
 
 function bestTapeRegimeLabel(w){
@@ -7058,6 +7068,17 @@ async function runCascadeCore(uni, opts){
         const distToAnchor = (isFinite(a4) && a4 > 0) ? Math.abs(p - e21) / a4 : NaN;
         const risk = Math.abs(tc.entry - tc.stop);
         if (!(risk > 0)) return;
+
+        /* Cross-venue cascade agreement (Delta/CoinDCX primary vs Binance reference) */
+        if (typeof hgSetupCrossVenueRows === 'function' && typeof scCrossVenueSwingGate === 'function'){
+          try{
+            const refRows = await hgSetupCrossVenueRows(t.symbol);
+            if (refRows && refRows.length >= 55){
+              const cv = scCrossVenueSwingGate(tc.dir, rows, refRows);
+              if (cv && cv.pass === false) return;
+            }
+          }catch(eCv){}
+        }
 
         // Quick 200 EMA read for breadth
         const e200arr = ema(c,200);
@@ -7296,6 +7317,27 @@ async function runCascadeCore(uni, opts){
     s.robScore=(r1?1:0)+(r2?1:0);
     s.profitBoost = bestProfitBoost(s);
 
+    /* Increment 2 — setup calibration: historical edge, regime conditioning, tier */
+    if (typeof hgSetupCalibrationEval === 'function'){
+      const rs = (typeof hgRegimeResolveState === 'function') ? hgRegimeResolveState() : null;
+      const cal = hgSetupCalibrationEval({
+        setupKind: 'swing', sym: s.t.symbol, dir: s.dir, rows: s.rows,
+        famScore: s.famScore, famMax: s.famMax, tapeRegime: s.tapeRegime,
+        regimeScore: rs ? rs.score : 0,
+        sessionOverlap: bestSessionActive(),
+        retailLongPct: null, topLongPct: null, takerRatio: null
+      });
+      s._calibration = cal;
+      s.profileAnn = cal.profile;
+      s.confluenceTier = cal.tier;
+      if (cal.veto){
+        s.veto = true;
+        s.staleReason = (cal.reasons && cal.reasons.length) ? cal.reasons.join(' · ') : 'calibration veto';
+      }
+    } else if (typeof hgSetupConfluenceTier === 'function'){
+      s.confluenceTier = hgSetupConfluenceTier(s.t.symbol, s.dir);
+    }
+
     if (s.veto) {
         s.fam.unshift(['VETO', 'INSTITUTIONAL / TIME GUARD', false, s.staleReason]);
     }
@@ -7305,10 +7347,12 @@ async function runCascadeCore(uni, opts){
 
   funnel.vetoStale = 0;
   funnel.vetoTrap = 0;
+  funnel.vetoCalibration = 0;
   for (let vi = 0; vi < clean.length; vi++){
     const sv = clean[vi];
     if (!sv.veto) continue;
     if (sv.staleReason && String(sv.staleReason).indexOf('STALE') >= 0) funnel.vetoStale++;
+    else if (sv._calibration && sv._calibration.veto) funnel.vetoCalibration++;
     else funnel.vetoTrap++;
   }
 
@@ -7329,6 +7373,7 @@ function bestFunnelRows(funnel, cleanLen, uniLen){
     { k: 'CLEAN after 7/7 gates', v: String(funnel.cleanRaw || 0) },
     { k: 'Veto · stale momentum', v: String(funnel.vetoStale || 0) },
     { k: 'Veto · CVD/OBI trap', v: String(funnel.vetoTrap || 0) },
+    { k: 'Veto · calibration (EV/regime/tier)', v: String(funnel.vetoCalibration || 0) },
     { k: 'Ranked survivors', v: String(cleanLen || 0) }
   ];
   return rows;

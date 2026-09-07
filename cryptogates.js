@@ -270,8 +270,6 @@
         else if (drG6 && drG6.regime === 'volatile') expAtr = 4.0;
       }catch(e){}
     }
-    var expectedMove = a4 * expAtr;
-    var dynamicRR = (isFinite(a4) && a4 > 0 && risk > 0) ? expectedMove / risk : 0;
     var rrMin = CG_SWING_RR_MIN;
     if (typeof G.hgRegimeResolveState === 'function' && typeof G.hgRegimeAdjust === 'function'){
       try{
@@ -279,6 +277,15 @@
         rrMin = rsAdj.thresholds.minRR;
       }catch(eR){}
     }
+    if (typeof G.hgSetupVolAdaptive === 'function'){
+      try{
+        var va = G.hgSetupVolAdaptive(rows, null, rrMin);
+        if (va && isFinite(va.rrMin)) rrMin = Math.max(rrMin, va.rrMin);
+        if (va && isFinite(va.stopMult) && isFinite(expAtr)) expAtr = expAtr * va.stopMult;
+      }catch(eVa){}
+    }
+    var expectedMove = a4 * expAtr;
+    var dynamicRR = (isFinite(a4) && a4 > 0 && risk > 0) ? expectedMove / risk : 0;
     var g6 = dynamicRR >= rrMin;
     gates.push(['G6 ATR-capacity R:R≥' + (isFinite(rrMin) ? rrMin.toFixed(1) : CG_SWING_RR_MIN), g6]);
     var ev = cusumLast(c.slice(-120), 1);
