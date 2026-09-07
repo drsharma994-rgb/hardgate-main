@@ -105,6 +105,7 @@ const CONNECT_SRC = [
   'https://api.alternative.me',               /* regime.js Fear & Greed */
   'https://api.coingecko.com',                /* regime.js global cap */
   'https://stablecoins.llama.fi',             /* regime.js stablecoin supply */
+  'https://yields.llama.fi',                  /* borrow-rates.js DeFi borrow APR */
   'https://home.treasury.gov',                /* macro.js yield curve */
   'https://api.hyperliquid.xyz',              /* worldmonitor-desk.js */
   'https://api.worldmonitor.app',

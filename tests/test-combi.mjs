@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { swCacheOk, HG_VER } from './helpers/build-version.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url)) + '/..';
 let passed = 0;
@@ -148,7 +149,7 @@ console.log('== wiring ==');
   ok(/combi\.js/.test(html), 'index loads combi.js');
   ok(/'combi'/.test(html), 'nav includes combi');
   ok(/\.\/combi\.js/.test(sw), 'sw precaches combi.js');
-  ok(/const HG_CACHE = 'hg-v620'/.test(sw), 'sw HG_CACHE current');
+  ok(swCacheOk(sw), 'sw HG_CACHE matches ' + HG_VER);
   ok(/combi:\s*'combiCards'/.test(read('setup-ui.js')), 'HG_MP_HOST maps combi');
 }
 

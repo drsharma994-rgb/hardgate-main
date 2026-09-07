@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { swCacheOk, HG_VER } from './helpers/build-version.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url)) + '/..';
 let passed = 0;
@@ -72,8 +73,7 @@ console.log('== HG_tabs + wiring ==');
   ok(/dexscreener/.test(html) && /DEX SCREENER/.test(read('dex-screener.js')),
     'nav group includes dexscreener');
   ok(/\.\/dex-screener\.js/.test(sw), 'sw.js HG_SHELL precaches dex-screener.js');
-  const cache = (sw.match(/const HG_CACHE = '([^']+)'/) || [])[1];
-  ok(cache === 'hg-v616' || cache === 'hg-v615', 'sw.js HG_CACHE is current (' + cache + ')');
+  ok(swCacheOk(sw), 'sw.js HG_CACHE is current (' + HG_VER + ')');
   ok(/hgOmniSetupCard/.test(read('omniroute.js')), 'omniroute exports hgOmniSetupCard for cards');
   ok(/dexscreener:\s*'dexCards'/.test(read('setup-ui.js')), 'HG_MP_HOST maps dexscreener');
 }

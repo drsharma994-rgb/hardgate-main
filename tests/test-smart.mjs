@@ -48,6 +48,16 @@ globalThis.waitAlertIdle = async statEl => {
   if (globalThis.S.alertBusy && globalThis.S.alertBusySince && Date.now() - globalThis.S.alertBusySince > 4*60*1000) globalThis.S.alertBusy = false;
   return !globalThis.S.alertBusy;
 };
+globalThis.dropForming = (rows, res) => (Array.isArray(rows) ? rows : []);
+globalThis.getClosedCandles = (rows) => ({ rows: Array.isArray(rows) ? rows : [], stale: false });
+globalThis.biasBinanceSymbol = function(sym){
+  if (!sym) return null;
+  const s = String(sym).toUpperCase();
+  if (s.includes('XAUT') || s.includes('XAU')) return 'XAUUSDT';
+  if (s.includes('ETH')) return 'ETHUSDT';
+  if (s.includes('BTC')) return 'BTCUSDT';
+  return s.replace(/[^A-Z0-9]/g, '') + 'USDT';
+};
 
 // ---- load the extracted smart block + runBias ----
 vm.runInThisContext(smartBlock[0], { filename: 'smart-extract.js' });

@@ -512,7 +512,7 @@ function mount(el){
   el.innerHTML =
     '<div class="panel">'
     + '<h2>ROTATION <span>altseason index · dominance trend · retail attention</span></h2>'
-    + (typeof W.hgOmniPrincipalNoteHtml === 'function' ? (W.hgOmniPrincipalNoteHtml('rotation') || '') : '')
+    + (typeof window.hgOmniPrincipalNoteHtml === 'function' ? (window.hgOmniPrincipalNoteHtml('rotation') || '') : '')
     + '<div class="row">'
     + '<button class="btn" data-rot="run">RUN ROTATION</button>'
     + '<span class="chip on" data-rot="srcchip">SRC: COINGECKO</span>'

@@ -1,10 +1,10 @@
-/* HARDGATE — the five fixpack cores: 69 exported helpers, none ever executed.
+/* HARDGATE — the five fixpack cores: 70 exported helpers, none ever executed.
 
    Continuing the coverage measurement from v339/v340. fixpack13..17-core.js
-   are ~1,890 lines exporting 69 helpers that the desks call, and no test had
+   are ~1,890 lines exporting 70 helpers that the desks call, and no test had
    ever run a line of them.
 
-   Executing all 69 against degenerate inputs found one defect that reaches a
+   Executing all 70 against degenerate inputs found one defect that reaches a
    user-visible panel, and a lot of noise that does not:
 
    THE DEFECT. hgFamilyLiftLine reported "measured: no settled samples yet"
@@ -178,7 +178,7 @@ console.log('\n== exports with no caller anywhere are named, not silently carrie
   }
   const unreferenced = declared.filter(n =>
     !files.some(f => !CORES.includes(f) && blob[f].includes(n)));
-  ok(declared.length === 69, 'the export count is what the header says (' + declared.length + ')');
+  ok(declared.length === 70, 'the export count is what the header says (' + declared.length + ')');
   ok(unreferenced.length <= 16,
     'unreferenced exports have not grown beyond the 16 recorded here (' + unreferenced.length + ': ' + unreferenced.join(', ') + ')');
 }

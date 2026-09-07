@@ -187,6 +187,7 @@
       "SQUEEZE-FIRE",
       "THREE-BAR",
       "TREND-RECLAIM",
+      "VALUE",
       "VWAP-REVERT"
     ],
     "dayPrefer": [

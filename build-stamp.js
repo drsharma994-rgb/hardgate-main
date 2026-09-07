@@ -18,9 +18,9 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v635',
-  pack: 'Setup plumbing audit — gate discipline, closed bars, inverse sizing, universe filter, EDGE/BOOK/SEARCH fixes',
-  built: '2026-09-07T22:00:00Z',
+  version: 'hg-v636',
+  pack: 'Setup audit finish — gate plumbing fixes, test suite green, thin-sample demotion, rotation/sniper bugs',
+  built: '2026-09-07T23:30:00Z',
   note: 'gold-seven-step.js: Playbook Parts 1–9 + Master Catalog seven-step readout — closed 1H/4H bars (4H derived @22:00 UTC), VP POC/VAH/VAL/HVN/LVN, Asia/PDH/PDL/PWH/PWL/EQ pools, fresh OBs, ATR/ADR/RSI/EMA/KER, DST sessions, news lockout, strategy eligibility, 4H bias, rule-based confluence rank, 12 core gates + G14, entry/stop/T1/T2/size/venue basis, TRIGGERED/WAIT/EXPIRED. IST with UTC. No win rates. Against-tape candidates HELD.'
 };
 

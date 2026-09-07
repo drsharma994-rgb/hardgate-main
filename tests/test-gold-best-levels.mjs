@@ -12,7 +12,7 @@ const ok = (c, m) => { if (!c) throw new Error('FAIL: ' + m); pass++; console.lo
 function loadStack(){
   const files = [
     'indicators.js', 'indicators2.js', 'plans.js', 'structure-levels.js',
-    'formation.js', 'freqtrade-formation.js', 'best-levels.js', 'gold-best-levels.js',
+    'formation.js', 'freqtrade-formation.js', 'best-levels.js', 'gold-session.js', 'gold-best-levels.js',
   ];
   for (const f of files){
     vm.runInThisContext(fs.readFileSync(root + f, 'utf8'), { filename: f });
@@ -66,7 +66,7 @@ console.log('== phase 4 regime ==');
   const rows = trendRows(50, 2400, 3, 1700000000);
   const reg = W.hgGoldRegime(rows, 'gold-scalp');
   ok(reg.label && typeof reg.label === 'string', 'regime label');
-  ok(W.hgGoldSessionBoost(Date.UTC(2024, 0, 15, 8, 30), 'ob') >= 6, 'Silver Bullet London boost');
+  ok(W.hgGoldSessionBoost(Date.UTC(2024, 0, 15, 10, 30), 'ob') >= 6, 'Silver Bullet London boost');
 }
 
 console.log('== phase 1 apply on candidate ==');

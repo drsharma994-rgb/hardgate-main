@@ -32,9 +32,9 @@ ok(/carryAnnualize\(deltaRatePct8h, DELTA_FUNDING_INTERVAL_HOURS\)/.test(carry),
    'carry: Delta leg uses carryAnnualize helper');
 ok(/deltaIntervalAssumed/.test(carry), 'carry: delta interval assumption flagged on spread result');
 
-/* REGIME — doc reflects 7 scored / max ±7 */
-ok(/theoretical max \|score\| = 7/.test(regime), 'regime: max score documented as ±7');
-ok(/R7 gold is informational only/.test(regime), 'regime: R7 gold unscored documented');
+/* REGIME — doc reflects 9 scored / max ±9 */
+ok(/theoretical max \|score\| = 9/.test(regime), 'regime: max score documented as ±9');
+ok(/R7 GOLD.*HEDGE DEMAND/.test(regime), 'regime: R7 gold gauge documented');
 
 /* POSITIONING — unit-asymmetry note */
 ok(/position-weighted/.test(positioning) && /account-weighted/.test(positioning),

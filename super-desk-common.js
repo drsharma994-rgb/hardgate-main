@@ -97,14 +97,16 @@ function hgSuperDeskOmniDemoteEffects(hit){
 }
 
 function hgSuperDeskApplyOmniPrincipal(hit, tab, opts){
-  if (!hit || typeof W.hgOmniPrincipalApply !== 'function') return hit;
+  if (!hit) return hit;
   opts = opts || {};
-  try{
-    W.hgOmniPrincipalApply(hit, Object.assign({
-      tab: tab || hit.tab || hit.scanner
-    }, opts));
-    hgSuperDeskOmniDemoteEffects(hit);
-  }catch(e){}
+  if (typeof W.hgOmniPrincipalApply === 'function'){
+    try{
+      W.hgOmniPrincipalApply(hit, Object.assign({
+        tab: tab || hit.tab || hit.scanner
+      }, opts));
+    }catch(e){}
+  }
+  hgSuperDeskOmniDemoteEffects(hit);
   return hit;
 }
 

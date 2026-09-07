@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { swCacheOk, HG_VER } from './helpers/build-version.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url)) + '/..';
 let passed = 0;
@@ -141,7 +142,7 @@ console.log('== wiring ==');
   ok(/setup-confirm\.js/.test(html), 'index loads setup-confirm.js');
   ok(/setupconfirm/.test(html), 'nav includes setupconfirm');
   ok(/\.\/setup-confirm\.js/.test(sw), 'sw precaches setup-confirm.js');
-  ok(/const HG_CACHE = 'hg-v616'/.test(sw) || /const HG_CACHE = 'hg-v617'/.test(sw) || /const HG_CACHE = 'hg-v618'/.test(sw) || /const HG_CACHE = 'hg-v619'/.test(sw), 'sw HG_CACHE current');
+  ok(swCacheOk(sw), 'sw HG_CACHE matches ' + HG_VER);
   ok(/setupconfirm:\s*'cfCards'/.test(read('setup-ui.js')), 'HG_MP_HOST maps setupconfirm');
 }
 

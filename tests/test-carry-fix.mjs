@@ -236,8 +236,8 @@ console.log('--- carrySpread: unchanged legacy behavior ---');
   approx(r.spreadAPR, 43.8, 1e-9, 'legacy spreadAPR');
   assert(r.shortVenue === 'delta' && r.longVenue === 'binance', 'legacy venue assignment');
   assert(JSON.stringify(Object.keys(r).sort()) ===
-    JSON.stringify(['binanceAPR', 'deltaAPR', 'longVenue', 'shortVenue', 'spreadAPR']),
-    'legacy result still has exactly the five contracted keys');
+    JSON.stringify(['binanceAPR', 'deltaAPR', 'deltaIntervalAssumed', 'deltaIntervalHours', 'longVenue', 'shortVenue', 'spreadAPR']),
+    'legacy result keeps core keys plus interval metadata');
   assert(cs('0.05', 0.01) === null && cs(NaN, 1) === null && cs(1, Infinity) === null,
     'legacy invalid-input guards unchanged');
 }

@@ -9,13 +9,12 @@ Eight gauges, rendered as a ledger with BULL/BEAR/N-A stamps:
   R4 Fed net liquidity WALCL−TGA−RRP WoW >+0.15% +1 · <-0.15% -1   ±1/0
   R5 DXY                20d trend FALLING +1 · RISING -1                  ±1/0
   R6 US 10Y yield       20d trend FALLING +1 · RISING -1                  ±1/0
-  R7 GOLD (XAU PERP)    close vs EMA200 — HEDGE DEMAND, informational only
+  R7 GOLD (XAU PERP)    close vs EMA200 — HEDGE DEMAND                       ±1
   R8 STABLECOIN FLOWS   DeFiLlama total mcap, 7d delta vs ±0.5% band      ±1/0
   R9 DVOL SLOPE         Deribit DVOL rising -1 · falling +1 · flat 0     ±1/0
 
 Score >= +3 RISK-ON · <= -3 RISK-OFF · else MIXED — SELECTIVE.
-Nine gauges rendered; R7 gold is informational only (scored:false). Eight
-scored components (R1–R6, R8–R9) → theoretical max |score| = 8.
+Nine gauges rendered; all nine scored (R1–R9) → theoretical max |score| = 9.
 Jumping to ±4 (57%) would make regime calls too rare on a dashboard whose
 sources fail often. N/A gauges score 0 — an honest dashboard shows holes.
 

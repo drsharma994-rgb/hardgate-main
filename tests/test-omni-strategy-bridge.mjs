@@ -141,7 +141,7 @@ console.log('== formation nightly paints all nav tabs ==');
 }
 
 console.log('== build stamp / sw cache ==');
-ok(HG_VER === 'hg-v628', 'HG_VER is hg-v628');
+ok(HG_VER === read('build-stamp.js').match(/version\s*:\s*'([^']+)'/)[1], 'HG_VER matches build-stamp');
 ok(swCacheOk(read('sw.js')), 'sw.js HG_CACHE matches build stamp');
 
 console.log('\n' + pass + ' passed');
