@@ -41,6 +41,12 @@ const ALLOWED_HOSTS = new Set([
   'stablecoins.llama.fi',
   'yields.llama.fi',
   'api.llama.fi',
+  /* v648 SMART $ fallback: OKX SWAP tickers used as a source of last resort
+     when Binance is geo-blocked AND the Render mirror is also rate-banned
+     (this happened live on 09-07). OKX is reachable from the pplx.app
+     sandbox and covers the top ~470 USDT SWAP contracts. */
+  'www.okx.com',
+  'aws.okx.com',
 ]);
 
 const UPSTREAM_TIMEOUT_MS = 15000;

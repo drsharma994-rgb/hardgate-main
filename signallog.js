@@ -57,11 +57,10 @@ var W = (typeof window !== 'undefined') ? window
 var LS_KEY = 'hgSignalLog';
 var MAX_ENTRIES = 500;
 var INTERVAL_MS = 5*60*1000;             /* every 5 min */
-/* v646 — crypto SWING/SCALP were missing from the source list, so the log
-   was 100% BRAIN and the Pack-2 gateMeta summaries (wired in slices 1-4)
-   were never surfaced. Adding 'cswing' + 'cscalp' pullers that read
-   window.swingScan() / window.scalpScan() so cryptogates rows appear here. */
-var SOURCES = ['brain', 'cswing', 'cscalp', 'scalp', 'swing', 'supergold'];
+/* v646 — crypto SWING/SCALP were missing from the source list.
+   v648 — crypto goes FIRST so brain's 200-row batch (per-round cap below)
+   can't outrun the interesting rows when the 500-cap kicks in. */
+var SOURCES = ['cswing', 'cscalp', 'scalp', 'swing', 'supergold', 'brain'];
 
 /* ---------------- tiny helpers ---------------- */
 function esc(s){
@@ -355,17 +354,26 @@ function snapshotRound(){
   try{
     var iso = '';
     try{ iso = new Date().toISOString(); }catch(eD){ iso = ''; }
-    var pulls = [pullBrain(),
-                 pullScan('swingScan'),   /* v646: crypto SWING (cryptogates) */
-                 pullScan('scalpScan'),   /* v646: crypto SCALP (cryptogates) */
+    var pulls = [pullScan('swingScan'),   /* cswing — v646: crypto SWING */
+                 pullScan('scalpScan'),   /* cscalp — v646: crypto SCALP */
                  pullScan('goldscalpScan'),
                  pullScan('goldswingScan'),
-                 pullSuperGold()];
-    var seen = {}, fresh = [];
+                 pullSuperGold(),
+                 pullBrain()];             /* brain last so its cap runs after crypto */
+    /* v648: per-source cap so no single source (looking at you, BRAIN with
+       500 identical rows per snapshot) can monopolize the log and knock out
+       every crypto SWING/SCALP entry with a gate summary. Brain gets 200
+       slots per round; other sources unbounded (they typically emit ≤10
+       rows per scan). */
+    var PER_ROUND_CAP = { brain: 200 };
+    var seen = {}, fresh = [], srcCount = {};
     for (var s = 0; s < SOURCES.length; s++){
       __live[SOURCES[s]] = !!pulls[s].live;
       var rows = pulls[s].rows;
+      var cap = PER_ROUND_CAP[SOURCES[s]] || Infinity;
+      srcCount[SOURCES[s]] = 0;
       for (var i = 0; i < rows.length; i++){
+        if (srcCount[SOURCES[s]] >= cap) break;
         var r = rows[i];
         var key = SOURCES[s] + '|' + r.sym + '|' + r.dir;   /* de-dup within the round */
         if (seen[key]) continue;
@@ -377,6 +385,7 @@ function snapshotRound(){
           maeR: numOrNull(r.maeR), mfeR: numOrNull(r.mfeR),
           note: String(r.note || '').slice(0, 140)
         }));
+        srcCount[SOURCES[s]]++;
       }
     }
     if (fresh.length){

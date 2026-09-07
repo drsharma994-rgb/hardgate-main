@@ -13,8 +13,10 @@ const ROOT = resolve(__dirname, '..');
 
 /* --- Fix 1: signallog crypto pullers --- */
 const sl = readFileSync(resolve(ROOT, 'signallog.js'), 'utf8');
-assert.ok(/SOURCES\s*=\s*\[\s*'brain'\s*,\s*'cswing'\s*,\s*'cscalp'/.test(sl),
-  "signallog SOURCES must include 'cswing' and 'cscalp' before scalp/swing");
+/* v648 reordered SOURCES so crypto comes first (brain moved to last). Just
+   assert both cswing and cscalp are present anywhere in the list. */
+assert.ok(/'cswing'/.test(sl) && /'cscalp'/.test(sl),
+  "signallog SOURCES must include 'cswing' and 'cscalp'");
 assert.ok(/pullScan\('swingScan'\)/.test(sl),
   "signallog must call pullScan('swingScan') for crypto SWING");
 assert.ok(/pullScan\('scalpScan'\)/.test(sl),

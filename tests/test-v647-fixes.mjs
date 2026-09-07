@@ -35,12 +35,15 @@ assert.ok(/const okx = await __binOkxTickersFallback\(\);\n\s+if \(okx\)/.test(b
   'binanceTickers24h must call __binOkxTickersFallback and use its result');
 
 /* --- version bumps --- */
-assert.ok(HG_VER === 'hg-v647', `HG_VER must be hg-v647 (saw ${HG_VER})`);
+assert.ok(/^hg-v(?:647|64[8-9]|65\d|[7-9]\d\d|\d{4,})$/.test(HG_VER),
+  `HG_VER must be ≥ hg-v647 (saw ${HG_VER})`);
 const sw = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
 const cacheRx = new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'");
 assert.ok(cacheRx.test(sw), `sw.js HG_CACHE must match ${HG_VER}`);
 const idx = readFileSync(resolve(ROOT, 'index.html'), 'utf8');
-assert.ok(/build-stamp\.js\?v=647/.test(idx), 'index.html cache-buster must be ?v=647');
+const qv647 = HG_VER.replace(/^hg-v/, '');
+assert.ok(new RegExp('build-stamp\\.js\\?v=' + qv647).test(idx),
+  `index.html cache-buster must be ?v=${qv647}`);
 
 console.log('OK \u2014 v647 fixes verified');
 console.log('  * signallog rowsFrom now merges cands + nearCands (crypto NEAR rows enter the log)');
