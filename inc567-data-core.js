@@ -156,10 +156,63 @@ function hgStrategySharpesFromBook(bookSnap, opts){
   return sharpes;
 }
 
+function hgStrategySharpesDual(bookSnap, opts){
+  return {
+    w30: hgStrategySharpesFromBook(bookSnap, Object.assign({}, opts, { windowDays: 30 })),
+    w90: hgStrategySharpesFromBook(bookSnap, Object.assign({}, opts, { windowDays: 90 }))
+  };
+}
+
+function hgBookKellyStats(bookSnap, strategy, opts){
+  opts = opts || {};
+  var windowDays = opts.windowDays > 0 ? opts.windowDays : 90;
+  var cutoff = Date.now() - windowDays * 86400000;
+  bookSnap = bookSnap || {};
+  var closed = bookSnap.closed || (bookSnap.book && bookSnap.book.closed) || [];
+  var wins = 0, losses = 0, sumWin = 0, sumLoss = 0;
+  var stratKey = String(strategy || '').toUpperCase();
+  for (var i = 0; i < closed.length; i++){
+    var c = closed[i];
+    if (!c) continue;
+    var at = c.closedAt || c.at || c.exitAt;
+    if (at && +at < cutoff) continue;
+    var fund = String(c.fund || c.fundId || 'main').toLowerCase();
+    if (opts.fundId && fund !== String(opts.fundId).toLowerCase()) continue;
+    var sk = String(c.strategy || c.setupKind || '').toUpperCase();
+    if (stratKey && sk && sk !== stratKey) continue;
+    var pnl = fin(c.pnl) || fin(c.pnlUsd) || 0;
+    var risk = fin(c.riskUsd);
+    var r = (risk && risk > 0) ? pnl / risk : (pnl > 0 ? 1 : (pnl < 0 ? -1 : 0));
+    if (r > 0){ wins++; sumWin += r; }
+    else if (r < 0){ losses++; sumLoss += Math.abs(r); }
+  }
+  var n = wins + losses;
+  if (n < 5) return { winRate: 0.52, winLossRatio: 2.0, n: n, note: 'insufficient book history — defaults' };
+  return {
+    winRate: wins / n,
+    winLossRatio: losses ? (sumWin / wins) / (sumLoss / losses) : 2.0,
+    n: n,
+    note: 'book-derived ' + n + ' trades (' + windowDays + 'd' + (opts.fundId ? ' · ' + opts.fundId : '') + ')'
+  };
+}
+
 function hgStrategyWeightsFromBook(bookSnap, opts){
   if (typeof G.hgCalcStrategyWeights !== 'function') return {};
-  var weights = G.hgCalcStrategyWeights(hgStrategySharpesFromBook(bookSnap, opts));
-  try{ G.HG_STRATEGY_WEIGHTS = weights; }catch(e){}
+  var dual = hgStrategySharpesDual(bookSnap, opts);
+  var merged = {};
+  var keys = {};
+  Object.keys(dual.w30).forEach(function(k){ keys[k] = true; });
+  Object.keys(dual.w90).forEach(function(k){ keys[k] = true; });
+  Object.keys(keys).forEach(function(k){
+    var s30 = dual.w30[k] || 0;
+    var s90 = dual.w90[k] || 0;
+    merged[k] = (s30 * 0.35) + (s90 * 0.65);
+  });
+  var weights = G.hgCalcStrategyWeights(merged);
+  try{
+    G.HG_STRATEGY_WEIGHTS = weights;
+    G.HG_STRATEGY_SHARPES = dual;
+  }catch(e){}
   return weights;
 }
 
@@ -197,6 +250,8 @@ G.hgOnchainAltGate = hgOnchainAltGate;
 G.hgStableContractionDays = hgStableContractionDays;
 G.hgStableContractionTrack = hgStableContractionTrack;
 G.hgStrategySharpesFromBook = hgStrategySharpesFromBook;
+G.hgStrategySharpesDual = hgStrategySharpesDual;
+G.hgBookKellyStats = hgBookKellyStats;
 G.hgStrategyWeightsFromBook = hgStrategyWeightsFromBook;
 G.hgRegimeStrategyActive = hgRegimeStrategyActive;
 
@@ -212,11 +267,18 @@ function hgInc567StrategyWeightsPanelHtml(){
     return '<div class="panel" style="margin-top:10px"><h2>STRATEGY ALLOCATION <span>Increment 7</span></h2><div class="note">No weights yet — close trades in BOOK or edit data/strategy-weights.json</div></div>';
   }
   var esc = function(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); };
+  var sharpNote = '';
+  if (G.HG_STRATEGY_SHARPES && G.HG_STRATEGY_SHARPES.w90){
+    var top = Object.keys(weights).sort(function(a,b){ return (weights[b]||0)-(weights[a]||0); })[0];
+    if (top && G.HG_STRATEGY_SHARPES.w90[top] != null){
+      sharpNote = ' · 90d Sharpe ' + (+G.HG_STRATEGY_SHARPES.w90[top]).toFixed(2);
+    }
+  }
   var chips = Object.keys(weights).sort(function(a,b){ return (weights[b]||0)-(weights[a]||0); }).map(function(k){
     var w = (+weights[k] * 100).toFixed(1);
     return '<span class="gpip ok" title="Sharpe-weighted budget share">' + esc(k) + ' ' + w + '%</span>';
   }).join(' ');
-  return '<div class="panel hg-strategy-weights" style="margin-top:10px"><h2>STRATEGY ALLOCATION <span>Sharpe^1.5 weights · floor 5% · cap 35%</span></h2><div class="gates">' + chips + '</div></div>';
+  return '<div class="panel hg-strategy-weights" style="margin-top:10px"><h2>STRATEGY ALLOCATION <span>30/90d Sharpe^1.5 · floor 5% · cap 35%' + sharpNote + '</span></h2><div class="gates">' + chips + '</div></div>';
 }
 
 G.hgInc567StrategyWeightsPanelHtml = hgInc567StrategyWeightsPanelHtml;

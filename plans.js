@@ -2120,6 +2120,26 @@ function hgTicketFinalGates(plan, ctx){
       }
     }
 
+    if (typeof G.hgSetupCalibrationEval === 'function' && (ctx.style || ctx.setupKind || plan.type)){
+      try{
+        var calStyle = String(ctx.style || ctx.setupKind || plan.type || 'swing').toLowerCase();
+        var cal = G.hgSetupCalibrationEval({
+          setupKind: calStyle, sym: plan.sym, dir: plan.dir, rows: ctx.rows,
+          famScore: ctx.gatesPassed || ctx.famScore, famMax: ctx.famMax || 7,
+          tapeRegime: ctx.tapeRegime || 'n/a',
+          rr: isFinite(plan.rr1) ? plan.rr1 : plan.rr,
+          regimeScore: (typeof G.hgRegimeResolveState === 'function') ? (G.hgRegimeResolveState().score || 0) : 0
+        });
+        if (cal){
+          plan.confluenceTier = cal.tier;
+          if (cal.tier <= 2) chips.push('tier ' + cal.tier + ' confluence');
+          if (cal.veto){
+            return { ok: false, tag: 'calibration', reason: 'VETO — ' + ((cal.reasons && cal.reasons[0]) || 'setup calibration') };
+          }
+        }
+      }catch(eCal){ chips.push('calibration unchecked'); }
+    }
+
     return { ok: true, chips: chips };
   }catch(e){
     /* Not a veto — a fault here is no evidence against the trade. But the

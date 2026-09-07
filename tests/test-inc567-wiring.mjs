@@ -29,6 +29,8 @@ ok(typeof W.hgCalcStrategyWeights === 'function', 'hgCalcStrategyWeights exporte
 ok(typeof W.hgOnchainAltFetch === 'function', 'hgOnchainAltFetch exported');
 ok(typeof W.hgOnchainAltGate === 'function', 'hgOnchainAltGate exported');
 ok(typeof W.hgReconcileTrades === 'function', 'hgReconcileTrades exported');
+ok(typeof W.hgBookKellyStats === 'function', 'hgBookKellyStats exported');
+ok(typeof W.hgStrategySharpesDual === 'function', 'hgStrategySharpesDual exported');
 
 console.log('== goldind does not clobber hgDetectFvg ==');
 const W2 = loadChain(['structure-core.js', 'goldind.js']);

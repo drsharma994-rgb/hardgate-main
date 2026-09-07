@@ -87,6 +87,14 @@ const candles = [
 const sw = detectSwings(candles, { left: 2, right: 2 });
 ok(sw.swings.length >= 2, 'detectSwings identified swing pivots');
 ok(sw.choch.length >= 1 || sw.bos.length >= 1, 'detectSwings identified structure break across level 108');
+if (sw.bos.length){
+  ok(sw.bos.some(function(b){ return b.type === 'bos' || b.kind === 'bos' || b.label === 'BOS'; }) || sw.bos[0].dir,
+    'BOS events carry directional structure metadata');
+}
+if (sw.choch.length){
+  ok(sw.choch.some(function(c){ return c.type === 'choch' || c.kind === 'choch' || String(c.label || '').indexOf('CHoCH') >= 0; }) || sw.choch[0].dir,
+    'CHoCH events are classified separately from BOS');
+}
 
 // FVG with displacement
 const fvgCandles = [
@@ -111,6 +119,12 @@ for (let i = 0; i < 60; i++){
 }
 const divs = detectDivergences(divCandles, { rsiPeriod: 14 });
 ok(divs && Array.isArray(divs.regular) && Array.isArray(divs.hidden), 'detectDivergences cleanly separates regular & hidden');
+if (divs.regular.length){
+  ok(divs.regular.every(function(d){ return d.type && String(d.type).indexOf('hidden') < 0; }), 'regular list excludes hidden-type divergences');
+}
+if (divs.hidden.length){
+  ok(divs.hidden.every(function(d){ return d.type && String(d.type).indexOf('hidden') >= 0; }), 'hidden list contains hidden-type divergences only');
+}
 
 // Primitives: CUSUM, TSMOM, EMA Cascade
 const closes = [10, 10.2, 10.5, 10.3, 10.8, 11.2, 11.5, 12, 12.3, 12.5, 13, 13.5, 14, 14.5, 15, 15.5, 16, 16.5, 17, 18, 19, 20, 22, 25];

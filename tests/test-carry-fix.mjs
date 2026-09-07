@@ -278,6 +278,11 @@ console.log('--- carrySpreadInt: interval-aware classifier ---');
   assert(flip.shortVenue === 'binance' && flip.longVenue === 'delta',
     'interval-aware APR can flip the venue assignment vs the 8h bug (0.02@4h > 0.03@8h)');
 
+  const d4 = ci(0.05, 0.01, 8, 4);
+  approx(d4.deltaAPR, 109.5, 1e-9, 'delta 4h interval: 0.05 * 6 * 365 = 109.5% APR');
+  approx(d4.spreadAPR, Math.abs(109.5 - 10.95), 1e-9, '4h delta leg widens spread vs 8h assumption');
+  assert(d4.deltaIntervalHours === 4 && d4.deltaIntervalAssumed === false, 'explicit delta interval metadata');
+
   assert(ci(0.05, 0.01, 0) === null && ci(0.05, 0.01, -8) === null && ci(0.05, 0.01, NaN) === null,
     'invalid interval -> null');
   assert(ci(null, 0.01, 8) === null && ci(0.05, NaN, 8) === null, 'invalid rates -> null');

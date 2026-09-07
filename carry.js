@@ -70,19 +70,22 @@ is in flight it reports 'busy' (overlaps never double-fetch).
   }
 
   /* Interval-aware carrySpread: binance leg uses fundingInfo cadence; delta
-     leg uses DELTA_FUNDING_INTERVAL_HOURS until a Delta fundingInfo exists. */
-  function carrySpreadInt(deltaRatePct8h, binanceRatePctPerPrint, binanceIntervalHours){
+     leg uses per-ticker funding_interval_hours when Delta exposes it. */
+  function carrySpreadInt(deltaRatePct8h, binanceRatePctPerPrint, binanceIntervalHours, deltaIntervalHours){
     if (typeof deltaRatePct8h !== 'number' || typeof binanceRatePctPerPrint !== 'number') return null;
     if (!isFinite(deltaRatePct8h) || !isFinite(binanceRatePctPerPrint)) return null;
     const binanceAPR = carryAnnualize(binanceRatePctPerPrint, binanceIntervalHours);
     if (binanceAPR === null) return null;
-    const deltaAPR = carryAnnualize(deltaRatePct8h, DELTA_FUNDING_INTERVAL_HOURS);
+    const dInt = (typeof deltaIntervalHours === 'number' && isFinite(deltaIntervalHours) && deltaIntervalHours > 0)
+      ? deltaIntervalHours : DELTA_FUNDING_INTERVAL_HOURS;
+    const deltaAPR = carryAnnualize(deltaRatePct8h, dInt);
     if (deltaAPR === null) return null;
     const spreadAPR = Math.abs(deltaAPR - binanceAPR);
     const shortVenue = (deltaAPR >= binanceAPR) ? 'delta' : 'binance';
     const longVenue = (shortVenue === 'delta') ? 'binance' : 'delta';
+    const dAssumed = !(typeof deltaIntervalHours === 'number' && isFinite(deltaIntervalHours) && deltaIntervalHours > 0);
     return { deltaAPR: deltaAPR, binanceAPR: binanceAPR, spreadAPR: spreadAPR, shortVenue: shortVenue, longVenue: longVenue,
-             deltaIntervalHours: DELTA_FUNDING_INTERVAL_HOURS, deltaIntervalAssumed: DELTA_INTERVAL_ASSUMED };
+             deltaIntervalHours: dInt, deltaIntervalAssumed: dAssumed };
   }
 
   /* Generalized two-venue carry spread. Rates are percent per print at each
@@ -644,7 +647,7 @@ is in flight it reports 'busy' (overlaps never double-fetch).
           if (!d || r.avg8hPct === null) continue;
           matched++;
           const dInt = (d.intervalHours > 0) ? d.intervalHours : DELTA_FUNDING_INTERVAL_HOURS;
-          const sp = carrySpreadInt(d.pct8h, r.avg8hPct, r.intervalHours);
+          const sp = carrySpreadInt(d.pct8h, r.avg8hPct, r.intervalHours, dInt);
           if (!sp) continue;
           sp.deltaIntervalHours = dInt;
           sp.deltaIntervalAssumed = !!d.intervalAssumed;

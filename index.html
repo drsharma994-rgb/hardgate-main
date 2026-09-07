@@ -814,7 +814,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 </main>
 
 
-  <script src="build-stamp.js?v=643"></script>
+  <script src="build-stamp.js?v=644"></script>
   <script src="hg-setup-core.js"></script>
 <script src="hghost.js"></script>
 <script src="indicators.js"></script>
@@ -5933,11 +5933,19 @@ async function planTradeAsync(){
       var corrMat = (typeof hgCorrMatrix === 'function') ? hgCorrMatrix(seriesBySym) : null;
       var t1Est = $('tT1').value ? +$('tT1').value : (side==='long' ? entry+2*Math.abs(entry-stop) : entry-2*Math.abs(entry-stop));
       var rrEst = Math.abs(t1Est-entry)/Math.abs(entry-stop);
-      var kellyRes = hgCorrelationKellySize({ sym: symVal, dir: side, winRate: 0.52, winLossRatio: rrEst }, activePos, corrMat);
+      var stratPick = $('tStrategy') && $('tStrategy').value || 'swing';
+      var kStats = { winRate: 0.52, winLossRatio: rrEst };
+      if (typeof hgBookKellyStats === 'function'){
+        try{
+          var bookSnap = (typeof __book !== 'undefined' && __book && __book.snap) ? __book.snap : null;
+          kStats = hgBookKellyStats(bookSnap, stratPick, { fundId: fundId, windowDays: 90 });
+        }catch(eBk){}
+      }
+      var kellyRes = hgCorrelationKellySize({ sym: symVal, dir: side, winRate: kStats.winRate, winLossRatio: kStats.winLossRatio || rrEst }, activePos, corrMat);
       if (kellyRes && isFinite(kellyRes.targetRiskPct) && !document.getElementById('tRisk').dataset.userOverride){
         riskPct = kellyRes.targetRiskPct;
         $('tRisk').value = riskPct;
-        kellyNote = 'Kelly sizing: ' + kellyRes.targetRiskPct + '% (corr disc ' + (kellyRes.correlationDiscount || 1).toFixed(2) + ')';
+        kellyNote = 'Kelly sizing: ' + kellyRes.targetRiskPct + '% (corr disc ' + (kellyRes.correlationDiscount || 1).toFixed(2) + (kStats.note ? ' · ' + kStats.note : '') + ')';
       }
     }
   }catch(eKelly){}
@@ -7600,8 +7608,16 @@ async function runCascadeCore(uni, opts){
     try{
       const d1=await getCandles(s.t.symbol,'1d',120); const c1=d1.map(r=>r.c);
       const r30=roc(c1,30), r90=roc(c1,90);
-      mTs = isFinite(r30)&&isFinite(r90)&&Math.sign(r30)===want&&Math.sign(r90)===want;
-      tsD = `30d ${pct(r30,1)} · 90d ${pct(r90,1)}`;
+      if (typeof hgPrimitiveTsmom === 'function' && c1.length >= 91){
+        const tsPrim = hgPrimitiveTsmom(c1, [30, 90]);
+        const primOk = tsPrim && (tsPrim.agreement === 'bullish' || tsPrim.agreement === 'bearish')
+          && ((want > 0 && tsPrim.agreement === 'bullish') || (want < 0 && tsPrim.agreement === 'bearish'));
+        mTs = primOk || (isFinite(r30)&&isFinite(r90)&&Math.sign(r30)===want&&Math.sign(r90)===want);
+        tsD = (tsPrim && tsPrim.agreement ? tsPrim.agreement + ' · ' : '') + `30d ${pct(r30,1)} · 90d ${pct(r90,1)}`;
+      } else {
+        mTs = isFinite(r30)&&isFinite(r90)&&Math.sign(r30)===want&&Math.sign(r90)===want;
+        tsD = `30d ${pct(r30,1)} · 90d ${pct(r90,1)}`;
+      }
       const e50d=last(ema(c1,50));
       mD1 = c1.length>=60 && (s.dir==='long'?last(c1)>e50d:last(c1)<e50d);
       d1D = `1D EMA50 ${px(e50d)}`;

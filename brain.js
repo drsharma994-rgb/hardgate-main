@@ -2025,6 +2025,15 @@ function trend4hAssess(rows){
       var ec = window.hgPrimitiveEmaCascade(closes, [20, 50]);
       if (ec && ec.state === 'bullish' && dir !== 'long') return null;
       if (ec && ec.state === 'bearish' && dir !== 'short') return null;
+      if (typeof window.hgPrimitiveTsmom === 'function' && closes.length >= 31){
+        var ts = window.hgPrimitiveTsmom(closes, [10, 20]);
+        if (ts && ts.agreement === 'bullish' && dir !== 'long') return null;
+        if (ts && ts.agreement === 'bearish' && dir !== 'short') return null;
+      }
+      if (typeof window.hgPrimitiveCusum === 'function' && closes.length >= 25){
+        var cu = window.hgPrimitiveCusum(closes, 1.0);
+        if (cu && cu.barsAgo <= 8 && cu.dir && cu.dir !== dir) return null;
+      }
     }
     var st = structureOf(rows);
     if (dir === 'long' && st !== 'HH') return null;
