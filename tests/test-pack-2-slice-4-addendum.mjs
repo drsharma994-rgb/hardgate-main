@@ -32,16 +32,19 @@ assert.ok(/hit\.gateMeta[\s\S]{0,200}row\.gateMeta\s*=\s*hit\.gateMeta/.test(can
 assert.ok(/Array\.isArray\(hit\.gateMeta\)/.test(candRow[0]),
   'hgCryptoCandRow guard must use Array.isArray for safety');
 
-/* --- version bump: build-stamp.js and sw.js must agree on hg-v645 --- */
-const stamp = readFileSync(resolve(ROOT, 'build-stamp.js'), 'utf8');
-const sw    = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
-assert.ok(/version:\s*'hg-v645'/.test(stamp),
-  "build-stamp.js version must be bumped to 'hg-v645'");
-assert.ok(/HG_CACHE\s*=\s*'hg-v645'/.test(sw),
-  "sw.js HG_CACHE must be bumped to 'hg-v645'");
+/* --- version bump: build-stamp.js and sw.js must agree --- */
+/* v646: read the version through the helper so version bumps don't break
+   this test suite. Slice 4 addendum shipped in v645; v646 fixes are
+   independent and each release afterwards keeps advancing the number. */
+const { HG_VER } = await import('./helpers/build-version.mjs');
+const sw = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
+assert.ok(/^hg-v(?:645|64[6-9]|65\d|[7-9]\d\d|\d{4,})$/.test(HG_VER),
+  `build-stamp.js version must be ≥ hg-v645 (saw ${HG_VER})`);
+assert.ok(new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'").test(sw),
+  `sw.js HG_CACHE must match build-stamp version ${HG_VER}`);
 
 console.log('OK \u2014 Pack 2 slice 4 addendum: gateMeta propagates end-to-end');
 console.log('  * swingTryClean out.gateMeta \u2190 m.gateMeta');
 console.log('  * scalpTryClean out.gateMeta \u2190 m.gateMeta');
 console.log('  * hgCryptoCandRow row.gateMeta \u2190 hit.gateMeta (Array.isArray guarded)');
-console.log('  * build-stamp.js + sw.js bumped to hg-v645');
+console.log('  * build-stamp.js + sw.js on ' + HG_VER + ' (≥ hg-v645 for slice 4 addendum)');

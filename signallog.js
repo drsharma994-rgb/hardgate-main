@@ -57,7 +57,11 @@ var W = (typeof window !== 'undefined') ? window
 var LS_KEY = 'hgSignalLog';
 var MAX_ENTRIES = 500;
 var INTERVAL_MS = 5*60*1000;             /* every 5 min */
-var SOURCES = ['brain', 'scalp', 'swing', 'supergold'];
+/* v646 — crypto SWING/SCALP were missing from the source list, so the log
+   was 100% BRAIN and the Pack-2 gateMeta summaries (wired in slices 1-4)
+   were never surfaced. Adding 'cswing' + 'cscalp' pullers that read
+   window.swingScan() / window.scalpScan() so cryptogates rows appear here. */
+var SOURCES = ['brain', 'cswing', 'cscalp', 'scalp', 'swing', 'supergold'];
 
 /* ---------------- tiny helpers ---------------- */
 function esc(s){
@@ -342,7 +346,12 @@ function snapshotRound(){
   try{
     var iso = '';
     try{ iso = new Date().toISOString(); }catch(eD){ iso = ''; }
-    var pulls = [pullBrain(), pullScan('goldscalpScan'), pullScan('goldswingScan'), pullSuperGold()];
+    var pulls = [pullBrain(),
+                 pullScan('swingScan'),   /* v646: crypto SWING (cryptogates) */
+                 pullScan('scalpScan'),   /* v646: crypto SCALP (cryptogates) */
+                 pullScan('goldscalpScan'),
+                 pullScan('goldswingScan'),
+                 pullSuperGold()];
     var seen = {}, fresh = [];
     for (var s = 0; s < SOURCES.length; s++){
       __live[SOURCES[s]] = !!pulls[s].live;
@@ -456,6 +465,8 @@ var SL_CSS = ''
 + '#tab_signallog .sl-badge.brain{color:#b48cff;border-color:rgba(180,140,255,.45);background:rgba(180,140,255,.08)}'
 + '#tab_signallog .sl-badge.scalp{color:#ffd76a;border-color:rgba(255,215,106,.45);background:rgba(255,215,106,.07)}'
 + '#tab_signallog .sl-badge.swing{color:#4ac3ff;border-color:rgba(74,195,255,.45);background:rgba(74,195,255,.07)}'
++ '#tab_signallog .sl-badge.cswing{color:#4ac3ff;border-color:rgba(74,195,255,.6);background:rgba(74,195,255,.12)}'   /* v646 */
++ '#tab_signallog .sl-badge.cscalp{color:#ffd76a;border-color:rgba(255,215,106,.6);background:rgba(255,215,106,.12)}' /* v646 */
 + '#tab_signallog .sl-badge.supergold{color:#b8860b;border-color:rgba(184,134,11,.45);background:rgba(184,134,11,.08)}'
 + '#tab_signallog .sl-dir{font-weight:800;letter-spacing:.08em;font-size:10px}'
 + '#tab_signallog .sl-dir.long{color:#19e3a2}'

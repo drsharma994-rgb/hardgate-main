@@ -292,39 +292,60 @@ module.exports = async (req, res) => {
 
     /* GEO-BLOCK RESCUE: some deploy regions (e.g. the pplx.app sandbox) sit
        inside Binance's 'restricted' territory and get HTTP 451 on every
-       fapi.binance.com request. When that happens, retry once through the
-       Render mirror at hardgate-main.onrender.com, which runs in an allowed
-       region. Only trigger on 451 (or 403 for spot), and only for binance.com
-       hosts. Wall-clock cost of the extra hop is ~250ms. Opt out by unsetting
-       HG_GEO_FALLBACK. */
+       fapi.binance.com request. When that happens, retry through one or more
+       mirror hosts that run in an allowed region.
+
+       v646: broadened from a single mirror to a comma-separated list, and we
+       now also retry when the mirror ITSELF returns a Binance -1003 rate-ban
+       (Binance banned Render's shared IP 74.220.52.33 during the 09-07 audit
+       and every SMART $ scan died with 'network issue?'). Set
+       HG_GEO_FALLBACK_HOST to a comma-separated list to add more mirrors.
+       Opt out by setting HG_GEO_FALLBACK=0. */
     if (upstream && (upstream.status === 451 || upstream.status === 403)
         && /(^|\.)binance\.com$/.test(target.hostname)
         && process.env.HG_GEO_FALLBACK !== '0'){
-      try{
-        const mirrorHost = process.env.HG_GEO_FALLBACK_HOST || 'hardgate-main.onrender.com';
-        const mirrorUrl = 'https://' + mirrorHost + '/api/proxy?url=' + encodeURIComponent(target.toString());
-        const rescue = await fetch(mirrorUrl, {
-          method: 'GET',
-          signal: ctrl.signal,
-          redirect: 'follow',
-          headers: { 'Accept': '*/*' },
-        });
-        if (rescue && rescue.ok){
-          upstream = rescue;
-        }
-      }catch(e){ /* keep the 451; not worth failing louder */ }
+      const mirrorList = String(process.env.HG_GEO_FALLBACK_HOST || 'hardgate-main.onrender.com')
+        .split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+      for (let mi = 0; mi < mirrorList.length; mi++){
+        try{
+          const mirrorHost = mirrorList[mi];
+          const mirrorUrl = 'https://' + mirrorHost + '/api/proxy?url=' + encodeURIComponent(target.toString());
+          const rescue = await fetch(mirrorUrl, {
+            method: 'GET',
+            signal: ctrl.signal,
+            redirect: 'follow',
+            headers: { 'Accept': '*/*' },
+          });
+          if (rescue && rescue.ok){
+            /* Peek at the body: if this mirror is itself banned, keep trying. */
+            const peek = await rescue.clone().text();
+            if (/-1003|IP\(.*\) banned/.test(peek)){
+              /* mirror is rate-banned by Binance too — try next */
+              continue;
+            }
+            upstream = new Response(peek, {
+              status: rescue.status,
+              headers: rescue.headers,
+            });
+            break;
+          }
+        }catch(e){ /* try next mirror */ }
+      }
     }
 
     const text = await upstream.text();
     const ctype = upstream.headers.get('content-type') || 'text/plain; charset=utf-8';
     const urlKey = target.toString();
-    if (upstream.ok) cacheSet(urlKey, upstream.status, text, ctype);
-    if (!upstream.ok && (upstream.status === 429 || upstream.status >= 500)){
+    /* v646: Binance answers ok=true but with body {"code":-1003,"msg":"...banned"}
+       on rate-bans — don't cache that as a good response. */
+    const binanceBanned = /(^|\.)binance\.com$/.test(target.hostname) && /"code":\s*-1003/.test(text);
+    if (upstream.ok && !binanceBanned) cacheSet(urlKey, upstream.status, text, ctype);
+    if ((!upstream.ok && (upstream.status === 429 || upstream.status >= 500)) || binanceBanned){
       const stale = cacheGet(urlKey, true);
       if (stale){
         return send(res, stale.status, stale.text, {
           'Content-Type': stale.contentType || ctype,
-          'X-HG-Cache': 'stale',
+          'X-HG-Cache': binanceBanned ? 'stale-rate-banned' : 'stale',
         }, req);
       }
     }

@@ -815,7 +815,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 </main>
 
 
-  <script src="build-stamp.js?v=645"></script>
+  <script src="build-stamp.js?v=646"></script>
   <script src="hg-setup-core.js"></script>
 <script src="hghost.js"></script>
 <script src="indicators.js"></script>
@@ -2720,7 +2720,20 @@ async function runSmartScan(opts){
     if (!quiet) statEl.textContent = 'loading Binance perp universe…';
     const res = await Promise.all([binancePerpUniverse(), binanceTickers24h()]);
     const perps = res[0], ticks = res[1];
-    if (!perps.length || !ticks){ if (!quiet) statEl.textContent = 'Binance universe unavailable (network issue?)'; return; }
+    if (!perps.length || !ticks){
+      /* v646 fix: precise, actionable error. The 'network issue?' guess was
+         wrong — the real cause is either (a) Binance geo-blocks the sandbox
+         and the Render mirror is rate-limited too, or (b) both endpoints hit
+         a temporary rate ban. Tell the user what to try. */
+      if (!quiet){
+        var reason;
+        if (!perps.length && !ticks) reason = 'both universe + tickers empty';
+        else if (!perps.length) reason = 'universe empty (' + (ticks ? Object.keys(ticks).length : 0) + ' tickers ok)';
+        else reason = 'tickers empty (' + perps.length + ' perps ok)';
+        statEl.textContent = 'Binance unavailable — ' + reason + ' · possible geo-block or shared-IP rate limit. Retry in 60s or switch venue to CDCX above.';
+      }
+      return;
+    }
     const scr = smartScreenCandidates(perps, ticks);
     const uni = scr.universe;
     let cands = scr.candidates;
@@ -4034,13 +4047,31 @@ function gateRow(id,name,state,detail){ // state: 'pass'|'veto'|'na'
 
 async function runBias(){
   const st0=$('biasOut'); if (!(await waitAlertIdle(st0))) return;
-  const sym = ($('biasSym').value||'').trim() || (S.exchange==='delta'?'BTCUSD':'B-BTC_USDT');
+  let sym = ($('biasSym').value||'').trim() || (S.exchange==='delta'?'BTCUSD':'B-BTC_USDT');
+  /* v646 fix: auto-normalize symbol to the current exchange's convention so a
+     Delta ticker typed while on CoinDCX (or vice-versa) still works. This was
+     the source of the 'Not enough history for BTCUSD' report — the input was
+     a Delta code being routed into a CoinDCX candles fetch. */
+  if (typeof hgBiasNormalizeSym === 'function'){
+    try { sym = hgBiasNormalizeSym(sym, S.exchange) || sym; } catch(e){}
+  } else {
+    /* inline fallback: minimal Delta<->CoinDCX crypto mapping */
+    const DELTA_TO_CDCX = { 'BTCUSD':'B-BTC_USDT','ETHUSD':'B-ETH_USDT','SOLUSD':'B-SOL_USDT','XAUTUSD':'B-XAUT_USDT' };
+    const CDCX_TO_DELTA = { 'B-BTC_USDT':'BTCUSD','B-ETH_USDT':'ETHUSD','B-SOL_USDT':'SOLUSD','B-XAUT_USDT':'XAUTUSD' };
+    if (S.exchange === 'coindcx' && DELTA_TO_CDCX[sym]) sym = DELTA_TO_CDCX[sym];
+    else if (S.exchange === 'delta' && CDCX_TO_DELTA[sym]) sym = CDCX_TO_DELTA[sym];
+  }
   $('biasSym').value = sym;
   const out = $('biasOut'); out.innerHTML=''; setProg('biasProg',0.05); $('biasRun').disabled=true;
   try{
     const [d1, h4, h1] = [await getCandles(sym,'1d',260), (setProg('biasProg',0.4), await getCandles(sym,'4h',300)), (setProg('biasProg',0.7), await getCandles(sym,'1h',200))];
     setProg('biasProg',0.95);
-    if (d1.length<60 || h4.length<60) { out.innerHTML = `<div class="empty">Not enough history for ${sym}.</div>`; return; }
+    if (d1.length<60 || h4.length<60) {
+      /* v646 fix: name the actual counts and the exchange so the user can
+         see whether it's a data issue or a symbol-format mismatch. */
+      out.innerHTML = `<div class="empty">Not enough history for ${sym} on ${S.exchange||'this exchange'} (1D=${d1.length}, 4H=${h4.length}, need ≥60 each). Try switching the exchange toggle or a different symbol.</div>`;
+      return;
+    }
 
     const c1=d1.map(r=>r.c), c4=h4.map(r=>r.c), ch=h1.map(r=>r.c);
     const e50d=last(ema(c1,50)), e200d=last(ema(c1,200)), pd=last(c1);
