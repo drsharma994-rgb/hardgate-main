@@ -57,7 +57,10 @@ var W = (typeof window !== 'undefined') ? window
 var LS_KEY = 'hgSignalLog';
 var MAX_ENTRIES = 500;
 var INTERVAL_MS = 5*60*1000;             /* every 5 min */
-var SOURCES = ['brain', 'scalp', 'swing', 'supergold'];
+/* v646 — crypto SWING/SCALP were missing from the source list.
+   v648 — crypto goes FIRST so brain's 200-row batch (per-round cap below)
+   can't outrun the interesting rows when the 500-cap kicks in. */
+var SOURCES = ['cswing', 'cscalp', 'scalp', 'swing', 'supergold', 'brain'];
 
 /* ---------------- tiny helpers ---------------- */
 function esc(s){
@@ -184,7 +187,16 @@ function saveJournal(){
 function rowsFrom(val){
   if (Array.isArray(val)) return val;
   if (val && typeof val === 'object'){
-    var keys = ['cands', 'rows', 'results', 'cards', 'setups'];
+    /* v647: merge cands + nearCands so NEAR (6/7) crypto rows also enter the
+       log. NEAR rows are exactly where gate summaries are most useful — they
+       show which single gate is blocking ("6/7 · blocked: vol+wick"). Without
+       this, in most market conditions (0 CLEAN, many NEAR) the log stays
+       100% BRAIN and Pack 2's whole point is invisible. */
+    var out = [];
+    if (Array.isArray(val.cands)) out = out.concat(val.cands);
+    if (Array.isArray(val.nearCands)) out = out.concat(val.nearCands);
+    if (out.length) return out;
+    var keys = ['rows', 'results', 'cards', 'setups'];
     for (var i = 0; i < keys.length; i++){
       if (Array.isArray(val[keys[i]])) return val[keys[i]];
     }
@@ -342,12 +354,26 @@ function snapshotRound(){
   try{
     var iso = '';
     try{ iso = new Date().toISOString(); }catch(eD){ iso = ''; }
-    var pulls = [pullBrain(), pullScan('goldscalpScan'), pullScan('goldswingScan'), pullSuperGold()];
-    var seen = {}, fresh = [];
+    var pulls = [pullScan('swingScan'),   /* cswing — v646: crypto SWING */
+                 pullScan('scalpScan'),   /* cscalp — v646: crypto SCALP */
+                 pullScan('goldscalpScan'),
+                 pullScan('goldswingScan'),
+                 pullSuperGold(),
+                 pullBrain()];             /* brain last so its cap runs after crypto */
+    /* v648: per-source cap so no single source (looking at you, BRAIN with
+       500 identical rows per snapshot) can monopolize the log and knock out
+       every crypto SWING/SCALP entry with a gate summary. Brain gets 200
+       slots per round; other sources unbounded (they typically emit ≤10
+       rows per scan). */
+    var PER_ROUND_CAP = { brain: 200 };
+    var seen = {}, fresh = [], srcCount = {};
     for (var s = 0; s < SOURCES.length; s++){
       __live[SOURCES[s]] = !!pulls[s].live;
       var rows = pulls[s].rows;
+      var cap = PER_ROUND_CAP[SOURCES[s]] || Infinity;
+      srcCount[SOURCES[s]] = 0;
       for (var i = 0; i < rows.length; i++){
+        if (srcCount[SOURCES[s]] >= cap) break;
         var r = rows[i];
         var key = SOURCES[s] + '|' + r.sym + '|' + r.dir;   /* de-dup within the round */
         if (seen[key]) continue;
@@ -359,6 +385,7 @@ function snapshotRound(){
           maeR: numOrNull(r.maeR), mfeR: numOrNull(r.mfeR),
           note: String(r.note || '').slice(0, 140)
         }));
+        srcCount[SOURCES[s]]++;
       }
     }
     if (fresh.length){
@@ -456,6 +483,8 @@ var SL_CSS = ''
 + '#tab_signallog .sl-badge.brain{color:#b48cff;border-color:rgba(180,140,255,.45);background:rgba(180,140,255,.08)}'
 + '#tab_signallog .sl-badge.scalp{color:#ffd76a;border-color:rgba(255,215,106,.45);background:rgba(255,215,106,.07)}'
 + '#tab_signallog .sl-badge.swing{color:#4ac3ff;border-color:rgba(74,195,255,.45);background:rgba(74,195,255,.07)}'
++ '#tab_signallog .sl-badge.cswing{color:#4ac3ff;border-color:rgba(74,195,255,.6);background:rgba(74,195,255,.12)}'   /* v646 */
++ '#tab_signallog .sl-badge.cscalp{color:#ffd76a;border-color:rgba(255,215,106,.6);background:rgba(255,215,106,.12)}' /* v646 */
 + '#tab_signallog .sl-badge.supergold{color:#b8860b;border-color:rgba(184,134,11,.45);background:rgba(184,134,11,.08)}'
 + '#tab_signallog .sl-dir{font-weight:800;letter-spacing:.08em;font-size:10px}'
 + '#tab_signallog .sl-dir.long{color:#19e3a2}'
