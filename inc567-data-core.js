@@ -84,8 +84,13 @@ async function hgOnchainAltFetch(force){
           snap.netflowZ = G.hgCalcNetflowZ(j.flows7d);
         }
         if (j && Array.isArray(j.whaleTxs)) snap.whaleTxs = j.whaleTxs;
+        if (j && j.puell != null && typeof G.hgMinerCycleContext === 'function'){
+          var ribbon = (snap.minerCycle && snap.minerCycle.hashRibbonState) || 'neutral';
+          var hrTrend = (snap.minerCycle && snap.minerCycle.hashrateTrendPct) || null;
+          snap.minerCycle = G.hgMinerCycleContext(j.puell, hrTrend, ribbon);
+        }
         if (j && j.lth && typeof G.hgLthSthSupplyDynamics === 'function'){
-          snap.lthSth = G.hgLthSthSupplyDynamics(j.lth.lthPct, j.lth.sthPct, j.lth.lth30d, null);
+          snap.lthSth = G.hgLthSthSupplyDynamics(j.lth.lthPct, j.lth.sthPct, j.lth.lth30d, j.lth.centralBankGoldSharePct);
         }
         if (j && Array.isArray(j.notes)) notes = notes.concat(j.notes);
       } else notes.push('onchain-alt API HTTP ' + r.status);
@@ -119,14 +124,21 @@ function hgOnchainAltGate(sym, dir){
   return { pass: true, state: 'pass', note: 'on-chain alt clear' };
 }
 
-function hgStrategySharpesFromBook(bookSnap){
+function hgStrategySharpesFromBook(bookSnap, opts){
+  opts = opts || {};
+  var windowDays = opts.windowDays > 0 ? opts.windowDays : 90;
+  var cutoff = Date.now() - windowDays * 86400000;
   bookSnap = bookSnap || {};
   var closed = bookSnap.closed || (bookSnap.book && bookSnap.book.closed) || [];
   var byStrat = {};
   for (var i = 0; i < closed.length; i++){
     var c = closed[i];
     if (!c) continue;
+    var at = c.closedAt || c.at || c.exitAt;
+    if (at && +at < cutoff) continue;
     var strat = String(c.strategy || c.setupKind || 'unknown').toUpperCase();
+    var fund = String(c.fund || c.fundId || 'main').toLowerCase();
+    if (opts.fundId && fund !== String(opts.fundId).toLowerCase()) continue;
     var pnl = fin(c.pnl) || fin(c.pnlUsd) || 0;
     var risk = fin(c.riskUsd);
     var r = (risk && risk > 0) ? pnl / risk : (pnl !== 0 ? (pnl > 0 ? 1 : -1) : 0);
@@ -144,9 +156,11 @@ function hgStrategySharpesFromBook(bookSnap){
   return sharpes;
 }
 
-function hgStrategyWeightsFromBook(bookSnap){
+function hgStrategyWeightsFromBook(bookSnap, opts){
   if (typeof G.hgCalcStrategyWeights !== 'function') return {};
-  return G.hgCalcStrategyWeights(hgStrategySharpesFromBook(bookSnap));
+  var weights = G.hgCalcStrategyWeights(hgStrategySharpesFromBook(bookSnap, opts));
+  try{ G.HG_STRATEGY_WEIGHTS = weights; }catch(e){}
+  return weights;
 }
 
 function hgRegimeStrategyActive(strategy){
@@ -159,6 +173,12 @@ function hgRegimeStrategyActive(strategy){
         var lbl = String(rg.label).toUpperCase();
         if (lbl.indexOf('RISK-ON') >= 0) regime = 'RISK-ON';
         else if (lbl.indexOf('RISK-OFF') >= 0) regime = 'RISK-OFF';
+        else if (lbl.indexOf('SELECTIVE') >= 0) regime = 'MIXED';
+      } else if (rg && rg.word){
+        var w = String(rg.word).toUpperCase();
+        if (w.indexOf('RISK-ON') >= 0) regime = 'RISK-ON';
+        else if (w.indexOf('RISK-OFF') >= 0) regime = 'RISK-OFF';
+        else regime = 'MIXED';
       }
     }
   }catch(e){}

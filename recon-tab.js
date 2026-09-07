@@ -20,6 +20,8 @@ function reconBuildPaperLogs(bookSnap){
       sym: c.sym,
       strategy: c.strategy || c.setupKind,
       entry: c.entry,
+      exit: c.exit || c.mark,
+      closedAt: c.closedAt || c.at,
       expectedFeesUsd: fin(c.feesUsd) ? c.feesUsd : 10
     };
   });
@@ -34,6 +36,7 @@ function reconBuildLiveFills(blotter){
     out.push({
       id: b.positionId || b.id,
       entry: b.fillPrice || b.entry,
+      exit: b.exitPrice || b.closePrice || b.mark,
       feesUsd: b.feesUsd || b.feeUsd || 0,
       slippageUsd: b.slippageUsd || 0
     });
@@ -62,14 +65,26 @@ function reconRender(root){
   var rows = (recon.diffs || []).map(function(d){
     return '<tr><td>' + esc(d.tradeId) + '</td><td>' + esc(d.sym) + '</td><td>' + esc(d.strategy)
       + '</td><td>' + (fin(d.slippagePct) ? d.slippagePct.toFixed(3) + '%' : '—')
+      + '</td><td>' + (fin(d.exitSlippagePct) ? d.exitSlippagePct.toFixed(3) + '%' : '—')
       + '</td><td>$' + (fin(d.feeDrift) ? d.feeDrift.toFixed(2) : '—') + '</td></tr>';
   }).join('');
+  var weeklyRows = (recon.weeklyByStrategy || []).map(function(w){
+    return '<tr><td>' + esc(w.week) + '</td><td>' + esc(w.strategy) + '</td><td>' + w.n
+      + '</td><td>$' + (fin(w.slippageUsd) ? w.slippageUsd.toFixed(2) : '0')
+      + '</td><td>$' + (fin(w.feeDriftUsd) ? w.feeDriftUsd.toFixed(2) : '0') + '</td></tr>';
+  }).join('');
+  if (recon.alert && recon.alert.push && typeof G.sendAlertPush === 'function'){
+    try{ G.sendAlertPush(recon.alert.title, recon.alert.body, { setup: 'recon', scanner: 'recon' }); }catch(ePush){}
+  }
   out.innerHTML = '<div class="verdict ' + healthCls + '"><div class="vword">' + esc(recon.executionHealth) + '</div>'
     + '<div class="vwhy">Reconciled ' + recon.reconciledCount + ' trades · slippage $'
     + (fin(recon.totalSlippageUsd) ? recon.totalSlippageUsd.toFixed(2) : '0')
     + ' · fee drift $' + (fin(recon.totalFeeDriftUsd) ? recon.totalFeeDriftUsd.toFixed(2) : '0') + '</div></div>'
-    + '<table class="tbl" style="margin-top:10px"><thead><tr><th>ID</th><th>Sym</th><th>Strategy</th><th>Slippage</th><th>Fee drift</th></tr></thead>'
-    + '<tbody>' + (rows || '<tr><td colspan="5">No matched paper/live fills yet — execute brackets to populate.</td></tr>') + '</tbody></table>'
+    + '<table class="tbl" style="margin-top:10px"><thead><tr><th>ID</th><th>Sym</th><th>Strategy</th><th>Entry slip</th><th>Exit slip</th><th>Fee drift</th></tr></thead>'
+    + '<tbody>' + (rows || '<tr><td colspan="6">No matched paper/live fills yet — execute brackets to populate.</td></tr>') + '</tbody></table>'
+    + '<h3 style="margin-top:12px">Weekly per-strategy divergence</h3>'
+    + '<table class="tbl"><thead><tr><th>Week</th><th>Strategy</th><th>n</th><th>Slippage</th><th>Fee drift</th></tr></thead>'
+    + '<tbody>' + (weeklyRows || '<tr><td colspan="5">No weekly buckets yet</td></tr>') + '</tbody></table>'
     + '<div class="note" style="margin-top:8px">Compares closed paper entries vs execute_ok blotter fills. DEGRADED_EXECUTION when |slippage| &gt; $500 or fee drift &gt; $100.</div>';
   if (stat) stat.textContent = 'updated ' + new Date().toISOString().slice(11, 19) + ' UTC';
 }

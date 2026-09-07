@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v641';
+const HG_CACHE = 'hg-v642';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -27,7 +27,7 @@ const HG_SHELL = [
      the offline shell covered 126 local files and then broke on charts. */
   './vendor/lightweight-charts-4.2.0.js', './vendor/emailjs-browser-4.4.1.js',
   './onchain.js', './onchain-alt-data.js', './exchange_netflow.js', './lth_sth.js', './whale_alerts.js',
-  './structure-core.js', './structure/swings.js', './structure/fvg.js', './structure/order_blocks.js', './structure/divergence_regular.js',
+  './structure-core.js', './structure/pine-bridge.js', './structure/swings.js', './structure/fvg.js', './structure/order_blocks.js', './structure/divergence_regular.js',
   './primitives/cusum.js', './primitives/tsmom.js', './primitives/ema_cascade.js',
   './portfolio-allocation.js', './inc567-data-core.js', './inc567-config-loader.js', './inc567-regime-panels.js',
   './inc34-data-core.js', './data/param-drift.json', './data/symbol-tier.json', './data/alert-precision.json',

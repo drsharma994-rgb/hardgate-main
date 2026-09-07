@@ -8,6 +8,10 @@ function fin(v){ return typeof v === 'number' && isFinite(v); }
 function pxF(n){ return (typeof W.px === 'function') ? W.px(n) : (fin(+n) ? String(+n) : '—'); }
 
 function signalFromResult(item, res, rows){
+  if (typeof W.hgPineStructureSignal === 'function' && rows && rows.length >= 30){
+    var bridged = W.hgPineStructureSignal(rows, item, { pivotLength: 5, atrLen: 14 });
+    if (bridged && bridged.dir === item.dir) res = bridged;
+  }
   if (!res || !res.dir || String(res.dir).toLowerCase() !== item.dir) return null;
   if (!fin(+res.entry) || !fin(+res.stop) || res.entry === res.stop) return null;
   var t1 = fin(+res.t1) ? +res.t1 : null;

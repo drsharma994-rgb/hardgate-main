@@ -2020,6 +2020,12 @@ function trend4hAssess(rows){
     var e20 = emaLast(rows, 20), e50 = emaLast(rows, 50);
     if (!isFinite(e20) || !isFinite(e50) || e20 === e50) return null;
     var dir = e20 > e50 ? 'long' : 'short';
+    if (typeof window !== 'undefined' && typeof window.hgPrimitiveEmaCascade === 'function'){
+      var closes = rows.map(function(r){ return +r.c; });
+      var ec = window.hgPrimitiveEmaCascade(closes, [20, 50]);
+      if (ec && ec.state === 'bullish' && dir !== 'long') return null;
+      if (ec && ec.state === 'bearish' && dir !== 'short') return null;
+    }
     var st = structureOf(rows);
     if (dir === 'long' && st !== 'HH') return null;
     if (dir === 'short' && st !== 'LL') return null;

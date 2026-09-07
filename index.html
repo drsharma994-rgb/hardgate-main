@@ -814,7 +814,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 </main>
 
 
-  <script src="build-stamp.js?v=641"></script>
+  <script src="build-stamp.js?v=642"></script>
   <script src="hg-setup-core.js"></script>
 <script src="hghost.js"></script>
 <script src="indicators.js"></script>
@@ -884,7 +884,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="onchain-alt-data.js?v=640"></script>
 <script src="exchange_netflow.js"></script>
 <script src="lth_sth.js"></script>
-<script src="structure-core.js?v=638"></script>
+<script src="structure-core.js?v=642"></script>
+<script src="structure/pine-bridge.js?v=642"></script>
 <script src="structure/swings.js"></script>
 <script src="structure/fvg.js"></script>
 <script src="structure/order_blocks.js"></script>
@@ -893,7 +894,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="primitives/tsmom.js"></script>
 <script src="primitives/ema_cascade.js"></script>
 <script src="portfolio-allocation.js?v=640"></script>
-<script src="inc567-data-core.js?v=641"></script>
+<script src="inc567-data-core.js?v=642"></script>
 <script src="inc34-data-core.js?v=641"></script>
 <script src="inc567-config-loader.js"></script>
 <script src="inc567-regime-panels.js"></script>
@@ -2137,12 +2138,60 @@ async function runDivScanLeg(opts){
             }
             return null;
           }
-          const d = pickDiv(divRes.regular) || pickDiv(divRes.hidden);
-          if (d){
+          const dReg = pickDiv(divRes.regular);
+          const dHid = pickDiv(divRes.hidden);
+          const divPicks = [];
+          if (dReg) divPicks.push({ d: dReg, listKind: 'REGULAR' });
+          if (dHid) divPicks.push({ d: dHid, listKind: 'HIDDEN' });
+          for (let pi = 0; pi < divPicks.length; pi++){
+            const d = divPicks[pi].d;
+            const listKind = divPicks[pi].listKind;
             dir = d.side;
-            kindLabel = d.type.split('-').map(function(w){ return w.charAt(0).toUpperCase()+w.slice(1); }).join(' ');
+            kindLabel = listKind + ' ' + d.type.split('-').map(function(w){ return w.charAt(0).toUpperCase()+w.slice(1); }).join(' ');
             pivA = { i: d.p1.i, v: d.p1.px };
             pivB = { i: d.p2.i, v: d.p2.px };
+            if (!dir) continue;
+            if ((n-1-pivB.i) > 15) continue;
+            const ev = (typeof hgPrimitiveCusum === 'function') ? hgPrimitiveCusum(c, 1) : cusumLast(c,1);
+            if (ev && ev.barsAgo<=10){
+              if ((dir==="long" && ev.dir==="short") || (dir==="short" && ev.dir==="long")) continue;
+            }
+            if (t.fundingPct!==null){
+              const fr = t.fundingPct;
+              if (Math.abs(fr) > 0.05-1e-9) continue;
+              if ((dir==="long" && fr>=0.04) || (dir==="short" && fr<=-0.04)) continue;
+            }
+            const p = c[n-1];
+            const a4 = last(atr(rows,14));
+            if (!isFinite(a4) || a4<=0) continue;
+            const entry = p;
+            let stop = dir==="long" ? pivB.v - 0.75*a4 : pivB.v + 0.75*a4;
+            let capped = false;
+            const maxStop = 2*a4;
+            if (dir==="long" && entry-stop > maxStop){ stop = entry - maxStop; capped = true; }
+            if (dir==="short" && stop-entry > maxStop){ stop = entry + maxStop; capped = true; }
+            const risk = Math.abs(entry-stop);
+            if (!(risk>0)) continue;
+            const t1 = dir==='long' ? entry+2*risk : entry-2*risk;
+            const t2 = dir==='long' ? entry+3*risk : entry-3*risk;
+            const rr = Math.abs(t1-entry)/risk;
+            if (!(rr>=2)) continue;
+            var plObj = applyExactEntry({ dir: dir, type: 'SWING', entry: entry, stop: stop, t1: t1, t2: t2,
+              note: capped ? 'stop capped at 2×ATR — the divergence pivot sits beyond; invalidation still belongs to the pivot' : '' },
+              rows, { style: 'swing', preferEdge: true, refineLevels: true });
+            entry = plObj.entry; stop = plObj.stop; t1 = plObj.t1; t2 = plObj.t2;
+            found++;
+            const reg = detectRegime(rows);
+            const divStack = inlineScanStack(dir, t.symbol, rows, { style: 'swing', ticker: t, clean: true });
+            __cardsHtml.push(cardHTML(hgCardVenueSym(t.symbol, venueTag), dir,
+              [["mark",px(t.mark||p)],["type",kindLabel],["RSI 4H",fmt(rv[n-1],1)],["span",(pivB.i-pivA.i)+" bars"],
+               ["funding", t.fundingPct!==null?fmt(t.fundingPct,4)+"%":"n/a"],["regime",reg.label]],
+              ["G1 pivot structure","G2 span>=10 bars","G3 funding","G4 no opposing CUSUM","G5 R:R>=2"],
+              planBlockExact(plObj, plObj.note), entry, stop, t1, null,
+              Object.assign({ scanner: 'divergence', strategy: 'divergence', t2: t2, stack: divStack, rows: rows,
+                strategyConfirm: plObj.strategyConfirm, strategyWith: plObj.strategyWith, strategyAgainst: plObj.strategyAgainst },
+                (typeof hgStrategyBookFields === 'function') ? hgStrategyBookFields(plObj) : {})));
+            logSetup(t.symbol, dir, "div", entry, stop, t1);
           }
         } else {
         const pivots = findPivots(c,3);
@@ -2851,9 +2900,18 @@ async function runApexScanLeg(opts){
         const ret24=((p-p24)/p24)*100;
         const spread24 = ret24 - btcRet24;
         if (spread24<5.0) continue;
+        var whaleAccumTag = '';
+        try{
+          if (typeof hgOnchainAltFetch === 'function' && !hgOnchainAltState()) await hgOnchainAltFetch();
+          var altSnap = hgOnchainAltState();
+          if (altSnap && altSnap.whaleTxs && typeof hgWhaleFlowAnalysis === 'function'){
+            var whA = hgWhaleFlowAnalysis(altSnap.whaleTxs, t.symbol);
+            if (whA && whA.accumulateAlt) whaleAccumTag = 'WHALE ACCUMULATION — >$25M exchange outflow (24h)';
+          }
+        }catch(eWh){}
         const e50=last(ema(c,50));
         if (p<e50) continue;
-        results.push({sym:t.symbol, mark:p, ret24, spread24, e50, rows});
+        results.push({sym:t.symbol, mark:p, ret24, spread24, e50, rows, whaleAccumTag});
       }catch(e){}
       await sleep(100);
     }
@@ -2865,6 +2923,7 @@ async function runApexScanLeg(opts){
         [['mark',px(r.mark)],['BTC 24h',pct(btcRet24,2)],['asset 24h',pct(r.ret24,2)],['RS spread',pct(r.spread24,2)],['Nearest OB',nearestOBText(r.rows,'long')],['Liquidity Target',liquidityTargetText(r.rows,'long')]],
         ['G1 BTC headwind','G2 spread ≥5%','G3 1H EMA50 intact'],
         (pl ? planBlockExact(pl, pl.note) : 'levels unavailable — size down')
+          + (r.whaleAccumTag ? '<br><span class="gpip ok">' + r.whaleAccumTag + '</span>' : '')
           + '<br>MANUAL TRIGGER: do not buy yet. Pull up a 15m chart of BTC. The exact minute BTC prints a bullish reclaim or sweeps a local low, buy this asset.',
         pl?pl.entry:r.mark, pl?pl.stop:r.e50, pl?pl.t1:r.mark*1.05, null,
         Object.assign({ scanner: 'apex', strategy: 'apex', t2: pl ? pl.t2 : null, tier: 'forming', stack: apexStack, rows: r.rows,
@@ -3048,8 +3107,8 @@ async function runSmcScanLeg(opts){
           return side === 'long' ? bar2.c > bar2.o : bar2.c < bar2.o;
         }
         let fvg = null, dir = null;
-        if (typeof hgDetectFvg === 'function'){
-          const fvgList = hgDetectFvg(rows, { atrLen: 14 });
+        if (typeof hgDetectFvgList === 'function'){
+          const fvgList = hgDetectFvgList(rows, { atrLen: 14 });
           for (let fi = fvgList.length - 1; fi >= 0; fi--){
             const f = fvgList[fi];
             if (!f || f.state === 'invalidated') continue;
@@ -3180,6 +3239,7 @@ async function runObScanLeg(opts){
         else if (obShort && p >= obShort.bottom && p <= obShort.top && p < e200){ dir = 'short'; ob = obShort; }
         }
         if (!dir) continue;
+        if (ob && ob.highQualityTap === false) continue;
         found++;
         const lp = findLiquidityPools(rows);
         const target = dir === 'long' ? lp.buySide : lp.sellSide;
@@ -4370,6 +4430,9 @@ function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId, bookMet
   const confirmChip = (typeof hgStrategyConfirmChipHtml === 'function')
     ? hgStrategyConfirmChipHtml(bookMeta.strategyConfirm, bookMeta.strategyWith, bookMeta.strategyAgainst)
     : '';
+  const hiddenDivChip = (bookMeta.hiddenDivConfluence || (Array.isArray(bookMeta.stamps) && bookMeta.stamps.indexOf('HIDDEN DIV CONFLUENCE') >= 0))
+    ? ' <span class="stamp pass">HIDDEN DIV</span>' : '';
+  const regimePausedChip = bookMeta.regimePaused ? ' <span class="stamp bad">REGIME PAUSED</span>' : '';
   const strategyDetail = (typeof hgStrategyTradeDetailHtml === 'function')
     ? hgStrategyTradeDetailHtml(bookMeta, { skipChip: true })
     : '';
@@ -4379,7 +4442,7 @@ function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId, bookMet
   const entryData = isFinite(entry) ? ` data-hg-setup-entry="${entry}"` : '';
   const stopData = isFinite(stop) ? ` data-hg-setup-stop="${stop}"` : '';
   return `<div class="card ${dir}${tierCls}" data-hg-setup-sym="${symHtml}" data-hg-setup-dir="${dir}"${entryData}${stopData}>
-    <div class="chead">${actDot}${venueHtml}<span class="sym">${symHtml}</span><span class="dir">${dir.toUpperCase()} · ${tierLabel}</span>${bookStamp}${tripleChip}${visionChipHtml}${confirmChip}</div>
+    <div class="chead">${actDot}${venueHtml}<span class="sym">${symHtml}</span><span class="dir">${dir.toUpperCase()} · ${tierLabel}</span>${bookStamp}${tripleChip}${visionChipHtml}${confirmChip}${hiddenDivChip}${regimePausedChip}</div>
     <div class="mini">${mini.map(([k,v])=>`<span class="k">${k}</span><span>${v}</span>`).join('')}</div>
     ${stackHtml}
     ${postGateBanner}
@@ -5816,11 +5879,41 @@ async function planTradeAsync(){
   let riskPct=+$('tRisk').value;
   const mmr=(+$('tMmr').value||0.5)/100;
   const symVal = $('tSym').value || '';
+  var regimeNote = '';
+  var ddNote = '';
+  const out=$('tradeOut');
+  try{
+    if (typeof hgInc567LoadConfigs === 'function') await hgInc567LoadConfigs();
+    if (typeof hgRegimeStrategyActive === 'function'){
+      var stratAct = hgRegimeStrategyActive($('tStrategy') && $('tStrategy').value || 'swing');
+      if (stratAct && stratAct.active === false){
+        regimeNote = '<div class="note warn"><b>REGIME PAUSED</b> — ' + (stratAct.reason || stratAct.status || 'strategy inactive in current regime') + '</div>';
+      }
+    }
+    if (typeof hgDynamicDrawdownRisk === 'function' && eq > 0){
+      var peakNav = (typeof hgBookPeakNav === 'function') ? hgBookPeakNav() : eq;
+      var ddRisk = hgDynamicDrawdownRisk(eq, peakNav, riskPct);
+      if (!ddRisk.allowedNewEntries){
+        out.innerHTML = '<div class="empty">DRAWDOWN HALT — ' + ddRisk.state + ' (' + ddRisk.ddPct.toFixed(1) + '% DD). No new risk until recovery.</div>';
+        return;
+      }
+      if (ddRisk.state === 'PROTECTIVE DOWNSCALE' && isFinite(ddRisk.riskPct)){
+        riskPct = ddRisk.riskPct;
+        $('tRisk').value = riskPct;
+        ddNote = 'Drawdown protective scale — risk ×' + ddRisk.riskPct.toFixed(2) + ' (' + ddRisk.ddPct.toFixed(1) + '% DD)';
+      }
+    }
+  }catch(eReg){}
   /* Increment 7 — correlation-adjusted Kelly sizing suggestion */
   var kellyNote = '';
   try{
     if (typeof hgCorrelationKellySize === 'function' && symVal){
-      var openLog = loadLog().filter(function(e){ return e.status === 'open'; });
+      var fundId = (typeof bookFundId === 'function') ? bookFundId() : 'main';
+      var openLog = loadLog().filter(function(e){
+        if (e.status !== 'open') return false;
+        if (!e.fund && !e.fundId) return true;
+        return String(e.fund || e.fundId).toLowerCase() === String(fundId).toLowerCase();
+      });
       var activePos = openLog.map(function(e){ return { sym: e.sym, dir: e.dir }; });
       var seriesBySym = {};
       for (var pi = 0; pi < activePos.length + 1; pi++){
@@ -5842,7 +5935,6 @@ async function planTradeAsync(){
     }
   }catch(eKelly){}
   const scaleOut=Math.min(100,Math.max(0,+$('tScale').value||50));
-  const out=$('tradeOut');
   if (!(entry>0&&stop>0&&eq>0&&riskPct>0)){ out.innerHTML='<div class="empty">Fill entry, stop, equity, and risk %.</div>'; return; }
   const dirOk = side==='long' ? stop<entry : stop>entry;
   const riskUnit = Math.abs(entry-stop);
@@ -5991,6 +6083,7 @@ liq est   ${px(liq)}  (${fmt(clearance,2)}× stop clearance)`;
     goldBasisHtml = hgGoldBasisNoteHtml();
   }
   out.innerHTML = `
+    ${regimeNote}${ddNote ? '<div class="note warn">' + ddNote + '</div>' : ''}${kellyNote ? '<div class="note">' + kellyNote + '</div>' : ''}
     ${handoffNote}${stackHtml}${goldBasisHtml}
     <div class="ledger">${g.map(x=>gateRow(...x)).join('')}</div>
     <div class="verdict ${vet?'aside':side}">
@@ -7287,12 +7380,29 @@ function bestProfitBoost(s){
 async function bestInc34Prepare(clean){
   if (!clean || !clean.length) return clean;
   try{ if (typeof hgInc34LoadConfigs === 'function') await hgInc34LoadConfigs(); }catch(e){}
+  try{ if (typeof hgInc567LoadConfigs === 'function') await hgInc567LoadConfigs(); }catch(e){}
   var out = clean.slice();
   if (typeof hgSymbolTierGate === 'function'){
     out = out.filter(function(s){
       if (!s || !s.t) return false;
       var gate = hgSymbolTierGate(s.t.symbol, s.famScore, s.famMax || 9);
       if (gate && gate.veto){ s.tierVeto = gate.note; return false; }
+      return true;
+    });
+  }
+  if (typeof hgBestCycleModifier === 'function'){
+    out = out.filter(function(s){
+      if (!s || !s.t) return true;
+      var cm = hgBestCycleModifier(s.t.symbol, s.dir);
+      if (cm && cm.veto){ s.cycleVeto = cm.reason; return false; }
+      return true;
+    });
+  }
+  if (typeof hgInc567StrategyWeight === 'function'){
+    out = out.filter(function(s){
+      if (!s || !s.t) return false;
+      var w = hgInc567StrategyWeight(s.strategy || s.fam || 'SWING');
+      if (w != null && w < 0.06){ s.lowWeight = true; return false; }
       return true;
     });
   }

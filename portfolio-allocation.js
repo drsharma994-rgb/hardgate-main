@@ -111,8 +111,11 @@ function hgCorrelationKellySize(newTrade, activePositions, correlationMatrix, op
 
   var avgCorr = count ? (sumCorr / count) : 0;
   // If highly positively correlated with open book, downscale size: sqrt(1 - corr^2) style damping
+  /* Portfolio Kelly dampener: closed-form 2-asset style 1/(1+ρ) with negative-ρ relief */
   var corrDampener = avgCorr > 0 ? (1 / (1 + avgCorr)) : (1 + Math.abs(avgCorr) * 0.25);
   var adjustedFraction = unadjustedFraction * corrDampener;
+  var portfolioKellyCap = unadjustedFraction * 3.0;
+  adjustedFraction = Math.min(adjustedFraction, portfolioKellyCap);
   var finalPct = Math.min(2.5, Math.max(0.25, adjustedFraction * 100));
 
   return {
@@ -134,6 +137,9 @@ function hgCheckStrategyRegimeActive(strategy, regimeState, regimeExpectancies){
 
   var key = strategy + ':' + regimeState;
   var exp = regimeExpectancies[key];
+  if (exp === undefined && regimeExpectancies[strategy] && typeof regimeExpectancies[strategy] === 'object'){
+    exp = regimeExpectancies[strategy][regimeState];
+  }
   if (exp !== undefined && exp < 0){
     return {
       active: false,
@@ -201,6 +207,7 @@ function hgReconcileTrades(paperLogs, liveFills){
   var diffs = [];
   var totalSlippageUsd = 0;
   var totalFeeDriftUsd = 0;
+  var weeklyByStrat = {};
 
   for (var j = 0; j < paperLogs.length; j++){
     var pl = paperLogs[j];
@@ -209,26 +216,42 @@ function hgReconcileTrades(paperLogs, liveFills){
 
     var pEntry = num(pl.entry);
     var lEntry = num(match.entry);
+    var pExit = num(pl.exit);
+    var lExit = num(match.exit);
     var slippagePct = (fin(pEntry) && fin(lEntry) && pEntry > 0) ? ((lEntry - pEntry) / pEntry) * 100 : 0;
+    var exitSlippagePct = (fin(pExit) && fin(lExit) && pExit > 0) ? ((lExit - pExit) / pExit) * 100 : null;
     var feeDrift = (num(match.feesUsd) || 0) - (num(pl.expectedFeesUsd) || 0);
+    var strat = String(pl.strategy || 'unknown').toUpperCase();
+    var weekKey = pl.closedAt ? new Date(pl.closedAt).toISOString().slice(0, 10) : 'unknown';
 
     diffs.push({
       tradeId: pl.id,
       sym: pl.sym,
       strategy: pl.strategy,
       slippagePct: slippagePct,
+      exitSlippagePct: exitSlippagePct,
       feeDrift: feeDrift
     });
     totalSlippageUsd += (num(match.slippageUsd) || 0);
     totalFeeDriftUsd += feeDrift;
+    var wk = weekKey + '|' + strat;
+    if (!weeklyByStrat[wk]) weeklyByStrat[wk] = { week: weekKey, strategy: strat, slippageUsd: 0, feeDriftUsd: 0, n: 0 };
+    weeklyByStrat[wk].slippageUsd += (num(match.slippageUsd) || 0);
+    weeklyByStrat[wk].feeDriftUsd += feeDrift;
+    weeklyByStrat[wk].n += 1;
   }
+
+  var weekly = Object.keys(weeklyByStrat).map(function(k){ return weeklyByStrat[k]; });
+  var degraded = (Math.abs(totalSlippageUsd) > 500 || totalFeeDriftUsd > 100);
 
   return {
     reconciledCount: diffs.length,
     diffs: diffs,
+    weeklyByStrategy: weekly,
     totalSlippageUsd: totalSlippageUsd,
     totalFeeDriftUsd: totalFeeDriftUsd,
-    executionHealth: (Math.abs(totalSlippageUsd) > 500 || totalFeeDriftUsd > 100) ? 'DEGRADED_EXECUTION' : 'HEALTHY_EXECUTION'
+    executionHealth: degraded ? 'DEGRADED_EXECUTION' : 'HEALTHY_EXECUTION',
+    alert: degraded ? { push: true, title: 'HARDGATE RECON DEGRADED', body: 'Execution drift slippage $' + totalSlippageUsd.toFixed(0) + ' fee $' + totalFeeDriftUsd.toFixed(0) } : null
   };
 }
 

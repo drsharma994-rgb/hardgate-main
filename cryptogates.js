@@ -296,7 +296,16 @@
     var dynamicRR = (isFinite(a4) && a4 > 0 && risk > 0) ? expectedMove / risk : 0;
     var g6 = dynamicRR >= rrMin;
     gates.push(['G6 ATR-capacity R:R≥' + (isFinite(rrMin) ? rrMin.toFixed(1) : CG_SWING_RR_MIN), g6]);
-    var ev = cusumLast(c.slice(-120), 1);
+    var ev = null;
+    if (typeof G.hgPrimitiveCusum === 'function'){
+      try{
+        var cusEv = G.hgPrimitiveCusum(c, 1.0);
+        if (cusEv && cusEv.dir){
+          ev = { dir: cusEv.dir, barsAgo: (cusEv.barsAgo != null) ? cusEv.barsAgo : 0 };
+        }
+      }catch(eCus){}
+    }
+    if (!ev) ev = cusumLast(c.slice(-120), 1);
     var g7 = !(ev && ev.barsAgo <= 20 && ev.dir !== dir);
     gates.push(['G7 CUSUM', g7]);
     var passed = gates.filter(function(g){ return g[1]; }).length;

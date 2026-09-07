@@ -477,6 +477,15 @@ function gateCandidate(inp){
   if (!isFinite(e9) || !isFinite(e21) || !isFinite(e50)) return die(1, 'EMA cascade not warmed up');
   dir = (e9 > e21 && e21 > e50) ? 'long' : ((e9 < e21 && e21 < e50) ? 'short' : null);
   if (!dir) return die(1, 'EMA9/21/50 mixed — chop. Standing aside IS the position.');
+  if (typeof G.hgPrimitiveEmaCascade === 'function'){
+    try{
+      var ec = G.hgPrimitiveEmaCascade(c4, [9, 21, 50]);
+      if (ec && ec.state === 'bullish' && dir === 'short')
+        return die(1, 'structure-core EMA cascade bullish — short vetoed');
+      if (ec && ec.state === 'bearish' && dir === 'long')
+        return die(1, 'structure-core EMA cascade bearish — long vetoed');
+    }catch(eEc){}
+  }
   if (!isFinite(a4) || a4 <= 0) return die(1, 'ATR(4h) not computable — cascade spread cannot be verified');
   var spreadX = Math.abs(e21 - e50)/a4;
   if (spreadX < SPREAD_MIN_ATR)

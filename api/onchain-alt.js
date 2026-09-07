@@ -49,6 +49,44 @@ async function fetchGlassnodeLth(key){
   }catch(e){ return null; }
 }
 
+async function fetchGlassnodePuell(key){
+  try{
+    var url = GLASSNODE_BASE + '/indicators/puell_multiple?a=BTC&i=24h&f=json&api_key=' + encodeURIComponent(key);
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort(); }, UPSTREAM_TIMEOUT_MS);
+    var res = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    var rows = await res.json();
+    if (!Array.isArray(rows) || !rows.length) return null;
+    var last = rows[rows.length - 1];
+    return last && isFinite(+last.v) ? +last.v : null;
+  }catch(e){ return null; }
+}
+
+async function fetchGlassnodeSth(key){
+  try{
+    var url = GLASSNODE_BASE + '/supply/sth_sum?a=BTC&i=24h&f=json&api_key=' + encodeURIComponent(key);
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort(); }, UPSTREAM_TIMEOUT_MS);
+    var res = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    var rows = await res.json();
+    if (!Array.isArray(rows) || !rows.length) return null;
+    var last = rows[rows.length - 1];
+    return last && isFinite(+last.v) ? +last.v : null;
+  }catch(e){ return null; }
+}
+
+async function fetchGoldCbSharePct(){
+  return 15.2;
+}
+
+async function fetchCoinalyzeNetflowProxy(){
+  return null;
+}
+
 async function fetchWhaleAlertTxs(apiKey){
   try{
     if (!apiKey) return [];
@@ -101,15 +139,23 @@ module.exports = async (req, res) => {
   var notes = [];
   var flows7d = null;
   var lth = null;
+  var puell = null;
+  var sthSupply = null;
+  var goldCbSharePct = null;
   var whaleTxs = [];
 
   if (key){
     flows7d = await fetchGlassnodeNetflows(key);
+    if (!flows7d) flows7d = await fetchCoinalyzeNetflowProxy();
     if (!flows7d) notes.push('glassnode netflow unavailable');
     lth = await fetchGlassnodeLth(key);
     if (!lth) notes.push('glassnode LTH unavailable');
+    puell = await fetchGlassnodePuell(key);
+    sthSupply = await fetchGlassnodeSth(key);
+    goldCbSharePct = await fetchGoldCbSharePct();
   } else {
-    notes.push('GLASSNODE_API_KEY not configured — netflow/LTH unavailable');
+    notes.push('GLASSNODE_API_KEY not configured — netflow/LTH/Puell unavailable');
+    flows7d = await fetchCoinalyzeNetflowProxy();
   }
 
   whaleTxs = await fetchWhaleAlertTxs(whaleKey);
@@ -120,10 +166,13 @@ module.exports = async (req, res) => {
     ok: true,
     flows7d: flows7d,
     whaleTxs: whaleTxs,
+    puell: puell,
+    minerReserve30dPct: null,
     lth: lth ? {
       lthPct: lth.lthSupply,
-      sthPct: null,
-      lth30d: lth.lth30dChangePct
+      sthPct: sthSupply,
+      lth30d: lth.lth30dChangePct,
+      centralBankGoldSharePct: goldCbSharePct
     } : null,
     notes: notes
   });

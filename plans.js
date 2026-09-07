@@ -247,6 +247,12 @@ async function hgPostGateSetupVeto(ticker, hit, rows, style, getCandles){
     if (flow.veto) return { ok: false, reason: flow.reason || 'flow trap', tag: 'flow', flowDetail: flow.flowDetail };
     if (flow.flowNA) unchecked.push('flow trap: ' + (flow.flowDetail || 'no flow legs'));
     /* Increment 5 — on-chain alt netflow / whale veto (honest degrade when snap missing) */
+    if (typeof G.hgRegimeStrategyActive === 'function'){
+      var stratAct = G.hgRegimeStrategyActive(style || 'swing');
+      if (stratAct && stratAct.active === false){
+        return { ok: false, reason: stratAct.reason || 'REGIME PAUSED', tag: 'regime-paused' };
+      }
+    }
     if (typeof G.hgOnchainAltGate === 'function'){
       try{
         if (typeof G.hgOnchainAltFetch === 'function' && !G.hgOnchainAltState()) await G.hgOnchainAltFetch();
@@ -255,6 +261,22 @@ async function hgPostGateSetupVeto(ticker, hit, rows, style, getCandles){
         if (altG && altG.bonus) hit.onchainAltBonus = true;
         if (altG && altG.tightenRr) hit.tightenRr = (hit.tightenRr || 0) + altG.tightenRr;
       }catch(eAlt){ unchecked.push('on-chain alt: ' + (eAlt && eAlt.message || eAlt)); }
+    }
+    if (typeof G.hgDetectDivergences === 'function' && rows && rows.length >= 60){
+      try{
+        var divRes = G.hgDetectDivergences(rows, { rsiPeriod: 14 });
+        var hidList = (divRes && divRes.hidden) || [];
+        for (var hi = hidList.length - 1; hi >= 0; hi--){
+          var hd = hidList[hi];
+          if (!hd || !hd.side) continue;
+          if (String(hd.side).toLowerCase() === dir){
+            hit.hiddenDivConfluence = true;
+            if (!Array.isArray(hit.stamps)) hit.stamps = [];
+            if (hit.stamps.indexOf('HIDDEN DIV CONFLUENCE') < 0) hit.stamps.push('HIDDEN DIV CONFLUENCE');
+            break;
+          }
+        }
+      }catch(eDiv){ unchecked.push('hidden divergence: ' + (eDiv && eDiv.message || eDiv)); }
     }
     var rsEdge = null;
     if (!hgIsBtcSymbol(sym) && style.indexOf('gold') < 0 && typeof hgRelStrength === 'function' && typeof getCandles === 'function'){

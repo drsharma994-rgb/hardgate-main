@@ -851,6 +851,21 @@ function edgeEnrich(sig, rows, item, candleSrc){
       out.parts.push({ label: 'pullback volume corrective (not falling knife)', pts: 1 });
       out.tally += 1;
     }
+    if (typeof W.hgDetectDivergences === 'function' && rows.length >= 60){
+      try{
+        var divRes = W.hgDetectDivergences(rows, { rsiPeriod: 14 });
+        var hidList = (divRes && divRes.hidden) || [];
+        for (var hi = hidList.length - 1; hi >= 0; hi--){
+          var hd = hidList[hi];
+          if (!hd || !hd.side) continue;
+          if (String(hd.side).toLowerCase() === dir){
+            out.parts.push({ label: 'Hidden divergence same-side confluence', pts: 1 });
+            out.tally += 1;
+            break;
+          }
+        }
+      }catch(eDiv){}
+    }
 
     if (typeof W.hgStructureGate === 'function'){
       var sg = W.hgStructureGate(rows, dir);

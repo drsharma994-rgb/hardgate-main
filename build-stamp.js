@@ -18,9 +18,9 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v641',
-  pack: 'Increments 3–4 adaptive layer — walk-forward recalibration, symbol tiers, corr dedupe, realistic-fill P&L, alert precision loop, regime transition anticipator, book-imbalance confluence',
-  built: '2026-09-08T12:00:00Z',
+  version: 'hg-v642',
+  pack: 'Increments 5–7 verification fixes — FVG polymorphism, structure-core pine bridge, on-chain desk, portfolio allocation, RECON tab, labeled dataset',
+  built: '2026-09-08T18:00:00Z',
   note: 'gold-seven-step.js: Playbook Parts 1–9 + Master Catalog seven-step readout — closed 1H/4H bars (4H derived @22:00 UTC), VP POC/VAH/VAL/HVN/LVN, Asia/PDH/PDL/PWH/PWL/EQ pools, fresh OBs, ATR/ADR/RSI/EMA/KER, DST sessions, news lockout, strategy eligibility, 4H bias, rule-based confluence rank, 12 core gates + G14, entry/stop/T1/T2/size/venue basis, TRIGGERED/WAIT/EXPIRED. IST with UTC. No win rates. Against-tape candidates HELD.'
 };
 

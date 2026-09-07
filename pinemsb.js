@@ -29,6 +29,10 @@ function pxF(n){
 }
 
 function signalFromResult(item, res, rows){
+  if (typeof W.hgPineObSignal === 'function' && rows && rows.length >= 30){
+    var bridged = W.hgPineObSignal(rows, item, { pivotLength: 5, requireQualityTap: true });
+    if (bridged && bridged.dir === item.dir) res = bridged;
+  }
   if (!res || !res.dir) return null;
   if (String(res.dir).toLowerCase() !== item.dir) return null;
   if (!fin(+res.entry) || !fin(+res.stop) || res.entry === res.stop) return null;

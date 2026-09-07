@@ -18,6 +18,10 @@ function signalFromResult(item, res, rows){
     gates: item.gates, rows: rows
   };
   sig.rr = Math.abs(sig.t1 - sig.entry) / Math.abs(sig.entry - sig.stop);
+  if (typeof W.hgPineDivTags === 'function'){
+    var divTags = W.hgPineDivTags(rows, item.dir);
+    if (divTags.length) sig.divConfluence = divTags;
+  }
   return W.pineSubEnrichSignal(sig, item, res);
 }
 function smfNote(sig){ return 'SMF ' + fmtF(sig.smf, 4) + ' · cross ±' + fmtF(sig.threshold, 2); }

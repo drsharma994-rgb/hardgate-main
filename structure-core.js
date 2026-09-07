@@ -487,9 +487,47 @@ function primitiveEmaCascade(closes, periods){
   };
 }
 
+/** Legacy dir-shaped FVG POI (formation.js / gold-best-levels.js / structure-levels.js API). */
+var __hgDetectFvgDirPoi = (typeof G.hgDetectFvg === 'function') ? G.hgDetectFvg : null;
+
+function hgDetectFvgForDir(rows, dir){
+  if (__hgDetectFvgDirPoi && __hgDetectFvgDirPoi !== detectFvg && __hgDetectFvgDirPoi !== hgDetectFvgPolymorphic){
+    try{
+      var leg = __hgDetectFvgDirPoi(rows, dir);
+      if (leg && fin(+leg.entry)) return leg;
+    }catch(e){}
+  }
+  var list = detectFvg(rows, { atrLen: 14 });
+  if (!Array.isArray(list) || !list.length) return null;
+  dir = String(dir || '').toLowerCase();
+  var want = dir === 'long' ? 'bullish' : (dir === 'short' ? 'bearish' : null);
+  var pick = null;
+  for (var i = list.length - 1; i >= 0; i--){
+    var f = list[i];
+    if (!f || f.state === 'invalidated') continue;
+    if (want && f.dir !== want) continue;
+    pick = f; break;
+  }
+  if (!pick) pick = list[list.length - 1];
+  var mid = fin(pick.mid) ? pick.mid : ((pick.top + pick.bottom) / 2);
+  return {
+    entry: mid,
+    zone: { lo: pick.bottom, hi: pick.top },
+    label: pick.dir === 'bullish' ? 'bull FVG' : 'bear FVG',
+    poi: 'fvg',
+    idx: pick.idx
+  };
+}
+
+function hgDetectFvgPolymorphic(rows, dirOrOpts){
+  if (typeof dirOrOpts === 'string') return hgDetectFvgForDir(rows, dirOrOpts);
+  return detectFvg(rows, dirOrOpts || {});
+}
+
 /* hg-prefixed exports — crypto scans use these; goldind.js keeps its own goldSwings aliases */
 G.hgDetectSwings = detectSwings;
-G.hgDetectFvg = detectFvg;
+G.hgDetectFvgList = detectFvg;
+G.hgDetectFvg = hgDetectFvgPolymorphic;
 G.hgDetectOrderBlocks = detectOrderBlocks;
 G.hgDetectDivergences = detectDivergences;
 G.hgPrimitiveCusum = primitiveCusum;
@@ -498,7 +536,7 @@ G.hgPrimitiveEmaCascade = primitiveEmaCascade;
 /* unprefixed only when goldind has not yet loaded (tests / early boot) */
 if (!G.detectSwings || G.detectSwings === detectSwings){
   G.detectSwings = detectSwings;
-  G.detectFvg = detectFvg;
+  G.detectFvg = hgDetectFvgPolymorphic;
   G.detectOrderBlocks = detectOrderBlocks;
   G.detectDivergences = detectDivergences;
   G.primitiveCusum = primitiveCusum;
@@ -509,7 +547,8 @@ if (!G.detectSwings || G.detectSwings === detectSwings){
 if (typeof module !== 'undefined' && module.exports){
   module.exports = {
     hgDetectSwings: detectSwings,
-    hgDetectFvg: detectFvg,
+    hgDetectFvg: hgDetectFvgPolymorphic,
+    hgDetectFvgList: detectFvg,
     hgDetectOrderBlocks: detectOrderBlocks,
     hgDetectDivergences: detectDivergences,
     hgPrimitiveCusum: primitiveCusum,

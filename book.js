@@ -432,6 +432,10 @@ async function addToBook(opts){
         if (!ddRisk.allowedNewEntries){
           return { ok: false, veto: true, reasons: ['DRAWDOWN HALT — ' + ddRisk.state + ' (' + ddRisk.ddPct.toFixed(1) + '% DD)'] };
         }
+        if (ddRisk.state === 'PROTECTIVE DOWNSCALE' && isFinite(ddRisk.riskPct)){
+          body.riskScale = ddRisk.riskPct;
+          body.ddNote = 'drawdown protective scale — risk ×' + ddRisk.riskPct.toFixed(2) + ' (' + ddRisk.ddPct.toFixed(1) + '% DD)';
+        }
       }
       /* Increment 7 — segregated fund heat limits */
       if (typeof W.hgSegregatedFundLimits === 'function'){
