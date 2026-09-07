@@ -280,7 +280,7 @@
       }catch(eR){}
     }
     var g6 = dynamicRR >= rrMin;
-    gates.push(['G6 R:R≥' + (isFinite(rrMin) ? rrMin.toFixed(1) : CG_SWING_RR_MIN), g6]);
+    gates.push(['G6 ATR-capacity R:R≥' + (isFinite(rrMin) ? rrMin.toFixed(1) : CG_SWING_RR_MIN), g6]);
     var ev = cusumLast(c.slice(-120), 1);
     var g7 = !(ev && ev.barsAgo <= 20 && ev.dir !== dir);
     gates.push(['G7 CUSUM', g7]);
@@ -384,7 +384,7 @@
       var frAgainst = (dir === 'long' && fr >= CG_FUND_DIR) || (dir === 'short' && fr <= -CG_FUND_DIR);
       g4 = isFinite(fr) && Math.abs(fr) <= CG_FUND_SANITY && !frAgainst;
     }
-    var g4b = !(minsToFunding < 25);
+    var g4b = (minsToFunding == null || !isFinite(minsToFunding)) ? true : minsToFunding >= 25;
     var atrArr = atr(m15, 14);
     var a = last(atrArr);
     var base = atrArr.slice(-96).filter(isFinite).sort(function(x,y){ return x-y; });
@@ -410,12 +410,12 @@
     var dynamicRR = risk > 0 ? expectedMove / risk : 0;
     var g7 = dynamicRR >= CG_SCALP_RR_MIN;
     var gates = [
-      ['G1 1H trend', true],
+      ['G1 1H trend (' + dir + ')', true],
       ['G2 sweep/reclaim · ORB · VWAP', g2],
       ['G3 RSI band', g3],
       ['G4 funding', g4],
       ['G5 settle>25m', g4b],
-      ['G6 vol+wick commit', g6 && closeOK],
+      ['G6 vol+wick commit', g6],
       ['G7 ' + CG_SCALP_RR_MIN + 'R vol-capped', g7]
     ];
     var passed = gates.filter(function(g){ return g[1]; }).length;
@@ -427,7 +427,7 @@
       entry: entry, stop: stop, t1: t1, t2: t2, dynamicRR: dynamicRR,
       r15: r15, a: a, m15: m15, h1: h1, swept: swept, reclaimed: reclaimed,
       localLow: localLow, localHigh: localHigh,
-      e21: e21a[n], mark: c15[n - 1], g2Detail: g2Detail,
+      e21: e21a[n - 1], mark: c15[n - 1], g2Detail: g2Detail,
       orb: orb, vwapReclaim: vwr
     };
   }

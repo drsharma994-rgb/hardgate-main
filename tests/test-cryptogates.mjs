@@ -153,6 +153,9 @@ console.log('\n== scalp gate matrix ==');
 
   const badFund = globalThis.scalpGateMatrix(h1, m15, { fundingPct: 0.05, mark: tick.mark }, 120);
   ok(badFund && badFund.gates.some(g => g[0] === 'G4 funding' && g[1] === false), 'scalpGateMatrix: extreme funding fails G4');
+  ok(isFinite(mFar.e21), 'scalpGateMatrix: e21 is finite (off-by-one fix)');
+  const mNullSettle = globalThis.scalpGateMatrix(h1, m15, tick, null);
+  ok(mNullSettle && mNullSettle.gates.some(g => g[0].indexOf('settle') >= 0 && g[1] === true), 'scalpGateMatrix: null minsToFunding passes settle gate');
 }
 
 console.log('\n== funding-fade swing/scalp path ==');

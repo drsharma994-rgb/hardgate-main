@@ -1149,6 +1149,20 @@ function hgVenueFullUni(excludeSym){
   if (excludeSym) uni = uni.filter(function(t){ return t.symbol !== excludeSym; });
   return uni.sort(function(a, b){ return (b.turnoverUsd || 0) - (a.turnoverUsd || 0); });
 }
+/* Specialty scans (COIL, APEX, DIV, TRAP, SMC, OB): same turnover floor as
+   swing on Delta/StarTrader; on CoinDCX cap to top-N (no turnover field). */
+var HG_SPEC_MIN_TURN = 500000;
+var HG_SPEC_UNI_CAP = 60;
+function hgSpecialtyScanUni(excludeSym){
+  var uni = hgBoundScanUniverse(S.tickers, {
+    scanAll: false,
+    n: HG_SPEC_UNI_CAP,
+    minTurn: HG_SPEC_MIN_TURN,
+    exchange: S.exchange
+  });
+  if (excludeSym) uni = uni.filter(function(t){ return t.symbol !== excludeSym; });
+  return uni;
+}
 /* Dual venue means Delta AND CoinDCX at this depth. It does not mean
    "ignore SCAN TOP and fetch every name". Whole-exchange is the checkbox
    or opts.forceScanAll. Alert / pine / SUPER SETUP warm uses HG_SCAN_WARM_N. */
@@ -1912,7 +1926,7 @@ async function runCoilScanLeg(opts){
   let __cardsHtml = [];
   try{
     if (!S.tickers.length) S.tickers=await getTickers();
-    const uni = hgVenueFullUni();
+    const uni = hgSpecialtyScanUni();
     let found=0;
     let coilList = [];
     for (let i=0;i<uni.length;i++){
@@ -2038,7 +2052,7 @@ async function runDivScanLeg(opts){
   let __cardsHtml = [];
   try{
     if (!S.tickers.length) S.tickers = await getTickers();
-    const uni = hgVenueFullUni();
+    const uni = hgSpecialtyScanUni();
     let found=0;
     for (let i=0;i<uni.length;i++){
       const t = uni[i];
@@ -2688,7 +2702,7 @@ async function runApexScanLeg(opts){
       statEl.textContent = `skipped — BTC bullish (+${fmt(btcRet24,2)}%)`;
       return;
     }
-    const uni = hgVenueFullUni(btcSym);
+    const uni = hgSpecialtyScanUni(btcSym);
     let results=[];
     for (let i=0;i<uni.length;i++){
       const t=uni[i];
@@ -2751,7 +2765,7 @@ async function runTrapScanLeg(opts){
   let __cardsHtml = [];
   try{
 if (!S.tickers.length) S.tickers=await getTickers();
-const uni = hgVenueFullUni();
+    const uni = hgSpecialtyScanUni();
 let found=0;
 for (let i=0;i<uni.length;i++){
 const t=uni[i];
@@ -2782,11 +2796,12 @@ const uInner=bbInner.upper[c.length-1];
 // (close back inside the inner band) is what confirms it right now. Momentum
 // exhaustion (RSI) is checked AT THE SWEEP BAR itself, not after price has
 // already partly recovered - by the time of reclaim RSI has typically normalized.
+// Bands are evaluated per-bar (bb.lower[k]) — not today's band on history.
 const N=4;
 let sweptLowAt=-1, sweptHighAt=-1;
 for (let k=Math.max(0,rows.length-N); k<rows.length; k++){
-if (rows[k].l<lOuter) sweptLowAt=k;
-if (rows[k].h>uOuter) sweptHighAt=k;
+if (rows[k].l < bbOuter.lower[k]) sweptLowAt=k;
+if (rows[k].h > bbOuter.upper[k]) sweptHighAt=k;
 }
 const reclaimLong = sweptLowAt>=0 && p>lInner;
 const reclaimShort = sweptHighAt>=0 && p<uInner;
@@ -2859,7 +2874,7 @@ async function runSmcScanLeg(opts){
   let __cardsHtml = [];
   try{
     if (!S.tickers.length) S.tickers = await getTickers();
-    let uni = S.exchange === 'delta' ? S.tickers.filter(t => t.turnoverUsd >= 500000).sort((a,b)=>b.turnoverUsd-a.turnoverUsd) : S.tickers.slice();
+    let uni = hgSpecialtyScanUni();
     if (S.exchange === 'delta' && !uni.some(t=>t.symbol==='XAUTUSD')) uni.unshift({ symbol: 'XAUTUSD', mark: null, chg24: null, turnoverUsd: 0 });
     let found = 0;
     for (let i = 0; i < uni.length; i++){
@@ -2873,23 +2888,32 @@ async function runSmcScanLeg(opts){
         const c = rows.map(r => r.c);
         const p = c[c.length-1];
         const e200 = last(ema(c, 200));
+        const a4 = last(atr(rows, 14));
+        const minDisp = (isFinite(a4) && a4 > 0) ? 0.35 * a4 : 0;
+        function smcDispOk(bar2, side){
+          if (!bar2) return false;
+          var body = Math.abs(bar2.c - bar2.o);
+          if (!(body >= minDisp)) return false;
+          return side === 'long' ? bar2.c > bar2.o : bar2.c < bar2.o;
+        }
         let fvg = null, dir = null;
-        for (let j = rows.length-30; j < rows.length-1; j++){
+        for (let j = rows.length - 2; j >= Math.max(2, rows.length - 30); j--){
           const bar1 = rows[j-2], bar2 = rows[j-1], bar3 = rows[j];
-          if (bar1.h < bar3.l && bar2.c > bar2.o){
+          if (!bar1 || !bar2 || !bar3) continue;
+          if (bar1.h < bar3.l && smcDispOk(bar2, 'long')){
             let gapHigh = bar3.l, gapLow = bar1.h, mitigated = false;
             for (let k = j+1; k < rows.length; k++){
               if (rows[k].l <= gapLow){ mitigated = true; break; }
               if (rows[k].l < gapHigh) gapHigh = rows[k].l;
             }
-            if (!mitigated && p > e200){ fvg = { top: gapHigh, bottom: gapLow, age: rows.length-1-j }; dir = 'long'; }
-          } else if (bar1.l > bar3.h && bar2.c < bar2.o){
+            if (!mitigated && p > e200){ fvg = { top: gapHigh, bottom: gapLow, age: rows.length-1-j }; dir = 'long'; break; }
+          } else if (bar1.l > bar3.h && smcDispOk(bar2, 'short')){
             let gapLow = bar3.h, gapHigh = bar1.l, mitigated = false;
             for (let k = j+1; k < rows.length; k++){
               if (rows[k].h >= gapHigh){ mitigated = true; break; }
               if (rows[k].h > gapLow) gapLow = rows[k].h;
             }
-            if (!mitigated && p < e200){ fvg = { top: gapHigh, bottom: gapLow, age: rows.length-1-j }; dir = 'short'; }
+            if (!mitigated && p < e200){ fvg = { top: gapHigh, bottom: gapLow, age: rows.length-1-j }; dir = 'short'; break; }
           }
         }
         if (!fvg) continue;
@@ -2947,7 +2971,7 @@ async function runObScanLeg(opts){
   let __cardsHtml = [];
   try{
     if (!S.tickers.length) S.tickers = await getTickers();
-    let uni = S.exchange === 'delta' ? S.tickers.filter(t => t.turnoverUsd >= 500000).sort((a,b)=>b.turnoverUsd-a.turnoverUsd) : S.tickers.slice();
+    let uni = hgSpecialtyScanUni();
     if (S.exchange === 'delta' && !uni.some(t=>t.symbol==='XAUTUSD')) uni.unshift({ symbol: 'XAUTUSD', mark: null, chg24: null, turnoverUsd: 0 });
     let found = 0;
     for (let i = 0; i < uni.length; i++){
@@ -3803,8 +3827,8 @@ async function runBias(){
       const bSym = biasBinanceSymbol(sym);
       let b1State = 'na', b1Det = 'no Binance USD-M perp for this symbol';
       if (bSym && typeof binanceKlines === 'function'){
-        const bd1 = await binanceKlines(bSym, '1d', 120);
-        const bh4 = await binanceKlines(bSym, '4h', 120);
+        const bd1 = dropForming(await binanceKlines(bSym, '1d', 120), '1d');
+        const bh4 = dropForming(await binanceKlines(bSym, '4h', 120), '4h');
         if (bd1.length >= 60 && bh4.length >= 60){
           const bc1 = bd1.map(r=>r.c), bc4 = bh4.map(r=>r.c);
           const bE50d = last(ema(bc1,50)), bPd = last(bc1);
