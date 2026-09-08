@@ -766,9 +766,48 @@ async function rsRunScan(opts){
       if (ci + CHUNK < uni.length) await sleep(CHUNK_SLEEP_MS);
     }
     results.sort(function(a, b){ return b.setup.conviction - a.setup.conviction; });
+    /* v682: attach shared solidity grade to each row so the tab speaks the
+       same "SOLID / GOOD / MIXED / THIN / WEAK" language as omniroute and
+       omnigold. Feature-checked: helper missing = no chip, no gate,
+       ordering unchanged. The lead-eligibility test below prefers a
+       SOLID/GOOD row over a WEAK one that happens to have marginally
+       higher rsConviction, but only when SOME solid row is present. */
+    (function stampSol(){
+      try {
+        if (typeof W.hgSolidityGrade !== 'function') return;
+        for (var si = 0; si < results.length; si++){
+          var r = results[si];
+          if (!r || !r.setup) continue;
+          var s = r.setup;
+          /* Enrich setup with a minimal plan shape solidity understands. */
+          var planForSol = {
+            dir: s.dir,
+            entry: s.entry, stop: s.stop, t1: s.t1, t2: s.t2,
+            rr1: s.rr1 || s.rr,
+            minRr: 1.5, /* rsniper style floor */
+            liveGrade: s.liveGrade, livePx: s.livePx,
+            tape: s.tape,
+            consensus: s.consensus || (isFinite(s.trigger) ? { nAgree: Math.max(0, Math.floor(s.trigger)) } : null),
+            stopWidened: s.stopWidened
+          };
+          r.solidity = W.hgSolidityGrade(planForSol, { minRr: 1.5 });
+        }
+      } catch(eSol){}
+    })();
     var lead = null;
+    /* Two-pass lead selection: first try to find a rsTradeable + lead-
+       eligible (SOLID/GOOD) row; if none, fall back to the old
+       first-rsTradeable behavior. Preserves conviction order within
+       each pass. */
     for (var li = 0; li < results.length; li++){
-      if (rsTradeable(results[li].setup)){ lead = results[li]; break; }
+      var r = results[li];
+      if (!r || !rsTradeable(r.setup)) continue;
+      if (r.solidity && r.solidity.leadEligible){ lead = r; break; }
+    }
+    if (!lead){
+      for (var li2 = 0; li2 < results.length; li2++){
+        if (rsTradeable(results[li2].setup)){ lead = results[li2]; break; }
+      }
     }
     if (lead) lead.best = true;
     publishRsDeskSnap(results);

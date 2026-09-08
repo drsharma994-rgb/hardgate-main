@@ -5361,8 +5361,49 @@ terse status, and never launches a first-time scan on a global refresh.
     return hgOgBalanceParts(c, tape).score;
   }
 
+  /* v682: attach shared solidity grade before ordering (mirror of the
+     omniroute pattern so both tabs speak the same language for "solid").
+     Feature-checked: helper missing = no chip, no reorder, native ranker
+     order preserved. */
+  function hgOgStampSolidity(list, tape){
+    var W = (typeof window !== 'undefined') ? window : ((typeof globalThis !== 'undefined') ? globalThis : null);
+    if (!W || typeof W.hgSolidityGrade !== 'function') return;
+    if (!Array.isArray(list)) return;
+    var tapeDir = String(tape || '').toLowerCase();
+    for (var i = 0; i < list.length; i++){
+      var c = list[i];
+      if (!c) continue;
+      try {
+        if (!c.tape){
+          if (tapeDir === 'long' || tapeDir === 'short') c.tape = tapeDir;
+        }
+        if (!c.liveGrade && c.plan && isFinite(fin(c.livePx)) && typeof W.hgLivePriceGrade === 'function'){
+          var lpDir = String((c.dir) || (c.plan.dir) || '').toLowerCase();
+          var lp = W.hgLivePriceGrade(lpDir, c.plan.entry, c.plan.stop, c.plan.t1, c.plan.t2, fin(c.livePx));
+          if (lp && lp.grade) c.liveGrade = lp.grade;
+        }
+        if (!c.consensus && c.balance && isFinite(fin(c.balance.nAgree))){
+          c.consensus = { nAgree: fin(c.balance.nAgree) };
+        }
+      } catch(eStamp){}
+      var planForSol = c.plan ? Object.assign({
+        dir: c.dir,
+        tape: c.tape,
+        liveGrade: c.liveGrade,
+        livePx: c.livePx,
+        consensus: c.consensus,
+        alsoKinds: c.alsoKinds,
+        strategyConfirm: c.strategyConfirm
+      }, c.plan) : c;
+      try { c.solidity = W.hgSolidityGrade(planForSol, { minRr: (typeof MIN_RR === 'number') ? MIN_RR : 2.0 }); }
+      catch(eSol){}
+    }
+  }
+
   function hgOgDeskOrder(list, tape){
     var tapeDir = String(tape || '').toLowerCase();
+    /* v682: stamp solidity BEFORE sort so downstream reorder sees it. */
+    hgOgStampSolidity(list, tapeDir);
     /* replay-survivor class key (hg-v533): within the SAME section — same
        ticket state, same tape side — a kind the replay measured
        gross-positive at scale with a low fee load sorts ahead of untagged
@@ -5377,7 +5418,7 @@ terse status, and never launches a first-time scan on a global refresh.
       return (c && (c.replaySurvivor || hgOgIsSurvivor(c.kind)
         || hgOgSwingPrefer(c.kind, c.horizon))) ? 1 : 0;
     }
-    return (list || []).slice().sort(function(a, b){
+    var sorted = (list || []).slice().sort(function(a, b){
       if (!!a.topPick !== !!b.topPick) return a.topPick ? -1 : 1;
       if (!!a.topWatch !== !!b.topWatch) return a.topWatch ? -1 : 1;
       if (ordCls(a) === ordCls(b)){
@@ -5392,6 +5433,11 @@ terse status, and never launches a first-time scan on a global refresh.
       if (da !== db) return da - db;
       return String(a.kind || '') < String(b.kind || '') ? -1 : 1;
     });
+    /* v682: reorder so SOLID/GOOD cards lead. Preserves score order
+       WITHIN each solidity bucket (helper does stable partition). */
+    var W2 = (typeof window !== 'undefined') ? window : ((typeof globalThis !== 'undefined') ? globalThis : null);
+    if (W2 && typeof W2.hgSolidityReorder === 'function') return W2.hgSolidityReorder(sorted);
+    return sorted;
   }
 
   /* The price a CLOSED bar must print for hgOgTapeDir(rows) to read `want`.
