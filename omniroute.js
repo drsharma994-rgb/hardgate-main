@@ -8453,9 +8453,60 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return hgOmniBalanceParts(c, tape).score;
   }
 
+  /* v682: attach shared solidity grade before ordering. This is the ONE
+     spot where every ranked card passes through, so it is the natural
+     chokepoint to compute solidity. Feature-checked (helper may be
+     missing, e.g. hg-solidity.js failed to load); when absent, cards
+     simply have no .solidity and the ranker falls back to the pre-v682
+     order. */
+  function hgOmniStampSolidity(list, tape){
+    var W = (typeof window !== 'undefined') ? window : ((typeof globalThis !== 'undefined') ? globalThis : null);
+    if (!W || typeof W.hgSolidityGrade !== 'function') return;
+    if (!Array.isArray(list)) return;
+    var tapeDir = String(tape || '').toLowerCase();
+    for (var i = 0; i < list.length; i++){
+      var c = list[i];
+      if (!c) continue;
+      /* Enrich the card with the fields solidity needs, drawn from what
+         the ranker already knows. This does NOT mutate scan output; it
+         only writes ranker-scope hints. */
+      try {
+        if (!c.tape){
+          if (tapeDir === 'long' || tapeDir === 'short') c.tape = tapeDir;
+        }
+        if (!c.liveGrade && c.plan && isFinite(fin(c.livePx)) && typeof W.hgLivePriceGrade === 'function'){
+          var lpDir = String((c.dir) || (c.plan.dir) || '').toLowerCase();
+          var lp = W.hgLivePriceGrade(lpDir, c.plan.entry, c.plan.stop, c.plan.t1, c.plan.t2, fin(c.livePx));
+          if (lp && lp.grade) c.liveGrade = lp.grade;
+        }
+        /* v682: use the balance ranker's already-computed family agreement
+           count as the confluence source when the card lacks a native
+           consensus object. This keeps the solidity G1 gate aligned with
+           the ranker's own view of confluence. */
+        if (!c.consensus && c.balance && isFinite(fin(c.balance.nAgree))){
+          c.consensus = { nAgree: fin(c.balance.nAgree) };
+        }
+      } catch(eStamp){}
+      /* Grade using the balance-derived plan when the card has one. */
+      var planForSol = c.plan ? Object.assign({
+        dir: c.dir,
+        tape: c.tape,
+        liveGrade: c.liveGrade,
+        livePx: c.livePx,
+        consensus: c.consensus,
+        alsoKinds: c.alsoKinds,
+        strategyConfirm: c.strategyConfirm
+      }, c.plan) : c;
+      try { c.solidity = W.hgSolidityGrade(planForSol, { minRr: (typeof MIN_RR === 'number') ? MIN_RR : 2.0 }); }
+      catch(eSol){}
+    }
+  }
+
   function hgOmniDeskOrder(list, tape){
     var tapeDir = String(tape || '').toLowerCase();
-    return (list || []).slice().sort(function(a, b){
+    /* v682: stamp solidity BEFORE sort so downstream reorder sees it. */
+    hgOmniStampSolidity(list, tapeDir);
+    var sorted = (list || []).slice().sort(function(a, b){
       if (!!a.topPick !== !!b.topPick) return a.topPick ? -1 : 1;
       var sa = hgOmniBalanceScore(a, tapeDir);
       var sb = hgOmniBalanceScore(b, tapeDir);
@@ -8465,6 +8516,13 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       if (da !== db) return da - db;
       return String(a.sym || a.kind || '') < String(b.sym || b.kind || '') ? -1 : 1;
     });
+    /* v682: reorder so SOLID/GOOD cards lead. Preserves the score-based
+       ordering WITHIN each solidity bucket, so raw ranker still decides
+       ordering when solidity ties. When hgSolidityReorder is unavailable
+       (helper missing), returns sorted list unchanged. */
+    var W2 = (typeof window !== 'undefined') ? window : ((typeof globalThis !== 'undefined') ? globalThis : null);
+    if (W2 && typeof W2.hgSolidityReorder === 'function') return W2.hgSolidityReorder(sorted);
+    return sorted;
   }
 
   function hgOmniPickFew(list, tape, limit){
