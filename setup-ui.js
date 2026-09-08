@@ -424,6 +424,50 @@ function hgSetupCardHead(sym, dir, tier, extraBadges, venue, bookMeta){
     + bookStamp + badges + confirmChip;
 }
 
+/** v650: Gate ledger badge — compact per-gate dot row for scan cards.
+    Reads Pack-2 gateMeta[] (from cryptogates/index.html BIAS/edge.js) and
+    renders one small circle per gate: green filled = pass, red filled =
+    veto, gray outlined = na/info. Tooltip on hover shows the gate label
+    + detail so users can see WHY a specific gate blocked without opening
+    the plan panel.
+
+    Returns '' when input is not a gateMeta array so callers can concat
+    safely into an existing card head/mini row without extra guards. */
+function hgGateLedgerBadge(gateMeta, opts){
+  try{
+    if (!Array.isArray(gateMeta) || !gateMeta.length) return '';
+    opts = opts || {};
+    var esc = suEsc;
+    var dots = gateMeta.map(function(g){
+      if (!g || typeof g !== 'object') return '';
+      var state = String(g.state || 'na').toLowerCase();
+      var cls = 'hg-gld-dot ' + (state === 'pass' ? 'pass'
+                                 : state === 'veto' ? 'veto'
+                                 : 'na');
+      var lbl = (typeof g.label === 'string' && g.label) ? g.label : (g.id || '?');
+      var detail = (typeof g.detail === 'string' && g.detail) ? (' — ' + g.detail) : '';
+      var title = lbl + detail + ' (' + state + ')';
+      var id = String(g.id || '?').replace(/^E?G/, '');
+      /* short label glyph: '1'..'9' for G1..G9 / EG1..EG9. Falls back to '•'. */
+      var glyph = /^[0-9]$/.test(id) ? id : '•';
+      return '<span class="' + cls + '" title="' + esc(title) + '">' + glyph + '</span>';
+    }).join('');
+    if (!dots) return '';
+    var pass = 0, total = 0;
+    for (var i = 0; i < gateMeta.length; i++){
+      var s = gateMeta[i] && String(gateMeta[i].state || '').toLowerCase();
+      if (s === 'pass') pass++;
+      if (s === 'pass' || s === 'veto' || s === 'na') total++;
+    }
+    var summary = pass + '/' + total;
+    return '<span class="hg-gld" title="gate ledger ' + summary + '">'
+      + '<span class="hg-gld-lbl">' + summary + '</span>'
+      + dots
+      + '</span>';
+  }catch(e){ return ''; }
+}
+W.hgGateLedgerBadge = hgGateLedgerBadge;
+
 /** Conviction mesh chip — agree / oppose / dark / silent layer counts. */
 function hgSetupConvictionMeshHtml(mesh){
   try{
@@ -508,9 +552,14 @@ function hgSetupCardHTML(setup){
 
   var entryAttr = isFinite(entry) ? ' data-hg-setup-entry="' + suEsc(String(entry)) + '"' : '';
   var stopAttr = isFinite(stop) ? ' data-hg-setup-stop="' + suEsc(String(stop)) + '"' : '';
+  /* v650: render the Pack-2 gate ledger badge below the mini row when the
+     scan supplied a gateMeta[]. Compact 7-dot row + summary; tooltip per
+     dot names the specific gate + detail. Skips silently when absent. */
+  var gateLedgerHtml = hgGateLedgerBadge(setup.gateMeta);
   return '<div class="card ' + suEsc(dir) + tierCls + '" data-hg-setup-sym="' + symHtml + '" data-hg-setup-dir="' + suEsc(dir) + '"' + entryAttr + stopAttr + '>'
     + '<div class="chead">' + hgSetupCardHead(sym, dir, tier, [tripleChip], bookMeta.venue, bookMeta) + '</div>'
     + (miniHtml ? '<div class="mini">' + miniHtml + '</div>' : '')
+    + gateLedgerHtml
     + (gateHtml ? '<div class="gates">' + gateHtml + '</div>' : '')
     + stackHtml
     + meshHtml
