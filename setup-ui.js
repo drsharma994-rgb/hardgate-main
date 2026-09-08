@@ -447,9 +447,17 @@ function hgGateLedgerBadge(gateMeta, opts){
       var lbl = (typeof g.label === 'string' && g.label) ? g.label : (g.id || '?');
       var detail = (typeof g.detail === 'string' && g.detail) ? (' — ' + g.detail) : '';
       var title = lbl + detail + ' (' + state + ')';
-      var id = String(g.id || '?').replace(/^E?G/, '');
-      /* short label glyph: '1'..'9' for G1..G9 / EG1..EG9. Falls back to '•'. */
-      var glyph = /^[0-9]$/.test(id) ? id : '•';
+      /* v652: derive a short glyph from the gate id.
+         - G1..G9 / EG1..EG9    → '1'..'9'  (single digit for crypto/EDGE)
+         - T1..T6, S1..S2, F1, B1 → 'T1' etc (2-char for BIAS categorized ids)
+         - Anything else         → '•' */
+      var rawId = String(g.id || '?');
+      var glyph;
+      var mCrypto = rawId.match(/^E?G([0-9])$/);
+      var mCategorized = rawId.match(/^([A-Z][0-9])$/);
+      if (mCrypto) glyph = mCrypto[1];
+      else if (mCategorized) glyph = mCategorized[1];
+      else glyph = '•';
       return '<span class="' + cls + '" title="' + esc(title) + '">' + glyph + '</span>';
     }).join('');
     if (!dots) return '';
