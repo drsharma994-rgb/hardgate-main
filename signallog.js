@@ -268,10 +268,17 @@ function firstEvidence(r){
 function gateSummary(meta){
   try{
     if (!Array.isArray(meta) || !meta.length) return '';
-    var pass = 0, blocked = [];
+    /* v662: pair the total count with the pass loop — same bug pattern v661
+       fixed in hgGateLedgerBadge. Prior to v662, total = meta.length would
+       overcount when meta had null / non-object entries (the loop skipped
+       them for pass/veto classification, so a shape like
+       [{pass},{pass},null] produced '2/3 blocked: ...' with a phantom third
+       slot the user has no way to inspect). */
+    var pass = 0, total = 0, blocked = [];
     for (var i = 0; i < meta.length; i++){
       var g = meta[i];
       if (!g || typeof g !== 'object') continue;
+      total++;
       if (g.state === 'pass') pass++;
       else if (g.state === 'veto'){
         var lbl = (typeof g.label === 'string' && g.label) ? g.label : (g.id || '?');
@@ -279,7 +286,7 @@ function gateSummary(meta){
         blocked.push(lbl.replace(/^E?G\d+\s+/, ''));
       }
     }
-    var total = meta.length;
+    if (!total) return '';
     var head = pass + '/' + total + (pass === total ? ' pass' : '');
     if (!blocked.length) return head;
     /* Trim: keep the first two block reasons — note column is width-capped. */
@@ -777,15 +784,22 @@ function computeStats(rows){
     if (typeof e.maeR === 'number' && isFinite(e.maeR)){ maeSum += e.maeR; maeN++; }
     if (typeof e.mfeR === 'number' && isFinite(e.mfeR)){ mfeSum += e.mfeR; mfeN++; }
     if (Array.isArray(e.gateMeta) && e.gateMeta.length){
-      var pass = 0;
+      /* v662: total for this row must match the pass loop's skip predicate
+         (same fix pattern as v661 hgGateLedgerBadge + gateSummary above),
+         otherwise avg gates X/Y in the stats strip can show phantom slots
+         that the user can never inspect via the badge. */
+      var pass = 0, tot = 0;
       for (var g = 0; g < e.gateMeta.length; g++){
-        var gm = e.gateMeta[g]; if (!gm) continue;
+        var gm = e.gateMeta[g]; if (!gm || typeof gm !== 'object') continue;
+        tot++;
         if (gm.state === 'pass') pass++;
         else if (gm.state === 'veto') vetoCounts[gm.id] = (vetoCounts[gm.id] || 0) + 1;
       }
-      gatesPassSum += pass;
-      gatesTotalSum += e.gateMeta.length;
-      gatesN++;
+      if (tot){
+        gatesPassSum += pass;
+        gatesTotalSum += tot;
+        gatesN++;
+      }
     }
   }
   /* top 2 vetos by count, descending; ties broken by id for determinism */
