@@ -8597,8 +8597,19 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       var nAg = cons.nAgree || 0;
       var fam = nAg + ' famil' + (nAg === 1 ? 'y agrees' : 'ies agree');
       var ind = info.n ? (info.pass + '/' + info.n + ' indicators with') : 'indicators unread';
+      /* v683: render the shared SOLIDITY chip in the head line so the user
+         sees which of the 5 gates the card cleared. Chip is drawn from
+         hg-solidity.js; feature-checked so a missing helper renders no chip
+         rather than a broken card. */
+      var solChip = '';
+      try {
+        var Wc = (typeof window !== 'undefined') ? window : ((typeof globalThis !== 'undefined') ? globalThis : null);
+        if (c.solidity && Wc && typeof Wc.hgSolidityChipHtml === 'function'){
+          solChip = Wc.hgSolidityChipHtml(c.solidity);
+        }
+      } catch(eSc){}
       h += '<div class="hg-mp-head">' + esc(String(c.sym || c.base || '')) + ' ' + esc(String(c.dir || '').toUpperCase())
-        +  ' <span>' + esc(c.kind) + ' · ' + esc(grade) + '</span></div>';
+        +  ' <span>' + esc(c.kind) + ' · ' + esc(grade) + (solChip ? ' ' + solChip : '') + '</span></div>';
       h += '<div class="hg-mp-note">' + esc(fam) + ' · ' + esc(ind)
         +  ' · WITH TAPE · not a win probability.</div>';
       h += '<div class="hg-mp-grid">';
