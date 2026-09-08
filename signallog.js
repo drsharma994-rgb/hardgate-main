@@ -55,6 +55,7 @@ var W = (typeof window !== 'undefined') ? window
       : (typeof globalThis !== 'undefined') ? globalThis : {};
 
 var LS_KEY = 'hgSignalLog';
+var LS_FILTERS_KEY = 'hgSignalLogFilters';   /* v655: persist filter chip state */
 var MAX_ENTRIES = 500;
 var INTERVAL_MS = 5*60*1000;             /* every 5 min */
 /* v646 — crypto SWING/SCALP were missing from the source list.
@@ -111,6 +112,32 @@ function __lsWipe(){
   try{
     if (typeof localStorage === 'undefined' || !localStorage) return;
     localStorage.removeItem(LS_KEY);
+  }catch(e){}
+}
+
+/* v655: filter-state persistence. Independent key so a corrupt filter
+   blob can never corrupt the journal (and vice-versa). Set is serialised
+   as an array so JSON survives round-trip; empty array → sources cleared
+   (ALL active). Any read failure silently falls back to defaults. */
+function __lsReadFilters(){
+  try{
+    if (typeof localStorage === 'undefined' || !localStorage) return null;
+    var s = localStorage.getItem(LS_FILTERS_KEY);
+    if (!s) return null;
+    var o = JSON.parse(s);
+    if (!o || typeof o !== 'object') return null;
+    return o;
+  }catch(e){ return null; }
+}
+function __lsWriteFilters(f){
+  try{
+    if (typeof localStorage === 'undefined' || !localStorage) return;
+    var out = {
+      sources: (f && f.sources && f.sources.size) ? Array.from(f.sources) : null,
+      dir: (f && f.dir) ? f.dir : 'all',
+      q: (f && typeof f.q === 'string') ? f.q : ''
+    };
+    localStorage.setItem(LS_FILTERS_KEY, JSON.stringify(out));
   }catch(e){}
 }
 
@@ -597,7 +624,116 @@ var SL_CSS = ''
    a way to narrow it. Three combinable filters: source (multi-toggle),
    direction (long/short/all), and symbol substring search. State lives
    on __filters; render() applies the predicate before tableHTML. */
-var __filters = { sources: null, dir: 'all', q: '' };
+/* v655: hydrate from localStorage so filter preferences survive reloads.
+   Any bad shape is silently ignored; defaults win. */
+var __filters = (function initFilters(){
+  var def = { sources: null, dir: 'all', q: '' };
+  try{
+    var stored = __lsReadFilters();
+    if (!stored) return def;
+    if (Array.isArray(stored.sources) && stored.sources.length){
+      /* only accept known sources so a stale storage entry from an older
+         SOURCES list can't leave dead chips selected */
+      var known = {};
+      for (var i = 0; i < SOURCES.length; i++) known[SOURCES[i]] = 1;
+      var s = new Set();
+      for (var j = 0; j < stored.sources.length; j++){
+        if (known[stored.sources[j]]) s.add(stored.sources[j]);
+      }
+      def.sources = s.size ? s : null;
+    }
+    if (stored.dir === 'long' || stored.dir === 'short' || stored.dir === 'all'){
+      def.dir = stored.dir;
+    }
+    if (typeof stored.q === 'string') def.q = stored.q.slice(0, 20);
+  }catch(e){}
+  return def;
+})();
+function persistFilters(){ __lsWriteFilters(__filters); }
+
+/* v655: CSV export of currently-filtered journal rows. Uses RFC 4180
+   quoting: any field with a comma/quote/newline is wrapped in double
+   quotes and internal quotes doubled. Gate ledger gets three flat
+   columns (pass count / total / veto ids) so the CSV opens usefully
+   in a spreadsheet without hand-parsing the badge. */
+function csvEscape(v){
+  if (v === null || v === undefined) return '';
+  var s = String(v);
+  if (s.indexOf(',') === -1 && s.indexOf('"') === -1 && s.indexOf('\n') === -1 && s.indexOf('\r') === -1){
+    return s;
+  }
+  return '"' + s.replace(/"/g, '""') + '"';
+}
+function gateColsFromEntry(e){
+  var meta = (e && Array.isArray(e.gateMeta)) ? e.gateMeta : null;
+  if (!meta || !meta.length) return { pass: '', total: '', vetos: '' };
+  var pass = 0, veto = [];
+  for (var i = 0; i < meta.length; i++){
+    var g = meta[i]; if (!g) continue;
+    if (g.state === 'pass') pass++;
+    else if (g.state === 'veto') veto.push(g.id);
+  }
+  return { pass: pass, total: meta.length, vetos: veto.join(' ') };
+}
+function buildCsv(entries){
+  var header = ['time','source','symbol','dir','tierOrGrade','entry','stop','t1',
+                'maeR','mfeR','gatesPass','gatesTotal','gatesVeto','note'];
+  var lines = [header.join(',')];
+  for (var i = 0; i < entries.length; i++){
+    var e = entries[i]; if (!e) continue;
+    var g = gateColsFromEntry(e);
+    lines.push([
+      csvEscape(e.t),
+      csvEscape(e.source),
+      csvEscape(e.sym),
+      csvEscape(e.dir),
+      csvEscape(e.tierOrGrade === null || e.tierOrGrade === undefined ? '' : e.tierOrGrade),
+      csvEscape(e.entry === null || e.entry === undefined ? '' : e.entry),
+      csvEscape(e.stop === null || e.stop === undefined ? '' : e.stop),
+      csvEscape(e.t1 === null || e.t1 === undefined ? '' : e.t1),
+      csvEscape(e.maeR === null || e.maeR === undefined ? '' : e.maeR),
+      csvEscape(e.mfeR === null || e.mfeR === undefined ? '' : e.mfeR),
+      csvEscape(g.pass),
+      csvEscape(g.total),
+      csvEscape(g.vetos),
+      csvEscape(e.note || '')
+    ].join(','));
+  }
+  return lines.join('\r\n') + '\r\n';
+}
+function csvFilename(){
+  var d = new Date();
+  function p2(n){ return (n < 10 ? '0' : '') + n; }
+  return 'hardgate-signal-log-'
+    + d.getFullYear() + '-' + p2(d.getMonth()+1) + '-' + p2(d.getDate())
+    + '-' + p2(d.getHours()) + p2(d.getMinutes()) + '.csv';
+}
+function exportFilteredCsv(){
+  try{
+    var rows = applyFilters(__journal);
+    if (!rows.length){
+      setStat('nothing to export — the current filter matches zero rows');
+      return 0;
+    }
+    var csv = buildCsv(rows);
+    /* BOM so Excel opens UTF-8 correctly */
+    var blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = csvFilename();
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    /* release the blob URL on the next tick — the browser has consumed it */
+    setTimeout(function(){ try{ URL.revokeObjectURL(url); }catch(e){} }, 1500);
+    setStat('exported ' + rows.length + ' row' + (rows.length === 1 ? '' : 's') + ' to CSV');
+    return rows.length;
+  }catch(e){
+    setStat('CSV export failed: ' + ((e && e.message) ? e.message : String(e)));
+    return 0;
+  }
+}
 function applyFilters(entries){
   var sources = __filters.sources;    /* null = ALL; else Set of enabled */
   var dir = __filters.dir;
@@ -647,6 +783,7 @@ function bindFilterHandlers(){
         else __filters.sources.add(src);
         if (!__filters.sources.size) __filters.sources = null;
       }
+      persistFilters();      /* v655 */
       rebuildFilterChips();
       render();
     });
@@ -658,6 +795,7 @@ function bindFilterHandlers(){
       var d = t.getAttribute('data-sl-dir');
       if (!d) return;
       __filters.dir = d;
+      persistFilters();      /* v655 */
       rebuildFilterChips();
       render();
     });
@@ -665,6 +803,7 @@ function bindFilterHandlers(){
   if (__ui.q){
     __ui.q.addEventListener('input', function(){
       __filters.q = __ui.q.value || '';
+      persistFilters();      /* v655 */
       render();
     });
   }
@@ -691,6 +830,7 @@ function mount(el){
       + '<div class="panel">'
       + '<h2>SIGNAL LOG <span>persistent journal of brain + scalp + swing signals · newest first · capped at 500</span></h2>'
       + '<div class="row"><button class="btn" id="slClear">CLEAR JOURNAL</button>'
+      + '<button class="btn" id="slExport" style="margin-left:6px">EXPORT CSV</button>'   /* v655 */
       + '<span class="note" id="slStat">journal ready — snapshots run every 5 min and on refresh.</span></div>'
       + '<div class="sl-filters" id="slFilters">'
         + '<div class="sl-filter-row"><span class="sl-filter-lbl">source</span>'
@@ -711,6 +851,7 @@ function mount(el){
 
     __ui = {
       clear:    el.querySelector('#slClear'),
+      export_:  el.querySelector('#slExport'),   /* v655 */
       stat:     el.querySelector('#slStat'),
       count:    el.querySelector('#slCount'),
       sources:  el.querySelector('#slSources'),
@@ -722,7 +863,12 @@ function mount(el){
       q:        el.querySelector('#slQ')
     };
     if (__ui.clear) __ui.clear.addEventListener('click', function(){ clearJournal(); });
+    if (__ui.export_) __ui.export_.addEventListener('click', function(){ exportFilteredCsv(); });   /* v655 */
     bindFilterHandlers();
+    /* v655: paint chips + search box with the stored filter state on
+       mount so the UI reflects what actually filters the render below. */
+    if (__ui.q && __filters.q) __ui.q.value = __filters.q;
+    rebuildFilterChips();
     ensureTimer();
     if (!__snapshotted) snapshotRound();   /* first open this session -> an immediate honest sources line */
     render();

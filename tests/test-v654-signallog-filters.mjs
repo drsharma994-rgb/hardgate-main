@@ -19,8 +19,13 @@ const { HG_VER } = await import('./helpers/build-version.mjs');
 const sl = readFileSync(resolve(ROOT, 'signallog.js'), 'utf8');
 
 /* --- filter state + applyFilters exist --- */
-assert.ok(/var __filters = \{ sources: null, dir: 'all', q: '' \};/.test(sl),
-  '__filters state must be declared');
+/* v655 wrapped the initial declaration in an IIFE that hydrates from
+   localStorage. Accept either the plain literal (original v654 shape)
+   or the IIFE variant, as long as the default shape lives inside it. */
+assert.ok(
+  /var __filters = \{ sources: null, dir: 'all', q: '' \};/.test(sl)
+  || /var __filters = \(function initFilters\(\)\{[\s\S]*?sources: null,\s*dir: 'all',\s*q: ''[\s\S]*?\}\)\(\);/.test(sl),
+  '__filters state must be declared with the default shape (plain or IIFE-hydrated)');
 assert.ok(/function applyFilters\(entries\)/.test(sl),
   'applyFilters() must be defined');
 /* early-exit fast path when no filter is set */
