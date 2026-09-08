@@ -905,6 +905,66 @@ terse status, and never launches a first-time scan on a global refresh.
      Compression precedes expansion; direction is taken from the break. */
   function hgOgNr7Break(rows){ var f = gfn('hgMechNr7Break'); return f ? f(rows) : null; }
 
+  /* v666: gold/silver bars aligned by TIMESTAMP, not by tail-index.
+
+     Prior to v666, three gold-vs-silver mechanics (SMT-DIVERGE, GSR-EXTREME,
+     COINT-SPREAD) paired bars by array index: xag[n-1] with rows[m-1],
+     xag[n-2] with rows[m-2], etc. That silently assumed both series had
+     the same length AND were aligned on the same timestamps.
+
+     Two things break that assumption on real feeds:
+
+       * XAG can arrive with fewer bars than XAU (different provider, gaps,
+         session offsets). goldind.js's shared __smtAlignIdx exists exactly
+         for this reason, and detectSMTDivergence in goldind.js was already
+         fixed to align by timestamp.
+
+       * A single data gap in XAG shifts ALL subsequent pairs by one bar,
+         so "gold 10 bars ago vs silver 10 bars ago" can compare different
+         time windows. On a fast market that produces phantom divergence
+         and phantom GSR z-scores that don't reflect reality.
+
+     hgOgAlignXag walks XAU rows newest -> oldest and, for each, finds the
+     nearest XAG bar within maxSkewSec (default 8 min, matching goldind's
+     __smtAlignIdx tolerance). It returns pairs oldest-to-newest so callers
+     don't have to reverse. Missing XAG for a XAU bar drops that pair, not
+     the whole result. */
+  function hgOgAlignXag(rows, xag, maxSkewSec){
+    if (!rows || !rows.length || !xag || !xag.length) return [];
+    var skew = (isFinite(maxSkewSec) && maxSkewSec > 0) ? maxSkewSec : 480;
+    /* Prefer the shared __smtAlignIdx helper (goldind.js) so both this
+       module and detectSMTDivergence use the exact same tolerance and
+       search behaviour. Feature-checked: if absent, fall back to an
+       inline linear scan with the same shape. */
+    var alignFn = gfn('__smtAlignIdx');
+    function findIdx(t){
+      if (typeof alignFn === 'function'){
+        try{ var i = alignFn(xag, t, skew); if (isFinite(i)) return i; }catch(e){}
+      }
+      var best = -1, bestD = Infinity, i2;
+      for (i2 = xag.length - 1; i2 >= 0; i2--){
+        var xg = xag[i2];
+        if (!xg || !isFinite(xg.t)) continue;
+        var d = Math.abs(xg.t - t);
+        if (d <= skew && d < bestD){ bestD = d; best = i2; }
+      }
+      return best;
+    }
+    var pairs = [], i, r, j;
+    for (i = 0; i < rows.length; i++){
+      r = rows[i];
+      if (!r || !isFinite(r.t)) continue;
+      j = findIdx(r.t);
+      if (j < 0) continue;
+      var sr = xag[j];
+      if (!sr) continue;
+      var gc = num(r.c), sc = num(sr.c);
+      if (!isFinite(gc) || !isFinite(sc)) continue;
+      pairs.push({ t: r.t, gc: gc, sc: sc, gh: num(r.h), gl: num(r.l), sh: num(sr.h), sl: num(sr.l) });
+    }
+    return pairs;
+  }
+
   /* Gold against silver. Real desks watch the pair; macro-feeds.js already
      fetches the silver series. With no silver this returns null rather than
      guessing — a mechanic that cannot see its second leg has no signal. */
@@ -913,20 +973,22 @@ terse status, and never launches a first-time scan on a global refresh.
     var w = W();
     var xag = w && w.__hgXagCandles;
     if (!xag || xag.length < 20) return null;
-    function legs(src){
-      var n = src.length - 1;
-      return { last: num(src[n].c), prior: num(src[n - 10] && src[n - 10].c) };
-    }
-    var g = legs(rows), s = legs(xag);
-    if (!isFinite(g.last) || !isFinite(g.prior) || !isFinite(s.last) || !isFinite(s.prior)) return null;
-    var gUp = g.last > g.prior, sUp = s.last > s.prior;
+    /* v666: timestamp-align the two series before comparing 10-bar legs. */
+    var pairs = hgOgAlignXag(rows, xag);
+    if (pairs.length < 12) return null;
+    var last = pairs[pairs.length - 1];
+    var prior = pairs[pairs.length - 11];
+    if (!last || !prior) return null;
+    if (!isFinite(last.gc) || !isFinite(last.sc)
+     || !isFinite(prior.gc) || !isFinite(prior.sc)) return null;
+    var gUp = last.gc > prior.gc, sUp = last.sc > prior.sc;
     if (gUp === sUp) return null;                      /* aligned — no divergence */
-    var gMove = Math.abs(g.last - g.prior) / Math.max(1e-9, Math.abs(g.prior));
-    var sMove = Math.abs(s.last - s.prior) / Math.max(1e-9, Math.abs(s.prior));
+    var gMove = Math.abs(last.gc - prior.gc) / Math.max(1e-9, Math.abs(prior.gc));
+    var sMove = Math.abs(last.sc - prior.sc) / Math.max(1e-9, Math.abs(prior.sc));
     if (gMove < 0.002 || sMove < 0.002) return null;   /* both legs must have moved */
-    return { kind:'SMT-DIVERGE', dir: gUp ? 'short' : 'long', level: g.last,
+    return { kind:'SMT-DIVERGE', dir: gUp ? 'short' : 'long', level: last.gc,
              why:'gold ' + (gUp ? 'up' : 'down') + ' while silver ' + (sUp ? 'up' : 'down')
-                 + ' over 10 bars — the metals disagree' };
+                 + ' over 10 aligned bars — the metals disagree' };
   }
 
   /* Trend reclaim: an established stack, a pullback through the fast EMA, and
@@ -1024,11 +1086,14 @@ terse status, and never launches a first-time scan on a global refresh.
     if (!xag || xag.length < 60) return null;
     var zf = gfn('zscoreLast');
     if (!zf) return null;
-    var m = Math.min(rows.length, xag.length);
+    /* v666: pair each XAU bar with its TIMESTAMP-nearest XAG bar. Tail-index
+       pairing broke the ratio series any time XAG was a different length or
+       had a data gap. */
+    var pairs = hgOgAlignXag(rows, xag);
+    if (pairs.length < 60) return null;
     var ratio = [], i, g, s;
-    for (i = 0; i < m; i++){
-      g = num(rows[rows.length - m + i].c);
-      s = num(xag[xag.length - m + i].c);
+    for (i = 0; i < pairs.length; i++){
+      g = pairs[i].gc; s = pairs[i].sc;
       if (!isFinite(g) || !isFinite(s) || !(s > 0)) continue;
       ratio.push(g / s);
     }
@@ -1112,11 +1177,15 @@ terse status, and never launches a first-time scan on a global refresh.
     if (!xag || xag.length < 120) return null;
     var f = gfn('hgCoint');
     if (!f) return null;
-    var m = Math.min(rows.length, xag.length, 300);
+    /* v666: pair by timestamp so the cointegration test sees real synchronous
+       observations. Tail-index pairing broke the alignment on data-gap days
+       and on cross-provider legs of different length. */
+    var pairsAll = hgOgAlignXag(rows, xag);
+    var pairs = pairsAll.length > 300 ? pairsAll.slice(-300) : pairsAll;
+    if (pairs.length < 120) return null;
     var a = [], b = [], i, ga, sa;
-    for (i = 0; i < m; i++){
-      ga = num(rows[rows.length - m + i].c);
-      sa = num(xag[xag.length - m + i].c);
+    for (i = 0; i < pairs.length; i++){
+      ga = pairs[i].gc; sa = pairs[i].sc;
       if (!isFinite(ga) || !isFinite(sa)) continue;
       a.push(ga); b.push(sa);
     }
