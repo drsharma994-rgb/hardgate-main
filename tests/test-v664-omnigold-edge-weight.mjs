@@ -34,11 +34,17 @@ assert.ok(/v664: rebalanced so measured-edge has real say among ticket survivors
 /* --- the numeric weight change: exact new coefficients + inline annotations --- */
 assert.ok(/\+ 25 \* edgeN\s+\/\* v664: 8 -> 25/.test(src),
   'edgeN weight must be 25 with a v664 annotation');
-assert.ok(/\+ 40 \* edgeDemoteN;\s+\/\* v664: 15 -> 40/.test(src),
+/* v677: relaxed — the score expression grew a freshness term below
+   edgeDemoteN, so `;` is no longer immediately after edgeDemoteN. Accept
+   either the original `edgeDemoteN;` shape or `edgeDemoteN` followed by
+   whitespace and the v664 annotation. */
+assert.ok(/\+ 40 \* edgeDemoteN[;\s]\s*\/\* v664: 15 -> 40/.test(src),
   'edgeDemoteN weight must be 40 with a v664 annotation');
 
 /* --- old numeric weights must be gone from the score expression --- */
-const scoreBlock = src.match(/var score = 100 \* tapeScore[\s\S]{0,600}edgeDemoteN;/);
+/* v677: match up to the trailing semicolon of the score expression, which may
+   now sit after a later term (freshN) rather than immediately after edgeDemoteN. */
+const scoreBlock = src.match(/var score = 100 \* tapeScore[\s\S]{0,900}edgeDemoteN[\s\S]{0,300}?;/);
 assert.ok(scoreBlock, 'balance-score expression must still be intact');
 assert.ok(!/\+ 8 \* edgeN$/m.test(scoreBlock[0]),
   'stale "+ 8 * edgeN" without v664 annotation must be gone from the score');

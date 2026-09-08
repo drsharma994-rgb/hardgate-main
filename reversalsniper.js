@@ -178,6 +178,23 @@ function rsConviction(setup){
       if (isFinite(bt.expR) && bt.expR > 0) c += 2;
       if (isFinite(bt.winPct) && bt.winPct >= 50) c += 1;
     }
+    /* v677: freshness component. A reversal snipe is a time-sensitive read —
+       an RSI(2)-oversold + drawdown setup that formed >= 3 4H bars ago has
+       lost the exhaustion edge that made it a snipe in the first place;
+       price has usually already bounced or continued to break. We do NOT
+       hard-veto (that would be too surgical for a system with existing
+       tuning) — instead we award +1 to fresh setups and -2 to stale setups
+       so ranking and MIN_CONVICTION naturally push older setups to the back
+       or off the board. Requires setup.formedT and a live wall clock. */
+    if (isFinite(setup.formedT)){
+      var nowSec = Math.floor(Date.now() / 1000);
+      var TF_4H = 4 * 3600;
+      var barsSince = Math.max(0, Math.floor((nowSec - setup.formedT) / TF_4H));
+      if (barsSince <= 1) c += 1;      /* fresh: within the last full 4H bar */
+      else if (barsSince === 2) c += 0; /* neutral */
+      else if (barsSince <= 4) c -= 1;  /* getting stale */
+      else c -= 2;                      /* clearly stale (>= 20 hours) */
+    }
     return c;
   }catch(e){ return 0; }
 }
@@ -280,13 +297,22 @@ function rsAssess(rows, opts){
     var btFn = (typeof W.mrBacktest === 'function') ? W.mrBacktest : null;
     var bt = btFn ? btFn(rows) : { n: 0, winPct: 0, avgR: 0, pf: 0, expR: 0 };
 
+    /* v677: stamp the formation-bar timestamp (last closed bar's t) so the
+       card can display and rank on freshness. Reversal setups age fast —
+       an RSI(2)-oversold reversal that formed 12 4H-bars ago (48 hours)
+       is no longer actionable. Downstream ranking may soft-penalise cards
+       older than a threshold. */
+    var formedT = NaN;
+    if (rows[n - 1] && isFinite(+rows[n - 1].t)) formedT = +rows[n - 1].t;
+    if (formedT > 1e12) formedT = Math.floor(formedT / 1000); /* ms -> sec */
     var setup = {
       dir: 'long',
       entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2,
       risk: plan.risk, riskPct: plan.riskPct,
       rr1: plan.rr1, rr2: plan.rr2, lev: plan.lev,
       triggers: triggers, drawdownPct: dd * 100, rsi2: rsi2Val,
-      sweep: sweep, meanrev: mr, bt: bt
+      sweep: sweep, meanrev: mr, bt: bt,
+      formedT: isFinite(formedT) ? formedT : null
     };
 
     if (typeof W.hgApplyExactEntry === 'function'){
