@@ -209,6 +209,88 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return isFinite(n) ? n : NaN;
   }
 
+  /* v679: live-price sanity classification.
+
+     Every desk in HARDGATE presents cards showing entry/stop/T1/T2 based on
+     detection at a specific closing bar. But cards stay on screen while
+     price keeps moving. Prior to v679 nothing checked whether the CURRENT
+     price was still consistent with the plan. Real failure modes seen:
+
+       * Card at 10:00 UTC: BUY at 42,300 (entry near current). Same card
+         still on screen at 14:00 UTC when price = 43,100. Plan geometry
+         still passes all checks, but the setup is now offering a chase.
+         User places at 43,100 thinking it's the fresh entry.
+
+       * PDL-SWEEP long entry 42,300 stop 42,150. Price is now 42,050 (past
+         the stop). Plan is already invalidated but still displayed with
+         no visual downgrade. User places, gets stopped instantly.
+
+       * Any card whose price has already reached T1 — the reward described
+         has already happened; a fresh entry at current price is a chase
+         to T2 with worse R:R than the card advertises.
+
+     hgLivePriceGrade classifies each plan against live price into one of
+     five states with a numeric solidity delta:
+
+       'fresh'       (+1.0): price is between entry and t1 for long, or
+                             between t1 and entry for short. In the meat of
+                             the trade. If entry-triggered, this is normal;
+                             still-actionable if pullback fills entry.
+       'pending'     (+0.5): price is on the FAR side of entry from the
+                             stop (long: below entry; short: above entry).
+                             Normal for limit-triggered plans waiting for
+                             pullback fill. Fully actionable.
+       'past-entry'  (-0.5): price has moved past entry in trade direction
+                             but hasn't hit T1 yet. Card is asking for a
+                             chase at worse R:R than shown.
+       'past-t1'     (-1.0): price is at or beyond T1. First target already
+                             reached; placing here means R:R2 only, with
+                             already-run price.
+       'past-stop'   (-1.5): price has crossed stop. Plan is dead; showing
+                             it as tradeable is misleading.
+
+     Returns { grade: string, delta: number } or null when required inputs
+     missing (livePx / entry / stop / t1). Detects the direction from the
+     provided dir string; when omitted, infers dir from entry-vs-stop.
+
+     Used by hgOmniBalanceParts (v679), hgOgBalanceParts (v679), and
+     reversalsniper rsConviction (v679). Attach to G so cross-file callers
+     do not need to redefine. */
+  function hgLivePriceGrade(dir, entry, stop, t1, t2, livePx){
+    var e = fin(entry), s = fin(stop), t = fin(t1), px = fin(livePx);
+    if (!(isFinite(e) && isFinite(s) && isFinite(t) && isFinite(px))) return null;
+    var d = String(dir || '').toLowerCase();
+    if (d !== 'long' && d !== 'short'){
+      d = (t > e) ? 'long' : 'short'; /* infer from geometry when omitted */
+    }
+    var t2n = fin(t2);
+    /* order-preserving side test. long: px > level = beyond in trade dir */
+    var beyond = function(lvl){ return d === 'long' ? (px >= lvl) : (px <= lvl); };
+    var wrongOfStop = function(){ return d === 'long' ? (px <= s) : (px >= s); };
+    if (wrongOfStop()) return { grade: 'past-stop', delta: -1.5 };
+    if (beyond(t)) return { grade: 'past-t1', delta: -1.0 };
+    /* 'fresh' means price is at or very close to entry, on either side.
+       Check this BEFORE the past-entry / pending split so a price hovering
+       within a small band of entry gets the fresh bonus regardless of
+       which side. Uses 5% of R1 (entry-to-t1 span) as tolerance. */
+    var span = Math.abs(t - e);
+    var atEntry = span > 0 && Math.abs(px - e) / span < 0.05;
+    if (atEntry) return { grade: 'fresh', delta: 1.0 };
+    if (beyond(e)){
+      /* between entry and t1 in trade direction — partial move already made */
+      return { grade: 'past-entry', delta: -0.5 };
+    }
+    /* px is on the pullback side of entry, above stop, below t1 (for long).
+       Waiting for pullback fill — fully actionable. */
+    return { grade: 'pending', delta: 0.5 };
+  }
+  /* Expose on the global so omnigold.js and reversalsniper.js can call it
+     without redefining (they load AFTER omniroute per index.html). */
+  try {
+    if (typeof window !== 'undefined') window.hgLivePriceGrade = hgLivePriceGrade;
+    else if (typeof globalThis !== 'undefined') globalThis.hgLivePriceGrade = hgLivePriceGrade;
+  } catch(e){}
+
   function emaOf(vals, n){
     if (!vals || vals.length < n || n <= 0) return NaN;
     var k = 2 / (n + 1), e = vals[0], i;
@@ -8328,6 +8410,22 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       else if (barsSince <= 4) freshN = -0.5; /* getting stale */
       else freshN = -1;                       /* clearly stale, deprioritise */
     }
+    /* v679: live-price sanity. Every card sits on screen while price keeps
+       moving. hgLivePriceGrade classifies the plan against current price so
+       cards where price already crossed the stop, reached T1, or ran past
+       entry get downgraded in the ranker. See the helper's docblock for
+       full state map. */
+    var liveN = 0;
+    var liveGrade = null;
+    try {
+      var lpPx = fin(c && c.livePx);
+      var lpPlan = (c && c.plan) || null;
+      if (lpPlan && isFinite(lpPx)){
+        var lpDir = String((c && c.dir) || (lpPlan.dir) || '').toLowerCase();
+        var lp = hgLivePriceGrade(lpDir, lpPlan.entry, lpPlan.stop, lpPlan.t1, lpPlan.t2, lpPx);
+        if (lp){ liveGrade = lp.grade; liveN = lp.delta; }
+      }
+    } catch(eLp){}
     var score = 100 * tapeScore
               + 120 * ticketN
               + 30 * family
@@ -8338,6 +8436,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
               + 25 * edgeN            /* v671: 8 -> 25 (walk-forward positive edge) */
               + 20 * edgeDemoteSoft   /* v671: NEW (soft demote for weak/negative measured edge) */
               + 15 * freshN           /* v677: NEW (freshness: +15 fresh, -15 stale) */
+              + 20 * liveN            /* v679: NEW (live-price sanity: +20 fresh, -30 past-stop) */
               + 18 * preferN
               - 25 * demoteN;
     return {
@@ -8346,6 +8445,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       ticket: ticketN, info: info, dist: dist, edge: edgeN,
       edgeDemoteSoft: edgeDemoteSoft,
       freshN: freshN,
+      liveN: liveN, liveGrade: liveGrade,
       nAgree: nAgree, nAgainst: nAgainst
     };
   }

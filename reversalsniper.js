@@ -253,6 +253,26 @@ function rsConviction(setup){
        both reasonable). */
     if (setup.tape === 'long') c += 1;
     else if (setup.tape === 'short') c -= 3;
+    /* v679: live-price sanity. If the shared hgLivePriceGrade helper (from
+       omniroute.js) is available and setup carries a live price hint,
+       classify the plan against current price. Reversal snipes are
+       especially exposed to "price already ran past entry" — the exhaustion
+       window is short. Award +2 for fresh/pending, -1 for past-entry, -3
+       for past-t1, -4 for past-stop. Falls silently to 0 if helper missing
+       or livePx absent. */
+    try {
+      var lpFn = W.hgLivePriceGrade;
+      var lpPx = isFinite(setup.livePx) ? +setup.livePx : NaN;
+      if (typeof lpFn === 'function' && isFinite(lpPx)){
+        var lp = lpFn(setup.dir, setup.entry, setup.stop, setup.t1, setup.t2, lpPx);
+        if (lp){
+          if (lp.grade === 'fresh' || lp.grade === 'pending') c += 2;
+          else if (lp.grade === 'past-entry') c -= 1;
+          else if (lp.grade === 'past-t1') c -= 3;
+          else if (lp.grade === 'past-stop') c -= 4;
+        }
+      }
+    } catch(eLp){}
     return c;
   }catch(e){ return 0; }
 }
@@ -367,6 +387,11 @@ function rsAssess(rows, opts){
        so the card can display it and rsConviction can penalise against-tape
        longs. See rsTape() for rationale. */
     var tape = rsTape(rows);
+    /* v679: capture the live price snapshot at construction so downstream
+       rsConviction (and the card) can grade the plan against current price
+       via hgLivePriceGrade. rows already had the forming bar dropped in
+       v670, so rows[n-1].c is the last CLOSED price — the correct "live"
+       reference for a 4H reversal snipe. */
     var setup = {
       dir: 'long',
       entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2,
@@ -375,7 +400,8 @@ function rsAssess(rows, opts){
       triggers: triggers, drawdownPct: dd * 100, rsi2: rsi2Val,
       sweep: sweep, meanrev: mr, bt: bt,
       formedT: isFinite(formedT) ? formedT : null,
-      tape: tape
+      tape: tape,
+      livePx: entry /* v679: entry equals rows[n-1].c at construction */
     };
 
     if (typeof W.hgApplyExactEntry === 'function'){

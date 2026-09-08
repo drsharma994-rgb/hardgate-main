@@ -60,7 +60,9 @@ assert.ok(/formedT: isFinite\(formedT\) \? formedT : null/.test(rsSrc),
 /* omnigold BalanceParts includes freshN term */
 assert.ok(/v677: freshness component\. hgOgDetect \(v677 upstream change\)/.test(ogSrc),
   'omnigold BalanceParts v677 freshness rationale must be present');
-assert.ok(/\+ 15 \* freshN;\s+\/\* v677: NEW/.test(ogSrc),
+/* v679: relaxed — the score expression grew a liveN term below freshN, so
+   `;` may no longer be immediately after freshN. Accept either shape. */
+assert.ok(/\+ 15 \* freshN[;\s]\s*\/\* v677: NEW/.test(ogSrc),
   'omnigold BalanceParts must add 15 * freshN to score');
 assert.ok(/freshN: freshN,/.test(ogSrc),
   'omnigold BalanceParts must return freshN in parts');

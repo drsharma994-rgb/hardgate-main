@@ -5317,6 +5317,25 @@ terse status, and never launches a first-time scan on a global refresh.
       else if (barsSince <= 4) freshN = -0.5;
       else freshN = -1;
     }
+    /* v679: live-price sanity. Uses hgLivePriceGrade (exposed by omniroute
+       which loads first) to classify each candidate's plan against current
+       price. Cards where price has already crossed the stop, reached T1,
+       or ran past entry get downgraded in the ranker. Falls back to 0 if
+       the helper isn't loaded (test harness). See omniroute.js hgLivePriceGrade
+       docblock for the full state map. */
+    var liveN = 0;
+    var liveGrade = null;
+    try {
+      var lpFn = (typeof W === 'function' ? W().hgLivePriceGrade : null)
+              || (typeof window !== 'undefined' ? window.hgLivePriceGrade : null);
+      var lpPx = fin(c && c.livePx);
+      var lpPlan = (c && c.plan) || null;
+      if (typeof lpFn === 'function' && lpPlan && isFinite(lpPx)){
+        var lpDir = String((c && c.dir) || (lpPlan.dir) || '').toLowerCase();
+        var lp = lpFn(lpDir, lpPlan.entry, lpPlan.stop, lpPlan.t1, lpPlan.t2, lpPx);
+        if (lp){ liveGrade = lp.grade; liveN = lp.delta; }
+      }
+    } catch(eLp){}
     var score = 100 * tapeScore
               + 120 * ticketN
               + 30 * family
@@ -5327,12 +5346,14 @@ terse status, and never launches a first-time scan on a global refresh.
               + 10 * near
               + 25 * edgeN          /* v664: 8 -> 25 (walk-forward positive edge) */
               + 40 * edgeDemoteN    /* v664: 15 -> 40 (measured-negative demotion) */
-              + 15 * freshN;        /* v677: NEW (freshness: +15 fresh, -15 stale) */
+              + 15 * freshN         /* v677: NEW (freshness: +15 fresh, -15 stale) */
+              + 20 * liveN;         /* v679: NEW (live-price sanity: +20 fresh, -30 past-stop) */
     return {
       score: score, family: family, infoRatio: infoRatio, coverage: coverage,
       alsoNorm: alsoNorm, horizon: horizon, near: near, tapeScore: tapeScore,
       ticket: ticketN, info: info, dist: dist, edge: edgeN,
       freshN: freshN,
+      liveN: liveN, liveGrade: liveGrade,
       nAgree: nAgree, nAgainst: nAgainst
     };
   }
