@@ -872,12 +872,26 @@ terse status, and never launches a first-time scan on a global refresh.
      to the widened UTC window 14..16, which still catches BST 15:00 (=14
      UTC) and GMT 15:00 (=15 UTC) — not perfect on the shoulder days but
      honest instead of silent. */
-  function hgOgLondonHour(t){
-    /* t is seconds since epoch. Return the London local hour or NaN. */
-    if (!isFinite(t)) return NaN;
+  /* v668: generalized version of v667's London-hour helper. Returns the
+     local hour in the given IANA tz for a timestamp (seconds since epoch),
+     using Intl.DateTimeFormat (DST-aware in every modern runtime). Returns
+     NaN if Intl is absent or the tz string is invalid — callers must guard.
+
+     Two callers now depend on this:
+       * LONDON-FIX (v667)
+       * hgOgLondonRange (v668) — was hard-coded UTC 07..13, wrong under BST
+       * hgOgNyOpenDrive (v668) — was hard-coded UTC 13..16, wrong under EST
+
+     Prior to v668 those two used UTC hours as if they were local hours,
+     so each mechanic silently skipped roughly half the year: London range
+     mis-shifted by an hour under BST, and NY-open-drive missed EST entirely
+     (the correct EST 09..12 NY equals 14..17 UTC, but the code checked
+     13..16 UTC which is EDT summer only). */
+  function hgOgLocalHour(t, tz){
+    if (!isFinite(t) || !tz) return NaN;
     try{
       var fmt = new Intl.DateTimeFormat('en-GB', {
-        timeZone: 'Europe/London', hour: '2-digit', hour12: false
+        timeZone: tz, hour: '2-digit', hour12: false
       });
       var parts = fmt.formatToParts(new Date(t * 1000));
       for (var i = 0; i < parts.length; i++){
@@ -885,6 +899,12 @@ terse status, and never launches a first-time scan on a global refresh.
       }
     }catch(e){}
     return NaN;
+  }
+  function hgOgLondonHour(t){
+    /* v668: delegate to hgOgLocalHour so both London and NY share one
+       DST-aware code path. v667's inline Europe/London Intl block moved
+       into hgOgLocalHour so future timezones don't require a new helper. */
+    return hgOgLocalHour(t, 'Europe/London');
   }
   function hgOgLondonFix(rows){
     if (!rows || rows.length < 6) return null;
@@ -1264,17 +1284,32 @@ terse status, and never launches a first-time scan on a global refresh.
     return sec / 3600;
   }
 
+  /* v668: London session range measured in LONDON local hours, not UTC.
+     Previously hard-coded UTC 07..13, which is correct under GMT but under
+     BST (~7 months of the year) drops to UTC 06..12, so bars at 07:00 UTC
+     (= 08:00 BST) were included when they should have been the *second*
+     hour of the London session, and bars at 06:00 UTC (= 07:00 BST) — the
+     real London open under BST — were excluded. This propagates into
+     NY-OPEN-DRIVE, which reads london.hi/lo as the level to break through.
+     Falls back to the prior UTC window if Intl is absent. */
   function hgOgLondonRange(rows){
     if (!rows || rows.length < 8) return null;
     var lastT = num(rows[rows.length - 1].t);
     if (!isFinite(lastT)) return null;
     var dayStart = Math.floor(lastT / 86400) * 86400;
-    var hi = -Infinity, lo = Infinity, n = 0, i, t, h, l, hr;
+    var hi = -Infinity, lo = Infinity, n = 0, i, t, h, l, lhr;
     for (i = 0; i < rows.length; i++){
       t = num(rows[i].t);
       if (!isFinite(t) || t < dayStart || t >= dayStart + 86400) continue;
-      hr = hgOgBarHour(rows[i]);
-      if (!(hr >= 7 && hr < 13)) continue;
+      lhr = hgOgLocalHour(t, 'Europe/London');
+      if (isFinite(lhr)){
+        if (!(lhr >= 7 && lhr < 13)) continue;
+      } else {
+        /* Intl absent — fall back to a widened UTC window that catches BST
+           07:00 London (= 06:00 UTC) alongside GMT 07:00 (= 07:00 UTC). */
+        var uhr = hgOgBarHour(rows[i]);
+        if (!(uhr >= 6 && uhr < 13)) continue;
+      }
       h = num(rows[i].h); l = num(rows[i].l);
       if (isFinite(h) && h > hi) hi = h;
       if (isFinite(l) && l < lo) lo = l;
@@ -1284,14 +1319,31 @@ terse status, and never launches a first-time scan on a global refresh.
     return { hi: hi, lo: lo, bars: n };
   }
 
+  /* v668: NY-open-drive window measured in NEW YORK local hours (09..12),
+     not UTC. Previously hard-coded UTC 13..16 — correct under EDT (summer,
+     NY = UTC-4) but under EST (winter, NY = UTC-5) 09..12 NY = 14..17 UTC,
+     so the mechanic missed the entire NY morning window for ~5 months of
+     the year. Falls back to a widened UTC window (13..17) if Intl is
+     absent, catching both EDT and EST NY 09..12. */
   function hgOgNyOpenDrive(rows){
     try{
       if (!rows || rows.length < 16) return null;
       var london = hgOgLondonRange(rows);
       if (!london) return null;
       var last = rows[rows.length - 1];
-      var hr = hgOgBarHour(last);
-      if (!(hr >= 13 && hr < 16)) return null;
+      var t = num(last.t);
+      if (!isFinite(t)) return null;
+      var nhr = hgOgLocalHour(t, 'America/New_York');
+      var inWindow;
+      if (isFinite(nhr)){
+        inWindow = (nhr >= 9 && nhr < 12);
+      } else {
+        /* Intl absent — fall back to a widened UTC window that covers both
+           EDT NY 09..12 (= 13..16 UTC) and EST NY 09..12 (= 14..17 UTC). */
+        var uhr = hgOgBarHour(last);
+        inWindow = (uhr >= 13 && uhr < 17);
+      }
+      if (!inWindow) return null;
       var o = num(last.o), h = num(last.h), l = num(last.l), c = num(last.c);
       if (!isFinite(o) || !isFinite(c)) return null;
       if (c > london.hi && o <= london.hi)
