@@ -435,10 +435,36 @@ function hgRankCryptoSetups(cands, side){
   return { cands: sorted, best: best };
 }
 
+/* v675: also reject wrong-side plan geometry. hgNormalizeSetupRow is the
+   funnel every setup row enters before hgPickMostProbable selects the desk
+   leader. Prior to v675 hgSetupHasLevels checked only finite/positive/
+   non-equal — a mislabelled row (long with stop above entry, or short with
+   t1 below entry) propagated through the picker and onto the card. Once
+   placed, that card would either auto-fill (stop is on the reward side) or
+   auto-stop (t1 is on the loss side).
+
+   The direction assertion below is the same one hgSwingHitToPlan and
+   hgSwingPostEnrichValid enforce at their own layers — v675 pulls it
+   forward to the ingest funnel so a wrong-side row can never be selected
+   as the desk leader in the first place. Cannot regress a correctly-built
+   plan (those already satisfy the assertion). Rows without a dir (falsy or
+   unknown) skip the direction check because the picker will not act on
+   them until dir is resolved. */
 function hgSetupHasLevels(row){
   if (!row) return false;
   var e = +row.entry, s = +row.stop, t1 = +row.t1;
-  return isFinite(e) && e > 0 && isFinite(s) && s > 0 && e !== s && isFinite(t1) && t1 > 0;
+  if (!(isFinite(e) && e > 0 && isFinite(s) && s > 0 && e !== s && isFinite(t1) && t1 > 0)) return false;
+  var dir = String(row.dir || '').toLowerCase();
+  if (dir === 'long'){
+    if (!(s < e && t1 > e)) return false;
+    if (isFinite(+row.t2) && +row.t2 > 0 && !(+row.t2 > e)) return false;
+  } else if (dir === 'short'){
+    if (!(s > e && t1 < e)) return false;
+    if (isFinite(+row.t2) && +row.t2 > 0 && !(+row.t2 < e)) return false;
+  }
+  /* unknown dir: return true to let downstream classify; the direction-aware
+     checks in hgSwingHitToPlan will still catch it before card render */
+  return true;
 }
 
 function hgMpNum(v){
@@ -1069,9 +1095,19 @@ function hgPlanFromRisk(dir, entry, stop, opts){
     /* A supplied structural hint that falls short of minRr is a REJECT.
        Only the no-hint case may use the R-multiple policy target above. */
     if (rr1 < minRr) return null;
+    /* v675: also require rew2 > rew1. Prior to v675 the size of a caller-
+       supplied t2Hint was validated only for correct side (rew2 > 0); nothing
+       stopped a t2Hint from being closer to entry than t1. A magnet that
+       lands between entry and t1 shipped an inverted ladder — the card
+       advertised T2 as "further" than T1 while T2 actually paid less R.
+       Downstream ledgers closing at T2 realised less R than the card
+       claimed. Fix: fall through to the R-multiple policy target whenever
+       t2Hint fails to be both on the correct side AND strictly larger than
+       t1's reward. This is guardrail only — magnets that legitimately sit
+       beyond t1 still get used verbatim. */
     var t2 = opts.t2Hint;
     var rew2 = (isFinite(t2)) ? ((dir === 'long') ? (t2 - entry) : (entry - t2)) : NaN;
-    if (!(isFinite(t2) && rew2 > 0)){
+    if (!(isFinite(t2) && rew2 > 0 && rew2 > rew1)){
       t2 = (dir === 'long') ? entry + t2R * risk : entry - t2R * risk;
       rew2 = t2R * risk;
     }
