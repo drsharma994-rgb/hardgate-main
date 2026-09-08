@@ -5038,6 +5038,25 @@ terse status, and never launches a first-time scan on a global refresh.
     var edgeN = 0;
     if (c && isFinite(fin(c.edgeScore))) edgeN = Math.max(0, Math.min(100, fin(c.edgeScore))) / 100;
     var edgeDemoteN = (c && c.formation && c.formation.edgeDemote) ? -0.35 : 0;
+    /* v664: rebalanced so measured-edge has real say among ticket survivors.
+
+       Prior weights (edgeN=8, edgeDemoteN weight=15 with a fixed -0.35
+       multiplier -> effective -5.25 penalty) meant walk-forward history
+       barely tipped the pick order. Tape (100), ticket (120), family (30)
+       and infoRatio (30) dominated so completely that a mechanic with 100%
+       measured edge outranked an unmeasured mechanic by 8 points — less
+       than one gate agreeing. The whole point of walk-forward is to prefer
+       setups that have actually paid on the user's feed, and it was doing
+       almost nothing.
+
+       v664 raises the positive-edge weight (8 -> 25) and demote weight
+       (15 -> 40, so measured-negative-but-not-vetoed cards fall harder
+       among survivors: 40 * -0.35 = -14 vs -5.25 before). Neither change
+       affects what QUALIFIES as a ticket — gates still decide that. This
+       is ordering only. The measured-edge VETO already keeps significantly
+       negative mechanics out of the pool entirely; this fix affects the
+       remaining ambiguity between measured-positive, measured-neutral,
+       and unmeasured cards, which is where the pick actually lived. */
     var score = 100 * tapeScore
               + 120 * ticketN
               + 30 * family
@@ -5046,8 +5065,8 @@ terse status, and never launches a first-time scan on a global refresh.
               + 10 * alsoNorm
               + 8 * horizon
               + 10 * near
-              + 8 * edgeN
-              + 15 * edgeDemoteN;
+              + 25 * edgeN          /* v664: 8 -> 25 (walk-forward positive edge) */
+              + 40 * edgeDemoteN;   /* v664: 15 -> 40 (measured-negative demotion) */
     return {
       score: score, family: family, infoRatio: infoRatio, coverage: coverage,
       alsoNorm: alsoNorm, horizon: horizon, near: near, tapeScore: tapeScore,
