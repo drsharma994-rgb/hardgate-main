@@ -127,7 +127,7 @@ assert.equal(statsLine([{ dir:'long', maeR:null, mfeR:null }]),
   'singular row/no-metrics case must skip empty numeric parts');
 
 /* --- version --- */
-assert.ok(/^hg-v(?:657|65[8-9]|66\d|[7-9]\d\d|\d{4,})$/.test(HG_VER),
+assert.ok(/^hg-v(?:657|65[8-9]|66\d|67\d|6[8-9]\d|[7-9]\d\d|\d{4,})$/.test(HG_VER),
   'HG_VER must be >= hg-v657 (saw ' + HG_VER + ')');
 const sw = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
 assert.ok(new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'").test(sw),

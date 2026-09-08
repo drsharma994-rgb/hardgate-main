@@ -70,7 +70,7 @@ assert.ok(/if \(HG_ALERTS_FORCED_ON\)\{[\s\S]{0,400}armAlertCycle\(\);/.test(idx
   'HG_ALERTS_FORCED_ON boot branch must remain \u2014 alerts still auto-arm when turned on');
 
 /* --- version --- */
-assert.ok(/^hg-v(?:656|65[7-9]|66\d|[7-9]\d\d|\d{4,})$/.test(HG_VER),
+assert.ok(/^hg-v(?:656|65[7-9]|66\d|67\d|6[8-9]\d|[7-9]\d\d|\d{4,})$/.test(HG_VER),
   'HG_VER must be >= hg-v656 (saw ' + HG_VER + ')');
 const sw = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
 assert.ok(new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'").test(sw),
