@@ -1451,8 +1451,31 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
   /* 4h -> 1d without a second network call: 180 4h bars is 30 daily bars,
      and the venue legs are the expensive part of a scan. Buckets by UTC day
-     from the bar-open seconds xuCandles guarantees. Pure. */
-  function hgOmniResample(rows, secPerBucket){
+     from the bar-open seconds xuCandles guarantees. Pure.
+
+     v672: drop the trailing bucket when it is still aggregating. Prior to
+     v672 the function unconditionally pushed the final bucket even when
+     only 1..(N-1) of its constituent bars had actually arrived, so daily
+     resamples mid-session emitted a "daily" bar containing partial data.
+     Consumers (hgOmniDailyHtf, hgOmniMultiTfCascadeScore, HouseHits
+     squeeze path) then read EMA21/EMA50 off that partial daily close,
+     causing the daily HTF gate to flip mid-day and the MTF cascade
+     agreement bits to repaint. Same class as v665 dropForming on the
+     fetch path, one abstraction higher (bucketing rather than fetching).
+
+     Behaviour: a bucket is considered forming when its key + per exceeds
+     the last raw-row timestamp + one intraday-tf's slack. Since we do not
+     know the intraday tf here, we take the last raw row's timestamp as
+     the honest upper bound on time-observed — if the trailing bucket's
+     open key is BEFORE that upper bound, at least some later bars would
+     have been aggregated into the SAME bucket if they existed, so the
+     bucket is closed only when the next raw bar would have started a new
+     bucket. Otherwise it is still open and must be dropped.
+
+     Callers that want the OLD full-bucket behaviour (walk-forward replays
+     that already prefix-close their own series) can pass
+     opts.dropForming === false to opt out. */
+  function hgOmniResample(rows, secPerBucket, opts){
     if (!rows || !rows.length) return [];
     var per = secPerBucket || 86400, out = [], cur = null, i, r, t, key;
     for (i = 0; i < rows.length; i++){
@@ -1469,7 +1492,33 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         cur.v += (num(r.v) || 0);
       }
     }
-    if (cur) out.push(cur);
+    if (cur){
+      /* v672: default — drop the trailing bucket unless the caller opts out */
+      var drop = !(opts && opts.dropForming === false);
+      if (drop){
+        /* The last raw bar in `rows` is our honest upper bound on "time
+           observed". If cur.t + per is beyond that upper bound + one raw-bar
+           period (heuristic: we don't know the raw tf here, so use the
+           difference between the last two raw bar timestamps if available),
+           the trailing bucket is still forming and must be dropped. */
+        var lastRawT = num(rows[rows.length - 1].t);
+        var rawTf = 0;
+        if (rows.length >= 2){
+          var prevT = num(rows[rows.length - 2].t);
+          if (isFinite(prevT) && isFinite(lastRawT) && lastRawT > prevT){
+            rawTf = lastRawT - prevT;
+          }
+        }
+        /* Bucket is closed only when the next raw-bar timestamp WOULD have
+           landed in a new bucket. i.e. lastRawT + rawTf >= cur.t + per. */
+        var isClosed = isFinite(lastRawT) && rawTf > 0 &&
+                       (lastRawT + rawTf >= cur.t + per);
+        if (isClosed){ out.push(cur); }
+        /* else: still forming, discard */
+      } else {
+        out.push(cur);
+      }
+    }
     return out;
   }
 
