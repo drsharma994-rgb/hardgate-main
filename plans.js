@@ -27,10 +27,59 @@ function _last(arr){
   return (arr && arr.length) ? arr[arr.length - 1] : NaN;
 }
 
+/* v676: defensive forming-bar drop for plans.js internals.
+
+   plans.js is the trade-plan engine consumed by OMNIGOLD, OMNIROUTE, and
+   Reversal Sniper. Its internals read rows[rows.length - 1] as "the last
+   closed bar" for cascade badges, stale-momentum vetoes, and G5 wick +
+   volume participation. Prior to v676 the file trusted its callers to
+   supply already-closed rows; three callers (engine.js, oiflow.js,
+   squeeze.js, brainrobust.js) pass raw fetcher output that still
+   includes the currently forming bar. Result: cascade badge, veto
+   decision, and G5 gate all flicker mid-bar and settle only at bar
+   close — the exact class of repaint OMNIGOLD v665 and reversalsniper
+   v670 fixed at the fetch layer.
+
+   Fix: apply a defensive drop at the entry of every function that reads
+   the last bar as a closed reference. Prefer the shared hgDropForming
+   helper when it exists (same one v665/v670/v672 use); else fall back to
+   a bar-tf-agnostic heuristic that pops the last row only when its
+   timestamp + one raw-tf period exceeds now. Cannot regress a caller
+   that already prefix-closes their rows — that caller sees the same
+   closed prefix.
+
+   Guards: skip when rows has fewer than 2 bars (cannot infer tf) or
+   when the shared helper is present (delegate to it). */
+function hgPlansDropForming(rows){
+  try{
+    if (!Array.isArray(rows) || rows.length < 2) return rows || [];
+    var shared = G.hgDropForming || G.hgOgDropForming || G.dropForming;
+    if (typeof shared === 'function'){
+      var out = shared(rows);
+      if (Array.isArray(out) && out.length) return out;
+    }
+    var lastRow = rows[rows.length - 1];
+    var prevRow = rows[rows.length - 2];
+    var t = lastRow && (+lastRow.t || +lastRow.time || +lastRow.openTime);
+    var p = prevRow && (+prevRow.t || +prevRow.time || +prevRow.openTime);
+    if (!isFinite(t) || !isFinite(p) || t <= p) return rows;
+    if (t > 1e12) t = Math.floor(t / 1000);
+    if (p > 1e12) p = Math.floor(p / 1000);
+    var tf = t - p;
+    if (!(tf > 0)) return rows;
+    var nowSec = Math.floor(Date.now() / 1000);
+    if (t + tf > nowSec) return rows.slice(0, -1);
+    return rows;
+  }catch(e){ return rows || []; }
+}
+
 /* --- confirmed trend cascade (single definition for badges) --- */
 function hgConfirmedCascade(rows, style){
   var out = { confirmed: false, dir: null, label: 'n/a', style: style || 'smart' };
   try{
+    /* v676: defensively drop the forming bar so the badge does not flicker
+       mid-bar as ticks drag the EMA20/EMA50/EMA9/EMA21 last values around */
+    rows = hgPlansDropForming(rows);
     if (!rows || rows.length < 55 || typeof ema !== 'function') return out;
     var closes = rows.map(function(r){ return r.c; });
     var n = closes.length - 1;
@@ -142,6 +191,11 @@ function hgErrText(e){
 function hgStaleMomentumVeto(rows, dir, entry){
   try{
     if (!dir || !isFinite(+entry)) return hgUncheckedGate('stale-momentum: no direction/entry to test');
+    /* v676: defensively drop the forming bar. cascadeAgeBars walks from the
+       last bar backward and pivots on whether the current bar satisfies the
+       cascade condition; if that bar is forming, one tick can flip the age
+       from 0 to N and thus flip the veto decision. */
+    rows = hgPlansDropForming(rows);
     if (!rows || rows.length < 60){
       return hgUncheckedGate('stale-momentum: ' + ((rows && rows.length) || 0) + ' bars, needs 60');
     }
@@ -751,6 +805,21 @@ function hgSwingG5OK(dir, rows, c, r14, vz){
   try{
     dir = String(dir || '').toLowerCase();
     if (!rows || !rows.length || !c || !c.length) return { ok: false, closeOK: false, quiet: false };
+    /* v676: defensively drop the forming bar. The wick close-position (line
+       cb.c) and the RSI(14) slope (last vs. -4) both need to reference a
+       closed bar; otherwise a tick can push closePos above/below the 0.6/0.4
+       gate every second. If we drop rows, also drop the matching last entry
+       from the closes array so the RSI slope path stays synchronized. vz
+       (volume z) was computed by the caller — we cannot honestly recompute
+       it here but leave it as-is; the closeOK gate still short-circuits the
+       vz-driven quiet path when the wick disagrees, so the drop still
+       eliminates the dominant flicker source. */
+    var dropped = hgPlansDropForming(rows);
+    if (dropped.length === rows.length - 1 && Array.isArray(c) && c.length === rows.length){
+      c = c.slice(0, -1);
+    }
+    rows = dropped;
+    if (!rows.length || !c.length) return { ok: false, closeOK: false, quiet: false };
     var cb = rows[rows.length - 1];
     var range = (+cb.h) - (+cb.l);
     var closePos = range > 0 ? ((+cb.c) - (+cb.l)) / range : 0.5;
