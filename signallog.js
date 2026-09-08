@@ -549,8 +549,11 @@ function render(){
       if (ui.body) ui.body.innerHTML = '';
       if (ui.empty){
         ui.empty.style.display = 'block';
+        /* v659: empty-state text was stuck at 'BRAIN, GOLD SCALP or GOLD SWING'
+           since v646. Rebuild from SOURCES so it names every active source. */
         ui.empty.textContent = 'no signals logged yet — the journal fills while the app '
-          + 'is open (every 5 min + on refresh) whenever BRAIN, GOLD SCALP or GOLD SWING have live results.';
+          + 'is open (every 5 min + on refresh) whenever any of these sources have '
+          + 'live results: ' + SOURCES.map(function(s){ return s.toUpperCase(); }).join(', ') + '.';
       }
     } else if (!filtered.length){
       /* journal has rows but current filter matches none — keep the table
@@ -919,7 +922,11 @@ function mount(el){
     el.innerHTML =
       '<style>' + SL_CSS + '</style>'
       + '<div class="panel">'
-      + '<h2>SIGNAL LOG <span>persistent journal of brain + scalp + swing signals · newest first · capped at 500</span></h2>'
+      /* v659: subtitle was stuck at 'brain + scalp + swing' — stale since v646
+         when we started pulling crypto SWING/SCALP + supergold too. Rebuilt
+         from SOURCES so it stays truthful on future source additions. */
+      + '<h2>SIGNAL LOG <span>persistent journal of ' + SOURCES.join(' + ')
+      + ' signals · newest first · capped at ' + MAX_ENTRIES + '</span></h2>'
       + '<div class="row"><button class="btn" id="slClear">CLEAR JOURNAL</button>'
       + '<button class="btn" id="slExport" style="margin-left:6px">EXPORT CSV</button>'   /* v655 */
       + '<span class="note" id="slStat">journal ready — snapshots run every 5 min and on refresh.</span></div>'
@@ -938,8 +945,11 @@ function mount(el){
       + '<div class="note warn" id="slCorrupt" style="display:none;margin-top:4px">journal reset (corrupt) — stored data was unreadable, started fresh.</div>'
       + '</div>'
       + '<div class="sl-wrap" id="slBody"></div>'
+      /* v659: static empty-state text also rebuilt from SOURCES for parity
+         with the render() dynamic empty text above. */
       + '<div class="empty" id="slEmpty" style="display:none">no signals logged yet — the journal fills while the app '
-      + 'is open (every 5 min + on refresh) whenever BRAIN, GOLD SCALP or GOLD SWING have live results.</div>';
+      + 'is open (every 5 min + on refresh) whenever any of these sources have live results: '
+      + SOURCES.map(function(s){ return s.toUpperCase(); }).join(', ') + '.</div>';
 
     __ui = {
       clear:    el.querySelector('#slClear'),
