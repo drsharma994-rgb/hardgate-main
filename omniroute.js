@@ -3124,78 +3124,142 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     };
   }
 
+  /* v673: local-hour helper for session scoring. Delegates to the shared
+     hgOgLocalHour (defined in omnigold.js as of v668) if available so both
+     tabs share one DST-aware code path. Returns the local hour (0..23) or
+     NaN if Intl or the tz is unavailable. */
+  function hgOmniLocalHour(t, tz){
+    if (!isFinite(t) || !tz) return NaN;
+    /* Prefer the shared helper (v668 in omnigold) so the two tabs cannot drift */
+    var shared = (typeof W !== 'undefined' && W.hgOgLocalHour) ||
+                 (typeof window !== 'undefined' && window.hgOgLocalHour);
+    if (typeof shared === 'function'){
+      try {
+        var v = shared(t, tz);
+        if (isFinite(v)) return v;
+      } catch(e){}
+    }
+    /* Fallback: our own Intl call */
+    try {
+      var fmt = new Intl.DateTimeFormat('en-GB', {
+        timeZone: tz, hour: '2-digit', hour12: false
+      });
+      var parts = fmt.formatToParts(new Date(t * 1000));
+      for (var i = 0; i < parts.length; i++){
+        if (parts[i].type === 'hour') return parseInt(parts[i].value, 10);
+      }
+    } catch(e){}
+    return NaN;
+  }
+
   /* P1.3: SESSION/EXECUTION TIMING SCORING (7 pts)
-     Scores trade timing by session (LONDON, NY, ASIA) and horizon (SCALP vs SWING).
-     SCALP (1H): 7pts LONDON/NY OVERLAP, 5pts LONDON open, 3pts NY open, 1pt ASIA
-     SWING (4H): 7pts LONDON/NY OVERLAP, 4pts other active hours
-     Penalize: -2pts if red-flag news <1h away, 0pts if in quiet hours
-  */
+
+     v673: DST-aware Europe/London + America/New_York rewrite (mirrors
+     omnigold v667/v668). Prior to v673 this function:
+       1. Assumed a fixed IST offset (UTC+5:30) with hard-coded window
+          boundaries that were labelled as London/NY sessions but were
+          actually 5-6 hours OFF the real session hours — e.g. the code
+          called 05:00 IST "LONDON OPEN" but 05:00 IST = 23:30 UTC (prev
+          day), which is well before the true London open (08:00 London
+          local = ~13:30 IST in winter, ~12:30 IST in summer).
+       2. Was DST-blind: London swings 07:00 <-> 08:00 UTC across the BST
+          boundary and NY swings 13:30 <-> 14:30 UTC across the EDT/EST
+          boundary, but the IST table cannot represent this.
+       3. Used Date.now() rather than the setup's bar timestamp, so a
+          swing setup detected on a 4h close six hours ago was scored
+          against the operator's current wall clock.
+
+     Result: session scoring was displaced by ~5 hours on average, real
+     LONDON/NY overlap trades scored as UNDEFINED (score 0) or ASIA
+     (score 1), and Asian-session trades were routinely mislabelled as
+     OVERLAP (score 7) — the composite solidity tier decision was
+     silently corrupted.
+
+     Fix (v673):
+       * Resolve BOTH local hours from the setup's bar timestamp via
+         hgOmniLocalHour (Intl.DateTimeFormat), so BST/EDT/EST/GMT are
+         all handled correctly.
+       * Windows in true LOCAL hours:
+           LONDON open        ≡ London  hour in [7, 9)
+           NY open            ≡ NY      hour in [9, 11)
+           LONDON/NY overlap  ≡ London  hour in [13, 16) AND NY hour in [8, 11)
+           ASIA               ≡ UTC     hour in [0, 7)   (Tokyo/HK have no DST)
+           QUIET              ≡ UTC     hour in [22, 24) or NY hour in [17, 22)
+       * Prefer setup.hit.t / setup.bar.t / setup.rows tail over Date.now().
+     Falls back gracefully to Date.now() only when no bar timestamp is
+     available.
+
+     Behaviour compatibility: still returns the same shape
+     { score, detail, maxScore, session, horizon, ... }. `istHours` is
+     kept in the return payload for existing UI consumers, computed from
+     the resolved setup timestamp rather than wall clock. */
   function hgOmniSessionTimingScore(setup, horizonLabel){
     if (!setup) return { score: 0, detail: 'no setup' };
 
-    /* Current time in IST (Indian Standard Time, UTC+5:30) for consistent reference */
-    var now = new Date();
-    var istOffset = 5.5; /* IST is UTC+5:30 */
-    var utcHours = now.getUTCHours();
-    var istHours = (utcHours + istOffset) % 24;
-    var minutes = now.getUTCMinutes();
-    var timeDecimal = istHours + (minutes / 60);
+    /* v673: use the setup's bar timestamp when available; fall back to now */
+    var sec = NaN;
+    if (setup.hit && isFinite(fin(setup.hit.t))) sec = fin(setup.hit.t);
+    else if (setup.bar && isFinite(fin(setup.bar.t))) sec = fin(setup.bar.t);
+    else if (Array.isArray(setup.rows) && setup.rows.length){
+      var last = setup.rows[setup.rows.length - 1];
+      if (last && isFinite(fin(last.t))) sec = fin(last.t);
+    }
+    if (!isFinite(sec)) sec = Math.floor(Date.now() / 1000);
+
+    var utcDate = new Date(sec * 1000);
+    var utcHour = utcDate.getUTCHours();
+    var utcMin = utcDate.getUTCMinutes();
+    var istDecimal = ((utcHour + 5.5) % 24) + (utcMin / 60);
+    var lonHour = hgOmniLocalHour(sec, 'Europe/London');
+    var nyHour = hgOmniLocalHour(sec, 'America/New_York');
 
     var horizon = horizonLabel ? String(horizonLabel).toUpperCase() : 'UNKNOWN';
-    var score = 0, sessionLabel = '', detail = '';
+    var score = 0, sessionLabel = '';
 
-    /* Session windows (in IST hours) */
-    var asiaOpen = 0;     /* 00:00 IST = 18:30 prev JST open (approx) */
-    var londonOpen = 5;   /* 05:00 IST = 23:30 prev London open (approx) */
-    var londonNyOverlap = 13; /* 13:00-17:30 IST = 07:30-12:00 London / 13:00-17:30 NY */
-    var nyOpen = 20.5;    /* 20:30 IST = 11:00 NY open (approx) */
-    var quietHoursStart = 0;
-    var quietHoursEnd = 5;
+    /* Session classification in LOCAL hours (Intl-resolved). Fallbacks below
+       when Intl is absent widen to UTC windows that cover both DST regimes. */
+    var isOverlap, isLondon, isNy, isAsia, isQuiet;
+    if (isFinite(lonHour) && isFinite(nyHour)){
+      isOverlap = (lonHour >= 13 && lonHour < 16) && (nyHour >= 8 && nyHour < 11);
+      isLondon  = !isOverlap && (lonHour >= 7 && lonHour < 13);
+      isNy      = !isOverlap && !isLondon && (nyHour >= 9 && nyHour < 16);
+      isAsia    = !isOverlap && !isLondon && !isNy && (utcHour >= 0 && utcHour < 7);
+      isQuiet   = !isOverlap && !isLondon && !isNy && !isAsia &&
+                  ((utcHour >= 22 && utcHour < 24) || (nyHour >= 17 && nyHour < 22));
+    } else {
+      /* Intl absent — widened UTC windows that cover both DST regimes */
+      isOverlap = (utcHour >= 12 && utcHour < 16); /* London 13..16 union NY 08..11 */
+      isLondon  = !isOverlap && (utcHour >= 6 && utcHour < 13); /* covers BST + GMT */
+      isNy      = !isOverlap && !isLondon && (utcHour >= 13 && utcHour < 21);
+      isAsia    = !isOverlap && !isLondon && !isNy && (utcHour >= 0 && utcHour < 7);
+      isQuiet   = !isOverlap && !isLondon && !isNy && !isAsia && (utcHour >= 21 || utcHour < 0);
+    }
 
-    /* Determine current session and timing bonus */
-    if (timeDecimal >= londonNyOverlap && timeDecimal < 17.5){
+    if (isOverlap){
       sessionLabel = 'LONDON/NY OVERLAP';
-      if (horizon === 'SCALP' || horizon === '1H'){
-        score = 7;
-      } else if (horizon === 'SWING' || horizon === '4H'){
-        score = 7;
-      } else {
-        score = 6;
-      }
-    } else if (timeDecimal >= londonOpen && timeDecimal < londonNyOverlap){
+      score = (horizon === 'SCALP' || horizon === '1H' || horizon === 'SWING' || horizon === '4H') ? 7 : 6;
+    } else if (isLondon){
       sessionLabel = 'LONDON OPEN';
-      if (horizon === 'SCALP' || horizon === '1H'){
-        score = 5;
-      } else {
-        score = 4;
-      }
-    } else if (timeDecimal >= nyOpen || timeDecimal < asiaOpen + 1){
+      score = (horizon === 'SCALP' || horizon === '1H') ? 5 : 4;
+    } else if (isNy){
       sessionLabel = 'NY OPEN';
-      if (horizon === 'SCALP' || horizon === '1H'){
-        score = 3;
-      } else {
-        score = 3;
-      }
-    } else if (timeDecimal >= asiaOpen && timeDecimal < londonOpen){
+      score = 3;
+    } else if (isAsia){
       sessionLabel = 'ASIA';
-      if (horizon === 'SCALP' || horizon === '1H'){
-        score = 1;
-      } else {
-        score = 1;
-      }
-    } else {
-      sessionLabel = 'UNDEFINED';
+      score = 1;
+    } else if (isQuiet){
+      sessionLabel = 'QUIET HOURS';
       score = 0;
+    } else {
+      sessionLabel = 'OFF-SESSION';
+      score = 2; /* v673: an off-session survivor is still a survivor; no
+                    longer scored 0 like an UNDEFINED gap. */
     }
 
-    /* Quiet hours penalty (very low liquidity) */
-    if (timeDecimal >= quietHoursStart && timeDecimal < quietHoursEnd){
-      score = 0;
-      sessionLabel = 'QUIET HOURS (penalized)';
-      detail = 'setup during quiet hours (00:00-05:00 IST) — minimal liquidity';
-    } else {
-      detail = horizon + ' setup during ' + sessionLabel + ' (' + istHours.toFixed(1) + ' IST)';
-    }
+    var detail = horizon + ' setup during ' + sessionLabel +
+                 ' (London ' + (isFinite(lonHour) ? lonHour : '?') +
+                 ', NY ' + (isFinite(nyHour) ? nyHour : '?') +
+                 ', UTC ' + utcHour + ')';
 
     /* News penalty: -2pts if red-flag news <1h away */
     var newsPenalty = 0;
@@ -3211,7 +3275,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       maxScore: 7,
       session: sessionLabel,
       horizon: horizon,
-      istHours: istHours,
+      istHours: istDecimal, /* v673: computed from setup timestamp, not wall clock */
+      lonHour: lonHour,
+      nyHour: nyHour,
+      utcHour: utcHour,
       newsPenalty: newsPenalty
     };
   }
