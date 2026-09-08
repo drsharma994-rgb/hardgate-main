@@ -1356,18 +1356,57 @@ terse status, and never launches a first-time scan on a global refresh.
     }catch(e){ return null; }
   }
 
+  /* v669: FX/gold trading week opens at 17:00 NEW YORK time on Sunday,
+     not Monday 00:00 UTC. Under EST that's Sunday 22:00 UTC; under EDT
+     that's Sunday 21:00 UTC. Prior to v669 the week open was pinned to
+     Monday 00:00 UTC, so the WEEKLY-OPEN mechanic:
+       * missed the first 2–3 hours of every real trading week (Sunday
+         22:00–24:00 UTC in EST, or 21:00–24:00 UTC in EDT), and
+       * during Monday 00:00–17:00 UTC it read the Monday-00:00 hourly bar
+         as the "weekly open" instead of the actual Sunday-evening bar
+         where the true weekly-open price prints.
+     Fix: resolve the most recent Sunday 17:00 America/New_York and treat
+     the first bar at-or-after that instant as the weekly open. Falls back
+     to a widened UTC window (Sunday 21:00 UTC) if Intl is absent — correct
+     under EDT, off by an hour in EST but still much better than Monday 00. */
   function hgOgWeekOpenPx(rows){
     if (!rows || !rows.length) return NaN;
     var lastT = num(rows[rows.length - 1].t);
     if (!isFinite(lastT)) return NaN;
-    var dayStart = Math.floor(lastT / 86400) * 86400;
-    var dow = new Date(dayStart * 1000).getUTCDay();
-    var fromMon = (dow + 6) % 7;
-    var weekStart = dayStart - fromMon * 86400;
+    /* Walk back day-by-day up to 8 days looking for a Sunday whose local NY
+       hour crosses 17. Cap the walk at 8 days so an Intl misfire cannot
+       spin. `stepStart` is a UTC-midnight-aligned second-of-day for the day
+       we are testing. */
+    var todayStart = Math.floor(lastT / 86400) * 86400;
+    var weekOpenT = NaN;
+    var stepStart, dow, cand, nhr;
+    for (var back = 0; back <= 8; back++){
+      stepStart = todayStart - back * 86400;
+      dow = new Date(stepStart * 1000).getUTCDay(); /* 0 = Sunday */
+      if (dow !== 0) continue;
+      /* Try each hour of that Sunday from 20..23 UTC and pick the first that
+         hits 17 NY local (that covers both EDT 21 UTC and EST 22 UTC). */
+      var picked = NaN;
+      for (var hh = 20; hh <= 23; hh++){
+        cand = stepStart + hh * 3600;
+        nhr = (typeof hgOgLocalHour === 'function') ? hgOgLocalHour(cand, 'America/New_York') : NaN;
+        if (isFinite(nhr) && nhr === 17){ picked = cand; break; }
+      }
+      if (isFinite(picked)){ weekOpenT = picked; }
+      else {
+        /* Intl absent — use Sunday 21:00 UTC as the widened fallback (correct
+           under EDT summer, one hour early under EST winter). Still better
+           than Monday 00:00 which lost 2–4 hours of every trading week. */
+        weekOpenT = stepStart + 21 * 3600;
+      }
+      if (weekOpenT > lastT) continue; /* Sunday in the future — rare, skip */
+      break;
+    }
+    if (!isFinite(weekOpenT)) return NaN;
     var i, t, first = null;
     for (i = 0; i < rows.length; i++){
       t = num(rows[i].t);
-      if (!isFinite(t) || t < weekStart) continue;
+      if (!isFinite(t) || t < weekOpenT) continue;
       first = rows[i];
       break;
     }
