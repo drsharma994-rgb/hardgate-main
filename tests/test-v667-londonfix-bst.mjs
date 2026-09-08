@@ -28,10 +28,14 @@ assert.ok(/v667: London PM Fix is 15:00 LONDON local time/.test(src),
 /* --- London-hour helper must be defined --- */
 assert.ok(/function hgOgLondonHour\(t\)\{/.test(src),
   'hgOgLondonHour helper must be defined');
-assert.ok(/timeZone: 'Europe\/London'/.test(src),
-  'helper must use Europe/London for Intl.DateTimeFormat');
+/* v668: helper delegates through hgOgLocalHour(t, tz); accept either the
+   original inline shape ('Europe/London' literal) OR the delegated shape
+   (a call like hgOgLocalHour(t, 'Europe/London')). Either way, Europe/London
+   must appear somewhere in the source. */
+assert.ok(/'Europe\/London'/.test(src),
+  'source must reference Europe/London (inline or delegated)');
 assert.ok(/parts\[i\]\.type === 'hour'/.test(src),
-  'helper must extract the hour part from formatToParts');
+  'source must extract the hour part from formatToParts (in the helper or its delegate)');
 
 /* --- hgOgLondonFix uses the LONDON hour first, then falls back --- */
 assert.ok(/var lhr = hgOgLondonHour\(t\);/.test(src),
@@ -46,11 +50,16 @@ assert.ok(/inWindow = \(uhr === 14 \|\| uhr === 15 \|\| uhr === 16\);/.test(src)
 assert.ok(!/if \(hr !== 15 && hr !== 16\) return null;/.test(src),
   'stale strict UTC guard must be removed');
 
-/* --- runtime demonstration: extract hgOgLondonHour and prove BST vs GMT --- */
-const helperMatch = src.match(/function hgOgLondonHour\(t\)\{[\s\S]*?\n  \}/);
-assert.ok(helperMatch, 'hgOgLondonHour body must be extractable');
+/* --- runtime demonstration: extract hgOgLondonHour and prove BST vs GMT.
+   v668: hgOgLondonHour delegates to hgOgLocalHour, so if the delegated form
+   is present we must also pull hgOgLocalHour into the extracted sandbox. */
+const londonMatch = src.match(/function hgOgLondonHour\(t\)\{[\s\S]*?\n  \}/);
+assert.ok(londonMatch, 'hgOgLondonHour body must be extractable');
+const localMatch = src.match(/function hgOgLocalHour\(t, tz\)\{[\s\S]*?\n  \}/);
+/* if the source has the delegate, include it in the sandbox */
+const body = (localMatch ? (localMatch[0] + '\n') : '') + londonMatch[0];
 const wrap = new Function('num', 'isFinite',
-  helperMatch[0] + '\nreturn hgOgLondonHour;');
+  body + '\nreturn hgOgLondonHour;');
 const hgOgLondonHour = wrap(
   (v) => { var n = +v; return Number.isFinite(n) ? n : NaN; },
   Number.isFinite
