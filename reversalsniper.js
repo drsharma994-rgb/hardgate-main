@@ -240,9 +240,34 @@ function rsAssess(rows, opts){
                                 atr: a14, mean: mr.target, oppBand: opp });
       if (mrp) plan = rsBuildPlan(mrp.entry, rsSniperStop('long', mrp.entry, mrp.stop), mrp.rr1, mrp.rr2);
     }
-    if (!plan && triggers.indexOf('rsi') >= 0 && isFinite(a14)){
+    /* v674: RSI-only branch — the weakest branch (fires on a single indicator,
+       adds only +1 rsConviction on its own) is also the one that most needed
+       structural discipline. v670 already gave us closed-bar hygiene by
+       dropping the forming bar in rsFetchKlines, but even with a closed
+       rows[n-1] a hot RSI(2) alone does not describe the swing shape that a
+       reversal snipes.
+
+       Guard: require a completed LOWER LOW on the last two closed bars
+       (rows[n-2].l < rows[n-3].l) before allowing lowest[n-1] as the swing
+       extreme. If no such lower low is present, fall back to a proper
+       closed-bar swing low (rsSwingLow with lookback 10, exclude 1) so the
+       stop anchors on a level that HAS actually completed as a swing.
+       When neither is available, skip the branch entirely rather than
+       anchor to a level that never was a swing. */
+    if (!plan && triggers.indexOf('rsi') >= 0 && isFinite(a14) && n >= 4){
       var lo5b = (typeof lowest === 'function') ? lowest(rows.map(function(r){ return r.l; }), EXT_LEN) : null;
-      var ex = (lo5b && lo5b.length) ? lo5b[n - 1] : NaN;
+      var lower = isFinite(rows[n-2] && rows[n-2].l) && isFinite(rows[n-3] && rows[n-3].l) &&
+                  (rows[n-2].l < rows[n-3].l);
+      var ex;
+      if (lower){
+        /* structural weakness in the closed prefix: lowest[n-1] is a
+           legitimate rolling minimum of that weakness */
+        ex = (lo5b && lo5b.length) ? lo5b[n - 1] : NaN;
+      } else {
+        /* no completed lower low — fall back to the proper swing-low helper
+           whose window excludes only the immediately-adjacent bar */
+        ex = rsSwingLow(rows, 10, 1);
+      }
       if (isFinite(ex)){
         var tightStop = rsSniperStop('long', entry, ex - 1.5 * a14);
         plan = rsBuildPlan(entry, tightStop, RR1, RR2);
