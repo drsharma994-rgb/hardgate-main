@@ -207,8 +207,48 @@
     };
   }
 
+  /* v684: per-gate reason string for the chip tooltip. Turns the chip from
+     decorative into diagnostic — a trader can hover a MIXED chip and see
+     which specific gates failed (adverse tape? past-stop? widened stop?),
+     rather than just a 3/5 that gives no direction on what to fix or ignore.
+
+     Reason format: five lines, one per gate, each prefixed with ✓ or ✗ and
+     a short label describing that gate's finding. Consumed as a title=""
+     attribute so browsers render it as native hover text; newlines are
+     encoded as &#10; which every modern engine treats as a line break in
+     tooltip contexts. */
+  function hgSolidityReasons(sol){
+    if (!sol || !sol.gates) return '';
+    var g = sol.gates;
+    var lines = [];
+    /* G1 FAMILIES */
+    var g1 = g.families || {};
+    lines.push((g1.pass ? '✓' : '✗') + ' families: '
+      + (isFinite(g1.n) ? g1.n : '?') + ' agree'
+      + (g1.source ? ' (' + g1.source + ')' : ''));
+    /* G2 LIVE-FRESH */
+    var g2 = g.liveFresh || {};
+    lines.push((g2.pass ? '✓' : '✗') + ' live-price: ' + (g2.grade || 'unknown'));
+    /* G3 TAPE */
+    var g3 = g.tape || {};
+    lines.push((g3.pass ? '✓' : '✗') + ' tape: ' + (g3.tape || 'unknown'));
+    /* G4 RR */
+    var g4 = g.rr || {};
+    var rrStr = (isFinite(g4.rr) ? g4.rr.toFixed(2) : '?') + 'R (floor '
+      + (isFinite(g4.floor) ? g4.floor.toFixed(2) : '?') + 'R + 0.25)';
+    lines.push((g4.pass ? '✓' : '✗') + ' rr: ' + rrStr);
+    /* G5 STOP */
+    var g5 = g.stop || {};
+    lines.push((g5.pass ? '✓' : '✗') + ' stop: '
+      + (g5.widened === true ? 'widened to v681 floor' : 'natural structure'));
+    return lines.join('\n');
+  }
+
   /* Convenience: chip HTML for a card footer, styled to match existing hg
-     chips (gpip ok / caution / veto). Tabs may render it or not. */
+     chips (gpip ok / caution / veto). Tabs may render it or not.
+
+     v684: tooltip now carries the per-gate breakdown so a MIXED chip
+     tells the user WHICH gates failed — not just the score. */
   function hgSolidityChipHtml(sol){
     if (!sol || !sol.grade) return '';
     var cls = 'caution';
@@ -217,7 +257,15 @@
     else if (sol.grade === 'MIXED') cls = 'caution';
     else if (sol.grade === 'THIN') cls = 'veto';
     else if (sol.grade === 'WEAK') cls = 'veto';
-    return '<span class="gpip ' + cls + '" title="Solidity ' + sol.score + '/5">SOLIDITY ' + sol.grade + '</span>';
+    var reasons = hgSolidityReasons(sol);
+    var title = 'Solidity ' + sol.score + '/5';
+    if (reasons) title += '\n' + reasons;
+    /* HTML-encode the title to keep double-quotes safe inside the attribute
+       AND to preserve newlines as &#10; which browsers convert back to line
+       breaks in native tooltips. */
+    var titleAttr = title.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '&#10;');
+    return '<span class="gpip ' + cls + '" title="' + titleAttr + '">SOLIDITY ' + sol.grade + '</span>';
   }
 
   /* Sort helper: reorders a list of cards so lead-eligible (SOLID/GOOD) come
@@ -240,11 +288,12 @@
   /* --- expose ----------------------------------------------------------- */
   G.hgSolidityGrade = hgSolidityGrade;
   G.hgSolidityChipHtml = hgSolidityChipHtml;
+  G.hgSolidityReasons = hgSolidityReasons; /* v684 */
   G.hgSolidityReorder = hgSolidityReorder;
   G.hgSolGateFamilies = hgSolGateFamilies;
   G.hgSolGateLiveFresh = hgSolGateLiveFresh;
   G.hgSolGateTape = hgSolGateTape;
   G.hgSolGateRr = hgSolGateRr;
   G.hgSolGateStop = hgSolGateStop;
-  G.HG_SOLIDITY_VERSION = 'v682';
+  G.HG_SOLIDITY_VERSION = 'v684';
 })();

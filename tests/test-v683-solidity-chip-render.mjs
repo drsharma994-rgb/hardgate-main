@@ -21,7 +21,7 @@ const { HG_VER } = await import('./helpers/build-version.mjs');
 /* --- 1. helper still present and unchanged --- */
 const solSrc = readFileSync(resolve(ROOT, 'hg-solidity.js'), 'utf8');
 assert.ok(/hgSolidityChipHtml/.test(solSrc), 'chip helper defined');
-assert.ok(/HG_SOLIDITY_VERSION = 'v682'/.test(solSrc), 'helper still v682 (this ship is a consumer)');
+assert.ok(/HG_SOLIDITY_VERSION = 'v(682|68[3-9]|69\d|[7-9]\d\d|\d{4,})'/.test(solSrc), 'helper version stamped >= v682');
 
 /* --- 2. all three tabs render the chip in their card head --- */
 const omniroute = readFileSync(resolve(ROOT, 'omniroute.js'), 'utf8');
@@ -75,7 +75,7 @@ const chip = api.hgSolidityChipHtml;
   const html = chip({ grade: 'SOLID', score: 5 });
   assert.ok(/gpip ok/.test(html), 'SOLID -> ok class');
   assert.ok(/SOLIDITY SOLID/.test(html));
-  assert.ok(/title="Solidity 5\/5"/.test(html), 'SOLID score tooltip');
+  assert.ok(/title="Solidity 5\/5(&#10;[\s\S]*)?"/.test(html), 'SOLID score tooltip (optional per-gate reasons from v684)');
 }
 /* GOOD */
 {
