@@ -56,7 +56,7 @@ assert.ok(/max-width:420px/.test(sl),
   'sl-note max-width should be widened from 280px to 420px for the badge');
 
 /* --- version --- */
-assert.ok(/^hg-v(?:653|65[4-9]|66\d|[7-9]\d\d|\d{4,})$/.test(HG_VER),
+assert.ok(/^hg-v(?:653|65[4-9]|66\d|67\d|6[8-9]\d|[7-9]\d\d|\d{4,})$/.test(HG_VER),
   'HG_VER must be >= hg-v653 (saw ' + HG_VER + ')');
 const sw = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
 assert.ok(new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'").test(sw),

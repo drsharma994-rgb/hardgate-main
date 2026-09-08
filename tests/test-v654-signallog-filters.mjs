@@ -97,7 +97,7 @@ assert.ok(/#tab_signallog \.sl-search:focus/.test(sl),
   '.sl-search:focus style required');
 
 /* --- version --- */
-assert.ok(/^hg-v(?:654|65[5-9]|66\d|[7-9]\d\d|\d{4,})$/.test(HG_VER),
+assert.ok(/^hg-v(?:654|65[5-9]|66\d|67\d|6[8-9]\d|[7-9]\d\d|\d{4,})$/.test(HG_VER),
   'HG_VER must be >= hg-v654 (saw ' + HG_VER + ')');
 const sw = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
 assert.ok(new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'").test(sw),

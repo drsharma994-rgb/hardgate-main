@@ -86,7 +86,7 @@ assert.ok(html2.includes('title="G2 sweep/reclaim &mdash; no trigger (veto)"')
 assert.ok(/hg-gld-dot veto"[^>]*>2</.test(html2), 'G2 dot glyph must be 2');
 
 /* --- version bump --- */
-assert.ok(/^hg-v(?:650|65[1-9]|66\d|[7-9]\d\d|\d{4,})$/.test(HG_VER),
+assert.ok(/^hg-v(?:650|65[1-9]|66\d|67\d|6[8-9]\d|[7-9]\d\d|\d{4,})$/.test(HG_VER),
   'HG_VER must be >= hg-v650 (saw ' + HG_VER + ')');
 const sw = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
 const cacheRx = new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'");

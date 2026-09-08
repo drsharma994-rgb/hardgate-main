@@ -131,7 +131,7 @@ assert.ok(csv.includes('cswing,BTCUSD,long,A,60500,60100,61400,-0.3,1.2,1,2,G6,"
 assert.ok(csv.endsWith('\r\n'), 'CSV must terminate with CRLF');
 
 /* ------- version ------- */
-assert.ok(/^hg-v(?:655|65[6-9]|66\d|[7-9]\d\d|\d{4,})$/.test(HG_VER),
+assert.ok(/^hg-v(?:655|65[6-9]|66\d|67\d|6[8-9]\d|[7-9]\d\d|\d{4,})$/.test(HG_VER),
   'HG_VER must be >= hg-v655 (saw ' + HG_VER + ')');
 const sw = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
 assert.ok(new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'").test(sw),

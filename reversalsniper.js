@@ -334,31 +334,93 @@ async function rsLoadUniverse(force){
   }
 }
 
+/* v670: strip the currently forming bar off every fetch return before it can
+   reach rsAssess. rsAssess reads rows[n-1] as "the last closed bar" for entry,
+   RSI(2), ATR, lowest[n-1] extreme, and bollinger.upper[n-1] — every trigger
+   and every plan input. Binance kline endpoints (and hgDeskFetchKlines /
+   xuCandles when they wrap them) return the currently forming bar as the
+   last element. Without this drop, a sniper card can be published against
+   an unclosed bar whose RSI(2), ATR, and swing-low extreme drift every tick
+   and often re-print above the trigger threshold once the bar closes.
+   Same defect family as OMNIGOLD v665 (which extended dropForming to the
+   legacy fetch path); this is the analogous fix for the Reversal Sniper.
+
+   Strategy: prefer the shared hgDropForming helper (used across HARDGATE),
+   else fall back to a timeframe-aware guard — if the last bar's open
+   timestamp + timeframe duration > now, it hasn't closed yet. */
+function rsTfSec(tf){
+  var s = String(tf || '').toLowerCase();
+  var m = s.match(/^(\d+)\s*([smhdw])$/);
+  if (!m) return 0;
+  var n = parseInt(m[1], 10); var u = m[2];
+  if (u === 's') return n;
+  if (u === 'm') return n * 60;
+  if (u === 'h') return n * 3600;
+  if (u === 'd') return n * 86400;
+  if (u === 'w') return n * 86400 * 7;
+  return 0;
+}
+function rsDropForming(rows, tf){
+  if (!Array.isArray(rows) || !rows.length) return rows || [];
+  /* prefer the shared helper if present (same one v665 uses in omnigold) */
+  var f = W.hgDropForming || W.dropForming || W.hgOgDropForming;
+  if (typeof f === 'function'){
+    try {
+      var out = f(rows, tf);
+      if (Array.isArray(out)) return out;
+    } catch(e){}
+  }
+  /* fallback: drop the last bar if it is still open under this timeframe */
+  var per = rsTfSec(tf);
+  if (!(per > 0)) return rows;
+  var last = rows[rows.length - 1];
+  var t = last && (+last.t || +last.time || +last.openTime);
+  if (!isFinite(t)) return rows;
+  /* t may arrive in seconds or milliseconds — normalise to seconds */
+  if (t > 1e12) t = Math.floor(t / 1000);
+  var nowSec = Math.floor(Date.now() / 1000);
+  if (t + per > nowSec) return rows.slice(0, -1);
+  return rows;
+}
 async function rsFetchKlines(item, tf, n){
   try{
+    var rows;
     if (typeof W.hgDeskFetchKlines === 'function'){
-      return await W.hgDeskFetchKlines(item, tf, n);
-    }
-    if (typeof W.xuCandles === 'function'){
-      return await W.xuCandles(item, tf, n);
-    }
+      rows = await W.hgDeskFetchKlines(item, tf, n);
+    } else if (typeof W.xuCandles === 'function'){
+      rows = await W.xuCandles(item, tf, n);
+    } else {
 /* Map before asking Binance — a venue code means nothing to fapi. This is the
    same defect fixed in desk-scan-universe.js (v431) and brain.js (v450);
    reuse the mapping those export rather than a fifth private copy. When it is
    unavailable the Binance leg is skipped: no usable symbol means no Binance
    data, and inventing one is how this family started. */
-    var bSym = (typeof W.hgDeskBinanceSym === 'function') ? W.hgDeskBinanceSym(item) : null;
-    if (bSym && typeof binanceKlines === 'function'){
-      return await binanceKlines(bSym, tf, n);
+      var bSym = (typeof W.hgDeskBinanceSym === 'function') ? W.hgDeskBinanceSym(item) : null;
+      if (bSym && typeof binanceKlines === 'function'){
+        rows = await binanceKlines(bSym, tf, n);
+      }
     }
+    /* v670: apply forming-bar drop to whatever fetcher returned */
+    return rsDropForming(rows || [], tf);
   }catch(e){}
   return [];
 }
 
+/* v670: back-test on the closed prefix only — an unclosed final bar makes
+   the last simulated trade non-reproducible tick-to-tick, biasing winPct,
+   avgR, expR, and pf. All four values then feed rsConviction (+3 total).
+   rsFetchKlines already drops the forming bar in v670, so rsAssess passes
+   an already-clean array here; the extra safety belt below covers callers
+   that may hand in raw rows (e.g. rsBacktest exported for external use). */
 function rsBacktest(rows){
   try{
-    if (typeof W.mrBacktest === 'function') return W.mrBacktest(rows);
-    return { n: 0, winPct: 0, avgR: 0, pf: 0, expR: 0 };
+    if (typeof W.mrBacktest !== 'function') return { n: 0, winPct: 0, avgR: 0, pf: 0, expR: 0 };
+    var clean = Array.isArray(rows) ? rows : [];
+    /* Belt-and-braces: also try to strip a forming last bar here for external
+       callers, using a generous default tf hint. If clean is already closed,
+       rsDropForming returns it unchanged. */
+    if (clean.length) clean = rsDropForming(clean, '4h');
+    return W.mrBacktest(clean);
   }catch(e){ return { n: 0, winPct: 0, avgR: 0, pf: 0, expR: 0 }; }
 }
 

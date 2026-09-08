@@ -57,7 +57,7 @@ assert.ok(/var SOURCES = \['cswing', 'cscalp', 'scalp', 'swing', 'supergold', 'b
   'SOURCES array shape must still match the pullers so the rebuilt strings are accurate');
 
 /* --- version --- */
-assert.ok(/^hg-v(?:659|66\d|[7-9]\d\d|\d{4,})$/.test(HG_VER) && HG_VER >= 'hg-v659',
+assert.ok(/^hg-v(?:659|66\d|67\d|6[8-9]\d|[7-9]\d\d|\d{4,})$/.test(HG_VER) && HG_VER >= 'hg-v659',
   'HG_VER must be >= hg-v659 (saw ' + HG_VER + ')');
 const sw = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
 assert.ok(new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'").test(sw),
