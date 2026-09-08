@@ -1444,6 +1444,24 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     if (d) out.push(d);
     try { d = hgOmniExhaustRevert(rows); } catch (eCv6) { d = null; }
     if (d) out.push(d);
+
+    /* v677: stamp every hit with the formation-bar timestamp. Detectors
+       identify a pattern relative to the closing bar (rows[n-1]) but do
+       not record WHEN. The formation timestamp lets the desk enforce
+       freshness (soft penalty for stale setups) and lets the walk-forward
+       replay compare replay hits to live hits by bar. Cannot regress: a
+       detector that already returned t keeps its value (no override). */
+    var formT = NaN;
+    if (rows.length){
+      var lastBar = rows[rows.length - 1];
+      if (lastBar && isFinite(num(lastBar.t))) formT = num(lastBar.t);
+    }
+    if (isFinite(formT)){
+      for (var oi = 0; oi < out.length; oi++){
+        var h = out[oi];
+        if (h && !isFinite(num(h.t))) h.t = formT;
+      }
+    }
     return out;
   }
 
@@ -8290,6 +8308,26 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
        affects what QUALIFIES as a ticket — gates still decide that.
        This is ordering only. The hard edge VETO at line 8212 still keeps
        n>=20 & E<-0.05 mechanics out of the pool entirely. */
+    /* v677: freshness component. Detectors identify a pattern at the closing
+       bar (rows[n-1]); hgOmniDetect stamps c.t with that bar's timestamp
+       (v677 upstream change). A setup that formed >= 3 bars ago has usually
+       already resolved (price ran through the level, or held it and moved
+       on) — the further past it is, the less actionable the read. This is
+       an ORDERING adjustment, not a veto: fresh setups gain up to +15 pts
+       (~half a family-delta), stale setups lose up to -20 pts. The
+       infrastructure that produces c.t is upstream (hgOmniDetect); if it
+       ever fails to stamp, freshN=0 and this term contributes 0 (safe
+       fallback). */
+    var freshN = 0;
+    if (c && isFinite(fin(c.t))){
+      var nowSecFr = Math.floor(Date.now() / 1000);
+      var tfFr = (c && c.tfSec && isFinite(fin(c.tfSec))) ? fin(c.tfSec) : (4 * 3600);
+      var barsSince = Math.max(0, Math.floor((nowSecFr - fin(c.t)) / tfFr));
+      if (barsSince <= 1) freshN = 1;         /* fresh: within the last completed bar */
+      else if (barsSince === 2) freshN = 0.5; /* still tradeable */
+      else if (barsSince <= 4) freshN = -0.5; /* getting stale */
+      else freshN = -1;                       /* clearly stale, deprioritise */
+    }
     var score = 100 * tapeScore
               + 120 * ticketN
               + 30 * family
@@ -8299,6 +8337,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
               + 10 * near
               + 25 * edgeN            /* v671: 8 -> 25 (walk-forward positive edge) */
               + 20 * edgeDemoteSoft   /* v671: NEW (soft demote for weak/negative measured edge) */
+              + 15 * freshN           /* v677: NEW (freshness: +15 fresh, -15 stale) */
               + 18 * preferN
               - 25 * demoteN;
     return {
@@ -8306,6 +8345,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       alsoNorm: alsoNorm, near: near, tapeScore: tapeScore,
       ticket: ticketN, info: info, dist: dist, edge: edgeN,
       edgeDemoteSoft: edgeDemoteSoft,
+      freshN: freshN,
       nAgree: nAgree, nAgainst: nAgainst
     };
   }

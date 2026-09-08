@@ -797,6 +797,24 @@ terse status, and never launches a first-time scan on a global refresh.
     d = hgOgPart8ByKind(rows, 'P8-VPINBO', opts); if (d) out.push(d);
     d = hgOgPart9ByKind(rows, 'P9-VOLBAR', opts); if (d) out.push(d);
     d = hgOgPart9ByKind(rows, 'P9-PREM', opts); if (d) out.push(d);
+
+    /* v677: stamp every hit with the formation-bar timestamp. Detectors
+       identify a pattern relative to the closing bar (rows[n-1]) but do
+       not record WHEN. The formation timestamp lets the desk enforce
+       freshness (soft penalty for stale setups) and lets the walk-forward
+       replay compare replay hits to live hits by bar. Cannot regress: a
+       detector that already returned t keeps its value (no override). */
+    var formT = NaN;
+    if (rows.length){
+      var lastBar = rows[rows.length - 1];
+      if (lastBar && isFinite(fin(lastBar.t))) formT = fin(lastBar.t);
+    }
+    if (isFinite(formT)){
+      for (var oi = 0; oi < out.length; oi++){
+        var h = out[oi];
+        if (h && !isFinite(fin(h.t))) h.t = formT;
+      }
+    }
     return out;
   }
 
@@ -5277,6 +5295,28 @@ terse status, and never launches a first-time scan on a global refresh.
        negative mechanics out of the pool entirely; this fix affects the
        remaining ambiguity between measured-positive, measured-neutral,
        and unmeasured cards, which is where the pick actually lived. */
+    /* v677: freshness component. hgOgDetect (v677 upstream change) stamps
+       every hit with its formation-bar timestamp (rows[n-1].t). A gold
+       setup that formed several bars ago has usually already resolved —
+       ADR-FADE from three 4H bars ago is no longer a fade opportunity;
+       ASIA-BREAK four bars past London-close is no longer a break. This is
+       ORDERING only, not a veto: fresh setups gain up to +15 pts (~half a
+       family delta), stale setups lose up to -15 pts. Requires c.t; if the
+       upstream stamp fails, freshN=0 and this term contributes nothing. */
+    var freshN = 0;
+    if (c && isFinite(fin(c.t))){
+      var nowSecFr = Math.floor(Date.now() / 1000);
+      /* Gold desk scans on 1H (scalp) and 4H (swing). Detect from horizon
+         if available; fallback to 4H which is the more conservative — an
+         over-forgiving tf inflates freshN, an under-forgiving tf deflates
+         it. Use the more stringent default. */
+      var tfFr = (c && c.tfSec && isFinite(fin(c.tfSec))) ? fin(c.tfSec) : (4 * 3600);
+      var barsSince = Math.max(0, Math.floor((nowSecFr - fin(c.t)) / tfFr));
+      if (barsSince <= 1) freshN = 1;
+      else if (barsSince === 2) freshN = 0.5;
+      else if (barsSince <= 4) freshN = -0.5;
+      else freshN = -1;
+    }
     var score = 100 * tapeScore
               + 120 * ticketN
               + 30 * family
@@ -5286,11 +5326,13 @@ terse status, and never launches a first-time scan on a global refresh.
               + 8 * horizon
               + 10 * near
               + 25 * edgeN          /* v664: 8 -> 25 (walk-forward positive edge) */
-              + 40 * edgeDemoteN;   /* v664: 15 -> 40 (measured-negative demotion) */
+              + 40 * edgeDemoteN    /* v664: 15 -> 40 (measured-negative demotion) */
+              + 15 * freshN;        /* v677: NEW (freshness: +15 fresh, -15 stale) */
     return {
       score: score, family: family, infoRatio: infoRatio, coverage: coverage,
       alsoNorm: alsoNorm, horizon: horizon, near: near, tapeScore: tapeScore,
       ticket: ticketN, info: info, dist: dist, edge: edgeN,
+      freshN: freshN,
       nAgree: nAgree, nAgainst: nAgainst
     };
   }
