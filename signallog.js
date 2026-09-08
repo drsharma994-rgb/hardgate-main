@@ -532,6 +532,18 @@ function render(){
       }
       ui.count.textContent = lbl;
     }
+    /* v657: summary stats over the filtered set. Hidden when empty so we
+       don't render a stat strip above an empty table. */
+    if (ui.stats){
+      var line = statsLine(filtered);
+      if (line){
+        ui.stats.textContent = line;
+        ui.stats.style.display = '';
+      } else {
+        ui.stats.textContent = '';
+        ui.stats.style.display = 'none';
+      }
+    }
     if (ui.corrupt) ui.corrupt.style.display = __corrupt ? 'block' : 'none';
     if (!__journal.length){
       if (ui.body) ui.body.innerHTML = '';
@@ -617,7 +629,13 @@ var SL_CSS = ''
 + '#tab_signallog .sl-search{background:rgba(0,0,0,.25);color:var(--txt,#d7dbe0);'
 + 'border:1px solid var(--bd,rgba(255,255,255,.14));border-radius:3px;padding:2px 8px;'
 + 'font:inherit;font-size:11px;letter-spacing:.04em;width:110px;outline:none}'
-+ '#tab_signallog .sl-search:focus{border-color:rgba(255,255,255,.35)}';
++ '#tab_signallog .sl-search:focus{border-color:rgba(255,255,255,.35)}'
+/* v657: summary stats strip — sits between filter row and count note. */
++ '#tab_signallog .sl-stats{margin-top:8px;padding:6px 10px;'
++ 'border:1px solid var(--bd,rgba(255,255,255,.08));border-radius:4px;'
++ 'background:rgba(74,195,255,.04);color:var(--txt,#d7dbe0);'
++ 'font-size:11px;letter-spacing:.02em;font-variant-numeric:tabular-nums;'
++ 'line-height:1.5}';
 
 /* ---------------- mount / refresh ---------------- */
 /* v654: SIGNAL LOG filters. 500 rows is too many to scan by eye without
@@ -708,6 +726,79 @@ function csvFilename(){
     + d.getFullYear() + '-' + p2(d.getMonth()+1) + '-' + p2(d.getDate())
     + '-' + p2(d.getHours()) + p2(d.getMinutes()) + '.csv';
 }
+/* v657: summary stats over the currently-filtered rows. Renders one
+   pipe-separated line above the count/sources notes so the user can
+   immediately see the shape of what the filter selected without eyeballing
+   the whole table. All values are honest (arithmetic mean; median for gates)
+   and skip null/NaN cells rather than treating them as zero. */
+function __fmt2(n){
+  if (!isFinite(n)) return '—';
+  var r = Math.round(n * 100) / 100;
+  return (r > 0 ? '+' : '') + r.toFixed(2);
+}
+function __fmt1(n){
+  if (!isFinite(n)) return '—';
+  return (Math.round(n * 10) / 10).toFixed(1);
+}
+function computeStats(rows){
+  var n = rows.length;
+  var longs = 0, shorts = 0;
+  var maeSum = 0, maeN = 0, mfeSum = 0, mfeN = 0;
+  var gatesPassSum = 0, gatesTotalSum = 0, gatesN = 0;
+  var vetoCounts = {};
+  for (var i = 0; i < n; i++){
+    var e = rows[i]; if (!e) continue;
+    if (e.dir === 'long') longs++;
+    else if (e.dir === 'short') shorts++;
+    if (typeof e.maeR === 'number' && isFinite(e.maeR)){ maeSum += e.maeR; maeN++; }
+    if (typeof e.mfeR === 'number' && isFinite(e.mfeR)){ mfeSum += e.mfeR; mfeN++; }
+    if (Array.isArray(e.gateMeta) && e.gateMeta.length){
+      var pass = 0;
+      for (var g = 0; g < e.gateMeta.length; g++){
+        var gm = e.gateMeta[g]; if (!gm) continue;
+        if (gm.state === 'pass') pass++;
+        else if (gm.state === 'veto') vetoCounts[gm.id] = (vetoCounts[gm.id] || 0) + 1;
+      }
+      gatesPassSum += pass;
+      gatesTotalSum += e.gateMeta.length;
+      gatesN++;
+    }
+  }
+  /* top 2 vetos by count, descending; ties broken by id for determinism */
+  var vetoList = Object.keys(vetoCounts).map(function(id){
+    return { id: id, n: vetoCounts[id] };
+  });
+  vetoList.sort(function(a, b){ return (b.n - a.n) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0); });
+  return {
+    n: n,
+    longs: longs,
+    shorts: shorts,
+    avgMae: maeN ? (maeSum / maeN) : NaN,
+    avgMfe: mfeN ? (mfeSum / mfeN) : NaN,
+    avgGatesPass: gatesN ? (gatesPassSum / gatesN) : NaN,
+    avgGatesTotal: gatesN ? (gatesTotalSum / gatesN) : NaN,
+    gatesN: gatesN,
+    topVetos: vetoList.slice(0, 2)
+  };
+}
+function statsLine(rows){
+  if (!rows || !rows.length) return '';
+  var s = computeStats(rows);
+  var parts = [s.n + ' row' + (s.n === 1 ? '' : 's')];
+  if (s.longs || s.shorts) parts.push(s.longs + ' long / ' + s.shorts + ' short');
+  if (isFinite(s.avgMae)) parts.push('avg maeR ' + __fmt2(s.avgMae) + 'R');
+  if (isFinite(s.avgMfe)) parts.push('avg mfeR ' + __fmt2(s.avgMfe) + 'R');
+  if (s.gatesN && isFinite(s.avgGatesPass)){
+    parts.push('avg gates ' + __fmt1(s.avgGatesPass) + '/' + __fmt1(s.avgGatesTotal));
+  }
+  if (s.topVetos.length){
+    parts.push('top vetos: ' + s.topVetos.map(function(v){
+      return v.id + ' (' + v.n + '×)';
+    }).join(', '));
+  }
+  return parts.join(' · ');
+}
+
 function exportFilteredCsv(){
   try{
     var rows = applyFilters(__journal);
@@ -840,6 +931,7 @@ function mount(el){
         + '<span class="sl-filter-lbl" style="margin-left:14px">symbol</span>'
         + '<input type="text" class="sl-search" id="slQ" placeholder="e.g. BTC" autocomplete="off"></div>'
       + '</div>'
+      + '<div class="sl-stats" id="slStats" style="display:none"></div>'   /* v657 */
       + '<div class="note" style="margin-top:8px"><b>logs while the app is open · every 5 min + on refresh</b>'
       + ' · <span id="slCount"></span></div>'
       + '<div class="note" id="slSources" style="margin-top:4px">sources: awaiting first snapshot</div>'
@@ -860,7 +952,8 @@ function mount(el){
       empty:    el.querySelector('#slEmpty'),
       srcChips: el.querySelector('#slSrcChips'),
       dirChips: el.querySelector('#slDirChips'),
-      q:        el.querySelector('#slQ')
+      q:        el.querySelector('#slQ'),
+      stats:    el.querySelector('#slStats')       /* v657 */
     };
     if (__ui.clear) __ui.clear.addEventListener('click', function(){ clearJournal(); });
     if (__ui.export_) __ui.export_.addEventListener('click', function(){ exportFilteredCsv(); });   /* v655 */
