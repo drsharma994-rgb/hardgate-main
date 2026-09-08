@@ -26,7 +26,7 @@ assert.ok(/gateMeta:\s*m\.gateMeta/.test(scalpNearBlock[0]),
   'scalpTryNear near object must include gateMeta: m.gateMeta');
 
 /* version */
-assert.ok(/^hg-v(?:649|65\d|[7-9]\d\d|\d{4,})$/.test(HG_VER),
+assert.ok(/^hg-v(?:649|65\d|6[6-9]\d|[7-9]\d\d|\d{4,})$/.test(HG_VER),
   'HG_VER must be >= hg-v649 (saw ' + HG_VER + ')');
 const sw = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
 const cacheRx = new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'");

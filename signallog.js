@@ -575,14 +575,29 @@ function setStat(t){
   try{ if (__ui && __ui.stat) __ui.stat.textContent = t; }catch(e){}
 }
 
-function clearJournal(){
+/* v660: CLEAR JOURNAL is destructive — obliterates the entire 500-row
+   journal + wipes localStorage. Prior to v660 a single tap destroyed
+   the journal with no confirmation, which is a real landmine on mobile
+   where a stray tap on a scrolling list can catch the button. Confirm
+   first, and only clear if the user explicitly agrees. Matches the
+   pattern used by clearLog() at index.html line 7471 (setup log). */
+function clearJournal(opts){
   try{
+    var force = opts && opts.force === true;
+    if (!force && typeof confirm === 'function'){
+      var n = __journal.length;
+      var msg = 'Delete the entire signal log' + (n ? ' (' + n + ' row'
+        + (n === 1 ? '' : 's') + ')' : '') + '?\n\nThis cannot be undone. '
+        + 'Export CSV first if you care about the sample.';
+      if (!confirm(msg)) return false;
+    }
     __journal = [];
     __corrupt = false;
     __lsWipe();
     setStat('journal cleared — logging continues on the next snapshot.');
     render();
-  }catch(e){}
+    return true;
+  }catch(e){ return false; }
 }
 
 /* ---------------- pane-scoped styles (injected from here ONLY) ---------------- */
@@ -633,6 +648,12 @@ var SL_CSS = ''
 + 'border:1px solid var(--bd,rgba(255,255,255,.14));border-radius:3px;padding:2px 8px;'
 + 'font:inherit;font-size:11px;letter-spacing:.04em;width:110px;outline:none}'
 + '#tab_signallog .sl-search:focus{border-color:rgba(255,255,255,.35)}'
+/* v660: destructive-button styling for CLEAR JOURNAL — subtle by default,
+   hover paints a clear red so intent is unambiguous before the tap lands. */
++ '#tab_signallog .sl-btn-danger{border-color:rgba(255,107,74,.35)}'
++ '#tab_signallog .sl-btn-danger:hover{background:rgba(255,107,74,.12);'
++ 'border-color:rgba(255,107,74,.7);color:#ff8b6a}'
++ '#tab_signallog .sl-btn-danger:focus-visible{outline:2px solid rgba(255,107,74,.6);outline-offset:2px}'
 /* v657: summary stats strip — sits between filter row and count note. */
 + '#tab_signallog .sl-stats{margin-top:8px;padding:6px 10px;'
 + 'border:1px solid var(--bd,rgba(255,255,255,.08));border-radius:4px;'
@@ -927,7 +948,10 @@ function mount(el){
          from SOURCES so it stays truthful on future source additions. */
       + '<h2>SIGNAL LOG <span>persistent journal of ' + SOURCES.join(' + ')
       + ' signals · newest first · capped at ' + MAX_ENTRIES + '</span></h2>'
-      + '<div class="row"><button class="btn" id="slClear">CLEAR JOURNAL</button>'
+      /* v660: CLEAR JOURNAL styled as destructive so it doesn't blend with
+         the neutral EXPORT CSV button beside it. Muted border by default;
+         hover paints red so intent is unambiguous before the tap lands. */
+      + '<div class="row"><button class="btn sl-btn-danger" id="slClear" title="delete the entire signal log (asks to confirm first)">CLEAR JOURNAL</button>'
       + '<button class="btn" id="slExport" style="margin-left:6px">EXPORT CSV</button>'   /* v655 */
       + '<span class="note" id="slStat">journal ready — snapshots run every 5 min and on refresh.</span></div>'
       + '<div class="sl-filters" id="slFilters">'

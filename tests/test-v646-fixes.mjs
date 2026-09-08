@@ -53,7 +53,7 @@ const stamp = readFileSync(resolve(ROOT, 'build-stamp.js'), 'utf8');
 const sw = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
 /* v647: read through the helper so version bumps don't break this suite. */
 const { HG_VER } = await import('./helpers/build-version.mjs');
-assert.ok(/^hg-v(?:646|64[7-9]|65\d|[7-9]\d\d|\d{4,})$/.test(HG_VER),
+assert.ok(/^hg-v(?:646|64[7-9]|65\d|6[6-9]\d|[7-9]\d\d|\d{4,})$/.test(HG_VER),
   `build-stamp.js version must be ≥ hg-v646 (saw ${HG_VER})`);
 const cacheRx646 = new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'");
 assert.ok(cacheRx646.test(sw), `sw.js HG_CACHE must match build-stamp version ${HG_VER}`);

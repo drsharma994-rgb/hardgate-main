@@ -35,7 +35,7 @@ assert.ok(/const okx = await __binOkxTickersFallback\(\);\n\s+if \(okx\)/.test(b
   'binanceTickers24h must call __binOkxTickersFallback and use its result');
 
 /* --- version bumps --- */
-assert.ok(/^hg-v(?:647|64[8-9]|65\d|[7-9]\d\d|\d{4,})$/.test(HG_VER),
+assert.ok(/^hg-v(?:647|64[8-9]|65\d|6[6-9]\d|[7-9]\d\d|\d{4,})$/.test(HG_VER),
   `HG_VER must be ≥ hg-v647 (saw ${HG_VER})`);
 const sw = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
 const cacheRx = new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'");

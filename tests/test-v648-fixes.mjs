@@ -40,7 +40,7 @@ assert.ok(sl.includes('pullBrain()];'),
   'pulls[] must end with pullBrain()');
 
 /* version */
-assert.ok(/^hg-v(?:648|64[9]|65\d|[7-9]\d\d|\d{4,})$/.test(HG_VER),
+assert.ok(/^hg-v(?:648|64[9]|65\d|6[6-9]\d|[7-9]\d\d|\d{4,})$/.test(HG_VER),
   'HG_VER must be >= hg-v648 (saw ' + HG_VER + ')');
 const cacheRx = new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'");
 assert.ok(cacheRx.test(sw), 'sw.js HG_CACHE must match ' + HG_VER);
