@@ -612,9 +612,19 @@ function cardHTML(r){
     : '<div class="note warn" style="margin-top:6px"><b>WATCH ONLY</b> — ' + esc(edgeWhy)
       + '. Not a ticket. No SEND TO TRADE PLAN / ADD TO BOOK.</div>';
 
+  /* v683: render the shared SOLIDITY chip in the card head. Chip is
+     drawn from hg-solidity.js; feature-checked so a missing helper
+     renders no chip rather than a broken card. */
+  var solChip = '';
+  try {
+    if (r && r.solidity && typeof W.hgSolidityChipHtml === 'function'){
+      solChip = W.hgSolidityChipHtml(r.solidity);
+    }
+  } catch(eSc){}
   return '<div class="card long' + (r.best && tradeable ? ' best' : '') + '">'
     + '<div class="chead"><span class="sym">' + esc(symLab) + venueChip + '</span>'
     + '<span class="dir">LONG · REVERSAL SNIPER · ' + (tradeable ? 'conviction ' + s.conviction : 'WATCH') + '</span>'
+    + (solChip ? ' ' + solChip : '')
     + (typeof hgBookStampChip === 'function' ? hgBookStampChip(r.sym, 'long', { scanner: 'reversalsniper', strategy: 'reversalsniper' }) : '')
     + '</div>'
     + '<div class="mini">'

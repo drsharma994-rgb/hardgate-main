@@ -5668,8 +5668,19 @@ terse status, and never launches a first-time scan on a global refresh.
       var ind = isEngine
         ? (isFinite(fin(row.engineTally)) ? ('tally +' + fin(row.engineTally) + ' · multi-strategy catalog') : 'multi-strategy catalog')
         : (info.n ? (info.pass + '/' + info.n + ' indicators with') : 'indicators unread');
+      /* v683: render the shared SOLIDITY chip in the head line so the user
+         sees which of the 5 gates the card cleared. Chip is drawn from
+         hg-solidity.js; feature-checked so a missing helper renders no chip. */
+      var solChip = '';
+      try {
+        var Wc = (typeof window !== 'undefined') ? window : ((typeof globalThis !== 'undefined') ? globalThis : null);
+        if (row.solidity && Wc && typeof Wc.hgSolidityChipHtml === 'function'){
+          solChip = Wc.hgSolidityChipHtml(row.solidity);
+        }
+      } catch(eSc){}
       h += '<div class="hg-mp-head">XAUUSD ' + esc(String(row.dir || '').toUpperCase())
         +  ' <span>' + esc(label) + ' · ' + esc(isEngine ? String(row.kind).slice(0, 48) : row.kind) + ' · ' + grade
+        +  (solChip ? ' ' + solChip : '')
         +  (isWatch ? ' · VETO' : '')
         +  (isEngine
              /* AGAINST THE TAPE IS NOT ACTIONABLE, whoever found it.
