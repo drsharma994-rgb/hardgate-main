@@ -38,7 +38,7 @@ assert.ok(/Array\.isArray\(hit\.gateMeta\)/.test(candRow[0]),
    independent and each release afterwards keeps advancing the number. */
 const { HG_VER } = await import('./helpers/build-version.mjs');
 const sw = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
-assert.ok(/^hg-v(?:645|64[6-9]|65\d|[7-9]\d\d|\d{4,})$/.test(HG_VER),
+assert.ok(/^hg-v(?:645|64[6-9]|65\d|6[6-9]\d|[7-9]\d\d|\d{4,})$/.test(HG_VER),
   `build-stamp.js version must be ≥ hg-v645 (saw ${HG_VER})`);
 assert.ok(new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'").test(sw),
   `sw.js HG_CACHE must match build-stamp version ${HG_VER}`);
