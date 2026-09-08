@@ -493,15 +493,38 @@ function render(){
   var ui = __ui;
   if (!ui) return;
   try{
+    /* v654: apply source/direction/query filters before render. The count
+       chip shows filtered/total so the user always knows how much the
+       filter is hiding. */
+    var filtered = applyFilters(__journal);
     if (ui.sources) ui.sources.textContent = sourcesLine();
-    if (ui.count) ui.count.textContent = __journal.length + ' / ' + MAX_ENTRIES + ' entries · newest first';
+    if (ui.count){
+      var lbl = __journal.length + ' / ' + MAX_ENTRIES + ' entries · newest first';
+      if (filtered.length !== __journal.length){
+        lbl = filtered.length + ' shown of ' + __journal.length + ' · ' + lbl;
+      }
+      ui.count.textContent = lbl;
+    }
     if (ui.corrupt) ui.corrupt.style.display = __corrupt ? 'block' : 'none';
     if (!__journal.length){
       if (ui.body) ui.body.innerHTML = '';
-      if (ui.empty) ui.empty.style.display = 'block';
+      if (ui.empty){
+        ui.empty.style.display = 'block';
+        ui.empty.textContent = 'no signals logged yet — the journal fills while the app '
+          + 'is open (every 5 min + on refresh) whenever BRAIN, GOLD SCALP or GOLD SWING have live results.';
+      }
+    } else if (!filtered.length){
+      /* journal has rows but current filter matches none — keep the table
+         area empty and show a distinct "no matches" message via #slEmpty. */
+      if (ui.body) ui.body.innerHTML = '';
+      if (ui.empty){
+        ui.empty.style.display = 'block';
+        ui.empty.textContent = 'no rows match the current filter — try widening the source chips, '
+          + 'switching direction to ALL, or clearing the symbol search.';
+      }
     } else {
       if (ui.empty) ui.empty.style.display = 'none';
-      if (ui.body) ui.body.innerHTML = tableHTML(__journal);
+      if (ui.body) ui.body.innerHTML = tableHTML(filtered);
     }
   }catch(e){ /* rendering never breaks the journal */ }
 }
@@ -548,18 +571,135 @@ var SL_CSS = ''
 + '#tab_signallog .sl-note{color:var(--mut,#8a8f98);max-width:420px;overflow:hidden;'
 + 'text-overflow:ellipsis;white-space:nowrap}'
 + '#tab_signallog .sl-note .hg-gld{margin:0;vertical-align:middle}'
-+ '#tab_signallog .sl-note-suffix{color:var(--mut,#8a8f98);font-size:10px;margin-left:6px}';
++ '#tab_signallog .sl-note-suffix{color:var(--mut,#8a8f98);font-size:10px;margin-left:6px}'
+/* v654: filter chip row — sits between title row and count/sources notes. */
++ '#tab_signallog .sl-filters{display:flex;flex-direction:column;gap:6px;margin-top:10px;'
++ 'padding:8px 10px;border:1px solid var(--bd,rgba(255,255,255,.08));border-radius:6px;'
++ 'background:rgba(255,255,255,.015)}'
++ '#tab_signallog .sl-filter-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}'
++ '#tab_signallog .sl-filter-lbl{color:var(--mut,#8a8f98);font-size:10px;letter-spacing:.14em;'
++ 'text-transform:uppercase;margin-right:4px;min-width:56px}'
++ '#tab_signallog .sl-chip-group{display:inline-flex;flex-wrap:wrap;gap:4px}'
++ '#tab_signallog .sl-chip{background:transparent;color:var(--mut,#8a8f98);'
++ 'border:1px solid var(--bd,rgba(255,255,255,.14));border-radius:3px;'
++ 'padding:2px 8px;font-size:10px;letter-spacing:.1em;font-weight:600;cursor:pointer;'
++ 'font-family:inherit;line-height:1.4;transition:background .15s,color .15s,border-color .15s}'
++ '#tab_signallog .sl-chip:hover{color:var(--txt,#d7dbe0);border-color:rgba(255,255,255,.28)}'
++ '#tab_signallog .sl-chip.sl-chip-on{color:#0b0d10;background:var(--txt,#d7dbe0);'
++ 'border-color:var(--txt,#d7dbe0)}'
++ '#tab_signallog .sl-search{background:rgba(0,0,0,.25);color:var(--txt,#d7dbe0);'
++ 'border:1px solid var(--bd,rgba(255,255,255,.14));border-radius:3px;padding:2px 8px;'
++ 'font:inherit;font-size:11px;letter-spacing:.04em;width:110px;outline:none}'
++ '#tab_signallog .sl-search:focus{border-color:rgba(255,255,255,.35)}';
 
 /* ---------------- mount / refresh ---------------- */
+/* v654: SIGNAL LOG filters. 500 rows is too many to scan by eye without
+   a way to narrow it. Three combinable filters: source (multi-toggle),
+   direction (long/short/all), and symbol substring search. State lives
+   on __filters; render() applies the predicate before tableHTML. */
+var __filters = { sources: null, dir: 'all', q: '' };
+function applyFilters(entries){
+  var sources = __filters.sources;    /* null = ALL; else Set of enabled */
+  var dir = __filters.dir;
+  var q = String(__filters.q || '').trim().toUpperCase();
+  if ((!sources || !sources.size) && dir === 'all' && !q) return entries;
+  var out = [];
+  for (var i = 0; i < entries.length; i++){
+    var e = entries[i]; if (!e) continue;
+    if (sources && sources.size && !sources.has(e.source)) continue;
+    if (dir !== 'all' && e.dir !== dir) continue;
+    if (q && String(e.sym || '').toUpperCase().indexOf(q) === -1) continue;
+    out.push(e);
+  }
+  return out;
+}
+function rebuildFilterChips(){
+  if (!__ui || !__ui.srcChips) return;
+  var active = __filters.sources;
+  var chips = __ui.srcChips.querySelectorAll('[data-sl-src]');
+  for (var i = 0; i < chips.length; i++){
+    var src = chips[i].getAttribute('data-sl-src');
+    var on = (src === '__all__')
+      ? (!active || !active.size)
+      : (active && active.has(src));
+    chips[i].classList.toggle('sl-chip-on', on);
+  }
+  if (__ui.dirChips){
+    var dchips = __ui.dirChips.querySelectorAll('[data-sl-dir]');
+    for (var d = 0; d < dchips.length; d++){
+      dchips[d].classList.toggle('sl-chip-on',
+        dchips[d].getAttribute('data-sl-dir') === __filters.dir);
+    }
+  }
+}
+function bindFilterHandlers(){
+  if (!__ui) return;
+  if (__ui.srcChips){
+    __ui.srcChips.addEventListener('click', function(e){
+      var t = e.target; while (t && t !== __ui.srcChips && !t.getAttribute('data-sl-src')) t = t.parentNode;
+      if (!t || !t.getAttribute) return;
+      var src = t.getAttribute('data-sl-src');
+      if (!src) return;
+      if (src === '__all__'){ __filters.sources = null; }
+      else {
+        if (!__filters.sources) __filters.sources = new Set();
+        if (__filters.sources.has(src)) __filters.sources.delete(src);
+        else __filters.sources.add(src);
+        if (!__filters.sources.size) __filters.sources = null;
+      }
+      rebuildFilterChips();
+      render();
+    });
+  }
+  if (__ui.dirChips){
+    __ui.dirChips.addEventListener('click', function(e){
+      var t = e.target; while (t && t !== __ui.dirChips && !t.getAttribute('data-sl-dir')) t = t.parentNode;
+      if (!t || !t.getAttribute) return;
+      var d = t.getAttribute('data-sl-dir');
+      if (!d) return;
+      __filters.dir = d;
+      rebuildFilterChips();
+      render();
+    });
+  }
+  if (__ui.q){
+    __ui.q.addEventListener('input', function(){
+      __filters.q = __ui.q.value || '';
+      render();
+    });
+  }
+}
+
 function mount(el){
   if (!el) return;
   try{
+    /* v654: filter row above the table — source multi-toggle chips +
+       direction 3-way + symbol search. Rebuilt from SOURCES so future
+       source additions get chips automatically. */
+    var srcChipsHtml = '<button type="button" class="sl-chip sl-chip-on" data-sl-src="__all__">ALL</button>';
+    for (var si = 0; si < SOURCES.length; si++){
+      srcChipsHtml += '<button type="button" class="sl-chip" data-sl-src="' + SOURCES[si] + '">'
+        + SOURCES[si].toUpperCase() + '</button>';
+    }
+    var dirChipsHtml =
+      '<button type="button" class="sl-chip sl-chip-on" data-sl-dir="all">ALL</button>'
+      + '<button type="button" class="sl-chip" data-sl-dir="long">LONG</button>'
+      + '<button type="button" class="sl-chip" data-sl-dir="short">SHORT</button>';
+
     el.innerHTML =
       '<style>' + SL_CSS + '</style>'
       + '<div class="panel">'
       + '<h2>SIGNAL LOG <span>persistent journal of brain + scalp + swing signals · newest first · capped at 500</span></h2>'
       + '<div class="row"><button class="btn" id="slClear">CLEAR JOURNAL</button>'
       + '<span class="note" id="slStat">journal ready — snapshots run every 5 min and on refresh.</span></div>'
+      + '<div class="sl-filters" id="slFilters">'
+        + '<div class="sl-filter-row"><span class="sl-filter-lbl">source</span>'
+        + '<span class="sl-chip-group" id="slSrcChips">' + srcChipsHtml + '</span></div>'
+        + '<div class="sl-filter-row"><span class="sl-filter-lbl">direction</span>'
+        + '<span class="sl-chip-group" id="slDirChips">' + dirChipsHtml + '</span>'
+        + '<span class="sl-filter-lbl" style="margin-left:14px">symbol</span>'
+        + '<input type="text" class="sl-search" id="slQ" placeholder="e.g. BTC" autocomplete="off"></div>'
+      + '</div>'
       + '<div class="note" style="margin-top:8px"><b>logs while the app is open · every 5 min + on refresh</b>'
       + ' · <span id="slCount"></span></div>'
       + '<div class="note" id="slSources" style="margin-top:4px">sources: awaiting first snapshot</div>'
@@ -570,15 +710,19 @@ function mount(el){
       + 'is open (every 5 min + on refresh) whenever BRAIN, GOLD SCALP or GOLD SWING have live results.</div>';
 
     __ui = {
-      clear:   el.querySelector('#slClear'),
-      stat:    el.querySelector('#slStat'),
-      count:   el.querySelector('#slCount'),
-      sources: el.querySelector('#slSources'),
-      corrupt: el.querySelector('#slCorrupt'),
-      body:    el.querySelector('#slBody'),
-      empty:   el.querySelector('#slEmpty')
+      clear:    el.querySelector('#slClear'),
+      stat:     el.querySelector('#slStat'),
+      count:    el.querySelector('#slCount'),
+      sources:  el.querySelector('#slSources'),
+      corrupt:  el.querySelector('#slCorrupt'),
+      body:     el.querySelector('#slBody'),
+      empty:    el.querySelector('#slEmpty'),
+      srcChips: el.querySelector('#slSrcChips'),
+      dirChips: el.querySelector('#slDirChips'),
+      q:        el.querySelector('#slQ')
     };
     if (__ui.clear) __ui.clear.addEventListener('click', function(){ clearJournal(); });
+    bindFilterHandlers();
     ensureTimer();
     if (!__snapshotted) snapshotRound();   /* first open this session -> an immediate honest sources line */
     render();
