@@ -4488,19 +4488,39 @@ terse status, and never launches a first-time scan on a global refresh.
 
   function hgOgFetchRowsLegacy(tf, n){
     var xm = gfn('getXmGoldCandles'), gg = gfn('getGoldCandles'), bk = gfn('binanceKlines');
+    /* v665: strip the forming (unclosed) bar on this fallback path too.
+       getXAUCandles already calls dropForming(rows, res) on every branch
+       before returning; hgOgFetchRowsLegacy did not, so when getXAUCandles
+       was absent (older builds, transient failures) OMNIGOLD detectors ran
+       with rows[rows.length - 1] pointing at an OPEN candle. Every wick /
+       close-through / fib decision then read a moving target: mechanics
+       could pass on transient wick data that reversed before close, print
+       a live ticket, then invalidate the next tick — exactly the "setups
+       are not good" experience a user reports. dropForming is a global
+       function declared in index.html; feature-checked here so absence
+       degrades to the raw rows (still safer than silently accepting a
+       partial bar). */
+    var dropFn = gfn('dropForming');
+    function trim(rows){
+      if (!rows || !rows.length) return rows || [];
+      if (typeof dropFn === 'function'){
+        try{ var t = dropFn(rows, tf); if (t && t.length) return t; }catch(e){}
+      }
+      return rows;
+    }
     return Promise.resolve()
       .then(function(){ return xm ? xm(tf, n) : null; })
       .catch(function(){ return null; })
       .then(function(a){
-        if (a && a.rows && a.rows.length) return { rows: a.rows, source: a.source || 'xm-xauusd' };
+        if (a && a.rows && a.rows.length) return { rows: trim(a.rows), source: a.source || 'xm-xauusd' };
         return Promise.resolve().then(function(){ return gg ? gg(tf, n) : null; })
           .catch(function(){ return null; })
           .then(function(b){
-            if (b && b.rows && b.rows.length) return { rows: b.rows, source: b.source || 'gold-spot' };
+            if (b && b.rows && b.rows.length) return { rows: trim(b.rows), source: b.source || 'gold-spot' };
             return Promise.resolve().then(function(){ return bk ? bk('PAXGUSDT', tf, n) : null; })
               .catch(function(){ return null; })
               .then(function(c){
-                if (c && c.length) return { rows: c, source: 'binance-paxg' };
+                if (c && c.length) return { rows: trim(c), source: 'binance-paxg' };
                 return { rows: [], source: null };
               });
           });
