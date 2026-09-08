@@ -461,11 +461,22 @@ function hgGateLedgerBadge(gateMeta, opts){
       return '<span class="' + cls + '" title="' + esc(title) + '">' + glyph + '</span>';
     }).join('');
     if (!dots) return '';
+    /* v661: summary count must equal the number of dots visible. Prior
+       to v661, `total` only incremented for known states (pass|veto|na),
+       so an unexpected `state` string (a null default in a slice, a
+       future value, a typo) would render a dot but silently drop out
+       of the denominator — producing summaries like '2/1' when there
+       are actually 3 dots on the badge. Now we count every entry that
+       is a real object (matching the dot render predicate above), then
+       classify state loosely: 'pass' -> pass count, any veto-ish -> veto
+       count, everything else falls through to na. */
     var pass = 0, total = 0;
     for (var i = 0; i < gateMeta.length; i++){
-      var s = gateMeta[i] && String(gateMeta[i].state || '').toLowerCase();
+      var g = gateMeta[i];
+      if (!g || typeof g !== 'object') continue;
+      total++;
+      var s = String(g.state || 'na').toLowerCase();
       if (s === 'pass') pass++;
-      if (s === 'pass' || s === 'veto' || s === 'na') total++;
     }
     var summary = pass + '/' + total;
     return '<span class="hg-gld" title="gate ledger ' + summary + '">'
