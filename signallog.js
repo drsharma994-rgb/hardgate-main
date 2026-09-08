@@ -127,7 +127,21 @@ function normEntry(e){
   var dir = normDir(e.dir);
   if (!dir || !e.sym) return null;
   var src = String(e.source || '');
-  if (src !== 'brain' && src !== 'scalp' && src !== 'swing' && src !== 'supergold') return null;
+  /* v653: keep the allowlist in sync with SOURCES. Missing cswing/cscalp
+     here meant persisted crypto rows were dropped on the next load. */
+  var ALLOWED = { brain:1, cswing:1, cscalp:1, scalp:1, swing:1, supergold:1 };
+  if (!ALLOWED[src]) return null;
+  /* v653: rehydrate compact gateMeta (id/label/state only) if present */
+  var gm = null;
+  if (Array.isArray(e.gateMeta) && e.gateMeta.length){
+    gm = e.gateMeta.map(function(g){
+      if (!g || typeof g !== 'object') return null;
+      var st = String(g.state || 'na');
+      if (st !== 'pass' && st !== 'veto' && st !== 'na') st = 'na';
+      return { id: String(g.id || ''), label: String(g.label || g.id || ''), state: st };
+    }).filter(function(g){ return g && g.id; });
+    if (!gm.length) gm = null;
+  }
   return {
     t: (typeof e.t === 'string' && e.t) ? e.t : '',
     source: src,
@@ -139,7 +153,8 @@ function normEntry(e){
     t1: numOrNull(e.t1),
     maeR: numOrNull(e.maeR),
     mfeR: numOrNull(e.mfeR),
-    note: (e.note === null || e.note === undefined) ? '' : String(e.note).slice(0, 140)
+    note: (e.note === null || e.note === undefined) ? '' : String(e.note).slice(0, 140),
+    gateMeta: gm
   };
 }
 function hydrateMfeMae(entry){
@@ -284,7 +299,9 @@ function pullBrain(){
       sym: String(sym), dir: dir,
       tierOrGrade: (r.tier !== null && r.tier !== undefined) ? r.tier : r.grade,
       entry: plan.entry, stop: plan.stop, t1: plan.t1,
-      note: note
+      note: note,
+      /* v653: pass gateMeta through so the log row can render the badge */
+      gateMeta: r.gateMeta || (plan && plan.gateMeta)
     });
   }
   return { live: true, rows: out };
@@ -313,7 +330,9 @@ function pullScan(fnName){
       sym: String(sym), dir: dir,
       tierOrGrade: (c.grade !== null && c.grade !== undefined) ? c.grade : c.tier,
       entry: c.entry, stop: c.stop, t1: c.t1,
-      note: note
+      note: note,
+      /* v653: pass gateMeta through so the log row can render the badge */
+      gateMeta: c.gateMeta
     });
   }
   return { live: true, rows: out };
@@ -378,12 +397,27 @@ function snapshotRound(){
         var key = SOURCES[s] + '|' + r.sym + '|' + r.dir;   /* de-dup within the round */
         if (seen[key]) continue;
         seen[key] = 1;
+        /* v653: compact gateMeta — keep id/label/state only so the persisted
+           journal doesn't bloat with detail strings. Detail is only useful
+           on live cards (hover tooltip); log rows show state via the dot. */
+        var gm = null;
+        if (Array.isArray(r.gateMeta) && r.gateMeta.length){
+          gm = r.gateMeta.map(function(g){
+            if (!g || typeof g !== 'object') return null;
+            return {
+              id: String(g.id || ''),
+              label: String(g.label || g.id || ''),
+              state: String(g.state || 'na')
+            };
+          }).filter(function(g){ return g && g.id; });
+        }
         fresh.push(hydrateMfeMae({
           t: iso, source: SOURCES[s], sym: r.sym, dir: r.dir,
           tierOrGrade: (r.tierOrGrade === null || r.tierOrGrade === undefined) ? null : String(r.tierOrGrade),
           entry: numOrNull(r.entry), stop: numOrNull(r.stop), t1: numOrNull(r.t1),
           maeR: numOrNull(r.maeR), mfeR: numOrNull(r.mfeR),
-          note: String(r.note || '').slice(0, 140)
+          note: String(r.note || '').slice(0, 140),
+          gateMeta: gm
         }));
         srcCount[SOURCES[s]]++;
       }
@@ -414,9 +448,27 @@ function sourcesLine(){
 
 function tableHTML(j){
   var rows = [];
+  /* v653: render the gate ledger badge inline when the row carries gateMeta.
+     Uses the same W.hgGateLedgerBadge shipped in v650/v651/v652 so log rows
+     look identical to scan cards. Note text stays as a fallback / suffix. */
+  var badgeFn = (typeof W !== 'undefined' && typeof W.hgGateLedgerBadge === 'function')
+    ? W.hgGateLedgerBadge : null;
   for (var i = 0; i < j.length; i++){
     var e = j[i];
     if (!e) continue;
+    var badge = (badgeFn && Array.isArray(e.gateMeta) && e.gateMeta.length)
+      ? badgeFn(e.gateMeta) : '';
+    var noteCell;
+    if (badge){
+      /* strip the leading "N/M · blocked: …" summary from the note when we
+         already show it as a badge (avoids duplicate info); keep any trailing
+         detail after the first " · ". */
+      var rawNote = String(e.note || '');
+      var trimmed = rawNote.replace(/^\d+\/\d+(?:\s+pass)?(?:\s+\u00b7\s+blocked:[^\u00b7]*?(?:\s+\+\d+)?)?\s*(?:\u00b7\s+)?/, '');
+      noteCell = badge + (trimmed ? ' <span class="sl-note-suffix">' + esc(trimmed) + '</span>' : '');
+    } else {
+      noteCell = esc(e.note || '—');
+    }
     rows.push('<tr>'
       + '<td class="sl-t">' + esc(fmtTime(e.t)) + '</td>'
       + '<td><span class="sl-badge ' + esc(e.source) + '">' + esc(e.source.toUpperCase()) + '</span></td>'
@@ -428,12 +480,12 @@ function tableHTML(j){
       + '<td class="sl-n">' + esc(fmtP(e.t1)) + '</td>'
       + '<td class="sl-n">' + esc(e.maeR !== null ? fmtP(e.maeR) + 'R' : '—') + '</td>'
       + '<td class="sl-n">' + esc(e.mfeR !== null ? fmtP(e.mfeR) + 'R' : '—') + '</td>'
-      + '<td class="sl-note">' + esc(e.note || '—') + '</td>'
+      + '<td class="sl-note">' + noteCell + '</td>'
       + '</tr>');
   }
   return '<table class="sl-table"><thead><tr>'
     + '<th>TIME</th><th>SOURCE</th><th>SYMBOL</th><th>DIR</th><th>TIER/GRADE</th>'
-    + '<th>ENTRY</th><th>STOP</th><th>TP1</th><th>MAE</th><th>MFE</th><th>NOTE</th>'
+    + '<th>ENTRY</th><th>STOP</th><th>TP1</th><th>MAE</th><th>MFE</th><th>GATES</th>'
     + '</tr></thead><tbody>' + rows.join('') + '</tbody></table>';
 }
 
@@ -491,8 +543,12 @@ var SL_CSS = ''
 + '#tab_signallog .sl-dir.short{color:#ff6b4a}'
 + '#tab_signallog .sl-tg{font-weight:700;color:var(--txt,#d7dbe0)}'
 + '#tab_signallog .sl-n{font-variant-numeric:tabular-nums}'
-+ '#tab_signallog .sl-note{color:var(--mut,#8a8f98);max-width:280px;overflow:hidden;'
-+ 'text-overflow:ellipsis;white-space:nowrap}';
+/* v653: give the note cell more room so the badge (7-10 dots) fits inline, and
+   style the trailing detail text as a subtle suffix beside it. */
++ '#tab_signallog .sl-note{color:var(--mut,#8a8f98);max-width:420px;overflow:hidden;'
++ 'text-overflow:ellipsis;white-space:nowrap}'
++ '#tab_signallog .sl-note .hg-gld{margin:0;vertical-align:middle}'
++ '#tab_signallog .sl-note-suffix{color:var(--mut,#8a8f98);font-size:10px;margin-left:6px}';
 
 /* ---------------- mount / refresh ---------------- */
 function mount(el){
