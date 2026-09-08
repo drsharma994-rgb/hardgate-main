@@ -1143,12 +1143,51 @@ function hgSyncPlanRatios(p){
   return p;
 }
 
+/* v681: minimum stop distance in ATR units. Below this, spread + a normal
+   wick will clip the stop before the setup ever gets a chance to work.
+   Applied at the plan-builder layer so every downstream desk benefits.
+
+   0.5 x ATR is a widely-accepted institutional floor for intraday and swing
+   entries. Below it the stop is a hair-trigger — a normal 4H wick, an
+   exchange spread widening, or a single fast tick will fill the stop even
+   though nothing about the setup has actually invalidated. This is the
+   single most common way structurally correct plans lose money. */
+var HG_MIN_STOP_ATR = 0.5;
+
 function hgPlanFromRisk(dir, entry, stop, opts){
   opts = opts || {};
   try{
     entry = +entry; stop = +stop;
     if (!(dir === 'long' || dir === 'short')) return null;
     if (!(isFinite(entry) && isFinite(stop))) return null;
+    /* v681: enforce minimum stop distance in ATR units when the caller
+       supplies ATR (via opts.atr) or rows (from which we derive it). If
+       neither is available, we skip the check for backward compatibility.
+       When the check fires, we WIDEN the stop away from entry to reach the
+       floor — never tighten. The downstream minRr gate then decides if the
+       widened plan is still tradeable, so risky-close plans that lose too
+       much R:R after widening get rejected downstream. Emits a stopWidened
+       flag so the card can indicate the widening (v681). */
+    var atrIn = (typeof fin === 'function') ? fin(opts.atr) : +opts.atr;
+    if (!isFinite(atrIn) && Array.isArray(opts.rows) && opts.rows.length && typeof atr === 'function'){
+      try {
+        var atrArr = atr(opts.rows, 14);
+        if (Array.isArray(atrArr) && atrArr.length){
+          var lastAtr = atrArr[atrArr.length - 1];
+          atrIn = (typeof fin === 'function') ? fin(lastAtr) : +lastAtr;
+        }
+      } catch(eA){}
+    }
+    var stopWidened = false;
+    var stopFloorAtr = (typeof HG_MIN_STOP_ATR === 'number') ? HG_MIN_STOP_ATR : 0.5;
+    if (isFinite(atrIn) && atrIn > 0){
+      var minStopDist = stopFloorAtr * atrIn;
+      var curDist = Math.abs(entry - stop);
+      if (curDist < minStopDist){
+        stop = (dir === 'long') ? (entry - minStopDist) : (entry + minStopDist);
+        stopWidened = true;
+      }
+    }
     var risk = (dir === 'long') ? (entry - stop) : (stop - entry);
     if (!(risk > 0)) return null;
     var t1R = opts.t1R !== undefined ? opts.t1R : HG_T1_R;
@@ -1185,7 +1224,12 @@ function hgPlanFromRisk(dir, entry, stop, opts){
       risk: risk, riskPct: risk / entry * 100,
       rr1: rr1, rr2: rew2 / risk,
       targetPolicy: opts.targetPolicy || 'R-multiples',
-      t1R: t1R, t2R: t2R
+      t1R: t1R, t2R: t2R,
+      /* v681: signal that the stop was widened to meet the ATR floor. Cards
+         may surface this so the user sees the plan is a stop-widened variant
+         rather than the raw structural stop the detector emitted. */
+      stopWidened: stopWidened,
+      stopFloorAtr: stopFloorAtr
     };
   }catch(e){ return null; }
 }
@@ -1248,7 +1292,8 @@ function hgPlanLevelsCore(dir, rows, entryOverride, opts){
     if (!st) return null;
     var plan = hgPlanFromRisk(dir, entry, st.stop, {
       t1R: opts.t1R, t2R: opts.t2R, minRr: opts.minRr || HG_MIN_RR_DEFAULT,
-      targetPolicy: 'R-multiples (2R/3.5R)'
+      targetPolicy: 'R-multiples (2R/3.5R)',
+      rows: rows /* v681: enables minimum-stop-distance ATR floor */
     });
     if (!plan) return null;
     plan.note = st.note;
@@ -1349,7 +1394,8 @@ function hgEnrichGenericExact(plan, rows, opts){
       t1R: (plan.type === 'SCALP' || plan.type === 'FADE') ? HG_SCALP_T1_R : HG_T1_R,
       t2R: (plan.type === 'SCALP' || plan.type === 'FADE') ? HG_SCALP_T2_R : HG_T2_R,
       minRr: minRr,
-      targetPolicy: plan.targetPolicy || 'R-multiples'
+      targetPolicy: plan.targetPolicy || 'R-multiples',
+      rows: rows /* v681: enables minimum-stop-distance ATR floor */
     });
     var out = Object.assign({}, plan, {
       entry: entry, stop: stop, anchor: anchor, zone: zone, mark: mark,
@@ -1404,7 +1450,8 @@ function hgEnrichScalpExact(hit, m15, opts){
     if (!(isFinite(stop))) return hit;
     var pr = hgPlanFromRisk(dir, entry, stop, {
       t1R: HG_SCALP_T1_R, t2R: HG_SCALP_T2_R, minRr: 2.25,
-      targetPolicy: 'scalp R-multiples (1.5R/2.5R)'
+      targetPolicy: 'scalp R-multiples (1.5R/2.5R)',
+      rows: m15 /* v681: enables minimum-stop-distance ATR floor (15m ATR) */
     });
     return Object.assign({}, hit, {
       entry: entry, stop: stop,
@@ -2143,7 +2190,8 @@ function hgEnrichSmartPlan(plan, rows4h){
     var st = hgStructureStop(dir, entry, rows4h, { atrLen: 14, look: swLook2 });
     if (st){
       plan.stop = st.stop;
-      var pr = hgPlanFromRisk(dir, entry, st.stop, { minRr: HG_MIN_RR_SWING, targetPolicy: plan.targetPolicy });
+      /* v681: enables minimum-stop-distance ATR floor */
+      var pr = hgPlanFromRisk(dir, entry, st.stop, { minRr: HG_MIN_RR_SWING, targetPolicy: plan.targetPolicy, rows: rows4h });
       if (pr){
         plan.t1 = pr.t1; plan.t2 = pr.t2; plan.rr1 = pr.rr1; plan.rr2 = pr.rr2; plan.riskPct = pr.riskPct;
       }
