@@ -8146,8 +8146,34 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     var ticketN = (c && c.grade && c.grade.ticket) ? 1 : 0;
     var edgeN = 0;
     if (c && isFinite(fin(c.edgeScore))) edgeN = Math.max(0, Math.min(100, fin(c.edgeScore))) / 100;
+    /* v671: measured-negative-but-not-vetoed penalty. hgOmniAdvancedEdge
+       only VETOs on n>=20 AND E<-0.05 (line 2547). A cand with n<20 or
+       -0.05 <= E < 0 survives edgePass but represents weak/neutral or
+       lightly-negative measured evidence, and its edgeScore lands below
+       50 accordingly. Before v671 that low score was down-weighted by only
+       8 points (max), so ordering barely reflected "lightly toxic" vs
+       "lightly positive" among survivors. edgeDemoteSoft raises the penalty
+       for the lower half of the edgeScore range without a hard veto. */
+    var edgeDemoteSoft = 0;
+    if (edgeN > 0 && edgeN < 0.5) edgeDemoteSoft = -(0.5 - edgeN) * 2; /* 0..-1 */
     var preferN = (c && (c.replaySurvivor === true || hgOmniKindPrefer(c.kind))) ? 1 : 0;
     var demoteN = (c && hgOmniKindDemotion(c.kind) && !(c.unDemoted)) ? 1 : 0;
+    /* v671: measured-edge weight rebalance (mirrors omnigold v664).
+
+       Prior weight `8 * edgeN` meant a mechanic with 100% measured positive
+       walk-forward edge outranked an unmeasured one by ≤ 8 points — less
+       than one gate agreement swing (family delta ≈ 30 per gate). Meanwhile
+       tape (100), ticket (120), and family (30) sums dominated so completely
+       that tape+ticket+family-tied survivors were then ordered by alsoNorm,
+       near, and preferN. The desk claims to prefer "setups that have
+       actually paid on the user's feed" and this scoring did not deliver.
+
+       v671 raises the positive-edge weight (8 -> 25) to match omnigold v664
+       and adds a proportional 20 * edgeDemoteSoft penalty for measured-
+       weak-or-negative edge (up to -20 when edgeN = 0). Neither change
+       affects what QUALIFIES as a ticket — gates still decide that.
+       This is ordering only. The hard edge VETO at line 8212 still keeps
+       n>=20 & E<-0.05 mechanics out of the pool entirely. */
     var score = 100 * tapeScore
               + 120 * ticketN
               + 30 * family
@@ -8155,13 +8181,15 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
               + 12 * coverage
               + 10 * alsoNorm
               + 10 * near
-              + 8 * edgeN
+              + 25 * edgeN            /* v671: 8 -> 25 (walk-forward positive edge) */
+              + 20 * edgeDemoteSoft   /* v671: NEW (soft demote for weak/negative measured edge) */
               + 18 * preferN
               - 25 * demoteN;
     return {
       score: score, family: family, infoRatio: infoRatio, coverage: coverage,
       alsoNorm: alsoNorm, near: near, tapeScore: tapeScore,
       ticket: ticketN, info: info, dist: dist, edge: edgeN,
+      edgeDemoteSoft: edgeDemoteSoft,
       nAgree: nAgree, nAgainst: nAgainst
     };
   }
