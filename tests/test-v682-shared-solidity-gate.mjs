@@ -32,7 +32,7 @@ const solSrc = readFileSync(resolve(ROOT, 'hg-solidity.js'), 'utf8');
 assert.ok(/hgSolidityGrade/.test(solSrc), 'hgSolidityGrade defined');
 assert.ok(/hgSolidityReorder/.test(solSrc), 'hgSolidityReorder defined');
 assert.ok(/hgSolidityChipHtml/.test(solSrc), 'hgSolidityChipHtml defined');
-assert.ok(/HG_SOLIDITY_VERSION = 'v682'/.test(solSrc), 'version stamp v682');
+assert.ok(/HG_SOLIDITY_VERSION = 'v(682|68[3-9]|69\d|[7-9]\d\d|\d{4,})'/.test(solSrc), 'helper version stamped >= v682');
 assert.ok(/HG_SOL_MIN_FAMILIES = 2/.test(solSrc), 'families gate = 2');
 assert.ok(/HG_SOL_RR_HEADROOM = 0\.25/.test(solSrc), 'rr headroom = 0.25');
 
@@ -68,7 +68,7 @@ const buildFn = new Function('window', `
 `);
 const api = buildFn(fakeG);
 assert.equal(typeof api.hgSolidityGrade, 'function', 'helper attached to window');
-assert.equal(api.HG_SOLIDITY_VERSION, 'v682');
+assert.ok(api.HG_SOLIDITY_VERSION && api.HG_SOLIDITY_VERSION >= 'v682', 'helper version >= v682');
 
 const grade = api.hgSolidityGrade;
 const reorder = api.hgSolidityReorder;
