@@ -744,6 +744,20 @@ async function rsRunScan(opts){
         try{
           var rows = await rsFetchKlines(item, '4h', KL_LIMIT);
           if (!rows || !rows.length){ failed++; return; }
+          /* v680: settle any prior open forward-log records for this symbol
+             using the freshest rows we just fetched. Without this, every
+             reversalsniper card we record via hgFwdRecordScan accumulates as
+             'open' forever unless another tab happens to scan the same alt
+             symbol — our measured edge (the input to rsConviction's bt
+             lookup at rsAssess line ~180) never learns from live outcomes.
+             hgFwdResolve is a no-op when the helper is absent (test harness
+             or config), and dedupes per symbol so a rescan does not
+             double-settle. See hg-forward.js hgFwdSettleOne for the T1 vs
+             stop vs expired logic — v680 just wires the trigger. */
+          if (typeof W.hgFwdResolve === 'function'){
+            try { W.hgFwdResolve(item.sym, '4h', rows); }
+            catch (eR) { try { if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('reversalsniper:resolve', eR); } catch (eW) {} }
+          }
           var setup = rsAssess(rows);
           if (!setup) return;
           results.push({ item: item, sym: symLab, setup: setup, rows: rows, tick: item });
