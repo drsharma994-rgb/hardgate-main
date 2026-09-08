@@ -859,13 +859,53 @@ terse status, and never launches a first-time scan on a global refresh.
 
   /* The London PM fix at 15:00 is a scheduled, documented gold flow. Taken as
      a decisive drive through the fix hour rather than a fade of it. */
+  /* v667: London PM Fix is 15:00 LONDON local time. Prior to v667 the
+     mechanic hard-coded hr === 15 || hr === 16 in UTC. That works during
+     GMT (winter), when London = UTC, but during BST (roughly late March
+     to late October, ~7 months of the year) London = UTC+1, so the actual
+     15:00 London fix bar lands at 14:00 UTC. Under BST the mechanic never
+     fired — half a year of gold trading with LONDON-FIX silently dead.
+
+     Fix: resolve the LONDON local hour from the bar timestamp using
+     Intl.DateTimeFormat with Europe/London (DST-aware in every modern
+     browser and Node). Feature-checked so an ancient runtime falls back
+     to the widened UTC window 14..16, which still catches BST 15:00 (=14
+     UTC) and GMT 15:00 (=15 UTC) — not perfect on the shoulder days but
+     honest instead of silent. */
+  function hgOgLondonHour(t){
+    /* t is seconds since epoch. Return the London local hour or NaN. */
+    if (!isFinite(t)) return NaN;
+    try{
+      var fmt = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London', hour: '2-digit', hour12: false
+      });
+      var parts = fmt.formatToParts(new Date(t * 1000));
+      for (var i = 0; i < parts.length; i++){
+        if (parts[i].type === 'hour') return parseInt(parts[i].value, 10);
+      }
+    }catch(e){}
+    return NaN;
+  }
   function hgOgLondonFix(rows){
     if (!rows || rows.length < 6) return null;
     var last = rows[rows.length - 1];
     var t = num(last.t);
     if (!isFinite(t)) return null;
+    /* Try LONDON local hour first (DST-aware). PM Fix is 15:00 London;
+       the fix WINDOW extends into 16:00 for late-cross prints. */
+    var lhr = hgOgLondonHour(t);
+    var inWindow;
+    if (isFinite(lhr)){
+      inWindow = (lhr === 15 || lhr === 16);
+    } else {
+      /* Fallback: widen UTC to 14..16 so BST 15:00 (= 14 UTC) still
+         qualifies, alongside the prior GMT 15/16 UTC coverage. */
+      var uhr = Math.floor((t % 86400) / 3600);
+      inWindow = (uhr === 14 || uhr === 15 || uhr === 16);
+    }
+    if (!inWindow) return null;
     var hr = Math.floor((t % 86400) / 3600);
-    if (hr !== 15 && hr !== 16) return null;
+    /* keep hr in the why-string as the observed UTC hour, unchanged from v666 */
     var c = num(last.c), o = num(last.o), h = num(last.h), l = num(last.l);
     if (!isFinite(c) || !isFinite(o) || !isFinite(h) || !isFinite(l)) return null;
     var rng = h - l;
