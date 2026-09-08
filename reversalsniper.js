@@ -149,6 +149,54 @@ function rsTradeable(setup){
   }catch(e){ return false; }
 }
 
+/* v678: HTF tape classification for the Reversal Sniper.
+
+   Reversalsniper fires long-only reversal snipes on 4H. Every other tab in
+   HARDGATE (omnigold, omniroute) already gates or ranks against a tape/
+   regime; rsniper had nothing. The result: long snipes fired freely on
+   symbols in strong 4H downtrends — the classic "catching a falling knife"
+   failure mode.
+
+   Approach: derive the HTF tape from rsniper's own 4H closes. EMA20 vs
+   EMA50 (the same cascade omniroute and plans.js use) captures the
+   dominant trend over the last ~10 4H bars, which for 4H TF spans about a
+   week and a half — the right time scale for "is this dip a real
+   exhaustion or a trend continuation".
+
+   Returns 'long' | 'short' | null. Requires ema() from indicators.js; if
+   absent (test harness), returns null and the caller treats it as neutral.
+
+   Wired into rsConviction as a soft penalty: rsniper long against 'short'
+   tape loses 3 conviction points — nearly one full MIN_CONVICTION step —
+   so weak against-tape cards drop below the tradeable threshold while
+   strong ones (many triggers, deep RSI(2), big drawdown, positive backtest)
+   survive. This is intentional: sometimes the very best reversal IS
+   against the daily tape (exhaustion at capitulation). We deprioritize,
+   don't hard-veto. */
+function rsTape(rows){
+  try{
+    if (!Array.isArray(rows) || rows.length < 55 || typeof ema !== 'function') return null;
+    var closes = rows.map(function(r){ return +r.c; });
+    var e20a = ema(closes, 20);
+    var e50a = ema(closes, 50);
+    if (!e20a || !e50a || !e20a.length || !e50a.length) return null;
+    var e20 = e20a[e20a.length - 1];
+    var e50 = e50a[e50a.length - 1];
+    if (!isFinite(e20) || !isFinite(e50)) return null;
+    /* Prefer plans.js hgConfirmedCascade when available for parity with the
+       other tabs; else fall back to the local pair. */
+    if (typeof W.hgConfirmedCascade === 'function'){
+      try {
+        var cc = W.hgConfirmedCascade(rows, 'smart');
+        if (cc && (cc.dir === 'long' || cc.dir === 'short')) return cc.dir;
+      } catch(e){}
+    }
+    if (e20 > e50) return 'long';
+    if (e20 < e50) return 'short';
+    return null;
+  }catch(e){ return null; }
+}
+
 function rsConviction(setup){
   try{
     if (!setup) return 0;
@@ -195,6 +243,16 @@ function rsConviction(setup){
       else if (barsSince <= 4) c -= 1;  /* getting stale */
       else c -= 2;                      /* clearly stale (>= 20 hours) */
     }
+    /* v678: HTF tape alignment. All rsniper snipes are long (dir hardcoded).
+       Tape 'long' = with the trend (dip-buy in uptrend) => small bonus.
+       Tape 'short' = against the trend ("catching a falling knife") => big
+       penalty; with MIN_CONVICTION = 4, this alone knocks the weakest
+       against-tape cards off the board while strong ones (many triggers,
+       deep RSI(2), big drawdown, positive backtest) survive. Tape null =
+       neutral (mixed/ranging market where dip-buys and reversal-shorts are
+       both reasonable). */
+    if (setup.tape === 'long') c += 1;
+    else if (setup.tape === 'short') c -= 3;
     return c;
   }catch(e){ return 0; }
 }
@@ -305,6 +363,10 @@ function rsAssess(rows, opts){
     var formedT = NaN;
     if (rows[n - 1] && isFinite(+rows[n - 1].t)) formedT = +rows[n - 1].t;
     if (formedT > 1e12) formedT = Math.floor(formedT / 1000); /* ms -> sec */
+    /* v678: stamp the HTF tape (derived from the same 4H rows via EMA20/50)
+       so the card can display it and rsConviction can penalise against-tape
+       longs. See rsTape() for rationale. */
+    var tape = rsTape(rows);
     var setup = {
       dir: 'long',
       entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2,
@@ -312,7 +374,8 @@ function rsAssess(rows, opts){
       rr1: plan.rr1, rr2: plan.rr2, lev: plan.lev,
       triggers: triggers, drawdownPct: dd * 100, rsi2: rsi2Val,
       sweep: sweep, meanrev: mr, bt: bt,
-      formedT: isFinite(formedT) ? formedT : null
+      formedT: isFinite(formedT) ? formedT : null,
+      tape: tape
     };
 
     if (typeof W.hgApplyExactEntry === 'function'){
@@ -536,6 +599,15 @@ function cardHTML(r){
     + '</div>'
     + '<div class="gates">' + triggerChips(s.triggers)
     + '<span class="gpip ok">CONVICTION ' + s.conviction + '</span>'
+    /* v678: HTF tape chip. Green when the sniper long is with the daily tape,
+       amber-warning when against ("catching a falling knife" caution), quiet
+       when tape is mixed. Purely display; the penalty was applied upstream
+       in rsConviction. */
+    + (s.tape === 'long'
+        ? '<span class="gpip ok">TAPE LONG</span>'
+        : (s.tape === 'short'
+            ? '<span class="gpip warn" title="Long snipe against the 4H HTF downtrend (EMA20 &lt; EMA50). Conviction penalised.">TAPE SHORT — vs trend</span>'
+            : '<span class="gpip">TAPE MIXED</span>'))
     + '<span class="gpip ok">≥' + MIN_LEV + '× SAFE</span>'
     + ((typeof W.hgStrategyConfirmChipHtml === 'function')
       ? W.hgStrategyConfirmChipHtml(s.strategyConfirm, s.strategyWith, s.strategyAgainst) : '')
