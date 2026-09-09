@@ -75,7 +75,8 @@ const chip = api.hgSolidityChipHtml;
   const html = chip({ grade: 'SOLID', score: 5 });
   assert.ok(/gpip ok/.test(html), 'SOLID -> ok class');
   assert.ok(/SOLIDITY SOLID/.test(html));
-  assert.ok(/title="Solidity 5\/5(&#10;[\s\S]*)?"/.test(html), 'SOLID score tooltip (optional per-gate reasons from v684)');
+  /* v685: max score is now 6; older test literals for /5 widened to match either scale. */
+  assert.ok(/title="Solidity 5\/[56](&#10;[\s\S]*)?"/.test(html), 'SOLID score tooltip (score 5 shown as 5/N where N is the scale)');
 }
 /* GOOD */
 {

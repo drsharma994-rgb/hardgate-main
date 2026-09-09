@@ -800,7 +800,18 @@ async function rsRunScan(opts){
             consensus: s.consensus || (isFinite(s.trigger) ? { nAgree: Math.max(0, Math.floor(s.trigger)) } : null),
             stopWidened: s.stopWidened
           };
-          r.solidity = W.hgSolidityGrade(planForSol, { minRr: 1.5 });
+          /* v685: pass tab + kind so the measured-edge veto (G6) can look
+             up rsniper's own recorded outcomes for SNIPER-BOUNCE. When
+             the log has >= 20 samples with expR < -0.25R, G6 fails and
+             the card cannot lead. This is exactly the loop v680 opened:
+             rsniper records via hgFwdRecordScan(REVERSALSNIPER, ...) with
+             mechanic 'SNIPER-BOUNCE', then hgFwdResolve settles them,
+             then G6 reads the accumulated expectancy. */
+          r.solidity = W.hgSolidityGrade(planForSol, {
+            minRr: 1.5,
+            tab: 'REVERSALSNIPER',
+            kind: 'SNIPER-BOUNCE'
+          });
         }
       } catch(eSol){}
     })();

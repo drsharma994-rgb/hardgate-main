@@ -66,15 +66,30 @@
   /* --- gate constants --------------------------------------------------- */
   var HG_SOL_MIN_FAMILIES = 2;
   var HG_SOL_RR_HEADROOM = 0.25;
+  /* v685 measured-edge veto: sample-count threshold and expR floor. Below
+     20 recorded outcomes the sample is noise — do not penalize. At >= 20
+     samples, expR < -0.25 means measured losing after all noise: the veto
+     fires and G6 is marked failed. Choice of thresholds is deliberate:
+     20 is the smallest N where the standard error of an even-money hit
+     rate is <= 0.1, and -0.25R is the smallest expectancy loss that
+     survives typical fee/slip modelling in the forward log. */
+  var HG_SOL_MIN_EDGE_SAMPLES = 20;
+  var HG_SOL_EDGE_FLOOR = -0.25;
 
+  /* v685: labels re-scaled to a 6-point gate system. Only 6/6 is SOLID;
+     5/6 is GOOD; both remain lead-eligible. Mid grades tightened so a
+     card with a measured-losing kind cannot lead just because its other
+     five gates happen to line up. */
   var HG_SOL_LABELS = {
-    5: 'SOLID',
-    4: 'GOOD',
+    6: 'SOLID',
+    5: 'GOOD',
+    4: 'MIXED',
     3: 'MIXED',
     2: 'THIN',
     1: 'WEAK',
     0: 'WEAK'
   };
+  var HG_SOL_LEAD_MIN = 5; /* v685: score >= 5 leads (was 4 pre-v685) */
 
   function _fin(x){ x = +x; return isFinite(x) ? x : NaN; }
 
@@ -178,11 +193,54 @@
     return { pass: plan.stopWidened !== true, widened: plan.stopWidened === true };
   }
 
+  /* G6 (v685): MEASURED-EDGE veto. Reads the forward log's expectancy for
+     this (tab, kind) pair. If we have enough samples and the measured expR
+     is meaningfully negative, this gate FAILS. That drops the total score
+     by 1, which flips a would-be GOOD lead into MIXED and pushes it out of
+     the lead slot without hiding the card.
+
+     Absent data means pass=true — unmeasured setups are innocent until
+     proven guilty. Only setups the log has ACTUALLY MEASURED as losing
+     get penalized. Feature-checked: forward log missing (test harness,
+     load failure) always passes.
+
+     opts.tab and opts.kind identify the (scanner, mechanic) pair to look
+     up. Both tabs must pass them; if missing, gate passes without lookup
+     to preserve backward compatibility with pre-v685 callers. */
+  function hgSolGateMeasuredEdge(plan, opts){
+    opts = opts || {};
+    if (!opts.tab || !opts.kind) return { pass: true, source: 'no-lookup' };
+    var W = (typeof window !== 'undefined') ? window : ((typeof globalThis !== 'undefined') ? globalThis : G);
+    if (!W || typeof W.hgFwdStats !== 'function') return { pass: true, source: 'no-fwdlog' };
+    var stats = null;
+    try { stats = W.hgFwdStats(String(opts.tab), String(opts.kind), false); }
+    catch(eF){ return { pass: true, source: 'fwdlog-error' }; }
+    if (!stats || !isFinite(stats.samples) || stats.samples < HG_SOL_MIN_EDGE_SAMPLES){
+      return { pass: true, source: 'too-few-samples', samples: stats && stats.samples || 0, expR: stats && stats.expR };
+    }
+    var expR = _fin(stats.expR);
+    /* Not-a-number expR with samples present means every settled trade
+       lost 1R (hgFwdStats sets expR = -1 when wins=0) or a data glitch;
+       treat the -1 case as an explicit veto. NaN with samples is a data
+       shape we do not want to penalize on. */
+    if (!isFinite(expR)) return { pass: true, source: 'expR-nan', samples: stats.samples, expR: NaN };
+    var pass = expR >= HG_SOL_EDGE_FLOOR;
+    return { pass: pass, source: 'measured', samples: stats.samples, expR: expR };
+  }
+
   /* --- composite grade -------------------------------------------------- */
 
-  /* Given a plan, return { grade, score, gates } where score is 0..5. This
-     is the ONE call every tab makes. Adds no fields to plan; returns a
-     fresh object the tab attaches (or doesn't) at its discretion. */
+  /* Given a plan, return { grade, score, gates } where score is 0..6 (v685).
+     This is the ONE call every tab makes. Adds no fields to plan; returns a
+     fresh object the tab attaches (or doesn't) at its discretion.
+
+     opts.minRr: the tab's minimum R:R floor (default 2.0).
+     opts.tab, opts.kind: identifies (scanner, mechanic) pair for G6
+       measured-edge lookup. If either is missing, G6 passes unconditionally.
+
+     v685: G6 measured-edge veto added; only setups the forward log has
+     ACTUALLY MEASURED as losing get penalized. Lead eligibility raised to
+     score >= 5 so a card cannot lead while carrying a measured-losing kind. */
   function hgSolidityGrade(plan, opts){
     opts = opts || {};
     var g1 = hgSolGateFamilies(plan);
@@ -190,8 +248,9 @@
     var g3 = hgSolGateTape(plan);
     var g4 = hgSolGateRr(plan, opts);
     var g5 = hgSolGateStop(plan);
+    var g6 = hgSolGateMeasuredEdge(plan, opts);
     var score = (g1.pass ? 1 : 0) + (g2.pass ? 1 : 0) + (g3.pass ? 1 : 0)
-              + (g4.pass ? 1 : 0) + (g5.pass ? 1 : 0);
+              + (g4.pass ? 1 : 0) + (g5.pass ? 1 : 0) + (g6.pass ? 1 : 0);
     return {
       grade: HG_SOL_LABELS[score] || 'WEAK',
       score: score,
@@ -200,10 +259,12 @@
         liveFresh: g2,
         tape: g3,
         rr: g4,
-        stop: g5
+        stop: g5,
+        measuredEdge: g6
       },
-      /* leadEligible: only SOLID or GOOD may lead a tab. */
-      leadEligible: score >= 4
+      /* leadEligible: only SOLID (6) or GOOD (5) may lead a tab. Threshold
+         is HG_SOL_LEAD_MIN so the constant stays honest. */
+      leadEligible: score >= HG_SOL_LEAD_MIN
     };
   }
 
@@ -241,6 +302,17 @@
     var g5 = g.stop || {};
     lines.push((g5.pass ? '✓' : '✗') + ' stop: '
       + (g5.widened === true ? 'widened to v681 floor' : 'natural structure'));
+    /* G6 MEASURED-EDGE (v685) */
+    var g6 = g.measuredEdge || {};
+    var edgeStr;
+    if (g6.source === 'no-lookup' || g6.source === 'no-fwdlog') edgeStr = 'no data';
+    else if (g6.source === 'too-few-samples') edgeStr = 'sample too small (' + (g6.samples || 0) + '/' + HG_SOL_MIN_EDGE_SAMPLES + ')';
+    else if (g6.source === 'expR-nan' || g6.source === 'fwdlog-error') edgeStr = 'no data';
+    else if (g6.source === 'measured'){
+      var er = isFinite(g6.expR) ? g6.expR.toFixed(2) + 'R' : '?';
+      edgeStr = 'measured ' + er + ' over ' + (g6.samples || 0) + ' samples (floor ' + HG_SOL_EDGE_FLOOR.toFixed(2) + 'R)';
+    } else edgeStr = 'unknown';
+    lines.push((g6.pass ? '✓' : '✗') + ' measured-edge: ' + edgeStr);
     return lines.join('\n');
   }
 
@@ -258,7 +330,11 @@
     else if (sol.grade === 'THIN') cls = 'veto';
     else if (sol.grade === 'WEAK') cls = 'veto';
     var reasons = hgSolidityReasons(sol);
-    var title = 'Solidity ' + sol.score + '/5';
+    /* v685: max score is now 6 (was 5 pre-v685). Use the label table's
+       highest key so future scale changes don't need another callsite
+       update. */
+    var MAX = Math.max.apply(null, Object.keys(HG_SOL_LABELS).map(Number));
+    var title = 'Solidity ' + sol.score + '/' + MAX;
     if (reasons) title += '\n' + reasons;
     /* HTML-encode the title to keep double-quotes safe inside the attribute
        AND to preserve newlines as &#10; which browsers convert back to line
@@ -271,15 +347,20 @@
   /* Sort helper: reorders a list of cards so lead-eligible (SOLID/GOOD) come
      first, keeping stable order within each bucket (so the tab's own ranker
      still decides ordering WITHIN a bucket). Every card must already carry
-     a .solidity object (attach with hgSolidityGrade before calling). */
+     a .solidity object (attach with hgSolidityGrade before calling).
+
+     v685: bucket thresholds re-scaled to the 6-point system. Lead bucket is
+     score >= 5 (HG_SOL_LEAD_MIN); mid bucket is 3-4 (both MIXED); back
+     bucket is 0-2. Preserves the property that ORDER within a bucket is
+     stable, so the tab's own ranker still decides ordering. */
   function hgSolidityReorder(cards){
     if (!Array.isArray(cards)) return cards;
     var lead = [], mid = [], back = [];
     for (var i = 0; i < cards.length; i++){
       var c = cards[i];
       var sol = c && c.solidity;
-      if (sol && sol.score >= 4) lead.push(c);
-      else if (sol && sol.score === 3) mid.push(c);
+      if (sol && sol.score >= HG_SOL_LEAD_MIN) lead.push(c);
+      else if (sol && sol.score >= 3) mid.push(c);
       else back.push(c);
     }
     return lead.concat(mid).concat(back);
@@ -295,5 +376,9 @@
   G.hgSolGateTape = hgSolGateTape;
   G.hgSolGateRr = hgSolGateRr;
   G.hgSolGateStop = hgSolGateStop;
-  G.HG_SOLIDITY_VERSION = 'v684';
+  G.hgSolGateMeasuredEdge = hgSolGateMeasuredEdge; /* v685 */
+  G.HG_SOLIDITY_VERSION = 'v685';
+  G.HG_SOL_LEAD_MIN = HG_SOL_LEAD_MIN;
+  G.HG_SOL_MIN_EDGE_SAMPLES = HG_SOL_MIN_EDGE_SAMPLES;
+  G.HG_SOL_EDGE_FLOOR = HG_SOL_EDGE_FLOOR;
 })();

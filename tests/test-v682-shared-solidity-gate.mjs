@@ -35,6 +35,9 @@ assert.ok(/hgSolidityChipHtml/.test(solSrc), 'hgSolidityChipHtml defined');
 assert.ok(/HG_SOLIDITY_VERSION = 'v(682|68[3-9]|69\d|[7-9]\d\d|\d{4,})'/.test(solSrc), 'helper version stamped >= v682');
 assert.ok(/HG_SOL_MIN_FAMILIES = 2/.test(solSrc), 'families gate = 2');
 assert.ok(/HG_SOL_RR_HEADROOM = 0\.25/.test(solSrc), 'rr headroom = 0.25');
+/* v685: gate count expanded to 6; SOLID is now 6/6 and lead threshold is 5. */
+const LEAD_MIN = 5;
+const MAX_SCORE = 6;
 
 /* --- 2. loads via index.html BEFORE all three consumer tabs --- */
 const idx = readFileSync(resolve(ROOT, 'index.html'), 'utf8');
@@ -85,13 +88,16 @@ const reorder = api.hgSolidityReorder;
   };
   const g = grade(p);
   assert.equal(g.grade, 'SOLID', 'grade=SOLID');
-  assert.equal(g.score, 5, 'score=5');
+  assert.equal(g.score, MAX_SCORE, 'score=6 (all six gates)');
   assert.equal(g.leadEligible, true, 'leadEligible');
   assert.equal(g.gates.families.pass, true);
   assert.equal(g.gates.liveFresh.pass, true);
   assert.equal(g.gates.tape.pass, true);
   assert.equal(g.gates.rr.pass, true);
   assert.equal(g.gates.stop.pass, true);
+  /* v685: G6 measured-edge passes when no tab/kind provided (backward compat) */
+  assert.equal(g.gates.measuredEdge.pass, true);
+  assert.equal(g.gates.measuredEdge.source, 'no-lookup');
 }
 
 /* --- Case B: solid setup ranked GOOD by one flaw --- */
@@ -106,7 +112,7 @@ const reorder = api.hgSolidityReorder;
   };
   const g = grade(p);
   assert.equal(g.grade, 'GOOD');
-  assert.equal(g.score, 4);
+  assert.equal(g.score, MAX_SCORE - 1);
   assert.equal(g.leadEligible, true, 'GOOD still leads');
   assert.equal(g.gates.stop.pass, false);
 }
@@ -138,7 +144,7 @@ const reorder = api.hgSolidityReorder;
   };
   const g = grade(p);
   assert.equal(g.gates.liveFresh.pass, false);
-  assert.equal(g.score, 4);
+  assert.equal(g.score, MAX_SCORE - 1);
 }
 
 /* --- Case E: WEAK plan cannot lead --- */
@@ -152,7 +158,8 @@ const reorder = api.hgSolidityReorder;
     stopWidened: true
   };
   const g = grade(p);
-  assert.equal(g.score, 0);
+  /* v685: 5 gates fail, G6 still passes (no-lookup). Score = 1 = WEAK. */
+  assert.equal(g.score, 1);
   assert.equal(g.grade, 'WEAK');
   assert.equal(g.leadEligible, false);
 }
@@ -169,23 +176,24 @@ const reorder = api.hgSolidityReorder;
   };
   const g = grade(p);
   assert.equal(g.gates.rr.pass, false, 'rr AT floor fails (need +0.25 headroom)');
-  assert.equal(g.score, 4);
+  assert.equal(g.score, MAX_SCORE - 1);
 }
 
 /* --- Case G: reorder preserves within-bucket ordering --- */
 {
+  /* v685: bucket thresholds rescaled to 6-point system.
+       Lead bucket: score >= 5 (SOLID or GOOD)
+       Mid bucket:  score in [3, 4] (MIXED)
+       Back bucket: score <= 2 (THIN or WEAK) */
   const cards = [
-    { id: 'a', solidity: { score: 2, leadEligible: false } },
-    { id: 'b', solidity: { score: 5, leadEligible: true } },
-    { id: 'c', solidity: { score: 4, leadEligible: true } },
-    { id: 'd', solidity: { score: 3, leadEligible: false } },
-    { id: 'e', solidity: { score: 5, leadEligible: true } }
+    { id: 'a', solidity: { score: 2, leadEligible: false } }, /* back */
+    { id: 'b', solidity: { score: 6, leadEligible: true } },  /* lead SOLID */
+    { id: 'c', solidity: { score: 5, leadEligible: true } },  /* lead GOOD */
+    { id: 'd', solidity: { score: 3, leadEligible: false } }, /* mid */
+    { id: 'e', solidity: { score: 6, leadEligible: true } }   /* lead SOLID */
   ];
   const out = reorder(cards);
   const ids = out.map(function(c){ return c.id; });
-  /* Lead bucket (score>=4): b, c, e (stable order preserved).
-     Mid bucket (score==3): d.
-     Back bucket (score<3): a. */
   assert.deepEqual(ids, ['b', 'c', 'e', 'd', 'a']);
 }
 
