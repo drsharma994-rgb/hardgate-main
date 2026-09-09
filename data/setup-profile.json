@@ -1,7 +1,7 @@
 {
   "version": 1,
   "minSample": 20,
-  "computedAt": 1788931208297,
+  "computedAt": 1788939149103,
   "note": "Synthesized from backtest-omniroute-v531 byMechanic aggregates (offline replay, not live LOG)",
   "setups": {
     "swing": {
