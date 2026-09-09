@@ -32,7 +32,7 @@ assert.ok(/function hgSolGateMeasuredEdge\(plan, opts\)/.test(solSrc),
 assert.ok(/HG_SOL_MIN_EDGE_SAMPLES = 20/.test(solSrc), 'sample floor is 20');
 assert.ok(/HG_SOL_EDGE_FLOOR = -0\.25/.test(solSrc), 'expR floor is -0.25');
 assert.ok(/HG_SOL_LEAD_MIN = 5/.test(solSrc), 'lead threshold raised to 5');
-assert.ok(/HG_SOLIDITY_VERSION = 'v685'/.test(solSrc), 'helper stamped v685');
+assert.ok(/HG_SOLIDITY_VERSION = 'v(685|68[6-9]|69\d|[7-9]\d\d|\d{4,})'/.test(solSrc), 'helper version stamped >= v685');
 assert.ok(/G\.hgSolGateMeasuredEdge = hgSolGateMeasuredEdge/.test(solSrc),
   'G6 gate exposed on globalThis');
 

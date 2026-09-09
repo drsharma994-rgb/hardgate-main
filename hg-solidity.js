@@ -377,7 +377,7 @@
   G.hgSolGateRr = hgSolGateRr;
   G.hgSolGateStop = hgSolGateStop;
   G.hgSolGateMeasuredEdge = hgSolGateMeasuredEdge; /* v685 */
-  G.HG_SOLIDITY_VERSION = 'v685';
+  G.HG_SOLIDITY_VERSION = 'v686';
   G.HG_SOL_LEAD_MIN = HG_SOL_LEAD_MIN;
   G.HG_SOL_MIN_EDGE_SAMPLES = HG_SOL_MIN_EDGE_SAMPLES;
   G.HG_SOL_EDGE_FLOOR = HG_SOL_EDGE_FLOOR;
