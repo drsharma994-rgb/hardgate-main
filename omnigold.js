@@ -10258,6 +10258,15 @@ terse status, and never launches a first-time scan on a global refresh.
            still renders in full — those levels are meant to be far. */
         var deadLines = '';
         var heldCards = hgOgHeldCards(ogCollapsed, deskTape);
+        /* v697 rule D: cap visible tradable cards at 5 per direction so the
+           tab reads as top picks, not a firehose. Order is preserved (the
+           list is already ranked upstream); a summary line reports how many
+           extras were trimmed. Held cards + dead-level lines still render
+           in full because they carry a different reader responsibility.
+           A <details> disclosure exposes the trimmed tail on demand. */
+        var OG_VIS_CAP = 5;
+        var perSideKept = { long: 0, short: 0, other: 0 };
+        var trimmedTail = [];
         for (i = 0; i < ogCollapsed.length; i++){
           var cCard = ogCollapsed[i];
           var lfG = null, gj;
@@ -10270,18 +10279,46 @@ terse status, and never launches a first-time scan on a global refresh.
                       +  ' · card not rendered</div>';
             continue;
           }
+          var sideKey = String(cCard.dir || '').toLowerCase();
+          if (sideKey !== 'long' && sideKey !== 'short') sideKey = 'other';
+          if (perSideKept[sideKey] >= OG_VIS_CAP){
+            trimmedTail.push(cCard);
+            continue;
+          }
+          perSideKept[sideKey]++;
           h += setupCard(cCard);
+        }
+        if (trimmedTail.length){
+          h += '<details class="note" style="margin-top:10px">'
+            +    '<summary style="cursor:pointer;padding:6px 0">▸ '
+            +      trimmedTail.length + ' lower-ranked setup'
+            +      (trimmedTail.length === 1 ? '' : 's')
+            +      ' beyond top ' + OG_VIS_CAP + ' per side · <span class="dim">click to expand</span></summary>'
+            +    '<div style="margin-top:8px">';
+          for (var ti = 0; ti < trimmedTail.length; ti++){
+            h += setupCard(trimmedTail[ti]);
+          }
+          h +=  '</div></details>';
         }
         if (deadLines){
           h += '<div class="note" style="margin-top:10px"><b>DEAD LEVELS — priced off a closed bar the market has left behind:</b>'
             +  deadLines + '</div>';
         }
-        /* MEASURED-NEGATIVE KINDS — stood aside (hg-v533). Every setup that
-           fired but did not FORM renders here: visible, with its replay row
-           and the formation reason, and with NO levels. Rendered-information
-           parity: nothing the scan generated is silently dropped. */
+        /* MEASURED-NEGATIVE KINDS — stood aside (hg-v533).
+           v697 rule C: keep parity (nothing silently dropped) but
+           collapse the whole demoted-cards section behind a <details>
+           so the tab reads as 'tradable + a summary of what was stood
+           aside'. Expanding shows the exact same block hg-v533 rendered. */
         if (ogDemotedCards.length){
-          h += hgOgDemotedSectionHtml(ogDemotedCards);
+          h += '<details class="note" id="ogDemotedDetails" style="margin-top:12px">'
+            +    '<summary style="cursor:pointer;padding:6px 0">▸ '
+            +      ogDemotedCards.length + ' measured-negative setup'
+            +      (ogDemotedCards.length === 1 ? '' : 's')
+            +      ' stood aside · <span class="dim">click to inspect</span></summary>'
+            +    '<div style="margin-top:8px">'
+            +      hgOgDemotedSectionHtml(ogDemotedCards)
+            +    '</div>'
+            + '</details>';
         }
         /* Prepend circuit breaker warning banner if active */
         var drawdownStateBanner = hgOgResetWeeklyDrawdown();
@@ -10751,18 +10788,38 @@ terse status, and never launches a first-time scan on a global refresh.
      measured-negative kinds from the tradable list before any of this runs,
      so a demoted kind can no more appear under PAID-ONLY than under ALL. */
   var OG_PAID_LS = 'hg_paidonly_OMNIGOLD';
+  /* v697 rule A: default to PAID-ONLY so users see only setups whose
+     forward ledger reads 'has paid'. The old default of ALL surfaced
+     every mechanic incl. those the tab's own replay marks negative;
+     PAID is a stricter, honest starting view. ALL toggle remains one
+     click away. Migration: a NEW third key encodes explicit user
+     choice so returning users who never touched the toggle inherit
+     the new default; only an explicit ALL click keeps ALL. */
+  var OG_PAID_CHOICE_LS = 'hg_paidonly_OMNIGOLD_choice'; /* v697 */
 
   function hgOgShowMode(){
     try{
-      if (typeof localStorage === 'undefined') return 'ALL';
-      return localStorage.getItem(OG_PAID_LS) === '1' ? 'PAID' : 'ALL';
-    }catch(e){ return 'ALL'; }
+      if (typeof localStorage === 'undefined') return 'PAID';
+      var explicit = localStorage.getItem(OG_PAID_CHOICE_LS);
+      if (explicit === 'ALL') return 'ALL';
+      if (explicit === 'PAID') return 'PAID';
+      /* Legacy key still honored: '1' -> PAID, everything else -> new PAID default. */
+      if (localStorage.getItem(OG_PAID_LS) === '1') return 'PAID';
+      return 'PAID';
+    }catch(e){ return 'PAID'; }
   }
   function hgOgShowModeSet(mode){
     try{
       if (typeof localStorage === 'undefined') return;
-      if (mode === 'PAID') localStorage.setItem(OG_PAID_LS, '1');
-      else localStorage.removeItem(OG_PAID_LS);
+      /* v697: record the explicit choice so we never regress a
+         deliberate ALL back to the new PAID default. */
+      if (mode === 'PAID'){
+        localStorage.setItem(OG_PAID_LS, '1');
+        localStorage.setItem(OG_PAID_CHOICE_LS, 'PAID');
+      } else {
+        localStorage.removeItem(OG_PAID_LS);
+        localStorage.setItem(OG_PAID_CHOICE_LS, 'ALL');
+      }
     }catch(e){}
   }
 
@@ -10925,10 +10982,17 @@ terse status, and never launches a first-time scan on a global refresh.
       + 'The perp gates have no meaning here (spot gold has no funding, OI, retail ratio or taker flow) and are deliberately absent rather than faked; '
       + 'in their place sit session, real-rate macro, DXY inverse, yield guard and ADR budget. '
       + 'Levels come from the house plan engine. <b>MOST PROBABLE SETUPS</b> lead the tab: one SCALP and one SWING ticket when the mechanic ledger clears; otherwise grade-A/B setups from the <b>GOLD SCALP / GOLD SWING</b> engines (15m + 4h). Cards still badge STRONGEST. Nothing here is a profit forecast.</div>'
-      /* DESK-STANCE BANNER (hg-v532) — permanent, before any scan runs:
-         the replay's verdict on this tab's own labels, in the reader's
-         face where the scan button is, not in a footnote below a card. */
-      + hgOgDeskStanceBannerHtml()
+      /* v697 rule B: collapse the DESK-STANCE (replay) verdict + DESK
+         VERDICT (forward) block behind a single <details> so the tab
+         opens on the setups, not on a wall of forensic paragraphs. The
+         evidence is still one click away; nothing is deleted. */
+      + '<details class="note" id="ogEvidenceDetails" style="margin-bottom:10px">'
+      +   '<summary style="cursor:pointer;padding:6px 0">▸ measured evidence · replay + forward verdicts · <span class="dim">click to expand</span></summary>'
+      +   '<div style="margin-top:8px">'
+      +     hgOgDeskStanceBannerHtml()
+      +     '<div id="ogFwdVerdict" style="margin-top:8px"></div>'
+      +   '</div>'
+      + '</details>'
       /* EXECUTION VENUE control + counts strip (hg-v537) — see
          hgOgVenueControlHtml for why changes apply on the next scan. */
       + hgOgVenueControlHtml()
@@ -10936,10 +11000,7 @@ terse status, and never launches a first-time scan on a global refresh.
       +   ' <button class="btn" id="ogGrid">R / HORIZON GRID</button></div>'
       + '<div class="note" id="ogStat">idle — press RUN. Fetches two horizons of gold bars, then measures every mechanic on each.</div>'
       + '<div class="note warn" id="ogWarn" style="display:none"></div>'
-      /* DESK VERDICT + PAID-ONLY toggle (hg-v540) — under the banners, above
-         the picks. The strip fills from the live pools at mount and again
-         after every scan. */
-      + '<div id="ogFwdVerdict" style="margin-top:8px"></div>'
+      /* PAID-ONLY toggle (hg-v540) — stays visible above the picks. */
       + '<div id="ogShowMode" style="margin-top:8px"></div>'
       + '<div id="ogMp" style="margin-top:12px"></div>'
       + '<div id="ogVerdict" style="margin-top:12px"></div>'
