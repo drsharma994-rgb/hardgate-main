@@ -426,7 +426,15 @@ function sectionHTML(title, setups, emptyMsg, opts){
 }
 
 var __goldPineSnap = null;
-var __goldPineTab = { busy: false, hasRun: false, run: null };
+var __goldPineTab = { busy: false, hasRun: false, run: null, __timer: null, __mountEl: null };
+
+/* v693: auto-refresh cadence for GOLD PINE, mirroring the v691 pattern
+   already proven on NEW GOLD. Fetches gold candles + re-scores swing +
+   scalp every 5 minutes while the tab is mounted so setups stay live
+   without needing a manual RUN GOLD PINE SCAN click. Pattern mirrors
+   omnigold's __og.__uniTimer (mount-time only, never module load) so
+   Node test processes never hang on a stray interval. */
+var GOLDPINE_AUTO_REFRESH_MS = 5 * 60 * 1000;
 
 function mount(el){
   el.innerHTML =
@@ -534,6 +542,37 @@ function mount(el){
   setTimeout(function(){
     if (!__goldPineTab.hasRun && !__goldPineTab.busy) runScan();
   }, 150);
+
+  /* v693: auto-refresh every 5 minutes while the tab is mounted.
+     Timer is stored on module state so a subsequent mount (tab close +
+     reopen, hot reload) clears the prior timer instead of stacking.
+     The interval calls the exact same runScan the button uses, so a
+     manual click and an auto-tick are indistinguishable except for
+     origin. Also self-heals: if runScan is busy, the tick becomes a
+     no-op via __goldPineTab.busy inside runScan; the next tick tries
+     again 5 minutes later. And if the mount element leaves the DOM
+     (user unmounted the tab), the timer clears itself and both fields
+     null out. */
+  try {
+    if (__goldPineTab.__timer){
+      clearInterval(__goldPineTab.__timer);
+      __goldPineTab.__timer = null;
+    }
+    __goldPineTab.__mountEl = el;
+    if (typeof setInterval === 'function'){
+      __goldPineTab.__timer = setInterval(function(){
+        try {
+          if (__goldPineTab.__mountEl && !document.body.contains(__goldPineTab.__mountEl)){
+            clearInterval(__goldPineTab.__timer);
+            __goldPineTab.__timer = null;
+            __goldPineTab.__mountEl = null;
+            return;
+          }
+        } catch(eDoc){}
+        try { runScan(); } catch(eTick){}
+      }, GOLDPINE_AUTO_REFRESH_MS);
+    }
+  } catch(eTimer){}
 }
 
 async function goldPineRefresh(){
