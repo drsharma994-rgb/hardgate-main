@@ -35,9 +35,12 @@ assert.ok(/hgSolidityChipHtml/.test(solSrc), 'hgSolidityChipHtml defined');
 assert.ok(/HG_SOLIDITY_VERSION = 'v(682|68[3-9]|69\d|[7-9]\d\d|\d{4,})'/.test(solSrc), 'helper version stamped >= v682');
 assert.ok(/HG_SOL_MIN_FAMILIES = 2/.test(solSrc), 'families gate = 2');
 assert.ok(/HG_SOL_RR_HEADROOM = 0\.25/.test(solSrc), 'rr headroom = 0.25');
-/* v685: gate count expanded to 6; SOLID is now 6/6 and lead threshold is 5. */
+/* v685: gate count expanded to 6.
+   v687: added G7 (measured-winning). G7 defaults to FAIL (0 pts) when
+   no fwd log or no tab/kind. So a plan without opts scores at most 6/7
+   which is SOLID (not PRIME). Lead threshold is 5. */
 const LEAD_MIN = 5;
-const MAX_SCORE = 6;
+const MAX_SCORE = 6; /* max reachable without a G7-firing mock fwdlog */
 
 /* --- 2. loads via index.html BEFORE all three consumer tabs --- */
 const idx = readFileSync(resolve(ROOT, 'index.html'), 'utf8');
@@ -87,8 +90,8 @@ const reorder = api.hgSolidityReorder;
     stopWidened: false
   };
   const g = grade(p);
-  assert.equal(g.grade, 'SOLID', 'grade=SOLID');
-  assert.equal(g.score, MAX_SCORE, 'score=6 (all six gates)');
+  assert.equal(g.grade, 'SOLID', 'grade=SOLID (6/7 without G7-firing mock)');
+  assert.equal(g.score, MAX_SCORE, 'score=6 (all quality gates + G6 no-lookup pass, G7 no-lookup fail)');
   assert.equal(g.leadEligible, true, 'leadEligible');
   assert.equal(g.gates.families.pass, true);
   assert.equal(g.gates.liveFresh.pass, true);
@@ -98,6 +101,9 @@ const reorder = api.hgSolidityReorder;
   /* v685: G6 measured-edge passes when no tab/kind provided (backward compat) */
   assert.equal(g.gates.measuredEdge.pass, true);
   assert.equal(g.gates.measuredEdge.source, 'no-lookup');
+  /* v687: G7 measured-winning fails when no tab/kind (opposite polarity to G6) */
+  assert.equal(g.gates.measuredWinning.pass, false);
+  assert.equal(g.gates.measuredWinning.source, 'no-lookup');
 }
 
 /* --- Case B: solid setup ranked GOOD by one flaw --- */
@@ -158,7 +164,8 @@ const reorder = api.hgSolidityReorder;
     stopWidened: true
   };
   const g = grade(p);
-  /* v685: 5 gates fail, G6 still passes (no-lookup). Score = 1 = WEAK. */
+  /* v685: 5 quality gates fail, G6 passes (no-lookup).
+     v687: G7 fails (no-lookup). Score = 1 = WEAK. */
   assert.equal(g.score, 1);
   assert.equal(g.grade, 'WEAK');
   assert.equal(g.leadEligible, false);
@@ -226,6 +233,7 @@ const reorder = api.hgSolidityReorder;
   const g = grade(p);
   assert.equal(g.gates.liveFresh.pass, true, 'absent live data: not a fail (no-live)');
   assert.equal(g.gates.liveFresh.grade, 'no-live');
+  /* v687: SOLID (6/7) because G7 fails without a mock fwdlog. Was 'SOLID' pre-v687 too. */
   assert.equal(g.grade, 'SOLID');
 }
 

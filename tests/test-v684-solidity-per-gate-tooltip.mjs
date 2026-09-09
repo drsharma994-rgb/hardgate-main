@@ -53,10 +53,15 @@ const chip = api.hgSolidityChipHtml;
   const g = grade(p);
   const r = reasons(g);
   const lines = r.split('\n');
-  assert.equal(lines.length, 6, 'six lines (v685 added G6)');
-  for (const line of lines){
-    assert.ok(line.startsWith('\u2713'), 'every gate passes: ' + line);
-  }
+  assert.equal(lines.length, 7, 'seven lines (v687 added G7 measured-winning)');
+  /* v687: G7 fails without a mock fwdlog (no-lookup fail), so 6 of the
+     7 lines pass, 1 (G7 measured-winning) fails with 'no data'. */
+  const passCount = lines.filter(l => l.startsWith('\u2713')).length;
+  const failCount = lines.filter(l => l.startsWith('\u2717')).length;
+  assert.equal(passCount, 6, 'six gates pass (all quality + G6)');
+  assert.equal(failCount, 1, 'G7 measured-winning fails with no-lookup');
+  assert.ok(/\u2717 measured-winning: no data/.test(r),
+    'G7 no-lookup shows no data');
   assert.ok(/families: 3 agree/.test(r));
   assert.ok(/live-price: fresh/.test(r));
   assert.ok(/tape: long/.test(r));
@@ -74,12 +79,13 @@ const chip = api.hgSolidityChipHtml;
   const g = grade(p);
   const r = reasons(g);
   const lines = r.split('\n');
-  assert.equal(lines.length, 6);
-  /* v685: G6 measured-edge passes because no tab/kind was provided
-     (no-lookup). Five gates should fail, one (G6) passes. */
+  assert.equal(lines.length, 7);
+  /* v685: G6 measured-edge passes because no tab/kind was provided (no-lookup).
+     v687: G7 measured-winning FAILS with no tab/kind (opposite polarity to G6).
+     So the WEAK plan now shows 6 crosses, 1 check. */
   const failCount = lines.filter(l => l.startsWith('\u2717')).length;
   const passCount = lines.filter(l => l.startsWith('\u2713')).length;
-  assert.equal(failCount, 5, 'five gates fail');
+  assert.equal(failCount, 6, 'six gates fail (5 quality + G7 no-lookup)');
   assert.equal(passCount, 1, 'G6 passes (no-lookup)');
   assert.ok(/live-price: past-stop/.test(r));
   assert.ok(/tape: short/.test(r), 'tape adverse');
@@ -99,13 +105,14 @@ const chip = api.hgSolidityChipHtml;
   const g = grade(p);
   const r = reasons(g);
   const lines = r.split('\n');
-  assert.equal(lines.length, 6);
-  /* v685: G6 measured-edge passes because no tab/kind was provided
-     (no-lookup). So the pass count includes G6. */
+  assert.equal(lines.length, 7);
+  /* v685: G6 measured-edge passes because no tab/kind was provided (no-lookup).
+     v687: G7 measured-winning FAILS with no tab/kind. So the MIXED plan
+     now shows 4 passes (G1,G4,G5,G6) and 3 fails (G2,G3,G7). */
   const passLines = lines.filter(l => l.startsWith('\u2713'));
   const failLines = lines.filter(l => l.startsWith('\u2717'));
-  assert.equal(passLines.length, 4, 'four gates pass (v685: G6 no-lookup adds one)');
-  assert.equal(failLines.length, 2, 'two gates fail');
+  assert.equal(passLines.length, 4, 'four gates pass');
+  assert.equal(failLines.length, 3, 'three gates fail (v687: G7 adds one fail)');
   assert.ok(/\u2717 live-price: past-t1/.test(r));
   assert.ok(/\u2717 tape: short/.test(r));
 }
@@ -126,7 +133,10 @@ const chip = api.hgSolidityChipHtml;
   const titleValue = titleMatch[1];
   assert.ok(/&#10;/.test(titleValue), 'newlines encoded as &#10;');
   assert.ok(!/\n/.test(titleValue), 'no raw newlines in title attribute');
-  assert.ok(/Solidity 6\/6/.test(titleValue), 'score header preserved (v685: 6-gate scale)');
+  /* v687: G7 measured-winning fails when no tab/kind (no-lookup fail), so
+     the perfect quality plan scores 6/7 (not 7/7 which would need a mock
+     forward log returning a measured-winning stat). */
+  assert.ok(/Solidity 6\/7/.test(titleValue), 'score header 6/7 (v687: 6 pass, G7 no-lookup fail)');
   assert.ok(/families: 3 agree/.test(titleValue), 'gate reason present in title');
 }
 
@@ -151,7 +161,7 @@ const chip = api.hgSolidityChipHtml;
   };
   const r = reasons(partial);
   const lines = r.split('\n');
-  assert.equal(lines.length, 6, 'always six lines (v685)');
+  assert.equal(lines.length, 7, 'always seven lines (v687)');
   assert.ok(/\u2713 families: 2 agree/.test(r));
   assert.ok(/\u2717 live-price: past-entry/.test(r));
   assert.ok(/\u2717 rr: \?R \(floor \?R/.test(r), 'missing rr shows ?');
