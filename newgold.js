@@ -287,6 +287,58 @@ function fetchXau(tf, n){
 
 /* --- scan runner ------------------------------------------------------ */
 
+/* v695: pull OMNIGOLD's already-scored gold candidates and its scan rows.
+   OMNIGOLD keeps m15 + swing (4h) rows in __og.lastRows and exposes them
+   through window.hgOgUniformDebug(); each candidate has kind, dir, plan,
+   and the horizon it fired on. We reuse OMNIGOLD's ROWS (same 4h/15m
+   candles it already fetched, no duplicate network) and re-gate through
+   ngAssess. Only OMNIGOLD candidates whose direction matches an
+   ngAssess fire on the same rows survive — the intersection is stricter
+   than either detector alone.
+
+   Returns [{ horizonLabel, tf, source, ogKind, ogDir, ogPlan, rows }, ...]
+   or [] when OMNIGOLD is not loaded or has no state yet. */
+function ngPullOmniLanes(){
+  var out = [];
+  try {
+    var dbg = (typeof W.hgOgUniformDebug === 'function') ? W.hgOgUniformDebug() : null;
+    if (!dbg) return out;
+    var lanes = [
+      { tag: 'SWING', tf: '4h', label: 'OMNI-4H', rowsKey: 'swing' },
+      { tag: 'SCALP', tf: '15m', label: 'OMNI-15m', rowsKey: 'm15' }
+    ];
+    for (var li = 0; li < lanes.length; li++){
+      var lane = lanes[li];
+      var cands = (lane.tag === 'SWING') ? dbg.swing : dbg.scalp;
+      if (!Array.isArray(cands) || !cands.length) continue;
+      /* OMNIGOLD's own rows for this horizon (via __og.lastRows on window) */
+      var ogState = (typeof W !== 'undefined') ? (W.__og || null) : null;
+      var laneRows = (ogState && ogState.lastRows && ogState.lastRows[lane.rowsKey]) || [];
+      /* Some OMNIGOLD paths store swing rows under 'scalp' when the swing
+         desk is idle; fall back defensively. */
+      if (!laneRows.length && ogState && ogState.lastRows){
+         laneRows = ogState.lastRows.scalp || ogState.lastRows.swing || [];
+      }
+      /* Feed source label if OMNIGOLD published one. */
+      var src = (dbg.src && (dbg.src[lane.rowsKey] || dbg.src.swing || dbg.src.scalp)) || 'omnigold';
+      for (var ci = 0; ci < cands.length; ci++){
+        var c = cands[ci];
+        if (!c || !c.dir) continue;
+        out.push({
+          horizonLabel: lane.label,
+          tf: lane.tf,
+          source: src,
+          ogKind: c.kind || c.strategy || 'OMNI',
+          ogDir: String(c.dir).toLowerCase(),
+          ogPlan: c.plan || null,
+          rows: laneRows
+        });
+      }
+    }
+  } catch(eOmni){}
+  return out;
+}
+
 async function ngRunScan(){
   if (__ng.busy) return 'busy';
   __ng.busy = true;
@@ -332,16 +384,89 @@ async function ngRunScan(){
       }
       results.push(record);
     }
+
+    /* v695: OMNIGOLD lane. Pull OMNIGOLD's already-scored candidates plus
+       the rows they were scored against, and re-gate each through the
+       Pine triple-confirmation. A candidate survives only when BOTH
+       agree: OMNIGOLD flagged this direction as a setup, AND ngAssess
+       (FVG + VWMA-50 + RSI cross) fires the SAME direction on the same
+       rows. This is a stricter intersection than either detector alone,
+       and it treats OMNIGOLD as an additional confluence signal without
+       trusting its plan geometry as-is.
+
+       The mechanic key is TRIPLE-CONF+OMNI:<ogKind> so the forward log
+       tracks these hybrid setups separately from plain TRIPLE-CONF and
+       from plain OMNIGOLD — the measured-edge stats will show whether
+       the intersection wins more often than either parent. */
+    try {
+      var omniLanes = ngPullOmniLanes();
+      /* Deduplicate on (horizonLabel + ogKind + ogDir) so multiple
+         OMNIGOLD ranked entries for the same mechanic in the same
+         direction do not produce duplicate cards. */
+      var seenOmni = {};
+      for (var oi = 0; oi < omniLanes.length; oi++){
+        var lane = omniLanes[oi];
+        if (!lane || !lane.rows || lane.rows.length < ML_LOOKBACK + 5) continue;
+        var dedupKey = lane.horizonLabel + '|' + lane.ogKind + '|' + lane.ogDir;
+        if (seenOmni[dedupKey]) continue;
+        seenOmni[dedupKey] = true;
+        var ogSetup = null;
+        try { ogSetup = ngAssess(lane.rows); } catch(eA){ ogSetup = null; }
+        if (!ogSetup) continue;
+        /* Intersection guard: NEW GOLD triple-conf must match OMNIGOLD's
+           own direction. If they disagree we drop the fire — the whole
+           point of this lane is stricter, not merely additive. */
+        if (ogSetup.dir !== lane.ogDir) continue;
+        /* Stamp the hybrid mechanic + carry the OMNIGOLD kind through. */
+        var hybridKind = 'TRIPLE-CONF+OMNI:' + lane.ogKind;
+        ogSetup.kind = hybridKind;
+        ogSetup.omni = { kind: lane.ogKind, dir: lane.ogDir, ogPlan: lane.ogPlan };
+        ogSetup.confluenceCount = 4; /* ML + FVG + momentum + OMNIGOLD agree */
+        var omniRecord = {
+          horizon: lane.horizonLabel,
+          tf: lane.tf,
+          source: lane.source,
+          setup: ogSetup,
+          rows: lane.rows
+        };
+        /* Solidity through the same shared helper as the primary horizons. */
+        if (typeof W.hgSolidityGrade === 'function'){
+          try {
+            var planForSol2 = {
+              dir: ogSetup.dir,
+              entry: ogSetup.entry, stop: ogSetup.stop,
+              t1: ogSetup.t1, t2: ogSetup.t2,
+              rr1: ogSetup.rr1, minRr: MIN_RR,
+              tape: ogSetup.dir,
+              stopWidened: ogSetup.stopWidened,
+              consensus: { nAgree: ogSetup.confluenceCount },
+              liveGrade: 'fresh'
+            };
+            omniRecord.solidity = W.hgSolidityGrade(planForSol2, {
+              minRr: MIN_RR,
+              tab: 'NEWGOLD:' + lane.horizonLabel,
+              kind: hybridKind
+            });
+          } catch(eSol2){}
+        }
+        results.push(omniRecord);
+      }
+    } catch(eOmniLane){}
+
     /* Forward log every firing so the accumulated evidence grows. */
     try {
       if (typeof W.hgFwdRecordScan === 'function'){
         for (var ri = 0; ri < results.length; ri++){
           var r = results[ri];
           if (!r.setup) continue;
+          /* v695: mechanic is now r.setup.kind (TRIPLE-CONF for the
+             primary horizons, TRIPLE-CONF+OMNI:<ogKind> for the
+             OMNIGOLD lane) so the forward log measures each edge
+             separately. */
           W.hgFwdRecordScan('NEWGOLD:' + r.horizon, r.tf, [{
             sym: 'XAUUSD', dir: r.setup.dir,
             entry: r.setup.entry, stop: r.setup.stop, t1: r.setup.t1,
-            mechanic: 'TRIPLE-CONF',
+            mechanic: r.setup.kind || 'TRIPLE-CONF',
             ticket: !!(r.solidity && r.solidity.leadEligible)
           }], { horizonBars: 30 });
         }
@@ -356,7 +481,9 @@ async function ngRunScan(){
       }
     } catch(eFwd){ /* silent */ }
 
-    /* Kill-list filter (v689): drop any record whose solidity says killed. */
+    /* Kill-list filter (v689): drop any record whose solidity says killed.
+       v695: killedKinds tracks the actual setup.kind so the killed-note
+       shows whether TRIPLE-CONF or TRIPLE-CONF+OMNI:<kind> got hidden. */
     var kept = [];
     var killedCount = 0;
     var killedKinds = {};
@@ -364,7 +491,8 @@ async function ngRunScan(){
       var kr = results[kli];
       if (kr.solidity && kr.solidity.killed === true){
         killedCount++;
-        killedKinds['TRIPLE-CONF'] = (killedKinds['TRIPLE-CONF'] || 0) + 1;
+        var kk = (kr.setup && kr.setup.kind) || 'TRIPLE-CONF';
+        killedKinds[kk] = (killedKinds[kk] || 0) + 1;
         continue;
       }
       kept.push(kr);
@@ -459,11 +587,13 @@ function refreshPerfPanels(el){
 function mount(el){
   if (!el) return;
   el.innerHTML = '<div class="panel">'
-    + '<h2>New Gold <span>XAUUSD triple confirmation \u00b7 SMC (FVG) + ML (VWMA-50) + Momentum (RSI cross) \u00b7 1H + 4H</span></h2>'
+    + '<h2>New Gold <span>XAUUSD triple confirmation \u00b7 SMC (FVG) + ML (VWMA-50) + Momentum (RSI cross) \u00b7 1H + 4H + OMNIGOLD</span></h2>'
     + '<div class="note" style="margin-bottom:8px">Fires only when all three modules agree: '
     + 'price is inside a fresh FVG mitigation zone, VWMA-50 regime matches direction, and RSI(14) '
     + 'crosses its own 9-SMA in the trade direction. Entry MARKET at close; stop at FVG opposite '
     + 'edge (v681 ATR floor may widen tight stops); T1 = 1.5R, T2 = 2.5R. '
+    + '<b>v695 OMNIGOLD lane</b>: reuses OMNIGOLD\'s already-scored 4h + 15m candidates and re-gates each through triple-confirmation. '
+    + 'A hybrid card fires only when NEW GOLD and OMNIGOLD agree on direction; tracked as <code>TRIPLE-CONF+OMNI:&lt;kind&gt;</code> in the forward log. '
     + 'Cards graded through the shared 7-gate SOLIDITY pipeline; kinds with 30+ samples and expR &lt; -0.5R are auto-killed.</div>'
     + '<div class="row"><button class="btn" id="ngRun">SCAN NEW GOLD</button>'
     + '<span class="note" id="ngStat">idle \u00b7 XAUUSD 1H + 4H</span></div>'
@@ -572,6 +702,7 @@ function ngRefresh(){
 /* --- exports ---------------------------------------------------------- */
 W.ngAssess = ngAssess;
 W.ngRunScan = ngRunScan;
+W.ngPullOmniLanes = ngPullOmniLanes; /* v695: exposed for test + inspection */
 W.newGoldScan = function(){ return __ng.snap; };
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'newgold', label: 'NEW GOLD', mount: mount, refresh: ngRefresh });
