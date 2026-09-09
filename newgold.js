@@ -49,8 +49,17 @@ var HORIZONS = [
   { tf: '4h', label: '4H' }
 ];
 
+/* v691: auto-refresh cadence. RSI cross detection lives entirely on
+   closed-bar semantics but intra-bar price motion still moves through
+   FVG zones and updates the ML baseline, so a 5-minute re-scan keeps
+   the trigger window responsive without waiting for a full 1H/4H bar
+   close. Pattern mirrors omnigold's __og.__uniTimer (mount-time only,
+   never module load) so Node test processes never hang on a stray
+   interval. */
+var NG_AUTO_REFRESH_MS = 5 * 60 * 1000;
+
 /* --- state ------------------------------------------------------------ */
-var __ng = { busy: false, snap: null, at: 0 };
+var __ng = { busy: false, snap: null, at: 0, __timer: null, __mountEl: null };
 
 /* --- helpers ---------------------------------------------------------- */
 function fmtF(n, d){ n = +n; if (!isFinite(n)) return '\u2014'; return n.toFixed(d != null ? d : 2); }
@@ -518,6 +527,38 @@ function mount(el){
   refreshKilledNote(el);
   refreshPerfPanels(el);
   runScan();
+
+  /* v691: auto-refresh every 5 minutes while the tab is mounted.
+     Timer is stored on module state so a subsequent mount (tab close +
+     reopen, hot reload) clears the prior timer instead of stacking.
+     The interval calls the exact same runScan the button uses, so a
+     manual click and an auto-tick are indistinguishable except for
+     origin. Also self-heals: if runScan is busy (a slow fetch is in
+     flight), the tick becomes a no-op via the __ng.busy guard inside
+     ngRunScan; the next tick tries again 5 minutes later. */
+  try {
+    if (__ng.__timer){
+      clearInterval(__ng.__timer);
+      __ng.__timer = null;
+    }
+    __ng.__mountEl = el;
+    if (typeof setInterval === 'function'){
+      __ng.__timer = setInterval(function(){
+        /* If the mount element has been removed from the document
+           (user navigated away entirely, tab unmounted), stop ticking
+           and clear the timer. Prevents scans on a dead tab. */
+        try {
+          if (__ng.__mountEl && !document.body.contains(__ng.__mountEl)){
+            clearInterval(__ng.__timer);
+            __ng.__timer = null;
+            __ng.__mountEl = null;
+            return;
+          }
+        } catch(eDoc){}
+        try { runScan(); } catch(eTick){}
+      }, NG_AUTO_REFRESH_MS);
+    }
+  } catch(eTimer){}
 }
 
 function ngRefresh(){
