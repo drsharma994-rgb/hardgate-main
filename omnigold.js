@@ -5395,7 +5395,18 @@ terse status, and never launches a first-time scan on a global refresh.
         alsoKinds: c.alsoKinds,
         strategyConfirm: c.strategyConfirm
       }, c.plan) : c;
-      try { c.solidity = W.hgSolidityGrade(planForSol, { minRr: (typeof MIN_RR === 'number') ? MIN_RR : 2.0 }); }
+      /* v686: pass tab + kind so the measured-edge veto (G6) can look up
+         this (horizon, mechanic) pair in the forward log. omnigold records
+         with tab='OMNIGOLD:'+cfg.label (line 9680) and mechanic=c.kind,
+         so the lookup key here must match. Fallback to 'OMNIGOLD' when
+         c.horizon is absent so we still hit any records written under a
+         bare tab prefix (defensive). */
+      var ogTab = c.horizon ? ('OMNIGOLD:' + String(c.horizon)) : 'OMNIGOLD';
+      try { c.solidity = W.hgSolidityGrade(planForSol, {
+        minRr: (typeof MIN_RR === 'number') ? MIN_RR : 2.0,
+        tab: ogTab,
+        kind: c.kind
+      }); }
       catch(eSol){}
     }
   }
