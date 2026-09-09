@@ -81,6 +81,19 @@
      +0.5R is the smallest expectancy that clears typical fee/slip modelling
      with headroom; anything lower is edge-thin. */
   var HG_SOL_EDGE_PRIME = 0.5;
+  /* v689 KILL-LIST: stricter thresholds than G6 veto. Kinds with 30+
+     samples AND expR < -0.5R are REMOVED from the visible list entirely
+     rather than merely demoted. 30 samples so the standard error of the
+     hit rate is <= 0.09 (tighter than G6's 0.11). -0.5R because the
+     kill is destructive — the user won't see the kind at all until the
+     stat recovers, so the bar has to be higher than the veto's -0.25R.
+
+     Filter is HONEST: the tab renders a 'KILLED N proven-losing setups
+     hidden' note so the user knows filtering happened. Recovery is
+     automatic — as new samples land and expR recovers, the kind
+     re-enters the visible list. */
+  var HG_SOL_KILL_MIN_SAMPLES = 30;
+  var HG_SOL_KILL_EDGE_FLOOR = -0.5;
 
   /* v687: 7-point scale. 7/7 = PRIME (measured-winning kind + all quality
      gates clean). 6/7 = SOLID. 5/7 = GOOD. Both PRIME and SOLID and GOOD
@@ -243,6 +256,37 @@
     return { pass: pass, source: 'measured', samples: stats.samples, expR: expR };
   }
 
+  /* v689 KILL-LIST check. Returns { killed: bool, samples, expR } for a
+     given (tab, kind). Kinds with 30+ samples AND expR < -0.5R are killed:
+     the tab hides them entirely, with a 'N proven-losing setups hidden'
+     note so the user can see the filtering happened.
+
+     Defaults to killed=false when data is missing (no lookup, no fwdlog,
+     small sample, NaN expR). This is deliberately more conservative than
+     G6 veto: kill is destructive, so we require BOTH higher sample count
+     AND worse expR before hiding a kind entirely.
+
+     Recovery is automatic: if new samples land and expR recovers above
+     -0.5R (either through wins or through the stale-sample decay in
+     hgFwdStats), the kind reappears on the next scan. Nothing needs to
+     be manually unkilled. */
+  function hgSolidityIsKilled(tab, kind){
+    if (!tab || !kind) return { killed: false, source: 'no-lookup' };
+    var W = (typeof window !== 'undefined') ? window : ((typeof globalThis !== 'undefined') ? globalThis : G);
+    if (!W || typeof W.hgFwdStats !== 'function') return { killed: false, source: 'no-fwdlog' };
+    var stats = null;
+    try { stats = W.hgFwdStats(String(tab), String(kind), false); }
+    catch(eF){ return { killed: false, source: 'fwdlog-error' }; }
+    if (!stats || !isFinite(stats.samples) || stats.samples < HG_SOL_KILL_MIN_SAMPLES){
+      return { killed: false, source: 'too-few-samples', samples: stats && stats.samples || 0 };
+    }
+    var expR = _fin(stats.expR);
+    if (!isFinite(expR)) return { killed: false, source: 'expR-nan', samples: stats.samples };
+    var killed = expR < HG_SOL_KILL_EDGE_FLOOR;
+    return { killed: killed, source: 'measured', samples: stats.samples, expR: expR,
+             threshold: HG_SOL_KILL_EDGE_FLOOR };
+  }
+
   /* G7 (v687): MEASURED-WINNING auto-promotion. Symmetric to G6 — same
      sample floor, same lookup, opposite polarity. Fires (pass=true) only
      when the log has HG_SOL_MIN_EDGE_SAMPLES+ observations AND measured
@@ -310,6 +354,13 @@
       effectiveGrade = HG_SOL_LABELS[effectiveScore] || effectiveGrade;
       tapeOverridden = true;
     }
+    /* v689: attach the kill decision. This is not a gate (doesn't affect
+       score or grade) — it's a downstream filter. A card can be PRIME
+       and killed simultaneously in principle, though in practice a
+       killed kind will have failed G7 (never enters PRIME) and failed G6
+       (drops below GOOD). The killed flag is what lets hgSolidityReorder
+       hide the card from the visible list. */
+    var kill = hgSolidityIsKilled(opts.tab, opts.kind);
     return {
       grade: effectiveGrade,
       score: effectiveScore,
@@ -328,7 +379,12 @@
       leadEligible: effectiveScore >= HG_SOL_LEAD_MIN,
       /* primeEligible: score == HG_SOL_PRIME_MIN (7). PRIME cards may override
          tape veto on tabs that opt in (see v687 omnigold override). */
-      primeEligible: effectiveScore >= HG_SOL_PRIME_MIN
+      primeEligible: effectiveScore >= HG_SOL_PRIME_MIN,
+      /* v689 KILL flag: true when the kind has been proven losing over
+         30+ samples with expR < -0.5R. Consumed by hgSolidityReorder to
+         filter the card out of the visible list. */
+      killed: kill.killed === true,
+      killReason: kill
     };
   }
 
@@ -446,21 +502,114 @@
     if (!Array.isArray(cards)) return cards;
     /* v687: split lead bucket into prime + rest so PRIME cards lead
        absolutely. Within each bucket, input order (score-derived) is
-       preserved so the tab's own ranker still resolves ties. */
+       preserved so the tab's own ranker still resolves ties.
+
+       v689: cards marked sol.killed=true are FILTERED OUT of the visible
+       list entirely. The count is exposed via .killedCount on the returned
+       array so the tab can render a 'N proven-losing setups hidden' note. */
     var prime = [], lead = [], mid = [], back = [];
+    var killedCount = 0;
+    var killedKinds = {};
     for (var i = 0; i < cards.length; i++){
       var c = cards[i];
       var sol = c && c.solidity;
+      /* v689: skip killed kinds. The kind is still recorded in
+         killedKinds so the tab can list which kinds were filtered. */
+      if (sol && sol.killed === true){
+        killedCount++;
+        var kindKey = (c && (c.kind || (c.setup && c.setup.kind))) || 'unknown';
+        killedKinds[kindKey] = (killedKinds[kindKey] || 0) + 1;
+        continue;
+      }
       if (sol && sol.score >= HG_SOL_PRIME_MIN) prime.push(c);
       else if (sol && sol.score >= HG_SOL_LEAD_MIN) lead.push(c);
       else if (sol && sol.score >= 3) mid.push(c);
       else back.push(c);
     }
-    return prime.concat(lead).concat(mid).concat(back);
+    var out = prime.concat(lead).concat(mid).concat(back);
+    /* v689: attach the filter statistics to the returned array as
+       properties so no caller signature has to change. Arrays are
+       objects in JS and callers that don't look for these props see
+       the plain reordered array.
+
+       Also stash the last-computed stats on window per tab (via opts.tab
+       if the caller supplies it) so downstream renderers can read them
+       without re-running the reorder. */
+    try {
+      Object.defineProperty(out, 'killedCount', { value: killedCount, enumerable: false });
+      Object.defineProperty(out, 'killedKinds', { value: killedKinds, enumerable: false });
+    } catch(eProp){ /* older engines: silent */ }
+    try {
+      if (opts && opts.tab){
+        var W = (typeof window !== 'undefined') ? window : ((typeof globalThis !== 'undefined') ? globalThis : G);
+        if (W){
+          W.__hgSolKillLast = W.__hgSolKillLast || {};
+          W.__hgSolKillLast[String(opts.tab)] = {
+            killedCount: killedCount,
+            killedKinds: killedKinds,
+            at: Date.now()
+          };
+        }
+      }
+    } catch(eStash){ /* silent */ }
+    return out;
+  }
+
+  /* v689: read the last-reordered killed stats for a tab (stashed by
+     hgSolidityReorder when opts.tab was provided). Returns a fake
+     array-like { killedCount, killedKinds } compatible with
+     hgSolidityKilledNoteHtml. Useful when the render site does not have
+     the reordered array in scope but knows the tab id. */
+  function hgSolidityLastKilled(tab){
+    if (!tab) return null;
+    var W = (typeof window !== 'undefined') ? window : ((typeof globalThis !== 'undefined') ? globalThis : G);
+    if (!W || !W.__hgSolKillLast) return null;
+    var rec = W.__hgSolKillLast[String(tab)];
+    if (!rec) return null;
+    /* Return an object with the same duck-type hgSolidityKilledNoteHtml
+       expects (killedCount + killedKinds). */
+    return { killedCount: rec.killedCount, killedKinds: rec.killedKinds };
+  }
+
+  /* v689: render 'N proven-losing setups hidden' note. Consumers pass the
+     reordered array returned from hgSolidityReorder. When killedCount is 0
+     returns empty string; when > 0 renders a small note listing the total
+     count and the top kinds hidden. Uses only inline styles so it matches
+     any theme. */
+  function hgSolidityKilledNoteHtml(reordered){
+    if (!reordered || typeof reordered !== 'object') return '';
+    var n = 0, kinds = null;
+    try { n = reordered.killedCount; kinds = reordered.killedKinds; }
+    catch(e){ return ''; }
+    if (!isFinite(n) || n <= 0) return '';
+    var kindList = '';
+    if (kinds){
+      var names = [];
+      for (var k in kinds) if (Object.prototype.hasOwnProperty.call(kinds, k)) names.push(k);
+      if (names.length){
+        /* Show up to 3 kind names; if more, add '+ N more' */
+        var shown = names.slice(0, 3);
+        kindList = ' (' + shown.map(function(name){
+          var count = kinds[name];
+          return name + (count > 1 ? ' ×' + count : '');
+        }).join(', ');
+        if (names.length > 3) kindList += ', +' + (names.length - 3) + ' more';
+        kindList += ')';
+      }
+    }
+    return '<div class="hg-sol-killed-note" style="margin-top:6px;padding:4px 8px;'
+      + 'border:1px dashed rgba(255,140,0,0.4);border-radius:4px;font-size:11px;'
+      + 'opacity:0.75;background:rgba(255,140,0,0.06)">'
+      + '✗ ' + n + ' proven-losing setup' + (n === 1 ? '' : 's') + ' hidden'
+      + kindList
+      + ' — kinds with 30+ samples and expR < -0.5R are removed from the visible list until the stat recovers'
+      + '</div>';
   }
 
   /* --- expose ----------------------------------------------------------- */
   G.hgSolidityGrade = hgSolidityGrade;
+  G.hgSolidityKilledNoteHtml = hgSolidityKilledNoteHtml; /* v689 */
+  G.hgSolidityLastKilled = hgSolidityLastKilled; /* v689 */
   G.hgSolidityChipHtml = hgSolidityChipHtml;
   G.hgSolidityReasons = hgSolidityReasons; /* v684 */
   G.hgSolidityReorder = hgSolidityReorder;
@@ -471,10 +620,13 @@
   G.hgSolGateStop = hgSolGateStop;
   G.hgSolGateMeasuredEdge = hgSolGateMeasuredEdge; /* v685 */
   G.hgSolGateMeasuredWinning = hgSolGateMeasuredWinning; /* v687 */
-  G.HG_SOLIDITY_VERSION = 'v687';
+  G.hgSolidityIsKilled = hgSolidityIsKilled; /* v689 */
+  G.HG_SOLIDITY_VERSION = 'v689';
   G.HG_SOL_LEAD_MIN = HG_SOL_LEAD_MIN;
   G.HG_SOL_PRIME_MIN = HG_SOL_PRIME_MIN;
   G.HG_SOL_MIN_EDGE_SAMPLES = HG_SOL_MIN_EDGE_SAMPLES;
   G.HG_SOL_EDGE_FLOOR = HG_SOL_EDGE_FLOOR;
   G.HG_SOL_EDGE_PRIME = HG_SOL_EDGE_PRIME;
+  G.HG_SOL_KILL_MIN_SAMPLES = HG_SOL_KILL_MIN_SAMPLES;
+  G.HG_SOL_KILL_EDGE_FLOOR = HG_SOL_KILL_EDGE_FLOOR;
 })();
