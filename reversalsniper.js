@@ -31,6 +31,12 @@ var W = (typeof window !== 'undefined') ? window
 var MIN_LEV         = 30;
 var MIN_RR          = 1.5;
 var MIN_CONVICTION  = 4;
+function rsDeskParam(key, fb){
+  if (typeof W.hgDeskParam === 'function') return W.hgDeskParam('reversalsniper', key, fb);
+  return fb;
+}
+function rsMinRr(){ return rsDeskParam('minRR', MIN_RR); }
+function rsMinConviction(){ return rsDeskParam('minConviction', MIN_CONVICTION); }
 var MIN_TURNOVER    = 5e6;
 var MAX_UNIVERSE    = 0;
 var KL_LIMIT        = 300;
@@ -370,7 +376,7 @@ function rsAssess(rows, opts){
     }
     if (!plan) return null;
     if (!(plan.lev >= MIN_LEV)) return null;
-    if (!(plan.rr1 >= MIN_RR)) return null;
+    if (!(plan.rr1 >= rsMinRr())) return null;
 
     var btFn = (typeof W.mrBacktest === 'function') ? W.mrBacktest : null;
     var bt = btFn ? btFn(rows) : { n: 0, winPct: 0, avgR: 0, pf: 0, expR: 0 };
@@ -426,7 +432,7 @@ function rsAssess(rows, opts){
     }
 
     setup.conviction = rsConviction(setup);
-    if (setup.conviction < MIN_CONVICTION) return null;
+    if (setup.conviction < rsMinConviction()) return null;
     if (typeof W.hgDeskFormationEdgeApply === 'function'){
       W.hgDeskFormationEdgeApply(setup, { tab: 'reversalsniper', rows: rows, dir: 'long' });
     }

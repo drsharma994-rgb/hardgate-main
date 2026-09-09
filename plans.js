@@ -2215,7 +2215,13 @@ function hgTicketFinalGates(plan, ctx){
 
     if (typeof G.hgRegimeResolveState === 'function' && typeof G.hgRegimeAdjust === 'function'){
       var rs = G.hgRegimeResolveState();
-      var adj = G.hgRegimeAdjust({ minRR: ctx.minRr || 2 }, rs.dark ? null : rs.score, lane);
+      var baseMinRr = ctx.minRr || 2;
+      if (typeof G.hgDeskParam === 'function' && ctx.style){
+        baseMinRr = G.hgDeskParam(String(ctx.style).toLowerCase(), 'minRR', baseMinRr);
+      } else if (typeof G.hgGlobalParam === 'function'){
+        baseMinRr = G.hgGlobalParam('rrMin', baseMinRr);
+      }
+      var adj = G.hgRegimeAdjust({ minRR: baseMinRr }, rs.dark ? null : rs.score, lane);
       plan.regimeLabel = adj.regimeLabel;
       plan.regimeApplied = adj.applied;
       if (rs.dark) chips.push('regime dark');

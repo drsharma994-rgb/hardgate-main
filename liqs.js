@@ -78,6 +78,14 @@ var SETUP_RR1          = 2;      // T1 = 2R
 var SETUP_RR2          = 3.5;    // T2 = 3.5R
 var SETUP_WICK_ATR     = 0.5;    // stop buffer = 0.5 x ATR14 beyond the flush wick
 var SETUP_FALLBACK_PCT = 0.005;  // stop buffer fallback = 0.5% of entry when ATR unavailable
+
+function liqsDeskParam(key, fb){
+  if (typeof G.hgDeskParam === 'function') return G.hgDeskParam('liqs', key, fb);
+  return fb;
+}
+function liqsTapeMin(){ return liqsDeskParam('minTapeUsd', TAPE_MIN_USD); }
+function liqsSpikeUsd(){ return liqsDeskParam('spikeUsd', SPIKE_USD); }
+function liqsSetupRr1(){ return liqsDeskParam('minRR', SETUP_RR1); }
 var SETUP_CANDLES_N    = 60;     // 1h candles pulled for the setup symbol
 var SETUP_ROWS_MS      = 60000;  // setup candle cache freshness
 
@@ -162,7 +170,7 @@ All inputs validated; malformed prints are dropped (add returns null).
 function liqAgg(opts){
   opts = opts || {};
   var WINDOW = (isFinite(opts.windowMs)   && opts.windowMs   > 0) ? opts.windowMs        : WINDOW_MS;
-  var SPIKE  = (isFinite(opts.spikeUsd)   && opts.spikeUsd   > 0) ? opts.spikeUsd        : SPIKE_USD;
+  var SPIKE  = (isFinite(opts.spikeUsd)   && opts.spikeUsd   > 0) ? opts.spikeUsd        : liqsSpikeUsd();
   var TOPN   = (isFinite(opts.topN)       && opts.topN       > 0) ? Math.floor(opts.topN): TOP_N;
   var FLUSH  = (isFinite(opts.flushRatio) && opts.flushRatio > 1) ? opts.flushRatio      : FLUSH_RATIO;
 
@@ -348,7 +356,8 @@ function liqFlushSetup(snap, rowsOpt, opts){
     var dir = (flushSide === 'long') ? 'short' : 'long';
 
     var spikeUsd = (isFinite(+opts.minSpikeUsd) && +opts.minSpikeUsd > 0) ? +opts.minSpikeUsd
-                 : (isFinite(+snap.spikeUsd) && +snap.spikeUsd > 0) ? +snap.spikeUsd : SPIKE_USD;
+                 : (isFinite(+snap.spikeUsd) && +snap.spikeUsd > 0) ? +snap.spikeUsd : liqsSpikeUsd();
+    var setupRr1 = (isFinite(+opts.minRr) && +opts.minRr > 0) ? +opts.minRr : liqsSetupRr1();
     var now   = (isFinite(+opts.now) && +opts.now > 0) ? +opts.now : Date.now();
     var winMs = (snap.window && isFinite(+snap.window.ms) && +snap.window.ms > 0) ? +snap.window.ms : WINDOW_MS;
     var cut = now - winMs;
@@ -372,7 +381,7 @@ function liqFlushSetup(snap, rowsOpt, opts){
       ratio: ratio,
       flushUsd: biggest, spikeUsd: spikeUsd,
       entry: null, stop: null, t1: null, t2: null,
-      rr1: SETUP_RR1, rr2: SETUP_RR2, riskPct: null,
+      rr1: setupRr1, rr2: SETUP_RR2, riskPct: null,
       note: ''
     };
 
@@ -412,7 +421,7 @@ function liqFlushSetup(snap, rowsOpt, opts){
     }
     setup.entry = entry;
     setup.stop  = stop;
-    setup.t1    = (dir === 'short') ? entry - SETUP_RR1*risk : entry + SETUP_RR1*risk;
+    setup.t1    = (dir === 'short') ? entry - setupRr1*risk : entry + setupRr1*risk;
     setup.t2    = (dir === 'short') ? entry - SETUP_RR2*risk : entry + SETUP_RR2*risk;
     setup.riskPct = risk/entry*100;
     setup.note  = bufNote + ' · ENTRY = last 1h close (current mark)';
@@ -518,7 +527,7 @@ function onSpike(p){
     if (typeof sendAlertPush === 'function'){
       sendAlertPush('LIQ SPIKE',
         p.sym + ' ' + (p.side === 'long' ? 'LONG' : 'SHORT') + ' LIQ ' + fmtUsd(p.usd)
-        + ' — single forced print ≥ ' + fmtUsd(SPIKE_USD));
+        + ' — single forced print ≥ ' + fmtUsd(liqsSpikeUsd()));
     }
   }catch(e){ /* push layer is best-effort */ }
 }
@@ -532,7 +541,7 @@ function ingest(parsed){
     S.prints++;
     got = true;
     var p = res.print;
-    if (p.usd >= TAPE_MIN_USD){
+    if (p.usd >= liqsTapeMin()){
       S.tape.unshift({ sym: p.sym, side: p.side, usd: p.usd, t: p.t, spike: res.spike });
       if (S.tape.length > TAPE_MAX) S.tape.length = TAPE_MAX;
     }
@@ -696,7 +705,7 @@ function renderTape(){
   var box = q('#liqsTape'); if (!box) return;
   var now = Date.now();
   if (!S.tape.length){
-    box.innerHTML = '<div class="empty">No prints ≥ ' + fmtUsd(TAPE_MIN_USD)
+    box.innerHTML = '<div class="empty">No prints ≥ ' + fmtUsd(liqsTapeMin())
       + ' yet' + ((S.status === 'live') ? ' — listening…' : ' — press START.') + '</div>';
     return;
   }
@@ -847,7 +856,7 @@ function renderSetups(snap){
   var probe = liqFlushSetup(snap, null, { now: Date.now() });
   if (!probe){
     box.innerHTML = '<div class="empty">no flush-reversal setup — needs a ≥' + FLUSH_RATIO
-      + '× 1h imbalance with a single print ≥ ' + fmtUsd(SPIKE_USD) + ' on the flushed side inside the window</div>';
+      + '× 1h imbalance with a single print ≥ ' + fmtUsd(liqsSpikeUsd()) + ' on the flushed side inside the window</div>';
     return;
   }
   var rows = (S.setupRows && S.setupRows.sym === probe.sym) ? S.setupRows.rows : null;
@@ -882,7 +891,7 @@ function mount(el){
       + '<button class="btn ghost" id="liqsStop">STOP</button>'
       + '<span class="note" id="liqsStat"></span></div>'
       + '<div class="note" style="margin-top:8px">BUY prints = <b>SHORT LIQ</b> (forced buy) · SELL prints = <b>LONG LIQ</b> (forced sell) · '
-      + '$ value = price × qty · tape shows prints ≥ ' + fmtUsd(TAPE_MIN_USD) + ' · single prints ≥ ' + fmtUsd(SPIKE_USD)
+      + '$ value = price × qty · tape shows prints ≥ ' + fmtUsd(liqsTapeMin()) + ' · single prints ≥ ' + fmtUsd(liqsSpikeUsd())
       + ' are spike-highlighted and push an alert when configured.</div>'
       + '<div class="note warn" style="margin-top:6px">WS-only — history starts when you open this tab '
       + '(Binance exposes no free REST liq history).</div>'
@@ -897,7 +906,7 @@ function mount(el){
       + '<div id="liqsSetups"></div>'
       + '</div>'
       + '<div class="panel">'
-      + '<h2>TAPE <span>last ' + TAPE_MAX + ' prints ≥ ' + fmtUsd(TAPE_MIN_USD) + '</span></h2>'
+      + '<h2>TAPE <span>last ' + TAPE_MAX + ' prints ≥ ' + fmtUsd(liqsTapeMin()) + '</span></h2>'
       + '<div id="liqsTape"></div>'
       + '</div>'
       + '<div class="panel">'

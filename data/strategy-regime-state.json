@@ -1,15 +1,61 @@
 {
-  "updated": "2026-09-08T00:00:00Z",
-  "note": "60d mean R expectancy per (strategy, regime). Negative → REGIME PAUSED for new entries.",
+  "updated": "2026-09-09T05:20:08.297Z",
+  "note": "Backtest-derived 60d-style expectancy prior + hand-tuned RISK-ON boosts. Negative → REGIME PAUSED.",
   "expectancy": {
-    "SWING": { "RISK-ON": 0.42, "MIXED": 0.15, "RISK-OFF": -0.08 },
-    "SCALP": { "RISK-ON": 0.28, "MIXED": 0.22, "RISK-OFF": 0.05 },
-    "EDGE": { "RISK-ON": 0.35, "MIXED": 0.18, "RISK-OFF": -0.12 },
-    "SMC": { "RISK-ON": 0.30, "MIXED": 0.10, "RISK-OFF": -0.15 },
-    "OB": { "RISK-ON": 0.25, "MIXED": 0.12, "RISK-OFF": -0.10 },
-    "DIV": { "RISK-ON": 0.08, "MIXED": 0.20, "RISK-OFF": 0.18 },
-    "TRAP": { "RISK-ON": 0.15, "MIXED": 0.25, "RISK-OFF": 0.12 },
-    "MEANREV": { "RISK-ON": -0.20, "MIXED": 0.15, "RISK-OFF": 0.30 },
-    "CARRY": { "RISK-ON": 0.22, "MIXED": 0.08, "RISK-OFF": -0.05 }
+    "SWING": {
+      "RISK-ON": 0.154,
+      "MIXED": -0.242,
+      "RISK-OFF": -0.05
+    },
+    "SCALP": {
+      "RISK-ON": 0.1,
+      "MIXED": -0.192,
+      "RISK-OFF": -0.05
+    },
+    "EDGE": {
+      "RISK-ON": 0.364,
+      "MIXED": 0,
+      "RISK-OFF": -0.05
+    },
+    "SMC": {
+      "RISK-ON": 0.1,
+      "MIXED": -0.1902,
+      "RISK-OFF": -0.05
+    },
+    "OB": {
+      "RISK-ON": 0.1,
+      "MIXED": 0,
+      "RISK-OFF": -0.05
+    },
+    "DIV": {
+      "RISK-ON": 0.1,
+      "MIXED": -0.6224,
+      "RISK-OFF": -0.05
+    },
+    "TRAP": {
+      "RISK-ON": 0.1,
+      "MIXED": -0.3604,
+      "RISK-OFF": -0.05
+    },
+    "MEANREV": {
+      "RISK-ON": 0.1,
+      "MIXED": 0,
+      "RISK-OFF": -0.05
+    },
+    "CARRY": {
+      "RISK-ON": 0.1,
+      "MIXED": 0,
+      "RISK-OFF": -0.05
+    },
+    "SMART": {
+      "RISK-ON": 0.1,
+      "MIXED": 0,
+      "RISK-OFF": -0.05
+    },
+    "BEST": {
+      "RISK-ON": 0.1,
+      "MIXED": -0.242,
+      "RISK-OFF": -0.05
+    }
   }
 }

@@ -1,0 +1,305 @@
+{
+  "version": 1,
+  "updatedAt": "2026-09-09T05:20:08.296Z",
+  "sources": [
+    "scripts/backtest-omniroute-v531-results.json",
+    "scripts/omni-bt-analysis.json",
+    "scripts/gold-setup-edge.json",
+    "scripts/exit-optimization-results.json",
+    "data/param-drift.json"
+  ],
+  "global": {
+    "rrMin": 2,
+    "timeStopScalpBars": 12,
+    "timeStopSwingBars": 40,
+    "macroVetoAbs": 3,
+    "atrStopMult": 1.5,
+    "costToxicR": 0.125,
+    "swingTargetR": 3
+  },
+  "tabs": {
+    "swing": {
+      "minRR": 2,
+      "minTurnoverUsd": 200000,
+      "timeStopBars": 40,
+      "atrStopMult": 1.5,
+      "minEvidence": 7
+    },
+    "scalp": {
+      "minRR": 2.25,
+      "minTurnoverUsd": 200000,
+      "timeStopBars": 12,
+      "atrStopMult": 1.5,
+      "minEvidence": 7,
+      "backtestWorst": {
+        "kind": "NR7-BREAK",
+        "n": 150,
+        "net": 0.0522,
+        "gross": 0.1356
+      },
+      "backtestBest": {
+        "kind": "NR7-BREAK",
+        "n": 150,
+        "net": 0.0522,
+        "gross": 0.1356
+      }
+    },
+    "edge": {
+      "minRR": 2.75,
+      "minTurnoverUsd": 5000000,
+      "minTally": 6,
+      "stopAtr": 2,
+      "maxHold": 12,
+      "backtestWorst": {
+        "kind": "HTF-PULLBACK",
+        "n": 55,
+        "net": -0.5085,
+        "gross": -0.4433
+      },
+      "minEvidence": 3
+    },
+    "best": {
+      "minRR": 2,
+      "minFamScore": 7,
+      "minTurnoverUsd": 200000,
+      "backtestWorst": {
+        "kind": "NR7-BREAK",
+        "n": 150,
+        "net": 0.0522,
+        "gross": 0.1356
+      },
+      "backtestBest": {
+        "kind": "AVWAP-RECLAIM",
+        "n": 71,
+        "net": 0.364,
+        "gross": 0.4421
+      }
+    },
+    "smart": {
+      "minRR": 2,
+      "minTurnoverUsd": 5000000,
+      "minEvidence": 2,
+      "minAbsChg24": 2,
+      "backtestWorst": {
+        "kind": "MMOVE",
+        "n": 188,
+        "net": 0.0578,
+        "gross": 0.134
+      },
+      "backtestBest": {
+        "kind": "MMOVE",
+        "n": 188,
+        "net": 0.0578,
+        "gross": 0.134
+      }
+    },
+    "squeeze": {
+      "minRR": 2.25,
+      "stopAtr": 1.5,
+      "t1R": 2,
+      "t2R": 3.5,
+      "volZMin": 0.5,
+      "backtestWorst": {
+        "kind": "SQUEEZE-FIRE",
+        "n": 50,
+        "net": -0.0989,
+        "gross": -0.0398
+      }
+    },
+    "reversalsniper": {
+      "minRR": 2.25,
+      "minConviction": 4,
+      "minLev": 30,
+      "backtestWorst": {
+        "kind": "PIN-REJECT",
+        "n": 115,
+        "net": -1.0284,
+        "gross": -0.4783
+      },
+      "minEvidence": 3
+    },
+    "smc": {
+      "minRR": 3,
+      "minTurnoverUsd": 5000000,
+      "backtestWorst": {
+        "kind": "FVG-FILL",
+        "n": 184,
+        "net": -0.1902,
+        "gross": -0.0833
+      },
+      "minEvidence": 3
+    },
+    "ob": {
+      "minRR": 2.5,
+      "minTurnoverUsd": 5000000,
+      "backtestWorst": {
+        "kind": "BOS-RETEST",
+        "n": 137,
+        "net": -0.2847,
+        "gross": -0.2214
+      },
+      "minEvidence": 3
+    },
+    "trap": {
+      "minRR": 2.25,
+      "minTurnoverUsd": 5000000,
+      "backtestWorst": {
+        "kind": "EQH-SWEEP",
+        "n": 119,
+        "net": -0.3604,
+        "gross": -0.1335
+      },
+      "minEvidence": 3
+    },
+    "divergence": {
+      "minRR": 3.25,
+      "minTurnoverUsd": 5000000,
+      "backtestWorst": {
+        "kind": "RSI-DIVERGE",
+        "n": 58,
+        "net": -0.6224,
+        "gross": -0.2759
+      },
+      "minEvidence": 3
+    },
+    "div": {
+      "minRR": 3.25,
+      "minTurnoverUsd": 5000000,
+      "backtestWorst": {
+        "kind": "RSI-DIVERGE",
+        "n": 58,
+        "net": -0.6224,
+        "gross": -0.2759
+      },
+      "minEvidence": 3
+    },
+    "coil": {
+      "minRR": 2,
+      "minTurnoverUsd": 2000000,
+      "backtestWorst": {
+        "kind": "NR7-BREAK",
+        "n": 150,
+        "net": 0.0522,
+        "gross": 0.1356
+      },
+      "backtestBest": {
+        "kind": "NR7-BREAK",
+        "n": 150,
+        "net": 0.0522,
+        "gross": 0.1356
+      }
+    },
+    "apex": {
+      "minRR": 2,
+      "minTurnoverUsd": 2000000,
+      "backtestWorst": {
+        "kind": "DONCHIAN-DRIVE",
+        "n": 53,
+        "net": 0.0717,
+        "gross": 0.1321
+      },
+      "backtestBest": {
+        "kind": "DONCHIAN-DRIVE",
+        "n": 53,
+        "net": 0.0717,
+        "gross": 0.1321
+      }
+    },
+    "oiflow": {
+      "minRR": 2,
+      "minTurnoverUsd": 30000000,
+      "minEvidence": 2,
+      "backtestWorst": {
+        "kind": "MMOVE",
+        "n": 188,
+        "net": 0.0578,
+        "gross": 0.134
+      },
+      "backtestBest": {
+        "kind": "MMOVE",
+        "n": 188,
+        "net": 0.0578,
+        "gross": 0.134
+      }
+    },
+    "liqs": {
+      "minRR": 2.5,
+      "minTapeUsd": 100000,
+      "spikeUsd": 2000000,
+      "backtestWorst": {
+        "kind": "SWEEP-RECLAIM",
+        "n": 120,
+        "net": -0.3085,
+        "gross": -0.2496
+      },
+      "minEvidence": 3
+    },
+    "meanrev": {
+      "minRR": 1.2,
+      "minTurnoverUsd": 20000000,
+      "maxHold": 10
+    },
+    "carry": {
+      "minSpreadApr": 25,
+      "minTurnoverUsd": 20000000
+    },
+    "chartvision": {
+      "minRR": 2,
+      "minGates": 6
+    },
+    "gold-swing": {
+      "minRR": 1.5,
+      "minTurnoverUsd": 0
+    },
+    "gold-scalp": {
+      "minRR": 1.2,
+      "minTurnoverUsd": 0
+    },
+    "goldswing": {
+      "minRR": 1.5
+    },
+    "goldscalp": {
+      "minRR": 1.2
+    }
+  },
+  "notes": [
+    "scalp: tightened minRR to 2.25 (NR7-BREAK net 0.05R n=150)",
+    "edge: tightened minRR to 2.75 (HTF-PULLBACK net -0.51R n=55)",
+    "best: tightened minRR to 2 (NR7-BREAK net 0.05R n=150)",
+    "smart: tightened minRR to 2 (MMOVE net 0.06R n=188)",
+    "squeeze: tightened minRR to 2.25 (SQUEEZE-FIRE net -0.10R n=50)",
+    "reversalsniper: tightened minRR to 2.25 (PIN-REJECT net -1.03R n=115)",
+    "smc: tightened minRR to 3 (FVG-FILL net -0.19R n=184)",
+    "ob: tightened minRR to 2.5 (BOS-RETEST net -0.28R n=137)",
+    "trap: tightened minRR to 2.25 (EQH-SWEEP net -0.36R n=119)",
+    "divergence: tightened minRR to 3.25 (RSI-DIVERGE net -0.62R n=58)",
+    "div: tightened minRR to 3.25 (RSI-DIVERGE net -0.62R n=58)",
+    "coil: tightened minRR to 2 (NR7-BREAK net 0.05R n=150)",
+    "apex: tightened minRR to 2 (DONCHIAN-DRIVE net 0.07R n=53)",
+    "oiflow: tightened minRR to 2 (MMOVE net 0.06R n=188)",
+    "liqs: tightened minRR to 2.5 (SWEEP-RECLAIM net -0.31R n=120)"
+  ],
+  "preferKinds": [
+    "AVWAP-RECLAIM",
+    "CUSUM-SHIFT",
+    "DONCHIAN-DRIVE",
+    "MMOVE",
+    "NR7-BREAK"
+  ],
+  "demoteKinds": [
+    "FVG-FILL",
+    "TREND-RECLAIM",
+    "AVWAP-DEFEND",
+    "BOS-RETEST",
+    "EQL-SWEEP",
+    "SWEEP-RECLAIM",
+    "SPRING",
+    "EQH-SWEEP",
+    "UTAD",
+    "HTF-PULLBACK",
+    "ENGULF-LEVEL",
+    "RSI-DIVERGE",
+    "THREE-BAR",
+    "PIN-REJECT"
+  ]
+}

@@ -77,6 +77,14 @@ var CHUNK            = 5;
 var CHUNK_SLEEP_MS   = 120;
 var FUND_HIST_URL    = 'https://fapi.binance.com/fapi/v1/fundingRate';
 
+function oiDeskParam(key, fb){
+  if (typeof G.hgDeskParam === 'function') return G.hgDeskParam('oiflow', key, fb);
+  return fb;
+}
+function oiMinTurnover(){ return oiDeskParam('minTurnoverUsd', MIN_TURNOVER); }
+function oiMinEvidence(){ return oiDeskParam('minEvidence', MIN_EVIDENCE); }
+function oiMinRr(){ return oiDeskParam('minRR', 2); }
+
 /* ---------------- formatters: reuse index.html helpers when present ---------------- */
 function _fmtFb(n, d){ d = (d === undefined) ? 2 : d; return (n === null || n === undefined || !isFinite(n)) ? '—' : Number(n).toLocaleString('en-US', { maximumFractionDigits: d, minimumFractionDigits: 0 }); }
 function _pxFb(n){ if (n === null || n === undefined || !isFinite(n)) return '—'; var a = Math.abs(n); var d = a >= 1000 ? 1 : a >= 100 ? 2 : a >= 1 ? 4 : a >= 0.01 ? 6 : 8; return Number(n).toLocaleString('en-US', { maximumFractionDigits: d }); }
@@ -359,7 +367,7 @@ function oiflowSetup(cls, rows4h, rows1h){
       return setup;
     }
     if (typeof hgPlanLevelsCore === 'function'){
-      var pl = hgPlanLevelsCore(dirLow, rows4h, null, { minRr: 2 });
+      var pl = hgPlanLevelsCore(dirLow, rows4h, null, { minRr: oiMinRr() });
       if (pl){
         var cc = (typeof hgConfirmedCascade === 'function') ? hgConfirmedCascade(rows4h, 'smart') : null;
         return {
@@ -601,12 +609,12 @@ async function runScan(el){
     stat.textContent = 'loading Delta + CoinDCX desk universe…';
     var items = [];
     if (typeof hgDeskLoadDeltaCoinDCX === 'function'){
-      var desk = await hgDeskLoadDeltaCoinDCX({ force: true, minTurnover: MIN_TURNOVER, includeUnknown: false });
+      var desk = await hgDeskLoadDeltaCoinDCX({ force: true, minTurnover: oiMinTurnover(), includeUnknown: false });
       items = (desk && desk.items) ? desk.items : [];
     } else if (typeof binancePerpUniverse === 'function' && typeof binanceTickers24h === 'function'){
       var res0 = await Promise.all([binancePerpUniverse(), binanceTickers24h()]);
       var perps0 = res0[0] || [], ticks0 = res0[1];
-      items = perps0.filter(function(s){ return ticks0[s] && ticks0[s].turnoverUsd >= MIN_TURNOVER; })
+      items = perps0.filter(function(s){ return ticks0[s] && ticks0[s].turnoverUsd >= oiMinTurnover(); })
         .map(function(s){ return { sym: s, exchange: 'binance', turnoverUsd: ticks0[s].turnoverUsd }; });
     }
     if (MAX_UNIVERSE > 0) items = items.slice(0, MAX_UNIVERSE);
@@ -632,7 +640,7 @@ async function runScan(el){
           r.venue = item.exchange || null;
           r.cls = oiflowClassify({ fundingZ: r.fundingZ, fundingPct: r.fundingPct, oiChg: r.oiChg, pxChg: r.pxChg,
                                    takerAvg: r.takerAvg, longPct: r.longPct });
-          if (!(r.cls.dir && r.cls.score >= MIN_EVIDENCE)) return;
+          if (!(r.cls.dir && r.cls.score >= oiMinEvidence())) return;
           /* candidate: pull 4h/1h for the plan — kline failure = context-only card */
           var kl = await fetchSetupKlines(sym);
           r.rows4h = kl.rows4h; r.rows1h = kl.rows1h;
@@ -752,7 +760,7 @@ function mount(el){
     try {
       var oiFwdEl = el.querySelector('#oiflowFwd');
       if (oiFwdEl && typeof W.hgFwdPanelHTML === 'function'){
-        oiFwdEl.innerHTML = W.hgFwdPanelHTML('OIFLOW', { minRr: 2, title: 'FORWARD — do OI regimes resolve differently?' });
+        oiFwdEl.innerHTML = W.hgFwdPanelHTML('OIFLOW', { minRr: oiMinRr(), title: 'FORWARD — do OI regimes resolve differently?' });
       }
     } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("oiflow", eFwd); } catch (eW) {} }
     try{
