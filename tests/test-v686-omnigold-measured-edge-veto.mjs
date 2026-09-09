@@ -40,8 +40,8 @@ assert.ok(/tab: 'OMNIGOLD:' \+ cfg\.label, mechanic: c\.kind/.test(omnigold),
 
 /* --- helper version bumped --- */
 const solSrc = readFileSync(resolve(ROOT, 'hg-solidity.js'), 'utf8');
-assert.ok(/HG_SOLIDITY_VERSION = 'v686'/.test(solSrc),
-  'helper stamped v686');
+assert.ok(/HG_SOLIDITY_VERSION = 'v(686|68[7-9]|69\d|[7-9]\d\d|\d{4,})'/.test(solSrc),
+  'helper version stamped >= v686');
 
 /* --- runtime: simulate omnigold plan through the grader with a mock\n   forward log that returns MEASURED-LOSING for one specific (tab, kind)\n   pair. G6 must fail for that pair and pass for a different one. */
 const fakeG = {};

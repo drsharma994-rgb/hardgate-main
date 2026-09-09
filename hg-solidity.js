@@ -75,12 +75,23 @@
      survives typical fee/slip modelling in the forward log. */
   var HG_SOL_MIN_EDGE_SAMPLES = 20;
   var HG_SOL_EDGE_FLOOR = -0.25;
+  /* v687 auto-promotion: symmetric to the v685 veto floor. When the same
+     (tab, kind) pair has HG_SOL_MIN_EDGE_SAMPLES+ recorded outcomes AND
+     expR >= HG_SOL_EDGE_PRIME, G7 passes and the card earns the PRIME grade.
+     +0.5R is the smallest expectancy that clears typical fee/slip modelling
+     with headroom; anything lower is edge-thin. */
+  var HG_SOL_EDGE_PRIME = 0.5;
 
-  /* v685: labels re-scaled to a 6-point gate system. Only 6/6 is SOLID;
-     5/6 is GOOD; both remain lead-eligible. Mid grades tightened so a
-     card with a measured-losing kind cannot lead just because its other
-     five gates happen to line up. */
+  /* v687: 7-point scale. 7/7 = PRIME (measured-winning kind + all quality
+     gates clean). 6/7 = SOLID. 5/7 = GOOD. Both PRIME and SOLID and GOOD
+     remain lead-eligible. PRIME is a new grade earned only when G7 fires
+     positively — an unmeasured or too-few-samples kind can still be SOLID,
+     just not PRIME. This preserves the innocent-until-proven-guilty rule
+     from v685 while adding a proven-innocent bonus. */
   var HG_SOL_LABELS = {
+    /* v687 tape-override virtual point can push effectiveScore to 8; still PRIME */
+    8: 'PRIME',
+    7: 'PRIME',
     6: 'SOLID',
     5: 'GOOD',
     4: 'MIXED',
@@ -89,7 +100,8 @@
     1: 'WEAK',
     0: 'WEAK'
   };
-  var HG_SOL_LEAD_MIN = 5; /* v685: score >= 5 leads (was 4 pre-v685) */
+  var HG_SOL_LEAD_MIN = 5; /* score >= 5 leads (PRIME, SOLID, GOOD) */
+  var HG_SOL_PRIME_MIN = 7; /* score == 7 = PRIME */
 
   function _fin(x){ x = +x; return isFinite(x) ? x : NaN; }
 
@@ -206,7 +218,10 @@
 
      opts.tab and opts.kind identify the (scanner, mechanic) pair to look
      up. Both tabs must pass them; if missing, gate passes without lookup
-     to preserve backward compatibility with pre-v685 callers. */
+     to preserve backward compatibility with pre-v685 callers.
+
+     v687: this gate now also stamps the raw stats on the returned object
+     so G7 (auto-promotion) can read them without a second lookup. */
   function hgSolGateMeasuredEdge(plan, opts){
     opts = opts || {};
     if (!opts.tab || !opts.kind) return { pass: true, source: 'no-lookup' };
@@ -228,19 +243,45 @@
     return { pass: pass, source: 'measured', samples: stats.samples, expR: expR };
   }
 
+  /* G7 (v687): MEASURED-WINNING auto-promotion. Symmetric to G6 — same
+     sample floor, same lookup, opposite polarity. Fires (pass=true) only
+     when the log has HG_SOL_MIN_EDGE_SAMPLES+ observations AND measured
+     expR meets or exceeds HG_SOL_EDGE_PRIME. Unlike G6 which defaults to
+     pass when data is missing (innocent-until-proven-guilty), G7 defaults
+     to FAIL when data is missing (proven-innocent bonus).
+
+     G7 reads the same stats G6 already computed when both are called from
+     hgSolidityGrade in sequence. When called standalone, it re-queries. */
+  function hgSolGateMeasuredWinning(plan, opts){
+    opts = opts || {};
+    if (!opts.tab || !opts.kind) return { pass: false, source: 'no-lookup' };
+    var W = (typeof window !== 'undefined') ? window : ((typeof globalThis !== 'undefined') ? globalThis : G);
+    if (!W || typeof W.hgFwdStats !== 'function') return { pass: false, source: 'no-fwdlog' };
+    var stats = null;
+    try { stats = W.hgFwdStats(String(opts.tab), String(opts.kind), false); }
+    catch(eF){ return { pass: false, source: 'fwdlog-error' }; }
+    if (!stats || !isFinite(stats.samples) || stats.samples < HG_SOL_MIN_EDGE_SAMPLES){
+      return { pass: false, source: 'too-few-samples', samples: stats && stats.samples || 0, expR: stats && stats.expR };
+    }
+    var expR = _fin(stats.expR);
+    if (!isFinite(expR)) return { pass: false, source: 'expR-nan', samples: stats.samples, expR: NaN };
+    var pass = expR >= HG_SOL_EDGE_PRIME;
+    return { pass: pass, source: 'measured', samples: stats.samples, expR: expR, threshold: HG_SOL_EDGE_PRIME };
+  }
+
   /* --- composite grade -------------------------------------------------- */
 
-  /* Given a plan, return { grade, score, gates } where score is 0..6 (v685).
+  /* Given a plan, return { grade, score, gates } where score is 0..7 (v687).
      This is the ONE call every tab makes. Adds no fields to plan; returns a
      fresh object the tab attaches (or doesn't) at its discretion.
 
      opts.minRr: the tab's minimum R:R floor (default 2.0).
-     opts.tab, opts.kind: identifies (scanner, mechanic) pair for G6
-       measured-edge lookup. If either is missing, G6 passes unconditionally.
+     opts.tab, opts.kind: identifies (scanner, mechanic) pair for G6/G7
+       lookups. If either is missing, G6 passes unconditionally and G7
+       fails unconditionally (backward-compat + honest no-data).
 
-     v685: G6 measured-edge veto added; only setups the forward log has
-     ACTUALLY MEASURED as losing get penalized. Lead eligibility raised to
-     score >= 5 so a card cannot lead while carrying a measured-losing kind. */
+     v685: G6 measured-edge veto added.
+     v687: G7 measured-winning auto-promotion added; PRIME grade for 7/7. */
   function hgSolidityGrade(plan, opts){
     opts = opts || {};
     var g1 = hgSolGateFamilies(plan);
@@ -249,22 +290,45 @@
     var g4 = hgSolGateRr(plan, opts);
     var g5 = hgSolGateStop(plan);
     var g6 = hgSolGateMeasuredEdge(plan, opts);
+    var g7 = hgSolGateMeasuredWinning(plan, opts);
     var score = (g1.pass ? 1 : 0) + (g2.pass ? 1 : 0) + (g3.pass ? 1 : 0)
-              + (g4.pass ? 1 : 0) + (g5.pass ? 1 : 0) + (g6.pass ? 1 : 0);
+              + (g4.pass ? 1 : 0) + (g5.pass ? 1 : 0) + (g6.pass ? 1 : 0)
+              + (g7.pass ? 1 : 0);
+    /* v687 opts.tapeOverride: when the caller (currently omnigold only) opts
+       in, a card whose G7 measured-winning fires gets ALL OTHER GATES
+       INCLUDING TAPE re-evaluated as if tape passed. A measured-winning
+       kind has been proven to work over 20+ samples of REAL market
+       history — that empirical evidence overrides the current-tape
+       heuristic for the purpose of lead ordering. The card's tape gate
+       still shows the honest ✗ in the tooltip so the trader sees the
+       risk; only the composite score and grade get promoted. */
+    var effectiveScore = score;
+    var effectiveGrade = HG_SOL_LABELS[score] || 'WEAK';
+    var tapeOverridden = false;
+    if (opts.tapeOverride === true && g7.pass === true && g3.pass === false){
+      effectiveScore = score + 1; /* virtual point for the override */
+      effectiveGrade = HG_SOL_LABELS[effectiveScore] || effectiveGrade;
+      tapeOverridden = true;
+    }
     return {
-      grade: HG_SOL_LABELS[score] || 'WEAK',
-      score: score,
+      grade: effectiveGrade,
+      score: effectiveScore,
+      rawScore: score,
+      tapeOverridden: tapeOverridden,
       gates: {
         families: g1,
         liveFresh: g2,
         tape: g3,
         rr: g4,
         stop: g5,
-        measuredEdge: g6
+        measuredEdge: g6,
+        measuredWinning: g7
       },
-      /* leadEligible: only SOLID (6) or GOOD (5) may lead a tab. Threshold
-         is HG_SOL_LEAD_MIN so the constant stays honest. */
-      leadEligible: score >= HG_SOL_LEAD_MIN
+      /* leadEligible: score >= HG_SOL_LEAD_MIN (5). PRIME/SOLID/GOOD lead. */
+      leadEligible: effectiveScore >= HG_SOL_LEAD_MIN,
+      /* primeEligible: score == HG_SOL_PRIME_MIN (7). PRIME cards may override
+         tape veto on tabs that opt in (see v687 omnigold override). */
+      primeEligible: effectiveScore >= HG_SOL_PRIME_MIN
     };
   }
 
@@ -313,6 +377,24 @@
       edgeStr = 'measured ' + er + ' over ' + (g6.samples || 0) + ' samples (floor ' + HG_SOL_EDGE_FLOOR.toFixed(2) + 'R)';
     } else edgeStr = 'unknown';
     lines.push((g6.pass ? '✓' : '✗') + ' measured-edge: ' + edgeStr);
+    /* G7 MEASURED-WINNING (v687): auto-promotion. Only shows a check when
+       the (tab, kind) pair has genuinely proven itself. */
+    var g7 = g.measuredWinning || {};
+    var winStr;
+    if (g7.source === 'no-lookup' || g7.source === 'no-fwdlog') winStr = 'no data';
+    else if (g7.source === 'too-few-samples') winStr = 'sample too small (' + (g7.samples || 0) + '/' + HG_SOL_MIN_EDGE_SAMPLES + ')';
+    else if (g7.source === 'expR-nan' || g7.source === 'fwdlog-error') winStr = 'no data';
+    else if (g7.source === 'measured'){
+      var er7 = isFinite(g7.expR) ? g7.expR.toFixed(2) + 'R' : '?';
+      winStr = 'measured ' + er7 + ' over ' + (g7.samples || 0) + ' samples (prime floor ' + HG_SOL_EDGE_PRIME.toFixed(2) + 'R)';
+    } else winStr = 'unknown';
+    lines.push((g7.pass ? '✓' : '✗') + ' measured-winning: ' + winStr);
+    /* v687 omnigold tape-override marker: shown only when the override
+       actually fired so the trader sees that a proven-winning kind is
+       leading despite an adverse tape reading. */
+    if (sol.tapeOverridden === true){
+      lines.push('★ tape-override: PRIME kind overrides adverse tape (omnigold)');
+    }
     return lines.join('\n');
   }
 
@@ -324,16 +406,22 @@
   function hgSolidityChipHtml(sol){
     if (!sol || !sol.grade) return '';
     var cls = 'caution';
-    if (sol.grade === 'SOLID') cls = 'ok';
+    /* v687: PRIME shares 'ok' class with SOLID/GOOD; distinguished by the
+       grade label itself and the tooltip. */
+    if (sol.grade === 'PRIME') cls = 'ok';
+    else if (sol.grade === 'SOLID') cls = 'ok';
     else if (sol.grade === 'GOOD') cls = 'ok';
     else if (sol.grade === 'MIXED') cls = 'caution';
     else if (sol.grade === 'THIN') cls = 'veto';
     else if (sol.grade === 'WEAK') cls = 'veto';
     var reasons = hgSolidityReasons(sol);
-    /* v685: max score is now 6 (was 5 pre-v685). Use the label table's
-       highest key so future scale changes don't need another callsite
-       update. */
-    var MAX = Math.max.apply(null, Object.keys(HG_SOL_LABELS).map(Number));
+    /* v687: real gate count is 7; effectiveScore may reach 8 via the
+       omnigold tape-override virtual point. Display the raw '/7' as the
+       user-facing denominator because that matches the number of actual
+       gates. When tape-overridden, the tooltip ★ line makes the override
+       explicit; the chip's numerator can still be 8 in that case, which
+       reads as 'better than every gate' and matches the PRIME grade. */
+    var MAX = 7;
     var title = 'Solidity ' + sol.score + '/' + MAX;
     if (reasons) title += '\n' + reasons;
     /* HTML-encode the title to keep double-quotes safe inside the attribute
@@ -353,17 +441,22 @@
      score >= 5 (HG_SOL_LEAD_MIN); mid bucket is 3-4 (both MIXED); back
      bucket is 0-2. Preserves the property that ORDER within a bucket is
      stable, so the tab's own ranker still decides ordering. */
-  function hgSolidityReorder(cards){
+  function hgSolidityReorder(cards, opts){
+    opts = opts || {};
     if (!Array.isArray(cards)) return cards;
-    var lead = [], mid = [], back = [];
+    /* v687: split lead bucket into prime + rest so PRIME cards lead
+       absolutely. Within each bucket, input order (score-derived) is
+       preserved so the tab's own ranker still resolves ties. */
+    var prime = [], lead = [], mid = [], back = [];
     for (var i = 0; i < cards.length; i++){
       var c = cards[i];
       var sol = c && c.solidity;
-      if (sol && sol.score >= HG_SOL_LEAD_MIN) lead.push(c);
+      if (sol && sol.score >= HG_SOL_PRIME_MIN) prime.push(c);
+      else if (sol && sol.score >= HG_SOL_LEAD_MIN) lead.push(c);
       else if (sol && sol.score >= 3) mid.push(c);
       else back.push(c);
     }
-    return lead.concat(mid).concat(back);
+    return prime.concat(lead).concat(mid).concat(back);
   }
 
   /* --- expose ----------------------------------------------------------- */
@@ -377,8 +470,11 @@
   G.hgSolGateRr = hgSolGateRr;
   G.hgSolGateStop = hgSolGateStop;
   G.hgSolGateMeasuredEdge = hgSolGateMeasuredEdge; /* v685 */
-  G.HG_SOLIDITY_VERSION = 'v686';
+  G.hgSolGateMeasuredWinning = hgSolGateMeasuredWinning; /* v687 */
+  G.HG_SOLIDITY_VERSION = 'v687';
   G.HG_SOL_LEAD_MIN = HG_SOL_LEAD_MIN;
+  G.HG_SOL_PRIME_MIN = HG_SOL_PRIME_MIN;
   G.HG_SOL_MIN_EDGE_SAMPLES = HG_SOL_MIN_EDGE_SAMPLES;
   G.HG_SOL_EDGE_FLOOR = HG_SOL_EDGE_FLOOR;
+  G.HG_SOL_EDGE_PRIME = HG_SOL_EDGE_PRIME;
 })();

@@ -5400,12 +5400,21 @@ terse status, and never launches a first-time scan on a global refresh.
          with tab='OMNIGOLD:'+cfg.label (line 9680) and mechanic=c.kind,
          so the lookup key here must match. Fallback to 'OMNIGOLD' when
          c.horizon is absent so we still hit any records written under a
-         bare tab prefix (defensive). */
+         bare tab prefix (defensive).
+
+         v687: opt into tapeOverride so a PRIME (measured-winning) kind
+         with adverse tape still leads the omnigold desk. Empirical
+         performance over 20+ samples with expR >= +0.5R overrides the
+         current-tape heuristic for lead ordering only. The tape gate
+         still fails honestly in the tooltip; only the composite grade
+         and score get promoted, with a ★ tape-override marker so the
+         trader sees why an against-tape card is on top. */
       var ogTab = c.horizon ? ('OMNIGOLD:' + String(c.horizon)) : 'OMNIGOLD';
       try { c.solidity = W.hgSolidityGrade(planForSol, {
         minRr: (typeof MIN_RR === 'number') ? MIN_RR : 2.0,
         tab: ogTab,
-        kind: c.kind
+        kind: c.kind,
+        tapeOverride: true /* v687 omnigold-only opt-in */
       }); }
       catch(eSol){}
     }

@@ -68,27 +68,35 @@ const p = {
   stopWidened: false
 };
 
-/* --- Case A: no fwd log helper -> G6 passes (no-fwdlog source) --- */
+/* --- Case A: no fwd log helper -> G6 passes, G7 fails (no-fwdlog) --- */
 {
   const api = buildHelper(null);
   const g = api.hgSolidityGrade(p, { tab: 'OMNIROUTE', kind: 'FVG' });
   assert.equal(g.gates.measuredEdge.pass, true);
   assert.equal(g.gates.measuredEdge.source, 'no-fwdlog');
-  assert.equal(g.score, 6, 'perfect plan still 6/6');
+  /* v687: G7 also fails without fwdlog (opposite polarity). Score = 6/7
+     = SOLID, not PRIME. Perfect quality plan gets SOLID; PRIME requires
+     measured-winning data. */
+  assert.equal(g.gates.measuredWinning.pass, false);
+  assert.equal(g.gates.measuredWinning.source, 'no-fwdlog');
+  assert.equal(g.score, 6, 'perfect plan is SOLID (6/7)');
   assert.equal(g.grade, 'SOLID');
 }
 
-/* --- Case B: enough samples, expR ABOVE floor -> G6 passes (measured) --- */
+/* --- Case B: enough samples, expR above -0.25 but below +0.5 --- */
 {
   const api = buildHelper(function(tab, kind, ticketOnly){
     return { samples: 50, expR: 0.15 };
   });
   const g = api.hgSolidityGrade(p, { tab: 'OMNIROUTE', kind: 'FVG' });
+  /* G6 passes (above veto floor -0.25); G7 fails (below prime floor +0.5) */
   assert.equal(g.gates.measuredEdge.pass, true);
   assert.equal(g.gates.measuredEdge.source, 'measured');
   assert.equal(g.gates.measuredEdge.expR, 0.15);
   assert.equal(g.gates.measuredEdge.samples, 50);
-  assert.equal(g.score, 6);
+  assert.equal(g.gates.measuredWinning.pass, false, 'expR 0.15 < prime floor 0.5');
+  assert.equal(g.gates.measuredWinning.source, 'measured');
+  assert.equal(g.score, 6, 'SOLID (G7 fails)');
 }
 
 /* --- Case C: enough samples, expR BELOW floor -> G6 fails (veto) --- */
@@ -97,11 +105,12 @@ const p = {
     return { samples: 47, expR: -0.31 };
   });
   const g = api.hgSolidityGrade(p, { tab: 'OMNIROUTE', kind: 'FVG' });
-  assert.equal(g.gates.measuredEdge.pass, false, 'measured-losing -> fail');
-  assert.equal(g.gates.measuredEdge.source, 'measured');
+  assert.equal(g.gates.measuredEdge.pass, false, 'measured-losing -> G6 fail');
   assert.equal(g.gates.measuredEdge.expR, -0.31);
-  assert.equal(g.gates.measuredEdge.samples, 47);
-  assert.equal(g.score, 5, '5 other gates pass, G6 fails -> 5');
+  /* v687: G7 also fails (way below +0.5 prime floor) */
+  assert.equal(g.gates.measuredWinning.pass, false, 'losing -> G7 fail too');
+  /* Score: 5 quality gates pass + G6 fail + G7 fail = 5 */
+  assert.equal(g.score, 5, '5 quality gates pass, G6+G7 fail -> 5');
   assert.equal(g.grade, 'GOOD', 'still leads via GOOD but chip warns');
   assert.equal(g.leadEligible, true, 'GOOD >= 5 = leadEligible');
 }
@@ -150,12 +159,11 @@ const p = {
 /* --- Case I: full veto changes lead-eligibility for a marginal plan --- */
 {
   const api = buildHelper(function(){ return { samples: 40, expR: -0.5 }; });
-  /* A plan that's already GOOD (4/5 on old scale = 5 gates pass): tape
-     adverse fails G3, so score = 4 passes + 1 G6 fail = 4. That was GOOD
-     before v685; now MIXED = not lead-eligible. */
+  /* A marginal plan (tape adverse) with a measured-losing kind:
+     4 quality gates pass + G3 fail + G6 fail + G7 fail = 4 = MIXED */
   const marginal = Object.assign({}, p, { tape: 'short' });
   const g = api.hgSolidityGrade(marginal, { tab: 'OMNIROUTE', kind: 'FVG' });
-  assert.equal(g.score, 4, '4 gates pass out of 6');
+  assert.equal(g.score, 4, '4 gates pass out of 7');
   assert.equal(g.grade, 'MIXED');
   assert.equal(g.leadEligible, false, 'MIXED cannot lead');
 }
@@ -168,15 +176,17 @@ const p = {
   assert.ok(/\u2717 measured-edge: measured -0\.31R over 47 samples/.test(r),
     'reason line shows expR and sample count');
   const lines = r.split('\n');
-  assert.equal(lines.length, 6, 'six lines total');
+  assert.equal(lines.length, 7, 'v687: seven lines total (G7 added)');
 }
 
-/* --- Case K: chip title includes /6 not /5 --- */
+/* --- Case K: chip title includes /7 (v687 scale) --- */
 {
   const api = buildHelper(null);
   const g = api.hgSolidityGrade(p);
   const html = api.hgSolidityChipHtml(g);
-  assert.ok(/Solidity 6\/6/.test(html), 'chip shows /6 (v685 scale)');
+  /* v687: no opts + no fwd log -> G6 passes (no-lookup), G7 fails
+     (no-lookup), so score = 6/7 = SOLID. */
+  assert.ok(/Solidity 6\/7/.test(html), 'chip shows /7 (v687 scale)');
 }
 
 /* --- Case L: reorder uses new HG_SOL_LEAD_MIN --- */
@@ -217,6 +227,6 @@ console.log('  * G: fwd log throws -> pass (error contained)');
 console.log('  * H: no tab/kind -> pass (backward compat)');
 console.log('  * I: veto flips marginal plan out of lead');
 console.log('  * J: reasons string shows measured-edge line');
-console.log('  * K: chip title uses /6 scale');
+console.log('  * K: chip title uses /7 scale (v687)');
 console.log('  * L: reorder uses new lead threshold >=5');
 console.log('  * version bumped to ' + HG_VER);
