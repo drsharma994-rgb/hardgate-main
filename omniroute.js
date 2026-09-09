@@ -8497,7 +8497,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         alsoKinds: c.alsoKinds,
         strategyConfirm: c.strategyConfirm
       }, c.plan) : c;
-      try { c.solidity = W.hgSolidityGrade(planForSol, { minRr: (typeof MIN_RR === 'number') ? MIN_RR : 2.0 }); }
+      /* v685: pass tab + kind so the measured-edge veto (G6) can look up
+         this (scanner, mechanic) pair in the forward log. When kind is
+         absent, G6 passes unconditionally (documented pre-v685 fallback). */
+      try { c.solidity = W.hgSolidityGrade(planForSol, {
+        minRr: (typeof MIN_RR === 'number') ? MIN_RR : 2.0,
+        tab: 'OMNIROUTE',
+        kind: c.kind
+      }); }
       catch(eSol){}
     }
   }

@@ -25,8 +25,8 @@ assert.ok(/G\.hgSolidityReasons = hgSolidityReasons/.test(solSrc),
   'hgSolidityReasons exposed on globalThis');
 assert.ok(/var reasons = hgSolidityReasons\(sol\);/.test(solSrc),
   'chip calls hgSolidityReasons');
-assert.ok(/HG_SOLIDITY_VERSION = 'v684'/.test(solSrc),
-  'helper version bumped to v684');
+assert.ok(/HG_SOLIDITY_VERSION = 'v(684|68[5-9]|69\d|[7-9]\d\d|\d{4,})'/.test(solSrc),
+  'helper version stamped >= v684');
 
 /* --- runtime evaluation of the helper module --- */
 const fakeG = {};
@@ -53,7 +53,7 @@ const chip = api.hgSolidityChipHtml;
   const g = grade(p);
   const r = reasons(g);
   const lines = r.split('\n');
-  assert.equal(lines.length, 5, 'five lines');
+  assert.equal(lines.length, 6, 'six lines (v685 added G6)');
   for (const line of lines){
     assert.ok(line.startsWith('\u2713'), 'every gate passes: ' + line);
   }
@@ -74,13 +74,17 @@ const chip = api.hgSolidityChipHtml;
   const g = grade(p);
   const r = reasons(g);
   const lines = r.split('\n');
-  assert.equal(lines.length, 5);
-  for (const line of lines){
-    assert.ok(line.startsWith('\u2717'), 'every gate fails: ' + line);
-  }
+  assert.equal(lines.length, 6);
+  /* v685: G6 measured-edge passes because no tab/kind was provided
+     (no-lookup). Five gates should fail, one (G6) passes. */
+  const failCount = lines.filter(l => l.startsWith('\u2717')).length;
+  const passCount = lines.filter(l => l.startsWith('\u2713')).length;
+  assert.equal(failCount, 5, 'five gates fail');
+  assert.equal(passCount, 1, 'G6 passes (no-lookup)');
   assert.ok(/live-price: past-stop/.test(r));
   assert.ok(/tape: short/.test(r), 'tape adverse');
   assert.ok(/stop: widened to v681 floor/.test(r));
+  assert.ok(/\u2713 measured-edge: no data/.test(r), 'G6 no-lookup shows no data');
 }
 
 /* --- Case C: MIXED plan shows a mix of checks and crosses --- */
@@ -95,10 +99,12 @@ const chip = api.hgSolidityChipHtml;
   const g = grade(p);
   const r = reasons(g);
   const lines = r.split('\n');
-  assert.equal(lines.length, 5);
+  assert.equal(lines.length, 6);
+  /* v685: G6 measured-edge passes because no tab/kind was provided
+     (no-lookup). So the pass count includes G6. */
   const passLines = lines.filter(l => l.startsWith('\u2713'));
   const failLines = lines.filter(l => l.startsWith('\u2717'));
-  assert.equal(passLines.length, 3, 'three gates pass');
+  assert.equal(passLines.length, 4, 'four gates pass (v685: G6 no-lookup adds one)');
   assert.equal(failLines.length, 2, 'two gates fail');
   assert.ok(/\u2717 live-price: past-t1/.test(r));
   assert.ok(/\u2717 tape: short/.test(r));
@@ -120,7 +126,7 @@ const chip = api.hgSolidityChipHtml;
   const titleValue = titleMatch[1];
   assert.ok(/&#10;/.test(titleValue), 'newlines encoded as &#10;');
   assert.ok(!/\n/.test(titleValue), 'no raw newlines in title attribute');
-  assert.ok(/Solidity 5\/5/.test(titleValue), 'score header preserved');
+  assert.ok(/Solidity 6\/6/.test(titleValue), 'score header preserved (v685: 6-gate scale)');
   assert.ok(/families: 3 agree/.test(titleValue), 'gate reason present in title');
 }
 
@@ -145,7 +151,7 @@ const chip = api.hgSolidityChipHtml;
   };
   const r = reasons(partial);
   const lines = r.split('\n');
-  assert.equal(lines.length, 5, 'always five lines');
+  assert.equal(lines.length, 6, 'always six lines (v685)');
   assert.ok(/\u2713 families: 2 agree/.test(r));
   assert.ok(/\u2717 live-price: past-entry/.test(r));
   assert.ok(/\u2717 rr: \?R \(floor \?R/.test(r), 'missing rr shows ?');
