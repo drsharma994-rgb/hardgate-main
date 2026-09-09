@@ -287,51 +287,45 @@ function fetchXau(tf, n){
 
 /* --- scan runner ------------------------------------------------------ */
 
-/* v695: pull OMNIGOLD's already-scored gold candidates and its scan rows.
-   OMNIGOLD keeps m15 + swing (4h) rows in __og.lastRows and exposes them
-   through window.hgOgUniformDebug(); each candidate has kind, dir, plan,
-   and the horizon it fired on. We reuse OMNIGOLD's ROWS (same 4h/15m
-   candles it already fetched, no duplicate network) and re-gate through
-   ngAssess. Only OMNIGOLD candidates whose direction matches an
-   ngAssess fire on the same rows survive — the intersection is stricter
-   than either detector alone.
+/* v695 (v696 fix): pull OMNIGOLD's already-scored gold candidates.
 
-   Returns [{ horizonLabel, tf, source, ogKind, ogDir, ogPlan, rows }, ...]
-   or [] when OMNIGOLD is not loaded or has no state yet. */
+   OMNIGOLD is an IIFE and its per-scan rows live on the local __og
+   binding, NOT on window. Only the ranked candidates are exposed via
+   window.hgOgUniformDebug(). v695 assumed window.__og was accessible;
+   in production it was not, so every OMNI lane had rowsLen=0 and every
+   hybrid card was silently dropped by the ML_LOOKBACK+5 guard in
+   ngRunScan.
+
+   v696 fix: return ROWLESS metadata for each candidate. The caller
+   (ngRunScan) fetches 4h + 15m rows ONCE via fetchXau (the same
+   cascade OMNIGOLD used) and passes them into the OMNI-lane loop.
+   Zero duplicate fetches vs. the primary horizons — fetchXau caches
+   through the app-level candle cache OMNIGOLD populated.
+
+   Returns [{ horizonLabel, tf, ogKind, ogDir, ogPlan }, ...] or [] when
+   OMNIGOLD is not loaded / has no candidates yet. */
 function ngPullOmniLanes(){
   var out = [];
   try {
     var dbg = (typeof W.hgOgUniformDebug === 'function') ? W.hgOgUniformDebug() : null;
     if (!dbg) return out;
     var lanes = [
-      { tag: 'SWING', tf: '4h', label: 'OMNI-4H', rowsKey: 'swing' },
-      { tag: 'SCALP', tf: '15m', label: 'OMNI-15m', rowsKey: 'm15' }
+      { tag: 'SWING', tf: '4h', label: 'OMNI-4H' },
+      { tag: 'SCALP', tf: '15m', label: 'OMNI-15m' }
     ];
     for (var li = 0; li < lanes.length; li++){
       var lane = lanes[li];
       var cands = (lane.tag === 'SWING') ? dbg.swing : dbg.scalp;
       if (!Array.isArray(cands) || !cands.length) continue;
-      /* OMNIGOLD's own rows for this horizon (via __og.lastRows on window) */
-      var ogState = (typeof W !== 'undefined') ? (W.__og || null) : null;
-      var laneRows = (ogState && ogState.lastRows && ogState.lastRows[lane.rowsKey]) || [];
-      /* Some OMNIGOLD paths store swing rows under 'scalp' when the swing
-         desk is idle; fall back defensively. */
-      if (!laneRows.length && ogState && ogState.lastRows){
-         laneRows = ogState.lastRows.scalp || ogState.lastRows.swing || [];
-      }
-      /* Feed source label if OMNIGOLD published one. */
-      var src = (dbg.src && (dbg.src[lane.rowsKey] || dbg.src.swing || dbg.src.scalp)) || 'omnigold';
       for (var ci = 0; ci < cands.length; ci++){
         var c = cands[ci];
         if (!c || !c.dir) continue;
         out.push({
           horizonLabel: lane.label,
           tf: lane.tf,
-          source: src,
           ogKind: c.kind || c.strategy || 'OMNI',
           ogDir: String(c.dir).toLowerCase(),
-          ogPlan: c.plan || null,
-          rows: laneRows
+          ogPlan: c.plan || null
         });
       }
     }
@@ -385,71 +379,101 @@ async function ngRunScan(){
       results.push(record);
     }
 
-    /* v695: OMNIGOLD lane. Pull OMNIGOLD's already-scored candidates plus
-       the rows they were scored against, and re-gate each through the
-       Pine triple-confirmation. A candidate survives only when BOTH
-       agree: OMNIGOLD flagged this direction as a setup, AND ngAssess
-       (FVG + VWMA-50 + RSI cross) fires the SAME direction on the same
-       rows. This is a stricter intersection than either detector alone,
-       and it treats OMNIGOLD as an additional confluence signal without
-       trusting its plan geometry as-is.
+    /* v695 (v696 fix): OMNIGOLD lane. Pull OMNIGOLD's already-scored
+       candidates and re-gate each through the Pine triple-confirmation.
+       A candidate survives only when BOTH agree: OMNIGOLD flagged this
+       direction as a setup, AND ngAssess (FVG + VWMA-50 + RSI cross)
+       fires the SAME direction on the same-tf rows.
+
+       v696 fetches the tf rows itself instead of relying on the
+       IIFE-scoped __og.lastRows that never reached window. Reuses rows
+       already fetched for the primary 1H/4H horizons above when the tf
+       matches, so 4h needs no extra fetch (results[1].rows) and only
+       15m makes a new network call.
 
        The mechanic key is TRIPLE-CONF+OMNI:<ogKind> so the forward log
-       tracks these hybrid setups separately from plain TRIPLE-CONF and
-       from plain OMNIGOLD — the measured-edge stats will show whether
-       the intersection wins more often than either parent. */
+       tracks each hybrid separately from plain TRIPLE-CONF. */
     try {
       var omniLanes = ngPullOmniLanes();
-      /* Deduplicate on (horizonLabel + ogKind + ogDir) so multiple
-         OMNIGOLD ranked entries for the same mechanic in the same
-         direction do not produce duplicate cards. */
-      var seenOmni = {};
-      for (var oi = 0; oi < omniLanes.length; oi++){
-        var lane = omniLanes[oi];
-        if (!lane || !lane.rows || lane.rows.length < ML_LOOKBACK + 5) continue;
-        var dedupKey = lane.horizonLabel + '|' + lane.ogKind + '|' + lane.ogDir;
-        if (seenOmni[dedupKey]) continue;
-        seenOmni[dedupKey] = true;
-        var ogSetup = null;
-        try { ogSetup = ngAssess(lane.rows); } catch(eA){ ogSetup = null; }
-        if (!ogSetup) continue;
-        /* Intersection guard: NEW GOLD triple-conf must match OMNIGOLD's
-           own direction. If they disagree we drop the fire — the whole
-           point of this lane is stricter, not merely additive. */
-        if (ogSetup.dir !== lane.ogDir) continue;
-        /* Stamp the hybrid mechanic + carry the OMNIGOLD kind through. */
-        var hybridKind = 'TRIPLE-CONF+OMNI:' + lane.ogKind;
-        ogSetup.kind = hybridKind;
-        ogSetup.omni = { kind: lane.ogKind, dir: lane.ogDir, ogPlan: lane.ogPlan };
-        ogSetup.confluenceCount = 4; /* ML + FVG + momentum + OMNIGOLD agree */
-        var omniRecord = {
-          horizon: lane.horizonLabel,
-          tf: lane.tf,
-          source: lane.source,
-          setup: ogSetup,
-          rows: lane.rows
-        };
-        /* Solidity through the same shared helper as the primary horizons. */
-        if (typeof W.hgSolidityGrade === 'function'){
-          try {
-            var planForSol2 = {
-              dir: ogSetup.dir,
-              entry: ogSetup.entry, stop: ogSetup.stop,
-              t1: ogSetup.t1, t2: ogSetup.t2,
-              rr1: ogSetup.rr1, minRr: MIN_RR,
-              tape: ogSetup.dir,
-              stopWidened: ogSetup.stopWidened,
-              consensus: { nAgree: ogSetup.confluenceCount },
-              liveGrade: 'fresh'
-            };
-            omniRecord.solidity = W.hgSolidityGrade(planForSol2, {
-              minRr: MIN_RR,
-              tab: 'NEWGOLD:' + lane.horizonLabel,
-              kind: hybridKind
-            });
-          } catch(eSol2){}
+      if (omniLanes.length){
+        /* Cache tf->rows to avoid double-fetching. Seed from the primary
+           horizons above (1H/4H). */
+        var tfRows = {};
+        var tfSource = {};
+        for (var pi = 0; pi < results.length; pi++){
+          var pr = results[pi];
+          if (pr && pr.rows && pr.rows.length){
+            tfRows[pr.tf] = pr.rows;
+            tfSource[pr.tf] = pr.source;
+          }
         }
-        results.push(omniRecord);
+        /* Fetch any missing tf rows the OMNI lanes need. 4h is almost
+           always already in tfRows from the primary loop above; 15m is
+           new territory. */
+        var neededTfs = {};
+        for (var oi0 = 0; oi0 < omniLanes.length; oi0++){
+          if (!tfRows[omniLanes[oi0].tf]) neededTfs[omniLanes[oi0].tf] = true;
+        }
+        var missingList = Object.keys(neededTfs);
+        for (var mi = 0; mi < missingList.length; mi++){
+          var mtf = missingList[mi];
+          try {
+            var pack = await fetchXau(mtf, KL_LIMIT);
+            if (pack && pack.rows && pack.rows.length){
+              tfRows[mtf] = pack.rows;
+              tfSource[mtf] = pack.source;
+            }
+          } catch(eFm){}
+        }
+        /* Deduplicate on (horizonLabel + ogKind + ogDir) so multiple
+           OMNIGOLD ranked entries for the same mechanic in the same
+           direction do not produce duplicate cards. */
+        var seenOmni = {};
+        for (var oi = 0; oi < omniLanes.length; oi++){
+          var lane = omniLanes[oi];
+          var laneRows = tfRows[lane.tf] || [];
+          if (laneRows.length < ML_LOOKBACK + 5) continue;
+          var dedupKey = lane.horizonLabel + '|' + lane.ogKind + '|' + lane.ogDir;
+          if (seenOmni[dedupKey]) continue;
+          seenOmni[dedupKey] = true;
+          var ogSetup = null;
+          try { ogSetup = ngAssess(laneRows); } catch(eA){ ogSetup = null; }
+          if (!ogSetup) continue;
+          /* Intersection guard: NEW GOLD triple-conf must match OMNIGOLD's
+             own direction. If they disagree we drop the fire. */
+          if (ogSetup.dir !== lane.ogDir) continue;
+          var hybridKind = 'TRIPLE-CONF+OMNI:' + lane.ogKind;
+          ogSetup.kind = hybridKind;
+          ogSetup.omni = { kind: lane.ogKind, dir: lane.ogDir, ogPlan: lane.ogPlan };
+          ogSetup.confluenceCount = 4; /* ML + FVG + momentum + OMNIGOLD agree */
+          var omniRecord = {
+            horizon: lane.horizonLabel,
+            tf: lane.tf,
+            source: tfSource[lane.tf] || 'omnigold',
+            setup: ogSetup,
+            rows: laneRows
+          };
+          if (typeof W.hgSolidityGrade === 'function'){
+            try {
+              var planForSol2 = {
+                dir: ogSetup.dir,
+                entry: ogSetup.entry, stop: ogSetup.stop,
+                t1: ogSetup.t1, t2: ogSetup.t2,
+                rr1: ogSetup.rr1, minRr: MIN_RR,
+                tape: ogSetup.dir,
+                stopWidened: ogSetup.stopWidened,
+                consensus: { nAgree: ogSetup.confluenceCount },
+                liveGrade: 'fresh'
+              };
+              omniRecord.solidity = W.hgSolidityGrade(planForSol2, {
+                minRr: MIN_RR,
+                tab: 'NEWGOLD:' + lane.horizonLabel,
+                kind: hybridKind
+              });
+            } catch(eSol2){}
+          }
+          results.push(omniRecord);
+        }
       }
     } catch(eOmniLane){}
 

@@ -29,30 +29,33 @@ assert.ok(/function ngPullOmniLanes\(\)\{/.test(src),
   'ngPullOmniLanes defined');
 assert.ok(/W\.ngPullOmniLanes = ngPullOmniLanes;/.test(src),
   'ngPullOmniLanes exposed on W');
-assert.ok(/v695: pull OMNIGOLD's already-scored gold candidates/.test(src),
-  'v695 rationale comment at helper');
+assert.ok(/v695 \(v696 fix\): pull OMNIGOLD's already-scored gold candidates/.test(src),
+  'v695+v696 rationale comment at helper');
 
 /* --- ngPullOmniLanes reads OMNIGOLD state correctly --- */
 assert.ok(/typeof W\.hgOgUniformDebug === 'function'/.test(src),
   'feature-checks hgOgUniformDebug');
-assert.ok(/tag: 'SWING', tf: '4h', label: 'OMNI-4H', rowsKey: 'swing'/.test(src),
-  'SWING lane maps to 4h + swing rows');
-assert.ok(/tag: 'SCALP', tf: '15m', label: 'OMNI-15m', rowsKey: 'm15'/.test(src),
-  'SCALP lane maps to 15m + m15 rows');
-assert.ok(/ogState\.lastRows\[lane\.rowsKey\]/.test(src),
-  'reads __og.lastRows by rowsKey');
-assert.ok(/ogState\.lastRows\.scalp \|\| ogState\.lastRows\.swing/.test(src),
-  'defensive fallback when primary rowsKey empty');
+assert.ok(/tag: 'SWING', tf: '4h', label: 'OMNI-4H'/.test(src),
+  'SWING lane maps to 4h');
+assert.ok(/tag: 'SCALP', tf: '15m', label: 'OMNI-15m'/.test(src),
+  'SCALP lane maps to 15m');
+/* v696: rowless — rows fetched by ngRunScan via fetchXau instead of window.__og */
+assert.ok(!/ogState\.lastRows/.test(src),
+  'v696: rows are NOT read from window.__og (was unreachable in production)');
 
 /* --- ngRunScan integrates the OMNIGOLD lane --- */
 assert.ok(/var omniLanes = ngPullOmniLanes\(\);/.test(src),
   'ngRunScan calls ngPullOmniLanes');
 assert.ok(/dedupKey = lane\.horizonLabel \+ '\|' \+ lane\.ogKind \+ '\|' \+ lane\.ogDir/.test(src),
   'dedupes on (horizon, kind, dir)');
-assert.ok(/lane\.rows\.length < ML_LOOKBACK \+ 5/.test(src),
-  'skips lanes without enough bars for ngAssess');
-assert.ok(/ogSetup = ngAssess\(lane\.rows\);/.test(src),
-  're-gates OMNIGOLD candidate through ngAssess');
+assert.ok(/laneRows\.length < ML_LOOKBACK \+ 5/.test(src),
+  'v696: skips lanes without enough bars for ngAssess (laneRows fetched by ngRunScan)');
+assert.ok(/ogSetup = ngAssess\(laneRows\);/.test(src),
+  'v696: re-gates OMNIGOLD candidate through ngAssess on fetched rows');
+assert.ok(/pack = await fetchXau\(mtf, KL_LIMIT\);/.test(src),
+  'v696: ngRunScan fetches missing tf rows via fetchXau');
+assert.ok(/tfRows\[pr\.tf\] = pr\.rows;/.test(src),
+  'v696: reuses primary-horizon rows via tfRows cache (no double fetch)');
 assert.ok(/if \(ogSetup\.dir !== lane\.ogDir\) continue;/.test(src),
   'intersection guard: direction must match');
 
@@ -78,15 +81,10 @@ assert.ok(/var kk = \(kr\.setup && kr\.setup\.kind\) \|\| 'TRIPLE-CONF';/.test(s
 assert.ok(/tab: 'NEWGOLD:' \+ lane\.horizonLabel/.test(src),
   'solidity tab = NEWGOLD:OMNI-4H or NEWGOLD:OMNI-15m');
 
-/* --- runtime: ngPullOmniLanes with a fake W.hgOgUniformDebug returns lanes --- */
+/* --- runtime: ngPullOmniLanes with a fake W.hgOgUniformDebug returns lanes
+     (v696: rowless — rows are fetched by ngRunScan, not by ngPullOmniLanes) --- */
 {
   const fakeW = {};
-  const fakeSwingRows = new Array(80).fill(0).map((_, i) => ({
-    t: 1000 + i * 14400, o: 100, h: 101, l: 99, c: 100.5, v: 1000
-  }));
-  const fake15mRows = new Array(80).fill(0).map((_, i) => ({
-    t: 1000 + i * 900, o: 100, h: 101, l: 99, c: 100.5, v: 1000
-  }));
   fakeW.hgOgUniformDebug = () => ({
     swing: [
       { kind: 'kzJudas', dir: 'long', plan: { entry: 100, stop: 99 } },
@@ -97,12 +95,6 @@ assert.ok(/tab: 'NEWGOLD:' \+ lane\.horizonLabel/.test(src),
     ],
     src: { swing: 'binance-xau', m15: 'binance-xau' }
   });
-  fakeW.__og = {
-    lastRows: {
-      swing: fakeSwingRows,
-      m15: fake15mRows
-    }
-  };
   const api = new Function('window', `
     var globalThis = window;
     ${src}
@@ -116,8 +108,8 @@ assert.ok(/tab: 'NEWGOLD:' \+ lane\.horizonLabel/.test(src),
   assert.equal(scalpLanes.length, 1, '1 scalp lane');
   assert.equal(swingLanes[0].ogKind, 'kzJudas');
   assert.equal(swingLanes[0].tf, '4h');
-  assert.equal(swingLanes[0].source, 'binance-xau');
-  assert.equal(swingLanes[0].rows.length, 80);
+  assert.equal(swingLanes[0].ogDir, 'long');
+  assert.ok(!('rows' in swingLanes[0]), 'v696: no rows on lane object');
   assert.equal(scalpLanes[0].tf, '15m');
 }
 
@@ -134,7 +126,7 @@ assert.ok(/tab: 'NEWGOLD:' \+ lane\.horizonLabel/.test(src),
 }
 
 /* --- version + cache-buster --- */
-assert.ok(/^hg-v(?:695|69[6-9]|[7-9]\d\d|\d{4,})$/.test(HG_VER) && HG_VER >= 'hg-v695',
+assert.ok(/^hg-v(?:69[5-9]|[7-9]\d\d|\d{4,})$/.test(HG_VER) && HG_VER >= 'hg-v695',
   'HG_VER must be >= hg-v695');
 const sw = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
 assert.ok(new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'").test(sw));
