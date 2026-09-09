@@ -5454,9 +5454,12 @@ terse status, and never launches a first-time scan on a global refresh.
       return String(a.kind || '') < String(b.kind || '') ? -1 : 1;
     });
     /* v682: reorder so SOLID/GOOD cards lead. Preserves score order
-       WITHIN each solidity bucket (helper does stable partition). */
+       WITHIN each solidity bucket (helper does stable partition).
+       v689: pass tab='OMNIGOLD' so the reorder can stash aggregate
+       killed stats (across both horizons) for the KILLED note rendered
+       later in the MP section. */
     var W2 = (typeof window !== 'undefined') ? window : ((typeof globalThis !== 'undefined') ? globalThis : null);
-    if (W2 && typeof W2.hgSolidityReorder === 'function') return W2.hgSolidityReorder(sorted);
+    if (W2 && typeof W2.hgSolidityReorder === 'function') return W2.hgSolidityReorder(sorted, { tab: 'OMNIGOLD' });
     return sorted;
   }
 
@@ -8836,6 +8839,17 @@ terse status, and never launches a first-time scan on a global refresh.
     h += '</div>';
     h += hgOgMpHorizonHtml('SCALP', pickScalp, scalpT, watchScalp, held, engineScalp);
     h += hgOgMpHorizonHtml('SWING', pickSwing, swingT, watchSwing, held, engineSwing);
+    /* v689: KILLED note. Rendered BEFORE the perf panels so the user
+       sees the filter action, then the per-horizon stats that justify
+       it. Reads from window.__hgSolKillLast[OMNIGOLD] which
+       hgSolidityReorder stashed during the ranker step. */
+    try {
+      var Wk = (typeof window !== 'undefined') ? window : null;
+      if (Wk && typeof Wk.hgSolidityLastKilled === 'function'
+              && typeof Wk.hgSolidityKilledNoteHtml === 'function'){
+        h += Wk.hgSolidityKilledNoteHtml(Wk.hgSolidityLastKilled('OMNIGOLD'));
+      }
+    } catch(eKn){}
     /* v688: kind performance panels per horizon from the accumulated forward
        log. omnigold records with tab='OMNIGOLD:'+cfg.label so each horizon
        gets its own panel keyed by 'OMNIGOLD:SCALP' / 'OMNIGOLD:SWING'. Shows

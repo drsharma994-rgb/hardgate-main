@@ -44,8 +44,8 @@ assert.ok(/G\.hgSolGateMeasuredWinning = hgSolGateMeasuredWinning/.test(solSrc),
 assert.ok(/'PRIME'/.test(solSrc), 'PRIME label defined in HG_SOL_LABELS');
 assert.ok(/HG_SOL_PRIME_MIN = 7/.test(solSrc),
   'HG_SOL_PRIME_MIN = 7');
-assert.ok(/HG_SOLIDITY_VERSION = 'v687'/.test(solSrc),
-  'helper stamped v687');
+assert.ok(/HG_SOLIDITY_VERSION = 'v(687|68[8-9]|69\d|[7-9]\d\d|\d{4,})'/.test(solSrc),
+  'helper version stamped >= v687');
 
 /* --- structural: omnigold opts into tape-override --- */
 const omnigold = readFileSync(resolve(ROOT, 'omnigold.js'), 'utf8');

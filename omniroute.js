@@ -8526,9 +8526,11 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     /* v682: reorder so SOLID/GOOD cards lead. Preserves the score-based
        ordering WITHIN each solidity bucket, so raw ranker still decides
        ordering when solidity ties. When hgSolidityReorder is unavailable
-       (helper missing), returns sorted list unchanged. */
+       (helper missing), returns sorted list unchanged.
+       v689: pass tab so the reorder can stash killed stats for the
+       KILLED note rendered later in the MP section. */
     var W2 = (typeof window !== 'undefined') ? window : ((typeof globalThis !== 'undefined') ? globalThis : null);
-    if (W2 && typeof W2.hgSolidityReorder === 'function') return W2.hgSolidityReorder(sorted);
+    if (W2 && typeof W2.hgSolidityReorder === 'function') return W2.hgSolidityReorder(sorted, { tab: 'OMNIROUTE' });
     return sorted;
   }
 
@@ -8653,6 +8655,17 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       h += '<div class="og-mp-hz"><div class="hg-mp-head">STAND ASIDE <span>no tape-aligned ticket</span></div>';
       h += '<div class="hg-mp-note">' + esc(hgOmniMpNoneWhy(tape, held)) + '</div></div>';
     }
+    /* v689: KILLED note. Rendered BEFORE the perf panel so the user sees
+       the filter action, then the underlying stats that justify it.
+       Reads from window.__hgSolKillLast[OMNIROUTE] which hgSolidityReorder
+       stashed during the ranker step. */
+    try {
+      var Wk = (typeof window !== 'undefined') ? window : null;
+      if (Wk && typeof Wk.hgSolidityLastKilled === 'function'
+              && typeof Wk.hgSolidityKilledNoteHtml === 'function'){
+        h += Wk.hgSolidityKilledNoteHtml(Wk.hgSolidityLastKilled('OMNIROUTE'));
+      }
+    } catch(eKn){}
     /* v688: kind performance panel from the accumulated forward log.
        Shows which OMNIROUTE mechanics are actually winning and losing
        so the trader can verify the veto (v685) and promotion (v687)

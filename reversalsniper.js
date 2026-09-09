@@ -815,6 +815,41 @@ async function rsRunScan(opts){
         }
       } catch(eSol){}
     })();
+    /* v689: kill-list. If the SNIPER-BOUNCE kind has been measured
+       losing over 30+ samples with expR < -0.5R, ALL cards for this
+       tab get filtered out (rsniper only records one kind, so a
+       measured-losing kind means every card in the tab is a proven
+       loser). The tab renders an empty state via the existing
+       #rsEmpty path so the user sees zero cards, and the KILLED
+       note surfaces the reason.
+
+       Stash the count and kind so the tab's mount code can render
+       the note via hgSolidityKilledNoteHtml. Only fires when the
+       forward log has enough evidence — with < 30 samples or
+       expR >= -0.5R, the filter is a no-op. */
+    var killedResults = 0;
+    var killedKindsRs = {};
+    var kept = [];
+    for (var kli = 0; kli < results.length; kli++){
+      var kr = results[kli];
+      if (kr && kr.solidity && kr.solidity.killed === true){
+        killedResults++;
+        killedKindsRs['SNIPER-BOUNCE'] = (killedKindsRs['SNIPER-BOUNCE'] || 0) + 1;
+        continue;
+      }
+      kept.push(kr);
+    }
+    /* Stash on window for the mount code to read. */
+    try {
+      W.__hgSolKillLast = W.__hgSolKillLast || {};
+      W.__hgSolKillLast['REVERSALSNIPER'] = {
+        killedCount: killedResults,
+        killedKinds: killedKindsRs,
+        at: Date.now()
+      };
+    } catch(eStash){}
+    results = kept;
+
     var lead = null;
     /* Two-pass lead selection: first try to find a rsTradeable + lead-
        eligible (SOLID/GOOD) row; if none, fall back to the old
@@ -856,6 +891,7 @@ function mount(el){
     + '<span class="note" id="rsStat">idle — full Delta + CoinDCX universe · conviction ≥ ' + MIN_CONVICTION
     + ' · lev ≥ ' + MIN_LEV + '×</span></div>'
     + '<div class="prog" id="rsProg"><i></i></div>'
+    + '<div id="rsKilledNote"></div>'
     + '<div class="cards" id="rsCards"></div>'
     + '<div id="rsFwd"></div>'
     + '<div class="empty" id="rsEmpty" style="display:none">No sniper-grade long reversals right now — '
@@ -878,6 +914,17 @@ function mount(el){
       rsFwdEl.innerHTML = W.hgFwdPanelHTML('REVERSALSNIPER', { minRr: 2, title: 'FORWARD — has the sniper bounce paid?' });
     }
   } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("reversalsniper", eFwd); } catch (eW) {} }
+  /* v689: KILLED note refreshed after each scan. Renders BEFORE the
+     cards list so the user sees the filter action if any kinds got
+     removed. Feature-checked. */
+  function refreshKilledNote(){
+    try {
+      var noteEl = el.querySelector('#rsKilledNote');
+      if (!noteEl) return;
+      if (typeof W.hgSolidityLastKilled !== 'function' || typeof W.hgSolidityKilledNoteHtml !== 'function') return;
+      noteEl.innerHTML = W.hgSolidityKilledNoteHtml(W.hgSolidityLastKilled('REVERSALSNIPER'));
+    } catch(eK){}
+  }
   if (!btn || !statEl) return;
 
   function setStat(t, warn){ statEl.textContent = t; statEl.className = warn ? 'note warn' : 'note'; }
@@ -924,10 +971,15 @@ function mount(el){
         try {
           if (tradeableN && typeof W.hgMpPin === 'function') W.hgMpPin('reversalsniper', results, null, cardsEl);
         } catch (eMp) {}
+        /* v689: refresh KILLED note after each scan render */
+        try { refreshKilledNote(); } catch(eKr){}
       } else {
         emptyEl.style.display = 'block';
         emptyEl.textContent = 'No sniper-grade long reversals right now — need post-drop (≥2%) + sweep/mean-rev/RSI(2) confluence, stop tight enough for ≥'
           + MIN_LEV + '× leverage, conviction ≥ ' + MIN_CONVICTION + '. Quiet tape is normal; re-scan after a flush.';
+        /* v689: refresh KILLED note in the empty branch too so the user
+           sees WHY the tab is empty if kill-list filtering caused it. */
+        try { refreshKilledNote(); } catch(eKr){}
       }
       if (pack.status === 'failed: universe'){
         setStat(pack.note || 'Delta + CoinDCX universe unavailable — check xuniverse.js / network', true);
