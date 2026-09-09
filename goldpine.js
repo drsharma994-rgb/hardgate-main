@@ -215,6 +215,119 @@ function topProbSetups(list, limit){
   return sortSetups(list.slice()).slice(0, limit);
 }
 
+/* =======================================================================
+   v694: measured-edge wiring.
+
+   GOLD PINE used to rank setups purely on a heuristic probScore
+   (isNew/isRecent/tier/grade/rr/familyCount) with NO outcome evidence.
+   The rest of the desk (omnigold, omniroute, reversalsniper, newgold)
+   already runs the shared measured-edge loop: record fires into the
+   forward log, resolve them against later candles, then veto proven
+   losers (G6), auto-promote proven winners (G7), and kill the
+   destructive kinds (30+ samples, expR < -0.5R).
+
+   This section wires GOLD PINE into that SAME loop so its win rate is
+   self-correcting instead of faith-based:
+
+     * hgGpKind          — a stable (scanner, mechanic) key per setup
+     * hgGpStampSolidity — attaches W.hgSolidityGrade to every setup
+     * hgGpRecord        — writes each fire into the forward log
+     * hgGpReorder       — buckets by solidity so proven winners lead
+
+   Every call is feature-checked: if a helper is missing (test harness,
+   load failure) GOLD PINE degrades gracefully to its prior behavior.
+   ======================================================================= */
+
+/* Stable mechanic identity for forward-log lookups. The SAME string must
+   be used for recording (hgFwdRecordScan mechanic) and for the solidity
+   G6/G7 lookup (opts.kind) or the two cannot be compared. */
+function hgGpKind(s){
+  if (!s) return 'confluence';
+  if (s.layerLabel) return String(s.layerLabel);
+  if (s.nativeStrategy) return String(s.nativeStrategy);
+  return String(s.kind || 'confluence');
+}
+
+/* Attach a shared 7-gate solidity grade to every setup. Mirrors
+   omnigold's hgOgStampSolidity. G1 families reads familyCount (native
+   detectors report agree), else falls back to the factors ledger length.
+   G2 live-freshness is computed from s.price (the detector's mark) via
+   hgLivePriceGrade, so a setup whose price has already run past entry/T1
+   or through its stop is honestly demoted (the v679 sanity check). G4
+   R:R uses the house 2.0 floor + headroom. Tape (G3) is intentionally
+   left unset: GOLD PINE does not compute a tape direction, so the gate
+   reads 'unknown' (honest neutral) rather than a fabricated signal. */
+function hgGpStampSolidity(list, mode, ctx){
+  try {
+    var W2 = (typeof window !== 'undefined') ? window : ((typeof globalThis !== 'undefined') ? globalThis : null);
+    if (!W2 || typeof W2.hgSolidityGrade !== 'function' || !Array.isArray(list)) return;
+    var spotPx = (ctx && ctx.spot && fin(+ctx.spot)) ? +ctx.spot : null;
+    for (var i = 0; i < list.length; i++){
+      var s = list[i];
+      if (!s) continue;
+      try {
+        var famN = fin(+s.familyCount) ? +s.familyCount
+          : (Array.isArray(s.factors) ? s.factors.length : 0);
+        var planForSol = {
+          dir: s.dir,
+          entry: s.entry,
+          stop: s.stop,
+          t1: s.t1,
+          t2: s.t2,
+          rr1: fin(+s.rr) ? +s.rr : 0,
+          consensus: { nAgree: famN },
+          livePx: fin(+s.price) ? +s.price : spotPx
+        };
+        s.solidity = W2.hgSolidityGrade(planForSol, {
+          minRr: 2.0,
+          tab: 'GOLDPINE:' + mode,
+          kind: hgGpKind(s)
+        });
+      } catch(eStamp){}
+    }
+  } catch(eTop){}
+}
+
+/* Record every fire that carries a plan into the forward log. The
+   mechanic key must equal hgGpKind(s) so the solidity G6/G7 lookup and
+   this record resolve to the same (scanner, mechanic) cell. */
+function hgGpRecord(list, mode){
+  try {
+    var rec = gfn('hgFwdRecordScan');
+    if (!rec || !Array.isArray(list) || !list.length) return 0;
+    var tf = (mode === 'swing') ? '4h' : '15m';
+    var cands = [];
+    for (var i = 0; i < list.length; i++){
+      var s = list[i];
+      if (!s || !s.dir || !fin(+s.entry) || !fin(+s.stop)) continue;
+      cands.push({
+        mechanic: hgGpKind(s),
+        sym: 'XAUUSD',
+        dir: s.dir,
+        entry: +s.entry,
+        stop: +s.stop,
+        t1: +s.t1,
+        sol: (s.solidity && fin(+s.solidity.score)) ? +s.solidity.score : undefined,
+        solTier: (s.solidity && s.solidity.grade) ? s.solidity.grade : undefined
+      });
+    }
+    if (!cands.length) return 0;
+    return rec('GOLDPINE:' + mode, tf, cands, { horizonBars: (mode === 'swing') ? 6 : 12 });
+  } catch(e){ return 0; }
+}
+
+/* Bucket-sort by solidity so PRIME/SOLID/GOOD lead, MIXED follows, THIN/
+   WEAK and KILLED sink / drop. Preserves probScore order within a bucket
+   so the existing ranker still resolves ties. Returns the reordered array
+   with a non-enumerable .killedCount prop (from hgSolidityReorder). */
+function hgGpReorder(list){
+  try {
+    var W2 = (typeof window !== 'undefined') ? window : ((typeof globalThis !== 'undefined') ? globalThis : null);
+    if (!W2 || typeof W2.hgSolidityReorder !== 'function' || !Array.isArray(list)) return list;
+    return W2.hgSolidityReorder(list, { tab: 'GOLDPINE' });
+  } catch(e){ return list; }
+}
+
 function collectNativeScalp(bars, ctx, source){
   var out = [];
   var cached = null;
@@ -302,6 +415,17 @@ function runGoldPineScan(bars, ctx){
     return { swing: [], scalp: [], error: 'pinegoldmath' };
   }
 
+  /* v694: settle open forward records against fresh candles BEFORE
+     recording this scan's fires. Mirrors omnigold's resolve-at-scan-start
+     so the measured-edge stats reflect real outcomes, not stale opens. */
+  try {
+    var fwdResolve = gfn('hgFwdResolve');
+    if (fwdResolve){
+      if (bars.rows4h && bars.rows4h.length) fwdResolve('XAUUSD', '4h', bars.rows4h);
+      if (bars.rows15m && bars.rows15m.length) fwdResolve('XAUUSD', '15m', bars.rows15m);
+    }
+  } catch(eResolve){}
+
   var levels = lvFn ? lvFn(bars.rows1d, bars.rows15m) : {};
   var source = SRC_LABEL[bars.source] || bars.source || 'GOLD';
   var macro = ctx.macro || null;
@@ -331,7 +455,17 @@ function runGoldPineScan(bars, ctx){
   swing = sortSetups(dedupeSetups(swing.filter(Boolean)));
   scalp = sortSetups(dedupeSetups(scalp.filter(Boolean)));
 
-  return { swing: swing.filter(Boolean), scalp: scalp.filter(Boolean), levels: levels, source: source, at: Date.now() };
+  /* v694: stamp solidity, record fires, then reorder so proven-winning
+     kinds lead and proven-losing kinds are vetoed/killed. The reordered
+     arrays carry a non-enumerable .killedCount for the UI's killed note. */
+  hgGpStampSolidity(swing, 'swing', scanCtx);
+  hgGpStampSolidity(scalp, 'scalp', scanCtx);
+  hgGpRecord(swing, 'swing');
+  hgGpRecord(scalp, 'scalp');
+  swing = hgGpReorder(swing);
+  scalp = hgGpReorder(scalp);
+
+  return { swing: swing, scalp: scalp, levels: levels, source: source, at: Date.now() };
 }
 
 function factorsHTML(factors){
@@ -384,6 +518,9 @@ function cardHTML(s, rank){
     }catch(eGp){}
   }
   var gpStackHtml = (gpStack && typeof W.hgSetupStackMiniHtml === 'function') ? W.hgSetupStackMiniHtml(gpStack) : '';
+  /* v694: SOLIDITY chip with a per-gate tooltip (5-7 gate reasons). */
+  var solChip = (s.solidity && typeof W.hgSolidityChipHtml === 'function')
+    ? W.hgSolidityChipHtml(s.solidity) : '';
   return '<div class="panel ' + cls + ' tier-' + tier + '" style="margin-bottom:12px">'
     + '<h2>XAUUSD <span>' + esc(s.dir.toUpperCase()) + ' · ' + modeLabel + ' · Grade ' + esc(s.grade)
     + rankBadge + badge
@@ -396,6 +533,7 @@ function cardHTML(s, rank){
     + ' · families <b>' + (s.familyCount != null ? s.familyCount : '—') + '</b>'
     + ' · mark ' + pxF(s.price) + ' · ' + esc(s.source)
     + (fin(+s.rr) ? (' · R:R ' + fmtF(s.rr, 2)) : '')
+    + (solChip ? (' ' + solChip) : '')
     + '</div>'
     + '<div class="note" style="margin-top:6px;font-size:11px">' + factorsHTML(s.factors) + '</div>'
     + gpStackHtml
@@ -500,8 +638,11 @@ function mount(el){
       if (stat) stat.textContent = 'Scoring Pine + gold confluence…';
       var result = runGoldPineScan(bars, { macro: macro });
       setProg(0.9);
-      var swingTop = topProbSetups(result.swing, TOP_SETUPS);
-      var scalpTop = topProbSetups(result.scalp, TOP_SETUPS);
+      /* v694: the lists are already reordered by solidity in
+         runGoldPineScan, so slice directly instead of re-sorting via
+         topProbSetups (which would undo the measured-edge bucket order). */
+      var swingTop = result.swing.slice(0, TOP_SETUPS);
+      var scalpTop = result.scalp.slice(0, TOP_SETUPS);
       result.swingTop = swingTop;
       result.scalpTop = scalpTop;
       __goldPineSnap = result;
@@ -512,7 +653,12 @@ function mount(el){
           + '</b> · Asia <b>' + pxF(lv.asiaLo) + '–' + pxF(lv.asiaHi) + '</b> · feed <b>' + esc(result.source) + '</b></div>';
       }
 
-      var html = sectionHTML('GOLD PINE — SWING SETUPS (4H)', swingTop,
+      /* v694: killed note surfaces proven-losing kinds the reorder hid. */
+      var killedNote = (typeof W.hgSolidityKilledNoteHtml === 'function')
+        ? (W.hgSolidityKilledNoteHtml(result.swing) + W.hgSolidityKilledNoteHtml(result.scalp))
+        : '';
+      var html = killedNote
+        + sectionHTML('GOLD PINE — SWING SETUPS (4H)', swingTop,
           'No swing formations — check gold feed (4h bars). Layers need ~280×4h for full Pine stack.',
           { total: result.swing.length })
         + sectionHTML('GOLD PINE — SCALP SETUPS (15m)', scalpTop,
