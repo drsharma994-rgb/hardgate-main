@@ -8836,6 +8836,19 @@ terse status, and never launches a first-time scan on a global refresh.
     h += '</div>';
     h += hgOgMpHorizonHtml('SCALP', pickScalp, scalpT, watchScalp, held, engineScalp);
     h += hgOgMpHorizonHtml('SWING', pickSwing, swingT, watchSwing, held, engineSwing);
+    /* v688: kind performance panels per horizon from the accumulated forward
+       log. omnigold records with tab='OMNIGOLD:'+cfg.label so each horizon
+       gets its own panel keyed by 'OMNIGOLD:SCALP' / 'OMNIGOLD:SWING'. Shows
+       which mechanics are actually winning/losing so the trader can verify
+       the v685 veto and v687 PRIME promotion (including the v687 omnigold
+       tape-override) rest on real accumulated evidence. Feature-checked. */
+    try {
+      var Wp = (typeof window !== 'undefined') ? window : null;
+      if (Wp && typeof Wp.hgPerfPanelHtml === 'function'){
+        h += Wp.hgPerfPanelHtml('OMNIGOLD:SCALP', { title: 'KIND PERFORMANCE · OMNIGOLD SCALP' });
+        h += Wp.hgPerfPanelHtml('OMNIGOLD:SWING', { title: 'KIND PERFORMANCE · OMNIGOLD SWING' });
+      }
+    } catch(ePerf){}
     h += '</section>';
     return h;
   }

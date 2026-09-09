@@ -8653,6 +8653,17 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       h += '<div class="og-mp-hz"><div class="hg-mp-head">STAND ASIDE <span>no tape-aligned ticket</span></div>';
       h += '<div class="hg-mp-note">' + esc(hgOmniMpNoneWhy(tape, held)) + '</div></div>';
     }
+    /* v688: kind performance panel from the accumulated forward log.
+       Shows which OMNIROUTE mechanics are actually winning and losing
+       so the trader can verify the veto (v685) and promotion (v687)
+       decisions rest on real evidence. Feature-checked; helper missing
+       or empty pool = panel skipped. */
+    try {
+      var Wp = (typeof window !== 'undefined') ? window : null;
+      if (Wp && typeof Wp.hgPerfPanelHtml === 'function'){
+        h += Wp.hgPerfPanelHtml('OMNIROUTE', { title: 'KIND PERFORMANCE · OMNIROUTE' });
+      }
+    } catch(ePerf){}
     h += '</section>';
     return h;
   }
