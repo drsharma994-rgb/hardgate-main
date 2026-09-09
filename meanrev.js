@@ -70,6 +70,13 @@ var BB_LEN        = 20, BB_MULT = 2;
 var PB_LO         = 0.05, PB_HI = 0.95;
 var ATR_LEN       = 14, EXT_LEN = 5, STOP_ATR = 0.5;
 var MIN_RR        = 1.2;
+function mrDeskParam(key, fb){
+  var W = (typeof window !== 'undefined') ? window : globalThis;
+  if (typeof W.hgDeskParam === 'function') return W.hgDeskParam('meanrev', key, fb);
+  return fb;
+}
+function mrMinRr(){ return mrDeskParam('minRR', MIN_RR); }
+function mrMinTurnover(){ return mrDeskParam('minTurnoverUsd', MIN_TURNOVER); }
 var MAX_HOLD      = 10;      // backtest timeout, bars
 var MIN_RECORD    = 3;       // occurrences needed for a full SETUP RECORD
 var CHUNK         = 5, CHUNK_SLEEP_MS = 120;
@@ -173,7 +180,7 @@ function setupAt(A, i){
   if (!(risk > 0)) return null;
   var reward = (dir === 'long') ? (target - entry) : (entry - target);
   var rr = reward / risk;
-  if (!(isFinite(rr) && rr >= MIN_RR)) return null;
+  if (!(isFinite(rr) && rr >= mrMinRr())) return null;
   return { dir: dir, entry: entry, stop: stop, target: target, rr: rr };
 }
 

@@ -1,40 +1,295 @@
 {
   "version": 1,
   "minSample": 20,
-  "computedAt": null,
-  "note": "Populated from LOG + SCORECARD via hgSetupProfileRefresh() or scripts/compute-setup-profile.mjs",
+  "computedAt": 1788939149103,
+  "note": "Synthesized from backtest-omniroute-v531 byMechanic aggregates (offline replay, not live LOG)",
   "setups": {
     "swing": {
-      "risk-on": { "n": 0, "wins": 0, "losses": 0, "wr": null, "avgWinR": null, "avgLossR": null, "expectancy": null, "medianWinBars": null },
-      "risk-off": { "n": 0, "wins": 0, "losses": 0, "wr": null, "avgWinR": null, "avgLossR": null, "expectancy": null, "medianWinBars": null },
-      "chop": { "n": 0, "wins": 0, "losses": 0, "wr": null, "avgWinR": null, "avgLossR": null, "expectancy": null, "medianWinBars": null },
-      "trend": { "n": 0, "wins": 0, "losses": 0, "wr": null, "avgWinR": null, "avgLossR": null, "expectancy": null, "medianWinBars": null },
-      "all": { "n": 0, "wins": 0, "losses": 0, "wr": null, "avgWinR": null, "avgLossR": null, "expectancy": null, "medianWinBars": null }
+      "risk-on": {
+        "n": 0,
+        "wins": 0,
+        "losses": 0,
+        "wr": null,
+        "avgWinR": null,
+        "avgLossR": null,
+        "expectancy": null,
+        "medianWinBars": null
+      },
+      "risk-off": {
+        "n": 405,
+        "wins": 114,
+        "losses": 253,
+        "wr": 0.281,
+        "avgWinR": 1.5,
+        "avgLossR": 1,
+        "expectancy": -0.099,
+        "medianWinBars": null
+      },
+      "chop": {
+        "n": 405,
+        "wins": 114,
+        "losses": 253,
+        "wr": 0.281,
+        "avgWinR": 1.5,
+        "avgLossR": 1,
+        "expectancy": -0.099,
+        "medianWinBars": null
+      },
+      "trend": {
+        "n": 0,
+        "wins": 0,
+        "losses": 0,
+        "wr": null,
+        "avgWinR": null,
+        "avgLossR": null,
+        "expectancy": null,
+        "medianWinBars": null
+      },
+      "all": {
+        "n": 405,
+        "wins": 114,
+        "losses": 253,
+        "wr": 0.281,
+        "avgWinR": 1.5,
+        "avgLossR": 1,
+        "expectancy": -0.099,
+        "medianWinBars": null
+      }
     },
     "scalp": {
-      "risk-on": { "n": 0, "wins": 0, "losses": 0, "wr": null, "avgWinR": null, "avgLossR": null, "expectancy": null, "medianWinBars": 12 },
-      "risk-off": { "n": 0, "wins": 0, "losses": 0, "wr": null, "avgWinR": null, "avgLossR": null, "expectancy": null, "medianWinBars": 12 },
-      "chop": { "n": 0, "wins": 0, "losses": 0, "wr": null, "avgWinR": null, "avgLossR": null, "expectancy": null, "medianWinBars": 12 },
-      "all": { "n": 0, "wins": 0, "losses": 0, "wr": null, "avgWinR": null, "avgLossR": null, "expectancy": null, "medianWinBars": 12 }
-    },
-    "gold-swing": {
-      "risk-on": { "n": 0, "wins": 0, "losses": 0, "wr": null, "avgWinR": null, "avgLossR": null, "expectancy": null, "medianWinBars": 30 },
-      "all": { "n": 0, "wins": 0, "losses": 0, "wr": null, "avgWinR": null, "avgLossR": null, "expectancy": null, "medianWinBars": 30 }
-    },
-    "meanrev": {
-      "chop": { "n": 0, "wins": 0, "losses": 0, "wr": null, "avgWinR": null, "avgLossR": null, "expectancy": null, "medianWinBars": 20 },
-      "all": { "n": 0, "wins": 0, "losses": 0, "wr": null, "avgWinR": null, "avgLossR": null, "expectancy": null, "medianWinBars": 20 }
+      "risk-on": {
+        "n": 0,
+        "wins": 0,
+        "losses": 0,
+        "wr": null,
+        "avgWinR": null,
+        "avgLossR": null,
+        "expectancy": null,
+        "medianWinBars": null
+      },
+      "risk-off": {
+        "n": 0,
+        "wins": 0,
+        "losses": 0,
+        "wr": null,
+        "avgWinR": null,
+        "avgLossR": null,
+        "expectancy": null,
+        "medianWinBars": null
+      },
+      "chop": {
+        "n": 356,
+        "wins": 98,
+        "losses": 181,
+        "wr": 0.275,
+        "avgWinR": 1.5,
+        "avgLossR": 1,
+        "expectancy": 0.015,
+        "medianWinBars": null
+      },
+      "trend": {
+        "n": 0,
+        "wins": 0,
+        "losses": 0,
+        "wr": null,
+        "avgWinR": null,
+        "avgLossR": null,
+        "expectancy": null,
+        "medianWinBars": null
+      },
+      "all": {
+        "n": 356,
+        "wins": 98,
+        "losses": 181,
+        "wr": 0.275,
+        "avgWinR": 1.5,
+        "avgLossR": 1,
+        "expectancy": 0.015,
+        "medianWinBars": null
+      }
     },
     "smc-fvg": {
-      "all": { "n": 0, "wins": 0, "losses": 0, "wr": null, "avgWinR": null, "avgLossR": null, "expectancy": null, "medianWinBars": 5 }
+      "risk-on": {
+        "n": 0,
+        "wins": 0,
+        "losses": 0,
+        "wr": null,
+        "avgWinR": null,
+        "avgLossR": null,
+        "expectancy": null,
+        "medianWinBars": null
+      },
+      "risk-off": {
+        "n": 184,
+        "wins": 44,
+        "losses": 114,
+        "wr": 0.239,
+        "avgWinR": 1.5,
+        "avgLossR": 1,
+        "expectancy": -0.19,
+        "medianWinBars": null
+      },
+      "chop": {
+        "n": 184,
+        "wins": 44,
+        "losses": 114,
+        "wr": 0.239,
+        "avgWinR": 1.5,
+        "avgLossR": 1,
+        "expectancy": -0.19,
+        "medianWinBars": null
+      },
+      "trend": {
+        "n": 0,
+        "wins": 0,
+        "losses": 0,
+        "wr": null,
+        "avgWinR": null,
+        "avgLossR": null,
+        "expectancy": null,
+        "medianWinBars": null
+      },
+      "all": {
+        "n": 184,
+        "wins": 44,
+        "losses": 114,
+        "wr": 0.239,
+        "avgWinR": 1.5,
+        "avgLossR": 1,
+        "expectancy": -0.19,
+        "medianWinBars": null
+      }
+    },
+    "meanrev": {
+      "risk-on": {
+        "n": 0,
+        "wins": 0,
+        "losses": 0,
+        "wr": null,
+        "avgWinR": null,
+        "avgLossR": null,
+        "expectancy": null,
+        "medianWinBars": null
+      },
+      "risk-off": {
+        "n": 223,
+        "wins": 39,
+        "losses": 168,
+        "wr": 0.175,
+        "avgWinR": 1.5,
+        "avgLossR": 1,
+        "expectancy": -0.758,
+        "medianWinBars": null
+      },
+      "chop": {
+        "n": 223,
+        "wins": 39,
+        "losses": 168,
+        "wr": 0.175,
+        "avgWinR": 1.5,
+        "avgLossR": 1,
+        "expectancy": -0.758,
+        "medianWinBars": null
+      },
+      "trend": {
+        "n": 0,
+        "wins": 0,
+        "losses": 0,
+        "wr": null,
+        "avgWinR": null,
+        "avgLossR": null,
+        "expectancy": null,
+        "medianWinBars": null
+      },
+      "all": {
+        "n": 223,
+        "wins": 39,
+        "losses": 168,
+        "wr": 0.175,
+        "avgWinR": 1.5,
+        "avgLossR": 1,
+        "expectancy": -0.758,
+        "medianWinBars": null
+      }
+    },
+    "trap": {
+      "risk-on": {
+        "n": 0,
+        "wins": 0,
+        "losses": 0,
+        "wr": null,
+        "avgWinR": null,
+        "avgLossR": null,
+        "expectancy": null,
+        "medianWinBars": null
+      },
+      "risk-off": {
+        "n": 350,
+        "wins": 95,
+        "losses": 249,
+        "wr": 0.271,
+        "avgWinR": 1.5,
+        "avgLossR": 1,
+        "expectancy": -0.32,
+        "medianWinBars": null
+      },
+      "chop": {
+        "n": 350,
+        "wins": 95,
+        "losses": 249,
+        "wr": 0.271,
+        "avgWinR": 1.5,
+        "avgLossR": 1,
+        "expectancy": -0.32,
+        "medianWinBars": null
+      },
+      "trend": {
+        "n": 0,
+        "wins": 0,
+        "losses": 0,
+        "wr": null,
+        "avgWinR": null,
+        "avgLossR": null,
+        "expectancy": null,
+        "medianWinBars": null
+      },
+      "all": {
+        "n": 350,
+        "wins": 95,
+        "losses": 249,
+        "wr": 0.271,
+        "avgWinR": 1.5,
+        "avgLossR": 1,
+        "expectancy": -0.32,
+        "medianWinBars": null
+      }
     }
   },
   "timeStopDefaults": {
-    "scalp": { "bars": 12, "res": "15m" },
-    "swing": { "bars": 60, "res": "4h" },
-    "best": { "bars": 60, "res": "4h" },
-    "gold-swing": { "bars": 30, "res": "4h" },
-    "judas": { "bars": 8, "res": "1h", "nyClose": true },
-    "smc-fvg": { "bars": 5, "res": "4h" }
+    "scalp": {
+      "bars": 12,
+      "res": "15m"
+    },
+    "swing": {
+      "bars": 60,
+      "res": "4h"
+    },
+    "best": {
+      "bars": 60,
+      "res": "4h"
+    },
+    "gold-swing": {
+      "bars": 30,
+      "res": "4h"
+    },
+    "judas": {
+      "bars": 8,
+      "res": "1h",
+      "nyClose": true
+    },
+    "smc-fvg": {
+      "bars": 5,
+      "res": "4h"
+    }
   }
 }

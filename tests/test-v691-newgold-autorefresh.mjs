@@ -136,7 +136,7 @@ assert.ok(/try \{ runScan\(\); \} catch\(eTick\)\{\}/.test(src),
 
 /* --- version + cache-buster --- */
 assert.ok(/^hg-v(?:691|69[2-9]|[7-9]\d\d|\d{4,})$/.test(HG_VER) && HG_VER >= 'hg-v691',
-  'HG_VER must be >= hg-v691');
+  'HG_VER must be >= hg-v691 (merge with concurrent hg-v645 bumped to v692)');
 const sw = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
 assert.ok(new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'").test(sw));
 const idx = readFileSync(resolve(ROOT, 'index.html'), 'utf8');

@@ -40,6 +40,22 @@
      Applies ALWAYS — it used to be skipped once |funding| >= CG_FUND_HARD,
      which let a setup with every other gate down still emit a ticket. */
   var CG_FADE_MAX_OTHER_FAILS = 1;
+
+  /** Backtest + param-drift aware thresholds (lazy read at scan time). */
+  function cgDeskParam(tab, key, fb){
+    if (typeof G.hgDeskParam === 'function') return G.hgDeskParam(tab, key, fb);
+    if ((key === 'minRR' || key === 'rrMin') && typeof G.hgInc34Param === 'function'){
+      var g = G.hgInc34Param('rrMin', fb);
+      if (tab === 'scalp' && isFinite(g)) return Math.max(g + 0.25, fb);
+      return g;
+    }
+    return fb;
+  }
+  function cgSwingRrMin(){ return cgDeskParam('swing', 'minRR', CG_SWING_RR_MIN); }
+  function cgScalpRrMin(){ return cgDeskParam('scalp', 'minRR', CG_SCALP_RR_MIN); }
+  function cgSwingTimeStop(){ return cgDeskParam('swing', 'timeStopBars', 60); }
+  function cgScalpTimeStop(){ return cgDeskParam('scalp', 'timeStopBars', 12); }
+
   function cgEsc(s){ return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
   function cgPositioningCls(ticker){
@@ -309,13 +325,13 @@
         else if (drG6 && drG6.regime === 'volatile') expAtr = 4.0;
       }catch(e){}
     }
-    var rrMin = CG_SWING_RR_MIN;
+    var rrMin = cgSwingRrMin();
     if (fundMissing && ticker && (ticker.exchange === 'coindcx' || ticker.exchange === 'cdcx' || ticker.noFunding)){
       rrMin = Math.max(rrMin, 2.5);
     }
     if (typeof G.hgRegimeResolveState === 'function' && typeof G.hgRegimeAdjust === 'function'){
       try{
-        var rsAdj = G.hgRegimeAdjust({ minRR: CG_SWING_RR_MIN }, G.hgRegimeResolveState().score, 'crypto');
+        var rsAdj = G.hgRegimeAdjust({ minRR: cgSwingRrMin() }, G.hgRegimeResolveState().score, 'crypto');
         rrMin = rsAdj.thresholds.minRR;
       }catch(eR){}
     }
@@ -470,7 +486,7 @@
     var risk = Math.abs(entry - stop);
     var expectedMove = a * 2.5;
     var dynamicRR = risk > 0 ? expectedMove / risk : 0;
-    var g7 = dynamicRR >= CG_SCALP_RR_MIN;
+    var g7 = dynamicRR >= cgScalpRrMin();
 
     /* PACK 2 (Increment 1) — SCALP gate ledger mirrors SWING: parallel
        gateMeta[] via hgGateResult with per-gate degrade discipline. The
@@ -491,7 +507,7 @@
       ['G4 funding', g4],
       ['G5 settle>25m', g4b],
       ['G6 vol+wick commit', g6],
-      ['G7 ' + CG_SCALP_RR_MIN + 'R vol-capped', g7]
+      ['G7 ' + cgScalpRrMin() + 'R vol-capped', g7]
     ];
     /* SCALP-specific degrade modes:
        - G1 1H trend: pass by construction (dir=null returned early above)
@@ -521,8 +537,8 @@
     metaPush('G6', 'G6 vol+wick commit', g6,
       'vz ' + (isFinite(vz) ? vz.toFixed(2) : 'n/a') + ' · close@' + (closePos * 100).toFixed(0) + '%',
       { degradeMode: 'veto' });
-    metaPush('G7', 'G7 ' + CG_SCALP_RR_MIN + 'R vol-capped', g7,
-      'R:R ' + (isFinite(dynamicRR) ? dynamicRR.toFixed(2) : 'n/a') + ' (need ≥' + CG_SCALP_RR_MIN + ')',
+    metaPush('G7', 'G7 ' + cgScalpRrMin() + 'R vol-capped', g7,
+      'R:R ' + (isFinite(dynamicRR) ? dynamicRR.toFixed(2) : 'n/a') + ' (need ≥' + cgScalpRrMin() + ')',
       { degradeMode: 'veto' });
 
     var passed = gates.filter(function(g){ return g[1]; }).length;
@@ -565,7 +581,7 @@
     var t1 = dir === 'long' ? entry + expectedMove : entry - expectedMove;
     var t2 = dir === 'long' ? entry + maxExcursion : entry - maxExcursion;
     var dynamicRR = expectedMove / risk;
-    if (!(dynamicRR >= CG_SWING_RR_MIN)) return null;
+    if (!(dynamicRR >= cgSwingRrMin())) return null;
     if (typeof cascadeAge === 'function' && m.rows && m.rows.length){
       var cAge = cascadeAge(m.rows.map(function(r){ return r.c; }), dir);
       if (isFinite(cAge) && cAge < CG_SWING_CASCADE_MIN) return null;
@@ -590,7 +606,7 @@
       if (exact) out = exact;
     }
     if (typeof hgSwingPostEnrichValid === 'function'){
-      out = hgSwingPostEnrichValid(out, { rows: rows, a4: a4, minRr: CG_SWING_RR_MIN, expMult: CG_SWING_EXP_ATR });
+      out = hgSwingPostEnrichValid(out, { rows: rows, a4: a4, minRr: cgSwingRrMin(), expMult: CG_SWING_EXP_ATR });
       if (!out) return null;
     }
     if (typeof hgSetupStackAttach === 'function'){
@@ -626,7 +642,7 @@
       out = hgApplyExactEntry(Object.assign({ type: 'SCALP' }, out), m15, { style: 'scalp', m15: m15 }) || out;
     }
     if (typeof hgScalpPostEnrichValid === 'function'){
-      out = hgScalpPostEnrichValid(out, { rows: m15, a: m.a, minRr: CG_SCALP_RR_MIN });
+      out = hgScalpPostEnrichValid(out, { rows: m15, a: m.a, minRr: cgScalpRrMin() });
       if (!out) return null;
     }
     if (typeof hgSetupStackAttach === 'function'){

@@ -47,6 +47,14 @@ var OTE_MID       = 0.705;
 var MIN_IMPULSE_ATR = 1.5;
 var MIN_RR        = 2.0;
 var MIN_TALLY     = 6;
+function edgeDeskParam(key, fb){
+  if (typeof W.hgDeskParam === 'function') return W.hgDeskParam('edge', key, fb);
+  if (key === 'minRR' && typeof W.hgInc34Param === 'function') return W.hgInc34Param('rrMin', fb);
+  return fb;
+}
+function edgeMinRr(){ return edgeDeskParam('minRR', MIN_RR); }
+function edgeMinTally(){ return edgeDeskParam('minTally', MIN_TALLY); }
+function edgeMinTurnover(){ return edgeDeskParam('minTurnoverUsd', MIN_TURNOVER); }
 var SIGNAL_LOOKBACK = 4;
 var MAX_HOLD      = 12;
 var MIN_RECORD    = 3;
@@ -506,16 +514,17 @@ function planFromRisk(dir, entry, stop, t1Hint, t2Hint){
   if (!(risk > 0)) return null;
   var t1 = t1Hint;
   var rew1 = (dir === 'long') ? (t1 - entry) : (entry - t1);
-  if (!(rew1 > 0)) t1 = (dir === 'long') ? entry + MIN_RR * risk : entry - MIN_RR * risk;
+  var minRrEdge = edgeMinRr();
+  if (!(rew1 > 0)) t1 = (dir === 'long') ? entry + minRrEdge * risk : entry - minRrEdge * risk;
   rew1 = (dir === 'long') ? (t1 - entry) : (entry - t1);
   if (!(rew1 > 0)) return null;
   var rr = rew1 / risk;
   /* Post-cost R:R gate — fee/slip/funding drag must clear MIN_RR */
   if (typeof W.hgPostCostRr === 'function'){
     var pc = W.hgPostCostRr(entry, stop, t1, {});
-    if (pc && pc.rr < MIN_RR) return null;
+    if (pc && pc.rr < minRrEdge) return null;
     if (pc) rr = pc.rr;
-  } else if (rr < MIN_RR) return null;
+  } else if (rr < minRrEdge) return null;
   var t2 = t2Hint;
   if (!isFinite(t2) || (dir === 'long' ? t2 <= t1 : t2 >= t1)){
     t2 = (dir === 'long') ? entry + 3.5 * risk : entry - 3.5 * risk;
@@ -1349,7 +1358,7 @@ async function edgeScanList(list, fetchCandles, hooks){
   var setProg = hooks.setProg || function(){};
   var setStat = hooks.setStat || function(){};
   var maxN = (hooks.maxUniverse > 0) ? hooks.maxUniverse : MAX_UNIVERSE;
-  var minTurn = (hooks.minTurnover !== undefined) ? hooks.minTurnover : MIN_TURNOVER;
+  var minTurn = (hooks.minTurnover !== undefined) ? hooks.minTurnover : edgeMinTurnover();
   var skipped = 0, noBias = 0, noTrig = 0, tallyFail = 0, t0 = Date.now();
   var found = [], forming = [];
   list = (list || []).filter(function(it){
@@ -1474,7 +1483,7 @@ function mount(el){
     + ' Strategies: <b>LIMIT @ EMA21/EMA9/EMA50</b>, <b>sweep reclaim/fail</b>, <b>OTE 62–79%</b>.'
     + ' Confluence: structure BOS, vol regime, liquidity, TTM squeeze.'
     + ' <b>INSTITUTIONAL LAYER:</b> CVD/OBI vetoes when Binance flow legs load; SMT + yield traps always on. Cards show <b>FLOW OK / PARTIAL / N/A</b>.'
-    + ' Min R:R ' + MIN_RR + ' · tally ≥ ' + MIN_TALLY + ' · <b>USE Nx</b> = 50% max-safe.</p>'
+    + ' Min R:R ' + edgeMinRr() + ' · tally ≥ ' + edgeMinTally() + ' · <b>USE Nx</b> = 50% max-safe.</p>'
     + '<div class="row"><button class="btn" id="edgeRun">FIND EDGE SETUPS</button>'
     + '<span class="note" id="edgeStat">idle — SWING-aligned · full Delta + CoinDCX desk</span></div>'
     + '<div class="prog" id="edgeProg"><i></i></div>'

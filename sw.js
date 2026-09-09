@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v691';
+const HG_CACHE = 'hg-v692';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -30,7 +30,7 @@ const HG_SHELL = [
   './structure-core.js', './structure/pine-bridge.js', './structure/swings.js', './structure/fvg.js', './structure/order_blocks.js', './structure/divergence_regular.js',
   './primitives/cusum.js', './primitives/tsmom.js', './primitives/ema_cascade.js',
   './portfolio-allocation.js', './inc567-data-core.js', './inc567-config-loader.js', './inc567-regime-panels.js',
-  './inc34-data-core.js', './data/param-drift.json', './data/symbol-tier.json', './data/alert-precision.json',
+  './inc34-data-core.js', './backtest-tab-params.js', './data/param-drift.json', './data/desk-tab-params.json', './data/symbol-tier.json', './data/alert-precision.json',
   './recon-tab.js', './setup-activation.js', './rotation.js', './goldspot.js',
   './gold-session.js', './goldind.js', './gold-catalog.js', './gold-seven-step.js', './goldscalp.js', './goldswing.js', './pinegoldmath.js', './goldpine.js', './signallog.js',
   './data/setup-profile.json', './data/regime-profile.json',

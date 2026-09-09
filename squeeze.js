@@ -262,6 +262,7 @@ function validSetup(s){
 
 function sqMinRr(){
   try{
+    if (typeof W !== 'undefined' && typeof W.hgDeskParam === 'function') return W.hgDeskParam('squeeze', 'minRR', 2.0);
     if (typeof W !== 'undefined' && typeof W.CG_SWING_RR_MIN === 'number') return W.CG_SWING_RR_MIN;
   }catch(e){}
   return 2.0;
