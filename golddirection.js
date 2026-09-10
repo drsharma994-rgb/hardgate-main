@@ -74,6 +74,42 @@ desk + stratKey], {horizonBars:24}) — feature-checked — so this tab
 accumulates its own paid evidence. hgFwdResolve runs first on the bars just
 fetched so a setup can never be settled by the bar it was written on.
 
+PROVEN-ONLY CROWNING (hg-v702): the crowned pick must be lead-eligible AND
+measured-proven. The proven set is built AT RUNTIME from the live
+single-source surfaces — NEVER a hardcoded copy that goes stale (the
+fabricated-bos-row lesson):
+  (a) W.HG_GOLD_SETUP_EDGE.scalp/.swing rows with action === 'prefer'
+      (goldind.js) — their n/gross/net/why are the numbers printed;
+  (b) OMNIGOLD kinds where hgOgSwingPrefer(kind, horizon) answers truthy
+      (omnigold.js, feature-checked) — membership only; that desk exports
+      no per-kind figures, so NONE are printed for these;
+  (c) hgFwdPaidKinds (hg-forward.js, feature-checked) — mechanics whose
+      LIVE forward ledger reads 'has paid' at the family-wise bar, read
+      for GOLDDIRECTION + OMNIGOLD:SCALP + OMNIGOLD:SWING; these can
+      un-gate kinds beyond (a)/(b) and are tagged 'live-paid', with the
+      hgFwdPool stats printed when that surface answers.
+Lead-eligible-but-UNPROVEN candidates are never crowned — they render in a
+clearly-headed 'NOT MEASURED-PROVEN — paints, not crowned' list (full
+cards, no execution banner), so the board stays populated and honest. The
+crowned card carries a MEASURED RECORD line sourced from the SAME row that
+proved it; no number is ever printed that was not read from its source.
+No strategy measures 100% — the tab says so in a fixed header note and
+never claims certainty (the v536 label rule).
+
+DIRECTION CONFIRMATION (hg-v702): picking a side ARMS it ('Direction
+armed: LONG — press CONFIRM & SCAN'); the scan button is CONFIRM & SCAN
+and the user's click IS the confirmation — a side persisted from a
+previous session still requires a fresh confirm click this session before
+the first scan (warm-up refuses instead of confirming on the user's
+behalf). SWITCHING sides clears the rendered results AND the published
+snapshots — no stale other-side cards ever remain on screen — and
+requires confirm again. After a scan the board header states 'Direction
+confirmed: LONG — every setup below is LONG-only.' The side is still
+never inferred or flipped by the tab. A side switch WHILE a scan is in
+flight discards that scan whole (generation-guarded): its cards are never
+painted, its snapshots never published, its picks never recorded — the
+board a switch cleared can never be repainted by a stale async scan.
+
 Classic script, no build step, loads AFTER the engines it polls (all
 optional). Never throws at load, mount, scan or refresh: every external
 global is feature-checked (gfn), every network leg is async with its own
@@ -82,18 +118,27 @@ honest stat line / empty state.
 
 Registers window.HG_tabs.push({id:'golddirection', label:'GOLD DIRECTION',
 mount, refresh}) — refresh(): async, never throws, 'busy' | 'skipped: not
-run yet' | 'refreshed' | 'error: …', busy-guarded, never triggers a
-first-time scan on its own. Warm-up: window.HG_warmups.push — 'fresh' when
-a snapshot exists, 'unavailable: no direction selected …' when the user has
-not picked a side (the tab never picks one to warm itself), else a headless
-scan against inert stub elements -> 'warmed' | 'busy' | 'unavailable: …'.
+run yet' | 'skipped: direction not confirmed this session' | 'skipped:
+side switched mid-scan' | 'refreshed' | 'error: …', busy-guarded, never
+triggers a first-time scan on its own.
+Warm-up: window.HG_warmups.push — 'fresh' when a snapshot exists,
+'unavailable: no direction selected …' when the user has not picked a side
+(the tab never picks one to warm itself), 'unavailable: direction not
+confirmed this session …' when a persisted side lacks this session's
+CONFIRM & SCAN click (hg-v702 — warm-up never confirms for the user), else
+a headless scan against inert stub elements -> 'warmed' | 'busy' |
+'unavailable: …'.
 
 DIAGNOSTIC SURFACE — window.goldDirectionScan(): last successful scan,
-deep-frozen, null before the first:
-  { side, scalp: { pick, held: [{source,horizon,strategy,dir,reason}],
+deep-frozen, null before the first (and nulled on a side switch — no
+stale other-side picks survive):
+  { side, scalp: { pick, crownedProven,
+                   held: [{source,horizon,strategy,dir,reason}],
                    rejected: [{source,horizon,strategy,dir,reason}],
+                   unproven: [{source,horizon,strategy,stratKey,dir,reason}],
                    otherSide },
-    swing: { … same shape … }, tape, enginesDark: [names…], at }
+    swing: { … same shape … }, tape, enginesDark: [names…],
+    provenSet: [{key,horizon,source,n?,gross?,net?,why?,tab?,stats?}], at }
 BRAIN STATE — window.goldDirectionState():
   { results: [{ dir, horizon, grade, source }], at } | null — one row per
   crowned pick, deep-frozen, failed re-runs keep the previous good snapshot.
@@ -225,7 +270,13 @@ var GD_CSS = ''
 + '.gdx-silent b{letter-spacing:.12em;font-weight:800}'
 + '.gdx-dark{font-size:10px;color:#64748B;margin:6px 0;line-height:1.55}'
 + '.gdx-tape{font-size:10px;color:#0F172A;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;'
-+ 'padding:6px 10px;margin:8px 0;line-height:1.5;font-weight:500}';
++ 'padding:6px 10px;margin:8px 0;line-height:1.5;font-weight:500}'
++ '.gdx-confirm{font-size:11px;letter-spacing:.08em;font-weight:800;color:#065F46;background:#ECFDF5;'
++ 'border:1px solid rgba(5,150,105,.4);border-radius:6px;padding:7px 10px;margin:8px 0;line-height:1.5}'
++ '.gdx-confirm.short{color:#991B1B;background:#FEF2F2;border-color:rgba(220,38,38,.4)}'
++ '.gdx-measured{font-size:10px;margin-top:6px;padding:6px 9px;border-radius:6px;line-height:1.55;'
++ 'color:#065F46;border:1px solid rgba(5,150,105,.35);background:rgba(5,150,105,.06);font-weight:500}'
++ '.gdx-measured b{color:#047857;letter-spacing:.12em;font-size:9px;font-weight:800}';
 
 (function hgInjectGdCss(){
   try{
@@ -355,7 +406,15 @@ function normCand(src, horizon, c, over){
     vetoed: !!c.vetoed,
     dropped: !!c.dropped,
     why: c.why || over.why || null,
-    invalidates: c.invalidates || null
+    invalidates: c.invalidates || null,
+    /* hg-v702: the edge row the candidate's OWN desk stamped onto it
+       (hgGoldSetupEdgeApply) rides through — a 'prefer' row here IS the
+       measured proof, carried with its own n/gross/net/why. Copied, never
+       invented: absent stays null. */
+    edge: (c.edge && typeof c.edge === 'object') ? {
+      action: c.edge.action || null, n: fin(c.edge.n), gross: fin(c.edge.gross),
+      net: fin(c.edge.net), why: c.edge.why ? String(c.edge.why) : ''
+    } : null
   };
   if (!out.demoteReasons.length){
     if (c.demoteWhy) out.demoteReasons.push(String(c.demoteWhy));
@@ -670,6 +729,149 @@ function laneNewGold(gold, now){
   return out;
 }
 
+/* ---------------- proven set (hg-v702, resolved at scan time) ----------------
+   The whitelist of strategies that MEASURABLY PAID, rebuilt on every scan
+   from the live single-source surfaces — never a hardcoded copy that can go
+   stale (the fabricated-bos-row lesson). Every entry carries its source and
+   only numbers actually read from that source. Fail closed: an absent
+   surface contributes nothing, and an empty set crowns nothing. */
+var FWD_PAID_TABS = ['GOLDDIRECTION', 'OMNIGOLD:SCALP', 'OMNIGOLD:SWING'];
+
+/* the forward ledger's mechanic name for a candidate — the SAME normalization
+   recordForward writes with, so the ledger's paid list can be matched back */
+function fwdMechName(c){
+  return String((c.source || '') + ' ' + (c.stratKey || c.strategy || 'UNKNOWN'))
+    .toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 28);
+}
+
+function buildProvenSet(allCands){
+  var entries = [];
+  function add(e){
+    for (var di = 0; di < entries.length; di++){
+      if (entries[di].key === e.key && entries[di].source === e.source
+          && String(entries[di].horizon || '') === String(e.horizon || '')
+          && String(entries[di].tab || '') === String(e.tab || '')) return;
+    }
+    entries.push(e);
+  }
+  /* (a) the live baked edge table — prefer rows only, numbers read here */
+  try{
+    var tbl = W.HG_GOLD_SETUP_EDGE;
+    if (tbl && typeof tbl === 'object'){
+      var parts = [ { t: tbl.scalp, hz: 'SCALP' }, { t: tbl.swing, hz: 'SWING' } ];
+      for (var pi = 0; pi < parts.length; pi++){
+        var t = parts[pi].t;
+        if (!t || typeof t !== 'object') continue;
+        for (var k in t){
+          if (!Object.prototype.hasOwnProperty.call(t, k)) continue;
+          var row = t[k];
+          if (!row || row.action !== 'prefer') continue;
+          add({ key: k, horizon: parts[pi].hz, source: 'replay-prefer',
+                n: fin(row.n), gross: fin(row.gross), net: fin(row.net),
+                why: row.why ? String(row.why) : '' });
+        }
+      }
+    }
+  }catch(eA){}
+  /* (b) OMNIGOLD swing-prefer — probed per scanned OMNIGOLD kind; the desk
+     exports the predicate, not per-kind figures, so no numbers ride here */
+  try{
+    var sp = gfn('hgOgSwingPrefer');
+    if (sp && Array.isArray(allCands)){
+      for (var ci = 0; ci < allCands.length; ci++){
+        var c = allCands[ci];
+        if (!c || c.source !== 'OMNIGOLD') continue;
+        var kind = c.stratKey || c.strategy;
+        if (!kind) continue;
+        var hit = false;
+        try{ hit = !!sp(kind, c.horizon); }catch(eS){ hit = false; }
+        if (hit) add({ key: String(kind), horizon: c.horizon, source: 'omnigold-prefer',
+          why: 'on OMNIGOLD’s swing-replay prefer list (hgOgSwingPrefer) — per-kind figures are not exported, so none are printed' });
+      }
+    }
+  }catch(eB){}
+  /* (c) the LIVE forward ledger — mechanics reading 'has paid' at the
+     family-wise bar; stats read from hgFwdPool when that surface answers */
+  try{
+    var pk = gfn('hgFwdPaidKinds');
+    if (pk){
+      var poolFn = gfn('hgFwdPool');
+      for (var ti = 0; ti < FWD_PAID_TABS.length; ti++){
+        var list = null;
+        try{ list = pk(FWD_PAID_TABS[ti]); }catch(eK){ list = null; }
+        if (!Array.isArray(list)) continue;
+        for (var li = 0; li < list.length; li++){
+          if (!list[li]) continue;
+          var e = { key: String(list[li]), horizon: null, source: 'live-paid', tab: FWD_PAID_TABS[ti] };
+          if (poolFn){
+            try{
+              var pool = poolFn(FWD_PAID_TABS[ti]);
+              var p = pool && pool[e.key];
+              if (p && fin(p.samples) > 0){
+                e.stats = { samples: fin(p.samples), wins: fin(p.wins), expR: fin(p.expR) };
+              }
+            }catch(eP){}
+          }
+          add(e);
+        }
+      }
+    }
+  }catch(eC){}
+  return entries;
+}
+
+/* Is this candidate measured-proven? Returns the proving entry (source +
+   the numbers read from it) or null. Never throws, never invents. */
+function provenOf(c, entries){
+  try{
+    /* the prefer row the candidate's own desk stamped onto it — the SAME
+       row, carried with its own numbers */
+    if (c.edge && c.edge.action === 'prefer'){
+      return { source: 'replay-prefer', key: String(c.stratKey || c.strategy || ''),
+               n: fin(c.edge.n), gross: fin(c.edge.gross), net: fin(c.edge.net),
+               why: c.edge.why ? String(c.edge.why) : '' };
+    }
+    var list = entries || [];
+    var key = String(c.stratKey || '').toLowerCase();
+    /* the edge-apply fn's own swing alias — table keys are evidence labels */
+    if (c.horizon === 'SWING' && key === 'wkbreak') key = 'weekly';
+    var i, e;
+    if (key){
+      for (i = 0; i < list.length; i++){
+        e = list[i];
+        if (e.source === 'replay-prefer' && e.horizon === c.horizon
+            && String(e.key).toLowerCase() === key) return e;
+      }
+    }
+    if (c.source === 'OMNIGOLD'){
+      var kUp = String(c.stratKey || c.strategy || '').toUpperCase();
+      for (i = 0; i < list.length; i++){
+        e = list[i];
+        if (e.source === 'omnigold-prefer' && e.horizon === c.horizon
+            && String(e.key).toUpperCase() === kUp && kUp) return e;
+      }
+    }
+    var mech = fwdMechName(c);
+    var rawUp = String(c.stratKey || c.strategy || '').toUpperCase();
+    for (i = 0; i < list.length; i++){
+      e = list[i];
+      if (e.source !== 'live-paid') continue;
+      /* hg-v702 audit closeout: live-paid proof is CADENCE-SCOPED. A kind
+         that has paid only on the OMNIGOLD:SCALP (1h) ledger must not crown
+         a 4h SWING candidate — omnigold.js's own HG_OG_SWING_PREFER comment
+         warns the same names lose across cadence in the reverse direction.
+         An OMNIGOLD:SCALP entry proves SCALP candidates only, :SWING proves
+         SWING only; GOLDDIRECTION's own ledger records this tab's crowned
+         picks per horizon-tagged mechanic and matches by that exact name. */
+      if (e.tab === 'OMNIGOLD:SCALP' && c.horizon !== 'SCALP') continue;
+      if (e.tab === 'OMNIGOLD:SWING' && c.horizon !== 'SWING') continue;
+      var ek = String(e.key).toUpperCase();
+      if (ek === mech || (rawUp && ek === rawUp)) return e;
+    }
+  }catch(ePr){}
+  return null;
+}
+
 /* ---------------- selection (per horizon, fail closed) ---------------- */
 function rankKey(c){
   return {
@@ -688,7 +890,7 @@ function cmpCands(a, b){
   if (ka.tally !== kb.tally) return kb.tally - ka.tally;
   return kb.rr - ka.rr;
 }
-function selectHorizon(all, side, horizon){
+function selectHorizon(all, side, horizon, provenEntries){
   var matched = [], rejected = [], otherSide = 0, i;
   for (i = 0; i < all.length; i++){
     var c = all[i];
@@ -713,20 +915,32 @@ function selectHorizon(all, side, horizon){
     matched.push(c);
   }
   matched.sort(cmpCands);
-  /* LEAD INVARIANT (v699/v700): the crowned pick is the FIRST lead-eligible
-     (non-demoted, non-vetoed) card. An all-demoted side gets NO pick and NO
-     execution banner — the closest demoted candidates render honestly. */
-  var pick = null;
+  /* LEAD INVARIANT (v699/v700) + PROVEN-ONLY CROWNING (hg-v702): the crowned
+     pick is the FIRST lead-eligible (non-demoted, non-vetoed) card that is
+     ALSO measured-proven (provenOf against the runtime-resolved set).
+     Lead-eligible-but-unproven cards are NEVER crowned — they collect in
+     unproven[] and render under an honest 'NOT MEASURED-PROVEN' header.
+     An all-demoted side still gets NO pick and NO execution banner. */
+  var pick = null, unproven = [];
   for (i = 0; i < matched.length; i++){
-    if (!matched[i].demoted && !matched[i].vetoed){ pick = matched[i]; break; }
+    var m = matched[i];
+    if (m.demoted || m.vetoed) continue;
+    var pv = provenOf(m, provenEntries);
+    if (pv){
+      m.provenBy = pv;
+      if (!pick) pick = m;
+    } else {
+      unproven.push(m);
+    }
   }
   var demotedTop = [];
-  if (!pick){
+  if (!pick && !unproven.length){
     for (i = 0; i < matched.length && demotedTop.length < 3; i++){
       if (matched[i].demoted) demotedTop.push(matched[i]);
     }
   }
-  return { pick: pick, matched: matched, demotedTop: demotedTop, rejected: rejected, otherSide: otherSide };
+  return { pick: pick, matched: matched, demotedTop: demotedTop, unproven: unproven,
+           rejected: rejected, otherSide: otherSide };
 }
 
 /* ---------------- renderers ---------------- */
@@ -759,6 +973,38 @@ function guideHtml(c, pxNow){
               : 'price outside zone — limit order at zone edge $' + pxF(pxNow > c.zone.hi ? c.zone.hi : c.zone.lo))
     + '</div>';
 }
+/* MEASURED RECORD line (hg-v702) — rendered on the crowned card ONLY, from
+   the SAME entry that proved it. Every number printed was read from its
+   source at render time; a source with no exported figures prints none. */
+function measuredHtml(c){
+  var pv = c.provenBy;
+  if (!pv) return '';
+  var txt;
+  if (pv.source === 'replay-prefer'){
+    var bits = [];
+    if (isFinite(pv.net)) bits.push('net ' + (pv.net >= 0 ? '+' : '') + fmtF(pv.net, 2) + 'R/trade after costs');
+    if (isFinite(pv.n)) bits.push('n=' + fmtF(pv.n, 0));
+    if (isFinite(pv.gross)) bits.push('gross ' + (pv.gross >= 0 ? '+' : '') + fmtF(pv.gross, 2) + 'R');
+    txt = esc(c.strategy) + ' — measured ' + (bits.length ? esc(bits.join(', ')) : 'in the replay bake')
+        + (pv.why ? ' — ' + esc(pv.why) : '')
+        + ' <i>(HG_GOLD_SETUP_EDGE prefer row, read at render)</i>';
+  } else if (pv.source === 'omnigold-prefer'){
+    txt = esc(c.strategy) + ' — on OMNIGOLD’s swing-replay prefer list (hgOgSwingPrefer): paid net-positive'
+        + ' in that desk’s replay; per-kind figures are not exported here, so none are printed.';
+  } else {
+    txt = esc(c.strategy) + ' — LIVE LEDGER' + (pv.tab ? ' (' + esc(pv.tab) + ')' : '')
+        + ': reads HAS PAID at the family-wise bar (hgFwdPaidKinds)';
+    if (pv.stats && isFinite(pv.stats.samples)){
+      txt += ' — ' + fmtF(pv.stats.samples, 0) + ' settled'
+          + (isFinite(pv.stats.wins) ? ', ' + fmtF(pv.stats.wins, 0) + ' paid' : '')
+          + (isFinite(pv.stats.expR) ? ', exp ' + (pv.stats.expR >= 0 ? '+' : '') + fmtF(pv.stats.expR, 2) + 'R/trade' : '')
+          + ' <i>(hgFwdPool read at render)</i>';
+    } else {
+      txt += ' — the ledger stat surface (hgFwdPool) did not answer; no numbers printed.';
+    }
+  }
+  return '<div class="gdx-measured"><b>MEASURED RECORD</b> · ' + txt + '</div>';
+}
 function cardHTML(c, tape, pxNow, crowned){
   var chips = '';
   chips += '<span class="gdx-chip">' + esc(c.horizon) + '</span>';
@@ -773,6 +1019,12 @@ function cardHTML(c, tape, pxNow, crowned){
   var si;
   for (si = 0; si < c.stamps.length; si++) chips += '<span class="gdx-chip warn">' + esc(c.stamps[si]) + '</span>';
   if (c.demoted) chips += '<span class="gdx-chip warn">DEMOTED — paints, never leads</span>';
+  /* hg-v702 proven chips: lead-eligible cards say plainly whether a measured
+     record backs them; demoted/vetoed cards already carry their own stamps */
+  if (!c.demoted && !c.vetoed){
+    if (c.provenBy) chips += '<span class="gdx-chip ok">MEASURED-PROVEN · ' + esc(c.provenBy.source) + '</span>';
+    else chips += '<span class="gdx-chip warn">NOT MEASURED-PROVEN — paints, not crowned</span>';
+  }
   var gates = '';
   if (c.gateNotes.length) gates += '<div class="gdx-gate"><b>GATE NOTES</b> — ' + esc(c.gateNotes.join(' · ')) + '</div>';
   if (c.demoted && c.demoteReasons.length) gates += '<div class="gdx-gate"><b>DEMOTED</b> — ' + esc(c.demoteReasons.join(' · ')) + '</div>';
@@ -787,6 +1039,7 @@ function cardHTML(c, tape, pxNow, crowned){
     + ' · TP1 <b>$' + pxF(c.t1) + '</b>' + (isFinite(c.rr) ? ' (' + fmtF(c.rr, 1) + 'R)' : '')
     + ' · TP2 <b>$' + pxF(c.t2) + '</b>' + (isFinite(c.rr2) ? ' (' + fmtF(c.rr2, 1) + 'R)' : '')
     + '</div>'
+    + (crowned ? measuredHtml(c) : '')
     + mgmtHtml(c) + guideHtml(c, pxNow)
     + (c.why ? '<div class="gdx-why">' + esc(c.why) + '</div>' : '')
     + (c.invalidates ? '<div class="gdx-why"><b>INVALIDATES:</b> ' + esc(c.invalidates) + '</div>' : '')
@@ -827,9 +1080,18 @@ function heldListHTML(lines, title){
 }
 function horizonHTML(sel, side, horizon, tape, pxNow, enginesDark){
   var h = '<div class="gdx-hzhead">BEST ' + esc(horizon) + ' — ' + esc(side.toUpperCase()) + '</div>';
+  var unpr = sel.unproven || [];
   if (sel.pick){
     h += bannerHTML(sel.pick, horizon, tape);
-    h += sel.matched.map(function(c){ return cardHTML(c, tape, pxNow, c === sel.pick); }).join('');
+    /* main list = matched minus the unproven cards, which render below under
+       their own honest header — never mixed in as if crownable */
+    h += sel.matched.filter(function(c){ return unpr.indexOf(c) < 0; })
+      .map(function(c){ return cardHTML(c, tape, pxNow, c === sel.pick); }).join('');
+  } else if (unpr.length){
+    /* hg-v702: lead-eligible candidates exist but NONE measurably paid — NO
+       execution banner; the honest unproven list below is the whole board */
+    h += '<div class="gdx-demhead">no crowned ' + esc(horizon) + ' setup on the ' + esc(side.toUpperCase())
+      + ' side — lead-eligible candidates exist, but none has a measured paid record (proven-only crowning):</div>';
   } else if (sel.demotedTop.length){
     /* all-demoted side: NO execution banner — honest header + demoted cards */
     h += '<div class="gdx-demhead">no lead-eligible ' + esc(horizon) + ' setup on the ' + esc(side.toUpperCase())
@@ -841,6 +1103,15 @@ function horizonHTML(sel, side, horizon, tape, pxNow, enginesDark){
     if (sel.rejected.length) whyBits.push(sel.rejected.length + ' rejected (reasons listed below)');
     if (enginesDark.length) whyBits.push(enginesDark.length + ' engine' + (enginesDark.length === 1 ? '' : 's') + ' dark');
     h += '<div class="gdx-silent"><b>WHY SILENT</b> — ' + esc(whyBits.join(' · ')) + '</div>';
+  }
+  if (unpr.length){
+    /* hg-v702: the clearly-headed unproven list — full cards, no execution
+       banner treatment, never crowned, never recorded to the ledger */
+    h += '<div class="gdx-demhead">NOT MEASURED-PROVEN — paints, not crowned: ' + unpr.length
+      + ' lead-eligible ' + esc(horizon) + ' candidate' + (unpr.length === 1 ? '' : 's')
+      + ' with no measured paid record (edge-table prefer / OMNIGOLD swing-prefer / live ledger all silent on '
+      + (unpr.length === 1 ? 'it' : 'them') + '). Informational only.</div>';
+    h += unpr.map(function(c){ return cardHTML(c, tape, pxNow, false); }).join('');
   }
   if (sel.otherSide > 0 && (sel.pick || sel.demotedTop.length)){
     h += '<div class="gdx-dark">' + sel.otherSide + ' candidate' + (sel.otherSide === 1 ? '' : 's')
@@ -863,11 +1134,20 @@ function publishState(scalpSel, swingSel){
     __snap = { results: rows, at: Date.now() };
   }catch(e){ /* snapshotting must never break the scan */ }
 }
-function publishScan(side, scalpSel, swingSel, tape, enginesDark, heldAll, at){
+function publishScan(side, scalpSel, swingSel, tape, enginesDark, heldAll, at, provenSet){
   try{
     function hz(sel){
       return {
         pick: sel.pick ? JSON.parse(JSON.stringify(sel.pick)) : null,
+        /* hg-v702 additive: crowned pick is proven by construction; the
+           lead-eligible-but-unproven list is published so the refusal to
+           crown is itself auditable */
+        crownedProven: !!(sel.pick && sel.pick.provenBy),
+        unproven: (sel.unproven || []).map(function(c){
+          return { source: c.source, horizon: c.horizon, strategy: c.strategy,
+                   stratKey: c.stratKey, dir: c.dir,
+                   reason: 'lead-eligible but not measured-proven — paints, not crowned' };
+        }),
         held: heldAll.filter(function(r){ return r && r.horizon === sel.horizonName; })
           .map(function(r){ return { source: r.source, horizon: r.horizon, strategy: r.strategy, dir: r.dir, reason: r.reason }; }),
         rejected: sel.rejected.map(function(r){ return { source: r.source, horizon: r.horizon, strategy: r.strategy, dir: r.dir, reason: r.reason }; }),
@@ -877,7 +1157,9 @@ function publishScan(side, scalpSel, swingSel, tape, enginesDark, heldAll, at){
     scalpSel.horizonName = 'SCALP';
     swingSel.horizonName = 'SWING';
     __scanSnap = { side: side, scalp: hz(scalpSel), swing: hz(swingSel),
-                   tape: tape || '', enginesDark: enginesDark.slice(), at: at };
+                   tape: tape || '', enginesDark: enginesDark.slice(),
+                   provenSet: JSON.parse(JSON.stringify(provenSet || [])),
+                   at: at };
   }catch(e){ /* snapshotting must never break the scan */ }
 }
 function recordForward(scalpSel, swingSel, gold){
@@ -899,17 +1181,23 @@ function recordForward(scalpSel, swingSel, gold){
     if (!picks.length) return;
     W.hgFwdRecordScan('GOLDDIRECTION', '1h', picks.map(function(c){
       /* mechanic = source desk + stratKey, so the ledger judges each desk's
-         crowned exports separately */
-      var mech = String(c.source + ' ' + (c.stratKey || c.strategy || 'UNKNOWN'))
-        .toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 28);
+         crowned exports separately — fwdMechName is the ONE normalization,
+         shared with the proven-set live-paid match (hg-v702) */
       return { sym: 'XAUUSD', dir: c.dir, entry: +c.entry, stop: +c.stop, t1: +c.t1,
-               mechanic: mech, ticket: true };
+               mechanic: fwdMechName(c), ticket: true };
     }), { horizonBars: 24 });
   }catch(eF){ try{ if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('golddirection', eF); }catch(eW2){} }
 }
 
 /* ---------------- scan ---------------- */
-var __scan = { busy: false, hasRun: false, ui: null, side: null };
+/* confirmed (hg-v702): true only after the USER's own CONFIRM & SCAN click
+   this session for the currently-armed side; cleared on a side switch and
+   never set by warm-up, refresh, or a persisted side from a past session.
+   gen (hg-v702 audit fatal closed): a generation counter bumped on EVERY
+   side pick — an in-flight scan captures it at start and discards itself
+   (no render, no snapshot, no ledger record) when a pick moved it, so a
+   mid-flight switch can never be repainted over by the stale scan. */
+var __scan = { busy: false, hasRun: false, ui: null, side: null, confirmed: false, gen: 0 };
 
 function setStat(ui, t, warn){
   if (!ui || !ui.stat) return;
@@ -931,8 +1219,24 @@ async function runScan(ui, scanSt){
     setStat(ui, NO_SIDE_HINT, true);
     return 'skipped: no direction selected';
   }
+  /* hg-v702: an armed side is not a confirmed side. The user's own
+     CONFIRM & SCAN click this session is the only confirmation — a side
+     persisted from a previous session never scans by itself. */
+  if (!scanSt.confirmed){
+    setStat(ui, 'direction ' + side.toUpperCase() + ' armed but NOT confirmed this session — press CONFIRM & SCAN (a saved side never scans by itself).', true);
+    return 'skipped: direction not confirmed this session';
+  }
   scanSt.busy = true;
   var t0 = Date.now();
+  /* hg-v702 audit fatal closed: capture the side-pick generation at start;
+     any pick while this scan is airborne moves it, and the scan then
+     discards itself before touching the DOM, the snapshots or the ledger. */
+  var genAtStart = (scanSt.gen | 0);
+  function sideSwitchedMidScan(){ return (scanSt.gen | 0) !== genAtStart; }
+  function discardStat(){
+    setStat(ui, 'side switched mid-scan — the ' + side.toUpperCase() + ' scan was discarded unseen; direction '
+      + String(scanSt.side || '').toUpperCase() + ' is armed — press CONFIRM & SCAN.', true);
+  }
   try{
     if (ui && ui.btn) ui.btn.disabled = true;
     if (ui && ui.empty) ui.empty.style.display = 'none';
@@ -940,6 +1244,7 @@ async function runScan(ui, scanSt){
     setStat(ui, 'pulling gold klines 15m/1h/4h/1d…');
     var now = Date.now();
     var gold = await fetchGoldKlines();
+    if (sideSwitchedMidScan()){ discardStat(); return 'skipped: side switched mid-scan'; }
     setProg(ui, 0.4);
     if (!gold.rows15m.length && !gold.rows1h.length && !gold.rows4h.length){
       /* feeds failed: nothing fabricated, previous snapshot kept */
@@ -958,6 +1263,9 @@ async function runScan(ui, scanSt){
     try{ lanes.push(laneOmnigold(gold, now)); }catch(e3){ lanes.push({ cands: [], held: [], dark: 'OMNIGOLD lane threw: ' + ((e3 && e3.message) || e3) }); }
     try{ lanes.push(laneOmnigold1(gold, now)); }catch(e4){ lanes.push({ cands: [], held: [], dark: 'OMNIGOLD 1 lane threw: ' + ((e4 && e4.message) || e4) }); }
     try{ lanes.push(laneNewGold(gold, now)); }catch(e5){ lanes.push({ cands: [], held: [], dark: 'NEW GOLD lane threw: ' + ((e5 && e5.message) || e5) }); }
+    /* the scalp lane awaited (post-gate) — re-check the pick generation
+       before ANYTHING is rendered, recorded or published */
+    if (sideSwitchedMidScan()){ discardStat(); return 'skipped: side switched mid-scan'; }
     setProg(ui, 0.75);
     var all = [], heldAll = [], enginesDark = [], i, j;
     for (i = 0; i < lanes.length; i++){
@@ -969,14 +1277,20 @@ async function runScan(ui, scanSt){
     }
     var tape = '';
     try{ tape = deskTapeOf(gold) || ''; }catch(eTp){ tape = ''; }
+    /* hg-v702: resolve the proven whitelist from the live sources NOW, so
+       the crown site and the snapshot share one resolution per scan */
+    var provenSet = [];
+    try{ provenSet = buildProvenSet(all); }catch(ePv){ provenSet = []; }
     /* SELECTION — per horizon, fail closed. The chosen side is the user's;
        it is NEVER flipped here, tape agreement or not. */
-    var scalpSel = selectHorizon(all, side, 'SCALP');
-    var swingSel = selectHorizon(all, side, 'SWING');
+    var scalpSel = selectHorizon(all, side, 'SCALP', provenSet);
+    var swingSel = selectHorizon(all, side, 'SWING', provenSet);
 
     /* render */
     if (ui && ui.cards){
       var html = '';
+      html += '<div class="gdx-confirm' + (side === 'short' ? ' short' : '') + '">Direction confirmed: '
+        + esc(side.toUpperCase()) + ' — every setup below is ' + esc(side.toUpperCase()) + '-only.</div>';
       if (tape === 'long' || tape === 'short'){
         html += '<div class="gdx-tape"><b>DESK TAPE</b> — gold\'s own bars read ' + esc(tape.toUpperCase())
           + (tape === side ? ' · with your call' : ' · AGAINST your ' + esc(side.toUpperCase()) + ' call — shown, never flipped') + '</div>';
@@ -1003,11 +1317,13 @@ async function runScan(ui, scanSt){
 
     /* publish snapshots */
     publishState(scalpSel, swingSel);
-    publishScan(side, scalpSel, swingSel, tape, enginesDark, heldAll, now);
+    publishScan(side, scalpSel, swingSel, tape, enginesDark, heldAll, now, provenSet);
 
     var secs = ((Date.now() - t0) / 1000).toFixed(1);
-    var statBits = [side.toUpperCase() + ' scan',
+    var statBits = [side.toUpperCase() + ' scan (confirmed by your click)',
       (all.length + ' candidate' + (all.length === 1 ? '' : 's') + ' from ' + (lanes.length - enginesDark.length) + '/' + lanes.length + ' engines'),
+      ('proven set ' + provenSet.length + ' entr' + (provenSet.length === 1 ? 'y' : 'ies')
+        + ' · unproven held off the crown: SCALP ' + scalpSel.unproven.length + ' / SWING ' + swingSel.unproven.length),
       'SCALP ' + (scalpSel.pick ? 'pick: ' + scalpSel.pick.source + ' ' + (scalpSel.pick.stratKey || '') : (scalpSel.demotedTop.length ? 'demoted-only (no banner)' : 'silent')),
       'SWING ' + (swingSel.pick ? 'pick: ' + swingSel.pick.source + ' ' + (swingSel.pick.stratKey || '') : (swingSel.demotedTop.length ? 'demoted-only (no banner)' : 'silent'))];
     if (enginesDark.length) statBits.push(enginesDark.length + ' engine' + (enginesDark.length === 1 ? '' : 's') + ' dark');
@@ -1041,20 +1357,25 @@ function mount(el){
       '<style>' + GD_CSS + '</style>'
       + '<div class="panel">'
       + '<h2>GOLD DIRECTION <span>your call: LONG or SHORT · every gold engine aggregated · best SCALP + best SWING for your side</span></h2>'
+      + '<div class="gdx-hint">No strategy measures 100%. Crowned setups come only from strategies that '
+      + 'measurably paid after costs in the replays / live ledger; their real records are printed on each card.</div>'
       + '<div class="gdx-dirrow">'
       + '<button class="gdx-dirbtn long" id="gdLong">LONG</button>'
       + '<button class="gdx-dirbtn short" id="gdShort">SHORT</button>'
-      + '<button class="btn" id="gdRun">RUN SCAN</button>'
+      + '<button class="btn" id="gdRun">CONFIRM &amp; SCAN</button>'
       + '<span class="note" id="gdStat"></span>'
       + '</div>'
       + '<div class="note" style="margin-top:6px">The direction is <b>your</b> call — this desk never picks or flips it. '
-      + 'It polls GOLD SCALP, GOLD SWING, OMNIGOLD, OMNIGOLD 1 and NEW GOLD for candidates on your side, holds the '
-      + 'v699/v700 lead invariant (a demoted or vetoed card is never crowned; an all-demoted side gets no execution banner), '
-      + 'lists every held-back reason, and stamps AGAINST DESK TAPE when gold’s own bars disagree with you.</div>'
+      + 'Picking a side ARMS it; your CONFIRM &amp; SCAN click is the confirmation, and switching sides clears the '
+      + 'board until you confirm again (hg-v702). It polls GOLD SCALP, GOLD SWING, OMNIGOLD, OMNIGOLD 1 and NEW GOLD '
+      + 'for candidates on your side, crowns ONLY measured-proven strategies (edge-table prefer rows, OMNIGOLD '
+      + 'swing-prefer, or a live forward ledger that reads has-paid), holds the v699/v700 lead invariant (a demoted '
+      + 'or vetoed card is never crowned; an all-demoted side gets no execution banner), lists every held-back '
+      + 'reason, and stamps AGAINST DESK TAPE when gold’s own bars disagree with you.</div>'
       + '<div class="prog" id="gdProg"><i></i></div>'
       + '</div>'
       + '<div class="cards" id="gdCards"></div>'
-      + '<div class="empty" id="gdEmpty" style="display:none">pick a side and RUN SCAN — nothing is fabricated while the desk is silent.</div>';
+      + '<div class="empty" id="gdEmpty" style="display:none">pick a side, then CONFIRM &amp; SCAN — nothing is fabricated while the desk is silent.</div>';
 
     var ui = {
       btn: el.querySelector('#gdRun'),
@@ -1067,20 +1388,43 @@ function mount(el){
     };
     __scan.ui = ui;
     __scan.side = loadSide();   /* persisted round-trip; default none-selected */
+    __scan.confirmed = false;   /* hg-v702: a persisted side is ARMED, never
+                                   pre-confirmed — the first scan waits for
+                                   the user's own CONFIRM & SCAN click */
     applySideUi(ui, __scan.side);
     if (!__scan.side) setStat(ui, NO_SIDE_HINT, true);
-    else setStat(ui, 'direction ' + __scan.side.toUpperCase() + ' (your saved call) — RUN SCAN to aggregate every gold engine.', false);
+    else setStat(ui, 'direction ' + __scan.side.toUpperCase() + ' (your saved call) — press CONFIRM & SCAN to confirm it this session; a saved side never scans by itself.', false);
 
     function pickSide(s){
-      /* the user's explicit choice — persisted, never auto-flipped */
+      /* the user's explicit choice — persisted, never auto-flipped.
+         hg-v702: picking ARMS the side; switching sides clears the rendered
+         board AND the published snapshots (no stale other-side cards or
+         picks ever remain) and requires a fresh confirm. */
+      var switched = (__scan.side === 'long' || __scan.side === 'short') && __scan.side !== s;
       __scan.side = s;
       saveSide(s);
+      __scan.confirmed = false;
+      /* hg-v702 audit fatal closed: EVERY pick moves the generation, so an
+         airborne scan (confirmed before this click) discards itself instead
+         of repainting the board this pick just cleared. */
+      __scan.gen = (__scan.gen | 0) + 1;
+      if (switched){
+        try{ if (ui.cards) ui.cards.innerHTML = ''; }catch(eC){}
+        try{ if (ui.empty) ui.empty.style.display = 'block'; }catch(eE){}
+        __scanSnap = null;
+        __snap = null;
+      }
       applySideUi(ui, s);
-      setStat(ui, 'direction ' + s.toUpperCase() + ' — RUN SCAN to aggregate every gold engine on your side.', false);
+      setStat(ui, 'Direction armed: ' + s.toUpperCase() + ' — press CONFIRM & SCAN.', false);
     }
     if (ui.btnLong) ui.btnLong.addEventListener('click', function(){ pickSide('long'); });
     if (ui.btnShort) ui.btnShort.addEventListener('click', function(){ pickSide('short'); });
-    if (ui.btn) ui.btn.addEventListener('click', function(){ return runScan(ui, __scan); });
+    if (ui.btn) ui.btn.addEventListener('click', function(){
+      /* the user's own click on CONFIRM & SCAN IS the confirmation of the
+         armed side — nothing else ever sets it */
+      if (__scan.side === 'long' || __scan.side === 'short') __scan.confirmed = true;
+      return runScan(ui, __scan);
+    });
 
     var missing = [];
     if (!gfn('goldScalpSetups')) missing.push('GOLD SCALP (goldind.js)');
@@ -1120,6 +1464,12 @@ async function gdWarm(){
   var side = __scan.side || loadSide();
   if (side !== 'long' && side !== 'short'){
     return 'unavailable: no direction selected — LONG/SHORT is the user’s call; the tab never picks one to warm itself';
+  }
+  /* hg-v702: a persisted side is armed, not confirmed. The confirmation is
+     the user's own CONFIRM & SCAN click this session — warm-up never
+     confirms on their behalf. */
+  if (!__scan.confirmed){
+    return 'unavailable: direction not confirmed this session — CONFIRM & SCAN is the user’s click; the tab never confirms for itself';
   }
   if (!gfn('getGoldCandles') && !gfn('binanceKlines')) return 'unavailable: gold klines layer not loaded';
   var stubUi = { btn: __gdWarmShim(), stat: __gdWarmShim(), prog: __gdWarmShim(),

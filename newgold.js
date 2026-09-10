@@ -41,6 +41,32 @@ var FVG_MAX_AGE = 30;      /* Bars to keep an unfilled FVG alive; older FVGs
                                overwritten; we cap to avoid ancient gaps. */
 var KL_LIMIT    = 300;     /* Enough for ML_LOOKBACK (50) + FVG history */
 var MIN_RR      = 1.5;     /* T1 floor (user chose 1.5R / 2.5R ladder) */
+/* hg-v702 LOOSENED FIRE WINDOWS (user-directed; evidence-bounded). The
+   original Pine fire demanded all three legs on ONE closed bar — the RSI
+   cross is a one-bar event, so the triple coincidence fired ~9 times in
+   5.5 months (scripts/backtest-newgold-results.json counters.fires=9).
+   Two knobs, both named, both printed on any fire that used them:
+     NG_RSI_CROSS_BARS  a cross within the last N closed bars still
+                        triggers, provided RSI HOLDS the crossed side now;
+                        a more recent opposite cross kills the window.
+     NG_FVG_EDGE_ATR    a close within this many ATR(14) of the zone's NEAR
+                        edge counts as tagging the zone (inside still
+                        counts; the far side never does — that is the stop
+                        side). ATR unreadable -> tolerance 0: fail closed
+                        to the strict inside-only read.
+   NOT loosened: FVG mitigation (a traded-through gap stays dead, hg-v700),
+   the VWMA-50 side, the session-htf formation class, the composed stop
+   floor, MIN_RR. The loosened config's replay ships with the change. */
+var NG_RSI_CROSS_BARS = 3;
+/* hg-v702 dial, measured before ship (scripts/backtest-newgold-results.json
+   at the 0.25 trial): the RSI-window-only cohort (cross 1-2 bars ago, close
+   INSIDE the zone) measured n=9 67% WR +0.58R net at XM — the best cohort
+   this desk has produced — while every edge-tag cohort (price never closed
+   inside the zone) measured negative (edge-only n=17 −0.29, window+edge
+   n=41 −0.24). The knob and its machinery stay (tests pin the math), the
+   DIAL is 0: a fire still requires a close inside the gap. Small-n honesty:
+   the +0.58 is promising, not proven — the forward ledger decides from here. */
+var NG_FVG_EDGE_ATR   = 0;
 var T1_R        = 1.5;
 var T2_R        = 2.5;
 
@@ -68,6 +94,37 @@ var __ng = { busy: false, snap: null, at: 0, __timer: null, __mountEl: null };
 function fmtF(n, d){ if (n === null || n === undefined || n === '') return '\u2014'; n = +n; if (!isFinite(n)) return '\u2014'; return n.toFixed(d != null ? d : 2); }
 function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
 function last(arr){ return (arr && arr.length) ? arr[arr.length - 1] : undefined; }
+/* hg-v701: house feature-check — a shared helper is used only when it is
+   actually a function; anything else reads as absent, never as a stub. */
+function gfn(name){ try { return (W && typeof W[name] === 'function') ? W[name] : null; } catch(e){ return null; } }
+/* hg-v701: deep-freeze for the ADDITIVE snapshot keys only (checklist /
+   watch / hybridLaneStatus / sessionEdge / history are built fresh each
+   scan from plain scalars+strings, so freezing them shares nothing with
+   the mutable results[] the existing consumers already hold). */
+function ngDeepFreeze(o){
+  try{
+    if (!o || typeof o !== 'object' || Object.isFrozen(o)) return o;
+    Object.freeze(o);
+    var ks = Object.keys(o), i;
+    for (i = 0; i < ks.length; i++) ngDeepFreeze(o[ks[i]]);
+  }catch(e){}
+  return o;
+}
+/* hg-v701: the CLOSED signal bar's instant — the shared helper when loaded
+   (gold-formation.js hgGoldSignalBarMs), else the same read done locally
+   (last row's own timestamp). NEVER the wall clock: leg states are a
+   property of the bar, and a wall-clock read would let the same closed bar
+   answer differently on two auto-refresh ticks with no new data. */
+function ngBarMs(rows){
+  var fn = gfn('hgGoldSignalBarMs');
+  if (fn){ try { var m = +fn(rows); if (isFinite(m)) return m; } catch(e){} }
+  try{
+    if (!rows || !rows.length) return NaN;
+    var t = +rows[rows.length - 1].t;
+    if (!isFinite(t)) return NaN;
+    return (t < 1e12) ? t * 1000 : t;
+  }catch(e2){ return NaN; }
+}
 
 /* --- indicators ------------------------------------------------------- */
 
@@ -230,49 +287,199 @@ function ngVenueFloorDist(entry){
   }catch(e){ return NaN; }
 }
 
+/* --- pure leg reader (hg-v701) ----------------------------------------- */
+
+/* ONE place that reads the three triple-confirmation legs on the LAST
+   CLOSED bar. ngAssess decides fires from these exact reads and the
+   always-on CONFIRMATION CHECKLIST renders them, so the board and the
+   detector can never disagree on a threshold — the population of the tab
+   is the detector's own reads, not a re-implementation of them.
+
+   Returns (never throws):
+     { ok, why, lastClose, atr,
+       ml:  { baseline, side }                        side: 'bull'|'bear'|''
+       fvg: { bullTop, bullBot, bullAge, bearTop, bearBot, bearAge,
+              inBull, inBear, mitigationChecked }      (detectLastFvgs is
+                                                       already hg-v700
+                                                       mitigation-checked)
+       rsi: { now, prev, sma, smaPrev, bullCross, bearCross, lastCross } }
+   lastCross ({dir:'up'|'down', barsAgo}) is checklist CONTEXT only: a cross
+   fires a signal only on the bar it happens, and the scan back is capped at
+   20 bars so it stays a bounded, honest read. ok:false names the reason and
+   nothing else is claimed (atr NaN = 'ATR unreadable', never 0). */
+/* hg-v702 pure window rules — extracted so the loosened boundaries are
+   directly testable with explicit series (the hgGoldScalpStopFloor test
+   pattern). ngLegRead is their ONLY production caller; the detector and the
+   checklist inherit them through it. Never throw. */
+function ngRsiWindowFromSeries(rsi, sma){
+  var out = { now: NaN, prev: NaN, sma: NaN, smaPrev: NaN,
+              bullCross: false, bearCross: false, lastCross: null,
+              bullCrossWin: false, bearCrossWin: false, bullCrossAge: null, bearCrossAge: null };
+  try{
+    if (!Array.isArray(rsi) || !Array.isArray(sma)) return out;
+    var n = rsi.length;
+    if (n < 2 || sma.length !== n) return out;
+    out.now = rsi[n - 1]; out.prev = rsi[n - 2];
+    out.sma = sma[n - 1]; out.smaPrev = sma[n - 2];
+    var fin4 = isFinite(out.now) && isFinite(out.prev) && isFinite(out.sma) && isFinite(out.smaPrev);
+    out.bullCross = fin4 && out.prev <= out.smaPrev && out.now > out.sma;
+    out.bearCross = fin4 && out.prev >= out.smaPrev && out.now < out.sma;
+    var lo = Math.max(RSI_LEN + RSI_SMA_LEN, n - 20);
+    for (var i = n - 1; i >= lo; i--){
+      var rN = rsi[i], rP = rsi[i - 1], sN = sma[i], sP = sma[i - 1];
+      if (!isFinite(rN) || !isFinite(rP) || !isFinite(sN) || !isFinite(sP)) break;
+      if (rP <= sP && rN > sN){ out.lastCross = { dir: 'up', barsAgo: n - 1 - i }; break; }
+      if (rP >= sP && rN < sN){ out.lastCross = { dir: 'down', barsAgo: n - 1 - i }; break; }
+    }
+    var lc = out.lastCross;
+    out.bullCrossAge = out.bullCross ? 0
+      : ((lc && lc.dir === 'up' && lc.barsAgo <= NG_RSI_CROSS_BARS - 1) ? lc.barsAgo : null);
+    out.bearCrossAge = out.bearCross ? 0
+      : ((lc && lc.dir === 'down' && lc.barsAgo <= NG_RSI_CROSS_BARS - 1) ? lc.barsAgo : null);
+    out.bullCrossWin = out.bullCrossAge !== null && fin4 && out.now > out.sma;
+    out.bearCrossWin = out.bearCrossAge !== null && fin4 && out.now < out.sma;
+    return out;
+  }catch(e){ return out; }
+}
+function ngFvgNearFrom(fvgs, lastClose, atr){
+  var out = { inBull: false, inBear: false, nearBull: false, nearBear: false,
+              bullEdgeAtr: NaN, bearEdgeAtr: NaN };
+  try{
+    if (!fvgs || !isFinite(lastClose)) return out;
+    out.inBull = isFinite(fvgs.bullTop) && lastClose <= fvgs.bullTop && lastClose >= fvgs.bullBot;
+    out.inBear = isFinite(fvgs.bearTop) && lastClose <= fvgs.bearTop && lastClose >= fvgs.bearBot;
+    var edgeTol = (isFinite(atr) && atr > 0) ? NG_FVG_EDGE_ATR * atr : 0;
+    out.nearBull = out.inBull || (isFinite(fvgs.bullTop) && lastClose > fvgs.bullTop
+      && (lastClose - fvgs.bullTop) <= edgeTol);
+    out.nearBear = out.inBear || (isFinite(fvgs.bearBot) && lastClose < fvgs.bearBot
+      && (fvgs.bearBot - lastClose) <= edgeTol);
+    out.bullEdgeAtr = out.inBull ? 0
+      : ((out.nearBull && isFinite(atr) && atr > 0) ? (lastClose - fvgs.bullTop) / atr : NaN);
+    out.bearEdgeAtr = out.inBear ? 0
+      : ((out.nearBear && isFinite(atr) && atr > 0) ? (fvgs.bearBot - lastClose) / atr : NaN);
+    return out;
+  }catch(e){ return out; }
+}
+
+function ngLegRead(rows){
+  var out = { ok: false, why: '', lastClose: NaN, atr: NaN,
+    ml: { baseline: NaN, side: '' },
+    fvg: { bullTop: NaN, bullBot: NaN, bullAge: NaN,
+           bearTop: NaN, bearBot: NaN, bearAge: NaN,
+           inBull: false, inBear: false, mitigationChecked: false,
+           nearBull: false, nearBear: false, bullEdgeAtr: NaN, bearEdgeAtr: NaN },
+    rsi: { now: NaN, prev: NaN, sma: NaN, smaPrev: NaN,
+           bullCross: false, bearCross: false, lastCross: null,
+           bullCrossWin: false, bearCrossWin: false, bullCrossAge: null, bearCrossAge: null } };
+  try{
+    if (!Array.isArray(rows) || rows.length < ML_LOOKBACK + 5){
+      out.why = 'feed too short (' + (Array.isArray(rows) ? rows.length : 0)
+        + ' bars < ' + (ML_LOOKBACK + 5) + ' needed) — no leg can be read on a closed bar';
+      return out;
+    }
+    var n = rows.length;
+    var lastClose = +rows[n - 1].c;
+    if (!isFinite(lastClose)){ out.why = 'last closed bar carries no finite close'; return out; }
+    out.lastClose = lastClose;
+    /* ATR(14) for DISPLAY distances only (shared indicators.js atr when
+       loaded — it returns a PARALLEL SERIES, so read the last value);
+       unreadable stays NaN and the renderer says so. */
+    var atrFn = gfn('atr');
+    if (atrFn){
+      try {
+        var aOut = atrFn(rows, 14);
+        var aVal = Array.isArray(aOut) ? +aOut[aOut.length - 1] : +aOut;
+        if (isFinite(aVal) && aVal > 0) out.atr = aVal;
+      } catch(eA){}
+    }
+
+    /* 1. ML baseline (VWMA-50) — the same series ngAssess fires on */
+    var ml = vwmaSeries(rows, ML_LOOKBACK);
+    var mlLast = ml[n - 1];
+    if (isFinite(mlLast)){
+      out.ml.baseline = mlLast;
+      out.ml.side = lastClose > mlLast ? 'bull' : (lastClose < mlLast ? 'bear' : '');
+    }
+
+    /* 2. STRUCTURE — the hg-v700 mitigation-checked FVG scan, and the SAME
+       zone-membership test ngAssess fires on */
+    var fvgs = detectLastFvgs(rows);
+    out.fvg.bullTop = fvgs.bullTop; out.fvg.bullBot = fvgs.bullBot; out.fvg.bullAge = fvgs.bullAge;
+    out.fvg.bearTop = fvgs.bearTop; out.fvg.bearBot = fvgs.bearBot; out.fvg.bearAge = fvgs.bearAge;
+    /* hg-v702 loosened zone read via the exported pure rule (inside, OR
+       within NG_FVG_EDGE_ATR of the NEAR edge; the far side never counts;
+       no readable ATR -> zero tolerance, fail closed to inside-only). */
+    var nearRead = ngFvgNearFrom(fvgs, lastClose, out.atr);
+    out.fvg.inBull = nearRead.inBull;
+    out.fvg.inBear = nearRead.inBear;
+    out.fvg.nearBull = nearRead.nearBull;
+    out.fvg.nearBear = nearRead.nearBear;
+    out.fvg.bullEdgeAtr = nearRead.bullEdgeAtr;
+    out.fvg.bearEdgeAtr = nearRead.bearEdgeAtr;
+    out.fvg.mitigationChecked = true;
+
+    /* 3. RSI(14) vs its 9-SMA — the hg-v702 windowed trigger via the
+       exported pure rule (a cross within NG_RSI_CROSS_BARS closed bars
+       still triggers when RSI HOLDS the crossed side now; a more recent
+       opposite cross kills the window; age 0 = the original strict read). */
+    var rsi = rsiSeries(rows, RSI_LEN);
+    var rsiSma = smaSeries(rsi, RSI_SMA_LEN);
+    out.rsi = ngRsiWindowFromSeries(rsi, rsiSma);
+    out.ok = true;
+    return out;
+  }catch(e){
+    out.ok = false;
+    if (!out.why) out.why = 'leg read threw — nothing is claimed: ' + String(e && e.message || e);
+    return out;
+  }
+}
+
 /* --- signal assessment ----------------------------------------------- */
 
 /* Given closed rows for a horizon, return a setup object when the triple
    confirmation fires; otherwise null. */
 function ngAssess(rows){
-  if (!Array.isArray(rows) || rows.length < ML_LOOKBACK + 5) return null;
-  var n = rows.length;
-  var closes = rows.map(function(r){ return +r.c; });
-  var lastClose = closes[n - 1];
-  if (!isFinite(lastClose)) return null;
+  /* hg-v701: the three legs are read through ngLegRead — the SAME reader
+     the always-on checklist renders — so the detector and the board share
+     one set of thresholds by construction. Behaviour is unchanged: the
+     guards below are the exact pre-v701 expressions, now read from the
+     shared leg object. */
+  var leg = ngLegRead(rows);
+  if (!leg || leg.ok !== true) return null;
+  var lastClose = leg.lastClose;
 
   /* 1. ML baseline regime */
-  var ml = vwmaSeries(rows, ML_LOOKBACK);
-  var mlLast = ml[n - 1];
+  var mlLast = leg.ml.baseline;
   if (!isFinite(mlLast)) return null;
-  var isMlBull = lastClose > mlLast;
-  var isMlBear = lastClose < mlLast;
+  var isMlBull = leg.ml.side === 'bull';
+  var isMlBear = leg.ml.side === 'bear';
 
-  /* 2. FVG zone check */
-  var fvgs = detectLastFvgs(rows);
-  var inBull = isFinite(fvgs.bullTop) && lastClose <= fvgs.bullTop && lastClose >= fvgs.bullBot;
-  var inBear = isFinite(fvgs.bearTop) && lastClose <= fvgs.bearTop && lastClose >= fvgs.bearBot;
+  /* 2. FVG zone check (mitigation-checked hg-v700; hg-v702 loosened edge
+     read — inside the gap, or a close within NG_FVG_EDGE_ATR of its near
+     edge; the far side never counts) */
+  var fvgs = leg.fvg;
+  var inBull = leg.fvg.nearBull;
+  var inBear = leg.fvg.nearBear;
 
-  /* 3. RSI momentum crossover */
-  var rsi = rsiSeries(rows, RSI_LEN);
-  var rsiSma = smaSeries(rsi, RSI_SMA_LEN);
-  var rNow = rsi[n - 1], rPrev = rsi[n - 2];
-  var sNow = rsiSma[n - 1], sPrev = rsiSma[n - 2];
-  var bullCross = isFinite(rNow) && isFinite(rPrev) && isFinite(sNow) && isFinite(sPrev)
-    && rPrev <= sPrev && rNow > sNow;
-  var bearCross = isFinite(rNow) && isFinite(rPrev) && isFinite(sNow) && isFinite(sPrev)
-    && rPrev >= sPrev && rNow < sNow;
+  /* 3. RSI momentum crossover (hg-v702 loosened window — a cross within
+     the last NG_RSI_CROSS_BARS closed bars, still held now) */
+  var rNow = leg.rsi.now, sNow = leg.rsi.sma;
+  var bullCross = leg.rsi.bullCrossWin;
+  var bearCross = leg.rsi.bearCrossWin;
 
   /* Triple-confirmation fire */
   var dir = null, stop = NaN, fvgHi = NaN, fvgLo = NaN, fvgAge = NaN;
+  var rsiCrossAge = null, fvgEdgeAtr = NaN;
   if (isMlBull && inBull && bullCross){
     dir = 'long';
     stop = fvgs.bullBot;
     fvgHi = fvgs.bullTop; fvgLo = fvgs.bullBot; fvgAge = fvgs.bullAge;
+    rsiCrossAge = leg.rsi.bullCrossAge; fvgEdgeAtr = leg.fvg.bullEdgeAtr;
   } else if (isMlBear && inBear && bearCross){
     dir = 'short';
     stop = fvgs.bearTop;
     fvgHi = fvgs.bearTop; fvgLo = fvgs.bearBot; fvgAge = fvgs.bearAge;
+    rsiCrossAge = leg.rsi.bearCrossAge; fvgEdgeAtr = leg.fvg.bearEdgeAtr;
   }
   if (!dir) return null;
   if (!isFinite(stop)) return null;
@@ -386,6 +593,13 @@ function ngAssess(rows){
     ml: { baseline: mlLast, regime: isMlBull ? 'bullish' : 'bearish' },
     rsi: { now: rNow, sma: sNow },
     kind: 'TRIPLE-CONF',
+    /* hg-v702: which loosened path (if any) this fire used — printed on the
+       card's confirmation details (labels print what happened, v536). Age 0
+       and edge 0 mean the original strict same-bar/inside-zone read fired. */
+    loosened: { rsiCrossAge: isFinite(rsiCrossAge) ? rsiCrossAge : null,
+                fvgEdgeAtr: isFinite(fvgEdgeAtr) ? fvgEdgeAtr : null,
+                used: (isFinite(rsiCrossAge) && rsiCrossAge > 0)
+                   || (isFinite(fvgEdgeAtr) && fvgEdgeAtr > 0) },
     /* hg-v700 (was: hard-coded 3). The v698 note here already conceded the
        three reads span only TWO independent classes — structure (FVG) and
        momentum (VWMA regime + RSI cross) — so 3 was a read count wearing a
@@ -512,6 +726,12 @@ function ngConfirmations(setup, opts){
                    + (fvg.mitigationChecked === true
                        ? ', unmitigated (no later closed bar traded through the gap)'
                        : ''))
+                : '')
+            /* hg-v702: an edge-tag fire says so — the close tagged the zone
+               from outside rather than closing inside it. */
+            + ((setup.loosened && isFinite(setup.loosened.fvgEdgeAtr) && setup.loosened.fvgEdgeAtr > 0)
+                ? (' · edge tag ' + setup.loosened.fvgEdgeAtr.toFixed(2) + ' ATR outside the zone (loosened window ≤ '
+                   + NG_FVG_EDGE_ATR + ' ATR, hg-v702)')
                 : ''),
       ok: isFinite(fvg.top) && isFinite(fvg.bot) });
 
@@ -531,7 +751,14 @@ function ngConfirmations(setup, opts){
       && ((dir === 'long' && setup.rsi.now > setup.rsi.sma) || (dir === 'short' && setup.rsi.now < setup.rsi.sma)));
     out.push({ cls: 'momentum', name: 'RSI(14) crossed its 9-SMA', inherent: true,
       detail: 'RSI ' + (setup.rsi && isFinite(setup.rsi.now) ? setup.rsi.now.toFixed(1) : '?')
-            + ' vs SMA9 ' + (setup.rsi && isFinite(setup.rsi.sma) ? setup.rsi.sma.toFixed(1) : '?'),
+            + ' vs SMA9 ' + (setup.rsi && isFinite(setup.rsi.sma) ? setup.rsi.sma.toFixed(1) : '?')
+            /* hg-v702: a windowed cross says its age — the trigger was N
+               bars ago and RSI still holds the crossed side now. */
+            + ((setup.loosened && isFinite(setup.loosened.rsiCrossAge) && setup.loosened.rsiCrossAge > 0)
+                ? (' · cross ' + setup.loosened.rsiCrossAge + ' bar'
+                   + (setup.loosened.rsiCrossAge === 1 ? '' : 's')
+                   + ' ago, still held (loosened window ≤ ' + NG_RSI_CROSS_BARS + ' bars, hg-v702)')
+                : ''),
       ok: rsiOk });
     var mlOk = !!(setup.ml && ((dir === 'long' && setup.ml.regime === 'bullish')
       || (dir === 'short' && setup.ml.regime === 'bearish')));
@@ -585,6 +812,379 @@ function ngConfirmations(setup, opts){
       ok: !!tape.dir && tape.dir === dir });
   }catch(e){}
   return out;
+}
+
+/* =========================================================================
+   ALWAYS-ON BOARD (hg-v701) — the tab is POPULATED, never invented.
+
+   Before this, the tab rendered one static line unless a triple-confirmation
+   fire existed — 9 fires in 5.5 months of replay
+   (scripts/backtest-newgold-results.json), so the user opened a blank tab.
+   The population is the desk's OWN closed-bar reads, printed honestly:
+
+     1  CONFIRMATION CHECKLIST  per horizon, every leg's state on the last
+                                CLOSED bar + what each direction still needs.
+                                A missing leg is NAMED; levels are NEVER
+                                printed for anything short of FORMED (the
+                                gold-formation WATCH philosophy).
+     2  WATCH / NEAR-MISS       fires short of the bar, missing class named,
+                                no levels; plus any composed-floor drop
+                                (W.__ngLastDrop) surfaced instead of stashed.
+     3  HYBRID LANE STATUS      why the OMNIGOLD lane produced nothing, with
+                                counts — never a silent empty.
+     4  SESSION CONTEXT STRIP   measured cohorts + htf tape chips, labeled
+                                informational; leg verdicts read the closed
+                                bar, never this strip's wall clock.
+     5  PAID HISTORY            settled NEWGOLD forward-ledger records,
+                                read-only; honest empty state.
+
+   Every builder is pure, feature-checked and fail-soft: a section that
+   cannot be read says so and claims nothing. Dark feeds/legs say DARK with
+   the reason, never silently omitted, never counted as a pass.
+   ========================================================================= */
+
+/* Exact participation truth — one place, used by the checklist whether the
+   feed is up or dark. Same substance as ngConfirmations' participation leg. */
+function ngPartLeg(){
+  return { key: 'participation', label: 'PARTICIPATION', dark: true,
+    long: false, short: false,
+    text: 'DARK by design — this XAUUSD feed carries no taker delta, no OI and no COT, '
+        + 'and trigger-bar volume is NOT substituted: OMNIGOLD measured that read pointing '
+        + 'the wrong way on gold (passed 27.7% n=2856 vs vetoed 35.2% n=1737). '
+        + 'Reported dark, never counted as a pass.' };
+}
+
+/* One side's structure-context sentence. Distances in ATR when ATR is
+   readable, absolute dollars (named as such) when it is not — never a
+   silent unit swap. */
+function ngFvgSideText(side, leg){
+  var bull = side === 'bull';
+  var top = bull ? leg.fvg.bullTop : leg.fvg.bearTop;
+  var bot = bull ? leg.fvg.bullBot : leg.fvg.bearBot;
+  var age = bull ? leg.fvg.bullAge : leg.fvg.bearAge;
+  var zone = '[' + fmtF(bot, 2) + ' – ' + fmtF(top, 2) + ']';
+  var head = 'nearest unmitigated ' + side + ' FVG ' + zone
+    + (isFinite(age) ? ' · ' + age + ' bars old' : '');
+  var inside = bull ? leg.fvg.inBull : leg.fvg.inBear;
+  if (inside) return 'price is INSIDE the ' + head;
+  var c = leg.lastClose;
+  var above = c > top;
+  var dist = above ? (c - top) : (bot - c);
+  var distTxt = (isFinite(leg.atr) && leg.atr > 0)
+    ? fmtF(dist / leg.atr, 1) + ' ATR'
+    : fmtF(dist, 2) + ' abs (ATR unreadable on this feed)';
+  return 'price is ' + distTxt + ' ' + (above ? 'above' : 'below') + ' the ' + head;
+}
+
+/* The per-horizon CONFIRMATION CHECKLIST — every leg of the triple
+   confirmation on the last CLOSED bar, through the module's own reader
+   (ngLegRead — the same thresholds ngAssess fires on), plus the session-htf
+   read on the SIGNAL BAR instant and the participation truth. Ends with the
+   needs verdict for BOTH directions; no direction is recommended.
+   Pure and throw-safe; rows-less/short feeds come back ok:false with the
+   reason and only the participation leg (which is true feed-up or dark). */
+function ngBuildChecklist(rows, horizonLabel, tape, source){
+  var cl = { horizon: String(horizonLabel || ''), source: String(source || ''),
+             ok: false, why: '', barMs: NaN, barISO: '',
+             legs: [], needs: { long: [], short: [] }, fireDir: '' };
+  try{
+    tape = tape || { dir: '', src: '' };
+    var leg = ngLegRead(rows);
+    if (!leg.ok){
+      cl.why = (!Array.isArray(rows) || !rows.length)
+        ? ('no bars from the feed' + (cl.source ? ' (source=' + cl.source + ')' : '')
+           + ' — every leg is DARK; nothing is read, nothing is invented')
+        : (leg.why || 'legs unreadable on this feed');
+      cl.legs.push(ngPartLeg());
+      return cl;
+    }
+    cl.ok = true;
+    cl.barMs = ngBarMs(rows);
+    if (isFinite(cl.barMs)){
+      try { cl.barISO = new Date(cl.barMs).toISOString().slice(0, 16).replace('T', ' ') + ' UTC'; } catch(eIso){}
+    }
+
+    /* STRUCTURE — context only, explicitly not an entry. */
+    var hasBull = isFinite(leg.fvg.bullTop) && isFinite(leg.fvg.bullBot);
+    var hasBear = isFinite(leg.fvg.bearTop) && isFinite(leg.fvg.bearBot);
+    var st = { key: 'structure', label: 'STRUCTURE',
+               context: 'structure context — not an entry',
+               long: false, short: false, dark: false, text: '' };
+    if (!hasBull && !hasBear){
+      st.text = 'no unmitigated FVG in range — structure leg cannot fire '
+        + '(gaps older than ' + FVG_MAX_AGE + ' bars are stale; traded-through gaps are excluded, hg-v700)';
+    } else {
+      var stParts = [];
+      if (hasBull) stParts.push(ngFvgSideText('bull', leg));
+      if (hasBear) stParts.push(ngFvgSideText('bear', leg));
+      st.text = stParts.join(' · ');
+      /* hg-v702: the leg state is the LOOSENED zone read — the same one
+         ngAssess fires on (inside, or within the edge-tag tolerance). */
+      st.long = leg.fvg.nearBull === true;
+      st.short = leg.fvg.nearBear === true;
+    }
+    cl.legs.push(st);
+
+    /* ML BASELINE (VWMA-50) */
+    var mlLeg = { key: 'ml', label: 'ML BASELINE (VWMA-50)',
+                  long: leg.ml.side === 'bull', short: leg.ml.side === 'bear',
+                  dark: false, text: '' };
+    if (!isFinite(leg.ml.baseline)){
+      mlLeg.text = 'VWMA-50 unreadable on this feed — the ML leg cannot agree with either direction';
+      mlLeg.long = false; mlLeg.short = false;
+    } else {
+      var rel = leg.ml.side === 'bull' ? 'above' : (leg.ml.side === 'bear' ? 'below' : 'exactly at');
+      mlLeg.text = 'close ' + fmtF(leg.lastClose, 2) + ' ' + rel + ' VWMA-50 '
+        + fmtF(leg.ml.baseline, 2) + ' — '
+        + (leg.ml.side === 'bull' ? 'agrees with LONG only'
+          : leg.ml.side === 'bear' ? 'agrees with SHORT only'
+          : 'agrees with neither direction');
+    }
+    cl.legs.push(mlLeg);
+
+    /* RSI CROSS — the trigger read. hg-v702: a cross within the last
+       NG_RSI_CROSS_BARS closed bars still triggers when RSI HOLDS the
+       crossed side now (the leg state = the SAME windowed read ngAssess
+       fires on); a more recent opposite cross kills the window. */
+    var rsiLeg = { key: 'rsi', label: 'RSI CROSS (RSI-14 vs 9-SMA)',
+                   long: leg.rsi.bullCrossWin === true, short: leg.rsi.bearCrossWin === true,
+                   dark: false, text: '' };
+    var rsiBase = 'RSI ' + fmtF(leg.rsi.now, 1) + ' vs 9-SMA ' + fmtF(leg.rsi.sma, 1);
+    if (leg.rsi.bullCross)      rsiLeg.text = rsiBase + ' — crossed UP on this closed bar (the trigger read)';
+    else if (leg.rsi.bearCross) rsiLeg.text = rsiBase + ' — crossed DOWN on this closed bar (the trigger read)';
+    else if (leg.rsi.bullCrossWin) rsiLeg.text = rsiBase + ' — crossed UP ' + leg.rsi.bullCrossAge + ' bar'
+      + (leg.rsi.bullCrossAge === 1 ? '' : 's') + ' ago and still held (inside the loosened ≤'
+      + NG_RSI_CROSS_BARS + '-bar window, hg-v702)';
+    else if (leg.rsi.bearCrossWin) rsiLeg.text = rsiBase + ' — crossed DOWN ' + leg.rsi.bearCrossAge + ' bar'
+      + (leg.rsi.bearCrossAge === 1 ? '' : 's') + ' ago and still held (inside the loosened ≤'
+      + NG_RSI_CROSS_BARS + '-bar window, hg-v702)';
+    else if (leg.rsi.lastCross) rsiLeg.text = rsiBase + ' — no live trigger; last cross '
+      + leg.rsi.lastCross.dir + ' ' + leg.rsi.lastCross.barsAgo + ' bar'
+      + (leg.rsi.lastCross.barsAgo === 1 ? '' : 's') + ' ago (outside the ≤'
+      + NG_RSI_CROSS_BARS + '-bar window, or no longer held)';
+    else rsiLeg.text = rsiBase + ' — no cross on this closed bar and none in the last 20';
+    cl.legs.push(rsiLeg);
+
+    /* SESSION-HTF — the desk's ONE revocable class (v698 closeout): the
+       measured cohort on the SIGNAL BAR instant, or the real htf tape.
+       Either can carry it; the row says which one would. */
+    var sedgeFn = gfn('hgGoldSessionEdge');
+    var sedge = (sedgeFn && isFinite(cl.barMs)) ? sedgeFn(cl.barMs) : null;
+    var winTxt = !sedgeFn
+      ? 'session cohort table unavailable (gold-formation.js not loaded) — the clock cannot confirm (fail closed)'
+      : (sedge ? ('window: ' + String(sedge.why || sedge.label || ''))
+               : 'session cohort unreadable on the closed signal bar — the clock cannot confirm (fail closed)');
+    var tapeTxt = tape.dir
+      ? ('htf tape: ' + String(tape.src || '') + ' reads ' + String(tape.dir).toUpperCase())
+      : 'htf tape: no higher-timeframe read available on this scan';
+    var carrier;
+    if (sedge && sedge.confirms === true){
+      carrier = 'the session window carries the revocable class — for either direction';
+    } else if (tape.dir){
+      carrier = 'the HTF tape alone would carry the revocable class — for '
+        + String(tape.dir).toUpperCase() + ' only';
+    } else {
+      carrier = 'NEITHER read confirms — the desk’s one revocable class is unavailable, so no fire can FORM on this bar';
+    }
+    cl.legs.push({ key: 'session-htf', label: 'SESSION-HTF',
+      long: !!(sedge && sedge.confirms === true) || tape.dir === 'long',
+      short: !!(sedge && sedge.confirms === true) || tape.dir === 'short',
+      dark: false,
+      text: winTxt + ' · ' + tapeTxt + ' · ' + carrier });
+
+    /* PARTICIPATION — dark by the module's own design. */
+    cl.legs.push(ngPartLeg());
+
+    /* The needs verdict, per direction, computed FROM the leg states. */
+    var mkNeeds = function(side){
+      var wantBull = side === 'long';
+      var arr = [];
+      var inZone = wantBull ? leg.fvg.nearBull : leg.fvg.nearBear;   /* hg-v702 loosened read */
+      var hasZone = wantBull ? hasBull : hasBear;
+      if (!inZone){
+        if (hasZone){
+          var zTop = wantBull ? leg.fvg.bullTop : leg.fvg.bearTop;
+          var zBot = wantBull ? leg.fvg.bullBot : leg.fvg.bearBot;
+          arr.push('price back inside the ' + (wantBull ? 'bull' : 'bear') + ' FVG ['
+            + fmtF(zBot, 2) + ' – ' + fmtF(zTop, 2) + ']'
+            + (NG_FVG_EDGE_ATR > 0
+                ? ' (or within ' + NG_FVG_EDGE_ATR + ' ATR of its near edge — structure context, not an entry)'
+                : ''));
+        } else {
+          arr.push('a fresh unmitigated ' + (wantBull ? 'bull' : 'bear') + ' FVG (none in range)');
+        }
+      }
+      if (leg.ml.side !== (wantBull ? 'bull' : 'bear')){
+        arr.push('close ' + (wantBull ? 'above' : 'below') + ' VWMA-50 ('
+          + (isFinite(leg.ml.baseline) ? fmtF(leg.ml.baseline, 2) : 'unreadable') + ')');
+      }
+      if (!(wantBull ? leg.rsi.bullCrossWin : leg.rsi.bearCrossWin)){
+        arr.push('RSI(14) cross ' + (wantBull ? 'above' : 'below') + ' its 9-SMA within the last '
+          + NG_RSI_CROSS_BARS + ' closed bars (still held now)');
+      }
+      return arr;
+    };
+    cl.needs.long = mkNeeds('long');
+    cl.needs.short = mkNeeds('short');
+    if (!cl.needs.long.length) cl.fireDir = 'long';
+    else if (!cl.needs.short.length) cl.fireDir = 'short';
+    return cl;
+  }catch(e){
+    cl.ok = false;
+    cl.why = 'checklist build threw — section fails soft, nothing is claimed: ' + String(e && e.message || e);
+    return cl;
+  }
+}
+
+/* WATCH / NEAR-MISS list — fires that exist but are NOT tradable, plus any
+   composed-floor drop this scan stashed on W.__ngLastDrop (hg-v700 dropped
+   the fire honestly but told nobody; now it is surfaced). Entries carry NO
+   level fields at all — a card the desk declined to call tradable never
+   gets numbers to lean on. */
+function ngWatchList(results, sinceMs){
+  var out = [];
+  try{
+    var list = Array.isArray(results) ? results : [];
+    for (var i = 0; i < list.length; i++){
+      var r = list[i];
+      if (!r || !r.setup) continue;
+      var fm = r.formation || null;
+      if (fm && fm.tradable === true) continue;   /* FORMED fires are cards, not watches */
+      var conf = fm && fm.confluence ? fm.confluence : null;
+      var missing = [];
+      if (conf && Array.isArray(conf.requiredMissing) && conf.requiredMissing.length){
+        missing = conf.requiredMissing.slice();
+      } else if (conf && Array.isArray(conf.missing)){
+        missing = conf.missing.slice();
+      }
+      out.push({
+        horizon: String(r.horizon || ''), dir: String(r.setup.dir || ''),
+        kind: String(r.setup.kind || 'TRIPLE-CONF'),
+        state: String((fm && fm.state) || 'WATCH'),
+        missing: missing,
+        reasons: (fm && Array.isArray(fm.reasons)) ? fm.reasons.slice(0, 4).map(String)
+          : ['formation verdict unavailable — fail closed, not tradable']
+      });
+    }
+    /* composed-floor drop from THIS scan (ngAssess stashes it when the
+       final T1 would pay under MIN_RR — the fire is dropped, not widened) */
+    var d = W.__ngLastDrop;
+    if (d && isFinite(+d.at) && isFinite(+sinceMs) && +d.at >= +sinceMs){
+      out.push({ horizon: '', dir: '', kind: 'TRIPLE-CONF', state: 'DROPPED',
+        missing: [], reasons: [String(d.reason || 'fire dropped by the composed stop floor')] });
+    }
+  }catch(e){}
+  return out;
+}
+
+/* HYBRID LANE STATUS — why ngPullOmniLanes() produced what it produced,
+   with counts from the scan loop. Honest at every depth of absence. */
+function ngOmniLaneStatus(stat){
+  var out = { state: 'dark', lines: [],
+    counts: stat ? { candidates: +stat.candidates || 0, rowsShort: +stat.rowsShort || 0,
+                     dedup: +stat.dedup || 0, noFire: +stat.noFire || 0,
+                     dirDrop: +stat.dirDrop || 0, emitted: +stat.emitted || 0 } : null };
+  try{
+    if (typeof W.hgOgUniformDebug !== 'function'){
+      out.lines.push('OMNIGOLD is not loaded — the hybrid lane is DARK by design without its feeds; no candidates are invented');
+      return out;
+    }
+    var dbg = null;
+    try { dbg = W.hgOgUniformDebug(); } catch(eD){ dbg = null; }
+    if (!dbg){
+      out.lines.push('OMNIGOLD debug surface returned nothing — no OMNIGOLD scan to read this session');
+      return out;
+    }
+    var nS = Array.isArray(dbg.swing) ? dbg.swing.length : 0;
+    var nC = Array.isArray(dbg.scalp) ? dbg.scalp.length : 0;
+    if (!nS && !nC){
+      out.state = 'empty';
+      out.lines.push('OMNIGOLD is loaded but has no ranked candidates this session — the hybrid lane '
+        + 'reads OMNIGOLD’s own scan output and never re-scans or invents candidates'
+        + (dbg.src ? '' : ' (no OMNIGOLD scan yet — open the OMNIGOLD tab or wait for its warmup)'));
+      return out;
+    }
+    out.state = 'read';
+    out.lines.push(nS + ' SWING + ' + nC + ' SCALP OMNIGOLD candidate' + ((nS + nC) === 1 ? '' : 's') + ' read');
+    if (stat){
+      if (stat.rowsShort) out.lines.push(stat.rowsShort + ' lane' + (stat.rowsShort === 1 ? '' : 's')
+        + ' skipped — fewer than ' + (ML_LOOKBACK + 5) + ' bars on the lane timeframe');
+      if (stat.dedup) out.lines.push(stat.dedup + ' duplicate (horizon·kind·dir) entr'
+        + (stat.dedup === 1 ? 'y' : 'ies') + ' deduped');
+      if (stat.noFire) out.lines.push(stat.noFire + ' dropped — no triple-confirmation fire on the lane '
+        + 'timeframe (the hybrid requires BOTH engines to read the same bars)');
+      if (stat.dirDrop) out.lines.push('direction intersection dropped ' + stat.dirDrop
+        + ' — OMNIGOLD’s direction ≠ the triple-confirmation’s on the same rows');
+      out.lines.push(stat.emitted + ' hybrid card' + (stat.emitted === 1 ? '' : 's') + ' emitted this scan');
+    }
+    return out;
+  }catch(e){
+    out.state = 'error';
+    out.lines = ['hybrid lane status unreadable — fails soft, nothing claimed: ' + String(e && e.message || e)];
+    return out;
+  }
+}
+
+/* SESSION CONTEXT STRIP data — measured cohorts, informational only.
+   The BAR line is the instant the session leg actually reads; the WALL
+   line is labeled as the clock the legs never use. */
+function ngSessionRead(tapes, barMsFirst){
+  var out = { available: !!gfn('hgGoldSessionEdge'),
+    barMs: isFinite(+barMsFirst) ? +barMsFirst : NaN, bar: null,
+    wallMs: Date.now(), wall: null,
+    tapes: [] };
+  try{
+    var list = Array.isArray(tapes) ? tapes : [];
+    for (var i = 0; i < list.length; i++){
+      var t = list[i];
+      if (!t) continue;
+      out.tapes.push({ horizon: String(t.horizon || ''), dir: String(t.dir || ''), src: String(t.src || '') });
+    }
+    var fn = gfn('hgGoldSessionEdge');
+    if (fn){
+      if (isFinite(out.barMs)){
+        try { var b = fn(out.barMs); if (b) out.bar = { key: b.key, label: b.label, n: b.n, grossR: b.grossR, confirms: b.confirms === true, why: String(b.why || '') }; } catch(eB){}
+      }
+      try { var w = fn(out.wallMs); if (w) out.wall = { key: w.key, label: w.label, n: w.n, grossR: w.grossR, confirms: w.confirms === true, why: String(w.why || '') }; } catch(eW){}
+    }
+  }catch(e){}
+  return out;
+}
+
+/* PAID HISTORY — settled NEWGOLD forward-ledger records (mechanic
+   TRIPLE-CONF*), READ-ONLY: this never settles, re-settles or writes
+   anything; it renders what hg-forward.js already resolved.
+   -> array of settled entries (newest first, capped), [] when none,
+      null when the ledger surface is not loaded (DARK, not empty). */
+function ngHistoryRecords(limit){
+  try{
+    if (typeof W.hgFwdRecords !== 'function') return null;
+    var all = null;
+    try { all = W.hgFwdRecords(); } catch(eR){ return null; }
+    if (!Array.isArray(all)) return null;
+    var out = [];
+    for (var i = 0; i < all.length; i++){
+      var r = all[i];
+      if (!r) continue;
+      if (String(r.tab || '').indexOf('NEWGOLD') !== 0) continue;
+      if (String(r.mechanic || '').indexOf('TRIPLE-CONF') !== 0) continue;
+      if (r.state !== 't1' && r.state !== 'stop' && r.state !== 'expired') continue;
+      var rGross = NaN;
+      if (r.state === 't1') rGross = isFinite(+r.r) ? +r.r : (isFinite(+r.rr) ? +r.rr : NaN);
+      else if (r.state === 'stop') rGross = isFinite(+r.r) ? +r.r : -1;
+      out.push({
+        mechanic: String(r.mechanic), horizon: String(r.tab).replace(/^NEWGOLD:?/, ''),
+        dir: String(r.dir || ''), state: String(r.state),
+        rGross: isFinite(rGross) ? rGross : null,
+        barT: isFinite(+r.barT) ? +r.barT : null,
+        settledT: isFinite(+r.settledT) ? +r.settledT : null,
+        ticket: r.ticket === true
+      });
+    }
+    out.sort(function(a, b){ return (b.settledT || 0) - (a.settledT || 0); });
+    var cap = isFinite(+limit) && +limit > 0 ? Math.floor(+limit) : 12;
+    return out.slice(0, cap);
+  }catch(e){ return null; }
 }
 
 /* --- fetch ------------------------------------------------------------ */
@@ -662,6 +1262,12 @@ async function ngRunScan(){
   __ng.busy = true;
   var results = [];
   var errors = [];
+  /* hg-v701 board state — collected alongside the scan, never gating it */
+  var scanStartAt = Date.now();
+  var checklists = [];
+  var stripTapes = [];
+  var stripBarMs = NaN;
+  var laneStat = { candidates: 0, rowsShort: 0, dedup: 0, noFire: 0, dirDrop: 0, emitted: 0 };
   try {
     /* v698: fetch BOTH horizons before assessing either, so the 1H card can
        read a REAL 4H tape instead of the fabricated `tape: setup.dir` that
@@ -680,9 +1286,24 @@ async function ngRunScan(){
       h = HORIZONS[hi];
       pack = packsByTf[h.tf] || { rows: [], source: 'unknown' };
       var rows = pack && pack.rows ? pack.rows : [];
-      if (!rows.length){ errors.push(h.label + ': no bars (source=' + (pack && pack.source) + ')'); continue; }
+      if (!rows.length){
+        errors.push(h.label + ': no bars (source=' + (pack && pack.source) + ')');
+        /* hg-v701: the checklist still renders for a dead horizon — DARK
+           with the reason, never silently missing from the board. */
+        try { checklists.push(ngBuildChecklist([], h.label, { dir: '', src: '' }, (pack && pack.source) || 'unknown')); } catch(eCl0){}
+        continue;
+      }
       var setup = ngAssess(rows);
       var tape = ngHtfTape(h.label, rows4hForTape);
+      /* hg-v701: per-horizon checklist + session-strip inputs, fail-soft */
+      try { checklists.push(ngBuildChecklist(rows, h.label, tape, pack.source)); }
+      catch(eCl){ checklists.push({ horizon: h.label, ok: false,
+        why: 'checklist build threw — section fails soft: ' + String(eCl && eCl.message || eCl),
+        legs: [], needs: { long: [], short: [] }, fireDir: '' }); }
+      try {
+        stripTapes.push({ horizon: h.label, dir: (tape && tape.dir) || '', src: (tape && tape.src) || '' });
+        if (!isFinite(stripBarMs)) stripBarMs = ngBarMs(rows);
+      } catch(eSt){}
       var record = {
         horizon: h.label,
         tf: h.tf,
@@ -778,6 +1399,7 @@ async function ngRunScan(){
        tracks each hybrid separately from plain TRIPLE-CONF. */
     try {
       var omniLanes = ngPullOmniLanes();
+      laneStat.candidates = omniLanes.length; /* hg-v701: hybrid-lane honesty counts */
       if (omniLanes.length){
         /* Cache tf->rows to avoid double-fetching. Seed from the primary
            horizons above (1H/4H). */
@@ -815,15 +1437,20 @@ async function ngRunScan(){
         for (var oi = 0; oi < omniLanes.length; oi++){
           var lane = omniLanes[oi];
           var laneRows = tfRows[lane.tf] || [];
+          /* hg-v701: the counter lines sit BESIDE the original guards (which
+             tests pin verbatim) so the hybrid-lane status can say how many
+             candidates each guard dropped instead of a silent empty. */
+          if (laneRows.length < ML_LOOKBACK + 5) laneStat.rowsShort++;
           if (laneRows.length < ML_LOOKBACK + 5) continue;
           var dedupKey = lane.horizonLabel + '|' + lane.ogKind + '|' + lane.ogDir;
-          if (seenOmni[dedupKey]) continue;
+          if (seenOmni[dedupKey]){ laneStat.dedup++; continue; }
           seenOmni[dedupKey] = true;
           var ogSetup = null;
           try { ogSetup = ngAssess(laneRows); } catch(eA){ ogSetup = null; }
-          if (!ogSetup) continue;
+          if (!ogSetup){ laneStat.noFire++; continue; }
           /* Intersection guard: NEW GOLD triple-conf must match OMNIGOLD's
              own direction. If they disagree we drop the fire. */
+          if (ogSetup.dir !== lane.ogDir) laneStat.dirDrop++;
           if (ogSetup.dir !== lane.ogDir) continue;
           var hybridKind = 'TRIPLE-CONF+OMNI:' + lane.ogKind;
           ogSetup.kind = hybridKind;
@@ -882,6 +1509,7 @@ async function ngRunScan(){
             } catch(eSol2){}
           }
           results.push(omniRecord);
+          laneStat.emitted++;
         }
       }
     } catch(eOmniLane){}
@@ -950,8 +1578,30 @@ async function ngRunScan(){
     } catch(eStash){}
     results = kept;
 
-    __ng.snap = { at: Date.now(), results: results, errors: errors };
-    return { status: results.length ? 'refreshed' : 'empty', results: results, errors: errors };
+    /* -- hg-v701: ALWAYS-ON BOARD DATA ------------------------------------
+       Built AFTER the kill filter so the watch list reflects what actually
+       renders; each block fail-soft so the scan itself can never be broken
+       by a board read. The snapshot is EXTENDED ADDITIVELY (new keys only,
+       mirroring goldscalp.js publishScan's armed/whySilent addition): the
+       existing { at, results, errors } contract is untouched, and the new
+       keys are deep-frozen — they are read surfaces, not scan state. */
+    var watch = [], hybridStatus = null, sessionEdge = null, history = null;
+    try { watch = ngWatchList(results, scanStartAt); } catch(eWb){ watch = []; }
+    try { hybridStatus = ngOmniLaneStatus(laneStat); }
+    catch(eHb){ hybridStatus = { state: 'error', lines: ['hybrid lane status unreadable: ' + String(eHb && eHb.message || eHb)], counts: null }; }
+    try { sessionEdge = ngSessionRead(stripTapes, stripBarMs); } catch(eSb){ sessionEdge = null; }
+    try { history = ngHistoryRecords(12); } catch(eHi){ history = null; }
+
+    __ng.snap = { at: Date.now(), results: results, errors: errors,
+      checklist: ngDeepFreeze(checklists),
+      watch: ngDeepFreeze(watch),
+      hybridLaneStatus: ngDeepFreeze(hybridStatus),
+      sessionEdge: ngDeepFreeze(sessionEdge),
+      history: ngDeepFreeze(history) };
+    return { status: results.length ? 'refreshed' : 'empty', results: results, errors: errors,
+      checklist: __ng.snap.checklist, watch: __ng.snap.watch,
+      hybridLaneStatus: __ng.snap.hybridLaneStatus,
+      sessionEdge: __ng.snap.sessionEdge, history: __ng.snap.history };
   } catch(e){
     return { status: 'error', results: [], errors: [String(e && e.message || e)] };
   } finally {
@@ -1037,6 +1687,216 @@ function cardHtml(r){
     + '</div>';
 }
 
+/* --- always-on board render (hg-v701) ---------------------------------- */
+
+/* Scoped house pane CSS, ng- prefixed, injected ONCE at mount (never at
+   module load — Node test boots have no document). */
+var NG_CSS = ''
++ '.ng-board{margin-top:14px}'
++ '.ng-sec{margin-top:12px;padding:9px 11px;border:1px solid #E2E8F0;border-radius:8px;background:#F8FAFC;font-size:11px;line-height:1.55;color:#0F172A}'
++ '.ng-sec .ng-h{font-size:10px;letter-spacing:.16em;font-weight:800;color:#1E293B;margin-bottom:6px}'
++ '.ng-dim{opacity:.65;font-weight:500}'
++ '.ng-leg{padding:5px 8px;border-left:3px solid #E2E8F0;margin:4px 0;background:#fff}'
++ '.ng-leg.ok{border-left-color:#059669}'
++ '.ng-leg.no{border-left-color:#DC2626}'
++ '.ng-leg.dark{border-left-color:#64748B;background:#F1F5F9;color:#334155}'
++ '.ng-leg b{letter-spacing:.08em}'
++ '.ng-ctx{font-size:9px;letter-spacing:.1em;color:#9A3412;font-weight:800;margin-left:6px}'
++ '.ng-chip{display:inline-block;font-size:8px;letter-spacing:.12em;border:1px solid;border-radius:4px;padding:1px 5px;margin-right:5px;font-weight:800}'
++ '.ng-chip.on{color:#047857;border-color:rgba(5,150,105,.5);background:rgba(5,150,105,.08)}'
++ '.ng-chip.off{color:#64748B;border-color:#CBD5E1;background:#F8FAFC}'
++ '.ng-needs{margin-top:6px;padding:6px 8px;border:1px dashed #FDE68A;background:#FFFBEB;border-radius:6px}'
++ '.ng-needs b{color:#A67C12;letter-spacing:.08em}'
++ '.ng-wrow{padding:5px 8px;border-left:3px solid #C9921A;background:#FFFBEB;margin:4px 0}'
++ '.ng-wrow b{letter-spacing:.08em}'
++ '.ng-hrow{padding:4px 8px;border-left:3px solid #E2E8F0;margin:3px 0;background:#fff}'
++ '.ng-hrow.t1{border-left-color:#059669}'
++ '.ng-hrow.stop{border-left-color:#DC2626}'
++ '.ng-hrow.expired{border-left-color:#A67C12}'
++ '.ng-err{border-color:rgba(220,38,38,.4);background:#FEF2F2;color:#B91C1C}';
+
+function ngInjectCss(){
+  try{
+    if (typeof document === 'undefined' || !document || typeof document.createElement !== 'function') return;
+    if (typeof document.getElementById === 'function' && document.getElementById('hg-ng-styles')) return;
+    var st = document.createElement('style');
+    st.id = 'hg-ng-styles';
+    st.textContent = NG_CSS;
+    ((document.head) || document.documentElement || document.body).appendChild(st);
+  }catch(e){}
+}
+
+function ngChip(on, lab){
+  return '<span class="ng-chip ' + (on ? 'on' : 'off') + '">' + esc(lab) + (on ? ' ✓' : ' —') + '</span>';
+}
+
+/* One horizon's CONFIRMATION CHECKLIST. Levels NEVER appear here: the
+   structure row is labeled context, and the needs line names what has to
+   happen — no direction is recommended. */
+function ngChecklistHtml(cl){
+  if (!cl) return '';
+  var h = '<div class="ng-sec ng-checklist" data-ng-horizon="' + esc(cl.horizon || '?') + '">'
+    + '<div class="ng-h">CONFIRMATION CHECKLIST · ' + esc(cl.horizon || '?')
+    + ' <span class="ng-dim">'
+    + (cl.barISO ? 'closed bar ' + esc(cl.barISO) + ' · ' : '')
+    + 'source ' + esc(cl.source || '—') + '</span></div>';
+  if (cl.ok !== true){
+    h += '<div class="ng-leg dark"><b>DARK</b> — ' + esc(cl.why || 'legs unreadable') + '</div>';
+    /* the participation truth still prints (it is feed-independent) */
+    var pl = (cl.legs || []).filter(function(l){ return l && l.key === 'participation'; })[0];
+    if (pl) h += '<div class="ng-leg dark"><b>' + esc(pl.label) + '</b> — ' + esc(pl.text) + '</div>';
+    return h + '</div>';
+  }
+  for (var i = 0; i < (cl.legs || []).length; i++){
+    var l = cl.legs[i];
+    if (!l) continue;
+    var cls = l.dark ? 'dark' : ((l.long || l.short) ? 'ok' : 'no');
+    h += '<div class="ng-leg ' + cls + '">'
+      + (l.dark ? '' : (ngChip(l.long === true, 'LONG') + ngChip(l.short === true, 'SHORT')))
+      + '<b>' + esc(l.label) + '</b>'
+      + (l.context ? '<span class="ng-ctx">' + esc(l.context) + '</span>' : '')
+      + ' — ' + esc(l.text) + '</div>';
+  }
+  var needsTxt = function(arr, dirLab){
+    return '<b>' + esc(dirLab) + ' needs:</b> '
+      + (arr && arr.length ? esc(arr.join(', '))
+        : 'nothing — all three signal legs read ' + esc(dirLab) + ' on this closed bar (see the fire card above)');
+  };
+  h += '<div class="ng-needs">' + needsTxt(cl.needs && cl.needs.long, 'LONG')
+    + ' · ' + needsTxt(cl.needs && cl.needs.short, 'SHORT') + '</div>'
+    + '<div class="ng-dim">no direction is recommended — the checklist reads the closed bar both ways; '
+    + 'a fire still only FORMS when the session-htf class confirms on the signal bar (see the SESSION-HTF row)</div>';
+  return h + '</div>';
+}
+
+function ngWatchHtml(watch){
+  var list = Array.isArray(watch) ? watch : [];
+  var h = '<div class="ng-sec ng-watch"><div class="ng-h">WATCH / NEAR-MISS '
+    + '<span class="ng-dim">fires short of the bar — NO levels by design (a level on a non-ticket is an invitation)</span></div>';
+  if (!list.length){
+    return h + '<div class="ng-dim">no near-miss fires this scan — the checklist above shows how far each leg is from firing</div></div>';
+  }
+  for (var i = 0; i < list.length; i++){
+    var w = list[i];
+    if (!w) continue;
+    h += '<div class="ng-wrow"><b>' + esc(w.state || 'WATCH') + '</b> — '
+      + (w.horizon ? esc(w.horizon) + ' ' : '')
+      + (w.dir ? esc(String(w.dir).toUpperCase()) + ' ' : '')
+      + esc(w.kind || 'TRIPLE-CONF')
+      + (w.missing && w.missing.length ? ' · missing class: ' + esc(w.missing.join(', ')) : '')
+      + (w.reasons && w.reasons.length ? '<br><span class="ng-dim">' + esc(w.reasons.join(' · ')) + '</span>' : '')
+      + '</div>';
+  }
+  return h + '</div>';
+}
+
+function ngHybridHtml(st){
+  var h = '<div class="ng-sec ng-hybrid"><div class="ng-h">HYBRID LANE STATUS '
+    + '<span class="ng-dim">OMNIGOLD × triple-confirmation intersection</span></div>';
+  if (!st || !Array.isArray(st.lines) || !st.lines.length){
+    return h + '<div class="ng-dim">hybrid lane status unavailable this scan — nothing claimed</div></div>';
+  }
+  for (var i = 0; i < st.lines.length; i++){
+    h += '<div>· ' + esc(st.lines[i]) + '</div>';
+  }
+  return h + '</div>';
+}
+
+function ngSessionStripHtml(se){
+  var h = '<div class="ng-sec ng-session"><div class="ng-h">SESSION CONTEXT '
+    + '<span class="ng-dim">measured cohorts · informational only — leg verdicts read the closed bar, never this strip</span></div>';
+  if (!se){
+    return h + '<div class="ng-dim">session context unreadable this scan — nothing claimed</div></div>';
+  }
+  if (!se.available){
+    h += '<div class="ng-leg dark"><b>DARK</b> — session cohort table unavailable (gold-formation.js not loaded); no cohort is invented</div>';
+  } else {
+    if (se.bar){
+      h += '<div>· signal-bar clock'
+        + (isFinite(se.barMs) ? ' (' + esc(new Date(se.barMs).toISOString().slice(11, 16)) + ' UTC closed bar)' : '')
+        + ': ' + esc(se.bar.why || se.bar.label || '') + ' <span class="ng-dim">— the instant the session leg reads (measured)</span></div>';
+    } else {
+      h += '<div class="ng-dim">· signal-bar cohort unreadable (no bars this scan) — fail closed, nothing claimed</div>';
+    }
+    if (se.wall){
+      h += '<div>· wall clock now: ' + esc(se.wall.why || se.wall.label || '')
+        + ' <span class="ng-dim">— informational only; no leg reads this clock (measured)</span></div>';
+    }
+  }
+  var tp = Array.isArray(se.tapes) ? se.tapes : [];
+  for (var i = 0; i < tp.length; i++){
+    var t = tp[i];
+    if (!t) continue;
+    h += '<div>· htf tape ' + esc(t.horizon || '?') + ': '
+      + (t.dir ? esc(String(t.dir).toUpperCase()) + ' <span class="ng-dim">(' + esc(t.src) + ')</span>'
+               : '<span class="ng-dim">no read this scan — unread is unread, not neutral-bullish</span>')
+      + '</div>';
+  }
+  return h + '</div>';
+}
+
+function ngHistoryHtml(history){
+  var h = '<div class="ng-sec ng-history"><div class="ng-h">PAID HISTORY '
+    + '<span class="ng-dim">NEWGOLD forward ledger · settled outcomes only · read-only (nothing is re-settled here)</span></div>';
+  if (history === null || history === undefined){
+    return h + '<div class="ng-leg dark"><b>DARK</b> — forward ledger unavailable (hg-forward.js not loaded); history is dark, not empty</div></div>';
+  }
+  var list = Array.isArray(history) ? history : [];
+  if (!list.length){
+    return h + '<div class="ng-dim">no settled TRIPLE-CONF records yet — the ledger fills as fires settle on later bars; nothing is claimed until an outcome exists</div></div>';
+  }
+  for (var i = 0; i < list.length; i++){
+    var r = list[i];
+    if (!r) continue;
+    var when = '';
+    try {
+      var tMs = isFinite(+r.settledT) ? (+r.settledT < 1e12 ? +r.settledT * 1000 : +r.settledT) : NaN;
+      if (isFinite(tMs)) when = new Date(tMs).toISOString().slice(0, 10);
+    } catch(eD){}
+    var outcome = r.state === 't1'
+      ? ('TP1 hit · ' + (r.rGross !== null && isFinite(+r.rGross) ? '+' + fmtF(r.rGross, 2) + 'R gross' : 'R unreadable'))
+      : r.state === 'stop'
+        ? ('stopped · ' + (r.rGross !== null && isFinite(+r.rGross) ? fmtF(r.rGross, 2) + 'R gross' : '−1R gross'))
+        : 'expired unsettled — no outcome claimed';
+    h += '<div class="ng-hrow ' + esc(r.state) + '"><b>' + esc(r.mechanic) + '</b> '
+      + esc(r.horizon || '?') + ' ' + esc(r.dir || '?')
+      + ' · ' + outcome
+      + (when ? ' · ' + esc(when) : '')
+      + ' · <span class="ng-dim">' + (r.ticket ? 'ticket' : 'recorded fire, not a ticket') + '</span></div>';
+  }
+  return h + '</div>';
+}
+
+/* Per-section catch isolation: one broken section fails soft with its name
+   and takes nothing else down. */
+function ngSecSafe(fn, label){
+  try { return fn() || ''; }
+  catch(e){
+    return '<div class="ng-sec ng-err"><div class="ng-h">' + esc(label) + '</div>'
+      + 'section failed soft — ' + esc(String(e && e.message || e)) + ' (nothing invented)</div>';
+  }
+}
+
+function ngBoardHtml(data){
+  data = data || {};
+  var h = '<div class="ng-board">';
+  h += ngSecSafe(function(){
+    var cls = Array.isArray(data.checklist) ? data.checklist : [];
+    if (!cls.length){
+      return '<div class="ng-sec ng-checklist"><div class="ng-h">CONFIRMATION CHECKLIST</div>'
+        + '<div class="ng-dim">no horizons read this scan — the feeds returned nothing (see the status line); nothing is invented</div></div>';
+    }
+    var s = '';
+    for (var i = 0; i < cls.length; i++) s += ngChecklistHtml(cls[i]);
+    return s;
+  }, 'CONFIRMATION CHECKLIST');
+  h += ngSecSafe(function(){ return ngWatchHtml(data.watch); }, 'WATCH / NEAR-MISS');
+  h += ngSecSafe(function(){ return ngHybridHtml(data.hybridLaneStatus); }, 'HYBRID LANE STATUS');
+  h += ngSecSafe(function(){ return ngSessionStripHtml(data.sessionEdge); }, 'SESSION CONTEXT');
+  h += ngSecSafe(function(){ return ngHistoryHtml(data.history); }, 'PAID HISTORY');
+  return h + '</div>';
+}
+
 function refreshKilledNote(el){
   try {
     var noteEl = el.querySelector('#ngKilledNote');
@@ -1062,6 +1922,7 @@ function refreshPerfPanels(el){
 
 function mount(el){
   if (!el) return;
+  ngInjectCss(); /* hg-v701: scoped ng- board styles, injected once */
   el.innerHTML = '<div class="panel">'
     + '<h2>New Gold <span>XAUUSD triple confirmation \u00b7 SMC (FVG) + ML (VWMA-50) + Momentum (RSI cross) \u00b7 1H + 4H + OMNIGOLD</span></h2>'
     + '<div class="note" style="margin-bottom:8px">Fires only when all three modules agree: '
@@ -1076,8 +1937,12 @@ function mount(el){
     + '<div class="prog" id="ngProg"><i></i></div>'
     + '<div id="ngKilledNote"></div>'
     + '<div class="cards" id="ngCards"></div>'
+    /* hg-v701: the always-on board \u2014 with feeds up this IS the content, so
+       the old one-line empty state below survives ONLY for the
+       feeds-failed case. */
+    + '<div id="ngBoard"></div>'
     + '<div id="ngPerf"></div>'
-    + '<div class="empty" id="ngEmpty" style="display:none">No triple-confirmation fires right now \u2014 wait for price to enter an FVG with ML baseline and RSI cross both aligned.</div>'
+    + '<div class="empty" id="ngEmpty" style="display:none">FEEDS DOWN \u2014 no XAUUSD bars returned for either horizon this scan, so the board stays dark rather than invented. The status line above names the source errors.</div>'
     + '</div>';
 
   var btn = el.querySelector('#ngRun');
@@ -1131,6 +1996,15 @@ function mount(el){
       var current = statEl ? statEl.textContent : '';
       setStat(current + ' \u00b7 ' + pack.errors.length + ' warning' + (pack.errors.length === 1 ? '' : 's'), pack.errors.length > 0);
     }
+    /* hg-v701: the always-on board renders on EVERY scan outcome \u2014 fires,
+       no fires, even feeds down (each section then says DARK with the
+       reason). Isolated so a board failure can never break the cards. */
+    try {
+      var boardEl = el.querySelector('#ngBoard');
+      /* a 'busy' tick returns a string, not a pack — keep the standing
+         board instead of blanking it on no new data */
+      if (boardEl && pack && typeof pack === 'object') boardEl.innerHTML = ngBoardHtml(pack);
+    } catch(eBoard){}
     refreshKilledNote(el);
     refreshPerfPanels(el);
   }
@@ -1197,6 +2071,27 @@ W.ngConfirmations = ngConfirmations;
    (tests/test-newgold-honesty.mjs). */
 W.ngDetectLastFvgs = detectLastFvgs;
 W.ngVenueFloorDist = ngVenueFloorDist;
+/* hg-v701: the always-on board — pure builders + renderers exported so the
+   population is testable without a mount (tests/test-newgold-populate.mjs).
+   All ADDITIVE: nothing above changed shape. */
+W.ngLegRead = ngLegRead;
+W.ngRsiWindowFromSeries = ngRsiWindowFromSeries;   /* hg-v702 pure window rules, exported for direct-drive tests */
+W.ngFvgNearFrom = ngFvgNearFrom;
+/* hg-v702 knob readout (read-only copy): tests compute their expectations
+   from the SHIPPED dials instead of pinning stale numbers. */
+W.NG_LOOSEN = { rsiCrossBars: NG_RSI_CROSS_BARS, fvgEdgeAtr: NG_FVG_EDGE_ATR };
+W.ngBuildChecklist = ngBuildChecklist;
+W.ngChecklistHtml = ngChecklistHtml;
+W.ngWatchList = ngWatchList;
+W.ngWatchHtml = ngWatchHtml;
+W.ngOmniLaneStatus = ngOmniLaneStatus;
+W.ngHybridHtml = ngHybridHtml;
+W.ngSessionRead = ngSessionRead;
+W.ngSessionStripHtml = ngSessionStripHtml;
+W.ngHistoryRecords = ngHistoryRecords;
+W.ngHistoryHtml = ngHistoryHtml;
+W.ngBoardHtml = ngBoardHtml;
+W.ngCardHtml = cardHtml;
 W.newGoldScan = function(){ return __ng.snap; };
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'newgold', label: 'NEW GOLD', mount: mount, refresh: ngRefresh });

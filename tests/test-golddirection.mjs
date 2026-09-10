@@ -17,7 +17,20 @@
    source desk + stratKey, horizonBars 24); snapshot contract fields
    (side/scalp/swing/tape/enginesDark/at, deep-frozen); BRAIN state contract;
    localStorage 'hg_golddir_side' persistence round-trip; refresh + warm-up
-   contracts. Run: node tests/test-golddirection.mjs */
+   contracts.
+
+   hg-v702: PROVEN-ONLY CROWNING — the proven set resolves at runtime from
+   W.HG_GOLD_SETUP_EDGE prefer rows + stubbed hgOgSwingPrefer/hgFwdPaidKinds,
+   each entry tagged with its source; a lead-eligible UNPROVEN candidate is
+   never crowned (lands on unproven[]); the crowned card's MEASURED RECORD
+   line prints the proving row's own numbers (n= asserted from the row);
+   live-paid ledger evidence un-gates a kind (tagged live-paid, hgFwdPool
+   stats printed); '100%' never appears as a claim — only inside the fixed
+   honesty note. EXPLICIT DIRECTION CONFIRMATION — no scan without the
+   user's CONFIRM & SCAN click this session (persisted side included);
+   switching sides clears rendered results + snapshots and requires
+   re-confirm; the board header names the confirmed side.
+   Run: node tests/test-golddirection.mjs */
 
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -427,6 +440,12 @@ console.log('== 4) desk-tape fidelity ==');
   T.getGoldCandles = async () => ({ rows: down.map(r => ({ ...r })), source: 'seed' });
   T.goldSwingSetups = () => ({ ranked: [{ dir: 'long', strategy: 'LONG STUB', stratKey: 'ls',
     entry: 2260, stop: 2250, t1: 2280, t2: 2290, rr: 2, rr2: 3, stamps: [], gateNotes: [] }], rejected: [] });
+  /* hg-v702 deliberate update: crowning is now PROVEN-ONLY, and this section
+     loads no goldind — bless the stub strategy through the live edge-table
+     source (the same W.HG_GOLD_SETUP_EDGE read the tab resolves at scan
+     time) so the tape-fidelity pick still crowns. */
+  T.HG_GOLD_SETUP_EDGE = { scalp: {}, swing: { ls: { n: 40, gross: 0.3, net: 0.25, action: 'prefer',
+    why: 'stub prefer row for the tape-fidelity crown (hg-v702 test)' } } };
   const og1Inputs = [];
   T.hgOg1Engine = (inp) => { og1Inputs.push(inp); return { ok: false, why: 'stub' }; };
   /* forming 4h bar: a violent up-bar whose close time is AFTER now — the tape
@@ -516,6 +535,294 @@ console.log('== 5) hg-v701: scalp lane runs hgFilterGoldPostGate (source-desk pa
   const r2 = await tab.refresh();
   assert(r2 === 'refreshed', 'gate-throw scan still completes (got "' + r2 + '")');
   assert(marked >= 1, 'a throwing post-gate marks candidates UNCHECKED — never silently clean');
+  Date.now = realDateNow;
+  delete globalThis.localStorage;
+}
+
+/* =========================================================================
+   6) hg-v702: proven-only crowning — runtime proven set, measured records
+========================================================================= */
+console.log('== 6) hg-v702: proven-only crowning ==');
+{
+  const ls = memLocalStorage();
+  globalThis.localStorage = ls;
+  globalThis.window = {};
+  vm.runInThisContext(fs.readFileSync(root + 'goldind.js', 'utf8'), { filename: 'goldind.js' });
+  vm.runInThisContext(fs.readFileSync(root + 'golddirection.js', 'utf8'), { filename: 'golddirection.js' });
+  const C = globalThis.window;
+  const realDateNow = Date.now;
+  Date.now = () => PINNED;
+
+  /* feeds: 1h + 4h long enough for the OMNIGOLD lane (>=60 bars); 15m empty
+     so the GOLD SCALP lane stays held and adds no noise */
+  const t0 = Date.UTC(2024, 0, 1) / 1000;
+  const rows1h = []; for (let i = 0; i < 80; i++){ const o = 2300 + i * 0.5, c = o + 0.4; rows1h.push({ t: t0 + i * 3600, o, h: c + 0.5, l: o - 0.5, c, v: 1000 }); }
+  const rows4h = []; for (let i = 0; i < 80; i++){ const o = 2300 + i * 1.5, c = o + 1.2; rows4h.push({ t: t0 + i * 14400, o, h: c + 1, l: o - 1, c, v: 3000 }); }
+  C.getGoldCandles = async (tf) => (tf === '1h') ? { rows: rows1h.map(r => ({ ...r })), source: 'seed' }
+    : (tf === '4h') ? { rows: rows4h.map(r => ({ ...r })), source: 'seed' }
+    : { rows: [], source: 'seed' };
+
+  /* OMNIGOLD lane stubs: one formed SWING kind on the proven-list stub */
+  C.hgOgHorizonCfg = (label) => ({ label });
+  C.hgOgDetect = () => [{ k: 1 }];
+  C.hgOgEvaluate = (rows, hits, extra, cfg) => (cfg && cfg.label === 'SWING')
+    ? [{ kind: 'BOS-RETEST', dir: 'long', formation: { formed: true },
+         plan: { entry: 2400, stop: 2380, t1: 2440, t2: 2460, rr1: 2, rr2: 3 } }]
+    : [];
+  C.hgOgSwingPrefer = (kind, hz) => String(hz).toUpperCase() === 'SWING' && String(kind).toUpperCase() === 'BOS-RETEST';
+  const paidCalls = [];
+  C.hgFwdPaidKinds = (tab) => { paidCalls.push(tab); return tab === 'GOLDDIRECTION' ? ['GOLD-SWING-LEDGERKID'] : []; };
+  C.hgFwdPool = (tab) => (tab === 'GOLDDIRECTION') ? { 'GOLD-SWING-LEDGERKID': { samples: 21, wins: 13, expR: 0.31 } } : {};
+
+  /* swing engine: an UNPROVEN lead-eligible card OUTRANKING a proven one */
+  const provenSwing = { dir: 'long', strategy: 'WEEKLY RANGE BREAKOUT', stratKey: 'weekly', grade: 'A',
+    entry: 2300, stop: 2280, t1: 2340, t2: 2360, rr: 2, rr2: 3, confScore: 50, stamps: [], gateNotes: [] };
+  const unprovenSwing = { dir: 'long', strategy: 'UNPROVEN THING', stratKey: 'mystery',
+    entry: 2310, stop: 2290, t1: 2350, t2: 2370, rr: 2, rr2: 3, confScore: 90, stamps: [], gateNotes: [] };
+  C.goldSwingSetups = () => ({ ranked: [unprovenSwing, provenSwing], rejected: [] });
+
+  const tab = C.HG_tabs.find(t => t.id === 'golddirection');
+  const M = freshPane();
+  tab.mount(M.pane);
+
+  /* fixed honesty note; '100%' appears ONLY inside its phrase */
+  assert(M.pane._html.indexOf('No strategy measures 100%.') >= 0,
+         'fixed honesty note rendered in the tab header area');
+  {
+    const html = M.pane._html;
+    const PHR = 'No strategy measures 100%';
+    let i = -1, stray = false;
+    while ((i = html.indexOf('100%', i + 1)) >= 0){
+      if (html.substring(i - (PHR.length - 4), i + 4) !== PHR) stray = true;
+    }
+    assert(!stray, 'every "100%" in the header sits inside the honesty phrase — no certainty claim anywhere');
+  }
+
+  M.stubs['#gdLong']._handler();
+  assert(/Direction armed: LONG — press CONFIRM & SCAN/.test(M.stubs['#gdStat'].textContent),
+         'picking a side ARMS it and asks for the confirm click');
+  const r1 = await M.stubs['#gdRun']._handler();
+  assert(r1 === 'refreshed', 'CONFIRM & SCAN completes (got "' + r1 + '")');
+  const snap = C.goldDirectionScan();
+
+  /* proven-set resolution: exactly the live table's prefer rows + the
+     stubbed hgOgSwingPrefer / hgFwdPaidKinds contributions, each tagged */
+  const ps = snap.provenSet;
+  assert(Array.isArray(ps) && Object.isFrozen(ps), 'snapshot.provenSet published, deep-frozen');
+  const replayKeys = ps.filter(e => e.source === 'replay-prefer').map(e => e.horizon + ':' + e.key).sort().join(',');
+  const expReplay = ['scalp', 'swing'].flatMap(hz => Object.keys(C.HG_GOLD_SETUP_EDGE[hz])
+    .filter(k => C.HG_GOLD_SETUP_EDGE[hz][k] && C.HG_GOLD_SETUP_EDGE[hz][k].action === 'prefer')
+    .map(k => hz.toUpperCase() + ':' + k)).sort().join(',');
+  assert(replayKeys === expReplay && expReplay.length > 0,
+         'replay-prefer entries = EXACTLY the live W.HG_GOLD_SETUP_EDGE prefer rows (' + replayKeys + ')');
+  const wkRow = C.HG_GOLD_SETUP_EDGE.swing.weekly;
+  const psWk = ps.find(e => e.source === 'replay-prefer' && e.key === 'weekly' && e.horizon === 'SWING');
+  assert(!!psWk && psWk.n === wkRow.n && psWk.net === wkRow.net && psWk.gross === wkRow.gross,
+         'a replay-prefer entry carries the row\'s OWN n/gross/net — read, never retyped');
+  assert(ps.some(e => e.source === 'omnigold-prefer' && e.key === 'BOS-RETEST' && e.horizon === 'SWING'),
+         'hgOgSwingPrefer contribution present, tagged omnigold-prefer');
+  assert(ps.some(e => e.source === 'live-paid' && e.key === 'GOLD-SWING-LEDGERKID' && e.tab === 'GOLDDIRECTION'),
+         'hgFwdPaidKinds contribution present, tagged live-paid with its ledger tab');
+  assert(ps.filter(e => e.source === 'live-paid').length === 1,
+         'no live-paid entry fabricated for pools whose stub answered empty');
+  assert(paidCalls.includes('GOLDDIRECTION') && paidCalls.includes('OMNIGOLD:SCALP') && paidCalls.includes('OMNIGOLD:SWING'),
+         'hgFwdPaidKinds consulted for GOLDDIRECTION + both OMNIGOLD horizon pools');
+
+  /* crowning: proven-only — the higher-confScore UNPROVEN card never crowns */
+  assert(!!snap.swing.pick && snap.swing.pick.stratKey === 'weekly',
+         'crowned = first PROVEN lead-eligible (weekly), not the higher-confScore unproven card');
+  assert(snap.swing.crownedProven === true, 'crownedProven flag true on the crowned horizon');
+  assert(snap.swing.pick.provenBy && snap.swing.pick.provenBy.source === 'replay-prefer',
+         'the pick carries its proving entry with the source named');
+  assert(Array.isArray(snap.swing.unproven) && snap.swing.unproven.some(u => u.stratKey === 'mystery'),
+         'the lead-eligible UNPROVEN candidate lands on unproven[], never crowned');
+  assert(Object.isFrozen(snap.swing.unproven), 'unproven[] deep-frozen with the snapshot');
+
+  const html6 = M.stubs['#gdCards'].innerHTML;
+  assert(html6.indexOf('MEASURED RECORD') >= 0, 'crowned card carries a MEASURED RECORD line');
+  assert(html6.indexOf('n=' + wkRow.n) >= 0,
+         'the printed n= comes from the SAME table row that proved the pick (n=' + wkRow.n + ')');
+  assert(html6.indexOf('NOT MEASURED-PROVEN — paints, not crowned') >= 0,
+         'clearly-headed NOT MEASURED-PROVEN list rendered');
+  assert(html6.indexOf('UNPROVEN THING') >= 0, 'the unproven candidate still paints as a full card');
+  assert((html6.match(/gdx-banner-in/g) || []).length === 1,
+         'exactly ONE execution banner — the unproven list gets no banner treatment');
+  assert(html6.indexOf('Direction confirmed: LONG — every setup below is LONG-only.') >= 0,
+         'board header states the confirmed direction');
+  assert(html6.indexOf('100%') < 0, 'rendered scan HTML never claims 100%');
+
+  /* live-paid un-gating: the ledger-blessed kind becomes crownable */
+  C.goldSwingSetups = () => ({ ranked: [{ dir: 'long', strategy: 'LEDGER KID', stratKey: 'ledgerkid',
+    entry: 2320, stop: 2300, t1: 2360, t2: 2380, rr: 2, rr2: 3, confScore: 40, stamps: [], gateNotes: [] }], rejected: [] });
+  C.hgOgEvaluate = () => [];
+  const r2 = await tab.refresh();
+  assert(r2 === 'refreshed', 'live-paid re-scan completes (got "' + r2 + '")');
+  const snap2 = C.goldDirectionScan();
+  assert(!!snap2.swing.pick && snap2.swing.pick.stratKey === 'ledgerkid'
+      && snap2.swing.pick.provenBy && snap2.swing.pick.provenBy.source === 'live-paid',
+         'live forward-ledger proof UN-GATES a kind beyond the tables — crowned, tagged live-paid');
+  const html6b = M.stubs['#gdCards'].innerHTML;
+  assert(/HAS PAID at the family-wise bar/.test(html6b), 'live-paid measured line names the ledger read');
+  assert(html6b.indexOf('21 settled') >= 0 && html6b.indexOf('13 paid') >= 0 && html6b.indexOf('+0.31R/trade') >= 0,
+         'live-paid stats printed are the hgFwdPool numbers, read at render');
+  Date.now = realDateNow;
+  delete globalThis.localStorage;
+}
+
+/* =========================================================================
+   7) hg-v702: explicit direction confirmation
+========================================================================= */
+console.log('== 7) hg-v702: explicit direction confirmation ==');
+{
+  const ls = memLocalStorage();
+  ls._map['hg_golddir_side'] = 'long';   /* persisted from a "previous session" */
+  globalThis.localStorage = ls;
+  globalThis.window = {};
+  vm.runInThisContext(fs.readFileSync(root + 'golddirection.js', 'utf8'), { filename: 'golddirection.js' });
+  const C = globalThis.window;
+  const realDateNow = Date.now;
+  Date.now = () => PINNED;
+  const t0 = Date.UTC(2024, 0, 1) / 1000;
+  const rows = []; for (let i = 0; i < 80; i++){ const o = 2300 + i, c = o + 0.5; rows.push({ t: t0 + i * 3600, o, h: c + 1, l: o - 1, c, v: 1000 }); }
+  C.getGoldCandles = async () => ({ rows: rows.map(r => ({ ...r })), source: 'seed' });
+  C.HG_GOLD_SETUP_EDGE = { scalp: {}, swing: { stub: { n: 77, gross: 0.4, net: 0.3, action: 'prefer',
+    why: 'stub prefer row (hg-v702 test)' } } };
+  C.goldSwingSetups = () => ({ ranked: [{ dir: 'long', strategy: 'STUB PROVEN', stratKey: 'stub',
+    entry: 2300, stop: 2280, t1: 2340, t2: 2360, rr: 2, rr2: 3, stamps: [], gateNotes: [] }], rejected: [] });
+
+  const tab = C.HG_tabs.find(t => t.id === 'golddirection');
+  const warm = (C.HG_warmups || []).find(t => t.id === 'golddirection');
+  const M = freshPane();
+  tab.mount(M.pane);
+  assert(M.pane._html.indexOf('CONFIRM &amp; SCAN') >= 0, 'the scan button reads CONFIRM & SCAN');
+  assert(/CONFIRM & SCAN/.test(M.stubs['#gdStat'].textContent) && /saved/i.test(M.stubs['#gdStat'].textContent),
+         'persisted side restored ARMED with the confirm-required hint');
+  assert(M.stubs['#gdRun'].disabled === false, 'button enabled — the armed side awaits the user\'s own click');
+
+  /* a persisted side NEVER scans without a this-session confirm */
+  const w0 = await warm.run();
+  assert(/^unavailable: direction not confirmed this session/.test(w0),
+         'warm-up refuses to scan a persisted side without this session\'s confirm (got "' + w0 + '")');
+  const rf0 = await tab.refresh();
+  assert(rf0 === 'skipped: not run yet', 'refresh still never triggers a first-time scan');
+  assert(C.goldDirectionScan() === null, 'no snapshot published before the user confirms');
+
+  /* the user's CONFIRM & SCAN click IS the confirmation */
+  const r1 = await M.stubs['#gdRun']._handler();
+  assert(r1 === 'refreshed', 'the confirm click runs the scan (got "' + r1 + '")');
+  const html1 = M.stubs['#gdCards'].innerHTML;
+  assert(html1.indexOf('Direction confirmed: LONG — every setup below is LONG-only.') >= 0,
+         'board header states the confirmed LONG direction');
+  assert(html1.indexOf('n=77') >= 0, 'crowned card prints the stub row\'s own n=77');
+  assert(!!C.goldDirectionScan() && C.goldDirectionScan().side === 'long', 'snapshot published for the confirmed scan');
+
+  /* SWITCHING sides clears results + snapshots and demands a fresh confirm */
+  M.stubs['#gdShort']._handler();
+  assert(M.stubs['#gdCards'].innerHTML === '', 'side switch CLEARS rendered results — no stale LONG cards remain');
+  assert(C.goldDirectionScan() === null && C.goldDirectionState() === null,
+         'side switch clears the published snapshots — no stale other-side picks');
+  assert(/Direction armed: SHORT — press CONFIRM & SCAN/.test(M.stubs['#gdStat'].textContent),
+         'switch re-arms and asks for a fresh confirm');
+  const rf1 = await tab.refresh();
+  assert(rf1 === 'skipped: direction not confirmed this session',
+         'refresh after a side switch refuses to scan until re-confirmed (got "' + rf1 + '")');
+  const w1 = await warm.run();
+  assert(/^unavailable: direction not confirmed this session/.test(w1),
+         'warm-up refuses after a side switch too (got "' + w1 + '")');
+
+  const r2 = await M.stubs['#gdRun']._handler();
+  assert(r2 === 'refreshed', 'the re-confirm click scans the switched side (got "' + r2 + '")');
+  const snap7 = C.goldDirectionScan();
+  assert(snap7.side === 'short', 'the switched side scans as SHORT — never inferred, never flipped');
+  const html2 = M.stubs['#gdCards'].innerHTML;
+  assert(html2.indexOf('Direction confirmed: SHORT — every setup below is SHORT-only.') >= 0,
+         'board header states the confirmed SHORT direction');
+  assert(html2.indexOf('<div class="gdx-card') < 0 && snap7.swing.otherSide >= 1,
+         'no LONG card survives on the confirmed SHORT board — other side counted only');
+
+  /* ---- hg-v702 audit fatal closed: a side switch WHILE a scan is in
+     flight discards that scan whole — the stale async scan must never
+     repaint the board the switch just cleared, republish the old-side
+     snapshots, or record its picks to the ledger. ---- */
+  {
+    let release; let gate = new Promise(res => { release = res; });
+    C.getGoldCandles = async () => { await gate; return { rows: rows.map(r => ({ ...r })), source: 'seed' }; };
+    const fwdRace = [];
+    C.hgFwdRecordScan = (tabName, tf, rws) => { fwdRace.push(rws); return rws.length; };
+    M.stubs['#gdLong']._handler();                     /* arm LONG */
+    const inFlight = M.stubs['#gdRun']._handler();     /* confirm LONG; scan blocks on feeds */
+    await new Promise(res => setTimeout(res, 0));      /* let it reach the feed await */
+    M.stubs['#gdShort']._handler();                    /* the user switches mid-flight */
+    assert(M.stubs['#gdCards'].innerHTML === '', 'mid-flight switch clears the board immediately');
+    release();
+    const rRace = await inFlight;
+    assert(rRace === 'skipped: side switched mid-scan',
+           'the in-flight scan discards itself on a mid-flight switch (got "' + rRace + '")');
+    assert(M.stubs['#gdCards'].innerHTML === '',
+           'RACE: the stale LONG scan never repaints the cleared board');
+    assert(C.goldDirectionScan() === null && C.goldDirectionState() === null,
+           'RACE: no old-side snapshot is republished by the discarded scan');
+    assert(fwdRace.length === 0, 'RACE: the discarded scan records nothing to the forward ledger');
+    assert(/side switched mid-scan/.test(M.stubs['#gdStat'].textContent)
+        && /SHORT/.test(M.stubs['#gdStat'].textContent),
+           'stat names the discard and the newly armed side');
+    /* the fresh confirm still scans the new side normally */
+    const rAfter = await M.stubs['#gdRun']._handler();
+    assert(rAfter === 'refreshed', 'a fresh CONFIRM & SCAN after the discarded scan runs (got "' + rAfter + '")');
+    assert(C.goldDirectionScan() && C.goldDirectionScan().side === 'short',
+           'the post-discard scan publishes the NEW side');
+  }
+  Date.now = realDateNow;
+  delete globalThis.localStorage;
+}
+
+console.log('== 8) hg-v702 audit closeout: live-paid proof is CADENCE-SCOPED ==');
+/* A kind that has paid ONLY on the OMNIGOLD:SCALP (1h) ledger must not crown
+   a 4h SWING candidate — omnigold.js's HG_OG_SWING_PREFER comment warns the
+   same names lose across cadence in the reverse direction. GOLDDIRECTION's
+   own ledger entries stay unscoped (they are recorded per horizon-tagged
+   mechanic name and match by that exact name). */
+{
+  const ls = memLocalStorage();
+  globalThis.localStorage = ls;
+  globalThis.window = {};
+  vm.runInThisContext(fs.readFileSync(root + 'goldind.js', 'utf8'), { filename: 'goldind.js' });
+  vm.runInThisContext(fs.readFileSync(root + 'golddirection.js', 'utf8'), { filename: 'golddirection.js' });
+  const C = globalThis.window;
+  const realDateNow = Date.now;
+  Date.now = () => PINNED;
+  const t0 = Math.floor((PINNED - 90 * 86400 * 1000) / 1000);
+  const rows1h = []; for (let i = 0; i < 300; i++){ const o = 2300 + i * 0.3, c2 = o + 0.2; rows1h.push({ t: t0 + i * 3600, o, h: c2 + 0.5, l: o - 0.5, c: c2, v: 2000 }); }
+  const rows4h = []; for (let i = 0; i < 80; i++){ const o = 2300 + i * 1.5, c2 = o + 1.2; rows4h.push({ t: t0 + i * 14400, o, h: c2 + 1, l: o - 1, c: c2, v: 3000 }); }
+  const rows15 = []; const t15 = Math.floor(PINNED / 1000) - 300 * 900;
+  for (let i = 0; i < 300; i++){ const o = 2305 + (i % 7) * 0.4, c2 = o + 0.3; rows15.push({ t: t15 + i * 900, o, h: c2 + 0.5, l: o - 0.5, c: c2, v: 1200 }); }
+  C.getGoldCandles = async (tf) => (tf === '1h') ? { rows: rows1h.map(r => ({ ...r })), source: 'seed' }
+    : (tf === '4h') ? { rows: rows4h.map(r => ({ ...r })), source: 'seed' }
+    : (tf === '15m') ? { rows: rows15.map(r => ({ ...r })), source: 'seed' }
+    : { rows: [], source: 'seed' };
+  /* the kind is paid ONLY on the OMNIGOLD:SCALP ledger */
+  C.hgFwdPaidKinds = (tab) => tab === 'OMNIGOLD:SCALP' ? ['LEDGER-ONLY-KIND'] : [];
+  C.hgFwdPool = (tab) => tab === 'OMNIGOLD:SCALP' ? { 'LEDGER-ONLY-KIND': { samples: 25, wins: 14, expR: 0.2 } } : {};
+  /* same-named lead-eligible candidates on BOTH horizons via the swing/scalp engines */
+  C.goldSwingSetups = () => ({ ranked: [{ dir: 'long', strategy: 'LEDGER-ONLY-KIND', stratKey: 'LEDGER-ONLY-KIND',
+    entry: 2310, stop: 2290, t1: 2350, t2: 2370, rr: 2, rr2: 3, confScore: 80, stamps: [], gateNotes: [] }], rejected: [] });
+  C.goldScalpSetups = () => { const a = [{ dir: 'long', strategy: 'LEDGER-ONLY-KIND', stratKey: 'LEDGER-ONLY-KIND',
+    entry: 2310, stop: 2300, t1: 2330, t2: 2345, rr: 2, rr2: 3.5, confScore: 80, stamps: [], gateNotes: [], atr: 6 }]; a.rejected = []; return a; };
+  C.goldRankSetups = (cands) => ({ ranked: cands, best: cands[0] || null, rejected: [] });
+  C.hgGoldPlanSidesOk = () => ({ ok: true });
+  const tab8 = C.HG_tabs.find(t => t.id === 'golddirection');
+  const M8 = freshPane();
+  tab8.mount(M8.pane);
+  M8.stubs['#gdLong']._handler();
+  const r8 = await M8.stubs['#gdRun']._handler();
+  assert(r8 === 'refreshed', 'cadence-scope scan completes (got "' + r8 + '")');
+  const s8 = C.goldDirectionScan();
+  assert(!!(s8.scalp.pick && s8.scalp.pick.provenBy && s8.scalp.pick.provenBy.source === 'live-paid'
+      && s8.scalp.pick.provenBy.tab === 'OMNIGOLD:SCALP'),
+         'SCALP candidate IS crowned by the OMNIGOLD:SCALP live-paid proof (matching cadence)');
+  assert(!s8.swing.pick && Array.isArray(s8.swing.unproven)
+      && s8.swing.unproven.some(u => u.stratKey === 'LEDGER-ONLY-KIND'),
+         'the same-named 4h SWING candidate is NOT crowned by scalp-cadence proof — lands on unproven[] (hg-v702 closeout)');
   Date.now = realDateNow;
   delete globalThis.localStorage;
 }

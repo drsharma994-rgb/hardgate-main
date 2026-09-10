@@ -347,6 +347,7 @@ function settleRecord(tr, rows, counters, results){
     tapeOk: !!tr.tapeOk,
     sessionLeg: tr.sessionLeg || null,
     stopWidened: !!tr.stopWidened,
+    loosened: tr.loosened || null,
     fvgAgeBars: isFinite(tr.fvgAgeBars) ? tr.fvgAgeBars : null,
     utcHour: new Date(rows[tr.sigIdx].t * 1000).getUTCHours(),
     entry: +tr.entry.toFixed(2), stop: +tr.stop.toFixed(2),
@@ -504,6 +505,10 @@ function walkHorizon(W, hz, rows, rows4h, results, counters){
         tapeOk: sessLeg.tapeOk,
         sessionLeg: sessLeg.name,
         stopWidened: setup.stopWidened === true,
+        /* hg-v702: which loosened path (if any) the fire used — windowed RSI
+           cross age and/or FVG edge-tag distance; both null/0 = strict. */
+        loosened: setup.loosened ? { rsiCrossAge: setup.loosened.rsiCrossAge,
+          fvgEdgeAtr: setup.loosened.fvgEdgeAtr, used: setup.loosened.used === true } : null,
         fvgAgeBars: setup.fvg ? setup.fvg.ageBars : NaN,
         rr1: setup.rr1, riskPct: setup.riskPct,
         stopAtr: (isFinite(a14) && a14 > 0) ? Math.abs(entry - stop) / a14 : NaN,
