@@ -6900,97 +6900,98 @@ terse status, and never launches a first-time scan on a global refresh.
      Keys are uppercase so lookup can normalise case. */
   var HG_OG_REPLAY_EVIDENCE = {
     src: 'scripts/omnigold-replay-evidence.json',
-    window: '2026-03-15..2026-08-29',
+    window: '2026-03-27..2026-09-10',   /* refreshed 2026-09-10 post hg-v699 */
     barBasis: 'PAXGUSDT 1h proxy',
-    settled: 7270,
+    settled: 8155,
     rtCostPct: 0.26,
-    fit: { verdict: 'not-predictive', testAUC: 0.4924,
-           topDecileLift: 0.929, bottomDecileLift: 0.864 },
+    fit: { verdict: 'not-predictive', testAUC: 0.5044,
+           topDecileLift: 1.051, bottomDecileLift: 0.635 },
     kinds: {
-      'ADR-FADE':        [242, 0.3388, -1.415,  0.017, 1.462],
-      'THREE-BAR':       [283, 0.3392, -4.220,  0.018, 2.325],
-      'ENGULF-LEVEL':    [115, 0.3652, -3.351,  0.096, 1.868],
-      'CCI-EXTREME':     [372, 0.3118, -1.095, -0.046, 0.679],
-      'STOCHRSI-TURN':   [495, 0.3394, -0.737,  0.053, 0.532],
-      'PIN-REJECT':      [195, 0.3590, -4.018,  0.077, 2.383],
-      'SPRING':          [132, 0.2879, -1.555, -0.136, 0.944],
-      'ROUND-MAGNET':    [713, 0.3745, -0.783,  0.133, 0.720],
-      'VWAP-BAND':       [ 71, 0.2535, -1.217, -0.239, 0.646],
-      'SWEEP-V2':        [205, 0.3220, -1.818, -0.034, 0.932],
-      'LONDON-FIX':      [133, 0.2481, -0.465, -0.063, 0.241],
-      'HA-FLIP':         [109, 0.2936, -0.387,  0.069, 0.268],
-      'FVG-HVN':         [151, 0.2450, -0.714, -0.166, 0.322],
-      'SQUEEZE-FIRE':    [ 53, 0.3019, -0.310,  0.094, 0.245],
-      'CUSUM-SHIFT':     [ 53, 0.3019, -0.185,  0.082, 0.238],
-      'NY-OPEN-DRIVE':   [ 62, 0.1774, -0.433, -0.106, 0.214],
-      'STRUCT-BOS':      [104, 0.3077, -0.164,  0.165, 0.211],
-      'BOS-RETEST':      [ 87, 0.3218, -0.299,  0.112, 0.224],
-      'NR7-BREAK':       [143, 0.2587, -0.529, -0.102, 0.260],
-      'MMOVE':           [212, 0.3019, -0.250,  0.072, 0.226],
-      'MFI-SQUAT':       [117, 0.2650, -0.732, -0.092, 0.354],
-      'PIVOT-REJECT':    [177, 0.2994, -1.139, -0.094, 0.803],
-      'INSIDE-BREAK':    [126, 0.3016, -0.394,  0.044, 0.284],
-      'ASIA-BREAK':      [ 91, 0.2198, -0.463, -0.068, 0.231],
-      'KZ-JUDAS':        [158, 0.2975, -2.206, -0.108, 1.242],
-      'ORB':             [142, 0.2817, -0.332,  0.024, 0.235],
-      'TREND-RECLAIM':   [107, 0.3364, -0.397,  0.082, 0.341],
-      'DI-CROSS':        [107, 0.2710, -0.358, -0.001, 0.240],
-      'PO3':             [158, 0.3038, -0.823, -0.048, 0.461],
-      'FIB-618':         [126, 0.2778, -0.635, -0.115, 0.373],
-      'PD-EQUILIBRIUM':  [307, 0.2964, -5.185, -0.111, 2.307],
-      'FVG-FILL':        [155, 0.2774, -0.346,  0.039, 0.261],
-      'ER-IGNITION':     [ 80, 0.2500, -1.392, -0.250, 0.622],
-      'RSI-DIVERGE':     [ 51, 0.3529, -2.720,  0.071, 1.947],
-      'PDL-SWEEP':       [ 76, 0.1974, -1.588, -0.408, 0.780],
-      'RIBBON-PULLBACK': [102, 0.2451, -0.447, -0.093, 0.244],
-      'VWAP-REVERT':     [ 61, 0.2951, -0.662, -0.077, 0.306],
-      'AVWAP-RECLAIM':   [117, 0.3419, -0.370,  0.080, 0.305],
-      'ICHI-KUMO':       [107, 0.2617, -0.401, -0.053, 0.232],
-      'EQH-SWEEP':       [ 47, 0.3404, -1.390,  0.021, 0.848],
-      'WEEKLY-OPEN':     [150, 0.3533, -0.645,  0.076, 0.619],
-      'EMA50-HOLD':      [118, 0.2712, -1.131, -0.108, 0.412],
-      'UTAD':            [107, 0.3364, -1.493,  0.009, 1.022],
-      'PDH-SWEEP':       [ 81, 0.3210, -1.174, -0.024, 0.745],
-      'EQL-SWEEP':       [ 53, 0.3774, -1.033,  0.132, 0.887],
-      'OPENING RANGE BREAKOUT':   [69, 0.4928, -1.798,  0.220, 0.880],
-      'HVN / VOLUME NODE RETEST': [65, 0.3846, -3.071, -0.038, 1.304]
+      'ROUND-MAGNET': [620, 0.3403,  -0.834,   0.036, 0.630],
+      'STOCHRSI-TURN': [434, 0.3249,  -0.689,   0.026, 0.487],
+      'P8-RANGE': [358, 0.2542,  -2.163,  -0.235, 1.177],
+      'CCI-EXTREME': [328, 0.3323,  -0.748,   0.023, 0.521],
+      'P9-VOLBAR': [315, 0.2952,  -1.487,  -0.112, 0.982],
+      'PD-EQUILIBRIUM': [288, 0.3090,  -5.158,  -0.073, 2.311],
+      'THREE-BAR': [279, 0.3513,  -3.732,   0.054, 2.087],
+      'ADR-FADE': [210, 0.3476,  -1.260,   0.043, 1.353],
+      'MMOVE': [206, 0.3107,  -0.236,   0.088, 0.233],
+      'P6-FAIL': [197, 0.3909,  -1.670,   0.203, 0.914],
+      'PIN-REJECT': [192, 0.3646,  -3.838,   0.094, 2.208],
+      'SWEEP-V2': [189, 0.2963,  -1.600,  -0.087, 0.688],
+      'PIVOT-REJECT': [171, 0.2749,  -1.126,  -0.168, 0.610],
+      'PO3': [162, 0.2963,  -0.841,  -0.071, 0.484],
+      'FVG-HVN': [161, 0.2484,  -0.680,  -0.135, 0.336],
+      'P4-LAF': [156, 0.3782,  -0.653,   0.141, 0.578],
+      'FVG-FILL': [155, 0.2774,  -0.387,   0.027, 0.286],
+      'WEEKLY-OPEN': [154, 0.3312,  -0.936,   0.020, 0.639],
+      'KZ-JUDAS': [150, 0.2800,  -1.992,  -0.160, 0.924],
+      'ORB': [146, 0.2740,  -0.346,   0.028, 0.236],
+      'P5-VWAP': [139, 0.2806,  -0.805,  -0.120, 0.406],
+      'NR7-BREAK': [139, 0.2590,  -0.539,  -0.107, 0.280],
+      'FIB-618': [132, 0.2955,  -0.635,  -0.064, 0.391],
+      'P7-SCALP': [132, 0.3409,  -0.884,   0.054, 0.680],
+      'INSIDE-BREAK': [122, 0.2869,  -0.446,   0.018, 0.294],
+      'AVWAP-RECLAIM': [118, 0.3305,  -0.460,   0.046, 0.321],
+      'MFI-SQUAT': [117, 0.2821,  -0.627,  -0.041, 0.367],
+      'EMA50-HOLD': [116, 0.2586,  -0.893,  -0.144, 0.434],
+      'ENGULF-LEVEL': [114, 0.3421,  -3.175,   0.026, 1.571],
+      'DI-CROSS': [112, 0.2321,  -0.485,  -0.118, 0.241],
+      'HA-FLIP': [109, 0.2936,  -0.415,   0.052, 0.295],
+      'TREND-RECLAIM': [106, 0.3491,  -0.369,   0.121, 0.344],
+      'ICHI-KUMO': [106, 0.2358,  -0.453,  -0.106, 0.236],
+      'STRUCT-BOS': [105, 0.3048,  -0.202,   0.145, 0.213],
+      'SPRING': [104, 0.1923,  -1.429,  -0.382, 0.523],
+      'RIBBON-PULLBACK': [103, 0.2524,  -0.563,  -0.070, 0.286],
+      'P6-COMP': [ 95, 0.2526,  -0.320,  -0.018, 0.227],
+      'UTAD': [ 91, 0.3846,  -1.043,   0.154, 0.644],
+      'ASIA-BREAK': [ 90, 0.2222,  -0.461,  -0.042, 0.233],
+      'LONDON-FIX': [ 89, 0.2022,  -0.547,  -0.189, 0.256],
+      'BOS-RETEST': [ 85, 0.3059,  -0.392,   0.067, 0.233],
+      'ER-IGNITION': [ 81, 0.2593,  -1.339,  -0.222, 0.626],
+      'PDL-SWEEP': [ 81, 0.2222,  -1.452,  -0.333, 0.716],
+      'PDH-SWEEP': [ 75, 0.3467,  -0.955,   0.054, 0.648],
+      'VWAP-REVERT': [ 65, 0.3077,  -0.658,  -0.041, 0.346],
+      'VWAP-BAND': [ 63, 0.2381,  -0.890,  -0.286, 0.487],
+      'P5-WYCK': [ 58, 0.2241,  -0.693,  -0.219, 0.352],
+      'EQL-SWEEP': [ 53, 0.2075,  -1.168,  -0.366, 0.625],
+      'NY-OPEN-DRIVE': [ 51, 0.2157,  -0.358,  -0.025, 0.216],
+      'SQUEEZE-FIRE': [ 50, 0.3200,  -0.328,   0.108, 0.258],
+      'P5-DRIVE': [ 48, 0.3333,  -0.226,   0.228, 0.307],
+      'RSI-DIVERGE': [ 46, 0.3696,  -1.931,   0.123, 1.379],
+      'CUSUM-SHIFT': [ 45, 0.2444,  -0.237,   0.041, 0.247],
+      'EQH-SWEEP': [ 42, 0.3571,  -0.971,   0.071, 0.612]
     },
+    /* hg-v700 refresh note: the ENGINE cohort collapsed from 277 to 3 settled
+       trades — the hg-v699 GOLD SCALP overhaul (stop floor + edge suppressions)
+       made bridge picks scarce, so per-grade ENGINE rows are no longer
+       statistically meaningful. Rows kept for shape; n says everything. */
     grades: {
-      'A':         [70, 0.5429, -1.714],
-      'B':         [36, 0.3611, -2.291],
-      'C':         [23, 0.3478, -0.511],
-      'A-DEMOTED': [40, 0.4250, -2.677],
-      'B-DEMOTED': [88, 0.4091, -3.133],
-      'C-DEMOTED': [20, 0.5500, -2.764]
+      'A': [1, 0.0000, 0.874],
+      'B': [1, 1.0000, 1.391],
+      'C': [1, 0.0000, 0.283]
     },
     /* SCAN multi-factor score tiers, [n, winRate, avgNetR], baked from
-       scripts/backtest-omnigold-results.json aggregates.byTier (the same
-       replay the evidence file distills). The ordering is the point:
-       WEAK 34% WR beat STRONG 30% — the tiers did not rank outcomes.
-       No EXCEPTIONAL row exists because >=85 is unreachable by the scan
-       arithmetic (byTierNote says so; independently: the market-conditions
-       factor caps at 84.25/5 = 16.85 and the Wilson factor at 0.3, so the
-       scan total tops out near 82). ENGINE grade rows above are a separate
-       scalar scale — never pooled with these. */
+       scripts/backtest-omnigold-results.json aggregates.byTier (refreshed
+       window). The ordering is still the point: WEAK 32% ~= STRONG 32% >
+       FAIR 30% — the tiers still do not rank outcomes (fit not-predictive,
+       deciles non-monotonic 0.635..1.28..1.051). No EXCEPTIONAL row exists
+       because >=85 is unreachable by the scan arithmetic offline. */
     tiers: {
-      'WEAK':   [ 330, 0.3420, -0.243],
-      'FAIR':   [5422, 0.3100, -1.547],
-      'STRONG': [1241, 0.3040, -0.536]
+      'WEAK':   [ 407, 0.3220, -0.370],
+      'FAIR':   [6338, 0.2980, -1.463],
+      'STRONG': [1407, 0.3180, -0.492]
     },
-    /* Median per-trade fee load in R over settled replay trades, computed
-       from trades[] in scripts/backtest-omnigold-results.json as
-       rMultiple - netR (settled = win/loss/both-touch/timeout, n=7270).
-       NOTE: an earlier draft of the desk-stance wording quoted 0.79R;
-       that figure does not reproduce from the shipped trades — these do. */
-    medianCostR: { all: 0.626, scalp: 0.738, swing: 0.335 },
-    /* Profit factor of the one near-breakeven cohort, from
-       aggregates.bySource['ENGINE:SWING'].profitFactor. */
-    pf: { 'ENGINE:SWING': 0.90 },
+    /* Median per-trade fee load in R over settled replay trades (n=8155),
+       computed from trades[] as rMultiple - netR at the 0.26% PAXG RT. */
+    medianCostR: { all: 0.546, scalp: 0.635, swing: 0.282 },
+    /* ENGINE:SWING n=3 this window — no meaningful profit factor exists
+       (the old 0.90 was measured on n=27 pre-v699). null, not a number. */
+    pf: { 'ENGINE:SWING': null },
     cohorts: {
-      'SCAN:SCALP':   [5466, 0.3035, -1.524, -0.012],
-      'SCAN:SWING':   [1527, 0.3353, -0.523,  0.024],
-      'ENGINE:SCALP': [ 250, 0.4520, -2.603,  0.123],
-      'ENGINE:SWING': [  27, 0.3704, -0.056,  0.195]
+      'SCAN:SCALP':   [6461, 0.2959, -1.438, -0.034],
+      'SCAN:SWING':   [1691, 0.3294, -0.488,  0.009],
+      'ENGINE:SWING': [   3, 0.3333,  0.849,  0.954]
     }
   };
 
@@ -7529,7 +7530,13 @@ terse status, and never launches a first-time scan on a global refresh.
     var drag = null;
     try { drag = hgOgCostDrag(setup, vc); } catch (eD) { drag = null; }
     out.drag = drag;
-    if (drag && fin(drag.costR) > HG_OG_FORM_COST_R_MAX){
+    /* hg-v700: float tolerance at the bar. Producers now mint stops AT the
+       venue floor (og1 hg-v700 mint floor; entry×rt/0.125/100 exactly), and
+       rt/stopPct at that boundary divides to 0.12500000000000003 — strictly
+       greater than 0.125 in floats — which stood aside the very cards the
+       floor was composed for (replay caught 2,826 boundary stand-asides). A
+       stop AT the bar is AT the bar. */
+    if (drag && fin(drag.costR) > HG_OG_FORM_COST_R_MAX * (1 + 1e-9)){
       out.formed = false;
       out.stopFloor = { costR: drag.costR, maxR: HG_OG_FORM_COST_R_MAX,
                         stopPct: drag.stopPct, rtCostPct: drag.rtCostPct, venue: vc.venue };

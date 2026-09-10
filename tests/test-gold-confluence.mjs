@@ -73,15 +73,36 @@ console.log('\n== news lock zeros macro + blocks alert ==');
   ok(!sc.alertOk, 'no alert under news lock');
 }
 
-console.log('\n== apply stamps NO_TRADE without hard demote ==');
+console.log('\n== apply stamps NO_TRADE and DEMOTES (hg-v700) ==');
 {
+  /* hg-v700: the old "stamp only, never demote" contract let goldRankSetups
+     crown a stamped-no-trade card MOST PROBABLE — the 140-day GOLD SWING
+     replay measured that MP cohort n=100 ALL carrying CONF NO TRADE at
+     −0.209R/trade net XM (scripts/backtest-goldswing-results.json). A tier
+     the desk's own score calls "below trade bar" now paints, never leads. */
+  /* hg-v700 refined: the demote fires only from a DATA-BACKED score. A ctx
+     with no candle rows starves every leg — the gate reports CONF UNCHECKED
+     and never manufactures a no-trade verdict (v698 unchecked rule; SUPER
+     GOLD's rows-free cross-desk re-rank was clobbering evaluated cards). */
+  const starved = { dir: 'short', stratKey: 'rsidiv', entry: 2310, agree: 0, demoted: false, stamps: [], confScore: 71 };
+  W.hgGoldApplyConfluence(starved, { newsGate: { lock: true } });
+  ok(starved.stamps.indexOf('CONF UNCHECKED') >= 0, 'rows-free ctx stamps CONF UNCHECKED');
+  ok(starved.demoted === false, 'rows-free ctx NEVER demotes (missing data is not a measured no-trade)');
+  ok(starved.confScore === 71, 'a prior data-backed verdict is never overwritten by a starved re-check');
   const weak = { dir: 'short', stratKey: 'rsidiv', entry: 2310, agree: 0, demoted: false, stamps: [] };
-  W.hgGoldApplyConfluence(weak, { newsGate: { lock: true } });
+  W.hgGoldApplyConfluence(weak, { newsGate: { lock: true }, rows15m: trendRows() });
   ok(isFinite(weak.confScore), 'confScore stamped');
   ok(weak.confTier === 'NO_TRADE' || weak.confScore < 65, 'weak → low tier (got ' + weak.confTier + '/' + weak.confScore + ')');
   ok(weak.stamps.some((s) => /CONF/.test(s)), 'CONF stamp');
-  ok(weak.demoted === false, 'does not hard-demote (ranker demotions stay authoritative)');
+  ok(weak.demoted === true, 'data-backed NO_TRADE hard-demotes — paints, never leads (hg-v700, measured MP cohort −0.209R/trade)');
+  ok(Array.isArray(weak.gateNotes) && /no-trade — paints, never leads/.test(weak.gateNotes.join(' ')),
+     'gate note names the confluence demotion');
   ok(weak.confAlertOk === false, 'alert blocked');
+  /* WATCH and above never demote here — quality gates stay authoritative */
+  const mid = { dir: 'long', stratKey: 'liqsweep', entry: 2310, agree: 3, demoted: false, stamps: [], confirmed: true, sweepScore: 82, killzoneWeight: 3 };
+  W.hgGoldApplyConfluence(mid, { rows15m: trendRows(), rows4h: trendRows(), macro: { realRateHint: 'TAILWIND' } });
+  ok(mid.confTier === 'NO_TRADE' ? mid.demoted === true : mid.demoted === false,
+     'demotion tracks the NO_TRADE tier only (got ' + mid.confTier + '/' + mid.confScore + ', demoted=' + mid.demoted + ')');
 }
 
 console.log('\n== ranker wires confluence ==');

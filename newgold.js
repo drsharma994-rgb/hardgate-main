@@ -143,31 +143,57 @@ function smaSeries(vals, p){
    Bearish FVG (Pine): high[0] < low[2] AND close[1] < open[1].
    The gap is [high[0], low[2]] and is a valid sell zone until mitigated.
 
+   MITIGATION IS NOW ACTUALLY TESTED (hg-v700). Until this fix every card
+   printed "unmitigated" while no code anywhere tested mitigation — the v536
+   label class: a claim the data was never asked. The real check, from this
+   module's own gap geometry above: a bull gap [gapLo=high[i-2], gapHi=low[i]]
+   is MITIGATED once any LATER closed bar's low <= gapLo (price traded down
+   through the whole gap); mirrored, a bear gap [gapLo=high[i], gapHi=low[i-2]]
+   is mitigated once any later closed bar's high >= gapHi. A partial dip into
+   the gap is not mitigation — the zone survives until fully covered. A
+   mitigated FVG stops counting as the structure leg entirely (fail closed):
+   it is skipped here, and an older unmitigated gap may take its place.
+
    Returns { bullTop, bullBot, bearTop, bearBot, bullAge, bearAge } as of
-   the LAST bar. Ages are bars-since-formation; FVGs older than
-   FVG_MAX_AGE bars are dropped as stale (they've usually been touched by
-   noise even if the loose mitigation test disagrees). */
+   the LAST bar — every gap returned has passed the mitigation check. Ages
+   are bars-since-formation; FVGs older than FVG_MAX_AGE bars are dropped
+   as stale. */
 function detectLastFvgs(rows){
   var out = { bullTop: NaN, bullBot: NaN, bearTop: NaN, bearBot: NaN,
               bullAge: NaN, bearAge: NaN };
   if (!Array.isArray(rows) || rows.length < 3) return out;
   var lastIdx = rows.length - 1;
+  /* Running extremes of every bar AFTER bar i (maintained as the scan walks
+     newest -> oldest), so the mitigation check is O(1) per candidate gap. */
+  var minLowAfter = Infinity, maxHighAfter = -Infinity;
   /* Scan from newest to oldest so we keep the freshest unmitigated FVG. */
   for (var i = lastIdx; i >= 2; i--){
+    if (i < lastIdx){
+      var rA = rows[i + 1];
+      if (rA){
+        var la = +rA.l, ha = +rA.h;
+        if (isFinite(la) && la < minLowAfter) minLowAfter = la;
+        if (isFinite(ha) && ha > maxHighAfter) maxHighAfter = ha;
+      }
+    }
     var r0 = rows[i], r1 = rows[i - 1], r2 = rows[i - 2];
     if (!r0 || !r1 || !r2) continue;
     var age = lastIdx - i;
     if (age > FVG_MAX_AGE) break;
-    /* Bull FVG at bar i: low[i] > high[i-2] AND close[i-1] > open[i-1] */
+    /* Bull FVG at bar i: low[i] > high[i-2] AND close[i-1] > open[i-1],
+       and no later closed bar traded down through the gap (hg-v700). */
     if (!isFinite(out.bullTop)
-        && r0.l > r2.h && r1.c > r1.o){
+        && r0.l > r2.h && r1.c > r1.o
+        && !(minLowAfter <= r2.h)){
       out.bullTop = r0.l;
       out.bullBot = r2.h;
       out.bullAge = age;
     }
-    /* Bear FVG at bar i: high[i] < low[i-2] AND close[i-1] < open[i-1] */
+    /* Bear FVG at bar i: high[i] < low[i-2] AND close[i-1] < open[i-1],
+       and no later closed bar traded up through the gap (hg-v700). */
     if (!isFinite(out.bearTop)
-        && r0.h < r2.l && r1.c < r1.o){
+        && r0.h < r2.l && r1.c < r1.o
+        && !(maxHighAfter >= r2.l)){
       out.bearTop = r2.l;
       out.bearBot = r0.h;
       out.bearAge = age;
@@ -175,6 +201,33 @@ function detectLastFvgs(rows){
     if (isFinite(out.bullTop) && isFinite(out.bearTop)) break;
   }
   return out;
+}
+
+/* --- venue stop-floor leg (hg-v700) ------------------------------------ */
+
+/* The venue round-trip stop-floor DISTANCE for this entry, derived the SAME
+   way hgOgFormation rejects a stop (omnigold.js hgOgFormation/hgOgCostDrag):
+   costR = rtCostPct / stopPct must stay <= HG_OG_FORM_COST_R_MAX (0.125),
+   i.e. stop distance >= entry x rtCostPct% / HG_OG_FORM_COST_R_MAX = 8x the
+   venue round trip. Both constants are READ from omnigold at call time
+   (hgOgVenueCost / HG_OG_FORM_COST_R_MAX) and never restated here, so a
+   venue or threshold change there moves this floor too. -> NaN when the
+   cost machinery is not loaded: no floor is invented, and hgGoldFormation
+   still fail-closes on the missing cost model. */
+function ngVenueFloorDist(entry){
+  try{
+    entry = +entry;
+    if (!isFinite(entry) || !(entry > 0)) return NaN;
+    if (typeof W.hgOgVenueCost !== 'function') return NaN;
+    var maxR = +W.HG_OG_FORM_COST_R_MAX;
+    if (!isFinite(maxR) || !(maxR > 0)) return NaN;
+    var vc = W.hgOgVenueCost();
+    var rt = vc ? +vc.rtCostPct : NaN;
+    if (!isFinite(rt) || !(rt > 0)) return NaN;
+    /* 1e-6 relative headroom: the floor exists to MEET hgOgCostDrag's
+       recomputed stopPct bar, not to round a hair under it in fp. */
+    return entry * (rt / 100) / maxR * (1 + 1e-6);
+  }catch(e){ return NaN; }
 }
 
 /* --- signal assessment ----------------------------------------------- */
@@ -232,6 +285,34 @@ function ngAssess(rows){
   var risk = Math.abs(entry - stop);
   if (!(risk > 0)) return null;
 
+  /* -- ONE composed stop floor, BEFORE the plan is built (hg-v700) --------
+     Replay: 16 of 28 1H fires stood aside at the venue stop floor
+     (scripts/backtest-newgold-results.json counters.horizons.1H
+     stoodAsideStopFloor=16), 14 of them AFTER hgPlanFromRisk had already
+     widened the stop (fireLog stopWidened:true + stopFloorCostR > 0.125):
+     the plans-layer 0.5xATR floor and hgOgFormation's 8x-round-trip venue
+     floor never compared notes, so the desk widened a stop and then stood
+     aside from its own widening. The composed floor is
+       max(v681 0.5xATR leg, venue 8x-round-trip leg)
+     applied as: the venue leg is anchored HERE (ngVenueFloorDist \u2014 derived
+     from omnigold's own constants, never restated) and hgPlanFromRisk's
+     ATR leg applies on top in the SAME call below. Both legs only ever
+     WIDEN a valid-side stop \u2014 risk > 0 is already proven above and the
+     signal's own construction puts the stop on the correct side (the
+     v681/v698 lesson: a floor never repairs sides) \u2014 so the sequential
+     application equals the max. Venue unreadable (omnigold not loaded)
+     -> NaN -> no leg is invented and hgGoldFormation still fail-closes on
+     the missing cost model. Cohort note, informational only (n=6/5): the
+     stop-widened cohort measured +0.573R net at XM vs natural -0.081R
+     (backtest-newgold-results.json aggregates.byStopWidened). */
+  var venueFloorD = ngVenueFloorDist(entry);
+  var venueFloored = false;
+  if (isFinite(venueFloorD) && venueFloorD > 0 && risk < venueFloorD){
+    stop = (dir === 'long') ? entry - venueFloorD : entry + venueFloorD;
+    risk = Math.abs(entry - stop);
+    venueFloored = true;
+  }
+
   var t1 = dir === 'long' ? entry + T1_R * risk : entry - T1_R * risk;
   var t2 = dir === 'long' ? entry + T2_R * risk : entry - T2_R * risk;
 
@@ -251,23 +332,69 @@ function ngAssess(rows){
     entry = plan.entry; stop = plan.stop; t1 = plan.t1; t2 = plan.t2;
   }
 
+  /* -- every ratio prints against the FINAL geometry (hg-v700) ------------
+     Until this fix rr1/rr2 divided by the pre-widening FVG risk while
+     entry/stop/t1/t2 were reassigned from the hgPlanFromRisk result: every
+     stop-widened settled trade printed rr1 > 1.5 against a T1 that pays
+     exactly 1.5R of the FINAL stop (scripts/backtest-newgold-results.json
+     trades[] rr1 = 3.96 / 36.55 / 6.39 / 2.90 / 2.43 / 1.92, all with
+     stopWidened:true; all 5 natural trades printed 1.50). Downstream,
+     solidity G4 (rr >= minRr + 0.25 headroom, hg-solidity.js hgSolGateRr)
+     passed ONLY on those inflated cards \u2014 an honest 1.5R-ladder card can
+     never print 1.75 \u2014 so the headroom gate rewarded exactly the cards
+     whose geometry the detector got wrong. Derive from the levels the card
+     actually carries; never inherit (the plans.js hgSyncPlanRatios rule). */
+  risk = Math.abs(entry - stop);
+  if (!(risk > 0)) return null;
+  var rr1Final = Math.abs(t1 - entry) / risk;
+  var rr2Final = Math.abs(t2 - entry) / risk;
+
+  /* Fail closed (hg-v700): the composed floor must never ship a card whose
+     FINAL T1 pays under the module's MIN_RR. The R-multiple ladder re-prices
+     T1 from the final risk so this cannot trip today; if a future target
+     hint or ladder change makes it possible, the fire is DROPPED with the
+     reason stashed below \u2014 never widened into a ticket. hgGoldFormation
+     already rejects this geometry class; the goal of the composed floor is
+     ONE coherent floor, not more trades. */
+  if (!(isFinite(rr1Final) && rr1Final >= MIN_RR - 1e-9)){
+    try {
+      W.__ngLastDrop = { at: Date.now(),
+        reason: 'composed stop floor leaves T1 at '
+          + (isFinite(rr1Final) ? rr1Final.toFixed(2) : '\u2014') + 'R < ' + MIN_RR
+          + 'R minimum \u2014 fire dropped, not widened into a ticket (hg-v700 fail closed)' };
+    } catch(eDrop){}
+    return null;
+  }
+
   return {
     dir: dir,
     entry: entry, stop: stop, t1: t1, t2: t2,
-    rr1: Math.abs(t1 - entry) / risk,
-    rr2: Math.abs(t2 - entry) / risk,
+    rr1: rr1Final,
+    rr2: rr2Final,
     risk: risk, riskPct: risk / entry * 100,
-    stopWidened: plan && plan.stopWidened === true,
-    fvg: { top: fvgHi, bot: fvgLo, ageBars: fvgAge },
+    stopWidened: (plan && plan.stopWidened === true) || venueFloored,
+    /* hg-v700: the card names the leg that actually set the final stop
+       (v536 \u2014 print only what happened). plans' ATR leg runs AFTER the
+       venue leg and only ever widens further, so plan.stopWidened=true
+       means the 0.5xATR leg bound; otherwise the venue leg did. */
+    stopWidenedTo: (plan && plan.stopWidened === true) ? '0.5\u00d7ATR floor'
+      : (venueFloored ? 'venue floor (8\u00d7 round trip)' : ''),
+    /* mitigationChecked: detectLastFvgs (hg-v700) verified no later closed
+       bar traded through this gap \u2014 the "unmitigated" label downstream
+       prints ONLY when this flag is true (ngConfirmations). */
+    fvg: { top: fvgHi, bot: fvgLo, ageBars: fvgAge, mitigationChecked: true },
     ml: { baseline: mlLast, regime: isMlBull ? 'bullish' : 'bearish' },
     rsi: { now: rNow, sma: sNow },
     kind: 'TRIPLE-CONF',
-    /* RAW READ COUNT, not a confluence claim (v698). ML + FVG + momentum are
-       three reads across only TWO independent classes — structure (FVG) and
-       momentum (VWMA regime + RSI cross). The tradable bar is >= 3 DISTINCT
-       classes and is decided by gold-formation.js from ngConfirmations(); this
-       number is never fed to a gate as if it were a family count. */
-    confluenceCount: 3 /* ML + FVG + momentum — reads, not classes */
+    /* hg-v700 (was: hard-coded 3). The v698 note here already conceded the
+       three reads span only TWO independent classes — structure (FVG) and
+       momentum (VWMA regime + RSI cross) — so 3 was a read count wearing a
+       class-count name. The fallback is that honest 2; ngRunScan overwrites
+       it with the MEASURED distinct-class count from the shared formation
+       verdict on BOTH lanes (the OMNI lane has stamped it since v698). The
+       tradable bar itself is still decided by gold-formation.js from
+       ngConfirmations(). */
+    confluenceCount: 2 /* structure + momentum — the classes the signal's own reads span */
   };
 }
 
@@ -373,7 +500,19 @@ function ngConfirmations(setup, opts){
     out.push({ cls: 'structure', name: 'FVG mitigation zone', inherent: true,
       detail: (isFinite(fvg.bot) ? fvg.bot.toFixed(2) : '?') + '–'
             + (isFinite(fvg.top) ? fvg.top.toFixed(2) : '?')
-            + (isFinite(fvg.ageBars) ? (' · ' + fvg.ageBars + ' bars old, unmitigated') : ''),
+            + (isFinite(fvg.ageBars)
+                ? (' · ' + fvg.ageBars + ' bars old'
+                   /* hg-v700: "unmitigated" prints ONLY when the module
+                      actually ran the check (detectLastFvgs skips any gap
+                      a later closed bar traded through, and ngAssess
+                      stamps mitigationChecked). Until this fix the word
+                      printed unconditionally while mitigation was never
+                      tested anywhere — the v536 label class: labels print
+                      what was checked, never an untested claim. */
+                   + (fvg.mitigationChecked === true
+                       ? ', unmitigated (no later closed bar traded through the gap)'
+                       : ''))
+                : ''),
       ok: isFinite(fvg.top) && isFinite(fvg.bot) });
 
     /* structure — OMNI lane only: OMNIGOLD's own mechanic agrees. Deliberately
@@ -583,6 +722,15 @@ async function ngRunScan(){
                 requireClasses: ['session-htf'] })
           : { formed: false, tradable: false, state: 'STOOD-ASIDE', confluence: null,
               reasons: ['shared gold formation unavailable \u2014 gold-formation.js is not loaded; fail closed'] };
+        /* hg-v700: the primary lane never corrected ngAssess's minted
+           confluenceCount while the OMNI lane has stamped the measured
+           count since v698 \u2014 stamp the DISTINCT confirmation-class count
+           the shared formation verdict actually measured (the ngAssess
+           fallback of 2 stands only when the verdict carries none). */
+        if (record.formation && record.formation.confluence
+            && isFinite(+record.formation.confluence.classCount)){
+          setup.confluenceCount = record.formation.confluence.classCount;
+        }
       }
       /* Compute solidity via the shared helper so the same veto/promotion/
          kill pipeline applies. Kind is fixed at TRIPLE-CONF; the tab key
@@ -859,7 +1007,11 @@ function cardHtml(r){
   var levels = tradable
     ? ('<div class="hg-mp-grid">'
       + '<div><i>ENTRY</i><b>' + fmtF(s.entry, 2) + '</b><u>' + (s.dir === 'long' ? 'MARKET BUY' : 'MARKET SELL') + '</u></div>'
-      + '<div><i>STOP</i><b>' + fmtF(s.stop, 2) + '</b><u>FVG ' + (s.dir === 'long' ? 'bottom' : 'top') + (s.stopWidened ? ' \u00b7 widened to 0.5\u00d7ATR' : '') + '</u></div>'
+      /* hg-v700: the widened note names the leg that actually set the stop
+         (setup.stopWidenedTo) \u2014 until now it always said "0.5\u00d7ATR" even
+         when the venue 8\u00d7-round-trip leg is what bound (v536: labels print
+         what happened). */
+      + '<div><i>STOP</i><b>' + fmtF(s.stop, 2) + '</b><u>FVG ' + (s.dir === 'long' ? 'bottom' : 'top') + (s.stopWidened ? ' \u00b7 widened to ' + esc(s.stopWidenedTo || 'floor') : '') + '</u></div>'
       + '<div><i>T1 (1.5R)</i><b>' + fmtF(s.t1, 2) + '</b><u>rr ' + fmtF(s.rr1, 2) + '</u></div>'
       + '<div><i>T2 (2.5R)</i><b>' + fmtF(s.t2, 2) + '</b><u>rr ' + fmtF(s.rr2, 2) + '</u></div>'
       + '</div>'
@@ -1040,6 +1192,11 @@ W.ngPullOmniLanes = ngPullOmniLanes; /* v695: exposed for test + inspection */
 W.ngHtfTape = ngHtfTape;
 W.ngHtfVwmaRegime = ngHtfVwmaRegime;
 W.ngConfirmations = ngConfirmations;
+/* hg-v700: the mitigation-checked FVG scan and the venue leg of the composed
+   stop floor, exported so both honesty fixes are testable without a mount
+   (tests/test-newgold-honesty.mjs). */
+W.ngDetectLastFvgs = detectLastFvgs;
+W.ngVenueFloorDist = ngVenueFloorDist;
 W.newGoldScan = function(){ return __ng.snap; };
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'newgold', label: 'NEW GOLD', mount: mount, refresh: ngRefresh });

@@ -217,12 +217,15 @@
   /* Each row is a MEASURED cohort, not a preference. `confirms` is derived
      from `grossR >= 0` at read time so a re-bake of the numbers moves the
      rule without a second edit. */
+  /* hg-v700 re-bake: 8,155-settled refresh (2026-03-27..09-10). Every
+     cohort kept its SIGN from the 7,270-trade bake, so `confirms` behavior
+     is unchanged — only the measured magnitudes moved. */
   var HG_GOLD_SESSION_EVIDENCE = [
-    { from: 0,  to: 7,  key: 'ASIA',       label: 'ASIA 00-06 UTC',       n: 2082, grossR:  0.097, medCostR: 0.57, weekendCaveat: true },
-    { from: 7,  to: 12, key: 'LONDON',     label: 'LONDON 07-11 UTC',     n: 1305, grossR: -0.080, medCostR: 0.80, weekendCaveat: false },
-    { from: 12, to: 17, key: 'NY-OVERLAP', label: 'NY-OVERLAP 12-16 UTC', n: 2247, grossR: -0.061, medCostR: 0.51, weekendCaveat: false },
-    { from: 17, to: 21, key: 'NY-PM',      label: 'NY-PM 17-20 UTC',      n:  994, grossR:  0.053, medCostR: 0.69, weekendCaveat: false },
-    { from: 21, to: 24, key: 'OFF',        label: 'OFF 21-23 UTC',        n:  642, grossR: -0.011, medCostR: 0.88, weekendCaveat: true }
+    { from: 0,  to: 7,  key: 'ASIA',       label: 'ASIA 00-06 UTC',       n: 2307, grossR:  0.066, medCostR: 0.51, weekendCaveat: true },
+    { from: 7,  to: 12, key: 'LONDON',     label: 'LONDON 07-11 UTC',     n: 1428, grossR: -0.124, medCostR: 0.68, weekendCaveat: false },
+    { from: 12, to: 17, key: 'NY-OVERLAP', label: 'NY-OVERLAP 12-16 UTC', n: 2644, grossR: -0.094, medCostR: 0.45, weekendCaveat: false },
+    { from: 17, to: 21, key: 'NY-PM',      label: 'NY-PM 17-20 UTC',      n: 1055, grossR:  0.113, medCostR: 0.57, weekendCaveat: false },
+    { from: 21, to: 24, key: 'OFF',        label: 'OFF 21-23 UTC',        n:  721, grossR: -0.062, medCostR: 0.81, weekendCaveat: true }
   ];
   /* The source's own caveat, carried verbatim wherever a caveated window is
      what confirmed. scripts/backtest-omnigold-results.json meta.proxyNote. */

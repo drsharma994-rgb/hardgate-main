@@ -1181,17 +1181,28 @@ var HG_GOLD_SETUP_EDGE = {
     p9volbar: { n: 72, gross: 0.243, net: 0.155, action: 'prefer',
       why: 'S62 VOLUME-BAR SWEEP net +0.16R at XM (n=72, 44% WR) — measured fee-survivor' }
   },
+  /* SWING rows (hg-v700): re-baked from the GOLD SWING tab's OWN 4h replay
+   * (scripts/backtest-goldswing-results.json, n=243 settled, 140 days,
+   * post stop-floor + gate-stack, netR at XM 0.020% RT). The old rows came
+   * from the OMNIGOLD bridge replay at n<=6 — three of five verdicts did
+   * not survive real sample sizes. Bars (swing-desk n's are smaller than
+   * scalp's by cadence): suppress n>=25 & gross<=0 & netXm<=-0.20 (none
+   * qualify); demote netXm<0 & n>=12; prefer n>=25 & gross>0 & netXm>=+0.10.
+   * ribbon (+0.228 n=23) and ob (+0.215 n=4) contradict their old demote
+   * rows but sit under the prefer bars -> NEUTRAL (rows removed). */
   swing: {
-    sweep: { n: 5, gross: 0.375, net: 0.154, action: 'prefer',
-      why: 'SWING 4H liquidity sweep net +0.15R (n=5) — rare fee-survivor' },
-    weekly: { n: 6, gross: 0.54, net: 0.341, action: 'prefer',
-      why: 'SWING weekly range breakout net +0.34R (n=6)' },
-    fvg: { n: 6, gross: -0.167, net: -0.522, action: 'demote',
-      why: 'SWING 4H FVG fill net −0.52R (n=6)' },
-    ribbon: { n: 4, gross: -0.008, net: -0.25, action: 'demote',
-      why: 'SWING 4H ribbon net −0.25R (n=4)' },
-    ob: { n: 1, gross: -1, net: -1.357, action: 'demote',
-      why: 'SWING 4H OB retest lost in sample' }
+    sweep: { n: 14, gross: -0.109, net: -0.125, action: 'demote',
+      why: 'SWING 4H liquidity sweep gross −0.11R / net −0.13R at XM (n=14, tab replay) — the old n=5 prefer did not survive; paints, never leads' },
+    weekly: { n: 32, gross: 0.217, net: 0.2, action: 'prefer',
+      why: 'SWING weekly range breakout net +0.20R at XM (n=32, 44% WR, tab replay) — the bridge-era prefer confirmed at real n' },
+    p9volbar: { n: 44, gross: 0.211, net: 0.189, action: 'prefer',
+      why: 'S62 VOLUME-BAR SWEEP net +0.19R at XM (n=44, post stop-floor) — fee-survivor on the swing desk too (scalp n=72 +0.16 independently)' },
+    fvg: { n: 34, gross: -0.036, net: -0.059, action: 'demote',
+      why: 'SWING 4H FVG fill net −0.06R at XM (n=34) — near-flat negative; paints, never leads' },
+    pullback: { n: 18, gross: -0.258, net: -0.272, action: 'demote',
+      why: 'SWING 4H trend pullback net −0.27R at XM (n=18, 17% WR) — paints, never leads' },
+    p6comp: { n: 17, gross: -0.267, net: -0.289, action: 'demote',
+      why: 'S30 SESSION-COMPOSITE PULLBACK net −0.29R at XM (n=17) — paints, never leads' }
   }
 };
 
@@ -1299,11 +1310,16 @@ function hgGoldSetupEdgeApply(cand, opts){
     var table = opts.swing ? HG_GOLD_SETUP_EDGE.swing : HG_GOLD_SETUP_EDGE.scalp;
     var key = String(cand.stratKey || '');
     var row = table && table[key];
-    /* Swing stratKey aliases — table keys are evidence labels, not all SW_NAME keys. */
+    /* Swing stratKey aliases — table keys are evidence labels, not all SW_NAME keys.
+       hg-v700: the fabricated inline 'bos' prefer pseudo-row is GONE. It quoted
+       numbers (n=2 net 1.2) no baked table row backed — a prefer boost invented
+       in code, not measured into scripts/gold-setup-edge.json. The 140-day swing
+       replay (scripts/backtest-goldswing-results.json byStrategy.bos) measured
+       bos n=8 +0.542R/trade net at XM: positive but far too thin to earn a
+       prefer bar, so bos is NEUTRAL — no row, no boost, no fabricated label. */
     if (!row && opts.swing && table){
       if (key === 'wkbreak') row = table.weekly;
       else if (key === 'pullback') row = table.ribbon;
-      else if (key === 'bos') row = { action: 'prefer', why: 'SWING 4H BOS thin survivor (n=2 net +)', n: 2, net: 1.2, gross: 1.5 };
     }
     if (!row){
       /* Map human strategy labels from OMNIGOLD ENGINE bridge. */
@@ -1320,7 +1336,10 @@ function hgGoldSetupEdgeApply(cand, opts){
       else if (/ASIAN RANGE/.test(lab)) row = HG_GOLD_SETUP_EDGE.scalp.asian;
       else if (/4H LIQUIDITY SWEEP/.test(lab)) row = HG_GOLD_SETUP_EDGE.swing.sweep;
       else if (/LIQUIDITY SWEEP/.test(lab)) row = HG_GOLD_SETUP_EDGE.scalp.sweep;
-      else if (/BOS ALIGNMENT|4H BOS/.test(lab)) row = opts.swing ? { action: 'prefer', why: 'SWING BOS thin survivor', n: 2, net: 1.2, gross: 1.5 } : HG_GOLD_SETUP_EDGE.scalp.bosalign;
+      /* hg-v700: swing '4H BOS' maps to NO row — the inline prefer pseudo-row
+         here quoted unbacked numbers; replay measured bos n=8 +0.542 net XM
+         (scripts/backtest-goldswing-results.json), unproven for a prefer bar. */
+      else if (/BOS ALIGNMENT|4H BOS/.test(lab)) row = opts.swing ? null : HG_GOLD_SETUP_EDGE.scalp.bosalign;
       else if (/ORDER BLOCK/.test(lab) && !/^4H/.test(lab)) row = HG_GOLD_SETUP_EDGE.scalp.ob;
       else if (/4H ORDER BLOCK/.test(lab)) row = HG_GOLD_SETUP_EDGE.swing.ob;
       else if (/WEEKLY RANGE/.test(lab)) row = HG_GOLD_SETUP_EDGE.swing.weekly;
@@ -3580,12 +3599,36 @@ function hgGoldConfluenceHtml(sc){
 
 /**
  * Apply confluence score onto a candidate (mutates). Stamps tiers.
- * Does NOT hard-demote — NO_TRADE only blocks alerts (confAlertOk=false).
- * Existing quality-gate demotions remain authoritative for MOST PROBABLE.
+ * hg-v700: NO_TRADE now DEMOTES (paint, never lead). The old contract —
+ * "stamp only, alerts blocked, ranking untouched" — let goldRankSetups crown
+ * a stamped-no-trade card MOST PROBABLE: the 140-day GOLD SWING replay
+ * (scripts/backtest-goldswing-results.json, XM costs) measured the MP cohort
+ * n=100 ALL carrying CONF NO TRADE at −0.209R/trade (all 292 settled swing
+ * trades were stamped NO_TRADE, −0.158R/trade overall). A tier the desk's own
+ * score calls "below trade bar" cannot lead; existing quality-gate demotions
+ * remain authoritative and stack with this one.
  */
 function hgGoldApplyConfluence(cand, ctx){
   try{
     if (!cand) return cand;
+    /* hg-v700: the scorer's verdict is only a VERDICT when it was fed. A
+       ranking ctx with no candle rows (SUPER GOLD's cross-desk re-rank, any
+       bare goldRankSetups call) starves every leg to its default and the
+       score ceilings near the teens — that is missing data, not measured
+       no-trade. A starved run stamps CONF UNCHECKED (honesty chip), never
+       overwrites a prior data-backed verdict, and never demotes: a gate
+       whose inputs are absent reports, it does not gate (the v698
+       unchecked:true rule). The gold tabs always feed rows since hg-v700,
+       so the measured demotion below fires everywhere a banner exists. */
+    var dataBacked = !!((ctx && ctx.rows15m && ctx.rows15m.length)
+      || (ctx && ctx.rows && ctx.rows.length)
+      || (ctx && ctx.rows4h && ctx.rows4h.length)
+      || (ctx && ctx.rows1h && ctx.rows1h.length));
+    if (!dataBacked){
+      if (!Array.isArray(cand.stamps)) cand.stamps = [];
+      if (cand.stamps.indexOf('CONF UNCHECKED') < 0) cand.stamps.push('CONF UNCHECKED');
+      return cand;   /* keep whatever verdict the source scan made with data */
+    }
     var sc = hgGoldConfluenceScore(cand, ctx);
     cand.confScore = sc.score;
     cand.confTier = sc.tier;
@@ -3596,6 +3639,15 @@ function hgGoldApplyConfluence(cand, ctx){
     if (cand.stamps.indexOf(stamp) < 0) cand.stamps.push(stamp);
     if (sc.tier === 'NO_TRADE'){
       if (cand.stamps.indexOf('CONF NO TRADE') < 0) cand.stamps.push('CONF NO TRADE');
+      /* hg-v700: a stamped-no-trade card can no longer lead. Measured on the
+         swing MP cohort (scripts/backtest-goldswing-results.json): every one
+         of the 100 MOST PROBABLE settles carried CONF NO TRADE and ran
+         −0.209R/trade net of XM costs. Demote — goldRankSetups' best pick
+         skips demoted cards; an all-demoted board has NO lead (v699 precedent). */
+      cand.demoted = true;
+      var gnConf = Array.isArray(cand.gateNotes) ? cand.gateNotes.slice() : [];
+      gnConf.push('confluence tier says no-trade — paints, never leads');
+      cand.gateNotes = gnConf;
     } else if (sc.tier === 'WATCH'){
       if (cand.stamps.indexOf('CONF WATCH') < 0) cand.stamps.push('CONF WATCH');
     } else if ((sc.tier === 'A' || sc.tier === 'GOOD') && sc.alertOk){

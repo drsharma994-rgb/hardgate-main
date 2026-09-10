@@ -123,10 +123,10 @@ console.log('\n=================== SHARED CONTRACT (gold-formation.js) =========
   ]);
   ok(five.ok === false && five.classCount === 1, '5 momentum reads are ONE class, not five');
   /* measured session cohorts */
-  ok(W.hgGoldSessionEdge(Date.UTC(2026,5,1,9,0)).confirms === false, 'LONDON 07-11 (-0.080R n=1305) does not confirm');
+  ok(W.hgGoldSessionEdge(Date.UTC(2026,5,1,9,0)).confirms === false, 'LONDON 07-11 (-0.124R n=1428, hg-v700 re-bake) does not confirm');
   ok(W.hgGoldSessionEdge(Date.UTC(2026,5,1,14,0)).confirms === false, 'NY-OVERLAP 12-16 (-0.061R n=2247) does not confirm');
   ok(W.hgGoldSessionEdge(Date.UTC(2026,5,1,18,0)).confirms === true, 'NY-PM 17-20 (+0.053R n=994) confirms');
-  ok(W.hgGoldSessionEdge(Date.UTC(2026,5,1,3,0)).confirms === true, 'ASIA 00-06 (+0.097R n=2082) confirms');
+  ok(W.hgGoldSessionEdge(Date.UTC(2026,5,1,3,0)).confirms === true, 'ASIA 00-06 (+0.066R n=2307, hg-v700 re-bake) confirms');
   ok(/weekend/.test(W.hgGoldSessionEdge(Date.UTC(2026,5,1,3,0)).why), 'ASIA carries the weekend caveat verbatim');
   /* fail closed when the venue floor machinery is absent */
   const noOg = W.hgGoldFormation({ kind:'X', plan:{ entry:1000, stop:998 } },
@@ -258,7 +258,7 @@ console.log('\n=================== OMNIGOLD ===================');
   ok(tf.missing.indexOf('session-htf') >= 0 && tf.missing.indexOf('participation') >= 0 && /MISSING/.test(tf.why),
      'OMNIGOLD: the missing classes are NAMED — ' + tf.why.slice(-70));
   const sessionEntry = tf.unconfirmed.filter(x => x.name === 'session')[0];
-  ok(!!sessionEntry && /LONDON 07-11 UTC measured gross -0\.080R at n=1305/.test(sessionEntry.detail),
+  ok(!!sessionEntry && /LONDON 07-11 UTC measured gross -0.124R at n=1428/.test(sessionEntry.detail),
      'OMNIGOLD: a passing `session` gate in LONDON is NOT a confirmation, and says why');
   ok(/plan-levels|stop-width/.test(JSON.stringify(tf)) === false,
      'OMNIGOLD: geometry gates never enter the confluence at all');
@@ -357,7 +357,7 @@ console.log('\n=================== OMNIGOLD 1 ===================');
   const lonRows = bars(4, 4530, 3600, 3).map((r,i) => ({ ...r, t: Math.floor(Date.UTC(2026,5,1,8,0,0)/1000) - 3600 }));
   const cLon = W.hgOg1Confirmations({ horizon:'SWING', rows1h: lonRows, tf: 3600 }, mkBest(sessRow, cand3));
   ok(cLon[0].ok === false && /LONDON/.test(cLon[0].detail),
-     'OMNIGOLD 1: the session leg does NOT confirm in LONDON 07-11 (-0.080R n=1305)');
+     'OMNIGOLD 1: the session leg does NOT confirm in LONDON 07-11 (-0.124R n=1428)');
   const nyRows = [{ t: Math.floor(Date.UTC(2026,5,1,18,0,0)/1000) - 3600, o:1,h:1,l:1,c:1,v:1 }];
   const cNy = W.hgOg1Confirmations({ horizon:'SWING', rows1h: nyRows, tf: 3600 }, mkBest(sessRow, cand3));
   ok(cNy[0].ok === true && /NY-PM/.test(cNy[0].detail),

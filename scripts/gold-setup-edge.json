@@ -3,7 +3,7 @@
   "settledScan": 7270,
   "settledEngine": 277,
   "overallNetR": -1.346,
-  "note": "hg-v699: SCALP rows re-baked from the GOLD SCALP tab's OWN 15m replay (scripts/backtest-goldscalp.mjs, post 1.5xATR stop-floor), priced at the desk venue (XM XAUUSD 0.020% RT) — the old scalp rows came from the OMNIGOLD bridge replay at PAXG costs (wrong selector + wrong venue; n as small as 2). Bars: suppress = n>=50 & gross<=0 & netXm<=-0.20; demote = netXm<0 (paint, never lead); prefer = n>=50 & gross>0 & netXm>=+0.10. sweepob (+0.162, n=49) sits one settle short of the prefer bar — no row. SWING rows unchanged (bridge replay IS the swing selector). Shadow ledger keeps fvg/vwapband suppressed. See scripts/gold-scalp-bt-analysis-floor.json + the prefloor twins for the defect baseline.",
+  "note": "hg-v699: SCALP rows re-baked from the GOLD SCALP tab's OWN 15m replay (scripts/backtest-goldscalp.mjs, post 1.5xATR stop-floor), priced at the desk venue (XM XAUUSD 0.020% RT) — the old scalp rows came from the OMNIGOLD bridge replay at PAXG costs (wrong selector + wrong venue; n as small as 2). Bars: suppress = n>=50 & gross<=0 & netXm<=-0.20; demote = netXm<0 (paint, never lead); prefer = n>=50 & gross>0 & netXm>=+0.10. sweepob (+0.162, n=49) sits one settle short of the prefer bar — no row. SWING rows unchanged (bridge replay IS the swing selector). Shadow ledger keeps fvg/vwapband suppressed. See scripts/gold-scalp-bt-analysis-floor.json + the prefloor twins for the defect baseline. hg-v700: SWING rows re-baked from the GOLD SWING tab's own 4h replay (n=243 at XM costs, post stop-floor + gate-stack): sweep prefer REFUTED -> demote; weekly prefer confirmed (n=32); p9volbar prefer added (n=44, independent of its scalp prefer); ribbon/ob old demotes contradicted -> neutral; pullback/p6comp new demotes. Swing bars: suppress n>=25 & gross<=0 & netXm<=-0.20; demote netXm<0 & n>=12; prefer n>=25 & gross>0 & netXm>=+0.10.",
   "scalp": {
     "fvg": {
       "n": 245,
@@ -129,34 +129,55 @@
   },
   "swing": {
     "sweep": {
-      "n": 5,
-      "gross": 0.375,
-      "net": 0.154,
-      "action": "prefer"
+      "n": 14,
+      "gross": -0.109,
+      "netXm": -0.125,
+      "action": "demote",
+      "note": "old n=5 prefer refuted by the tab replay"
     },
     "weekly": {
-      "n": 6,
-      "gross": 0.54,
-      "net": 0.341,
+      "n": 32,
+      "gross": 0.217,
+      "netXm": 0.2,
+      "action": "prefer"
+    },
+    "p9volbar": {
+      "n": 44,
+      "gross": 0.211,
+      "netXm": 0.189,
       "action": "prefer"
     },
     "fvg": {
-      "n": 6,
-      "gross": -0.167,
-      "net": -0.522,
+      "n": 34,
+      "gross": -0.036,
+      "netXm": -0.059,
+      "action": "demote"
+    },
+    "pullback": {
+      "n": 18,
+      "gross": -0.258,
+      "netXm": -0.272,
+      "action": "demote"
+    },
+    "p6comp": {
+      "n": 17,
+      "gross": -0.267,
+      "netXm": -0.289,
       "action": "demote"
     },
     "ribbon": {
-      "n": 4,
-      "gross": -0.008,
-      "net": -0.25,
-      "action": "demote"
+      "n": 23,
+      "gross": 0.25,
+      "netXm": 0.228,
+      "action": "neutral",
+      "note": "old n=4 demote contradicted; under the n>=25 prefer bar — no row in the baked table"
     },
     "ob": {
-      "n": 1,
-      "gross": -1,
-      "net": -1.357,
-      "action": "demote"
+      "n": 4,
+      "gross": 0.241,
+      "netXm": 0.215,
+      "action": "neutral",
+      "note": "old n=1 demote contradicted; tiny n — no row in the baked table"
     }
   },
   "omnigoldPrefer": [
@@ -177,5 +198,8 @@
   "scalpSource": "scripts/backtest-goldscalp-results-floor.json",
   "scalpSettled": 2193,
   "scalpWindow": "2026-07-10..2026-09-10",
-  "scalpCostBasis": "netXm at XM XAUUSD 0.020% RT (desk venue, primary); netPaxg at PAXG 0.26% RT (sensitivity)"
+  "scalpCostBasis": "netXm at XM XAUUSD 0.020% RT (desk venue, primary); netPaxg at PAXG 0.26% RT (sensitivity)",
+  "swingSource": "scripts/backtest-goldswing-results.json",
+  "swingSettled": 243,
+  "swingWindow": "2026-04-23..2026-09-10 (140d, post stop-floor + gate-stack)"
 }

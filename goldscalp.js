@@ -1539,6 +1539,18 @@ async function runScan(ui, scanSt){
     if (purged) legs.push('cleared ' + purged + ' stale conviction' + (purged === 1 ? '' : 's') + ' (XAUT / off-spot locks)');
     var cvFn = gfn('goldCrossVenueMap');
     if (cvFn) ctx.crossVenue = cvFn(cands);
+    /* hg-v700: feed the confluence scorer its inputs. The ranking ctx used to
+       carry no candle rows, so hgGoldApplyConfluence's HTF/location/momentum/
+       vol legs read defaults and the score CEILINGED AT 54 — below the 65
+       WATCH bar — which, now that CONF NO TRADE demotes (measured: the swing
+       MP cohort it crowned ran −0.21R/trade), would have blanked MOST
+       PROBABLE forever through data starvation rather than measurement (the
+       v532 solidity lesson). The scorer derives structure/ribbon/VWAP/ADX/RSI
+       from these rows itself; cards that clear the bar with real data can
+       lead again. */
+    ctx.rows15m = gold.rows15m;
+    ctx.rows1h = gold.rows1h;
+    ctx.rows4h = gold.rows4h;
     if (rankFn){
       var rk = null;
       try{ rk = rankFn(cands, ctx); }catch(eR){ rk = null; }

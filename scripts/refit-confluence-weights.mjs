@@ -200,7 +200,11 @@ const evidence = {
   engineGrades,
   cohorts,
   costModel: { rtCostPct: 0.26 },
-  window: '2026-03-15..2026-08-29',
+  /* derived from the results meta, never hardcoded — a stale window label on
+     fresh data is the v536 label class (caught at the 2026-09-10 refresh) */
+  window: (data.meta && data.meta.span)
+    ? data.meta.span.from.slice(0, 10) + '..' + data.meta.span.to.slice(0, 10)
+    : 'unknown',
   barBasis: 'PAXGUSDT 1h proxy',
 };
 writeFileSync(OUT, JSON.stringify(evidence, null, 2));

@@ -222,7 +222,12 @@ console.log('== SCALP horizon + setup cards ==');
   ok(/data-hg-og1-setups="1"/.test(html) && /SWING SETUPS/.test(html) && /SCALP SETUPS/.test(html), 'cards panel prints SWING SETUPS and SCALP SETUPS');
   const nCards = (html.match(/og1-card /g) || []).length;
   const total = rW.candidates.length + rS.candidates.length;
-  ok(nCards === total + Math.min(3, total), 'one card per candidate across both horizons + the top 3 repeated in the BEST ribbon (' + nCards + ')');
+  /* hg-v700: SCALP-horizon candidates are demoted (replay gross −0.287R /
+     net −0.455R at XM, n=250 — scripts/backtest-omnigold1-results.json
+     tabLane.aggregates.byHorizon), so the BEST ribbon draws from SWING only.
+     Protective intent kept: every candidate still paints exactly once in its
+     horizon list, and the ribbon never repeats more than its own picks. */
+  ok(nCards === total + Math.min(3, rW.candidates.length), 'one card per candidate across both horizons + the SWING-only BEST ribbon repeats (' + nCards + ')');
   if (nCards){
     ok(/ENTRY<\/i><b>\d/.test(html) && /STOP<\/i><b>\d/.test(html) && /TP1<\/i><b>/.test(html), 'cards print ENTRY / STOP / TP1 / TP2');
     ok(/SCORE \d+\/20/.test(html) && /gates \d+\/12/.test(html), 'cards carry matrix score and gate tally');
@@ -260,7 +265,11 @@ console.log('== grade ladder + MOST PROBABLE per horizon ==');
   const last = m15[m15.length - 1]; last.l = Math.min(...m15.slice(-60, -1).map(r => r.l)) - 2.5; last.c = last.o + 0.8;
   const base = { rows1h: d.rows, rows15m: m15, now: d.now, feed: 'delta-xaut', venue: 'Delta XAUTUSD', equity: 50000, stopsToday: 0 };
   const rW = W.hgOg1Engine(base), rS = W.hgOg1Engine(Object.assign({}, base, { horizon: 'SCALP' }));
-  for (const [hz, r] of [['SWING', rW], ['SCALP', rS]]){
+  /* hg-v700: the SCALP horizon is demoted (replay gross −0.287R / net
+     −0.455R at XM, n=250) — its MOST PROBABLE banner is now honestly empty
+     (paint, never lead; the goldscalp v699 lead invariant). The SWING run
+     keeps every protective assertion this loop always made. */
+  for (const [hz, r] of [['SWING', rW]]){
     const mp = W.hgOg1MostProbable(r);
     ok(mp && mp.cand && mp.grade && /^(A|B\+|B|C|D)$/.test(mp.grade.grade), hz + ' MOST PROBABLE picks a candidate with a grade (' + mp.grade.grade + ')');
     ok(!mp.cand.matrix.held, hz + ' MOST PROBABLE is never an against-tape candidate');
@@ -272,6 +281,9 @@ console.log('== grade ladder + MOST PROBABLE per horizon ==');
     ok(new RegExp('data-hg-og1-mp="' + hz + '"').test(html) && /MOST PROBABLE · /.test(html) && /og1-grade og1-grade-[ABCD]p?"/.test(html) && /DETAIL STUDY/.test(html), hz + ' MOST PROBABLE banner renders with grade badge + detail study');
     ok(!/win[ -]?rate|(?<!not a )probability|confidence\s*%/i.test(html), hz + ' banner has no probability language');
   }
+  ok(W.hgOg1MostProbable(rS) === null, 'hg-v700: SCALP MOST PROBABLE is null — demoted cohort never leads');
+  const scalpMpHtml = W.hgOg1MostProbableHtml({ horizon: 'SCALP', r: rS });
+  ok(/data-hg-og1-mp="SCALP"/.test(scalpMpHtml) && /paints, never leads/.test(scalpMpHtml) && /n=250/.test(scalpMpHtml), 'hg-v700: SCALP banner names the measured demotion, not a fabricated lead');
   const heldRun = W.hgOg1Engine(Object.assign({}, base, { tape: rW.sections.s2.best.dir === 'long' ? 'DOWN' : 'UP' }));
   ok(W.hgOg1MostProbable(heldRun) === null && /HELD|no swept pool|NO PERMITTED/.test(W.hgOg1MostProbableHtml({ horizon: 'SWING', r: heldRun })), 'against-tape run → no MOST PROBABLE, reason printed');
   const cards = W.hgOg1CardsHtml([{ horizon: 'SWING', r: rW }, { horizon: 'SCALP', r: rS }]);
@@ -290,7 +302,13 @@ console.log('== BEST SETUPS across horizons ==');
   const runs = [{ horizon: 'SWING', r: W.hgOg1Engine(base) }, { horizon: 'SCALP', r: W.hgOg1Engine(Object.assign({}, base, { horizon: 'SCALP' })) }];
   const bs = W.hgOg1BestSetups(runs, 3);
   const all = runs[0].r.candidates.length + runs[1].r.candidates.length;
-  ok(bs.total === all && bs.best.length === Math.min(3, all) && bs.best.length > 0, 'ranks every candidate from both horizons and keeps the top 3 (' + bs.best.length + ' of ' + all + ')');
+  /* hg-v700: SCALP candidates are demoted (gross −0.287R / net −0.455R at XM,
+     n=250) so only SWING is BEST-eligible; the pool still scores everyone
+     (bs.total) and the demoted count is reported, never hidden. */
+  const swingN = runs[0].r.candidates.length;
+  ok(bs.total === all && bs.best.length === Math.min(3, swingN) && bs.best.length > 0, 'ranks every candidate, BEST drawn from the lead-eligible (SWING) pool (' + bs.best.length + ' of ' + all + ')');
+  ok(bs.demoted === runs[1].r.candidates.length, 'demoted (SCALP) count reported: ' + bs.demoted);
+  ok(bs.best.every(c => c.horizon === 'SWING' && !c.demoted), 'hg-v700: a SCALP-horizon (demoted) card is never BEST');
   ok(bs.best.every((c, i) => c.bestRank === i + 1 && c.horizon), 'BEST #1..#3 stamped with their horizon');
   const rankKey = c => [(c.verdict.qualifies ? 1 : 0), { A: 5, 'B+': 4, B: 3, C: 2, D: 1 }[c.gradeInfo.grade], c.matrix.score, c.gates.pass, c.rr1 || 0];
   ok(bs.best.every((c, i, a) => i === 0 || rankKey(a[i - 1]).join('|') >= rankKey(c).join('|') || (rankKey(a[i - 1])[0] > rankKey(c)[0]) || (rankKey(a[i - 1])[0] === rankKey(c)[0] && rankKey(a[i - 1])[1] >= rankKey(c)[1])), 'ordered by qualification → grade → score');
@@ -401,3 +419,161 @@ console.log('== data ceiling + sweep-candle OB ==');
 }
 
 console.log('\nall ok (cont.) —', passed, 'assertions');
+
+/* ================= hg-v700 — replay-measured fixes (C1–C8) =================
+   Evidence base: scripts/backtest-omnigold1-results.json (tab-lane replay of
+   hgOg1Engine, n=385 settled cards over ~83 days at XM costs): SCALP horizon
+   n=250 gross −0.287R / net −0.455R vs SWING n=135 gross +0.137R / net
+   +0.018R; 2,883 stand-asides across the run's scans on ONE rule — stop
+   inside 8× the venue round trip (byFormation STOOD-ASIDE n=229 settled). */
+
+console.log('== hg-v700 C1/C2/C3/C4/C5 — mechanical defects stay fixed ==');
+{
+  const src = read('omnigold1.js');
+  /* C1: the removeT2 OI/covering leg was '(long && fund>0) || false' — the
+     short mirror never ran. */
+  ok(/c\.dir === 'short' && ctx\.fund\.value < 0/.test(src), 'C1: removeT2 covering leg mirrored for shorts (short + negative funding)');
+  ok(!/\(c\.dir === 'long' && ctx\.fund\.value > 0\) \|\| false/.test(src), 'C1: the hard-coded `|| false` short leg is gone');
+  /* C2: the tape read used Date.now() while the engine keys on inp.now —
+     a replayed/injected now silently mixed clocks (v698 class). */
+  ok(!/closedRows\(inp\.rows4h, H4, Date\.now\(\)\)/.test(src), 'C2: tape is no longer cut on the wall clock');
+  ok(/closedRows\(inp\.rows4h, H4, inp\.now\)/.test(src), 'C2: tape reads the same now the engine receives');
+  ok(/inp\.now = has\(inp\.now\) \? \+inp\.now : Date\.now\(\)/.test(src), 'C2: an injected/replayed now wins and is settled before the tape read');
+  /* C3: G13 read best.rows[1] by POSITION — matrix reordering would silently
+     rewire the gate. */
+  ok(!/best\.rows\[1\]\./.test(src), 'C3: no positional matrix-row read remains (the comment documenting the removal may name it)');
+  const W = boot();
+  const d = sweepDay();
+  const cvd = []; for (let i = 0; i < 200; i++) cvd.push(1000 + i);
+  const r = W.hgOg1Engine({ rows1h: d.rows, rows15m: d.m15, now: d.now, feed: 'delta-xaut', venue: 'Delta XAUTUSD', equity: 50000, stopsToday: 0, cvd15m: cvd, cvdSource: 'test' });
+  const g13 = r.sections.s7 && r.sections.s7.rows.find(x => x.gate === 'G13');
+  const cvdRow = r.sections.s2.best.rows.find(x => x.name === 'Order Flow & Delta Divergence');
+  ok(g13 && cvdRow && g13.note === cvdRow.evidence, 'C3: G13 note is the Order Flow & Delta Divergence row, keyed by name');
+  /* C4: gate 9 label said 'RR ≥ 2' but has always passed at rr1 ≥ 1.5 —
+     label honesty only; the matrix calibration owns the threshold. */
+  const g9 = r.candidates[0].gates.gates.find(g => g.n === 9);
+  ok(/RR ≥ 1\.5/.test(g9.name) && !/RR ≥ 2/.test(g9.name), 'C4: gate 9 label matches its 1.5 behavior');
+  ok(/gate\(9, 'RR ≥ 1\.5', has\(c\.rr1\) && c\.rr1 >= 1\.5/.test(src), 'C4: the 1.5 threshold itself is untouched');
+  /* C5: naked-POC row state was a dead ternary (naked ? live : live). */
+  ok(!/L\('naked POCs', naked \? 'live' : 'live'/.test(src), 'C5: the dead ternary is gone from the load row (the comment documenting it may quote it)');
+  const nrow = r.sections.s0.load.find(l => l.name === 'naked POCs');
+  ok(nrow && nrow.state === 'live' && /\(|none untested/.test(nrow.note), 'C5: with ≥ 2 session POCs the read is live (found one or none untested)');
+  ok(/need ≥ 2 session POCs to test/.test(src), 'C5: the not-computable branch prints unavailable with the shortfall named');
+}
+
+console.log('== hg-v700 C6 — replay line surfaces minRisk rejections ==');
+{
+  const W = boot();
+  const d = sweepDay();
+  /* direct-drive the exported line with every rejection counter set */
+  const line = W.hgOg1ReplayLine({ gated: true, resolved: 0, signals: 6, filled: 0, note: 'x', rejected: { session: 1, rr: 2, rcap: 3, risk: 4, bias: 5 } }, '1H');
+  ok(/session 1, RR 2, R-cap 3, minRisk 4, bias 5/.test(line), 'C6: gated line prints session/RR/R-cap AND the minRisk count');
+  /* a RAW replay with opts.minRisk also stands rows aside — that count was
+     silently swallowed before hg-v700 */
+  const rows = W.HG_GOLD7.closedRows(d.rows, 3600, d.now);
+  const rp = W.hgOg1Replay(rows, [], { tfLabel: '1H', minRisk: 1e9 });
+  ok(rp.rejected && rp.rejected.risk > 0, 'C6: raw replay counts minRisk rejections (' + rp.rejected.risk + ')');
+  ok(new RegExp('minRisk ' + rp.rejected.risk).test(W.hgOg1ReplayLine(rp, '1H')), 'C6: and the raw line prints them');
+  ok(!/minRisk/.test(W.hgOg1ReplayLine({ gated: false, resolved: 0, signals: 0, filled: 0, note: 'x', rejected: { session: 0, rr: 0, rcap: 0 } }, '1H')), 'C6: no phantom minRisk clause when nothing was rejected');
+}
+
+console.log('== hg-v700 C7 — venue stop floor AT MINT (2,883 stand-asides on one rule) ==');
+{
+  /* direct-drive, the tests/test-goldscalp-stopfloor.mjs v699 pattern.
+     Stub the OWNERS the stand-aside rule reads (omnigold.js hgOgVenueCost +
+     HG_OG_FORM_COST_R_MAX) — floor = entry × (rt / maxR) / 100. */
+  const W = boot();
+  W.hgOgVenueCost = () => ({ venue: 'XM', rtCostPct: 0.020, basis: 'stub' });
+  W.HG_OG_FORM_COST_R_MAX = 0.125;
+  const floorUsd = e => e * (0.020 / 0.125) / 100;   /* 0.16% of entry — 8× the RT */
+  let f = W.hgOg1StopFloor('long', 4500, 4499.5);    /* structural $0.50 « floor $7.20 */
+  ok(f.floored && Math.abs(f.risk - floorUsd(4500)) < 1e-9 && Math.abs(f.stop - (4500 - floorUsd(4500))) < 1e-9, 'C7: tight valid-side LONG stop floored to 8× the venue round trip');
+  f = W.hgOg1StopFloor('short', 4500, 4500.4);
+  ok(f.floored && Math.abs(f.stop - (4500 + floorUsd(4500))) < 1e-9, 'C7: SHORT floors symmetrically (stop above entry)');
+  f = W.hgOg1StopFloor('long', 4500, 4490);          /* $10 ≥ $7.20 */
+  ok(!f.floored && f.stop === 4490 && f.risk === 10, 'C7: a structural stop already clearing the floor is untouched');
+  f = W.hgOg1StopFloor('long', 4500, 4501);          /* wrong side */
+  ok(!f.floored && f.stop === 4501, 'C7: wrong-side stop is NEVER floored — sides first, gates own that failure (v681 lesson)');
+  let threw = false;
+  try{ W.hgOg1StopFloor(null, NaN, NaN); W.hgOg1StopFloor('sideways', 1, 2); W.hgOg1StopFloor('long', 4500, NaN); }catch(e){ threw = true; }
+  ok(!threw, 'C7: never throws on garbage');
+  /* owners absent -> no mint floor; formation already fails closed downstream */
+  const W0 = boot();
+  f = W0.hgOg1StopFloor('long', 4500, 4499.5);
+  ok(!f.floored && f.stop === 4499.5, 'C7: omnigold.js owners absent → no mint floor (fail-closed formation owns it downstream)');
+
+  /* pipeline invariant: with the owners present, every minted candidate is
+     floored-or-wider, floored survivors re-cleared the lane's own 1.5R bar,
+     and fires whose floored TP1 no longer pays are DROPPED with the reason
+     named — never scored, never a card. rt=0.05% → floor ≈ 0.4% of entry
+     (≈$18 at 4500), far above the structural $2–8 stops this fixture mints. */
+  const W2 = boot();
+  W2.hgOgVenueCost = () => ({ venue: 'XM', rtCostPct: 0.05, basis: 'stub' });
+  W2.HG_OG_FORM_COST_R_MAX = 0.125;
+  const d = sweepDay();
+  const r = W2.hgOg1Engine({ rows1h: d.rows, rows15m: d.m15, now: d.now, feed: 'delta-xaut', venue: 'Delta XAUTUSD', equity: 50000, stopsToday: 0 });
+  const bigFloor = e => e * (0.05 / 0.125) / 100;
+  const minted = r.candidates || [], droppedRows = r.dropped || [];
+  ok(minted.length + droppedRows.length > 0, 'C7: fixture minted candidates (' + minted.length + ' kept, ' + droppedRows.length + ' dropped)');
+  ok(minted.every(c => c.risk >= bigFloor(c.entry) * (1 - 1e-9)), 'C7 invariant: every shipped candidate rides a stop at or above the venue floor');
+  ok(minted.filter(c => c.mintFloor).every(c => has(c.rr1) && c.rr1 >= 1.5), 'C7: every floored survivor re-cleared the lane 1.5R bar against the floored risk');
+  ok(droppedRows.every(x => /venue stop floor at mint/.test(x.reason) && /1\.5R \(gate 9 bar\)/.test(x.reason)), 'C7: drops carry the named reason (floor + the RR bar it failed)');
+  ok(minted.some(c => c.mintFloor) || droppedRows.length > 0, 'C7: the tight-stop fixture was floored or honestly dropped, never shipped raw');
+  const flooredCand = minted.find(c => c.mintFloor);
+  if (flooredCand){
+    ok(/venue-floored to \$/.test(flooredCand.bufNote), 'C7: floored candidate names the floor in its buffer note');
+    const cardHtml = W2.hgOg1CardsHtml([{ horizon: 'SWING', r }]);
+    ok(/venue floor \$/.test(cardHtml) && !new RegExp('stop beyond ' + flooredCand.wick.toFixed(2)).test(cardHtml), 'C7: the card prints the venue-floor basis, not the discredited wick+buffer label');
+  }
+  /* forced DROP: rt=2% → floor ≈ 16% of entry (~$720) — no TP1 on this tape
+     pays 1.5R at that risk, so every fire must come out DROPPED with the
+     named reason, and none may ship with a sub-floor stop. */
+  const W3 = boot();
+  W3.hgOgVenueCost = () => ({ venue: 'XM', rtCostPct: 2, basis: 'stub' });
+  W3.HG_OG_FORM_COST_R_MAX = 0.125;
+  const r3 = W3.hgOg1Engine({ rows1h: d.rows, rows15m: d.m15, now: d.now, feed: 'delta-xaut', venue: 'Delta XAUTUSD', equity: 50000, stopsToday: 0 });
+  ok((r3.dropped || []).length > 0 && (r3.candidates || []).every(c => !c.mintFloor), 'C7: an unpayable floor DROPS every floored fire (' + (r3.dropped || []).length + ' dropped), none shipped');
+  ok((r3.dropped || []).every(x => /venue stop floor at mint/.test(x.reason) && /dropped, not rewritten/.test(x.reason)), 'C7: each forced drop names the floor and refuses to rewrite');
+  /* hg-v700 audit fix: out.dropped was reported in the DATA but the rendered
+     board still said 'no swept pool' when the drops emptied it — a claim the
+     run's own out.dropped discredits (v536). Every surface now names the
+     drops. */
+  const dropCards = W3.hgOg1CardsHtml([{ horizon: 'SWING', r: r3 }]);
+  if (!(r3.candidates || []).length){
+    ok(/dropped at mint/.test(dropCards) && /venue stop floor at mint/.test(dropCards), 'C7 fix: an all-dropped board names the drops on the cards panel');
+    ok(!/no swept pool/.test(dropCards), 'C7 fix: an all-dropped board never claims "no swept pool"');
+    ok(/dropped at mint \(venue stop floor\)/.test(W3.hgOg1BestHtml(W3.hgOg1BestSetups([{ horizon: 'SWING', r: r3 }], 3), [{ horizon: 'SWING', r: r3 }])), 'C7 fix: the empty BEST ribbon names the mint drops, not "no swept pool"');
+    ok(/dropped at mint/.test(W3.hgOg1MostProbableHtml({ horizon: 'SWING', r: r3 })), 'C7 fix: the MOST PROBABLE banner names the mint drops');
+    ok(/dropped at mint/.test(W3.hgOg1Html(r3)) || !/no swept pool this window/.test(W3.hgOg1Html(r3)), 'C7 fix: the Sections 0–8 view does not claim "no swept pool this window" over drops');
+  } else {
+    ok(/dropped at mint/.test(dropCards), 'C7 fix: partial drops still paint a named line under the surviving cards');
+  }
+}
+
+console.log('== hg-v700 C8 — SCALP horizon demoted: paints, never leads ==');
+{
+  const W = boot();
+  const d = sweepDay();
+  /* 15m tape with a sweep on the last closed bar so the SCALP run mints */
+  const m15 = []; let p = 4493;
+  for (let i = 0; i < 200; i++){ const t = Math.floor(d.now / 1000 / 900) * 900 - (200 - i) * 900; const c = p + Math.sin(i / 9) * 0.8; m15.push({ t, o: p, h: Math.max(p, c) + 1.2, l: Math.min(p, c) - 1.2, c, v: 40 + (i % 5) * 5 }); p = c; }
+  const last = m15[m15.length - 1]; last.l = Math.min(...m15.slice(-60, -1).map(r => r.l)) - 2.5; last.c = last.o + 0.8;
+  const base = { rows1h: d.rows, rows15m: m15, now: d.now, feed: 'delta-xaut', venue: 'Delta XAUTUSD', equity: 50000, stopsToday: 0 };
+  const rW = W.hgOg1Engine(base), rS = W.hgOg1Engine(Object.assign({}, base, { horizon: 'SCALP' }));
+  const STAMP = 'SCALP horizon replay gross -0.29R / net -0.46R at XM over n=250 — paints, never leads';
+  ok(rS.candidates.length > 0 && rS.candidates.every(c => c.demoted === true && c.demoteWhy === STAMP), 'C8: every SCALP candidate is demoted with the exact measured stamp');
+  ok(rW.candidates.length > 0 && rW.candidates.every(c => !c.demoted), 'C8: SWING (gross +0.137R, n=135) stays lead-eligible');
+  const bs = W.hgOg1BestSetups([{ horizon: 'SWING', r: rW }, { horizon: 'SCALP', r: rS }], 3);
+  ok(bs.best.length > 0 && bs.best.every(c => c.horizon === 'SWING'), 'C8: a SCALP-horizon card can never be BEST');
+  ok(rS.candidates.every(c => c.bestRank === 0), 'C8: no SCALP candidate carries a bestRank');
+  const bsScalpOnly = W.hgOg1BestSetups([{ horizon: 'SCALP', r: rS }], 3);
+  ok(bsScalpOnly.best.length === 0 && bsScalpOnly.demoted === rS.candidates.length, 'C8: an all-demoted pool gets NO best setup invented (v699 lead invariant)');
+  ok(/every candidate demoted — SCALP horizon replay/.test(W.hgOg1BestHtml(bsScalpOnly, [{ horizon: 'SCALP', r: rS }])), 'C8: the empty ribbon names the measured demotion');
+  ok(W.hgOg1MostProbable(rS) === null, 'C8: SCALP MOST PROBABLE is null');
+  const cards = W.hgOg1CardsHtml([{ horizon: 'SWING', r: rW }, { horizon: 'SCALP', r: rS }]);
+  ok(/DEMOTED — paints, never leads/.test(cards) && cards.indexOf(esc0(STAMP)) >= 0, 'C8: SCALP cards still PAINT, stamped with the measured evidence');
+  ok(!/win[ -]?rate|(?<!not a )probability|confidence\s*%/i.test(cards), 'C8: still no probability language anywhere');
+}
+function esc0(s){ return String(s).replace(/[<>&]/g, c => c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&amp;'); }
+
+console.log('\nall ok (hg-v700) —', passed, 'assertions');

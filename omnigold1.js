@@ -158,12 +158,28 @@
     gate(6, 'body in OB', c.obOk, c.ob ? ((c.obSrc || 'OB') + ' ' + px(c.ob.lo) + '–' + px(c.ob.hi) + (c.obOk ? '' : ' — entry outside')) : 'no ' + c.dir + ' OB (no sweep candle, no fresh block)');
     gate(7, 'session window · no lockout', ctx.session.tradeable && !ctx.news.lock, ctx.session.label + (ctx.news.lock ? ' · LOCKOUT' : ''));
     gate(8, 'LVN path', c.lvnPath, c.lvnPath ? 'LVN between entry and TP1' : 'no LVN path');
-    gate(9, 'RR ≥ 2', has(c.rr1) && c.rr1 >= 1.5, has(c.rr1) ? (num(c.rr1) + 'R' + (c.rr1 < 2 ? ' (half band)' : '')) : 'no TP1');
+    /* hg-v700 label honesty: this gate has ALWAYS passed at rr1 >= 1.5 (the
+       1.5–2.0 half band is the note beside it), but the label said 'RR >= 2'
+       — a label the behavior discredits gets corrected, not annotated
+       (v536). The THRESHOLD is untouched: the matrix calibration owns it. */
+    gate(9, 'RR ≥ 1.5', has(c.rr1) && c.rr1 >= 1.5, has(c.rr1) ? (num(c.rr1) + 'R' + (c.rr1 < 2 ? ' (half band)' : '')) : 'no TP1');
     gate(10, 'R ≤ 0.6 × ' + (ctx.ctxLabel || '4H') + ' ATR', c.risk <= 0.6 * ctx.atr4h, 'R $' + num(c.risk) + ' vs $' + num(0.6 * ctx.atr4h));
     gate(11, 'feed sane', ctx.feedOk, ctx.feedWhy);
     gate(12, '< 2 stops today', !(ctx.stopsToday >= 2), has(ctx.stopsToday) ? ('stops ' + ctx.stopsToday) : 'stops today unavailable — passes with note');
     return { gates: gates, pass: pass, halfBand: has(c.rr1) && c.rr1 >= 1.5 && c.rr1 < 2 };
   }
+
+  /* MEASURED, COHORT (hg-v700): scripts/backtest-omnigold1-results.json
+     tabLane.aggregates.byHorizon — the tab-lane replay of hgOg1Engine over
+     ~83 days at XM costs settled SCALP n=250 at gross −0.287R / net −0.455R
+     per trade, GROSS-NEGATIVE BEFORE FEES, while SWING n=135 ran gross
+     +0.137R / net +0.018R. A measured gross-negative cohort paints but can
+     never lead: every SCALP-horizon candidate is stamped demoted with this
+     exact evidence line, and hgOg1BestSetups / hgOg1MostProbable hold the
+     lead invariant (mirroring goldscalp.js hg-v699: a demoted card is never
+     MOST PROBABLE; an all-demoted board has no lead). SWING stays
+     lead-eligible. */
+  var OG1_SCALP_DEMOTE_WHY = 'SCALP horizon replay gross -0.29R / net -0.46R at XM over n=250 — paints, never leads';
 
   /* ================================================================== */
   /*                               ENGINE                               */
@@ -262,7 +278,13 @@
     L('Volume profile (prev session · 4H range · composite)', vp4h ? 'live' : 'unavailable', (prevSess ? 'prev VPOC ' + px(prevSess.pocPrice) + ' VAH ' + px(prevSess.vah) + ' VAL ' + px(prevSess.val) : 'prev session unavailable') + (vp4h ? ' · 4H POC ' + px(vp4h.pocPrice) : '') + (composite ? ' · composite (' + Math.min(400, rows1h.length) + '×1H ≈ ' + Math.round(Math.min(400, rows1h.length) / 23) + ' sessions) POC ' + px(composite.pocPrice) : ''));
     var naked = null;
     if (pocs.length >= 2){ var pp = pocs[pocs.length - 2], touched = false, ti; for (ti = rows1h.length - 1; ti >= 0; ti--){ if (new Date(rows1h[ti].t * 1000).toISOString().slice(0, 10) === pp.day) break; if (rows1h[ti].l <= pp.poc && rows1h[ti].h >= pp.poc){ touched = true; break; } } if (!touched) naked = { level: pp.poc, day: pp.day }; }
-    L('naked POCs', naked ? 'live' : 'live', naked ? (px(naked.level) + ' (' + naked.day + ')') : 'none untested');
+    /* hg-v700: `naked ? 'live' : 'live'` was a dead ternary — the else branch
+       printed 'live' even when the read never ran (the naked-POC test above
+       needs >= 2 session POCs before it can look for an untested one). The
+       honest split is the read's own precondition: computed -> 'live'
+       (found one, or genuinely none untested); not computable -> 'unavailable'
+       with the shortfall named, never a claimed 'none untested'. */
+    L('naked POCs', pocs.length >= 2 ? 'live' : 'unavailable', naked ? (px(naked.level) + ' (' + naked.day + ')') : (pocs.length >= 2 ? 'none untested' : 'need ≥ 2 session POCs to test (have ' + pocs.length + ')'));
     var vw = sessionVwap(rows1h, 22);
     var wkOpen = anchoredVwap(rows1h, rows1h.length ? (function(){ var last = rows1h[rows1h.length - 1].t; var dow = (new Date(last * 1000).getUTCDay() + 6) % 7; return (g.dayKey(last) - dow) * 86400; })() : 0);
     L('session VWAP (22:00 UTC) ±σ · anchored VWAPs', has(vw.vwap) ? 'live' : 'unavailable', has(vw.vwap) ? ('VWAP ' + px(vw.vwap) + ' ±1σ ' + px(vw.vwap - vw.sd) + '/' + px(vw.vwap + vw.sd) + ' ±2σ ' + px(vw.vwap - 2 * vw.sd) + '/' + px(vw.vwap + 2 * vw.sd) + ' · weekly-open AVWAP ' + px(wkOpen)) : '');
@@ -459,6 +481,21 @@
       var closedRight = pdir === 'long' ? last.c > poc : last.c < poc;
       if (touched && closedRight) cands.push(buildCand(ctx, { sid: 'S3', dir: pdir, level: poc, kind: '4H POC pullback', wick: pdir === 'long' ? last.l : last.h, age: 0, reclaimed: true, breach: NaN, cls: 'continuation', entry: pdir === 'long' ? poc + Math.max(1, 0.1 * atr1h) : poc - Math.max(1, 0.1 * atr1h) }));
     }
+    /* hg-v700: fires whose venue-floored TP1 no longer pays gate 9's 1.5R bar
+       were DROPPED at mint with the reason named (see og1VenueFloor /
+       buildCand) — they are never scored and never become a card; the drops
+       are reported, not hidden. Placeable-or-honestly-dropped. */
+    var droppedMint = cands.filter(function(c){ return c.dropped; });
+    if (droppedMint.length){
+      cands = cands.filter(function(c){ return !c.dropped; });
+      out.dropped = droppedMint.map(function(c){ return { sid: c.sid, dir: c.dir, kind: c.kind, reason: c.dropReason }; });
+    }
+    /* hg-v700 SCALP-horizon demotion — see OG1_SCALP_DEMOTE_WHY above for the
+       measured cohort. Stamped here so every downstream reader (cards, BEST,
+       MOST PROBABLE) sees the same evidence line. Paint, never lead. */
+    if (scalp){
+      cands.forEach(function(c){ c.demoted = true; c.demoteWhy = OG1_SCALP_DEMOTE_WHY; });
+    }
     /* ---------------- SECTION 2 — score every candidate, then each permitted direction ---------------- */
     var ci;
     for (ci = 0; ci < cands.length; ci++){
@@ -501,6 +538,67 @@
     return out;
   }
 
+  /* ---------------- venue stop floor at mint (hg-v700) ----------------
+     MEASURED: scripts/backtest-omnigold1-results.json tabLane (hgOg1Engine
+     replayed per closed 1h bar over ~83 days, n=385 settled cards at XM
+     costs): 2,883 stand-asides across the run's scans — 521 of the 797
+     minted card rows, 229 of the 385 settled (tabLane.aggregates.byFormation
+     STOOD-ASIDE n=229) — died on ONE reason, "stop inside 8x the venue
+     round-trip": OG1 mints stops structurally too tight to pay at XM, then
+     ships cards its own formation gate must refuse. The floor is therefore
+     composed INTO the stop at mint time:
+
+       stop distance >= entry × (rtCostPct / HG_OG_FORM_COST_R_MAX) / 100
+
+     with BOTH numbers read from the owners the stand-aside rule reads
+     (omnigold.js hgOgVenueCost + HG_OG_FORM_COST_R_MAX, the same pair
+     hgOgCostDrag prices inside hgOgFormation) — nothing restated here, so a
+     venue or threshold change moves mint and gate together. Order of
+     operations per the v681/v698 lesson: SIDES FIRST (a wrong-side stop is
+     never floored into a "fixed" one — the gates/formation own that
+     failure), floor second, then the caller re-checks the lane's own RR bar
+     (gate 9's 1.5) against the floored risk and DROPS a fire whose floored
+     TP1 no longer pays, with the reason named. Owners absent (omnigold.js
+     not loaded) -> no mint-time floor, and the formation verdict downstream
+     already fails closed on the same missing machinery. Never throws. */
+  function og1VenueFloor(entry){
+    try{
+      var e = fin(entry);
+      var vcFn = gfn('hgOgVenueCost');
+      var maxR = fin(W.HG_OG_FORM_COST_R_MAX);
+      if (!vcFn || !(maxR > 0) || !(e > 0)) return null;
+      var vc = null;
+      try{ vc = vcFn(); }catch(eV){ return null; }
+      var rt = vc ? fin(vc.rtCostPct) : NaN;
+      if (!(rt > 0)) return null;
+      return { usd: e * (rt / maxR) / 100, venue: String((vc && vc.venue) || ''), rtCostPct: rt, maxR: maxR };
+    }catch(eF){ return null; }
+  }
+  /* -> { stop, risk, floored, floor } for one mint-time plan. Exported for
+     the hg-v700 regression tests (direct-drive, like hgGoldScalpStopFloor). */
+  function hgOg1StopFloor(dir, entry, stop){
+    var out = { stop: stop, risk: Math.abs(fin(entry) - fin(stop)), floored: false, floor: null };
+    try{
+      var e = fin(entry), s = fin(stop);
+      if (!isFinite(e) || !isFinite(s) || (dir !== 'long' && dir !== 'short')) return out;
+      if (!(dir === 'long' ? e > s : e < s)) return out;  /* sides first — never floor a wrong-side stop (v681) */
+      var f = og1VenueFloor(e);
+      if (!f || !(f.usd > 0)) return out;
+      out.floor = f;
+      if (out.risk >= f.usd * (1 - 1e-9)) return out;     /* structural stop already clears the venue floor */
+      out.stop = dir === 'long' ? e - f.usd : e + f.usd;
+      out.risk = f.usd;
+      out.floored = true;
+      return out;
+    }catch(eA){ return out; }
+  }
+  /* The honest stop-basis label for a card: a floored stop no longer sits at
+     wick ± buffer, and a label the data discredits gets replaced (v536). */
+  function og1StopBasis(c){
+    if (c && c.mintFloor) return 'venue floor $' + num(c.mintFloor.usd) + ' (' + c.mintFloor.venue + ' ' + num(c.mintFloor.rtCostPct, 3) + '% RT × ' + (1 / c.mintFloor.maxR) + '; structural $' + num(c.mintFloor.structRisk) + ' beyond ' + px(c.wick) + ' + $' + num(c.buf) + ' was inside it)';
+    return 'beyond ' + px(c.wick) + ' + $' + num(c.buf);
+  }
+
   /* ---------------- candidate + gates ---------------- */
   function buildCand(ctx, src){
     var g = G7(), atr = ctx.atr1h, dir = src.dir;
@@ -518,7 +616,14 @@
     }
     var wick = has(src.wick) ? +src.wick : src.level;
     var stop = dir === 'long' ? wick - buf : wick + buf;
-    var risk = Math.abs(entry - stop);
+    /* hg-v700 venue stop floor AT MINT (see og1VenueFloor above for the
+       measured evidence): sides first, then floor; targets are then priced
+       against the floored risk so TP1 selection and the RR re-check below
+       both see the stop that would actually be placed. */
+    var structRisk = Math.abs(entry - stop);
+    var vf = hgOg1StopFloor(dir, entry, stop);
+    stop = vf.stop;
+    var risk = vf.risk;
     var tg = g.targets(ctx, entry, dir, { risk: risk });
     var t1 = tg.t1 ? tg.t1.level : NaN, t2 = tg.t2 ? tg.t2.level : NaN;
     var rr1 = risk > 0 && has(t1) ? Math.abs(t1 - entry) / risk : NaN, rr2 = risk > 0 && has(t2) ? Math.abs(t2 - entry) / risk : NaN;
@@ -535,6 +640,19 @@
               t1: t1, t2: t2, t1Label: tg.t1 ? tg.t1.label : 'unavailable', t2Label: tg.t2 ? tg.t2.label : 'unavailable', t1Rule: tg.rule, rr1: rr1, rr2: rr2,
               grade: loc.grade, gradeWhy: loc.why, obOk: obOk, ob: ob, obSrc: obSrc, age: has(src.age) ? +src.age : NaN, reclaimed: !!src.reclaimed, acceptance: !!src.acceptance,
               breach: fin(src.breach), displacementAtr: fin(src.displacementAtr), second: !!src.second, lvnPath: g.lvnBetween(entry, t1, ctx.vp4h), crowded: crowded };
+    if (vf.floored){
+      c.mintFloor = { usd: vf.floor.usd, venue: vf.floor.venue, rtCostPct: vf.floor.rtCostPct, maxR: vf.floor.maxR, structRisk: structRisk };
+      c.bufNote += ' · venue-floored to $' + num(vf.floor.usd) + ' (' + vf.floor.venue + ' ' + num(vf.floor.rtCostPct, 3) + '% RT × ' + (1 / vf.floor.maxR) + ')';
+      /* re-check the lane's own RR bar (gate 9: rr1 >= 1.5) against the
+         floored risk. A fire whose floored TP1 no longer pays is DROPPED
+         with the reason named — placeable-or-honestly-dropped, never a
+         card the formation gate must refuse (hg-v700; the 2,883-stand-aside
+         cohort in scripts/backtest-omnigold1-results.json tabLane). */
+      if (!(has(rr1) && rr1 >= 1.5)){
+        c.dropped = true;
+        c.dropReason = 'venue stop floor at mint: structural stop $' + num(structRisk) + ' sits inside ' + (1 / vf.floor.maxR) + '× the ' + vf.floor.venue + ' round trip (' + num(vf.floor.rtCostPct, 3) + '% RT → floor $' + num(vf.floor.usd) + '); at the floored stop TP1 pays ' + (has(rr1) ? num(rr1) + 'R' : 'nothing (no TP1)') + ' < 1.5R (gate 9 bar) — dropped, not rewritten';
+      }
+    }
     c.gates = coreGates(ctx, c);
     return c;
   }
@@ -848,8 +966,14 @@
     var g = G7(), c = best.cand, nextClose = (ctx.rows1h[ctx.rows1h.length - 1].t + 2 * ctx.tf) * 1000;
     var t2 = c.t2, t2Note = c.t2Label;
     if (has(ctx.composite && ctx.composite.pocPrice) && has(t2) && Math.abs(ctx.composite.pocPrice - c.entry) <= ctx.atr1h && ((c.dir === 'long' && ctx.composite.pocPrice < t2) || (c.dir === 'short' && ctx.composite.pocPrice > t2))){ t2 = ctx.composite.pocPrice; t2Note = 'capped at composite POC'; }
-    var removeT2 = (has(ctx.oi.chgPct) && ctx.oi.chgPct < -2 && ((c.dir === 'long' && ctx.fund.value > 0) || false)) || ctx.atrRegime === 'compressed' || ctx.walls.some(function(w){ return Math.abs(w.level - c.t1) <= 1; });
-    var mgmt = removeT2 ? '70% at TP1 + stop to entry (TP2 removed: ' + (ctx.atrRegime === 'compressed' ? 'ATR compressed' : 'options wall / short-covering') + ') · 30% runner by nPOC ladder (S38)' : '50% TP1 + stop to entry · 30% TP2 · 20% runner by nPOC ladder (S38) or session-VWAP trail';
+    /* OI down > 2% while the mover's side PAYS funding = a covering move, not
+       initiative flow, so the extension target is unearned: a LONG with
+       funding > 0 (longs paying) rising on falling OI is SHORT-covering fuel.
+       hg-v700: the SHORT leg was hard-coded `|| false` — the mirror never
+       ran. Mirrored exactly: a SHORT with funding < 0 (shorts paying) falling
+       on falling OI is LONG-liquidation fuel that exhausts the same way. */
+    var removeT2 = (has(ctx.oi.chgPct) && ctx.oi.chgPct < -2 && ((c.dir === 'long' && ctx.fund.value > 0) || (c.dir === 'short' && ctx.fund.value < 0))) || ctx.atrRegime === 'compressed' || ctx.walls.some(function(w){ return Math.abs(w.level - c.t1) <= 1; });
+    var mgmt = removeT2 ? '70% at TP1 + stop to entry (TP2 removed: ' + (ctx.atrRegime === 'compressed' ? 'ATR compressed' : 'options wall / covering flow (OI down, mover pays funding)') + ') · 30% runner by nPOC ladder (S38)' : '50% TP1 + stop to entry · 30% TP2 · 20% runner by nPOC ladder (S38) or session-VWAP trail';
     var rrVerdict = !has(c.rr1) ? 'RR FAIL — NO SETUP (no TP1)' : c.rr1 >= 2 ? 'RR ' + num(c.rr1) + ' ≥ 2.0 full' : c.rr1 >= 1.5 ? 'RR ' + num(c.rr1) + ' in 1.5–2.0 half band' : 'RR FAIL — NO SETUP (' + num(c.rr1) + ' < 1.5)';
     if (has(c.rr1) && c.rr1 < 1.5){ s3.qualifies = false; s3.decision = 'NO SETUP'; s3.why += ' · RR FAIL ' + num(c.rr1); }
     var mult = has(ctx.basisPct) ? 1 + ctx.basisPct / 100 : 1;
@@ -859,7 +983,12 @@
     var expression = t1InHold ? 'option debit spread preferable (S41) — Tier-1 event inside the hold window' : (has(ivrv) && ivrv < -3) ? 'option debit spread preferable (S41) — GVZ − realized ' + num(ivrv, 1) + ' < −3' : 'outright position (no S41 trigger' + (has(ivrv) ? '' : '; GVZ/RV unavailable') + ')';
     return {
       dir: c.dir, entry: c.entry, entryCondition: c.sid === 'S37' ? (ctx.tfLabel + ' retest of ' + px(c.level) + ' after acceptance → limit ' + px(c.entry)) : (c.reclaimed ? (ctx.tfLabel + ' closed back ' + (c.dir === 'long' ? 'above ' : 'below ') + px(c.level) + ' (' + c.kind + ') → limit ' + px(c.entry)) : (ctx.tfLabel + ' close back ' + (c.dir === 'long' ? 'above ' : 'below ') + px(c.level) + ' at ' + g.istUtc(nextClose) + ' → limit ' + px(c.entry))),
-      stop: c.stop, sl: c.risk, stopWhy: 'beyond ' + (c.sid === 'S3' ? 'far edge of the node' : 'sweep wick ' + px(c.wick)) + ' + buffer $' + num(c.buf) + ' (' + c.bufNote + ')' + (has(ctx.gcRoll) ? '' : ' · GC roll-week coverage unavailable'),
+      /* hg-v700: a venue-floored stop no longer sits at wick ± buffer, so the
+         'beyond sweep wick + buffer' label would be discredited by the level
+         it prints beside — the floored branch names the real basis (v536). */
+      stop: c.stop, sl: c.risk, stopWhy: (c.mintFloor
+        ? 'venue stop floor $' + num(c.mintFloor.usd) + ' — max(structural $' + num(c.mintFloor.structRisk) + ' ' + (c.sid === 'S3' ? 'beyond the node edge' : 'beyond sweep wick ' + px(c.wick)) + ' + $' + num(c.buf) + ', ' + (1 / c.mintFloor.maxR) + '× the ' + c.mintFloor.venue + ' ' + num(c.mintFloor.rtCostPct, 3) + '% round trip)'
+        : 'beyond ' + (c.sid === 'S3' ? 'far edge of the node' : 'sweep wick ' + px(c.wick)) + ' + buffer $' + num(c.buf) + ' (' + c.bufNote + ')') + (has(ctx.gcRoll) ? '' : ' · GC roll-week coverage unavailable'),
       t1: c.t1, t1Label: c.t1Label, rr1: c.rr1, rrVerdict: rrVerdict, t2: t2, t2Label: t2Note, rr2: c.risk > 0 && has(t2) ? Math.abs(t2 - c.entry) / c.risk : NaN, removeT2: removeT2,
       management: mgmt, timeStop: (c.sid === 'S7' || c.sid === 'S17') ? 'runner may hold with stop under each session POC; intraday portion London close ' + g.istUtc(holdEnd) : 'London close ' + g.istUtc(holdEnd),
       invalidation: 'two consecutive ' + ctx.tfLabel + ' closes ' + (c.dir === 'long' ? 'below ' : 'above ') + px(c.level) + ' (acceptance) or sweep age > 3 bars',
@@ -898,7 +1027,12 @@
     var c = best.cand, gt = c.gates, rows = gt.gates.map(function(x){ return { gate: 'G' + x.n, name: x.name, result: x.pass ? 'PASS' : 'FAIL', note: x.note }; });
     var g14 = c.dir === 'long' ? ctx.rsiVeto.longVeto : ctx.rsiVeto.shortVeto;
     rows.push({ gate: 'G14', name: 'RSI exhaustion veto', result: g14 ? 'FAIL' : 'PASS', note: '4H RSI ' + num(ctx.rsi4h, 1) });
-    rows.push({ gate: 'G13', name: 'CVD confirms (optional)', result: ctx.cvd ? (best.rows[1].got ? 'PASS' : 'FAIL') : 'unavailable', note: best.rows[1].evidence });
+    /* hg-v700: this read was best.rows[1] BY POSITION — reordering the matrix
+       would silently rewire the gate to whatever row landed second (the v698
+       defect class: a gate reading something other than what it names).
+       Keyed by row NAME like G15 below; a missing row fails closed. */
+    var cvdRow = best.rows.find(function(r){ return r.name === 'Order Flow & Delta Divergence'; }) || { got: 0, evidence: 'Order Flow & Delta Divergence row missing from the matrix — fail closed' };
+    rows.push({ gate: 'G13', name: 'CVD confirms (optional)', result: ctx.cvd ? (cvdRow.got ? 'PASS' : 'FAIL') : 'unavailable', note: cvdRow.evidence });
     rows.push({ gate: 'G15', name: 'positioning (optional)', result: has(ctx.cot) || has(ctx.fund.value) ? (best.rows.find(function(r){ return r.name === 'Positioning & Physical'; }).got ? 'PASS' : 'FAIL') : 'unavailable', note: '' });
     rows.push({ gate: 'G16', name: 'anchored VWAP side (optional)', result: has(ctx.vw.vwap) ? ((c.dir === 'long' ? c.entry >= ctx.vw.vwap - ctx.vw.sd : c.entry <= ctx.vw.vwap + ctx.vw.sd) ? 'PASS' : 'FAIL') : 'unavailable', note: 'session VWAP ' + px(ctx.vw.vwap) });
     var fails = gt.gates.filter(function(x){ return !x.pass; });
@@ -968,7 +1102,7 @@
     var R = best.rows, gotOf = function(n){ var r = R.find(function(x){ return x.name === n; }); return r ? r.got : 0; };
     L.push('SCORE ' + best.score + '/20 (A: Macro ' + gotOf('Intermarket / Macro Driver') + ' Delta ' + gotOf('Order Flow & Delta Divergence') + ' VPOC ' + gotOf('Volume Profile & VPOC/HVN Rejection') + ' VWAP/Z ' + gotOf('Statistical Positioning (VWAP / Z)') + ' ML ' + gotOf('Algorithmic Momentum (ML)') + ' Sweep ' + gotOf('Structural Liquidity Sweep (SMC)') + ' Session ' + gotOf('Session Volatility Filter')
       + ' | B: Trend ' + gotOf('Trend & Location Alignment') + ' Positioning ' + gotOf('Positioning & Physical') + ' Vol ' + gotOf('Volatility & Target Realism') + ' Composite ' + gotOf('Composite Structure') + ' Time ' + gotOf('Time Statistics') + ' Regime ' + gotOf('Regime Fit') + ' Exec ' + gotOf('Execution Quality') + ' Path ' + gotOf('Clean Path') + ')');
-    L.push('Families contributing ' + best.families.length + (best.spreadOk ? '' : ' (SPREAD FAIL)') + (best.unavailPts ? ' | reachable ' + best.reachable + '/20' : '') + ' | DECISION ' + s3.decision + ' | ' + (s4 && s4.primary ? 'PRIMARY ' + s4.primary + ' ' + s4.name + (s4.also.length ? ' | also ' + s4.also.join(', ') : '') + ' | target ' + s4.target : 'hypothesis ' + up(best.dir) + (best.cand ? ' ' + best.cand.sid + ' ' + best.cand.kind : ' — no swept pool')));
+    L.push('Families contributing ' + best.families.length + (best.spreadOk ? '' : ' (SPREAD FAIL)') + (best.unavailPts ? ' | reachable ' + best.reachable + '/20' : '') + ' | DECISION ' + s3.decision + ' | ' + (s4 && s4.primary ? 'PRIMARY ' + s4.primary + ' ' + s4.name + (s4.also.length ? ' | also ' + s4.also.join(', ') : '') + ' | target ' + s4.target : 'hypothesis ' + up(best.dir) + (best.cand ? ' ' + best.cand.sid + ' ' + best.cand.kind : (out.dropped && out.dropped.length ? ' — ' + out.dropped.length + ' fire(s) dropped at mint (venue stop floor)' : ' — no swept pool'))));
     if (s5){
       L.push('ENTRY ' + px(s5.entry) + ' on ' + s5.entryCondition + ' | STOP ' + px(s5.stop) + ' (SL$ ' + num(s5.sl) + ') | TP1 ' + px(s5.t1) + ' RR ' + num(s5.rr1) + ' | TP2 ' + (s5.removeT2 ? 'removed' : px(s5.t2) + ' RR ' + num(s5.rr2)) + ' | time stop ' + s5.timeStop.replace(/^London close /, ''));
       L.push('V-Mod raw ' + num(s6.vmodRaw) + ' clamped ' + num(s6.vmod) + ' | Adjusted risk $' + num(s6.adjustedRisk, 0) + ' | Size ' + s6.pick + ' (mult ' + s6.multLabel + ') | Leverage ' + num(s6.leverage, 1) + 'x | Liq clearance ' + (ctx.isPerp ? 'unavailable' : 'n/a'));
@@ -1013,7 +1147,7 @@
       h += row('Hypothesis', s1.permitted.length ? s1.permitted.map(up).map(esc).join(' + ') + (s1.held.length ? ' · HELD ' + s1.held.map(up).join('/') + ' (against gold tape)' : '') : '<b>NO PERMITTED DIRECTION</b>');
       if (!S.s2){ h += '<div style="margin-top:6px"><b>' + esc(S.s3.decision) + '</b> — ' + esc(S.s3.why) + '</div><pre class="dim og1-pre">' + esc(r.summary.join('\n')) + '</pre></div>'; return h; }
       var best = S.s2.best;
-      h += sec(2, 'THE 20-POINT CONFLUENCE MATRIX — hypothesis ' + up(best.dir) + (best.cand ? ' · ' + best.cand.sid + ' ' + best.cand.kind : ' · no swept pool this window'));
+      h += sec(2, 'THE 20-POINT CONFLUENCE MATRIX — hypothesis ' + up(best.dir) + (best.cand ? ' · ' + best.cand.sid + ' ' + best.cand.kind : (r.dropped && r.dropped.length ? ' · ' + droppedNote(r) : ' · no swept pool this window')));
       h += '<table class="og1-tbl"><tr><th>blk</th><th>pts</th><th>component</th><th>family</th><th>evidence</th></tr>';
       best.rows.forEach(function(x){ h += '<tr class="' + (x.got ? 'og1-got' : 'og1-miss') + '"><td>' + x.block + '</td><td><b>' + x.got + '/' + x.pts + '</b></td><td>' + esc(x.name) + '</td><td class="dim">' + esc(x.family) + '</td><td class="dim">' + esc(x.evidence) + (x.unavailable ? ' · unavailable' : '') + '</td></tr>'; });
       h += '</table><div><b>SCORE = ' + best.score + ' / 20</b> · families ' + best.families.length + ' (' + esc(best.families.join(', ')) + ')' + (best.spreadOk ? '' : ' · <b>SPREAD FAIL</b>') + '</div>';
@@ -1112,7 +1246,11 @@
   function hgOg1MostProbable(r){
     if (!r || !r.ok || !Array.isArray(r.candidates) || !r.candidates.length) return null;
     var s0 = r.sections.s0; if (s0 && !s0.clear) return null;
-    var list = r.candidates.filter(function(c){ return !(c.matrix && c.matrix.held); });
+    /* hg-v700 lead invariant (goldscalp.js hg-v699 precedent): a demoted
+       candidate can never be MOST PROBABLE — the SCALP cohort is measured
+       gross-negative (OG1_SCALP_DEMOTE_WHY). An all-demoted run has NO lead
+       banner rather than a fabricated one. */
+    var list = r.candidates.filter(function(c){ return !(c.matrix && c.matrix.held) && c.demoted !== true; });
     if (!list.length) return null;
     list.forEach(function(c){ c.gradeInfo = hgOg1Grade(c); });
     list.sort(function(a, b){
@@ -1158,7 +1296,7 @@
     var missing = m.rows.filter(function(q){ return !q.got; }).sort(function(a, b){ return b.pts - a.pts; });
     out.push({ h: 'What upgrades it', t: (missing.length ? missing.slice(0, 5).map(function(q){ return q.name + ' +' + q.pts + ' (' + q.evidence + ')'; }).join(' · ') : 'nothing missing on the matrix') + (c.gradeInfo && c.gradeInfo.why[c.gradeInfo.why.length - 1].indexOf('next grade') === 0 ? ' · ' + c.gradeInfo.why[c.gradeInfo.why.length - 1] : '') });
     var trig = S.s8 && S.s2 && S.s2.best && S.s2.best.cand === c ? S.s8 : null;
-    out.push({ h: 'Plan', t: 'ENTRY ' + px(c.entry) + ' (' + (c.dir === 'long' ? 'buy' : 'sell') + ' zone, limit) · STOP ' + px(c.stop) + ' (SL$ ' + num(c.risk) + ' — beyond ' + px(c.wick) + ' + $' + num(c.buf) + ') · TP1 ' + px(c.t1) + ' · TP2 ' + px(c.t2) + ' · invalidates on two ' + (r.horizon === 'SCALP' ? '15m' : '1H') + ' closes ' + (c.dir === 'long' ? 'below ' : 'above ') + px(c.level) + ' · time stop London close' });
+    out.push({ h: 'Plan', t: 'ENTRY ' + px(c.entry) + ' (' + (c.dir === 'long' ? 'buy' : 'sell') + ' zone, limit) · STOP ' + px(c.stop) + ' (SL$ ' + num(c.risk) + ' — ' + og1StopBasis(c) + ') · TP1 ' + px(c.t1) + ' · TP2 ' + px(c.t2) + ' · invalidates on two ' + (r.horizon === 'SCALP' ? '15m' : '1H') + ' closes ' + (c.dir === 'long' ? 'below ' : 'above ') + px(c.level) + ' · time stop London close' });
     out.push({ h: 'Trigger', t: trig ? (trig.state + ' — ' + (trig.line || trig.reason) + (trig.nextClose ? ' · ' + trig.nextClose : '')) : ((c.reclaimed ? 'reclaim closed' : 'reclaim pending') + ' · age ' + c.age + ' bar(s) · the next ' + (r.horizon === 'SCALP' ? '15m' : '1H') + ' close must hold ' + (c.dir === 'long' ? 'above ' : 'below ') + px(c.level) + (c.verdict && !c.verdict.qualifies ? ' — not trade-ready until the matrix reaches 10/20 with 4 families' : '')) });
     return out;
   }
@@ -1167,7 +1305,10 @@
     var mp = hgOg1MostProbable(r);
     var h = '<div class="og1-mp" data-hg-og1-mp="' + esc(hz) + '">';
     if (!mp){
-      var why = !r || !r.ok ? ('DATA_UNAVAILABLE — ' + esc(r ? r.why : 'no run')) : (r.sections.s0 && !r.sections.s0.clear ? 'VETO ACTIVE — ' + esc(r.sections.s0.active.map(function(v){ return v.name; }).join(' · ')) : (r.candidates && r.candidates.length ? 'every candidate is against the desk gold tape — HELD' : 'no swept pool on the last 4 closed bars — nothing leads'));
+      /* hg-v700: an all-demoted run (the SCALP horizon) names the measured
+         cohort instead of claiming HELD — the cards still paint below. */
+      var allDemoted = !!(r && r.ok && Array.isArray(r.candidates) && r.candidates.length && r.candidates.every(function(c){ return c && (c.demoted === true || (c.matrix && c.matrix.held)); }) && r.candidates.some(function(c){ return c && c.demoted === true; }));
+      var why = !r || !r.ok ? ('DATA_UNAVAILABLE — ' + esc(r ? r.why : 'no run')) : (r.sections.s0 && !r.sections.s0.clear ? 'VETO ACTIVE — ' + esc(r.sections.s0.active.map(function(v){ return v.name; }).join(' · ')) : (r.candidates && r.candidates.length ? (allDemoted ? 'demoted — ' + esc(OG1_SCALP_DEMOTE_WHY) + ' (cards paint below)' : 'every candidate is against the desk gold tape — HELD') : (r.dropped && r.dropped.length ? esc(droppedNote(r)) + ' — nothing leads' : 'no swept pool on the last 4 closed bars — nothing leads')));
       h += '<div class="og1-mp-head"><b>MOST PROBABLE · ' + esc(hz) + '</b> <span class="og1-grade og1-grade-none">—</span> <span class="dim">' + why + '</span></div></div>';
       return h;
     }
@@ -1193,6 +1334,17 @@
   }
 
   /* ---------------- setup cards: SCALP + SWING from the engine, plus desk-bridged setups ---------------- */
+  /* hg-v700 audit fix: out.dropped (mint-time venue-floor drops) was reported
+     in the DATA but every rendered surface still said 'no swept pool' when
+     the drops emptied the board — a swept pool DID exist and was dropped, so
+     the claim was discredited by the run's own out.dropped (v536: a label the
+     data discredits gets replaced). One helper names the drops everywhere. */
+  function droppedNote(r){
+    if (!r || !Array.isArray(r.dropped) || !r.dropped.length) return '';
+    var d0 = r.dropped[0];
+    return r.dropped.length + ' fire(s) dropped at mint — ' + d0.sid + ' ' + up(d0.dir) + ' ' + d0.kind + ': ' + d0.reason
+      + (r.dropped.length > 1 ? ' (+' + (r.dropped.length - 1) + ' more on the same rule)' : '');
+  }
   function verdictChip(v){
     if (!v) return tag('unscored');
     if (v.decision.indexOf('HELD') === 0) return tag('HELD');
@@ -1206,10 +1358,10 @@
     var h = '<div class="og1-card og1-card-' + esc(c.dir) + (v && v.qualifies ? ' og1-card-q' : '') + (isBest ? ' og1-card-best' : '') + '"' + (isBest ? ' data-og1-best="' + c.bestRank + '"' : '') + '>';
     h += '<div class="og1-card-head">' + (isBest ? '<span class="og1-best-badge">BEST #' + c.bestRank + '</span> ' : '') + '<b class="og1-dir">' + esc(up(c.dir)) + '</b> <b>XAUUSD</b> · ' + esc(horizon) + ' · <b>' + esc(c.sid) + '</b> ' + esc(c.name) + ' <span class="dim">— ' + esc(c.kind) + '</span></div>';
     var gi = c.gradeInfo || hgOg1Grade(c);
-    h += '<div class="og1-card-chips">' + '<span class="og1-grade og1-grade-' + esc(gi.grade.replace('+', 'p')) + '">' + esc(gi.grade) + '</span>' + verdictChip(v) + (gi.tradeReady && !(v && v.qualifies) ? tag('gates permit ' + gi.size + ' size · matrix overlay below 10') : '') + tag('SCORE ' + m.score + '/20') + tag('gates ' + g7.pass + '/12') + tag('location ' + c.grade) + (has(c.rr1) ? tag('RR ' + num(c.rr1, 1)) : tag('RR unavailable')) + tag('families ' + (m.families || []).length) + (c.reclaimed ? tag('reclaim closed · age ' + c.age) : tag('reclaim pending · age ' + c.age)) + '</div>';
+    h += '<div class="og1-card-chips">' + '<span class="og1-grade og1-grade-' + esc(gi.grade.replace('+', 'p')) + '">' + esc(gi.grade) + '</span>' + verdictChip(v) + (c.demoted ? tag('DEMOTED — paints, never leads') : '') + (gi.tradeReady && !(v && v.qualifies) ? tag('gates permit ' + gi.size + ' size · matrix overlay below 10') : '') + tag('SCORE ' + m.score + '/20') + tag('gates ' + g7.pass + '/12') + tag('location ' + c.grade) + (has(c.rr1) ? tag('RR ' + num(c.rr1, 1)) : tag('RR unavailable')) + tag('families ' + (m.families || []).length) + (c.reclaimed ? tag('reclaim closed · age ' + c.age) : tag('reclaim pending · age ' + c.age)) + '</div>';
     h += '<div class="og1-levels"><div><i>ENTRY</i><b>' + px(c.entry) + '</b><u>' + (c.dir === 'long' ? 'BUY ZONE' : 'SELL ZONE') + '</u></div><div><i>STOP</i><b>' + px(c.stop) + '</b><u>SL$ ' + num(c.risk) + '</u></div><div><i>TP1</i><b>' + px(c.t1) + '</b><u>' + esc(c.t1Label) + '</u></div><div><i>TP2</i><b>' + px(c.t2) + '</b><u>' + esc(c.t2Label) + '</u></div></div>';
-    h += '<div class="dim og1-card-why">' + esc(v ? v.why : '') + (v && v.missing && v.missing.length ? ' · missing ' + esc(v.missing.slice(0, 3).map(function(x){ return x.name + ' +' + x.pts; }).join(', ')) : '') + '</div>';
-    h += '<div class="dim">context ' + esc(ctxLabel) + ' · execution ' + esc(tfLabel) + ' · stop beyond ' + px(c.wick) + ' + $' + num(c.buf) + ' · invalidates on two ' + esc(tfLabel) + ' closes ' + (c.dir === 'long' ? 'below ' : 'above ') + px(c.level) + '</div>';
+    h += '<div class="dim og1-card-why">' + esc(v ? v.why : '') + (v && v.missing && v.missing.length ? ' · missing ' + esc(v.missing.slice(0, 3).map(function(x){ return x.name + ' +' + x.pts; }).join(', ')) : '') + (c.demoted && c.demoteWhy ? ' · ' + esc(c.demoteWhy) : '') + '</div>';
+    h += '<div class="dim">context ' + esc(ctxLabel) + ' · execution ' + esc(tfLabel) + ' · stop ' + esc(og1StopBasis(c)) + ' · invalidates on two ' + esc(tfLabel) + ' closes ' + (c.dir === 'long' ? 'below ' : 'above ') + px(c.level) + '</div>';
     h += '</div>';
     return h;
   }
@@ -1345,7 +1497,20 @@
     if (!rp) return '';
     var head = tfLabel + (rp.gated ? ((rp.rejected && rp.rejected.bias) || rp.note && /bias/.test(rp.note) ? ' GATED+BIAS replay' : ' GATED replay') : ' raw replay');
     if (rp.gated && rp.rejected && isFinite(rp.rejected.bias)) head = tfLabel + ' GATED+BIAS replay';
-    var rej = rp.gated && rp.rejected ? ' · rejected by gates: session ' + rp.rejected.session + ', RR ' + rp.rejected.rr + ', R-cap ' + rp.rejected.rcap + (rp.rejected.bias ? ', bias ' + rp.rejected.bias : '') : '';
+    /* hg-v700: minRisk rejections (out.rejected.risk — the opts.minRisk
+       stand-aside in hgOg1Replay) were counted but never printed, so the
+       line hid the one rule doing the most standing-aside (the same defect
+       class as the 2,883 formation stand-asides the tab lane measured,
+       scripts/backtest-omnigold1-results.json: variants minRisk5 counts
+       rejected.risk=2 that no line ever showed). Printed whenever it fired,
+       gated or raw — the raw replay takes minRisk too. */
+    var rejParts = [];
+    if (rp.rejected){
+      if (rp.gated) rejParts.push('session ' + rp.rejected.session + ', RR ' + rp.rejected.rr + ', R-cap ' + rp.rejected.rcap);
+      if (rp.rejected.risk) rejParts.push('minRisk ' + rp.rejected.risk);
+      if (rp.rejected.bias) rejParts.push('bias ' + rp.rejected.bias);
+    }
+    var rej = rejParts.length ? ' · rejected by gates: ' + rejParts.join(', ') : '';
     if (!rp.resolved) return head + ': ' + rp.signals + ' signal(s), ' + rp.filled + ' filled, 0 resolved' + rej + ' — ' + rp.note;
     return head + ' (in-sample, n=' + rp.resolved + '): expectancy ' + (rp.expR >= 0 ? '+' : '') + num(rp.expR, 2) + 'R per trade · TP1 ' + rp.tp1 + ' · stopped ' + rp.stopped + ' · flat ' + rp.flat + ' · avg win ' + num(rp.avgWinR, 2) + 'R · ' + rp.signals + ' signals / ' + rp.filled + ' filled' + rej;
   }
@@ -1408,21 +1573,30 @@
       return (b.rr1 || 0) - (a.rr1 || 0);
     });
     pool.forEach(function(c){ c.bestRank = 0; });
-    var ready = pool.filter(function(c){ return c.gradeInfo && c.gradeInfo.tradeReady; });
-    var best = (ready.length ? ready : pool).slice(0, n);
+    /* hg-v700 lead invariant (goldscalp.js hg-v699 precedent): a demoted
+       candidate can never be BEST, whatever its grade — the SCALP-horizon
+       cohort is measured gross-negative before fees (OG1_SCALP_DEMOTE_WHY:
+       gross −0.287R / net −0.455R at XM on n=250, scripts/
+       backtest-omnigold1-results.json tabLane.aggregates.byHorizon).
+       Demoted cards keep painting in their horizon list; an all-demoted
+       pool gets NO best setup rather than an invented one. */
+    var leadable = pool.filter(function(c){ return c.demoted !== true; });
+    var ready = leadable.filter(function(c){ return c.gradeInfo && c.gradeInfo.tradeReady; });
+    var best = (ready.length ? ready : leadable).slice(0, n);
     best.forEach(function(c, i){ c.bestRank = i + 1; });
-    return { best: best, total: pool.length, tradeReady: ready.length };
+    return { best: best, total: pool.length, tradeReady: ready.length, demoted: pool.length - leadable.length };
   }
   function hgOg1BestHtml(bs, runs){
     var h = '<div class="og1-best" data-hg-og1-best="1"><div class="og1-setups-head"><b>BEST SETUPS</b> <span class="dim">· across SWING + SCALP · ranked by qualification → grade → matrix score → gates → RR</span></div>';
     if (!bs || !bs.best.length){
       var why = [];
-      (runs || []).forEach(function(run){ var r = run.r; if (!r || !r.ok) why.push(run.horizon + ': DATA_UNAVAILABLE'); else if (r.sections.s0 && !r.sections.s0.clear) why.push(run.horizon + ': VETO ACTIVE'); else if (r.sections.s1 && r.sections.s1.noPermitted) why.push(run.horizon + ': no permitted direction'); else if (!(r.candidates || []).length) why.push(run.horizon + ': no swept pool'); else why.push(run.horizon + ': every candidate HELD against tape'); });
+      (runs || []).forEach(function(run){ var r = run.r; if (!r || !r.ok) why.push(run.horizon + ': DATA_UNAVAILABLE'); else if (r.sections.s0 && !r.sections.s0.clear) why.push(run.horizon + ': VETO ACTIVE'); else if (r.sections.s1 && r.sections.s1.noPermitted) why.push(run.horizon + ': no permitted direction'); else if (!(r.candidates || []).length) why.push(run.horizon + ': ' + (r.dropped && r.dropped.length ? r.dropped.length + ' fire(s) dropped at mint (venue stop floor)' : 'no swept pool')); else if ((r.candidates || []).every(function(c){ return c && c.demoted === true; })) why.push(run.horizon + ': every candidate demoted — ' + OG1_SCALP_DEMOTE_WHY); else why.push(run.horizon + ': every candidate HELD against tape'); });
       h += '<div class="dim">none — ' + esc(why.join(' · ') || 'no runs') + '</div></div>';
       return h;
     }
     var ceil = bs.best[0] && bs.best[0].matrix ? bs.best[0].matrix.reachable : NaN;
     h += '<div class="dim" style="margin-bottom:4px">' + bs.total + ' candidate(s) scored · ' + (bs.tradeReady ? bs.tradeReady + ' trade-ready (grade B or better)' : '<b>none trade-ready</b> — best available shown by grade; treat as watch items')
+      + (bs.demoted ? ' · ' + bs.demoted + ' demoted (paint only — ' + esc(OG1_SCALP_DEMOTE_WHY) + ')' : '')
       + (has(ceil) && ceil < 20 ? ' · <b>data ceiling ' + ceil + '/20</b> — ' + (20 - ceil) + ' matrix points sit on legs the app cannot fetch (paste them in the DATA BLOCK to score them)' + (ceil < 12 ? '; QUALIFIES (≥ 12) is unreachable until they are supplied' : '') : '') + '</div>';
     h += bs.best.map(function(c){ return candCard(c, c.horizon, c.horizon === 'SCALP' ? '1H' : '4H', c.horizon === 'SCALP' ? '15m' : '1H'); }).join('');
     h += measuredHtml(runs);
@@ -1463,8 +1637,12 @@
       if (!r || !r.ok) h += '<div class="dim">DATA_UNAVAILABLE — ' + esc(r ? r.why : 'no run') + '</div>';
       else if (s0 && !s0.clear) h += '<div class="dim">VETO ACTIVE — ' + esc(s0.active.map(function(v){ return v.name; }).join(' · ')) + ' · SCORE = 0 · NO TRADE</div>';
       else if (s1 && s1.noPermitted) h += '<div class="dim">NO PERMITTED DIRECTION — ' + esc(r.sections.s3.why) + '</div>';
-      else if (!cands.length) h += '<div class="dim">no swept pool on the last 4 closed ' + tfLabel + ' bars — nothing to price · next re-scan ' + esc(r.sections.s8 ? r.sections.s8.nextRescan : '') + '</div>';
-      else h += cands.map(function(c){ return candCard(c, hz, ctxLabel, tfLabel); }).join('');
+      else if (!cands.length) h += '<div class="dim">' + (r.dropped && r.dropped.length ? esc(droppedNote(r)) : 'no swept pool on the last 4 closed ' + tfLabel + ' bars — nothing to price') + ' · next re-scan ' + esc(r.sections.s8 ? r.sections.s8.nextRescan : '') + '</div>';
+      else {
+        h += cands.map(function(c){ return candCard(c, hz, ctxLabel, tfLabel); }).join('');
+        /* partial drops paint too — a dropped fire never silently vanishes */
+        if (r.dropped && r.dropped.length) h += '<div class="dim">' + esc(droppedNote(r)) + '</div>';
+      }
       var br = bridgeCards(hz);
       if (br.n) h += '<div class="dim" style="margin-top:4px">GOLD ' + esc(hz) + ' desk setups (bridged)</div>' + br.html;
     });
@@ -1521,10 +1699,19 @@
     await Promise.all(waits);
     inp.news = news;
     try{ var q = W.__hgGoldQuote; if (q){ inp.bid = q.bid; inp.ask = q.ask; inp.spreadUsd = q.spreadUsd; } if (has(W.__hgGoldSpreadUsd) && !has(inp.spreadUsd)) inp.spreadUsd = W.__hgGoldSpreadUsd; }catch(e){}
-    try{ var tf = gfn('hgGoldUniformTape'); if (tf && inp.rows4h) inp.tape = tf(G7().closedRows(inp.rows4h, H4, Date.now())); }catch(e){}
+    /* hg-v700 (the v698 wall-clock class): the tape cut used Date.now() while
+       the engine keys every other read on inp.now — a replayed/injected now
+       (DATA BLOCK JSON, a harness) silently mixed clocks: the desk tape was
+       read on today's closed 4H bars while the rest of the run replayed the
+       injected instant. The tab-lane measurement had to re-key the tape on
+       the bar clock for exactly this reason (scripts/
+       backtest-omnigold1-results.json tabLane.meta.deviations, last row).
+       One clock now: inp.now is settled FIRST (an injected now wins) and the
+       tape reads the same now the engine receives. */
+    inp.now = has(inp.now) ? +inp.now : Date.now();
+    try{ var tf = gfn('hgGoldUniformTape'); if (tf && inp.rows4h) inp.tape = tf(G7().closedRows(inp.rows4h, H4, inp.now)); }catch(e){}
     inp.venue = (inp.feed === 'delta-xaut') ? 'Delta XAUTUSD' : (inp.venue || 'Delta XAUTUSD');
     if (inp.feed === 'delta-xaut') inp.basisPct = NaN;
-    inp.now = Date.now();
     return inp;
   }
   async function runScan(ui){
@@ -1585,6 +1772,11 @@
   W.hgOg1Grade = hgOg1Grade;
   W.hgOg1BestSetups = hgOg1BestSetups;
   W.hgOg1Replay = hgOg1Replay;
+  /* hg-v700: exported for the regression tests — the mint-time venue stop
+     floor (direct-drive, the hgGoldScalpStopFloor v699 pattern) and the
+     replay line (so the minRisk-rejection surfacing is testable). */
+  W.hgOg1StopFloor = hgOg1StopFloor;
+  W.hgOg1ReplayLine = replayLine;
   W.hgOg1ForwardRecord = hgOg1ForwardRecord;
   W.hgOg1BestHtml = hgOg1BestHtml;
   W.hgOg1MostProbable = hgOg1MostProbable;

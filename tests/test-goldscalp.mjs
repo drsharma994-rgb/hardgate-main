@@ -1073,8 +1073,20 @@ console.log('== 20) goldRankSetups tally ==');
     fng: { v: 12, c: 'Extreme Fear' }
   };
   const r = W.goldRankSetups([Bc, A], ctx);
-  assert(r && r.ranked.length === 2 && r.best && r.best.id === 'a|long|1',
-         'MOST PROBABLE = highest tally (long beats short under TAILWIND + shorts-crowding + extreme fear)');
+  /* hg-v700 (refined): the CONF NO TRADE demotion fires only from a
+     DATA-BACKED score — a ctx with no candle rows starves every scorer leg,
+     and a gate whose inputs are absent reports CONF UNCHECKED instead of
+     manufacturing a no-trade verdict (the v698 unchecked rule; SUPER GOLD's
+     cross-desk re-rank was clobbering already-evaluated cards). This ctx
+     carries no rows, so cards keep their standing and the ranker still
+     crowns the tally leader; the demote path is covered with a rows-fed ctx
+     in tests/test-gold-confluence.mjs and the desk pipelines. */
+  assert(r && r.ranked.length === 2 && r.ranked[0].id === 'a|long|1',
+         'highest tally ranks first (long beats short under TAILWIND + shorts-crowding + extreme fear)');
+  assert(r.best && r.best.id === 'a|long|1'
+      && r.ranked.every(c => (c.stamps || []).indexOf('CONF UNCHECKED') >= 0)
+      && r.ranked.every(c => (c.stamps || []).indexOf('CONF NO TRADE') < 0),
+         'rows-free ctx: CONF UNCHECKED honesty chip, no manufactured no-trade demote (hg-v700 refined)');
   const ra = r.ranked[0], rb = r.ranked[1];
   assert(ra.tally === 9, 'long tally: 3 reads + 3 killzone − 2 news + 2 macro + 1 basis + 1 season + 1 fng = 9 (got ' + ra.tally + ')');
   assert(rb.tally === -3, 'short tally: 2 reads − 2 news − 2 macro − 1 basis = −3 (got ' + rb.tally + ')');
@@ -1085,9 +1097,12 @@ console.log('== 20) goldRankSetups tally ==');
       'every tally part is human-readable on the card');
   assert(ra.tallyParts.every(p => typeof p.pts === 'number' && isFinite(p.pts)), 'every part carries signed points');
 
-  /* absent context -> tally = reads + killzone only, never throws */
+  /* absent context -> tally = reads + killzone only, never throws.
+     hg-v700 refined: a bare (rows-free) ctx cannot score confluence, so it
+     stamps CONF UNCHECKED and never demotes — the tally leader stands. */
   const r2 = W.goldRankSetups([A], {});
-  assert(r2.best && r2.ranked[0].tally === 6, 'bare ctx: 3 reads + 3 killzone = 6, all optional legs skipped');
+  assert(r2.best && r2.best.id === 'a|long|1' && r2.ranked[0].tally === 6,
+         'bare ctx: 3 reads + 3 killzone = 6, all optional legs skipped; CONF UNCHECKED, leader stands (hg-v700 refined)');
 
   /* HEADWIND flips the macro leg to favor shorts */
   const r3 = W.goldRankSetups([A, Bc], { macro: { realRateHint: 'HEADWIND' } });

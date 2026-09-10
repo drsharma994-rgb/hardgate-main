@@ -312,10 +312,15 @@ console.log('== 2) 4h trend pullback fires + extended-not-firing ==');
       && pbHtml.indexOf('pullback into the 4h 50-EMA') >= 0,
       'every agreeing read listed in the on-card ledger');
   assert(pb && pb.tally === pb.agree, 'bare ctx (March, no news/macro/spot/fng): tally == agreeing reads exactly');
-  assert(scan.bestId === pb.id, 'only candidate -> MOST PROBABLE');
-  assert(env.M.stubs['#gwCards'].innerHTML.indexOf('MOST PROBABLE SETUP') >= 0
-      && env.M.stubs['#gwCards'].innerHTML.indexOf('WHY THIS ONE LEADS') >= 0,
-      'MOST PROBABLE banner rendered with execution guidance');
+  /* hg-v700: a rows-free rank ctx scores the confluence stack below the 65
+     trade bar, and CONF NO TRADE now DEMOTES (paint, never lead) — the swing
+     replay measured the MP cohort n=100 ALL stamped CONF NO TRADE at
+     −0.209R/trade net XM (scripts/backtest-goldswing-results.json). The card
+     still paints with its full ledger (asserts above); nothing leads
+     (the v699 all-demoted-board -> bestId-null precedent). */
+  assert(scan.bestId === null, 'stamped-no-trade only candidate -> NO MOST PROBABLE (bestId null, hg-v700)');
+  assert(env.M.stubs['#gwCards'].innerHTML.indexOf('MOST PROBABLE SETUP') < 0,
+      'no banner fabricated from a stamped-no-trade board (hg-v700)');
 
   /* extended: no pullback tail -> no pullback candidate (nothing fabricated) */
   const env2 = makeScanEnv(pullbackExtended4h(), dailyBull());
@@ -507,12 +512,17 @@ console.log('== 6) ranking + MOST PROBABLE banner ==');
   const mc = scan && scan.cands.find(c => c.stratKey === 'macro');
   assert(!!ob && !!mc, 'both candidates on the board');
   assert(ob && mc && mc.tally === ob.tally + 1, 'macro leads by exactly the trigger read (tally ' + (mc && mc.tally) + ' vs ' + (ob && ob.tally) + ')');
-  assert(scan && scan.bestId === mc.id, 'MOST PROBABLE = highest tally (macro continuation)');
+  /* hg-v700: both cards carry CONF NO TRADE in this rows-free rank ctx and
+     the stamp now demotes — no MOST PROBABLE, no banner, no star (swing
+     replay: MP cohort n=100 all stamped no-trade, −0.209R/trade net XM,
+     scripts/backtest-goldswing-results.json). Ranking order + card plans
+     still paint (protective intent kept below). */
+  assert(scan && scan.bestId === null, 'all-demoted board -> NO MOST PROBABLE (bestId null, hg-v700)');
   const html = env.M.stubs['#gwCards'].innerHTML;
-  assert(html.indexOf('MOST PROBABLE SETUP') >= 0 && html.indexOf('MACRO-ALIGNED TREND CONTINUATION') >= 0
-      && html.indexOf('BUY ZONE') >= 0 && html.indexOf('TP3') >= 0,
-         'banner singles out the leader with its full 3-target plan');
-  assert(html.indexOf('★ MOST PROBABLE') >= 0, 'leader card carries the star stamp');
+  assert(html.indexOf('MOST PROBABLE SETUP') < 0 && html.indexOf('★ MOST PROBABLE') < 0,
+         'no banner / star fabricated from a stamped-no-trade board (hg-v700)');
+  assert(html.indexOf('MACRO-ALIGNED TREND CONTINUATION') >= 0 && html.indexOf('TP3') >= 0,
+         'cards still paint with their full 3-target plans (demoted paints, never leads)');
   /* every tally part is human-readable and signed, parts sum to the tally */
   assert(scan.cands.every(c => c.tallyParts.reduce((s, p) => s + p.pts, 0) === c.tally
       && c.tallyParts.every(p => typeof p.label === 'string' && p.label.length > 5 && isFinite(p.pts))),
@@ -756,7 +766,10 @@ console.log('== 10) BRAIN state + diagnostic contracts ==');
   assert(Object.isFrozen(st) && Object.isFrozen(st.results) && Object.isFrozen(row), 'state snapshot is deep-frozen');
 
   const scan = C.goldswingScan();
-  assert(!!scan && Array.isArray(scan.cands) && typeof scan.bestId === 'string'
+  /* hg-v700: bestId may honestly be null — an all-demoted board (every card
+     stamped CONF NO TRADE here) has no lead; the field stays in the contract. */
+  assert(!!scan && Array.isArray(scan.cands) && ('bestId' in scan)
+      && (scan.bestId === null || typeof scan.bestId === 'string')
       && Array.isArray(scan.history) && Array.isArray(scan.rejected) && typeof scan.at === 'number',
          'goldswingScan() -> {cands, bestId, history, rejected, at}');
   const c0 = scan.cands[0];
@@ -893,8 +906,9 @@ function fmtLike14(n, d){ return Number(n).toLocaleString('en-US', { maximumFrac
          'snapshot.armed entries carry EXACTLY {strategy, venue, state, level, condition, reason}, venue-tagged');
   assert(scan.whySilent === null, 'whySilent null when candidates qualify');
   assert('armed' in scan && 'whySilent' in scan
-      && Array.isArray(scan.cands) && typeof scan.bestId === 'string' && typeof scan.at === 'number',
-         'additive contract: existing snapshot fields untouched, armed/whySilent added');
+      && Array.isArray(scan.cands) && ('bestId' in scan)
+      && (scan.bestId === null || typeof scan.bestId === 'string') && typeof scan.at === 'number',
+         'additive contract: existing snapshot fields untouched, armed/whySilent added (bestId null on an all-demoted board, hg-v700)');
   const byKey = {};
   const SWK = { pullback: '4H TREND PULLBACK (EMA50/200)', wkbreak: 'WEEKLY RANGE BREAKOUT',
                 ob: '4H ORDER BLOCK RETEST', macro: 'MACRO-ALIGNED TREND CONTINUATION' };

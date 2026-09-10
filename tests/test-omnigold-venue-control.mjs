@@ -75,10 +75,18 @@ function boot(lsMode){
    The extra PAXG-only names (venue-net <= -0.5R) must NOT be demoted at XM.
    Derived from the baked table, checked literally here so a silent re-bake
    moves a test, not just a banner. hg-v589 dropped the n-floor 100→50. */
-const GROSS_NEGATIVE_18 = ['ASIA-BREAK', 'EMA50-HOLD', 'ER-IGNITION', 'FIB-618',
-  'FVG-HVN', 'ICHI-KUMO', 'KZ-JUDAS', 'LONDON-FIX', 'MFI-SQUAT', 'NR7-BREAK',
-  'NY-OPEN-DRIVE', 'PD-EQUILIBRIUM', 'PDL-SWEEP', 'PIVOT-REJECT',
-  'RIBBON-PULLBACK', 'SPRING', 'VWAP-BAND', 'VWAP-REVERT'].sort();
+/* hg-v700: re-baked from the refreshed 8,155-settled replay window
+   (2026-03-27..09-10, scripts/omnigold-replay-evidence.json). The demotion
+   verdict is COMPUTED from each kind's measured gross at the venue, so a
+   window refresh legitimately moves this list — 4 kinds recovered
+   (ASIA-BREAK, MFI-SQUAT, NY-OPEN-DRIVE, VWAP-REVERT went gross-flat+) and
+   8 newly measured wrong at scale (DI-CROSS, EQL-SWEEP, P5-VWAP, P5-WYCK,
+   P8-RANGE, P9-VOLBAR, PO3, SWEEP-V2). */
+const GROSS_NEGATIVE_XM = ['DI-CROSS', 'EMA50-HOLD', 'EQL-SWEEP', 'ER-IGNITION',
+  'FIB-618', 'FVG-HVN', 'ICHI-KUMO', 'KZ-JUDAS', 'LONDON-FIX', 'NR7-BREAK',
+  'P5-VWAP', 'P5-WYCK', 'P8-RANGE', 'P9-VOLBAR', 'PD-EQUILIBRIUM', 'PDL-SWEEP',
+  'PIVOT-REJECT', 'PO3', 'RIBBON-PULLBACK', 'SPRING', 'SWEEP-V2', 'VWAP-BAND'].sort();
+const GROSS_NEGATIVE_18 = GROSS_NEGATIVE_XM;   /* legacy alias for the exclusion check below */
 
 console.log('== precedence: override > UI selection > PAXG fail-closed ==');
 {
@@ -121,10 +129,10 @@ console.log('\n== per-venue demotion counts: 18 at XM, 33 at PAXG ==');
   const kinds = Object.keys(W.HG_OG_REPLAY_EVIDENCE.kinds);
   const demXm = kinds.filter(k => W.hgOgKindDemotion(k, xm)).sort();
   const demPaxg = kinds.filter(k => W.hgOgKindDemotion(k, paxg)).sort();
-  ok(W.hgOgDemotedKindCount(xm) === 18 && demXm.length === 18, '18 kinds stand demoted at XM costs');
-  ok(W.hgOgDemotedKindCount(paxg) === 33 && demPaxg.length === 33, '33 at PAXG costs');
-  ok(JSON.stringify(demXm) === JSON.stringify(GROSS_NEGATIVE_18),
-     'the XM 18 are exactly the gross-negative kinds — cheap fees clear no wrong direction');
+  ok(W.hgOgDemotedKindCount(xm) === 22 && demXm.length === 22, '22 kinds stand demoted at XM costs (hg-v700 refresh)');
+  ok(W.hgOgDemotedKindCount(paxg) === 31 && demPaxg.length === 31, '31 at PAXG costs (hg-v700 refresh)');
+  ok(JSON.stringify(demXm) === JSON.stringify(GROSS_NEGATIVE_XM),
+     'the XM 22 are exactly the gross-negative kinds — cheap fees clear no wrong direction');
   ok(demXm.every(k => demPaxg.includes(k)), 'every XM demotion is also a PAXG demotion (fees only add)');
   demXm.forEach(k => {
     const d = W.hgOgKindDemotion(k, xm);
@@ -154,12 +162,12 @@ console.log('\n== desk-stance banner names the ACTIVE venue and both counts ==')
   const W = boot();
   W.hgOgVenueInit();                                   /* -> XM default */
   const atXm = W.hgOgDeskStanceBannerHtml();
-  ok(/venue XM XAUUSD ~0\.020% RT — 18 measured-negative kinds stood aside; at PAXG costs \(0\.260% RT\) it would be 33/.test(atXm),
-     'XM banner line: 18 stood aside, 33 at PAXG costs');
+  ok(/venue XM XAUUSD ~0\.020% RT — 22 measured-negative kinds stood aside; at PAXG costs \(0\.260% RT\) it would be 31/.test(atXm),
+     'XM banner line: 22 stood aside, 31 at PAXG costs (hg-v700 refresh)');
   W.hgOgSetVenue('PAXG');
   const atPaxg = W.hgOgDeskStanceBannerHtml();
-  ok(/venue PAXG ~0\.260% RT — 33 measured-negative kinds stood aside; at XM costs \(0\.020% RT\) it would be 18/.test(atPaxg),
-     'PAXG banner line: 33 stood aside, 18 at XM costs');
+  ok(/venue PAXG ~0\.260% RT — 31 measured-negative kinds stood aside; at XM costs \(0\.020% RT\) it would be 22/.test(atPaxg),
+     'PAXG banner line: 31 stood aside, 22 at XM costs (hg-v700 refresh)');
 }
 
 console.log('\n== disclosure integrity at the XM default ==');
@@ -186,7 +194,7 @@ console.log('\n== mount: control present, XM applied, counts strip reserved ==')
   ok(/applies on next scan/.test(el.innerHTML), 'labeled honestly: formation stamps re-price on the next scan');
   ok(/id="ogCounts"/.test(el.innerHTML), 'population counts strip reserved under the banner');
   ok(W.hgOgVenueCost().venue === 'XM', 'mount applied the XM default (nothing stored)');
-  ok(/venue XM XAUUSD ~0\.020% RT — 18 measured-negative kinds/.test(el.innerHTML),
+  ok(/venue XM XAUUSD ~0\.020% RT — 22 measured-negative kinds/.test(el.innerHTML),
      'the banner in the mounted tab prices the XM default');
 }
 

@@ -1,80 +1,96 @@
-/* HARDGATE — GOLD SCALP tab backtest harness (offline, node ESM).
-   Run:  node scripts/backtest-goldscalp.mjs [--smoke] [--bars=N] [--refresh]
+/* HARDGATE — GOLD SWING tab backtest harness (offline, node ESM).
+   Run:  node scripts/backtest-goldswing.mjs [--smoke] [--bars=N] [--refresh]
 
    WHAT THIS REPLAYS
    -----------------
-   The GOLD SCALP tab's OWN pipeline, per closed 15m bar, zero lookahead:
-     goldScalpSetups(inp) -> goldRankSetups(cands, ctx)
-   — NOT the OMNIGOLD engine bridge (hgOgPickGoldEngineForMp) that
-   scripts/backtest-omnigold.mjs samples. That bridge takes ONE grade-gated
-   pick per horizon; the tab ranks EVERY strategy candidate, applies its own
-   quality gates (inst-filter Asia demotion, micro veto, EDGE table,
-   OFF-SESSION bar, GOLD PRO alignment), and issues per-(strategy,dir)
-   convictions. The existing HG_GOLD_SETUP_EDGE table (goldind.js:1136) was
-   baked from the BRIDGE replay (ENGINE n as small as 2) at PAXG 0.26% RT
-   costs — this harness measures the tab itself, at the venue the tab
-   actually quotes (XM XAUUSD), with PAXG costs as the sensitivity row.
+   The GOLD SWING tab's OWN inline engine, per closed 4h bar, zero lookahead:
+     goldSwingSetups(inp)  (goldswing.js:2395)
+       -> buildCandidates (goldswing.js:1441) — 4h/1d strategy composition
+       -> rankSetups (goldswing.js:2422) -> window.goldRankSetups
+          (goldind.js:3608) — goldind.js is loaded FIRST in the vm so the
+          real ranker, hgGoldPlanSidesOk and hgGoldSetupEdgeApply({swing:true})
+          (applied inside mkCand, goldswing.js:1711-1712) run exactly as live.
+   This is the engine the tab itself exports (W.goldSwingSetups,
+   goldswing.js:3420) — NOT the OMNIGOLD bridge. The baked SWING rows of
+   HG_GOLD_SETUP_EDGE (goldind.js:1184-1195) still come from the bridge
+   replay (n as small as 1, PAXG costs); this harness measures the tab's own
+   pipeline at the venue the tab actually quotes (XM XAUUSD), with PAXG
+   costs as the sensitivity row.
 
    FIDELITY TO THE LIVE TAB
    ------------------------
-   - inp mirrors buildCandidates (goldscalp.js:1251) + scalpBundle:
-     { rows15m, rows1h, rows4h, dailyCandles, now, news, candleSource }.
-     Feed depths are the tab's own: 15m x240 (KL_15M, goldscalp.js:128),
-     1h x400 (the 7-step upgrade path at 1419 tops the 1h leg up to 400),
-     4h x220, 1d x260.
-   - ctx mirrors the tab's ranking ctx (goldscalp.js:1344): { now, news,
-     season: goldSeason(now), macro:null, spot:null, fng:null,
-     style:'goldscalp', perpNative:null, crossVenue: goldCrossVenueMap }.
-     The tab does NOT put candle rows in ctx, so hgGoldApplyConfluence's
-     core-confluence leg degrades the same way live and here.
-   - `now` is the CLOSED bar's close instant ((t+900)*1000) — killzone,
-     session gates and news windows read the bar's own clock, never the
-     wall clock (the v698 closed-bar lesson).
-   - live-only feeds (macro/DXY/US10Y, news, goldspot basis, F&G, GOLD PRO,
-     funding, L2/tick, hgFilterGoldPostGate, hgApplyGoldBestLevels) are
-     absent offline; every consumer feature-checks and degrades exactly as
-     the live tab does on a fetch failure. Deviations are listed in meta.
+   - inp mirrors the tab's feeds: rows4h x220 (KL_4H, goldswing.js:108),
+     rows1d x260 (KL_1D). MIN_4H=60 is the engine's own floor
+     (goldswing.js:109) — the walk only scans once 220 closed 4h bars exist.
+   - `now` is the CLOSED 4h bar's close instant ((t+14400)*1000) — the
+     session gate (hgGoldSessionGate, goldind.js:7159 — ASIA demotion via
+     hgGoldInstFilter's swing path, goldind.js:7263-7282) and every news/
+     killzone consumer read the bar's own clock, never the wall clock.
+   - season = goldSeason(now) (goldind.js:745) — pure date math, bar clock.
+   - live-only feeds (getGoldMacro, hgNewsState, goldspotState, S.fng,
+     goldProState, binanceFunding, Delta perpNative OI/funding, L2/tick/
+     spread, US10Y candles) are absent offline: passed null/undefined so
+     each consumer feature-checks and degrades exactly as a live fetch
+     failure would. Every degradation is listed in meta.deviations with the
+     module line it mirrors.
+   - runScan-only pipeline stages are NOT part of goldSwingSetups and are
+     not replayed (deviations list them with lines): the 7-step 1h leg,
+     sweep/NY-exhaustion/sweep→OB/silver-bullet/PART4-7/SMC/VP stamp passes
+     (goldswing.js:2775-2978), hgFilterGoldPostGate (3031), weekend demotes
+     (3046), best-levels/formation ticket batch (3072-3111), spot alignment
+     (3118), the conviction-lock level restore (3125) and the A+ batch.
 
    SELECTION / DEDUP (conviction-lock semantics)
    ---------------------------------------------
-   One live trade per (stratKey|dir) — the tab's conviction lock restores
-   ORIGINAL levels verbatim on re-scans and MERGES matching re-issues, so a
-   signal for a key with a pending/filled trade is a re-confirmation, not a
-   new trade (counted, skipped). Pending fill window = 24 x 15m bars (6h,
-   CONVICTION_TTL_MS, goldscalp.js:506 — the tab's own EXPIRED horizon).
+   One live trade per (stratKey|dir). The tab pins issued setups under
+   'hgGoldswingConviction' (goldswing.js:557) and MERGES matching re-issues
+   (same dir + compatible stratKey with anchors within 0.5xATR,
+   conviction-lock.js:426-449) while restoring ORIGINAL levels verbatim — so
+   a signal for a key with a pending/filled trade here is a re-confirmation,
+   counted as merged, never a new trade. Our key is coarser than the lock's
+   anchor-distance merge (deviation, stated).
 
    OUTCOME RESOLUTION (LIB semantics: lib/omnigold-xm-bot-backtest.mjs)
    --------------------------------------------------------------------
-   - signal fires on the CLOSE of 15m bar i; fills searched from bar i+1
-   - pending order at entry; type from xmOrderType(dir, entry, close[i]);
+   - signal fires on the CLOSE of a 4h bar; fills searched on the 1h grid
+     from the next 1h bar (finer first-touch resolution than the tab's own
+     4h-close invalidation — stricter, deliberate, stated as a deviation)
+   - pending order at entry; type from xmOrderType(dir, entry, close4h);
      fill test = ogXmBarTouchesEntry (shared lib)
-   - unfilled after 24 bars -> 'unfilled', NOT a loss (tab: EXPIRED)
-   - after the fill: first touch of stop vs t1; both in one bar = LOSS
-     (conservative); 96 bars (24h) after fill -> 'timeout', MTM at close
-   - NOTE the live tab STOPS on a 15m CLOSE beyond the stop (wick-through
-     survives live); touch-based stops here are stricter. Deliberate.
+   - unfilled after 120 x 1h bars (5 days = CONVICTION_TTL_MS,
+     goldswing.js:558 — the tab's own EXPIRED horizon) is NOT a loss
+   - after the fill: first touch of stop vs t1; both in one 1h bar = LOSS
+     (conservative); 120 x 1h bars (5 days) after the fill -> 'timeout',
+     mark-to-market at close. NOTE the tab's EXPIRED clock is anchored at
+     ISSUE, not fill (deviation, stated).
+   - the live tab STOPS on a 4h CLOSE beyond the stop (wick-through
+     survives live); touch-based 1h stops here are stricter. Deliberate.
 
    COSTS (venue-true — the v536 OMNIGOLD lesson)
    ---------------------------------------------
    PRIMARY netR at XM XAUUSD: $0.35 spread / $3500 ref spot + 0.010% slip
-   = 0.020% round trip (hgOgVenuePresetCost constants, omnigold.js:6789-91).
-   SENSITIVITY netR at PAXG spot: 0.1% taker + 0.03% slip per side = 0.26%
-   RT. Both are reported on every trade and every aggregate row; the scalp
-   desk quotes broker-aligned XAUUSD (goldscalp.js:1506), so XM is the
-   honest primary — PAXG is what the price SERIES is, so it stays visible.
+   = 0.020% round trip (hgOgVenuePresetCost constants). SENSITIVITY netR at
+   PAXG spot: 0.1% taker + 0.03% slip per side = 0.26% RT. Both on every
+   trade and aggregate row. stopAtr = |entry-stop| / candidate.atr (the 4h
+   ATR14 the engine itself carried, goldswing.js:1690) is recorded on every
+   trade — it exposes the engine-plan tight-stop override class (stops under
+   the tab's own 1.5xATR floor, goldswing.js:1352 / goldind.js:7269).
 
    SHADOW BOOK
    -----------
-   Candidates the baked EDGE table suppresses (stamps 'EDGE SUPPRESS')
-   ride goldScalpSetups' .rejected side-channel WITH their full plan; they
-   are walked in a separate shadow ledger (never pooled with the main book)
-   to test whether bridge-era suppressions hold on the tab's own pipeline.
-   Shadow rows never passed ranking, so they carry no grade/tally.
+   Rejected candidates carrying an 'EDGE SUPPRESS' stamp (or a replay-
+   suppress reason) with a finite entry/stop/t1 walk in a separate shadow
+   ledger, never pooled. The SWING edge table currently has NO suppress
+   rows (goldind.js:1184-1195 — prefer/demote only), and goldSwingSetups'
+   returned .rejected rows are minimal {id,stratKey,dir,reason} objects
+   (buildCandidates' full side-channel is not forwarded by rankSetups), so
+   the shadow book is expected EMPTY — the mechanism is kept and counted so
+   a future suppress row is picked up automatically.
 
-   DATA: PAXGUSDT Binance spot 15m/1h/4h/1d (same proxy + cache as
-   backtest-omnigold.mjs; basis vs XAU ~0.1-0.5%, 24/7 weekend bars a
-   broker never printed — session mechanics see phantom weekend sessions).
-   Style: modeled on scripts/backtest-omnigold.mjs. No new dependencies. */
+   DATA: PAXGUSDT Binance spot 1h/4h/1d (same proxy + cache as
+   backtest-goldscalp.mjs; basis vs XAU ~0.1-0.5%, 24/7 weekend bars a
+   broker never printed — session cohorts include phantom weekend bars).
+   Style: modeled on scripts/backtest-goldscalp.mjs. No new dependencies. */
 
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -94,18 +110,18 @@ const opt = (name, dflt) => {
 };
 const SMOKE = has('--smoke');
 const REFRESH = has('--refresh');
-const BARS_15M = +opt('--bars', SMOKE ? 700 : 6000);
+const BARS_1H = +opt('--bars', SMOKE ? 700 : 3960);
 /* smoke runs write to their own file so a full-run artifact can never be
-   silently overwritten (the OP smoke/OUT_PATH incident) */
+   silently overwritten */
 const OUT_FILE = path.join(ROOT, 'scripts',
-  SMOKE ? 'backtest-goldscalp-smoke-results.json' : 'backtest-goldscalp-results.json');
+  SMOKE ? 'backtest-goldswing-smoke-results.json' : 'backtest-goldswing-results.json');
 
 /* ---------- constants ---------- */
 const SYMBOL = 'PAXGUSDT';
-/* tab feed depths (goldscalp.js:128 + the 400x1h 7-step upgrade at 1419) */
-const DEPTH = { m15: 240, h1: 400, h4: 220, d1: 260 };
-const FILL_WINDOW = 24;           /* 15m bars = 6h, the tab's conviction TTL */
-const TIMEOUT_BARS = 96;          /* 15m bars = 24h after the fill, MTM exit */
+/* the tab's own feed depths (goldswing.js:108) */
+const DEPTH = { h4: 220, d1: 260 };
+const FILL_WINDOW = 120;          /* 1h bars = 5 days — CONVICTION_TTL_MS (goldswing.js:558) */
+const TIMEOUT_BARS = 120;         /* 1h bars = 5 days after the fill, MTM exit (same tab horizon; tab anchors it at issue) */
 /* venue-true round-trip costs, fraction of entry */
 const COST_XM_FRAC = (0.35 / 3500) + 0.010 / 100;      /* 0.020% — XM XAUUSD */
 const COST_PAXG_FRAC = 2 * (0.0010 + 0.0003);          /* 0.26% — PAXG spot  */
@@ -115,7 +131,7 @@ const COST_PAXG_FRAC = 2 * (0.0010 + 0.0003);          /* 0.26% — PAXG spot  *
 const IV_SEC = { '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400 };
 
 async function jget(url){
-  const r = await fetch(url, { headers: { 'User-Agent': 'hardgate-goldscalp-backtest/1.0' } });
+  const r = await fetch(url, { headers: { 'User-Agent': 'hardgate-goldswing-backtest/1.0' } });
   if (!r.ok) throw new Error('HTTP ' + r.status + ' for ' + url);
   return r.json();
 }
@@ -166,7 +182,7 @@ async function cachedKlines(symbol, interval, target){
   return rows;
 }
 
-/* ==================== 2. BOOT goldind.js in a vm sandbox ==================== */
+/* ==================== 2. BOOT goldind.js + goldswing.js in a vm sandbox ==================== */
 
 function boot(){
   const ctx = { console, Math, Date, isFinite, parseFloat, parseInt, JSON, Array, Object,
@@ -178,15 +194,19 @@ function boot(){
                    getElementById: () => null, querySelector: () => null, querySelectorAll: () => [],
                    head: { appendChild(){} }, documentElement: { appendChild(){} }, addEventListener(){} };
   vm.createContext(ctx);
-  /* goldind.js is standalone (tests/test-goldscalp.mjs boots it alone). */
+  /* goldind.js FIRST so goldswing.js's rankSetups finds window.goldRankSetups
+     and mkCand finds hgGoldInstFilter / hgGoldSetupEdgeApply / the detectors —
+     the exact live load order (goldswing.js header: "loads AFTER goldind.js"). */
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'goldind.js'), 'utf8'), ctx, { filename: 'goldind.js' });
-  for (const fn of ['goldScalpSetups', 'goldRankSetups', 'goldSeason', 'goldCrossVenueMap', 'goldKillzone']){
+  vm.runInContext(fs.readFileSync(path.join(ROOT, 'goldswing.js'), 'utf8'), ctx, { filename: 'goldswing.js' });
+  for (const fn of ['goldSwingSetups', 'goldRankSetups', 'goldSeason', 'goldCrossVenueMap',
+                    'hgGoldSetupEdgeApply', 'hgGoldPlanSidesOk']){
     if (typeof ctx[fn] !== 'function') throw new Error('boot failed: ' + fn + ' is not a function');
   }
   return ctx;
 }
 
-/* ==================== 3. trade lifecycle (same walk as backtest-omnigold) ==================== */
+/* ==================== 3. trade lifecycle (same walk as backtest-goldscalp) ==================== */
 
 function newTrade(sig){
   return Object.assign({ state: 'pending', waitBars: 0, fillIdx: null }, sig);
@@ -235,6 +255,7 @@ function settleRecord(tr, rows, counters, results){
     counters.sameBarWins++;
     if (pendingFill) counters.sameBarAmbiguousWins++;
   }
+  if (isFinite(tr.stopAtr) && tr.stopAtr < 1.5 - 1e-9 && !tr.shadow) counters.stopUnderFloor++;
   results.push({
     tISO: new Date(rows[tr.sigIdx].t * 1000).toISOString(),
     shadow: tr.shadow || undefined,
@@ -242,8 +263,11 @@ function settleRecord(tr, rows, counters, results){
     grade: tr.grade || null, tally: isFinite(tr.tally) ? tr.tally : null,
     demoted: !!tr.demoted, mp: !!tr.mp,
     stamps: tr.stamps && tr.stamps.length ? tr.stamps : undefined,
-    killzone: tr.killzone || null,
-    killzoneWeight: isFinite(tr.killzoneWeight) ? tr.killzoneWeight : 0,
+    edgeAction: tr.edgeAction || null,
+    session: tr.session || null,
+    sessionWeight: isFinite(tr.sessionWeight) ? tr.sessionWeight : null,
+    agree: isFinite(tr.agree) ? tr.agree : null,
+    oppose: isFinite(tr.oppose) ? tr.oppose : null,
     utcHour: new Date(rows[tr.sigIdx].t * 1000).getUTCHours(),
     entry: +tr.entry.toFixed(2), stop: +tr.stop.toFixed(2), t1: +tr.t1.toFixed(2),
     rr: isFinite(tr.rr) ? +(+tr.rr).toFixed(2) : null,
@@ -270,66 +294,53 @@ function sliceByCutoff(rows, tfSec, cutoffSec){
   return rows.slice(0, lo);
 }
 
-function walk(W, m15, h1, h4, d1){
+function walk(W, h1, h4, d1){
   const results = [];
   const active = new Map();       /* 'stratKey|dir' (+ 'SH:' prefix for shadow) */
-  const counters = { scans: 0, issued: 0, merged: 0, noPlan: 0, badGeometry: 0,
+  const counters = { scans: 0, warmupSkips: 0, issued: 0, merged: 0, noPlan: 0, badGeometry: 0,
                      rankRejected: 0, edgeSuppressed: 0, otherRejected: 0,
                      scanErrors: 0, openAtEnd: 0, bothTouch: 0,
-                     sameBarWins: 0, sameBarAmbiguousWins: 0, shadowIssued: 0 };
-  /* need the tab's own 15m depth + full 1h/4h/1d coverage before the walk */
-  const needSec = Math.max(
-    m15[0].t + DEPTH.m15 * 900,
-    h4.length ? h4[0].t + DEPTH.h4 * 14400 : 0,
-    h1.length ? h1[0].t + DEPTH.h1 * 3600 : 0,
-    d1.length ? d1[0].t + DEPTH.d1 * 86400 : 0);
-  let first = m15.findIndex(r => r.t + 900 >= needSec);
-  if (first < 0){
-    /* HTF depth exceeds the 15m window — walk with what exists (the live tab
-       also runs on whatever depth the feed returned) but say so. */
-    first = Math.min(m15.length - 1, DEPTH.m15);
-    console.log('  WARN: HTF feeds shallower than tab depth over this window — walking from 15m bar ' + first);
-  }
+                     sameBarWins: 0, sameBarAmbiguousWins: 0,
+                     shadowIssued: 0, shadowSkippedNoPlan: 0, stopUnderFloor: 0 };
+  /* every 4h close instant present in the 4h series */
+  const h4CloseSet = new Set(h4.map(r => r.t + 14400));
   const t0 = Date.now();
-  for (let i = first; i < m15.length; i++){
-    const bar = m15[i];
-    /* 1. advance open trades (signals from earlier bars only) */
+  let scanned = 0;
+  for (let i = 0; i < h1.length; i++){
+    const bar = h1[i];
+    /* 1. advance open trades on the 1h grid (signals from earlier bars only) */
     for (const [key, tr] of active){
       if (tr.sigIdx >= i) continue;
       if (stepTrade(tr, bar, i)){
-        settleRecord(tr, m15, counters, results);
+        settleRecord(tr, h1, counters, results);
         active.delete(key);
       }
     }
-    /* 2. scan on the closed prefix */
-    const cutoff = bar.t + 900;
+    /* 2. scan only when a 4h bar just closed */
+    const cutoff = bar.t + 3600;
+    if (!h4CloseSet.has(cutoff)) continue;
+    const h4Prefix = sliceByCutoff(h4, 14400, cutoff);
+    if (h4Prefix.length < DEPTH.h4){ counters.warmupSkips++; continue; }
     const now = cutoff * 1000;
+    const lastClose4h = +h4Prefix[h4Prefix.length - 1].c;
     const inp = {
-      rows15m: sliceByCutoff(m15, 900, cutoff).slice(-DEPTH.m15),
-      rows1h: sliceByCutoff(h1, 3600, cutoff).slice(-DEPTH.h1),
-      rows4h: sliceByCutoff(h4, 14400, cutoff).slice(-DEPTH.h4),
-      dailyCandles: sliceByCutoff(d1, 86400, cutoff).slice(-DEPTH.d1),
-      now, news: null, candleSource: 'binance-paxg'
+      rows4h: h4Prefix.slice(-DEPTH.h4),
+      rows1d: sliceByCutoff(d1, 86400, cutoff).slice(-DEPTH.d1),
+      now,
+      /* live-only feeds absent — null so every consumer degrades like a
+         failed live fetch (see meta.deviations) */
+      news: null, macro: null, spot: null, fng: null,
+      fundingRate: null, goldPro: null,
+      season: W.goldSeason(now)
     };
     let ranked = [], best = null, rejected = [];
     try {
       counters.scans++;
-      const got = W.goldScalpSetups(inp) || [];
-      const cands = Array.isArray(got) ? got : [];
-      for (const c of cands){ if (c){ c.venue = 'BT PAXGUSDT'; c.sym = 'PAXGUSDT'; } }
-      rejected = got.rejected || [];
-      const ctx = { now, news: null, season: W.goldSeason(now), macro: null, spot: null,
-                    fng: null, style: 'goldscalp', perpNative: null,
-                    crossVenue: W.goldCrossVenueMap(cands),
-                    /* hg-v700 tab parity: the live tab now feeds the ranking
-                       ctx its candle rows so the confluence scorer can score
-                       (rows-free it ceilinged at 54 < the 65 bar and, with
-                       CONF NO TRADE demoting, would blank MOST PROBABLE). */
-                    rows15m: inp.rows15m, rows1h: inp.rows1h, rows4h: inp.rows4h };
-      const rk = W.goldRankSetups(cands, ctx) || { ranked: cands, best: null, rejected: [] };
+      const rk = W.goldSwingSetups(inp) || { ranked: [], best: null, rejected: [] };
       ranked = rk.ranked || [];
       best = rk.best || null;
-      counters.rankRejected += (rk.rejected || []).length;
+      rejected = rk.rejected || [];
+      counters.rankRejected += rejected.length;
     } catch (e) { counters.scanErrors++; continue; }
     /* 3. main book — every ranked candidate, conviction-lock dedup */
     for (const c of ranked){
@@ -346,22 +357,29 @@ function walk(W, m15, h1, h4, d1){
         stratKey: String(c.stratKey || '?'), strategy: c.strategy || null, dir: c.dir,
         grade: c.grade || null, tally: c.tally, demoted: !!c.demoted,
         mp: !!(best && best.id === c.id),
-        stamps: Array.isArray(c.stamps) ? c.stamps.slice(0, 6) : [],
-        killzone: c.killzone || null, killzoneWeight: c.killzoneWeight,
+        stamps: Array.isArray(c.stamps) ? c.stamps.slice(0, 8) : [],
+        edgeAction: (c.edge && c.edge.action) || null,
+        session: (c.sessionGate && c.sessionGate.session) || null,
+        sessionWeight: c.sessionWeight,
+        agree: c.agree, oppose: c.oppose,
         rr: c.rr, stopAtr: (isFinite(c.atr) && c.atr > 0) ? Math.abs(entry - stop) / c.atr : NaN,
         entry, stop, t1,
-        orderType: xmOrderType(c.dir, entry, +bar.c).name,
+        orderType: xmOrderType(c.dir, entry, lastClose4h).name,
         sigIdx: i
       }));
     }
-    /* 4. shadow book — EDGE-table-suppressed candidates with a full plan */
+    /* 4. shadow book — EDGE-suppressed rejects with a full plan.
+       NOTE: the swing edge table has no suppress rows (goldind.js:1184-1195)
+       and goldSwingSetups' rejected rows are minimal (no levels), so this
+       stays empty today — the mechanism is kept for future suppress rows. */
     for (const c of rejected){
-      if (!c || c.dir !== 'long' && c.dir !== 'short') continue;
-      const isEdge = Array.isArray(c.stamps) && c.stamps.indexOf('EDGE SUPPRESS') >= 0;
+      if (!c || (c.dir !== 'long' && c.dir !== 'short')){ counters.otherRejected++; continue; }
+      const isEdge = (Array.isArray(c.stamps) && c.stamps.indexOf('EDGE SUPPRESS') >= 0)
+        || /replay suppress|stays suppressed/i.test(String(c.reason || ''));
       if (!isEdge){ counters.otherRejected++; continue; }
       counters.edgeSuppressed++;
       const entry = +c.entry, stop = +c.stop, t1 = +c.t1;
-      if (!isFinite(entry) || !isFinite(stop) || !isFinite(t1)) continue;
+      if (!isFinite(entry) || !isFinite(stop) || !isFinite(t1)){ counters.shadowSkippedNoPlan++; continue; }
       const long = c.dir === 'long';
       if (long && !(stop < entry && t1 > entry)) continue;
       if (!long && !(stop > entry && t1 < entry)) continue;
@@ -373,15 +391,17 @@ function walk(W, m15, h1, h4, d1){
         stratKey: String(c.stratKey || '?'), strategy: c.strategy || null, dir: c.dir,
         grade: null, tally: NaN, demoted: false, mp: false,
         stamps: ['EDGE SUPPRESS (shadow)'],
-        killzone: null, killzoneWeight: NaN,
+        edgeAction: 'suppress',
+        session: null, sessionWeight: NaN, agree: NaN, oppose: NaN,
         rr: c.rr, stopAtr: (isFinite(c.atr) && c.atr > 0) ? Math.abs(entry - stop) / c.atr : NaN,
         entry, stop, t1,
-        orderType: xmOrderType(c.dir, entry, +bar.c).name,
+        orderType: xmOrderType(c.dir, entry, lastClose4h).name,
         sigIdx: i
       }));
     }
-    if ((i - first) % 400 === 0){
-      console.log('  bar ' + i + '/' + m15.length + ' · open ' + active.size
+    scanned++;
+    if (scanned % 100 === 0){
+      console.log('  scan ' + scanned + ' (1h bar ' + i + '/' + h1.length + ') · open ' + active.size
         + ' · settled ' + results.length + ' · ' + ((Date.now() - t0) / 1000).toFixed(0) + 's');
     }
   }
@@ -416,22 +436,24 @@ function groupAgg(trades, keyFn){
 
 /* ==================== 6. main ==================== */
 
-console.log('=== GOLD SCALP tab backtest — ' + (SMOKE ? 'SMOKE RUN' : 'FULL RUN')
+console.log('=== GOLD SWING tab backtest — ' + (SMOKE ? 'SMOKE RUN' : 'FULL RUN')
   + ' · ' + new Date().toISOString() + ' ===');
-console.log('symbol ' + SYMBOL + ' · 15m bars ' + BARS_15M
+console.log('symbol ' + SYMBOL + ' · 1h settlement bars ' + BARS_1H
   + ' · costs XM ' + (COST_XM_FRAC * 100).toFixed(3) + '% RT (primary) / PAXG '
   + (COST_PAXG_FRAC * 100).toFixed(2) + '% RT (sensitivity)');
 
-const m15 = await cachedKlines(SYMBOL, '15m', BARS_15M);
-const h1 = await cachedKlines(SYMBOL, '1h', Math.max(DEPTH.h1 + Math.ceil(BARS_15M / 4) + 8, 1200));
-const h4 = await cachedKlines(SYMBOL, '4h', Math.max(DEPTH.h4 + Math.ceil(BARS_15M / 16) + 8, 600));
-const d1 = await cachedKlines(SYMBOL, '1d', Math.max(DEPTH.d1 + Math.ceil(BARS_15M / 96) + 4, 330));
+/* targets sized to the existing .bt-cache (1h x3999 / 4h x1061 / 1d x401) so
+   no refetch is needed; the walk starts once 220 closed 4h bars exist. */
+const h1 = await cachedKlines(SYMBOL, '1h', BARS_1H);
+const h4 = await cachedKlines(SYMBOL, '4h', 1060);
+const d1 = await cachedKlines(SYMBOL, '1d', 400);
 
-console.log('booting goldind.js in vm sandbox...');
+console.log('booting goldind.js + goldswing.js in vm sandbox...');
 const W = boot();
 
-console.log('walking GOLD SCALP pipeline on the 15m grid (' + m15.length + ' bars)...');
-const { results, counters } = walk(W, m15, h1, h4, d1);
+console.log('walking GOLD SWING pipeline — scan per closed 4h bar, settle on the 1h grid ('
+  + h1.length + ' 1h bars)...');
+const { results, counters } = walk(W, h1, h4, d1);
 
 const main = results.filter(t => !t.shadow);
 const shadow = results.filter(t => t.shadow);
@@ -440,17 +462,19 @@ const aggregates = {
   byStrategy: groupAgg(main, t => t.stratKey),
   byGrade: groupAgg(main, t => (t.demoted ? 'demoted-' : '') + (t.grade || '?')),
   byDirection: groupAgg(main, t => t.dir),
-  byKillzone: groupAgg(main, t => t.killzone ? String(t.killzone).split(' · ')[0] : 'OFF-SESSION'),
+  bySession: groupAgg(main, t => t.session || 'n/a'),   /* hgGoldSessionGate cohort (bar clock) */
   byUtcSession: groupAgg(main, t => {
     const h = t.utcHour;
     return h < 7 ? 'ASIA(00-07)' : h < 12 ? 'LONDON(07-12)' : h < 17 ? 'NY-OVERLAP(12-17)' : 'NY-LATE(17-24)';
   }),
+  byEdgeAction: groupAgg(main, t => t.edgeAction || 'no-row'),
   mpOnly: agg(main.filter(t => t.mp)),
   leadEligible: agg(main.filter(t => !t.demoted)),
   demotedOnly: agg(main.filter(t => t.demoted)),
   shadowSuppressed: {
-    note: 'EDGE-table-suppressed kinds walked separately — NEVER pooled with the main book; '
-      + 'they test whether the bridge-era suppressions hold on the tab pipeline',
+    note: 'EDGE-table-suppressed kinds walked separately — NEVER pooled with the main book. '
+      + 'The SWING edge table has no suppress rows today (goldind.js:1184-1195) so this is '
+      + 'expected empty; the mechanism stays armed for future suppress rows.',
     overall: agg(shadow),
     byStrategy: groupAgg(shadow, t => t.stratKey)
   }
@@ -466,29 +490,34 @@ const meta = {
   mode: SMOKE ? 'smoke' : 'full',
   symbol: SYMBOL,
   universe: 'PAXGUSDT Binance spot proxy for XAUUSD (basis ~0.1-0.5%; 24/7 weekend bars a broker never printed)',
-  pipeline: 'goldScalpSetups -> goldRankSetups per closed 15m bar (the GOLD SCALP tab path, not the OMNIGOLD bridge)',
-  bars: { m15: m15.length, h1: h1.length, h4: h4.length, d1: d1.length },
-  span: m15.length ? { from: new Date(m15[0].t * 1000).toISOString(), to: new Date(m15[m15.length - 1].t * 1000).toISOString() } : null,
+  pipeline: 'goldSwingSetups(inp) per closed 4h bar (goldswing.js:2395 — buildCandidates -> goldRankSetups via goldind.js, hgGoldSetupEdgeApply({swing:true}) inside mkCand); outcomes settled on the 1h grid',
+  bars: { h1: h1.length, h4: h4.length, d1: d1.length },
+  span: h1.length ? { from: new Date(h1[0].t * 1000).toISOString(), to: new Date(h1[h1.length - 1].t * 1000).toISOString() } : null,
   feedDepths: DEPTH,
   costs: {
     xm: { rtFrac: COST_XM_FRAC, basis: 'XM XAUUSD $0.35 spread / $3500 ref + 0.010% slip = 0.020% RT (hgOgVenuePresetCost constants)' },
     paxg: { rtFrac: COST_PAXG_FRAC, basis: 'PAXG spot 0.1% taker + 0.03% slip per side = 0.26% RT' },
-    primary: 'xm — the scalp desk quotes broker-aligned XAUUSD (goldscalp.js:1506); netR is XM, netR_paxg the sensitivity'
+    primary: 'xm — the swing tab quotes broker-aligned XAUUSD (goldswing.js:2993 "gold swing uses broker-aligned XAUUSD spot only"); netR is XM, netR_paxg the sensitivity'
   },
   rules: {
-    cadence: 'scan on every closed 15m bar; now = bar close instant (killzone/session read the bar clock, zero lookahead)',
-    dedup: 'one live trade per (stratKey, dir) — conviction-lock merge semantics; re-issues while live are counted as merged',
-    fill: 'pending order at entry from bar i+1; type via xmOrderType; touch via ogXmBarTouchesEntry; unfilled after 24 bars (6h TTL) != loss',
-    resolution: 'first touch stop vs t1 after fill; both-touch bar = LOSS; 96 bars (24h) after fill -> timeout MTM at close',
-    stops: 'touch-based (stricter than the live tab, which stops on a 15m CLOSE beyond the stop)'
+    cadence: 'scan on every closed 4h bar; now = the 4h bar close instant ((t+14400)*1000) — session gate / news / season read the bar clock, zero lookahead; outcomes settle on the 1h grid for finer first-touch resolution',
+    dedup: 'one live trade per (stratKey, dir) — conviction-lock merge semantics (hgGoldswingConviction, goldswing.js:557); re-issues while live are counted as merged',
+    fill: 'pending order at entry from the next 1h bar; type via xmOrderType(dir, entry, 4h close); touch via ogXmBarTouchesEntry; unfilled after 120 x 1h bars (5-day CONVICTION_TTL_MS, goldswing.js:558) != loss',
+    resolution: 'first touch stop vs t1 after fill on 1h bars; both-touch bar = LOSS; 120 x 1h bars (5 days) after fill -> timeout MTM at close',
+    stops: 'touch-based on 1h bars (stricter than the live tab, which transitions STOPPED only on a 4h CLOSE beyond the stop — wick-through survives live)',
+    stopAtr: 'stopAtr = |entry-stop| / candidate.atr (the engine\'s own 4h ATR14, goldswing.js:1690); the tab\'s floor is 1.5xATR (goldswing.js:1352, stopFloorAtr goldind.js:7269) — stopUnderFloor counts violations from engine-plan overrides'
   },
   deviations: [
-    'live-only feeds absent (macro/DXY/US10Y, news calendar, goldspot basis, F&G, GOLD PRO, perp funding/OI, L2/tick): every consumer feature-checks and degrades exactly as a live fetch failure does; macro tilt / news +-2 tally legs and the MACRO/NEWS/SPREAD gates never fire here',
-    'hgFilterGoldPostGate and hgApplyGoldBestLevels are browser-side modules not loaded offline: post-gate filtering and best-levels refinement are not applied (candidates carry raw engine levels)',
-    'goldRankSetups ctx carries candle rows since hg-v700 (tab parity — goldscalp.js feeds rows so the confluence scorer can actually score); earlier runs of this harness were rows-free like the pre-v700 tab',
-    'single venue (PAXG proxy): cross-venue confirmation (+2) can never fire; XAUT leg is removed in the live tab too',
-    'conviction merge is anchor-distance-based live (0.5xATR); here any same-(stratKey,dir) signal while a trade is live is a merge — slightly coarser',
-    'weekend PAXG bars exist; the live desk quotes a broker feed that gaps weekends — session/killzone cohorts include phantom weekend bars'
+    'live-only feeds absent, passed null so each consumer degrades exactly as a live fetch failure: getGoldMacro (goldswing.js:2651-2655) -> macro tilt +-2 rank leg, mkCand macro-vs-daily-stack suppressions (goldswing.js:1638-1648) and the MACRO-ALIGNED TREND CONTINUATION strategy (needs realRateHint, goldswing.js:1820-1837) never fire; hgNewsState (2608-2610) -> news -2 leg, tier-1 mint lock and grade demotion never fire; goldspotState -> positioning +-1 leg off; S.fng -> risk-sentiment +1 leg off; goldProState -> GOLD PRO +-2 leg and conflict demote off; binanceFunding -> funding leg off; Delta perpNative OI/funding (2656-2680) -> OI-trap/funding stamps off; L2/tick/spread/US10Y micro feeds -> __swMicroVeto (goldind.js:3196) and spread lock degrade to pass',
+    'runScan-only pipeline stages are not part of goldSwingSetups and are not replayed: 7-step 1h leg (goldswing.js:2736-2748), sweep/NY-exhaustion/sweep-to-OB/silver-bullet/PART4-7/SMC/VP stamp+demote passes (2775-2978), hgFilterGoldPostGate (3031-3045), weekend demotes (3046-3056), best-levels/formation ticket batch (3072-3111), spot alignment (3118-3120), conviction-lock level restore (3122-3132), A+ batch (3177-3178) — candidates carry the inline engine\'s own levels',
+    'indicators.js not loaded: _atr/_ema fall back to the module-local copies (goldswing.js:393-394) the header documents as identical to goldind.js\'s own fallbacks',
+    'hgGoldGradeFromScore (gold-best-levels.js:542) not loaded: goldRankSetups uses its inline fallback with IDENTICAL thresholds (goldind.js:3840-3843); mkCand\'s pre-rank fallback grades A at agree>=8 vs 7 live (goldswing.js:1672-1673) but the rank grade overwrites it',
+    'hgSetupSolidityApply (setup-solidity.js), hgProfitRankHint (scorecard.js) and window.__hgGoldCot absent: solidity never gates MOST PROBABLE (solidityBookOk undefined passes, goldind.js:3930), scorecard-expectancy and COT-crowding tally legs never fire',
+    'HG_GOLD_T1_R/T2_R/T3_R from plans.js not loaded — the local defaults are the same values (1.5/2.5/4.0, plans.js:2064-2066): no ladder drift',
+    'settlement on the 1h grid with touch-based stops vs the tab\'s own 4h-close invalidation (goldswing.js:11-13, conviction-lock evaluateSetup is4h) — stricter on stops, finer on fills; deliberate',
+    'timeout is anchored 120 x 1h bars AFTER THE FILL; the tab\'s EXPIRED transition is anchored at ISSUE (5 days from issuedAt, goldswing.js:558) — a late fill lives longer here than the tab\'s card would',
+    'dedup key is (stratKey|dir); the live lock merges on anchor distance <=0.5xATR across compatible stratKeys and keys venue-scoped ids (conviction-lock.js:406-449) — slightly coarser here',
+    'single venue (PAXG proxy): cross-venue confirmation (+2) can never fire — matches live (the tab skips the Delta XAUT leg, goldswing.js:2993); weekend PAXG bars exist, so session cohorts include phantom weekend bars a broker never printed'
   ],
   limitations: [
     'SAME-BAR FILL->TARGET OPTIMISM: ' + counters.sameBarWins + ' of ' + winsAll.length
@@ -496,9 +525,10 @@ const meta = {
       + ' are LIMIT/STOP fills where OHLC cannot prove order-of-touch — resolved pro-strategy. Win rate '
       + (settledAll.length ? (winsAll.length / settledAll.length * 100).toFixed(1) : '-') + '% -> '
       + (exAmbig.length ? (exAmbigWins.length / exAmbig.length * 100).toFixed(1) : '-')
-      + '% excluding ambiguous same-bar wins. Both-touch bars ARE losses (' + counters.bothTouch + ').',
+      + '% excluding ambiguous same-bar wins. Both-touch 1h bars ARE losses (' + counters.bothTouch + ').',
     'PORTFOLIO STATS NOT ATTAINABLE: every signal walks at 1R with unlimited concurrency; read per-trade expectancy and per-group rows only',
-    'grades A/B depend on tally legs that need live feeds (macro/news/positioning); offline tallies are structurally lower, so grade cohorts compress toward C — read the grade LADDER (ordering), not absolute counts'
+    'grades A/B depend on tally legs that need live feeds (macro/news/positioning/GOLD PRO/funding); offline tallies are structurally lower, so grade cohorts compress toward C — read the grade LADDER (ordering), not absolute counts',
+    'the SWING edge rows this harness can retire/confirm were baked from the OMNIGOLD bridge replay at n<=6 (goldind.js:1136,1184-1195) — this run measures the tab\'s own pipeline at the desk\'s venue'
   ],
   counters
 };
@@ -523,15 +553,16 @@ function printAgg(title, obj){
 }
 console.log('\n=== RESULTS (' + meta.mode + ') · main ' + main.length + ' (settled ' + aggregates.overall.n
   + ') · shadow ' + shadow.length + ' · merged ' + counters.merged
-  + ' · scanErrors ' + counters.scanErrors + ' ===');
+  + ' · scanErrors ' + counters.scanErrors + ' · stopUnderFloor ' + counters.stopUnderFloor + ' ===');
 printAgg('overall (main book)', { ALL: aggregates.overall, 'MP-only': aggregates.mpOnly,
   'lead-eligible': aggregates.leadEligible, 'demoted-only': aggregates.demotedOnly });
 printAgg('by strategy', aggregates.byStrategy);
 printAgg('by grade', aggregates.byGrade);
 printAgg('by direction', aggregates.byDirection);
-printAgg('by killzone', aggregates.byKillzone);
+printAgg('by session gate (bar clock)', aggregates.bySession);
 printAgg('by UTC session', aggregates.byUtcSession);
-printAgg('SHADOW — currently EDGE-suppressed kinds (never pooled)', aggregates.shadowSuppressed.byStrategy);
+printAgg('by edge action (baked table)', aggregates.byEdgeAction);
+printAgg('SHADOW — EDGE-suppressed kinds (never pooled; expected empty)', aggregates.shadowSuppressed.byStrategy);
 console.log('\nSTATED LIMITATIONS:');
 for (const lim of meta.limitations) console.log('  * ' + lim);
 console.log('\nwritten: ' + OUT_FILE);

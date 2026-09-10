@@ -1600,9 +1600,56 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
 
     /* ---- candidate assembly ---- */
     var seen = {};
+    /* hg-v700 GATE STACK at the push() choke point (mirrors the v699 GOLD
+       SCALP push() order in goldind.js). Every swing candidate — detector
+       mkCand, the VP §10 direct-mint, and every Part4–9 hgGoldBindEnginePlan
+       bind — passes the SAME gates. The 140-day swing replay
+       (scripts/backtest-goldswing-results.json, n=292 settled, XM costs)
+       measured the bypass mints (session=null, i.e. never saw
+       hgGoldInstFilter's session gate) at n=119 −0.544R/trade, and stops
+       under the module's own 1.5×ATR(4h) floor (counters.stopUnderFloor=170;
+       floor violators n=137 −0.448R/trade vs contract-true n=155 +0.098).
+       Order matters: inst gates → sides-guarded stop floor → replay edge
+       (suppress/demote/prefer + sides reject) → cost gate (demote-only). */
     function push(c){
       if (!c) return;
       if (c.dropped){ out.rejected.push(c); return; }
+      if (!c.session) c.session = sessionTxt || 'n/a';
+      var filt = gfn('hgGoldInstFilter');
+      if (filt){
+        c = filt(c, {
+          rows: rows4, nowMs: nowMs, scalp: false, hardReject: false,
+          macro: macro,
+          news: (microOpts && microOpts.news) || null,
+          rows4h: rows4,
+          rows1d: rows1d,
+          l2OrderBook: microOpts && microOpts.l2OrderBook,
+          spreadUsd: microOpts && microOpts.spreadUsd,
+          bid: microOpts && microOpts.bid,
+          ask: microOpts && microOpts.ask
+        }) || c;
+        if (c.dropped){ out.rejected.push(c); return; }
+      }
+      /* STOP-WIDTH FLOOR — engine-plan binds and the VP direct-mint can no
+         longer ship a stop tighter than the 1.5×ATR(4h) contract __swLevels
+         holds every detector to (hgGoldScalpStopFloor is TF-agnostic: floored,
+         or dropped when the floored TP1 pays < 1.2R). Runs BEFORE the edge
+         table so an EDGE-SUPPRESS rejection carries floor-true levels; the
+         floor is sides-guarded — wrong-side plans fall through to the sides
+         gate inside hgGoldSetupEdgeApply (the v681/v698 lesson: reject, never
+         rewrite invalid geometry). */
+      var floorFn = gfn('hgGoldScalpStopFloor');
+      if (floorFn) floorFn(c, a4);
+      if (c.dropped){ out.rejected.push(c); return; }
+      /* Replay edge + plan-side geometry (prefer fee-survivors; demote toxic; reject wrong-side stops). */
+      var edgeFn = gfn('hgGoldSetupEdgeApply');
+      if (edgeFn) edgeFn(c, { swing: true });
+      if (c.dropped){ out.rejected.push(c); return; }
+      /* COST-HEAVY — geometry whose stop distance cannot pay the venue round
+         trip (cost > 0.125R) paints but can never lead. Demote-only; 4h-wide
+         stops rarely bind it, which is the principled outcome. */
+      var costFn = gfn('hgGoldScalpCostGate');
+      if (costFn) costFn(c, microOpts && microOpts.rtCostPct);
       if (!seen[c.id]){ seen[c.id] = true; out.push(c); }
     }
     function bindPart(cand, hit, partLabel){
@@ -1693,23 +1740,13 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
           notes: notes.concat([lv.stopNote]),
           venue: venue, sym: sym
         };
-        var filt = gfn('hgGoldInstFilter');
-        if (filt){
-          cand = filt(cand, {
-            rows: rows4, nowMs: nowMs, scalp: false, hardReject: false,
-            macro: macro,
-            news: (microOpts && microOpts.news) || null,
-            rows4h: rows4,
-            rows1d: rows1d,
-            l2OrderBook: microOpts && microOpts.l2OrderBook,
-            spreadUsd: microOpts && microOpts.spreadUsd,
-            bid: microOpts && microOpts.bid,
-            ask: microOpts && microOpts.ask
-          }) || cand;
-        }
-        /* Replay edge + plan-side geometry (prefer fee-survivors; demote toxic; reject wrong-side stops). */
-        var edgeFn = gfn('hgGoldSetupEdgeApply');
-        if (edgeFn) edgeFn(cand, { swing: true });
+        /* hg-v700: hgGoldInstFilter + hgGoldSetupEdgeApply moved from here to
+           the push() gate stack — running them per-detector let the VP
+           direct-mint and the Part4–9 binds skip them entirely (measured:
+           session=null mints n=119 −0.544R/trade,
+           scripts/backtest-goldswing-results.json), and gating BEFORE
+           hgGoldBindEnginePlan meant the gates never saw the engine-plan
+           levels that actually shipped. */
         return cand;
       }catch(e){ return null; }
     }
@@ -2410,12 +2447,39 @@ function goldSwingSetups(inp){
     if (inp.news) microOpts.news = inp.news;
     if (isFinite(inp.spreadUsd)) microOpts.spreadUsd = inp.spreadUsd;
     if (inp.l2OrderBook) microOpts.l2OrderBook = inp.l2OrderBook;
+    if (isFinite(inp.rtCostPct)) microOpts.rtCostPct = inp.rtCostPct;   /* venue RT cost override for the push() cost gate (hg-v700) */
     var got = buildCandidates(leg, nowMs, newsC, inp.macro || null, 'n/a', 'INLINE', 'XAUUSD', microOpts);
     var cvFn = gfn('goldCrossVenueMap');
     var ctx = { now: nowMs, news: newsC, macro: inp.macro || null, goldPro: inp.goldPro || null,
                 season: inp.season || null, spot: inp.spot || null, fng: inp.fng || null,
-                fundingRate: inp.fundingRate, crossVenue: cvFn ? cvFn(got) : null };
-    return rankSetups(got, ctx);
+                fundingRate: inp.fundingRate, crossVenue: cvFn ? cvFn(got) : null,
+                /* hg-v700: feed the confluence scorer — rows-free ranking
+                   ceilinged the score at 54 < the 65 bar, and CONF NO TRADE
+                   now demotes, so a starved scorer would have blanked MOST
+                   PROBABLE forever (v532 data-starvation lesson). rows4h
+                   feeds the HTF legs; ctx.rows (the scorer's execution-TF
+                   slot) is ALSO the 4h series — this desk's execution TF IS
+                   4h, so VWAP/ribbon/ADX price on the desk's own bars. */
+                rows4h: leg.rows4h, rows: leg.rows4h, rows1d: leg.rows1d };
+    var rk = rankSetups(got, ctx);
+    /* hg-v700: surface buildCandidates' rejected side-channel on the exported
+       API. rankSetups returns only its OWN rank-time rejects, so every
+       build-time rejection — EDGE SUPPRESS / BAD PLAN SIDES / stop-floor
+       drops, full candidates with levels — was silently swallowed here (the
+       replay harness scripts/backtest-goldswing.mjs saw
+       counters.edgeSuppressed=0 and otherRejected=0 across 841 scans for this
+       reason, scripts/backtest-goldswing-results.json). No double-count:
+       push() never lets a dropped candidate into the main array rankSetups
+       iterates, and runScan (goldswing.js ~2982/~3021) calls rankSetups
+       directly — not this wrapper — collecting got.rejected itself. */
+    try{
+      var side = (got && Array.isArray(got.rejected)) ? got.rejected : [];
+      if (side.length){
+        if (!Array.isArray(rk.rejected)) rk.rejected = [];
+        rk.rejected = side.concat(rk.rejected);
+      }
+    }catch(eRej){}
+    return rk;
   }catch(e){ return { ranked: [], best: null, rejected: [] }; }
 }
 
@@ -2995,6 +3059,14 @@ async function runScan(ui, scanSt){
     /* ranking: transparent confluence tally across ALL venues */
     var cvFn = gfn('goldCrossVenueMap');
     if (cvFn) ctx.crossVenue = cvFn(cands);
+    /* hg-v700: feed the confluence scorer (see goldSwingSetups note — a
+       rows-free ctx ceilings the score at 54 < 65 and would blank MOST
+       PROBABLE forever now that CONF NO TRADE demotes). ctx.rows = the 4h
+       series: this desk's execution TF IS 4h, so the scorer's VWAP/ribbon/
+       ADX legs price on the desk's own bars. */
+    ctx.rows4h = gold.rows4h;
+    ctx.rows = gold.rows4h;
+    if (gold.rows1h && gold.rows1h.length) ctx.rows1h = gold.rows1h;
     var klineSpot = goldSpotRefFromRows(gold.rows4h);
     var liveSpot = await goldLiveSpotRef(klineSpot);
     var spotRef = (isFinite(liveSpot) && liveSpot > 0) ? liveSpot : klineSpot;
@@ -3137,10 +3209,20 @@ async function runScan(ui, scanSt){
       display = display.filter(function(c){ return c && !c.vetoed; });
     }
     var displayBest = best;
-    if (!displayBest && display.length) displayBest = display[0];
+    /* hg-v700: the "crown display[0] anyway" fallback is GONE (the same
+       defect class v699 removed from GOLD SCALP). It promoted a demoted card
+       to MOST PROBABLE whenever nothing was lead-eligible — on the swing
+       replay every one of the 100 MP settles carried CONF NO TRADE and ran
+       −0.209R/trade net of XM costs (scripts/backtest-goldswing-results.json).
+       An all-demoted board now has NO banner. */
     var deskTape = goldUniformTapeOf(gold.rows4h);
     __lastDeskTape = deskTape || '';   /* published with the scan snapshot so OMNIGOLD holds the same side */
     displayBest = goldTapeAlignedBest(displayBest, display, deskTape);
+    /* LEAD INVARIANT (fail closed): whatever path proposed the lead —
+       ranking, spot alignment, tape alignment (hgGoldUniformAlignedBest can
+       return its demoted fallback) — a demoted or vetoed card can never be
+       MOST PROBABLE. goldRankSetups holds this rule; the desk holds it too. */
+    if (displayBest && (displayBest.demoted || displayBest.vetoed)) displayBest = null;
     goldStampTape(display, deskTape);
     if (newsC && newsC.caution){
       for (var dix = 0; dix < display.length; dix++){
