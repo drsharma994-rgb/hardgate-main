@@ -1125,38 +1125,61 @@ var GST_NAME = {
 };
 
 /**
- * Baked setup-edge table from scripts/backtest-omnigold-results.json
- * (ENGINE 277 settled + SCAN 7270). Overall net expectancy ≈ −1.35R after
- * 0.26% PAXG RT — almost nothing is fee-positive. Actions:
- *   suppress — reject (QUALITY GATES / not tradable)
- *   demote   — paint but never MOST PROBABLE
- *   prefer   — rank boost when gross+ and rare net+
- * Re-bake: node scripts/backtest-omnigold.mjs then refresh gold-setup-edge.json.
+ * Baked setup-edge table.
+ * SCALP rows (hg-v699): from scripts/backtest-goldscalp-results-floor.json —
+ * the GOLD SCALP tab's OWN pipeline replayed per closed 15m bar (2,193
+ * settled, 2026-07-10..09-10, post stop-floor), netR at the desk's venue
+ * cost (XM XAUUSD 0.020% RT); PAXG 0.26% RT kept as netPaxg sensitivity.
+ * The previous scalp rows came from the OMNIGOLD bridge replay (n as small
+ * as 2, priced at PAXG costs) — a different selector and the wrong venue
+ * for this desk (the v536 venue-true lesson).
+ * SWING rows: still the bridge replay (that IS the swing path's selector).
+ * Actions and their bars (stated so a re-bake is mechanical):
+ *   suppress — n≥50 AND gross ≤ 0 AND netXm ≤ −0.20 (no redeeming edge at
+ *              the venue) → reject with a named reason
+ *   demote   — netXm < 0 → paint but never MOST PROBABLE / ENGINE lead
+ *   prefer   — n≥50 AND gross > 0 AND netXm ≥ +0.10 → rank boost
+ *   no row   — neutral / unproven (sweepob +0.162 sat at n=49, one settle
+ *              short of the prefer bar; p8range +0.038 under the bar)
+ * Re-bake: node scripts/backtest-goldscalp.mjs then
+ * node scripts/analyze-goldscalp-backtest.mjs and refresh gold-setup-edge.json.
  */
 var HG_GOLD_SETUP_EDGE = {
   scalp: {
-    fvg: { n: 27, gross: -0.003, net: -4.853, action: 'suppress',
-      why: 'SCALP FVG FILL replay net −4.85R (n=27) — fee-toxic + no direction edge' },
-    hvn: { n: 65, gross: -0.038, net: -3.071, action: 'demote',
-      why: 'SCALP HVN retest replay net −3.07R (n=65) — never MOST PROBABLE / ENGINE lead' },
-    ribbon: { n: 21, gross: 0.297, net: -4.74, action: 'demote',
-      why: 'SCALP EMA ribbon gross+ but net −4.74R (n=21) — never MOST PROBABLE / ENGINE lead' },
-    vwapband: { n: 2, gross: -1, net: -4.226, action: 'suppress',
-      why: 'SCALP VWAP-band MR replay all losses in sample' },
-    openrange: { n: 69, gross: 0.22, net: -1.798, action: 'demote',
-      why: 'SCALP ORB replay net −1.80R (n=69) — never MOST PROBABLE / ENGINE lead' },
-    vwap: { n: 6, gross: 0.239, net: -2.092, action: 'demote',
-      why: 'SCALP VWAP bounce net −2.09R (n=6) — never MOST PROBABLE / ENGINE lead' },
-    asian: { n: 8, gross: -0.063, net: -1.713, action: 'demote',
-      why: 'SCALP Asian breakout net −1.71R (n=8) — never MOST PROBABLE / ENGINE lead' },
-    sweep: { n: 12, gross: 0.25, net: -1.478, action: 'demote',
-      why: 'SCALP liquidity sweep net −1.48R (n=12) — prefer SWING sweep; never lead' },
-    bosalign: { n: 31, gross: 0.29, net: -1.18, action: 'demote',
-      why: 'SCALP BOS align net −1.18R (n=31) — never MOST PROBABLE / ENGINE lead' },
-    ob: { n: 7, gross: -0.286, net: -1.37, action: 'demote',
-      why: 'SCALP OB/breaker net −1.37R (n=7) — never MOST PROBABLE / ENGINE lead' },
-    silverb: { n: 0, gross: NaN, net: NaN, action: 'demote',
-      why: 'SESSION SILVER BULLET has 0 settled replay trades — unproven, never lead' }
+    fvg: { n: 245, gross: 0.19, net: -0.211, action: 'suppress',
+      why: 'SCALP FVG FILL shadow replay net −0.21R at XM over n=245 (gross+ but cost-eaten, 47% WR) — stays suppressed' },
+    vwapband: { n: 7, gross: -1, net: -1.224, action: 'suppress',
+      why: 'SCALP VWAP-band MR 0-for-7 in shadow replay — stays suppressed' },
+    vwap: { n: 132, gross: -0.127, net: -0.314, action: 'suppress',
+      why: 'SCALP VWAP bounce gross −0.13R / net −0.31R at XM (n=132, 33% WR) — negative before fees, not tradable' },
+    nyexh: { n: 167, gross: -0.157, net: -0.343, action: 'suppress',
+      why: 'NY VOLUME EXHAUSTION gross −0.16R / net −0.34R at XM (n=167) — 61% WR but timeout losses dominate; negative before fees' },
+    liqsweep: { n: 97, gross: -0.041, net: -0.304, action: 'suppress',
+      why: 'FIVE-LEG SWEEP ENGINE gross −0.04R / net −0.30R at XM (n=97, post stop-floor) — no edge at the venue' },
+    sweep: { n: 74, gross: -0.073, net: -0.267, action: 'suppress',
+      why: 'SCALP liquidity sweep gross −0.07R / net −0.27R at XM (n=74, 37% WR) — negative before fees; SWING 4H sweep stays preferred' },
+    hvn: { n: 391, gross: 0.013, net: -0.232, action: 'demote',
+      why: 'SCALP HVN retest net −0.23R at XM (n=391, gross flat) — never MOST PROBABLE / ENGINE lead' },
+    ob: { n: 57, gross: 0.139, net: -0.237, action: 'demote',
+      why: 'SCALP OB/breaker net −0.24R at XM (n=57, gross+) — never MOST PROBABLE / ENGINE lead' },
+    openrange: { n: 276, gross: 0.088, net: -0.143, action: 'demote',
+      why: 'SCALP ORB net −0.14R at XM (n=276, gross+) — never MOST PROBABLE / ENGINE lead' },
+    bosalign: { n: 189, gross: 0.088, net: -0.108, action: 'demote',
+      why: 'SCALP BOS align net −0.11R at XM (n=189, gross+) — never MOST PROBABLE / ENGINE lead' },
+    asian: { n: 157, gross: 0.117, net: -0.089, action: 'demote',
+      why: 'SCALP Asian breakout net −0.09R at XM (n=157, gross+) — never MOST PROBABLE / ENGINE lead' },
+    ribbon: { n: 144, gross: 0.171, net: -0.05, action: 'demote',
+      why: 'SCALP EMA ribbon net −0.05R at XM (n=144, gross+) — near-flat, never MOST PROBABLE / ENGINE lead' },
+    rsidiv: { n: 86, gross: -0.051, net: -0.154, action: 'demote',
+      why: 'SCALP RSI divergence net −0.15R at XM (n=86, 34% WR) — never MOST PROBABLE / ENGINE lead' },
+    p4laf: { n: 24, gross: -0.261, net: -0.455, action: 'demote',
+      why: 'S9 LIQUIDITY ABSORPTION net −0.46R at XM (n=24, small sample) — never lead until it proves out' },
+    silverb: { n: 14, gross: -0.265, net: -0.547, action: 'demote',
+      why: 'SESSION SILVER BULLET net −0.55R at XM (n=14, small sample) — unproven, never lead' },
+    p6fail: { n: 85, gross: 0.387, net: 0.182, action: 'prefer',
+      why: 'S30 FAILED-BREAK REVERSAL net +0.18R at XM (n=85, 54% WR, post stop-floor) — measured fee-survivor' },
+    p9volbar: { n: 72, gross: 0.243, net: 0.155, action: 'prefer',
+      why: 'S62 VOLUME-BAR SWEEP net +0.16R at XM (n=72, 44% WR) — measured fee-survivor' }
   },
   swing: {
     sweep: { n: 5, gross: 0.375, net: 0.154, action: 'prefer',
@@ -1291,7 +1314,9 @@ function hgGoldSetupEdgeApply(cand, opts){
       else if (/EMA RIBBON/.test(lab) && !/^4H/.test(lab)) row = HG_GOLD_SETUP_EDGE.scalp.ribbon;
       else if (/4H EMA RIBBON|4H TREND PULLBACK/.test(lab)) row = HG_GOLD_SETUP_EDGE.swing.ribbon;
       else if (/OPENING RANGE/.test(lab)) row = HG_GOLD_SETUP_EDGE.scalp.openrange;
-      else if (/SESSION VWAP/.test(lab)) row = HG_GOLD_SETUP_EDGE.scalp.vwap;
+      /* exact engine label only — 'S22 SESSION VWAP 2σ REVERSION' (p5vwap,
+         measured +0.25R at XM) must NOT inherit the vwap-bounce suppression */
+      else if (/SESSION VWAP BOUNCE/.test(lab)) row = HG_GOLD_SETUP_EDGE.scalp.vwap;
       else if (/ASIAN RANGE/.test(lab)) row = HG_GOLD_SETUP_EDGE.scalp.asian;
       else if (/4H LIQUIDITY SWEEP/.test(lab)) row = HG_GOLD_SETUP_EDGE.swing.sweep;
       else if (/LIQUIDITY SWEEP/.test(lab)) row = HG_GOLD_SETUP_EDGE.scalp.sweep;
@@ -1326,6 +1351,87 @@ function hgGoldSetupEdgeApply(cand, opts){
     }
     return cand;
   }catch(e){ return cand; }
+}
+
+/* STOP-WIDTH FLOOR for scalp candidates. The module contract says stops are
+   1.5×ATR14(15m), never tighter (header + __gsLevels), but engine plan
+   overrides (VP stopPlan on liqsweep/nyexh, sweep→OB, Silver Bullet,
+   hgGoldTakeEnginePlan / hgGoldBindEnginePlan binds) copy tighter stops onto
+   minted cards with only a SIDES check — the GOLD SCALP tab replay measured
+   stops down to 0.03×ATR burning 1.5–30R of round-trip cost per trade
+   (scripts/gold-scalp-bt-analysis.json, floorSplit / byStopBand).
+   Sides must already be valid when this runs (hgGoldSetupEdgeApply checks
+   them; the v681 lesson — never floor a wrong-side stop into a "fixed" one).
+   A valid-side, too-tight stop is re-anchored to the 1.5×ATR floor and the
+   engine's own TP1 is re-priced against the real risk: if it no longer
+   clears the 1.2R minimum the candidate is DROPPED with a named reason —
+   the same bar __gsCand holds every house plan to. Never throws. */
+var GS_STOP_FLOOR_ATR = 1.5;
+
+/* COST-HEAVY demotion. Even a contract-true 1.5×ATR stop can be economically
+   unpayable in quiet tape: the GOLD SCALP replay's <0.08%-risk cohort ran
+   gross +0.19R but net −1.18R per trade at the desk's own venue cost
+   (XM XAUUSD 0.020% RT; scripts/gold-scalp-bt-analysis.json byRiskPctBand),
+   and MOST PROBABLE concentrated exactly there. The setups are real — the
+   geometry cannot pay the spread — so the action is DEMOTE (paint, never
+   lead), not suppress. Bar: risk ≥ 8× round-trip cost, i.e. cost ≤ 0.125R —
+   the same discipline as the OMNIROUTE 20X stop band and the OMNIGOLD
+   formation costR floor. rtCostPct is overridable per venue via
+   inp.rtCostPct; the default is the desk's XM XAUUSD preset. Never throws. */
+var GS_RT_COST_PCT_DEFAULT = 0.020;   /* XM XAUUSD: $0.35/$3500 + 0.010% slip */
+var GS_COST_RISK_MULT = 8;            /* risk ≥ 8× RT cost ⇔ cost ≤ 0.125R */
+function hgGoldScalpCostGate(c, rtCostPct){
+  try{
+    if (!c || c.dropped || (c.dir !== 'long' && c.dir !== 'short')) return c;
+    var e = +c.entry, s = +c.stop;
+    if (!isFinite(e) || !(e > 0) || !isFinite(s)) return c;
+    var rt = (isFinite(+rtCostPct) && +rtCostPct > 0) ? +rtCostPct : GS_RT_COST_PCT_DEFAULT;
+    var riskPct = Math.abs(e - s) / e * 100;
+    var barPct = GS_COST_RISK_MULT * rt;
+    if (!(riskPct > 0) || riskPct >= barPct) return c;
+    c.demoted = true;
+    c.costHeavy = true;
+    if (!Array.isArray(c.stamps)) c.stamps = [];
+    if (c.stamps.indexOf('COST-HEAVY') < 0) c.stamps.push('COST-HEAVY');
+    var gn = Array.isArray(c.gateNotes) ? c.gateNotes.slice() : [];
+    gn.push('stop distance ' + riskPct.toFixed(3) + '% of entry < ' + barPct.toFixed(2)
+      + '% (8× the ' + rt.toFixed(3) + '% venue round trip) — fees eat ≥0.125R; '
+      + 'replay measured this cohort gross-positive but net-negative, so it paints but can never lead');
+    c.gateNotes = gn;
+    return c;
+  }catch(eC){ return c; }
+}
+
+function hgGoldScalpStopFloor(c, a15){
+  try{
+    if (!c || c.dropped || (c.dir !== 'long' && c.dir !== 'short')) return c;
+    var e = +c.entry, s = +c.stop;
+    if (!isFinite(e) || !isFinite(s) || !isFinite(a15) || !(a15 > 0)) return c;
+    if (!hgGoldPlanSidesOk(c).ok) return c;   /* sides gate owns that failure */
+    var risk = Math.abs(e - s);
+    var floorD = GS_STOP_FLOOR_ATR * a15;
+    if (risk >= floorD * (1 - 1e-9)) return c;
+    var rr1F = isFinite(+c.t1) ? Math.abs(+c.t1 - e) / floorD : NaN;
+    if (!(isFinite(rr1F) && rr1F >= 1.2)){
+      c.dropped = true;
+      c.reason = 'engine stop ' + (risk / a15).toFixed(2) + '×ATR is below the '
+        + GS_STOP_FLOOR_ATR + '×ATR scalp floor; at the floored stop TP1 pays '
+        + (isFinite(rr1F) ? rr1F.toFixed(1) : '—') + 'R < 1.2R minimum — cost-toxic geometry (replay-measured)';
+      if (!Array.isArray(c.stamps)) c.stamps = [];
+      if (c.stamps.indexOf('STOP FLOOR') < 0) c.stamps.push('STOP FLOOR');
+      return c;
+    }
+    c.stop = (c.dir === 'long') ? e - floorD : e + floorD;
+    c.rr = rr1F;
+    if (isFinite(+c.t2)) c.rr2 = Math.abs(+c.t2 - e) / floorD;
+    if (!Array.isArray(c.stamps)) c.stamps = [];
+    if (c.stamps.indexOf('STOP FLOORED 1.5×ATR') < 0) c.stamps.push('STOP FLOORED 1.5×ATR');
+    var gn = Array.isArray(c.gateNotes) ? c.gateNotes.slice() : [];
+    gn.push('engine stop was ' + (risk / a15).toFixed(2) + '×ATR — re-anchored to the '
+      + GS_STOP_FLOOR_ATR + '×ATR floor (module contract; tighter stops measured cost-toxic in replay)');
+    c.gateNotes = gn;
+    return c;
+  }catch(eF){ return c; }
 }
 
 /* limit-at-zone entry: when price has extended beyond the setup zone, anchor
@@ -2001,9 +2107,21 @@ function goldScalpSetups(inp){
           return;
         }
       }
+      /* (12) STOP-WIDTH FLOOR — engine overrides can no longer ship a stop
+         tighter than the 1.5×ATR contract; floored, or dropped when the
+         floored TP1 pays < 1.2R (see hgGoldScalpStopFloor). Runs BEFORE the
+         edge table so an EDGE-SUPPRESS rejection always carries floor-true
+         levels — the shadow ledger then measures the honest counterfactual.
+         (The floor is sides-guarded; wrong-side plans fall through to the
+         sides gate inside hgGoldSetupEdgeApply below.) */
+      hgGoldScalpStopFloor(c, a15);
+      if (c.dropped){ rejected.push(c); return; }
       /* Replay edge + plan-side geometry (suppress toxic SCALP kinds; fix bogus SHORT/LONG sides). */
       hgGoldSetupEdgeApply(c, { scalp: true });
       if (c.dropped){ rejected.push(c); return; }
+      /* (13) COST-HEAVY — quiet-tape geometry whose stop distance cannot pay
+         the venue round trip (cost > 0.125R) paints but can never lead. */
+      hgGoldScalpCostGate(c, inp.rtCostPct);
       if (!seen[c.id]){ seen[c.id] = true; out.push(c); }
     }
     var tol = 0.5*a15;
@@ -14310,6 +14428,8 @@ W.hgGoldPlanSidesOk = hgGoldPlanSidesOk;
 W.hgGoldTakeEnginePlan = hgGoldTakeEnginePlan;
 W.hgGoldBindEnginePlan = hgGoldBindEnginePlan;
 W.hgGoldSetupEdgeApply = hgGoldSetupEdgeApply;
+W.hgGoldScalpStopFloor = hgGoldScalpStopFloor;
+W.hgGoldScalpCostGate = hgGoldScalpCostGate;
 W.goldCrossVenueMap = goldCrossVenueMap;
 W.goldWatchPromote = goldWatchPromote;
 W.hgGoldInlineBridge = hgGoldInlineBridge;

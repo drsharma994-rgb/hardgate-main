@@ -78,6 +78,17 @@ a small reason line — nothing is dropped silently):
      (price > EMA20 > EMA50). HTF conflict (Daily bull / H4 bear or the
      reverse) locks the entire scalp desk and leaves Gold Wing open.
      Missing H4 or Daily fail-open.
+ 12) STOP-WIDTH FLOOR (goldind hgGoldScalpStopFloor) — engine plan overrides
+     can no longer ship a stop tighter than the 1.5×ATR(15m) contract: a
+     valid-side tight stop is re-anchored to the floor (rr re-priced), and a
+     floored TP1 < 1.2R drops the candidate with a named reason. The GOLD
+     SCALP replay (scripts/backtest-goldscalp.mjs) measured the sub-floor
+     cohort at −1.17R/trade net of XM costs, stops down to 0.03×ATR.
+ 13) COST-HEAVY (goldind hgGoldScalpCostGate) — a stop distance under 8× the
+     venue round-trip cost (XM XAUUSD 0.020% RT ⇒ 0.16% of entry; fees
+     ≥0.125R) demotes the card: it paints but can never lead. Replay measured
+     that cohort gross-positive but net-negative — real setups, unpayable
+     geometry.
 
 Feeds (in preference order):
   1) window.getGoldCandles (macro.js) — XAUUSDT TradFi perp first, PAXGUSDT
@@ -1720,11 +1731,20 @@ async function runScan(ui, scanSt){
         if (dc0 && !dc0.demoted && !dc0.vetoed){ displayBest = dc0; break; }
       }
     }
-    if (!displayBest && display.length) displayBest = display[0];
+    /* hg-v699: the "crown display[0] anyway" fallback is GONE. It promoted a
+       demoted card to MOST PROBABLE whenever nothing was lead-eligible — the
+       replay measured that banner cohort at −1.49R/trade net of XM costs,
+       the exact TOP-SETUP-widget defect class (fabricated lead from a
+       measured-negative board). An all-demoted board now has NO banner. */
     var uniRows = gold.rows15m.length ? gold.rows15m : (gold.rows1h || []);
     var deskTape = goldUniformTapeOf(uniRows);
     __lastDeskTape = deskTape || '';   /* published with the scan snapshot so OMNIGOLD holds the same side */
     displayBest = goldTapeAlignedBest(displayBest, display, deskTape);
+    /* LEAD INVARIANT (fail closed): whatever path proposed the lead —
+       ranking, spot alignment, tape alignment (hgGoldUniformAlignedBest can
+       return its demoted fallback) — a demoted or vetoed card can never be
+       MOST PROBABLE. goldRankSetups holds this rule; the desk holds it too. */
+    if (displayBest && (displayBest.demoted || displayBest.vetoed)) displayBest = null;
     goldStampTape(display, deskTape);
 
     if (lock.transitions.length){

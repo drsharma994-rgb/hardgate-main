@@ -3,27 +3,179 @@
   "settledScan": 7270,
   "settledEngine": 277,
   "overallNetR": -1.346,
-  "note": "No large cohort is net-profitable after 0.26% PAXG RT. hg-v589: SCALP ORB/FVG/HVN/ribbon suppress. hg-v607: VWAP/Asian/scalp-sweep/BOS/OB stay demote (never MOST PROBABLE / ENGINE lead; n<50 so they still paint). hg-v626: ORB/HVN/ribbon demote (paint + OMNIGOLD eligible) — FVG/vwapband stay suppress. SWING prefer 4H sweep + weekly. suppress = reject; demote = never lead; prefer = rank boost.",
+  "note": "hg-v699: SCALP rows re-baked from the GOLD SCALP tab's OWN 15m replay (scripts/backtest-goldscalp.mjs, post 1.5xATR stop-floor), priced at the desk venue (XM XAUUSD 0.020% RT) — the old scalp rows came from the OMNIGOLD bridge replay at PAXG costs (wrong selector + wrong venue; n as small as 2). Bars: suppress = n>=50 & gross<=0 & netXm<=-0.20; demote = netXm<0 (paint, never lead); prefer = n>=50 & gross>0 & netXm>=+0.10. sweepob (+0.162, n=49) sits one settle short of the prefer bar — no row. SWING rows unchanged (bridge replay IS the swing selector). Shadow ledger keeps fvg/vwapband suppressed. See scripts/gold-scalp-bt-analysis-floor.json + the prefloor twins for the defect baseline.",
   "scalp": {
-    "fvg": { "n": 27, "gross": -0.003, "net": -4.853, "action": "suppress" },
-    "hvn": { "n": 65, "gross": -0.038, "net": -3.071, "action": "demote" },
-    "ribbon": { "n": 21, "gross": 0.297, "net": -4.74, "action": "demote" },
-    "openrange": { "n": 69, "gross": 0.22, "net": -1.798, "action": "demote" },
-    "vwap": { "n": 6, "gross": 0.239, "net": -2.092, "action": "demote" },
-    "asian": { "n": 8, "gross": -0.063, "net": -1.713, "action": "demote" },
-    "sweep": { "n": 12, "gross": 0.25, "net": -1.478, "action": "demote" },
-    "bosalign": { "n": 31, "gross": 0.29, "net": -1.18, "action": "demote" },
-    "ob": { "n": 7, "gross": -0.286, "net": -1.37, "action": "demote" },
-    "silverb": { "n": 0, "gross": null, "net": null, "action": "demote" },
-    "vwapband": { "n": 2, "gross": -1.0, "net": -4.226, "action": "suppress" }
+    "fvg": {
+      "n": 245,
+      "gross": 0.19,
+      "netXm": -0.211,
+      "netPaxg": -5.019,
+      "action": "suppress",
+      "shadow": true
+    },
+    "vwapband": {
+      "n": 7,
+      "gross": -1,
+      "netXm": -1.224,
+      "netPaxg": -3.907,
+      "action": "suppress",
+      "shadow": true
+    },
+    "vwap": {
+      "n": 132,
+      "gross": -0.127,
+      "netXm": -0.314,
+      "netPaxg": -2.562,
+      "action": "suppress"
+    },
+    "nyexh": {
+      "n": 167,
+      "gross": -0.157,
+      "netXm": -0.343,
+      "netPaxg": -2.575,
+      "action": "suppress"
+    },
+    "liqsweep": {
+      "n": 97,
+      "gross": -0.041,
+      "netXm": -0.304,
+      "netPaxg": -3.467,
+      "action": "suppress"
+    },
+    "sweep": {
+      "n": 74,
+      "gross": -0.073,
+      "netXm": -0.267,
+      "netPaxg": -2.593,
+      "action": "suppress"
+    },
+    "hvn": {
+      "n": 391,
+      "gross": 0.013,
+      "netXm": -0.232,
+      "netPaxg": -3.176,
+      "action": "demote"
+    },
+    "ob": {
+      "n": 57,
+      "gross": 0.139,
+      "netXm": -0.237,
+      "netPaxg": -4.737,
+      "action": "demote"
+    },
+    "openrange": {
+      "n": 276,
+      "gross": 0.088,
+      "netXm": -0.143,
+      "netPaxg": -2.923,
+      "action": "demote"
+    },
+    "bosalign": {
+      "n": 189,
+      "gross": 0.088,
+      "netXm": -0.108,
+      "netPaxg": -2.452,
+      "action": "demote"
+    },
+    "asian": {
+      "n": 157,
+      "gross": 0.117,
+      "netXm": -0.089,
+      "netPaxg": -2.56,
+      "action": "demote"
+    },
+    "ribbon": {
+      "n": 144,
+      "gross": 0.171,
+      "netXm": -0.05,
+      "netPaxg": -2.705,
+      "action": "demote"
+    },
+    "rsidiv": {
+      "n": 86,
+      "gross": -0.051,
+      "netXm": -0.154,
+      "netPaxg": -1.386,
+      "action": "demote"
+    },
+    "p4laf": {
+      "n": 24,
+      "gross": -0.261,
+      "netXm": -0.455,
+      "netPaxg": -2.793,
+      "action": "demote"
+    },
+    "silverb": {
+      "n": 14,
+      "gross": -0.265,
+      "netXm": -0.547,
+      "netPaxg": -3.94,
+      "action": "demote"
+    },
+    "p6fail": {
+      "n": 85,
+      "gross": 0.387,
+      "netXm": 0.182,
+      "netPaxg": -2.28,
+      "action": "prefer"
+    },
+    "p9volbar": {
+      "n": 72,
+      "gross": 0.243,
+      "netXm": 0.155,
+      "netPaxg": -0.897,
+      "action": "prefer"
+    }
   },
   "swing": {
-    "sweep": { "n": 5, "gross": 0.375, "net": 0.154, "action": "prefer" },
-    "weekly": { "n": 6, "gross": 0.54, "net": 0.341, "action": "prefer" },
-    "fvg": { "n": 6, "gross": -0.167, "net": -0.522, "action": "demote" },
-    "ribbon": { "n": 4, "gross": -0.008, "net": -0.25, "action": "demote" },
-    "ob": { "n": 1, "gross": -1.0, "net": -1.357, "action": "demote" }
+    "sweep": {
+      "n": 5,
+      "gross": 0.375,
+      "net": 0.154,
+      "action": "prefer"
+    },
+    "weekly": {
+      "n": 6,
+      "gross": 0.54,
+      "net": 0.341,
+      "action": "prefer"
+    },
+    "fvg": {
+      "n": 6,
+      "gross": -0.167,
+      "net": -0.522,
+      "action": "demote"
+    },
+    "ribbon": {
+      "n": 4,
+      "gross": -0.008,
+      "net": -0.25,
+      "action": "demote"
+    },
+    "ob": {
+      "n": 1,
+      "gross": -1,
+      "net": -1.357,
+      "action": "demote"
+    }
   },
-  "omnigoldPrefer": ["STRUCT-BOS", "BOS-RETEST", "INSIDE-BREAK", "RIBBON-PULLBACK", "NR7-BREAK", "AVWAP-RECLAIM", "SQUEEZE-FIRE", "CUSUM-SHIFT", "MMOVE", "HA-FLIP", "ORB", "FVG-FILL"],
-  "omnigoldSuppressExtra": []
+  "omnigoldPrefer": [
+    "STRUCT-BOS",
+    "BOS-RETEST",
+    "INSIDE-BREAK",
+    "RIBBON-PULLBACK",
+    "NR7-BREAK",
+    "AVWAP-RECLAIM",
+    "SQUEEZE-FIRE",
+    "CUSUM-SHIFT",
+    "MMOVE",
+    "HA-FLIP",
+    "ORB",
+    "FVG-FILL"
+  ],
+  "omnigoldSuppressExtra": [],
+  "scalpSource": "scripts/backtest-goldscalp-results-floor.json",
+  "scalpSettled": 2193,
+  "scalpWindow": "2026-07-10..2026-09-10",
+  "scalpCostBasis": "netXm at XM XAUUSD 0.020% RT (desk venue, primary); netPaxg at PAXG 0.26% RT (sensitivity)"
 }

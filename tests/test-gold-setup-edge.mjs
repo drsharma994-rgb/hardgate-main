@@ -59,20 +59,53 @@ ok(W.HG_GOLD_SETUP_EDGE && W.HG_GOLD_SETUP_EDGE.scalp.fvg.action === 'suppress',
   ok((c.stamps || []).indexOf('EDGE DEMOTE') >= 0, 'ORB EDGE DEMOTE stamp');
 }
 
-/* hg-v607: remaining fee-toxic ENGINE scalp kinds stay demote (never lead) */
+/* hg-v699: measured-negative scalp kinds, re-baked from the GOLD SCALP tab's
+   OWN 15m replay at the desk venue cost (XM XAUUSD 0.020% RT; see
+   scripts/gold-setup-edge.json). Gross-positive-but-cost-eaten kinds stay
+   demote (paint, never lead); gross-NEGATIVE kinds with n>=50 are suppress. */
 {
-  const keys = [
+  const demoteKeys = [
     ['bosalign', 'BOS ALIGNMENT'],
-    ['sweep', 'LIQUIDITY SWEEP REVERSAL'],
     ['asian', 'ASIAN RANGE BREAKOUT'],
-    ['vwap', 'SESSION VWAP BOUNCE'],
-    ['ob', 'ORDER BLOCK RETEST']
+    ['ob', 'ORDER BLOCK RETEST'],
+    ['rsidiv', 'MODIFIED RSI 75/25 DIVERGENCE'],
+    ['hvn', 'HVN RETEST'],
+    ['ribbon', 'EMA RIBBON PULLBACK']
   ];
-  for (const [key, lab] of keys){
+  for (const [key, lab] of demoteKeys){
     const c = { dir: 'long', entry: 2650, stop: 2640, t1: 2670, stratKey: key, strategy: lab };
     W.hgGoldSetupEdgeApply(c, { scalp: true });
     ok(c.demoted === true && !c.dropped, 'SCALP ' + key + ' demoted — never MOST PROBABLE / ENGINE lead');
     ok((c.stamps || []).indexOf('EDGE DEMOTE') >= 0, key + ' EDGE DEMOTE stamp');
+  }
+  const suppressKeys = [
+    ['sweep', 'LIQUIDITY SWEEP REVERSAL', /n=74/],
+    ['vwap', 'SESSION VWAP BOUNCE', /n=132/],
+    ['nyexh', 'NY VOLUME EXHAUSTION', /n=167/],
+    ['liqsweep', 'GOLD SWEEP ENGINE', /n=97/]
+  ];
+  for (const [key, lab, nRe] of suppressKeys){
+    const c = { dir: 'long', entry: 2650, stop: 2640, t1: 2670, stratKey: key, strategy: lab };
+    W.hgGoldSetupEdgeApply(c, { scalp: true });
+    ok(c.dropped === true, 'SCALP ' + key + ' suppressed — gross-negative at the venue in the tab replay');
+    ok((c.stamps || []).indexOf('EDGE SUPPRESS') >= 0 && nRe.test(c.reason || ''),
+       key + ' EDGE SUPPRESS stamp + measured n on the reason line');
+  }
+  const preferKeys = [
+    ['p6fail', 'S30 FAILED-BREAK REVERSAL'],
+    ['p9volbar', 'S62 VOLUME-BAR S0 SWEEP']
+  ];
+  for (const [key, lab] of preferKeys){
+    const c = { dir: 'long', entry: 2650, stop: 2640, t1: 2670, stratKey: key, strategy: lab };
+    W.hgGoldSetupEdgeApply(c, { scalp: true });
+    ok(!c.dropped && !c.demoted && c.edgeBoost >= 2, 'SCALP ' + key + ' prefer — measured fee-survivor rank boost');
+    ok((c.stamps || []).indexOf('EDGE PREFER') >= 0, key + ' EDGE PREFER stamp');
+  }
+  /* sweepob sat one settle short of the prefer bar (n=49) — deliberately NO row */
+  {
+    const c = { dir: 'long', entry: 2650, stop: 2640, t1: 2670, stratKey: 'sweepob', strategy: 'ADVANCED SWEEP→OB' };
+    W.hgGoldSetupEdgeApply(c, { scalp: true });
+    ok(!c.dropped && !c.demoted && !(c.edgeBoost >= 2), 'sweepob neutral — n=49 is one settle short of the prefer bar');
   }
 }
 

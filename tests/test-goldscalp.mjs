@@ -921,18 +921,27 @@ function checkCandShape(c, key, dir, msg){
          msg + ': >=2 independent agreeing reads in the ledger');
 }
 {
-  /* compLongRows hosts a bullish sweep (10b ago) + a bullish RSI divergence */
+  /* compLongRows hosts a bullish sweep (10b ago) + a bullish RSI divergence.
+     hg-v699: the SCALP sweep kind is EDGE-SUPPRESSED — the tab's own 15m
+     replay measured it gross −0.07R / net −0.27R at XM over n=74
+     (scripts/gold-setup-edge.json). Like the ribbon fixture below, the setup
+     did not vanish silently: it rides the rejected channel with the measured
+     reason. rsidiv still paints (demoted — measured −0.15R, never lead). */
   const rows = compLongRows();
   const cands = W.goldScalpSetups({ rows15m: rows, now: OFF_NOW });
-  assert(Array.isArray(cands) && cands.length >= 2, 'multi-setup: >=2 candidates from one candle set (got ' + cands.length + ')');
-  checkCandShape(cands.find(c => c.stratKey === 'sweep'), 'sweep', 'long', 'sweep reversal');
+  assert(Array.isArray(cands) && cands.length >= 1, 'multi-setup: >=1 candidate from one candle set (got ' + cands.length + ')');
+  const swSupp = (cands.rejected || []).find(r => r.stratKey === 'sweep');
+  assert(!!swSupp && swSupp.dropped === true, 'sweep reversal: EDGE-SUPPRESSED into the rejected channel (v699 replay bake)');
+  assert((swSupp.stamps || []).indexOf('EDGE SUPPRESS') >= 0 && /n=74/.test(swSupp.reason || ''),
+         'sweep suppression names the measured evidence (n=74) on the reason line');
   checkCandShape(cands.find(c => c.stratKey === 'rsidiv'), 'rsidiv', 'long', 'RSI 75/25 divergence');
   assert(cands.every(c => c.dir === 'long'), 'all candidates agree with the majority direction here');
 
   /* mirrored construction -> symmetric short candidates */
   const mc = W.goldScalpSetups({ rows15m: mirrorRows(rows, 2300), now: OFF_NOW });
-  assert(mc.length >= 2 && mc.every(c => c.dir === 'short'), 'mirrored: >=2 short candidates');
-  checkCandShape(mc.find(c => c.stratKey === 'sweep'), 'sweep', 'short', 'mirrored sweep');
+  assert(mc.length >= 1 && mc.every(c => c.dir === 'short'), 'mirrored: >=1 short candidate');
+  const mSw = (mc.rejected || []).find(r => r.stratKey === 'sweep' && r.dir === 'short');
+  assert(!!mSw && mSw.dropped === true, 'mirrored sweep: suppressed symmetrically on the short side');
 
   /* degenerate input -> empty array (never null, never throws) */
   assert(JSON.stringify(W.goldScalpSetups(null)) === '[]'
@@ -958,7 +967,13 @@ function checkCandShape(c, key, dir, msg){
     return rows;
   }
   const vc = W.goldScalpSetups({ rows15m: vwapRows(), now: OFF_NOW });
-  checkCandShape(vc.find(c => c.stratKey === 'vwap'), 'vwap', 'long', 'session-VWAP bounce');
+  /* hg-v699: SESSION VWAP BOUNCE is EDGE-SUPPRESSED — tab replay measured it
+     gross −0.13R / net −0.31R at XM over n=132 (33% WR): negative BEFORE
+     fees. The detection still fires; the reason line carries the evidence. */
+  const vwSupp = (vc.rejected || []).find(r => r.stratKey === 'vwap');
+  assert(!vc.find(c => c.stratKey === 'vwap'), 'session-VWAP bounce: no longer offered (measured-negative at the venue)');
+  assert(!!vwSupp && (vwSupp.stamps || []).indexOf('EDGE SUPPRESS') >= 0 && /n=132/.test(vwSupp.reason || ''),
+         'session-VWAP bounce: suppressed with the measured evidence named (n=132)');
 
   /* --- EMA ribbon pullback: strong day trend, 4-bar pullback to the 20-EMA --- */
   function ribbonRows(){
@@ -1133,11 +1148,16 @@ function loadConvictionStore(ls){
   const r1 = await M.stubs['#gsRun']._handler();
   assert(r1 === 'refreshed', 'scan 1 completes with the seeded gold feed (got "' + r1 + '")');
   const scan1 = C.goldscalpScan();
-  assert(!!scan1 && scan1.cands.length >= 2 && typeof scan1.bestId === 'string',
-         'scan 1: >=2 ranked candidates + a MOST PROBABLE bestId');
+  /* hg-v699: on this synthetic tape every surviving candidate is measured-
+     negative (rsidiv is edge-DEMOTED, sweep edge-SUPPRESSED), so nothing may
+     lead: bestId is honestly null and no MOST PROBABLE banner is fabricated.
+     Demoted cards still paint and still mint convictions. */
+  assert(!!scan1 && scan1.cands.length >= 1, 'scan 1: >=1 ranked candidate on the board');
+  assert(scan1.bestId === null, 'scan 1: all-demoted board -> bestId null (nothing measured-negative may lead)');
   assert(scan1.cands.every(c => c.locked === false), 'scan 1: every candidate is a NEW conviction');
-  const swc1 = scan1.cands.find(c => c.stratKey === 'sweep');
-  assert(!!swc1, 'scan 1: sweep candidate on the board');
+  const swc1 = scan1.cands.find(c => c.stratKey === 'rsidiv');
+  assert(!!swc1, 'scan 1: rsidiv candidate on the board (demoted, still painted)');
+  assert(swc1.demoted === true, 'scan 1: rsidiv carries its measured demotion');
   const store1 = loadConvictionStore(ls);
   assert(!!store1 && !!store1.live[swc1.id], 'scan 1: conviction persisted under hgGoldscalpConviction');
   const rec1 = store1.live[swc1.id];
@@ -1146,9 +1166,12 @@ function loadConvictionStore(ls){
   assert(rec1.entry === swc1.entry && rec1.stop === swc1.stop && rec1.t1 === swc1.t1 && rec1.t2 === swc1.t2,
          'persisted levels match the issued card');
   const html1 = M.stubs['#gsCards'].innerHTML;
-  assert(html1.indexOf('MOST PROBABLE SETUP') >= 0 && html1.indexOf('WHY THIS ONE LEADS') >= 0
-      && html1.indexOf('INVALIDATION') >= 0 && html1.indexOf('BUY ZONE') >= 0,
-      'MOST PROBABLE banner rendered with execution guidance');
+  /* hg-v699: no lead on an all-demoted board -> the banner must NOT render
+     (fabricating a MOST PROBABLE from a measured-negative book was exactly
+     the TOP-SETUP-widget class of defect); the cards themselves still paint
+     with their tally. */
+  assert(html1.indexOf('MOST PROBABLE SETUP') < 0,
+      'no MOST PROBABLE banner fabricated when every candidate is demoted');
   assert(/tally [+-]?\d+/.test(html1), 'confluence tally shown on the cards');
 
   /* scan 2 on IDENTICAL candles: the lock restores — locked stamp, original
@@ -1173,7 +1196,7 @@ function loadConvictionStore(ls){
      freshly computed ones (never re-pick levels for a live conviction) */
   ls.removeItem('hgGoldscalpConviction');
   const freshDet = C.goldScalpSetups({ rows15m: cloneRows(baseRows), now: Date.now() });
-  const freshSw = freshDet.find(c => c.stratKey === 'sweep');
+  const freshSw = freshDet.find(c => c.stratKey === 'rsidiv');
   assert(!!freshSw && freshSw.id === swc1.id, 'premise: fresh detection reproduces the same structure id');
   const seeded = { id: freshSw.id, dir: freshSw.dir, strategy: freshSw.strategy,
                    entry: freshSw.entry - 1, stop: freshSw.stop - 1, t1: freshSw.t1 - 1, t2: freshSw.t2 - 1,
@@ -1391,7 +1414,10 @@ function rrShortRows25(){            /* short into a bearish OB with a bullish O
 {
   /* ---- (1) OFF-SESSION DEMOTION + raised tally bar + Asian exception ---- */
   const offC = W.goldScalpSetups({ rows15m: compLongRows(), now: OFF_NOW });
-  assert(offC.length >= 2 && offC.every(c => c.demoted === true && c.offSession === true && c.stamps.indexOf('OFF-SESSION') >= 0),
+  /* hg-v699: sweep is EDGE-SUPPRESSED (tab replay n=74 gross-negative), so
+     this fixture yields fewer painted candidates — the gate contract is
+     unchanged: everything painted off-hours is demoted + stamped. */
+  assert(offC.length >= 1 && offC.every(c => c.demoted === true && c.offSession === true && c.stamps.indexOf('OFF-SESSION') >= 0),
          'off-session: candidates detected outside every ICT killzone are demoted + stamped OFF-SESSION');
   const offRank = W.goldRankSetups(offC, { now: OFF_NOW });
   assert(offRank.rejected.length === 0 && offRank.ranked.length === offC.length && offRank.ranked.every(c => c.demoted),
@@ -1421,15 +1447,18 @@ function rrShortRows25(){            /* short into a bearish OB with a bullish O
 
   /* ---- (2) TREND ALIGNMENT ---- */
   const ctBear = W.goldScalpSetups({ rows15m: ctRows25(), rows4h: rows4hBear25(), now: OVLP_NOW });
-  const rsiL = ctBear.find(c => c.stratKey === 'rsidiv'), swL = ctBear.find(c => c.stratKey === 'sweep');
+  const rsiL = ctBear.find(c => c.stratKey === 'rsidiv');
+  const swL = (ctBear.rejected || []).find(r => r.stratKey === 'sweep');
   assert(!!rsiL && rsiL.demoted === true && rsiL.stamps.indexOf('FOLKLORE') >= 0,
          'trend: rsidiv is FOLKLORE-demoted (no defended mechanism) regardless of EMA stack');
-  /* Sweep stays the COUNTER-TREND exemption, but hg-v574 EDGE DEMOTE
-     (scalp sweep net −1.48R) means it paints demoted and never leads. */
-  assert(!!swL && swL.stamps.indexOf('COUNTER-TREND') < 0,
+  /* Sweep keeps the COUNTER-TREND exemption in __gsCand, but hg-v699 EDGE
+     SUPPRESS (tab replay: gross −0.07R / net −0.27R at XM, n=74) rejects it
+     with the measured reason — the exemption shows as the ABSENCE of a
+     COUNTER-TREND stamp on the rejected row. */
+  assert(!!swL && (swL.stamps || []).indexOf('COUNTER-TREND') < 0,
          'trend exception: liquidity-sweep is not COUNTER-TREND demoted');
-  assert(swL.demoted === true && swL.stamps.indexOf('EDGE DEMOTE') >= 0,
-         'trend: scalp sweep is EDGE DEMOTE from replay (prefer SWING sweep)');
+  assert(swL.dropped === true && (swL.stamps || []).indexOf('EDGE SUPPRESS') >= 0,
+         'trend: scalp sweep is EDGE SUPPRESS from the v699 tab replay (SWING sweep stays preferred)');
   const ctBull = W.goldScalpSetups({ rows15m: ctRows25(), rows4h: rows4hBull25(), now: OVLP_NOW });
   const rsiLB = ctBull.find(c => c.stratKey === 'rsidiv');
   assert(!!rsiLB && rsiLB.demoted === true && rsiLB.stamps.indexOf('FOLKLORE') >= 0,
@@ -1439,12 +1468,13 @@ function rrShortRows25(){            /* short into a bearish OB with a bullish O
   assert(!!rsiLN && rsiLN.demoted === true && rsiLN.stamps.indexOf('FOLKLORE') >= 0,
          'trend: rsidiv FOLKLORE demotion when 4H unavailable');
   const ctMir = W.goldScalpSetups({ rows15m: mirrorRows(ctRows25(), 2560), rows4h: rows4hBull25(), now: OVLP_NOW });
-  const rsiS = ctMir.find(c => c.stratKey === 'rsidiv'), swS = ctMir.find(c => c.stratKey === 'sweep');
+  const rsiS = ctMir.find(c => c.stratKey === 'rsidiv');
+  const swS = (ctMir.rejected || []).find(r => r.stratKey === 'sweep' && r.dir === 'short');
   assert(!!rsiS && rsiS.dir === 'short' && rsiS.demoted === true && rsiS.stamps.indexOf('FOLKLORE') >= 0,
          'trend (mirrored): short rsidiv is FOLKLORE-demoted');
-  assert(!!swS && swS.stamps.indexOf('COUNTER-TREND') < 0
-      && swS.demoted === true && swS.stamps.indexOf('EDGE DEMOTE') >= 0,
-         'trend (mirrored): sweep-rejection short is COUNTER-TREND-exempt but EDGE DEMOTE');
+  assert(!!swS && (swS.stamps || []).indexOf('COUNTER-TREND') < 0
+      && swS.dropped === true && (swS.stamps || []).indexOf('EDGE SUPPRESS') >= 0,
+         'trend (mirrored): sweep-rejection short is COUNTER-TREND-exempt, EDGE SUPPRESS (v699)');
 
   /* ---- (3) MIN R:R AFTER SNAPPING ---- */
   const rrC = W.goldScalpSetups({ rows15m: rrShortRows25(), now: OVLP_NOW });
@@ -1463,8 +1493,11 @@ function rrShortRows25(){            /* short into a bearish OB with a bullish O
       && /Kaufman ER .* < 0\.25/.test(chopOb.gateNotes.join(' ')),
          'chop: Kaufman ER(20) < 0.25 demotes the mean-reversion OB retest (stamped CHOP)');
   const chopBreak = W.goldScalpSetups({ rows15m: compLongRows(), now: OVLP_NOW });
-  const chSw = chopBreak.find(c => c.stratKey === 'sweep'), chRs = chopBreak.find(c => c.stratKey === 'rsidiv');
-  assert(!!chSw && chSw.stamps.indexOf('CHOP') < 0 && !!chRs && chRs.stamps.indexOf('CHOP') < 0,
+  /* hg-v699: sweep is EDGE-SUPPRESSED — the chop exemption is still visible
+     as the ABSENCE of a CHOP stamp on its rejected row. */
+  const chSw = (chopBreak.rejected || []).find(r => r.stratKey === 'sweep');
+  const chRs = chopBreak.find(c => c.stratKey === 'rsidiv');
+  assert(!!chSw && (chSw.stamps || []).indexOf('CHOP') < 0 && !!chRs && chRs.stamps.indexOf('CHOP') < 0,
          'chop: breakout triggers (sweep) and divergence plays are exempt from the chop demotion');
 
   /* ---- (5) NEWS-WINDOW VETO (tab level) ---- */
@@ -1491,29 +1524,35 @@ function rrShortRows25(){            /* short into a bearish OB with a bullish O
     const liveA2 = Object.keys(loadConvictionStore(ls2).live).length;
     assert(liveA2 === 0 && sA.cands.length === 0,
            'news veto: inside the tier-1 −30/+15 window NO new conviction is issued');
+    /* hg-v699: the rejected channel now also carries the EDGE-SUPPRESSED
+       sweep (measured reason) alongside the news-gated candidates — every
+       row still names its reason, and at least one is the NEWS GATE. */
     assert(sA.rejected.length >= 2
-        && sA.rejected.every(r => /NEWS (GATE|WINDOW) — no new entries/.test(r.reason)),
-           'news veto: every held-back setup renders the NEWS GATE reason line');
+        && sA.rejected.every(r => typeof r.reason === 'string' && r.reason.length > 10)
+        && sA.rejected.some(r => /NEWS (GATE|WINDOW) — no new entries/.test(r.reason)),
+           'news veto: every held-back setup carries a reason; the NEWS GATE line is among them');
     assert(M2.stubs['#gsCards'].innerHTML.indexOf('NEWS GATE — no new entries') >= 0
         || M2.stubs['#gsCards'].innerHTML.indexOf('NEWS WINDOW — no new entries') >= 0,
            'news veto: reason lines rendered on the pane (never silently dropped)');
 
-    /* already-live conviction keeps running untouched through the window */
-    const det = C2.goldScalpSetups({ rows15m: cloneRows(compLongRows()), now: FIXED,
-                                     news: { loaded: true, events: [] } });
-    const detSw = det.find(c => c.stratKey === 'sweep');
+    /* already-live conviction keeps running untouched through the window.
+       hg-v699: seed a SYNTHETIC live record (sweep-style id, far-away levels
+       that neither stop nor target on this tape) instead of a detected sweep
+       — the sweep kind is now EDGE-SUPPRESSED so detection cannot mint it,
+       and the not-yet-live rsidiv keeps the "held back" leg meaningful. */
+    const seededLive = { id: 'sweep|long|7777', dir: 'long', strategy: 'LIQUIDITY SWEEP REVERSAL',
+                         entry: 2300, stop: 2200, t1: 99999, t2: 99999,
+                         venue: 'BINANCE XAUUSDT', sym: 'XAUUSDT', issuedAt: FIXED - 60*1000, tally: 7 };
     const preStore = loadConvictionStore(ls2) || { v: 1, live: {}, history: [] };
-    preStore.live[detSw.id] = { id: detSw.id, dir: detSw.dir, strategy: detSw.strategy,
-                                entry: detSw.entry, stop: detSw.stop, t1: detSw.t1, t2: detSw.t2,
-                                venue: 'BINANCE XAUUSDT', sym: 'XAUUSDT', issuedAt: FIXED - 60*1000, tally: 7 };
+    preStore.live[seededLive.id] = seededLive;
     ls2.setItem('hgGoldscalpConviction', JSON.stringify(preStore));
     await tab2.refresh();                                      // scan B: veto active, one live record
     const sB = C2.goldscalpScan();
     const liveB2 = Object.keys(loadConvictionStore(ls2).live).length;
     assert(liveB2 === 1, 'news veto: nothing new minted even with a live record present (live count flat)');
-    assert(sB.cands.length === 1 && sB.cands[0].id === detSw.id && sB.cands[0].locked === true && sB.cands[0].vetoed === false,
+    assert(sB.cands.length === 1 && sB.cands[0].id === seededLive.id && sB.cands[0].locked === true && sB.cands[0].vetoed === false,
            'news veto: the already-live conviction is restored + locked — it keeps running untouched');
-    assert(sB.rejected.length >= 1 && sB.rejected.every(r => /NEWS (GATE|WINDOW)/.test(r.reason)),
+    assert(sB.rejected.some(r => /NEWS (GATE|WINDOW)/.test(r.reason)),
            'news veto: the OTHER (not-yet-live) setup is still held back with the reason line');
 
     /* window passes -> issuance resumes */
@@ -1587,12 +1626,13 @@ function vwapRows26(){
   assert(!!obDet && isFinite(obDet.anchor) && obDet.id === 'ob|long|' + Math.round(obDet.anchor),
          'candidate carries its numeric structure anchor (id bucket = Math.round(anchor), got ' + (obDet && obDet.anchor) + ')');
 
-  /* (1) TRADE MANAGEMENT block on EVERY card, with the card's real values */
+  /* (1) TRADE MANAGEMENT block on EVERY card, with the card's real values.
+     hg-v699: sweep is EDGE-SUPPRESSED, so the board carries rsidiv. */
   const html1 = M3.stubs['#gsCards'].innerHTML;
   const mgmtCount = (html1.match(/TRADE MANAGEMENT/g) || []).length;
-  assert(mgmtCount === s1.cands.length && s1.cands.length >= 2,
+  assert(mgmtCount === s1.cands.length && s1.cands.length >= 1,
          'trade-management block rendered on EVERY scalp card (' + mgmtCount + '/' + s1.cands.length + ')');
-  const swG = s1.cands.find(c => c.stratKey === 'sweep');
+  const swG = s1.cands.find(c => c.stratKey === 'rsidiv');
   assert(html1.indexOf('At TP1 $' + pxLike(swG.t1) + ': close 50%, move stop to breakeven ($' + pxLike(swG.entry)
       + '). Runner targets TP2 $' + pxLike(swG.t2) + '.') >= 0,
          'management block uses the card\'s real TP1/entry(breakeven)/TP2 values');
@@ -1602,17 +1642,27 @@ function vwapRows26(){
   assert(guideInCount === s1.cands.length,
          'entry guidance: price inside the zone -> "price in zone — market entry valid" on every card');
 
-  /* (3) ENTRY GUIDANCE — price outside the entry zone (vwap bounce: close sits above the zone) */
+  /* (3) ENTRY GUIDANCE — price outside the entry zone. hg-v699: the vwap
+     fixture is gone (kind EDGE-SUPPRESSED); the OB retest's structural zone
+     is price-independent, so a breakaway close above the zone hi exercises
+     the same render path. */
+  function obZoneRows26Out(){
+    const rows = obZoneRows26();
+    const last = rows[rows.length - 1];
+    rows[rows.length - 1] = Object.assign({}, last, { c: 100.6, h: Math.max(last.h, 100.8) });
+    return rows;
+  }
   C3.getGoldCandles = async (tf) => (tf === '15m')
-    ? { rows: vwapRows26(), source: 'binance-xau' }
+    ? { rows: obZoneRows26Out(), source: 'binance-xau' }
     : { rows: [], source: 'binance-xau' };
   await tab3.refresh();
   const s2 = C3.goldscalpScan();
-  const vw2 = s2.cands.find(c => c.stratKey === 'vwap');
-  assert(!!vw2 && vw2.zone && isFinite(vw2.zone.hi), 'premise: vwap candidate with a zone on the board');
+  const vw2 = s2.cands.find(c => c.stratKey === 'ob');
+  assert(!!vw2 && vw2.zone && isFinite(vw2.zone.hi), 'premise: ob candidate with a zone on the board');
   const html2 = M3.stubs['#gsCards'].innerHTML;
   assert(html2.indexOf('price outside zone — limit order at zone edge $' + pxLike(vw2.zone.hi)) >= 0,
          'entry guidance: price above the zone -> "price outside zone — limit order at zone edge <real edge>"');
+  ls3.removeItem('hgGoldscalpConviction');   /* the OB conviction just minted must not leak into the merge test */
 
   /* (2) DUPLICATE-CONVICTION MERGE — same sym+dir, anchor within 0.5×ATR */
   const seedMerge = { v: 1, live: {}, history: [] };
@@ -1883,8 +1933,9 @@ function fmtLike(n, d){ return Number(n).toLocaleString('en-US', { maximumFracti
   }
   assert(wScan.whySilent === null, 'whySilent null when candidates qualify');
   assert('armed' in wScan && 'whySilent' in wScan
-      && Array.isArray(wScan.cands) && typeof wScan.bestId === 'string' && typeof wScan.at === 'number',
-         'additive contract: existing snapshot fields untouched, armed/whySilent added');
+      && Array.isArray(wScan.cands) && (typeof wScan.bestId === 'string' || wScan.bestId === null)
+      && typeof wScan.at === 'number',
+         'additive contract: existing snapshot fields untouched, armed/whySilent added (bestId null on an all-demoted board, v699)');
 
   /* silent scan (flat rows, OVLP): lead = nearest armed trigger with $ + ATR distance */
   C4.getGoldCandles = async (tf) => (tf === '15m')
@@ -1959,10 +2010,14 @@ console.log('== volume microstructure ==');
   assert(prof && isFinite(prof.pocPrice) && Array.isArray(prof.hvns), 'goldVolumeProfile: returns POC + hvns array');
   const sweepRows = compLongRows();
   const swCands = W.goldScalpSetups({ rows15m: sweepRows, now: OFF_NOW });
-  const swCand = swCands.find(c => c.stratKey === 'sweep');
+  /* hg-v699: the sweep kind is EDGE-SUPPRESSED, so the fully-built candidate
+     (V2 volume validation and all) rides the rejected channel — the V2
+     evidence contract is unchanged, read it from there. */
+  const swCand = (swCands.rejected || []).find(c => c.stratKey === 'sweep' && typeof c.why === 'string');
   assert(!!swCand && swCand.why.indexOf('volume climax') >= 0,
          'goldScalpSetups: sweep candidate cites volume climax when sweep bar spikes');
-  assert(swCand && swCand.confluence.some(l => l.indexOf('volume climax on the liquidity sweep') >= 0),
+  assert(swCand && Array.isArray(swCand.confluence)
+      && swCand.confluence.some(l => l.indexOf('volume climax on the liquidity sweep') >= 0),
          'goldScalpSetups: volspike read in sweep confluence ledger');
   assert(swCand && swCand.why.indexOf('volume-validated') >= 0,
          'goldScalpSetups: sweep why cites V2 volume validation');
