@@ -672,6 +672,92 @@
              held: !!(ctx.tape && ctx.tape !== dir) };
   }
 
+  /* ---------------- SHARED GOLD FORMATION (hg-v698) ----------------
+     Until this repair OMNIGOLD 1 was the only gold desk that never ran
+     hgOgFormation, never priced a stop against the venue round trip (it
+     hard-coded a $5 SL floor and CALLED it "the same 0.125R bar OMNIGOLD
+     formation uses" — it was not: $5 on ~$4,500 gold is a 0.11% stop, while
+     the real bar is stopPct >= 8 x the venue round trip), and never read the
+     v689 KILL-LIST or the v685 measured-edge veto that the other two desks
+     have applied since those landed.
+
+     All of that now runs through gold-formation.js -> the SAME functions
+     OMNIGOLD and NEW GOLD call. No threshold is restated here.
+
+     CONFLUENCE. The 20-point matrix already labels every row with an
+     evidence family; those families route to the shared four classes through
+     HG_GOLD_CONF_FAMILY_CLASS, so a candidate must earn points in >= 3
+     DISTINCT classes to be tradable. A 12/20 score concentrated in two
+     classes is no longer a qualifying setup — it is WATCH with the missing
+     class named. This is the matrix's own 4-family spread rule made
+     class-aware: spreadOk counts families, which can all sit inside one
+     class (Statistical + Trend + Volatility + Regime are four families and
+     one kind of evidence).
+
+     SESSION LEG. 'Session Volatility Filter' confirms only inside a UTC
+     window whose measured gross is >= 0 — ASIA 00-06 (+0.097R, n=2,082) and
+     NY-PM 17-20 (+0.053R, n=994). LONDON 07-11 (-0.080R, n=1,305),
+     NY-OVERLAP 12-16 (-0.061R, n=2,247) and OFF 21-23 (-0.011R, n=642) do
+     not confirm. The matrix POINT is untouched (the score is what it always
+     was); only the confluence CLASS credit is withheld, and Macro / Time
+     Statistics can still satisfy the same class.
+
+     Never throws; a missing helper is a fail-closed not-formed. */
+  /* -> the CONFIRMATION LIST for this candidate: every matrix row mapped to
+     its shared class, ok = it actually earned its points, with the session
+     row re-decided against the measured UTC cohort. */
+  function og1Confirmations(ctx, best){
+    var confs = [];
+    try{
+      confs = (typeof W.hgGoldConfluenceFromMatrix === 'function' && best)
+        ? W.hgGoldConfluenceFromMatrix(best.rows) : [];
+    }catch(eM){ confs = []; }
+    /* SESSION LEG — through the SHARED helper, on the SIGNAL BAR'S OPEN
+       instant. This used to compute its own `(lastBar.t + ctx.tf) * 1000`,
+       i.e. the bar's CLOSE, and re-implement the fail-closed branch inline.
+       Both were drift: the measured cohorts are keyed on the signal bar's
+       own timestamp (backtest-omnigold-results.json trades[].tISO — the fill
+       is bar sigIdx+1), so a close-time read shifts every 1H candidate one
+       whole bucket-width later than the evidence it cites, and a second copy
+       of the rule is a second place for it to change. One helper now, for all
+       three gold desks. */
+    try{
+      if (typeof W.hgGoldApplySessionLeg === 'function'){
+        var whenMs = (typeof W.hgGoldSignalBarMs === 'function')
+          ? W.hgGoldSignalBarMs(ctx && ctx.rows1h) : NaN;
+        W.hgGoldApplySessionLeg(confs, 'Session Volatility Filter', whenMs);
+      }
+    }catch(eS){}
+    return confs;
+  }
+
+  function og1Formation(ctx, best){
+    var c = best && best.cand;
+    if (!c) return null;
+    var confs = og1Confirmations(ctx, best);
+    if (typeof W.hgGoldFormation !== 'function'){
+      return { formed: false, tradable: false, state: 'STOOD-ASIDE',
+               confluence: (typeof W.hgGoldConfluence === 'function') ? W.hgGoldConfluence(confs, {}) : null,
+               reasons: ['shared gold formation unavailable — gold-formation.js is not loaded; fail closed'] };
+    }
+    var hz = up(ctx && ctx.horizon) === 'SCALP' ? 'SCALP' : 'SWING';
+    try{
+      return W.hgGoldFormation(
+        /* rows deliberately NOT passed: OMNIGOLD calls hgOgFormation
+           rows-less (omnigold.js hgOgEvaluate), so passing them here would
+           give OG1 a gold-catalog verdict OMNIGOLD never computes — a new
+           asymmetry in place of the one this ship removes. Identical call,
+           identical verdict, on all three desks. */
+        { kind: c.sid, stratKey: c.sid, horizon: hz, dir: c.dir,
+          plan: { entry: c.entry, stop: c.stop, t1: c.t1, rr1: c.rr1 },
+          entry: c.entry, stop: c.stop, t1: c.t1 },
+        { tab: 'omnigold1', mechanic: c.sid + '-' + hz, confirmations: confs });
+    }catch(eF){
+      return { formed: false, tradable: false, state: 'STOOD-ASIDE', confluence: null,
+               reasons: ['gold formation threw — fail closed: ' + ((eF && eF.message) || eF)] };
+    }
+  }
+
   /* ---------------- SECTION 3 ---------------- */
   function decide(ctx, best){
     var s3 = { score: best ? best.score : 0, decision: 'NO SETUP', tier: null, qualifies: false, why: '', missing: [], mlGuard: false };
@@ -698,13 +784,40 @@
       s3.missing = best.rows.filter(function(r){ return !r.got; }).map(function(r){ return { name: r.name, pts: r.pts, need: r.evidence }; });
     }
     if (best.held){ s3.qualifies = false; s3.decision = 'HELD — against gold tape'; s3.why += ' · desk tape opposes this direction'; }
-    /* Cost floor (hg-v607): SL$ < $5 is > 0.125R of the XM $0.60 round-trip
-       — the same 0.125R bar OMNIGOLD formation uses. Watch cards still paint. */
+    /* NIGHTLY SL FLOOR (hg-v607, corrected hg-v698). This is the 40-day
+       rolling retune's own minRisk from scripts/formation-nightly.json
+       (formation-nightly.js:180/369 -> HG_OG1_FORM_EDGE), NOT a restatement
+       of OMNIGOLD's 0.125R bar — the previous comment claimed it was, and it
+       was not. The venue-true 0.125R bar is applied separately below, by the
+       function that owns it. Both floors are named on the card. */
     var minRisk = og1FormEdge().minRisk;
     if (s3.qualifies && best.cand && has(best.cand.risk) && best.cand.risk < minRisk){
       s3.qualifies = false; s3.tier = null; s3.decision = 'NO SETUP';
-      s3.why += ' · cost floor: SL$ ' + num(best.cand.risk) + ' < $' + num(minRisk)
-        + ' is fee-toxic at XM $0.60 RT (nightly floor, never below $5)';
+      s3.why += ' · nightly SL floor: SL$ ' + num(best.cand.risk) + ' < $' + num(minRisk)
+        + ' (scripts/formation-nightly.json omnigold1.minRisk, never below $5)';
+    }
+    /* SHARED GOLD FORMATION (hg-v698) — venue stop floor (8x the venue round
+       trip, hgOgFormation), measured kind demotion, gold-setup-edge, catalog,
+       v689 KILL-LIST, v685 measured-edge veto and the >= 3-distinct-class
+       confluence bar. All through gold-formation.js, which delegates every
+       threshold to the function that already owned it. Applied LAST so its
+       verdict is decided on the plan the rest of Section 3 settled on.
+       Fail closed: no verdict at all -> NO SETUP with the reason named. */
+    s3.formation = og1Formation(ctx, best);
+    if (s3.qualifies){
+      var fm = s3.formation;
+      if (!fm){
+        s3.qualifies = false; s3.tier = null; s3.decision = 'NO SETUP';
+        s3.why += ' · shared gold formation produced no verdict — fail closed';
+      } else if (fm.state === 'WATCH'){
+        s3.qualifies = false; s3.tier = null; s3.decision = 'WATCH — short of 3 confirmation classes';
+        s3.watch = true;
+        s3.why += ' · ' + ((fm.confluence && fm.confluence.why) || 'confluence short');
+      } else if (fm.formed !== true){
+        s3.qualifies = false; s3.tier = null;
+        s3.decision = (fm.state === 'KILLED') ? 'NO SETUP — kill-listed' : 'NO SETUP';
+        s3.why += ' · ' + ((fm.reasons && fm.reasons.length) ? fm.reasons.join(' · ') : 'formation declined');
+      }
     }
     return s3;
   }
@@ -973,6 +1086,18 @@
     why.push(basis);
     why.push('matrix ' + m.score + '/20' + (has(m.reachable) && m.reachable < 20 ? ' (reachable ' + m.reachable + ')' : '') + ' · gates ' + gp + '/12 · families ' + (m.families || []).length + (m.spreadOk ? '' : ' (spread fail)') + ' · RR ' + num(rr, 1) + ' · location ' + loc + ' · reclaim ' + (c && c.reclaimed ? 'closed' : 'pending'));
     if (m.held && grade !== 'D'){ if (grade === 'A' || grade === 'B+' || grade === 'B') grade = 'C'; why.push('capped at C — against the desk gold tape (HELD)'); }
+    /* hg-v698: a candidate that did not FORM is never trade-ready, whatever
+       the gates and matrix say. Same cap and same strength as HELD, because
+       it means the same thing to a reader: worth watching, not worth taking.
+       The reason is the formation's own words — the missing confluence class,
+       the venue stop floor, the kill-list row — never a bare downgrade. */
+    var fmG = c && c.verdict && c.verdict.formation;
+    if (fmG && fmG.formed !== true && grade !== 'D'){
+      if (grade === 'A' || grade === 'B+' || grade === 'B') grade = 'C';
+      why.push('capped at C — ' + (fmG.state === 'WATCH'
+        ? ((fmG.confluence && fmG.confluence.why) || 'short of 3 confirmation classes')
+        : ((fmG.reasons && fmG.reasons.length) ? fmG.reasons.join(' · ') : 'did not form')));
+    }
     var next = grade === 'A' ? null
       : grade === 'B+' ? 'A needs 12/12 gates, RR ≥ 2.0, location A/B+, matrix ≥ 10 with a 4-family spread'
       : grade === 'B' ? 'B+ needs gates ≥ 11 with matrix ≥ 8 or location A'
@@ -1018,6 +1143,16 @@
     out.push({ h: 'Statistics & ML', t: ev('Statistical Positioning (VWAP / Z)').ev + ' · ' + ev('Algorithmic Momentum (ML)').ev });
     out.push({ h: 'Session & time', t: ev('Session Volatility Filter').ev + ' · ' + ev('Time Statistics').ev + ' · regime fit: ' + ev('Regime Fit').ev });
     out.push({ h: 'Execution', t: ev('Execution Quality').ev });
+    /* hg-v698: the shared confluence contract, in the candidate's own words. */
+    (function(){
+      var fm = c.verdict && c.verdict.formation;
+      var line = (fm && fm.confluence && typeof W.hgGoldConfluenceLine === 'function')
+        ? W.hgGoldConfluenceLine(fm.confluence) : '';
+      var extra = (fm && fm.reasons && fm.reasons.length) ? (' · ' + fm.reasons.join(' · ')) : '';
+      out.push({ h: 'Confluence (>= 3 distinct classes)',
+                 t: (line || 'confluence contract unavailable — gold-formation.js is not loaded')
+                    + (fm ? (' · formation ' + fm.state) : '') + extra });
+    })();
     out.push({ h: 'Gates (12 core)', t: 'pass ' + c.gates.gates.filter(function(g){ return g.pass; }).map(function(g){ return 'G' + g.n; }).join(' ') + ' · fail ' + (c.gates.gates.filter(function(g){ return !g.pass; }).map(function(g){ return 'G' + g.n + ' ' + g.name + ' (' + g.note + ')'; }).join(' · ') || 'none') });
     out.push({ h: 'Veto stack', t: s0.clear ? ('VETO CLEAR ' + s0.passed + '/10' + (s0.veto.filter(function(v){ return v.state === 'unavailable'; }).length ? ' · unavailable checks: ' + s0.veto.filter(function(v){ return v.state === 'unavailable'; }).map(function(v){ return v.name; }).join(', ') : '')) : 'VETO ACTIVE — ' + s0.active.map(function(v){ return v.name; }).join(' · ') });
     var missing = m.rows.filter(function(q){ return !q.got; }).sort(function(a, b){ return b.pts - a.pts; });
@@ -1041,6 +1176,17 @@
       + '<b class="og1-dir">' + esc(up(c.dir)) + '</b> XAUUSD · <b>' + esc(c.sid) + '</b> ' + esc(c.name) + ' <span class="dim">— ' + esc(c.kind) + '</span> ' + verdictChip(c.verdict) + (g.tradeReady ? tag('trade-ready grade') : tag('watch grade — not trade-ready')) + '</div>';
     h += '<div class="og1-levels"><div><i>ENTRY</i><b>' + px(c.entry) + '</b><u>' + (c.dir === 'long' ? 'BUY ZONE' : 'SELL ZONE') + '</u></div><div><i>STOP</i><b>' + px(c.stop) + '</b><u>SL$ ' + num(c.risk) + '</u></div><div><i>TP1</i><b>' + px(c.t1) + '</b><u>RR ' + num(c.rr1, 1) + ' · ' + esc(c.t1Label) + '</u></div><div><i>TP2</i><b>' + px(c.t2) + '</b><u>RR ' + num(c.rr2, 1) + ' · ' + esc(c.t2Label) + '</u></div></div>';
     h += '<div class="dim">grade basis: ' + esc(g.why.join(' · ')) + '</div>';
+    /* hg-v698: named independent confirmations + any missing class, rendered
+       by the shared helper so all three gold desks print the same block. */
+    try{
+      var fmMp = c.verdict && c.verdict.formation;
+      if (fmMp && fmMp.confluence && typeof W.hgGoldConfluenceHtml === 'function'){
+        h += W.hgGoldConfluenceHtml(fmMp.confluence);
+      }
+      if (fmMp && fmMp.formed !== true && fmMp.reasons && fmMp.reasons.length){
+        h += '<div class="dim" style="margin-top:2px">not tradable — ' + esc(fmMp.reasons.join(' · ')) + '</div>';
+      }
+    }catch(eMpC){}
     h += '<details class="og1-study" open><summary>DETAIL STUDY</summary><dl>' + mp.study.map(function(s){ return '<dt>' + esc(s.h) + '</dt><dd>' + esc(s.t) + '</dd>'; }).join('') + '</dl></details>';
     h += '</div>';
     return h;
@@ -1443,6 +1589,10 @@
   W.hgOg1BestHtml = hgOg1BestHtml;
   W.hgOg1MostProbable = hgOg1MostProbable;
   W.hgOg1MostProbableHtml = hgOg1MostProbableHtml;
+  /* hg-v698: the shared-formation entry points, exported so the confluence
+     mapping and the venue/kill-list verdict are testable without a mount. */
+  W.hgOg1Confirmations = og1Confirmations;
+  W.hgOg1Formation = og1Formation;
   W.omnigold1ScalpState = function(){ return __st.lastScalp; };
   W.hgOg1RunScan = function(){ return __st.ui ? runScan(__st.ui) : Promise.resolve('skipped: not mounted'); };
   W.omnigold1State = function(){ return __st.last; };

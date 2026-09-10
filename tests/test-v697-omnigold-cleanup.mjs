@@ -67,8 +67,24 @@ assert.ok(/v697 rule C: keep parity/.test(src),
   'rule C rationale comment present');
 assert.ok(/<details class="note" id="ogDemotedDetails"/.test(src),
   'demoted details wrapper present');
-assert.ok(/measured-negative setup/.test(src),
-  'demoted summary label present');
+/* hg-v698 audit fix: the summary no longer says "N measured-negative
+   setups" for the WHOLE list. Since v698 a card can also stand aside merely
+   for being short of the >= 3-distinct-class confluence bar, which is NOT a
+   measurement against it, and this collapsed summary is the only text a
+   reader sees before expanding — so it named 11 WATCH cards measured-negative
+   whenever 11 WATCH cards existed. The label is still there and still names
+   the stood-aside population; it now carries BOTH counts, from the same
+   hgOgStoodAsideSplit predicate the inner sections partition on. Rule C's
+   actual claim (nothing is deleted, the section still labels itself) is
+   asserted harder here than before, not relaxed. */
+assert.ok(/' stood aside'/.test(src),
+  'demoted summary still labels the stood-aside population');
+assert.ok(/measured-negative \/ venue stop floor/.test(src),
+  'demoted summary names the measured-negative count');
+assert.ok(/WATCH \(short of 3 confirmation classes\)/.test(src),
+  'demoted summary names the WATCH count separately (v698: they mean opposite things)');
+assert.ok(/hgOgStoodAsideSplit\(ogDemotedCards\)/.test(src),
+  'both counts come from the ONE shared predicate, so the summary and the status tally cannot disagree');
 assert.ok(/hgOgDemotedSectionHtml\(ogDemotedCards\)/.test(src),
   'hgOgDemotedSectionHtml still called (parity preserved)');
 

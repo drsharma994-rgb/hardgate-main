@@ -13,12 +13,44 @@ function fin(x){
   return isFinite(n) ? n : null;
 }
 
+/* GOLD DESK ALIASES (hg-v698).
+
+   data/desk-tab-params.json carries measured rows for `gold-swing`
+   (minRR 1.5) and `gold-scalp` (minRR 1.2) and NOTHING for omnigold,
+   omnigold1 or newgold. Those three desks address themselves by their own
+   tab keys — 'OMNIGOLD:SWING', 'OMNIGOLD:SCALP', 'omnigold1', 'NEWGOLD:1H',
+   'NEWGOLD:4H' — so every hgDeskParam call from a gold desk missed the tab
+   row entirely and fell through to the crypto global rrMin 2.0. Three gold
+   desks were reading a crypto default while the measured gold rows sat in
+   the same file unread.
+
+   The mapping is by HORIZON, because that is what the two measured rows are
+   split on: 4H / SWING work routes to gold-swing, 1H / 15m / SCALP work to
+   gold-scalp. No new numbers are introduced — each desk simply reaches the
+   gold row that was already measured for its horizon. */
+function normGoldTab(tab){
+  /* SWING-horizon gold: 4H structure. */
+  if (tab === 'omnigold:swing' || tab === 'omnigold1:swing' || tab === 'newgold:4h'
+      || tab === 'newgold:omni-4h') return 'gold-swing';
+  /* SCALP-horizon gold: 1H / 15m execution. */
+  if (tab === 'omnigold:scalp' || tab === 'omnigold1:scalp' || tab === 'newgold:1h'
+      || tab === 'newgold:omni-15m') return 'gold-scalp';
+  /* Horizon-less desk keys. omnigold1 records BOTH horizons into one forward
+     pool ('omnigold1'), and its default horizon is SWING (omnigold1.js:171
+     `up(inp.horizon) === 'SCALP' ? 'SCALP' : 'SWING'`), so the swing row is
+     the honest default rather than the crypto global. */
+  if (tab === 'omnigold' || tab === 'omnigold1' || tab === 'newgold') return 'gold-swing';
+  return null;
+}
+
 function normTab(tab){
   tab = String(tab || 'swing').toLowerCase();
   if (tab === 'divergence') return 'div';
   if (tab === 'goldswing') return 'gold-swing';
   if (tab === 'goldscalp') return 'gold-scalp';
   if (tab === 'reversalsniper' || tab === 'sniper') return 'reversalsniper';
+  var gold = normGoldTab(tab);
+  if (gold) return gold;
   return tab;
 }
 
@@ -97,6 +129,7 @@ function hgDeskBacktestBannerHtml(tab){
 }
 
 G.hgBacktestParamsLoad = hgBacktestParamsLoad;
+G.hgNormDeskTab = normTab;      /* hg-v698: exported so the gold aliases are testable */
 G.hgGlobalParam = hgGlobalParam;
 G.hgDeskParam = hgDeskParam;
 G.hgDeskParamsForTab = hgDeskParamsForTab;

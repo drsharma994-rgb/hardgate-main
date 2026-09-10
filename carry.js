@@ -691,8 +691,13 @@ is in flight it reports 'busy' (overlaps never double-fetch).
           }));
           if (bj + CHUNK < cards.length) await __sleep(CHUNK_SLEEP_MS);
         }
-        cards = cards.filter(function(c){ return c.sp && c.sp.spreadAPR >= SPREAD_MIN_APR; });
       }
+      /* v641 netted spreads of borrow cost before this filter, but left the
+         filter INSIDE the borrowRateForBase guard — with the borrow module
+         absent the >= SPREAD_MIN_APR gate silently vanished and zero-spread
+         pairs printed cards. The gate must run unconditionally: net of
+         borrow when rates are available, on the gross spread when not. */
+      cards = cards.filter(function(c){ return c.sp && c.sp.spreadAPR >= SPREAD_MIN_APR; });
       cards.sort(function(a, b){ return b.sp.spreadAPR - a.sp.spreadAPR; });
 
       if (cards.length && typeof bybitFunding === 'function'){

@@ -131,10 +131,20 @@ console.log('\n== per-venue demotion counts: 18 at XM, 33 at PAXG ==');
     ok(d.reasons.some(r => /grossR .* direction measured wrong at scale/.test(r)),
        k + ' demoted at XM for measured direction, not fees');
   });
-  ok(!W.hgOgKindDemotion('RIBBON-PULLBACK', xm, 'SWING'),
-     'RIBBON-PULLBACK is not demoted on SWING — that horizon paid');
+  /* HG_OG_SWING_PREFER no longer exempts a kind from the demotion verdict.
+     It used to short-circuit hgOgKindDemotion before the baked row was even
+     read, so a measured-negative kind formed a tradable SWING card with no
+     evidence check while every other demoted kind needed a live 'has paid'
+     forward ledger. Demotion is a property of the baked row and the venue —
+     the horizon does not change what was measured; the un-demotion route is
+     hgOgForwardPaid inside hgOgFormation, tested below. */
+  ok(!!W.hgOgKindDemotion('RIBBON-PULLBACK', xm, 'SWING'),
+     'RIBBON-PULLBACK stays demoted on SWING — no name-list exemption');
   ok(!!W.hgOgKindDemotion('RIBBON-PULLBACK', xm, 'SCALP'),
      'RIBBON-PULLBACK stays demoted on SCALP');
+  ok(W.hgOgFormation({ kind: 'RIBBON-PULLBACK', horizon: 'SWING', dir: 'long',
+       plan: { dir: 'long', entry: 3400, stop: 3366, t1: 3468 } }).formed === false,
+     'and it does not form a tradable SWING card without live forward evidence');
   ok(W.hgOgSwingPrefer('BOS-RETEST', 'SWING') && !W.hgOgSwingPrefer('BOS-RETEST', 'SCALP'),
      'BOS-RETEST prefer is SWING-only');
 }
@@ -260,9 +270,20 @@ console.log('\n== END TO END at the XM default: the real detect->evaluate chain 
     && isFinite(stopPct(c)) && stopPct(c) >= 0.2 && stopPct(c) <= 1.0
     && !GROSS_NEGATIVE_18.includes(String(c.kind).toUpperCase()));
   ok(scalpTight.length > 0, 'the battery produced scalps with 0.2-1% stops (' + scalpTight.length + ')');
-  const refused = scalpTight.filter(c => c.formation && c.formation.formed === false);
+  /* hg-v698: this file tests the VENUE CONTROL, so the assertion is about the
+     venue stop floor and the kind demotion — the two things a venue switch
+     moves. Since hg-v698 a card can also stand aside for being short of the
+     shared >= 3-distinct-class confluence bar (gold-formation.js), which is
+     not a cost verdict and does not change with the venue; those refusals are
+     excluded here and are covered by tests/test-v698-gold-formation.mjs.
+     Anything refused for a COST or EVIDENCE reason still fails this. */
+  const refused = scalpTight.filter(c => c.formation && c.formation.formed === false
+    && !(c.formation.confluenceShort === true || c.formation.confluenceUnavailable === true));
   ok(refused.length === 0, 'every one of them FORMS at XM costs'
     + (refused.length ? ' — refused: ' + refused.map(c => c.kind + '@' + stopPct(c).toFixed(2) + '%').join(', ') : ''));
+  /* and the venue floor itself is still what refuses a too-tight stop: */
+  const stopFloorRefused = scalpTight.filter(c => c.formation && c.formation.stopFloor);
+  ok(stopFloorRefused.length === 0, 'none of them trips the XM 0.16% stop floor');
   ok(W.hgOgFormation({ kind: 'ORB', horizon: 'SCALP', plan: { entry: 1000, stop: 998 } }).formed === true,
      'floor check: a 0.2% stop clears the XM 0.16% floor');
   W.hgOgSetVenue('PAXG');
@@ -279,8 +300,20 @@ console.log('\n== END TO END at the XM default: the real detect->evaluate chain 
      'every demotion stamped at XM is in the gross-negative 18 — none of PAXG\'s fee-only demotions');
 
   /* 3. Survivors sort first: in desk order, any section containing a
-        survivor is LED by one. */
-  const ordered = W.hgOgDeskOrder(formed, 'none');
+        survivor is LED by one.
+
+        hg-v698: ranked over the cost/evidence-clean population rather than
+        the FORMED one. This battery deliberately supplies no killzone, no
+        HTF daily and no macro (see `extra` above), so since hg-v698 the
+        session/HTF confirmation class is empty BY CONSTRUCTION here and the
+        formed set contains no survivor to rank. That is the confluence
+        contract failing closed on absent data, which is correct — but it is
+        not what this assertion is about. hgOgDeskOrder's survivor ordering is
+        a property of the RANKER, so it is exercised over everything the
+        venue and the measured evidence let through. */
+  const orderable = all.filter(c => !(c.formation && c.formation.formed === false
+    && !(c.formation.confluenceShort === true || c.formation.confluenceUnavailable === true)));
+  const ordered = W.hgOgDeskOrder(orderable, 'none');
   const cls = c => ((c && c.grade && c.grade.ticket) ? 2 : 0);   /* tape 'none' -> no alignment bit */
   const surv = c => !!(c.replaySurvivor || W.hgOgIsSurvivor(c.kind));
   const firstOf = {}, hasSurv = {};
@@ -302,7 +335,10 @@ console.log('\n== END TO END at the XM default: the real detect->evaluate chain 
   ok(!/ENTRY/.test(sect) && !/T1/.test(sect), 'and no levels are printed on a stood-aside card');
 
   /* 5. The counts strip from this same partition is the real population. */
-  const counts = W.hgOgScanCounts(ordered, demotedCards, 'none');
+  /* hg-v698: the counts strip describes the TRADABLE partition, so it is fed
+     the formed list (ordered exactly as runScan orders it) — not the wider
+     `orderable` set assertion 3 uses to exercise the ranker. */
+  const counts = W.hgOgScanCounts(W.hgOgDeskOrder(formed, 'none'), demotedCards, 'none');
   ok(counts.tradable === formed.length && counts.demoted === demotedCards.length,
      'counts strip: tradable ' + counts.tradable + ' · demoted ' + counts.demoted
      + ' · survivors leading ' + counts.survivorLedSections + ' section(s) — all from the partition');

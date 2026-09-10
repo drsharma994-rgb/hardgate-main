@@ -203,8 +203,10 @@ function verdictWith(patch){
 
   const withGold = verdictWith({ btc: { close: 7e4, ema50: 6.2e4, ema200: 6e4 }, gold: { close: 2500, ema200: 2400 } });
   const noGold   = verdictWith({ btc: { close: 7e4, ema50: 6.2e4, ema200: 6e4 }, gold: null });
-  assert(withGold.score === noGold.score + 1 && withGold.scoredTotal === 9,
-         'R7: gold now moves aggregate score (+1 when bid firm), scoredTotal is 9');
+  /* Increment 5 added R10 EXCHANGE NETFLOW — ten scored gauges now, so
+     scoredTotal / rows.length / the N-of-M status counts all read 10. */
+  assert(withGold.score === noGold.score + 1 && withGold.scoredTotal === 10,
+         'R7: gold now moves aggregate score (+1 when bid firm), scoredTotal is 10');
 }
 
 /* ---------------- 7b) R8 STABLECOIN FLOWS — dry powder, ±0.5% band ---------------- */
@@ -213,21 +215,26 @@ function verdictWith(patch){
   let v = verdictWith({ stable: { totalUSD: 100.6e9, delta7dUSD: 0.6e9, delta30dUSD: 1.1e9 } });
   assert(v.rows[7].id === 'R8' && v.rows[7].name === 'DRY POWDER' && v.rows[7].scored === true,
          'R8: row id "R8", label "DRY POWDER", scored gauge');
+  /* Increment 5 reworked the R8 ledger text: "(INFLOWS)/(DRAINING)/(FLAT)"
+     became a 30d printing-cadence readout ("30D slope ±x.xx% — printing
+     cadence expanding / fuel draining / flat cadence"); the short driver
+     label is now "dry powder in / out / stables flat". Scores unchanged. */
   assert(v.rows[7].stamp === 'BULL' && v.rows[7].score === 1 && v.rows[7].stampClass === 'pass'
-         && v.rows[7].detail.indexOf('(INFLOWS)') > -1 && v.rows[7].detail.indexOf('risk-on') > -1,
-         'R8: +0.6% 7d flow (> +0.5%) => BULL/+1 INFLOWS');
+         && v.rows[7].detail.indexOf('STABLECOINS $100.6B') > -1 && v.rows[7].detail.indexOf('7D +$600.0M') > -1
+         && v.rows[7].detail.indexOf('printing cadence expanding') > -1 && v.rows[7].short === 'dry powder in',
+         'R8: +0.6% 7d flow (> +0.5%) => BULL/+1 dry powder in');
 
   /* -0.6% 7d flow => liquidity DRAINING => BEAR/-1, with ledger text shape */
   v = verdictWith({ stable: { totalUSD: 308.9e9, delta7dUSD: -3e9, delta30dUSD: -4.5e9 } });
   assert(v.rows[7].stamp === 'BEAR' && v.rows[7].score === -1 && v.rows[7].stampClass === 'veto'
          && v.rows[7].detail.indexOf('STABLECOINS $308.9B') > -1 && v.rows[7].detail.indexOf('7D -$3.0B') > -1
-         && v.rows[7].detail.indexOf('(DRAINING)') > -1 && v.rows[7].detail.indexOf('30D -$4.5B') > -1,
-         'R8: -0.6% 7d flow => BEAR/-1, ledger "STABLECOINS $308.9B · 7D -$3.0B (DRAINING) · 30D -$4.5B"');
+         && v.rows[7].detail.indexOf('fuel draining') > -1 && v.rows[7].short === 'dry powder out',
+         'R8: -0.6% 7d flow => BEAR/-1, ledger "STABLECOINS $308.9B · 7D -$3.0B · … fuel draining"');
 
   /* exactly ±0.5% boundaries sit inside the band => NA/0 FLAT */
   v = verdictWith({ stable: { totalUSD: 100.5e9, delta7dUSD: 0.5e9 } });
-  assert(v.rows[7].stamp === 'NA' && v.rows[7].score === 0 && v.rows[7].detail.indexOf('(FLAT)') > -1,
-         'R8: exactly +0.5% boundary => NA/0 FLAT (band edge not scored)');
+  assert(v.rows[7].stamp === 'NA' && v.rows[7].score === 0 && v.rows[7].detail.indexOf('flat cadence') > -1,
+         'R8: exactly +0.5% boundary => NA/0 flat cadence (band edge not scored)');
 
   v = verdictWith({ stable: { totalUSD: 99.5e9, delta7dUSD: -0.5e9 } });
   assert(v.rows[7].stamp === 'NA' && v.rows[7].score === 0, 'R8: exactly -0.5% boundary => NA/0 FLAT');
@@ -270,7 +277,7 @@ function verdictWith(patch){
     stable: { totalUSD: 101e9, delta7dUSD: 1e9, delta30dUSD: 2e9 },
     dvol:   { dvol: 55, slope: { slope: 'FALLING', chg: -3 } }
   });
-  assert(allOn.score === 9 && allOn.word === 'RISK-ON' && allOn.cls === 'long' && allOn.scoredTotal === 9
+  assert(allOn.score === 9 && allOn.word === 'RISK-ON' && allOn.cls === 'long' && allOn.scoredTotal === 10
          && allOn.why.indexOf('+1 BTC trend up') > -1 && allOn.why.indexOf('+1 dry powder in') > -1,
          'aggregate: all nine risk-on => score 9, RISK-ON, cls long, drivers listed');
 
@@ -285,7 +292,7 @@ function verdictWith(patch){
     stable: { totalUSD: 99e9, delta7dUSD: -1e9, delta30dUSD: -2e9 },
     dvol:   { dvol: 75, slope: { slope: 'RISING', chg: 3 } }
   });
-  assert(allOff.score === -9 && allOff.word === 'RISK-OFF' && allOff.cls === 'short' && allOff.scoredTotal === 9,
+  assert(allOff.score === -9 && allOff.word === 'RISK-OFF' && allOff.cls === 'short' && allOff.scoredTotal === 10,
          'aggregate: all nine risk-off => score -9, RISK-OFF, cls short');
 
   const plus3 = regimeVerdict({ // exactly +3 boundary => RISK-ON
@@ -336,8 +343,8 @@ function verdictWith(patch){
   const allNull = regimeVerdict({
     btc: null, ethbtc: null, btcd: null, fedliq: null, dxy: null, us10y: null, gold: null, stable: null, dvol: null
   });
-  assert(allNull.score === 0 && allNull.word === 'MIXED — SELECTIVE' && allNull.rows.length === 9
-         && allNull.why.indexOf('no directional drivers') > -1 && allNull.scoredTotal === 9,
+  assert(allNull.score === 0 && allNull.word === 'MIXED — SELECTIVE' && allNull.rows.length === 10
+         && allNull.why.indexOf('no directional drivers') > -1 && allNull.scoredTotal === 10,
          'aggregate: all sources null => score 0, MIXED, 9 rows, honest "no directional drivers"');
 
   let threw = false;
@@ -346,7 +353,7 @@ function verdictWith(patch){
   assert(!threw, 'aggregate: null/undefined/empty argument never throws');
 
   const mixedWhy = allOn.why + ' | ' + allNull.why;
-  assert(allOn.why.indexOf('score +9/9') === 0 && allOff.why.indexOf('score -9/9') === 0,
+  assert(allOn.why.indexOf('score +9/10') === 0 && allOff.why.indexOf('score -9/10') === 0,
          'aggregate: why string opens with signed score out of 9');
   assert(mixedWhy.length > 0, 'aggregate: why strings built');
 }
@@ -395,7 +402,7 @@ const autoOk = await waitForScan('auto-run');
 assert(autoOk, 'auto-run on mount completes (all sources fail fast, no hang)');
 assert(outNode.innerHTML.indexOf('class="empty"') > -1 && outNode.innerHTML.indexOf('note warn') > -1,
        'all-sources-down render: .note warn + .empty (graceful, no throw)');
-assert(statNode.textContent.indexOf('0/9 sources ok') > -1, 'status line reports 0/9 sources ok');
+assert(statNode.textContent.indexOf('0/10 sources ok') > -1, 'status line reports 0/10 sources ok');
 assert(typeof runNode._click === 'function', 'REFRESH button has a click handler');
 
 runNode._click();
@@ -426,8 +433,8 @@ async function clickAndWait(target){
   };
   sandbox.ema = (arr) => arr.map(() => arr[arr.length - 1] - 100); // close > ema => BULL legs
 
-  const ok = await clickAndWait('2/9 sources ok'); // btc + gold hit stubs, seven sources still dead
-  assert(ok, 'stubbed scan completes with 2/9 sources ok (btc + gold)');
+  const ok = await clickAndWait('2/10 sources ok'); // btc + gold hit stubs, seven sources still dead
+  assert(ok, 'stubbed scan completes with 2/10 sources ok (btc + gold)');
   assert(klineCalls.some(c => c.indexOf('XAUUSDT|1d|') === 0), 'gold leg calls binanceKlines("XAUUSDT", "1d", …)');
   assert(!klineCalls.some(c => c.indexOf('PAXGUSDT') > -1), 'gold leg never calls PAXGUSDT anymore');
   assert(klineCalls.some(c => c.indexOf('BTCUSDT|1d|') === 0), 'btc leg still calls binanceKlines("BTCUSDT", "1d", …)');
@@ -439,7 +446,7 @@ async function clickAndWait(target){
 {
   /* 11a) null payload => honest NA row, no throw (nothing cached yet, so this really fetches) */
   sandbox.fetch = async () => ({ ok: true, status: 200, json: async () => null });
-  let ok = await clickAndWait('2/9 sources ok');
+  let ok = await clickAndWait('2/10 sources ok');
   assert(ok && outNode.innerHTML.indexOf('DRY POWDER') > -1 && outNode.innerHTML.indexOf('data unavailable') > -1,
          'R8: null payload => DRY POWDER row renders NA "data unavailable", scan survives');
 
@@ -458,12 +465,12 @@ async function clickAndWait(target){
       return { ok: true, status: 200, json: async () => llamaPayload };
     return { ok: false, status: 503, json: async () => null };
   };
-  ok = await clickAndWait('3/9 sources ok'); // btc + gold + stablecoins
-  assert(ok, 'stubbed scan completes with 3/9 sources ok (btc + gold + stablecoins)');
+  ok = await clickAndWait('3/10 sources ok'); // btc + gold + stablecoins
+  assert(ok, 'stubbed scan completes with 3/10 sources ok (btc + gold + stablecoins)');
   assert(outNode.innerHTML.indexOf('DRY POWDER') > -1
          && outNode.innerHTML.indexOf('STABLECOINS $100.0B') > -1
-         && outNode.innerHTML.indexOf('(INFLOWS)') > -1,
-         'R8: malformed entries tolerated — $100.0B total from valid entries, +0.8% 7d => INFLOWS ledger row');
+         && outNode.innerHTML.indexOf('dry powder in') > -1,   /* Increment 5 label ("(INFLOWS)" retired) */
+         'R8: malformed entries tolerated — $100.0B total from valid entries, +0.8% 7d => dry-powder-in ledger row');
   assert(outNode.innerHTML.indexOf('class="empty"') === -1, 'R8: partial-success render is a ledger, not the empty state');
 }
 
@@ -586,8 +593,8 @@ assert(pbDerived && pbDerived.cls === 'long' && pbDerived.bias === 'LONG-ONLY' &
 /* ---------------- 13) playbook panel in the rendered dashboard ---------------- */
 console.log('== playbook panel: rendered from live scan state ==');
 /* current stub state (btc+gold ok, stables cached inflow, rest dead) => score +3 RISK-ON with gold scored */
-let okMix = await clickAndWait('3/9 sources ok');
-assert(okMix, 'playbook UI: scan completes with btc+gold+stables (3/9 sources ok)');
+let okMix = await clickAndWait('3/10 sources ok');
+assert(okMix, 'playbook UI: scan completes with btc+gold+stables (3/10 sources ok)');
 assert(outNode.innerHTML.indexOf('PLAYBOOK') > -1 && outNode.innerHTML.indexOf('INVALIDATION —') > -1,
        'playbook UI: PLAYBOOK card + INVALIDATION plan line rendered');
 assert(outNode.innerHTML.indexOf('RISK-ON') > -1 && (outNode.innerHTML.indexOf('LONG-ONLY') > -1 || outNode.innerHTML.indexOf('FULL') > -1),
@@ -630,8 +637,8 @@ sandbox.fetch = async (url) => {
     return { ok: true, status: 200, json: async () => ethbtcKlines };
   return { ok: false, status: 503, json: async () => null };
 };
-let okOn = await clickAndWait('9/9 sources ok');
-assert(okOn, 'playbook UI: fully-stubbed RISK-ON scan completes (9/9 sources ok)');
+let okOn = await clickAndWait('9/10 sources ok');
+assert(okOn, 'playbook UI: fully-stubbed RISK-ON scan completes (9/10 sources ok)');
 assert(outNode.innerHTML.indexOf('LONG-ONLY') > -1 && outNode.innerHTML.indexOf('FULL') > -1
        && outNode.innerHTML.indexOf('card long') > -1,
        'playbook UI: RISK-ON renders LONG-ONLY at FULL size on a .card.long');
@@ -775,10 +782,10 @@ console.log('== BRAIN state getter (window.regimeState) ==');
   const stat3 = el3._nodes['#regimeStat'], out3 = el3._nodes['#regimeOut'], run3 = el3._nodes['#regimeRun'];
   let settled3 = false;
   for (let i = 0; i < 200; i++){
-    if (run3.disabled === false && (stat3.textContent || '').indexOf('9/9 sources ok') > -1){ settled3 = true; break; }
+    if (run3.disabled === false && (stat3.textContent || '').indexOf('9/10 sources ok') > -1){ settled3 = true; break; }
     await new Promise(r => setTimeout(r, 25));
   }
-  assert(settled3, 'state: fully-stubbed RISK-ON scan completes (9/9 sources ok)');
+  assert(settled3, 'state: fully-stubbed RISK-ON scan completes (9/10 sources ok)');
 
   const st = W3.regimeState();
   assert(st && typeof st === 'object' && typeof st.at === 'number' && isFinite(st.at),

@@ -43,12 +43,20 @@ ok(W.rsIsDeskVenue('delta') && W.rsIsDeskVenue('coindcx') && !W.rsIsDeskVenue('b
    'rsIsDeskVenue: delta + coindcx only');
 ok(typeof W.rsLoadUniverse === 'function', 'rsLoadUniverse exported');
 ok(swCacheOk(readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache matches build stamp');
+/* Timestamps must be FRESH wall-clock ms: v677 stamps formedT off the last
+   closed bar and rsConviction penalises stale setups (-2 past ~4 bars), and
+   v678 charges -3 for an against-tape long — a dump tape is by definition
+   against-tape. The old epoch-0 t:i*14400 fixture read as a 1970 setup and
+   the two penalties together (8 - 2 - 3 = 3) sank it below MIN_CONVICTION 4.
+   A fresh last bar keeps the deep-RSI + drawdown snipe above the floor
+   (8 + 1 - 3 = 6), exactly the "strong ones survive" case v678 documents. */
 function tapeOversold(){
   const out=[]; let p=100;
+  const t0 = Date.now() - 120*14400*1000;   // 4H bars ending NOW (fresh)
   for(let i=0;i<120;i++){
     if(i>=100) p*=0.985;
     else if(i>=80) p*=0.995;
-    out.push({t:i*14400,o:p,h:p*1.01,l:p*0.992,c:p,v:1000});
+    out.push({t:t0+i*14400*1000,o:p,h:p*1.01,l:p*0.992,c:p,v:1000});
   }
   return out;
 }

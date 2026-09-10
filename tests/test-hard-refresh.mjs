@@ -171,11 +171,13 @@ assert(!loadErr, 'inline blocks execute without throwing'
   + (loadErr ? ' — got: ' + (loadErr && loadErr.stack ? loadErr.stack.split('\n').slice(0, 3).join(' | ') : loadErr) : ''));
 
 /* ---------------- 1. nav wiring: new module <script src> tags ---------------- */
-const tagOf = f => '<script src="' + f + '"></script>';
-const iNews = html.indexOf(tagOf('news.js'));
-const iOnchain = html.indexOf(tagOf('onchain.js'));
-const iRotation = html.indexOf(tagOf('rotation.js'));
-const iGoldspot = html.indexOf(tagOf('goldspot.js'));
+/* Tags carry ?v=NNN cache-busts (the ship checklist requires index.html
+   ?v= pins to move with every deploy) — match with or without the query. */
+const tagIdx = f => { const m = html.match(new RegExp('<script src="' + f.replace('.', '\\.') + '(\\?v=\\d+)?"></script>')); return m ? html.indexOf(m[0]) : -1; };
+const iNews = tagIdx('news.js');
+const iOnchain = tagIdx('onchain.js');
+const iRotation = tagIdx('rotation.js');
+const iGoldspot = tagIdx('goldspot.js');
 assert(iNews !== -1 && iOnchain !== -1 && iRotation !== -1 && iGoldspot !== -1,
   'index.html includes <script src> tags for onchain.js, rotation.js, goldspot.js');
 assert(iNews < iOnchain && iOnchain < iRotation && iRotation < iGoldspot,
@@ -183,12 +185,14 @@ assert(iNews < iOnchain && iOnchain < iRotation && iRotation < iGoldspot,
 
 /* ---------------- 1b. nav wiring: group membership ---------------- */
 const groupTabs = gid => run("HG_NAV_GROUPS.filter(function(g){ return g.id===" + JSON.stringify(gid) + "; })[0].tabs.join(',')");
-assert(groupTabs('overview') === 'brain,book,trade,log,news,bias,regime,trendmx,rotation,execute,startrader',
-  'COMMAND group: workflow then context');
+/* v658 renamed the LOG slot (SETUP LOG) and moved signallog into COMMAND
+   (SIGNAL LOG nav clash fix, documented at index.html HG_NAV_GROUPS). */
+assert(groupTabs('overview') === 'brain,book,trade,log,signallog,news,bias,regime,trendmx,rotation,execute,startrader',
+  'COMMAND group: workflow then context (incl. signallog since v658)');
 assert(groupTabs('crypto') === 'combi,omnibtc,omnipresent,omniroute,dexscreener,setupconfirm,best,swing,scalp,edge,smart,squeeze,reversalsniper,smc,ob,trap,div,coil,apex,oiflow,liqs,onchain,chartvision,carry,venueprem,termbasis',
   'CRYPTO group: BTC desk first, then anticipation, ranked scans → structure → flow → funding');
-assert(groupTabs('gold') === 'super-gold,omnigold,omnigold1,goldswing,goldscalp,gold,goldpro,goldspot,goldcoint,goldpine,signallog',
-  'GOLD group: super desk first, then scanners');
+assert(groupTabs('gold') === 'super-gold,omnigold,omnigold1,goldswing,goldscalp,gold,goldpro,goldspot,goldcoint,goldpine',
+  'GOLD group: super desk first, then scanners (signallog moved to COMMAND at v658)');
 assert(run("HG_TAB_GROUP.rotation") === 'overview' && run("HG_TAB_GROUP.onchain") === 'crypto'
     && run("HG_TAB_GROUP.goldspot") === 'gold',
   'HG_TAB_GROUP maps rotation→overview, onchain→crypto, goldspot→gold');
@@ -332,35 +336,43 @@ assert(autoCount.style.display !== 'none', 'countdown chip shows while armed');
 assert(run("document.getElementById('autoRef600000').classList.contains('on')") === true
     && run("document.getElementById('autoRefOff').classList.contains('on')") === false,
   'active segment repaints to 10m');
+/* v656 (documented at index.html HG_AUTO_REFRESH_HARDCODED_MS = 0) removed the
+   forced 10-minute lock at the owner's request: choices are HONORED now, and an
+   unknown choice degrades to OFF. The hard-lock mechanism itself survives (any
+   value > 0 re-locks) — asserted by the source grep above. */
 const timer1 = run('HG_AUTO_TIMER');
 run("setAutoRefresh('180000')");
-assert(run('HG_AUTO_MS') === 600000 && storeMem.get('hgAutoRefresh') === '600000',
-  '3m request ignored — stays hard-coded at 600000ms');
+assert(run('HG_AUTO_MS') === 180000 && storeMem.get('hgAutoRefresh') === '180000',
+  '3m request honored — maps to 180000ms and persists (hard-lock off since v656)');
 assert(run('HG_AUTO_TIMER') !== null && run('HG_AUTO_TIMER') !== timer1,
   'changing the choice re-arms the interval (old one cleared, never stacked)');
 run("setAutoRefresh('120000')");
-assert(run('HG_AUTO_MS') === 600000 && storeMem.get('hgAutoRefresh') === '600000',
-  '2m request ignored — stays hard-coded at 600000ms');
+assert(run('HG_AUTO_MS') === 120000 && storeMem.get('hgAutoRefresh') === '120000',
+  '2m request honored — maps to 120000ms and persists');
 run("setAutoRefresh('300000')");
-assert(run('HG_AUTO_MS') === 600000 && storeMem.get('hgAutoRefresh') === '600000',
-  '5m request ignored — stays hard-coded at 600000ms');
+assert(run('HG_AUTO_MS') === 300000 && storeMem.get('hgAutoRefresh') === '300000',
+  '5m request honored — maps to 300000ms and persists');
 run("setAutoRefresh('bogus')");
-assert(run('HG_AUTO_MS') === 600000 && storeMem.get('hgAutoRefresh') === '600000',
-  'unknown choice still hard-locked to 10m (no throw, no OFF)');
-assert(run('HG_AUTO_TIMER !== null') === true && autoCount.style.display !== 'none',
-  'interval stays armed and countdown visible when hard-coded');
+assert(run('HG_AUTO_MS') === 0 && storeMem.get('hgAutoRefresh') === 'off',
+  'unknown choice degrades to OFF (no throw, no invented interval)');
+assert(run('HG_AUTO_TIMER === null') === true && autoCount.style.display === 'none',
+  'interval disarmed and countdown hidden after an unknown choice');
 
 /* ---------------- 8. restore on load ---------------- */
+/* On LOAD, HG_ALERTS_FORCED_ON (index.html:1082) arms the alerts cadence
+   (HG_ALERTS_AUTO_REFRESH_MS = HG_GLOBAL_SCAN_MS = 10m) before any saved
+   choice is read — v656 unlocked the interactive control but the ALERTS
+   clock deliberately still rides the locked 10-minute cycle. */
 storeMem.set('hgAutoRefresh', '900000');
 run('hgAutoInit()');
 assert(run('HG_AUTO_MS') === 600000 && run('HG_AUTO_TIMER !== null') === true,
-  'saved 15m choice overridden to hard-coded 10m on load');
+  'init under alerts-forced-on arms the 10m alerts cadence regardless of saved choice');
 assert(run("document.getElementById('autoRef600000').classList.contains('on')") === true,
-  'restored segment painted as 10m active');
+  'init paints the alerts cadence segment (10m) active');
 storeMem.set('hgAutoRefresh', 'garbage');
 run('hgAutoInit()');
 assert(run('HG_AUTO_MS') === 600000 && run('HG_AUTO_TIMER !== null') === true,
-  'corrupt saved value still forces hard-coded 10m');
+  'corrupt saved value cannot disarm the alerts-forced cadence on load');
 storeMem.delete('hgAutoRefresh');
 
 /* ---------------- 9. scheduled fire → the EXISTING hardRefreshAll ---------------- */
@@ -380,15 +392,15 @@ assert((sandbox.__calls.hardRefreshAll || 0) === hraBefore + 1,
 assert(/^next \d+:\d{2}$/.test(autoCount.textContent),
   'countdown chip shows mm:ss while armed — got: "' + autoCount.textContent + '"');
 
-/* OFF request ignored when hard-coded */
+/* OFF honored since v656 — disarms cleanly, no stray fires */
 run("setAutoRefresh('off')");
-assert(run('HG_AUTO_MS') === 600000 && run('HG_AUTO_TIMER !== null') === true,
-  'OFF request ignored — interval stays armed at hard-coded 10m');
+assert(run('HG_AUTO_MS') === 0 && run('HG_AUTO_TIMER === null') === true,
+  'OFF request honored — interval disarmed (hard-lock off since v656)');
 run('HG_AUTO_NEXT = Date.now() - 1');
 run('hgAutoTick()');
-assert((sandbox.__calls.hardRefreshAll || 0) === hraBefore + 2,
-  'scheduled fires continue after OFF attempt (hard-coded 10m)');
-assert(autoCount.style.display !== 'none', 'countdown stays visible after OFF attempt');
+assert((sandbox.__calls.hardRefreshAll || 0) === hraBefore + 1,
+  'no fire after OFF — a stray tick is a no-op when disarmed');
+assert(autoCount.style.display === 'none', 'countdown hidden after OFF');
 
 /* ---------------- settle & summary ---------------- */
 process.on('unhandledRejection', () => {});

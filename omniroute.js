@@ -8500,7 +8500,15 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       /* v685: pass tab + kind so the measured-edge veto (G6) can look up
          this (scanner, mechanic) pair in the forward log. When kind is
          absent, G6 passes unconditionally (documented pre-v685 fallback). */
-      try { c.solidity = W.hgSolidityGrade(planForSol, {
+      /* WRITE TO .solGrade, NOT .solidity. `c.solidity` is the 200-pt /
+         18-pillar evaluate-time stamp written by hgOmniEvaluate; the
+         shared v682 helper returns a DIFFERENT object on a 0-6 scale.
+         Reusing the key clobbered the 200-pt read, so the card badge
+         printed e.g. "SOLIDITY 3/200 · WEAK" for a 148/200 SOLID card,
+         the 20X quality/PRIME floors (P.solidityFloor = 40) could never
+         be met, and the late 200-pt stamp was permanently skipped by
+         `if (lsc.solidity || !lsc.plan) continue`. */
+      try { c.solGrade = W.hgSolidityGrade(planForSol, {
         minRr: (typeof MIN_RR === 'number') ? MIN_RR : 2.0,
         tab: 'OMNIROUTE',
         kind: c.kind
@@ -8613,8 +8621,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       var solChip = '';
       try {
         var Wc = (typeof window !== 'undefined') ? window : ((typeof globalThis !== 'undefined') ? globalThis : null);
-        if (c.solidity && Wc && typeof Wc.hgSolidityChipHtml === 'function'){
-          solChip = Wc.hgSolidityChipHtml(c.solidity);
+        /* .solGrade = shared 0-6 grade; .solidity = 200-pt stamp. */
+        if (c.solGrade && Wc && typeof Wc.hgSolidityChipHtml === 'function'){
+          solChip = Wc.hgSolidityChipHtml(c.solGrade);
         }
       } catch(eSc){}
       h += '<div class="hg-mp-head">' + esc(String(c.sym || c.base || '')) + ' ' + esc(String(c.dir || '').toUpperCase())

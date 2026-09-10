@@ -472,7 +472,9 @@ console.log('\n== SEARCH settles before it records ==');
 console.log('\n== the SEARCH tab is wired to it ==');
 {
   const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-  ok(/<script src="contract-report\.js"><\/script>/.test(html), 'index.html loads contract-report.js');
+  /* Tags carry ?v=NNN cache-busts (the ship checklist requires index.html
+     ?v= pins to move with every deploy) — match with or without the query. */
+  ok(/<script src="contract-report\.js(\?v=\d+)?"><\/script>/.test(html), 'index.html loads contract-report.js');
   ok(/function runContractReport\(ex, sym, rid\)/.test(html), 'the SEARCH handler exists');
   ok(/FULL REPORT<\/button>/.test(html), 'every search result carries a FULL REPORT button');
   ok(/candlesDelta : candlesCdcx/.test(html), 'it pulls candles from whichever venue the row came from');

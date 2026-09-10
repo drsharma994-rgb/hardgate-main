@@ -29,8 +29,11 @@ console.log('== HG_VER shell ==');
 console.log('== gstack + brain wiring ==');
 {
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-  const gIdx = html.indexOf('src="gstack-brain.js"');
-  const bIdx = html.indexOf('src="brain.js"');
+  /* Tags carry ?v=NNN cache-busts (the ship checklist requires index.html
+     ?v= pins to move with every deploy) — match with or without the query. */
+  const tagIdx = f => { const m = html.match(new RegExp('<script src="' + f.replace('.', '\\.') + '(\\?v=\\d+)?"></script>')); return m ? html.indexOf(m[0]) : -1; };
+  const gIdx = tagIdx('gstack-brain.js');
+  const bIdx = tagIdx('brain.js');
   ok(gIdx >= 0 && bIdx >= 0 && gIdx < bIdx, 'gstack loads before brain');
   ok(/applyGstackBrain/.test(fs.readFileSync(path.join(root, 'brain.js'), 'utf8')), 'brain applies gstack');
 }

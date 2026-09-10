@@ -862,7 +862,11 @@ async function rgRun(els){
       }catch(eAlt){}
     }
     var fails = 0;
-    ['btc','ethbtc','gold','dxy','btcd','fedliq','us10y','stable','dvol'].forEach(function(k){
+    /* netflow counts too: the status line prints N/10 and the all-down
+       empty state fires on fails === total, so leaving netflow out of the
+       count overstated the ok tally by one ("1/10 sources ok" with every
+       source dead) and made the fails===total branch unreachable. */
+    ['btc','ethbtc','gold','dxy','btcd','fedliq','us10y','stable','dvol','netflow'].forEach(function(k){
       if (!components[k]) fails++;
     });
 

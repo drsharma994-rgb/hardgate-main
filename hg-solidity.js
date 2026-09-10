@@ -242,7 +242,13 @@
     if (!W || typeof W.hgFwdStats !== 'function') return { pass: true, source: 'no-fwdlog' };
     var stats = null;
     try { stats = W.hgFwdStats(String(opts.tab), String(opts.kind), false); }
-    catch(eF){ return { pass: true, source: 'fwdlog-error' }; }
+    catch(eF){
+      /* Deliberately fail-open (unmeasured setups are innocent), but a
+         thrown lookup is NOT "measured clean" — say so (fail-open gate
+         contract, test-gates-fail-open). */
+      return { pass: true, source: 'fwdlog-error', unchecked: true,
+               reason: 'measured-edge lookup threw: ' + (eF && eF.message || eF) };
+    }
     if (!stats || !isFinite(stats.samples) || stats.samples < HG_SOL_MIN_EDGE_SAMPLES){
       return { pass: true, source: 'too-few-samples', samples: stats && stats.samples || 0, expR: stats && stats.expR };
     }
@@ -512,7 +518,12 @@
     var killedKinds = {};
     for (var i = 0; i < cards.length; i++){
       var c = cards[i];
-      var sol = c && c.solidity;
+      /* .solGrade FIRST. A tab whose cards already carry a different
+         `.solidity` object (omniroute stamps a 200-pt / 18-pillar read
+         there) writes this helper's 0-6 grade to `.solGrade` instead, so
+         neither read clobbers the other. Tabs with no such conflict keep
+         writing `.solidity` and are unaffected. */
+      var sol = c && (c.solGrade || c.solidity);
       /* v689: skip killed kinds. The kind is still recorded in
          killedKinds so the tab can list which kinds were filtered. */
       if (sol && sol.killed === true){

@@ -57,7 +57,10 @@ console.log('== alert cycle constants (README alignment) ==');
   ok(/HG_ALERT_CYCLE_MS = HG_TAB_ALERT_MS/.test(html), 'HG_ALERT_CYCLE_MS aliases tab alert ms');
   ok(/HG_GLOBAL_SCAN_MS = 10 \* 60 \* 1000/.test(html), 'HG_GLOBAL_SCAN_MS is 10 minutes');
   ok(/HG_ALERTS_AUTO_REFRESH_MS = HG_GLOBAL_SCAN_MS/.test(html), 'HG_ALERTS_AUTO_REFRESH_MS uses global scan interval');
-  ok(/HG_AUTO_REFRESH_HARDCODED_MS = HG_GLOBAL_SCAN_MS/.test(html), 'HG_AUTO_REFRESH_HARDCODED_MS uses global scan interval');
+  /* v656 (b0f8fa9) stopped the 10-min hard-coded auto-refresh: the constant
+     is now 0 so the segmented AUTO control honors user clicks and true OFF.
+     Documented at index.html HG_AUTO_REFRESH_HARDCODED_MS. */
+  ok(/HG_AUTO_REFRESH_HARDCODED_MS = 0/.test(html), 'HG_AUTO_REFRESH_HARDCODED_MS is 0 (hard-lock off since v656)');
   ok(/GAP_MS = 5 \* 60 \* 1000/.test(tabalerts), 'tabalerts GAP_MS is 5 minutes');
   ok(/HG_SCAN_WARM_N\s*=\s*80/.test(html), 'alert warm uses a liquid cap, not the whole book');
   ok(!/function cryptoScanWarm\([\s\S]*?forceScanAll:\s*true/.test(html),

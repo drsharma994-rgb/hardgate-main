@@ -52,7 +52,7 @@ assert.ok(/laneRows\.length < ML_LOOKBACK \+ 5/.test(src),
   'v696: skips lanes without enough bars for ngAssess (laneRows fetched by ngRunScan)');
 assert.ok(/ogSetup = ngAssess\(laneRows\);/.test(src),
   'v696: re-gates OMNIGOLD candidate through ngAssess on fetched rows');
-assert.ok(/pack = await fetchXau\(mtf, KL_LIMIT\);/.test(src),
+assert.ok(/mpack = await fetchXau\(mtf, KL_LIMIT\);/.test(src),
   'v696: ngRunScan fetches missing tf rows via fetchXau');
 assert.ok(/tfRows\[pr\.tf\] = pr\.rows;/.test(src),
   'v696: reuses primary-horizon rows via tfRows cache (no double fetch)');
@@ -64,8 +64,20 @@ assert.ok(/var hybridKind = 'TRIPLE-CONF\+OMNI:' \+ lane\.ogKind;/.test(src),
   'hybrid mechanic key = TRIPLE-CONF+OMNI:<ogKind>');
 assert.ok(/ogSetup\.kind = hybridKind;/.test(src),
   'setup.kind stamped as hybrid');
-assert.ok(/ogSetup\.confluenceCount = 4;/.test(src),
-  'confluenceCount = 4 (ML + FVG + momentum + OMNIGOLD)');
+/* hg-v698: confluenceCount is NO LONGER forced to 4, and this expectation
+   changed on purpose. Forcing 4 was the exact inflation the unified
+   confluence contract forbids: OMNIGOLD agreeing on the same bars is another
+   STRUCTURAL read, not a fourth independent class, and the count was fed
+   straight into hgSolidityGrade as `consensus.nAgree` — a family count. The
+   hybrid now takes the DISTINCT-CLASS count the shared contract actually
+   measured (gold-formation.js), and the OMNIGOLD agreement is registered in
+   the SAME structure class as the FVG so it earns no free class. */
+assert.ok(/ogSetup\.confluenceCount = \(omniRecord\.formation && omniRecord\.formation\.confluence\)/.test(src),
+  'confluenceCount comes from the measured distinct-class count, never a hard-coded 4');
+assert.ok(/alsoKinds: \[lane\.ogKind\]/.test(src),
+  'hybrid formation also judges the UNDERLYING OMNIGOLD kind (demotion table is keyed by it)');
+assert.ok(/tape: laneTape\.dir \|\| ''/.test(src),
+  'hybrid solidity gets the REAL htf tape, never the card own direction');
 assert.ok(/kind: hybridKind/.test(src),
   'solidity lookup uses hybrid kind');
 
@@ -141,7 +153,7 @@ console.log('  * SCALP lane (OMNI-15m) reads __og.lastRows.m15');
 console.log('  * Each OMNIGOLD candidate re-gated through ngAssess');
 console.log('  * Intersection guard: NG dir must match OMNIGOLD dir');
 console.log('  * Hybrid mechanic = TRIPLE-CONF+OMNI:<ogKind>');
-console.log('  * confluenceCount = 4 (ML + FVG + momentum + OMNIGOLD)');
+console.log('  * confluenceCount = measured distinct-class count (v698), never a hard-coded 4');
 console.log('  * Forward log mechanic = actual setup.kind (per-hybrid measurement)');
 console.log('  * Feature-checked: [] when OMNIGOLD not loaded');
 console.log('  * runtime: 3 lanes from 2 swing + 1 scalp candidate');

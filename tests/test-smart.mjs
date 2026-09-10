@@ -302,9 +302,14 @@ function mkRows(n, start, step, stepSec, range){
   ok(/!\(risk > 0\)/.test(smartBlock[0]) && /!\(sRisk > 0\)/.test(smartBlock[0]),
      'defensive risk ≤ 0 rejects present in source (swing + scalp)');
   /* R:R is now measured against the ATR excursion, so the reject is REACHABLE:
-     a stop wider than expMove/2 must return null instead of pushing T1 out. */
-  ok(/expMove \/ risk >= 2\.0/.test(smartBlock[0]) && /fadeMove \/ sRisk >= 2\.0/.test(smartBlock[0]),
+     a stop wider than expMove/2 must return null instead of pushing T1 out.
+     The 2.0 floor moved from a literal into a tunable desk param
+     (hgDeskParam('smart','minRR', 2.0)) — same default, same mechanism. */
+  ok(/expMove \/ risk >= smartMinRr/.test(smartBlock[0]) && /fadeMove \/ sRisk >= smartFadeMinRr/.test(smartBlock[0]),
      'R:R reject measured against ATR excursion, not a multiple of risk');
+  ok(/smartMinRr = [^;]*hgDeskParam\('smart', ?'minRR', ?2\.0\)[^;]*: ?2\.0/.test(smartBlock[0])
+     && /smartFadeMinRr = [^;]*hgDeskParam\('smart', ?'minRR', ?2\.0\)[^;]*: ?2\.0/.test(smartBlock[0]),
+     'R:R floor is the smart minRR desk param with a 2.0 default (swing + fade)');
 }
 
 /* ================= 6) smartScreenCandidates — full-universe 2-pass filter ================= */

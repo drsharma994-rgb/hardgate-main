@@ -121,6 +121,21 @@ function hgOnchainAltGate(sym, dir){
   if (snap.stableCadence && snap.stableCadence.tightenRrLongs && dir === 'long'){
     return { pass: true, state: 'pass', tightenRr: 0.5, note: 'stablecoin supply contracting 14d+ — tighten R:R +0.5' };
   }
+  /* AN UNREAD GATE IS NOT A CLEARED GATE. Both veto legs above are
+     data-conditional: netflowZ is null and whaleTxs is empty in the default
+     deploy (no GLASSNODE_API_KEY, no WHALE_ALERT_API_KEY — api/onchain-alt.js
+     then returns flows7d:null, whaleTxs:[]), and equally when the API 500s or
+     the fetch throws. Falling through to 'pass' told the trade plan the
+     netflow/whale veto was SATISFIED when nothing had been read at all.
+     Report it unread instead: pass stays true so no new rejection is
+     introduced, but state 'na' makes plans.js list it under uncheckedReasons
+     the same way a thrown gate is listed. */
+  var nfRead = !!snap.netflowZ;
+  var whRead = !!(snap.whaleTxs && snap.whaleTxs.length);
+  if (!nfRead && !whRead){
+    return { pass: true, state: 'na',
+             note: 'on-chain alt unread — netflow and whale legs both dark' };
+  }
   return { pass: true, state: 'pass', note: 'on-chain alt clear' };
 }
 

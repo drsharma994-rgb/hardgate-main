@@ -62,7 +62,10 @@ var NG_AUTO_REFRESH_MS = 5 * 60 * 1000;
 var __ng = { busy: false, snap: null, at: 0, __timer: null, __mountEl: null };
 
 /* --- helpers ---------------------------------------------------------- */
-function fmtF(n, d){ n = +n; if (!isFinite(n)) return '\u2014'; return n.toFixed(d != null ? d : 2); }
+/* Absent values must render as absent: +null coerces to 0, which printed
+   "0.00" for missing measurements (test-null-formatting). Guard the empty
+   shapes before coercion, matching the goldswing.js fmtF contract. */
+function fmtF(n, d){ if (n === null || n === undefined || n === '') return '\u2014'; n = +n; if (!isFinite(n)) return '\u2014'; return n.toFixed(d != null ? d : 2); }
 function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
 function last(arr){ return (arr && arr.length) ? arr[arr.length - 1] : undefined; }
 
@@ -259,8 +262,190 @@ function ngAssess(rows){
     ml: { baseline: mlLast, regime: isMlBull ? 'bullish' : 'bearish' },
     rsi: { now: rNow, sma: sNow },
     kind: 'TRIPLE-CONF',
-    confluenceCount: 3 /* ML + FVG + momentum */
+    /* RAW READ COUNT, not a confluence claim (v698). ML + FVG + momentum are
+       three reads across only TWO independent classes — structure (FVG) and
+       momentum (VWMA regime + RSI cross). The tradable bar is >= 3 DISTINCT
+       classes and is decided by gold-formation.js from ngConfirmations(); this
+       number is never fed to a gate as if it were a family count. */
+    confluenceCount: 3 /* ML + FVG + momentum — reads, not classes */
   };
+}
+
+/* --- REAL higher-timeframe tape (hg-v698) -----------------------------
+
+   Until this repair NEW GOLD passed `tape: setup.dir` into hgSolidityGrade
+   (v690 lines 367 and 463): the card's own direction, handed to the gate that
+   is supposed to check the card against the higher timeframe. G3 could not
+   fail. That is a card confirming itself, and it is the only fabricated
+   number the recon found on any gold desk.
+
+   It is replaced with two REAL reads, both already available at scan time:
+
+     1H horizon  the 4H VWMA-50 regime — the SAME indicator this desk already
+                 trusts as its ML baseline, read one timeframe up. Genuinely
+                 higher-timeframe and genuinely independent of the 1H close.
+     4H horizon  OMNIGOLD's desk tape (hgOgUniformDebug().tape.stored.desk),
+                 which is gold's own 1h + 4h EMA21/EMA50 stacks and only
+                 speaks when both horizons agree (omnigold.js hgOgDeskTape).
+                 A different indicator family from VWMA, so it is evidence and
+                 not an echo.
+
+   Neither is invented: when the read is unavailable the tape is '' and the
+   solidity gate sees 'unknown' — which hgSolGateTape treats as no signal,
+   not as agreement. Fail closed by returning nothing rather than a guess. */
+function ngHtfVwmaRegime(rows){
+  try{
+    if (!Array.isArray(rows) || rows.length < ML_LOOKBACK + 1) return '';
+    var ml = vwmaSeries(rows, ML_LOOKBACK);
+    var n = rows.length;
+    var base = ml[n - 1], px = +rows[n - 1].c;
+    if (!isFinite(base) || !isFinite(px)) return '';
+    if (px > base) return 'long';
+    if (px < base) return 'short';
+    return '';
+  }catch(e){ return ''; }
+}
+
+function ngOmnigoldDeskTape(){
+  try{
+    if (typeof W.hgOgUniformDebug !== 'function') return '';
+    var dbg = W.hgOgUniformDebug();
+    var t = dbg && dbg.tape && dbg.tape.stored;
+    var d = t && t.desk;
+    return (d === 'long' || d === 'short') ? d : '';
+  }catch(e){ return ''; }
+}
+
+/* -> { dir, src } for the horizon, or { dir: '', src: '' } when unread. */
+function ngHtfTape(horizonLabel, rows4h){
+  var lab = String(horizonLabel || '').toUpperCase();
+  if (lab === '1H' || lab === 'OMNI-15M'){
+    var d = ngHtfVwmaRegime(rows4h);
+    if (d) return { dir: d, src: '4H VWMA-50 regime' };
+  }
+  var od = ngOmnigoldDeskTape();
+  if (od) return { dir: od, src: 'OMNIGOLD desk tape (gold 1h+4h EMA21/50 stacks, both horizons agreeing)' };
+  return { dir: '', src: '' };
+}
+
+/* --- confirmations for the shared >= 3-distinct-class contract ---------
+
+   gold-formation.js decides FORMED vs WATCH; this only names what NEW GOLD
+   can actually see on the closed bar, honestly, one entry per read:
+
+     structure       price inside a fresh, unmitigated FVG (the SMC leg)
+     momentum        RSI(14) crossing its own 9-SMA + the VWMA-50 regime
+                     (one class, however many reads inside it agree)
+     participation   NOTHING. This feed carries no order flow, no positioning
+                     and no COT, and the trigger-bar volume read is NOT
+                     substituted for one: OMNIGOLD measured that gate pointing
+                     the wrong way on gold (SCALP passed 27.7% n=2,856 vs
+                     vetoed 35.2% n=1,737, z=-5.38; omnigold.js hgOgGates
+                     'participation'), so counting volume as a confirmation
+                     here would import a rule its own evidence rejects. The
+                     class is reported as unconfirmed, with that reason, so
+                     the reader sees the hole rather than a fabricated fill.
+     session-htf     the measured UTC session cohort AND/OR the real HTF tape
+                     above. Either satisfies the class.
+
+   SESSION RULE (recon 3.3, 7,270 settled): the clock confirms only where
+   measured gross is >= 0 — ASIA 00-06 (+0.097R, n=2,082) and NY-PM 17-20
+   (+0.053R, n=994). LONDON 07-11 (-0.080R, n=1,305), NY-OVERLAP 12-16
+   (-0.061R, n=2,247) and OFF 21-23 (-0.011R, n=642) do not. */
+function ngConfirmations(setup, opts){
+  opts = opts || {};
+  var out = [];
+  try{
+    if (!setup) return out;
+    var dir = setup.dir;
+
+    /* structure — the FVG mitigation zone the entry sits inside.
+
+       INHERENT (hg-v698 audit closeout): a NEW GOLD card only exists because
+       price is inside a fresh FVG — this read is the signal's own definition
+       and is therefore true on ANY fire. It still counts toward the class bar
+       (the read is real) but it is declared `inherent: true` so the shared
+       renderer reports it apart from the revocable session-htf leg instead of
+       dressing a tautology up as independent confirmation. Same for the two
+       momentum reads below. The OMNI-lane structural read stays REVOCABLE:
+       OMNIGOLD agreeing is external evidence, not the card's own premise. */
+    var fvg = setup.fvg || {};
+    out.push({ cls: 'structure', name: 'FVG mitigation zone', inherent: true,
+      detail: (isFinite(fvg.bot) ? fvg.bot.toFixed(2) : '?') + '–'
+            + (isFinite(fvg.top) ? fvg.top.toFixed(2) : '?')
+            + (isFinite(fvg.ageBars) ? (' · ' + fvg.ageBars + ' bars old, unmitigated') : ''),
+      ok: isFinite(fvg.top) && isFinite(fvg.bot) });
+
+    /* structure — OMNI lane only: OMNIGOLD's own mechanic agrees. Deliberately
+       the SAME class as the FVG so a hybrid card gets no free class for what
+       is another structural read. */
+    if (setup.omni && setup.omni.kind){
+      out.push({ cls: 'structure', name: 'OMNIGOLD ' + String(setup.omni.kind),
+        detail: 'OMNIGOLD scored this mechanic ' + String(setup.omni.dir || '').toUpperCase()
+              + ' on the same bars', ok: String(setup.omni.dir || '') === dir });
+    }
+
+    /* momentum — the RSI cross and the VWMA-50 regime; one class. Both
+       INHERENT: they are the other two thirds of the triple-confirmation, so
+       a fired card carries them by construction. Declared, not hidden. */
+    var rsiOk = !!(setup.rsi && isFinite(setup.rsi.now) && isFinite(setup.rsi.sma)
+      && ((dir === 'long' && setup.rsi.now > setup.rsi.sma) || (dir === 'short' && setup.rsi.now < setup.rsi.sma)));
+    out.push({ cls: 'momentum', name: 'RSI(14) crossed its 9-SMA', inherent: true,
+      detail: 'RSI ' + (setup.rsi && isFinite(setup.rsi.now) ? setup.rsi.now.toFixed(1) : '?')
+            + ' vs SMA9 ' + (setup.rsi && isFinite(setup.rsi.sma) ? setup.rsi.sma.toFixed(1) : '?'),
+      ok: rsiOk });
+    var mlOk = !!(setup.ml && ((dir === 'long' && setup.ml.regime === 'bullish')
+      || (dir === 'short' && setup.ml.regime === 'bearish')));
+    out.push({ cls: 'momentum', name: 'VWMA-50 regime', inherent: true,
+      detail: 'baseline ' + (setup.ml && isFinite(setup.ml.baseline) ? setup.ml.baseline.toFixed(2) : '?')
+            + ' · ' + ((setup.ml && setup.ml.regime) || 'unknown'),
+      ok: mlOk });
+
+    /* participation — named absent, never fabricated. See the block comment. */
+    out.push({ cls: 'participation', name: 'order flow / positioning',
+      detail: 'this XAUUSD feed carries no taker delta, no OI and no COT; '
+            + 'trigger-bar volume is NOT substituted — OMNIGOLD measured that read '
+            + 'pointing the wrong way on gold (passed 27.7% n=2856 vs vetoed 35.2% n=1737)',
+      ok: false });
+
+    /* session-htf — the measured cohort, then the real HTF tape.
+
+       THE COHORT IS READ ON THE CLOSED SIGNAL BAR, not on Date.now(). This
+       used to fall back to the wall clock, and ngRunScan never passed an
+       instant, so the wall clock is what every production card actually
+       used. That is the one revocable class NEW GOLD has, and the tab
+       re-scans every 5 minutes (NG_AUTO_REFRESH_MS): the same closed bar
+       therefore printed FORMED on one refresh and WATCH on another with no
+       new data. The measured cohorts are keyed on the signal bar's own
+       timestamp (backtest-omnigold-results.json trades[].tISO), so the bar
+       is also the only instant the evidence licenses. Unreadable bars ->
+       fail closed, through the SAME shared helper the other two desks use. */
+    var whenMs = (typeof W.hgGoldSignalBarMs === 'function') ? W.hgGoldSignalBarMs(opts.rows) : NaN;
+    if (!isFinite(whenMs) && isFinite(+opts.nowMs)) whenMs = +opts.nowMs;
+    var sedge = (typeof W.hgGoldSessionEdge === 'function' && isFinite(whenMs))
+      ? W.hgGoldSessionEdge(whenMs) : null;
+    out.push({ cls: 'session-htf', name: 'session window',
+      detail: sedge ? sedge.why
+        : 'session cohort unreadable on the closed signal bar — the clock cannot confirm (fail closed)',
+      ok: !!(sedge && sedge.confirms === true) });
+    var kz = null;
+    try { kz = (typeof W.hgGoldKillzoneRead === 'function' && isFinite(whenMs))
+      ? W.hgGoldKillzoneRead(new Date(whenMs)) : null; }
+    catch(eKz){ kz = null; }
+    if (kz && kz.label){
+      /* killzone is CONTEXT, printed on the confirmation it belongs to and
+         never a class of its own — it is the same clock read twice. Read on
+         the same closed-bar instant as the cohort above, so the two cannot
+         describe different moments. */
+      out[out.length - 1].detail += ' · ' + String(kz.label);
+    }
+    var tape = opts.tape || { dir: '', src: '' };
+    out.push({ cls: 'session-htf', name: 'higher-timeframe tape',
+      detail: tape.dir ? (tape.src + ' reads ' + String(tape.dir).toUpperCase())
+                       : 'no higher-timeframe read available on this scan',
+      ok: !!tape.dir && tape.dir === dir });
+  }catch(e){}
+  return out;
 }
 
 /* --- fetch ------------------------------------------------------------ */
@@ -339,21 +524,66 @@ async function ngRunScan(){
   var results = [];
   var errors = [];
   try {
-    for (var hi = 0; hi < HORIZONS.length; hi++){
-      var h = HORIZONS[hi];
-      var pack;
+    /* v698: fetch BOTH horizons before assessing either, so the 1H card can
+       read a REAL 4H tape instead of the fabricated `tape: setup.dir` that
+       stood here until now. Same two fetches as before \u2014 only the order
+       changed, and both still flow through the app-level candle cache. */
+    var packsByTf = {}, hi, h, pack;
+    for (hi = 0; hi < HORIZONS.length; hi++){
+      h = HORIZONS[hi];
       try { pack = await fetchXau(h.tf, KL_LIMIT); }
       catch(eF){ pack = { rows: [], source: 'fetch-error' }; errors.push(h.label + ': fetch failed'); }
+      packsByTf[h.tf] = pack || { rows: [], source: 'unknown' };
+    }
+    var rows4hForTape = (packsByTf['4h'] && packsByTf['4h'].rows) ? packsByTf['4h'].rows : [];
+
+    for (hi = 0; hi < HORIZONS.length; hi++){
+      h = HORIZONS[hi];
+      pack = packsByTf[h.tf] || { rows: [], source: 'unknown' };
       var rows = pack && pack.rows ? pack.rows : [];
       if (!rows.length){ errors.push(h.label + ': no bars (source=' + (pack && pack.source) + ')'); continue; }
       var setup = ngAssess(rows);
+      var tape = ngHtfTape(h.label, rows4hForTape);
       var record = {
         horizon: h.label,
         tf: h.tf,
         source: pack.source,
         setup: setup,
+        tape: tape,
         rows: rows
       };
+      /* SHARED GOLD FORMATION (hg-v698). NEW GOLD had no venue cost model at
+         all, so a stop tighter than the round trip formed as a tradable
+         ticket. It now runs the SAME hgOgFormation machinery OMNIGOLD does
+         (8x the venue round trip, measured kind demotion, gold-setup-edge,
+         catalog) plus the v689 KILL-LIST, the v685 measured-edge veto and the
+         >= 3-distinct-class confluence bar \u2014 all through gold-formation.js.
+         Fail closed: no verdict -> not tradable, reason named on the card. */
+      if (setup){
+        /* rows = the CLOSED bars this card fired on. The session leg is
+           read on the signal bar, never on Date.now(). */
+        record.confirmations = ngConfirmations(setup, { tape: tape, rows: rows });
+        record.formation = (typeof W.hgGoldFormation === 'function')
+          ? W.hgGoldFormation(
+              /* rows deliberately NOT passed — see omnigold1.js og1Formation:
+                 all three desks make the IDENTICAL rows-less hgOgFormation
+                 call, so none of them gets a catalog verdict the others do not. */
+              { kind: setup.kind, horizon: h.label, dir: setup.dir,
+                plan: { entry: setup.entry, stop: setup.stop, t1: setup.t1, rr1: setup.rr1 },
+                entry: setup.entry, stop: setup.stop, t1: setup.t1 },
+              { tab: 'NEWGOLD:' + h.label, mechanic: setup.kind || 'TRIPLE-CONF',
+                confirmations: record.confirmations,
+                /* v698 audit closeout: structure + momentum are INHERENT here
+                   (the triple-confirmation confirming itself), so session-htf
+                   is this desk's only revocable class. FORMED must REQUIRE it
+                   explicitly — with participation dark it already decided
+                   every verdict in practice, and making it a named floor
+                   means a future always-true read cannot silently weaken
+                   the bar back to tautologies. */
+                requireClasses: ['session-htf'] })
+          : { formed: false, tradable: false, state: 'STOOD-ASIDE', confluence: null,
+              reasons: ['shared gold formation unavailable \u2014 gold-formation.js is not loaded; fail closed'] };
+      }
       /* Compute solidity via the shared helper so the same veto/promotion/
          kill pipeline applies. Kind is fixed at TRIPLE-CONF; the tab key
          is per-horizon (NEWGOLD:1H, NEWGOLD:4H) so measured evidence is
@@ -364,9 +594,14 @@ async function ngRunScan(){
             dir: setup.dir,
             entry: setup.entry, stop: setup.stop, t1: setup.t1, t2: setup.t2,
             rr1: setup.rr1, minRr: MIN_RR,
-            tape: setup.dir, /* self-consistent \u2014 ML regime = direction */
+            /* v698: the REAL higher-timeframe read, or '' so hgSolGateTape
+               reports 'unknown' \u2014 never the card's own direction. */
+            tape: tape.dir || '',
             stopWidened: setup.stopWidened,
-            consensus: { nAgree: setup.confluenceCount },
+            /* v698: confluence is the count of DISTINCT confirmation classes
+               the shared contract actually confirmed, not a hard-coded 3. */
+            consensus: { nAgree: (record.formation && record.formation.confluence)
+                                   ? record.formation.confluence.classCount : 0 },
             liveGrade: 'fresh' /* market fill = fresh by definition */
           };
           record.solidity = W.hgSolidityGrade(planForSol, {
@@ -418,10 +653,10 @@ async function ngRunScan(){
         for (var mi = 0; mi < missingList.length; mi++){
           var mtf = missingList[mi];
           try {
-            var pack = await fetchXau(mtf, KL_LIMIT);
-            if (pack && pack.rows && pack.rows.length){
-              tfRows[mtf] = pack.rows;
-              tfSource[mtf] = pack.source;
+            var mpack = await fetchXau(mtf, KL_LIMIT);
+            if (mpack && mpack.rows && mpack.rows.length){
+              tfRows[mtf] = mpack.rows;
+              tfSource[mtf] = mpack.source;
             }
           } catch(eFm){}
         }
@@ -445,14 +680,39 @@ async function ngRunScan(){
           var hybridKind = 'TRIPLE-CONF+OMNI:' + lane.ogKind;
           ogSetup.kind = hybridKind;
           ogSetup.omni = { kind: lane.ogKind, dir: lane.ogDir, ogPlan: lane.ogPlan };
-          ogSetup.confluenceCount = 4; /* ML + FVG + momentum + OMNIGOLD agree */
+          /* v698: confluenceCount is no longer forced to 4. OMNIGOLD agreeing
+             is another STRUCTURAL read, not a fourth class — the shared
+             contract counts distinct classes and a hybrid earns none for free.
+             The real class count is stamped from the formation verdict below. */
+          var laneTape = ngHtfTape(lane.horizonLabel, rows4hForTape);
           var omniRecord = {
             horizon: lane.horizonLabel,
             tf: lane.tf,
             source: tfSource[lane.tf] || 'omnigold',
             setup: ogSetup,
+            tape: laneTape,
             rows: laneRows
           };
+          omniRecord.confirmations = ngConfirmations(ogSetup, { tape: laneTape, rows: laneRows });
+          /* Shared formation. alsoKinds carries the UNDERLYING OMNIGOLD
+             mechanic so the measured kind-demotion table (which is keyed by
+             OMNIGOLD kind, not by the hybrid label) is actually consulted —
+             a hybrid built on a measured-negative kind stands aside for the
+             same reason the OMNIGOLD card would. */
+          omniRecord.formation = (typeof W.hgGoldFormation === 'function')
+            ? W.hgGoldFormation(
+                { kind: hybridKind, horizon: lane.horizonLabel, dir: ogSetup.dir,
+                  plan: { entry: ogSetup.entry, stop: ogSetup.stop, t1: ogSetup.t1, rr1: ogSetup.rr1 },
+                  entry: ogSetup.entry, stop: ogSetup.stop, t1: ogSetup.t1 },
+                { tab: 'NEWGOLD:' + lane.horizonLabel, mechanic: hybridKind,
+                  alsoKinds: [lane.ogKind], confirmations: omniRecord.confirmations,
+                  /* same explicit floor as the primary lane: the revocable
+                     session-htf leg must pass for FORMED (v698 closeout) */
+                  requireClasses: ['session-htf'] })
+            : { formed: false, tradable: false, state: 'STOOD-ASIDE', confluence: null,
+                reasons: ['shared gold formation unavailable — gold-formation.js is not loaded; fail closed'] };
+          ogSetup.confluenceCount = (omniRecord.formation && omniRecord.formation.confluence)
+            ? omniRecord.formation.confluence.classCount : 0;
           if (typeof W.hgSolidityGrade === 'function'){
             try {
               var planForSol2 = {
@@ -460,7 +720,8 @@ async function ngRunScan(){
                 entry: ogSetup.entry, stop: ogSetup.stop,
                 t1: ogSetup.t1, t2: ogSetup.t2,
                 rr1: ogSetup.rr1, minRr: MIN_RR,
-                tape: ogSetup.dir,
+                /* v698: real HTF read, never the card's own direction */
+                tape: laneTape.dir || '',
                 stopWidened: ogSetup.stopWidened,
                 consensus: { nAgree: ogSetup.confluenceCount },
                 liveGrade: 'fresh'
@@ -491,7 +752,13 @@ async function ngRunScan(){
             sym: 'XAUUSD', dir: r.setup.dir,
             entry: r.setup.entry, stop: r.setup.stop, t1: r.setup.t1,
             mechanic: r.setup.kind || 'TRIPLE-CONF',
-            ticket: !!(r.solidity && r.solidity.leadEligible)
+            /* v698: a fire is a TICKET only when it FORMED — cleared the
+               venue stop floor, the measured-evidence checks and the
+               >= 3-distinct-class confluence bar — and still clears the
+               shared solidity lead bar. Every fire is still RECORDED; the
+               flag only says which ones the desk called tradable. */
+            ticket: !!(r.formation && r.formation.tradable === true
+                       && r.solidity && r.solidity.leadEligible)
           }], { horizonBars: 30 });
         }
         /* Also settle any prior open records for this scan's rows. */
@@ -513,7 +780,11 @@ async function ngRunScan(){
     var killedKinds = {};
     for (var kli = 0; kli < results.length; kli++){
       var kr = results[kli];
-      if (kr.solidity && kr.solidity.killed === true){
+      /* v698: the shared formation reads the SAME hgSolidityIsKilled the
+         solidity grade does, so both stamps agree; honouring either keeps
+         the filter correct when one of the two graders is unavailable. */
+      if ((kr.solidity && kr.solidity.killed === true)
+          || (kr.formation && kr.formation.state === 'KILLED')){
         killedCount++;
         var kk = (kr.setup && kr.setup.kind) || 'TRIPLE-CONF';
         killedKinds[kk] = (killedKinds[kk] || 0) + 1;
@@ -563,25 +834,54 @@ function cardHtml(r){
   } catch(eSc){}
 
   var dirLabel = s.dir === 'long' ? 'LONG' : 'SHORT';
-  var isBest = r.solidity && r.solidity.leadEligible;
+  var fm = r.formation || null;
+  /* v698: only a FORMED card is a ticket. A card short of the shared
+     confluence bar, or one the venue stop floor / measured evidence stood
+     aside, keeps its evidence on screen and loses the tradable styling and
+     its levels \u2014 a level on a card the desk declined to call tradable is an
+     invitation. Nothing is hidden: the reason is printed underneath. */
+  var tradable = !!(fm && fm.tradable === true);
+  var isBest = tradable && r.solidity && r.solidity.leadEligible;
+  var formChip = '';
+  try {
+    if (fm && typeof W.hgGoldFormationChipHtml === 'function') formChip = W.hgGoldFormationChipHtml(fm);
+  } catch(eFc){}
+  var confBlock = '';
+  try {
+    if (fm && fm.confluence && typeof W.hgGoldConfluenceHtml === 'function'){
+      confBlock = W.hgGoldConfluenceHtml(fm.confluence);
+    }
+  } catch(eCb){}
+  var tapeTxt = (r.tape && r.tape.dir)
+    ? (String(r.tape.dir).toUpperCase() + ' \u00b7 ' + r.tape.src)
+    : 'no higher-timeframe read this scan';
 
-  return '<div class="card ' + (s.dir === 'long' ? 'long' : 'short') + (isBest ? ' best' : '') + '">'
+  var levels = tradable
+    ? ('<div class="hg-mp-grid">'
+      + '<div><i>ENTRY</i><b>' + fmtF(s.entry, 2) + '</b><u>' + (s.dir === 'long' ? 'MARKET BUY' : 'MARKET SELL') + '</u></div>'
+      + '<div><i>STOP</i><b>' + fmtF(s.stop, 2) + '</b><u>FVG ' + (s.dir === 'long' ? 'bottom' : 'top') + (s.stopWidened ? ' \u00b7 widened to 0.5\u00d7ATR' : '') + '</u></div>'
+      + '<div><i>T1 (1.5R)</i><b>' + fmtF(s.t1, 2) + '</b><u>rr ' + fmtF(s.rr1, 2) + '</u></div>'
+      + '<div><i>T2 (2.5R)</i><b>' + fmtF(s.t2, 2) + '</b><u>rr ' + fmtF(s.rr2, 2) + '</u></div>'
+      + '</div>'
+      + '<div class="note" style="margin-top:6px;font-size:11px;opacity:0.7">Risk ' + fmtF(s.riskPct, 2) + '% \u00b7 not a win probability</div>')
+    : ('<div class="note warn" style="margin-top:6px;font-size:11px">NOT A TICKET \u2014 no levels printed. '
+      + esc(((fm && fm.reasons) || ['formation verdict unavailable']).join(' \u00b7 ')) + '</div>');
+
+  return '<div class="card ' + (s.dir === 'long' ? 'long' : 'short') + (isBest ? ' best' : '')
+    + '" data-ng-form="' + esc((fm && fm.state) || 'UNKNOWN') + '">'
     + '<div class="chead"><span class="sym">XAUUSD</span>'
     + '<span class="dir">' + dirLabel + ' \u00b7 TRIPLE CONF \u00b7 ' + esc(r.horizon) + ' \u00b7 ' + esc(r.source || '') + '</span>'
+    + (formChip ? ' ' + formChip : '')
     + (solChip ? ' ' + solChip : '')
     + '</div>'
     + '<div class="mini">'
     + '<span class="k">ml baseline</span><span>' + fmtF(s.ml.baseline, 2) + ' \u00b7 ' + esc(s.ml.regime) + '</span>'
     + '<span class="k">fvg zone</span><span>' + fmtF(s.fvg.bot, 2) + ' \u2192 ' + fmtF(s.fvg.top, 2) + ' \u00b7 ' + (isFinite(s.fvg.ageBars) ? s.fvg.ageBars + 'b old' : '?') + '</span>'
     + '<span class="k">rsi \u00b7 sma9</span><span>' + fmtF(s.rsi.now, 1) + ' \u00b7 ' + fmtF(s.rsi.sma, 1) + '</span>'
+    + '<span class="k">htf tape</span><span>' + esc(tapeTxt) + '</span>'
     + '</div>'
-    + '<div class="hg-mp-grid">'
-    + '<div><i>ENTRY</i><b>' + fmtF(s.entry, 2) + '</b><u>' + (s.dir === 'long' ? 'MARKET BUY' : 'MARKET SELL') + '</u></div>'
-    + '<div><i>STOP</i><b>' + fmtF(s.stop, 2) + '</b><u>FVG ' + (s.dir === 'long' ? 'bottom' : 'top') + (s.stopWidened ? ' \u00b7 widened to 0.5\u00d7ATR' : '') + '</u></div>'
-    + '<div><i>T1 (1.5R)</i><b>' + fmtF(s.t1, 2) + '</b><u>rr ' + fmtF(s.rr1, 2) + '</u></div>'
-    + '<div><i>T2 (2.5R)</i><b>' + fmtF(s.t2, 2) + '</b><u>rr ' + fmtF(s.rr2, 2) + '</u></div>'
-    + '</div>'
-    + '<div class="note" style="margin-top:6px;font-size:11px;opacity:0.7">Risk ' + fmtF(s.riskPct, 2) + '% \u00b7 not a win probability</div>'
+    + confBlock
+    + levels
     + '</div>';
 }
 
@@ -656,7 +956,14 @@ function mount(el){
     var fires = results.filter(function(r){ return r.setup; });
     if (fires.length){
       cardsEl.innerHTML = fires.map(cardHtml).join('');
+      /* v698: a fire is not a ticket. Every fire still renders; the tally
+         says how many of them FORMED and how many are WATCH, so the reader
+         can never mistake the one count for the other. */
+      var nTicket = fires.filter(function(r){ return r.formation && r.formation.tradable === true; }).length;
+      var nWatch = fires.length - nTicket;
       setStat(fires.length + ' fire' + (fires.length === 1 ? '' : 's')
+        + ' \u00b7 ' + nTicket + ' formed'
+        + (nWatch ? (' \u00b7 ' + nWatch + ' WATCH (short of 3 confirmation classes or stood aside)') : '')
         + ' \u00b7 ' + results.length + ' horizon' + (results.length === 1 ? '' : 's') + ' scanned'
         + ' \u00b7 ' + new Date().toISOString().slice(11, 19) + ' UTC');
     } else {
@@ -727,6 +1034,12 @@ function ngRefresh(){
 W.ngAssess = ngAssess;
 W.ngRunScan = ngRunScan;
 W.ngPullOmniLanes = ngPullOmniLanes; /* v695: exposed for test + inspection */
+/* v698: the real HTF tape read and the confirmation builder, exported so the
+   removal of the fabricated `tape: setup.dir` and the >= 3-class contract are
+   testable without a mount. */
+W.ngHtfTape = ngHtfTape;
+W.ngHtfVwmaRegime = ngHtfVwmaRegime;
+W.ngConfirmations = ngConfirmations;
 W.newGoldScan = function(){ return __ng.snap; };
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'newgold', label: 'NEW GOLD', mount: mount, refresh: ngRefresh });

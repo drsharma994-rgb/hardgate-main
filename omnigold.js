@@ -3227,10 +3227,44 @@ terse status, and never launches a first-time scan on a global refresh.
     /* 5 — session. Gold's character is session-bound in a way alts are not:
        the London and NY killzones carry the volume that makes intraday
        structure mean anything. Off-hours is not a veto (swing setups are
-       legitimately born there) but it is reported. */
-    var sess = null, sessWhy = 'killzone module unavailable';
-    if (x.killzone && x.killzone.zone){
-      var z = String(x.killzone.zone);
+       legitimately born there) but it is reported.
+
+       THE INSTANT (hg-v698 audit closeout). This gate used to read the stamp
+       runScan computed once per scan from Date.now() (extra.killzone — the
+       WALL CLOCK) while the session confluence LEG reads the CLOSED SIGNAL
+       BAR through hgGoldSignalBarMs. One session rule, two instants: on a
+       5-minute auto-refresh the gate and the leg could describe different
+       moments on the same card, and the gate's answer moved with no new bar.
+       The stamp is now taken on the SAME closed-bar instant, through the
+       SAME shared helper the leg uses, whenever gold-formation.js and the
+       killzone module are both loaded. Pass semantics are unchanged —
+       decisive intraday, contextual on swing. Reads that genuinely ARE about
+       "now" keep the wall clock on purpose: the weekend-exposure gate (can
+       this ticket be placed on a live book?) and the inst-filter news
+       lockout still read x.nowSec. Without the shared helper this falls back
+       to the caller's stamp exactly as before, so harnesses that do not load
+       gold-formation.js are unchanged. Unreadable bars fail closed to
+       UNCHECKED — never borrowed from the wall clock, matching the leg. */
+    var sessKz = x.killzone || null;
+    var sessWhy = 'killzone module unavailable';
+    try {
+      var sgBarMsFn = gfn('hgGoldSignalBarMs');
+      var sgKzFn = gfn('goldKillzone');
+      if (sgBarMsFn && sgKzFn){
+        var sgBarMs = fin(sgBarMsFn(rows));
+        if (isFinite(sgBarMs)){
+          var sgStamp = null;
+          try { sgStamp = sgKzFn(sgBarMs); } catch (eSgKz){ sgStamp = null; }
+          if (sgStamp && sgStamp.zone) sessKz = sgStamp;
+        } else {
+          sessKz = null;
+          sessWhy = 'session instant unreadable on the closed signal bar — session not judged (fail closed)';
+        }
+      }
+    } catch (eSessKz){}
+    var sess = null;
+    if (sessKz && sessKz.zone){
+      var z = String(sessKz.zone);
       var inKz = (z !== 'OFF');
       /* Session is decisive INTRADAY and merely contextual on the swing
          horizon — a 4h structure is legitimately born at any hour, and
@@ -3238,11 +3272,11 @@ terse status, and never launches a first-time scan on a global refresh.
          against a scalper's model. The comment said this; the code did not. */
       if (x.sessionHard === false){
         sess = true;
-        sessWhy = 'session ' + (x.killzone.label || z)
+        sessWhy = 'session ' + (sessKz.label || z)
                 + (inKz ? '' : ' — off-hours, context only at swing horizon');
       } else {
         sess = inKz;
-        sessWhy = 'session ' + (x.killzone.label || z) + (inKz ? '' : ' — outside the London/NY killzones');
+        sessWhy = 'session ' + (sessKz.label || z) + (inKz ? '' : ' — outside the London/NY killzones');
       }
     }
     gates.push({ key:'session', hard:false, pass: sess, why: sessWhy });
@@ -4553,6 +4587,64 @@ terse status, and never launches a first-time scan on a global refresh.
     return plan;
   }
 
+  /* ============ UNIFIED CONFLUENCE (hg-v698) ============================
+
+     The shared >=3-DISTINCT-CLASS contract every gold desk now runs
+     (gold-formation.js). OMNIGOLD feeds it from the gate ledger it already
+     builds, through the SHARED gate->class table (HG_GOLD_CONF_GATE_CLASS)
+     so OMNIGOLD 1 and NEW GOLD classify the same evidence the same way.
+
+     Only pass === true counts. An UNCHECKED (null) gate is not evidence, and
+     geometry gates (plan-levels / stop-width / cost-drag / fill-*) are not in
+     the table at all — they say whether a trade is placeable, not whether
+     anything confirms the side.
+
+     THE SESSION LEG carries the measured window rule from the recon's UTC
+     session cohorts (recon 3.3, 7,270 settled): the clock confirms only where
+     measured gross is >= 0 — ASIA 00-06 (+0.097R, n=2,082) and NY-PM 17-20
+     (+0.053R, n=994). In LONDON 07-11 (-0.080R, n=1,305), NY-OVERLAP 12-16
+     (-0.061R, n=2,247) and OFF 21-23 (-0.011R, n=642) a passing `session`
+     gate is NOT a confirmation. The gate itself stays soft and unchanged —
+     this only decides whether the clock may be one of the three classes.
+     htf-daily / macro / dxy / season can still satisfy the same class.
+
+     Fail closed: no shared helper -> no confluence object, and the caller
+     treats a missing verdict as not formed. */
+  function hgOgConfluenceFor(gates, extra){
+    var w = W();
+    if (!w || typeof w.hgGoldConfluence !== 'function') return null;
+    var confs = [];
+    try {
+      confs = (typeof w.hgGoldConfluenceFromGates === 'function')
+        ? w.hgGoldConfluenceFromGates(gates) : [];
+    } catch (eC){ confs = []; }
+    /* SESSION LEG: re-decided against the measured UTC cohort, ON THE CLOSED
+       SIGNAL BAR. It used to read `extra.nowSec` (runScan sets that to
+       Date.now()/1000, line ~10022) and fell back to Date.now() — the WALL
+       CLOCK. The measured cohorts are keyed on the signal bar's own
+       timestamp (backtest-omnigold-results.json trades[].tISO; the fill is
+       bar sigIdx+1), so a wall-clock read asks a different question and lets
+       the SAME closed bar answer FORMED on one scan and WATCH on the next
+       with no new data. The instant and the rule both come from
+       gold-formation.js now, so OMNIGOLD, OMNIGOLD 1 and NEW GOLD cannot
+       drift apart on either. Unreadable bars -> the leg fails closed. */
+    try {
+      var applyFn = (typeof w.hgGoldApplySessionLeg === 'function') ? w.hgGoldApplySessionLeg : null;
+      var barMsFn = (typeof w.hgGoldSignalBarMs === 'function') ? w.hgGoldSignalBarMs : null;
+      /* extra.barMs is the closed signal bar's own open instant; extra.rows
+         is the tape it is read from. Nothing else is accepted — a caller
+         that supplies neither gets a fail-closed session leg rather than a
+         verdict borrowed from the wall clock. */
+      var whenMs = fin(extra && extra.barMs);
+      if (!isFinite(whenMs) && barMsFn) whenMs = barMsFn(extra && extra.rows);
+      if (applyFn) applyFn(confs, 'session', whenMs);
+    } catch (eS){}
+    /* the desk's own family consensus is the structural read the gate ledger
+       reports as `consensus`; nothing extra is added here so a card cannot
+       count the same evidence twice. */
+    try { return w.hgGoldConfluence(confs, {}); } catch (eG){ return null; }
+  }
+
   /* Grade + plan for one horizon. Reuses omniroute's grade/derive so the
      ticket rule and the R:R correction stay in one place. */
   function hgOgEvaluate(rows, hits, extra, cfg){
@@ -4597,8 +4689,12 @@ terse status, and never launches a first-time scan on a global refresh.
         catch (eFmPl) {}
         if (deriveFn) plan = deriveFn(plan);
         /* Same floor the GOLD tabs use. Native stops stay ATR-based +
-           GOLD_STOP_MAX_PCT clip — this stamp does not tighten them. */
-        if (!isFinite(fin(plan.stopFloorAtr))) plan.stopFloorAtr = 1.5;
+           GOLD_STOP_MAX_PCT clip — this stamp does not tighten them.
+           v681 made plans.js stamp its generic 0.5 crypto floor on every
+           plan, which silently kept the "only if absent" stamp here from
+           ever recording gold's 1.5 — raise to the gold floor instead
+           (Math.max: a floor stamp, never a cap; goldind.js pattern). */
+        plan.stopFloorAtr = Math.max(fin(plan.stopFloorAtr) || 0, 1.5);
       }
       ex.planRisk = (plan && isFinite(fin(plan.risk))) ? fin(plan.risk) : NaN;
       /* Attach only when the engine exists. An absent engine is not a
@@ -4625,6 +4721,35 @@ terse status, and never launches a first-time scan on a global refresh.
       catch (eFm) {
         formation = { formed: false, drag: null, failClosed: true,
           reasons: ['formation check threw — fail closed: ' + ((eFm && eFm.message) || eFm)] };
+      }
+      /* UNIFIED CONFLUENCE (hg-v698) — the same >=3-distinct-class bar
+         OMNIGOLD 1 and NEW GOLD now apply, computed from THIS card's gate
+         ledger through the shared class table. A card short of three classes
+         is not a ticket: it becomes WATCH, keeps its levels off the tradable
+         list, and names the missing class. It is NOT hidden — the stood-aside
+         section prints it with the missing class spelled out.
+         Fail closed: no shared helper -> not formed, reason named. */
+      try {
+        /* `rows` — the CLOSED bars this card was detected on — not `ex`,
+           whose nowSec is the wall clock. The session leg is a property of
+           the signal bar. */
+        var ogConf = hgOgConfluenceFor(gates, { rows: rows });
+        formation.confluence = ogConf;
+        if (!ogConf){
+          formation.formed = false;
+          formation.confluenceUnavailable = true;
+          formation.reasons = (formation.reasons || []).concat(
+            ['confluence contract unavailable — gold-formation.js is not loaded; fail closed']);
+        } else if (!ogConf.ok){
+          formation.formed = false;
+          formation.confluenceShort = true;
+          formation.reasons = (formation.reasons || []).concat([ogConf.why]);
+        }
+      } catch (eCf){
+        formation.formed = false;
+        formation.confluenceUnavailable = true;
+        formation.reasons = (formation.reasons || []).concat(
+          ['confluence check threw — fail closed: ' + ((eCf && eCf.message) || eCf)]);
       }
       out.push({
         horizon: cfg.label, kind: hit.kind, dir: hit.dir, level: hit.level, why: hit.why,
@@ -7236,12 +7361,27 @@ terse status, and never launches a first-time scan on a global refresh.
      evidence claim and only measured evidence can make it).
      Else { kind, n, winRate, grossR, paxgNetR, medCostR, venueNetR, venue,
             reasons[] }. */
-  function hgOgKindDemotion(kind, venueCost, horizon){
+  function hgOgKindDemotion(kind, venueCost){
     try{
-      /* SWING-only prefer list paid net+ on 4h. Pooled rows can still be
-         gross-negative because SCALP dragged them — do not stand the
-         SWING desk aside for a 1h loss. */
-      if (hgOgSwingPrefer(kind, horizon)) return null;
+      /* NO HORIZON EXEMPTION HERE. Until this repair the first line was
+         `if (hgOgSwingPrefer(kind, horizon)) return null;`, which returned
+         BEFORE hgOgReplayEvidence was read — so hgOgFormation never
+         computed a demotion for a SWING-prefer kind and therefore never
+         called hgOgForwardPaid on it. Measured-negative kinds
+         (RIBBON-PULLBACK grossR -0.093 at n=102, NR7-BREAK grossR -0.102
+         at n=143) formed tradable SWING cards with no evidence check at
+         all, while every other demoted kind had to show a live 'has paid'
+         forward ledger to be un-demoted. HG_OG_SWING_PREFER carries no
+         per-horizon replay row, so the "paid net+ on 4h" claim was not
+         traceable to the baked source either.
+         The list stays exactly what its own comment says — ranking / score
+         only (hgOgDeskOrder's surv(), hgOgBalanceScore's
+         'swing-replay-prefer' bonus). A SWING-prefer kind that genuinely
+         paid on the 4h desk is still exempted, through the SAME
+         hgOgForwardPaid(kind, 'SWING') check hgOgFormation applies to
+         everything else — measured live evidence, not a hand-kept list.
+         Dropping the horizon argument also makes hgOgDemotedKindCount's
+         banner figure describe what every desk actually applies. */
       var ev = hgOgReplayEvidence(kind);
       if (!ev || !isFinite(fin(ev.avgGrossR))) return null;   /* kinds only carry gross */
       if (!(fin(ev.n) >= HG_OG_DEMOTE_MIN_N)) return null;
@@ -7277,8 +7417,9 @@ terse status, and never launches a first-time scan on a global refresh.
      a hand-kept list, so a re-bake or threshold change moves it. At today's
      bake: 18 at XM (~0.020% RT), 33 at PAXG (0.26% RT) after n-floor 100→50
      (hg-v589: mid-sample losers such as PDL-SWEEP / ER-IGNITION / ASIA-BREAK
-     can no longer hide under n<100). SWING-prefer kinds are exempt on the
-     4h desk when that horizon paid. */
+     can no longer hide under n<100). No kind is exempt by name: a demoted
+     kind clears only through hgOgForwardPaid in hgOgFormation, so this
+     count describes exactly what every desk applies. */
   function hgOgDemotedKindCount(venueCost){
     var vc = (venueCost && isFinite(fin(venueCost.rtCostPct))) ? venueCost : hgOgVenueCost();
     var kinds = HG_OG_REPLAY_EVIDENCE.kinds, k, n = 0;
@@ -7373,7 +7514,8 @@ terse status, and never launches a first-time scan on a global refresh.
        - KIND DEMOTION: measured-toxic per hgOgKindDemotion -> not formed,
          UNLESS the kind's live forward ledger reads 'has paid' (the same
          read the FORWARD table renders) — then unDemoted carries both the
-         demotion and the forward evidence, shown on the card.
+         demotion and the forward evidence, shown on the card. This is the
+         ONLY route out of a demotion; no name list exempts a kind.
        - No measurable stop -> no stop-floor verdict (a card without levels
          is already not tradable); kind demotion still applies.
      Never throws. Callers treat their OWN failure to obtain a verdict as
@@ -7396,7 +7538,7 @@ terse status, and never launches a first-time scan on a global refresh.
         + 'R of 1R before the idea speaks (' + vc.venue + ' '
         + fin(vc.rtCostPct).toFixed(3) + '% RT vs ' + drag.stopPct.toFixed(2) + '% stop)');
     }
-    var dem = kind ? hgOgKindDemotion(kind, vc, setup.horizon) : null;
+    var dem = kind ? hgOgKindDemotion(kind, vc) : null;
     if (dem){
       var paid = hgOgForwardPaid(kind, setup.horizon);
       if (paid){
@@ -7471,6 +7613,62 @@ terse status, and never launches a first-time scan on a global refresh.
     return out;
   }
 
+  /* WATCH SECTION (hg-v698). Setups that fired, cleared the venue floor and
+     the measured-evidence checks, and are short ONLY of the shared
+     >=3-distinct-class confluence bar. Nothing here is measured-negative and
+     nothing here is hidden: each row names the classes that DID confirm and
+     the class that is missing, so the reader knows exactly what would turn it
+     into a ticket. Still no entry/stop/target — a level on a card the desk
+     has declined to call tradable is an invitation. */
+  /* THE ONE PREDICATE that separates "not yet" from "measured losing".
+     It was written out three times (section partition, status tally, and
+     nowhere at all in the collapsed wrapper, which is how the wrapper came
+     to call every stood-aside card measured-negative). One function, so the
+     three places cannot disagree about what a WATCH card is. */
+  function hgOgIsWatchOnly(f){
+    return !!(f && (f.confluenceShort === true || f.confluenceUnavailable === true)
+      && !f.kindDemotion && !f.stopFloor && !f.catalogExclude && !f.edgeSuppress);
+  }
+  function hgOgStoodAsideSplit(cards){
+    var watch = [], neg = [], i;
+    for (i = 0; i < (cards || []).length; i++){
+      if (!cards[i]) continue;
+      if (hgOgIsWatchOnly(cards[i].formation)) watch.push(cards[i]);
+      else neg.push(cards[i]);
+    }
+    return { watch: watch, neg: neg };
+  }
+
+  function hgOgWatchSectionHtml(cards){
+    if (!cards || !cards.length) return '';
+    var w = W();
+    var htmlFn = (w && typeof w.hgGoldConfluenceHtml === 'function') ? w.hgGoldConfluenceHtml : null;
+    var h = '<details class="note og-watch-confluence" data-og-watch="1" style="margin-top:12px">';
+    h += '<summary style="cursor:pointer"><b>WATCH — short of the confluence bar</b> ('
+      + cards.length + ' setup' + (cards.length === 1 ? '' : 's')
+      + ', not tickets yet)</summary>';
+    h += '<div class="dim" style="margin:8px 0;font-size:0.85em">A gold setup becomes a tradable card only with '
+      + '<b>&ge; 3 independent confirmations on the closed bar from distinct classes</b> '
+      + '(structure · momentum · participation · session/HTF). One class counts once however many reads inside it agree. '
+      + 'These fired and are on the record; they are NOT tradable and no levels print. '
+      + 'The missing class is named on each row.</div>';
+    var i, c, cf;
+    for (i = 0; i < cards.length; i++){
+      c = cards[i];
+      if (!c) continue;
+      h += '<div class="og-watch-row" style="margin:6px 0;font-size:0.85em">'
+        + '<b>' + esc(String(c.horizon || '') + ' · ' + String(c.kind || '?') + ' '
+                     + String(c.dir || '').toUpperCase()) + '</b>';
+      cf = c.formation && c.formation.confluence;
+      if (cf && htmlFn) h += htmlFn(cf);
+      else if (cf) h += '<div class="dim">' + esc(cf.why || '') + '</div>';
+      else h += '<div class="dim">' + esc((c.formation && c.formation.reasons || []).join(' · ')) + '</div>';
+      h += '</div>';
+    }
+    h += '</details>';
+    return h;
+  }
+
   /* The stood-aside section: every setup that fired but did NOT form.
      Collapsed, listed with each kind's replay row — n, WR, grossR,
      venue-net — and the formation reason. NO entry/stop/target renders
@@ -7479,7 +7677,22 @@ terse status, and never launches a first-time scan on a global refresh.
   function hgOgDemotedSectionHtml(cards){
     if (!cards || !cards.length) return '';
     var vc = hgOgVenueCost();
-    var h = '<details class="note og-demoted-kinds" data-og-demoted="1" style="margin-top:12px">';
+    /* hg-v698: a card can leave the tradable list for two DIFFERENT reasons,
+       and calling both "measured-negative" is a lie about one of them.
+         WATCH             the evidence is fine as far as it goes, it is just
+                           short of the >=3-distinct-class confluence bar.
+                           The missing class is named; nothing is measured
+                           against this kind.
+         MEASURED-NEGATIVE the replay / venue floor / catalog stood it aside.
+       They render in separate blocks so a reader can tell "not yet" from
+       "measured losing". */
+    var __split = hgOgStoodAsideSplit(cards);
+    var watchCards = __split.watch, negCards = __split.neg;
+    var h = '';
+    if (watchCards.length) h += hgOgWatchSectionHtml(watchCards);
+    if (!negCards.length) return h;
+    cards = negCards;
+    h += '<details class="note og-demoted-kinds" data-og-demoted="1" style="margin-top:12px">';
     h += '<summary style="cursor:pointer"><b>MEASURED-NEGATIVE KINDS — stood aside</b> ('
       + cards.length + ' setup' + (cards.length === 1 ? '' : 's')
       + ' fired, none tradable)</summary>';
@@ -9096,6 +9309,11 @@ terse status, and never launches a first-time scan on a global refresh.
       if (!c.plan) continue;              /* no levels means nothing to act on */
       /* not-FORMED (hg-v533): never a pick, whatever its grade says */
       if (c.formation && c.formation.formed === false) continue;
+      /* KILLED (v689): a proven-losing kind is filtered out of the visible
+         list by hgSolidityReorder, so it must never be the MOST PROBABLE
+         pick either — otherwise the tab prints ENTRY/STOP/T1 for a card it
+         simultaneously reports as hidden. Same shape as the formed check. */
+      if (c.solidity && c.solidity.killed === true) continue;
       if (c.plan.momentumStop === true) vol.push(c);
       else structural.push(c);
     }
@@ -9150,6 +9368,8 @@ terse status, and never launches a first-time scan on a global refresh.
       /* not-FORMED (hg-v533): not even as a WATCH — it lives in the
          MEASURED-NEGATIVE section instead */
       if (c.formation && c.formation.formed === false) continue;
+      /* KILLED (v689): filtered out of the visible list, so not a WATCH. */
+      if (c.solidity && c.solidity.killed === true) continue;
       if (c.plan.momentumStop === true) vol.push(c);
       else structural.push(c);
     }
@@ -9340,19 +9560,40 @@ terse status, and never launches a first-time scan on a global refresh.
         +  '</div>';
     }
     if (c.plan){
-      /* Apply regime scale factor to risk % display */
+      /* THE RISK % IS THE STOP, NOT THE SIZE. plan.riskPct is
+         |entry - stop| / entry * 100 — a GEOMETRIC distance, fixed by the
+         two prices printed on this very line. It used to be multiplied by
+         hgOgRegimeScaleFactor (1.0 / 0.7 / 0.6), so a card reading
+         ENTRY 3400 · STOP 3366 (a 1.00% stop) printed "risk 0.70%" in a
+         DECOUPLING regime — the line contradicted itself. The regime factor
+         is a POSITION-SIZE multiplier; it is shown as one, beside the
+         geometry rather than folded into it. */
       var regimeScale = 1.0;
       if (__og.correlationRegime){
         regimeScale = hgOgRegimeScaleFactor(__og.correlationRegime.regime);
       }
-      var displayRiskPct = fin(c.plan.riskPct) * regimeScale;
       h += '<div class="plan">ENTRY ' + fmtPx(c.plan.entry) + ' · STOP ' + fmtPx(c.plan.stop)
         +  ' · T1 ' + fmtPx(c.plan.t1) + ' · T2 ' + fmtPx(c.plan.t2)
-        +  ' · <b>R:R ' + fmt(c.plan.rr1, 2) + '</b> · risk ' + fmt(displayRiskPct, 2) + '%'
-        +  (regimeScale < 1.0 ? (' <span class="dim">(regime adj ' + (regimeScale * 100).toFixed(0) + '%)</span>') : '') + '</div>';
+        +  ' · <b>R:R ' + fmt(c.plan.rr1, 2) + '</b> · stop ' + fmt(fin(c.plan.riskPct), 2) + '% of entry'
+        +  (regimeScale < 1.0
+              ? (' <span class="dim">· size ' + (regimeScale * 100).toFixed(0) + '% (regime '
+                 + esc(String((__og.correlationRegime && __og.correlationRegime.regime) || '')) + ')</span>')
+              : '') + '</div>';
       /* Replay evidence line (ADDITIVE): the mechanic's settled PAXG-replay
          record, negative numbers included; '' when it has no n>=40 record. */
       h += hgOgReplayLineHtml(c.kind);
+      /* UNIFIED CONFLUENCE (hg-v698): the named independent confirmations
+         this card actually stands on, one line per confirmation, plus any
+         class still missing. Every name comes from this card's own gate
+         ledger — nothing is invented and no count is inflated (a class
+         counts once however many reads inside it agree). */
+      try {
+        var wConf = W();
+        if (c.formation && c.formation.confluence && wConf
+            && typeof wConf.hgGoldConfluenceHtml === 'function'){
+          h += wConf.hgGoldConfluenceHtml(c.formation.confluence);
+        }
+      } catch (eCH){}
       /* venue-vs-replay honesty (hg-v533): cost figures on this card are
          venue-priced, the replay line above is a PAXG-cost fact. */
       h += hgOgVenueCostNoteHtml();
@@ -10205,11 +10446,33 @@ terse status, and never launches a first-time scan on a global refresh.
           }
           ogCollapsed = keep;
         })();
+        /* Counted ONCE, from the shared predicate, and used by both the
+           status tally and the collapsed wrapper below — those two used to
+           disagree, and the wrapper (the only line visible before a reader
+           expands it) called every WATCH card measured-negative. */
+        var __sa = hgOgStoodAsideSplit(ogDemotedCards);
+        var ogWatchN = __sa.watch.length, ogNegN = __sa.neg.length;
         if (ogDemotedCards.length){
-          __og.lastStat += '  ·  ' + ogDemotedCards.length + ' stood aside (measured-negative kind / venue stop floor)';
+          /* hg-v698: the tally now names BOTH reasons a card can leave the
+             tradable list, because they mean opposite things to a reader —
+             "measured losing" versus "not enough independent confirmation
+             yet". Counted from the same stamps the two sections partition on. */
+          __og.lastStat += '  ·  ' + ogDemotedCards.length + ' stood aside ('
+            + (ogNegN ? ogNegN + ' measured-negative / venue stop floor' : '')
+            + (ogNegN && ogWatchN ? ' · ' : '')
+            + (ogWatchN ? ogWatchN + ' WATCH — short of 3 confirmation classes' : '')
+            + ')';
           ui.stat.textContent = __og.lastStat + warn;
         }
 
+        /* KILL-LIST BEFORE THE PICK (v689 repair). hgOgDeskOrder stamps
+           .solidity and then drops sol.killed cards. Stamping there and
+           only there meant the pick was chosen from an UNSTAMPED list, so
+           a proven-losing kind could be selected as MOST PROBABLE and keep
+           printing ENTRY/STOP/T1 while the same card was counted in the
+           "N proven-losing setups hidden" note. Stamp first so hgOgPickFor
+           can see .killed; hgOgDeskOrder re-stamps idempotently below. */
+        try { hgOgStampSolidity(ogCollapsed, deskTape); } catch (eSolPre) {}
         var pickScalp = hgOgPickFor(ogCollapsed, HORIZONS.scalp.label, scalpTape);
         var pickSwing = hgOgPickFor(ogCollapsed, HORIZONS.swing.label, swingTape);
         var watchScalp = pickScalp ? null : hgOgPickWatchFor(ogCollapsed, HORIZONS.scalp.label, scalpTape);
@@ -10219,6 +10482,18 @@ terse status, and never launches a first-time scan on a global refresh.
         if (watchScalp) watchScalp.topWatch = true;
         if (watchSwing) watchSwing.topWatch = true;
         ogCollapsed = hgOgDeskOrder(ogCollapsed, deskTape);
+        /* Belt and braces: the re-stamp inside hgOgDeskOrder could flip a
+           card to killed (fresh forward samples land between the two
+           calls). A pick the ordered list no longer carries is not a pick. */
+        (function(){
+          function stillLive(p){
+            if (!p) return null;
+            if (p.solidity && p.solidity.killed === true){ p.topPick = false; p.topWatch = false; return null; }
+            return p;
+          }
+          pickScalp = stillLive(pickScalp); pickSwing = stillLive(pickSwing);
+          watchScalp = stillLive(watchScalp); watchSwing = stillLive(watchSwing);
+        })();
 
         /* POPULATION COUNTS strip (hg-v537) — from the REAL partition just
            made: the desk-ordered tradable list and the stood-aside list. */
@@ -10310,11 +10585,19 @@ terse status, and never launches a first-time scan on a global refresh.
            so the tab reads as 'tradable + a summary of what was stood
            aside'. Expanding shows the exact same block hg-v533 rendered. */
         if (ogDemotedCards.length){
+          /* hg-v698 (audit fix): this summary is the ONLY text a reader sees
+             before expanding, and it used to call all of them
+             "measured-negative" — including the WATCH cards the block inside
+             it explicitly separates out as NOT measured against. Same two
+             counts as the status tally, from the same predicate. */
           h += '<details class="note" id="ogDemotedDetails" style="margin-top:12px">'
             +    '<summary style="cursor:pointer;padding:6px 0">▸ '
-            +      ogDemotedCards.length + ' measured-negative setup'
+            +      ogDemotedCards.length + ' setup'
             +      (ogDemotedCards.length === 1 ? '' : 's')
-            +      ' stood aside · <span class="dim">click to inspect</span></summary>'
+            +      ' stood aside'
+            +      (ogNegN ? ' · ' + ogNegN + ' measured-negative / venue stop floor' : '')
+            +      (ogWatchN ? ' · ' + ogWatchN + ' WATCH (short of 3 confirmation classes)' : '')
+            +      ' · <span class="dim">click to inspect</span></summary>'
             +    '<div style="margin-top:8px">'
             +      hgOgDemotedSectionHtml(ogDemotedCards)
             +    '</div>'
@@ -11243,18 +11526,43 @@ terse status, and never launches a first-time scan on a global refresh.
 
   /* ==================== RISK SIZING & DRAWDOWN CIRCUIT BREAKER ==================== */
 
-  function hgOgLoadDrawdownState(){
-    try {
-      var stored = localStorage.getItem('hg_og_drawdown_state');
-      if (stored) return JSON.parse(stored);
-    } catch (e) {}
-    /* Default state: Monday 00:00 IST, 0 P&L, no loss streak, circuit not active */
+  /* A DEFAULT STATE, never a partial one. hgOgLoadDrawdownState used to
+     return whatever JSON.parse produced — `null`, a number, a string, an
+     array — and every caller then wrote `.weekStart` onto it. 'null' threw
+     inside hgOgResetWeeklyDrawdown (which runScan calls at line ~10054 with
+     no local try/catch), and a legacy object missing weekPnl/losStreak turned
+     both counters into NaN on the first ++/+=, at which point
+     `losStreak >= 3` and `weekPnl <= -2.0` are false forever — the auto-50%
+     sizing and the -2% breaker silently off, showing as "Streak: undefinedL".
+     Every field is coerced here so no downstream reader has to. */
+  function hgOgDrawdownDefaults(){
     return {
-      weekStart: new Date().toISOString().split('T')[0],
+      weekStart: hgOgMondayIstIso(new Date()),
       weekPnl: 0,
       losStreak: 0,
+      settles: 0,
       isCircuitBreakerActive: false
     };
+  }
+  function hgOgNormalizeDrawdownState(raw){
+    var d = hgOgDrawdownDefaults();
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return d;
+    var ws = raw.weekStart;
+    if (typeof ws === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(ws)) d.weekStart = ws;
+    d.weekPnl = isFinite(+raw.weekPnl) ? +raw.weekPnl : 0;
+    d.losStreak = isFinite(+raw.losStreak) ? Math.max(0, Math.floor(+raw.losStreak)) : 0;
+    d.settles = isFinite(+raw.settles) ? Math.max(0, Math.floor(+raw.settles)) : 0;
+    d.isCircuitBreakerActive = raw.isCircuitBreakerActive === true;
+    return d;
+  }
+
+  function hgOgLoadDrawdownState(){
+    var raw = null;
+    try {
+      var stored = localStorage.getItem('hg_og_drawdown_state');
+      if (stored) raw = JSON.parse(stored);
+    } catch (e) { raw = null; }
+    return hgOgNormalizeDrawdownState(raw);
   }
 
   function hgOgSaveDrawdownState(state){
@@ -11282,6 +11590,7 @@ terse status, and never launches a first-time scan on a global refresh.
       state.weekStart = currentMonday;
       state.weekPnl = 0;
       state.losStreak = 0;
+      state.settles = 0;
       state.isCircuitBreakerActive = false;
       hgOgSaveDrawdownState(state);
     }
@@ -11348,7 +11657,18 @@ terse status, and never launches a first-time scan on a global refresh.
   }
 
   function hgOgDrawdownMetricsHtml(state){
-    if (!state) state = hgOgResetWeeklyDrawdown();
+    state = hgOgNormalizeDrawdownState(state || hgOgResetWeeklyDrawdown());
+    /* NOTHING HAS BEEN SETTLED INTO THIS PANEL. hgOgUpdateDrawdownOnSettle is
+       the only writer and it has no call site, so "Week P&L: 0% | Streak: 0L"
+       was a fabricated measurement, not a measured zero — the tab's own house
+       rule is unavailable over estimates. Say unread until a settle lands.
+       (The R-denominated forward ledger cannot feed weekPnl: this file has no
+       account-equity or risk-per-trade concept, so R -> % would be an invented
+       constant. See the report note.) */
+    if (!(state.settles > 0)){
+      return '<span class="dim">Week P&amp;L: unavailable · Streak: unavailable '
+           + '(no settled outcome recorded — breaker and auto-sizing unread)</span>';
+    }
     var html = '<span class="dim">Week P&L: ';
     html += (isFinite(state.weekPnl) && state.weekPnl !== 0)
       ? ((state.weekPnl >= 0 ? '+' : '') + state.weekPnl.toFixed(1) + '%')
@@ -11365,19 +11685,26 @@ terse status, and never launches a first-time scan on a global refresh.
   }
 
   function hgOgDrawdownCircuitBannerHtml(state){
-    if (!state || !state.isCircuitBreakerActive) return '';
+    if (!state || state.isCircuitBreakerActive !== true) return '';
+    /* weekPnl.toFixed threw on a legacy state that carried the flag but not
+       the number, taking the whole MOST PROBABLE render down with it. */
+    var pnl = isFinite(+(state && state.weekPnl)) ? +state.weekPnl : null;
     var html = '<div style="background:#ffe0e0;border:1px solid #ff6666;border-radius:4px;'
              + 'padding:10px;margin:8px 0;color:#cc0000;font-weight:bold;">'
-             + '⚠ Drawdown Circuit Breaker: ' + (state.weekPnl >= 0 ? '+' : '') + state.weekPnl.toFixed(1) + '% week | '
-             + 'PAUSE ENTRIES until next Mon</div>';
+             + '⚠ Drawdown Circuit Breaker: '
+             + (pnl === null ? 'week P&amp;L unavailable' : ((pnl >= 0 ? '+' : '') + pnl.toFixed(1) + '% week'))
+             + ' | PAUSE ENTRIES until next Mon</div>';
     return html;
   }
 
   function hgOgUpdateDrawdownOnSettle(outcome, pnl){
-    /* Called when a setup settles (outcome = 'win' or 'loss', pnl = numeric or null) */
+    /* Called when a setup settles (outcome = 'win' or 'loss', pnl = numeric or null).
+       `settles` counts the folds so the panel can tell "measured zero" from
+       "never fed" instead of printing a fabricated 0% / 0L. */
     var state = hgOgResetWeeklyDrawdown();
 
-    if (!outcome) return state;
+    if (outcome !== 'win' && outcome !== 'loss') return state;
+    state.settles++;
 
     /* Update consecutive loss streak */
     if (outcome === 'loss'){
@@ -11386,9 +11713,10 @@ terse status, and never launches a first-time scan on a global refresh.
       state.losStreak = 0;
     }
 
-    /* Accumulate weekly P&L if provided */
-    if (isFinite(pnl) && pnl !== 0){
-      state.weekPnl += pnl;
+    /* Accumulate weekly P&L if provided. `+pnl` so a numeric string cannot
+       turn the running total into a concatenated string (and then NaN). */
+    if (isFinite(+pnl) && +pnl !== 0){
+      state.weekPnl += +pnl;
     }
 
     /* Check circuit breaker: -2% threshold */
@@ -11405,12 +11733,13 @@ terse status, and never launches a first-time scan on a global refresh.
 
   function hgOgApplyDrawdownSizing(riskScale, state){
     /* Apply consecutive loss auto-reduction (50%) on top of other sizing */
-    if (!state) state = hgOgResetWeeklyDrawdown();
+    state = hgOgNormalizeDrawdownState(state || hgOgResetWeeklyDrawdown());
     var lossReduction = hgOgGetConsecutiveLossReduction(state.losStreak);
     return riskScale * lossReduction;
   }
 
   window.hgOgLoadDrawdownState = hgOgLoadDrawdownState;
+  window.hgOgNormalizeDrawdownState = hgOgNormalizeDrawdownState;
   window.hgOgSaveDrawdownState = hgOgSaveDrawdownState;
   window.hgOgResetWeeklyDrawdown = hgOgResetWeeklyDrawdown;
   window.hgOgCalculateRiskScale = hgOgCalculateRiskScale;
@@ -11470,6 +11799,9 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgBalanceScore = hgOgBalanceScore;
     window.hgOgBalanceParts = hgOgBalanceParts;
     window.hgOgDeskOrder = hgOgDeskOrder;
+    /* exported so the kill-list-before-the-pick order runScan uses is
+       testable without a mount (v689 repair). */
+    window.hgOgStampSolidity = hgOgStampSolidity;
     window.hgOgMostProbablePanelHtml = hgOgMostProbablePanelHtml;
     /* TOP SETUP — gate-ledger-fed card (hg-v541); exported so the pick,
        the level-fresh re-check and the stand-aside copy are testable
@@ -11537,6 +11869,11 @@ terse status, and never launches a first-time scan on a global refresh.
     window.HG_OG_SWING_PREFER = HG_OG_SWING_PREFER;
     window.hgOgFormation = hgOgFormation;
     window.hgOgDemotedSectionHtml = hgOgDemotedSectionHtml;
+    /* hg-v698: the unified >=3-distinct-class confluence read and the WATCH
+       section it feeds, exported so both are testable without a mount. */
+    window.hgOgConfluenceFor = hgOgConfluenceFor;
+    window.hgOgWatchSectionHtml = hgOgWatchSectionHtml;
+    window.hgOgStoodAsideSplit = hgOgStoodAsideSplit;
     window.HG_OG_FORM_COST_R_MAX = HG_OG_FORM_COST_R_MAX;
     window.hgOgCostChipHtml = hgOgCostChipHtml;
     window.hgOgReplayEvidence = hgOgReplayEvidence;

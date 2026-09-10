@@ -85,8 +85,11 @@ console.log('== shell wiring ==');
   const idx = fs.readFileSync(root + 'index.html', 'utf8');
   ok(swCacheOk(sw), 'cache matches build stamp');
   ok(sw.indexOf('gstack-brain.js') >= 0, 'sw precaches gstack-brain.js');
-  ok(/gstack-brain\.js/.test(idx) && /brain\.js/.test(idx)
-    && idx.indexOf('src="gstack-brain.js"') < idx.indexOf('src="brain.js"'),
+  /* Tags carry ?v=NNN cache-busts (the ship checklist requires index.html
+     ?v= pins to move with every deploy) — match with or without the query. */
+  const tagIdx = f => { const m = idx.match(new RegExp('<script src="' + f.replace('.', '\\.') + '(\\?v=\\d+)?"></script>')); return m ? idx.indexOf(m[0]) : -1; };
+  const gIdx = tagIdx('gstack-brain.js'), bIdx = tagIdx('brain.js');
+  ok(gIdx >= 0 && bIdx >= 0 && gIdx < bIdx,
     'index loads gstack-brain.js before brain.js');
   const brain = fs.readFileSync(root + 'brain.js', 'utf8');
   ok(/applyGstackBrain/.test(brain), 'brain.js calls applyGstackBrain');

@@ -31,9 +31,9 @@ const rsniper = readFileSync(resolve(ROOT, 'reversalsniper.js'), 'utf8');
 /* omniroute */
 assert.ok(/v683: render the shared SOLIDITY chip/.test(omniroute),
   'omniroute v683 comment');
-assert.ok(/if \(c\.solidity && Wc && typeof Wc\.hgSolidityChipHtml === 'function'\)/.test(omniroute),
+assert.ok(/if \(c\.solGrade && Wc && typeof Wc\.hgSolidityChipHtml === 'function'\)/.test(omniroute),
   'omniroute feature-check pattern');
-assert.ok(/solChip = Wc\.hgSolidityChipHtml\(c\.solidity\);/.test(omniroute),
+assert.ok(/solChip = Wc\.hgSolidityChipHtml\(c\.solGrade\);/.test(omniroute),
   'omniroute chip call');
 assert.ok(/\(solChip \? ' ' \+ solChip : ''\)/.test(omniroute),
   'omniroute appends chip conditionally');

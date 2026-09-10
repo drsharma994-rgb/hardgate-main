@@ -7,6 +7,11 @@
 
    G1–G7 and crypto execute stay untouched.
 
+   v656 amendment: the user-facing AUTO control is unlocked again
+   (HG_AUTO_REFRESH_HARDCODED_MS = 0, OFF is the default) — the owner asked
+   to stop the forced 10-minute auto-refresh. The internal ALERTS sweep and
+   every scan clock still ride the locked 10-minute global cycle.
+
    Run: node tests/test-scan-every-10m.mjs */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -34,18 +39,23 @@ ok(/const HG_TAB_ALERT_MS = 10 \* 60 \* 1000/.test(HTML), 'tab-alert scan clock 
 ok(/const HG_BEST_ALERT_MS = 10 \* 60 \* 1000/.test(HTML), 'BEST alert clock is 10 minutes');
 ok(/HG_ALERT_CYCLE_MS = HG_TAB_ALERT_MS/.test(HTML), 'alert interval aliases the 10-min tab clock');
 ok(/HG_ALERTS_AUTO_REFRESH_MS = HG_GLOBAL_SCAN_MS/.test(HTML), 'AUTO refresh uses the global 10-min clock');
-ok(/HG_AUTO_REFRESH_HARDCODED_MS = HG_GLOBAL_SCAN_MS/.test(HTML), 'AUTO is hard-coded to the global clock');
+/* v656: owner asked to STOP forcing the 10-minute auto-refresh. The
+   hard-code constant is now 0 (unlocked) so OFF/2m/3m/5m/10m/15m clicks
+   are honored and OFF is the painted default. The internal ALERTS sweep
+   still rides the 10-minute global clock (asserted above); only the
+   user-facing AUTO control is unlocked. */
+ok(/const HG_AUTO_REFRESH_HARDCODED_MS = 0/.test(HTML), 'AUTO hard-code is 0 — control unlocked (v656)');
 ok(!/const HG_GLOBAL_SCAN_MS = 5 \* 60 \* 1000/.test(HTML), '5-minute global scan clock is gone');
 ok(!/const HG_TAB_ALERT_MS = 5 \* 60 \* 1000/.test(HTML), '5-minute tab-alert scan clock is gone');
 
-console.log('== header: AUTO 10m locked ==');
-ok(/AUTO 10m/.test(HTML), 'header label says AUTO 10m');
+console.log('== header: AUTO control, OFF default, 10m available (v656 unlock) ==');
+ok(/<span class="hgalabel">AUTO<\/span>/.test(HTML), 'header carries the AUTO segmented control');
 ok(/id="autoRef600000"/.test(HTML), '10m segment exists');
-ok(/id="autoRef600000"[^>]*class="on"/.test(HTML) || /id="autoRef600000" class="on"/.test(HTML),
-   '10m segment is the painted default');
+ok(/id="autoRefOff" class="on"/.test(HTML) || /id="autoRefOff"[^>]*class="on"/.test(HTML),
+   'OFF segment is the painted default (v656: no forced auto-refresh)');
 ok(/'600000':600000/.test(HTML) || /"600000":600000/.test(HTML), 'setAutoRefresh knows 600000ms');
 ok(/autoRef600000/.test(HTML) && /hgAutoPaint/.test(HTML), 'paint list includes the 10m button');
-ok(/locked at 10 minutes/.test(HTML), 'control title says the 10-minute lock');
+ok(/no longer locked to 10 min/.test(HTML), 'control title says the lock was lifted (v656)');
 
 console.log('== every tab rides the same sweep ==');
 ok(/function hgScanAllTabs/.test(HTML) && /function hgCollectAllScanTabIds/.test(HTML),

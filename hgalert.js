@@ -125,7 +125,13 @@ function alertPushGate(meta){
     if (!should) return { allow: true };
     meta = meta || {};
     return should(meta.setup || meta.scanner || 'hgalert', meta.regime || 'MIXED', meta.tier || 'clean');
-  }catch(e){ return { allow: true }; }
+  }catch(e){
+    /* Fail-open on purpose (a broken precision layer must not silence real
+       alerts) but never silently: mark the verdict unchecked with the fault
+       (fail-open gate contract, test-gates-fail-open). */
+    return { allow: true, unchecked: true,
+             reason: 'push gate threw: ' + (e && e.message || e) };
+  }
 }
 function alertRecordFire(meta){
   try{

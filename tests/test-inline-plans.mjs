@@ -328,13 +328,20 @@ const trapRows = (() => {
   return rows;
 })();
 
-/* smc: displacement leaves an unmitigated 4H FVG, price drifts back into it */
-const smcRows = linRows(260, [[0, 100], [249, 100], [253, 100.2], [254, 105], [255, 104.2], [256, 103.6], [257, 103.1], [258, 103.0], [259, 102.9]]);
-smcRows[252] = bar(252, 100.0, 100.3, 99.9, 100.1);
-smcRows[253] = bar(253, 100.1, 105.4, 100.0, 105.0);
-smcRows[254] = bar(254, 105.0, 105.2, 104.5, 104.6);
-smcRows[255].l = 103.9; smcRows[256].l = 103.3; smcRows[257].l = 102.9; smcRows[258].l = 102.85;
-smcRows[259] = bar(259, 103.0, 103.05, 102.8, 102.8);
+/* smc: displacement leaves an unmitigated 4H FVG, price drifts back into it.
+   v645 (48ee910) put a min-R:R gate on the inline SMC scan (hgTabMinRr('smc'),
+   backtest-tightened; fallback 2.5, desk param 3) — the old fixture gapped
+   straight off the 100 base, so the structural stop sat ~2.7 under a 102.8
+   entry against a 105.4 liquidity target (R:R ~0.96) and no card could ever
+   print again. Stage the displacement off a 103 shelf instead: the FVG floor
+   sits ~0.7 under the tap while T1 (the 106.4 displacement high) is ~2.6
+   away — R:R ~3.7 clears the tightened gate either way. */
+const smcRows = linRows(260, [[0, 100], [247, 100], [250, 103], [252, 103.1], [254, 106], [255, 105.4], [256, 104.6], [257, 104.1], [258, 103.9], [259, 103.8]]);
+smcRows[252] = bar(252, 103.0, 103.3, 102.9, 103.1);
+smcRows[253] = bar(253, 103.1, 106.4, 103.0, 106.0);
+smcRows[254] = bar(254, 106.0, 106.2, 105.5, 105.6);
+smcRows[255].l = 104.9; smcRows[256].l = 104.4; smcRows[257].l = 104.0; smcRows[258].l = 103.85;
+smcRows[259] = bar(259, 103.9, 103.95, 103.8, 103.8);
 
 /* ob: red OB bar, green displacement through the swing high, drift back in */
 const obRows = linRows(260, [[0, 99], [249, 99], [253, 99.4], [254, 102.6], [255, 102.2], [259, 100.0]]);

@@ -312,6 +312,11 @@ async function hgPostGateSetupVeto(ticker, hit, rows, style, getCandles){
         if (typeof G.hgOnchainAltFetch === 'function' && !G.hgOnchainAltState()) await G.hgOnchainAltFetch();
         var altG = G.hgOnchainAltGate(sym, dir);
         if (altG && altG.pass === false) return { ok: false, reason: altG.note || 'on-chain alt veto', tag: 'onchain-alt' };
+        /* state 'na' = the gate could not read its legs (snap not loaded, or
+           netflow AND whale both dark). Previously only a THROW was reported
+           as unchecked, so a dark gate was indistinguishable from a cleared
+           one on the card. */
+        if (altG && altG.state === 'na') unchecked.push('on-chain alt: ' + (altG.note || 'not read'));
         if (altG && altG.bonus) hit.onchainAltBonus = true;
         if (altG && altG.tightenRr) hit.tightenRr = (hit.tightenRr || 0) + altG.tightenRr;
       }catch(eAlt){ unchecked.push('on-chain alt: ' + (eAlt && eAlt.message || eAlt)); }
@@ -1178,18 +1183,30 @@ function hgPlanFromRisk(dir, entry, stop, opts){
         }
       } catch(eA){}
     }
+    /* v675 SIDE CHECK RUNS FIRST. The v681 floor below rewrites the stop to
+       `entry -/+ minStopDist`, which lands on the CORRECT side whatever the
+       caller passed — so running it before this check silently REPAIRED a
+       long whose stop sat above entry (and a short whose stop sat below)
+       into a fully-formed, valid-looking plan, and turned entry === stop
+       into a tradeable risk. The identical input was rejected when no ATR
+       happened to be in scope, so the guard inverted on data availability.
+       A mislabelled-direction row is exactly what v675 exists to kill: the
+       floor may only ever WIDEN an already-correct stop, never manufacture
+       one. Side is decided on the caller's stop, before any widening. */
+    var risk = (dir === 'long') ? (entry - stop) : (stop - entry);
+    if (!(risk > 0)) return null;
     var stopWidened = false;
     var stopFloorAtr = (typeof HG_MIN_STOP_ATR === 'number') ? HG_MIN_STOP_ATR : 0.5;
     if (isFinite(atrIn) && atrIn > 0){
       var minStopDist = stopFloorAtr * atrIn;
-      var curDist = Math.abs(entry - stop);
-      if (curDist < minStopDist){
+      if (risk < minStopDist){
         stop = (dir === 'long') ? (entry - minStopDist) : (entry + minStopDist);
         stopWidened = true;
+        /* recomputed from the assigned stop, not from minStopDist, so the
+           number matches the printed stop bit-for-bit. */
+        risk = (dir === 'long') ? (entry - stop) : (stop - entry);
       }
     }
-    var risk = (dir === 'long') ? (entry - stop) : (stop - entry);
-    if (!(risk > 0)) return null;
     var t1R = opts.t1R !== undefined ? opts.t1R : HG_T1_R;
     var t2R = opts.t2R !== undefined ? opts.t2R : HG_T2_R;
     var minRr = opts.minRr !== undefined ? opts.minRr : HG_MIN_RR_DEFAULT;

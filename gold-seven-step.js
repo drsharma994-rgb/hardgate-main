@@ -715,6 +715,7 @@
       t2Label: tg.t2 ? tg.t2.label : 'unavailable', rr1: rr1, rr2: rr2, grade: loc.grade, gradeWhy: loc.why,
       obOk: obOk, ob: ob, obSrc: obSrc, sweep: src.sweep || null, age: isFinite(src.age) ? src.age : NaN,
       reclaimed: !!src.reclaimed, acceptance: !!src.acceptance, breach: fin(src.breach), engine: src.engine || 'local',
+      continuation: !!src.continuation,
       gates: [], gatesPass: 0, families: null, vetoes: [], held: false
     };
     /* 12 core gates */
@@ -728,10 +729,28 @@
     var minBreach = Math.max(0.5, 0.05 * atr);
     gate(4, 'Liquidity pool swept', isFinite(c.breach) && c.breach >= minBreach, isFinite(c.breach) ? (c.kind + ' breach $' + num(c.breach) + ' (min $' + num(minBreach) + ')') : 'no sweep');
     var dispAtr = c.sweep ? fin(c.sweep.displacementAtr) : NaN;
-    /* Sweep class fails closed: missing displacement is not a pass. */
-    var dispOk = !c.sweep || (isFinite(dispAtr) && dispAtr >= 0.5);
-    gate(5, 'Close back inside ≤ 3 bars with displacement ≥ 0.5 × ATR', c.reclaimed && c.age <= MAX_SWEEP_AGE && dispOk,
-      c.reclaimed ? ('reclaim closed, sweep age ' + c.age + (isFinite(dispAtr) ? ' · displacement ' + num(dispAtr, 2) + ' × ATR' + (dispOk ? '' : ' (weak — no follow-through)') : '')) : 'reclaim not closed');
+    /* Sweep class fails closed: missing displacement is not a pass. It used
+       to read `!c.sweep || (...)`, which failed OPEN on a missing SWEEP
+       OBJECT — the opposite of what the line above it says, and the hole
+       every source that carries no sweep (S37 continuation, engine
+       candidates) fell through. A displacement that was never read is not a
+       displacement that cleared 0.5 × ATR. */
+    var dispOk = isFinite(dispAtr) && dispAtr >= 0.5;
+    if (c.continuation){
+      /* A CONTINUATION CANDIDATE IS NOT A RECLAIM. Asking it to close back
+         inside the pool asks for the opposite of its own premise, so it gets
+         its own measured predicate: the acceptance the sweep scan actually
+         counted (two consecutive 1H closes beyond the pool), still inside the
+         sweep-age window. Nothing here is asserted by the source. */
+      gate(5, 'Acceptance held beyond the pool ≤ 3 bars', c.acceptance && c.age <= MAX_SWEEP_AGE,
+        c.acceptance
+          ? ('acceptance held — 2 closes beyond ' + px(c.level) + ', sweep age ' + c.age
+             + (c.age <= MAX_SWEEP_AGE ? '' : ' (older than ' + MAX_SWEEP_AGE + ')'))
+          : 'no acceptance beyond ' + px(c.level));
+    } else {
+      gate(5, 'Close back inside ≤ 3 bars with displacement ≥ 0.5 × ATR', c.reclaimed && c.age <= MAX_SWEEP_AGE && dispOk,
+        c.reclaimed ? ('reclaim closed, sweep age ' + c.age + (isFinite(dispAtr) ? ' · displacement ' + num(dispAtr, 2) + ' × ATR' + (dispOk ? '' : ' (weak — no follow-through)') : ' · displacement unread — not a pass')) : 'reclaim not closed');
+    }
     gate(6, 'Rejection overlaps OB', obOk, ob ? ((obSrc || 'OB') + ' ' + px(ob.lo) + '–' + px(ob.hi) + (obOk ? ' overlaps entry' : ' does not overlap entry')) : 'no ' + dir + ' OB (no sweep candle, no fresh block)');
     gate(7, 'Session London/NY · no news lock', ctx.session.tradeable && !ctx.news.lock, ctx.session.label + (ctx.news.lock ? ' · NEWS LOCK' : ''));
     var lvn = lvnBetween(entry, t1, ctx.vp4h);
@@ -745,7 +764,9 @@
     /* evidence families — one vote each, only where data exists */
     var fam = [], agree = 0, total = 0;
     function vote(name, state, note){ fam.push({ name: name, state: state, note: note }); if (state !== 'unavailable'){ total++; if (state === 'agree') agree++; } }
-    vote('structure', 'agree', c.kind + ' swept and ' + (c.reclaimed ? 'reclaimed' : 'not yet reclaimed'));
+    vote('structure', 'agree', c.continuation
+      ? (c.kind + ' swept and accepted through — reclaim failed')
+      : (c.kind + ' swept and ' + (c.reclaimed ? 'reclaimed' : 'not yet reclaimed')));
     vote('flow', ctx.pocStep === 'unavailable' ? 'unavailable' : (ctx.pocStep === (dir === 'long' ? 'UP' : 'DOWN') ? 'agree' : (ctx.pocStep === 'FLAT' ? 'neutral' : 'oppose')), 'session POCs ' + ctx.pocStep);
     vote('trend', ctx.emaSlope === 'unavailable' ? 'unavailable' : (ctx.emaSlope === (dir === 'long' ? 'UP' : 'DOWN') ? 'agree' : (ctx.emaSlope === 'FLAT' ? 'neutral' : 'oppose')), 'EMA20/50 4H ' + ctx.emaSlope);
     var momVeto = dir === 'long' ? ctx.rsiVeto.longVeto : ctx.rsiVeto.shortVeto;
@@ -1034,7 +1055,15 @@
           /* continuation through the failed pool: the stop belongs beyond the
              pool the reclaim failed at, not beyond the last bar's wick */
           srcs.push({ sid: 'S37', name: 'failed-sweep continuation through ' + sw.pool.kind, dir: cdir, level: sw.pool.level, kind: sw.pool.kind + ' acceptance',
-                      wick: sw.pool.level, age: sw.age, reclaimed: true, acceptance: true, breach: sw.breach, continuation: true });
+                      /* reclaimed:false — an ACCEPTANCE candidate is by
+                         definition the case where the reclaim FAILED. It used
+                         to be hardcoded true here, which handed gate 5 a free
+                         pass and printed "reclaim closed" on a card whose whole
+                         premise is that price accepted BEYOND the pool.
+                         `acceptance` is a measured fact (2+ consecutive closes
+                         beyond the pool, computed at line ~586) and is what
+                         gate 5 now judges this candidate on. */
+                      wick: sw.pool.level, age: sw.age, reclaimed: false, acceptance: true, breach: sw.breach, continuation: true });
         }
         continue;
       }
@@ -1193,17 +1222,25 @@
       out.s37 = ctx.acceptance ? 'S37 failed-sweep continuation now eligible — re-run Steps 3–6 for it' : 'S37 not eligible (no acceptance through the pool)';
       return out;
     }
-    if (best.reclaimed && isFinite(distR) && distR <= 0.25 && best.age <= MAX_SWEEP_AGE && valid){
+    /* A continuation candidate never reclaims — its entry condition is the
+       acceptance that already printed. Reading `best.reclaimed` alone used to
+       work here only because the S37 source lied about it. */
+    var entryReady = best.continuation ? (best.acceptance === true) : best.reclaimed;
+    if (entryReady && isFinite(distR) && distR <= 0.25 && best.age <= MAX_SWEEP_AGE && valid){
       out.state = 'TRIGGERED';
-      out.reason = 'reclaim closed on the ' + istUtc((lastBar.t + HOUR) * 1000) + ' bar, price ' + num(distR) + 'R from entry, sweep ' + best.age + ' bars old, checklist ' + s6.result;
+      out.reason = (best.continuation
+          ? ('acceptance held through ' + px(best.level) + ' as of the ' + istUtc((lastBar.t + HOUR) * 1000) + ' bar')
+          : ('reclaim closed on the ' + istUtc((lastBar.t + HOUR) * 1000) + ' bar'))
+        + ', price ' + num(distR) + 'R from entry, sweep ' + best.age + ' bars old, checklist ' + s6.result;
       var sz = ctx.equity > 0 ? (sizing(ctx, best).pick) : 'account size missing';
       out.line = 'You can enter at market or limit at ' + px(best.entry) + '. Stop ' + px(best.stop) + '. T1 ' + px(best.t1) + '. T2 ' + px(best.t2)
         + '. Size ' + sz + '. Time stop ' + fmtHM(sess.londonCloseMs, 'Asia/Kolkata') + ' IST.';
       return out;
     }
     out.state = 'WAIT';
-    if (!best.reclaimed) out.reason = 'sweep wick ' + px(best.wick) + ' printed ' + best.age + ' bar(s) ago; need the ' + istUtc(nextClose) + ' close back ' + (best.dir === 'long' ? 'above ' : 'below ') + px(best.level);
-    else if (!valid) out.reason = 'reclaim closed but checklist ' + (s6 ? s6.result : 'INVALID') + ' (' + (s6 ? s6.failing.join(', ') : '') + ') — need those gates on the ' + istUtc(nextClose) + ' close';
+    if (best.continuation && !best.acceptance) out.reason = 'no acceptance beyond ' + px(best.level) + ' yet; need two closes through it';
+    else if (!entryReady) out.reason = 'sweep wick ' + px(best.wick) + ' printed ' + best.age + ' bar(s) ago; need the ' + istUtc(nextClose) + ' close back ' + (best.dir === 'long' ? 'above ' : 'below ') + px(best.level);
+    else if (!valid) out.reason = (best.continuation ? 'acceptance held but checklist ' : 'reclaim closed but checklist ') + (s6 ? s6.result : 'INVALID') + ' (' + (s6 ? s6.failing.join(', ') : '') + ') — need those gates on the ' + istUtc(nextClose) + ' close';
     else out.reason = 'price ' + num(distR) + 'R from entry ' + px(best.entry) + ' (> 0.25R) — wait for the retest; next close ' + istUtc(nextClose);
     out.ifClose = 'if the ' + istUtc(nextClose) + ' bar closes ' + (best.dir === 'long' ? 'above ' : 'below ') + px(best.level) + ' → TRIGGERED, limit ' + px(best.entry)
       + ' · if it closes ' + (best.dir === 'long' ? 'below' : 'above') + ' again → EXPIRED (acceptance), S37 check';

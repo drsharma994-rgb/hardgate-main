@@ -81,7 +81,12 @@ const NOT_FETCHED = {
 {
   const proxySrc = readFileSync(path.join(root, 'api', 'proxy.js'), 'utf8');
   const pi = proxySrc.indexOf('ALLOWED_HOSTS');
-  const proxied = new Set([...proxySrc.slice(pi, pi + 1500).matchAll(/'([a-z0-9.-]+[.][a-z]{2,})'/g)].map(m => m[1]));
+  /* Parse to the Set's closing bracket, not a fixed window: the v649 OKX
+     fallback (4be4c6b) grew ALLOWED_HOSTS past the old 1500-char slice,
+     which silently dropped www.okx.com/aws.okx.com from the parsed roster
+     and flagged a host the proxy in fact permits. */
+  const pe = proxySrc.indexOf(']', pi);
+  const proxied = new Set([...proxySrc.slice(pi, pe + 1).matchAll(/'([a-z0-9.-]+[.][a-z]{2,})'/g)].map(m => m[1]));
   assert(proxied.size > 5, 'api/proxy.js ALLOWED_HOSTS parsed (' + proxied.size + ' hosts)');
 
   const bare = new Set([...serverHosts].map(function(h){ return h.replace(/^(https|wss):[/][/]/, ''); }));

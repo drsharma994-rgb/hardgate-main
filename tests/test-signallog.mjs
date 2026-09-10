@@ -39,8 +39,16 @@ function memLocalStorage(){
            _map: m };
 }
 function stubEl(){
+  /* v654 added a filter-chip row: mount() calls querySelectorAll +
+     classList.toggle on the chip containers, so the stub must carry both
+     (querySelectorAll returning [] is enough — zero chips to paint).
+     Without them mount()'s try/catch swallowed the TypeError and render()
+     never ran, leaving every stub blank. */
   return { innerHTML: '', textContent: '', className: '', disabled: false, value: '',
            style: {}, firstElementChild: { style: {} }, _handlers: {},
+           classList: { toggle: function(){}, add: function(){}, remove: function(){} },
+           querySelectorAll: function(){ return []; },
+           getAttribute: function(){ return null; },
            addEventListener: function(ev, fn){ this._handler = fn; this._handlers[ev] = fn; } };
 }
 function freshPane(){
@@ -118,7 +126,9 @@ console.log('== 1) registration + bare-env contracts ==');
   assert(M.pane._html.indexOf('logs while the app is open · every 5 min + on refresh') >= 0,
          'header states honestly: logs while the app is open · every 5 min + on refresh');
   assert(M.pane._html.indexOf('no signals logged yet') >= 0, 'honest empty state rendered (nothing fabricated)');
-  assert(M.stubs['#slSources'].textContent === 'sources live: none · waiting: brain, scalp, swing, supergold',
+  /* v646 grew SOURCES to six (cswing/cscalp crypto scans + supergold), and
+     the header lists them in SOURCES order with brain last (v648). */
+  assert(M.stubs['#slSources'].textContent === 'sources live: none · waiting: cswing, cscalp, scalp, swing, supergold, brain',
          'all sources absent -> honest header: "' + M.stubs['#slSources'].textContent + '"');
   assert(M.stubs['#slEmpty'].style.display === 'block', 'empty state visible with zero entries');
   assert(typeof M.stubs['#slClear']._handler === 'function', 'CLEAR JOURNAL wired to a click handler');
@@ -147,8 +157,9 @@ console.log('== 2) all three sources stubbed ==');
   const es = W.signallogEntries();
   assert(es.length === 5, 'journal holds 5 entries');
   const keys = Object.keys(es[0]).sort();
-  assert(JSON.stringify(keys) === JSON.stringify(['dir','entry','maeR','mfeR','note','source','stop','sym','t','t1','tierOrGrade']),
-         'entry shape exact: t, source, sym, dir, tierOrGrade, entry, stop, t1, maeR, mfeR, note');
+  /* v653 added gateMeta (compact id/label/state gate ledger) to the shape */
+  assert(JSON.stringify(keys) === JSON.stringify(['dir','entry','gateMeta','maeR','mfeR','note','source','stop','sym','t','t1','tierOrGrade']),
+         'entry shape exact: t, source, sym, dir, tierOrGrade, entry, stop, t1, maeR, mfeR, note, gateMeta');
   assert(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(es[0].t), 't is an ISO string ("' + es[0].t + '")');
   assert(es.every(e => e.t === es[0].t), 'one timestamp shared across the whole snapshot round');
 
@@ -183,8 +194,10 @@ console.log('== 2) all three sources stubbed ==');
       && html.indexOf('>LONG</span>') >= 0 && html.indexOf('>SHORT</span>') >= 0,
          'direction colored LONG/SHORT');
   assert(html.indexOf('60,000') >= 0 && html.indexOf('2,350.5') >= 0, 'entry/stop/TP1 price columns formatted');
-  assert(M.stubs['#slSources'].textContent === 'sources live: brain, scalp, swing · waiting: supergold',
-         'header: all three live, no waiting line ("' + M.stubs['#slSources'].textContent + '")');
+  /* v646/v648: six sources in SOURCES order (brain last), so with only the
+     three classic sources stubbed the crypto scans + supergold still wait */
+  assert(M.stubs['#slSources'].textContent === 'sources live: scalp, swing, brain · waiting: cswing, cscalp, supergold',
+         'header: all three stubbed sources live ("' + M.stubs['#slSources'].textContent + '")');
   assert(M.stubs['#slEmpty'].style.display === 'none', 'empty state hidden once entries exist');
   assert(M.stubs['#slCount'].textContent.indexOf('5 / 500') >= 0, 'entry count line rendered ("' + M.stubs['#slCount'].textContent + '")');
 
@@ -214,18 +227,18 @@ console.log('== 3) source absent + throwing + null ==');
 
   const M = freshPane();
   tabOf(W).mount(M.pane);
-  assert(M.stubs['#slSources'].textContent === 'sources live: swing · waiting: brain, scalp, supergold',
+  assert(M.stubs['#slSources'].textContent === 'sources live: swing · waiting: cswing, cscalp, scalp, supergold, brain',
          'honest header names live vs waiting ("' + M.stubs['#slSources'].textContent + '")');
 
   /* a source returning null is "waiting" too; a recovering source flips to live */
   W.goldscalpScan = () => null;
   W.__hgBrainLast = () => null;
   W.signallogSnapshot();
-  assert(M.stubs['#slSources'].textContent === 'sources live: swing · waiting: brain, scalp, supergold',
+  assert(M.stubs['#slSources'].textContent === 'sources live: swing · waiting: cswing, cscalp, scalp, supergold, brain',
          'null-returning sources count as waiting, nothing recorded for them');
   W.goldscalpScan = () => scalpSnap();
   const n2 = W.signallogSnapshot();
-  assert(n2 === 3 && M.stubs['#slSources'].textContent === 'sources live: scalp, swing · waiting: brain, supergold',
+  assert(n2 === 3 && M.stubs['#slSources'].textContent === 'sources live: scalp, swing · waiting: cswing, cscalp, supergold, brain',
          'recovered source flips to live on the next round (2 scalp + 1 swing, "' + M.stubs['#slSources'].textContent + '")');
 
   /* brain present but not a function -> feature-check says waiting, never throws */
@@ -287,7 +300,11 @@ console.log('== 4) persistence + cap ==');
   const added = env3.W.signallogSnapshot();
   const esC = env3.W.signallogEntries();
   assert(added === 5 && esC.length === 500, '500-entry hard cap enforced (498 + 5 -> ' + esC.length + ')');
-  assert(esC[0].sym === 'N1' && esC[4].sym === 'N5', 'the 5 fresh entries sit at the head after capping');
+  /* v646/v648 reordered the pulls: gold scalp (N4, N5) now snapshots before
+     brain (N1-N3) — brain runs last so its per-round cap fires after the
+     crypto/gold scans. All 5 fresh rows still sit at the head. */
+  assert(esC[0].sym === 'N4' && esC[1].sym === 'N5' && esC[2].sym === 'N1' && esC[4].sym === 'N3',
+         'the 5 fresh entries sit at the head after capping (scans before brain)');
   assert(esC[499].sym === 'OLD494', 'the oldest entries dropped off the tail (last kept: ' + esC[499].sym + ')');
   assert(JSON.parse(ls2.getItem('hgSignalLog')).length === 500, 'the cap is persisted to storage, not just in memory');
 }

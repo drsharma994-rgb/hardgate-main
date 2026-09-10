@@ -226,18 +226,22 @@ assert(/\?diag=1/.test(blocks[0]), 'and the first of them is the ?diag=1 probe, 
 
 /* xuniverse.js library tag: no-tab IIFE consumed by engine.js/brain.js —
    must load after binance.js and before engine.js so consumers find it */
-const tagOf = f => '<script src="' + f + '"></script>';
-const iBinance = html.indexOf(tagOf('binance.js'));
-const iXuniverse = html.search(/<script src="xuniverse\.js(\?v=\d+)?"><\/script>/);
-const iEngine = html.indexOf(tagOf('engine.js'));
+/* Every <script src> in index.html carries a cache-bust query (?v=NNN,
+   stamped by build-stamp.js), so tag lookups must tolerate an optional
+   ?v= pin — a bare-string indexOf would miss every tag and go stale
+   whenever the version bumps. */
+const tagIdx = f => html.search(new RegExp('<script src="' + f.replace('.', '\\.') + '(\\?v=\\d+)?"></script>'));
+const iBinance = tagIdx('binance.js');
+const iXuniverse = tagIdx('xuniverse.js');
+const iEngine = tagIdx('engine.js');
 assert(iXuniverse !== -1, 'index.html includes xuniverse.js script tag (optional ?v= pin)');
 assert(iBinance !== -1 && iEngine !== -1 && iBinance < iXuniverse && iXuniverse < iEngine,
   'xuniverse.js tag ordered after binance.js and before engine.js');
 
 /* scorecard.js strategy module: wired after brain.js so any brain globals it
    feature-checks already exist */
-const iBrain = html.indexOf(tagOf('brain.js'));
-const iScorecard = html.indexOf(tagOf('scorecard.js'));
+const iBrain = tagIdx('brain.js');
+const iScorecard = tagIdx('scorecard.js');
 assert(iScorecard !== -1, 'index.html includes <script src="scorecard.js"></script>');
 assert(iBrain !== -1 && iBrain < iScorecard, 'scorecard.js tag ordered after brain.js');
 
@@ -265,10 +269,14 @@ assert(REQUIRED_TABS.every(([id]) => run('HG_TAB_MODS[' + JSON.stringify(id) + '
   'HG_TAB_MODS keyed by every required module id');
 
 /* ---------------- group model ---------------- */
+/* v658 moved 'signallog' from GOLD -> COMMAND (right after the SETUP LOG
+   tab): it journals BRAIN + SCALP + SWING signals across crypto AND gold,
+   so COMMAND is the honest home (see the HG_NAV_GROUPS comment in
+   index.html). Spec updated to match. */
 const EXPECTED_GROUPS = {
-  overview:   ['brain', 'book', 'trade', 'log', 'news', 'bias', 'regime', 'trendmx', 'rotation', 'execute', 'startrader'],
+  overview:   ['brain', 'book', 'trade', 'log', 'signallog', 'news', 'bias', 'regime', 'trendmx', 'rotation', 'execute', 'startrader'],
   crypto:     ['combi', 'omnibtc', 'omnipresent', 'omniroute', 'dexscreener', 'setupconfirm', 'best', 'swing', 'scalp', 'edge', 'smart', 'squeeze', 'reversalsniper', 'smc', 'ob', 'trap', 'div', 'coil', 'apex', 'oiflow', 'liqs', 'onchain', 'chartvision', 'carry', 'venueprem', 'termbasis'],
-  gold:       ['super-gold', 'omnigold', 'omnigold1', 'goldswing', 'goldscalp', 'gold', 'goldpro', 'goldspot', 'goldcoint', 'goldpine', 'signallog'],
+  gold:       ['super-gold', 'omnigold', 'omnigold1', 'goldswing', 'goldscalp', 'gold', 'goldpro', 'goldspot', 'goldcoint', 'goldpine'],
   strategies: ['super-setup', 'super-best', 'super-sniper', 'super-book', 'super-calibrate', 'pine', 'pine-msb', 'pine-sqz', 'pine-smf', 'pine-ht', 'pine-smc', 'pine-cipher', 'pine-rf', 'pine-nw', 'pine-avwap', 'strats', 'meanrev', 'formationlab', 'scorecard', 'reliability'],
   tools:      ['risk', 'recon', 'basis', 'search', 'finder', 'tradeos', 'hey', 'aiagent']
 };
