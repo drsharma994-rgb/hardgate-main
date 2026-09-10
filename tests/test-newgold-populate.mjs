@@ -381,6 +381,41 @@ console.log('\n--- P11: wiring — board div, feeds-failed one-liner, fail-soft 
   ok(/nothing is invented/.test(emptyBoard), 'and say that nothing is invented');
 }
 
+console.log('\n--- P9 (hg-v703): FORMING setups — 2-of-3 legs, watch conditions, never entries ---');
+{
+  /* the no-cross tape reads structure+ml LONG with the RSI window missing ->
+     exactly one forming LONG entry; the fire tape (all three legs) must NOT
+     appear as forming (it is a fire). */
+  const clNoX = W.ngBuildChecklist(mkNoCross(), '1H', { dir: '', src: '' }, 'fixture');
+  const forming = W.ngFormingList([clNoX]);
+  ok(Array.isArray(forming) && forming.length === 1 && forming[0].dir === 'long' && forming[0].horizon === '1H',
+     'no-cross tape: exactly ONE forming entry, LONG on 1H (2 of 3 signal legs in place)');
+  ok(forming[0].present.length === 2 && forming[0].present.join(' ').indexOf('RSI') < 0,
+     'the two legs IN PLACE are named and the missing RSI leg is not among them');
+  ok(forming[0].armsWhen.some(s => /RSI\(14\) cross above/.test(s)),
+     'armsWhen carries the checklist\'s own needs text for the missing leg');
+  ok(typeof forming[0].zone === 'string' && /FVG \[/.test(forming[0].zone),
+     'zone-to-watch line present with the zone bounds as a WATCH CONDITION');
+  ok(/session-htf/.test(forming[0].sessionNote),
+     'the session-htf formation class is named honestly either way');
+  const clFire = W.ngBuildChecklist(mkFixture(18), '1H', { dir: '', src: '' }, 'fixture');
+  const formingFire = W.ngFormingList([clFire]);
+  ok(!formingFire.some(f => f.dir === clFire.fireDir),
+     'a firing direction never appears as forming (it is a fire, not a forming)');
+  const html = W.ngFormingHtml(forming);
+  ok(/FORMING — one signal leg short/.test(html) && /watch items, not entries/.test(html),
+     'section header says watch items, not entries');
+  ok(/a watch condition, not an entry/.test(html),
+     'the zone line is explicitly labeled a watch condition');
+  ok(!/hg-mp-grid/.test(html) && !/ENTRY/.test(html.replace(/not an entry|not entries/g, ''))
+     && !/T1 \(/.test(html) && !/STOP/.test(html),
+     'NO entry/stop/target markup anywhere in the forming section (levels only on FORMED cards)');
+  const empty = W.ngFormingHtml([]);
+  ok(/nothing is one leg short right now/.test(empty), 'honest empty state');
+  ok(W.ngFormingList(null).length === 0 && W.ngFormingList([null, {}]).length === 0,
+     'garbage checklists -> empty, never throws');
+}
+
 console.log('\n' + pass + ' assertions passed' + (fail ? (', ' + fail + ' FAILED') : ''));
 if (fail) process.exit(1);
-console.log('OK - hg-v701: NEW GOLD always-on board (checklist / watch / hybrid status / session strip / paid history — honest, never invented)');
+console.log('OK - hg-v701: NEW GOLD always-on board (checklist / watch / hybrid status / session strip / paid history — honest, never invented; hg-v703 forming setups)');

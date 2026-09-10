@@ -882,12 +882,12 @@ localStorage. Never throws.
        offline replay of RAW DETECTIONS for that desk, cited to the JSON
        artifact it came from. Only this replay clause is baked — the forward
        clause of the strip is computed live from the pool at every render.
-       PROVENANCE (read from the artifacts on 2026-09-01):
-         OMNIROUTE    scripts/backtest-omniroute-v531-results.json
-                      (wallClockRunAt 2026-08-30) aggregates.overall:
-                      n=2832, avgNetR=-0.2424 -> ~-0.24R net per raw detection.
-                      (The earlier full run, scripts/backtest-omniroute-results.json,
-                      measured -0.2396 over n=2496 — the same read.)
+       PROVENANCE (OMNIROUTE re-read 2026-09-11; others read 2026-09-01):
+         OMNIROUTE    scripts/backtest-omniroute-v701-results.json
+                      (wallClockRunAt 2026-09-10) aggregates.overall:
+                      n=2823, avgNetR=-0.2112 -> ~-0.21R net per raw detection.
+                      (The v531-era run, scripts/backtest-omniroute-v531-results.json,
+                      measured -0.2424 over n=2832 — the same read.)
          OMNIGOLD     scripts/backtest-omnigold-results.json (2026-08-29)
                       aggregates.overall: n=7270, avgR_net=-1.346; EVERY tier
                       in aggregates.byTier is net-negative (best SCAN WEAK
@@ -897,7 +897,7 @@ localStorage. Never throws.
                       net-negative — OP-HIGH-REJECT -0.2182R (n=4204),
                       OP-LOW-REJECT -0.2196R (n=4318). */
     var FWD_REPLAY_BAKED = {
-      'OMNIROUTE':   'raw detections replayed NET-NEGATIVE: -0.24R/trade over 2,832 settled (scripts/backtest-omniroute-v531-results.json)',
+      'OMNIROUTE':   'raw detections replayed NET-NEGATIVE: -0.21R/trade over 2,823 settled (scripts/backtest-omniroute-v701-results.json)',
       'OMNIGOLD':    'raw detections replayed NET-NEGATIVE in EVERY tier: -1.35R/trade over 7,270 settled (scripts/backtest-omnigold-results.json)',
       'OMNIPRESENT': 'raw detections replayed NET-NEGATIVE for BOTH kinds: HIGH-REJECT -0.22R (n=4,204), LOW-REJECT -0.22R (n=4,318) (scripts/backtest-omnipresent-results.json)'
     };

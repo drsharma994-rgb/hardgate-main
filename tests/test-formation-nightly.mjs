@@ -181,9 +181,14 @@ console.log('== live desks honour nightly overlay ==');
   });
   const W = bootDesks(nightly);
   ok(typeof W.hgFormationNightlyApply === 'function', 'hgFormationNightlyApply export');
-  ok(!!W.hgOmniKindDemotion('VALUE'), 'VALUE n=12 baked-open becomes day-aside');
-  ok(!!W.hgOmniKindDemotion('PO3'), 'baked PO3 demote still fires');
-  ok(W.hgOmniKindPrefer('MMOVE') === true, 'day-prefer MMOVE (already baked-prefer or nightly)');
+  ok(!!W.hgOmniKindDemotion('VALUE'), 'VALUE baked-open (n=15 in the v701 bake) becomes day-aside');
+  /* hg-v703: PO3's baked demote was RETIRED by the fresh replay (v531 net
+     −0.223/73 → v701 −0.037/77 — flat, neutral now); FVG-FILL (−0.130/186
+     in scripts/backtest-omniroute-v701-results.json) carries the baked-
+     demote assertion instead. */
+  ok(!W.hgOmniKindDemotion('PO3'), 'PO3 baked demote retired on the v701 evidence');
+  ok(!!W.hgOmniKindDemotion('FVG-FILL'), 'baked FVG-FILL demote still fires');
+  ok(W.hgOmniKindPrefer('MMOVE') === true, 'day-prefer MMOVE (nightly prefer; baked prefer retired at hg-v703)');
   ok(W.hgOmniKindPrefer('VALUE') === false, 'aside kind is never preferred');
   const ev = W.HG_OP_REPLAY_EVIDENCE;
   ok(ev.costToxic.thresholdR <= 0.12, 'OP cost overlay did not loosen');

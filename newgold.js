@@ -903,6 +903,13 @@ function ngBuildChecklist(rows, horizonLabel, tape, source){
     if (isFinite(cl.barMs)){
       try { cl.barISO = new Date(cl.barMs).toISOString().slice(0, 16).replace('T', ' ') + ' UTC'; } catch(eIso){}
     }
+    /* hg-v703: plain-scalar zone/context readout so the FORMING section can
+       print the zone-to-watch line without re-reading legs. Data only —
+       the levels discipline lives in the renderer (a forming card prints
+       zone bounds as a WATCH CONDITION, never entry/stop/targets). */
+    cl.zones = { bullTop: leg.fvg.bullTop, bullBot: leg.fvg.bullBot, bullAge: leg.fvg.bullAge,
+                 bearTop: leg.fvg.bearTop, bearBot: leg.fvg.bearBot, bearAge: leg.fvg.bearAge,
+                 lastClose: leg.lastClose, atr: leg.atr };
 
     /* STRUCTURE — context only, explicitly not an entry. */
     var hasBull = isFinite(leg.fvg.bullTop) && isFinite(leg.fvg.bullBot);
@@ -1034,6 +1041,72 @@ function ngBuildChecklist(rows, horizonLabel, tape, source){
     cl.why = 'checklist build threw — section fails soft, nothing is claimed: ' + String(e && e.message || e);
     return cl;
   }
+}
+
+/* FORMING SETUPS (hg-v703) — the user-facing shape of "one signal leg
+   short": a direction where EXACTLY 2 of the 3 signal legs (structure /
+   ml / rsi) already read that side and the desk is NOT already firing it.
+   Derived purely from the checklist's own leg states + needs lines (the
+   same reader ngAssess fires on) — nothing is re-read, nothing invented.
+   A forming entry names the legs present, the ARMING CONDITION (the
+   checklist's own needs text for the missing leg), and the zone to watch
+   with its ATR distance — zone bounds are a WATCH CONDITION in the
+   goldscalp FORMING-NOW tradition, never entry/stop/targets (those exist
+   only on a FORMED card; formation still owns the session-htf class). */
+function ngFormingList(checklists){
+  var out = [];
+  try{
+    var list = Array.isArray(checklists) ? checklists : [];
+    var SIGNAL = { structure: 1, ml: 1, rsi: 1 };
+    for (var i = 0; i < list.length; i++){
+      var cl = list[i];
+      if (!cl || cl.ok !== true || !Array.isArray(cl.legs)) continue;
+      for (var d = 0; d < 2; d++){
+        var dir = d === 0 ? 'long' : 'short';
+        if (cl.fireDir === dir) continue;              /* already a fire, not forming */
+        var present = [], missingLegs = 0;
+        for (var li = 0; li < cl.legs.length; li++){
+          var lg = cl.legs[li];
+          if (!lg || !SIGNAL[lg.key]) continue;
+          if (lg[dir] === true) present.push(lg.label);
+          else missingLegs++;
+        }
+        if (present.length !== 2 || missingLegs !== 1) continue;
+        var needs = (cl.needs && Array.isArray(cl.needs[dir])) ? cl.needs[dir].slice() : [];
+        var z = cl.zones || {};
+        var top = dir === 'long' ? z.bullTop : z.bearTop;
+        var bot = dir === 'long' ? z.bullBot : z.bearBot;
+        var age = dir === 'long' ? z.bullAge : z.bearAge;
+        var zoneTxt = null;
+        if (isFinite(top) && isFinite(bot)){
+          var c0 = z.lastClose, inZone = isFinite(c0) && c0 <= top && c0 >= bot;
+          var dist = !isFinite(c0) ? NaN : (c0 > top ? c0 - top : (c0 < bot ? bot - c0 : 0));
+          var distTxt = inZone ? 'price is INSIDE the zone'
+            : (isFinite(z.atr) && z.atr > 0 && isFinite(dist)
+                ? 'price ' + (dist / z.atr).toFixed(1) + ' ATR ' + (c0 > top ? 'above' : 'below')
+                : (isFinite(dist) ? 'price ' + dist.toFixed(2) + ' abs away (ATR unreadable)' : 'distance unreadable'));
+          zoneTxt = (dir === 'long' ? 'bull' : 'bear') + ' FVG [' + fmtF(bot, 2) + ' – ' + fmtF(top, 2) + ']'
+            + (isFinite(age) ? ' · ' + age + ' bars old' : '') + ' · ' + distTxt;
+        }
+        /* the session-htf class is formation's, not a signal leg — say
+           honestly whether it is available right now for this side */
+        var sess = null;
+        for (var si = 0; si < cl.legs.length; si++){
+          if (cl.legs[si] && cl.legs[si].key === 'session-htf'){ sess = cl.legs[si]; break; }
+        }
+        out.push({
+          horizon: cl.horizon, dir: dir, barISO: cl.barISO || '',
+          present: present,
+          armsWhen: needs.length ? needs : ['(condition unreadable — see the checklist)'],
+          zone: zoneTxt,
+          sessionNote: (sess && sess[dir] === true)
+            ? 'session-htf class currently available for this side'
+            : 'even when it arms, FORMED still needs the session-htf class — currently unavailable for this side'
+        });
+      }
+    }
+    return out;
+  }catch(e){ return out; }
 }
 
 /* WATCH / NEAR-MISS list — fires that exist but are NOT tradable, plus any
@@ -1585,8 +1658,9 @@ async function ngRunScan(){
        mirroring goldscalp.js publishScan's armed/whySilent addition): the
        existing { at, results, errors } contract is untouched, and the new
        keys are deep-frozen — they are read surfaces, not scan state. */
-    var watch = [], hybridStatus = null, sessionEdge = null, history = null;
+    var watch = [], hybridStatus = null, sessionEdge = null, history = null, forming = [];
     try { watch = ngWatchList(results, scanStartAt); } catch(eWb){ watch = []; }
+    try { forming = ngFormingList(checklists); } catch(eFo){ forming = []; }
     try { hybridStatus = ngOmniLaneStatus(laneStat); }
     catch(eHb){ hybridStatus = { state: 'error', lines: ['hybrid lane status unreadable: ' + String(eHb && eHb.message || eHb)], counts: null }; }
     try { sessionEdge = ngSessionRead(stripTapes, stripBarMs); } catch(eSb){ sessionEdge = null; }
@@ -1594,12 +1668,13 @@ async function ngRunScan(){
 
     __ng.snap = { at: Date.now(), results: results, errors: errors,
       checklist: ngDeepFreeze(checklists),
+      forming: ngDeepFreeze(forming),
       watch: ngDeepFreeze(watch),
       hybridLaneStatus: ngDeepFreeze(hybridStatus),
       sessionEdge: ngDeepFreeze(sessionEdge),
       history: ngDeepFreeze(history) };
     return { status: results.length ? 'refreshed' : 'empty', results: results, errors: errors,
-      checklist: __ng.snap.checklist, watch: __ng.snap.watch,
+      checklist: __ng.snap.checklist, forming: __ng.snap.forming, watch: __ng.snap.watch,
       hybridLaneStatus: __ng.snap.hybridLaneStatus,
       sessionEdge: __ng.snap.sessionEdge, history: __ng.snap.history };
   } catch(e){
@@ -1696,6 +1771,8 @@ var NG_CSS = ''
 + '.ng-sec{margin-top:12px;padding:9px 11px;border:1px solid #E2E8F0;border-radius:8px;background:#F8FAFC;font-size:11px;line-height:1.55;color:#0F172A}'
 + '.ng-sec .ng-h{font-size:10px;letter-spacing:.16em;font-weight:800;color:#1E293B;margin-bottom:6px}'
 + '.ng-dim{opacity:.65;font-weight:500}'
++ '.ng-form-row{padding:6px 9px;margin-top:6px;border-left:3px solid #C9921A;background:#FFFBEB;border-radius:4px;line-height:1.6}'
++ '.ng-form-row b{letter-spacing:.06em}'
 + '.ng-leg{padding:5px 8px;border-left:3px solid #E2E8F0;margin:4px 0;background:#fff}'
 + '.ng-leg.ok{border-left-color:#059669}'
 + '.ng-leg.no{border-left-color:#DC2626}'
@@ -1766,6 +1843,27 @@ function ngChecklistHtml(cl){
     + ' · ' + needsTxt(cl.needs && cl.needs.short, 'SHORT') + '</div>'
     + '<div class="ng-dim">no direction is recommended — the checklist reads the closed bar both ways; '
     + 'a fire still only FORMS when the session-htf class confirms on the signal bar (see the SESSION-HTF row)</div>';
+  return h + '</div>';
+}
+
+function ngFormingHtml(forming){
+  var list = Array.isArray(forming) ? forming : [];
+  var h = '<div class="ng-sec ng-forming"><div class="ng-h">FORMING — one signal leg short '
+    + '<span class="ng-dim">(watch items, not entries — levels appear only on a FORMED card)</span></div>';
+  if (!list.length){
+    return h + '<div class="ng-dim">nothing is one leg short right now — see the checklist for what each direction needs</div></div>';
+  }
+  for (var i = 0; i < list.length; i++){
+    var f = list[i];
+    if (!f) continue;
+    h += '<div class="ng-form-row">'
+      + '<b>' + esc(String(f.horizon || '?')) + ' ' + esc(String(f.dir || '').toUpperCase()) + ' forming</b>'
+      + ' · legs in place: ' + esc(f.present.join(' + '))
+      + (f.zone ? '<br>zone to watch: ' + esc(f.zone) + ' — <i>a watch condition, not an entry</i>' : '')
+      + '<br>arms when: ' + esc(f.armsWhen.join(' · '))
+      + '<br><span class="ng-dim">' + esc(f.sessionNote || '') + '</span>'
+      + '</div>';
+  }
   return h + '</div>';
 }
 
@@ -1890,6 +1988,7 @@ function ngBoardHtml(data){
     for (var i = 0; i < cls.length; i++) s += ngChecklistHtml(cls[i]);
     return s;
   }, 'CONFIRMATION CHECKLIST');
+  h += ngSecSafe(function(){ return ngFormingHtml(data.forming); }, 'FORMING');
   h += ngSecSafe(function(){ return ngWatchHtml(data.watch); }, 'WATCH / NEAR-MISS');
   h += ngSecSafe(function(){ return ngHybridHtml(data.hybridLaneStatus); }, 'HYBRID LANE STATUS');
   h += ngSecSafe(function(){ return ngSessionStripHtml(data.sessionEdge); }, 'SESSION CONTEXT');
@@ -2080,6 +2179,8 @@ W.ngFvgNearFrom = ngFvgNearFrom;
 /* hg-v702 knob readout (read-only copy): tests compute their expectations
    from the SHIPPED dials instead of pinning stale numbers. */
 W.NG_LOOSEN = { rsiCrossBars: NG_RSI_CROSS_BARS, fvgEdgeAtr: NG_FVG_EDGE_ATR };
+W.ngFormingList = ngFormingList;   /* hg-v703: forming setups (2-of-3 legs), exported for tests */
+W.ngFormingHtml = ngFormingHtml;
 W.ngBuildChecklist = ngBuildChecklist;
 W.ngChecklistHtml = ngChecklistHtml;
 W.ngWatchList = ngWatchList;

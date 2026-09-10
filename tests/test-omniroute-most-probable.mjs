@@ -170,7 +170,13 @@ console.log('== card list: with-tape above against-tape ==');
   });
   const ordered = W.hgOmniDeskOrder([against, watch, withTape], 'long');
   ok(ordered[0] === withTape || ordered[0].dir === 'long', 'first card is with-tape (got ' + ordered[0].kind + ' ' + ordered[0].dir + ')');
-  ok(ordered[ordered.length - 1] === against, 'against-tape sinks to the bottom even when it is the nearest ticket');
+  /* hg-v703: PIN-REJECT carries a v701 suppression row (−0.877R net over
+     n=114, scripts/backtest-omniroute-v701-results.json), and the re-bake's
+     lead-block orders ANY demoted/suppressed kind below every clean kind —
+     even a clean against-tape card. So the demoted watch is now the floor,
+     with against-tape directly above it. */
+  ok(ordered[ordered.length - 1] === watch, 'demoted PIN-REJECT sinks below everything clean');
+  ok(ordered[ordered.length - 2] === against, 'against-tape sinks to the bottom of the CLEAN cards');
 }
 
 console.log('== MOST PROBABLE SETUPS panel: few tickets, real levels, no invented 7/7 ==');

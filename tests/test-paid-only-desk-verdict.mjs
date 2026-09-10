@@ -99,8 +99,10 @@ console.log('\n== DESK VERDICT: baked replay clauses, cited to their artifacts =
   const W = boot();
   const or = W.hgFwdDeskVerdictHtml('OMNIROUTE');
   ok(/no settled history yet/.test(or), 'fresh pool -> honest forward clause');
-  ok(/-0\.24R/.test(or) && /backtest-omniroute-v531-results\.json/.test(or),
-     'OMNIROUTE replay clause: -0.24R net, cited to its JSON');
+  /* hg-v703: OMNIROUTE clause re-baked from the fresh v701 replay
+     (-0.2112R over 2,823 settled, scripts/backtest-omniroute-v701-results.json). */
+  ok(/-0\.21R/.test(or) && /backtest-omniroute-v701-results\.json/.test(or),
+     'OMNIROUTE replay clause: -0.21R net, cited to its v701 JSON');
   ok(/~49% probability|has ~49% probability/.test(or) && /expected variance, not malfunction/.test(or),
      'the variance note is on the strip');
   const og = W.hgFwdDeskVerdictHtml(['OMNIGOLD:SCALP', 'OMNIGOLD:SWING']);
@@ -111,9 +113,9 @@ console.log('\n== DESK VERDICT: baked replay clauses, cited to their artifacts =
      'OMNIPRESENT replay clause: both kinds negative, cited');
   ok(W.hgFwdDeskVerdictHtml(null) === '', 'no tab -> empty string, never a throw');
   /* the baked numbers match the artifacts on disk — the citation is real */
-  const orJson = JSON.parse(read('scripts/backtest-omniroute-v531-results.json'));
-  ok(Math.abs(orJson.aggregates.overall.avgNetR - (-0.2424)) < 1e-4 && orJson.aggregates.overall.n === 2832,
-     'omniroute artifact really says -0.2424R over n=2832');
+  const orJson = JSON.parse(read('scripts/backtest-omniroute-v701-results.json'));
+  ok(Math.abs(orJson.aggregates.overall.avgNetR - (-0.2112)) < 1e-4 && orJson.aggregates.overall.n === 2823,
+     'omniroute artifact really says -0.2112R over n=2823');
   const opJson = JSON.parse(read('scripts/backtest-omnipresent-results.json'));
   ok(opJson.aggregates.byKind['OP-HIGH-REJECT'].avgNetR < 0 && opJson.aggregates.byKind['OP-LOW-REJECT'].avgNetR < 0,
      'omnipresent artifact really says both kinds net-negative');

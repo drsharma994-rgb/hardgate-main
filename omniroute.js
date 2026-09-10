@@ -2284,16 +2284,24 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   function hgOmniFormTicket(plan, hit, rows, extra){
     extra = extra || {};
     if (!plan) return { plan: null, ok: false, reason: 'no plan' };
-    /* Replay demotion runs even when hgFormTicket is absent — a toxic kind
-       cannot hide behind a missing enricher. Prefer stamp waits for the
-       formed plan so survivor rides the levels that will print. */
+    /* Replay suppression runs even when hgFormTicket is absent — a toxic
+       kind cannot hide behind a missing enricher. Only the SUPPRESS tier
+       (and nightly asides, which carry no .action) refuses here; the
+       DEMOTE tier forms and paints with its measured row but never leads
+       (v701 re-bake). Prefer stamp waits for the formed plan so survivor
+       rides the levels that will print. */
     var earlyKind = hgOmniReplayKind((hit && hit.kind) || plan.kind || '');
     var earlyDem = hgOmniKindDemotion(earlyKind);
     if (earlyDem && !hgOmniReplayForwardPaid(earlyKind)){
-      plan.formationOk = false;
-      plan.formationReason = 'replay-demoted: ' + earlyDem.reasons.join('; ');
+      if ((earlyDem.action || 'suppress') === 'suppress'){
+        plan.formationOk = false;
+        plan.formationReason = 'replay-suppressed: ' + earlyDem.reasons.join('; ');
+        plan.kindDemotion = earlyDem;
+        return { plan: plan, ok: false, reason: plan.formationReason, tag: 'replay-kind' };
+      }
+      /* demote tier — stamp now so the row paints even if the enricher is
+         missing (UNCHECKED path returns before the post-formation stamp). */
       plan.kindDemotion = earlyDem;
-      return { plan: plan, ok: false, reason: plan.formationReason, tag: 'replay-kind' };
     }
     var w = (typeof window !== 'undefined') ? window : null;
     var formFn = (w && typeof w.hgFormTicket === 'function') ? w.hgFormTicket : null;
@@ -2355,10 +2363,13 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         }
       } catch (eCat) {}
     }
-    /* Replay kind apply (hg-v590 / hg-v612). Demoted kinds do not form
-       unless the live forward ledger reads "has paid". House extras map
-       onto their measured analogue (SNIPER→PIN-REJECT) so they cannot
-       fail-open a toxic book. Prefer kinds stamp survivor.
+    /* Replay kind apply (re-baked from v701). SUPPRESSED kinds do not form
+       unless the live forward ledger reads "has paid" — the named reason
+       line carries the measured row. DEMOTED kinds FORM and PAINT (the
+       card carries the demotion row) but never lead: no MOST PROBABLE,
+       ordered below clean kinds, cert grants no rank privilege. House
+       extras map onto their measured analogue (SNIPER→PIN-REJECT) so they
+       cannot fail-open a toxic book. Prefer kinds stamp survivor.
        Never invents levels or direction. */
     var replayKind = hgOmniReplayKind((hit && hit.kind) || formed.kind || (plan && plan.kind) || '');
     var dem = hgOmniKindDemotion(replayKind);
@@ -2366,11 +2377,13 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       var paid = hgOmniReplayForwardPaid(replayKind);
       if (paid){
         formed.unDemoted = { demotion: dem, forward: paid };
-      } else {
+      } else if ((dem.action || 'suppress') === 'suppress'){
         formed.formationOk = false;
-        formed.formationReason = 'replay-demoted: ' + dem.reasons.join('; ');
+        formed.formationReason = 'replay-suppressed: ' + dem.reasons.join('; ');
         formed.kindDemotion = dem;
         return { plan: formed, ok: false, reason: formed.formationReason, tag: 'replay-kind' };
+      } else {
+        formed.kindDemotion = dem;
       }
     } else if (hgOmniKindPrefer(replayKind)){
       formed.replaySurvivor = true;
@@ -2378,58 +2391,103 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return { plan: formed, ok: true };
   }
 
-  /* ==================== OMNIROUTE REPLAY EDGE (hg-v590 / hg-v607) ==========
-     Baked from scripts/backtest-omniroute-v531-results.json (2,832 settled,
-     25-symbol point-in-time 1h universe, 0.05%+0.02%/side). Live desk scans
-     4h — directional evidence only. Demote/prefer are COMPUTED from these
-     rows at call time (n / avgGrossR / avgNetR), never a hand-kept list.
-       DEMOTE  n>=50 AND (avgGrossR <= -0.05
-                OR (avgGrossR < 0 AND avgNetR <= -0.20))  → formation refuses
-       PREFER  n>=50 AND avgGrossR > 0 AND avgNetR > 0 → replay-survivor
-     ORB is near-even (gross +0.056, net −0.011) — not demoted, not preferred.
-     PO3 (n=73, gross −0.044, net −0.223) is net-toxic — demoted at hg-v607.
+  /* ==================== OMNIROUTE REPLAY EDGE (re-baked from v701) ==========
+     Baked from scripts/backtest-omniroute-v701-results.json (2,823 settled,
+     25-symbol point-in-time 1h universe, 0.05%+0.02%/side, scanErrors=0,
+     run 2026-09-10). The previous bake was the v531-era table; the v701
+     kindDemotion cohort proved the MACHINERY works while the TABLE was
+     stale: clean cohort −0.024R net (PF 0.96) vs demoted −0.361R (PF 0.58)
+     over 1255/1568 settled. Live desk scans 4h — directional evidence only.
+     Suppress/demote/prefer are COMPUTED from these rows at call time
+     (n / avgGrossR / avgNetR), never a hand-kept list.
+       SUPPRESS  n>=60 AND gross<0 AND net<=-0.60 → formation refuses with a
+                 named reason line (PIN-REJECT −0.877/114, THREE-BAR
+                 −0.830/165, RSI-DIVERGE −0.645/61). The net bar sits at
+                 −0.60, not the −0.40 first proposed, because −0.40 would
+                 also sweep SPRING (−0.464/81) — assigned demote by the
+                 action spec — into the refuse tier; −0.60 reproduces the
+                 spec'd suppress set exactly and only.
+       DEMOTE    n>=30 AND net<=-0.10 → forms and PAINTS (card renders with
+                 its measured row) but NEVER LEADS: excluded from MOST
+                 PROBABLE, ordered below every clean kind, and its
+                 conviction cert confers no rank privilege. Plain net<0
+                 would also sweep the near-flat book (VWAP-REVERT −0.094,
+                 NR7-BREAK −0.059, SQUEEZE-FIRE −0.049, PO3 −0.037) that
+                 the action spec keeps neutral; −0.10 is roughly half the
+                 whole book's net drag and separates them cleanly.
+       SMALL-N   n>=20 AND net<=-0.60 → demote with a small-n note
+                 (POC-REVERT −0.801/24 — under the 30 bar, too toxic to
+                 stay neutral, not enough n to suppress).
+       CONVICTION ROSTER — all six v531 conviction mechanics measured
+                 NEGATIVE in v701 (AVWAP-DEFEND −0.314/65, COMPRESSION-BREAK
+                 −0.387/21, SWEEP-RECLAIM −0.237/120, HTF-PULLBACK −0.186/61,
+                 DONCHIAN-DRIVE −0.142/52, EXHAUST-REVERT −0.165/31). A
+                 roster kind with a net-negative row is demoted even under
+                 the 30 bar (COMPRESSION-BREAK n=21): the formation cert
+                 stays on the card but confers no lead/rank privilege while
+                 the forward ledger is unpaid.
+       PREFER    n>=60 AND gross>0 AND net>=+0.15 → replay-survivor
+                 (AVWAP-RECLAIM +0.387/80 PF 1.73, CUSUM-SHIFT +0.237/85
+                 PF 1.49 — the only positive book at scale).
+     RETIRED by the fresh evidence (v531 → v701, both cited):
+       PO3 demote        −0.223/73 → −0.037/77   (flat — neutral now)
+       DONCHIAN-DRIVE prefer +0.072/53 → −0.142/52 (flipped — demote now)
+       MMOVE prefer      +0.058/188 → +0.024/191  (under the +0.15 bar)
+       NR7-BREAK prefer  +0.052/150 → −0.059/136  (flipped — neutral)
+     ORB stays near-even (gross +0.076, net +0.005) — not demoted, not
+     preferred. Un-demotion route is unchanged: the live forward ledger
+     reading 'has paid' (hgOmniReplayForwardPaid — the v689/G7 pattern).
      House extras with no baked row fail-open. Never invents tickets. */
 
   var HG_OMNI_REPLAY_EVIDENCE = {
-    src: 'scripts/backtest-omniroute-v531-results.json',
-    runAt: '2026-08-30T09:34:30Z',
+    src: 'scripts/backtest-omniroute-v701-results.json',
+    runAt: '2026-09-10T22:08:23Z',
     basis: '25 symbols × 2000 1h bars, point-in-time cache, taker 0.05%+0.02%/side',
-    settled: 2832,
-    overall: { n: 2832, winRate: 0.2602, avgGrossR: -0.0843, avgNetR: -0.2424, pf: 0.6828 },
-    demoteMinN: 50,
-    demoteGrossR: -0.05,
-    demoteNetR: -0.20,
-    preferMinN: 50,
+    settled: 2823,
+    overall: { n: 2823, winRate: 0.2724, avgGrossR: -0.0522, avgNetR: -0.2112, pf: 0.7196 },
+    suppressMinN: 60,
+    suppressNetR: -0.60,
+    demoteMinN: 30,
+    demoteNetR: -0.10,
+    smallNMinN: 20,
+    smallNNetR: -0.60,
+    preferMinN: 60,
+    preferNetR: 0.15,
+    /* The conviction roster is a structural fact of this module (the six
+       hgOmniCvHit emitters), not an evidence row — listed so the demotion
+       rule can read it without a scan. */
+    convictionKinds: ['AVWAP-DEFEND', 'COMPRESSION-BREAK', 'DONCHIAN-DRIVE',
+                      'EXHAUST-REVERT', 'HTF-PULLBACK', 'SWEEP-RECLAIM'],
     kinds: {
-      'AVWAP-RECLAIM': { n: 71, winRate: 0.4225, avgGrossR: 0.4421, avgNetR: 0.3640, pf: 1.6965 },
-      'CUSUM-SHIFT': { n: 77, winRate: 0.2987, avgGrossR: 0.1687, avgNetR: 0.0854, pf: 1.1557 },
-      'DONCHIAN-DRIVE': { n: 53, winRate: 0.3774, avgGrossR: 0.1321, avgNetR: 0.0717, pf: 1.1085 },
-      'VOL-EXPANSION': { n: 22, winRate: 0.1818, avgGrossR: 0.0911, avgNetR: 0.0603, pf: 1.1389 },
-      'MMOVE': { n: 188, winRate: 0.3138, avgGrossR: 0.1340, avgNetR: 0.0578, pf: 1.0950 },
-      'NR7-BREAK': { n: 150, winRate: 0.3200, avgGrossR: 0.1356, avgNetR: 0.0522, pf: 1.0853 },
-      'ORB': { n: 206, winRate: 0.2427, avgGrossR: 0.0564, avgNetR: -0.0114, pf: 0.9797 },
-      'VWAP-REVERT': { n: 336, winRate: 0.2679, avgGrossR: -0.0051, avgNetR: -0.0748, pf: 0.8851 },
-      'SQUEEZE-FIRE': { n: 50, winRate: 0.2200, avgGrossR: -0.0398, avgNetR: -0.0989, pf: 0.8439 },
-      'EXHAUST-REVERT': { n: 26, winRate: 0.1154, avgGrossR: -0.1197, avgNetR: -0.1683, pf: 0.7109 },
-      'ABSORB': { n: 3, winRate: 0.3333, avgGrossR: 0.0000, avgNetR: -0.1824, pf: 0.7365 },
-      'FVG-FILL': { n: 184, winRate: 0.2391, avgGrossR: -0.0833, avgNetR: -0.1902, pf: 0.7282 },
-      'PO3': { n: 73, winRate: 0.3014, avgGrossR: -0.0443, avgNetR: -0.2229, pf: 0.7141 },
-      'TREND-RECLAIM': { n: 109, winRate: 0.2385, avgGrossR: -0.1457, avgNetR: -0.2448, pf: 0.6767 },
-      'AVWAP-DEFEND': { n: 66, winRate: 0.2727, avgGrossR: -0.1818, avgNetR: -0.2561, pf: 0.6727 },
-      'BOS-RETEST': { n: 137, winRate: 0.1752, avgGrossR: -0.2214, avgNetR: -0.2847, pf: 0.5994 },
-      'EQL-SWEEP': { n: 111, winRate: 0.2973, avgGrossR: -0.0984, avgNetR: -0.2903, pf: 0.6471 },
-      'SWEEP-RECLAIM': { n: 120, winRate: 0.2333, avgGrossR: -0.2496, avgNetR: -0.3085, pf: 0.6042 },
-      'SPRING': { n: 100, winRate: 0.2900, avgGrossR: -0.1184, avgNetR: -0.3190, pf: 0.6257 },
-      'EQH-SWEEP': { n: 119, winRate: 0.2857, avgGrossR: -0.1335, avgNetR: -0.3604, pf: 0.5895 },
-      'COMPRESSION-BREAK': { n: 16, winRate: 0.1875, avgGrossR: -0.3126, avgNetR: -0.3742, pf: 0.5292 },
-      'POC-REVERT': { n: 24, winRate: 0.0833, avgGrossR: -0.4019, avgNetR: -0.4322, pf: 0.4056 },
-      'UTAD': { n: 135, winRate: 0.2593, avgGrossR: -0.2222, avgNetR: -0.4681, pf: 0.4881 },
-      'VALUE': { n: 12, winRate: 0.2500, avgGrossR: -0.2500, avgNetR: -0.4765, pf: 0.4525 },
-      'HTF-PULLBACK': { n: 55, winRate: 0.1636, avgGrossR: -0.4433, avgNetR: -0.5085, pf: 0.4033 },
-      'ENGULF-LEVEL': { n: 55, winRate: 0.2545, avgGrossR: -0.2364, avgNetR: -0.6009, pf: 0.4363 },
-      'RSI-DIVERGE': { n: 58, winRate: 0.2414, avgGrossR: -0.2759, avgNetR: -0.6224, pf: 0.3928 },
-      'THREE-BAR': { n: 161, winRate: 0.2484, avgGrossR: -0.2547, avgNetR: -0.7878, pf: 0.3139 },
-      'PIN-REJECT': { n: 115, winRate: 0.1739, avgGrossR: -0.4783, avgNetR: -1.0284, pf: 0.1870 }
+      'AVWAP-RECLAIM': { n: 80, winRate: 0.4375, avgGrossR: 0.4661, avgNetR: 0.3867, pf: 1.7321 },
+      'CUSUM-SHIFT': { n: 85, winRate: 0.3529, avgGrossR: 0.2918, avgNetR: 0.2369, pf: 1.486 },
+      'VOL-EXPANSION': { n: 30, winRate: 0.2667, avgGrossR: 0.1028, avgNetR: 0.0758, pf: 1.1441 },
+      'MMOVE': { n: 191, winRate: 0.3089, avgGrossR: 0.1044, avgNetR: 0.0241, pf: 1.0394 },
+      'ORB': { n: 218, winRate: 0.2615, avgGrossR: 0.0756, avgNetR: 0.0047, pf: 1.0082 },
+      'PO3': { n: 77, winRate: 0.3636, avgGrossR: 0.1216, avgNetR: -0.0369, pf: 0.9482 },
+      'SQUEEZE-FIRE': { n: 45, winRate: 0.2444, avgGrossR: 0.0183, avgNetR: -0.0485, pf: 0.921 },
+      'NR7-BREAK': { n: 136, winRate: 0.2868, avgGrossR: 0.035, avgNetR: -0.0592, pf: 0.9107 },
+      'VWAP-REVERT': { n: 322, winRate: 0.2609, avgGrossR: -0.0213, avgNetR: -0.0936, pf: 0.8564 },
+      'BOS-RETEST': { n: 149, winRate: 0.2215, avgGrossR: -0.0531, avgNetR: -0.1135, pf: 0.8242 },
+      'FVG-FILL': { n: 186, winRate: 0.2419, avgGrossR: -0.0324, avgNetR: -0.1295, pf: 0.8007 },
+      'DONCHIAN-DRIVE': { n: 52, winRate: 0.3077, avgGrossR: -0.0769, avgNetR: -0.142, pf: 0.8072 },
+      'EXHAUST-REVERT': { n: 31, winRate: 0.1935, avgGrossR: -0.1169, avgNetR: -0.1651, pf: 0.7465 },
+      'TREND-RECLAIM': { n: 119, winRate: 0.2605, avgGrossR: -0.0798, avgNetR: -0.1716, pf: 0.7608 },
+      'HTF-PULLBACK': { n: 61, winRate: 0.2787, avgGrossR: -0.1213, avgNetR: -0.186, pf: 0.7527 },
+      'VALUE': { n: 15, winRate: 0.3333, avgGrossR: 0, avgNetR: -0.2132, pf: 0.731 },
+      'SWEEP-RECLAIM': { n: 120, winRate: 0.2583, avgGrossR: -0.1734, avgNetR: -0.2373, pf: 0.6852 },
+      'ENGULF-LEVEL': { n: 45, winRate: 0.3778, avgGrossR: 0.1333, avgNetR: -0.2724, pf: 0.7177 },
+      'EQH-SWEEP': { n: 104, winRate: 0.3077, avgGrossR: -0.0769, avgNetR: -0.3106, pf: 0.6405 },
+      'AVWAP-DEFEND': { n: 65, winRate: 0.2462, avgGrossR: -0.2367, avgNetR: -0.3136, pf: 0.6054 },
+      'EQL-SWEEP': { n: 106, winRate: 0.2736, avgGrossR: -0.1792, avgNetR: -0.3733, pf: 0.5672 },
+      'UTAD': { n: 115, winRate: 0.3043, avgGrossR: -0.087, avgNetR: -0.3848, pf: 0.5687 },
+      'COMPRESSION-BREAK': { n: 21, winRate: 0.1905, avgGrossR: -0.3323, avgNetR: -0.387, pf: 0.5184 },
+      'SPRING': { n: 81, winRate: 0.2593, avgGrossR: -0.2222, avgNetR: -0.4639, pf: 0.5025 },
+      'RSI-DIVERGE': { n: 61, winRate: 0.2295, avgGrossR: -0.3115, avgNetR: -0.6448, pf: 0.3729 },
+      'POC-REVERT': { n: 24, winRate: 0.0417, avgGrossR: -0.7689, avgNetR: -0.8015, pf: 0.093 },
+      'THREE-BAR': { n: 165, winRate: 0.2364, avgGrossR: -0.2909, avgNetR: -0.8295, pf: 0.2931 },
+      'PIN-REJECT': { n: 114, winRate: 0.2281, avgGrossR: -0.3158, avgNetR: -0.8769, pf: 0.2717 },
+      'ABSORB': { n: 5, winRate: 0, avgGrossR: -1, avgNetR: -1.0272, pf: 0 }
     }
   };
 
@@ -2463,6 +2521,16 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     }catch(eE){ return null; }
   }
 
+  /* Tiered verdict computed from the baked v701 rows at call time.
+     Returns null (no action), or an object whose .action is:
+       'suppress' — formation refuses with the named reason line;
+       'demote'   — forms and paints (card carries this measured row) but
+                    never leads: no MOST PROBABLE, ordered below clean
+                    kinds, conviction cert grants no rank privilege.
+     Nightly asides carry no .action; downstream treats a missing action as
+     'suppress' (a day-book aside stands the kind fully down, as before).
+     Un-demotion for every tier is the live forward ledger reading
+     'has paid' (hgOmniReplayForwardPaid — the v689/G7 pattern). */
   function hgOmniKindDemotion(kind){
     try{
       var rawKind = String(kind || '').toUpperCase();
@@ -2470,28 +2538,51 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       var ev = hgOmniReplayEvidence(mapped);
       var E = (typeof window !== 'undefined' && window.HG_OMNI_REPLAY_EVIDENCE)
         ? window.HG_OMNI_REPLAY_EVIDENCE : HG_OMNI_REPLAY_EVIDENCE;
-      var minN = isFinite(fin(E.demoteMinN)) ? fin(E.demoteMinN) : 50;
-      var floor = isFinite(fin(E.demoteGrossR)) ? fin(E.demoteGrossR) : -0.05;
-      var netFloor = isFinite(fin(E.demoteNetR)) ? fin(E.demoteNetR) : -0.20;
-      if (!ev || !isFinite(fin(ev.avgGrossR)) || !(fin(ev.n) >= minN))
+      var supN = isFinite(fin(E.suppressMinN)) ? fin(E.suppressMinN) : 60;
+      var supNet = isFinite(fin(E.suppressNetR)) ? fin(E.suppressNetR) : -0.60;
+      var demN = isFinite(fin(E.demoteMinN)) ? fin(E.demoteMinN) : 30;
+      var demNet = isFinite(fin(E.demoteNetR)) ? fin(E.demoteNetR) : -0.10;
+      var smallN = isFinite(fin(E.smallNMinN)) ? fin(E.smallNMinN) : 20;
+      var smallNet = isFinite(fin(E.smallNNetR)) ? fin(E.smallNNetR) : -0.60;
+      var cvKinds = (E.convictionKinds && E.convictionKinds.length) ? E.convictionKinds : [];
+      if (!ev || !isFinite(fin(ev.avgNetR)))
         return hgOmniNightlyAsideKind(mapped) || hgOmniNightlyAsideKind(rawKind);
-      var reasons = [];
-      if (fin(ev.avgGrossR) <= floor){
-        reasons.push('grossR ' + fin(ev.avgGrossR).toFixed(3) + ' <= ' + floor
-          + ' at n=' + ev.n + ' — direction measured wrong at scale regardless of costs');
+      var n = fin(ev.n), gross = fin(ev.avgGrossR), net = fin(ev.avgNetR);
+      var row = 'n=' + ev.n + ' gross ' + gross.toFixed(3) + 'R net ' + net.toFixed(3)
+        + 'R PF ' + (isFinite(fin(ev.pf)) ? fin(ev.pf).toFixed(2) : '?')
+        + ' (scripts/backtest-omniroute-v701-results.json)';
+      var action = null, reasons = [], isSmall = false;
+      if (n >= supN && gross < 0 && net <= supNet){
+        action = 'suppress';
+        reasons.push('netR ' + net.toFixed(3) + ' <= ' + supNet + ' with gross < 0 at ' + row
+          + ' — fee-and-direction toxic at scale, stands fully aside');
+      } else if (n >= demN && net <= demNet){
+        action = 'demote';
+        reasons.push('netR ' + net.toFixed(3) + ' <= ' + demNet + ' at ' + row
+          + ' — paints with this row, never leads');
+      } else if (n >= smallN && net <= smallNet){
+        /* POC-REVERT class: under the 30 bar but catastrophically negative. */
+        action = 'demote'; isSmall = true;
+        reasons.push('netR ' + net.toFixed(3) + ' <= ' + smallNet + ' at ' + row
+          + ' — SMALL N (under the ' + demN + ' bar): demoted, not suppressed');
+      } else if (net < 0 && cvKinds.indexOf(mapped) >= 0){
+        /* Conviction roster with a measured-negative row of any n: the
+           formation cert must not confer lead/rank privilege while the
+           forward ledger is unpaid. */
+        action = 'demote'; isSmall = (n < demN);
+        reasons.push('conviction-roster kind measured negative: ' + row
+          + (n < demN ? ' — SMALL N (under the ' + demN + ' bar)' : '')
+          + ' — cert paints, never leads, until the forward ledger reads has paid');
       }
-      /* n≥50, already losing before fees, and still ≤ −0.20R after fees
-         (PO3 class). Does not catch near-even books (ORB, VWAP-REVERT). */
-      if (fin(ev.avgGrossR) < 0 && isFinite(fin(ev.avgNetR)) && fin(ev.avgNetR) <= netFloor){
-        reasons.push('netR ' + fin(ev.avgNetR).toFixed(3) + ' <= ' + netFloor
-          + ' with gross < 0 at n=' + ev.n + ' — fee-and-direction toxic');
-      }
-      if (!reasons.length){
+      if (!action){
         var nightMiss = hgOmniNightlyAsideKind(mapped) || hgOmniNightlyAsideKind(rawKind);
         return nightMiss || null;
       }
       return {
         kind: mapped,
+        action: action,
+        smallN: isSmall || undefined,
+        convictionRoster: (cvKinds.indexOf(mapped) >= 0) || undefined,
         n: ev.n, winRate: ev.winRate,
         grossR: ev.avgGrossR, netR: ev.avgNetR, pf: ev.pf,
         reasons: reasons
@@ -2519,10 +2610,15 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       var ev = hgOmniReplayEvidence(kind);
       var E = (typeof window !== 'undefined' && window.HG_OMNI_REPLAY_EVIDENCE)
         ? window.HG_OMNI_REPLAY_EVIDENCE : HG_OMNI_REPLAY_EVIDENCE;
-      var minN = isFinite(fin(E.preferMinN)) ? fin(E.preferMinN) : 50;
+      var minN = isFinite(fin(E.preferMinN)) ? fin(E.preferMinN) : 60;
+      /* v701 bar: gross>0 AND net>=+0.15 at n>=60. The old net>0 bar let
+         near-flat books (MMOVE +0.024/191, ORB +0.005/218) wear the
+         survivor stamp; +0.15 keeps it for the measured book only
+         (AVWAP-RECLAIM +0.387/80, CUSUM-SHIFT +0.237/85). */
+      var netBar = isFinite(fin(E.preferNetR)) ? fin(E.preferNetR) : 0.15;
       if (ev && (fin(ev.n) >= minN)
         && isFinite(fin(ev.avgGrossR)) && fin(ev.avgGrossR) > 0
-        && isFinite(fin(ev.avgNetR)) && fin(ev.avgNetR) > 0) return true;
+        && isFinite(fin(ev.avgNetR)) && fin(ev.avgNetR) >= netBar) return true;
       var night = (typeof window !== 'undefined' && typeof window.hgOmniNightlyPrefer === 'function')
         ? window.hgOmniNightlyPrefer(kind) : false;
       return !!night;
@@ -2570,19 +2666,32 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   function hgOmniDeskStanceBannerHtml(){
     var E = (typeof window !== 'undefined' && window.HG_OMNI_REPLAY_EVIDENCE)
       ? window.HG_OMNI_REPLAY_EVIDENCE : HG_OMNI_REPLAY_EVIDENCE;
-    var nDem = hgOmniDemotedKindCount();
     var prefer = hgOmniPreferKinds();
+    var nSup = 0, nDemOnly = 0, bk;
+    if (E && E.kinds){
+      for (bk in E.kinds){
+        if (!Object.prototype.hasOwnProperty.call(E.kinds, bk)) continue;
+        var bAct = hgOmniKindDemotion(bk);
+        if (!bAct) continue;
+        if ((bAct.action || 'suppress') === 'suppress') nSup++;
+        else nDemOnly++;
+      }
+    }
     var ov = E.overall || {};
-    var txt = 'REPLAY VERDICT (' + (E.settled || 2832) + ' settled 1h trades in '
-      + (E.src || 'scripts/backtest-omniroute-v531-results.json') + '): overall '
-      + (isFinite(fin(ov.avgNetR)) ? fin(ov.avgNetR).toFixed(2) : '-0.24') + 'R net, PF '
-      + (isFinite(fin(ov.pf)) ? fin(ov.pf).toFixed(2) : '0.68') + '. '
-      + nDem + ' kinds stood aside (n≥50 and gross≤−0.05, or gross<0 and net≤−0.20). '
+    var txt = 'REPLAY VERDICT (' + (E.settled || 2823) + ' settled 1h trades in '
+      + (E.src || 'scripts/backtest-omniroute-v701-results.json') + '): overall '
+      + (isFinite(fin(ov.avgNetR)) ? fin(ov.avgNetR).toFixed(2) : '-0.21') + 'R net, PF '
+      + (isFinite(fin(ov.pf)) ? fin(ov.pf).toFixed(2) : '0.72') + '. '
+      + nSup + ' kinds suppressed (n≥60, gross<0, net≤−0.60 — named reason line) and '
+      + nDemOnly + ' demoted (net≤−0.10 at n≥30, small-n catastrophic, or a measured-negative '
+      + 'conviction-roster kind — paints with its row, never leads). '
+      + 'All six conviction mechanics measured negative in v701, so a conviction cert '
+      + 'confers no lead/rank privilege until the live forward ledger reads has paid. '
       + 'Prefer ' + (prefer.length ? prefer.join(', ') : 'none')
-      + ' — the only net-positive book at scale. '
-      + 'ORB is near-even on the long book, not suppressed. House extras follow their analogue '
+      + ' — the only net-positive book at scale (n≥60, gross>0, net≥+0.15). '
+      + 'ORB and MMOVE are near-even, neither suppressed nor preferred. House extras follow their analogue '
       + '(SNIPER→PIN-REJECT, SMC→FVG-FILL, SQUEEZE→SQUEEZE-FIRE, SCALP→NR7-BREAK, MR→VWAP-REVERT). '
-      + 'Nightly asides add to baked demotes. Solidity and conviction do not forecast wins. '
+      + 'Nightly asides add to baked actions. Solidity and conviction do not forecast wins. '
       + 'Harness is 1h; live scan is 4h — directional evidence only. Never invents tickets.';
     var night = '';
     try{
@@ -3353,13 +3462,22 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     } else {
       sessionLabel = 'OFF-SESSION';
       score = 2; /* v673: an off-session survivor is still a survivor; no
-                    longer scored 0 like an UNDEFINED gap. */
+                    longer scored 0 like an UNDEFINED gap.
+                    v701 replay note (informational, NOT a gate): the
+                    OFF-SESSION cohort settled −0.552R net over n=71
+                    (scripts/backtest-omniroute-v701-results.json,
+                    aggregates.cohorts.session) — the worst session bucket,
+                    but n is too small to justify a new gate. The measured
+                    read rides the detail line below instead. */
     }
 
     var detail = horizon + ' setup during ' + sessionLabel +
                  ' (London ' + (isFinite(lonHour) ? lonHour : '?') +
                  ', NY ' + (isFinite(nyHour) ? nyHour : '?') +
                  ', UTC ' + utcHour + ')';
+    if (sessionLabel === 'OFF-SESSION'){
+      detail += ' | v701 replay: OFF-SESSION cohort -0.55R net over 71 settled — informational, n too small to gate';
+    }
 
     /* News penalty: -2pts if red-flag news <1h away */
     var newsPenalty = 0;
@@ -5291,6 +5409,27 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             +  '">CONVICTION ' + cvFired + '/' + cvTotal + '</span>';
         }
       }
+      /* DEMOTED chip — the v701 re-bake's demote tier paints, never leads.
+         Every demoted card carries its measured row (n / gross / net) and
+         the reason, so the demotion is auditable on the card itself. The
+         cert (chip above) stays visible next to it: cert AND row, honest
+         together. unDemoted (forward ledger has paid) removes the chip. */
+      try {
+        var demChip = (c.kindDemotion && typeof c.kindDemotion === 'object')
+          ? c.kindDemotion
+          : (c.plan && c.plan.kindDemotion && typeof c.plan.kindDemotion === 'object')
+            ? c.plan.kindDemotion : hgOmniKindDemotion(c.kind);
+        if (demChip && !c.unDemoted && !(c.plan && c.plan.unDemoted)){
+          var demTip = (demChip.reasons && demChip.reasons.length)
+            ? demChip.reasons.join('; ')
+            : 'measured negative in the v701 replay';
+          demTip += ' · never MOST PROBABLE; un-demotes only when the live forward ledger reads has paid';
+          h += ' <span class="gpip bad" title="' + esc(demTip) + '">DEMOTED '
+            + (isFinite(fin(demChip.netR)) ? ((fin(demChip.netR) >= 0 ? '+' : '') + fin(demChip.netR).toFixed(2) + 'R') : '?')
+            + '/' + (isFinite(fin(demChip.n)) ? fmt(demChip.n, 0) : '—')
+            + (demChip.smallN ? ' · SMALL N' : '') + '</span>';
+        }
+      } catch (eDemChip) {}
       return h ? '<div style="margin-top:4px">' + h + '</div>' : '';
     } catch (eB) {
       return '';
@@ -5596,7 +5735,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
        (d) cost tier 'ok' (costR <= 0.125) via hgOmniCostDrag's exact math
            ON THE PLAN BEING JUDGED — a tighter stop pays more R to fees.
        (e) quality floor, ANY of (recorded in q.quality):
-             'conviction'   — FULL certificate (count >= 3, costGate passed);
+             'conviction'   — FULL certificate (count >= 3, costGate passed)
+                              on a kind the v701 replay did not demote —
+                              a demoted kind's cert is set aside until its
+                              forward ledger reads 'has paid';
              'forward-paid' — this mechanic's out-of-sample FORWARD ledger
                               reads 'has paid' (hgOmni20xForwardPaid: the
                               same stats and the same bar the FORWARD table
@@ -5659,7 +5801,23 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
              : (c && c.hit && c.hit.conviction && typeof c.hit.conviction === 'object') ? c.hit.conviction
              : null;
       if (cv && isFinite(fin(cv.count)) && fin(cv.count) >= 3 && cv.costGate === 'passed'){
-        quality = 'conviction';
+        /* v701 lead-block: all six conviction mechanics measured NEGATIVE
+           (scripts/backtest-omniroute-v701-results.json byMechanic;
+           conviction cohort overall −0.231R/350 vs legacy −0.208R/2473).
+           A cert on a demoted kind is context on the card, not a quality
+           credential — the ONLY way back is the forward-paid path checked
+           next (the v689/G7 pattern), which is also this gate's own next
+           alternate. */
+        var cvKind20 = String((c && c.kind) || (c && c.hit && c.hit.kind) || '');
+        var cvDem = hgOmniKindDemotion(cvKind20);
+        if (cvDem && !(c && c.unDemoted) && !hgOmniReplayForwardPaid(hgOmniReplayKind(cvKind20))){
+          qualWhy.push('conviction cert set aside — ' + String(cvDem.kind)
+            + ' measured ' + (isFinite(fin(cvDem.netR)) ? fin(cvDem.netR).toFixed(3) : '?')
+            + 'R net over n=' + cvDem.n
+            + ' (v701 replay); cert confers no privilege until the forward ledger reads has paid');
+        } else {
+          quality = 'conviction';
+        }
       } else {
         qualWhy.push('no full conviction cert');
       }
@@ -5898,9 +6056,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                (3) stamped solidity at/above the same frozen 105 floor.
              Marker only: it gates nothing and loosens nothing. The tooltip
              names each edge with its MEASURED basis — the replay PF pair is
-             hardcoded from scripts/backtest-omniroute-v531-results.json
-             aggregates.cohorts.withTrend (PF 0.7344 with vs 0.6656
-             against-or-unknown, n=752/2080). Fails closed to no chip. */
+             hardcoded from scripts/backtest-omniroute-v701-results.json
+             aggregates.cohorts.withTrend (PF 0.7755 with vs 0.7009
+             against-or-unknown, n=754/2069). Fails closed to no chip. */
           var prime = false, primeTip = '';
           try {
             var qEdge = !!(q && (q.quality === 'forward-paid' || q.quality === 'conviction'));
@@ -5935,7 +6093,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                 tipQ = 'conviction cert: count ' + (pCv ? fmt(pCv.count, 0) : '—') + ' >= 3, formation cost gate passed';
               }
               primeTip = '3 stacked edges — 1) ' + tipQ
-                + ' · 2) with-trend: trend + htf-daily + regime PASS — withTrend replay PF 0.734 vs 0.666'
+                + ' · 2) with-trend: trend + htf-daily + regime PASS — withTrend replay PF 0.776 vs 0.701 (v701)'
                 + ' · 3) solidity ' + fmt(pSol, 0) + '/200 (floor ' + fmt(P.solidityFloor, 0) + ')';
             }
           } catch (ePr) { prime = false; primeTip = ''; }
@@ -6045,7 +6203,11 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
           reads 'has paid' (hgOmni20xForwardPaid: the same hgFwdPool +
           hgOmniPoolRead at the family-wise bar the FORWARD table renders),
           OR the hit carries a FULL conviction certificate (count >= 3,
-          formation cost gate passed).
+          formation cost gate passed) on a kind the v701 replay did NOT
+          demote — all six conviction mechanics measured negative in
+          scripts/backtest-omniroute-v701-results.json, so on a demoted
+          kind the cert is context on the card, not a proven edge, until
+          the forward ledger reads 'has paid'.
        2. STACKED INDEPENDENT EDGES — the candidate is a confluence cluster:
           >= 2 mechanics fired on identical levels (the collapse pass already
           merged them into one card carrying alsoKinds), AND at least one of
@@ -6191,16 +6353,30 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       var quality = null;
       var fwSelf = hgOmniApexForwardFor(kind);
       if (fwSelf && fwSelf.read === 'has paid') quality = 'forward-paid';
+      var cvSetAside = null;
       if (!quality){
         var cv = (c.conviction && typeof c.conviction === 'object') ? c.conviction
                : (c.hit && c.hit.conviction && typeof c.hit.conviction === 'object') ? c.hit.conviction
                : null;
-        if (cv && isFinite(fin(cv.count)) && fin(cv.count) >= 3 && cv.costGate === 'passed') quality = 'conviction';
+        if (cv && isFinite(fin(cv.count)) && fin(cv.count) >= 3 && cv.costGate === 'passed'){
+          /* v701 lead-block: a cert on a demoted kind is not a proven edge
+             — every conviction mechanic measured negative in the v701
+             replay. The forward ledger reading 'has paid' (checked above
+             AND re-read here via the stub-able hgOmniReplayForwardPaid —
+             the v689/G7 pattern) stays the only way back. */
+          var cvDemA = hgOmniKindDemotion(kind);
+          if (cvDemA && !c.unDemoted && !hgOmniReplayForwardPaid(hgOmniReplayKind(kind))) cvSetAside = cvDemA;
+          else quality = 'conviction';
+        }
       }
       if (!quality){
         fails.push({ rule: 'proven-edge',
-          why: fwSelf ? ('forward ledger reads "' + String(fwSelf.read) + '" and no full conviction certificate')
-                      : 'no settled forward record and no full conviction certificate' });
+          why: cvSetAside
+            ? ('conviction cert set aside — ' + String(cvSetAside.kind) + ' measured '
+               + (isFinite(fin(cvSetAside.netR)) ? fin(cvSetAside.netR).toFixed(3) : '?')
+               + 'R net over n=' + cvSetAside.n + ' (v701 replay) and the forward ledger has not paid')
+            : fwSelf ? ('forward ledger reads "' + String(fwSelf.read) + '" and no full conviction certificate')
+                     : 'no settled forward record and no full conviction certificate' });
       }
 
       /* 2 — stacked independent edges: >= 2 mechanics on identical levels,
@@ -6834,10 +7010,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             + (rg ? '' : ' — against the setup side');
       /* A macro read imposed as a VETO silenced every short for as long as
          BTC's own daily stack was bullish — including shorts on symbols in
-         their own confirmed downtrend. The v531 roster replay
-         (scripts/backtest-omniroute-v531-results.json, aggregates.cohorts
+         their own confirmed downtrend. The roster replay
+         (scripts/backtest-omniroute-v701-results.json, aggregates.cohorts
          .withTrend) measured SYMBOL-level trend alignment as the edge:
-         withTrend PF 0.7344 vs againstOrUnknown 0.6656 across 531 contracts
+         withTrend PF 0.7755 vs againstOrUnknown 0.7009 (n=754/2069)
          — not BTC direction imposed on all of them. So when the symbol's OWN
          tape argues with the trade on BOTH the scan timeframe and the daily,
          the adverse macro read is DEMOTED to context (info:true — 'an info
@@ -6868,7 +7044,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                 + (rgProxy ? (' (BTC daily proxy — regime.js gauges unavailable' + (x.regime.detail ? '; ' + x.regime.detail : '') + ')') : '')
                 + ' — against this ' + hit.dir
                 + ', but the symbol own 4h + daily trend align with it: demoted to context'
-                + ' (symbol-trend cohort PF 0.734 vs 0.666 in replay)';
+                + ' (symbol-trend cohort PF 0.776 vs 0.701 in the v701 replay)';
         }
       }
     }
@@ -8522,6 +8698,17 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     /* v682: stamp solidity BEFORE sort so downstream reorder sees it. */
     hgOmniStampSolidity(list, tapeDir);
     var sorted = (list || []).slice().sort(function(a, b){
+      /* v701 lead-block: a demoted kind (conviction cert or not) can NEVER
+         outrank a clean kind — hard tier, not a score penalty, because the
+         −25 demote term could still be out-argued by tape/ticket/family
+         sums. Checked BEFORE topPick: hgOmniPickFew already excludes
+         demoted kinds so a legitimate topPick is clean by construction,
+         and a stale topPick restored onto a since-demoted kind must not
+         lead either. Un-demotion route: the forward ledger reading
+         'has paid' (c.unDemoted — the v689/G7 pattern). */
+      var adem = ((a.kindDemotion || hgOmniKindDemotion(a.kind)) && !a.unDemoted) ? 1 : 0;
+      var bdem = ((b.kindDemotion || hgOmniKindDemotion(b.kind)) && !b.unDemoted) ? 1 : 0;
+      if (adem !== bdem) return adem - bdem;
       if (!!a.topPick !== !!b.topPick) return a.topPick ? -1 : 1;
       var sa = hgOmniBalanceScore(a, tapeDir);
       var sb = hgOmniBalanceScore(b, tapeDir);
@@ -8538,8 +8725,25 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
        v689: pass tab so the reorder can stash killed stats for the
        KILLED note rendered later in the MP section. */
     var W2 = (typeof window !== 'undefined') ? window : ((typeof globalThis !== 'undefined') ? globalThis : null);
-    if (W2 && typeof W2.hgSolidityReorder === 'function') return W2.hgSolidityReorder(sorted, { tab: 'OMNIROUTE' });
-    return sorted;
+    var reordered = (W2 && typeof W2.hgSolidityReorder === 'function')
+      ? W2.hgSolidityReorder(sorted, { tab: 'OMNIROUTE' }) : sorted;
+    /* v703 audit fix: hgSolidityReorder buckets purely by solidity score
+       (hg-solidity.js:506 — it never reads kindDemotion), so a demoted kind
+       graded PRIME/SOLID was lifted straight back above clean MIXED cards,
+       silently undoing the hard tier the comparator just applied. Re-assert
+       the tier as the FINAL, OUTERMOST partition: clean kinds first, demoted
+       kinds after, order INSIDE each side exactly as the solidity reorder
+       left it (stable). Un-demotion route unchanged (c.unDemoted — forward
+       ledger 'has paid', the v689/G7 pattern). The killed-note stats are
+       unaffected: the tab reads them from the window stash
+       (hgSolidityLastKilled), which hgSolidityReorder already wrote. */
+    var cleanSide = [], demSide = [], iP, cP;
+    for (iP = 0; iP < reordered.length; iP++){
+      cP = reordered[iP];
+      if (cP && (cP.kindDemotion || hgOmniKindDemotion(cP.kind)) && !cP.unDemoted) demSide.push(cP);
+      else cleanSide.push(cP);
+    }
+    return cleanSide.concat(demSide);
   }
 
   function hgOmniPickFew(list, tape, limit){
@@ -8552,8 +8756,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       c = ranked[i];
       if (!c || !c.plan || !(c.grade && c.grade.ticket)) continue;
       /* Demoted kinds never MOST PROBABLE (or HELD) unless the live
-         forward ledger un-demoted them. Formation already refuses them;
-         this is the last line so a synthetic ticket cannot sneak in. */
+         forward ledger un-demoted them. Suppressed kinds never form at
+         all; demote-tier kinds (v701 re-bake) DO form and paint, so this
+         line is what enforces "paints, never leads" — and it is also the
+         last line, so a synthetic ticket cannot sneak in. */
       if ((c.kindDemotion || hgOmniKindDemotion(c.kind)) && !c.unDemoted) continue;
       if (String(c.dir || '').toLowerCase() !== tape){
         var hSym = String(c.sym || c.base || '');
