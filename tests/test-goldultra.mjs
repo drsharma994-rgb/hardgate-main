@@ -18,6 +18,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { xmOrderType } from '../lib/xm-order-type.mjs';
 const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 let pass = 0, fail = 0;
 function assert(c, m){ if (c){ pass++; console.log('ok    - ' + m); } else { fail++; console.error('FAIL  - ' + m); } }
@@ -129,6 +130,18 @@ console.log('== 3) honesty gates ==');
   assert(f1.ok && f1.bar.t === up15[319].t && f1.price === up15[319].c, 'a still-forming bar (t+900 > now) is never read — the last CLOSED bar is the signal bar');
   const nov = W.goldUltraEngine({ rows15m: up15, rows1h: [], now: upNow });
   assert(nov.fire === false && nov.gates.some(g => /MEASURED NOT TRADABLE/.test(g)), 'with the measured-negative evidence baked, a perfect uptrend still yields NO ticket — the gate says MEASURED NOT TRADABLE');
+  assert(nov.recordOnly === true && nov.plan && nov.plan.stop < nov.plan.entry && nov.dir === 'long', 'the would-be plan is still priced as RECORD ONLY (long, stop below entry) so the reader sees what the rule would have done');
+  {
+    const stubs2 = {}; const el2 = { innerHTML: '', querySelector: s => (stubs2[s] = stubs2[s] || { innerHTML: '', textContent: '', style: {}, disabled: false, addEventListener(ev, fn){ this._handler = fn; } }) };
+    W.HG_tabs.find(t => t.id === 'goldultra').mount(el2);
+    W.getGoldCandles = async (tf) => tf === '15m' ? { rows: up15.map(r => ({ ...r })), source: 'seed' } : { rows: [], source: 'seed' };
+    const realNow = Date.now; Date.now = () => upNow;
+    let r2 = null; try{ r2 = stubs2['#guRun']._handler ? await stubs2['#guRun']._handler() : null; }catch(e){}
+    Date.now = realNow;
+    const cards = stubs2['#guCards'].innerHTML;
+    assert(/RECORD ONLY — NOT A TICKET/.test(cards) && /COUNT MET, RECORD ONLY/.test(cards), 'the rendered card is stamped RECORD ONLY — NOT A TICKET and the header says COUNT MET, RECORD ONLY');
+    assert(!/FIRES — the rule is met/.test(cards), 'nothing on the board claims a fire');
+  }
   const wide = W.goldUltraEngine({ rows15m: up15, rows1h: [], now: upNow, allowUnverified: true, venueCost: { venue: 'PAXG', rtFrac: 0.0026 } });
   assert(wide.fire && wide.plan.floorNote && /widened/.test(wide.plan.floorNote) && wide.plan.risk >= 8 * 0.0026 * wide.plan.entry - 1e-9, 'a stop tighter than 8x the PAXG round trip is widened to the floor and the card SAYS so');
   const novc = W.goldUltraEngine({ rows15m: up15, rows1h: [], now: upNow, allowUnverified: true });
@@ -140,6 +153,58 @@ console.log('== 3) honesty gates ==');
   assert(JSON.stringify(a.votes) === JSON.stringify(b.votes) && a.line === b.line, 'deterministic: same bars -> identical reads and line');
   const rule = W.goldUltraEngine({ rows15m: up15, rows1h: [], now: upNow, allowUnverified: true, rule: { minPct: 0.99 } });
   assert(rule.fire === false && rule.gates.some(g => /< 99%/.test(g)), 'rule override is honoured (minPct 99% blocks the uptrend fire)');
+}
+
+/* =========================================================================
+   4) hg-v707 — SETUPS: the GOLD SCALP prefer book, stamped by the count
+========================================================================= */
+console.log('== 4) setups — prefer book, AGAINST-consensus crowning (hg-v707) ==');
+{
+  const W = boot();
+  const F = W.HG_GOLD_ULTRA_FILTER;
+  assert(!!F && F.prefer && F.prefer.against.oos.n > 0 && F.prefer.against.ins.net > 0 && F.prefer.against.oos.net > 0 && F.prefer.with.oos.net <= 0,
+         'filter evidence is baked: AGAINST positive in both windows, WITH flat-to-negative OOS (the measured basis of the crown)');
+  assert(typeof W.goldUltraSelectSetups === 'function', 'selectSetups exported for testing');
+  const mkC = (o) => Object.assign({ source: 'GOLD SCALP', strategy: 'S30 FAILED-BREAK REVERSAL', stratKey: 'p6fail', dir: 'short', entry: 4380, stop: 4392, t1: 4362, t2: 4350, rr: 1.5, rr2: 2.5, tally: 5, confScore: 70, demoted: false, vetoed: false, stamps: [], gateNotes: [], why: null, edge: null }, o);
+  const countLong = { lead: 'long', pct: 0.92, decisive: 190 };
+  const s1 = W.goldUltraSelectSetups([mkC({}), mkC({ stratKey: 'p9volbar', strategy: 'S62 VOLUME-BAR SWEEP', dir: 'long', entry: 4390, stop: 4380, t1: 4405, t2: 4415 }), mkC({ stratKey: 'ribbon', strategy: 'EMA RIBBON', confScore: 90 })], countLong);
+  assert(s1.pick && s1.pick.stratKey === 'p6fail' && s1.pick.confluence === 'AGAINST', 'a prefer-row SHORT against a 92% LONG count is crowned (AGAINST)');
+  assert(s1.cards.find(c => c.stratKey === 'p9volbar').confluence === 'WITH' && !s1.cards.find(c => c.stratKey === 'p9volbar').crownable, 'a prefer-row LONG with the LONG count is stamped WITH and never crownable');
+  assert(!s1.cards.find(c => c.stratKey === 'ribbon').crownable && s1.cards.find(c => c.stratKey === 'ribbon').book === 'other', 'a non-prefer strategy is never crownable even at a higher confScore (v699 lead invariant, measured basis)');
+  const s2 = W.goldUltraSelectSetups([mkC({ demoted: true, gateNotes: ['stale momentum'] })], countLong);
+  assert(!s2.pick && s2.cards[0].confluence === 'AGAINST' && !s2.cards[0].crownable, 'a DEMOTED prefer row is shown with its stamp but never crowned');
+  const s3 = W.goldUltraSelectSetups([mkC({})], { lead: 'long', pct: 0.52, decisive: 120 });
+  assert(!s3.pick && s3.cards[0].confluence === 'NEUTRAL', 'under the 55% stamp threshold the confluence read is NEUTRAL and nothing is crowned');
+  const s4 = W.goldUltraSelectSetups([mkC({ stop: 4370 })], countLong);
+  assert(!s4.pick && s4.cards.length === 0 && /wrong side/.test(s4.held[0]), 'wrong-side geometry (short with the stop below entry) is held, never rendered tradable');
+
+  /* rendered board through the real scan path */
+  const stubs = {}; const el = { innerHTML: '', querySelector: s => (stubs[s] = stubs[s] || { innerHTML: '', textContent: '', style: {}, disabled: false, addEventListener(ev, fn){ this._handler = fn; } }) };
+  W.HG_tabs.find(t => t.id === 'goldultra').mount(el);
+  W.getGoldCandles = async (tf) => tf === '15m' ? { rows: up15.map(r => ({ ...r })), source: 'seed' } : { rows: [], source: 'seed' };
+  const lastClose = up15[319].c;
+  W.goldScalpSetups = () => { const a = [mkC({ entry: lastClose - 60, stop: lastClose - 48, t1: lastClose - 78, t2: lastClose - 90 }), mkC({ stratKey: 'p9volbar', strategy: 'S62 VOLUME-BAR SWEEP', dir: 'long', entry: lastClose, stop: lastClose - 10, t1: lastClose + 15, t2: lastClose + 25 })]; a.rejected = [{ strategy: 'ASIAN RANGE BREAKOUT', dir: 'long', reason: 'structure too close — test reject' }]; return a; };
+  W.goldRankSetups = (c) => ({ ranked: c, rejected: [] });
+  const recorded = []; W.hgFwdRecordScan = (tab, tf, items, opts) => { recorded.push({ tab, tf, items, opts }); };
+  const realNow = Date.now; Date.now = () => upNow;
+  const r = await stubs['#guRun']._handler(); Date.now = realNow;
+  const html = stubs['#guCards'].innerHTML, st = W.goldUltraState();
+  assert(r === 'refreshed' && st && st.setups && st.setups.pick && st.setups.pick.stratKey === 'p6fail', 'the scan crowns the prefer-row short against the LONG count (state.setups.pick)');
+  assert(/BEST SETUP — GOLD SCALP prefer row, AGAINST the consensus/.test(html) && /AGAINST CONSENSUS — crownable/.test(html), 'the crowned card carries the BEST SETUP banner and the AGAINST stamp');
+  assert(/WITH CONSENSUS — never crowned/.test(html), 'the with-consensus card is shown and says so');
+  assert(/MEASURED · against the consensus: \+0\.360R in-sample \(n=37\) · \+0\.373R out-of-sample \(n=15\)/.test(html), 'the crowned card prints the measured record with its real n');
+  assert(/structure too close — test reject/.test(html), 'held-back reasons from the desk are listed, nothing dropped silently');
+  const expectWord = xmOrderType('short', lastClose - 60, lastClose).name.replace('_', ' ');
+  assert(new RegExp('<div class="gu-plan">' + expectWord + ' <b>').test(html), 'the setup order word matches lib/xm-order-type.mjs (' + expectWord + ' for a short entry under the tape)');
+  assert(recorded.length === 1 && recorded[0].tab === 'GOLDULTRA' && recorded[0].items[0].mechanic === 'GOLDSCALP-p6fail-AGAINST-ULTRA' && recorded[0].items[0].dir === 'short', 'ONLY the crowned pick is recorded to the forward ledger, as a GOLDSCALP-prefer-AGAINST-ULTRA mechanic');
+  assert(/COUNT MET, RECORD ONLY|NO FIRE/.test(html) && !/FIRES — the rule is met/.test(html), 'the plain count itself stays record-only beneath the setups');
+  assert(/the count as a CONFLUENCE STAMP/.test(html), 'the filter evidence panel is on the board');
+  /* engine dark */
+  delete W.goldScalpSetups;
+  const stubs2 = {}; const el2 = { innerHTML: '', querySelector: s => (stubs2[s] = stubs2[s] || { innerHTML: '', textContent: '', style: {}, disabled: false, addEventListener(ev, fn){ this._handler = fn; } }) };
+  W.HG_tabs.find(t => t.id === 'goldultra').mount(el2);
+  Date.now = () => upNow; await stubs2['#guRun']._handler(); Date.now = realNow;
+  assert(/ENGINE DARK/.test(stubs2['#guCards'].innerHTML) && !W.goldUltraState().setups.pick, 'without goldind loaded the setups section says ENGINE DARK and crowns nothing');
 }
 
 console.log('\n' + pass + ' assertions passed' + (fail ? (', ' + fail + ' FAILED') : ''));

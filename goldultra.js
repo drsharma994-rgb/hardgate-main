@@ -88,9 +88,25 @@
    100%. Until a full run is baked the panel says NOT YET MEASURED and the
    rule fires nothing as tradable.
 
-   FEEDS: getGoldCandles('15m'/'1h') with the PAXGUSDT fallback; closed bars
-   only (hg-v698). Venue cost via hgOgVenueCost() when mounted; absent -> the
-   cost floor is skipped and SAID.
+   FEEDS: getGoldCandles('15m'/'1h'/'4h'/'1d') with the PAXGUSDT fallback;
+   closed bars only (hg-v698). Venue cost via hgOgVenueCost() when mounted;
+   absent -> the cost floor is skipped and SAID.
+
+   SETUPS (hg-v707) — where the tickets come from
+   -----------------------------------------------
+   The plain vote measured negative, so it never issues a ticket (RECORD
+   ONLY). scripts/backtest-goldultra-filter.mjs joined every GOLD SCALP trade
+   to the ULTRA read of its own signal bar: the desk's PREFER rows (p6fail,
+   p9volbar — reversal mechanics) paid MORE against the consensus and went
+   flat with it, same sign in-sample / out-of-sample and in both book cuts.
+   So this tab's SETUPS are the GOLD SCALP candidates (goldScalpSetups ->
+   goldRankSetups -> hgFilterGoldPostGate, the desk's own pipeline, feature-
+   checked), and the count is a contrarian confluence stamp: a prefer-row
+   card reading AGAINST CONSENSUS is crowned (and recorded to the forward
+   ledger as GOLDSCALP-<key>-AGAINST-ULTRA); WITH CONSENSUS is shown, never
+   crowned; unproven / non-prefer / demoted cards are shown with their
+   reasons. The measured record (with its small n) prints on every card and
+   in the VERIFIED filter panel. HG_GOLD_ULTRA_FILTER holds the numbers.
    ================================================================================ */
 (function(){
 'use strict';
@@ -1503,19 +1519,182 @@ function goldUltraEngine(inp){
   if (pct < rule.minPct) out.gates.push('agreement ' + Math.round(pct * 100) + '% < ' + Math.round(rule.minPct * 100) + '% — the reads do not agree enough');
   if (rule.regimeGate && v.regime === 'chop') out.gates.push('REGIME reads CHOP (' + v.regimeCounts.chop + ' of 4 strength reads) — the gate holds');
   if (!isFinite(v.atr) || v.atr <= 0) out.gates.push('ATR 14 unreadable — no stop can be priced');
-  if (!HG_GOLD_ULTRA_EVIDENCE && !inp.allowUnverified) out.gates.push('NOT YET MEASURED — no full backtest has been baked; the rule fires nothing as tradable until it is');
-  if (HG_GOLD_ULTRA_EVIDENCE && HG_GOLD_ULTRA_EVIDENCE.tradable === false && !inp.allowUnverified) out.gates.push('MEASURED NOT TRADABLE — out-of-sample the rule did not pay after costs (see VERIFIED); the count prints for the record, never as a ticket');
-  if (out.gates.length){ out.reasons = out.gates.slice(); return out; }
+  /* evidence gates are kept apart from the count gates: when the COUNT clears
+     the rule but the evidence says it does not pay, the plan is still priced
+     and shown as RECORD ONLY — the reader sees exactly what the rule would
+     have done, and the card says plainly that it is not a ticket */
+  var evGates = [];
+  if (!HG_GOLD_ULTRA_EVIDENCE && !inp.allowUnverified) evGates.push('NOT YET MEASURED — no full backtest has been baked; the rule fires nothing as tradable until it is');
+  if (HG_GOLD_ULTRA_EVIDENCE && HG_GOLD_ULTRA_EVIDENCE.tradable === false && !inp.allowUnverified) evGates.push('MEASURED NOT TRADABLE — out-of-sample the rule did not pay after costs (see VERIFIED); the count prints for the record, never as a ticket');
+  if (out.gates.length){ out.reasons = out.gates.concat(evGates); out.gates = out.reasons.slice(); return out; }
+  out.recordOnly = evGates.length > 0;
+  if (out.recordOnly){ out.gates = evGates.slice(); out.reasons = evGates.slice(); }
   var entry = v.price, risk = rule.stopAtr * v.atr, floorNote = null, vc = inp.venueCost;
   if (vc && isFinite(+vc.rtFrac) && +vc.rtFrac > 0){
     var floorD = rule.costFloorMult * (+vc.rtFrac) * entry;
     if (risk < floorD){ floorNote = 'stop widened from ' + fmt(risk) + ' to the ' + (vc.venue || 'venue') + ' cost floor ' + fmt(floorD) + ' (' + rule.costFloorMult + ' x ' + (100 * +vc.rtFrac).toFixed(3) + '% RT)'; risk = floorD; }
   } else out.gates.push('venue cost unknown — cost floor not applied (said, not hidden)');
   var s = lead === 'long' ? 1 : -1;
-  out.fire = true; out.dir = lead;
+  out.fire = !out.recordOnly; out.dir = lead;
   out.plan = { entry: entry, stop: entry - s * risk, t1: entry + s * rule.t1R * risk, t2: entry + s * rule.t2R * risk, risk: risk, rr1: rule.t1R, rr2: rule.t2R,
                orderType: lead === 'long' ? 'BUY' : 'SELL', stopAtr: risk / v.atr, floorNote: floorNote, timeoutBars: rule.timeoutBars };
   return out;
+}
+
+/* =========================== SETUPS — the paying desk, stamped by the count ===========================
+   hg-v707. The plain vote lost on its own (VERIFIED). scripts/backtest-
+   goldultra-filter.mjs then joined every GOLD SCALP trade to the ULTRA read
+   of ITS OWN signal bar. The setups the scalp desk actually crowns — the
+   edge-table PREFER rows, both reversal mechanics — paid MORE when they
+   traded AGAINST the consensus and went flat when they traded WITH it, the
+   same sign in-sample and out-of-sample and in both book cuts. So this tab's
+   setups ARE the GOLD SCALP prefer-book candidates, and the count is a
+   contrarian confluence stamp on them: AGAINST CONSENSUS crowns, WITH
+   CONSENSUS is shown and never crowned, NEUTRAL (thin / under 55%) is shown
+   unstamped. Numbers below are the measured ones; n is small and SAID. */
+var GU_PREFER = ['p6fail', 'p9volbar'];              /* goldind HG_GOLD_SETUP_EDGE.scalp action:'prefer' */
+var GU_SHOWN = GU_PREFER.concat(['sweepob', 'p8range']); /* unproven, not discredited — shown, never crowned */
+var HG_GOLD_ULTRA_FILTER = {
+  generated: '2026-09-11T18:22:52Z', source: 'scripts/backtest-goldultra-filter.mjs · GOLD SCALP trades (scripts/backtest-goldscalp-results.json, XM costs) joined to the ULTRA read of their signal bar',
+  x: 0.55, minAvail: 25,
+  book: 'GOLD SCALP prefer rows p6fail (S30 failed-break reversal) + p9volbar (S62 volume-bar sweep)',
+  prefer: { baseline: { ins: { n: 109, net: 0.225 }, oos: { n: 48, net: 0.021, win: 0.44 } },
+            against: { ins: { n: 37, net: 0.36 }, oos: { n: 15, net: 0.373 } },
+            with: { ins: { n: 60, net: 0.125 }, oos: { n: 23, net: -0.078, win: 0.39 } } },
+  notDiscredited: { baseline: { ins: { n: 207, net: 0.162 }, oos: { n: 90, net: 0.038, win: 0.43 } },
+                    against: { ins: { n: 66, net: 0.199 }, oos: { n: 34, net: 0.306 } },
+                    with: { ins: { n: 113, net: 0.132 }, oos: { n: 39, net: -0.042 } } },
+  verdict: 'The prefer-book reversal setups pay more AGAINST the ULTRA consensus (+0.36R in-sample n=37, +0.37R out-of-sample n=15; +0.20R / +0.31R on the wider not-discredited book n=66 / 34) and go flat-to-negative WITH it (+0.13R / −0.08R). Same sign in both windows and both cuts — a contrarian confluence stamp, not a signal of its own. Out-of-sample n is small: read it as a ranking preference, size accordingly.',
+  limitations: ['out-of-sample AGAINST n=15 on the prefer book (34 on the wider book) — a preference with a consistent sign, not a statistically settled edge',
+                'offline every GOLD SCALP candidate carries a demote stamp (live feeds absent), so the cut is by strategy key, exactly the rows the live desk crowns',
+                'the plain ULTRA vote itself measured −0.215R OOS and stays RECORD ONLY; only the desk’s own measured setups are ever crowned here',
+                'one split of one regime of gold history; PAXGUSDT proxy at XM costs, as every gold harness']
+};
+function guConfluence(c, count){
+  if (!count || count.decisive < HG_GOLD_ULTRA_FILTER.minAvail || count.pct < HG_GOLD_ULTRA_FILTER.x) return 'NEUTRAL';
+  return count.lead === c.dir ? 'WITH' : 'AGAINST';
+}
+/* same rule as lib/xm-order-type.mjs (pinned by tests/test-goldultra.mjs) */
+function guOrderWord(dir, entry, livePx){
+  var long = dir !== 'short', e = +entry, live = +livePx;
+  if (!isFinite(live) || live <= 0 || !isFinite(e) || e <= 0) return long ? 'BUY LIMIT' : 'SELL LIMIT';
+  if (Math.abs(e - live) / live <= 0.0003) return long ? 'BUY' : 'SELL';
+  if (long) return e < live ? 'BUY LIMIT' : 'BUY STOP';
+  return e > live ? 'SELL LIMIT' : 'SELL STOP';
+}
+function guNorm(c){
+  var f = function(x){ var v = +x; return isFinite(v) ? v : NaN; };
+  return { source: 'GOLD SCALP', strategy: c.strategy || c.stratKey || 'SETUP', stratKey: c.stratKey || null, dir: c.dir, grade: typeof c.grade === 'string' ? c.grade : null,
+           entry: f(c.entry), stop: f(c.stop), t1: f(c.t1), t2: f(c.t2), rr: f(isFinite(f(c.rr)) ? c.rr : c.rr1), rr2: f(c.rr2),
+           tally: f(c.tally), confScore: f(c.confScore), demoted: !!c.demoted, vetoed: !!c.vetoed,
+           stamps: Array.isArray(c.stamps) ? c.stamps.slice() : [], gateNotes: Array.isArray(c.gateNotes) ? c.gateNotes.slice() : [],
+           why: c.why || null, edge: (c.edge && typeof c.edge === 'object') ? { action: c.edge.action || null, n: f(c.edge.n), net: f(c.edge.net), why: c.edge.why ? String(c.edge.why) : '' } : null };
+}
+function guSidesOk(c){
+  if (!isFinite(c.entry) || !isFinite(c.stop) || !isFinite(c.t1)) return false;
+  return c.dir === 'long' ? (c.stop < c.entry && c.t1 > c.entry) : (c.stop > c.entry && c.t1 < c.entry);
+}
+async function laneGoldScalp(gold, now){
+  var out = { cands: [], held: [], dark: null };
+  var setupsFn = gfn('goldScalpSetups');
+  if (!setupsFn){ out.dark = 'GOLD SCALP engine dark — goldScalpSetups (goldind.js) not loaded; no setups can be sourced'; return out; }
+  if (!gold.rows15m.length){ out.held.push('no 15m bars from any feed — lane skipped'); return out; }
+  var cands = null;
+  try{ cands = setupsFn({ rows15m: gold.rows15m, rows1h: gold.rows1h, rows4h: gold.rows4h, dailyCandles: (gold.rows1d && gold.rows1d.length) ? gold.rows1d : undefined, now: now, news: null }); }
+  catch(e){ out.held.push('detector threw: ' + ((e && e.message) || e)); return out; }
+  if (!Array.isArray(cands)) return out;
+  var i, rj = cands.rejected || [];
+  for (i = 0; i < rj.length; i++) if (rj[i]) out.held.push((rj[i].strategy || 'setup') + ' · ' + String(rj[i].dir || '').toUpperCase() + ' — ' + (rj[i].reason || 'failed a quality gate'));
+  for (i = 0; i < cands.length; i++) if (cands[i]){ cands[i].venue = 'GOLD ULTRA'; cands[i].sym = 'XAUUSD'; }
+  var ranked = cands, rankFn = gfn('goldRankSetups');
+  if (rankFn){
+    var ctx = { now: now, news: null, style: 'goldscalp', rows15m: gold.rows15m, rows1h: gold.rows1h, rows4h: gold.rows4h };
+    try{ var sf = gfn('goldSeason'); if (sf) ctx.season = sf(now); }catch(eS){}
+    try{ var cv = gfn('goldCrossVenueMap'); if (cv) ctx.crossVenue = cv(cands); }catch(eC){}
+    var rk = null; try{ rk = rankFn(cands, ctx); }catch(eR){ rk = null; }
+    if (rk && Array.isArray(rk.ranked)){ ranked = rk.ranked; var rr = rk.rejected || []; for (i = 0; i < rr.length; i++) if (rr[i]) out.held.push((rr[i].strategy || 'setup') + ' · ' + String(rr[i].dir || '').toUpperCase() + ' — ' + (rr[i].reason || 'failed a quality gate')); }
+  }
+  var pgFn = gfn('hgFilterGoldPostGate');
+  if (pgFn){
+    try{ ranked = await pgFn(ranked, { 'GOLD ULTRA': { rows15m: gold.rows15m } }, gold.rows4h, 'gold-scalp'); }
+    catch(ePg){ var mk = gfn('hgMarkGateUnchecked'), why = 'post-gate filter threw: ' + ((ePg && ePg.message) || ePg); for (var q = 0; q < ranked.length; q++) if (mk && ranked[q]) mk(ranked[q], [why]); }
+    if (!Array.isArray(ranked)) ranked = [];
+  }
+  for (i = 0; i < ranked.length; i++){ var c = ranked[i]; if (c && (c.dir === 'long' || c.dir === 'short')) out.cands.push(guNorm(c)); }
+  return out;
+}
+function selectSetups(cands, count){
+  var sel = { pick: null, cards: [], held: [] };
+  for (var i = 0; i < cands.length; i++){
+    var c = cands[i];
+    if (!guSidesOk(c)){ sel.held.push(c.strategy + ' · ' + c.dir.toUpperCase() + ' — levels incomplete or on the wrong side; never tradable'); continue; }
+    c.confluence = guConfluence(c, count);
+    c.book = GU_PREFER.indexOf(c.stratKey) >= 0 ? 'prefer' : GU_SHOWN.indexOf(c.stratKey) >= 0 ? 'unproven' : 'other';
+    c.crownable = c.book === 'prefer' && !c.demoted && !c.vetoed && c.confluence === 'AGAINST';
+    sel.cards.push(c);
+  }
+  sel.cards.sort(function(a, b){
+    var ra = (a.crownable ? 0 : a.book === 'prefer' ? 1 : a.book === 'unproven' ? 2 : 3) - (b.crownable ? 0 : b.book === 'prefer' ? 1 : b.book === 'unproven' ? 2 : 3);
+    if (ra) return ra;
+    var ca = isFinite(a.confScore) ? a.confScore : -1, cb = isFinite(b.confScore) ? b.confScore : -1;
+    return cb - ca || ((isFinite(b.tally) ? b.tally : 0) - (isFinite(a.tally) ? a.tally : 0));
+  });
+  for (var k = 0; k < sel.cards.length; k++) if (sel.cards[k].crownable){ sel.pick = sel.cards[k]; break; }
+  return sel;
+}
+function measuredLine(kind, book){
+  var F = HG_GOLD_ULTRA_FILTER, b = book === 'prefer' ? F.prefer : F.notDiscredited;
+  if (kind === 'AGAINST') return 'MEASURED · against the consensus: ' + fmtR(b.against.ins.net) + ' in-sample (n=' + b.against.ins.n + ') · ' + fmtR(b.against.oos.net) + ' out-of-sample (n=' + b.against.oos.n + ') · baseline ' + fmtR(b.baseline.oos.net) + ' (n=' + b.baseline.oos.n + ')';
+  if (kind === 'WITH') return 'MEASURED · with the consensus: ' + fmtR(b.with.ins.net) + ' in-sample (n=' + b.with.ins.n + ') · ' + fmtR(b.with.oos.net) + ' out-of-sample (n=' + b.with.oos.n + ') — flat, never crowned';
+  return 'count thin or under ' + Math.round(F.x * 100) + '% — no confluence read; the desk’s own record stands';
+}
+function setupCardHTML(c, pxNow, crowned){
+  var chips = '<span class="gu-chip">GOLD SCALP</span><span class="gu-chip">' + esc(c.strategy) + '</span>'
+    + (c.grade ? '<span class="gu-chip">GRADE ' + esc(c.grade) + '</span>' : '')
+    + (isFinite(c.confScore) ? '<span class="gu-chip">conf ' + fmt(c.confScore, 0) + '</span>' : '')
+    + '<span class="gu-chip ' + (c.confluence === 'AGAINST' ? 'ok' : c.confluence === 'WITH' ? 'warn' : '') + '">' + (c.confluence === 'AGAINST' ? 'AGAINST CONSENSUS — crownable' : c.confluence === 'WITH' ? 'WITH CONSENSUS — never crowned' : 'NO CONFLUENCE READ') + '</span>'
+    + (c.book === 'prefer' ? '<span class="gu-chip ok">PREFER ROW (measured fee-survivor)</span>' : c.book === 'unproven' ? '<span class="gu-chip warn">UNPROVEN — not discredited, never crowned</span>' : '<span class="gu-chip warn">NOT A PREFER ROW — never crowned</span>')
+    + (c.demoted ? '<span class="gu-chip warn">DEMOTED by its desk</span>' : '') + (c.vetoed ? '<span class="gu-chip warn">VETOED</span>' : '');
+  for (var s = 0; s < c.stamps.length; s++) chips += '<span class="gu-chip warn">' + esc(c.stamps[s]) + '</span>';
+  var risk = Math.abs(c.entry - c.stop), t2 = isFinite(c.t2) ? c.t2 : (c.dir === 'long' ? c.entry + 2.5 * risk : c.entry - 2.5 * risk);
+  var rr1 = isFinite(c.rr) ? c.rr : Math.abs(c.t1 - c.entry) / risk, away = isFinite(pxNow) ? (c.entry - pxNow) : NaN;
+  return '<div class="gu-setup' + (crowned ? ' crowned' : '') + '">'
+    + (crowned ? '<div class="gu-crown">BEST SETUP — GOLD SCALP prefer row, AGAINST the consensus</div>' : '')
+    + '<div class="gu-chips">' + chips + '</div>'
+    + '<div class="gu-plan">' + esc(guOrderWord(c.dir, c.entry, pxNow)) + ' <b>$' + esc(fmt(c.entry)) + '</b>'
+    + (isFinite(away) ? ' <span class="gu-away">' + (Math.abs(away) / pxNow <= 0.0003 ? 'at the last trade' : '$' + esc(fmt(Math.abs(away))) + ' ' + (away < 0 ? 'below' : 'above') + ' the last trade ($' + esc(fmt(pxNow)) + ') — resting order') + '</span>' : '')
+    + ' · STOP <b>$' + esc(fmt(c.stop)) + '</b> · TP1 <b>$' + esc(fmt(c.t1)) + '</b> (' + esc(fmt(rr1, 1)) + 'R) · TP2 <b>$' + esc(fmt(t2)) + '</b>'
+    + '<br>At TP1 close 50%, stop to breakeven ($' + esc(fmt(c.entry)) + '); runner to TP2. A 15m close beyond the stop kills the idea.</div>'
+    + '<div class="gu-measured">' + esc(measuredLine(c.confluence, c.book)) + (c.edge && c.edge.why ? ' · desk row: ' + esc(c.edge.why) : '') + '</div>'
+    + (c.why ? '<div class="gu-why">' + esc(c.why) + '</div>' : '')
+    + (c.demoted && c.gateNotes.length ? '<div class="gu-gate">' + esc(c.gateNotes.join(' · ')) + '</div>' : '')
+    + '</div>';
+}
+function setupsHTML(sel, lane, pxNow, count){
+  var h = '<div class="gu-sechead">SETUPS — the GOLD SCALP prefer book, stamped by the ULTRA count</div>';
+  if (lane.dark){ h += '<div class="gu-gate"><b>ENGINE DARK</b> — ' + esc(lane.dark) + '</div>'; return h; }
+  if (!sel.cards.length){ h += '<div class="gu-gate"><b>NO SETUPS</b> — GOLD SCALP produced no candidate this bar' + (lane.held.length ? ' (' + lane.held.length + ' held back below)' : '') + '. Nothing is fabricated.</div>'; }
+  else {
+    if (!sel.pick) h += '<div class="gu-demhead">no crowned setup — no prefer-row candidate reads AGAINST the consensus (count ' + (count ? Math.round(count.pct * 100) + '% ' + count.lead.toUpperCase() : '—') + '); the cards below are shown for the record</div>';
+    for (var i = 0; i < sel.cards.length; i++) h += setupCardHTML(sel.cards[i], pxNow, sel.cards[i] === sel.pick);
+  }
+  var held = sel.held.concat(lane.held);
+  if (held.length){ h += '<div class="gu-held"><b>HELD BACK (the desk’s own reasons)</b>'; for (var k = 0; k < Math.min(6, held.length); k++) h += '<div>✕ ' + esc(held[k]) + '</div>'; if (held.length > 6) h += '<div>… and ' + (held.length - 6) + ' more</div>'; h += '</div>'; }
+  return h;
+}
+function filterEvidenceHTML(){
+  var F = HG_GOLD_ULTRA_FILTER;
+  return '<div class="gu-ev"><div class="gu-evhead">VERIFIED · the count as a CONFLUENCE STAMP on the GOLD SCALP prefer book</div>'
+    + '<div class="gu-evline">' + esc(F.book) + ' · stamp threshold ' + Math.round(F.x * 100) + '% of ≥' + F.minAvail + ' decisive reads</div>'
+    + '<table class="gu-tbl"><tr><th>cohort</th><th>in-sample n</th><th>avgR net @XM</th><th>out-of-sample n</th><th>avgR net @XM</th></tr>'
+    + '<tr><td>prefer book · baseline</td><td>' + F.prefer.baseline.ins.n + '</td><td>' + fmtR(F.prefer.baseline.ins.net) + '</td><td>' + F.prefer.baseline.oos.n + '</td><td>' + fmtR(F.prefer.baseline.oos.net) + '</td></tr>'
+    + '<tr><td>prefer book · AGAINST consensus</td><td>' + F.prefer.against.ins.n + '</td><td>' + fmtR(F.prefer.against.ins.net) + '</td><td>' + F.prefer.against.oos.n + '</td><td>' + fmtR(F.prefer.against.oos.net) + '</td></tr>'
+    + '<tr><td>prefer book · WITH consensus</td><td>' + F.prefer.with.ins.n + '</td><td>' + fmtR(F.prefer.with.ins.net) + '</td><td>' + F.prefer.with.oos.n + '</td><td>' + fmtR(F.prefer.with.oos.net) + '</td></tr>'
+    + '<tr><td>not-discredited book · AGAINST</td><td>' + F.notDiscredited.against.ins.n + '</td><td>' + fmtR(F.notDiscredited.against.ins.net) + '</td><td>' + F.notDiscredited.against.oos.n + '</td><td>' + fmtR(F.notDiscredited.against.oos.net) + '</td></tr>'
+    + '<tr><td>not-discredited book · WITH</td><td>' + F.notDiscredited.with.ins.n + '</td><td>' + fmtR(F.notDiscredited.with.ins.net) + '</td><td>' + F.notDiscredited.with.oos.n + '</td><td>' + fmtR(F.notDiscredited.with.oos.net) + '</td></tr></table>'
+    + '<div class="gu-evnote"><b>read it straight:</b> ' + esc(F.verdict) + '</div>'
+    + '<div class="gu-evnote"><b>stated limitations</b><ul>' + F.limitations.map(function(l){ return '<li>' + esc(l) + '</li>'; }).join('') + '</ul></div>'
+    + '<div class="gu-evnote">generated ' + esc(F.generated) + ' · ' + esc(F.source) + '</div></div>';
 }
 
 /* =========================== evidence panel =========================== */
@@ -1554,20 +1733,35 @@ var GU_CSS = ''
 + '.gu-grp{font-size:9px;letter-spacing:.1em;color:#94A3B8;font-weight:800;padding-top:8px}'
 + '.gu-ev{font-size:10px;margin-top:10px;padding:9px 11px;border-radius:6px;border:1px solid rgba(201,146,26,.5);background:rgba(201,146,26,.06);color:#FDE68A;line-height:1.6}'
 + '.gu-evhead{font-size:10px;letter-spacing:.1em;font-weight:800;color:#FBBF24}.gu-evline{margin-top:4px}.gu-evnote{margin-top:6px;color:#FCD34D}.gu-evnote ul{margin:4px 0 0 14px;padding:0}'
-+ '.gu-part{font-size:9px;color:#94A3B8;margin-top:6px}';
++ '.gu-part{font-size:9px;color:#94A3B8;margin-top:6px}'
++ '.gu-sechead{font-size:10px;letter-spacing:.12em;font-weight:800;color:#0F172A;margin:12px 0 4px}'
++ '.gu-setup{border:1px solid #CBD5E1;border-radius:8px;padding:9px 11px;margin-top:8px;background:#FFFFFF}'
++ '.gu-setup.crowned{border:2px solid #C9921A;background:#FFFBEB}'
++ '.gu-crown{font-size:10px;letter-spacing:.12em;font-weight:800;color:#92400E;margin-bottom:6px}'
++ '.gu-chips{display:flex;flex-wrap:wrap;gap:4px}'
++ '.gu-chip{font-size:9px;letter-spacing:.06em;font-weight:700;padding:2px 7px;border-radius:999px;border:1px solid #CBD5E1;color:#334155;background:#F8FAFC}'
++ '.gu-chip.ok{color:#166534;border-color:rgba(22,163,74,.5);background:rgba(22,163,74,.08)}.gu-chip.warn{color:#9A3412;border-color:rgba(234,88,12,.45);background:rgba(234,88,12,.08)}'
++ '.gu-away{display:inline-block;font-size:9px;letter-spacing:.04em;color:#FDBA74;font-weight:600}'
++ '.gu-measured{font-size:10px;color:#92400E;margin-top:6px;line-height:1.55;border:1px dashed rgba(201,146,26,.5);border-radius:6px;padding:5px 8px;background:rgba(201,146,26,.06)}'
++ '.gu-why{font-size:10px;color:#475569;margin-top:5px;line-height:1.5}'
++ '.gu-demhead{font-size:11px;color:#9A3412;border:1px solid rgba(234,88,12,.35);border-radius:6px;padding:8px 11px;margin:8px 0;line-height:1.55;background:#FFF7ED;font-weight:600}'
++ '.gu-held{font-size:10px;color:#475569;margin-top:8px;line-height:1.6}.gu-held b{letter-spacing:.08em;font-size:9px}';
 
 var __ui = null, __last = null, __busy = false;
 function setStat(ui, s, bad){ try{ if (ui && ui.stat){ ui.stat.textContent = s; ui.stat.style.color = bad ? '#DC2626' : ''; } }catch(e){} }
 function gfn(name){ try{ if (typeof W[name] === 'function') return W[name]; }catch(e){} return null; }
 async function fetchRows(){
-  var out = { rows15m: [], rows1h: [], src: null }, ggc = gfn('getGoldCandles'), bk = gfn('binanceKlines');
+  var out = { rows15m: [], rows1h: [], rows4h: [], rows1d: [], src: null }, ggc = gfn('getGoldCandles'), bk = gfn('binanceKlines');
   if (ggc){
     try{ var a = await ggc('15m', KL_15M); if (a && a.rows && a.rows.length){ out.rows15m = a.rows; out.src = a.source || 'gold'; } }catch(e1){}
     try{ var b = await ggc('1h', KL_1H); if (b && b.rows && b.rows.length) out.rows1h = b.rows; }catch(e2){}
+    try{ var c4 = await ggc('4h', 220); if (c4 && c4.rows && c4.rows.length) out.rows4h = c4.rows; }catch(e5){}
+    try{ var d1 = await ggc('1d', 260); if (d1 && d1.rows && d1.rows.length) out.rows1d = d1.rows; }catch(e6){}
   }
   if (bk){
     if (!out.rows15m.length){ try{ var p = await bk('PAXGUSDT', '15m', KL_15M); if (p && p.length){ out.rows15m = p; out.src = 'binance-paxg'; } }catch(e3){} }
     if (!out.rows1h.length){ try{ var q = await bk('PAXGUSDT', '1h', KL_1H); if (q && q.length) out.rows1h = q; }catch(e4){} }
+    if (!out.rows4h.length){ try{ var z = await bk('PAXGUSDT', '4h', 220); if (z && z.length) out.rows4h = z; }catch(e7){} }
   }
   return out;
 }
@@ -1587,21 +1781,23 @@ function voteTableHTML(res){
   if (res.participation) h += '<div class="gu-part">' + esc(res.participation.name) + ' ' + esc(res.participation.read) + ' — ' + esc(res.participation.note) + '</div>';
   return h;
 }
-function renderResult(ui, res, src){
+function renderResult(ui, res, src, sel, lane){
   var h = '';
-  if (!res.ok){ ui.cards.innerHTML = '<div class="gu-gate"><b>SILENT</b> — ' + esc(res.reasons.join(' · ')) + '</div>' + evidenceHTML(); return; }
+  if (sel && lane) h += setupsHTML(sel, lane, res.price, res.ok ? res.count : null);
+  if (!res.ok){ ui.cards.innerHTML = h + '<div class="gu-gate"><b>COUNT SILENT</b> — ' + esc(res.reasons.join(' · ')) + '</div>' + filterEvidenceHTML() + evidenceHTML(); return; }
   var cls = res.fire ? (res.dir === 'long' ? ' long' : ' short') : '', K = res.count.kinds;
+  h += '<div class="gu-sechead">THE COUNT — every read, printed for the record</div>';
   h += '<div class="gu-count' + cls + '">' + esc(res.line)
-    + '<small>' + (res.fire ? esc(res.dir.toUpperCase()) + ' FIRES — the rule is met' : 'NO FIRE — ' + esc(res.gates.join(' · '))) + '</small>'
+    + '<small>' + (res.fire ? esc(res.dir.toUpperCase()) + ' FIRES — the rule is met' : res.recordOnly ? 'COUNT MET, RECORD ONLY — ' + esc(res.gates.join(' · ')) : 'NO FIRE — ' + esc(res.gates.join(' · '))) + '</small>'
     + '<small>' + res.count.total + ' reads fed: ' + K.vote + ' vote · ' + K.regime + ' regime · ' + K.print + ' print-only · ' + K.na + ' not applicable · closed 15m bar '
     + new Date(res.bar.t * 1000).toISOString().replace('T', ' ').slice(0, 16) + ' UTC · close $' + esc(fmt(res.price)) + ' · ATR14 $' + esc(fmt(res.atr)) + ' · feed ' + esc(src || '—') + '</small></div>';
-  if (res.fire && res.plan){
+  if ((res.fire || res.recordOnly) && res.plan){
     var p = res.plan;
-    h += '<div class="gu-plan">' + esc(p.orderType) + ' at the close <b>$' + esc(fmt(p.entry)) + '</b> · STOP <b>$' + esc(fmt(p.stop)) + '</b> (' + esc(fmt(p.stopAtr, 2)) + '×ATR) · TP1 <b>$' + esc(fmt(p.t1)) + '</b> (' + p.rr1 + 'R) · TP2 <b>$' + esc(fmt(p.t2)) + '</b> (' + p.rr2 + 'R) · expires after ' + p.timeoutBars + ' bars (6h)'
+    h += '<div class="gu-plan">' + (res.recordOnly ? '<b>RECORD ONLY — NOT A TICKET</b> (measured negative out-of-sample; this is what the rule would have done)<br>' : '') + esc(p.orderType) + ' at the close <b>$' + esc(fmt(p.entry)) + '</b> · STOP <b>$' + esc(fmt(p.stop)) + '</b> (' + esc(fmt(p.stopAtr, 2)) + '×ATR) · TP1 <b>$' + esc(fmt(p.t1)) + '</b> (' + p.rr1 + 'R) · TP2 <b>$' + esc(fmt(p.t2)) + '</b> (' + p.rr2 + 'R) · expires after ' + p.timeoutBars + ' bars (6h)'
       + '<br>At TP1 close 50%, stop to breakeven ($' + esc(fmt(p.entry)) + '); runner to TP2. A 15m close beyond the stop kills the idea.' + (p.floorNote ? '<br>' + esc(p.floorNote) : '') + '</div>';
     if (res.gates.length) h += '<div class="gu-gate">' + esc(res.gates.join(' · ')) + '</div>';
   }
-  ui.cards.innerHTML = h + voteTableHTML(res) + evidenceHTML();
+  ui.cards.innerHTML = h + voteTableHTML(res) + filterEvidenceHTML() + evidenceHTML();
 }
 async function runScan(ui){
   if (__busy) return 'busy';
@@ -1611,13 +1807,21 @@ async function runScan(ui){
     setStat(ui, 'reading closed 15m + 1h gold bars…');
     var f = await fetchRows();
     if (!f.rows15m.length){ setStat(ui, 'feeds failed — no gold klines from any source; nothing fabricated', true); return 'error: no feed'; }
-    var res = goldUltraEngine({ rows15m: f.rows15m, rows1h: f.rows1h, now: Date.now(), venueCost: venueCost() });
-    __last = { at: Date.now(), src: f.src, ok: res.ok, fire: res.fire, dir: res.dir, count: res.count || null, regime: res.regime || null, plan: res.plan || null, line: res.line || null, reasons: res.reasons };
-    if (ui && ui.cards) renderResult(ui, res, f.src);
-    setStat(ui, (res.ok ? res.line : 'silent') + ' · ' + new Date().toISOString().slice(11, 19) + ' UTC', false);
-    try{ if (res.fire && res.plan && typeof W.hgFwdRecordScan === 'function'){
+    var now = Date.now();
+    var res = goldUltraEngine({ rows15m: f.rows15m, rows1h: f.rows1h, now: now, venueCost: venueCost() });
+    /* the setups: the GOLD SCALP prefer book, stamped by the count */
+    var lane = { cands: [], held: [], dark: null };
+    try{ lane = await laneGoldScalp(f, now); }catch(eL){ lane = { cands: [], held: ['lane threw: ' + ((eL && eL.message) || eL)], dark: null }; }
+    var sel = selectSetups(lane.cands, res.ok ? res.count : null);
+    __last = { at: now, src: f.src, ok: res.ok, fire: res.fire, recordOnly: !!res.recordOnly, dir: res.dir, count: res.count || null, regime: res.regime || null, plan: res.plan || null, line: res.line || null, reasons: res.reasons,
+               setups: { pick: sel.pick ? { strategy: sel.pick.strategy, stratKey: sel.pick.stratKey, dir: sel.pick.dir, entry: sel.pick.entry, stop: sel.pick.stop, t1: sel.pick.t1, confluence: sel.pick.confluence } : null,
+                         cards: sel.cards.map(function(c){ return { strategy: c.strategy, stratKey: c.stratKey, dir: c.dir, confluence: c.confluence, book: c.book, crownable: c.crownable, demoted: c.demoted }; }),
+                         held: sel.held.concat(lane.held).length, dark: lane.dark } };
+    if (ui && ui.cards) renderResult(ui, res, f.src, sel, lane);
+    setStat(ui, (sel.pick ? 'BEST: ' + sel.pick.strategy + ' ' + sel.pick.dir.toUpperCase() + ' (against the consensus) · ' : (sel.cards.length ? sel.cards.length + ' setup' + (sel.cards.length === 1 ? '' : 's') + ' shown, none crowned · ' : 'no GOLD SCALP setup this bar · ')) + (res.ok ? res.line : 'count silent') + ' · ' + new Date().toISOString().slice(11, 19) + ' UTC', false);
+    try{ if (sel.pick && typeof W.hgFwdRecordScan === 'function'){
       if (typeof W.hgFwdResolve === 'function') W.hgFwdResolve('XAUUSD', null, f.rows15m);
-      W.hgFwdRecordScan('GOLDULTRA', '15m', [{ sym: 'XAUUSD', dir: res.dir, entry: res.plan.entry, stop: res.plan.stop, t1: res.plan.t1, mechanic: 'ULTRA-VOTE-' + Math.round(res.count.pct * 100), ticket: true }], { horizonBars: RULE.timeoutBars });
+      W.hgFwdRecordScan('GOLDULTRA', '15m', [{ sym: 'XAUUSD', dir: sel.pick.dir, entry: sel.pick.entry, stop: sel.pick.stop, t1: sel.pick.t1, mechanic: 'GOLDSCALP-' + (sel.pick.stratKey || 'prefer') + '-AGAINST-ULTRA', ticket: true }], { horizonBars: RULE.timeoutBars });
     } }catch(eF){}
     return 'refreshed';
   }catch(e){ setStat(ui, 'scan failed: ' + ((e && e.message) || e), true); return 'error: ' + ((e && e.message) || e); }
@@ -1630,12 +1834,13 @@ function mount(el){
       + '<div class="panel"><h2>GOLD ULTRA <span>one plain scalp rule · every standard indicator fed in · verified out-of-sample</span></h2>'
       + '<div class="gu-rule"><b>THE RULE:</b> on every closed 15m bar, every directional indicator read votes LONG / SHORT / neutral. When ≥' + RULE.minAvail + ' reads are decisive, <b>' + Math.round(RULE.minPct * 100) + '%</b> of them agree'
       + (RULE.regimeGate ? ', and the REGIME reads do not say CHOP' : '') + ', that side fires: entry at the close, stop ' + RULE.stopAtr + '×ATR14 (never tighter than ' + RULE.costFloorMult + '× the venue round-trip), TP1 ' + RULE.t1R + 'R, TP2 ' + RULE.t2R + 'R, dead after ' + RULE.timeoutBars
-      + ' bars. Every read, its value, its kind, its vote and its rule are printed so you can count them yourself. Reads that cannot vote a side (volatility, trend strength) feed the regime gate; reads that cannot be computed from one instrument (market breadth, beta) are shown as not applicable, never faked. No strategy measures 100% — the VERIFIED panel says what this one measured.</div>'
+      + ' bars. Every read, its value, its kind, its vote and its rule are printed so you can count them yourself. Reads that cannot vote a side (volatility, trend strength) feed the regime gate; reads that cannot be computed from one instrument (market breadth, beta) are shown as not applicable, never faked. No strategy measures 100% — the VERIFIED panel says what this one measured.'
+      + '<br><b>THE SETUPS:</b> the count measured negative on its own, so it never issues a ticket. The tickets here are the GOLD SCALP desk’s own prefer-row setups (failed-break reversals, volume-bar sweeps); measured against every one of that desk’s trades, they paid <b>more when the ULTRA consensus leaned the other way</b> and went flat when it agreed — so a prefer-row card reading AGAINST CONSENSUS is crowned, a card reading WITH it is shown and never crowned. The record, with its small n, is printed on every card.</div>'
       + '<div style="margin-top:8px"><button class="btn" id="guRun">SCAN GOLD ULTRA</button> <span class="note" id="guStat">idle — closed bars only; the forming bar is never read.</span></div>'
       + '</div><div class="cards" id="guCards"></div>';
     var ui = { btn: el.querySelector('#guRun'), stat: el.querySelector('#guStat'), cards: el.querySelector('#guCards') };
     __ui = ui;
-    if (ui.cards) ui.cards.innerHTML = evidenceHTML();
+    if (ui.cards) ui.cards.innerHTML = filterEvidenceHTML() + evidenceHTML();
     if (ui.btn) ui.btn.addEventListener('click', function(){ return runScan(ui); });
   }catch(e){ try{ el.innerHTML = '<div class="panel">GOLD ULTRA failed to mount: ' + esc((e && e.message) || e) + '</div>'; }catch(e2){} }
 }
@@ -1646,6 +1851,8 @@ W.goldUltraVotes = goldUltraVotes;
 W.goldUltraState = function(){ return __last ? JSON.parse(JSON.stringify(__last)) : null; };
 W.HG_GOLD_ULTRA_RULE = RULE;
 W.HG_GOLD_ULTRA_EVIDENCE = HG_GOLD_ULTRA_EVIDENCE;
+W.HG_GOLD_ULTRA_FILTER = HG_GOLD_ULTRA_FILTER;
+W.goldUltraSelectSetups = selectSetups;   /* pure — exported for the tests */
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: TAB_ID, label: 'GOLD ULTRA', mount: mount, refresh: refresh });
 W.HG_warmups = W.HG_warmups || [];
