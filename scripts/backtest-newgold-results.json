@@ -1,17 +1,17 @@
 {
  "meta": {
-  "generated": "2026-09-10T21:59:41.159Z",
+  "generated": "2026-09-11T10:20:52.827Z",
   "mode": "full",
   "symbol": "PAXGUSDT",
   "universe": "PAXGUSDT Binance spot proxy for XAUUSD (basis ~0.1-0.5%; 24/7 weekend bars a broker never printed)",
   "pipeline": "ngAssess -> ngHtfTape -> ngConfirmations -> hgGoldFormation (requireClasses [session-htf]) -> hgSolidityGrade -> v689 kill filter, per closed native bar on BOTH tab horizons (1H + 4H)",
   "bars": {
-   "h1": 3999,
-   "h4": 1061
+   "h1": 3962,
+   "h4": 1062
   },
   "span": {
-   "from": "2026-03-27T23:00:00.000Z",
-   "to": "2026-09-10T13:00:00.000Z"
+   "from": "2026-03-30T08:00:00.000Z",
+   "to": "2026-09-11T09:00:00.000Z"
   },
   "feedDepth": 300,
   "costs": {
@@ -53,7 +53,7 @@
    "the 4H horizon's session-htf class can only confirm through the session window offline (its tape leg is dark, see deviations) — its FORMED rate is structurally lower than live-with-OMNIGOLD-running"
   ],
   "counters": {
-   "scans": 4460,
+   "scans": 4424,
    "fires": 31,
    "formedFires": 27,
    "killedFiltered": 0,
@@ -68,8 +68,8 @@
    "sameBarAmbiguousWins": 0,
    "horizons": {
     "1H": {
-     "scans": 3699,
-     "noFire": 3670,
+     "scans": 3662,
+     "noFire": 3633,
      "fires": 29,
      "formed": 26,
      "watch": 3,
@@ -87,8 +87,8 @@
      "tapeLegConfirms": 18
     },
     "4H": {
-     "scans": 761,
-     "noFire": 759,
+     "scans": 762,
+     "noFire": 760,
      "fires": 2,
      "formed": 1,
      "watch": 1,

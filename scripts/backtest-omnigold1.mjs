@@ -594,14 +594,37 @@ function runSweep(W, h1All){
 
 console.log('=== OMNIGOLD 1 tab backtest — ' + (SMOKE ? 'SMOKE RUN' : 'FULL RUN')
   + ' · ' + new Date().toISOString() + ' ===');
-console.log('symbol ' + SYMBOL + ' · sweep bars ' + SWEEP_BARS
-  + ' · tab-lane scan bars ' + (SCAN_BARS || 'all-with-tab-depth')
+console.log('symbol ' + SYMBOL + ' · sweep bars requested ' + SWEEP_BARS
+  + ' · tab-lane scan bars ' + (SCAN_BARS || 'all fetched')
   + ' · costs XM ' + (COST_XM_FRAC * 100).toFixed(3) + '% RT (primary) / PAXG '
   + (COST_PAXG_FRAC * 100).toFixed(2) + '% RT (sensitivity)');
 
-const m15 = await cachedKlines(SYMBOL, '15m', 1200);
-const h1 = await cachedKlines(SYMBOL, '1h', 1200);
-const h4 = await cachedKlines(SYMBOL, '4h', 500);
+/* hg-v704 FIX: these three fetches used to be hardcoded to 1200/1200/500
+   bars, completely divorced from --bars/SWEEP_BARS and from the per-scan
+   DEPTH lookback the walk needs at its FIRST bar. Two silent consequences:
+   (1) LANE 1's runSweep does h1All.slice(-SWEEP_BARS) — with h1All capped
+       at 1200 by the old hardcode, a 2000-bar request silently ran on
+       whatever was cached (<=1200), while the console log kept claiming
+       "sweep bars 2000";
+   (2) the tab lane's walkable window was capped at 1200 h1 bars / 1200 m15
+       bars (~12.5 days, m15 is the binding constraint) regardless of
+       intent — it only ever looked bigger because the 15m cache file is
+       SHARED with scripts/backtest-goldscalp.mjs, which normally requests
+       ~6000 m15 bars and leaves that larger series cached; running this
+       harness's own --refresh (or running it after clearing the shared
+       cache) collapses straight back to 1200.
+   Fetch targets now scale with SWEEP_BARS and add each walk's own DEPTH
+   lookback so the earliest bar walked still has full warmup history,
+   independent of what any OTHER script happened to leave cached. */
+const H1_TARGET = SWEEP_BARS + DEPTH.h1 + 50;
+const M15_TARGET = SWEEP_BARS * 4 + DEPTH.m15 + 50;   /* 4x: 15m bars per h1 bar */
+const H4_TARGET = Math.ceil(SWEEP_BARS / 4) + DEPTH.h4 + 50;
+
+const m15 = await cachedKlines(SYMBOL, '15m', M15_TARGET);
+const h1 = await cachedKlines(SYMBOL, '1h', H1_TARGET);
+const h4 = await cachedKlines(SYMBOL, '4h', H4_TARGET);
+console.log('  fetched (actual, may exceed target on a cache hit): m15 ' + m15.length
+  + ' · h1 ' + h1.length + ' · h4 ' + h4.length);
 
 console.log('booting the OMNIGOLD 1 tab stack in a vm sandbox...');
 const W = boot();
