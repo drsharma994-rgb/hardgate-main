@@ -24,7 +24,30 @@ jobs:
           if [ -n "${BOOK_DIGEST_CRON_SECRET:-}" ]; then
             HDR=(-H "X-Book-Digest-Key: ${BOOK_DIGEST_CRON_SECRET}")
           fi
-          curl -sfS -X POST "$URL" \
+          RESP="$(curl -sS -w $'\n%{http_code}' -X POST "$URL" \
             -H "Content-Type: application/json" \
             "${HDR[@]}" \
-            -d '{"period":"week","cron":true}'
+            -d '{"period":"week","cron":true}')"
+          HTTP="$(printf '%s' "$RESP" | tail -n1)"
+          BODY="$(printf '%s' "$RESP" | sed '$d')"
+          echo "HTTP ${HTTP}"
+          echo "${BODY}"
+
+          if [ "$HTTP" = "200" ]; then
+            if printf '%s' "$BODY" | grep -q '"skipped"[[:space:]]*:[[:space:]]*true'; then
+              echo "SKIP: weekly digest not due this run"
+            else
+              echo "OK: digest send accepted"
+            fi
+            exit 0
+          fi
+
+          # Production ships with TELEGRAM_DISABLED=1 and no LP digest webhook by default.
+          # A 503 here means channels are honestly unset — not a deploy regression.
+          if [ "$HTTP" = "503" ] && printf '%s' "$BODY" | grep -q 'LP_DIGEST_WEBHOOK_URL'; then
+            echo "SKIP: digest channels not configured on production (expected until LP_DIGEST_* / Telegram are set on Render)"
+            exit 0
+          fi
+
+          echo "FAIL: unexpected digest response"
+          exit 1
