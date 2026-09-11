@@ -839,7 +839,7 @@ console.log('== 13) wiring edits (index.html HG_NAV_GROUPS + sw.js) ==');
   const gLine = (html.match(/\{ id:'gold'[^\n]*\n?/) || [''])[0];
   /* v658 moved signallog GOLD -> COMMAND (SIGNAL LOG nav clash fix, documented
      at index.html HG_NAV_GROUPS); the GOLD group membership is otherwise pinned. */
-  assert(/tabs:\['super-gold','omnigold','omnigold1','goldswing','goldscalp','gold','goldpro','goldspot','goldcoint','goldpine'\]/.test(gLine),
+  assert(/tabs:\['super-gold','omnigold','omnigold1','goldswing','goldscalp','goldultra','gold','goldpro','goldspot','goldcoint','goldpine'\]/.test(gLine),
          'GOLD group: super desk first, then swing/scalp scanners — got: ' + gLine.trim());
   const sw = fs.readFileSync(root + 'sw.js', 'utf8');
   assert(/HG_CACHE\s*=\s*'hg-v\d+'/.test(sw), 'service worker cache is hg-vN (alerts workstream)');
