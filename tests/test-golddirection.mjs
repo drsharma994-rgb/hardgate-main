@@ -36,6 +36,10 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+/* hg-v705: the ONE order-type rule. golddirection.js carries a browser copy
+   (it cannot import an .mjs), so section 9 drives the rendered card against
+   THIS module case-for-case — the copy can never grow a third behaviour. */
+import { xmOrderType } from '../lib/xm-order-type.mjs';
 
 const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 
@@ -825,6 +829,100 @@ console.log('== 8) hg-v702 audit closeout: live-paid proof is CADENCE-SCOPED =='
          'the same-named 4h SWING candidate is NOT crowned by scalp-cadence proof — lands on unproven[] (hg-v702 closeout)');
   Date.now = realDateNow;
   delete globalThis.localStorage;
+}
+
+/* =========================================================================
+   9) hg-v705 — the printed order is one the reader can actually place, and
+      one setup is ONE card
+      Regression: the board printed a flat "BUY $4,295" beside an entry $95
+      under the last trade (a market order at a price gold had left), and
+      rendered OMNIGOLD's duplicate same-bar emissions as two cards.
+========================================================================= */
+console.log('== 9) order word + duplicate collapse (hg-v705) ==');
+{
+  globalThis.window = {};
+  delete globalThis.localStorage;
+  vm.runInThisContext(fs.readFileSync(root + 'golddirection.js', 'utf8'), { filename: 'golddirection.js' });
+  const C = globalThis.window;
+
+  const LIVE = 4390;                       // the last close every lane reads
+  const mkRows = (n, stepSec) => {
+    const out = [];
+    const base = Math.floor(PINNED / 1000) - n * stepSec;
+    for (let i = 0; i < n; i++){
+      const c = (i === n - 1) ? LIVE : LIVE - (n - 1 - i) * 0.1;
+      const o = c - 0.2;
+      out.push({ t: base + i * stepSec, o, h: c + 0.5, l: o - 0.5, c, v: 1000 });
+    }
+    return out;
+  };
+  const rows4 = mkRows(120, 14400), rows1 = mkRows(300, 3600), rows15 = mkRows(300, 900);
+  C.getGoldCandles = async (tf) => (tf === '4h') ? { rows: cloneRows(rows4), source: 'seed' }
+    : (tf === '1h') ? { rows: cloneRows(rows1), source: 'seed' }
+    : (tf === '15m') ? { rows: cloneRows(rows15), source: 'seed' }
+    : { rows: [], source: 'seed' };
+  C.hgGoldPlanSidesOk = () => ({ ok: true });
+
+  const mkCand = (dir, entry) => ({
+    dir, strategy: 'ORDERWORD', stratKey: 'ORDERWORD',
+    entry, stop: dir === 'long' ? entry - 30 : entry + 30,
+    t1: dir === 'long' ? entry + 60 : entry - 60,
+    t2: dir === 'long' ? entry + 90 : entry - 90,
+    rr: 2, rr2: 3, confScore: 70, stamps: [], gateNotes: []
+  });
+  const runWith = async (dir, ranked) => {
+    C.goldSwingSetups = () => ({ ranked, rejected: [] });
+    const tabX = C.HG_tabs.find(t => t.id === 'golddirection');
+    const MX = freshPane();
+    tabX.mount(MX.pane);
+    MX.stubs[dir === 'long' ? '#gdLong' : '#gdShort']._handler();
+    const r = await MX.stubs['#gdRun']._handler();
+    return { r, html: MX.stubs['#gdCards'].innerHTML, stat: MX.stubs['#gdStat'].textContent };
+  };
+
+  /* --- the order word matches lib/xm-order-type.mjs, case for case --- */
+  const cases = [
+    { dir: 'long',  entry: 4295,    note: 'long, far below the tape' },
+    { dir: 'long',  entry: 4450,    note: 'long, far above the tape' },
+    { dir: 'long',  entry: 4390.2,  note: 'long, at the tape' },
+    { dir: 'short', entry: 4450,    note: 'short, far above the tape' },
+    { dir: 'short', entry: 4295,    note: 'short, far below the tape' },
+    { dir: 'short', entry: 4389.8,  note: 'short, at the tape' }
+  ];
+  for (const cs of cases){
+    const { html } = await runWith(cs.dir, [mkCand(cs.dir, cs.entry)]);
+    const m = html.match(/<div class="gdx-planline">([A-Z ]+?) <b>/);
+    const expected = xmOrderType(cs.dir, cs.entry, LIVE).name.replace('_', ' ');
+    assert(!!m && m[1] === expected,
+           'order word matches lib/xm-order-type.mjs — ' + cs.note + ': expected "' + expected
+             + '", card says "' + (m ? m[1] : 'NONE') + '"');
+  }
+
+  /* --- a resting entry says how far away it is, and which side --- */
+  const below = await runWith('long', [mkCand('long', 4295)]);
+  assert(/gdx-away/.test(below.html) && /below the last trade/.test(below.html)
+      && /resting order, not a fill you have now/.test(below.html),
+         'an entry under the tape is named a resting order and prints the gap below the last trade');
+  const above = await runWith('long', [mkCand('long', 4450)]);
+  assert(/above the last trade/.test(above.html),
+         'an entry over the tape prints the gap ABOVE the last trade');
+  const atMkt = await runWith('long', [mkCand('long', 4390.2)]);
+  assert(/at the last trade/.test(atMkt.html) && !/resting order/.test(atMkt.html),
+         'an entry at the tape reads "at the last trade" — never called a resting order');
+
+  /* --- one setup is one card: identical emissions collapse, and are counted --- */
+  const dupe = await runWith('long', [mkCand('long', 4295), mkCand('long', 4295)]);
+  const cards = (dupe.html.match(/gdx-planline/g) || []).length;
+  assert(cards === 1, 'two identical emissions of one setup render ONE card (got ' + cards + ')');
+  assert(/1 duplicate card collapsed/.test(dupe.stat) && /never twice/.test(dupe.stat),
+         'the collapse is COUNTED in the status line, never dropped silently');
+
+  /* --- but two genuinely different plans from one strategy both survive --- */
+  const two = await runWith('long', [mkCand('long', 4295), mkCand('long', 4310)]);
+  const cards2 = (two.html.match(/gdx-planline/g) || []).length;
+  assert(cards2 === 2, 'two DIFFERENT plans from the same strategy both stand (got ' + cards2 + ')');
+  assert(!/duplicate card collapsed/.test(two.stat),
+         'nothing is claimed collapsed when nothing was');
 }
 
 console.log('\n' + pass + ' assertions passed' + (fail ? (', ' + fail + ' FAILED') : ''));

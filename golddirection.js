@@ -57,8 +57,16 @@ SELECTION (per horizon, SCALP and SWING separately), fail closed:
     vetoed card can never be the crowned pick; an all-demoted side gets NO
     execution banner.)
 
-CARDS (house style, self-contained CSS like goldscalp GS_CSS): entry zone /
-entry / stop / TP1 / TP2 with rr; TRADE MANAGEMENT line (At TP1 close 50%,
+CARDS (house style, self-contained CSS like goldscalp GS_CSS): order word /
+entry zone / entry / stop / TP1 / TP2 with rr. The ORDER WORD is the one the
+reader can actually place — BUY / BUY LIMIT / BUY STOP (and the SELL twins)
+off the entry's distance from the last trade, by the same rule as
+lib/xm-order-type.mjs, with the gap printed beside it (hg-v705: a flat
+"BUY $4,295" on an entry $95 under the tape read as a market order at a price
+gold had already left). ONE card per (desk, horizon, strategy, dir, levels):
+duplicate emissions from a desk's own detector are collapsed at the merge and
+COUNTED in the status line, never dropped silently.
+TRADE MANAGEMENT line (At TP1 close 50%,
 stop to breakeven, runner TP2 — the card's real values); ENTRY GUIDANCE
 (price in/out of zone) when a zone exists; source-desk chip (GOLD SCALP /
 GOLD SWING / OMNIGOLD / OMNIGOLD 1 / NEW GOLD) + strategy name; ALL stamps
@@ -179,6 +187,44 @@ function gfn(name){
 }
 function fin(n){ var v = +n; return isFinite(v) ? v : NaN; }
 
+/* ---------------- order word (what the reader can actually place) ----------------
+   hg-v705: this board printed a flat BUY/SELL next to the entry, so a long
+   whose entry sat $95 under the last trade read "BUY $4,295" — a market
+   order at a price the tape had already left. The entry is a RESTING order
+   whenever it is away from the last trade, and the card now says which kind.
+   Same rule as lib/xm-order-type.mjs (the live gold-lot sender and the
+   OMNIGOLD bot walk already share it, "so the two cannot drift");
+   tests/test-golddirection.mjs pins this copy to that module case-for-case
+   so a third behaviour can never appear here. */
+function gdOrderWord(dir, entry, livePx){
+  var long = dir !== 'short';
+  var e = fin(entry), live = fin(livePx);
+  /* no usable live price: the entry is a resting order by default — never
+     call it a market order on a feed we could not read (fail closed) */
+  if (!isFinite(live) || live <= 0 || !isFinite(e) || e <= 0) return long ? 'BUY LIMIT' : 'SELL LIMIT';
+  if (Math.abs(e - live) / live <= 0.0003) return long ? 'BUY' : 'SELL';
+  if (long) return e < live ? 'BUY LIMIT' : 'BUY STOP';
+  return e > live ? 'SELL LIMIT' : 'SELL STOP';
+}
+/* How far the entry sits from the last trade, in the reader's own units.
+   Silent when there is no live price to compare against — never guessed. */
+function gdAwayNote(entry, livePx){
+  var e = fin(entry), live = fin(livePx);
+  if (!isFinite(e) || e <= 0 || !isFinite(live) || live <= 0) return '';
+  var d = e - live;
+  if (Math.abs(d) / live <= 0.0003) return '<span class="gdx-away">at the last trade ($' + pxF(live) + ')</span>';
+  return '<span class="gdx-away">$' + pxF(Math.abs(d)) + ' ' + (d < 0 ? 'below' : 'above')
+       + ' the last trade ($' + pxF(live) + ') — resting order, not a fill you have now</span>';
+}
+/* Plain-text twin for the banner's <u> sub-label (no markup allowed there). */
+function gdBannerAway(entry, livePx){
+  var e = fin(entry), live = fin(livePx);
+  if (!isFinite(e) || e <= 0 || !isFinite(live) || live <= 0) return '';
+  var d = e - live;
+  if (Math.abs(d) / live <= 0.0003) return ' · at the last trade';
+  return ' · $' + pxF(Math.abs(d)) + ' ' + (d < 0 ? 'below' : 'above') + ' the last trade ($' + pxF(live) + ')';
+}
+
 /* ---------------- side persistence (the USER'S call, never flipped) ---------------- */
 function loadSide(){
   try{
@@ -248,6 +294,7 @@ var GD_CSS = ''
 + '.gdx-planline{font-size:11px;margin-top:8px;padding:7px 10px;border-radius:6px;line-height:1.6;'
 + 'background:#1E293B;border:1px solid #475569;color:#E2E8F0}'
 + '.gdx-planline b{color:#67E8F9}'
++ '.gdx-away{display:inline-block;font-size:9px;letter-spacing:.04em;color:#FDBA74;font-weight:600}'
 + '.gdx-mgmt{font-size:10px;margin-top:6px;padding:6px 9px;border-radius:6px;line-height:1.55;'
 + 'color:#FDE68A;border:1px dashed rgba(201,146,26,.45);background:rgba(201,146,26,.06);font-weight:500}'
 + '.gdx-mgmt b{color:#FBBF24;letter-spacing:.12em;font-size:9px;font-weight:800}'
@@ -1033,8 +1080,8 @@ function cardHTML(c, tape, pxNow, crowned){
     + '<div>' + srcChip(c) + '<span class="gdx-strat">' + esc(c.strategy) + '</span>'
     + ' · <b>' + esc(String(c.dir).toUpperCase()) + '</b></div>'
     + '<div class="gdx-chips">' + chips + '</div>'
-    + '<div class="gdx-planline">' + (c.dir === 'long' ? 'BUY' : 'SELL') + ' <b>' + zoneTxt + '</b>'
-    + ' · ENTRY <b>$' + pxF(c.entry) + '</b>'
+    + '<div class="gdx-planline">' + esc(gdOrderWord(c.dir, c.entry, pxNow)) + ' <b>' + zoneTxt + '</b>'
+    + ' · ENTRY <b>$' + pxF(c.entry) + '</b> ' + gdAwayNote(c.entry, pxNow)
     + ' · STOP <b>$' + pxF(c.stop) + '</b>'
     + ' · TP1 <b>$' + pxF(c.t1) + '</b>' + (isFinite(c.rr) ? ' (' + fmtF(c.rr, 1) + 'R)' : '')
     + ' · TP2 <b>$' + pxF(c.t2) + '</b>' + (isFinite(c.rr2) ? ' (' + fmtF(c.rr2, 1) + 'R)' : '')
@@ -1047,16 +1094,16 @@ function cardHTML(c, tape, pxNow, crowned){
     + venueCostLine()
     + '</div>';
 }
-function bannerHTML(pick, horizon, tape){
+function bannerHTML(pick, horizon, tape, pxNow){
   if (!pick) return '';
   return '<div class="gdx-banner"><div class="gdx-banner-in">'
     + '<div class="gdx-eye">BEST ' + esc(horizon) + ' SETUP — YOUR ' + esc(String(pick.dir).toUpperCase()) + ' CALL</div>'
     + '<div class="gdx-dir ' + esc(pick.dir) + '">' + esc(String(pick.dir).toUpperCase())
     + '<span>' + esc(pick.source) + ' · ' + esc(pick.strategy) + (pick.grade ? ' · GRADE ' + esc(pick.grade) : '') + '</span></div>'
     + '<div class="gdx-plan">'
-    + '<div><i>' + (pick.dir === 'long' ? 'BUY ZONE' : 'SELL ZONE') + '</i><b>'
+    + '<div><i>' + esc(gdOrderWord(pick.dir, pick.entry, pxNow)) + '</i><b>'
     + (pick.zone ? ('$' + pxF(pick.zone.lo) + ' – $' + pxF(pick.zone.hi)) : ('$' + pxF(pick.entry)))
-    + '</b><u>entry $' + pxF(pick.entry) + '</u></div>'
+    + '</b><u>entry $' + pxF(pick.entry) + gdBannerAway(pick.entry, pxNow) + '</u></div>'
     + '<div><i>STOP</i><b>$' + pxF(pick.stop) + '</b><u>a close beyond it kills the idea</u></div>'
     + '<div><i>TP1</i><b>$' + pxF(pick.t1) + '</b><u>' + (isFinite(pick.rr) ? fmtF(pick.rr, 1) + 'R — ' : '') + 'trim / de-risk</u></div>'
     + '<div><i>TP2</i><b>$' + pxF(pick.t2) + '</b><u>' + (isFinite(pick.rr2) ? fmtF(pick.rr2, 1) + 'R — ' : '') + 'runner</u></div>'
@@ -1082,7 +1129,7 @@ function horizonHTML(sel, side, horizon, tape, pxNow, enginesDark){
   var h = '<div class="gdx-hzhead">BEST ' + esc(horizon) + ' — ' + esc(side.toUpperCase()) + '</div>';
   var unpr = sel.unproven || [];
   if (sel.pick){
-    h += bannerHTML(sel.pick, horizon, tape);
+    h += bannerHTML(sel.pick, horizon, tape, pxNow);
     /* main list = matched minus the unproven cards, which render below under
        their own honest header — never mixed in as if crownable */
     h += sel.matched.filter(function(c){ return unpr.indexOf(c) < 0; })
@@ -1275,6 +1322,31 @@ async function runScan(ui, scanSt){
       for (j = 0; j < ln.cands.length; j++) all.push(ln.cands[j]);
       for (j = 0; j < ln.held.length; j++) heldAll.push(ln.held[j]);
     }
+    /* hg-v705: ONE card per (desk, horizon, strategy, dir, levels). OMNIGOLD's
+       detector can emit the same hit twice on a single bar — proved live: two
+       THREE-BAR longs on the same timestamp with an identical plan, and two
+       ENGULF-LEVELs likewise — and its own desk hides that behind the
+       per-(kind,dir) dedup every other consumer applies. This board had none,
+       so the reader saw the same setup twice and counted it as two
+       independent reads. Collapsed here once, for every lane, and COUNTED —
+       never dropped silently. Identical levels only: two genuinely different
+       plans from one strategy both survive. */
+    var dupCollapsed = 0;
+    (function dedupe(){
+      var seen = {}, kept = [], k, cc;
+      for (k = 0; k < all.length; k++){
+        cc = all[k];
+        if (!cc){ continue; }
+        var key = [cc.source, cc.horizon, cc.stratKey || cc.strategy, cc.dir,
+                   isFinite(cc.entry) ? cc.entry.toFixed(4) : 'x',
+                   isFinite(cc.stop) ? cc.stop.toFixed(4) : 'x',
+                   isFinite(cc.t1) ? cc.t1.toFixed(4) : 'x'].join('|');
+        if (Object.prototype.hasOwnProperty.call(seen, key)){ dupCollapsed++; continue; }
+        seen[key] = true;
+        kept.push(cc);
+      }
+      all = kept;
+    })();
     var tape = '';
     try{ tape = deskTapeOf(gold) || ''; }catch(eTp){ tape = ''; }
     /* hg-v702: resolve the proven whitelist from the live sources NOW, so
@@ -1326,6 +1398,8 @@ async function runScan(ui, scanSt){
         + ' · unproven held off the crown: SCALP ' + scalpSel.unproven.length + ' / SWING ' + swingSel.unproven.length),
       'SCALP ' + (scalpSel.pick ? 'pick: ' + scalpSel.pick.source + ' ' + (scalpSel.pick.stratKey || '') : (scalpSel.demotedTop.length ? 'demoted-only (no banner)' : 'silent')),
       'SWING ' + (swingSel.pick ? 'pick: ' + swingSel.pick.source + ' ' + (swingSel.pick.stratKey || '') : (swingSel.demotedTop.length ? 'demoted-only (no banner)' : 'silent'))];
+    if (dupCollapsed) statBits.push(dupCollapsed + ' duplicate card' + (dupCollapsed === 1 ? '' : 's')
+      + ' collapsed (same desk · strategy · side · levels — counted once, never twice)');
     if (enginesDark.length) statBits.push(enginesDark.length + ' engine' + (enginesDark.length === 1 ? '' : 's') + ' dark');
     statBits.push(secs + 's · ' + new Date().toISOString().slice(11, 19) + ' UTC');
     setStat(ui, statBits.join(' · '), false);
