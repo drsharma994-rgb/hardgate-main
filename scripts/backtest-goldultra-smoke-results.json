@@ -1,0 +1,600 @@
+{
+ "meta": {
+  "generated": "2026-09-11T15:34:21.909Z",
+  "mode": "smoke",
+  "symbol": "PAXGUSDT",
+  "bars": {
+   "m15": 900,
+   "h1": 633
+  },
+  "span": "2026-09-02 .. 2026-09-11",
+  "window": {
+   "m15": 320,
+   "h1": 400
+  },
+  "costs": {
+   "xm": 0.00019999999999999998,
+   "paxg": 0.0026
+  },
+  "grid": {
+   "minPct": [
+    0.55,
+    0.6,
+    0.65,
+    0.7,
+    0.75,
+    0.8,
+    0.85
+   ],
+   "regimeGate": [
+    true,
+    false
+   ],
+   "minAvail": 25,
+   "isShare": 0.7,
+   "minNPick": 80
+  },
+  "engineErrors": 0,
+  "barsWithLead": 670,
+  "limitations": [
+   "MARKET FILL AT THE SIGNAL CLOSE: the walk fills BUY/SELL on bar i+1 at the entry price (= the signal close), ignoring the i+1 open gap; PAXG 15m gaps are small but weekend proxy bars exist",
+   "SAME-BAR FILL->TARGET OPTIMISM: 0 of 0 OOS wins settle on the fill bar (market fills, so OHLC cannot order open->stop->t1 within it); both-touch bars ARE losses (0)",
+   "PORTFOLIO STATS NOT ATTAINABLE: one live trade per side, unlimited overlap between sides; read per-trade expectancy only",
+   "THE RULE WAS PICKED ON THE FIRST 70% AND REPORTED ON THE LAST 30%: one split, one regime of gold history — a different quarter can measure differently; the grid rows show how sensitive the choice is",
+   "PAXGUSDT proxy for XAUUSD: basis ~0.1-0.5%, 24/7 weekend bars a broker never printed; the tab quotes broker XAUUSD at XM costs (primary) with PAXG costs as the sensitivity row",
+   "the 105 directional reads are correlated (many are moving-average variants); agreement % is a count, not an independence-weighted probability — the backtest measures what the count is worth, nothing more"
+  ]
+ },
+ "grid": [
+  {
+   "minPct": 0.55,
+   "regimeGate": true,
+   "fired": 565,
+   "merged": 478,
+   "all": {
+    "n": 86,
+    "unfilled": 0,
+    "winRate": 0.326,
+    "avgR_gross": -0.032,
+    "avgR_net_xm": -0.125,
+    "avgR_net_paxg": -1.241,
+    "sumR_net_xm": -10.78,
+    "bothTouch": 1,
+    "timeouts": 13
+   },
+   "ins": {
+    "n": 54,
+    "unfilled": 0,
+    "winRate": 0.296,
+    "avgR_gross": -0.029,
+    "avgR_net_xm": -0.132,
+    "avgR_net_paxg": -1.365,
+    "sumR_net_xm": -7.14,
+    "bothTouch": 0,
+    "timeouts": 12
+   },
+   "oos": {
+    "n": 32,
+    "unfilled": 0,
+    "winRate": 0.375,
+    "avgR_gross": -0.037,
+    "avgR_net_xm": -0.114,
+    "avgR_net_paxg": -1.032,
+    "sumR_net_xm": -3.65,
+    "bothTouch": 1,
+    "timeouts": 1
+   }
+  },
+  {
+   "minPct": 0.6,
+   "regimeGate": true,
+   "fired": 514,
+   "merged": 430,
+   "all": {
+    "n": 83,
+    "unfilled": 0,
+    "winRate": 0.325,
+    "avgR_gross": -0.015,
+    "avgR_net_xm": -0.108,
+    "avgR_net_paxg": -1.222,
+    "sumR_net_xm": -8.97,
+    "bothTouch": 0,
+    "timeouts": 13
+   },
+   "ins": {
+    "n": 52,
+    "unfilled": 0,
+    "winRate": 0.288,
+    "avgR_gross": -0.021,
+    "avgR_net_xm": -0.123,
+    "avgR_net_paxg": -1.354,
+    "sumR_net_xm": -6.4,
+    "bothTouch": 0,
+    "timeouts": 12
+   },
+   "oos": {
+    "n": 31,
+    "unfilled": 0,
+    "winRate": 0.387,
+    "avgR_gross": -0.006,
+    "avgR_net_xm": -0.083,
+    "avgR_net_paxg": -1.001,
+    "sumR_net_xm": -2.57,
+    "bothTouch": 0,
+    "timeouts": 1
+   }
+  },
+  {
+   "minPct": 0.65,
+   "regimeGate": true,
+   "fired": 466,
+   "merged": 386,
+   "all": {
+    "n": 79,
+    "unfilled": 0,
+    "winRate": 0.316,
+    "avgR_gross": -0.06,
+    "avgR_net_xm": -0.152,
+    "avgR_net_paxg": -1.265,
+    "sumR_net_xm": -12.03,
+    "bothTouch": 1,
+    "timeouts": 11
+   },
+   "ins": {
+    "n": 53,
+    "unfilled": 0,
+    "winRate": 0.283,
+    "avgR_gross": -0.085,
+    "avgR_net_xm": -0.187,
+    "avgR_net_paxg": -1.411,
+    "sumR_net_xm": -9.91,
+    "bothTouch": 0,
+    "timeouts": 10
+   },
+   "oos": {
+    "n": 26,
+    "unfilled": 0,
+    "winRate": 0.385,
+    "avgR_gross": -0.008,
+    "avgR_net_xm": -0.082,
+    "avgR_net_paxg": -0.968,
+    "sumR_net_xm": -2.12,
+    "bothTouch": 1,
+    "timeouts": 1
+   }
+  },
+  {
+   "minPct": 0.7,
+   "regimeGate": true,
+   "fired": 415,
+   "merged": 343,
+   "all": {
+    "n": 71,
+    "unfilled": 0,
+    "winRate": 0.31,
+    "avgR_gross": -0.074,
+    "avgR_net_xm": -0.167,
+    "avgR_net_paxg": -1.284,
+    "sumR_net_xm": -11.84,
+    "bothTouch": 1,
+    "timeouts": 11
+   },
+   "ins": {
+    "n": 47,
+    "unfilled": 0,
+    "winRate": 0.277,
+    "avgR_gross": -0.096,
+    "avgR_net_xm": -0.2,
+    "avgR_net_paxg": -1.442,
+    "sumR_net_xm": -9.39,
+    "bothTouch": 0,
+    "timeouts": 10
+   },
+   "oos": {
+    "n": 24,
+    "unfilled": 0,
+    "winRate": 0.375,
+    "avgR_gross": -0.029,
+    "avgR_net_xm": -0.102,
+    "avgR_net_paxg": -0.974,
+    "sumR_net_xm": -2.44,
+    "bothTouch": 1,
+    "timeouts": 1
+   }
+  },
+  {
+   "minPct": 0.75,
+   "regimeGate": true,
+   "fired": 355,
+   "merged": 291,
+   "all": {
+    "n": 64,
+    "unfilled": 0,
+    "winRate": 0.297,
+    "avgR_gross": -0.108,
+    "avgR_net_xm": -0.199,
+    "avgR_net_paxg": -1.285,
+    "sumR_net_xm": -12.71,
+    "bothTouch": 1,
+    "timeouts": 9
+   },
+   "ins": {
+    "n": 40,
+    "unfilled": 0,
+    "winRate": 0.25,
+    "avgR_gross": -0.135,
+    "avgR_net_xm": -0.237,
+    "avgR_net_paxg": -1.455,
+    "sumR_net_xm": -9.47,
+    "bothTouch": 0,
+    "timeouts": 9
+   },
+   "oos": {
+    "n": 24,
+    "unfilled": 0,
+    "winRate": 0.375,
+    "avgR_gross": -0.062,
+    "avgR_net_xm": -0.135,
+    "avgR_net_paxg": -1.002,
+    "sumR_net_xm": -3.23,
+    "bothTouch": 1,
+    "timeouts": 0
+   }
+  },
+  {
+   "minPct": 0.8,
+   "regimeGate": true,
+   "fired": 268,
+   "merged": 213,
+   "all": {
+    "n": 55,
+    "unfilled": 0,
+    "winRate": 0.273,
+    "avgR_gross": -0.153,
+    "avgR_net_xm": -0.244,
+    "avgR_net_paxg": -1.338,
+    "sumR_net_xm": -13.44,
+    "bothTouch": 1,
+    "timeouts": 8
+   },
+   "ins": {
+    "n": 33,
+    "unfilled": 0,
+    "winRate": 0.242,
+    "avgR_gross": -0.119,
+    "avgR_net_xm": -0.221,
+    "avgR_net_paxg": -1.437,
+    "sumR_net_xm": -7.28,
+    "bothTouch": 0,
+    "timeouts": 8
+   },
+   "oos": {
+    "n": 22,
+    "unfilled": 0,
+    "winRate": 0.318,
+    "avgR_gross": -0.205,
+    "avgR_net_xm": -0.28,
+    "avgR_net_paxg": -1.19,
+    "sumR_net_xm": -6.17,
+    "bothTouch": 1,
+    "timeouts": 0
+   }
+  },
+  {
+   "minPct": 0.85,
+   "regimeGate": true,
+   "fired": 186,
+   "merged": 140,
+   "all": {
+    "n": 46,
+    "unfilled": 0,
+    "winRate": 0.283,
+    "avgR_gross": -0.125,
+    "avgR_net_xm": -0.219,
+    "avgR_net_paxg": -1.348,
+    "sumR_net_xm": -10.08,
+    "bothTouch": 1,
+    "timeouts": 7
+   },
+   "ins": {
+    "n": 29,
+    "unfilled": 0,
+    "winRate": 0.241,
+    "avgR_gross": -0.129,
+    "avgR_net_xm": -0.233,
+    "avgR_net_paxg": -1.48,
+    "sumR_net_xm": -6.77,
+    "bothTouch": 0,
+    "timeouts": 7
+   },
+   "oos": {
+    "n": 17,
+    "unfilled": 0,
+    "winRate": 0.353,
+    "avgR_gross": -0.118,
+    "avgR_net_xm": -0.195,
+    "avgR_net_paxg": -1.122,
+    "sumR_net_xm": -3.31,
+    "bothTouch": 1,
+    "timeouts": 0
+   }
+  },
+  {
+   "minPct": 0.55,
+   "regimeGate": false,
+   "fired": 610,
+   "merged": 520,
+   "all": {
+    "n": 89,
+    "unfilled": 0,
+    "winRate": 0.326,
+    "avgR_gross": -0.037,
+    "avgR_net_xm": -0.13,
+    "avgR_net_paxg": -1.245,
+    "sumR_net_xm": -11.59,
+    "bothTouch": 1,
+    "timeouts": 13
+   },
+   "ins": {
+    "n": 57,
+    "unfilled": 0,
+    "winRate": 0.298,
+    "avgR_gross": -0.037,
+    "avgR_net_xm": -0.139,
+    "avgR_net_paxg": -1.367,
+    "sumR_net_xm": -7.95,
+    "bothTouch": 0,
+    "timeouts": 12
+   },
+   "oos": {
+    "n": 32,
+    "unfilled": 0,
+    "winRate": 0.375,
+    "avgR_gross": -0.037,
+    "avgR_net_xm": -0.114,
+    "avgR_net_paxg": -1.029,
+    "sumR_net_xm": -3.64,
+    "bothTouch": 1,
+    "timeouts": 1
+   }
+  },
+  {
+   "minPct": 0.6,
+   "regimeGate": false,
+   "fired": 552,
+   "merged": 467,
+   "all": {
+    "n": 84,
+    "unfilled": 0,
+    "winRate": 0.333,
+    "avgR_gross": 0.001,
+    "avgR_net_xm": -0.092,
+    "avgR_net_paxg": -1.204,
+    "sumR_net_xm": -7.69,
+    "bothTouch": 0,
+    "timeouts": 14
+   },
+   "ins": {
+    "n": 53,
+    "unfilled": 0,
+    "winRate": 0.302,
+    "avgR_gross": 0.006,
+    "avgR_net_xm": -0.097,
+    "avgR_net_paxg": -1.325,
+    "sumR_net_xm": -5.13,
+    "bothTouch": 0,
+    "timeouts": 13
+   },
+   "oos": {
+    "n": 31,
+    "unfilled": 0,
+    "winRate": 0.387,
+    "avgR_gross": -0.006,
+    "avgR_net_xm": -0.083,
+    "avgR_net_paxg": -0.996,
+    "sumR_net_xm": -2.56,
+    "bothTouch": 0,
+    "timeouts": 1
+   }
+  },
+  {
+   "minPct": 0.65,
+   "regimeGate": false,
+   "fired": 500,
+   "merged": 419,
+   "all": {
+    "n": 80,
+    "unfilled": 0,
+    "winRate": 0.325,
+    "avgR_gross": -0.04,
+    "avgR_net_xm": -0.133,
+    "avgR_net_paxg": -1.243,
+    "sumR_net_xm": -10.6,
+    "bothTouch": 1,
+    "timeouts": 11
+   },
+   "ins": {
+    "n": 53,
+    "unfilled": 0,
+    "winRate": 0.283,
+    "avgR_gross": -0.085,
+    "avgR_net_xm": -0.187,
+    "avgR_net_paxg": -1.41,
+    "sumR_net_xm": -9.91,
+    "bothTouch": 0,
+    "timeouts": 10
+   },
+   "oos": {
+    "n": 27,
+    "unfilled": 0,
+    "winRate": 0.407,
+    "avgR_gross": 0.048,
+    "avgR_net_xm": -0.026,
+    "avgR_net_paxg": -0.914,
+    "sumR_net_xm": -0.7,
+    "bothTouch": 1,
+    "timeouts": 1
+   }
+  },
+  {
+   "minPct": 0.7,
+   "regimeGate": false,
+   "fired": 441,
+   "merged": 369,
+   "all": {
+    "n": 71,
+    "unfilled": 0,
+    "winRate": 0.31,
+    "avgR_gross": -0.074,
+    "avgR_net_xm": -0.167,
+    "avgR_net_paxg": -1.281,
+    "sumR_net_xm": -11.82,
+    "bothTouch": 1,
+    "timeouts": 11
+   },
+   "ins": {
+    "n": 47,
+    "unfilled": 0,
+    "winRate": 0.277,
+    "avgR_gross": -0.096,
+    "avgR_net_xm": -0.2,
+    "avgR_net_paxg": -1.441,
+    "sumR_net_xm": -9.39,
+    "bothTouch": 0,
+    "timeouts": 10
+   },
+   "oos": {
+    "n": 24,
+    "unfilled": 0,
+    "winRate": 0.375,
+    "avgR_gross": -0.029,
+    "avgR_net_xm": -0.101,
+    "avgR_net_paxg": -0.969,
+    "sumR_net_xm": -2.43,
+    "bothTouch": 1,
+    "timeouts": 1
+   }
+  },
+  {
+   "minPct": 0.75,
+   "regimeGate": false,
+   "fired": 376,
+   "merged": 312,
+   "all": {
+    "n": 64,
+    "unfilled": 0,
+    "winRate": 0.297,
+    "avgR_gross": -0.108,
+    "avgR_net_xm": -0.198,
+    "avgR_net_paxg": -1.282,
+    "sumR_net_xm": -12.7,
+    "bothTouch": 1,
+    "timeouts": 9
+   },
+   "ins": {
+    "n": 40,
+    "unfilled": 0,
+    "winRate": 0.25,
+    "avgR_gross": -0.135,
+    "avgR_net_xm": -0.237,
+    "avgR_net_paxg": -1.453,
+    "sumR_net_xm": -9.47,
+    "bothTouch": 0,
+    "timeouts": 9
+   },
+   "oos": {
+    "n": 24,
+    "unfilled": 0,
+    "winRate": 0.375,
+    "avgR_gross": -0.063,
+    "avgR_net_xm": -0.134,
+    "avgR_net_paxg": -0.998,
+    "sumR_net_xm": -3.23,
+    "bothTouch": 1,
+    "timeouts": 0
+   }
+  },
+  {
+   "minPct": 0.8,
+   "regimeGate": false,
+   "fired": 282,
+   "merged": 225,
+   "all": {
+    "n": 57,
+    "unfilled": 0,
+    "winRate": 0.281,
+    "avgR_gross": -0.139,
+    "avgR_net_xm": -0.23,
+    "avgR_net_paxg": -1.316,
+    "sumR_net_xm": -13.09,
+    "bothTouch": 1,
+    "timeouts": 8
+   },
+   "ins": {
+    "n": 35,
+    "unfilled": 0,
+    "winRate": 0.257,
+    "avgR_gross": -0.098,
+    "avgR_net_xm": -0.198,
+    "avgR_net_paxg": -1.398,
+    "sumR_net_xm": -6.93,
+    "bothTouch": 0,
+    "timeouts": 8
+   },
+   "oos": {
+    "n": 22,
+    "unfilled": 0,
+    "winRate": 0.318,
+    "avgR_gross": -0.205,
+    "avgR_net_xm": -0.28,
+    "avgR_net_paxg": -1.186,
+    "sumR_net_xm": -6.16,
+    "bothTouch": 1,
+    "timeouts": 0
+   }
+  },
+  {
+   "minPct": 0.85,
+   "regimeGate": false,
+   "fired": 191,
+   "merged": 144,
+   "all": {
+    "n": 47,
+    "unfilled": 0,
+    "winRate": 0.277,
+    "avgR_gross": -0.144,
+    "avgR_net_xm": -0.237,
+    "avgR_net_paxg": -1.358,
+    "sumR_net_xm": -11.14,
+    "bothTouch": 1,
+    "timeouts": 7
+   },
+   "ins": {
+    "n": 29,
+    "unfilled": 0,
+    "winRate": 0.241,
+    "avgR_gross": -0.129,
+    "avgR_net_xm": -0.233,
+    "avgR_net_paxg": -1.479,
+    "sumR_net_xm": -6.77,
+    "bothTouch": 0,
+    "timeouts": 7
+   },
+   "oos": {
+    "n": 18,
+    "unfilled": 0,
+    "winRate": 0.333,
+    "avgR_gross": -0.167,
+    "avgR_net_xm": -0.243,
+    "avgR_net_paxg": -1.162,
+    "sumR_net_xm": -4.38,
+    "bothTouch": 1,
+    "timeouts": 0
+   }
+  }
+ ],
+ "chosen": null,
+ "oosCohorts": null,
+ "evidence": null,
+ "trades": []
+}

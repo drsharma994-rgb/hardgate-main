@@ -1,6 +1,6 @@
 /* CRYPTO SCAN — multi-symbol scanner for Delta Exchange + CoinDCX futures.
-   Runs the CRYPTO ULTRA 470-read vote engine on every futures contract that
-   clears the $5M turnover floor and shows setups with entry / SL / TP1 / TP2.
+   Runs the CRYPTO ULTRA 470-read vote engine on every futures contract and
+   shows setups with entry / SL / TP1 / TP2.
 
    Each setup renders the FULL CRYPTO ULTRA card: vote count line, plan with
    levels, and the complete 470-indicator vote table (lazy-loaded on expand)
@@ -10,8 +10,10 @@
    (cryptoUltraEngine). Both must load before this file.
 
    ALL SETUPS ARE RECORD ONLY — the engine is measured NOT TRADABLE on BTCUSDT
-   and has never been backtested on any other symbol. These are what the 470-read
-   vote rule WOULD say, printed for the record so the count can be audited.     */
+   (rule is self-canceling: ~3,600 candidates merge/dedupe to 0 settled trades).
+   Engine has never been backtested on any other symbol. These are what the
+   470-read vote rule WOULD say, printed for the record so the count can be
+   audited. NOT FOR TRADING.                                                    */
 (function(){
 'use strict';
 var W = (typeof window !== 'undefined') ? window : globalThis;
@@ -199,7 +201,7 @@ function renderCards(setups){
   if (!__ui || !__ui.cards) return;
   __voteStore = {};
   if (!setups || !setups.length){
-    __ui.cards.innerHTML = '<div class="cs-empty">No setups found — no contract met all gates (≥55% agreement, regime ≠ chop, ATR valid).</div>';
+    __ui.cards.innerHTML = '<div class="cs-empty">No setups found — no contract met all gates (≥70% agreement, regime ≠ chop, ATR valid).</div>';
     return;
   }
   var longs = setups.filter(function(s){ return s.dir === 'long'; }).length;
@@ -211,9 +213,10 @@ function renderCards(setups){
     __voteStore[i] = setups[i].votes;
     h += setupCardHTML(setups[i], i);
   }
-  h += '<div class="cs-note">ALL SETUPS ARE RECORD ONLY — the 470-read vote engine was backtested on BTCUSDT 15m and measured NOT TRADABLE '
-    + '(all OOS trades timed out from cost floor). It has never been backtested on any other symbol. '
-    + 'These are what the rule WOULD say, printed for the record. No win rates claimed. No invented thresholds.</div>';
+  h += '<div class="cs-note">ALL SETUPS ARE RECORD ONLY — the 470-read vote engine was backtested on BTCUSDT 15m and measured NOT TRADABLE. '
+    + 'The rule is self-canceling: tightened to 70% agreement (up from 55%), it still fires ~3,600 candidates but long/short signals overlap on the same bars, '
+    + 'causing merge logic to net all trades to zero. Never backtested on any other symbol. These are what the rule would say, printed for audit. '
+    + 'NOT FOR TRADING. No win rates claimed. No invented thresholds.</div>';
   __ui.cards.innerHTML = h;
 }
 
@@ -314,7 +317,7 @@ function mount(el){
     el.innerHTML = '<style>' + CS_CSS + '</style>'
       + '<div class="cs-wrap">'
       + '<h2 class="cs-hdr">CRYPTO SCAN <span>· all Delta + CoinDCX futures · 470-read vote engine · full indicator breakdown · record only</span></h2>'
-      + '<div style="margin:8px 0"><button class="btn" id="csRun">SCAN ALL FUTURES</button> <span class="cs-stat" id="csStat">idle — scans every futures contract on Delta Exchange + CoinDCX through the CRYPTO ULTRA engine with the full 470-indicator vote table.</span></div>'
+      + '<div style="margin:8px 0"><button class="btn" id="csRun">SCAN ALL FUTURES</button> <span class="cs-stat" id="csStat">idle — scans every futures contract (Delta + CoinDCX) through the unverified CRYPTO ULTRA 470-read vote engine. All setups are record only, not for trading. Full indicator breakdown on each card.</span></div>'
       + '<div class="cs-bar"><div class="cs-bar-fill" id="csBar" style="width:0%"></div></div>'
       + '<div id="csCards"></div>'
       + '</div>';
