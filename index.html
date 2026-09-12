@@ -951,6 +951,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="goldultra.js?v=708"></script>
 <!-- cryptoultra.js (hg-v708): CRYPTO ULTRA tab — every standard + crypto-native indicator on BTCUSDT fed as votes / regime / print / n-a, self-contained kernel, VERIFIED panel baked from the out-of-sample split. Standalone: reads only binanceKlines, all feature-checked. -->
 <script src="cryptoultra.js?v=708"></script>
+<script src="cryptoscan.js?v=708"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
 <script src="omnipresent.js?v=708"></script>
 <!-- formation-nightly.js: after 21:00 UTC, retunes OMNIROUTE / OMNIPRESENT / OMNIGOLD 1 + all desk tabs from the rolling 40-day book. Demote/tighten only. -->
@@ -3414,7 +3415,7 @@ const HG_NAV_GROUPS = [
      across crypto AND gold, so COMMAND is the honest home. Also removes
      the naming clash with the SETUP LOG tab that used to be labeled 'LOG'. */
   { id:'overview',   label:'COMMAND',  tabs:['brain','book','trade','log','signallog','news','bias','regime','trendmx','rotation','execute','startrader'] },
-  { id:'crypto',     label:'CRYPTO',   tabs:['combi','omnibtc','omnipresent','omniroute','dexscreener','setupconfirm','best','swing','scalp','edge','smart','squeeze','reversalsniper','smc','ob','trap','div','coil','apex','oiflow','liqs','onchain','chartvision','carry','venueprem','termbasis','cryptoultra'] },
+  { id:'crypto',     label:'CRYPTO',   tabs:['combi','omnibtc','omnipresent','omniroute','dexscreener','setupconfirm','best','swing','scalp','edge','smart','squeeze','reversalsniper','smc','ob','trap','div','coil','apex','oiflow','liqs','onchain','chartvision','carry','venueprem','termbasis','cryptoultra','cryptoscan'] },
   { id:'gold',       label:'GOLD',     tabs:['super-gold','omnigold','omnigold1','goldswing','goldscalp','goldultra','gold','goldpro','goldspot','goldcoint','goldpine'] },
   { id:'strategies', label:'MODELS',   tabs:['super-setup','super-best','super-sniper','super-book','super-calibrate','pine','pine-msb','pine-sqz','pine-smf','pine-ht','pine-smc','pine-cipher','pine-rf','pine-nw','pine-avwap','strats','meanrev','formationlab','scorecard','reliability'] },
   { id:'tools',      label:'TOOLS',    tabs:['risk','recon','basis','search','finder','tradeos','hey','aiagent'] },
