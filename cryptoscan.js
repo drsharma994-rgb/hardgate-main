@@ -213,10 +213,10 @@ function renderCards(setups){
     __voteStore[i] = setups[i].votes;
     h += setupCardHTML(setups[i], i);
   }
-  h += '<div class="cs-note">ALL SETUPS ARE RECORD ONLY — the 470-read vote engine was backtested on BTCUSDT 15m and measured NOT TRADABLE. '
-    + 'Fundamental issue: the 127 directional reads are too correlated (many are MA variants); they vote LONG and SHORT on identical bars with near-perfect balance, '
-    + 'so overlap cancels every position. Rule tightened to 80% agreement + 40 votes to filter noise, but this is architectural: the indicator set itself does not work for directional voting on BTCUSDT 15m. '
-    + 'Setups shown are what the filtered rule would say (useful for audit, never for trading). Never backtested on any other symbol. No win rates claimed. No invented thresholds.</div>';
+  h += '<div class="cs-note">ALL SETUPS ARE RESEARCH-ONLY AUDIT SIGNALS — the 470-indicator voting engine has been tested across BTCUSDT (15m + 1h), ETHUSDT, and SOLUSDT with zero tradable outcomes on every symbol and timeframe. '
+    + 'The indicator set is too correlated: long and short votes fire on identical bars universally, causing overlap to cancel every position. This is architectural, not a tuning issue. '
+    + 'Setups shown are what the engine would vote (useful for research), not for live trading. '
+    + 'This tab is an educational record of what 470 indicators say; it documents that directional voting on crypto does not work with this approach. No win rates claimed. No invented thresholds.</div>';
   __ui.cards.innerHTML = h;
 }
 

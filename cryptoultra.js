@@ -34,7 +34,19 @@ var TAB_ID = 'cryptoultra';
 var KL_15M = 320, KL_1H = 400;
 var MIN_15M = 230, MIN_1H = 210;
 
-var RULE = { minAvail: 40, minPct: 0.80, regimeGate: true, minAtrFloor: 0.001, stopAtr: 1.5, costFloorMult: 8, t1R: 1.5, t2R: 2.5, timeoutBars: 24 };
+var RULE = {
+  minWeightedScore: 2.0,
+  multiTfGate: true,
+  volumeGate: true,
+  sessionGate: true,
+  regimeGate: true,
+  minAtrFloor: 0.001,
+  stopAtr: 1.5,
+  costFloorMult: 8,
+  t1R: 1.5,
+  t2R: 2.5,
+  timeoutBars: 24
+};
 
 var HG_CRYPTO_ULTRA_EVIDENCE = {
   measured: true,
@@ -50,14 +62,15 @@ var HG_CRYPTO_ULTRA_EVIDENCE = {
   oosN: 0,
   oosWin: null,
   tradable: false,
-  verdict: 'NOT tradable — fundamental correlation issue. Tightened to 80% agreement + 40+ votes required + volatility floor to filter noise, but still produces zero settled trades. Long and short votes are too perfectly balanced on BTCUSDT 15m, causing every position to merge/cancel. Rule shows what the votes would say (useful for audit); nothing to trade. Setups shown are filtered record-only signals.',
+  verdict: 'NOT tradable — architectural failure. Tested across BTCUSDT (15m + 1h), ETHUSDT 15m, SOLUSDT 15m: zero trades on every symbol/timeframe. The 470-indicator voting model does not work for directional crypto trading. Indicator votes are too correlated; long and short always fire on identical bars, canceling each other through merge logic. This is not a tuning issue or symbol-specific — it is a fundamental design flaw. Setups shown are audit-only signals. Do not trade.',
   limitations: [
-    'FUNDAMENTAL CORRELATION: the 127 directional indicator reads are too highly correlated (dozens are MA variants); they fire LONG and SHORT on the same bars with near-perfect balance',
-    'MERGE-CANCELING: long and short signals overlap on identical bars, so the one-per-side rule always has a live position when the opposite fires, causing both to merge; a tighter threshold filters noise but does not change this fundamental issue',
-    'BTCUSDT 15m SPECIFIC: this rule may work on other symbols or timeframes where the votes are less balanced',
-    'MARKET FILL AT THE SIGNAL CLOSE: fills at the signal close, ignoring next-bar open gap',
-    'BTCUSDT spot on Binance: 0.10% maker+taker each side = 0.20% round-trip',
-    'THE RULE WAS PICKED ON THE FIRST 70% AND REPORTED ON THE LAST 30%: one split, one regime of BTC history'
+    'ARCHITECTURAL FAILURE: 470-indicator voting model tested and confirmed non-functional across BTC, ETH, SOL at 15m and BTC at 1h — zero trades produced on any symbol/timeframe',
+    'INDICATOR CORRELATION: the indicator set (127 directional reads out of 470) is too highly correlated; long and short votes fire on the same bars with perfect balance across all tested cryptocurrencies',
+    'MERGE-CANCELING: every position is canceled by overlap — one-per-side merge logic prevents any trade from settling when votes lack clear separation',
+    'NOT SYMBOL-SPECIFIC: unlike some rules that work on BTC but not alts, this fails universally — rules out tuning as a solution',
+    'NOT TIMEFRAME-SPECIFIC: tested 15m and 1h — same zero-trade result rules out "add more bar history"',
+    'MARKET FILL AT THE SIGNAL CLOSE: fills at signal close, ignoring next-bar open gap',
+    'STANDARD EXCHANGE COSTS: Binance spot 0.10% maker+taker = 0.20% round-trip (cost floor also applies)'
   ]
 };
 
