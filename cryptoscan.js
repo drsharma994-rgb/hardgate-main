@@ -214,9 +214,9 @@ function renderCards(setups){
     h += setupCardHTML(setups[i], i);
   }
   h += '<div class="cs-note">ALL SETUPS ARE RECORD ONLY — the 470-read vote engine was backtested on BTCUSDT 15m and measured NOT TRADABLE. '
-    + 'The rule is self-canceling: tightened to 70% agreement (up from 55%), it still fires ~3,600 candidates but long/short signals overlap on the same bars, '
-    + 'causing merge logic to net all trades to zero. Never backtested on any other symbol. These are what the rule would say, printed for audit. '
-    + 'NOT FOR TRADING. No win rates claimed. No invented thresholds.</div>';
+    + 'Fundamental issue: the 127 directional reads are too correlated (many are MA variants); they vote LONG and SHORT on identical bars with near-perfect balance, '
+    + 'so overlap cancels every position. Rule tightened to 80% agreement + 40 votes to filter noise, but this is architectural: the indicator set itself does not work for directional voting on BTCUSDT 15m. '
+    + 'Setups shown are what the filtered rule would say (useful for audit, never for trading). Never backtested on any other symbol. No win rates claimed. No invented thresholds.</div>';
   __ui.cards.innerHTML = h;
 }
 

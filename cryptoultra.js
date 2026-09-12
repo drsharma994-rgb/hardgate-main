@@ -34,7 +34,7 @@ var TAB_ID = 'cryptoultra';
 var KL_15M = 320, KL_1H = 400;
 var MIN_15M = 230, MIN_1H = 210;
 
-var RULE = { minAvail: 25, minPct: 0.70, regimeGate: true, stopAtr: 1.5, costFloorMult: 8, t1R: 1.5, t2R: 2.5, timeoutBars: 24 };
+var RULE = { minAvail: 40, minPct: 0.80, regimeGate: true, minAtrFloor: 0.001, stopAtr: 1.5, costFloorMult: 8, t1R: 1.5, t2R: 2.5, timeoutBars: 24 };
 
 var HG_CRYPTO_ULTRA_EVIDENCE = {
   measured: true,
@@ -50,12 +50,13 @@ var HG_CRYPTO_ULTRA_EVIDENCE = {
   oosN: 0,
   oosWin: null,
   tradable: false,
-  verdict: 'NOT tradable — the rule is self-canceling. Tightened to 70% agreement (up from 55%) to filter noise; still fires ~3,600 candidates but merging/deduping reduces all to 0 settled trades. The indicator votes are too correlated and the merge logic cancels out every position. Nothing chosen, nothing baked.',
+  verdict: 'NOT tradable — fundamental correlation issue. Tightened to 80% agreement + 40+ votes required + volatility floor to filter noise, but still produces zero settled trades. Long and short votes are too perfectly balanced on BTCUSDT 15m, causing every position to merge/cancel. Rule shows what the votes would say (useful for audit); nothing to trade. Setups shown are filtered record-only signals.',
   limitations: [
+    'FUNDAMENTAL CORRELATION: the 127 directional indicator reads are too highly correlated (dozens are MA variants); they fire LONG and SHORT on the same bars with near-perfect balance',
+    'MERGE-CANCELING: long and short signals overlap on identical bars, so the one-per-side rule always has a live position when the opposite fires, causing both to merge; a tighter threshold filters noise but does not change this fundamental issue',
+    'BTCUSDT 15m SPECIFIC: this rule may work on other symbols or timeframes where the votes are less balanced',
     'MARKET FILL AT THE SIGNAL CLOSE: fills at the signal close, ignoring next-bar open gap',
     'BTCUSDT spot on Binance: 0.10% maker+taker each side = 0.20% round-trip',
-    'the 127 directional reads are heavily correlated (dozens are MA variants); agreement % is a count, not an independence-weighted probability',
-    'SELF-CANCELING RULE: long and short signals overlap on the same bars, causing the merge logic to net all trades to zero; tightening the threshold reduces noise but does not produce tradable outcomes',
     'THE RULE WAS PICKED ON THE FIRST 70% AND REPORTED ON THE LAST 30%: one split, one regime of BTC history'
   ]
 };
@@ -882,6 +883,7 @@ function cryptoUltraEngine(inp){
   if (pctV < rule.minPct){ out.gates.push('agreement ' + Math.round(100 * pctV) + '% < ' + Math.round(100 * rule.minPct) + '%'); }
   if (rule.regimeGate && res.regime === 'chop'){ out.gates.push('regime gate: ' + res.regimeCounts.chop + ' reads say CHOP'); }
   if (!isFinite(res.atr) || res.atr <= 0){ out.gates.push('ATR unreadable'); }
+  if (rule.minAtrFloor && isFinite(res.atr) && res.atr < rule.minAtrFloor){ out.gates.push('volatility too low (ATR ' + fmt(res.atr, 4) + ' < ' + fmt(rule.minAtrFloor, 4) + ')'); }
 
   if (out.gates.length){ return out; }
   out.dir = lead;
