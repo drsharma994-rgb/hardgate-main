@@ -1,6 +1,6 @@
 {
  "meta": {
-  "generated": "2026-09-11T10:20:36.055Z",
+  "generated": "2026-09-12T05:53:17.658Z",
   "mode": "full",
   "symbol": "PAXGUSDT",
   "universe": "PAXGUSDT Binance spot proxy for XAUUSD (basis ~0.1-0.5%; 24/7 weekend bars a broker never printed)",
@@ -11,8 +11,8 @@
    "d1": 401
   },
   "span": {
-   "from": "2026-03-30T09:00:00.000Z",
-   "to": "2026-09-11T09:00:00.000Z"
+   "from": "2026-03-31T04:00:00.000Z",
+   "to": "2026-09-12T04:00:00.000Z"
   },
   "feedDepths": {
    "h4": 220,
@@ -50,7 +50,7 @@
    "single venue (PAXG proxy): cross-venue confirmation (+2) can never fire — matches live (the tab skips the Delta XAUT leg, goldswing.js:2993); weekend PAXG bars exist, so session cohorts include phantom weekend bars a broker never printed"
   ],
   "limitations": [
-   "SAME-BAR FILL->TARGET OPTIMISM: 1 of 84 wins settle on the fill bar; 1 are LIMIT/STOP fills where OHLC cannot prove order-of-touch — resolved pro-strategy. Win rate 34.6% -> 34.3% excluding ambiguous same-bar wins. Both-touch 1h bars ARE losses (0).",
+   "SAME-BAR FILL->TARGET OPTIMISM: 1 of 84 wins settle on the fill bar; 1 are LIMIT/STOP fills where OHLC cannot prove order-of-touch — resolved pro-strategy. Win rate 34.4% -> 34.2% excluding ambiguous same-bar wins. Both-touch 1h bars ARE losses (0).",
    "PORTFOLIO STATS NOT ATTAINABLE: every signal walks at 1R with unlimited concurrency; read per-trade expectancy and per-group rows only",
    "grades A/B depend on tally legs that need live feeds (macro/news/positioning/GOLD PRO/funding); offline tallies are structurally lower, so grade cohorts compress toward C — read the grade LADDER (ordering), not absolute counts",
    "the SWING edge rows this harness can retire/confirm were baked from the OMNIGOLD bridge replay at n<=6 (goldind.js:1136,1184-1195) — this run measures the tab's own pipeline at the desk's venue"
@@ -59,14 +59,14 @@
    "scans": 842,
    "warmupSkips": 148,
    "issued": 282,
-   "merged": 559,
+   "merged": 561,
    "noPlan": 0,
    "badGeometry": 0,
-   "rankRejected": 765,
+   "rankRejected": 772,
    "edgeSuppressed": 0,
-   "otherRejected": 765,
+   "otherRejected": 772,
    "scanErrors": 0,
-   "openAtEnd": 6,
+   "openAtEnd": 5,
    "bothTouch": 0,
    "sameBarWins": 1,
    "sameBarAmbiguousWins": 1,
@@ -77,23 +77,23 @@
  },
  "aggregates": {
   "overall": {
-   "n": 243,
+   "n": 244,
    "unfilled": 33,
-   "winRate": 0.346,
-   "avgR_gross": 0.105,
-   "avgR_net_xm": 0.085,
-   "avgR_net_paxg": -0.157,
-   "sumR_net_xm": 20.72
+   "winRate": 0.344,
+   "avgR_gross": 0.101,
+   "avgR_net_xm": 0.081,
+   "avgR_net_paxg": -0.163,
+   "sumR_net_xm": 19.68
   },
   "byStrategy": {
    "bos": {
-    "n": 8,
+    "n": 9,
     "unfilled": 0,
-    "winRate": 0.625,
-    "avgR_gross": 0.563,
-    "avgR_net_xm": 0.542,
-    "avgR_net_paxg": 0.299,
-    "sumR_net_xm": 4.34
+    "winRate": 0.556,
+    "avgR_gross": 0.389,
+    "avgR_net_xm": 0.369,
+    "avgR_net_paxg": 0.129,
+    "sumR_net_xm": 3.32
    },
    "fvg": {
     "n": 34,
@@ -164,8 +164,8 @@
     "winRate": 0.275,
     "avgR_gross": 0.058,
     "avgR_net_xm": 0.037,
-    "avgR_net_paxg": -0.218,
-    "sumR_net_xm": 1.47
+    "avgR_net_paxg": -0.222,
+    "sumR_net_xm": 1.46
    },
    "p9volbar": {
     "n": 44,
@@ -173,8 +173,8 @@
     "winRate": 0.318,
     "avgR_gross": 0.211,
     "avgR_net_xm": 0.189,
-    "avgR_net_paxg": -0.075,
-    "sumR_net_xm": 8.32
+    "avgR_net_paxg": -0.078,
+    "sumR_net_xm": 8.31
    },
    "pullback": {
     "n": 18,
@@ -233,13 +233,13 @@
     "sumR_net_xm": -0.17
    },
    "demoted-C": {
-    "n": 170,
+    "n": 171,
     "unfilled": 21,
-    "winRate": 0.347,
-    "avgR_gross": 0.092,
-    "avgR_net_xm": 0.071,
-    "avgR_net_paxg": -0.173,
-    "sumR_net_xm": 12.15
+    "winRate": 0.345,
+    "avgR_gross": 0.085,
+    "avgR_net_xm": 0.065,
+    "avgR_net_paxg": -0.181,
+    "sumR_net_xm": 11.11
    }
   },
   "byDirection": {
@@ -249,28 +249,28 @@
     "winRate": 0.294,
     "avgR_gross": 0.085,
     "avgR_net_xm": 0.065,
-    "avgR_net_paxg": -0.171,
-    "sumR_net_xm": 7.77
+    "avgR_net_paxg": -0.174,
+    "sumR_net_xm": 7.75
    },
    "short": {
-    "n": 124,
+    "n": 125,
     "unfilled": 19,
-    "winRate": 0.395,
-    "avgR_gross": 0.125,
-    "avgR_net_xm": 0.104,
-    "avgR_net_paxg": -0.143,
-    "sumR_net_xm": 12.95
+    "winRate": 0.392,
+    "avgR_gross": 0.116,
+    "avgR_net_xm": 0.095,
+    "avgR_net_paxg": -0.152,
+    "sumR_net_xm": 11.94
    }
   },
   "bySession": {
    "ASIAN": {
-    "n": 61,
+    "n": 63,
     "unfilled": 7,
-    "winRate": 0.328,
-    "avgR_gross": 0.085,
-    "avgR_net_xm": 0.064,
-    "avgR_net_paxg": -0.185,
-    "sumR_net_xm": 3.92
+    "winRate": 0.317,
+    "avgR_gross": 0.05,
+    "avgR_net_xm": 0.029,
+    "avgR_net_paxg": -0.222,
+    "sumR_net_xm": 1.86
    },
    "LONDON_OPEN": {
     "n": 51,
@@ -282,13 +282,13 @@
     "sumR_net_xm": 25.31
    },
    "NY_OVERLAP": {
-    "n": 29,
+    "n": 27,
     "unfilled": 4,
-    "winRate": 0.448,
-    "avgR_gross": 0.225,
-    "avgR_net_xm": 0.205,
-    "avgR_net_paxg": -0.026,
-    "sumR_net_xm": 5.95
+    "winRate": 0.481,
+    "avgR_gross": 0.315,
+    "avgR_net_xm": 0.296,
+    "avgR_net_paxg": 0.064,
+    "sumR_net_xm": 7.99
    },
    "NY_PM": {
     "n": 49,
@@ -300,42 +300,42 @@
     "sumR_net_xm": -3.56
    },
    "OFF": {
-    "n": 53,
+    "n": 54,
     "unfilled": 8,
-    "winRate": 0.264,
-    "avgR_gross": -0.186,
-    "avgR_net_xm": -0.205,
-    "avgR_net_paxg": -0.436,
-    "sumR_net_xm": -10.89
+    "winRate": 0.259,
+    "avgR_gross": -0.201,
+    "avgR_net_xm": -0.221,
+    "avgR_net_paxg": -0.451,
+    "sumR_net_xm": -11.91
    }
   },
   "byUtcSession": {
    "ASIA(00-07)": {
-    "n": 33,
+    "n": 35,
     "unfilled": 5,
-    "winRate": 0.333,
-    "avgR_gross": 0.175,
-    "avgR_net_xm": 0.154,
-    "avgR_net_paxg": -0.104,
-    "sumR_net_xm": 5.07
+    "winRate": 0.314,
+    "avgR_gross": 0.108,
+    "avgR_net_xm": 0.086,
+    "avgR_net_paxg": -0.176,
+    "sumR_net_xm": 3.02
    },
    "LONDON(07-12)": {
-    "n": 80,
+    "n": 78,
     "unfilled": 11,
-    "winRate": 0.4,
-    "avgR_gross": 0.412,
-    "avgR_net_xm": 0.391,
-    "avgR_net_paxg": 0.141,
-    "sumR_net_xm": 31.26
+    "winRate": 0.41,
+    "avgR_gross": 0.448,
+    "avgR_net_xm": 0.427,
+    "avgR_net_paxg": 0.176,
+    "sumR_net_xm": 33.3
    },
    "NY-LATE(17-24)": {
-    "n": 81,
+    "n": 82,
     "unfilled": 10,
-    "winRate": 0.284,
-    "avgR_gross": -0.129,
-    "avgR_net_xm": -0.149,
-    "avgR_net_paxg": -0.382,
-    "sumR_net_xm": -12.05
+    "winRate": 0.28,
+    "avgR_gross": -0.14,
+    "avgR_net_xm": -0.159,
+    "avgR_net_paxg": -0.393,
+    "sumR_net_xm": -13.06
    },
    "NY-OVERLAP(12-17)": {
     "n": 49,
@@ -358,13 +358,13 @@
     "sumR_net_xm": -13.57
    },
    "no-row": {
-    "n": 84,
+    "n": 85,
     "unfilled": 14,
-    "winRate": 0.369,
-    "avgR_gross": 0.254,
-    "avgR_net_xm": 0.233,
-    "avgR_net_paxg": -0.021,
-    "sumR_net_xm": 19.56
+    "winRate": 0.365,
+    "avgR_gross": 0.239,
+    "avgR_net_xm": 0.218,
+    "avgR_net_paxg": -0.037,
+    "sumR_net_xm": 18.53
    },
    "prefer": {
     "n": 76,
@@ -372,8 +372,8 @@
     "winRate": 0.368,
     "avgR_gross": 0.214,
     "avgR_net_xm": 0.194,
-    "avgR_net_paxg": -0.043,
-    "sumR_net_xm": 14.73
+    "avgR_net_paxg": -0.045,
+    "sumR_net_xm": 14.72
    }
   },
   "mpOnly": {
@@ -395,13 +395,13 @@
    "sumR_net_xm": 0
   },
   "demotedOnly": {
-   "n": 243,
+   "n": 244,
    "unfilled": 33,
-   "winRate": 0.346,
-   "avgR_gross": 0.105,
-   "avgR_net_xm": 0.085,
-   "avgR_net_paxg": -0.157,
-   "sumR_net_xm": 20.72
+   "winRate": 0.344,
+   "avgR_gross": 0.101,
+   "avgR_net_xm": 0.081,
+   "avgR_net_paxg": -0.163,
+   "sumR_net_xm": 19.68
   },
   "shadowSuppressed": {
    "note": "EDGE-table-suppressed kinds walked separately — NEVER pooled with the main book. The SWING edge table has no suppress rows today (goldind.js:1184-1195) so this is expected empty; the mechanism stays armed for future suppress rows.",
@@ -538,47 +538,7 @@
    "exitISO": "2026-04-28T05:00:00.000Z"
   },
   {
-   "tISO": "2026-04-24T11:00:00.000Z",
-   "stratKey": "p9volbar",
-   "strategy": "S62 VOLUME-BAR S0 SWEEP",
-   "dir": "long",
-   "grade": "B",
-   "tally": 6,
-   "demoted": true,
-   "mp": false,
-   "stamps": [
-    "PART9 P9VOLBAR",
-    "S60 HALF",
-    "STOP FLOORED 1.5×ATR",
-    "EDGE PREFER",
-    "CONF 46/NO_TRADE",
-    "CONF NO TRADE",
-    "S9 P/D OK",
-    "S23 CHOP"
-   ],
-   "edgeAction": "prefer",
-   "session": "NY_OVERLAP",
-   "sessionWeight": 3,
-   "agree": 2,
-   "oppose": 0,
-   "utcHour": 11,
-   "entry": 4657.87,
-   "stop": 4606.27,
-   "t1": 4793.02,
-   "rr": 2.62,
-   "stopAtr": 1.5,
-   "orderType": "BUY_LIMIT",
-   "outcome": "loss",
-   "rGross": -1,
-   "netR": -1.018,
-   "netR_paxg": -1.235,
-   "costR_xm": 0.018,
-   "costR_paxg": 0.235,
-   "barsHeld": 4,
-   "exitISO": "2026-04-28T09:00:00.000Z"
-  },
-  {
-   "tISO": "2026-04-24T11:00:00.000Z",
+   "tISO": "2026-04-27T03:00:00.000Z",
    "stratKey": "p8range",
    "strategy": "S52 RANGE-BAR S0 SWEEP",
    "dir": "long",
@@ -590,32 +550,72 @@
     "PART8 P8RANGE",
     "S55 THIN",
     "S56 BALANCE",
+    "ASIA SESSION",
     "STOP FLOORED 1.5×ATR",
     "S60 HALF",
     "CONF 46/NO_TRADE",
-    "CONF NO TRADE",
-    "S9 P/D OK"
+    "CONF NO TRADE"
    ],
    "edgeAction": null,
-   "session": "NY_OVERLAP",
-   "sessionWeight": 3,
+   "session": "ASIAN",
+   "sessionWeight": 0,
    "agree": 2,
    "oppose": 0,
-   "utcHour": 11,
-   "entry": 4657.87,
-   "stop": 4606.27,
-   "t1": 4793.02,
-   "rr": 2.62,
+   "utcHour": 3,
+   "entry": 4680.93,
+   "stop": 4648.4,
+   "t1": 4807.32,
+   "rr": 3.88,
    "stopAtr": 1.5,
    "orderType": "BUY_LIMIT",
    "outcome": "loss",
    "rGross": -1,
-   "netR": -1.018,
-   "netR_paxg": -1.235,
-   "costR_xm": 0.018,
-   "costR_paxg": 0.235,
-   "barsHeld": 4,
-   "exitISO": "2026-04-28T09:00:00.000Z"
+   "netR": -1.029,
+   "netR_paxg": -1.374,
+   "costR_xm": 0.029,
+   "costR_paxg": 0.374,
+   "barsHeld": 16,
+   "exitISO": "2026-04-28T05:00:00.000Z"
+  },
+  {
+   "tISO": "2026-04-27T03:00:00.000Z",
+   "stratKey": "p9volbar",
+   "strategy": "S62 VOLUME-BAR S0 SWEEP",
+   "dir": "long",
+   "grade": "C",
+   "tally": 4,
+   "demoted": true,
+   "mp": false,
+   "stamps": [
+    "PART9 P9VOLBAR",
+    "S60 HALF",
+    "ASIA SESSION",
+    "STOP FLOORED 1.5×ATR",
+    "EDGE PREFER",
+    "CONF 46/NO_TRADE",
+    "CONF NO TRADE",
+    "NEAR EQ"
+   ],
+   "edgeAction": "prefer",
+   "session": "ASIAN",
+   "sessionWeight": 0,
+   "agree": 2,
+   "oppose": 0,
+   "utcHour": 3,
+   "entry": 4688.03,
+   "stop": 4655.5,
+   "t1": 4807.32,
+   "rr": 3.67,
+   "stopAtr": 1.5,
+   "orderType": "BUY_LIMIT",
+   "outcome": "loss",
+   "rGross": -1,
+   "netR": -1.029,
+   "netR_paxg": -1.375,
+   "costR_xm": 0.029,
+   "costR_paxg": 0.375,
+   "barsHeld": 17,
+   "exitISO": "2026-04-28T05:00:00.000Z"
   },
   {
    "tISO": "2026-04-28T07:00:00.000Z",
@@ -11355,6 +11355,45 @@
    "costR_paxg": 0.275,
    "barsHeld": 7,
    "exitISO": "2026-09-10T12:00:00.000Z"
+  },
+  {
+   "tISO": "2026-09-10T19:00:00.000Z",
+   "stratKey": "bos",
+   "strategy": "4H BOS / CHOCH ALIGNMENT",
+   "dir": "short",
+   "grade": "B",
+   "tally": 5,
+   "demoted": true,
+   "mp": false,
+   "stamps": [
+    "S55 THIN",
+    "S56 BALANCE",
+    "S60 HALF",
+    "CONF 57/NO_TRADE",
+    "CONF NO TRADE",
+    "DISCOUNT SHORT",
+    "S23 CHOP"
+   ],
+   "edgeAction": null,
+   "session": "OFF",
+   "sessionWeight": 0,
+   "agree": 5,
+   "oppose": 1,
+   "utcHour": 19,
+   "entry": 4329.95,
+   "stop": 4377.78,
+   "t1": 4258.21,
+   "rr": 1.5,
+   "stopAtr": 1.5,
+   "orderType": "SELL",
+   "outcome": "loss",
+   "rGross": -1,
+   "netR": -1.018,
+   "netR_paxg": -1.235,
+   "costR_xm": 0.018,
+   "costR_paxg": 0.235,
+   "barsHeld": 16,
+   "exitISO": "2026-09-11T12:00:00.000Z"
   }
  ]
 }

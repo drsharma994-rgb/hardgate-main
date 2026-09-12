@@ -44,7 +44,7 @@ console.log('== 0) registration + mount ==');
   const E = W.HG_CRYPTO_ULTRA_EVIDENCE;
   assert(!!E && E.measured === true, 'evidence is measured');
   assert(E.tradable === false, 'evidence says NOT tradable');
-  assert(E.oosN >= 80, 'OOS sample size >= 80 (got ' + E.oosN + ')');
+  assert(E.oosN === 0, 'OOS sample size is 0 — no rule reached IS threshold (got ' + E.oosN + ')');
   assert(E.symbol === 'BTCUSDT' && E.interval === '15m', 'evidence symbol + interval');
   const cards0 = stubs['#cuCards'].innerHTML;
   assert(/MEASURED NOT TRADABLE/.test(cards0), 'the panel prints MEASURED NOT TRADABLE');

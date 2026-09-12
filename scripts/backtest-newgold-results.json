@@ -1,6 +1,6 @@
 {
  "meta": {
-  "generated": "2026-09-11T10:20:52.827Z",
+  "generated": "2026-09-12T05:53:30.758Z",
   "mode": "full",
   "symbol": "PAXGUSDT",
   "universe": "PAXGUSDT Binance spot proxy for XAUUSD (basis ~0.1-0.5%; 24/7 weekend bars a broker never printed)",
@@ -10,8 +10,8 @@
    "h4": 1062
   },
   "span": {
-   "from": "2026-03-30T08:00:00.000Z",
-   "to": "2026-09-11T09:00:00.000Z"
+   "from": "2026-03-31T03:00:00.000Z",
+   "to": "2026-09-12T04:00:00.000Z"
   },
   "feedDepth": 300,
   "costs": {
@@ -54,37 +54,37 @@
   ],
   "counters": {
    "scans": 4424,
-   "fires": 31,
-   "formedFires": 27,
+   "fires": 33,
+   "formedFires": 28,
    "killedFiltered": 0,
-   "issued": 19,
+   "issued": 20,
    "merged": 8,
    "noPlan": 0,
    "badGeometry": 0,
    "scanErrors": 0,
-   "openAtEnd": 0,
+   "openAtEnd": 1,
    "bothTouch": 0,
    "sameBarWins": 1,
    "sameBarAmbiguousWins": 0,
    "horizons": {
     "1H": {
      "scans": 3662,
-     "noFire": 3633,
-     "fires": 29,
-     "formed": 26,
-     "watch": 3,
-     "watchSessionMissing": 3,
+     "noFire": 3631,
+     "fires": 31,
+     "formed": 27,
+     "watch": 4,
+     "watchSessionMissing": 4,
      "stoodAside": 0,
      "stoodAsideStopFloor": 0,
      "killed": 0,
      "noPlan": 0,
      "badGeometry": 0,
      "merged": 8,
-     "issued": 18,
-     "openAtEnd": 0,
-     "tapeReads": 29,
-     "sessionLegConfirms": 21,
-     "tapeLegConfirms": 18
+     "issued": 19,
+     "openAtEnd": 1,
+     "tapeReads": 31,
+     "sessionLegConfirms": 22,
+     "tapeLegConfirms": 19
     },
     "4H": {
      "scans": 762,
@@ -1578,6 +1578,35 @@
    "classes": "structure+momentum+session-htf",
    "sessionLeg": "both",
    "tapeDir": "long",
+   "grade": "MIXED",
+   "reason": "5 independent confirmations on the closed bar across 3 distinct classes: structure (FVG mitigation zone) · momentum (RSI(14) crossed its 9-SMA + VWMA-50 regime)"
+  },
+  {
+   "tISO": "2026-09-11T14:00:00.000Z",
+   "horizon": "1H",
+   "dir": "long",
+   "state": "WATCH",
+   "riskPct": 0.672,
+   "stopPctFinal": 0.672,
+   "stopWidened": false,
+   "classes": "structure+momentum",
+   "requiredMissing": "session-htf",
+   "sessionLeg": "none",
+   "tapeDir": "short",
+   "grade": "MIXED",
+   "reason": "WATCH — 2 of 3 required confirmation classes: structure (FVG mitigation zone) · momentum (RSI(14) crossed its 9-SMA + VWMA-50 regime) · MISSING participation, s"
+  },
+  {
+   "tISO": "2026-09-12T04:00:00.000Z",
+   "horizon": "1H",
+   "dir": "short",
+   "state": "FORMED",
+   "riskPct": 0.16,
+   "stopPctFinal": 0.16,
+   "stopWidened": true,
+   "classes": "structure+momentum+session-htf",
+   "sessionLeg": "both",
+   "tapeDir": "short",
    "grade": "MIXED",
    "reason": "5 independent confirmations on the closed bar across 3 distinct classes: structure (FVG mitigation zone) · momentum (RSI(14) crossed its 9-SMA + VWMA-50 regime)"
   },

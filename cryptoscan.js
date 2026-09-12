@@ -237,7 +237,7 @@ async function runScan(ui){
     if (ui && ui.btn) ui.btn.disabled = true;
     setStat('loading universe (Delta + CoinDCX futures)…');
     setProgress(0);
-    var pack = await loadUni({ minTurnover: 5e6 });
+    var pack = await loadUni({ minTurnover: 0, includeUnknown: true });
     var items = pack.items || [];
     if (!items.length){ setStat('universe empty — no contracts above $5M turnover', true); return 'error: empty universe'; }
     var vc = pack.venueCounts || {};
@@ -314,7 +314,7 @@ function mount(el){
     el.innerHTML = '<style>' + CS_CSS + '</style>'
       + '<div class="cs-wrap">'
       + '<h2 class="cs-hdr">CRYPTO SCAN <span>· all Delta + CoinDCX futures · 470-read vote engine · full indicator breakdown · record only</span></h2>'
-      + '<div style="margin:8px 0"><button class="btn" id="csRun">SCAN ALL FUTURES</button> <span class="cs-stat" id="csStat">idle — scans every futures contract above $5M turnover through the CRYPTO ULTRA engine with the full 470-indicator vote table.</span></div>'
+      + '<div style="margin:8px 0"><button class="btn" id="csRun">SCAN ALL FUTURES</button> <span class="cs-stat" id="csStat">idle — scans every futures contract on Delta Exchange + CoinDCX through the CRYPTO ULTRA engine with the full 470-indicator vote table.</span></div>'
       + '<div class="cs-bar"><div class="cs-bar-fill" id="csBar" style="width:0%"></div></div>'
       + '<div id="csCards"></div>'
       + '</div>';
