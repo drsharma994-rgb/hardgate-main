@@ -1,13 +1,13 @@
 {
  "meta": {
-  "generated": "2026-09-12T08:11:48.925Z",
+  "generated": "2026-09-12T12:07:30.270Z",
   "mode": "full",
   "symbol": "BTCUSDT",
   "bars": {
    "m15": 5999,
    "h1": 1909
   },
-  "span": "2026-07-11 .. 2026-09-12",
+  "span": "2026-07-12 .. 2026-09-12",
   "window": {
    "m15": 320,
    "h1": 400
@@ -48,8 +48,8 @@
   {
    "minPct": 0.55,
    "regimeGate": true,
-   "fired": 4977,
-   "merged": 4607,
+   "fired": 4976,
+   "merged": 4606,
    "all": {
     "n": 0,
     "unfilled": 0,
@@ -84,8 +84,8 @@
   {
    "minPct": 0.6,
    "regimeGate": true,
-   "fired": 4571,
-   "merged": 4217,
+   "fired": 4574,
+   "merged": 4220,
    "all": {
     "n": 0,
     "unfilled": 0,
@@ -120,8 +120,8 @@
   {
    "minPct": 0.65,
    "regimeGate": true,
-   "fired": 4149,
-   "merged": 3808,
+   "fired": 4150,
+   "merged": 3809,
    "all": {
     "n": 0,
     "unfilled": 0,
@@ -156,8 +156,8 @@
   {
    "minPct": 0.7,
    "regimeGate": true,
-   "fired": 3581,
-   "merged": 3263,
+   "fired": 3584,
+   "merged": 3266,
    "all": {
     "n": 0,
     "unfilled": 0,
@@ -192,8 +192,8 @@
   {
    "minPct": 0.75,
    "regimeGate": true,
-   "fired": 2999,
-   "merged": 2700,
+   "fired": 3003,
+   "merged": 2703,
    "all": {
     "n": 0,
     "unfilled": 0,
@@ -300,8 +300,8 @@
   {
    "minPct": 0.55,
    "regimeGate": false,
-   "fired": 5335,
-   "merged": 4962,
+   "fired": 5334,
+   "merged": 4961,
    "all": {
     "n": 0,
     "unfilled": 0,
@@ -336,8 +336,8 @@
   {
    "minPct": 0.6,
    "regimeGate": false,
-   "fired": 4884,
-   "merged": 4527,
+   "fired": 4887,
+   "merged": 4530,
    "all": {
     "n": 0,
     "unfilled": 0,
@@ -372,8 +372,8 @@
   {
    "minPct": 0.65,
    "regimeGate": false,
-   "fired": 4427,
-   "merged": 4083,
+   "fired": 4428,
+   "merged": 4084,
    "all": {
     "n": 0,
     "unfilled": 0,
@@ -408,8 +408,8 @@
   {
    "minPct": 0.7,
    "regimeGate": false,
-   "fired": 3822,
-   "merged": 3499,
+   "fired": 3825,
+   "merged": 3502,
    "all": {
     "n": 0,
     "unfilled": 0,
@@ -444,8 +444,8 @@
   {
    "minPct": 0.75,
    "regimeGate": false,
-   "fired": 3192,
-   "merged": 2890,
+   "fired": 3197,
+   "merged": 2894,
    "all": {
     "n": 0,
     "unfilled": 0,
@@ -480,8 +480,8 @@
   {
    "minPct": 0.8,
    "regimeGate": false,
-   "fired": 2472,
-   "merged": 2204,
+   "fired": 2473,
+   "merged": 2205,
    "all": {
     "n": 0,
     "unfilled": 0,

@@ -34,7 +34,7 @@ var TAB_ID = 'cryptoultra';
 var KL_15M = 320, KL_1H = 400;
 var MIN_15M = 230, MIN_1H = 210;
 
-var RULE = { minAvail: 25, minPct: 0.55, regimeGate: true, stopAtr: 1.5, costFloorMult: 8, t1R: 1.5, t2R: 2.5, timeoutBars: 24 };
+var RULE = { minAvail: 25, minPct: 0.70, regimeGate: true, stopAtr: 1.5, costFloorMult: 8, t1R: 1.5, t2R: 2.5, timeoutBars: 24 };
 
 var HG_CRYPTO_ULTRA_EVIDENCE = {
   measured: true,
@@ -50,11 +50,12 @@ var HG_CRYPTO_ULTRA_EVIDENCE = {
   oosN: 0,
   oosWin: null,
   tradable: false,
-  verdict: 'NOT tradable — no rule on the grid reached n>=80 in-sample; the engine fired 4977 signals at the loosest threshold (55%) but all were merged/deduped to 0 settled trades. Nothing chosen, nothing baked.',
+  verdict: 'NOT tradable — the rule is self-canceling. Tightened to 70% agreement (up from 55%) to filter noise; still fires ~3,600 candidates but merging/deduping reduces all to 0 settled trades. The indicator votes are too correlated and the merge logic cancels out every position. Nothing chosen, nothing baked.',
   limitations: [
     'MARKET FILL AT THE SIGNAL CLOSE: fills at the signal close, ignoring next-bar open gap',
     'BTCUSDT spot on Binance: 0.10% maker+taker each side = 0.20% round-trip',
     'the 127 directional reads are heavily correlated (dozens are MA variants); agreement % is a count, not an independence-weighted probability',
+    'SELF-CANCELING RULE: long and short signals overlap on the same bars, causing the merge logic to net all trades to zero; tightening the threshold reduces noise but does not produce tradable outcomes',
     'THE RULE WAS PICKED ON THE FIRST 70% AND REPORTED ON THE LAST 30%: one split, one regime of BTC history'
   ]
 };
