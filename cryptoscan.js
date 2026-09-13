@@ -170,21 +170,51 @@ function setupCardHTML(s, idx){
   if (s.bar) h += ' · closed 15m bar ' + new Date(s.bar.t * 1000).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
   h += ' · close $' + fmt(s.price) + ' · ATR14 $' + fmt(s.atr) + '</small>';
 
-  /* Layer 2 & 3 voting breakdown (v2 three-layer consensus) */
+  /* All three layers voting breakdown (v3 complete) */
   var layerText = '';
+
+  /* Layer 1: Price */
+  layerText += '<small>🔵 Price: ' + Math.round(s.pct * 100) + '% (' + (s.dir || 'N/A').toUpperCase() + ') · ';
+
+  /* Layer 2: Order Flow */
   if (s.orderFlow && s.orderFlow.direction){
-    var orderFlowEmoji = s.orderFlow.direction === 'long' ? '🔵' : s.orderFlow.direction === 'short' ? '🔴' : '⚪';
-    layerText += '<small>' + orderFlowEmoji + ' Order Flow: ' + (s.orderFlow.direction || 'neutral').toUpperCase() +
-                ' (' + (s.orderFlow.confidence || 0).toFixed(2) + ') · </small>';
+    var ofEmoji = s.orderFlow.direction === 'long' ? '🟢' : s.orderFlow.direction === 'short' ? '🔴' : '⚪';
+    layerText += ofEmoji + ' Flow: ' + (s.orderFlow.direction || 'N').toUpperCase() + ' · ';
   }
+
+  /* Layer 3: Sentiment */
   if (s.sentiment && s.sentiment.score !== undefined){
-    var sentimentEmoji = s.sentiment.score > 0.3 ? '🟢' : s.sentiment.score < -0.3 ? '🔴' : '🟡';
-    layerText += '<small>' + sentimentEmoji + ' Sentiment: ' + s.sentiment.score.toFixed(2) + '</small>';
+    var sentEmoji = s.sentiment.score > 0.3 ? '🟢' : s.sentiment.score < -0.3 ? '🔴' : '🟡';
+    layerText += sentEmoji + ' Senti: ' + s.sentiment.score.toFixed(2);
   }
+  layerText += '</small>';
+
+  /* Agreement + Confidence */
   if (s.layerAgreement !== undefined){
-    var agreementLabel = s.layerAgreement === 2 ? '✅ All Agree' : s.layerAgreement === 1 ? '⚠️ Partial' : '❌ Diverge';
-    layerText += '<small> · ' + agreementLabel + ' (3-layer confidence ' + (s.threeLayerConfidence || 0).toFixed(2) + ')</small>';
+    var agreeEmoji = s.layerAgreement === 2 ? '✅' : s.layerAgreement === 1 ? '⚠️' : '❌';
+    layerText += '<br><small>' + agreeEmoji + ' Agreement: ';
+    if (s.layerAgreement === 2) layerText += 'All Layers Agree';
+    else if (s.layerAgreement === 1) layerText += 'Partial Agreement';
+    else layerText += 'Layer Divergence';
+    layerText += ' · Confidence ' + (s.threeLayerConfidence || 0).toFixed(2) + ' · Tier: ' + (s.voteTier || 'weak').toUpperCase() + '</small>';
   }
+
+  /* External Risk Flags (Phase 2) */
+  if (s.externalRisk){
+    var riskFlags = [];
+    if (s.externalRisk.cascadeImminent) riskFlags.push('⚡ CASCADE');
+    if (s.externalRisk.whaleActive) riskFlags.push('🐋 WHALE');
+    if (s.externalRisk.fundingExtreme) riskFlags.push('📊 FUNDING');
+    if (riskFlags.length > 0){
+      layerText += '<br><small style="color:#DC2626;font-weight:700">⚠️ RISK: ' + riskFlags.join(' + ') + '</small>';
+    }
+  }
+
+  /* Pro-Grade Stamp (Phase 3) */
+  if (s.isPro){
+    layerText += '<br><small style="color:#166534;font-weight:700;background:#DCFCE7;padding:2px 4px;border-radius:3px">✅ PROFESSIONAL-GRADE</small>';
+  }
+
   if (layerText) h += '<div style="font-size:9px;color:#64748B;margin-top:4px">' + layerText + '</div>';
 
   h += '<small>RECORD ONLY — engine measured NOT TRADABLE; this is what the rule would say</small></div>';
@@ -336,29 +366,48 @@ async function runScan(ui){
             orderFlowDir = orderFlow.direction;
           }
 
-          /* Layer 3: Sentiment Enrichment + Gates */
+          /* Layer 3: Sentiment + External Risk Scoring */
           var sentiment = {};
           var sentimentGate = null;
+          var externalRisk = {};
           if (typeof hgSentimentGet === 'function'){
             sentiment = hgSentimentGet(item.sym);
+          }
+          if (typeof hgExternalRiskScore === 'function'){
+            externalRisk = hgExternalRiskScore(item.sym);
           }
           var sentimentAdjusted = pct;
           if (typeof hgSentimentScoreSignal === 'function' && sentiment.score !== undefined){
             sentimentAdjusted = hgSentimentScoreSignal(item.sym, pct, res.dir);
           }
 
-          /* Two-Layer Consensus Check (v2 fix) */
-          /* Rule: Entry fires ONLY if Layer 1 (Price) AND (Layer 2 (Order Flow) OR Layer 3 (Sentiment)) agree */
+          /* Layer Agreement Check */
           var layerAgreement = 0;
           if (orderFlowDir === 'neutral'){
-            layerAgreement = 1;  /* Order flow doesn't contradict */
+            layerAgreement = 1;
           } else if (orderFlowDir === res.dir){
-            layerAgreement = 2;  /* Both layers agree (strong signal) */
+            layerAgreement = 2;
           } else {
-            layerAgreement = 0;  /* Layers diverge (weak signal) */
+            layerAgreement = 0;
           }
 
-          /* Apply sentiment conflict detection */
+          /* Phase 3: Three-Layer Consensus Logic (v3 final) */
+          var voteResult = { shouldTrade: true };
+          if (typeof hgComputeThreeLayerConfidence === 'function'){
+            voteResult = hgComputeThreeLayerConfidence(
+              { pct: pct, dir: res.dir },
+              { score: orderFlow.score || 0, dir: orderFlowDir },
+              { sentiment: sentiment.score || 0 },
+              externalRisk
+            );
+          }
+
+          /* Apply voting result to quality gates */
+          if (!voteResult.shouldTrade){
+            qualityGates.push('VOTING_GATE: ' + (voteResult.gateReasons || []).join(' + '));
+          }
+
+          /* Sentiment conflict detection */
           if (typeof hgSentimentGate === 'function'){
             sentimentGate = hgSentimentGate(item.sym, res.dir, pct);
             if (!sentimentGate.shouldTrade && sentimentGate.conflictLevel === 'major'){
@@ -366,19 +415,20 @@ async function runScan(ui){
             }
           }
 
-          /* Two-layer gate: If order flow disagrees and sentiment also disagrees, block */
-          if (layerAgreement === 0 && sentimentGate && !sentimentGate.shouldTrade){
-            qualityGates.push('layers diverge: price ' + res.dir + ', flow ' + orderFlowDir + ', sentiment ' + (sentiment.score > 0 ? 'bullish' : 'bearish'));
+          /* Final three-layer confidence */
+          var threeLayerConfidence = voteResult.confidence || 0;
+
+          /* Check if professional-grade (all gates passed + high confluence) */
+          var proGradeCheck = { isPro: false };
+          if (typeof hgIsProGradeSetup === 'function'){
+            proGradeCheck = hgIsProGradeSetup({
+              threeLayerConfidence: threeLayerConfidence,
+              layerAgreement: layerAgreement,
+              externalRisk: externalRisk,
+              qualityGates: qualityGates,
+              plan: res.plan
+            });
           }
-
-          /* Three-Layer Confidence Score (v2: uncorrelated voting) */
-          var threeLayerConfidence = (pct * 0.40) +          /* Layer 1: Price action (40%) */
-                                      (Math.abs(orderFlow.score || 0) * 0.35) +  /* Layer 2: Order flow (35%) */
-                                      ((sentiment.score || 0) * 0.25);           /* Layer 3: Sentiment (25%) */
-
-          /* Apply agreement boost */
-          if (layerAgreement === 2) threeLayerConfidence *= 1.15;  /* +15% if all layers agree */
-          if (layerAgreement === 0 && pct < 0.80) threeLayerConfidence *= 0.80;  /* -20% penalty if layers diverge and confidence weak */
 
           var setup = {
             item: item,
@@ -388,11 +438,15 @@ async function runScan(ui){
             dir: res.dir,
             pct: pct,
             threeLayerConfidence: Math.max(0, Math.min(1, threeLayerConfidence)),
+            voteResult: voteResult,
+            voteTier: voteResult.tier || 'weak',
             sentimentAdjusted: sentimentAdjusted,
             sentiment: sentiment,
             orderFlow: orderFlow,
             orderFlowDir: orderFlowDir,
             layerAgreement: layerAgreement,
+            externalRisk: externalRisk,
+            isPro: proGradeCheck.isPro,
             regime: res.regime,
             atr: res.atr,
             price: res.price,
@@ -405,7 +459,7 @@ async function runScan(ui){
             votes: res.votes,
             bar: res.bar,
             qualityGates: qualityGates,
-            isHighQuality: qualityGates.length === 0
+            isHighQuality: qualityGates.length === 0 && proGradeCheck.isPro
           };
           setups.push(setup);
         }
