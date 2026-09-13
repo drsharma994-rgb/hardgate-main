@@ -149,6 +149,129 @@
     console.error('[ERROR] Setup Intelligence initialization failed:', err);
   });
 
+  // Create SETUP INTELLIGENCE tab in main menu
+  setTimeout(() => {
+    // Find or create tab container
+    const existingTab = document.querySelector('[data-setup-tab]');
+    if (existingTab) return; // Already created
+
+    // Create tab button
+    const tabButton = document.createElement('button');
+    tabButton.setAttribute('data-setup-tab', 'true');
+    tabButton.style.cssText = `
+      padding: 12px 20px; margin: 8px 4px;
+      background: #00ff00; color: #000;
+      border: none; border-radius: 6px;
+      font-weight: bold; cursor: pointer;
+      font-size: 14px; font-family: monospace;
+      box-shadow: 0 0 15px rgba(0,255,0,0.4);
+      transition: all 0.2s;
+    `;
+    tabButton.textContent = '📊 SETUP INTELLIGENCE';
+    tabButton.onmouseover = () => {
+      tabButton.style.background = '#00dd00';
+      tabButton.style.boxShadow = '0 0 25px rgba(0,255,0,0.6)';
+    };
+    tabButton.onmouseout = () => {
+      tabButton.style.background = '#00ff00';
+      tabButton.style.boxShadow = '0 0 15px rgba(0,255,0,0.4)';
+    };
+
+    // Click handler
+    tabButton.onclick = () => {
+      showSetupIntelligenceDashboard();
+    };
+
+    // Find the best place to insert the tab (near other command tabs)
+    const commandTab = document.querySelector('button') || document.body.querySelector('main button');
+    if (commandTab && commandTab.parentNode) {
+      commandTab.parentNode.insertBefore(tabButton, commandTab.nextSibling);
+      console.log('[✅ TAB] SETUP INTELLIGENCE tab added to menu');
+    } else {
+      document.body.insertBefore(tabButton, document.body.firstChild);
+    }
+  }, 500);
+
+  // Dashboard display function
+  window.showSetupIntelligenceDashboard = function() {
+    // Create modal/overlay
+    const existingModal = document.querySelector('[data-setup-modal]');
+    if (existingModal) existingModal.remove();
+
+    const status = window.setupRecording?.getStatus?.();
+    const setups = status?.setups || [];
+
+    const modal = document.createElement('div');
+    modal.setAttribute('data-setup-modal', 'true');
+    modal.style.cssText = `
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.85); z-index: 20000;
+      display: flex; align-items: center; justify-content: center;
+      font-family: monospace; color: #fff;
+    `;
+
+    modal.innerHTML = `
+      <div style="
+        background: #1a1a1a; border: 3px solid #00ff00;
+        border-radius: 12px; padding: 24px; max-width: 700px;
+        max-height: 80vh; overflow-y: auto;
+        box-shadow: 0 0 40px rgba(0,255,0,0.5);
+      ">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+          <h2 style="color: #00ff00; margin: 0;">📊 SETUP INTELLIGENCE DASHBOARD</h2>
+          <button style="
+            background: #ff0000; border: none; color: #fff;
+            padding: 8px 16px; border-radius: 4px; cursor: pointer;
+            font-weight: bold; font-family: monospace;
+          " onclick="this.closest('[data-setup-modal]').remove()">CLOSE</button>
+        </div>
+
+        <div style="background: #222; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+          <h3 style="color: #00ff00; margin-top: 0;">Today's Performance</h3>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 14px;">
+            <div>Total Setups: <strong style="color: #00ff00;">${setups.length}</strong></div>
+            <div>Closed: <strong style="color: #00ff00;">0</strong></div>
+            <div>Open: <strong style="color: #00ff00;">${setups.length}</strong></div>
+            <div>Win Rate: <strong style="color: #00ff00;">0.0%</strong></div>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 16px;">
+          <h3 style="color: #00ff00; margin-top: 0;">Active Setups</h3>
+          ${setups.map((s, i) => `
+            <div style="
+              background: #222; padding: 12px; margin-bottom: 8px;
+              border-left: 4px solid ${s.direction === 'LONG' ? '#00ff00' : '#ff0000'};
+              border-radius: 4px;
+            ">
+              <div style="font-weight: bold; margin-bottom: 4px;">
+                ${i+1}. ${s.symbol} | <span style="color: ${s.direction === 'LONG' ? '#00ff00' : '#ff0000'};">${s.direction}</span>
+              </div>
+              <div style="font-size: 12px; color: #aaa;">
+                Pattern: ${s.pattern} | Confidence: ${(s.confidence*100).toFixed(0)}%
+              </div>
+              <div style="font-size: 12px; color: #aaa;">
+                Entry: $${s.entryPrice} | SL: $${s.stopLoss} | TP1: $${s.takeProfit1} | TP2: $${s.takeProfit2}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+
+        <div style="background: #222; padding: 16px; border-radius: 8px;">
+          <h3 style="color: #00ff00; margin-top: 0;">System Status</h3>
+          <div style="font-size: 14px;">
+            <div>Recording: <span style="color: #00ff00;">✅ ACTIVE</span></div>
+            <div>Engine: <span style="color: #00ff00;">✅ Initialized</span></div>
+            <div>Last Update: <strong>${new Date().toLocaleTimeString()}</strong></div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+    console.log('[✅ DASHBOARD] Setup Intelligence modal opened');
+  };
+
   // Update Setup Intelligence Report with actual data
   setTimeout(() => {
     const reportElements = Array.from(document.querySelectorAll('*')).filter(el =>
