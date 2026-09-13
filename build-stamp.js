@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v731',
-  pack: 'SMC scoring actually wired into the solidity composite; index.html mojibake repaired; main-grid layout hijack removed',
+  version: 'hg-v732',
+  pack: 'SMC ordering active in CRYPTO SCAN; SMC read carried across the gold publish boundary',
   built: '2026-09-13T17:00:00Z'
 };
 

@@ -109,6 +109,42 @@ function rr(entry, stop, t1){
   return risk > 0 ? +(reward / risk).toFixed(2) : null;
 }
 
+/* SMC rank — ORDERING ONLY, deliberately not a gate. The grade is dominated by
+   STRUCT_WITH/AGAINST, and that same structural fact is already voted inside pct
+   by the 470-read engine (cryptoultra.js CHoCH/FVG/liq_sweep reads), which then
+   feeds the 75% gate and 40% of the confidence score. Letting it also veto would
+   penalise one fact a third time — and on the slowest copy of it, since a swing
+   needs swingLength bars to close on its right (~2.5h at 15m) against a ~6h plan
+   horizon. So structure breaks ties between cards the trader reads as equally
+   confident; it never removes one. Missing smc ranks identically to NEUTRAL, so
+   ordering cannot shift with smc-lib.js load order. */
+function csSmcRank(s){
+  var g = s && s.smc && s.smc.grade;
+  if (g === 'STRONG') return 2;
+  if (g === 'WITH') return 1;
+  if (g === 'AGAINST') return -1;
+  return 0;
+}
+
+/* Primary key is the confidence the card actually PRINTS (whole percent — see
+   pct() and the Math.round in the card head), because two setups shown as "82%"
+   are tied to the reader even when their floats differ. SMC breaks that tie; raw
+   pct is the final key so order stays deterministic. renderCards re-partitions
+   by isHighQuality AFTER this with filter, which preserves order, so nothing can
+   cross the quality boundary here. */
+function csSortSetups(arr){
+  if (!Array.isArray(arr)) return arr;
+  arr.sort(function(a, b){
+    var pa = (a && a.pct) || 0, pb = (b && b.pct) || 0;
+    var ba = Math.round(pa * 100), bb = Math.round(pb * 100);
+    if (bb !== ba) return bb - ba;
+    var ra = csSmcRank(a), rb = csSmcRank(b);
+    if (rb !== ra) return rb - ra;
+    return pb - pa;
+  });
+  return arr;
+}
+
 function voteTableHTML(votes){
   if (!votes || !votes.length) return '';
   var groups = [], h = '<table class="cs-vtbl"><tr><th>read</th><th>value</th><th>kind</th><th>vote</th><th>rule</th></tr>';
@@ -463,8 +499,9 @@ async function runScan(ui){
             isHighQuality: qualityGates.length === 0 && proGradeCheck.isPro
           };
 
-          /* SMC context — record-only annotation. Never feeds scoring, gating, tiering or
-             sort order; it only attaches setup.smc for the card chip and Setup Intelligence.
+          /* SMC context — ACTIVE on sort order as of v732 (record-only before that).
+             setup.smc feeds csSortSetups below; it still does not gate, tier or change
+             which cards are high-quality. See csSmcRank for why it ranks but never vetoes.
              Levels live on res.plan, so a synthetic row carries them to the enricher and the
              result is copied back. The tape is trimmed to the closed bar the engine voted on
              (the engine drops the forming bar via closedRows) so SMC grades the same bar. */
@@ -491,10 +528,7 @@ async function runScan(ui){
       }
     }
 
-    setups.sort(function(a, b){
-      var pa = a.pct || 0, pb = b.pct || 0;
-      return pb - pa;
-    });
+    csSortSetups(setups);
 
     __results = { at: now, setups: setups, scanned: scanned, errors: errors, skipped: skipped, universe: items.length };
     renderCards(setups);
@@ -539,6 +573,11 @@ function cryptoScanState(){
 }
 
 W.cryptoScanState = cryptoScanState;
+/* Exported so the SMC ordering can actually be tested: everything else in the
+   scan path sits inside runScan, which is unreachable without a live network,
+   so a behaviour test is impossible unless the decision is a pure function. */
+W.__csSmcRank = csSmcRank;
+W.__csSortSetups = csSortSetups;
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: TAB_ID, label: 'CRYPTO SCAN', mount: mount, refresh: refresh });
 W.HG_warmups = W.HG_warmups || [];
