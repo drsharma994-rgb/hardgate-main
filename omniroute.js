@@ -5430,7 +5430,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             + (demChip.smallN ? ' · SMALL N' : '') + '</span>';
         }
       } catch (eDemChip) {}
-      /* SMC chip — Smart Money Concepts context (smc-setups.js), record-only.
+      /* SMC chip — Smart Money Concepts context (smc-setups.js), display-only.
          This is the shared chip row setupCard / 20X / APEX / TOP SETUP all
          append, so the chip lands once for every card that prints a plan.
          Feature-checked: a missing helper or an un-enriched candidate renders
@@ -8841,7 +8841,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
           solChip = Wc.hgSolidityChipHtml(c.solGrade);
         }
       } catch(eSc){}
-      /* SMC chip (smc-setups.js) — record-only context, drawn next to the
+      /* SMC chip (smc-setups.js) — display-only context, drawn next to the
          shared SOLIDITY chip. Feature-checked; helper missing or candidate
          un-enriched renders no chip rather than a broken head. */
       var smcChip = '';
@@ -10381,13 +10381,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             if (!ex.ticker) ex.ticker = fitem;
             var found = hgOmniEvaluate(fitem, held[j].rows, pos, ex);
             for (k = 0; k < found.length; k++) cands.push(found[k]);
-            /* SMC CONTEXT (smc-setups.js) — RECORD-ONLY. Smart Money Concepts
-               structure (BOS/CHOCH bias, order blocks, fair-value gaps, unswept
+            /* SMC CONTEXT (smc-setups.js). Smart Money Concepts structure
+               (BOS/CHOCH bias, order blocks, fair-value gaps, unswept
                liquidity, premium/discount) is attached to each priced candidate
                as row.smc and recorded to Setup Intelligence under OMNIROUTE.
-               It NEVER touches the 18-pillar solidity score, the gate ledger,
-               grade.ticket, the tier thresholds, the conviction lead-block or
-               the rank — it adds one field and one chip, nothing else.
+               It never touches THIS tab's 18-pillar solidity score, the gate
+               ledger, grade.ticket, the tier thresholds, the conviction
+               lead-block or the rank — but SETUP CONFIRM inherits row.smc and
+               setup-solidity.js smcPts scores the grade there.
                Hooked HERE, at the tab's own grading site, rather than inside
                hgOmniEvaluate: that function is documented pure and is shared
                with DEX SCREENER / OMNIBTC, which record under their own tab

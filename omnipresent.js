@@ -994,11 +994,12 @@
                          here, while rows are still in scope — the omniroute
                          lesson this file already records at opX20Stamp. */
                       opX20Stamp(cands[c], rows);
-                      /* hg-v729: SMC context — RECORD-ONLY. It only adds
-                         cands[c].smc; nothing downstream (opBetterCand,
-                         opRankHead, opX20Wrap, opGates, opShowable) reads it,
-                         so score, ticket, rank, filtering and visibility are
-                         untouched. Bars travel through opts ONLY — the
+                      /* hg-v731: SMC context. It only adds cands[c].smc, and
+                         nothing in THIS tab (opBetterCand, opRankHead,
+                         opX20Wrap, opGates, opShowable) reads it, so score,
+                         ticket, rank, filtering and visibility are untouched
+                         here — but COMBI inherits it through hgOpState and
+                         setup-solidity.js smcPts scores the grade there. Bars travel through opts ONLY — the
                          candidate must stay rows-free (hgOpState JSON-clones
                          the snapshot and combi.js reads it), and rows is
                          released a few lines below. Placed after opX20Stamp
@@ -1601,7 +1602,7 @@
             +  ' · ' + esc(mech)
             +  ' <span class="gpip ok">' + (used20 ? '20X RE-PLAN OK' : '20X GEOMETRY OK') + '</span>'
             +  ' <span class="dim">' + esc(String(c.exchange || '').toUpperCase()) + '</span>'
-            /* hg-v729: same record-only SMC read as the zone card; '' without the glue. */
+            /* hg-v731: same SMC read as the zone card, display-only here; '' without the glue. */
             +  (gfn('hgSmcChipHtml') ? (W.hgSmcChipHtml(c) || '') : '') + '</div>';
           if (used20){
             /* the re-plan card must never read like the zone card — the stop
@@ -1668,7 +1669,7 @@
             +  ' · ' + esc(gMech)
             +  ' <span class="gpip warn">GEOMETRY-ONLY</span>'
             +  ' <span class="dim">' + esc(String(c.exchange || '').toUpperCase()) + '</span>'
-            /* hg-v729: same record-only SMC read as the zone card; '' without the glue. */
+            /* hg-v731: same SMC read as the zone card, display-only here; '' without the glue. */
             +  (gfn('hgSmcChipHtml') ? (W.hgSmcChipHtml(c) || '') : '') + '</div>';
           h += '<div class="note warn" style="display:block">GEOMETRY OK — quality unproven: no paid forward record; '
             +  'replay for this mechanic: ' + esc(gLine || 'no replay record at all — fully unproven') + '.</div>';
