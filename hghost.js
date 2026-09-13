@@ -44,3 +44,67 @@
     try{ hgStaticHostBanner(); }catch(e){}
   }
 })();
+
+/* =========================================================================
+   HARDGATE Conviction System - Phase 3 & 4 Integration
+   Live deployment of conviction-driven trading system with intelligent optimization
+   ========================================================================= */
+(function(){
+  'use strict';
+
+  // Initialize conviction system on app startup
+  if (document && document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', function(){
+      try {
+        initializeConvictionSystem();
+      } catch(e) {
+        console.error('[HARDGATE-Conviction] Initialization failed:', e);
+      }
+    });
+  } else {
+    try {
+      initializeConvictionSystem();
+    } catch(e) {
+      console.error('[HARDGATE-Conviction] Initialization failed:', e);
+    }
+  }
+
+  async function initializeConvictionSystem(){
+    try {
+      // Load bootstrap
+      const HardgateConvictionBootstrap = (function(){
+        // Inline bootstrap to avoid additional HTTP request
+        // Complete bootstrap code loaded from hardgate-conviction-bootstrap.js
+        return window.HardgateConvictionBootstrap || (typeof require !== 'undefined' ? require('./hardgate-conviction-bootstrap.js') : null);
+      })();
+
+      if (!HardgateConvictionBootstrap) {
+        console.warn('[HARDGATE-Conviction] Bootstrap not available, loading via require');
+        const Bootstrap = require('./hardgate-conviction-bootstrap.js');
+        const bootstrap = new Bootstrap(window);
+        await bootstrap.initialize();
+        window.HG_BOOTSTRAP = bootstrap;
+        console.log('[HARDGATE-Conviction] ✅ Phase 3 & 4 LIVE');
+        return;
+      }
+
+      const bootstrap = new HardgateConvictionBootstrap(window);
+      await bootstrap.initialize();
+      window.HG_BOOTSTRAP = bootstrap;
+
+      // Log status to console
+      console.log('[HARDGATE-Conviction] ✅ System initialized');
+      console.log('[HARDGATE-Conviction] Status:', bootstrap.getStatus());
+
+    } catch(e) {
+      console.error('[HARDGATE-Conviction] Error during initialization:', e);
+    }
+  }
+
+  // Expose helper
+  window.HG_CONVICTION_INIT = function(){
+    console.log('[HARDGATE-Conviction] Manual initialization triggered');
+    return window.HG_BOOTSTRAP ? window.HG_BOOTSTRAP.getStatus() : 'Not initialized';
+  };
+
+})();

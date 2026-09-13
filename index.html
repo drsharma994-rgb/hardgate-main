@@ -10232,6 +10232,45 @@ try{ const __tdk = localStorage.getItem('hg_td_key'); if (__tdk && $('tdKeyInput
 
 runMarketPictureUI();
 
+/* ========== HARDGATE CONVICTION SYSTEM v723 ========== */
+(function(){
+  var dashboardHTML = `
+    <div id="hg-conviction-dashboards" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px;background:#0f1419;border-top:1px solid #3a4556;margin-top:12px;">
+      <div id="hg-conviction-dashboard" style="background:#0f1419;color:#e8ecef;padding:12px;border-radius:6px;border:1px solid #3a4556;max-height:400px;overflow-y:auto;font-size:11px;">
+        <p style="text-align:center;color:#ffd700;margin:20px 0;">🔄 Loading Conviction Dashboard...</p>
+      </div>
+      <div id="hg-optimizer-dashboard" style="background:#0f1419;color:#e8ecef;padding:12px;border-radius:6px;border:1px solid #3a4556;max-height:400px;overflow-y:auto;font-size:11px;">
+        <p style="text-align:center;color:#ffd700;margin:20px 0;">🔄 Loading Optimizer Dashboard...</p>
+      </div>
+    </div>
+  `;
+  if (document && document.body) {
+    var dashDiv = document.createElement('div');
+    dashDiv.innerHTML = dashboardHTML;
+    document.body.appendChild(dashDiv);
+  }
+})();
+
+/* = Load conviction bootstrap and initialize Phase 3 & 4 = */
+(function(){
+  try {
+    // Require bootstrap if available
+    if (typeof require === 'function') {
+      var Bootstrap = require('./hardgate-conviction-bootstrap.js');
+      var bootstrap = new Bootstrap(window);
+      bootstrap.initialize().then(function(){
+        console.log('[HARDGATE] ✅ Conviction System Phase 3 & 4 LIVE');
+      }).catch(function(err){
+        console.warn('[HARDGATE] Conviction system error:', err);
+      });
+    } else {
+      console.log('[HARDGATE] Conviction system available via HG_CONVICTION_INIT()');
+    }
+  } catch(e) {
+    console.warn('[HARDGATE] Conviction bootstrap not available:', e);
+  }
+})();
+
 /* ---------------- PWA: service worker registration ----------------
    sw.js is network-first for EVERYTHING (fresh market data is sacred); its
    cache is an offline fallback only and never stores /api/ or /api/proxy
