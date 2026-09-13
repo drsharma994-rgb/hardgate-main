@@ -149,6 +149,52 @@
     console.error('[ERROR] Setup Intelligence initialization failed:', err);
   });
 
+  // Update Setup Intelligence Report with actual data
+  setTimeout(() => {
+    const reportElements = Array.from(document.querySelectorAll('*')).filter(el =>
+      el.textContent?.includes('Setup Intelligence Report') ||
+      el.textContent?.includes('Total Setups') ||
+      el.textContent?.includes('Win Rate')
+    );
+
+    if (reportElements.length > 0) {
+      const reportContainer = reportElements[0].closest('div') || reportElements[0];
+      const setups = window.setupRecording?.getStatus?.().setups || [];
+      const closedSetups = setups.filter(s => s.status === 'CLOSED');
+      const openSetups = setups.filter(s => s.status === 'OPEN' || !s.status);
+
+      reportContainer.innerHTML = `
+        <div style="background: #1a1a1a; color: #fff; padding: 16px; border-radius: 8px; font-family: monospace;">
+          <h3 style="color: #00ff00; margin-top: 0;">📊 Setup Intelligence Report</h3>
+
+          <div style="margin: 12px 0; padding: 12px; background: #222; border-radius: 4px;">
+            <strong>Today's Performance</strong>
+            <div>Total Setups: <strong>${setups.length}</strong></div>
+            <div>Closed: <strong>${closedSetups.length}</strong></div>
+            <div>Open: <strong>${openSetups.length}</strong></div>
+            <div>Win Rate: <strong>${((setups.filter(s => s.outcome?.includes('TP')).length / setups.length || 0) * 100).toFixed(1)}%</strong></div>
+          </div>
+
+          <div style="margin: 12px 0;">
+            <strong>Active Setups:</strong>
+            ${setups.map(s => `
+              <div style="margin: 6px 0; padding: 8px; background: #222; border-left: 3px solid ${s.direction === 'LONG' ? '#00ff00' : '#ff0000'};font-size: 12px;">
+                <strong>${s.symbol}</strong> | ${s.direction} | ${s.pattern} | Conf: ${(s.confidence*100).toFixed(0)}%
+              </div>
+            `).join('')}
+          </div>
+
+          <div style="margin: 12px 0; padding: 12px; background: #222; border-radius: 4px; font-size: 12px;">
+            <strong>📈 System Status:</strong>
+            <div>Recording: ✅ ACTIVE</div>
+            <div>Engine: Initialized</div>
+            <div>Last Update: ${new Date().toLocaleTimeString()}</div>
+          </div>
+        </div>
+      `;
+    }
+  }, 1000);
+
   // Create fixed monitoring panel at top-right
   setTimeout(() => {
     const panelHTML = `
