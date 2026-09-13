@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v730',
-  pack: 'Smart Money Concepts active scoring — improves setup quality across all 39 tabs',
+  version: 'hg-v731',
+  pack: 'SMC scoring actually wired into the solidity composite; index.html mojibake repaired; main-grid layout hijack removed',
   built: '2026-09-13T17:00:00Z'
 };
 

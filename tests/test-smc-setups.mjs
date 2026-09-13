@@ -67,7 +67,7 @@ console.log('== rows without candles: solidity untouched, no smc ==');
   ok(W.hgSetupSolidityChipHtml(row).indexOf('SMC') < 0, 'chip carries no SMC stamp without context');
 }
 
-console.log('== rows with candles: smc attached, solidity score identical ==');
+console.log('== rows with candles: smc attached, solidity score moves with grade ==');
 {
   const signals = [];
   const W = boot(ctx => { ctx.setupRecording = { recordSignal(tab, data){ signals.push({ tab, data }); return data; } }; });
@@ -75,7 +75,10 @@ console.log('== rows with candles: smc attached, solidity score identical ==');
   const expected = W.hgSetupSolidityScore(Object.assign({}, base), { asset: 'crypto' }).score;
   const row = Object.assign({ rows }, base);
   W.hgSetupSolidityApply(row, { asset: 'crypto' });
-  ok(row.solidityScore === expected, 'solidity score unchanged by SMC (' + expected + ')');
+  const SMC_PTS = { STRONG: 5, WITH: 2, AGAINST: -3 };
+  const adj = (row.smc && SMC_PTS[row.smc.grade]) || 0;
+  ok(row.solidityScore === Math.max(0, Math.min(100, expected + adj)),
+     'solidity score moves with SMC grade ' + (row.smc && row.smc.grade) + ' (' + expected + ' → ' + row.solidityScore + ')');
   ok(row.smc && typeof row.smc.score === 'number' && typeof row.smc.grade === 'string', 'row.smc present — ' + row.smc.grade + ' ' + row.smc.score);
   ok(row.smc.bias === 'bull' || row.smc.bias === 'bear', 'structure bias read — ' + row.smc.bias);
   ok(Array.isArray(row.smc.tags), 'tags array');

@@ -57,9 +57,10 @@ function cfNormRow(raw, meta){
   if (meta.near) { row.near = true; row.clean = false; }
   if (meta.forming) { row.forming = true; row.clean = false; row.near = false; }
   row.scanner = meta.source || row.scanner;
-  /* v729: SMC CONTEXT — RECORD-ONLY. Nothing downstream reads row.smc except
-     the card chip; score, tier, blockers, needs, sort order and card visibility
-     are untouched. This desk never loads candles of its own — it only
+  /* v731: SMC CONTEXT. The grade now feeds the solidity composite via
+     setup-solidity.js smcPts, so it can move score and tier; blockers, needs,
+     sort order and card visibility stay untouched. This desk never loads
+     candles of its own — it only
      re-presents other desks' published snapshots — so the live path here is
      INHERITANCE (contract rule 8): hgNormalizeSetupRow rebuilds a fresh
      whitelist row and drops the source desk's read, so carry it across by hand.
@@ -81,6 +82,12 @@ function cfNormRow(raw, meta){
       W.hgSmcEnrich(row, { rows: smcRows, tab: 'SETUP CONFIRM' });
     }
   }catch(eSmc){}
+  /* v731: solidity was stamped above by hgNormalizeSetupRow, before row.smc
+     existed, so it does not account for the grade. Restamp. Safe to repeat:
+     hgSetupSolidityScore recomputes from its base every call, never accumulates. */
+  try{
+    if (row.smc && gfn('hgSetupSolidityApply')) W.hgSetupSolidityApply(row, { asset: 'crypto' });
+  }catch(eSol){}
   return row;
 }
 

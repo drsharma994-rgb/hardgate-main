@@ -3,8 +3,9 @@
    Hooks the shared choke points every desk already passes through (solidity
    apply, solidity chip, pine signal enrich) so any row that carries its candles
    gets row.smc — structure bias, zone confluence, a grade — and an SMC_CONTEXT
-   signal lands in Setup Intelligence. Record-only: solidity score and tier are
-   never changed by this file. Tabs can also call hgSmcEnrich(row, { rows }). */
+   signal lands in Setup Intelligence. This file supplies the READ; the scoring
+   lives in setup-solidity.js (smcPts), which folds the grade into the composite
+   upstream of tiering. Tabs can also call hgSmcEnrich(row, { rows }). */
 (function(){
 'use strict';
 var W = (typeof window !== 'undefined') ? window : globalThis;
@@ -108,20 +109,12 @@ function wrapOnce(name, make){
 function install(){
   wrapOnce('hgSetupSolidityApply', function(orig){
     return function(row, opts){
-      var out = orig(row, opts);
+      /* Enrich BEFORE scoring. hgSetupSolidityScore reads row.smc as one more
+         scoring component (smcPts in setup-solidity.js), so the read has to be
+         on the row before orig() computes the score. hgSmcEnrich is itself a
+         silent no-op without hgSmc, without candles, or without a direction. */
       hgSmcEnrich(row, opts);
-      /* Activate SMC: adjust solidity score based on confluence grade */
-      if (row.smc && row.smc.grade && typeof row.score === 'number'){
-        var adj = 0;
-        if (row.smc.grade === 'STRONG') adj = 5;
-        else if (row.smc.grade === 'WITH') adj = 2;
-        else if (row.smc.grade === 'AGAINST') adj = -3;
-        if (adj !== 0){
-          row.score += adj;
-          if (row.solidity) row.solidity.smcAdj = adj;
-        }
-      }
-      return out;
+      return orig(row, opts);
     };
   });
   wrapOnce('hgSetupSolidityChipHtml', function(orig){

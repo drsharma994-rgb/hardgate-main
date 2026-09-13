@@ -104,6 +104,24 @@ function metaPts(row){
   return pts;
 }
 
+/* SMC confluence, attached as row.smc by smc-setups.js. Scored inside the
+   composite, upstream of the clamp and tierFromScore, so score/tier/bookOk/
+   tradeOk all derive from the same adjusted number. Returns 0 — and so adds no
+   part and no delta — when there is no SMC read: lib not loaded, no candles,
+   no direction, or a NEUTRAL grade. Magnitudes are unmeasured; see v706/v702
+   for the precedent on backtesting a rule before trusting its numbers. */
+function smcPts(row){
+  try{
+    var s = row && row.smc;
+    if (!s || typeof s !== 'object') return 0;
+    var g = String(s.grade || '').toUpperCase();
+    if (g === 'STRONG') return 5;
+    if (g === 'WITH') return 2;
+    if (g === 'AGAINST') return -3;
+    return 0;
+  }catch(e){ return 0; }
+}
+
 function tierFromScore(score, row, opts){
   var clean = !!(row.clean && !row.near && !row.nearClean && !row.forming);
   var near = !!(row.near || row.nearClean);
@@ -132,6 +150,7 @@ function hgSetupSolidityScore(row, opts){
   var gp = goldPts(row, opts); score += gp; add('gold', gp);
   var op = omniInfoPts(row); score += op; add('omni-info', op);
   var mp = metaPts(row); score += mp; add('formation/meta', mp);
+  var sm = smcPts(row); score += sm; add('SMC', sm);
   if (row.near || row.nearClean) score -= 10;
   if (row.forming) score -= 6;
   score = Math.max(0, Math.min(100, Math.round(score)));

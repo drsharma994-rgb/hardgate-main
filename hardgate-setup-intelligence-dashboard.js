@@ -147,7 +147,7 @@ class HardgateSetupIntelligenceDashboard {
    */
   renderSummary(summary) {
     return `
-      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 12px;">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 12px;">
         <div style="background: #1a2235; padding: 12px; border-radius: 4px;">
           <div style="font-size: 10px; color: #999;">Total Setups</div>
           <div style="font-size: 18px; font-weight: bold; color: #ffd700;">${summary.totalSetups}</div>
@@ -180,7 +180,7 @@ class HardgateSetupIntelligenceDashboard {
     let html = `
       <div style="margin-bottom: 12px;">
         <h3 style="margin: 0 0 8px 0; font-size: 12px; color: #ffd700;">📈 Performance by Tab</h3>
-        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px;">
     `;
 
     for (const [tabName, perf] of Object.entries(byTab)) {

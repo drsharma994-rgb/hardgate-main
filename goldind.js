@@ -3896,7 +3896,12 @@ function goldRankSetups(cands, ctx){
       }catch(eGr){}
       try{
         if (typeof window !== 'undefined' && typeof window.hgSetupSolidityApply === 'function'){
-          window.hgSetupSolidityApply(rc, { asset: 'gold', tally: tally, grade: rc.grade });
+          /* v731: hand over the execution-timeframe candles so the SMC read is on
+             the row before it is scored (setup-solidity.js smcPts). Same bars the
+             confluence pass below uses. They ride on opts, never on rc — ranked
+             rows get cloned into desk state and must stay bar-free. */
+          window.hgSetupSolidityApply(rc, { asset: 'gold', tally: tally, grade: rc.grade,
+            rows: ctx.rows15m || ctx.rows, sym: rc.sym || ctx.sym });
         }
       }catch(eSol){}
       try{

@@ -40,6 +40,13 @@
    TRADING DASHBOARD CONTAINER
    ========================================================================= */
 
+/* v731: DISABLED. This rule hijacked <main> into a 12-column grid. HARDGATE's
+   tabpanes are plain block children that span no columns, so each landed in one
+   ~330px track and the remaining ten painted as dead space on the right. The
+   real layout is index.html's own `main{padding:18px 16px 60px;max-width:1280px;
+   margin:0 auto}` plus mobile.css's <=860px rule, both of which this suppressed.
+   The rest of this file (.kpi-cards, .signal-grid, .trading-table, ...) matches
+   zero elements in the DOM and is inert; removing it is a separate decision.
 main {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
@@ -49,6 +56,7 @@ main {
   margin: 0 auto;
   background: var(--trading-bg);
 }
+*/
 
 /* =========================================================================
    PROFESSIONAL KPI CARDS (Header Row)
@@ -294,21 +302,14 @@ main {
    ========================================================================= */
 
 @media (max-width: 1200px) {
-  main {
-    grid-template-columns: repeat(8, 1fr);
-  }
-
+  /* v731: `main` override removed with the base rule above. */
   .signal-grid {
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   }
 }
 
 @media (max-width: 768px) {
-  main {
-    grid-template-columns: repeat(4, 1fr);
-    padding: 8px;
-  }
-
+  /* v731: `main` override removed with the base rule above. */
   .kpi-cards {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -323,10 +324,7 @@ main {
 }
 
 @media (max-width: 480px) {
-  main {
-    grid-template-columns: 1fr;
-  }
-
+  /* v731: `main` override removed with the base rule above. */
   .kpi-cards,
   .signal-grid {
     grid-template-columns: 1fr;

@@ -64,7 +64,7 @@ function cbNormRow(raw, meta){
   if (meta.near) { row.near = true; row.clean = false; }
   if (meta.forming) { row.forming = true; row.clean = false; row.near = false; }
   row.scanner = meta.source || row.scanner;
-  /* v729: SMC context — record-only, never touches scoring or ranking.
+  /* v731: SMC context. The grade now scores, via setup-solidity.js smcPts.
      hgNormalizeSetupRow already ran the wrapped hgSetupSolidityApply, but on a
      candle-less row, so SMC no-opped there. Inherit the source desk's read when it
      already has one, else enrich from candles the raw snapshot still carries (chart
@@ -79,6 +79,12 @@ function cbNormRow(raw, meta){
       W.hgSmcEnrich(row, { rows: smcRows, tab: 'COMBI' });
     }
   }catch(eSmc){}
+  /* v731: solidity was stamped above by hgNormalizeSetupRow, before row.smc
+     existed, so it does not account for the grade. Restamp. Safe to repeat:
+     hgSetupSolidityScore recomputes from its base every call, never accumulates. */
+  try{
+    if (row.smc && gfn('hgSetupSolidityApply')) W.hgSetupSolidityApply(row, { asset: 'crypto' });
+  }catch(eSol){}
   return row;
 }
 

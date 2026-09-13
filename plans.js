@@ -599,7 +599,17 @@ function hgNormalizeSetupRow(raw){
   else if (near){ row.near = true; row.nearClean = true; }
   if (forming && !row.clean) row.forming = true;
   if (!row.clean && !row.near && !row.forming) row.clean = true;
-  if (typeof G.hgSetupSolidityApply === 'function') G.hgSetupSolidityApply(row, { asset: 'crypto' });
+  if (typeof G.hgSetupSolidityApply === 'function'){
+    /* v731: pass the source snapshot's candles through on opts so the SMC read
+       lands before scoring (setup-solidity.js smcPts). `row` is a whitelist and
+       must stay bar-free — desks JSON-clone these into state — which is why the
+       bars travel on opts rather than on the row. */
+    var nRows = raw.rows || raw.candles || raw.bars || raw.ohlc
+      || nest.rows || nest.candles || nest.bars || nest.ohlc;
+    G.hgSetupSolidityApply(row, (Array.isArray(nRows) && nRows.length)
+      ? { asset: 'crypto', rows: nRows, sym: row.sym }
+      : { asset: 'crypto' });
+  }
   return row;
 }
 
