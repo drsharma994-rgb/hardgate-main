@@ -1,26 +1,59 @@
 {
   "BTCUSDT": {
     "symbol": "BTCUSDT",
-    "score": 0.35,
-    "text": "Bitcoin steady with institutional adoption news. Recent ETF approvals supporting bullish sentiment.",
-    "timestamp": "2026-09-13T10:00:00Z",
+    "score": 0.272,
+    "sources": [
+      {
+        "source": "cointelegraph",
+        "score": 0.122,
+        "weight": 0.8
+      },
+      {
+        "source": "bloomberg",
+        "score": 0.404,
+        "weight": 0.9
+      }
+    ],
+    "timestamp": "2026-09-13T04:56:56.603451Z",
     "ttl": 300,
-    "source": "Bloomberg, CoinTelegraph feeds"
+    "source_count": 2
   },
   "ETHUSDT": {
     "symbol": "ETHUSDT",
-    "score": 0.15,
-    "text": "Ethereum mixed sentiment. Shanghai upgrade benefits offset by broader market uncertainty.",
-    "timestamp": "2026-09-13T10:00:00Z",
+    "score": 0.272,
+    "sources": [
+      {
+        "source": "cointelegraph",
+        "score": 0.122,
+        "weight": 0.8
+      },
+      {
+        "source": "bloomberg",
+        "score": 0.404,
+        "weight": 0.9
+      }
+    ],
+    "timestamp": "2026-09-13T04:56:58.219220Z",
     "ttl": 300,
-    "source": "CoinTelegraph, Reddit sentiment"
+    "source_count": 2
   },
   "SOLUSDT": {
     "symbol": "SOLUSDT",
-    "score": -0.2,
-    "text": "Solana network issues reported. Liquidations cascade on leverage. Recent validator problems.",
-    "timestamp": "2026-09-13T10:00:00Z",
+    "score": 0.272,
+    "sources": [
+      {
+        "source": "cointelegraph",
+        "score": 0.122,
+        "weight": 0.8
+      },
+      {
+        "source": "bloomberg",
+        "score": 0.404,
+        "weight": 0.9
+      }
+    ],
+    "timestamp": "2026-09-13T04:56:59.819102Z",
     "ttl": 300,
-    "source": "Twitter, exchange announcements"
+    "source_count": 2
   }
 }

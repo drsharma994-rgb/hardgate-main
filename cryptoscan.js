@@ -172,17 +172,8 @@ function setupCardHTML(s, idx){
   h += '<small>RECORD ONLY — engine measured NOT TRADABLE; this is what the rule would say</small></div>';
 
   /* Sentiment context and warnings */
-  if (s.sentiment && typeof hgSentimentBadge === 'function'){
-    var sentimentBadge = hgSentimentBadge(s.sentiment);
-    var sentimentHTML = '<div class="cs-sentiment sentiment-' + sentimentBadge.cls + '" title="' + esc(sentimentBadge.title) + '">';
-    sentimentHTML += sentimentBadge.label;
-    if (s.sentiment.timestamp){
-      var age = Math.round((Date.now() - new Date(s.sentiment.timestamp)) / 1000);
-      var ageLabel = age < 60 ? age + 's' : (age < 3600 ? Math.round(age / 60) + 'm' : Math.round(age / 3600) + 'h');
-      sentimentHTML += ' (' + ageLabel + ' ago)';
-    }
-    sentimentHTML += '</div>';
-    h += '<div style="margin:6px 0">' + sentimentHTML + '</div>';
+  if (s.sentiment && typeof hgSentimentCardHTML === 'function'){
+    h += '<div style="margin:6px 0">' + hgSentimentCardHTML(s.sym) + '</div>';
   }
 
   if (p){
@@ -319,14 +310,22 @@ async function runScan(ui){
           if (res.regime === 'chop') qualityGates.push('regime: CHOP');
           if (!liquidHour) qualityGates.push('session: low liquidity');
 
-          /* Sentiment enrichment */
+          /* Sentiment enrichment + gates */
           var sentiment = {};
+          var sentimentGate = null;
           if (typeof hgSentimentGet === 'function'){
             sentiment = hgSentimentGet(item.sym);
           }
           var sentimentAdjusted = pct;
           if (typeof hgSentimentScoreSignal === 'function' && sentiment.score !== undefined){
             sentimentAdjusted = hgSentimentScoreSignal(item.sym, pct, res.dir);
+          }
+          /* Apply sentiment conflict detection */
+          if (typeof hgSentimentGate === 'function'){
+            sentimentGate = hgSentimentGate(item.sym, res.dir, pct);
+            if (!sentimentGate.shouldTrade && sentimentGate.conflictLevel === 'major'){
+              qualityGates.push('sentiment: ' + res.dir + ' vs ' + (sentiment.score > 0 ? 'bullish' : 'bearish'));
+            }
           }
 
           var setup = {
