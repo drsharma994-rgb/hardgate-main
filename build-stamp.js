@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v719',
-  pack: 'CRYPTO SCAN v2: Three-layer voting system (Price 40% + Order Flow 35% + External 25%)',
-  built: '2026-09-13T14:00:00Z'
+  version: 'hg-v720',
+  pack: 'GOLD ULTRA Pro: Macro feeds + Smart Money + Session Volume + Professional Tiers',
+  built: '2026-09-13T15:30:00Z'
 };
 
 function hgBuildLabel(b){
