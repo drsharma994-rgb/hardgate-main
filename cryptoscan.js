@@ -79,7 +79,14 @@ var CS_CSS = ''
   + '.cs-lv b{display:block;font-size:13px;color:#1E293B}'
   + '.cs-lv small{font-size:9px;color:#64748B;letter-spacing:.06em}'
   + '.cs-votes-placeholder{font-size:10px;color:#94A3B8;padding:8px 0;cursor:pointer}'
-  + '.cs-votes-placeholder:hover{color:#2563EB}';
+  + '.cs-votes-placeholder:hover{color:#2563EB}'
+  + '.cs-sentiment{display:inline-block;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;letter-spacing:.05em;cursor:help}'
+  + '.cs-sentiment.sentiment-bullish{background:#DCFCE7;color:#166534;border:1px solid #86EFAC}'
+  + '.cs-sentiment.sentiment-mildly-bullish{background:#FEF3C7;color:#92400E;border:1px solid #FCD34D}'
+  + '.cs-sentiment.sentiment-bearish{background:#FEE2E2;color:#DC2626;border:1px solid #FECACA}'
+  + '.cs-sentiment.sentiment-mildly-bearish{background:#FED7AA;color:#EA580C;border:1px solid #FDBA74}'
+  + '.cs-sentiment.sentiment-neutral{background:#F1F5F9;color:#64748B;border:1px solid #CBD5E1}'
+  + '.cs-sentiment.sentiment-stale{background:#E0E7FF;color:#4F46E5;border:1px dashed #A5B4FC;font-style:italic}';
 
 function venueChip(ex){
   var e = String(ex || '').toLowerCase();
@@ -163,6 +170,20 @@ function setupCardHTML(s, idx){
   if (s.bar) h += ' · closed 15m bar ' + new Date(s.bar.t * 1000).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
   h += ' · close $' + fmt(s.price) + ' · ATR14 $' + fmt(s.atr) + '</small>';
   h += '<small>RECORD ONLY — engine measured NOT TRADABLE; this is what the rule would say</small></div>';
+
+  /* Sentiment context and warnings */
+  if (s.sentiment && typeof hgSentimentBadge === 'function'){
+    var sentimentBadge = hgSentimentBadge(s.sentiment);
+    var sentimentHTML = '<div class="cs-sentiment sentiment-' + sentimentBadge.cls + '" title="' + esc(sentimentBadge.title) + '">';
+    sentimentHTML += sentimentBadge.label;
+    if (s.sentiment.timestamp){
+      var age = Math.round((Date.now() - new Date(s.sentiment.timestamp)) / 1000);
+      var ageLabel = age < 60 ? age + 's' : (age < 3600 ? Math.round(age / 60) + 'm' : Math.round(age / 3600) + 'h');
+      sentimentHTML += ' (' + ageLabel + ' ago)';
+    }
+    sentimentHTML += '</div>';
+    h += '<div style="margin:6px 0">' + sentimentHTML + '</div>';
+  }
 
   if (p){
     h += '<div class="cs-levels">';
@@ -255,6 +276,16 @@ async function runScan(ui){
     __busy = false;
     return 'error: universe missing';
   }
+
+  /* Load sentiment data for enrichment */
+  if (typeof hgSentimentLoad === 'function'){
+    try{
+      await hgSentimentLoad();
+    }catch(e){
+      console.warn('[cryptoscan] sentiment load failed:', e);
+    }
+  }
+
   try{
     if (ui && ui.btn) ui.btn.disabled = true;
     setStat('loading universe (Delta + CoinDCX futures)…');
@@ -288,6 +319,16 @@ async function runScan(ui){
           if (res.regime === 'chop') qualityGates.push('regime: CHOP');
           if (!liquidHour) qualityGates.push('session: low liquidity');
 
+          /* Sentiment enrichment */
+          var sentiment = {};
+          if (typeof hgSentimentGet === 'function'){
+            sentiment = hgSentimentGet(item.sym);
+          }
+          var sentimentAdjusted = pct;
+          if (typeof hgSentimentScoreSignal === 'function' && sentiment.score !== undefined){
+            sentimentAdjusted = hgSentimentScoreSignal(item.sym, pct, res.dir);
+          }
+
           var setup = {
             item: item,
             label: symLabel(item),
@@ -295,6 +336,8 @@ async function runScan(ui){
             exchange: item.exchange,
             dir: res.dir,
             pct: pct,
+            sentimentAdjusted: sentimentAdjusted,
+            sentiment: sentiment,
             regime: res.regime,
             atr: res.atr,
             price: res.price,
