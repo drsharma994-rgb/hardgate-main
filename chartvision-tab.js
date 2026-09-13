@@ -211,6 +211,8 @@ function cvCardHTML(r){
   var tierCls = r.tier === 'near' ? ' tier-near' : '';
   var gateLbl = cvGateLabel(r);
   var visionChip = r.visionChip ? ' <span class="gpip ok">' + esc(r.visionChip) + '</span>' : '';
+  var smcChip = '';
+  try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(r) || ''; }catch(eSmc){ smcChip = ''; }
   var visionHtml = (typeof W.hgChartVisionCardBlock === 'function') ? W.hgChartVisionCardBlock(r) : '';
   var visionOnlySvg = (!visionHtml && r.visionSvg && typeof W.hgChartVisionSvgBlock === 'function')
     ? W.hgChartVisionSvgBlock(r) : '';
@@ -241,6 +243,7 @@ function cvCardHTML(r){
     + '<span class="dir">' + esc(String(r.dir).toUpperCase()) + ' · ' + esc(gateLbl) + ' · ' + esc(String(r.style || 'swing').toUpperCase())
     + visionChip + '</span>'
     + (typeof W.hgBookStampChip === 'function' ? W.hgBookStampChip(r.sym, r.dir, { scanner: 'chartvision', strategy: r.style || 'swing' }) : '')
+    + smcChip
     + '</div>'
     + '<div class="mini">'
     + '<span class="k">gates</span><span>' + esc(String(r.gatesPassed) + '/' + String(r.gatesTotal || 7)) + '</span>'
@@ -407,6 +410,13 @@ async function cvRunScan(opts){
 
     results.sort(cvSort);
     var shown = results.slice(0, MAX_SHOW);
+    try{
+      if (typeof W.hgSmcEnrich === 'function'){
+        for (var si = 0; si < shown.length; si++){
+          W.hgSmcEnrich(shown[si], { rows: shown[si].rows, tab: 'CHART VISION' });
+        }
+      }
+    }catch(eSmc){}
     var clean7n = results.filter(function(r){ return r.clean7; }).length;
     var nearN = results.length - clean7n;
 

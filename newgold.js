@@ -1651,6 +1651,28 @@ async function ngRunScan(){
     } catch(eStash){}
     results = kept;
 
+    /* SMC CONTEXT (hg-v729) — RECORD-ONLY. Runs AFTER the kill filter and
+       after the forward log, attaches nothing but .smc, and is never read by
+       any gate: score, tier, formation, solidity, sort order and which cards
+       render are all already decided above. One call per surviving fire per
+       scan — primary 1H/4H lanes and the OMNIGOLD hybrid lanes alike — on
+       the CLOSED bars that fire was assessed on (record.rows). The setup
+       object carries no symbol, so a flat probe supplies 'XAUUSD' the way the
+       forward log does and only the resulting .smc is copied back; no other
+       key is ever added to the setup. */
+    try {
+      if (typeof W.hgSmcEnrich === 'function'){
+        for (var smi = 0; smi < results.length; smi++){
+          var smr = results[smi];
+          if (!smr || !smr.setup || !Array.isArray(smr.rows) || !smr.rows.length) continue;
+          var smProbe = { sym: 'XAUUSD', dir: smr.setup.dir, entry: smr.setup.entry,
+            stop: smr.setup.stop, t1: smr.setup.t1, t2: smr.setup.t2 };
+          W.hgSmcEnrich(smProbe, { rows: smr.rows, tab: 'NEW GOLD' });
+          if (smProbe.smc) smr.setup.smc = smProbe.smc;
+        }
+      }
+    } catch(eSmc){}
+
     /* -- hg-v701: ALWAYS-ON BOARD DATA ------------------------------------
        Built AFTER the kill filter so the watch list reflects what actually
        renders; each block fail-soft so the scan itself can never be broken
@@ -1705,6 +1727,13 @@ function cardHtml(r){
       solChip = W.hgSolidityChipHtml(r.solidity);
     }
   } catch(eSc){}
+  /* SMC context chip (hg-v729) — record-only, appended beside the existing
+     stamps. .smc lives on the SETUP (r.setup), never on the scan record; an
+     un-enriched card gets '' back and the head is byte-identical. */
+  var smcChip = '';
+  try {
+    if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(s) || '';
+  } catch(eSmcC){ smcChip = ''; }
 
   var dirLabel = s.dir === 'long' ? 'LONG' : 'SHORT';
   var fm = r.formation || null;
@@ -1750,6 +1779,7 @@ function cardHtml(r){
     + '<span class="dir">' + dirLabel + ' \u00b7 TRIPLE CONF \u00b7 ' + esc(r.horizon) + ' \u00b7 ' + esc(r.source || '') + '</span>'
     + (formChip ? ' ' + formChip : '')
     + (solChip ? ' ' + solChip : '')
+    + (smcChip ? ' ' + smcChip : '')
     + '</div>'
     + '<div class="mini">'
     + '<span class="k">ml baseline</span><span>' + fmtF(s.ml.baseline, 2) + ' \u00b7 ' + esc(s.ml.regime) + '</span>'

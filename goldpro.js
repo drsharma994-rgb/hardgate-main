@@ -465,11 +465,14 @@ function renderLevelsPanel(o){
   }
   var gpStack = goldProCardStack(o);
   var stackHtml = (gpStack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(gpStack) : '';
+  var gpSmcChip = '';
+  try{ if (typeof window !== 'undefined' && typeof window.hgSmcChipHtml === 'function') gpSmcChip = window.hgSmcChipHtml(p) || ''; }catch(eSmc){ gpSmcChip = ''; }
   h += '<div class="row">'
      + '<span class="statuschip">dir <b>' + esc(p.dir.toUpperCase()) + '</b></span>'
      + '<span class="statuschip">4H cascade <b>' + esc(String(o.cascade || '').toUpperCase()) + '</b></span>'
      + (o.src ? '<span class="statuschip">src <b>' + esc(o.src) + '</b></span>' : '')
      + (o.rowsN ? '<span class="statuschip">4H bars <b>' + o.rowsN + '</b></span>' : '')
+     + gpSmcChip
      + '</div>';
   h += '<div class="plan">ENTRY <b>' + esc(pxF(p.entry)) + '</b>'
      + ' · STOP <b>' + esc(pxF(p.stop)) + '</b>'
@@ -722,6 +725,22 @@ async function runGoldPro(ui){
         }
       }
     }
+
+    /* SMC CONTEXT. Record-only: this attaches lvPlan.smc for the chip and
+       files one SMC_CONTEXT signal in Setup Intelligence. Nothing in this tab
+       reads .smc — no score, tier, gate or card visibility changes. The plan
+       object carries no sym (every consumer here hardcodes XAUUSD), so enrich
+       a stamped copy and copy the result back rather than changing the shape
+       lvPlan hands to hgMpPin. Placed after the composite override above,
+       which replaces lvPlan wholesale. */
+    try{
+      if (lvPlan && lvRows && lvRows.length && W && typeof W.hgSmcEnrich === 'function'){
+        var gpSmcRow = { sym: 'XAUUSD', dir: lvPlan.dir, entry: lvPlan.entry,
+                         stop: lvPlan.stop, t1: lvPlan.t1 };
+        W.hgSmcEnrich(gpSmcRow, { rows: lvRows, tab: 'GOLD PRO' });
+        if (gpSmcRow.smc) lvPlan.smc = gpSmcRow.smc;
+      }
+    }catch(eSmc){}
 
     /* FORWARD LOG. GOLD PRO issues one live 4H setup at a time rather than a
        list, so the mechanic is whether its levels came from the composite

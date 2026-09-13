@@ -228,6 +228,13 @@ function buildSnapFromBestScan(win, riskOpts, opts){
       row.famScore = c.famScore;
       row.robScore = c.robScore;
       row.scanner = 'best';
+      /* SMC context — record-only. The desk row is finished here (dir + entry
+         + stop + t1 settled) and the BEST CLEAN candidate carried its own 4h
+         candles through, so this is the one point where both are in scope.
+         A row an upstream desk already enriched keeps its own .smc. */
+      if (!row.smc){
+        try{ if (typeof W.hgSmcEnrich === 'function') W.hgSmcEnrich(row, { rows: row.rows, tab: 'SUPER BEST' }); }catch(eSmc){}
+      }
       merged.push(row);
       audit.clean++;
       if (row.minimalLossPass) audit.minLoss++;
@@ -574,13 +581,15 @@ function mount(el){
     desk.innerHTML = rows.map(function(r){
       var pill = superBestDeskPill(r);
       var sel = (__sb.selectedId === r.id) ? ' sel' : '';
+      var smcChip = '';
+      try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(r) || ''; }catch(eSmc){ smcChip = ''; }
       return '<div class="hg-desk-card' + sel + '" data-id="' + String(r.id).replace(/"/g, '') + '">'
         + '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px">'
         + '<strong>' + String(r.sym || '—') + ' · ' + String(r.dir || '').toUpperCase() + '</strong>'
         + '<span><span class="hg-pill clean">BEST CLEAN</span> '
         + '<span class="hg-pill">' + (r.famScore != null ? r.famScore + '/9 fam' : '7/7') + '</span> '
         + (r.confluenceTier ? '<span class="hg-pill">TIER ' + r.confluenceTier + '</span> ' : '')
-        + '<span class="hg-pill ' + pill.cls + '">' + pill.label + '</span></span></div>'
+        + '<span class="hg-pill ' + pill.cls + '">' + pill.label + '</span>' + smcChip + '</span></div>'
         + '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:8px;font:600 11px var(--mono,monospace)">'
         + '<div>ENTRY<br/>' + fmt(r.entry, 6) + '</div>'
         + '<div>STOP<br/>' + fmt(r.stop, 6) + '</div>'

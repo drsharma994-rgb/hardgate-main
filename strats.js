@@ -428,6 +428,18 @@ function sgLiveLevels(stratId, rows){
 function sgLiveFooter(stratId, rows, trades){
   var lv = sgLiveLevels(stratId, rows);
   if (lv){
+    /* SMC context on the live ticket — RECORD-ONLY: never touches dir,
+       entry, stop, targets or whether the footer renders; it only adds
+       lv.smc and one extra chip. Same raw rows reference for all three
+       strategies so the enricher per-array context cache is shared. */
+    try{
+      if (typeof W.hgSmcEnrich === 'function'){
+        if (!lv.sym && __sgState && __sgState.cfg && __sgState.cfg.sym) lv.sym = __sgState.cfg.sym;
+        W.hgSmcEnrich(lv, { rows: rows, tab: 'STRATEGY LAB' });
+      }
+    }catch(eSmc){}
+    var smcChip = '';
+    try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(lv) || ''; }catch(eSmcChip){ smcChip = ''; }
     return '<div class="plan">LIVE LEVELS · ' + lv.dir.toUpperCase()
       + ' — ENTRY <b>' + sgPx(lv.entry) + '</b>'
       + ' · STOP <b>' + sgPx(lv.stop) + '</b>'
@@ -435,6 +447,7 @@ function sgLiveFooter(stratId, rows, trades){
       + ' · T2 ' + sgPx(lv.t2) + ' (' + lv.rr2.toFixed(1) + 'R)'
       + ' · risk ' + lv.riskPct.toFixed(2) + '%'
       + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(lv.entry, lv.stop) : '')
+      + smcChip
       + (lv.note ? ' — ' + sgEsc(lv.note) : '') + '</div>';
   }
   var lastT = (Array.isArray(trades) && trades.length) ? trades[trades.length - 1].t : null;

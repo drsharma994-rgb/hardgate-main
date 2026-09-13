@@ -1038,6 +1038,9 @@ function cardHTML(r){
   var badge = s ? ' <span class="gpip ok">' + s.type + '</span> <span class="gpip' + (s.confirmed ? ' ok' : '') + '">'
       + (s.confirmed ? 'CONFIRMED' : 'UNCONFIRMED') + '</span>' : '';
   if (r.visionChip) badge += ' <span class="gpip ok">' + esc(r.visionChip) + '</span>';
+  /* v729 SMC chip — additive only; '' when the module is absent or the plan carries no .smc */
+  var smcChip = '';
+  try{ if (s && typeof G.hgSmcChipHtml === 'function') smcChip = G.hgSmcChipHtml(s) || ''; }catch(eSmc){ smcChip = ''; }
   var visionLine = (r.visionNextBar || r.visionNextMove)
     ? '<div class="note hg-vision-line" style="margin-top:6px"><b>NEXT BAR:</b> ' + esc(r.visionNextBar || r.visionNextMove)
       + (r.visionPrediction && r.visionPrediction !== r.visionNextBar ? '<br><b>PATH:</b> ' + esc(r.visionPrediction) : '') + '</div>' : '';
@@ -1078,7 +1081,7 @@ function cardHTML(r){
     }) : '';
   return '<div class="card ' + dir + '">'
     + '<div class="chead"><span class="sym">' + symHtml + '</span><span class="dir">' + dir.toUpperCase() + ' · EXECUTE'
-    + (r.exchange ? ' <span class="gpip">' + esc(String(r.exchange).toUpperCase()) + '</span>' : '') + badge
+    + (r.exchange ? ' <span class="gpip">' + esc(String(r.exchange).toUpperCase()) + '</span>' : '') + badge + smcChip
     + (typeof G.hgBookStampChip === 'function' ? G.hgBookStampChip(r.sym, dir, { scanner: 'execute', strategy: 'execute', venue: r.exchange || 'delta' }) : '')
     + (typeof hgSessionChip === 'function' ? hgSessionChip() : '') + '</span></div>'
     + verdict + mini + trailHtml + planHtml
@@ -1241,6 +1244,25 @@ function depStatus(){
   return { missing: missing, optMissing: optMissing };
 }
 
+/* v729 SMC CONTEXT — RECORD-ONLY. Attaches res.plan.smc (structure bias, OB/FVG
+   confluence, a grade) and files one SMC_CONTEXT signal in Setup Intelligence.
+   It must never touch the verdict, the conviction, the plan levels, the sort or
+   whether a card renders: the levels are read off a THROWAWAY shim, and only the
+   resulting .smc is copied back onto the plan. Called once per candidate per
+   scan / quick-rescan from the two gate*Candidate return sites (never inside
+   gateCandidate, which runs twice per xu passer, and never from a render path). */
+function smcContext(res, sym, rows4h){
+  try{
+    if (!res || !res.pass || !res.plan) return;
+    if (!rows4h || !rows4h.length) return;
+    if (typeof G.hgSmcEnrich !== 'function') return;
+    var shim = { sym: sym, dir: res.dir, entry: res.plan.entry, stop: res.plan.stop,
+                 t1: res.plan.t1, t2: res.plan.t2 };
+    G.hgSmcEnrich(shim, { rows: rows4h, tab: 'GATES' });
+    if (shim.smc) res.plan.smc = shim.smc;
+  }catch(eSmc){}
+}
+
 /* ---------------- shared per-candidate gating (full scan + QUICK RESCAN) ---------------- */
 /* xu mode, STAGED: 4h first, full funnel on it; 1h ONLY for passers (plan
    quality). Dead candidates never cost a second request. */
@@ -1257,6 +1279,7 @@ async function gateXuCandidate(item, cfg){
     var rows1h = await xuCandleLeg(item, '1h', 120);
     if (rows1h && rows1h.length){ inp.rows1h = rows1h; res = gateCandidate(inp); }
   }
+  smcContext(res, item.sym, rows4h);
   return { sym: item.sym, exchange: item.exchange, res: res, rows4h: rows4h,
            mark: item.mark, chg24: null, fundingPct: item.fundingPct,
            oiChgPct: null, turnoverUsd: item.turnoverUsd };
@@ -1265,6 +1288,7 @@ async function gateLegacyCandidate(sym, ticks, source, cfg){
   var inp = await gatherSymbol(sym, ticks ? ticks[sym] : null, source);
   inp.minTurnover = cfg.minTurnover;
   var res = gateCandidate(inp);
+  smcContext(res, sym, inp.rows4h);
   return { sym: sym, res: res, rows4h: inp.rows4h,
            mark: inp.mark, chg24: inp.chg24, fundingPct: inp.fundingPct,
            oiChgPct: inp.oiChgPct, turnoverUsd: inp.turnoverUsd };

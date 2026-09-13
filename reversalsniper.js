@@ -627,10 +627,18 @@ function cardHTML(r){
       solChip = W.hgSolidityChipHtml(r.solidity);
     }
   } catch(eSc){}
+  /* SMC chip (smc-setups.js). Feature-checked + try/catch: a missing
+     helper or a setup with no .smc renders '' and the card is otherwise
+     byte-identical. Display only — no gate, no ordering. */
+  var smcChip = '';
+  try {
+    if (s && s.smc && typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(s) || '';
+  } catch(eSmcChip){ smcChip = ''; }
   return '<div class="card long' + (r.best && tradeable ? ' best' : '') + '">'
     + '<div class="chead"><span class="sym">' + esc(symLab) + venueChip + '</span>'
     + '<span class="dir">LONG · REVERSAL SNIPER · ' + (tradeable ? 'conviction ' + s.conviction : 'WATCH') + '</span>'
     + (solChip ? ' ' + solChip : '')
+    + (smcChip ? ' ' + smcChip : '')
     + (typeof hgBookStampChip === 'function' ? hgBookStampChip(r.sym, 'long', { scanner: 'reversalsniper', strategy: 'reversalsniper' }) : '')
     + '</div>'
     + '<div class="mini">'
@@ -855,6 +863,30 @@ async function rsRunScan(opts){
       };
     } catch(eStash){}
     results = kept;
+
+    /* SMC context (record-only). Sits after the v689 kill filter so a
+       filtered-out card never records a signal, and after solidity and
+       conviction are final — nothing here can change score, tier, sort
+       order, leadEligible or rsTradeable. The rsAssess setup literal
+       carries no symbol, so a small shim carries sym + levels into
+       hgSmcEnrich and only the resulting context is copied back onto the
+       setup for the card chip; the setup object gains nothing but .smc.
+       Feature-checked: helper missing = no .smc and identical cards. */
+    try {
+      if (typeof W.hgSmcEnrich === 'function'){
+        for (var smi = 0; smi < results.length; smi++){
+          var smr = results[smi];
+          if (!smr || !smr.setup || !Array.isArray(smr.rows) || smr.rows.length < 22) continue;
+          var smShim = {
+            sym: smr.sym || (smr.item && smr.item.sym) || '',
+            dir: 'long',
+            entry: smr.setup.entry, stop: smr.setup.stop, t1: smr.setup.t1
+          };
+          W.hgSmcEnrich(smShim, { rows: smr.rows, tab: 'REVERSAL SNIPER' });
+          if (smShim.smc) smr.setup.smc = smShim.smc;
+        }
+      }
+    } catch(eSmc){}
 
     var lead = null;
     /* Two-pass lead selection: first try to find a rsTradeable + lead-

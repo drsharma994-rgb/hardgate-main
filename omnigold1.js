@@ -504,6 +504,23 @@
     }
     cands.sort(function(a, b){ return (b.matrix.score - a.matrix.score) || (b.gates.pass - a.gates.pass) || (g.gradeRank(b.grade) - g.gradeRank(a.grade)) || ((b.rr1 || 0) - (a.rr1 || 0)); });
     for (ci = 0; ci < cands.length; ci++) cands[ci].rank = ci + 1;
+    /* SMC context (smc-setups.js) — RECORD-ONLY. Runs here, after the mint
+       venue-floor drops (488-492), the SCALP demotion stamp and the matrix /
+       verdict / sort / rank above, so it reads only surviving candidates and
+       nothing it does can reach score, gates, grade, rank, order, filtering or
+       whether a card paints. The only key it adds to a candidate is .smc,
+       which nothing but hgSmcChipHtml reads. Candidates carry no sym field, so
+       XAUUSD goes through opts (never stamped onto the ticket) — the same
+       symbol hgOg1ForwardRecord hard-codes. Bars are this horizon's EXECUTION
+       series (1H for SWING, 15m for SCALP) — the bars entry/stop were priced
+       on. Feature-checked: the test harnesses boot without smc-setups.js. */
+    try{
+      if (typeof W.hgSmcEnrich === 'function'){
+        for (ci = 0; ci < cands.length; ci++){
+          W.hgSmcEnrich(cands[ci], { rows: rows1h, tab: 'OMNIGOLD 1 ' + horizon, sym: 'XAUUSD' });
+        }
+      }
+    }catch(eSmc){}
     var scored = permitted.map(function(d){
       var cs = cands.filter(function(c){ return c.dir === d; });
       return cs.length ? cs[0].matrix : scoreMatrix(ctx, d, null, []);
@@ -1313,8 +1330,11 @@
       return h;
     }
     var c = mp.cand, g = mp.grade;
+    /* SMC context chip — record-only, '' when smc-setups.js is absent or the
+       candidate could not be read (no candles / too few bars). */
+    var smcChipMp = ''; try{ if (typeof W.hgSmcChipHtml === 'function') smcChipMp = W.hgSmcChipHtml(c) || ''; }catch(eSmcMp){ smcChipMp = ''; }
     h += '<div class="og1-mp-head"><b>MOST PROBABLE · ' + esc(hz) + '</b> <span class="og1-grade og1-grade-' + esc(g.grade.replace('+', 'p')) + '">' + esc(g.grade) + '</span> '
-      + '<b class="og1-dir">' + esc(up(c.dir)) + '</b> XAUUSD · <b>' + esc(c.sid) + '</b> ' + esc(c.name) + ' <span class="dim">— ' + esc(c.kind) + '</span> ' + verdictChip(c.verdict) + (g.tradeReady ? tag('trade-ready grade') : tag('watch grade — not trade-ready')) + '</div>';
+      + '<b class="og1-dir">' + esc(up(c.dir)) + '</b> XAUUSD · <b>' + esc(c.sid) + '</b> ' + esc(c.name) + ' <span class="dim">— ' + esc(c.kind) + '</span> ' + verdictChip(c.verdict) + (g.tradeReady ? tag('trade-ready grade') : tag('watch grade — not trade-ready')) + smcChipMp + '</div>';
     h += '<div class="og1-levels"><div><i>ENTRY</i><b>' + px(c.entry) + '</b><u>' + (c.dir === 'long' ? 'BUY ZONE' : 'SELL ZONE') + '</u></div><div><i>STOP</i><b>' + px(c.stop) + '</b><u>SL$ ' + num(c.risk) + '</u></div><div><i>TP1</i><b>' + px(c.t1) + '</b><u>RR ' + num(c.rr1, 1) + ' · ' + esc(c.t1Label) + '</u></div><div><i>TP2</i><b>' + px(c.t2) + '</b><u>RR ' + num(c.rr2, 1) + ' · ' + esc(c.t2Label) + '</u></div></div>';
     h += '<div class="dim">grade basis: ' + esc(g.why.join(' · ')) + '</div>';
     /* hg-v698: named independent confirmations + any missing class, rendered
@@ -1358,7 +1378,10 @@
     var h = '<div class="og1-card og1-card-' + esc(c.dir) + (v && v.qualifies ? ' og1-card-q' : '') + (isBest ? ' og1-card-best' : '') + '"' + (isBest ? ' data-og1-best="' + c.bestRank + '"' : '') + '>';
     h += '<div class="og1-card-head">' + (isBest ? '<span class="og1-best-badge">BEST #' + c.bestRank + '</span> ' : '') + '<b class="og1-dir">' + esc(up(c.dir)) + '</b> <b>XAUUSD</b> · ' + esc(horizon) + ' · <b>' + esc(c.sid) + '</b> ' + esc(c.name) + ' <span class="dim">— ' + esc(c.kind) + '</span></div>';
     var gi = c.gradeInfo || hgOg1Grade(c);
-    h += '<div class="og1-card-chips">' + '<span class="og1-grade og1-grade-' + esc(gi.grade.replace('+', 'p')) + '">' + esc(gi.grade) + '</span>' + verdictChip(v) + (c.demoted ? tag('DEMOTED — paints, never leads') : '') + (gi.tradeReady && !(v && v.qualifies) ? tag('gates permit ' + gi.size + ' size · matrix overlay below 10') : '') + tag('SCORE ' + m.score + '/20') + tag('gates ' + g7.pass + '/12') + tag('location ' + c.grade) + (has(c.rr1) ? tag('RR ' + num(c.rr1, 1)) : tag('RR unavailable')) + tag('families ' + (m.families || []).length) + (c.reclaimed ? tag('reclaim closed · age ' + c.age) : tag('reclaim pending · age ' + c.age)) + '</div>';
+    /* SMC context chip — record-only, appended last so every existing chip
+       keeps its position; '' when smc-setups.js is absent. */
+    var smcChipCard = ''; try{ if (typeof W.hgSmcChipHtml === 'function') smcChipCard = W.hgSmcChipHtml(c) || ''; }catch(eSmcCard){ smcChipCard = ''; }
+    h += '<div class="og1-card-chips">' + '<span class="og1-grade og1-grade-' + esc(gi.grade.replace('+', 'p')) + '">' + esc(gi.grade) + '</span>' + verdictChip(v) + (c.demoted ? tag('DEMOTED — paints, never leads') : '') + (gi.tradeReady && !(v && v.qualifies) ? tag('gates permit ' + gi.size + ' size · matrix overlay below 10') : '') + tag('SCORE ' + m.score + '/20') + tag('gates ' + g7.pass + '/12') + tag('location ' + c.grade) + (has(c.rr1) ? tag('RR ' + num(c.rr1, 1)) : tag('RR unavailable')) + tag('families ' + (m.families || []).length) + (c.reclaimed ? tag('reclaim closed · age ' + c.age) : tag('reclaim pending · age ' + c.age)) + smcChipCard + '</div>';
     h += '<div class="og1-levels"><div><i>ENTRY</i><b>' + px(c.entry) + '</b><u>' + (c.dir === 'long' ? 'BUY ZONE' : 'SELL ZONE') + '</u></div><div><i>STOP</i><b>' + px(c.stop) + '</b><u>SL$ ' + num(c.risk) + '</u></div><div><i>TP1</i><b>' + px(c.t1) + '</b><u>' + esc(c.t1Label) + '</u></div><div><i>TP2</i><b>' + px(c.t2) + '</b><u>' + esc(c.t2Label) + '</u></div></div>';
     h += '<div class="dim og1-card-why">' + esc(v ? v.why : '') + (v && v.missing && v.missing.length ? ' · missing ' + esc(v.missing.slice(0, 3).map(function(x){ return x.name + ' +' + x.pts; }).join(', ')) : '') + (c.demoted && c.demoteWhy ? ' · ' + esc(c.demoteWhy) : '') + '</div>';
     h += '<div class="dim">context ' + esc(ctxLabel) + ' · execution ' + esc(tfLabel) + ' · stop ' + esc(og1StopBasis(c)) + ' · invalidates on two ' + esc(tfLabel) + ' closes ' + (c.dir === 'long' ? 'below ' : 'above ') + px(c.level) + '</div>';
@@ -1377,7 +1400,11 @@
       if (!c || !c.dir || !has(c.entry)) return;
       n++;
       h += '<div class="og1-card og1-card-' + esc(String(c.dir).toLowerCase()) + ' og1-card-bridge"><div class="og1-card-head"><b class="og1-dir">' + esc(up(c.dir)) + '</b> <b>XAUUSD</b> · ' + esc(horizon) + ' · <b>' + esc(c.strategy || c.stratKey || 'desk setup') + '</b> <span class="dim">— GOLD ' + esc(horizon) + ' desk' + (c.id === snap.bestId ? ' · MOST PROBABLE' : '') + '</span></div>';
-      h += '<div class="og1-card-chips">' + tag('desk grade ' + (c.grade || '—')) + (has(c.tally) ? tag('tally ' + c.tally) : '') + (has(c.rr) ? tag('RR ' + num(c.rr, 1)) : '') + (c.locked ? tag('conviction-locked') : '') + '</div>';
+      /* SMC context chip for a BRIDGED desk row — RENDER ONLY, never enrich:
+         these rows belong to the GOLD SCALP / GOLD SWING desks, so the chip
+         paints only if that desk already attached .smc to its own row. */
+      var smcChipBr = ''; try{ if (typeof W.hgSmcChipHtml === 'function') smcChipBr = W.hgSmcChipHtml(c) || ''; }catch(eSmcBr){ smcChipBr = ''; }
+      h += '<div class="og1-card-chips">' + tag('desk grade ' + (c.grade || '—')) + (has(c.tally) ? tag('tally ' + c.tally) : '') + (has(c.rr) ? tag('RR ' + num(c.rr, 1)) : '') + (c.locked ? tag('conviction-locked') : '') + smcChipBr + '</div>';
       h += '<div class="og1-levels"><div><i>ENTRY</i><b>' + px(c.entry) + '</b><u>' + (String(c.dir).toLowerCase() === 'long' ? 'BUY ZONE' : 'SELL ZONE') + '</u></div><div><i>STOP</i><b>' + px(c.stop) + '</b><u>SL$ ' + num(Math.abs(c.entry - c.stop)) + '</u></div><div><i>TP1</i><b>' + px(c.t1) + '</b><u>desk</u></div><div><i>TP2</i><b>' + px(c.t2) + '</b><u>desk</u></div></div>';
       h += '<div class="dim og1-card-why">' + esc(c.why || '') + '</div><div class="dim">bridged from the GOLD ' + esc(horizon) + ' desk — not scored by the 20-point matrix; run that desk for its own gates</div></div>';
     });

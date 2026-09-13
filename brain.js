@@ -400,6 +400,7 @@ var TAPE_EXTREME = 25;    /* |24h change| % — overextended: caution, never a c
 var GATE_MIN_TURNOVER = 5e6;   /* $5M 24h turnover — radar liquidity floor */
 var GATE_OVEREXT_CHG  = 15;    /* |24h change| % — chasing threshold */
 var GATE_FUNDING_ABS  = 0.1;   /* |funding %/8h| — same-direction crowding */
+var SMC_MIN_ROWS      = 22;    /* 2*swingLength+2 — below this smc-setups is a no-op anyway */
 
 /* ---------------- formatters: reuse index.html helpers when present ---------------- */
 function _fmtFb(n, d){ d = (d === undefined) ? 2 : d; return (n === null || n === undefined || !isFinite(n)) ? '—' : Number(n).toLocaleString('en-US', { maximumFractionDigits: d, minimumFractionDigits: 0 }); }
@@ -1916,7 +1917,40 @@ function judgeCrypto(cand, snap){
   return row;
 }
 
+/* SMART MONEY CONCEPTS context — RECORD-ONLY. The brain row keeps its
+   direction on row.dec.dir and its levels on row.plan, neither of which
+   hgSmcEnrich's readers can see, so enrich a flat wrapper over the SAME
+   candle array the plan was built on (row.rows; the queue's 4h leg when an
+   engine-survivor plan carried none) and copy the resulting .smc back onto
+   the row for the card / board / ticket chips. Tier, direction, plan, sort
+   order and visibility are never touched, and it never throws. */
+function brainApplySmc(row){
+  try{
+    if (!row || typeof G.hgSmcEnrich !== 'function') return row;
+    var sPlan = row.plan;
+    if (!sPlan) return row;
+    /* the plan is the truth on direction — the same rule ticketCandidate
+       applies, so the SMC read is taken for the side these entry/stop/t1
+       levels actually belong to (an engine-survivor plan can disagree with
+       the layer vote, and the ticket / board card show the plan side). */
+    var sDir = row.dec && row.dec.dir;
+    if (isDir(sPlan.dir)) sDir = sPlan.dir;
+    if (!isDir(sDir)) return row;
+    if (sPlan.entry == null || !isFinite(+sPlan.entry)) return row;
+    if (sPlan.stop == null || !isFinite(+sPlan.stop)) return row;
+    var sRows = (Array.isArray(row.rows) && row.rows.length >= SMC_MIN_ROWS) ? row.rows
+              : (Array.isArray(row.rows4h) && row.rows4h.length >= SMC_MIN_ROWS) ? row.rows4h : null;
+    if (!sRows) return row;
+    var sWrap = { sym: row.sym, dir: sDir, entry: +sPlan.entry, stop: +sPlan.stop,
+                  t1: (sPlan.t1 != null && isFinite(+sPlan.t1)) ? +sPlan.t1 : null };
+    G.hgSmcEnrich(sWrap, { rows: sRows, tab: 'BRAIN' });
+    if (sWrap.smc) row.smc = sWrap.smc;
+  }catch(eSmc){}
+  return row;
+}
+
 function brainApplyOmniPrincipal(row){
+  brainApplySmc(row);   /* SMC context — record-only; ahead of the omni guard so an absent bridge never hides it */
   if (!row || typeof G.hgOmniPrincipalApply !== 'function') return row;
   try{
     var plan = row.plan;
@@ -3864,13 +3898,15 @@ function ticketHTML(row, dir){
       : esc(p.src ? String(p.src) + ' levels' : 'gate-engine levels') + (p.note ? ' — ' + esc(p.note) : '');
     var venueStamp = (row.exchange === 'delta') ? ' · DELTA'
                    : (row.exchange === 'cdcx') ? ' · COINDCX' : '';
+    var smcChipT = '';
+    try{ if (typeof G.hgSmcChipHtml === 'function') smcChipT = G.hgSmcChipHtml(row) || ''; }catch(eSmc){ smcChipT = ''; }
     return '<div style="flex:1 1 340px;border:1px solid ' + col + ';border-radius:6px;'
       + 'background:rgba(255,255,255,.02);padding:12px 14px">'
       + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">'
       + '<span style="font-size:15px;font-weight:700;letter-spacing:.04em">' + esc(ticketSymTxt(row)) + '</span>'
       + '<span style="font-size:10px;letter-spacing:.08em;color:' + col + ';font-weight:700">'
       + dir.toUpperCase() + ' TICKET · ' + esc(String(dec.tier || '').toUpperCase()) + ' · '
-      + (isFinite(dec.agree) ? dec.agree : 0) + ' LAYERS' + venueStamp + '</span></div>'
+      + (isFinite(dec.agree) ? dec.agree : 0) + ' LAYERS' + venueStamp + '</span>' + smcChipT + '</div>'
       + '<div style="margin-top:8px;font-size:10px;letter-spacing:.1em;color:#9aa6b5">' + headline + '</div>'
       + '<div style="font-size:24px;font-weight:800;font-variant-numeric:tabular-nums;color:' + col + ';line-height:1.2">'
       + PX(p.entry) + '</div>'
@@ -4320,6 +4356,7 @@ function boardCardHTML(c, stamp){
           }catch(eD){}
           return '';
         })()
+      + (function(){ try{ return (typeof G.hgSmcChipHtml === 'function') ? (G.hgSmcChipHtml(row) || '') : ''; }catch(eSmc){ return ''; } })()
       + '</div>'
       + '<div style="margin-top:6px;font-size:9px;letter-spacing:.1em;color:#9aa6b5">' + headline + '</div>'
       + '<div style="font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;color:' + col + ';line-height:1.25">'
@@ -4670,6 +4707,8 @@ function cardHTML(row){
   var setupTier = (typeof G.hgBrainSetupTier === 'function') ? G.hgBrainSetupTier(dec.tier) : 'clean';
   var tierCls = setupTier === 'near' ? ' tier-near' : (setupTier === 'forming' ? ' tier-forming' : '');
   var tierBadge = (typeof G.hgSetupTierBadge === 'function') ? (' ' + G.hgSetupTierBadge(setupTier, dec.tier)) : '';
+  var smcChip = '';
+  try{ if (typeof G.hgSmcChipHtml === 'function') smcChip = G.hgSmcChipHtml(row) || ''; }catch(eSmc){ smcChip = ''; }
   return '<div class="card ' + dir + tierCls + '">'
     + '<div class="chead"><span class="sym">' + esc(row.lane === 'gold' ? 'XAU · GOLD' : row.sym) + '</span>'
     + '<span class="dir"><span class="stamp pass">' + dir.toUpperCase() + '</span> ' + dec.tier
@@ -4677,6 +4716,7 @@ function cardHTML(row){
     + (typeof G.hgBookStampChip === 'function' ? G.hgBookStampChip(row.lane === 'gold' ? 'XAUTUSD' : row.sym, dir, { scanner: 'brain', strategy: 'brain', fund: row.lane === 'gold' ? 'gold' : 'main', klass: row.lane === 'gold' ? 'metal' : 'crypto' }) : '')
     + (typeof G.hgTripleStackChipHtml === 'function' ? G.hgTripleStackChipHtml(row.sym, dir) : '')
     + (typeof G.brainLiveChipHtml === 'function' ? G.brainLiveChipHtml(row) : '')
+    + smcChip
     + '</span></div>'
     + '<div class="mini">'
     + '<span class="k">verdict</span><span>' + esc(dec.reasons[0] || '') + '</span>'

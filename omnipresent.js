@@ -994,6 +994,16 @@
                          here, while rows are still in scope — the omniroute
                          lesson this file already records at opX20Stamp. */
                       opX20Stamp(cands[c], rows);
+                      /* hg-v729: SMC context — RECORD-ONLY. It only adds
+                         cands[c].smc; nothing downstream (opBetterCand,
+                         opRankHead, opX20Wrap, opGates, opShowable) reads it,
+                         so score, ticket, rank, filtering and visibility are
+                         untouched. Bars travel through opts ONLY — the
+                         candidate must stay rows-free (hgOpState JSON-clones
+                         the snapshot and combi.js reads it), and rows is
+                         released a few lines below. Placed after opX20Stamp
+                         so entry/stop/t1 are final. */
+                      if (gfn('hgSmcEnrich')){ try{ W.hgSmcEnrich(cands[c], { rows: rows, tab: 'OMNIPRESENT' }); }catch(eSmc){} }
                       found.push(cands[c]);
                     }
                   }
@@ -1590,7 +1600,9 @@
           h += '<div class="ttl">' + esc(c.base || c.sym) + ' · ' + esc(String(c.dir || '').toUpperCase())
             +  ' · ' + esc(mech)
             +  ' <span class="gpip ok">' + (used20 ? '20X RE-PLAN OK' : '20X GEOMETRY OK') + '</span>'
-            +  ' <span class="dim">' + esc(String(c.exchange || '').toUpperCase()) + '</span></div>';
+            +  ' <span class="dim">' + esc(String(c.exchange || '').toUpperCase()) + '</span>'
+            /* hg-v729: same record-only SMC read as the zone card; '' without the glue. */
+            +  (gfn('hgSmcChipHtml') ? (W.hgSmcChipHtml(c) || '') : '') + '</div>';
           if (used20){
             /* the re-plan card must never read like the zone card — the stop
                is 1h structure chosen to FIT 20x, not the invalidation */
@@ -1655,7 +1667,9 @@
           h += '<div class="ttl">' + esc(c.base || c.sym) + ' · ' + esc(String(c.dir || '').toUpperCase())
             +  ' · ' + esc(gMech)
             +  ' <span class="gpip warn">GEOMETRY-ONLY</span>'
-            +  ' <span class="dim">' + esc(String(c.exchange || '').toUpperCase()) + '</span></div>';
+            +  ' <span class="dim">' + esc(String(c.exchange || '').toUpperCase()) + '</span>'
+            /* hg-v729: same record-only SMC read as the zone card; '' without the glue. */
+            +  (gfn('hgSmcChipHtml') ? (W.hgSmcChipHtml(c) || '') : '') + '</div>';
           h += '<div class="note warn" style="display:block">GEOMETRY OK — quality unproven: no paid forward record; '
             +  'replay for this mechanic: ' + esc(gLine || 'no replay record at all — fully unproven') + '.</div>';
           h += '<div>ENTRY <b>' + pxF(c.entry) + '</b> · STOP <b>' + pxF(c.stop)
@@ -1937,10 +1951,15 @@
     var st = (c.status === 'TRIGGERED')
       ? '<span class="gpip ok">TRIGGERED — rejection closed, entry at market</span>'
       : '<span class="gpip">ARMED — level not yet swept, be there first</span>';
+    /* hg-v729: SMC read, printed only. '' when the glue is absent or the
+       candidate carries no .smc, so the card is byte-identical without it. */
+    var smcChip = '';
+    if (gfn('hgSmcChipHtml')){ try{ smcChip = W.hgSmcChipHtml(c) || ''; }catch(eSmc){ smcChip = ''; } }
     var h = '<div class="card">';
     h += '<div class="ttl">' + esc(c.base || c.sym) + ' · ' + (c.dir === 'short' ? 'SHORT from the high' : 'LONG from the bottom')
        + ' ' + badge + ' ' + st + ' <span class="dim">' + esc(String(c.exchange || '').toUpperCase()) + '</span>'
        + (gfn('hgBookStampChip') ? W.hgBookStampChip(c.sym, c.dir, { scanner: 'omnipresent', strategy: 'OP-' + (c.dir === 'short' ? 'HIGH-REJECT' : 'LOW-REJECT') }) : '')
+       + smcChip
        + '</div>';
     h += '<div>ZONE <b>' + pxF(c.zone.lo) + '–' + pxF(c.zone.hi) + '</b> (' + c.zone.confluence + ' sources: '
        + esc(c.zone.srcs.join(', ')) + ') · ' + c.zone.distAtr.toFixed(1) + 'xATR from market ' + pxF(c.livePx) + '</div>';

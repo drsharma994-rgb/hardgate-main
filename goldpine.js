@@ -465,6 +465,22 @@ function runGoldPineScan(bars, ctx){
   swing = hgGpReorder(swing);
   scalp = hgGpReorder(scalp);
 
+  /* v728: SMC context (record-only). Swing rows read the 4h leg, scalp rows
+     the 15m leg — the same candles each list was formed on. Adds row.smc and
+     one Setup Intelligence signal; never touches score, tier, sort order,
+     filtering or visibility. Feature-checked so a harness without
+     smc-setups.js loaded behaves exactly as before. */
+  try {
+    if (bars && typeof W.hgSmcEnrich === 'function'){
+      for (var gsi = 0; gsi < swing.length; gsi++){
+        if (swing[gsi]) W.hgSmcEnrich(swing[gsi], { rows: bars.rows4h, tab: 'GOLDPINE:swing' });
+      }
+      for (var gci = 0; gci < scalp.length; gci++){
+        if (scalp[gci]) W.hgSmcEnrich(scalp[gci], { rows: bars.rows15m, tab: 'GOLDPINE:scalp' });
+      }
+    }
+  } catch(eSmc){}
+
   return { swing: swing, scalp: scalp, levels: levels, source: source, at: Date.now() };
 }
 
@@ -494,6 +510,14 @@ function cardHTML(s, rank){
     };
     var html = W.hgSetupPanelHTML(sig, { scanner: 'goldpine', label: sig.scriptLabel });
     if (rank) html = html.replace('</h2>', ' <span class="stamp pass">#' + rank + ' PICK</span></h2>');
+    /* v728: SMC context chip in the shared panel head. Empty string when
+       smc-setups.js is absent or the row carries no .smc — html untouched. */
+    try{
+      if (typeof W.hgSmcChipHtml === 'function'){
+        var smcHead = W.hgSmcChipHtml(s) || '';
+        if (smcHead) html = html.replace('</h2>', ' ' + smcHead + '</h2>');
+      }
+    }catch(eSmcP){}
     return html;
   }
   var cls = s.dir === 'long' ? 'long' : 'short';
@@ -521,6 +545,9 @@ function cardHTML(s, rank){
   /* v694: SOLIDITY chip with a per-gate tooltip (5-7 gate reasons). */
   var solChip = (s.solidity && typeof W.hgSolidityChipHtml === 'function')
     ? W.hgSolidityChipHtml(s.solidity) : '';
+  /* v728: SMC context chip — '' when smc-setups.js is absent or s.smc unset. */
+  var smcChip = '';
+  try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(s) || ''; }catch(eSmcC){ smcChip = ''; }
   return '<div class="panel ' + cls + ' tier-' + tier + '" style="margin-bottom:12px">'
     + '<h2>XAUUSD <span>' + esc(s.dir.toUpperCase()) + ' · ' + modeLabel + ' · Grade ' + esc(s.grade)
     + rankBadge + badge
@@ -534,6 +561,7 @@ function cardHTML(s, rank){
     + ' · mark ' + pxF(s.price) + ' · ' + esc(s.source)
     + (fin(+s.rr) ? (' · R:R ' + fmtF(s.rr, 2)) : '')
     + (solChip ? (' ' + solChip) : '')
+    + (smcChip ? (' ' + smcChip) : '')
     + '</div>'
     + '<div class="note" style="margin-top:6px;font-size:11px">' + factorsHTML(s.factors) + '</div>'
     + gpStackHtml

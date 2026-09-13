@@ -149,9 +149,13 @@ the user runs a scan once.
     var tagCls = (c.regime === 'contango') ? 'long' : ((c.regime === 'backwardation') ? 'short' : '');
     var tbStack = termBasisCardStack(row);
     var stackHtml = (tbStack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(tbStack) : '';
+    /* Empty string unless smc-setups.js is loaded AND scanPair got a usable
+       tape, so the card head is unchanged wherever SMC context is absent. */
+    var smcChip = '';
+    try{ if (typeof G.hgSmcChipHtml === 'function') smcChip = G.hgSmcChipHtml(row) || ''; }catch(eSmc){ smcChip = ''; }
     return '<div class="card">'
       + '<div class="card-h"><span class="sym">' + esc(row.pair) + '</span>'
-      + '<span class="tag ' + tagCls + '">' + esc(tag) + '</span>' + termBasisBookStamp(row) + '</div>'
+      + '<span class="tag ' + tagCls + '">' + esc(tag) + '</span>' + termBasisBookStamp(row) + smcChip + '</div>'
       + '<div class="card-b">'
       + '<div class="kv"><span class="k">Perp ann.</span><span class="v">' + fmtN(c.perp, 2) + '%</span></div>'
       + '<div class="kv"><span class="k">Current Q</span><span class="v">' + fmtN(c.cur, 2) + '%</span></div>'
@@ -181,6 +185,43 @@ the user runs a scan once.
     }catch(e){ return null; }
   }
 
+  /* SMC CONTEXT ON THE PERP LEG — RECORD-ONLY.
+
+     The scan row is a curve reading: {pair, curve, mark, turnoverUsd, score}.
+     It carries no direction, entry or stop of its own — the tradeable ticket
+     is built on demand by termBasisPlan(), which returns a FRESH object on
+     every call (cardHTML alone calls it five times). So enrich a throwaway
+     plan and cache only the resulting .smc on the scan row, which is the one
+     object that survives to cardHTML.
+
+     Deliberately NOT copied onto the row: dir / entry / stop / t1. hgMpPin()
+     runs these rows through hgNormalizeSetupRow, which today rejects every
+     one of them for having no levels; giving them flat ticket fields would
+     make MOST PROBABLE start picking term-basis rows, which is a behaviour
+     change, not context. The candles are handed over via opts.rows for the
+     same reason — nothing new lands on the row but .smc.
+
+     Klines are the perp's own 1h tape (binance.js, 60s cache, 10s timeout,
+     [] on geo-block). Any failure, or a tape under the 22 bars the SMC
+     context needs, leaves the row byte-identical to before. The direction
+     here comes from term structure, not price structure, so an AGAINST grade
+     is information about the tape and must never gate the curve, the score,
+     the sort or the plan. */
+  async function attachSmc(pair, out){
+    try{
+      if (typeof G.hgSmcEnrich !== 'function') return;
+      var klines = (typeof G.binanceKlines === 'function') ? G.binanceKlines
+        : ((typeof binanceKlines === 'function') ? binanceKlines : null);
+      if (!klines) return;
+      var plan = termBasisPlan(out);
+      if (!plan) return;
+      var bars = await klines(pair, '1h', 200);
+      if (!Array.isArray(bars) || bars.length < 22) return;
+      G.hgSmcEnrich(plan, { rows: bars, tab: 'TERM BASIS' });
+      if (plan.smc) out.smc = plan.smc;
+    }catch(eSmc){}
+  }
+
   async function scanPair(pair, tick){
     var legs = await Promise.all([
       fetchBasisLeg(pair, 'PERPETUAL'),
@@ -190,13 +231,15 @@ the user runs a scan once.
     if (!legs[0] || !legs[1] || !legs[2]) return null;
     var curve = termBasisCurve(legs[0].annualizedBasisPct, legs[1].annualizedBasisPct, legs[2].annualizedBasisPct);
     if (!curve) return null;
-    return {
+    var out = {
       pair: pair,
       curve: curve,
       mark: (tick && isFinite(tick.mark)) ? tick.mark : legs[0].futuresPrice,
       turnoverUsd: tick ? tick.turnoverUsd : null,
       score: termBasisScore(curve)
     };
+    await attachSmc(pair, out);
+    return out;
   }
 
   /* A TERM STRUCTURE NEEDS DATED CONTRACTS, AND BINANCE LISTS TWO.

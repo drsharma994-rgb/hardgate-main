@@ -180,6 +180,15 @@ is in flight it reports 'busy' (overlaps never double-fetch).
     }catch(e){ return ''; }
   }
 
+  /* SMC context chip — record-only. Empty string whenever smc-setups.js is
+     absent or the card was never enriched, so the card HTML is unchanged. */
+  function carrySmcChip(c){
+    try{
+      if (!c || !c.smc || typeof window.hgSmcChipHtml !== 'function') return '';
+      return window.hgSmcChipHtml(c) || '';
+    }catch(e){ return ''; }
+  }
+
   function carryPlanMeta(c, stack){
     try{
       var lv = c && c.levels;
@@ -466,7 +475,7 @@ is in flight it reports 'busy' (overlaps never double-fetch).
       const carryStackHtml = (carryStack && typeof hgSetupStackMiniHtml === 'function')
         ? hgSetupStackMiniHtml(carryStack) : '';
       return '<div class="card long">'
-        + '<div class="chead"><span class="sym">' + esc(c.base) + '</span><span class="dir">CARRY · ' + esc(pairLbl) + '</span>' + carryBookStamp(c) + '</div>'
+        + '<div class="chead"><span class="sym">' + esc(c.base) + '</span><span class="dir">CARRY · ' + esc(pairLbl) + '</span>' + carryBookStamp(c) + carrySmcChip(c) + '</div>'
         + '<div class="mini">' + mini.map(function(kv){ return '<span class="k">' + kv[0] + '</span><span>' + kv[1] + '</span>'; }).join('') + '</div>'
         + '<div class="gates">' + gates.map(function(g){ return '<span class="gpip ok">' + g + '</span>'; }).join('') + '</div>'
         + '<div class="plan">' + plan + '</div>'
@@ -732,6 +741,25 @@ is in flight it reports 'busy' (overlaps never double-fetch).
               if (c.levels && typeof hgDeskFormationEdgeApply === 'function'){
                 hgDeskFormationEdgeApply(c.levels, { tab: 'carry', rows: kRows });
               }
+              /* SMC context on the reference (binance 4h) tape for the
+                 funding-collecting SHORT leg — the same ticket carryPlanMeta
+                 hands to TRADE PLAN / the book. The card object carries no
+                 dir/entry/stop of its own (they live in c.levels), so enrich a
+                 shim row and copy the resulting .smc onto the card for the
+                 chip. Record-only: levels, spread, sort and filtering are
+                 never touched. */
+              try{
+                if (c.levels && typeof window.hgSmcEnrich === 'function'){
+                  const smcRow = {
+                    sym: c.bin.symbol, dir: 'short', scanner: 'carry',
+                    entry: c.levels.entry, stop: c.levels.stopShort,
+                    t1: c.levels.entry - c.levels.t1Px,
+                    t2: isFinite(c.levels.t2Px) ? c.levels.entry - c.levels.t2Px : null
+                  };
+                  window.hgSmcEnrich(smcRow, { rows: kRows, tab: 'CARRY' });
+                  if (smcRow.smc) c.smc = smcRow.smc;
+                }
+              }catch(eSmc){ /* record-only: never affects levels or the card */ }
             }
           }catch(e){ /* c.levels stays unset -> honest fallback on the card */ }
         }));

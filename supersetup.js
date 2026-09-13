@@ -759,6 +759,15 @@ function enrichSuperSetupRow(c, tier, riskOpts, meta){
   if (typeof W.hgSuperDeskApplyOmniPrincipal === 'function'){
     W.hgSuperDeskApplyOmniPrincipal(hit, TAB_ID, { rows: hit.rows || c.rows || c.rows4h });
   }
+  /* SMC context — record-only, attached once the ticket is finished (levels
+     refined, audits run, sizing done). Candles ride along only on the sources
+     that publish them: BEST clean rows and NEAR swing/scalp rows. CLEAN swing/
+     scalp cand rows are rebuilt upstream without .rows, so hgSmcEnrich sees no
+     candles there and silently no-ops. Nothing here touches score/tier/sort. */
+  var smcRows = hit.rows || c.rows || c.rows4h || null;
+  if (!hit.smc){
+    try{ if (typeof W.hgSmcEnrich === 'function') W.hgSmcEnrich(hit, { rows: smcRows, tab: 'SUPER SETUP' }); }catch(eSmc){}
+  }
   return hit;
 }
 
@@ -1940,13 +1949,15 @@ function mount(el){
       var pill = superSetupDeskPill(r);
       var riskPill = '<span class="hg-pill ' + pill.cls + '">' + pill.label + '</span>';
       var refinePill = r.refined ? '<span class="hg-pill refined">' + String(r.entryType || 'EXACT').toUpperCase() + '</span>' : '';
+      var smcChip = '';
+      try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(r) || ''; }catch(eSmcChip){ smcChip = ''; }
       var sel = (__ss.selectedId === r.id) ? ' sel' : '';
       return '<div class="hg-desk-card' + sel + '" data-id="' + String(r.id).replace(/"/g, '') + '">'
         + '<div class="hg-desk-top"><div class="hg-desk-sym">' + String(r.sym || '—') + ' · '
         + String(r.dir || '').toUpperCase() + '</div>'
         + '<div class="hg-desk-pills"><span class="hg-pill ' + tier + '">' + tierLbl + '</span>'
         + refinePill
-        + '<span class="hg-pill">' + String(r.venueTag || r.scanner || 'venue') + '</span>' + riskPill + '</div></div>'
+        + '<span class="hg-pill">' + String(r.venueTag || r.scanner || 'venue') + '</span>' + riskPill + smcChip + '</div></div>'
         + '<div class="hg-desk-levels">'
         + '<div><div class="k">ENTRY</div><div class="v">' + fmt(r.entry, 8) + '</div></div>'
         + '<div><div class="k">STOP</div><div class="v">' + fmt(r.stop, 8) + '</div></div>'

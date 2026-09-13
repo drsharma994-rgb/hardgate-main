@@ -139,6 +139,10 @@ function dexCardHtml(c, sideRead){
     + ' ' + esc(String(c.dir || '').toUpperCase()) + ' <span class="dim">' + badge + '</span>';
   if (isFinite(fin(c.dexExplode))) h += ' <span class="dim">· explode ' + fin(c.dexExplode) + '</span>';
   if (isFinite(fin(c.dexChg24))) h += ' <span class="dim">· 7d ' + fin(c.dexChg24).toFixed(1) + '%</span>';
+  /* SMC chip (smc-setups.js) — record-only. Production cards render through
+     W.hgOmniSetupCard above, which carries the chip in its shared badge row;
+     this local fallback only runs when omniroute.js is absent. */
+  try{ if (W && typeof W.hgSmcChipHtml === 'function') h += (W.hgSmcChipHtml(c) || ''); }catch(eSmc){}
   h += '</div>';
   if (c.plan){
     h += '<div class="plan">ENTRY ' + esc(String(c.plan.entry)) + ' · STOP ' + esc(String(c.plan.stop))
@@ -285,6 +289,24 @@ async function dexRunScan(ui){
         c.meme = true;
         c.exchange = f.item.exchange;
         c.turnoverUsd = f.item.turnoverUsd;
+        /* SMC CONTEXT (smc-setups.js) — RECORD-ONLY. Attaches c.smc (bias,
+           structure, zone confluence score/grade/tags) and records one
+           SMC_CONTEXT signal per kept candidate under DEX SCREENER. It never
+           changes dexExplode, the grade, the rank or whether a card shows.
+           OMNIROUTE candidates keep their levels under .plan, so a flat shim
+           carries entry/stop/t1 to the enricher (same pattern as mpRow below)
+           and only the digest is copied back. f.rows is the 4h closed tape;
+           it is released after this loop, so this is the last point the
+           candles are in scope. */
+        try{
+          if (W && typeof W.hgSmcEnrich === 'function' && f.rows && f.rows.length){
+            var smcShim = { sym: c.sym, dir: c.dir, kind: c.kind,
+                            entry: c.plan && c.plan.entry, stop: c.plan && c.plan.stop,
+                            t1: c.plan && c.plan.t1, t2: c.plan && c.plan.t2 };
+            W.hgSmcEnrich(smcShim, { rows: f.rows, tab: 'DEX SCREENER' });
+            if (smcShim.smc) c.smc = smcShim.smc;
+          }
+        }catch(eSmc){}
         cands.push(c);
       }
       graded++;

@@ -64,6 +64,21 @@ function cbNormRow(raw, meta){
   if (meta.near) { row.near = true; row.clean = false; }
   if (meta.forming) { row.forming = true; row.clean = false; row.near = false; }
   row.scanner = meta.source || row.scanner;
+  /* v729: SMC context — record-only, never touches scoring or ranking.
+     hgNormalizeSetupRow already ran the wrapped hgSetupSolidityApply, but on a
+     candle-less row, so SMC no-opped there. Inherit the source desk's read when it
+     already has one, else enrich from candles the raw snapshot still carries (chart
+     vision is the only such source today). Candles travel via opts only — combiState()
+     JSON-clones every group/hit, so bars must never be attached to the row. */
+  try{
+    var smcHave = raw.smc;
+    var smcRows = meta.rows || raw.rows || raw.candles || raw.bars || raw.ohlc;
+    if (smcHave && typeof smcHave === 'object' && typeof smcHave.score === 'number'){
+      row.smc = smcHave;
+    } else if (Array.isArray(smcRows) && smcRows.length && gfn('hgSmcEnrich')){
+      W.hgSmcEnrich(row, { rows: smcRows, tab: 'COMBI' });
+    }
+  }catch(eSmc){}
   return row;
 }
 
@@ -442,9 +457,11 @@ function cbCardHtml(g){
     var rew = Math.abs(fin(leader.t1) - fin(leader.entry));
     if (risk > 0 && isFinite(rew)) rr = ' · RR ' + (rew / risk).toFixed(1);
   }
+  var smcChip = '';
+  try{ if (gfn('hgSmcChipHtml')) smcChip = W.hgSmcChipHtml(leader) || ''; }catch(eSmc){ smcChip = ''; }
   var h = '<div class="card' + (g.combiTier === 'BLOCKED' ? ' tier-blocked' : '') + '">';
   h += '<div class="ttl">' + esc(g.sym) + ' · ' + esc(String(g.dir || '').toUpperCase()) + ' '
-    + cbTierPill(g) + ' <span class="dim">score ' + g.score.toFixed(1)
+    + cbTierPill(g) + smcChip + ' <span class="dim">score ' + g.score.toFixed(1)
     + ' · ' + g.sourceCount + ' desks · ' + g.cleanCount + ' CLEAN' + rr + '</span></div>';
   if (g.triple){
     h += '<div class="dim"><span class="gpip ok">TRIPLE STACK</span> SWING + EDGE + BRAIN agree</div>';

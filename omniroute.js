@@ -5430,6 +5430,15 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             + (demChip.smallN ? ' · SMALL N' : '') + '</span>';
         }
       } catch (eDemChip) {}
+      /* SMC chip — Smart Money Concepts context (smc-setups.js), record-only.
+         This is the shared chip row setupCard / 20X / APEX / TOP SETUP all
+         append, so the chip lands once for every card that prints a plan.
+         Feature-checked: a missing helper or an un-enriched candidate renders
+         nothing and the row is byte-identical. */
+      try {
+        var smcW = (typeof window !== 'undefined') ? window : null;
+        if (smcW && typeof smcW.hgSmcChipHtml === 'function') h += (smcW.hgSmcChipHtml(c) || '');
+      } catch (eSmcChip) {}
       return h ? '<div style="margin-top:4px">' + h + '</div>' : '';
     } catch (eB) {
       return '';
@@ -8832,8 +8841,15 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
           solChip = Wc.hgSolidityChipHtml(c.solGrade);
         }
       } catch(eSc){}
+      /* SMC chip (smc-setups.js) — record-only context, drawn next to the
+         shared SOLIDITY chip. Feature-checked; helper missing or candidate
+         un-enriched renders no chip rather than a broken head. */
+      var smcChip = '';
+      try {
+        if (Wc && typeof Wc.hgSmcChipHtml === 'function') smcChip = Wc.hgSmcChipHtml(c) || '';
+      } catch(eSmc){}
       h += '<div class="hg-mp-head">' + esc(String(c.sym || c.base || '')) + ' ' + esc(String(c.dir || '').toUpperCase())
-        +  ' <span>' + esc(c.kind) + ' · ' + esc(grade) + (solChip ? ' ' + solChip : '') + '</span></div>';
+        +  ' <span>' + esc(c.kind) + ' · ' + esc(grade) + (solChip ? ' ' + solChip : '') + (smcChip ? ' ' + smcChip : '') + '</span></div>';
       h += '<div class="hg-mp-note">' + esc(fam) + ' · ' + esc(ind)
         +  ' · WITH TAPE · not a win probability.</div>';
       h += '<div class="hg-mp-grid">';
@@ -10365,6 +10381,36 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             if (!ex.ticker) ex.ticker = fitem;
             var found = hgOmniEvaluate(fitem, held[j].rows, pos, ex);
             for (k = 0; k < found.length; k++) cands.push(found[k]);
+            /* SMC CONTEXT (smc-setups.js) — RECORD-ONLY. Smart Money Concepts
+               structure (BOS/CHOCH bias, order blocks, fair-value gaps, unswept
+               liquidity, premium/discount) is attached to each priced candidate
+               as row.smc and recorded to Setup Intelligence under OMNIROUTE.
+               It NEVER touches the 18-pillar solidity score, the gate ledger,
+               grade.ticket, the tier thresholds, the conviction lead-block or
+               the rank — it adds one field and one chip, nothing else.
+               Hooked HERE, at the tab's own grading site, rather than inside
+               hgOmniEvaluate: that function is documented pure and is shared
+               with DEX SCREENER / OMNIBTC, which record under their own tab
+               labels. held[j].rows is the 4h closed tape (released below), so
+               this is the last point the candles are in scope.
+               Levels live under .plan, so a flat shim carries entry/stop/t1 to
+               the enricher and only the digest is copied back onto the
+               candidate. Feature-checked so the vm harnesses that boot
+               omniroute.js without smc-setups.js stay green. */
+            try {
+              if (W && typeof W.hgSmcEnrich === 'function'){
+                var smcI, smcCand, smcShim;
+                for (smcI = 0; smcI < found.length; smcI++){
+                  smcCand = found[smcI];
+                  if (!smcCand || !smcCand.plan) continue;
+                  smcShim = { sym: smcCand.sym, dir: smcCand.dir, kind: smcCand.kind,
+                              entry: smcCand.plan.entry, stop: smcCand.plan.stop,
+                              t1: smcCand.plan.t1, t2: smcCand.plan.t2 };
+                  W.hgSmcEnrich(smcShim, { rows: held[j].rows, tab: 'OMNIROUTE' });
+                  if (smcShim.smc) smcCand.smc = smcShim.smc;
+                }
+              }
+            } catch (eSmc) {}
             /* Record this contract's firings so OMNIROUTE accumulates the same
                out-of-sample evidence OMNIGOLD does. Every setup with a plan,
                not only tickets, so the forward pool measures the same thing

@@ -374,6 +374,25 @@ function lastT(rows){
   return (lc && isFinite(+lc.t)) ? +lc.t : NaN;
 }
 
+/* ---------------- SMC context bars (hg-v728, record-only) ----------------
+   The bars handed to the SMC read are this desk's OWN feed, cut to CLOSED
+   bars by the SAME HG_GOLD7 rule the 4h tape cut uses in laneOmnigold1 —
+   so the context never reads a still-forming bar. No helper -> raw rows
+   stand, exactly as that fallback does. Read-only: this decides nothing
+   about which bars the ENGINES count as closed, and nothing about the
+   tape, the side, the selection or the crown. */
+function smcBars(rows, tfSec, nowMs){
+  if (!rows || !rows.length) return null;
+  try{
+    var g7 = W.HG_GOLD7;
+    if (g7 && typeof g7.closedRows === 'function'){
+      var cr = g7.closedRows(rows, tfSec, nowMs);
+      if (cr && cr.length) return cr;
+    }
+  }catch(eCB){}
+  return rows;
+}
+
 /* ---------------- desk tape (feature-checked; '' when unread) ---------------- */
 function deskTapeOf(gold){
   try{
@@ -1059,6 +1078,10 @@ function cardHTML(c, tape, pxNow, crowned){
   if (isFinite(c.confScore)) chips += '<span class="gdx-chip">conf ' + fmtF(c.confScore, 0) + '</span>';
   if (isFinite(c.tally)) chips += '<span class="gdx-chip">tally ' + (c.tally > 0 ? '+' : '') + fmtF(c.tally, 0) + '</span>';
   if (isFinite(c.solidity)) chips += '<span class="gdx-chip">solidity ' + fmtF(c.solidity, 0) + '</span>';
+  /* hg-v728 SMC chip: painted only when smc-setups.js is loaded AND this card
+     carries a context. Context, never a verdict — it ranks nothing. Absent
+     helper or absent c.smc -> '' and the card is byte-identical to before. */
+  try{ if (typeof W.hgSmcChipHtml === 'function') chips += (W.hgSmcChipHtml(c) || ''); }catch(eSmcChip){}
   if ((tape === 'long' || tape === 'short') && c.dir !== tape)
     chips += '<span class="gdx-chip warn">AGAINST DESK TAPE — your call</span>';
   else if ((tape === 'long' || tape === 'short') && c.dir === tape)
@@ -1357,6 +1380,34 @@ async function runScan(ui, scanSt){
        it is NEVER flipped here, tape agreement or not. */
     var scalpSel = selectHorizon(all, side, 'SCALP', provenSet);
     var swingSel = selectHorizon(all, side, 'SWING', provenSet);
+
+    /* SMC CONTEXT (hg-v728) — RECORD-ONLY. One read per card that can paint,
+       fed this desk's own closed bars: 15m for SCALP, 4h for SWING, 1h when
+       that feed is missing. It runs AFTER selection, so nothing it produces
+       can reach rankKey/cmpCands, the proven set, the crown, the ledger or
+       the WHY-SILENT counts — the only thing it adds is c.smc and the chip
+       cardHTML paints from it. The read happens on a throwaway shim so the
+       candidate's own shape is untouched (and the ledger's XAUUSD rides with
+       it, so the SMC_CONTEXT signal is not recorded under a blank symbol);
+       a candidate that already carries .smc from its own desk is never
+       re-enriched. Absent smc-setups.js -> the whole block is inert. */
+    try{
+      if (typeof W.hgSmcEnrich === 'function'){
+        var smc1h = (!gold.rows15m.length || !gold.rows4h.length) ? smcBars(gold.rows1h, 3600, now) : null;
+        var smcScalpRows = gold.rows15m.length ? smcBars(gold.rows15m, 900, now) : smc1h;
+        var smcSwingRows = gold.rows4h.length ? smcBars(gold.rows4h, 14400, now) : smc1h;
+        var smcList = scalpSel.matched.concat(swingSel.matched), smcI, smcC, smcRows, smcShim;
+        for (smcI = 0; smcI < smcList.length; smcI++){
+          smcC = smcList[smcI];
+          if (!smcC || smcC.smc) continue;
+          smcRows = (smcC.horizon === 'SWING') ? smcSwingRows : smcScalpRows;
+          if (!smcRows || !smcRows.length) continue;
+          smcShim = { sym: 'XAUUSD', dir: smcC.dir, entry: smcC.entry, stop: smcC.stop, t1: smcC.t1 };
+          W.hgSmcEnrich(smcShim, { rows: smcRows, tab: 'GOLD DIRECTION', sym: 'XAUUSD' });
+          if (smcShim.smc) smcC.smc = smcShim.smc;
+        }
+      }
+    }catch(eSmc){}
 
     /* render */
     if (ui && ui.cards){

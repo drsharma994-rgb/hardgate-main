@@ -1068,6 +1068,18 @@ function edgeAssess(rows, item, candleSrc){
     if (typeof W.hgDeskFormationEdgeApply === 'function'){
       W.hgDeskFormationEdgeApply(plan, { tab: 'edge', rows: rows, dir: sig.dir });
     }
+    /* SMC context — record-only. Never touches tally/plan/sort. plan carries
+       dir/entry/stop/t1/t2 but no sym, so enrich a flat view and pin .smc onto
+       the plan cardHTML renders from. rows are closed 4H bars (>= 210). */
+    try{
+      if (W && typeof W.hgSmcEnrich === 'function'){
+        var smcView = { sym: (item && item.sym) || '', dir: plan.dir, entry: plan.entry,
+          stop: plan.stop, t1: plan.t1, t2: plan.t2 };
+        W.hgSmcEnrich(smcView, { rows: rows,
+          tab: (item && String(item.exchange || '').toLowerCase() === 'startrader') ? 'STARTRADER EDGE' : 'EDGE' });
+        if (smcView.smc) plan.smc = smcView.smc;
+      }
+    }catch(eSmc){}
     return { sig: sig, enrich: en, plan: plan, tally: en.tally, parts: en.parts,
       weakTally: en.tally < MIN_TALLY };
   }catch(e){ return null; }
@@ -1223,11 +1235,13 @@ function cardHTML(r){
   var visionChip = r.visionChip
     ? ' <span class="gpip ok">' + esc(r.visionChip) + '</span>' : '';
   var visionHtml = (typeof W.hgChartVisionCardBlock === 'function') ? W.hgChartVisionCardBlock(r) : '';
+  var smcChip = '';
+  try{ if (W && typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(p) || ''; }catch(eSmc){ smcChip = ''; }
   return '<div class="card ' + sig.dir + '">'
     + '<div class="chead"><span class="sym">' + esc(sym) + '</span>'
     + '<span class="dir"><span class="stamp pass">' + sig.dir.toUpperCase() + '</span>'
     + ' EDGE · tally ' + (r.tally || 0) + ' · exp ' + fmtSignedR(bt.expR) + ' '
-    + edgeFreshnessChip(sig.barAge) + ' ' + edgeFlowChip(en) + visionChip + '</span>'
+    + edgeFreshnessChip(sig.barAge) + ' ' + edgeFlowChip(en) + visionChip + smcChip + '</span>'
     + (typeof W.hgBookStampChip === 'function' ? W.hgBookStampChip(sym, sig.dir, { scanner: 'edge', strategy: 'edge', fund: edgeFund, klass: edgeKlass }) : '')
     + (typeof W.hgTripleStackChipHtml === 'function' ? W.hgTripleStackChipHtml(sym, sig.dir) : '')
     + '</div>'

@@ -963,10 +963,13 @@ function cardHTML(c, isBest, season, tape){
   }).join(' · ');
   var visionLine = visionText
     ? '<div class="gsx-whyline"><b>VISION:</b> ' + esc(visionText) + '</div>' : '';
+  var smcChip = '';
+  try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(c) || ''; }catch(eSmcC){ smcChip = ''; }
   return '<div class="card gsx-card ' + c.dir + (isBest ? ' best' : '') + '"' + gsxSt(GSX_CARD) + '>'
     + '<div class="chead"><span class="sym"' + gsxSt(GSX_SYM) + '>' + esc(c.venue) + '</span>'
     + '<span class="dir">' + dirUp + ' · <span class="gsx-grade ' + esc(c.grade) + '">GRADE ' + esc(c.grade) + '</span></span>'
     + (typeof hgBookStampChip === 'function' ? hgBookStampChip(c.sym, c.dir, { scanner: 'goldscalp', strategy: 'goldscalp', klass: 'metals', fund: 'gold' }) : '')
+    + smcChip
     + '</div>'
     + '<div class="gsx-strat"' + gsxSt(GSX_STRAT) + '>' + esc(c.strategy) + (isBest ? ' · ★ MOST PROBABLE' : '') + '</div>'
     + '<div class="mini"' + gsxSt(GSX_MINI) + '>'
@@ -1758,6 +1761,25 @@ async function runScan(ui, scanSt){
        MOST PROBABLE. goldRankSetups holds this rule; the desk holds it too. */
     if (displayBest && (displayBest.demoted || displayBest.vetoed)) displayBest = null;
     goldStampTape(display, deskTape);
+    /* hg-v729: Smart Money Concepts context on the finished cards — RECORD ONLY.
+       Runs after every level engine, the spot alignment, the conviction lock and
+       the lead invariant, so it reads the exact objects cardHTML paints. It only
+       attaches c.smc and records an SMC_CONTEXT signal; it never touches tally,
+       grade, demotion, veto, ordering, filtering or the lead. */
+    try{
+      if (typeof W.hgSmcEnrich === 'function'){
+        var smcTab = (scanSt && scanSt.deskTab) || 'GOLD SCALP';
+        for (var smcI = 0; smcI < display.length; smcI++){
+          var smcC = display[smcI];
+          if (!smcC || !smcC.dir) continue;
+          var smcVr = venueRows ? venueRows[smcC.venue] : null;
+          W.hgSmcEnrich(smcC, {
+            rows: (smcVr && smcVr.rows15m && smcVr.rows15m.length) ? smcVr.rows15m : gold.rows15m,
+            tab: smcTab
+          });
+        }
+      }
+    }catch(eSmc){}
 
     if (lock.transitions.length){
       legs.push(lock.transitions.length + ' conviction' + (lock.transitions.length === 1 ? '' : 's')
@@ -1961,6 +1983,7 @@ function goldscalpMountInto(el, scanSt, cfg){
     };
     scanSt.ui = ui;
     scanSt.useStartraderRouting = !!cfg.useStartraderRouting;
+    scanSt.deskTab = cfg.deskTab || 'GOLD SCALP';   /* same bucket label hgSetupPaintDesk uses below */
 
     var missing = [];
     if (!gfn('goldScalpSetups') && !gfn('goldScalpSetup')) missing.push('goldScalpSetups/goldScalpSetup (goldind.js)');

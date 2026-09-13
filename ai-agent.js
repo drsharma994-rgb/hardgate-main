@@ -218,14 +218,22 @@ function runTrendmxScoutFromRows(rows){
   if (goldenFn){
     try{
       var list = goldenFn(rows) || [];
+      var byS = {};
+      if (Array.isArray(rows)){
+        for (var k = 0; k < rows.length; k++){
+          if (rows[k] && rows[k].sym && Array.isArray(rows[k].rows4h)) byS[rows[k].sym] = rows[k].rows4h;
+        }
+      }
       for (var i = 0; i < list.length; i++){
         var g = list[i];
         if (!g || !hasSetupLevels(g)) continue;
-        finds.push(finding(g.sym, g.dir, {
+        var tf = finding(g.sym, g.dir, {
           src: 'TRENDMX GOLDEN', entry: g.entry, stop: g.stop, t1: g.t1, t2: g.t2,
           rr: g.rr, score: g.score != null ? g.score : 12, clean7: !!g.clean7,
           tier: g.tier || g.conviction, prime: !!g.prime, note: g.note,
-        }));
+        });
+        try{ if (typeof W.hgSmcEnrich === 'function' && Array.isArray(byS[g.sym])) W.hgSmcEnrich(tf, { rows: byS[g.sym], tab: 'AI AGENT' }); }catch(eSmc){}
+        finds.push(tf);
       }
     }catch(e){}
   }
@@ -424,11 +432,13 @@ function runPineScout(){
       for (var i = 0; i < sigs.length; i++){
         var s = sigs[i];
         if (!s || (!s.isNew && !s.isRecent)) continue;
-        finds.push(finding(s.sym, s.dir, {
+        var pf = finding(s.sym, s.dir, {
           src: 'PINE', entry: s.entry, stop: s.stop, t1: s.t1,
           score: fin(+s.smoothedScore) ? +s.smoothedScore : 7,
           note: s.isNew ? 'fresh pine signal' : 'recent pine',
-        }));
+        });
+        try{ if (typeof W.hgSmcEnrich === 'function' && Array.isArray(s.rows)) W.hgSmcEnrich(pf, { rows: s.rows, tab: 'AI AGENT' }); }catch(eSmc){}
+        finds.push(pf);
       }
     }catch(e1){}
   }
@@ -465,11 +475,13 @@ function runStrategyLab(){
         if (lvFn){
           var lv = lvFn('ema', rows);
           if (lv && lv.dir){
-            finds.push(finding('BTCUSD', lv.dir, {
+            var lab = finding('BTCUSD', lv.dir, {
               src: 'STRATEGY LAB', score: 7,
               entry: lv.entry, stop: lv.stop, t1: lv.t1,
               note: 'EMA cross live · ' + notes.join(' · '),
-            }));
+            });
+            try{ if (typeof W.hgSmcEnrich === 'function') W.hgSmcEnrich(lab, { rows: rows, tab: 'AI AGENT' }); }catch(eSmc){}
+            finds.push(lab);
           }
         }
         if (!finds.length && notes.length){
@@ -752,8 +764,10 @@ function renderAgentCards(desk){
       for (var fi = 0; fi < rep.findings.length && fi < 2; fi++){
         var ff = rep.findings[fi];
         if (!hasSetupLevels(ff)) continue;
+        var smcChipAg = '';
+        try{ if (typeof W.hgSmcChipHtml === 'function') smcChipAg = W.hgSmcChipHtml(ff) || ''; }catch(eSmcAg){ smcChipAg = ''; }
         h += '<div class="note" style="margin-top:6px;font-size:11px;line-height:1.5;border-left:2px solid var(--border);padding-left:8px">'
-          + '<b>' + toEsc(ff.sym) + '</b> <span class="' + (ff.dir === 'long' ? 'pos' : 'neg') + '">' + toEsc(ff.dir) + '</span><br>'
+          + '<b>' + toEsc(ff.sym) + '</b> <span class="' + (ff.dir === 'long' ? 'pos' : 'neg') + '">' + toEsc(ff.dir) + '</span>' + smcChipAg + '<br>'
           + setupLevelsTag(ff) + '</div>';
       }
     }
@@ -778,6 +792,8 @@ function renderSetupDetailCards(desk){
     var rr = f.rr != null && fin(+f.rr) ? +f.rr : agentRr(f.entry, f.stop, f.t1);
     var riskPct = fin(+f.entry) && fin(+f.stop) ? Math.abs(+f.entry - +f.stop) / Math.abs(+f.entry) * 100 : null;
     var tier = f.clean7 ? '7/7 CLEAN' : (f.nearClean ? '6/7 NEAR' : (f.tier || 'SETUP'));
+    var smcChip = '';
+    try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(f) || ''; }catch(eSmc){ smcChip = ''; }
     h += '<div class="hg-panel" style="padding:12px;margin:0">'
       + '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:baseline">'
       + '<span style="font-weight:700;font-size:14px">' + toEsc(f.sym) + '</span>'
@@ -786,6 +802,7 @@ function renderSetupDetailCards(desk){
       + (f.venue || f.exchange ? '<span class="note" style="margin:0">' + toEsc(f.venue || f.exchange) + '</span>' : '')
       + (f.style ? '<span class="note" style="margin:0">' + toEsc(f.style) + '</span>' : '')
       + (f.confluence >= 2 ? '<span class="gpip ok" title="Multiple agents agree on this sym+dir">' + f.confluence + '-agent confluence</span>' : '')
+      + smcChip
       + '</div>'
       + '<div class="note" style="margin-top:4px">' + toEsc(f.agentLabel || f.agentId || f.src || 'agent')
       + (f.score != null ? ' · score <span class="hg-num">' + f.score + '</span>' : '') + '</div>'

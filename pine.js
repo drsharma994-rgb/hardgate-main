@@ -241,6 +241,18 @@ function signalFromScript(item, script, res, rows){
       }
     }catch(eOm){}
   }
+  /* SMC context — record-only. signalFromScript is the single finaliser for
+     both the live scan and pineEvalEligible, and by here the levels are set,
+     the invisible tiers have already returned null and the OMNIROUTE
+     principal has had its say, so the ticket will not be rebuilt. The main
+     PINE tab has no pineSubEnrichSignal hop, so this is the only place the
+     enrich can fire. Tab key is PINE_<scriptId> — the same key the nine
+     sub-tabs record under — so one signal cannot land in two buckets
+     depending on which tab scanned it first. */
+  try{
+    if (typeof W.hgSmcEnrich === 'function')
+      W.hgSmcEnrich(sig, { rows: rows, tab: 'PINE_' + String(script.id || 'SUB') });
+  }catch(eSmc){}
   return sig;
 }
 

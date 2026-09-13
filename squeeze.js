@@ -587,10 +587,12 @@ function sqFiredDeskHTML(items){
     var r = items[i], plan = squeezePlan({ sym: r.sym, dir: r.dir, cls: r.cls, rows4h: r.rows4h, rows1h: r.rows1h, kind: r.kind, gate: r.gate, tick: r.tick });
     if (!plan) continue;
     var col = r.dir === 'long' ? '#047857' : '#dc2626';
+    var smcChip = '';
+    try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(r) || ''; }catch(e){ smcChip = ''; }
     var tradeOn = (typeof hgToTradePlanOnclickAttr === 'function')
       ? hgToTradePlanOnclickAttr(r.sym, r.dir, plan.entry, plan.stop, plan.t1, { t2: plan.t2, stack: plan.stack, scanner: 'squeeze', strategy: 'squeeze-fired' }) : '';
     cards += '<div style="flex:1 1 280px;max-width:380px;border:1px solid rgba(5,150,105,.45);border-left:4px solid ' + col + ';border-radius:8px;padding:12px;background:rgba(5,150,105,.06)">'
-      + '<div><b>' + esc(r.sym) + '</b> · ' + r.dir.toUpperCase() + ' · <span class="stamp pass">SQZ FIRED</span></div>'
+      + '<div><b>' + esc(r.sym) + '</b> · ' + r.dir.toUpperCase() + ' · <span class="stamp pass">SQZ FIRED</span>' + smcChip + '</div>'
       + '<div style="font-size:22px;font-weight:800;color:' + col + ';margin:6px 0">' + pxF(plan.entry) + '</div>'
       + '<div class="plan">' + squeezePlanHTML(plan) + '</div>'
       + (tradeOn ? '<button class="toTrade" onclick="' + tradeOn + '">SEND TO TRADE PLAN →</button>' : '')
@@ -625,10 +627,12 @@ function sqLimitBoardHTML(results){
       var st = hgLimitState(p, r.rows4h[r.rows4h.length - 1].c, atrL);
       if (st && st.label) stHtml = '<span class="stamp" style="margin-left:6px">' + esc(st.label) + '</span>';
     }
+    var smcChip = '';
+    try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(r) || ''; }catch(e){ smcChip = ''; }
     var tradeOn = (typeof hgToTradePlanOnclickAttr === 'function')
       ? hgToTradePlanOnclickAttr(r.sym, dir, p.entry, p.stop, p.t1, { t2: p.t2, stack: p.stack, scanner: 'squeeze', strategy: 'squeeze' }) : '';
     return '<div style="flex:1 1 260px;max-width:360px;border:1px solid #E2E8F0;border-left:3px solid ' + col + ';border-radius:8px;padding:10px 12px;background:#fff">'
-      + '<div><b>' + esc(r.sym) + '</b>' + sqVenueChip(r) + ' · ' + dir.toUpperCase() + stHtml + '</div>'
+      + '<div><b>' + esc(r.sym) + '</b>' + sqVenueChip(r) + ' · ' + dir.toUpperCase() + stHtml + smcChip + '</div>'
       + '<div style="font-size:18px;font-weight:800;color:' + col + ';margin:4px 0">' + pxF(p.entry) + '</div>'
       + '<div class="note">' + squeezePlanHTML(p) + '</div>'
       + (tradeOn ? '<button class="toTrade" onclick="' + tradeOn + '">SEND TO TRADE PLAN →</button>' : '')
@@ -648,6 +652,11 @@ function sqSetupCardHTML(r, tier){
       ['KIND', r.kind === 'fired' ? 'SQZ FIRED' : 'DC BREAK'],
       ['ENTRY', pxF(plan.entry)], ['R:R', fmtF(plan.rr1, 1) + 'R']
     ];
+    /* CLEAN cards render through the shared hgSetupCardHTML, whose head takes
+       no caller chips — surface the record-only SMC read in the mini row. */
+    var smcChip = '';
+    try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(r) || ''; }catch(e){ smcChip = ''; }
+    if (smcChip) mini.push(['SMC', smcChip]);
     var gates = r.gate ? [[r.gate.label, r.gate.clean7 && !r.gate.veto]] : [];
     return hgSetupCardHTML({
       sym: r.sym, dir: dir, tier: tier, mini: mini, gates: gates,
@@ -761,6 +770,9 @@ function cardHTML(r){
   var cls = r.cls, tick = r.tick;
   var turnover = tick ? '$' + fmtF(tick.turnoverUsd / 1e6, 0) + 'M' : '—';
   var lastC = r.rows4h[r.rows4h.length - 1].c;
+  /* SMC read attached by publishSqueezeState — '' when the row has none. */
+  var smcChip = '';
+  try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(r) || ''; }catch(e){ smcChip = ''; }
 
   if (r.kind === 'build'){
     return '<div class="card tier-forming">'
@@ -798,6 +810,7 @@ function cardHTML(r){
     return '<div class="card ' + r.dir + '">'
       + '<div class="chead"><span class="sym">' + esc(r.sym) + sqVenueChip(r) + '</span><span class="dir">' + dirUp + ' · SQZ FIRED'
       + (cls.trendAgree === false ? ' · AGAINST TREND' : '') + '</span>'
+      + smcChip
       + (typeof hgBookStampChip === 'function' ? hgBookStampChip(r.sym, r.dir, { scanner: 'squeeze', strategy: 'squeeze' }) : '')
       + '</div>'
       + '<div class="mini">'
@@ -817,6 +830,7 @@ function cardHTML(r){
   var dUp = cls.donchianBreak === 'LONG';
   return '<div class="card ' + r.dir + '">'
     + '<div class="chead"><span class="sym">' + esc(r.sym) + sqVenueChip(r) + '</span><span class="dir">' + dirUp + ' · DC' + DC_LEN + ' BREAKOUT</span>'
+    + smcChip
     + (typeof hgBookStampChip === 'function' ? hgBookStampChip(r.sym, r.dir, { scanner: 'squeeze', strategy: 'squeeze' }) : '')
     + '</div>'
     + '<div class="mini">'
@@ -882,6 +896,20 @@ function publishSqueezeState(results){
             if (isFinite(+pubPlan.t2)) row.t2 = +pubPlan.t2;
           }
         }catch(ePub){}
+        /* SMC context — the setup is finished here: this is the one place per
+           scan where a direction, the plan levels and the row's own 4H candles
+           are all in hand. RECORD-ONLY: row.smc is read by the card chip and
+           by Setup Intelligence; it never touches kind, dir, tier, sort order
+           or whether a card is shown. Enriched on a synthetic ticket so the
+           published {sym,dir,kind,entry,stop,t1} contract keeps its shape, then
+           the read is copied onto the scan row the cards render from. */
+        try{
+          if (typeof W.hgSmcEnrich === 'function'){
+            var smcRow = { sym: r.sym, dir: row.dir, entry: row.entry, stop: row.stop, t1: row.t1 };
+            W.hgSmcEnrich(smcRow, { rows: r.rows4h, tab: 'SQUEEZE' });
+            if (smcRow.smc) r.smc = smcRow.smc;
+          }
+        }catch(eSmc){}
       }
       rows.push(row);
       syms.push(r.sym);

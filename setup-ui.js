@@ -631,6 +631,15 @@ function hgSetupPanelHTML(sig, opts){
   var tradeBtn = (tier === 'clean')
     ? '<button class="toTrade" onclick="' + tradeOnclick + '">SEND TO TRADE PLAN →</button>'
     : '<div class="note warn" style="margin-top:8px">' + (tier === 'forming' ? 'FORMING — wait for NEW bar or full confluence before sizing.' : 'WATCH tier — not a ticket yet.') + '</div>';
+  /* SMC context chip — record-only. Reads sig.smc, which upstream attached
+     (hgSmcEnrich directly, or the pineSubEnrichSignal wrapper for the nine
+     PINE sub-tabs); it never computes and never touches tier, sort or
+     visibility. Missing helper or missing sig.smc => '' and this card's
+     markup is byte-identical to before. One edit here lights the chip on
+     every hgSetupPanelHTML consumer: PINE, the nine PINE sub-tabs, GOLD
+     PINE — instead of nine copies that drift apart. */
+  var smcChip = '';
+  try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(sig) || ''; }catch(eSmc){ smcChip = ''; }
 
   return '<div class="panel ' + cls + tierCls + '" style="margin-bottom:12px">'
     + '<h2>' + suEsc(sig.sym) + ' <span>' + suEsc(String(sig.dir || '').toUpperCase()) + ' · ' + suEsc(label)
@@ -638,6 +647,7 @@ function hgSetupPanelHTML(sig, opts){
     + ((typeof W.hgBookStampChip === 'function')
       ? W.hgBookStampChip(sig.sym, sig.dir, { scanner: opts.scanner || 'pine', strategy: sig.scriptId || opts.scanner || 'pine' })
       : '')
+    + smcChip
     + '</span></h2>'
     + '<div class="note">' + noteHtml
     + ' · mark ' + pxF(sig.price || sig.entry) + hits

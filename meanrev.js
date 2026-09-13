@@ -382,11 +382,15 @@ function cardHTML(r){
     ? '<button class="toTrade" onclick="' + tradeOnclick + '">SEND TO TRADE PLAN →</button>' : '';
   var bookBtn = (lv && typeof bookBtnHTML === 'function')
     ? bookBtnHTML(r.sym, sig.dir, lv.entry, lv.stop, lv.t1, { scanner: 'meanrev', strategy: 'meanrev', t2: lv.t2, stack: mrStack }) : '';
+  /* SMC read attached during the scan — display only, '' when absent */
+  var smcChip = '';
+  try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(r) || ''; }catch(eSmcC){ smcChip = ''; }
 
   return '<div class="card ' + sig.dir + '">'
     + '<div class="chead"><span class="sym">' + esc(r.sym) + '</span>'
     + '<span class="dir">' + dirUp + ' · MEAN REV · exp ' + fmtSignedR(bt.expR) + '</span>'
     + (typeof hgBookStampChip === 'function' ? hgBookStampChip(r.sym, sig.dir, { scanner: 'meanrev', strategy: 'meanrev' }) : '')
+    + smcChip
     + '</div>'
     + (r.omniDemoted ? '<div class="note warn">OMNI replay — VWAP-REVERT / divergence desk stands aside on this day book.</div>' : '')
     + '<span class="k">last</span><span>' + pxF(st.last) + '</span>'
@@ -540,6 +544,31 @@ function mount(el){
                 }
               }catch(eOm){}
             }
+            /* SMC context (smc-setups.js) — the setup is finished here: the
+               direction, the traded plan levels and this symbol's own closed 4H
+               tape are all in hand, once per symbol per scan and never inside a
+               repaint. RECORD-ONLY: the scan row only gains .smc, read by the
+               card chip and by Setup Intelligence. Nothing below reads it — sig,
+               bt, stats, the expectancy sort, the plan levels and whether a card
+               is shown are all untouched. A mean-reversion fade is frequently
+               structurally AGAINST the SMC bias; that grade is recorded as
+               information and must never demote, filter or re-score this desk.
+               The scan row nests its ticket under row.sig, so hgSmcEnrich gets a
+               flat synthetic view built from the same meanrevPlan the card and
+               the MOST PROBABLE pin trade (putting top-level dir/entry/stop on
+               the row itself would change what hgNormalizeSetupRow picks), and
+               the result is copied back onto the row. */
+            try{
+              if (typeof W.hgSmcEnrich === 'function'){
+                var smcPlan = meanrevPlan({ dir: sig.dir, entry: sig.entry, extreme: row.stats.extreme,
+                  atr: row.stats.atr, mean: sig.target, oppBand: row.stats.oppBand });
+                var smcRow = smcPlan
+                  ? { sym: sym, dir: smcPlan.dir, entry: smcPlan.entry, stop: smcPlan.stop, t1: smcPlan.t1, t2: smcPlan.t2 }
+                  : { sym: sym, dir: sig.dir, entry: sig.entry, stop: sig.stop, t1: sig.target };
+                W.hgSmcEnrich(smcRow, { rows: rows, tab: 'MEAN REV' });
+                if (smcRow.smc) row.smc = smcRow.smc;
+              }
+            }catch(eSmc){}
             results.push(row);
           }catch(e){ failed++; }
         }));

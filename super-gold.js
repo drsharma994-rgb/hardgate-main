@@ -376,6 +376,34 @@ function enrichSuperGoldRow(c, tier, riskOpts, meta){
     ? hit.positionSize.positionSizeUnits : calc.qty;
   hit.notional = hit.positionSize && hit.positionSize.notionalValueUSD != null
     ? hit.positionSize.notionalValueUSD : calc.notional;
+
+  /* SMC CONTEXT — RECORD-ONLY, attached where the ticket is FINISHED: levels
+     refined by hgApplyGoldBestLevels, gold desk audit run, spot sizing
+     attached, tier/minimalLossPass/riskReason already decided above. Nothing
+     here or downstream reads hit.smc — superGoldSortCands, superGoldDeskPill,
+     hitToEvaluation and the send-to-trade gate never consult it — so the
+     measured gold desk scoring is untouched.
+     COVERAGE IS PARTIAL BY CONSTRUCTION. This desk re-presents candidates from
+     goldscalpScan() / goldswingScan(), and both publish whitelisted, frozen
+     cand objects that DROP the bar arrays, so in practice no candles arrive
+     and hgSmcEnrich silently no-ops. The read is wired to exactly the fields
+     refineSuperGoldLevels already expects candles on (rows15m / rows1h /
+     rows4h / rows), preferring the source scanner's own timeframe, so it
+     lights up the moment an upstream hydrates them. A cand that already
+     carries .smc from its own desk is copied forward, never re-enriched. */
+  if (c.smc && !hit.smc){
+    hit.smc = c.smc;
+  } else if (!hit.smc){
+    var smcIsScalp = String(hit.scanner || '').toLowerCase().indexOf('scalp') >= 0;
+    var smcRows = smcIsScalp
+      ? (c.rows15m || c.m15 || c.rows1h || c.rows4h || c.rows || null)
+      : (c.rows4h || c.rows || c.rows1h || c.rows15m || c.m15 || null);
+    try{
+      if (typeof W.hgSmcEnrich === 'function' && Array.isArray(smcRows) && smcRows.length){
+        W.hgSmcEnrich(hit, { rows: smcRows, tab: 'SUPER GOLD' });
+      }
+    }catch(eSmc){}
+  }
   return hit;
 }
 
@@ -933,6 +961,9 @@ function mount(el){
       var pill = superGoldDeskPill(r);
       var sel = (__sg.selectedId === r.id) ? ' sel' : '';
       var tierPillCls = r.tier === 'clean' ? 'clean' : 'watch';
+      /* SMC chip — pure read of r.smc; '' when the row has none. */
+      var smcChip = '';
+      try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(r) || ''; }catch(eSmcChip){ smcChip = ''; }
       return '<div class="hg-desk-card' + sel + '" data-id="' + String(r.id).replace(/"/g, '') + '">'
         + '<div class="hg-desk-top">'
         + '<div class="hg-desk-sym">' + String(r.sym || 'XAU') + ' · ' + String(r.dir || '').toUpperCase() + '</div>'
@@ -940,6 +971,7 @@ function mount(el){
         + '<span class="hg-pill ' + tierPillCls + '">' + tierLbl + '</span>'
         + '<span class="hg-pill">' + String(r.scanner || '') + '</span>'
         + '<span class="hg-pill ' + pill.cls + '">' + pill.label + '</span>'
+        + smcChip
         + '</div></div>'
         + '<div class="hg-desk-levels">'
         + '<div><div class="k">ENTRY</div><div class="v">' + fmt(r.entry, 2) + '</div></div>'

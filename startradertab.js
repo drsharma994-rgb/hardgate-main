@@ -122,10 +122,27 @@ async function stEdgeScanList(list, fetchCandles, hooks){
         var assessed = api.assess(rows, item, src);
         if (!assessed){ tallyFail++; return; }
         var bt = api.backtest(rows);
-        found.push({
+        var edgeRow = {
           item: item, sym: item.sym, sig: assessed.sig, plan: assessed.plan,
           enrich: assessed.enrich, tally: assessed.tally, bt: bt, candleSrc: src
-        });
+        };
+        /* SMC context — record-only, and only reachable through this fallback:
+           a current edge.js supplies edgeScanList and enriches assessed.plan itself
+           inside edgeAssess, so reuse that read when it is already there rather than
+           recording the same setup twice. Same 'STARTRADER EDGE' bucket edge.js uses
+           for startrader items, so the two paths cannot split the bucket. */
+        try{
+          if (assessed.plan && assessed.plan.smc){
+            edgeRow.smc = assessed.plan.smc;
+          } else if (typeof W.hgSmcEnrich === 'function'){
+            var smcSrc = assessed.plan || assessed.sig || {};
+            var smcView = { sym: item.sym, dir: assessed.sig && assessed.sig.dir,
+              entry: smcSrc.entry, stop: smcSrc.stop, t1: smcSrc.t1, t2: smcSrc.t2 };
+            W.hgSmcEnrich(smcView, { rows: rows, tab: 'STARTRADER EDGE' });
+            if (smcView.smc) edgeRow.smc = smcView.smc;
+          }
+        }catch(eSmc){}
+        found.push(edgeRow);
       }catch(e){ skipped++; }
     }));
     await sleep(ST_EDGE_CHUNK_MS);
@@ -149,9 +166,11 @@ function stEdgeCardFn(r){
     ? ('entry ' + pxF(p.entry) + ' · stop ' + pxF(p.stop)
       + (isFinite(p.t1) ? ' · T1 ' + pxF(p.t1) : ''))
     : 'levels unavailable';
+  var smcChip = '';
+  try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(r) || ''; }catch(eSmc){ smcChip = ''; }
   return '<div class="card ' + esc(sig.dir || '') + '"><div class="chead"><span class="sym">' + esc(sym)
     + '</span><span class="dir">' + esc((sig.dir || '').toUpperCase()) + ' · tally ' + (r.tally || 0)
-    + '</span></div><div class="cbody"><span class="k">strategy</span><span>' + esc(sig.edge || 'EDGE')
+    + '</span>' + smcChip + '</div><div class="cbody"><span class="k">strategy</span><span>' + esc(sig.edge || 'EDGE')
     + '</span><span class="k">plan</span><span>' + plan + '</span></div></div>';
 }
 
@@ -673,11 +692,14 @@ function cardHTML(r){
     ? '<button class="toTrade" onclick="' + tradeOnclick + '">SEND TO TRADE PLAN →</button>' : '';
   var visionChip = (!draft && r.visionChip) ? ' <span class="gpip ok">' + esc(r.visionChip) + '</span>' : '';
   var visionHtml = (!draft && typeof W.hgChartVisionCardBlock === 'function') ? W.hgChartVisionCardBlock(r) : '';
+  var smcChip = '';
+  try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(r) || ''; }catch(eSmc){ smcChip = ''; }
   return '<div class="card ' + tierCls + '">'
     + '<div class="chead"><span class="sym">' + esc(r.sym) + '</span>'
     + '<span class="gpip">' + klassChip(r.klass) + '</span>'
     + '<span class="dir">' + r.dir.toUpperCase() + ' · ' + r.tier + visionChip + '</span>'
     + (typeof W.hgBookStampChip === 'function' ? W.hgBookStampChip(r.sym, r.dir, { scanner: 'startrader', strategy: 'startrader', fund: stFund, klass: r.klass }) : '')
+    + smcChip
     + '</div>'
     + '<div class="cbody">'
     + '<span class="k">asset</span><span>' + esc(r.label) + '</span>'
@@ -879,7 +901,26 @@ function mount(el){
             if (!h4 || h4.length < MIN_BARS_4H){ skipped++; return; }
             var tk = tmap[c.sym] || { symbol: c.sym, fundingPct: null, mark: null };
             var setup = stSynthesize(c, h4, h1, m15, tk, ctx);
-            if (setup) found.push(setup);
+            if (setup){
+              /* SMC context — record-only: adds setup.smc and one chip, and never
+                 touches tier / points / sort / filtering. The levels live under
+                 setup.plan but hgSmcEnrich reads entry/stop/t1 off the row itself,
+                 so enrich a flat view and copy the read back — adding entry/stop to
+                 the setup object itself would change what every downstream reader
+                 (bookBtnHTML, hgMpPin, ChartVision wraps) sees. The inner try/catch
+                 is load-bearing, not cosmetic: a throw here would fall into the
+                 per-contract catch below and count a real setup as `skipped`. */
+              try{
+                if (typeof W.hgSmcEnrich === 'function'){
+                  var smcP = setup.plan || {};
+                  var smcView = { sym: setup.sym, dir: setup.dir, entry: smcP.entry,
+                    stop: smcP.stop, t1: smcP.t1, t2: smcP.t2 };
+                  W.hgSmcEnrich(smcView, { rows: h4, tab: 'STAR TRADER' });
+                  if (smcView.smc) setup.smc = smcView.smc;
+                }
+              }catch(eSmc){}
+              found.push(setup);
+            }
           }catch(e){ skipped++; }
         }));
         await sleep(CHUNK_MS);

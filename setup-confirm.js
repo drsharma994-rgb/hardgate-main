@@ -57,6 +57,30 @@ function cfNormRow(raw, meta){
   if (meta.near) { row.near = true; row.clean = false; }
   if (meta.forming) { row.forming = true; row.clean = false; row.near = false; }
   row.scanner = meta.source || row.scanner;
+  /* v729: SMC CONTEXT — RECORD-ONLY. Nothing downstream reads row.smc except
+     the card chip; score, tier, blockers, needs, sort order and card visibility
+     are untouched. This desk never loads candles of its own — it only
+     re-presents other desks' published snapshots — so the live path here is
+     INHERITANCE (contract rule 8): hgNormalizeSetupRow rebuilds a fresh
+     whitelist row and drops the source desk's read, so carry it across by hand.
+     The enrich fallback only fires on the rare raw snap row that still carries
+     its own bars. opts.tab is pinned to this file's own HG_tabs label: without
+     it hgSmcEnrich falls back to row.scanner (the SOURCE desk id), which files
+     this desk's reads into other tabs' buckets — 'omniroute' normalises to
+     OMNIROUTE, the exact Setup Intelligence bucket omniroute.js records into,
+     and the recorder's dedupe key carries no tab, so whichever tab ran first
+     silently suppressed the other. COMBI also reaches cfNormRow (via
+     hgConfirmHarvest) and is labelled SETUP CONFIRM here on purpose: combi.js
+     tags its own cbNormRow rows 'COMBI', so the two paths stay distinct. */
+  try{
+    var smcHave = raw.smc || (raw.plan && raw.plan.smc) || (raw.setup && raw.setup.smc) || (raw.sig && raw.sig.smc);
+    var smcRows = raw.rows || raw.candles || raw.bars || raw.ohlc || raw.rows4h;
+    if (smcHave && typeof smcHave === 'object' && typeof smcHave.score === 'number'){
+      row.smc = smcHave;
+    } else if (Array.isArray(smcRows) && smcRows.length && gfn('hgSmcEnrich')){
+      W.hgSmcEnrich(row, { rows: smcRows, tab: 'SETUP CONFIRM' });
+    }
+  }catch(eSmc){}
   return row;
 }
 
@@ -152,6 +176,7 @@ var CF_SOURCES = [
           sym: r.sym, dir: r.dir,
           entry: r.plan && r.plan.entry, stop: r.plan && r.plan.stop,
           t1: r.plan && r.plan.t1, t2: r.plan && r.plan.t2,
+          smc: r.smc,   /* v729: BRAIN pins its own SMC read on the row; carry it across normalisation (record-only) */
           clean: tier === 'PRIME' || tier === 'HIGH',
           near: tier === 'WATCH', tier: tier
         }, {
@@ -494,9 +519,29 @@ function cfTierPill(tier){
 
 function cfCardHtml(g){
   var leader = g.leader || {};
+  /* v729: SMC chip — pure render, never consulted by any gate. Prefer the
+     leader's own read. This desk's leader is usually a structural desk
+     (SWING / SCALP / EDGE), whose snapshot rows are rebuilt field-by-field by
+     hgNormalizeSetupRow and so arrive with no read at all, so fall back to a
+     sibling hit in the SAME symbol+direction group that does carry one — and
+     name that desk, because its confluence tags were scored against ITS
+     entry/stop/t1, not the leader's. */
+  var smcRow = (leader && leader.smc) ? leader : null, smcFrom = '', si;
+  if (!smcRow){
+    for (si = 0; si < (g.hits || []).length; si++){
+      if (g.hits[si] && g.hits[si].smc){
+        smcRow = g.hits[si];
+        smcFrom = g.hits[si].sourceLabel || g.hits[si].source || '';
+        break;
+      }
+    }
+  }
+  var smcChip = '';
+  try{ if (smcRow && gfn('hgSmcChipHtml')) smcChip = W.hgSmcChipHtml(smcRow) || ''; }catch(eSmc){ smcChip = ''; }
+  if (smcChip && smcFrom) smcChip += '<span class="dim" style="margin-left:3px">' + esc(smcFrom) + '</span>';
   var h = '<div class="card">';
   h += '<div class="ttl">' + esc(g.sym) + ' · ' + esc(String(g.dir || '').toUpperCase()) + ' '
-    + cfTierPill(g.tier) + ' <span class="dim">score ' + g.score.toFixed(1)
+    + cfTierPill(g.tier) + smcChip + ' <span class="dim">score ' + g.score.toFixed(1)
     + ' · ' + g.sourceCount + ' desks · ' + g.cleanCount + ' CLEAN</span></div>';
   if (g.triple){
     h += '<div class="dim"><span class="gpip ok">TRIPLE STACK</span> SWING + EDGE + BRAIN agree</div>';

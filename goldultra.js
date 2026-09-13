@@ -1656,6 +1656,7 @@ function setupCardHTML(c, pxNow, crowned){
     + (c.book === 'prefer' ? '<span class="gu-chip ok">PREFER ROW (measured fee-survivor)</span>' : c.book === 'unproven' ? '<span class="gu-chip warn">UNPROVEN — not discredited, never crowned</span>' : '<span class="gu-chip warn">NOT A PREFER ROW — never crowned</span>')
     + (c.demoted ? '<span class="gu-chip warn">DEMOTED by its desk</span>' : '') + (c.vetoed ? '<span class="gu-chip warn">VETOED</span>' : '');
   for (var s = 0; s < c.stamps.length; s++) chips += '<span class="gu-chip warn">' + esc(c.stamps[s]) + '</span>';
+  try{ if (typeof W.hgSmcChipHtml === 'function') chips += W.hgSmcChipHtml(c) || ''; }catch(eSmc){}
   var risk = Math.abs(c.entry - c.stop), t2 = isFinite(c.t2) ? c.t2 : (c.dir === 'long' ? c.entry + 2.5 * risk : c.entry - 2.5 * risk);
   var rr1 = isFinite(c.rr) ? c.rr : Math.abs(c.t1 - c.entry) / risk, away = isFinite(pxNow) ? (c.entry - pxNow) : NaN;
   return '<div class="gu-setup' + (crowned ? ' crowned' : '') + '">'
@@ -1813,6 +1814,21 @@ async function runScan(ui){
     var lane = { cands: [], held: [], dark: null };
     try{ lane = await laneGoldScalp(f, now); }catch(eL){ lane = { cands: [], held: ['lane threw: ' + ((eL && eL.message) || eL)], dark: null }; }
     var sel = selectSetups(lane.cands, res.ok ? res.count : null);
+    /* SMC context on every GOLD SCALP card this tab shows — record-only.
+       goldind.js calls hgSetupSolidityApply(rc, {asset,tally,grade}) with no
+       candle array, and guNorm() rebuilds a fresh whitelisted row, so the
+       smc-setups.js solidity wrapper can never reach these rows. */
+    try{
+      if (typeof W.hgSmcEnrich === 'function' && sel.cards.length){
+        var smcRows = closedRows(f.rows15m, 900, now);
+        for (var si = 0; si < sel.cards.length; si++){
+          var sc = sel.cards[si];
+          if (!sc || sc.smc) continue;
+          if (!sc.sym) sc.sym = 'XAUUSD';
+          W.hgSmcEnrich(sc, { rows: smcRows, tab: 'GOLD ULTRA' });
+        }
+      }
+    }catch(eSmc){}
     __last = { at: now, src: f.src, ok: res.ok, fire: res.fire, recordOnly: !!res.recordOnly, dir: res.dir, count: res.count || null, regime: res.regime || null, plan: res.plan || null, line: res.line || null, reasons: res.reasons,
                setups: { pick: sel.pick ? { strategy: sel.pick.strategy, stratKey: sel.pick.stratKey, dir: sel.pick.dir, entry: sel.pick.entry, stop: sel.pick.stop, t1: sel.pick.t1, confluence: sel.pick.confluence } : null,
                          cards: sel.cards.map(function(c){ return { strategy: c.strategy, stratKey: c.stratKey, dir: c.dir, confluence: c.confluence, book: c.book, crownable: c.crownable, demoted: c.demoted }; }),

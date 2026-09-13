@@ -478,6 +478,14 @@ function trendmxPlanBlock(r){
   if (!dir)
     return '<div class="plan">No majority direction on this row (|score| &lt; ' + TM_MAJORITY + ') — no levels.</div>';
   var s = trendmxPlan(Object.assign({}, r, { dir: dir }));
+  /* lazy SMC read for a row the operator expanded by hand: one row per click,
+     not a repaint loop, so rows outside the scan's capped slice still get a
+     context when they are actually looked at. */
+  if (s && !r.smc && r.rows4h && r.rows4h.length && tmSmcOn()){
+    var tmSyn = { sym: r.sym, dir: dir, entry: s.entry, stop: s.stop, t1: s.t1 };
+    tmSmcMark(tmSyn, r.rows4h);
+    if (tmSyn.smc) r.smc = tmSyn.smc;
+  }
   var tmStack = trendmxCardStack(r, dir);
   var stackHtml = (tmStack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(tmStack) : '';
   var inner = '<b>' + escH(r.sym) + '</b> ' + dir.toUpperCase() + ' · '
@@ -486,6 +494,7 @@ function trendmxPlanBlock(r){
   if (s && s.gateLabel){
     inner += ' · <span class="gpip ' + (s.clean7 ? 'ok' : (s.nearClean ? '' : '')) + '">' + escH(s.gateLabel) + '</span>';
   }
+  inner += tmSmcChip(r);
   var tradeOnclick = (s && (typeof hgToTradePlanOnclickAttr === 'function' || typeof toTrade === 'function'))
     ? ((typeof hgToTradePlanOnclickAttr === 'function')
       ? hgToTradePlanOnclickAttr(r.sym, s.dir, s.entry, s.stop, s.t1, { t2: s.t2, stack: tmStack, scanner: 'trendmx', strategy: 'trendmx' })
@@ -563,6 +572,84 @@ function trendmxGoldenCrossSetups(rows){
 
 function fin(v){ return typeof v === 'number' && isFinite(v); }
 
+/* ---------------- SMC context (record-only) ----------------
+   hgSmcEnrich attaches .smc (structure bias, OB/FVG confluence, a grade) and
+   records one SMC_CONTEXT signal. Nothing in this file reads .smc except the
+   chip helper below: composite score, gate label, tier, sort order, the venue
+   and quality filters and whether a card is shown are all untouched.
+
+   Cost: the matrix holds the whole universe and every row carries its own
+   120-bar 4h array, so SMC runs ONCE per scan over a capped, ranked slice of
+   the rows the desk itself promotes — never from a render path, which
+   repaints on every venue chip, SYNC DESK and chart-vision callback. */
+var TM_SMC_MAX = 24;
+
+function tmSmcOn(){
+  try{ return !!(W && typeof W.hgSmcEnrich === 'function'); }catch(e){ return false; }
+}
+
+/* enrich a finished ticket in place; a ticket that already carries .smc, or a
+   row with no cached 4h history, is left exactly as it was. */
+function tmSmcMark(ticket, rows4h){
+  try{
+    if (!ticket || ticket.smc) return ticket;
+    if (!Array.isArray(rows4h) || !rows4h.length) return ticket;
+    if (W && typeof W.hgSmcEnrich === 'function') W.hgSmcEnrich(ticket, { rows: rows4h, tab: 'TREND MATRIX' });
+  }catch(e){}
+  return ticket;
+}
+
+function tmSmcChip(o){
+  var out = '';
+  try{
+    if (o && o.smc && W && typeof W.hgSmcChipHtml === 'function') out = W.hgSmcChipHtml(o) || '';
+  }catch(e){ out = ''; }
+  return out;
+}
+
+/* One pass per scan. Golden tickets carry their levels but drop their candles;
+   matrix rows carry their candles but not their levels — the two are joined
+   here by symbol. The matrix row is never given dir/entry/stop of its own:
+   trendmxPlan reads inp.entry as an entry OVERRIDE and tmDirOf reads inp.dir,
+   so writing those onto the row would change the plan the desk builds. A
+   synthetic ticket is enriched instead and only .smc is copied back. */
+function tmSmcScanPass(rows, golden){
+  try{
+    if (!tmSmcOn() || !Array.isArray(rows) || !rows.length) return;
+    var i, r, byRows = {};
+    for (i = 0; i < rows.length; i++){ if (rows[i] && rows[i].sym) byRows[rows[i].sym] = rows[i].rows4h; }
+    golden = golden || [];
+    for (i = 0; i < golden.length && i < TM_SMC_MAX; i++){
+      if (golden[i]) tmSmcMark(golden[i], byRows[golden[i].sym]);
+    }
+    var cands = [];
+    for (i = 0; i < rows.length; i++){
+      r = rows[i];
+      if (!r || r.smc || !r.rows4h || !r.rows4h.length) continue;
+      if (r.gate && r.gate.veto) continue;
+      if (!tmDirOf(r)) continue;
+      if (!(r.gate && r.gate.clean7) && !trendmxConviction(r)) continue;
+      cands.push(r);
+    }
+    /* the limit board's own rank, so the capped slice is the slice this desk
+       promotes first rather than an arbitrary universe order */
+    cands.sort(function(a, b){
+      var ra = ((a.gate && a.gate.clean7) ? 1000 : 0) + Math.abs(a.score) * 10 + ((a.gate && a.gate.gatesPassed) || 0);
+      var rb = ((b.gate && b.gate.clean7) ? 1000 : 0) + Math.abs(b.score) * 10 + ((b.gate && b.gate.gatesPassed) || 0);
+      return rb - ra;
+    });
+    for (i = 0; i < cands.length && i < TM_SMC_MAX; i++){
+      r = cands[i];
+      var dir = tmDirOf(r);
+      var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
+      if (!tmValidSetup(plan)) continue;
+      var syn = { sym: r.sym, dir: dir, entry: plan.entry, stop: plan.stop, t1: plan.t1 };
+      tmSmcMark(syn, r.rows4h);
+      if (syn.smc) r.smc = syn.smc;
+    }
+  }catch(e){}
+}
+
 async function trendmxScanCore(hooks){
   hooks = hooks || {};
 /* Map before asking Binance — a venue code means nothing to fapi. This is the
@@ -625,6 +712,7 @@ async function trendmxScan(opts){
   }
   var core = await trendmxScanCore(opts);
   var golden = trendmxGoldenCrossSetups(core.rows);
+  tmSmcScanPass(core.rows, golden);
   __tmScanSnap = {
     at: core.at, rows: core.rows, failed: core.failed, uniLen: core.uniLen, scanned: core.scanned,
     goldenCross: golden, note: core.note, source: core.source, venueCounts: core.venueCounts
@@ -698,6 +786,7 @@ function trendmxGoldenCardHTML(g){
     + '<span style="font-size:14px;font-weight:800">' + escH(g.sym) + tmVenueChip(g) + '</span>'
     + '<span class="stamp pass">⚡GOLDEN</span>'
     + '<span class="stamp pass">' + escH(g.conviction || g.tier || 'CONVICTION') + '</span>'
+    + tmSmcChip(g)
     + '</div>'
     + '<div style="margin-top:6px;font-size:10px;color:#64748B">' + escH(g.note || '') + '</div>'
     + '<div style="font-size:22px;font-weight:800;color:' + col + ';margin-top:6px">' + pxFmt(g.entry) + '</div>'
@@ -730,7 +819,7 @@ function trendmxLimitCardHTML(item){
   var tradeOn = (typeof hgToTradePlanOnclickAttr === 'function')
     ? hgToTradePlanOnclickAttr(r.sym, dir, p.entry, p.stop, p.t1, { t2: p.t2, stack: item.stack, scanner: 'trendmx', strategy: 'trendmx' }) : '';
   return '<div style="flex:1 1 260px;max-width:360px;border:1px solid #E2E8F0;border-left:3px solid ' + col + ';border-radius:8px;padding:10px 12px;background:#fff">'
-    + '<div><b>' + escH(r.sym) + '</b>' + tmVenueChip(r) + ' · ' + dir.toUpperCase() + stHtml + '</div>'
+    + '<div><b>' + escH(r.sym) + '</b>' + tmVenueChip(r) + ' · ' + dir.toUpperCase() + stHtml + tmSmcChip(r) + '</div>'
     + '<div style="font-size:18px;font-weight:800;color:' + col + ';margin:4px 0">' + pxFmt(p.entry) + '</div>'
     + '<div class="note">' + trendmxPlanHTML(p) + '</div>'
     + (tradeOn ? '<button class="toTrade" onclick="' + tradeOn + '">SEND TO TRADE PLAN →</button>' : '')
@@ -797,7 +886,7 @@ function trendmxSetupCardHTML(r, tier){
   return hgSetupCardHTML({
     sym: r.sym, dir: dir, tier: tier,
     mini: mini, gates: gates,
-    plan: plan ? trendmxPlanHTML(plan) : '',
+    plan: plan ? (trendmxPlanHTML(plan) + tmSmcChip(r)) : '',
     entry: plan ? plan.entry : null, stop: plan ? plan.stop : null, t1: plan ? plan.t1 : null,
     chartId: (tier === 'clean' && plan) ? ('tmx_' + String(r.sym).replace(/[^A-Za-z0-9]/g, '')) : '',
     stack: stack,

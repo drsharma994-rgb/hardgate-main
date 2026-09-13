@@ -804,6 +804,15 @@ function setupCardHTML(setup){
   if (hasPlan && setupRows && typeof hgStrategyRefine === 'function'){
     try{ hgStrategyRefine(setup, setupRows, { style: 'liqs', kind: 'liqs', reversion: true }); }catch(eRf){}
   }
+  /* SMC context — RECORD-ONLY. Runs after hgStrategyRefine so the levels SMC
+     reads are the final ones, on the very same 1h rows the plan was built
+     from. Never touches levels, score, ordering or whether the card shows.
+     Helper is absent until smc-setups.js loads (and in tests) — feature-check
+     at call time, never at load. SMC "liquidity" here is its own swing-pool
+     notion; it is NOT the exchange liquidation tape this desk trades. */
+  if (hasPlan && setupRows && G && typeof G.hgSmcEnrich === 'function'){
+    try{ G.hgSmcEnrich(setup, { rows: setupRows, tab: 'LIQS' }); }catch(eSmc){}
+  }
   var liqStack = null;
   if (hasPlan && typeof hgSetupStackForInlineScan === 'function'){
     try{
@@ -825,10 +834,13 @@ function setupCardHTML(setup){
   var bookBtn = (hasPlan && setup.sym && typeof bookBtnHTML === 'function')
     ? bookBtnHTML(setup.sym, setup.dir, setup.entry, setup.stop, setup.t1,
       { scanner: 'liqs', strategy: 'liqs', t2: setup.t2, stack: liqStack }) : '';
+  var smcChip = '';
+  try{ if (G && typeof G.hgSmcChipHtml === 'function') smcChip = G.hgSmcChipHtml(setup) || ''; }catch(eSmcChip){ smcChip = ''; }
   return '<div class="card ' + setup.dir + '">'
     + '<div class="chead"><span class="sym">' + esc(setup.sym || 'MULTI') + '</span>'
     + '<span class="dir">' + dirUp + ' · FADE THE FLUSH</span>'
     + (hasPlan && typeof hgBookStampChip === 'function' ? hgBookStampChip(setup.sym, setup.dir, { scanner: 'liqs', strategy: 'liqs' }) : '')
+    + smcChip
     + '</div>'
     + '<div class="mini">'
     + '<span class="k">flushed side</span><span>' + setup.flushSide.toUpperCase() + 'S LIQUIDATED</span>'

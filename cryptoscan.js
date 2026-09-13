@@ -157,6 +157,7 @@ function setupCardHTML(s, idx){
   h += '<span class="cs-card-sym">' + esc(s.label) + '</span>';
   h += venueChip(s.exchange);
   h += ' <span class="cs-dir ' + dirCls + '">' + (s.dir || '—').toUpperCase() + '</span>';
+  try{ if (typeof W.hgSmcChipHtml === 'function') h += (W.hgSmcChipHtml(s) || ''); }catch(eSmc){}
   h += '<span class="cs-card-meta">' + pct(s.pct) + ' agree · ' + (s.count ? s.count.decisive : '—') + ' decisive · regime ' + esc((s.regime || '—').toUpperCase());
   if (p) h += '<br>entry ' + fmt(p.entry) + ' · SL ' + fmt(p.stop) + ' · TP1 ' + fmt(p.t1) + ' · R:R ' + (rrv != null ? rrv.toFixed(1) : '—');
   h += '</span>';
@@ -461,6 +462,22 @@ async function runScan(ui){
             qualityGates: qualityGates,
             isHighQuality: qualityGates.length === 0 && proGradeCheck.isPro
           };
+
+          /* SMC context — record-only annotation. Never feeds scoring, gating, tiering or
+             sort order; it only attaches setup.smc for the card chip and Setup Intelligence.
+             Levels live on res.plan, so a synthetic row carries them to the enricher and the
+             result is copied back. The tape is trimmed to the closed bar the engine voted on
+             (the engine drops the forming bar via closedRows) so SMC grades the same bar. */
+          var smcRows = rows15m.slice(0, -1);
+          if (res.bar && res.bar.t != null){
+            for (var bi = rows15m.length - 1; bi >= 0; bi--){
+              if (rows15m[bi].t === res.bar.t){ smcRows = rows15m.slice(0, bi + 1); break; }
+            }
+          }
+          var smcRow = { sym: item.sym, dir: res.dir, entry: res.plan.entry, stop: res.plan.stop, t1: res.plan.t1 };
+          try{ if (typeof W.hgSmcEnrich === 'function') W.hgSmcEnrich(smcRow, { rows: smcRows, tab: 'CRYPTO SCAN' }); }catch(eSmc){}
+          if (smcRow.smc) setup.smc = smcRow.smc;
+
           setups.push(setup);
         }
 

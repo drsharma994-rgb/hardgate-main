@@ -19,7 +19,7 @@ function dirOf(row){
   if (d === 'short' || d === 'sell') return 'short';
   return null;
 }
-function symOf(row){ return String(row.sym || row.symbol || row.pair || '').toUpperCase(); }
+function symOf(row, opts){ return String(row.sym || row.symbol || row.pair || (opts && opts.sym) || '').toUpperCase(); }
 function tabOf(row, opts){
   var t = (opts && opts.tab) || row.tab || row.tabName || row.desk || row.scanner || 'UNKNOWN';
   return String(t).toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'UNKNOWN';
@@ -70,7 +70,7 @@ function hgSmcEnrich(row, opts){
 function record(row, dir, ctx, conf, opts){
   var rec = W.setupRecording;
   if (!rec || typeof rec.recordSignal !== 'function') return;
-  var sym = symOf(row);
+  var sym = symOf(row, opts);
   var key = [sym, dir, num(row.entry), ctx.lastT, conf.score].join('|');
   if (seen[key]) return;
   if (seenCount >= 2000){ seen = {}; seenCount = 0; }

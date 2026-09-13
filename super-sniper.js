@@ -93,6 +93,15 @@ function enrichSuperSniperRow(c, riskOpts){
     }
   }
 
+  /* SMC CONTEXT — record-only. The ticket is finished here: entry/stop/t1 are
+     final (hgApplyExactEntry ran upstream in reversalsniper, the omni-principal
+     pass above is done) and the REVERSAL SNIPER candidate carries its own 4H
+     bars on .rows, so structure/zone context is computable without a refetch.
+     Nothing below reads hit.smc — it never touches tier, sniperPass,
+     minimalLossPass, conviction or sort order. */
+  var smcRows = hit.rows || (c && c.rows) || null;
+  try{ if (typeof W.hgSmcEnrich === 'function') W.hgSmcEnrich(hit, { rows: smcRows, tab: 'SUPER SNIPER' }); }catch(eSmc){}
+
   return hit;
 }
 
@@ -384,10 +393,13 @@ function mount(el){
     desk.innerHTML = rows.map(function(r){
       var pill = superSniperDeskPill(r);
       var sel = (__sn.selectedId === r.id) ? ' sel' : '';
+      var smcChip = '';
+      try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(r) || ''; }catch(eSmcChip){ smcChip = ''; }
       return '<div class="hg-desk-card' + sel + '" data-id="' + String(r.id).replace(/"/g, '') + '">'
         + '<strong>' + String(r.sym) + ' LONG</strong> '
         + '<span class="hg-pill">conv ' + (r.conviction || '—') + '</span> '
         + '<span class="hg-pill ' + pill.cls + '">' + pill.label + '</span>'
+        + smcChip
         + '<div style="margin-top:8px;font:600 11px var(--mono,monospace)">'
         + 'E ' + fmt(r.entry, 6) + ' · S ' + fmt(r.stop, 6) + ' · T1 ' + fmt(r.t1, 6)
         + ' · lev ' + fmt(r.lev || r.safeMaxLev, 0) + '×</div></div>';

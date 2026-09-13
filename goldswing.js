@@ -722,6 +722,23 @@ var GW_CSS = ''
 + '.card.gsw-card .gsw-lockline{color:#6EE7B7!important}'
 + '.card.gsw-card .toTrade{color:#67E8F9!important;border-color:#38BDF8!important;background:rgba(34,211,238,.08)!important}'
 + '.card.gsw-card .toBook{color:#67E8F9!important;border-color:#0891B2!important;background:rgba(8,145,178,.08)!important}'
+/* hg-v729: legibility for the SMC context chip on the dark HUD card. No .stamp
+   element is rendered inside .gsw-card by anything else, so this adds nothing
+   to the existing board. */
++ '.card.gsw-card .stamp{border:1px solid #475569!important;color:#CBD5E1!important;background:rgba(30,41,59,.75)!important;font-size:9px;padding:2px 6px;border-radius:4px}'
++ '.card.gsw-card .stamp.pass{border-color:rgba(52,211,153,.5)!important;color:#6EE7B7!important;background:rgba(52,211,153,.14)!important}'
++ '.card.gsw-card .stamp.ok{border-color:rgba(56,189,248,.5)!important;color:#7DD3FC!important;background:rgba(56,189,248,.12)!important}'
++ '.card.gsw-card .stamp.warn{border-color:rgba(251,191,36,.5)!important;color:#FCD34D!important;background:rgba(251,191,36,.12)!important}'
++ '.card.gsw-card .stamp.bad{border-color:rgba(248,113,113,.5)!important;color:#FCA5A5!important;background:rgba(248,113,113,.12)!important}'
+/* hg-v729 (review): the `.gsw-dir span` rule above is a DESCENDANT selector, so
+   it also catches the SMC chip nested inside the MOST PROBABLE banner line and
+   would render it display:block — a full-width box on its own line. These three
+   rules (specificity 0,0,2,0 > 0,0,1,1) restore inline chip presentation and
+   give warn/bad the colors neither index.html nor bright.css defines. Nothing
+   else emits a .stamp inside .gsw-dir, so this too is strictly additive. */
++ '.gsw-dir .stamp{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.08em;margin-top:0;vertical-align:middle}'
++ '.gsw-dir .stamp.warn{color:#B45309;border-color:rgba(180,83,9,.45);background:rgba(245,158,11,.10)}'
++ '.gsw-dir .stamp.bad{color:#B91C1C;border-color:rgba(220,38,38,.40);background:rgba(220,38,38,.08)}'
 + '.gsw-strat{color:#A67C12;font-size:10px;font-weight:800;letter-spacing:.12em}'
 + '.gsw-grade{font-weight:800}'
 + '.gsw-grade.A{color:#047857}'
@@ -946,7 +963,10 @@ function bannerHTML(best, ranked){
     + '<div class="gsw-eye">MOST PROBABLE SETUP</div>'
     + '<div class="gsw-dir ' + best.dir + '">' + dirUp
     + '<span>' + esc(best.strategy) + ' · ' + esc(best.venue) + (best.sym ? ' (' + esc(best.sym) + ')' : '')
-    + ' · GRADE ' + esc(best.grade) + '</span></div>'
+    + ' · GRADE ' + esc(best.grade)
+    /* hg-v729: SMC context chip (record-only; '' without the helper or best.smc) */
+    + (function(){ try{ return (typeof W.hgSmcChipHtml === 'function') ? (W.hgSmcChipHtml(best) || '') : ''; }catch(eSmcB){ return ''; } })()
+    + '</span></div>'
     + '<div class="gsw-plan">'
     + '<div><i>' + act + '</i><b>$' + pxF(best.zone ? best.zone.lo : best.entry) + ' – $' + pxF(best.zone ? best.zone.hi : best.entry) + '</b><u>entry $' + pxF(best.entry) + '</u></div>'
     + '<div><i>STOP</i><b>$' + pxF(best.stop) + '</b><u>4h close beyond it kills the idea</u></div>'
@@ -1031,10 +1051,15 @@ function cardHTML(c, isBest, season, tape){
     ? '<div class="note warn" style="margin-top:6px;color:#FBBF24!important">XAUT instrument ~$' + pxF(c.entry)
       + ' vs spot XAU ~$' + pxF(c.spotRef) + ' (' + (c.xautBasisPct >= 0 ? '+' : '') + fmtF(c.xautBasisPct, 2)
       + '%). Levels valid on <b>Delta XAUTUSD</b> only — not spot/StarTrader XAUUSD.</div>' : '';
+  /* hg-v729: SMC context chip — feature-checked, '' when the helper or c.smc
+     is absent, so the card HTML is byte-identical without the SMC scripts. */
+  var smcChip = '';
+  try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(c) || ''; }catch(eSmcC){ smcChip = ''; }
   return '<div class="card gsw-card ' + c.dir + (isBest ? ' best' : '') + '"' + gswSt(GSW_CARD) + '>'
     + '<div class="chead"><span class="sym"' + gswSt(GSW_SYM) + '>' + esc(c.venue) + '</span>'
     + '<span class="dir">' + dirUp + ' · <span class="gsw-grade ' + esc(c.grade) + '">GRADE ' + esc(c.grade) + '</span></span>'
     + (typeof hgBookStampChip === 'function' ? hgBookStampChip(c.sym, c.dir, { scanner: 'goldswing', strategy: 'goldswing', klass: 'metals', fund: 'gold' }) : '')
+    + smcChip
     + '</div>'
     + '<div class="gsw-strat"' + gswSt(GSW_STRAT) + '>' + esc(c.strategy) + (isBest ? ' · ★ MOST PROBABLE' : '') + '</div>'
     + '<div class="mini"' + gswSt(GSW_MINI) + '>'
@@ -3224,6 +3249,27 @@ async function runScan(ui, scanSt){
        MOST PROBABLE. goldRankSetups holds this rule; the desk holds it too. */
     if (displayBest && (displayBest.demoted || displayBest.vetoed)) displayBest = null;
     goldStampTape(display, deskTape);
+    /* hg-v729: Smart Money Concepts context on the FINAL display rows — after
+       post-gate, best-levels/hgFormTicket, spot alignment and the conviction
+       lock have all settled entry/stop/targets. RECORD-ONLY: it only attaches
+       row.smc (read by the card chip) and records one SMC_CONTEXT signal; it
+       never touches score, tally, grade, the lead, levels, order or filtering.
+       Candles go through opts.rows so no 220-bar array is ever attached to a
+       card object — attaching them would also make the solidity wrapper in
+       goldind.js goldRankSetups enrich pre-refinement levels and double-record. */
+    try{
+      if (typeof W.hgSmcEnrich === 'function' && gold.rows4h && gold.rows4h.length){
+        for (var smcQ = 0; smcQ < display.length; smcQ++){
+          var smcRow = display[smcQ];
+          if (!smcRow) continue;
+          var smcVr = venueRows[smcRow.venue];
+          W.hgSmcEnrich(smcRow, {
+            rows: (smcVr && smcVr.rows4h && smcVr.rows4h.length) ? smcVr.rows4h : gold.rows4h,
+            tab: stRoute ? 'STAR TRADER GOLD SWING' : 'GOLD SWING'
+          });
+        }
+      }
+    }catch(eSmcEn){}
     if (newsC && newsC.caution){
       for (var dix = 0; dix < display.length; dix++){
         var dc = display[dix];

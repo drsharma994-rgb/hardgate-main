@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v728',
-  pack: 'Smart Money Concepts on every setup — BOS/CHoCH, OB, FVG, liquidity, OTE (record-only)',
+  version: 'hg-v729',
+  pack: 'Smart Money Concepts (SMC) integrated per-tab — record-only on every setup, bridge to Setup Intelligence',
   built: '2026-09-13T17:00:00Z'
 };
 

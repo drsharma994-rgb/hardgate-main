@@ -890,7 +890,13 @@ a global hard refresh.
             else if (/Liquidation map/.test(r.name || '') && /fuel toward/i.test(det)) pick.row.omniLiqFuel = true;
           });
         }
-        if (gfn('hgSetupSolidityApply')) W.hgSetupSolidityApply(pick.row, { asset: 'crypto' });
+        /* rows/tab ride along on the solidity opts so the SMC wrapper around
+           hgSetupSolidityApply can compute context on the winner leg's 4h
+           candles. hgSetupSolidityScore reads only opts.asset/tally/grade, so
+           the extra keys cannot move the solidity score or tier; pick.row is
+           a normalised copy that carries no candles of its own, which is why
+           the rows have to be handed over here. Record-only. */
+        if (gfn('hgSetupSolidityApply')) W.hgSetupSolidityApply(pick.row, { asset: 'crypto', rows: winnerRows, tab: 'OMNIBTC' });
         if (gfn('hgStrategyRefine') && winnerRows && winnerRows.length){
           try{
             W.hgStrategyRefine(pick.row, winnerRows, {

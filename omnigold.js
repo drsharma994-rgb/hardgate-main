@@ -5826,9 +5826,18 @@ terse status, and never launches a first-time scan on a global refresh.
           solChip = Wc.hgSolidityChipHtml(row.solidity);
         }
       } catch(eSc){}
+      /* hg-v729: SMC context chip beside the SOLIDITY chip. '' when the
+         helper is absent or the row carries no .smc (engine-bridge picks
+         from hgOgBridgeSetupToPick never do), so the head is unchanged. */
+      var smcChipMp = '';
+      try {
+        var smcChipFnMp = gfn('hgSmcChipHtml');
+        if (smcChipFnMp) smcChipMp = smcChipFnMp(row) || '';
+      } catch (eSmcMp) { smcChipMp = ''; }
+
       h += '<div class="hg-mp-head">XAUUSD ' + esc(String(row.dir || '').toUpperCase())
         +  ' <span>' + esc(label) + ' · ' + esc(isEngine ? String(row.kind).slice(0, 48) : row.kind) + ' · ' + grade
-        +  (solChip ? ' ' + solChip : '')
+        +  (solChip ? ' ' + solChip : '') + (smcChipMp ? ' ' + smcChipMp : '')
         +  (isWatch ? ' · VETO' : '')
         +  (isEngine
              /* AGAINST THE TAPE IS NOT ACTIONABLE, whoever found it.
@@ -7861,9 +7870,16 @@ terse status, and never launches a first-time scan on a global refresh.
     var pct = w ? (w.p * 100).toFixed(0) : '—';
     var lo = w ? (w.lo * 100).toFixed(0) : '—';
     var hi = w ? (w.hi * 100).toFixed(0) : '—';
+    /* hg-v729: SMC context chip — '' when the helper or c.smc is absent. */
+    var smcChipSe = '';
+    try {
+      var smcChipFnSe = gfn('hgSmcChipHtml');
+      if (smcChipFnSe) smcChipSe = smcChipFnSe(c) || '';
+    } catch (eSmcSe) { smcChipSe = ''; }
     var h = '<div class="og-settled-row' + (tier === 'execute' ? ' og-settled-exec' : '') + '">';
     h += '<div class="hg-mp-head">XAUUSD ' + esc(String(c.dir || '').toUpperCase())
-      + ' <span>' + esc(c.horizon) + ' · ' + esc(c.kind) + ' · TICKET</span></div>';
+      + ' <span>' + esc(c.horizon) + ' · ' + esc(c.kind) + ' · TICKET'
+      + (smcChipSe ? ' ' + smcChipSe : '') + '</span></div>';
     h += '<div class="hg-mp-note">SETTLED ' + esc(ev.source) + ' · '
       + esc(String(ev.wins)) + '/' + esc(String(ev.samples)) + ' wins · '
       + pct + '% hit · Wilson 95% CI ' + lo + '–' + hi + '%'
@@ -8101,9 +8117,16 @@ terse status, and never launches a first-time scan on a global refresh.
     var lo = w ? (w.lo * 100).toFixed(0) : '—';
     var hi = w ? (w.hi * 100).toFixed(0) : '—';
     var src = c.engineSrc ? (' · ' + c.engineSrc) : '';
+    /* hg-v729: SMC context chip — '' when the helper or c.smc is absent. */
+    var smcChipSv = '';
+    try {
+      var smcChipFnSv = gfn('hgSmcChipHtml');
+      if (smcChipFnSv) smcChipSv = smcChipFnSv(c) || '';
+    } catch (eSmcSv) { smcChipSv = ''; }
     var h = '<div class="og-verdict-row' + (tier === 'go' ? ' og-verdict-go' : '') + '">';
     h += '<div class="hg-mp-head">XAUUSD ' + esc(String(c.dir || '').toUpperCase())
-      + ' <span>SCALP · ' + esc(c.kind) + src + '</span></div>';
+      + ' <span>SCALP · ' + esc(c.kind) + src
+      + (smcChipSv ? ' ' + smcChipSv : '') + '</span></div>';
     /* Cost-drag chip (ADDITIVE): heavy/fatal fee load on this stop. */
     var vCostChip = hgOgCostChipHtml(c);
     if (vCostChip) h += '<div style="margin-top:2px">' + vCostChip + '</div>';
@@ -9522,6 +9545,15 @@ terse status, and never launches a first-time scan on a global refresh.
     /* replay-survivor tag (hg-v533): kind measured gross-POSITIVE at scale
        with a low fee load in the PAXG replay. A ranking tag, not a promise. */
     if (c.replaySurvivor || hgOgIsSurvivor(c.kind)) badge += ' ' + pill('replay-survivor', 'ok');
+    /* hg-v729: SMC context chip (smc-setups.js hgSmcChipHtml). Returns ''
+       when the helper or c.smc is absent, so the head is byte-identical
+       without it. Additive — no score, tier, order or visibility reads it. */
+    try {
+      var smcChipFn = gfn('hgSmcChipHtml');
+      var smcChipCard = smcChipFn ? (smcChipFn(c) || '') : '';
+      if (smcChipCard) badge += ' ' + smcChipCard;
+    } catch (eSmcCard) {}
+
     var h = '<div class="card' + (c.topPick ? ' og-pick' : '') + (c.topWatch ? ' og-watch' : '') + '">';
     h += '<div class="ttl">GOLD · ' + esc(c.horizon) + ' · ' + esc(c.kind) + ' ' + esc(c.dir.toUpperCase()) + ' ' + badge + '</div>';
     var confResult = hgOgAdvancedConfluenceScore(c);
@@ -9959,6 +9991,32 @@ terse status, and never launches a first-time scan on a global refresh.
         extra.ask = extra.ask != null ? extra.ask : shared.ask;
         extra.spreadUsd = extra.spreadUsd != null ? extra.spreadUsd : shared.spreadUsd;
         var cands = hgOgEvaluate(rows, hits, extra, cfg);
+
+        /* hg-v729: Smart-Money-Concepts context on every card that carries
+           a plan (smc-setups.js). RECORD-ONLY — gates, grade, plan, ranking,
+           solidity and visibility are all untouched; this only hangs a .smc
+           object off the card for the chip and logs one SMC_CONTEXT signal.
+           hgSmcEnrich reads dir/entry/stop/t1 at the TOP level and this desk
+           keeps them on c.plan, so a shim row carries them and the resulting
+           .smc is copied back onto the card. Scored here, BEFORE
+           hgOgAlignPlansToSpot rescales plans, so the geometry matches the
+           feed rows the mechanic actually fired on. Feature-checked through
+           gfn() — W is a FUNCTION in this file, not the window object. */
+        try {
+          var smcEnrichFn = gfn('hgSmcEnrich');
+          if (smcEnrichFn && rows.length){
+            for (var smcI = 0; smcI < cands.length; smcI++){
+              var smcCard = cands[smcI];
+              if (!smcCard || !smcCard.plan) continue;
+              var smcRow = { sym: 'XAUUSD', dir: smcCard.dir,
+                             entry: smcCard.plan.entry, stop: smcCard.plan.stop,
+                             t1: smcCard.plan.t1, t2: smcCard.plan.t2 };
+              smcEnrichFn(smcRow, { rows: rows, tab: 'OMNIGOLD' });
+              if (smcRow.smc) smcCard.smc = smcRow.smc;
+            }
+          }
+        } catch (eSmcOg) {}
+
 
         /* Record every firing that carries a plan — not only tickets. The
            in-sample pool measures the raw mechanic, so the forward pool must

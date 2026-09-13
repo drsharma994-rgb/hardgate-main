@@ -438,6 +438,8 @@ function cardHTML(r){
   var badge = s ? ' <span class="gpip ok">' + s.type + '</span> <span class="gpip' + (s.confirmed ? ' ok' : '') + '">'
       + (s.confirmed ? 'CONFIRMED' : 'UNCONFIRMED') + '</span>' : '';
   var visionChip = (r.visionChip && s && s.confirmed) ? ' <span class="gpip ok">' + String(r.visionChip).replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>' : '';
+  var smcChip = '';
+  try{ if (s && typeof G.hgSmcChipHtml === 'function') smcChip = G.hgSmcChipHtml(s) || ''; }catch(eSmc){ smcChip = ''; }
   var planTxt = s
     ? 'ENTRY <b>' + PX(s.entry) + '</b> · STOP <b>' + PX(s.stop) + '</b>'
       + ' · T1 ' + PX(s.t1) + ' (' + FMT(s.rr1, 1) + 'R) · T2 ' + PX(s.t2) + ' (' + FMT(s.rr2, 1) + 'R)'
@@ -467,7 +469,7 @@ function cardHTML(r){
   var stackHtml = (s && s.stack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(s.stack) : '';
   var chartBox = s ? '<div class="oiflowChart" data-sym="' + r.sym + '" style="height:180px;margin-top:8px"></div>' : '';
   return '<div class="card ' + dirLow + tierCls + '">'
-    + '<div class="chead"><span class="sym">' + r.sym + '</span><span class="dir">' + cls.dir + ' · ' + cls.score + ' EVIDENCE · ' + tierLabel + badge + visionChip
+    + '<div class="chead"><span class="sym">' + r.sym + '</span><span class="dir">' + cls.dir + ' · ' + cls.score + ' EVIDENCE · ' + tierLabel + badge + visionChip + smcChip
       + (s && typeof hgBookStampChip === 'function' ? hgBookStampChip(r.sym, s.dir, { scanner: 'oiflow', strategy: 'oiflow' }) : '')
       + '</span></div>'
     + '<div class="mini">'
@@ -659,6 +661,15 @@ async function runScan(el){
               positioning: { items: oiEv.slice(0, 6).map(function(e){ return { label: 'OI evidence', detail: e, align: 'with' }; }) }
             });
           }
+          /* SMC context (record-only) — the ticket carries neither candles nor a
+             sym of its own, so hand it the 4h tape and the desk symbol through
+             opts (no field is added to r.setup but .smc). Never touches levels,
+             tier, sort order or card visibility. */
+          try{
+            if (r.setup && r.rows4h && r.rows4h.length && typeof G.hgSmcEnrich === 'function'){
+              G.hgSmcEnrich(r.setup, { rows: r.rows4h, tab: 'OI FLOW', sym: r.sym });
+            }
+          }catch(eSmc){}
           results.push(r);
         }catch(e){ failed++; }
       }));
