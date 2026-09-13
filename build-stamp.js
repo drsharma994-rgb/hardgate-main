@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v721',
-  pack: 'GOLD ULTRA Pro: Macro + Smart Money + Session Volume + Professional Tiers (force refresh)',
-  built: '2026-09-13T16:45:32Z'
+  version: 'hg-v722',
+  pack: 'GOLD ULTRA Pro: + Real Binance/Coinglass/CoinGecko API integration (live feeds)',
+  built: '2026-09-13T17:15:00Z'
 };
 
 function hgBuildLabel(b){
