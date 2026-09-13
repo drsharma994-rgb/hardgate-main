@@ -1,0 +1,41 @@
+{
+  "algorithm-type-name": "HardgateStrategyAdapter",
+  "algorithm-language": "CSharp",
+  "live-mode": false,
+  "backtest-start": "2024-01-15",
+  "backtest-end": "2024-12-31",
+  "account-currency": "USD",
+  "security-price-type": "Bid",
+  "cash-strategy": "RoundWhole",
+  "initial-cash": 100000,
+  "data-provider": "QuantConnect",
+  "resolution": "Minute",
+  "fill-forward": true,
+  "extended-market-hours": false,
+  "account-type": "Margin",
+  "leverage": 1.5,
+  "margin-call-model": "Percentage",
+  "margin-call-percentage": 0.25,
+  "log-level": "Info",
+  "parameters": {
+    "risk-per-trade": 0.02,
+    "leverage": 1.5,
+    "max-positions": 5,
+    "use-atr-stops": true
+  },
+  "results-destination-folder": "./results",
+  "data-folder": "./data",
+  "object-store": null,
+  "transaction-log": {
+    "enabled": true,
+    "path": "./results/transactions.csv"
+  },
+  "debugging": {
+    "method": null,
+    "initialize-in-teardown": false,
+    "initialize-after-initialize": false
+  },
+  "git-ignore": null,
+  "git-copy-repo": false,
+  "asset-classes": ["Crypto", "Forex"]
+}
