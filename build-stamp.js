@@ -5,7 +5,7 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v723',
+  version: 'hg-v724',
   pack: 'GOLD ULTRA Pro UI: Data-dense dashboard + professional trading interface',
   built: '2026-09-13T17:45:00Z'
 };
