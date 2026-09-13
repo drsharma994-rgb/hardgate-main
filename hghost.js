@@ -46,65 +46,82 @@
 })();
 
 /* =========================================================================
-   HARDGATE Conviction System - Phase 3 & 4 Integration
-   Live deployment of conviction-driven trading system with intelligent optimization
+   HARDGATE Setup Intelligence System
+
+   Records every setup, tracks TP/SL outcomes, analyzes performance patterns,
+   and provides daily intelligence for better setup formation.
    ========================================================================= */
 (function(){
   'use strict';
 
-  // Initialize conviction system on app startup
+  // Initialize setup intelligence on app startup
   if (document && document.readyState === 'loading'){
     document.addEventListener('DOMContentLoaded', function(){
       try {
-        initializeConvictionSystem();
+        initializeSetupIntelligence();
       } catch(e) {
-        console.error('[HARDGATE-Conviction] Initialization failed:', e);
+        console.error('[HARDGATE-SetupIntelligence] Initialization failed:', e);
       }
     });
   } else {
     try {
-      initializeConvictionSystem();
+      initializeSetupIntelligence();
     } catch(e) {
-      console.error('[HARDGATE-Conviction] Initialization failed:', e);
+      console.error('[HARDGATE-SetupIntelligence] Initialization failed:', e);
     }
   }
 
-  async function initializeConvictionSystem(){
+  async function initializeSetupIntelligence(){
     try {
-      // Load bootstrap
-      const HardgateConvictionBootstrap = (function(){
-        // Inline bootstrap to avoid additional HTTP request
-        // Complete bootstrap code loaded from hardgate-conviction-bootstrap.js
-        return window.HardgateConvictionBootstrap || (typeof require !== 'undefined' ? require('./hardgate-conviction-bootstrap.js') : null);
-      })();
-
-      if (!HardgateConvictionBootstrap) {
-        console.warn('[HARDGATE-Conviction] Bootstrap not available, loading via require');
-        const Bootstrap = require('./hardgate-conviction-bootstrap.js');
-        const bootstrap = new Bootstrap(window);
-        await bootstrap.initialize();
-        window.HG_BOOTSTRAP = bootstrap;
-        console.log('[HARDGATE-Conviction] ✅ Phase 3 & 4 LIVE');
+      // Load setup intelligence engine
+      const SetupIntelligence = window.HardgateSetupIntelligence;
+      if (!SetupIntelligence) {
+        console.warn('[HARDGATE-SetupIntelligence] Engine not loaded');
         return;
       }
 
-      const bootstrap = new HardgateConvictionBootstrap(window);
+      // Load bootstrap
+      const Bootstrap = window.HardgateSetupIntelligenceBootstrap;
+      if (!Bootstrap) {
+        console.warn('[HARDGATE-SetupIntelligence] Bootstrap not available');
+        return;
+      }
+
+      const bootstrap = new Bootstrap(window);
       await bootstrap.initialize();
-      window.HG_BOOTSTRAP = bootstrap;
+      window.HG_SETUP_BOOTSTRAP = bootstrap;
 
       // Log status to console
-      console.log('[HARDGATE-Conviction] ✅ System initialized');
-      console.log('[HARDGATE-Conviction] Status:', bootstrap.getStatus());
+      console.log('[HARDGATE-SetupIntelligence] ✅ System initialized');
+      console.log('[HARDGATE-SetupIntelligence] Status:', bootstrap.getStatus());
 
     } catch(e) {
-      console.error('[HARDGATE-Conviction] Error during initialization:', e);
+      console.error('[HARDGATE-SetupIntelligence] Error during initialization:', e);
     }
   }
 
-  // Expose helper
-  window.HG_CONVICTION_INIT = function(){
-    console.log('[HARDGATE-Conviction] Manual initialization triggered');
-    return window.HG_BOOTSTRAP ? window.HG_BOOTSTRAP.getStatus() : 'Not initialized';
+  // Expose helpers
+  window.HG_SETUP_INIT = function(){
+    console.log('[HARDGATE-SetupIntelligence] Manual initialization triggered');
+    return window.HG_SETUP_BOOTSTRAP ? window.HG_SETUP_BOOTSTRAP.getStatus() : 'Not initialized';
+  };
+
+  // Helper to record setup from any tab
+  window.HG_RECORD_SETUP = function(setupData){
+    if (window.HG_SETUP_INTELLIGENCE) {
+      return window.HG_SETUP_INTELLIGENCE.recordSetup(setupData);
+    }
+    console.warn('[HARDGATE-SetupIntelligence] Engine not available');
+    return null;
+  };
+
+  // Helper to track setup outcome (TP/SL)
+  window.HG_TRACK_OUTCOME = function(setupId, outcome){
+    if (window.HG_SETUP_INTELLIGENCE) {
+      return window.HG_SETUP_INTELLIGENCE.updateSetupOutcome(setupId, outcome);
+    }
+    console.warn('[HARDGATE-SetupIntelligence] Engine not available');
+    return null;
   };
 
 })();

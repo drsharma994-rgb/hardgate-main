@@ -10232,15 +10232,12 @@ try{ const __tdk = localStorage.getItem('hg_td_key'); if (__tdk && $('tdKeyInput
 
 runMarketPictureUI();
 
-/* ========== HARDGATE CONVICTION SYSTEM v723 ========== */
+/* ========== HARDGATE SETUP INTELLIGENCE SYSTEM v723 ========== */
 (function(){
   var dashboardHTML = `
-    <div id="hg-conviction-dashboards" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px;background:#0f1419;border-top:1px solid #3a4556;margin-top:12px;">
-      <div id="hg-conviction-dashboard" style="background:#0f1419;color:#e8ecef;padding:12px;border-radius:6px;border:1px solid #3a4556;max-height:400px;overflow-y:auto;font-size:11px;">
-        <p style="text-align:center;color:#ffd700;margin:20px 0;">🔄 Loading Conviction Dashboard...</p>
-      </div>
-      <div id="hg-optimizer-dashboard" style="background:#0f1419;color:#e8ecef;padding:12px;border-radius:6px;border:1px solid #3a4556;max-height:400px;overflow-y:auto;font-size:11px;">
-        <p style="text-align:center;color:#ffd700;margin:20px 0;">🔄 Loading Optimizer Dashboard...</p>
+    <div id="hg-setup-intelligence-dashboards" style="display:block;padding:12px;background:#0f1419;border-top:1px solid #3a4556;margin-top:12px;">
+      <div id="hg-setup-intelligence-dashboard" style="background:#0f1419;color:#e8ecef;padding:12px;border-radius:6px;border:1px solid #3a4556;max-height:600px;overflow-y:auto;font-size:11px;">
+        <p style="text-align:center;color:#ffd700;margin:20px 0;">📊 Loading Setup Intelligence Dashboard...</p>
       </div>
     </div>
   `;
@@ -10251,23 +10248,30 @@ runMarketPictureUI();
   }
 })();
 
-/* = Load conviction bootstrap and initialize Phase 3 & 4 = */
+/* = Load setup intelligence bootstrap and initialize = */
 (function(){
   try {
-    // Require bootstrap if available
+    // Require setup intelligence system files
     if (typeof require === 'function') {
-      var Bootstrap = require('./hardgate-conviction-bootstrap.js');
+      // Load engine
+      var Engine = require('./hardgate-setup-intelligence.js');
+      window.HardgateSetupIntelligence = Engine;
+
+      // Load bootstrap
+      var Bootstrap = require('./hardgate-setup-intelligence-bootstrap.js');
+      window.HardgateSetupIntelligenceBootstrap = Bootstrap;
+
       var bootstrap = new Bootstrap(window);
       bootstrap.initialize().then(function(){
-        console.log('[HARDGATE] ✅ Conviction System Phase 3 & 4 LIVE');
+        console.log('[HARDGATE] ✅ Setup Intelligence System READY');
       }).catch(function(err){
-        console.warn('[HARDGATE] Conviction system error:', err);
+        console.warn('[HARDGATE] Setup intelligence system error:', err);
       });
     } else {
-      console.log('[HARDGATE] Conviction system available via HG_CONVICTION_INIT()');
+      console.log('[HARDGATE] Setup intelligence system available via HG_SETUP_INIT()');
     }
   } catch(e) {
-    console.warn('[HARDGATE] Conviction bootstrap not available:', e);
+    console.warn('[HARDGATE] Setup intelligence bootstrap not available:', e);
   }
 })();
 
