@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v722',
-  pack: 'GOLD ULTRA Pro: + Real Binance/Coinglass/CoinGecko API integration (live feeds)',
-  built: '2026-09-13T17:15:00Z'
+  version: 'hg-v723',
+  pack: 'GOLD ULTRA Pro UI: Data-dense dashboard + professional trading interface',
+  built: '2026-09-13T17:45:00Z'
 };
 
 function hgBuildLabel(b){

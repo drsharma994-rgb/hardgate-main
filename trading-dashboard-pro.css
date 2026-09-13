@@ -1,0 +1,359 @@
+/* =========================================================================
+   HARDGATE v723 — Professional Data-Dense Trading Dashboard
+
+   Implements UI/UX Pro Max "Data-Dense Dashboard" pattern for professional
+   trading platforms. Optimizes information density, visual hierarchy, and
+   real-time data readability.
+   ========================================================================= */
+
+:root {
+  /* Trading Dashboard Color Tokens */
+  --trading-bg: #0F1419;
+  --trading-surface: #1A1F2E;
+  --trading-surface-alt: #242C3F;
+  --trading-border: #3A4556;
+  --trading-text: #E8ECEF;
+  --trading-text-dim: #8B92A0;
+  --trading-accent: #FFD700;
+
+  /* Data-Dense Grid Layout */
+  --grid-gap: 8px;
+  --card-padding: 12px;
+  --compact-padding: 8px;
+
+  /* Typography for Data Density */
+  --font-size-tiny: 11px;
+  --font-size-compact: 12px;
+  --font-size-small: 13px;
+  --font-size-label: 14px;
+  --line-height-compact: 1.3;
+
+  /* Component Heights (Compact) */
+  --header-height: 48px;
+  --row-height: 28px;
+  --card-height-sm: 140px;
+  --card-height-md: 200px;
+  --sidebar-width: 220px;
+}
+
+/* =========================================================================
+   TRADING DASHBOARD CONTAINER
+   ========================================================================= */
+
+main {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: var(--grid-gap);
+  padding: 12px;
+  max-width: 1600px;
+  margin: 0 auto;
+  background: var(--trading-bg);
+}
+
+/* =========================================================================
+   PROFESSIONAL KPI CARDS (Header Row)
+   ========================================================================= */
+
+.kpi-cards {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--grid-gap);
+}
+
+.kpi-card {
+  background: var(--trading-surface);
+  border: 1px solid var(--trading-border);
+  border-radius: 6px;
+  padding: var(--card-padding);
+  min-height: var(--card-height-sm);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.kpi-label {
+  font-size: var(--font-size-tiny);
+  color: var(--trading-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.kpi-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--trading-accent);
+  font-family: var(--mono);
+}
+
+.kpi-sub {
+  font-size: var(--font-size-tiny);
+  color: var(--trading-text-dim);
+  margin-top: 4px;
+}
+
+/* =========================================================================
+   TRADING DATA TABLES (Data-Dense)
+   ========================================================================= */
+
+.trading-table {
+  grid-column: 1 / -1;
+  background: var(--trading-surface);
+  border: 1px solid var(--trading-border);
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.table-header {
+  display: flex;
+  background: var(--trading-surface-alt);
+  border-bottom: 1px solid var(--trading-border);
+  padding: var(--compact-padding);
+  font-size: var(--font-size-tiny);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--trading-text-dim);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.table-header-cell {
+  flex: 1;
+  min-width: 60px;
+  padding: 0 var(--compact-padding);
+  text-align: right;
+}
+
+.table-header-cell:first-child {
+  text-align: left;
+}
+
+.table-body {
+  overflow-y: auto;
+  flex: 1;
+  max-height: 280px;
+}
+
+.table-row {
+  display: flex;
+  padding: var(--compact-padding);
+  border-bottom: 1px solid var(--trading-border);
+  font-size: var(--font-size-compact);
+  color: var(--trading-text);
+  line-height: var(--line-height-compact);
+  transition: background 0.15s;
+  height: var(--row-height);
+  align-items: center;
+}
+
+.table-row:hover {
+  background: var(--trading-surface-alt);
+}
+
+.table-cell {
+  flex: 1;
+  min-width: 60px;
+  padding: 0 var(--compact-padding);
+  text-align: right;
+  font-family: var(--mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.table-cell:first-child {
+  text-align: left;
+}
+
+/* =========================================================================
+   SIGNAL CARDS (Professional Grid)
+   ========================================================================= */
+
+.signal-grid {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--grid-gap);
+}
+
+.signal-card {
+  background: var(--trading-surface);
+  border: 1px solid var(--trading-border);
+  border-radius: 6px;
+  padding: var(--card-padding);
+  min-height: var(--card-height-md);
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.signal-card:hover {
+  border-color: var(--trading-accent);
+  box-shadow: 0 0 12px rgba(255, 215, 0, 0.1);
+}
+
+.signal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  margin-bottom: 8px;
+}
+
+.signal-symbol {
+  font-weight: 700;
+  color: var(--trading-text);
+  font-size: var(--font-size-label);
+}
+
+.signal-tier {
+  font-size: var(--font-size-tiny);
+  padding: 2px 6px;
+  background: var(--trading-surface-alt);
+  border-radius: 3px;
+  color: var(--trading-accent);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.signal-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.signal-metric {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-size-tiny);
+  color: var(--trading-text-dim);
+}
+
+.signal-metric-value {
+  color: var(--trading-text);
+  font-weight: 600;
+  font-family: var(--mono);
+}
+
+/* =========================================================================
+   FILTERS & CONTROLS (Compact)
+   ========================================================================= */
+
+.trading-filters {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: var(--grid-gap);
+  padding: var(--card-padding);
+  background: var(--trading-surface);
+  border: 1px solid var(--trading-border);
+  border-radius: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.filter-group {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.filter-label {
+  font-size: var(--font-size-tiny);
+  color: var(--trading-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.filter-input {
+  padding: 4px 8px;
+  border: 1px solid var(--trading-border);
+  background: var(--trading-bg);
+  color: var(--trading-text);
+  border-radius: 4px;
+  font-size: var(--font-size-tiny);
+  font-family: var(--mono);
+  min-width: 100px;
+}
+
+.filter-input:focus {
+  outline: 1px solid var(--trading-accent);
+  border-color: var(--trading-accent);
+}
+
+/* =========================================================================
+   RESPONSIVE BREAKPOINTS
+   ========================================================================= */
+
+@media (max-width: 1200px) {
+  main {
+    grid-template-columns: repeat(8, 1fr);
+  }
+
+  .signal-grid {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  main {
+    grid-template-columns: repeat(4, 1fr);
+    padding: 8px;
+  }
+
+  .kpi-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .signal-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .table-body {
+    max-height: 200px;
+  }
+}
+
+@media (max-width: 480px) {
+  main {
+    grid-template-columns: 1fr;
+  }
+
+  .kpi-cards,
+  .signal-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* =========================================================================
+   DARK MODE SUPPORT
+   ========================================================================= */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --trading-bg: #0A0E14;
+    --trading-surface: #141820;
+    --trading-surface-alt: #1E2532;
+    --trading-border: #2A3344;
+  }
+}
+
+/* =========================================================================
+   REDUCED MOTION SUPPORT
+   ========================================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .signal-card,
+  .table-row,
+  .filter-input {
+    transition: none;
+  }
+}
