@@ -169,6 +169,24 @@ function setupCardHTML(s, idx){
   h += '<small>' + (s.count ? s.count.total : '—') + ' reads fed: ' + (K.vote || 0) + ' vote · ' + (K.regime || 0) + ' regime · ' + (K.print || 0) + ' print-only · ' + (K.na || 0) + ' not applicable';
   if (s.bar) h += ' · closed 15m bar ' + new Date(s.bar.t * 1000).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
   h += ' · close $' + fmt(s.price) + ' · ATR14 $' + fmt(s.atr) + '</small>';
+
+  /* Layer 2 & 3 voting breakdown (v2 three-layer consensus) */
+  var layerText = '';
+  if (s.orderFlow && s.orderFlow.direction){
+    var orderFlowEmoji = s.orderFlow.direction === 'long' ? '🔵' : s.orderFlow.direction === 'short' ? '🔴' : '⚪';
+    layerText += '<small>' + orderFlowEmoji + ' Order Flow: ' + (s.orderFlow.direction || 'neutral').toUpperCase() +
+                ' (' + (s.orderFlow.confidence || 0).toFixed(2) + ') · </small>';
+  }
+  if (s.sentiment && s.sentiment.score !== undefined){
+    var sentimentEmoji = s.sentiment.score > 0.3 ? '🟢' : s.sentiment.score < -0.3 ? '🔴' : '🟡';
+    layerText += '<small>' + sentimentEmoji + ' Sentiment: ' + s.sentiment.score.toFixed(2) + '</small>';
+  }
+  if (s.layerAgreement !== undefined){
+    var agreementLabel = s.layerAgreement === 2 ? '✅ All Agree' : s.layerAgreement === 1 ? '⚠️ Partial' : '❌ Diverge';
+    layerText += '<small> · ' + agreementLabel + ' (3-layer confidence ' + (s.threeLayerConfidence || 0).toFixed(2) + ')</small>';
+  }
+  if (layerText) h += '<div style="font-size:9px;color:#64748B;margin-top:4px">' + layerText + '</div>';
+
   h += '<small>RECORD ONLY — engine measured NOT TRADABLE; this is what the rule would say</small></div>';
 
   /* Sentiment context and warnings */
@@ -310,7 +328,15 @@ async function runScan(ui){
           if (res.regime === 'chop') qualityGates.push('regime: CHOP');
           if (!liquidHour) qualityGates.push('session: low liquidity');
 
-          /* Sentiment enrichment + gates */
+          /* Layer 2: Order Flow Voting (decorrelates from price action) */
+          var orderFlow = {};
+          var orderFlowDir = 'neutral';
+          if (typeof hgOrderFlowScore === 'function'){
+            orderFlow = hgOrderFlowScore(item.sym, rows15m, rows1h || []);
+            orderFlowDir = orderFlow.direction;
+          }
+
+          /* Layer 3: Sentiment Enrichment + Gates */
           var sentiment = {};
           var sentimentGate = null;
           if (typeof hgSentimentGet === 'function'){
@@ -320,6 +346,18 @@ async function runScan(ui){
           if (typeof hgSentimentScoreSignal === 'function' && sentiment.score !== undefined){
             sentimentAdjusted = hgSentimentScoreSignal(item.sym, pct, res.dir);
           }
+
+          /* Two-Layer Consensus Check (v2 fix) */
+          /* Rule: Entry fires ONLY if Layer 1 (Price) AND (Layer 2 (Order Flow) OR Layer 3 (Sentiment)) agree */
+          var layerAgreement = 0;
+          if (orderFlowDir === 'neutral'){
+            layerAgreement = 1;  /* Order flow doesn't contradict */
+          } else if (orderFlowDir === res.dir){
+            layerAgreement = 2;  /* Both layers agree (strong signal) */
+          } else {
+            layerAgreement = 0;  /* Layers diverge (weak signal) */
+          }
+
           /* Apply sentiment conflict detection */
           if (typeof hgSentimentGate === 'function'){
             sentimentGate = hgSentimentGate(item.sym, res.dir, pct);
@@ -328,6 +366,20 @@ async function runScan(ui){
             }
           }
 
+          /* Two-layer gate: If order flow disagrees and sentiment also disagrees, block */
+          if (layerAgreement === 0 && sentimentGate && !sentimentGate.shouldTrade){
+            qualityGates.push('layers diverge: price ' + res.dir + ', flow ' + orderFlowDir + ', sentiment ' + (sentiment.score > 0 ? 'bullish' : 'bearish'));
+          }
+
+          /* Three-Layer Confidence Score (v2: uncorrelated voting) */
+          var threeLayerConfidence = (pct * 0.40) +          /* Layer 1: Price action (40%) */
+                                      (Math.abs(orderFlow.score || 0) * 0.35) +  /* Layer 2: Order flow (35%) */
+                                      ((sentiment.score || 0) * 0.25);           /* Layer 3: Sentiment (25%) */
+
+          /* Apply agreement boost */
+          if (layerAgreement === 2) threeLayerConfidence *= 1.15;  /* +15% if all layers agree */
+          if (layerAgreement === 0 && pct < 0.80) threeLayerConfidence *= 0.80;  /* -20% penalty if layers diverge and confidence weak */
+
           var setup = {
             item: item,
             label: symLabel(item),
@@ -335,8 +387,12 @@ async function runScan(ui){
             exchange: item.exchange,
             dir: res.dir,
             pct: pct,
+            threeLayerConfidence: Math.max(0, Math.min(1, threeLayerConfidence)),
             sentimentAdjusted: sentimentAdjusted,
             sentiment: sentiment,
+            orderFlow: orderFlow,
+            orderFlowDir: orderFlowDir,
+            layerAgreement: layerAgreement,
             regime: res.regime,
             atr: res.atr,
             price: res.price,
