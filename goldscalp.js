@@ -449,7 +449,13 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
         stamps: Array.isArray(c.stamps) ? c.stamps.slice() : [],
         vetoed: !!c.vetoed, merged: !!c.merged,
         locked: !!c.locked, issuedAt: isFinite(c.issuedAt) ? c.issuedAt : null,
-        asOf: c.asOf || null, why: c.why || null, invalidates: c.invalidates || null
+        asOf: c.asOf || null, why: c.why || null, invalidates: c.invalidates || null,
+        /* v731: carry the SMC read across the publish boundary. Consumers that
+           re-rank these cands (super-gold.js absorbSnap -> goldRankSetups) have
+           no candles of their own, so without this the grade is neither
+           inheritable nor recomputable, and their solidity scores silently
+           differ from this desk's. Counts only — .smc holds no bars. */
+        smc: (c.smc && typeof c.smc === 'object') ? c.smc : null
       });
     }
     /* FORWARD LOG, split by STRATEGY. This desk runs several distinct setups

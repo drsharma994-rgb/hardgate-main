@@ -492,7 +492,11 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
         locked: !!c.locked, issuedAt: isFinite(c.issuedAt) ? c.issuedAt : null,
         asOf: c.asOf || null, why: c.why || null, invalidates: c.invalidates || null,
         anchor: isFinite(c.anchor) ? c.anchor : null,
-        zone: (c.zone && isFinite(c.zone.lo) && isFinite(c.zone.hi)) ? { lo: c.zone.lo, hi: c.zone.hi } : null
+        zone: (c.zone && isFinite(c.zone.lo) && isFinite(c.zone.hi)) ? { lo: c.zone.lo, hi: c.zone.hi } : null,
+        /* v731: carry the SMC read across the publish boundary — see the same
+           note in goldscalp.js publishScan. Re-rankers downstream have no
+           candles, so the read has to travel or it is lost. No bars in .smc. */
+        smc: (c.smc && typeof c.smc === 'object') ? c.smc : null
       });
     }
     /* FORWARD LOG, split by STRATEGY. This desk runs several distinct setups
