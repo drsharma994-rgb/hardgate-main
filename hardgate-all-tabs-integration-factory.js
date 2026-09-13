@@ -225,27 +225,29 @@ class HardgateAllTabsIntegrationFactory {
       ? (allRiskRewards.reduce((a, b) => a + b) / allRiskRewards.length).toFixed(2)
       : 0;
 
+    const summary = {
+      totalSetups: totalSetups,
+      closedSetups: totalClosed,
+      openSetups: totalSetups - totalClosed,
+      overallWinRate: overallWinRate + '%',
+      overallRiskReward: overallRiskReward,
+      tabsActive: Object.keys(this.integrations).length
+    };
+
     return {
       timestamp: new Date().toISOString(),
-      summary: {
-        totalSetups: totalSetups,
-        closedSetups: totalClosed,
-        openSetups: totalSetups - totalClosed,
-        overallWinRate: overallWinRate + '%',
-        overallRiskReward: overallRiskReward,
-        tabsActive: Object.keys(this.integrations).length
-      },
+      summary: summary,
       byTab: allPerformance,
       topTabs: this.getTopPerformersAcrossAllTabs(3),
       consensusSignals: this.findConsensusSignals(),
-      insights: this.generateInsights(allPerformance)
+      insights: this.generateInsights(allPerformance, summary)
     };
   }
 
   /**
    * Generate insights across all tabs
    */
-  generateInsights(allPerformance) {
+  generateInsights(allPerformance, summary) {
     const insights = [];
 
     // Find best performing tab
@@ -279,8 +281,8 @@ class HardgateAllTabsIntegrationFactory {
       insights.push(`⭐ ${consensus.length} consensus signals (2+ tabs agreeing)`);
     }
 
-    // Overall performance
-    const totalPerformance = this.getUnifiedPerformanceReport().summary;
+    // Overall performance (summary is passed in — asking the report for it here recursed forever)
+    const totalPerformance = summary || { overallWinRate: '0%' };
     const overallWR = parseFloat(totalPerformance.overallWinRate);
     if (overallWR >= 70) {
       insights.push(`✅ Strong overall performance: ${totalPerformance.overallWinRate}% win rate`);

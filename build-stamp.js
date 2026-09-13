@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v727',
-  pack: 'Setup Intelligence - multi-tab integration, comprehensive recording',
-  built: '2026-09-13T20:15:00Z'
+  version: 'hg-v728',
+  pack: 'Smart Money Concepts on every setup — BOS/CHoCH, OB, FVG, liquidity, OTE (record-only)',
+  built: '2026-09-13T17:00:00Z'
 };
 
 function hgBuildLabel(b){

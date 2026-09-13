@@ -265,23 +265,3 @@ try{
 }catch(e){}
 
 })();
-
-// Auto-load test setups for development/demo
-if (typeof window !== 'undefined') {
-  window.addEventListener('DOMContentLoaded', function() {
-    setTimeout(function() {
-      if (window.HardgateSetupIntelligence) {
-        const testSetups = [
-          { symbol: 'GOLD', tabName: 'GOLD ULTRA', direction: 'LONG', pattern: 'EMA_CASCADE', entryPrice: 2050, stopLoss: 2040, takeProfit1: 2060, takeProfit2: 2070, confidence: 0.85, tier: 'HIGH_CONVICTION' },
-          { symbol: 'BTC/USDT', tabName: 'CRYPTO ULTRA', direction: 'SHORT', pattern: 'RSI_DIVERGENCE', entryPrice: 42500, stopLoss: 43000, takeProfit1: 41500, takeProfit2: 40500, confidence: 0.75, tier: 'STANDARD' },
-          { symbol: 'ETH/USDT', tabName: 'CRYPTO SCAN', direction: 'LONG', pattern: 'VOLUME_SPIKE', entryPrice: 2250, stopLoss: 2230, takeProfit1: 2270, takeProfit2: 2300, confidence: 0.65, tier: 'STANDARD' }
-        ];
-        
-        testSetups.forEach(setup => {
-          window.HardgateSetupIntelligence.recordSetup(setup);
-          console.log('[Demo] Setup recorded:', setup.symbol, setup.tabName);
-        });
-      }
-    }, 2000);
-  });
-}

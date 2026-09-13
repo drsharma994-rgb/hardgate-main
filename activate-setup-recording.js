@@ -54,6 +54,7 @@
       };
 
       // Hook into chart updates and signals
+      if (typeof window.addEventListener !== 'function') return;
       window.addEventListener('message', (event) => {
         try {
           if (event.data && event.data.type === 'CHART_UPDATE') {
