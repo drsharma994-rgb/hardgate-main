@@ -10248,30 +10248,60 @@ runMarketPictureUI();
   }
 })();
 
-/* = Load setup intelligence bootstrap and initialize = */
+/* = Load complete Setup Intelligence ecosystem = */
 (function(){
   try {
-    // Require setup intelligence system files
     if (typeof require === 'function') {
-      // Load engine
+      // Phase 1: Base engine
       var Engine = require('./hardgate-setup-intelligence.js');
       window.HardgateSetupIntelligence = Engine;
 
-      // Load bootstrap
+      // Phase 2: Tab template
+      var TabIntegration = require('./hardgate-tab-integration-template.js');
+      window.HardgateTabIntegration = TabIntegration;
+
+      // Phase 3: Advanced analytics
+      var Advanced = require('./hardgate-setup-intelligence-advanced.js');
+      window.HardgateSetupIntelligenceAdvanced = Advanced;
+
+      // Phase 4: GOLD ULTRA example
+      var GoldUltraIntegration = require('./hardgate-gold-ultra-integration.js');
+      window.HardgateGoldUltraIntegration = GoldUltraIntegration;
+
+      // Phase 5: Data persistence
+      var Persistence = require('./hardgate-setup-intelligence-persistence.js');
+      window.HardgateSetupIntelligencePersistence = Persistence;
+
+      // Phase 6: Bulk tab integrations
+      var AllTabsFactory = require('./hardgate-all-tabs-integration-factory.js');
+      window.HardgateAllTabsIntegrationFactory = AllTabsFactory;
+
+      // Phase 7: Unified dashboard
+      var Dashboard = require('./hardgate-setup-intelligence-dashboard.js');
+      window.HardgateSetupIntelligenceDashboard = Dashboard;
+
+      // Phase 4: Bootstrap initialization
       var Bootstrap = require('./hardgate-setup-intelligence-bootstrap.js');
       window.HardgateSetupIntelligenceBootstrap = Bootstrap;
 
+      // Initialize complete ecosystem
       var bootstrap = new Bootstrap(window);
       bootstrap.initialize().then(function(){
-        console.log('[HARDGATE] ✅ Setup Intelligence System READY');
+        // Initialize persistence
+        var persistence = new Persistence(window.HardgateSetupIntelligence);
+        persistence.initialize().then(function(){
+          // Persistence ready, factory and dashboard auto-init
+          console.log('[HARDGATE] ✅ Complete Setup Intelligence Ecosystem LIVE');
+          console.log('[HARDGATE] Phases: 1-7 initialized');
+        });
       }).catch(function(err){
-        console.warn('[HARDGATE] Setup intelligence system error:', err);
+        console.warn('[HARDGATE] Setup intelligence error:', err);
       });
     } else {
-      console.log('[HARDGATE] Setup intelligence system available via HG_SETUP_INIT()');
+      console.log('[HARDGATE] Setup intelligence available via HG_SETUP_INIT()');
     }
   } catch(e) {
-    console.warn('[HARDGATE] Setup intelligence bootstrap not available:', e);
+    console.warn('[HARDGATE] Setup intelligence initialization failed:', e);
   }
 })();
 
