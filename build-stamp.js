@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v726',
-  pack: 'Setup Intelligence recording system - clean, non-intrusive',
-  built: '2026-09-13T19:00:00Z'
+  version: 'hg-v727',
+  pack: 'Setup Intelligence - multi-tab integration, comprehensive recording',
+  built: '2026-09-13T20:15:00Z'
 };
 
 function hgBuildLabel(b){
