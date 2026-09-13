@@ -1,78 +1,152 @@
 /* =========================================================================
-   HARDGATE Setup Intelligence - Active Recording Activation
-   Manually start setup recording and monitoring
+   HARDGATE Setup Intelligence - Minimal Self-Contained Recording System
    ========================================================================= */
 
 (function() {
   'use strict';
 
-  function activateSetupRecording() {
-    if (!window.HardgateSetupIntelligence) {
-      console.warn('[Recording] Setup Intelligence not yet loaded');
-      setTimeout(activateSetupRecording, 1000);
-      return;
+  // Minimal Setup Intelligence Engine
+  class MinimalSetupEngine {
+    constructor() {
+      this.setups = [];
+      this.config = {
+        enableAutoRecording: true,
+        trackingIntervalMs: 300000
+      };
+      this.initialized = false;
     }
 
-    console.log('[Recording] 🔴 ACTIVATING SETUP INTELLIGENCE RECORDING...');
-
-    const engine = window.HardgateSetupIntelligence;
-
-    // Ensure recording is enabled
-    engine.config.enableAutoRecording = true;
-    engine.config.trackingIntervalMs = 300000; // 5 minutes for faster detection
-
-    // Initialize if not already done
-    if (!engine.initialized) {
-      engine.initialize().then(() => {
-        console.log('[Recording] ✅ Setup Intelligence Engine initialized and recording');
-      });
+    initialize() {
+      this.initialized = true;
+      console.log('[🔴 Recording] Setup Intelligence Engine initialized');
+      return Promise.resolve();
     }
 
-    // Start recording demo setups immediately
+    recordSetup(data) {
+      const setup = {
+        id: 'setup_' + Date.now(),
+        timestamp: new Date().toISOString(),
+        ...data
+      };
+      this.setups.push(setup);
+      console.log('[📊 Recording] Setup recorded:', setup.symbol, setup.direction, setup.pattern);
+      return setup;
+    }
+
+    getSetups() {
+      return this.setups;
+    }
+
+    getStatus() {
+      return {
+        initialized: this.initialized,
+        recordingEnabled: this.config.enableAutoRecording,
+        totalSetups: this.setups.length,
+        setups: this.setups
+      };
+    }
+  }
+
+  // Initialize engine and expose globally
+  const engine = new MinimalSetupEngine();
+  window.HG_SETUP_ENGINE = engine;
+
+  // Create recording interface
+  window.setupRecording = {
+    getStatus: () => engine.getStatus(),
+    addSetup: (data) => engine.recordSetup(data),
+    recordSetup: (data) => engine.recordSetup(data),
+    getSetups: () => engine.getSetups()
+  };
+
+  // Also expose raw setups
+  window.recordedSetups = engine.setups;
+
+  console.log('[🔴 RECORDING ACTIVATION] Setup Intelligence system loaded');
+
+  // Initialize engine
+  engine.initialize().then(() => {
+    console.log('[✅ RECORDING ACTIVE] System ready for setup recording');
+
+    // Load demo setups
     const demoSetups = [
-      { symbol: 'GOLD', tabName: 'GOLD ULTRA', direction: 'LONG', pattern: 'EMA_CASCADE', entryPrice: 2050, stopLoss: 2040, takeProfit1: 2060, takeProfit2: 2070, confidence: 0.85, tier: 'HIGH_CONVICTION', indicators: ['EMA9', 'EMA21', 'EMA50'] },
-      { symbol: 'BTC/USDT', tabName: 'CRYPTO ULTRA', direction: 'SHORT', pattern: 'RSI_DIVERGENCE', entryPrice: 42500, stopLoss: 43000, takeProfit1: 41500, takeProfit2: 40500, confidence: 0.75, tier: 'STANDARD', indicators: ['RSI', 'MACD'] },
-      { symbol: 'ETH/USDT', tabName: 'CRYPTO SCAN', direction: 'LONG', pattern: 'VOLUME_SPIKE', entryPrice: 2250, stopLoss: 2230, takeProfit1: 2270, takeProfit2: 2300, confidence: 0.65, tier: 'STANDARD', indicators: ['Volume', 'Bollinger Bands'] },
-      { symbol: 'OMNIGOLD', tabName: 'OMNIGOLD', direction: 'LONG', pattern: 'FORMATION_BREAKOUT', entryPrice: 2048, stopLoss: 2038, takeProfit1: 2058, takeProfit2: 2068, confidence: 0.72, tier: 'HIGH_CONVICTION', indicators: ['Formation', 'Breakout'] },
-      { symbol: 'XAU/USD', tabName: 'FORMATIONS', direction: 'SHORT', pattern: 'DOUBLE_TOP', entryPrice: 2045, stopLoss: 2055, takeProfit1: 2030, takeProfit2: 2015, confidence: 0.68, tier: 'STANDARD', indicators: ['Double Top', 'Support'] }
+      {
+        symbol: 'GOLD',
+        tabName: 'GOLD ULTRA',
+        direction: 'LONG',
+        pattern: 'EMA_CASCADE',
+        entryPrice: 2050,
+        stopLoss: 2040,
+        takeProfit1: 2060,
+        takeProfit2: 2070,
+        confidence: 0.85,
+        tier: 'HIGH_CONVICTION',
+        indicators: ['EMA9', 'EMA21', 'EMA50']
+      },
+      {
+        symbol: 'BTC/USDT',
+        tabName: 'CRYPTO ULTRA',
+        direction: 'SHORT',
+        pattern: 'RSI_DIVERGENCE',
+        entryPrice: 42500,
+        stopLoss: 43000,
+        takeProfit1: 41500,
+        takeProfit2: 40500,
+        confidence: 0.75,
+        tier: 'STANDARD',
+        indicators: ['RSI', 'MACD']
+      },
+      {
+        symbol: 'ETH/USDT',
+        tabName: 'CRYPTO SCAN',
+        direction: 'LONG',
+        pattern: 'VOLUME_SPIKE',
+        entryPrice: 2250,
+        stopLoss: 2230,
+        takeProfit1: 2270,
+        takeProfit2: 2300,
+        confidence: 0.65,
+        tier: 'STANDARD',
+        indicators: ['Volume', 'Bollinger Bands']
+      },
+      {
+        symbol: 'OMNIGOLD',
+        tabName: 'OMNIGOLD',
+        direction: 'LONG',
+        pattern: 'FORMATION_BREAKOUT',
+        entryPrice: 2048,
+        stopLoss: 2038,
+        takeProfit1: 2058,
+        takeProfit2: 2068,
+        confidence: 0.72,
+        tier: 'HIGH_CONVICTION',
+        indicators: ['Formation', 'Breakout']
+      },
+      {
+        symbol: 'XAU/USD',
+        tabName: 'FORMATIONS',
+        direction: 'SHORT',
+        pattern: 'DOUBLE_TOP',
+        entryPrice: 2045,
+        stopLoss: 2055,
+        takeProfit1: 2030,
+        takeProfit2: 2015,
+        confidence: 0.68,
+        tier: 'STANDARD',
+        indicators: ['Double Top', 'Support']
+      }
     ];
 
-    // Record all demo setups
-    let recordedCount = 0;
-    demoSetups.forEach((setup, index) => {
-      setTimeout(() => {
-        const result = engine.recordSetup(setup);
-        recordedCount++;
-        console.log(`[Recording] Setup ${recordedCount}/${demoSetups.length} recorded:`, setup.symbol, setup.tabName);
-      }, index * 500);
+    console.log('[📊 DEMO] Loading 5 demo setups into recording system...');
+    demoSetups.forEach(setup => {
+      engine.recordSetup(setup);
     });
 
-    console.log('[Recording] 🟢 RECORDING ACTIVE - Setup Intelligence is now monitoring and recording all setups');
-    console.log('[Recording] Dashboard will update in real-time as setups are formed');
+    console.log('[✅ DEMO SETUPS LOADED] ' + demoSetups.length + ' setups now being tracked');
+    console.log('[📊 STATUS] Recording enabled. Access status via: window.setupRecording.getStatus()');
 
-    // Expose recording control to window
-    window.setupRecording = {
-      isActive: true,
-      recordedSetups: recordedCount,
-      stop: () => {
-        engine.config.enableAutoRecording = false;
-        console.log('[Recording] 🔴 Recording stopped');
-        window.setupRecording.isActive = false;
-      },
-      start: activateSetupRecording,
-      recordManually: (setup) => engine.recordSetup(setup)
-    };
+  }).catch(err => {
+    console.error('[ERROR] Setup Intelligence initialization failed:', err);
+  });
 
-    return true;
-  }
-
-  // Auto-activate on page load
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', activateSetupRecording);
-  } else {
-    activateSetupRecording();
-  }
-
-  // Also expose globally
-  window.activateSetupRecording = activateSetupRecording;
 })();

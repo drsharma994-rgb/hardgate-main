@@ -10248,63 +10248,18 @@ runMarketPictureUI();
   }
 })();
 
-/* = Load complete Setup Intelligence ecosystem = */
-(function(){
-  try {
-    if (typeof require === 'function') {
-      // Phase 1: Base engine
-      var Engine = require('./hardgate-setup-intelligence.js');
-      window.HardgateSetupIntelligence = Engine;
-
-      // Phase 2: Tab template
-      var TabIntegration = require('./hardgate-tab-integration-template.js');
-      window.HardgateTabIntegration = TabIntegration;
-
-      // Phase 3: Advanced analytics
-      var Advanced = require('./hardgate-setup-intelligence-advanced.js');
-      window.HardgateSetupIntelligenceAdvanced = Advanced;
-
-      // Phase 4: GOLD ULTRA example
-      var GoldUltraIntegration = require('./hardgate-gold-ultra-integration.js');
-      window.HardgateGoldUltraIntegration = GoldUltraIntegration;
-
-      // Phase 5: Data persistence
-      var Persistence = require('./hardgate-setup-intelligence-persistence.js');
-      window.HardgateSetupIntelligencePersistence = Persistence;
-
-      // Phase 6: Bulk tab integrations
-      var AllTabsFactory = require('./hardgate-all-tabs-integration-factory.js');
-      window.HardgateAllTabsIntegrationFactory = AllTabsFactory;
-
-      // Phase 7: Unified dashboard
-      var Dashboard = require('./hardgate-setup-intelligence-dashboard.js');
-      window.HardgateSetupIntelligenceDashboard = Dashboard;
-
-      // Phase 4: Bootstrap initialization
-      var Bootstrap = require('./hardgate-setup-intelligence-bootstrap.js');
-      window.HardgateSetupIntelligenceBootstrap = Bootstrap;
-
-      // Initialize complete ecosystem
-      var bootstrap = new Bootstrap(window);
-      bootstrap.initialize().then(function(){
-        // Initialize persistence
-        var persistence = new Persistence(window.HardgateSetupIntelligence);
-        persistence.initialize().then(function(){
-          // Persistence ready, factory and dashboard auto-init
-          console.log('[HARDGATE] ✅ Complete Setup Intelligence Ecosystem LIVE');
-          console.log('[HARDGATE] Phases: 1-7 initialized');
-        });
-      }).catch(function(err){
-        console.warn('[HARDGATE] Setup intelligence error:', err);
-      });
-    } else {
-      console.log('[HARDGATE] Setup intelligence available via HG_SETUP_INIT()');
-    }
-  } catch(e) {
-    console.warn('[HARDGATE] Setup intelligence initialization failed:', e);
-  }
-})();
-
+/* = Load complete Setup Intelligence ecosystem via script tags = */
+console.log('[HARDGATE] Loading Setup Intelligence modules...');
+</script>
+<script src="./hardgate-setup-intelligence.js?v=hg-v724"></script>
+<script src="./hardgate-tab-integration-template.js?v=hg-v724"></script>
+<script src="./hardgate-setup-intelligence-advanced.js?v=hg-v724"></script>
+<script src="./hardgate-gold-ultra-integration.js?v=hg-v724"></script>
+<script src="./hardgate-setup-intelligence-persistence.js?v=hg-v724"></script>
+<script src="./hardgate-all-tabs-integration-factory.js?v=hg-v724"></script>
+<script src="./hardgate-setup-intelligence-dashboard.js?v=hg-v724"></script>
+<script src="./hardgate-setup-intelligence-bootstrap.js?v=hg-v724"></script>
+<script>
 /* ---------------- PWA: service worker registration ----------------
    sw.js is network-first for EVERYTHING (fresh market data is sacred); its
    cache is an offline fallback only and never stores /api/ or /api/proxy
@@ -10345,6 +10300,7 @@ try{
 }catch(e){}
 /* hgVerBadge is painted by build-stamp.js (hgRenderVerBadge) â€” do not duplicate here. */
 </script>
+<script src="./activate-setup-recording.js?v=hg-v724"></script>
 </body>
 </html>
 
