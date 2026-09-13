@@ -149,4 +149,37 @@
     console.error('[ERROR] Setup Intelligence initialization failed:', err);
   });
 
+  // Create fixed monitoring panel at top-right
+  setTimeout(() => {
+    const panelHTML = `
+    <div style="
+      position: fixed; top: 80px; right: 16px; width: 320px;
+      background: #1a1a1a; border: 2px solid #00ff00;
+      border-radius: 8px; padding: 12px; z-index: 10000;
+      color: #fff; font-family: monospace; font-size: 11px;
+      box-shadow: 0 0 20px rgba(0,255,0,0.3);
+    ">
+      <div style="text-align: center; margin-bottom: 8px; color: #00ff00; font-weight: bold;">
+        📊 SETUP INTELLIGENCE
+      </div>
+      <div style="border-top: 1px solid #444; padding-top: 8px;">
+        <div>Status: <span style="color: #00ff00;">✅ ACTIVE</span></div>
+        <div>Recording: <span style="color: #00ff00;">✅ ENABLED</span></div>
+        <div>Setups: <strong>${demoSetups.length}</strong></div>
+      </div>
+      <div style="border-top: 1px solid #444; margin-top: 8px; padding-top: 8px; font-size: 10px;">
+        ${demoSetups.map(s =>
+          `<div style="margin: 4px 0; color: ${s.direction === 'LONG' ? '#00ff00' : '#ff0000'};"><strong>${s.symbol}</strong> ${s.direction} - ${(s.confidence*100).toFixed(0)}%</div>`
+        ).join('')}
+      </div>
+    </div>
+    `;
+
+    const panel = document.createElement('div');
+    panel.setAttribute('data-setup-panel', 'true');
+    panel.innerHTML = panelHTML;
+    document.body.appendChild(panel);
+    console.log('[✅ PANEL] Setup Intelligence monitoring panel created at top-right');
+  }, 500);
+
 })();
