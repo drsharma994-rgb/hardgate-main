@@ -1761,11 +1761,13 @@ async function runScan(ui, scanSt){
        MOST PROBABLE. goldRankSetups holds this rule; the desk holds it too. */
     if (displayBest && (displayBest.demoted || displayBest.vetoed)) displayBest = null;
     goldStampTape(display, deskTape);
-    /* hg-v729: Smart Money Concepts context on the finished cards — RECORD ONLY.
-       Runs after every level engine, the spot alignment, the conviction lock and
-       the lead invariant, so it reads the exact objects cardHTML paints. It only
-       attaches c.smc and records an SMC_CONTEXT signal; it never touches tally,
-       grade, demotion, veto, ordering, filtering or the lead. */
+    /* hg-v731: Smart Money Concepts context on the finished cards — DISPLAY ONLY
+       at this point. Runs after every level engine, the spot alignment, the
+       conviction lock and the lead invariant, so it reads the exact objects
+       cardHTML paints. THIS call only attaches c.smc and records an SMC_CONTEXT
+       signal; it never touches tally, grade, demotion, veto or the lead.
+       Ordering upstream is no longer SMC-free though: goldRankSetups scores an
+       SMC read into solidityScore, which is its third sort tiebreaker. */
     try{
       if (typeof W.hgSmcEnrich === 'function'){
         var smcTab = (scanSt && scanSt.deskTab) || 'GOLD SCALP';

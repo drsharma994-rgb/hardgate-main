@@ -1814,10 +1814,12 @@ async function runScan(ui){
     var lane = { cands: [], held: [], dark: null };
     try{ lane = await laneGoldScalp(f, now); }catch(eL){ lane = { cands: [], held: ['lane threw: ' + ((eL && eL.message) || eL)], dark: null }; }
     var sel = selectSetups(lane.cands, res.ok ? res.count : null);
-    /* SMC context on every GOLD SCALP card this tab shows — record-only.
-       goldind.js calls hgSetupSolidityApply(rc, {asset,tally,grade}) with no
-       candle array, and guNorm() rebuilds a fresh whitelisted row, so the
-       smc-setups.js solidity wrapper can never reach these rows. */
+    /* SMC context on every GOLD SCALP card this tab shows — display-only HERE.
+       v731: goldind.js now hands 15m candles to hgSetupSolidityApply, so the
+       ranker has already scored an SMC read into rc.solidityScore upstream —
+       third sort tiebreaker, and solidityBookOk gates MOST PROBABLE. guNorm()
+       rebuilds a fresh whitelisted row that drops .smc, which is why the cards
+       this tab paints still need their own read to carry the chip. */
     try{
       if (typeof W.hgSmcEnrich === 'function' && sel.cards.length){
         var smcRows = closedRows(f.rows15m, 900, now);
