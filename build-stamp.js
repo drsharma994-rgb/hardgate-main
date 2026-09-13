@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v720',
-  pack: 'GOLD ULTRA Pro: Macro feeds + Smart Money + Session Volume + Professional Tiers',
-  built: '2026-09-13T15:30:00Z'
+  version: 'hg-v721',
+  pack: 'GOLD ULTRA Pro: Macro + Smart Money + Session Volume + Professional Tiers (force refresh)',
+  built: '2026-09-13T16:45:32Z'
 };
 
 function hgBuildLabel(b){
