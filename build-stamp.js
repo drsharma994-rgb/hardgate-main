@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v729',
-  pack: 'Smart Money Concepts (SMC) integrated per-tab — record-only on every setup, bridge to Setup Intelligence',
+  version: 'hg-v730',
+  pack: 'Smart Money Concepts active scoring — improves setup quality across all 39 tabs',
   built: '2026-09-13T17:00:00Z'
 };
 

@@ -107,7 +107,22 @@ function wrapOnce(name, make){
 }
 function install(){
   wrapOnce('hgSetupSolidityApply', function(orig){
-    return function(row, opts){ var out = orig(row, opts); hgSmcEnrich(row, opts); return out; };
+    return function(row, opts){
+      var out = orig(row, opts);
+      hgSmcEnrich(row, opts);
+      /* Activate SMC: adjust solidity score based on confluence grade */
+      if (row.smc && row.smc.grade && typeof row.score === 'number'){
+        var adj = 0;
+        if (row.smc.grade === 'STRONG') adj = 5;
+        else if (row.smc.grade === 'WITH') adj = 2;
+        else if (row.smc.grade === 'AGAINST') adj = -3;
+        if (adj !== 0){
+          row.score += adj;
+          if (row.solidity) row.solidity.smcAdj = adj;
+        }
+      }
+      return out;
+    };
   });
   wrapOnce('hgSetupSolidityChipHtml', function(orig){
     return function(row){ var html = orig(row) || ''; return html + hgSmcChipHtml(row); };
