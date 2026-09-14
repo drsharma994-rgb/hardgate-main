@@ -31,7 +31,14 @@ const opt = (name, dflt) => { const a = argv.find(x => x.startsWith(name + '='))
 const BARS_15M = +opt('--bars', 6000);
 const OUT_FILE = path.join(ROOT, 'scripts', 'backtest-goldultra-filter-results.json');
 const WIN_15M = 320, WIN_1H = 400, MIN_15M = 230, MIN_AVAIL = 25, IS_SHARE = 0.70, MIN_N = 60;
-const GRID = [0.55, 0.60, 0.65, 0.70, 0.75, 0.80];
+/* v733: extended DOWN from 0.55. The binding limitation on this finding has
+   never been the effect size — OOS AGAINST is positive at all six original
+   thresholds in both gold-scalp books — it is n. The lowest threshold yields
+   the largest cohort and still pays, so the open question is whether the edge
+   survives further down with enough samples to be tradable rather than a
+   ranking preference. Lower X admits more setups into BOTH cohorts and shrinks
+   NEUTRAL; it does not change any trade's outcome. */
+const GRID = [0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80];
 const COST_XM_FRAC = (0.35 / 3500) + 0.010 / 100;
 
 function loadCache(interval, target){
@@ -92,10 +99,23 @@ function study(label, trades){
   const grid = GRID.map(X => ({ X, ins: cohorts(ins, X), oos: cohorts(oos, X), all: cohorts(trades, X) }));
   let chosen = null;
   for (const g of grid){ if (g.ins.agree.n < MIN_N) continue; const lift = g.ins.agree.avgR_net_xm - base.ins.avgR_net_xm; if (!chosen || lift > chosen.lift) chosen = { X: g.X, lift: +lift.toFixed(3), row: g }; }
+  /* v733: the deployed rule crowns AGAINST (HG_GOLD_ULTRA_FILTER in goldultra.js
+     stamps WITH/AGAINST and the desk crowns the contrarian side), but `chosen`
+     above picks X by maximising the AGREE cohort and gates on AGREE's n. The
+     parameter was being tuned for a cohort the tab does not trade. This second
+     selection uses the SAME in-sample-only discipline on the cohort actually
+     deployed, so the two can be compared honestly. Selection reads ins only —
+     oos is never consulted here. */
+  let chosenAgainst = null;
+  for (const g of grid){
+    if (g.ins.against.n < MIN_N) continue;
+    const lift = g.ins.against.avgR_net_xm - base.ins.avgR_net_xm;
+    if (!chosenAgainst || lift > chosenAgainst.lift) chosenAgainst = { X: g.X, lift: +lift.toFixed(3), row: g };
+  }
   const byRegime = {}; for (const t of oos){ const k = t.ultra.regime; (byRegime[k] = byRegime[k] || []).push(t); }
   const regimeRows = Object.keys(byRegime).sort().map(k => ({ regime: k, ...agg(byRegime[k]) }));
   const byLead = { with: agg(oos.filter(t => t.ultra.lead === t.dir)), against: agg(oos.filter(t => t.ultra.lead !== t.dir)) };
-  return { label, joined: trades.length, base, grid, chosen, oosByRegime: regimeRows, oosByLeadAnyPct: byLead };
+  return { label, joined: trades.length, base, grid, chosen, chosenAgainst, oosByRegime: regimeRows, oosByLeadAnyPct: byLead };
 }
 const gs = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts', 'backtest-goldscalp-results.json'), 'utf8'));
 const gsT = gs.trades.filter(t => !t.shadow && t.netR != null).map(t => { const sec = Math.floor(Date.parse(t.tISO) / 1000); return { sec, dir: t.dir, outcome: t.outcome, netXm: t.netR, netPaxg: t.netR_paxg, demoted: !!t.demoted, ultra: byT.get(sec) || null }; });

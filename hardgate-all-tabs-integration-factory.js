@@ -122,10 +122,67 @@ class HardgateAllTabsIntegrationFactory {
 
     for (const [tabName, integration] of Object.entries(this.integrations)) {
       const perf = integration.getTabPerformance();
-      performance[tabName] = perf;
+      /* v733: only surface an integration that actually has settled data.
+         All six read HG_SETUP_INTELLIGENCE, which nothing populates, so
+         without this the dashboard rendered six all-zero rows and called it
+         a performance report. */
+      if (perf && perf.dataPoints > 0) performance[tabName] = perf;
     }
 
+    Object.assign(performance, this.getForwardLogPerformance());
     return performance;
+  }
+
+  /* v733: the real source of settled outcomes.
+     The six hardcoded integrations above read W.HG_SETUP_INTELLIGENCE, which
+     nothing writes setups into — recordSetup is called from only two places,
+     neither wired to a live tab — so this dashboard had never shown a number.
+     Meanwhile hg-forward.js has been accumulating genuine out-of-sample
+     evidence the whole time: one record per firing keyed to the bar it fired
+     on, never resolved by the firing bar, settled later by candles that had
+     not printed when it was written.
+     The tab names are a third scheme again (forward log 'GOLDSCALP', factory
+     'GOLD ULTRA', smc-setups 'GOLD_ULTRA'), so rather than translate between
+     them this reads whichever tabs the log actually contains. */
+  getForwardLogPerformance() {
+    const W = this.W;
+    if (!W || typeof W.hgFwdPool !== 'function') return {};
+    let tabs = [];
+    try {
+      const raw = W.localStorage ? W.localStorage.getItem('hg_forward_v1') : null;
+      const parsed = raw ? JSON.parse(raw) : [];
+      const recs = Array.isArray(parsed) ? parsed : (parsed.records || []);
+      tabs = Array.from(new Set(recs.map(r => r && r.tab).filter(Boolean)));
+    } catch (e) { return {}; }
+
+    const out = {};
+    for (const tab of tabs) {
+      let pool;
+      try { pool = W.hgFwdPool(tab) || {}; } catch (e) { continue; }
+      let settled = 0, wins = 0, open = 0, rrSum = 0, rrN = 0;
+      for (const stats of Object.values(pool)) {
+        if (!stats) continue;
+        settled += stats.samples || 0;
+        wins += stats.wins || 0;
+        open += stats.open || 0;
+        if (typeof stats.avgRr === 'number' && isFinite(stats.avgRr)) { rrSum += stats.avgRr; rrN++; }
+      }
+      if (!settled && !open) continue;
+      out[tab] = {
+        totalSetups: settled + open,
+        closedSetups: settled,
+        /* null, not 0, when nothing has settled. A forward record cannot
+           resolve until bars after its firing bar exist — on a 4h record with
+           a 20-bar horizon that is ~80 hours — so a young log is CORRECTLY
+           all-open. Rendering that as "0%" reads as "we measured zero wins"
+           when it means "no outcome yet", which is the opposite claim. */
+        winRate: settled > 0 ? (wins / settled * 100).toFixed(1) + '%' : null,
+        avgRiskReward: rrN > 0 ? (rrSum / rrN).toFixed(2) : null,
+        dataPoints: settled,
+        source: 'forward-log',
+      };
+    }
+    return out;
   }
 
   /**
@@ -215,23 +272,32 @@ class HardgateAllTabsIntegrationFactory {
       if (perf) {
         totalSetups += perf.totalSetups;
         totalClosed += perf.closedSetups;
-        totalWins += (parseFloat(perf.winRate) || 0) * perf.closedSetups;
-        allRiskRewards.push(parseFloat(perf.avgRiskReward) || 0);
+        /* v733 UNIT FIX: perf.winRate is a PERCENT string ("66.7%"), so
+           parseFloat gives 66.7, not 0.667. Multiplying that by closedSetups
+           and then re-multiplying by 100 below inflated every win rate 100x —
+           latent until now only because the store it read was always empty. */
+        totalWins += ((parseFloat(perf.winRate) || 0) / 100) * perf.closedSetups;
+        /* only average an R:R that exists; a tab with nothing settled was
+           dragging the mean toward zero by contributing a fabricated 0 */
+        const rr = parseFloat(perf.avgRiskReward);
+        if (isFinite(rr)) allRiskRewards.push(rr);
       }
     }
 
-    const overallWinRate = totalClosed > 0 ? (totalWins / totalClosed * 100).toFixed(1) : 0;
+    const overallWinRate = totalClosed > 0 ? (totalWins / totalClosed * 100).toFixed(1) : null;
     const overallRiskReward = allRiskRewards.length > 0
       ? (allRiskRewards.reduce((a, b) => a + b) / allRiskRewards.length).toFixed(2)
-      : 0;
+      : null;
 
     const summary = {
       totalSetups: totalSetups,
       closedSetups: totalClosed,
       openSetups: totalSetups - totalClosed,
-      overallWinRate: overallWinRate + '%',
-      overallRiskReward: overallRiskReward,
-      tabsActive: Object.keys(this.integrations).length
+      /* '—' rather than '0%' when nothing has settled: see the note in
+         getForwardLogPerformance. No data is not a measurement of zero. */
+      overallWinRate: overallWinRate === null ? '—' : overallWinRate + '%',
+      overallRiskReward: overallRiskReward === null ? '—' : overallRiskReward,
+      tabsActive: Object.keys(allPerformance).length
     };
 
     return {

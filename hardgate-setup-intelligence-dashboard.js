@@ -157,17 +157,17 @@ class HardgateSetupIntelligenceDashboard {
         <div style="background: #1a2235; padding: 12px; border-radius: 4px;">
           <div style="font-size: 10px; color: #999;">Win Rate</div>
           <div style="font-size: 18px; font-weight: bold; color: ${parseFloat(summary.overallWinRate) >= 70 ? '#00d084' : '#ffd700'};">
-            ${summary.overallWinRate}%
+            ${summary.overallWinRate}
           </div>
-          <div style="font-size: 10px; color: #666;">Overall performance</div>
+          <div style="font-size: 10px; color: #666;">${summary.closedSetups > 0 ? 'Across ' + summary.closedSetups + ' settled' : 'No settled trades yet'}</div>
         </div>
 
         <div style="background: #1a2235; padding: 12px; border-radius: 4px;">
           <div style="font-size: 10px; color: #999;">Avg Risk/Reward</div>
           <div style="font-size: 18px; font-weight: bold; color: #ffd700;">
-            ${summary.overallRiskReward}:1
+            ${summary.overallRiskReward === '—' ? '—' : summary.overallRiskReward + ':1'}
           </div>
-          <div style="font-size: 10px; color: #666;">Across all setups</div>
+          <div style="font-size: 10px; color: #666;">${summary.overallRiskReward === '—' ? 'Awaiting settled trades' : 'Realised, across tabs'}</div>
         </div>
       </div>
     `;
@@ -192,8 +192,8 @@ class HardgateSetupIntelligenceDashboard {
           <div style="background: #1a2235; padding: 8px; border-radius: 4px; border-left: 3px solid ${color};">
             <div style="font-weight: bold; font-size: 11px; margin-bottom: 2px;">${tabName}</div>
             <div style="display: flex; justify-content: space-between; font-size: 10px;">
-              <span>WR: <span style="color: ${color};">${perf.winRate}</span></span>
-              <span>RR: ${perf.avgRiskReward}</span>
+              <span>WR: <span style="color: ${color};">${perf.winRate == null ? '—' : perf.winRate}</span></span>
+              <span>RR: ${perf.avgRiskReward == null ? '—' : perf.avgRiskReward}</span>
               <span>${perf.closedSetups}/${perf.totalSetups}</span>
             </div>
           </div>

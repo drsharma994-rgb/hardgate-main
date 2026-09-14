@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v733',
-  pack: 'cointegration gate corrected to the residual-based critical value + Engle-Granger step 2',
+  version: 'hg-v734',
+  pack: 'Setup Intelligence dashboard reads the forward log instead of an empty store; win-rate unit fix',
   built: '2026-09-13T17:00:00Z'
 };
 
