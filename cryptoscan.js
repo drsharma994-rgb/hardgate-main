@@ -145,6 +145,50 @@ function csSortSetups(arr){
   return arr;
 }
 
+/* v735: forward-log row builder, kept PURE and exported for the same reason
+   csSmcRank is — everything else in the scan path lives inside runScan, which
+   cannot be reached without live network, so a behaviour test is impossible
+   unless the decision is liftable. The previous SMC activation shipped as dead
+   code precisely because nothing could exercise it. */
+function csFwdRows(setups){
+  if (!Array.isArray(setups)) return [];
+  /* +null, +undefined and +'' are 0, and isFinite(0) is true, so coercing
+     before the finite test would let a MISSING level through AS ZERO — which
+     records a fabricated 100%-risk trade rather than dropping the row. Same
+     trap fixpack14-core.js documents in hgCoint; my own test caught it here. */
+  function lvl(v){ return (v === null || v === undefined || v === '') ? NaN : +v; }
+  var out = [], i;
+  for (i = 0; i < setups.length; i++){
+    var s = setups[i], p = s && s.plan;
+    if (!s || !s.sym || !s.dir || !p) continue;
+    var en = lvl(p.entry), st = lvl(p.stop), tp = lvl(p.t1);
+    if (!isFinite(en) || !isFinite(st) || !isFinite(tp)) continue;
+    /* a zero-risk plan cannot be scored in R and would divide by zero downstream */
+    if (en === st) continue;
+    out.push({
+      sym: String(s.sym), dir: s.dir,
+      entry: en, stop: st, t1: tp,
+      /* mechanic is the VOTE TIER, not a constant, so the log answers the
+         question worth asking — do this desk's own confidence tiers actually
+         separate — rather than pooling everything into one bag */
+      mechanic: ('VOTE-' + String(s.voteTier || 'weak')).toUpperCase().slice(0, 28),
+      /* marks the HIGH-QUALITY cohort (no quality gates AND pro-grade). Not a
+         claim these are tradeable — the cards say RECORD ONLY — it is the split
+         that lets someone later ask whether the tab's strongest claim paid. */
+      ticket: !!s.isHighQuality
+    });
+  }
+  return out;
+}
+
+/* the plan's own expiry, so a record cannot outlive the setup it describes;
+   the card prints it as "expires after N bars" */
+function csFwdHorizon(setups){
+  var s = Array.isArray(setups) ? setups[0] : null;
+  var n = s && s.plan ? +s.plan.timeoutBars : NaN;
+  return (isFinite(n) && n > 0) ? n : 24;
+}
+
 function voteTableHTML(votes){
   if (!votes || !votes.length) return '';
   var groups = [], h = '<table class="cs-vtbl"><tr><th>read</th><th>value</th><th>kind</th><th>vote</th><th>rule</th></tr>';
@@ -530,6 +574,32 @@ async function runScan(ui){
 
     csSortSetups(setups);
 
+    /* v735: FORWARD LOG. Until now this desk measured nothing about itself —
+       every number on its cards came from the same rolling window it had just
+       fetched, so re-scanning reshuffled noise rather than adding evidence, and
+       CRYPTO SCAN was absent from Setup Intelligence entirely because that
+       dashboard reads hg-forward.js and nothing here wrote to it.
+
+       Recorded per scan, once per bar: hgFwdAdd keys on tab+mechanic+sym+dir+
+       barT, so pressing SCAN repeatedly inside one 15m bar cannot turn a single
+       setup into a hundred samples. Resolution happens later, from candles that
+       had not printed when the record was written.
+
+       mechanic is the VOTE TIER, not a constant, so the log answers the
+       question worth asking — whether the tab's own confidence tiers actually
+       separate — instead of pooling everything into one undifferentiated bag.
+
+       `ticket` marks the HIGH-QUALITY cohort (the green block: no quality gates
+       AND pro-grade). That is not a claim these are tradeable — the cards say
+       RECORD ONLY — it is the split that lets someone later ask whether the
+       tab's strongest claim paid better than its weakest. */
+    try{
+      if (typeof W.hgFwdRecordScan === 'function'){
+        var fwdRows = csFwdRows(setups);
+        if (fwdRows.length) W.hgFwdRecordScan('CRYPTO SCAN', '15m', fwdRows, { horizonBars: csFwdHorizon(setups) });
+      }
+    }catch(eFwd){ try{ if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('cryptoscan', eFwd); }catch(eW){} }
+
     __results = { at: now, setups: setups, scanned: scanned, errors: errors, skipped: skipped, universe: items.length };
     renderCards(setups);
     setStat(setups.length + ' setup(s) from ' + scanned + ' scanned · ' + skipped + ' skipped (too few bars) · ' + errors + ' errors · ' + new Date().toISOString().slice(11, 19) + ' UTC', false);
@@ -578,6 +648,8 @@ W.cryptoScanState = cryptoScanState;
    so a behaviour test is impossible unless the decision is a pure function. */
 W.__csSmcRank = csSmcRank;
 W.__csSortSetups = csSortSetups;
+W.__csFwdRows = csFwdRows;
+W.__csFwdHorizon = csFwdHorizon;
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: TAB_ID, label: 'CRYPTO SCAN', mount: mount, refresh: refresh });
 W.HG_warmups = W.HG_warmups || [];
