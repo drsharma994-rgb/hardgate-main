@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v732',
-  pack: 'SMC ordering active in CRYPTO SCAN; SMC read carried across the gold publish boundary',
+  version: 'hg-v733',
+  pack: 'cointegration gate corrected to the residual-based critical value + Engle-Granger step 2',
   built: '2026-09-13T17:00:00Z'
 };
 

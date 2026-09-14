@@ -348,6 +348,84 @@ function hgFamilyRouter(input){
 }
 
 /* --- gold coint --- */
+function hgCointEcm(a, b, spread){
+  /* Engle-Granger STEP 2. Step 1 asks whether the residual looks stationary;
+     that is only half the claim. "No unit root" is not "a pulls back toward the
+     relation" — a spread can test stationary and never correct. Step 2 asks the
+     mechanism question on the levels that actually trade:
+
+       d(a)_t = c + g*d(b)_t + gamma*spread_(t-1) + e_t
+
+     gamma is the adjustment coefficient and must be NEGATIVE: a spread sitting
+     above its relation last bar has to drag a down this bar. gamma >= 0, or one
+     indistinguishable from 0, means the pair drifts whatever the ADF printed.
+
+     UNITS — where a naive 3x3 solve dies. d(b) is a price difference (silver:
+     cents a bar) while the lagged spread runs to the hundreds, so raw normal
+     equations mix entries spanning ~1e6 and the determinant loses most of its
+     mantissa to cancellation before the singularity test ever sees it. Both
+     regressors are therefore centred and divided by their own sd first: every
+     cross-product becomes O(m), det reduces to m^3*(1-r^2), and "is this
+     singular" becomes scale-free. Standardising is affine so the t-statistic is
+     untouched; only gamma is scaled back into residual units at the end. */
+  var m = (spread || []).length - 1;
+  if (!(m >= 20)) return null;
+  var da = [], db = [], lagS = [], i;
+  for (i = 0; i < m; i++){ da.push(a[i + 1] - a[i]); db.push(b[i + 1] - b[i]); lagS.push(spread[i]); }
+  var m1 = 0, m2 = 0;
+  for (i = 0; i < m; i++){ m1 += db[i]; m2 += lagS[i]; }
+  m1 /= m; m2 /= m;
+  var v1 = 0, v2 = 0;
+  for (i = 0; i < m; i++){ v1 += (db[i] - m1) * (db[i] - m1); v2 += (lagS[i] - m2) * (lagS[i] - m2); }
+  var s1 = Math.sqrt(v1 / m), s2 = Math.sqrt(v2 / m);
+  /* a regressor with no variation carries no information: b flat (stale feed)
+     kills s1, spread identically zero (same series handed in twice) kills s2 */
+  if (!(s1 > 0) || !(s2 > 0)) return null;
+  var z1 = [], z2 = [];
+  for (i = 0; i < m; i++){ z1.push((db[i] - m1) / s1); z2.push((lagS[i] - m2) / s2); }
+  var S00 = m, S01 = 0, S02 = 0, S11 = 0, S12 = 0, S22 = 0, T0 = 0, T1 = 0, T2 = 0;
+  for (i = 0; i < m; i++){
+    S01 += z1[i]; S02 += z2[i];
+    S11 += z1[i] * z1[i]; S12 += z1[i] * z2[i]; S22 += z2[i] * z2[i];
+    T0 += da[i]; T1 += z1[i] * da[i]; T2 += z2[i] * da[i];
+  }
+  /* cofactors of the symmetric 3x3: the adjugate is symmetric, so the same six
+     numbers give both the solution and the (X'X)^-1 diagonal the se needs */
+  var C00 = S11 * S22 - S12 * S12;
+  var C01 = -(S01 * S22 - S12 * S02);
+  var C02 = S01 * S12 - S11 * S02;
+  var C11 = S00 * S22 - S02 * S02;
+  var C12 = -(S00 * S12 - S01 * S02);
+  var C22 = S00 * S11 - S01 * S01;
+  var det = S00 * C00 + S01 * C01 + S02 * C02;
+  /* standardised columns make a non-degenerate system det ~ m^3, so this is a
+     RELATIVE test: it means 1 - corr(d(b), lagged spread)^2 > 1e-10. A Gram
+     determinant is non-negative in exact arithmetic, so a negative det from
+     accumulated error is caught by the same comparison. */
+  if (!(det > m * m * m * 1e-10)) return null;
+  var g0 = (C00 * T0 + C01 * T1 + C02 * T2) / det;
+  var g1 = (C01 * T0 + C11 * T1 + C12 * T2) / det;
+  var g2 = (C02 * T0 + C12 * T1 + C22 * T2) / det;
+  if (!isFinite(g0) || !isFinite(g1) || !isFinite(g2)) return null;
+  var dof = m - 3;
+  if (!(dof > 0)) return null;
+  var ssr = 0, mYb = 0, tss = 0;
+  for (i = 0; i < m; i++){ var e = da[i] - (g0 + g1 * z1[i] + g2 * z2[i]); ssr += e * e; mYb += da[i]; }
+  mYb /= m;
+  for (i = 0; i < m; i++) tss += (da[i] - mYb) * (da[i] - mYb);
+  /* an SSR at rounding level against the variation being explained is not a
+     perfect fit, it is a degenerate one — a derived feed where a is an exact
+     function of b. Dividing by it manufactures a t of 1e16 that sails through
+     any threshold, so refuse instead. */
+  if (!(tss > 0) || !(ssr > tss * 1e-12)) return null;
+  var varG = (ssr / dof) * (C22 / det);
+  if (!(varG > 0) || !isFinite(varG)) return null;
+  var tStat = g2 / Math.sqrt(varG);
+  var gamma = g2 / s2;
+  if (!isFinite(gamma) || !isFinite(tStat)) return null;
+  return { gamma: gamma, gammaT: tStat, dbCoef: g1 / s1, n: m };
+}
+
 function hgCoint(seriesA, seriesB){
   /* Cointegration is a statement about CONTEMPORANEOUS observations, and
      these are bare number arrays with no timestamps, so the only alignment
@@ -415,14 +493,52 @@ function hgCoint(seriesA, seriesB){
   for (i = 0; i < spread.length; i++) vS += (spread[i] - mS) * (spread[i] - mS);
   var sd = Math.sqrt(vS / spread.length);
   var z = sd > 0 ? (spread[spread.length - 1] - mS) / sd : null;
-  var cointegrated = adf !== null && adf <= -2.86 && hl !== null && hl > 0 && hl < 500;
-  return { beta: beta, alpha: alpha, adfStat: adf, halfLifeBars: hl, spreadZ: z, cointegrated: cointegrated, n: n,
-    note: cointegrated ? 'cointegrated z=' + (z != null ? z.toFixed(2) : '—') + ' HL=' + Math.round(hl) : 'not cointegrated' };
+  var ecm = hgCointEcm(a, b, spread);
+  /* -2.86 is the Dickey-Fuller 5% value for a unit-root test on an OBSERVED
+     series with a constant. This spread is not observed: beta was fitted on
+     this same data, and OLS by construction picks the beta that makes the
+     residual look as stationary as it can, so the statistic's null
+     distribution is shifted left and -2.86 rejects far too often. Monte Carlo
+     over this exact arithmetic (two independent random walks, truth = not
+     cointegrated) puts the real rejection rate of -2.86 at 13-15% against a
+     nominal 5%, flat in n because it is an asymptotic error, not a
+     small-sample one. The residual-based Engle-Granger / MacKinnon 5% value
+     for one regressor with a constant is -3.34 (finite-sample -3.377 at
+     T=150); everything between -3.34 and -2.86 this desk called cointegrated
+     was a false positive.
+     NOTE the one case where -2.86 IS right: if beta were IMPOSED rather than
+     fitted, nothing is searched over and the N=1 value applies. A same-asset
+     pair (tokenised vs venue-variant gold, where no-arbitrage gives beta=1)
+     would be both economically and statistically better served by pinning
+     beta than by fitting it. This function fits, so it uses -3.34. */
+  var EG_CRIT_5 = -3.34;
+  /* once cointegration is established the ECM t is asymptotically normal, so
+     the ordinary one-sided 5% value applies — used here as a sign-and-magnitude
+     confirmation of the correction mechanism, not as a second formal test */
+  var ECM_T_CRIT = -2.0;
+  var fails = [];
+  if (adf === null) fails.push('ADF not computable');
+  else if (!(adf <= EG_CRIT_5)) fails.push('ADF ' + adf.toFixed(2) + ' above EG 5% ' + EG_CRIT_5.toFixed(2));
+  if (hl === null) fails.push('half-life not computable');
+  else if (!(hl > 0 && hl < 500)) fails.push('half-life ' + Math.round(hl) + ' outside 0–500 bars');
+  if (!ecm) fails.push('ECM not computable (collinear or degenerate)');
+  else if (!(ecm.gamma < 0)) fails.push('ECM adj ' + ecm.gamma.toFixed(4) + ' not negative — no error correction');
+  else if (!(ecm.gammaT <= ECM_T_CRIT)) fails.push('ECM adj t ' + ecm.gammaT.toFixed(2) + ' above ' + ECM_T_CRIT.toFixed(2));
+  var cointegrated = fails.length === 0;
+  return { beta: beta, alpha: alpha, adfStat: adf, halfLifeBars: hl, spreadZ: z,
+    ecmAdj: ecm ? ecm.gamma : null, ecmAdjT: ecm ? ecm.gammaT : null, ecmN: ecm ? ecm.n : null,
+    cointegrated: cointegrated, n: n,
+    note: cointegrated
+      ? 'cointegrated z=' + (z != null ? z.toFixed(2) : '—') + ' HL=' + Math.round(hl)
+        + ' adj=' + ecm.gamma.toFixed(3) + ' (t=' + ecm.gammaT.toFixed(2) + ')'
+      : 'not cointegrated — ' + fails.join('; ') };
 }
 
 function hgCointHalfLifeVeto(coint, timeBarrierBars){
   timeBarrierBars = fin(timeBarrierBars);
-  if (!coint || !coint.cointegrated) return { veto: true, reason: 'not cointegrated' };
+  /* pass the diagnosis through: goldcoint.js:25 renders veto.reason, not
+     coint.note, so a bare 'not cointegrated' would hide WHICH test failed */
+  if (!coint || !coint.cointegrated) return { veto: true, reason: (coint && coint.note) ? coint.note : 'not cointegrated' };
   var hl = fin(coint.halfLifeBars);
   if (timeBarrierBars !== null && hl > timeBarrierBars) return { veto: true, reason: 'half-life ' + Math.round(hl) + ' > barrier ' + Math.round(timeBarrierBars) };
   return { veto: false, reason: 'half-life ' + Math.round(hl) + ' bars' };
@@ -444,6 +560,10 @@ G.hgRelGateIC = relGateIC;
 G.hgHurstRS = hgHurstRS;
 G.hgFamilyRouter = hgFamilyRouter;
 G.hgCoint = hgCoint;
+/* hgCointEcm stays internal on purpose — it is an implementation detail of the
+   Engle-Granger second step, and its result is already observable through
+   hgCoint's ecmAdj / ecmAdjT. Exporting it purely for a test would widen the
+   public surface and add an unreferenced export. */
 G.hgCointHalfLifeVeto = hgCointHalfLifeVeto;
 
 })();
