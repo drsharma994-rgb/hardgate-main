@@ -190,6 +190,12 @@ function ogSignals(rows, opts){
     /* how far price must travel BACK to fill — the number that decides whether
        this setup is realistic, and the one the source code never surfaced */
     s.retracePct = Math.abs(cur - eq) / (cur || 1) * 100;
+    /* bars left before this setup expires, counted from the END of the loaded
+       window. The reach estimate needs it: a limit 2xATR away with 30 bars to
+       run is a different proposition from the same limit with 2 bars left, and
+       distance alone cannot tell those apart. */
+    var hz = (opts.horizonBars != null) ? Math.floor(opts.horizonBars) : 0;
+    s.barsLeft = hz - (rows.length - 1 - t);
     out.push(s);
   }
   return out;
@@ -249,6 +255,96 @@ function ogOpenRead(setup, px){
     beyondStop: long ? (p <= stop) : (p >= stop),
     beyondTarget: long ? (p >= t1) : (p <= t1),
   };
+}
+
+/* ---------- how likely, and on what grounds ----------
+
+   READ THIS BEFORE TRUSTING THE NUMBER. There is no forward evidence for this
+   rule yet, so no win rate here is MEASURED. What ogProb returns is an estimate
+   under an explicitly stated model - a driftless random walk with per-bar scale
+   equal to ATR - and nothing more. The method is written down because the
+   alternative, sorting cards under a "most probable" heading with no method
+   stated, is worse: it looks like evidence and it is not.
+
+   Two cases, two textbook results:
+
+   RUNNING (already filled). Gambler's ruin on a driftless walk between two
+   absorbing barriers: P(target first) = distToStop / (distToStop + distToTarget),
+   both in R. A position that has drifted toward its stop has less room left on
+   that side and scores lower, which is the ordering a trader actually wants.
+
+   RESTING (unfilled limit). Two steps, independent under the model:
+     P(fill)     - reflection principle, the chance a driftless walk covers the
+                   distance d within n bars: 2 * (1 - PHI(d / (sigma * sqrt(n)))),
+                   with sigma taken as one ATR per bar.
+     P(win|fill) - gambler's ruin FROM the entry, where the stop is 1R away and
+                   the target rr R away: 1 / (1 + rr).
+   Their product is the unconditional chance the order fills AND then pays.
+
+   The model's defects are known and they do not cancel: gold is not driftless,
+   ATR understates tail moves, and OHLC cannot order two touches inside one bar.
+   Read the number as a RANKING KEY WITH AN ARGUMENT BEHIND IT, not as a
+   probability anyone should size a position on. */
+
+/* standard normal CDF - Abramowitz & Stegun 7.1.26 on erf, |error| < 1.5e-7 */
+function ogNormCdf(z){
+  if (!isFinite(z)) return z > 0 ? 1 : 0;
+  var x = z / Math.SQRT2, sign = x < 0 ? -1 : 1;
+  x = Math.abs(x);
+  var t = 1 / (1 + 0.3275911 * x);
+  var y = 1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+  return 0.5 * (1 + sign * y);
+}
+
+function ogProb(s, px){
+  var p = (px === null || px === undefined || px === '') ? NaN : +px;
+  if (!s || !isFinite(p)) return null;
+  var rr = (+s.rr > 0) ? +s.rr : 2;
+
+  if (s.state === 'open'){
+    var op = ogOpenRead(s, p);
+    if (!op) return null;
+    if (op.beyondTarget) return { p: 1, kind: 'running', fill: 1, cond: 1, note: 'the mark is already at or past the target' };
+    if (op.beyondStop) return { p: 0, kind: 'running', fill: 1, cond: 0, note: 'the mark is already at or past the stop' };
+    var den = op.toStopR + op.toTargetR;
+    if (!(den > 0)) return null;
+    var cond = op.toStopR / den;
+    return { p: cond, kind: 'running', fill: 1, cond: cond,
+             note: 'already filled — gambler\'s ruin between the stop and the target from where the mark sits' };
+  }
+
+  if (s.state !== 'waiting') return null;
+  var d = ogDistance(s, p);
+  if (!d || d.atr == null || !isFinite(d.atr)) return null;
+  /* n <= 0 means no bars remain before expiry, so the order cannot fill at all */
+  var n = Math.floor(+s.barsLeft);
+  if (!isFinite(n) || n <= 0) return { p: 0, kind: 'resting', fill: 0, cond: 1 / (1 + rr), note: 'no bars left before this order expires' };
+  var z = d.atr / Math.sqrt(n);
+  var fill = 2 * (1 - ogNormCdf(z));
+  if (!(fill > 0)) fill = 0;
+  if (fill > 1) fill = 1;
+  var condR = 1 / (1 + rr);
+  return { p: fill * condR, kind: 'resting', fill: fill, cond: condR,
+           note: 'about ' + Math.round(fill * 100) + '% chance the mark reaches the limit within ' + n
+                 + ' bar(s), times the ' + Math.round(condR * 100) + '% odds from entry at ' + rr + 'R' };
+}
+
+/* The single best live setup in each of the two lanes the panel leads with.
+   Deliberately ONE EACH and never "top two overall" - two scalps at the top
+   would answer a different question than the one asked. A lane with nothing
+   live yields null, and the header says so rather than quietly promoting the
+   other lane's runner-up into a slot it was not picked for. */
+function ogTopPicks(setups, px){
+  var best = { scalp: null, swing: null };
+  (setups || []).forEach(function(s){
+    if (!s || (s.state !== 'waiting' && s.state !== 'open')) return;
+    if (s.lane !== 'scalp' && s.lane !== 'swing') return;
+    var e = ogProb(s, px);
+    if (!e || !isFinite(e.p)) return;
+    var cur = best[s.lane];
+    if (!cur || e.p > cur.est.p) best[s.lane] = { setup: s, est: e };
+  });
+  return best;
 }
 
 /* ---------- rendering ---------- */
@@ -312,6 +408,18 @@ function card(s, mark){
     + '</div>';
 }
 
+function pickCard(s, mark, est, badge){
+  var pct = (est && isFinite(est.p)) ? Math.round(est.p * 100) + '%' : '—';
+  return '<div style="border:1px solid var(--line,#333);border-radius:8px;padding:6px">'
+    + '<div class="row" style="gap:8px;align-items:baseline;margin-bottom:4px">'
+    + '<span class="statuschip ok">' + esc(badge) + '</span>'
+    + '<span style="font-size:18px;font-weight:700">' + pct + '</span>'
+    + '<span class="note">estimated, under the model stated below</span></div>'
+    + (est && est.note ? '<div class="note" style="margin-bottom:4px">' + esc(est.note) + '</div>' : '')
+    + card(s, mark)
+    + '</div>';
+}
+
 function render(ui, lanes, mark, note){
   if (!ui || !ui.body) return;
   var all = [];
@@ -349,6 +457,15 @@ function render(ui, lanes, mark, note){
     return xa - xb;
   });
 
+  /* the two picks the panel leads with, removed from the lists below so the
+     same card never appears twice under two different orderings */
+  var picks = ogTopPicks(live, mark);
+  var pickSet = [];
+  ['scalp', 'swing'].forEach(function(k){ if (picks[k]) pickSet.push(picks[k].setup); });
+  var notPicked = function(s){ return pickSet.indexOf(s) === -1; };
+  running = running.filter(notPicked);
+  resting = resting.filter(notPicked);
+
   var h = '';
 
   /* the mark, first and largest — every distance below is measured from it */
@@ -364,6 +481,29 @@ function render(ui, lanes, mark, note){
     + 'written read future bars to place its levels; this does not, which is why it fires later and less often. '
     + 'All three lanes run the <b>identical</b> rule — only timeframe and expiry differ, so nothing here is '
     + 'per-lane fitted. <b>No forward evidence yet</b>: this is rule output, not a measured edge.'
+    + '</div>';
+
+  /* TOP PICKS - one scalp, one swing, ranked by a STATED estimate. The method
+     note under them is not decoration: a "most probable" heading with nothing
+     behind it reads as measured evidence, and none of this is measured. */
+  h += '<h3 style="font-size:12px;margin:10px 0 6px">TOP PICKS — best live setup in each lane, by estimated odds</h3>';
+  h += '<div class="cards">';
+  ['scalp', 'swing'].forEach(function(k){
+    var pk = picks[k];
+    if (!pk){
+      h += '<div class="card"><div class="chead"><span class="sym">XAUUSD</span>'
+        + '<span class="stamp">' + (k === 'scalp' ? 'SCALP 15m' : 'SWING 4h') + '</span></div>'
+        + '<div class="note">Nothing live in this lane — an empty slot rather than a setup promoted from another timeframe.</div></div>';
+      return;
+    }
+    h += pickCard(pk.setup, mark, pk.est, k === 'scalp' ? 'BEST SCALP' : 'BEST SWING');
+  });
+  h += '</div>';
+  h += '<div class="note warn" style="margin:6px 0 12px">'
+    + 'These odds are a <b>model, not a measurement</b>: a driftless random walk with per-bar scale equal to ATR. '
+    + 'A filled position uses gambler\'s ruin between its stop and target; a resting limit uses the reflection-principle '
+    + 'chance of reaching the entry before expiry, times the 33% odds from entry at 2R. Gold is not driftless and ATR '
+    + 'understates tails, so read these as a ranking key with an argument behind it — not as a win rate.'
     + '</div>';
 
   h += '<div class="row" style="gap:14px;margin-bottom:10px;flex-wrap:wrap">'
@@ -547,6 +687,9 @@ W.optiGoldState = optiGoldState;
 W.__ogLanes = LANES;
 W.__ogDistance = ogDistance;
 W.__ogOpenRead = ogOpenRead;
+W.__ogProb = ogProb;
+W.__ogNormCdf = ogNormCdf;
+W.__ogTopPicks = ogTopPicks;
 /* exported so the rule can be tested: runOptiGold needs a live gold feed and is
    unreachable in a test sandbox, which is exactly how a previous activation in
    this repo shipped as dead code */

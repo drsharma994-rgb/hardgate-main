@@ -319,4 +319,126 @@ console.log('== the source documents the lookahead it removed ==');
   ok(/__ogSignals\s*=\s*ogSignals/.test(src), 'the tested function is the one the tab uses');
 }
 
+console.log('== the rule itself supplies barsLeft, or every resting score would be zero ==');
+{
+  /* ogProb multiplies by the chance of filling BEFORE expiry. If ogSignals stopped
+     attaching barsLeft, that term would read undefined, the estimate would return 0
+     for every resting order, and the panel would quietly rank them all equal-last
+     while still printing confident-looking percentages. Nothing else catches that. */
+  let px = 2000; const rows = [];
+  for (let i = 0; i < 300; i++){ px += Math.sin(i / 7) * 3 + Math.cos(i / 3) * 1.5;
+    rows.push({ t: i * 900000, o: px, h: px + 2, l: px - 2, c: px }); }
+  const out = W.__ogSignals(rows, { swingLength: 5, atrPeriod: 14, stopAtr: 1.5, rr: 2, horizonBars: 32 });
+  ok(out.length > 0, 'the synthetic tape produces setups at all (' + out.length + ')');
+  ok(out.every(s => Number.isFinite(s.barsLeft)), 'EVERY setup carries a finite barsLeft — the term ogProb needs');
+  ok(out[out.length - 1].barsLeft > out[0].barsLeft, 'newer setups have MORE time left than older ones');
+  ok(out.some(s => s.barsLeft < 0), 'setups older than the horizon go negative rather than clamping to a false positive');
+  const later = W.__ogSignals(rows, { swingLength: 5, atrPeriod: 14, stopAtr: 1.5, rr: 2, horizonBars: 64 });
+  ok(later[0].barsLeft === out[0].barsLeft + 32, 'barsLeft tracks the lane horizon, not a hard-coded constant');
+}
+
+console.log('== the odds estimate is the stated model, not a vibe ==');
+{
+  const Phi = W.__ogNormCdf;
+  ok(typeof Phi === 'function', 'the normal CDF is exported so the estimate can be checked, not just trusted');
+  ok(Math.abs(Phi(0) - 0.5) < 1e-9, 'PHI(0) = 0.5');
+  ok(Math.abs(Phi(1.96) - 0.975) < 1e-4, 'PHI(1.96) ~ 0.975 — the textbook value, within the A&S error bound');
+  ok(Math.abs(Phi(-1.96) - 0.025) < 1e-4, 'PHI(-1.96) ~ 0.025 — symmetric, so the erf sign branch is right');
+  ok(Phi(-9) < 1e-9 && Phi(9) > 1 - 1e-9, 'the tails saturate rather than overflowing');
+  ok(Phi(0.5) > Phi(0.4) && Phi(-0.5) < Phi(-0.4), 'monotone increasing across zero');
+}
+
+console.log('== a RUNNING position is scored by gambler\'s ruin, not by distance to entry ==');
+{
+  const P2 = W.__ogProb;
+  /* long, entry 100, stop 95, target 110: risk 5R units of 5 price */
+  const open = { state: 'open', lane: 'scalp', dir: 'long', entry: 100, stop: 95, t1: 110, risk: 5, rr: 2, atr: 2 };
+  const mid = P2(open, 100);
+  ok(Math.abs(mid.p - 1 / 3) < 1e-9, 'at the entry the odds are exactly 1/(1+rr) = 1/3, the R:R the rule fixes');
+  const near = P2(open, 108), far = P2(open, 97);
+  ok(near.p > mid.p, 'closer to the target scores HIGHER (' + near.p.toFixed(3) + ' > ' + mid.p.toFixed(3) + ')');
+  ok(far.p < mid.p, 'closer to the stop scores LOWER (' + far.p.toFixed(3) + ' < ' + mid.p.toFixed(3) + ')');
+  ok(near.p > 0 && near.p < 1 && far.p > 0 && far.p < 1, 'every score is a probability, never outside [0,1]');
+  ok(P2(open, 111).p === 1 && P2(open, 94).p === 0,
+     'past a barrier the walk has not settled yet reads as 1 and 0, not as a distance to a level price went through');
+  ok(P2(open, 100).kind === 'running', 'the case is labelled so the card can say which model it used');
+}
+
+console.log('== a RESTING limit pays only if it FILLS, and time is part of that ==');
+{
+  const P2 = W.__ogProb;
+  const rest = (barsLeft) => ({ state: 'waiting', lane: 'swing', dir: 'long', entry: 100, stop: 95, t1: 110,
+                                risk: 5, rr: 2, atr: 2, barsLeft });
+  const lots = P2(rest(40), 102), few = P2(rest(2), 102);
+  ok(lots.p > few.p, 'MORE bars left = more chance to fill = higher score (' + lots.p.toFixed(3) + ' > ' + few.p.toFixed(3) + ')');
+  ok(P2(rest(40), 101).p > P2(rest(40), 106).p, 'nearer the mark scores higher at equal time');
+  ok(P2(rest(40), 102).p <= 1 / 3 + 1e-12,
+     'a resting order can never beat 1/3 — it must first fill, and only then faces the same 2R odds');
+  ok(P2(rest(0), 102).p === 0 && P2(rest(-5), 102).p === 0, 'no bars left → cannot fill → zero, not a stale positive');
+  ok(P2(rest(40), 100).p > 0.32, 'a limit AT the mark is all but certain to fill, so it approaches the 1/3 ceiling');
+  ok(P2(rest(40), 102).kind === 'resting', 'the case is labelled');
+  ok(/fill|reach/i.test(P2(rest(40), 102).note || ''), 'the card is handed the grounds, not a bare number');
+}
+
+console.log('== the estimate refuses inputs it cannot honestly score ==');
+{
+  const P2 = W.__ogProb;
+  const base = { state: 'waiting', lane: 'scalp', dir: 'long', entry: 100, stop: 95, t1: 110, risk: 5, rr: 2, atr: 2, barsLeft: 20 };
+  /* +null === 0 and isFinite(0) === true: a missing mark must NOT read as a real price of zero */
+  for (const bad of [null, undefined, '', 'abc', NaN]) {
+    ok(P2(base, bad) === null, 'mark ' + JSON.stringify(bad) + ' → null, never a score against a fabricated price');
+  }
+  ok(P2(null, 100) === null && P2(undefined, 100) === null, 'no setup → null');
+  ok(P2({ ...base, atr: 0 }, 102) === null, 'no usable ATR → null rather than dividing by zero');
+  ok(P2({ ...base, state: 'target' }, 102) === null && P2({ ...base, state: 'stopped' }, 102) === null,
+     'a settled setup is not scored — its outcome is known, not estimated');
+  ok(P2({ ...base, state: 'missed' }, 102) === null, 'a missed setup is not scored either');
+}
+
+console.log('== the panel leads with ONE scalp and ONE swing ==');
+{
+  const T = W.__ogTopPicks;
+  const mk = (lane, entry, extra) => ({ state: 'waiting', lane, dir: 'long', entry, stop: entry - 5,
+                                        t1: entry + 10, risk: 5, rr: 2, atr: 2, barsLeft: 30, ...extra });
+  const picks = T([mk('scalp', 99), mk('scalp', 80), mk('swing', 98), mk('swing', 70)], 100);
+  ok(picks.scalp && picks.swing, 'both lanes filled');
+  ok(picks.scalp.setup.entry === 99, 'the scalp pick is the better-scoring scalp, not the first one seen');
+  ok(picks.swing.setup.entry === 98, 'the swing pick is the better-scoring swing');
+  ok(picks.scalp.est.p > 0 && picks.swing.est.p > 0, 'each pick carries the estimate that chose it');
+
+  /* the ordering must be by SCORE — a far scalp must not outrank a near one */
+  const inverted = T([mk('scalp', 60), mk('scalp', 99.5)], 100);
+  ok(inverted.scalp.setup.entry === 99.5, 'a distant setup never outranks a near one at equal time');
+
+  /* the constraint the request actually imposes: one of EACH, never two of one */
+  const scalpsOnly = T([mk('scalp', 99), mk('scalp', 98)], 100);
+  ok(scalpsOnly.swing === null, 'an empty swing lane stays EMPTY — no scalp is promoted into the swing slot');
+  ok(scalpsOnly.scalp !== null, 'and the lane that does have setups still produces its pick');
+
+  /* intraday exists and must not leak into either headline slot */
+  const withIntraday = T([mk('intraday', 99.9), mk('scalp', 95), mk('swing', 94)], 100);
+  ok(withIntraday.scalp.setup.lane === 'scalp' && withIntraday.swing.setup.lane === 'swing',
+     'INTRADAY never occupies a slot, however well it scores — the ask was one scalp and one swing');
+
+  ok(JSON.stringify(T(null, 100)) === '{"scalp":null,"swing":null}', 'null input → both slots empty, no throw');
+  ok(T([mk('scalp', 99)], null).scalp === null, 'no mark → no pick, rather than a pick scored against price zero');
+  ok(T([{ ...mk('scalp', 99), state: 'target' }], 100).scalp === null, 'settled setups are not eligible to be picked');
+  ok(T([mk('scalp', 99, { state: 'open' })], 100).scalp !== null, 'a RUNNING setup is eligible — it is still live');
+}
+
+console.log('== the picks are wired into the panel and cannot be shown twice ==');
+{
+  const src = fs.readFileSync(path.join(ROOT, 'optigold.js'), 'utf8');
+  ok(/ogTopPicks\(live, mark\)/.test(src), 'render actually calls the tested selector rather than a second inline copy');
+  ok(/running = running\.filter\(notPicked\)/.test(src) && /resting = resting\.filter\(notPicked\)/.test(src),
+     'a promoted card is REMOVED from the list below — the same setup under two orderings reads as two setups');
+  ok(/TOP PICKS/.test(src), 'the section exists in the rendered output');
+  /* the honesty guard: an estimate presented without its model is indistinguishable
+     from a measured win rate, and this tab has no measured win rate */
+  ok(/model, not a measurement/.test(src), 'the panel states that the odds are modelled, not measured');
+  ok(/driftless/.test(src), 'and names the model it used');
+  ok(/__ogProb\s*=\s*ogProb/.test(src) && /__ogTopPicks\s*=\s*ogTopPicks/.test(src),
+     'the tested functions are the ones the tab uses');
+}
+
 console.log('\ntest-optigold: ' + passed + ' assertions passed');
