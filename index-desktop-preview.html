@@ -1,0 +1,798 @@
+<title>HARDGATE Desk Shell</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap">
+<style>
+/* ============================================================
+   HARDGATE — desktop shell layout preview
+   Palette and faces are taken from the live app (bright.css +
+   vendor/base-themes/tokens-data-dense-light.css), not invented.
+   The app commits to one light, data-dense theme, so this
+   preview commits to it too — every colour is painted
+   explicitly so it holds on any host ground.
+   ============================================================ */
+:root{
+  /* surfaces — from bright.css */
+  --ink:#f4f6f9;
+  --panel:#ffffff;
+  --panel2:#edf1f6;
+  --line:#d7dee8;
+  --line-strong:#aab7c8;
+  /* desktop chrome — tokens-data-dense-light.css --surface-strong */
+  --chrome:#172033;
+  --chrome-2:#1f2b42;
+  --chrome-line:#2c3a56;
+  --chrome-txt:#c8d3e4;
+  --chrome-dim:#8595ae;
+  /* text */
+  --txt:#172033;
+  --mut:#536175;
+  --dim:#65758c;
+  /* accent + semantics */
+  --accent:#0f5cc0;
+  --accent-2:#2563eb;
+  --accent-soft:#e7eefb;
+  --long:#15803d;
+  --short:#dc2626;
+  --veto:#c2410c;
+  --wait:#8a6d1f;
+  /* metrics */
+  --radius:8px;
+  --radius-sm:6px;
+  --titlebar:38px;
+  --menubar:30px;
+  --statusbar:28px;
+  --sidebar:246px;
+  --mono:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,monospace;
+  --disp:'Space Grotesk',system-ui,sans-serif;
+  --ui:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  background:var(--ink);
+  color:var(--txt);
+  font-family:var(--ui);
+  font-size:13px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--accent-2);outline-offset:1px}
+
+/* ---------- shell ---------- */
+.app{
+  height:100%;
+  display:grid;
+  grid-template-rows:auto auto minmax(0,1fr) auto;
+  background:var(--ink);
+}
+
+/* ---------- title bar ---------- */
+.titlebar{
+  display:flex;align-items:center;gap:14px;
+  height:var(--titlebar);
+  padding:0 10px 0 14px;
+  padding-top:env(safe-area-inset-top, 0px);
+  height:calc(var(--titlebar) + env(safe-area-inset-top, 0px));
+  background:var(--chrome);
+  border-bottom:1px solid var(--chrome-line);
+  color:var(--chrome-txt);
+  overflow:hidden;            /* never let the chrome widen the document */
+}
+.brand{
+  display:flex;align-items:baseline;gap:8px;
+  font-family:var(--disp);font-weight:700;font-size:14px;
+  letter-spacing:.16em;color:#fff;
+}
+.verbadge{
+  font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.04em;
+  color:#bcd2f4;background:rgba(37,99,235,.22);
+  border:1px solid rgba(96,150,240,.45);
+  border-radius:4px;padding:1px 6px;
+}
+.tagline{
+  font-family:var(--mono);font-size:10px;letter-spacing:.06em;
+  color:var(--chrome-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  flex:1 1 auto;min-width:0;
+}
+.venue{
+  display:flex;gap:1px;background:var(--chrome-line);border-radius:5px;padding:1px;
+  flex:0 1 auto;min-width:0;overflow-x:auto;scrollbar-width:none;
+}
+.venue::-webkit-scrollbar{display:none}
+.venue button{
+  font-size:10px;font-weight:600;letter-spacing:.09em;white-space:nowrap;
+  padding:4px 10px;border-radius:4px;color:var(--chrome-dim);
+}
+.venue .abbr{display:none}
+.venue button:hover{color:#fff}
+.venue button[aria-pressed="true"]{background:var(--accent);color:#fff}
+.winctl{display:flex;gap:2px;flex:none}
+.winctl button{
+  width:30px;height:24px;border-radius:4px;color:var(--chrome-dim);
+  display:grid;place-items:center;
+}
+.winctl button:hover{background:var(--chrome-2);color:#fff}
+.winctl svg{width:13px;height:13px;stroke:currentColor;stroke-width:1.6;fill:none}
+
+/* ---------- menu bar ---------- */
+.menubar{
+  display:flex;align-items:center;gap:2px;
+  height:var(--menubar);padding:0 8px;
+  background:var(--panel);
+  border-bottom:1px solid var(--line);
+  position:relative;z-index:40;
+  overflow-x:auto;scrollbar-width:none;
+}
+.menubar::-webkit-scrollbar{display:none}
+.menu{position:relative;flex:none}
+.menu > button{
+  padding:4px 11px;border-radius:5px;
+  font-size:12px;font-weight:500;color:var(--txt);white-space:nowrap;
+}
+.menu > button:hover{background:var(--panel2)}
+.menu[data-open="true"] > button{background:var(--accent);color:#fff}
+.dropdown{
+  position:absolute;top:calc(100% + 3px);left:0;min-width:214px;
+  background:var(--panel);border:1px solid var(--line-strong);
+  border-radius:var(--radius-sm);
+  box-shadow:0 12px 28px -8px rgba(23,32,51,.28);
+  padding:4px;z-index:50;
+}
+.dropdown[hidden]{display:none}
+.dropdown button{
+  display:flex;width:100%;align-items:center;justify-content:space-between;gap:18px;
+  padding:5px 9px;border-radius:4px;font-size:12px;text-align:left;color:var(--txt);
+}
+.dropdown button:hover{background:var(--accent-soft);color:var(--accent)}
+.dropdown .key{font-family:var(--mono);font-size:10px;color:var(--dim)}
+.dropdown hr{border:0;border-top:1px solid var(--line);margin:4px 2px}
+.dropdown .grouplabel{
+  font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--dim);
+  padding:6px 9px 3px;
+}
+.menuspacer{flex:1 1 auto;min-width:12px}
+.menubar .live{
+  display:flex;align-items:center;gap:6px;flex:none;
+  font-family:var(--mono);font-size:10px;letter-spacing:.05em;color:var(--mut);
+  padding-right:4px;
+}
+.pulse{width:6px;height:6px;border-radius:50%;background:var(--long);flex:none}
+
+/* ---------- body row ---------- */
+.bodyrow{display:grid;grid-template-columns:var(--sidebar) minmax(0,1fr);min-height:0}
+
+/* ---------- sidebar ---------- */
+.sidebar{
+  background:var(--panel2);
+  border-right:1px solid var(--line);
+  overflow-y:auto;min-height:0;
+  padding:8px 0 14px;
+  scrollbar-width:thin;
+}
+.navsection{border-bottom:1px solid var(--line)}
+.navsection:last-child{border-bottom:0}
+.navsection > summary{
+  list-style:none;cursor:pointer;
+  display:flex;align-items:center;gap:7px;
+  padding:7px 12px;
+  font-size:10px;font-weight:700;letter-spacing:.15em;color:var(--mut);
+}
+.navsection > summary::-webkit-details-marker{display:none}
+.navsection > summary:hover{color:var(--txt)}
+.caret{width:9px;height:9px;stroke:currentColor;stroke-width:2.2;fill:none;flex:none;transition:transform .14s}
+.navsection[open] > .caret,.navsection[open] > summary .caret{transform:rotate(90deg)}
+.navsection .cnt{margin-left:auto;font-family:var(--mono);font-size:10px;font-weight:500;color:var(--dim)}
+.navlist{padding:0 6px 8px;display:flex;flex-direction:column;gap:1px}
+.navlist button{
+  display:flex;align-items:center;gap:8px;
+  padding:5px 9px;border-radius:var(--radius-sm);
+  font-size:12px;font-weight:500;color:var(--mut);text-align:left;
+  border:1px solid transparent;
+}
+.navlist button:hover{background:var(--panel);color:var(--txt);border-color:var(--line)}
+.navlist button[aria-current="page"]{
+  background:var(--panel);color:var(--accent);font-weight:600;
+  border-color:var(--line-strong);
+  box-shadow:inset 3px 0 0 var(--accent);
+}
+.dot{width:5px;height:5px;border-radius:50%;background:var(--line-strong);flex:none}
+.navlist button[aria-current="page"] .dot{background:var(--accent)}
+.dot.live{background:var(--long)}
+.dot.alert{background:var(--veto)}
+.navlist .tag{
+  margin-left:auto;font-family:var(--mono);font-size:9px;font-weight:600;
+  letter-spacing:.04em;padding:0 4px;border-radius:3px;
+  background:var(--panel2);color:var(--dim);border:1px solid var(--line);
+}
+.navlist button[aria-current="page"] .tag{background:var(--accent-soft);color:var(--accent);border-color:#c5d8f4}
+.tag.hot{background:#fdeeea;color:var(--veto);border-color:#f3cfc3}
+
+/* ---------- workspace ---------- */
+/* wide tables scroll in their own .tblwrap, so the workspace itself never
+   scrolls sideways — this is the guard that keeps the page from shifting */
+.workspace{overflow-y:auto;overflow-x:hidden;min-height:0;scrollbar-width:thin}
+.previewnote{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:7px 20px;
+  background:#fdf7e3;border-bottom:1px solid #ecdca8;
+  font-size:11px;color:#6b571d;
+}
+.previewnote b{font-weight:700}
+.wshead{
+  display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;
+  padding:16px 20px 12px;
+  border-bottom:1px solid var(--line);
+  background:var(--panel);
+}
+.wstitle{font-family:var(--disp);font-size:17px;font-weight:700;letter-spacing:.04em;margin:0}
+.wssub{font-family:var(--mono);font-size:10.5px;color:var(--mut);letter-spacing:.02em}
+.crumb{
+  font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--dim);
+  text-transform:uppercase;margin-bottom:3px;
+}
+.wsactions{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+.btn{
+  background:linear-gradient(180deg,var(--accent-2),var(--accent));color:#fff;
+  border-radius:var(--radius-sm);padding:6px 14px;
+  font-size:11px;font-weight:700;letter-spacing:.08em;
+  box-shadow:0 2px 8px rgba(15,92,192,.2);
+}
+.btn:hover{filter:brightness(1.06)}
+.btn.ghost{
+  background:var(--panel);color:var(--mut);
+  border:1px solid var(--line-strong);box-shadow:none;font-weight:600;
+}
+.btn.ghost:hover{color:var(--txt);border-color:var(--dim)}
+
+.wsbody{padding:16px 20px 28px;display:flex;flex-direction:column;gap:14px}
+/* four panels, so two columns — three-up would strand one alone in row 2.
+   align-items:start lets each panel end at its content instead of
+   stretching a border box over dead space to match its neighbour. */
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start}
+@media (max-width:760px){ .grid2{grid-template-columns:minmax(0,1fr)} }
+
+/* ---------- panels ---------- */
+.panel{
+  background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--radius);padding:14px 15px;min-width:0;
+  box-shadow:0 1px 2px rgba(23,32,51,.06);
+}
+.panel > h2{
+  font-family:var(--disp);font-size:12px;font-weight:700;letter-spacing:.14em;
+  text-transform:uppercase;margin:0 0 3px;text-wrap:balance;
+}
+.panel > .sub{
+  display:block;font-family:var(--mono);font-size:10px;color:var(--mut);
+  margin-bottom:11px;line-height:1.5;
+}
+
+/* the verdict panel is the one thing lifted off the page */
+.panel.verdict{
+  border-color:var(--line-strong);
+  border-left:4px solid var(--long);
+  box-shadow:0 6px 18px -6px rgba(23,32,51,.14);
+}
+
+.plan{display:flex;flex-wrap:wrap;gap:10px;align-items:stretch;min-width:0}
+.side{
+  display:flex;flex-direction:column;justify-content:center;gap:1px;
+  padding:9px 15px;border-radius:var(--radius-sm);
+  background:#eaf5ee;border:1px solid #bcdcc7;flex:none;
+}
+.side .word{font-family:var(--disp);font-size:19px;font-weight:700;letter-spacing:.1em;color:var(--long)}
+.side .kind{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;color:#3d7a53}
+/* a grid, not a flex row: auto-fit tracks can never push past the panel */
+.levels{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(98px,1fr));
+  flex:1 1 340px;min-width:0;
+}
+.lv{
+  min-width:0;padding:5px 11px;border-left:1px solid var(--line);
+  display:flex;flex-direction:column;gap:1px;
+}
+.lv:first-child{border-left:0;padding-left:4px}
+.lv .k{font-family:var(--mono);font-size:9px;letter-spacing:.12em;color:var(--dim)}
+.lv .v{font-family:var(--mono);font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.lv .r{font-family:var(--mono);font-size:9.5px;color:var(--mut);font-variant-numeric:tabular-nums}
+.lv.stop .v{color:var(--short)}
+.lv.tgt .v{color:var(--long)}
+
+.gates{display:flex;flex-wrap:wrap;gap:5px;margin-top:11px}
+.gate{
+  display:inline-flex;align-items:center;gap:5px;
+  font-family:var(--mono);font-size:10px;font-weight:500;
+  padding:3px 8px;border-radius:4px;border:1px solid var(--line);
+  background:var(--panel2);color:var(--mut);
+}
+.gate::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--line-strong)}
+.gate.pass{background:#eaf5ee;border-color:#bcdcc7;color:#2c6b42}
+.gate.pass::before{background:var(--long)}
+.gate.veto{background:#fdeeea;border-color:#f3cfc3;color:var(--veto)}
+.gate.veto::before{background:var(--veto)}
+.gate.wait{background:#fbf5e4;border-color:#e8d9a9;color:var(--wait)}
+.gate.wait::before{background:var(--wait)}
+
+.tblwrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:11.5px}
+th,td{padding:5px 8px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{
+  font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.09em;
+  color:var(--dim);text-transform:uppercase;
+}
+td{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--txt)}
+td.name{font-family:var(--ui);font-weight:600}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:#f5f8fd}
+.up{color:var(--long)}
+.dn{color:var(--short)}
+.state{
+  display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.09em;
+  padding:1px 6px;border-radius:3px;
+}
+.state.armed{background:#eaf5ee;color:#2c6b42}
+.state.aside{background:var(--panel2);color:var(--mut)}
+.state.near{background:#fbf5e4;color:var(--wait)}
+
+.kv{display:flex;flex-direction:column;gap:0}
+.kv .row{
+  display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  padding:5px 0;border-bottom:1px solid var(--line);
+}
+.kv .row:last-child{border-bottom:0}
+.kv .k{font-size:11.5px;color:var(--mut)}
+.kv .v{font-family:var(--mono);font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+.kv .n{font-family:var(--mono);font-size:10px;color:var(--dim)}
+
+.empty{
+  font-family:var(--mono);font-size:10.5px;color:var(--mut);line-height:1.6;
+  background:var(--panel2);border:1px dashed var(--line-strong);
+  border-radius:var(--radius-sm);padding:11px 12px;
+}
+
+/* ---------- status bar ---------- */
+.statusbar{
+  display:flex;align-items:center;gap:0;
+  height:var(--statusbar);
+  padding:0 4px;
+  padding-bottom:env(safe-area-inset-bottom, 0px);
+  height:calc(var(--statusbar) + env(safe-area-inset-bottom, 0px));
+  background:var(--chrome);border-top:1px solid var(--chrome-line);
+  overflow-x:auto;scrollbar-width:none;
+}
+.statusbar::-webkit-scrollbar{display:none}
+.chip{
+  display:flex;align-items:center;gap:6px;flex:none;
+  padding:0 11px;height:20px;
+  border-right:1px solid var(--chrome-line);
+  font-family:var(--mono);font-size:10px;letter-spacing:.05em;
+  color:var(--chrome-dim);white-space:nowrap;
+}
+.chip b{color:#e6edf8;font-weight:600;font-variant-numeric:tabular-nums}
+.chip.ok b{color:#5fcf8a}
+.chip.warn b{color:#ffb454}
+.chip:last-child{border-right:0;margin-left:auto}
+
+@media (prefers-reduced-motion:reduce){
+  *{transition:none!important;animation:none!important}
+}
+
+/* ---------- narrow widths ---------- */
+@media (max-width:880px){
+  :root{--sidebar:0px}
+  .bodyrow{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
+  .sidebar{
+    border-right:0;border-bottom:1px solid var(--line);
+    overflow-x:auto;overflow-y:hidden;
+    display:flex;padding:6px 8px;gap:8px;
+  }
+  .navsection{border-bottom:0;flex:none}
+  .navsection > summary{padding:5px 8px}
+  .navlist{
+    position:static;flex-direction:row;padding:0;
+  }
+  .navlist button{white-space:nowrap}
+  .navlist .tag{display:none}
+  .tagline{display:none}
+  .wshead,.wsbody,.previewnote{padding-left:16px;padding-right:16px}
+}
+@media (max-width:620px){
+  .venue button{padding:4px 8px;font-size:9px}
+  .venue .full{display:none}
+  .venue .abbr{display:inline}
+  .brand{font-size:12px;letter-spacing:.1em}
+  .wsactions{margin-left:0;width:100%}
+}
+</style>
+
+<div class="app">
+
+  <!-- ══════════ TITLE BAR ══════════ -->
+  <div class="titlebar">
+    <span class="brand">HARDGATE<span class="verbadge">v741</span></span>
+    <span class="tagline">DELTA · COINDCX · STARTRADER · BINANCE · GOLD (PAXG) — GATES, NOT SCORES</span>
+    <div class="venue" role="group" aria-label="Exchange">
+      <button type="button" aria-pressed="true"><span class="full">DELTA INDIA</span><span class="abbr">DELTA</span></button>
+      <button type="button" aria-pressed="false"><span class="full">COINDCX</span><span class="abbr">CDCX</span></button>
+      <button type="button" aria-pressed="false"><span class="full">STARTRADER</span><span class="abbr">STAR</span></button>
+    </div>
+    <div class="winctl">
+      <button type="button" title="Hard refresh all scans" aria-label="Hard refresh all scans">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+      </button>
+      <button type="button" title="Minimize chrome" aria-label="Minimize chrome">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ══════════ MENU BAR ══════════ -->
+  <div class="menubar" id="menubar">
+
+    <div class="menu" data-menu>
+      <button type="button" aria-haspopup="true" aria-expanded="false">Scan</button>
+      <div class="dropdown" hidden>
+        <button type="button">Hard refresh all<span class="key">Ctrl R</span></button>
+        <button type="button">Re-run active tab<span class="key">F5</span></button>
+        <hr>
+        <div class="grouplabel">AUTO CADENCE</div>
+        <button type="button">Off<span class="key">·</span></button>
+        <button type="button">Every 3 min</button>
+        <button type="button">Every 5 min<span class="key">on</span></button>
+        <button type="button">Every 15 min</button>
+      </div>
+    </div>
+
+    <div class="menu" data-menu>
+      <button type="button" aria-haspopup="true" aria-expanded="false">Alerts</button>
+      <div class="dropdown" hidden>
+        <button type="button">Alerts<span class="key">ON</span></button>
+        <button type="button">ntfy topic…</button>
+        <button type="button">Telegram…</button>
+        <hr>
+        <button type="button">Send test alert</button>
+        <button type="button">Stop all alerts</button>
+      </div>
+    </div>
+
+    <div class="menu" data-menu>
+      <button type="button" aria-haspopup="true" aria-expanded="false">Risk</button>
+      <div class="dropdown" hidden>
+        <div class="grouplabel">STAND-DOWN DISCIPLINE</div>
+        <button type="button">Max consecutive losses<span class="key">3</span></button>
+        <button type="button">Daily floor<span class="key">−2.0R</span></button>
+        <button type="button">Weekly floor<span class="key">−5.0R</span></button>
+        <hr>
+        <button type="button">Position sizer…</button>
+      </div>
+    </div>
+
+    <div class="menu" data-menu>
+      <button type="button" aria-haspopup="true" aria-expanded="false">Connections</button>
+      <div class="dropdown" hidden>
+        <button type="button">API key…</button>
+        <button type="button">Execute endpoint…</button>
+        <button type="button">Twelve Data key…</button>
+        <hr>
+        <button type="button">Live trading<span class="key">disabled</span></button>
+      </div>
+    </div>
+
+    <div class="menu" data-menu>
+      <button type="button" aria-haspopup="true" aria-expanded="false">View</button>
+      <div class="dropdown" hidden>
+        <button type="button">Minimize chrome<span class="key">`</span></button>
+        <button type="button">Collapse sidebar</button>
+        <button type="button">Market picture bar<span class="key">on</span></button>
+        <hr>
+        <button type="button">Reset layout</button>
+      </div>
+    </div>
+
+    <div class="menuspacer"></div>
+    <div class="live"><span class="pulse"></span>MARKET PICTURE: RISK-ON, THIN</div>
+  </div>
+
+  <!-- ══════════ BODY ══════════ -->
+  <div class="bodyrow">
+
+    <!-- ── sidebar: the five real HG_NAV_GROUPS ── -->
+    <nav class="sidebar" aria-label="Tools">
+
+      <details class="navsection">
+        <summary>
+          <svg class="caret" viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2l4 4-4 4"/></svg>
+          COMMAND <span class="cnt">12</span>
+        </summary>
+        <div class="navlist">
+          <button type="button"><span class="dot"></span>Brain</button>
+          <button type="button"><span class="dot"></span>Trade plan</button>
+          <button type="button"><span class="dot"></span>Setup log<span class="tag">14</span></button>
+          <button type="button"><span class="dot live"></span>Signal log<span class="tag">6</span></button>
+          <button type="button"><span class="dot"></span>Bias</button>
+          <button type="button"><span class="dot"></span>Regime</button>
+          <button type="button"><span class="dot"></span>Rotation</button>
+          <button type="button"><span class="dot"></span>News</button>
+        </div>
+      </details>
+
+      <details class="navsection">
+        <summary>
+          <svg class="caret" viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2l4 4-4 4"/></svg>
+          CRYPTO <span class="cnt">27</span>
+        </summary>
+        <div class="navlist">
+          <button type="button"><span class="dot"></span>Best</button>
+          <button type="button"><span class="dot"></span>Swing scan</button>
+          <button type="button"><span class="dot"></span>Scalp scan</button>
+          <button type="button"><span class="dot"></span>Smart money</button>
+          <button type="button"><span class="dot alert"></span>Liquidity trap<span class="tag hot">2</span></button>
+          <button type="button"><span class="dot"></span>SMC (FVG)</button>
+          <button type="button"><span class="dot"></span>Order blocks</button>
+          <button type="button"><span class="dot"></span>Divergence</button>
+          <button type="button"><span class="dot"></span>Coil watchlist</button>
+          <button type="button"><span class="dot"></span>Apex (RS)</button>
+          <button type="button"><span class="dot"></span>OI flow</button>
+          <button type="button"><span class="dot"></span>Liquidations</button>
+        </div>
+      </details>
+
+      <details class="navsection" open>
+        <summary>
+          <svg class="caret" viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2l4 4-4 4"/></svg>
+          GOLD <span class="cnt">11</span>
+        </summary>
+        <div class="navlist">
+          <button type="button"><span class="dot"></span>Super gold</button>
+          <button type="button"><span class="dot"></span>Omnigold</button>
+          <button type="button" aria-current="page"><span class="dot"></span>Opti gold<span class="tag">armed</span></button>
+          <button type="button"><span class="dot"></span>Gold swing</button>
+          <button type="button"><span class="dot"></span>Gold scalp</button>
+          <button type="button"><span class="dot"></span>Gold ultra</button>
+          <button type="button"><span class="dot"></span>Gold spot</button>
+          <button type="button"><span class="dot"></span>Cointegration</button>
+        </div>
+      </details>
+
+      <details class="navsection">
+        <summary>
+          <svg class="caret" viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2l4 4-4 4"/></svg>
+          MODELS <span class="cnt">20</span>
+        </summary>
+        <div class="navlist">
+          <button type="button"><span class="dot"></span>Formation lab</button>
+          <button type="button"><span class="dot"></span>Scorecard</button>
+          <button type="button"><span class="dot"></span>Reliability</button>
+          <button type="button"><span class="dot"></span>Mean reversion</button>
+          <button type="button"><span class="dot"></span>Pine · MSB</button>
+          <button type="button"><span class="dot"></span>Pine · Squeeze</button>
+          <button type="button"><span class="dot"></span>Calibrate</button>
+        </div>
+      </details>
+
+      <details class="navsection">
+        <summary>
+          <svg class="caret" viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2l4 4-4 4"/></svg>
+          TOOLS <span class="cnt">8</span>
+        </summary>
+        <div class="navlist">
+          <button type="button"><span class="dot"></span>Risk sizer</button>
+          <button type="button"><span class="dot"></span>Recon</button>
+          <button type="button"><span class="dot"></span>Basis</button>
+          <button type="button"><span class="dot"></span>Search</button>
+          <button type="button"><span class="dot"></span>Find trade</button>
+          <button type="button"><span class="dot"></span>Trade OS</button>
+        </div>
+      </details>
+    </nav>
+
+    <!-- ── workspace ── -->
+    <main class="workspace">
+
+      <div class="previewnote">
+        <b>Layout preview.</b>
+        <span>Chrome, navigation and panel structure are the proposal. Every figure below is illustrative — not live market data.</span>
+      </div>
+
+      <div class="wshead">
+        <div>
+          <div class="crumb" id="crumb">Gold · Opti gold</div>
+          <h1 class="wstitle" id="wstitle">Opti Gold</h1>
+          <div class="wssub">4H cascade + 1D structure + auto macro · expiry-enforced picks · honest STAND ASIDE when the pillars disagree</div>
+        </div>
+        <div class="wsactions">
+          <button type="button" class="btn">BUILD GOLD SETUP</button>
+          <button type="button" class="btn ghost">DEEP SCAN</button>
+          <button type="button" class="btn ghost">BACKTEST</button>
+        </div>
+      </div>
+
+      <div class="wsbody">
+
+        <!-- the one lifted object on the page -->
+        <section class="panel verdict">
+          <h2>Next to arm — XAUUSD swing</h2>
+          <span class="sub">4H retracement into the 1D demand shelf · expires 2 bars from now if unfilled</span>
+          <div class="plan">
+            <div class="side">
+              <span class="word">LONG</span>
+              <span class="kind">SWING · 4H</span>
+            </div>
+            <div class="levels">
+              <div class="lv"><span class="k">MARK</span><span class="v">3 842.60</span><span class="r">PAXG</span></div>
+              <div class="lv"><span class="k">ENTRY</span><span class="v">3 826.40</span><span class="r">−0.42%</span></div>
+              <div class="lv stop"><span class="k">STOP</span><span class="v">3 803.10</span><span class="r">23.3 pts</span></div>
+              <div class="lv tgt"><span class="k">T1</span><span class="v">3 872.90</span><span class="r">2.0R</span></div>
+              <div class="lv tgt"><span class="k">T2</span><span class="v">3 908.50</span><span class="r">3.5R</span></div>
+              <div class="lv tgt"><span class="k">T3</span><span class="v">3 955.00</span><span class="r">5.5R</span></div>
+            </div>
+          </div>
+          <div class="gates">
+            <span class="gate pass">1D structure · HH/HL</span>
+            <span class="gate pass">4H cascade · aligned</span>
+            <span class="gate pass">demand shelf · untested</span>
+            <span class="gate pass">DXY · falling</span>
+            <span class="gate wait">entry · not filled</span>
+            <span class="gate wait">kill zone · opens 07:00 LDN</span>
+            <span class="gate veto">10Y real rate · rising</span>
+          </div>
+        </section>
+
+        <div class="grid2">
+
+          <section class="panel">
+            <h2>Swing ledger</h2>
+            <span class="sub">37-gate engine · 4H structure · weekly context</span>
+            <div class="tblwrap">
+              <table>
+                <thead>
+                  <tr><th>Gate</th><th>Reads</th><th>State</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td class="name">Weekly trend</td><td>higher highs</td><td><span class="state armed">PASS</span></td></tr>
+                  <tr><td class="name">1D structure</td><td>HH / HL intact</td><td><span class="state armed">PASS</span></td></tr>
+                  <tr><td class="name">4H cascade</td><td>3 of 3 aligned</td><td><span class="state armed">PASS</span></td></tr>
+                  <tr><td class="name">Demand shelf</td><td>3 826 untested</td><td><span class="state armed">PASS</span></td></tr>
+                  <tr><td class="name">ATR expansion</td><td>1.18× 20-bar</td><td><span class="state armed">PASS</span></td></tr>
+                  <tr><td class="name">Real rate</td><td>10Y TIPS +4bp</td><td><span class="state aside">VETO</span></td></tr>
+                  <tr><td class="name">Event window</td><td>CPI in 2 days</td><td><span class="state near">WATCH</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>Scalp ledger</h2>
+            <span class="sub">20-gate engine · 15m sweep-and-reclaim inside a kill zone</span>
+            <div class="empty">STAND ASIDE — outside both kill zones. London opens in 3h 12m; the Asian range is still forming (3 831.20 / 3 848.90). No sweep, so no reclaim to trade.</div>
+            <div class="gates">
+              <span class="gate wait">kill zone · closed</span>
+              <span class="gate wait">Asia range · forming</span>
+              <span class="gate">PDH sweep · none</span>
+              <span class="gate">PDL sweep · none</span>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>Macro (auto)</h2>
+            <span class="sub">DXY via Frankfurter/ECB · 10Y + silver via Yahoo proxy · never blocks the ledgers</span>
+            <div class="kv">
+              <div class="row"><span class="k">DXY</span><span><span class="v dn">97.41</span> <span class="n">−0.28%</span></span></div>
+              <div class="row"><span class="k">US 10Y</span><span><span class="v up">4.126%</span> <span class="n">+4 bp</span></span></div>
+              <div class="row"><span class="k">Real rate hint</span><span><span class="v">+1.83%</span> <span class="n">rising — headwind</span></span></div>
+              <div class="row"><span class="k">Silver (XAG)</span><span><span class="v up">46.08</span> <span class="n">+0.61%</span></span></div>
+              <div class="row"><span class="k">Gold / silver</span><span><span class="v">83.4</span> <span class="n">20d mean 84.9</span></span></div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>Session &amp; levels</h2>
+            <span class="sub">session-aware · PDH/PDL liquidity · Asian range</span>
+            <div class="kv">
+              <div class="row"><span class="k">Session</span><span><span class="v">ASIA</span> <span class="n">low liquidity</span></span></div>
+              <div class="row"><span class="k">PDH</span><span><span class="v">3 857.40</span> <span class="n">unswept</span></span></div>
+              <div class="row"><span class="k">PDL</span><span><span class="v">3 811.05</span> <span class="n">unswept</span></span></div>
+              <div class="row"><span class="k">Asia high</span><span><span class="v">3 848.90</span> <span class="n">forming</span></span></div>
+              <div class="row"><span class="k">Asia low</span><span><span class="v">3 831.20</span> <span class="n">forming</span></span></div>
+              <div class="row"><span class="k">Data chain</span><span><span class="v">PAXG</span> <span class="n">Binance · primary</span></span></div>
+            </div>
+          </section>
+        </div>
+
+        <section class="panel">
+          <h2>Signal log</h2>
+          <span class="sub">persistent journal across BRAIN, SCALP and SWING — crypto and gold</span>
+          <div class="tblwrap">
+            <table>
+              <thead>
+                <tr><th>Time IST</th><th>Tab</th><th>Symbol</th><th>Side</th><th>Entry</th><th>Stop</th><th>State</th><th>Result</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>21:44</td><td class="name">Opti gold</td><td>XAUUSD</td><td class="up">LONG</td><td>3 826.40</td><td>3 803.10</td><td><span class="state near">NEXT TO ARM</span></td><td>—</td></tr>
+                <tr><td>19:02</td><td class="name">Scalp scan</td><td>SOLUSD</td><td class="dn">SHORT</td><td>238.14</td><td>242.90</td><td><span class="state armed">ARMED</span></td><td>+1.2R</td></tr>
+                <tr><td>17:30</td><td class="name">Liquidity trap</td><td>BTCUSD</td><td class="up">LONG</td><td>—</td><td>—</td><td><span class="state aside">STAND ASIDE</span></td><td>gate 14 veto</td></tr>
+                <tr><td>15:11</td><td class="name">Swing scan</td><td>ETHUSD</td><td class="up">LONG</td><td>4 118.00</td><td>3 992.50</td><td><span class="state armed">ARMED</span></td><td>+2.0R · T1</td></tr>
+                <tr><td>12:48</td><td class="name">Gold scalp</td><td>XAUUSD</td><td class="dn">SHORT</td><td>3 851.20</td><td>3 864.00</td><td><span class="state aside">CLOSED</span></td><td>−1.0R</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- ══════════ STATUS BAR ══════════ -->
+  <div class="statusbar">
+    <span class="chip ok">BUILD <b>v741</b></span>
+    <span class="chip"><b>312</b> symbols</span>
+    <span class="chip">next funding <b>02:41</b></span>
+    <span class="chip">F&amp;G <b>61</b></span>
+    <span class="chip">BTC.D <b>54.2%</b></span>
+    <span class="chip warn">auto refresh <b>5m</b></span>
+    <span class="chip"><b>21:47</b> IST</span>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  /* ---- menu bar: click to open, click-away / Escape to close ---- */
+  var menus = Array.prototype.slice.call(document.querySelectorAll('[data-menu]'));
+
+  function close(menu){
+    menu.dataset.open = 'false';
+    menu.querySelector('button[aria-haspopup]').setAttribute('aria-expanded','false');
+    menu.querySelector('.dropdown').hidden = true;
+  }
+  function closeAll(){ menus.forEach(close); }
+
+  menus.forEach(function(menu){
+    var trigger = menu.querySelector('button[aria-haspopup]');
+    var panel   = menu.querySelector('.dropdown');
+
+    trigger.addEventListener('click', function(e){
+      e.stopPropagation();
+      var wasOpen = menu.dataset.open === 'true';
+      closeAll();
+      if (!wasOpen){
+        menu.dataset.open = 'true';
+        trigger.setAttribute('aria-expanded','true');
+        panel.hidden = false;
+      }
+    });
+
+    /* hovering across the bar while one menu is open follows the pointer,
+       the way a real menu bar behaves */
+    trigger.addEventListener('mouseenter', function(){
+      var anyOpen = menus.some(function(m){ return m.dataset.open === 'true'; });
+      if (anyOpen && menu.dataset.open !== 'true'){ trigger.click(); }
+    });
+
+    panel.addEventListener('click', function(e){ e.stopPropagation(); closeAll(); });
+  });
+
+  document.addEventListener('click', closeAll);
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeAll(); });
+
+  /* ---- sidebar: selecting a tool drives the workspace header ---- */
+  var items  = Array.prototype.slice.call(document.querySelectorAll('.navlist button'));
+  var title  = document.getElementById('wstitle');
+  var crumb  = document.getElementById('crumb');
+
+  items.forEach(function(item){
+    item.addEventListener('click', function(){
+      items.forEach(function(b){ b.removeAttribute('aria-current'); });
+      item.setAttribute('aria-current','page');
+
+      var label = item.childNodes[1] ? String(item.childNodes[1].textContent).trim() : item.textContent.trim();
+      var group = item.closest('.navsection').querySelector('summary').textContent.trim().split(/\s+/)[0];
+
+      title.textContent = label;
+      crumb.textContent = group.charAt(0) + group.slice(1).toLowerCase() + ' · ' + label;
+    });
+  });
+})();
+</script>
