@@ -211,6 +211,102 @@ console.log('== degenerate input never throws ==');
   ok(Array.isArray(W.__ogSignals(flat, {})), 'a flat tape (zero ATR) returns an array rather than throwing');
 }
 
+console.log('== three lanes, and the SAME rule on each ==');
+{
+  const L = W.__ogLanes;
+  ok(Array.isArray(L) && L.length === 3, 'three lanes are defined (' + (L && L.length) + ')');
+  ok(L.map(x => x.key).join(',') === 'scalp,intraday,swing', 'scalp / intraday / swing — got ' + L.map(x => x.key).join(','));
+  ok(L.map(x => x.interval).join(',') === '15m,1h,4h', 'on 15m / 1h / 4h — got ' + L.map(x => x.interval).join(','));
+
+  /* THE DESIGN DECISION THIS PINS. Three lanes with three tuned parameter sets
+     would be three separately-fitted rules wearing one name, and nothing here
+     has the evidence to justify per-lane tuning. If someone later "improves"
+     one lane's stop or target in isolation, this fails and asks them why. */
+  for (const field of ['swingLength', 'atrPeriod', 'stopAtr', 'rr']){
+    const vals = new Set(L.map(x => x[field]));
+    ok(vals.size === 1, 'every lane shares the same ' + field + ' (' + [...vals].join('/') + ') — no per-lane fitting');
+  }
+  const horizons = new Set(L.map(x => x.horizonBars));
+  ok(horizons.size > 1, 'but horizons DO differ by lane, matched to the style rather than the rule');
+  ok(L.every(x => x.horizonBars > 0 && x.bars > 0), 'every lane has a positive horizon and bar count');
+}
+
+console.log('== distance is measured from the live mark, in ATR ==');
+{
+  const D = W.__ogDistance;
+  const s = { entry: 100, atr: 2 };
+  const above = D(s, 104);
+  ok(above.px === 4, 'absolute distance is |mark - entry| (4)');
+  ok(above.atr === 2, 'and 2x the ATR of 2 — the unit that compares across lanes');
+  ok(Math.abs(above.pct - (4 / 104 * 100)) < 1e-9, 'percent is relative to the mark, not the entry');
+  ok(above.side === 'above', 'side says the mark is ABOVE the entry — price must fall to fill a long');
+  ok(D(s, 96).side === 'below', 'and below when it is under the entry');
+  ok(D(s, 100).side === 'at', 'and "at" when they coincide');
+
+  /* the same absolute move is a different distance on a different lane */
+  ok(D({ entry: 100, atr: 1 }, 104).atr === 4 && D({ entry: 100, atr: 8 }, 104).atr === 0.5,
+     'identical 4-point gap reads as 4xATR on a tight lane and 0.5xATR on a wide one');
+
+  /* +null is 0 and isFinite(0) is true — a missing mark must not become a price */
+  for (const bad of [null, undefined, '', NaN, 'abc'])
+    ok(D(s, bad) === null, 'a missing mark (' + JSON.stringify(bad) + ') returns null, never a distance from zero');
+  ok(D(null, 100) === null && D({}, 100) === null, 'a missing setup returns null');
+  ok(D({ entry: 100 }, 104).atr === null, 'no ATR yields a null ATR distance rather than Infinity or NaN');
+}
+
+console.log('== a FILLED position is read differently from a resting order ==');
+{
+  /* The bug this pins was live on the page: 8 of 10 live setups had already
+     filled, and every card still said "price must fall 0.52xATR to fill".
+     Distance-to-entry is meaningless once an order is done. */
+  const O = W.__ogOpenRead;
+  const long = { dir: 'long', entry: 100, stop: 95, t1: 110, risk: 5 };
+
+  const half = O(long, 105);
+  ok(half.unrealR === 1, 'a long 5 points up on 5 of risk is +1.00R');
+  ok(half.toStopR === 2, 'with 2R of room back to the stop');
+  ok(half.toTargetR === 1, 'and 1R left to the target');
+
+  const down = O(long, 97.5);
+  ok(down.unrealR === -0.5, 'below entry it reads negative (-0.50R)');
+  ok(down.toStopR === 0.5, 'and the room to the stop shrinks to 0.5R');
+
+  const short = O({ dir: 'short', entry: 100, stop: 105, t1: 90, risk: 5 }, 95);
+  ok(short.unrealR === 1, 'a short measures the opposite way (+1.00R at 95)');
+
+  /* the mark can outrun a state resolved on closed bars */
+  ok(O(long, 94).beyondStop === true && O(long, 94).beyondTarget === false, 'a mark past the stop is flagged');
+  ok(O(long, 111).beyondTarget === true, 'and a mark past the target is flagged');
+  ok(O(long, 105).beyondStop === false && O(long, 105).beyondTarget === false, 'a mark between them is flagged as neither');
+
+  for (const bad of [null, undefined, '', NaN])
+    ok(O(long, bad) === null, 'a missing mark (' + JSON.stringify(bad) + ') returns null, never a fabricated R');
+  ok(O({ dir: 'long', entry: 100, stop: 100, t1: 110, risk: 0 }, 105) === null, 'zero risk returns null rather than dividing by zero');
+  ok(O(null, 100) === null, 'a missing setup returns null');
+}
+
+console.log('== the card asks the right question for each state ==');
+{
+  const src = fs.readFileSync(path.join(ROOT, 'optigold.js'), 'utf8');
+  ok(/ogOpenRead\(s, mark\)/.test(src), 'card() consults ogOpenRead for filled positions');
+  ok(/s\.state === 'open'/.test(src), 'and branches on the filled state rather than treating all live alike');
+  ok(/RUNNING/.test(src) && /RESTING/.test(src), 'the render separates running positions from resting orders');
+}
+
+console.log('== forward records are tagged by lane ==');
+{
+  const R = W.__ogFwdRows;
+  const base = { dir: 'long', state: 'waiting', entry: 100, stop: 95, t1: 110 };
+  const scalp = R([base], 'scalp')[0].mechanic;
+  const swing = R([base], 'swing')[0].mechanic;
+  ok(scalp !== swing, 'lanes get DIFFERENT mechanics (' + scalp + ' vs ' + swing + ')');
+  ok(/SCALP/.test(scalp) && /SWING/.test(swing), 'each names its own lane');
+  ok(/LONG/.test(scalp) && /SHORT/.test(R([{ ...base, dir: 'short' }], 'scalp')[0].mechanic),
+     'direction is still in the mechanic');
+  ok(R([base], 'scalp')[0].mechanic.length <= 28, 'mechanic fits the forward log field (<=28 chars)');
+  ok(/BOS-RETRACE/.test(R([base])[0].mechanic), 'an untagged call still names the rule rather than throwing');
+}
+
 console.log('== the source documents the lookahead it removed ==');
 {
   const src = fs.readFileSync(path.join(ROOT, 'optigold.js'), 'utf8');

@@ -195,10 +195,65 @@ function ogSignals(rows, opts){
   return out;
 }
 
+/* THE THREE LANES. Deliberately the SAME rule at three scales — identical swing
+   window, ATR period, stop multiple and target. Only the timeframe and the
+   expiry differ. Three lanes with three tuned parameter sets would be three
+   separately-fitted rules wearing one name, and nothing here has the evidence
+   to justify per-lane tuning. Horizons are chosen to match the trading style in
+   wall-clock terms, not fitted: 32×15m ≈ 8h, 48×1h = 2 days, 42×4h = 7 days. */
+var LANES = [
+  { key: 'scalp',    label: 'SCALP',    interval: '15m', bars: 600, swingLength: 5, atrPeriod: 14, stopAtr: 1.5, rr: 2, horizonBars: 32 },
+  { key: 'intraday', label: 'INTRADAY', interval: '1h',  bars: 500, swingLength: 5, atrPeriod: 14, stopAtr: 1.5, rr: 2, horizonBars: 48 },
+  { key: 'swing',    label: 'SWING',    interval: '4h',  bars: 400, swingLength: 5, atrPeriod: 14, stopAtr: 1.5, rr: 2, horizonBars: 42 },
+];
+
+/* Distance from the LIVE MARK to a resting entry, in three units.
+   ATR is the one that compares across lanes: 0.4% is nothing on 4h gold and a
+   long way on 15m, and a percentage hides exactly that difference. `side` says
+   which way price must travel to fill. These are facts about where price is
+   now — none of them is a probability that it gets there. */
+function ogDistance(setup, px){
+  /* +null and +'' are 0 — reject before coercing, or a missing mark reads as
+     a real price of zero and every entry looks infinitely far away */
+  var p = (px === null || px === undefined || px === '') ? NaN : +px;
+  if (!setup || !isFinite(p) || !isFinite(+setup.entry)) return null;
+  var entry = +setup.entry;
+  var d = Math.abs(p - entry);
+  var a = (+setup.atr > 0) ? +setup.atr : NaN;
+  return {
+    px: d,
+    pct: p !== 0 ? (d / p * 100) : null,
+    atr: isFinite(a) ? (d / a) : null,
+    side: p > entry ? 'above' : (p < entry ? 'below' : 'at'),
+  };
+}
+
+/* For a position that has already FILLED, distance-to-entry is meaningless —
+   that order is done. What matters is where the mark sits between the stop and
+   the target, and what the move is worth in R right now. Showing a filled
+   position "how far to fill" is the kind of incoherent card this tab exists to
+   avoid; it was on screen until the live page was actually read. */
+function ogOpenRead(setup, px){
+  var p = (px === null || px === undefined || px === '') ? NaN : +px;
+  if (!setup || !isFinite(p)) return null;
+  var entry = +setup.entry, stop = +setup.stop, t1 = +setup.t1, risk = +setup.risk;
+  if (!isFinite(entry) || !isFinite(stop) || !isFinite(t1) || !(risk > 0)) return null;
+  var long = setup.dir === 'long';
+  return {
+    unrealR: (long ? (p - entry) : (entry - p)) / risk,
+    toStopR: Math.abs(p - stop) / risk,
+    toTargetR: Math.abs(t1 - p) / risk,
+    /* States are resolved on CLOSED bars, so the live mark can already sit past
+       a barrier the walk has not registered yet. Say that plainly instead of
+       printing a distance to a level price has gone through. */
+    beyondStop: long ? (p <= stop) : (p >= stop),
+    beyondTarget: long ? (p >= t1) : (p <= t1),
+  };
+}
+
 /* ---------- rendering ---------- */
 
-function card(s, last){
-  var live = s.state === 'waiting' || s.state === 'open';
+function card(s, mark){
   var cls = s.dir === 'long' ? 'long' : 'short';
   var stateLabel = { waiting: 'WAITING — price has not retraced to entry',
                      open: 'FILLED — running',
@@ -206,23 +261,50 @@ function card(s, last){
                      stopped: 'STOPPED',
                      missed: 'MISSED — ran to target without filling' }[s.state] || s.state;
   var stateCls = s.state === 'target' ? 'ok' : (s.state === 'stopped' || s.state === 'missed') ? 'bad' : 'warn';
-  var away = last ? (Math.abs(last - s.entry) / last * 100) : null;
+  var d = ogDistance(s, mark);
   var smcChip = '';
   try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(s) || ''; }catch(e){}
 
+  /* The reading depends on whether the order has FILLED. A resting order is
+     described by how far the mark is from its entry; a running position by
+     where the mark sits between stop and target. Using the first for both puts
+     "must fall to fill" on a position that filled hours ago. */
+  var filled = (s.state === 'open');
+  var op = filled ? ogOpenRead(s, mark) : null;
+  var travel = '';
+  if (filled && op){
+    if (op.beyondTarget) travel = 'the mark is already at or past the target — the walk settles on closed bars and has not caught up';
+    else if (op.beyondStop) travel = 'the mark is already at or past the stop — the walk settles on closed bars and has not caught up';
+    else travel = 'running at ' + (op.unrealR >= 0 ? '+' : '') + fmt(op.unrealR, 2) + 'R · '
+      + fmt(op.toStopR, 2) + 'R of room to the stop, ' + fmt(op.toTargetR, 2) + 'R left to the target';
+  } else if (d && d.side !== 'at'){
+    travel = 'price is ' + fmt(d.px) + ' ' + d.side + ' the entry — it must '
+      + (s.dir === 'long' ? 'fall' : 'rise') + ' '
+      + (d.atr != null ? fmt(d.atr, 1) + '×ATR' : fmt(d.pct, 2) + '%') + ' to fill';
+  }
+
   return '<div class="card ' + cls + '">'
     + '<div class="chead"><span class="sym">XAUUSD</span>'
-    + '<span class="dir">' + (s.dir === 'long' ? 'BUY LIMIT' : 'SELL LIMIT') + '</span></div>'
+    + '<span class="stamp">' + esc(s.laneLabel || '') + '</span>'
+    + '<span class="dir">' + (filled ? (s.dir === 'long' ? 'LONG — filled' : 'SHORT — filled')
+                                     : (s.dir === 'long' ? 'BUY LIMIT' : 'SELL LIMIT')) + '</span></div>'
     + '<div class="row" style="gap:6px;margin:4px 0"><span class="stamp ' + stateCls + '">' + esc(stateLabel) + '</span>' + smcChip + '</div>'
     + '<div class="mini">'
+    + (filled && op
+        ? '<span class="k">unrealised</span><span><b>' + (op.unrealR >= 0 ? '+' : '') + fmt(op.unrealR, 2) + 'R</b></span>'
+          + '<span class="k">room to stop</span><span>' + fmt(op.toStopR, 2) + 'R</span>'
+          + '<span class="k">left to target</span><span>' + fmt(op.toTargetR, 2) + 'R</span>'
+        : (d ? '<span class="k">distance to entry</span><span><b>' + (d.atr != null ? fmt(d.atr, 2) + '×ATR' : '—')
+               + '</b> (' + fmt(d.pct, 2) + '% · ' + fmt(d.px) + ')</span>' : ''))
     + '<span class="k">entry (50% eq)</span><span>' + fmt(s.entry) + '</span>'
     + '<span class="k">stop</span><span>' + fmt(s.stop) + '</span>'
     + '<span class="k">target (' + fmt(s.rr, 1) + 'R)</span><span>' + fmt(s.t1) + '</span>'
     + '<span class="k">risk</span><span>' + fmt(s.risk) + '</span>'
+    + '<span class="k">expires in</span><span>' + esc(String(s.horizonBars || '—')) + ' × ' + esc(String(s.interval || '')) + ' bars</span>'
     + '<span class="k">broken level</span><span>' + fmt(s.dir === 'long' ? s.res : s.sup) + '</span>'
     + '<span class="k">opposite level</span><span>' + fmt(s.dir === 'long' ? s.sup : s.res) + '</span>'
-    + (away != null ? '<span class="k">entry is</span><span>' + fmt(away, 2) + '% away</span>' : '')
     + '</div>'
+    + (travel ? '<div class="note" style="margin:4px 0">' + esc(travel) + '</div>' : '')
     + '<div class="plan">Break of structure at <b>' + fmt(s.brokeAt) + '</b>; the order rests at the midpoint '
     + 'of the broken range and is <b>not a market entry</b>. Stop is 1.5×ATR beyond the opposite structural level, '
     + 'so risk is roughly half the range plus the buffer — a wide stop by construction. '
@@ -230,47 +312,104 @@ function card(s, last){
     + '</div>';
 }
 
-function render(ui, setups, rows, note){
+function render(ui, lanes, mark, note){
   if (!ui || !ui.body) return;
-  var last = rows && rows.length ? +rows[rows.length - 1].c : null;
-  var live = setups.filter(function(s){ return s.state === 'waiting' || s.state === 'open'; });
-  var done = setups.filter(function(s){ return s.state !== 'waiting' && s.state !== 'open'; });
-  var settled = done.filter(function(s){ return s.state === 'target' || s.state === 'stopped'; });
+  var all = [];
+  lanes.forEach(function(L){ all = all.concat(L.setups || []); });
+  var live = all.filter(function(s){ return s.state === 'waiting' || s.state === 'open'; });
+  var settled = all.filter(function(s){ return s.state === 'target' || s.state === 'stopped'; });
+  var missed = all.filter(function(s){ return s.state === 'missed'; });
   var wins = settled.filter(function(s){ return s.state === 'target'; }).length;
 
+  /* RUNNING and RESTING are different questions and must not share a list.
+     A filled position is judged by where the mark sits between its stop and
+     target; a resting order by how far the mark is from its entry. Sorting them
+     together on distance-to-entry ranks a position that filled hours ago as if
+     it were still waiting. */
+  var running = live.filter(function(s){ return s.state === 'open'; });
+  var resting = live.filter(function(s){ return s.state === 'waiting'; });
+
+  /* running: closest to resolution first — least room left to stop or target */
+  running.sort(function(a, b){
+    var oa = ogOpenRead(a, mark), ob = ogOpenRead(b, mark);
+    var xa = oa ? Math.min(oa.toStopR, oa.toTargetR) : Infinity;
+    var xb = ob ? Math.min(ob.toStopR, ob.toTargetR) : Infinity;
+    return xa - xb;
+  });
+
+  /* resting: NEAREST FIRST — the ordering that respects "with the current price
+     in mind". An order 0.3×ATR from the mark is actionable; one 6×ATR away is
+     decoration, and burying the first under the second by recency would be
+     useless. Sorted on ATR rather than percent so the three lanes compare
+     fairly; anything without a usable ATR sinks last rather than sorting as 0. */
+  resting.sort(function(a, b){
+    var da = ogDistance(a, mark), db = ogDistance(b, mark);
+    var xa = (da && da.atr != null) ? da.atr : Infinity;
+    var xb = (db && db.atr != null) ? db.atr : Infinity;
+    return xa - xb;
+  });
+
   var h = '';
-  h += '<div class="note" style="margin-bottom:8px">'
-    + esc(note || '') + '</div>';
+
+  /* the mark, first and largest — every distance below is measured from it */
+  h += '<div class="row" style="align-items:baseline;gap:10px;margin-bottom:6px">'
+    + '<span style="font-size:20px;font-weight:700">' + fmt(mark) + '</span>'
+    + '<span class="note">XAUUSD live mark · every distance below is measured from this</span>'
+    + '</div>';
+
+  h += '<div class="note" style="margin-bottom:8px">' + esc(note || '') + '</div>';
 
   h += '<div class="note warn" style="margin-bottom:10px">'
-    + 'Swings are confirmed <b>' + esc(String(__og.cfg.swingLength)) + ' bars after they print</b>, never centred on them. '
-    + 'The rule as originally written read future bars to place its levels; this does not, which is why it '
-    + 'fires later and less often. <b>No forward evidence yet</b> — these are rule output, not a measured edge.'
+    + 'Swings are confirmed <b>5 bars after they print</b>, never centred on them. The rule as originally '
+    + 'written read future bars to place its levels; this does not, which is why it fires later and less often. '
+    + 'All three lanes run the <b>identical</b> rule — only timeframe and expiry differ, so nothing here is '
+    + 'per-lane fitted. <b>No forward evidence yet</b>: this is rule output, not a measured edge.'
     + '</div>';
 
-  h += '<div class="row" style="gap:14px;margin-bottom:10px">'
+  h += '<div class="row" style="gap:14px;margin-bottom:10px;flex-wrap:wrap">'
     + '<span class="statuschip">live <b>' + live.length + '</b></span>'
     + '<span class="statuschip">settled <b>' + settled.length + '</b></span>'
-    + '<span class="statuschip">of those hit target <b>' + wins + '</b></span>'
-    + '<span class="statuschip">never filled <b>' + done.filter(function(s){ return s.state === 'missed'; }).length + '</b></span>'
+    + '<span class="statuschip">hit target <b>' + wins + '</b></span>'
+    + '<span class="statuschip">never filled <b>' + missed.length + '</b></span>'
     + '</div>';
 
-  if (!setups.length){
-    h += '<div class="note">No break of structure in the fetched window. With a ' + esc(String(__og.cfg.swingLength))
-      + '-bar swing window and an honest confirmation lag this is normal on a quiet tape.</div>';
+  /* per-lane status, including lanes whose feed failed — a silent missing lane
+     would read as "no setups on 4h" when it means "4h never loaded" */
+  h += '<div class="row" style="gap:10px;margin-bottom:12px;flex-wrap:wrap">';
+  lanes.forEach(function(L){
+    var lv = (L.setups || []).filter(function(s){ return s.state === 'waiting' || s.state === 'open'; }).length;
+    var cls = L.err ? 'bad' : 'ok';
+    h += '<span class="statuschip ' + cls + '">' + esc(L.cfg.label) + ' ' + esc(L.cfg.interval) + ' — '
+      + (L.err ? esc(L.err) : lv + ' live · ' + (L.rows ? L.rows.length : 0) + ' bars') + '</span>';
+  });
+  h += '</div>';
+
+  if (!all.length){
+    h += '<div class="note">No break of structure in any lane. With a 5-bar swing window and an honest '
+      + 'confirmation lag this is normal on a quiet tape — the rule is waiting, not broken.</div>';
   } else {
-    if (live.length){
-      h += '<h3 style="font-size:12px;margin:10px 0 6px">LIVE — resting orders</h3><div class="cards">';
-      live.slice(-6).reverse().forEach(function(s){ h += card(s, last); });
+    if (running.length){
+      h += '<h3 style="font-size:12px;margin:10px 0 6px">RUNNING — already filled, closest to resolution first</h3><div class="cards">';
+      running.slice(0, 6).forEach(function(s){ h += card(s, mark); });
       h += '</div>';
+      if (running.length > 6) h += '<div class="note">' + (running.length - 6) + ' further running position(s) not shown.</div>';
+    }
+    if (resting.length){
+      h += '<h3 style="font-size:12px;margin:14px 0 6px">RESTING — unfilled limits, nearest to the mark first</h3><div class="cards">';
+      resting.slice(0, 6).forEach(function(s){ h += card(s, mark); });
+      h += '</div>';
+      if (resting.length > 6) h += '<div class="note">' + (resting.length - 6) + ' further resting order(s) hidden — they sit further from the mark.</div>';
+    }
+    if (!running.length && !resting.length){
+      h += '<div class="note">Nothing live: every break in the window has already filled and resolved, or expired unfilled.</div>';
     }
     if (settled.length){
       h += '<h3 style="font-size:12px;margin:14px 0 6px">SETTLED — what the rule would have done</h3><div class="cards">';
-      settled.slice(-6).reverse().forEach(function(s){ h += card(s, last); });
+      settled.slice(-6).reverse().forEach(function(s){ h += card(s, mark); });
       h += '</div>';
-      h += '<div class="note" style="margin-top:8px">Settled counts are in-sample over the fetched window only: '
+      h += '<div class="note" style="margin-top:8px">Settled counts are in-sample over the fetched window only — '
         + 'the same bars the levels were derived from. Read them as a description of the rule, not as evidence it pays. '
-        + 'Forward records are being written for a later, honest answer.</div>';
+        + 'Forward records are written per lane so each timeframe can be judged separately later.</div>';
     }
   }
   ui.body.innerHTML = h;
@@ -282,45 +421,70 @@ async function runOptiGold(ui){
   if (__og.busy) return 'busy';
   __og.busy = true;
   try{
-    if (ui && ui.stat) ui.stat.textContent = 'fetching gold candles…';
     var ggc = (typeof W.getGoldCandles === 'function') ? W.getGoldCandles : null;
     if (!ggc) throw new Error('getGoldCandles unavailable — gold feed not loaded');
 
-    var got = await ggc(__og.cfg.interval, __og.cfg.bars);
-    var rows = (got && got.rows) ? got.rows : [];
-    if (!rows.length) throw new Error('no ' + __og.cfg.interval + ' gold candles returned');
-
-    var setups = ogSignals(rows, __og.cfg);
-    __og.last = { at: Date.now(), rows: rows.length, setups: setups, src: (got && got.source) || 'gold' };
-
-    /* SMC context on the live ones, record-only here — the chip only */
-    try{
-      if (typeof W.hgSmcEnrich === 'function'){
-        setups.forEach(function(s){
-          if (s.state === 'waiting' || s.state === 'open'){
-            s.sym = 'XAUUSD';
-            W.hgSmcEnrich(s, { rows: rows.slice(0, s.i + 1), tab: 'OPTI GOLD' });
-          }
-        });
+    var lanes = [], i, markLane = null;
+    for (i = 0; i < LANES.length; i++){
+      var L = LANES[i];
+      if (ui && ui.stat) ui.stat.textContent = 'fetching ' + L.label + ' (' + L.interval + ')…';
+      var got = null, err = null;
+      try{ got = await ggc(L.interval, L.bars); }
+      catch(eF){ err = (eF && eF.message) || String(eF); }
+      var rows = (got && got.rows) ? got.rows : [];
+      /* a lane that fails is REPORTED, not dropped — a silently missing lane
+         reads as "no setups on 4h" when it means "4h never loaded" */
+      if (!rows.length){
+        lanes.push({ cfg: L, rows: [], setups: [], err: err || ('no ' + L.interval + ' candles') });
+        continue;
       }
-    }catch(eSmc){}
+      var setups = ogSignals(rows, L);
+      setups.forEach(function(s){
+        s.lane = L.key; s.laneLabel = L.label; s.interval = L.interval;
+        s.horizonBars = L.horizonBars; s.sym = 'XAUUSD';
+      });
+      lanes.push({ cfg: L, rows: rows, setups: setups, src: (got && got.source) || 'gold' });
 
-    /* forward log: one record per setup, keyed to its BOS bar, so this tab
-       accumulates real out-of-sample evidence instead of re-describing the
-       window it was fitted on */
-    try{
-      if (typeof W.hgFwdRecordScan === 'function'){
-        var fwd = ogFwdRows(setups);
-        if (fwd.length) W.hgFwdRecordScan('OPTI GOLD', __og.cfg.interval, fwd, { horizonBars: __og.cfg.horizonBars });
-      }
-    }catch(eFwd){ try{ if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('optigold', eFwd); }catch(eW){} }
+      /* SMC context on the live ones — the chip only, never a gate */
+      try{
+        if (typeof W.hgSmcEnrich === 'function'){
+          setups.forEach(function(s){
+            if (s.state === 'waiting' || s.state === 'open'){
+              W.hgSmcEnrich(s, { rows: rows.slice(0, s.i + 1), tab: 'OPTI GOLD' });
+            }
+          });
+        }
+      }catch(eSmc){}
 
-    var note = rows.length + ' × ' + __og.cfg.interval + ' bars from ' + esc(String(__og.last.src))
-      + ' · swing window ' + __og.cfg.swingLength + ' · ATR ' + __og.cfg.atrPeriod
-      + ' · stop ' + __og.cfg.stopAtr + '×ATR · target ' + __og.cfg.rr + 'R'
+      /* forward log PER LANE, with the lane in the mechanic. Pooling all three
+         into one bucket would make it impossible to ask the question that
+         matters — whether the same rule pays differently at different scales. */
+      try{
+        if (typeof W.hgFwdRecordScan === 'function'){
+          var fwd = ogFwdRows(setups, L.key);
+          if (fwd.length) W.hgFwdRecordScan('OPTI GOLD', L.interval, fwd, { horizonBars: L.horizonBars });
+        }
+      }catch(eFwd){ try{ if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('optigold', eFwd); }catch(eW){} }
+    }
+
+    /* THE MARK: the last close of the shortest lane that loaded — the freshest
+       price this tab can honestly claim. It is a closed-bar close, not a tick,
+       and the note says so rather than implying a live quote. */
+    for (i = 0; i < lanes.length; i++){
+      if (lanes[i].rows && lanes[i].rows.length){ markLane = lanes[i]; break; }
+    }
+    if (!markLane) throw new Error('no gold candles on any lane — feed unavailable');
+    var mark = +markLane.rows[markLane.rows.length - 1].c;
+
+    var total = lanes.reduce(function(n, L){ return n + (L.setups ? L.setups.length : 0); }, 0);
+    __og.last = { at: Date.now(), mark: mark, lanes: lanes, setups: [].concat.apply([], lanes.map(function(L){ return L.setups || []; })) };
+
+    var note = 'mark is the last closed ' + markLane.cfg.interval + ' bar from ' + esc(String(markLane.src || 'gold'))
+      + ' · same rule on every lane: swing 5 · ATR 14 · stop 1.5×ATR · target 2R'
+      + ' · ' + total + ' setup(s) across ' + lanes.length + ' lanes'
       + ' · ' + new Date().toISOString().slice(11, 19) + ' UTC';
-    render(ui, setups, rows, note);
-    if (ui && ui.stat) ui.stat.textContent = setups.length + ' setup(s) from ' + rows.length + ' bars';
+    render(ui, lanes, mark, note);
+    if (ui && ui.stat) ui.stat.textContent = total + ' setup(s) · mark ' + fmt(mark);
     __og.ranOnce = true;
     return 'ok';
   }catch(e){
@@ -334,7 +498,7 @@ async function runOptiGold(ui){
 
 /* forward-log rows, pure and exported so the recording can be tested without
    a live scan — runOptiGold needs network and is unreachable offline */
-function ogFwdRows(setups){
+function ogFwdRows(setups, lane){
   if (!Array.isArray(setups)) return [];
   /* +null / +'' are 0 and isFinite(0) is true, so a missing level must be
      rejected BEFORE coercion or it records as a fabricated zero */
@@ -347,8 +511,12 @@ function ogFwdRows(setups){
     var en = lvl(s.entry), st = lvl(s.stop), tp = lvl(s.t1);
     if (!isFinite(en) || !isFinite(st) || !isFinite(tp)) continue;
     if (en === st) continue;
+    /* the LANE is part of the mechanic, so the forward log can answer whether
+       the same rule pays differently at 15m, 1h and 4h. One pooled bucket
+       would average that question away before it could be asked. */
+    var laneKey = String(lane || s.lane || 'na').toUpperCase();
     out.push({ sym: 'XAUUSD', dir: s.dir, entry: en, stop: st, t1: tp,
-               mechanic: 'BOS-RETRACE-' + (s.dir === 'long' ? 'LONG' : 'SHORT'),
+               mechanic: ('BOS-RETRACE-' + laneKey + '-' + (s.dir === 'long' ? 'LONG' : 'SHORT')).slice(0, 28),
                ticket: false });   /* never a ticket: unmeasured rule, by design */
   }
   return out;
@@ -356,7 +524,7 @@ function ogFwdRows(setups){
 
 function mountOptiGold(el){
   if (!el) return;
-  el.innerHTML = '<div class="panel"><h2>OPTI GOLD <span>break of structure → 50% retracement limit · causal swings</span></h2>'
+  el.innerHTML = '<div class="panel"><h2>OPTI GOLD <span>break of structure → 50% retracement limit · scalp / intraday / swing · causal swings</span></h2>'
     + '<div class="row"><button class="btn" id="ogRun">RUN SCAN</button>'
     + '<span class="note" id="ogStat">auto-runs on open</span></div>'
     + '<div id="ogBody"></div></div>';
@@ -371,11 +539,14 @@ async function refreshOptiGold(){
   return runOptiGold(__og.ui);
 }
 
-__og.cfg = { interval: '1h', bars: 500, swingLength: 5, atrPeriod: 14, stopAtr: 1.5, rr: 2, horizonBars: 48 };
+__og.lanes = LANES;
 
 function optiGoldState(){ return __og.last || null; }
 
 W.optiGoldState = optiGoldState;
+W.__ogLanes = LANES;
+W.__ogDistance = ogDistance;
+W.__ogOpenRead = ogOpenRead;
 /* exported so the rule can be tested: runOptiGold needs a live gold feed and is
    unreachable in a test sandbox, which is exactly how a previous activation in
    this repo shipped as dead code */

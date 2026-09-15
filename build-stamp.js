@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v737',
-  pack: 'OPTI GOLD tab — break of structure to 50% retracement limit, with causal swing confirmation',
+  version: 'hg-v738',
+  pack: 'OPTI GOLD runs scalp/intraday/swing lanes and ranks resting orders by distance from the live mark',
   built: '2026-09-13T17:00:00Z'
 };
 
