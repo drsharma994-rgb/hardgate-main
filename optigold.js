@@ -118,9 +118,17 @@ function ogSwings(rows, len){
    Order of checks inside one bar matters: a bar that spans both the entry and
    the stop is treated as filled-then-stopped, the pessimistic reading, because
    OHLC cannot order the touches within a bar. */
-function ogResolve(rows, from, s){
+function ogResolve(rows, from, s, horizon){
+  /* THE EXPIRY IS REAL. Every card prints "expires in N bars"; until this
+     argument existed nothing enforced it, so a break from 70 bars ago stayed
+     "live" forever and the panel led with orders whose entry price had long
+     since been left behind. That is the whole reason the setups on screen sat
+     a hundred points from the mark. A setup that has used up its horizon
+     without hitting stop or target is EXPIRED, whether or not it filled. */
+  var hz = Math.floor(+horizon);
+  var end = (isFinite(hz) && hz > 0) ? Math.min(rows.length, from + hz) : rows.length;
   var filled = false, i;
-  for (i = from; i < rows.length; i++){
+  for (i = from; i < end; i++){
     var h = +rows[i].h, l = +rows[i].l;
     if (!filled){
       var touched = s.dir === 'long' ? (l <= s.entry) : (h >= s.entry);
@@ -137,6 +145,8 @@ function ogResolve(rows, from, s){
     if (hitStop) return { state: 'stopped', at: i };
     if (hitT1) return { state: 'target', at: i };
   }
+  /* ran out of horizon rather than out of data -> expired, not live */
+  if (end < rows.length) return { state: 'expired', at: end - 1 };
   return { state: filled ? 'open' : 'waiting', at: null };
 }
 
@@ -185,7 +195,7 @@ function ogSignals(rows, opts){
 
     var s = { i: t, t: rows[t].t, dir: dir, entry: eq, stop: stop, t1: t1, risk: risk,
               rr: rr, res: res, sup: sup, atr: a, brokeAt: cur, filledAt: null };
-    var r = ogResolve(rows, t + 1, s);
+    var r = ogResolve(rows, t + 1, s, opts.horizonBars);
     s.state = r.state; s.resolvedAt = r.at;
     /* how far price must travel BACK to fill — the number that decides whether
        this setup is realistic, and the one the source code never surfaced */
@@ -255,6 +265,27 @@ function ogOpenRead(setup, px){
     beyondStop: long ? (p <= stop) : (p >= stop),
     beyondTarget: long ? (p >= t1) : (p <= t1),
   };
+}
+
+/* What this setup is worth IF TAKEN NOW, at the mark, instead of at its planned
+   limit. The plan's 2R is the R:R of an order that filled at the 50% level; once
+   price has run past that level the plan's numbers describe a trade nobody can
+   still take. The stop and target do not move - they are structural - so the
+   honest quote at the current price is simply both distances measured from the
+   mark. It is usually much worse than 2R, and saying so is the point. */
+function ogAtMark(s, px){
+  var p = (px === null || px === undefined || px === '') ? NaN : +px;
+  if (!s || !isFinite(p)) return null;
+  var stop = +s.stop, t1 = +s.t1;
+  if (!isFinite(stop) || !isFinite(t1)) return null;
+  var long = s.dir === 'long';
+  /* past either barrier there is no trade left to quote */
+  if (long ? (p <= stop || p >= t1) : (p >= stop || p <= t1)) return null;
+  var risk = Math.abs(p - stop), reward = Math.abs(t1 - p);
+  if (!(risk > 0)) return null;
+  return { entry: p, risk: risk, reward: reward, rr: reward / risk,
+           /* gambler's ruin from HERE, the same driftless model used elsewhere */
+           odds: risk / (risk + reward) };
 }
 
 /* ---------- how likely, and on what grounds ----------
@@ -329,6 +360,42 @@ function ogProb(s, px){
                  + ' bar(s), times the ' + Math.round(condR * 100) + '% odds from entry at ' + rr + 'R' };
 }
 
+/* CAN I ACT ON THIS, AT THIS PRICE, RIGHT NOW? Distance alone does not answer
+   that, and neither do the odds: a position 120 points past its entry scores
+   high precisely BECAUSE it has already run, which is the opposite of useful.
+   Two different questions, one per state:
+
+     a resting limit  - is the entry close enough that placing the order means
+                        something? Measured in ATR so the lanes compare fairly,
+                        and it must still have bars left to fill in.
+     a running position - you missed the planned entry, so the only question is
+                        whether joining AT THE MARK is still worth it. Risking
+                        more than you stand to make is not, however high the
+                        odds: those two always trade off.
+
+   Both thresholds are judgement, not measurement, and are named on screen. */
+var REACH_ATR = 2.0;   /* a limit further than this is not an order you place now */
+var MIN_RR_NOW = 1.0;  /* never risk more than the trade can pay, at any odds */
+
+function ogReach(s, px){
+  if (!s) return null;
+  if (s.state === 'waiting'){
+    var d = ogDistance(s, px);
+    if (!d || d.atr == null || !isFinite(d.atr)) return { ok: false, why: 'distance not computable' };
+    var n = Math.floor(+s.barsLeft);
+    if (!isFinite(n) || n <= 0) return { ok: false, why: 'expired before it could fill' };
+    if (d.atr > REACH_ATR) return { ok: false, why: 'entry is ' + d.atr.toFixed(1) + '×ATR away — beyond the ' + REACH_ATR.toFixed(1) + '×ATR reach' };
+    return { ok: true, why: 'limit sits ' + d.atr.toFixed(1) + '×ATR from the mark, within reach' };
+  }
+  if (s.state === 'open'){
+    var am = ogAtMark(s, px);
+    if (!am) return { ok: false, why: 'the mark is already past the stop or the target' };
+    if (am.rr < MIN_RR_NOW) return { ok: false, why: 'joining at the mark pays only ' + am.rr.toFixed(2) + ':1 — it has already run' };
+    return { ok: true, why: 'still worth joining at the mark: ' + am.rr.toFixed(2) + ':1 from here' };
+  }
+  return { ok: false, why: 'not live' };
+}
+
 /* The single best live setup in each of the two lanes the panel leads with.
    Deliberately ONE EACH and never "top two overall" - two scalps at the top
    would answer a different question than the one asked. A lane with nothing
@@ -341,10 +408,26 @@ function ogTopPicks(setups, px){
     if (s.lane !== 'scalp' && s.lane !== 'swing') return;
     var e = ogProb(s, px);
     if (!e || !isFinite(e.p)) return;
+    var reach = ogReach(s, px);
+    var d = ogDistance(s, px);
+    var cand = { setup: s, est: e, atMark: ogAtMark(s, px),
+                 actionable: !!(reach && reach.ok), why: (reach && reach.why) || '',
+                 distAtr: (d && d.atr != null && isFinite(d.atr)) ? d.atr : Infinity };
     var cur = best[s.lane];
-    if (!cur || e.p > cur.est.p) best[s.lane] = { setup: s, est: e };
+    if (!cur || ogBetterPick(cand, cur)) best[s.lane] = cand;
   });
   return best;
+}
+
+/* ACTIONABLE ALWAYS OUTRANKS UNREACHABLE, whatever the odds say. This is the
+   ordering the previous version got wrong: it sorted on the estimate alone, and
+   the estimate rewards a position for having already moved. Within a group the
+   nearer setup wins, and only then the better odds - "with the current price in
+   mind" means proximity is the first question, not the last. */
+function ogBetterPick(a, b){
+  if (a.actionable !== b.actionable) return a.actionable;
+  if (a.distAtr !== b.distAtr) return a.distAtr < b.distAtr;
+  return a.est.p > b.est.p;
 }
 
 /* ---------- rendering ---------- */
@@ -355,8 +438,9 @@ function card(s, mark){
                      open: 'FILLED — running',
                      target: 'TARGET reached',
                      stopped: 'STOPPED',
-                     missed: 'MISSED — ran to target without filling' }[s.state] || s.state;
-  var stateCls = s.state === 'target' ? 'ok' : (s.state === 'stopped' || s.state === 'missed') ? 'bad' : 'warn';
+                     missed: 'MISSED — ran to target without filling',
+                     expired: 'EXPIRED — the horizon ran out before stop or target' }[s.state] || s.state;
+  var stateCls = s.state === 'target' ? 'ok' : (s.state === 'stopped' || s.state === 'missed' || s.state === 'expired') ? 'bad' : 'warn';
   var d = ogDistance(s, mark);
   var smcChip = '';
   try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(s) || ''; }catch(e){}
@@ -408,14 +492,36 @@ function card(s, mark){
     + '</div>';
 }
 
-function pickCard(s, mark, est, badge){
+function pickCard(pk, mark, badge){
+  var s = pk.setup, est = pk.est;
   var pct = (est && isFinite(est.p)) ? Math.round(est.p * 100) + '%' : '—';
+  var am = pk.atMark;
+
+  /* the line that answers "this is far from the current price": what the same
+     stop and target are worth if the trade is taken HERE instead */
+  var quote = '';
+  if (am){
+    quote = '<div class="mini" style="margin:4px 0">'
+      + '<span class="k">take it at the mark</span><span><b>' + fmt(am.entry) + '</b></span>'
+      + '<span class="k">risk from here</span><span>' + fmt(am.risk) + '</span>'
+      + '<span class="k">reward from here</span><span>' + fmt(am.reward) + '</span>'
+      + '<span class="k">R:R from here</span><span><b>' + fmt(am.rr, 2) + ':1</b>'
+      + (am.rr < MIN_RR_NOW ? ' — worse than 1:1, the plan\'s ' + fmt(s.rr, 1) + 'R is gone' : '') + '</span>'
+      + '</div>';
+  } else {
+    quote = '<div class="note" style="margin:4px 0">No trade left to quote at the mark — price is already past the stop or the target.</div>';
+  }
+
   return '<div style="border:1px solid var(--line,#333);border-radius:8px;padding:6px">'
     + '<div class="row" style="gap:8px;align-items:baseline;margin-bottom:4px">'
-    + '<span class="statuschip ok">' + esc(badge) + '</span>'
+    + '<span class="statuschip ' + (pk.actionable ? 'ok' : 'warn') + '">' + esc(badge) + '</span>'
+    + '<span class="statuschip ' + (pk.actionable ? 'ok' : 'bad') + '">'
+    + (pk.actionable ? 'ACTIONABLE NOW' : 'OUT OF REACH') + '</span>'
     + '<span style="font-size:18px;font-weight:700">' + pct + '</span>'
     + '<span class="note">estimated, under the model stated below</span></div>'
+    + (pk.why ? '<div class="note' + (pk.actionable ? '' : ' warn') + '" style="margin-bottom:4px">' + esc(pk.why) + '</div>' : '')
     + (est && est.note ? '<div class="note" style="margin-bottom:4px">' + esc(est.note) + '</div>' : '')
+    + quote
     + card(s, mark)
     + '</div>';
 }
@@ -427,6 +533,7 @@ function render(ui, lanes, mark, note){
   var live = all.filter(function(s){ return s.state === 'waiting' || s.state === 'open'; });
   var settled = all.filter(function(s){ return s.state === 'target' || s.state === 'stopped'; });
   var missed = all.filter(function(s){ return s.state === 'missed'; });
+  var expired = all.filter(function(s){ return s.state === 'expired'; });
   var wins = settled.filter(function(s){ return s.state === 'target'; }).length;
 
   /* RUNNING and RESTING are different questions and must not share a list.
@@ -496,7 +603,7 @@ function render(ui, lanes, mark, note){
         + '<div class="note">Nothing live in this lane — an empty slot rather than a setup promoted from another timeframe.</div></div>';
       return;
     }
-    h += pickCard(pk.setup, mark, pk.est, k === 'scalp' ? 'BEST SCALP' : 'BEST SWING');
+    h += pickCard(pk, mark, k === 'scalp' ? 'BEST SCALP' : 'BEST SWING');
   });
   h += '</div>';
   h += '<div class="note warn" style="margin:6px 0 12px">'
@@ -504,6 +611,10 @@ function render(ui, lanes, mark, note){
     + 'A filled position uses gambler\'s ruin between its stop and target; a resting limit uses the reflection-principle '
     + 'chance of reaching the entry before expiry, times the 33% odds from entry at 2R. Gold is not driftless and ATR '
     + 'understates tails, so read these as a ranking key with an argument behind it — not as a win rate.'
+    + '<br>A pick is <b>ACTIONABLE</b> only if you can still do something about it at ' + fmt(mark) + ': a resting limit '
+    + 'within ' + REACH_ATR.toFixed(1) + '×ATR that still has bars left to fill, or a running position that pays at least '
+    + MIN_RR_NOW.toFixed(1) + ':1 joined at the mark. Anything else is shown badged OUT OF REACH rather than hidden — '
+    + 'the rule found it, but price has left it behind.'
     + '</div>';
 
   h += '<div class="row" style="gap:14px;margin-bottom:10px;flex-wrap:wrap">'
@@ -511,6 +622,7 @@ function render(ui, lanes, mark, note){
     + '<span class="statuschip">settled <b>' + settled.length + '</b></span>'
     + '<span class="statuschip">hit target <b>' + wins + '</b></span>'
     + '<span class="statuschip">never filled <b>' + missed.length + '</b></span>'
+    + '<span class="statuschip">expired <b>' + expired.length + '</b></span>'
     + '</div>';
 
   /* per-lane status, including lanes whose feed failed — a silent missing lane
@@ -690,6 +802,8 @@ W.__ogOpenRead = ogOpenRead;
 W.__ogProb = ogProb;
 W.__ogNormCdf = ogNormCdf;
 W.__ogTopPicks = ogTopPicks;
+W.__ogAtMark = ogAtMark;
+W.__ogReach = ogReach;
 /* exported so the rule can be tested: runOptiGold needs a live gold feed and is
    unreachable in a test sandbox, which is exactly how a previous activation in
    this repo shipped as dead code */

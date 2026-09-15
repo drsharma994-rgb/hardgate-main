@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v739',
-  pack: 'OPTI GOLD leads with one scalp and one swing, ranked by a stated model — not a measured win rate',
+  version: 'hg-v740',
+  pack: 'OPTI GOLD picks what can be acted on at the current price; the expiry on each card is now enforced',
   built: '2026-09-13T17:00:00Z'
 };
 

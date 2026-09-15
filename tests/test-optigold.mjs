@@ -441,4 +441,133 @@ console.log('== the picks are wired into the panel and cannot be shown twice =='
      'the tested functions are the ones the tab uses');
 }
 
+
+console.log('== the horizon on the card is ENFORCED, not decorative ==');
+{
+  /* THE BUG THIS PINS. Every card printed "expires in N bars" while ogResolve
+     walked to the end of the data, so a break from 70 bars ago stayed "live"
+     forever. The panel then led with orders whose entry price had been left a
+     hundred points behind — which is exactly what "the setups are far from the
+     current price" looked like from outside. */
+  const rows = []; let tt = 1700000000;
+  const bar = (h, l, c) => rows.push({ t: (tt += 3600), o: c, h, l, c });
+  for (let i = 0; i < 14; i++) bar(101, 99, 100);
+  for (let i = 0; i < 3; i++) bar(102, 98, 100);
+  bar(101, 94, 99);                                   /* swing low 94 */
+  for (let i = 0; i < 3; i++) bar(102, 98, 100);
+  bar(105, 99, 101);                                  /* swing high 105 */
+  for (let i = 0; i < 6; i++) bar(102, 98, 100);
+  bar(108, 99, 107);                                  /* BOS above 105 */
+  /* 60 bars that never reach the entry, the stop or the target */
+  for (let i = 0; i < 60; i++) bar(107.5, 106.5, 107);
+
+  const short = W.__ogSignals(rows, { horizonBars: 10 });
+  const long  = W.__ogSignals(rows, { horizonBars: 500 });
+  ok(short.length > 0 && long.length > 0, 'the tape produces a setup under either horizon');
+  ok(short[0].state === 'expired', 'a 10-bar horizon EXPIRES it — got ' + short[0].state);
+  ok(long[0].state === 'waiting', 'a 500-bar horizon leaves the same setup live — got ' + long[0].state);
+  ok(short[0].i === long[0].i && short[0].entry === long[0].entry,
+     'the horizon changes only the OUTCOME, never the signal — same bar, same levels');
+  ok(W.__ogSignals(rows, {})[0].state === 'waiting',
+     'no horizon supplied → old behaviour, so the expiry cannot silently fire on callers that never asked for one');
+
+  /* the states the rest of the code branches on must stay a closed set */
+  ok(['waiting','open','target','stopped','missed','expired'].includes(short[0].state),
+     'expired joins the known state set rather than leaking an unlabelled value');
+}
+
+console.log('== an expired setup is not live, and is never picked ==');
+{
+  const mk = (state) => ({ state, lane: 'scalp', dir: 'long', entry: 99, stop: 94, t1: 109,
+                           risk: 5, rr: 2, atr: 2, barsLeft: 20 });
+  ok(W.__ogProb(mk('expired'), 100) === null, 'an expired setup has no odds — its horizon is gone');
+  ok(W.__ogTopPicks([mk('expired')], 100).scalp === null, 'and it can never occupy a headline slot');
+  ok(W.__ogFwdRows([mk('expired')], 'scalp').length === 0, 'nor is it re-recorded to the forward log as if still open');
+}
+
+console.log('== what the trade is worth IF TAKEN NOW, at the mark ==');
+{
+  const A = W.__ogAtMark;
+  /* long: entry 100, stop 95, target 110 — the plan is 2R from 100 */
+  const s = { dir: 'long', entry: 100, stop: 95, t1: 110, risk: 5, rr: 2 };
+  const atPlan = A(s, 100);
+  ok(Math.abs(atPlan.rr - 2) < 1e-9, 'at the planned entry the quote reproduces the plan: 2:1');
+  const late = A(s, 107);
+  ok(Math.abs(late.risk - 12) < 1e-9 && Math.abs(late.reward - 3) < 1e-9, 'risk and reward are measured from the MARK, not the plan');
+  ok(late.rr < 1, 'chasing it 7 points late pays ' + late.rr.toFixed(2) + ':1 — worse than 1:1, which is the point');
+  ok(late.odds > atPlan.odds, 'the odds do IMPROVE as it runs (' + late.odds.toFixed(2) + ' > ' + atPlan.odds.toFixed(2) + ')');
+  ok(late.rr < atPlan.rr, 'while the payoff collapses — the trade-off the odds alone hide');
+  ok(Math.abs(late.odds - late.risk / (late.risk + late.reward)) < 1e-12, 'odds are gambler\'s ruin from the mark, the same model used elsewhere');
+
+  ok(A(s, 111) === null && A(s, 94) === null, 'past a barrier there is no trade left to quote');
+  const sh = { dir: 'short', entry: 100, stop: 105, t1: 90 };
+  ok(Math.abs(A(sh, 95).rr - 0.5) < 1e-9, 'shorts are quoted the same way, with the signs the other way round');
+  for (const bad of [null, undefined, '', 'x', NaN]) ok(A(s, bad) === null, 'mark ' + JSON.stringify(bad) + ' → null, never a quote against price zero');
+  ok(A(null, 100) === null && A({ dir: 'long' }, 100) === null, 'a setup without levels yields no quote');
+}
+
+console.log('== reach: can this be acted on, at this price, right now ==');
+{
+  const R = W.__ogReach;
+  const rest = (entry, barsLeft) => ({ state: 'waiting', dir: 'long', entry, stop: entry - 5, t1: entry + 10,
+                                       risk: 5, rr: 2, atr: 2, barsLeft });
+  ok(R(rest(99, 20), 100).ok, 'a limit 0.5×ATR away with time left is actionable');
+  ok(!R(rest(90, 20), 100).ok, 'a limit 5×ATR away is not — beyond the stated reach');
+  ok(!R(rest(99, 0), 100).ok, 'a limit with no bars left cannot fill, however near');
+  ok(/ATR/.test(R(rest(90, 20), 100).why), 'and the refusal SAYS how far it is, rather than just hiding the card');
+
+  const run = (px) => R({ state: 'open', dir: 'long', entry: 100, stop: 95, t1: 110, risk: 5, rr: 2, atr: 2 }, px);
+  ok(run(100).ok, 'a position at its entry is worth joining — 2:1 from here');
+  ok(run(101).ok, 'and slightly past it, still better than 1:1');
+  ok(!run(107).ok, 'but not once joining pays under 1:1 — it has already run');
+  ok(/already run|pays only/.test(run(107).why), 'the reason names the payoff rather than the distance');
+  ok(!run(94).ok && !run(111).ok, 'past either barrier nothing is actionable');
+  ok(!R({ state: 'target', dir: 'long', entry: 100, stop: 95, t1: 110 }, 100).ok, 'a settled setup is not actionable');
+}
+
+console.log('== THE REGRESSION: a runaway must not outrank a placeable order ==');
+{
+  /* This is the defect the previous version shipped. ogProb rewards a position
+     for having ALREADY MOVED — a short 120 points into profit scores 75% while
+     paying 0.33:1 to join. Sorting on the estimate alone therefore promoted
+     precisely the setups nobody can act on, which is what the user saw. */
+  const runaway = { state: 'open', lane: 'scalp', dir: 'short', entry: 4392, stop: 4492, t1: 4192,
+                    risk: 100, rr: 2, atr: 33, barsLeft: 18 };
+  const near = { state: 'waiting', lane: 'scalp', dir: 'short', entry: 4280, stop: 4300, t1: 4240,
+                 risk: 20, rr: 2, atr: 12, barsLeft: 25 };
+  const mark = 4271.65;
+
+  const pRun = W.__ogProb(runaway, mark), pNear = W.__ogProb(near, mark);
+  ok(pRun.p > pNear.p, 'the runaway still SCORES higher on odds alone (' + pRun.p.toFixed(2) + ' vs ' + pNear.p.toFixed(2) + ') — the estimate is not the bug');
+  ok(W.__ogAtMark(runaway, mark).rr < 1, 'yet joining it at the mark pays under 1:1');
+  ok(!W.__ogReach(runaway, mark).ok && W.__ogReach(near, mark).ok, 'so reach separates them where odds cannot');
+
+  const picks = W.__ogTopPicks([runaway, near], mark);
+  ok(picks.scalp.setup === near, 'and the PICK is the placeable order, not the higher-scoring runaway');
+  ok(picks.scalp.actionable === true, 'the chosen pick is marked actionable');
+
+  /* when nothing is actionable the slot is still filled — badged, not hidden,
+     because "the rule found nothing near" and "the rule found nothing" differ */
+  const onlyFar = W.__ogTopPicks([runaway], mark);
+  ok(onlyFar.scalp !== null, 'a lane with only unreachable setups still shows its best one');
+  ok(onlyFar.scalp.actionable === false, 'badged OUT OF REACH rather than presented as a pick');
+  ok(typeof onlyFar.scalp.why === 'string' && onlyFar.scalp.why.length > 0, 'with the reason attached for the card to print');
+  ok(onlyFar.scalp.atMark !== undefined, 'and the at-the-mark quote, so "far" is priced rather than merely asserted');
+
+  /* within the actionable group, nearer wins — "with the current price in mind" */
+  const a = { ...near, entry: 4275 }, b = { ...near, entry: 4290 };
+  ok(W.__ogTopPicks([b, a], mark).scalp.setup === a, 'among actionable setups the nearer one leads');
+}
+
+console.log('== the panel renders reach, the quote, and the expired count ==');
+{
+  const src = fs.readFileSync(path.join(ROOT, 'optigold.js'), 'utf8');
+  ok(/ACTIONABLE NOW/.test(src) && /OUT OF REACH/.test(src), 'both verdicts reach the screen');
+  ok(/take it at the mark/.test(src), 'the pick quotes what the trade is worth at the current price');
+  ok(/R:R from here/.test(src), 'including the payoff from here, which is the number the plan hides once price has run');
+  ok(/state === 'expired'/.test(src), 'expired setups are counted separately from live ones');
+  ok(/ogResolve\(rows, t \+ 1, s, opts\.horizonBars\)/.test(src), 'the signal loop passes the horizon — an unpassed argument would silently restore the bug');
+  ok(/__ogAtMark\s*=\s*ogAtMark/.test(src) && /__ogReach\s*=\s*ogReach/.test(src), 'the tested functions are the ones the tab uses');
+}
+
 console.log('\ntest-optigold: ' + passed + ' assertions passed');
