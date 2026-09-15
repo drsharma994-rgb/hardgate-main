@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v741';
+const HG_CACHE = 'hg-v742';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -16,9 +16,9 @@ const HG_SHELL = [
   './',
   './index.html',
   './manifest.webmanifest',
-  './icon.svg', './icon-192.png', './icon-512.png', './bright.css', './hg-icons.css', './vendor/base-themes/tokens-data-dense-light.css', './mobile.css', './annunciator.css',
+  './icon.svg', './icon-192.png', './icon-512.png', './bright.css', './hg-icons.css', './vendor/base-themes/tokens-data-dense-light.css', './mobile.css', './annunciator.css', './hardgate-desktop-shell.css',
   './build-stamp.js',
-  './hghost.js',
+  './hghost.js', './hardgate-desktop-shell.js',
   './indicators.js', './indicators2.js', './store.js', './binance.js', './inc4-data-core.js', './hg-setup-core.js', './coinalyze.js', './coinglass.js', './borrow-rates.js', './liquidity-gate.js', './spot-perp.js', './startrader.js', './xm-trader.js', './bybit.js', './deribit-vol.js', './positioning.js', './cryptowatch.js', './macro.js', './openbb-desk.js', './ccxt-desk.js', './trading-stack.js', './worldmonitor-desk.js', './chart-vision-desk.js', './chartvision-tab.js', './hey-desk.js', './atomic-agent-desk.js', './ai-agent.js', './agent-alerts.js',
   './setup-ui.js', './setup-solidity.js', './smc-lib.js', './smc-setups.js', './setup-calibration.js', './plans.js', './setup-stack.js', './gate-replay-oos.js', './cryptogates.js',
   './squeeze.js', './trendtable.js', './oiflow.js', './regime.js', './carry.js', './hg-forward.js', './hg-mechanics.js', './hg-gates.js', './hg-plan.js', './crypto-catalog.js', './omniroute.js', './dex-screener.js', './setup-confirm.js', './combi.js', './gold-formation.js', './omnigold.js', './omnigold1.js', './newgold.js', './golddirection.js', './goldultra.js', './cryptoultra.js', './cryptoscan.js', './omnipresent.js', './formation-nightly.js', './formation-nightly-boot.js', './desk-formation-edge.js', './hg-omni-strategy-bridge.js', './contract-report.js', './omnibtc-engines.js', './omnibtc.js', './termbasis.js',

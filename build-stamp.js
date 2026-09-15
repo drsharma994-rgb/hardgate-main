@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v741',
-  pack: 'OPTI GOLD shows the structure price is inside now and the close that would arm the next setup',
-  built: '2026-09-13T17:00:00Z'
+  version: 'hg-v742',
+  pack: 'desktop shell on the desk; phone layout unchanged',
+  built: '2026-09-15T12:00:00Z'
 };
 
 function hgBuildLabel(b){

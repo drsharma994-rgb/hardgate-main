@@ -1,0 +1,363 @@
+/* ============================================================================
+   HARDGATE — desktop shell
+   ----------------------------------------------------------------------------
+   Turns the stacked web chrome into a desktop application shell:
+
+       ┌──────────────────────────────────────────────┐
+       │ title bar   brand · build · exchange · min   │  fixed
+       │ tool strip  refresh · alerts · risk · keys   │  fixed
+       ├────────────┬─────────────────────────────────┤
+       │ groups     │ market picture                  │
+       │ (COMMAND…) ├─────────────────────────────────┤
+       │ tabs       │ main — the active tab           │  normal flow
+       │ (scrolls)  │                                 │
+       ├────────────┴─────────────────────────────────┤
+       │ status bar  build · symbols · funding · IST  │  fixed
+       └──────────────────────────────────────────────┘
+
+   DESIGN NOTES — why it is built this way
+
+   1. No DOM is moved. #navGroups, #navTabs, .header-chips and main keep
+      their ids, their children and their handlers exactly as index.html
+      writes them, so hgPaintGroups(), hgLayoutNav(), showTab(),
+      document.querySelector('nav') and the HG_tabs modules that inject
+      buttons all keep working untouched. This is a re-layout, not an
+      injected second navigation — the overlay approach is what caused the
+      text overlap previously.
+
+   2. The chrome is position:fixed and the document stays in NORMAL FLOW
+      (deliberately not a grid on <body>). Scripts append in-flow elements
+      to document.body at runtime — the Setup Intelligence dashboard
+      (index.html) and the static-mirror banner (hghost.js) — and on a grid
+      those would auto-place into whatever cell came next. In normal flow
+      they simply land in the content column where they belong.
+
+   3. Everything is scoped to >=861px. Below that, mobile.css owns the
+      layout exactly as before; the phone experience is untouched.
+
+   4. Chrome offsets come from --hg-chrome-h / --hg-groups-h, measured at
+      runtime by hardgate-desktop-shell.js. The values below are sane
+      fallbacks, so the shell still lays out if that script never runs.
+   ========================================================================= */
+
+:root{
+  --hg-chrome:#172033;          /* tokens-data-dense-light.css --surface-strong */
+  --hg-chrome-2:#1f2b42;
+  --hg-chrome-line:#2c3a56;
+  --hg-chrome-txt:#c8d3e4;
+  --hg-chrome-dim:#8595ae;
+  --hg-sidebar:250px;
+  --hg-statusbar:28px;
+  --hg-chrome-h:76px;           /* measured at runtime */
+  --hg-groups-h:184px;          /* measured at runtime */
+}
+
+@media (min-width:861px){
+
+  /* ---------- the shell reserves the chrome, content flows inside it ---------- */
+  body{
+    padding-top:var(--hg-chrome-h);
+    padding-left:var(--hg-sidebar);
+    padding-bottom:var(--hg-statusbar);
+    background:var(--ink);
+  }
+
+  /* ---------- title bar ---------- */
+  header.hg-header{
+    position:fixed;
+    top:0; left:0; right:0;
+    z-index:60;
+    display:flex;
+    flex-direction:column;
+    padding:0;
+    gap:0;
+    background:var(--hg-chrome);
+    border-bottom:1px solid var(--hg-chrome-line);
+    box-shadow:0 1px 3px rgba(23,32,51,.22);
+  }
+  .hg-header .header-primary{
+    display:flex;
+    align-items:center;
+    flex-wrap:nowrap;
+    gap:14px;
+    min-height:38px;
+    padding:0 10px 0 14px;
+    border-bottom:1px solid var(--hg-chrome-line);
+  }
+  .hg-header .brand{
+    display:flex;
+    align-items:baseline;
+    gap:8px;
+    flex:1 1 auto;
+    min-width:0;
+    font-size:14px;
+    letter-spacing:.16em;
+    color:#fff;
+  }
+  .hg-header .brand small{
+    display:inline-block;
+    flex:0 1 auto;
+    min-width:0;
+    color:var(--hg-chrome-dim);
+    letter-spacing:.07em;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .hg-header .verbadge{
+    flex:none;
+    margin-left:0;
+    padding:1px 6px;
+    border-radius:4px;
+    border-color:rgba(96,150,240,.45);
+    background:rgba(37,99,235,.22);
+    color:#bcd2f4;
+    opacity:1;
+  }
+  .hg-header .xtoggle{
+    flex:none;
+    border-color:var(--hg-chrome-line);
+    background:var(--hg-chrome-line);
+    border-radius:5px;
+    padding:1px;
+    gap:1px;
+  }
+  .hg-header .xtoggle button{
+    padding:4px 11px;
+    border-radius:4px;
+    color:var(--hg-chrome-dim);
+    font-size:10px;
+  }
+  .hg-header .xtoggle button:hover{ color:#fff }
+  .hg-header .chrome-min-btn{
+    flex:none;
+    margin-left:0;
+    min-height:24px;
+    padding:4px 10px;
+    border-color:var(--hg-chrome-line);
+    background:transparent;
+    color:var(--hg-chrome-dim);
+  }
+  .hg-header .chrome-min-btn:hover{ background:var(--hg-chrome-2); color:#fff }
+  .hg-header .chrome-min-btn[aria-pressed="true"]{
+    background:var(--hg-chrome-2);
+    border-color:var(--hg-chrome-line);
+    color:#fff;
+  }
+
+  /* ---------- tool strip (the old drawer, as one deterministic-height row) ---
+     A single non-wrapping row keeps the chrome a predictable height and
+     reads like an application toolbar. Nothing is removed — the row
+     scrolls sideways rather than hiding any control.                       */
+  .hg-header .header-drawer{
+    width:100%;
+    background:var(--panel);
+    border-bottom:1px solid var(--line);
+  }
+  .hg-header .header-drawer-inner{
+    display:flex;
+    flex-wrap:nowrap;
+    align-items:center;
+    gap:6px;
+    margin-top:0;
+    padding:5px 12px;
+    border-top:0;
+    overflow-x:auto;
+    overflow-y:hidden;
+    scrollbar-width:thin;
+  }
+  .hg-header .header-drawer-inner::-webkit-scrollbar{ height:4px }
+  .hg-header .header-drawer-inner > *{ flex:none }
+  /* labels inline, so each control is one row tall instead of two */
+  .hg-header .header-field{
+    flex-wrap:nowrap;
+    align-items:center;
+    gap:5px;
+    padding:3px 7px;
+    white-space:nowrap;
+  }
+  .hg-header .header-field-label{
+    flex:none;
+    font-size:9px;
+    letter-spacing:.1em;
+  }
+  .hg-header .header-field input{ flex:none; width:132px; min-width:0 }
+  .hg-header .header-field #executeBackendUrl{ width:160px }
+  .hg-header .header-field .header-field-sep{ margin:0 2px }
+  .hg-header .statuschip{ flex:none }
+
+  /* ---------- sidebar: groups on top, the active group's tabs below -------
+     hgPaintGroups() already hides the tabs of inactive groups via inline
+     display, so the list below is exactly the active group's tools.      */
+  #navGroups.navgroups{
+    position:fixed;
+    top:var(--hg-chrome-h);
+    left:0;
+    width:var(--hg-sidebar);
+    display:flex;
+    flex-direction:column;
+    flex-wrap:nowrap;
+    gap:2px;
+    z-index:55;
+    padding:10px 8px;
+    overflow:visible;
+    background:var(--panel2);
+    border-right:1px solid var(--line);
+    border-bottom:1px solid var(--line);
+  }
+  .navgroups button{
+    display:flex;
+    align-items:center;
+    width:100%;
+    padding:7px 11px;
+    text-align:left;
+    font-size:10px;
+    letter-spacing:.15em;
+  }
+  .navgroups button .cnt{ margin-left:auto; opacity:.7 }
+
+  nav#navTabs{
+    position:fixed;
+    top:calc(var(--hg-chrome-h) + var(--hg-groups-h));
+    bottom:var(--hg-statusbar);
+    left:0;
+    width:var(--hg-sidebar);
+    display:flex;
+    flex-direction:column;
+    flex-wrap:nowrap;
+    align-content:start;
+    gap:1px;
+    z-index:55;
+    padding:8px 8px 16px;
+    overflow-y:auto;
+    overflow-x:hidden;
+    scrollbar-width:thin;
+    background:var(--panel2);
+    border-right:1px solid var(--line);
+    border-bottom:0;
+  }
+  nav#navTabs::-webkit-scrollbar{ width:6px }
+  nav#navTabs button{
+    flex:none;
+    width:100%;
+    padding:6px 11px;
+    border-radius:var(--radius-sm,6px);
+    text-align:left;
+    font-size:11.5px;
+    letter-spacing:.07em;
+    border:1px solid transparent;
+  }
+  nav#navTabs button:hover{
+    background:var(--panel);
+    color:var(--txt);
+    border-color:var(--line);
+  }
+  nav#navTabs button.on{
+    background:var(--panel);
+    color:var(--gold);
+    font-weight:700;
+    border-color:var(--line-strong);
+    box-shadow:inset 3px 0 0 var(--gold);
+  }
+  /* the sliding underline belongs to a horizontal tab bar */
+  nav#navTabs button::after{ display:none }
+
+  /* ---------- content column ---------- */
+  .market-picture-bar{
+    padding:8px 20px;
+    text-align:left;
+    background:var(--panel);
+  }
+  main{
+    max-width:none;
+    margin:0;
+    padding:16px 20px 28px;
+  }
+
+  /* ---------- status bar ---------- */
+  .hg-header .header-chips{
+    position:fixed;
+    left:0; right:0; bottom:0;
+    z-index:65;
+    width:auto;
+    height:var(--hg-statusbar);
+    display:flex;
+    flex-wrap:nowrap;
+    align-items:center;
+    gap:0;
+    padding:0 4px;
+    overflow-x:auto;
+    scrollbar-width:none;
+    background:var(--hg-chrome);
+    border-top:1px solid var(--hg-chrome-line);
+  }
+  .hg-header .header-chips::-webkit-scrollbar{ display:none }
+  /* :nth-child(n) lifts specificity above bright.css's light-header chip
+     styling — .statuschip{background:var(--panel)} plus the per-chip tints
+     on nth-child(1..5) — which would otherwise paint white boxes onto the
+     dark status bar. */
+  .hg-header .header-chips .statuschip:nth-child(n){
+    display:flex;
+    align-items:center;
+    /* the chips are markup like `next funding <b>2h 56m</b>`; flex layout
+       drops the whitespace between the label and the value, so the gap
+       puts that space back */
+    gap:5px;
+    flex:none;
+    height:20px;
+    padding:0 11px;
+    border:0;
+    border-right:1px solid var(--hg-chrome-line);
+    border-radius:0;
+    background:transparent;
+    color:var(--hg-chrome-dim);
+    box-shadow:none;
+  }
+  .hg-header .header-chips .statuschip b{ color:#e6edf8 }
+  .hg-header .header-chips .statuschip:nth-child(n):last-child{
+    border-right:0;
+    margin-left:auto;
+  }
+  /* an alertable chip still has to look clickable */
+  .hg-header .header-chips .statuschip[onclick]:hover{
+    background:var(--hg-chrome-2);
+    color:#fff;
+  }
+  .hg-header .header-chips .statuschip.warn b{ color:#ff8f6b }
+  /* The build chip carries the deploy note, which can be a full sentence.
+     In a one-line status bar that would push every other chip off the end,
+     so it truncates here — the whole note stays in the title attribute. */
+  .hg-header .header-chips #chipBuild{
+    max-width:46ch;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    display:block;
+    line-height:20px;
+  }
+  /* the build chip keeps its own warn/bad states legible on dark chrome */
+  .hg-header .header-chips .statuschip.hg-build-bad{
+    background:var(--bad,#c0392b);
+    color:#fff;
+  }
+  .hg-header .header-chips .statuschip.hg-build-bad b{ color:#fff }
+
+  /* ---------- toasts clear the status bar ---------- */
+  #hgAlertRoot{ bottom:calc(18px + var(--hg-statusbar))!important }
+
+  /* ---------- minimized chrome ----------
+     The existing rule hides .header-chips and .navgroups; reclaim the
+     space they were holding. --hg-chrome-h / --hg-groups-h are
+     re-measured by the shell script, so the sidebar follows along.   */
+  html.hg-chrome-min body{ padding-bottom:0 }
+  html.hg-chrome-min nav#navTabs{ bottom:0 }
+  html.hg-chrome-min #hgAlertRoot{ bottom:18px!important }
+  html.hg-chrome-min .hg-header .header-primary{ border-bottom:0 }
+  html.hg-chrome-min header.hg-header,
+  html.hg-chrome-min .hg-header{ padding:0 }
+}
+
+/* Wide desks: stop the densest tables running to a 2500px line length. */
+@media (min-width:2000px){
+  main{ max-width:1900px }
+}
