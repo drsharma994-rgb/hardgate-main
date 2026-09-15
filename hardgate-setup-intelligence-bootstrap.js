@@ -234,48 +234,95 @@ class HardgateSetupIntelligenceBootstrap {
     element.innerHTML = html;
   }
 
+  /* ---------------------------------------------------------------------
+     A rate computed from ZERO closed setups is not zero — it is unmeasured.
+     setup-intelligence.js falls back to `: 0` for winRate and avgRiskReward,
+     so this panel used to print "0.0%" and "0.00" the moment the log was
+     young, directly contradicting the panel above it (which correctly says
+     "—, no settled trades yet"). "0% win rate" reads as "we measured zero
+     wins"; the truth is "nothing has settled". Render the em dash instead,
+     and only trust a rate when something actually closed.
+     --------------------------------------------------------------------- */
+  ratio(value, closedCount, dp, suffix, scale) {
+    if (!closedCount || closedCount <= 0) return '—';
+    const n = typeof value === 'number' ? value : parseFloat(String(value));
+    if (!isFinite(n)) return '—';
+    return (n * (scale == null ? 1 : scale)).toFixed(dp == null ? 1 : dp) + (suffix || '');
+  }
+
+  /* Neutral until measured — an em dash painted green reads as a pass. */
+  rateColor(value, closedCount) {
+    if (!closedCount || closedCount <= 0) return 'var(--mut, #536175)';
+    const n = typeof value === 'number' ? value : parseFloat(String(value));
+    if (!isFinite(n)) return 'var(--mut, #536175)';
+    if (n >= 0.70) return 'var(--long, #15803d)';
+    if (n >= 0.50) return 'var(--txt, #172033)';
+    return 'var(--short, #dc2626)';
+  }
+
   generateDashboardHTML(report) {
     if (!report) {
-      return '<p style="color: #ffd700;">Loading setup intelligence...</p>';
+      return '<p style="color:var(--mut,#536175);font-family:var(--mono,monospace);font-size:10px;letter-spacing:.08em;">loading setup intelligence…</p>';
     }
 
     const today = report.today;
     const historical = report.historical;
+    const H = (t) => `<div style="font-family:var(--disp,system-ui);font-size:11px;font-weight:800;
+      letter-spacing:.14em;text-transform:uppercase;color:var(--txt,#172033);margin-bottom:6px;">${t}</div>`;
+    const cell = (k, v, color) => `<div style="font-size:11px;color:var(--mut,#536175);">${k}
+      <b style="font-family:var(--mono,monospace);font-variant-numeric:tabular-nums;
+      color:${color || 'var(--txt,#172033)'};">${v}</b></div>`;
 
     let html = `
-    <div style="font-size: 12px; color: #e8ecef;">
-      <h3 style="margin: 0 0 8px 0; color: #ffd700;">📊 Setup Intelligence Report</h3>
+    <div style="font-size:12px;color:var(--txt,#172033);font-family:var(--mono,monospace);">
+      <h3 style="margin:0 0 10px 0;font-family:var(--disp,system-ui);font-size:12px;font-weight:800;
+        letter-spacing:.14em;text-transform:uppercase;color:var(--txt,#172033);">Setup Intelligence Report</h3>
 
-      <div style="margin-bottom: 12px;">
-        <div style="font-weight: bold; margin-bottom: 4px;">Today's Performance</div>
+      <div style="margin-bottom:12px;">
+        ${H("Today")}
     `;
 
-    if (today) {
+    /* analyzeTodaySetups() returns NULL when nothing was recorded today, and
+       generateIntelligenceReport spreads it into `{ date, ...null }` — which
+       is a truthy object carrying only `date`. A plain `if (today)` therefore
+       passed and printed "undefined" into every cell. Test a field that only
+       a real analysis has. */
+    const haveToday = today && typeof today.totalSetups === 'number';
+    if (haveToday) {
+      const closed = today.closedSetups;
       html += `
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px;">
-          <div>Total Setups: <span style="color: #00d084;">${today.totalSetups}</span></div>
-          <div>Closed: <span style="color: #00d084;">${today.closedSetups}</span></div>
-          <div>Open: <span style="color: #ffd700;">${today.openSetups}</span></div>
-          <div>Win Rate: <span style="color: ${today.winRate >= 0.70 ? '#00d084' : '#ffd700'};">${(today.winRate * 100).toFixed(1)}%</span></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px;">
+          ${cell('total', today.totalSetups)}
+          ${cell('settled', closed)}
+          ${cell('open', today.openSetups)}
+          ${cell('win rate', this.ratio(today.winRate, closed, 1, '%', 100), this.rateColor(today.winRate, closed))}
         </div>
+        ${closed > 0 ? '' : `<div style="font-size:10px;color:var(--dim,#65758c);margin-top:4px;">nothing has settled today — the rate is unmeasured, not zero</div>`}
       `;
+    } else {
+      html += `<div style="font-size:11px;color:var(--mut,#536175);">No setup recorded today.</div>`;
     }
 
     html += `
       </div>
 
-      <div style="margin-bottom: 12px;">
-        <div style="font-weight: bold; margin-bottom: 4px;">Historical Metrics</div>
+      <div style="margin-bottom:12px;">
+        ${H("Historical")}
     `;
 
+    /* analyzeAllSetups() is null until something has been recorded, which
+       used to leave this heading standing over nothing at all. */
     if (historical) {
+      const closedAll = this.setupIntelligence.getClosedSetups().length;
       html += `
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px;">
-          <div>Overall Win Rate: <span style="color: #00d084;">${(historical.overallWinRate * 100).toFixed(1)}%</span></div>
-          <div>Avg R/R: <span style="color: #ffd700;">${historical.avgRiskReward.toFixed(2)}</span></div>
-          <div>Total Setups: <span>${this.setupIntelligence.getClosedSetups().length}</span></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px;">
+          ${cell('win rate', this.ratio(historical.overallWinRate, closedAll, 1, '%', 100), this.rateColor(historical.overallWinRate, closedAll))}
+          ${cell('avg R:R', this.ratio(historical.avgRiskReward, closedAll, 2))}
+          ${cell('settled', closedAll)}
         </div>
       `;
+    } else {
+      html += `<div style="font-size:11px;color:var(--mut,#536175);">Nothing recorded yet — history builds as setups are logged.</div>`;
     }
 
     html += `
@@ -284,12 +331,10 @@ class HardgateSetupIntelligenceBootstrap {
 
     // Insights
     if (report.insights && report.insights.length > 0) {
-      html += `
-        <div style="margin-bottom: 12px;">
-          <div style="font-weight: bold; margin-bottom: 4px;">📈 Insights</div>
-      `;
+      html += `<div style="margin-bottom:12px;">${H("Insights")}`;
       report.insights.forEach(insight => {
-        html += `<div style="font-size: 11px; margin: 2px 0;">${insight}</div>`;
+        html += `<div style="font-size:11px;margin:2px 0;color:var(--txt,#172033);
+          padding-left:12px;text-indent:-12px;">· ${insight}</div>`;
       });
       html += `</div>`;
     }
@@ -297,28 +342,42 @@ class HardgateSetupIntelligenceBootstrap {
     // Top performers
     if (report.topPerformers && report.topPerformers.length > 0) {
       html += `
-        <div style="margin-bottom: 8px;">
-          <div style="font-weight: bold; font-size: 11px; margin-bottom: 4px;">⭐ Top Setups</div>
-          <table style="width: 100%; font-size: 10px; border-collapse: collapse;">
-            <tr style="border-bottom: 1px solid #3a4556;">
-              <td style="padding: 2px;">Symbol</td>
-              <td style="padding: 2px;">Pattern</td>
-              <td style="padding: 2px;">Outcome</td>
-              <td style="padding: 2px;">R/R</td>
+        <div style="margin-bottom:8px;">
+          ${H("Top setups")}
+          <div style="overflow-x:auto;">
+          <table style="width:100%;font-size:10px;border-collapse:collapse;
+            font-family:var(--mono,monospace);font-variant-numeric:tabular-nums;">
+            <tr style="border-bottom:1px solid var(--line,#d7dee8);">
+              <th style="padding:4px 6px;text-align:left;font-size:9px;letter-spacing:.09em;
+                text-transform:uppercase;color:var(--dim,#65758c);font-weight:600;">Symbol</th>
+              <th style="padding:4px 6px;text-align:left;font-size:9px;letter-spacing:.09em;
+                text-transform:uppercase;color:var(--dim,#65758c);font-weight:600;">Pattern</th>
+              <th style="padding:4px 6px;text-align:left;font-size:9px;letter-spacing:.09em;
+                text-transform:uppercase;color:var(--dim,#65758c);font-weight:600;">Outcome</th>
+              <th style="padding:4px 6px;text-align:left;font-size:9px;letter-spacing:.09em;
+                text-transform:uppercase;color:var(--dim,#65758c);font-weight:600;">R:R</th>
             </tr>
       `;
       report.topPerformers.slice(0, 5).forEach(s => {
+        /* s.outcome has been assumed a string here; a setup closed without one
+           would throw on .includes and take the whole panel down with it. */
+        const outcome = String(s.outcome == null ? '' : s.outcome);
+        const won = outcome.indexOf('TP') !== -1;
+        const rr = (typeof s.riskReward === 'number' && isFinite(s.riskReward))
+          ? s.riskReward.toFixed(2)
+          : (s.riskReward == null || s.riskReward === '' ? '—' : s.riskReward);
         html += `
-          <tr style="border-bottom: 1px solid #3a4556;">
-            <td style="padding: 2px;">${s.symbol}</td>
-            <td style="padding: 2px; font-size: 9px;">${s.pattern}</td>
-            <td style="padding: 2px; color: ${s.outcome.includes('TP') ? '#00d084' : '#ff4444'};">${s.outcome}</td>
-            <td style="padding: 2px;">${s.riskReward}</td>
+          <tr style="border-bottom:1px solid var(--line,#d7dee8);">
+            <td style="padding:4px 6px;color:var(--txt,#172033);font-weight:600;">${s.symbol}</td>
+            <td style="padding:4px 6px;font-size:9px;color:var(--mut,#536175);">${s.pattern}</td>
+            <td style="padding:4px 6px;color:${won ? 'var(--long,#15803d)' : 'var(--short,#dc2626)'};">${outcome || '—'}</td>
+            <td style="padding:4px 6px;color:var(--txt,#172033);">${rr}</td>
           </tr>
         `;
       });
       html += `
           </table>
+          </div>
         </div>
       `;
     }
@@ -385,6 +444,13 @@ class HardgateSetupIntelligenceBootstrap {
 // Export
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = HardgateSetupIntelligenceBootstrap;
+}
+
+/* The class itself on the global, the way the sibling dashboard module does
+   it. A top-level `class` is lexically scoped, so without this the type is
+   unreachable from outside the script — including from the tests. */
+if (typeof window !== 'undefined') {
+  window.HardgateSetupIntelligenceBootstrap = HardgateSetupIntelligenceBootstrap;
 }
 
 // Auto-initialize if loaded in browser

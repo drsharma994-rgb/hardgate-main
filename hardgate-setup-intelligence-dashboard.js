@@ -68,14 +68,19 @@ class HardgateSetupIntelligenceDashboard {
     dashboard = document.createElement('div');
     dashboard.id = 'hg-setup-intelligence-dashboard-main';
     dashboard.className = 'hg-dashboard';
+    /* Styled from the app's own tokens (bright.css) rather than the hardcoded
+       dark palette this panel shipped with. It was the one block on a light,
+       data-dense page painted #0f1419, which read as a different product
+       bolted on — and it would not follow a future theme change either. */
     dashboard.style.cssText = `
-      background: #0f1419;
-      color: #e8ecef;
+      background: var(--panel, #fff);
+      color: var(--txt, #172033);
       padding: 16px;
-      border-radius: 6px;
-      border: 1px solid #3a4556;
+      border-radius: var(--radius, 8px);
+      border: 1px solid var(--line, #d7dee8);
+      box-shadow: 0 1px 2px rgba(23,32,51,.06);
       margin: 12px 0;
-      font-family: system-ui, -apple-system, sans-serif;
+      font-family: var(--mono, ui-monospace, monospace);
       font-size: 12px;
     `;
 
@@ -109,6 +114,69 @@ class HardgateSetupIntelligenceDashboard {
     this.dashboardElement.innerHTML = html;
   }
 
+  /* ---------------------------------------------------------------------
+     Absent values must never render as a measurement. The factory returns
+     null for winRate and avgRiskReward when nothing has settled / no winner
+     has reported its R, and parseFloat(null) is NaN — which .toFixed() then
+     happily prints as the string "NaN" on a trading card. Everything below
+     goes through these, so the panel says "—" and means it.
+     --------------------------------------------------------------------- */
+
+  /** A finite number, or null. Never NaN, never a coerced zero. */
+  num(v) {
+    if (v === null || v === undefined || v === '') return null;
+    const n = typeof v === 'number' ? v : parseFloat(String(v));
+    return isFinite(n) ? n : null;
+  }
+
+  /** Format a number to `dp` places, or the em dash when it is absent. */
+  fmt(v, dp, suffix) {
+    const n = this.num(v);
+    if (n === null) return '—';
+    return n.toFixed(dp == null ? 1 : dp) + (suffix || '');
+  }
+
+  /** Semantic colour for a win rate — absent stays neutral, never green. */
+  wrColor(v) {
+    const n = this.num(v);
+    if (n === null) return 'var(--mut, #536175)';
+    if (n >= 70) return 'var(--long, #15803d)';
+    if (n >= 50) return 'var(--txt, #172033)';
+    return 'var(--short, #dc2626)';
+  }
+
+  /** Section heading in the app's own idiom — uppercase, letterspaced. */
+  heading(text, note) {
+    return `<h3 style="margin:0 0 8px 0;font-family:var(--disp,system-ui);font-size:11px;font-weight:800;
+      letter-spacing:.14em;text-transform:uppercase;color:var(--txt,#172033);">${text}${
+      note ? `<span style="margin-left:8px;font-family:var(--mono,monospace);font-size:10px;font-weight:600;
+      letter-spacing:.04em;text-transform:none;color:var(--mut,#536175);">${note}</span>` : ''}</h3>`;
+  }
+
+  /** Tile shell, so every metric box shares one set of edges. */
+  tile(inner, accent) {
+    return `<div style="background:var(--panel2,#edf1f6);border:1px solid var(--line,#d7dee8);
+      border-radius:var(--radius-sm,6px);padding:10px 12px;${
+      accent ? `border-left:3px solid ${accent};` : ''}">${inner}</div>`;
+  }
+
+  /** Small uppercase label above a figure. */
+  label(text) {
+    return `<div style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;
+      color:var(--mut,#536175);margin-bottom:2px;">${text}</div>`;
+  }
+
+  /** The figure itself — tabular so columns of numbers line up. */
+  figure(text, color) {
+    return `<div style="font-family:var(--mono,monospace);font-size:18px;font-weight:600;
+      font-variant-numeric:tabular-nums;color:${color || 'var(--txt,#172033)'};">${text}</div>`;
+  }
+
+  /** Sub-note under a figure. */
+  sub(text) {
+    return `<div style="font-size:10px;color:var(--dim,#65758c);margin-top:2px;">${text}</div>`;
+  }
+
   /**
    * Render complete dashboard HTML
    */
@@ -131,12 +199,18 @@ class HardgateSetupIntelligenceDashboard {
   renderHeader() {
     const timestamp = new Date().toLocaleTimeString();
     return `
-      <div style="margin-bottom: 12px; border-bottom: 1px solid #3a4556; padding-bottom: 8px;">
-        <h2 style="margin: 0; font-size: 16px; color: #ffd700;">
-          📊 Setup Intelligence Dashboard
+      <div style="margin-bottom:12px;border-bottom:1px solid var(--line,#d7dee8);padding-bottom:8px;">
+        <h2 style="margin:0;font-family:var(--disp,system-ui);font-size:13px;font-weight:800;
+          letter-spacing:.14em;text-transform:uppercase;color:var(--txt,#172033);">
+          Setup Intelligence
+          <span style="margin-left:8px;font-family:var(--mono,monospace);font-size:10px;font-weight:600;
+            letter-spacing:.04em;text-transform:none;color:var(--mut,#536175);">
+            measured across every integrated tab · settled outcomes only
+          </span>
         </h2>
-        <div style="font-size: 10px; color: #999; margin-top: 4px;">
-          Last updated: ${timestamp}
+        <div style="font-size:10px;color:var(--dim,#65758c);margin-top:4px;
+          font-family:var(--mono,monospace);font-variant-numeric:tabular-nums;">
+          updated ${timestamp} · refreshes every ${Math.round(this.updateInterval / 1000)}s
         </div>
       </div>
     `;
@@ -146,29 +220,27 @@ class HardgateSetupIntelligenceDashboard {
    * Render summary metrics
    */
   renderSummary(summary) {
+    const wr = this.num(summary.overallWinRate);
+    const rr = this.num(summary.overallRiskReward);
     return `
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 12px;">
-        <div style="background: #1a2235; padding: 12px; border-radius: 4px;">
-          <div style="font-size: 10px; color: #999;">Total Setups</div>
-          <div style="font-size: 18px; font-weight: bold; color: #ffd700;">${summary.totalSetups}</div>
-          <div style="font-size: 10px; color: #666;">Closed: ${summary.closedSetups}, Open: ${summary.openSetups}</div>
-        </div>
-
-        <div style="background: #1a2235; padding: 12px; border-radius: 4px;">
-          <div style="font-size: 10px; color: #999;">Win Rate</div>
-          <div style="font-size: 18px; font-weight: bold; color: ${parseFloat(summary.overallWinRate) >= 70 ? '#00d084' : '#ffd700'};">
-            ${summary.overallWinRate}
-          </div>
-          <div style="font-size: 10px; color: #666;">${summary.closedSetups > 0 ? 'Across ' + summary.closedSetups + ' settled' : 'No settled trades yet'}</div>
-        </div>
-
-        <div style="background: #1a2235; padding: 12px; border-radius: 4px;">
-          <div style="font-size: 10px; color: #999;">Avg Risk/Reward</div>
-          <div style="font-size: 18px; font-weight: bold; color: #ffd700;">
-            ${summary.overallRiskReward === '—' ? '—' : summary.overallRiskReward + ':1'}
-          </div>
-          <div style="font-size: 10px; color: #666;">${summary.overallRiskReward === '—' ? 'Awaiting settled trades' : 'Realised, across tabs'}</div>
-        </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:14px;">
+        ${this.tile(
+          this.label('Total setups') +
+          this.figure(summary.totalSetups) +
+          this.sub(`${summary.closedSetups} settled · ${summary.openSetups} open`)
+        )}
+        ${this.tile(
+          this.label('Win rate') +
+          this.figure(wr === null ? '—' : this.fmt(wr, 1, '%'), this.wrColor(wr)) +
+          this.sub(summary.closedSetups > 0
+            ? `across ${summary.closedSetups} settled`
+            : 'no settled trades yet')
+        )}
+        ${this.tile(
+          this.label('Avg risk / reward') +
+          this.figure(rr === null ? '—' : this.fmt(rr, 2, ':1')) +
+          this.sub(rr === null ? 'no winner has reported its R' : 'realised, across tabs')
+        )}
       </div>
     `;
   }
@@ -177,35 +249,37 @@ class HardgateSetupIntelligenceDashboard {
    * Render per-tab performance
    */
   renderTabsPerformance(byTab) {
-    let html = `
-      <div style="margin-bottom: 12px;">
-        <h3 style="margin: 0 0 8px 0; font-size: 12px; color: #ffd700;">📈 Performance by Tab</h3>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px;">
-    `;
+    const rows = Object.entries(byTab).filter(([, p]) => p && p.dataPoints > 0);
 
-    for (const [tabName, perf] of Object.entries(byTab)) {
-      if (perf && perf.dataPoints > 0) {
-        const winRate = parseFloat(perf.winRate);
-        const color = winRate >= 70 ? '#00d084' : winRate >= 50 ? '#ffd700' : '#ff6b6b';
+    let html = `<div style="margin-bottom:14px;">`
+      + this.heading('Performance by tab', rows.length ? `${rows.length} with settled outcomes` : '');
 
-        html += `
-          <div style="background: #1a2235; padding: 8px; border-radius: 4px; border-left: 3px solid ${color};">
-            <div style="font-weight: bold; font-size: 11px; margin-bottom: 2px;">${tabName}</div>
-            <div style="display: flex; justify-content: space-between; font-size: 10px;">
-              <span>WR: <span style="color: ${color};">${perf.winRate == null ? '—' : perf.winRate}</span></span>
-              <span>RR: ${perf.avgRiskReward == null ? '—' : perf.avgRiskReward}</span>
-              <span>${perf.closedSetups}/${perf.totalSetups}</span>
-            </div>
-          </div>
-        `;
-      }
+    if (!rows.length) {
+      html += `<div style="font-size:11px;color:var(--mut,#536175);background:var(--panel2,#edf1f6);
+        border:1px dashed var(--line-strong,#aab7c8);border-radius:var(--radius-sm,6px);padding:10px 12px;">
+        No tab has a settled outcome yet. A forward record cannot resolve until bars after its firing bar
+        exist, so a young log is correctly all-open.</div></div>`;
+      return html;
     }
 
-    html += `
-        </div>
-      </div>
-    `;
+    html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;">`;
 
+    for (const [tabName, perf] of rows) {
+      const wr = this.num(perf.winRate);
+      const rr = this.num(perf.avgRiskReward);
+      html += this.tile(
+        `<div style="font-weight:700;font-size:11px;margin-bottom:4px;color:var(--txt,#172033);">${tabName}</div>
+         <div style="display:flex;justify-content:space-between;gap:8px;font-size:10px;
+           font-family:var(--mono,monospace);font-variant-numeric:tabular-nums;color:var(--mut,#536175);">
+           <span>WR <b style="color:${this.wrColor(wr)};">${wr === null ? '—' : this.fmt(wr, 1, '%')}</b></span>
+           <span>R:R <b style="color:var(--txt,#172033);">${rr === null ? '—' : this.fmt(rr, 2)}</b></span>
+           <span>${perf.closedSetups}/${perf.totalSetups}</span>
+         </div>`,
+        this.wrColor(wr)
+      );
+    }
+
+    html += `</div></div>`;
     return html;
   }
 
@@ -214,41 +288,33 @@ class HardgateSetupIntelligenceDashboard {
    */
   renderConsensusSignals(consensus) {
     if (consensus.length === 0) {
-      return `
-        <div style="margin-bottom: 12px; background: #1a2235; padding: 12px; border-radius: 4px;">
-          <h3 style="margin: 0 0 8px 0; font-size: 12px; color: #ffd700;">⭐ Consensus Signals</h3>
-          <div style="font-size: 11px; color: #999;">No consensus signals today</div>
-        </div>
-      `;
+      return `<div style="margin-bottom:14px;">`
+        + this.heading('Consensus signals')
+        + `<div style="font-size:11px;color:var(--mut,#536175);background:var(--panel2,#edf1f6);
+          border:1px dashed var(--line-strong,#aab7c8);border-radius:var(--radius-sm,6px);padding:10px 12px;">
+          No symbol is being called the same way by two or more tabs today.</div></div>`;
     }
 
-    let html = `
-      <div style="margin-bottom: 12px;">
-        <h3 style="margin: 0 0 8px 0; font-size: 12px; color: #ffd700;">⭐ Consensus Signals (${consensus.length})</h3>
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px;">
-    `;
+    let html = `<div style="margin-bottom:14px;">`
+      + this.heading('Consensus signals', `${consensus.length} · same symbol and direction across 2+ tabs`)
+      + `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;">`;
 
     consensus.forEach(signal => {
-      html += `
-        <div style="background: #1a2235; padding: 8px; border-radius: 4px; border: 1px solid #00d084;">
-          <div style="font-weight: bold; font-size: 11px; margin-bottom: 4px;">
-            ${signal.symbol} ${signal.direction}
-          </div>
-          <div style="font-size: 10px; color: #00d084; margin-bottom: 2px;">
-            ${signal.tabCount} tabs agree
-          </div>
-          <div style="font-size: 9px; color: #999;">
-            ${signal.tabs.join(', ')}
-          </div>
-        </div>
-      `;
+      const long = String(signal.direction || '').toUpperCase().indexOf('LONG') === 0;
+      const dirColor = long ? 'var(--long,#15803d)' : 'var(--short,#dc2626)';
+      html += this.tile(
+        `<div style="font-weight:700;font-size:11px;margin-bottom:3px;color:var(--txt,#172033);">
+           ${signal.symbol} <span style="color:${dirColor};">${signal.direction}</span>
+         </div>
+         <div style="font-size:10px;font-family:var(--mono,monospace);color:var(--mut,#536175);margin-bottom:2px;">
+           ${signal.tabCount} tabs agree
+         </div>
+         <div style="font-size:9px;color:var(--dim,#65758c);">${signal.tabs.join(' · ')}</div>`,
+        dirColor
+      );
     });
 
-    html += `
-        </div>
-      </div>
-    `;
-
+    html += `</div></div>`;
     return html;
   }
 
@@ -256,37 +322,44 @@ class HardgateSetupIntelligenceDashboard {
    * Render top performers
    */
   renderTopPerformers(topTabs) {
-    let html = `
-      <div style="margin-bottom: 12px;">
-        <h3 style="margin: 0 0 8px 0; font-size: 12px; color: #ffd700;">🏆 Top Performers</h3>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px;">
-    `;
+    if (!topTabs || !topTabs.length) {
+      return `<div style="margin-bottom:14px;">`
+        + this.heading('Top performers')
+        + `<div style="font-size:11px;color:var(--mut,#536175);background:var(--panel2,#edf1f6);
+          border:1px dashed var(--line-strong,#aab7c8);border-radius:var(--radius-sm,6px);padding:10px 12px;">
+          Nothing to rank until a tab has settled outcomes.</div></div>`;
+    }
+
+    let html = `<div style="margin-bottom:14px;">`
+      + this.heading('Top performers', 'ranked by settled win rate')
+      /* Numbered because this IS a ranking — the position carries information.
+         Medals did not: they implied a podium over what is often 1-3 tabs. */
+      + `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px;">`;
 
     topTabs.forEach((tab, index) => {
-      const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉';
-      html += `
-        <div style="background: #1a2235; padding: 10px; border-radius: 4px;">
-          <div style="font-size: 11px; font-weight: bold; margin-bottom: 4px;">
-            ${medal} ${tab.tabName}
-          </div>
-          <div style="font-size: 10px; color: #00d084;">
-            ${tab.winRate.toFixed(1)}% win rate
-          </div>
-          <div style="font-size: 10px; color: #ffd700;">
-            ${tab.avgRiskReward.toFixed(2)}:1 R/R
-          </div>
-          <div style="font-size: 9px; color: #999;">
-            ${tab.closedSetups} closed setups
-          </div>
-        </div>
-      `;
+      /* getTopPerformersAcrossAllTabs does parseFloat(perf.avgRiskReward), and
+         that field is null whenever no winner has reported its R — which is
+         independent of whether anything settled. The old code called
+         .toFixed(2) on the resulting NaN and printed the string "NaN:1 R/R"
+         as a measurement. Both figures now go through fmt(). */
+      const wr = this.num(tab.winRate);
+      const rr = this.num(tab.avgRiskReward);
+      html += this.tile(
+        `<div style="display:flex;align-items:baseline;gap:6px;margin-bottom:4px;">
+           <span style="font-family:var(--mono,monospace);font-size:10px;font-weight:700;
+             color:var(--gold,#0f5cc0);">${index + 1}</span>
+           <span style="font-size:11px;font-weight:700;color:var(--txt,#172033);">${tab.tabName}</span>
+         </div>
+         <div style="font-family:var(--mono,monospace);font-variant-numeric:tabular-nums;font-size:10px;
+           color:var(--mut,#536175);line-height:1.6;">
+           <div>win rate <b style="color:${this.wrColor(wr)};">${wr === null ? '—' : this.fmt(wr, 1, '%')}</b></div>
+           <div>R:R <b style="color:var(--txt,#172033);">${rr === null ? '—' : this.fmt(rr, 2, ':1')}</b></div>
+           <div style="color:var(--dim,#65758c);">${tab.closedSetups} settled</div>
+         </div>`
+      );
     });
 
-    html += `
-        </div>
-      </div>
-    `;
-
+    html += `</div></div>`;
     return html;
   }
 
@@ -294,22 +367,19 @@ class HardgateSetupIntelligenceDashboard {
    * Render insights
    */
   renderInsights(insights) {
-    let html = `
-      <div style="background: #1a2235; padding: 12px; border-radius: 4px; border-left: 3px solid #ffd700;">
-        <h3 style="margin: 0 0 8px 0; font-size: 12px; color: #ffd700;">💡 Daily Insights</h3>
-    `;
+    let inner = this.heading('Daily insights');
 
-    if (insights.length === 0) {
-      html += `<div style="font-size: 11px; color: #999;">Build data to see insights</div>`;
+    if (!insights || insights.length === 0) {
+      inner += `<div style="font-size:11px;color:var(--mut,#536175);">
+        Nothing to report yet — insights are derived from settled outcomes.</div>`;
     } else {
       insights.forEach(insight => {
-        html += `<div style="font-size: 11px; color: #e8ecef; margin-bottom: 4px;">• ${insight}</div>`;
+        inner += `<div style="font-size:11px;color:var(--txt,#172033);margin-bottom:4px;
+          padding-left:12px;text-indent:-12px;">· ${insight}</div>`;
       });
     }
 
-    html += `</div>`;
-
-    return html;
+    return this.tile(inner, 'var(--gold, #0f5cc0)');
   }
 
   /**

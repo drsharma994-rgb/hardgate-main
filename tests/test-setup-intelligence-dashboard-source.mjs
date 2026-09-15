@@ -62,7 +62,12 @@ function loadFactory(W){
 console.log('== the dashboard no longer double-prints the percent sign ==');
 ok(!/\$\{summary\.overallWinRate\}%/.test(DASH),
    'the template no longer appends % to a value that already carries one (this rendered "0%%")');
-ok(/\$\{summary\.overallWinRate\}/.test(DASH), 'it still renders the win rate');
+/* hg-v744 routes this value through num()/fmt() instead of interpolating it
+   raw, so the old `${summary.overallWinRate}` literal is gone. What matters is
+   that the field is still read and still rendered — the "0%%" and 100x-unit
+   regressions are locked behaviourally in
+   tests/test-intelligence-dashboard-absent.mjs. */
+ok(/summary\.overallWinRate/.test(DASH), 'it still renders the win rate');
 
 console.log('== the win-rate unit bug is fixed ==');
 ok(/parseFloat\(perf\.winRate\)[^\n]*\/\s*100/.test(FACTORY),

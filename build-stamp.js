@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v743',
-  pack: 'OMNIGOLD promotes on PROVEN EDGE — a forward bar a real mechanic can clear',
+  version: 'hg-v744',
+  pack: 'Setup Intelligence reads as part of the desk, and never prints NaN for an absent R',
   built: '2026-09-15T12:00:00Z'
 };
 
