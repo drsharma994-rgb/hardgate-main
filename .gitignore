@@ -18,3 +18,7 @@ android/local.properties
 __pycache__/
 *.pyc
 scripts/.bt-cache/
+
+# 20MB third-party reference clone with its own .git (je-suis-tm/quant-trading).
+# Re-clone it rather than vendoring it; nothing in the app imports from it.
+vendors/quant-trading/

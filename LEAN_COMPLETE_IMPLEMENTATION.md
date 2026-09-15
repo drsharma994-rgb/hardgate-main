@@ -39,7 +39,7 @@ Connects HARDGATE signals → Lean backtesting:
 **4 New Components**:
 
 #### 1. HardgateStrategyAdapter.cs (880 lines)
-**Location**: `vendors/Lean/Algorithms/HardgateStrategyAdapter.cs`
+**Location**: `lean-algorithms/HardgateStrategyAdapter.cs (copied to vendors/Lean/Algorithms/ to build)`
 
 C# algorithm running inside Lean:
 - Reads signals from CSV export
@@ -320,7 +320,7 @@ adapter.exportSignalsWithValidation('GOLD_ULTRA', W.GU_SIGNALS);
 // Lean algorithm reads signals from CSV
 // Applies tier-based position sizing
 // Executes realistic backtesting
-// See: vendors/Lean/Algorithms/HardgateStrategyAdapter.cs
+// See: lean-algorithms/HardgateStrategyAdapter.cs (copied to vendors/Lean/Algorithms/ to build)
 ```
 
 ---
@@ -433,7 +433,7 @@ dotnet --version
 **Code**:
 - Bridge: `hardgate-lean-bridge.js`
 - Adapter: `hardgate-lean-universal-adapter.js`
-- Algorithm: `vendors/Lean/Algorithms/HardgateStrategyAdapter.cs`
+- Algorithm: `lean-algorithms/HardgateStrategyAdapter.cs (copied to vendors/Lean/Algorithms/ to build)`
 - Test: `test-lean-backtest.js`
 
 **External**:
