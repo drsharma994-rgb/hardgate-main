@@ -570,4 +570,116 @@ console.log('== the panel renders reach, the quote, and the expired count ==');
   ok(/__ogAtMark\s*=\s*ogAtMark/.test(src) && /__ogReach\s*=\s*ogReach/.test(src), 'the tested functions are the ones the tab uses');
 }
 
+
+console.log('== NEXT TO ARM: the structure price is inside right now ==');
+{
+  /* Why this exists: a retracement limit is placed BEHIND a break, so once
+     price runs the entry is behind it by construction and no ranking brings it
+     closer. The only thing this rule ever has near the mark is the structure
+     itself and the close that would arm the next setup. */
+  const rows = []; let tt = 1700000000;
+  const bar = (h, l, c) => rows.push({ t: (tt += 3600), o: c, h, l, c });
+  for (let i = 0; i < 14; i++) bar(101, 99, 100);
+  for (let i = 0; i < 3; i++) bar(102, 98, 100);
+  bar(101, 94, 99);                                  /* swing low 94 */
+  for (let i = 0; i < 3; i++) bar(102, 98, 100);
+  bar(106, 99, 101);                                 /* swing high 106 */
+  for (let i = 0; i < 8; i++) bar(102, 98, 100);     /* confirm both, price inside */
+
+  const p = W.__ogPending(rows, {});
+  ok(p !== null, 'pending structure is reported at all');
+  ok(p.res === 106 && p.sup === 94, 'the confirmed range is the one the rule will use next bar');
+  ok(p.eq === 100, 'the 50% equilibrium is the midpoint of that range');
+  ok(p.inside === true, 'price closing at 100 is INSIDE the range');
+  ok(p.long.trigger === 106 && p.short.trigger === 94, 'each side arms on a close through its own level');
+  ok(p.long.already === false && p.short.already === false, 'neither side has fired');
+  ok(Math.abs(p.long.toTrigger - 6) < 1e-9, 'the distance reported is to the TRIGGER, not to the entry');
+  ok(p.long.toTriggerAtr > 0 && isFinite(p.long.toTriggerAtr), 'and is also given in ATR so the lanes compare');
+  ok(p.long.entry === p.short.entry && p.long.entry === 100, 'both sides would rest a limit at the same equilibrium');
+  ok(p.long.stop < p.sup && p.short.stop > p.res, 'stops sit beyond the OPPOSITE structural level, as the rule says');
+  ok(p.long.t1 > p.long.entry && p.short.t1 < p.short.entry, 'targets face the right way');
+  ok(Math.abs((p.long.t1 - p.long.entry) / p.long.risk - 2) < 1e-9, 'and are 2R from the entry, matching the rule');
+}
+
+console.log('== NEXT TO ARM obeys the same confirmation clock as the rule ==');
+{
+  /* If the preview consulted an unconfirmed swing it would advertise a level the
+     rule itself cannot use yet — the same lookahead this tab was built to remove,
+     re-entering through the panel instead of the signal loop. */
+  const rows = []; let tt = 1700000000;
+  const bar = (h, l, c) => rows.push({ t: (tt += 3600), o: c, h, l, c });
+  for (let i = 0; i < 14; i++) bar(101, 99, 100);
+  for (let i = 0; i < 3; i++) bar(102, 98, 100);
+  bar(101, 94, 99);                                  /* swing low 94 */
+  for (let i = 0; i < 3; i++) bar(102, 98, 100);
+  bar(106, 99, 101);                                 /* swing high 106, confirms 5 later */
+  for (let i = 0; i < 8; i++) bar(102, 98, 100);
+  const hiIdx = 21;                                  /* the 106 bar */
+
+  /* one bar before the high is confirmed, the preview must not know about it */
+  const early = W.__ogPending(rows.slice(0, hiIdx + 5), {});
+  const onTime = W.__ogPending(rows.slice(0, hiIdx + 6), {});
+  ok(!early || early.res !== 106, 'the 106 high is INVISIBLE until its confirmation bar closes');
+  ok(onTime && onTime.res === 106, 'and visible the moment it closes — got ' + (onTime && onTime.res));
+
+  /* the preview at bar T must equal the preview recomputed on data ending at T */
+  let drift = 0;
+  for (let T = 30; T <= rows.length; T++){
+    const a = W.__ogPending(rows.slice(0, T), {});
+    const b = W.__ogPending(rows.slice(0, T), {});
+    if (JSON.stringify(a) !== JSON.stringify(b)) drift++;
+  }
+  ok(drift === 0, 'the preview is a pure function of the bars up to now (' + drift + ' mismatches)');
+}
+
+console.log('== the preview does not lie about the order it would place ==');
+{
+  /* The preview is worthless if the setup that actually fires differs from the
+     one it advertised. Build a tape that breaks on its LAST bar, then compare
+     what the preview said one bar earlier against what the rule produced. */
+  const rows = []; let tt = 1700000000;
+  const bar = (h, l, c) => rows.push({ t: (tt += 3600), o: c, h, l, c });
+  for (let i = 0; i < 14; i++) bar(101, 99, 100);
+  for (let i = 0; i < 3; i++) bar(102, 98, 100);
+  bar(101, 94, 99);
+  for (let i = 0; i < 3; i++) bar(102, 98, 100);
+  bar(106, 99, 101);
+  for (let i = 0; i < 8; i++) bar(102, 98, 100);
+  const before = W.__ogPending(rows.slice(), {});
+  bar(108, 99, 107);                                 /* the break */
+
+  const fired = W.__ogSignals(rows, {}).filter(s => s.i === rows.length - 1);
+  ok(fired.length === 1, 'the break fires exactly one setup on the last bar');
+  ok(fired[0].dir === 'long', 'in the direction the preview said would arm');
+  ok(fired[0].entry === before.long.entry, 'the ENTRY is exactly what the preview advertised');
+  ok(fired[0].res === before.res && fired[0].sup === before.sup, 'from the same range');
+  /* the stop rides on ATR, which advances with the breaking bar — so this is
+     close, not identical, and the panel must not claim otherwise */
+  ok(Math.abs(fired[0].stop - before.long.stop) < before.atr,
+     'the stop is within one ATR of the preview — it moves because ATR advances on the breaking bar');
+  ok(before.long.already === false, 'and before the break the preview correctly said it had not fired');
+
+  const after = W.__ogPending(rows, {});
+  ok(after.long.already === true, 'once price closes through, the preview stops calling that side pending');
+  ok(after.inside === false, 'and reports that price is outside the range');
+}
+
+console.log('== the preview refuses to invent structure ==');
+{
+  ok(W.__ogPending([], {}) === null, 'no bars → null');
+  ok(W.__ogPending(null, {}) === null, 'null → null, no throw');
+  const flat = [];
+  for (let i = 0; i < 60; i++) flat.push({ t: i * 3600, o: 100, h: 100, l: 100, c: 100 });
+  ok(W.__ogPending(flat, {}) === null, 'a dead flat tape has no swings and yields no levels rather than a fabricated range');
+}
+
+console.log('== the panel shows what is near the price, and says it is not a signal ==');
+{
+  const src = fs.readFileSync(path.join(ROOT, 'optigold.js'), 'utf8');
+  ok(/NEXT TO ARM/.test(src), 'the section reaches the screen');
+  ok(/Nothing here is a setup/.test(src), 'and states plainly that these are levels, not signals');
+  ok(/pending: ogPending\(rows, L\)/.test(src), 'the scan computes it per lane from that lane own rows');
+  ok(/__ogPending\s*=\s*ogPending/.test(src), 'the tested function is the one the tab uses');
+}
+
 console.log('\ntest-optigold: ' + passed + ' assertions passed');

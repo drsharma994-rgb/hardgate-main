@@ -267,6 +267,60 @@ function ogOpenRead(setup, px){
   };
 }
 
+/* THE SETUP THAT HAS NOT FIRED YET — and the only thing this rule ever has
+   near the current price.
+
+   A retracement limit is placed BEHIND a break, so the further price travels
+   after breaking, the further its entry falls behind: that is the strategy
+   working as designed, not a defect, and no amount of ranking makes a stale
+   limit reachable. What IS near the mark, always, is the structure price is
+   currently trading inside. This reports it: the confirmed resistance and
+   support as of the LAST CLOSED BAR, the close that would arm a setup in each
+   direction, and the exact order that break would place.
+
+   It uses the same causal clock as ogSignals — a swing is invisible until
+   confirmedAt bars have closed — so the levels here are the ones the rule will
+   actually use on the next bar. Nothing is a signal until price closes through
+   a level; the panel says "not armed" and means it. */
+function ogPending(rows, opts){
+  rows = rows || []; opts = opts || {};
+  var len = Math.max(1, Math.floor(opts.swingLength || 5));
+  var atrP = Math.max(2, Math.floor(opts.atrPeriod || 14));
+  var stopMult = (opts.stopAtr != null) ? +opts.stopAtr : 1.5;
+  var rr = (opts.rr != null) ? +opts.rr : 2;
+  if (rows.length < atrP + len * 2 + 2) return null;
+
+  var last = rows.length - 1;
+  var atr = ogAtr(rows, atrP);
+  var sw = ogSwings(rows, len);
+  var res = null, sup = null, i;
+  /* only swings confirmed by the last closed bar — the same guard as ogSignals */
+  for (i = 0; i < sw.length; i++){
+    if (sw[i].confirmedAt > last) break;
+    if (sw[i].kind === 'high') res = sw[i].px; else sup = sw[i].px;
+  }
+  var a = atr[last], cur = +rows[last].c;
+  if (res == null || sup == null || !(res > sup) || !isFinite(a) || !(a > 0) || !isFinite(cur)) return null;
+
+  var eq = (res + sup) / 2;
+  function plan(dir){
+    var stop = dir === 'long' ? (sup - stopMult * a) : (res + stopMult * a);
+    var risk = dir === 'long' ? (eq - stop) : (stop - eq);
+    if (!(risk > 0)) return null;
+    var trigger = dir === 'long' ? res : sup;
+    return { dir: dir, trigger: trigger, entry: eq, stop: stop, risk: risk,
+             t1: dir === 'long' ? (eq + rr * risk) : (eq - rr * risk), rr: rr,
+             /* distance from the mark to the TRIGGER, which is the number that
+                matters here — the entry is only reachable once the break happens */
+             toTrigger: Math.abs(cur - trigger), toTriggerAtr: Math.abs(cur - trigger) / a,
+             /* has price already closed through it? then this side is not pending,
+                it has fired, and ogSignals owns it */
+             already: dir === 'long' ? (cur > trigger) : (cur < trigger) };
+  }
+  return { res: res, sup: sup, eq: eq, atr: a, mark: cur, inside: (cur <= res && cur >= sup),
+           long: plan('long'), short: plan('short') };
+}
+
 /* What this setup is worth IF TAKEN NOW, at the mark, instead of at its planned
    limit. The plan's 2R is the R:R of an order that filled at the 50% level; once
    price has run past that level the plan's numbers describe a trade nobody can
@@ -625,6 +679,53 @@ function render(ui, lanes, mark, note){
     + '<span class="statuschip">expired <b>' + expired.length + '</b></span>'
     + '</div>';
 
+  /* WHAT IS ACTUALLY NEAR THE PRICE. When every limit the rule has placed is
+     out of reach, this is the honest answer to "show me something near the
+     mark": the structure price is trading inside right now, and the close that
+     would arm the next setup. It is not a signal and is labelled as one. */
+  var pend = {};
+  lanes.forEach(function(L){ if (L.pending) pend[L.cfg.key] = { p: L.pending, cfg: L.cfg }; });
+  if (pend.scalp || pend.swing){
+    h += '<h3 style="font-size:12px;margin:14px 0 6px">NEXT TO ARM — current structure, and the close that would trigger a setup</h3>';
+    h += '<div class="cards">';
+    ['scalp', 'swing'].forEach(function(k){
+      var e = pend[k];
+      if (!e){
+        h += '<div class="card"><div class="chead"><span class="sym">XAUUSD</span>'
+          + '<span class="stamp">' + esc(k.toUpperCase()) + '</span></div>'
+          + '<div class="note">No confirmed structure on this lane yet — not enough closed bars since the last swing.</div></div>';
+        return;
+      }
+      var P = e.p;
+      h += '<div class="card"><div class="chead"><span class="sym">XAUUSD</span>'
+        + '<span class="stamp">' + esc(e.cfg.label) + ' ' + esc(e.cfg.interval) + '</span>'
+        + '<span class="dir">' + (P.inside ? 'INSIDE THE RANGE' : 'OUTSIDE — a break has already happened') + '</span></div>'
+        + '<div class="mini">'
+        + '<span class="k">resistance</span><span>' + fmt(P.res) + '</span>'
+        + '<span class="k">support</span><span>' + fmt(P.sup) + '</span>'
+        + '<span class="k">50% equilibrium</span><span><b>' + fmt(P.eq) + '</b></span>'
+        + '<span class="k">ATR</span><span>' + fmt(P.atr) + '</span>'
+        + '</div>';
+      [P.long, P.short].forEach(function(pl){
+        if (!pl) return;
+        h += '<div class="note" style="margin:4px 0">'
+          + '<b>' + (pl.dir === 'long' ? 'LONG' : 'SHORT') + '</b> arms on a close '
+          + (pl.dir === 'long' ? 'above ' : 'below ') + '<b>' + fmt(pl.trigger) + '</b> — '
+          + (pl.already ? 'price is already through it, so this side has fired and is listed above'
+                        : fmt(pl.toTrigger) + ' away (' + fmt(pl.toTriggerAtr, 1) + '×ATR)')
+          + '. It would then rest a limit at ' + fmt(pl.entry) + ', stop ' + fmt(pl.stop)
+          + ', target ' + fmt(pl.t1) + '.'
+          + '</div>';
+      });
+      h += '</div>';
+    });
+    h += '</div>';
+    h += '<div class="note warn" style="margin:6px 0 12px">Nothing here is a setup. These are the levels the rule is '
+      + 'watching on the last closed bar, shown because a retracement limit is placed <b>behind</b> a break — so once '
+      + 'price runs, the entry is behind it by construction and no ranking can bring it closer. The trigger is the part '
+      + 'that sits near the mark.</div>';
+  }
+
   /* per-lane status, including lanes whose feed failed — a silent missing lane
      would read as "no setups on 4h" when it means "4h never loaded" */
   h += '<div class="row" style="gap:10px;margin-bottom:12px;flex-wrap:wrap">';
@@ -695,7 +796,8 @@ async function runOptiGold(ui){
         s.lane = L.key; s.laneLabel = L.label; s.interval = L.interval;
         s.horizonBars = L.horizonBars; s.sym = 'XAUUSD';
       });
-      lanes.push({ cfg: L, rows: rows, setups: setups, src: (got && got.source) || 'gold' });
+      lanes.push({ cfg: L, rows: rows, setups: setups, src: (got && got.source) || 'gold',
+                   pending: ogPending(rows, L) });
 
       /* SMC context on the live ones — the chip only, never a gate */
       try{
@@ -804,6 +906,7 @@ W.__ogNormCdf = ogNormCdf;
 W.__ogTopPicks = ogTopPicks;
 W.__ogAtMark = ogAtMark;
 W.__ogReach = ogReach;
+W.__ogPending = ogPending;
 /* exported so the rule can be tested: runOptiGold needs a live gold feed and is
    unreachable in a test sandbox, which is exactly how a previous activation in
    this repo shipped as dead code */
