@@ -263,13 +263,40 @@ terse status, and never launches a first-time scan on a global refresh.
     var h = String(horizon || '').toUpperCase();
     return (h === 'SWING') ? GOLD_WATCH_MAX_ATR_SWING : GOLD_WATCH_MAX_ATR_SCALP;
   }
-  /* SETTLED EXECUTE — only promote setups whose cleared TICKETS have a
-     measured forward win rate with Wilson 95% CI lower bound >= 95%.
-     Requires enough settled out-of-sample tickets; most mechanics never
-     reach this bar — the panel says so rather than inventing a number. */
+  /* NEAR-CERTAINTY (was "SETTLED EXECUTE") — Wilson 95% CI lower bound >= 95%.
+     KEPT, BUT NO LONGER THE HEADLINE, because it cannot be cleared by a
+     mechanic that trades a real edge rather than a near-sure thing.
+
+     The Wilson lower bound converges UPWARD to the true win rate, so the bar
+     is a statement about the true rate, not about sample size. Measured with
+     this app's own hgWilson:
+
+       perfect records:   15/15 -> 79.6%   50/50 -> 92.9%   80/80 -> 95.4%
+       at a true 54% hit: n=100 -> 44.3%   n=1e4 -> 53.0%   n=1e5 -> 53.7%
+
+     The minimum TRUE win rate that can ever clear 95% is about 97%. Gold
+     in-sample grids peak near 54%, so at this bar the tier can never fire and
+     "keep scanning" is advice that never pays off. It stays as an aspirational
+     ceiling — a mechanic that somehow did reach it should still be flagged —
+     and PROVEN EDGE below is the bar the desk actually trades. */
   var OG_EXEC_MIN_N = 15;
   var OG_EXEC_WILSON_LO = 0.95;
   var OG_EXEC_WILSON_Z = 1.96;
+  /* PROVEN EDGE — the reachable bar, and the panel's headline.
+     Promote a mechanic when its settled forward record is profitable at 95%
+     confidence: Wilson 95% LOWER bound above the win rate the plan needs just
+     to break even, which is 1/(1+avgRr) at the reward multiple the WINNERS
+     actually carried. At avgRr 1.5 that is 40%, so a genuine 54% mechanic can
+     clear it with enough settled trades, while a 39% one never does no matter
+     how many it accumulates.
+
+     Still a lower-bound test, so thin records cannot promote themselves: the
+     bound only rises above breakeven once the sample is big enough to rule out
+     the mechanic being a loser. avgRr comes from the recorded winners — when
+     it is unknown there is no breakeven to clear and the tier stays silent
+     rather than assuming one. */
+  var OG_EDGE_MIN_N = 25;
+  var OG_EDGE_MARGIN = 0.02;   /* clear breakeven by 2 points, not by rounding */
   /* SCALP VERDICT — pooled settled TICKET record across gold desks.
      Wilson 95% lower ≥ 90% with enough settled trades. Lower bar than the
      95% execute tier; still requires real forward history, not in-sample. */
@@ -5978,11 +6005,18 @@ terse status, and never launches a first-time scan on a global refresh.
   function hgOgMergeSettledEvidence(tabs, mechanic, dir){
     tabs = tabs || [];
     var wins = 0, losses = 0, sources = [], i, st;
+    /* Reward multiple, pooled across the desks the same way the wins are.
+       rrWins counts only the winners whose avgRr was actually reported, so a
+       tab that cannot supply one dilutes nothing — it just does not vote. */
+    var rrSum = 0, rrWins = 0, stWins, stRr;
     for (i = 0; i < tabs.length; i++){
       st = hgOgFwdTicketStats(tabs[i], mechanic);
       if (!st) continue;
-      wins += fin(st.wins) || 0;
+      stWins = fin(st.wins) || 0;
+      wins += stWins;
       losses += fin(st.losses) || 0;
+      stRr = fin(st.avgRr);
+      if (stWins > 0 && isFinite(stRr) && stRr > 0){ rrSum += stRr * stWins; rrWins += stWins; }
       sources.push(tabs[i] + (mechanic ? ':' + mechanic : ' · all TICKETs'));
     }
     var settled = wins + losses;
@@ -5994,6 +6028,9 @@ terse status, and never launches a first-time scan on a global refresh.
       losses: losses,
       samples: settled,
       hit: wins / settled,
+      /* NaN, not a default, when no winner reported a multiple — see
+         hgOgBreakevenHit for why an assumed R must never promote a setup. */
+      avgRr: rrWins > 0 ? (rrSum / rrWins) : NaN,
       wilson: hgOgWilsonHit(wins, settled),
       pooled: true
     };
@@ -7812,6 +7849,7 @@ terse status, and never launches a first-time scan on a global refresh.
           samples: fin(t.samples),
           hit: fin(t.hit),
           expR: fin(t.expR),
+          avgRr: fin(t.avgRr),
           wilson: hgOgWilsonHit(t.wins, t.samples)
         };
       }
@@ -7840,12 +7878,45 @@ terse status, and never launches a first-time scan on a global refresh.
     return fin(ev.samples) >= minN && ev.wilson.lo >= minLo;
   }
 
+  /* The hit rate a plan needs just to break even at the reward multiple its
+     winners actually carried. NaN when avgRr is unknown or non-positive —
+     there is no breakeven to quote, and a fabricated one would promote a
+     losing mechanic. */
+  function hgOgBreakevenHit(avgRr){
+    var r = fin(avgRr);
+    if (!(r > 0)) return NaN;
+    return 1 / (1 + r);
+  }
+
+  /* PROVEN EDGE: profitable at 95% confidence — the Wilson lower bound sits
+     above breakeven by a real margin, on enough settled trades. */
+  function hgOgProvenEdgeOk(ev, minN, margin){
+    if (!ev || !ev.wilson) return false;
+    minN = isFinite(fin(minN)) ? fin(minN) : OG_EDGE_MIN_N;
+    margin = isFinite(fin(margin)) ? fin(margin) : OG_EDGE_MARGIN;
+    var be = hgOgBreakevenHit(ev.avgRr);
+    if (!isFinite(be)) return false;
+    return fin(ev.samples) >= minN && ev.wilson.lo >= (be + margin);
+  }
+
+  /* How far the lower bound clears breakeven. The honest ranking key: a
+     mechanic with a smaller hit rate but a bigger payoff can carry more edge
+     than a higher-hit one, and this is what says so. NaN when unknowable. */
+  function hgOgEdgeMargin(ev){
+    if (!ev || !ev.wilson) return NaN;
+    var be = hgOgBreakevenHit(ev.avgRr);
+    if (!isFinite(be)) return NaN;
+    return ev.wilson.lo - be;
+  }
+
   function hgOgPickSettledExecutes(ranked, tapeDir, opts){
     opts = opts || {};
     var minLo = opts.minWilsonLo != null ? opts.minWilsonLo : OG_EXEC_WILSON_LO;
     var minN = opts.minN != null ? opts.minN : OG_EXEC_MIN_N;
+    var edgeN = opts.edgeMinN != null ? opts.edgeMinN : OG_EDGE_MIN_N;
+    var edgeMargin = opts.edgeMargin != null ? opts.edgeMargin : OG_EDGE_MARGIN;
     tapeDir = String(tapeDir || '').toLowerCase();
-    var execute = [], pool = [], i, c, ev;
+    var execute = [], proven = [], pool = [], i, c, ev;
     for (i = 0; i < (ranked || []).length; i++){
       c = ranked[i];
       if (!c || !(c.grade && c.grade.ticket) || !c.plan) continue;
@@ -7854,14 +7925,25 @@ terse status, and never launches a first-time scan on a global refresh.
       }
       ev = hgOgSettledEvidence(c);
       c.settledEv = ev;
+      /* A setup can sit in BOTH tiers: near-certainty is a strict superset of
+         proven edge whenever the reward multiple is known, and the panel wants
+         to show it under the bar it actually trades as well as the ceiling. */
       if (hgOgSettledExecuteOk(ev, minLo, minN)) execute.push(c);
-      else if (ev && ev.wilson) pool.push(c);
+      if (hgOgProvenEdgeOk(ev, edgeN, edgeMargin)) proven.push(c);
+      else if (ev && ev.wilson && !hgOgSettledExecuteOk(ev, minLo, minN)) pool.push(c);
     }
+    /* Ranked by how far the lower bound clears breakeven, so a lower-hit,
+       bigger-payoff mechanic can legitimately outrank a higher-hit one. */
+    proven.sort(function(a, b){
+      return (hgOgEdgeMargin(b.settledEv) - hgOgEdgeMargin(a.settledEv))
+          || (b.settledEv.samples - a.settledEv.samples);
+    });
     pool.sort(function(a, b){
       return (b.settledEv.wilson.lo - a.settledEv.wilson.lo)
           || (b.settledEv.samples - a.settledEv.samples);
     });
-    return { execute: execute, best: pool.slice(0, 2), minLo: minLo, minN: minN };
+    return { execute: execute, proven: proven, best: pool.slice(0, 2),
+             minLo: minLo, minN: minN, edgeMinN: edgeN, edgeMargin: edgeMargin };
   }
 
   function hgOgSettledExecuteRowHtml(c, tier){
@@ -7876,14 +7958,35 @@ terse status, and never launches a first-time scan on a global refresh.
       var smcChipFnSe = gfn('hgSmcChipHtml');
       if (smcChipFnSe) smcChipSe = smcChipFnSe(c) || '';
     } catch (eSmcSe) { smcChipSe = ''; }
-    var h = '<div class="og-settled-row' + (tier === 'execute' ? ' og-settled-exec' : '') + '">';
+    var h = '<div class="og-settled-row' + (tier === 'execute' ? ' og-settled-exec' : '')
+          + (tier === 'proven' ? ' og-settled-proven' : '') + '">';
     h += '<div class="hg-mp-head">XAUUSD ' + esc(String(c.dir || '').toUpperCase())
       + ' <span>' + esc(c.horizon) + ' · ' + esc(c.kind) + ' · TICKET'
       + (smcChipSe ? ' ' + smcChipSe : '') + '</span></div>';
+    /* Breakeven is what makes the lower bound mean something: 62% sounds
+       strong until the plan needs 67% to break even. Shown on every row. */
+    var beV = hgOgBreakevenHit(ev.avgRr);
+    var beTxt = isFinite(beV)
+      ? ' · breakeven ' + (beV * 100).toFixed(0) + '% at ' + fin(ev.avgRr).toFixed(2) + 'R'
+      : ' · breakeven unknown (no winner has reported its R yet)';
+    var mg = hgOgEdgeMargin(ev);
+    var tierTxt;
+    if (tier === 'execute'){
+      tierTxt = ' · <b>meets the 95% near-certainty ceiling</b>';
+    } else if (tier === 'proven'){
+      tierTxt = ' · <b>clears breakeven by ' + (mg * 100).toFixed(1)
+              + ' pts — profitable at 95% confidence</b>';
+    } else if (isFinite(mg)){
+      tierTxt = ' · ' + (mg >= 0 ? 'clears breakeven by ' + (mg * 100).toFixed(1) + ' pts, below the '
+                                 + OG_EDGE_MIN_N + '-trade minimum'
+                                 : 'lower bound is ' + Math.abs(mg * 100).toFixed(1) + ' pts BELOW breakeven');
+    } else {
+      tierTxt = ' · not yet judgeable';
+    }
     h += '<div class="hg-mp-note">SETTLED ' + esc(ev.source) + ' · '
       + esc(String(ev.wins)) + '/' + esc(String(ev.samples)) + ' wins · '
       + pct + '% hit · Wilson 95% CI ' + lo + '–' + hi + '%'
-      + (tier === 'execute' ? ' · <b>meets execute bar</b>' : ' · below ' + (OG_EXEC_WILSON_LO * 100) + '% lower bound') + '</div>';
+      + beTxt + tierTxt + '</div>';
     h += '<div class="hg-mp-grid">';
     var mkt = fin(__og.spotAnchor);
     if (mkt > 0) h += '<div><i>MARKET</i><b>' + fmtPx(mkt) + '</b><u>live spot</u></div>';
@@ -7936,25 +8039,44 @@ terse status, and never launches a first-time scan on a global refresh.
   }
 
   function hgOgSettledExecutePanelHtml(bag){
-    bag = bag || { execute: [], best: [], minLo: OG_EXEC_WILSON_LO, minN: OG_EXEC_MIN_N };
-    var h = '<section class="hg-mp og-settled-exec-panel" data-og-settled="1" aria-label="Settled execute setups">';
-    h += '<div class="hg-mp-eye">SETTLED EXECUTE · 95% BAR</div>';
-    h += '<div class="hg-mp-head">XAUUSD <span>TICKET + forward settled evidence · Wilson lower ≥ '
-      + (bag.minLo * 100).toFixed(0) + '% · min ' + bag.minN + ' trades</span></div>';
+    bag = bag || { execute: [], proven: [], best: [], minLo: OG_EXEC_WILSON_LO, minN: OG_EXEC_MIN_N,
+                   edgeMinN: OG_EDGE_MIN_N, edgeMargin: OG_EDGE_MARGIN };
+    var edgeN = bag.edgeMinN != null ? bag.edgeMinN : OG_EDGE_MIN_N;
+    var h = '<section class="hg-mp og-settled-exec-panel" data-og-settled="1" aria-label="Settled forward-tested setups">';
+    h += '<div class="hg-mp-eye">PROVEN EDGE · FORWARD-TESTED</div>';
+    h += '<div class="hg-mp-head">XAUUSD <span>TICKET + settled out-of-sample record · Wilson 95% lower above breakeven · min '
+      + edgeN + ' trades</span></div>';
+
+    /* ---- the bar the desk actually trades ---- */
+    if (bag.proven && bag.proven.length){
+      h += '<div class="hg-mp-note">Profitable at 95% confidence: the lower bound of each record sits above the win rate its own plan needs to break even. Ranked by how far it clears. Measured on trades already settled — not a forecast.</div>';
+      var pi;
+      for (pi = 0; pi < bag.proven.length; pi++) h += hgOgSettledExecuteRowHtml(bag.proven[pi], 'proven');
+    } else {
+      h += '<div class="hg-mp-note warn">No mechanic has yet proven a forward edge: none has ' + edgeN
+        + '+ settled TICKETs whose Wilson 95% lower bound clears its own breakeven. This is the honest state of the log, not a missing number — '
+        + 'a mechanic reaches it by settling trades, so keep scanning and it will resolve either way.</div>';
+      if (bag.best && bag.best.length){
+        h += '<div class="hg-mp-note">Closest on current TICKETs — the best forward-tested evidence available right now, ranked by Wilson lower bound. Read the breakeven on each row before trading it:</div>';
+        var bi;
+        for (bi = 0; bi < bag.best.length; bi++) h += hgOgSettledExecuteRowHtml(bag.best[bi], 'best');
+      } else {
+        h += '<div class="hg-mp-note dim">No settled TICKET record on any current setup yet. The forward log fills one record per firing bar and settles on later bars — there is nothing to rank until then.</div>';
+      }
+    }
+
+    /* ---- the aspirational ceiling, kept but no longer the headline ---- */
+    h += '<div class="hg-mp-eye" style="margin-top:12px">NEAR-CERTAINTY CEILING · 95% BAR</div>';
     if (bag.execute && bag.execute.length){
-      h += '<div class="hg-mp-note">These cleared the full ledger <b>and</b> their mechanic\'s settled TICKET record meets the bar. Not a forecast — measured on trades this desk already cleared.</div>';
+      h += '<div class="hg-mp-note">Also clears the strictest bar on the desk — settled record with Wilson 95% lower bound ≥ '
+        + (bag.minLo * 100).toFixed(0) + '% on ' + bag.minN + '+ trades.</div>';
       var ei;
       for (ei = 0; ei < bag.execute.length; ei++) h += hgOgSettledExecuteRowHtml(bag.execute[ei], 'execute');
     } else {
-      h += '<div class="hg-mp-note warn">No setup meets TICKET + ' + bag.minN + ' settled forward tickets + Wilson 95% lower bound ≥ '
-        + (bag.minLo * 100).toFixed(0) + '%. Even 15/15 wins only yields ~80% Wilson lower — you need roughly <b>80+ cleared wins</b> at near-perfect rate. '
-        + 'Gold in-sample grids peak near ~54% hit, so this bar is intentionally rare. '
-        + 'Use <b>GOLD SCALP / GOLD SWING</b> for 7/7 grade-A setups, or keep scanning to build the forward log below.</div>';
-      if (bag.best && bag.best.length){
-        h += '<div class="hg-mp-note">Best <b>available</b> settled edge on current TICKETs (still below the execute bar):</div>';
-        var bi;
-        for (bi = 0; bi < bag.best.length; bi++) h += hgOgSettledExecuteRowHtml(bag.best[bi], 'best');
-      }
+      h += '<div class="hg-mp-note dim">Empty, and expected to stay so. The old SETTLED EXECUTE bar — Wilson 95% lower bound ≥ '
+        + (bag.minLo * 100).toFixed(0) + '% — is a claim about the TRUE win rate, not about sample size: the bound converges upward to the true rate, so clearing 95% needs a mechanic that wins about '
+        + '<b>97% of the time</b>. A perfect 15/15 only reaches 79.6%, and 80 straight wins reach 95.4%; at gold\'s measured ~54% hit the bound converges to ~53.7% and never clears, at any sample size. '
+        + 'Kept as a ceiling so a mechanic that somehow did reach it would be flagged — but PROVEN EDGE above is the bar to trade.</div>';
     }
     h += '<div class="hg-mp-note dim">Also check SCORECARD → BY LANE → gold for your booked LOG history. OMNIGOLD forward log grows each scan — run regularly to settle mechanics.</div>';
     h += '</section>';
@@ -11832,6 +11954,9 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgSettledEvidence = hgOgSettledEvidence;
     window.hgOgSettledExecuteOk = hgOgSettledExecuteOk;
     window.hgOgPickSettledExecutes = hgOgPickSettledExecutes;
+    window.hgOgProvenEdgeOk = hgOgProvenEdgeOk;
+    window.hgOgBreakevenHit = hgOgBreakevenHit;
+    window.hgOgEdgeMargin = hgOgEdgeMargin;
     window.hgOgSettledExecutePanelHtml = hgOgSettledExecutePanelHtml;
     window.hgOgMergeSettledEvidence = hgOgMergeSettledEvidence;
     window.hgOgPickScalpVerdict = hgOgPickScalpVerdict;
