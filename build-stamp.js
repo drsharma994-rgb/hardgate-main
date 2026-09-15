@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v735',
-  pack: 'CRYPTO SCAN records its setups to the forward log, so it appears in Setup Intelligence',
+  version: 'hg-v737',
+  pack: 'OPTI GOLD tab — break of structure to 50% retracement limit, with causal swing confirmation',
   built: '2026-09-13T17:00:00Z'
 };
 
