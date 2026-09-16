@@ -589,6 +589,28 @@ localStorage. Never throws.
 
   function hgFwdStats(list, tab, mechanic, ticketOnly, agg, nowSec){
     var recs = Array.isArray(list) ? list : [];
+    /* `tab` accepts a LIST as well as a name.
+
+       Three tabs run the same mechanics on the same instrument —
+       OMNIGOLD:SCALP, GOLDSCALP and SUPER:GOLD — and the settled-evidence
+       panel has always pooled them. The gate that decides whether anything
+       is a ticket read one, discarding two thirds of its own evidence at
+       the exact point where data is the binding constraint.
+
+       Pooling here rather than by summing three stat blocks afterwards,
+       because expR and avgRr are ratios: adding them is wrong, and every
+       caller that tried would have to carry rrSum to do it right. */
+    var tabList = null, tabName = tab;
+    if (Array.isArray(tab)){
+      tabName = null;                               /* an array is never a name */
+      if (tab.length){
+        tabList = {};
+        for (var ti = 0; ti < tab.length; ti++) if (tab[ti]) tabList[String(tab[ti])] = 1;
+      }
+      /* an EMPTY list leaves both null, which is "no filter" — the same as
+         passing null. An array coerced to a name would compare every record
+         against "" and drop the lot. */
+    }
     var wantTicket = (ticketOnly && typeof ticketOnly === 'object')
       ? (ticketOnly.ticket === true) : (ticketOnly === true);
     var wantShown = (ticketOnly && typeof ticketOnly === 'object')
@@ -621,14 +643,34 @@ localStorage. Never throws.
     /* the aggregate keeps no ticket/shown split, so any filtered query is
        deliberately a view of the LIVE window rather than of all time */
     if (agg && !wantTicket && !wantShown && !wantGateClear){
-      var ak = String(tab || '') + '|' + String(mechanic || '');
-      var a = agg[ak];
-      if (a){ wins += (a.wins || 0); losses += (a.losses || 0); expired += (a.expired || 0); rrSum += (a.rrSum || 0);
-              bankN += (a.bankN || 0); bankSum += (a.bankSum || 0); bankActualSum += (a.bankActualSum || 0); }
+      var aggTabs = tabList ? Object.keys(tabList) : [String(tab || '')];
+      for (var ai = 0; ai < aggTabs.length; ai++){
+        var a = agg[aggTabs[ai] + '|' + String(mechanic || '')];
+        if (a){ wins += (a.wins || 0); losses += (a.losses || 0); expired += (a.expired || 0); rrSum += (a.rrSum || 0);
+                bankN += (a.bankN || 0); bankSum += (a.bankSum || 0); bankActualSum += (a.bankActualSum || 0); }
+      }
+    }
+    /* The gate-clear split DOES survive pruning now (see hgFwdFold), so a
+       gate-clear query reads all time rather than the last few weeks. This
+       is the difference between a threshold of twenty being reachable and
+       being arithmetic that never lands. Ticket and shown queries stay
+       live-window views — no aggregate carries their split. */
+    else if (agg && wantGateClear && !wantTicket && !wantShown){
+      var gcTabs = tabList ? Object.keys(tabList) : [String(tab || '')];
+      for (var gi = 0; gi < gcTabs.length; gi++){
+        var ge = agg[gcTabs[gi] + '|' + String(mechanic || '')];
+        var ga = ge && ge.gc;
+        if (!ga) continue;
+        wins += (ga.wins || 0); losses += (ga.losses || 0);
+        expired += (ga.expired || 0); rrSum += (ga.rrSum || 0);
+        fillWins += (ga.fillWins || 0); fillLosses += (ga.fillLosses || 0);
+        fillUnfilled += (ga.fillUnfilled || 0); fillUnprovable += (ga.fillUnprovable || 0);
+      }
     }
     for (i = 0; i < recs.length; i++){
       r = recs[i];
-      if (tab && r.tab !== tab) continue;
+      if (tabList){ if (!tabList[String(r.tab)]) continue; }
+      else if (tabName && r.tab !== tabName) continue;
       if (mechanic && r.mechanic !== mechanic) continue;
       if (wantTicket === true && r.ticket !== true) continue;
       /* same rule as `shown`: a record with no gateClear field predates the
@@ -785,6 +827,36 @@ localStorage. Never throws.
         out[key].bankN = (out[key].bankN || 0) + 1;
         out[key].bankSum = (out[key].bankSum || 0) + num(r.bankR);
         out[key].bankActualSum = (out[key].bankActualSum || 0) + ((r.state === 't1') ? (num(r.rr) || 0) : -1);
+      }
+      /* THE GATE-CLEAR SPLIT FOLDS TOO, OR THE GATE CAN NEVER OPEN.
+
+         Until this existed the aggregate kept no ticket/shown/gateClear
+         dimension, so a filtered query could only read live records — and
+         the live list is capped at MAX_RECORDS and pruned continuously.
+         Since hg-v756 made measured-edge hard, the gate-clear population is
+         what promotes a mechanic, and the arithmetic said it could never
+         get there: roughly 0.05 usable records per (tab, mechanic) per day
+         against a window of about four weeks and a threshold of twenty. It
+         asymptotes near three and never moves.
+
+         Detail is still lost — which record, when, at what level. The
+         COUNTS survive, and counts are what the threshold reads. Same
+         bargain the aggregate was built on.
+
+         The fill-aware counters fold beside them, so the population that
+         decides is the one measured on orders that would actually have
+         filled rather than the one that assumed they did. */
+      if (r.gateClear === true){
+        var gc = out[key].gc || (out[key].gc = { wins: 0, losses: 0, expired: 0, rrSum: 0,
+                                                 fillWins: 0, fillLosses: 0,
+                                                 fillUnfilled: 0, fillUnprovable: 0 });
+        if (r.state === 't1'){ gc.wins++; gc.rrSum += (num(r.rr) || 0); }
+        else if (r.state === 'stop') gc.losses++;
+        else gc.expired++;
+        if (r.stateFill === 't1') gc.fillWins++;
+        else if (r.stateFill === 'stop') gc.fillLosses++;
+        else if (r.fillState === 'unfilled') gc.fillUnfilled++;
+        else if (r.fillState === 'unprovable') gc.fillUnprovable++;
       }
     }
     return out;

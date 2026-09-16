@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v757',
-  pack: 'v756 made the edge gate the only thing that could clear the edge gate; and the forward log has never checked whether the order filled',
+  version: 'hg-v758',
+  pack: 'the evidence was pruned 13x faster than a mechanic could accumulate it; now it folds into the uncapped aggregate, pools three tabs, and promotes on a question the data can answer',
   built: '2026-09-16T12:00:00Z'
 };
 

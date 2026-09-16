@@ -194,9 +194,26 @@ console.log('\n== THE CORRECTION: 27 mechanics change what a sigma is worth ==')
   ok(strong.pass === true, 'a genuinely strong in-sample read still passes');
   ok(/clears the \d+-mechanic significance bar/.test(strong.why), 'and says it cleared the bar (' + strong.why.slice(-52) + ')');
 
-  /* Precedence is untouched: real out-of-sample evidence still outranks. */
-  const good = edge({ samples: 41, hit: 0.51, expR: 0.54 }, { samples: 25, hit: 0.64, open: 0, expR: 0.6, ticketOnly: { samples: 25, hit: 0.64, open: 0, expR: 0.6 } });
-  ok(good.pass === true, 'a good settled forward record still passes on its own merit');
+  /* Precedence is untouched: real out-of-sample evidence still outranks.
+
+     The BAR it has to clear changed in hg-v758. Promotion used to happen
+     for any forward record merely better than -2σ, so a mechanic sitting
+     near breakeven on twenty-five trades read "measured out-of-sample" and
+     issued tickets. That is an absence of evidence against an edge, not
+     evidence of one. A forward record now promotes on its own merit only
+     by clearing the same family-wise bar the in-sample read must clear —
+     76 mechanics are watched forward too, and whichever crosses first is
+     the one that gets reported. */
+  const good = edge({ samples: 41, hit: 0.51, expR: 0.54 }, { samples: 40, hit: 0.72, open: 0, expR: 0.8, ticketOnly: { samples: 40, hit: 0.72, open: 0, expR: 0.8 } });
+  ok(good.pass === true, 'a forward record that clears the family-wise bar still passes on its own merit');
+  ok(/on its own out-of-sample record/.test(good.why), 'and says that is what carried it');
+
+  /* the old fixture: +2.45σ on 25 samples — better than -2σ, short of the
+     76-mechanic bar. It used to PASS. */
+  const meh = edge({ samples: 41, hit: 0.51, expR: 0.54 }, { samples: 25, hit: 0.64, open: 0, expR: 0.6, ticketOnly: { samples: 25, hit: 0.64, open: 0, expR: 0.6 } });
+  ok(meh.pass === null, 'a forward record short of that bar reads UNCHECKED rather than PASS');
+  ok(/not proof of an edge on its own record/.test(meh.why),
+     'and says so plainly instead of claiming a measurement');
   const bad = edge({ samples: 41, hit: 0.51, expR: 0.54 }, { samples: 25, hit: 0, open: 0, expR: -1, ticketOnly: { samples: 25, hit: 0, open: 0, expR: -1 } });
   ok(bad.pass === false, 'and a bad one still vetoes');
 

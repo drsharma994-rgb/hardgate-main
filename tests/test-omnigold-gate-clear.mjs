@@ -130,8 +130,10 @@ console.log('\n== stats can ask for the population that still grows ==');
 
 console.log('\n== the desk asks for it, and the panel stops lying about it ==');
 {
-  ok(/hgFwdStats\(tab, mechanic, \{ gateClear: true \}\)/.test(SRC),
-     'hgOgFwdFor fetches the gate-clear record');
+  /* `tabs`, not `tab`: hg-v758 pools the three gold tabs that run these
+     same mechanics, which the settled-evidence panel had always done. */
+  ok(/hgFwdStats\(tabs, mechanic, \{ gateClear: true \}\)/.test(SRC),
+     'hgOgFwdFor fetches the gate-clear record across the pooled tabs');
   ok(/all\.gateClear = /.test(SRC), 'and hands it to the gate beside ticketOnly');
   ok(/gateClear: hgOgGateClear\(c\.grade\)/.test(SRC), 'the recorder stamps it from the grade');
 

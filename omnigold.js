@@ -328,6 +328,25 @@ terse status, and never launches a first-time scan on a global refresh.
      Wilson 95% lower ≥ 90% with enough settled trades. Lower bar than the
      95% execute tier; still requires real forward history, not in-sample. */
   var OG_SCALP_FWD_TABS = ['OMNIGOLD:SCALP', 'GOLDSCALP', 'SUPER:GOLD'];
+  /* The swing equivalent, which existed only as a literal inside
+     hgOgSettledEvidence. Named because measured-edge now reads it too, and
+     two copies of the same list are two chances to pool different tabs. */
+  var OG_SWING_FWD_TABS = ['OMNIGOLD:SWING', 'GOLDSWING', 'SUPER:GOLD'];
+  /* How many horizon-pool tests the desk runs — one per horizon. The
+     promotion bar is corrected for exactly this many comparisons, so it is
+     COUNTED from the horizon table rather than written down: adding a third
+     horizon must tighten the bar on its own. */
+  function hgOgHorizonPoolTests(){
+    try {
+      var n = Object.keys(HORIZONS || {}).length;
+      return (n > 0) ? n : 1;
+    } catch (e) { return 1; }
+  }
+
+  function hgOgFwdTabsFor(horizon){
+    return (String(horizon || '').toUpperCase() === 'SCALP')
+      ? OG_SCALP_FWD_TABS.slice() : OG_SWING_FWD_TABS.slice();
+  }
   var OG_VERDICT_SCALP_LO = 0.90;
   var OG_VERDICT_MIN_N = 10;
 
@@ -3824,13 +3843,33 @@ terse status, and never launches a first-time scan on a global refresh.
         var fz = (judgeHit - fBreak) / fse;
         var fzTxt = ' [' + (fz >= 0 ? '+' : '') + fz.toFixed(2) + 'σ vs breakeven]';
         var tixTxt = judgeN + ' ' + judgeLabel + ' · ' + (judgeHit * 100).toFixed(0) + '% T1-first';
+        /* THE VETO IS MECHANIC-SPECIFIC AND STAYS THAT WAY.
+
+           Condemning a mechanic is a claim about that mechanic, so it is
+           made on evidence about that mechanic. Nothing here changed. */
         if (fz <= EDGE_VETO_Z){
           ed = false;
           edWhy = tixTxt + fzTxt + ' — the trades this ledger actually cleared have not paid'
                 + (fN > judgeN ? ' (of ' + fN + ' settled firings overall)' : '');
-        } else {
+        } else if (fz >= hgOgFamilyZ(OG_MECHANICS.length)){
+          /* THE MECHANIC CARRIED IT ON ITS OWN. Rare, and the strongest
+             evidence available: this mechanic, out of sample, clearing the
+             bar set for having searched every mechanic. Kept because when
+             it does happen it beats any pooled argument. */
           ed = true;
-          edWhy = tixTxt + fzTxt + ' — measured out-of-sample on cleared setups';
+          edWhy = tixTxt + fzTxt + ' — clears the ' + OG_MECHANICS.length
+                + '-mechanic bar on its own out-of-sample record';
+        } else {
+          /* NOT CONDEMNED IS NOT PROOF.
+
+             This used to read PASS for anything merely better than -2σ, so
+             a mechanic sitting at breakeven on twenty trades was "measured
+             out-of-sample" and issued tickets. That is not evidence of an
+             edge, it is an absence of evidence against one. Such a mechanic
+             can still be promoted below, on the horizon's whole book, where
+             the sample is big enough to carry the claim. */
+          ed = null;
+          edWhy = tixTxt + fzTxt + ' — not condemned, but not proof of an edge on its own record';
         }
       } else if (fN >= FWD_MIN_JUDGE && isFinite(fHit)){
         /* Enough settled FIRINGS to describe, not enough cleared TICKETS to
@@ -3851,6 +3890,59 @@ terse status, and never launches a first-time scan on a global refresh.
       }
     } else if (fwd && fin(fwd.open) > 0){
       edWhy = fin(fwd.open) + ' out-of-sample trade' + (fin(fwd.open) === 1 ? '' : 's') + ' still open · ' + edWhy;
+    }
+
+    /* ===== PROMOTION RUNS ON THE HORIZON'S WHOLE BOOK =====================
+
+       Per-mechanic evidence costs twice over. The data splits 108 ways (54
+       mechanics x 2 horizons), AND the significance bar is +3.11 sigma
+       precisely BECAUSE there are 54 of them. Together those put a verdict
+       out of reach: about 0.05 usable records per cell per day against a
+       threshold of 20 is roughly a year per mechanic, and the log's own cap
+       prunes faster than that. A test that can never conclude is not a
+       strict test, it is no test.
+
+       So promotion asks a question the data can answer: does this HORIZON's
+       cleared book beat breakeven? One test per horizon, so the bar is the
+       2-comparison one rather than the 54-comparison one, and every cleared
+       setup on the desk feeds it instead of one mechanic's slice.
+
+       The asymmetry is deliberate and is the whole design:
+         CONDEMN a mechanic only on evidence about that mechanic
+         PROMOTE only on evidence big enough to mean something
+       A mechanic already vetoed above is NEVER promoted here — the pooled
+       book cannot rehabilitate something measured bad on its own record. */
+    if (ed !== false && fwd && fwd.horizonPool){
+      var hp = fwd.horizonPool;
+      /* the fill-aware count when it stands on its own, the raw one
+         otherwise — same precedence as the mechanic-level judge above */
+      var hpFillN = fin(hp.fillSamples), hpFillHit = fin(hp.fillHit);
+      var useFill = isFinite(hpFillN) && hpFillN >= FWD_MIN_JUDGE && isFinite(hpFillHit);
+      var hpN = useFill ? hpFillN : fin(hp.samples);
+      var hpHit = useFill ? hpFillHit : fin(hp.hit);
+      if (isFinite(hpN) && hpN >= FWD_MIN_JUDGE && isFinite(hpHit)){
+        var hpBreak = 1 / (1 + minRr);
+        var hpZ = (hpHit - hpBreak) / Math.sqrt(Math.max(1e-9, hpBreak * (1 - hpBreak) / hpN));
+        /* ONE TEST PER HORIZON — counted, never written as a literal.
+           test-omnigold-full-cover asserts that this bar always tracks the
+           number of comparisons actually made, and it is right to: a
+           hard-coded count silently stops correcting the moment a horizon
+           is added. */
+        var hpBar = hgOgFamilyZ(hgOgHorizonPoolTests());
+        var hpTxt = hpN + (useFill ? ' FILLED' : ' settled') + ' cleared setups across '
+                  + (fwd.pooledTabs ? fwd.pooledTabs.length : 1) + ' gold tabs · '
+                  + (hpHit * 100).toFixed(0) + '% T1-first ['
+                  + (hpZ >= 0 ? '+' : '') + hpZ.toFixed(2) + 'σ vs breakeven]';
+        if (hpZ >= hpBar){
+          ed = true;
+          edWhy = hpTxt + ' — the horizon\'s cleared book clears the 2-test bar (+'
+                + hpBar.toFixed(2) + 'σ). Promoted on the desk, not on this mechanic alone'
+                + (isFinite(judgeN) ? '; its own record did not condemn it' : '') + '.';
+        } else {
+          edWhy = edWhy + ' · horizon book: ' + hpTxt + ', short of the +'
+                + hpBar.toFixed(2) + 'σ bar';
+        }
+      }
     }
 
     /* HARD when proof is required: pass===null then reads NO DATA in
@@ -4628,15 +4720,34 @@ terse status, and never launches a first-time scan on a global refresh.
          ticketOnly cannot be answered from the pruned aggregate, so it is a
          view of the recent window rather than of all time. That is a reason
          to require enough of it before acting, not a reason to ignore it. */
-      var all = w.hgFwdStats(tab, mechanic, false);
-      var tix = w.hgFwdStats(tab, mechanic, true);
+      /* POOL THE THREE TABS THAT RUN THESE MECHANICS.
+
+         OMNIGOLD:SCALP, GOLDSCALP and SUPER:GOLD are the same mechanics on
+         the same instrument, and hgOgSettledEvidence has pooled them since
+         it was written. This gate read one, and so discarded two thirds of
+         its own evidence at the exact point where evidence is what it is
+         short of. A `tab` that is a LIST pools inside hgFwdStats, where
+         rrSum is still in scope — summing three finished stat blocks would
+         average the ratios wrong. */
+      var tabs = hgOgFwdTabsFor(String(tab).indexOf('SCALP') >= 0 ? 'SCALP' : 'SWING');
+      var all = w.hgFwdStats(tabs, mechanic, false);
+      var tix = w.hgFwdStats(tabs, mechanic, true);
       /* AND the population that did not stop growing. `ticket` has been
          false on every card since measured-edge went hard, so ticketOnly is
          frozen; gateClear is the same ledger minus the gate under test. */
-      var clr = w.hgFwdStats(tab, mechanic, { gateClear: true });
+      var clr = w.hgFwdStats(tabs, mechanic, { gateClear: true });
+      /* AND THE SAME POOL WITH NO MECHANIC FILTER — the horizon's whole
+         book. Per-mechanic evidence costs twice: it splits the data 108
+         ways AND pays the 54-comparison significance bar precisely because
+         there are 54 of them, which puts a verdict out of reach on any
+         human timescale. This is the population a promotion can actually be
+         measured on. It is never used to condemn — see the gate. */
+      var pooled = w.hgFwdStats(tabs, null, { gateClear: true });
       if (!all || !isFinite(fin(all.samples))) return null;
       all.ticketOnly = (tix && isFinite(fin(tix.samples))) ? tix : null;
       all.gateClear = (clr && isFinite(fin(clr.samples))) ? clr : null;
+      all.horizonPool = (pooled && isFinite(fin(pooled.samples))) ? pooled : null;
+      all.pooledTabs = tabs;
       return all;
     }catch(e){ return null; }
   }
@@ -8740,8 +8851,7 @@ terse status, and never launches a first-time scan on a global refresh.
     if (!row) return null;
     var horizon = String(row.horizon || 'SWING').toUpperCase();
     var mechanic = row.kind || row.stratKey || row.strategy;
-    var tabs = (horizon === 'SCALP') ? OG_SCALP_FWD_TABS.slice()
-              : ['OMNIGOLD:SWING', 'GOLDSWING', 'SUPER:GOLD'];
+    var tabs = hgOgFwdTabsFor(horizon);
     var out = hgOgMergeSettledEvidence(tabs, mechanic, row.dir);
     if (!out){
       var tab = 'OMNIGOLD:' + (horizon === 'SCALP' ? 'SCALP' : 'SWING');
@@ -12990,6 +13100,7 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgFamilyZ = hgOgFamilyZ;
     /* the population measured-edge judges on since it went hard */
     window.hgOgGateClear = hgOgGateClear;
+    window.hgOgHorizonPoolTests = hgOgHorizonPoolTests;
     /* the one-line reason, for every surface the hard edge gate emptied */
     window.hgOgEdgeSilenceNote = hgOgEdgeSilenceNote;
     window.hgOgMpNoneWhyTape = hgOgMpNoneWhyTape;
