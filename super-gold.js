@@ -129,6 +129,10 @@ function hitFromGoldCand(c, meta){
     trigger: meta.trigger || tier,
     clean: tier === 'clean',
     nearClean: tier === 'near',
+    /* the mark the source desk sized this against — goldswing/goldscalp
+       now carry it, and without forwarding it here super-gold cannot ask
+       whether price already walked through the plan it is about to show. */
+    mark: N(c.mark),
     venueTag: c.venue || meta.venueTag || null,
     id: c.id || null,
     at: meta.at || null,
@@ -782,6 +786,7 @@ function hitToEvaluation(hit){
     sym: hit.sym,
     tf: hit.scanner || 'gold',
     entry: hit.entry, stop: hit.stop, t1: hit.t1, t2: hit.t2, rr: rr,
+    mark: N(hit.mark),
     entryType: hit.entryType,
     minimalLossPass: hit.minimalLossPass,
     goldAudit: hit.goldAudit,
@@ -794,6 +799,24 @@ function hitToEvaluation(hit){
           : (hit.tier === 'near' ? ' · watch only' : ''))),
     hit: hit
   };
+}
+
+/* PRICE MAY HAVE WALKED THROUGH THIS PLAN ALREADY — the shared rule in
+   hg-plan.js, judged against the mark the SOURCE desk sized the candidate
+   against (forwarded through hitFromGoldCand / hitToEvaluation). Silent
+   without a mark: super-gold has no price feed of its own, and goldspotState
+   carries only basis, so a missing mark here is normal and must not be
+   reported as a clean plan. */
+function sgGeoLine(r){
+  try{
+    var fn = (typeof win !== 'undefined' && win && win.hgPlanMarketGeometry)
+      || (typeof window !== 'undefined' && window && window.hgPlanMarketGeometry) || null;
+    if (typeof fn !== 'function' || !r) return '';
+    var g = fn({ dir: r.side || r.dir, entry: r.entry, stop: r.stop, t1: r.t1 }, r.mark);
+    if (!g || g.ok) return '';
+    var label = (g.code === 'stop-breached') ? 'STOP ALREADY BREACHED' : 'TARGET BEHIND PRICE';
+    return '<div class="hg-desk-note"><b>' + label + ':</b> ' + String(g.why) + '</div>';
+  }catch(e){ return ''; }
 }
 
 function mount(el){
@@ -980,6 +1003,7 @@ function mount(el){
         + '<div><div class="k">RR</div><div class="v">' + fmt(r.rr, 2) + '</div></div>'
         + '<div><div class="k">SIZE</div><div class="v">'
         + (r.positionSize ? fmt(r.positionSize.positionSizeUnits, 3) + ' oz' : '—') + '</div></div>'
+        + sgGeoLine(r)
         + '</div>'
         + '<div class="hg-note" style="margin-top:8px">' + String(r.strategy || '') + '</div></div>';
     }).join('');
