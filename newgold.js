@@ -576,6 +576,11 @@ function ngAssess(rows){
   return {
     dir: dir,
     entry: entry, stop: stop, t1: t1, t2: t2,
+    /* the mark this setup was sized from. The card says MARKET BUY/SELL, but
+       hgPlanFromRisk above may have moved `entry` off lastClose — once it
+       does, a retest gap exists and T1 can land inside it. Carry the mark so
+       hgPlanMarketGeometry can say so. */
+    mark: lastClose,
     rr1: rr1Final,
     rr2: rr2Final,
     risk: risk, riskPct: risk / entry * 100,
@@ -1708,6 +1713,22 @@ async function ngRunScan(){
 
 /* --- render ----------------------------------------------------------- */
 
+/* PRICE MAY HAVE WALKED THROUGH THIS PLAN ALREADY — the shared rule in
+   hg-plan.js. Silent when the mark or the rule is unreachable: an
+   unjudgeable plan gets no claim in either direction. */
+function ngGeoLine(s){
+  try{
+    var fn = (typeof W !== 'undefined' && W && W.hgPlanMarketGeometry)
+      || (typeof hgPlanMarketGeometry === 'function' ? hgPlanMarketGeometry : null);
+    if (typeof fn !== 'function' || !s) return '';
+    var g = fn({ dir: s.dir, entry: s.entry, stop: s.stop, t1: s.t1 }, s.mark);
+    if (!g || g.ok) return '';
+    var label = (g.code === 'stop-breached') ? 'STOP ALREADY BREACHED' : 'TARGET BEHIND PRICE';
+    return '<div class="note warn" style="margin-top:6px;font-size:11px"><b>' + label
+      + ':</b> ' + esc(g.why) + '</div>';
+  }catch(e){ return ''; }
+}
+
 function cardHtml(r){
   if (!r) return '';
   if (!r.setup){
@@ -1769,7 +1790,8 @@ function cardHtml(r){
       + '<div><i>T1 (1.5R)</i><b>' + fmtF(s.t1, 2) + '</b><u>rr ' + fmtF(s.rr1, 2) + '</u></div>'
       + '<div><i>T2 (2.5R)</i><b>' + fmtF(s.t2, 2) + '</b><u>rr ' + fmtF(s.rr2, 2) + '</u></div>'
       + '</div>'
-      + '<div class="note" style="margin-top:6px;font-size:11px;opacity:0.7">Risk ' + fmtF(s.riskPct, 2) + '% \u00b7 not a win probability</div>')
+      + '<div class="note" style="margin-top:6px;font-size:11px;opacity:0.7">Risk ' + fmtF(s.riskPct, 2) + '% \u00b7 not a win probability</div>'
+      + ngGeoLine(s))
     : ('<div class="note warn" style="margin-top:6px;font-size:11px">NOT A TICKET \u2014 no levels printed. '
       + esc(((fm && fm.reasons) || ['formation verdict unavailable']).join(' \u00b7 ')) + '</div>');
 
