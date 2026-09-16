@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v751',
-  pack: 'the four setup tabs v750 missed, and a test that counts tabs instead of files',
+  version: 'hg-v752',
+  pack: 'OMNIGOLD: a stop floor, a cost gate that vetoes, and a badge that stopped claiming a ranking',
   built: '2026-09-15T12:00:00Z'
 };
 

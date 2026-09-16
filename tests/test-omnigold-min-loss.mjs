@@ -183,15 +183,31 @@ console.log('\n== 5. gold weekend is a veto when the scan is inside the closure 
 
 console.log('\n== 6. scalp cost-drag vetoes a stop the spread would eat ==');
 {
+  /* The claim here is that the SCALP ceiling (0.15) is tighter than the
+     SWING one (0.30) — two ceilings, one stop. That is only observable at a
+     venue where 3.16 points lands between them. The gate prices at
+     hgOgVenueCost() now, and with no venue selected it fails closed to
+     PAXG, where a 0.26% round trip is 363% of 1R and both horizons decline
+     for the same reason. Naming XM is what this block always meant: the
+     flat $0.30 spread it used to read WAS the XM spread. */
+  W.HG_OG_VENUE = 'XM';
   const tight = gate('cost-drag', { dir: 'long', kind: 'MMOVE' },
                      { planRisk: 3.16, sessionHard: true });
-  ok(tight.pass === false, 'the live 3.16-point scalp stop is vetoed — 19% of 1R was paying the spread');
+  ok(tight.pass === false, 'at XM the live 3.16-point scalp stop is vetoed — past the 15% scalp ceiling');
   const swing = gate('cost-drag', { dir: 'long', kind: 'MMOVE' },
                     { planRisk: 3.16, sessionHard: false });
   ok(swing.pass === true, 'the same stop on SWING still passes (wider horizon, different cost bar)');
+
+  /* and the venue is not decoration: at the venue the replay was measured
+     at, that stop cannot pay on either horizon */
+  W.HG_OG_VENUE = 'PAXG';
+  ok(gate('cost-drag', { dir: 'long', kind: 'MMOVE' }, { planRisk: 3.16, sessionHard: false }).pass === false,
+     'at PAXG the same stop is vetoed even on SWING — 0.26% round trip is 363% of 1R');
+  W.HG_OG_VENUE = 'XM';
   const wide = gate('cost-drag', { dir: 'long', kind: 'MMOVE' },
                    { planRisk: 12, sessionHard: true });
-  ok(wide.pass === true, 'a $12 scalp stop still clears cost-drag');
+  ok(wide.pass === true, 'at XM a $12 scalp stop still clears cost-drag');
+  delete W.HG_OG_VENUE;
 }
 
 console.log('\n== 7. ShieldGuard, when loaded, can veto; when absent it is UNCHECKED ==');

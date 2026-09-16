@@ -382,6 +382,25 @@ function stepTrade(tr, bar, bi, fillWindow){
     }
   }
   if (tr.state === 'filled'){
+    /* EXCURSION, so the 2R target can be measured instead of assumed.
+
+       Every plan this desk publishes is exactly 2.0R — a fixed rule, never
+       tested against what price actually offered. Answering "would 1R have
+       paid better?" needs to know how far the trade ran BEFORE it resolved,
+       and no artifact recorded that. mfe/mae are that record.
+
+       Conservative on purpose: a bar that touches the stop contributes
+       NOTHING to the favourable excursion, because intrabar order is
+       unknown and this walk already resolves a both-touch bar as a loss.
+       Crediting the high of the bar that stopped the trade out would let
+       the sweep invent wins that a real fill never saw. */
+    const risk = Math.abs(stop - entry);
+    if (!hitStop && risk > 0){
+      const fav = dir === 'long' ? (+bar.h - entry) : (entry - +bar.l);
+      if (isFinite(fav) && (tr.mfe == null || fav > tr.mfe)) tr.mfe = fav;
+      const adv = dir === 'long' ? (entry - +bar.l) : (+bar.h - entry);
+      if (isFinite(adv) && (tr.mae == null || adv > tr.mae)) tr.mae = adv;
+    }
     if (hitStop && hitT1){ tr.outcome = 'loss'; tr.bothTouch = true; tr.rGross = -1; tr.exitIdx = bi; return true; }
     if (hitStop){ tr.outcome = 'loss'; tr.rGross = -1; tr.exitIdx = bi; return true; }
     if (hitT1){ tr.outcome = 'win'; tr.rGross = Math.abs(t1 - entry) / Math.abs(stop - entry); tr.exitIdx = bi; return true; }
@@ -433,6 +452,13 @@ function settleRecord(tr, rows, tfSec, counters, evidence, results){
        recorded it, so no settled artifact in this repo could answer
        whether a plan was already dead when it was published. */
     markAtFire: (typeof tr.markAtFire === "number" && isFinite(tr.markAtFire)) ? +tr.markAtFire.toFixed(4) : null,
+    /* HOW FAR IT ACTUALLY RAN, in R, before it resolved — the record that
+       lets scripts/target-sweep.mjs test the fixed 2R target instead of
+       assuming it. Null for a trade that never filled. */
+    mfeR: (tr.fillIdx == null || tr.mfe == null) ? null
+      : +(tr.mfe / Math.abs(tr.stop - tr.entry)).toFixed(3),
+    maeR: (tr.fillIdx == null || tr.mae == null) ? null
+      : +(tr.mae / Math.abs(tr.stop - tr.entry)).toFixed(3),
     sameBarExit: sameBarExit || undefined,
     ambiguousSameBarWin: ambiguousWin || undefined,
     outcome: tr.outcome + (tr.bothTouch ? ' (both-touch)' : ''),

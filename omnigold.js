@@ -7294,10 +7294,39 @@ terse status, and never launches a first-time scan on a global refresh.
          is upside down and the reader deserves to see it on the badge,
          not in a footnote.
      Returns { color, label, suffix }; suffix '' when no record exists. */
+  /* THE BADGE STOPPED CLAIMING A RANKING IT DOES NOT HAVE.
+
+     The comment above already said the ordering is upside down. The PIXELS
+     said otherwise: green for STRONG, red for WEAK, a tick, a cross and a
+     trophy. A reader takes the colour before the suffix, so the badge was
+     asserting exactly what its own footnote denied.
+
+     Measured on the desk's settled walk (7,670 plans, ambiguous same-bar
+     wins dropped) the score does not rank OUTCOMES — it ranks STOP WIDTH,
+     inversely:
+
+       conf band   median stop   below the 0.50% floor   GROSS
+         40s          1.098%              14%            +0.095R
+         70s          0.775%              31%            +0.037R
+         50s          0.539%              47%            -0.181R
+         60s          0.274%              74%            -0.241R
+
+     The worst band is the one whose stops are tightest. Control for that —
+     apply GOLD_STOP_MIN_PCT — and no band separates at all: t runs -1.57
+     to +2.30 across five bands, none clearing the family-wise bar.
+
+     So the number stays on the card, because it describes the setup and a
+     reader may want it. What goes is the verdict dressing: one neutral
+     colour for every band, no tick, no cross, no trophy, and a suffix that
+     says what the record actually is. The engine-grade path below keeps
+     its own labels — that is a different scalar with its own measured
+     record, and it is not what this measurement is about. */
+  var OG_TIER_NEUTRAL = '#64748B';
+
   function hgOgTierBadgeInfo(score, setup, fromGrade){
     var s = isFinite(fin(score)) ? fin(score) : 0;
-    var color = s >= 85 ? '#10b981' : s >= 70 ? '#22c55e' : s >= 50 ? '#f59e0b' : '#dc2626';
-    var label = s >= 85 ? '🏆 EXCEPTIONAL' : s >= 70 ? '✓ STRONG' : s >= 50 ? '⚠ FAIR' : '✗ WEAK';
+    var color = OG_TIER_NEUTRAL;
+    var label = s >= 85 ? 'EXCEPTIONAL' : s >= 70 ? 'STRONG' : s >= 50 ? 'FAIR' : 'WEAK';
     var suffix = '';
     if (fromGrade){
       if (s >= 85) label = 'GRADE-A CLASS';
@@ -7326,7 +7355,10 @@ terse status, and never launches a first-time scan on a global refresh.
     } else {
       var tev = hgOgReplayEvidence(s >= 70 ? 'STRONG' : s >= 50 ? 'FAIR' : 'WEAK');
       if (tev && isFinite(fin(tev.winRate))){
-        suffix = 'replay ' + (tev.winRate * 100).toFixed(0) + '% WR';
+        /* the record, and then what the record means — a band with no
+           measured ranking must not read like a grade */
+        suffix = 'replay ' + (tev.winRate * 100).toFixed(0) + '% WR · '
+               + 'this score does not rank outcomes (it tracks stop width)';
       }
     }
     return { color: color, label: label, suffix: suffix };
