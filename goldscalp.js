@@ -444,6 +444,9 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
         agree: isFinite(c.agree) ? c.agree : null, oppose: isFinite(c.oppose) ? c.oppose : null,
         killzone: c.killzone || null, atr: isFinite(c.atr) ? c.atr : null,
         anchor: isFinite(c.anchor) ? c.anchor : null,
+        /* the mark this candidate was sized against — lost downstream if it
+           does not travel, same reason .smc does */
+        mark: isFinite(c.mark) ? c.mark : null,
         zone: (c.zone && isFinite(c.zone.lo) && isFinite(c.zone.hi)) ? { lo: c.zone.lo, hi: c.zone.hi } : null,
         demoted: !!c.demoted,
         stamps: Array.isArray(c.stamps) ? c.stamps.slice() : [],
@@ -884,6 +887,23 @@ function bannerHTML(best, ranked){
     + '</div></div>';
 }
 
+/* PRICE MAY HAVE WALKED THROUGH THIS PLAN ALREADY — see gswGeoLine in
+   goldswing.js. hgPlanMarketGeometry (hg-plan.js) is the shared rule; this
+   renders its verdict, and stays silent when the mark or the rule is
+   unreachable rather than claiming the plan is fine. */
+function gsxGeoLine(c){
+  try{
+    var fn = (typeof W !== 'undefined' && W && W.hgPlanMarketGeometry)
+      || (typeof hgPlanMarketGeometry === 'function' ? hgPlanMarketGeometry : null);
+    if (typeof fn !== 'function' || !c) return '';
+    var g = fn({ dir: c.dir, entry: c.entry, stop: c.stop, t1: c.t1 }, c.mark);
+    if (!g || g.ok) return '';
+    var label = (g.code === 'stop-breached') ? 'STOP ALREADY BREACHED' : 'TARGET BEHIND PRICE';
+    return '<div class="gsx-geoline note warn" style="margin-top:4px"><b>' + label
+      + ':</b> ' + esc(g.why) + '</div>';
+  }catch(e){ return ''; }
+}
+
 function cardHTML(c, isBest, season, tape){
   tape = tape || (c && c.goldTape) || '';
   var dirUp = c.dir.toUpperCase();
@@ -998,6 +1018,7 @@ function cardHTML(c, isBest, season, tape){
     + ' · TP1 <b' + gsxSt(GSX_PLAN_B) + '>$' + pxF(c.t1) + '</b> (' + fmtF(c.rr, 1) + 'R)'
     + ' · TP2 <b' + gsxSt(GSX_PLAN_B) + '>$' + pxF(c.t2) + '</b> (' + fmtF(c.rr2, 1) + 'R)'
     + '</div>'
+    + gsxGeoLine(c)
     + ((typeof hgStrategyTradeDetailHtml === 'function') ? hgStrategyTradeDetailHtml(c) : '')
     + mgmtBlock + guideBlock
     + (c.why ? '<div class="gsx-whyline"' + gsxSt(GSX_WHY) + '>' + esc(c.why) + '</div>' : '')
@@ -1510,7 +1531,23 @@ async function runScan(ui, scanSt){
       venueRows[v] = { rows15m: gold.rows15m };
       var got = buildCandidates(gold, now, news, v, sym1, scalpBundle);
       collectWatch(gold.rows15m, gold.rows1h, gold.rows4h, v);
-      for (i = 0; i < got.length; i++) cands.push(got[i]);
+      /* the mark this candidate was sized against — live goldspot when the
+         feed is up, else the last CLOSED 15m close, which is the bar the
+         scalp gates above already judged. Lets the card ask
+         hgPlanMarketGeometry whether price walked through the plan. */
+      var __gsxMark = NaN;
+      try {
+        var __sp = ctx && ctx.spot && +ctx.spot.spotPx;
+        if (isFinite(__sp) && __sp > 0) __gsxMark = __sp;
+        else if (gold && gold.rows15m && gold.rows15m.length){
+          var __lc = gold.rows15m[gold.rows15m.length - 1];
+          if (__lc && isFinite(+__lc.c)) __gsxMark = +__lc.c;
+        }
+      } catch (eMk) { __gsxMark = NaN; }
+      for (i = 0; i < got.length; i++){
+        if (got[i] && isFinite(__gsxMark) && !isFinite(+got[i].mark)) got[i].mark = __gsxMark;
+        cands.push(got[i]);
+      }
       for (i = 0; i < (got.rejected || []).length; i++) rejectedAll.push(got.rejected[i]);
       legs.push(v + ': ' + gold.rows15m.length + ' 15m bars — '
         + (got.length ? got.length + ' strategy candidate' + (got.length === 1 ? '' : 's') : 'no qualifying confluence'));
