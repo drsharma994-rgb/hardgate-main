@@ -6044,10 +6044,56 @@ terse status, and never launches a first-time scan on a global refresh.
     return h;
   }
 
-  function hgOgWilsonHit(wins, n, z){
+  /* SEVENTY-SEVEN TRADES' WORTH OF INFORMATION IN A HUNDRED ROWS.
+
+     Every interval this desk prints treats its replay rows as independent
+     trades. They are not. Measured on the walk (scripts/backtest-omnigold-
+     results.json, and scripts/omnigold-evidence-bake.mjs which computes
+     this number): the desk publishes 59.4 plans a day on ONE instrument,
+     9.34 per 4h bar, with a time-weighted mean of 55 positions open at
+     once and a peak of 109. Fifty-five simultaneous gold positions is one
+     bet repeated, not fifty-five independent draws.
+
+     Clustering the per-trade R by week — positions run up to five days, so
+     day-clusters still overlap each other — puts the effective sample at
+     3,111 of 7,670 rows. The ratio is what this applies.
+
+     It is not a cosmetic correction. On the one cell that looked like an
+     edge, SWING/STRONG above the stop floor, the per-trade t goes 3.28
+     naive, 1.85 day-clustered, 1.17 week-clustered. Read independently it
+     cleared the family-wise bar; read honestly it does not clear the naive
+     one. A Wilson bound built on the row count is narrower than the
+     evidence supports, and this desk's whole PROVEN EDGE tier rests on
+     Wilson bounds.
+
+     A book with no overlap is not deflated: hgOgEffN is for the replay
+     population, whose rows are simultaneous by construction. A sequential
+     book — one position at a time — already has effN == n and callers pass
+     overlapping:false for it. */
+  var OG_EFF_N_RATIO = 0.406;   /* 3111.1 / 7670, week-clustered */
+
+  function hgOgEffN(n, overlapping){
+    n = fin(n);
+    if (!(n > 0)) return NaN;
+    if (overlapping === false) return n;
+    /* never below 1 — a deflated sample is still at least one observation,
+       and a zero would make every interval degenerate rather than wide */
+    return Math.max(1, n * OG_EFF_N_RATIO);
+  }
+
+  /* wins scale with the sample, or the deflation would move the observed
+     rate as well as the width, which is not what overlap does */
+  function hgOgWilsonHit(wins, n, z, opts){
     var wf = gfn('hgWilson');
     wins = fin(wins); n = fin(n);
     if (!wf || !(n > 0) || wins < 0 || wins > n) return null;
+    if (opts && opts.overlapping === true){
+      var eff = hgOgEffN(n, true);
+      if (isFinite(eff) && eff > 0 && eff < n){
+        wins = wins * (eff / n);
+        n = eff;
+      }
+    }
     try { return wf(wins, n, isFinite(fin(z)) ? fin(z) : OG_EXEC_WILSON_Z); }
     catch (eW){ return null; }
   }
@@ -7269,8 +7315,18 @@ terse status, and never launches a first-time scan on a global refresh.
     var wins = Math.round(wr * n);
     var m = hgOgReplayFamilySize();
     var zFw = hgOgInvNorm(1 - 0.05 / (2 * m));
-    var lo95 = hgOgWilsonHit(wins, n, OG_EXEC_WILSON_Z);
-    var loFw = isFinite(zFw) ? hgOgWilsonHit(wins, n, zFw) : null;
+    /* THE REPLAY POPULATION OVERLAPS, so its row count is not its sample.
+       This verdict is what promotes a mechanic to PROVEN EDGE, and it was
+       reading n rows as n independent trades while the walk that produced
+       them held 55 positions at once. Deflated to the measured effective
+       sample — see hgOgEffN. The other two hgOgWilsonHit callers are left
+       alone deliberately: the scorecard is the user's own settled
+       positions, taken one at a time, and the forward log publishes only
+       aggregates, so there is no timing in hand to measure ITS overlap
+       with. Importing this ratio there would be borrowing a constant from
+       a different population, which is the error this fixes. */
+    var lo95 = hgOgWilsonHit(wins, n, OG_EXEC_WILSON_Z, { overlapping: true });
+    var loFw = isFinite(zFw) ? hgOgWilsonHit(wins, n, zFw, { overlapping: true }) : null;
     if (!lo95) return null;
     var tier = (loFw && loFw.lo > be) ? 'family'
              : (lo95.lo > be) ? 'naive'
@@ -12242,6 +12298,9 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgPickFor = hgOgPickFor;
     window.hgOgPickWatchFor = hgOgPickWatchFor;
     window.hgOgWilsonHit = hgOgWilsonHit;
+    /* exported so the overlap deflation can be tested on its own: it is
+       what decides whether a mechanic reaches PROVEN EDGE */
+    window.hgOgEffN = hgOgEffN;
     window.hgOgSettledEvidence = hgOgSettledEvidence;
     window.hgOgSettledExecuteOk = hgOgSettledExecuteOk;
     window.hgOgPickSettledExecutes = hgOgPickSettledExecutes;

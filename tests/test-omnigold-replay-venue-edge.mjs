@@ -141,7 +141,18 @@ console.log('\n== sweeping all 54: re-pricing helps, and still finds no edge =='
   ok(repriced === 54, `all 54 mechanics re-price (${repriced})`);
   ok(netPosPaxg === 0, 'at the replay\'s PAXG cost, NOTHING is net positive');
   ok(netPosXM === 18, `at XM cost, 18 are net positive (${netPosXM}) — the labelling error was real`);
-  ok(naive === 1, `but only 1 clears its own breakeven at 95% (${naive})`);
+  /* WAS 1, IS NOW 0, and the change is the point rather than a regression.
+     hgOgReplayEdgeVerdict used to read n replay rows as n independent
+     trades. The walk that produced them published 59.4 plans a day on one
+     instrument and held a time-weighted mean of 55 positions at once, so
+     the row count was never the sample size. Deflated to the measured
+     effective sample (hgOgEffN, week-clustered: 3,111 of 7,670), the one
+     mechanic that used to clear its own breakeven at naive 95% no longer
+     does — it was clearing on an interval that was too narrow.
+
+     The test's own thesis gets stronger, not weaker: 0 is further below
+     the ~2.7 that chance alone yields than 1 was. */
+  ok(naive === 0, `and NONE clears its own breakeven at 95% (${naive})`);
   ok(naive < 54 * 0.05, 'which is FEWER than the ~2.7 chance alone would produce');
   ok(family === 0, 'and none survives the family-wise bound — no mechanic has a provable edge');
 }

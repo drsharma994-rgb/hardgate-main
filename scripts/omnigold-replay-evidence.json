@@ -508,5 +508,1198 @@
     "rtCostPct": 0.26
   },
   "window": "2026-03-27..2026-09-10",
-  "barBasis": "PAXGUSDT 1h proxy"
+  "barBasis": "PAXGUSDT 1h proxy",
+  "sequentialBake": {
+    "generated": "2026-09-16T10:16:18.172Z",
+    "src": "scripts/backtest-omnigold-results.json",
+    "window": "2026-03-29..2026-09-12",
+    "barBasis": "PAXGUSDT proxy for XAUUSD",
+    "clusterWidth": "week",
+    "costModel": {
+      "paxgRtFrac": 0.0026,
+      "xmRtFrac": 0.0002
+    },
+    "concurrency": {
+      "peak": 109,
+      "meanOpen": 55.3
+    },
+    "populations": {
+      "formed": {
+        "n": 7670,
+        "settled": 7272,
+        "wins": 2008,
+        "winRate": 0.2761,
+        "grossR": -0.144,
+        "netR_paxg": -1.2736,
+        "netR_xm": -0.2309,
+        "medianCostR_paxg": 0.514,
+        "effective": {
+          "n": 7670,
+          "effN": 3111.1,
+          "clusters": 25,
+          "tNaive": -9.56,
+          "tCluster": -6.09,
+          "inflation": 1.57
+        }
+      },
+      "sequential": {
+        "n": 275,
+        "settled": 266,
+        "wins": 71,
+        "winRate": 0.2669,
+        "grossR": -0.1728,
+        "netR_paxg": -1.203,
+        "netR_xm": -0.252,
+        "medianCostR_paxg": 0.683,
+        "effective": {
+          "n": 275,
+          "effN": 275,
+          "clusters": 24,
+          "tNaive": -2.17,
+          "tCluster": -2.64,
+          "inflation": 0.82
+        }
+      },
+      "sequentialTickets": {
+        "n": 105,
+        "settled": 99,
+        "wins": 35,
+        "winRate": 0.3535,
+        "grossR": 0.0965,
+        "netR_paxg": -0.7675,
+        "netR_xm": 0.03,
+        "medianCostR_paxg": 0.555,
+        "effective": {
+          "n": 105,
+          "effN": 105,
+          "clusters": 22,
+          "tNaive": 0.7,
+          "tCluster": 0.89,
+          "inflation": 0.79
+        }
+      }
+    },
+    "formedByKind": {
+      "ROUND-MAGNET": {
+        "n": 593,
+        "settled": 587,
+        "wins": 186,
+        "winRate": 0.3169,
+        "grossR": -0.043,
+        "netR_paxg": -0.9072,
+        "netR_xm": -0.1095,
+        "medianCostR_paxg": 0.617,
+        "effective": {
+          "n": 593,
+          "effN": 593,
+          "clusters": 25,
+          "tNaive": -0.75,
+          "tCluster": -0.85,
+          "inflation": 0.89
+        }
+      },
+      "STOCHRSI-TURN": {
+        "n": 439,
+        "settled": 425,
+        "wins": 141,
+        "winRate": 0.3318,
+        "grossR": 0.0146,
+        "netR_paxg": -0.6987,
+        "netR_xm": -0.0403,
+        "medianCostR_paxg": 0.487,
+        "effective": {
+          "n": 439,
+          "effN": 439,
+          "clusters": 25,
+          "tNaive": 0.22,
+          "tCluster": 0.27,
+          "inflation": 0.82
+        }
+      },
+      "P6-FAIL": {
+        "n": 187,
+        "settled": 182,
+        "wins": 68,
+        "winRate": 0.3736,
+        "grossR": 0.1232,
+        "netR_paxg": -1.7333,
+        "netR_xm": -0.0196,
+        "medianCostR_paxg": 0.898,
+        "effective": {
+          "n": 187,
+          "effN": 187,
+          "clusters": 24,
+          "tNaive": 1.17,
+          "tCluster": 1.23,
+          "inflation": 0.95
+        }
+      },
+      "P8-RANGE": {
+        "n": 324,
+        "settled": 323,
+        "wins": 57,
+        "winRate": 0.1765,
+        "grossR": -0.4701,
+        "netR_paxg": -2.3236,
+        "netR_xm": -0.6126,
+        "medianCostR_paxg": 1.152,
+        "effective": {
+          "n": 324,
+          "effN": 324,
+          "clusters": 25,
+          "tNaive": -7.4,
+          "tCluster": -8.58,
+          "inflation": 0.86
+        }
+      },
+      "P9-VOLBAR": {
+        "n": 275,
+        "settled": 274,
+        "wins": 55,
+        "winRate": 0.2007,
+        "grossR": -0.3975,
+        "netR_paxg": -1.7181,
+        "netR_xm": -0.499,
+        "medianCostR_paxg": 0.944,
+        "effective": {
+          "n": 275,
+          "effN": 275,
+          "clusters": 25,
+          "tNaive": -5.48,
+          "tCluster": -6.62,
+          "inflation": 0.83
+        }
+      },
+      "P4-LAF": {
+        "n": 151,
+        "settled": 150,
+        "wins": 50,
+        "winRate": 0.3333,
+        "grossR": 0.0002,
+        "netR_paxg": -0.7388,
+        "netR_xm": -0.0566,
+        "medianCostR_paxg": 0.557,
+        "effective": {
+          "n": 151,
+          "effN": 151,
+          "clusters": 24,
+          "tNaive": 0,
+          "tCluster": 0,
+          "inflation": 0.56
+        }
+      },
+      "ORB": {
+        "n": 144,
+        "settled": 125,
+        "wins": 37,
+        "winRate": 0.296,
+        "grossR": -0.0204,
+        "netR_paxg": -0.3971,
+        "netR_xm": -0.0493,
+        "medianCostR_paxg": 0.239,
+        "effective": {
+          "n": 144,
+          "effN": 144,
+          "clusters": 25,
+          "tNaive": -0.19,
+          "tCluster": -0.2,
+          "inflation": 0.92
+        }
+      },
+      "INSIDE-BREAK": {
+        "n": 121,
+        "settled": 108,
+        "wins": 34,
+        "winRate": 0.3148,
+        "grossR": 0.0018,
+        "netR_paxg": -0.4663,
+        "netR_xm": -0.0342,
+        "medianCostR_paxg": 0.3,
+        "effective": {
+          "n": 121,
+          "effN": 121,
+          "clusters": 24,
+          "tNaive": 0.01,
+          "tCluster": 0.02,
+          "inflation": 0.98
+        }
+      },
+      "PO3": {
+        "n": 155,
+        "settled": 148,
+        "wins": 43,
+        "winRate": 0.2905,
+        "grossR": -0.1263,
+        "netR_paxg": -0.889,
+        "netR_xm": -0.1849,
+        "medianCostR_paxg": 0.474,
+        "effective": {
+          "n": 155,
+          "effN": 155,
+          "clusters": 24,
+          "tNaive": -1.18,
+          "tCluster": -1.57,
+          "inflation": 0.75
+        }
+      },
+      "VWAP-BAND": {
+        "n": 57,
+        "settled": 57,
+        "wins": 13,
+        "winRate": 0.2281,
+        "grossR": -0.3158,
+        "netR_paxg": -0.8818,
+        "netR_xm": -0.3593,
+        "medianCostR_paxg": 0.451,
+        "effective": {
+          "n": 57,
+          "effN": 57,
+          "clusters": 19,
+          "tNaive": -1.88,
+          "tCluster": -2.45,
+          "inflation": 0.77
+        }
+      },
+      "CCI-EXTREME": {
+        "n": 327,
+        "settled": 322,
+        "wins": 109,
+        "winRate": 0.3385,
+        "grossR": 0.0265,
+        "netR_paxg": -0.7471,
+        "netR_xm": -0.033,
+        "medianCostR_paxg": 0.521,
+        "effective": {
+          "n": 327,
+          "effN": 327,
+          "clusters": 24,
+          "tNaive": 0.34,
+          "tCluster": 0.43,
+          "inflation": 0.79
+        }
+      },
+      "UTAD": {
+        "n": 83,
+        "settled": 83,
+        "wins": 29,
+        "winRate": 0.3494,
+        "grossR": 0.0482,
+        "netR_paxg": -1.158,
+        "netR_xm": -0.0446,
+        "medianCostR_paxg": 0.598,
+        "effective": {
+          "n": 83,
+          "effN": 80,
+          "clusters": 21,
+          "tNaive": 0.31,
+          "tCluster": 0.3,
+          "inflation": 1.02
+        }
+      },
+      "KZ-JUDAS": {
+        "n": 140,
+        "settled": 140,
+        "wins": 34,
+        "winRate": 0.2429,
+        "grossR": -0.2714,
+        "netR_paxg": -2.1193,
+        "netR_xm": -0.4136,
+        "medianCostR_paxg": 0.9,
+        "effective": {
+          "n": 140,
+          "effN": 110.1,
+          "clusters": 24,
+          "tNaive": -2.49,
+          "tCluster": -2.21,
+          "inflation": 1.13
+        }
+      },
+      "P5-VWAP": {
+        "n": 138,
+        "settled": 133,
+        "wins": 38,
+        "winRate": 0.2857,
+        "grossR": -0.1351,
+        "netR_paxg": -0.8224,
+        "netR_xm": -0.1879,
+        "medianCostR_paxg": 0.406,
+        "effective": {
+          "n": 138,
+          "effN": 127.9,
+          "clusters": 25,
+          "tNaive": -1.19,
+          "tCluster": -1.14,
+          "inflation": 1.04
+        }
+      },
+      "P7-SCALP": {
+        "n": 131,
+        "settled": 127,
+        "wins": 45,
+        "winRate": 0.3543,
+        "grossR": 0.0625,
+        "netR_paxg": -0.8786,
+        "netR_xm": -0.0099,
+        "medianCostR_paxg": 0.685,
+        "effective": {
+          "n": 131,
+          "effN": 131,
+          "clusters": 24,
+          "tNaive": 0.5,
+          "tCluster": 0.53,
+          "inflation": 0.95
+        }
+      },
+      "P6-COMP": {
+        "n": 98,
+        "settled": 82,
+        "wins": 27,
+        "winRate": 0.3293,
+        "grossR": 0.0421,
+        "netR_paxg": -0.2632,
+        "netR_xm": 0.0186,
+        "medianCostR_paxg": 0.231,
+        "effective": {
+          "n": 98,
+          "effN": 98,
+          "clusters": 21,
+          "tNaive": 0.31,
+          "tCluster": 0.32,
+          "inflation": 0.99
+        }
+      },
+      "PIVOT-REJECT": {
+        "n": 161,
+        "settled": 159,
+        "wins": 37,
+        "winRate": 0.2327,
+        "grossR": -0.3026,
+        "netR_paxg": -1.2145,
+        "netR_xm": -0.3727,
+        "medianCostR_paxg": 0.591,
+        "effective": {
+          "n": 161,
+          "effN": 120.3,
+          "clusters": 25,
+          "tNaive": -3.04,
+          "tCluster": -2.63,
+          "inflation": 1.16
+        }
+      },
+      "THREE-BAR": {
+        "n": 207,
+        "settled": 207,
+        "wins": 25,
+        "winRate": 0.1208,
+        "grossR": -0.6377,
+        "netR_paxg": -4.4035,
+        "netR_xm": -0.9274,
+        "medianCostR_paxg": 2.007,
+        "effective": {
+          "n": 207,
+          "effN": 207,
+          "clusters": 25,
+          "tNaive": -9.36,
+          "tCluster": -11.73,
+          "inflation": 0.8
+        }
+      },
+      "LONDON-FIX": {
+        "n": 87,
+        "settled": 69,
+        "wins": 17,
+        "winRate": 0.2464,
+        "grossR": -0.2052,
+        "netR_paxg": -0.5692,
+        "netR_xm": -0.2332,
+        "medianCostR_paxg": 0.258,
+        "effective": {
+          "n": 87,
+          "effN": 87,
+          "clusters": 24,
+          "tNaive": -1.62,
+          "tCluster": -1.76,
+          "inflation": 0.92
+        }
+      },
+      "NY-OPEN-DRIVE": {
+        "n": 51,
+        "settled": 41,
+        "wins": 11,
+        "winRate": 0.2683,
+        "grossR": -0.0254,
+        "netR_paxg": -0.3583,
+        "netR_xm": -0.051,
+        "medianCostR_paxg": 0.216,
+        "effective": {
+          "n": 51,
+          "effN": 51,
+          "clusters": 23,
+          "tNaive": -0.14,
+          "tCluster": -0.18,
+          "inflation": 0.79
+        }
+      },
+      "NR7-BREAK": {
+        "n": 136,
+        "settled": 119,
+        "wins": 34,
+        "winRate": 0.2857,
+        "grossR": -0.1314,
+        "netR_paxg": -0.5601,
+        "netR_xm": -0.1643,
+        "medianCostR_paxg": 0.285,
+        "effective": {
+          "n": 136,
+          "effN": 117.8,
+          "clusters": 24,
+          "tNaive": -1.19,
+          "tCluster": -1.11,
+          "inflation": 1.07
+        }
+      },
+      "FVG-FILL": {
+        "n": 153,
+        "settled": 132,
+        "wins": 39,
+        "winRate": 0.2955,
+        "grossR": -0.0383,
+        "netR_paxg": -0.438,
+        "netR_xm": -0.069,
+        "medianCostR_paxg": 0.286,
+        "effective": {
+          "n": 153,
+          "effN": 153,
+          "clusters": 25,
+          "tNaive": -0.36,
+          "tCluster": -0.41,
+          "inflation": 0.88
+        }
+      },
+      "ER-IGNITION": {
+        "n": 74,
+        "settled": 74,
+        "wins": 14,
+        "winRate": 0.1892,
+        "grossR": -0.4324,
+        "netR_paxg": -1.3693,
+        "netR_xm": -0.5045,
+        "medianCostR_paxg": 0.591,
+        "effective": {
+          "n": 74,
+          "effN": 61.9,
+          "clusters": 24,
+          "tNaive": -3.14,
+          "tCluster": -2.88,
+          "inflation": 1.09
+        }
+      },
+      "MFI-SQUAT": {
+        "n": 115,
+        "settled": 105,
+        "wins": 31,
+        "winRate": 0.2952,
+        "grossR": -0.0766,
+        "netR_paxg": -0.636,
+        "netR_xm": -0.1196,
+        "medianCostR_paxg": 0.354,
+        "effective": {
+          "n": 115,
+          "effN": 115,
+          "clusters": 23,
+          "tNaive": -0.62,
+          "tCluster": -0.7,
+          "inflation": 0.88
+        }
+      },
+      "RSI-DIVERGE": {
+        "n": 40,
+        "settled": 39,
+        "wins": 9,
+        "winRate": 0.2308,
+        "grossR": -0.309,
+        "netR_paxg": -2.2302,
+        "netR_xm": -0.4568,
+        "medianCostR_paxg": 1.386,
+        "effective": {
+          "n": 40,
+          "effN": 40,
+          "clusters": 19,
+          "tNaive": -1.55,
+          "tCluster": -1.72,
+          "inflation": 0.9
+        }
+      },
+      "SWEEP-V2": {
+        "n": 175,
+        "settled": 172,
+        "wins": 44,
+        "winRate": 0.2558,
+        "grossR": -0.2198,
+        "netR_paxg": -1.642,
+        "netR_xm": -0.3292,
+        "medianCostR_paxg": 0.623,
+        "effective": {
+          "n": 175,
+          "effN": 157.2,
+          "clusters": 24,
+          "tNaive": -2.22,
+          "tCluster": -2.11,
+          "inflation": 1.06
+        }
+      },
+      "EMA50-HOLD": {
+        "n": 116,
+        "settled": 109,
+        "wins": 30,
+        "winRate": 0.2752,
+        "grossR": -0.1442,
+        "netR_paxg": -0.8844,
+        "netR_xm": -0.2011,
+        "medianCostR_paxg": 0.433,
+        "effective": {
+          "n": 116,
+          "effN": 116,
+          "clusters": 24,
+          "tNaive": -1.18,
+          "tCluster": -1.57,
+          "inflation": 0.75
+        }
+      },
+      "BOS-RETEST": {
+        "n": 83,
+        "settled": 74,
+        "wins": 25,
+        "winRate": 0.3378,
+        "grossR": 0.0367,
+        "netR_paxg": -0.4057,
+        "netR_xm": 0.0027,
+        "medianCostR_paxg": 0.23,
+        "effective": {
+          "n": 83,
+          "effN": 83,
+          "clusters": 24,
+          "tNaive": 0.25,
+          "tCluster": 0.3,
+          "inflation": 0.82
+        }
+      },
+      "ASIA-BREAK": {
+        "n": 90,
+        "settled": 75,
+        "wins": 20,
+        "winRate": 0.2667,
+        "grossR": -0.0423,
+        "netR_paxg": -0.449,
+        "netR_xm": -0.0735,
+        "medianCostR_paxg": 0.231,
+        "effective": {
+          "n": 90,
+          "effN": 90,
+          "clusters": 24,
+          "tNaive": -0.31,
+          "tCluster": -0.36,
+          "inflation": 0.87
+        }
+      },
+      "PIN-REJECT": {
+        "n": 138,
+        "settled": 138,
+        "wins": 17,
+        "winRate": 0.1232,
+        "grossR": -0.6304,
+        "netR_paxg": -4.6494,
+        "netR_xm": -0.9396,
+        "medianCostR_paxg": 2.056,
+        "effective": {
+          "n": 138,
+          "effN": 138,
+          "clusters": 24,
+          "tNaive": -7.48,
+          "tCluster": -7.63,
+          "inflation": 0.98
+        }
+      },
+      "PDL-SWEEP": {
+        "n": 80,
+        "settled": 80,
+        "wins": 16,
+        "winRate": 0.2,
+        "grossR": -0.4,
+        "netR_paxg": -1.4954,
+        "netR_xm": -0.4843,
+        "medianCostR_paxg": 0.716,
+        "effective": {
+          "n": 80,
+          "effN": 71.2,
+          "clusters": 21,
+          "tNaive": -2.96,
+          "tCluster": -2.8,
+          "inflation": 1.06
+        }
+      },
+      "PD-EQUILIBRIUM": {
+        "n": 237,
+        "settled": 237,
+        "wins": 38,
+        "winRate": 0.1603,
+        "grossR": -0.519,
+        "netR_paxg": -5.8059,
+        "netR_xm": -0.9257,
+        "medianCostR_paxg": 2.26,
+        "effective": {
+          "n": 237,
+          "effN": 205.4,
+          "clusters": 24,
+          "tNaive": -7.24,
+          "tCluster": -6.74,
+          "inflation": 1.07
+        }
+      },
+      "MMOVE": {
+        "n": 204,
+        "settled": 177,
+        "wins": 63,
+        "winRate": 0.3559,
+        "grossR": 0.0836,
+        "netR_paxg": -0.2391,
+        "netR_xm": 0.0587,
+        "medianCostR_paxg": 0.232,
+        "effective": {
+          "n": 204,
+          "effN": 204,
+          "clusters": 25,
+          "tNaive": 0.88,
+          "tCluster": 1.54,
+          "inflation": 0.57
+        }
+      },
+      "FVG-HVN": {
+        "n": 159,
+        "settled": 145,
+        "wins": 38,
+        "winRate": 0.2621,
+        "grossR": -0.1622,
+        "netR_paxg": -0.7089,
+        "netR_xm": -0.2042,
+        "medianCostR_paxg": 0.336,
+        "effective": {
+          "n": 159,
+          "effN": 159,
+          "clusters": 24,
+          "tNaive": -1.59,
+          "tCluster": -2.26,
+          "inflation": 0.7
+        }
+      },
+      "ADR-FADE": {
+        "n": 161,
+        "settled": 161,
+        "wins": 32,
+        "winRate": 0.1988,
+        "grossR": -0.4037,
+        "netR_paxg": -1.6252,
+        "netR_xm": -0.4977,
+        "medianCostR_paxg": 1.234,
+        "effective": {
+          "n": 161,
+          "effN": 128.6,
+          "clusters": 23,
+          "tNaive": -4.27,
+          "tCluster": -3.81,
+          "inflation": 1.12
+        }
+      },
+      "FIB-618": {
+        "n": 132,
+        "settled": 127,
+        "wins": 38,
+        "winRate": 0.2992,
+        "grossR": -0.0872,
+        "netR_paxg": -0.6509,
+        "netR_xm": -0.1306,
+        "medianCostR_paxg": 0.391,
+        "effective": {
+          "n": 132,
+          "effN": 132,
+          "clusters": 25,
+          "tNaive": -0.74,
+          "tCluster": -0.9,
+          "inflation": 0.82
+        }
+      },
+      "AVWAP-RECLAIM": {
+        "n": 118,
+        "settled": 112,
+        "wins": 37,
+        "winRate": 0.3304,
+        "grossR": -0.0051,
+        "netR_paxg": -0.5007,
+        "netR_xm": -0.0432,
+        "medianCostR_paxg": 0.32,
+        "effective": {
+          "n": 118,
+          "effN": 118,
+          "clusters": 24,
+          "tNaive": -0.04,
+          "tCluster": -0.05,
+          "inflation": 0.88
+        }
+      },
+      "HA-FLIP": {
+        "n": 109,
+        "settled": 97,
+        "wins": 31,
+        "winRate": 0.3196,
+        "grossR": 0.0248,
+        "netR_paxg": -0.4437,
+        "netR_xm": -0.0113,
+        "medianCostR_paxg": 0.295,
+        "effective": {
+          "n": 109,
+          "effN": 96.7,
+          "clusters": 24,
+          "tNaive": 0.19,
+          "tCluster": 0.18,
+          "inflation": 1.06
+        }
+      },
+      "P5-DRIVE": {
+        "n": 48,
+        "settled": 41,
+        "wins": 16,
+        "winRate": 0.3902,
+        "grossR": 0.2146,
+        "netR_paxg": -0.2398,
+        "netR_xm": 0.1796,
+        "medianCostR_paxg": 0.317,
+        "effective": {
+          "n": 48,
+          "effN": 48,
+          "clusters": 21,
+          "tNaive": 1.07,
+          "tCluster": 1.55,
+          "inflation": 0.69
+        }
+      },
+      "SQUEEZE-FIRE": {
+        "n": 50,
+        "settled": 45,
+        "wins": 16,
+        "winRate": 0.3556,
+        "grossR": 0.1082,
+        "netR_paxg": -0.3284,
+        "netR_xm": 0.0746,
+        "medianCostR_paxg": 0.26,
+        "effective": {
+          "n": 50,
+          "effN": 50,
+          "clusters": 24,
+          "tNaive": 0.55,
+          "tCluster": 0.55,
+          "inflation": 0.99
+        }
+      },
+      "EQL-SWEEP": {
+        "n": 54,
+        "settled": 53,
+        "wins": 12,
+        "winRate": 0.2264,
+        "grossR": -0.322,
+        "netR_paxg": -1.1184,
+        "netR_xm": -0.3832,
+        "medianCostR_paxg": 0.625,
+        "effective": {
+          "n": 54,
+          "effN": 54,
+          "clusters": 21,
+          "tNaive": -1.88,
+          "tCluster": -2.23,
+          "inflation": 0.84
+        }
+      },
+      "WEEKLY-OPEN": {
+        "n": 143,
+        "settled": 140,
+        "wins": 42,
+        "winRate": 0.3,
+        "grossR": -0.0904,
+        "netR_paxg": -0.9835,
+        "netR_xm": -0.1591,
+        "medianCostR_paxg": 0.623,
+        "effective": {
+          "n": 143,
+          "effN": 143,
+          "clusters": 25,
+          "tNaive": -0.79,
+          "tCluster": -1.14,
+          "inflation": 0.69
+        }
+      },
+      "DI-CROSS": {
+        "n": 111,
+        "settled": 96,
+        "wins": 27,
+        "winRate": 0.2813,
+        "grossR": -0.0832,
+        "netR_paxg": -0.4543,
+        "netR_xm": -0.1118,
+        "medianCostR_paxg": 0.256,
+        "effective": {
+          "n": 111,
+          "effN": 111,
+          "clusters": 24,
+          "tNaive": -0.68,
+          "tCluster": -0.84,
+          "inflation": 0.81
+        }
+      },
+      "PDH-SWEEP": {
+        "n": 68,
+        "settled": 67,
+        "wins": 22,
+        "winRate": 0.3284,
+        "grossR": -0.0135,
+        "netR_paxg": -1.0717,
+        "netR_xm": -0.0949,
+        "medianCostR_paxg": 0.66,
+        "effective": {
+          "n": 68,
+          "effN": 68,
+          "clusters": 21,
+          "tNaive": -0.08,
+          "tCluster": -0.09,
+          "inflation": 0.92
+        }
+      },
+      "EQH-SWEEP": {
+        "n": 41,
+        "settled": 41,
+        "wins": 15,
+        "winRate": 0.3659,
+        "grossR": 0.0976,
+        "netR_paxg": -0.9637,
+        "netR_xm": 0.0159,
+        "medianCostR_paxg": 0.625,
+        "effective": {
+          "n": 41,
+          "effN": 29.7,
+          "clusters": 19,
+          "tNaive": 0.43,
+          "tCluster": 0.36,
+          "inflation": 1.17
+        }
+      },
+      "SPRING": {
+        "n": 100,
+        "settled": 97,
+        "wins": 16,
+        "winRate": 0.1649,
+        "grossR": -0.4768,
+        "netR_paxg": -1.4848,
+        "netR_xm": -0.5544,
+        "medianCostR_paxg": 0.499,
+        "effective": {
+          "n": 100,
+          "effN": 97.5,
+          "clusters": 23,
+          "tNaive": -4.25,
+          "tCluster": -4.2,
+          "inflation": 1.01
+        }
+      },
+      "STRUCT-BOS": {
+        "n": 103,
+        "settled": 87,
+        "wins": 30,
+        "winRate": 0.3448,
+        "grossR": 0.1085,
+        "netR_paxg": -0.2413,
+        "netR_xm": 0.0816,
+        "medianCostR_paxg": 0.213,
+        "effective": {
+          "n": 103,
+          "effN": 103,
+          "clusters": 24,
+          "tNaive": 0.81,
+          "tCluster": 1.22,
+          "inflation": 0.67
+        }
+      },
+      "RIBBON-PULLBACK": {
+        "n": 100,
+        "settled": 88,
+        "wins": 23,
+        "winRate": 0.2614,
+        "grossR": -0.1317,
+        "netR_paxg": -0.6076,
+        "netR_xm": -0.1683,
+        "medianCostR_paxg": 0.283,
+        "effective": {
+          "n": 100,
+          "effN": 100,
+          "clusters": 24,
+          "tNaive": -1.03,
+          "tCluster": -1.09,
+          "inflation": 0.95
+        }
+      },
+      "TREND-RECLAIM": {
+        "n": 106,
+        "settled": 99,
+        "wins": 36,
+        "winRate": 0.3636,
+        "grossR": 0.0923,
+        "netR_paxg": -0.3945,
+        "netR_xm": 0.0549,
+        "medianCostR_paxg": 0.344,
+        "effective": {
+          "n": 106,
+          "effN": 106,
+          "clusters": 24,
+          "tNaive": 0.68,
+          "tCluster": 0.83,
+          "inflation": 0.82
+        }
+      },
+      "ICHI-KUMO": {
+        "n": 106,
+        "settled": 89,
+        "wins": 24,
+        "winRate": 0.2697,
+        "grossR": -0.134,
+        "netR_paxg": -0.482,
+        "netR_xm": -0.1608,
+        "medianCostR_paxg": 0.24,
+        "effective": {
+          "n": 106,
+          "effN": 106,
+          "clusters": 24,
+          "tNaive": -1.11,
+          "tCluster": -1.22,
+          "inflation": 0.91
+        }
+      },
+      "VWAP-REVERT": {
+        "n": 65,
+        "settled": 63,
+        "wins": 20,
+        "winRate": 0.3175,
+        "grossR": -0.0414,
+        "netR_paxg": -0.6588,
+        "netR_xm": -0.0889,
+        "medianCostR_paxg": 0.346,
+        "effective": {
+          "n": 65,
+          "effN": 65,
+          "clusters": 22,
+          "tNaive": -0.24,
+          "tCluster": -0.25,
+          "inflation": 0.97
+        }
+      },
+      "CUSUM-SHIFT": {
+        "n": 44,
+        "settled": 32,
+        "wins": 11,
+        "winRate": 0.3438,
+        "grossR": 0.0918,
+        "netR_paxg": -0.1835,
+        "netR_xm": 0.0707,
+        "medianCostR_paxg": 0.247,
+        "effective": {
+          "n": 44,
+          "effN": 44,
+          "clusters": 21,
+          "tNaive": 0.48,
+          "tCluster": 0.58,
+          "inflation": 0.82
+        }
+      },
+      "P5-WYCK": {
+        "n": 60,
+        "settled": 56,
+        "wins": 14,
+        "winRate": 0.25,
+        "grossR": -0.1955,
+        "netR_paxg": -0.6614,
+        "netR_xm": -0.2313,
+        "medianCostR_paxg": 0.336,
+        "effective": {
+          "n": 60,
+          "effN": 60,
+          "clusters": 23,
+          "tNaive": -1.18,
+          "tCluster": -1.5,
+          "inflation": 0.79
+        }
+      },
+      "ENGULF-LEVEL": {
+        "n": 95,
+        "settled": 95,
+        "wins": 21,
+        "winRate": 0.2211,
+        "grossR": -0.3368,
+        "netR_paxg": -3.3916,
+        "netR_xm": -0.5718,
+        "medianCostR_paxg": 1.561,
+        "effective": {
+          "n": 95,
+          "effN": 90.1,
+          "clusters": 23,
+          "tNaive": -2.62,
+          "tCluster": -2.55,
+          "inflation": 1.03
+        }
+      }
+    },
+    "sequentialByCell": {
+      "SWING/FAIR": {
+        "n": 10,
+        "settled": 10,
+        "wins": 3,
+        "winRate": 0.3,
+        "grossR": -0.1,
+        "netR_paxg": -0.5221,
+        "netR_xm": -0.1325,
+        "medianCostR_paxg": 0.399,
+        "effective": {
+          "n": 10,
+          "effN": 10,
+          "clusters": 7,
+          "tNaive": -0.22,
+          "tCluster": -0.26,
+          "inflation": 0.83
+        }
+      },
+      "SCALP/WEAK": {
+        "n": 15,
+        "settled": 14,
+        "wins": 4,
+        "winRate": 0.2857,
+        "grossR": -0.0386,
+        "netR_paxg": -0.6716,
+        "netR_xm": -0.0873,
+        "medianCostR_paxg": 0.551,
+        "effective": {
+          "n": 15,
+          "effN": 15,
+          "clusters": 7,
+          "tNaive": -0.11,
+          "tCluster": -0.12,
+          "inflation": 0.92
+        }
+      },
+      "SCALP/FAIR": {
+        "n": 210,
+        "settled": 203,
+        "wins": 49,
+        "winRate": 0.2414,
+        "grossR": -0.253,
+        "netR_paxg": -1.4291,
+        "netR_xm": -0.3434,
+        "medianCostR_paxg": 0.836,
+        "effective": {
+          "n": 210,
+          "effN": 210,
+          "clusters": 23,
+          "tNaive": -2.88,
+          "tCluster": -3.47,
+          "inflation": 0.83
+        }
+      },
+      "SCALP/STRONG": {
+        "n": 37,
+        "settled": 36,
+        "wins": 14,
+        "winRate": 0.3889,
+        "grossR": 0.1942,
+        "netR_paxg": -0.3919,
+        "netR_xm": 0.1491,
+        "medianCostR_paxg": 0.447,
+        "effective": {
+          "n": 37,
+          "effN": 37,
+          "clusters": 18,
+          "tNaive": 0.8,
+          "tCluster": 0.86,
+          "inflation": 0.93
+        }
+      }
+    },
+    "sequentialByKind": {
+      "P7-SCALP": {
+        "n": 18,
+        "settled": 18,
+        "wins": 7,
+        "winRate": 0.3889,
+        "grossR": 0.1667,
+        "netR_paxg": -0.9669,
+        "netR_xm": 0.0795,
+        "medianCostR_paxg": 1.113,
+        "effective": {
+          "n": 18,
+          "effN": 18,
+          "clusters": 14,
+          "tNaive": 0.47,
+          "tCluster": 0.51,
+          "inflation": 0.93
+        }
+      },
+      "ADR-FADE": {
+        "n": 45,
+        "settled": 45,
+        "wins": 9,
+        "winRate": 0.2,
+        "grossR": -0.4,
+        "netR_paxg": -1.6814,
+        "netR_xm": -0.4986,
+        "medianCostR_paxg": 1.366,
+        "effective": {
+          "n": 45,
+          "effN": 45,
+          "clusters": 17,
+          "tNaive": -2.21,
+          "tCluster": -2.37,
+          "inflation": 0.93
+        }
+      },
+      "ROUND-MAGNET": {
+        "n": 49,
+        "settled": 47,
+        "wins": 14,
+        "winRate": 0.2979,
+        "grossR": -0.0622,
+        "netR_paxg": -0.702,
+        "netR_xm": -0.1115,
+        "medianCostR_paxg": 0.56,
+        "effective": {
+          "n": 49,
+          "effN": 49,
+          "clusters": 18,
+          "tNaive": -0.32,
+          "tCluster": -0.42,
+          "inflation": 0.75
+        }
+      },
+      "STOCHRSI-TURN": {
+        "n": 10,
+        "settled": 9,
+        "wins": 3,
+        "winRate": 0.3333,
+        "grossR": 0.1072,
+        "netR_paxg": -1.1167,
+        "netR_xm": 0.0131,
+        "medianCostR_paxg": 0.702,
+        "effective": {
+          "n": 10,
+          "effN": 5.2,
+          "clusters": 6,
+          "tNaive": 0.23,
+          "tCluster": 0.17,
+          "inflation": 1.39
+        }
+      }
+    }
+  }
 }
