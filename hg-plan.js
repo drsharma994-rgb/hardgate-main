@@ -129,7 +129,80 @@
     }catch(e){ return null; }
   }
 
+  /* =====================================================================
+     IS THIS PLAN STILL AHEAD OF PRICE?
+
+     hgPlanLevels sizes entry, stop and T1 against each OTHER, which is the
+     right job and is why a plan can be a flawless 2.0R and still be
+     nonsense: none of that arithmetic knows where price is NOW.
+
+     Reported from the desk, XAUUSD SHORT SWING:
+
+       mark 4282.70   entry 4316.20   stop 4326.05   T1 4296.51
+
+     A true 2.0R — and T1 sits BETWEEN the mark and the entry, so price
+     climbing to fill the short has to cross TP1 on the way up. The target
+     is behind price, not ahead of it.
+
+     omnigold has named that geometry since v697 (hgOgEntryMarketNote) but
+     it lives in that tab's renderer, so every other gold desk — goldswing,
+     goldscalp, goldultra, goldpro, newgold, golddirection, super-gold,
+     omnigold1 — sized plans with no idea whether price had already walked
+     through them. This is the same rule in the shared layer those desks
+     already call, as a verdict rather than a sentence.
+
+     Two ways a pending plan can be dead on arrival:
+
+       stop-breached   price is already through the invalidation. A short
+                       whose stop is BELOW the mark is not a trade waiting
+                       to happen; it is a trade that already lost.
+       target-crossed  the target sits between the mark and the entry, as
+                       above — reaching the entry crosses the target.
+
+     Returns null when the mark or the plan is unknown: an unjudgeable plan
+     must not come back as 'ok'. Pure, no DOM, no globals. */
+  function hgPlanMarketGeometry(plan, mark){
+    try{
+      if (!plan) return null;
+      var dir = String(plan.dir || '').toLowerCase();
+      if (dir !== 'long' && dir !== 'short') return null;
+      var e = +plan.entry, s = +plan.stop, t1 = +plan.t1, m = +mark;
+      if (!isFinite(e) || !isFinite(m) || !(m > 0) || !(e > 0)) return null;
+
+      var long = (dir === 'long');
+
+      /* 1 — invalidation already through. Checked first: a breached stop
+         makes the target question moot. */
+      if (isFinite(s) && s > 0){
+        if (long ? (m <= s) : (m >= s)){
+          return { code: 'stop-breached', ok: false, dir: dir, mark: m,
+                   why: 'price is already through the stop at ' + s
+                      + ' — the invalidation happened before the entry filled' };
+        }
+      }
+
+      /* 2 — target behind price. Only meaningful while the entry is still
+         a retest AWAY from the mark in the direction price must travel. */
+      if (isFinite(t1) && t1 > 0){
+        /* A retest is an entry price must still TRAVEL to: a long buys the
+           dip below the mark (m > e), a short sells the rally above it
+           (m < e). Getting these the wrong way round makes the rule fire on
+           exactly the plans it should pass. */
+        var retest = long ? (m > e) : (m < e);
+        var crossed = long ? (t1 < m && t1 > e) : (t1 > m && t1 < e);
+        if (retest && crossed){
+          return { code: 'target-crossed', ok: false, dir: dir, mark: m,
+                   why: 'T1 ' + t1 + ' sits between the market and the entry — '
+                      + 'the retest crosses TP1 before the fill' };
+        }
+      }
+
+      return { code: 'ok', ok: true, dir: dir, mark: m, why: '' };
+    }catch(e){ return null; }
+  }
+
   G.applyExactEntry = applyExactEntry;
   G.hgPlanLevels    = hgPlanLevels;
+  G.hgPlanMarketGeometry = hgPlanMarketGeometry;
 
 })(typeof window !== 'undefined' ? window : globalThis);

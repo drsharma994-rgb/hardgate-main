@@ -5001,6 +5001,20 @@ terse status, and never launches a first-time scan on a global refresh.
     var gap = mkt - e;
     var pts = Math.abs(gap);
     var bits = ['MARKET ' + fmtPx(mkt)];
+    /* A stop price has already traded through is a trade that lost before it
+       filled, and it outranks every other thing this note can say. The shared
+       rule in hg-plan.js judges it (hgPlanMarketGeometry), so the same verdict
+       is available to the gold desks that do not have this renderer. */
+    try {
+      var geoFn = gfn('hgPlanMarketGeometry');
+      if (geoFn){
+        var g = geoFn({ dir: row && row.dir, entry: e, stop: plan && plan.stop,
+                        t1: t1 }, mkt);
+        if (g && g.code === 'stop-breached'){
+          return bits.join('') + ' · STOP ALREADY BREACHED — ' + esc(g.why);
+        }
+      }
+    } catch (eG) { /* the note below still stands on its own */ }
     if (pts < 0.5) return bits.join('') + ' · at entry';
     var dir = String(row.dir || '').toLowerCase();
     if (dir === 'short'){
