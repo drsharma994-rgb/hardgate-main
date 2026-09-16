@@ -4650,6 +4650,25 @@ function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId, bookMet
      can pass it through cardHTML without changing every caller signature */
   const gateLedgerHtml = (bookMeta.gateMeta && typeof hgGateLedgerBadge === 'function')
     ? hgGateLedgerBadge(bookMeta.gateMeta) : '';
+  /* PRICE MAY HAVE WALKED THROUGH THIS PLAN ALREADY — the shared rule in
+     hg-plan.js, rendered by hgPlanGeometryLineHtml. This is the same choke
+     point the forward log uses above, and for the same reason: SMC, ORDER
+     BLOCKS, TRAP, DIV, COIL and APEX all render here, so one call covers
+     six tabs that share no other code. hgSetupCardHTML delegates here for
+     every CLEAN card, which is why wiring setup-ui.js alone would have
+     missed exactly the cards that carry committed levels.
+
+     The mark comes from hgMpMarkOf, which reads only fields that mean
+     price NOW and falls back to the last close of bookMeta.rows — the bars
+     the scan was built on. No mark, no verdict. */
+  let geoLine = '';
+  try {
+    if (typeof hgPlanGeometryLineHtml === 'function'){
+      const geoMark = (typeof hgMpMarkOf === 'function') ? hgMpMarkOf(bookMeta, bookMeta, {}) : NaN;
+      geoLine = hgPlanGeometryLineHtml({ dir: dir, entry: entry, stop: stop, t1: t1 },
+                                       geoMark, { cls: 'note warn', style: 'margin-top:6px' }) || '';
+    }
+  } catch (eGeo) { geoLine = ''; }
   return `<div class="card ${dir}${tierCls}" data-hg-setup-sym="${symHtml}" data-hg-setup-dir="${dir}"${entryData}${stopData}>
     <div class="chead">${actDot}${venueHtml}<span class="sym">${symHtml}</span><span class="dir">${dir.toUpperCase()} · ${tierLabel}</span>${bookStamp}${tripleChip}${visionChipHtml}${confirmChip}${hiddenDivChip}${regimePausedChip}${confTierChip}</div>
     <div class="mini">${mini.map(([k,v])=>`<span class="k">${k}</span><span>${v}</span>`).join('')}</div>
@@ -4659,6 +4678,7 @@ function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId, bookMet
     ${deskEdgeBanner}
     <div class="gates">${gates.map(g=>`<span class="gpip ok">${g}</span>`).join('')}</div>
     <div class="plan">${plan}</div>
+    ${geoLine}
     ${strategyDetail}
     ${visionHtml}
     ${cid?`<div class="hgchart" id="${cid}"></div>`:''}

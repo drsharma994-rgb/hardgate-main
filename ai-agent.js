@@ -52,6 +52,18 @@ function setupLevelsTag(f){
     + ' · TP1 <b class="hg-num">' + agentPx(f.t1) + '</b>';
   if (fin(+f.t2)) h += ' · TP2 <b class="hg-num">' + agentPx(f.t2) + '</b>';
   if (rr != null) h += ' · <span class="hg-num">' + rr.toFixed(2) + 'R</span>';
+  /* price may have walked through this plan already — the shared rule in
+     hg-plan.js. AI AGENT relays setups other desks produced, so the mark
+     is whatever the source attached; hgMpMarkOf reads only fields that
+     mean price NOW, and falls back to the last close of any bars that
+     travelled with the setup. No mark, no verdict. */
+  try{
+    if (typeof W.hgPlanGeometryLineHtml === 'function'){
+      h += W.hgPlanGeometryLineHtml({ dir: f.dir, entry: f.entry, stop: f.stop, t1: f.t1 },
+        (typeof W.hgMpMarkOf === 'function') ? W.hgMpMarkOf(f, f, {}) : NaN,
+        { cls: 'hg-panel__note', style: 'margin-top:6px' }) || '';
+    }
+  }catch(eGeo){}
   return h;
 }
 

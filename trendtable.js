@@ -300,6 +300,17 @@ function trendmxAttachMeta(plan, gate, extra){
     plan.gateLabel = gate.label;
   }
   if (extra && extra.formationScore != null) plan.formationScore = extra.formationScore;
+  /* WHERE PRICE IS, carried with the plan. trendmxTicker already derives
+     exactly this — inp.price, else the last 4h close — for the gate
+     evaluation; the plan just never kept it, so the card could not tell
+     whether price had already walked through the levels it was drawing.
+     Positive finite only: an unknown mark stays absent and renders no
+     verdict rather than a wrong one. */
+  if (plan.mark == null && extra){
+    var tmMark = isFinite(+extra.price) ? +extra.price
+      : ((extra.rows4h && extra.rows4h.length) ? +extra.rows4h[extra.rows4h.length - 1].c : NaN);
+    if (isFinite(tmMark) && tmMark > 0) plan.mark = tmMark;
+  }
   if (!plan.planSrc) plan.planSrc = 'trendmx';
   if (typeof W.hgOmniPrincipalApply === 'function'){
     try{
@@ -329,7 +340,7 @@ function trendmxPlan(inp){
         tab: 'trendmx', style: 'swing', dir: dir, gate: gate,
       }));
       if (bl && bl.ok && bl.plan && tmValidSetup(bl.plan)){
-        return trendmxAttachMeta(bl.plan, bl.gate || gate, { formationScore: bl.formationScore, rows4h: inp.rows4h });
+        return trendmxAttachMeta(bl.plan, bl.gate || gate, { formationScore: bl.formationScore, rows4h: inp.rows4h, price: inp.price });
       }
       if (bl && bl.veto) return null;
     }
@@ -357,7 +368,7 @@ function trendmxPlanLegacy(inp){
           rows1h: inp.rows1h, ticker: ticker
         });
         if (fm && fm.ok && fm.hit && tmValidSetup(fm.hit)){
-          return trendmxAttachMeta(fm.hit, gate, { formationScore: fm.formationScore });
+          return trendmxAttachMeta(fm.hit, gate, { formationScore: fm.formationScore, rows4h: rows, price: inp.price });
         }
       }catch(eForm){}
     }
@@ -366,7 +377,7 @@ function trendmxPlanLegacy(inp){
     if (typeof hgSwingCleanPlan === 'function'){
       try{
         var sc = hgSwingCleanPlan(rows, ticker, dir);
-        if (tmValidSetup(sc)) return trendmxAttachMeta(sc, gate);
+        if (tmValidSetup(sc)) return trendmxAttachMeta(sc, gate, { rows4h: rows, price: inp.price });
       }catch(eSc){}
     }
 
@@ -374,7 +385,7 @@ function trendmxPlanLegacy(inp){
     if (typeof hgPlanLevelsCore === 'function'){
       try{
         var pl = hgPlanLevelsCore(dir, rows, null, { minRr: TM_MIN_RR, style: 'swing', type: 'TRENDMX' });
-        if (tmValidSetup(pl)) return trendmxAttachMeta(pl, gate);
+        if (tmValidSetup(pl)) return trendmxAttachMeta(pl, gate, { rows4h: rows, price: inp.price });
       }catch(ePl){}
     }
 
@@ -387,7 +398,7 @@ function trendmxPlanLegacy(inp){
           if (typeof hgApplyExactEntry === 'function'){
             s = hgApplyExactEntry(s, rows, { rows1h: inp.rows1h, style: s.type || 'swing', preferEdge: true }) || s;
           }
-          return trendmxAttachMeta(s, gate);
+          return trendmxAttachMeta(s, gate, { rows4h: rows, price: inp.price });
         }
       }catch(eSmart){}
     }
@@ -418,7 +429,7 @@ function trendmxPlanLegacy(inp){
       confirmed: null, note: st.note, planSrc: 'trendmx-fallback'
     };
     if (!tmValidSetup(fb)) return null;
-    return trendmxAttachMeta(fb, gate);
+    return trendmxAttachMeta(fb, gate, { rows4h: rows, price: inp.price });
   }catch(e){ return null; }
 }
 
@@ -435,6 +446,11 @@ function trendmxPlanHTML(s){
     + (isFinite(s.riskPct) ? ' · risk ' + fmtN(s.riskPct, 2) + '%' : '')
     + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(s.entry, s.stop) : '')
     + (s.note ? ' — ' + escH(s.note) : '')
+    /* price may have walked through this plan already — the shared rule in
+       hg-plan.js, judged against the mark trendmxAttachMeta carried over */
+    + ((typeof W !== 'undefined' && W && typeof W.hgPlanGeometryLineHtml === 'function')
+      ? (W.hgPlanGeometryLineHtml({ dir: s.dir, entry: s.entry, stop: s.stop, t1: s.t1 },
+                                  s.mark, { cls: 'note warn', style: 'margin-top:6px' }) || '') : '')
     /* the shared 14-gate indicator read attached by hgBestLevels */
     + ((typeof hgStrategyConfirmChipHtml === 'function')
       ? hgStrategyConfirmChipHtml(s.strategyConfirm, s.strategyWith, s.strategyAgainst) : '')

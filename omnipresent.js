@@ -1619,6 +1619,19 @@
             h += '<div>ENTRY <b>' + pxF(c.entry) + '</b> · STOP <b>' + pxF(c.stop)
               +  '</b> · T1 <b>' + pxF(c.t1) + '</b></div>';
           }
+          /* PRICE MAY HAVE WALKED THROUGH THIS PLAN ALREADY — the shared
+             rule in hg-plan.js, judged against c.livePx, which the scan
+             already attaches to every candidate. Judged on the plan printed
+             directly above: the 20x re-plan when that ran, the zone plan
+             otherwise. */
+          try{
+            if (gfn('hgPlanGeometryLineHtml')){
+              var opGeoPl = used20 ? q.x20 : c;
+              h += W.hgPlanGeometryLineHtml(
+                { dir: c.dir, entry: opGeoPl.entry, stop: opGeoPl.stop, t1: opGeoPl.t1 },
+                fin(c.livePx), { cls: 'note warn', style: 'display:block;margin-top:6px' }) || '';
+            }
+          }catch(eGeo){}
           /* the 20x arithmetic, spelled out — computed from the plan that
              actually qualified. A 1.2% stop is "small" until it is printed
              as 24% of the margin. */

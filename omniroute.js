@@ -6135,6 +6135,21 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
               +  ' · STOP ' + fmtPx(c.plan.stop)
               +  ' · T1 ' + fmtPx(c.plan.t1) + '</div>';
           }
+          /* PRICE MAY HAVE WALKED THROUGH THIS PLAN ALREADY — the shared
+             rule in hg-plan.js. OMNIROUTE already carries c.livePx (it is
+             what hgLivePriceGrade reads), so there is nothing to plumb: the
+             card just never asked the geometry question. Judged against the
+             plan printed above — the 20x re-plan when that is what ran, the
+             swing plan otherwise — because a verdict about levels the reader
+             cannot see is worse than none. */
+          try{
+            if (typeof W.hgPlanGeometryLineHtml === 'function'){
+              var geoPl = used20 ? q.x20 : c.plan;
+              h += W.hgPlanGeometryLineHtml(
+                { dir: c.dir, entry: geoPl.entry, stop: geoPl.stop, t1: geoPl.t1 },
+                fin(c.livePx), { cls: 'note warn', style: 'display:block;margin-top:6px' }) || '';
+            }
+          }catch(eGeo){}
           /* The 20x arithmetic, spelled out — computed from the plan that
              actually QUALIFIED (q came from that gate run). A 1.2% stop is
              "small" until it is printed as 24% of the margin. */

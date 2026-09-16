@@ -56,6 +56,12 @@ function bestCandFromClean(c, at){
     t1: N(c.t1),
     t2: N(c.t2),
     rr: N(c.rr),
+    /* WHERE PRICE IS. The BEST candidates these rows are built from carry
+       `mark` (cryptogates puts it on every hit, next to entry/stop/t1) and
+       this selection layer dropped it, so the desk card could not tell
+       whether price had already walked through the plan. Positive finite
+       only: absent stays absent and renders no verdict. */
+    mark: (isFinite(+c.mark) && +c.mark > 0) ? +c.mark : undefined,
     rows: c.rows || null,
     stack: c.stack || null,
     famScore: c.famScore,
@@ -110,6 +116,7 @@ function enrichSuperBestRowLite(c, tier, riskOpts, meta){
     t2: N(c.t2),
     rr: N(c.rr) || rrForCalc,
     tp: N(c.t1),
+    mark: (isFinite(+c.mark) && +c.mark > 0) ? +c.mark : undefined,
     tier: tier,
     scanner: meta.scanner || 'best',
     famScore: c.famScore,
@@ -212,6 +219,7 @@ function buildSnapFromBestScan(win, riskOpts, opts){
         t2: raw.t2,
         rr: raw.rr,
         tp: raw.t1,
+        mark: (isFinite(+raw.mark) && +raw.mark > 0) ? +raw.mark : undefined,
         tier: 'clean',
         scanner: 'best',
         famScore: c.famScore,
@@ -596,7 +604,15 @@ function mount(el){
         + '<div>T1<br/>' + fmt(r.tp, 6) + '</div>'
         + '<div>RR<br/>' + fmt(r.rr, 2) + '</div>'
         + '<div>LEV<br/>' + fmt(r.impliedLev, 1) + 'x</div>'
-        + '</div></div>';
+        + '</div>'
+        /* price may have walked through this plan already — the shared rule
+           in hg-plan.js, judged against the mark the row now carries, or the
+           last close of the bars it came with. No mark, no verdict. */
+        + ((typeof W.hgPlanGeometryLineHtml === 'function')
+          ? (W.hgPlanGeometryLineHtml({ dir: r.dir, entry: r.entry, stop: r.stop, t1: r.t1 },
+              (typeof W.hgMpMarkOf === 'function') ? W.hgMpMarkOf(r, r, {}) : NaN,
+              { cls: 'note warn', style: 'margin-top:8px' }) || '') : '')
+        + '</div>';
     }).join('');
     try { if (typeof W.hgMpPin === 'function') W.hgMpPin('super-best', rows, null, desk); } catch (eMp) {}
     desk.querySelectorAll('.hg-desk-card').forEach(function(card){

@@ -854,6 +854,15 @@ function setupCardHTML(setup){
     + '<span class="gpip">fade → ' + dirUp + '</span>'
     + '</div>'
     + '<div class="plan">' + planTxt + '</div>'
+    /* price may have walked through this plan already — the shared rule in
+       hg-plan.js. LIQS fades a flush, so its entry sits AWAY from the print
+       that triggered it and the question is live by construction. The mark
+       is the last close of the 1h candles this card already fetched for
+       hgStrategyRefine and hgSmcEnrich; no bars, no verdict. */
+    + ((hasPlan && G && typeof G.hgPlanGeometryLineHtml === 'function')
+      ? (G.hgPlanGeometryLineHtml({ dir: setup.dir, entry: setup.entry, stop: setup.stop, t1: setup.t1 },
+          (typeof G.hgMpMarkOf === 'function') ? G.hgMpMarkOf({ mark: setup.mark, rows: setupRows }, {}, {}) : NaN,
+          { cls: 'note warn', style: 'margin-top:6px' }) || '') : '')
     + ((typeof hgStrategyTradeDetailHtml === 'function') ? hgStrategyTradeDetailHtml(setup) : '')
     + stackHtml
     + tradeBtn

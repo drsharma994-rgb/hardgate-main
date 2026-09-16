@@ -3882,6 +3882,22 @@ function ticketTradeBtn(row, dir){
     return '<button class="toTrade" style="margin-top:8px" onclick="' + tradeOnclick + '">SEND TO TRADE PLAN →</button>';
   }catch(e){ return ''; }
 }
+/* PRICE MAY HAVE WALKED THROUGH THIS TICKET ALREADY.
+
+   The rule is hgPlanMarketGeometry and the markup is hgPlanGeometryLineHtml,
+   both in hg-plan.js. BRAIN needs neither a fetch nor a new field for it:
+   boardMarkFor(row) is the zero-fetch mark the limit-state chip already
+   reads — the xuniverse positioning cache, then the row's own snapshot,
+   honestly NaN otherwise. A NaN mark renders no verdict. */
+function ticketGeoLine(p, row, dir){
+  try{
+    if (typeof G.hgPlanGeometryLineHtml !== 'function' || !p) return '';
+    return G.hgPlanGeometryLineHtml({ dir: p.dir || dir, entry: p.entry, stop: p.stop, t1: p.t1 },
+                                    boardMarkFor(row),
+                                    { cls: 'note warn', style: 'margin-top:8px' }) || '';
+  }catch(e){ return ''; }
+}
+
 function ticketHTML(row, dir){
   try{
     var p = row.plan, dec = row.dec, long = dir === 'long';
@@ -3923,6 +3939,7 @@ function ticketHTML(row, dir){
       + (limitish ? '<br>limit working ~24h or until structure breaks' : '')
       + familyLineHTML(p)
       + '</div>'
+      + ticketGeoLine(p, row, dir)
       + ticketTradeBtn(row, dir)
       + '</div>';
   }catch(e){
@@ -4371,6 +4388,7 @@ function boardCardHTML(c, stamp){
       + '<br><span style="color:#9aa6b5">' + esc(st.note) + ' · as of ' + esc(stamp) + '</span>'
       + familyLineHTML(p)
       + '</div>'
+      + ticketGeoLine(p, row, dir)
       + ticketTradeBtn(row, dir)
       + '</div>';
   }catch(e){

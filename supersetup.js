@@ -88,6 +88,11 @@ function hitFromCand(c, meta){
     t1: N(c.t1),
     t2: N(c.t2),
     rr: N(c.rr),
+    /* WHERE PRICE IS. cryptogates puts `mark` on every hit it builds, right
+       next to entry/stop/t1, and this normalizer dropped it — so the desk
+       card could not tell whether price had already walked through the plan
+       it was drawing. Positive finite only: absent stays absent. */
+    mark: (isFinite(+c.mark) && +c.mark > 0) ? +c.mark : undefined,
     rows: c.rows || c.rows4h || null,
     source: meta.source,
     tier: tier,
@@ -1965,7 +1970,15 @@ function mount(el){
         + '<div><div class="k">T2</div><div class="v">' + fmt(r.tp2, 8) + '</div></div>'
         + '<div><div class="k">IMPL LEV</div><div class="v">' + fmt(r.impliedLev, 2) + 'x</div></div>'
         + '<div><div class="k">SAFE MAX</div><div class="v">' + (Number.isFinite(r.safeMaxLev) ? fmt(r.safeMaxLev, 0) + 'x' : '—') + '</div></div>'
-        + '</div></div>';
+        + '</div>'
+        /* price may have walked through this plan already — the shared rule
+           in hg-plan.js, judged against the mark the row now carries or the
+           last close of the bars it came with. No mark, no verdict. */
+        + ((typeof W.hgPlanGeometryLineHtml === 'function')
+          ? (W.hgPlanGeometryLineHtml({ dir: r.dir, entry: r.entry, stop: r.stop, t1: r.t1 },
+              (typeof W.hgMpMarkOf === 'function') ? W.hgMpMarkOf(r, r, {}) : NaN,
+              { cls: 'hg-note', style: 'margin-top:8px' }) || '') : '')
+        + '</div>';
     }).join('');
     try { if (typeof W.hgMpPin === 'function') W.hgMpPin('super-setup', rows, null, desk); } catch (eMp) {}
     desk.querySelectorAll('.hg-desk-card').forEach(function(card){

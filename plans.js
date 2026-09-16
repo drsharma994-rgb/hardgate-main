@@ -1680,7 +1680,19 @@ function hgStrategyBookFields(src){
     strategyAgainstKeys: src.strategyAgainstKeys,
     contextRead: src.contextRead,
     contextWarn: src.contextWarn,
-    contextGates: src.contextGates
+    contextGates: src.contextGates,
+    /* THE SAME WHITELIST BUG, THE OTHER END OF THE APP.
+
+       cryptogates.js puts `mark` — price at scan time — right next to
+       entry/stop/t1 on every hit it builds. This function is how those
+       fields reach cardHTML's bookMeta, and it dropped the one field that
+       says where price IS, so the card could not tell whether price had
+       already walked through the plan it was drawing.
+
+       Only a positive finite number passes: undefined stays undefined, so
+       a card with no knowable mark renders no verdict rather than a wrong
+       one. Scalar, like everything else on this object. */
+    mark: (isFinite(+src.mark) && +src.mark > 0) ? +src.mark : undefined
   };
 }
 

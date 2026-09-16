@@ -449,6 +449,27 @@ function goldProCardStack(o){
   }catch(e){ return null; }
 }
 
+/* PRICE MAY HAVE WALKED THROUGH THIS PLAN ALREADY.
+
+   v748 wired the shared rule into eight gold desks and skipped this one,
+   because GOLD PRO does not carry a live mark: it builds its levels off
+   4H bars and never fetches a tick. But the bars ARE the mark — the last
+   4H close is the most recent print this tab has seen, and it is the same
+   price renderStructurePanel already prints as '1D close' above.
+
+   hg-plan.js holds the rule and the markup; this only finds the mark.
+   No bars, no verdict. */
+function gpGeoLine(p, o){
+  try{
+    var W = (typeof window !== 'undefined') ? window : null;
+    if (!W || typeof W.hgPlanGeometryLineHtml !== 'function' || !p) return '';
+    var rows = (o && o.rows4h) || null;
+    var mark = (typeof W.hgMpMarkOf === 'function') ? W.hgMpMarkOf({ rows: rows }, {}, {}) : NaN;
+    return W.hgPlanGeometryLineHtml({ dir: p.dir, entry: p.entry, stop: p.stop, t1: p.t1 },
+                                    mark, { cls: 'note warn', style: 'margin-top:6px' }) || '';
+  }catch(e){ return ''; }
+}
+
 function renderLevelsPanel(o){
   var h = '<div class="panel"><h2>EXECUTION LEVELS <span>live 4H gold setup · stop = wider of 1.5×ATR14(4H) / 30-bar swing structure · T1 2R · T2 3.5R</span></h2>';
   if (!o || !o.plan) return h + '<div class="note warn">' + esc((o && o.reason) || 'levels unavailable.') + '</div></div>';
@@ -483,6 +504,7 @@ function renderLevelsPanel(o){
      + (p.structural ? ' — stop = wider of 1.5×ATR14(4H) / structure beyond the 30-bar swing'
                      : ' — stop = 1.5×ATR14(4H)')
      + '</div>';
+  h += gpGeoLine(p, o);
   if (o.note) h += '<div class="note" style="margin-top:6px">' + esc(o.note) + '</div>';
   h += stackHtml;
   var gpMeta = {
