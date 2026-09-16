@@ -294,7 +294,12 @@ assert(/^refreshed \d+ · skipped \d+ · failed 0 · /.test(chip.textContent),
 
 /* ---------------- 5. theme wiring: bright.css linked + precached ---------------- */
 const iStyleEnd = html.indexOf('</style>');
-const iBright = html.indexOf('<link rel="stylesheet" href="bright.css">');
+/* v750: stamp-cachebusters.mjs now stamps <link> stylesheets as well as
+   <script src>, so the href carries a ?v=NNN. This assertion is about WHERE
+   the link sits — after the inline </style>, inside <head> — not about the
+   href being bare, so it matches the tag rather than one literal spelling. */
+const mBright = /<link rel="stylesheet" href="bright\.css(?:\?v=\d+)?">/.exec(html);
+const iBright = mBright ? mBright.index : -1;
 assert(iStyleEnd !== -1 && iBright !== -1 && iStyleEnd < iBright && iBright < html.indexOf('</head>'),
   'bright.css <link> lands after the inline </style> block, inside <head>');
 const swSrc = readFileSync(path.join(root, 'sw.js'), 'utf8');

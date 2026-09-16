@@ -19,12 +19,26 @@ const ver = m[1];
 
 const htmlPath = resolve(ROOT, 'index.html');
 const src = readFileSync(htmlPath, 'utf8');
-let n = 0;
-const out = src.replace(/src="([^"]+\.js(?:\?v=\d+)?)"/g, (whole, hit) => {
-  if (hit.startsWith('http://') || hit.startsWith('https://') || hit.startsWith('//')) return whole;
+const external = hit => hit.startsWith('http://') || hit.startsWith('https://') || hit.startsWith('//');
+let n = 0, css = 0;
+let out = src.replace(/src="([^"]+\.js(?:\?v=\d+)?)"/g, (whole, hit) => {
+  if (external(hit)) return whole;
   n++;
   const base = hit.replace(/\?v=\d+$/, '');
   return `src="${base}?v=${ver}"`;
 });
+/* STYLESHEETS TOO. This stamped only <script src> and left every
+   <link href="...css"> to be edited by hand at each bump, so the two
+   local stylesheets carried a stale ?v= into v750 — caught by the
+   cache-buster check in test-smc-setups.mjs, which reads EVERY ?v= in the
+   file and not just the ones this script maintained. A CSS file served
+   from a 4h edge cache after a deploy is the same failure that motivated
+   this script in v649; there is no reason the rule stopped at .js. */
+out = out.replace(/href="([^"]+\.css(?:\?v=\d+)?)"/g, (whole, hit) => {
+  if (external(hit)) return whole;
+  css++;
+  const base = hit.replace(/\?v=\d+$/, '');
+  return `href="${base}?v=${ver}"`;
+});
 writeFileSync(htmlPath, out);
-console.log(`stamped ${n} <script> tags with ?v=${ver}`);
+console.log(`stamped ${n} <script> tags and ${css} <link> stylesheets with ?v=${ver}`);

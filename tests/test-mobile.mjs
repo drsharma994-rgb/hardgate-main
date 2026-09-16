@@ -24,8 +24,14 @@ console.log('== viewport ==');
 
 console.log('== shell wiring ==');
 {
-  const iBright = html.indexOf('href="bright.css"');
-  const iMobile = html.indexOf('href="mobile.css"');
+  /* v750: cache-busters are stamped onto stylesheets too, so match the href
+     with its optional ?v=NNN. The claim here is load ORDER, not spelling. */
+  const at = name => {
+    const m = new RegExp('href="' + name.replace('.', '\\.') + '(?:\\?v=\\d+)?"').exec(html);
+    return m ? m.index : -1;
+  };
+  const iBright = at('bright.css');
+  const iMobile = at('mobile.css');
   ok(iBright > 0 && iMobile > iBright, 'mobile.css loads after bright.css');
   ok(/id="headerMenuBtn"/.test(html), 'hamburger exists');
   ok(/aria-label="/.test(html.match(/id="headerMenuBtn"[^>]*>/)[0]),
