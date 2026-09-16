@@ -7994,6 +7994,24 @@ terse status, and never launches a first-time scan on a global refresh.
     h += '<div><i>STOP</i><b>' + fmtPx(p.stop) + '</b><u>invalidation</u></div>';
     h += '<div><i>T1</i><b>' + fmtPx(p.t1) + '</b><u>' + esc(hgOgTargetReadout(Object.assign({ dir: c.dir }, p), c.horizon) || 'target') + '</u></div>';
     h += '</div>';
+    /* WHERE THE PLAN SITS AGAINST THE LIVE MARK.
+       hgOgTargetReadout measures T1 from the ENTRY, so a plan can be a clean
+       2.0R and still be nonsense against spot: on a short whose entry is a
+       retest ABOVE the market, a T1 that lands BETWEEN market and entry has
+       already been traded through. Price reaching the entry has to cross TP1
+       on the way up, so the target is behind price, not ahead of it.
+
+       hgOgEntryMarketNote already names that exact geometry and the market
+       picture cards have shown it since v697 — this row simply never called
+       it, so the settled-evidence panel was the one place that printed such a
+       plan with no warning at all. Reuse it rather than re-deriving it. */
+    var mktNote = '';
+    try { mktNote = hgOgEntryMarketNote(c, p) || ''; } catch (eMn) { mktNote = ''; }
+    if (mktNote){
+      var crossesTp1 = mktNote.indexOf('crosses TP1') !== -1;
+      h += '<div class="hg-mp-note' + (crossesTp1 ? ' warn' : '') + '" style="margin-top:6px">'
+        + esc(mktNote) + '</div>';
+    }
     h += '<div class="row" style="margin-top:8px">'
       + '<button type="button" class="btn og-xm-send" data-og-key="' + esc(ogTradeKey(c)) + '">SEND TICKET TO XM</button>'
       + '</div></div>';

@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v744',
-  pack: 'Setup Intelligence reads as part of the desk, and never prints NaN for an absent R',
+  version: 'hg-v745',
+  pack: 'settled rows warn when the retest crosses TP1 before fill',
   built: '2026-09-15T12:00:00Z'
 };
 

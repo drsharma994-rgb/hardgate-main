@@ -120,6 +120,45 @@ console.log('\n== the panel no longer sells an unreachable bar ==');
      'it no longer tells the reader to scan towards an unreachable bar');
 }
 
+console.log('\n== a plan that is a clean 2R and still nonsense against spot ==');
+{
+  /* Reported from the desk, XAUUSD SHORT SWING / THREE-BAR:
+       market 4282.70   entry 4316.20   stop 4326.05   T1 4296.51
+     The arithmetic is right — risk is 9.85, and 4316.20 - 2(9.85) = 4296.50,
+     so T1 really is 2.0R and the "20 pts · 0.46%" readout matches. What is
+     wrong is WHERE it sits: the entry is a retest 34 pts ABOVE the market, and
+     T1 lands BETWEEN market and entry. Price climbing to the entry must cross
+     TP1 on the way, so the target is behind price rather than ahead of it.
+
+     hgOgEntryMarketNote has named that geometry since v697, but the settled-
+     evidence row never called it, so this panel was the one place that printed
+     such a plan with no warning at all. */
+  const entry = 4316.20, stop = 4326.05, t1 = 4296.51, mkt = 4282.70;
+  const risk = stop - entry;
+  ok(Math.abs((entry - t1) / risk - 2) < 0.01, 'the plan really is 2.0R — the arithmetic was never the bug');
+  ok(t1 > mkt && t1 < entry, 'and T1 sits between the market and the entry');
+
+  const note = W.hgOgEntryMarketNote({ dir: 'short', livePx: mkt }, { entry, stop, t1 });
+  ok(/crosses TP1 before fill/.test(note), 'the detector names it: the retest crosses TP1 before fill');
+
+  const row = {
+    horizon: 'SWING', kind: 'THREE-BAR', dir: 'short', livePx: mkt,
+    grade: { ticket: true }, plan: { entry, stop, t1 },
+    settledEv: { source: 'OMNIGOLD:SWING:THREE-BAR', wins: 1, samples: 1, hit: 1,
+                 avgRr: 2.0, wilson: wilson(1, 1) }
+  };
+  const html = W.hgOgSettledExecutePanelHtml({
+    execute: [], proven: [], best: [row], minLo: 0.95, minN: 15, edgeMinN: 25, edgeMargin: 0.02
+  });
+  ok(/crosses TP1 before fill/.test(html), 'and the settled-evidence row now carries that warning');
+  ok(/limit retest/.test(html), 'along with the fact that it is a retest, not a market short');
+
+  /* a plan whose T1 is genuinely ahead of price must NOT be flagged */
+  const clean = W.hgOgEntryMarketNote({ dir: 'short', livePx: 4320.00 },
+                                      { entry: 4316.20, stop: 4326.05, t1: 4296.51 });
+  ok(!/crosses TP1/.test(clean), 'a target still ahead of price raises no warning');
+}
+
 console.log('\n== source still carries the old names for the wired-in checks ==');
 {
   const GOLD = fs.readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
