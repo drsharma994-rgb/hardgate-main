@@ -1383,13 +1383,11 @@
      hg-plan.js. Silent without a mark or the rule. */
   function og1GeoLine(c){
     try{
-      var fn = (typeof W !== 'undefined' && W && W.hgPlanMarketGeometry)
-        || (typeof window !== 'undefined' && window && window.hgPlanMarketGeometry) || null;
+      var fn = (typeof W !== 'undefined' && W && W.hgPlanGeometryLineHtml)
+        || (typeof window !== 'undefined' && window && window.hgPlanGeometryLineHtml) || null;
       if (typeof fn !== 'function' || !c) return '';
-      var g = fn({ dir: c.dir, entry: c.entry, stop: c.stop, t1: c.t1 }, c.mark);
-      if (!g || g.ok) return '';
-      var label = (g.code === 'stop-breached') ? 'STOP ALREADY BREACHED' : 'TARGET BEHIND PRICE';
-      return '<div class="og1-note warn"><b>' + label + ':</b> ' + esc(g.why) + '</div>';
+      return fn({ dir: c.dir, entry: c.entry, stop: c.stop, t1: c.t1 },
+                c.mark, { cls: 'og1-note warn' }) || '';
     }catch(e){ return ''; }
   }
 

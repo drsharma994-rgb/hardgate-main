@@ -544,6 +544,47 @@ function hgMpFirstNum(){
   return NaN;
 }
 
+/* WHERE IS PRICE NOW?
+
+   hgNormalizeSetupRow whitelists the fields a card may show, and every
+   price-now field fell outside it. So the shared renderers in setup-ui.js —
+   the MOST PROBABLE panel alone is pinned by 29 tabs — drew ENTRY / STOP /
+   T1 / T2 with no idea whether price had already walked through them. That
+   is the geometry hgPlanMarketGeometry exists to judge, and it cannot judge
+   anything without a mark.
+
+   Only fields that unambiguously mean price NOW are read. `price` is not on
+   the list: across this repo it means the entry price about as often as the
+   live one, and a wrong mark does not produce a missing verdict — it
+   produces a confident WRONG one, which is worse than silence. The last
+   candle close is the honest last resort: it is the most recent print the
+   desk that built the plan actually saw, and it is the same mark goldswing
+   derives for itself.
+
+   Returns NaN when nothing real is available, and NaN renders no verdict.
+   Never invents a mark. */
+function hgMpMarkOf(raw, src, nest){
+  var m = hgMpFirstNum(
+    raw.mark, src.mark, nest.mark,
+    raw.pxNow, src.pxNow, nest.pxNow,
+    raw.livePx, src.livePx, nest.livePx,
+    raw.lastPx, src.lastPx, nest.lastPx,
+    raw.spotPx, src.spotPx, nest.spotPx,
+    raw.spot, src.spot, nest.spot
+  );
+  if (isFinite(m) && m > 0) return m;
+  var bars = raw.rows || raw.candles || raw.bars || raw.ohlc
+    || nest.rows || nest.candles || nest.bars || nest.ohlc;
+  if (Array.isArray(bars) && bars.length){
+    var lastBar = bars[bars.length - 1];
+    if (lastBar && typeof lastBar === 'object'){
+      m = hgMpNum(lastBar.c != null ? lastBar.c : lastBar.close);
+      if (isFinite(m) && m > 0) return m;
+    }
+  }
+  return NaN;
+}
+
 function hgNormalizeSetupRow(raw){
   if (!raw || typeof raw !== 'object') return null;
   var plan = (raw.plan && typeof raw.plan === 'object' && !Array.isArray(raw.plan)) ? raw.plan : null;
@@ -584,6 +625,9 @@ function hgNormalizeSetupRow(raw){
     rankBoost: raw.rankBoost != null ? raw.rankBoost : nest.rankBoost
   };
   if (isFinite(t2) && t2 > 0) row.t2 = t2;
+  /* scalar, so the JSON-clone note below still holds */
+  var mark = hgMpMarkOf(raw, src, nest);
+  if (isFinite(mark) && mark > 0) row.mark = mark;
   if (!hgSetupHasLevels(row)) return null;
   var tier = String(raw.tier || nest.tier || '').toLowerCase();
   var confirmed = !!(raw.confirmed || (setup && setup.confirmed) || (raw.grade && raw.grade.ticket) || raw.ticket);
@@ -2380,6 +2424,9 @@ G.hgRankCryptoSetups = hgRankCryptoSetups;
 G.hgSetupHasLevels = hgSetupHasLevels;
 G.hgPickMostProbable = hgPickMostProbable;
 G.hgNormalizeSetupRow = hgNormalizeSetupRow;
+/* Exported so the mark can be tested on its own: a wrong one is worse than
+   none, and the whole geometry verdict rests on it. */
+G.hgMpMarkOf = hgMpMarkOf;
 G.hgCollectSetupRows = hgCollectSetupRows;
 G.hgPickMostProbableAny = hgPickMostProbableAny;
 G.hgIsBtcSymbol = hgIsBtcSymbol;

@@ -1718,14 +1718,11 @@ async function ngRunScan(){
    unjudgeable plan gets no claim in either direction. */
 function ngGeoLine(s){
   try{
-    var fn = (typeof W !== 'undefined' && W && W.hgPlanMarketGeometry)
-      || (typeof hgPlanMarketGeometry === 'function' ? hgPlanMarketGeometry : null);
+    var fn = (typeof W !== 'undefined' && W && W.hgPlanGeometryLineHtml)
+      || (typeof window !== 'undefined' && window && window.hgPlanGeometryLineHtml) || null;
     if (typeof fn !== 'function' || !s) return '';
-    var g = fn({ dir: s.dir, entry: s.entry, stop: s.stop, t1: s.t1 }, s.mark);
-    if (!g || g.ok) return '';
-    var label = (g.code === 'stop-breached') ? 'STOP ALREADY BREACHED' : 'TARGET BEHIND PRICE';
-    return '<div class="note warn" style="margin-top:6px;font-size:11px"><b>' + label
-      + ':</b> ' + esc(g.why) + '</div>';
+    return fn({ dir: s.dir, entry: s.entry, stop: s.stop, t1: s.t1 },
+              s.mark, { cls: 'note warn', style: 'margin-top:6px;font-size:11px' }) || '';
   }catch(e){ return ''; }
 }
 

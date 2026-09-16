@@ -893,14 +893,11 @@ function bannerHTML(best, ranked){
    unreachable rather than claiming the plan is fine. */
 function gsxGeoLine(c){
   try{
-    var fn = (typeof W !== 'undefined' && W && W.hgPlanMarketGeometry)
-      || (typeof hgPlanMarketGeometry === 'function' ? hgPlanMarketGeometry : null);
+    var fn = (typeof W !== 'undefined' && W && W.hgPlanGeometryLineHtml)
+      || (typeof window !== 'undefined' && window && window.hgPlanGeometryLineHtml) || null;
     if (typeof fn !== 'function' || !c) return '';
-    var g = fn({ dir: c.dir, entry: c.entry, stop: c.stop, t1: c.t1 }, c.mark);
-    if (!g || g.ok) return '';
-    var label = (g.code === 'stop-breached') ? 'STOP ALREADY BREACHED' : 'TARGET BEHIND PRICE';
-    return '<div class="gsx-geoline note warn" style="margin-top:4px"><b>' + label
-      + ':</b> ' + esc(g.why) + '</div>';
+    return fn({ dir: c.dir, entry: c.entry, stop: c.stop, t1: c.t1 },
+              c.mark, { cls: 'gsx-geoline note warn', style: 'margin-top:4px' }) || '';
   }catch(e){ return ''; }
 }
 

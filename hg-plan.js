@@ -201,8 +201,65 @@
     }catch(e){ return null; }
   }
 
+  /* =====================================================================
+     THE SAME VERDICT, RENDERED ONCE.
+
+     v748 wired hgPlanMarketGeometry into eight gold desks and each one got
+     its own copy of the same twelve lines — gswGeoLine, gsxGeoLine,
+     guGeoLine, ngGeoLine, gdGeoLine, sgGeoLine, og1GeoLine — differing only
+     in the CSS class on the wrapper. Eight copies of a rule is eight places
+     to fix it, and the tabs outside gold would have made it thirty.
+
+     So the rule renders here. Callers pass their own class and keep their
+     own look; what they stop carrying is the logic.
+
+     Returns null — not an empty note — when there is nothing to say: no
+     rule, no plan, no mark, or a plan that is fine. An unjudgeable plan
+     gets no claim in either direction, which is the same contract
+     hgPlanMarketGeometry itself keeps. */
+  var GEO_LABELS = { 'stop-breached': 'STOP ALREADY BREACHED',
+                     'target-crossed': 'TARGET BEHIND PRICE' };
+
+  function geoEsc(s){
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function hgPlanGeometryNote(plan, mark, opts){
+    try{
+      var g = hgPlanMarketGeometry(plan, mark);
+      if (!g || g.ok) return null;
+      var label = GEO_LABELS[g.code];
+      /* an unrecognised code is a new rule this renderer has not been
+         taught to name — say nothing rather than print a raw code */
+      if (!label) return null;
+      var o = opts || {};
+      var cls = o.cls ? String(o.cls) : 'note warn';
+      var style = o.style ? ' style="' + geoEsc(o.style) + '"' : '';
+      return {
+        code: g.code,
+        label: label,
+        why: g.why,
+        mark: g.mark,
+        html: '<div class="' + geoEsc(cls) + '"' + style + '><b>' + label
+            + ':</b> ' + geoEsc(g.why) + '</div>'
+      };
+    }catch(e){ return null; }
+  }
+
+  /* The one-liner the desks actually call: the HTML, or '' for nothing to
+     say. Kept separate from the note above so a caller that wants the
+     verdict without the markup — a gate, a log, a test — has it. */
+  function hgPlanGeometryLineHtml(plan, mark, opts){
+    var n = hgPlanGeometryNote(plan, mark, opts);
+    return n ? n.html : '';
+  }
+
   G.applyExactEntry = applyExactEntry;
   G.hgPlanLevels    = hgPlanLevels;
   G.hgPlanMarketGeometry = hgPlanMarketGeometry;
+  G.hgPlanGeometryNote = hgPlanGeometryNote;
+  G.hgPlanGeometryLineHtml = hgPlanGeometryLineHtml;
 
 })(typeof window !== 'undefined' ? window : globalThis);

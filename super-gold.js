@@ -809,13 +809,11 @@ function hitToEvaluation(hit){
    reported as a clean plan. */
 function sgGeoLine(r){
   try{
-    var fn = (typeof win !== 'undefined' && win && win.hgPlanMarketGeometry)
-      || (typeof window !== 'undefined' && window && window.hgPlanMarketGeometry) || null;
+    var fn = (typeof win !== 'undefined' && win && win.hgPlanGeometryLineHtml)
+      || (typeof window !== 'undefined' && window && window.hgPlanGeometryLineHtml) || null;
     if (typeof fn !== 'function' || !r) return '';
-    var g = fn({ dir: r.side || r.dir, entry: r.entry, stop: r.stop, t1: r.t1 }, r.mark);
-    if (!g || g.ok) return '';
-    var label = (g.code === 'stop-breached') ? 'STOP ALREADY BREACHED' : 'TARGET BEHIND PRICE';
-    return '<div class="hg-desk-note"><b>' + label + ':</b> ' + String(g.why) + '</div>';
+    return fn({ dir: r.side || r.dir, entry: r.entry, stop: r.stop, t1: r.t1 },
+              r.mark, { cls: 'hg-desk-note' }) || '';
   }catch(e){ return ''; }
 }
 

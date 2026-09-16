@@ -50,6 +50,8 @@ var SU_CSS = ''
 + '.hg-mp-grid i{display:block;font-style:normal;font-size:9px;letter-spacing:.12em;font-weight:800;color:#64748B;margin-bottom:4px}'
 + '.hg-mp-grid b{display:block;font-size:14px;font-weight:800;color:#020617}'
 + '.hg-mp-grid u{display:block;margin-top:2px;font-size:10px;color:#64748B;text-decoration:none}'
++ '.hg-mp-geo{margin-top:8px;padding:8px 10px;border:1px solid rgba(180,83,9,.45);border-radius:8px;background:rgba(251,191,36,.10);color:#b45309;font-size:11px;line-height:1.5;font-weight:600}'
++ '.hg-mp-geo b{font-weight:800;letter-spacing:.06em}'
 + '@media (max-width:720px){.hg-mp-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}';
 
 function suEsc(s){
@@ -117,6 +119,36 @@ function suOrderRunner(dir, entry, t1, t2){
   if (Math.abs(b - a) < 1e-12){ out.t2 = NaN; out.dropped = true; return out; }
   out.t1 = b; out.t2 = a; out.swapped = true;
   return out;
+}
+
+/* PRICE MAY HAVE WALKED THROUGH THIS PLAN ALREADY.
+
+   The rule is hgPlanMarketGeometry and the markup is hgPlanGeometryNote,
+   both in hg-plan.js; this is only the lookup that lets the three shared
+   renderers in this file reach them. Wiring it here rather than in each
+   tab is the whole point: the MOST PROBABLE panel alone is pinned by 29
+   tabs, so one edit covers what would otherwise be 29 copies of the same
+   twelve lines — which is exactly the mess v748 left across gold.
+
+   Silent whenever anything is missing: no helper, no plan, no mark, or a
+   plan that is fine. A card that cannot be judged makes no claim. */
+function suGeoLine(plan, mark, cls, style){
+  try{
+    if (typeof W.hgPlanGeometryLineHtml !== 'function') return '';
+    return W.hgPlanGeometryLineHtml(plan, mark, { cls: cls, style: style }) || '';
+  }catch(e){ return ''; }
+}
+
+/* Where price NOW comes from, for a shape this file was handed directly
+   rather than through hgNormalizeSetupRow. Same short field list, same
+   refusal to read `price`. */
+function suMarkOf(obj, nest){
+  try{
+    if (!obj) return NaN;
+    if (typeof W.hgMpMarkOf === 'function') return W.hgMpMarkOf(obj, obj, nest || {});
+    var m = +obj.mark;
+    return (isFinite(m) && m > 0) ? m : NaN;
+  }catch(e){ return NaN; }
 }
 
 function hgMpPx(n){
@@ -188,7 +220,11 @@ function hgMostProbablePanelHTML(kind, pick){
       + '<div><i>STOP</i><b>' + suEsc(hgMpPx(s)) + '</b><u>invalidation</u></div>'
       + '<div><i>T1</i><b>' + suEsc(hgMpPx(t1)) + '</b><u>' + (isFinite(rr) ? suFmt(rr, 1) + 'R take profit' : 'take profit') + '</u></div>'
       + t2Cell
-      + '</div></section>';
+      + '</div>'
+      /* t1 is the post-suOrderRunner level — the one actually printed
+         above — so the verdict judges what the reader can see. */
+      + suGeoLine({ dir: dir, entry: e, stop: s, t1: t1 }, suMarkOf(row), 'hg-mp-geo')
+      + '</section>';
   }catch(e){ return ''; }
 }
 
@@ -583,12 +619,38 @@ function hgSetupCardHTML(setup){
     + stackHtml
     + meshHtml
     + (plan ? '<div class="plan">' + plan + '</div>' : '')
+    + suGeoLine({ dir: dir, entry: entry, stop: stop, t1: t1 },
+                suMarkOf(setup, setup.plan && typeof setup.plan === 'object' ? setup.plan : null),
+                'note warn', 'margin-top:6px')
     + ((typeof W.hgStrategyTradeDetailHtml === 'function') ? W.hgStrategyTradeDetailHtml(bookMeta, { skipChip: true }) : '')
     + visionHtml
     + note
     + (cid ? '<div class="hgchart" id="' + cid + '"></div>' : '')
     + tradeBtn + bookBtn
     + '</div>';
+}
+
+/* A PINE SIGNAL'S `price` IS NOT ALWAYS PRICE NOW.
+
+   The note line below prints `mark <sig.price>`, but pinemath.js sets that
+   field to `closes[bi]` — the close of the BAR THAT SIGNALLED — and in one
+   path to the entry itself. On a fresh signal the signal bar is the last
+   bar and the two are the same thing. On a RECENT −4b signal they are not,
+   and judging a plan against a four-bar-old close would produce a
+   confident verdict about where price was, not where it is.
+
+   So sig.price is only trusted at barsAgo 0. Anything older has to supply
+   a real mark or get no verdict, which is the correct answer when the
+   honest response is "this card does not know". */
+function suPineMark(sig){
+  var m = suMarkOf(sig);
+  if (isFinite(m) && m > 0) return m;
+  var ago = +(sig && sig.barsAgo);
+  if (sig && (ago === 0 || !isFinite(ago))){
+    var p = +sig.price;
+    if (isFinite(p) && p > 0) return p;
+  }
+  return NaN;
 }
 
 /** Pine / Gold Pine / strategy panel card with unified tiers. */
@@ -655,6 +717,8 @@ function hgSetupPanelHTML(sig, opts){
     + '</div>'
     + stackHtml
     + '<div class="plan">' + planHtml + '</div>'
+    + suGeoLine({ dir: sig.dir, entry: sig.entry, stop: sig.stop, t1: sig.t1 },
+                suPineMark(sig), 'note warn', 'margin-top:6px')
     + ((typeof W.hgStrategyTradeDetailHtml === 'function') ? W.hgStrategyTradeDetailHtml(sig) : '')
     + tradeBtn + bookBtn
     + '</div>';
