@@ -837,9 +837,11 @@ console.log('== 13) wiring edits (index.html HG_NAV_GROUPS + sw.js) ==');
 {
   const html = fs.readFileSync(root + 'index.html', 'utf8');
   const gLine = (html.match(/\{ id:'gold'[^\n]*\n?/) || [''])[0];
-  /* v658 moved signallog GOLD -> COMMAND (SIGNAL LOG nav clash fix, documented
-     at index.html HG_NAV_GROUPS); the GOLD group membership is otherwise pinned. */
-  assert(/tabs:\['super-gold','omnigold','omnigold1','goldswing','goldscalp','goldultra','gold','goldpro','goldspot','goldcoint','goldpine'\]/.test(gLine),
+  /* v658 moved signallog GOLD -> COMMAND (SIGNAL LOG nav clash fix); v749
+     added optigold, newgold and golddirection, which had been in NO group and
+     so fell through HG_GROUP_FALLBACK into TOOLS. Membership is otherwise
+     pinned: composites and pick engines first, then swing/scalp, then context. */
+  assert(/tabs:\['super-gold','omnigold','omnigold1','optigold','newgold','golddirection','goldswing','goldscalp','goldultra','gold','goldpro','goldspot','goldcoint','goldpine'\]/.test(gLine),
          'GOLD group: super desk first, then swing/scalp scanners — got: ' + gLine.trim());
   const sw = fs.readFileSync(root + 'sw.js', 'utf8');
   assert(/HG_CACHE\s*=\s*'hg-v\d+'/.test(sw), 'service worker cache is hg-vN (alerts workstream)');

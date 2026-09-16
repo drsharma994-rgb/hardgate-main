@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v748',
-  pack: 'every gold desk now says when price has already walked through the plan',
+  version: 'hg-v749',
+  pack: 'OPTI GOLD, NEW GOLD and GOLD DIRECTION move from TOOLS into the GOLD group',
   built: '2026-09-15T12:00:00Z'
 };
 

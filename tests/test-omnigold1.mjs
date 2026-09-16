@@ -384,7 +384,10 @@ console.log('== wiring + deploy stamp ==');
   const vNum = HG_VER.replace(/^hg-v/, '');
   ok(new RegExp('omnigold1\\.js\\?v=' + vNum).test(idx), 'index.html loads omnigold1.js pinned to ' + HG_VER);
   ok(idx.indexOf('gold-seven-step.js?v=') < idx.indexOf('omnigold1.js?v=') && idx.indexOf('omnigold.js?v=') < idx.indexOf('omnigold1.js?v='), 'omnigold1.js loads after gold-seven-step.js and omnigold.js');
-  ok(/tabs:\['super-gold','omnigold','omnigold1','goldswing'/.test(idx), 'OMNIGOLD 1 sits in the GOLD group next to OMNIGOLD');
+  /* the claim is ADJACENCY, so assert that and not the whole tail — the
+     old regex re-pinned every tab after it and broke on v749's additions
+     without OMNIGOLD 1 having moved at all. */
+  ok(/tabs:\[[^\]]*'omnigold','omnigold1'/.test(idx), 'OMNIGOLD 1 sits in the GOLD group next to OMNIGOLD');
   ok(/t === 'omnigold1'/.test(idx), 'OMNIGOLD 1 is a must-scan tab on open');
   ok(/'\.\/omnigold1\.js'/.test(sw), 'sw.js HG_SHELL precaches omnigold1.js');
   ok(swCacheOk(sw), 'sw.js HG_CACHE matches build-stamp ' + HG_VER);
