@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v753',
-  pack: 'OMNIGOLD publishes 6 cards a day instead of 46, and its intervals admit the overlap',
+  version: 'hg-v754',
+  pack: 'OMNIGOLD says what holding it cost: an 18R drawdown, and how often an entry even fills',
   built: '2026-09-15T12:00:00Z'
 };
 

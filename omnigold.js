@@ -6163,6 +6163,11 @@ terse status, and never launches a first-time scan on a global refresh.
       h += '</div>';
       var mktNote = hgOgEntryMarketNote(row, p);
       if (mktNote) h += '<div class="hg-mp-note dim">' + esc(mktNote) + '</div>';
+      /* how often this kind of entry becomes a trade at all */
+      try {
+        h += hgOgFillRateNoteHtml(row.dir, p && p.entry,
+          fin(row.livePx) || fin(row.mark)) || '';
+      } catch (eFr2) {}
     } else {
       h += '<div class="hg-mp-head">' + esc(label) + ' · STAND ASIDE <span>no tape-aligned ticket</span></div>';
       h += '<div class="hg-mp-note">' + esc(hgOgMpNoneWhy(tape, heldMeta)) + '</div>';
@@ -7573,7 +7578,9 @@ terse status, and never launches a first-time scan on a global refresh.
       + esc(txt) + '</div>'
       /* replay-vs-venue honesty (hg-v533): the cohort loss above is a
          PAXG-cost fact; a cheaper venue re-prices the fee, not the record. */
-      + hgOgVenueCostNoteHtml();
+      + hgOgVenueCostNoteHtml()
+      /* and what the book it belongs to actually did to an account */
+      + hgOgBookExperienceHtml();
   }
 
   /* The legend's honest header — above the four tier cells, in warn style,
@@ -7700,6 +7707,122 @@ terse status, and never launches a first-time scan on a global refresh.
   /* 'replay: 37% WR, -0.78R net (n=713)' — the mechanic's settled replay
      record in muted small text, negative numbers included. The reader gets
      the honest history or nothing; '' when the kind has no n>=40 record. */
+  /* ====================================================================
+     WHAT HOLDING THIS BOOK WOULD HAVE FELT LIKE
+     ====================================================================
+
+     Everything else this desk prints is a per-trade statistic: win rate,
+     R multiple, Wilson bound, breakeven, family-wise correction. Not one
+     of them tells a reader what the EQUITY did, and on this book that is
+     the whole story.
+
+     Sequential ticket book — one position at a time, ticket-only, which is
+     the only book a person can actually run — over 2026-03-29..2026-09-12,
+     priced at XM:
+
+         final +3.2R     peak +4.2R     MAX DRAWDOWN 18.3R
+         longest losing streak 7        the hole ran 01 Apr -> 21 May
+
+     At 1% risk a trade that is an 18% account drawdown, held for seven
+     weeks, to finish +3%. A flat expectancy is not harmless — that shape
+     is exactly what people abandon at the bottom, and a card that reports
+     only the win rate helps them do it.
+
+     Numbers from scripts/omnigold-evidence-bake.mjs (bake.experience),
+     which computes them on the SEQUENTIAL book because a drawdown only
+     means anything walked in the order the trades were taken. Running it
+     on the overlapping firehose would draw a curve nobody ever rode. */
+  var HG_OG_BOOK_EXPERIENCE = {
+    window: '2026-03-29..2026-09-12',
+    src: 'scripts/omnigold-evidence-bake.mjs',
+    /* [finalR, peakR, maxDrawdownR, longestLosingStreak, n, from, to] */
+    ticketsXm:   [  3.15,  4.16,  18.30, 7, 105, '2026-04-01', '2026-05-21'],
+    ticketsPaxg: [-80.60,  1.90,  83.00, 7, 105, '2026-04-01', '2026-09-11'],
+    allXm:       [-69.30,  0.00,  73.40, 16, 275, '2026-03-27', '2026-09-03']
+  };
+
+  /* HOW OFTEN DOES THIS KIND OF ENTRY EVEN HAPPEN?
+
+     A resting order is not a trade until price comes to it, and the rate
+     at which that happens is not uniform. Measured over the walk's 9,435
+     published plans:
+
+         BUY        100.0%      SELL        100.0%   (at the market)
+         BUY_LIMIT   79.2%      SELL_LIMIT   75.3%
+         BUY_STOP    43.7%      SELL_STOP    52.5%
+
+     MORE THAN HALF OF BREAKOUT ENTRIES NEVER TRIGGER, and nothing in this
+     app said so. A mechanic whose record looks respectable on the trades
+     that filled is a different proposition when half of them never became
+     trades — the record is conditioned on filling, and the card was
+     quoting it as if it were unconditional.
+
+     Unfilled is NOT a loss and is excluded from every hit rate this desk
+     prints, here and in the replay. It is reported as its own fact,
+     because "this idea never happened" is a different outcome from "this
+     idea lost". Numbers from scripts/omnigold-evidence-bake.mjs (bake.fills). */
+  var HG_OG_FILL_RATES = {
+    'BUY': 1.0, 'SELL': 1.0,
+    'BUY_LIMIT': 0.792, 'SELL_LIMIT': 0.753,
+    'BUY_STOP': 0.437, 'SELL_STOP': 0.525
+  };
+
+  /* The order type a plan implies, priced against the live mark — the same
+     xmOrderType rule the bot and the backtest use, so the card, the walk
+     and the ticket cannot disagree about what kind of order this is. */
+  function hgOgFillRate(dir, entry, mark){
+    var e = fin(entry), m = fin(mark);
+    var long = String(dir || '').toLowerCase() !== 'short';
+    if (!(e > 0) || !(m > 0)) return null;
+    var rel = Math.abs(e - m) / m;
+    var name;
+    if (rel <= 0.0003) name = long ? 'BUY' : 'SELL';
+    else if (long) name = (e < m) ? 'BUY_LIMIT' : 'BUY_STOP';
+    else name = (e > m) ? 'SELL_LIMIT' : 'SELL_STOP';
+    var rate = HG_OG_FILL_RATES[name];
+    return (typeof rate === 'number') ? { orderType: name, fillRate: rate } : null;
+  }
+
+  function hgOgFillRateNoteHtml(dir, entry, mark){
+    try {
+      var f = hgOgFillRate(dir, entry, mark);
+      if (!f) return '';
+      /* silent at the market: "100% of market orders fill" is not news */
+      if (f.fillRate >= 0.999) return '';
+      var pct = (f.fillRate * 100).toFixed(0);
+      var warn = f.fillRate < 0.6;
+      return '<div class="dim og-fill-rate" style="font-size:10px;margin-top:1px'
+        + (warn ? ';color:#b45309;font-weight:600' : '') + '">'
+        + esc(f.orderType.replace('_', ' ') + ' — on the record this kind of entry triggers '
+          + pct + '% of the time'
+          + (warn ? '; more often than not it never becomes a trade at all' : ''))
+        + '</div>';
+    } catch (e) { return ''; }
+  }
+
+  function hgOgBookExperienceHtml(){
+    try {
+      var vc = null;
+      try { vc = hgOgVenueCost(); } catch (eV) { vc = null; }
+      var xm = vc && String(vc.venue).toUpperCase() === 'XM';
+      var row = xm ? HG_OG_BOOK_EXPERIENCE.ticketsXm : HG_OG_BOOK_EXPERIENCE.ticketsPaxg;
+      var venue = xm ? 'XM' : 'PAXG';
+      var fin0 = row[0], peak = row[1], dd = row[2], streak = row[3], n = row[4];
+      return '<div class="note warn og-book-experience" style="margin:8px 0;padding:6px 8px;'
+        + 'border:1px solid #f59e0b;border-left:3px solid #f59e0b;border-radius:4px;'
+        + 'background:rgba(245,158,11,0.06);font-size:0.85em">'
+        + '<b>WHAT HOLDING IT FELT LIKE</b> — ' + esc(venue) + ', ticket-only, one position at a time, '
+        + n + ' trades over ' + esc(HG_OG_BOOK_EXPERIENCE.window) + ': '
+        + 'finished <b>' + (fin0 >= 0 ? '+' : '') + fin0.toFixed(1) + 'R</b> '
+        + 'after a <b>' + dd.toFixed(1) + 'R drawdown</b> '
+        + '(peak ' + peak.toFixed(1) + 'R, ' + streak + ' losses in a row, the hole ran '
+        + esc(row[5]) + ' to ' + esc(row[6]) + '). '
+        + 'At 1% risk a trade that is ' + dd.toFixed(0) + '% of the account to finish '
+        + (fin0 >= 0 ? '+' : '') + fin0.toFixed(0) + '%.'
+        + '</div>';
+    } catch (e) { return ''; }
+  }
+
   function hgOgReplayLineHtml(kind){
     var ev = hgOgReplayEvidence(kind);
     if (!ev || !isFinite(fin(ev.winRate)) || !isFinite(fin(ev.avgNetR))) return '';
@@ -8468,6 +8591,13 @@ terse status, and never launches a first-time scan on a global refresh.
       h += '<div class="hg-mp-note' + (crossesTp1 ? ' warn' : '') + '" style="margin-top:6px">'
         + esc(mktNote) + '</div>';
     }
+    /* and how often an entry of this kind becomes a trade at all — the
+       same entry-vs-mark relationship the note above reads, priced against
+       the measured fill rate rather than left implicit */
+    try {
+      h += hgOgFillRateNoteHtml(c.dir, p && p.entry,
+        fin(c.livePx) || fin(c.mark) || fin(c.markAtFire)) || '';
+    } catch (eFr) {}
     h += '<div class="row" style="margin-top:8px">'
       + '<button type="button" class="btn og-xm-send" data-og-key="' + esc(ogTradeKey(c)) + '">SEND TICKET TO XM</button>'
       + '</div></div>';
@@ -10624,11 +10754,25 @@ terse status, and never launches a first-time scan on a global refresh.
           for (var ci = 0; ci < cands.length; ci++){
             var c = cands[ci];
             if (!c.plan) continue;
+            /* The EXACT forward key this record will carry, stamped on the
+               candidate so the lane throttle downstream can mark it shown or
+               hidden without reconstructing the key and guessing wrong about
+               cfg.label vs c.horizon. One source of truth for the key. */
+            c.__fwdKey = ['OMNIGOLD:' + cfg.label, c.kind, 'XAUUSD', c.dir, barT].join('|');
             try {
               fwdRecord({
                 tab: 'OMNIGOLD:' + cfg.label, mechanic: c.kind, sym: 'XAUUSD', tf: cfg.tf,
                 dir: c.dir, entry: c.plan.entry, stop: c.plan.stop, t1: c.plan.t1,
                 barT: barT, horizonBars: cfg.horizonBars, ticket: !!(c.grade && c.grade.ticket),
+                /* WAS IT ON THE SCREEN? hg-v753's lane throttle means the
+                   tab forms ~46 plans a day and shows about 6. The recording
+                   stays unthrottled on purpose — the in-sample pool measures
+                   the raw mechanic and the forward pool must measure the same
+                   thing — but without this the log could only ever answer how
+                   the MECHANIC did, never how the cards a reader actually saw
+                   did. Undefined until the throttle has run, which is after
+                   this point in the scan; hgOgMarkShownInForward stamps it. */
+                shown: undefined,
                 /* The A/B/C chip this setup wore when it fired. Written now so
                    the forward panel can judge the chips rather than trust them:
                    the grade counts CONFLUENCE, and confluence has never been
@@ -11109,6 +11253,32 @@ terse status, and never launches a first-time scan on a global refresh.
           if (ogThr && ogThr.shown){
             __og.laneLastPub = ogThr.lastByLane;
             __og.laneThrottled = ogCollapsed.length - ogThr.shown.length;
+            /* Tell the forward log which firings reached the screen. The
+               records were written during the per-horizon evaluation, before
+               this decision existed; hgFwdMarkShown stamps them write-once so
+               a re-scan cannot flip a card's history. Without this the log
+               can only ever answer how the MECHANIC did, never how the cards
+               a reader actually saw did — and since hg-v753 those are
+               different populations: ~46 formed a day against about 6 shown. */
+            try {
+              var markFn = gfn('hgFwdMarkShown');
+              if (markFn){
+                var shownKeys = {}, hiddenKeys = {}, mi, mc;
+                for (mi = 0; mi < ogCollapsed.length; mi++){
+                  mc = ogCollapsed[mi];
+                  if (!mc || !mc.__fwdKey) continue;
+                  hiddenKeys[mc.__fwdKey] = 1;
+                }
+                for (mi = 0; mi < ogThr.shown.length; mi++){
+                  mc = ogThr.shown[mi];
+                  if (!mc || !mc.__fwdKey) continue;
+                  shownKeys[mc.__fwdKey] = 1;
+                  delete hiddenKeys[mc.__fwdKey];
+                }
+                markFn(shownKeys, true);
+                markFn(hiddenKeys, false);
+              }
+            } catch (eMark) {}
             ogCollapsed = ogThr.shown;
           }
         } catch (eThr) { /* fail open — show everything rather than nothing */ }
@@ -12455,6 +12625,12 @@ terse status, and never launches a first-time scan on a global refresh.
        be tested without a mount */
     window.hgOgLaneCooldownMs = hgOgLaneCooldownMs;
     window.hgOgLaneThrottle = hgOgLaneThrottle;
+    /* drawdown / streak panel + its baked numbers */
+    window.hgOgBookExperienceHtml = hgOgBookExperienceHtml;
+    window.HG_OG_BOOK_EXPERIENCE = HG_OG_BOOK_EXPERIENCE;
+    window.hgOgFillRate = hgOgFillRate;
+    window.hgOgFillRateNoteHtml = hgOgFillRateNoteHtml;
+    window.HG_OG_FILL_RATES = HG_OG_FILL_RATES;
     window.ogTradeKey = ogTradeKey;
     window.hgOgSettledEvidence = hgOgSettledEvidence;
     window.hgOgSettledExecuteOk = hgOgSettledExecuteOk;

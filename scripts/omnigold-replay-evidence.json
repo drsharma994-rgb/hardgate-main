@@ -510,7 +510,7 @@
   "window": "2026-03-27..2026-09-10",
   "barBasis": "PAXGUSDT 1h proxy",
   "sequentialBake": {
-    "generated": "2026-09-16T10:16:18.172Z",
+    "generated": "2026-09-16T12:25:50.237Z",
     "src": "scripts/backtest-omnigold-results.json",
     "window": "2026-03-29..2026-09-12",
     "barBasis": "PAXGUSDT proxy for XAUUSD",
@@ -576,6 +576,133 @@
           "tNaive": 0.7,
           "tCluster": 0.89,
           "inflation": 0.79
+        }
+      },
+      "sequentialTicketsBrokerHours": {
+        "n": 105,
+        "settled": 99,
+        "wins": 35,
+        "winRate": 0.3535,
+        "grossR": 0.0965,
+        "netR_paxg": -0.7675,
+        "netR_xm": 0.03,
+        "medianCostR_paxg": 0.555,
+        "effective": {
+          "n": 105,
+          "effN": 105,
+          "clusters": 22,
+          "tNaive": 0.7,
+          "tCluster": 0.89,
+          "inflation": 0.79
+        }
+      }
+    },
+    "experience": {
+      "sequential": {
+        "xm": {
+          "finalR": -69.31,
+          "peakR": 0,
+          "maxDrawdownR": 73.42,
+          "longestLosingStreak": 16,
+          "everAboveWater": false,
+          "worstFrom": "2026-03-27",
+          "worstTo": "2026-09-03"
+        },
+        "paxg": {
+          "finalR": -330.81,
+          "peakR": 0,
+          "maxDrawdownR": 331.38,
+          "longestLosingStreak": 16,
+          "everAboveWater": false,
+          "worstFrom": "2026-03-27",
+          "worstTo": "2026-09-11"
+        }
+      },
+      "sequentialTickets": {
+        "xm": {
+          "finalR": 3.15,
+          "peakR": 4.16,
+          "maxDrawdownR": 18.3,
+          "longestLosingStreak": 7,
+          "everAboveWater": true,
+          "worstFrom": "2026-04-01",
+          "worstTo": "2026-05-21"
+        },
+        "paxg": {
+          "finalR": -80.59,
+          "peakR": 1.9,
+          "maxDrawdownR": 83.05,
+          "longestLosingStreak": 7,
+          "everAboveWater": true,
+          "worstFrom": "2026-04-01",
+          "worstTo": "2026-09-11"
+        }
+      }
+    },
+    "fills": {
+      "SELL_LIMIT": {
+        "n": 3203,
+        "unfilled": 792,
+        "fillRate": 0.7527
+      },
+      "BUY": {
+        "n": 1464,
+        "unfilled": 0,
+        "fillRate": 1
+      },
+      "SELL": {
+        "n": 1411,
+        "unfilled": 0,
+        "fillRate": 1
+      },
+      "BUY_LIMIT": {
+        "n": 3252,
+        "unfilled": 675,
+        "fillRate": 0.7924
+      },
+      "SELL_STOP": {
+        "n": 242,
+        "unfilled": 115,
+        "fillRate": 0.5248
+      },
+      "BUY_STOP": {
+        "n": 325,
+        "unfilled": 183,
+        "fillRate": 0.4369
+      }
+    },
+    "calendar": {
+      "note": "live tab prefers XM XAUUSD / Binance XAU; this walk is PAXG, which trades 24/7",
+      "rows": 7670,
+      "outsideBrokerHours": 1421,
+      "byDayGross": {
+        "Wed": {
+          "n": 1322,
+          "grossR": -0.0689
+        },
+        "Thu": {
+          "n": 1148,
+          "grossR": -0.1362
+        },
+        "Fri": {
+          "n": 894,
+          "grossR": -0.1033
+        },
+        "Sat": {
+          "n": 577,
+          "grossR": -0.0165
+        },
+        "Sun": {
+          "n": 1034,
+          "grossR": -0.2863
+        },
+        "Mon": {
+          "n": 1383,
+          "grossR": -0.1351
+        },
+        "Tue": {
+          "n": 1312,
+          "grossR": -0.2078
         }
       }
     },

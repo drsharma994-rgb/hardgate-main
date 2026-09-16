@@ -125,6 +125,31 @@ localStorage. Never throws.
          not, the ledger is decoration. It cannot be reconstructed after the
          fact, so it has to be written at record time. */
       ticket: rec.ticket === true,
+      /* WAS IT ACTUALLY ON THE SCREEN?
+
+         The same question as `ticket`, one layer further out, and it became
+         a different question in hg-v753. Until then a tab recorded roughly
+         what it published. OMNIGOLD now forms ~46 plans a day and SHOWS
+         about 6: the lane throttle drops a card into a direction/horizon
+         whose previous card is still running, because a reader holds one
+         gold position and not fifty-five.
+
+         The recording deliberately stays unthrottled — the in-sample pool
+         measures the raw mechanic, so the forward pool must measure the
+         same thing or the two cannot be compared. But without this flag
+         the log can only ever answer "how did the MECHANIC do", never "how
+         did the cards I actually saw do", and the second one is the
+         question a person has.
+
+         Like `ticket` it cannot be reconstructed after the fact — whether a
+         lane was occupied at 09:00 on a Tuesday is not recoverable from the
+         record — so it is written at record time and costs one boolean.
+
+         undefined, not false, when the caller does not say: a tab that has
+         no concept of throttling has not told us its cards were hidden, and
+         defaulting to false would silently claim every one of them was
+         shown. */
+      shown: (rec.shown === undefined || rec.shown === null) ? undefined : (rec.shown === true),
       /* THE SETUP'S OWN GRADE AT FIRING TIME (A/B/C/D), so the chips can be
          judged out-of-sample. The grade is a CONFLUENCE tally — A is "eight or
          more reads agree" — and confluence has never been shown to predict
@@ -314,8 +339,112 @@ localStorage. Never throws.
      in-sample shape exactly (samples/wins/losses/open/hit/expR) so the same
      verdict helper reads both. 'expired' is excluded from the hit rate — it
      is not a win. Pure. */
+  /* ticketOnly stays a boolean for every existing caller, and also accepts
+     { ticket, shown } so the log can answer the question hg-v753 created:
+     the tab now forms ~46 plans a day and shows about 6, and only the
+     record knows which. */
+  /* ==================== HOW MUCH OF THIS IS ONE BET? ====================
+
+     A forward record is written per firing bar, so a tab that fires nine
+     times in a 4h bar writes nine records — and if each carries a 20-bar
+     horizon they are nine views of the same stretch of tape, not nine
+     independent trades. omnigold.js corrects its REPLAY intervals with a
+     ratio measured on the backtest (hgOgEffN, 0.406). That ratio was
+     deliberately NOT applied to forward stats, because importing a constant
+     measured on one population into another is the error it exists to fix.
+
+     It does not have to be imported. Every record carries barT, tf and
+     horizonBars, which is exactly enough to compute this log's OWN overlap:
+     lay each record's [fire, fire + horizon] interval on a line and ask how
+     much of the total covered time had more than one open at once.
+
+     effN = n / meanConcurrency, floored at 1 and capped at n. Capped
+     because a concurrency below 1 is arithmetic noise, not extra evidence,
+     and a sample can never carry more information than it has rows.
+
+     Returns null rather than a guess when the records lack the timing to
+     answer — a missing measurement is not a measurement of 1. */
+  var TF_SEC = { '1m':60, '5m':300, '15m':900, '30m':1800, '1h':3600,
+                 '2h':7200, '4h':14400, '1d':86400 };
+
+  function hgFwdOverlap(list, tab, mechanic){
+    var recs = Array.isArray(list) ? list : [];
+    var spans = [], i, r, t0, tfs, hb, span;
+    for (i = 0; i < recs.length; i++){
+      r = recs[i];
+      if (!r) continue;
+      if (tab && r.tab !== tab) continue;
+      if (mechanic && r.mechanic !== mechanic) continue;
+      t0 = num(r.barT);
+      tfs = TF_SEC[String(r.tf || '')];
+      hb = num(r.horizonBars);
+      if (!isFinite(t0) || !isFinite(tfs) || !isFinite(hb) || hb <= 0) continue;
+      span = tfs * hb;
+      if (!(span > 0)) continue;
+      spans.push([t0, t0 + span]);
+    }
+    if (spans.length < 2) return null;
+
+    /* time-weighted mean concurrency: total record-seconds over the seconds
+       during which at least one record was open. A union denominator, not a
+       sum — quiet stretches must not dilute it. */
+    var events = [], k;
+    for (k = 0; k < spans.length; k++){ events.push([spans[k][0], 1]); events.push([spans[k][1], -1]); }
+    events.sort(function(a, b){ return a[0] - b[0] || a[1] - b[1]; });
+    var open = 0, prev = events[0][0], covered = 0, weighted = 0;
+    for (k = 0; k < events.length; k++){
+      var dt = events[k][0] - prev;
+      if (dt > 0 && open > 0){ covered += dt; weighted += open * dt; }
+      prev = events[k][0];
+      open += events[k][1];
+    }
+    if (!(covered > 0)) return null;
+    var meanOpen = weighted / covered;
+    if (!(meanOpen > 0)) return null;
+    var n = spans.length;
+    var effN = n / meanOpen;
+    if (!isFinite(effN)) return null;
+    effN = Math.max(1, Math.min(n, effN));
+    return { n: n, meanConcurrency: meanOpen, effN: effN, coveredSec: covered };
+  }
+
+  /* STAMP `shown` ON RECORDS ALREADY WRITTEN.
+
+     A tab records its firings while it evaluates each horizon, and only
+     learns which of them reached the screen later, once every horizon is
+     collapsed and the lane throttle has run. Rather than restructure that
+     order — which would mean recording after the render decision and risk
+     losing the record entirely when a render throws — the flag is stamped
+     afterwards onto the rows already in the log.
+
+     Write-once: a record that already carries `shown` is left alone, so a
+     re-scan of the same bar cannot flip a card from shown to hidden (or
+     back) depending on what else happened to be running that minute. Same
+     discipline as ONE RECORD PER FIRING at the top of this file.
+
+     `keys` is a set of hgFwdKey strings. Returns how many rows it changed,
+     so a caller can tell "nothing to do" from "nothing worked". */
+  function hgFwdMarkShown(list, keys, shown){
+    var recs = Array.isArray(list) ? list : [];
+    var want = (shown === true), changed = 0, i, r, k;
+    if (!keys) return 0;
+    for (i = 0; i < recs.length; i++){
+      r = recs[i];
+      if (!r) continue;
+      if (r.shown !== undefined) continue;         /* write-once */
+      k = hgFwdKey(r);
+      if (!k) continue;
+      if (Object.prototype.hasOwnProperty.call(keys, k)){ r.shown = want; changed++; }
+    }
+    return changed;
+  }
+
   function hgFwdStats(list, tab, mechanic, ticketOnly, agg, nowSec){
     var recs = Array.isArray(list) ? list : [];
+    var wantTicket = (ticketOnly && typeof ticketOnly === 'object')
+      ? (ticketOnly.ticket === true) : (ticketOnly === true);
+    var wantShown = (ticketOnly && typeof ticketOnly === 'object')
+      ? (ticketOnly.shown === true) : false;
     var wins = 0, losses = 0, open = 0, expired = 0, rrSum = 0, stale = 0, i, r;
     /* MATCHED PAIRS for the bank-half-at-1R shadow: only records carrying a
        finite bankR contribute, and each contributes BOTH its actual and its
@@ -332,7 +461,9 @@ localStorage. Never throws.
        ticketOnly cannot be answered from the aggregate — it does not keep that
        split — so a ticket-only query deliberately uses live records only and
        is therefore a view of the recent window, not of all time. */
-    if (agg && !ticketOnly){
+    /* the aggregate keeps no ticket/shown split, so any filtered query is
+       deliberately a view of the LIVE window rather than of all time */
+    if (agg && !wantTicket && !wantShown){
       var ak = String(tab || '') + '|' + String(mechanic || '');
       var a = agg[ak];
       if (a){ wins += (a.wins || 0); losses += (a.losses || 0); expired += (a.expired || 0); rrSum += (a.rrSum || 0);
@@ -342,7 +473,12 @@ localStorage. Never throws.
       r = recs[i];
       if (tab && r.tab !== tab) continue;
       if (mechanic && r.mechanic !== mechanic) continue;
-      if (ticketOnly === true && r.ticket !== true) continue;
+      if (wantTicket === true && r.ticket !== true) continue;
+      /* shown === true keeps only cards that reached the screen. A record
+         with no `shown` field predates the flag (or came from a tab with no
+         throttle) and is EXCLUDED from a shown-only query rather than
+         assumed — "we never asked" is not "it was shown". */
+      if (wantShown === true && r.shown !== true) continue;
       /* Split 'open' before counting it: a record whose bars were never
          going to arrive is not a trade still running. Neither is counted as
          a sample — we do not know the outcome of either. */
@@ -551,6 +687,8 @@ localStorage. Never throws.
     W.hgFwdSettleOne = hgFwdSettleOne;
     W.hgFwdSettle = hgFwdSettle;
     W.hgFwdStatsOf = hgFwdStats;
+    W.hgFwdOverlapOf = hgFwdOverlap;
+    W.hgFwdMarkShownOf = hgFwdMarkShown;
     W.hgFwdFold = hgFwdFold;
     W.hgFwdAgg = loadAgg;
     W.hgFwdPoolOf = hgFwdPool;
@@ -582,6 +720,22 @@ localStorage. Never throws.
       } catch (e) { return 0; }
     };
 
+    /* This log's OWN overlap, measured from its own barT/tf/horizonBars —
+       so a forward interval can be widened by what THIS population did,
+       never by a ratio borrowed from the backtest. */
+    /* stamp which of the already-recorded firings reached the screen */
+    W.hgFwdMarkShown = function(keys, shown){
+      try {
+        var list = load();
+        var n = hgFwdMarkShown(list, keys, shown);
+        if (n) save(list);
+        return n;
+      } catch (e){ hgFwdWarn('hgFwdMarkShown', e); return 0; }
+    };
+    W.hgFwdOverlap = function(tab, mechanic){
+      try { return hgFwdOverlap(load(), tab, mechanic); }
+      catch (e){ hgFwdWarn('hgFwdOverlap', e); return null; }
+    };
     /* Out-of-sample stats, same shape the in-sample pool uses, so
        hgOmniPoolRead() reads either without translation. */
     W.hgFwdStats = function(tab, mechanic, ticketOnly){
