@@ -246,6 +246,33 @@ terse status, and never launches a first-time scan on a global refresh.
      XAUUSD is already a very wide swing stop; anything larger is a different
      instrument than the setup on the card. */
   var GOLD_STOP_MAX_PCT = 0.025;
+  /* ...AND A FLOOR, which there never was.
+     Measured on the desk's own settled walk (scripts/backtest-omnigold-
+     results.json, 7,670 settled plans after dropping the ambiguous same-bar
+     wins), sorted into deciles by stop distance:
+
+       stop 0.069% of entry   win 18.1%   GROSS -0.456R
+       stop 0.157%            win 19.4%   GROSS -0.417R
+       stop 0.244%            win 23.7%   GROSS -0.288R
+       ...
+       stop 1.265%            win 26.1%   GROSS +0.001R
+       stop 2.019%            win 21.6%   GROSS +0.042R
+
+     That column is GROSS — before a penny of spread. A stop this tight is
+     not expensive, it is INSIDE THE NOISE: price takes it out on its way to
+     nowhere. Cost makes it worse (costR 5.73 in the first decile against
+     0.13 in the last) but cost is not what makes it negative, which is why
+     this is a separate gate from cost-drag and why it is not venue-tunable.
+
+     0.50% is where gross crosses zero and stays there. Applying it to the
+     walk keeps 50% of setups and takes the book from -9,768R to -1,092R.
+
+     VETO, NEVER WIDEN. plans.js already states the rule for the other
+     direction — "DO NOT TIGHTEN A FAR STOP" — and it holds symmetrically:
+     pushing a tight stop out to satisfy a floor invents a risk distance the
+     setup never argued for and falsifies the R:R printed on the card. The
+     two honest answers are decline, or trade the stop the structure gave. */
+  var GOLD_STOP_MIN_PCT = 0.005;
   /* STRONGEST prefers a ticket whose named level is actually in reach.
      A 4H FVG 6×ATR behind the market is a real limit, not the trade to
      float first when a sweep 1.5×ATR away already has a ticket.
@@ -3384,24 +3411,72 @@ terse status, and never launches a first-time scan on a global refresh.
     var nw = __nw.pass, nwWhy = __nw.why, nwInfo = __nw.info;
     gates.push({ key:'news-window', hard:false, info: nwInfo, pass: nw, why: nwWhy });
 
-    /* 11 — cost drag. A stop can be structurally correct and still be
+    /* A plan is priceable only when the engine produced one. Both gates
+       below are HARD when there is a plan to judge and UNCHECKED when there
+       is not: "we cannot price a plan that does not exist" is missing data,
+       not a veto, and plans.js is absent in some harnesses by design (see
+       the ex.plan note at the call site). */
+    var planRisk = fin(x.planRisk);
+    /* Both gates below are a ratio of the STOP DISTANCE to the PRICE OF
+       GOLD, and the price of gold does not depend on there being a plan —
+       the bars carry it. So the reference falls back: the plan's own entry
+       first, then the live mark, then the last close. Requiring plan.entry
+       here made both gates read UNCHECKED for every caller that supplies a
+       stop distance without a plan object, which is most of the harnesses
+       and was never the intent. */
+    var planEntry = (x.plan && isFinite(fin(x.plan.entry)) && fin(x.plan.entry) > 0)
+      ? fin(x.plan.entry)
+      : ((isFinite(fin(x.livePx)) && fin(x.livePx) > 0) ? fin(x.livePx)
+        : ((lastBar && isFinite(fin(lastBar.c)) && fin(lastBar.c) > 0) ? fin(lastBar.c) : NaN));
+    var priceable = isFinite(planRisk) && planRisk > 0 && isFinite(planEntry) && planEntry > 0;
+
+    /* 11a — STOP FLOOR. See GOLD_STOP_MIN_PCT: on this desk's own settled
+       walk a stop inside ~0.5% of entry loses GROSS, before any cost, in
+       every decile. It is not a fee problem, it is a noise problem, so this
+       gate is separate from cost-drag and is not venue-tunable. */
+    var stopPct = priceable ? (planRisk / planEntry) : NaN;
+    var floorOk = priceable ? (stopPct >= GOLD_STOP_MIN_PCT) : null;
+    gates.push({ key:'stop-floor', hard: priceable, pass: floorOk,
+      why: priceable
+        ? ('stop $' + planRisk.toFixed(2) + ' = ' + (stopPct * 100).toFixed(3)
+           + '% of entry (floor ' + (GOLD_STOP_MIN_PCT * 100).toFixed(2) + '%)'
+           + (floorOk ? '' : ' — inside the noise: this stop loses gross on the record, before costs'))
+        : 'no plan risk to measure' });
+
+    /* 11b — cost drag. A stop can be structurally correct and still be
        untradeable: the walk-forward measures GROSS outcomes, so a tight
        intraday stop can show a healthy R multiple that the spread then eats.
        On the first live scalp card a 3.16-point stop meant a $0.30 spread
-       was 19% of 1R, turning a measured +0.38R into roughly +0.19R net. */
+       was 19% of 1R, turning a measured +0.38R into roughly +0.19R net.
+
+       PRICED AT THE VENUE ACTUALLY SELECTED, and HARD. It used to be
+       neither. It read ASSUMED_SPREAD_USD — the XM spread — whatever venue
+       the desk was set to, and then pushed hard:false, so it flagged the
+       trade and let it through. At XM that threshold declines 7% of the
+       walk's plans; priced at PAXG, where the same walk's outcomes were
+       measured, it declines 85%. Those 85% average -1.24R net. A gate that
+       names the reason a trade cannot pay and then waves it through is not
+       a gate, and hgOgVenueCost() has been sitting here the whole time. */
     var cost = null, costWhy = 'no plan risk to cost';
-    var planRisk = fin(x.planRisk);
-    if (isFinite(planRisk) && planRisk > 0){
-      var rt = ASSUMED_SPREAD_USD * 2;
+    if (priceable){
+      var vc = null;
+      try { vc = hgOgVenueCost(); } catch (eVc) { vc = null; }
+      /* fail closed: an unreadable venue prices as the conservative preset,
+         never as free */
+      var rtPct = (vc && isFinite(fin(vc.rtCostPct)) && fin(vc.rtCostPct) > 0)
+        ? fin(vc.rtCostPct) : hgOgRtCostPct();
+      var venueName = (vc && vc.venue) ? String(vc.venue) : 'PAXG';
+      var rt = planEntry * rtPct / 100;
       var costR = rt / planRisk;
       var costCeil = (x.sessionHard === true) ? COST_VETO_R_SCALP : COST_VETO_R;
       cost = costR <= costCeil;
-      costWhy = 'round-trip ~$' + rt.toFixed(2) + ' on a $' + planRisk.toFixed(2) + ' stop = '
-              + (costR * 100).toFixed(0) + '% of 1R'
+      costWhy = venueName + ' round-trip ' + rtPct.toFixed(3) + '% ≈ $' + rt.toFixed(2)
+              + ' on a $' + planRisk.toFixed(2) + ' stop = '
+              + (costR * 100).toFixed(0) + '% of 1R (ceiling ' + (costCeil * 100).toFixed(0) + '%)'
               + (costR > costCeil ? ' — the spread would eat most of the edge'
                  : (costR > COST_WARN_R ? ' — material drag, size accordingly' : ''));
     }
-    gates.push({ key:'cost-drag', hard:false, pass: cost, why: costWhy });
+    gates.push({ key:'cost-drag', hard: priceable, pass: cost, why: costWhy });
 
     /* FILL RISK — a limit away from market is not a position until it fills.
 

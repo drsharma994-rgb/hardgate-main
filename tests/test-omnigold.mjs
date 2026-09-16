@@ -132,13 +132,21 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
       wavy.push({ t: i * 3600, o, h: Math.max(o, p) + 2, l: Math.min(o, p) - 2, c: p, v: 100 });
     }
   }
+  /* cost-drag is priced at the SELECTED VENUE now, so "immaterial" is only
+     true of a named one. $12 on ~$2000 gold is 0.6% of price: clear of the
+     0.50% stop floor, and at XM's 0.020% round trip the spread is 3% of 1R.
+     Left unset it would fail closed to PAXG, where the same stop pays 43%
+     and the gate correctly declines — which is the whole point of the
+     change and not what this block is testing. */
+  win.HG_OG_VENUE = 'XM';
   const full = win.hgOgGates(wavy, hit, {
     htf:{e21:10,e50:9}, killzone:{zone:'LONDON',label:'LONDON OPEN'},
     macro:{realRateHint:'TAILWIND', dxy:{trend20:'DOWN'}}, yield:{valid:true},
     adr:{usedPct:45}, news:{risk:'low',note:''}, minRr:1.5,
     stats:{samples:120,hit:0.45,expR:0.12},
-    planRisk: 12   /* a wide-enough stop that cost drag is immaterial */
+    planRisk: 12   /* 0.6% of price: clear of the floor, cheap at XM */
   });
+  delete win.HG_OG_VENUE;
   const gFull = win.hgOmniGrade(full);
   ok(gFull.ticket === true, 'a fully supported gold setup grades to a ticket');
 
@@ -296,23 +304,86 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
    The walk-forward measures GROSS outcomes. On the first live scalp card a
    3.16-point stop meant a $0.30 gold spread was ~19% of 1R round-trip,
    turning a measured +0.38R into roughly +0.19R net. Six scalp mechanics
-   reading "has paid" gross is exactly where that difference matters. */
+   reading "has paid" gross is exactly where that difference matters.
+
+   EVERY ASSERTION BELOW NOW NAMES ITS VENUE, and the reason is the point of
+   the change. This block used to read the flat ASSUMED_SPREAD_USD, which is
+   the XM spread — so it was an XM test the whole time and never said so,
+   while the desk could be set to PAXG and get the same verdicts. The gate
+   prices at hgOgVenueCost() now, so the venue is stated. The original
+   expectations are kept verbatim under XM, which is the venue they were
+   always describing. */
 {
   const flat = [];
   let px = 4384;
   for (let i = 0; i < 200; i++){ const o = px, c = px + 0.15; flat.push({ t:i*3600, o, h:Math.max(o,c)+0.6, l:Math.min(o,c)-0.6, c, v:100 }); px = c; }
   const hit = { kind:'MMOVE', dir:'long', level:1, why:'t' };
-  const cost = r => win.hgOgGates(flat, hit, { planRisk: r }).filter(g => g.key === 'cost-drag')[0];
+  const at = (venue, r, key) => {
+    if (venue) win.HG_OG_VENUE = venue; else delete win.HG_OG_VENUE;
+    const g = win.hgOgGates(flat, hit, { planRisk: r }).filter(x => x.key === (key || 'cost-drag'))[0];
+    delete win.HG_OG_VENUE;
+    return g;
+  };
+  const cost = r => at('XM', r);
 
-  ok(cost(1.5).pass === false, 'a $1.50 stop is vetoed — the spread would eat most of 1R');
-  ok(cost(3.16).pass === true, 'the live 3.16-point stop passes but is flagged');
+  ok(cost(1.5).pass === false, 'at XM a $1.50 stop is vetoed — the spread would eat most of 1R');
+  ok(cost(3.16).pass === true, 'at XM the live 3.16-point stop passes but is flagged');
   ok(/material drag/.test(cost(3.16).why), 'and says the drag is material rather than staying silent');
   ok(!/material drag/.test(cost(40).why), 'a wide swing stop carries no drag warning');
   ok(/% of 1R/.test(cost(8).why), 'the card always states the cost as a share of 1R');
-  ok(cost(NaN).pass === null, 'with no plan risk the gate stays UNCHECKED rather than guessing');
+  ok(at('XM', NaN).pass === null, 'with no plan risk the gate stays UNCHECKED rather than guessing');
+  ok(/^XM /.test(cost(8).why), 'and the card names the venue it priced at');
+
+  /* the same stop, the venue the walk-forward was measured at */
+  ok(at('PAXG', 3.16).pass === false,
+     'the SAME 3.16-point stop is vetoed at PAXG — 0.26% round trip is 363% of 1R');
+  ok(/^PAXG /.test(at('PAXG', 3.16).why), 'and the card says which venue made it untradeable');
+  ok(at('PAXG', 40).pass === true, 'a wide enough stop survives even PAXG costs');
+
+  /* unset venue must fail CLOSED to the conservative preset, never to free */
+  ok(at(null, 3.16).pass === false, 'with no venue selected the gate prices conservatively, not freely');
 
   ok(win.hgOgGates(flat, hit, {}).map(g => g.key).indexOf('cost-drag') >= 0,
      'cost-drag is part of the gold ledger');
+  ok(win.hgOgGates(flat, hit, { planRisk: 8 }).filter(g => g.key === 'cost-drag')[0].hard === true,
+     'and it VETOES now — it used to name the reason a trade could not pay and wave it through');
+}
+
+/* ---- stop floor: a stop inside the noise loses gross, before any cost ----
+   Measured on this desk's own settled walk: sorted into deciles by stop
+   distance, the tightest decile (0.069% of entry) grosses -0.456R and the
+   widest (2.019%) grosses +0.042R. That column is BEFORE costs, which is
+   why this is a separate gate from cost-drag and why it does not move with
+   the venue. */
+{
+  const flat = [];
+  let px = 4384;
+  for (let i = 0; i < 200; i++){ const o = px, c = px + 0.15; flat.push({ t:i*3600, o, h:Math.max(o,c)+0.6, l:Math.min(o,c)-0.6, c, v:100 }); px = c; }
+  const hit = { kind:'MMOVE', dir:'long', level:1, why:'t' };
+  const floor = (r, venue) => {
+    if (venue) win.HG_OG_VENUE = venue;
+    const g = win.hgOgGates(flat, hit, { planRisk: r }).filter(x => x.key === 'stop-floor')[0];
+    delete win.HG_OG_VENUE;
+    return g;
+  };
+  const lastC = flat[flat.length - 1].c;
+
+  ok(floor(8).pass === false, 'a $8 stop on $' + lastC.toFixed(0) + ' gold is 0.18% — inside the noise, vetoed');
+  ok(floor(60).pass === true, 'a $60 stop is 1.36% — wide enough to be a real invalidation');
+  ok(floor(8).hard === true, 'and the floor VETOES rather than flagging');
+  ok(/inside the noise/.test(floor(8).why), 'the card says why in words, not just a number');
+  ok(/0\.50%/.test(floor(8).why), 'and states the floor it failed');
+
+  /* the floor is about market noise, not fees — it must not move with venue */
+  ok(floor(8, 'XM').pass === floor(8, 'PAXG').pass,
+     'the floor is identical at XM and PAXG — it is a noise rule, not a cost rule');
+
+  ok(floor(NaN).pass === null, 'with no plan risk the floor stays UNCHECKED rather than guessing');
+  ok(floor(NaN).hard === false, 'and an unpriceable plan is missing data, not a veto');
+
+  /* the two ends of the same rule now both exist */
+  ok(win.hgOgGates(flat, hit, { planRisk: 8 }).map(g => g.key).indexOf('stop-floor') >= 0,
+     'stop-floor is part of the gold ledger, opposite GOLD_STOP_MAX_PCT');
 }
 
 console.log('');
