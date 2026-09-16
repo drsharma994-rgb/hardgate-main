@@ -569,6 +569,18 @@ function cfCardHtml(g){
       + (leader.t2 ? (' · T2 ' + esc(String(leader.t2))) : '')
       + ' · leader ' + esc(leader.sourceLabel || leader.source || 'desk') + '</div>';
   }
+  /* price may have walked through this plan already — the shared rule in
+     hg-plan.js. This tab relays a leader row another desk produced, so the
+     mark is whatever travelled with it; hgMpMarkOf reads only fields that
+     mean price NOW. No mark, no verdict. */
+  if (leader.entry && leader.stop && leader.t1 && gfn('hgPlanGeometryLineHtml')){
+    try{
+      h += W.hgPlanGeometryLineHtml(
+        { dir: leader.dir, entry: leader.entry, stop: leader.stop, t1: leader.t1 },
+        gfn('hgMpMarkOf') ? W.hgMpMarkOf(leader, leader, {}) : NaN,
+        { cls: 'note warn', style: 'margin-top:6px' }) || '';
+    }catch(eGeo){}
+  }
   if (gfn('hgStrategyTradeDetailHtml') && leader.entry){
     try{ h += W.hgStrategyTradeDetailHtml(leader); }catch(eD){}
   }

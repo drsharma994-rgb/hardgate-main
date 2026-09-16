@@ -148,6 +148,16 @@ function dexCardHtml(c, sideRead){
   if (c.plan){
     h += '<div class="plan">ENTRY ' + esc(String(c.plan.entry)) + ' · STOP ' + esc(String(c.plan.stop))
       + ' · T1 ' + esc(String(c.plan.t1)) + ' · R:R ' + esc(String(c.plan.rr1)) + '</div>';
+    /* price may have walked through this plan already — the shared rule in
+       hg-plan.js, judged against whatever mark came with the candidate. */
+    try{
+      if (W && typeof W.hgPlanGeometryLineHtml === 'function'){
+        h += W.hgPlanGeometryLineHtml(
+          { dir: c.plan.dir || c.dir, entry: c.plan.entry, stop: c.plan.stop, t1: c.plan.t1 },
+          (typeof W.hgMpMarkOf === 'function') ? W.hgMpMarkOf(c.plan, c, {}) : NaN,
+          { cls: 'note warn', style: 'margin-top:6px' }) || '';
+      }
+    }catch(eGeo){}
   }
   h += '<div class="dim">' + esc(c.why || '') + '</div></div>';
   return h;

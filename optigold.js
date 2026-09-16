@@ -539,6 +539,16 @@ function card(s, mark){
     + '<span class="k">opposite level</span><span>' + fmt(s.dir === 'long' ? s.sup : s.res) + '</span>'
     + '</div>'
     + (travel ? '<div class="note" style="margin:4px 0">' + esc(travel) + '</div>' : '')
+    /* PRICE MAY HAVE WALKED THROUGH THIS PLAN ALREADY — the shared rule in
+       hg-plan.js. Every OPTI GOLD ticket is a RESTING LIMIT at the midpoint
+       of a broken range, so it is a retest by construction: the population
+       the geometry defect lives in, and the one desk where asking the
+       question is least optional. Only asked while the order is still
+       pending — once it has filled the entry is history, and "the target is
+       behind price" on an open position is called profit. */
+    + ((!filled && typeof W.hgPlanGeometryLineHtml === 'function')
+      ? (W.hgPlanGeometryLineHtml({ dir: s.dir, entry: s.entry, stop: s.stop, t1: s.t1 },
+          mark, { cls: 'note warn', style: 'margin:4px 0' }) || '') : '')
     + '<div class="plan">Break of structure at <b>' + fmt(s.brokeAt) + '</b>; the order rests at the midpoint '
     + 'of the broken range and is <b>not a market entry</b>. Stop is 1.5×ATR beyond the opposite structural level, '
     + 'so risk is roughly half the range plus the buffer — a wide stop by construction. '

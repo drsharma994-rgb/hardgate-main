@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v750',
-  pack: 'every desk in the book says when price has already walked through the plan',
+  version: 'hg-v751',
+  pack: 'the four setup tabs v750 missed, and a test that counts tabs instead of files',
   built: '2026-09-15T12:00:00Z'
 };
 
