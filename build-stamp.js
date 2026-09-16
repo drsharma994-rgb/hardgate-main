@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v756',
-  pack: 'the win rate was never a number: 21.5% of the walk cannot be ordered, so it is an interval — and no mechanic clears its bar, so no ticket issues',
+  version: 'hg-v757',
+  pack: 'v756 made the edge gate the only thing that could clear the edge gate; and the forward log has never checked whether the order filled',
   built: '2026-09-16T12:00:00Z'
 };
 

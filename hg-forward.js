@@ -118,6 +118,35 @@ localStorage. Never throws.
       rr: Math.abs(t1 - entry) / risk,
       barT: barT,
       horizonBars: isFinite(fin(rec.horizonBars)) ? fin(rec.horizonBars) : 20,
+      /* THE PRICE WHEN THE PLAN FIRED — the one field a fill test needs.
+
+         This log has never modelled a fill. hgFwdSettleOne walks bars after
+         barT and tests stop and target immediately, with nothing requiring
+         price to have reached `entry`. The in-sample walk DOES require a
+         fill and drops 17.8% of its signals as never triggered, and the two
+         pools are then compared sigma against sigma inside measured-edge.
+
+         The error is not random. Geometry decides its direction per order
+         type, because one side of the plan always sits past the entry:
+
+           entry BELOW mark (a limit, for a long)
+             the stop is past the entry, so a loss cannot happen without
+             filling — but the target is not, so wins can be recorded for
+             trades that never opened.  PHANTOM WINS.
+
+           entry ABOVE mark (a stop entry, for a long)
+             the mirror: the target is past the entry, so wins are real, and
+             phantom LOSSES are recorded instead.
+
+         Limits are about two thirds of this desk's book, so the net is
+         upward — on the very pool that now decides whether anything is ever
+         a ticket again.
+
+         `mark` makes the order type recoverable, and without it the record
+         simply cannot be settled that way and says so rather than guessing.
+         Undefined, never a substitute value: `entry` would read as a market
+         order and quietly declare every legacy record filled. */
+      mark: isFinite(fin(rec.mark)) ? fin(rec.mark) : undefined,
       /* Whether the gate ledger passed this setup at the time it fired. Not
          used by the stats yet, but recording it now means we can later ask
          the question that actually matters about the gates: do TICKETS
@@ -125,6 +154,30 @@ localStorage. Never throws.
          not, the ledger is decoration. It cannot be reconstructed after the
          fact, so it has to be written at record time. */
       ticket: rec.ticket === true,
+      /* WOULD IT HAVE BEEN A TICKET BUT FOR THE EDGE GATE?
+
+         hg-v756 made measured-edge hard, so a setup with no proven edge
+         stands aside and `ticket` is false on every card the desk now
+         produces. measured-edge then promotes a mechanic only on twenty
+         settled TICKETS — which can never arrive, because the gate itself
+         is what stops them being tickets. The gate became the only thing
+         that could clear the gate.
+
+         `ticket` stopped being the right population at that moment. This is
+         the one that replaced it: every gate passed EXCEPT measured-edge.
+
+         It is not the circularity `ticket` was protecting against. Judging a
+         mechanic on ALL its firings condemns it using setups the ledger
+         refused for reasons of its own — no trend, wrong regime — and that
+         is what emptied both tabs. This population is still only setups the
+         ledger cleared; it simply does not ask the gate under test to have
+         already passed before its evidence counts.
+
+         undefined when the caller does not say, so a tab that has never
+         heard of this cannot be read as having reported false. */
+      gateClear: (rec.gateClear === undefined || rec.gateClear === null)
+        ? (rec.ticket === true ? true : undefined)      /* a ticket cleared everything, by definition */
+        : (rec.gateClear === true),
       /* WAS IT ACTUALLY ON THE SCREEN?
 
          The same question as `ticket`, one layer further out, and it became
@@ -270,6 +323,92 @@ localStorage. Never throws.
        oneR   whether +1R traded before the stop (null while unknowable)
        bankR  the shadow outcome in R; null when the actual expired unsettled
               or T1 sits inside +1R (no banking opportunity — policies equal) */
+  /* WHICH ORDER THIS PLAN IS, from where the entry sits against the mark.
+     Same rule as the in-sample walk's xmOrderType. Returns null when the
+     record carries no mark, because a guess here decides whether a trade
+     counted at all. */
+  function hgFwdOrderType(rec){
+    if (!rec) return null;
+    var mark = fin(rec.mark), entry = fin(rec.entry);
+    if (!isFinite(mark) || !isFinite(entry) || !(mark > 0)) return null;
+    var long = (rec.dir === 'long');
+    if (Math.abs(entry - mark) < 1e-9) return long ? 'BUY' : 'SELL';
+    if (long) return entry < mark ? 'BUY_LIMIT' : 'BUY_STOP';
+    return entry > mark ? 'SELL_LIMIT' : 'SELL_STOP';
+  }
+
+  /* Did this bar reach a resting order? A market order is already filled. */
+  function hgFwdOrderTouched(type, bar, entry){
+    if (type === 'BUY' || type === 'SELL') return true;
+    var h = num(bar.h), l = num(bar.l);
+    if (!isFinite(h) || !isFinite(l)) return false;
+    if (type === 'BUY_LIMIT' || type === 'SELL_STOP') return l <= entry;
+    if (type === 'SELL_LIMIT' || type === 'BUY_STOP') return h >= entry;
+    return false;
+  }
+
+  /* THE SAME RECORD, SETTLED AS IF THE ORDER HAD TO FILL FIRST.
+
+     Runs beside hgFwdSettleOne and never replaces it. Every record keeps
+     the state and R it was settled with, because a log that silently
+     restates its own history is worse than one with a known bias — the
+     bias can at least be measured against. These are the parallel fields:
+
+       fillState  'filled' | 'unfilled' | 'unprovable' | 'open' | undefined
+       stateFill  the fill-aware outcome, same vocabulary as `state`
+       rFill      its R
+
+     `unprovable` is the case hg-v756 named in lib/unprovable-fill.mjs: the
+     bar that filled the order also touched an exit, and OHLC cannot order
+     the two prints, so the position cannot be shown to have existed. It is
+     neither a win nor a loss and is excluded rather than guessed.
+
+     undefined everywhere when the record has no mark — a legacy record is
+     not evidence about fills in either direction. */
+  function hgFwdSettleFill(rec, rows){
+    if (!rec || !rows || !rows.length) return null;
+    var type = hgFwdOrderType(rec);
+    if (!type) return null;                          /* no mark: unknowable */
+    var long = (rec.dir === 'long');
+    var filled = false, seen = 0, sinceFill = 0, i, t, h, l, hitStop, hitT1;
+
+    for (i = 0; i < rows.length; i++){
+      t = num(rows[i].t);
+      if (!isFinite(t) || t <= rec.barT) continue;   /* strictly after, as the actual does */
+      h = num(rows[i].h); l = num(rows[i].l);
+      if (!isFinite(h) || !isFinite(l)) continue;
+      hitStop = long ? (l <= rec.stop) : (h >= rec.stop);
+      hitT1   = long ? (h >= rec.t1)   : (l <= rec.t1);
+
+      if (!filled){
+        seen++;
+        if (!hgFwdOrderTouched(type, rows[i], rec.entry)){
+          /* the same window the in-sample walk gives a pending order */
+          if (seen >= rec.horizonBars){
+            return { fillState: 'unfilled', stateFill: 'unfilled', rFill: null, orderType: type, settledFillT: t };
+          }
+          continue;
+        }
+        filled = true;
+        /* the fill bar itself carrying an exit is the unprovable case */
+        if (hitStop || hitT1){
+          return { fillState: 'unprovable', stateFill: null, rFill: null, orderType: type, settledFillT: t };
+        }
+        continue;                                     /* filled clean; resolve from the next bar */
+      }
+
+      sinceFill++;
+      /* both in one bar -> STOP, the same convention the actual uses: here
+         the position certainly exists and only the exit is unknown */
+      if (hitStop) return { fillState: 'filled', stateFill: 'stop', rFill: -1, orderType: type, settledFillT: t };
+      if (hitT1)   return { fillState: 'filled', stateFill: 't1', rFill: rec.rr, orderType: type, settledFillT: t };
+      if (sinceFill >= rec.horizonBars){
+        return { fillState: 'filled', stateFill: 'expired', rFill: null, orderType: type, settledFillT: t };
+      }
+    }
+    return { fillState: filled ? 'open' : 'pending', stateFill: null, rFill: null, orderType: type };
+  }
+
   function hgFwdSettleOne(rec, rows){
     if (!rec || rec.state !== 'open') return rec;
     if (!rows || !rows.length) return rec;
@@ -328,6 +467,15 @@ localStorage. Never throws.
       r = recs[i];
       if (r.state === 'open' && r.sym === sym && (!tf || !r.tf || r.tf === tf)){
         var s = hgFwdSettleOne(r, rows);
+        /* the fill-aware pass runs on the SAME bars in the same call, and is
+           written into parallel fields — `state` and `r` are never touched
+           by it. A record can be settled by one and still open on the other
+           (an order that filled late, say), which is the point: the two
+           resolutions are different measurements of the same plan. */
+        var f = r.fillState ? null : hgFwdSettleFill(r, rows);
+        if (f && f.fillState !== 'pending' && f.fillState !== 'open'){
+          s = copyWith(s === r ? r : s, f);
+        }
         if (s !== r) changed++;
         out.push(s);
       } else out.push(r);
@@ -445,12 +593,21 @@ localStorage. Never throws.
       ? (ticketOnly.ticket === true) : (ticketOnly === true);
     var wantShown = (ticketOnly && typeof ticketOnly === 'object')
       ? (ticketOnly.shown === true) : false;
+    /* SETUPS THAT CLEARED EVERY GATE BUT THE EDGE GATE. See `gateClear` in
+       hgFwdNormalize: since measured-edge went hard, `ticket` can never
+       again be true, so a ticket-only query is a population that has
+       stopped growing. This one has not. */
+    var wantGateClear = (ticketOnly && typeof ticketOnly === 'object')
+      ? (ticketOnly.gateClear === true) : false;
     var wins = 0, losses = 0, open = 0, expired = 0, rrSum = 0, stale = 0, i, r;
     /* MATCHED PAIRS for the bank-half-at-1R shadow: only records carrying a
        finite bankR contribute, and each contributes BOTH its actual and its
        shadow R — comparing the shadow against a different population than the
        actual would be the fill-modelling mistake all over again. */
     var bankN = 0, bankSum = 0, bankActualSum = 0;
+    /* the same records settled as if the order had to fill first — see
+       hgFwdSettleFill. Counted separately so neither population is hidden. */
+    var fillWins = 0, fillLosses = 0, fillUnfilled = 0, fillUnprovable = 0;
     /* Settled outcomes split by the grade the setup carried WHEN IT FIRED, so
        the A/B/C chips can be judged rather than trusted. */
     var byGrade = { A:{n:0,w:0}, B:{n:0,w:0}, C:{n:0,w:0}, D:{n:0,w:0} };
@@ -463,7 +620,7 @@ localStorage. Never throws.
        is therefore a view of the recent window, not of all time. */
     /* the aggregate keeps no ticket/shown split, so any filtered query is
        deliberately a view of the LIVE window rather than of all time */
-    if (agg && !wantTicket && !wantShown){
+    if (agg && !wantTicket && !wantShown && !wantGateClear){
       var ak = String(tab || '') + '|' + String(mechanic || '');
       var a = agg[ak];
       if (a){ wins += (a.wins || 0); losses += (a.losses || 0); expired += (a.expired || 0); rrSum += (a.rrSum || 0);
@@ -474,6 +631,9 @@ localStorage. Never throws.
       if (tab && r.tab !== tab) continue;
       if (mechanic && r.mechanic !== mechanic) continue;
       if (wantTicket === true && r.ticket !== true) continue;
+      /* same rule as `shown`: a record with no gateClear field predates the
+         flag and is EXCLUDED rather than assumed either way */
+      if (wantGateClear === true && r.gateClear !== true) continue;
       /* shown === true keeps only cards that reached the screen. A record
          with no `shown` field predates the flag (or came from a tab with no
          throttle) and is EXCLUDED from a shown-only query rather than
@@ -483,6 +643,18 @@ localStorage. Never throws.
          going to arrive is not a trade still running. Neither is counted as
          a sample — we do not know the outcome of either. */
       if (r.state === 'open' && hgFwdIsStale(r, nowSec)){ stale++; continue; }
+      /* THE FILL-AWARE TALLY, counted beside the actual rather than instead
+         of it. Every record contributes to the numbers this function has
+         always returned; those with a usable fill resolution ALSO feed
+         fillWins/fillLosses, so a caller can compare the two populations
+         instead of being handed one and told to trust it.
+         'unfilled' is not a loss and 'unprovable' is not an outcome —
+         neither counts, and fillUnfilled/fillUnprovable report how many
+         were set aside so the gap is visible rather than implied. */
+      if (r.stateFill === 't1') fillWins++;
+      else if (r.stateFill === 'stop') fillLosses++;
+      else if (r.fillState === 'unfilled') fillUnfilled++;
+      else if (r.fillState === 'unprovable') fillUnprovable++;
       if (r.state === 't1'){ wins++; rrSum += num(r.rr) || 0; }
       else if (r.state === 'stop') losses++;
       else if (r.state === 'expired') expired++;
@@ -523,6 +695,20 @@ localStorage. Never throws.
              bankN: bankN,
              bankExpR: bankN ? (bankSum / bankN) : NaN,
              bankActualExpR: bankN ? (bankActualSum / bankN) : NaN,
+             /* THE SAME MECHANIC, WITH THE ORDER REQUIRED TO FILL.
+
+                `hit` above assumes you were in the trade from the bar after
+                the signal. That is not what a resting order does, and the
+                difference is one-directional per order type: a limit can
+                record a win it never opened for, a stop entry a loss it
+                never opened for. These fields are the honest comparison —
+                null when no record carries a mark, because a legacy log is
+                not evidence about fills either way. */
+             fillSamples: (fillWins + fillLosses) || 0,
+             fillWins: fillWins, fillLosses: fillLosses,
+             fillHit: (fillWins + fillLosses) ? fillWins / (fillWins + fillLosses) : NaN,
+             fillUnfilled: fillUnfilled,
+             fillUnprovable: fillUnprovable,
              byGrade: byGrade, byStack: byStack };
   }
 
@@ -685,6 +871,9 @@ localStorage. Never throws.
     W.hgFwdNormalize = hgFwdNormalize;
     W.hgFwdAdd = hgFwdAdd;
     W.hgFwdSettleOne = hgFwdSettleOne;
+    /* the parallel fill-aware resolution, and the order-type rule it uses */
+    W.hgFwdSettleFill = hgFwdSettleFill;
+    W.hgFwdOrderType = hgFwdOrderType;
     W.hgFwdSettle = hgFwdSettle;
     W.hgFwdStatsOf = hgFwdStats;
     W.hgFwdOverlapOf = hgFwdOverlap;

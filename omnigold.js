@@ -3766,17 +3766,64 @@ terse status, and never launches a first-time scan on a global refresh.
          Most firings are rejected by this very ledger, the rejects are
          recorded, they lose, and the mechanic is then condemned by trades the
          desk refused to take. That is what emptied both tabs. */
+      /* WHICH POPULATION IS STILL GROWING.
+
+         Judging on tickets alone was a deadlock the moment measured-edge
+         went hard: no ticket issues, so ticketOnly can never reach
+         FWD_MIN_JUDGE, so this branch never runs, so the gate can never
+         promote a mechanic — the gate became the only thing able to clear
+         the gate. gateClear is the same ledger with the gate under test
+         excluded from its own entry requirement, so it keeps accumulating
+         and the anti-circularity `ticket` was protecting stays intact: it
+         is still only setups this ledger cleared, never all firings.
+
+         Tickets are preferred when there are enough of them, so records
+         written before hg-v757 keep deciding exactly as they used to. */
       var tix = fwd.ticketOnly;
       var tN = tix ? fin(tix.samples) : NaN;
       var tHit = tix ? fin(tix.hit) : NaN;
-      var judgeN = (isFinite(tN) && tN >= FWD_MIN_JUDGE) ? tN : NaN;
-      var judgeHit = isFinite(judgeN) ? tHit : NaN;
+      var clr = fwd.gateClear;
+      var cN = clr ? fin(clr.samples) : NaN;
+      var cHit = clr ? fin(clr.hit) : NaN;
+
+      var judgeN = NaN, judgeHit = NaN, judgeLabel = '';
+      if (isFinite(tN) && tN >= FWD_MIN_JUDGE){
+        judgeN = tN; judgeHit = tHit; judgeLabel = 'settled TICKETS';
+      } else if (isFinite(cN) && cN >= FWD_MIN_JUDGE){
+        judgeN = cN; judgeHit = cHit;
+        judgeLabel = 'settled setups that cleared every gate but this one';
+      }
+      /* AND IF THOSE RECORDS KNOW WHETHER THE ORDER FILLED, USE THAT.
+
+         The hit rate above assumes the position opened at `entry` on the
+         bar after the signal. A resting order does no such thing, and the
+         error runs one way per order type: a limit can book a win it never
+         opened for, a stop entry a loss it never opened for. Records
+         carrying a mark are settled both ways (hgFwdSettleFill), and where
+         enough of them exist the fill-aware count is the one that describes
+         a trade somebody could have had.
+
+         Preferred only when it clears FWD_MIN_JUDGE on its own, so a log
+         that is mostly legacy records keeps deciding exactly as before
+         rather than on a handful of new ones. */
+      var judgeSrc = (isFinite(tN) && tN >= FWD_MIN_JUDGE) ? tix
+                   : ((isFinite(cN) && cN >= FWD_MIN_JUDGE) ? clr : null);
+      if (judgeSrc){
+        var fillN = fin(judgeSrc.fillSamples), fillHit = fin(judgeSrc.fillHit);
+        if (isFinite(fillN) && fillN >= FWD_MIN_JUDGE && isFinite(fillHit)){
+          judgeN = fillN; judgeHit = fillHit;
+          judgeLabel = judgeLabel.replace(/^settled /, 'FILLED ');
+          if (fin(judgeSrc.fillUnfilled) > 0){
+            judgeLabel += ' (' + fin(judgeSrc.fillUnfilled) + ' never filled, excluded)';
+          }
+        }
+      }
 
       if (isFinite(judgeN) && isFinite(judgeHit)){
         var fse = Math.sqrt(Math.max(1e-9, fBreak * (1 - fBreak) / judgeN));
         var fz = (judgeHit - fBreak) / fse;
         var fzTxt = ' [' + (fz >= 0 ? '+' : '') + fz.toFixed(2) + 'σ vs breakeven]';
-        var tixTxt = judgeN + ' settled TICKETS · ' + (judgeHit * 100).toFixed(0) + '% T1-first';
+        var tixTxt = judgeN + ' ' + judgeLabel + ' · ' + (judgeHit * 100).toFixed(0) + '% T1-first';
         if (fz <= EDGE_VETO_Z){
           ed = false;
           edWhy = tixTxt + fzTxt + ' — the trades this ledger actually cleared have not paid'
@@ -3790,9 +3837,10 @@ terse status, and never launches a first-time scan on a global refresh.
            condemn. Report, do not veto. */
         var az = (fHit - fBreak) / Math.sqrt(Math.max(1e-9, fBreak * (1 - fBreak) / fN));
         ed = null;
+        var clearedN = isFinite(cN) ? cN : (isFinite(tN) ? tN : 0);
         edWhy = fTxt + ' [' + (az >= 0 ? '+' : '') + az.toFixed(2) + 'σ vs breakeven]'
-              + ' — but only ' + (isFinite(tN) ? tN : 0) + ' of those were setups this ledger cleared, '
-              + 'too few to judge the mechanic on. Reported, not vetoed.';
+              + ' — but only ' + clearedN + ' of those were setups this ledger cleared, '
+              + 'too few to judge the mechanic on (' + FWD_MIN_JUDGE + ' needed). Reported, not vetoed.';
       } else if (isFinite(fHit) && isFinite(z) && z > 0 && fHit < fBreak){
         ed = null;
         edWhy = fTxt + ' vs ' + edWhy
@@ -4536,6 +4584,28 @@ terse status, and never launches a first-time scan on a global refresh.
   /* This mechanic's OUT-OF-SAMPLE record, or null when the log is absent.
      Never throws: no forward log must leave the gate on the in-sample number
      saying so, not break the scan. */
+  /* Did this setup clear every gate EXCEPT measured-edge?
+
+     A ticket did, by definition. Anything else qualifies when the only key
+     standing in its way is the edge gate itself — nothing else vetoed and
+     nothing else is missing data.
+
+     Reads the grade's own lists so it says exactly what the card said. A
+     grade object that is absent or malformed yields undefined, never false:
+     "we could not tell" must not be recorded as "it failed", or the
+     population this exists to grow would be quietly poisoned. */
+  function hgOgGateClear(grade){
+    if (!grade || !Array.isArray(grade.vetoes) || !Array.isArray(grade.unknown)) return undefined;
+    if (grade.ticket === true) return true;
+    var blocking = grade.vetoes.concat(grade.unknown);
+    for (var i = 0; i < blocking.length; i++){
+      if (blocking[i] !== 'measured-edge') return false;
+    }
+    /* nothing blocking at all cannot happen here (that would be a ticket),
+       but an empty list is still honestly "cleared" rather than a guess */
+    return true;
+  }
+
   function hgOgFwdFor(tab, mechanic){
     try{
       var w = W();
@@ -4560,8 +4630,13 @@ terse status, and never launches a first-time scan on a global refresh.
          to require enough of it before acting, not a reason to ignore it. */
       var all = w.hgFwdStats(tab, mechanic, false);
       var tix = w.hgFwdStats(tab, mechanic, true);
+      /* AND the population that did not stop growing. `ticket` has been
+         false on every card since measured-edge went hard, so ticketOnly is
+         frozen; gateClear is the same ledger minus the gate under test. */
+      var clr = w.hgFwdStats(tab, mechanic, { gateClear: true });
       if (!all || !isFinite(fin(all.samples))) return null;
       all.ticketOnly = (tix && isFinite(fin(tix.samples))) ? tix : null;
+      all.gateClear = (clr && isFinite(fin(clr.samples))) ? clr : null;
       return all;
     }catch(e){ return null; }
   }
@@ -5919,7 +5994,24 @@ terse status, and never launches a first-time scan on a global refresh.
      on this desk — firings that agree with it hit 37.4% against 24.0% for
      those that do not, z +9.79 on the scalp horizon — so the setups stay held.
      They are simply no longer held in silence. */
+  /* The tape/held reasoning, plus the gate reason when the gate is why
+     nothing cleared. Two sentences, because they answer two questions a
+     reader has at once: which side is eligible, and why no side is a
+     ticket. hgOgEdgeSilenceNote returns '' whenever the gate is not the
+     reason, so this collapses to exactly the old copy. */
   function hgOgMpNoneWhy(tape, held){
+    var base = hgOgMpNoneWhyTape(tape, held);
+    var edge = hgOgEdgeSilenceNote();
+    return edge ? (base + ' ' + edge) : base;
+  }
+
+  function hgOgMpNoneWhyTape(tape, held){
+    /* THE TAPE REASON AND THE GATE REASON ARE BOTH TRUE.
+
+       An earlier pass at this returned the gate note INSTEAD of the tape
+       copy, which threw away the thing a reader most wants — which side is
+       even eligible. Appended, not substituted: the tape says why this side
+       is wrong today, the gate says why no side is a ticket at all. */
     var base;
     if (tape === 'short')
       base = 'gold is going down — a LONG is not the setup. Standing aside is the position when no short ticket cleared.';
@@ -6733,8 +6825,14 @@ terse status, and never launches a first-time scan on a global refresh.
     var dir = String(pick.dir || '').toLowerCase();
     var tapeOk = !(tape === 'long' || tape === 'short') || dir === tape;
     var fresh = hgOgTopSetupFresh(pick, mktPx);
+    /* "not a TICKET" was true and useless once the edge gate went hard —
+       it is the reason for every non-ticket on this desk, and a reader
+       deserves the reason rather than the restatement. */
     push('ticket', !!(pick.grade && pick.grade.ticket),
-         (pick.grade && pick.grade.ticket) ? 'gate ledger TICKET' : 'not a TICKET');
+         (pick.grade && pick.grade.ticket) ? 'gate ledger TICKET'
+           : (hgOgGateClear(pick.grade) === true
+               ? 'cleared every gate except measured-edge — no proven edge, so no ticket'
+               : 'not a TICKET'));
     push('formed', formed, formed ? 'formation formed' : 'did not form');
     push('level-fresh', !!fresh.ok, fresh.why || (fresh.ok ? 'levels fresh' : 'levels not fresh'));
     push('tape', tapeOk,
@@ -7990,8 +8088,33 @@ terse status, and never launches a first-time scan on a global refresh.
         + 'which is what that bar exists to say.<br>'
         + 'Every setup below still shows its levels, its gates and its reasoning as a '
         + '<b>WATCH</b>. What would refill this column is a mechanic clearing the bar on '
-        + 'out-of-sample trades — the forward log is accumulating them.'
+        + 'out-of-sample trades: ' + FWD_MIN_JUDGE + ' settled setups that passed every other '
+        + 'gate, beating breakeven. The forward log records those whether or not they ticket, '
+        + 'which is what stops this gate being the only thing able to clear itself.'
         + '</div>';
+    } catch (e) { return ''; }
+  }
+
+  /* ONE SENTENCE, FOR EVERY SURFACE hg-v756 SILENCED.
+
+     Making measured-edge hard emptied more than the ticket column. Anything
+     keyed on grade.ticket went with it — the MOST PROBABLE panel, the pick
+     selector, the XM bot payload, the activation row — and the explanation
+     lived in exactly one place, the evidence panel further down. A reader
+     on MOST PROBABLE saw an empty box and no reason, which reads as a
+     broken desk rather than a deliberate one.
+
+     Returns '' when the gate is not the reason, so a genuinely quiet tape
+     is not mislabelled: the flag off, or any mechanic clearing its bar,
+     and this says nothing. hgOgEdgeProofPanelHtml is the long form; this is
+     the line that goes where a reader is already looking. */
+  function hgOgEdgeSilenceNote(){
+    try {
+      if (!OG_EDGE_PROOF_REQUIRED) return '';
+      if (hgOgEdgeProofPanelHtml() === '') return '';   /* something clears — not this */
+      return 'No ticket can clear while no gold mechanic has a measured edge: '
+           + 'this desk stopped issuing them rather than imply one. The setups below are '
+           + 'WATCH cards with their levels and gates intact.';
     } catch (e) { return ''; }
   }
 
@@ -9970,9 +10093,12 @@ terse status, and never launches a first-time scan on a global refresh.
           ? (((engineScalp && engineScalp.engineLowGrade) || (engineSwing && engineSwing.engineLowGrade))
               ? 'forming' : 'engine')
           : 'forming');
+    /* When the edge gate is why this panel is empty, say so HERE rather
+       than only in the evidence panel further down. */
+    var edgeSilence = hgOgEdgeSilenceNote();
     var note = anyTrade
       ? 'Balanced across mechanic families and indicator reads on gold\'s own tape. Tickets only. Not a win probability.'
-      : (anyEngine
+      : ((anyEngine
           ? ((engineScalp && engineScalp.engineLowGrade) || (engineSwing && engineSwing.engineLowGrade)
               ? 'No grade-A/B engine this bar — showing best <b>grade-C FORMING</b> setup from GOLD SCALP/SWING (tally below 5). Not a win probability.'
               : 'No OMNIGOLD TICKET cleared on this horizon — showing the best grade-A/B setup from <b>GOLD SCALP / GOLD SWING</b> engines. Demoted or against-tape engines are labeled honestly. Not a win probability.')
@@ -9983,7 +10109,10 @@ terse status, and never launches a first-time scan on a global refresh.
                 ? ('Against-tape tickets (' + held.n + ') stay in the HELD queue — not shown as setups. ')
                 : '')
              + 'Hard refresh after a tape flip.')
-          : hgOgMpNoneWhy(tape, held)));
+          /* hgOgMpNoneWhy already carries the gate reason; the branches
+             above do not, so it is appended to them here. */
+          : hgOgMpNoneWhy(tape, held)))
+        + ((edgeSilence && (anyEngine || anyWatch)) ? (' ' + edgeSilence) : ''));
     var h = '<section class="hg-mp" data-hg-mp="omnigold" data-og-mp="1" data-tier="' + tier + '" aria-label="Most probable gold setups">';
     h += '<div class="hg-mp-eye">MOST PROBABLE SETUPS</div>';
     h += '<div class="hg-mp-head">XAUUSD';
@@ -10967,6 +11096,34 @@ terse status, and never launches a first-time scan on a global refresh.
                 tab: 'OMNIGOLD:' + cfg.label, mechanic: c.kind, sym: 'XAUUSD', tf: cfg.tf,
                 dir: c.dir, entry: c.plan.entry, stop: c.plan.stop, t1: c.plan.t1,
                 barT: barT, horizonBars: cfg.horizonBars, ticket: !!(c.grade && c.grade.ticket),
+                /* EVERY GATE PASSED EXCEPT THE ONE UNDER TEST.
+
+                   measured-edge promotes a mechanic on twenty settled
+                   TICKETS. hg-v756 made that gate hard, so nothing is a
+                   ticket, so the population can never grow, so the gate can
+                   never promote anything — it became the only thing that
+                   could clear itself. This is the population that replaced
+                   `ticket`, and it keeps accumulating.
+
+                   Computed from the grade's own veto/unknown lists rather
+                   than re-deriving the ledger, so it cannot drift from what
+                   the card actually showed. */
+                gateClear: hgOgGateClear(c.grade),
+                /* PRICE AT FIRE. Without it the log cannot tell a limit from
+                   a stop entry, and so cannot ask whether the order would
+                   have filled at all — it has always assumed it did. The
+                   bar close is the mark the plan was written against; the
+                   live price is preferred when the scan has one. */
+                mark: (function(){
+                  /* same precedence the zone context uses a few lines up:
+                     the traded market price first, the feed's live price
+                     next, the bar close last */
+                  var m = fin(mktPx);
+                  if (!(isFinite(m) && m > 0)) m = fin(livePx);
+                  if (isFinite(m) && m > 0) return m;
+                  var b = rows[rows.length - 1];
+                  return (b && isFinite(fin(b.c))) ? fin(b.c) : undefined;
+                })(),
                 /* WAS IT ON THE SCREEN? hg-v753's lane throttle means the
                    tab forms ~46 plans a day and shows about 6. The recording
                    stays unthrottled on purpose — the in-sample pool measures
@@ -12831,6 +12988,11 @@ terse status, and never launches a first-time scan on a global refresh.
     /* pure Bonferroni bar — exported so a test can check the ledger against
        the same number the gate and the panel use, not a copy of it */
     window.hgOgFamilyZ = hgOgFamilyZ;
+    /* the population measured-edge judges on since it went hard */
+    window.hgOgGateClear = hgOgGateClear;
+    /* the one-line reason, for every surface the hard edge gate emptied */
+    window.hgOgEdgeSilenceNote = hgOgEdgeSilenceNote;
+    window.hgOgMpNoneWhyTape = hgOgMpNoneWhyTape;
     window.hgOgLaneThrottle = hgOgLaneThrottle;
     /* drawdown / streak panel + its baked numbers */
     window.hgOgBookExperienceHtml = hgOgBookExperienceHtml;
