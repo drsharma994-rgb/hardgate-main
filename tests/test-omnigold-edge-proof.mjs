@@ -30,11 +30,16 @@ const doc = { getElementById: () => null, createElement: () => ({ style: {}, cla
 const ctx = { console, Math, isFinite, isNaN, parseFloat, parseInt, Number, String, Object, Array,
               JSON, Date, RegExp, document: doc, setTimeout: () => 0, clearTimeout: () => {},
               addEventListener: () => {}, fetch: () => Promise.reject(new Error('no net')),
-              localStorage: { getItem: () => null, setItem(){}, removeItem(){} } };
+              localStorage: (function(){ var st = {}; return {
+                getItem: k => (k in st ? st[k] : null),
+                setItem: (k, v) => { st[k] = String(v); },
+                removeItem: k => { delete st[k]; } }; })() };
 ctx.window = ctx; ctx.globalThis = ctx; ctx.self = ctx;
 vm.createContext(ctx);
-for (const f of ['indicators.js', 'indicators2.js', 'plans.js', 'hg-plan.js', 'hg-gates.js',
-                 'omniroute.js', 'omnigold.js']){
+/* hg-forward.js included because the panel now reads the live forward log
+   for progress; without it hgOgEdgeProgressHtml correctly degrades to '' */
+for (const f of ['indicators.js', 'indicators2.js', 'hg-forward.js', 'plans.js', 'hg-plan.js',
+                 'hg-gates.js', 'omniroute.js', 'omnigold.js']){
   try { vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f }); }
   catch (e) { /* optional deps degrade */ }
 }
@@ -106,7 +111,14 @@ console.log('\n== the empty column explains itself ==');
   ok(/BY DESIGN, NOT BY FAULT/.test(html), 'and that this is deliberate, not a broken feed');
   ok(/WATCH/.test(html), 'it says the setups are still there as watches');
   ok(/σ/.test(html), 'it quotes the actual bar rather than asserting a conclusion');
-  ok(/forward log/.test(html), 'and says what would refill the column');
+  ok(/settled setups that passed every other gate, beating breakeven/.test(html),
+     'and says what would refill the column');
+  /* hg-v761: and how far that has got, so a reader waiting weeks can tell
+     2-of-20 from 19-of-20 — and from a log that stopped recording */
+  ok(/SCALP/.test(html) && /SWING/.test(html),
+     'with live progress per horizon, where the promise is made');
+  ok(/of 20 settled|no cleared setups have settled yet/.test(html),
+     'counted against the threshold rather than merely asserted');
 
   /* it must be rendered ABOVE the numbers a reader would scan for a ticket */
   ok(/hgOgEdgeProofPanelHtml\(\)[\s\S]{0,200}hgOgBookExperienceHtml\(\)/.test(SRC),

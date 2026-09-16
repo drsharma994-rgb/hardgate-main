@@ -667,11 +667,15 @@ localStorage. Never throws.
        is the difference between a threshold of twenty being reachable and
        being arithmetic that never lands. Ticket and shown queries stay
        live-window views — no aggregate carries their split. */
-    else if (agg && wantGateClear && !wantTicket && !wantShown){
+    else if (agg && (wantGateClear || wantShown) && !wantTicket && !(wantGateClear && wantShown)){
+      /* Both splits are folded now, so either query reads all time. A query
+         for BOTH at once has no folded block of its own and stays a live
+         view rather than borrowing one of them — an intersection is not
+         either of its parts. */
       var gcTabs = tabList ? Object.keys(tabList) : [String(tab || '')];
       for (var gi = 0; gi < gcTabs.length; gi++){
         var ge = agg[gcTabs[gi] + '|' + String(mechanic || '')];
-        var ga = ge && ge.gc;
+        var ga = ge && (wantGateClear ? ge.gc : ge.sh);
         if (!ga) continue;
         wins += (ga.wins || 0); losses += (ga.losses || 0);
         expired += (ga.expired || 0); rrSum += (ga.rrSum || 0);
@@ -858,18 +862,31 @@ localStorage. Never throws.
          The fill-aware counters fold beside them, so the population that
          decides is the one measured on orders that would actually have
          filled rather than the one that assumed they did. */
-      if (r.gateClear === true){
-        var gc = out[key].gc || (out[key].gc = { wins: 0, losses: 0, expired: 0, rrSum: 0,
-                                                 fillWins: 0, fillLosses: 0,
-                                                 fillUnfilled: 0, fillUnprovable: 0 });
-        if (r.state === 't1'){ gc.wins++; gc.rrSum += (num(r.rr) || 0); }
-        else if (r.state === 'stop') gc.losses++;
-        else gc.expired++;
-        if (r.stateFill === 't1') gc.fillWins++;
-        else if (r.stateFill === 'stop') gc.fillLosses++;
-        else if (r.fillState === 'unfilled') gc.fillUnfilled++;
-        else if (r.fillState === 'unprovable') gc.fillUnprovable++;
-      }
+      var blank = function(){ return { wins: 0, losses: 0, expired: 0, rrSum: 0,
+                                       fillWins: 0, fillLosses: 0,
+                                       fillUnfilled: 0, fillUnprovable: 0 }; };
+      var tally = function(b){
+        if (r.state === 't1'){ b.wins++; b.rrSum += (num(r.rr) || 0); }
+        else if (r.state === 'stop') b.losses++;
+        else b.expired++;
+        if (r.stateFill === 't1') b.fillWins++;
+        else if (r.stateFill === 'stop') b.fillLosses++;
+        else if (r.fillState === 'unfilled') b.fillUnfilled++;
+        else if (r.fillState === 'unprovable') b.fillUnprovable++;
+      };
+      if (r.gateClear === true) tally(out[key].gc || (out[key].gc = blank()));
+      /* AND THE CARDS THAT REACHED THE SCREEN.
+
+         `shown` marks the ~6 plans a day the lane throttle publishes out of
+         the ~49 formed. It is the only population that answers the question
+         a person using this tab actually has — did the cards I SAW pay? —
+         as opposed to how the raw unthrottled mechanic did.
+
+         Without this fold that question is answerable only over the live
+         window, which the cap keeps at about four weeks. `shown` is the
+         throttled subset, so per mechanic it is thinner still: folding it is
+         what makes it answerable at all. */
+      if (r.shown === true) tally(out[key].sh || (out[key].sh = blank()));
     }
     return out;
   }

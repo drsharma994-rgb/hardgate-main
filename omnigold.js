@@ -8274,6 +8274,73 @@ terse status, and never launches a first-time scan on a global refresh.
      It reads the SHIPPED ledger rather than a hard-coded sentence, so the
      day a mechanic does clear its bar this panel stops claiming otherwise
      on its own. */
+  /* HOW FAR THE WAIT HAS GOT, AND WHETHER IT IS STILL RUNNING.
+
+     The panel above tells a reader the forward log is collecting the
+     evidence that would bring tickets back. That was a promise with nothing
+     behind it: hgFwdHealthHTML has existed since the log was written and
+     renders only on the FORWARD LEDGER tab, so someone waiting weeks on THIS
+     tab could not tell 2-of-20 from 19-of-20, nor either from a pipeline
+     that stopped recording a fortnight ago. hg-forward.js says so itself —
+     "a SILENT logging failure is worse than the crash it prevents".
+
+     Three things, per horizon: how many cleared setups have settled against
+     the threshold, how they are doing against breakeven, and — separately —
+     how the cards a reader ACTUALLY SAW have done. That last one is the
+     question a person has, and until now nothing in this repo asked it:
+     `shown` has been stamped on every record since hg-v753 and queried by
+     nothing.
+
+     Absent numbers read as absent. A log with no records says so rather
+     than rendering zeros that look like a measured nothing. */
+  function hgOgEdgeProgressHtml(){
+    try {
+      var w = W();
+      if (!w || typeof w.hgFwdStats !== 'function') return '';
+      var be = 1 / (1 + OG_T1_R);
+      var rows = [], i, hz = ['SCALP', 'SWING'];
+      for (i = 0; i < hz.length; i++){
+        var tabs = hgOgFwdTabsFor(hz[i]);
+        var clr = null, shw = null;
+        try { clr = w.hgFwdStats(tabs, null, { gateClear: true }); } catch (e1) { clr = null; }
+        try { shw = w.hgFwdStats(tabs, null, { shown: true }); } catch (e2) { shw = null; }
+        var n = clr ? fin(clr.samples) : NaN;
+        var hit = clr ? fin(clr.hit) : NaN;
+        var open = clr ? fin(clr.open) : NaN;
+        var bit = '<b>' + hz[i] + '</b> ';
+        if (!isFinite(n) || n <= 0){
+          bit += 'no cleared setups have settled yet'
+              + (isFinite(open) && open > 0 ? ' (' + open + ' still running)' : '');
+        } else {
+          bit += n + ' of ' + FWD_MIN_JUDGE + ' settled'
+              + (isFinite(open) && open > 0 ? ', ' + open + ' running' : '')
+              + (isFinite(hit) ? (' · ' + (hit * 100).toFixed(0) + '% vs '
+                   + (be * 100).toFixed(0) + '% breakeven') : '');
+          if (n >= FWD_MIN_JUDGE) bit += ' — enough to judge';
+        }
+        if (shw && fin(shw.samples) > 0){
+          bit += ' · cards actually shown: ' + fin(shw.samples) + ' settled'
+              + (isFinite(fin(shw.hit)) ? ' at ' + (fin(shw.hit) * 100).toFixed(0) + '%' : '');
+        }
+        rows.push(bit);
+      }
+
+      /* the log's own fault report, where the promise is made rather than on
+         a tab nobody waiting is looking at */
+      var bad = '';
+      try {
+        var h = (typeof w.hgFwdHealth === 'function') ? w.hgFwdHealth() : null;
+        if (h && fin(h.recent) > 0){
+          bad = '<br><span style="color:#dc2626"><b>THE LOG IS REPORTING ERRORS</b> — '
+              + fin(h.recent) + ' recent. Evidence may not be accumulating at all; '
+              + 'see the FORWARD LEDGER tab.</span>';
+        }
+      } catch (eH) { bad = ''; }
+
+      return '<br><span style="opacity:0.85">' + rows.join('<br>') + '</span>' + bad;
+    } catch (e) { return ''; }
+  }
+
   function hgOgEdgeProofPanelHtml(){
     try {
       if (!OG_EDGE_PROOF_REQUIRED) return '';
@@ -8312,10 +8379,10 @@ terse status, and never launches a first-time scan on a global refresh.
         + '. Searching ' + keys.length + ' ways and taking the best one is not evidence, '
         + 'which is what that bar exists to say.<br>'
         + 'Every setup below still shows its levels, its gates and its reasoning as a '
-        + '<b>WATCH</b>. What would refill this column is a mechanic clearing the bar on '
-        + 'out-of-sample trades: ' + FWD_MIN_JUDGE + ' settled setups that passed every other '
-        + 'gate, beating breakeven. The forward log records those whether or not they ticket, '
-        + 'which is what stops this gate being the only thing able to clear itself.'
+        + '<b>WATCH</b>. What would refill this column is ' + FWD_MIN_JUDGE + ' settled setups '
+        + 'that passed every other gate, beating breakeven — recorded whether or not they '
+        + 'ticket, which is what stops this gate being the only thing able to clear itself.'
+        + hgOgEdgeProgressHtml()
         + '</div>';
     } catch (e) { return ''; }
   }
@@ -13217,6 +13284,7 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgHorizonPoolTests = hgOgHorizonPoolTests;
     /* the one-line reason, for every surface the hard edge gate emptied */
     window.hgOgEdgeSilenceNote = hgOgEdgeSilenceNote;
+    window.hgOgEdgeProgressHtml = hgOgEdgeProgressHtml;
     window.hgOgMpNoneWhyTape = hgOgMpNoneWhyTape;
     window.hgOgLaneThrottle = hgOgLaneThrottle;
     /* drawdown / streak panel + its baked numbers */

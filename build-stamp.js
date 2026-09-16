@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v760',
-  pack: 'the stop floor was fitted to one end of an interval that reverses sign at the other; it stays as a cost rule, and every gate tuned the same way becomes re-testable',
+  version: 'hg-v761',
+  pack: 'the tab is waiting for evidence and never said how far it had got, whether the log was still recording, or how the cards you actually saw had done',
   built: '2026-09-16T12:00:00Z'
 };
 
