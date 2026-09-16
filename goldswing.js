@@ -492,6 +492,10 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
         locked: !!c.locked, issuedAt: isFinite(c.issuedAt) ? c.issuedAt : null,
         asOf: c.asOf || null, why: c.why || null, invalidates: c.invalidates || null,
         anchor: isFinite(c.anchor) ? c.anchor : null,
+        /* the mark this candidate was sized against — re-rankers and the
+           card both need it to ask whether price already walked through
+           the plan, and it is lost if it does not travel */
+        mark: isFinite(c.mark) ? c.mark : null,
         zone: (c.zone && isFinite(c.zone.lo) && isFinite(c.zone.hi)) ? { lo: c.zone.lo, hi: c.zone.hi } : null,
         /* v731: carry the SMC read across the publish boundary — see the same
            note in goldscalp.js publishScan. Re-rankers downstream have no
@@ -996,6 +1000,26 @@ function bannerHTML(best, ranked){
     + '</div></div>';
 }
 
+/* PRICE MAY HAVE WALKED THROUGH THIS PLAN ALREADY.
+
+   The levels on the card are sized against each other and can be a flawless
+   2.0R while the target sits behind price, or the stop is already breached.
+   hgPlanMarketGeometry (hg-plan.js) is the shared rule; this renders its
+   verdict. Silent when the rule is unreachable or the mark is unknown — an
+   unjudgeable plan gets no claim either way. */
+function gswGeoLine(c){
+  try{
+    var fn = (typeof W !== 'undefined' && W && W.hgPlanMarketGeometry)
+      || (typeof hgPlanMarketGeometry === 'function' ? hgPlanMarketGeometry : null);
+    if (typeof fn !== 'function' || !c) return '';
+    var g = fn({ dir: c.dir, entry: c.entry, stop: c.stop, t1: c.t1 }, c.mark);
+    if (!g || g.ok) return '';
+    var label = (g.code === 'stop-breached') ? 'STOP ALREADY BREACHED' : 'TARGET BEHIND PRICE';
+    return '<div class="gsw-geoline note warn" style="margin-top:4px"><b>' + label
+      + ':</b> ' + esc(g.why) + '</div>';
+  }catch(e){ return ''; }
+}
+
 function cardHTML(c, isBest, season, tape){
   tape = tape || (c && c.goldTape) || '';
   var dirUp = c.dir.toUpperCase();
@@ -1090,6 +1114,7 @@ function cardHTML(c, isBest, season, tape){
     + ' · TP2 <b' + gswSt(GSW_PLAN_B) + '>$' + pxF(c.t2) + '</b> (' + fmtF(c.rr2, 1) + 'R)'
     + ' · TP3 <b' + gswSt(GSW_PLAN_B) + '>$' + pxF(c.t3) + '</b> (' + fmtF(c.rr3, 1) + 'R)'
     + '</div>'
+    + gswGeoLine(c)
     + ((typeof hgStrategyTradeDetailHtml === 'function') ? hgStrategyTradeDetailHtml(c) : '')
     + (c.why ? '<div class="gsw-whyline"' + gswSt(GSW_WHY) + '>' + esc(c.why) + '</div>' : '')
     + visionLine
@@ -3071,7 +3096,25 @@ async function runScan(ui, scanSt){
         }
       }catch(ePn){}
       collectWatch(gold, v);
-      for (i = 0; i < got.length; i++) cands.push(got[i]);
+      /* Carry the mark the candidate was sized against, so the card can ask
+         hgPlanMarketGeometry whether price has already walked through the
+         plan. Live spot when the goldspot feed is up, else the last CLOSED
+         4h close — the same bar the gates above already judged. Named .mark
+         rather than a live-sounding name because the fallback is a bar
+         close, not a tick. */
+      var __gswMark = NaN;
+      try {
+        var __sp = ctx && ctx.spot && +ctx.spot.spotPx;
+        if (isFinite(__sp) && __sp > 0) __gswMark = __sp;
+        else if (gold && gold.rows4h && gold.rows4h.length){
+          var __lc = gold.rows4h[gold.rows4h.length - 1];
+          if (__lc && isFinite(+__lc.c)) __gswMark = +__lc.c;
+        }
+      } catch (eMk) { __gswMark = NaN; }
+      for (i = 0; i < got.length; i++){
+        if (got[i] && isFinite(__gswMark) && !isFinite(+got[i].mark)) got[i].mark = __gswMark;
+        cands.push(got[i]);
+      }
       for (i = 0; i < (got.rejected || []).length; i++) rejectedAll.push(got.rejected[i]);
       legs.push(v + ': ' + gold.rows4h.length + ' 4h bars — '
         + (got.length ? got.length + ' strategy candidate' + (got.length === 1 ? '' : 's') : 'no qualifying confluence'));
