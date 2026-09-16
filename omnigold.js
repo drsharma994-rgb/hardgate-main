@@ -6060,6 +6060,25 @@ terse status, and never launches a first-time scan on a global refresh.
         if (lp){ liveGrade = lp.grade; liveN = lp.delta; }
       }
     } catch(eLp){}
+    /* THE 120 IS INERT WHILE THE EDGE GATE IS HARD.
+
+       ticketN exists to hold tickets above watches, and it is the largest
+       weight here for that reason. Since hg-v756 made measured-edge hard,
+       no card is a ticket, so this term is 0 for every card on every scan.
+       A constant adds nothing to an ordering, so nothing is WRONG — but the
+       note above this function still describes a scheme in which "ticket"
+       dominates, and that has not been true for six releases.
+
+       What actually separates WATCH cards now is tape (100), then the two
+       normalised agreement terms at 30 each, the edge pair (25 / -40), and
+       freshness and live-price sanity at 15 and 20. Nobody re-examined that
+       ordering for a book in which EVERY card is a watch — it was tuned
+       when the ticket term did the heavy lifting.
+
+       Left in place deliberately: the moment a mechanic clears its bar this
+       term does its job again, and removing it would have to be undone.
+       hgOgDeskOrder's section key carries the same inert `ticket ? 2 : 0`
+       for the same reason. */
     var score = 100 * tapeScore
               + 120 * ticketN
               + 30 * family
@@ -11400,6 +11419,33 @@ terse status, and never launches a first-time scan on a global refresh.
                    than re-deriving the ledger, so it cannot drift from what
                    the card actually showed. */
                 gateClear: hgOgGateClear(c.grade),
+                /* WHERE THE DESK PUT THIS CARD.
+
+                   hgOgBalanceParts is what orders every gold card — the
+                   composite of tape, family agreement, indicator net,
+                   coverage, proximity, freshness and measured edge. It has
+                   decided which setup a reader sees first since it was
+                   written, and NOTHING has ever recorded it, so whether a
+                   higher-ranked card actually does better is a question
+                   this desk has never been able to ask.
+
+                   Computed here, at fire time, from the same function the
+                   renderer uses, so the number recorded is the number that
+                   ordered the card. Tape is unread at this point in the
+                   scan — it is resolved later — so the score is taken
+                   WITHOUT a tape side: the tape term contributes 0 for
+                   every card equally and the remaining terms are what
+                   separate them. That makes it comparable across bars,
+                   which a tape-dependent score would not be.
+
+                   A number, not a claim. The forward log will say in time
+                   whether it ranks anything. */
+                balScore: (function(){
+                  try {
+                    var b = hgOgBalanceParts(c, '');
+                    return (b && isFinite(fin(b.score))) ? Math.round(fin(b.score) * 10) / 10 : undefined;
+                  } catch (eB) { return undefined; }
+                })(),
                 /* PRICE AT FIRE. Without it the log cannot tell a limit from
                    a stop entry, and so cannot ask whether the order would
                    have filled at all — it has always assumed it did. The

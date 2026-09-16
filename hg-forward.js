@@ -147,6 +147,18 @@ localStorage. Never throws.
          Undefined, never a substitute value: `entry` would read as a market
          order and quietly declare every legacy record filled. */
       mark: isFinite(fin(rec.mark)) ? fin(rec.mark) : undefined,
+      /* THE SCORE THAT ORDERED THE CARD.
+
+         A desk that ranks its setups is making a claim: the one at the top
+         is the better bet. OMNIGOLD has ordered gold cards by a composite
+         score since it was written and never recorded it, so the claim has
+         never been tested. This is the number, at fire time, from the same
+         function the renderer sorts on.
+
+         undefined when the tab does not rank, which most do not — a missing
+         score must never read as a score of zero, because zero is a real
+         and unremarkable value on this scale. */
+      balScore: isFinite(fin(rec.balScore)) ? fin(rec.balScore) : undefined,
       /* Whether the gate ledger passed this setup at the time it fired. Not
          used by the stats yet, but recording it now means we can later ask
          the question that actually matters about the gates: do TICKETS
@@ -647,6 +659,13 @@ localStorage. Never throws.
     var byGrade = { A:{n:0,w:0}, B:{n:0,w:0}, C:{n:0,w:0}, D:{n:0,w:0} };
     /* settled outcomes split by how many of the three replicated gates agreed */
     var byStack = { 0:{n:0,w:0}, 1:{n:0,w:0}, 2:{n:0,w:0}, 3:{n:0,w:0} };
+    /* Settled outcomes split by the RANK SCORE the desk gave the card, so
+       the ordering can be judged rather than trusted. Buckets, not a
+       correlation: the score is a composite on an arbitrary scale and the
+       only honest question is whether the cards it put near the top did
+       better than the ones it put near the bottom. Records with no score —
+       every tab that does not rank — land nowhere and are not counted. */
+    var byBal = { top:{n:0,w:0}, mid:{n:0,w:0}, low:{n:0,w:0} };
     /* Start from any evidence already folded out of the record list. Without
        this, everything pruned would silently vanish from the numbers.
        ticketOnly cannot be answered from the aggregate — it does not keep that
@@ -729,6 +748,15 @@ localStorage. Never throws.
         byStack[r.stack3].n++;
         if (r.state === 't1') byStack[r.stack3].w++;
       }
+      if ((r.state === 't1' || r.state === 'stop') && isFinite(num(r.balScore))){
+        /* cut at the tape term's own size: a card carrying tape agreement
+           scores about 100 clear of one that does not, so these thirds are
+           "with the tape and agreeing", "one or the other", "neither" */
+        var bs = num(r.balScore);
+        var slot = bs >= 100 ? 'top' : (bs >= 0 ? 'mid' : 'low');
+        byBal[slot].n++;
+        if (r.state === 't1') byBal[slot].w++;
+      }
     }
     var settled = wins + losses;
     var hit = settled ? wins / settled : NaN;
@@ -767,7 +795,7 @@ localStorage. Never throws.
              fillHit: (fillWins + fillLosses) ? fillWins / (fillWins + fillLosses) : NaN,
              fillUnfilled: fillUnfilled,
              fillUnprovable: fillUnprovable,
-             byGrade: byGrade, byStack: byStack };
+             byGrade: byGrade, byStack: byStack, byBal: byBal };
   }
 
   /* Every mechanic seen for a tab. Pure. */

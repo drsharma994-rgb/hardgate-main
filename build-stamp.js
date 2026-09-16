@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v762',
-  pack: 'the page seeded itself with six invented setups on every load, and four tests had never passed since the first commit',
+  version: 'hg-v763',
+  pack: 'the desk has ordered its gold cards by a composite score since it was written and never recorded it, so the ranking has never been testable',
   built: '2026-09-16T12:00:00Z'
 };
 
