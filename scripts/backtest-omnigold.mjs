@@ -427,6 +427,12 @@ function settleRecord(tr, rows, tfSec, counters, evidence, results){
     engineAgainstTape: tr.source === 'ENGINE' ? !!tr.engineAgainstTape : undefined,
     gateConf: tr.gateConf, checksPass: tr.checksPass,
     orderType: tr.orderType,
+    /* PRICE AT FIRE — the mark hgPlanMarketGeometry judges a plan against.
+       Every one of these emitters already had it in hand (it is the same
+       number xmOrderType reads to pick LIMIT vs STOP) and none of them
+       recorded it, so no settled artifact in this repo could answer
+       whether a plan was already dead when it was published. */
+    markAtFire: (typeof tr.markAtFire === "number" && isFinite(tr.markAtFire)) ? +tr.markAtFire.toFixed(4) : null,
     sameBarExit: sameBarExit || undefined,
     ambiguousSameBarWin: ambiguousWin || undefined,
     outcome: tr.outcome + (tr.bothTouch ? ' (both-touch)' : ''),
@@ -480,6 +486,7 @@ function walkCore(W, rows, cfgLabel, evidence, results, counters){
         confluence: conf.score, tier: conf.tier,
         gateConf: conf.gateConf, checksPass: conf.checksPass,
         orderType: xmOrderType(c.dir, +p.entry, +bar.c).name,
+        markAtFire: +bar.c,
         sigIdx: i
       }));
     }
@@ -601,6 +608,7 @@ function walkEngines(W, rows1h, m15, h4, d1, evidence, results, counters){
         engineLowGrade: !!bridge.engineLowGrade,
         gateConf: null, checksPass: null,
         orderType: xmOrderType(bridge.dir, p.entry, +bar.c).name,
+        markAtFire: +bar.c,
         sigIdx: i
       }));
     }

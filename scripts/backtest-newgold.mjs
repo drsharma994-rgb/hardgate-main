@@ -356,6 +356,12 @@ function settleRecord(tr, rows, counters, results){
     riskPct: isFinite(tr.riskPct) ? +tr.riskPct.toFixed(3) : null,
     stopAtr: isFinite(tr.stopAtr) ? +tr.stopAtr.toFixed(2) : null,
     orderType: tr.orderType,
+    /* PRICE AT FIRE — the mark hgPlanMarketGeometry judges a plan against.
+       Every one of these emitters already had it in hand (it is the same
+       number xmOrderType reads to pick LIMIT vs STOP) and none of them
+       recorded it, so no settled artifact in this repo could answer
+       whether a plan was already dead when it was published. */
+    markAtFire: (typeof tr.markAtFire === "number" && isFinite(tr.markAtFire)) ? +tr.markAtFire.toFixed(4) : null,
     sameBarExit: sameBarExit || undefined,
     ambiguousSameBarWin: ambiguousWin || undefined,
     outcome: tr.outcome + (tr.bothTouch ? ' (both-touch)' : ''),
@@ -514,6 +520,7 @@ function walkHorizon(W, hz, rows, rows4h, results, counters){
         stopAtr: (isFinite(a14) && a14 > 0) ? Math.abs(entry - stop) / a14 : NaN,
         entry, stop, t1, t2: +setup.t2,
         orderType: xmOrderType(setup.dir, entry, +bar.c).name,
+        markAtFire: +bar.c,
         sigIdx: i
       }));
     } catch (e) { counters.scanErrors++; }
