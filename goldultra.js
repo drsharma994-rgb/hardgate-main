@@ -1648,6 +1648,22 @@ function measuredLine(kind, book){
   if (kind === 'WITH') return 'MEASURED · with the consensus: ' + fmtR(b.with.ins.net) + ' in-sample (n=' + b.with.ins.n + ') · ' + fmtR(b.with.oos.net) + ' out-of-sample (n=' + b.with.oos.n + ') — flat, never crowned';
   return 'count thin or under ' + Math.round(F.x * 100) + '% — no confluence read; the desk’s own record stands';
 }
+/* PRICE MAY HAVE WALKED THROUGH THIS PLAN ALREADY — the shared rule in
+   hg-plan.js. This tab already hands the card pxNow, so there is no mark to
+   plumb: the last trade IS the mark. Silent when the rule is unreachable or
+   pxNow is unknown. */
+function guGeoLine(c, pxNow){
+  try{
+    var fn = (typeof W !== 'undefined' && W && W.hgPlanMarketGeometry)
+      || (typeof hgPlanMarketGeometry === 'function' ? hgPlanMarketGeometry : null);
+    if (typeof fn !== 'function' || !c) return '';
+    var g = fn({ dir: c.dir, entry: c.entry, stop: c.stop, t1: c.t1 }, pxNow);
+    if (!g || g.ok) return '';
+    var label = (g.code === 'stop-breached') ? 'STOP ALREADY BREACHED' : 'TARGET BEHIND PRICE';
+    return '<div class="gu-gate"><b>' + label + ':</b> ' + esc(g.why) + '</div>';
+  }catch(e){ return ''; }
+}
+
 function setupCardHTML(c, pxNow, crowned){
   var chips = '<span class="gu-chip">GOLD SCALP</span><span class="gu-chip">' + esc(c.strategy) + '</span>'
     + (c.grade ? '<span class="gu-chip">GRADE ' + esc(c.grade) + '</span>' : '')
@@ -1666,6 +1682,7 @@ function setupCardHTML(c, pxNow, crowned){
     + (isFinite(away) ? ' <span class="gu-away">' + (Math.abs(away) / pxNow <= 0.0003 ? 'at the last trade' : '$' + esc(fmt(Math.abs(away))) + ' ' + (away < 0 ? 'below' : 'above') + ' the last trade ($' + esc(fmt(pxNow)) + ') — resting order') + '</span>' : '')
     + ' · STOP <b>$' + esc(fmt(c.stop)) + '</b> · TP1 <b>$' + esc(fmt(c.t1)) + '</b> (' + esc(fmt(rr1, 1)) + 'R) · TP2 <b>$' + esc(fmt(t2)) + '</b>'
     + '<br>At TP1 close 50%, stop to breakeven ($' + esc(fmt(c.entry)) + '); runner to TP2. A 15m close beyond the stop kills the idea.</div>'
+    + guGeoLine(c, pxNow)
     + '<div class="gu-measured">' + esc(measuredLine(c.confluence, c.book)) + (c.edge && c.edge.why ? ' · desk row: ' + esc(c.edge.why) : '') + '</div>'
     + (c.why ? '<div class="gu-why">' + esc(c.why) + '</div>' : '')
     + (c.demoted && c.gateNotes.length ? '<div class="gu-gate">' + esc(c.gateNotes.join(' · ')) + '</div>' : '')
