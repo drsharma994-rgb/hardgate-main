@@ -1071,6 +1071,21 @@ function measuredHtml(c){
   }
   return '<div class="gdx-measured"><b>MEASURED RECORD</b> · ' + txt + '</div>';
 }
+/* PRICE MAY HAVE WALKED THROUGH THIS PLAN ALREADY — the shared rule in
+   hg-plan.js. This tab already threads pxNow through its card helpers, so
+   the last trade IS the mark and nothing needs plumbing. */
+function gdGeoLine(c, pxNow){
+  try{
+    var fn = (typeof W !== 'undefined' && W && W.hgPlanMarketGeometry)
+      || (typeof hgPlanMarketGeometry === 'function' ? hgPlanMarketGeometry : null);
+    if (typeof fn !== 'function' || !c) return '';
+    var g = fn({ dir: c.dir, entry: c.entry, stop: c.stop, t1: c.t1 }, pxNow);
+    if (!g || g.ok) return '';
+    var label = (g.code === 'stop-breached') ? 'STOP ALREADY BREACHED' : 'TARGET BEHIND PRICE';
+    return '<div class="gdx-why"><b>' + label + ':</b> ' + esc(g.why) + '</div>';
+  }catch(e){ return ''; }
+}
+
 function cardHTML(c, tape, pxNow, crowned){
   var chips = '';
   chips += '<span class="gdx-chip">' + esc(c.horizon) + '</span>';
@@ -1109,6 +1124,7 @@ function cardHTML(c, tape, pxNow, crowned){
     + ' · TP1 <b>$' + pxF(c.t1) + '</b>' + (isFinite(c.rr) ? ' (' + fmtF(c.rr, 1) + 'R)' : '')
     + ' · TP2 <b>$' + pxF(c.t2) + '</b>' + (isFinite(c.rr2) ? ' (' + fmtF(c.rr2, 1) + 'R)' : '')
     + '</div>'
+    + gdGeoLine(c, pxNow)
     + (crowned ? measuredHtml(c) : '')
     + mgmtHtml(c) + guideHtml(c, pxNow)
     + (c.why ? '<div class="gdx-why">' + esc(c.why) + '</div>' : '')
