@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v754',
-  pack: 'OMNIGOLD says what holding it cost: an 18R drawdown, and how often an entry even fills',
+  version: 'hg-v755',
+  pack: 'the drawdown v754 quoted was from the old gate set; now it is the right one, and staleness is detectable',
   built: '2026-09-15T12:00:00Z'
 };
 

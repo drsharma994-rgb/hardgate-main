@@ -410,7 +410,10 @@ terse status, and never launches a first-time scan on a global refresh.
                /* lane -> scan timestamp of the last card published into it.
                   See hgOgLaneThrottle: a lane is one direction on one
                   horizon, and a reader holds one gold position. */
-               laneLastPub: {}, laneThrottled: 0 };
+               laneLastPub: {}, laneThrottled: 0,
+               /* the gate ledger's key list as this build actually produces
+                  it — see hgOgEvidenceStale */
+               liveGateKeys: null };
   var OG_FRESH_MS = 180000;   /* tab-open / hardRefreshAll skip when scan is still fresh */
 
   function W(){ return (typeof window !== 'undefined') ? window : null; }
@@ -4474,6 +4477,19 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     gates.push({ key:'inst-filter', hard: instHard, pass: instOk, why: instWhy });
 
+    /* THE LIVE LEDGER'S SIGNATURE, captured where it is free. Every baked
+       number in this file was measured against SOME gate set, and until
+       hg-v755 nothing recorded which — so hg-v754 shipped a drawdown from a
+       walk that predated the v752 gates and overstated the hole 2.2x.
+       hgOgEvidenceStale compares this against the baked list. */
+    try {
+      if (!__og.liveGateKeys || __og.liveGateKeys.length !== gates.length){
+        var gk = [], gi;
+        for (gi = 0; gi < gates.length; gi++) if (gates[gi] && gates[gi].key) gk.push(gates[gi].key);
+        __og.liveGateKeys = gk;
+      }
+    } catch (eGk) {}
+
     return gates;
   }
 
@@ -7579,6 +7595,9 @@ terse status, and never launches a first-time scan on a global refresh.
       /* replay-vs-venue honesty (hg-v533): the cohort loss above is a
          PAXG-cost fact; a cheaper venue re-prices the fee, not the record. */
       + hgOgVenueCostNoteHtml()
+      /* if the ledger has moved on since the evidence was baked, that comes
+         FIRST — every number under it is about a different system */
+      + hgOgEvidenceStaleHtml()
       /* and what the book it belongs to actually did to an account */
       + hgOgBookExperienceHtml();
   }
@@ -7735,9 +7754,24 @@ terse status, and never launches a first-time scan on a global refresh.
   var HG_OG_BOOK_EXPERIENCE = {
     window: '2026-03-29..2026-09-12',
     src: 'scripts/omnigold-evidence-bake.mjs',
+    /* THE GATE SET MATTERS, and getting it wrong here shipped a wrong
+       number for a day. hg-v754 quoted the raw ticket book from a walk
+       generated 2026-09-12 — before GOLD_STOP_MIN_PCT and the hard
+       venue-priced cost gate landed on 2026-09-16. Those numbers described
+       a system this tab no longer runs, and they overstated the drawdown
+       2.2x at XM (18.3R against 8.2R) and 8.5x at PAXG (83R against 9.8R).
+
+       The rows below are the ticket book with the CURRENT gates applied to
+       that walk. It is a PROXY, and `proxy` says so: a genuine re-walk
+       would change which setups formed at all, not merely which of them
+       survived the ledger. Re-run scripts/backtest-omnigold.mjs and this
+       bake to replace it with the real thing. */
+    gateSet: 'hg-v752 (stop floor + hard venue cost)',
+    proxy: true,
     /* [finalR, peakR, maxDrawdownR, longestLosingStreak, n, from, to] */
-    ticketsXm:   [  3.15,  4.16,  18.30, 7, 105, '2026-04-01', '2026-05-21'],
-    ticketsPaxg: [-80.60,  1.90,  83.00, 7, 105, '2026-04-01', '2026-09-11'],
+    ticketsXm:   [  1.66,  9.34,   8.21, 6,  58, '2026-04-01', '2026-05-21'],
+    ticketsPaxg: [ -6.09,  1.90,   9.81, 7,  34, '2026-04-01', '2026-05-15'],
+    /* every plan formed, one at a time — pre-gate, kept for contrast */
     allXm:       [-69.30,  0.00,  73.40, 16, 275, '2026-03-27', '2026-09-03']
   };
 
@@ -7800,6 +7834,70 @@ terse status, and never launches a first-time scan on a global refresh.
     } catch (e) { return ''; }
   }
 
+  /* ==================== IS THE EVIDENCE STILL ABOUT THIS CODE? ==========
+
+     Every baked number in this file — the 54-mechanic replay table, the
+     fill rates, OG_EFF_N_RATIO, the lane cool-downs, the drawdown panel —
+     came from one walk, and nothing recorded which GATE SET produced it.
+     hg-v754 shipped a drawdown computed before the v752 gates existed: it
+     overstated the hole 2.2x at XM and 8.5x at PAXG, and no test, reader or
+     assertion could have caught it. The number was simply about a different
+     system than the one running.
+
+     The ledger's key list is the signature. It changes exactly when a gate
+     is added or removed, which is exactly when `ticket` starts meaning
+     something else. The live list costs nothing to obtain — hgOgGates runs
+     on every scan — so it is captured there and compared here.
+
+     A signature, not a proof: retuning a THRESHOLD inside an existing gate
+     changes what a ticket is without changing a key, and this will not see
+     that. It catches the change that actually happened. */
+  var HG_OG_EVIDENCE_GATESET = {
+    bakedFrom: '2026-09-12 walk',
+    count: 35,
+    keys: ['adr-budget','adx-trend','atr-percentile','consensus','context-gates','cost-drag',
+           'dxy-inverse','ema-stack','fade-strength','fill-path','fill-risk','gold-season',
+           'htf-daily','inst-filter','level-fresh','macro-realrate','measured-edge',
+           'momentum-stop','news-window','participation','plan-levels',
+           'premium-discount','rsi-zone','session','session-vwap','shield-guard','spot-basis',
+           'stop-floor','stop-width','trend','vol-alive','vol-forecast','weekend-exposure',
+           'yield-guard','zone-anchor']
+  };
+
+  /* Returns null when there is nothing to say — no live ledger seen yet, or
+     it matches. A missing observation is not a mismatch. */
+  function hgOgEvidenceStale(liveKeys){
+    try {
+      if (!liveKeys || !liveKeys.length) return null;
+      var baked = HG_OG_EVIDENCE_GATESET.keys;
+      var live = liveKeys.slice().sort();
+      var added = [], removed = [], i;
+      for (i = 0; i < live.length; i++) if (baked.indexOf(live[i]) < 0) added.push(live[i]);
+      for (i = 0; i < baked.length; i++) if (live.indexOf(baked[i]) < 0) removed.push(baked[i]);
+      if (!added.length && !removed.length) return null;
+      return { added: added, removed: removed, bakedFrom: HG_OG_EVIDENCE_GATESET.bakedFrom };
+    } catch (e) { return null; }
+  }
+
+  function hgOgEvidenceStaleHtml(){
+    try {
+      var st = hgOgEvidenceStale(__og.liveGateKeys);
+      if (!st) return '';
+      var what = [];
+      if (st.added.length) what.push('added ' + st.added.join(', '));
+      if (st.removed.length) what.push('removed ' + st.removed.join(', '));
+      return '<div class="note warn og-evidence-stale" style="margin:8px 0;padding:6px 8px;'
+        + 'border:1px solid #dc2626;border-left:3px solid #dc2626;border-radius:4px;'
+        + 'background:rgba(220,38,38,0.07);font-size:0.85em">'
+        + '<b>EVIDENCE PREDATES THIS GATE LEDGER</b> — every baked number below was '
+        + 'measured on the ' + esc(st.bakedFrom) + ', and the ledger has since '
+        + esc(what.join(' and ')) + '. A ticket now means something different from the '
+        + 'ticket those numbers counted. Re-run scripts/backtest-omnigold.mjs and '
+        + 'scripts/omnigold-evidence-bake.mjs --write.'
+        + '</div>';
+    } catch (e) { return ''; }
+  }
+
   function hgOgBookExperienceHtml(){
     try {
       var vc = null;
@@ -7819,6 +7917,14 @@ terse status, and never launches a first-time scan on a global refresh.
         + esc(row[5]) + ' to ' + esc(row[6]) + '). '
         + 'At 1% risk a trade that is ' + dd.toFixed(0) + '% of the account to finish '
         + (fin0 >= 0 ? '+' : '') + fin0.toFixed(0) + '%.'
+        /* never let a reader mistake a proxy for a measurement */
+        + (HG_OG_BOOK_EXPERIENCE.proxy
+          ? '<div class="dim" style="font-size:0.9em;margin-top:3px">'
+            + esc('Proxy: ' + HG_OG_BOOK_EXPERIENCE.gateSet + ' applied to a '
+                + HG_OG_BOOK_EXPERIENCE.window.slice(-10) + ' walk, not a re-walk — '
+                + 'a fresh walk would change which setups formed, not only which survived.')
+            + '</div>'
+          : '')
         + '</div>';
     } catch (e) { return ''; }
   }
@@ -12627,6 +12733,9 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgLaneThrottle = hgOgLaneThrottle;
     /* drawdown / streak panel + its baked numbers */
     window.hgOgBookExperienceHtml = hgOgBookExperienceHtml;
+    window.hgOgEvidenceStale = hgOgEvidenceStale;
+    window.hgOgEvidenceStaleHtml = hgOgEvidenceStaleHtml;
+    window.HG_OG_EVIDENCE_GATESET = HG_OG_EVIDENCE_GATESET;
     window.HG_OG_BOOK_EXPERIENCE = HG_OG_BOOK_EXPERIENCE;
     window.hgOgFillRate = hgOgFillRate;
     window.hgOgFillRateNoteHtml = hgOgFillRateNoteHtml;

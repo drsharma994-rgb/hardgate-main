@@ -196,6 +196,21 @@ function fillRates(pool){
    is identical either way, because gated tickets rarely fire at a weekend.
    What it fixes is the claim — a card quoting a mechanic's record should be
    quoting trades that could have been taken. */
+/* The two gates that shipped in hg-v752, applied to an older walk so the
+   numbers quoted on the card describe the code that is running. Kept in one
+   place and named after the constants they mirror, so a future change to
+   either has one obvious place to follow. */
+const GOLD_STOP_MIN_PCT = 0.005;                 /* omnigold.js */
+const COST_VETO_R = 0.30, COST_VETO_R_SCALP = 0.15;
+
+function passesCurrentGates(r, frac){
+  const risk = Math.abs(r.entry - r.stop);
+  if (!(risk > 0) || !(r.entry > 0)) return false;
+  if (risk / r.entry < GOLD_STOP_MIN_PCT) return false;
+  const ceiling = (String(r.horizon).toUpperCase() === 'SCALP') ? COST_VETO_R_SCALP : COST_VETO_R;
+  return (r.entry * frac / risk) <= ceiling;
+}
+
 function brokerOpen(r){
   const d = new Date(r.tISO);
   const day = d.getUTCDay(), hr = d.getUTCHours();
@@ -254,8 +269,38 @@ const WIDTH = 'week';   /* positions run up to 5 days, so day clusters overlap *
 const seq = sequential(formed);
 const seqTickets = sequential(formed.filter(r => r.ticket));
 
+/* THE FINGERPRINT THAT MAKES STALENESS DETECTABLE.
+
+   Everything baked into omnigold.js — the 54-mechanic replay table, the
+   fill rates, the effN ratio, the lane cool-downs, the drawdown panel —
+   comes from one walk artifact, and until now nothing recorded WHICH GATE
+   SET produced it. hg-v754 shipped a drawdown from a 2026-09-12 walk after
+   the v752 gates had changed what a ticket is, overstating it 2.2x at XM
+   and 8.5x at PAXG, and no test or reader could have noticed.
+
+   The ledger's KEY LIST is a good signature: it changes exactly when a gate
+   is added or removed, which is exactly when a `ticket` means something
+   different. Read from source rather than by booting the module, because
+   this script must not depend on omnigold.js loading cleanly under node.
+
+   It is a signature, not a proof — retuning a THRESHOLD inside an existing
+   gate changes what a ticket is without changing a key. It catches the
+   change that actually happened, and is honest about the one it would
+   miss. */
+function gateFingerprint(){
+  try {
+    const src = fs.readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
+    const keys = [...src.matchAll(/gates\.push\(\s*\{\s*key\s*:\s*.([a-z0-9-]+)./g)].map(m => m[1]);
+    if (!keys.length) return null;
+    return { count: keys.length, keys: keys.slice().sort() };
+  } catch (e) { return null; }
+}
+
 const bake = {
   generated: new Date().toISOString(),
+  /* the gate ledger as it stood when this evidence was computed */
+  gateFingerprint: gateFingerprint(),
+  walkGenerated: (walk.meta && walk.meta.generated) || null,
   src: 'scripts/backtest-omnigold-results.json',
   window: walk.meta && walk.meta.span
     ? (walk.meta.span.from.slice(0, 10) + '..' + walk.meta.span.to.slice(0, 10)) : null,
@@ -275,7 +320,25 @@ const bake = {
      overlapping firehose */
   experience: {
     sequential: { xm: drawdown(seq, XM), paxg: drawdown(seq, PAXG) },
-    sequentialTickets: { xm: drawdown(seqTickets, XM), paxg: drawdown(seqTickets, PAXG) }
+    sequentialTickets: { xm: drawdown(seqTickets, XM), paxg: drawdown(seqTickets, PAXG) },
+    /* THE GATE SET THIS ARTIFACT WAS WALKED WITH IS NOT THE ONE SHIPPING.
+
+       r.ticket in a walk artifact is whatever hgOgGates said on the day it
+       ran. This one ran 2026-09-12; the stop floor (GOLD_STOP_MIN_PCT) and
+       the HARD venue-priced cost-drag gate landed 2026-09-16. Quoting the
+       raw ticket book as "what this desk does" therefore describes a system
+       the tab no longer runs — it overstates the drawdown 2.2x at XM and
+       8.5x at PAXG.
+
+       Until the walk is re-run, the closest honest proxy is the ticket book
+       with those two gates applied after the fact. It is a PROXY and is
+       labelled one: a re-walk would also change which setups formed at all,
+       not merely which of them survived. */
+    sequentialTicketsCurrentGates: {
+      xm: drawdown(sequential(formed.filter(r => r.ticket && passesCurrentGates(r, XM))), XM),
+      paxg: drawdown(sequential(formed.filter(r => r.ticket && passesCurrentGates(r, PAXG))), PAXG),
+      note: 'PROXY — v752 gates applied to a 2026-09-12 walk, not a re-walk'
+    }
   },
   fills: fillRates(walk.trades || []),
   calendar: {
