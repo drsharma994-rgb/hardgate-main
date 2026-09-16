@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v747',
-  pack: 'plan-vs-market geometry moves into the shared layer every gold desk calls',
+  version: 'hg-v748',
+  pack: 'every gold desk now says when price has already walked through the plan',
   built: '2026-09-15T12:00:00Z'
 };
 
