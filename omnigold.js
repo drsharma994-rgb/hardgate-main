@@ -7074,6 +7074,123 @@ terse status, and never launches a first-time scan on a global refresh.
     return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   }
 
+  /* ====================================================================
+     TESTING EVERY MECHANIC, PRICED AT THE VENUE YOU ACTUALLY TRADE
+     ====================================================================
+
+     The replay measured 54 mechanics over 7,953 settled trades and every
+     one of them is NET NEGATIVE — but that net is PAXG-priced at 0.26%
+     round trip, and this desk executes on XM at ~0.020%, thirteen times
+     cheaper. hgOgReplayLineHtml quoted the PAXG net on every setup card
+     regardless of the selected venue, so each mechanic was labelled far
+     worse than it is where the SEND TICKET TO XM button sends it.
+
+     Re-pricing is arithmetic on numbers the record already carries:
+
+       netAtVenue = avgGrossR - medianCostR x (venueRtPct / replayRtPct)
+
+     because medianCostR is the fee in R at the replay's own fee level, so
+     scaling it by the fee ratio gives the fee in R at another one. The
+     gross outcome does not move — only what it costs to take it.
+
+     At XM that turns 0 net-positive mechanics into 18. Which is the point
+     where it would be very easy to fool ourselves, so nothing here stops
+     at the sign of a number — see hgOgReplayEdgeVerdict. */
+  function hgOgReplayNetAtVenue(ev){
+    if (!ev) return null;
+    var gross = fin(ev.avgGrossR), cost = fin(ev.medianCostR);
+    /* Engine grades and score tiers carry no gross, so they cannot be
+       re-priced. Say nothing rather than quote a number as if it were. */
+    if (!isFinite(gross) || !isFinite(cost)) return null;
+    var vc = null;
+    try { vc = hgOgVenueCost(); } catch (eV) { vc = null; }
+    var venueRt = fin(vc && vc.rtCostPct);
+    var replayRt = fin(HG_OG_REPLAY_EVIDENCE.rtCostPct);
+    if (!(venueRt > 0) || !(replayRt > 0)) return null;
+    return { net: gross - cost * (venueRt / replayRt),
+             venue: (vc && vc.venue) || '', venueRt: venueRt, replayRt: replayRt,
+             repriced: Math.abs(venueRt - replayRt) > 1e-9 };
+  }
+
+  /* Inverse standard normal CDF (Acklam's rational approximation, |err| <
+     1.15e-9). Needed because the family-wise bound below uses a z for an
+     alpha that depends on how many mechanics were tested, so it cannot be
+     a hardcoded 1.96. */
+  function hgOgInvNorm(p){
+    if (!(p > 0 && p < 1)) return NaN;
+    var a = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02,
+              1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00];
+    var b = [-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02,
+              6.680131188771972e+01, -1.328068155288572e+01];
+    var c = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00,
+             -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00];
+    var dd = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00,
+              3.754408661907416e+00];
+    var pl = 0.02425, q, r;
+    if (p < pl){
+      q = Math.sqrt(-2 * Math.log(p));
+      return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) /
+             ((((dd[0]*q+dd[1])*q+dd[2])*q+dd[3])*q+1);
+    }
+    if (p > 1 - pl){
+      q = Math.sqrt(-2 * Math.log(1 - p));
+      return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) /
+              ((((dd[0]*q+dd[1])*q+dd[2])*q+dd[3])*q+1);
+    }
+    q = p - 0.5; r = q * q;
+    return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q /
+           (((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);
+  }
+
+  /* How many mechanics the replay tested — the size of the family a "best"
+     mechanic was selected from. Counted, not hardcoded, so adding kinds
+     tightens the bar automatically. */
+  function hgOgReplayFamilySize(){
+    try { return Object.keys(HG_OG_REPLAY_EVIDENCE.kinds || {}).length || 1; }
+    catch (eF) { return 1; }
+  }
+
+  /* DOES THIS MECHANIC'S EDGE SURVIVE HAVING TESTED 54 OF THEM?
+
+     Two traps sit between "positive net R" and "worth trading", and this
+     answers both on the mechanic's OWN numbers.
+
+     1. Sampling noise. A 33% win rate over 48 trades is not a 33% win
+        rate. Compare the Wilson LOWER bound against the win rate the
+        mechanic needs just to break even at its own payoff:
+        breakeven = 1/(1+R), where R is implied by gross avgR.
+
+     2. Selection. Ranking 54 mechanics and trading the top one is the
+        multiple-comparisons trap: at a naive 95% bound you expect ~2.7 of
+        54 to clear by chance with no edge at all. The family-wise bound
+        raises z for alpha/m so "best of 54" has to mean something.
+
+     Measured on the shipped table: 18 of 54 are net-positive at XM, ONE
+     clears its own breakeven at the naive bound — fewer than the ~2.7
+     chance alone would produce — and NONE clears family-wise. */
+  function hgOgReplayEdgeVerdict(ev){
+    if (!ev) return null;
+    var n = fin(ev.n), wr = fin(ev.winRate), gross = fin(ev.avgGrossR);
+    if (!(n > 0) || !isFinite(wr) || !isFinite(gross)) return null;
+    /* gross = wr*R - (1-wr)  =>  R = (gross + 1 - wr)/wr */
+    if (!(wr > 0)) return null;
+    var R = (gross + 1 - wr) / wr;
+    if (!(R > 0)) return null;
+    var be = 1 / (1 + R);
+    var wins = Math.round(wr * n);
+    var m = hgOgReplayFamilySize();
+    var zFw = hgOgInvNorm(1 - 0.05 / (2 * m));
+    var lo95 = hgOgWilsonHit(wins, n, OG_EXEC_WILSON_Z);
+    var loFw = isFinite(zFw) ? hgOgWilsonHit(wins, n, zFw) : null;
+    if (!lo95) return null;
+    var tier = (loFw && loFw.lo > be) ? 'family'
+             : (lo95.lo > be) ? 'naive'
+             : 'none';
+    return { breakeven: be, impliedR: R, lo95: lo95.lo,
+             loFw: loFw ? loFw.lo : NaN, family: m, zFw: zFw, tier: tier,
+             expectedByChance: m * 0.05 };
+  }
+
   /* SPECTRUM TRUTH LABELS (hg-v532). One place decides what a confluence
      badge is allowed to claim:
        - fromGrade (the engine-grade scalar path in
@@ -7283,8 +7400,43 @@ terse status, and never launches a first-time scan on a global refresh.
     var ev = hgOgReplayEvidence(kind);
     if (!ev || !isFinite(fin(ev.winRate)) || !isFinite(fin(ev.avgNetR))) return '';
     var netTxt = (ev.avgNetR >= 0 ? '+' : '') + ev.avgNetR.toFixed(2) + 'R';
-    return '<div class="dim og-replay-line" style="font-size:11px;margin-top:2px">replay: '
-      + (ev.winRate * 100).toFixed(0) + '% WR, ' + netTxt + ' net (n=' + ev.n + ')</div>';
+    var h = '<div class="dim og-replay-line" style="font-size:11px;margin-top:2px">replay: '
+      + (ev.winRate * 100).toFixed(0) + '% WR, ' + netTxt + ' net (n=' + ev.n + ')';
+
+    /* The net above is the replay's own PAXG price. When the desk is set to
+       a cheaper venue, say what the same record costs THERE — otherwise every
+       mechanic is quoted 13x more expensive than the button next to it pays. */
+    var rp = hgOgReplayNetAtVenue(ev);
+    if (rp && rp.repriced){
+      h += ' · <b>' + (rp.net >= 0 ? '+' : '') + rp.net.toFixed(2) + 'R at '
+        + esc(rp.venue || 'venue') + '</b> (' + rp.venueRt.toFixed(3) + '% vs '
+        + rp.replayRt.toFixed(2) + '% round trip)';
+    }
+    h += '</div>';
+
+    /* A positive number is where self-deception starts, so the verdict goes
+       on the same card: does it clear its own breakeven, and does it still
+       clear once you account for having ranked the whole family? */
+    var vd = hgOgReplayEdgeVerdict(ev);
+    if (vd){
+      var beTxt = 'breakeven ' + (vd.breakeven * 100).toFixed(0) + '% at '
+        + vd.impliedR.toFixed(2) + 'R · Wilson lo ' + (vd.lo95 * 100).toFixed(0) + '%';
+      var verdict, cls;
+      if (vd.tier === 'family'){
+        verdict = 'edge holds even against ' + vd.family + ' mechanics tested';
+        cls = 'og-replay-edge-ok';
+      } else if (vd.tier === 'naive'){
+        verdict = 'clears breakeven at 95%, but ~' + vd.expectedByChance.toFixed(1)
+                + ' of ' + vd.family + ' do so by chance — not a selection you can trust';
+        cls = 'og-replay-edge-noise';
+      } else {
+        verdict = 'lower bound does not clear its own breakeven — no measured edge';
+        cls = 'og-replay-edge-none';
+      }
+      h += '<div class="dim og-replay-edge ' + cls + '" style="font-size:10px;margin-top:1px">'
+        + esc(beTxt + ' · ' + verdict) + '</div>';
+    }
+    return h;
   }
 
   /* ENGINE pick annotations. Grade A/B carry the replay's one genuinely
@@ -12086,6 +12238,10 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgCostChipHtml = hgOgCostChipHtml;
     window.hgOgReplayEvidence = hgOgReplayEvidence;
     window.hgOgReplayLineHtml = hgOgReplayLineHtml;
+    window.hgOgReplayNetAtVenue = hgOgReplayNetAtVenue;
+    window.hgOgReplayEdgeVerdict = hgOgReplayEdgeVerdict;
+    window.hgOgReplayFamilySize = hgOgReplayFamilySize;
+    window.hgOgInvNorm = hgOgInvNorm;
     window.hgOgEngineReplayLinesHtml = hgOgEngineReplayLinesHtml;
     window.hgOgConfluenceFitNoteHtml = hgOgConfluenceFitNoteHtml;
     window.hgOgConfluenceFitPwin = hgOgConfluenceFitPwin;
