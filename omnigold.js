@@ -406,7 +406,11 @@ terse status, and never launches a first-time scan on a global refresh.
                /* hg-v540: the ALL view's exact bytes + the inputs behind
                   them, so PAID-ONLY filters a snapshot and ALL restores
                   verbatim. */
-               lastAllView: null, lastView: null };
+               lastAllView: null, lastView: null,
+               /* lane -> scan timestamp of the last card published into it.
+                  See hgOgLaneThrottle: a lane is one direction on one
+                  horizon, and a reader holds one gold position. */
+               laneLastPub: {}, laneThrottled: 0 };
   var OG_FRESH_MS = 180000;   /* tab-open / hardRefreshAll skip when scan is still fresh */
 
   function W(){ return (typeof window !== 'undefined') ? window : null; }
@@ -2569,13 +2573,136 @@ terse status, and never launches a first-time scan on a global refresh.
      That is not hypothetical: mechanics on identical levels genuinely grade
      differently, because measured-edge is per mechanic and consensus is per
      family. A cleared member now takes the card. */
+  /* TWO PLANS A FEW CENTS APART ARE ONE TRADE.
+
+     This key used to compare entry and stop at EIGHT significant figures,
+     so 4713.89 and 4713.91 were two separate cards wearing two mechanic
+     names. Measured on the walk, that exactness is most of why the desk
+     published 9.34 plans per 4h bar.
+
+     The tolerance is a share of price, not of the plan's own risk: keying
+     on each plan's risk would make the key asymmetric — A collapses into B
+     but B does not collapse into A. At 0.10% of a $4,700 gold price the
+     grid is about $4.70, comfortably inside the $23 the stop floor
+     already requires, so nothing this merges could have been two trades a
+     person would size differently. */
+  var OG_TRADE_KEY_TICK_PCT = 0.10;
+
+  /* A LOG GRID, and the reason matters.
+
+     The obvious implementation — divide by a tick that is a percentage of
+     the level itself — is broken, and broken in a way that silently merges
+     everything: 4366.19 / (4366.19 * 0.001) and 4300.00 / (4300.00 * 0.001)
+     are BOTH 1000. Every price maps to the same bucket because the divisor
+     scales with the dividend. A test that had two setups 66 dollars apart
+     caught it; without that test this would have collapsed the whole book
+     into one card per direction.
+
+     ln(x) / ln(1 + tick) is the same proportional tolerance on ONE shared
+     grid, so it is symmetric — A and B agree on whether they are the same
+     trade regardless of which is asked — and it works on a $30 silver
+     price and a $4,700 gold price alike.
+
+     GRID BOUNDARIES ARE A REAL LIMIT, stated rather than glossed. Two
+     levels a hair apart that straddle a bucket edge do NOT collapse —
+     4713.89 and 4713.91 are four thousandths of a tick apart and land
+     either side of one. Merging those needs neighbour-aware clustering,
+     which a key function used as a hash cannot do.
+
+     For a separation d and tick t the miss rate is d/t, so at two cents on
+     a $4.70 tick it is about 0.4% of such pairs. It is a MISSED merge, not
+     a wrong one: the desk shows two cards where one would have done, which
+     is the safe direction to fail.
+
+     This is also the minor lever. Measured on the walk, level tolerance
+     takes the desk from 42 cards a day to 31; the lane throttle below
+     takes it to 6.3, and boundary misses do not touch that at all. */
+  var OG_TRADE_KEY_LOG_STEP = Math.log(1 + OG_TRADE_KEY_TICK_PCT / 100);
+
+  function ogQuantiseLevel(v){
+    var x = fin(v);
+    if (!isFinite(x) || !(x > 0)) return 'na';
+    if (!(OG_TRADE_KEY_LOG_STEP > 0)) return x.toPrecision(8);
+    return String(Math.round(Math.log(x) / OG_TRADE_KEY_LOG_STEP));
+  }
+
   function ogTradeKey(c){
     var pl = (c && c.plan) || {};
-    var e = isFinite(fin(pl.entry)) ? fin(pl.entry).toPrecision(8) : 'na';
-    var st = isFinite(fin(pl.stop)) ? fin(pl.stop).toPrecision(8) : 'na';
+    var e = ogQuantiseLevel(pl.entry);
+    var st = ogQuantiseLevel(pl.stop);
     /* Horizon is part of the key: the same levels on SCALP and SWING are
        genuinely two tickets, with different targets and different time stops. */
     return String(c && c.horizon) + '|' + String(c && c.dir) + '|' + e + '|' + st;
+  }
+
+  /* HOW LONG A LANE STAYS OCCUPIED.
+
+     A lane is one direction on one horizon. Publishing a second card into
+     a lane whose last card is still running is publishing a trade the
+     reader cannot take — they hold one gold position, not fifty-five.
+
+     These numbers are the MEASURED median time from fire to exit on the
+     walk, including the wait for a fill, not a swept parameter:
+
+       SCALP long   n=3273   median  8h   p75 22h
+       SCALP short  n=3136   median  8h   p75 22h
+       SWING long   n= 910   median 28h   p75 68h
+       SWING short  n= 813   median 32h   p75 88h
+
+     Applied per lane this takes the desk from 45.9 cards a day to 6.3.
+
+     IT IS NOT AN EDGE PLAY, and the measurement says so plainly. Sweeping
+     cool-down lengths from 4h to 48h, every gross confidence interval
+     spans zero (max |t| 1.04 across five tries, Bonferroni bar 2.58), and
+     the apparent gain at 24-48h evaporates under randomisation: taking the
+     FIRST eligible signal grosses +0.061R where a RANDOM eligible one in
+     the same window grosses -0.032R. The gap is the artifact. What the
+     cool-down actually buys is a publication rate a person can act on, and
+     rows that overlap less so the intervals mean something. */
+  var OG_LANE_COOLDOWN_H = { SCALP: 8, SWING: 28 };
+  var OG_LANE_COOLDOWN_DEFAULT_H = 8;
+
+  function hgOgLaneCooldownMs(horizon){
+    var h = String(horizon || '').toUpperCase();
+    var hrs = OG_LANE_COOLDOWN_H[h];
+    if (!isFinite(hrs) || !(hrs > 0)) hrs = OG_LANE_COOLDOWN_DEFAULT_H;
+    return hrs * 3600000;
+  }
+
+  function ogLaneKey(c){
+    return String(c && c.dir) + '|' + String(c && c.horizon);
+  }
+
+  /* PURE. Takes the already-collapsed, already-ranked list and the map of
+     when each lane last published; returns the list to show plus the map
+     to keep. Mutates nothing — a filter that edited the caller's state
+     would make two renders of the same scan disagree.
+
+     `now` is passed in rather than read from the clock so a test can drive
+     it, and so a re-render of the SAME scan cannot age its own cards out
+     from under the reader. */
+  function hgOgLaneThrottle(list, lastByLane, now){
+    var out = [], held = {}, i, c, lane, at, k;
+    for (k in (lastByLane || {})) if (Object.prototype.hasOwnProperty.call(lastByLane, k)) held[k] = lastByLane[k];
+    var t = fin(now);
+    if (!isFinite(t)) t = 0;
+    for (i = 0; i < (list || []).length; i++){
+      c = list[i];
+      if (!c) continue;
+      lane = ogLaneKey(c);
+      at = fin(held[lane]);
+      /* a card whose lane is quiet publishes and claims the lane; one whose
+         lane is still running is suppressed, with the reason recorded on it
+         so the desk can say why rather than silently showing less */
+      if (isFinite(at) && t > 0 && (t - at) < hgOgLaneCooldownMs(c.horizon)){
+        c.laneThrottled = true;
+        continue;
+      }
+      c.laneThrottled = false;
+      held[lane] = t;
+      out.push(c);
+    }
+    return { shown: out, lastByLane: held };
   }
   /* PURE. Counts only — choosing which member keeps the card is the render's
      job, and a counter that mutated the candidates would make the two passes
@@ -10963,6 +11090,29 @@ terse status, and never launches a first-time scan on a global refresh.
           }
         }
 
+        /* LANE THROTTLE. The collapse above merges plans on the same
+           levels; this drops a card into a lane whose previous card is
+           still running. One direction on one horizon is a lane, and a
+           reader holds one gold position — see hgOgLaneThrottle for the
+           measured occupancy the interval comes from, and for why this is
+           a tradeability rule and explicitly not an edge play.
+
+           Keyed on the SCAN's timestamp, not the wall clock, so
+           re-rendering the same scan cannot age its own cards out from
+           under the reader. Fail-open: any error and the full list shows,
+           because a throttle that silently eats the book is worse than one
+           that does nothing. */
+        try {
+          var ogScanAt = fin(__og.snap && __og.snap.at);
+          if (!isFinite(ogScanAt)) ogScanAt = (typeof Date !== 'undefined') ? Date.now() : 0;
+          var ogThr = hgOgLaneThrottle(ogCollapsed, __og.laneLastPub || {}, ogScanAt);
+          if (ogThr && ogThr.shown){
+            __og.laneLastPub = ogThr.lastByLane;
+            __og.laneThrottled = ogCollapsed.length - ogThr.shown.length;
+            ogCollapsed = ogThr.shown;
+          }
+        } catch (eThr) { /* fail open — show everything rather than nothing */ }
+
         /* FORMATION PARTITION (hg-v533). Cards stamped not-formed at plan
            construction leave the tradable list HERE, before any pick,
            verdict or MOST PROBABLE row can see them, and land in the
@@ -12301,6 +12451,11 @@ terse status, and never launches a first-time scan on a global refresh.
     /* exported so the overlap deflation can be tested on its own: it is
        what decides whether a mechanic reaches PROVEN EDGE */
     window.hgOgEffN = hgOgEffN;
+    /* publication throttle — pure, so the rate the desk publishes at can
+       be tested without a mount */
+    window.hgOgLaneCooldownMs = hgOgLaneCooldownMs;
+    window.hgOgLaneThrottle = hgOgLaneThrottle;
+    window.ogTradeKey = ogTradeKey;
     window.hgOgSettledEvidence = hgOgSettledEvidence;
     window.hgOgSettledExecuteOk = hgOgSettledExecuteOk;
     window.hgOgPickSettledExecutes = hgOgPickSettledExecutes;

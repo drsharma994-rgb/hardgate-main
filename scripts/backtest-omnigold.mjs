@@ -130,7 +130,9 @@ import { xmOrderType, ogXmBarTouchesEntry } from '../lib/omnigold-xm-bot-backtes
 
 const ROOT = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 const CACHE_DIR = path.join(ROOT, 'scripts', '.bt-cache');
-const OUT_FILE = path.join(ROOT, 'scripts', 'backtest-omnigold-results.json');
+/* OUT_FILE is assigned after the CLI is parsed: a per-symbol run must not
+   overwrite the PAXG artifact the whole repo quotes. */
+let OUT_FILE = path.join(ROOT, 'scripts', 'backtest-omnigold-results.json');
 
 /* ---------- CLI ---------- */
 const argv = process.argv.slice(2);
@@ -145,7 +147,24 @@ const REFRESH = has('--refresh');
 const BARS_1H = +opt('--bars', SMOKE ? 500 : 4000);
 
 /* ---------- constants ---------- */
-const SYMBOL = 'PAXGUSDT';
+/* ONE SYMBOL IS ONE BET, and that is the binding constraint on everything
+   this walk can prove. The sequential book — one position at a time, which
+   is what a person runs — takes 0.63 trades a day. At a per-trade sd of
+   1.394R, detecting a +0.10R edge at 80% power needs 1,526 trades: 6.6
+   YEARS on PAXG alone. Across eight lightly-correlated instruments it is
+   ten months.
+
+   That is the whole argument for this flag. No indicator added to gold can
+   be validated on a six-month single-symbol walk; more independent bets
+   can. scripts/backtest-multi.mjs drives this script once per symbol and
+   pools the result.
+
+   The default stays PAXGUSDT so every existing invocation, artifact path
+   and quoted number is unchanged. */
+const SYMBOL = String(opt('--symbol', 'PAXGUSDT')).toUpperCase();
+if (SYMBOL !== 'PAXGUSDT'){
+  OUT_FILE = path.join(ROOT, 'scripts', 'backtest-omnigold-results-' + SYMBOL.toLowerCase() + '.json');
+}
 const FEE_SIDE = 0.0010;          /* Binance spot taker */
 const SLIP_SIDE = 0.0003;         /* PAXG book is thin */
 const COST_RT_FRAC = 2 * (FEE_SIDE + SLIP_SIDE);   /* 0.26% of entry, round trip */
@@ -789,7 +808,7 @@ const meta = {
   generated: new Date().toISOString(),
   mode: SMOKE ? 'smoke' : 'full',
   symbol: SYMBOL,
-  universe: 'PAXGUSDT proxy for XAUUSD',
+  universe: SYMBOL === 'PAXGUSDT' ? 'PAXGUSDT proxy for XAUUSD' : (SYMBOL + ' (multi-symbol pooling run)'),
   proxyNote: 'PAXGUSDT Binance spot as XAU proxy (the module docs measured on PAXG). '
     + 'PAXG trades 24/7: session mechanics fire on weekend bars a spot-gold broker never printed. '
     + 'Basis vs XAU ~0.1-0.5%; thin volume degrades participation gates to UNCHECKED.',

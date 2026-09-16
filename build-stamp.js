@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v752',
-  pack: 'OMNIGOLD: a stop floor, a cost gate that vetoes, and a badge that stopped claiming a ranking',
+  version: 'hg-v753',
+  pack: 'OMNIGOLD publishes 6 cards a day instead of 46, and its intervals admit the overlap',
   built: '2026-09-15T12:00:00Z'
 };
 

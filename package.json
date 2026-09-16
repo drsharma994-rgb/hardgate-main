@@ -20,6 +20,11 @@
     "check:prod": "node scripts/check-production.mjs",
     "sync:backtest-params": "node scripts/sync-backtest-tab-params.mjs",
     "test:data-layer": "node tests/test-data-layer.mjs",
+    "og:walk": "node scripts/backtest-omnigold.mjs",
+    "og:sweep": "node scripts/backtest-omnigold.mjs && node scripts/target-sweep.mjs",
+    "og:bake": "node scripts/omnigold-evidence-bake.mjs --write",
+    "og:audit": "node scripts/geometry-audit.mjs",
+    "og:multi": "node scripts/backtest-multi.mjs --run --symbols=PAXGUSDT,XAUTUSDT",
     "test": "node scripts/run-tests.mjs"
   }
 }
