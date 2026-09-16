@@ -126,7 +126,13 @@ console.log('\n== per-venue demotion counts: 18 at XM, 33 at PAXG ==');
   const xm = W.hgOgVenuePresetCost('XM'), paxg = W.hgOgVenuePresetCost('PAXG');
   ok(Math.abs(xm.rtCostPct - 0.020) < 1e-9, 'XM preset ~0.020% RT');
   ok(Math.abs(paxg.rtCostPct - 0.26) < 1e-9, 'PAXG preset 0.26% RT');
-  const kinds = Object.keys(W.HG_OG_REPLAY_EVIDENCE.kinds);
+  /* distinct MECHANICS: SPRING and UTAD are one detector under two
+     direction labels (hg-v764) and now share one verdict, so filtering the
+     raw label list would report one demoted mechanic as two */
+  const seenK = {};
+  const kinds = Object.keys(W.HG_OG_REPLAY_EVIDENCE.kinds)
+    .map(k => (k === 'UTAD' ? 'SPRING' : k))
+    .filter(k => (seenK[k] ? false : (seenK[k] = 1)));
   const demXm = kinds.filter(k => W.hgOgKindDemotion(k, xm)).sort();
   const demPaxg = kinds.filter(k => W.hgOgKindDemotion(k, paxg)).sort();
   ok(W.hgOgDemotedKindCount(xm) === 22 && demXm.length === 22, '22 kinds stand demoted at XM costs (hg-v700 refresh)');
@@ -300,9 +306,13 @@ console.log('\n== END TO END at the XM default: the real detect->evaluate chain 
   W.hgOgSetVenue('XM');
 
   /* 2. Every kind demotion stamped in this scan is one of the XM 12. */
+  /* canonicalised: a UTAD card carries the SPRING mechanic's demotion now
+     that the two share one record (hg-v764), so the label must be folded
+     before it is looked up in a list keyed by mechanic */
   const demKinds = [...new Set(demotedCards
     .filter(c => c.formation.kindDemotion)
-    .map(c => String(c.kind).toUpperCase()))].sort();
+    .map(c => String(c.kind).toUpperCase())
+    .map(k => (k === 'UTAD' ? 'SPRING' : k)))].sort();
   ok(demKinds.length > 0, 'the battery hit demoted kinds (' + demKinds.join(', ') + ')');
   ok(demKinds.every(k => GROSS_NEGATIVE_18.includes(k)),
      'every demotion stamped at XM is in the gross-negative 18 — none of PAXG\'s fee-only demotions');

@@ -44,8 +44,19 @@ A mechanic that pays on the swing horizon need not pay intraday, so the two
 pools are measured and reported apart — never merged into one flattering
 number.
 
-HOW MANY MECHANICS, AND WHERE THEY COME FROM. OG_MECHANICS is the single
-source of truth and currently holds 55. Six are OmniRoute's, consumed from
+HOW MANY MECHANICS, AND WHERE THEY COME FROM. OG_MECHANICS is the list this
+desk advertises. It said "currently holds 55" for long enough to be 21 out
+of date — a count written into prose drifts silently, so the number lives in
+tests/test-omnigold-full-cover.mjs now, which counts it from the source on
+every run and prints it. Ask that, not this paragraph.
+
+Nor is it quite the single source of truth. hgOgDetect calls hgOmniDetect,
+OmniRoute's whole pass, so this desk consumes a SUPERSET: two CV detectors
+(DONCHIAN-DRIVE, COMPRESSION-BREAK) reach the gold book without being
+listed here. Four firings in 9,897 rows, declared and bounded by that same
+test rather than left to be rediscovered.
+
+Six are OmniRoute's, consumed from
 its exports. Four are the classic gold desk setups described just below.
 Thirty more were added in later rounds from the shared hg-mechanics library
 and gold-specific session/structure work. The last fifteen come from
@@ -5242,8 +5253,11 @@ terse status, and never launches a first-time scan on a global refresh.
       var hit = hits[i];
       var ex = {}, k;
       for (k in (extra || {})) if (Object.prototype.hasOwnProperty.call(extra, k)) ex[k] = extra[k];
-      /* UTAD is measured under SPRING — same family in the pool */
-      var statKey = (hit.kind === 'UTAD') ? 'SPRING' : hit.kind;
+      /* One detector, two direction labels — see OG_KIND_ALIAS. Was an
+         inline UTAD-to-SPRING special case; now the same map the ledger
+         accessor and the family count use, so the three cannot drift. */
+      var statKey = Object.prototype.hasOwnProperty.call(OG_KIND_ALIAS, hit.kind)
+        ? OG_KIND_ALIAS[hit.kind] : hit.kind;
       ex.stats = (extra && extra.stats && extra.stats[statKey]) ? extra.stats[statKey] : null;
       /* Tell the shared gate which forward pool is this desk's, so
          measured-edge can weigh the out-of-sample record for this mechanic
@@ -7706,8 +7720,77 @@ terse status, and never launches a first-time scan on a global refresh.
     }
   };
 
+  /* ONE DETECTOR, TWO DIRECTION LABELS, ONE RECORD.
+
+     hgOmniSpring (omniroute.js) returns kind 'SPRING' when the last bar
+     sweeps the range LOW and closes back inside, and kind 'UTAD' when it
+     sweeps the HIGH. Same function, same rule, one mechanic — the labels
+     are the two sides of it. The walk confirms it: SPRING is 123 of 123
+     long, UTAD 106 of 106 short.
+
+     The ledger measured them as separate rows, which had two consequences
+     and neither was intended:
+
+       the panel could show 'UTAD 38.5%' as though a mechanic with an edge
+       existed, when the mechanic as a whole settles at 28.9%
+
+       the gate maps UTAD to SPRING (correctly — one mechanic) and so read
+       the LONG HALF ONLY: a short setup was judged on 104 long trades and
+       none of its own 91. That half is the worse half, at 19.2% and z
+       -3.05, a VETO, where the mechanic pooled is 28.9% at z -1.28 and is
+       not one.
+
+     So a whole mechanic, 229 firings and 2.3% of the book, was condemned
+     by a directional split of its own record.
+
+     Folded here, at the single accessor every reader goes through, rather
+     than re-baking: the ledger keeps whatever rows it has and callers see
+     one mechanic. hgOgFamilyZ's count comes through the same fold, so the
+     significance bar stops counting one detector twice. */
+  var OG_KIND_ALIAS = { 'UTAD': 'SPRING' };
+
+  /* Merge two [n, winRate, avgNetR, avgGrossR, medianCostR] rows. Counts
+     add; the rates are re-weighted by n, which is the only correct way to
+     combine them — averaging two win rates from unequal samples is how a
+     19-point gap becomes an invented midpoint. */
+  function hgOgMergeReplayRows(a, b){
+    if (!a) return b || null;
+    if (!b) return a;
+    var na = fin(a[0]) || 0, nb = fin(b[0]) || 0, n = na + nb;
+    if (!(n > 0)) return a;
+    var wavg = function(ia, ib){
+      var va = fin(a[ia]), vb = fin(b[ib]);
+      if (!isFinite(va) && !isFinite(vb)) return null;
+      if (!isFinite(va)) return vb;
+      if (!isFinite(vb)) return va;
+      return (va * na + vb * nb) / n;
+    };
+    return [n, wavg(1, 1), wavg(2, 2), wavg(3, 3), wavg(4, 4)];
+  }
+
+  /* Every key that folds into `key`, the key itself first. */
+  function hgOgKindGroup(key){
+    var out = [key], k;
+    for (k in OG_KIND_ALIAS){
+      if (!Object.prototype.hasOwnProperty.call(OG_KIND_ALIAS, k)) continue;
+      if (OG_KIND_ALIAS[k] === key && out.indexOf(k) < 0) out.push(k);
+    }
+    return out;
+  }
+
   function hgOgReplayRow(map, key){
-    return (map && Object.prototype.hasOwnProperty.call(map, key)) ? map[key] : null;
+    if (!map) return null;
+    /* an aliased label resolves to its mechanic, so 'UTAD' and 'SPRING'
+       reach the same row rather than two different ones */
+    var canon = Object.prototype.hasOwnProperty.call(OG_KIND_ALIAS, key)
+      ? OG_KIND_ALIAS[key] : key;
+    var group = hgOgKindGroup(canon), merged = null, i;
+    for (i = 0; i < group.length; i++){
+      if (Object.prototype.hasOwnProperty.call(map, group[i])){
+        merged = hgOgMergeReplayRows(merged, map[group[i]]);
+      }
+    }
+    return merged;
   }
 
   /* The mechanic's / grade's / cohort's own settled replay record, or null.
@@ -7811,7 +7894,21 @@ terse status, and never launches a first-time scan on a global refresh.
      mechanic was selected from. Counted, not hardcoded, so adding kinds
      tightens the bar automatically. */
   function hgOgReplayFamilySize(){
-    try { return Object.keys(HG_OG_REPLAY_EVIDENCE.kinds || {}).length || 1; }
+    try {
+      /* DISTINCT MECHANICS, not distinct labels. A correction for having
+         tested N things must count the things actually tested: SPRING and
+         UTAD are one detector under two direction labels, so counting both
+         inflates the family and tightens the bar for a search nobody
+         performed. Folded through OG_KIND_ALIAS, the same map the ledger
+         accessor uses, so the count and the records can never disagree. */
+      var seen = {}, k, n = 0;
+      for (k in (HG_OG_REPLAY_EVIDENCE.kinds || {})){
+        if (!Object.prototype.hasOwnProperty.call(HG_OG_REPLAY_EVIDENCE.kinds, k)) continue;
+        var canon = Object.prototype.hasOwnProperty.call(OG_KIND_ALIAS, k) ? OG_KIND_ALIAS[k] : k;
+        if (!seen[canon]){ seen[canon] = 1; n++; }
+      }
+      return n || 1;
+    }
     catch (eF) { return 1; }
   }
 
@@ -8685,10 +8782,17 @@ terse status, and never launches a first-time scan on a global refresh.
      count describes exactly what every desk applies. */
   function hgOgDemotedKindCount(venueCost){
     var vc = (venueCost && isFinite(fin(venueCost.rtCostPct))) ? venueCost : hgOgVenueCost();
-    var kinds = HG_OG_REPLAY_EVIDENCE.kinds, k, n = 0;
+    /* DISTINCT MECHANICS, like hgOgReplayFamilySize. With SPRING and UTAD
+       folded to one record they now share one verdict — correct — but
+       counting both labels would report one demoted mechanic as two and
+       inflate this tally by one for every aliased pair. */
+    var kinds = HG_OG_REPLAY_EVIDENCE.kinds, k, n = 0, seen = {};
     for (k in kinds){
       if (!Object.prototype.hasOwnProperty.call(kinds, k)) continue;
-      if (hgOgKindDemotion(k, vc)) n++;
+      var canon = Object.prototype.hasOwnProperty.call(OG_KIND_ALIAS, k) ? OG_KIND_ALIAS[k] : k;
+      if (seen[canon]) continue;
+      seen[canon] = 1;
+      if (hgOgKindDemotion(canon, vc)) n++;
     }
     return n;
   }

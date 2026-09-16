@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v763',
-  pack: 'the desk has ordered its gold cards by a composite score since it was written and never recorded it, so the ranking has never been testable',
+  version: 'hg-v764',
+  pack: 'SPRING and UTAD are one detector under two direction labels, and the gate was vetoing the mechanic on its long half alone',
   built: '2026-09-16T12:00:00Z'
 };
 

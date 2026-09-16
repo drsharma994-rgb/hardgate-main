@@ -216,6 +216,92 @@ function familyZ(k){
   for (let i = 0; i < 64; i++){ const mid = (lo + hi) / 2; if (normCdf(mid) < target) lo = mid; else hi = mid; }
   return (lo + hi) / 2;
 }
+/* ---- (4) THE REGISTRY NOBODY COMPARED: WHAT THE DETECTOR EMITS ----
+
+   The three cross-checks above are static list against static list —
+   OG_MECHANICS, the fns map, the detector call-set. None of them looks at
+   the `kind` strings hgOgDetect actually produces, so a detector emitting a
+   label absent from every list slips through silently, which is precisely
+   the failure the file header says this test prevents.
+
+   Three had: UTAD (106 firings in the walk), DONCHIAN-DRIVE (3) and
+   COMPRESSION-BREAK (1). The walk artifact records `kind` per row, so it
+   is the one place the emitted set can be read without a network call.
+
+   ALIAS-AWARE. SPRING and UTAD are one detector under two direction labels
+   (hgOmniSpring returns SPRING on a swept low and UTAD on a swept high,
+   confirmed 123/123 long and 106/106 short), so UTAD is expected to be
+   absent from OG_MECHANICS and must not be reported as a gap. The alias map
+   is read from omnigold.js rather than copied, so the two cannot drift. */
+{
+  const ALIAS = {};
+  const aliasSrc = (CODE.match(/var OG_KIND_ALIAS = \{([^}]*)\}/) || [])[1] || '';
+  for (const m of aliasSrc.matchAll(/'([A-Z0-9-]+)'\s*:\s*'([A-Z0-9-]+)'/g)) ALIAS[m[1]] = m[2];
+  ok(Object.keys(ALIAS).length > 0, 'the alias map is readable from source (' + JSON.stringify(ALIAS) + ')');
+  ok(ALIAS.UTAD === 'SPRING', 'and UTAD folds into SPRING — one detector, two direction labels');
+
+  const walkPath = path.join(ROOT, 'scripts', 'backtest-omnigold-results.json');
+  if (fs.existsSync(walkPath)){
+    const walk = JSON.parse(fs.readFileSync(walkPath, 'utf8'));
+    const emitted = new Set((walk.trades || [])
+      .filter(t => t.source === 'SCAN')            /* engine picks are not omnigold mechanics */
+      .map(t => t.kind));
+    ok(emitted.size > 40, 'the walk emitted ' + emitted.size + ' distinct SCAN kinds');
+
+    const canon = k => (Object.prototype.hasOwnProperty.call(ALIAS, k) ? ALIAS[k] : k);
+    const unregistered = [...emitted].filter(k => !MECHANICS.includes(canon(k)));
+
+    /* TWO DECLARED GAPS, and they are declared rather than hidden.
+
+       hgOgDetect calls hgOmniDetect — OmniRoute's WHOLE detect pass — so
+       this desk consumes a superset of what OG_MECHANICS lists, and the
+       header's claim to be "the single source of truth" is not quite true.
+       Two OmniRoute CV detectors reach the gold book through it:
+
+         DONCHIAN-DRIVE     3 firings in 9,897 rows
+         COMPRESSION-BREAK  1 firing
+
+       Registering them properly means adding them to the fns map too, and
+       a key in that map with no replay row fails the check above it — so
+       the real fix needs a walk, and the walk needs Binance klines that
+       are a gateway policy denial from this environment.
+
+       Named here with their counts so the gap is visible, and asserted to
+       be EXACTLY these two: a third one, or either of these growing into a
+       real share of the book, fails this test immediately. That is the
+       property that matters — the guard was blind, and it is not now. */
+    const DECLARED_GAPS = ['DONCHIAN-DRIVE', 'COMPRESSION-BREAK'];
+    const undeclared = unregistered.filter(k => DECLARED_GAPS.indexOf(k) < 0);
+    ok(undeclared.length === 0,
+       'every kind the detector emits is registered or declared' +
+       (undeclared.length ? ' — UNREGISTERED: ' + undeclared.join(', ') : ''));
+
+    /* the declared ones must stay rare; they are tolerated because they are
+       negligible, not because they are allowed */
+    const rows = (walk.trades || []).filter(t => t.source === 'SCAN');
+    for (const g of DECLARED_GAPS){
+      const n = rows.filter(t => t.kind === g).length;
+      ok(n <= 10, g + ' is still negligible (' + n + ' of ' + rows.length + ' SCAN rows)');
+    }
+    ok(DECLARED_GAPS.every(g => unregistered.indexOf(g) >= 0 || !emitted.has(g)),
+       'and every declared gap is still a real one — a fixed gap must leave this list');
+  }
+
+  /* (5) and the baked ledger the gate actually reads */
+  const ledger = new Set();
+  const ledStart = CODE.indexOf('kinds: {', CODE.indexOf('HG_OG_REPLAY_EVIDENCE'));
+  if (ledStart > 0){
+    const block = braceBlock(CODE, ledStart);
+    for (const m of block.matchAll(/'([A-Z0-9][A-Z0-9-]*)'\s*:\s*\[/g)) ledger.add(m[1]);
+    ok(ledger.size > 40, 'the baked ledger holds ' + ledger.size + ' rows');
+    const canon2 = k => (Object.prototype.hasOwnProperty.call(ALIAS, k) ? ALIAS[k] : k);
+    const orphanLedger = [...ledger].filter(k => !MECHANICS.includes(canon2(k)));
+    ok(orphanLedger.length === 0,
+       'the ledger measures nothing the card cannot name' +
+       (orphanLedger.length ? ' — ORPHANS: ' + orphanLedger.join(', ') : ''));
+  }
+}
+
 const z34 = familyZ(34), zNow = familyZ(MECHANICS.length);
 ok(zNow > z34,
    'adding mechanics raised the per-mechanic significance bar (' +

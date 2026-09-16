@@ -183,9 +183,13 @@ console.log('\n== OMNIGOLD carries its own copy, and it got the same fix ==');
   ok(/ex\.fwdTab = 'OMNIGOLD:' \+ cfg\.label/.test(og), 'against the pool that horizon records into');
 
   /* UTAD is measured under SPRING in the pool; the forward lookup must use
-     the same key or it would silently find nothing. */
-  ok(/var statKey = \(hit\.kind === 'UTAD'\) \? 'SPRING' : hit\.kind;/.test(og),
+     the same key or it would silently find nothing. hg-v764 moved that from
+     an inline special case to OG_KIND_ALIAS, the one map the ledger
+     accessor and the family count also read, so the three cannot drift. */
+  ok(/var statKey = Object\.prototype\.hasOwnProperty\.call\(OG_KIND_ALIAS, hit\.kind\)/.test(og),
     'and uses the same family key the stats pool does');
+  ok(/var OG_KIND_ALIAS = \{ 'UTAD': 'SPRING' \}/.test(og),
+    'from a shared alias map rather than a special case');
 }
 
 console.log('\n' + passed + ' passed, 0 failed');

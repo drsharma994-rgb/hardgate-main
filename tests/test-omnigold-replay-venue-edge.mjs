@@ -85,7 +85,13 @@ console.log('== the inverse normal is accurate enough to set a family-wise bound
 console.log('\n== the family is counted, not assumed ==');
 {
   const m = XM.hgOgReplayFamilySize();
-  ok(m === Object.keys(TABLE.perKind).length, `family size is the table size (${m})`);
+  /* DISTINCT MECHANICS, not table rows. SPRING and UTAD are one detector
+     under two direction labels (hg-v764), so the table carries two rows for
+     one mechanic and a correction for "how many things were tested" must
+     count the thing, not the label. */
+  const rows = Object.keys(TABLE.perKind).length;
+  ok(m === rows - 1, `family size is the table size minus the aliased pair (${m} of ${rows} rows)`);
+  ok(m < rows, 'so the significance bar stops counting one detector twice');
   ok(m > 1, 'and it is a real family, not a single test');
 }
 
@@ -128,8 +134,17 @@ console.log('\n== the verdict answers breakeven AND selection ==');
 console.log('\n== sweeping all 54: re-pricing helps, and still finds no edge ==');
 {
   let repriced = 0, netPosXM = 0, netPosPaxg = 0, naive = 0, family = 0;
+  /* ONE ROW PER MECHANIC, not per label. hg-v764 folds SPRING and UTAD —
+     one detector, two direction labels — into a single record, so walking
+     the raw table keys would count that mechanic twice and, worse, count it
+     twice at the SAME pooled numbers. Its two halves used to disagree by 19
+     points of win rate, which is exactly why they were pooled. */
+  const seenKind = {};
   for (const kind of Object.keys(TABLE.perKind)){
-    const ev = XM.hgOgReplayEvidence(kind);
+    const canon = kind === 'UTAD' ? 'SPRING' : kind;
+    if (seenKind[canon]) continue;
+    seenKind[canon] = 1;
+    const ev = XM.hgOgReplayEvidence(canon);
     if (!ev) continue;
     if (ev.avgNetR > 0) netPosPaxg++;
     const rp = XM.hgOgReplayNetAtVenue(ev);
@@ -138,9 +153,14 @@ console.log('\n== sweeping all 54: re-pricing helps, and still finds no edge =='
     if (vd && vd.tier === 'naive') naive++;
     if (vd && vd.tier === 'family') family++;
   }
-  ok(repriced === 54, `all 54 mechanics re-price (${repriced})`);
+  ok(repriced === 53, `all 53 mechanics re-price (${repriced}) — 54 rows, one aliased pair`);
   ok(netPosPaxg === 0, 'at the replay\'s PAXG cost, NOTHING is net positive');
-  ok(netPosXM === 18, `at XM cost, 18 are net positive (${netPosXM}) — the labelling error was real`);
+  /* 18 -> 17: UTAD alone read net positive at XM and SPRING did not. Pooled,
+     the mechanic is negative, so the pair contributes one negative rather
+     than one of each. Fewer net-positive mechanics is the CORRECTION, not a
+     regression — the extra one was a direction half wearing a mechanic's
+     name. */
+  ok(netPosXM === 17, `at XM cost, 17 are net positive (${netPosXM}) — the labelling error was real`);
   /* WAS 1, IS NOW 0, and the change is the point rather than a regression.
      hgOgReplayEdgeVerdict used to read n replay rows as n independent
      trades. The walk that produced them published 59.4 plans a day on one
