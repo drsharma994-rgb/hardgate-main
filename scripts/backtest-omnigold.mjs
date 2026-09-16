@@ -126,7 +126,8 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { xmOrderType, ogXmBarTouchesEntry } from '../lib/omnigold-xm-bot-backtest.mjs';
+import { xmOrderType, ogXmBarTouchesEntry, ogXmFillDepth } from '../lib/omnigold-xm-bot-backtest.mjs';
+import { isPendingOrder, partitionProvable, unprovableNote } from '../lib/unprovable-fill.mjs';
 
 const ROOT = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 const CACHE_DIR = path.join(ROOT, 'scripts', '.bt-cache');
@@ -390,6 +391,13 @@ function stepTrade(tr, bar, bi, fillWindow){
     if (ogXmBarTouchesEntry(tr.orderType, dir, bar, entry)){
       tr.state = 'filled';
       tr.fillIdx = bi;
+      /* HOW CREDIBLE THIS FILL IS. The walk fills the moment the bar's
+         extreme reaches the order; a bar that merely kissed the price is
+         recorded as an identical fill to one that traded a dollar through
+         it. Measured here so the artifact can answer how much of the fill
+         rate rests on extreme-tick touches. Nothing branches on it. */
+      tr.fillDepth = ogXmFillDepth(tr.orderType, dir, bar, entry);
+      tr.fillBarRange = (+bar.h - +bar.l) || null;
       /* fall through: the fill bar itself can settle the trade (lib does the same) */
     } else {
       tr.waitBars++;
@@ -448,12 +456,20 @@ function settleRecord(tr, rows, tfSec, counters, evidence, results){
      the fill bar itself is resolved pro-strategy; for LIMIT/STOP fills the
      OHLC cannot prove the entry touch preceded the target print. */
   const sameBarExit = (tr.fillIdx != null && tr.exitIdx === tr.fillIdx);
-  const pendingFill = /LIMIT|STOP/.test(String(tr.orderType || ''));
-  const ambiguousWin = (tr.outcome === 'win' && sameBarExit && pendingFill);
+  const pendingFill = isPendingOrder(tr.orderType);
+  /* A pending order that resolved on its own fill bar cannot be shown to
+     have existed: if the exit level printed first the order was still
+     resting. Recorded on the LOSS side too — that is the whole point. The
+     flag used to be set only on wins, and the bake dropped only wins, which
+     condemned sixteen mechanics that had merely been filtered. See
+     lib/unprovable-fill.mjs. */
+  const unprovableFill = (sameBarExit && pendingFill);
+  const ambiguousWin = (tr.outcome === 'win' && unprovableFill);
   if (tr.outcome === 'win' && sameBarExit){
     counters.sameBarWins++;
     if (pendingFill) counters.sameBarAmbiguousWins++;
   }
+  if (unprovableFill) counters.unprovableFills = (counters.unprovableFills || 0) + 1;
   results.push({
     tISO: new Date(rows[tr.sigIdx].t * 1000).toISOString(),
     source: tr.source, horizon: tr.horizon,
@@ -478,7 +494,22 @@ function settleRecord(tr, rows, tfSec, counters, evidence, results){
       : +(tr.mfe / Math.abs(tr.stop - tr.entry)).toFixed(3),
     maeR: (tr.fillIdx == null || tr.mae == null) ? null
       : +(tr.mae / Math.abs(tr.stop - tr.entry)).toFixed(3),
+    /* HOW CREDIBLE THE FILL WAS — see ogXmFillDepth. `fillDepthR` is how far
+       price traded through the resting order in units of the trade's own
+       risk; `fillDepthBar` is the same distance as a fraction of the fill
+       bar's range. Both null for a market order, which fills at the open
+       and has no queue to be behind. A book of fills clustered at depth ~0
+       is a book the walk got for free and a real account would not. */
+    fillDepthR: (tr.fillDepth == null || !(Math.abs(tr.stop - tr.entry) > 0)) ? null
+      : +(tr.fillDepth / Math.abs(tr.stop - tr.entry)).toFixed(4),
+    fillDepthBar: (tr.fillDepth == null || !(tr.fillBarRange > 0)) ? null
+      : +(tr.fillDepth / tr.fillBarRange).toFixed(4),
     sameBarExit: sameBarExit || undefined,
+    /* THE row-level verdict every consumer filters on. `ambiguousSameBarWin`
+       is kept because older artifacts carry it and readers still name it,
+       but it is the win-only half of this and must not be filtered on
+       alone. */
+    unprovableFill: unprovableFill || undefined,
     ambiguousSameBarWin: ambiguousWin || undefined,
     outcome: tr.outcome + (tr.bothTouch ? ' (both-touch)' : ''),
     rMultiple: tr.rGross == null ? null : +tr.rGross.toFixed(3),
@@ -795,7 +826,16 @@ for (const t of results){
   bag[b + '-' + (b + 10)] = (bag[b + '-' + (b + 10)] || 0) + 1;
 }
 
-/* Quantify the same-bar fill->target optimism (stated limitation). */
+/* Quantify the same-bar fill->target optimism (stated limitation), and the
+   one-sided exclusion that used to be applied to it. Three numbers, because
+   the gap BETWEEN them is the finding:
+
+     winRateAll        every row, the walk's own optimistic resolution
+     winRateExAmbig    dropping unprovable WINS only — what the bake used to
+                       do, and a filter that cannot be right: it removes 462
+                       unprovable wins and keeps 1,289 unprovable losses
+     winRateProvable   dropping every row whose position cannot be shown to
+                       have existed, win and loss alike */
 const settledAll = results.filter(t => t.netR != null);
 const winsAll = settledAll.filter(t => t.outcome.startsWith('win'));
 const ambigWins = settledAll.filter(t => t.ambiguousSameBarWin);
@@ -803,6 +843,16 @@ const exAmbig = settledAll.filter(t => !t.ambiguousSameBarWin);
 const exAmbigWins = exAmbig.filter(t => t.outcome.startsWith('win'));
 const winRateAll = settledAll.length ? winsAll.length / settledAll.length : null;
 const winRateExAmbig = exAmbig.length ? exAmbigWins.length / exAmbig.length : null;
+
+const provable = partitionProvable(settledAll);
+const provableWins = provable.kept.filter(t => t.outcome.startsWith('win'));
+const winRateProvable = provable.kept.length ? provableWins.length / provable.kept.length : null;
+const unprovableWithheld = {
+  rows: provable.withheld.length,
+  wins: provable.withheld.filter(t => t.outcome.startsWith('win')).length,
+  losses: provable.withheld.filter(t => t.outcome.startsWith('loss')).length,
+  note: unprovableNote(settledAll)
+};
 
 const meta = {
   generated: new Date().toISOString(),
@@ -816,6 +866,20 @@ const meta = {
   barCount: h1.length,
   span: h1.length ? { from: new Date(h1[0].t * 1000).toISOString(), to: new Date(h1[h1.length - 1].t * 1000).toISOString() } : null,
   fees: { takerPerSide: FEE_SIDE, slipPerSide: SLIP_SIDE, roundTripFrac: COST_RT_FRAC },
+  /* HOW BIG THE SAMPLE REALLY IS. Structured, not only prose in limitations,
+     because every consumer that quotes a row count needs to quote the
+     withheld count beside it. */
+  sampleIntegrity: {
+    settled: settledAll.length,
+    provable: provable.kept.length,
+    unprovableFills: unprovableWithheld.rows,
+    unprovableScoredWins: unprovableWithheld.wins,
+    unprovableScoredLosses: unprovableWithheld.losses,
+    winRateAllRows: winRateAll == null ? null : +winRateAll.toFixed(4),
+    winRateProvable: winRateProvable == null ? null : +winRateProvable.toFixed(4),
+    winRateDroppingWinsOnly: winRateExAmbig == null ? null : +winRateExAmbig.toFixed(4),
+    note: unprovableWithheld.note
+  },
   feeModel: (FEE_SIDE * 100) + '% taker/side + ' + (SLIP_SIDE * 100) + '% slippage/side = '
     + (COST_RT_FRAC * 100).toFixed(2) + '% of entry round trip; costR = entry*' + COST_RT_FRAC + '/|stop-entry|',
   rules: {
@@ -843,14 +907,20 @@ const meta = {
     'no per-kind cooldown beyond the one-open-trade dedup (the XM bot walk uses a global cooldown instead; this harness measures setups, not the single-account bot)'
   ],
   limitations: [
-    'SAME-BAR FILL->TARGET OPTIMISM (inherited from lib ogXmBotWalkTrade semantics): '
-      + counters.sameBarWins + ' of ' + winsAll.length + ' wins settle on the fill bar itself; '
-      + counters.sameBarAmbiguousWins + ' of them are LIMIT/STOP fills where OHLC cannot prove the entry touch preceded '
-      + 'the target print — all resolved pro-strategy at full R. Overall win rate '
-      + (winRateAll == null ? '-' : (winRateAll * 100).toFixed(1) + '%') + ' -> '
+    'UNPROVABLE FILLS — the position cannot be shown to have existed: ' + unprovableWithheld.rows
+      + ' of ' + settledAll.length + ' settled rows are LIMIT/STOP orders that resolved on their own fill bar, where '
+      + 'OHLC cannot order the entry touch against the exit touch. If the exit printed first the order was still '
+      + 'resting and there was no trade, so the row is neither a win nor a loss — it is not a sample. '
+      + unprovableWithheld.wins + ' were scored as wins and ' + unprovableWithheld.losses + ' as losses. Win rate '
+      + (winRateAll == null ? '-' : (winRateAll * 100).toFixed(1) + '%') + ' (all rows) -> '
+      + (winRateProvable == null ? '-' : (winRateProvable * 100).toFixed(1) + '%') + ' (provable rows only). '
+      + 'Excluding only the unprovable WINS, as this repo did until the symmetric rule landed, gives '
       + (winRateExAmbig == null ? '-' : (winRateExAmbig * 100).toFixed(1) + '%')
-      + ' if ambiguous same-bar wins are excluded; absolute win rates carry that much upward slack. '
-      + 'Stop+target both-touch bars ARE counted as losses (' + counters.bothTouch + ' here).',
+      + ' — a one-sided filter that reads as evidence against the mechanics. '
+      + 'THE EXCLUSION IS NOT FREE: it removes fast resolutions specifically, so the provable sample is both smaller '
+      + 'and not a random subset. scripts/resolve-unprovable-1m.mjs settles them properly when klines are reachable. '
+      + 'Stop+target both-touch bars on an ALREADY-FILLED position ARE counted as losses (' + counters.bothTouch
+      + ' here) — there the position certainly existed and only the exit is unknown.',
     'OUTCOME SEMANTICS ARE LIB SEMANTICS, NOT DESK-PANEL SEMANTICS: resolution follows lib/omnigold-xm-bot-backtest.mjs '
       + '(fill required, stop-first, unfilled != loss) plus a 96-bar MTM timeout and per-(kind,dir) dedup. The desk panel '
       + 'hgOgUpdateSetupStatus (omnigold.js:4694) is LOOSER (profit/stopped on a live-price cross, no fill requirement), '

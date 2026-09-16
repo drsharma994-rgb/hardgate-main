@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v755',
-  pack: 'the drawdown v754 quoted was from the old gate set; now it is the right one, and staleness is detectable',
-  built: '2026-09-15T12:00:00Z'
+  version: 'hg-v756',
+  pack: 'the win rate was never a number: 21.5% of the walk cannot be ordered, so it is an interval — and no mechanic clears its bar, so no ticket issues',
+  built: '2026-09-16T12:00:00Z'
 };
 
 function hgBuildLabel(b){

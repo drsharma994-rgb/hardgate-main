@@ -39,6 +39,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { isProvableFill } from '../lib/unprovable-fill.mjs';
 
 const ROOT = path.join(fileURLToPath(new URL('../', import.meta.url)));
 const argv = process.argv.slice(2);
@@ -69,7 +70,8 @@ const sd = a => {
 /* one position at a time, per symbol — the only book a person can run */
 function sequential(trades){
   const rows = (trades || [])
-    .filter(r => typeof r.rMultiple === 'number' && !r.ambiguousSameBarWin && r.tISO && r.exitISO)
+    /* symmetric unprovable-fill exclusion — see lib/unprovable-fill.mjs */
+    .filter(r => typeof r.rMultiple === 'number' && isProvableFill(r) && r.tISO && r.exitISO)
     .sort((a, b) => new Date(a.tISO) - new Date(b.tISO));
   const out = [];
   let freeAt = 0;

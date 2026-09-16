@@ -143,12 +143,38 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
     htf:{e21:10,e50:9}, killzone:{zone:'LONDON',label:'LONDON OPEN'},
     macro:{realRateHint:'TAILWIND', dxy:{trend20:'DOWN'}}, yield:{valid:true},
     adr:{usedPct:45}, news:{risk:'low',note:''}, minRr:1.5,
+    /* MEASURED EDGE IS NOW PART OF "FULLY SUPPORTED".
+       OG_EDGE_PROOF_REQUIRED made measured-edge hard, so an UNKNOWN verdict
+       stands the setup aside instead of letting the ticket through. At
+       minRr 1.5 breakeven is 40%, and clearing the 54-mechanic bar (+3.11σ)
+       on 120 samples needs about 54%. 45% clears nothing — it reads
+       UNCHECKED, as the measured-edge assertion further down requires, and
+       a ticket used to issue on it anyway. */
     stats:{samples:120,hit:0.45,expR:0.12},
     planRisk: 12   /* 0.6% of price: clear of the floor, cheap at XM */
   });
   delete win.HG_OG_VENUE;
   const gFull = win.hgOmniGrade(full);
-  ok(gFull.ticket === true, 'a fully supported gold setup grades to a ticket');
+  ok(gFull.ticket === false,
+     'a gold setup with every CONTEXT gate satisfied but no measured edge is NOT a ticket');
+  ok(gFull.unknown.indexOf('measured-edge') >= 0,
+     'and measured-edge is what stands it aside, named on the card');
+  ok(/WATCH/.test(gFull.verdict),
+     'it reads WATCH — the levels and the reasoning survive, the claim does not');
+
+  /* the same setup on stats that DO clear the bar still tickets, so the
+     gate is a threshold and not a blanket refusal */
+  win.HG_OG_VENUE = 'XM';
+  const proven = win.hgOgGates(wavy, hit, {
+    htf:{e21:10,e50:9}, killzone:{zone:'LONDON',label:'LONDON OPEN'},
+    macro:{realRateHint:'TAILWIND', dxy:{trend20:'DOWN'}}, yield:{valid:true},
+    adr:{usedPct:45}, news:{risk:'low',note:''}, minRr:1.5,
+    stats:{samples:120,hit:0.58,expR:0.12},
+    planRisk: 12
+  });
+  delete win.HG_OG_VENUE;
+  ok(win.hgOmniGrade(proven).ticket === true,
+     'and the identical setup on stats that clear the bar DOES ticket');
 
   /* This harness loads each module with new Function('window', src), which
      gives every file its own scope — so indicators.js, indicators2.js and

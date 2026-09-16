@@ -24,8 +24,14 @@
    Saturday — and weekend-exposure correctly vetoed all 371. Gold's book is
    shut at the weekend and a swing hold across it is a gap bet.
    The tapes below are therefore STAGGERED across the week, and the test
-   asserts both horizons produce tickets, so a future change that quietly
+   asserts both horizons produce SETUPS, so a future change that quietly
    kills one horizon cannot hide behind a calendar artefact.
+
+   It asserts setups rather than tickets because measured-edge is now hard
+   (OG_EDGE_PROOF_REQUIRED): these tapes are synthetic and carry no
+   walk-forward record, so nothing here can ticket, and nothing should. The
+   claim that the chain can still REACH a ticket is made separately, by
+   feeding the same path stats that clear the significance bar.
 
    Run: node tests/test-omnigold-end-to-end.mjs */
 import fs from 'node:fs';
@@ -90,6 +96,7 @@ const fired = {}, becameCand = {};
 MECHS.forEach(k => { fired[k] = 0; becameCand[k] = 0; });
 const gateSeen = {}, infoKeys = new Set();
 let nCand = 0, tickets = { SCALP: 0, SWING: 0 }, gateCounts = [];
+const candsByHz = { SCALP: 0, SWING: 0 };
 
 for (const hz of ['SCALP', 'SWING']){
   const cfg = HZ[hz], tfSec = hz === 'SCALP' ? 3600 : 14400;
@@ -110,6 +117,7 @@ for (const hz of ['SCALP', 'SWING']){
       let cands = [];
       try { cands = W.hgOgEvaluate(rows, hits, extra, cfg); } catch (e) { continue; }
       nCand += cands.length;
+      candsByHz[hz] += cands.length;
       cands.forEach(c => {
         if (becameCand[c.kind] !== undefined) becameCand[c.kind]++;
         if (c.grade && c.grade.ticket) tickets[hz]++;
@@ -156,9 +164,47 @@ console.log('\n== every indicator read is on every candidate ==');
 
 console.log('\n== both horizons actually produce setups ==');
 {
-  ok(tickets.SCALP > 0, 'SCALP produces tickets (' + tickets.SCALP + ')');
+  /* This loop feeds `stats: null` — synthetic tapes have no walk-forward
+     record — so with OG_EDGE_PROOF_REQUIRED nothing here can ticket, and
+     that is correct: a mechanic with no measured edge does not get one.
+     The pipeline claim this block exists to make is about SETUPS. */
+  ok(candsByHz.SCALP > 0, 'SCALP produces setups (' + candsByHz.SCALP + ')');
   /* The assertion the weekend artefact would have hidden. */
-  ok(tickets.SWING > 0, 'SWING produces tickets (' + tickets.SWING + ')');
+  ok(candsByHz.SWING > 0, 'SWING produces setups (' + candsByHz.SWING + ')');
+
+  ok(tickets.SCALP === 0 && tickets.SWING === 0,
+     'and none of them tickets on evidence that does not exist — measured-edge is hard');
+
+  /* the pipeline can still REACH a ticket, which is the part the old
+     assertion was really protecting: same path, stats that clear the bar */
+  let reached = 0;
+  for (const hz of ['SCALP', 'SWING']){
+    const cfg = HZ[hz], tfSec = hz === 'SCALP' ? 3600 : 14400;
+    const rows = tape(7919 + (hz === 'SWING' ? 13 : 0), 300, tfSec, 'trend', 1);
+    let hits = [];
+    try { hits = W.hgOgDetect(rows, { nowSec: rows[rows.length - 1].t }); } catch (e) { continue; }
+    if (!hits.length) continue;
+    const livePx = rows[rows.length - 1].c;
+    let cands = [];
+    try {
+      cands = W.hgOgEvaluate(rows, hits, {
+        htf: null, killzone: null, macro: null, yieldRows: null,
+        nowSec: rows[rows.length - 1].t, adr: W.hgOgAdr(rows, 14),
+        news: null, livePx, zoneCtx: null, paxg: livePx * 1.004, srcId: 'gold-spot',
+        /* hgOgEvaluate looks stats up PER MECHANIC (ex.stats =
+           extra.stats[statKey]), so a flat object reaches nothing. 120
+           samples at 58% clears the bar at either horizon's breakeven. */
+        stats: MECHS.concat(['SPRING']).reduce((m, k) => {
+          m[k] = { samples: 120, hit: 0.58, expR: 0.12 }; return m;
+        }, {})
+      }, cfg);
+    } catch (e) { continue; }
+    for (const c of cands){
+      const g = (c.gates || []).filter(x => x.key === 'measured-edge')[0];
+      if (g && g.pass === true) reached++;
+    }
+  }
+  ok(reached > 0, 'measured-edge PASSES end to end when the evidence supports it (' + reached + ')');
 }
 
 console.log('\n== the weekend veto is real, and dated from the scan clock ==');

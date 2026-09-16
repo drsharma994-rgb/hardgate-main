@@ -44,6 +44,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { boundRows, isUnprovableFill, winRateBounds, thresholdVsInterval,
+         unprovableNote } from '../lib/unprovable-fill.mjs';
 
 const ROOT = path.join(fileURLToPath(new URL('../', import.meta.url)));
 const argv = process.argv.slice(2);
@@ -64,10 +66,32 @@ const isWin = r => r.outcome === 'win';
 const isLoss = r => String(r.outcome).startsWith('loss');
 const settledRow = r => typeof r.rMultiple === 'number';
 
-/* the ambiguous same-bar wins are dropped everywhere: the bar spanned both
-   levels and the walk resolved it optimistically. 462 of them, 18.7% of all
-   wins, worth 0.12R a trade of flattery. */
-const formed = (walk.trades || []).filter(r => settledRow(r) && !r.ambiguousSameBarWin);
+/* Rows whose position cannot be shown to have existed are dropped — BOTH
+   SIDES of them. This filter used to read `!r.ambiguousSameBarWin`, which
+   dropped the 462 unprovable wins and kept the 1,289 unprovable losses,
+   because the walk only ever set that flag on wins. The asymmetry was worth
+   about six points of win rate against a 33.3% breakeven and it read as
+   evidence AGAINST the mechanics: seventeen of them scored "significantly
+   below breakeven" under it and one does when the rule is applied evenly.
+   lib/unprovable-fill.mjs holds the predicate and the reasoning. */
+const settledRows = (walk.trades || []).filter(settledRow);
+
+/* THE BOOK IS AN INTERVAL, AND THESE TABLES ARE ITS CAUTIOUS END.
+
+   `formed` is the LOWER bound: unprovable wins dropped, unprovable losses
+   kept. That is exactly what the old `!r.ambiguousSameBarWin` filter
+   computed, so every number below is continuous with what shipped — what
+   changes is that it is now labelled a bound instead of passing as the
+   record, and `winRateInterval` carries the other end.
+
+   Performance claims stay on this end deliberately: a desk should be
+   credited only for what survives its worst case. Verdicts are the mirror
+   of that and must NOT come from here — condemning a mechanic at the lower
+   bound is what marked seventeen of them "significantly below breakeven"
+   when not one fails at its upper bound. */
+const formed = boundRows(settledRows, 'lower');
+const formedUpper = boundRows(settledRows, 'upper');
+const withheld = settledRows.filter(isUnprovableFill);
 
 /* ---------- the sequential book ---------- */
 function sequential(pool){
@@ -307,6 +331,23 @@ const bake = {
   barBasis: (walk.meta && walk.meta.universe) || null,
   clusterWidth: WIDTH,
   costModel: { paxgRtFrac: PAXG, xmRtFrac: XM },
+  /* What this bake refused to count, and why. A sample size quoted without
+     this is a bigger claim than the data supports. */
+  sampleIntegrity: (() => {
+    const b = winRateBounds(settledRows);
+    return {
+      settled: b.settled,
+      unprovableFills: b.unprovable,
+      unprovableScoredWins: b.unprovableScoredWins,
+      unprovableScoredLosses: b.unprovableScoredLosses,
+      /* the whole point: a range, and where breakeven at 2R falls in it */
+      winRateInterval: { lower: b.lower, upper: b.upper, point: b.point },
+      tablesComputedOn: 'lower bound (unprovable wins dropped, unprovable losses kept)',
+      breakevenAt2R: +(1 / 3).toFixed(4),
+      breakevenVsInterval: thresholdVsInterval(settledRows, 1 / 3),
+      note: unprovableNote(settledRows)
+    };
+  })(),
   concurrency: concurrency(formed),
   populations: {
     formed: record(formed, WIDTH),
@@ -366,6 +407,28 @@ const r3 = v => (v == null || !isFinite(v)) ? '—' : (v >= 0 ? '+' : '') + v.to
 console.log('OMNIGOLD EVIDENCE — re-baked over trades a person could take');
 console.log('============================================================\n');
 console.log('  window ' + bake.window + '   clusters: ' + WIDTH);
+{
+  /* printed BEFORE the tables, because it governs how to read all of them */
+  const si = bake.sampleIntegrity;
+  if (si.unprovableFills){
+    const p = x => (x == null ? '—' : (100 * x).toFixed(2) + '%');
+    console.log('\n  THE WIN RATE IS AN INTERVAL, NOT A NUMBER');
+    console.log('    ' + si.unprovableFills + ' of ' + si.settled + ' settled rows are pending orders that resolved on');
+    console.log('    their own fill bar. OHLC cannot say whether the entry printed before the');
+    console.log('    exit, and if it did not there was no trade at all — so each row is either');
+    console.log('    what the walk scored or not a sample point.');
+    console.log('      win rate at worst : ' + p(si.winRateInterval.lower)
+      + '   (' + si.unprovableScoredWins + ' scored wins deleted, ' + si.unprovableScoredLosses + ' scored losses kept)');
+    console.log('      win rate at best  : ' + p(si.winRateInterval.upper)
+      + '   (the mirror of that)');
+    console.log('      breakeven at 2R   : ' + p(si.breakevenAt2R) + ' — it falls '
+      + (si.breakevenVsInterval === 'straddles' ? 'INSIDE the interval' : si.breakevenVsInterval + ' it'));
+    if (si.breakevenVsInterval === 'straddles'){
+      console.log('    So this walk cannot say whether the book wins or loses. Every table below');
+      console.log('    is computed at the CAUTIOUS end and is a bound, not a record.');
+    }
+  }
+}
 console.log('  concurrency: peak ' + bake.concurrency.peak + ' open, time-weighted mean '
   + bake.concurrency.meanOpen);
 console.log('  -> the shipped constant quotes the FORMED row, which assumes every');
@@ -400,6 +463,14 @@ console.log('\n  WHAT HOLDING IT WOULD HAVE FELT LIKE');
 console.log('  (nothing in the tab has ever reported any of this)');
 for (const [label, e] of Object.entries(bake.experience)){
   for (const [venue, d] of Object.entries(e)){
+    /* A book can legitimately be empty at one venue and not the other — the
+       cost gate vetoes more at PAXG. An empty book has no drawdown, and
+       printing one would be inventing it. */
+    if (!d || !isFinite(d.finalR)){
+      console.log('    ' + (label + ' @' + venue.toUpperCase()).padEnd(32)
+        + 'no trades survive this filter at this venue — no drawdown to report');
+      continue;
+    }
     console.log('    ' + (label + ' @' + venue.toUpperCase()).padEnd(32)
       + 'final ' + (d.finalR >= 0 ? '+' : '') + d.finalR.toFixed(1) + 'R'
       + '   peak ' + d.peakR.toFixed(1) + 'R'

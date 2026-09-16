@@ -40,6 +40,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isProvableFill, unprovableNote } from '../lib/unprovable-fill.mjs';
 
 const ROOT = path.join(fileURLToPath(new URL('../', import.meta.url)));
 const argv = process.argv.slice(2);
@@ -65,7 +66,10 @@ const j = JSON.parse(fs.readFileSync(FILE, 'utf8'));
 const PAXG = (j.meta && j.meta.fees && j.meta.fees.roundTripFrac) || 0.0026;
 const XM = 0.0002;                             /* hgOgVenueCost() XM preset */
 
-const rows = (j.trades || []).filter(r => typeof r.rMultiple === 'number' && !r.ambiguousSameBarWin);
+/* Symmetric exclusion: a pending order that resolved on its own fill bar
+   cannot be shown to have filled at all, whichever way the walk scored it.
+   See lib/unprovable-fill.mjs — this filter used to drop only the wins. */
+const rows = (j.trades || []).filter(r => typeof r.rMultiple === 'number' && isProvableFill(r));
 const withMfe = rows.filter(r => typeof r.mfeR === 'number' && isFinite(r.mfeR));
 
 const s = a => a.reduce((x, y) => x + y, 0);
@@ -106,6 +110,11 @@ if (!withMfe.length){
   console.log('    above the ' + FLOOR_PCT.toFixed(2) + '% stop floor : '
     + ((kw / (kw + kl)) * 100).toFixed(1) + '% on ' + (kw + kl) + ' settled — still '
     + (((kw / (kw + kl)) - be) * 100).toFixed(1) + ' points short of 2R breakeven');
+  const withheldNote = unprovableNote((j.trades || []).filter(r => typeof r.rMultiple === 'number'));
+  if (withheldNote){
+    console.log('\n  On the sample those figures rest on:');
+    console.log('    ' + withheldNote.replace(/(.{72}\s)/g, '$1\n    '));
+  }
   console.log('\n  A target the entry cannot reach is a losing rule however good');
   console.log('  the entry is. That shortfall is the case for running the sweep.');
   process.exit(0);

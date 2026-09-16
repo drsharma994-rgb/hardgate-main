@@ -1,4 +1,4 @@
-/* HARDGATE — the desk published 45.9 cards a day for one instrument.
+/* HARDGATE — the desk published 48.8 cards a day for one instrument.
 
    A reader holds one gold position. The walk shows a time-weighted mean of
    55 open at once, and 77% of same-bar same-direction duplicates settle
@@ -24,6 +24,8 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { boundRows } from '../lib/unprovable-fill.mjs';
+
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url)) + '/..';
 let passed = 0;
@@ -154,7 +156,11 @@ console.log('\n== what it does to the real walk ==');
   /* the claim in the source comment, checked against the artifact it came
      from rather than taken on trust */
   const walk = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts', 'backtest-omnigold-results.json'), 'utf8'));
-  const rows = walk.trades.filter(r => typeof r.rMultiple === 'number' && !r.ambiguousSameBarWin)
+  /* EVERY settled row, unprovable fills included. The question here is how
+     many plans the desk put on screen, and a card was published whether or
+     not the bar data can later show the order filled — that ambiguity
+     belongs to the evidence tables, not to the publication rate. */
+  const rows = walk.trades.filter(r => typeof r.rMultiple === 'number')
     .sort((a, b) => new Date(a.tISO) - new Date(b.tISO));
   const days = (new Date(walk.meta.span.to) - new Date(walk.meta.span.from)) / 864e5;
 
@@ -172,15 +178,28 @@ console.log('\n== what it does to the real walk ==');
   ok(after < 10, 'the lane cool-down takes it to ' + after.toFixed(1) + ' a day');
   ok(after > 3, 'without collapsing to nothing — ' + kept.length + ' cards remain');
 
-  /* and the honest part: it is not an edge */
+  /* And the honest part: it is not an edge.
+
+     Judged at the CAUTIOUS bound, deliberately. Every row the walk scored
+     is in the rate above, because every one of them was a card on screen —
+     but 21.5% of them are pending orders that resolved on their own fill
+     bar, and scoring those pro-strategy is what makes a throttled book look
+     significant. Run on all rows this same statistic reads t=4.00, which is
+     the flattery lib/unprovable-fill.mjs exists to stop, not a finding. */
   const s = a => a.reduce((x, y) => x + y, 0);
-  const grossOf = v => s(v.map(r => r.rMultiple)) / v.length;
-  const xs = kept.map(r => r.rMultiple), mu = grossOf(kept);
+  const cautious = boundRows(kept, 'lower');
+  const xs = cautious.map(r => r.rMultiple), mu = s(xs) / xs.length;
   const sd = Math.sqrt(s(xs.map(x => (x - mu) * (x - mu))) / (xs.length - 1));
   const t = mu / (sd / Math.sqrt(xs.length));
   ok(Math.abs(t) < 1.96,
      'and the thinned book is STILL not distinguishable from zero — t=' + t.toFixed(2)
-     + '. This rule buys tradeability, not edge.');
+     + ' on ' + cautious.length + ' rows. This rule buys tradeability, not edge.');
+
+  /* the claim above is a bound, so say which one and what the other is */
+  const optimistic = boundRows(kept, 'upper');
+  const xo = optimistic.map(r => r.rMultiple), mo = s(xo) / xo.length;
+  ok(mo > mu, 'the optimistic bound is higher (' + mo.toFixed(3) + 'R vs ' + mu.toFixed(3)
+     + 'R) — the thinned book is an interval too, and only its worst end is asserted here');
 }
 
 console.log('\n' + passed + ' passed, 0 failed');

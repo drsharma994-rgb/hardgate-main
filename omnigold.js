@@ -335,6 +335,38 @@ terse status, and never launches a first-time scan on a global refresh.
   var MIN_SAMPLES = 20;
   var EDGE_VETO_Z = -2;
   var EDGE_VETO_SAMPLES = 30;
+
+  /* ===== MEASURED EDGE: PROOF REQUIRED, OR NO TICKET =====================
+
+     The measured-edge gate has three verdicts. It vetoes on a KNOWN failure
+     (pass false) and it has always done so. What it did NOT do is stand a
+     setup aside when the answer is UNKNOWN (pass null) — soft gates let an
+     unknown through, so the ticket stood and the card said UNCHECKED. That
+     is how every OMNIGOLD ticket has ever been issued, because nothing
+     clears the bar:
+
+       54 mechanics in the replay ledger
+        0 clear the 54-comparison significance bar (the best, P6-FAIL, is
+          +1.71 sigma against a bar of +3.11)
+        8 fail it outright
+       46 are unknown
+
+     With this true the gate is hard, and an unknown stands the setup aside
+     like any other missing evidence. The honest reading of the ledger is
+     that the desk cannot show any mechanic pays, and a ticket is a claim
+     that it does.
+
+     SO THIS WILL EMPTY THE TICKET COLUMN. That is not a side effect, it is
+     the change: every card becomes WATCH, with its levels, its gates and
+     its reasoning intact, and none of them is called a ticket until
+     something earns it. hgOgEdgeProofPanelHtml renders WHY the column is
+     empty and what would refill it, because an unexplained empty tab is
+     worse than a wrong one.
+
+     One constant, so this is one line to reverse. Turning it off restores
+     exactly the previous behaviour: unknown stops standing setups aside and
+     tickets issue on UNCHECKED evidence again. */
+  var OG_EDGE_PROOF_REQUIRED = true;
   var DAILY_FAST = 10, DAILY_SLOW = 21;
   /* THERE WERE THREE DEFINITIONS OF "REVERSION" AND THEY DISAGREED.
 
@@ -3773,7 +3805,15 @@ terse status, and never launches a first-time scan on a global refresh.
       edWhy = fin(fwd.open) + ' out-of-sample trade' + (fin(fwd.open) === 1 ? '' : 's') + ' still open · ' + edWhy;
     }
 
-    gates.push({ key:'measured-edge', hard:false, info: edInfo, pass: ed, why: edWhy });
+    /* HARD when proof is required: pass===null then reads NO DATA in
+       hgOmniGrade and stands the setup aside, instead of UNCHECKED letting
+       it through. A known failure (pass===false) vetoed either way — that
+       never depended on this flag. See OG_EDGE_PROOF_REQUIRED. */
+    if (OG_EDGE_PROOF_REQUIRED && ed === null && !edInfo){
+      edWhy = edWhy + ' · NO TICKET: this desk now requires a measured edge, and this mechanic '
+            + 'has not got one. The setup stands as a WATCH with its levels intact.';
+    }
+    gates.push({ key:'measured-edge', hard: OG_EDGE_PROOF_REQUIRED, info: edInfo, pass: ed, why: edWhy });
 
     /* The 14 indicator context reads moved to hg-gates.js so OMNIROUTE gets
        them too — a gold card carried 34 checks to crypto\'s 21, and the gap
@@ -7598,6 +7638,9 @@ terse status, and never launches a first-time scan on a global refresh.
       /* if the ledger has moved on since the evidence was baked, that comes
          FIRST — every number under it is about a different system */
       + hgOgEvidenceStaleHtml()
+      /* then why there are no tickets to read at all, before the numbers a
+         reader would otherwise scan looking for one */
+      + hgOgEdgeProofPanelHtml()
       /* and what the book it belongs to actually did to an account */
       + hgOgBookExperienceHtml();
   }
@@ -7894,6 +7937,60 @@ terse status, and never launches a first-time scan on a global refresh.
         + esc(what.join(' and ')) + '. A ticket now means something different from the '
         + 'ticket those numbers counted. Re-run scripts/backtest-omnigold.mjs and '
         + 'scripts/omnigold-evidence-bake.mjs --write.'
+        + '</div>';
+    } catch (e) { return ''; }
+  }
+
+  /* WHY THE TICKET COLUMN IS EMPTY.
+
+     OG_EDGE_PROOF_REQUIRED stands aside every setup whose mechanic has no
+     measured edge, and no mechanic in the ledger has one. So the tab shows
+     WATCH cards and no tickets, and without this panel a reader would be
+     left to guess whether the desk had broken.
+
+     It reads the SHIPPED ledger rather than a hard-coded sentence, so the
+     day a mechanic does clear its bar this panel stops claiming otherwise
+     on its own. */
+  function hgOgEdgeProofPanelHtml(){
+    try {
+      if (!OG_EDGE_PROOF_REQUIRED) return '';
+      var kinds = (HG_OG_REPLAY_EVIDENCE && HG_OG_REPLAY_EVIDENCE.kinds) || null;
+      if (!kinds) return '';
+      var keys = Object.keys(kinds);
+      if (!keys.length) return '';
+
+      var famZ = hgOgFamilyZ(keys.length);
+      var be = 1 / 3;                      /* every plan this desk writes is 2R */
+      var clears = 0, fails = 0, best = null;
+      for (var i = 0; i < keys.length; i++){
+        var row = kinds[keys[i]];
+        var n = fin(row && row[0]), hit = fin(row && row[1]);
+        if (!isFinite(n) || !isFinite(hit) || !(n > 0)) continue;
+        var z = (hit - be) / Math.sqrt(be * (1 - be) / n);
+        if (!isFinite(z)) continue;
+        if (z >= famZ) clears++;
+        else if (z <= EDGE_VETO_Z) fails++;
+        if (!best || z > best.z) best = { kind: keys[i], z: z, n: n, hit: hit };
+      }
+      /* the moment something clears, this panel has nothing to say */
+      if (clears > 0) return '';
+
+      return '<div class="note og-edge-proof" style="margin:8px 0;padding:6px 8px;'
+        + 'border:1px solid #64748B;border-left:3px solid #64748B;border-radius:4px;'
+        + 'background:rgba(100,116,139,0.07);font-size:0.85em">'
+        + '<b>NO TICKETS — BY DESIGN, NOT BY FAULT</b><br>'
+        + 'This desk issues a ticket only for a mechanic whose edge has been measured. '
+        + 'Of ' + keys.length + ' mechanics in the ledger, <b>none</b> clears the '
+        + keys.length + '-comparison significance bar (+' + famZ.toFixed(2) + 'σ), '
+        + fails + ' fail it outright'
+        + (best ? ', and the best — ' + esc(best.kind) + ', ' + hgOgFmtCount(best.n)
+                  + ' trades at ' + (best.hit * 100).toFixed(1) + '% — reaches only +'
+                  + best.z.toFixed(2) + 'σ' : '')
+        + '. Searching ' + keys.length + ' ways and taking the best one is not evidence, '
+        + 'which is what that bar exists to say.<br>'
+        + 'Every setup below still shows its levels, its gates and its reasoning as a '
+        + '<b>WATCH</b>. What would refill this column is a mechanic clearing the bar on '
+        + 'out-of-sample trades — the forward log is accumulating them.'
         + '</div>';
     } catch (e) { return ''; }
   }
@@ -12730,6 +12827,10 @@ terse status, and never launches a first-time scan on a global refresh.
     /* publication throttle — pure, so the rate the desk publishes at can
        be tested without a mount */
     window.hgOgLaneCooldownMs = hgOgLaneCooldownMs;
+    window.hgOgEdgeProofPanelHtml = hgOgEdgeProofPanelHtml;
+    /* pure Bonferroni bar — exported so a test can check the ledger against
+       the same number the gate and the panel use, not a copy of it */
+    window.hgOgFamilyZ = hgOgFamilyZ;
     window.hgOgLaneThrottle = hgOgLaneThrottle;
     /* drawdown / streak panel + its baked numbers */
     window.hgOgBookExperienceHtml = hgOgBookExperienceHtml;
