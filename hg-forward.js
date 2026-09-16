@@ -515,14 +515,26 @@ localStorage. Never throws.
   var TF_SEC = { '1m':60, '5m':300, '15m':900, '30m':1800, '1h':3600,
                  '2h':7200, '4h':14400, '1d':86400 };
 
-  function hgFwdOverlap(list, tab, mechanic){
+  function hgFwdOverlap(list, tab, mechanic, opts){
     var recs = Array.isArray(list) ? list : [];
+    /* `tab` takes a list, and `opts.gateClear` narrows to the population a
+       promotion is actually judged on — the overlap of the whole log is not
+       the overlap of the subset being tested. Same filter vocabulary as
+       hgFwdStats so the two cannot describe different populations. */
+    var oTabs = null;
+    if (Array.isArray(tab)){
+      if (tab.length){ oTabs = {}; for (var oi = 0; oi < tab.length; oi++) if (tab[oi]) oTabs[String(tab[oi])] = 1; }
+      tab = null;
+    }
+    var wantGc = !!(opts && opts.gateClear === true);
     var spans = [], i, r, t0, tfs, hb, span;
     for (i = 0; i < recs.length; i++){
       r = recs[i];
       if (!r) continue;
-      if (tab && r.tab !== tab) continue;
+      if (oTabs){ if (!oTabs[String(r.tab)]) continue; }
+      else if (tab && r.tab !== tab) continue;
       if (mechanic && r.mechanic !== mechanic) continue;
+      if (wantGc && r.gateClear !== true) continue;
       t0 = num(r.barT);
       tfs = TF_SEC[String(r.tf || '')];
       hb = num(r.horizonBars);
@@ -993,8 +1005,8 @@ localStorage. Never throws.
         return n;
       } catch (e){ hgFwdWarn('hgFwdMarkShown', e); return 0; }
     };
-    W.hgFwdOverlap = function(tab, mechanic){
-      try { return hgFwdOverlap(load(), tab, mechanic); }
+    W.hgFwdOverlap = function(tab, mechanic, opts){
+      try { return hgFwdOverlap(load(), tab, mechanic, opts); }
       catch (e){ hgFwdWarn('hgFwdOverlap', e); return null; }
     };
     /* Out-of-sample stats, same shape the in-sample pool uses, so

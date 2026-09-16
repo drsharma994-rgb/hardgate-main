@@ -3920,9 +3920,27 @@ terse status, and never launches a first-time scan on a global refresh.
       var useFill = isFinite(hpFillN) && hpFillN >= FWD_MIN_JUDGE && isFinite(hpFillHit);
       var hpN = useFill ? hpFillN : fin(hp.samples);
       var hpHit = useFill ? hpFillHit : fin(hp.hit);
-      if (isFinite(hpN) && hpN >= FWD_MIN_JUDGE && isFinite(hpHit)){
+      /* THE POOL'S ROWS ARE NOT INDEPENDENT BETS.
+
+         Deflated by the ratio the log measures on its own cleared records.
+         A ratio rather than the raw effN, because the overlap is counted
+         over records with usable timing and the test runs on settled ones —
+         the two counts need not match, and the ratio is what transfers.
+
+         NO MEASUREMENT, NO PROMOTION. Treating an unmeasurable overlap as
+         1.0 is precisely the assumption that inflates the statistic, and
+         this is the only path by which anything becomes a ticket. */
+      var ovl = fwd.horizonOverlap;
+      var ovlRatio = (ovl && isFinite(fin(ovl.effN)) && isFinite(fin(ovl.n)) && fin(ovl.n) > 0)
+        ? (fin(ovl.effN) / fin(ovl.n)) : NaN;
+      if (isFinite(hpN) && hpN >= FWD_MIN_JUDGE && isFinite(hpHit) && !isFinite(ovlRatio)){
+        edWhy = edWhy + ' · horizon book has ' + hpN + ' cleared setups but its overlap cannot be '
+              + 'measured, so no promotion is offered — concurrent rows are not independent bets';
+      }
+      if (isFinite(hpN) && hpN >= FWD_MIN_JUDGE && isFinite(hpHit) && isFinite(ovlRatio)){
+        var hpEffN = Math.max(1, hpN * ovlRatio);
         var hpBreak = 1 / (1 + minRr);
-        var hpZ = (hpHit - hpBreak) / Math.sqrt(Math.max(1e-9, hpBreak * (1 - hpBreak) / hpN));
+        var hpZ = (hpHit - hpBreak) / Math.sqrt(Math.max(1e-9, hpBreak * (1 - hpBreak) / hpEffN));
         /* ONE TEST PER HORIZON — counted, never written as a literal.
            test-omnigold-full-cover asserts that this bar always tracks the
            number of comparisons actually made, and it is right to: a
@@ -3933,11 +3951,40 @@ terse status, and never launches a first-time scan on a global refresh.
                   + (fwd.pooledTabs ? fwd.pooledTabs.length : 1) + ' gold tabs · '
                   + (hpHit * 100).toFixed(0) + '% T1-first ['
                   + (hpZ >= 0 ? '+' : '') + hpZ.toFixed(2) + 'σ vs breakeven]';
-        if (hpZ >= hpBar){
+        /* PARTIAL POOLING — the pool may not carry a mechanic that is
+           pulling away from it.
+
+           Promotion needs 20 pooled records, about three days. Condemnation
+           needs 20 for one MECHANIC, about a year. So for the first year a
+           clearing pool would promote every mechanic, including one at
+           0-for-3, because nothing can condemn it yet. All-or-nothing
+           pooling is the wrong shape.
+
+           Each mechanic's own rate is shrunk toward the pool with weight
+           n/(n+K), K = FWD_MIN_JUDGE: with no record of its own a mechanic
+           simply IS the pool, and with enough it pulls away. The shrunken
+           rate must still clear breakeven. A mechanic at 10% on ten records
+           against a 40% pool shrinks to 30% and is held back — at an n the
+           per-mechanic veto could not act on for another eleven months. */
+        var ownN = fin(cN), ownHit = fin(cHit);
+        var shrunk = hpHit, shrinkTxt = '';
+        if (isFinite(ownN) && ownN > 0 && isFinite(ownHit)){
+          var wOwn = ownN / (ownN + FWD_MIN_JUDGE);
+          shrunk = wOwn * ownHit + (1 - wOwn) * hpHit;
+          shrinkTxt = ' · this mechanic ' + ownN + ' of its own at '
+                    + (ownHit * 100).toFixed(0) + '%, shrunk to ' + (shrunk * 100).toFixed(0) + '%';
+        }
+        var shrunkOk = shrunk > hpBreak;
+
+        if (hpZ >= hpBar && shrunkOk){
           ed = true;
-          edWhy = hpTxt + ' — the horizon\'s cleared book clears the 2-test bar (+'
-                + hpBar.toFixed(2) + 'σ). Promoted on the desk, not on this mechanic alone'
-                + (isFinite(judgeN) ? '; its own record did not condemn it' : '') + '.';
+          edWhy = hpTxt + shrinkTxt + ' — the horizon\'s cleared book clears the '
+                + hgOgHorizonPoolTests() + '-test bar (+' + hpBar.toFixed(2)
+                + 'σ) on ' + hpEffN.toFixed(0) + ' effective rows of ' + hpN
+                + ', and this mechanic is not pulling away from it.';
+        } else if (hpZ >= hpBar && !shrunkOk){
+          edWhy = edWhy + ' · the horizon book clears its bar, but this mechanic\'s own record'
+                + shrinkTxt + ' sits below breakeven — the desk is not asked to carry it';
         } else {
           edWhy = edWhy + ' · horizon book: ' + hpTxt + ', short of the +'
                 + hpBar.toFixed(2) + 'σ bar';
@@ -4743,10 +4790,27 @@ terse status, and never launches a first-time scan on a global refresh.
          human timescale. This is the population a promotion can actually be
          measured on. It is never used to condemn — see the gate. */
       var pooled = w.hgFwdStats(tabs, null, { gateClear: true });
+      /* HOW MUCH OF THAT POOL IS ONE BET.
+
+         The pooled book is the MOST overlapping population this desk has —
+         every mechanic firing on the same bar is one trade wearing several
+         names. The in-sample replay measures the same thing at an effective
+         n of 3,111 from 7,670 rows, a ratio of 0.406, and z scales with the
+         square root of n: uncorrected, a pooled reading is inflated by
+         about 1.57x, so a +1.96σ bar is really +1.25σ.
+
+         Measured on the log's OWN records rather than borrowing 0.406 —
+         importing a constant measured on one population into another is the
+         error hgOgEffN exists to fix. Null when the records cannot answer
+         it, and the gate then refuses to promote rather than assuming
+         independence. */
+      var poolOverlap = null;
+      try { poolOverlap = w.hgFwdOverlap(tabs, null, { gateClear: true }); } catch (eO) { poolOverlap = null; }
       if (!all || !isFinite(fin(all.samples))) return null;
       all.ticketOnly = (tix && isFinite(fin(tix.samples))) ? tix : null;
       all.gateClear = (clr && isFinite(fin(clr.samples))) ? clr : null;
       all.horizonPool = (pooled && isFinite(fin(pooled.samples))) ? pooled : null;
+      all.horizonOverlap = poolOverlap;
       all.pooledTabs = tabs;
       return all;
     }catch(e){ return null; }
