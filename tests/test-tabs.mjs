@@ -221,7 +221,22 @@ while ((m = re.exec(html)) !== null){ if (m[1].trim()) blocks.push(m[1]); }
    app blocks all sit far below the first src tag, so it cannot live inside
    one of them. App code still belongs in the other three — that is the thing
    this count protects, and it still does. */
-assert(blocks.length === 4, 'index.html yields exactly 4 non-empty inline <script> blocks (got ' + blocks.length + ')');
+/* FIVE blocks, not four. Two are page BOOTSTRAPPING and cannot live inside
+   an app block; the other three are the app, and that is what this count
+   protects.
+
+     1  the ?diag=1 cold-load probe — must run before every <script src> to
+        observe a cold load at all (documented where it sits)
+     2-4 the app
+     5  PWA service-worker registration — must run AFTER the src tags, so it
+        cannot sit inside block 4 either
+
+   This assertion read 4 from the repo's first commit and index.html has
+   always had 5, so it had never once passed and therefore never protected
+   anything. Three separate test files carried the same stale number.
+   Corrected to 5 in hg-v762, with the same kind of exemption already
+   written out for block 1. */
+assert(blocks.length === 5, 'index.html yields exactly 5 non-empty inline <script> blocks (got ' + blocks.length + ')');
 assert(/\?diag=1/.test(blocks[0]), 'and the first of them is the ?diag=1 probe, ahead of every app script');
 
 /* xuniverse.js library tag: no-tab IIFE consumed by engine.js/brain.js —
@@ -276,7 +291,14 @@ assert(REQUIRED_TABS.every(([id]) => run('HG_TAB_MODS[' + JSON.stringify(id) + '
 const EXPECTED_GROUPS = {
   overview:   ['brain', 'book', 'trade', 'log', 'signallog', 'news', 'bias', 'regime', 'trendmx', 'rotation', 'execute', 'startrader'],
   crypto:     ['combi', 'omnibtc', 'omnipresent', 'omniroute', 'dexscreener', 'setupconfirm', 'best', 'swing', 'scalp', 'edge', 'smart', 'squeeze', 'reversalsniper', 'smc', 'ob', 'trap', 'div', 'coil', 'apex', 'oiflow', 'liqs', 'onchain', 'chartvision', 'carry', 'venueprem', 'termbasis', 'cryptoultra', 'cryptoscan'],
-  gold:       ['super-gold', 'omnigold', 'omnigold1', 'goldswing', 'goldscalp', 'goldultra', 'gold', 'goldpro', 'goldspot', 'goldcoint', 'goldpine'],
+  /* v749 added optigold, newgold and golddirection. They were in NO group
+     at all, so HG_GROUP_FALLBACK filed three gold desks under TOOLS next to
+     the risk sizer and the search box; index.html says so where the list is
+     defined. This spec was not updated with them, and the failure sat
+     behind the stale inline-block count in the same file until hg-v762 —
+     which is what a permanently red suite costs. Checked against the live
+     list: the other four groups match exactly, only gold had drifted. */
+  gold:       ['super-gold', 'omnigold', 'omnigold1', 'optigold', 'newgold', 'golddirection', 'goldswing', 'goldscalp', 'goldultra', 'gold', 'goldpro', 'goldspot', 'goldcoint', 'goldpine'],
   strategies: ['super-setup', 'super-best', 'super-sniper', 'super-book', 'super-calibrate', 'pine', 'pine-msb', 'pine-sqz', 'pine-smf', 'pine-ht', 'pine-smc', 'pine-cipher', 'pine-rf', 'pine-nw', 'pine-avwap', 'strats', 'meanrev', 'formationlab', 'scorecard', 'reliability'],
   tools:      ['risk', 'recon', 'basis', 'search', 'finder', 'tradeos', 'hey', 'aiagent']
 };

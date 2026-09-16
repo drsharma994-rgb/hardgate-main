@@ -46,7 +46,22 @@ while ((m = re.exec(html)) !== null){ if (m[1].trim()) blocks.push(m[1]); }
    app blocks all sit far below the first src tag, so it cannot live inside
    one of them. App code still belongs in the other three — that is the thing
    this count protects, and it still does. */
-assert(blocks.length === 4, 'index.html still yields exactly 4 inline <script> blocks (got ' + blocks.length + ')');
+/* FIVE blocks, not four. Two are page BOOTSTRAPPING and cannot live inside
+   an app block; the other three are the app, and that is what this count
+   protects.
+
+     1  the ?diag=1 cold-load probe — must run before every <script src> to
+        observe a cold load at all (documented where it sits)
+     2-4 the app
+     5  PWA service-worker registration — must run AFTER the src tags, so it
+        cannot sit inside block 4 either
+
+   This assertion read 4 from the repo's first commit and index.html has
+   always had 5, so it had never once passed and therefore never protected
+   anything. Three separate test files carried the same stale number.
+   Corrected to 5 in hg-v762, with the same kind of exemption already
+   written out for block 1. */
+assert(blocks.length === 5, 'index.html still yields exactly 5 inline <script> blocks (got ' + blocks.length + ')');
 assert(/\?diag=1/.test(blocks[0]), 'and the first of them is the ?diag=1 probe, ahead of every app script');
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hg-core-'));

@@ -6,6 +6,73 @@
 (function() {
   'use strict';
 
+  /* THE SEEDED ROWS EARLIER LOADS ALREADY WROTE.
+
+     Until this change, every page load recorded six hard-coded setups into
+     the engine and they persisted to localStorage. Deleting the injector
+     stops new ones; it does not clear what a browser has been accumulating
+     on every visit since the file shipped.
+
+     Matched on the exact triple that identifies them — symbol, pattern and
+     entry price — never on a loose field like tier or confidence, because a
+     REAL setup could carry those and this must not be able to delete real
+     recorded history. A row that does not match all three is left alone.
+
+     Runs once per browser, then marks itself done, so a person who later
+     records a setup that happens to look like one of these does not have it
+     removed on the next load. */
+  var HG_SEEDED_DEMO_ROWS = [
+    { symbol: 'GOLD',      pattern: 'EMA_CASCADE',        entryPrice: 2050 },
+    { symbol: 'BTC/USDT',  pattern: 'RSI_DIVERGENCE',     entryPrice: 42500 },
+    { symbol: 'ETH/USDT',  pattern: 'VOLUME_SPIKE',       entryPrice: 2250 },
+    { symbol: 'OMNIGOLD',  pattern: 'FORMATION_BREAKOUT', entryPrice: 2048 },
+    { symbol: 'XAU/USD',   pattern: 'DOUBLE_TOP',         entryPrice: 2045 },
+    { symbol: 'BTC',       pattern: 'MOMENTUM_BURST',     entryPrice: 42300 }
+  ];
+  var HG_DEMO_PURGE_KEY = 'hg_setup_demo_purged_v1';
+
+  function hgIsSeededDemoRow(row){
+    if (!row) return false;
+    for (var i = 0; i < HG_SEEDED_DEMO_ROWS.length; i++){
+      var d = HG_SEEDED_DEMO_ROWS[i];
+      if (String(row.symbol) === d.symbol
+       && String(row.pattern) === d.pattern
+       && Number(row.entryPrice) === d.entryPrice) return true;
+    }
+    return false;
+  }
+
+  function hgPurgeSeededDemoSetups(engine){
+    try {
+      if (typeof localStorage !== 'undefined' && localStorage.getItem(HG_DEMO_PURGE_KEY)) return 0;
+      var removed = 0;
+      var scrub = function(arr){
+        if (!Array.isArray(arr)) return arr;
+        var keep = arr.filter(function(r){
+          var drop = hgIsSeededDemoRow(r);
+          if (drop) removed++;
+          return !drop;
+        });
+        arr.length = 0;
+        for (var j = 0; j < keep.length; j++) arr.push(keep[j]);
+        return arr;
+      };
+      if (engine && Array.isArray(engine.setups)) scrub(engine.setups);
+      var db = engine && engine.setupDatabase;
+      if (db){
+        ['daily', 'byTab', 'bySymbol'].forEach(function(k){
+          var m = db[k];
+          if (m && typeof m.forEach === 'function') m.forEach(function(v){ scrub(v); });
+        });
+      }
+      try { if (typeof localStorage !== 'undefined') localStorage.setItem(HG_DEMO_PURGE_KEY, '1'); } catch (eS) {}
+      if (removed) console.log('[setup-intelligence] removed ' + removed + ' seeded demo setups from storage');
+      return removed;
+    } catch (e) { return 0; }
+  }
+
+  try { if (typeof window !== 'undefined') window.hgIsSeededDemoRow = hgIsSeededDemoRow; } catch (eW) {}
+
   // Comprehensive Setup Intelligence Engine with tab integration
   class ComprehensiveSetupEngine {
     constructor() {
@@ -227,100 +294,28 @@
       engine.recordTabActivity(tab, { initialized: true });
     });
 
-    // Load demo setups from all major tabs
-    const demoSetups = [
-      {
-        symbol: 'GOLD',
-        tabName: 'GOLD ULTRA',
-        direction: 'LONG',
-        pattern: 'EMA_CASCADE',
-        entryPrice: 2050,
-        stopLoss: 2040,
-        takeProfit1: 2060,
-        takeProfit2: 2070,
-        confidence: 0.85,
-        tier: 'HIGH_CONVICTION',
-        indicators: ['EMA9', 'EMA21', 'EMA50'],
-        source: 'GOLD_ULTRA_TAB'
-      },
-      {
-        symbol: 'BTC/USDT',
-        tabName: 'CRYPTO ULTRA',
-        direction: 'SHORT',
-        pattern: 'RSI_DIVERGENCE',
-        entryPrice: 42500,
-        stopLoss: 43000,
-        takeProfit1: 41500,
-        takeProfit2: 40500,
-        confidence: 0.75,
-        tier: 'STANDARD',
-        indicators: ['RSI', 'MACD'],
-        source: 'CRYPTO_ULTRA_TAB'
-      },
-      {
-        symbol: 'ETH/USDT',
-        tabName: 'CRYPTO SCAN',
-        direction: 'LONG',
-        pattern: 'VOLUME_SPIKE',
-        entryPrice: 2250,
-        stopLoss: 2230,
-        takeProfit1: 2270,
-        takeProfit2: 2300,
-        confidence: 0.65,
-        tier: 'STANDARD',
-        indicators: ['Volume', 'Bollinger Bands'],
-        source: 'CRYPTO_SCAN_TAB'
-      },
-      {
-        symbol: 'OMNIGOLD',
-        tabName: 'OMNIGOLD',
-        direction: 'LONG',
-        pattern: 'FORMATION_BREAKOUT',
-        entryPrice: 2048,
-        stopLoss: 2038,
-        takeProfit1: 2058,
-        takeProfit2: 2068,
-        confidence: 0.72,
-        tier: 'HIGH_CONVICTION',
-        indicators: ['Formation', 'Breakout'],
-        source: 'OMNIGOLD_TAB'
-      },
-      {
-        symbol: 'XAU/USD',
-        tabName: 'FORMATIONS',
-        direction: 'SHORT',
-        pattern: 'DOUBLE_TOP',
-        entryPrice: 2045,
-        stopLoss: 2055,
-        takeProfit1: 2030,
-        takeProfit2: 2015,
-        confidence: 0.68,
-        tier: 'STANDARD',
-        indicators: ['Double Top', 'Support'],
-        source: 'FORMATIONS_TAB'
-      },
-      {
-        symbol: 'BTC',
-        tabName: 'OMNIBTC',
-        direction: 'LONG',
-        pattern: 'MOMENTUM_BURST',
-        entryPrice: 42300,
-        stopLoss: 41800,
-        takeProfit1: 43000,
-        takeProfit2: 43500,
-        confidence: 0.70,
-        tier: 'HIGH_CONVICTION',
-        indicators: ['Momentum', 'Breakout'],
-        source: 'OMNIBTC_TAB'
-      }
-    ];
+    /* THE SIX FABRICATED SETUPS THAT USED TO BE RECORDED HERE ARE GONE.
 
-    console.log('[📊 DEMO] Loading ' + demoSetups.length + ' demo setups from multi-tab sources...');
-    demoSetups.forEach(setup => {
-      engine.recordSetup(setup);
-    });
+       This file is loaded by index.html on every page load, and inside this
+       initialize() callback it unconditionally called engine.recordSetup()
+       on six hard-coded rows — GOLD LONG EMA_CASCADE at an entry of 2050,
+       XAU/USD SHORT DOUBLE_TOP, one tagged OMNIGOLD, each carrying
+       confidence 0.85 and tier HIGH_CONVICTION. They persisted to
+       localStorage under hg_setup_intelligence_data and rendered into the
+       dashboard at index.html #hg-setup-intelligence-dashboard, which is
+       display:block. Gold has not traded near 2050 in years.
 
-    console.log('[✅ DEMO SETUPS LOADED] ' + demoSetups.length + ' setups recorded from all tabs');
+       They never reached the gold gates — that evidence lives in
+       hg_forward_v1 and hg_forward_agg_v1, and neither omnigold.js nor
+       hg-forward.js reads this key — so nothing was mismeasured. What they
+       did was put invented setups on the page, labelled as recorded, a few
+       divs below a desk that will not call anything a ticket without twenty
+       settled out-of-sample trades.
+
+       Removing the injector does not remove what earlier loads already
+       wrote, so the stored rows are purged once below. */
+    hgPurgeSeededDemoSetups(engine);
+
     console.log('[📊 STATUS] Recording enabled for ' + tabsList.length + ' tabs');
     console.log('[🔍 API] window.setupRecording.getReport() → comprehensive view');
 

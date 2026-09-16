@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v761',
-  pack: 'the tab is waiting for evidence and never said how far it had got, whether the log was still recording, or how the cards you actually saw had done',
+  version: 'hg-v762',
+  pack: 'the page seeded itself with six invented setups on every load, and four tests had never passed since the first commit',
   built: '2026-09-16T12:00:00Z'
 };
 

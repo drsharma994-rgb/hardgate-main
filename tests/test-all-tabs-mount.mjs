@@ -76,27 +76,66 @@ function boot(){
   ctx.location = { href: 'http://localhost/', search: '', hash: '', protocol: 'http:', host: 'localhost', reload(){} };
   ctx.CustomEvent = function(){}; ctx.Event = function(){};
   vm.createContext(ctx);
-  const files = fs.readdirSync(ROOT).filter(f => f.endsWith('.js') && f !== 'sw.js').sort();
+  /* NOT EVERY .js IN THE ROOT IS A BROWSER MODULE.
+
+     This scan read every root .js and treated each as a script index.html
+     could load. Seven of them are Node-only tooling that has never been
+     browser code — standalone backtests and bridges using require(),
+     module.exports or top-level const fs — so the count was permanently 8
+     against a threshold of 1, and the assertion never passed.
+
+     Detected rather than listed by name, so a new Node script dropped in
+     the root does not reopen this, and a browser module that starts using
+     require() is NOT excused — CommonJS in a file index.html loads is a
+     real failure and still lands in `failed`. */
+  const NODE_ONLY = /(^|\n)\s*(?:const|let|var)\s+\{?[\w\s,]*\}?\s*=\s*require\(|(^|\n)\s*module\.exports\b|(^|\n)\s*exports\.\w+\s*=/;
+  const htmlSrc = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  /* The EXACT set of files index.html loads, parsed rather than matched as
+     substrings: the page writes some as src="x.js?v=1" and others as
+     src="./x.js?v=1", and a substring test also hits any mention in a
+     comment or in the service-worker shell list. Several dual-use modules
+     carry a `module.exports` tail for Node tests while being genuine
+     browser scripts — the page's own src list is what settles it. */
+  const pageScripts = new Set(
+    [...htmlSrc.matchAll(/<script[^>]+src\s*=\s*["']([^"']+)["']/gi)]
+      .map(m => m[1].split('?')[0].replace(/^\.\//, '')));
+  const loadedByPage = f => pageScripts.has(f);
+  const all = fs.readdirSync(ROOT).filter(f => f.endsWith('.js') && f !== 'sw.js').sort();
+  const nodeOnly = all.filter(f => !loadedByPage(f) && NODE_ONLY.test(fs.readFileSync(path.join(ROOT, f), 'utf8')));
+  const files = all.filter(f => nodeOnly.indexOf(f) < 0);
   const failed = [];
   for (const f of files){
     try { vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f }); }
     catch (e){ failed.push(f + ': ' + String(e.message).slice(0, 60)); }
   }
-  return { ctx, files, failed };
+  return { ctx, files, failed, nodeOnly, all, loadedByPage };
 }
 
-const { ctx, files, failed } = boot();
+const { ctx, files, failed, nodeOnly, all, loadedByPage } = boot();
 
 console.log('== every browser module parses and runs ==');
 {
   /* app.js is the ESM daemon and is not a browser script — it is the only
      file expected to fail here, and naming it means a NEW failure cannot hide
-     behind a vague count. */
-  ok(files.length > 100, 'the app has ' + files.length + ' javascript modules');
-  ok(failed.length <= 1, 'at most one fails to run as a browser script (' + failed.length + ')');
+     behind a vague count.
+
+     NAMING IT was the one thing this did not do: it asserted the COUNT and
+     printed no names, so reproducing the sandbox by hand was the only way
+     to find out what had broken. It names them now. */
+  ok(all.length > 100, 'the root holds ' + all.length + ' javascript files');
+  ok(nodeOnly.length > 0, nodeOnly.length + ' are Node-only tooling the page never loads, and are not scanned');
+  ok(files.length > 100, 'leaving ' + files.length + ' browser modules');
+  ok(failed.length <= 1,
+     'at most one fails to run as a browser script (' + failed.length
+     + (failed.length ? ' — ' + failed.join(' | ') : '') + ')');
   if (failed.length){
     ok(/^app\.js/.test(failed[0]), 'and it is app.js, the ESM daemon — not a tab (' + failed[0] + ')');
   }
+  /* a Node-only file that IS loaded by index.html would be a real defect and
+     must never be filtered out of the scan */
+  const smuggled = nodeOnly.filter(loadedByPage);
+  ok(smuggled.length === 0,
+     'no Node-only file is referenced by index.html' + (smuggled.length ? ' — ' + smuggled.join(', ') : ''));
 }
 
 console.log('\n== the tab registry is coherent ==');
