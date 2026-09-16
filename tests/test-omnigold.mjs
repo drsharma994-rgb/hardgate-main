@@ -394,10 +394,26 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
   };
   const lastC = flat[flat.length - 1].c;
 
-  ok(floor(8).pass === false, 'a $8 stop on $' + lastC.toFixed(0) + ' gold is 0.18% — inside the noise, vetoed');
+  ok(floor(8).pass === false, 'a $8 stop on $' + lastC.toFixed(0) + ' gold is 0.18% — too tight, vetoed');
   ok(floor(60).pass === true, 'a $60 stop is 1.36% — wide enough to be a real invalidation');
   ok(floor(8).hard === true, 'and the floor VETOES rather than flagging');
-  ok(/inside the noise/.test(floor(8).why), 'the card says why in words, not just a number');
+  ok(/too tight to carry a spread/.test(floor(8).why), 'the card says why in words, not just a number');
+
+  /* hg-v760 WITHDREW the outcome claim. The floor shipped on "a stop this
+     tight loses GROSS in every decile", total -9,768R -> -1,092R. That is
+     the lower bound of the unprovable-fill interval, and at the upper bound
+     the same split reads +0.2888R below the floor against +0.0568R above —
+     the floor deleting the most profitable half of the book. Tight stops
+     are exactly where unprovable fills concentrate, so the bucket being
+     judged is the bucket the bound moves most.
+
+     The floor stays on the COST argument, which is arithmetic rather than a
+     fitted outcome, and the card no longer claims a measurement. */
+  ok(!/inside the noise/.test(floor(8).why),
+     'and no longer claims the stop "loses gross on the record" — that was one end of an interval');
+  ok(/spans a sign change/.test(floor(8).why),
+     'it says the outcome evidence reverses across the unprovable-fill interval');
+  ok(/COST rule/.test(floor(8).why), 'and rests the floor on cost, where the argument holds');
   ok(/0\.50%/.test(floor(8).why), 'and states the floor it failed');
 
   /* the floor is about market noise, not fees — it must not move with venue */

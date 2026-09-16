@@ -128,6 +128,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { xmOrderType, ogXmBarTouchesEntry, ogXmFillDepth } from '../lib/omnigold-xm-bot-backtest.mjs';
 import { isPendingOrder, partitionProvable, unprovableNote } from '../lib/unprovable-fill.mjs';
+import { gateKeyOrder, encodeGateMask } from '../lib/gate-mask.mjs';
 
 const ROOT = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 const CACHE_DIR = path.join(ROOT, 'scripts', '.bt-cache');
@@ -480,6 +481,9 @@ function settleRecord(tr, rows, tfSec, counters, evidence, results){
     engineGrade: tr.source === 'ENGINE' ? (tr.engineGrade || '?') : undefined,
     engineAgainstTape: tr.source === 'ENGINE' ? !!tr.engineAgainstTape : undefined,
     gateConf: tr.gateConf, checksPass: tr.checksPass,
+    /* the raw ledger, carried through settlement and turned into bitmasks
+       once the whole run's key order is known (see the write step) */
+    __gates: tr.gates || null,
     orderType: tr.orderType,
     /* PRICE AT FIRE — the mark hgPlanMarketGeometry judges a plan against.
        Every one of these emitters already had it in hand (it is the same
@@ -561,6 +565,11 @@ function walkCore(W, rows, cfgLabel, evidence, results, counters){
         ticket: !!(c.grade && c.grade.ticket),
         confluence: conf.score, tier: conf.tier,
         gateConf: conf.gateConf, checksPass: conf.checksPass,
+        /* THE LEDGER ITSELF, so every gate's tuning stays auditable. The
+           participation gate was re-pointed on a split of this walk by its
+           own verdict, and that split cannot be reproduced from any
+           artifact this repo has kept. See lib/gate-mask.mjs. */
+        gates: c.gates || null,
         orderType: xmOrderType(c.dir, +p.entry, +bar.c).name,
         markAtFire: +bar.c,
         sigIdx: i
@@ -683,6 +692,7 @@ function walkEngines(W, rows1h, m15, h4, d1, evidence, results, counters){
         engineAgainstTape: !!bridge.engineAgainstTape,
         engineLowGrade: !!bridge.engineLowGrade,
         gateConf: null, checksPass: null,
+        gates: bridge.gates || null,
         orderType: xmOrderType(bridge.dir, p.entry, +bar.c).name,
         markAtFire: +bar.c,
         sigIdx: i
@@ -939,6 +949,41 @@ const meta = {
   counters,
   confluenceDistribution: distBuckets
 };
+
+/* ---------- freeze each row's gate ledger into bitmasks ----------
+
+   Done here, once, because the key order is the union across the whole run
+   and is not knowable while rows are still settling. Two hex strings per
+   row against a key order stored once in meta: 35 gates x ~10k rows as
+   objects would multiply this artifact several times over.
+
+   This exists so a gate's tuning can be re-tested rather than trusted. The
+   participation gate was re-pointed on a split of this walk by its own
+   verdict and that split cannot be reproduced from any artifact kept here;
+   the stop floor was tuned the same way and did not survive re-testing
+   across the unprovable-fill interval. See lib/gate-mask.mjs. */
+{
+  const allKeys = [];
+  for (const r of results) for (const g of (r.__gates || [])) if (g && g.key) allKeys.push(g.key);
+  const keyOrder = gateKeyOrder(allKeys);
+  for (const r of results){
+    if (r.__gates){
+      const m = encodeGateMask(r.__gates, keyOrder);
+      /* '0' means "this row judged nothing" and is dropped rather than
+         stored ~10k times */
+      if (m.pass !== '0') r.gatesPass = m.pass;
+      if (m.fail !== '0') r.gatesFail = m.fail;
+    }
+    delete r.__gates;
+  }
+  meta.gateKeyOrder = keyOrder;
+  meta.gateLedgerNote = keyOrder.length
+    ? ('per-row gate verdicts as hex bitmasks over gateKeyOrder (' + keyOrder.length
+       + ' keys). A key in NEITHER mask means the gate did not judge that row — '
+       + 'unchecked, or never pushed — and such rows must be DROPPED from a split, '
+       + 'not counted as failures. Decode with lib/gate-mask.mjs.')
+    : 'no gate ledger was captured on this run';
+}
 
 fs.writeFileSync(OUT_FILE, JSON.stringify({ meta, aggregates, trades: results }, null, 1));
 

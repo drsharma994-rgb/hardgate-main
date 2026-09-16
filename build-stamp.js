@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v759',
-  pack: 'the pooled promotion treated overlapping rows as independent bets and let the desk carry any mechanic; both corrected on the log\'s own measurements',
+  version: 'hg-v760',
+  pack: 'the stop floor was fitted to one end of an interval that reverses sign at the other; it stays as a cost rule, and every gate tuned the same way becomes re-testable',
   built: '2026-09-16T12:00:00Z'
 };
 

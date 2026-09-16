@@ -258,14 +258,33 @@ terse status, and never launches a first-time scan on a global refresh.
        stop 1.265%            win 26.1%   GROSS +0.001R
        stop 2.019%            win 21.6%   GROSS +0.042R
 
-     That column is GROSS — before a penny of spread. A stop this tight is
-     not expensive, it is INSIDE THE NOISE: price takes it out on its way to
-     nowhere. Cost makes it worse (costR 5.73 in the first decile against
-     0.13 in the last) but cost is not what makes it negative, which is why
-     this is a separate gate from cost-drag and why it is not venue-tunable.
+     THAT TABLE IS ONE END OF AN INTERVAL, NOT A MEASUREMENT (hg-v760).
 
-     0.50% is where gross crosses zero and stays there. Applying it to the
-     walk keeps 50% of setups and takes the book from -9,768R to -1,092R.
+     Every figure above was computed on the walk with unprovable fills
+     resolved at the cautious end — deleting unprovable wins, keeping
+     unprovable losses. A tight stop is exactly the plan whose fill bar
+     spans both levels, so the unprovable population is concentrated in the
+     bucket this table judges. Re-running the same split across the
+     interval:
+
+       below 0.50%        above 0.50%
+         -0.2989R           +0.0084R     cautious end (the table above)
+         +0.0030R           +0.0474R     all unprovable rows dropped
+         +0.2888R           +0.0568R     optimistic end
+
+     The sign reverses, and at the far end this floor removes the most
+     profitable half of the book. "0.50% is where gross crosses zero and
+     stays there" is true of one bound and false of the other.
+
+     THE FLOOR STAYS, ON THE COST ARGUMENT, WHICH IS ARITHMETIC. A stop
+     inside 0.5% of gold pays a spread that is a large fraction of 1R — no
+     walk is needed to know that, and cost-drag prices it at the live venue.
+     This constant is the venue-independent floor beneath it. What has been
+     withdrawn is the claim that a tight stop is measurably negative GROSS;
+     this walk cannot establish that in either direction.
+
+     scripts/resolve-unprovable-1m.mjs is the only thing that can settle it.
+     Until it has run, nothing here should be re-tuned on these numbers.
 
      VETO, NEVER WIDEN. plans.js already states the rule for the other
      direction — "DO NOT TIGHTEN A FAR STOP" — and it holds symmetrically:
@@ -3611,17 +3630,48 @@ terse status, and never launches a first-time scan on a global refresh.
         : ((lastBar && isFinite(fin(lastBar.c)) && fin(lastBar.c) > 0) ? fin(lastBar.c) : NaN));
     var priceable = isFinite(planRisk) && planRisk > 0 && isFinite(planEntry) && planEntry > 0;
 
-    /* 11a — STOP FLOOR. See GOLD_STOP_MIN_PCT: on this desk's own settled
-       walk a stop inside ~0.5% of entry loses GROSS, before any cost, in
-       every decile. It is not a fee problem, it is a noise problem, so this
-       gate is separate from cost-drag and is not venue-tunable. */
+    /* 11a — STOP FLOOR.
+
+       WHAT THIS GATE USED TO CLAIM, AND WHY IT NO LONGER DOES.
+
+       hg-v752 shipped this floor on a measurement: a stop inside ~0.5% of
+       entry "loses GROSS, before any cost, in every decile", total -9,768R
+       -> -1,092R, gross flipping positive at +0.008R. That number is the
+       LOWER BOUND of the unprovable-fill interval — the end that deletes
+       every unprovable win and keeps every unprovable loss. Re-run across
+       the interval on the same walk:
+
+         below the floor   above the floor
+           -0.2989R          +0.0084R      lower bound (what v752 quoted)
+           +0.0030R          +0.0474R      dropping all unprovable rows
+           +0.2888R          +0.0568R      upper bound
+
+       The sign reverses. At the far end this floor deletes the most
+       profitable half of the book. And it reverses for a reason that is not
+       coincidence: a tight stop is exactly the plan whose fill bar spans
+       both levels, so the unprovable population is concentrated precisely
+       in the bucket being judged. The floor was fitted to an artifact of
+       the bound it was measured at.
+
+       IT STAYS, ON THE OTHER ARGUMENT. A stop inside 0.5% of gold pays a
+       spread that is a large fraction of 1R, and that is arithmetic rather
+       than a fitted outcome. cost-drag enforces it at the live venue and is
+       the load-bearing gate; this floor is the venue-independent floor
+       under it. What has gone is the claim to a measured outcome edge,
+       because the walk cannot carry it.
+
+       Only finer bars inside the fill hour can settle which end of that
+       interval is true — scripts/resolve-unprovable-1m.mjs. Until then this
+       gate says what it is: a cost floor, not a measurement. */
     var stopPct = priceable ? (planRisk / planEntry) : NaN;
     var floorOk = priceable ? (stopPct >= GOLD_STOP_MIN_PCT) : null;
     gates.push({ key:'stop-floor', hard: priceable, pass: floorOk,
       why: priceable
         ? ('stop $' + planRisk.toFixed(2) + ' = ' + (stopPct * 100).toFixed(3)
            + '% of entry (floor ' + (GOLD_STOP_MIN_PCT * 100).toFixed(2) + '%)'
-           + (floorOk ? '' : ' — inside the noise: this stop loses gross on the record, before costs'))
+           + (floorOk ? '' : ' — too tight to carry a spread. This floor is a COST rule: '
+                + 'the outcome evidence once quoted for it spans a sign change across the '
+                + 'unprovable-fill interval and is not a measurement'))
         : 'no plan risk to measure' });
 
     /* 11b — cost drag. A stop can be structurally correct and still be
