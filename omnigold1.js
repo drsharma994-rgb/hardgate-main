@@ -653,7 +653,14 @@
     }
     var obOk = !!(ob && entry >= ob.lo - atr * 0.1 && entry <= ob.hi + atr * 0.1);
     var loc = g.locationGrade(ctx, entry, dir, obOk, true);
-    var c = { sid: src.sid, name: NAME_OF[src.sid] || src.sid, cls: src.cls, dir: dir, level: src.level, kind: src.kind, entry: entry, stop: stop, wick: wick, risk: risk, buf: buf, bufNote: bufNote,
+    /* the mark this candidate was sized against — the last CLOSED 1H close,
+       the same leg the staleness clock above uses. These entries are retest
+       limits inside the sweep candle, so a retest gap always exists and a
+       target can land inside it; without the mark the card cannot say so. */
+    var __og1Mark = NaN;
+    try { var __lc1 = ctx.rows1h && ctx.rows1h.length ? ctx.rows1h[ctx.rows1h.length - 1] : null;
+          if (__lc1 && isFinite(+__lc1.c)) __og1Mark = +__lc1.c; } catch (eMk) { __og1Mark = NaN; }
+    var c = { sid: src.sid, name: NAME_OF[src.sid] || src.sid, cls: src.cls, dir: dir, level: src.level, kind: src.kind, entry: entry, stop: stop, mark: __og1Mark, wick: wick, risk: risk, buf: buf, bufNote: bufNote,
               t1: t1, t2: t2, t1Label: tg.t1 ? tg.t1.label : 'unavailable', t2Label: tg.t2 ? tg.t2.label : 'unavailable', t1Rule: tg.rule, rr1: rr1, rr2: rr2,
               grade: loc.grade, gradeWhy: loc.why, obOk: obOk, ob: ob, obSrc: obSrc, age: has(src.age) ? +src.age : NaN, reclaimed: !!src.reclaimed, acceptance: !!src.acceptance,
               breach: fin(src.breach), displacementAtr: fin(src.displacementAtr), second: !!src.second, lvnPath: g.lvnBetween(entry, t1, ctx.vp4h), crowded: crowded };
@@ -1335,7 +1342,7 @@
     var smcChipMp = ''; try{ if (typeof W.hgSmcChipHtml === 'function') smcChipMp = W.hgSmcChipHtml(c) || ''; }catch(eSmcMp){ smcChipMp = ''; }
     h += '<div class="og1-mp-head"><b>MOST PROBABLE · ' + esc(hz) + '</b> <span class="og1-grade og1-grade-' + esc(g.grade.replace('+', 'p')) + '">' + esc(g.grade) + '</span> '
       + '<b class="og1-dir">' + esc(up(c.dir)) + '</b> XAUUSD · <b>' + esc(c.sid) + '</b> ' + esc(c.name) + ' <span class="dim">— ' + esc(c.kind) + '</span> ' + verdictChip(c.verdict) + (g.tradeReady ? tag('trade-ready grade') : tag('watch grade — not trade-ready')) + smcChipMp + '</div>';
-    h += '<div class="og1-levels"><div><i>ENTRY</i><b>' + px(c.entry) + '</b><u>' + (c.dir === 'long' ? 'BUY ZONE' : 'SELL ZONE') + '</u></div><div><i>STOP</i><b>' + px(c.stop) + '</b><u>SL$ ' + num(c.risk) + '</u></div><div><i>TP1</i><b>' + px(c.t1) + '</b><u>RR ' + num(c.rr1, 1) + ' · ' + esc(c.t1Label) + '</u></div><div><i>TP2</i><b>' + px(c.t2) + '</b><u>RR ' + num(c.rr2, 1) + ' · ' + esc(c.t2Label) + '</u></div></div>';
+    h += '<div class="og1-levels"><div><i>ENTRY</i><b>' + px(c.entry) + '</b><u>' + (c.dir === 'long' ? 'BUY ZONE' : 'SELL ZONE') + '</u></div><div><i>STOP</i><b>' + px(c.stop) + '</b><u>SL$ ' + num(c.risk) + '</u></div><div><i>TP1</i><b>' + px(c.t1) + '</b><u>RR ' + num(c.rr1, 1) + ' · ' + esc(c.t1Label) + '</u></div><div><i>TP2</i><b>' + px(c.t2) + '</b><u>RR ' + num(c.rr2, 1) + ' · ' + esc(c.t2Label) + '</u></div></div>' + og1GeoLine(c);
     h += '<div class="dim">grade basis: ' + esc(g.why.join(' · ')) + '</div>';
     /* hg-v698: named independent confirmations + any missing class, rendered
        by the shared helper so all three gold desks print the same block. */
@@ -1372,6 +1379,20 @@
     if (v.qualifies) return tag('HALF SIZE');
     return tag('NO SETUP');
   }
+  /* PRICE MAY HAVE WALKED THROUGH THIS PLAN ALREADY — the shared rule in
+     hg-plan.js. Silent without a mark or the rule. */
+  function og1GeoLine(c){
+    try{
+      var fn = (typeof W !== 'undefined' && W && W.hgPlanMarketGeometry)
+        || (typeof window !== 'undefined' && window && window.hgPlanMarketGeometry) || null;
+      if (typeof fn !== 'function' || !c) return '';
+      var g = fn({ dir: c.dir, entry: c.entry, stop: c.stop, t1: c.t1 }, c.mark);
+      if (!g || g.ok) return '';
+      var label = (g.code === 'stop-breached') ? 'STOP ALREADY BREACHED' : 'TARGET BEHIND PRICE';
+      return '<div class="og1-note warn"><b>' + label + ':</b> ' + esc(g.why) + '</div>';
+    }catch(e){ return ''; }
+  }
+
   function candCard(c, horizon, ctxLabel, tfLabel){
     var m = c.matrix || { score: 0, families: [] }, v = c.verdict || null, g7 = c.gates || { pass: 0 };
     var isBest = c.bestRank > 0;
@@ -1382,7 +1403,7 @@
        keeps its position; '' when smc-setups.js is absent. */
     var smcChipCard = ''; try{ if (typeof W.hgSmcChipHtml === 'function') smcChipCard = W.hgSmcChipHtml(c) || ''; }catch(eSmcCard){ smcChipCard = ''; }
     h += '<div class="og1-card-chips">' + '<span class="og1-grade og1-grade-' + esc(gi.grade.replace('+', 'p')) + '">' + esc(gi.grade) + '</span>' + verdictChip(v) + (c.demoted ? tag('DEMOTED — paints, never leads') : '') + (gi.tradeReady && !(v && v.qualifies) ? tag('gates permit ' + gi.size + ' size · matrix overlay below 10') : '') + tag('SCORE ' + m.score + '/20') + tag('gates ' + g7.pass + '/12') + tag('location ' + c.grade) + (has(c.rr1) ? tag('RR ' + num(c.rr1, 1)) : tag('RR unavailable')) + tag('families ' + (m.families || []).length) + (c.reclaimed ? tag('reclaim closed · age ' + c.age) : tag('reclaim pending · age ' + c.age)) + smcChipCard + '</div>';
-    h += '<div class="og1-levels"><div><i>ENTRY</i><b>' + px(c.entry) + '</b><u>' + (c.dir === 'long' ? 'BUY ZONE' : 'SELL ZONE') + '</u></div><div><i>STOP</i><b>' + px(c.stop) + '</b><u>SL$ ' + num(c.risk) + '</u></div><div><i>TP1</i><b>' + px(c.t1) + '</b><u>' + esc(c.t1Label) + '</u></div><div><i>TP2</i><b>' + px(c.t2) + '</b><u>' + esc(c.t2Label) + '</u></div></div>';
+    h += '<div class="og1-levels"><div><i>ENTRY</i><b>' + px(c.entry) + '</b><u>' + (c.dir === 'long' ? 'BUY ZONE' : 'SELL ZONE') + '</u></div><div><i>STOP</i><b>' + px(c.stop) + '</b><u>SL$ ' + num(c.risk) + '</u></div><div><i>TP1</i><b>' + px(c.t1) + '</b><u>' + esc(c.t1Label) + '</u></div><div><i>TP2</i><b>' + px(c.t2) + '</b><u>' + esc(c.t2Label) + '</u></div></div>' + og1GeoLine(c);
     h += '<div class="dim og1-card-why">' + esc(v ? v.why : '') + (v && v.missing && v.missing.length ? ' · missing ' + esc(v.missing.slice(0, 3).map(function(x){ return x.name + ' +' + x.pts; }).join(', ')) : '') + (c.demoted && c.demoteWhy ? ' · ' + esc(c.demoteWhy) : '') + '</div>';
     h += '<div class="dim">context ' + esc(ctxLabel) + ' · execution ' + esc(tfLabel) + ' · stop ' + esc(og1StopBasis(c)) + ' · invalidates on two ' + esc(tfLabel) + ' closes ' + (c.dir === 'long' ? 'below ' : 'above ') + px(c.level) + '</div>';
     h += '</div>';
@@ -1405,7 +1426,7 @@
          paints only if that desk already attached .smc to its own row. */
       var smcChipBr = ''; try{ if (typeof W.hgSmcChipHtml === 'function') smcChipBr = W.hgSmcChipHtml(c) || ''; }catch(eSmcBr){ smcChipBr = ''; }
       h += '<div class="og1-card-chips">' + tag('desk grade ' + (c.grade || '—')) + (has(c.tally) ? tag('tally ' + c.tally) : '') + (has(c.rr) ? tag('RR ' + num(c.rr, 1)) : '') + (c.locked ? tag('conviction-locked') : '') + smcChipBr + '</div>';
-      h += '<div class="og1-levels"><div><i>ENTRY</i><b>' + px(c.entry) + '</b><u>' + (String(c.dir).toLowerCase() === 'long' ? 'BUY ZONE' : 'SELL ZONE') + '</u></div><div><i>STOP</i><b>' + px(c.stop) + '</b><u>SL$ ' + num(Math.abs(c.entry - c.stop)) + '</u></div><div><i>TP1</i><b>' + px(c.t1) + '</b><u>desk</u></div><div><i>TP2</i><b>' + px(c.t2) + '</b><u>desk</u></div></div>';
+      h += '<div class="og1-levels"><div><i>ENTRY</i><b>' + px(c.entry) + '</b><u>' + (String(c.dir).toLowerCase() === 'long' ? 'BUY ZONE' : 'SELL ZONE') + '</u></div><div><i>STOP</i><b>' + px(c.stop) + '</b><u>SL$ ' + num(Math.abs(c.entry - c.stop)) + '</u></div><div><i>TP1</i><b>' + px(c.t1) + '</b><u>desk</u></div><div><i>TP2</i><b>' + px(c.t2) + '</b><u>desk</u></div></div>' + og1GeoLine(c);
       h += '<div class="dim og1-card-why">' + esc(c.why || '') + '</div><div class="dim">bridged from the GOLD ' + esc(horizon) + ' desk — not scored by the 20-point matrix; run that desk for its own gates</div></div>';
     });
     return { html: h, n: n };
