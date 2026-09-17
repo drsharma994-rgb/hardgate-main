@@ -1825,7 +1825,16 @@ console.log('\n== what the venue takes out of the win, on the card itself ==');
   ok(/36% of the winner/.test(noRisk.replace(/<[^>]+>/g, '')),
      'and the share it CAN compute is still shown');
 
-  ok(/costLineHtml\(rung\.be/.test(SRC), 'and it is wired into the setup card');
+  /* WIRED INTO THE CARD, AND PRICED FOR THE CARD. This asserted the literal
+     `costLineHtml(rung.be` — which held the right line while the verdict was
+     decoration and the wrong one from hg-v790, when it started deciding
+     whether a setup is counted actionable. A rung is priced from its LAST
+     bar; a setup that fired three bars ago has its own ATR, and on the
+     fixture the two targets are 13.5% apart on the same card. */
+  ok(/costLineHtml\(hg80CardBe\(sig, rung\)/.test(SRC),
+     'the setup card renders a cost line, priced from the card\'s own plan');
+  ok(!/costLineHtml\(rung\.be\b/.test(SRC),
+     'and not from the rung\'s last-bar breakeven, which prices a different trade');
   ok(/costLineHtml\(a\.rung\.be/.test(SRC), 'and onto the armed rows too');
 }
 
@@ -2531,6 +2540,117 @@ console.log('\n== the ledger is read at the bar for the number of things being t
        && vm.runInContext('typeof hgOmniFamilyZ', ctx) === 'function',
        'and it is restored, so nothing after this block runs against a stub');
   }
+}
+
+console.log('\n== a card is priced for the trade on the card ==');
+{
+  /* hg80Breakeven prices a RUNG from its last bar: today's ATR, today's
+     close. That is right for the ladder board and for an armed row, whose
+     estimate is literally built from that bar's ATR.
+
+     It is wrong for a setup that has already fired. A plan's target is
+     0.75 x the ATR AT THE SIGNAL BAR, and ATR moves. */
+  const def = { tf: '15m', sec: 900, bars: 320, band: 'scalp' };
+  const out = ctx.hg80ScanTf(series(320, { tfSec: 900, endHour: 15, tail: 3 }), def,
+                             ctx.hg80VenueRt());
+  const v = out.res.signals.filter(x => x.status === 'open').pop();
+  const cardTarget = Math.abs(v.plan.t1 - v.plan.entry);
+  const cardRisk = Math.abs(v.plan.entry - v.plan.stop);
+
+  ok(Math.abs(out.be.target - cardTarget) / cardTarget > 0.05,
+     `the rung and the card really do disagree on this fixture — ${out.be.target.toFixed(3)} `
+     + `against ${cardTarget.toFixed(3)}, ${(100 * Math.abs(out.be.target - cardTarget)
+        / cardTarget).toFixed(1)}% apart`);
+
+  const cb = ctx.hg80CardBe(v, out);
+  ok(near(cb.target, cardTarget, 1e-9) && near(cb.risk, cardRisk, 1e-9),
+     'the card is priced against ITS OWN target and stop');
+  ok(near(cb.gross, cardRisk / (cardRisk + cardTarget), 1e-12),
+     'its gross bar is that geometry, computed rather than assumed from the spec constants');
+  ok(near(cb.cost, v.plan.entry * out.be.rtFrac, 1e-9),
+     'with the round trip charged on its own entry');
+  ok(cb.rtFrac === out.be.rtFrac,
+     'the venue fraction still comes from the rung — that is where you trade, not when the '
+     + 'candle closed');
+
+  /* THIS WAS COSMETIC UNTIL hg-v790 MADE IT BINDING */
+  const qOwn = ctx.hg80Quality(v, out, null, NaN);
+  ok(near(qOwn.verdict.target, cardTarget, 1e-9),
+     'and the verdict deciding whether this is counted actionable is the card\'s, not the rung\'s');
+
+  /* an armed row keeps the rung's — its estimate IS the last bar's ATR */
+  ok(/costLineHtml\(a\.rung\.be/.test(SRC),
+     'the armed row still prices from the rung, which is the right number for an estimate built '
+     + 'from that bar');
+
+  /* degenerate plans yield nothing rather than a divide */
+  ok(ctx.hg80PlanBe(null, 0.0002) === null, 'no plan, no price');
+  ok(ctx.hg80PlanBe({ entry: 100, stop: 100, t1: 101 }, 0.0002) === null,
+     'a zero-wide stop is not a cheap trade, it is not a trade');
+  ok(ctx.hg80PlanBe({ entry: 100, stop: 96, t1: 100 }, 0.0002) === null, 'nor a zero-wide target');
+  ok(ctx.hg80CardBe({ plan: null }, out) === out.be,
+     'and an unpriceable plan falls back to the rung rather than losing the line entirely');
+}
+
+console.log('\n== an unread venue makes no claim, and 0 is not "no claim" ==');
+{
+  /* fin() COERCES. Number(null), Number(''), Number([]) and Number(false)
+     are all 0, and isFinite(0) is true — so fin() cannot tell "no venue was
+     read" from "the venue costs nothing".
+
+     hg80Breakeven returns cost:null when the venue cannot be read.
+     hg80CostVerdict ran that through fin(), got 0, and skipped its
+     'unknown' branch entirely: it reported CLEAR, 0% of the winner gone —
+     a confident false statement manufactured out of a failed read. hg-v790
+     then made that verdict decide whether a setup is counted actionable.
+     Third time this exact coercion has bitten this file. */
+  const unread = ctx.hg80Breakeven(2.54, 4354, NaN);
+  ok(unread.cost === null && unread.rtFrac === null,
+     'an unreadable venue leaves the cost unset, as it always did');
+  const v = ctx.hg80CostVerdict(unread);
+  ok(v.key === 'unknown',
+     `which now reads as unknown, not as free (was "${'clear'}", 0% of the winner gone)`);
+  ok(!isFinite(v.share) && !isFinite(v.cost),
+     'with no share and no cost invented to fill the gap');
+
+  /* the whole family of things that coerce to zero */
+  for (const junk of [null, undefined, '', [], false]){
+    ok(ctx.hg80CostVerdict({ target: 2, risk: 10, cost: junk }).key === 'unknown',
+       `a cost of ${JSON.stringify(junk) ?? 'undefined'} is not a cost of zero`);
+    ok(ctx.hg80Breakeven(2.54, 4354, junk).cost === null,
+       `and a venue fraction of ${JSON.stringify(junk) ?? 'undefined'} does not price a free `
+       + 'round trip');
+  }
+  /* a REAL zero still works — a venue that genuinely costs nothing is a
+     legitimate answer, and this must not have been broken to fix the above */
+  ok(ctx.hg80Breakeven(2.54, 4354, 0).cost === 0,
+     'a real zero fraction still prices a free round trip');
+  ok(ctx.hg80CostVerdict({ target: 2, risk: 10, cost: 0 }).key === 'clear',
+     'and a real zero cost still reads as clear');
+
+  /* the same boundary in the two helpers that grew later */
+  ok(ctx.hg80PlanBe({ entry: 100, stop: 96, t1: 101 }, null).cost === null,
+     'hg80PlanBe does not price a null venue as free');
+  const lp = ctx.hg80LivePlan({ dir: 'long', plan: { dir: 'long', entry: 100, stop: 96, t1: 101,
+                                                     atr: 1 } }, 100.5);
+  ok(ctx.hg80LiveBe(lp, null) === null && ctx.hg80LiveBe(lp, '') === null,
+     'nor does hg80LiveBe');
+  ok(ctx.hg80LiveBe(lp, 0).cost === 0, 'while a real zero still prices through both');
+
+  /* the helper itself */
+  const F = ctx.hg80FinStrict;
+  for (const junk of [null, undefined, '', [], {}, false, true, '5', '0', NaN, Infinity]){
+    ok(!isFinite(F(junk)),
+       `finStrict rejects ${JSON.stringify(junk) ?? 'undefined'} — including numeric STRINGS, `
+       + 'because a string here means something upstream lost its type');
+  }
+  ok(F(0) === 0 && F(-1.5) === -1.5 && F(4354) === 4354, 'and takes actual finite numbers');
+
+  /* fin() is still the coercing one, deliberately — it parses attributes
+     and feed payloads, where a numeric string is the normal case */
+  ok(/function fin\(v\)\{ var n = Number\(v\)/.test(SRC.replace(/\s+/g, ' ')
+       .replace(/function fin\(v\) \{/, 'function fin(v){')),
+     'fin is left alone — it reads attributes and feed payloads where strings are normal');
 }
 
 console.log('\n== the cards say how much to buy, and what makes that number lie ==');

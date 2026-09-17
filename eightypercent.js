@@ -366,6 +366,26 @@ function esc(s){
   });
 }
 function fin(v){ var n = Number(v); return isFinite(n) ? n : NaN; }
+/* ---------------------------------------------------------------------
+   fin() COERCES, AND 0 IS A MEANINGFUL ANSWER IN THIS FILE
+
+   Number(null), Number(''), Number([]) and Number(false) are all 0, and
+   isFinite(0) is true. So fin() cannot tell "no venue was read" from "the
+   venue costs nothing", and anywhere a zero is a real answer that is not a
+   rounding difference — it is the difference between a verdict and no
+   verdict.
+
+   It had already cost this file twice. hg-v795: a missing localStorage key
+   read as a deliberate choice of OFF. And, from the day the cost verdict
+   shipped, hg80Breakeven returns cost:null when the venue cannot be read,
+   which fin() turned into 0 — so hg80CostVerdict skipped its 'unknown'
+   branch entirely and reported <b>clear, 0% of the winner gone</b>, a
+   confident false statement manufactured out of a failed read. hg-v790
+   then made that verdict decide whether a setup is counted actionable.
+
+   finStrict takes only an actual finite number. Nothing coerces.
+   --------------------------------------------------------------------- */
+function finStrict(v){ return (typeof v === 'number' && isFinite(v)) ? v : NaN; }
 function num(v, d){ return isFinite(fin(v)) ? fin(v).toFixed(d == null ? 2 : d) : '—'; }
 function pctTxt(v, d){ return isFinite(fin(v)) ? (fin(v) * 100).toFixed(d == null ? 2 : d) + '%' : '—'; }
 function gfn(name){ return (typeof W[name] === 'function') ? W[name] : null; }
@@ -387,12 +407,59 @@ function hg80Breakeven(atr, px, rtFrac){
   if (!(a > 0) || !(p > 0)) return out;
   out.risk = P80_SL_ATR * a;
   out.target = P80_TP_ATR * a;
-  var rt = fin(rtFrac);
+  var rt = finStrict(rtFrac);
   if (!(rt >= 0)) return out;
   out.rtFrac = rt;
   out.cost = p * rt;
   out.net = (out.cost + out.risk) / (out.risk + out.target);
   return out;
+}
+
+/* ---------------------------------------------------------------------
+   THE RUNG'S BREAKEVEN IS NOT THE CARD'S BREAKEVEN
+
+   hg80Breakeven prices a rung from its LAST bar: today's ATR, today's
+   close. That is the right number for the ladder board and for an armed
+   row, which both ask "what would a trade on this rung need, now" — an
+   armed estimate is literally built from that bar's ATR.
+
+   It is the wrong number for a setup that has already fired. A plan's
+   target is 0.75 x the ATR AT THE SIGNAL BAR, and ATR moves. On the
+   fixture a 15m long that fired three bars ago carries a 1.91 target while
+   its rung prices 1.65 — 13.5% apart, printed on the same card as the
+   take-profit row it contradicts.
+
+   That was cosmetic while the verdict was decoration. hg-v790 made it
+   binding: whether a setup is counted among the ones you could act on now
+   turns on this arithmetic, and it was being asked about a trade with a
+   different target from the one on the card.
+
+   So a fired setup is priced from ITS OWN plan. The venue fraction still
+   comes from the rung — that is a property of where you trade, not of
+   when the candle closed — and an unread venue still yields no verdict
+   rather than a guess.
+   --------------------------------------------------------------------- */
+function hg80PlanBe(plan, rtFrac){
+  if (!plan) return null;
+  var E = fin(plan.entry), S = fin(plan.stop), T = fin(plan.t1);
+  if (!isFinite(E) || !isFinite(S) || !isFinite(T)) return null;
+  var risk = Math.abs(E - S), target = Math.abs(T - E);
+  if (!(risk > 0) || !(target > 0)) return null;
+  var out = { gross: risk / (risk + target), net: null, cost: null,
+              risk: risk, target: target, rtFrac: null };
+  var rt = finStrict(rtFrac);
+  if (!(rt >= 0)) return out;
+  out.rtFrac = rt;
+  out.cost = E * rt;
+  out.net = (out.cost + risk) / (risk + target);
+  return out;
+}
+
+/* The breakeven to print on a card ABOUT A FIRED SETUP: its own, falling
+   back to the rung's only when the plan cannot be priced at all. */
+function hg80CardBe(sig, rung){
+  var rt = (rung && rung.be) ? rung.be.rtFrac : NaN;
+  return hg80PlanBe(sig && sig.plan, rt) || (rung ? rung.be : null);
 }
 
 /* Expectancy in R at an assumed win rate, cost included. `hit` is an INPUT,
@@ -588,7 +655,7 @@ function hg80LivePlan(sig, px){
    target does. */
 function hg80LiveBe(lp, rtFrac){
   if (!lp) return null;
-  var rt = fin(rtFrac);
+  var rt = finStrict(rtFrac);
   if (!isFinite(rt) || rt < 0) return null;
   var cost = lp.entry * rt;
   return { gross: lp.grossBe, cost: cost, target: lp.reward, risk: lp.risk,
@@ -772,8 +839,11 @@ var P80_COST_HEAVY = 1 / 3;
 function hg80CostVerdict(be){
   var out = { key: 'unknown', label: 'cost unknown', share: NaN, expR: NaN,
               cost: NaN, target: NaN };
-  if (!be || !(fin(be.target) > 0) || !isFinite(fin(be.cost))) return out;
-  out.cost = fin(be.cost);
+  /* finStrict, not fin: a cost of null means the venue was never read, and
+     coercing it to 0 is how this returned 'clear, 0% gone' for four
+     versions instead of making no claim. */
+  if (!be || !(fin(be.target) > 0) || !isFinite(finStrict(be.cost))) return out;
+  out.cost = finStrict(be.cost);
   out.target = fin(be.target);
   out.share = out.cost / out.target;
   out.expR = hg80ExpectancyR(P80_CLAIMED, be);
@@ -817,7 +887,7 @@ function hg80CostVerdict(be){
    not silently remove the trade the spec asked for.
    --------------------------------------------------------------------- */
 function hg80Quality(sig, rung, grade, livePx){
-  var planV = hg80CostVerdict(rung && rung.be);
+  var planV = hg80CostVerdict(hg80CardBe(sig, rung));
 
   /* PRICED WHERE GOLD IS, NOT WHERE IT WAS. A setup whose fill has drifted
      halfway to its target is a different trade from the one the card was
@@ -2931,7 +3001,7 @@ function simpleCardHtml(sig, rung, state){
     + ((P80_SL_ATR / (P80_SL_ATR + P80_TP_ATR)) * 100).toFixed(1)
     + '% of the time just to break even, before any spread.</div>';
 
-  if (rung) h += costLineHtml(rung.be, __p.venue ? __p.venue.venue : null);
+  if (rung) h += costLineHtml(hg80CardBe(sig, rung), __p.venue ? __p.venue.venue : null);
 
   h += watchLineHtml(sig);
   return h + '</div>';
@@ -3762,7 +3832,7 @@ function focusedFiringsHtml(list){
     for (j = 0; j < r2.res.signals.length; j++){
       var x = r2.res.signals[j];
       if (x.i === r2.rows.length - 1 || x.status === 'open'){
-        h += setupCardHtml(x, r2.be, r2.cfg,
+        h += setupCardHtml(x, hg80CardBe(x, r2), r2.cfg,
           x.i === r2.rows.length - 1 ? 'last closed candle' : 'still open');
         live++;
       }
@@ -3823,7 +3893,7 @@ function latestSetupsHtml(rungs){
   });
   for (i = 0; i < actionable.length; i++){
     var a = actionable[i];
-    h += setupCardHtml(a.latest, a.be, a.cfg,
+    h += setupCardHtml(a.latest, hg80CardBe(a.latest, a), a.cfg,
       a.latest.ageBars === 0 ? 'last closed candle' : ('still open · ' + a.latest.ageBars + ' bars old'));
   }
   if (!actionable.length){
@@ -4111,7 +4181,8 @@ function firedHtml(rungs){
       + '<span>fired inside the window, neither level reached yet</span></h3>';
     var shown = open.slice(-6).reverse();
     for (i = 0; i < shown.length; i++){
-      h += setupCardHtml(shown[i].s, shown[i].r.be, shown[i].r.cfg, 'still open');
+      h += setupCardHtml(shown[i].s, hg80CardBe(shown[i].s, shown[i].r), shown[i].r.cfg,
+                         'still open');
     }
     h += '<div class="note">These are the firings whose horizon has not elapsed and whose target '
       + 'and stop are both still untouched on the bars fetched. That is the only sense in which '
@@ -4899,6 +4970,9 @@ W.hg80ArmedPays      = hg80ArmedPays;
 W.hg80ArmedSplit     = hg80ArmedSplit;
 W.hg80ArmedVerdict   = hg80ArmedVerdict;
 W.hg80Size           = hg80Size;
+W.hg80PlanBe         = hg80PlanBe;
+W.hg80FinStrict      = finStrict;
+W.hg80CardBe         = hg80CardBe;
 W.hg80RiskCash       = hg80RiskCash;
 W.hg80RiskSet        = hg80RiskSet;
 W.hg80RiskValid      = hg80RiskValid;

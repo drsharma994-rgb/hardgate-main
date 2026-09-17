@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v798',
-  pack: 'the 80PERCENT tab sizes the trade — set what you are willing to lose and every card says how many ounces that buys, off the stop you can actually get, with the gapped-fill rate measured from the bars on screen rather than the comfortable half of the truth',
+  version: 'hg-v799',
+  pack: 'the 80PERCENT tab prices each card for the trade on that card, not for a rung priced at a later bar — and an unreadable venue stops reporting itself as a free one, which it had been doing since the cost verdict shipped because Number(null) is 0',
   built: '2026-09-17T00:00:00Z'
 };
 
