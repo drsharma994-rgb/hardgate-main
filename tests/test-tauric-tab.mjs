@@ -295,6 +295,36 @@ console.log('\n== one JSON object crosses the seam, and stderr cannot corrupt it
   ok(/did not print JSON/.test(API), 'unparseable output is reported as such, never guessed at');
 }
 
+console.log('\n== the bridge runs where the .env actually is ==');
+{
+  /* THE BUG THIS PINS, because it wasted nobody's time only by luck.
+     tradingagents/__init__.py loads its .env with find_dotenv(usecwd=True),
+     which walks UP FROM THE CWD. Spawned with cwd = this repo, that walk
+     never reaches the TradingAgents checkout, so a key pasted exactly where
+     its README says to put it was invisible — and the tab told somebody who
+     had just set a key that they had no key. Shipped that way in hg-v767
+     and fixed here. */
+  ok(/find_dotenv\(usecwd=True\)|walks UP FROM THE CWD/.test(API),
+     'the handler records WHY the cwd matters, not just that it is set');
+  ok(/const cwd = \(found\.home && fs\.existsSync\(found\.home\)\) \? found\.home : ROOT;/.test(API),
+     'it spawns from the checkout when one was located');
+  ok(/cwd: cwd/.test(API), 'and passes that as the child cwd');
+  ok(/obj\.cwd = cwd/.test(API), 'reporting it back, so "no key" says which directory was searched');
+  ok(/the <code>\.env<\/code> is read from/.test(TAB),
+     'and the tab prints that directory on the no-key card');
+
+  /* an explicitly-set interpreter still resolves its project, or the fix
+     would only work for the two paths that happen to carry `home` */
+  ok(/function homeOfInterpreter/.test(API), 'an explicit TAURIC_PYTHON resolves its checkout too');
+  ok(/for \(let i = parts\.length - 1; i >= 0; i--\)/.test(API),
+     'by walking up to the venv, rather than assuming a fixed depth');
+
+  /* a key from another provider is not enough on its own: the config still
+     names the provider to call, and that trap is now on the card */
+  ok(/TRADINGAGENTS_LLM_PROVIDER/.test(TAB),
+     'and the no-key card warns that a different provider needs the provider set too');
+}
+
 console.log('\n== it is wired into the server ==');
 {
   ok(/createTauricApi/.test(SERVER), 'the server imports the handler');

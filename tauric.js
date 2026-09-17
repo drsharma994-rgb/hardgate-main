@@ -216,9 +216,14 @@ function blockedHtml(pre){
       + 'Every stage of this pipeline is an LLM call. Set one provider key in the TradingAgents '
       + '<code>.env</code> — <code>OPENAI_API_KEY</code>, <code>ANTHROPIC_API_KEY</code>, '
       + '<code>GOOGLE_API_KEY</code> or any of the other thirteen it supports — and this tab runs.'
+      + (pre && pre.cwd
+          ? '<br><span class="note">the <code>.env</code> is read from <code>' + esc(pre.cwd)
+            + '</code> — a key anywhere else will not be seen</span>' : '')
       + (pre && pre.config && pre.config.llm_provider
           ? '<br><span class="note">configured provider: ' + esc(pre.config.llm_provider)
-            + ' · ' + esc(pre.config.deep_think_llm || '?') + '</span>' : '')
+            + ' · ' + esc(pre.config.deep_think_llm || '?')
+            + ' — a key from a DIFFERENT provider also needs '
+            + '<code>TRADINGAGENTS_LLM_PROVIDER</code> set, or it will still call this one</span>' : '')
       + '</div>';
   }
   if (b === 'vendor'){

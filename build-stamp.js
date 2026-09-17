@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v767',
-  pack: 'TAURIC — the TradingAgents multi-agent pipeline on XAUUSD, supplying the view while this desk prices the levels and holds it to the measured-edge rule',
+  version: 'hg-v768',
+  pack: 'the TAURIC bridge ran from the wrong directory, so a key pasted where its README says to put it was invisible',
   built: '2026-09-17T00:00:00Z'
 };
 
