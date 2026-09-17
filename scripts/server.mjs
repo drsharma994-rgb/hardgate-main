@@ -26,6 +26,7 @@ import { createHeyLensApi } from '../lib/hey-lens-api.mjs';
 import { createHardgateMcpApi } from '../lib/hardgate-mcp-api.mjs';
 import { createWorldmonitorApi } from '../lib/worldmonitor-api.mjs';
 import { createAgentApi } from '../lib/agent-api.mjs';
+import { createTauricApi } from '../lib/tauric-api.mjs';
 import { createAtomicAgentApi } from '../lib/atomic-agent-api.mjs';
 import { createCoindcxApi } from '../lib/coindcx-api.mjs';
 import { createChartVisionApi } from '../lib/chart-vision-api.mjs';
@@ -56,6 +57,7 @@ const heyHandler = createHeyLensApi();
 const hardgateMcpHandler = createHardgateMcpApi();
 const worldmonitorHandler = createWorldmonitorApi();
 const agentHandler = createAgentApi();
+const tauricHandler = createTauricApi();
 const atomicHandler = createAtomicAgentApi();
 const coindcxHandler = createCoindcxApi();
 const chartVisionHandler = createChartVisionApi();
@@ -214,6 +216,11 @@ const server = http.createServer(async (req, res) => {
     }
     if (u.pathname === '/api/agents' || u.pathname.indexOf('/api/agents/') === 0){
       return agentHandler(req, res);
+    }
+    /* TAURIC — the TradingAgents (TauricResearch) multi-agent pipeline for
+       XAUUSD, run out of process because it is Python and LLM-driven. */
+    if (u.pathname === '/api/tauric' || u.pathname.indexOf('/api/tauric/') === 0){
+      return tauricHandler(req, res);
     }
     if (u.pathname === '/api/atomic' || u.pathname.indexOf('/api/atomic/') === 0){
       return atomicHandler(req, res);

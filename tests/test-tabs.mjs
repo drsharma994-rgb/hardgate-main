@@ -298,7 +298,7 @@ const EXPECTED_GROUPS = {
      behind the stale inline-block count in the same file until hg-v762 —
      which is what a permanently red suite costs. Checked against the live
      list: the other four groups match exactly, only gold had drifted. */
-  gold:       ['super-gold', 'omnigold', 'omnigold1', 'optigold', 'newgold', 'golddirection', 'goldswing', 'goldscalp', 'goldultra', 'gold', 'goldpro', 'goldspot', 'goldcoint', 'goldpine'],
+  gold:       ['super-gold', 'omnigold', 'omnigold1', 'optigold', 'newgold', 'golddirection', 'goldswing', 'goldscalp', 'goldultra', 'gold', 'goldpro', 'goldspot', 'goldcoint', 'goldpine', 'tauric'],
   strategies: ['super-setup', 'super-best', 'super-sniper', 'super-book', 'super-calibrate', 'pine', 'pine-msb', 'pine-sqz', 'pine-smf', 'pine-ht', 'pine-smc', 'pine-cipher', 'pine-rf', 'pine-nw', 'pine-avwap', 'strats', 'meanrev', 'formationlab', 'scorecard', 'reliability'],
   tools:      ['risk', 'recon', 'basis', 'search', 'finder', 'tradeos', 'hey', 'aiagent']
 };
