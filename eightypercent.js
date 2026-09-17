@@ -1280,6 +1280,88 @@ function whyNothingHtml(rungs){
    No cap: on one timeframe the whole list IS the answer to "show me what
    fires", and truncating it would be the same mistake as showing only the
    most recent one. */
+/* ---------------------------------------------------------------------
+   THE FOCUSED ROWS AS PLAIN TEXT
+
+   This tab runs in a browser; anything wanting to look at its output —
+   another desk, a spreadsheet, a colleague, an assistant being asked why a
+   rung is quiet — gets it by copy and paste. Pasting the rendered table
+   drops exactly the things needed to read it: which venue priced it, which
+   mechanic fired each row, what the required rate was. Twice now that has
+   meant answering a question about this tab by inferring its own settings
+   back out of its prose.
+
+   So the copy is built here, self-describing, with the header a reader needs
+   to interpret the rows and nothing they have to take on trust. Pure and
+   returned as a string, so it is testable without a clipboard.
+   --------------------------------------------------------------------- */
+function hg80FocusText(list, venue){
+  var ok = (list || []).filter(function(r){ return r && r.ok; });
+  var L = [];
+  var ver = '';
+  try { ver = (W.HG_BUILD && W.HG_BUILD.version) ? String(W.HG_BUILD.version) : ''; } catch (e){}
+  L.push('HARDGATE 80PERCENT' + (ver ? ' · ' + ver : '') + ' · ' + new Date().toISOString().slice(0, 16) + 'Z');
+  L.push('venue: ' + ((venue && venue.venue) ? venue.venue : 'unknown')
+    + (venue && isFinite(fin(venue.rtCostPct)) ? ' @ ' + fin(venue.rtCostPct).toFixed(3) + '% round trip' : ''));
+  L.push('spec: EMA' + P80_EMA_FAST + '/' + P80_EMA_SLOW + ', RSI(' + P80_RSI_LEN + ') < '
+    + P80_RSI_LONG + ' / > ' + P80_RSI_SHORT + ', TP ' + P80_TP_ATR + 'xATR, SL ' + P80_SL_ATR
+    + 'xATR, session ' + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC');
+  L.push('wide: same rules, RSI < ' + P80_RSI_WIDE_LONG + ' / > ' + P80_RSI_WIDE_SHORT
+    + ' (bars the spec turned away; recorded under ' + P80_VARIANTS[1].mech + ')');
+  L.push('gross breakeven: ' + ((P80_SL_ATR / (P80_SL_ATR + P80_TP_ATR)) * 100).toFixed(4) + '%');
+
+  if (!ok.length){
+    L.push('');
+    L.push('no rung returned usable bars');
+    return L.join('\n');
+  }
+
+  var i, j;
+  L.push('');
+  for (i = 0; i < ok.length; i++){
+    var r = ok[i], c = hg80CountByVariant(r);
+    L.push(r.def.tf + ' (' + r.def.band + '): SPEC ' + c.spec + ' WIDE ' + c.wide
+      + ' in ' + r.scanned + ' bars'
+      + (r.medianBars != null ? ', typical hold ' + r.medianBars + ' bars' : '')
+      + ', ATR ' + num(r.lastAtr, 3) + ', last close ' + num(r.lastPx)
+      + ', needs ' + (r.be && r.be.net != null ? (r.be.net * 100).toFixed(2) + '%' : 'n/a')
+      + (r.cfg.session === false ? ', no session gate' : ', session-gated')
+      + (r.nearest ? ', closest: ' + r.nearest.variant.label + ' ' + r.nearest.side.toUpperCase()
+          + ' ' + r.nearest.score.met + '/' + r.nearest.score.total
+          + ' missing ' + (r.nearest.score.missing.join('+') || 'nothing') : ''));
+  }
+
+  var rows = [];
+  for (i = 0; i < ok.length; i++){
+    for (j = 0; j < ok[i].res.signals.length; j++) rows.push({ r: ok[i], s: ok[i].res.signals[j] });
+  }
+  rows.sort(function(a, b){ return fin(b.s.t) - fin(a.s.t); });
+
+  L.push('');
+  L.push(['rung', 'when_utc', 'mech', 'age_bars', 'dir', 'entry', 'stop', 'target',
+          'rsi', 'atr', 'outcome', 'R', 'bars_held'].join('\t'));
+  for (i = 0; i < rows.length; i++){
+    var rg = rows[i].r, sg = rows[i].s, p = sg.plan, rs = sg.res;
+    L.push([
+      rg.def.tf,
+      isFinite(sg.t) ? new Date(sg.t * 1000).toISOString().replace('T', ' ').slice(0, 16) : '-',
+      sg.variantLabel || 'SPEC',
+      (rg.rows.length - 1) - sg.i,
+      sg.dir,
+      num(p.entry), num(p.stop), num(p.t1),
+      num(sg.rsi, 1), num(sg.atr, 2),
+      sg.status || '-',
+      rs ? num(rs.rMultiple, 3) : '-',
+      (rs && sg.status !== 'open') ? rs.bars : '-'
+    ].join('\t'));
+  }
+  if (!rows.length) L.push('(nothing fired on these rungs in the bars evaluated)');
+  L.push('');
+  L.push('Outcomes resolved inside this fetch only. Not a backtest, not sequential, no win rate.');
+  L.push('Both mechanics are a WATCH: no measured record on this desk yet.');
+  return L.join('\n');
+}
+
 function focusedFiringsHtml(list){
   var ok = (list || []).filter(function(r){ return r && r.ok; });
   if (!ok.length){
@@ -1306,7 +1388,14 @@ function focusedFiringsHtml(list){
   rows.sort(function(a, b){ return fin(b.s.t) - fin(a.s.t); });
 
   var h = '<div class="panel" style="margin-top:10px"><h3>EVERYTHING ' + esc(label)
-    + ' FIRED <span>' + total + ' in ' + scanned + ' evaluable bars</span></h3>';
+    + ' FIRED <span>' + total + ' in ' + scanned + ' evaluable bars</span></h3>'
+    + '<div class="row" style="margin:0 0 6px 0;align-items:center">'
+    + '<button type="button" class="btn ghost" id="p80Copy">COPY THESE ROWS</button>'
+    + ' <span class="note dim" style="margin:0;font-size:11px">tab-separated, with the venue, '
+    + 'both mechanics\' thresholds and the breakeven in the header — so a paste can be read '
+    + 'without knowing how this tab was set</span></div>'
+    + '<textarea id="p80CopyBox" style="display:none;width:100%;height:160px;font-family:monospace;'
+    + 'font-size:11px"></textarea>';
 
   /* a summary line per rung, because a merged count hides which rung
      produced what — the whole reason for holding two at once */
@@ -1715,6 +1804,7 @@ function render(rungs, venue, recNotes, basis){
       + esc(bits.join(' · ')) + '</div>';
     wireVenueButtons();
     wireFocusButtons();
+    wireCopyButton();
     return;
   }
 
@@ -1766,10 +1856,46 @@ function render(rungs, venue, recNotes, basis){
   ui.body.innerHTML = h;
   wireVenueButtons();
   wireFocusButtons();
+  wireCopyButton();
 }
 
 /* The buttons live inside innerHTML that is replaced on every render, so the
    listeners are re-attached each time rather than bound once at mount. */
+/* Clipboard where it exists, a selectable textarea where it does not. The
+   API needs a secure context and a user gesture and is absent or refused in
+   plenty of real browsers, so the fallback is not an edge case — it is the
+   path a copy button has to have or it silently does nothing. */
+function wireCopyButton(){
+  var ui = __p.ui;
+  if (!ui || !ui.body || !ui.body.querySelector) return;
+  var btn = ui.body.querySelector('#p80Copy');
+  var box = ui.body.querySelector('#p80CopyBox');
+  if (!btn) return;
+  btn.addEventListener('click', function(){
+    var txt = '';
+    try {
+      txt = hg80FocusText((__p.last && __p.last.rungs) || [], __p.venue);
+    } catch (e){ txt = 'could not build the copy: ' + String((e && e.message) || e); }
+    function reveal(note){
+      if (box){
+        box.style.display = 'block';
+        box.value = txt;
+        try { box.focus(); if (box.select) box.select(); } catch (e2){}
+      }
+      if (ui.stat) ui.stat.textContent = note;
+    }
+    try {
+      if (W.navigator && W.navigator.clipboard && W.navigator.clipboard.writeText){
+        W.navigator.clipboard.writeText(txt).then(function(){
+          if (ui.stat) ui.stat.textContent = 'copied ' + txt.split('\n').length + ' lines';
+        }, function(){ reveal('clipboard refused — select the box below and copy'); });
+        return;
+      }
+    } catch (e3){}
+    reveal('no clipboard here — select the box below and copy');
+  });
+}
+
 function wireFocusButtons(){
   var ui = __p.ui;
   if (!ui || !ui.body || !ui.body.querySelectorAll) return;
@@ -1951,6 +2077,7 @@ W.hg80Nearest        = hg80Nearest;
 W.hg80MissCost       = hg80MissCost;
 W.hg80BandRungs      = hg80BandRungs;
 W.hg80UngatedRungs   = hg80UngatedRungs;
+W.hg80FocusText      = hg80FocusText;
 W.HG_P80_MISS_COST   = P80_MISS_COST;
 W.hg80SecsToSession  = hg80SecsToSession;
 W.hg80Plan           = hg80Plan;

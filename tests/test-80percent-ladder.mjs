@@ -924,7 +924,7 @@ console.log('\n== focusing a rung scans only that rung, and shows everything it 
   }
   function parseEls(html){
     const out = [];
-    const re = /<(button|div|span)\b([^>]*)>/gi;
+    const re = /<(button|div|span|textarea)\b([^>]*)>/gi;
     let m;
     while ((m = re.exec(html))){
       const attrs = {};
@@ -1067,6 +1067,50 @@ console.log('\n== focusing a rung scans only that rung, and shows everything it 
   await new Promise(r => setTimeout(r, 0));
   ok(fetched.length === ctx.HG_P80_LADDER.length,
      'pressing a group button that is already showing returns to the whole ladder');
+
+  /* ---- the paste-back loop: what COPY THESE ROWS actually emits ---- */
+  fetched.length = 0;
+  node.querySelector('#p80Body').querySelectorAll('[data-p80-focus]')
+      .find(b => b.getAttribute('data-p80-focus') === 'set:ungated').click();
+  await new Promise(r => setImmediate(r));
+  await new Promise(r => setTimeout(r, 0));
+
+  const copyBtn = node.querySelector('#p80Body').querySelector('#p80Copy');
+  ok(!!copyBtn, 'the focused panel carries a copy button');
+  /* no navigator.clipboard in this sandbox, which is the fallback path and
+     the one that must not silently do nothing */
+  copyBtn.click();
+  const box = node.querySelector('#p80Body').querySelector('#p80CopyBox');
+  ok(!!box && box.style.display === 'block',
+     'with no clipboard available it reveals a selectable box instead of failing quietly');
+  const txt = String(box.value || '');
+  ok(txt.length > 200, `which holds the text (${txt.split('\n').length} lines)`);
+
+  /* the header has to make the rows readable without knowing how the tab was
+     set — this is the thing a pasted screenshot of the table always lost */
+  ok(/^HARDGATE 80PERCENT/.test(txt), 'the copy names itself');
+  ok(/venue: (XM|PAXG)/.test(txt), 'and the venue that priced it');
+  ok(/spec: EMA50\/200, RSI\(14\) < 45 \/ > 55, TP 0\.75xATR, SL 4xATR/.test(txt),
+     'and the spec thresholds in full');
+  ok(/wide: same rules, RSI < 55 \/ > 45/.test(txt), 'and the wide mechanic\'s');
+  ok(/recorded under P80W/.test(txt), 'naming the mechanic the wide rows are filed under');
+  ok(/gross breakeven: 84\.2105%/.test(txt), 'and the bar every row has to clear');
+
+  const tsvRows = txt.split('\n').filter(l => /^(5m|15m|1h|4h|1d)\t/.test(l));
+  const ungRungs = ctx.hg80UngatedRungs();
+  ok(tsvRows.length > 0, `${tsvRows.length} tab-separated rows`);
+  ok(tsvRows.every(l => l.split('\t').length === 13),
+     'every row has all thirteen columns, so it pastes into a spreadsheet unaltered');
+  ok(tsvRows.every(l => ungRungs.indexOf(l.split('\t')[0]) >= 0),
+     'and carries only the focused rungs, never a rung that is not on screen');
+  ok(/\brung\twhen_utc\tmech\t/.test(txt), 'with a header row naming the columns');
+  ok(ungRungs.every(t => new RegExp('^' + t + ' \\(', 'm').test(txt)),
+     'each focused rung gets its own summary line above the rows');
+  ok(/Not a backtest, not sequential, no win rate/.test(txt),
+     'the disclaimers travel WITH the data — a paste that loses them is how a fetch-window '
+     + 'resolution gets quoted as a track record');
+  ok(/WATCH/.test(txt), 'and it says both mechanics are unmeasured');
+  ok(!/winRate|hit rate|win rate:/i.test(txt), 'no rate is computed into the copy');
 
   fetched.length = 0;
   node.querySelector('#p80Body').querySelectorAll('[data-p80-focus]')
