@@ -1403,7 +1403,7 @@ localStorage. Never throws.
        PROVENANCE (OMNIROUTE re-read 2026-09-11; others read 2026-09-01):
          OMNIROUTE    scripts/backtest-omniroute-v701-results.json
                       (wallClockRunAt 2026-09-10) aggregates.overall:
-                      n=2823, avgNetR=-0.2112 -> ~-0.21R net per raw detection.
+                      n=2833, avgNetR=-0.2160 -> ~-0.22R net per raw detection.
                       (The v531-era run, scripts/backtest-omniroute-v531-results.json,
                       measured -0.2424 over n=2832 — the same read.)
          OMNIGOLD     scripts/backtest-omnigold-results.json (2026-08-29)

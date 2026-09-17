@@ -2441,10 +2441,28 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
   var HG_OMNI_REPLAY_EVIDENCE = {
     src: 'scripts/backtest-omniroute-v701-results.json',
-    runAt: '2026-09-10T22:08:23Z',
+    runAt: '2026-09-12T07:57:10Z',
     basis: '25 symbols × 2000 1h bars, point-in-time cache, taker 0.05%+0.02%/side',
-    settled: 2823,
-    overall: { n: 2823, winRate: 0.2724, avgGrossR: -0.0522, avgNetR: -0.2112, pf: 0.7196 },
+    /* RE-READ FROM THE ARTIFACT. It had been re-baked on 2026-09-12 while
+       these numbers still quoted the 2026-09-10 run, so the module was
+       citing a file that no longer said what the module claimed — 2823
+       settled had become 2833. Same config, same hg-v701 roster; only the
+       run is newer.
+
+       The table below is regenerated from that file wholesale rather than
+       hand-patched, and every kind moved a little. Nothing the desk REFUSES
+       changed: PIN-REJECT, RSI-DIVERGE and THREE-BAR still suppress,
+       AVWAP-RECLAIM and CUSUM-SHIFT still prefer.
+
+       ONE THING DID MOVE, and it is the rule working rather than drift.
+       SQUEEZE-FIRE measured −0.0485 over 45 on the 09-10 run, which cleared
+       the −0.10 demote bar, and −0.1235 over 44 on this one, which does
+       not — so it now forms and paints its measured row but never leads. No
+       list was edited to make that happen: suppress / demote / prefer are
+       COMPUTED from these numbers, so a kind that gets worse falls into the
+       demoted set on its own. That is the whole reason they are computed. */
+    settled: 2833,
+    overall: { n: 2833, winRate: 0.2711, avgGrossR: -0.0556, avgNetR: -0.216, pf: 0.7146 },
     suppressMinN: 60,
     suppressNetR: -0.60,
     demoteMinN: 30,
@@ -2459,34 +2477,34 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     convictionKinds: ['AVWAP-DEFEND', 'COMPRESSION-BREAK', 'DONCHIAN-DRIVE',
                       'EXHAUST-REVERT', 'HTF-PULLBACK', 'SWEEP-RECLAIM'],
     kinds: {
-      'AVWAP-RECLAIM': { n: 80, winRate: 0.4375, avgGrossR: 0.4661, avgNetR: 0.3867, pf: 1.7321 },
-      'CUSUM-SHIFT': { n: 85, winRate: 0.3529, avgGrossR: 0.2918, avgNetR: 0.2369, pf: 1.486 },
-      'VOL-EXPANSION': { n: 30, winRate: 0.2667, avgGrossR: 0.1028, avgNetR: 0.0758, pf: 1.1441 },
-      'MMOVE': { n: 191, winRate: 0.3089, avgGrossR: 0.1044, avgNetR: 0.0241, pf: 1.0394 },
-      'ORB': { n: 218, winRate: 0.2615, avgGrossR: 0.0756, avgNetR: 0.0047, pf: 1.0082 },
-      'PO3': { n: 77, winRate: 0.3636, avgGrossR: 0.1216, avgNetR: -0.0369, pf: 0.9482 },
-      'SQUEEZE-FIRE': { n: 45, winRate: 0.2444, avgGrossR: 0.0183, avgNetR: -0.0485, pf: 0.921 },
-      'NR7-BREAK': { n: 136, winRate: 0.2868, avgGrossR: 0.035, avgNetR: -0.0592, pf: 0.9107 },
-      'VWAP-REVERT': { n: 322, winRate: 0.2609, avgGrossR: -0.0213, avgNetR: -0.0936, pf: 0.8564 },
-      'BOS-RETEST': { n: 149, winRate: 0.2215, avgGrossR: -0.0531, avgNetR: -0.1135, pf: 0.8242 },
-      'FVG-FILL': { n: 186, winRate: 0.2419, avgGrossR: -0.0324, avgNetR: -0.1295, pf: 0.8007 },
-      'DONCHIAN-DRIVE': { n: 52, winRate: 0.3077, avgGrossR: -0.0769, avgNetR: -0.142, pf: 0.8072 },
+      'AVWAP-RECLAIM': { n: 81, winRate: 0.4321, avgGrossR: 0.448, avgNetR: 0.3663, pf: 1.6817 },
+      'CUSUM-SHIFT': { n: 84, winRate: 0.3571, avgGrossR: 0.3072, avgNetR: 0.253, pf: 1.5279 },
+      'VOL-EXPANSION': { n: 32, winRate: 0.2813, avgGrossR: 0.1276, avgNetR: 0.0973, pf: 1.1848 },
+      'MMOVE': { n: 190, winRate: 0.3105, avgGrossR: 0.1102, avgNetR: 0.0312, pf: 1.0512 },
+      'ORB': { n: 218, winRate: 0.2615, avgGrossR: 0.0799, avgNetR: 0.008, pf: 1.0138 },
+      'PO3': { n: 77, winRate: 0.3766, avgGrossR: 0.1606, avgNetR: 0.0031, pf: 1.0044 },
+      'NR7-BREAK': { n: 133, winRate: 0.2707, avgGrossR: 0.0042, avgNetR: -0.0887, pf: 0.8675 },
+      'VWAP-REVERT': { n: 319, winRate: 0.2602, avgGrossR: -0.0241, avgNetR: -0.0964, pf: 0.8526 },
+      'DONCHIAN-DRIVE': { n: 51, winRate: 0.3137, avgGrossR: -0.0588, avgNetR: -0.1233, pf: 0.8309 },
+      'SQUEEZE-FIRE': { n: 44, winRate: 0.2273, avgGrossR: -0.0576, avgNetR: -0.1235, pf: 0.8109 },
+      'FVG-FILL': { n: 192, winRate: 0.2448, avgGrossR: -0.0313, avgNetR: -0.1314, pf: 0.7993 },
+      'BOS-RETEST': { n: 152, winRate: 0.2171, avgGrossR: -0.0723, avgNetR: -0.1354, pf: 0.7937 },
+      'TREND-RECLAIM': { n: 118, winRate: 0.2627, avgGrossR: -0.072, avgNetR: -0.164, pf: 0.7704 },
       'EXHAUST-REVERT': { n: 31, winRate: 0.1935, avgGrossR: -0.1169, avgNetR: -0.1651, pf: 0.7465 },
-      'TREND-RECLAIM': { n: 119, winRate: 0.2605, avgGrossR: -0.0798, avgNetR: -0.1716, pf: 0.7608 },
       'HTF-PULLBACK': { n: 61, winRate: 0.2787, avgGrossR: -0.1213, avgNetR: -0.186, pf: 0.7527 },
-      'VALUE': { n: 15, winRate: 0.3333, avgGrossR: 0, avgNetR: -0.2132, pf: 0.731 },
       'SWEEP-RECLAIM': { n: 120, winRate: 0.2583, avgGrossR: -0.1734, avgNetR: -0.2373, pf: 0.6852 },
-      'ENGULF-LEVEL': { n: 45, winRate: 0.3778, avgGrossR: 0.1333, avgNetR: -0.2724, pf: 0.7177 },
-      'EQH-SWEEP': { n: 104, winRate: 0.3077, avgGrossR: -0.0769, avgNetR: -0.3106, pf: 0.6405 },
+      'ENGULF-LEVEL': { n: 44, winRate: 0.3864, avgGrossR: 0.1591, avgNetR: -0.2446, pf: 0.7433 },
+      'EQH-SWEEP': { n: 107, winRate: 0.3178, avgGrossR: -0.0467, avgNetR: -0.2819, pf: 0.669 },
       'AVWAP-DEFEND': { n: 65, winRate: 0.2462, avgGrossR: -0.2367, avgNetR: -0.3136, pf: 0.6054 },
-      'EQL-SWEEP': { n: 106, winRate: 0.2736, avgGrossR: -0.1792, avgNetR: -0.3733, pf: 0.5672 },
+      'EQL-SWEEP': { n: 106, winRate: 0.283, avgGrossR: -0.1509, avgNetR: -0.3448, pf: 0.5947 },
       'UTAD': { n: 115, winRate: 0.3043, avgGrossR: -0.087, avgNetR: -0.3848, pf: 0.5687 },
       'COMPRESSION-BREAK': { n: 21, winRate: 0.1905, avgGrossR: -0.3323, avgNetR: -0.387, pf: 0.5184 },
-      'SPRING': { n: 81, winRate: 0.2593, avgGrossR: -0.2222, avgNetR: -0.4639, pf: 0.5025 },
-      'RSI-DIVERGE': { n: 61, winRate: 0.2295, avgGrossR: -0.3115, avgNetR: -0.6448, pf: 0.3729 },
-      'POC-REVERT': { n: 24, winRate: 0.0417, avgGrossR: -0.7689, avgNetR: -0.8015, pf: 0.093 },
-      'THREE-BAR': { n: 165, winRate: 0.2364, avgGrossR: -0.2909, avgNetR: -0.8295, pf: 0.2931 },
-      'PIN-REJECT': { n: 114, winRate: 0.2281, avgGrossR: -0.3158, avgNetR: -0.8769, pf: 0.2717 },
+      'VALUE': { n: 16, winRate: 0.25, avgGrossR: -0.25, avgNetR: -0.4793, pf: 0.4802 },
+      'SPRING': { n: 84, winRate: 0.25, avgGrossR: -0.25, avgNetR: -0.4969, pf: 0.4763 },
+      'RSI-DIVERGE': { n: 60, winRate: 0.2333, avgGrossR: -0.3, avgNetR: -0.6268, pf: 0.3834 },
+      'POC-REVERT': { n: 25, winRate: 0.04, avgGrossR: -0.6795, avgNetR: -0.7126, pf: 0.16 },
+      'THREE-BAR': { n: 168, winRate: 0.2321, avgGrossR: -0.3036, avgNetR: -0.8587, pf: 0.2824 },
+      'PIN-REJECT': { n: 114, winRate: 0.2105, avgGrossR: -0.3684, avgNetR: -0.921, pf: 0.2543 },
       'ABSORB': { n: 5, winRate: 0, avgGrossR: -1, avgNetR: -1.0272, pf: 0 }
     }
   };
@@ -2678,7 +2696,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       }
     }
     var ov = E.overall || {};
-    var txt = 'REPLAY VERDICT (' + (E.settled || 2823) + ' settled 1h trades in '
+    var txt = 'REPLAY VERDICT (' + (E.settled || 2833) + ' settled 1h trades in '
       + (E.src || 'scripts/backtest-omniroute-v701-results.json') + '): overall '
       + (isFinite(fin(ov.avgNetR)) ? fin(ov.avgNetR).toFixed(2) : '-0.21') + 'R net, PF '
       + (isFinite(fin(ov.pf)) ? fin(ov.pf).toFixed(2) : '0.72') + '. '

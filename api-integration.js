@@ -3,7 +3,7 @@
 
    Provides live data feeds for:
    - DXY strength (via Binance USDINDEX futures)
-   - Real yields (via CoinGecko + FRED)
+   - Real yields (via CoinGecko)
    - Liquidation cascades (via Coinglass)
    - Funding rates (via Binance)
    - Economic calendar (via free API)
@@ -26,11 +26,13 @@ var HG_API_CONFIG = {
   coingecko: {
     baseUrl: 'https://api.coingecko.com/api/v3',
     free: true
-  },
-  fred: {
-    baseUrl: 'https://api.stlouisfed.org/fred',
-    key: 'FRED_API_KEY'  /* Get from env */
   }
+  /* FRED was configured here and never called. Its key was the literal
+     string 'FRED_API_KEY' — a placeholder, not a key — and hgGetRealYieldsReal
+     reads CoinGecko's /global, not St. Louis Fed. So the config declared a
+     host the page then dialled in no code path, which is how it turned up on
+     the CSP reachability sweep: a host in the allowlist test with nothing
+     behind it. Removed rather than permitted. */
 };
 
 /* Fetch with timeout and retry logic */
@@ -146,10 +148,21 @@ function hgGetLiquidationCascades(){
       return Promise.resolve(cached.data);
     }
     
-    /* Coinglass liquidation heatmap (free tier) */
+    /* THROUGH THE SAME-ORIGIN PROXY, not straight at the host.
+
+       connect-src does not permit api.coinglass.com, so this fetch was
+       blocked by the browser every 120 seconds — hgFetch retried twice, the
+       catch below returned riskLevel UNKNOWN, and hgComputeRealMacroScore's
+       "-0.15 if cascade" term was therefore permanently zero. One of its
+       four inputs had never once contributed.
+
+       /api/proxy is the pattern this repo already uses for exactly this
+       (Yahoo, CFTC, Frankfurter, Binance): the request is same-origin so
+       'self' covers it, and the host is allowlisted server-side in
+       api/proxy.js where a key can live if the endpoint needs one. */
     var url = HG_API_CONFIG.coinglass.baseUrl + '/liquidation_history?symbol=BTC&interval=1h';
     
-    return hgFetch(url, { timeout: 5000, retries: 2 })
+    return hgFetch('/api/proxy?url=' + encodeURIComponent(url), { timeout: 5000, retries: 2 })
       .then(function(data){
         var liquidations = data && data.data || [];
         var totalLiquidation = liquidations.reduce(function(sum, liq){

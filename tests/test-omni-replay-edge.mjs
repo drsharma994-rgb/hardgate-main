@@ -87,16 +87,28 @@ function tape(n, seed, start){
 /* hg-v703 expected partitions, verified against
    scripts/backtest-omniroute-v701-results.json aggregates.byMechanic. */
 const EXPECT_SUPPRESS = ['PIN-REJECT','RSI-DIVERGE','THREE-BAR'].sort();
+/* SQUEEZE-FIRE joined this set on the 2026-09-12 re-bake and that is the
+   rule working, not drift: it measured −0.0485 over 45 on the 09-10 run,
+   which cleared the −0.10 demote bar, and −0.1235 over 44 on the 09-12 one,
+   which does not. The set is COMPUTED from the table, so a kind that gets
+   worse falls into it without anyone editing a list. */
 const EXPECT_DEMOTE = ['AVWAP-DEFEND','BOS-RETEST','COMPRESSION-BREAK','DONCHIAN-DRIVE',
   'ENGULF-LEVEL','EQH-SWEEP','EQL-SWEEP','EXHAUST-REVERT','FVG-FILL','HTF-PULLBACK',
-  'POC-REVERT','SPRING','SWEEP-RECLAIM','TREND-RECLAIM','UTAD'].sort();
+  'POC-REVERT','SPRING','SQUEEZE-FIRE','SWEEP-RECLAIM','TREND-RECLAIM','UTAD'].sort();
 const EXPECT_PREFER = ['AVWAP-RECLAIM','CUSUM-SHIFT'].sort();
 
 console.log('== baked table matches v701 artifact ==');
 {
   const W = boot();
   const E = W.HG_OMNI_REPLAY_EVIDENCE;
-  ok(E && E.settled === 2823, 'OMNIROUTE bake settled=2823');
+  /* READ FROM THE ARTIFACT, not restated here. This assertion held 2823 as
+     a literal while the JSON beside it had been re-baked to 2833, so the
+     test and the module drifted from their own source together and the only
+     thing that noticed was the avgNetR check below. A constant copied out
+     of a file is a constant that will disagree with it eventually. */
+  const artHead = JSON.parse(read('scripts/backtest-omniroute-v701-results.json'));
+  ok(E && E.settled === artHead.aggregates.overall.n,
+     'OMNIROUTE bake settled=' + artHead.aggregates.overall.n + ' — taken from the artifact');
   ok(E.suppressNetR === -0.60 && E.suppressMinN === 60, 'suppress bar −0.60 at n≥60');
   ok(E.demoteNetR === -0.10 && E.demoteMinN === 30, 'demote bar −0.10 at n≥30');
   ok(E.preferNetR === 0.15 && E.preferMinN === 60, 'prefer bar +0.15 at n≥60');
@@ -128,7 +140,13 @@ console.log('\n== suppress / demote / prefer are computed from the table ==');
      'suppress kinds: ' + suppress.join(', '));
   ok(JSON.stringify(demote) === JSON.stringify(EXPECT_DEMOTE),
      'demote kinds: ' + demote.join(', '));
-  ok(W.hgOmniDemotedKindCount() === 18, '18 kinds carry an action (3 suppress + 15 demote)');
+  /* 19 on the 09-12 bake, not 18: SQUEEZE-FIRE crossed the demote bar. The
+     count is derived from the two sets above so it cannot disagree with
+     them. */
+  const expectAction = EXPECT_SUPPRESS.length + EXPECT_DEMOTE.length;
+  ok(W.hgOmniDemotedKindCount() === expectAction,
+     expectAction + ' kinds carry an action (' + EXPECT_SUPPRESS.length + ' suppress + '
+     + EXPECT_DEMOTE.length + ' demote)');
   ok(!W.hgOmniKindDemotion('ORB'), 'ORB near-even (net +0.005/218) is not demoted');
   ok(!W.hgOmniKindPrefer('ORB'), 'ORB is not preferred');
   /* SPRING (−0.464/81) meets a −0.40 suppress bar but the action spec keeps
@@ -151,8 +169,16 @@ console.log('\n== suppress / demote / prefer are computed from the table ==');
      'RETIRED: MMOVE prefer (v531 +0.058/188 → v701 +0.024/191, under the +0.15 bar) — neutral');
   ok(!W.hgOmniKindPrefer('NR7-BREAK') && !W.hgOmniKindDemotion('NR7-BREAK'),
      'RETIRED: NR7-BREAK prefer (v531 +0.052/150 → v701 −0.059/136) — neutral');
-  ok(!W.hgOmniKindDemotion('VWAP-REVERT') && !W.hgOmniKindDemotion('SQUEEZE-FIRE'),
-     'near-flat book (VWAP-REVERT −0.094, SQUEEZE-FIRE −0.049) stays neutral');
+  /* VWAP-REVERT is still the near-flat case at −0.096/319. SQUEEZE-FIRE is
+     no longer: −0.049/45 on the 09-10 run was inside the −0.10 bar, and
+     −0.1235/44 on the 09-12 one is not, so it demotes. Both halves asserted
+     rather than one dropped, because "still neutral" and "newly demoted"
+     are different claims and the second is the one that changed. */
+  ok(!W.hgOmniKindDemotion('VWAP-REVERT'),
+     'near-flat book (VWAP-REVERT −0.096/319) stays neutral');
+  const sqf = W.hgOmniKindDemotion('SQUEEZE-FIRE');
+  ok(sqf && sqf.action === 'demote',
+     'SQUEEZE-FIRE −0.1235/44 demotes on the 09-12 bake (it was −0.0485/45 and neutral)');
   ok(!W.hgOmniKindPrefer('VOL-EXPANSION'), 'VOL-EXPANSION n=30 is under the prefer floor');
   ok(!W.hgOmniKindDemotion('EDGE'), 'house extras with no baked row fail-open');
   ok(!W.hgOmniKindDemotion('VALUE'), 'VALUE n=15 is under the demote floor');
@@ -182,8 +208,16 @@ console.log('\n== formation: suppress refuses, demote paints, VALUE keeps formin
   const pinForm = W.hgOmniFormTicket(pinPl, pinHit, rows, { livePx: LIVE, sym: 'BTCUSD' });
   ok(pinForm && pinForm.ok === false, 'PIN-REJECT (suppress tier) formation refuses');
   ok(/replay-suppressed/.test(String(pinForm.reason || '')), 'reason is the named suppression line');
-  ok(/n=114/.test(String(pinForm.reason || '')) && /-0\.877/.test(String(pinForm.reason || '')),
-     'suppression reason carries the measured row (n=114, net −0.877)');
+  /* the row is read from the bake rather than restated, so the reason line
+     is checked against whatever the artifact currently says PIN-REJECT
+     measured — it was −0.877/114 on the 09-10 run and −0.921/114 on this
+     one, and the assertion should follow the evidence, not pin it */
+  const pinRow = W.HG_OMNI_REPLAY_EVIDENCE.kinds['PIN-REJECT'];
+  const pinReason = String(pinForm.reason || '');
+  ok(new RegExp('n=' + pinRow.n).test(pinReason)
+     && pinReason.indexOf(String(pinRow.avgNetR)) >= 0,
+     'suppression reason carries the measured row (n=' + pinRow.n + ', net '
+     + pinRow.avgNetR + ')');
 
   /* demote tier: SPRING (−0.464/81) FORMS and paints its row — never leads */
   const spHit = { kind: 'SPRING', dir: 'long', level: LIVE - 420, why: 'spring' };
@@ -340,8 +374,10 @@ console.log('\n== OMNIROUTE banner cites the replay ==');
   const html = W.hgOmniDeskStanceBannerHtml();
   ok(/REPLAY STANCE/.test(html) && /backtest-omniroute-v701-results/.test(html),
      'banner cites the v701 artifact');
-  ok(/3 kinds suppressed/.test(html) && /15 demoted/.test(html),
-     'banner names the suppress + demote counts');
+  ok(new RegExp(EXPECT_SUPPRESS.length + ' kinds suppressed').test(html)
+     && new RegExp(EXPECT_DEMOTE.length + ' demoted').test(html),
+     'banner names the suppress + demote counts (' + EXPECT_SUPPRESS.length + ' / '
+     + EXPECT_DEMOTE.length + ')');
   ok(/conviction cert\s+confers no lead\/rank privilege/.test(html.replace(/\s+/g, ' ')),
      'banner states the conviction lead-block');
   ok(/AVWAP-RECLAIM/.test(html) && /CUSUM-SHIFT/.test(html), 'banner names the two prefer kinds');

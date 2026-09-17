@@ -21,6 +21,13 @@ const ALLOWED_HOSTS = new Set([
   'api.frankfurter.app',
   // gold COT — CFTC Public Reporting (weekly managed-money positioning)
   'publicreporting.cftc.gov',
+  /* api-integration.js liquidation cascades. It dialled this host directly
+     for as long as it has existed, and connect-src has never permitted it,
+     so the browser blocked every request and hgComputeRealMacroScore's
+     cascade term scored zero on every evaluation. Same-origin through here
+     is what makes the call possible at all; if the endpoint later needs a
+     key, this is the side of the wire it can live on. */
+  'api.coinglass.com',
   /* Binance. NOT here until now, which is why every Binance-dependent read
      failed for a user in a geo-blocked country: the browser gets HTTP 451,
      binance.js returns null without saying why, and the cards then reported

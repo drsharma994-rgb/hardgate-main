@@ -112,10 +112,20 @@ console.log('\n== DESK VERDICT: baked replay clauses, cited to their artifacts =
   ok(/BOTH kinds/.test(op) && /backtest-omnipresent-results\.json/.test(op),
      'OMNIPRESENT replay clause: both kinds negative, cited');
   ok(W.hgFwdDeskVerdictHtml(null) === '', 'no tab -> empty string, never a throw');
-  /* the baked numbers match the artifacts on disk — the citation is real */
+  /* THE BAKED NUMBERS MATCH THE ARTIFACTS ON DISK — and this now checks
+     that, which it did not. It compared the artifact against -0.2112/2823
+     written out here, so what it really asserted was that the artifact
+     equalled a literal in a test file. When the artifact was re-baked on
+     2026-09-12 to -0.216/2833 the check failed while the module's own bake
+     — the thing the citation is about — went on disagreeing with it
+     unexamined. Read both sides. */
   const orJson = JSON.parse(read('scripts/backtest-omniroute-v701-results.json'));
-  ok(Math.abs(orJson.aggregates.overall.avgNetR - (-0.2112)) < 1e-4 && orJson.aggregates.overall.n === 2823,
-     'omniroute artifact really says -0.2112R over n=2823');
+  const orBake = W.HG_OMNI_REPLAY_EVIDENCE;
+  ok(orBake && orBake.overall, 'omniroute exposes its baked evidence');
+  ok(Math.abs(orJson.aggregates.overall.avgNetR - orBake.overall.avgNetR) < 1e-4
+     && orJson.aggregates.overall.n === orBake.overall.n,
+     'omniroute bake cites the artifact faithfully ('
+     + orBake.overall.avgNetR + 'R over n=' + orBake.overall.n + ')');
   const opJson = JSON.parse(read('scripts/backtest-omnipresent-results.json'));
   ok(opJson.aggregates.byKind['OP-HIGH-REJECT'].avgNetR < 0 && opJson.aggregates.byKind['OP-LOW-REJECT'].avgNetR < 0,
      'omnipresent artifact really says both kinds net-negative');

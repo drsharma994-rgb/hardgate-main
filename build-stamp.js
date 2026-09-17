@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v787',
-  pack: 'the 80PERCENT tab now looks like the rest of the app \u2014 it had been painting dark-theme Tailwind colours onto a light-theme desk and hand-rolling a card the stylesheet already ships, and the toggle it drew was malformed markup',
+  version: 'hg-v788',
+  pack: 'the five standing test failures are fixed at their causes \u2014 a liquidation feed the CSP had always blocked, a macro-feeds module that was never written, and a replay bake still quoting a run the artifact beside it had replaced',
   built: '2026-09-17T00:00:00Z'
 };
 
