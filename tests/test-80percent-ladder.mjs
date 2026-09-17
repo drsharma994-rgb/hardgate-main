@@ -2533,6 +2533,175 @@ console.log('\n== the ledger is read at the bar for the number of things being t
   }
 }
 
+console.log('\n== the trade is priced at the fill you can actually get ==');
+{
+  /* THE PLAN'S ENTRY IS THE CLOSE OF THE CANDLE THAT FIRED IT. By the time
+     anyone reads the card, gold is somewhere else, and every number beside
+     that entry is arithmetic about a fill nobody can still get.
+
+     The tab already knew. MOVED ON has said since hg-v783 that "part of
+     the move is gone and the rest of the target is closer than the card
+     says" — an admission in prose that the number two lines above is
+     wrong, with no attempt to say by how much. Same shape as the cost
+     verdict before hg-v790. */
+  const P = { dir: 'long', entry: 100, stop: 96, t1: 101, atr: 1 };
+  const sig = { dir: 'long', plan: P };
+  const lp = ctx.hg80LivePlan(sig, 100.5);
+  ok(near(lp.risk, 4.5) && near(lp.reward, 0.5),
+     'half a point past a 100 entry: risk 4.5, reward 0.5 — both moved, and the same way');
+  ok(near(lp.grossBe, 4.5 / 5), `which breaks even at ${(lp.grossBe * 100).toFixed(2)}%`);
+  ok(near(lp.planGrossBe, 4 / 5), 'against the card\'s 80.00%, carried so the gap is printable');
+  ok(near(lp.movedFrac, 0.5), 'and half the target is recorded as gone');
+  ok(lp.better === false, 'flagged as the worse direction');
+
+  /* IT CUTS BOTH WAYS, and is reported both ways */
+  const good = ctx.hg80LivePlan(sig, 99);
+  ok(near(good.risk, 3) && near(good.reward, 2), 'a point BELOW the entry: less risk, more reward');
+  ok(good.grossBe < good.planGrossBe && good.better === true,
+     `a fill there breaks even at ${(good.grossBe * 100).toFixed(2)}%, below the card's`);
+
+  /* SHORTS THE RIGHT WAY ROUND */
+  const sS = { dir: 'short', plan: { dir: 'short', entry: 100, stop: 104, t1: 99, atr: 1 } };
+  const sl = ctx.hg80LivePlan(sS, 99.5);
+  ok(near(sl.risk, 4.5) && near(sl.reward, 0.5) && sl.better === false,
+     'for a short, DOWN is the direction that eats the target');
+  ok(ctx.hg80LivePlan(sS, 100.5).better === true, 'and UP is the one that improves the fill');
+
+  /* PAST A LEVEL THERE IS NO TRADE LEFT TO PRICE. A negative "risk" is not
+     a smaller risk, it is the other side of the level. */
+  ok(ctx.hg80LivePlan(sig, 95) === null, 'below the stop there is nothing to re-price');
+  ok(ctx.hg80LivePlan(sig, 96) === null, 'nor exactly on it');
+  ok(ctx.hg80LivePlan(sig, 102) === null, 'past the target there is nothing left to take');
+  ok(ctx.hg80LivePlan(sig, 101) === null, 'nor exactly on it');
+  ok(ctx.hg80LivePlan(sig, NaN) === null && ctx.hg80LivePlan(null, 100) === null,
+     'and no price or no plan means no claim');
+
+  /* the identity that has to hold at every price in between */
+  for (const px of [96.5, 97, 98.5, 99.9, 100, 100.2, 100.9]){
+    const x = ctx.hg80LivePlan(sig, px);
+    ok(near(x.grossBe, x.risk / (x.risk + x.reward)),
+       `at ${px} the bar is risk/(risk+reward) — the same arithmetic the card uses`);
+    ok(near(x.risk + x.reward, 5), 'and risk plus reward is the stop-to-target span, always');
+  }
+
+  /* THE COST IS PRICED ON WHAT IS LEFT. The round trip does not shrink
+     when the target does. */
+  const be = ctx.hg80LiveBe(lp, 0.0002);
+  ok(near(be.cost, 100.5 * 0.0002), 'the round trip is a fraction of the live price');
+  ok(near(be.target, lp.reward), 'charged against the REMAINING target, not the original one');
+  ok(be.net > be.gross, 'so the cost-adjusted bar sits above the gross one');
+  ok(ctx.hg80LiveBe(null, 0.0002) === null && ctx.hg80LiveBe(lp, NaN) === null,
+     'and no plan or no venue means no verdict');
+}
+
+console.log('\n== which arithmetic decides is not symmetric ==');
+{
+  /* GETTING THIS BACKWARDS WOULD MAKE THE TAB RECOMMEND THE ONE THING IT
+     EXISTS TO REFUSE. Price short of the entry has not offered you that
+     fill — the trade on offer is a limit at the spec's entry, with the
+     CARD's geometry. Promoting it on numbers three dollars better is the
+     same untruth hg-v790 removed, wearing a different hat. */
+  const def = { tf: '15m', sec: 900, bars: 320, band: 'scalp' };
+  const out = ctx.hg80ScanTf(series(320, { tfSec: 900, endHour: 15, tail: 3 }), def,
+                             ctx.hg80VenueRt());
+  const v = out.res.signals.filter(x => x.status === 'open').pop();
+  const E = v.plan.entry;
+
+  const waiting = ctx.hg80Quality(v, out, ctx.hg80LiveGrade(v, E - 3), E - 3);
+  ok(waiting.live && waiting.live.better === true, 'the fixture gives a genuinely better fill');
+  ok(waiting.live.grossBe < waiting.live.planGrossBe,
+     `worth ${((waiting.live.planGrossBe - waiting.live.grossBe) * 100).toFixed(1)} points, on paper`);
+  ok(waiting.repriced === false,
+     'but the re-price does NOT bind — that fill is not the one being offered');
+  ok(waiting.verdict.key === ctx.hg80CostVerdict(out.be).key,
+     'so the card\'s own verdict is what decides it');
+
+  const past = ctx.hg80Quality(v, out, ctx.hg80LiveGrade(v, E + 0.9), E + 0.9);
+  ok(past.repriced === true,
+     'past the entry it DOES bind — the card\'s fill is gone and this is the only one left');
+  ok(past.verdict.target < out.be.target,
+     `and it is priced against the ${past.verdict.target.toFixed(2)} that remains, not the `
+     + `${out.be.target.toFixed(2)} the close offered`);
+  ok(near(past.verdict.target, past.live.reward, 1e-9),
+     'which is exactly the live plan\'s remaining reward, not a separate estimate');
+
+  /* RANKING: intact ahead of drifted, and drifted in proportion to what
+     the drift cost — not a flat penalty that scores two ticks and most of
+     the target the same */
+  const atEntry = ctx.hg80Quality(v, out, ctx.hg80LiveGrade(v, E), E);
+  const near1   = ctx.hg80Quality(v, out, ctx.hg80LiveGrade(v, E + 0.4), E + 0.4);
+  const far1    = ctx.hg80Quality(v, out, ctx.hg80LiveGrade(v, E + 1.7), E + 1.7);
+  ok(atEntry.score < near1.score && near1.score < far1.score,
+     `at the entry ranks ahead of slightly past, which ranks ahead of mostly gone `
+     + `(${atEntry.score.toFixed(1)} < ${near1.score.toFixed(1)} < ${far1.score.toFixed(1)})`);
+  ok((far1.score - near1.score) > (near1.score - atEntry.score),
+     'and the gap widens with the loss rather than stepping by a constant');
+  ok(atEntry.score < waiting.score,
+     'a setup you can fill now ranks ahead of one still waiting for its level');
+
+  /* THE SPREAD EATS WHAT IS LEFT. A rung that could pay at the close can
+     be unable to pay now, and that reaches the verdict. */
+  const eaten = ctx.hg80Quality(v, out, ctx.hg80LiveGrade(v, E + 1.7), E + 1.7);
+  ok(eaten.verdict.share > 1 || eaten.verdict.key === 'gone' || eaten.verdict.key === 'negative',
+     `with most of the target taken the round trip is ${(eaten.verdict.share * 100).toFixed(0)}% `
+     + 'of what remains');
+  ok(eaten.pays === false, 'so it does not pay, whatever the card said at the close');
+
+  /* and with no live price nothing is re-priced and nothing changes */
+  const blind = ctx.hg80Quality(v, out, null, NaN);
+  ok(blind.live === null && blind.repriced === false,
+     'no live price means no re-pricing — the tab makes no claim about a fill it cannot see');
+  ok(blind.verdict.key === ctx.hg80CostVerdict(out.be).key,
+     'and the card\'s own arithmetic is what stands');
+}
+
+console.log('\n== and the card shows the re-priced trade, both ways ==');
+{
+  const txt = h => String(h).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  const def = { tf: '15m', sec: 900, bars: 320, band: 'scalp' };
+  const out = ctx.hg80ScanTf(series(320, { tfSec: 900, endHour: 15, tail: 3 }), def,
+                             ctx.hg80VenueRt());
+  const v = out.res.signals.filter(x => x.status === 'open').pop();
+  const E = v.plan.entry;
+  const card = px => txt(ctx.reprintHtml(ctx.hg80Quality(v, out, ctx.hg80LiveGrade(v, px), px),
+                                         'XM'));
+
+  const bad = card(E + 1.2);
+  ok(/AT THE PRICE YOU CAN GET NOW/.test(bad), 'the drifted card re-prices the trade');
+  ok(/points harder/.test(bad) && /of the target has already been taken/.test(bad),
+     'saying how much harder, and why');
+  ok(/The entry on the card is gone/.test(bad),
+     'and that the entry beside it is no longer available');
+  ok(/round trip at XM/.test(bad) && /that is left/.test(bad),
+     'with the venue charged against what remains');
+
+  /* THE FAVOURABLE HALF NEEDS THE OPPOSITE WARNING. Better geometry is not
+     a better trade — it is a fill the strategy never asked for, and
+     arithmetic about a hypothetical fill is not evidence about it. */
+  const good = card(E - 3);
+  ok(/points easier on the arithmetic/.test(good), 'the favourable case is shown too');
+  ok(/That is not the same as a better trade/.test(good),
+     'with the warning that makes it safe to show');
+  ok(/buying a pullback the rules have not finished waiting for/.test(good),
+     'naming what taking it would actually be');
+  ok(/nothing measured on this tab says the edge holds at an entry the strategy never asked for/
+       .test(good),
+     'and that no evidence here covers that fill');
+  ok(new RegExp('spec\'s entry is ' + E.toFixed(2)).test(good),
+     `pointing at the level to wait for (${E.toFixed(2)})`);
+
+  /* A ROUNDING DIFFERENCE IS NOT A RE-PRICE */
+  ok(card(E) === '', 'at the entry there is nothing to re-price');
+  ok(card(E + 0.001) === '', 'and a drift below the threshold says nothing at all');
+  ok(ctx.HG_P80_REPRICE_MIN_FRAC > 0 && ctx.HG_P80_REPRICE_MIN_FRAC < 0.2,
+     `the threshold is a small share of the target (${ctx.HG_P80_REPRICE_MIN_FRAC})`);
+
+  ok(!/NaN|undefined|Infinity/.test(bad + good), 'and nothing renders as NaN or undefined');
+
+  /* it reaches the panel */
+  ok(/reprintHtml\(c[and]\.q, vn\)/.test(CODE), 'the setups panel renders it on the cards');
+}
+
 console.log('\n== the tab counts the trades a desk could have held, not the firings ==');
 {
   /* THE DIVERGENCE. scripts/walk-80percent.mjs has kept ONE POSITION AT A

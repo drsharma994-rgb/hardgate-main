@@ -517,6 +517,85 @@ function hg80LiveGrade(sig, px){
   } catch (e){ return null; }
 }
 
+/* ---------------------------------------------------------------------
+   WHAT THE TRADE IS WORTH AT THE PRICE YOU CAN ACTUALLY GET
+
+   The plan's entry is the close of the candle that fired it. By the time
+   anyone reads the card, gold is somewhere else — and every number beside
+   that entry is arithmetic about a fill nobody can still get. "You risk
+   10.16 to make 1.91, so it has to win 84.2%" describes a trade that was
+   available at the close and may not be available now.
+
+   The tab already knew this. The MOVED ON grade has said since hg-v783
+   that "part of the move is gone and the rest of the target is closer than
+   the card says" — an admission in prose that the number two lines above
+   is wrong, with no attempt to say by how much. That is the same shape as
+   the cost verdict before hg-v790: a discrepancy acknowledged in words
+   instead of carried into the arithmetic.
+
+   So the plan is re-priced at the live price. Same stop, same target, the
+   fill where gold actually is:
+
+     LONG, price ABOVE the entry   risk grows, reward shrinks, the bar rises
+     LONG, price BELOW the entry   risk shrinks, reward grows, the bar FALLS
+
+   It cuts both ways and is reported both ways. A setup still waiting for
+   its pullback is worth MORE than the card says, and a reader who only
+   ever hears the bad half learns to discount the good half too.
+
+   THE BAR CAN MOVE A LONG WAY. A long that has run half its 0.75 ATR
+   target needs 4.5 ATR of risk for 0.375 of reward — 92.3% instead of
+   84.2%. The venue's round trip has not shrunk with the target, so a rung
+   that paid at the close can be unable to pay now, and that reaches the
+   count rather than a footnote.
+   --------------------------------------------------------------------- */
+function hg80LivePlan(sig, px){
+  var p = sig && sig.plan;
+  var v = fin(px);
+  if (!p || !isFinite(v) || !(v > 0)) return null;
+  var long = p.dir === 'long';
+  var E = fin(p.entry), S = fin(p.stop), T = fin(p.t1);
+  if (!isFinite(E) || !isFinite(S) || !isFinite(T)) return null;
+
+  var risk = long ? (v - S) : (S - v);
+  var reward = long ? (T - v) : (v - T);
+  /* past the stop or past the target there is no trade left to price, and
+     a negative "risk" is not a smaller risk — it is the other side of the
+     level. Those two cases are the grades' job, not this one's. */
+  if (!(risk > 0) || !(reward > 0)) return null;
+
+  var planRisk = Math.abs(E - S), planReward = Math.abs(T - E);
+  var moved = long ? (v - E) : (E - v);
+  return {
+    dir: p.dir, entry: v, stop: S, t1: T,
+    risk: risk, reward: reward,
+    rr: risk / reward,
+    grossBe: risk / (risk + reward),
+    planGrossBe: (planRisk + planReward) > 0 ? planRisk / (planRisk + planReward) : NaN,
+    /* how far the fill has drifted, as a share of the target — the one
+       number that says whether this is a rounding difference or a
+       different trade */
+    moved: moved,
+    movedFrac: planReward > 0 ? (moved / planReward) : NaN,
+    better: moved < 0,
+    stopPct: (risk / v) * 100,
+    atr: fin(p.atr)
+  };
+}
+
+/* The live plan's cost verdict, priced on the REMAINING target rather than
+   the one the close offered. The round trip does not shrink when the
+   target does. */
+function hg80LiveBe(lp, rtFrac){
+  if (!lp) return null;
+  var rt = fin(rtFrac);
+  if (!isFinite(rt) || rt < 0) return null;
+  var cost = lp.entry * rt;
+  return { gross: lp.grossBe, cost: cost, target: lp.reward, risk: lp.risk,
+           rtFrac: rt,
+           net: (cost + lp.risk) / (lp.risk + lp.reward) };
+}
+
 /* THE FIVE GRADES, IN WORDS A DESK USES, and — the part that matters —
    whether each one is still a trade. `act` false is what keeps a dead setup
    out of the "you could act on" count. */
@@ -556,6 +635,56 @@ function bookChipHtml(sig){
     + ' on this rung had not finished when this one fired. Taking both is one position twice '
     + 'over, not two trades — and it is why this firing is not counted in the book the '
     + 'measurements on this tab are made on.</div>';
+}
+
+/* THE RE-PRICED TRADE, ON THE CARD, BESIDE THE ONE IT REPLACES. Shown
+   whenever the fill has moved enough to change the answer — in either
+   direction, because a reader who only ever hears the bad half learns to
+   discount the good half too. */
+var P80_REPRICE_MIN_FRAC = 0.02;   /* below this the drift is a rounding difference */
+
+function reprintHtml(q, venue){
+  if (!q || !q.live) return '';
+  var lp = q.live;
+  if (!isFinite(lp.movedFrac) || Math.abs(lp.movedFrac) < P80_REPRICE_MIN_FRAC) return '';
+  var worse = !lp.better;
+  var col = worse ? 'var(--veto)' : 'var(--pass)';
+  var pts = (lp.grossBe - lp.planGrossBe) * 100;
+
+  var h = '<div class="note" style="margin-top:4px;padding:3px 6px;border-left:3px solid '
+    + col + '"><b>AT THE PRICE YOU CAN GET NOW (' + num(lp.entry) + '):</b> you would risk <b>'
+    + num(lp.risk) + '</b> to make <b>' + num(lp.reward) + '</b> — 1:' + lp.rr.toFixed(2)
+    + ', which breaks even at <b style="color:' + col + '">' + (lp.grossBe * 100).toFixed(2)
+    + '%</b> against the card\'s ' + (lp.planGrossBe * 100).toFixed(2) + '%. ';
+  h += worse
+    ? ('<b>' + Math.abs(pts).toFixed(1) + ' points harder</b> than the setup that fired, because '
+       + (100 * Math.abs(lp.movedFrac)).toFixed(0) + '% of the target has already been taken. '
+       + 'The entry on the card is gone; this is what is left of it.')
+    /* THE FAVOURABLE HALF NEEDS THE OPPOSITE WARNING. Better geometry is
+       not a better trade: entering below the spec's entry on a long is
+       buying a pullback the spec has not finished waiting for, and nothing
+       measured anywhere on this tab says the edge survives at a fill the
+       strategy did not ask for. Arithmetic about a hypothetical fill is
+       not evidence about that fill. */
+    : ('<b>' + Math.abs(pts).toFixed(1) + ' points easier</b> on the arithmetic — a fill here is '
+       + 'further from the stop and closer to the target. <b>That is not the same as a better '
+       + 'trade.</b> The spec\'s entry is ' + num(lp.entry + (lp.dir === 'long' ? -lp.moved : lp.moved))
+       + ' and gold has not come back to it; taking a fill here is buying a pullback the rules '
+       + 'have not finished waiting for, and nothing measured on this tab says the edge holds at '
+       + 'an entry the strategy never asked for. Waiting for the level is what the card costs '
+       + 'out.');
+
+  /* and whether the venue can still be paid out of what is left */
+  if (q.repriced && q.verdict && q.verdict.key !== 'unknown'){
+    var lv = q.verdict;
+    h += ' <b>The round trip at ' + esc(venue || 'this venue') + '</b> is ' + num(lv.cost)
+      + ' against the <b>' + num(lp.reward) + '</b> that is left — '
+      + (lv.share * 100).toFixed(0) + '% of it'
+      + ((lv.key === 'gone' || lv.key === 'negative')
+          ? ', which is why this is no longer a trade that can pay here.'
+          : '.');
+  }
+  return h + '</div>';
 }
 
 function liveChipHtml(grade, px){
@@ -637,10 +766,41 @@ function hg80CostVerdict(be){
    it deviates, so a thin stop lowers a setup's rank and says so — it does
    not silently remove the trade the spec asked for.
    --------------------------------------------------------------------- */
-function hg80Quality(sig, rung, grade){
-  var v = hg80CostVerdict(rung && rung.be);
-  var stopPct = (sig && sig.plan && isFinite(fin(sig.plan.stopPct)))
+function hg80Quality(sig, rung, grade, livePx){
+  var planV = hg80CostVerdict(rung && rung.be);
+
+  /* PRICED WHERE GOLD IS, NOT WHERE IT WAS. A setup whose fill has drifted
+     halfway to its target is a different trade from the one the card was
+     built on: more risk, less reward, a higher bar, and a round trip that
+     did not shrink when the target did. See hg80LivePlan. */
+  var lp = hg80LivePlan(sig, livePx);
+  var liveBe = lp ? hg80LiveBe(lp, rung && rung.be ? rung.be.rtFrac : NaN) : null;
+  var liveV = liveBe ? hg80CostVerdict(liveBe) : null;
+
+  /* WHICH ARITHMETIC DECIDES IS NOT SYMMETRIC, and getting this backwards
+     would make the tab recommend the one thing it exists to refuse.
+
+       AT OR PAST THE ENTRY   the card's fill is gone. The only trade on
+                              offer is the one at the live price, so the
+                              live arithmetic IS the trade and it binds.
+
+       STILL SHORT OF IT      the trade on offer is the card's: a limit at
+                              the spec's entry, waiting. That fill has the
+                              card's geometry, so the CARD's arithmetic
+                              decides. A hypothetical fill three dollars
+                              better is not on offer — counting it would
+                              promote a setup on numbers nobody can get,
+                              which is the exact untruth hg-v790 removed.
+
+     The favourable re-price is still SHOWN, with what it is worth and what
+     it is not. It just does not get a vote. */
+  var repriceBinds = !!(lp && !lp.better);
+  var v = repriceBinds ? liveV : planV;
+
+  /* the stop distance a fill HERE would have, not the one the close had */
+  var planStopPct = (sig && sig.plan && isFinite(fin(sig.plan.stopPct)))
     ? fin(sig.plan.stopPct) : NaN;
+  var stopPct = (lp && !lp.better && isFinite(fin(lp.stopPct))) ? fin(lp.stopPct) : planStopPct;
   var underFloor = isFinite(stopPct) && stopPct < P80_STOP_FLOOR;
 
   /* 'unknown' makes NO claim in either direction. With the venue unreadable
@@ -664,14 +824,28 @@ function hg80Quality(sig, rung, grade){
      both measured and decisive; the rest break ties. */
   var score = 0;
   score += isFinite(v.share) ? (v.share * 100) : 50;      /* % of the win the venue takes */
-  score += (gradeRank[grade] == null ? 1 : gradeRank[grade]) * 8;
+  /* HOW MUCH HARDER THE DRIFT HAS MADE IT, in points of required accuracy.
+     This replaces a flat penalty for MOVED ON with the size of what was
+     actually lost: a setup two ticks past its entry and one that has run
+     most of its target were both worth the same +8 before, and they are
+     not the same trade. */
+  if (repriceBinds && isFinite(lp.grossBe) && isFinite(lp.planGrossBe)){
+    /* points of required accuracy the drift has already cost. A setup two
+       ticks past its entry and one that has run most of its target were
+       both a flat +8 before, and they are not the same trade. */
+    score += (lp.grossBe - lp.planGrossBe) * 100;
+  }
+  /* a setup still WAITING for its entry has lost nothing, so it carries no
+     drift penalty — and earns no bonus for a fill it is not offering */
+  score += (gradeRank[grade] == null ? 1 : gradeRank[grade]) * 2;
   score += vi * 4;                                        /* SPEC ahead of MID ahead of WIDE */
   score += underFloor ? 15 : 0;
   score += doubles ? 12 : 0;
 
   return { score: score, pays: pays, verdict: v, costShare: v.share,
            stopPct: stopPct, underFloor: underFloor, gradeRank: gradeRank[grade],
-           doubles: doubles };
+           doubles: doubles, live: lp, liveBe: liveBe, planVerdict: planV,
+           repriced: repriceBinds };
 }
 
 /* ---------------------------------------------------------------------
@@ -2939,11 +3113,12 @@ function simpleSetupsHtml(rungs, livePx){
   for (k = 0; k < cands.length; k++){
     cands[k].grade = hg80LiveGrade(cands[k].s, spot);
     cands[k].act = hg80LiveActs(cands[k].grade);
-    cands[k].q = hg80Quality(cands[k].s, cands[k].r, cands[k].grade);
+    cands[k].q = hg80Quality(cands[k].s, cands[k].r, cands[k].grade, spot);
   }
   /* THREE BUCKETS. The arithmetic is binding now: a rung the tab has already
      computed cannot pay at this venue does not get counted as one you could
      act on, any more than one price has run past does. */
+  var vn = (__p.venue && __p.venue.venue) || null;
   var actable = cands.filter(function(c){ return c.act && c.q.pays; });
   var noPay   = cands.filter(function(c){ return c.act && !c.q.pays; });
   var dead    = cands.filter(function(c){ return !c.act; });
@@ -2979,7 +3154,7 @@ function simpleSetupsHtml(rungs, livePx){
         (ca.fresh ? '<span class="stamp pass">FIRED ON THE LAST CLOSED CANDLE</span>'
                   : '<span class="stamp pass">STILL OPEN</span> <span class="note">neither '
                     + 'the stop nor the target was touched in the bars fetched</span>')
-        + liveChipHtml(ca.grade, spot) + bookChipHtml(ca.s));
+        + liveChipHtml(ca.grade, spot) + reprintHtml(ca.q, vn) + bookChipHtml(ca.s));
     }
     if (noPay.length){
       h += '<div class="p80-band"><span class="p80-band-k">Cannot pay here</span>'
@@ -2996,7 +3171,7 @@ function simpleSetupsHtml(rungs, livePx){
         var cn = noPay[k];
         h += simpleCardHtml(cn.s, cn.r,
           '<span class="stamp veto">CANNOT PAY AT THIS VENUE</span>'
-          + liveChipHtml(cn.grade, spot) + bookChipHtml(cn.s));
+          + liveChipHtml(cn.grade, spot) + reprintHtml(cn.q, vn) + bookChipHtml(cn.s));
       }
     }
     if (dead.length){
@@ -3007,7 +3182,7 @@ function simpleSetupsHtml(rungs, livePx){
         var cd = dead[k];
         h += simpleCardHtml(cd.s, cd.r,
           '<span class="stamp veto">NO LONGER TAKEABLE</span>'
-          + liveChipHtml(cd.grade, spot) + bookChipHtml(cd.s));
+          + liveChipHtml(cd.grade, spot) + reprintHtml(cd.q, vn) + bookChipHtml(cd.s));
       }
     }
     return h + '</div>';
@@ -4426,6 +4601,10 @@ W.hg80AutoStop       = hg80AutoStop;
 W.hg80AutoMs         = hg80AutoMs;
 W.hg80AutoSet        = hg80AutoSet;
 W.hg80AutoValid      = hg80AutoValid;
+W.hg80LivePlan       = hg80LivePlan;
+W.hg80LiveBe         = hg80LiveBe;
+W.reprintHtml        = reprintHtml;
+W.HG_P80_REPRICE_MIN_FRAC = P80_REPRICE_MIN_FRAC;
 W.hg80AutoCtlHtml    = hg80AutoCtlHtml;
 W.HG_P80_AUTO_OPTS   = P80_AUTO_OPTS;
 W.HG_P80_AUTO_LS_KEY = P80_AUTO_LS_KEY;

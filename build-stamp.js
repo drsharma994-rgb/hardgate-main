@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v795',
-  pack: 'the 80PERCENT tab\u2019s auto-update is now OFF / 1m / 5m on the tab itself, remembered across reloads — and a missing stored value no longer reads as a deliberate OFF, which would have shipped every fresh reader the opposite of the default',
+  version: 'hg-v796',
+  pack: 'the 80PERCENT tab prices every setup at the fill you can actually get — a card that has drifted half its target is re-costed on what is left, which can take the bar from 84% to 92% and hand the whole remaining target to the spread, and that now decides the count instead of a sentence admitting it',
   built: '2026-09-17T00:00:00Z'
 };
 
