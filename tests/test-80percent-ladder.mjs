@@ -1549,9 +1549,9 @@ console.log('\n== the armed panel says what would trip it, and what it does not 
   const FLAT = SRC.replace(/'\s*\+\s*'/g, '').replace(/\s+/g, ' ');
   ok(/the real ones are set by whichever candle actually fires/.test(FLAT),
      'and that the projected levels are not the ones that will be used');
-  ok(/armedHtml\(rungs, spot\);/.test(SRC), 'wired into SIMPLE');
-  const iArmed = SRC.indexOf('h += armedHtml(rungs, spot);');
-  const iSetups = SRC.indexOf('h += simpleSetupsHtml(shown, spot);');
+  ok(/armedHtml\(rungs, gradePx\);/.test(SRC), 'wired into SIMPLE');
+  const iArmed = SRC.indexOf('h += armedHtml(rungs, gradePx);');
+  const iSetups = SRC.indexOf('h += simpleSetupsHtml(shown, gradePx);');
   ok(iArmed > 0 && iSetups > 0 && iArmed < iSetups,
      'and rendered ABOVE the finished setups — what might happen next is worth more than what '
      + 'already did');
@@ -1570,8 +1570,12 @@ console.log('\n== the armed panel says what would trip it, and what it does not 
      'the forward log records over every rung scanned, not the focused subset');
   ok(!/hg80Shown/.test(RUN.slice(0, RUN.indexOf('render('))),
      'and nothing between the scan and the render narrows what gets recorded');
-  ok((SRC.slice(SRC.indexOf('function render(')).match(/armedHtml\(rungs, spot\)/g) || []).length >= 2,
+  ok((SRC.slice(SRC.indexOf('function render(')).match(/armedHtml\(rungs, gradePx\)/g) || []).length >= 2,
      'in both views');
+  /* GRADED ON THE FEED, NOT ON SPOT. __p.spot is the cross-check and must
+     never reach a card. */
+  ok(!/armedHtml\(rungs, spot\)|simpleSetupsHtml\(shown, spot\)/.test(SRC),
+     'and no card is ever graded against the foreign spot price');
 }
 
 console.log('\n== ONE STEP BEHIND: what is two away, when the second thing can move ==');
@@ -1729,6 +1733,137 @@ console.log('\n== what the venue takes out of the win, on the card itself ==');
   ok(/costLineHtml\(a\.rung\.be/.test(SRC), 'and onto the armed rows too');
 }
 
+console.log('\n== the forming bar is not a closed bar, and 5m was reading it as one ==');
+{
+  /* THE BUG. The feed strips the unfinished bar via dropForming(rows, tf) ->
+     getClosedCandles(rows, tf, now). Both look the timeframe up in a table,
+     and neither table lists 5m — getClosedCandles hits `if (!sec) return
+     clean` and hands back every row including the forming one. So four rungs
+     of this ladder dropped it and the finest did not. */
+  const CORE = fs.readFileSync(path.join(ROOT, 'hg-setup-core.js'), 'utf8');
+  const tfTable = (CORE.match(/var TF_SEC = \{([^}]*)\}/) || [])[1] || '';
+  const coreKnows5m = /'5m'/.test(tfTable);
+  ok(!coreKnows5m,
+     'the shared getClosedCandles table STILL has no 5m key — this tab must not depend on it '
+     + '(reported separately; changing it moves every desk\'s candle set)');
+
+  /* ...so this rung does its own, from seconds it already owns. */
+  const now = Math.floor(Date.UTC(2026, 8, 17, 12, 2, 30) / 1000);   /* 150s into a 5m bar */
+  const mk = (tfSec, n) => {
+    const out = [], last = Math.floor(now / tfSec) * tfSec;
+    for (let i = n - 1; i >= 0; i--) out.push({ t: last - i * tfSec, o: 4300, h: 4301, l: 4299,
+                                                c: 4300 + i, v: 1 });
+    return out;
+  };
+
+  const five = mk(300, 5);
+  const sp5 = ctx.hg80SplitForming(five, 300, now);
+  ok(sp5.closed.length === five.length - 1,
+     `a 5m bar 150s old is still forming, so it is dropped (${five.length} -> ${sp5.closed.length})`);
+  ok(sp5.forming === five[five.length - 1],
+     'and handed back separately rather than thrown away');
+
+  /* every coarser rung: the same bar age is NOT forming, nothing is dropped */
+  for (const [tf, sec] of [['15m', 900], ['1h', 3600], ['4h', 14400], ['1d', 86400]]){
+    const rows = mk(sec, 5);
+    const sp = ctx.hg80SplitForming(rows, sec, now + sec);   /* a bar that HAS closed */
+    ok(sp.closed.length === rows.length && sp.forming === null,
+       `${tf}: a closed bar is left alone — the split is idempotent where the feed already did it`);
+  }
+
+  /* the rule is arithmetic on the rung's own seconds, so it cannot acquire a
+     missing-key bug the way the shared table did */
+  ok(ctx.hg80SplitForming(mk(300, 5), 300, now + 300).forming === null,
+     'once the interval has elapsed the same bar counts as closed');
+  ok(!/TF_SEC|\{ *'15m'/.test(SRC.slice(SRC.indexOf('function hg80SplitForming'),
+                                         SRC.indexOf('function hg80SplitForming') + 700)),
+     'and it uses NO timeframe lookup table of its own');
+
+  /* degenerate inputs never throw */
+  ok(ctx.hg80SplitForming([], 300, now).closed.length === 0, 'empty rows are safe');
+  ok(ctx.hg80SplitForming(null, 300, now).forming === null, 'null rows are safe');
+  ok(ctx.hg80SplitForming(mk(300, 3), 0, now).forming === null,
+     'a zero timeframe drops nothing rather than guessing');
+  const ms = [{ t: (now - 60) * 1000, o: 1, h: 1, l: 1, c: 1 }];
+  ok(ctx.hg80SplitForming(ms, 300, now).forming === ms[0],
+     'millisecond timestamps are handled, same rule the desk uses');
+
+  /* AND THE WIRING: the scan applies it to every rung, by def.sec */
+  ok(/hg80SplitForming\(rows, def\.sec/.test(SRC),
+     'the scan splits every rung by ITS OWN seconds, not by a lookup');
+  ok(/rows = split\.closed;/.test(SRC), 'and scans only the closed remainder');
+
+  /* AND THE ORDER MATTERS. hgFwdResolve settles this rung's OPEN forward
+     records against these bars. If it ran before the split, a 5m record
+     could be settled — won or lost — by the wick of a candle that had not
+     closed and might not end there. */
+  const FETCH = SRC.slice(SRC.indexOf('var rows = (got && got.rows)'),
+                          SRC.indexOf('rungs.push(hg80ScanTf'));
+  ok(FETCH.indexOf('split.closed') < FETCH.indexOf('hgFwdResolve'),
+     'the forming bar is dropped BEFORE the forward log settles against these rows — a record '
+     + 'must not be won or lost by a candle that has not closed');
+  ok(FETCH.indexOf('split.closed') < FETCH.indexOf('formingPx.push'),
+     'and the live price is taken from the bar that was dropped, not from one still in the scan');
+}
+
+console.log('\n== and the tab really does refuse the forming bar end to end ==');
+{
+  /* the assertions above are about a helper. This one DRIVES the tab with a
+     feed that hands back an unfinished bar on EVERY rung — which is exactly
+     what the real feed does on 5m, because its strip has no 5m key — and
+     reads what each rung ended up scanning off the rendered board. */
+  for (const k of Object.keys(store)) delete store[k];
+  const secOf = { '5m': 300, '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400 };
+  const nowS = Math.floor(Date.now() / 1000);
+  const handed = {};
+  ctx.hgOgFetchRows = (tf, n) => {
+    const tfSec = secOf[tf], out = [], lastOpen = Math.floor(nowS / tfSec) * tfSec;
+    let px = 4300;
+    for (let i = n - 1; i >= 0; i--){
+      const o = px, c = px + (i % 3 === 0 ? 1.1 : -0.7);
+      out.push({ t: lastOpen - i * tfSec, o, h: Math.max(o, c) + 0.3,
+                 l: Math.min(o, c) - 0.3, c, v: 1 });
+      px = c;
+    }
+    handed[tf] = out[out.length - 1].t;      /* the still-forming bar */
+    return Promise.resolve({ rows: out, source: 'fixture' });
+  };
+  ctx.hgGoldLiveSpot = undefined;
+
+  const tab = (ctx.HG_tabs || []).find(t => t && t.id === '80percent');
+  const node = mkEl('div');
+  tab.mount(node);
+  await new Promise(r => setImmediate(r));
+  await new Promise(r => setTimeout(r, 0));
+  press(node, 'data-p80-view', 'full');
+  await new Promise(r => setImmediate(r));
+  await new Promise(r => setTimeout(r, 0));
+
+  const html = String(node.querySelector('#p80Body').innerHTML);
+  ok(/THE LADDER RIGHT NOW/.test(html), 'the board rendered, so there is something to read');
+
+  /* <td><b>5m</b></td><td>scalp</td><td>09-17 12:00</td> — the board prints
+     each rung's last SCANNED bar, which is the thing under test */
+  const seen = {};
+  for (const m of html.matchAll(
+      /<tr><td><b>(5m|15m|1h|4h|1d)<\/b><\/td><td>[a-z]+<\/td><td>([0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2})<\/td>/g)){
+    seen[m[1]] = m[2];
+  }
+  ok(Object.keys(seen).length === ctx.HG_P80_LADDER.length,
+     `every rung reports a last bar on the board (${Object.keys(seen).length})`);
+
+  const yr = new Date(nowS * 1000).getUTCFullYear();
+  for (const tf of Object.keys(seen)){
+    const t = Math.floor(Date.parse(yr + '-' + seen[tf].replace(' ', 'T') + ':00Z') / 1000);
+    const sec = secOf[tf];
+    ok(t !== handed[tf],
+       `${tf}: the newest bar the feed handed over was still forming, and is NOT the one the `
+       + 'rung scanned');
+    ok((nowS - t) >= sec,
+       `${tf}: the bar it DID scan opened at least one full ${sec}s interval ago, so it closed`);
+  }
+}
+
 console.log('\n== the live gold price, and what it says about a setup ==');
 {
   ok(typeof ctx.hgLivePriceGrade === 'function',
@@ -1850,9 +1985,9 @@ console.log('\n== a setup gold has already run past is NOT offered as one you co
   /* THE RENDERERS TAKE THE PRICE, they do not reach for it. Passing it in is
      what makes all of the above assertable at all, and it is the same shape
      render() already uses for the venue. */
-  ok(/function simpleSetupsHtml\(rungs, spot\)/.test(SRC)
-     && /function livePriceHtml\(spot, hint\)/.test(SRC)
-     && /function armedHtml\(rungs, spot\)/.test(SRC),
+  ok(/function simpleSetupsHtml\(rungs, livePx\)/.test(SRC)
+     && /function livePriceHtml\(gradePx, gradeTf, spot, feedRef, rungs\)/.test(SRC)
+     && /function armedHtml\(rungs, livePx\)/.test(SRC),
      'livePriceHtml, armedHtml and simpleSetupsHtml all take the live price as an argument');
   ok(!/function (livePriceHtml|armedLiveHtml|simpleSetupsHtml)[\s\S]{0,300}__p\.spot/.test(SRC),
      'and none of them reads __p.spot out of module state');
@@ -1891,33 +2026,46 @@ console.log('\n== an armed row says which way the forming candle is leaning ==')
   ok(!/NaN|undefined/.test(up + down), 'nothing renders as NaN or undefined');
 }
 
-console.log('\n== the live price panel, and the feed-versus-spot gap ==');
+console.log('\n== the live price panel names which price grades, and which only cross-checks ==');
 {
-  const none = ctx.livePriceHtml(NaN, NaN);
+  const def = { tf: '15m', sec: 900, bars: 320, band: 'scalp' };
+  const rungs = [ctx.hg80ScanTf(series(320, { tfSec: 900, endHour: 15 }), def, ctx.hg80VenueRt())];
+  const ref = rungs[0].lastPx;
+
+  const none = ctx.livePriceHtml(NaN, null, NaN, NaN, rungs);
   ok(/LIVE GOLD: not available this scan/.test(none),
-     'with no price the panel says so plainly');
+     'with no feed-native price the panel says so plainly');
+  ok(/no rung returned an unfinished bar/i.test(none),
+     'and says exactly why there is none');
   ok(/comes from the last closed candle/.test(none),
-     'and says what the numbers below it are based on instead');
-  ok(/No setup is marked dead or live on a price that was not read/.test(none),
-     'and that nothing was graded — silence about a missing input is how a stale grade gets '
-     + 'mistaken for a fresh one');
+     'and what the numbers below it are based on instead');
 
-  const tight = ctx.livePriceHtml(4312.40, 4310.00);
-  ok(/LIVE GOLD/.test(tight) && /4312\.40/.test(tight), 'with a price it shows the price');
-  ok(/bar feed last close/.test(tight) && /4310\.00/.test(tight),
-     'beside the bar feed\'s own last close, because they are two different numbers both '
-     + 'called "the gold price"');
-  ok(!/apart<\/b>, past the/.test(tight), 'a small gap is stated, not warned about');
+  const got = ctx.livePriceHtml(ref + 1.2, '5m', ref * 1.0009, ref, rungs);
+  ok(/LIVE GOLD/.test(got) && new RegExp((ref + 1.2).toFixed(2)).test(got),
+     'with one, it shows the price');
+  ok(/from the 5m bar forming right now/.test(got),
+     'naming the rung it came from — the freshest unfinished bar on the ladder');
+  ok(/same feed the levels came from/.test(got),
+     'and that it is the SAME feed as the levels, which is the entire reason it can grade them');
 
-  /* past the desk's own floor it becomes a warning */
-  const far = 4310 * (1 + (ctx.HG_P80_SPOT_DRIFT_PCT + 0.2) / 100);
-  const wide = ctx.livePriceHtml(far, 4310.00);
-  ok(/apart<\/b>, past the/.test(wide),
-     `a gap past the desk's ${ctx.HG_P80_SPOT_DRIFT_PCT}% floor is warned about`);
-  ok(/is not rescaled/.test(wide),
-     'and the panel says the levels are NOT rescaled — rescaling would mix two sources inside '
-     + 'one plan, and this tab writes those plans to the forward log');
-  ok(!/NaN|undefined/.test(wide + tight + none), 'and none of it renders as NaN or undefined');
+  /* THE ARGUMENT, WITH MEASURED NUMBERS. An earlier draft of this panel
+     multiplied two constants and printed 3.000% for a target nearer 0.055%.
+     The figure has to come from the rungs actually scanned. */
+  const share = ctx.hg80TargetSharePct(rungs);
+  ok(share !== null && share > 0 && share < 0.5,
+     `the tightest target is measured off the ladder, not assumed (${share.toFixed(3)}% of price)`);
+  ok(new RegExp(share.toFixed(3) + '% of').test(got.replace(/<[^>]+>/g, '')),
+     'and that measured figure is what the panel prints');
+  ok(ctx.hg80TargetSharePct([]) === null && ctx.hg80TargetSharePct(null) === null,
+     'with nothing priced it returns null rather than a made-up number');
+
+  ok(/Spot cross-check/.test(got), 'spot is shown');
+  ok(/does not grade anything/.test(got),
+     'and explicitly does NOT grade anything — a foreign feed cannot resolve a target this '
+     + 'narrow');
+  ok(/decide every card on the gap between the feeds/.test(got),
+     'with the reason stated: the comparison would measure the feeds, not the market');
+  ok(!/NaN|undefined/.test(got + none), 'and none of it renders as NaN or undefined');
 }
 
 console.log('\n== and it still refuses to invent a rate from what it resolved ==');

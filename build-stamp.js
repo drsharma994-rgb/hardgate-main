@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v783',
-  pack: 'the live gold price reaches the 80PERCENT tab — a setup the market has already run past its stop is no longer counted as one you could act on, and every armed row says where gold is against the level that would trip it',
+  version: 'hg-v784',
+  pack: 'the 5m rung was scanning the candle that had not closed yet — the feed\u2019s forming-bar strip has no 5m key. Fixed from the rung\u2019s own seconds, and the bar it drops is now the feed-native live price that grades every card',
   built: '2026-09-17T00:00:00Z'
 };
 

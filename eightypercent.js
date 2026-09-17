@@ -302,6 +302,61 @@ function hg80ExpectancyR(hit, be){
 }
 
 /* ---------------------------------------------------------------------
+   THE FORMING BAR IS NOT A CLOSED BAR, AND ON 5m IT WAS BEING READ AS ONE
+
+   This tab's central claim is that a setup exists once a candle CLOSES and
+   not before. On the 5m rung that was not true.
+
+   The feed strips the unfinished bar through dropForming(rows, tf), which
+   delegates to getClosedCandles(rows, tf, now). Both look the timeframe up
+   in a table — and both tables list 15m, 1h, 2h, 4h and 1d. Neither lists
+   5m. getClosedCandles hits `if (!sec) return clean` and hands back every
+   row it was given, forming bar included; dropForming's own fallback map
+   has the same hole. So four rungs of this ladder dropped it and the finest
+   one did not.
+
+   What that did to the 5m rung, every scan:
+     - the trigger is "closed the right side of its open", read off a bar
+       that had not closed, so it flipped as the bar moved
+     - EMA, RSI and ATR all included a partial bar
+     - ARMED is defined as "three conditions hold on the last CLOSED candle,
+       only the trigger outstanding" — on 5m the last candle WAS the forming
+       one, so the panel was describing a bar to itself
+     - a firing recorded to the forward log carried a bar timestamp that had
+       not settled
+
+   OMNIGOLD's own v665 note describes this exact failure — "mechanics could
+   pass on transient wick data that reversed before close, print a live
+   ticket, then invalidate the next tick — exactly the 'setups are not good'
+   experience a user reports" — and fixes it by calling dropForming. That
+   fix inherits the same hole.
+
+   So this rung does NOT look the timeframe up. It already knows its own
+   seconds, from the ladder that defined it, and a bar whose open is less
+   than one interval old has not closed. That is arithmetic on data the tab
+   already holds, and it cannot acquire a missing-key bug later.
+
+   It is idempotent: on the rungs where the feed already dropped the forming
+   bar there is nothing to drop, and this returns them untouched.
+   --------------------------------------------------------------------- */
+function hg80SplitForming(rows, tfSec, nowSec){
+  var out = { closed: rows || [], forming: null };
+  var tf = fin(tfSec);
+  if (!rows || !rows.length || !(tf > 0)) return out;
+  var now = fin(nowSec);
+  if (!isFinite(now)) now = Math.floor(Date.now() / 1000);
+  var last = rows[rows.length - 1];
+  var t = fin(last && last.t);
+  if (!isFinite(t)) return out;
+  if (t > 1e12) t = Math.floor(t / 1000);      /* ms feeds, same rule as the desk */
+  if ((now - t) < tf){
+    out.closed = rows.slice(0, -1);
+    out.forming = last;
+  }
+  return out;
+}
+
+/* ---------------------------------------------------------------------
    WHERE GOLD ACTUALLY IS, RIGHT NOW
 
    Every number this tab printed came from the last CLOSED candle. That is
@@ -1790,7 +1845,7 @@ function simpleCardHtml(sig, rung, state){
    inside the window is not knowable in advance, but the window itself is. */
 /* The panel the whole tab was missing: what is one candle away, what would
    trip it, and when that candle closes — in the reader's own clock. */
-function armedHtml(rungs, spot){
+function armedHtml(rungs, livePx){
   var armed = hg80Armed(rungs);
   var arming = hg80Arming(rungs, armed);
   if (!armed.length && !arming.length) return '';
@@ -1806,7 +1861,7 @@ function armedHtml(rungs, spot){
     h += '<div class="note" style="margin-top:6px"><b>ARMED — ONE CANDLE AWAY.</b> Three of the '
       + 'four conditions hold on the last closed candle. Only the candle\'s own direction is '
       + 'outstanding, and it is decided at the close named on each row.</div>';
-    h += bandBlocksHtml(armed, function(x){ return armedRowHtml(x, spot); });
+    h += bandBlocksHtml(armed, function(x){ return armedRowHtml(x, livePx); });
   }
 
   if (arming.length){
@@ -1864,7 +1919,7 @@ function bandBlocksHtml(list, rowFn){
   return h;
 }
 
-function armedRowHtml(a, spot){
+function armedRowHtml(a, livePx){
   var long = a.side === 'long';
   var closesAt = isFinite(fin(a.closesIn))
     ? hg80WhenTxt(Math.floor(Date.now() / 1000) + fin(a.closesIn), false) : '';
@@ -1879,7 +1934,7 @@ function armedRowHtml(a, spot){
     + '<div class="note" style="margin-top:3px">Candle closes in <b>'
     + hg80DurTxt(a.closesIn) + '</b>' + (closesAt ? ' — at <b>' + esc(closesAt) + '</b>' : '')
     + '</div>'
-    + armedLiveHtml(a, spot)
+    + armedLiveHtml(a, livePx)
     + '<table style="border:0;margin:4px 0"><tbody>'
     + '<tr><td style="padding:2px 10px 2px 0">likely ENTRY</td>'
     + '<td class="hg-num" style="font-weight:bold;padding:2px 10px 2px 0">' + num(a.entryEst) + '</td></tr>'
@@ -1902,8 +1957,8 @@ function armedRowHtml(a, spot){
    there, which nothing can say, but which side it is on as the reader
    looks. A row that needs a green close while gold sits 3.20 BELOW the open
    is leaning the wrong way, and that is worth seeing next to the countdown. */
-function armedLiveHtml(a, spot){
-  var px = fin(spot), lvl = fin(a.level);
+function armedLiveHtml(a, livePx){
+  var px = fin(livePx), lvl = fin(a.level);
   if (!isFinite(px) || !(px > 0) || !isFinite(lvl)) return '';
   var long = a.side === 'long';
   var d = px - lvl;
@@ -1943,33 +1998,69 @@ function armingRowHtml(a){
    bar ever produced. The gap is disclosed instead, and above the desk's own
    0.35% floor it is disclosed as a warning.
    --------------------------------------------------------------------- */
-function livePriceHtml(spot, hint){
-  var px = fin(spot);
-  var ref = fin(hint);
-  if (!isFinite(px) || !(px > 0)){
-    return '<div class="note" style="margin-top:8px;padding:4px 8px;border-left:3px solid #64748b">'
-      + '<b>LIVE GOLD: not available this scan.</b> The spot reader '
-      + (gfn('hgGoldLiveSpot') ? 'did not answer in time' : 'is not loaded')
-      + ', so nothing below is checked against the current price — every level and every status '
-      + 'comes from the last closed candle, which is what this tab did before. No setup is '
-      + 'marked dead or live on a price that was not read.</div>';
+/* The target, as a share of price, MEASURED on the rungs actually scanned
+   rather than assumed from a constant. This number is the whole argument for
+   why a foreign spot price cannot grade these cards, so it has to be the
+   real one — an earlier draft of this panel multiplied two constants
+   together and printed 3.000% for a target that is nearer 0.055%. */
+function hg80TargetSharePct(rungs){
+  var best = null, i;
+  for (i = 0; i < (rungs || []).length; i++){
+    var r = rungs[i];
+    if (!r || !r.ok || !r.be || !(fin(r.be.target) > 0) || !(fin(r.lastPx) > 0)) continue;
+    var share = 100 * fin(r.be.target) / fin(r.lastPx);
+    if (best === null || share < best) best = share;
   }
-  var driftPct = isFinite(ref) && ref > 0 ? ((px / ref) - 1) * 100 : NaN;
-  var wide = isFinite(driftPct) && Math.abs(driftPct) >= P80_SPOT_DRIFT_PCT;
+  return best;
+}
+
+function livePriceHtml(gradePx, gradeTf, spot, feedRef, rungs){
+  var gp = fin(gradePx), sp = fin(spot), ref = fin(feedRef);
   var h = '<div class="note" style="margin-top:8px;padding:4px 8px;border-left:3px solid '
-    + (wide ? '#b45309' : '#10b981') + '">'
-    + '<b>LIVE GOLD <span style="font-size:1.25em">' + num(px) + '</span></b> '
-    + '<span class="dim">spot, read just now</span>';
-  if (isFinite(ref) && ref > 0){
-    h += ' · bar feed last close <b>' + num(ref) + '</b> ('
-      + (driftPct >= 0 ? '+' : '') + driftPct.toFixed(2) + '%)';
+    + (isFinite(gp) && gp > 0 ? '#10b981' : '#64748b') + '">';
+
+  if (isFinite(gp) && gp > 0){
+    h += '<b>LIVE GOLD <span style="font-size:1.25em">' + num(gp) + '</span></b> '
+      + '<span class="dim">from the ' + esc(gradeTf || '') + ' bar forming right now, on the '
+      + 'same feed the levels came from</span>';
+  } else {
+    h += '<b>LIVE GOLD: not available this scan.</b> No rung returned an unfinished bar, so '
+      + 'there is no price on the same feed as the levels. Nothing below is graded against a '
+      + 'live price — every status comes from the last closed candle, which is what this tab '
+      + 'did before.';
   }
-  if (wide){
-    h += '<br><span class="warn"><b>The feed and spot are ' + Math.abs(driftPct).toFixed(2)
-      + '% apart</b>, past the ' + P80_SPOT_DRIFT_PCT.toFixed(2) + '% the desk treats as '
-      + 'meaningful. Every entry, stop and target below is quoted on the BAR FEED and is not '
-      + 'rescaled — shift them by that percentage before comparing them to your broker\'s '
-      + 'screen.</span>';
+
+  if (isFinite(sp) && sp > 0){
+    h += '<br><span class="note">Spot cross-check <b>' + num(sp) + '</b>'
+      + (isFinite(ref) && ref > 0
+          ? ' · ' + (((sp / ref) - 1) >= 0 ? '+' : '')
+            + ((((sp / ref) - 1)) * 100).toFixed(3) + '% from the feed\'s last close'
+          : '')
+      + '. <b>It does not grade anything</b>, and that is not caution — it is arithmetic. ';
+    var share = hg80TargetSharePct(rungs);
+    if (share !== null){
+      h += 'The tightest target on the ladder right now is <b>' + share.toFixed(3) + '% of '
+        + 'price</b>'
+        + (isFinite(sp) && isFinite(ref) && ref > 0
+            ? ', and these two feeds are ' + Math.abs(((sp / ref) - 1) * 100).toFixed(3)
+              + '% apart' : '')
+        + '. Two price sources routinely sit further apart than the whole target, so a '
+        + 'cross-source comparison would decide every card on the gap between the feeds rather '
+        + 'than on anything the market did.';
+    } else {
+      h += 'The targets on this strategy are a few hundredths of a percent of price, which is '
+        + 'smaller than two price sources routinely differ by — so a cross-source comparison '
+        + 'would decide every card on the gap between the feeds.';
+    }
+    h += '</span>';
+  }
+
+  /* the basis the app itself measured for these bars, when it measured one */
+  var bFn = gfn('hgGoldBasisNote');
+  var bTxt = '';
+  try { bTxt = bFn ? String(bFn() || '') : ''; } catch (e){ bTxt = ''; }
+  if (bTxt){
+    h += '<br><span class="warn"><b>FEED BASIS:</b> ' + esc(bTxt) + '</span>';
   }
   return h + '</div>';
 }
@@ -2001,7 +2092,7 @@ function sessionClockHtml(rungs){
   return h;
 }
 
-function simpleSetupsHtml(rungs, spot){
+function simpleSetupsHtml(rungs, livePx){
   var usable = rungs.filter(function(r){ return r.ok; });
   var live = [], open = [], recent = [], i, j;
   for (i = 0; i < usable.length; i++){
@@ -2026,7 +2117,7 @@ function simpleSetupsHtml(rungs, spot){
      live grade is what decides actionability now; with no live price nothing
      is graded and the old wording is used unchanged, which is the honest
      fallback rather than a guess in either direction. */
-  spot = fin(spot);
+  var spot = fin(livePx);
   var cands = [], k;
   for (k = 0; k < live.length; k++) cands.push({ r: live[k].r, s: live[k].s, fresh: true });
   for (k = 0; k < open.length; k++) cands.push({ r: open[k].r, s: open[k].s, fresh: false });
@@ -2754,21 +2845,24 @@ function render(rungs, venue, recNotes, basis){
      read once by the scan, passed down, never reached for out of module
      state by whichever renderer happens to want it */
   var spot = fin(__p.spot), spotRef = fin(__p.spotHint);
+  /* the price the cards are GRADED against — feed-native, never spot */
+  var gradePx = fin(__p.feedLive);
   var h = viewControlHtml();
 
   if (__p.view === 'simple'){
     if (!usable.length){
       var b0 = shown.map(function(r){ return r.def.tf + ': ' + ((r.why) || 'no bars'); });
-      ui.body.innerHTML = h + livePriceHtml(spot, spotRef) + armedHtml(rungs, spot)
+      ui.body.innerHTML = h + livePriceHtml(gradePx, __p.feedLiveTf, spot, spotRef, rungs)
+        + armedHtml(rungs, gradePx)
         + '<div class="note warn">No gold bars came back on the focused rungs — '
         + esc(b0.join(' · ')) + '</div>';
       wireViewButtons();
       wireFocusButtons();
       return;
     }
-    h += livePriceHtml(spot, spotRef);
-    h += armedHtml(rungs, spot);
-    h += simpleSetupsHtml(shown, spot);
+    h += livePriceHtml(gradePx, __p.feedLiveTf, spot, spotRef, rungs);
+    h += armedHtml(rungs, gradePx);
+    h += simpleSetupsHtml(shown, gradePx);
     h += sessionClockHtml(shown);
     h += '<div class="note" style="margin-top:8px">Priced at <b>'
       + esc((venue || 'the selected venue')) + '</b>. Switch to <b>FULL</b> for the cost '
@@ -2782,8 +2876,8 @@ function render(rungs, venue, recNotes, basis){
 
   h += venueControlHtml(__p.venue);
   h += focusControlHtml();
-  h += livePriceHtml(spot, spotRef);
-  h += armedHtml(rungs, spot);
+  h += livePriceHtml(gradePx, __p.feedLiveTf, spot, spotRef, rungs);
+  h += armedHtml(rungs, gradePx);
   h += whyNothingHtml(shown);
   h += mathPanelHtml(shown, venue, basis);
 
@@ -2982,6 +3076,8 @@ function run(){
   hg80VenueEnsure();
   var venue = hg80VenueRt();
   var rungs = [];
+  /* the unfinished bar from each rung, kept as the feed's own live price */
+  var formingPx = [];
   var chain = Promise.resolve();
 
   /* THE WHOLE LADDER, ALWAYS. Focus used to narrow the fetch, which made it
@@ -3000,6 +3096,24 @@ function run(){
           if (!rows || !rows.length){
             rungs.push({ def: def, ok: false, why: 'no ' + def.tf + ' gold bars came back' });
             return;
+          }
+          /* CLOSED BARS ONLY, by this rung's own seconds. See
+             hg80SplitForming: the feed's table-driven strip has no 5m key,
+             so the finest rung was scanning an unfinished candle. */
+          var split = hg80SplitForming(rows, def.sec, Math.floor(Date.now() / 1000));
+          rows = split.closed;
+          if (!rows.length){
+            rungs.push({ def: def, ok: false,
+                         why: 'every ' + def.tf + ' bar returned was still forming' });
+            return;
+          }
+          /* THE BAR WE JUST DROPPED IS THE FEED'S OWN LIVE PRICE — same
+             instrument as the levels, so comparing them carries no basis at
+             all. That is the only price this tab can honestly grade a
+             0.055%-wide target against. */
+          if (split.forming && isFinite(fin(split.forming.c)) && fin(split.forming.c) > 0){
+            formingPx.push({ tf: def.tf, sec: def.sec, px: fin(split.forming.c),
+                             t: fin(split.forming.t) });
           }
           /* settle anything this rung already has open before recording
              today's, so the log's own resolution stays ahead of its input */
@@ -3022,12 +3136,22 @@ function run(){
     for (hi = 0; hi < rungs.length; hi++){
       if (rungs[hi].ok && isFinite(fin(rungs[hi].lastPx))){ hint = fin(rungs[hi].lastPx); break; }
     }
+    /* THE PRICE THAT CAN ACTUALLY GRADE THESE LEVELS is the feed's own
+       unfinished bar — the finest rung that has one, because it is the
+       freshest. Spot from gold-api is a DIFFERENT instrument and is kept
+       only as a cross-check; see hg80GradePx for why it cannot do this job. */
+    formingPx.sort(function(a, b){ return fin(a.sec) - fin(b.sec); });
+    var feedLive = formingPx.length ? formingPx[0] : null;
     if (ui && ui.stat) ui.stat.textContent = 'reading live gold…';
-    return hg80LiveSpot(hint).then(function(spot){ return { spot: spot, hint: hint }; });
+    return hg80LiveSpot(hint).then(function(spot){
+      return { spot: spot, hint: hint, feedLive: feedLive };
+    });
   })
   .then(function(live){
     __p.spot = fin(live.spot);
     __p.spotHint = fin(live.hint);
+    __p.feedLive = live.feedLive ? fin(live.feedLive.px) : NaN;
+    __p.feedLiveTf = live.feedLive ? live.feedLive.tf : null;
 
     /* EVERY RUNG THAT FIRED, not every rung on screen. This loop always read
        `rungs`, but `rungs` used to BE the focused subset — so the forward
@@ -3058,7 +3182,9 @@ function run(){
         + (hg80FocusList().length
              ? (hg80FocusList().join(' + ') + ' shown of ' + rungs.length + ' scanned')
              : (okN + '/' + rungs.length + ' rungs')) + ' · '
-        + (isFinite(fin(__p.spot)) ? 'gold ' + num(__p.spot) + ' · ' : 'no live price · ')
+        + (isFinite(fin(__p.feedLive))
+             ? 'gold ' + num(__p.feedLive) + ' (' + __p.feedLiveTf + ' live) · '
+             : 'no feed-native live price · ')
         + (fired.length ? fired.join(', ') + ' fired' : 'no rung fired on its last candle');
     }
     __p.ranOnce = true;
@@ -3142,6 +3268,8 @@ W.hg80LiveSpot       = hg80LiveSpot;
 W.hg80LiveGrade      = hg80LiveGrade;
 W.hg80LiveActs       = hg80LiveActs;
 W.livePriceHtml      = livePriceHtml;
+W.hg80TargetSharePct = hg80TargetSharePct;
+W.hg80SplitForming   = hg80SplitForming;
 W.armedLiveHtml      = armedLiveHtml;
 W.liveChipHtml       = liveChipHtml;
 W.simpleSetupsHtml   = simpleSetupsHtml;
