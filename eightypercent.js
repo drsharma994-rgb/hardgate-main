@@ -1,11 +1,11 @@
 /* =========================================================================
 HARDGATE — eightypercent.js
 80PERCENT tab (GOLD group): the High-Momentum Trend Dip-Buyer, implemented
-exactly as specified, and priced honestly.
+exactly as specified, run across the whole scalp-to-swing ladder, and priced
+honestly at every rung.
 
 THE SPEC, IMPLEMENTED LITERALLY
 
-  timeframe   5-minute XAUUSD
   indicators  EMA(200), EMA(50), RSI(14), ATR(14)
   session     13:00-18:00 UTC only
   long        close > EMA50  AND  EMA50 > EMA200
@@ -18,43 +18,55 @@ THE SPEC, IMPLEMENTED LITERALLY
   target      entry +/- 0.75 x ATR(14)
   stop        entry -/+ 4.00 x ATR(14)
 
-All four conditions must hold on the SAME candle. Nothing here is loosened,
-tightened or "improved" — the four indicator functions are the desk's own
+All four conditions must hold on the SAME candle. Nothing is loosened,
+tightened or "improved" — the indicator functions are the desk's own
 (indicators.js ema / rsi / atr, Wilder-smoothed RSI and ATR), and the rules
 are transcribed one to one so the tab can be checked against the spec line
 by line.
 
-THE ARITHMETIC THE SPEC CANNOT ESCAPE, AND WHY IT IS ON THE CARD
+WHY THIS TAB RUNS A LADDER AND NOT ONE TIMEFRAME
 
-Risking 4.00 ATR to make 0.75 ATR is 1:5.333. The win rate that merely
-breaks even, before a single cent of cost, is
+The spec was written for 5m. On 5m this desk found two things.
 
-    4.00 / (4.00 + 0.75) = 84.2105%
+  1. The spec fires almost never. Its trend condition (close above the 50
+     EMA) and its pullback condition (RSI(14) below 45) pull against each
+     other: fourteen net-down bars usually leave the close under a 50-period
+     EMA. On synthetic 5m the pair coincided ~60x LESS often than
+     independence predicts. A tab that only ever showed 5m setups was
+     therefore a tab that showed nothing, on most days, forever.
 
-The strategy claims 85%+. That clears the gross bar by 0.79 points and is
-worth +0.0375 ATR per trade — which sounds like an edge until it is priced.
+  2. It cannot pay on 5m anyway, and the reason is arithmetic. Risking
+     4.00 ATR to make 0.75 ATR needs 4.00 / 4.75 = 84.2105% before a cent
+     of cost. Cost is a fixed FRACTION OF PRICE; the target is a fraction
+     of ATR. So the shorter the timeframe, the smaller the target in
+     dollars, the larger the spread as a share of it, and the higher the
+     rate the trade must hit. On 5m gold one round trip is a third of the
+     entire winner.
 
-On this desk's own numbers (gold ~4358, 15m ATR ~5.749 from the goldscalp
-walk, so 5m ATR ~3.32 by sqrt-of-time) one round trip costs ~0.87 at XM's
-0.020%. Against a 0.75 ATR target of ~2.49 that is 35% of the entire
-winner. Solve for the win rate that breaks even AFTER cost:
+Both problems point the same way: UP the ladder. A bigger ATR is a bigger
+target in dollars against the same percentage cost, so the required rate
+falls back towards the gross bar; and there are more distinct swings per
+bar, so the conditions get a chance to coincide. The tab therefore runs the
+identical protocol on 5m, 15m, 1h, 4h and 1d, prices each rung separately
+from ITS OWN live ATR, and shows where the claim can and cannot survive.
 
-    p = (cost + 4.00 x ATR) / (4.75 x ATR)
+Nothing is loosened to make setups appear. The four conditions are the same
+four at every rung. What changes is only the bar the conditions are read on.
 
-    at XM   (0.020% RT)   needs 89.74%   -> at 85% it nets -0.0563R/trade
-    at PAXG (0.26%  RT)   needs 156.09%  -> arithmetically unreachable
+THE ONE DEVIATION, AND IT IS LABELLED
 
-So even taking 85% entirely at face value, this loses money at the venue
-this desk actually trades. The claim is not far enough above breakeven to
-survive its own spread. That is not a criticism of the entry logic — the
-entries may well be 85% — it is that 85% is the wrong side of the line once
-the line is drawn in the right place.
+The session filter is 13:00-18:00 UTC — five hours. A bar can only be
+inside a five-hour window if the WHOLE bar fits in it. At 4h the venue's
+bars open 00/04/08/12/16/20 UTC and not one of them lies wholly inside
+13:00-18:00; at 1d it is hopeless. So at those two rungs the filter is not
+"passed", it is INAPPLICABLE, and applying it would have meant either
+admitting bars that spend most of their life outside the session or firing
+nothing at all for a reason the spec never intended.
 
-THE TAB DOES NOT ASSERT ANY OF THAT. It recomputes the required win rate
-from the LIVE ATR and the venue currently selected, every scan, and shows it
-beside the claim. If ATR widens enough that 0.75 ATR dwarfs the spread, the
-number moves on its own and the card says so. Arithmetic on current
-numbers, not an opinion baked in at build time.
+hg80SessionApplies() decides that by arithmetic on the timeframe, not by a
+hand-written list, and every card at 4h and 1d says in as many words that
+the session rule was dropped there and why. A deviation you can read is a
+deviation; one you cannot is a bug.
 
 WHY EVERY SETUP IS A WATCH
 
@@ -62,9 +74,26 @@ hg-v756 made measured-edge a hard gate: a ticket needs a measured edge. This
 strategy has no record on this desk — it has never been walked, and its 85%
 is an assertion, not a measurement. Under the desk's own rule that makes
 every 80PERCENT setup a WATCH, exactly as TAURIC is. Every fired setup is
-written to the forward log under OMNIGOLD:P80 so the claim becomes testable:
-at 20 settled trades the log can say whether the win rate is anywhere near
-84.21%, and that is the only thing that could ever change the verdict.
+written to the forward log under OMNIGOLD:P80, tagged with the rung it fired
+on, so the claim becomes testable per timeframe rather than as one pooled
+blur: 5m and 1d are not the same strategy and must not share a record.
+
+WHAT IS ON THE TAB WHEN NOTHING HAS FIRED
+
+Everything except a setup, because "nothing fired" is not the same as
+"nothing to say":
+
+  - the required-rate table, recomputed from each rung's live ATR
+  - the ladder board: where price, RSI and ATR actually are right now, and
+    how far each rung is from firing, by name and by number
+  - near misses: bars that met three of the four and which one they missed
+  - setups that fired inside the fetched window and are still unresolved
+  - setups that fired and have since resolved, with their outcome
+
+The near-miss list is labelled as such and is never a setup. The resolved
+list carries outcomes and NO win rate: a handful of firings inside one
+fetch is not a measurement, and this desk does not print rates it has not
+earned. The forward log and scripts/walk-80percent.mjs are what answer that.
 
 Classic script + HG_tabs, like every other module.
 ========================================================================= */
@@ -90,7 +119,36 @@ var P80_SL_ATR      = 4.00;
 var P80_UTC_FROM    = 13;
 var P80_UTC_TO      = 18;
 var P80_TAB         = 'OMNIGOLD:P80';
-var P80_HORIZON_BARS = 48;          /* 4h of 5m bars to resolve, then expire */
+var P80_HORIZON_BARS = 48;          /* resolve within this many bars, then expire */
+/* the rate the supplied strategy claims. An INPUT to the arithmetic, never
+   a result of it — it is the thing being tested, and it is printed only
+   ever beside the word "claim". */
+var P80_CLAIMED     = 0.85;
+/* this desk's own minimum stop distance, as a percent of entry */
+var P80_STOP_FLOOR  = 0.50;
+/* how far back the near-miss scan looks, in bars */
+var P80_NEARMISS_BARS = 80;
+/* how many near misses one rung may list */
+var P80_NEARMISS_MAX  = 3;
+
+/* ---------------------------------------------------------------------
+   THE LADDER
+
+   Two scalp rungs and three swing rungs, every one running the identical
+   protocol. `bars` is what is asked for; EMA200 eats the first 200 of
+   whatever comes back, so the usable scan window is what is left.
+
+   The band is descriptive, not functional: nothing in the protocol reads
+   it. It exists because "scalp" and "swing" are the words a desk uses and
+   the required-rate table is easier to read when they are grouped.
+   --------------------------------------------------------------------- */
+var P80_LADDER = [
+  { tf: '5m',  sec: 300,   bars: 500, band: 'scalp' },
+  { tf: '15m', sec: 900,   bars: 500, band: 'scalp' },
+  { tf: '1h',  sec: 3600,  bars: 500, band: 'swing' },
+  { tf: '4h',  sec: 14400, bars: 400, band: 'swing' },
+  { tf: '1d',  sec: 86400, bars: 400, band: 'swing' }
+];
 
 var __p = { ui: null, busy: false, ranOnce: false, last: null };
 
@@ -101,6 +159,7 @@ function esc(s){
 }
 function fin(v){ var n = Number(v); return isFinite(n) ? n : NaN; }
 function num(v, d){ return isFinite(fin(v)) ? fin(v).toFixed(d == null ? 2 : d) : '—'; }
+function pctTxt(v, d){ return isFinite(fin(v)) ? (fin(v) * 100).toFixed(d == null ? 2 : d) + '%' : '—'; }
 function gfn(name){ return (typeof W[name] === 'function') ? W[name] : null; }
 
 /* ---------------------------------------------------------------------
@@ -184,13 +243,55 @@ function hg80InSession(tSec){
 }
 
 /* ---------------------------------------------------------------------
+   CAN THE SESSION RULE EVEN BE APPLIED AT THIS TIMEFRAME?
+
+   A bar belongs to a five-hour window only if the WHOLE bar is inside it.
+   Bars on every timeframe this desk fetches align to a multiple of the
+   timeframe from midnight UTC, so the question is whether any such
+   multiple opens at or after 13:00 and closes at or before 18:00.
+
+     5m, 15m, 1h   yes  — 13:00 itself is an aligned open and the bar closes
+                          well inside the window
+     4h            NO   — opens are 00/04/08/12/16/20; 12:00 starts too
+                          early and 16:00 ends at 20:00, four hours past
+     1d            NO   — the bar is longer than the window
+
+   Returned as a fact about the timeframe, computed here, so no rung has to
+   carry a hand-written flag that can drift out of step with its seconds.
+   --------------------------------------------------------------------- */
+function hg80SessionApplies(tfSec){
+  var s = fin(tfSec);
+  if (!(s > 0)) return false;
+  var from = P80_UTC_FROM * 3600, to = P80_UTC_TO * 3600;
+  if (s > (to - from)) return false;
+  for (var open = 0; open < 86400; open += s){
+    if (open >= from && (open + s) <= to) return true;
+  }
+  return false;
+}
+
+/* The config a rung runs under. Defaults to the spec's own 5m, so every
+   caller that predates the ladder — the tests, the walk, anything reading
+   hg80SignalAt directly — keeps the exact behaviour it had. */
+function hg80Cfg(def){
+  var d = def || {};
+  var tf = d.tf || P80_TF;
+  var sec = isFinite(fin(d.sec)) && fin(d.sec) > 0 ? fin(d.sec) : P80_TF_SEC;
+  return { tf: tf, tfSec: sec, band: d.band || 'scalp', session: hg80SessionApplies(sec) };
+}
+
+/* ---------------------------------------------------------------------
    THE ENTRY PROTOCOL, TRANSCRIBED
 
-   Returns a signal for bar i, or null. Every one of the four conditions is
-   reported by name whether it passed or failed, so the card can show WHY a
-   bar did not fire instead of only showing the ones that did.
+   Returns a signal for bar i, or null. Every condition is reported by name
+   whether it passed or failed, so the card can show WHY a bar did not fire
+   instead of only showing the ones that did.
+
+   The session key is PRESENT only where the filter applies. An absent key
+   is how a 4h card avoids printing a green "13:00-18:00 UTC" chip for a
+   rule it never ran — a chip like that is a lie the reader cannot detect.
    --------------------------------------------------------------------- */
-function hg80SignalAt(rows, ind, i){
+function hg80SignalAt(rows, ind, i, cfg){
   if (!rows || !ind || i < 0 || i >= rows.length) return null;
   var r = rows[i];
   if (!r) return null;
@@ -200,30 +301,48 @@ function hg80SignalAt(rows, ind, i){
   if (!isFinite(c) || !isFinite(o) || !isFinite(e50) || !isFinite(e200)
       || !isFinite(rs) || !(a > 0)) return null;
 
+  var sessionOn = !cfg || cfg.session !== false;
   var inSess = hg80InSession(r.t);
 
   var longChecks = {
     trend:    (c > e50) && (e50 > e200),
     pullback: rs < P80_RSI_LONG,
-    trigger:  c > o,
-    session:  inSess
+    trigger:  c > o
   };
   var shortChecks = {
     trend:    (c < e50) && (e50 < e200),
     pullback: rs > P80_RSI_SHORT,
-    trigger:  c < o,
-    session:  inSess
+    trigger:  c < o
   };
-  var allOf = function(x){ return x.trend && x.pullback && x.trigger && x.session; };
+  if (sessionOn){ longChecks.session = inSess; shortChecks.session = inSess; }
+
+  var allOf = function(x){
+    return x.trend && x.pullback && x.trigger && (x.session !== false);
+  };
 
   var dir = allOf(longChecks) ? 'long' : (allOf(shortChecks) ? 'short' : null);
   return {
     i: i, t: fin(r.t), dir: dir,
+    tf: cfg && cfg.tf ? cfg.tf : P80_TF,
+    tfSec: cfg && cfg.tfSec ? cfg.tfSec : P80_TF_SEC,
+    sessionApplies: sessionOn,
     close: c, open: o, ema50: e50, ema200: e200, rsi: rs, atr: a,
     longChecks: longChecks, shortChecks: shortChecks,
     /* which side was closer to firing, for the "why not" line */
     checks: dir === 'short' ? shortChecks : longChecks
   };
+}
+
+/* How many of a side's conditions held, and which one did not. Drives the
+   near-miss list — a bar at three of four is not a setup and is never shown
+   as one, but it is the honest answer to "how close is this rung?". */
+function hg80Score(checks){
+  var met = 0, total = 0, missing = [], k;
+  for (k in checks) if (Object.prototype.hasOwnProperty.call(checks, k)){
+    total++;
+    if (checks[k]) met++; else missing.push(k);
+  }
+  return { met: met, total: total, missing: missing };
 }
 
 /* The exit protocol. Entry is the trigger candle's CLOSE, per the spec. */
@@ -235,8 +354,65 @@ function hg80Plan(sig){
   var stop = sig.dir === 'long' ? entry - slDist : entry + slDist;
   return { dir: sig.dir, entry: entry, stop: stop, t1: t1,
            risk: slDist, reward: tpDist, atr: sig.atr,
+           tf: sig.tf || P80_TF,
            rr: tpDist > 0 ? (slDist / tpDist) : NaN,
            stopPct: (slDist / entry) * 100 };
+}
+
+/* ---------------------------------------------------------------------
+   RESOLUTION — one implementation, shared with the walk
+
+   scripts/walk-80percent.mjs loads this file and calls THIS function, so
+   the tab and the walk can never drift into two different answers about
+   what a bar did to a trade. Three cases, in the order they must be
+   checked:
+
+     GAP    the bar OPENS beyond a level. The open is the first print, so
+            the fill is there, not at the level, and a gapped stop costs
+            MORE than -1R. Unambiguous, and checked first because a gapped
+            bar usually covers both levels too.
+
+     BOTH   target and stop are inside one bar's range. OHLC cannot order
+            them. Scored optimistically as the target AND flagged, so the
+            interval machinery can strip it at the lower bound — never
+            silently kept as a win. One of these resolved the wrong way is
+            worth 5.33 winners at this R:R.
+
+     ONE    the ordinary case.
+
+   The signal bar itself never resolves the trade it created: entry is its
+   close, and everything inside that bar already happened.
+   --------------------------------------------------------------------- */
+function hg80Resolve(rows, i, plan, horizon){
+  if (!rows || !plan) return null;
+  var long = plan.dir === 'long';
+  var E = fin(plan.entry), T = fin(plan.t1), S = fin(plan.stop);
+  var risk = Math.abs(E - S);
+  if (!(risk > 0)) return null;
+  var rMul = function(px){ return (long ? (px - E) : (E - px)) / risk; };
+
+  for (var j = i + 1; j < rows.length && j <= i + horizon; j++){
+    var b = rows[j];
+    var hitT = long ? (fin(b.h) >= T) : (fin(b.l) <= T);
+    var hitS = long ? (fin(b.l) <= S) : (fin(b.h) >= S);
+    var gapS = long ? (fin(b.o) <= S) : (fin(b.o) >= S);
+    var gapT = long ? (fin(b.o) >= T) : (fin(b.o) <= T);
+
+    if (gapS) return { outcome: 'loss', exit: fin(b.o), rMultiple: rMul(fin(b.o)), bars: j - i,
+                       exitT: fin(b.t), gapped: true, ambiguous: false };
+    if (gapT) return { outcome: 'win', exit: fin(b.o), rMultiple: rMul(fin(b.o)), bars: j - i,
+                       exitT: fin(b.t), gapped: true, ambiguous: false };
+    if (hitT && hitS) return { outcome: 'win', exit: T, rMultiple: rMul(T), bars: j - i,
+                               exitT: fin(b.t), gapped: false, ambiguous: true };
+    if (hitT) return { outcome: 'win', exit: T, rMultiple: rMul(T), bars: j - i,
+                       exitT: fin(b.t), gapped: false, ambiguous: false };
+    if (hitS) return { outcome: 'loss', exit: S, rMultiple: rMul(S), bars: j - i,
+                       exitT: fin(b.t), gapped: false, ambiguous: false };
+  }
+  var last = rows[Math.min(i + horizon, rows.length - 1)];
+  return { outcome: 'expired', exit: fin(last.c), rMultiple: rMul(fin(last.c)),
+           bars: Math.min(horizon, rows.length - 1 - i), exitT: fin(last.t),
+           gapped: false, ambiguous: false };
 }
 
 /* Scan a bar series for every setup the spec fires. Pure — takes rows,
@@ -244,40 +420,107 @@ function hg80Plan(sig){
    a DOM or a clock. */
 function hg80Scan(rows, opts){
   var o = opts || {};
+  var cfg = o.cfg || hg80Cfg(null);
   var ind = hg80Indicators(rows);
   if (!ind) return { ok: false, why: 'need at least ' + (P80_EMA_SLOW + 2)
-                        + ' bars and the desk\'s indicator functions', signals: [] };
+                        + ' bars and the desk\'s indicator functions', signals: [], cfg: cfg };
   var out = [], i;
   var from = Math.max(P80_EMA_SLOW, 0);
   var lastOnly = o.lastOnly === true;
   var start = lastOnly ? Math.max(from, rows.length - 1) : from;
   for (i = start; i < rows.length; i++){
-    var s = hg80SignalAt(rows, ind, i);
+    var s = hg80SignalAt(rows, ind, i, cfg);
     if (s && s.dir){ s.plan = hg80Plan(s); out.push(s); }
   }
-  return { ok: true, signals: out, bars: rows.length, ind: ind };
+  return { ok: true, signals: out, bars: rows.length, ind: ind, cfg: cfg };
 }
 
 /* ---------------------------------------------------------------------
-   RECORDING — so the 85% stops being an assertion
+   ONE RUNG
+
+   Scans it, prices it from ITS OWN live ATR, resolves what fired inside the
+   fetched window, and collects the near misses. Everything the ladder board
+   and the cards need for that timeframe, computed once.
+
+   The open/expired distinction matters and is not the resolver's to make:
+   hg80Resolve says "expired" both when the horizon elapsed with neither
+   level touched AND when the series simply ran out of bars. Those are
+   different facts. A trade whose horizon has not elapsed yet is STILL OPEN
+   — it is the one a desk can act on — and calling it expired would retire a
+   live setup on the page.
+   --------------------------------------------------------------------- */
+function hg80ScanTf(rows, def, venue){
+  var cfg = hg80Cfg(def);
+  var res = hg80Scan(rows, { cfg: cfg });
+  if (!res.ok) return { def: def, cfg: cfg, ok: false, why: res.why };
+
+  var n = rows.length;
+  var lastAtr = res.ind ? fin(res.ind.atr[n - 1]) : NaN;
+  var lastPx = fin(rows[n - 1].c);
+  var be = hg80Breakeven(lastAtr, lastPx, venue ? venue.rtFrac : NaN);
+
+  var tally = { open: 0, win: 0, loss: 0, expired: 0, ambiguous: 0 };
+  var i;
+  for (i = 0; i < res.signals.length; i++){
+    var s = res.signals[i];
+    var barsLeft = n - 1 - s.i;
+    var r = hg80Resolve(rows, s.i, s.plan, P80_HORIZON_BARS);
+    s.res = r;
+    if (!r) { s.status = 'unpriced'; continue; }
+    s.status = (r.outcome === 'expired' && barsLeft < P80_HORIZON_BARS) ? 'open' : r.outcome;
+    if (Object.prototype.hasOwnProperty.call(tally, s.status)) tally[s.status]++;
+    if (r.ambiguous) tally.ambiguous++;
+  }
+
+  var lastSig = hg80SignalAt(rows, res.ind, n - 1, cfg);
+  var live = res.signals.filter(function(x){ return x.i === n - 1; });
+
+  /* near misses: three of the four (or two of three where the session rule
+     is inapplicable), most recent first, capped so one quiet rung cannot
+     flood the page */
+  var misses = [], j;
+  var from = Math.max(P80_EMA_SLOW, n - P80_NEARMISS_BARS);
+  for (j = n - 1; j >= from && misses.length < P80_NEARMISS_MAX; j--){
+    var m = hg80SignalAt(rows, res.ind, j, cfg);
+    if (!m || m.dir) continue;
+    var ls = hg80Score(m.longChecks), ss = hg80Score(m.shortChecks);
+    var best = ls.met >= ss.met ? { side: 'long', sc: ls, ch: m.longChecks } : { side: 'short', sc: ss, ch: m.shortChecks };
+    if (best.sc.met === best.sc.total - 1) misses.push({ sig: m, side: best.side, score: best.sc });
+  }
+
+  return { def: def, cfg: cfg, ok: true, rows: rows, res: res, be: be,
+           lastAtr: lastAtr, lastPx: lastPx, lastSig: lastSig,
+           live: live, tally: tally, misses: misses,
+           scanned: Math.max(0, n - P80_EMA_SLOW) };
+}
+
+/* ---------------------------------------------------------------------
+   RECORDING — so the claim stops being an assertion
 
    Same contract as every other instrumented tab: barT floored to the bar
    (the log's dedup rule AND what makes a record settleable), ticket false
    and gateClear false because this cleared no gate — it was never put to
    them. hgFwdRecord returns a REASON STRING; only 'recorded' is one.
+
+   The mechanic carries the RUNG. A 1d dip-buy and a 5m dip-buy share four
+   conditions and nothing else that matters: different cost ratio, different
+   stop in percent, different holding period. Pooling them would build one
+   record for two strategies, which is the exact mistake hg-v770 un-pooled
+   SPRING and UTAD to stop making.
    --------------------------------------------------------------------- */
-function hg80Record(sig){
+function hg80Record(sig, cfg){
   try {
     if (typeof W.hgFwdRecord !== 'function') return { ok: false, why: 'forward log not loaded' };
     if (!sig || !sig.dir || !sig.plan) return { ok: false, why: 'no fired setup to record' };
+    var c = cfg || hg80Cfg({ tf: sig.tf, sec: sig.tfSec });
     var p = sig.plan;
     var barT = isFinite(fin(sig.t))
-      ? Math.floor(fin(sig.t) / P80_TF_SEC) * P80_TF_SEC
-      : Math.floor((Date.now() / 1000) / P80_TF_SEC) * P80_TF_SEC;
+      ? Math.floor(fin(sig.t) / c.tfSec) * c.tfSec
+      : Math.floor((Date.now() / 1000) / c.tfSec) * c.tfSec;
     var reason = W.hgFwdRecord({
       tab: P80_TAB,
-      mechanic: 'P80-DIP-' + sig.dir.toUpperCase(),
-      sym: 'XAUUSD', tf: P80_TF, dir: sig.dir,
+      mechanic: 'P80-' + String(c.tf).toUpperCase() + '-' + sig.dir.toUpperCase(),
+      sym: 'XAUUSD', tf: c.tf, dir: sig.dir,
       entry: fin(p.entry), stop: fin(p.stop), t1: fin(p.t1),
       barT: barT,
       horizonBars: P80_HORIZON_BARS,
@@ -293,44 +536,154 @@ function hg80Record(sig){
 /* ---------------------------------------------------------------------
    RENDERING
    --------------------------------------------------------------------- */
-function mathPanelHtml(be, venue){
+
+/* The arithmetic, once, for the whole ladder — and then per rung, because
+   the required rate is the thing that CHANGES up the ladder and is the
+   whole reason the ladder exists. */
+function mathPanelHtml(rungs, venue){
+  var gross = P80_SL_ATR / (P80_SL_ATR + P80_TP_ATR);
   var h = '<div class="note warn" style="margin:8px 0;padding:8px 10px;border:1px solid #b45309;'
     + 'border-left:3px solid #b45309;border-radius:4px;background:rgba(180,83,9,0.08)">'
     + '<b>WHAT THIS CONFIGURATION HAS TO HIT TO BREAK EVEN</b><br>'
     + 'Risking ' + P80_SL_ATR.toFixed(2) + ' ATR to make ' + P80_TP_ATR.toFixed(2)
     + ' ATR is 1:' + (P80_SL_ATR / P80_TP_ATR).toFixed(3) + '. Before any cost at all, that needs '
-    + '<b>' + (be.gross * 100).toFixed(2) + '%</b> — arithmetic, not an opinion. '
+    + '<b>' + (gross * 100).toFixed(2) + '%</b> — arithmetic, not an opinion. '
     + 'The strategy claims 85%, which clears it by '
-    + (100 * (0.85 - be.gross)).toFixed(2) + ' points.';
+    + (100 * (P80_CLAIMED - gross)).toFixed(2) + ' points.';
 
-  if (be.net == null){
-    return h + '<br><span class="note">The cost-adjusted bar cannot be computed — no live ATR or no '
-      + 'venue cost — so it is not shown rather than guessed.</span></div>';
+  h += '<br><span class="note">Cost is a fixed fraction of PRICE. The target is a fraction of '
+    + 'ATR. So the bar moves with the timeframe — and that, not a change to any rule, is why '
+    + 'this tab runs the ladder.</span>';
+
+  var priced = rungs.filter(function(r){ return r.ok && r.be && r.be.net != null; });
+  if (!priced.length){
+    return h + '<br><span class="note">The cost-adjusted bar cannot be computed on any rung — '
+      + 'no live ATR or no venue cost — so it is not shown rather than guessed.</span></div>';
   }
 
-  var e85 = hg80ExpectancyR(0.85, be);
-  var reachable = be.net < 1;
-  h += '<br>Priced at <b>' + esc(venue || 'the selected venue') + '</b> ('
-    + (be.rtFrac * 100).toFixed(3) + '% round trip = ' + num(be.cost) + ' on this price), '
-    + 'against a target of ' + num(be.target) + ' and a stop of ' + num(be.risk) + ':';
-  h += '<br><b style="font-size:1.1em">it needs ' + (be.net * 100).toFixed(2) + '%</b>'
-    + (reachable ? '' : ' — which is above 100% and therefore unreachable at this venue');
-  if (isFinite(e85)){
-    h += '<br>At the claimed 85% it nets <b>' + (e85 >= 0 ? '+' : '') + e85.toFixed(4)
-      + 'R per trade</b>' + (e85 < 0 ? ' — a loss.' : '.');
+  h += '<table class="tbl" style="margin-top:6px"><tr><th>rung</th><th>band</th><th>ATR</th>'
+    + '<th>target</th><th>cost</th><th>cost / target</th><th>it needs</th><th>at the claimed rate</th></tr>';
+  var i, cleared = [], failed = [];
+  for (i = 0; i < priced.length; i++){
+    var r = priced[i], be = r.be;
+    var eR = hg80ExpectancyR(P80_CLAIMED, be);
+    var pays = isFinite(eR) && eR > 0;
+    if (pays) cleared.push(r.def.tf); else failed.push(r.def.tf);
+    h += '<tr><td><b>' + esc(r.def.tf) + '</b></td><td>' + esc(r.def.band) + '</td>'
+      + '<td class="hg-num">' + num(r.lastAtr, 3) + '</td>'
+      + '<td class="hg-num">' + num(be.target) + '</td>'
+      + '<td class="hg-num">' + num(be.cost) + '</td>'
+      + '<td class="hg-num">' + (100 * be.cost / be.target).toFixed(1) + '%</td>'
+      + '<td class="hg-num"><b>' + (be.net * 100).toFixed(2) + '%</b>'
+      + (be.net >= 1 ? ' <span class="statuschip na">unreachable</span>' : '') + '</td>'
+      + '<td class="hg-num ' + (pays ? 'ok' : 'na') + '">'
+      + (isFinite(eR) ? (eR >= 0 ? '+' : '') + eR.toFixed(4) + 'R' : '—') + '</td></tr>';
   }
-  h += '<br><span class="note">The cost is ' + (100 * be.cost / be.target).toFixed(1)
-    + '% of the entire winner, which is what closes the gap: the target is small in price '
-    + 'even though the stop is wide in ATR. Recomputed from live ATR every scan — if '
-    + 'volatility widens, this number falls on its own.</span>';
+  h += '</table>';
+
+  h += '<div class="note" style="margin-top:4px">Priced at <b>' + esc(venue || 'the selected venue')
+    + '</b>' + (priced[0].be.rtFrac != null ? ' (' + (priced[0].be.rtFrac * 100).toFixed(3)
+    + '% round trip)' : '') + ', from each rung\'s own live ATR, this scan.</div>';
+
+  if (cleared.length){
+    h += '<div class="note ok" style="margin-top:4px"><b>Taking the claimed rate entirely at face '
+      + 'value</b>, it is above the cost-adjusted bar on <b>' + esc(cleared.join(', '))
+      + '</b> and below it on ' + (failed.length ? esc(failed.join(', ')) : 'nothing')
+      + '. That is what the ladder is for: the identical rules, priced where they can and '
+      + 'cannot survive their own spread.</div>';
+  } else {
+    h += '<div class="note warn" style="margin-top:4px"><b>The claimed rate clears the '
+      + 'cost-adjusted bar on no rung at this venue.</b> Every rung listed needs more than the '
+      + 'strategy claims, so at this venue the arithmetic says no timeframe saves it. Switching '
+      + 'the desk to a cheaper venue changes this number and it will recompute on the next scan.</div>';
+  }
   return h + '</div>';
 }
 
-function setupCardHtml(sig, be){
+/* The state of every rung right now: where the conditions stand and how far
+   from firing. This is the part of the tab that is populated on every scan
+   whether or not anything fired, because "how close is it" is a real
+   answer and silence is not. */
+function ladderBoardHtml(rungs){
+  var h = '<div class="panel" style="margin-top:10px"><h3>THE LADDER RIGHT NOW '
+    + '<span>identical rules, five timeframes</span></h3>'
+    + '<table class="tbl"><tr><th>rung</th><th>band</th><th>last bar (UTC)</th><th>close</th>'
+    + '<th>RSI(14)</th><th>ATR(14)</th><th>stop % of entry</th><th>state</th><th>distance to fire</th></tr>';
+  var i;
+  for (i = 0; i < rungs.length; i++){
+    var r = rungs[i];
+    if (!r.ok){
+      h += '<tr><td><b>' + esc(r.def.tf) + '</b></td><td>' + esc(r.def.band) + '</td>'
+        + '<td colspan="7" class="note">' + esc(r.why || 'no bars') + '</td></tr>';
+      continue;
+    }
+    var s = r.lastSig;
+    var when = (s && isFinite(s.t)) ? new Date(s.t * 1000).toISOString().replace('T', ' ').slice(5, 16) : '—';
+    var stopPct = (r.lastAtr > 0 && r.lastPx > 0) ? (P80_SL_ATR * r.lastAtr / r.lastPx) * 100 : NaN;
+    var state = r.live.length
+      ? '<span class="statuschip ok">' + esc(r.live[0].dir.toUpperCase()) + ' FIRED</span>'
+      : '<span class="statuschip na">no fire</span>';
+    h += '<tr><td><b>' + esc(r.def.tf) + '</b></td><td>' + esc(r.def.band) + '</td>'
+      + '<td>' + esc(when) + '</td>'
+      + '<td class="hg-num">' + num(r.lastPx) + '</td>'
+      + '<td class="hg-num">' + (s ? num(s.rsi, 1) : '—') + '</td>'
+      + '<td class="hg-num">' + num(r.lastAtr, 3) + '</td>'
+      + '<td class="hg-num">' + (isFinite(stopPct) ? stopPct.toFixed(3) + '%'
+          + (stopPct < P80_STOP_FLOOR ? ' <span class="statuschip na">under floor</span>' : '') : '—') + '</td>'
+      + '<td>' + state + '</td>'
+      + '<td>' + distanceHtml(s, r.cfg) + '</td></tr>';
+  }
+  h += '</table><div class="note">"Distance to fire" is the nearer side\'s failing conditions, '
+    + 'named and measured on the last CLOSED bar. It is not a forecast and not a setup — it is '
+    + 'where the rung stands.</div></div>';
+  return h;
+}
+
+/* What the nearer side still needs, by name and by number. */
+function distanceHtml(sig, cfg){
+  if (!sig) return '<span class="note">not enough bars</span>';
+  var ls = hg80Score(sig.longChecks), ss = hg80Score(sig.shortChecks);
+  var side = ls.met >= ss.met ? 'long' : 'short';
+  var sc = side === 'long' ? ls : ss;
+  if (sc.met === sc.total) return '<span class="statuschip ok">all ' + sc.total + ' hold</span>';
+  var bits = [], i;
+  for (i = 0; i < sc.missing.length; i++){
+    var k = sc.missing[i];
+    if (k === 'pullback'){
+      var need = side === 'long' ? P80_RSI_LONG : P80_RSI_SHORT;
+      bits.push('RSI ' + num(sig.rsi, 1) + ' needs ' + (side === 'long' ? '&lt;' : '&gt;') + ' '
+        + need + ' (' + num(Math.abs(sig.rsi - need), 1) + ' away)');
+    } else if (k === 'trend'){
+      var gap = (sig.close - sig.ema50) / (sig.atr > 0 ? sig.atr : 1);
+      bits.push('trend: close is ' + num(gap, 2) + ' ATR from EMA50, and EMA50 is '
+        + (sig.ema50 > sig.ema200 ? 'above' : 'below') + ' EMA200');
+    } else if (k === 'trigger'){
+      bits.push('needs a ' + (side === 'long' ? 'green' : 'red') + ' close');
+    } else if (k === 'session'){
+      bits.push('outside ' + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC');
+    }
+  }
+  return '<span class="note">' + esc(side.toUpperCase()) + ' ' + sc.met + '/' + sc.total + ' — '
+    + bits.join(' · ') + (cfg && cfg.session === false
+        ? ' <span class="statuschip na">session rule N/A here</span>' : '') + '</span>';
+}
+
+function sessionNoteHtml(cfg){
+  if (!cfg || cfg.session !== false) return '';
+  return '<div class="note warn" style="margin-top:4px">The ' + P80_UTC_FROM + ':00-'
+    + P80_UTC_TO + ':00 UTC session filter is <b>not applied at ' + esc(cfg.tf) + '</b>, and this '
+    + 'is a stated deviation from the spec rather than a rule that passed. No ' + esc(cfg.tf)
+    + ' bar lies wholly inside a five-hour window at this venue\'s bar alignment, so the filter '
+    + 'could only have admitted bars spending most of their life outside the session, or excluded '
+    + 'every bar for a reason the spec never intended. Three conditions ran here, not four.</div>';
+}
+
+function setupCardHtml(sig, be, cfg, kind){
   var p = sig.plan;
   var when = isFinite(fin(sig.t)) ? new Date(fin(sig.t) * 1000).toISOString().replace('T', ' ').slice(0, 16) + ' UTC' : '—';
   var h = '<div class="panel" style="margin-top:8px"><h3>'
-    + (sig.dir === 'long' ? 'LONG' : 'SHORT') + ' XAUUSD <span>' + esc(when) + '</span></h3>';
+    + (sig.dir === 'long' ? 'LONG' : 'SHORT') + ' XAUUSD ' + esc(sig.tf || '')
+    + ' <span>' + esc(when) + (kind ? ' · ' + esc(kind) : '') + '</span></h3>';
   h += '<table class="tbl"><tr><th>entry</th><th>stop</th><th>target</th><th>risk</th><th>reward</th><th>R:R</th></tr>'
     + '<tr><td class="hg-num">' + num(p.entry) + '</td><td class="hg-num">' + num(p.stop) + '</td>'
     + '<td class="hg-num">' + num(p.t1) + '</td><td class="hg-num">' + num(p.risk) + '</td>'
@@ -341,16 +694,18 @@ function setupCardHtml(sig, be){
     + ' · stop is ' + num(p.stopPct, 3) + '% of entry</div>';
 
   /* the desk's own stop floor, stated where it is contradicted rather than
-     silently bypassed — 4 ATR is WIDE in ATR and NARROW in percent on a 5m
-     chart, and those are not the same thing */
-  var floor = 0.50;
+     silently bypassed — 4 ATR is WIDE in ATR and can be NARROW in percent,
+     and those are not the same thing */
+  var floor = P80_STOP_FLOOR;
   if (p.stopPct < floor){
     h += '<div class="note warn" style="margin-top:4px">This stop is '
       + num(p.stopPct, 3) + '% of entry, below this desk\'s ' + floor.toFixed(2)
       + '% floor. The floor exists because a stop too tight to carry a spread turns cost into '
-      + 'the dominant term — which is exactly what the arithmetic above shows happening here. '
-      + 'Shown, not suppressed: the spec asked for 4 ATR and 4 ATR is what is printed.</div>';
+      + 'the dominant term — which is exactly what the arithmetic above shows happening on the '
+      + 'short rungs. Shown, not suppressed: the spec asked for 4 ATR and 4 ATR is what is printed.</div>';
   }
+
+  h += sessionNoteHtml(cfg);
 
   /* the shared geometry verdict, like every other plan-publishing tab */
   try {
@@ -361,69 +716,188 @@ function setupCardHtml(sig, be){
 
   if (be && be.net != null){
     h += '<div class="note" style="margin-top:4px">Needs ' + (be.net * 100).toFixed(2)
-      + '% to pay at this ATR and venue.</div>';
+      + '% to pay at this rung\'s ATR and this venue.</div>';
+  }
+  if (sig.res && sig.status && sig.status !== 'open'){
+    h += resultLineHtml(sig);
   }
   h += '<div class="note warn" style="margin-top:6px;padding:4px 6px;border-left:3px solid #b45309">'
-    + '<b>WATCH, NOT A TICKET.</b> This strategy has no measured record on this desk — the 85% is '
-    + 'an assertion, and hg-v756 made measured-edge hard. Recorded to the forward log so it can '
-    + 'earn one.</div>';
+    + '<b>WATCH, NOT A TICKET.</b> This strategy has no measured record on this desk — the claimed '
+    + 'rate is an assertion, and hg-v756 made measured-edge hard. Recorded to the forward log so '
+    + 'it can earn one.</div>';
   return h + '</div>';
 }
 
-function whyNotHtml(sig){
-  if (!sig) return '<div class="note">not enough bars to evaluate the last candle</div>';
-  var name = { trend: 'trend alignment', pullback: 'RSI pullback', trigger: 'candle direction', session: '13:00-18:00 UTC' };
+function resultLineHtml(sig){
+  var r = sig.res;
+  if (!r) return '';
+  var cls = r.outcome === 'win' ? 'ok' : (r.outcome === 'loss' ? 'warn' : '');
+  return '<div class="note ' + cls + '" style="margin-top:4px">Inside the fetched window this one '
+    + esc(r.outcome === 'win' ? 'reached its target' : r.outcome === 'loss' ? 'was stopped' : 'expired unresolved')
+    + ' after ' + r.bars + ' bar' + (r.bars === 1 ? '' : 's') + ' at ' + num(r.exit)
+    + ' (' + (r.rMultiple >= 0 ? '+' : '') + num(r.rMultiple, 3) + 'R)'
+    + (r.gapped ? ' — filled at a GAPPED open, not at the level' : '')
+    + (r.ambiguous ? ' — <b>ambiguous</b>: one bar covered both the target and the stop and OHLC '
+        + 'cannot order them, so this is the optimistic read, not an established one' : '')
+    + '.</div>';
+}
+
+function whyNotHtml(sig, cfg, tf){
+  var lead = '<b>' + esc(tf || (cfg && cfg.tf) || '') + '</b> ';
+  if (!sig) return '<div class="note" style="margin-top:4px">' + lead
+    + 'not enough bars to evaluate the last candle</div>';
+  var name = { trend: 'trend alignment', pullback: 'RSI pullback', trigger: 'candle direction',
+               session: P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC' };
   var side = function(label, ch){
     var bits = [], k;
     for (k in ch) if (Object.prototype.hasOwnProperty.call(ch, k)){
       bits.push('<span class="statuschip ' + (ch[k] ? 'ok' : 'na') + '">' + esc(name[k]) + '</span>');
     }
-    return '<div style="margin-top:2px"><b>' + label + '</b> ' + bits.join(' ') + '</div>';
+    return '<b>' + label + '</b> ' + bits.join(' ');
   };
-  return '<div class="note">The last closed candle fired nothing. All four must hold on the '
-    + 'same candle:</div>' + side('LONG', sig.longChecks) + side('SHORT', sig.shortChecks);
+  var total = hg80Score(sig.longChecks).total;
+  return '<div class="note" style="margin-top:4px">' + lead + '<span class="statuschip na">'
+    + total + ' needed</span> ' + side('LONG', sig.longChecks) + ' &nbsp; '
+    + side('SHORT', sig.shortChecks)
+    + (cfg && cfg.session === false
+        ? ' <span class="statuschip na">session rule N/A at this rung</span>' : '') + '</div>';
 }
 
-function render(res, be, venue, recNote){
+function nearMissHtml(rungs){
+  var rows = [], i, j;
+  for (i = 0; i < rungs.length; i++){
+    var r = rungs[i];
+    if (!r.ok) continue;
+    for (j = 0; j < r.misses.length; j++) rows.push({ tf: r.def.tf, m: r.misses[j] });
+  }
+  if (!rows.length) return '';
+  var name = { trend: 'trend alignment', pullback: 'RSI pullback', trigger: 'candle direction',
+               session: 'session window' };
+  var h = '<div class="panel" style="margin-top:10px"><h3>NEAR MISSES '
+    + '<span>one condition short, and which one</span></h3>'
+    + '<table class="tbl"><tr><th>rung</th><th>time (UTC)</th><th>side</th><th>held</th>'
+    + '<th>missed</th><th>RSI</th><th>close</th></tr>';
+  for (i = 0; i < rows.length; i++){
+    var x = rows[i], s = x.m.sig;
+    var missed = x.m.score.missing.map(function(k){ return name[k] || k; }).join(', ');
+    h += '<tr><td><b>' + esc(x.tf) + '</b></td>'
+      + '<td>' + esc(isFinite(s.t) ? new Date(s.t * 1000).toISOString().replace('T', ' ').slice(5, 16) : '—') + '</td>'
+      + '<td>' + esc(x.m.side) + '</td>'
+      + '<td class="hg-num">' + x.m.score.met + '/' + x.m.score.total + '</td>'
+      + '<td>' + esc(missed) + '</td>'
+      + '<td class="hg-num">' + num(s.rsi, 1) + '</td>'
+      + '<td class="hg-num">' + num(s.close) + '</td></tr>';
+  }
+  return h + '</table><div class="note"><b>These did NOT fire and are not setups.</b> The spec '
+    + 'requires every condition on the same candle and none of these had them. The held count is '
+    + 'out of THREE at 4h and 1d, where the session rule is inapplicable, and out of four '
+    + 'everywhere else — the column says which. They are listed because a rung that keeps missing '
+    + 'on one named condition is telling you something a blank panel cannot.</div></div>';
+}
+
+function firedHtml(rungs){
+  var open = [], settled = [], i, j;
+  for (i = 0; i < rungs.length; i++){
+    var r = rungs[i];
+    if (!r.ok) continue;
+    for (j = 0; j < r.res.signals.length; j++){
+      var s = r.res.signals[j];
+      if (s.i === r.rows.length - 1) continue;      /* the live ones have their own cards */
+      if (s.status === 'open') open.push({ r: r, s: s });
+      else settled.push({ r: r, s: s });
+    }
+  }
+  var h = '';
+  if (open.length){
+    h += '<div class="panel" style="margin-top:10px"><h3>STILL OPEN '
+      + '<span>fired inside the window, neither level reached yet</span></h3>';
+    var shown = open.slice(-6).reverse();
+    for (i = 0; i < shown.length; i++){
+      h += setupCardHtml(shown[i].s, shown[i].r.be, shown[i].r.cfg, 'still open');
+    }
+    h += '<div class="note">These are the firings whose horizon has not elapsed and whose target '
+      + 'and stop are both still untouched on the bars fetched. That is the only sense in which '
+      + 'they are live — nothing here has been checked against a tick the fetch did not include.</div></div>';
+  }
+  if (settled.length){
+    var recent = settled.slice(-14).reverse();
+    h += '<div class="panel" style="margin-top:10px"><h3>FIRED AND RESOLVED IN THIS WINDOW</h3>'
+      + '<table class="tbl"><tr><th>rung</th><th>time (UTC)</th><th>dir</th><th>entry</th><th>stop</th>'
+      + '<th>target</th><th>outcome</th><th>R</th><th>bars</th></tr>';
+    for (i = 0; i < recent.length; i++){
+      var s2 = recent[i].s, p = s2.plan, res = s2.res;
+      var flag = (res && res.ambiguous) ? ' <span class="statuschip na">ambiguous</span>' : '';
+      if (res && res.gapped) flag += ' <span class="statuschip na">gapped</span>';
+      h += '<tr><td><b>' + esc(recent[i].r.def.tf) + '</b></td>'
+        + '<td>' + esc(isFinite(s2.t) ? new Date(s2.t * 1000).toISOString().replace('T', ' ').slice(5, 16) : '—')
+        + '</td><td>' + esc(s2.dir) + '</td><td class="hg-num">' + num(p.entry)
+        + '</td><td class="hg-num">' + num(p.stop) + '</td><td class="hg-num">' + num(p.t1)
+        + '</td><td>' + esc(s2.status) + flag + '</td>'
+        + '<td class="hg-num">' + (res ? (res.rMultiple >= 0 ? '+' : '') + num(res.rMultiple, 3) : '—')
+        + '</td><td class="hg-num">' + (res ? res.bars : '—') + '</td></tr>';
+    }
+    h += '</table><div class="note">Historical firings on the bars fetched, resolved against the '
+      + 'bars that followed them — NOT a backtest: one fetch is not a sample, the book here is not '
+      + 'sequential, and rows marked ambiguous cannot be established from OHLC at all. '
+      + 'That is why no win rate is shown from this table however many rows it has. '
+      + 'scripts/walk-80percent.mjs and the forward log are what answer that question.</div></div>';
+  }
+  return h;
+}
+
+function render(rungs, venue, recNotes){
   var ui = __p.ui;
   if (!ui || !ui.body) return;
-  var h = mathPanelHtml(be, venue);
 
-  if (!res || !res.ok){
-    ui.body.innerHTML = h + '<div class="note warn">' + esc((res && res.why) || 'no bars') + '</div>';
+  var usable = rungs.filter(function(r){ return r.ok; });
+  var h = mathPanelHtml(rungs, venue);
+
+  if (!usable.length){
+    var bits = rungs.map(function(r){ return r.def.tf + ': ' + ((r.why) || 'no bars'); });
+    ui.body.innerHTML = h + '<div class="note warn">No rung returned usable bars — '
+      + esc(bits.join(' · ')) + '</div>';
     return;
   }
 
-  h += '<div class="note">scanned ' + res.bars + ' × ' + P80_TF + ' bars · '
-    + res.signals.length + ' setup' + (res.signals.length === 1 ? '' : 's')
-    + ' fired across the whole series</div>';
+  h += ladderBoardHtml(rungs);
 
-  var live = res.signals.filter(function(s){ return s.i === res.bars - 1; });
+  var live = [], i;
+  for (i = 0; i < usable.length; i++){
+    if (usable[i].live.length) live.push({ r: usable[i], s: usable[i].live[0] });
+  }
   if (live.length){
-    h += '<div class="note ok" style="margin-top:6px"><b>THE LAST CLOSED CANDLE FIRED.</b></div>';
-    h += setupCardHtml(live[0], be);
-    if (recNote) h += '<div class="note" style="margin-top:4px">' + esc(recNote) + '</div>';
+    h += '<div class="note ok" style="margin-top:10px"><b>THE LAST CLOSED CANDLE FIRED ON '
+      + esc(live.map(function(x){ return x.r.def.tf; }).join(', ')) + '.</b></div>';
+    for (i = 0; i < live.length; i++){
+      h += setupCardHtml(live[i].s, live[i].r.be, live[i].r.cfg, 'last closed candle');
+      if (recNotes && recNotes[live[i].r.def.tf]){
+        h += '<div class="note" style="margin-top:4px">' + esc(recNotes[live[i].r.def.tf]) + '</div>';
+      }
+    }
   } else {
-    h += '<div style="margin-top:6px">' + whyNotHtml(res.lastSig) + '</div>';
+    h += '<div class="panel" style="margin-top:10px"><h3>NOTHING FIRED ON THE LAST CLOSED CANDLE</h3>'
+      + '<div class="note">Every condition has to hold on the SAME candle. Which ones did, per '
+      + 'rung, on its own last closed bar:</div>';
+    for (i = 0; i < usable.length; i++){
+      h += whyNotHtml(usable[i].lastSig, usable[i].cfg, usable[i].def.tf);
+    }
+    h += '</div>';
   }
 
-  if (res.signals.length){
-    var recent = res.signals.slice(-12).reverse();
-    h += '<div class="panel" style="margin-top:10px"><h3>MOST RECENT SETUPS IN THIS WINDOW</h3>'
-      + '<table class="tbl"><tr><th>time (UTC)</th><th>dir</th><th>entry</th><th>stop</th>'
-      + '<th>target</th><th>ATR</th><th>RSI</th></tr>';
-    for (var i = 0; i < recent.length; i++){
-      var s = recent[i], p = s.plan;
-      h += '<tr><td>' + esc(new Date(fin(s.t) * 1000).toISOString().replace('T', ' ').slice(5, 16))
-        + '</td><td>' + s.dir + '</td><td class="hg-num">' + num(p.entry)
-        + '</td><td class="hg-num">' + num(p.stop) + '</td><td class="hg-num">' + num(p.t1)
-        + '</td><td class="hg-num">' + num(s.atr, 2) + '</td><td class="hg-num">'
-        + num(s.rsi, 1) + '</td></tr>';
-    }
-    h += '</table><div class="note">Historical firings on the bars fetched — NOT a backtest. '
-      + 'Nothing here has been resolved against what happened next, so no win rate is shown. '
-      + 'The forward log is what will answer that.</div></div>';
+  h += firedHtml(rungs);
+  h += nearMissHtml(rungs);
+
+  var scanned = 0, fired = 0, amb = 0;
+  for (i = 0; i < usable.length; i++){
+    scanned += usable[i].scanned;
+    fired += usable[i].res.signals.length;
+    amb += usable[i].tally.ambiguous;
   }
+  h += '<div class="note" style="margin-top:8px">Scanned ' + scanned + ' evaluable bars across '
+    + usable.length + ' of ' + rungs.length + ' rungs · ' + fired + ' firing'
+    + (fired === 1 ? '' : 's') + ' in the fetched windows'
+    + (amb ? ' · ' + amb + ' of them resolved on a bar that covered both levels and cannot be '
+        + 'established either way' : '') + '.</div>';
 
   ui.body.innerHTML = h;
 }
@@ -432,7 +906,6 @@ function run(){
   if (__p.busy) return Promise.resolve('busy');
   var ui = __p.ui;
   __p.busy = true;
-  if (ui && ui.stat) ui.stat.textContent = 'fetching ' + P80_TF + ' bars…';
 
   var fetchFn = W.hgOgFetchRows;
   if (typeof fetchFn !== 'function'){
@@ -443,54 +916,77 @@ function run(){
     return Promise.resolve('error');
   }
 
-  return Promise.resolve().then(function(){ return fetchFn(P80_TF, P80_BARS); })
-    .then(function(got){
-      var rows = (got && got.rows) ? got.rows : got;
-      if (!rows || !rows.length) throw new Error('no ' + P80_TF + ' gold bars came back');
-      var res = hg80Scan(rows);
-      /* the last candle's checks, fired or not, so the card can say why */
-      if (res.ok && res.ind) res.lastSig = hg80SignalAt(rows, res.ind, rows.length - 1);
+  var venue = hg80VenueRt();
+  var rungs = [];
+  var chain = Promise.resolve();
 
-      var lastAtr = res.ind ? fin(res.ind.atr[rows.length - 1]) : NaN;
-      var lastPx = fin(rows[rows.length - 1].c);
-      var v = hg80VenueRt();
-      var be = hg80Breakeven(lastAtr, lastPx, v ? v.rtFrac : NaN);
+  P80_LADDER.forEach(function(def){
+    chain = chain.then(function(){
+      if (ui && ui.stat) ui.stat.textContent = 'fetching ' + def.tf + ' bars…';
+      return Promise.resolve().then(function(){ return fetchFn(def.tf, def.bars); })
+        .then(function(got){
+          var rows = (got && got.rows) ? got.rows : got;
+          if (!rows || !rows.length){
+            rungs.push({ def: def, ok: false, why: 'no ' + def.tf + ' gold bars came back' });
+            return;
+          }
+          /* settle anything this rung already has open before recording
+             today's, so the log's own resolution stays ahead of its input */
+          try { if (typeof W.hgFwdResolve === 'function') W.hgFwdResolve('XAUUSD', def.tf, rows); }
+          catch (e){}
+          rungs.push(hg80ScanTf(rows, def, venue));
+        })
+        .catch(function(e){
+          rungs.push({ def: def, ok: false, why: String((e && e.message) || e) });
+        });
+    });
+  });
 
-      var recNote = null;
-      var live = res.ok ? res.signals.filter(function(s){ return s.i === rows.length - 1; }) : [];
-      if (live.length){
-        var rec = hg80Record(live[0]);
-        recNote = rec.ok ? ('Recorded to ' + P80_TAB + ' — the claim is now testable.')
-                         : ('Not recorded: ' + (rec.why || 'unknown'));
-      }
+  return chain.then(function(){
+    var recNotes = {}, i, fired = [];
+    for (i = 0; i < rungs.length; i++){
+      var r = rungs[i];
+      if (!r.ok || !r.live.length) continue;
+      fired.push(r.def.tf + ' ' + r.live[0].dir.toUpperCase());
+      var rec = hg80Record(r.live[0], r.cfg);
+      recNotes[r.def.tf] = rec.ok
+        ? ('Recorded to ' + P80_TAB + ' as P80-' + r.def.tf.toUpperCase() + '-'
+           + r.live[0].dir.toUpperCase() + ' — the claim is now testable on this rung.')
+        : ('Not recorded: ' + (rec.why || 'unknown'));
+    }
 
-      __p.last = { res: res, be: be, venue: v };
-      render(res, be, v ? v.venue : null, recNote);
-      if (ui && ui.stat){
-        ui.stat.textContent = 'updated ' + new Date().toISOString().slice(11, 19) + ' UTC · '
-          + (live.length ? live[0].dir.toUpperCase() + ' fired' : 'no setup on the last candle');
-      }
-      __p.ranOnce = true;
-      return 'ok';
-    })
-    .catch(function(e){
-      if (ui && ui.body) ui.body.innerHTML = '<div class="note warn">'
-        + esc(String((e && e.message) || e)) + '</div>';
-      if (ui && ui.stat) ui.stat.textContent = 'failed';
-      return 'error';
-    })
-    .finally(function(){ __p.busy = false; });
+    __p.last = { rungs: rungs, venue: venue };
+    render(rungs, venue ? venue.venue : null, recNotes);
+
+    var okN = rungs.filter(function(x){ return x.ok; }).length;
+    if (ui && ui.stat){
+      ui.stat.textContent = 'updated ' + new Date().toISOString().slice(11, 19) + ' UTC · '
+        + okN + '/' + rungs.length + ' rungs · '
+        + (fired.length ? fired.join(', ') + ' fired' : 'no rung fired on its last candle');
+    }
+    __p.ranOnce = true;
+    return 'ok';
+  })
+  .catch(function(e){
+    if (ui && ui.body) ui.body.innerHTML = '<div class="note warn">'
+      + esc(String((e && e.message) || e)) + '</div>';
+    if (ui && ui.stat) ui.stat.textContent = 'failed';
+    return 'error';
+  })
+  .finally(function(){ __p.busy = false; });
 }
 
 function mount(el){
   if (!el) return;
+  var rungTxt = P80_LADDER.map(function(d){ return d.tf; }).join(' · ');
   el.innerHTML = '<div class="panel">'
-    + '<h2>80PERCENT <span>High-Momentum Trend Dip-Buyer · XAUUSD ' + P80_TF + '</span></h2>'
+    + '<h2>80PERCENT <span>High-Momentum Trend Dip-Buyer · XAUUSD · ' + esc(rungTxt) + '</span></h2>'
     + '<div class="note">EMA' + P80_EMA_FAST + '/' + P80_EMA_SLOW + ' trend, RSI('
     + P80_RSI_LEN + ') pullback below ' + P80_RSI_LONG + ' / above ' + P80_RSI_SHORT
-    + ', candle-direction trigger, ' + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC only. '
-    + 'Target ' + P80_TP_ATR + ' × ATR, stop ' + P80_SL_ATR + ' × ATR — implemented exactly '
-    + 'as specified.</div>'
+    + ', candle-direction trigger, ' + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC where a bar '
+    + 'can fit inside it. Target ' + P80_TP_ATR + ' × ATR, stop ' + P80_SL_ATR + ' × ATR — '
+    + 'implemented exactly as specified, and run unchanged on every rung from scalp to swing so '
+    + 'the cost arithmetic can be read where it differs.</div>'
     + '<div class="row" style="margin-top:8px"><button class="btn" id="p80Run">SCAN</button>'
     + '<span class="note" id="p80Stat">auto-runs on open</span></div>'
     + '<div id="p80Body" style="margin-top:8px"></div></div>';
@@ -508,20 +1004,27 @@ function refresh(){
 
 /* exported for the tests and for anything that wants the protocol without
    the markup — a gate, a log, a backtest */
-W.hg80Breakeven   = hg80Breakeven;
-W.hg80ExpectancyR = hg80ExpectancyR;
-W.hg80Indicators  = hg80Indicators;
-W.hg80InSession   = hg80InSession;
-W.hg80SignalAt    = hg80SignalAt;
-W.hg80Plan        = hg80Plan;
-W.hg80Scan        = hg80Scan;
-W.hg80Record      = hg80Record;
-W.HG_P80_TAB      = P80_TAB;
+W.hg80Breakeven      = hg80Breakeven;
+W.hg80ExpectancyR    = hg80ExpectancyR;
+W.hg80Indicators     = hg80Indicators;
+W.hg80InSession      = hg80InSession;
+W.hg80SessionApplies = hg80SessionApplies;
+W.hg80Cfg            = hg80Cfg;
+W.hg80SignalAt       = hg80SignalAt;
+W.hg80Score          = hg80Score;
+W.hg80Plan           = hg80Plan;
+W.hg80Resolve        = hg80Resolve;
+W.hg80Scan           = hg80Scan;
+W.hg80ScanTf         = hg80ScanTf;
+W.hg80Record         = hg80Record;
+W.HG_P80_TAB         = P80_TAB;
+W.HG_P80_LADDER      = P80_LADDER;
 W.HG_P80_SPEC     = { tf: P80_TF, emaFast: P80_EMA_FAST, emaSlow: P80_EMA_SLOW,
                       rsiLen: P80_RSI_LEN, atrLen: P80_ATR_LEN,
                       rsiLong: P80_RSI_LONG, rsiShort: P80_RSI_SHORT,
                       tpAtr: P80_TP_ATR, slAtr: P80_SL_ATR,
-                      utcFrom: P80_UTC_FROM, utcTo: P80_UTC_TO };
+                      utcFrom: P80_UTC_FROM, utcTo: P80_UTC_TO,
+                      horizonBars: P80_HORIZON_BARS, claimed: P80_CLAIMED };
 
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: '80percent', label: '80PERCENT', mount: mount, refresh: refresh });

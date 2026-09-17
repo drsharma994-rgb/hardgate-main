@@ -167,45 +167,25 @@ export function loadStrategy(){
    Order within a bar is decided by what OHLC can actually establish:
      the OPEN is the first print, so a gap through either level is certain;
      otherwise, if only one level is inside the bar's range, that one was hit;
-     if BOTH are, nothing can be established and the row is flagged. */
+     if BOTH are, nothing can be established and the row is flagged.
+
+   THE TAB OWNS THIS TOO. eightypercent.js exports hg80Resolve and its own
+   STILL OPEN / RESOLVED panels call it, so the resolver lives beside the
+   strategy it resolves and this file delegates rather than keeping a second
+   copy. Two copies of an exit rule is how a walk ends up measuring outcomes
+   the tab would never have printed — the same failure a second copy of the
+   ENTRY rules would cause, and it is guarded the same way.
+
+   The sandbox is loaded once and cached, so importing resolve() costs one
+   file read and no network. */
+let __ctx = null;
+function strategy(){
+  if (!__ctx) __ctx = loadStrategy();
+  return __ctx;
+}
+
 export function resolve(rows, i, plan, horizon){
-  const long = plan.dir === 'long';
-  const E = plan.entry, T = plan.t1, S = plan.stop;
-  const risk = Math.abs(E - S);
-  if (!(risk > 0)) return null;
-  const rMul = px => (long ? (px - E) : (E - px)) / risk;
-
-  for (let j = i + 1; j < rows.length && j <= i + horizon; j++){
-    const b = rows[j];
-    const hitT = long ? (b.h >= T) : (b.l <= T);
-    const hitS = long ? (b.l <= S) : (b.h >= S);
-
-    /* the open is the bar's first print — a gap past a level is unambiguous
-       and fills THERE, not at the level */
-    const gapS = long ? (b.o <= S) : (b.o >= S);
-    const gapT = long ? (b.o >= T) : (b.o <= T);
-    if (gapS) return { outcome: 'loss', exit: b.o, rMultiple: rMul(b.o), bars: j - i,
-                       exitT: b.t, gapped: true, ambiguous: false };
-    if (gapT) return { outcome: 'win', exit: b.o, rMultiple: rMul(b.o), bars: j - i,
-                       exitT: b.t, gapped: true, ambiguous: false };
-
-    if (hitT && hitS){
-      /* BOTH inside one bar. Nothing in OHLC orders them. Scored as the
-         target because that is the optimistic read, and flagged so the
-         interval machinery can strip it out at the lower bound — never
-         silently kept as a win. */
-      return { outcome: 'win', exit: T, rMultiple: rMul(T), bars: j - i,
-               exitT: b.t, gapped: false, ambiguous: true };
-    }
-    if (hitT) return { outcome: 'win', exit: T, rMultiple: rMul(T), bars: j - i,
-                       exitT: b.t, gapped: false, ambiguous: false };
-    if (hitS) return { outcome: 'loss', exit: S, rMultiple: rMul(S), bars: j - i,
-                       exitT: b.t, gapped: false, ambiguous: false };
-  }
-  const last = rows[Math.min(i + horizon, rows.length - 1)];
-  return { outcome: 'expired', exit: last.c, rMultiple: rMul(last.c),
-           bars: Math.min(horizon, rows.length - 1 - i), exitT: last.t,
-           gapped: false, ambiguous: false };
+  return strategy().hg80Resolve(rows, i, plan, horizon);
 }
 
 /* ==================== 4. THE WALK ==================== */

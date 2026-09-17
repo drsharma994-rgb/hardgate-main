@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v771',
-  pack: 'the 5m walk that tests 80PERCENT against its own 84.21% bar — ambiguity and sampling error both at their worst, and a census explaining the trade count',
+  version: 'hg-v772',
+  pack: '80PERCENT runs the whole scalp-to-swing ladder — identical rules on 5m/15m/1h/4h/1d, each rung priced from its own live ATR, and the tab says where it stands when nothing fires',
   built: '2026-09-17T00:00:00Z'
 };
 
