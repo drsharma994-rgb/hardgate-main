@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v772',
-  pack: '80PERCENT runs the whole scalp-to-swing ladder — identical rules on 5m/15m/1h/4h/1d, each rung priced from its own live ATR, and the tab says where it stands when nothing fires',
+  version: 'hg-v773',
+  pack: 'the setups moved to the top of 80PERCENT — the most recent firing on every rung, not only the last candle, plus a census of what the pullback threshold turns away',
   built: '2026-09-17T00:00:00Z'
 };
 

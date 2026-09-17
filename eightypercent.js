@@ -415,6 +415,64 @@ function hg80Resolve(rows, i, plan, horizon){
            gapped: false, ambiguous: false };
 }
 
+/* ---------------------------------------------------------------------
+   WHY SO FEW, AND WHAT THE THRESHOLD IS COSTING
+
+   "Where are the setups" has a number for an answer, and this computes it.
+
+   For every bar where the three NON-pullback conditions already hold — the
+   trend is aligned, the candle closed the right way, the session allows it
+   — it records where RSI actually was. Those are the bars that the pullback
+   threshold alone turned away.
+
+   Nothing here overrides a threshold and nothing here is a setup. It reads
+   the RSI that hg80SignalAt already computed on bars hg80SignalAt already
+   judged, and buckets them. The strategy has no knob and is offered none:
+   this is a census of what the spec rejected, not a second spec.
+
+   The point it makes is specific and is worth stating on the tab, because
+   it is counter-intuitive: MOVING THE THRESHOLD DOES NOT CHANGE WHAT THE
+   TRADE HAS TO HIT. The breakeven is set by 4.00 and 0.75 and by nothing
+   else, so a looser pullback buys more trades at the SAME 84.21% bar, of
+   unknown and probably worse quality — every extra trade is one the spec
+   thought was not yet a pullback. That is a real trade-off with a number on
+   each side, which is a better thing to hand someone than either a blank
+   panel or a quietly loosened rule.
+   --------------------------------------------------------------------- */
+var P80_CENSUS_LEVELS = [45, 50, 55, 60];
+
+function hg80PullbackCensus(rows, ind, cfg){
+  var out = { armedLong: 0, armedShort: 0, levels: [], bars: 0 };
+  if (!rows || !ind) return out;
+  var i, k;
+  var longAt = {}, shortAt = {};
+  for (k = 0; k < P80_CENSUS_LEVELS.length; k++){ longAt[P80_CENSUS_LEVELS[k]] = 0; shortAt[P80_CENSUS_LEVELS[k]] = 0; }
+  for (i = Math.max(P80_EMA_SLOW, 0); i < rows.length; i++){
+    var sg = hg80SignalAt(rows, ind, i, cfg);
+    if (!sg) continue;
+    out.bars++;
+    var lc = sg.longChecks, sc = sg.shortChecks;
+    var lArmed = lc.trend && lc.trigger && (lc.session !== false);
+    var sArmed = sc.trend && sc.trigger && (sc.session !== false);
+    if (lArmed){
+      out.armedLong++;
+      for (k = 0; k < P80_CENSUS_LEVELS.length; k++) if (sg.rsi < P80_CENSUS_LEVELS[k]) longAt[P80_CENSUS_LEVELS[k]]++;
+    }
+    if (sArmed){
+      out.armedShort++;
+      for (k = 0; k < P80_CENSUS_LEVELS.length; k++) if (sg.rsi > (100 - P80_CENSUS_LEVELS[k])) shortAt[P80_CENSUS_LEVELS[k]]++;
+    }
+  }
+  for (k = 0; k < P80_CENSUS_LEVELS.length; k++){
+    var lv = P80_CENSUS_LEVELS[k];
+    out.levels.push({ rsiLong: lv, rsiShort: 100 - lv,
+                      longFires: longAt[lv], shortFires: shortAt[lv],
+                      fires: longAt[lv] + shortAt[lv],
+                      isSpec: lv === P80_RSI_LONG });
+  }
+  return out;
+}
+
 /* Scan a bar series for every setup the spec fires. Pure — takes rows,
    returns signals — so the whole protocol is testable without a network,
    a DOM or a clock. */
@@ -475,6 +533,16 @@ function hg80ScanTf(rows, def, venue){
   var lastSig = hg80SignalAt(rows, res.ind, n - 1, cfg);
   var live = res.signals.filter(function(x){ return x.i === n - 1; });
 
+  /* THE MOST RECENT FIRING, whether or not it was the last candle. A setup
+     that fired three bars ago is still the answer to "what has this rung
+     given me" — burying it in a history table while the top of the page
+     says NOTHING FIRED is how a populated tab reads as an empty one. */
+  var latest = res.signals.length ? res.signals[res.signals.length - 1] : null;
+  if (latest){
+    latest.ageBars = (n - 1) - latest.i;
+    latest.ageSec = latest.ageBars * cfg.tfSec;
+  }
+
   /* near misses: three of the four (or two of three where the session rule
      is inapplicable), most recent first, capped so one quiet rung cannot
      flood the page */
@@ -490,7 +558,8 @@ function hg80ScanTf(rows, def, venue){
 
   return { def: def, cfg: cfg, ok: true, rows: rows, res: res, be: be,
            lastAtr: lastAtr, lastPx: lastPx, lastSig: lastSig,
-           live: live, tally: tally, misses: misses,
+           live: live, latest: latest, tally: tally, misses: misses,
+           census: hg80PullbackCensus(rows, res.ind, cfg),
            scanned: Math.max(0, n - P80_EMA_SLOW) };
 }
 
@@ -608,13 +677,14 @@ function ladderBoardHtml(rungs){
   var h = '<div class="panel" style="margin-top:10px"><h3>THE LADDER RIGHT NOW '
     + '<span>identical rules, five timeframes</span></h3>'
     + '<table class="tbl"><tr><th>rung</th><th>band</th><th>last bar (UTC)</th><th>close</th>'
-    + '<th>RSI(14)</th><th>ATR(14)</th><th>stop % of entry</th><th>state</th><th>distance to fire</th></tr>';
+    + '<th>RSI(14)</th><th>ATR(14)</th><th>stop % of entry</th><th>state</th>'
+    + '<th>fired</th><th>distance to fire</th></tr>';
   var i;
   for (i = 0; i < rungs.length; i++){
     var r = rungs[i];
     if (!r.ok){
       h += '<tr><td><b>' + esc(r.def.tf) + '</b></td><td>' + esc(r.def.band) + '</td>'
-        + '<td colspan="7" class="note">' + esc(r.why || 'no bars') + '</td></tr>';
+        + '<td colspan="8" class="note">' + esc(r.why || 'no bars') + '</td></tr>';
       continue;
     }
     var s = r.lastSig;
@@ -631,6 +701,9 @@ function ladderBoardHtml(rungs){
       + '<td class="hg-num">' + (isFinite(stopPct) ? stopPct.toFixed(3) + '%'
           + (stopPct < P80_STOP_FLOOR ? ' <span class="statuschip na">under floor</span>' : '') : '—') + '</td>'
       + '<td>' + state + '</td>'
+      + '<td class="hg-num">' + r.res.signals.length + ' in ' + r.scanned
+      + (r.scanned > 0 ? ' <span class="note">(' + (100 * r.res.signals.length / r.scanned).toFixed(2) + '%)</span>' : '')
+      + '</td>'
       + '<td>' + distanceHtml(s, r.cfg) + '</td></tr>';
   }
   h += '</table><div class="note">"Distance to fire" is the nearer side\'s failing conditions, '
@@ -666,6 +739,124 @@ function distanceHtml(sig, cfg){
   return '<span class="note">' + esc(side.toUpperCase()) + ' ' + sc.met + '/' + sc.total + ' — '
     + bits.join(' · ') + (cfg && cfg.session === false
         ? ' <span class="statuschip na">session rule N/A here</span>' : '') + '</span>';
+}
+
+/* ---------------------------------------------------------------------
+   THE SETUPS, AT THE TOP, WHERE THEY WERE ASKED FOR
+
+   The last closed candle fires roughly three times in a thousand bars, so a
+   page that only promotes THAT reads as a page with no setups on it even
+   while it is holding several. This panel answers "where are the setups"
+   directly: the most recent firing on every rung, with its age, its levels
+   and whether it has already resolved.
+
+   Age is the whole point and is stated in the rung's own bars AND in wall
+   time, because those diverge violently up the ladder: three bars old is
+   fifteen minutes on 5m and twelve days on 1d. A number a reader has to
+   convert in their head is a number that gets misread.
+   --------------------------------------------------------------------- */
+function ageTxt(sec){
+  var s = fin(sec);
+  if (!isFinite(s) || s < 0) return '—';
+  if (s < 3600) return Math.round(s / 60) + 'm';
+  if (s < 86400) return (s / 3600).toFixed(s < 36000 ? 1 : 0) + 'h';
+  return (s / 86400).toFixed(s < 864000 ? 1 : 0) + 'd';
+}
+
+function latestSetupsHtml(rungs){
+  var have = [], i;
+  for (i = 0; i < rungs.length; i++){
+    if (rungs[i].ok && rungs[i].latest) have.push(rungs[i]);
+  }
+  if (!have.length){
+    var scanned = 0;
+    for (i = 0; i < rungs.length; i++) if (rungs[i].ok) scanned += rungs[i].scanned;
+    return '<div class="panel" style="margin-top:10px"><h3>SETUPS</h3>'
+      + '<div class="note warn">Not one rung fired anywhere in ' + scanned + ' evaluable bars. '
+      + 'That is the supplied strategy\'s own rarity, not a missing feed — the census below '
+      + 'counts the bars it turned away and says which condition did it. Every rung\'s data '
+      + 'arrived; see the board above for where each one stands.</div></div>';
+  }
+
+  var h = '<div class="panel" style="margin-top:10px"><h3>SETUPS '
+    + '<span>the most recent firing on each rung</span></h3>'
+    + '<table class="tbl"><tr><th>rung</th><th>when (UTC)</th><th>age</th><th>dir</th>'
+    + '<th>entry</th><th>stop</th><th>target</th><th>state</th></tr>';
+  for (i = 0; i < have.length; i++){
+    var r = have[i], s = r.latest, p = s.plan;
+    var fresh = s.ageBars === 0;
+    var st = fresh ? '<span class="statuschip ok">last closed candle</span>'
+      : s.status === 'open' ? '<span class="statuschip ok">still open</span>'
+      : '<span class="statuschip na">' + esc(s.status || '—') + '</span>';
+    h += '<tr><td><b>' + esc(r.def.tf) + '</b></td>'
+      + '<td>' + esc(isFinite(s.t) ? new Date(s.t * 1000).toISOString().replace('T', ' ').slice(5, 16) : '—') + '</td>'
+      + '<td class="hg-num">' + (s.ageBars === 0 ? 'now' : s.ageBars + ' bars · ' + ageTxt(s.ageSec)) + '</td>'
+      + '<td>' + esc(s.dir) + '</td>'
+      + '<td class="hg-num">' + num(p.entry) + '</td>'
+      + '<td class="hg-num">' + num(p.stop) + '</td>'
+      + '<td class="hg-num">' + num(p.t1) + '</td>'
+      + '<td>' + st + '</td></tr>';
+  }
+  h += '</table>';
+
+  /* the actionable ones get a full card; a resolved firing from 200 bars
+     ago gets a row and nothing more, because it is history, not a setup */
+  var actionable = have.filter(function(r){
+    return r.latest.ageBars === 0 || r.latest.status === 'open';
+  });
+  for (i = 0; i < actionable.length; i++){
+    var a = actionable[i];
+    h += setupCardHtml(a.latest, a.be, a.cfg,
+      a.latest.ageBars === 0 ? 'last closed candle' : ('still open · ' + a.latest.ageBars + ' bars old'));
+  }
+  if (!actionable.length){
+    h += '<div class="note warn">None of these is actionable now: every one has already reached '
+      + 'its target, its stop or its horizon. They are listed because they are what the strategy '
+      + 'produced, not because they can be taken.</div>';
+  }
+  return h + '</div>';
+}
+
+/* ---------------------------------------------------------------------
+   WHAT THE PULLBACK THRESHOLD IS TURNING AWAY
+
+   Rendered as a trade-off with both sides priced, never as a recommendation
+   and never as a set of setups.
+   --------------------------------------------------------------------- */
+function censusHtml(rungs){
+  var rows = rungs.filter(function(r){ return r.ok && r.census && r.census.bars; });
+  if (!rows.length) return '';
+  var gross = P80_SL_ATR / (P80_SL_ATR + P80_TP_ATR);
+  var lv = P80_CENSUS_LEVELS;
+  var h = '<div class="panel" style="margin-top:10px"><h3>WHY SO FEW '
+    + '<span>what the pullback threshold turns away</span></h3>'
+    + '<div class="note">On these bars the trend, the candle direction and the session already '
+    + 'agreed. RSI alone decided. The first column is the spec.</div>'
+    + '<table class="tbl"><tr><th>rung</th><th>bars armed</th>';
+  var k;
+  for (k = 0; k < lv.length; k++){
+    h += '<th>RSI &lt;' + lv[k] + ' / &gt;' + (100 - lv[k]) + (lv[k] === P80_RSI_LONG ? ' <b>(spec)</b>' : '') + '</th>';
+  }
+  h += '</tr>';
+  var i;
+  for (i = 0; i < rows.length; i++){
+    var c = rows[i].census;
+    h += '<tr><td><b>' + esc(rows[i].def.tf) + '</b></td>'
+      + '<td class="hg-num">' + (c.armedLong + c.armedShort) + ' of ' + c.bars + '</td>';
+    for (k = 0; k < c.levels.length; k++){
+      h += '<td class="hg-num' + (c.levels[k].isSpec ? ' ok' : '') + '">' + c.levels[k].fires + '</td>';
+    }
+    h += '</tr>';
+  }
+  h += '</table>';
+  h += '<div class="note warn" style="margin-top:4px"><b>Moving the threshold does not change '
+    + 'what the trade has to hit.</b> The breakeven is set by ' + P80_SL_ATR.toFixed(2) + ' and '
+    + P80_TP_ATR.toFixed(2) + ' and by nothing else, so it stays ' + (gross * 100).toFixed(2)
+    + '% gross at every column. A looser pullback buys more trades at the SAME bar, and every '
+    + 'extra one is a bar the spec judged not yet a pullback — so their quality is unknown and '
+    + 'there is a good reason to think it is worse. The counts are here so that is a decision '
+    + 'with numbers on both sides. <b>The tab trades the spec column and nothing else.</b></div>';
+  return h + '</div>';
 }
 
 function sessionNoteHtml(cfg){
@@ -802,7 +993,9 @@ function firedHtml(rungs){
     if (!r.ok) continue;
     for (j = 0; j < r.res.signals.length; j++){
       var s = r.res.signals[j];
-      if (s.i === r.rows.length - 1) continue;      /* the live ones have their own cards */
+      /* the SETUPS panel carded the most recent firing on this rung already;
+         showing it again here is the same setup twice on one page */
+      if (r.latest && s.i === r.latest.i) continue;
       if (s.status === 'open') open.push({ r: r, s: s });
       else settled.push({ r: r, s: s });
     }
@@ -859,33 +1052,38 @@ function render(rungs, venue, recNotes){
     return;
   }
 
+  h += latestSetupsHtml(rungs);
   h += ladderBoardHtml(rungs);
 
-  var live = [], i;
+  /* the SETUPS panel above already carries every card worth carrying, so
+     this adds only what it cannot: what the log did with a fresh firing,
+     and — for the rungs that did NOT fire on their last candle — which
+     conditions held there */
+  var live = [], quiet = [], i;
   for (i = 0; i < usable.length; i++){
-    if (usable[i].live.length) live.push({ r: usable[i], s: usable[i].live[0] });
+    if (usable[i].live.length) live.push(usable[i]); else quiet.push(usable[i]);
   }
-  if (live.length){
-    h += '<div class="note ok" style="margin-top:10px"><b>THE LAST CLOSED CANDLE FIRED ON '
-      + esc(live.map(function(x){ return x.r.def.tf; }).join(', ')) + '.</b></div>';
-    for (i = 0; i < live.length; i++){
-      h += setupCardHtml(live[i].s, live[i].r.be, live[i].r.cfg, 'last closed candle');
-      if (recNotes && recNotes[live[i].r.def.tf]){
-        h += '<div class="note" style="margin-top:4px">' + esc(recNotes[live[i].r.def.tf]) + '</div>';
-      }
+  for (i = 0; i < live.length; i++){
+    if (recNotes && recNotes[live[i].def.tf]){
+      h += '<div class="note" style="margin-top:4px"><b>' + esc(live[i].def.tf) + '</b> '
+        + esc(recNotes[live[i].def.tf]) + '</div>';
     }
-  } else {
-    h += '<div class="panel" style="margin-top:10px"><h3>NOTHING FIRED ON THE LAST CLOSED CANDLE</h3>'
+  }
+  if (quiet.length){
+    h += '<div class="panel" style="margin-top:10px"><h3>'
+      + (live.length ? 'THE OTHER RUNGS DID NOT FIRE ON THEIR LAST CANDLE'
+                     : 'NOTHING FIRED ON THE LAST CLOSED CANDLE') + '</h3>'
       + '<div class="note">Every condition has to hold on the SAME candle. Which ones did, per '
       + 'rung, on its own last closed bar:</div>';
-    for (i = 0; i < usable.length; i++){
-      h += whyNotHtml(usable[i].lastSig, usable[i].cfg, usable[i].def.tf);
+    for (i = 0; i < quiet.length; i++){
+      h += whyNotHtml(quiet[i].lastSig, quiet[i].cfg, quiet[i].def.tf);
     }
     h += '</div>';
   }
 
   h += firedHtml(rungs);
   h += nearMissHtml(rungs);
+  h += censusHtml(rungs);
 
   var scanned = 0, fired = 0, amb = 0;
   for (i = 0; i < usable.length; i++){
@@ -1014,6 +1212,7 @@ W.hg80SignalAt       = hg80SignalAt;
 W.hg80Score          = hg80Score;
 W.hg80Plan           = hg80Plan;
 W.hg80Resolve        = hg80Resolve;
+W.hg80PullbackCensus = hg80PullbackCensus;
 W.hg80Scan           = hg80Scan;
 W.hg80ScanTf         = hg80ScanTf;
 W.hg80Record         = hg80Record;

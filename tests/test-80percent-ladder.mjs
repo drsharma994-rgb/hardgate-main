@@ -76,7 +76,11 @@ function series(n, o){
     if (i < trig - 7)      c = px + 1.2 * up;      /* the trend */
     else if (i < trig)     c = px - 2.6 * up;      /* the pullback */
     else if (i === trig)   c = px + 1.4 * up;      /* the trigger */
-    else                   c = px + 0.02 * up;     /* flat tail, resolves nothing */
+    /* the tail closes the WRONG way, so it fails the candle-direction
+       trigger and cannot fire — and moves too little to resolve anything.
+       That is what makes the trigger bar the LATEST firing rather than the
+       last one, which is the normal case this file is about. */
+    else                   c = px - 0.02 * up;
     rows.push({ t, o: oo, h: Math.max(oo, c) + 0.4, l: Math.min(oo, c) - 0.4, c, v: 100 });
     px = c;
   }
@@ -307,6 +311,128 @@ console.log('\n== the tab is POPULATED when nothing fires ==');
 
   const stat = String(node._q['#p80Stat'].textContent);
   ok(/rungs/.test(stat), `the status line reports the ladder: "${stat}"`);
+}
+
+console.log('\n== the setups are at the TOP, and are the most recent firing, not only the last candle ==');
+{
+  /* the complaint this section exists for: the tab held setups and read as
+     though it held none, because only a firing on the LAST candle was
+     promoted and that happens roughly three times in a thousand bars */
+  const def = { tf: '15m', sec: 900, bars: 280, band: 'scalp' };
+  const rows = series(280, { tfSec: 900, endHour: 15, tail: 4 });
+  const out = ctx.hg80ScanTf(rows, def, { rtFrac: 0.00020, venue: 'XM' });
+  ok(out.res.signals.length > 0, 'the fixture fires');
+  ok(!out.live.length, 'but NOT on the last closed candle — which is the normal case');
+  ok(!!out.latest, 'the rung still carries a latest setup');
+  ok(out.latest.i === out.res.signals[out.res.signals.length - 1].i,
+     'and it is the most recent firing, not the first');
+  ok(out.latest.ageBars === (rows.length - 1) - out.latest.i,
+     `with its age in bars (${out.latest.ageBars})`);
+  ok(out.latest.ageSec === out.latest.ageBars * 900,
+     'and in wall time at THIS rung\'s seconds — three bars is 45m here and 3 days on 1d');
+  ok(!!out.latest.plan && out.latest.plan.entry > 0, 'carrying its levels, so it can be acted on');
+
+  const iSetups = SRC.indexOf('latestSetupsHtml(rungs)');
+  const iBoard = SRC.indexOf('ladderBoardHtml(rungs)', SRC.indexOf('function render('));
+  ok(iSetups > 0 && iBoard > 0 && iSetups < iBoard,
+     'and the SETUPS panel is rendered ABOVE the ladder board, not buried under it');
+}
+
+console.log('\n== no setup is shown twice ==');
+{
+  ok(/if \(r\.latest && s\.i === r\.latest\.i\) continue;/.test(SRC),
+     'the history panels skip whatever the SETUPS panel already carded');
+  /* endHour 17 with a 4-bar tail puts the 1h trigger at 13:00 UTC — inside
+     the session. At endHour 15 it would land at 11:00 and fire nothing, which
+     would make this assertion pass vacuously. */
+  const def = { tf: '1h', sec: 3600, bars: 280, band: 'swing' };
+  const rows = series(280, { tfSec: 3600, endHour: 17, tail: 4 });
+  const out = ctx.hg80ScanTf(rows, def, { rtFrac: 0.00020, venue: 'XM' });
+  ok(out.res.signals.length >= 1, `the 1h fixture fires (${out.res.signals.length})`);
+  const rest = out.res.signals.filter(x => !out.latest || x.i !== out.latest.i);
+  ok(rest.length === out.res.signals.length - 1,
+     'exactly one signal is claimed by the SETUPS panel and the rest fall through to history');
+}
+
+console.log('\n== the census counts what the threshold turned away, and agrees with the scan ==');
+{
+  /* the strongest check available: the census re-derives the spec column
+     independently, so if it disagreed with the scan one of the two would be
+     measuring rules the tab does not trade */
+  for (const [tf, sec] of [['5m', 300], ['15m', 900], ['1h', 3600], ['1d', 86400]]){
+    const def = { tf, sec, bars: 280, band: sec > 3600 ? 'swing' : 'scalp' };
+    const rows = series(280, { tfSec: sec, endHour: 15 });
+    const out = ctx.hg80ScanTf(rows, def, { rtFrac: 0.00020, venue: 'XM' });
+    const spec = out.census.levels.find(l => l.isSpec);
+    ok(!!spec, `${tf}: the census marks the spec column`);
+    ok(spec.rsiLong === ctx.HG_P80_SPEC.rsiLong && spec.rsiShort === ctx.HG_P80_SPEC.rsiShort,
+       `${tf}: and it is the supplied 45 / 55, not a nearby number`);
+    ok(spec.fires === out.res.signals.length,
+       `${tf}: the spec column equals the scan exactly (${spec.fires} = ${out.res.signals.length}) `
+       + '— the census measures the rules the tab trades');
+  }
+}
+
+console.log('\n== the census is a census, never a second strategy ==');
+{
+  const lv = ctx.hg80PullbackCensus ? true : false;
+  ok(lv, 'the census is exported so it can be checked');
+  ok(!/hg80SignalAt\([^)]*,\s*\d/.test(LOGIC),
+     'no threshold is ever passed into the signal evaluator — it re-reads what was computed');
+  /* and the decisive one: a census cannot produce something tradeable. It
+     returns counts. If it ever returned a plan it would be a second spec
+     wearing a census's name, and the panel's promise would be false. */
+  const shape = ctx.hg80PullbackCensus(series(280, { tfSec: 3600, endHour: 15 }),
+                                       ctx.hg80Indicators(series(280, { tfSec: 3600, endHour: 15 })),
+                                       ctx.hg80Cfg({ tf: '1h', sec: 3600 }));
+  ok(!('plan' in shape) && !('signals' in shape) && !('entry' in shape),
+     'the census returns no plan, no signals and no entry — only counts');
+  ok(shape.levels.every(l => typeof l.fires === 'number' && !('plan' in l) && !('entry' in l)),
+     'and neither does any of its levels');
+  /* monotonicity needs a series with real spread across the levels — on the
+     engineered single-trigger fixture every column is 1 and the assertion
+     would hold without meaning anything */
+  const walk = (tfSec, n) => {
+    const out = [];
+    let px = 4358, st = 7;
+    const rnd = () => { st = (st * 1103515245 + 12345) & 0x7fffffff; return st / 0x7fffffff; };
+    for (let i = 0; i < n; i++){
+      const o = px, cl = o + (rnd() - 0.5) * 3.3 * Math.sqrt(tfSec / 300);
+      out.push({ t: 1789000000 - (n - 1 - i) * tfSec, o, h: Math.max(o, cl) + 0.3,
+                 l: Math.min(o, cl) - 0.3, c: cl, v: 1 });
+      px = cl;
+    }
+    return out;
+  };
+  const rows = walk(86400, 420);
+  const ind = ctx.hg80Indicators(rows);
+  const c = ctx.hg80PullbackCensus(rows, ind, ctx.hg80Cfg({ tf: '1d', sec: 86400 }));
+  const fires = c.levels.map(l => l.fires);
+  ok(fires.every((v, i) => i === 0 || v >= fires[i - 1]),
+     `looser thresholds can only ever fire more, never fewer (${fires.join(' <= ')})`);
+  ok(fires[fires.length - 1] > fires[0],
+     `and the spread is real, not a row of equal numbers — ${fires[0]} at the spec, `
+     + `${fires[fires.length - 1]} at the loosest, which is the trade-off the panel prices`);
+  ok(c.armedLong + c.armedShort <= c.bars,
+     'armed bars are a subset of evaluated bars');
+
+  /* the point the panel makes, asserted rather than claimed: relaxing the
+     pullback does not move the bar the trade has to clear */
+  const be = ctx.hg80Breakeven(5, 4000, 0.00020);
+  ok(near(be.gross, 4 / 4.75, 1e-12),
+     'the gross breakeven is a function of the stop and target alone');
+  ok(!/RSI|rsi/.test(String(ctx.hg80Breakeven)),
+     'and the breakeven function never reads an RSI threshold at all');
+  ok(/Moving the threshold does not change/.test(SRC), 'which is what the panel says');
+  ok(/The tab trades the spec column and nothing else/.test(SRC),
+     'and it states which column is actually traded');
+}
+
+console.log('\n== the board says how often each rung fires ==');
+{
+  ok(/<th>fired<\/th>/.test(SRC), 'the ladder board has a fired column');
+  ok(/r\.res\.signals\.length \+ ' in ' \+ r\.scanned/.test(SRC),
+     'reporting firings over the bars actually scanned, so the count is never a mystery');
 }
 
 console.log('\n== and it still refuses to invent a rate from what it resolved ==');
