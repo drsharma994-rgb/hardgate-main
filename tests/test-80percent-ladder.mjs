@@ -1659,8 +1659,16 @@ console.log('\n== ONE STEP BEHIND: what is two away, when the second thing can m
   const aS = armS.find(x => x.side === 'long');
   ok(!!aS && aS.need.kind === 'session',
      'a rung whose only other gap is the session names the CLOCK, not an indicator');
-  ok(aS.need.secs > 0 && /opens in/.test(aS.need.txt),
-     `with the wait stated: "${aS.need.txt}"`);
+  /* TIME-DEPENDENT, AND IT USED TO BE ASSERTED AS IF IT WERE NOT. This
+     checked `secs > 0`, which is false for the five hours a day the window
+     is actually open — so the test passed 19 hours and failed 5, and the
+     suite only looked green because it happened to run outside the window.
+     Both branches are real states and both are asserted. */
+  ok(aS.need.secs >= 0, 'with the wait measured, not guessed');
+  ok(aS.need.secs > 0
+       ? /opens in/.test(aS.need.txt)
+       : /is open NOW/.test(aS.need.txt),
+     `and stated for the state it is in: "${aS.need.txt}"`);
 
   /* (3) TREND IS NEVER THE SECOND THING. A rung needing its EMAs to recross
      is not two conditions from a trade in any sense worth showing next to
@@ -1999,7 +2007,16 @@ console.log('\n== a setup gold has already run past is NOT offered as one you co
      on" and printed an entry for it. */
   const def = { tf: '15m', sec: 900, bars: 320, band: 'scalp' };
   const rows = series(320, { tfSec: 900, endHour: 15, tail: 3 });
-  const out = ctx.hg80ScanTf(rows, def, ctx.hg80VenueRt());
+
+  /* ONE DIMENSION AT A TIME. Since hg-v790 the panel has two independent
+     reasons to refuse a setup: the live price has run past it, or the
+     venue's round trip eats the target. This block is about the FIRST, so
+     it prices the rung at a venue that takes nothing — otherwise the
+     assertions below pass or fail on the cost arithmetic and say nothing
+     about the live price at all. The cost half is asserted on the same
+     fixture at the real venue in the block after this one. */
+  const FREE = { rtFrac: 0, rtCostPct: 0, venue: 'ZERO-COST', basis: 'test venue, no spread' };
+  const out = ctx.hg80ScanTf(rows, def, FREE);
   const opens = out.res.signals.filter(x => x.status === 'open');
   ok(opens.length > 0, `the fixture leaves ${opens.length} setup(s) open at the last close`);
 
@@ -2039,6 +2056,138 @@ console.log('\n== a setup gold has already run past is NOT offered as one you co
      'livePriceHtml, armedHtml and simpleSetupsHtml all take the live price as an argument');
   ok(!/function (livePriceHtml|armedLiveHtml|simpleSetupsHtml)[\s\S]{0,300}__p\.spot/.test(SRC),
      'and none of them reads __p.spot out of module state');
+}
+
+console.log('\n== a rung the venue cannot pay for is not counted as one you could act on ==');
+{
+  /* THE SECOND HALF OF THE SAME UNTRUTH. hg-v783 stopped the panel offering
+     a setup gold had already run past. The cost verdict had been printed on
+     every card since hg-v782 and decided nothing: this very fixture — a 15m
+     long whose stop is 0.23% of entry, so the target is 1.65 and the XM
+     round trip is 0.87 of it — was counted under "setups you could act on"
+     with an entry price beside it, three lines above its own card saying
+     the trade returns less than nothing at the rate the strategy claims for
+     itself. A number the page computes and then ignores is decoration. */
+  const def = { tf: '15m', sec: 900, bars: 320, band: 'scalp' };
+  const rows = series(320, { tfSec: 900, endHour: 15, tail: 3 });
+  const paid = ctx.hg80ScanTf(rows, def, ctx.hg80VenueRt());
+  const opens = paid.res.signals.filter(x => x.status === 'open');
+  ok(opens.length > 0, `the fixture leaves ${opens.length} setup(s) open at the real venue too`);
+
+  const q = ctx.hg80Quality(opens[opens.length - 1], paid, null);
+  ok(q.verdict.key === 'negative',
+     `the arithmetic refuses it: ${(q.verdict.share * 100).toFixed(0)}% of the target is the `
+     + `round trip, and the claimed rate returns ${q.verdict.expR.toFixed(3)}R`);
+  ok(q.pays === false, 'so hg80Quality says it does not pay');
+
+  /* and that reaches the COUNT, which is the thing that was lying */
+  const h = ctx.simpleSetupsHtml([paid], NaN);
+  ok(/Nothing here is takeable/.test(h),
+     'the panel does not offer it — with no live price at all, the cost alone refuses it');
+  ok(!/[0-9]+ setups? you could act on/.test(h),
+     'and no count of actionable setups is printed');
+  ok(/CANNOT PAY AT THIS VENUE/.test(h), 'the card is still shown, stamped with the reason');
+  ok(/the arithmetic refuses at this venue/.test(h),
+     'and the heading says which reason, not just that the panel is empty');
+
+  /* NOT HIDDEN, and not confused with the other refusal */
+  ok(!/NO LONGER TAKEABLE/.test(h),
+     'it is NOT filed under "price has moved past" — nothing was read about the price');
+
+  /* 'unknown' MAKES NO CLAIM. With the venue unreadable the tab cannot say a
+     rung fails to pay, and refusing it on an input it never read would be a
+     worse error than showing it. */
+  const blind = ctx.hg80Quality(opens[0], { be: null }, null);
+  ok(blind.verdict.key === 'unknown' && blind.pays === true,
+     'an unpriced rung is not refused — a missing venue is not a negative verdict');
+}
+
+console.log('\n== a refused card says where on the ladder the spread is not the reason ==');
+{
+  /* A rung's breakeven is a property of the RUNG — this timeframe's
+     ATR-sized target against the venue's round trip — not of any one
+     firing. So when the arithmetic refuses a setup, the same arithmetic
+     already knows which timeframes it would not have refused, and that is
+     the only actionable thing left on the card. */
+  const mk = (tf, cost, target) => ({ ok: true, def: { tf: tf }, be: { cost: cost, target: target,
+                                                                      risk: 1 } });
+  const pay = ctx.hg80PayingRungs([
+    mk('5m',  0.9, 1.0),    /* 90% of the target — refused */
+    mk('4h',  0.1, 4.0),    /* 2.5% — clear */
+    mk('15m', 0.9, 2.0),    /* 45% — heavy, but it does pay */
+    { ok: false, def: { tf: '1m' } },
+    null
+  ]);
+  ok(pay.length === 2, `two of the five rungs clear the round trip (got ${pay.length})`);
+  ok(pay[0].tf === '4h' && pay[1].tf === '15m',
+     'cheapest first — the rung the venue takes least out of leads');
+  ok(!pay.some(p => p.tf === '5m'), 'and the one the spread eats is not among them');
+  ok(!pay.some(p => p.tf === '1m'),
+     'a rung that did not scan is not counted either way — no verdict from no data');
+
+  const h = ctx.payingRungsHtml([mk('5m', 0.9, 1.0), mk('4h', 0.1, 4.0)]);
+  ok(/4h/.test(h) && /3%/.test(h), 'the line names the rung and what it costs there');
+  ok(/not a reason to take a trade there/.test(h),
+     'and says plainly that this is NOT a recommendation — only where the spread stops being '
+     + 'the binding constraint');
+
+  const none = ctx.payingRungsHtml([mk('5m', 0.9, 1.0), mk('15m', 1.2, 1.0)]);
+  ok(/No rung on this ladder clears/.test(none),
+     'with nothing on the ladder clearing it, that is said rather than left blank');
+  ok(/spread is the binding constraint at every timeframe/.test(none),
+     'naming the constraint, so a reader knows it is the venue and not the strategy');
+
+  /* it reaches the panel, on the fixture the arithmetic actually refuses */
+  const def = { tf: '15m', sec: 900, bars: 320, band: 'scalp' };
+  const paid = ctx.hg80ScanTf(series(320, { tfSec: 900, endHour: 15, tail: 3 }), def,
+                              ctx.hg80VenueRt());
+  const panel = ctx.simpleSetupsHtml([paid], NaN);
+  ok(/No rung on this ladder clears|the round trip does clear the target at/.test(panel),
+     'and the refused card carries it — a reader is told what would change the answer');
+}
+
+console.log('\n== what survives is ranked by what is knowable before it resolves ==');
+{
+  /* Cost share leads because it is the one input that is both measured and
+     decisive. The rest break ties, and the STOP FLOOR IS A RANKING INPUT,
+     NOT A GATE: this tab implements the supplied spec exactly and discloses
+     where it deviates, so a stop thinner than P80_STOP_FLOOR lowers a
+     setup's rank rather than silently removing the trade the spec asked
+     for. */
+  const rung = be => ({ be: be });
+  const sig = stopPct => ({ dir: 'long', variant: 'spec', plan: { stopPct: stopPct } });
+
+  const cheap = ctx.hg80Quality(sig(1.0), rung({ cost: 0.1, target: 2, risk: 1 }), 'fresh');
+  const dear  = ctx.hg80Quality(sig(1.0), rung({ cost: 0.6, target: 2, risk: 1 }), 'fresh');
+  ok(cheap.score < dear.score,
+     `the rung the venue takes less out of ranks ahead (${cheap.score.toFixed(1)} < `
+     + `${dear.score.toFixed(1)})`);
+
+  const atEntry = ctx.hg80Quality(sig(1.0), rung({ cost: 0.1, target: 2, risk: 1 }), 'fresh');
+  const waiting = ctx.hg80Quality(sig(1.0), rung({ cost: 0.1, target: 2, risk: 1 }), 'pending');
+  const passed  = ctx.hg80Quality(sig(1.0), rung({ cost: 0.1, target: 2, risk: 1 }), 'past-entry');
+  ok(atEntry.score < waiting.score && waiting.score < passed.score,
+     'at the same cost, price sitting on the entry ranks ahead of one still waiting, which '
+     + 'ranks ahead of one price has already left behind');
+
+  const spec = ctx.hg80Quality({ dir: 'long', variant: 'spec', plan: { stopPct: 1 } },
+                               rung({ cost: 0.1, target: 2, risk: 1 }), 'fresh');
+  const wide = ctx.hg80Quality({ dir: 'long', variant: 'wide', plan: { stopPct: 1 } },
+                               rung({ cost: 0.1, target: 2, risk: 1 }), 'fresh');
+  ok(spec.score < wide.score, 'and the tighter mechanic ranks ahead of the looser one');
+
+  const thin = ctx.hg80Quality(sig(0.2), rung({ cost: 0.1, target: 2, risk: 1 }), 'fresh');
+  ok(thin.underFloor === true && thin.score > cheap.score,
+     `a stop at 0.20% of entry — under the ${ctx.HG_P80_STOP_FLOOR}% floor — ranks BELOW an `
+     + 'otherwise identical setup');
+  ok(thin.pays === true,
+     'but it is not refused: the floor is a ranking input, not a gate, and the spec asked '
+     + 'for the trade');
+
+  /* the ORDER reaches the page, not just the helper */
+  ok(/actable\.sort\(function \(?a, b\)? *\{ *return a\.q\.score - b\.q\.score/.test(
+       SRC.replace(/\s+/g, ' ')) || /a\.q\.score - b\.q\.score/.test(SRC),
+     'simpleSetupsHtml sorts the takeable bucket by that score');
 }
 
 console.log('\n== an armed row says which way the forming candle is leaning ==');

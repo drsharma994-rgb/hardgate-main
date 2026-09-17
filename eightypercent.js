@@ -590,6 +590,92 @@ function hg80CostVerdict(be){
   return out;
 }
 
+/* ---------------------------------------------------------------------
+   WHAT IS KNOWABLE ABOUT A SETUP BEFORE IT RESOLVES
+
+   The cost verdict has been printed on every card since hg-v782 and has
+   never once decided anything. A 5m setup at XM whose round trip eats 36%
+   of the target, and which returns a NEGATIVE expectancy even at the 85%
+   the strategy claims for itself, was still counted under "setups you
+   could act on" with an entry price beside it.
+
+   That is the same untruth hg-v783 fixed for the live price, in a
+   different place: the count asserting something the tab's own arithmetic
+   contradicts two lines below. If the page computes that a rung cannot pay
+   at this venue, that has to reach the count, or the computation is
+   decoration.
+
+   So three buckets now, not two:
+
+     takeable      live price allows it AND the arithmetic does not refuse
+     cannot pay    live price allows it, the arithmetic refuses
+     no longer     live price has run past the level
+
+   None are hidden. A setup that vanishes is one a reader asks about; a
+   setup shown under a heading that says why is one they can learn from.
+
+   THE STOP FLOOR IS A RANKING INPUT, NOT A GATE. P80_STOP_FLOOR is the
+   0.50%-of-entry line under which noise dominates the stop. This tab's
+   discipline is to implement the supplied spec exactly and disclose where
+   it deviates, so a thin stop lowers a setup's rank and says so — it does
+   not silently remove the trade the spec asked for.
+   --------------------------------------------------------------------- */
+function hg80Quality(sig, rung, grade){
+  var v = hg80CostVerdict(rung && rung.be);
+  var stopPct = (sig && sig.plan && isFinite(fin(sig.plan.stopPct)))
+    ? fin(sig.plan.stopPct) : NaN;
+  var underFloor = isFinite(stopPct) && stopPct < P80_STOP_FLOOR;
+
+  /* 'unknown' makes NO claim in either direction. With the venue unreadable
+     the tab cannot say a setup fails to pay, and refusing it on an unread
+     input would be a worse error than showing it. */
+  var pays = !(v.key === 'gone' || v.key === 'negative');
+
+  var gradeRank = { 'fresh': 0, 'pending': 1, 'past-entry': 2 };
+  var vi = 0, i;
+  for (i = 0; i < P80_VARIANTS.length; i++){
+    if (P80_VARIANTS[i].key === (sig && sig.variant)) { vi = i; break; }
+  }
+
+  /* Lower is better. Cost share leads because it is the one input that is
+     both measured and decisive; the rest break ties. */
+  var score = 0;
+  score += isFinite(v.share) ? (v.share * 100) : 50;      /* % of the win the venue takes */
+  score += (gradeRank[grade] == null ? 1 : gradeRank[grade]) * 8;
+  score += vi * 4;                                        /* SPEC ahead of MID ahead of WIDE */
+  score += underFloor ? 15 : 0;
+
+  return { score: score, pays: pays, verdict: v, costShare: v.share,
+           stopPct: stopPct, underFloor: underFloor, gradeRank: gradeRank[grade] };
+}
+
+/* ---------------------------------------------------------------------
+   WHICH RUNGS THE VENUE DOES NOT REFUSE
+
+   A rung's breakeven is a property of the RUNG, not of any one firing:
+   it is this timeframe's ATR-sized target against the venue's round trip.
+   So when the arithmetic refuses a setup, the same arithmetic already
+   knows which timeframes it would not have refused, and saying so is the
+   only actionable thing on that card.
+
+   Nothing here is a recommendation. A 4h rung whose target clears the
+   spread is not thereby a good trade — it is a rung where the spread is
+   not the reason to decline. That distinction is stated wherever this is
+   rendered.
+   --------------------------------------------------------------------- */
+function hg80PayingRungs(rungs){
+  var out = [], i;
+  if (!rungs) return out;
+  for (i = 0; i < rungs.length; i++){
+    var r = rungs[i];
+    if (!r || !r.ok || !r.def) continue;
+    var v = hg80CostVerdict(r.be);
+    if (v.key === 'clear' || v.key === 'heavy') out.push({ tf: r.def.tf, share: v.share });
+  }
+  out.sort(function(a, b){ return a.share - b.share; });
+  return out;
+}
+
 /* One line a reader can act on, from that verdict. */
 function costLineHtml(be, venue){
   var v = hg80CostVerdict(be);
@@ -962,9 +1048,18 @@ function hg80Arming(rungs, armed){
                         + (side === 'long' ? 'below ' : 'above ') + want
                         + ' — ' + num(Math.abs(fin(sg.rsi) - want), 1) + ' points away' };
         } else {
+          /* "it opens in 0m" is what this said for the whole five hours the
+             window is actually open — the exact time the row matters most,
+             and the one moment the sentence reads as though nothing can
+             happen. The bar that failed the session check failed it on ITS
+             timestamp; whether the window is open NOW is a different fact,
+             and when it is, the next candle is already inside it. */
           need = { kind: 'session', secs: toOpen, gap: 0,
-                   txt: 'the ' + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC window has to be '
-                        + 'open — it opens in ' + hg80DurTxt(toOpen) };
+                   txt: (toOpen > 0)
+                     ? ('the ' + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC window has to be '
+                        + 'open — it opens in ' + hg80DurTxt(toOpen))
+                     : ('the ' + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC window is open '
+                        + 'NOW — the candle forming is already inside it') };
         }
         var cand = { rung: r, band: r.def.band, variant: v, side: side, sig: sg,
                      need: need, level: fin(sg.close), atr: fin(sg.atr),
@@ -2358,6 +2453,23 @@ function sessionClockHtml(rungs){
   return h;
 }
 
+/* The one actionable line on a card the arithmetic has refused: where on
+   this same ladder the spread is NOT the reason to decline. */
+function payingRungsHtml(rungs){
+  var pay = hg80PayingRungs(rungs);
+  if (!pay.length){
+    return ' <span class="warn">No rung on this ladder clears the round trip at this venue '
+      + 'right now — on today\'s ATR the spread is the binding constraint at every timeframe '
+      + 'scanned, not the setup.</span>';
+  }
+  var names = pay.map(function(p){
+    return '<b>' + esc(p.tf) + '</b> (' + (p.share * 100).toFixed(0) + '%)';
+  }).join(', ');
+  return ' <span class="dim">On today\'s ATR the round trip does clear the target at '
+    + names + ' — that is where the spread is not the reason to decline. It is not a reason '
+    + 'to take a trade there; it is the rung where this one would have been priceable.</span>';
+}
+
 function simpleSetupsHtml(rungs, livePx){
   var usable = rungs.filter(function(r){ return r.ok; });
   var live = [], open = [], recent = [], i, j;
@@ -2390,35 +2502,38 @@ function simpleSetupsHtml(rungs, livePx){
   for (k = 0; k < cands.length; k++){
     cands[k].grade = hg80LiveGrade(cands[k].s, spot);
     cands[k].act = hg80LiveActs(cands[k].grade);
+    cands[k].q = hg80Quality(cands[k].s, cands[k].r, cands[k].grade);
   }
-  var actable = cands.filter(function(c){ return c.act; });
-  var dead = cands.filter(function(c){ return !c.act; });
+  /* THREE BUCKETS. The arithmetic is binding now: a rung the tab has already
+     computed cannot pay at this venue does not get counted as one you could
+     act on, any more than one price has run past does. */
+  var actable = cands.filter(function(c){ return c.act && c.q.pays; });
+  var noPay   = cands.filter(function(c){ return c.act && !c.q.pays; });
+  var dead    = cands.filter(function(c){ return !c.act; });
 
-  /* the ones you can still take, best first: at entry, then waiting for the
-     fill, then the ones price has already run away from */
-  var rank = { 'fresh': 0, 'pending': 1, 'past-entry': 2 };
-  actable.sort(function(a, b){
-    var ra = rank[a.grade] == null ? 1 : rank[a.grade];
-    var rb = rank[b.grade] == null ? 1 : rank[b.grade];
-    if (ra !== rb) return ra - rb;
-    return (a.fresh === b.fresh) ? 0 : (a.fresh ? -1 : 1);
-  });
+  /* best first, by what is knowable before it resolves — see hg80Quality */
+  actable.sort(function(a, b){ return a.q.score - b.q.score; });
+  noPay.sort(function(a, b){ return a.q.score - b.q.score; });
 
-  if (actable.length || dead.length){
+  if (actable.length || noPay.length || dead.length){
+    var otherN = noPay.length + dead.length;
     if (actable.length){
       h += '<div class="note ok" style="margin-bottom:4px"><b>' + actable.length
         + ' setup' + (actable.length === 1 ? '' : 's') + ' you could act on'
         + (isFinite(spot) ? ', checked against gold at <b>' + num(spot) + '</b>' : '')
-        + '.</b>'
-        + (dead.length ? ' <span class="warn">' + dead.length + ' more fired but '
-            + (dead.length === 1 ? 'is' : 'are') + ' no longer takeable — listed below.</span>' : '')
+        + '.</b> <span class="dim">Best first — by what the venue takes out of the win, then '
+        + 'how close price is, then how tight the mechanic is.</span>'
+        + (otherN ? ' <span class="warn">' + otherN + ' more fired and ' + (otherN === 1 ? 'is' : 'are')
+            + ' listed below with the reason.</span>' : '')
         + '</div>';
     } else {
-      h += '<div class="note warn" style="margin-bottom:4px"><b>Nothing here is still takeable.</b> '
-        + dead.length + ' setup' + (dead.length === 1 ? '' : 's') + ' fired, and gold has since '
-        + 'moved past ' + (dead.length === 1 ? 'its' : 'their') + ' level'
-        + (dead.length === 1 ? '' : 's') + '. They are shown so the reason is visible rather '
-        + 'than the panel simply looking empty.</div>';
+      h += '<div class="note warn" style="margin-bottom:4px"><b>Nothing here is takeable.</b> '
+        + otherN + ' setup' + (otherN === 1 ? '' : 's') + ' fired'
+        + (noPay.length ? ' — ' + noPay.length + ' the arithmetic refuses at this venue' : '')
+        + (dead.length ? (noPay.length ? ', ' : ' — ') + dead.length + ' that gold has since moved '
+            + 'past' : '')
+        + '. They are shown so the reason is visible rather than the panel simply looking '
+        + 'empty.</div>';
     }
 
     for (k = 0; k < actable.length; k++){
@@ -2429,11 +2544,34 @@ function simpleSetupsHtml(rungs, livePx){
                     + 'the stop nor the target was touched in the bars fetched</span>')
         + liveChipHtml(ca.grade, spot));
     }
-    for (k = 0; k < dead.length; k++){
-      var cd = dead[k];
-      h += simpleCardHtml(cd.s, cd.r,
-        '<span class="stamp veto">NO LONGER TAKEABLE</span>'
-        + liveChipHtml(cd.grade, spot));
+    if (noPay.length){
+      h += '<div class="p80-band"><span class="p80-band-k">Cannot pay here</span>'
+        + '<span class="p80-band-rule"></span>'
+        + '<span class="p80-band-n">' + noPay.length + '</span></div>'
+        + '<div class="p80-lead" style="margin-top:0">Price still allows '
+        + (noPay.length === 1 ? 'this one' : 'these') + '. The arithmetic does not: at <b>'
+        + esc((__p.venue && __p.venue.venue) || 'this venue') + '</b> the round trip takes enough '
+        + 'of the target that the trade returns less than nothing even at the '
+        + (P80_CLAIMED * 100).toFixed(0) + '% the strategy claims for itself. Shown because a '
+        + 'setup that vanishes is one you ask about.'
+        + payingRungsHtml(usable) + '</div>';
+      for (k = 0; k < noPay.length; k++){
+        var cn = noPay[k];
+        h += simpleCardHtml(cn.s, cn.r,
+          '<span class="stamp veto">CANNOT PAY AT THIS VENUE</span>'
+          + liveChipHtml(cn.grade, spot));
+      }
+    }
+    if (dead.length){
+      h += '<div class="p80-band"><span class="p80-band-k">Price has moved past</span>'
+        + '<span class="p80-band-rule"></span>'
+        + '<span class="p80-band-n">' + dead.length + '</span></div>';
+      for (k = 0; k < dead.length; k++){
+        var cd = dead[k];
+        h += simpleCardHtml(cd.s, cd.r,
+          '<span class="stamp veto">NO LONGER TAKEABLE</span>'
+          + liveChipHtml(cd.grade, spot));
+      }
     }
     return h + '</div>';
   }
@@ -3572,6 +3710,7 @@ W.armedHtml          = armedHtml;
 W.costLineHtml       = costLineHtml;
 W.hg80Shown          = hg80Shown;
 W.hg80CostVerdict    = hg80CostVerdict;
+W.hg80Quality        = hg80Quality;
 W.hg80LiveSpot       = hg80LiveSpot;
 W.hg80LiveGrade      = hg80LiveGrade;
 W.hg80LiveActs       = hg80LiveActs;
@@ -3591,6 +3730,9 @@ W.simpleSetupsHtml   = simpleSetupsHtml;
 W.HG_P80_LIVE_STATE  = P80_LIVE_STATE;
 W.HG_P80_SPOT_DRIFT_PCT = P80_SPOT_DRIFT_PCT;
 W.HG_P80_COST_HEAVY  = P80_COST_HEAVY;
+W.HG_P80_STOP_FLOOR  = P80_STOP_FLOOR;
+W.hg80PayingRungs    = hg80PayingRungs;
+W.payingRungsHtml    = payingRungsHtml;
 W.hg80WhenTxt        = hg80WhenTxt;
 W.hg80TzName         = hg80TzName;
 W.hg80TzShort        = hg80TzShort;

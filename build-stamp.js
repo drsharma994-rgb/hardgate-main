@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v789',
-  pack: 'the 80PERCENT tab reads back the ledger it has been writing to since the ladder shipped, and measures why the supplied spec is silent instead of asserting it \u2014 trend and pullback coincide far rarer than chance',
+  version: 'hg-v790',
+  pack: 'the 80PERCENT tab\u2019s own cost arithmetic is binding — a rung it has computed cannot pay at your venue is no longer counted among the setups you could act on, what survives is ranked cheapest-first, and a refused card names the rungs where the spread is not the reason to decline',
   built: '2026-09-17T00:00:00Z'
 };
 
