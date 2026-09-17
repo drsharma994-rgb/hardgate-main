@@ -394,10 +394,18 @@ console.log('\n== the tab is POPULATED when nothing fires ==');
   ok(/the session gate is a clock, not a condition/.test(html)
      || /can fire now and did not/.test(html),
      'naming the binding constraint — the session clock, or that the rungs were free to fire');
-  ok(/55 \/ 45 column is wired/.test(html),
-     'and the rendered census names the loosened column as wired, with its real thresholds');
-  ok(/SPEC [0-9]+<\/span> <span class="statuschip na">WIDE [0-9]+/.test(html),
-     'the board splits each rung\'s firings by mechanic rather than pooling them into one count');
+  for (const v of ctx.HG_P80_VARIANTS){
+    ok(new RegExp(v.mech + ' at ' + v.rsiLong + ' / ' + v.rsiShort).test(html),
+       `the rendered census names ${v.mech} as wired, with its real thresholds`);
+  }
+  /* one chip per mechanic, in table order, so a rung carried by a loosened
+     mechanic can never read as a rung the spec is producing */
+  const chipRe = ctx.HG_P80_VARIANTS
+    .map(v => '<span class="statuschip (?:ok|na)">' + v.label + ' [0-9]+</span>')
+    .join(' ');
+  ok(new RegExp(chipRe).test(html),
+     `the board splits each rung's firings across all ${ctx.HG_P80_VARIANTS.length} mechanics `
+     + 'rather than pooling them into one count');
 
   const stat = String(node.querySelector('#p80Stat').textContent);
   ok(/rungs/.test(stat), `the status line reports the ladder: "${stat}"`);
@@ -422,8 +430,8 @@ console.log('\n== the setups are at the TOP, and are the most recent firing, not
      'and in wall time at THIS rung\'s seconds — three bars is 45m here and 3 days on 1d');
   ok(!!out.latest.plan && out.latest.plan.entry > 0, 'carrying its levels, so it can be acted on');
 
-  const iSetups = SRC.indexOf('latestSetupsHtml(rungs)');
-  const iBoard = SRC.indexOf('ladderBoardHtml(rungs)', SRC.indexOf('function render('));
+  const iSetups = SRC.indexOf('latestSetupsHtml(shown)');
+  const iBoard = SRC.indexOf('ladderBoardHtml(shown)', SRC.indexOf('function render('));
   ok(iSetups > 0 && iBoard > 0 && iSetups < iBoard,
      'and the SETUPS panel is rendered ABOVE the ladder board, not buried under it');
 }
@@ -522,11 +530,23 @@ console.log('\n== the census is a census, never a second strategy ==');
      'the superseded "spec column only" promise is gone, not left behind to mislead');
   /* built from the constants rather than typed as a literal, so the copy
      cannot drift from the thresholds it describes */
-  ok(/P80_RSI_WIDE_LONG \+ ' \/ ' \+ P80_RSI_WIDE_SHORT \+ ' column is wired/.test(SRC),
-     'the panel says the loosened column is wired, naming it from the constants themselves');
-  ok(/recorded separately/.test(SRC), 'and that it records separately');
-  ok(/counts in that column are CUMULATIVE/.test(SRC),
-     'and warns that the census column includes the spec firings while the mechanic does not');
+  /* the wired/unwired split is DERIVED from the variant table now. It used to
+     be a sentence naming P80_VARIANTS[1], which printed the wrong mechanic
+     the moment a third one landed between them — the same bug class as the
+     header that hand-counted its mechanics. */
+  ok(/for \(vk = 0; vk < P80_VARIANTS\.length; vk\+\+\)/.test(SRC)
+     && /wired\.push\(hit\.mech/.test(SRC),
+     'the census works out which columns are wired by walking the variant table, not by index');
+  /* LOGIC, not SRC: the comment explaining WHY the index is gone contains the
+     index, and a guard that matches its own rationale is a guard that can
+     never be satisfied */
+  ok(!/P80_VARIANTS\[1\]/.test(LOGIC),
+     'and NOTHING in the tab indexes P80_VARIANTS[1] — inserting a mechanic must not silently '
+     + 'change what a sentence names');
+  ok(/recorded separately|its own mechanic/.test(SRC), 'and that each records separately');
+  ok(/counts are CUMULATIVE/.test(SRC),
+     'and warns that a looser census column includes the tighter firings while the mechanic '
+     + 'does not');
 }
 
 console.log('\n== the board says how often each rung fires ==');
@@ -534,19 +554,75 @@ console.log('\n== the board says how often each rung fires ==');
   ok(/<th>fired<\/th>/.test(SRC), 'the ladder board has a fired column');
   ok(/c\.total \+ ' in ' \+ r\.scanned/.test(SRC),
      'reporting firings over the bars actually scanned, so the count is never a mystery');
-  ok(/>SPEC ' \+ c\.spec[\s\S]{0,200}>WIDE ' \+ c\.wide/.test(SRC),
-     'and splitting that count by mechanic, so a rung carried by the loosened one cannot read '
+  /* keyed by the variant table. The old ternary — variant === 'wide' ? 'wide'
+     : 'spec' — filed every MID firing under SPEC the moment a third mechanic
+     existed, inflating the record of the one mechanic here whose numbers are
+     supposed to be untouched by the looser ones. */
+  ok(/out\.by\[k\]\+\+; out\.total\+\+/.test(SRC),
+     'and splitting that count by mechanic KEY, so a rung carried by a loosened one cannot read '
      + 'as a rung the spec is producing');
+  /* CODE, not SRC: the comment recording why the ternary went contains the
+     ternary. Not LOGIC either — that blanks string literals, so the pattern
+     could never match there and the guard would pass vacuously. */
+  ok(!new RegExp("variant === 'wide' \\? 'wide' : 'spec'").test(CODE),
+     'and the two-mechanic ternary that would have mis-filed the third is gone');
+
+  /* AND BY DIRECTION. Nothing in the protocol favours one side — a bar cannot
+     satisfy both trend tests — but a reader could not see that without
+     auditing the rows. */
+  const dirDef = { tf: '15m', sec: 900, bars: 400, band: 'scalp' };
+  const walk2 = (tfSec, n, seed) => {
+    const o2 = []; let px = 4358, st = seed;
+    const rnd = () => { st = (st * 1103515245 + 12345) & 0x7fffffff; return st / 0x7fffffff; };
+    const vol = 3.3 * Math.sqrt(tfSec / 300);
+    const end = Math.floor(Date.UTC(2026, 8, 17, 16, 0, 0) / 1000 / tfSec) * tfSec;
+    for (let i = 0; i < n; i++){
+      const oo = px, cl = oo + (rnd() - 0.48) * vol;
+      o2.push({ t: end - (n - 1 - i) * tfSec, o: oo, h: Math.max(oo, cl) + rnd() * vol * 0.6,
+                l: Math.min(oo, cl) - rnd() * vol * 0.6, c: cl, v: 1 });
+      px = cl;
+    }
+    return o2;
+  };
+  const dirRows = walk2(900, 500, 22);
+  const dirOut = ctx.hg80ScanTf(dirRows, dirDef, null);
+  const dc = ctx.hg80CountByVariant(dirOut);
+  ok(dc.long + dc.short === dc.total,
+     `every firing is counted on exactly one side (${dc.long} long + ${dc.short} short = ${dc.total})`);
+  ok(dc.long === dirOut.res.signals.filter(x => x.dir === 'long').length
+     && dc.short === dirOut.res.signals.filter(x => x.dir === 'short').length,
+     'and the split matches the signals themselves');
+  ok(/[0-9]+ long<\/span> · /.test(ctx.firedSplitHtml ? ctx.firedSplitHtml(dirOut) : ' long</span> · '),
+     'with both directions rendered on the board, so "does this thing ever short?" is a number '
+     + 'rather than a search');
 }
 
 console.log('\n== the second mechanic is a second mechanic, not a loosened spec ==');
 {
   const V = ctx.HG_P80_VARIANTS;
-  ok(V.length === 2, 'two variants are declared');
-  ok(V[0].key === 'spec' && V[1].key === 'wide', 'the spec first, the wide one second');
-  ok(V[0].mech !== V[1].mech, `they record under different mechanics (${V[0].mech} / ${V[1].mech})`);
-  ok(V[1].rsiLong === 55 && V[1].rsiShort === 45,
-     'and the wide one is the 55 / 45 column from the census, exactly as it was counted');
+  ok(V.length === 3, `three variants are declared (${V.map(v => v.label).join(', ')})`);
+  ok(V[0].key === 'spec', 'the supplied spec is first, so it stays the default everywhere');
+  ok(V.map(v => v.key).join(',') === 'spec,mid,wide', 'tightest to loosest: spec, mid, wide');
+
+  /* every mechanic records under its own name. Asserted as a SET rather than
+     pairwise, so adding a fourth cannot sneak a collision past this. */
+  const mechs = V.map(v => v.mech);
+  ok(new Set(mechs).size === V.length,
+     `each records under its own mechanic (${mechs.join(' / ')}) — no two share a record`);
+  const keys = V.map(v => v.key);
+  ok(new Set(keys).size === V.length, 'and each has its own key');
+
+  /* every variant has to be a census column, or the census is measuring
+     thresholds the tab does not trade and hiding ones it does */
+  for (const v of V){
+    ok(ctx.HG_P80_CENSUS_LEVELS.indexOf(v.rsiLong) >= 0,
+       `${v.mech}'s ${v.rsiLong} / ${v.rsiShort} is a column the census already counts`);
+  }
+  ok(V[V.length - 1].rsiLong === 55 && V[V.length - 1].rsiShort === 45,
+     'and the loosest is still the 55 / 45 column, exactly as it was counted');
+  ok(V[1].rsiLong === 50 && V[1].rsiShort === 50,
+     'with MID on the RSI midline — the level the index sits at when gain equals loss, and a '
+     + 'column the census has been counting since the ladder shipped');
 
   /* ORDERED TIGHTEST FIRST, and each a strict superset of the one before.
      hg80Scan's "first that fires wins" is only a valid disjoint assignment
@@ -556,7 +632,7 @@ console.log('\n== the second mechanic is a second mechanic, not a loosened spec 
        `variant ${i} is strictly looser on both sides — every earlier firing also satisfies it`);
   }
 
-  ok(ctx.hg80Variant('spec') === V[0] && ctx.hg80Variant('wide') === V[1], 'both resolve by key');
+  for (const v of V) ok(ctx.hg80Variant(v.key) === v, `${v.key} resolves by key`);
   ok(ctx.hg80Variant('nonsense') === V[0] && ctx.hg80Variant() === V[0],
      'and an unknown key falls back to the SPEC, never to the looser one');
 }
@@ -612,11 +688,14 @@ console.log('\n== the two populations are disjoint ==');
   const def = { tf: '15m', sec: 900, bars: 500, band: 'scalp' };
   const rows = walk(900, 500, 22);
   const out = ctx.hg80ScanTf(rows, def, { rtFrac: 0.00020, venue: 'XM' });
-  const spec = out.res.signals.filter(x => x.variant === 'spec');
-  const wide = out.res.signals.filter(x => x.variant === 'wide');
-  ok(spec.length > 0 && wide.length > 0,
-     `the fixture produces BOTH kinds (${spec.length} spec, ${wide.length} wide) — without that `
-     + 'everything below would pass vacuously');
+  const V = ctx.HG_P80_VARIANTS;
+  const byVar = V.map(v => out.res.signals.filter(x => x.variant === v.key));
+  const counts = V.map((v, i) => `${byVar[i].length} ${v.label}`).join(', ');
+  /* every mechanic has to be represented or the checks below pass vacuously
+     for the ones that are not */
+  ok(byVar.every(g => g.length > 0),
+     `the fixture produces a firing under EVERY mechanic (${counts}) — without that the checks `
+     + 'below would pass vacuously for whichever is missing');
 
   const byBar = {};
   let dup = 0;
@@ -624,28 +703,49 @@ console.log('\n== the two populations are disjoint ==');
   ok(dup === 0, 'no bar produces two signals — one bar belongs to exactly one mechanic');
 
   const ind = ctx.hg80Indicators(rows);
+
+  /* DISJOINT DOWNWARD: a firing filed under a looser mechanic must be a bar
+     every TIGHTER one rejected, or the looser record is contaminated with
+     trades that belong to the stricter one. */
   let checked = 0;
-  for (const s2 of wide){
-    const asSpec = ctx.hg80SignalAt(rows, ind, s2.i, out.cfg, ctx.hg80Variant('spec'));
-    if (asSpec.dir !== null) throw new Error('FAIL: a WIDE firing at bar ' + s2.i
-      + ' also satisfies the SPEC — the populations overlap and WIDE\'s record is contaminated');
-    checked++;
+  for (let i = 1; i < V.length; i++){
+    for (const s2 of byVar[i]){
+      for (let j = 0; j < i; j++){
+        const tighter = ctx.hg80SignalAt(rows, ind, s2.i, out.cfg, V[j]);
+        if (tighter.dir !== null) throw new Error(`FAIL: a ${V[i].label} firing at bar ${s2.i}`
+          + ` also satisfies ${V[j].label} — the populations overlap and ${V[i].label}'s record`
+          + ' is contaminated');
+        checked++;
+      }
+    }
   }
   passed++;
-  console.log('  ok — every one of the ' + checked + ' WIDE firings is a bar the SPEC rejected — '
-    + 'WIDE\'s record holds only marginal bars, never spec-quality ones wearing its name');
+  console.log(`  ok — all ${checked} looser-firing/tighter-mechanic pairs come back rejected — `
+    + 'each loosened record holds only the bars the stricter ones turned away, never '
+    + 'spec-quality ones wearing its name');
 
-  let specAlsoWide = 0;
-  for (const s2 of spec){
-    const asWide = ctx.hg80SignalAt(rows, ind, s2.i, out.cfg, ctx.hg80Variant('wide'));
-    if (asWide.dir === s2.dir) specAlsoWide++;
+  /* SUPERSET UPWARD: a firing filed under a tighter mechanic must ALSO
+     satisfy every looser one — which is exactly why it has to be assigned to
+     the tightest, and why pooling the records reconstructs "loose as
+     actually traded". */
+  let upward = 0, upwardOk = 0;
+  for (let i = 0; i < V.length - 1; i++){
+    for (const s2 of byVar[i]){
+      for (let j = i + 1; j < V.length; j++){
+        upward++;
+        const looser = ctx.hg80SignalAt(rows, ind, s2.i, out.cfg, V[j]);
+        if (looser.dir === s2.dir) upwardOk++;
+      }
+    }
   }
-  ok(specAlsoWide === spec.length,
-     `and all ${spec.length} SPEC firings would ALSO satisfy WIDE — which is exactly why they `
-     + 'have to be assigned to the tighter one, and why pooling the two records reconstructs '
-     + '"wide as actually traded"');
-  ok(out.res.signals.every(x => x.variant === 'spec' || x.variant === 'wide'),
-     'every signal is attributed to one of the two');
+  ok(upward > 0 && upwardOk === upward,
+     `and all ${upward} tighter-firing/looser-mechanic pairs come back firing the SAME side`);
+
+  const known = V.map(v => v.key);
+  ok(out.res.signals.every(x => known.indexOf(x.variant) >= 0),
+     `every signal is attributed to one of the ${V.length}`);
+  ok(byVar.reduce((a, g) => a + g.length, 0) === out.res.signals.length,
+     'and the per-mechanic groups account for every signal, with none double-counted');
 }
 
 console.log('\n== the record follows the mechanic, and the card says what was written ==');
@@ -671,10 +771,28 @@ console.log('\n== the record follows the mechanic, and the card says what was wr
   for (const k of Object.keys(store)) delete store[k];
 }
 
-console.log('\n== a WIDE card discloses what it is and what it did not buy ==');
+console.log('\n== a LOOSENED card discloses what it is and what it did not buy ==');
 {
-  ok(/THIS IS THE WIDE MECHANIC, NOT THE SUPPLIED SPEC/.test(SRC),
-     'the card names itself as the second mechanic');
+  /* rendered, not grepped: the note is built from the variant table now, so
+     the assertion that matters is that EVERY loosened mechanic produces the
+     disclosure and the SPEC produces none. A source regex for one hard-coded
+     label would have gone on passing while MID cards said nothing at all. */
+  ok(/THIS IS THE ' \+ esc\(v\.label\) \+ ' MECHANIC, NOT THE SUPPLIED SPEC/.test(SRC),
+     'the card names itself from the variant table, so every mechanic discloses itself');
+  for (const v of ctx.HG_P80_VARIANTS){
+    const note = ctx.variantNoteHtml
+      ? ctx.variantNoteHtml({ variant: v.key, rsi: 50 })
+      : null;
+    if (note == null) break;
+    if (v.key === 'spec'){
+      ok(note === '', 'the SPEC card carries no such note — it IS the supplied spec');
+    } else {
+      ok(new RegExp('THIS IS THE ' + v.label + ' MECHANIC, NOT THE SUPPLIED SPEC').test(note),
+         `a ${v.label} card names itself as not the spec`);
+      ok(new RegExp('asks for below ' + v.rsiLong + ' and above ' + v.rsiShort).test(note),
+         `and prints ${v.label}'s own thresholds, not the previous mechanic's`);
+    }
+  }
   ok(/which the spec turned away/.test(SRC), 'says the spec rejected this bar');
   ok(/the entry got easier and <b>the bar did not move<\/b>/.test(SRC),
      'and states the trade-off: a looser entry bought no relief on the exit');
@@ -1025,11 +1143,16 @@ console.log('\n== focusing a rung scans only that rung, and shows everything it 
   b4h.click();
   await new Promise(r => setImmediate(r));
   await new Promise(r => setTimeout(r, 0));
-  ok(fetched.length === 1 && fetched[0] === '4h',
-     `clicking it fetches ONLY that rung (${fetched.join(', ') || 'nothing'}) — four fewer `
-     + 'requests on a rung a desk is actually watching');
-  ok(/4h only/.test(String(node.querySelector('#p80Stat').textContent)),
-     'the status line says which rung is in view');
+  /* FOCUS NARROWS THE PAGE, NOT THE SCAN. It used to narrow the fetch too,
+     which made one control do two jobs — and the second job broke the first
+     once the tab grew a forward-looking panel: an unfetched rung cannot be
+     reported as arming, so a view filter was deciding what a reader was
+     allowed to know was coming. */
+  ok(fetched.length === ctx.HG_P80_LADDER.length,
+     `clicking it still scans the WHOLE ladder (${fetched.join(', ')}) — a view filter must not `
+     + 'be able to hide a rung that is one candle from firing');
+  ok(/4h shown of 5 scanned/.test(String(node.querySelector('#p80Stat').textContent)),
+     'and the status line says what is shown AND what was scanned, so the two are never confused');
 
   const html = String(node.querySelector('#p80Body').innerHTML);
   ok(/EVERYTHING 4h FIRED/.test(html), 'and the focused panel replaces the pooled one');
@@ -1048,9 +1171,10 @@ console.log('\n== focusing a rung scans only that rung, and shows everything it 
       .find(b => b.getAttribute('data-p80-focus') === '1d').click();
   await new Promise(r => setImmediate(r));
   await new Promise(r => setTimeout(r, 0));
-  ok(fetched.length === 2 && fetched.indexOf('4h') >= 0 && fetched.indexOf('1d') >= 0,
-     `clicking 1d ADDS it rather than replacing 4h (${fetched.join(', ')})`);
+  ok(fetched.length === ctx.HG_P80_LADDER.length, 'the scan is still the whole ladder');
   const both = String(node.querySelector('#p80Body').innerHTML);
+  ok(/EVERYTHING 4h \+ 1d FIRED/.test(both),
+     `clicking 1d ADDS it to the view rather than replacing 4h`);
   ok(/EVERYTHING 4h \+ 1d FIRED/.test(both),
      'the panel holds both, in LADDER order — 4h + 1d, never 1d + 4h whatever the click order');
   ok(/<th>rung<\/th>/.test(both),
@@ -1066,14 +1190,25 @@ console.log('\n== focusing a rung scans only that rung, and shows everything it 
      'with the warning that rows from different rungs are not one population — different cost '
      + 'ratios, different stops in percent, different holding periods, different mechanics');
 
+  /* WHAT IS SELECTED is now read off the status line, because the fetch list
+     no longer reports it — every rung is fetched on every pass. The status
+     line is the right source anyway: it is what a reader sees. */
+  const selection = () => {
+    const m = String(node.querySelector('#p80Stat').textContent)
+      .match(/([0-9a-z+ ]+) shown of [0-9]+ scanned/);
+    return m ? m[1].trim().split(' + ') : [];
+  };
+  const scannedAll = () => fetched.length === ctx.HG_P80_LADDER.length;
+
   /* clicking a focused rung again drops it */
   fetched.length = 0;
   node.querySelector('#p80Body').querySelectorAll('[data-p80-focus]')
       .find(b => b.getAttribute('data-p80-focus') === '4h').click();
   await new Promise(r => setImmediate(r));
   await new Promise(r => setTimeout(r, 0));
-  ok(fetched.length === 1 && fetched[0] === '1d',
-     `clicking 4h again drops it, leaving ${fetched.join(', ')}`);
+  ok(selection().length === 1 && selection()[0] === '1d',
+     `clicking 4h again drops it from the view, leaving ${selection().join(', ')}`);
+  ok(scannedAll(), 'and the scan is still the whole ladder');
 
   /* SWING is exactly the rungs with no session gate — the pair a desk has
      outside 13:00-18:00 UTC, which is why it earns a shortcut */
@@ -1083,7 +1218,7 @@ console.log('\n== focusing a rung scans only that rung, and shows everything it 
   await new Promise(r => setImmediate(r));
   await new Promise(r => setTimeout(r, 0));
   const swing = ctx.HG_P80_LADDER.filter(d => d.band === 'swing').map(d => d.tf);
-  ok(fetched.length === swing.length && swing.every(t => fetched.indexOf(t) >= 0),
+  ok(selection().length === swing.length && swing.every(t => selection().indexOf(t) >= 0),
      `SWING selects exactly the swing BAND: ${swing.join(' + ')}`);
 
   /* and the set that actually matters at 05:00 UTC is NOT that one. 1h is
@@ -1107,8 +1242,8 @@ console.log('\n== focusing a rung scans only that rung, and shows everything it 
       .find(b => b.getAttribute('data-p80-focus') === 'set:ungated').click();
   await new Promise(r => setImmediate(r));
   await new Promise(r => setTimeout(r, 0));
-  ok(fetched.length === ungated.length && ungated.every(t => fetched.indexOf(t) >= 0),
-     `and its button selects exactly them (${fetched.join(', ')})`);
+  ok(selection().length === ungated.length && ungated.every(t => selection().indexOf(t) >= 0),
+     `and its button selects exactly them (${selection().join(', ')})`);
 
   /* pressing the band button already showing goes back to ALL rather than
      doing nothing, which is the behaviour a toggle owes its user */
@@ -1117,8 +1252,8 @@ console.log('\n== focusing a rung scans only that rung, and shows everything it 
       .find(b => b.getAttribute('data-p80-focus') === 'set:ungated').click();
   await new Promise(r => setImmediate(r));
   await new Promise(r => setTimeout(r, 0));
-  ok(fetched.length === ctx.HG_P80_LADDER.length,
-     'pressing a group button that is already showing returns to the whole ladder');
+  ok(selection().length === 0 && /5\/5 rungs/.test(String(node.querySelector('#p80Stat').textContent)),
+     'pressing a group button that is already showing returns the VIEW to the whole ladder');
 
   /* ---- the paste-back loop: what COPY THESE ROWS actually emits ---- */
   fetched.length = 0;
@@ -1402,8 +1537,13 @@ console.log('\n== the armed panel says what would trip it, and what it does not 
      'and the three levels, marked LIKELY rather than stated as facts');
 
   ok(/<b>Armed is not a promise\.<\/b>/.test(SRC), 'the disclaimer is on every armed card');
-  ok(/any of them can drop out before it closes/.test(SRC),
-     'saying the other three conditions are recomputed on the new candle too');
+  /* flattened, because the sentence is built by concatenation across lines */
+  const FLAT0 = SRC.replace(/'\s*\+\s*'/g, '').replace(/\s+/g, ' ');
+  ok(/any of them can drop out before it closes/.test(FLAT0),
+     'saying the other conditions are recomputed on the new candle too');
+  ok(/on the rungs where a bar can fit inside the window/.test(FLAT0),
+     'and qualifying the session, which 4h and 1d never ran — claiming a condition a rung did '
+     + 'not evaluate is the same lie as a green session chip on a card that skipped the filter');
   /* the sentence is built by concatenation, so it is flattened before
      matching — a regex that only sees one source line would miss it */
   const FLAT = SRC.replace(/'\s*\+\s*'/g, '').replace(/\s+/g, ' ');
@@ -1411,10 +1551,182 @@ console.log('\n== the armed panel says what would trip it, and what it does not 
      'and that the projected levels are not the ones that will be used');
   ok(/armedHtml\(rungs\);/.test(SRC), 'wired into SIMPLE');
   const iArmed = SRC.indexOf('h += armedHtml(rungs);');
-  const iSetups = SRC.indexOf('h += simpleSetupsHtml(rungs);');
+  const iSetups = SRC.indexOf('h += simpleSetupsHtml(shown);');
   ok(iArmed > 0 && iSetups > 0 && iArmed < iSetups,
      'and rendered ABOVE the finished setups — what might happen next is worth more than what '
      + 'already did');
+  /* THE WHOLE LADDER, not the focused subset. Everything backward-looking
+     takes `shown`; this one takes `rungs`, and that difference is the point
+     — a view filter must not be able to hide a rung about to fire. */
+  ok(!/armedHtml\(shown\)/.test(SRC),
+     'and it reads the WHOLE ladder, never the focus-filtered set');
+
+  /* AND NEITHER DOES THE LOG. The recording loop always read `rungs`, but
+     `rungs` used to BE the focused subset, so a 5m firing went unrecorded
+     whenever somebody happened to be looking at 1d. A record that exists or
+     not according to a view setting is not evidence of anything. */
+  const RUN = SRC.slice(SRC.indexOf('function run('));
+  ok(/for \(i = 0; i < rungs\.length; i\+\+\)\{[\s\S]{0,400}hg80Record/.test(RUN),
+     'the forward log records over every rung scanned, not the focused subset');
+  ok(!/hg80Shown/.test(RUN.slice(0, RUN.indexOf('render('))),
+     'and nothing between the scan and the render narrows what gets recorded');
+  ok(/armedHtml\(rungs\)/.test(SRC.slice(SRC.indexOf('function render('))),
+     'in both views');
+}
+
+console.log('\n== ONE STEP BEHIND: what is two away, when the second thing can move ==');
+{
+  const def = { tf: '15m', sec: 900, bars: 280, band: 'scalp' };
+
+  /* (1) TREND HOLDS, RSI NOWHERE NEAR: a long whose pullback never happened.
+     Missing = trigger + pullback, which is the row a reader wants when
+     nothing is armed and the tab would otherwise show them nothing. */
+  const rowsP = series(280, { tfSec: 900, endHour: 15, dip: 0.2 });
+  const lp = rowsP[rowsP.length - 1];
+  lp.c = lp.o - 0.5; lp.l = Math.min(lp.l, lp.c - 0.2);   /* red close kills the trigger */
+  const outP = ctx.hg80ScanTf(rowsP, def, ctx.hg80VenueRt());
+  const indP = ctx.hg80Indicators(rowsP);
+  const cP = ctx.hg80SignalAt(rowsP, indP, rowsP.length - 1, outP.cfg, ctx.hg80Variant('spec'));
+  ok(cP.longChecks.trend && cP.longChecks.session
+     && !cP.longChecks.pullback && !cP.longChecks.trigger,
+     'the fixture has trend and session holding, and BOTH the pullback and the trigger missing');
+  ok(ctx.hg80Armed([outP]).length === 0, 'so nothing is armed on it — two conditions short');
+
+  const armP = ctx.hg80Arming([outP], []);
+  const aP = armP.find(x => x.side === 'long');
+  ok(!!aP, 'but it IS reported one step behind, on the long side');
+  ok(aP.need.kind === 'pullback', 'with the RSI pullback named as the outstanding condition');
+  ok(near(aP.need.rsi, cP.rsi, 1e-9) && aP.need.gap > 0,
+     `quantified rather than shrugged at: RSI ${aP.need.rsi.toFixed(1)}, `
+     + `${aP.need.gap.toFixed(1)} points to travel`);
+  ok(/has to get below/.test(aP.need.txt) && new RegExp(String(aP.need.want)).test(aP.need.txt),
+     `and written out in words: "${aP.need.txt}"`);
+
+  /* THE NEAREST THRESHOLD, NOT THE TIGHTEST MECHANIC. Breaking on the first
+     variant that qualified printed the SPEC's 45 — 40 points away — while
+     WIDE's 55 was ten points nearer and is the one that would trip first.
+     Same error the ladder board made before the distance was weighted. */
+  let nearest = null;
+  for (const v of ctx.HG_P80_VARIANTS){
+    const g = Math.abs(cP.rsi - v.rsiLong);
+    if (nearest == null || g < nearest) nearest = g;
+  }
+  ok(near(aP.need.gap, nearest, 1e-9),
+     `it measures to the NEAREST mechanic's threshold (${aP.variant.label} at ${aP.need.want}), `
+     + 'not the tightest one — the right distance to the wrong place is still the wrong answer');
+
+  /* (2) THE CLOCK, which is the other thing that moves on its own. */
+  const rowsS = series(280, { tfSec: 900, endHour: 4, dip: 2.6 });
+  const ls = rowsS[rowsS.length - 1];
+  ls.c = ls.o - 0.5; ls.l = Math.min(ls.l, ls.c - 0.2);
+  const outS = ctx.hg80ScanTf(rowsS, def, ctx.hg80VenueRt());
+  const armS = ctx.hg80Arming([outS], []);
+  const aS = armS.find(x => x.side === 'long');
+  ok(!!aS && aS.need.kind === 'session',
+     'a rung whose only other gap is the session names the CLOCK, not an indicator');
+  ok(aS.need.secs > 0 && /opens in/.test(aS.need.txt),
+     `with the wait stated: "${aS.need.txt}"`);
+
+  /* (3) TREND IS NEVER THE SECOND THING. A rung needing its EMAs to recross
+     is not two conditions from a trade in any sense worth showing next to
+     one that needs a red candle — the same line hg80Armed draws. */
+  const rowsD = series(280, { tfSec: 900, endHour: 15, down: true });
+  const outD = ctx.hg80ScanTf(rowsD, def, ctx.hg80VenueRt());
+  ok(!ctx.hg80Arming([outD], []).some(x => x.side === 'long'),
+     'a downtrend fixture reports no LONG one step behind, however close the rest is');
+  for (const x of ctx.hg80Arming([outP, outS, outD], [])){
+    const sc = ctx.hg80Score(x.side === 'long' ? x.sig.longChecks : x.sig.shortChecks);
+    ok(sc.missing.indexOf('trend') < 0,
+       `${x.rung.def.tf} ${x.side} is not listed with its trend missing`);
+    ok(sc.missing.length === 2 && sc.missing.indexOf('trigger') >= 0,
+       'and is exactly two away, one of them the trigger');
+  }
+
+  /* (4) THE STRONGER ROW WINS. A rung/side already ARMED must not appear a
+     second time in the weaker tier. */
+  const rowsA = series(280, { tfSec: 900, endHour: 15 });
+  const la = rowsA[rowsA.length - 1];
+  la.c = la.o - 0.5; la.l = Math.min(la.l, la.c - 0.2);
+  const outA = ctx.hg80ScanTf(rowsA, def, ctx.hg80VenueRt());
+  const armedA = ctx.hg80Armed([outA]);
+  ok(armedA.some(x => x.side === 'long'), 'the armed fixture is armed long');
+  ok(!ctx.hg80Arming([outA], armedA).some(x => x.side === 'long'),
+     'and it is NOT repeated one step behind — the stronger row is the one that belongs');
+  ok(ctx.hg80Arming([outA], []).length >= 0, 'passing no armed list is not an error');
+}
+
+console.log('\n== the panel groups scalp and swing, and counts both sides ==');
+{
+  const def15 = { tf: '15m', sec: 900, bars: 280, band: 'scalp' };
+  const def1d = { tf: '1d', sec: 86400, bars: 280, band: 'swing' };
+  const mk = (o, d) => {
+    const r = series(280, o);
+    const l = r[r.length - 1];
+    l.c = l.o - 0.5; l.l = Math.min(l.l, l.c - 0.2);
+    return ctx.hg80ScanTf(r, d, ctx.hg80VenueRt());
+  };
+  const scalp = mk({ tfSec: 900, endHour: 15 }, def15);
+  const swing = mk({ tfSec: 86400, endHour: 15 }, def1d);
+  const html = ctx.armedHtml([scalp, swing]);
+  ok(html.length > 0, 'the panel renders for a ladder with rows in both bands');
+  ok(/WHAT IS COMING/.test(html), 'under a heading that says what it is');
+  ok(/>SCALP</.test(html) && /<b>SWING<\/b>/.test(html),
+     'with SCALP and SWING as separate blocks — a 5m row and a 1d row share every rule and '
+     + 'nothing about how long you sit in them');
+  ok(/[0-9]+ long/.test(html) && /[0-9]+ short/.test(html),
+     'and both directions counted on the page, so "does this thing ever short?" is not a '
+     + 'question a reader has to audit the rows to answer');
+  ok(!/NaN|undefined/.test(html), 'and nothing renders as NaN or undefined');
+
+  /* the forward panel reads the WHOLE ladder even when the focus is narrow */
+  ok(ctx.hg80Shown([scalp, swing]).length === 2, 'with no focus set, every rung is shown');
+}
+
+console.log('\n== what the venue takes out of the win, on the card itself ==');
+{
+  const V = (cost, target) => ctx.hg80CostVerdict({ cost, target, risk: target * 4 / 0.75,
+                                                    net: null, gross: 0.842105 });
+  ok(ctx.hg80CostVerdict(null).key === 'unknown', 'no breakeven means UNKNOWN, never a guess');
+  ok(ctx.hg80CostVerdict({ cost: NaN, target: 2 }).key === 'unknown',
+     'and an unreadable venue is unknown too, not silently treated as free');
+
+  const gone = V(3.0, 2.0);
+  ok(gone.key === 'gone' && gone.share > 1,
+     'a round trip larger than the target is GONE — that is a fact, not a preference');
+
+  const clear = V(0.02, 2.39);
+  ok(clear.key === 'clear' && clear.expR > 0,
+     `a cost that is ${(clear.share * 100).toFixed(1)}% of the target is a small share`);
+
+  const heavy = V(0.87, 2.39);
+  ok(heavy.share > ctx.HG_P80_COST_HEAVY,
+     `the real 5m number from the live desk — 0.87 against a 2.39 target — is `
+     + `${(heavy.share * 100).toFixed(0)}% of the winner`);
+  ok(heavy.key === 'heavy' || heavy.key === 'negative',
+     `and is flagged (${heavy.key}) rather than shown as an ordinary setup`);
+
+  /* the threshold is a DISPLAY line and is named as one; the two verdicts
+     that are not judgement calls are asserted to be arithmetic */
+  ok(ctx.HG_P80_COST_HEAVY > 0 && ctx.HG_P80_COST_HEAVY < 1,
+     'the cost-heavy line is a fraction of the target');
+  ok(/display threshold/.test(SRC),
+     'and the source says it is a display threshold, not a measured one');
+
+  const line = ctx.costLineHtml ? ctx.costLineHtml({ cost: 0.87, target: 2.39, risk: 12.7 }, 'XM') : '';
+  if (line){
+    ok(/36% of the winner/.test(line), `the card states the share in words: it renders "36%"`);
+    ok(/XM/.test(line), 'naming the venue that charged it');
+  }
+  /* a breakeven with no stop distance still has a true cost SHARE and no
+     expectancy; the line must say so rather than print NaN */
+  const noRisk = ctx.costLineHtml({ cost: 0.87, target: 2.39 }, 'XM');
+  ok(!/NaN/.test(noRisk),
+     'a rung with no stop distance renders no NaN — the share is still true, the R figure is '
+     + 'simply not available and is named as such');
+  ok(/36% of the winner/.test(noRisk), 'and the share it CAN compute is still shown');
+
+  ok(/costLineHtml\(rung\.be/.test(SRC), 'and it is wired into the setup card');
+  ok(/costLineHtml\(a\.rung\.be/.test(SRC), 'and onto the armed rows too');
 }
 
 console.log('\n== and it still refuses to invent a rate from what it resolved ==');

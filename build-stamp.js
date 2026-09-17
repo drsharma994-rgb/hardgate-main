@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v781',
-  pack: 'ARMED — 80PERCENT now shows what is one candle from firing, the level that would trip it and when that candle closes, because three of the four conditions are already settled',
+  version: 'hg-v782',
+  pack: 'MID mechanic at the RSI midline, a second forward tier for what is two away, cost-per-win on every card, and a rung focus that narrows the page instead of the scan so no view setting can hide a rung about to fire',
   built: '2026-09-17T00:00:00Z'
 };
 

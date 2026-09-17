@@ -148,13 +148,39 @@ var P80_UTC_TO      = 18;
 var P80_RSI_WIDE_LONG  = 55;        /* long pullback, loosened: RSI below this */
 var P80_RSI_WIDE_SHORT = 45;        /* short pullback, loosened: RSI above this */
 
+/* AND THE RUNG BETWEEN THEM, at the midline.
+
+   With two mechanics the tab had a gap it could see and not name. On live
+   gold the spec fired ZERO times on every rung of the ladder, because a
+   market whose price is above its 50 EMA with the EMAs stacked up rarely
+   lets RSI fall under 45 — the two conditions fight each other. So every
+   firing the tab produced was WIDE, ten RSI points looser, and the reader
+   had a choice between a mechanic that never fires and one that fires on a
+   pullback most desks would not call a pullback.
+
+   RSI 50 is the midline: the level the index is defined to sit at when
+   average gain equals average loss. A long taken under it is being taken
+   into weakness by the indicator's own definition, which is what a dip-buy
+   is meant to be, and it is not a number fitted to this data — the census
+   has been counting bars at 45, 50, 55 and 60 since the ladder shipped, so
+   the 50 column was already on the page waiting to be traded.
+
+   It is a mechanic, not a fix. It records under P80M, it is judged on its
+   own record, and it lends nothing to the other two and borrows nothing
+   from them. */
+var P80_RSI_MID_LONG   = 50;        /* long pullback, midline: RSI below this */
+var P80_RSI_MID_SHORT  = 50;        /* short pullback, midline: RSI above this */
+
 /* Ordered TIGHTEST FIRST. hg80Scan takes the first that fires, which is what
    makes the populations disjoint, and it is only valid because each entry is
    a strict superset of the one before it — asserted in the tests, not
-   assumed here. */
+   assumed here. MID has to sit between the two on BOTH sides for that to
+   hold: 45 < 50 < 55 going long, 55 > 50 > 45 going short. It does. */
 var P80_VARIANTS = [
   { key: 'spec', label: 'SPEC', mech: 'P80',
     rsiLong: P80_RSI_LONG,      rsiShort: P80_RSI_SHORT },
+  { key: 'mid',  label: 'MID',  mech: 'P80M',
+    rsiLong: P80_RSI_MID_LONG,  rsiShort: P80_RSI_MID_SHORT },
   { key: 'wide', label: 'WIDE', mech: 'P80W',
     rsiLong: P80_RSI_WIDE_LONG, rsiShort: P80_RSI_WIDE_SHORT }
 ];
@@ -222,6 +248,15 @@ function hg80FocusList(){
 }
 function hg80FocusHas(tf){ return hg80FocusList().indexOf(tf) >= 0; }
 
+/* The rungs the focus wants DISPLAYED. Every rung is always scanned; this
+   is the filter applied on the way to the page, and it is never applied to
+   the forward-looking panel. */
+function hg80Shown(rungs){
+  var sel = hg80FocusList();
+  if (!sel.length) return rungs;
+  return rungs.filter(function(r){ return sel.indexOf(r.def.tf) >= 0; });
+}
+
 function esc(s){
   return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
     return c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;';
@@ -264,6 +299,82 @@ function hg80ExpectancyR(hit, be){
   if (!be || !(be.risk > 0) || !isFinite(h)) return NaN;
   var cost = isFinite(fin(be.cost)) ? fin(be.cost) : 0;
   return (h * be.target - (1 - h) * be.risk - cost) / be.risk;
+}
+
+/* ---------------------------------------------------------------------
+   IS THIS SETUP WORTH TAKING AT THIS VENUE
+
+   "More setups" and "better setups" pull against each other, and the tab
+   had no way to say which side of that line a given card fell on. The
+   required-rate table in FULL had the arithmetic all along, per RUNG — but
+   a reader looking at a 5m BUY card could not see that the 2.39 target it
+   was offering came with a 0.87 round trip attached, which is 36% of the
+   winner gone before the trade has an opinion.
+
+   So every card now carries the same three numbers the table carries, for
+   its own rung: what the target is worth, what the round trip costs, and
+   what share of the win the second eats. The verdict is a LABEL ON THAT
+   ARITHMETIC and not a recommendation — nothing here clears a gate, and a
+   'clear' card is still a WATCH card.
+
+   The 1/3 line is a display threshold and is stated as one. There is no
+   measured basis for putting it at a third rather than a quarter; what is
+   not arbitrary is 'gone' (the spread is the whole target — that is a
+   fact, not a preference) and 'negative' (even at the rate the strategy
+   claims for itself, the rung returns less than zero).
+   --------------------------------------------------------------------- */
+var P80_COST_HEAVY = 1 / 3;
+
+function hg80CostVerdict(be){
+  var out = { key: 'unknown', label: 'cost unknown', share: NaN, expR: NaN,
+              cost: NaN, target: NaN };
+  if (!be || !(fin(be.target) > 0) || !isFinite(fin(be.cost))) return out;
+  out.cost = fin(be.cost);
+  out.target = fin(be.target);
+  out.share = out.cost / out.target;
+  out.expR = hg80ExpectancyR(P80_CLAIMED, be);
+  if (out.share >= 1)               { out.key = 'gone';     out.label = 'spread eats the target'; }
+  else if (isFinite(out.expR) && out.expR <= 0)
+                                    { out.key = 'negative'; out.label = 'negative even at the claimed rate'; }
+  else if (out.share >= P80_COST_HEAVY)
+                                    { out.key = 'heavy';    out.label = 'cost-heavy'; }
+  else                              { out.key = 'clear';    out.label = 'cost is a small share'; }
+  return out;
+}
+
+/* One line a reader can act on, from that verdict. */
+function costLineHtml(be, venue){
+  var v = hg80CostVerdict(be);
+  if (v.key === 'unknown'){
+    return '<div class="note" style="margin-top:4px">Cost not priced on this rung — the venue '
+      + 'could not be read, so what the spread takes out of this target is unknown.</div>';
+  }
+  var bad = (v.key === 'gone' || v.key === 'negative');
+  var col = bad ? '#ef4444' : (v.key === 'heavy' ? '#b45309' : '#10b981');
+  var h = '<div class="note" style="margin-top:4px;padding:3px 6px;border-left:3px solid ' + col + '">'
+    + '<b>COST:</b> the round trip at ' + esc(venue || 'this venue') + ' is <b>' + num(v.cost)
+    + '</b> against a <b>' + num(v.target) + '</b> target — <b>' + (v.share * 100).toFixed(0)
+    + '% of the winner</b> gone before the trade has an opinion. ';
+  if (v.key === 'gone'){
+    h += '<b style="color:' + col + '">The spread is the whole target.</b> This rung cannot pay '
+      + 'here however often it is right.';
+  } else if (v.key === 'negative'){
+    h += '<b style="color:' + col + '">Even at the ' + (P80_CLAIMED * 100).toFixed(0) + '% the '
+      + 'strategy claims for itself</b>, that returns ' + v.expR.toFixed(3) + 'R per trade.';
+  } else if (v.key === 'heavy'){
+    /* the R figure needs a stop distance to be a ratio of; without one the
+       share is still true and the expectancy is simply not available, which
+       is said rather than printed as NaN */
+    h += isFinite(v.expR)
+      ? ('Taking the claimed rate at face value it still returns +' + v.expR.toFixed(3) + 'R, but '
+         + 'over a third of every win is the venue\'s.')
+      : 'Over a third of every win is the venue\'s.';
+  } else {
+    h += isFinite(v.expR)
+      ? ('At the claimed rate that is +' + v.expR.toFixed(3) + 'R per trade.')
+      : 'The per-trade expectancy needs a stop distance and is not available on this rung.';
+  }
+  return h + '</div>';
 }
 
 /* The venue round-trip fraction the desk is currently set to. Reuses the
@@ -482,12 +593,18 @@ function hg80SecsToBarClose(tfSec, nowSec){
   return (Math.floor(t / tf) + 1) * tf - t;
 }
 
-/* Every rung that is one CANDLE-DIRECTION away, across both mechanics.
+/* Every rung that is one CANDLE-DIRECTION away, across every mechanic.
 
    Only the trigger may be missing. A rung missing its trend is not armed in
    any useful sense — that is days of work on a 4h chart, and calling it
    "nearly there" would be the same flattery the ratio-printed-backwards bug
-   was. */
+   was.
+
+   This reads the WHOLE ladder and is deliberately not filtered by the rung
+   focus. Focus is a filter on history — "show me every 4h firing" — and
+   applying it here would let a view setting hide the one thing on the page
+   that looks forward. A 5m bar arming while the reader has 1d selected is
+   exactly the row they need to see. */
 function hg80Armed(rungs){
   var out = [], i, vi, si;
   var sides = ['long', 'short'];
@@ -496,14 +613,13 @@ function hg80Armed(rungs){
     var r = rungs[i];
     if (!r.ok || !r.res || !r.res.ind || !r.rows || !r.rows.length) continue;
     var last = r.rows.length - 1;
-    for (vi = 0; vi < P80_VARIANTS.length; vi++){
-      var v = P80_VARIANTS[vi];
-      var sg = hg80SignalAt(r.rows, r.res.ind, last, r.cfg, v);
-      if (!sg) continue;
-      for (si = 0; si < sides.length; si++){
-        var side = sides[si];
-        var ch = side === 'long' ? sg.longChecks : sg.shortChecks;
-        var sc = hg80Score(ch);
+    for (si = 0; si < sides.length; si++){
+      var side = sides[si];
+      for (vi = 0; vi < P80_VARIANTS.length; vi++){
+        var v = P80_VARIANTS[vi];
+        var sg = hg80SignalAt(r.rows, r.res.ind, last, r.cfg, v);
+        if (!sg) continue;
+        var sc = hg80Score(side === 'long' ? sg.longChecks : sg.shortChecks);
         /* armed = everything but the trigger */
         if (sc.missing.length !== 1 || sc.missing[0] !== 'trigger') continue;
         /* the bar now forming opens where the last one closed, near enough
@@ -512,20 +628,114 @@ function hg80Armed(rungs){
         var lvl = fin(sg.close);
         var atr = fin(sg.atr);
         out.push({
-          rung: r, variant: v, side: side, sig: sg,
+          rung: r, band: r.def.band, variant: v, side: side, sig: sg,
           level: lvl, atr: atr,
           entryEst: lvl,
           stopEst: side === 'long' ? lvl - P80_SL_ATR * atr : lvl + P80_SL_ATR * atr,
           targetEst: side === 'long' ? lvl + P80_TP_ATR * atr : lvl - P80_TP_ATR * atr,
           closesIn: hg80SecsToBarClose(r.cfg.tfSec, nowSec)
         });
-        break;     /* tightest variant that is armed on this side wins */
+        break;     /* tightest variant armed on this side wins — one row per rung per side */
       }
     }
   }
   /* soonest decision first — a 5m bar closing in 90 seconds is more use than
      a daily one closing in nine hours */
   out.sort(function(a, b){ return fin(a.closesIn) - fin(b.closesIn); });
+  return out;
+}
+
+/* ---------------------------------------------------------------------
+   THE TIER BELOW ARMED
+
+   Armed is a strict test and on a quiet ladder it is empty, which left the
+   forward-looking half of the tab showing nothing at all — the complaint
+   that produced it in the first place, one rung down.
+
+   So this is what is TWO away, where the second one is a thing that can
+   actually move: the RSI pullback, or the clock. Both resolve on their own
+   without anybody's permission — RSI drifts every bar, the session opens at
+   a time that is already known — so "what has to happen" can be written out
+   exactly, with the distance attached.
+
+   Trend is excluded on purpose, here as in hg80Armed. A rung needing its
+   EMAs to recross is not two conditions from a trade in any sense a reader
+   should be shown next to one that needs a red candle.
+
+   A rung/side already ARMED is not listed again: the stronger row is the
+   one that belongs on the page. */
+function hg80Arming(rungs, armed){
+  var out = [], i, vi, si;
+  var sides = ['long', 'short'];
+  var nowSec = Math.floor(Date.now() / 1000);
+  var taken = {}, k;
+  for (k = 0; k < (armed || []).length; k++){
+    taken[armed[k].rung.def.tf + '|' + armed[k].side] = true;
+  }
+  var toOpen = hg80SecsToSession(nowSec);
+
+  for (i = 0; i < rungs.length; i++){
+    var r = rungs[i];
+    if (!r.ok || !r.res || !r.res.ind || !r.rows || !r.rows.length) continue;
+    var last = r.rows.length - 1;
+    for (si = 0; si < sides.length; si++){
+      var side = sides[si];
+      if (taken[r.def.tf + '|' + side]) continue;
+      /* THE NEAREST THRESHOLD, NOT THE TIGHTEST MECHANIC.
+
+         hg80Armed breaks on the first (tightest) variant that qualifies,
+         and there that is right: an armed SPEC row is better news than an
+         armed WIDE row on the same bar. Here nothing is armed and the
+         question is a different one — what is closest to happening — so
+         breaking first printed "RSI is 85.7 and has to get below 45, 40.7
+         points away" when WIDE's 55 was 10 points nearer and would trip
+         first. That is the same mistake the board made before hg80Nearest
+         was weighted: the right distance, measured to the wrong place.
+
+         So every variant is evaluated and the smallest gap wins, ties
+         breaking toward the tighter mechanic. */
+      var best = null;
+      for (vi = 0; vi < P80_VARIANTS.length; vi++){
+        var v = P80_VARIANTS[vi];
+        var sg = hg80SignalAt(r.rows, r.res.ind, last, r.cfg, v);
+        if (!sg) continue;
+        var sc = hg80Score(side === 'long' ? sg.longChecks : sg.shortChecks);
+        if (sc.missing.length !== 2) continue;
+        if (sc.missing.indexOf('trigger') < 0) continue;
+        var other = sc.missing[0] === 'trigger' ? sc.missing[1] : sc.missing[0];
+        if (other !== 'pullback' && other !== 'session') continue;
+
+        var need;
+        if (other === 'pullback'){
+          var want = side === 'long' ? v.rsiLong : v.rsiShort;
+          need = { kind: 'pullback', rsi: fin(sg.rsi), want: want,
+                   gap: Math.abs(fin(sg.rsi) - want),
+                   txt: 'RSI is ' + num(sg.rsi, 1) + ' and has to get '
+                        + (side === 'long' ? 'below ' : 'above ') + want
+                        + ' — ' + num(Math.abs(fin(sg.rsi) - want), 1) + ' points away' };
+        } else {
+          need = { kind: 'session', secs: toOpen, gap: 0,
+                   txt: 'the ' + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC window has to be '
+                        + 'open — it opens in ' + hg80DurTxt(toOpen) };
+        }
+        var cand = { rung: r, band: r.def.band, variant: v, side: side, sig: sg,
+                     need: need, level: fin(sg.close), atr: fin(sg.atr),
+                     closesIn: hg80SecsToBarClose(r.cfg.tfSec, nowSec) };
+        if (!best || fin(cand.need.gap) < fin(best.need.gap)) best = cand;
+      }
+      if (best) out.push(best);
+    }
+  }
+  /* the clock is a known quantity and RSI is not, so session-blocked rows
+     sort by how long the wait is and pullback rows by how far RSI has to
+     travel — within each kind, nearest first; session before pullback
+     because "wait four hours" is a more certain statement than "RSI has to
+     fall six points" */
+  out.sort(function(a, b){
+    if (a.need.kind !== b.need.kind) return a.need.kind === 'session' ? -1 : 1;
+    if (a.need.kind === 'session') return fin(a.need.secs) - fin(b.need.secs);
+    return fin(a.need.gap) - fin(b.need.gap);
+  });
   return out;
 }
 
@@ -1106,10 +1316,10 @@ function ladderBoardHtml(rungs){
       + '<td class="hg-num">' + firedSplitHtml(r) + '</td>'
       + '<td>' + nearestHtml(r.nearest, r.cfg) + '</td></tr>';
   }
-  h += '</table><div class="note">"Closest" walks BOTH mechanics and BOTH sides and reports the '
-    + 'one nearest to firing, on the last CLOSED bar, with the mechanic named. Reporting it '
-    + 'against the spec alone printed "2 conditions away" for a rung that was one red candle from '
-    + 'a ' + esc(P80_VARIANTS[1].label) + ' entry — the wrong message, about the wrong mechanic. '
+  h += '</table><div class="note">"Closest" walks ALL ' + P80_VARIANTS.length + ' mechanics and '
+    + 'BOTH sides and reports the one nearest to firing, on the last CLOSED bar, with the '
+    + 'mechanic named. Reporting it against the spec alone printed "2 conditions away" for a rung '
+    + 'that was one red candle from a looser entry — the wrong message, about the wrong mechanic. '
     + 'A green chip means one condition short. It is not a forecast and not a setup — it is where '
     + 'the rung stands.</div></div>';
   return h;
@@ -1119,22 +1329,53 @@ function ladderBoardHtml(rungs){
 /* The fired count, split by mechanic. One pooled number would hide the
    thing the split exists to show: how many of a rung's firings the spec
    actually produced, and how many are the loosened ones. */
+/* Firings per mechanic, KEYED BY THE VARIANT TABLE.
+
+   This used to read `variant === 'wide' ? 'wide' : 'spec'`, which is a
+   two-mechanic assumption wearing a ternary. Adding a third would have
+   filed every MID firing under SPEC — inflating the record of the one
+   mechanic on this tab whose numbers are supposed to be untouched by the
+   looser ones. Unknown keys are counted under their own name rather than
+   folded into a neighbour. */
 function hg80CountByVariant(rung){
-  var out = { spec: 0, wide: 0, total: 0 };
+  var out = { total: 0, by: {}, long: 0, short: 0 }, i;
+  for (i = 0; i < P80_VARIANTS.length; i++) out.by[P80_VARIANTS[i].key] = 0;
   if (!rung || !rung.ok) return out;
-  for (var i = 0; i < rung.res.signals.length; i++){
-    var k = rung.res.signals[i].variant === 'wide' ? 'wide' : 'spec';
-    out[k]++; out.total++;
+  for (i = 0; i < rung.res.signals.length; i++){
+    var sg = rung.res.signals[i], k = sg.variant;
+    if (out.by[k] == null) out.by[k] = 0;
+    out.by[k]++; out.total++;
+    /* BOTH DIRECTIONS, COUNTED. Nothing in the protocol favours one — a bar
+       cannot satisfy both trend tests, so the split is whatever the market
+       gave — but a reader could not see that without auditing the rows, and
+       "does this thing ever short?" deserves a number rather than a search. */
+    if (sg.dir === 'long') out.long++; else if (sg.dir === 'short') out.short++;
   }
   return out;
+}
+
+/* "SPEC 0 · MID 3 · WIDE 7", built from the table so it grows with it. */
+function hg80CountTxt(c, sep){
+  var bits = [], i;
+  for (i = 0; i < P80_VARIANTS.length; i++){
+    var v = P80_VARIANTS[i];
+    bits.push(v.label + ' ' + (c.by[v.key] || 0));
+  }
+  return bits.join(sep == null ? ' · ' : sep);
 }
 
 function firedSplitHtml(r){
   var c = hg80CountByVariant(r);
   var rate = r.scanned > 0 ? (100 * c.total / r.scanned).toFixed(2) + '%' : '—';
-  return '<span class="statuschip ' + (c.spec ? 'ok' : 'na') + '">SPEC ' + c.spec + '</span> '
-    + '<span class="statuschip na">WIDE ' + c.wide + '</span>'
-    + '<div class="note">' + c.total + ' in ' + r.scanned + ' · ' + rate + '</div>';
+  var chips = '', i;
+  for (i = 0; i < P80_VARIANTS.length; i++){
+    var v = P80_VARIANTS[i], n = c.by[v.key] || 0;
+    chips += '<span class="statuschip ' + (v.key === 'spec' && n ? 'ok' : 'na') + '">'
+      + esc(v.label) + ' ' + n + '</span> ';
+  }
+  return chips + '<div class="note">' + c.total + ' in ' + r.scanned + ' · ' + rate
+    + '<br><span style="color:#10b981">' + c.long + ' long</span> · '
+    + '<span style="color:#ef4444">' + c.short + ' short</span></div>';
 }
 
 /* The board cell: which mechanic and side is closest, what it still needs,
@@ -1218,9 +1459,12 @@ function distanceHtml(sig, cfg){
    convert in their head is a number that gets misread.
    --------------------------------------------------------------------- */
 function variantChipHtml(sig){
-  var wide = sig && sig.variant === 'wide';
-  return '<span class="statuschip ' + (wide ? 'na' : 'ok') + '">'
-    + esc(wide ? 'WIDE' : 'SPEC') + '</span>';
+  var v = hg80Variant(sig && sig.variant);
+  /* SPEC is the supplied rule and reads as the pass state; everything
+     looser is chipped as what it is, so no card can be mistaken for a spec
+     firing at a glance */
+  return '<span class="statuschip ' + (v.key === 'spec' ? 'ok' : 'na') + '">'
+    + esc(v.label) + '</span>';
 }
 
 function ageTxt(sec){
@@ -1250,8 +1494,12 @@ function ageTxt(sec){
    recent firing each. Focusing a rung drops the cap and the pooling: one
    timeframe, every firing it produced in the window, with its outcome.
 
-   It also stops fetching the other four, which is the difference between
-   one request and five on a rung a desk is actually watching.
+   It used to stop FETCHING the other four as well. That made one control do
+   two jobs, and the second job quietly broke the first once the tab grew a
+   panel that looks forward: an unfetched rung cannot be reported as arming,
+   so a view filter was deciding what the reader was allowed to know was
+   coming. Every rung is scanned on every pass now; this narrows the page,
+   not the scan, and WHAT IS COMING ignores it entirely.
    --------------------------------------------------------------------- */
 function hg80BandRungs(band){
   var out = [], i;
@@ -1321,7 +1569,8 @@ function focusControlHtml(){
   h += '<span class="note dim" style="margin:0;font-size:11px">'
     + (sel.length
         ? esc(sel.join(' + ')) + ' — every firing in ' + (sel.length === 1 ? 'its' : 'their')
-          + ' window, uncapped. Click a rung again to drop it.'
+          + ' window, uncapped. Click a rung again to drop it. The whole ladder is still '
+          + 'scanned, and WHAT IS COMING still reports all five.'
         : 'all five rungs — SETUPS shows the most recent firing on each. '
           + 'SCALP is ' + esc(scalp.join(' + ')) + ', SWING is ' + esc(swing.join(' + '))
           + ' by holding period. NO SESSION GATE is ' + esc(ungated.join(' + '))
@@ -1437,6 +1686,8 @@ function simpleCardHtml(sig, rung, state){
     + ((P80_SL_ATR / (P80_SL_ATR + P80_TP_ATR)) * 100).toFixed(1) + '% of the time just to break '
     + 'even, before any spread.</div>';
 
+  if (rung) h += costLineHtml(rung.be, __p.venue ? __p.venue.venue : null);
+
   h += '<div class="note warn" style="margin-top:4px;padding:3px 6px;border-left:3px solid #b45309">'
     + '<b>WATCH — not a signal to act on.</b> ' + esc(sig.variantLabel || 'SPEC')
     + ' has no measured record on this desk. It is logged so it can earn one.</div>';
@@ -1450,45 +1701,116 @@ function simpleCardHtml(sig, rung, state){
    trip it, and when that candle closes — in the reader's own clock. */
 function armedHtml(rungs){
   var armed = hg80Armed(rungs);
-  if (!armed.length) return '';
-  var h = '<div class="panel" style="margin-top:8px;border-left:4px solid #0ea5e9">'
-    + '<h3 style="color:#0ea5e9">ARMED — ONE CANDLE AWAY <span>' + armed.length
-    + ' waiting on the close</span></h3>';
+  var arming = hg80Arming(rungs, armed);
+  if (!armed.length && !arming.length) return '';
 
-  for (var i = 0; i < armed.length; i++){
-    var a = armed[i], long = a.side === 'long';
-    var closesAt = isFinite(fin(a.closesIn))
-      ? hg80WhenTxt(Math.floor(Date.now() / 1000) + fin(a.closesIn), false) : '';
-    h += '<div style="margin-top:8px;padding:6px 8px;border:1px solid #334155;border-radius:4px">'
-      + '<b style="color:' + (long ? '#10b981' : '#ef4444') + ';font-size:1.1em">'
-      + (long ? 'BUY' : 'SELL') + ' XAUUSD ' + esc(a.rung.def.tf) + '</b> '
-      + variantChipHtml({ variant: a.variant.key })
-      + '<div style="margin-top:3px"><b>Fires if this candle closes '
-      + (long ? 'ABOVE' : 'BELOW') + ' its open.</b> '
-      + 'The last one closed at <b>' + num(a.level) + '</b>, which is about where this one '
-      + 'opened — so watch that level.</div>'
-      + '<div class="note" style="margin-top:3px">Candle closes in <b>'
-      + hg80DurTxt(a.closesIn) + '</b>' + (closesAt ? ' — at <b>' + esc(closesAt) + '</b>' : '')
-      + '</div>'
-      + '<table style="border:0;margin:4px 0"><tbody>'
-      + '<tr><td style="padding:2px 10px 2px 0">likely ENTRY</td>'
-      + '<td class="hg-num" style="font-weight:bold;padding:2px 10px 2px 0">' + num(a.entryEst) + '</td></tr>'
-      + '<tr><td style="padding:2px 10px 2px 0">likely STOP LOSS</td>'
-      + '<td class="hg-num" style="font-weight:bold;padding:2px 10px 2px 0">' + num(a.stopEst) + '</td>'
-      + '<td class="hg-num note">' + num(Math.abs(a.entryEst - a.stopEst)) + ' away</td></tr>'
-      + '<tr><td style="padding:2px 10px 2px 0">likely TAKE PROFIT</td>'
-      + '<td class="hg-num" style="font-weight:bold;padding:2px 10px 2px 0">' + num(a.targetEst) + '</td>'
-      + '<td class="hg-num note">' + num(Math.abs(a.entryEst - a.targetEst)) + ' away</td></tr>'
-      + '</tbody></table>'
-      + '<div class="note warn" style="padding:3px 6px;border-left:3px solid #b45309">'
-      + '<b>Armed is not a promise.</b> Three of the conditions hold on the last CLOSED candle: '
-      + 'the trend, the RSI pullback and the session. All three are recomputed on the new candle '
-      + 'and any of them can drop out before it closes. The levels above are worked from that '
-      + 'last close and the current ATR — the real ones are set by whichever candle actually '
-      + 'fires.</div>'
-      + '</div>';
+  var nowSec = Math.floor(Date.now() / 1000);
+  var h = '<div class="panel" style="margin-top:8px;border-left:4px solid #0ea5e9">'
+    + '<h3 style="color:#0ea5e9">WHAT IS COMING <span>'
+    + armed.length + ' armed · ' + arming.length + ' one step behind</span></h3>';
+
+  h += sideCountHtml(armed, arming);
+
+  if (armed.length){
+    h += '<div class="note" style="margin-top:6px"><b>ARMED — ONE CANDLE AWAY.</b> Three of the '
+      + 'four conditions hold on the last closed candle. Only the candle\'s own direction is '
+      + 'outstanding, and it is decided at the close named on each row.</div>';
+    h += bandBlocksHtml(armed, armedRowHtml);
   }
+
+  if (arming.length){
+    h += '<div class="note" style="margin-top:8px"><b>ONE STEP BEHIND.</b> These need the candle '
+      + '<i>and</i> one more thing — an RSI level, or the session clock. Both move on their own, '
+      + 'so what is outstanding is written out with the distance attached.</div>';
+    h += bandBlocksHtml(arming, armingRowHtml);
+  }
+
+  h += '<div class="note warn" style="margin-top:8px;padding:3px 6px;border-left:3px solid #b45309">'
+    + '<b>Armed is not a promise.</b> The trend, the RSI pullback and — on the rungs where a bar '
+    + 'can fit inside the window — the session are recomputed on the new candle, and any of them '
+    + 'can drop out before it closes. Levels are worked from '
+    + 'the last close and the current ATR — the real ones are set by whichever candle actually '
+    + 'fires. This is the outstanding condition stated exactly; it is not a forecast that it '
+    + 'will be met.</div>';
   return h + '</div>';
+}
+
+/* Long and short, scalp and swing, counted on the page. A reader asking
+   "does this thing ever short?" should not have to audit the rows. */
+function sideCountHtml(armed, arming){
+  var all = armed.concat(arming);
+  function n(band, side){
+    var c = 0;
+    for (var i = 0; i < all.length; i++){
+      if (all[i].band === band && all[i].side === side) c++;
+    }
+    return c;
+  }
+  var bands = ['scalp', 'swing'], h = '', i;
+  for (i = 0; i < bands.length; i++){
+    var b = bands[i];
+    h += '<span class="note" style="margin-right:14px">' + esc(b.toUpperCase())
+      + ' <span class="dim">(' + esc(hg80BandRungs(b).join(', ')) + ')</span>: '
+      + '<b style="color:#10b981">' + n(b, 'long') + ' long</b> · '
+      + '<b style="color:#ef4444">' + n(b, 'short') + ' short</b></span>';
+  }
+  return '<div style="margin-top:2px">' + h + '</div>';
+}
+
+/* Grouped SCALP then SWING, because those are the two different trades on
+   this ladder — a 5m row and a 1d row share every rule and nothing about
+   how long you sit in them. */
+function bandBlocksHtml(list, rowFn){
+  var bands = ['scalp', 'swing'], h = '', i, j;
+  for (i = 0; i < bands.length; i++){
+    var b = bands[i];
+    var rows = list.filter(function(x){ return x.band === b; });
+    if (!rows.length) continue;
+    h += '<div class="note dim" style="margin-top:6px;letter-spacing:0.08em"><b>'
+      + esc(b.toUpperCase()) + '</b></div>';
+    for (j = 0; j < rows.length; j++) h += rowFn(rows[j]);
+  }
+  return h;
+}
+
+function armedRowHtml(a){
+  var long = a.side === 'long';
+  var closesAt = isFinite(fin(a.closesIn))
+    ? hg80WhenTxt(Math.floor(Date.now() / 1000) + fin(a.closesIn), false) : '';
+  var h = '<div style="margin-top:6px;padding:6px 8px;border:1px solid #334155;border-radius:4px">'
+    + '<b style="color:' + (long ? '#10b981' : '#ef4444') + ';font-size:1.1em">'
+    + (long ? 'BUY' : 'SELL') + ' XAUUSD ' + esc(a.rung.def.tf) + '</b> '
+    + variantChipHtml({ variant: a.variant.key })
+    + '<div style="margin-top:3px"><b>Fires if this candle closes '
+    + (long ? 'ABOVE' : 'BELOW') + ' its open.</b> '
+    + 'The last one closed at <b>' + num(a.level) + '</b>, which is about where this one '
+    + 'opened — so watch that level.</div>'
+    + '<div class="note" style="margin-top:3px">Candle closes in <b>'
+    + hg80DurTxt(a.closesIn) + '</b>' + (closesAt ? ' — at <b>' + esc(closesAt) + '</b>' : '')
+    + '</div>'
+    + '<table style="border:0;margin:4px 0"><tbody>'
+    + '<tr><td style="padding:2px 10px 2px 0">likely ENTRY</td>'
+    + '<td class="hg-num" style="font-weight:bold;padding:2px 10px 2px 0">' + num(a.entryEst) + '</td></tr>'
+    + '<tr><td style="padding:2px 10px 2px 0">likely STOP LOSS</td>'
+    + '<td class="hg-num" style="font-weight:bold;padding:2px 10px 2px 0">' + num(a.stopEst) + '</td>'
+    + '<td class="hg-num note">' + num(Math.abs(a.entryEst - a.stopEst)) + ' away</td></tr>'
+    + '<tr><td style="padding:2px 10px 2px 0">likely TAKE PROFIT</td>'
+    + '<td class="hg-num" style="font-weight:bold;padding:2px 10px 2px 0">' + num(a.targetEst) + '</td>'
+    + '<td class="hg-num note">' + num(Math.abs(a.entryEst - a.targetEst)) + ' away</td></tr>'
+    + '</tbody></table>';
+  h += costLineHtml(a.rung.be, __p.venue ? __p.venue.venue : null);
+  return h + '</div>';
+}
+
+function armingRowHtml(a){
+  var long = a.side === 'long';
+  return '<div style="margin-top:6px;padding:5px 8px;border:1px dashed #334155;border-radius:4px">'
+    + '<b style="color:' + (long ? '#10b981' : '#ef4444') + '">'
+    + (long ? 'BUY' : 'SELL') + ' XAUUSD ' + esc(a.rung.def.tf) + '</b> '
+    + variantChipHtml({ variant: a.variant.key })
+    + '<div class="note" style="margin-top:2px">Waiting on: <b>' + esc(a.need.txt) + '</b>. '
+    + 'Then a candle closing ' + (long ? 'ABOVE' : 'BELOW') + ' its open. '
+    + 'Trend is already aligned; last close ' + num(a.level) + '.</div></div>';
 }
 
 function sessionClockHtml(rungs){
@@ -1652,8 +1974,9 @@ function whyNothingHtml(rungs){
       + closest.n.score.total + ', '
       + (away === 1 ? 'waiting only on <b>' + esc(miss[0]) + '</b>'
                     : 'still needs ' + esc(miss.join(' and ')))
-      + '. Measured across BOTH mechanics, so a rung one candle from a ' + esc(P80_VARIANTS[1].label)
-      + ' entry is not reported as two conditions from a ' + esc(P80_VARIANTS[0].label) + ' one.';
+      + '. Measured across all ' + P80_VARIANTS.length + ' mechanics, so a rung one candle from '
+      + 'a looser entry is not reported as two conditions from a '
+      + esc(P80_VARIANTS[0].label) + ' one.';
   }
 
   /* the part that explains the history list */
@@ -1703,8 +2026,11 @@ function hg80FocusText(list, venue){
   L.push('spec: EMA' + P80_EMA_FAST + '/' + P80_EMA_SLOW + ', RSI(' + P80_RSI_LEN + ') < '
     + P80_RSI_LONG + ' / > ' + P80_RSI_SHORT + ', TP ' + P80_TP_ATR + 'xATR, SL ' + P80_SL_ATR
     + 'xATR, session ' + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC');
-  L.push('wide: same rules, RSI < ' + P80_RSI_WIDE_LONG + ' / > ' + P80_RSI_WIDE_SHORT
-    + ' (bars the spec turned away; recorded under ' + P80_VARIANTS[1].mech + ')');
+  for (var vh = 1; vh < P80_VARIANTS.length; vh++){
+    var vv = P80_VARIANTS[vh];
+    L.push(vv.label.toLowerCase() + ': same rules, RSI < ' + vv.rsiLong + ' / > ' + vv.rsiShort
+      + ' (bars the tighter mechanics turned away; recorded under ' + vv.mech + ')');
+  }
   L.push('gross breakeven: ' + ((P80_SL_ATR / (P80_SL_ATR + P80_TP_ATR)) * 100).toFixed(4) + '%');
 
   if (!ok.length){
@@ -1717,7 +2043,8 @@ function hg80FocusText(list, venue){
   L.push('');
   for (i = 0; i < ok.length; i++){
     var r = ok[i], c = hg80CountByVariant(r);
-    L.push(r.def.tf + ' (' + r.def.band + '): SPEC ' + c.spec + ' WIDE ' + c.wide
+    L.push(r.def.tf + ' (' + r.def.band + '): ' + hg80CountTxt(c, ' ')
+      + ' | ' + c.long + ' long ' + c.short + ' short'
       + ' in ' + r.scanned + ' bars'
       + (r.medianBars != null ? ', typical hold ' + r.medianBars + ' bars' : '')
       + ', ATR ' + num(r.lastAtr, 3) + ', last close ' + num(r.lastPx)
@@ -1755,7 +2082,7 @@ function hg80FocusText(list, venue){
   if (!rows.length) L.push('(nothing fired on these rungs in the bars evaluated)');
   L.push('');
   L.push('Outcomes resolved inside this fetch only. Not a backtest, not sequential, no win rate.');
-  L.push('Both mechanics are a WATCH: no measured record on this desk yet.');
+  L.push('All ' + P80_VARIANTS.length + ' mechanics are a WATCH: no measured record on this desk yet.');
   return L.join('\n');
 }
 
@@ -1789,7 +2116,7 @@ function focusedFiringsHtml(list){
     + '<div class="row" style="margin:0 0 6px 0;align-items:center">'
     + '<button type="button" class="btn ghost" id="p80Copy">COPY THESE ROWS</button>'
     + ' <span class="note dim" style="margin:0;font-size:11px">tab-separated, with the venue, '
-    + 'both mechanics\' thresholds and the breakeven in the header — so a paste can be read '
+    + 'every mechanic\'s thresholds and the breakeven in the header — so a paste can be read '
     + 'without knowing how this tab was set</span></div>'
     + '<textarea id="p80CopyBox" style="display:none;width:100%;height:160px;font-family:monospace;'
     + 'font-size:11px"></textarea>';
@@ -1798,8 +2125,9 @@ function focusedFiringsHtml(list){
      produced what — the whole reason for holding two at once */
   for (i = 0; i < ok.length; i++){
     var rr = ok[i], c = hg80CountByVariant(rr);
-    h += '<div class="note"><b>' + esc(rr.def.tf) + '</b> (' + esc(rr.def.band) + ') — SPEC '
-      + c.spec + ' · WIDE ' + c.wide + ' in ' + rr.scanned + ' bars'
+    h += '<div class="note"><b>' + esc(rr.def.tf) + '</b> (' + esc(rr.def.band) + ') — '
+      + esc(hg80CountTxt(c)) + ' · ' + c.long + ' long / ' + c.short + ' short'
+      + ' in ' + rr.scanned + ' bars'
       + (rr.medianBars != null ? ' · typical hold ' + rr.medianBars + ' bar'
           + (rr.medianBars === 1 ? '' : 's') + ' (' + ageTxt(rr.medianBars * rr.cfg.tfSec) + ')' : '')
       + (rr.cfg.session === false
@@ -1965,14 +2293,29 @@ function censusHtml(rungs){
     h += '</tr>';
   }
   h += '</table>';
-  h += '<div class="note ok" style="margin-top:4px"><b>The '
-    + P80_RSI_WIDE_LONG + ' / ' + P80_RSI_WIDE_SHORT + ' column is wired.</b> It runs as the '
-    + '<b>' + esc(P80_VARIANTS[1].mech) + '</b> mechanic, scanned on every rung beside the spec '
-    + 'and recorded separately. The counts in that column are CUMULATIVE — they include the spec '
-    + 'firings, because RSI below ' + P80_RSI_LONG + ' is also below ' + P80_RSI_WIDE_LONG
-    + '. What ' + esc(P80_VARIANTS[1].mech) + ' records is the DIFFERENCE: only the bars the spec '
-    + 'turned away, so its record answers what the extra trades are worth rather than being '
-    + 'diluted by the spec\'s. Pooling the two records gives the loosened strategy as actually '
+  /* WHICH COLUMNS ARE TRADED, read off the variant table rather than counted
+     by hand. This paragraph named P80_VARIANTS[1] when there were two of
+     them; adding a third silently made it print the wrong mechanic, which
+     is the same bug class as the header that hand-counted its mechanics. */
+  var wired = [], unwired = [], vk, lk;
+  for (lk = 0; lk < lv.length; lk++){
+    var hit = null;
+    for (vk = 0; vk < P80_VARIANTS.length; vk++){
+      if (P80_VARIANTS[vk].rsiLong === lv[lk]) { hit = P80_VARIANTS[vk]; break; }
+    }
+    if (hit) wired.push(hit.mech + ' at ' + hit.rsiLong + ' / ' + hit.rsiShort);
+    else unwired.push(String(lv[lk]));
+  }
+  h += '<div class="note ok" style="margin-top:4px"><b>' + wired.length + ' of these columns are '
+    + 'wired:</b> ' + esc(wired.join(', ')) + '. Each is scanned on every rung and recorded under '
+    + 'its own mechanic.'
+    + (unwired.length ? ' The ' + esc(unwired.join(', ')) + ' column' + (unwired.length === 1
+        ? ' is counted here and not traded.' : 's are counted here and not traded.') : '')
+    + '<br>The counts are CUMULATIVE — a looser column includes the tighter firings, because RSI '
+    + 'below ' + P80_RSI_LONG + ' is also below ' + P80_RSI_MID_LONG + ' and below '
+    + P80_RSI_WIDE_LONG + '. What each mechanic RECORDS is the difference: only the bars the '
+    + 'tighter one turned away, so its record answers what its own extra trades are worth rather '
+    + 'than being diluted by theirs. Pooling the records gives the loosened strategy as actually '
     + 'traded; nothing can un-pool them once they are pooled, which is why they start apart.</div>';
   h += '<div class="note warn" style="margin-top:4px"><b>Moving the threshold does not change '
     + 'what the trade has to hit.</b> The breakeven is set by ' + P80_SL_ATR.toFixed(2) + ' and '
@@ -1981,8 +2324,8 @@ function censusHtml(rungs){
     + 'extra one is a bar the spec judged not yet a pullback — so their quality is unknown and '
     + 'there is a good reason to think it is worse. That is precisely why it is a separate '
     + 'mechanic with a separate record and not a widened spec: the claim that these trades are '
-    + 'worth taking is now a measurable one, and until it is measured both mechanics are a '
-    + 'WATCH.</div>';
+    + 'worth taking is now a measurable one, and until it is measured all '
+    + P80_VARIANTS.length + ' mechanics are a WATCH.</div>';
   return h + '</div>';
 }
 
@@ -1990,12 +2333,14 @@ function censusHtml(rungs){
    this bar is one the supplied spec REJECTED, and loosening the entry bought
    it nothing on the exit — the rate it has to hit did not move. */
 function variantNoteHtml(sig){
-  if (!sig || sig.variant !== 'wide') return '';
+  if (!sig || !sig.variant || sig.variant === 'spec') return '';
+  var v = hg80Variant(sig.variant);
   var gross = P80_SL_ATR / (P80_SL_ATR + P80_TP_ATR);
   return '<div class="note warn" style="margin-top:4px;border-left:3px solid #b45309">'
-    + '<b>THIS IS THE WIDE MECHANIC, NOT THE SUPPLIED SPEC.</b> The spec wants RSI below '
-    + P80_RSI_LONG + ' for a long and above ' + P80_RSI_SHORT + ' for a short; this fired at '
-    + num(sig.rsi, 1) + ', which the spec turned away. Everything else — trend, candle '
+    + '<b>THIS IS THE ' + esc(v.label) + ' MECHANIC, NOT THE SUPPLIED SPEC.</b> The spec wants '
+    + 'RSI below ' + P80_RSI_LONG + ' for a long and above ' + P80_RSI_SHORT + ' for a short; '
+    + esc(v.label) + ' asks for below ' + v.rsiLong + ' and above ' + v.rsiShort + '. This fired '
+    + 'at ' + num(sig.rsi, 1) + ', which the spec turned away. Everything else — trend, candle '
     + 'direction, session, target, stop — is identical.<br>'
     + 'And that is the trade-off in one line: the entry got easier and <b>the bar did not move</b>. '
     + 'This still has to hit ' + (gross * 100).toFixed(2) + '% gross, because the breakeven is set '
@@ -2189,20 +2534,26 @@ function render(rungs, venue, recNotes, basis){
   var ui = __p.ui;
   if (!ui || !ui.body) return;
 
-  var usable = rungs.filter(function(r){ return r.ok; });
+  /* `rungs` is always the whole ladder. `shown` is what the focus admits —
+     everything backward-looking reads the second, the forward-looking panel
+     reads the first. */
+  var shown = hg80Shown(rungs);
+  var usable = shown.filter(function(r){ return r.ok; });
   var h = viewControlHtml();
 
   if (__p.view === 'simple'){
     if (!usable.length){
-      var b0 = rungs.map(function(r){ return r.def.tf + ': ' + ((r.why) || 'no bars'); });
-      ui.body.innerHTML = h + '<div class="note warn">No gold bars came back — '
+      var b0 = shown.map(function(r){ return r.def.tf + ': ' + ((r.why) || 'no bars'); });
+      ui.body.innerHTML = h + armedHtml(rungs)
+        + '<div class="note warn">No gold bars came back on the focused rungs — '
         + esc(b0.join(' · ')) + '</div>';
       wireViewButtons();
+      wireFocusButtons();
       return;
     }
     h += armedHtml(rungs);
-    h += simpleSetupsHtml(rungs);
-    h += sessionClockHtml(rungs);
+    h += simpleSetupsHtml(shown);
+    h += sessionClockHtml(shown);
     h += '<div class="note" style="margin-top:8px">Priced at <b>'
       + esc((venue || 'the selected venue')) + '</b>. Switch to <b>FULL</b> for the cost '
       + 'arithmetic, the ladder board, the near misses and the census.</div>';
@@ -2215,11 +2566,12 @@ function render(rungs, venue, recNotes, basis){
 
   h += venueControlHtml(__p.venue);
   h += focusControlHtml();
-  h += whyNothingHtml(rungs);
-  h += mathPanelHtml(rungs, venue, basis);
+  h += armedHtml(rungs);
+  h += whyNothingHtml(shown);
+  h += mathPanelHtml(shown, venue, basis);
 
   if (!usable.length){
-    var bits = rungs.map(function(r){ return r.def.tf + ': ' + ((r.why) || 'no bars'); });
+    var bits = shown.map(function(r){ return r.def.tf + ': ' + ((r.why) || 'no bars'); });
     ui.body.innerHTML = h + '<div class="note warn">No rung returned usable bars — '
       + esc(bits.join(' · ')) + '</div>';
     wireViewButtons();
@@ -2229,8 +2581,8 @@ function render(rungs, venue, recNotes, basis){
     return;
   }
 
-  h += hg80FocusList().length ? focusedFiringsHtml(rungs) : latestSetupsHtml(rungs);
-  h += ladderBoardHtml(rungs);
+  h += hg80FocusList().length ? focusedFiringsHtml(shown) : latestSetupsHtml(shown);
+  h += ladderBoardHtml(shown);
 
   /* the SETUPS panel above already carries every card worth carrying, so
      this adds only what it cannot: what the log did with a fresh firing,
@@ -2258,9 +2610,9 @@ function render(rungs, venue, recNotes, basis){
     h += '</div>';
   }
 
-  if (!hg80FocusList().length) h += firedHtml(rungs);  /* focused table has every row already */
-  h += nearMissHtml(rungs);
-  h += censusHtml(rungs);
+  if (!hg80FocusList().length) h += firedHtml(shown);  /* focused table has every row already */
+  h += nearMissHtml(shown);
+  h += censusHtml(shown);
 
   var scanned = 0, fired = 0, amb = 0;
   for (i = 0; i < usable.length; i++){
@@ -2269,7 +2621,7 @@ function render(rungs, venue, recNotes, basis){
     amb += usable[i].tally.ambiguous;
   }
   h += '<div class="note" style="margin-top:8px">Scanned ' + scanned + ' evaluable bars across '
-    + usable.length + ' of ' + rungs.length + ' rungs · ' + fired + ' firing'
+    + usable.length + ' of ' + shown.length + ' shown rungs · ' + fired + ' firing'
     + (fired === 1 ? '' : 's') + ' in the fetched windows'
     + (amb ? ' · ' + amb + ' of them resolved on a bar that covered both levels and cannot be '
         + 'established either way' : '') + '.</div>';
@@ -2317,7 +2669,11 @@ function wireCopyButton(){
   btn.addEventListener('click', function(){
     var txt = '';
     try {
-      txt = hg80FocusText((__p.last && __p.last.rungs) || [], __p.venue);
+      /* THE ROWS ON SCREEN, not every rung scanned. __p.last.rungs became the
+         whole ladder when focus stopped narrowing the fetch, and copying
+         that would hand back rungs the reader never asked to see under a
+         heading that names the ones they did. */
+      txt = hg80FocusText(hg80Shown((__p.last && __p.last.rungs) || []), __p.venue);
     } catch (e){ txt = 'could not build the copy: ' + String((e && e.message) || e); }
     function reveal(note){
       if (box){
@@ -2411,11 +2767,14 @@ function run(){
   var rungs = [];
   var chain = Promise.resolve();
 
-  var sel = hg80FocusList();
-  var ladder = sel.length
-    ? P80_LADDER.filter(function(d){ return sel.indexOf(d.tf) >= 0; })
-    : P80_LADDER;
-  ladder.forEach(function(def){
+  /* THE WHOLE LADDER, ALWAYS. Focus used to narrow the fetch, which made it
+     a performance control as well as a view control — and the moment the
+     tab grew a forward-looking panel that was a bug: a reader focused on 1d
+     could not be shown a 5m rung arming, because the 5m bars were never
+     asked for. Arming is the one thing on this page a view filter must not
+     be able to hide. Focus now filters what is DISPLAYED and nothing else;
+     five sequential fetches is what this tab did before focus existed. */
+  P80_LADDER.forEach(function(def){
     chain = chain.then(function(){
       if (ui && ui.stat) ui.stat.textContent = 'fetching ' + def.tf + ' bars…';
       return Promise.resolve().then(function(){ return fetchFn(def.tf, def.bars); })
@@ -2438,6 +2797,12 @@ function run(){
   });
 
   return chain.then(function(){
+    /* EVERY RUNG THAT FIRED, not every rung on screen. This loop always read
+       `rungs`, but `rungs` used to BE the focused subset — so the forward
+       log's population silently depended on which rungs the reader happened
+       to have selected, and a 5m firing went unrecorded whenever somebody
+       was looking at 1d. A record that exists or not according to a view
+       setting is not evidence of anything. */
     var recNotes = {}, i, fired = [];
     for (i = 0; i < rungs.length; i++){
       var r = rungs[i];
@@ -2458,8 +2823,9 @@ function run(){
     var okN = rungs.filter(function(x){ return x.ok; }).length;
     if (ui && ui.stat){
       ui.stat.textContent = 'updated ' + new Date().toISOString().slice(11, 19) + ' UTC · '
-        + (hg80FocusList().length ? (hg80FocusList().join(' + ') + ' only')
-                                  : (okN + '/' + rungs.length + ' rungs')) + ' · '
+        + (hg80FocusList().length
+             ? (hg80FocusList().join(' + ') + ' shown of ' + rungs.length + ' scanned')
+             : (okN + '/' + rungs.length + ' rungs')) + ' · '
         + (fired.length ? fired.join(', ') + ' fired' : 'no rung fired on its last candle');
     }
     __p.ranOnce = true;
@@ -2484,10 +2850,12 @@ function mount(el){
     + ', candle-direction trigger, ' + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC where a bar '
     + 'can fit inside it. Target ' + P80_TP_ATR + ' × ATR, stop ' + P80_SL_ATR + ' × ATR — '
     + 'implemented exactly as specified, and run unchanged on every rung from scalp to swing so '
-    + 'the cost arithmetic can be read where it differs. A second mechanic, <b>'
-    + esc(P80_VARIANTS[1].mech) + '</b>, runs the identical rules at a loosened pullback ('
-    + P80_RSI_WIDE_LONG + ' / ' + P80_RSI_WIDE_SHORT + ') on the bars the spec turned away, '
-    + 'recorded apart so neither lends the other its numbers.</div>'
+    + 'the cost arithmetic can be read where it differs. '
+    + P80_VARIANTS.slice(1).map(function(v){
+        return '<b>' + esc(v.mech) + '</b> (' + v.rsiLong + ' / ' + v.rsiShort + ')';
+      }).join(' and ')
+    + ' run the identical rules at a looser pullback on the bars the tighter one turned away, '
+    + 'each recorded apart so none lends another its numbers.</div>'
     + '<div class="row" style="margin-top:8px"><button class="btn" id="p80Run">SCAN</button>'
     + '<span class="note" id="p80Stat">auto-runs on open</span></div>'
     + '<div id="p80Body" style="margin-top:8px"></div></div>';
@@ -2525,6 +2893,19 @@ W.HG_P80_MISS_COST   = P80_MISS_COST;
 W.hg80SecsToSession  = hg80SecsToSession;
 W.hg80SecsToBarClose = hg80SecsToBarClose;
 W.hg80Armed          = hg80Armed;
+W.hg80Arming         = hg80Arming;
+W.hg80CountByVariant = hg80CountByVariant;
+W.firedSplitHtml     = firedSplitHtml;
+/* exported so the disclosure can be asserted by RENDERING it for every
+   mechanic rather than grepping the source for one hard-coded label — a
+   regex for 'THIS IS THE WIDE MECHANIC' went on passing while a MID card
+   would have said nothing at all */
+W.variantNoteHtml    = variantNoteHtml;
+W.armedHtml          = armedHtml;
+W.costLineHtml       = costLineHtml;
+W.hg80Shown          = hg80Shown;
+W.hg80CostVerdict    = hg80CostVerdict;
+W.HG_P80_COST_HEAVY  = P80_COST_HEAVY;
 W.hg80WhenTxt        = hg80WhenTxt;
 W.hg80TzName         = hg80TzName;
 W.hg80TzShort        = hg80TzShort;
@@ -2537,6 +2918,7 @@ W.hg80ScanTf         = hg80ScanTf;
 W.hg80Record         = hg80Record;
 W.HG_P80_TAB         = P80_TAB;
 W.HG_P80_LADDER      = P80_LADDER;
+W.HG_P80_CENSUS_LEVELS = P80_CENSUS_LEVELS;
 W.HG_P80_VARIANTS    = P80_VARIANTS;
 W.HG_P80_SPEC     = { tf: P80_TF, emaFast: P80_EMA_FAST, emaSlow: P80_EMA_SLOW,
                       rsiLen: P80_RSI_LEN, atrLen: P80_ATR_LEN,
