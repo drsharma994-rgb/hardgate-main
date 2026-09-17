@@ -262,7 +262,26 @@ console.log('\n== nothing about the spec was quietly improved ==');
      policy anywhere in the file to disagree with the spec */
   ok((code.match(/P80_SL_ATR\s*=/g) || []).length === 1, 'the stop multiple is declared exactly once');
   ok((code.match(/P80_TP_ATR\s*=/g) || []).length === 1, 'and the target multiple exactly once');
-  ok(!/minRr/.test(code), 'with no minRr policy smuggled in from the shared plan layer');
+  /* NO SECOND R:R POLICY — which is the property this was after, and it is
+     now checked directly rather than by banning a word.
+
+     The tab reads its own forward ledger, and the shared reader takes a
+     minRr. Omitting it gets the desk-wide 2R default, which would judge
+     these trades against a target they never had, so one has to be passed.
+     What must never happen is a NUMBER: the moment a literal appears there
+     is a second R:R in the file free to disagree with 0.75 / 4.00. So the
+     value is required to be derived from the two multiples themselves. */
+  ok(/minRr: hg80FwdMinRr\(\)/.test(code),
+     'the only minRr passed anywhere is hg80FwdMinRr()');
+  ok(/function hg80FwdMinRr\(\)\{ return P80_TP_ATR \/ P80_SL_ATR; \}/.test(
+       code.replace(/\s+/g, ' ').replace(/\{ /g, '{').replace(/ \}/g, '}')
+           .replace(/function hg80FwdMinRr\(\)\{return/, 'function hg80FwdMinRr(){ return')
+           .replace(/P80_SL_ATR;\}/, 'P80_SL_ATR; }'))
+     || /return P80_TP_ATR \/ P80_SL_ATR;/.test(code),
+     'and it is COMPUTED from the spec multiples, not a number of its own');
+  ok(!/minRr\s*[:=]\s*[0-9]/.test(code),
+     'no numeric minRr literal anywhere — a second R:R policy could disagree with the spec, '
+     + 'which is what this guard has always been for');
 
   /* the desk's 0.50% stop floor is CONTRADICTED by a 4 ATR 5m stop, and the
      card says so rather than silently clipping the level */

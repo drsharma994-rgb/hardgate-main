@@ -1378,7 +1378,15 @@ console.log('\n== SIMPLE is the default, and it reads as a trade ==');
   ok(/WATCH — not a signal to act on/.test(html),
      'and the WATCH tag is on the card — simplifying the layout is not licence to drop the one '
      + 'line that separates a setup from a recommendation');
-  ok(/no measured record on this desk/.test(html), 'saying why');
+  /* THE REASON IS NOW READ FROM THE LEDGER rather than asserted. It used to
+     say "no measured record on this desk" on every card unconditionally —
+     an assertion about the tab's own state that the tab never checked. With
+     nothing settled it says so and points at the panel; with something
+     settled it says how much. Either way it is still a WATCH. */
+  ok(/nothing settled in the forward log yet|settled in the forward log/.test(html),
+     'saying why, from what the forward log actually holds');
+  ok(!/no measured record on this desk/.test(html),
+     'and the old unconditional claim is gone, not left beside the measured one');
 
   /* THE RATIO, THE RIGHT WAY ROUND. p.rr is risk/reward = 5.33. Printed as
      "1:0.19" it reads as though the reward were the 1 — the flattering way
@@ -2191,6 +2199,130 @@ console.log('\n== the markup it emits is well formed ==');
     }
     ok(!/NaN|undefined/.test(html), `${view}: nothing renders as NaN or undefined`);
   }
+}
+
+console.log('\n== the tab reads back the ledger it has been writing to ==');
+{
+  /* IT WROTE AND NEVER READ. Every scan calls hgFwdRecord; nothing ever
+     called anything back, so the tab accumulated out-of-sample evidence
+     under OMNIGOLD:P80 and showed a reader none of it — while every card
+     asserted "no measured record on this desk" whether or not that was
+     still true. Eight other modules read their ledger back. */
+  ok(typeof ctx.hg80FwdRead === 'function', 'the tab can read its own ledger');
+  ok(/hgFwdPool/.test(SRC) && /hgFwdPanelHTML/.test(SRC),
+     'through the shared forward layer rather than a second reader of its own');
+
+  /* judged at THIS strategy's T1, not the desk-wide 2R default */
+  ok(near(ctx.hg80FwdMinRr(), 0.75 / 4.0, 1e-12),
+     `minRr is the spec's own T1 in R (${ctx.hg80FwdMinRr()}), not the 2R a caller gets by `
+     + 'omitting it — judging a 0.75 ATR target against a 2R bar would score it on a target it '
+     + 'never had');
+
+  /* with nothing recorded it says so and does not throw */
+  for (const k of Object.keys(store)) delete store[k];
+  ok(ctx.hg80FwdRead('P80-5M-LONG') === null, 'an unrecorded mechanic reads null, never a guess');
+  ok(ctx.hg80FwdRead(null) === null && ctx.hg80FwdRead('') === null, 'and a missing name is safe');
+
+  const blank = ctx.watchLineHtml({ mech: 'P80-5M-LONG', variantLabel: 'SPEC' });
+  ok(/WATCH — not a signal to act on/.test(blank), 'the WATCH tag survives either way');
+  ok(/nothing settled in the forward log yet/.test(blank),
+     'with an empty ledger the card says exactly that');
+  ok(/fills on its own/.test(blank), 'and that it accumulates without the reader doing anything');
+
+  /* now put something in the ledger and watch the sentence change */
+  const rows = series(280, { tfSec: 900 });
+  const cfg = ctx.hg80Cfg({ tf: '15m', sec: 900 });
+  const ind = ctx.hg80Indicators(rows);
+  const sig = ctx.hg80SignalAt(rows, ind, rows.length - 1, cfg, ctx.hg80Variant('wide'));
+  sig.plan = ctx.hg80Plan(sig);
+  const rec = ctx.hg80Record(sig, cfg);
+  ok(rec.ok === true, `a firing records (${rec.mechanic})`);
+
+  const got = ctx.hg80FwdRead(rec.mechanic);
+  ok(got && got.pool, 'and the tab can now read that mechanic back');
+  ok(got.mechanic === rec.mechanic, 'under the name it was written with');
+
+  /* AN OPEN ROW IS NOT A SETTLED ONE. A record that has fired and is waiting
+     must not read as measured evidence. */
+  const openLine = ctx.watchLineHtml(sig);
+  ok(/WATCH/.test(openLine), 'still a WATCH');
+  ok(/nothing settled in the forward log yet/.test(openLine),
+     'a recorded-but-unsettled firing still reads as nothing settled — fired and waiting is not '
+     + 'measured');
+
+  ok(/hg80FwdRead/.test(SRC.slice(SRC.indexOf('function watchLineHtml'))),
+     'the card consults the ledger rather than asserting over it');
+  for (const k of Object.keys(store)) delete store[k];
+}
+
+console.log('\n== the forward panel is wired, and empty-safe ==');
+{
+  for (const k of Object.keys(store)) delete store[k];
+  const html = ctx.forwardPanelHtml();
+  ok(typeof html === 'string', 'it renders a string even with nothing recorded');
+  if (html){
+    ok(/OMNIGOLD:P80/.test(html), 'naming the ledger it reads');
+    ok(!/NaN|undefined/.test(html), 'and nothing renders as NaN or undefined');
+  }
+  /* FULL view only: this is evidence, not a setup, and SIMPLE is the panel
+     that answers "what is the trade" */
+  const R = SRC.slice(SRC.indexOf('function render('));
+  ok(/forwardPanelHtml\(\)/.test(R), 'wired into render');
+  const iSimple = R.indexOf("__p.view === 'simple'");
+  const iFwd = R.indexOf('forwardPanelHtml()');
+  ok(iFwd > iSimple, 'in the FULL branch, below the SIMPLE early return');
+}
+
+console.log('\n== the census measures why the spec is silent ==');
+{
+  const rows = series(400, { tfSec: 900 });
+  const cfg = ctx.hg80Cfg({ tf: '15m', sec: 900 });
+  const ind = ctx.hg80Indicators(rows);
+  const c = ctx.hg80PullbackCensus(rows, ind, cfg);
+  ok(c && c.coincide, 'the census carries a coincidence measurement');
+
+  for (const side of ['long', 'short']){
+    const x = c.coincide[side];
+    ok(x && isFinite(x.trend) && isFinite(x.pullback),
+       `${side}: each condition's own frequency is counted`);
+    ok(x.trend >= 0 && x.trend <= 1 && x.pullback >= 0 && x.pullback <= 1,
+       `${side}: as proportions of evaluable bars`);
+    ok(near(x.ifIndependent, x.trend * x.pullback, 1e-12),
+       `${side}: and what independence would have predicted is their product`);
+    ok(x.both <= Math.min(x.trend, x.pullback) + 1e-12,
+       `${side}: the pair can never be commoner than either half`);
+    if (x.both > 0){
+      ok(near(x.rarerBy, x.ifIndependent / x.both, 1e-9),
+         `${side}: rarerBy is the ratio between them (${x.rarerBy.toFixed(1)}x)`);
+    } else {
+      ok(x.rarerBy === null,
+         `${side}: with the pair never occurring the ratio is null, not Infinity — a ratio `
+         + 'against nothing is not a finding');
+    }
+  }
+  const empty = ctx.hg80PullbackCensus([], null, cfg);
+  ok(empty.coincide.long === null && empty.coincide.short === null,
+     'no bars means no measurement rather than a zero');
+
+  /* AND IT IS ON THE PAGE. Measuring it and not rendering it would repeat
+     the exact fault this change is about — a number the tab holds and never
+     shows. */
+  const html = ctx.coincideHtml([{ def: { tf: '15m' }, census: c }]);
+  ok(/WHY THE SPEC IS SILENT/.test(html), 'the census renders the measurement');
+  ok(/if independent/.test(html) && /rarer by/.test(html),
+     'with the independence prediction beside the observed pair, which is what makes the ratio '
+     + 'mean anything');
+  ok(/fight each other/.test(html), 'and states the mechanism in words');
+  ok(!/NaN|undefined/.test(html), 'nothing renders as NaN or undefined');
+  ok(ctx.coincideHtml([]) === '' && ctx.coincideHtml([{ def: { tf: '5m' }, census: null }]) === '',
+     'and it renders nothing at all rather than an empty table when there is no census');
+
+  /* a pair that never co-occurs prints "never", not Infinity or a blank */
+  const none = ctx.coincideHtml([{ def: { tf: '1h' }, census: { bars: 100, coincide: {
+    long:  { trend: 0.5, pullback: 0.5, both: 0, ifIndependent: 0.25, rarerBy: null },
+    short: { trend: 0.5, pullback: 0.5, both: 0, ifIndependent: 0.25, rarerBy: null } } } }]);
+  ok(/never/.test(none) && !/Infinity/.test(none),
+     'a pair that never co-occurs reads "never" rather than Infinity');
 }
 
 console.log('\n== and it still refuses to invent a rate from what it resolved ==');

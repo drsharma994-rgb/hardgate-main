@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v788',
-  pack: 'the five standing test failures are fixed at their causes \u2014 a liquidation feed the CSP had always blocked, a macro-feeds module that was never written, and a replay bake still quoting a run the artifact beside it had replaced',
+  version: 'hg-v789',
+  pack: 'the 80PERCENT tab reads back the ledger it has been writing to since the ladder shipped, and measures why the supplied spec is silent instead of asserting it \u2014 trend and pullback coincide far rarer than chance',
   built: '2026-09-17T00:00:00Z'
 };
 

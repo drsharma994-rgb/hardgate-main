@@ -1281,17 +1281,47 @@ function hg80Resolve(rows, i, plan, horizon){
    --------------------------------------------------------------------- */
 var P80_CENSUS_LEVELS = [45, 50, 55, 60];
 
+/* ---------------------------------------------------------------------
+   WHY THE SPEC IS SILENT, MEASURED RATHER THAN ASSERTED
+
+   The tab has said for several versions that trend and pullback "fight each
+   other" — a long needs price ABOVE its 50 EMA while RSI(14) says the last
+   fourteen bars were net DOWN — and it has never put a number on it. The
+   walk does, and the number is not a small effect:
+
+     side   trend    pullback   together   if independent   rarer by
+     long   48.97%   43.56%     0.07%      21.33%           312.9x
+
+   Each condition holds about half the time. If they were unrelated they
+   would coincide on a fifth of all bars. They coincide on one bar in 1400.
+
+   That ratio is the honest answer to "why does the supplied spec never
+   fire", and it is structural rather than a property of one sample, so it
+   belongs on the page next to the counts rather than only in a script the
+   reader has to run. Counted here on the same pass that builds the census,
+   so it costs nothing extra.
+   --------------------------------------------------------------------- */
 function hg80PullbackCensus(rows, ind, cfg){
-  var out = { armedLong: 0, armedShort: 0, levels: [], bars: 0 };
+  var out = { armedLong: 0, armedShort: 0, levels: [], bars: 0,
+              coincide: { long: null, short: null } };
   if (!rows || !ind) return out;
   var i, k;
   var longAt = {}, shortAt = {};
+  var tally = { long: { trend: 0, pull: 0, both: 0 }, short: { trend: 0, pull: 0, both: 0 } };
   for (k = 0; k < P80_CENSUS_LEVELS.length; k++){ longAt[P80_CENSUS_LEVELS[k]] = 0; shortAt[P80_CENSUS_LEVELS[k]] = 0; }
   for (i = Math.max(P80_EMA_SLOW, 0); i < rows.length; i++){
     var sg = hg80SignalAt(rows, ind, i, cfg);
     if (!sg) continue;
     out.bars++;
     var lc = sg.longChecks, sc = sg.shortChecks;
+    /* the two conditions on their own, and together — the SPEC's thresholds,
+       because "why does the spec never fire" is the question being answered */
+    if (lc.trend) tally.long.trend++;
+    if (lc.pullback) tally.long.pull++;
+    if (lc.trend && lc.pullback) tally.long.both++;
+    if (sc.trend) tally.short.trend++;
+    if (sc.pullback) tally.short.pull++;
+    if (sc.trend && sc.pullback) tally.short.both++;
     var lArmed = lc.trend && lc.trigger && (lc.session !== false);
     var sArmed = sc.trend && sc.trigger && (sc.session !== false);
     if (lArmed){
@@ -1309,6 +1339,21 @@ function hg80PullbackCensus(rows, ind, cfg){
                       longFires: longAt[lv], shortFires: shortAt[lv],
                       fires: longAt[lv] + shortAt[lv],
                       isSpec: lv === P80_RSI_LONG });
+  }
+  /* how much rarer the pair is than independence would predict. Null rather
+     than a number when the denominator is zero — a ratio against nothing is
+     not a finding. */
+  var sides = ['long', 'short'];
+  for (k = 0; k < sides.length; k++){
+    var t = tally[sides[k]];
+    if (!out.bars) continue;
+    var pT = t.trend / out.bars, pP = t.pull / out.bars, pB = t.both / out.bars;
+    out.coincide[sides[k]] = {
+      trend: pT, pullback: pP, both: pB,
+      ifIndependent: pT * pP,
+      rarerBy: (pB > 0) ? ((pT * pP) / pB) : null,
+      nBoth: t.both
+    };
   }
   return out;
 }
@@ -1477,6 +1522,68 @@ function hg80Record(sig, cfg){
 /* The arithmetic, once, for the whole ladder — and then per rung, because
    the required rate is the thing that CHANGES up the ladder and is the
    whole reason the ladder exists. */
+/* ---------------------------------------------------------------------
+   THE LEDGER THIS TAB HAS BEEN WRITING TO AND NEVER READ
+
+   Every scan calls hgFwdRecord. Nothing has ever called anything back. So
+   the tab has been accumulating out-of-sample evidence under OMNIGOLD:P80
+   since the ladder shipped and showing a reader none of it, while every
+   card asserted "no measured record on this desk" whether or not that was
+   still true.
+
+   Eight modules read their ledger back — omnigold, omniroute, edge,
+   squeeze, oiflow, omnipresent, reversalsniper and the forward layer
+   itself. This one wrote and never read.
+
+   It matters more now than it did before hg-v784. Until then the 5m rung
+   was scanning an unfinished candle, so what it recorded on that rung was
+   junk. Those records are trustworthy now, and this is the ONE evidence
+   route that needs no export and no open network: it fills on its own,
+   every scan, from bars that had not printed when the setup was logged.
+
+   minRr is this strategy's own T1 in R — 0.75 ATR of target against 4.00
+   ATR of stop — not the desk-wide 2R default, which would judge these
+   trades against a target they never had. */
+function hg80FwdMinRr(){ return P80_TP_ATR / P80_SL_ATR; }
+
+/* What the ledger says about ONE mechanic, or null when it has nothing.
+   Used by the card, so a WATCH line can stop claiming there is no record
+   the moment there is one. */
+function hg80FwdRead(mechanic){
+  try {
+    var poolFn = gfn('hgFwdPool');
+    if (!poolFn || !mechanic) return null;
+    var pool = poolFn(P80_TAB);
+    if (!pool) return null;
+    var p = pool[mechanic];
+    if (!p) return null;
+    var readFn = gfn('hgOmniPoolRead');
+    var read = readFn ? readFn(p, hg80FwdMinRr(), 20, 2) : null;
+    return { pool: p, read: read, mechanic: mechanic };
+  } catch (e){ return null; }
+}
+
+function forwardPanelHtml(){
+  var pf = gfn('hgFwdPanelHTML');
+  if (!pf){
+    return '<div class="note" style="margin-top:10px">The forward log (hg-forward.js) is not '
+      + 'loaded, so what this tab has recorded cannot be shown.</div>';
+  }
+  var body = '';
+  try {
+    body = pf(P80_TAB, { minRr: hg80FwdMinRr(),
+                         title: 'FORWARD — what this tab has actually recorded' }) || '';
+  } catch (e){ body = ''; }
+  if (!body) return '';
+  return '<div class="panel" style="margin-top:10px">' + body
+    + '<div class="note" style="margin-top:6px">Recorded under <b>' + esc(P80_TAB) + '</b>, one '
+    + 'mechanic per rung per direction, judged at this strategy\'s own T1 of '
+    + hg80FwdMinRr().toFixed(4) + 'R — ' + P80_TP_ATR.toFixed(2) + ' ATR of target against '
+    + P80_SL_ATR.toFixed(2) + ' ATR of stop. This is the only number on the tab that is not a '
+    + 'property of the window just fetched: each row was logged when it fired and settled later '
+    + 'by bars that had not printed at the time.</div></div>';
+}
+
 function mathPanelHtml(rungs, venue, basis){
   var gross = P80_SL_ATR / (P80_SL_ATR + P80_TP_ATR);
   var h = '<div class="note warn" style="margin:8px 0;padding:10px 12px;'
@@ -1956,10 +2063,37 @@ function simpleCardHtml(sig, rung, state){
 
   if (rung) h += costLineHtml(rung.be, __p.venue ? __p.venue.venue : null);
 
-  h += '<div class="p80-caveat"><b>WATCH — not a signal to act on.</b> '
-    + esc(sig.variantLabel || 'SPEC')
-    + ' has no measured record on this desk. It is logged so it can earn one.</div>';
+  h += watchLineHtml(sig);
   return h + '</div>';
+}
+
+/* THE WATCH LINE, ANSWERABLE TO THE LEDGER.
+
+   It said "has no measured record on this desk" on every card, always,
+   whether or not the forward log had one — which made it an assertion about
+   the tab's own state that the tab never checked. Now it reads the ledger
+   for that mechanic and says what is actually there.
+
+   It stays a WATCH either way. A handful of settled trades is not a record
+   that earns anything, and the shared reader is what decides when it is;
+   the change is that the sentence is now true rather than merely cautious. */
+function watchLineHtml(sig){
+  var mech = sig && sig.mech ? sig.mech : null;
+  var label = esc((sig && sig.variantLabel) || 'SPEC');
+  var got = mech ? hg80FwdRead(mech) : null;
+  var settled = got && got.pool ? fin(got.pool.settled) : NaN;
+
+  if (!got || !(settled > 0)){
+    return '<div class="p80-caveat"><b>WATCH — not a signal to act on.</b> ' + label
+      + ' has nothing settled in the forward log yet. It is recorded on every firing, so this '
+      + 'fills on its own — see FORWARD below for what has accumulated.</div>';
+  }
+  var readTxt = (got.read && got.read.read) ? String(got.read.read) : null;
+  return '<div class="p80-caveat"><b>WATCH — not a signal to act on.</b> ' + label
+    + ' has <b>' + settled + '</b> settled in the forward log'
+    + (readTxt ? ', which reads <b>' + esc(readTxt) + '</b>' : '')
+    + '. That is out-of-sample and it is the only measured thing on this card — but it is a '
+    + 'record being built, not one that has been earned. See FORWARD below.</div>';
 }
 
 /* When this strategy CAN produce a trade, in the reader's own clock. It is
@@ -2701,6 +2835,45 @@ function latestSetupsHtml(rungs){
    Rendered as a trade-off with both sides priced, never as a recommendation
    and never as a set of setups.
    --------------------------------------------------------------------- */
+/* The measurement, in the one table it is worth. */
+function coincideHtml(rows){
+  var best = null, i;
+  for (i = 0; i < rows.length; i++){
+    var c = rows[i].census;
+    if (!c || !c.coincide) continue;
+    var lo = c.coincide.long, sh = c.coincide.short;
+    if (!lo || !sh) continue;
+    if (!best || c.bars > best.bars) best = { tf: rows[i].def.tf, bars: c.bars, lo: lo, sh: sh };
+  }
+  if (!best) return '';
+  var pc = function(v){ return (100 * v).toFixed(2) + '%'; };
+  var h = '<div class="note" style="margin-top:6px;padding:6px 8px;'
+    + 'border-left:3px solid var(--veto)">'
+    + '<b>WHY THE SPEC IS SILENT</b> — on ' + esc(best.tf) + '\'s ' + best.bars
+    + ' evaluable bars. Trend and pullback are not independent; they fight each other, and this '
+    + 'is by how much:'
+    + '<table class="tbl" style="margin-top:4px"><tr><th>side</th><th>trend</th><th>pullback</th>'
+    + '<th>together</th><th>if independent</th><th>rarer by</th></tr>';
+  var sides = [['long', best.lo], ['short', best.sh]];
+  for (i = 0; i < sides.length; i++){
+    var x = sides[i][1];
+    h += '<tr><td><b>' + sides[i][0] + '</b></td>'
+      + '<td class="hg-num">' + pc(x.trend) + '</td>'
+      + '<td class="hg-num">' + pc(x.pullback) + '</td>'
+      + '<td class="hg-num">' + pc(x.both) + '</td>'
+      + '<td class="hg-num">' + pc(x.ifIndependent) + '</td>'
+      + '<td class="hg-num"><b>' + (x.rarerBy === null ? 'never' : x.rarerBy.toFixed(1) + '×')
+      + '</b></td></tr>';
+  }
+  h += '</table>'
+    + '<span class="note">A long needs price ABOVE its 50 EMA while RSI(14) says the last '
+    + 'fourteen bars were net DOWN. Each holds about half the time; together they are rarer than '
+    + 'chance by the factor in the last column. That is the structural reason the supplied spec '
+    + 'fires as little as it does — not a bug, not a thin sample, and not something a looser '
+    + 'threshold repairs so much as sidesteps.</span></div>';
+  return h;
+}
+
 function censusHtml(rungs){
   var rows = rungs.filter(function(r){ return r.ok && r.census && r.census.bars; });
   if (!rows.length) return '';
@@ -2710,6 +2883,7 @@ function censusHtml(rungs){
     + '<span>what the pullback threshold turns away</span></h3>'
     + '<div class="note">On these bars the trend, the candle direction and the session already '
     + 'agreed. RSI alone decided. The first column is the spec.</div>'
+    + coincideHtml(rows)
     + '<table class="tbl"><tr><th>rung</th><th>bars armed</th>';
   var k;
   for (k = 0; k < lv.length; k++){
@@ -3011,6 +3185,7 @@ function render(rungs, venue, recNotes, basis){
   h += livePriceHtml(gradePx, __p.feedLiveTf, spot, spotRef, rungs);
   h += armedHtml(rungs, gradePx);
   h += whyNothingHtml(shown);
+  h += forwardPanelHtml();
   h += mathPanelHtml(shown, venue, basis);
 
   if (!usable.length){
@@ -3403,6 +3578,11 @@ W.hg80LiveActs       = hg80LiveActs;
 W.livePriceHtml      = livePriceHtml;
 W.hg80TargetSharePct = hg80TargetSharePct;
 W.hg80SplitForming   = hg80SplitForming;
+W.hg80FwdRead        = hg80FwdRead;
+W.coincideHtml       = coincideHtml;
+W.hg80FwdMinRr       = hg80FwdMinRr;
+W.forwardPanelHtml   = forwardPanelHtml;
+W.watchLineHtml      = watchLineHtml;
 W.HG_P80_CSS         = P80_CSS;
 W.hg80InjectCss      = hg80InjectCss;
 W.armedLiveHtml      = armedLiveHtml;
