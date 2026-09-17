@@ -295,6 +295,67 @@ console.log('\n== one JSON object crosses the seam, and stderr cannot corrupt it
   ok(/did not print JSON/.test(API), 'unparseable output is reported as such, never guessed at');
 }
 
+console.log('\n== a call is really written, and "recorded" is not assumed ==');
+{
+  /* TWO BUGS THIS PINS, both shipped in hg-v767 and both caught only by
+     rendering a real card against real bars rather than by reasoning:
+
+       hgFwdRecord returns a REASON STRING — 'recorded', 'already recorded',
+       or 'unsettleable or malformed'. The card checked `!!reason`, so all
+       three read as success and it claimed a record the log had refused.
+
+       And the record carried NO barT, so every one of them was malformed
+       and dropped. TAURIC would have recorded nothing, ever, while saying
+       it had — which would have quietly emptied the only route it has to
+       ever earning an edge.
+
+     Tested against the live log rather than by reading the source, because
+     the source read fine both times. */
+  const geo = d => (d === 'short') ? { entry: 4700, stop: 4730, t1: 4640 }
+                                   : { entry: 4700, stop: 4670, t1: 4760 };
+  const rows = [];
+  let px = 4700;
+  for (let i = 0; i < 60; i++){
+    const o = px, c = px + ((i % 5) - 2) * 3;
+    rows.push({ t: 1757000000 + i * 14400, o, h: Math.max(o, c) + 5, l: Math.min(o, c) - 5, c, v: 100 });
+    px = c;
+  }
+  const savedFetch = ctx.hgOgFetchRows;
+  ctx.hgOgFetchRows = () => Promise.resolve(rows);
+  for (const k of Object.keys(store)) delete store[k];
+
+  const rating = ctx.hgTauricRating('Buy');
+  const priced = await ctx.hgTauricPricePlan('long');
+  ok(priced.ok, 'the fixture prices');
+
+  const first = ctx.hgTauricRecord(rating, priced);
+  ok(first.ok === true, 'a directional priced call records');
+  ok(first.reason === 'recorded', 'and the reason is the one value that means written');
+
+  const log = JSON.parse(ctx.localStorage.getItem('hg_forward_v1') || '[]');
+  ok(log.length === 1, 'the log really holds it — asserted against the log, not the return value');
+  ok(log[0].tab === 'OMNIGOLD:TAURIC', 'under its own tab');
+  ok(log[0].ticket === false, 'as a non-ticket');
+  ok(log[0].gateClear !== true, 'and not gate-clear — it was never put to the gates');
+  ok(isFinite(log[0].barT) && log[0].barT > 0, 'carrying a barT, without which it would be dropped');
+  ok(log[0].barT % (4 * 3600) === 0, 'floored to the 4h bar, which is the log\'s dedup rule');
+
+  /* the same bar twice is one record, and the card must not claim two */
+  const second = ctx.hgTauricRecord(rating, priced);
+  ok(second.ok === false, 'a second call in the same bar does NOT report a new record');
+  ok(second.reason === 'already recorded', 'it reports the log\'s own reason');
+  ok(/the log refused it/.test(second.why || ''), 'and says the log refused it');
+  ok(JSON.parse(ctx.localStorage.getItem('hg_forward_v1') || '[]').length === 1,
+     'with the log still holding exactly one');
+
+  /* and the malformed case, which is what shipped */
+  const bad = ctx.hgTauricRecord(rating, { ok: true, plan: { entry: NaN, stop: NaN, t1: NaN } });
+  ok(bad.ok === false, 'a plan the log cannot settle is not reported as recorded');
+
+  ctx.hgOgFetchRows = savedFetch;
+  for (const k of Object.keys(store)) delete store[k];
+}
+
 console.log('\n== the bridge runs where the .env actually is ==');
 {
   /* THE BUG THIS PINS, because it wasted nobody's time only by luck.

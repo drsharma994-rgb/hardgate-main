@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v768',
-  pack: 'the TAURIC bridge ran from the wrong directory, so a key pasted where its README says to put it was invisible',
+  version: 'hg-v769',
+  pack: 'TAURIC said it had recorded every call and had recorded none — a reason string read as a boolean, over a record with no bar',
   built: '2026-09-17T00:00:00Z'
 };
 

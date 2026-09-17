@@ -63,6 +63,11 @@ var TAURIC_T1_R = 2;
 /* 4h bars: the pipeline's view is a daily one and a 4h plan is the shortest
    horizon that does not read intraday noise into a daily argument. */
 var TAURIC_TF = '4h';
+/* The same timeframe in seconds, declared beside it so the two cannot drift.
+   The forward log dedups on the BAR a setup fired in, so a record needs its
+   barT floored to this — see hgFwdRecordScan, which does exactly this and is
+   the shape every other instrumented tab uses. */
+var TAURIC_TF_SEC = 4 * 60 * 60;
 var TAURIC_BARS = 300;
 
 var __t = { ui: null, busy: false, ranOnce: false, pre: null, last: null };
@@ -180,18 +185,31 @@ function hgTauricRecord(rating, priced){
       return { ok: false, why: 'nothing directional and priced to record' };
     }
     var p = priced.plan;
-    var rec = W.hgFwdRecord({
+    /* barT: the bar this fired in, floored to the timeframe. WITHOUT IT the
+       record is 'unsettleable or malformed' and is dropped — which is what
+       this did when it shipped, silently, while the card said it had been
+       recorded. Flooring is also the dedup rule the log is built on: re-run
+       the pipeline inside the same 4h bar and it records once, not twice. */
+    var barT = Math.floor((Date.now() / 1000) / TAURIC_TF_SEC) * TAURIC_TF_SEC;
+    var reason = W.hgFwdRecord({
       tab: TAURIC_TAB,
       mechanic: 'TAURIC-' + String(rating.label || '').toUpperCase(),
       sym: 'XAUUSD', tf: TAURIC_TF, dir: rating.dir,
       entry: fin(p.entry), stop: fin(p.stop), t1: fin(p.t1),
+      barT: barT,
       horizonBars: 30,
       ticket: false,
       /* it cleared nothing — it was never gated */
       gateClear: false,
       shown: true
     });
-    return { ok: !!rec, rec: rec };
+    /* hgFwdRecord returns a REASON STRING, not a boolean: 'recorded',
+       'already recorded', or 'unsettleable or malformed'. Two of those three
+       mean nothing was written, and `!!reason` called all three a success —
+       so the card claimed a record the log had refused. Only one value is
+       success, and the others are reported as themselves. */
+    return { ok: reason === 'recorded', reason: reason,
+             why: reason === 'recorded' ? null : ('the log refused it: ' + reason) };
   } catch (e){ return { ok: false, why: String((e && e.message) || e) }; }
 }
 
