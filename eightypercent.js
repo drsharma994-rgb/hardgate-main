@@ -4107,6 +4107,79 @@ function run(){
    silent, because a tab that has quietly stopped updating is worse than
    one that never did.
    --------------------------------------------------------------------- */
+/* The cadences on offer. 1m is the default because the live grade is what
+   goes stale fastest; 5m is one closed 5m candle, which is the slowest
+   cadence at which the finest rung can still show a new bar the tick it
+   prints; OFF is for a reader who would rather spend the requests
+   elsewhere. Anything not on this list is not a cadence — a stored value
+   the page does not recognise is discarded, not honoured. */
+var P80_AUTO_OPTS = [
+  { ms: 0,      label: 'OFF', note: 'not updating on its own — SCAN re-runs it' },
+  { ms: 60000,  label: '1m',  note: 'the live grade on every card re-checked each minute' },
+  { ms: 300000, label: '5m',  note: 'one 5m candle — the finest rung\'s own cadence' }
+];
+var P80_AUTO_DEFAULT_MS = 60000;
+var P80_AUTO_LS_KEY = 'hg_p80_auto_ms_v1';
+
+/* STRICT ABOUT WHAT IS A NUMBER, because 0 is a real option here and
+   almost everything coerces to it. Number(null), Number(''), Number([])
+   and Number(false) are all 0, so a plain fin() would have read a MISSING
+   localStorage key as a deliberate choice of OFF — every fresh reader
+   would have got the tab with auto-update switched off, which is the exact
+   opposite of the default. Only a number, or a string of digits, is an
+   answer; everything else is "nothing stored". */
+function hg80AutoValid(ms){
+  var v, i;
+  if (typeof ms === 'number') v = ms;
+  else if (typeof ms === 'string' && /^\s*\d+\s*$/.test(ms)) v = Number(ms);
+  else return null;
+  if (!isFinite(v)) return null;
+  for (i = 0; i < P80_AUTO_OPTS.length; i++) if (P80_AUTO_OPTS[i].ms === v) return v;
+  return null;
+}
+
+/* READ ONCE. hg80VenueEnsure carries the same note and the same reason: if
+   the read fails, re-running it on every render would silently revert a
+   choice made in this session every time the page repainted. */
+var __p80AutoInit = false;
+
+function hg80AutoEnsure(){
+  if (__p80AutoInit) return __p.autoMs;
+  __p80AutoInit = true;
+  var got = null;
+  try {
+    if (W.localStorage && typeof W.localStorage.getItem === 'function'){
+      got = hg80AutoValid(W.localStorage.getItem(P80_AUTO_LS_KEY));
+    }
+  } catch (e){ got = null; }
+  __p.autoMs = (got == null) ? P80_AUTO_DEFAULT_MS : got;
+  return __p.autoMs;
+}
+
+function hg80AutoMs(){
+  return (__p.autoMs == null) ? hg80AutoEnsure() : __p.autoMs;
+}
+
+/* Set the cadence, remember it, and make the timer match RIGHT NOW rather
+   than at the next tick — OFF that keeps ticking for another minute is not
+   OFF. */
+function hg80AutoSet(ms){
+  var v = hg80AutoValid(ms);
+  if (v == null) return hg80AutoMs();
+  __p80AutoInit = true;
+  __p.autoMs = v;
+  try {
+    if (W.localStorage && typeof W.localStorage.setItem === 'function'){
+      W.localStorage.setItem(P80_AUTO_LS_KEY, String(v));
+    }
+  } catch (e){}
+  if (v === 0){ hg80AutoStop(); hg80AutoPaint('off'); }
+  else if (__p.autoEl) hg80AutoStart(__p.autoEl);
+  else hg80AutoPaint(null);
+  hg80AutoPaintCtl();
+  return v;
+}
+
 var P80_AUTO_MS = 60000;
 
 /* Is this element inside a tab pane that is currently showing? The shell
@@ -4141,6 +4214,7 @@ function hg80AutoWhy(el, doc, busy){
 }
 
 var P80_AUTO_WHY = {
+  'off':        'switched off',
   'unmounted':  'the tab is no longer on the page',
   'background': 'this browser tab is in the background',
   'other-tab':  'you are looking at another tab',
@@ -4149,9 +4223,21 @@ var P80_AUTO_WHY = {
 
 /* One line under SCAN saying whether the tab is updating itself, and if
    not, why not. */
-function hg80AutoNote(why){
+function hg80AutoCadenceTxt(ms){
+  var v = fin(ms), i;
+  for (i = 0; i < P80_AUTO_OPTS.length; i++){
+    if (P80_AUTO_OPTS[i].ms === v) return P80_AUTO_OPTS[i].label;
+  }
+  return Math.round(v / 1000) + 's';
+}
+
+function hg80AutoNote(why, ms){
+  var cad = (ms == null) ? hg80AutoMs() : fin(ms);
+  if (why === 'off' || cad === 0){
+    return 'auto-update is OFF — this tab only re-runs when you press SCAN';
+  }
   if (!why){
-    return 'auto-updating every ' + Math.round(P80_AUTO_MS / 1000) + 's while this tab is open';
+    return 'auto-updating every ' + hg80AutoCadenceTxt(cad) + ' while this tab is open';
   }
   return 'auto-update paused — ' + (P80_AUTO_WHY[why] || why)
     + (why === 'unmounted' ? '' : '; it resumes on its own');
@@ -4161,6 +4247,52 @@ function hg80AutoPaint(why){
   try {
     if (__p.ui && __p.ui.auto) __p.ui.auto.textContent = hg80AutoNote(why);
   } catch (e){}
+}
+
+/* The cadence picker. It lives in the HEADER, not the body: the body is
+   re-rendered on every scan and on every view change, so a control there
+   would have to be re-wired each time and would lose its listeners the
+   first time anything forgot. The header is written once by mount, so this
+   is wired once and repainted by hand. */
+function hg80AutoCtlHtml(){
+  var cur = hg80AutoMs(), h = '<span class="p80-ctl-k">Auto</span> ', i, note = '';
+  for (i = 0; i < P80_AUTO_OPTS.length; i++){
+    var o = P80_AUTO_OPTS[i];
+    if (o.ms === cur) note = o.note;
+    h += '<button type="button" class="btn ghost' + (o.ms === cur ? ' is-on' : '') + '"'
+      + ' data-p80-auto="' + o.ms + '">' + esc(o.label) + '</button> ';
+  }
+  /* what the cadence in force actually buys, in the same place viewControlHtml
+     says what the view in force shows */
+  return h + '<span class="note dim" style="margin:0;font-size:11px">' + esc(note) + '</span>';
+}
+
+function hg80AutoPaintCtl(){
+  try {
+    var ui = __p.ui;
+    if (!ui || !ui.ctl) return;
+    ui.ctl.innerHTML = hg80AutoCtlHtml();
+    hg80WireAutoButtons();
+  } catch (e){}
+}
+
+function hg80WireAutoButtons(){
+  var ui = __p.ui;
+  if (!ui || !ui.ctl || !ui.ctl.querySelectorAll) return;
+  var btns = ui.ctl.querySelectorAll('[data-p80-auto]');
+  for (var i = 0; i < btns.length; i++){
+    (function(b){
+      b.addEventListener('click', function(){
+        var raw = b.getAttribute && b.getAttribute('data-p80-auto');
+        if (raw == null) return;
+        /* A CADENCE CHANGE IS NOT A RE-FETCH. Turning the timer from 5m to
+           1m does not make the bars in hand any newer, and firing a scan
+           off a button that says "1m" would be a request the reader did
+           not ask for. SCAN is the button that fetches. */
+        hg80AutoSet(Number(raw));
+      });
+    })(btns[i]);
+  }
 }
 
 function hg80AutoStop(){
@@ -4173,15 +4305,18 @@ function hg80AutoStop(){
    closed and reopened must not end up with two timers scanning at once. */
 function hg80AutoStart(el){
   hg80AutoStop();
-  if (typeof W.setInterval !== 'function') return null;
   __p.autoEl = el;
+  var ms = hg80AutoMs();
+  hg80AutoPaintCtl();
+  if (ms === 0){ hg80AutoPaint('off'); return null; }
+  if (typeof W.setInterval !== 'function') return null;
   __p.autoTimer = W.setInterval(function(){
     var why = hg80AutoWhy(__p.autoEl, W.document, __p.busy);
     if (why === 'unmounted'){ hg80AutoStop(); __p.autoEl = null; hg80AutoPaint('unmounted'); return; }
     hg80AutoPaint(why);
     if (why) return;
     try { run(); } catch (e){}
-  }, P80_AUTO_MS);
+  }, ms);
   hg80AutoPaint(null);
   return __p.autoTimer;
 }
@@ -4205,12 +4340,15 @@ function mount(el){
     + 'each recorded apart so none lends another its numbers.</div>'
     + '<div class="row" style="margin-top:8px"><button class="btn" id="p80Run">SCAN</button>'
     + '<span class="note" id="p80Stat">auto-runs on open</span></div>'
+    + '<div class="p80-ctl" id="p80AutoCtl"></div>'
     + '<div class="note dim" id="p80Auto" style="margin-top:2px"></div>'
     + '<div id="p80Body" style="margin-top:8px"></div></div>';
   __p.ui = { el: el, body: el.querySelector('#p80Body'),
              stat: el.querySelector('#p80Stat'), run: el.querySelector('#p80Run'),
-             auto: el.querySelector('#p80Auto') };
+             auto: el.querySelector('#p80Auto'), ctl: el.querySelector('#p80AutoCtl') };
   if (__p.ui.run) __p.ui.run.addEventListener('click', function(){ run(); });
+  hg80AutoEnsure();
+  hg80AutoPaintCtl();
   run();
   hg80AutoStart(el);
 }
@@ -4285,6 +4423,12 @@ W.hg80AutoWhy        = hg80AutoWhy;
 W.hg80AutoNote       = hg80AutoNote;
 W.hg80AutoStart      = hg80AutoStart;
 W.hg80AutoStop       = hg80AutoStop;
+W.hg80AutoMs         = hg80AutoMs;
+W.hg80AutoSet        = hg80AutoSet;
+W.hg80AutoValid      = hg80AutoValid;
+W.hg80AutoCtlHtml    = hg80AutoCtlHtml;
+W.HG_P80_AUTO_OPTS   = P80_AUTO_OPTS;
+W.HG_P80_AUTO_LS_KEY = P80_AUTO_LS_KEY;
 W.HG_P80_AUTO_MS     = P80_AUTO_MS;
 W.familyBarHtml      = familyBarHtml;
 W.hg80MechanicCeiling = hg80MechanicCeiling;

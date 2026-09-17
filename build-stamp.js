@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v794',
-  pack: 'the 80PERCENT tab updates itself every 60 seconds while it is on screen — the live grade on every card is the thing that goes stale in seconds, and the tick names every reason it skips instead of going quietly still',
+  version: 'hg-v795',
+  pack: 'the 80PERCENT tab\u2019s auto-update is now OFF / 1m / 5m on the tab itself, remembered across reloads — and a missing stored value no longer reads as a deliberate OFF, which would have shipped every fresh reader the opposite of the default',
   built: '2026-09-17T00:00:00Z'
 };
 

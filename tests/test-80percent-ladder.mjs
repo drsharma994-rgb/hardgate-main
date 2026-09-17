@@ -81,8 +81,12 @@ function parseEls(html){
     const ar = /([a-z0-9-]+)="([^"]*)"/gi;
     let a;
     while ((a = ar.exec(m[2]))) attrs[a[1]] = a[2];
-    if (attrs.id || attrs['data-p80-focus'] !== undefined || attrs['data-p80-venue'] !== undefined
-        || attrs['data-p80-view'] !== undefined){
+    /* Anything with an id, or ANY of this tab's own control attributes. The
+       list used to be spelled out one attribute at a time, so a control the
+       tab grew later was silently dropped from the parsed DOM and every
+       click test against it failed with "no such button" — a harness gap
+       that reads exactly like a product bug. */
+    if (attrs.id || Object.keys(attrs).some(k => /^data-p80-/.test(k))){
       const e = mkEl(m[1]); e.attrs = attrs; out.push(e);
     }
   }
@@ -938,8 +942,24 @@ console.log('\n== the venue control drives the desk, not a private copy ==');
 {
   ok(/W\.hgOgSetVenue\(name\)/.test(SRC),
      'the buttons call the gold desk\'s own hgOgSetVenue — one venue, one place it is stored');
-  ok(!/localStorage\.setItem/.test(CODE),
-     'and this tab never writes the venue to storage itself, which would be a second source of truth');
+  /* THE RULE IS ABOUT THE VENUE, NOT ABOUT THE TOKEN. This asserted that
+     the string `localStorage.setItem` appears nowhere, which held the right
+     line by accident and stopped holding any line at all the moment the tab
+     had a legitimate thing of its own to remember. What must never happen is
+     a SECOND COPY OF THE VENUE: the gold desk owns that key and this tab
+     reads it through hgOgVenueCost. So every write is checked against the
+     key it writes to. */
+  const writes = [...CODE.matchAll(/localStorage\.setItem\(\s*([A-Za-z0-9_$.]+)/g)]
+    .map(m => m[1]);
+  ok(writes.every(k => k === 'P80_AUTO_LS_KEY'),
+     `every storage write goes to this tab's own key, never a shared one (${
+        writes.join(', ') || 'none'})`);
+  ok(!/hg_og_venue/.test(SRC),
+     'the gold desk\'s venue key is not named anywhere in this file — reading or writing');
+  ok(!/localStorage\.setItem\([^)]*venue/i.test(CODE),
+     'and nothing writes anything venue-shaped to storage');
+  ok(ctx.HG_P80_AUTO_LS_KEY && ctx.HG_P80_AUTO_LS_KEY.indexOf('p80') >= 0,
+     `that key is namespaced to this tab (${ctx.HG_P80_AUTO_LS_KEY})`);
   ok(/data-p80-venue/.test(SRC), 'the buttons carry this tab\'s own ids, not OMNIGOLD\'s');
   ok(!/id="ogVenueXm"/.test(SRC),
      'so reusing the desk\'s markup cannot put duplicate element ids on the page');
@@ -2222,7 +2242,10 @@ console.log('\n== the tab updates itself every minute, and only while anyone is 
 
   /* ---- and the reason is SAID, because a tab that has quietly stopped
      updating is worse than one that never did ---- */
-  ok(/every 60s/.test(ctx.hg80AutoNote(null)), 'when running, the line states the cadence');
+  ok(/auto-updating every 1m/.test(ctx.hg80AutoNote(null, 60000)),
+     'when running, the line states the cadence in the same words the button uses');
+  ok(/auto-updating every 5m/.test(ctx.hg80AutoNote(null, 300000)),
+     'and it follows the cadence rather than quoting a fixed one');
   for (const why of ['unmounted', 'background', 'other-tab', 'busy']){
     const n = ctx.hg80AutoNote(why);
     ok(/paused/.test(n), `${why} is shown as paused, not as silence`);
@@ -2261,6 +2284,95 @@ console.log('\n== the tab updates itself every minute, and only while anyone is 
     ctx.hg80AutoStop();
   }
 
+  /* ---- THE CADENCE TOGGLE ---- */
+  ok(Array.isArray(ctx.HG_P80_AUTO_OPTS) && ctx.HG_P80_AUTO_OPTS.length >= 3,
+     `the tab offers ${ctx.HG_P80_AUTO_OPTS.length} cadences`);
+  ok(ctx.HG_P80_AUTO_OPTS.some(o => o.ms === 0), 'including OFF');
+  ok(ctx.HG_P80_AUTO_OPTS.some(o => o.ms === 60000), 'and the one-minute default');
+  ok(ctx.HG_P80_AUTO_OPTS.every(o => o.label && o.note), 'each with a label and a reason');
+
+  /* WHAT COUNTS AS A STORED ANSWER. 0 is a real option here and almost
+     everything coerces to it — Number(null), Number(''), Number([]) and
+     Number(false) are all 0 — so a lenient read would take a MISSING key
+     as a deliberate OFF and every fresh reader would get the tab with
+     auto-update switched off. */
+  for (const junk of [null, undefined, '', [], {}, false, true, 'abc', '5m', '60000px', -1, 99]){
+    ok(ctx.hg80AutoValid(junk) === null,
+       `${JSON.stringify(junk) === undefined ? 'undefined' : JSON.stringify(junk)} is not a `
+       + 'cadence — nothing stored, not a choice of OFF');
+  }
+  ok(ctx.hg80AutoValid(0) === 0 && ctx.hg80AutoValid('0') === 0,
+     'a real zero IS a choice of OFF, from a number or from its digits');
+  ok(ctx.hg80AutoValid(60000) === 60000 && ctx.hg80AutoValid('60000') === 60000,
+     'and a real cadence survives both ways, because localStorage hands back strings');
+  ok(ctx.hg80AutoMs() === 60000,
+     `with nothing stored the tab runs at one minute (${ctx.hg80AutoMs()})`);
+
+  /* ---- setting it: remembered, and applied at once ---- */
+  const realSI3 = ctx.setInterval, realCI3 = ctx.clearInterval;
+  const live3 = new Set();
+  let id3 = 500, ms3 = null;
+  ctx.setInterval = (fn, ms) => { ms3 = ms; const i = id3++; live3.add(i); return i; };
+  ctx.clearInterval = i => { live3.delete(i); };
+  const el3 = pane('tabpane on');
+  try {
+    ctx.hg80AutoStart(el3);
+    ok(live3.size === 1 && ms3 === 60000, 'starting at the default gives a one-minute timer');
+
+    ctx.hg80AutoSet(300000);
+    ok(ctx.hg80AutoMs() === 300000, 'setting 5m takes');
+    ok(live3.size === 1 && ms3 === 300000,
+       'and the timer is REPLACED at the new cadence, not left at the old one');
+    ok(ctx.localStorage.getItem(ctx.HG_P80_AUTO_LS_KEY) === '300000',
+       'the choice is written to storage so it survives a reload');
+
+    /* OFF THAT KEEPS TICKING FOR ANOTHER MINUTE IS NOT OFF. */
+    ctx.hg80AutoSet(0);
+    ok(ctx.hg80AutoMs() === 0 && live3.size === 0,
+       'OFF stops the timer immediately rather than at the next tick');
+    ok(/auto-update is OFF/.test(ctx.hg80AutoNote(null, 0)),
+       'and the line says so, naming SCAN as what re-runs it');
+    ok(/press SCAN/.test(ctx.hg80AutoNote(null, 0)),
+       'so a reader knows what to do instead');
+
+    /* starting while OFF must not quietly switch it back on */
+    ctx.hg80AutoStart(el3);
+    ok(live3.size === 0, 'a start while OFF registers no timer');
+
+    ctx.hg80AutoSet(60000);
+    ok(live3.size === 1 && ms3 === 60000, 'and turning it back on starts one again, at once');
+
+    /* an unrecognised value changes nothing at all */
+    const before = ctx.hg80AutoMs();
+    ok(ctx.hg80AutoSet(7) === before && ctx.hg80AutoMs() === before,
+       'a cadence the tab does not offer is refused, leaving the current one alone');
+    ok(ctx.localStorage.getItem(ctx.HG_P80_AUTO_LS_KEY) === '60000',
+       'and is not written to storage');
+
+    /* A CADENCE CHANGE IS NOT A RE-FETCH. Turning 5m into 1m does not make
+       the bars in hand newer, and scanning off it would be a request the
+       reader did not ask for. */
+    ok(!/data-p80-auto[\s\S]{0,400}?\brun\(\)/.test(CODE),
+       'the cadence buttons do not fire a scan — SCAN is the button that fetches');
+
+    /* the control paints the current choice */
+    const ctlTxt = ctx.hg80AutoCtlHtml();
+    ok(/data-p80-auto="0"/.test(ctlTxt) && /data-p80-auto="60000"/.test(ctlTxt)
+       && /data-p80-auto="300000"/.test(ctlTxt), 'every cadence has a button');
+    ok((ctlTxt.match(/is-on/g) || []).length === 1, 'exactly one is marked current');
+    /* the per-option note is carried on the option list; it has to reach the
+       page or it is data nothing reads */
+    const curNote = ctx.HG_P80_AUTO_OPTS.find(o => o.ms === ctx.hg80AutoMs()).note;
+    ok(ctlTxt.indexOf(curNote.replace(/'/g, '&#39;')) >= 0 || ctlTxt.indexOf(curNote) >= 0,
+       `the cadence in force says what it buys (${curNote})`);
+    ok(/data-p80-auto="60000" class|class="[^"]*is-on[^"]*" data-p80-auto="60000"/.test(ctlTxt)
+       || /is-on[^>]*data-p80-auto="60000"/.test(ctlTxt), 'and it is the one in force');
+  } finally {
+    ctx.setInterval = realSI3; ctx.clearInterval = realCI3;
+    ctx.hg80AutoStop();
+    ctx.hg80AutoSet(60000);
+  }
+
   /* ---- END TO END: mount the real tab and read the line off the page ---- */
   const realSI2 = ctx.setInterval, realCI2 = ctx.clearInterval;
   const live2 = new Set();
@@ -2275,8 +2387,38 @@ console.log('\n== the tab updates itself every minute, and only while anyone is 
     ok(live2.size === 1, 'mounting the tab starts exactly one timer');
     const line = node.querySelector('#p80Auto');
     ok(line, 'the header carries the element the status line is written to');
-    ok(/auto-updating every 60s/.test(String(line.textContent)),
+    ok(/auto-updating every 1m/.test(String(line.textContent)),
        `and it says so on the page (${String(line.textContent)})`);
+    const ctl = node.querySelector('#p80AutoCtl');
+    ok(ctl && /data-p80-auto/.test(String(ctl.innerHTML)),
+       'and the cadence picker is on the page beside it');
+
+    /* DRIVE THE BUTTONS. Asserting on markup alone cannot catch a listener
+       that was never attached — which is exactly how a malformed control
+       shipped past 514 green assertions in hg-v787. */
+    const hit = v => {
+      const b = ctl.querySelectorAll('[data-p80-auto]')
+        .find(x => x.getAttribute('data-p80-auto') === v);
+      if (!b) throw new Error('FAIL: no cadence button "' + v + '" on the page');
+      b.click();
+      return b;
+    };
+    hit('0');
+    ok(ctx.hg80AutoMs() === 0 && live2.size === 0,
+       'clicking OFF stops the tab updating itself, through the real listener');
+    ok(/auto-update is OFF/.test(String(node.querySelector('#p80Auto').textContent)),
+       'and the line under it says so');
+
+    /* THE CONTROL REPAINTS ITSELF, and the repaint must re-wire — it
+       replaces the very buttons carrying the listeners. A picker that works
+       once and then goes dead is worse than no picker. */
+    hit('300000');
+    ok(ctx.hg80AutoMs() === 300000 && live2.size === 1,
+       'clicking 5m after the repaint still works, so the buttons were re-wired');
+    hit('60000');
+    ok(ctx.hg80AutoMs() === 60000, 'and again, back to one minute');
+    ok((String(ctl.innerHTML).match(/is-on/g) || []).length === 1,
+       'with exactly one button marked current after all that clicking');
 
     /* remount — the timer must be replaced, not doubled */
     tab.mount(node);
