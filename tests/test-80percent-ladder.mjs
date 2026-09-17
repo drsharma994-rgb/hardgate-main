@@ -2869,6 +2869,100 @@ console.log('\n== the cards say how much to buy, and what makes that number lie 
   } finally { ctx.hg80RiskSet(before); }
 }
 
+console.log('\n== an armed row is about a candle, and it has to be the right candle ==');
+{
+  /* FOUND BY READING THE FULL VIEW, NOT BY DIFFING IT. The ARMED panel
+     said "BUY XAUUSD 5m — fires if this candle closes above its open,
+     candle closes in 3m", and the panel immediately below it said "3 of 5
+     rungs cannot fire at all (5m, 15m, 1h): it is outside 13:00-18:00
+     UTC". Two statements about the same rung, on the same screen,
+     contradicting each other.
+
+     The mechanism: every condition on an armed row is read off the LAST
+     CLOSED bar, and closesIn is measured from NOW. Those are the same
+     candle only when the feed is current AND the session state has not
+     changed between them. Neither is guaranteed. */
+  const tf = 300;
+  const hourT = h => Date.UTC(2026, 8, 16, h, 0, 0) / 1000;
+
+  /* a row whose next candle is inside the window is real */
+  const mk = (formOpen, lastOpen, gated) => ({
+    rung: { cfg: { tfSec: tf, session: gated !== false }, def: { tf: '5m', band: 'scalp' } },
+    formingT: formOpen,
+    gated: gated !== false,
+    formingInSession: (gated === false) ? true : ctx.hg80InSession(formOpen),
+    barsBehind: Math.max(0, Math.round((formOpen - lastOpen) / tf) - 1)
+  });
+
+  const good = mk(hourT(15), hourT(15) - tf);
+  ok(ctx.hg80ArmedReal(good).ok === true,
+     'a current feed inside the window gives a row about the candle that will actually fire');
+
+  /* THE WINDOW SHUTS BETWEEN THE TWO CANDLES. The 17:55 bar is inside
+     13:00-18:00 and the 18:00 bar is not, so at 17:57 a 5m rung reads as
+     armed for a candle the gate will refuse. Once per rung per day. */
+  const shut = mk(hourT(18), hourT(18) - tf);
+  ok(shut.formingInSession === false, 'the 18:00 candle is outside the window');
+  ok(ctx.hg80ArmedReal(shut).ok === false && ctx.hg80ArmedReal(shut).why === 'window-shut',
+     'so the row is not about a candle that can fire, and says which reason');
+
+  /* AN UNGATED RUNG HAS NO WINDOW TO BE OUTSIDE OF */
+  const free = mk(hourT(18), hourT(18) - tf, false);
+  ok(ctx.hg80ArmedReal(free).ok === true,
+     '4h and 1d carry no session rule, so no hour puts them out of it');
+
+  /* THE BARS ARE STALE. Over a weekend, through an outage, or with the app
+     left open, the last closed bar can be hours behind the candle now
+     forming — and "this candle closes in 3m" then describes a bar with no
+     relationship to the one the conditions were tested on. */
+  const stale = mk(hourT(15), hourT(15) - tf * 9);
+  ok(stale.barsBehind === 8, `eight candles are missing between them (${stale.barsBehind})`);
+  ok(ctx.hg80ArmedReal(stale).why === 'stale', 'which is reported as staleness, not as arming');
+  ok(ctx.hg80ArmedReal(mk(hourT(15), hourT(15) - tf)).ok === true,
+     'while the immediately preceding bar is not stale — one gap IS the forming candle');
+
+  /* THE WINDOW OUTRANKS STALENESS. Both are true of a weekend row and the
+     gate is the one a reader can do nothing about. */
+  const both = mk(hourT(18), hourT(18) - tf * 9);
+  ok(ctx.hg80ArmedReal(both).why === 'window-shut',
+     'a row that is both reports the gate, which is the harder constraint');
+
+  ok(ctx.hg80ArmedReal(null).ok === false, 'and no row makes no claim');
+
+  /* ---- the split, and what the panel does with it ---- */
+  const sp = ctx.hg80ArmedRealSplit([good, shut, stale, free]);
+  ok(sp.live.length === 2 && sp.no.length === 2, 'the split keeps every row and loses none');
+  ok(sp.live.indexOf(good) >= 0 && sp.live.indexOf(free) >= 0,
+     'with the two that are about a real candle on the live side');
+
+  const txt = h => String(h).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  const note = txt(ctx.armedRealNoteHtml(sp));
+  ok(/2 of these are about a candle that cannot fire/.test(note), 'the panel counts them');
+  ok(/outside 13:00-18:00 UTC/.test(note) && /fallen behind the candle now forming/.test(note),
+     'and names both reasons separately, because they are different problems');
+  ok(/promising a firing the gate or the feed will not deliver/.test(note),
+     'saying plainly what the panel had been doing');
+  ok(ctx.armedRealNoteHtml({ live: [good], no: [] }) === '',
+     'with nothing to say when every row is about a real candle');
+
+  const st1 = txt(ctx.armedRealStampHtml(shut));
+  ok(/THE NEXT CANDLE IS OUTSIDE THE WINDOW/.test(st1), 'the gated row is stamped');
+  ok(/arms again when the window reopens/.test(st1),
+     'and told what would change it, rather than only that it is refused');
+  const st2 = txt(ctx.armedRealStampHtml(stale));
+  ok(/THESE BARS ARE STALE/.test(st2) && /8 candles behind/.test(st2),
+     'the stale row is stamped with how far behind it is');
+  ok(/the countdown below is real, the arming is not/.test(st2),
+     'separating the part that is still true from the part that is not');
+  ok(ctx.armedRealStampHtml(good) === '', 'and a real row carries no stamp');
+
+  /* THE COST VERDICT IS NOT ASKED ABOUT A FIRING THAT CANNOT HAPPEN */
+  ok(/hg80ArmedSplit\(rSplit\.live\)/.test(CODE),
+     'the pay split is taken over the rows that can fire, not over all of them');
+  ok(/sideCountHtml\(hg80ArmedRealSplit\(armed\)\.live/.test(CODE),
+     'and the long/short counts describe the same population as the headline');
+}
+
 console.log('\n== an armed row the arithmetic would refuse is a wait not worth sitting ==');
 {
   /* hg-v790 stopped the SETUPS panel counting a fired setup this tab has

@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v800',
-  pack: 'the 80PERCENT tab says the constant things once — five cards no longer repeat the same sixty words of geometry and caveat around the three numbers that actually differ — and an unpriced venue can no longer return a flattering cost-free expectancy',
+  version: 'hg-v801',
+  pack: 'the 80PERCENT tab stops arming rows for a candle that cannot fire — the conditions are read off the last closed bar and the countdown from now, and when the window has shut or the feed has fallen behind, those are different candles and the panel was promising a firing nothing would deliver',
   built: '2026-09-17T00:00:00Z'
 };
 

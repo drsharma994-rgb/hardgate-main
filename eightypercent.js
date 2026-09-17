@@ -1297,13 +1297,50 @@ function hg80Armed(rungs){
            last close, not passed off as the live open */
         var lvl = fin(sg.close);
         var atr = fin(sg.atr);
+        /* THE CANDLE THAT WOULD FIRE IS NOT THE ONE THE CHECKS WERE RUN ON.
+
+           Every condition above is read off the LAST CLOSED bar. closesIn
+           is measured from NOW. Those are the same candle only when the
+           feed is current and the session state has not changed between
+           them, and the panel has been asserting it unconditionally.
+
+           Two ways it is false, both routine:
+
+             THE WINDOW SHUTS BETWEEN THEM. The 17:55 bar is inside
+             13:00-18:00 and the 18:00 bar is not, so at 17:57 a 5m rung
+             reads as armed for a candle the session gate will refuse.
+             Once per rung per day.
+
+             THE BARS ARE STALE. Over a weekend, through a feed outage, or
+             with the app left open, the last closed bar can be hours
+             behind the candle now forming — and "this candle closes in
+             3m" then describes a bar that has nothing to do with the one
+             the conditions were tested against. That is how this was
+             found: the panel offered five rows closing within the hour
+             while the panel below it said three of those rungs could not
+             fire for another thirteen hours.
+
+           So each row carries the forming candle's own open, whether the
+           gate lets THAT candle fire, and how far the bars have fallen
+           behind. Nothing is hidden; armedHtml marks them. */
+        var formT = Math.floor(nowSec / r.cfg.tfSec) * r.cfg.tfSec;
+        var lastT = fin(r.rows[last].t);
+        if (lastT > 1e12) lastT = Math.floor(lastT / 1000);
+        var gapBars = isFinite(lastT) ? Math.round((formT - lastT) / r.cfg.tfSec) : NaN;
+        var gated = r.cfg.session !== false;
         out.push({
           rung: r, band: r.def.band, variant: v, side: side, sig: sg,
           level: lvl, atr: atr,
           entryEst: lvl,
           stopEst: side === 'long' ? lvl - P80_SL_ATR * atr : lvl + P80_SL_ATR * atr,
           targetEst: side === 'long' ? lvl + P80_TP_ATR * atr : lvl - P80_TP_ATR * atr,
-          closesIn: hg80SecsToBarClose(r.cfg.tfSec, nowSec)
+          closesIn: hg80SecsToBarClose(r.cfg.tfSec, nowSec),
+          formingT: formT,
+          gated: gated,
+          /* an ungated rung is in session by definition — there is no
+             window for it to be outside of */
+          formingInSession: gated ? hg80InSession(formT) : true,
+          barsBehind: isFinite(gapBars) ? Math.max(0, gapBars - 1) : NaN
         });
         break;     /* tightest variant armed on this side wins — one row per rung per side */
       }
@@ -3120,6 +3157,24 @@ function geomPreambleHtml(){
    about, and "armed but it cannot pay here" is a fact about the VENUE
    worth learning, not a reason to hide the mechanic.
    --------------------------------------------------------------------- */
+/* Can the candle this row is about actually fire? See the note in
+   hg80Armed: the conditions were read off the last closed bar, and the
+   candle now forming is a different one. */
+function hg80ArmedReal(a){
+  if (!a) return { ok: false, why: 'none' };
+  if (a.formingInSession === false) return { ok: false, why: 'window-shut' };
+  if (isFinite(fin(a.barsBehind)) && fin(a.barsBehind) > 0) return { ok: false, why: 'stale' };
+  return { ok: true, why: null };
+}
+
+function hg80ArmedRealSplit(rows){
+  var live = [], no = [], i;
+  for (i = 0; i < (rows || []).length; i++){
+    (hg80ArmedReal(rows[i]).ok ? live : no).push(rows[i]);
+  }
+  return { live: live, no: no };
+}
+
 function hg80ArmedVerdict(a){
   return hg80CostVerdict(a && a.rung ? a.rung.be : null);
 }
@@ -3139,6 +3194,46 @@ function hg80ArmedSplit(rows){
 }
 
 /* the headline sentence, counted rather than asserted */
+/* The mark on a row whose candle cannot be the one the checks describe.
+   Phrased as what it is, not as a disclaimer: this row is about a candle
+   that is not the next one. */
+function armedRealStampHtml(a){
+  var r = hg80ArmedReal(a);
+  if (r.ok) return '';
+  if (r.why === 'window-shut'){
+    return '<div style="margin-top:4px"><span class="stamp veto">THE NEXT CANDLE IS OUTSIDE THE '
+      + 'WINDOW</span> <span class="note">the conditions above were read off the last closed '
+      + 'candle, which was inside ' + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC. The one now '
+      + 'forming is not, so the session gate refuses it however it closes. This rung arms again '
+      + 'when the window reopens.</span></div>';
+  }
+  var n = fin(a.barsBehind);
+  return '<div style="margin-top:4px"><span class="stamp veto">THESE BARS ARE STALE</span> '
+    + '<span class="note">the last candle this rung returned is <b>' + n + '</b> candle'
+    + (n === 1 ? '' : 's') + ' behind the one forming now, so "this candle" is not the candle '
+    + 'the conditions were tested on. Over a weekend or through a feed outage that is the normal '
+    + 'state; the countdown below is real, the arming is not.</span></div>';
+}
+
+/* the headline for the same split */
+function armedRealNoteHtml(split){
+  var n = split.no.length;
+  if (!n) return '';
+  var shut = 0, stale = 0, i;
+  for (i = 0; i < split.no.length; i++){
+    if (hg80ArmedReal(split.no[i]).why === 'window-shut') shut++; else stale++;
+  }
+  return '<div class="note warn" style="margin-top:4px"><b>' + n + ' of these '
+    + (n === 1 ? 'is' : 'are') + ' about a candle that cannot fire.</b> '
+    + (shut ? shut + ' ' + (shut === 1 ? 'sits' : 'sit') + ' on a rung whose next candle falls '
+        + 'outside ' + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC. ' : '')
+    + (stale ? stale + ' ' + (stale === 1 ? 'is' : 'are') + ' built on bars that have fallen '
+        + 'behind the candle now forming. ' : '')
+    + 'The conditions are read off the last CLOSED candle and the countdown is measured from '
+    + 'now; when those are not the same candle, this panel was promising a firing the gate or '
+    + 'the feed will not deliver. Listed last, with the reason.</div>';
+}
+
 function armedPayNoteHtml(split, venue){
   var n = split.no.length, y = split.pays.length;
   if (!n) return '';
@@ -3161,31 +3256,43 @@ function armedHtml(rungs, livePx){
   var nowSec = Math.floor(Date.now() / 1000);
   var h = '<div class="panel" style="border-left:3px solid var(--gold)">'
     + '<h2>WHAT IS COMING <span>'
-    + armed.length + ' armed · ' + arming.length + ' one step behind</span></h2>';
+    + hg80ArmedRealSplit(armed).live.length + ' armed · '
+    + hg80ArmedRealSplit(arming).live.length + ' one step behind</span></h2>';
 
-  h += sideCountHtml(armed, arming);
+  /* counted over the rows the headline claims — "1 armed" beside "2 long
+     and 3 long" is two numbers describing different populations */
+  h += sideCountHtml(hg80ArmedRealSplit(armed).live, hg80ArmedRealSplit(arming).live);
 
   var vn = __p.venue ? __p.venue.venue : null;
 
   if (armed.length){
-    var aSplit = hg80ArmedSplit(armed);
+    /* WHICH CANDLE IS THIS ROW ABOUT? Before anything is said about cost,
+       split off the rows whose next candle cannot fire at all — a cost
+       verdict on a firing that the session gate or a stale feed already
+       rules out is an answer to the wrong question. */
+    var rSplit = hg80ArmedRealSplit(armed);
+    var aSplit = hg80ArmedSplit(rSplit.live);
     h += '<div class="note" style="margin-top:6px"><b>ARMED — ONE CANDLE AWAY.</b> Three of the '
       + 'four conditions hold on the last closed candle. Only the candle\'s own direction is '
       + 'outstanding, and it is decided at the close named on each row.</div>'
+      + armedRealNoteHtml(rSplit)
       + armedPayNoteHtml(aSplit, vn);
     /* worth the wait first; the rest keep their soonest-first order within
-       each group, which is what hg80Armed already sorted them into */
-    h += bandBlocksHtml(aSplit.pays.concat(aSplit.no),
+       each group, which is what hg80Armed already sorted them into. Rows
+       about a candle that cannot fire go last, marked. */
+    h += bandBlocksHtml(aSplit.pays.concat(aSplit.no).concat(rSplit.no),
                         function(x){ return armedRowHtml(x, livePx); });
   }
 
   if (arming.length){
-    var gSplit = hg80ArmedSplit(arming);
+    var gReal = hg80ArmedRealSplit(arming);
+    var gSplit = hg80ArmedSplit(gReal.live);
     h += '<div class="note" style="margin-top:8px"><b>ONE STEP BEHIND.</b> These need the candle '
       + '<i>and</i> one more thing — an RSI level, or the session clock. Both move on their own, '
       + 'so what is outstanding is written out with the distance attached.</div>'
+      + armedRealNoteHtml(gReal)
       + armedPayNoteHtml(gSplit, vn);
-    h += bandBlocksHtml(gSplit.pays.concat(gSplit.no), armingRowHtml);
+    h += bandBlocksHtml(gSplit.pays.concat(gSplit.no).concat(gReal.no), armingRowHtml);
   }
 
   h += '<div class="p80-caveat" style="margin-top:12px">'
@@ -3263,6 +3370,7 @@ function armedRowHtml(a, livePx){
     + '</b>, which is about where this one opened — so watch that level.</div>'
     + '<div class="p80-when">Candle closes in <b>' + hg80DurTxt(a.closesIn) + '</b>'
     + (closesAt ? '<span class="dim">at ' + esc(closesAt) + '</span>' : '') + '</div>'
+    + armedRealStampHtml(a)
     + armedPayStampHtml(a)
     + armedLiveHtml(a, livePx);
 
@@ -5017,6 +5125,8 @@ W.hg80LiveBe         = hg80LiveBe;
 W.hg80ArmedPays      = hg80ArmedPays;
 W.hg80ArmedSplit     = hg80ArmedSplit;
 W.hg80ArmedVerdict   = hg80ArmedVerdict;
+W.hg80ArmedReal      = hg80ArmedReal;
+W.hg80ArmedRealSplit = hg80ArmedRealSplit;
 W.hg80Size           = hg80Size;
 W.hg80PlanBe         = hg80PlanBe;
 W.hg80FinStrict      = finStrict;
@@ -5032,6 +5142,8 @@ W.hg80SlipStats      = hg80SlipStats;
 W.sizeHtml           = sizeHtml;
 W.HG_P80_OZ_PER_LOT  = P80_OZ_PER_LOT;
 W.armedPayStampHtml  = armedPayStampHtml;
+W.armedRealStampHtml = armedRealStampHtml;
+W.armedRealNoteHtml  = armedRealNoteHtml;
 W.armedPayNoteHtml   = armedPayNoteHtml;
 W.reprintHtml        = reprintHtml;
 W.HG_P80_REPRICE_MIN_FRAC = P80_REPRICE_MIN_FRAC;
