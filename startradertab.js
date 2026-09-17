@@ -183,7 +183,8 @@ function stTierRank(t){ return TIER_RANK[t] || 0; }
 
 function stDropForming(rows, tf, nowSec){
   try{
-    var sec = { '15m':900,'1h':3600,'2h':7200,'4h':14400,'1d':86400 }[tf];
+    /* full set — see hg-setup-core.js: a missing key made this a no-op */
+    var sec = {'1m':60,'5m':300,'15m':900,'30m':1800,'1h':3600,'2h':7200,'4h':14400,'1d':86400}[tf];
     if (!rows || !rows.length || !sec) return rows || [];
     /* Bar timestamps arrive in seconds from every feed this tab uses today
        (binanceKlines divides by 1000, Yahoo reports seconds). engine.js

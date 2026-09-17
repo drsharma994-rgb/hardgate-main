@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v784',
-  pack: 'the 5m rung was scanning the candle that had not closed yet — the feed\u2019s forming-bar strip has no 5m key. Fixed from the rung\u2019s own seconds, and the bar it drops is now the feed-native live price that grades every card',
+  version: 'hg-v785',
+  pack: 'the closed-candle tables know every timeframe now \u2014 five copies stopped at 15m, so any desk reading 1m, 5m or 30m bars was evaluating a candle that had not closed, and the lookup failed open so nothing ever said so',
   built: '2026-09-17T00:00:00Z'
 };
 

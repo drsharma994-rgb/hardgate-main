@@ -7,7 +7,22 @@
     return isFinite(n) ? n : null;
   }
 
-  var TF_SEC = { '15m': 900, '1h': 3600, '2h': 7200, '4h': 14400, '1d': 86400 };
+  /* EVERY TIMEFRAME THIS APP REQUESTS, not just the ones somebody happened to
+     list. The table used to stop at 15m and a missing key made this function a
+     silent no-op: `sec` fell to 0, the `if (!sec)` branch handed back every row
+     it was given — forming bar included — and reported stale:false, a
+     freshness claim it had never checked.
+
+     5m was the live case. Any desk reading 5m bars was evaluating close vs
+     open, wick-through, EMA/RSI/ATR on a candle that had not finished, so a
+     setup could appear and vanish tick to tick. omnigold.js names the symptom
+     in its v665 note: "print a live ticket, then invalidate the next tick".
+     Its fix calls dropForming, which inherited this same hole.
+
+     The set matches hg-forward.js, which has carried the full list all along.
+     test-closed-candle-tables.mjs asserts every copy of this table stays in
+     step with it. */
+  var TF_SEC = { '1m': 60, '5m': 300, '15m': 900, '30m': 1800, '1h': 3600, '2h': 7200, '4h': 14400, '1d': 86400 };
 
   function gateResult(id, label, state, detail, opts){
     opts = opts || {};

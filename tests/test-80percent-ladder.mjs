@@ -1742,12 +1742,17 @@ console.log('\n== the forming bar is not a closed bar, and 5m was reading it as 
      of this ladder dropped it and the finest did not. */
   const CORE = fs.readFileSync(path.join(ROOT, 'hg-setup-core.js'), 'utf8');
   const tfTable = (CORE.match(/var TF_SEC = \{([^}]*)\}/) || [])[1] || '';
-  const coreKnows5m = /'5m'/.test(tfTable);
-  ok(!coreKnows5m,
-     'the shared getClosedCandles table STILL has no 5m key — this tab must not depend on it '
-     + '(reported separately; changing it moves every desk\'s candle set)');
+  /* The shared table has since been fixed for every desk (see
+     test-closed-candle-tables.mjs), so the feed now strips 5m correctly on
+     its own. This rung keeps its own split anyway and that is deliberate:
+     the split is idempotent, it costs one comparison, and it is the reason
+     this tab did not have to wait for a repo-wide change to stop scanning
+     an unfinished candle. Depending on no lookup table is the property
+     worth keeping, not a workaround to retire. */
+  ok(/'5m'/.test(tfTable),
+     'the shared getClosedCandles table now knows 5m — fixed for every desk, not just this tab');
 
-  /* ...so this rung does its own, from seconds it already owns. */
+  /* ...and this rung still does its own, from seconds it already owns. */
   const now = Math.floor(Date.UTC(2026, 8, 17, 12, 2, 30) / 1000);   /* 150s into a 5m bar */
   const mk = (tfSec, n) => {
     const out = [], last = Math.floor(now / tfSec) * tfSec;
