@@ -1395,6 +1395,18 @@ console.log('\n== SIMPLE is the default, and it reads as a trade ==');
   ok(/Switch to <b>FULL<\/b>/.test(html), 'but it says where they went');
 
   /* the honesty that must survive the simplification */
+  /* ON EVERY CARD, not merely somewhere on the page. The message on this
+     assertion always said "on the card"; the regex only asked whether the
+     phrase appeared ANYWHERE in the panel, which a single line at the top
+     satisfies — and a reader scrolled to the third card has lost it.
+     Counted against the cards now. */
+  {
+    const cards = (html.match(/class="card /g) || []).length;
+    const watches = (html.match(/WATCH — not a signal to act on/g) || []).length;
+    ok(cards > 0, `the panel renders ${cards} card(s)`);
+    ok(watches >= cards,
+       `and each carries the WATCH mark (${watches} marks for ${cards} cards)`);
+  }
   ok(/WATCH — not a signal to act on/.test(html),
      'and the WATCH tag is on the card — simplifying the layout is not licence to drop the one '
      + 'line that separates a setup from a recommendation');
@@ -2540,6 +2552,82 @@ console.log('\n== the ledger is read at the bar for the number of things being t
        && vm.runInContext('typeof hgOmniFamilyZ', ctx) === 'function',
        'and it is restored, so nothing after this block runs against a stub');
   }
+}
+
+console.log('\n== what is true of every card is said once ==');
+{
+  /* Five rungs firing the same mechanic produced five cards carrying the
+     same sixty words: the risk-for-reward ratio and its breakeven — which
+     are SL/TP and therefore identical on every card the app can render —
+     and the whole WATCH paragraph. The figures that actually differed,
+     0.89 against 0.91 and 47% against 48%, were buried in it. Repetition
+     is not emphasis. */
+  const pre = String(ctx.geomPreambleHtml());
+  const preTxt = pre.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  ok(/risked for every 1 gained/.test(preTxt), 'the ratio is stated in the preamble');
+  ok(preTxt.indexOf((ctx.HG_P80_SPEC.slAtr / ctx.HG_P80_SPEC.tpAtr).toFixed(2)) >= 0,
+     'as the spec\'s own SL/TP, computed rather than typed');
+  const gross = ctx.HG_P80_SPEC.slAtr / (ctx.HG_P80_SPEC.slAtr + ctx.HG_P80_SPEC.tpAtr);
+  ok(preTxt.indexOf((gross * 100).toFixed(1)) >= 0, 'with the breakeven it implies');
+  ok(/WATCH, not a signal to act on/.test(preTxt), 'and the WATCH, which leads it');
+
+  /* A PREAMBLE THAT COSTS MORE THAN THE REPETITION IT REPLACES IS NOT A
+     SAVING. With a single card on screen it would make the panel LONGER,
+     so everything in it has to be load-bearing — the commentary about why
+     it is said once belongs in the source, not on the page. */
+  const words = preTxt.split(/\s+/).length;
+  ok(words <= 45, `the preamble is ${words} words, short enough not to cost more than it saves`);
+  ok(!/said here and not|What differs from card to card/.test(preTxt),
+     'with no commentary about its own layout');
+
+  /* ---- and the panel: once, not once per card ---- */
+  const secOf = { '5m': 300, '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400 };
+  ctx.hgOgFetchRows = (tf, n) => Promise.resolve({
+    rows: series(n, { tfSec: secOf[tf], endHour: 15, tail: 0 }), source: 'fx' });
+  /* The harness's setTimeout fires synchronously, which wins hg80LiveSpot's
+     own race every time and starves the five sequential rung fetches. Swap
+     in the real timer for this mount, as the live-price block does, or the
+     panel renders empty and every count below is measuring nothing. */
+  const realST = ctx.setTimeout;
+  ctx.setTimeout = (fn, ms) => globalThis.setTimeout(fn, ms);
+  ctx.hgGoldLiveSpot = () => Promise.resolve(4354.4);
+  const tab = (ctx.HG_tabs || []).find(t => t && t.id === '80percent');
+  const node = mkEl('div');
+  tab.mount(node);
+  await new Promise(r => globalThis.setTimeout(r, 80));
+  await settle();
+  /* __p.view is module state and an earlier block in this file leaves it on
+     FULL, which renders setupCardHtml panels rather than the SIMPLE cards
+     this block is counting. Ask for the view under test rather than
+     inheriting whatever ran last. */
+  press(node, 'data-p80-view', 'simple');
+  await settle();
+  ctx.setTimeout = realST;
+  const html = String(node.querySelector('#p80Body').innerHTML);
+  const cards = (html.match(/class="card /g) || []).length;
+  ok(cards > 1, `the fixture renders ${cards} cards, so repetition is measurable`);
+
+  const ratio = (html.match(/risked for every 1 gained/g) || []).length;
+  ok(ratio === 1,
+     `the ratio appears ONCE across ${cards} cards (${ratio}) — it is a constant, and a constant `
+     + 'printed five times is noise that buries what changed');
+  const be = (html.match(/just to break even/g) || []).length;
+  ok(be === 1, `and its breakeven once (${be})`);
+
+  /* WHAT IS CARD-SPECIFIC STAYS ON THE CARD */
+  const risks = (html.match(/You risk <b>/g) || []).length;
+  ok(risks === cards, `every card still states its own risk and reward (${risks}/${cards})`);
+  const costs = (html.match(/<b>COST:<\/b>/g) || []).length;
+  ok(costs === cards, `and its own cost line (${costs}/${cards})`);
+
+  /* THE WATCH MARK IS NOT WHAT WAS HOISTED — only the paragraph was */
+  const marks = (html.match(/WATCH — not a signal to act on/g) || []).length;
+  ok(marks >= cards,
+     `the WATCH mark still travels with each card (${marks} for ${cards}) — a reader scrolled to `
+     + 'the third card has lost the preamble, and that is the one line separating a setup from a '
+     + 'recommendation');
+
+  ok(!/NaN|undefined/.test(html), 'and nothing renders as NaN or undefined');
 }
 
 console.log('\n== a card is priced for the trade on the card ==');

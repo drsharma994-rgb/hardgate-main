@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v799',
-  pack: 'the 80PERCENT tab prices each card for the trade on that card, not for a rung priced at a later bar — and an unreadable venue stops reporting itself as a free one, which it had been doing since the cost verdict shipped because Number(null) is 0',
+  version: 'hg-v800',
+  pack: 'the 80PERCENT tab says the constant things once — five cards no longer repeat the same sixty words of geometry and caveat around the three numbers that actually differ — and an unpriced venue can no longer return a flattering cost-free expectancy',
   built: '2026-09-17T00:00:00Z'
 };
 

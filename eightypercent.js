@@ -467,8 +467,14 @@ function hg80CardBe(sig, rung){
 function hg80ExpectancyR(hit, be){
   var h = fin(hit);
   if (!be || !(be.risk > 0) || !isFinite(h)) return NaN;
-  var cost = isFinite(fin(be.cost)) ? fin(be.cost) : 0;
-  return (h * be.target - (1 - h) * be.risk - cost) / be.risk;
+  /* THE ': 0' HERE WAS UNREACHABLE. fin(null) is 0 and isFinite(0) is true,
+     so a be with no cost took the first branch and returned a COST-FREE
+     expectancy — the flattering answer — with nothing to say it had. Both
+     callers in this file happen to be guarded, but this is exported for
+     "a gate, a log, a backtest", and those are exactly the callers that
+     would hit it. An unpriced venue gets no expectancy, not a free one. */
+  if (!isFinite(finStrict(be.cost))) return NaN;
+  return (h * be.target - (1 - h) * be.risk - finStrict(be.cost)) / be.risk;
 }
 
 /* ---------------------------------------------------------------------
@@ -2996,10 +3002,12 @@ function simpleCardHtml(sig, rung, state){
      the reward were the 1, which is the flattering way round and the wrong
      one. Say it as a desk says it: what you risk, for what you stand to
      make. */
+  /* WHAT DIFFERS BETWEEN CARDS STAYS ON THE CARD. The ratio and the
+     breakeven do not: they are SL/TP, the same on every card in the app,
+     and printing a constant five times buries the three numbers that
+     actually changed. They are stated once by geomPreambleHtml. */
   h += '<div class="p80-meta">You risk <b>' + num(p.risk) + '</b> to make <b>' + num(p.reward)
-    + '</b> — ' + num(p.rr, 2) + ' risked for every 1 gained, so it has to win '
-    + ((P80_SL_ATR / (P80_SL_ATR + P80_TP_ATR)) * 100).toFixed(1)
-    + '% of the time just to break even, before any spread.</div>';
+    + '</b>.</div>';
 
   if (rung) h += costLineHtml(hg80CardBe(sig, rung), __p.venue ? __p.venue.venue : null);
 
@@ -3023,24 +3031,63 @@ function watchLineHtml(sig){
   var got = mech ? hg80FwdRead(mech) : null;
   var settled = got && got.pool ? fin(got.pool.settled) : NaN;
 
+  /* ONE LINE, AND ONLY WHAT IS TRUE OF THIS MECHANIC. "WATCH — not a
+     signal to act on", and why a handful of settled trades is not a
+     record, are true of every card in the panel; they are said once by
+     geomPreambleHtml. What belongs here is this mechanic's own count and
+     what the ledger makes of it. */
+  /* THE WATCH MARK STAYS ON EVERY CARD. Hoisting the EXPLANATION is not
+     licence to drop the mark: a reader scrolled to the third card has lost
+     the preamble, and the one line separating a setup from a
+     recommendation has to travel with the card it is about. What is
+     hoisted is the paragraph, not the label. */
+  var tag = '<span class="stamp">WATCH — not a signal to act on</span> ';
   if (!got || !(settled > 0)){
-    return '<div class="p80-caveat"><b>WATCH — not a signal to act on.</b> ' + label
-      + ' has nothing settled in the forward log yet. It is recorded on every firing, so this '
-      + 'fills on its own — see FORWARD below for what has accumulated.</div>';
+    return '<div class="p80-caveat">' + tag + label
+      + ' — <b>nothing settled in the forward log yet</b>'
+      + '. It is recorded on every firing, so this fills on its own.</div>';
   }
   var readTxt = (got.read && got.read.read) ? String(got.read.read) : null;
   var bar = got.bar;
-  return '<div class="p80-caveat"><b>WATCH — not a signal to act on.</b> ' + label
-    + ' has <b>' + settled + '</b> settled in the forward log'
-    + (readTxt ? ', which reads <b>' + esc(readTxt) + '</b>' : '')
+  return '<div class="p80-caveat">' + tag + label + ' — <b>' + settled + '</b> settled in the '
+    + 'forward log' + (readTxt ? ', reads <b>' + esc(readTxt) + '</b>' : '')
     + (bar && bar.measured
-        ? ' — judged at <b>z ' + bar.z.toFixed(2) + '</b>, the bar for testing '
-          + bar.n + ' mechanic' + (bar.n === 1 ? '' : 's') + ' at once, not the z 1.64 a single '
-          + 'pre-registered one would face'
+        ? ' at <b>z ' + bar.z.toFixed(2) + '</b> (the bar for ' + bar.n + ' mechanic'
+          + (bar.n === 1 ? '' : 's') + ' at once, not the z 1.64 a single pre-registered one '
+          + 'would face)'
         : '')
-    + '. That is out-of-sample and it is the only measured thing on this card — but it is a '
-    + 'record being built, not one that has been earned. See FORWARD below.</div>';
+    + '.</div>';
 }
+
+/* ---------------------------------------------------------------------
+   THE THINGS THAT ARE TRUE OF EVERY CARD, SAID ONCE
+
+   Five rungs firing the same mechanic produced five cards carrying the
+   same sixty words: the risk-for-reward ratio and its breakeven, which are
+   SL/TP and therefore identical on every card the app can render, and the
+   whole WATCH paragraph. Three hundred words of boilerplate in one panel,
+   with the numbers that actually differ — 0.89 against 0.91, 47% against
+   48% — buried inside it.
+
+   Repetition is not emphasis. A reader scanning five cards for the three
+   figures that changed had to re-read the same two sentences five times to
+   find them. Nothing is dropped; what is invariant is stated where it is
+   invariant, and the cards keep what is theirs.
+   --------------------------------------------------------------------- */
+function geomPreambleHtml(){
+  var gross = P80_SL_ATR / (P80_SL_ATR + P80_TP_ATR);
+  /* KEPT SHORT ON PURPOSE. A preamble that costs more words than the
+     repetition it replaces is not a saving — with one card on screen it
+     would make the panel longer. Everything here is load-bearing: the
+     WATCH, the ratio, the bar it implies. The commentary about why it is
+     said once belongs in this comment, not on the page. */
+  return '<div class="p80-lead" style="margin-top:0"><b>Every card below is a WATCH, not a '
+    + 'signal to act on</b>, and every one carries the supplied geometry: <b>'
+    + (P80_SL_ATR / P80_TP_ATR).toFixed(2) + ' risked for every 1 gained</b>, needing <b>'
+    + (gross * 100).toFixed(1) + '%</b> just to break even before any spread.</div>';
+}
+
+
 
 /* When this strategy CAN produce a trade, in the reader's own clock. It is
    the only schedulable thing about it: whether the four conditions line up
@@ -3451,6 +3498,7 @@ function simpleSetupsHtml(rungs, livePx){
   noPay.sort(function(a, b){ return a.q.score - b.q.score; });
 
   if (actable.length || noPay.length || dead.length){
+    h += geomPreambleHtml();
     var otherN = noPay.length + dead.length;
     if (actable.length){
       h += '<div class="note ok" style="margin-bottom:4px"><b>' + actable.length
@@ -4973,6 +5021,8 @@ W.hg80Size           = hg80Size;
 W.hg80PlanBe         = hg80PlanBe;
 W.hg80FinStrict      = finStrict;
 W.hg80CardBe         = hg80CardBe;
+W.geomPreambleHtml   = geomPreambleHtml;
+W.watchLineHtml      = watchLineHtml;
 W.hg80RiskCash       = hg80RiskCash;
 W.hg80RiskSet        = hg80RiskSet;
 W.hg80RiskValid      = hg80RiskValid;
