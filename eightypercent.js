@@ -541,6 +541,22 @@ function hg80LiveActs(grade){
   return st ? st.act === true : true;   /* no grade = no claim either way */
 }
 
+/* THE ONE THING WORTH SAYING ABOUT AN OVERLAPPING FIRING. Not "this is
+   invalid" — the spec fired and the reader may be flat. What it says is
+   what taking it would MEAN: a second position in the same direction on
+   the same rung, not a second independent trade. */
+function bookChipHtml(sig){
+  if (!sig || sig.seq !== false || !sig.heldBy) return '';
+  var held = sig.heldBy;
+  var when = isFinite(fin(held.t)) ? hg80WhenTxt(fin(held.t)) : null;
+  return '<div class="note" style="margin-top:4px;padding:3px 6px;border-left:3px solid '
+    + 'var(--veto)"><b>DOUBLES AN OPEN TRADE.</b> The '
+    + esc(String(held.dir || '').toUpperCase()) + (when ? ' from <b>' + esc(when) + '</b>' : '')
+    + ' on this rung had not finished when this one fired. Taking both is one position twice '
+    + 'over, not two trades — and it is why this firing is not counted in the book the '
+    + 'measurements on this tab are made on.</div>';
+}
+
 function liveChipHtml(grade, px){
   var st = P80_LIVE_STATE[grade];
   if (!st) return '';
@@ -631,6 +647,12 @@ function hg80Quality(sig, rung, grade){
      input would be a worse error than showing it. */
   var pays = !(v.key === 'gone' || v.key === 'negative');
 
+  /* A firing that lands while the previous trade on this rung is still
+     running is not a second independent trade — taking it doubles the
+     position. It is not refused (the spec fired, and a reader may well be
+     flat), but it ranks below anything that stands on its own. */
+  var doubles = (sig && sig.seq === false && sig.heldBy) ? true : false;
+
   var gradeRank = { 'fresh': 0, 'pending': 1, 'past-entry': 2 };
   var vi = 0, i;
   for (i = 0; i < P80_VARIANTS.length; i++){
@@ -644,9 +666,11 @@ function hg80Quality(sig, rung, grade){
   score += (gradeRank[grade] == null ? 1 : gradeRank[grade]) * 8;
   score += vi * 4;                                        /* SPEC ahead of MID ahead of WIDE */
   score += underFloor ? 15 : 0;
+  score += doubles ? 12 : 0;
 
   return { score: score, pays: pays, verdict: v, costShare: v.share,
-           stopPct: stopPct, underFloor: underFloor, gradeRank: gradeRank[grade] };
+           stopPct: stopPct, underFloor: underFloor, gradeRank: gradeRank[grade],
+           doubles: doubles };
 }
 
 /* ---------------------------------------------------------------------
@@ -875,6 +899,17 @@ function hg80WhenTxt(tSec, withDate){
   /* the date is carried once, by the local half — repeating it in the UTC
      half doubles the length of every card header for no information */
   var utc = d.toISOString().slice(11, 16) + ' UTC';
+
+  /* AND WHEN LOCAL *IS* UTC, SAY IT ONCE. Every timestamp on this tab read
+     "13:55 UTC · 13:55 UTC" for anyone at offset zero — London in winter,
+     Lisbon, Accra, Reykjavik, and any browser or container with no zone
+     set at all, which is not a rare case. The offset is the authoritative
+     test; the abbreviation is a display string and can be either of two
+     things at the same instant. */
+  var off = 0;
+  try { off = d.getTimezoneOffset(); } catch (e){ off = null; }
+  if (loc && off === 0) return loc + ' UTC';
+
   return loc ? (loc + ' ' + hg80TzShort() + ' · ' + utc)
              : (d.toISOString().replace('T', ' ').slice(withDate ? 0 : 11, 16) + ' UTC');
 }
@@ -1434,7 +1469,7 @@ function hg80Median(arr){
 }
 
 function hg80Excursions(rungs){
-  var out = { n: 0, nWin: 0, nFail: 0, maeAll: [], maeWin: [], mfeFail: [],
+  var out = { n: 0, nWin: 0, nFail: 0, nOverlap: 0, maeAll: [], maeWin: [], mfeFail: [],
               deepest: NaN, medianMae: NaN, winnersWorst: NaN, failuresBest: NaN,
               fittedSlAtr: NaN, fittedBe: NaN, specBe: P80_SL_ATR / (P80_SL_ATR + P80_TP_ATR),
               enough: false, byTf: [] };
@@ -1449,6 +1484,12 @@ function hg80Excursions(rungs){
       /* only what RESOLVED. An open trade has not finished travelling, and
          counting its excursion so far would understate every one of them. */
       if (!sg.res || sg.status === 'open' || sg.status === 'unpriced') continue;
+      /* AND ONLY THE SEQUENTIAL BOOK. A firing that landed inside an open
+         trade is largely a re-print of it: counting both inflates n with
+         observations that are not independent, which is exactly the way a
+         threshold guarding a fitted number gets cleared without the
+         evidence to clear it. Counted separately, never silently. */
+      if (sg.seq === false){ out.nOverlap++; continue; }
       var mae = fin(sg.res.maeAtr), mfe = fin(sg.res.mfeAtr);
       if (!isFinite(mae) || !isFinite(mfe)) continue;
       out.n++; tfN++;
@@ -1607,6 +1648,53 @@ function hg80Scan(rows, opts){
 }
 
 /* ---------------------------------------------------------------------
+   THE SEQUENTIAL BOOK — WHICH FIRINGS A DESK COULD ACTUALLY HAVE TAKEN
+
+   scripts/walk-80percent.mjs has kept one position at a time since it was
+   written: a firing that lands while the previous trade is still open is
+   skipped, and the count it reports is the count of trades a desk could
+   have held. The tab has never done this. It resolved every firing
+   independently, so a rung the walk scores as 6 trades the tab scored as
+   12 — the same bars, counted twice, because the second firing of a pair
+   is very largely a re-print of the first.
+
+   That divergence was invisible while the tab only reported outcomes. It
+   stopped being invisible the moment hg-v791 started MEASURING on them:
+   overlapping firings are not independent observations, so a sample of
+   them is smaller than its count, and the 10-winner threshold guarding
+   the fitted stop was being cleared with duplicates.
+
+   NOTHING IS HIDDEN. Every firing still renders — the spec fired when it
+   fired, and a reader looking for a live setup wants to see it. What
+   changes is that a firing landing inside an open trade is MARKED, both
+   so the counting can exclude it and because "this fires while the 14:20
+   long is still running" is the single most useful thing that can be said
+   about it: taking it means doubling the position, not taking a second
+   independent trade.
+
+   ONE BOOK PER RUNG, both directions, all three variants — exactly what
+   the walk does. A long that fires while a short is open is still a
+   second position.
+   --------------------------------------------------------------------- */
+function hg80MarkBook(signals){
+  var openUntil = -1, heldBy = null, i;
+  if (!signals) return;
+  for (i = 0; i < signals.length; i++){
+    var s = signals[i];
+    if (!s.res){ s.seq = false; s.heldBy = null; continue; }
+    if (s.i <= openUntil){
+      s.seq = false;
+      s.heldBy = heldBy;   /* the signal still running when this one fired */
+      continue;
+    }
+    s.seq = true;
+    s.heldBy = null;
+    openUntil = s.i + s.res.bars;
+    heldBy = s;
+  }
+}
+
+/* ---------------------------------------------------------------------
    ONE RUNG
 
    Scans it, prices it from ITS OWN live ATR, resolves what fired inside the
@@ -1630,7 +1718,7 @@ function hg80ScanTf(rows, def, venue){
   var lastPx = fin(rows[n - 1].c);
   var be = hg80Breakeven(lastAtr, lastPx, venue ? venue.rtFrac : NaN);
 
-  var tally = { open: 0, win: 0, loss: 0, expired: 0, ambiguous: 0 };
+  var tally = { open: 0, win: 0, loss: 0, expired: 0, ambiguous: 0, overlap: 0 };
   var i;
   for (i = 0; i < res.signals.length; i++){
     var s = res.signals[i];
@@ -1642,6 +1730,10 @@ function hg80ScanTf(rows, def, venue){
     if (Object.prototype.hasOwnProperty.call(tally, s.status)) tally[s.status]++;
     if (r.ambiguous) tally.ambiguous++;
   }
+
+  /* and which of them a desk could actually have taken — see hg80MarkBook */
+  hg80MarkBook(res.signals);
+  for (i = 0; i < res.signals.length; i++) if (res.signals[i].seq === false) tally.overlap++;
 
   var lastSig = hg80SignalAt(rows, res.ind, n - 1, cfg);
   var nearest = hg80Nearest(rows, res.ind, n - 1, cfg);
@@ -1824,9 +1916,12 @@ function excursionHtml(rungs){
     + P80_SL_ATR.toFixed(2) + ' is doing anything. A stop is only risk if price goes there.</div>';
 
   h += '<div class="p80-levels">'
-    + '<span class="p80-lvl-k">Resolved firings</span>'
+    + '<span class="p80-lvl-k">Trades in the book</span>'
     + '<span class="p80-lvl-v">' + x.n + '</span>'
-    + '<span class="p80-lvl-d">' + x.nWin + ' reached the target, ' + x.nFail + ' did not</span>'
+    + '<span class="p80-lvl-d">' + x.nWin + ' reached the target, ' + x.nFail + ' did not'
+    + (x.nOverlap ? ' · ' + x.nOverlap + ' further firing'
+        + (x.nOverlap === 1 ? '' : 's') + ' landed inside an open trade and '
+        + (x.nOverlap === 1 ? 'is' : 'are') + ' not counted here' : '') + '</span>'
     + '<span class="p80-lvl-k">Deepest adverse</span>'
     + '<span class="p80-lvl-v">' + x.deepest.toFixed(2) + ' ATR</span>'
     + '<span class="p80-lvl-d">the worst point any of them reached — against a '
@@ -1865,7 +1960,8 @@ function excursionHtml(rungs){
       + 'stop that happens to have held this window\'s winners is the oldest way there is to '
       + 'manufacture an edge that does not survive out of sample, and the number above is very '
       + 'probably too good for that exact reason. More than that: it is a <b>maximum over a '
-      + 'sample of ' + x.nWin + '</b>, and a maximum can only rise as the sample grows. So it is '
+      + 'sample of ' + x.nWin + '</b> — ' + x.nWin + ' trades in the sequential book, not '
+      + (x.nWin + x.nOverlap) + ' firings — and a maximum can only rise as the sample grows. So it is '
       + 'not merely uncertain — it is biased TIGHT, in a known direction, and the true figure is '
       + 'above it rather than scattered around it. It is here to size the GAP between the '
       + 'spec\'s stop and anything that actually happened — not to be traded. The thing that can '
@@ -1874,7 +1970,10 @@ function excursionHtml(rungs){
       + '</span></div>';
   } else {
     h += '<div class="note" style="margin-top:8px">' + x.nWin + ' winner'
-      + (x.nWin === 1 ? '' : 's') + ' have resolved in this window. <b>No stop is fitted below '
+      + (x.nWin === 1 ? '' : 's') + ' in the book have resolved in this window'
+      + (x.nOverlap ? ' (the ' + x.nOverlap + ' overlapping firing'
+          + (x.nOverlap === 1 ? '' : 's') + ' would not have been separate trades)' : '')
+      + '. <b>No stop is fitted below '
       + P80_EXC_MIN_N + '</b> — "' + x.nWin + ' firings resolved and here is what they did" is a '
       + 'true sentence; "so the stop should be ' + (isFinite(x.winnersWorst)
           ? x.winnersWorst.toFixed(2) : 'X') + ' ATR" is not one, at this sample size. The '
@@ -1895,7 +1994,11 @@ function excursionHtml(rungs){
     h += '</table>';
   }
 
-  h += '<div class="p80-caveat">Every number here is a property of the bars currently on '
+  h += '<div class="p80-caveat">Measured over the SEQUENTIAL BOOK — one position at a time, '
+    + 'which is what scripts/walk-80percent.mjs has always counted and what a desk could '
+    + 'actually have held. A firing that lands while the previous trade is still open is '
+    + 'largely a re-print of it, so counting both would inflate the sample with observations '
+    + 'that are not independent. Every number here is a property of the bars currently on '
     + 'screen and changes on the next scan. It is not a record and it is not evidence of an '
     + 'edge — a window in which nothing went badly wrong is exactly the window in which a '
     + 'fitted stop looks best.</div></div>';
@@ -2065,9 +2168,16 @@ function firedSplitHtml(r){
     chips += '<span class="statuschip ' + (v.key === 'spec' && n ? 'ok' : 'na') + '">'
       + esc(v.label) + ' ' + n + '</span> ';
   }
+  /* FIRINGS AND TRADES ARE DIFFERENT NUMBERS, and the board says so rather
+     than printing one and letting it be read as the other. */
+  var ovl = (r.tally && r.tally.overlap) || 0;
   return chips + '<div class="note">' + c.total + ' in ' + r.scanned + ' · ' + rate
     + '<br><span style="color:var(--long)">' + c.long + ' long</span> · '
-    + '<span style="color:var(--short)">' + c.short + ' short</span></div>';
+    + '<span style="color:var(--short)">' + c.short + ' short</span>'
+    + (ovl ? '<br><span class="warn">' + ovl + ' of them fired inside an open trade</span> '
+        + '<span class="dim">— ' + (c.total - ovl) + ' trade'
+        + ((c.total - ovl) === 1 ? '' : 's') + ' a desk could have held, one at a time</span>'
+      : '') + '</div>';
 }
 
 /* The board cell: which mechanic and side is closest, what it still needs,
@@ -2765,7 +2875,7 @@ function simpleSetupsHtml(rungs, livePx){
         (ca.fresh ? '<span class="stamp pass">FIRED ON THE LAST CLOSED CANDLE</span>'
                   : '<span class="stamp pass">STILL OPEN</span> <span class="note">neither '
                     + 'the stop nor the target was touched in the bars fetched</span>')
-        + liveChipHtml(ca.grade, spot));
+        + liveChipHtml(ca.grade, spot) + bookChipHtml(ca.s));
     }
     if (noPay.length){
       h += '<div class="p80-band"><span class="p80-band-k">Cannot pay here</span>'
@@ -2782,7 +2892,7 @@ function simpleSetupsHtml(rungs, livePx){
         var cn = noPay[k];
         h += simpleCardHtml(cn.s, cn.r,
           '<span class="stamp veto">CANNOT PAY AT THIS VENUE</span>'
-          + liveChipHtml(cn.grade, spot));
+          + liveChipHtml(cn.grade, spot) + bookChipHtml(cn.s));
       }
     }
     if (dead.length){
@@ -2793,7 +2903,7 @@ function simpleSetupsHtml(rungs, livePx){
         var cd = dead[k];
         h += simpleCardHtml(cd.s, cd.r,
           '<span class="stamp veto">NO LONGER TAKEABLE</span>'
-          + liveChipHtml(cd.grade, spot));
+          + liveChipHtml(cd.grade, spot) + bookChipHtml(cd.s));
       }
     }
     return h + '</div>';
@@ -3959,6 +4069,8 @@ W.HG_P80_COST_HEAVY  = P80_COST_HEAVY;
 W.HG_P80_STOP_FLOOR  = P80_STOP_FLOOR;
 W.hg80PayingRungs    = hg80PayingRungs;
 W.hg80Excursions     = hg80Excursions;
+W.hg80MarkBook       = hg80MarkBook;
+W.bookChipHtml       = bookChipHtml;
 W.excursionHtml      = excursionHtml;
 W.hg80Median         = hg80Median;
 W.HG_P80_EXC_MIN_N   = P80_EXC_MIN_N;

@@ -1448,6 +1448,31 @@ console.log('\n== the clock is shown in the reader\'s own zone, from the runtime
     ok(!/2026-09-16 17:50 UTC/.test(w),
        'and the date is carried once, by the local half — repeating it doubles every card header '
        + 'for no information');
+
+    /* AT OFFSET ZERO THE TWO HALVES ARE THE SAME INSTANT, and every
+       timestamp on this tab read "17:50 UTC · 17:50 UTC" for anyone there.
+       Not a rare case: London in winter, Lisbon, Accra, Reykjavik, and any
+       browser or container with no zone set at all. */
+    process.env.TZ = 'UTC';
+    const u = ctx.hg80WhenTxt(Date.UTC(2026, 8, 16, 17, 50, 0) / 1000);
+    ok(/17:50 UTC/.test(u), `at offset zero the time is still stamped UTC (${u})`);
+    ok((u.match(/17:50/g) || []).length === 1,
+       `and it is printed ONCE, not twice (${u})`);
+    ok(u.indexOf('·') < 0, 'with no separator dividing a value from itself');
+
+    const ud = ctx.hg80WhenTxt(Date.UTC(2026, 8, 16, 17, 50, 0) / 1000, true);
+    ok(/16 Sept/.test(ud) && (ud.match(/17:50/g) || []).length === 1,
+       `the dated form keeps its date and still prints the time once (${ud})`);
+
+    /* a zone that is zero in WINTER but not in summer must not be collapsed
+       in summer — the offset at that instant decides, not the zone name */
+    process.env.TZ = 'Europe/London';
+    const bst = ctx.hg80WhenTxt(Date.UTC(2026, 6, 16, 17, 50, 0) / 1000);
+    ok(/18:50/.test(bst) && /17:50 UTC/.test(bst),
+       `London in July is +1 and keeps both halves (${bst})`);
+    const gmt = ctx.hg80WhenTxt(Date.UTC(2026, 0, 16, 17, 50, 0) / 1000);
+    ok((gmt.match(/17:50/g) || []).length === 1,
+       `and the same zone in January is offset zero, so it collapses (${gmt})`);
   } finally {
     if (tz0 === undefined) delete process.env.TZ; else process.env.TZ = tz0;
   }
@@ -2141,18 +2166,112 @@ console.log('\n== every resolved trade carries how far it actually travelled =='
      'past the horizon nothing counts — the trade was closed before that bar printed');
 }
 
+console.log('\n== the tab counts the trades a desk could have held, not the firings ==');
+{
+  /* THE DIVERGENCE. scripts/walk-80percent.mjs has kept ONE POSITION AT A
+     TIME since it was written — a firing that lands while the previous
+     trade is still open is skipped. The tab resolved every firing
+     independently, so the same rung the walk scores as 6 trades the tab
+     scored as 12. Same bars, counted twice, because the second firing of a
+     pair is very largely a re-print of the first.
+
+     That was invisible while the tab only reported outcomes. It stopped
+     being invisible the moment hg-v791 started MEASURING on them: the
+     10-winner threshold guarding the fitted stop was being cleared with
+     duplicates. */
+  const rung = ctx.hg80ScanTf(saw(1200, { tfSec: 300 }),
+                              { tf: '5m', sec: 300, bars: 1200, band: 'scalp' },
+                              ctx.hg80VenueRt());
+  const sigs = rung.res.signals.filter(g => g.res);
+  ok(sigs.length > 0, `the fixture fires ${sigs.length} times with a resolution each`);
+  ok(sigs.every(g => g.seq === true || g.seq === false),
+     'every resolved firing is marked in or out of the book — never left undefined');
+
+  const book = sigs.filter(g => g.seq);
+  const out = sigs.filter(g => !g.seq);
+  ok(out.length > 0, `${out.length} of them landed inside an open trade`);
+  ok(rung.tally.overlap === out.length, 'and the rung tallies exactly that many');
+
+  /* THE BOOK IS ACTUALLY SEQUENTIAL — asserted by replaying it, not by
+     trusting the flag. This is the property the walk has and the tab did
+     not, so it is checked rather than assumed. */
+  let prevEnd = -Infinity;
+  for (const g of book){
+    ok(g.i > prevEnd, `the book entry at bar ${g.i} opens after the previous one closed`);
+    prevEnd = g.i + g.res.bars;
+  }
+
+  /* and each excluded firing names the trade that was still running */
+  for (const g of out){
+    ok(g.heldBy && g.heldBy.i < g.i && (g.heldBy.i + g.heldBy.res.bars) >= g.i,
+       `the firing at bar ${g.i} points at an earlier trade that was genuinely still open`);
+    ok(g.heldBy.seq === true, 'and that trade is itself in the book, not another overlap');
+  }
+
+  /* IT MATCHES THE WALK. That is the whole point — the two are documented
+     to agree about what a bar did to a trade, and they now agree about
+     which trades there were. */
+  let openUntil = -1, walkCount = 0;
+  for (const g of rung.res.signals){
+    if (!g.res) continue;
+    if (g.i <= openUntil) continue;
+    openUntil = g.i + g.res.bars;
+    walkCount++;
+  }
+  ok(walkCount === book.length,
+     `the tab's book and the walk's sequential book are the same size (${walkCount})`);
+
+  /* NOTHING IS HIDDEN. The spec fired when it fired, and a reader looking
+     for a live setup wants to see it — the marking is for COUNTING. */
+  ok(rung.res.signals.length === sigs.length,
+     'no firing is dropped from the scan — every one is still there to render');
+}
+
+console.log('\n== an overlapping firing says what taking it would mean ==');
+{
+  const held = { dir: 'long', i: 10, t: 1789000000, res: { bars: 6 }, seq: true };
+  const dbl  = { dir: 'long', i: 12, seq: false, heldBy: held };
+
+  ok(ctx.bookChipHtml({ seq: true }) === '', 'a firing that stands on its own says nothing extra');
+  ok(ctx.bookChipHtml(null) === '' && ctx.bookChipHtml({ seq: false }) === '',
+     'and nothing is claimed without a trade to point at');
+
+  const txt = String(ctx.bookChipHtml(dbl)).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  ok(/DOUBLES AN OPEN TRADE/.test(txt), 'an overlapping one is labelled');
+  ok(/one position twice over, not two trades/.test(txt),
+     'in terms of what it would MEAN to take it, which is the actionable part');
+  ok(/LONG/.test(txt), 'naming the direction of the trade already running');
+  ok(!/invalid|do not take|never take/i.test(txt),
+     'and it does NOT call the setup invalid — the spec fired, and the reader may well be flat');
+
+  /* it is a RANKING input, like the stop floor: a doubled position ranks
+     below one that stands alone, and is not removed */
+  const rung = be => ({ be: be });
+  const base = { dir: 'long', variant: 'spec', plan: { stopPct: 1 } };
+  const alone = ctx.hg80Quality(base, rung({ cost: 0.1, target: 2, risk: 1 }), 'fresh');
+  const twice = ctx.hg80Quality(Object.assign({}, base, { seq: false, heldBy: held }),
+                                rung({ cost: 0.1, target: 2, risk: 1 }), 'fresh');
+  ok(twice.doubles === true && alone.doubles === false, 'quality carries the flag');
+  ok(twice.score > alone.score, 'the doubled one ranks below the one that stands alone');
+  ok(twice.pays === alone.pays,
+     'but it is not refused — overlapping is a ranking input, not a gate');
+}
+
 console.log('\n== and the tab adds them up to ask whether the stop was doing anything ==');
 {
-  const rows = saw(600, { tfSec: 300 });
-  const rung = ctx.hg80ScanTf(rows, { tf: '5m', sec: 300, bars: 600, band: 'scalp' },
+  const rows = saw(1200, { tfSec: 300 });
+  const rung = ctx.hg80ScanTf(rows, { tf: '5m', sec: 300, bars: 1200, band: 'scalp' },
                               ctx.hg80VenueRt());
-  ok(rung.ok && rung.tally.win + rung.tally.loss + rung.tally.expired > 0,
-     `the cycling fixture resolves ${rung.tally.win + rung.tally.loss + rung.tally.expired} `
-     + 'firings, which is what makes any of this measurable');
+  const resolved = rung.tally.win + rung.tally.loss + rung.tally.expired;
+  ok(rung.ok && resolved > 0,
+     `the cycling fixture resolves ${resolved} firings, which is what makes any of this `
+     + 'measurable');
 
   const x = ctx.hg80Excursions([rung]);
-  ok(x.n === rung.tally.win + rung.tally.loss + rung.tally.expired,
-     'every resolved firing is counted');
+  ok(x.n + x.nOverlap === resolved,
+     `every resolved firing is accounted for — ${x.n} in the book, ${x.nOverlap} set aside as `
+     + 'overlapping, and none simply dropped');
+  ok(x.nOverlap > 0, 'and this fixture really does produce overlaps, so the split is exercised');
   ok(x.nWin + x.nFail === x.n, 'split into the ones that reached the target and the ones that did not');
   ok(isFinite(x.deepest) && isFinite(x.medianMae), 'the deepest and the median adverse are reported');
   ok(x.deepest >= x.medianMae, 'and the deepest is never below the median — it is a maximum');
@@ -2203,8 +2322,8 @@ console.log('\n== the fitted stop is labelled as fitted, every time it is shown 
      an edge that does not survive out of sample. The number is worth showing
      because it sizes the GAP between the spec's stop and anything that
      actually happened — and it is worth showing ONLY with that said. */
-  const rung = ctx.hg80ScanTf(saw(600, { tfSec: 300 }),
-                              { tf: '5m', sec: 300, bars: 600, band: 'scalp' },
+  const rung = ctx.hg80ScanTf(saw(1200, { tfSec: 300 }),
+                              { tf: '5m', sec: 300, bars: 1200, band: 'scalp' },
                               ctx.hg80VenueRt());
   const x = ctx.hg80Excursions([rung]);
   ok(x.enough, `the fixture clears the ${ctx.HG_P80_EXC_MIN_N}-winner threshold (${x.nWin})`);
@@ -2239,6 +2358,19 @@ console.log('\n== the fitted stop is labelled as fitted, every time it is shown 
   ok(txt.indexOf((x.fittedBe * 100).toFixed(2)) >= 0, 'as is the fitted figure');
   ok(/points of required accuracy/.test(txt),
      'with the difference stated in points, which is the thing a reader is weighing');
+
+  /* THE SAMPLE IS THE BOOK, AND THE PANEL SAYS SO. The threshold guarding
+     the fit is only worth anything if the n it counts is a count of
+     independent observations. */
+  ok(/Trades in the book/.test(txt), 'the count is labelled as trades, not firings');
+  ok(new RegExp(x.nOverlap + ' further firings? landed inside an open trade').test(txt),
+     `the ${x.nOverlap} set aside are disclosed rather than quietly dropped`);
+  ok(/SEQUENTIAL BOOK/.test(txt) && /one position at a time/.test(txt),
+     'and the panel names what it measured over');
+  ok(/not independent/.test(txt), 'saying why that is the right population to measure on');
+  ok(new RegExp('maximum over a sample of ' + x.nWin).test(txt)
+     && new RegExp('not ' + (x.nWin + x.nOverlap) + ' firings').test(txt),
+     'the fitted stop states the sample it is a maximum over, and what it is NOT');
 
   ok(!/NaN|undefined|Infinity/.test(txt), 'and nothing renders as NaN, undefined or Infinity');
 

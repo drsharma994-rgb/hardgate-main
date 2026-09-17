@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v791',
-  pack: 'the 80PERCENT tab measures how far its trades actually travelled — every resolved firing now carries its worst and best excursion, so the tab can finally ask whether the spec\u2019s 4.00 ATR stop was ever the thing being measured, and say how tight the honest answer is biased',
+  version: 'hg-v792',
+  pack: 'the 80PERCENT tab counts the trades a desk could have held instead of the times the pattern printed — a firing that lands inside an open trade is marked, kept off the measurements, and told what it would mean to take; and every timestamp stops printing itself twice at offset zero',
   built: '2026-09-17T00:00:00Z'
 };
 
