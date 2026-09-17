@@ -2807,6 +2807,65 @@ function watchLineHtml(sig){
    inside the window is not knowable in advance, but the window itself is. */
 /* The panel the whole tab was missing: what is one candle away, what would
    trip it, and when that candle closes — in the reader's own clock. */
+/* ---------------------------------------------------------------------
+   AN ARMED ROW THE ARITHMETIC WOULD REFUSE IS A WAIT NOT WORTH SITTING
+
+   hg-v790 stopped the SETUPS panel counting a fired setup this tab has
+   already computed cannot pay at the reader's venue. The forward-looking
+   panel kept doing it. It printed the same cost line on every armed row —
+   the round trip, the share of the target, the expectancy at the claimed
+   rate — and then counted the row in "3 ARMED" regardless.
+
+   That is the more expensive half of the error. A fired setup you decline
+   costs a glance. An armed row is something a reader WAITS for: the panel
+   sorts by how soon the candle closes precisely so it can be sat on, and
+   on the session-gated rungs the wait can be most of a day. Telling
+   somebody to watch a level for five hours for a trade the page has
+   already priced as unpayable is not a small thing to get wrong.
+
+   The verdict is the rung's own — the armed estimate uses that rung's
+   current ATR and the supplied geometry, which is exactly what its
+   breakeven was computed from. Nothing new is calculated here; the number
+   already on the row is simply allowed to count.
+
+   NOT A FILTER. The row still renders, marked, for the same reason a
+   refused setup still renders: a row that vanishes is one a reader asks
+   about, and "armed but it cannot pay here" is a fact about the VENUE
+   worth learning, not a reason to hide the mechanic.
+   --------------------------------------------------------------------- */
+function hg80ArmedVerdict(a){
+  return hg80CostVerdict(a && a.rung ? a.rung.be : null);
+}
+
+function hg80ArmedPays(a){
+  var k = hg80ArmedVerdict(a).key;
+  /* 'unknown' makes no claim — an unread venue is not a refusal */
+  return !(k === 'gone' || k === 'negative');
+}
+
+function hg80ArmedSplit(rows){
+  var pays = [], no = [], i;
+  for (i = 0; i < (rows || []).length; i++){
+    (hg80ArmedPays(rows[i]) ? pays : no).push(rows[i]);
+  }
+  return { pays: pays, no: no };
+}
+
+/* the headline sentence, counted rather than asserted */
+function armedPayNoteHtml(split, venue){
+  var n = split.no.length, y = split.pays.length;
+  if (!n) return '';
+  return '<div class="note warn" style="margin-top:4px"><b>' + n + ' of these '
+    + (n === 1 ? 'is' : 'are') + ' not worth waiting for at <b>' + esc(venue || 'this venue')
+    + '</b>.</b> The round trip would take enough of the target that the trade returns less than '
+    + 'nothing even at the ' + (P80_CLAIMED * 100).toFixed(0) + '% the strategy claims for '
+    + 'itself — the same arithmetic already printed on each row, now counted. '
+    + (y ? '<b>' + y + '</b> ' + (y === 1 ? 'is' : 'are') + ' still worth the wait; '
+         + (y === 1 ? 'it is' : 'they are') + ' listed first.'
+        : 'None of them clears it.')
+    + '</div>';
+}
+
 function armedHtml(rungs, livePx){
   var armed = hg80Armed(rungs);
   var arming = hg80Arming(rungs, armed);
@@ -2815,22 +2874,31 @@ function armedHtml(rungs, livePx){
   var nowSec = Math.floor(Date.now() / 1000);
   var h = '<div class="panel" style="border-left:3px solid var(--gold)">'
     + '<h2>WHAT IS COMING <span>'
-    + armed.length + ' armed · ' + arming.length + ' one step behind</span></h3>';
+    + armed.length + ' armed · ' + arming.length + ' one step behind</span></h2>';
 
   h += sideCountHtml(armed, arming);
 
+  var vn = __p.venue ? __p.venue.venue : null;
+
   if (armed.length){
+    var aSplit = hg80ArmedSplit(armed);
     h += '<div class="note" style="margin-top:6px"><b>ARMED — ONE CANDLE AWAY.</b> Three of the '
       + 'four conditions hold on the last closed candle. Only the candle\'s own direction is '
-      + 'outstanding, and it is decided at the close named on each row.</div>';
-    h += bandBlocksHtml(armed, function(x){ return armedRowHtml(x, livePx); });
+      + 'outstanding, and it is decided at the close named on each row.</div>'
+      + armedPayNoteHtml(aSplit, vn);
+    /* worth the wait first; the rest keep their soonest-first order within
+       each group, which is what hg80Armed already sorted them into */
+    h += bandBlocksHtml(aSplit.pays.concat(aSplit.no),
+                        function(x){ return armedRowHtml(x, livePx); });
   }
 
   if (arming.length){
+    var gSplit = hg80ArmedSplit(arming);
     h += '<div class="note" style="margin-top:8px"><b>ONE STEP BEHIND.</b> These need the candle '
       + '<i>and</i> one more thing — an RSI level, or the session clock. Both move on their own, '
-      + 'so what is outstanding is written out with the distance attached.</div>';
-    h += bandBlocksHtml(arming, armingRowHtml);
+      + 'so what is outstanding is written out with the distance attached.</div>'
+      + armedPayNoteHtml(gSplit, vn);
+    h += bandBlocksHtml(gSplit.pays.concat(gSplit.no), armingRowHtml);
   }
 
   h += '<div class="p80-caveat" style="margin-top:12px">'
@@ -2882,6 +2950,19 @@ function bandBlocksHtml(list, rowFn){
   return h;
 }
 
+/* The mark on a row the arithmetic would refuse. Phrased as what the wait
+   is worth, because that is the decision in front of a reader looking at
+   a countdown. */
+function armedPayStampHtml(a){
+  if (hg80ArmedPays(a)) return '';
+  var v = hg80ArmedVerdict(a);
+  return '<div style="margin-top:4px"><span class="stamp veto">NOT WORTH WAITING FOR '
+    + 'AT THIS VENUE</span> <span class="note">even if this candle closes the right way, the '
+    + 'round trip takes ' + (v.share * 100).toFixed(0) + '% of the target'
+    + (v.key === 'gone' ? ' — the whole of it' : '')
+    + '. The cost line below is that arithmetic in full.</span></div>';
+}
+
 function armedRowHtml(a, livePx){
   var long = a.side === 'long';
   var closesAt = isFinite(fin(a.closesIn))
@@ -2895,6 +2976,7 @@ function armedRowHtml(a, livePx){
     + '</b>, which is about where this one opened — so watch that level.</div>'
     + '<div class="p80-when">Candle closes in <b>' + hg80DurTxt(a.closesIn) + '</b>'
     + (closesAt ? '<span class="dim">at ' + esc(closesAt) + '</span>' : '') + '</div>'
+    + armedPayStampHtml(a)
     + armedLiveHtml(a, livePx);
 
   /* "is-est" greys the figures: these are worked from the last close and the
@@ -4603,6 +4685,11 @@ W.hg80AutoSet        = hg80AutoSet;
 W.hg80AutoValid      = hg80AutoValid;
 W.hg80LivePlan       = hg80LivePlan;
 W.hg80LiveBe         = hg80LiveBe;
+W.hg80ArmedPays      = hg80ArmedPays;
+W.hg80ArmedSplit     = hg80ArmedSplit;
+W.hg80ArmedVerdict   = hg80ArmedVerdict;
+W.armedPayStampHtml  = armedPayStampHtml;
+W.armedPayNoteHtml   = armedPayNoteHtml;
 W.reprintHtml        = reprintHtml;
 W.HG_P80_REPRICE_MIN_FRAC = P80_REPRICE_MIN_FRAC;
 W.hg80AutoCtlHtml    = hg80AutoCtlHtml;

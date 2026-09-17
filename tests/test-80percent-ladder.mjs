@@ -2533,6 +2533,78 @@ console.log('\n== the ledger is read at the bar for the number of things being t
   }
 }
 
+console.log('\n== an armed row the arithmetic would refuse is a wait not worth sitting ==');
+{
+  /* hg-v790 stopped the SETUPS panel counting a fired setup this tab has
+     already priced as unpayable. The forward-looking panel kept doing it:
+     the same cost line on every armed row, and then "3 ARMED" regardless.
+
+     That is the more expensive half. A fired setup you decline costs a
+     glance. An armed row is something a reader WAITS for — the panel sorts
+     by how soon the candle closes precisely so it can be sat on, and on
+     the session-gated rungs that wait is most of a day. */
+  const rungs = ctx.HG_P80_LADDER.map(d =>
+    ctx.hg80ScanTf(series(d.bars, { tfSec: d.sec, endHour: 15, tail: 1 }), d, ctx.hg80VenueRt()));
+  const armed = ctx.hg80Armed(rungs);
+  ok(armed.length > 0, `the fixture arms ${armed.length} rows`);
+
+  const split = ctx.hg80ArmedSplit(armed);
+  ok(split.pays.length + split.no.length === armed.length,
+     'every armed row lands on one side of the split and none is dropped');
+  ok(split.no.length > 0,
+     `${split.no.length} of them could not pay at XM even if the candle closed right`);
+
+  /* THE VERDICT IS THE RUNG'S OWN — nothing new is computed here, the
+     number already printed on the row is simply allowed to count */
+  for (const a of armed){
+    ok(ctx.hg80ArmedVerdict(a).key === ctx.hg80CostVerdict(a.rung.be).key,
+       `${a.rung.def.tf}: the armed verdict is the rung's own cost verdict, not a second opinion`);
+  }
+
+  /* 'unknown' MAKES NO CLAIM. An unread venue is not a refusal. */
+  ok(ctx.hg80ArmedPays({ rung: { be: null } }) === true,
+     'an unpriced rung is not refused — the tab cannot say a venue it never read is too dear');
+  ok(ctx.hg80ArmedVerdict({}).key === 'unknown' && ctx.hg80ArmedPays({}) === true,
+     'and a row with no rung at all makes no claim either way');
+
+  /* NOT A FILTER. The row still renders, marked — a row that vanishes is
+     one a reader asks about, and "armed but unpayable HERE" is a fact
+     about the venue worth learning. */
+  ok(ctx.armedPayStampHtml(split.no[0]) !== '', 'a refused row is marked');
+  const st = String(ctx.armedPayStampHtml(split.no[0])).replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ');
+  ok(/NOT WORTH WAITING FOR AT THIS VENUE/.test(st),
+     'in terms of the wait, which is the decision in front of someone watching a countdown');
+  ok(/even if this candle closes the right way/.test(st),
+     'making clear the refusal is not about whether it will fire');
+  ok(/round trip takes \d+% of the target/.test(st), 'with the number that decided it');
+  if (split.pays.length){
+    ok(ctx.armedPayStampHtml(split.pays[0]) === '', 'and a row that can pay carries no stamp');
+  }
+
+  /* THE HEADLINE COUNTS IT */
+  const note = String(ctx.armedPayNoteHtml(split, 'XM')).replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ');
+  ok(new RegExp('^\\s*' + split.no.length + ' of these').test(note),
+     `the panel says how many are not worth waiting for (${split.no.length})`);
+  ok(/XM/.test(note), 'naming the venue, because it is a fact about the venue');
+  ok(/now counted/.test(note),
+     'and saying plainly that this is the arithmetic already on the rows, not a new rule');
+  ok(ctx.armedPayNoteHtml({ pays: armed, no: [] }, 'XM') === '',
+     'with nothing to say when every row clears');
+
+  /* PAYERS FIRST. The panel sorts by soonest close so a reader can sit on
+     it; a countdown that cannot pay should not be the one at the top. */
+  ok(/aSplit\.pays\.concat\(aSplit\.no\)/.test(CODE)
+     && /gSplit\.pays\.concat\(gSplit\.no\)/.test(CODE),
+     'both tiers list what can pay ahead of what cannot');
+
+  /* and the soonest-first order inside each group survives the split */
+  const secs = split.no.map(a => a.closesIn).filter(x => isFinite(x));
+  ok(secs.every((v, i) => i === 0 || v >= secs[i - 1]),
+     'the refused group is still ordered soonest-first, not reshuffled');
+}
+
 console.log('\n== the trade is priced at the fill you can actually get ==');
 {
   /* THE PLAN'S ENTRY IS THE CLOSE OF THE CANDLE THAT FIRED IT. By the time
@@ -3158,11 +3230,21 @@ console.log('\n== the markup it emits is well formed ==');
      an assertion that reads innerHTML with a regex does not care whether a
      browser could parse it. */
   const secOf = { '5m': 300, '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400 };
-  const bars = (tfSec, n) => {
+  /* TWO SHAPES, because the panels they produce are different markup.
+     `fired` ends on an up-close and trips the trigger; `armed` ends on a
+     down-close, so the trigger is the only outstanding condition and the
+     WHAT IS COMING panel renders instead. That panel opened <h2> and
+     closed </h3>, and this block never once rendered it — the guard was
+     sound and was being pointed at markup that could not contain the bug. */
+  const bars = (tfSec, n, shape) => {
     const out = [], end = Math.floor(Date.now() / 1000 / tfSec) * tfSec;
     let px = 4350;
     for (let i = n - 1; i >= 0; i--){
-      const o = px, c = o + (i > 8 ? 1.15 : (i > 1 ? -2.4 : 1.35));
+      let d;
+      if (i > 8) d = 1.15;                                   /* the trend */
+      else if (i > 1) d = -2.4;                              /* the pullback */
+      else d = (shape === 'armed' && i === 0) ? -0.05 : 1.35; /* trigger, or not */
+      const o = px, c = o + d;
       out.push({ t: end - i * tfSec, o, h: Math.max(o, c) + 0.4, l: Math.min(o, c) - 0.4, c, v: 1 });
       px = c;
     }
@@ -3173,9 +3255,20 @@ console.log('\n== the markup it emits is well formed ==');
     await new Promise(r => setTimeout(r, 0));
   };
 
+  let sawArmed = false;
+  for (const shape of ['fired', 'armed'])
   for (const view of ['simple', 'full']){
     for (const k of Object.keys(store)) delete store[k];
-    ctx.hgOgFetchRows = (tf, n) => Promise.resolve({ rows: bars(secOf[tf], n), source: 'fixture' });
+    /* the armed shape uses `series`, whose bars are anchored at a FIXED
+       hour inside the 13:00-18:00 window. `bars` anchors to Date.now(), so
+       whether the session condition holds depends on the hour the suite
+       runs at — fine for a shape that only has to render, useless for one
+       that has to arm. */
+    ctx.hgOgFetchRows = (tf, n) => Promise.resolve({
+      rows: shape === 'armed'
+        ? series(n, { tfSec: secOf[tf], endHour: 15, tail: 1 })
+        : bars(secOf[tf], n, shape),
+      source: 'fixture' });
     ctx.hgGoldLiveSpot = undefined;
     const tab = (ctx.HG_tabs || []).find(t => t && t.id === '80percent');
     const node = mkEl('div');
@@ -3184,28 +3277,61 @@ console.log('\n== the markup it emits is well formed ==');
     press(node, 'data-p80-view', view);
     await settle();
     const html = String(node.querySelector('#p80Body').innerHTML);
+    if (/WHAT IS COMING/.test(html)) sawArmed = true;
 
     /* no attribute may sit outside a tag, and no tag may carry a stray quote
        immediately before its '>' */
     ok(!/"\s+[a-z-]+"\s*>/.test(html),
-       `${view}: no orphaned attribute value before a tag close`);
+       `${shape}/${view}: no orphaned attribute value before a tag close`);
     ok(!/<button[^>]*"\s*>/.test(html.replace(/="[^"]*"/g, '=x')),
-       `${view}: every button tag closes cleanly, with no dangling quote`);
+       `${shape}/${view}: every button tag closes cleanly, with no dangling quote`);
 
-    /* tags balance */
-    const opens = (html.match(/<div\b/g) || []).length;
-    const closes = (html.match(/<\/div>/g) || []).length;
-    ok(opens === closes, `${view}: <div> tags balance (${opens} open, ${closes} close)`);
-    const bo = (html.match(/<button\b/g) || []).length;
-    const bc = (html.match(/<\/button>/g) || []).length;
-    ok(bo === bc, `${view}: <button> tags balance (${bo}/${bc})`);
+    /* EVERY PAIRED TAG BALANCES, not just the two that were named here.
+       This counted <div> and <button> and nothing else, so the ARMED
+       panel opened <h2> and closed </h3> for versions — in the one panel
+       the forward-looking half of the tab lives in — and 514 green
+       assertions had nothing to say about it. The tag list is derived
+       from the markup itself, so a tag the tab starts using later is
+       covered the day it appears. */
+    const VOID = /^(br|hr|img|input|meta|link|source|track|wbr|area|base|col|embed|param)$/;
+    const seen = new Map();
+    for (const m of html.matchAll(/<\/?([a-z][a-z0-9]*)\b/gi)){
+      const tag = m[1].toLowerCase();
+      if (VOID.test(tag)) continue;
+      const rec = seen.get(tag) || { open: 0, close: 0 };
+      if (m[0][1] === '/') rec.close++; else rec.open++;
+      seen.set(tag, rec);
+    }
+    ok(seen.size > 4, `${shape}/${view}: the markup uses ${seen.size} distinct tags, so there is something `
+       + 'to balance');
+    for (const [tag, rec] of seen){
+      ok(rec.open === rec.close,
+         `${shape}/${view}: <${tag}> balances (${rec.open} open, ${rec.close} close)`);
+    }
+    /* and a close must never name a DIFFERENT tag than the one that opened
+       — equal counts alone would let <h2>…</h3> and <h3>…</h2> cancel out */
+    const stack = [], mismatched = [];
+    for (const m of html.matchAll(/<(\/?)([a-z][a-z0-9]*)\b[^>]*?(\/?)>/gi)){
+      const tag = m[2].toLowerCase();
+      if (VOID.test(tag) || m[3] === '/') continue;
+      if (m[1] === '/'){
+        const top = stack.pop();
+        if (top !== tag) mismatched.push('</' + tag + '> closed <' + (top || 'nothing') + '>');
+      } else stack.push(tag);
+    }
+    ok(mismatched.length === 0,
+       `${shape}/${view}: every close matches the tag it closes (${mismatched.slice(0, 3).join('; ') || 'ok'})`);
+    ok(stack.length === 0, `${shape}/${view}: nothing is left open (${stack.slice(0, 3).join(', ')})`);
 
     /* every class attribute is a plain space-separated list */
     for (const m of html.matchAll(/class="([^"]*)"/g)){
-      ok(!/[<>"]/.test(m[1]), `${view}: class "${m[1]}" holds no markup`);
+      ok(!/[<>"]/.test(m[1]), `${shape}/${view}: class "${m[1]}" holds no markup`);
     }
-    ok(!/NaN|undefined/.test(html), `${view}: nothing renders as NaN or undefined`);
+    ok(!/NaN|undefined/.test(html), `${shape}/${view}: nothing renders as NaN or undefined`);
   }
+  ok(sawArmed,
+     'and one of those fixtures really did render the WHAT IS COMING panel — a guard that never '
+     + 'sees a panel cannot vouch for it');
 }
 
 console.log('\n== the tab reads back the ledger it has been writing to ==');

@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v796',
-  pack: 'the 80PERCENT tab prices every setup at the fill you can actually get — a card that has drifted half its target is re-costed on what is left, which can take the bar from 84% to 92% and hand the whole remaining target to the spread, and that now decides the count instead of a sentence admitting it',
+  version: 'hg-v797',
+  pack: 'the 80PERCENT tab stops telling you to wait for trades it has already priced as unpayable — the cost arithmetic printed on every armed row since the ladder shipped now decides whether that countdown is worth sitting on, and the panel it lives in no longer closes an h2 with an h3',
   built: '2026-09-17T00:00:00Z'
 };
 
