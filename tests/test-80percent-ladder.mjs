@@ -1311,6 +1311,112 @@ console.log('\n== the tab says WHEN it can fire, and refuses to say WHETHER ==')
   ok(/not a forecast/.test(CODE), 'and it says so where a reader might assume otherwise');
 }
 
+console.log('\n== ARMED: the forward-looking half that was missing ==');
+{
+  /* "A setup exists once a candle closes, not before" was true and was not
+     the whole truth. THREE of the four conditions are already settled on the
+     last closed candle — trend, pullback, session. Only the trigger waits.
+     A rung with the other three holding is one candle away, and what would
+     trip it can be stated exactly. */
+
+  const B = ctx.hg80SecsToBarClose;
+  for (const sec of [300, 900, 3600, 14400, 86400]){
+    const t = 1789000000;
+    const left = B(sec, t);
+    ok(left > 0 && left <= sec, `${sec}s bars: ${left}s left, inside (0, ${sec}]`);
+    ok((Math.floor(t / sec) * sec) + sec === t + left, 'and it lands exactly on the bar boundary');
+  }
+  ok(B(3600, 1789000000 - (1789000000 % 3600)) === 3600,
+     'a bar that just opened has a full period left, never zero');
+  ok(B(0, 1) === null && B(3600, NaN) === null, 'nonsense returns null rather than a number');
+
+  /* a fixture that is armed: trend, pullback and session hold, and the last
+     candle closed the WRONG way */
+  const rows = series(280, { tfSec: 900, endHour: 15 });
+  const lastBar = rows[rows.length - 1];
+  lastBar.c = lastBar.o - 0.5;                      /* red close kills the LONG trigger */
+  lastBar.l = Math.min(lastBar.l, lastBar.c - 0.2);
+  const def = { tf: '15m', sec: 900, bars: 280, band: 'scalp' };
+  const out = ctx.hg80ScanTf(rows, def, ctx.hg80VenueRt());
+  const ind = ctx.hg80Indicators(rows);
+  const chk = ctx.hg80SignalAt(rows, ind, rows.length - 1, out.cfg, ctx.hg80Variant('spec'));
+  ok(chk.longChecks.trend && chk.longChecks.pullback && chk.longChecks.session,
+     'the fixture has trend, pullback and session holding for a long');
+  ok(chk.longChecks.trigger === false && chk.dir === null,
+     'and only the candle direction missing, so it did NOT fire');
+
+  const armed = ctx.hg80Armed([out]);
+  ok(armed.length >= 1, `it reports as armed (${armed.length})`);
+  const a = armed.find(x => x.side === 'long');
+  ok(!!a, 'on the long side');
+  ok(a.rung.def.tf === '15m' && !!a.variant.key, 'naming the rung and the mechanic');
+
+  /* the projected levels use the SPEC's own multiples, not a softened pair */
+  ok(near((a.entryEst - a.stopEst) / a.atr, 4.00, 1e-9),
+     'the projected stop is the spec\'s 4.00 x ATR below the level');
+  ok(near((a.targetEst - a.entryEst) / a.atr, 0.75, 1e-9), 'and the target its 0.75 x ATR above');
+  ok(a.closesIn > 0 && a.closesIn <= 900, 'with the countdown to this bar\'s close');
+
+  /* ONLY the trigger may be missing. A rung missing its trend is days away
+     on a 4h chart and calling it "one candle" would be the same flattery as
+     printing the risk:reward upside down. */
+  ok(armed.length > 0, 'there are armed rows to check — otherwise the loop below proves nothing');
+  for (const x of armed){
+    const sc = ctx.hg80Score(x.side === 'long' ? x.sig.longChecks : x.sig.shortChecks);
+    ok(sc.missing.length === 1 && sc.missing[0] === 'trigger',
+       `${x.rung.def.tf} ${x.side} is missing the trigger and nothing else`);
+  }
+  /* and the negative: a series whose trend is against the long side must not
+     produce an armed long however close the other conditions are */
+  const rows2 = series(280, { tfSec: 900, endHour: 15, down: true });
+  const out2 = ctx.hg80ScanTf(rows2, def, ctx.hg80VenueRt());
+  const ind2 = ctx.hg80Indicators(rows2);
+  const c2 = ctx.hg80SignalAt(rows2, ind2, rows2.length - 1, out2.cfg, ctx.hg80Variant('spec'));
+  ok(c2.longChecks.trend === false, 'the downtrend fixture fails the long trend condition');
+  ok(!ctx.hg80Armed([out2]).some(x => x.side === 'long'),
+     'and no armed LONG is reported for it — a rung missing its trend is days away on a 4h '
+     + 'chart, and calling that "one candle" would be the same flattery as printing the '
+     + 'risk:reward upside down');
+  const outOfSession = ctx.hg80ScanTf(series(280, { tfSec: 900, endHour: 4 }), def, ctx.hg80VenueRt());
+  ok(ctx.hg80Armed([outOfSession]).every(x => {
+       const sc = ctx.hg80Score(x.side === 'long' ? x.sig.longChecks : x.sig.shortChecks);
+       return sc.missing.length === 1 && sc.missing[0] === 'trigger';
+     }),
+     'a rung outside its session window is never called armed — the clock is not a candle');
+
+  /* soonest decision first */
+  const many = ctx.hg80Armed([out, outOfSession]);
+  ok(many.every((x, i) => i === 0 || x.closesIn >= many[i - 1].closesIn),
+     'armed rows are ordered by which candle closes first — a 5m bar closing in 90 seconds is '
+     + 'more use than a daily one closing in nine hours');
+}
+
+console.log('\n== the armed panel says what would trip it, and what it does not promise ==');
+{
+  ok(/ARMED — ONE CANDLE AWAY/.test(SRC), 'the panel exists');
+  ok(/Fires if this candle closes/.test(SRC), 'it states the condition that would trip it');
+  ok(/ABOVE' : 'BELOW/.test(SRC), 'in the right direction for each side');
+  ok(/so watch that level/.test(SRC), 'and gives the price to watch');
+  ok(/Candle closes in/.test(SRC), 'with a countdown to the decision');
+  ok(/likely ENTRY/.test(SRC) && /likely STOP LOSS/.test(SRC) && /likely TAKE PROFIT/.test(SRC),
+     'and the three levels, marked LIKELY rather than stated as facts');
+
+  ok(/<b>Armed is not a promise\.<\/b>/.test(SRC), 'the disclaimer is on every armed card');
+  ok(/any of them can drop out before it closes/.test(SRC),
+     'saying the other three conditions are recomputed on the new candle too');
+  /* the sentence is built by concatenation, so it is flattened before
+     matching — a regex that only sees one source line would miss it */
+  const FLAT = SRC.replace(/'\s*\+\s*'/g, '').replace(/\s+/g, ' ');
+  ok(/the real ones are set by whichever candle actually fires/.test(FLAT),
+     'and that the projected levels are not the ones that will be used');
+  ok(/armedHtml\(rungs\);/.test(SRC), 'wired into SIMPLE');
+  const iArmed = SRC.indexOf('h += armedHtml(rungs);');
+  const iSetups = SRC.indexOf('h += simpleSetupsHtml(rungs);');
+  ok(iArmed > 0 && iSetups > 0 && iArmed < iSetups,
+     'and rendered ABOVE the finished setups — what might happen next is worth more than what '
+     + 'already did');
+}
+
 console.log('\n== and it still refuses to invent a rate from what it resolved ==');
 {
   ok(!/winRate|hitRate/.test(CODE), 'no win rate is computed anywhere in the code');

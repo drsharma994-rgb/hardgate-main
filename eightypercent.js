@@ -451,6 +451,84 @@ function hg80SessionLocalTxt(){
   } catch (e){ return ''; }
 }
 
+/* ---------------------------------------------------------------------
+   WHAT IS ARMED, AND WHAT WOULD TRIP IT
+
+   I have been answering "show me forthcoming setups" with "a setup exists
+   once a candle closes, not before". That is true and it was not the whole
+   truth, and the gap mattered.
+
+   Of the four conditions, THREE are already settled on the last closed
+   candle. The trend is known. The RSI pullback is known. The session is a
+   clock. Only the trigger — did this candle close the right way — is decided
+   at the close of the bar that has not finished yet.
+
+   So a rung with trend, pullback and session all holding is ARMED: one
+   candle from firing, and the thing that would fire it is precisely stated.
+   A long needs a close above the bar's open; the open of the bar now forming
+   is a price you can read off a chart. That is not a prediction, it is the
+   condition written out.
+
+   What is NOT promised: the trend and the RSI are recomputed on the new bar
+   too, and either can drop out. Armed means one condition away on what is
+   known now, not a trade that is going to happen. Every line says so.
+   --------------------------------------------------------------------- */
+
+/* Seconds until the bar now forming closes. Bars align to multiples of the
+   timeframe from the epoch, which is the same rule the fetchers use. */
+function hg80SecsToBarClose(tfSec, nowSec){
+  var tf = fin(tfSec), t = fin(nowSec);
+  if (!(tf > 0) || !isFinite(t)) return null;
+  return (Math.floor(t / tf) + 1) * tf - t;
+}
+
+/* Every rung that is one CANDLE-DIRECTION away, across both mechanics.
+
+   Only the trigger may be missing. A rung missing its trend is not armed in
+   any useful sense — that is days of work on a 4h chart, and calling it
+   "nearly there" would be the same flattery the ratio-printed-backwards bug
+   was. */
+function hg80Armed(rungs){
+  var out = [], i, vi, si;
+  var sides = ['long', 'short'];
+  var nowSec = Math.floor(Date.now() / 1000);
+  for (i = 0; i < rungs.length; i++){
+    var r = rungs[i];
+    if (!r.ok || !r.res || !r.res.ind || !r.rows || !r.rows.length) continue;
+    var last = r.rows.length - 1;
+    for (vi = 0; vi < P80_VARIANTS.length; vi++){
+      var v = P80_VARIANTS[vi];
+      var sg = hg80SignalAt(r.rows, r.res.ind, last, r.cfg, v);
+      if (!sg) continue;
+      for (si = 0; si < sides.length; si++){
+        var side = sides[si];
+        var ch = side === 'long' ? sg.longChecks : sg.shortChecks;
+        var sc = hg80Score(ch);
+        /* armed = everything but the trigger */
+        if (sc.missing.length !== 1 || sc.missing[0] !== 'trigger') continue;
+        /* the bar now forming opens where the last one closed, near enough
+           to name the level a reader should watch — and it is stated as the
+           last close, not passed off as the live open */
+        var lvl = fin(sg.close);
+        var atr = fin(sg.atr);
+        out.push({
+          rung: r, variant: v, side: side, sig: sg,
+          level: lvl, atr: atr,
+          entryEst: lvl,
+          stopEst: side === 'long' ? lvl - P80_SL_ATR * atr : lvl + P80_SL_ATR * atr,
+          targetEst: side === 'long' ? lvl + P80_TP_ATR * atr : lvl - P80_TP_ATR * atr,
+          closesIn: hg80SecsToBarClose(r.cfg.tfSec, nowSec)
+        });
+        break;     /* tightest variant that is armed on this side wins */
+      }
+    }
+  }
+  /* soonest decision first — a 5m bar closing in 90 seconds is more use than
+     a daily one closing in nine hours */
+  out.sort(function(a, b){ return fin(a.closesIn) - fin(b.closesIn); });
+  return out;
+}
+
 function hg80SecsToSession(nowSec){
   var t = fin(nowSec);
   if (!isFinite(t)) return null;
@@ -1368,6 +1446,51 @@ function simpleCardHtml(sig, rung, state){
 /* When this strategy CAN produce a trade, in the reader's own clock. It is
    the only schedulable thing about it: whether the four conditions line up
    inside the window is not knowable in advance, but the window itself is. */
+/* The panel the whole tab was missing: what is one candle away, what would
+   trip it, and when that candle closes — in the reader's own clock. */
+function armedHtml(rungs){
+  var armed = hg80Armed(rungs);
+  if (!armed.length) return '';
+  var h = '<div class="panel" style="margin-top:8px;border-left:4px solid #0ea5e9">'
+    + '<h3 style="color:#0ea5e9">ARMED — ONE CANDLE AWAY <span>' + armed.length
+    + ' waiting on the close</span></h3>';
+
+  for (var i = 0; i < armed.length; i++){
+    var a = armed[i], long = a.side === 'long';
+    var closesAt = isFinite(fin(a.closesIn))
+      ? hg80WhenTxt(Math.floor(Date.now() / 1000) + fin(a.closesIn), false) : '';
+    h += '<div style="margin-top:8px;padding:6px 8px;border:1px solid #334155;border-radius:4px">'
+      + '<b style="color:' + (long ? '#10b981' : '#ef4444') + ';font-size:1.1em">'
+      + (long ? 'BUY' : 'SELL') + ' XAUUSD ' + esc(a.rung.def.tf) + '</b> '
+      + variantChipHtml({ variant: a.variant.key })
+      + '<div style="margin-top:3px"><b>Fires if this candle closes '
+      + (long ? 'ABOVE' : 'BELOW') + ' its open.</b> '
+      + 'The last one closed at <b>' + num(a.level) + '</b>, which is about where this one '
+      + 'opened — so watch that level.</div>'
+      + '<div class="note" style="margin-top:3px">Candle closes in <b>'
+      + hg80DurTxt(a.closesIn) + '</b>' + (closesAt ? ' — at <b>' + esc(closesAt) + '</b>' : '')
+      + '</div>'
+      + '<table style="border:0;margin:4px 0"><tbody>'
+      + '<tr><td style="padding:2px 10px 2px 0">likely ENTRY</td>'
+      + '<td class="hg-num" style="font-weight:bold;padding:2px 10px 2px 0">' + num(a.entryEst) + '</td></tr>'
+      + '<tr><td style="padding:2px 10px 2px 0">likely STOP LOSS</td>'
+      + '<td class="hg-num" style="font-weight:bold;padding:2px 10px 2px 0">' + num(a.stopEst) + '</td>'
+      + '<td class="hg-num note">' + num(Math.abs(a.entryEst - a.stopEst)) + ' away</td></tr>'
+      + '<tr><td style="padding:2px 10px 2px 0">likely TAKE PROFIT</td>'
+      + '<td class="hg-num" style="font-weight:bold;padding:2px 10px 2px 0">' + num(a.targetEst) + '</td>'
+      + '<td class="hg-num note">' + num(Math.abs(a.entryEst - a.targetEst)) + ' away</td></tr>'
+      + '</tbody></table>'
+      + '<div class="note warn" style="padding:3px 6px;border-left:3px solid #b45309">'
+      + '<b>Armed is not a promise.</b> Three of the conditions hold on the last CLOSED candle: '
+      + 'the trend, the RSI pullback and the session. All three are recomputed on the new candle '
+      + 'and any of them can drop out before it closes. The levels above are worked from that '
+      + 'last close and the current ATR — the real ones are set by whichever candle actually '
+      + 'fires.</div>'
+      + '</div>';
+  }
+  return h + '</div>';
+}
+
 function sessionClockHtml(rungs){
   var usable = rungs.filter(function(r){ return r.ok; });
   if (!usable.length) return '';
@@ -1428,7 +1551,11 @@ function simpleSetupsHtml(rungs){
   /* nothing to act on. Say that in one sentence, then show the last one that
      DID fire on each rung, clearly marked finished — a card labelled "closed"
      is honest; an empty panel just gets asked about again. */
-  h += '<div class="note warn"><b>Nothing to act on right now.</b> ';
+  var armedNow = hg80Armed(rungs);
+  h += '<div class="note warn"><b>Nothing to act on right now.</b> '
+    + (armedNow.length ? '<b>' + armedNow.length + ' setup'
+        + (armedNow.length === 1 ? ' is' : 's are') + ' armed above — one candle from firing.</b> '
+        : '');
   var nowSec = Math.floor(Date.now() / 1000);
   var toOpen = hg80SecsToSession(nowSec);
   var gated = usable.filter(function(r){ return r.cfg.session !== false && toOpen > 0; });
@@ -2073,6 +2200,7 @@ function render(rungs, venue, recNotes, basis){
       wireViewButtons();
       return;
     }
+    h += armedHtml(rungs);
     h += simpleSetupsHtml(rungs);
     h += sessionClockHtml(rungs);
     h += '<div class="note" style="margin-top:8px">Priced at <b>'
@@ -2395,6 +2523,8 @@ W.hg80UngatedRungs   = hg80UngatedRungs;
 W.hg80FocusText      = hg80FocusText;
 W.HG_P80_MISS_COST   = P80_MISS_COST;
 W.hg80SecsToSession  = hg80SecsToSession;
+W.hg80SecsToBarClose = hg80SecsToBarClose;
+W.hg80Armed          = hg80Armed;
 W.hg80WhenTxt        = hg80WhenTxt;
 W.hg80TzName         = hg80TzName;
 W.hg80TzShort        = hg80TzShort;

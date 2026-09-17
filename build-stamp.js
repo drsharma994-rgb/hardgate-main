@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v780',
-  pack: 'every time on 80PERCENT is now in the reader own zone with UTC beside it, and the tab says when the window opens without pretending to know whether a setup will appear in it',
+  version: 'hg-v781',
+  pack: 'ARMED — 80PERCENT now shows what is one candle from firing, the level that would trip it and when that candle closes, because three of the four conditions are already settled',
   built: '2026-09-17T00:00:00Z'
 };
 
