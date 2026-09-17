@@ -240,7 +240,7 @@ var P80_LADDER = [
    "what is the trade". Everything still exists; it is one click away instead
    of first. */
 var __p = { ui: null, busy: false, ranOnce: false, last: null, focus: null, view: 'simple',
-            autoTimer: null, autoEl: null };
+            autoTimer: null, autoEl: null, riskCash: null };
 
 /* the focus as an array, whatever it is stored as */
 function hg80FocusList(){
@@ -642,6 +642,56 @@ function bookChipHtml(sig){
    direction, because a reader who only ever hears the bad half learns to
    discount the good half too. */
 var P80_REPRICE_MIN_FRAC = 0.02;   /* below this the drift is a rounding difference */
+
+/* THE SIZE LINE, and the measured reason it is not the whole story.
+
+   The stop distance is whichever one the reader can actually get — the
+   live one once price is at or past the entry, the card's while it is
+   still waiting. Same asymmetry hg80Quality uses, for the same reason:
+   sizing to a fill nobody is offering is a number that cannot be filled. */
+function sizeHtml(sig, q, slip){
+  var cash = hg80RiskCash();
+  if (!(cash > 0)) return '';
+  var lp = q && q.live;
+  var useLive = !!(lp && !lp.better);
+  var dist = useLive ? lp.risk
+    : (sig && sig.plan ? Math.abs(fin(sig.plan.entry) - fin(sig.plan.stop)) : NaN);
+  var sz = hg80Size(cash, dist);
+  if (!sz) return '';
+
+  var h = '<div class="note" style="margin-top:4px;padding:3px 6px;border-left:3px solid '
+    + 'var(--gold)"><b>SIZE:</b> risking <b>$' + num(cash) + '</b> against a <b>' + num(sz.stopDist)
+    + '</b> stop is <b>' + sz.oz.toFixed(2) + ' oz</b> ('
+    + sz.lots.toFixed(3) + ' lots at ' + P80_OZ_PER_LOT + " oz). That is arithmetic on your own "
+    + 'number, not a view about gold'
+    + (useLive ? ' — sized to the stop from the price you can get NOW, not from the card\'s '
+                 + 'entry' : '')
+    + '. ';
+
+  /* THE MEASURED CAVEAT. A stop is only worth exactly your risk if the
+     fill is AT it. */
+  if (slip && slip.stops > 0){
+    if (slip.gapped > 0){
+      h += '<b style="color:var(--veto)">A gap through the stop costs more.</b> In the bars on '
+        + 'screen <b>' + slip.gapped + ' of ' + slip.stops + '</b> stop-out'
+        + (slip.stops === 1 ? '' : 's') + ' filled at a gapped open rather than at the level'
+        + (isFinite(slip.worstR)
+            ? ', and the worst cost <b>' + slip.worstR.toFixed(2) + 'R</b> — <b>$'
+              + num(cash * slip.worstR) + '</b> at this size, not $' + num(cash)
+            : '')
+        + '.';
+    } else {
+      h += 'None of the ' + slip.stops + ' stop-out' + (slip.stops === 1 ? '' : 's')
+        + ' in this window gapped, so every one of them cost what it said. That is this window, '
+        + 'not a promise about the next one.';
+    }
+  } else {
+    h += '<span class="dim">Nothing has stopped out in the bars on screen, so how often a gap '
+      + 'beats the stop here is not measured — and a gapped fill costs more than this number '
+      + 'says.</span>';
+  }
+  return h + '</div>';
+}
 
 function reprintHtml(q, venue){
   if (!q || !q.live) return '';
@@ -1586,6 +1636,126 @@ function hg80Resolve(rows, i, plan, horizon){
   return done({ outcome: 'expired', exit: fin(last.c), rMultiple: rMul(fin(last.c)),
            bars: Math.min(horizon, rows.length - 1 - i), exitT: fin(last.t),
            gapped: false, ambiguous: false });
+}
+
+/* ---------------------------------------------------------------------
+   HOW MUCH TO BUY, AND THE ONE REASON THAT NUMBER LIES
+
+   Every card on this tab has carried an entry, a stop and a target since
+   the ladder shipped, and never once a size. That is the most-used
+   arithmetic on a trading desk and the reader has been doing it by hand
+   on every card.
+
+   It is also the one number here that needs no evidence at all. Size is
+   not a claim about gold: it is risk-cash divided by the stop distance,
+   exact, from inputs the reader supplied. Nothing about it depends on
+   whether the strategy works.
+
+   EXCEPT IN ONE PLACE, AND THE TAB HAS THE DATA FOR IT. "Your stop is 10.16
+   away, so this size loses exactly $100" is true only if the fill is AT the
+   stop. hg80Resolve has flagged gapped exits since it was written — a bar
+   that OPENS beyond the level fills there, not at it, and costs MORE than
+   1R — and that flag has been shown per row and never counted. So the size
+   line carries the measured gap rate from the bars on screen and what the
+   worst one would have cost at this size. A sizing number without that is
+   the comfortable half of the truth.
+
+   LOTS ARE A CONVERSION, NOT AN INSTRUCTION. A standard XAUUSD lot is 100
+   troy ounces; what a particular broker will actually accept as a minimum,
+   and what margin it wants, this tab does not know and does not guess.
+   --------------------------------------------------------------------- */
+var P80_OZ_PER_LOT = 100;
+
+/* THE READER'S OWN RISK PER TRADE, IN CASH. One number, not an account
+   size and a percent: a percent needs an account balance this tab has no
+   business holding, and "what I am willing to lose on one trade" is the
+   figure a desk actually works to. Nothing is stored but that number, and
+   0 means the reader has not said. */
+var P80_RISK_LS_KEY = 'hg_p80_risk_cash_v1';
+var P80_RISK_MAX = 1e9;
+var __p80RiskInit = false;
+
+function hg80RiskValid(v){
+  var n;
+  if (typeof v === 'number') n = v;
+  else if (typeof v === 'string' && /^\s*\d+(\.\d+)?\s*$/.test(v)) n = Number(v);
+  else return null;
+  if (!isFinite(n) || n < 0 || n > P80_RISK_MAX) return null;
+  return n;
+}
+
+function hg80RiskEnsure(){
+  if (__p80RiskInit) return __p.riskCash;
+  __p80RiskInit = true;
+  var got = null;
+  try {
+    if (W.localStorage && typeof W.localStorage.getItem === 'function'){
+      got = hg80RiskValid(W.localStorage.getItem(P80_RISK_LS_KEY));
+    }
+  } catch (e){ got = null; }
+  __p.riskCash = (got == null) ? 0 : got;
+  return __p.riskCash;
+}
+
+function hg80RiskCash(){
+  return (__p.riskCash == null) ? hg80RiskEnsure() : __p.riskCash;
+}
+
+function hg80RiskSet(v){
+  var n = hg80RiskValid(v);
+  if (n == null) return hg80RiskCash();
+  __p80RiskInit = true;
+  __p.riskCash = n;
+  try {
+    if (W.localStorage && typeof W.localStorage.setItem === 'function'){
+      W.localStorage.setItem(P80_RISK_LS_KEY, String(n));
+    }
+  } catch (e){}
+  /* a risk change is a RE-RENDER, not a re-fetch — the bars in hand size
+     the same trade either way */
+  try {
+    if (__p.last) render(__p.last.rungs, __p.last.venue ? __p.last.venue.venue : null, null,
+                         __p.last.venue ? __p.last.venue.basis : null);
+  } catch (e){}
+  return n;
+}
+
+function hg80Size(riskCash, stopDist){
+  var cash = fin(riskCash), d = fin(stopDist);
+  if (!(cash > 0) || !(d > 0)) return null;
+  var oz = cash / d;
+  return { cash: cash, stopDist: d, oz: oz, lots: oz / P80_OZ_PER_LOT,
+           perOz: d, ozPerLot: P80_OZ_PER_LOT };
+}
+
+/* HOW OFTEN THE STOP WAS NOT THE STOP. Counted over the sequential book —
+   the same population hg80Excursions measures on, for the same reason:
+   overlapping firings are re-prints of each other and would double every
+   figure here. */
+function hg80SlipStats(rungs){
+  var out = { n: 0, stops: 0, gapped: 0, worstR: NaN, rate: NaN }, i, j;
+  if (!rungs) return out;
+  for (i = 0; i < rungs.length; i++){
+    var r = rungs[i];
+    if (!r || !r.ok || !r.res || !r.res.signals) continue;
+    for (j = 0; j < r.res.signals.length; j++){
+      var sg = r.res.signals[j];
+      if (!sg.res || sg.seq === false) continue;
+      if (sg.status === 'open' || sg.status === 'unpriced') continue;
+      out.n++;
+      if (sg.status !== 'loss') continue;
+      out.stops++;
+      if (sg.res.gapped === true){
+        out.gapped++;
+        /* rMultiple on a loss is negative; the SIZE of the loss is its
+           magnitude, and a gapped one is bigger than 1 */
+        var mag = Math.abs(fin(sg.res.rMultiple));
+        if (isFinite(mag) && (!isFinite(out.worstR) || mag > out.worstR)) out.worstR = mag;
+      }
+    }
+  }
+  if (out.stops > 0) out.rate = out.gapped / out.stops;
+  return out;
 }
 
 /* ---------------------------------------------------------------------
@@ -3201,6 +3371,7 @@ function simpleSetupsHtml(rungs, livePx){
      computed cannot pay at this venue does not get counted as one you could
      act on, any more than one price has run past does. */
   var vn = (__p.venue && __p.venue.venue) || null;
+  var slip = hg80SlipStats(usable);
   var actable = cands.filter(function(c){ return c.act && c.q.pays; });
   var noPay   = cands.filter(function(c){ return c.act && !c.q.pays; });
   var dead    = cands.filter(function(c){ return !c.act; });
@@ -3236,7 +3407,8 @@ function simpleSetupsHtml(rungs, livePx){
         (ca.fresh ? '<span class="stamp pass">FIRED ON THE LAST CLOSED CANDLE</span>'
                   : '<span class="stamp pass">STILL OPEN</span> <span class="note">neither '
                     + 'the stop nor the target was touched in the bars fetched</span>')
-        + liveChipHtml(ca.grade, spot) + reprintHtml(ca.q, vn) + bookChipHtml(ca.s));
+        + liveChipHtml(ca.grade, spot) + reprintHtml(ca.q, vn)
+        + sizeHtml(ca.s, ca.q, slip) + bookChipHtml(ca.s));
     }
     if (noPay.length){
       h += '<div class="p80-band"><span class="p80-band-k">Cannot pay here</span>'
@@ -3253,7 +3425,8 @@ function simpleSetupsHtml(rungs, livePx){
         var cn = noPay[k];
         h += simpleCardHtml(cn.s, cn.r,
           '<span class="stamp veto">CANNOT PAY AT THIS VENUE</span>'
-          + liveChipHtml(cn.grade, spot) + reprintHtml(cn.q, vn) + bookChipHtml(cn.s));
+          + liveChipHtml(cn.grade, spot) + reprintHtml(cn.q, vn)
+          + sizeHtml(cn.s, cn.q, slip) + bookChipHtml(cn.s));
       }
     }
     if (dead.length){
@@ -4511,6 +4684,39 @@ function hg80AutoPaint(why){
    would have to be re-wired each time and would lose its listeners the
    first time anything forgot. The header is written once by mount, so this
    is wired once and repainted by hand. */
+/* The risk box, beside the cadence picker and wired the same way — once,
+   in the header, because the body is re-rendered under it. */
+function hg80RiskCtlHtml(){
+  var v = hg80RiskCash();
+  return '<span class="p80-ctl-k">Risk / trade</span> '
+    + '<span class="note" style="margin:0">$</span>'
+    + '<input id="p80Risk" type="number" min="0" step="10" inputmode="decimal"'
+    + ' value="' + (v > 0 ? esc(String(v)) : '') + '" placeholder="not set"'
+    + ' style="width:92px;padding:3px 6px;font-family:var(--mono);font-size:12px;'
+    + 'background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:4px">'
+    + '<span class="note dim" style="margin:0;font-size:11px">'
+    + (v > 0
+        ? 'every card shows what this buys, and what a gap through the stop would cost'
+        : 'set what you are willing to lose on one trade and every card sizes itself')
+    + '</span>';
+}
+
+function hg80WireRiskBox(){
+  var ui = __p.ui;
+  if (!ui || !ui.risk) return;
+  var box = ui.risk.querySelector ? ui.risk.querySelector('#p80Risk') : null;
+  if (!box || !box.addEventListener) return;
+  var apply = function(){
+    var raw = (box.value == null) ? '' : String(box.value).trim();
+    /* an empty box is "not set", which is a real answer and not a zero to
+       be refused — it puts every card back to no size rather than sizing
+       to nothing */
+    hg80RiskSet(raw === '' ? 0 : raw);
+  };
+  box.addEventListener('change', apply);
+  box.addEventListener('blur', apply);
+}
+
 function hg80AutoCtlHtml(){
   var cur = hg80AutoMs(), h = '<span class="p80-ctl-k">Auto</span> ', i, note = '';
   for (i = 0; i < P80_AUTO_OPTS.length; i++){
@@ -4598,14 +4804,18 @@ function mount(el){
     + '<div class="row" style="margin-top:8px"><button class="btn" id="p80Run">SCAN</button>'
     + '<span class="note" id="p80Stat">auto-runs on open</span></div>'
     + '<div class="p80-ctl" id="p80AutoCtl"></div>'
+    + '<div class="p80-ctl" id="p80RiskCtl"></div>'
     + '<div class="note dim" id="p80Auto" style="margin-top:2px"></div>'
     + '<div id="p80Body" style="margin-top:8px"></div></div>';
   __p.ui = { el: el, body: el.querySelector('#p80Body'),
              stat: el.querySelector('#p80Stat'), run: el.querySelector('#p80Run'),
-             auto: el.querySelector('#p80Auto'), ctl: el.querySelector('#p80AutoCtl') };
+             auto: el.querySelector('#p80Auto'), ctl: el.querySelector('#p80AutoCtl'),
+             risk: el.querySelector('#p80RiskCtl') };
   if (__p.ui.run) __p.ui.run.addEventListener('click', function(){ run(); });
   hg80AutoEnsure();
   hg80AutoPaintCtl();
+  hg80RiskEnsure();
+  if (__p.ui.risk){ __p.ui.risk.innerHTML = hg80RiskCtlHtml(); hg80WireRiskBox(); }
   run();
   hg80AutoStart(el);
 }
@@ -4688,6 +4898,15 @@ W.hg80LiveBe         = hg80LiveBe;
 W.hg80ArmedPays      = hg80ArmedPays;
 W.hg80ArmedSplit     = hg80ArmedSplit;
 W.hg80ArmedVerdict   = hg80ArmedVerdict;
+W.hg80Size           = hg80Size;
+W.hg80RiskCash       = hg80RiskCash;
+W.hg80RiskSet        = hg80RiskSet;
+W.hg80RiskValid      = hg80RiskValid;
+W.hg80RiskCtlHtml    = hg80RiskCtlHtml;
+W.HG_P80_RISK_LS_KEY = P80_RISK_LS_KEY;
+W.hg80SlipStats      = hg80SlipStats;
+W.sizeHtml           = sizeHtml;
+W.HG_P80_OZ_PER_LOT  = P80_OZ_PER_LOT;
 W.armedPayStampHtml  = armedPayStampHtml;
 W.armedPayNoteHtml   = armedPayNoteHtml;
 W.reprintHtml        = reprintHtml;

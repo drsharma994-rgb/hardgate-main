@@ -951,7 +951,7 @@ console.log('\n== the venue control drives the desk, not a private copy ==');
      key it writes to. */
   const writes = [...CODE.matchAll(/localStorage\.setItem\(\s*([A-Za-z0-9_$.]+)/g)]
     .map(m => m[1]);
-  ok(writes.every(k => k === 'P80_AUTO_LS_KEY'),
+  ok(writes.every(k => k === 'P80_AUTO_LS_KEY' || k === 'P80_RISK_LS_KEY'),
      `every storage write goes to this tab's own key, never a shared one (${
         writes.join(', ') || 'none'})`);
   ok(!/hg_og_venue/.test(SRC),
@@ -2531,6 +2531,134 @@ console.log('\n== the ledger is read at the bar for the number of things being t
        && vm.runInContext('typeof hgOmniFamilyZ', ctx) === 'function',
        'and it is restored, so nothing after this block runs against a stub');
   }
+}
+
+console.log('\n== the cards say how much to buy, and what makes that number lie ==');
+{
+  /* Every card has carried an entry, a stop and a target since the ladder
+     shipped and never once a size — the most-used arithmetic on a desk,
+     left to the reader on every card. It is also the one number here that
+     needs no evidence: risk-cash over stop distance, exact, from an input
+     the reader supplied. Nothing about it depends on whether the strategy
+     works. */
+  const sz = ctx.hg80Size(250, 10);
+  ok(near(sz.oz, 25), '$250 against a 10-wide stop is 25 oz');
+  ok(near(sz.lots, 0.25), `which is ${sz.lots} lots at ${ctx.HG_P80_OZ_PER_LOT} oz`);
+  ok(ctx.HG_P80_OZ_PER_LOT === 100, 'a standard XAUUSD lot is 100 troy ounces');
+  for (const [c, d] of [[0, 10], [250, 0], [-5, 10], [250, -1], [NaN, 10], [250, NaN]]){
+    ok(ctx.hg80Size(c, d) === null,
+       `no size from ${c}/${d} — a zero or negative leg is not a small position, it is no answer`);
+  }
+
+  /* WHAT THE READER IS ASKED FOR IS CASH, not an account size and a
+     percent: a percent needs a balance this tab has no business holding. */
+  for (const junk of [null, undefined, '', [], {}, false, true, 'abc', '10px', -1, 1e12]){
+    ok(ctx.hg80RiskValid(junk) === null, `${JSON.stringify(junk) ?? 'undefined'} is not a risk`);
+  }
+  ok(ctx.hg80RiskValid(0) === 0, 'zero IS valid — it means "not set", and puts the size away');
+  ok(ctx.hg80RiskValid('250') === 250 && ctx.hg80RiskValid(250.5) === 250.5,
+     'a number or its digits, since localStorage hands back strings');
+
+  /* HOW OFTEN THE STOP WAS NOT THE STOP. hg80Resolve has flagged gapped
+     exits since it was written — a bar that OPENS beyond the level fills
+     there, not at it, and costs MORE than 1R. That flag has been shown per
+     row and never counted, so a size line would have promised a loss the
+     bars on screen already contradict. */
+  const rung = sigs => ({ ok: true, def: { tf: '5m' }, res: { signals: sigs } });
+  const S = (status, gapped, r, seq) => ({ status, seq: seq !== false,
+    res: { gapped: gapped, rMultiple: r, maeAtr: 0, mfeAtr: 0 } });
+
+  const mixed = ctx.hg80SlipStats([rung([
+    S('win', false, 0.1875), S('loss', false, -1), S('loss', true, -1.42),
+    S('loss', true, -1.08), S('expired', false, 0.02)
+  ])]);
+  ok(mixed.n === 5 && mixed.stops === 3, 'five resolved, three of them stop-outs');
+  ok(mixed.gapped === 2 && near(mixed.rate, 2 / 3), 'two of the three gapped');
+  ok(near(mixed.worstR, 1.42),
+     'and the worst is reported as a MAGNITUDE — a 1.42R loss is bigger than 1R, not smaller');
+
+  /* the same population hg80Excursions measures on, for the same reason */
+  const withOverlap = ctx.hg80SlipStats([rung([
+    S('loss', true, -1.5), S('loss', true, -1.9, false), S('open', false, 0)
+  ])]);
+  ok(withOverlap.stops === 1 && withOverlap.gapped === 1,
+     'an overlapping firing is not a second stop-out — it is a re-print of the first');
+  ok(near(withOverlap.worstR, 1.5),
+     'so the worse number from the overlap does not leak into the figure');
+  ok(ctx.hg80SlipStats([rung([S('open', false, 0)])]).stops === 0,
+     'and an open trade has not stopped out yet');
+  ok(ctx.hg80SlipStats(null).stops === 0, 'no rungs means no claim');
+
+  /* ---- the line on the card ---- */
+  const t = h => String(h).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  const def = { tf: '15m', sec: 900, bars: 320, band: 'scalp' };
+  const out = ctx.hg80ScanTf(series(320, { tfSec: 900, endHour: 15, tail: 3 }), def,
+                             ctx.hg80VenueRt());
+  const v = out.res.signals.filter(x => x.status === 'open').pop();
+  const before = ctx.hg80RiskCash();
+  try {
+    ok(ctx.sizeHtml(v, ctx.hg80Quality(v, out, null, NaN), mixed) === '',
+       'with no risk set the card says nothing about size — it does not guess a default');
+
+    ctx.hg80RiskSet(250);
+    const line = t(ctx.sizeHtml(v, ctx.hg80Quality(v, out, null, NaN), mixed));
+    ok(/SIZE: risking \$250/.test(line), 'with one set, the card sizes itself');
+    const planDist = Math.abs(v.plan.entry - v.plan.stop);
+    ok(line.indexOf((250 / planDist).toFixed(2) + ' oz') >= 0,
+       `off the card's own stop distance (${(250 / planDist).toFixed(2)} oz)`);
+    ok(/arithmetic on your own number, not a view about gold/.test(line),
+       'and says what kind of number it is');
+
+    /* THE MEASURED CAVEAT, which is the half that makes it honest */
+    ok(/A gap through the stop costs more/.test(line), 'the gap warning is on the line');
+    ok(/2 of 3 stop-outs filled at a gapped open/.test(line),
+       'with the rate measured from the bars on screen, not asserted');
+    ok(/1\.42R/.test(line) && line.indexOf('$' + (250 * 1.42).toFixed(2)) >= 0,
+       `and the worst one priced at this size ($${(250 * 1.42).toFixed(2)}, not $250)`);
+
+    /* the two honest alternatives */
+    const clean = t(ctx.sizeHtml(v, ctx.hg80Quality(v, out, null, NaN),
+                                 ctx.hg80SlipStats([rung([S('loss', false, -1)])])));
+    ok(/None of the 1 stop-out in this window gapped/.test(clean),
+       'a clean window says so');
+    ok(/That is this window, not a promise about the next one/.test(clean),
+       'without turning that into a guarantee');
+    const none = t(ctx.sizeHtml(v, ctx.hg80Quality(v, out, null, NaN),
+                                ctx.hg80SlipStats([rung([S('open', false, 0)])])));
+    ok(/is not measured/.test(none) && /costs more than this number says/.test(none),
+       'and a window with no stop-outs at all says the rate is unmeasured, not that it is zero');
+
+    /* SIZED TO THE FILL YOU CAN GET, the same asymmetry hg80Quality uses */
+    const px = v.plan.entry + 0.9;
+    const liveQ = ctx.hg80Quality(v, out, ctx.hg80LiveGrade(v, px), px);
+    const liveLine = t(ctx.sizeHtml(v, liveQ, mixed));
+    ok(liveQ.live.risk > planDist, 'past the entry the stop is further away');
+    ok(liveLine.indexOf((250 / liveQ.live.risk).toFixed(2) + ' oz') >= 0,
+       'so the size is SMALLER, off the live stop rather than the card\'s');
+    ok(/from the price you can get NOW/.test(liveLine), 'and the line says which stop it used');
+
+    const waitQ = ctx.hg80Quality(v, out, ctx.hg80LiveGrade(v, v.plan.entry - 3),
+                                  v.plan.entry - 3);
+    const waitLine = t(ctx.sizeHtml(v, waitQ, mixed));
+    ok(waitLine.indexOf((250 / planDist).toFixed(2) + ' oz') >= 0,
+       'while one still waiting for its entry is sized to the fill it is offering — the card\'s');
+    ok(!/from the price you can get NOW/.test(waitLine), 'and does not claim otherwise');
+
+    ok(!/NaN|undefined/.test(line + liveLine + waitLine + clean + none),
+       'and nothing renders as NaN or undefined');
+
+    /* the control */
+    const ctl = ctx.hg80RiskCtlHtml();
+    ok(/id="p80Risk"/.test(ctl) && /type="number"/.test(ctl), 'the header carries a risk box');
+    ok(/value="250"/.test(ctl), 'holding the current figure');
+    ok(/min="0"/.test(ctl), 'which cannot be set negative');
+    ok(/what a gap through the stop would cost/.test(ctl),
+       'and says what setting it buys');
+    ctx.hg80RiskSet(0);
+    ok(/placeholder="not set"/.test(ctx.hg80RiskCtlHtml())
+       && !/value="0"/.test(ctx.hg80RiskCtlHtml()),
+       'unset reads as empty rather than as a zero position');
+  } finally { ctx.hg80RiskSet(before); }
 }
 
 console.log('\n== an armed row the arithmetic would refuse is a wait not worth sitting ==');

@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v797',
-  pack: 'the 80PERCENT tab stops telling you to wait for trades it has already priced as unpayable — the cost arithmetic printed on every armed row since the ladder shipped now decides whether that countdown is worth sitting on, and the panel it lives in no longer closes an h2 with an h3',
+  version: 'hg-v798',
+  pack: 'the 80PERCENT tab sizes the trade — set what you are willing to lose and every card says how many ounces that buys, off the stop you can actually get, with the gapped-fill rate measured from the bars on screen rather than the comfortable half of the truth',
   built: '2026-09-17T00:00:00Z'
 };
 
