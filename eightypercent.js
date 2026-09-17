@@ -191,7 +191,12 @@ var P80_LADDER = [
   { tf: '1d',  sec: 86400, bars: 400, band: 'swing' }
 ];
 
-var __p = { ui: null, busy: false, ranOnce: false, last: null };
+/* focus: null scans the whole ladder; a timeframe string scans only that
+   rung and shows EVERY firing in its window instead of just the latest.
+   Deliberately NOT persisted — the venue is desk-wide state that belongs in
+   storage, a view filter is not, and this tab writing a second key would
+   make "what is stored about the gold desk" two places instead of one. */
+var __p = { ui: null, busy: false, ranOnce: false, last: null, focus: null };
 
 function esc(s){
   return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
@@ -468,6 +473,36 @@ function hg80SignalAt(rows, ind, i, cfg, variant){
    conditions met, and on a tie the tighter mechanic, because a spec setup is
    worth more than a wide one at equal distance.
    --------------------------------------------------------------------- */
+/* NOT ALL MISSING CONDITIONS ARE THE SAME DISTANCE, and counting them as if
+   they were is how this went wrong a second time.
+
+   Ranking by "how many held" put a LONG at 2 of 3 ahead of a SHORT at 2 of 3
+   on a bar where the short had TREND and the long did not. Those are not
+   equally close. The long was missing trend — price 3.26 ATR the wrong side
+   of its 50 EMA with the EMAs crossed against it — which is days of work on
+   a 4h chart. The short was missing only its pullback.
+
+   So each missing condition is weighted by what it would take to satisfy it:
+
+     trigger   1  one candle, and it can be the very next one
+     pullback  2  an RSI move, which is several bars of drift
+     session   3  a clock, so it costs whatever the clock costs
+     trend     4  price back across its 50 EMA, or the EMAs recrossing
+
+   Lowest total cost wins, ties break toward the tighter mechanic. That makes
+   "missing a trigger and a pullback" (3) rank ahead of "missing trend
+   alone" (4), which is right: both of the first two can resolve on the next
+   bar, and a trend flip cannot. */
+var P80_MISS_COST = { trigger: 1, pullback: 2, session: 3, trend: 4 };
+
+function hg80MissCost(score){
+  var c = 0;
+  for (var i = 0; i < score.missing.length; i++){
+    c += (P80_MISS_COST[score.missing[i]] != null) ? P80_MISS_COST[score.missing[i]] : 2;
+  }
+  return c;
+}
+
 function hg80Nearest(rows, ind, i, cfg){
   var best = null, vi, sides = ['long', 'short'];
   for (vi = 0; vi < P80_VARIANTS.length; vi++){
@@ -478,11 +513,11 @@ function hg80Nearest(rows, ind, i, cfg){
       var side = sides[si];
       var ch = side === 'long' ? sg.longChecks : sg.shortChecks;
       var sc = hg80Score(ch);
-      var cand = { variant: v, side: side, score: sc, sig: sg, checks: ch };
+      var cand = { variant: v, side: side, score: sc, sig: sg, checks: ch,
+                   cost: hg80MissCost(sc) };
       if (!best) { best = cand; continue; }
-      if (sc.met > best.score.met) { best = cand; continue; }
-      /* tie -> prefer the tighter mechanic, then the side already chosen */
-      if (sc.met === best.score.met && vi < P80_VARIANTS.indexOf(best.variant)) best = cand;
+      if (cand.cost < best.cost) { best = cand; continue; }
+      if (cand.cost === best.cost && vi < P80_VARIANTS.indexOf(best.variant)) best = cand;
     }
   }
   return best;
@@ -954,7 +989,10 @@ function nearestHtml(nr, cfg){
       bits.push('outside ' + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC');
     }
   }
-  var one = (sc.total - sc.met) === 1;
+  /* green only when the single cheapest thing is missing — one candle. A
+     bar missing its pullback is not "one away" in any sense a desk can act
+     on, and colouring it as if it were is what a chip is for. */
+  var one = nr.cost <= P80_MISS_COST.trigger;
   return variantChipHtml({ variant: nr.variant.key }) + ' '
     + '<span class="statuschip ' + (one ? 'ok' : 'na') + '">' + esc(side.toUpperCase())
     + ' ' + sc.met + '/' + sc.total + '</span> '
@@ -1029,6 +1067,36 @@ function ageTxt(sec){
    An HG_OG_VENUE override wins over any UI selection by design, so when one
    is set the buttons are disabled and say so rather than pretending to
    work. */
+/* ---------------------------------------------------------------------
+   RUNG FOCUS
+
+   The ladder answers "where does this pay"; it is the wrong shape for
+   "show me what 4h fires". Pooled across five rungs the history table is
+   capped and interleaved, and SETUPS deliberately shows only the most
+   recent firing each. Focusing a rung drops the cap and the pooling: one
+   timeframe, every firing it produced in the window, with its outcome.
+
+   It also stops fetching the other four, which is the difference between
+   one request and five on a rung a desk is actually watching.
+   --------------------------------------------------------------------- */
+function focusControlHtml(){
+  var h = '<div class="row" style="margin:6px 0 0 0;align-items:center">'
+    + '<span class="note" style="margin:0"><b>RUNG</b>: </span> ';
+  function btn(tf, label){
+    var on = (tf === null) ? (__p.focus === null) : (__p.focus === tf);
+    return '<button type="button" class="btn ghost" data-p80-focus="' + (tf === null ? '' : tf) + '"'
+      + ' style="' + (on ? 'border-color:#10b981;color:#10b981;font-weight:bold' : '') + '">'
+      + esc(label) + '</button> ';
+  }
+  h += btn(null, 'ALL');
+  for (var i = 0; i < P80_LADDER.length; i++) h += btn(P80_LADDER[i].tf, P80_LADDER[i].tf);
+  h += '<span class="note dim" style="margin:0;font-size:11px">'
+    + (__p.focus ? esc(__p.focus) + ' only — every firing in its window, uncapped'
+                 : 'all five rungs — SETUPS shows the most recent firing on each')
+    + '</span></div>';
+  return h;
+}
+
 function venueControlHtml(v){
   var ovr = '';
   try { ovr = String(W.HG_OG_VENUE || '').toUpperCase().replace(/^\s+|\s+$/g, ''); } catch (e){}
@@ -1098,8 +1166,7 @@ function whyNothingHtml(rungs){
   function nearestOf(list){
     var b = null;
     for (var j = 0; j < list.length; j++){
-      var away = list[j].n.score.total - list[j].n.score.met;
-      if (!b || away < (b.n.score.total - b.n.score.met)) b = list[j];
+      if (!b || list[j].n.cost < b.n.cost) b = list[j];
     }
     return b;
   }
@@ -1148,6 +1215,86 @@ function whyNothingHtml(rungs){
       + ' ATR target is three quarters of one bar\'s range, so it is reached or stopped quickly. '
       + 'That is why the list below is history: this strategy is actionable ON the bar it fires, '
       + 'and a firing from a hundred bars ago is not a setup that is still standing.';
+  }
+  return h + '</div>';
+}
+
+/* Every firing on the focused rung, newest first, with what became of it.
+   No cap: on one timeframe the whole list IS the answer to "show me what
+   fires", and truncating it would be the same mistake as showing only the
+   most recent one. */
+function focusedFiringsHtml(r){
+  if (!r || !r.ok) return '<div class="panel" style="margin-top:10px"><h3>SETUPS</h3>'
+    + '<div class="note warn">' + esc((r && r.why) || 'this rung returned no bars') + '</div></div>';
+
+  var sigs = r.res.signals.slice().reverse();
+  var c = hg80CountByVariant(r);
+  var h = '<div class="panel" style="margin-top:10px"><h3>EVERYTHING ' + esc(r.def.tf)
+    + ' FIRED <span>' + sigs.length + ' in ' + r.scanned + ' evaluable bars · '
+    + esc(r.def.band) + '</span></h3>';
+
+  h += '<div class="note">SPEC ' + c.spec + ' · WIDE ' + c.wide
+    + (r.medianBars != null ? ' · typical holding time ' + r.medianBars + ' bar'
+        + (r.medianBars === 1 ? '' : 's') + ' (' + ageTxt(r.medianBars * r.cfg.tfSec) + ')' : '')
+    + (r.cfg.session === false
+        ? ' · the ' + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC session rule does not apply '
+          + 'at this rung, so three conditions ran here, not four'
+        : ' · only bars inside ' + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC could fire')
+    + '</div>';
+
+  if (!sigs.length){
+    return h + '<div class="note warn" style="margin-top:6px">Nothing fired on this rung in the '
+      + r.scanned + ' bars evaluated — not on the spec and not on the loosened mechanic. The board '
+      + 'below says how far it stood at the last close, and the census says which condition was '
+      + 'doing the turning away.</div></div>';
+  }
+
+  h += '<table class="tbl" style="margin-top:6px"><tr><th>when (UTC)</th><th>mechanic</th>'
+    + '<th>age</th><th>dir</th><th>entry</th><th>stop</th><th>target</th><th>RSI</th>'
+    + '<th>ATR</th><th>outcome</th><th>R</th><th>bars held</th></tr>';
+  var i;
+  for (i = 0; i < sigs.length; i++){
+    var sg = sigs[i], p = sg.plan, rs = sg.res;
+    var age = (r.rows.length - 1) - sg.i;
+    var flag = '';
+    if (rs && rs.ambiguous) flag += ' <span class="statuschip na">ambiguous</span>';
+    if (rs && rs.gapped) flag += ' <span class="statuschip na">gapped</span>';
+    h += '<tr><td>' + esc(isFinite(sg.t)
+          ? new Date(sg.t * 1000).toISOString().replace('T', ' ').slice(0, 16) : '—') + '</td>'
+      + '<td>' + variantChipHtml(sg) + '</td>'
+      + '<td class="hg-num">' + (age === 0 ? 'now' : age + ' · ' + ageTxt(age * r.cfg.tfSec)) + '</td>'
+      + '<td>' + esc(sg.dir) + '</td>'
+      + '<td class="hg-num">' + num(p.entry) + '</td>'
+      + '<td class="hg-num">' + num(p.stop) + '</td>'
+      + '<td class="hg-num">' + num(p.t1) + '</td>'
+      + '<td class="hg-num">' + num(sg.rsi, 1) + '</td>'
+      + '<td class="hg-num">' + num(sg.atr, 2) + '</td>'
+      + '<td>' + esc(sg.status || '—') + flag + '</td>'
+      + '<td class="hg-num">' + (rs ? (rs.rMultiple >= 0 ? '+' : '') + num(rs.rMultiple, 3) : '—') + '</td>'
+      + '<td class="hg-num">' + (rs && sg.status !== 'open' ? rs.bars : '—') + '</td></tr>';
+  }
+  h += '</table>';
+
+  h += '<div class="note warn" style="margin-top:6px">Outcomes are resolved against the bars that '
+    + 'followed each firing inside THIS fetch. That is not a backtest and no win rate is shown '
+    + 'from it: the book here is not sequential, one fetch is not a sample, and rows marked '
+    + 'ambiguous covered both the target and the stop in a single bar, which OHLC cannot order. '
+    + 'Both mechanics remain a WATCH until the forward log or scripts/walk-80percent.mjs says '
+    + 'otherwise.</div>';
+
+  /* anything still live gets a full card underneath */
+  var actionable = r.res.signals.filter(function(x){
+    return x.i === r.rows.length - 1 || x.status === 'open';
+  });
+  for (i = 0; i < actionable.length; i++){
+    h += setupCardHtml(actionable[i], r.be, r.cfg,
+      actionable[i].i === r.rows.length - 1 ? 'last closed candle' : 'still open');
+  }
+  if (!actionable.length){
+    h += '<div class="note" style="margin-top:6px">None of these is live now — every one reached '
+      + 'its target, its stop or its horizon. At a typical '
+      + (r.medianBars != null ? r.medianBars + '-bar' : 'short') + ' holding time that is what a '
+      + 'list of past firings on this rung looks like.</div>';
   }
   return h + '</div>';
 }
@@ -1465,6 +1612,7 @@ function render(rungs, venue, recNotes, basis){
 
   var usable = rungs.filter(function(r){ return r.ok; });
   var h = venueControlHtml(__p.venue);
+  h += focusControlHtml();
   h += whyNothingHtml(rungs);
   h += mathPanelHtml(rungs, venue, basis);
 
@@ -1473,10 +1621,11 @@ function render(rungs, venue, recNotes, basis){
     ui.body.innerHTML = h + '<div class="note warn">No rung returned usable bars — '
       + esc(bits.join(' · ')) + '</div>';
     wireVenueButtons();
+    wireFocusButtons();
     return;
   }
 
-  h += latestSetupsHtml(rungs);
+  h += __p.focus ? focusedFiringsHtml(usable[0] || rungs[0]) : latestSetupsHtml(rungs);
   h += ladderBoardHtml(rungs);
 
   /* the SETUPS panel above already carries every card worth carrying, so
@@ -1505,7 +1654,7 @@ function render(rungs, venue, recNotes, basis){
     h += '</div>';
   }
 
-  h += firedHtml(rungs);
+  if (!__p.focus) h += firedHtml(rungs);   /* the focused table already has every row */
   h += nearMissHtml(rungs);
   h += censusHtml(rungs);
 
@@ -1523,10 +1672,28 @@ function render(rungs, venue, recNotes, basis){
 
   ui.body.innerHTML = h;
   wireVenueButtons();
+  wireFocusButtons();
 }
 
 /* The buttons live inside innerHTML that is replaced on every render, so the
    listeners are re-attached each time rather than bound once at mount. */
+function wireFocusButtons(){
+  var ui = __p.ui;
+  if (!ui || !ui.body || !ui.body.querySelectorAll) return;
+  var btns = ui.body.querySelectorAll('[data-p80-focus]');
+  for (var i = 0; i < btns.length; i++){
+    (function(b){
+      b.addEventListener('click', function(){
+        var tf = b.getAttribute && b.getAttribute('data-p80-focus');
+        __p.focus = tf ? tf : null;
+        if (ui.stat) ui.stat.textContent = __p.focus
+          ? ('scanning ' + __p.focus + ' only…') : 'scanning the whole ladder…';
+        run();
+      });
+    })(btns[i]);
+  }
+}
+
 function wireVenueButtons(){
   var ui = __p.ui;
   if (!ui || !ui.body || !ui.body.querySelectorAll) return;
@@ -1565,7 +1732,10 @@ function run(){
   var rungs = [];
   var chain = Promise.resolve();
 
-  P80_LADDER.forEach(function(def){
+  var ladder = __p.focus
+    ? P80_LADDER.filter(function(d){ return d.tf === __p.focus; })
+    : P80_LADDER;
+  ladder.forEach(function(def){
     chain = chain.then(function(){
       if (ui && ui.stat) ui.stat.textContent = 'fetching ' + def.tf + ' bars…';
       return Promise.resolve().then(function(){ return fetchFn(def.tf, def.bars); })
@@ -1608,7 +1778,7 @@ function run(){
     var okN = rungs.filter(function(x){ return x.ok; }).length;
     if (ui && ui.stat){
       ui.stat.textContent = 'updated ' + new Date().toISOString().slice(11, 19) + ' UTC · '
-        + okN + '/' + rungs.length + ' rungs · '
+        + (__p.focus ? (__p.focus + ' only') : (okN + '/' + rungs.length + ' rungs')) + ' · '
         + (fired.length ? fired.join(', ') + ' fired' : 'no rung fired on its last candle');
     }
     __p.ranOnce = true;
@@ -1666,6 +1836,8 @@ W.hg80Variant        = hg80Variant;
 W.hg80SignalAt       = hg80SignalAt;
 W.hg80Score          = hg80Score;
 W.hg80Nearest        = hg80Nearest;
+W.hg80MissCost       = hg80MissCost;
+W.HG_P80_MISS_COST   = P80_MISS_COST;
 W.hg80SecsToSession  = hg80SecsToSession;
 W.hg80Plan           = hg80Plan;
 W.hg80Resolve        = hg80Resolve;

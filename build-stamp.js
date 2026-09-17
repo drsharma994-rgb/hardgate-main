@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v775',
-  pack: '80PERCENT answers why there is nothing to take — the session clock, the closest rung across BOTH mechanics, and the measured holding time that explains the history list; plus XM pricing without OMNIGOLD having been opened first',
+  version: 'hg-v776',
+  pack: 'focus one rung and 80PERCENT shows every firing it produced, uncapped, with outcomes — and distance is weighted by what each missing condition costs to satisfy',
   built: '2026-09-17T00:00:00Z'
 };
 

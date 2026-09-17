@@ -331,7 +331,10 @@ console.log('\n== the tab is POPULATED when nothing fires ==');
      'and names the venue cost it used, straight from the desk\'s own basis string');
   ok(!/cost-adjusted bar is not shown/.test(html),
      'and does not fall back to the cannot-compute branch when the venue is readable');
-  ok(/RSI [0-9]+\.[0-9] needs/.test(html),
+  /* whichever condition is missing, the cell quantifies it: an RSI gap, an
+     ATR distance from the EMA, or a named candle. Never a bare "not yet". */
+  ok(/RSI [0-9]+\.[0-9] needs/.test(html) || /close is -?[0-9]+\.[0-9]{2} ATR from EMA50/.test(html)
+     || /needs a (green|red) close/.test(html),
      'the distance is a NUMBER, not a shrug — this is what replaced the empty panel');
   ok(/WHY THERE IS NOTHING TO TAKE RIGHT NOW/.test(html),
      'and when nothing fired the tab leads with a computed answer to that question, rather than '
@@ -781,17 +784,17 @@ console.log('\n== closest-to-firing walks BOTH mechanics, which is the message t
 
   /* whatever the fixture produces, the invariant is what matters: no
      variant/side pair may be strictly closer than the one reported */
-  let bestMet = -1;
+  let bestCost = Infinity;
   for (const v of ctx.HG_P80_VARIANTS){
     const sg = ctx.hg80SignalAt(rows, ind, rows.length - 1, cfg, v);
     for (const side of ['long', 'short']){
       const sc = ctx.hg80Score(side === 'long' ? sg.longChecks : sg.shortChecks);
-      if (sc.met > bestMet) bestMet = sc.met;
+      bestCost = Math.min(bestCost, ctx.hg80MissCost(sc));
     }
   }
-  ok(nr.score.met === bestMet,
-     `the reported nearest (${nr.score.met}/${nr.score.total}) is the closest of ALL four `
-     + 'variant/side combinations — never a further one that happened to be checked first');
+  ok(nr.cost === bestCost,
+     `the reported nearest (cost ${nr.cost}) is the closest of ALL four variant/side `
+     + 'combinations — never a further one that happened to be checked first');
 
   /* a tie must break toward the TIGHTER mechanic: a spec setup at equal
      distance is worth more than a wide one */
@@ -866,6 +869,137 @@ console.log('\n== the panel suppresses itself when there IS something to take ==
   ok(/if \(r\.live\.length\) return '';/.test(SRC),
      'and the panel returns nothing in that case — explaining an absence that is not there '
      + 'would bury the setup it is standing next to');
+}
+
+console.log('\n== distance is weighted by what each missing condition would COST to satisfy ==');
+{
+  /* THE SECOND TIME THIS WENT WRONG. Ranking by "how many conditions held"
+     put a LONG at 2 of 3 ahead of a SHORT at 2 of 3 on a bar where the short
+     had TREND and the long did not. Those are not equally close: the long
+     needed price back across its 50 EMA with the EMAs crossed against it —
+     days of work on a 4h chart — and the short needed a red candle. */
+  const C = ctx.HG_P80_MISS_COST;
+  ok(C.trigger < C.pullback && C.pullback < C.session && C.session < C.trend,
+     `the weights are ordered by what each takes: trigger ${C.trigger} < pullback ${C.pullback} `
+     + `< session ${C.session} < trend ${C.trend}`);
+  ok(C.trigger + C.pullback < C.trend,
+     'so "missing a trigger AND a pullback" ranks ahead of "missing trend alone" — both of the '
+     + 'first two can resolve on the very next bar, and a trend flip cannot');
+
+  const cost = sc => ctx.hg80MissCost(sc);
+  ok(cost({ missing: [] }) === 0, 'nothing missing costs nothing');
+  ok(cost({ missing: ['trigger'] }) === C.trigger, 'one trigger costs the trigger weight');
+  ok(cost({ missing: ['trend', 'pullback'] }) === C.trend + C.pullback, 'and they add');
+  ok(cost({ missing: ['nonsense'] }) === 2,
+     'an unrecognised condition costs a middling amount rather than zero, so a future condition '
+     + 'cannot make a bar look closer than it is by being unknown');
+
+  ok(/nr\.cost <= P80_MISS_COST\.trigger/.test(SRC),
+     'the green "nearly there" chip is lit only when the single cheapest thing is missing — one '
+     + 'candle. A bar missing its pullback is not one away in any sense a desk can act on');
+}
+
+console.log('\n== focusing a rung scans only that rung, and shows everything it fired ==');
+{
+  /* driven through the real mount and a real click, because the thing under
+     test is a button: asserting on the source would not have caught a
+     listener that was never attached */
+  function mkEl(tag){
+    const e = { tag, children: [], attrs: {}, listeners: {}, style: {}, _html: '', textContent: '',
+      setAttribute(k, v){ this.attrs[k] = String(v); }, getAttribute(k){ return this.attrs[k]; },
+      addEventListener(t, f){ (this.listeners[t] = this.listeners[t] || []).push(f); },
+      click(){ (this.listeners.click || []).forEach(f => f()); },
+      appendChild(c){ this.children.push(c); },
+      classList: { add(){}, remove(){}, toggle(){}, contains: () => false }, dataset: {},
+      get innerHTML(){ return this._html; },
+      set innerHTML(v){ this._html = String(v); this.children = parseEls(this._html); },
+      querySelector(sel){ return this.querySelectorAll(sel)[0] || null; },
+      querySelectorAll(sel){
+        const m = sel.match(/^\[([a-z0-9-]+)\]$/i);
+        if (m) return this.children.filter(c => c.attrs[m[1]] !== undefined);
+        if (sel.startsWith('#')) return this.children.filter(c => c.attrs.id === sel.slice(1));
+        return [];
+      } };
+    return e;
+  }
+  function parseEls(html){
+    const out = [];
+    const re = /<(button|div|span)\b([^>]*)>/gi;
+    let m;
+    while ((m = re.exec(html))){
+      const attrs = {};
+      const ar = /([a-z0-9-]+)="([^"]*)"/gi;
+      let a;
+      while ((a = ar.exec(m[2]))) attrs[a[1]] = a[2];
+      if (attrs.id || attrs['data-p80-focus'] !== undefined || attrs['data-p80-venue'] !== undefined){
+        const e = mkEl(m[1]); e.attrs = attrs; out.push(e);
+      }
+    }
+    return out;
+  }
+  const walk = (tfSec, n) => {
+    const out = []; let px = 4600, st = 99;
+    const rnd = () => { st = (st * 1103515245 + 12345) & 0x7fffffff; return st / 0x7fffffff; };
+    const vol = 3.1 * Math.sqrt(tfSec / 300);
+    const end = Math.floor(Date.UTC(2026, 8, 17, 0, 0, 0) / 1000 / tfSec) * tfSec;
+    for (let i = 0; i < n; i++){
+      const o = px, c = o + (rnd() - 0.5) * vol;
+      out.push({ t: end - (n - 1 - i) * tfSec, o, h: Math.max(o, c) + rnd() * vol * 0.6,
+                 l: Math.min(o, c) - rnd() * vol * 0.6, c, v: 1 });
+      px = c;
+    }
+    return out;
+  };
+  const secOf = Object.fromEntries(ctx.HG_P80_LADDER.map(r => [r.tf, r.sec]));
+  const fetched = [];
+  ctx.hgOgFetchRows = (tf, n) => { fetched.push(tf); return Promise.resolve({ rows: walk(secOf[tf], n), source: 'fixture' }); };
+
+  const tab = (ctx.HG_tabs || []).find(t => t && t.id === '80percent');
+  const node = mkEl('div');
+  tab.mount(node);
+  await new Promise(r => setImmediate(r));
+  await new Promise(r => setTimeout(r, 0));
+  ok(fetched.length === ctx.HG_P80_LADDER.length,
+     `mounting scans the whole ladder (${fetched.join(', ')})`);
+
+  const body = node.querySelector('#p80Body');
+  const btns = body.querySelectorAll('[data-p80-focus]');
+  ok(btns.length === ctx.HG_P80_LADDER.length + 1, 'there is a button per rung plus ALL');
+  const b4h = btns.find(b => b.getAttribute('data-p80-focus') === '4h');
+  ok(!!b4h, 'including one for 4h');
+
+  fetched.length = 0;
+  b4h.click();
+  await new Promise(r => setImmediate(r));
+  await new Promise(r => setTimeout(r, 0));
+  ok(fetched.length === 1 && fetched[0] === '4h',
+     `clicking it fetches ONLY that rung (${fetched.join(', ') || 'nothing'}) — four fewer `
+     + 'requests on a rung a desk is actually watching');
+  ok(/4h only/.test(String(node.querySelector('#p80Stat').textContent)),
+     'the status line says which rung is in view');
+
+  const html = String(node.querySelector('#p80Body').innerHTML);
+  ok(/EVERYTHING 4h FIRED/.test(html), 'and the focused panel replaces the pooled one');
+  const rowCount = (html.match(/<tr><td>2026-/g) || []).length;
+  const fired = (html.match(/([0-9]+) in [0-9]+ evaluable bars/) || [])[1];
+  ok(Number(fired) > 0, `the fixture fired ${fired} times on 4h`);
+  ok(rowCount === Number(fired),
+     `and EVERY one has a row (${rowCount} of ${fired}) — uncapped, because on one timeframe the `
+     + 'whole list IS the answer to "show me what fires"');
+  ok(/bars held/.test(html), 'with how long each was held');
+  ok(/typical holding time/.test(html), 'and the rung\'s typical holding time');
+
+  fetched.length = 0;
+  btns.find(b => b.getAttribute('data-p80-focus') === '').click();
+  await new Promise(r => setImmediate(r));
+  await new Promise(r => setTimeout(r, 0));
+  ok(fetched.length === ctx.HG_P80_LADDER.length, 'ALL restores the whole ladder');
+  ok(!/EVERYTHING 4h FIRED/.test(String(node.querySelector('#p80Body').innerHTML)),
+     'and the focused panel goes away with it');
+
+  ok(!('hg_p80_focus' in store) && !Object.keys(store).some(k => /focus/i.test(k)),
+     'the focus is NOT written to storage — the venue is desk-wide state that belongs there, a '
+     + 'view filter is not, and a second key would split "what is stored about the gold desk"');
 }
 
 console.log('\n== and it still refuses to invent a rate from what it resolved ==');
