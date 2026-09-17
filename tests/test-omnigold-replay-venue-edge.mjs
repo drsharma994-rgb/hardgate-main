@@ -85,14 +85,66 @@ console.log('== the inverse normal is accurate enough to set a family-wise bound
 console.log('\n== the family is counted, not assumed ==');
 {
   const m = XM.hgOgReplayFamilySize();
-  /* DISTINCT MECHANICS, not table rows. SPRING and UTAD are one detector
-     under two direction labels (hg-v764), so the table carries two rows for
-     one mechanic and a correction for "how many things were tested" must
-     count the thing, not the label. */
+  /* TESTS PERFORMED, which is what a family-wise correction is a function
+     of. hg-v764 folded SPRING and UTAD and counted them as one; that fold
+     is withdrawn, because the halves settle 19 points of win rate apart and
+     a pooled record describes neither. Two records judged against two bars
+     are TWO TESTS, so the count is the table size again — and the bar goes
+     UP, which is the direction a correction should move when you admit to
+     having made another comparison. */
   const rows = Object.keys(TABLE.perKind).length;
-  ok(m === rows - 1, `family size is the table size minus the aliased pair (${m} of ${rows} rows)`);
-  ok(m < rows, 'so the significance bar stops counting one detector twice');
+  ok(m === rows, `family size is every row that was tested (${m} of ${rows} rows)`);
   ok(m > 1, 'and it is a real family, not a single test');
+  ok(XM.hgOgFamilyZ(m) > XM.hgOgFamilyZ(m - 1),
+     'so un-pooling raises the bar rather than lowering it — one more test, not one fewer');
+}
+
+console.log('\n== the two halves of one detector are judged separately ==');
+{
+  /* The reason the fold is gone. These are the same function's two sides,
+     and pooled they read 28.2% at z -1.28 — UNCHECKED for both, which
+     ALSO lifted the veto the long half had earned on its own record. */
+  const spring = XM.hgOgReplayEvidence('SPRING');
+  const utad = XM.hgOgReplayEvidence('UTAD');
+  ok(spring && utad, 'both labels carry their own row');
+  ok(spring.n === 104 && utad.n === 91, `on separate samples (${spring.n} long, ${utad.n} short)`);
+  ok(Math.abs(spring.winRate - utad.winRate) > 0.15,
+     `and they are 19 points apart (${(100 * spring.winRate).toFixed(1)}% vs ${(100 * utad.winRate).toFixed(1)}%)`);
+  ok(spring.n !== spring.n + utad.n, 'so neither reads the pooled 195-trade record');
+
+  /* the in-sample gate verdict each one now gets, which differs by side */
+  const BE = 1 / 3, z = ev => (ev.winRate - BE) / Math.sqrt(BE * (1 - BE) / ev.n);
+  ok(z(spring) <= -2, `the long half is condemned on its own record (z ${z(spring).toFixed(2)})`);
+  ok(z(utad) > -2, `and the short half is not (z ${z(utad).toFixed(2)})`);
+  ok(z(utad) < XM.hgOgFamilyZ(XM.hgOgReplayFamilySize()),
+     'while still coming nowhere near the bar to be a ticket — this buys nothing');
+
+  /* and the card shows the other half rather than leaving a reader with
+     one side of a two-sided measurement */
+  const line = XM.hgOgReplayLineHtml('SPRING');
+  ok(/same detector, other side/.test(line), 'the SPRING card names its own other half');
+  ok(/UTAD/.test(line), 'by label');
+  ok(/not established/.test(line), 'and says the gap is not established');
+  ok(XM.hgOgDirSibling('MMOVE') === null, 'a mechanic with no direction twin gets no such line');
+  ok(!/same detector/.test(XM.hgOgReplayLineHtml('MMOVE')), 'and its card does not grow one');
+}
+
+console.log('\n== a mechanic that was never measured says so ==');
+{
+  /* 13 mechanics fire on this walk and settle too few times to carry a
+     record. The bake omits them, correctly — but the card then rendered
+     NOTHING, which reads exactly like a mechanic that was measured and came
+     back fine. */
+  const below = XM.hgOgReplayLineHtml('POC-REVERT');
+  ok(below !== '', 'an unmeasured mechanic no longer renders as silence');
+  ok(/NOT MEASURED/.test(below), 'it says so in as many words');
+  ok(/2 settled firing/.test(below), 'with the count it actually reached');
+  ok(/40/.test(below), 'and the bar it fell short of');
+  ok(!/%/.test(below), 'and NO win rate — a rate on two trades is the same overclaim with a caveat');
+  ok(!/NaN|undefined|null/.test(below), 'with nothing leaked');
+
+  ok(XM.hgOgReplayLineHtml('NOT-A-MECHANIC') === '',
+     'while an unknown key still renders nothing — it is not a mechanic and has nothing to disclose');
 }
 
 console.log('\n== re-pricing uses the record\'s own numbers ==');
@@ -134,17 +186,13 @@ console.log('\n== the verdict answers breakeven AND selection ==');
 console.log('\n== sweeping all 54: re-pricing helps, and still finds no edge ==');
 {
   let repriced = 0, netPosXM = 0, netPosPaxg = 0, naive = 0, family = 0;
-  /* ONE ROW PER MECHANIC, not per label. hg-v764 folds SPRING and UTAD —
-     one detector, two direction labels — into a single record, so walking
-     the raw table keys would count that mechanic twice and, worse, count it
-     twice at the SAME pooled numbers. Its two halves used to disagree by 19
-     points of win rate, which is exactly why they were pooled. */
-  const seenKind = {};
+  /* EVERY ROW, because every row is a record that was measured and judged.
+     hg-v764 walked this table folding SPRING and UTAD into one entry; that
+     fold is withdrawn. Their halves disagree by 19 points of win rate,
+     which v764 read as a reason to pool and is in fact the reason not to —
+     a pooled record describes neither side. */
   for (const kind of Object.keys(TABLE.perKind)){
-    const canon = kind === 'UTAD' ? 'SPRING' : kind;
-    if (seenKind[canon]) continue;
-    seenKind[canon] = 1;
-    const ev = XM.hgOgReplayEvidence(canon);
+    const ev = XM.hgOgReplayEvidence(kind);
     if (!ev) continue;
     if (ev.avgNetR > 0) netPosPaxg++;
     const rp = XM.hgOgReplayNetAtVenue(ev);
@@ -153,14 +201,15 @@ console.log('\n== sweeping all 54: re-pricing helps, and still finds no edge =='
     if (vd && vd.tier === 'naive') naive++;
     if (vd && vd.tier === 'family') family++;
   }
-  ok(repriced === 53, `all 53 mechanics re-price (${repriced}) — 54 rows, one aliased pair`);
+  ok(repriced === 54, `all 54 rows re-price (${repriced}) — every measured record is one`);
   ok(netPosPaxg === 0, 'at the replay\'s PAXG cost, NOTHING is net positive');
-  /* 18 -> 17: UTAD alone read net positive at XM and SPRING did not. Pooled,
-     the mechanic is negative, so the pair contributes one negative rather
-     than one of each. Fewer net-positive mechanics is the CORRECTION, not a
-     regression — the extra one was a direction half wearing a mechanic's
-     name. */
-  ok(netPosXM === 17, `at XM cost, 17 are net positive (${netPosXM}) — the labelling error was real`);
+  /* 17 -> 18, back where it was before hg-v764 pooled the pair. UTAD reads
+     net positive at XM and SPRING does not, and that is a FACT ABOUT THE
+     TWO SIDES rather than a labelling error: pooling hid it by averaging a
+     19-point gap into a midpoint neither half occupies. The number moving
+     back up is not the veto weakening — nothing here clears breakeven, let
+     alone the family bar, and the assertions below still say so. */
+  ok(netPosXM === 18, `at XM cost, 18 are net positive (${netPosXM}) — the labelling error was real`);
   /* WAS 1, IS NOW 0, and the change is the point rather than a regression.
      hgOgReplayEdgeVerdict used to read n replay rows as n independent
      trades. The walk that produced them published 59.4 plans a day on one

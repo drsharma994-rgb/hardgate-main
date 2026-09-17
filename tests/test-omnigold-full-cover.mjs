@@ -228,17 +228,31 @@ function familyZ(k){
    COMPRESSION-BREAK (1). The walk artifact records `kind` per row, so it
    is the one place the emitted set can be read without a network call.
 
-   ALIAS-AWARE. SPRING and UTAD are one detector under two direction labels
-   (hgOmniSpring returns SPRING on a swept low and UTAD on a swept high,
-   confirmed 123/123 long and 106/106 short), so UTAD is expected to be
-   absent from OG_MECHANICS and must not be reported as a gap. The alias map
-   is read from omnigold.js rather than copied, so the two cannot drift. */
+   ALIAS-AWARE, AND THE ALIAS MAP IS NOW EMPTY. SPRING and UTAD are one
+   detector under two direction labels (hgOmniSpring returns SPRING on a
+   swept low and UTAD on a swept high, confirmed 123/123 long and 106/106
+   short). hg-v764 folded them; this file used to assert that fold. It no
+   longer holds: the two halves settle 19 points of win rate apart and a
+   pooled record describes neither, so each label is registered and judged
+   on its own. UTAD is therefore expected to be PRESENT in OG_MECHANICS —
+   the opposite of what this block used to require, and the reason it is
+   rewritten rather than renumbered.
+
+   The map is still read from omnigold.js rather than copied, so the day a
+   genuinely interchangeable pair appears this check follows it. An empty
+   map is a valid state and must not read as a parse failure — the two are
+   told apart by whether the declaration was found at all. */
 {
   const ALIAS = {};
-  const aliasSrc = (CODE.match(/var OG_KIND_ALIAS = \{([^}]*)\}/) || [])[1] || '';
+  const aliasMatch = CODE.match(/var OG_KIND_ALIAS = \{([^}]*)\}/);
+  const aliasSrc = (aliasMatch || [])[1] || '';
   for (const m of aliasSrc.matchAll(/'([A-Z0-9-]+)'\s*:\s*'([A-Z0-9-]+)'/g)) ALIAS[m[1]] = m[2];
-  ok(Object.keys(ALIAS).length > 0, 'the alias map is readable from source (' + JSON.stringify(ALIAS) + ')');
-  ok(ALIAS.UTAD === 'SPRING', 'and UTAD folds into SPRING — one detector, two direction labels');
+  ok(!!aliasMatch, 'the alias map declaration is readable from source');
+  ok(Object.keys(ALIAS).length === 0,
+     'and nothing folds today (' + JSON.stringify(ALIAS) + ') — a found-but-empty map, not a failed parse');
+  ok(MECHANICS.includes('UTAD'),
+     'so UTAD is registered in its own right rather than judged on SPRING\'s record');
+  ok(MECHANICS.includes('SPRING'), 'and SPRING still is too — un-pooling adds a mechanic, it removes none');
 
   const walkPath = path.join(ROOT, 'scripts', 'backtest-omnigold-results.json');
   if (fs.existsSync(walkPath)){

@@ -275,6 +275,28 @@ function groupBy(rows, keyFn, width, minN){
   return out;
 }
 
+/* THE KEYS groupBy DROPPED, AND HOW FAR SHORT THEY FELL.
+
+   Omitting a thin cohort is right — a record on eleven trades is not a
+   record — but omitting it SILENTLY leaves the card with nothing to say,
+   and nothing reads exactly like "measured and fine". Thirteen mechanics
+   fire in this walk and fall under the bar. The gap between raw firings
+   and what reaches this count is the filtering, not the detector:
+   POC-REVERT fires 146 times in the walk and TWO of them survive the stop
+   floor, the cost veto and broker hours. A reader looking at a POC-REVERT
+   card could not tell it apart from a mechanic that had been measured.
+
+   So the bake publishes the shortfall as data. It is a COUNT, never a
+   rate: computing a win rate on the rows that fell short and shipping it
+   under a caveat is the same mistake with a disclaimer stapled on. */
+function belowThreshold(rows, keyFn, minN){
+  const g = {};
+  for (const r of rows){ const k = keyFn(r); if (k == null) continue; g[k] = (g[k] || 0) + 1; }
+  const out = {};
+  for (const [k, n] of Object.entries(g)) if (n < (minN || 1)) out[k] = n;
+  return out;
+}
+
 /* ---------- concurrency, the fact that motivates all of this ---------- */
 function concurrency(pool){
   const ev = [];
@@ -395,6 +417,8 @@ const bake = {
     })()
   },
   formedByKind: groupBy(formed, r => r.kind, WIDTH, 40),
+  /* the other side of that 40: which mechanics fired and were left out */
+  kindBelowThreshold: { minN: 40, kinds: belowThreshold(formed, r => r.kind, 40) },
   sequentialByCell: groupBy(seq, r => r.horizon + '/' + r.tier, WIDTH, 10),
   sequentialByKind: groupBy(seq, r => r.kind, WIDTH, 10)
 };

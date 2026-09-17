@@ -182,14 +182,23 @@ console.log('\n== OMNIGOLD carries its own copy, and it got the same fix ==');
   ok(/ex\.fwd = hgOgFwdFor\(ex\.fwdTab, statKey\)/.test(og), 'wired per candidate by mechanic');
   ok(/ex\.fwdTab = 'OMNIGOLD:' \+ cfg\.label/.test(og), 'against the pool that horizon records into');
 
-  /* UTAD is measured under SPRING in the pool; the forward lookup must use
-     the same key or it would silently find nothing. hg-v764 moved that from
-     an inline special case to OG_KIND_ALIAS, the one map the ledger
-     accessor and the family count also read, so the three cannot drift. */
+  /* THE IN-SAMPLE AND OUT-OF-SAMPLE RECORDS MUST DESCRIBE THE SAME
+     POPULATION, whatever that population is. Both ex.stats and ex.fwd key
+     off statKey, so a mechanic cannot be condemned on one pool's rows and
+     promoted on another's.
+
+     What statKey resolves to has moved twice. It was an inline UTAD ->
+     SPRING special case; hg-v764 made it OG_KIND_ALIAS so the gate, the
+     ledger accessor and the family count could not drift; and the map is
+     now EMPTY, because the two halves settle 19 points apart and pooling
+     them judged each on the other's record. The lookup is unchanged — it
+     is the map it reads that emptied. */
   ok(/var statKey = Object\.prototype\.hasOwnProperty\.call\(OG_KIND_ALIAS, hit\.kind\)/.test(og),
     'and uses the same family key the stats pool does');
-  ok(/var OG_KIND_ALIAS = \{ 'UTAD': 'SPRING' \}/.test(og),
-    'from a shared alias map rather than a special case');
+  ok(/var OG_KIND_ALIAS = \{\};/.test(og),
+    'from a shared alias map, which folds nothing today — each direction reads its own record');
+  ok(/ex\.stats = \(extra && extra\.stats && extra\.stats\[statKey\]\)/.test(og),
+    'and the in-sample stats come through that same key, so the two pools cannot diverge');
 }
 
 console.log('\n' + passed + ' passed, 0 failed');

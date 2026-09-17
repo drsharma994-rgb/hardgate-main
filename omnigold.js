@@ -450,7 +450,11 @@ terse status, and never launches a first-time scan on a global refresh.
      so the multiple-comparisons correction can never drift out of step with
      the number of mechanics actually being tried. Adding a detector without
      adding it here would understate the correction. */
-  var OG_MECHANICS = ['SPRING','PO3','ORB','ABSORB','VALUE','MMOVE',
+  /* 'UTAD' sits beside 'SPRING' rather than folding into it: hgOmniSpring
+     emits both, they are the two sides of one detector, and their records
+     differ by 19 points of win rate. Registering only the long side left
+     106 firings judged on the other half's evidence. See OG_KIND_ALIAS. */
+  var OG_MECHANICS = ['SPRING','UTAD','PO3','ORB','ABSORB','VALUE','MMOVE',
                       'ASIA-BREAK','KZ-JUDAS','ADR-FADE','ROUND-MAGNET',
                       'PDH-SWEEP','PDL-SWEEP','LONDON-FIX','VWAP-REVERT','NR7-BREAK',
                       'SMT-DIVERGE','TREND-RECLAIM',
@@ -5253,9 +5257,11 @@ terse status, and never launches a first-time scan on a global refresh.
       var hit = hits[i];
       var ex = {}, k;
       for (k in (extra || {})) if (Object.prototype.hasOwnProperty.call(extra, k)) ex[k] = extra[k];
-      /* One detector, two direction labels — see OG_KIND_ALIAS. Was an
-         inline UTAD-to-SPRING special case; now the same map the ledger
-         accessor and the family count use, so the three cannot drift. */
+      /* The mechanic reads its OWN record — see OG_KIND_ALIAS, which is
+         empty. This was an inline UTAD-to-SPRING special case, which judged
+         short setups on the long half's 104 trades; folding the pair fixed
+         the wrong half of that. Both stats and fwd key off statKey, so the
+         in-sample and out-of-sample records stay the same population. */
       var statKey = Object.prototype.hasOwnProperty.call(OG_KIND_ALIAS, hit.kind)
         ? OG_KIND_ALIAS[hit.kind] : hit.kind;
       ex.stats = (extra && extra.stats && extra.stats[statKey]) ? extra.stats[statKey] : null;
@@ -7687,6 +7693,30 @@ terse status, and never launches a first-time scan on a global refresh.
       'CUSUM-SHIFT': [ 45, 0.2444,  -0.237,   0.041, 0.247],
       'EQH-SWEEP': [ 42, 0.3571,  -0.971,   0.071, 0.612]
     },
+    /* THE OTHER SIDE OF THE 40-TRADE BAR.
+
+       `kinds` above is every mechanic the bake could measure. These are the
+       ones it could not: they fire on this walk and settle too few times to
+       carry a record, so the bake omits them rather than zero-fill — right,
+       and until now silent. A card for a mechanic with no row rendered NO
+       replay line, which reads exactly like a mechanic that was measured
+       and came back fine.
+
+       Counts only, deliberately. These are settled firings after the stop
+       floor, the cost veto and broker hours; the walk's raw count is much
+       larger (POC-REVERT fires 146 times and two survive), and the gap is
+       the filtering rather than the detector. A win rate is NOT published
+       here: a rate on eleven trades under a caveat is the same overclaim
+       with a disclaimer attached.
+
+       From scripts/omnigold-replay-evidence.json sequentialBake
+       .kindBelowThreshold — baked, never hand-counted. */
+    kindsBelowBar: { minN: 40, counts: {
+      'VALUE': 29, 'VOL-EXPANSION': 26, 'P8-VPINBO': 25, 'P6-ZFADE': 23,
+      'PWH-SWEEP': 22, 'PWL-SWEEP': 22, 'ABSORB': 14, 'OB-RETEST': 12,
+      'P5-TURT': 7, 'P4-ADRX': 3, 'POC-REVERT': 2,
+      'COMPRESSION-BREAK': 1, 'DONCHIAN-DRIVE': 1
+    } },
     /* hg-v700 refresh note: the ENGINE cohort collapsed from 277 to 3 settled
        trades — the hg-v699 GOLD SCALP overhaul (stop floor + edge suppressions)
        made bridge picks scarce, so per-grade ENGINE rows are no longer
@@ -7720,34 +7750,98 @@ terse status, and never launches a first-time scan on a global refresh.
     }
   };
 
-  /* ONE DETECTOR, TWO DIRECTION LABELS, ONE RECORD.
+  /* ONE DETECTOR, TWO DIRECTION LABELS — AND THE LABELS ARE NOT
+     INTERCHANGEABLE, SO EACH KEEPS ITS OWN RECORD.
 
      hgOmniSpring (omniroute.js) returns kind 'SPRING' when the last bar
      sweeps the range LOW and closes back inside, and kind 'UTAD' when it
-     sweeps the HIGH. Same function, same rule, one mechanic — the labels
-     are the two sides of it. The walk confirms it: SPRING is 123 of 123
-     long, UTAD 106 of 106 short.
+     sweeps the HIGH. Same function, same rule. The walk confirms the labels
+     are pure direction: SPRING is 123 of 123 long, UTAD 106 of 106 short.
 
-     The ledger measured them as separate rows, which had two consequences
-     and neither was intended:
+     THE BUG THAT WAS REAL. The gate read UTAD's stats under 'SPRING', so a
+     short setup was judged on 104 long trades and none of its own 91. That
+     half is the worse half — 19.2%, z -3.05, a VETO — and it condemned
+     every short firing of the detector on evidence that was not its own.
 
-       the panel could show 'UTAD 38.5%' as though a mechanic with an edge
-       existed, when the mechanic as a whole settles at 28.9%
+     THE FIX THAT WAS WRONG. hg-v764 answered that by pooling: one detector,
+     one record, 28.2%. But pooling is only correct if the halves are
+     interchangeable draws from one distribution, and they are not. Measured
+     across the unprovable-fill interval, SPRING settles 16.5 / 22.2 / 27.3%
+     and UTAD 34.9 / 42.0 / 45.9% (lower / point / upper). A pooled 28.2%
+     describes NEITHER: it condemns the short half on the long half's record
+     and flatters the long half with the short half's.
 
-       the gate maps UTAD to SPRING (correctly — one mechanic) and so read
-       the LONG HALF ONLY: a short setup was judged on 104 long trades and
-       none of its own 91. That half is the worse half, at 19.2% and z
-       -3.05, a VETO, where the mechanic pooled is 28.9% at z -1.28 and is
-       not one.
+     Nor is the split peculiar to this detector. Three more omnigold
+     detectors emit a direction-labelled pair the same way — hgOgPdSweep
+     (PDL / PDH), the EQ sweep in hg-mechanics.js (EQL / EQH), hgOgPwSweep
+     (PWL / PWH) — and in all four the short half is the better one, at
+     every bound: 12 of 12 comparisons, none reversing. The ledger already
+     keeps those three as separate rows and the gate already judges them
+     separately. SPRING/UTAD was the only pooled pair, so the fold was also
+     the inconsistency.
 
-     So a whole mechanic, 229 firings and 2.3% of the book, was condemned
-     by a directional split of its own record.
+     WHAT THIS DOES AND DOES NOT CLAIM. Un-pooling is not a bet that shorts
+     work. Overlap-corrected, no pair reaches +/-1.9 at any bound and the
+     combined statistic peaks at -2.15 against a family-wise bar of 2.234
+     for four tests, so the asymmetry is NOT established — it is recorded
+     forward (hgFwdNormalize's dirHalf) for an out-of-sample test. What is
+     established is narrower and enough on its own: a record measured on one
+     direction does not describe the other, so it must not be used to judge
+     it. Each label reads its own row, in the gate and in the panel alike.
 
-     Folded here, at the single accessor every reader goes through, rather
-     than re-baking: the ledger keeps whatever rows it has and callers see
-     one mechanic. hgOgFamilyZ's count comes through the same fold, so the
-     significance bar stops counting one detector twice. */
-  var OG_KIND_ALIAS = { 'UTAD': 'SPRING' };
+     WHAT CHANGES AT THE GATE, BOTH WAYS. Pooled, each half read 28.2% at
+     z -1.28 and both came back UNCHECKED — so the fold did not only spare
+     the short half, it LIFTED A VETO off the long one. Un-pooled:
+
+       SPRING  n=104  19.2%  z -3.05  ->  VETO      (was UNCHECKED)
+       UTAD    n= 91  38.5%  z +1.04  ->  UNCHECKED (was UNCHECKED)
+
+     Which is the point, and it cuts against the desk as often as for it:
+     the long half is condemned on the long half's record rather than
+     rescued by the short half's. It also brings the pair into line with
+     PDL-SWEEP, already vetoed on its own -2.12 while PDH-SWEEP is not.
+     NOTHING IS PROMOTED — UTAD at +1.04 is nowhere near the 54-mechanic
+     bar, and no gold mechanic clears at any tier. This buys no tickets.
+
+     (The in-sample veto sits at a naive -2 while promotion needs family-
+     wise +3.11. That asymmetry is deliberate and older than this change:
+     condemning one mechanic is cheap and reversible, promoting one spends
+     the desk's money. Untouched here.)
+
+     The fold machinery below stays. It is the right answer for labels that
+     genuinely ARE one sample, and emptying the map rather than deleting the
+     code keeps that one line away from the callers. Nothing folds today, so
+     hgOgReplayFamilySize counts 54 again: two records judged against two
+     bars are two tests, and the correction has to say so. */
+  var OG_KIND_ALIAS = {};
+
+  /* THE FOUR PAIRS, NAMED SO THE SPLIT CAN BE READ INSTEAD OF REMEMBERED.
+
+     Not an alias — the whole point above is that these do NOT fold. This is
+     the map that lets a card show the other half of its own detector, and
+     lets the forward log be asked the pair question later without anyone
+     having to know which labels go together. Long label first.
+
+     Each detector is one function returning one label per side, so the walk
+     shows every firing of a label on one side: SPRING 123/123 long, UTAD
+     106/106 short, and the same for the other three. */
+  var OG_DIR_PAIRS = [
+    ['SPRING',    'UTAD'],
+    ['PDL-SWEEP', 'PDH-SWEEP'],
+    ['EQL-SWEEP', 'EQH-SWEEP'],
+    ['PWL-SWEEP', 'PWH-SWEEP']
+  ];
+
+  /* The other half of `kind`'s detector, with which side it is, or null for
+     a mechanic that has no direction twin. */
+  function hgOgDirSibling(kind){
+    var key = String(kind || '').toUpperCase(), i;
+    for (i = 0; i < OG_DIR_PAIRS.length; i++){
+      if (OG_DIR_PAIRS[i][0] === key) return { kind: OG_DIR_PAIRS[i][1], side: 'short', selfSide: 'long' };
+      if (OG_DIR_PAIRS[i][1] === key) return { kind: OG_DIR_PAIRS[i][0], side: 'long',  selfSide: 'short' };
+    }
+    return null;
+  }
 
   /* Merge two [n, winRate, avgNetR, avgGrossR, medianCostR] rows. Counts
      add; the rates are re-weighted by n, which is the only correct way to
@@ -8557,9 +8651,31 @@ terse status, and never launches a first-time scan on a global refresh.
     } catch (e) { return ''; }
   }
 
+  /* 'this mechanic was never measured', for the 13 that fall under the bar.
+     '' for anything with a record (that renders hgOgReplayLineHtml) and for
+     an unknown key, which is not a mechanic and has nothing to disclose. */
+  function hgOgReplayBelowBarHtml(kind){
+    try {
+      var tbl = HG_OG_REPLAY_EVIDENCE && HG_OG_REPLAY_EVIDENCE.kindsBelowBar;
+      if (!tbl || !tbl.counts) return '';
+      var key = String(kind || '').toUpperCase();
+      if (!Object.prototype.hasOwnProperty.call(tbl.counts, key)) return '';
+      var n = fin(tbl.counts[key]), bar = fin(tbl.minN);
+      if (!isFinite(n) || !isFinite(bar)) return '';
+      return '<div class="dim og-replay-line og-replay-edge-none" style="font-size:11px;margin-top:2px">'
+        + 'replay: NOT MEASURED — ' + n + ' settled firing' + (n === 1 ? '' : 's')
+        + ' in the walk, under the ' + bar + ' this desk needs before it will quote a '
+        + 'record. No win rate is shown because none would mean anything at that n.</div>';
+    } catch (e) { return ''; }
+  }
+
   function hgOgReplayLineHtml(kind){
     var ev = hgOgReplayEvidence(kind);
-    if (!ev || !isFinite(fin(ev.winRate)) || !isFinite(fin(ev.avgNetR))) return '';
+    if (!ev || !isFinite(fin(ev.winRate)) || !isFinite(fin(ev.avgNetR))) {
+      /* measured-and-bad and never-measured used to render identically —
+         as nothing at all. Only the second gets a line here. */
+      return hgOgReplayBelowBarHtml(kind);
+    }
     var netTxt = (ev.avgNetR >= 0 ? '+' : '') + ev.avgNetR.toFixed(2) + 'R';
     var h = '<div class="dim og-replay-line" style="font-size:11px;margin-top:2px">replay: '
       + (ev.winRate * 100).toFixed(0) + '% WR, ' + netTxt + ' net (n=' + ev.n + ')';
@@ -8597,7 +8713,36 @@ terse status, and never launches a first-time scan on a global refresh.
       h += '<div class="dim og-replay-edge ' + cls + '" style="font-size:10px;margin-top:1px">'
         + esc(beTxt + ' · ' + verdict) + '</div>';
     }
+    h += hgOgDirSiblingLineHtml(kind, ev);
     return h;
+  }
+
+  /* THE OTHER HALF OF THE SAME DETECTOR, ON THE SAME CARD.
+
+     A SPRING card quoting 19% and a UTAD card quoting 38% are the same
+     function measured on its two sides, and a reader seeing one of them has
+     no way to know the other exists. That asymmetry is the most interesting
+     thing this walk found and it was invisible on the surface that matters.
+
+     Shown as CONTEXT, not as a recommendation: the gap is real in sign
+     across every bound but nowhere near a family-wise bar, so the line says
+     what the two records are and stops. Nothing here changes a gate — the
+     card's own verdict above is computed on its own record alone. */
+  function hgOgDirSiblingLineHtml(kind, selfEv){
+    try {
+      var sib = hgOgDirSibling(kind);
+      if (!sib) return '';
+      var sEv = hgOgReplayEvidence(sib.kind);
+      if (!sEv || !isFinite(fin(sEv.winRate))) return '';
+      if (!selfEv || !isFinite(fin(selfEv.winRate))) return '';
+      return '<div class="dim og-replay-dirsplit" style="font-size:10px;margin-top:1px">'
+        + esc('same detector, other side: ' + sib.kind + ' (' + sib.side + ') '
+            + (sEv.winRate * 100).toFixed(0) + '% on n=' + sEv.n + ' vs this side\'s '
+            + (selfEv.winRate * 100).toFixed(0) + '% on n=' + selfEv.n
+            + ' — the halves are judged separately because they differ; '
+            + 'the gap is consistent in sign but not established')
+        + '</div>';
+    } catch (e) { return ''; }
   }
 
   /* ENGINE pick annotations. Grade A/B carry the replay's one genuinely
@@ -11318,7 +11463,19 @@ terse status, and never launches a first-time scan on a global refresh.
       var stats = {}, pooled = null;
       if (btFn){
         var fns = {
-          SPRING: function(r){ var g = w.hgOmniRange ? w.hgOmniRange(r, 40) : null; return g && w.hgOmniSpring ? w.hgOmniSpring(r, g) : null; },
+          /* ONE CALL, TWO REGISTERED LABELS — the EQL/EQH-SWEEP pattern.
+             hgOmniSpring returns SPRING on a swept low and UTAD on a swept
+             high. This entry used to return whichever came back, so UTAD
+             fired 106 times while being registered nowhere. Now each side
+             is its own mechanic with its own row, its own gate verdict and
+             its own place in the family count — which is the whole reason
+             OG_KIND_ALIAS is empty. */
+          SPRING: function(r){ var g = w.hgOmniRange ? w.hgOmniRange(r, 40) : null;
+                               var h = (g && w.hgOmniSpring) ? w.hgOmniSpring(r, g) : null;
+                               return (h && h.kind === 'SPRING') ? h : null; },
+          UTAD:   function(r){ var g = w.hgOmniRange ? w.hgOmniRange(r, 40) : null;
+                               var h = (g && w.hgOmniSpring) ? w.hgOmniSpring(r, g) : null;
+                               return (h && h.kind === 'UTAD') ? h : null; },
           PO3:    function(r){ return w.hgOmniPo3 ? w.hgOmniPo3(r, 6) : null; },
           ORB:    function(r){ return w.hgOmniOrb ? w.hgOmniOrb(r, 3) : null; },
           ABSORB: function(r){ var g = w.hgOmniRange ? w.hgOmniRange(r, 40) : null; return g && w.hgOmniAbsorb ? w.hgOmniAbsorb(r, g) : null; },
@@ -13564,6 +13721,10 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgCostChipHtml = hgOgCostChipHtml;
     window.hgOgReplayEvidence = hgOgReplayEvidence;
     window.hgOgReplayLineHtml = hgOgReplayLineHtml;
+    window.hgOgReplayBelowBarHtml = hgOgReplayBelowBarHtml;
+    window.hgOgDirSibling = hgOgDirSibling;
+    window.hgOgDirSiblingLineHtml = hgOgDirSiblingLineHtml;
+    window.OG_DIR_PAIRS = OG_DIR_PAIRS;
     window.hgOgReplayNetAtVenue = hgOgReplayNetAtVenue;
     window.hgOgReplayEdgeVerdict = hgOgReplayEdgeVerdict;
     window.hgOgReplayFamilySize = hgOgReplayFamilySize;

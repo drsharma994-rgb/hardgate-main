@@ -666,6 +666,27 @@ localStorage. Never throws.
        better than the ones it put near the bottom. Records with no score —
        every tab that does not rank — land nowhere and are not counted. */
     var byBal = { top:{n:0,w:0}, mid:{n:0,w:0}, low:{n:0,w:0} };
+    /* SETTLED OUTCOMES SPLIT BY SIDE, BECAUSE THE IN-SAMPLE BOOK SAYS THEY
+       DIFFER AND THE IN-SAMPLE BOOK CANNOT SETTLE IT.
+
+       Four omnigold detectors emit a long label and a short label from one
+       function — SPRING/UTAD, PDL/PDH-SWEEP, EQL/EQH-SWEEP, PWL/PWH-SWEEP.
+       In the replay the short half is the better half in all four, at every
+       bound of the unprovable-fill interval: 12 of 12 comparisons, none
+       reversing. That is the only formation cut measured on this walk whose
+       SIGN survives the interval; order type, stop distance and session all
+       flip.
+
+       It is also not established. Corrected for overlap no pair reaches
+       +/-1.9 at any bound, and the four combined peak at -2.15 against a
+       family-wise bar of 2.234 — and it is in-sample, on detectors sharing
+       an instrument and bars. The only way to find out is to watch it
+       forward, which needs the split recorded from now on.
+
+       So: recorded, reported, and used for NOTHING. No filter keys off it,
+       no weight reads it, no ordering changed. If it is real it will show
+       here in a year; if it was in-sample noise, that will show here too. */
+    var byDir = { long:{n:0,w:0}, short:{n:0,w:0} };
     /* Start from any evidence already folded out of the record list. Without
        this, everything pruned would silently vanish from the numbers.
        ticketOnly cannot be answered from the aggregate — it does not keep that
@@ -678,7 +699,12 @@ localStorage. Never throws.
       for (var ai = 0; ai < aggTabs.length; ai++){
         var a = agg[aggTabs[ai] + '|' + String(mechanic || '')];
         if (a){ wins += (a.wins || 0); losses += (a.losses || 0); expired += (a.expired || 0); rrSum += (a.rrSum || 0);
-                bankN += (a.bankN || 0); bankSum += (a.bankSum || 0); bankActualSum += (a.bankActualSum || 0); }
+                bankN += (a.bankN || 0); bankSum += (a.bankSum || 0); bankActualSum += (a.bankActualSum || 0);
+                /* the side split rides the same unfiltered path — it exists
+                   to be read over years, so it must not be a live-window
+                   view of the last four weeks */
+                if (a.dir_long){ byDir.long.n += (a.dir_long.n || 0); byDir.long.w += (a.dir_long.w || 0); }
+                if (a.dir_short){ byDir.short.n += (a.dir_short.n || 0); byDir.short.w += (a.dir_short.w || 0); } }
       }
     }
     /* The gate-clear split DOES survive pruning now (see hgFwdFold), so a
@@ -757,6 +783,12 @@ localStorage. Never throws.
         byBal[slot].n++;
         if (r.state === 't1') byBal[slot].w++;
       }
+      /* a record with no side lands in neither bucket — never a default of
+         'long', which would hand one half the other's losses */
+      if ((r.state === 't1' || r.state === 'stop') && byDir[r.dir]){
+        byDir[r.dir].n++;
+        if (r.state === 't1') byDir[r.dir].w++;
+      }
     }
     var settled = wins + losses;
     var hit = settled ? wins / settled : NaN;
@@ -795,7 +827,7 @@ localStorage. Never throws.
              fillHit: (fillWins + fillLosses) ? fillWins / (fillWins + fillLosses) : NaN,
              fillUnfilled: fillUnfilled,
              fillUnprovable: fillUnprovable,
-             byGrade: byGrade, byStack: byStack, byBal: byBal };
+             byGrade: byGrade, byStack: byStack, byBal: byBal, byDir: byDir };
   }
 
   /* Every mechanic seen for a tab. Pure. */
@@ -915,6 +947,20 @@ localStorage. Never throws.
          throttled subset, so per mechanic it is thinner still: folding it is
          what makes it answerable at all. */
       if (r.shown === true) tally(out[key].sh || (out[key].sh = blank()));
+      /* AND THE SIDE, FOR THE SAME REASON THE OTHERS FOLD.
+
+         The long/short split is the slowest measurement on this desk: it
+         needs years of settled records per mechanic before it can say
+         anything the in-sample walk has not already said badly. Left to the
+         live list it would be a rolling four-week view forever, which is
+         precisely the window that cannot answer it. Counts only, like the
+         rest of the aggregate. */
+      if ((r.state === 't1' || r.state === 'stop') && (r.dir === 'long' || r.dir === 'short')){
+        var dk = 'dir_' + r.dir;
+        if (!out[key][dk]) out[key][dk] = { n: 0, w: 0 };
+        out[key][dk].n++;
+        if (r.state === 't1') out[key][dk].w++;
+      }
     }
     return out;
   }

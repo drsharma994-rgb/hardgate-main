@@ -510,7 +510,48 @@
   "window": "2026-03-27..2026-09-10",
   "barBasis": "PAXGUSDT 1h proxy",
   "sequentialBake": {
-    "generated": "2026-09-16T12:25:50.237Z",
+    "generated": "2026-09-16T23:29:37.347Z",
+    "gateFingerprint": {
+      "count": 35,
+      "keys": [
+        "adr-budget",
+        "adx-trend",
+        "atr-percentile",
+        "consensus",
+        "context-gates",
+        "cost-drag",
+        "dxy-inverse",
+        "ema-stack",
+        "fade-strength",
+        "fill-path",
+        "fill-risk",
+        "gold-season",
+        "htf-daily",
+        "inst-filter",
+        "level-fresh",
+        "macro-realrate",
+        "measured-edge",
+        "momentum-stop",
+        "news-window",
+        "participation",
+        "plan-levels",
+        "premium-discount",
+        "rsi-zone",
+        "session",
+        "session-vwap",
+        "shield-guard",
+        "spot-basis",
+        "stop-floor",
+        "stop-width",
+        "trend",
+        "vol-alive",
+        "vol-forecast",
+        "weekend-exposure",
+        "yield-guard",
+        "zone-anchor"
+      ]
+    },
+    "walkGenerated": "2026-09-12T07:15:34.424Z",
     "src": "scripts/backtest-omnigold-results.json",
     "window": "2026-03-29..2026-09-12",
     "barBasis": "PAXGUSDT proxy for XAUUSD",
@@ -518,6 +559,21 @@
     "costModel": {
       "paxgRtFrac": 0.0026,
       "xmRtFrac": 0.0002
+    },
+    "sampleIntegrity": {
+      "settled": 7734,
+      "unprovableFills": 1751,
+      "unprovableScoredWins": 462,
+      "unprovableScoredLosses": 1289,
+      "winRateInterval": {
+        "lower": 0.2761276127612761,
+        "upper": 0.3832428238944919,
+        "point": 0.33561758315226475
+      },
+      "tablesComputedOn": "lower bound (unprovable wins dropped, unprovable losses kept)",
+      "breakevenAt2R": 0.3333,
+      "breakevenVsInterval": "straddles",
+      "note": "1751 of 7734 settled rows (22.6%) are pending orders that resolved on their own fill bar, where the OHLC cannot show the entry printed before the exit. If the exit printed first the order was still resting and there was no trade, so each row is either what the walk scored (462 wins, 1289 losses) or not a sample point at all. That puts the win rate between 27.61% and 38.32% — an interval, not a measurement. Only a finer series inside the fill bar can narrow it (scripts/resolve-unprovable-1m.mjs)."
     },
     "concurrency": {
       "peak": 109,
@@ -637,6 +693,27 @@
           "worstFrom": "2026-04-01",
           "worstTo": "2026-09-11"
         }
+      },
+      "sequentialTicketsCurrentGates": {
+        "xm": {
+          "finalR": 1.66,
+          "peakR": 9.34,
+          "maxDrawdownR": 8.21,
+          "longestLosingStreak": 6,
+          "everAboveWater": true,
+          "worstFrom": "2026-04-01",
+          "worstTo": "2026-05-21"
+        },
+        "paxg": {
+          "finalR": -6.09,
+          "peakR": 1.9,
+          "maxDrawdownR": 9.81,
+          "longestLosingStreak": 7,
+          "everAboveWater": true,
+          "worstFrom": "2026-04-01",
+          "worstTo": "2026-05-15"
+        },
+        "note": "PROXY — v752 gates applied to a 2026-09-12 walk, not a re-walk"
       }
     },
     "fills": {
@@ -1678,6 +1755,24 @@
           "tCluster": -2.55,
           "inflation": 1.03
         }
+      }
+    },
+    "kindBelowThreshold": {
+      "minN": 40,
+      "kinds": {
+        "P8-VPINBO": 25,
+        "OB-RETEST": 12,
+        "VALUE": 29,
+        "PWH-SWEEP": 22,
+        "ABSORB": 14,
+        "P6-ZFADE": 23,
+        "PWL-SWEEP": 22,
+        "P5-TURT": 7,
+        "VOL-EXPANSION": 26,
+        "POC-REVERT": 2,
+        "DONCHIAN-DRIVE": 1,
+        "P4-ADRX": 3,
+        "COMPRESSION-BREAK": 1
       }
     },
     "sequentialByCell": {
