@@ -1549,16 +1549,16 @@ console.log('\n== the armed panel says what would trip it, and what it does not 
   const FLAT = SRC.replace(/'\s*\+\s*'/g, '').replace(/\s+/g, ' ');
   ok(/the real ones are set by whichever candle actually fires/.test(FLAT),
      'and that the projected levels are not the ones that will be used');
-  ok(/armedHtml\(rungs\);/.test(SRC), 'wired into SIMPLE');
-  const iArmed = SRC.indexOf('h += armedHtml(rungs);');
-  const iSetups = SRC.indexOf('h += simpleSetupsHtml(shown);');
+  ok(/armedHtml\(rungs, spot\);/.test(SRC), 'wired into SIMPLE');
+  const iArmed = SRC.indexOf('h += armedHtml(rungs, spot);');
+  const iSetups = SRC.indexOf('h += simpleSetupsHtml(shown, spot);');
   ok(iArmed > 0 && iSetups > 0 && iArmed < iSetups,
      'and rendered ABOVE the finished setups — what might happen next is worth more than what '
      + 'already did');
   /* THE WHOLE LADDER, not the focused subset. Everything backward-looking
      takes `shown`; this one takes `rungs`, and that difference is the point
      — a view filter must not be able to hide a rung about to fire. */
-  ok(!/armedHtml\(shown\)/.test(SRC),
+  ok(!/armedHtml\(shown/.test(SRC),
      'and it reads the WHOLE ladder, never the focus-filtered set');
 
   /* AND NEITHER DOES THE LOG. The recording loop always read `rungs`, but
@@ -1570,7 +1570,7 @@ console.log('\n== the armed panel says what would trip it, and what it does not 
      'the forward log records over every rung scanned, not the focused subset');
   ok(!/hg80Shown/.test(RUN.slice(0, RUN.indexOf('render('))),
      'and nothing between the scan and the render narrows what gets recorded');
-  ok(/armedHtml\(rungs\)/.test(SRC.slice(SRC.indexOf('function render('))),
+  ok((SRC.slice(SRC.indexOf('function render(')).match(/armedHtml\(rungs, spot\)/g) || []).length >= 2,
      'in both views');
 }
 
@@ -1727,6 +1727,197 @@ console.log('\n== what the venue takes out of the win, on the card itself ==');
 
   ok(/costLineHtml\(rung\.be/.test(SRC), 'and it is wired into the setup card');
   ok(/costLineHtml\(a\.rung\.be/.test(SRC), 'and onto the armed rows too');
+}
+
+console.log('\n== the live gold price, and what it says about a setup ==');
+{
+  ok(typeof ctx.hgLivePriceGrade === 'function',
+     'the desk\'s shared live-price grader is loaded — this tab delegates to it rather than '
+     + 'writing a second definition of "past the stop"');
+
+  /* BOTH HELPERS HAVE TO BE ON THE PAGE BEFORE THIS TAB. The lookups are by
+     name at CALL time, so a reorder degrades to "not available" rather than
+     throwing — but degraded is not the same as working, and the thing that
+     makes it work in the browser is this ordering. */
+  const HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  const at = f => HTML.indexOf('src="' + f + '?');
+  ok(at('omniroute.js') > 0 && at('goldscalp.js') > 0 && at('eightypercent.js') > 0,
+     'omniroute.js, goldscalp.js and eightypercent.js are all on the page');
+  ok(at('omniroute.js') < at('eightypercent.js'),
+     'omniroute.js loads first — it defines hgLivePriceGrade');
+  ok(at('goldscalp.js') < at('eightypercent.js'),
+     'and goldscalp.js loads first — it defines hgGoldLiveSpot');
+  ok(/gfn\('hgGoldLiveSpot'\)/.test(SRC) && /gfn\('hgLivePriceGrade'\)/.test(SRC),
+     'and both are looked up by name at call time, so a reorder degrades rather than throws');
+
+  /* ---- the bounded read ---- */
+  const realSetTimeout = ctx.setTimeout;
+  ctx.hgGoldLiveSpot = undefined;
+  const noReader = await ctx.hg80LiveSpot(4300);
+  ok(Number.isNaN(noReader), 'with no spot reader loaded the read resolves NaN, never throws');
+
+  ctx.hgGoldLiveSpot = () => { throw new Error('boom'); };
+  ok(Number.isNaN(await ctx.hg80LiveSpot(4300)),
+     'a reader that throws resolves NaN — a price endpoint cannot break the scan');
+
+  ctx.hgGoldLiveSpot = () => Promise.resolve(-1);
+  ok(Number.isNaN(await ctx.hg80LiveSpot(4300)), 'and a nonsense price is rejected, not shown');
+
+  /* THE HARNESS FIRES setTimeout IMMEDIATELY, so the bounded read's race
+     would always be won by its own timeout and the happy path would never
+     run. Swap in Node's real timer for this one check — otherwise the
+     assertion that a price comes back would be structurally unreachable. */
+  ctx.setTimeout = (fn, ms) => globalThis.setTimeout(fn, ms);
+  ctx.hgGoldLiveSpot = () => Promise.resolve(4312.4);
+  const got = await ctx.hg80LiveSpot(4300);
+  ok(got === 4312.4, `a reader that answers gives the price back (${got})`);
+  ctx.setTimeout = realSetTimeout;
+
+  /* ---- the grades, and which of them are still a trade ---- */
+  const plan = { dir: 'long', entry: 4300, stop: 4288, t1: 4302.25 };
+  const sig = { dir: 'long', plan: plan };
+  ok(ctx.hg80LiveGrade(sig, NaN) === null, 'no live price means no grade — never a guess');
+  ok(ctx.hg80LiveGrade({ dir: 'long' }, 4300) === null, 'and no plan means no grade');
+
+  ok(ctx.hg80LiveGrade(sig, 4280) === 'past-stop',
+     'a long whose stop has traded through grades past-stop');
+  ok(ctx.hg80LiveGrade(sig, 4310) === 'past-t1', 'and one past its target grades past-t1');
+  ok(ctx.hg80LiveGrade(sig, 4295) === 'pending',
+     'price on the pullback side of entry is pending — the fill is still ahead');
+
+  const shortSig = { dir: 'short', plan: { dir: 'short', entry: 4300, stop: 4312, t1: 4297.75 } };
+  ok(ctx.hg80LiveGrade(shortSig, 4320) === 'past-stop',
+     'and a SHORT is graded the right way round — 4320 is through a 4312 stop, not under it');
+  ok(ctx.hg80LiveGrade(shortSig, 4290) === 'past-t1', 'with its target BELOW the entry');
+
+  ok(ctx.hg80LiveActs('past-stop') === false && ctx.hg80LiveActs('past-t1') === false,
+     'past-stop and past-t1 are NOT actionable — that is the whole point of reading the price');
+  for (const g of ['fresh', 'pending', 'past-entry']){
+    ok(ctx.hg80LiveActs(g) === true, `${g} is still actionable`);
+  }
+  ok(ctx.hg80LiveActs(null) === true,
+     'and an ungraded setup stays actionable — with no price read, the tab makes no claim '
+     + 'either way rather than silently killing every card');
+
+  /* every grade the shared grader can return has an entry here, or a card
+     hits the fallback and says nothing */
+  for (const g of ['fresh', 'pending', 'past-entry', 'past-t1', 'past-stop']){
+    ok(!!ctx.HG_P80_LIVE_STATE[g] && typeof ctx.HG_P80_LIVE_STATE[g].txt === 'string',
+       `${g} has words a reader can act on`);
+  }
+}
+
+console.log('\n== a setup gold has already run past is NOT offered as one you could act on ==');
+{
+  /* THE BUG THIS EXISTS FOR. "STILL OPEN — neither the stop nor the target
+     has been touched yet" was a statement about the FETCHED BARS, which end
+     at the last close. A firing from four bars ago could be through its stop
+     in the live market and this panel counted it under "setups you could act
+     on" and printed an entry for it. */
+  const def = { tf: '15m', sec: 900, bars: 320, band: 'scalp' };
+  const rows = series(320, { tfSec: 900, endHour: 15, tail: 3 });
+  const out = ctx.hg80ScanTf(rows, def, ctx.hg80VenueRt());
+  const opens = out.res.signals.filter(x => x.status === 'open');
+  ok(opens.length > 0, `the fixture leaves ${opens.length} setup(s) open at the last close`);
+
+  const victim = opens[opens.length - 1];
+  ok(victim.dir === 'long', 'the open one is a long');
+
+  /* with NO live price the panel behaves exactly as it did before */
+  const blind = ctx.simpleSetupsHtml([out], NaN);
+  ok(/you could act on/.test(blind), 'with no live price the panel still offers the open setup');
+  ok(!/NO LONGER TAKEABLE/.test(blind), 'and marks nothing dead on a price it never read');
+
+  /* now put gold through the stop */
+  const through = victim.plan.stop - 5;
+  const graded = ctx.simpleSetupsHtml([out], through);
+  ok(/NO LONGER TAKEABLE/.test(graded),
+     `with gold at ${through.toFixed(2)} — below the ${victim.plan.stop.toFixed(2)} stop — the `
+     + 'setup is marked no longer takeable');
+  ok(/DEAD — gold is already through the stop/.test(graded),
+     'in words, with the reason, not just a greyed-out chip');
+  ok(!/[0-9]+ setups? you could act on/.test(graded)
+     || /Nothing here is still takeable/.test(graded),
+     'and it is NOT counted under "setups you could act on" — the count is the thing that was '
+     + 'lying');
+
+  /* and the honest opposite: price sitting on the entry is the best kind */
+  const atEntry = ctx.simpleSetupsHtml([out], victim.plan.entry);
+  ok(/AT ENTRY — gold is at this level right now/.test(atEntry),
+     'price sitting on the entry says so');
+  ok(/you could act on/.test(atEntry), 'and that one IS offered');
+
+  /* THE RENDERERS TAKE THE PRICE, they do not reach for it. Passing it in is
+     what makes all of the above assertable at all, and it is the same shape
+     render() already uses for the venue. */
+  ok(/function simpleSetupsHtml\(rungs, spot\)/.test(SRC)
+     && /function livePriceHtml\(spot, hint\)/.test(SRC)
+     && /function armedHtml\(rungs, spot\)/.test(SRC),
+     'livePriceHtml, armedHtml and simpleSetupsHtml all take the live price as an argument');
+  ok(!/function (livePriceHtml|armedLiveHtml|simpleSetupsHtml)[\s\S]{0,300}__p\.spot/.test(SRC),
+     'and none of them reads __p.spot out of module state');
+}
+
+console.log('\n== an armed row says which way the forming candle is leaning ==');
+{
+  /* the trigger is "closes the right side of its open", and the open is what
+     the last bar closed at — so live price against that level says which
+     side the unfinished candle is currently on. Not where it ends; nothing
+     can say that. */
+  const a = { side: 'long', level: 4300, rung: { def: { tf: '5m' } } };
+  ok(ctx.armedLiveHtml(a, NaN) === '', 'with no live price the row says nothing extra');
+
+  const up = ctx.armedLiveHtml(a, 4303.2);
+  ok(/Leaning the right way/.test(up),
+     'gold above the level leans the RIGHT way for a long needing a green close');
+  ok(/3\.20<\/b> above/.test(up), 'with the distance stated');
+  ok(/green close/.test(up), 'and the close it needs named');
+
+  const down = ctx.armedLiveHtml(a, 4296.8);
+  ok(/Leaning the wrong way/.test(down), 'gold below it leans the wrong way');
+  ok(/3\.20<\/b> below/.test(down), 'with the distance the other way');
+
+  /* and the mirror image, which is the half a long-only reading would miss */
+  const sh = { side: 'short', level: 4300, rung: { def: { tf: '5m' } } };
+  ok(/Leaning the right way/.test(ctx.armedLiveHtml(sh, 4296.8)),
+     'a SHORT leans the right way when gold is BELOW the level');
+  ok(/Leaning the wrong way/.test(ctx.armedLiveHtml(sh, 4303.2)),
+     'and the wrong way when it is above — the test a long-only reading inverts');
+  ok(/red close/.test(ctx.armedLiveHtml(sh, 4296.8)), 'needing a red close, not a green one');
+
+  ok(/not finished/.test(up),
+     'and every one of them says the candle is not finished — this is where it stands, not '
+     + 'where it ends');
+  ok(!/NaN|undefined/.test(up + down), 'nothing renders as NaN or undefined');
+}
+
+console.log('\n== the live price panel, and the feed-versus-spot gap ==');
+{
+  const none = ctx.livePriceHtml(NaN, NaN);
+  ok(/LIVE GOLD: not available this scan/.test(none),
+     'with no price the panel says so plainly');
+  ok(/comes from the last closed candle/.test(none),
+     'and says what the numbers below it are based on instead');
+  ok(/No setup is marked dead or live on a price that was not read/.test(none),
+     'and that nothing was graded — silence about a missing input is how a stale grade gets '
+     + 'mistaken for a fresh one');
+
+  const tight = ctx.livePriceHtml(4312.40, 4310.00);
+  ok(/LIVE GOLD/.test(tight) && /4312\.40/.test(tight), 'with a price it shows the price');
+  ok(/bar feed last close/.test(tight) && /4310\.00/.test(tight),
+     'beside the bar feed\'s own last close, because they are two different numbers both '
+     + 'called "the gold price"');
+  ok(!/apart<\/b>, past the/.test(tight), 'a small gap is stated, not warned about');
+
+  /* past the desk's own floor it becomes a warning */
+  const far = 4310 * (1 + (ctx.HG_P80_SPOT_DRIFT_PCT + 0.2) / 100);
+  const wide = ctx.livePriceHtml(far, 4310.00);
+  ok(/apart<\/b>, past the/.test(wide),
+     `a gap past the desk's ${ctx.HG_P80_SPOT_DRIFT_PCT}% floor is warned about`);
+  ok(/is not rescaled/.test(wide),
+     'and the panel says the levels are NOT rescaled — rescaling would mix two sources inside '
+     + 'one plan, and this tab writes those plans to the forward log');
+  ok(!/NaN|undefined/.test(wide + tight + none), 'and none of it renders as NaN or undefined');
 }
 
 console.log('\n== and it still refuses to invent a rate from what it resolved ==');

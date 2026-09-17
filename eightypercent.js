@@ -302,6 +302,97 @@ function hg80ExpectancyR(hit, be){
 }
 
 /* ---------------------------------------------------------------------
+   WHERE GOLD ACTUALLY IS, RIGHT NOW
+
+   Every number this tab printed came from the last CLOSED candle. That is
+   correct for deciding whether a setup exists — a bar has to finish before
+   its conditions can be read — and it is wrong for deciding whether one is
+   still worth taking.
+
+   The SETUPS panel has been labelling a firing from four bars ago "STILL
+   OPEN — neither the stop nor the target has been touched yet" and counting
+   it under "setups you could act on". Both statements are about the FETCHED
+   BARS, which end at the last close. Between that close and now the market
+   kept moving, and a setup whose stop price has since traded through is not
+   open, not actionable, and offering it as either is the most dangerous
+   sentence on the page.
+
+   The gold desk already solved this twice and this tab used neither answer:
+   hgGoldLiveSpot() reads spot from gold-api.com, and hgLivePriceGrade()
+   sorts a plan against a live price into past-stop / past-t1 / fresh /
+   past-entry / pending. One definition, more users.
+
+   BOUNDED, AND NEVER LOAD-BEARING. The fetch races a timeout and resolves
+   NaN on any failure, so a slow or blocked price endpoint delays nothing and
+   removes nothing — the tab falls back to exactly what it printed before,
+   and says that it is doing so rather than showing a stale grade.
+   --------------------------------------------------------------------- */
+var P80_SPOT_TIMEOUT_MS = 2500;
+/* the desk's own floor for "the feed and spot have meaningfully diverged",
+   from hgOgAlignPlansToSpot */
+var P80_SPOT_DRIFT_PCT = 0.35;
+
+function hg80LiveSpot(klineHint){
+  var fn = gfn('hgGoldLiveSpot');
+  if (!fn) return Promise.resolve(NaN);
+  return Promise.race([
+    Promise.resolve().then(function(){ return fn(klineHint); }).catch(function(){ return NaN; }),
+    new Promise(function(r){ setTimeout(function(){ r(NaN); }, P80_SPOT_TIMEOUT_MS); })
+  ]).then(function(px){
+    var v = fin(px);
+    return (isFinite(v) && v > 0) ? v : NaN;
+  }).catch(function(){ return NaN; });
+}
+
+/* What the live price says about a plan. Delegates the geometry to the
+   desk's shared grader so this tab, OMNIGOLD and OMNIROUTE cannot disagree
+   about what "past the stop" means. */
+function hg80LiveGrade(sig, px){
+  var p = sig && sig.plan;
+  var v = fin(px);
+  if (!p || !isFinite(v) || !(v > 0)) return null;
+  var fn = gfn('hgLivePriceGrade');
+  if (!fn) return null;
+  try {
+    var g = fn(sig.dir, p.entry, p.stop, p.t1, null, v);
+    return (g && g.grade) ? g.grade : null;
+  } catch (e){ return null; }
+}
+
+/* THE FIVE GRADES, IN WORDS A DESK USES, and — the part that matters —
+   whether each one is still a trade. `act` false is what keeps a dead setup
+   out of the "you could act on" count. */
+var P80_LIVE_STATE = {
+  'fresh':      { act: true,  col: '#10b981',
+                  txt: 'AT ENTRY — gold is at this level right now' },
+  'pending':    { act: true,  col: '#10b981',
+                  txt: 'WAITING — gold has not come back to the entry yet, so the fill is '
+                       + 'still ahead of you' },
+  'past-entry': { act: true,  col: '#b45309',
+                  txt: 'MOVED ON — gold is already past the entry, so part of the move is gone '
+                       + 'and the rest of the target is closer than the card says' },
+  'past-t1':    { act: false, col: '#64748b',
+                  txt: 'GONE — gold has already reached the target. There is nothing left to '
+                       + 'take here' },
+  'past-stop':  { act: false, col: '#ef4444',
+                  txt: 'DEAD — gold is already through the stop. This is not an open setup and '
+                       + 'taking it now is taking the loss on purpose' }
+};
+
+function hg80LiveActs(grade){
+  var st = P80_LIVE_STATE[grade];
+  return st ? st.act === true : true;   /* no grade = no claim either way */
+}
+
+function liveChipHtml(grade, px){
+  var st = P80_LIVE_STATE[grade];
+  if (!st) return '';
+  return '<div class="note" style="margin-top:4px;padding:3px 6px;border-left:3px solid '
+    + st.col + '"><b style="color:' + st.col + '">' + esc(st.txt) + '.</b> '
+    + 'Gold is <b>' + num(px) + '</b> as this was drawn.</div>';
+}
+
+/* ---------------------------------------------------------------------
    IS THIS SETUP WORTH TAKING AT THIS VENUE
 
    "More setups" and "better setups" pull against each other, and the tab
@@ -1699,7 +1790,7 @@ function simpleCardHtml(sig, rung, state){
    inside the window is not knowable in advance, but the window itself is. */
 /* The panel the whole tab was missing: what is one candle away, what would
    trip it, and when that candle closes — in the reader's own clock. */
-function armedHtml(rungs){
+function armedHtml(rungs, spot){
   var armed = hg80Armed(rungs);
   var arming = hg80Arming(rungs, armed);
   if (!armed.length && !arming.length) return '';
@@ -1715,7 +1806,7 @@ function armedHtml(rungs){
     h += '<div class="note" style="margin-top:6px"><b>ARMED — ONE CANDLE AWAY.</b> Three of the '
       + 'four conditions hold on the last closed candle. Only the candle\'s own direction is '
       + 'outstanding, and it is decided at the close named on each row.</div>';
-    h += bandBlocksHtml(armed, armedRowHtml);
+    h += bandBlocksHtml(armed, function(x){ return armedRowHtml(x, spot); });
   }
 
   if (arming.length){
@@ -1773,7 +1864,7 @@ function bandBlocksHtml(list, rowFn){
   return h;
 }
 
-function armedRowHtml(a){
+function armedRowHtml(a, spot){
   var long = a.side === 'long';
   var closesAt = isFinite(fin(a.closesIn))
     ? hg80WhenTxt(Math.floor(Date.now() / 1000) + fin(a.closesIn), false) : '';
@@ -1788,6 +1879,7 @@ function armedRowHtml(a){
     + '<div class="note" style="margin-top:3px">Candle closes in <b>'
     + hg80DurTxt(a.closesIn) + '</b>' + (closesAt ? ' — at <b>' + esc(closesAt) + '</b>' : '')
     + '</div>'
+    + armedLiveHtml(a, spot)
     + '<table style="border:0;margin:4px 0"><tbody>'
     + '<tr><td style="padding:2px 10px 2px 0">likely ENTRY</td>'
     + '<td class="hg-num" style="font-weight:bold;padding:2px 10px 2px 0">' + num(a.entryEst) + '</td></tr>'
@@ -1802,6 +1894,30 @@ function armedRowHtml(a){
   return h + '</div>';
 }
 
+/* WHERE GOLD IS RELATIVE TO THE LEVEL THAT WOULD TRIP THIS.
+
+   The trigger is "closes the right side of its open", and the open is what
+   the last bar closed at. So the live price against that level says which
+   way the forming candle is currently leaning — not whether it will finish
+   there, which nothing can say, but which side it is on as the reader
+   looks. A row that needs a green close while gold sits 3.20 BELOW the open
+   is leaning the wrong way, and that is worth seeing next to the countdown. */
+function armedLiveHtml(a, spot){
+  var px = fin(spot), lvl = fin(a.level);
+  if (!isFinite(px) || !(px > 0) || !isFinite(lvl)) return '';
+  var long = a.side === 'long';
+  var d = px - lvl;
+  var leaning = long ? (d > 0) : (d < 0);
+  var col = leaning ? '#10b981' : '#b45309';
+  return '<div class="note" style="margin-top:3px;padding:3px 6px;border-left:3px solid ' + col + '">'
+    + 'Gold is <b>' + num(px) + '</b> right now — <b>' + num(Math.abs(d)) + '</b> '
+    + (d >= 0 ? 'above' : 'below') + ' that level. '
+    + '<b style="color:' + col + '">' + (leaning ? 'Leaning the right way' : 'Leaning the wrong way')
+    + '</b> for a ' + (long ? 'green' : 'red') + ' close, as of this scan. '
+    + '<span class="dim">The candle is not finished; this is where it stands, not where it '
+    + 'ends.</span></div>';
+}
+
 function armingRowHtml(a){
   var long = a.side === 'long';
   return '<div style="margin-top:6px;padding:5px 8px;border:1px dashed #334155;border-radius:4px">'
@@ -1811,6 +1927,51 @@ function armingRowHtml(a){
     + '<div class="note" style="margin-top:2px">Waiting on: <b>' + esc(a.need.txt) + '</b>. '
     + 'Then a candle closing ' + (long ? 'ABOVE' : 'BELOW') + ' its open. '
     + 'Trend is already aligned; last close ' + num(a.level) + '.</div></div>';
+}
+
+/* ---------------------------------------------------------------------
+   THE LIVE PRICE, AND HOW FAR THE BAR FEED IS FROM IT
+
+   Two different numbers that both get called "the gold price", printed
+   side by side because a reader comparing an entry to their broker's
+   screen needs to know which one the entry came from.
+
+   The levels on every card are computed from the BAR FEED — its closes and
+   its ATR. They are deliberately NOT rescaled to spot. Rescaling would mix
+   two sources inside one plan, and this tab writes those plans to the
+   forward log, so a rescaled level would put a number in the record that no
+   bar ever produced. The gap is disclosed instead, and above the desk's own
+   0.35% floor it is disclosed as a warning.
+   --------------------------------------------------------------------- */
+function livePriceHtml(spot, hint){
+  var px = fin(spot);
+  var ref = fin(hint);
+  if (!isFinite(px) || !(px > 0)){
+    return '<div class="note" style="margin-top:8px;padding:4px 8px;border-left:3px solid #64748b">'
+      + '<b>LIVE GOLD: not available this scan.</b> The spot reader '
+      + (gfn('hgGoldLiveSpot') ? 'did not answer in time' : 'is not loaded')
+      + ', so nothing below is checked against the current price — every level and every status '
+      + 'comes from the last closed candle, which is what this tab did before. No setup is '
+      + 'marked dead or live on a price that was not read.</div>';
+  }
+  var driftPct = isFinite(ref) && ref > 0 ? ((px / ref) - 1) * 100 : NaN;
+  var wide = isFinite(driftPct) && Math.abs(driftPct) >= P80_SPOT_DRIFT_PCT;
+  var h = '<div class="note" style="margin-top:8px;padding:4px 8px;border-left:3px solid '
+    + (wide ? '#b45309' : '#10b981') + '">'
+    + '<b>LIVE GOLD <span style="font-size:1.25em">' + num(px) + '</span></b> '
+    + '<span class="dim">spot, read just now</span>';
+  if (isFinite(ref) && ref > 0){
+    h += ' · bar feed last close <b>' + num(ref) + '</b> ('
+      + (driftPct >= 0 ? '+' : '') + driftPct.toFixed(2) + '%)';
+  }
+  if (wide){
+    h += '<br><span class="warn"><b>The feed and spot are ' + Math.abs(driftPct).toFixed(2)
+      + '% apart</b>, past the ' + P80_SPOT_DRIFT_PCT.toFixed(2) + '% the desk treats as '
+      + 'meaningful. Every entry, stop and target below is quoted on the BAR FEED and is not '
+      + 'rescaled — shift them by that percentage before comparing them to your broker\'s '
+      + 'screen.</span>';
+  }
+  return h + '</div>';
 }
 
 function sessionClockHtml(rungs){
@@ -1840,7 +2001,7 @@ function sessionClockHtml(rungs){
   return h;
 }
 
-function simpleSetupsHtml(rungs){
+function simpleSetupsHtml(rungs, spot){
   var usable = rungs.filter(function(r){ return r.ok; });
   var live = [], open = [], recent = [], i, j;
   for (i = 0; i < usable.length; i++){
@@ -1855,17 +2016,67 @@ function simpleSetupsHtml(rungs){
 
   var h = '<div class="panel"><h2>SETUPS <span>XAUUSD</span></h2>';
 
-  if (live.length || open.length){
-    h += '<div class="note ok" style="margin-bottom:4px"><b>' + (live.length + open.length)
-      + ' setup' + ((live.length + open.length) === 1 ? '' : 's') + ' you could act on.</b></div>';
-    for (i = 0; i < live.length; i++){
-      h += simpleCardHtml(live[i].s, live[i].r,
-        '<span class="statuschip ok">FIRED ON THE LAST CLOSED CANDLE</span>');
+  /* GRADE EVERY CANDIDATE AGAINST THE LIVE PRICE BEFORE COUNTING IT.
+
+     "STILL OPEN — neither the stop nor the target has been touched yet" was
+     a statement about the FETCHED BARS, which end at the last close. Between
+     that close and now the market kept moving, so a firing from four bars
+     ago could be through its stop already and this panel was still counting
+     it under "setups you could act on" and printing an entry for it. The
+     live grade is what decides actionability now; with no live price nothing
+     is graded and the old wording is used unchanged, which is the honest
+     fallback rather than a guess in either direction. */
+  spot = fin(spot);
+  var cands = [], k;
+  for (k = 0; k < live.length; k++) cands.push({ r: live[k].r, s: live[k].s, fresh: true });
+  for (k = 0; k < open.length; k++) cands.push({ r: open[k].r, s: open[k].s, fresh: false });
+  for (k = 0; k < cands.length; k++){
+    cands[k].grade = hg80LiveGrade(cands[k].s, spot);
+    cands[k].act = hg80LiveActs(cands[k].grade);
+  }
+  var actable = cands.filter(function(c){ return c.act; });
+  var dead = cands.filter(function(c){ return !c.act; });
+
+  /* the ones you can still take, best first: at entry, then waiting for the
+     fill, then the ones price has already run away from */
+  var rank = { 'fresh': 0, 'pending': 1, 'past-entry': 2 };
+  actable.sort(function(a, b){
+    var ra = rank[a.grade] == null ? 1 : rank[a.grade];
+    var rb = rank[b.grade] == null ? 1 : rank[b.grade];
+    if (ra !== rb) return ra - rb;
+    return (a.fresh === b.fresh) ? 0 : (a.fresh ? -1 : 1);
+  });
+
+  if (actable.length || dead.length){
+    if (actable.length){
+      h += '<div class="note ok" style="margin-bottom:4px"><b>' + actable.length
+        + ' setup' + (actable.length === 1 ? '' : 's') + ' you could act on'
+        + (isFinite(spot) ? ', checked against gold at <b>' + num(spot) + '</b>' : '')
+        + '.</b>'
+        + (dead.length ? ' <span class="warn">' + dead.length + ' more fired but '
+            + (dead.length === 1 ? 'is' : 'are') + ' no longer takeable — listed below.</span>' : '')
+        + '</div>';
+    } else {
+      h += '<div class="note warn" style="margin-bottom:4px"><b>Nothing here is still takeable.</b> '
+        + dead.length + ' setup' + (dead.length === 1 ? '' : 's') + ' fired, and gold has since '
+        + 'moved past ' + (dead.length === 1 ? 'its' : 'their') + ' level'
+        + (dead.length === 1 ? '' : 's') + '. They are shown so the reason is visible rather '
+        + 'than the panel simply looking empty.</div>';
     }
-    for (i = 0; i < open.length; i++){
-      h += simpleCardHtml(open[i].s, open[i].r,
-        '<span class="statuschip ok">STILL OPEN</span> <span class="note">neither the stop nor '
-        + 'the target has been touched yet</span>');
+
+    for (k = 0; k < actable.length; k++){
+      var ca = actable[k];
+      h += simpleCardHtml(ca.s, ca.r,
+        (ca.fresh ? '<span class="statuschip ok">FIRED ON THE LAST CLOSED CANDLE</span>'
+                  : '<span class="statuschip ok">STILL OPEN</span> <span class="note">neither '
+                    + 'the stop nor the target was touched in the bars fetched</span>')
+        + liveChipHtml(ca.grade, spot));
+    }
+    for (k = 0; k < dead.length; k++){
+      var cd = dead[k];
+      h += simpleCardHtml(cd.s, cd.r,
+        '<span class="statuschip na">NO LONGER TAKEABLE</span>'
+        + liveChipHtml(cd.grade, spot));
     }
     return h + '</div>';
   }
@@ -2539,20 +2750,25 @@ function render(rungs, venue, recNotes, basis){
      reads the first. */
   var shown = hg80Shown(rungs);
   var usable = shown.filter(function(r){ return r.ok; });
+  /* the live price is an INPUT to the render, the same way the venue is —
+     read once by the scan, passed down, never reached for out of module
+     state by whichever renderer happens to want it */
+  var spot = fin(__p.spot), spotRef = fin(__p.spotHint);
   var h = viewControlHtml();
 
   if (__p.view === 'simple'){
     if (!usable.length){
       var b0 = shown.map(function(r){ return r.def.tf + ': ' + ((r.why) || 'no bars'); });
-      ui.body.innerHTML = h + armedHtml(rungs)
+      ui.body.innerHTML = h + livePriceHtml(spot, spotRef) + armedHtml(rungs, spot)
         + '<div class="note warn">No gold bars came back on the focused rungs — '
         + esc(b0.join(' · ')) + '</div>';
       wireViewButtons();
       wireFocusButtons();
       return;
     }
-    h += armedHtml(rungs);
-    h += simpleSetupsHtml(shown);
+    h += livePriceHtml(spot, spotRef);
+    h += armedHtml(rungs, spot);
+    h += simpleSetupsHtml(shown, spot);
     h += sessionClockHtml(shown);
     h += '<div class="note" style="margin-top:8px">Priced at <b>'
       + esc((venue || 'the selected venue')) + '</b>. Switch to <b>FULL</b> for the cost '
@@ -2566,7 +2782,8 @@ function render(rungs, venue, recNotes, basis){
 
   h += venueControlHtml(__p.venue);
   h += focusControlHtml();
-  h += armedHtml(rungs);
+  h += livePriceHtml(spot, spotRef);
+  h += armedHtml(rungs, spot);
   h += whyNothingHtml(shown);
   h += mathPanelHtml(shown, venue, basis);
 
@@ -2797,6 +3014,21 @@ function run(){
   });
 
   return chain.then(function(){
+    /* LIVE SPOT, ONCE, AFTER THE BARS. The hint is the finest rung's last
+       close, which is what hgGoldLiveSpot uses to reject a price more than
+       8% from the feed — a sanity bound, not an alignment. Bounded and
+       non-fatal: NaN here costs the grades and nothing else. */
+    var hint = NaN, hi;
+    for (hi = 0; hi < rungs.length; hi++){
+      if (rungs[hi].ok && isFinite(fin(rungs[hi].lastPx))){ hint = fin(rungs[hi].lastPx); break; }
+    }
+    if (ui && ui.stat) ui.stat.textContent = 'reading live gold…';
+    return hg80LiveSpot(hint).then(function(spot){ return { spot: spot, hint: hint }; });
+  })
+  .then(function(live){
+    __p.spot = fin(live.spot);
+    __p.spotHint = fin(live.hint);
+
     /* EVERY RUNG THAT FIRED, not every rung on screen. This loop always read
        `rungs`, but `rungs` used to BE the focused subset — so the forward
        log's population silently depended on which rungs the reader happened
@@ -2826,6 +3058,7 @@ function run(){
         + (hg80FocusList().length
              ? (hg80FocusList().join(' + ') + ' shown of ' + rungs.length + ' scanned')
              : (okN + '/' + rungs.length + ' rungs')) + ' · '
+        + (isFinite(fin(__p.spot)) ? 'gold ' + num(__p.spot) + ' · ' : 'no live price · ')
         + (fired.length ? fired.join(', ') + ' fired' : 'no rung fired on its last candle');
     }
     __p.ranOnce = true;
@@ -2905,6 +3138,15 @@ W.armedHtml          = armedHtml;
 W.costLineHtml       = costLineHtml;
 W.hg80Shown          = hg80Shown;
 W.hg80CostVerdict    = hg80CostVerdict;
+W.hg80LiveSpot       = hg80LiveSpot;
+W.hg80LiveGrade      = hg80LiveGrade;
+W.hg80LiveActs       = hg80LiveActs;
+W.livePriceHtml      = livePriceHtml;
+W.armedLiveHtml      = armedLiveHtml;
+W.liveChipHtml       = liveChipHtml;
+W.simpleSetupsHtml   = simpleSetupsHtml;
+W.HG_P80_LIVE_STATE  = P80_LIVE_STATE;
+W.HG_P80_SPOT_DRIFT_PCT = P80_SPOT_DRIFT_PCT;
 W.HG_P80_COST_HEAVY  = P80_COST_HEAVY;
 W.hg80WhenTxt        = hg80WhenTxt;
 W.hg80TzName         = hg80TzName;

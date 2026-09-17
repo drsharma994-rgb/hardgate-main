@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v782',
-  pack: 'MID mechanic at the RSI midline, a second forward tier for what is two away, cost-per-win on every card, and a rung focus that narrows the page instead of the scan so no view setting can hide a rung about to fire',
+  version: 'hg-v783',
+  pack: 'the live gold price reaches the 80PERCENT tab — a setup the market has already run past its stop is no longer counted as one you could act on, and every armed row says where gold is against the level that would trip it',
   built: '2026-09-17T00:00:00Z'
 };
 
