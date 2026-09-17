@@ -241,6 +241,31 @@ function hg80ExpectancyR(hit, be){
    gold desk's own model so this tab and every other card price the same
    trade the same way; null when it cannot be read, which makes the net
    breakeven unavailable rather than wrong. */
+/* ---------------------------------------------------------------------
+   MAKE SURE THE DESK HAS A VENUE BEFORE PRICING ANYTHING
+
+   hgOgVenueInit() — which applies the persisted choice, or the desk's XM
+   default when nothing is stored — runs inside the OMNIGOLD tab's mount and
+   nowhere else. Open this tab without having opened that one and
+   __ogVenueSel is still '', so hgOgVenueCost() returns its conservative
+   PAXG fallback: every rung priced at 0.26% round trip instead of XM's
+   0.020%, which on 5m gold is the difference between "needs 89.74%" and
+   "needs 178.16%, unreachable". A tab whose headline number depends on
+   which OTHER tab you opened first is a tab reporting an accident.
+
+   Called ONCE per page load. Repeating it would undo an in-session choice
+   whenever localStorage is unavailable — hgOgVenueInit() resolves to '' in
+   that case, and '' means PAXG — so a selection made on this tab would
+   silently revert on the next scan.
+   --------------------------------------------------------------------- */
+var __p80VenueInit = false;
+
+function hg80VenueEnsure(){
+  if (__p80VenueInit) return;
+  __p80VenueInit = true;
+  try { if (typeof W.hgOgVenueInit === 'function') W.hgOgVenueInit(); } catch (e){}
+}
+
 function hg80VenueRt(){
   try {
     if (typeof W.hgOgVenueCost !== 'function') return null;
@@ -321,6 +346,20 @@ function hg80InSession(tSec){
    Returned as a fact about the timeframe, computed here, so no rung has to
    carry a hand-written flag that can drift out of step with its seconds.
    --------------------------------------------------------------------- */
+/* Seconds until 13:00 UTC next comes round, 0 while inside the window. The
+   three intraday rungs are structurally unable to fire outside it, and "it
+   is 05:00, the window opens in eight hours" is a better answer to "why is
+   there nothing" than five rows of chips a reader has to decode. */
+function hg80SecsToSession(nowSec){
+  var t = fin(nowSec);
+  if (!isFinite(t)) return null;
+  var d = new Date(t * 1000);
+  var secOfDay = d.getUTCHours() * 3600 + d.getUTCMinutes() * 60 + d.getUTCSeconds();
+  var from = P80_UTC_FROM * 3600, to = P80_UTC_TO * 3600;
+  if (secOfDay >= from && secOfDay < to) return 0;
+  return secOfDay < from ? (from - secOfDay) : (86400 - secOfDay + from);
+}
+
 function hg80SessionApplies(tfSec){
   var s = fin(tfSec);
   if (!(s > 0)) return false;
@@ -406,6 +445,47 @@ function hg80SignalAt(rows, ind, i, cfg, variant){
     /* which side was closer to firing, for the "why not" line */
     checks: dir === 'short' ? shortChecks : longChecks
   };
+}
+
+/* ---------------------------------------------------------------------
+   HOW CLOSE IS THIS RUNG, ACROSS BOTH MECHANICS
+
+   The board used to measure distance against the SPEC only, and to report
+   whichever side had more conditions met. On real gold that hid the one
+   thing worth knowing. A worked example from a live scan:
+
+     4h — close BELOW EMA50, EMA50 BELOW EMA200, RSI 45.6
+
+   Read against the spec that is a short missing its pullback (RSI must be
+   above 55), so the board printed "LONG 1/3" — the other side, further away,
+   because it happened to have one more box ticked. Read against WIDE, whose
+   short pullback is RSI above 45, that bar had trend AND pullback and was
+   ONE RED CANDLE from firing. "One candle away on the mechanic you are
+   running" and "two conditions away on the one you are not" are not the same
+   message, and the board was printing the second.
+
+   So this walks every variant and both sides, and returns the CLOSEST — most
+   conditions met, and on a tie the tighter mechanic, because a spec setup is
+   worth more than a wide one at equal distance.
+   --------------------------------------------------------------------- */
+function hg80Nearest(rows, ind, i, cfg){
+  var best = null, vi, sides = ['long', 'short'];
+  for (vi = 0; vi < P80_VARIANTS.length; vi++){
+    var v = P80_VARIANTS[vi];
+    var sg = hg80SignalAt(rows, ind, i, cfg, v);
+    if (!sg) continue;
+    for (var si = 0; si < sides.length; si++){
+      var side = sides[si];
+      var ch = side === 'long' ? sg.longChecks : sg.shortChecks;
+      var sc = hg80Score(ch);
+      var cand = { variant: v, side: side, score: sc, sig: sg, checks: ch };
+      if (!best) { best = cand; continue; }
+      if (sc.met > best.score.met) { best = cand; continue; }
+      /* tie -> prefer the tighter mechanic, then the side already chosen */
+      if (sc.met === best.score.met && vi < P80_VARIANTS.indexOf(best.variant)) best = cand;
+    }
+  }
+  return best;
 }
 
 /* How many of a side's conditions held, and which one did not. Drives the
@@ -615,6 +695,17 @@ function hg80ScanTf(rows, def, venue){
   }
 
   var lastSig = hg80SignalAt(rows, res.ind, n - 1, cfg);
+  var nearest = hg80Nearest(rows, res.ind, n - 1, cfg);
+
+  /* how fast this rung's firings actually resolved — the number that says
+     whether a setup from N bars ago could still be live */
+  var spans = [];
+  for (var si2 = 0; si2 < res.signals.length; si2++){
+    var sg2 = res.signals[si2];
+    if (sg2.res && sg2.status !== 'open' && isFinite(fin(sg2.res.bars))) spans.push(fin(sg2.res.bars));
+  }
+  spans.sort(function(a, b){ return a - b; });
+  var medianBars = spans.length ? spans[Math.floor(spans.length / 2)] : null;
   var live = res.signals.filter(function(x){ return x.i === n - 1; });
 
   /* THE MOST RECENT FIRING, whether or not it was the last candle. A setup
@@ -643,6 +734,7 @@ function hg80ScanTf(rows, def, venue){
   return { def: def, cfg: cfg, ok: true, rows: rows, res: res, be: be,
            lastAtr: lastAtr, lastPx: lastPx, lastSig: lastSig,
            live: live, latest: latest, tally: tally, misses: misses,
+           nearest: nearest, medianBars: medianBars, resolvedN: spans.length,
            census: hg80PullbackCensus(rows, res.ind, cfg),
            scanned: Math.max(0, n - P80_EMA_SLOW) };
 }
@@ -778,7 +870,7 @@ function ladderBoardHtml(rungs){
     + '<span>identical rules, five timeframes</span></h3>'
     + '<table class="tbl"><tr><th>rung</th><th>band</th><th>last bar (UTC)</th><th>close</th>'
     + '<th>RSI(14)</th><th>ATR(14)</th><th>stop % of entry</th><th>state</th>'
-    + '<th>fired</th><th>distance to SPEC</th></tr>';
+    + '<th>fired</th><th>closest, either mechanic</th></tr>';
   var i;
   for (i = 0; i < rungs.length; i++){
     var r = rungs[i];
@@ -803,13 +895,14 @@ function ladderBoardHtml(rungs){
           + (stopPct < P80_STOP_FLOOR ? ' <span class="statuschip na">under floor</span>' : '') : '—') + '</td>'
       + '<td>' + state + '</td>'
       + '<td class="hg-num">' + firedSplitHtml(r) + '</td>'
-      + '<td>' + distanceHtml(s, r.cfg) + '</td></tr>';
+      + '<td>' + nearestHtml(r.nearest, r.cfg) + '</td></tr>';
   }
-  h += '</table><div class="note">"Distance to SPEC" is the nearer side\'s failing conditions '
-    + 'against the SUPPLIED thresholds, named and measured on the last CLOSED bar. It is stated '
-    + 'against the spec even on a rung that just fired WIDE, because that is the number worth '
-    + 'knowing there: how far the loosened entry was from the one the strategy actually asked '
-    + 'for. It is not a forecast and not a setup — it is where the rung stands.</div></div>';
+  h += '</table><div class="note">"Closest" walks BOTH mechanics and BOTH sides and reports the '
+    + 'one nearest to firing, on the last CLOSED bar, with the mechanic named. Reporting it '
+    + 'against the spec alone printed "2 conditions away" for a rung that was one red candle from '
+    + 'a ' + esc(P80_VARIANTS[1].label) + ' entry — the wrong message, about the wrong mechanic. '
+    + 'A green chip means one condition short. It is not a forecast and not a setup — it is where '
+    + 'the rung stands.</div></div>';
   return h;
 }
 
@@ -833,6 +926,41 @@ function firedSplitHtml(r){
   return '<span class="statuschip ' + (c.spec ? 'ok' : 'na') + '">SPEC ' + c.spec + '</span> '
     + '<span class="statuschip na">WIDE ' + c.wide + '</span>'
     + '<div class="note">' + c.total + ' in ' + r.scanned + ' · ' + rate + '</div>';
+}
+
+/* The board cell: which mechanic and side is closest, what it still needs,
+   and the numbers behind each failing condition. */
+function nearestHtml(nr, cfg){
+  if (!nr) return '<span class="note">not enough bars</span>';
+  var sig = nr.sig, side = nr.side, sc = nr.score;
+  if (sc.met === sc.total){
+    return variantChipHtml({ variant: nr.variant.key }) + ' <span class="statuschip ok">'
+      + esc(side.toUpperCase()) + ' all ' + sc.total + ' hold</span>';
+  }
+  var bits = [], i;
+  for (i = 0; i < sc.missing.length; i++){
+    var k = sc.missing[i];
+    if (k === 'pullback'){
+      var need = side === 'long' ? nr.variant.rsiLong : nr.variant.rsiShort;
+      bits.push('RSI ' + num(sig.rsi, 1) + ' needs ' + (side === 'long' ? '&lt;' : '&gt;') + ' '
+        + need + ' (' + num(Math.abs(sig.rsi - need), 1) + ' away)');
+    } else if (k === 'trend'){
+      var gap = (sig.close - sig.ema50) / (sig.atr > 0 ? sig.atr : 1);
+      bits.push('trend: close is ' + num(gap, 2) + ' ATR from EMA50, EMA50 is '
+        + (sig.ema50 > sig.ema200 ? 'above' : 'below') + ' EMA200');
+    } else if (k === 'trigger'){
+      bits.push('needs a ' + (side === 'long' ? 'green' : 'red') + ' close');
+    } else if (k === 'session'){
+      bits.push('outside ' + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC');
+    }
+  }
+  var one = (sc.total - sc.met) === 1;
+  return variantChipHtml({ variant: nr.variant.key }) + ' '
+    + '<span class="statuschip ' + (one ? 'ok' : 'na') + '">' + esc(side.toUpperCase())
+    + ' ' + sc.met + '/' + sc.total + '</span> '
+    + '<span class="note">' + bits.join(' · ')
+    + (cfg && cfg.session === false ? ' <span class="statuschip na">session rule N/A here</span>' : '')
+    + '</span>';
 }
 
 function distanceHtml(sig, cfg){
@@ -889,6 +1017,139 @@ function ageTxt(sec){
   if (s < 3600) return Math.round(s / 60) + 'm';
   if (s < 86400) return (s / 3600).toFixed(s < 36000 ? 1 : 0) + 'h';
   return (s / 86400).toFixed(s < 864000 ? 1 : 0) + 'd';
+}
+
+/* The venue picker, on THIS tab. The gold desk's own control lives in the
+   OMNIGOLD tab and carries that tab's element ids, so reusing its markup
+   would put duplicate ids on the page. This drives the same
+   hgOgSetVenue() — one venue for the whole desk, one place it is stored —
+   and re-scans, because every required rate on the page is a function of
+   it.
+
+   An HG_OG_VENUE override wins over any UI selection by design, so when one
+   is set the buttons are disabled and say so rather than pretending to
+   work. */
+function venueControlHtml(v){
+  var ovr = '';
+  try { ovr = String(W.HG_OG_VENUE || '').toUpperCase().replace(/^\s+|\s+$/g, ''); } catch (e){}
+  var active = (v && v.venue) ? String(v.venue).toUpperCase() : '';
+  function btn(id, name, label){
+    var on = active === name;
+    return '<button type="button" class="btn ghost" id="' + id + '" data-p80-venue="' + name + '"'
+      + (ovr ? ' disabled' : '')
+      + ' style="' + (on ? 'border-color:#10b981;color:#10b981;font-weight:bold' : '') + '">'
+      + esc(label) + '</button>';
+  }
+  var h = '<div class="row" style="margin:8px 0 0 0;align-items:center">'
+    + '<span class="note" style="margin:0"><b>EXECUTION VENUE</b>: </span> '
+    + btn('p80VenueXm', 'XM', 'XM XAUUSD') + ' ' + btn('p80VenuePaxg', 'PAXG', 'PAXG')
+    + ' <span class="note dim" style="margin:0;font-size:11px">';
+  if (ovr){
+    h += 'locked to ' + esc(ovr) + ' by HG_OG_VENUE — the override outranks any selection here';
+  } else if (v){
+    h += 'active: ' + esc(active) + ' · ' + fin(v.rtCostPct).toFixed(3) + '% round trip';
+  } else {
+    h += 'the desk\'s venue could not be read';
+  }
+  return h + '</span></div>';
+}
+
+/* ---------------------------------------------------------------------
+   WHY THERE IS NOTHING TO TAKE RIGHT NOW
+
+   Asked three times, so it gets its own panel and a computed answer rather
+   than five rows of chips the reader has to decode.
+
+   It names the binding constraint in the order it binds: the session clock
+   first (three rungs CANNOT fire outside 13:00-18:00 UTC, whatever price
+   does), then how close the closest rung is across BOTH mechanics, then the
+   thing that explains why the list above is all history — how fast these
+   setups resolve. A 0.75 ATR target is three quarters of a typical bar's
+   range, so a firing is usually finished within a handful of bars. A setup
+   from 134 bars ago is not waiting for anyone.
+   --------------------------------------------------------------------- */
+function hg80DurTxt(sec){
+  var x = fin(sec);
+  if (!isFinite(x) || x < 0) return '—';
+  var h = Math.floor(x / 3600), m = Math.round((x % 3600) / 60);
+  if (h <= 0) return m + 'm';
+  return h + 'h ' + (m < 10 ? '0' : '') + m + 'm';
+}
+
+function whyNothingHtml(rungs){
+  var usable = rungs.filter(function(r){ return r.ok; });
+  if (!usable.length) return '';
+  var i, gated = [], open = [], closest = null;
+  var nowSec = Math.floor(Date.now() / 1000);
+  var toOpen = hg80SecsToSession(nowSec);
+
+  /* Candidates are split by whether the rung can fire AT ALL right now. A
+     "closest" that names a session-gated rung is worse than useless: it
+     invites someone to watch a chart that cannot produce a trade for another
+     eight hours. Gated rungs are only considered when nothing else is. */
+  var live = [], held = [];
+  for (i = 0; i < usable.length; i++){
+    var r = usable[i];
+    if (r.live.length) return '';                 /* something fired; nothing to explain */
+    var isGated = (r.cfg.session !== false && toOpen > 0);
+    if (isGated) gated.push(r.def.tf); else open.push(r.def.tf);
+    if (r.nearest) (isGated ? held : live).push({ r: r, n: r.nearest, gated: isGated });
+  }
+  function nearestOf(list){
+    var b = null;
+    for (var j = 0; j < list.length; j++){
+      var away = list[j].n.score.total - list[j].n.score.met;
+      if (!b || away < (b.n.score.total - b.n.score.met)) b = list[j];
+    }
+    return b;
+  }
+  closest = nearestOf(live) || nearestOf(held);
+
+  var h = '<div class="note warn" style="margin:8px 0;padding:8px 10px;border-left:3px solid #b45309">'
+    + '<b>WHY THERE IS NOTHING TO TAKE RIGHT NOW</b>';
+
+  if (gated.length){
+    h += '<br>· <b>' + gated.length + ' of ' + usable.length + ' rungs cannot fire at all</b> ('
+      + esc(gated.join(', ')) + '): it is outside ' + P80_UTC_FROM + ':00-' + P80_UTC_TO
+      + ':00 UTC and the window opens in <b>' + hg80DurTxt(toOpen) + '</b>. No price action '
+      + 'changes that — the session gate is a clock, not a condition.';
+  }
+  if (open.length){
+    h += '<br>· ' + open.length + ' rung' + (open.length === 1 ? '' : 's') + ' ('
+      + esc(open.join(', ')) + ') can fire now and did not.';
+  }
+  if (closest){
+    var miss = closest.n.score.missing.map(function(k){
+      return k === 'trigger' ? 'a ' + (closest.n.side === 'long' ? 'green' : 'red') + ' close'
+           : k === 'pullback' ? 'the RSI pullback'
+           : k === 'trend' ? 'trend alignment' : 'the session window';
+    });
+    var away = closest.n.score.total - closest.n.score.met;
+    h += '<br>· <b>Closest' + (closest.gated ? ' (and still session-gated)' : ' that can fire now')
+      + ': ' + esc(closest.r.def.tf) + ' ' + esc(closest.n.side.toUpperCase())
+      + ' on ' + esc(closest.n.variant.label) + '</b> — ' + closest.n.score.met + ' of '
+      + closest.n.score.total + ', '
+      + (away === 1 ? 'waiting only on <b>' + esc(miss[0]) + '</b>'
+                    : 'still needs ' + esc(miss.join(' and ')))
+      + '. Measured across BOTH mechanics, so a rung one candle from a ' + esc(P80_VARIANTS[1].label)
+      + ' entry is not reported as two conditions from a ' + esc(P80_VARIANTS[0].label) + ' one.';
+  }
+
+  /* the part that explains the history list */
+  var spans = [], nRes = 0;
+  for (i = 0; i < usable.length; i++){
+    if (usable[i].medianBars != null){ spans.push(usable[i].medianBars); nRes += usable[i].resolvedN; }
+  }
+  if (spans.length){
+    spans.sort(function(a, b){ return a - b; });
+    var med = spans[Math.floor(spans.length / 2)];
+    h += '<br>· <b>And these do not wait.</b> Across ' + nRes + ' firings in the fetched windows '
+      + 'the typical one finished in about <b>' + med + ' bars</b> — a ' + P80_TP_ATR
+      + ' ATR target is three quarters of one bar\'s range, so it is reached or stopped quickly. '
+      + 'That is why the list below is history: this strategy is actionable ON the bar it fires, '
+      + 'and a firing from a hundred bars ago is not a setup that is still standing.';
+  }
+  return h + '</div>';
 }
 
 function latestSetupsHtml(rungs){
@@ -1203,12 +1464,15 @@ function render(rungs, venue, recNotes, basis){
   if (!ui || !ui.body) return;
 
   var usable = rungs.filter(function(r){ return r.ok; });
-  var h = mathPanelHtml(rungs, venue, basis);
+  var h = venueControlHtml(__p.venue);
+  h += whyNothingHtml(rungs);
+  h += mathPanelHtml(rungs, venue, basis);
 
   if (!usable.length){
     var bits = rungs.map(function(r){ return r.def.tf + ': ' + ((r.why) || 'no bars'); });
     ui.body.innerHTML = h + '<div class="note warn">No rung returned usable bars — '
       + esc(bits.join(' · ')) + '</div>';
+    wireVenueButtons();
     return;
   }
 
@@ -1258,6 +1522,28 @@ function render(rungs, venue, recNotes, basis){
         + 'established either way' : '') + '.</div>';
 
   ui.body.innerHTML = h;
+  wireVenueButtons();
+}
+
+/* The buttons live inside innerHTML that is replaced on every render, so the
+   listeners are re-attached each time rather than bound once at mount. */
+function wireVenueButtons(){
+  var ui = __p.ui;
+  if (!ui || !ui.body || !ui.body.querySelectorAll) return;
+  var btns = ui.body.querySelectorAll('[data-p80-venue]');
+  for (var i = 0; i < btns.length; i++){
+    (function(b){
+      b.addEventListener('click', function(){
+        var name = b.getAttribute && b.getAttribute('data-p80-venue');
+        try {
+          if (typeof W.hgOgSetVenue === 'function' && W.hgOgSetVenue(name)){
+            if (ui.stat) ui.stat.textContent = 'venue -> ' + name + ', re-pricing every rung…';
+            run();
+          }
+        } catch (e){}
+      });
+    })(btns[i]);
+  }
 }
 
 function run(){
@@ -1274,6 +1560,7 @@ function run(){
     return Promise.resolve('error');
   }
 
+  hg80VenueEnsure();
   var venue = hg80VenueRt();
   var rungs = [];
   var chain = Promise.resolve();
@@ -1315,6 +1602,7 @@ function run(){
     }
 
     __p.last = { rungs: rungs, venue: venue };
+    __p.venue = venue;
     render(rungs, venue ? venue.venue : null, recNotes, venue ? venue.basis : null);
 
     var okN = rungs.filter(function(x){ return x.ok; }).length;
@@ -1372,10 +1660,13 @@ W.hg80Indicators     = hg80Indicators;
 W.hg80InSession      = hg80InSession;
 W.hg80SessionApplies = hg80SessionApplies;
 W.hg80VenueRt        = hg80VenueRt;
+W.hg80VenueEnsure    = hg80VenueEnsure;
 W.hg80Cfg            = hg80Cfg;
 W.hg80Variant        = hg80Variant;
 W.hg80SignalAt       = hg80SignalAt;
 W.hg80Score          = hg80Score;
+W.hg80Nearest        = hg80Nearest;
+W.hg80SecsToSession  = hg80SecsToSession;
 W.hg80Plan           = hg80Plan;
 W.hg80Resolve        = hg80Resolve;
 W.hg80PullbackCensus = hg80PullbackCensus;

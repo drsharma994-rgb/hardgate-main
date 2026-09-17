@@ -317,9 +317,9 @@ console.log('\n== the tab is POPULATED when nothing fires ==');
   for (const r of ctx.HG_P80_LADDER){
     ok(new RegExp('>' + r.tf + '<').test(html), `${r.tf} has a row on it`);
   }
-  ok(/distance to SPEC/i.test(html),
-     'with a distance column, measured against the SUPPLIED thresholds even on a rung that '
-     + 'just fired the loosened mechanic');
+  ok(/closest, either mechanic/i.test(html),
+     'with a closest-to-firing column that walks BOTH mechanics, so a rung one candle from a '
+     + 'WIDE entry is not reported as two conditions from a SPEC one');
   ok(/it needs/.test(html), 'the required-rate table renders');
   ok(/session rule N\/A/.test(html),
      'and the rungs where the session rule was dropped say so on the board');
@@ -333,6 +333,12 @@ console.log('\n== the tab is POPULATED when nothing fires ==');
      'and does not fall back to the cannot-compute branch when the venue is readable');
   ok(/RSI [0-9]+\.[0-9] needs/.test(html),
      'the distance is a NUMBER, not a shrug — this is what replaced the empty panel');
+  ok(/WHY THERE IS NOTHING TO TAKE RIGHT NOW/.test(html),
+     'and when nothing fired the tab leads with a computed answer to that question, rather than '
+     + 'leaving a reader to decode five rows of chips');
+  ok(/the session gate is a clock, not a condition/.test(html)
+     || /can fire now and did not/.test(html),
+     'naming the binding constraint — the session clock, or that the rungs were free to fire');
   ok(/55 \/ 45 column is wired/.test(html),
      'and the rendered census names the loosened column as wired, with its real thresholds');
   ok(/SPEC [0-9]+<\/span> <span class="statuschip na">WIDE [0-9]+/.test(html),
@@ -693,6 +699,173 @@ console.log('\n== when the venue genuinely cannot be read, the panel says WHICH 
   ok(!/no live ATR or no venue cost/.test(CODE),
      'the old ambiguous sentence that hid this for four versions no longer reaches the page '
      + '(it survives only in the comment explaining why it was removed)');
+}
+
+console.log('\n== the tab does not depend on which OTHER tab was opened first ==');
+{
+  /* THE BUG. hgOgVenueInit() — which applies the persisted venue, or the
+     desk's XM default — runs inside the OMNIGOLD tab's mount and nowhere
+     else. This sandbox never mounted that tab, exactly like a user who opens
+     80PERCENT straight from the nav. Before hg80VenueEnsure() the venue read
+     as the PAXG fail-closed fallback, and every required rate on the page was
+     priced at 0.26% round trip instead of XM's 0.020% — on 5m the difference
+     between "needs 89.74%" and "unreachable". */
+  ok(typeof ctx.hgOgVenueInit === 'function', 'omnigold exports hgOgVenueInit');
+  ok((CODE.match(/W\.hgOgVenueInit\(\)/g) || []).length === 1,
+     'and this tab calls it from exactly one place — the guarded ensure step — so no other '
+     + 'code path can re-run it and undo a selection');
+
+  const v = ctx.hg80VenueRt();
+  ok(!!v, 'the venue reads');
+  ok(v.venue === 'XM',
+     `and it is XM — the desk's own default — without the OMNIGOLD tab ever having mounted `
+     + `(got ${v.venue})`);
+  ok(near(v.rtFrac, 0.00020, 1e-9),
+     `at ${(v.rtFrac * 100).toFixed(3)}% round trip, not the 0.260% PAXG fallback`);
+
+  /* the PAXG fallback still exists and is still conservative — it is the
+     right answer when there is genuinely no selection, and must not be
+     "fixed" into silently assuming the cheap venue */
+  const paxg = ctx.hgOgVenuePresetCost('');
+  ok(paxg.venue === 'PAXG' && paxg.rtCostPct > v.rtCostPct,
+     'an unknown venue still fails closed to the DEARER one, which is the safe direction');
+}
+
+console.log('\n== the venue is initialised once, so a choice made here survives ==');
+{
+  /* hgOgVenueInit() resolves to '' when localStorage is unavailable, and ''
+     means PAXG. Re-running it on every scan would therefore undo a selection
+     made on this tab the moment storage is denied. */
+  ok(/__p80VenueInit/.test(SRC), 'the ensure step is guarded by a once-flag');
+  ok(/if \(__p80VenueInit\) return;/.test(SRC), 'returning early on every call after the first');
+
+  const before = ctx.hg80VenueRt().venue;
+  ok(ctx.hgOgSetVenue('PAXG') === true, 'a venue change is accepted');
+  ok(ctx.hg80VenueRt().venue === 'PAXG', 'and takes effect');
+  ctx.hg80VenueEnsure();
+  ok(ctx.hg80VenueRt().venue === 'PAXG',
+     'a later ensure does NOT reset it — the selection survives the next scan');
+  ctx.hgOgSetVenue(before);
+  ok(ctx.hg80VenueRt().venue === before, `restored to ${before} for the rest of this file`);
+}
+
+console.log('\n== the venue control drives the desk, not a private copy ==');
+{
+  ok(/W\.hgOgSetVenue\(name\)/.test(SRC),
+     'the buttons call the gold desk\'s own hgOgSetVenue — one venue, one place it is stored');
+  ok(!/localStorage\.setItem/.test(CODE),
+     'and this tab never writes the venue to storage itself, which would be a second source of truth');
+  ok(/data-p80-venue/.test(SRC), 'the buttons carry this tab\'s own ids, not OMNIGOLD\'s');
+  ok(!/id="ogVenueXm"/.test(SRC),
+     'so reusing the desk\'s markup cannot put duplicate element ids on the page');
+  ok(/HG_OG_VENUE[\s\S]{0,400}disabled/.test(SRC),
+     'an HG_OG_VENUE override disables the buttons rather than letting them pretend to work');
+  ok(/wireVenueButtons\(\);/.test(SRC) && (SRC.match(/wireVenueButtons\(\);/g) || []).length >= 2,
+     'and the listeners are re-attached on every render, because innerHTML replaces the buttons');
+}
+
+console.log('\n== closest-to-firing walks BOTH mechanics, which is the message that was wrong ==');
+{
+  /* THE DISPLAY BUG, from a live scan. 4h: close BELOW EMA50, EMA50 BELOW
+     EMA200, RSI 45.6. Against the spec that is a short missing its pullback
+     (needs RSI above 55), so the board reported the LONG side at 1 of 3 —
+     the side that was further away — while the WIDE short (pullback is RSI
+     above 45) had trend AND pullback and was one red candle from firing. */
+  const rows = series(280, { tfSec: 14400, endHour: 4, down: true, dip: 2.0 });
+  const ind = ctx.hg80Indicators(rows);
+  const cfg = ctx.hg80Cfg({ tf: '4h', sec: 14400 });
+  const nr = ctx.hg80Nearest(rows, ind, rows.length - 1, cfg);
+  ok(!!nr, 'a nearest is found');
+  ok(nr.variant && (nr.variant.key === 'spec' || nr.variant.key === 'wide'),
+     `and it names the mechanic it belongs to (${nr.variant.key})`);
+
+  /* whatever the fixture produces, the invariant is what matters: no
+     variant/side pair may be strictly closer than the one reported */
+  let bestMet = -1;
+  for (const v of ctx.HG_P80_VARIANTS){
+    const sg = ctx.hg80SignalAt(rows, ind, rows.length - 1, cfg, v);
+    for (const side of ['long', 'short']){
+      const sc = ctx.hg80Score(side === 'long' ? sg.longChecks : sg.shortChecks);
+      if (sc.met > bestMet) bestMet = sc.met;
+    }
+  }
+  ok(nr.score.met === bestMet,
+     `the reported nearest (${nr.score.met}/${nr.score.total}) is the closest of ALL four `
+     + 'variant/side combinations — never a further one that happened to be checked first');
+
+  /* a tie must break toward the TIGHTER mechanic: a spec setup at equal
+     distance is worth more than a wide one */
+  ok(/vi < P80_VARIANTS\.indexOf\(best\.variant\)/.test(SRC),
+     'and a tie breaks toward the tighter mechanic');
+  ok(/closest, either mechanic/.test(SRC), 'the column says it covers both');
+  ok(!/distance to SPEC/.test(CODE),
+     'the spec-only distance column is gone, not left beside the new one to contradict it');
+}
+
+console.log('\n== the session clock is reported as a clock ==');
+{
+  const S = ctx.hg80SecsToSession;
+  const day = Date.UTC(2026, 8, 17, 0, 0, 0) / 1000;
+  ok(S(day + 13 * 3600) === 0, 'inside the window it is zero');
+  ok(S(day + 17 * 3600 + 3599) === 0, 'right up to 17:59:59');
+  ok(S(day + 18 * 3600) === 3600 * 19, '18:00 is out, and the next open is 19h away');
+  ok(S(day + 5 * 3600) === 8 * 3600, 'at 05:00 the window opens in exactly 8h');
+  ok(S(day + 12 * 3600 + 3540) === 60, 'at 12:59 it is one minute away');
+  ok(S(day + 23 * 3600) === 14 * 3600, 'and late at night it wraps to the next day');
+  ok(S(NaN) === null, 'a nonsense clock returns null rather than a number');
+}
+
+console.log('\n== the why-nothing panel answers the question that was asked three times ==');
+{
+  ok(/WHY THERE IS NOTHING TO TAKE RIGHT NOW/.test(SRC), 'the panel exists');
+  ok(/rungs cannot fire at all/.test(SRC), 'it counts the rungs the clock has shut');
+  ok(/the session gate is a clock, not a condition/.test(SRC),
+     'and says plainly that no price action changes that');
+  ok(/Closest' \+ \(closest\.gated \? ' \(and still session-gated\)' : ' that can fire now'\)/.test(SRC),
+     'the closest rung is labelled by whether it can actually fire — naming a session-gated rung '
+     + 'as "closest" would invite watching a chart that cannot trade for hours');
+  ok(/nearestOf\(live\) \|\| nearestOf\(held\)/.test(SRC),
+     'and rungs that CAN fire are preferred over gated ones, with gated as the fallback');
+  ok(/And these do not wait/.test(SRC), 'it explains why the list below is all history');
+  ok(/actionable ON the bar it fires/.test(SRC),
+     'stating that this strategy is taken at the firing bar, not from a standing list');
+  ok(/medianBars/.test(SRC), 'and the holding time is MEASURED from the fetched windows');
+
+  /* measured, not asserted: the median must come from resolved rows */
+  const def = { tf: '15m', sec: 900, bars: 400, band: 'scalp' };
+  const walk = (tfSec, n, seed) => {
+    const out = []; let px = 4300, st = seed;
+    const rnd = () => { st = (st * 1103515245 + 12345) & 0x7fffffff; return st / 0x7fffffff; };
+    const vol = 3.1 * Math.sqrt(tfSec / 300);
+    const end = Math.floor(Date.UTC(2026, 8, 17, 16, 0, 0) / 1000 / tfSec) * tfSec;
+    for (let i = 0; i < n; i++){
+      const o = px, c = o + (rnd() - 0.5) * vol;
+      out.push({ t: end - (n - 1 - i) * tfSec, o, h: Math.max(o, c) + rnd() * vol * 0.6,
+                 l: Math.min(o, c) - rnd() * vol * 0.6, c, v: 1 });
+      px = c;
+    }
+    return out;
+  };
+  const out = ctx.hg80ScanTf(walk(900, 400, 22), def, ctx.hg80VenueRt());
+  ok(out.resolvedN > 0, `the rung resolved ${out.resolvedN} firings`);
+  ok(out.medianBars != null && out.medianBars >= 1,
+     `with a median holding time of ${out.medianBars} bars`);
+  ok(out.medianBars <= 48,
+     'inside the horizon, because anything longer would have expired rather than resolved');
+  const spans = out.res.signals.filter(x => x.res && x.status !== 'open').map(x => x.res.bars).sort((a, b) => a - b);
+  ok(out.medianBars === spans[Math.floor(spans.length / 2)],
+     'and it is the actual median of those rows, recomputed here independently');
+}
+
+console.log('\n== the panel suppresses itself when there IS something to take ==');
+{
+  const def = { tf: '15m', sec: 900, bars: 280, band: 'scalp' };
+  const rows = series(280, { tfSec: 900, endHour: 15 });
+  const out = ctx.hg80ScanTf(rows, def, ctx.hg80VenueRt());
+  ok(out.live.length > 0, 'the fixture fires on its last closed candle');
+  ok(/if \(r\.live\.length\) return '';/.test(SRC),
+     'and the panel returns nothing in that case — explaining an absence that is not there '
+     + 'would bury the setup it is standing next to');
 }
 
 console.log('\n== and it still refuses to invent a rate from what it resolved ==');

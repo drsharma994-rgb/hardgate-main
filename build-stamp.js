@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v774',
-  pack: 'the RSI 55 column is wired as P80W — a second mechanic on the bars the spec turned away, recorded apart so neither lends the other its numbers',
+  version: 'hg-v775',
+  pack: '80PERCENT answers why there is nothing to take — the session clock, the closest rung across BOTH mechanics, and the measured holding time that explains the history list; plus XM pricing without OMNIGOLD having been opened first',
   built: '2026-09-17T00:00:00Z'
 };
 
