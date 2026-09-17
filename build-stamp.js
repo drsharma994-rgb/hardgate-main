@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v769',
-  pack: 'TAURIC said it had recorded every call and had recorded none — a reason string read as a boolean, over a record with no bar',
+  version: 'hg-v770',
+  pack: '80PERCENT — the supplied dip-buyer implemented to the digit, with the win rate it actually has to hit computed from live ATR beside it',
   built: '2026-09-17T00:00:00Z'
 };
 
