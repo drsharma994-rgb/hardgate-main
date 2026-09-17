@@ -529,6 +529,10 @@ export function run(rows, ctx, opts){
       outcome: res.outcome, exit: res.exit, rMultiple: res.rMultiple,
       barsHeld: res.bars, exitISO: new Date(res.exitT * 1000).toISOString(),
       gapped: res.gapped,
+      /* HOW FAR IT ACTUALLY TRAVELLED, both ways, in ATR and in R. Carried
+         on every row so the sweep can answer the question the tab can only
+         gesture at on 500 bars: was the stop the thing being measured? */
+      maeAtr: res.maeAtr, mfeAtr: res.mfeAtr, maeR: res.maeR, mfeR: res.mfeR,
       /* the ambiguity here is the EXIT ORDER, not the fill. Carried on the
          repo's flag so the interval machinery works unchanged, and named
          so nobody reads it as a fill problem. */
@@ -545,6 +549,44 @@ export function run(rows, ctx, opts){
            geometry: geo ? { tpAtr: geo.tpAtr, slAtr: geo.slAtr }
                          : { tpAtr: spec.tpAtr, slAtr: spec.slAtr },
            census: o.skipCensus ? null : conditionCensus(rows, ctx) };
+}
+
+/* See the `excursions` note in summarise(). Computed over everything that
+   RESOLVED — an expiry travelled too, and excluding it would bias the
+   deepest-adverse figure toward trades that ended early. */
+export function excursionStats(trades, tpAtr){
+  const rows = (trades || []).filter(r => Number.isFinite(r.maeAtr) && Number.isFinite(r.mfeAtr));
+  if (!rows.length) return null;
+  const med = a => {
+    const x = a.slice().sort((p, q) => p - q), m = Math.floor(x.length / 2);
+    return x.length % 2 ? x[m] : (x[m - 1] + x[m]) / 2;
+  };
+  /* reduce, not a spread: Math.max applied to a spread array throws once
+     the array is long enough, and this runs over whole multi-symbol books */
+  const maxOf = a => a.reduce((m, v) => (v > m ? v : m), -Infinity);
+  const wins = rows.filter(r => r.outcome === 'win');
+  const fails = rows.filter(r => r.outcome !== 'win');
+  const mae = rows.map(r => r.maeAtr);
+  const out = {
+    n: rows.length, nWin: wins.length, nFail: fails.length,
+    deepestAdverseAtr: maxOf(mae),
+    medianAdverseAtr: med(mae),
+    p90AdverseAtr: (() => { const x = mae.slice().sort((p, q) => p - q);
+      return x[Math.min(x.length - 1, Math.floor(0.9 * (x.length - 1)))]; })(),
+    winnersWorstAtr: wins.length ? maxOf(wins.map(r => r.maeAtr)) : null,
+    failuresBestAtr: fails.length ? maxOf(fails.map(r => r.mfeAtr)) : null,
+    fittedSlAtr: null, fittedGrossBreakeven: null,
+    fittedIsMaximumOverSample: true,
+    note: 'fittedSlAtr is the winners worst adverse excursion in THIS run: a maximum over a '
+        + 'sample, so it can only rise with more data and is biased tight. A diagnostic for '
+        + 'whether the stop was ever the binding constraint — not a parameter to adopt. To '
+        + 'test a stop, re-run the sweep at it.'
+  };
+  if (out.winnersWorstAtr > 0 && tpAtr > 0){
+    out.fittedSlAtr = out.winnersWorstAtr;
+    out.fittedGrossBreakeven = out.fittedSlAtr / (out.fittedSlAtr + tpAtr);
+  }
+  return out;
 }
 
 export function summarise(trades, geometry){
@@ -574,6 +616,21 @@ export function summarise(trades, geometry){
        NEVER as the verdict: on 9 wins and 1 loss it says 'below' (i.e.
        established above the bar), which is nonsense on ten trades. */
     verdictVsAmbiguityOnly: thresholdVsInterval(settled, grossBE),
+    /* WHAT THE STOP AND THE TARGET ACTUALLY HAD TO BE.
+
+       The win rate says what THIS geometry paid. The excursions say whether
+       this geometry was the thing being measured at all — a stop is only
+       risk if price goes there, and if nothing in the run ever traded
+       within a third of it then the required rate above was being paid for
+       risk that did not occur.
+
+       fittedSlAtr is the winners' worst adverse excursion: the tightest
+       stop that would still have held every winner IN THIS RUN. It is a
+       MAXIMUM OVER A SAMPLE, so it can only rise as the sample grows — the
+       error has a known sign and the number is biased tight. It is a
+       diagnostic, never a parameter to adopt; the way to test a stop is to
+       re-run the sweep at it, which is one flag away. */
+    excursions: excursionStats(trades, tpAtr),
     byBound: {}
   };
 

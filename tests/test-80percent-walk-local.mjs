@@ -15,7 +15,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   parseBarTime, parseBarsCsv, parseBarsJson, detectInterval, tfNameOf, tidyBars,
-  readBarsFile, loadStrategy, run, summarise, sweepGeometry, SWEEP_TP, SWEEP_SL
+  readBarsFile, loadStrategy, run, summarise, sweepGeometry, SWEEP_TP, SWEEP_SL,
+  excursionStats
 } from '../scripts/walk-80percent.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -218,6 +219,69 @@ console.log('\n== and the summary is scored against the geometry that produced i
   const dflt = summarise(r.trades);
   ok(near(dflt.grossBreakeven, 0.842105, 1e-5),
      'with no geometry passed it falls back to the spec, so old callers are unchanged');
+}
+
+console.log('\n== and it carries how far each trade actually travelled ==');
+{
+  /* THE QUESTION THE WIN RATE CANNOT ANSWER. It says what the geometry paid.
+     It cannot say whether the geometry was the thing being measured — a stop
+     is only risk if price goes there, and if nothing in the run ever traded
+     within a third of it, the required rate was being paid for risk that did
+     not occur. The excursions are what make that answerable, and they cost
+     nothing: hg80Resolve already walks every bar the trade was open for. */
+  const ctx = loadStrategy();
+  const cfg = ctx.hg80Cfg({ tf: '5m', sec: 300 });
+  const r = run(BARS, ctx, { cfg, variants: ctx.HG_P80_VARIANTS });
+  ok(r.trades.length > 0, `the local series produces ${r.trades.length} trades`);
+  ok(r.trades.every(t => Number.isFinite(t.maeAtr) && Number.isFinite(t.mfeAtr)),
+     'every trade row carries its adverse and favourable excursion in ATR');
+  ok(r.trades.every(t => Number.isFinite(t.maeR) && Number.isFinite(t.mfeR)),
+     'and in R, which is the same pair divided by the stop distance');
+  ok(r.trades.every(t => t.maeAtr >= 0 && t.mfeAtr >= 0),
+     'neither is ever negative — an excursion that did not happen is 0');
+  ok(r.trades.every(t => near(t.maeR, t.maeAtr * t.atr / t.riskPx, 1e-9)),
+     'the R figure really is the ATR figure rescaled by this trade\'s own risk');
+
+  const x = excursionStats(r.trades, 0.75);
+  ok(x && x.n === r.trades.filter(t => Number.isFinite(t.maeAtr)).length,
+     'the summary counts every resolved trade, expiries included');
+  ok(x.nWin + x.nFail === x.n, 'split by whether the target was reached');
+  ok(x.deepestAdverseAtr >= x.p90AdverseAtr && x.p90AdverseAtr >= x.medianAdverseAtr,
+     `max >= p90 >= median (${x.deepestAdverseAtr.toFixed(3)} / `
+     + `${x.p90AdverseAtr.toFixed(3)} / ${x.medianAdverseAtr.toFixed(3)})`);
+  if (x.nWin) ok(x.winnersWorstAtr <= x.deepestAdverseAtr,
+     'the winners\' worst can never exceed the worst over everything');
+
+  /* THE FIT, AND ITS SIGN. fittedSlAtr is a MAXIMUM OVER A SAMPLE — it can
+     only rise as the sample grows, so the error has a known direction. The
+     file has to say so, because a bare number in a JSON artifact is exactly
+     the kind of thing that gets adopted as a parameter. */
+  if (x.fittedSlAtr != null){
+    ok(near(x.fittedSlAtr, x.winnersWorstAtr, 1e-12),
+       'the fitted stop is read off the winners\' worst, not searched for');
+    ok(near(x.fittedGrossBreakeven, x.fittedSlAtr / (x.fittedSlAtr + 0.75), 1e-12),
+       'and its breakeven is the ordinary arithmetic on that number');
+    ok(x.fittedGrossBreakeven < summarise(r.trades).grossBreakeven,
+       'which is necessarily easier than the spec\'s, since the fit is the tightest stop '
+       + 'that held — that is why the warning has to travel with it');
+  }
+  ok(x.fittedIsMaximumOverSample === true,
+     'the artifact flags that the fit is a maximum over a sample');
+  ok(/biased tight/.test(x.note) && /not a parameter to adopt/.test(x.note),
+     'in words, on the row itself, so it survives being read out of context');
+  ok(/re-run the sweep at it/.test(x.note),
+     'pointing at the thing that CAN test a stop honestly');
+
+  /* it reaches the summary, scored against that run's own target */
+  const sum = summarise(r.trades, { tpAtr: 2, slAtr: 2 });
+  ok(sum.excursions && sum.excursions.n === x.n, 'summarise carries the excursion block');
+  ok(near(sum.excursions.fittedGrossBreakeven,
+          sum.excursions.fittedSlAtr / (sum.excursions.fittedSlAtr + 2), 1e-12),
+     'and fits against the geometry that produced the run, not against a hard-coded 0.75');
+
+  ok(excursionStats([], 0.75) === null, 'no trades means no block rather than a block of nulls');
+  ok(excursionStats([{ outcome: 'win' }], 0.75) === null,
+     'and a row with no excursion on it is not counted as a zero');
 }
 
 fs.rmSync(TMP, { recursive: true, force: true });

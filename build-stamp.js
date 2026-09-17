@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v790',
-  pack: 'the 80PERCENT tab\u2019s own cost arithmetic is binding — a rung it has computed cannot pay at your venue is no longer counted among the setups you could act on, what survives is ranked cheapest-first, and a refused card names the rungs where the spread is not the reason to decline',
+  version: 'hg-v791',
+  pack: 'the 80PERCENT tab measures how far its trades actually travelled — every resolved firing now carries its worst and best excursion, so the tab can finally ask whether the spec\u2019s 4.00 ATR stop was ever the thing being measured, and say how tight the honest answer is biased',
   built: '2026-09-17T00:00:00Z'
 };
 

@@ -2058,6 +2058,196 @@ console.log('\n== a setup gold has already run past is NOT offered as one you co
      'and none of them reads __p.spot out of module state');
 }
 
+/* A CYCLING series: trend, pullback, trigger, repeat — so the pattern fires
+   many times with room after each to resolve. `series` above fires once, near
+   the end, and nothing it produces ever finishes; excursions are only defined
+   on trades that did. */
+function saw(n, o){
+  o = o || {};
+  const tfSec = o.tfSec == null ? 300 : o.tfSec;
+  const up = o.up == null ? 1.2 : o.up;
+  const down = o.down == null ? 1.9 : o.down;
+  const base = Date.UTC(2026, 8, 16, 15, 0, 0) / 1000 - (n - 1) * tfSec;
+  const rows = [];
+  let px = 4000;
+  for (let i = 0; i < n; i++){
+    const ph = i % 15;
+    let c;
+    if (ph < 7)       c = px + up;        /* the trend */
+    else if (ph < 14) c = px - down;      /* the pullback */
+    else              c = px + 1.4;       /* the trigger */
+    const oo = px;
+    rows.push({ t: base + i * tfSec, o: oo, h: Math.max(oo, c) + 0.4,
+                l: Math.min(oo, c) - 0.4, c, v: 100 });
+    px = c;
+  }
+  return rows;
+}
+
+console.log('\n== every resolved trade carries how far it actually travelled ==');
+{
+  /* THE QUESTION THE TAB COULD NOT ANSWER. It has said since hg-v772 that
+     4.00 ATR of stop against 0.75 ATR of target needs 84.21% to break even,
+     and presented that as the bar to clear. It never asked whether the 4.00
+     was doing anything — and a stop is only risk if price goes there. The
+     outcome alone cannot answer that; only the worst point the trade ever
+     reached can. */
+  const plan = { dir: 'long', entry: 100, stop: 96, t1: 101, atr: 1 };   /* risk 4, atr 1 */
+  const bars = [
+    { t: 0, o: 100, h: 100, l: 100, c: 100 },        /* the signal bar — never resolves itself */
+    { t: 1, o: 100, h: 100.5, l: 98.5, c: 99 },      /* 1.5 against, 0.5 for */
+    { t: 2, o: 99,  h: 101.2, l: 98.8, c: 101 }      /* target hit; 2.0 for at the high */
+  ];
+  const r = ctx.hg80Resolve(bars, 0, plan, 48);
+  ok(r.outcome === 'win', 'the outcome is unchanged — this adds to the result, it does not alter it');
+  ok(near(r.maeAtr, 1.5, 1e-9),
+     `the worst it ever got is 1.5 ATR against a 100 entry (got ${r.maeAtr})`);
+  ok(near(r.mfeAtr, 1.2, 1e-9),
+     `and the best it ever got is 1.2 ATR — the resolving bar's high counts (got ${r.mfeAtr})`);
+  ok(near(r.maeR, 1.5 / 4, 1e-9) && near(r.mfeR, 1.2 / 4, 1e-9),
+     'the same two numbers in R, which is ATR divided by the stop distance');
+
+  /* THE SIGNAL BAR IS EXCLUDED, and that is not a detail: entry is its close,
+     so everything inside it already happened and counting it would invent an
+     excursion that the trade was never exposed to. */
+  const early = ctx.hg80Resolve(
+    [{ t: 0, o: 100, h: 130, l: 70, c: 100 }].concat(bars.slice(1)), 0, plan, 48);
+  ok(near(early.maeAtr, 1.5, 1e-9),
+     'a 30-wide signal bar contributes nothing — the trade did not exist inside it');
+
+  /* a trade that never goes against the entry at all is 0, not NaN and not
+     a negative number dressed up as risk */
+  const clean = ctx.hg80Resolve(
+    [{ t: 0, o: 100, h: 100, l: 100, c: 100 }, { t: 1, o: 100, h: 101.5, l: 100, c: 101 }],
+    0, plan, 48);
+  ok(clean.maeAtr === 0, 'one that never traded below the entry has an adverse excursion of 0');
+
+  /* and a SHORT is measured the right way round */
+  const sPlan = { dir: 'short', entry: 100, stop: 104, t1: 99, atr: 1 };
+  const sr = ctx.hg80Resolve(
+    [{ t: 0, o: 100, h: 100, l: 100, c: 100 },
+     { t: 1, o: 100, h: 101.5, l: 99.7, c: 100 },
+     { t: 2, o: 100, h: 100, l: 98.8, c: 99 }], 0, sPlan, 48);
+  ok(near(sr.maeAtr, 1.5, 1e-9) && near(sr.mfeAtr, 1.2, 1e-9),
+     'for a short, UP is adverse and DOWN is favourable — 1.5 against, 1.2 for');
+
+  /* an expiry travels too, and the horizon caps which bars count */
+  const exp = ctx.hg80Resolve(
+    [{ t: 0, o: 100, h: 100, l: 100, c: 100 },
+     { t: 1, o: 100, h: 100.2, l: 99.5, c: 100 },
+     { t: 2, o: 100, h: 100.1, l: 99.9, c: 100 },
+     { t: 3, o: 100, h: 108, l: 92, c: 100 }], 0, plan, 2);
+  ok(exp.outcome === 'expired' && near(exp.maeAtr, 0.5, 1e-9),
+     'past the horizon nothing counts — the trade was closed before that bar printed');
+}
+
+console.log('\n== and the tab adds them up to ask whether the stop was doing anything ==');
+{
+  const rows = saw(600, { tfSec: 300 });
+  const rung = ctx.hg80ScanTf(rows, { tf: '5m', sec: 300, bars: 600, band: 'scalp' },
+                              ctx.hg80VenueRt());
+  ok(rung.ok && rung.tally.win + rung.tally.loss + rung.tally.expired > 0,
+     `the cycling fixture resolves ${rung.tally.win + rung.tally.loss + rung.tally.expired} `
+     + 'firings, which is what makes any of this measurable');
+
+  const x = ctx.hg80Excursions([rung]);
+  ok(x.n === rung.tally.win + rung.tally.loss + rung.tally.expired,
+     'every resolved firing is counted');
+  ok(x.nWin + x.nFail === x.n, 'split into the ones that reached the target and the ones that did not');
+  ok(isFinite(x.deepest) && isFinite(x.medianMae), 'the deepest and the median adverse are reported');
+  ok(x.deepest >= x.medianMae, 'and the deepest is never below the median — it is a maximum');
+  ok(x.maeAll.length === x.n, 'the raw excursions are kept, not just the summary');
+
+  /* AN OPEN TRADE IS NOT COUNTED. It has not finished travelling, so its
+     excursion so far understates it — including it would bias every number
+     in this panel downward. */
+  const open = ctx.hg80ScanTf(series(320, { tfSec: 900, endHour: 15, tail: 3 }),
+                              { tf: '15m', sec: 900, bars: 320, band: 'scalp' },
+                              ctx.hg80VenueRt());
+  ok(open.res.signals.some(g => g.status === 'open'), 'that fixture leaves a trade open');
+  ok(ctx.hg80Excursions([open]).n === 0,
+     'and it contributes nothing — an unfinished trade has not finished travelling');
+
+  /* the fit, and the threshold that guards it */
+  ok(x.enough === (x.maeWin.length >= ctx.HG_P80_EXC_MIN_N),
+     `a stop is fitted only at ${ctx.HG_P80_EXC_MIN_N}+ winners`);
+  if (x.enough){
+    ok(near(x.fittedSlAtr, x.winnersWorst, 1e-12),
+       'the fitted stop IS the winners\' worst excursion — nothing is chosen, it is read off');
+    ok(near(x.fittedBe, x.fittedSlAtr / (x.fittedSlAtr + ctx.HG_P80_SPEC.tpAtr), 1e-12),
+       'and its breakeven is the same arithmetic the spec\'s stop gets, on the fitted number');
+  }
+
+  /* BELOW THE THRESHOLD, NO FIT AT ALL — the measurement still stands */
+  const thin = { ok: true, def: { tf: '5m' }, res: { signals: [
+    { status: 'win', res: { maeAtr: 0.4, mfeAtr: 1.1 } },
+    { status: 'loss', res: { maeAtr: 1.0, mfeAtr: 0.3 } }
+  ] } };
+  const tx = ctx.hg80Excursions([thin]);
+  ok(tx.n === 2 && tx.enough === false, 'two resolved firings is not a sample to fit a stop to');
+  ok(!isFinite(tx.fittedSlAtr) && !isFinite(tx.fittedBe),
+     'so no fitted stop and no fitted breakeven are produced — not a number, not a zero');
+  ok(near(tx.deepest, 1.0, 1e-9) && near(tx.winnersWorst, 0.4, 1e-9)
+     && near(tx.failuresBest, 0.3, 1e-9),
+     'but the three measurements are still there — "2 resolved and here is what they did" is true');
+
+  const th = ctx.excursionHtml([thin]);
+  ok(/No stop is fitted below/.test(th), 'and the panel says why it is not quoting one');
+  ok(!/breaks even at/.test(th), 'with no fitted breakeven printed anywhere');
+}
+
+console.log('\n== the fitted stop is labelled as fitted, every time it is shown ==');
+{
+  /* THE ONE WAY THIS PANEL COULD DO HARM. Choosing the stop that happens to
+     have held this window's winners is the oldest way there is to manufacture
+     an edge that does not survive out of sample. The number is worth showing
+     because it sizes the GAP between the spec's stop and anything that
+     actually happened — and it is worth showing ONLY with that said. */
+  const rung = ctx.hg80ScanTf(saw(600, { tfSec: 300 }),
+                              { tf: '5m', sec: 300, bars: 600, band: 'scalp' },
+                              ctx.hg80VenueRt());
+  const x = ctx.hg80Excursions([rung]);
+  ok(x.enough, `the fixture clears the ${ctx.HG_P80_EXC_MIN_N}-winner threshold (${x.nWin})`);
+
+  const h = ctx.excursionHtml([rung]);
+  const txt = String(h).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  ok(/FITTED TO THE DATA IT IS MEASURED ON/.test(txt),
+     'the warning is in the panel, in those words');
+  ok(/manufacture an edge that does not survive out of sample/.test(txt),
+     'naming the failure mode rather than hedging at it');
+  ok(/not to be traded/.test(txt), 'and saying plainly what the number is not for');
+  /* THE SHARPEST TRUE THING THAT CAN BE SAID ABOUT IT, and a stronger claim
+     than a general overfitting hedge: the fitted stop is a MAXIMUM over a
+     sample, and a maximum can only rise as the sample grows. The error has a
+     known sign. A reader told "uncertain" discounts it in both directions;
+     a reader told "biased tight" knows which way to be wrong. */
+  ok(/maximum over a sample/.test(txt) && /maximum can only rise as the sample grows/.test(txt),
+     'the panel states that the fitted stop is a maximum over a sample');
+  ok(/biased TIGHT, in a known direction/.test(txt),
+     'so the error has a stated SIGN, not just a stated size');
+  ok(/true figure is above it rather than scattered around it/.test(txt),
+     'and says which side the truth is on');
+  ok(/walk-80percent\.mjs/.test(txt) && /--sweep/.test(txt),
+     'pointing at the only thing that can answer it honestly');
+  ok(/property of the bars currently on screen/.test(txt),
+     'and the whole panel is scoped to the window, not presented as a record');
+
+  /* the spec's own breakeven is shown BESIDE the fitted one, or the gap is
+     a number with nothing to be a gap from */
+  ok(txt.indexOf((x.specBe * 100).toFixed(2)) >= 0,
+     `the spec's ${(x.specBe * 100).toFixed(2)}% is printed next to it`);
+  ok(txt.indexOf((x.fittedBe * 100).toFixed(2)) >= 0, 'as is the fitted figure');
+  ok(/points of required accuracy/.test(txt),
+     'with the difference stated in points, which is the thing a reader is weighing');
+
+  ok(!/NaN|undefined|Infinity/.test(txt), 'and nothing renders as NaN, undefined or Infinity');
+
+  /* it is wired into the page, under the geometry panel it is about */
+  ok(/h \+= mathPanelHtml\(shown, venue, basis\);\s*(\/\*[\s\S]*?\*\/\s*)?h \+= excursionHtml\(shown\);/
+       .test(SRC),
+     'render() puts it directly under the required-rate table');
+}
+
 console.log('\n== a rung the venue cannot pay for is not counted as one you could act on ==');
 {
   /* THE SECOND HALF OF THE SAME UNTRUTH. hg-v783 stopped the panel offering

@@ -1317,6 +1317,12 @@ function hg80Plan(sig, opts){
 
    The signal bar itself never resolves the trade it created: entry is its
    close, and everything inside that bar already happened.
+
+   Every result also carries the EXCURSIONS — the worst the trade ever got
+   (mae) and the best it ever got (mfe), in ATR and in R, over the bars it
+   was open including the one that ended it. The outcome says what the
+   supplied geometry paid; the excursions say whether that geometry was
+   the thing being measured.
    --------------------------------------------------------------------- */
 function hg80Resolve(rows, i, plan, horizon){
   if (!rows || !plan) return null;
@@ -1324,7 +1330,28 @@ function hg80Resolve(rows, i, plan, horizon){
   var E = fin(plan.entry), T = fin(plan.t1), S = fin(plan.stop);
   var risk = Math.abs(E - S);
   if (!(risk > 0)) return null;
+  var atr = fin(plan.atr);
   var rMul = function(px){ return (long ? (px - E) : (E - px)) / risk; };
+
+  /* HOW FAR IT ACTUALLY TRAVELLED, both ways, up to and including the bar
+     that ended it. The outcome alone cannot answer "was 4.00 ATR of stop
+     doing anything?" — only the worst point the trade ever reached can.
+     Measured in ATR because that is the unit the geometry is specified in;
+     also in R, which is the same thing divided by the stop distance. */
+  var advMax = 0, favMax = 0;
+  var mark = function(b){
+    var adv = long ? (E - fin(b.l)) : (fin(b.h) - E);
+    var fav = long ? (fin(b.h) - E) : (E - fin(b.l));
+    if (isFinite(adv) && adv > advMax) advMax = adv;
+    if (isFinite(fav) && fav > favMax) favMax = fav;
+  };
+  var done = function(o){
+    o.maeR = advMax / risk;
+    o.mfeR = favMax / risk;
+    o.maeAtr = (atr > 0) ? (advMax / atr) : NaN;
+    o.mfeAtr = (atr > 0) ? (favMax / atr) : NaN;
+    return o;
+  };
 
   for (var j = i + 1; j < rows.length && j <= i + horizon; j++){
     var b = rows[j];
@@ -1332,22 +1359,119 @@ function hg80Resolve(rows, i, plan, horizon){
     var hitS = long ? (fin(b.l) <= S) : (fin(b.h) >= S);
     var gapS = long ? (fin(b.o) <= S) : (fin(b.o) >= S);
     var gapT = long ? (fin(b.o) >= T) : (fin(b.o) <= T);
+    mark(b);
 
-    if (gapS) return { outcome: 'loss', exit: fin(b.o), rMultiple: rMul(fin(b.o)), bars: j - i,
-                       exitT: fin(b.t), gapped: true, ambiguous: false };
-    if (gapT) return { outcome: 'win', exit: fin(b.o), rMultiple: rMul(fin(b.o)), bars: j - i,
-                       exitT: fin(b.t), gapped: true, ambiguous: false };
-    if (hitT && hitS) return { outcome: 'win', exit: T, rMultiple: rMul(T), bars: j - i,
-                               exitT: fin(b.t), gapped: false, ambiguous: true };
-    if (hitT) return { outcome: 'win', exit: T, rMultiple: rMul(T), bars: j - i,
-                       exitT: fin(b.t), gapped: false, ambiguous: false };
-    if (hitS) return { outcome: 'loss', exit: S, rMultiple: rMul(S), bars: j - i,
-                       exitT: fin(b.t), gapped: false, ambiguous: false };
+    if (gapS) return done({ outcome: 'loss', exit: fin(b.o), rMultiple: rMul(fin(b.o)), bars: j - i,
+                       exitT: fin(b.t), gapped: true, ambiguous: false });
+    if (gapT) return done({ outcome: 'win', exit: fin(b.o), rMultiple: rMul(fin(b.o)), bars: j - i,
+                       exitT: fin(b.t), gapped: true, ambiguous: false });
+    if (hitT && hitS) return done({ outcome: 'win', exit: T, rMultiple: rMul(T), bars: j - i,
+                               exitT: fin(b.t), gapped: false, ambiguous: true });
+    if (hitT) return done({ outcome: 'win', exit: T, rMultiple: rMul(T), bars: j - i,
+                       exitT: fin(b.t), gapped: false, ambiguous: false });
+    if (hitS) return done({ outcome: 'loss', exit: S, rMultiple: rMul(S), bars: j - i,
+                       exitT: fin(b.t), gapped: false, ambiguous: false });
   }
   var last = rows[Math.min(i + horizon, rows.length - 1)];
-  return { outcome: 'expired', exit: fin(last.c), rMultiple: rMul(fin(last.c)),
+  return done({ outcome: 'expired', exit: fin(last.c), rMultiple: rMul(fin(last.c)),
            bars: Math.min(horizon, rows.length - 1 - i), exitT: fin(last.t),
-           gapped: false, ambiguous: false };
+           gapped: false, ambiguous: false });
+}
+
+/* ---------------------------------------------------------------------
+   WHAT THE STOP AND THE TARGET ACTUALLY HAD TO BE
+
+   The spec puts the stop at 4.00 ATR and the target at 0.75 ATR, and this
+   tab has said since hg-v772 what that geometry costs: 5.33 risked for
+   every 1 gained, so it has to be right 84.2% of the time before a single
+   spread is paid. That number has been presented as the thing to beat.
+
+   It has never been asked whether the 4.00 is doing anything. A stop is
+   only risk if price goes there. If the deepest any firing in this window
+   ever traded against its entry is 1.2 ATR, then two thirds of the stop is
+   notional — the 84.2% is being paid for risk that did not occur, and the
+   binding constraint is the geometry, not the market.
+
+   That question is answerable from bars already on screen, so it is
+   answered here rather than deferred to a walk that has never been run.
+
+   THREE MEASUREMENTS, AND THEY ARE MEASUREMENTS:
+
+     deepest adverse     the worst point ANY resolved firing reached
+     the winners' worst  the tightest stop that would still have held
+                         every winner in this window
+     the failures' best  how close the ones that did not pay got to the
+                         target before they died
+
+   AND ONE ARITHMETIC CONSEQUENCE, WHICH IS WHERE THE CARE GOES. The
+   breakeven at the winners' worst is a stop FITTED TO THE DATA IT IS
+   MEASURED ON. That is the oldest way there is to manufacture an edge that
+   does not survive out of sample, and it is stated as such everywhere it
+   is shown. It is here to size the GAP between the spec's stop and
+   anything that happened — not to be traded, and not to replace the
+   sweep, which is the only thing that can answer it honestly.
+
+   Below P80_EXC_MIN_N winners no fit is quoted at all. The measurement is
+   still shown, because "3 firings resolved and here is what they did" is
+   a true sentence; "so the stop should be 1.1 ATR" is not.
+   --------------------------------------------------------------------- */
+var P80_EXC_MIN_N = 10;
+
+/* a reduce, not an apply: applying Math.max spreads the array as arguments
+   and throws once it is long enough */
+function hg80Max(arr){
+  if (!arr || !arr.length) return NaN;
+  var m = -Infinity, i;
+  for (i = 0; i < arr.length; i++) if (arr[i] > m) m = arr[i];
+  return m;
+}
+
+function hg80Median(arr){
+  if (!arr || !arr.length) return NaN;
+  var a = arr.slice().sort(function(x, y){ return x - y; });
+  var m = Math.floor(a.length / 2);
+  return (a.length % 2) ? a[m] : (a[m - 1] + a[m]) / 2;
+}
+
+function hg80Excursions(rungs){
+  var out = { n: 0, nWin: 0, nFail: 0, maeAll: [], maeWin: [], mfeFail: [],
+              deepest: NaN, medianMae: NaN, winnersWorst: NaN, failuresBest: NaN,
+              fittedSlAtr: NaN, fittedBe: NaN, specBe: P80_SL_ATR / (P80_SL_ATR + P80_TP_ATR),
+              enough: false, byTf: [] };
+  if (!rungs) return out;
+  var i, j;
+  for (i = 0; i < rungs.length; i++){
+    var r = rungs[i];
+    if (!r || !r.ok || !r.res || !r.res.signals) continue;
+    var tfN = 0, tfMae = [];
+    for (j = 0; j < r.res.signals.length; j++){
+      var sg = r.res.signals[j];
+      /* only what RESOLVED. An open trade has not finished travelling, and
+         counting its excursion so far would understate every one of them. */
+      if (!sg.res || sg.status === 'open' || sg.status === 'unpriced') continue;
+      var mae = fin(sg.res.maeAtr), mfe = fin(sg.res.mfeAtr);
+      if (!isFinite(mae) || !isFinite(mfe)) continue;
+      out.n++; tfN++;
+      out.maeAll.push(mae); tfMae.push(mae);
+      if (sg.status === 'win'){ out.nWin++; out.maeWin.push(mae); }
+      else { out.nFail++; out.mfeFail.push(mfe); }
+    }
+    if (tfN) out.byTf.push({ tf: r.def.tf, n: tfN, deepest: hg80Max(tfMae),
+                             median: hg80Median(tfMae) });
+  }
+  if (!out.n) return out;
+  out.deepest = hg80Max(out.maeAll);
+  out.medianMae = hg80Median(out.maeAll);
+  if (out.maeWin.length) out.winnersWorst = hg80Max(out.maeWin);
+  if (out.mfeFail.length) out.failuresBest = hg80Max(out.mfeFail);
+
+  /* the fit, and ONLY above the threshold */
+  out.enough = out.maeWin.length >= P80_EXC_MIN_N;
+  if (out.enough && isFinite(out.winnersWorst) && out.winnersWorst > 0){
+    out.fittedSlAtr = out.winnersWorst;
+    out.fittedBe = out.fittedSlAtr / (out.fittedSlAtr + P80_TP_ATR);
+  }
+  return out;
 }
 
 /* ---------------------------------------------------------------------
@@ -1677,6 +1801,105 @@ function forwardPanelHtml(){
     + P80_SL_ATR.toFixed(2) + ' ATR of stop. This is the only number on the tab that is not a '
     + 'property of the window just fetched: each row was logged when it fired and settled later '
     + 'by bars that had not printed at the time.</div></div>';
+}
+
+/* The measurement, with the fit kept on a very short leash — see
+   hg80Excursions for why that leash is the whole point. */
+function excursionHtml(rungs){
+  var x = hg80Excursions(rungs);
+  if (!x.n){
+    return '<div class="panel" style="margin-top:10px"><h2>WHAT THE STOP HAD TO BE '
+      + '<span>this window</span></h2>'
+      + '<div class="p80-lead">Nothing in the bars fetched has resolved yet, so there is no '
+      + 'excursion to measure. This panel fills as firings finish — it is a property of the '
+      + 'window on screen, not of a record kept over time.</div></div>';
+  }
+
+  var h = '<div class="panel" style="margin-top:10px"><h2>WHAT THE STOP HAD TO BE '
+    + '<span>this window</span></h2>'
+    + '<div class="p80-lead">The spec puts the stop at <b>' + P80_SL_ATR.toFixed(2)
+    + ' ATR</b> and the target at <b>' + P80_TP_ATR.toFixed(2) + ' ATR</b>, and the tab has said '
+    + 'from the start what that costs: <b>' + (x.specBe * 100).toFixed(2) + '%</b> to break even '
+    + 'before a single spread. What it has never asked is whether the '
+    + P80_SL_ATR.toFixed(2) + ' is doing anything. A stop is only risk if price goes there.</div>';
+
+  h += '<div class="p80-levels">'
+    + '<span class="p80-lvl-k">Resolved firings</span>'
+    + '<span class="p80-lvl-v">' + x.n + '</span>'
+    + '<span class="p80-lvl-d">' + x.nWin + ' reached the target, ' + x.nFail + ' did not</span>'
+    + '<span class="p80-lvl-k">Deepest adverse</span>'
+    + '<span class="p80-lvl-v">' + x.deepest.toFixed(2) + ' ATR</span>'
+    + '<span class="p80-lvl-d">the worst point any of them reached — against a '
+    + P80_SL_ATR.toFixed(2) + ' ATR stop, that is '
+    + (100 * x.deepest / P80_SL_ATR).toFixed(0) + '% of it</span>'
+    + '<span class="p80-lvl-k">Median adverse</span>'
+    + '<span class="p80-lvl-v">' + x.medianMae.toFixed(2) + ' ATR</span>'
+    + '<span class="p80-lvl-d">half of them never went further against the entry than this</span>';
+  if (isFinite(x.winnersWorst)){
+    h += '<span class="p80-lvl-k">The winners\' worst</span>'
+      + '<span class="p80-lvl-v">' + x.winnersWorst.toFixed(2) + ' ATR</span>'
+      + '<span class="p80-lvl-d">the tightest stop that would still have held every one of the '
+      + x.nWin + ' that paid, in this window</span>';
+  }
+  if (isFinite(x.failuresBest)){
+    h += '<span class="p80-lvl-k">The failures\' best</span>'
+      + '<span class="p80-lvl-v">' + x.failuresBest.toFixed(2) + ' ATR</span>'
+      + '<span class="p80-lvl-d">how close the ' + x.nFail + ' that did not pay got to the '
+      + P80_TP_ATR.toFixed(2) + ' ATR target before they died</span>';
+  }
+  h += '</div>';
+
+  /* THE ARITHMETIC CONSEQUENCE, AND THE WARNING THAT GOES WITH IT. */
+  if (x.enough && isFinite(x.fittedBe)){
+    var drop = (x.specBe - x.fittedBe) * 100;
+    h += '<div class="note warn" style="margin-top:8px;padding:10px 12px;border:1px solid '
+      + 'var(--line);border-left:3px solid var(--veto);border-radius:6px">'
+      + '<b>AND THIS IS WHY THAT MATTERS — READ THE SECOND PARAGRAPH BEFORE THE FIRST.</b><br>'
+      + 'A stop at <b>' + x.fittedSlAtr.toFixed(2) + ' ATR</b> would have held all ' + x.nWin
+      + ' winners here. Against the same ' + P80_TP_ATR.toFixed(2) + ' ATR target that is 1:'
+      + (x.fittedSlAtr / P80_TP_ATR).toFixed(3) + ', which breaks even at <b>'
+      + (x.fittedBe * 100).toFixed(2) + '%</b> instead of ' + (x.specBe * 100).toFixed(2)
+      + '% — <b>' + drop.toFixed(1) + ' points</b> of required accuracy, removed by changing '
+      + 'nothing about which bars fire.<br>'
+      + '<span class="note">That stop was FITTED TO THE DATA IT IS MEASURED ON. Choosing the '
+      + 'stop that happens to have held this window\'s winners is the oldest way there is to '
+      + 'manufacture an edge that does not survive out of sample, and the number above is very '
+      + 'probably too good for that exact reason. More than that: it is a <b>maximum over a '
+      + 'sample of ' + x.nWin + '</b>, and a maximum can only rise as the sample grows. So it is '
+      + 'not merely uncertain — it is biased TIGHT, in a known direction, and the true figure is '
+      + 'above it rather than scattered around it. It is here to size the GAP between the '
+      + 'spec\'s stop and anything that actually happened — not to be traded. The thing that can '
+      + 'answer it honestly is the sweep, on bars this tab has never seen: '
+      + '<code>node scripts/walk-80percent.mjs --bars-file=&lt;your bars&gt; --sweep</code>.'
+      + '</span></div>';
+  } else {
+    h += '<div class="note" style="margin-top:8px">' + x.nWin + ' winner'
+      + (x.nWin === 1 ? '' : 's') + ' have resolved in this window. <b>No stop is fitted below '
+      + P80_EXC_MIN_N + '</b> — "' + x.nWin + ' firings resolved and here is what they did" is a '
+      + 'true sentence; "so the stop should be ' + (isFinite(x.winnersWorst)
+          ? x.winnersWorst.toFixed(2) : 'X') + ' ATR" is not one, at this sample size. The '
+      + 'measurements above stand on their own.</div>';
+  }
+
+  if (x.byTf.length > 1){
+    h += '<table class="tbl" style="margin-top:8px"><tr><th>rung</th><th>resolved</th>'
+      + '<th>deepest adverse</th><th>median adverse</th><th>of the stop</th></tr>';
+    for (var i = 0; i < x.byTf.length; i++){
+      var b = x.byTf[i];
+      h += '<tr><td><b>' + esc(b.tf) + '</b></td>'
+        + '<td class="hg-num">' + b.n + '</td>'
+        + '<td class="hg-num">' + b.deepest.toFixed(2) + ' ATR</td>'
+        + '<td class="hg-num">' + b.median.toFixed(2) + ' ATR</td>'
+        + '<td class="hg-num">' + (100 * b.deepest / P80_SL_ATR).toFixed(0) + '%</td></tr>';
+    }
+    h += '</table>';
+  }
+
+  h += '<div class="p80-caveat">Every number here is a property of the bars currently on '
+    + 'screen and changes on the next scan. It is not a record and it is not evidence of an '
+    + 'edge — a window in which nothing went badly wrong is exactly the window in which a '
+    + 'fitted stop looks best.</div></div>';
+  return h;
 }
 
 function mathPanelHtml(rungs, venue, basis){
@@ -3325,6 +3548,9 @@ function render(rungs, venue, recNotes, basis){
   h += whyNothingHtml(shown);
   h += forwardPanelHtml();
   h += mathPanelHtml(shown, venue, basis);
+  /* directly under the geometry it is about: the required rate, then what
+     the window says that rate was paid for */
+  h += excursionHtml(shown);
 
   if (!usable.length){
     var bits = shown.map(function(r){ return r.def.tf + ': ' + ((r.why) || 'no bars'); });
@@ -3732,6 +3958,10 @@ W.HG_P80_SPOT_DRIFT_PCT = P80_SPOT_DRIFT_PCT;
 W.HG_P80_COST_HEAVY  = P80_COST_HEAVY;
 W.HG_P80_STOP_FLOOR  = P80_STOP_FLOOR;
 W.hg80PayingRungs    = hg80PayingRungs;
+W.hg80Excursions     = hg80Excursions;
+W.excursionHtml      = excursionHtml;
+W.hg80Median         = hg80Median;
+W.HG_P80_EXC_MIN_N   = P80_EXC_MIN_N;
 W.payingRungsHtml    = payingRungsHtml;
 W.hg80WhenTxt        = hg80WhenTxt;
 W.hg80TzName         = hg80TzName;
