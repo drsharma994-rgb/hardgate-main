@@ -204,7 +204,16 @@ var P80_LADDER = [
    Deliberately NOT persisted — the venue is desk-wide state that belongs in
    storage, a view filter is not, and this tab writing a second key would
    make "what is stored about the gold desk" two places instead of one. */
-var __p = { ui: null, busy: false, ranOnce: false, last: null, focus: null };
+/* view: 'simple' shows setups as trades — direction, entry, stop, target,
+   and what each is worth in points and percent. 'full' adds the arithmetic,
+   the board, the census and the near misses.
+
+   SIMPLE IS THE DEFAULT and that is a correction, not a preference. This tab
+   grew required-rate tables, condition censuses, distance-to-firing columns
+   and three panels of caveats, and somewhere in there stopped answering
+   "what is the trade". Everything still exists; it is one click away instead
+   of first. */
+var __p = { ui: null, busy: false, ranOnce: false, last: null, focus: null, view: 'simple' };
 
 /* the focus as an array, whatever it is stored as */
 function hg80FocusList(){
@@ -1117,6 +1126,24 @@ function hg80UngatedRungs(){
   return out;
 }
 
+function viewControlHtml(){
+  function btn(v, label){
+    var on = __p.view === v;
+    return '<button type="button" class="btn ghost" data-p80-view="' + v + '"'
+      + ' style="' + (on ? 'border-color:#10b981;color:#10b981;font-weight:bold' : '') + '">'
+      + esc(label) + '</button> ';
+  }
+  return '<div class="row" style="margin:0 0 6px 0;align-items:center">'
+    + '<span class="note" style="margin:0"><b>VIEW</b>: </span> '
+    + btn('simple', 'SIMPLE') + btn('full', 'FULL')
+    + '<span class="note dim" style="margin:0;font-size:11px">'
+    + (__p.view === 'simple'
+        ? 'setups only — entry, stop, target. FULL adds the cost arithmetic, the ladder board, '
+          + 'the near misses and the census.'
+        : 'everything. SIMPLE shows the setups and nothing else.')
+    + '</span></div>';
+}
+
 function focusControlHtml(){
   var sel = hg80FocusList();
   var h = '<div class="row" style="margin:6px 0 0 0;align-items:center;flex-wrap:wrap">'
@@ -1199,6 +1226,146 @@ function hg80DurTxt(sec){
   var h = Math.floor(x / 3600), m = Math.round((x % 3600) / 60);
   if (h <= 0) return m + 'm';
   return h + 'h ' + (m < 10 ? '0' : '') + m + 'm';
+}
+
+/* ---------------------------------------------------------------------
+   A SETUP, WRITTEN AS A TRADE
+
+   Direction, entry, stop, target, and what each is worth in points AND in
+   percent, because a stop 77 points away means nothing until you know it is
+   1.69% of the entry. One line of status, not a paragraph: this is what a
+   desk reads before deciding, and everything that belongs in the decision
+   AFTER that is in FULL.
+
+   The WATCH tag stays on every card. It is one line, it is not negotiable,
+   and it is the difference between a setup and a recommendation: nothing
+   here has a measured record on this desk yet.
+   --------------------------------------------------------------------- */
+function simpleCardHtml(sig, rung, state){
+  var p = sig.plan;
+  if (!p) return '';
+  var long = sig.dir === 'long';
+  var col = long ? '#10b981' : '#ef4444';
+  var when = isFinite(fin(sig.t))
+    ? new Date(fin(sig.t) * 1000).toISOString().replace('T', ' ').slice(0, 16) + ' UTC' : '—';
+  var age = rung ? (rung.rows.length - 1) - sig.i : null;
+
+  function leg(label, px, from){
+    /* distance from the ENTRY, as points and percent. The entry row itself
+       gets no delta — "+0.00 (+0.00%)" against itself is noise in the one
+       place the eye goes first. */
+    var d = (from == null) ? NaN : fin(px) - fin(from);
+    var pct = (d / fin(from)) * 100;
+    return '<tr><td style="padding:3px 10px 3px 0"><b>' + esc(label) + '</b></td>'
+      + '<td class="hg-num" style="font-size:1.35em;font-weight:bold;padding:3px 10px 3px 0">'
+      + num(px) + '</td>'
+      + '<td class="hg-num note" style="padding:3px 0">'
+      + (isFinite(d) ? Math.abs(d).toFixed(2) + ' away  (' + Math.abs(pct).toFixed(2) + '%)' : '')
+      + '</td></tr>';
+  }
+
+  var h = '<div class="panel" style="margin-top:8px;border-left:4px solid ' + col + '">'
+    + '<h3 style="color:' + col + '">' + (long ? 'BUY' : 'SELL') + ' XAUUSD'
+    + ' <span>' + esc((rung ? rung.def.tf + ' · ' : '')) + esc(when)
+    + (age != null && age > 0 && rung
+        ? ' · ' + age + ' bar' + (age === 1 ? '' : 's') + ' ago (' + ageTxt(age * rung.cfg.tfSec) + ')'
+        : (age === 0 ? ' · just closed' : '')) + '</span></h3>';
+
+  if (state) h += '<div style="margin-bottom:4px">' + state + '</div>';
+
+  h += '<table style="border:0;margin:2px 0"><tbody>'
+    + leg('ENTRY', p.entry, null)
+    + leg(long ? 'STOP LOSS' : 'STOP LOSS', p.stop, p.entry)
+    + leg('TAKE PROFIT', p.t1, p.entry)
+    + '</tbody></table>';
+
+  /* p.rr is risk/reward — 5.33 here. Printed as "1:0.19" it reads as though
+     the reward were the 1, which is the flattering way round and the wrong
+     one. Say it as a desk says it: what you risk, for what you stand to
+     make. */
+  h += '<div class="note"><b>You risk ' + num(p.risk) + ' to make ' + num(p.reward) + '</b> — '
+    + num(p.rr, 2) + ' risked for every 1 gained. That is why it has to win '
+    + ((P80_SL_ATR / (P80_SL_ATR + P80_TP_ATR)) * 100).toFixed(1) + '% of the time just to break '
+    + 'even, before any spread.</div>';
+
+  h += '<div class="note warn" style="margin-top:4px;padding:3px 6px;border-left:3px solid #b45309">'
+    + '<b>WATCH — not a signal to act on.</b> ' + esc(sig.variantLabel || 'SPEC')
+    + ' has no measured record on this desk. It is logged so it can earn one.</div>';
+  return h + '</div>';
+}
+
+function simpleSetupsHtml(rungs){
+  var usable = rungs.filter(function(r){ return r.ok; });
+  var live = [], open = [], recent = [], i, j;
+  for (i = 0; i < usable.length; i++){
+    var r = usable[i];
+    for (j = 0; j < r.res.signals.length; j++){
+      var sg = r.res.signals[j];
+      if (sg.i === r.rows.length - 1) live.push({ r: r, s: sg });
+      else if (sg.status === 'open') open.push({ r: r, s: sg });
+    }
+    if (r.latest) recent.push({ r: r, s: r.latest });
+  }
+
+  var h = '<div class="panel"><h2>SETUPS <span>XAUUSD</span></h2>';
+
+  if (live.length || open.length){
+    h += '<div class="note ok" style="margin-bottom:4px"><b>' + (live.length + open.length)
+      + ' setup' + ((live.length + open.length) === 1 ? '' : 's') + ' you could act on.</b></div>';
+    for (i = 0; i < live.length; i++){
+      h += simpleCardHtml(live[i].s, live[i].r,
+        '<span class="statuschip ok">FIRED ON THE LAST CLOSED CANDLE</span>');
+    }
+    for (i = 0; i < open.length; i++){
+      h += simpleCardHtml(open[i].s, open[i].r,
+        '<span class="statuschip ok">STILL OPEN</span> <span class="note">neither the stop nor '
+        + 'the target has been touched yet</span>');
+    }
+    return h + '</div>';
+  }
+
+  /* nothing to act on. Say that in one sentence, then show the last one that
+     DID fire on each rung, clearly marked finished — a card labelled "closed"
+     is honest; an empty panel just gets asked about again. */
+  h += '<div class="note warn"><b>Nothing to act on right now.</b> ';
+  var nowSec = Math.floor(Date.now() / 1000);
+  var toOpen = hg80SecsToSession(nowSec);
+  var gated = usable.filter(function(r){ return r.cfg.session !== false && toOpen > 0; });
+  if (gated.length){
+    h += gated.length + ' of ' + usable.length + ' rung'
+      + (usable.length === 1 ? '' : 's') + ' cannot fire until the '
+      + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC window opens in '
+      + hg80DurTxt(toOpen) + '. ';
+  }
+  var closest = null;
+  for (i = 0; i < usable.length; i++){
+    var nr = usable[i].nearest;
+    if (nr && (!closest || nr.cost < closest.n.cost)) closest = { r: usable[i], n: nr };
+  }
+  if (closest){
+    var need = closest.n.score.missing.map(function(k){
+      return k === 'trigger' ? 'a ' + (closest.n.side === 'long' ? 'green' : 'red') + ' candle'
+           : k === 'pullback' ? 'RSI to reach ' + (closest.n.side === 'long'
+               ? 'below ' + closest.n.variant.rsiLong : 'above ' + closest.n.variant.rsiShort)
+           : k === 'trend' ? 'the trend to line up' : 'the session window';
+    });
+    h += 'Closest is ' + esc(closest.r.def.tf) + ' ' + (closest.n.side === 'long' ? 'BUY' : 'SELL')
+      + ', waiting on ' + esc(need.join(' and ')) + '.';
+  }
+  h += '</div>';
+
+  if (recent.length){
+    h += '<div class="note" style="margin-top:8px">The last setup each rung produced — '
+      + '<b>these are finished</b>, shown so you can see what they look like:</div>';
+    for (i = 0; i < recent.length; i++){
+      var st = recent[i].s.status;
+      var chip = st === 'win' ? '<span class="statuschip">CLOSED — reached its target</span>'
+               : st === 'loss' ? '<span class="statuschip na">CLOSED — hit its stop</span>'
+               : '<span class="statuschip na">CLOSED — ' + esc(st || 'expired') + '</span>';
+      h += simpleCardHtml(recent[i].s, recent[i].r, chip);
+    }
+  }
+  return h + '</div>';
 }
 
 function whyNothingHtml(rungs){
@@ -1793,7 +1960,28 @@ function render(rungs, venue, recNotes, basis){
   if (!ui || !ui.body) return;
 
   var usable = rungs.filter(function(r){ return r.ok; });
-  var h = venueControlHtml(__p.venue);
+  var h = viewControlHtml();
+
+  if (__p.view === 'simple'){
+    if (!usable.length){
+      var b0 = rungs.map(function(r){ return r.def.tf + ': ' + ((r.why) || 'no bars'); });
+      ui.body.innerHTML = h + '<div class="note warn">No gold bars came back — '
+        + esc(b0.join(' · ')) + '</div>';
+      wireViewButtons();
+      return;
+    }
+    h += simpleSetupsHtml(rungs);
+    h += '<div class="note" style="margin-top:8px">Priced at <b>'
+      + esc((venue || 'the selected venue')) + '</b>. Switch to <b>FULL</b> for the cost '
+      + 'arithmetic, the ladder board, the near misses and the census.</div>';
+    h += focusControlHtml();
+    ui.body.innerHTML = h;
+    wireViewButtons();
+    wireFocusButtons();
+    return;
+  }
+
+  h += venueControlHtml(__p.venue);
   h += focusControlHtml();
   h += whyNothingHtml(rungs);
   h += mathPanelHtml(rungs, venue, basis);
@@ -1802,6 +1990,7 @@ function render(rungs, venue, recNotes, basis){
     var bits = rungs.map(function(r){ return r.def.tf + ': ' + ((r.why) || 'no bars'); });
     ui.body.innerHTML = h + '<div class="note warn">No rung returned usable bars — '
       + esc(bits.join(' · ')) + '</div>';
+    wireViewButtons();
     wireVenueButtons();
     wireFocusButtons();
     wireCopyButton();
@@ -1854,6 +2043,7 @@ function render(rungs, venue, recNotes, basis){
         + 'established either way' : '') + '.</div>';
 
   ui.body.innerHTML = h;
+  wireViewButtons();
   wireVenueButtons();
   wireFocusButtons();
   wireCopyButton();
@@ -1865,6 +2055,27 @@ function render(rungs, venue, recNotes, basis){
    API needs a secure context and a user gesture and is absent or refused in
    plenty of real browsers, so the fallback is not an edge case — it is the
    path a copy button has to have or it silently does nothing. */
+function wireViewButtons(){
+  var ui = __p.ui;
+  if (!ui || !ui.body || !ui.body.querySelectorAll) return;
+  var btns = ui.body.querySelectorAll('[data-p80-view]');
+  for (var i = 0; i < btns.length; i++){
+    (function(b){
+      b.addEventListener('click', function(){
+        var v = b.getAttribute && b.getAttribute('data-p80-view');
+        if (v !== 'simple' && v !== 'full') return;
+        if (v === __p.view) return;
+        __p.view = v;
+        /* a view change is a re-render, not a re-fetch — the bars in hand
+           are the same bars either way */
+        if (__p.last) render(__p.last.rungs, __p.last.venue ? __p.last.venue.venue : null, null,
+                             __p.last.venue ? __p.last.venue.basis : null);
+        else run();
+      });
+    })(btns[i]);
+  }
+}
+
 function wireCopyButton(){
   var ui = __p.ui;
   if (!ui || !ui.body || !ui.body.querySelector) return;

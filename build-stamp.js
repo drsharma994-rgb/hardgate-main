@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v778',
-  pack: 'COPY THESE ROWS — the focused firings as tab-separated text carrying the venue, both mechanics and the breakeven, so a paste can be read without knowing how the tab was set',
+  version: 'hg-v779',
+  pack: '80PERCENT opens on the setups — BUY/SELL, entry, stop loss, take profit, in points and percent; the arithmetic moved behind a FULL toggle',
   built: '2026-09-17T00:00:00Z'
 };
 

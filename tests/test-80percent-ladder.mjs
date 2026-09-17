@@ -50,6 +50,55 @@ for (const f of ['indicators.js', 'indicators2.js', 'fixpack14-core.js', 'hg-mec
   catch (e) { /* optional deps degrade */ }
 }
 const SRC = fs.readFileSync(path.join(ROOT, 'eightypercent.js'), 'utf8');
+/* A DOM real enough to carry listeners and querySelectorAll, at file scope
+   so every render assertion in this file can DRIVE the tab rather than only
+   read its markup. Asserting on innerHTML alone cannot catch a listener that
+   was never attached. */
+function mkEl(tag){
+  const e = { tag, children: [], attrs: {}, listeners: {}, style: {}, _html: '', textContent: '',
+    setAttribute(k, v){ this.attrs[k] = String(v); }, getAttribute(k){ return this.attrs[k]; },
+    addEventListener(t, f){ (this.listeners[t] = this.listeners[t] || []).push(f); },
+    click(){ (this.listeners.click || []).forEach(f => f()); },
+    appendChild(c){ this.children.push(c); },
+    classList: { add(){}, remove(){}, toggle(){}, contains: () => false }, dataset: {},
+    get innerHTML(){ return this._html; },
+    set innerHTML(v){ this._html = String(v); this.children = parseEls(this._html); },
+    querySelector(sel){ return this.querySelectorAll(sel)[0] || null; },
+    querySelectorAll(sel){
+      const m = sel.match(/^\[([a-z0-9-]+)\]$/i);
+      if (m) return this.children.filter(c => c.attrs[m[1]] !== undefined);
+      if (sel.startsWith('#')) return this.children.filter(c => c.attrs.id === sel.slice(1));
+      return [];
+    } };
+  return e;
+}
+function parseEls(html){
+  const out = [];
+  const re = /<(button|div|span|textarea)\b([^>]*)>/gi;
+  let m;
+  while ((m = re.exec(html))){
+    const attrs = {};
+    const ar = /([a-z0-9-]+)="([^"]*)"/gi;
+    let a;
+    while ((a = ar.exec(m[2]))) attrs[a[1]] = a[2];
+    if (attrs.id || attrs['data-p80-focus'] !== undefined || attrs['data-p80-venue'] !== undefined
+        || attrs['data-p80-view'] !== undefined){
+      const e = mkEl(m[1]); e.attrs = attrs; out.push(e);
+    }
+  }
+  return out;
+}
+const settle = async () => { await new Promise(r => setImmediate(r)); await new Promise(r => setTimeout(r, 0)); };
+/* click a control inside the tab body by its data attribute value */
+function press(node, attr, value){
+  const b = node.querySelector('#p80Body').querySelectorAll('[' + attr + ']')
+    .find(x => x.getAttribute(attr) === value);
+  if (!b) throw new Error('FAIL: no control ' + attr + '="' + value + '" on the page');
+  b.click();
+  return b;
+}
+
+
 const CODE = SRC.replace(/\/\*[\s\S]*?\*\//g, '');
 /* comments AND string literals stripped: what is left is only logic, so a
    regex looking for arithmetic cannot be fooled by display copy */
@@ -306,11 +355,14 @@ console.log('\n== the tab is POPULATED when nothing fires ==');
      'the REAL venue cost is in play for this render, not a stand-in');
 
   const tab = (ctx.HG_tabs || []).find(t => t && t.id === '80percent');
-  const node = { innerHTML: '', _q: {}, querySelector(sel){ if (!this._q[sel]) this._q[sel] = el(); return this._q[sel]; } };
+  const node = mkEl('div');
   tab.mount(node);
-  await new Promise(r => setImmediate(r));
-  await new Promise(r => setTimeout(r, 0));
-  const html = String(node._q['#p80Body'].innerHTML);
+  await settle();
+  /* SIMPLE is the default now, so the analysis this block is about lives one
+     click away — press FULL and assert against that */
+  press(node, 'data-p80-view', 'full');
+  await settle();
+  const html = String(node.querySelector('#p80Body').innerHTML);
 
   ok(html.length > 2000, `the body is not empty (${html.length} chars)`);
   ok(/THE LADDER RIGHT NOW/.test(html), 'the ladder board renders');
@@ -347,7 +399,7 @@ console.log('\n== the tab is POPULATED when nothing fires ==');
   ok(/SPEC [0-9]+<\/span> <span class="statuschip na">WIDE [0-9]+/.test(html),
      'the board splits each rung\'s firings by mechanic rather than pooling them into one count');
 
-  const stat = String(node._q['#p80Stat'].textContent);
+  const stat = String(node.querySelector('#p80Stat').textContent);
   ok(/rungs/.test(stat), `the status line reports the ladder: "${stat}"`);
 }
 
@@ -1124,6 +1176,77 @@ console.log('\n== focusing a rung scans only that rung, and shows everything it 
   ok(!('hg_p80_focus' in store) && !Object.keys(store).some(k => /focus/i.test(k)),
      'the focus is NOT written to storage — the venue is desk-wide state that belongs there, a '
      + 'view filter is not, and a second key would split "what is stored about the gold desk"');
+}
+
+console.log('\n== SIMPLE is the default, and it reads as a trade ==');
+{
+  ok(/view: 'simple'/.test(SRC), 'the tab opens in SIMPLE');
+  ok(/data-p80-view/.test(SRC), 'with a toggle to FULL');
+  ok(/a view change is a re-render, not a re-fetch/.test(SRC),
+     'and switching view re-renders the bars in hand rather than refetching them');
+
+  const walk = (tfSec, n) => {
+    const out = []; let px = 4300, st = tfSec;
+    const rnd = () => { st = (st * 1103515245 + 12345) & 0x7fffffff; return st / 0x7fffffff; };
+    const vol = 3.1 * Math.sqrt(tfSec / 300);
+    const end = Math.floor(Date.UTC(2026, 8, 17, 16, 0, 0) / 1000 / tfSec) * tfSec;
+    for (let i = 0; i < n; i++){
+      const o = px, c = o + (rnd() - 0.5) * vol;
+      out.push({ t: end - (n - 1 - i) * tfSec, o, h: Math.max(o, c) + rnd() * vol * 0.6,
+                 l: Math.min(o, c) - rnd() * vol * 0.6, c, v: 1 });
+      px = c;
+    }
+    return out;
+  };
+  const secOf = Object.fromEntries(ctx.HG_P80_LADDER.map(r => [r.tf, r.sec]));
+  ctx.hgOgFetchRows = (tf, n) => Promise.resolve({ rows: walk(secOf[tf], n), source: 'fixture' });
+
+  const node = mkEl('div');
+  const tab = (ctx.HG_tabs || []).find(t => t && t.id === '80percent');
+  tab.mount(node);
+  await settle();
+  /* an earlier block in this file switched the view to FULL, and the module
+     keeps that across mounts — so this asserts SIMPLE explicitly rather than
+     relying on a default another test may have moved */
+  press(node, 'data-p80-view', 'simple');
+  await settle();
+  const html = String(node.querySelector('#p80Body').innerHTML);
+
+  ok(/<h2>SETUPS/.test(html), 'SETUPS is the first panel, not the arithmetic');
+  ok(/ENTRY/.test(html) && /STOP LOSS/.test(html) && /TAKE PROFIT/.test(html),
+     'every card names entry, stop loss and take profit in those words');
+  ok(/BUY XAUUSD|SELL XAUUSD/.test(html), 'and says BUY or SELL rather than long/short');
+
+  /* the default view must NOT open with the analysis that buried the setups */
+  ok(!/WHAT THIS CONFIGURATION HAS TO HIT/.test(html), 'the required-rate table is not in SIMPLE');
+  ok(!/THE LADDER RIGHT NOW/.test(html), 'nor the ladder board');
+  ok(!/NEAR MISSES/.test(html), 'nor the near misses');
+  ok(!/WHY SO FEW/.test(html), 'nor the census');
+  ok(/Switch to <b>FULL<\/b>/.test(html), 'but it says where they went');
+
+  /* the honesty that must survive the simplification */
+  ok(/WATCH — not a signal to act on/.test(html),
+     'and the WATCH tag is on the card — simplifying the layout is not licence to drop the one '
+     + 'line that separates a setup from a recommendation');
+  ok(/no measured record on this desk/.test(html), 'saying why');
+
+  /* THE RATIO, THE RIGHT WAY ROUND. p.rr is risk/reward = 5.33. Printed as
+     "1:0.19" it reads as though the reward were the 1 — the flattering way
+     round, and wrong. */
+  ok(/risked for every 1 gained/.test(html), 'the ratio is stated as risk for reward');
+  ok(/5\.33 risked for every 1 gained/.test(html),
+     'and it is 5.33 risked per 1 gained, not "1:0.19" with the reward as the unit');
+  ok(!/reward:risk 1:0\.19/.test(html), 'the inverted phrasing is gone');
+  const m = html.match(/You risk ([0-9.]+) to make ([0-9.]+)/);
+  ok(!!m, 'the card states both legs in points');
+  ok(Number(m[1]) > Number(m[2]),
+     `and the risk (${m[1]}) really is the larger number (${m[2]}) — a card that printed it the `
+     + 'other way round would be describing a trade this strategy never takes');
+
+  ok(!/ENTRY<\/b><\/td><td[^>]*>[0-9.]+<\/td><td[^>]*>[0-9.]+ away/.test(html),
+     'the ENTRY row carries no distance-from-itself — "+0.00 (+0.00%)" in the place the eye goes '
+     + 'first is noise');
+  ok(!/ 1 bars ago/.test(html), 'and ages are pluralised properly');
 }
 
 console.log('\n== and it still refuses to invent a rate from what it resolved ==');
