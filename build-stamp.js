@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v770',
-  pack: '80PERCENT — the supplied dip-buyer implemented to the digit, with the win rate it actually has to hit computed from live ATR beside it',
+  version: 'hg-v771',
+  pack: 'the 5m walk that tests 80PERCENT against its own 84.21% bar — ambiguity and sampling error both at their worst, and a census explaining the trade count',
   built: '2026-09-17T00:00:00Z'
 };
 

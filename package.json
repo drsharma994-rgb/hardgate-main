@@ -21,6 +21,7 @@
     "sync:backtest-params": "node scripts/sync-backtest-tab-params.mjs",
     "test:data-layer": "node tests/test-data-layer.mjs",
     "og:walk": "node scripts/backtest-omnigold.mjs",
+    "p80:walk": "node scripts/walk-80percent.mjs",
     "og:sweep": "node scripts/backtest-omnigold.mjs && node scripts/target-sweep.mjs",
     "og:bake": "node scripts/omnigold-evidence-bake.mjs --write",
     "og:resolve-1m": "node scripts/resolve-unprovable-1m.mjs",
