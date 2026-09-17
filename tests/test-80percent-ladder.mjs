@@ -1360,7 +1360,10 @@ console.log('\n== SIMPLE is the default, and it reads as a trade ==');
   const html = String(node.querySelector('#p80Body').innerHTML);
 
   ok(/<h2>SETUPS/.test(html), 'SETUPS is the first panel, not the arithmetic');
-  ok(/ENTRY/.test(html) && /STOP LOSS/.test(html) && /TAKE PROFIT/.test(html),
+  /* case-insensitive: the labels are uppercased by CSS, the same way the
+     app's own .panel h2 is, so the literal in the markup is mixed case and
+     the casing is presentation rather than content */
+  ok(/\bentry\b/i.test(html) && /stop loss/i.test(html) && /take profit/i.test(html),
      'every card names entry, stop loss and take profit in those words');
   ok(/BUY XAUUSD|SELL XAUUSD/.test(html), 'and says BUY or SELL rather than long/short');
 
@@ -1384,7 +1387,10 @@ console.log('\n== SIMPLE is the default, and it reads as a trade ==');
   ok(/5\.33 risked for every 1 gained/.test(html),
      'and it is 5.33 risked per 1 gained, not "1:0.19" with the reward as the unit');
   ok(!/reward:risk 1:0\.19/.test(html), 'the inverted phrasing is gone');
-  const m = html.match(/You risk ([0-9.]+) to make ([0-9.]+)/);
+  /* matched against the TEXT, not the markup — a card that emphasises its
+     own numbers should not break an assertion about what it says */
+  const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  const m = text.match(/You risk ([0-9.]+) to make ([0-9.]+)/);
   ok(!!m, 'the card states both legs in points');
   ok(Number(m[1]) > Number(m[2]),
      `and the risk (${m[1]}) really is the larger number (${m[2]}) — a card that printed it the `
@@ -1545,8 +1551,13 @@ console.log('\n== the armed panel says what would trip it, and what it does not 
   ok(/ABOVE' : 'BELOW/.test(SRC), 'in the right direction for each side');
   ok(/so watch that level/.test(SRC), 'and gives the price to watch');
   ok(/Candle closes in/.test(SRC), 'with a countdown to the decision');
-  ok(/likely ENTRY/.test(SRC) && /likely STOP LOSS/.test(SRC) && /likely TAKE PROFIT/.test(SRC),
+  ok(/Likely entry/i.test(SRC) && /Likely stop/i.test(SRC) && /Likely target/i.test(SRC),
      'and the three levels, marked LIKELY rather than stated as facts');
+  /* and marked visually too: is-est greys the figures, so a reader scanning
+     prices can see at a glance that an armed row's numbers are not the same
+     kind of number as a fired setup's */
+  ok(/p80-levels is-est/.test(SRC) && /\.p80-levels\.is-est \.p80-lvl-v\{color:var\(--mut\)/.test(SRC),
+     'with the estimate styled differently from a settled level, not only labelled');
 
   ok(/<b>Armed is not a promise\.<\/b>/.test(SRC), 'the disclaimer is on every armed card');
   /* flattened, because the sentence is built by concatenation across lines */
@@ -1686,10 +1697,14 @@ console.log('\n== the panel groups scalp and swing, and counts both sides ==');
   const html = ctx.armedHtml([scalp, swing]);
   ok(html.length > 0, 'the panel renders for a ladder with rows in both bands');
   ok(/WHAT IS COMING/.test(html), 'under a heading that says what it is');
-  ok(/>SCALP</.test(html) && /<b>SWING<\/b>/.test(html),
+  ok(/p80-band-k">SCALP</.test(html) && /p80-band-k">SWING</.test(html),
      'with SCALP and SWING as separate blocks — a 5m row and a 1d row share every rule and '
      + 'nothing about how long you sit in them');
-  ok(/[0-9]+ long/.test(html) && /[0-9]+ short/.test(html),
+  ok(/p80-band-rule/.test(html),
+     'and the break between them is drawn, not just labelled — a band heading that looks like '
+     + 'another line of body text does not divide anything');
+  const bodyText = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  ok(/[0-9]+ long/.test(bodyText) && /[0-9]+ short/.test(bodyText),
      'and both directions counted on the page, so "does this thing ever short?" is not a '
      + 'question a reader has to audit the rows to answer');
   ok(!/NaN|undefined/.test(html), 'and nothing renders as NaN or undefined');
@@ -1730,8 +1745,15 @@ console.log('\n== what the venue takes out of the win, on the card itself ==');
 
   const line = ctx.costLineHtml ? ctx.costLineHtml({ cost: 0.87, target: 2.39, risk: 12.7 }, 'XM') : '';
   if (line){
-    ok(/36% of the winner/.test(line), `the card states the share in words: it renders "36%"`);
-    ok(/XM/.test(line), 'naming the venue that charged it');
+    const lineTxt = line.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ');
+    ok(/36% of the winner/.test(lineTxt), `the card states the share in words: it renders "36%"`);
+    ok(/XM/.test(lineTxt), 'naming the venue that charged it');
+    /* THE NUMBER CARRIES THE EMPHASIS, not the clause around it. An earlier
+       draft bolded "Even at the 85% the strategy claims for itself" and left
+       the figure that actually decides it — the R per trade — unstyled. */
+    ok(/<b style="color:var\(--short\)">36%<\/b>/.test(line),
+       'and the share itself is what is emphasised');
+    ok(!/<b[^>]*>Even at the/.test(line), 'not the sentence wrapped around it');
   }
   /* a breakeven with no stop distance still has a true cost SHARE and no
      expectancy; the line must say so rather than print NaN */
@@ -1739,7 +1761,8 @@ console.log('\n== what the venue takes out of the win, on the card itself ==');
   ok(!/NaN/.test(noRisk),
      'a rung with no stop distance renders no NaN — the share is still true, the R figure is '
      + 'simply not available and is named as such');
-  ok(/36% of the winner/.test(noRisk), 'and the share it CAN compute is still shown');
+  ok(/36% of the winner/.test(noRisk.replace(/<[^>]+>/g, '')),
+     'and the share it CAN compute is still shown');
 
   ok(/costLineHtml\(rung\.be/.test(SRC), 'and it is wired into the setup card');
   ok(/costLineHtml\(a\.rung\.be/.test(SRC), 'and onto the armed rows too');
@@ -2019,25 +2042,39 @@ console.log('\n== an armed row says which way the forming candle is leaning ==')
   const a = { side: 'long', level: 4300, rung: { def: { tf: '5m' } } };
   ok(ctx.armedLiveHtml(a, NaN) === '', 'with no live price the row says nothing extra');
 
+  /* asserted on the TEXT: the badge and the sentence are styled, and an
+     assertion about what a card SAYS should not break when it changes how
+     it says it */
+  const txt = h => String(h).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
   const up = ctx.armedLiveHtml(a, 4303.2);
-  ok(/Leaning the right way/.test(up),
+  ok(/leaning the right way/i.test(txt(up)),
      'gold above the level leans the RIGHT way for a long needing a green close');
-  ok(/3\.20<\/b> above/.test(up), 'with the distance stated');
-  ok(/green close/.test(up), 'and the close it needs named');
+  ok(/3\.20 above/.test(txt(up)), 'with the distance stated');
+  ok(/green close/.test(txt(up)), 'and the close it needs named');
 
   const down = ctx.armedLiveHtml(a, 4296.8);
-  ok(/Leaning the wrong way/.test(down), 'gold below it leans the wrong way');
-  ok(/3\.20<\/b> below/.test(down), 'with the distance the other way');
+  ok(/leaning the wrong way/i.test(txt(down)), 'gold below it leans the wrong way');
+  ok(/3\.20 below/.test(txt(down)), 'with the distance the other way');
+
+  /* THE BADGE NAMES NO COLOUR. "LEANING RED" is good news for a short and
+     bad for a long, so a reader would have to hold the direction in their
+     head to decode it. */
+  ok(/WITH YOU/.test(up) && /AGAINST YOU/.test(down),
+     'and the badge says whether it is going YOUR way, rather than naming a candle colour');
+  ok(!/LEANING (RED|GREEN)/.test(up + down), 'so no badge reads as a bare colour');
 
   /* and the mirror image, which is the half a long-only reading would miss */
   const sh = { side: 'short', level: 4300, rung: { def: { tf: '5m' } } };
-  ok(/Leaning the right way/.test(ctx.armedLiveHtml(sh, 4296.8)),
+  ok(/leaning the right way/i.test(txt(ctx.armedLiveHtml(sh, 4296.8))),
      'a SHORT leans the right way when gold is BELOW the level');
-  ok(/Leaning the wrong way/.test(ctx.armedLiveHtml(sh, 4303.2)),
+  ok(/WITH YOU/.test(ctx.armedLiveHtml(sh, 4296.8)), 'and is badged with you');
+  ok(/leaning the wrong way/i.test(txt(ctx.armedLiveHtml(sh, 4303.2))),
      'and the wrong way when it is above — the test a long-only reading inverts');
-  ok(/red close/.test(ctx.armedLiveHtml(sh, 4296.8)), 'needing a red close, not a green one');
+  ok(/red close/.test(txt(ctx.armedLiveHtml(sh, 4296.8))),
+     'needing a red close, not a green one');
 
-  ok(/not finished/.test(up),
+  ok(/not finished/.test(txt(up)),
      'and every one of them says the candle is not finished — this is where it stands, not '
      + 'where it ends');
   ok(!/NaN|undefined/.test(up + down), 'nothing renders as NaN or undefined');
@@ -2049,21 +2086,30 @@ console.log('\n== the live price panel names which price grades, and which only 
   const rungs = [ctx.hg80ScanTf(series(320, { tfSec: 900, endHour: 15 }), def, ctx.hg80VenueRt())];
   const ref = rungs[0].lastPx;
 
+  /* asserted on TEXT: the strip is laid out in spans and its labels are
+     uppercased by CSS, so matching raw markup would couple these to how it
+     looks rather than what it says */
+  const txt = h => String(h).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
   const none = ctx.livePriceHtml(NaN, null, NaN, NaN, rungs);
-  ok(/LIVE GOLD: not available this scan/.test(none),
+  ok(/live gold *not available this scan/i.test(txt(none)),
      'with no feed-native price the panel says so plainly');
-  ok(/no rung returned an unfinished bar/i.test(none),
+  ok(/no rung returned an unfinished bar/i.test(txt(none)),
      'and says exactly why there is none');
-  ok(/comes from the last closed candle/.test(none),
+  ok(/comes from the last closed candle/.test(txt(none)),
      'and what the numbers below it are based on instead');
+  ok(/p80-strip is-blind/.test(none),
+     'and it is styled as the empty state rather than looking like a reading');
 
   const got = ctx.livePriceHtml(ref + 1.2, '5m', ref * 1.0009, ref, rungs);
-  ok(/LIVE GOLD/.test(got) && new RegExp((ref + 1.2).toFixed(2)).test(got),
+  ok(/live gold/i.test(txt(got)) && new RegExp((ref + 1.2).toFixed(2)).test(got),
      'with one, it shows the price');
-  ok(/from the 5m bar forming right now/.test(got),
+  ok(/from the 5m bar forming now/.test(txt(got)),
      'naming the rung it came from — the freshest unfinished bar on the ladder');
-  ok(/same feed the levels came from/.test(got),
+  ok(/same feed the levels came from/.test(txt(got)),
      'and that it is the SAME feed as the levels, which is the entire reason it can grade them');
+  ok(/class="p80-px"/.test(got),
+     'with the price itself given the display treatment, not buried in a sentence');
 
   /* THE ARGUMENT, WITH MEASURED NUMBERS. An earlier draft of this panel
      multiplied two constants and printed 3.000% for a target nearer 0.055%.
@@ -2071,18 +2117,80 @@ console.log('\n== the live price panel names which price grades, and which only 
   const share = ctx.hg80TargetSharePct(rungs);
   ok(share !== null && share > 0 && share < 0.5,
      `the tightest target is measured off the ladder, not assumed (${share.toFixed(3)}% of price)`);
-  ok(new RegExp(share.toFixed(3) + '% of').test(got.replace(/<[^>]+>/g, '')),
+  ok(new RegExp(share.toFixed(3) + '% of').test(txt(got)),
      'and that measured figure is what the panel prints');
   ok(ctx.hg80TargetSharePct([]) === null && ctx.hg80TargetSharePct(null) === null,
      'with nothing priced it returns null rather than a made-up number');
 
-  ok(/Spot cross-check/.test(got), 'spot is shown');
-  ok(/does not grade anything/.test(got),
+  ok(/Spot cross-check/.test(txt(got)), 'spot is shown');
+  ok(/does not grade anything/.test(txt(got)),
      'and explicitly does NOT grade anything — a foreign feed cannot resolve a target this '
      + 'narrow');
-  ok(/decide every card on the gap between the feeds/.test(got),
+  ok(/decide every card on the gap between the feeds/.test(txt(got)),
      'with the reason stated: the comparison would measure the feeds, not the market');
   ok(!/NaN|undefined/.test(got + none), 'and none of it renders as NaN or undefined');
+}
+
+console.log('\n== the markup it emits is well formed ==');
+{
+  /* A REAL BUG THIS CAUGHT. Moving the toggle buttons off inline colour and
+     onto a class produced
+
+       <button class="btn ghost" data-p80-view="simple" is-on">
+
+     — the modifier outside the class attribute and a stray quote before the
+     '>'. Every control on the tab was malformed and nothing failed, because
+     an assertion that reads innerHTML with a regex does not care whether a
+     browser could parse it. */
+  const secOf = { '5m': 300, '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400 };
+  const bars = (tfSec, n) => {
+    const out = [], end = Math.floor(Date.now() / 1000 / tfSec) * tfSec;
+    let px = 4350;
+    for (let i = n - 1; i >= 0; i--){
+      const o = px, c = o + (i > 8 ? 1.15 : (i > 1 ? -2.4 : 1.35));
+      out.push({ t: end - i * tfSec, o, h: Math.max(o, c) + 0.4, l: Math.min(o, c) - 0.4, c, v: 1 });
+      px = c;
+    }
+    return out;
+  };
+  const settle = async () => {
+    await new Promise(r => setImmediate(r));
+    await new Promise(r => setTimeout(r, 0));
+  };
+
+  for (const view of ['simple', 'full']){
+    for (const k of Object.keys(store)) delete store[k];
+    ctx.hgOgFetchRows = (tf, n) => Promise.resolve({ rows: bars(secOf[tf], n), source: 'fixture' });
+    ctx.hgGoldLiveSpot = undefined;
+    const tab = (ctx.HG_tabs || []).find(t => t && t.id === '80percent');
+    const node = mkEl('div');
+    tab.mount(node);
+    await settle();
+    press(node, 'data-p80-view', view);
+    await settle();
+    const html = String(node.querySelector('#p80Body').innerHTML);
+
+    /* no attribute may sit outside a tag, and no tag may carry a stray quote
+       immediately before its '>' */
+    ok(!/"\s+[a-z-]+"\s*>/.test(html),
+       `${view}: no orphaned attribute value before a tag close`);
+    ok(!/<button[^>]*"\s*>/.test(html.replace(/="[^"]*"/g, '=x')),
+       `${view}: every button tag closes cleanly, with no dangling quote`);
+
+    /* tags balance */
+    const opens = (html.match(/<div\b/g) || []).length;
+    const closes = (html.match(/<\/div>/g) || []).length;
+    ok(opens === closes, `${view}: <div> tags balance (${opens} open, ${closes} close)`);
+    const bo = (html.match(/<button\b/g) || []).length;
+    const bc = (html.match(/<\/button>/g) || []).length;
+    ok(bo === bc, `${view}: <button> tags balance (${bo}/${bc})`);
+
+    /* every class attribute is a plain space-separated list */
+    for (const m of html.matchAll(/class="([^"]*)"/g)){
+      ok(!/[<>"]/.test(m[1]), `${view}: class "${m[1]}" holds no markup`);
+    }
+    ok(!/NaN|undefined/.test(html), `${view}: nothing renders as NaN or undefined`);
+  }
 }
 
 console.log('\n== and it still refuses to invent a rate from what it resolved ==');

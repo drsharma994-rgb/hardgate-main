@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v786',
-  pack: 'the 80PERCENT walk can finally run \u2014 bars from a file instead of a blocked API, the mechanics that actually fire, and a geometry sweep that prices the same entries at 25 target/stop pairs and refuses to name a winner',
+  version: 'hg-v787',
+  pack: 'the 80PERCENT tab now looks like the rest of the app \u2014 it had been painting dark-theme Tailwind colours onto a light-theme desk and hand-rolling a card the stylesheet already ships, and the toggle it drew was malformed markup',
   built: '2026-09-17T00:00:00Z'
 };
 

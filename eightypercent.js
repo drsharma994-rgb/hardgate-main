@@ -257,6 +257,108 @@ function hg80Shown(rungs){
   return rungs.filter(function(r){ return sel.indexOf(r.def.tf) >= 0; });
 }
 
+/* ---------------------------------------------------------------------
+   THE TAB'S OWN STYLESHEET
+
+   Everything this tab drew was inline, and every colour in it was a
+   hard-coded Tailwind value: #10b981, #ef4444, #0ea5e9, #334155. This app
+   runs data-theme="light" with --panel:#ffffff, so those were dark-theme
+   greens and slate borders painted onto white cards. Sixteen of one, ten of
+   another, forty in total, and not a single var(--...) anywhere in the file.
+
+   It also hand-rolled a card that already exists. index.html ships .card,
+   .card.long, .card.short, .chead, .sym, .dir, .mini and .plan — with a
+   hover state and a left border in the right accent — and this tab drew its
+   own out of inline borders instead.
+
+   So: one stylesheet, injected once, built only out of the design tokens,
+   and the app's own classes used wherever it already has one. The rule is
+   that nothing here invents a colour. If a value is not in :root it does
+   not belong in this file.
+   --------------------------------------------------------------------- */
+var P80_CSS = [
+'.p80-strip{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;',
+  'background:var(--panel2);border:1px solid var(--line);border-radius:6px;',
+  'padding:9px 12px;margin-bottom:12px}',
+'.p80-px{font-family:var(--mono);font-size:22px;font-weight:700;color:var(--txt);',
+  'letter-spacing:-.01em;line-height:1}',
+'.p80-px-k{font-size:9px;font-weight:700;letter-spacing:.16em;color:var(--mut);',
+  'text-transform:uppercase}',
+'.p80-strip .p80-sub{font-size:11px;color:var(--mut);font-weight:500}',
+'.p80-strip.is-blind{background:transparent;border-style:dashed}',
+
+/* a section lead: one sentence that says what the block beneath it is */
+'.p80-lead{font-size:11px;color:var(--mut);font-weight:500;line-height:1.55;margin:10px 0 8px}',
+'.p80-lead b{color:var(--txt);font-weight:700}',
+
+/* band divider — SCALP / SWING */
+'.p80-band{display:flex;align-items:center;gap:10px;margin:14px 0 8px}',
+'.p80-band-k{font-family:var(--disp);font-size:10px;font-weight:800;letter-spacing:.16em;',
+  'color:var(--mut);text-transform:uppercase;white-space:nowrap}',
+'.p80-band-rule{flex:1;height:1px;background:var(--line)}',
+'.p80-band-n{font-size:10px;color:var(--dim);font-weight:600;white-space:nowrap}',
+
+/* the levels block: label, price, distance — three aligned columns */
+'.p80-levels{display:grid;grid-template-columns:auto auto 1fr;gap:3px 16px;',
+  'align-items:baseline;margin:10px 0 8px;max-width:440px}',
+'.p80-lvl-k{font-size:10px;font-weight:700;letter-spacing:.1em;color:var(--mut);',
+  'text-transform:uppercase;white-space:nowrap}',
+'.p80-lvl-v{font-family:var(--mono);font-size:17px;font-weight:700;color:var(--txt);',
+  'text-align:right;font-variant-numeric:tabular-nums}',
+'.p80-lvl-d{font-family:var(--mono);font-size:10px;color:var(--dim);',
+  'white-space:nowrap;font-variant-numeric:tabular-nums}',
+'.p80-levels.is-est .p80-lvl-v{color:var(--mut);font-weight:600}',
+
+/* a metric line under a card — cost, risk:reward, the arithmetic */
+'.p80-meta{font-size:11px;color:var(--mut);line-height:1.6;font-weight:500;',
+  'border-top:1px solid var(--line);padding-top:7px;margin-top:8px}',
+'.p80-meta b{color:var(--txt);font-weight:700}',
+'.p80-meta.is-warn b{color:var(--veto)}',
+'.p80-meta.is-ok b{color:var(--pass)}',
+
+/* the caveat. Deliberately the quietest thing on the card: it has to be */
+/* present on every one of them, and it stops being read the moment it */
+/* shouts as loudly as the trade does. */
+'.p80-caveat{font-size:10px;color:var(--dim);line-height:1.55;font-weight:500;',
+  'margin-top:8px;padding-left:9px;border-left:2px solid var(--line)}',
+'.p80-caveat b{color:var(--mut);font-weight:700}',
+
+/* countdown / lean strip on an armed row */
+'.p80-when{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:11px;',
+  'color:var(--mut);font-weight:500;margin-top:4px}',
+'.p80-when b{color:var(--txt);font-weight:700;font-family:var(--mono)}',
+'.p80-lean{font-size:10px;font-weight:700;letter-spacing:.06em;padding:2px 7px;',
+  'border-radius:3px;border:1px solid;white-space:nowrap}',
+'.p80-lean.is-with{color:var(--pass);border-color:var(--pass);background:rgba(21,128,61,.07)}',
+'.p80-lean.is-against{color:var(--veto);border-color:var(--veto);background:rgba(194,65,12,.07)}',
+
+/* controls row */
+'.p80-ctl{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 10px}',
+'.p80-ctl-k{font-size:9px;font-weight:800;letter-spacing:.16em;color:var(--mut);',
+  'text-transform:uppercase;margin-right:2px}',
+'.p80-ctl .btn.ghost{padding:5px 11px;font-size:11px}',
+'.btn.ghost.is-on{border-color:var(--gold-dim);color:var(--gold);font-weight:700;',
+  'background:rgba(15,92,192,.06)}',
+'.p80-ctl-note{font-size:10px;color:var(--dim);font-weight:500;flex-basis:100%;line-height:1.5}',
+
+/* empty / waiting state */
+'.p80-empty{background:var(--panel2);border:1px solid var(--line);border-radius:6px;',
+  'padding:14px 16px;font-size:12px;color:var(--mut);line-height:1.6;font-weight:500}',
+'.p80-empty b{color:var(--txt);font-weight:700}'
+].join('');
+
+function hg80InjectCss(){
+  try {
+    var d = W.document;
+    if (!d || !d.createElement) return;
+    if (d.getElementById && d.getElementById('hg-p80-css')) return;
+    var el = d.createElement('style');
+    el.id = 'hg-p80-css';
+    el.textContent = P80_CSS;
+    (d.head || d.documentElement).appendChild(el);
+  } catch (e){}
+}
+
 function esc(s){
   return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
     return c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;';
@@ -418,18 +520,18 @@ function hg80LiveGrade(sig, px){
    whether each one is still a trade. `act` false is what keeps a dead setup
    out of the "you could act on" count. */
 var P80_LIVE_STATE = {
-  'fresh':      { act: true,  col: '#10b981',
+  'fresh':      { act: true,  col: 'var(--pass)',
                   txt: 'AT ENTRY — gold is at this level right now' },
-  'pending':    { act: true,  col: '#10b981',
+  'pending':    { act: true,  col: 'var(--pass)',
                   txt: 'WAITING — gold has not come back to the entry yet, so the fill is '
                        + 'still ahead of you' },
-  'past-entry': { act: true,  col: '#b45309',
+  'past-entry': { act: true,  col: 'var(--veto)',
                   txt: 'MOVED ON — gold is already past the entry, so part of the move is gone '
                        + 'and the rest of the target is closer than the card says' },
-  'past-t1':    { act: false, col: '#64748b',
+  'past-t1':    { act: false, col: 'var(--dim)',
                   txt: 'GONE — gold has already reached the target. There is nothing left to '
                        + 'take here' },
-  'past-stop':  { act: false, col: '#ef4444',
+  'past-stop':  { act: false, col: 'var(--short)',
                   txt: 'DEAD — gold is already through the stop. This is not an open setup and '
                        + 'taking it now is taking the loss on purpose' }
 };
@@ -496,17 +598,17 @@ function costLineHtml(be, venue){
       + 'could not be read, so what the spread takes out of this target is unknown.</div>';
   }
   var bad = (v.key === 'gone' || v.key === 'negative');
-  var col = bad ? '#ef4444' : (v.key === 'heavy' ? '#b45309' : '#10b981');
+  var col = bad ? 'var(--short)' : (v.key === 'heavy' ? 'var(--veto)' : 'var(--pass)');
   var h = '<div class="note" style="margin-top:4px;padding:3px 6px;border-left:3px solid ' + col + '">'
     + '<b>COST:</b> the round trip at ' + esc(venue || 'this venue') + ' is <b>' + num(v.cost)
-    + '</b> against a <b>' + num(v.target) + '</b> target — <b>' + (v.share * 100).toFixed(0)
-    + '% of the winner</b> gone before the trade has an opinion. ';
+    + '</b> against a <b>' + num(v.target) + '</b> target — <b style="color:' + col + '">'
+    + (v.share * 100).toFixed(0) + '%</b> of the winner gone before the trade has an opinion. ';
   if (v.key === 'gone'){
-    h += '<b style="color:' + col + '">The spread is the whole target.</b> This rung cannot pay '
+    h += 'The spread is <b style="color:' + col + '">the whole target</b> — this rung cannot pay '
       + 'here however often it is right.';
   } else if (v.key === 'negative'){
-    h += '<b style="color:' + col + '">Even at the ' + (P80_CLAIMED * 100).toFixed(0) + '% the '
-      + 'strategy claims for itself</b>, that returns ' + v.expR.toFixed(3) + 'R per trade.';
+    h += 'Even at the ' + (P80_CLAIMED * 100).toFixed(0) + '% the strategy claims for itself, '
+      + 'that returns <b style="color:' + col + '">' + v.expR.toFixed(3) + 'R</b> per trade.';
   } else if (v.key === 'heavy'){
     /* the R figure needs a stop distance to be a ratio of; without one the
        share is still true and the expectancy is simply not available, which
@@ -1377,8 +1479,9 @@ function hg80Record(sig, cfg){
    whole reason the ladder exists. */
 function mathPanelHtml(rungs, venue, basis){
   var gross = P80_SL_ATR / (P80_SL_ATR + P80_TP_ATR);
-  var h = '<div class="note warn" style="margin:8px 0;padding:8px 10px;border:1px solid #b45309;'
-    + 'border-left:3px solid #b45309;border-radius:4px;background:rgba(180,83,9,0.08)">'
+  var h = '<div class="note warn" style="margin:8px 0;padding:10px 12px;'
+    + 'border:1px solid var(--line);border-left:3px solid var(--veto);border-radius:6px;'
+    + 'background:var(--panel2)">'
     + '<b>WHAT THIS CONFIGURATION HAS TO HIT TO BREAK EVEN</b><br>'
     + 'Risking ' + P80_SL_ATR.toFixed(2) + ' ATR to make ' + P80_TP_ATR.toFixed(2)
     + ' ATR is 1:' + (P80_SL_ATR / P80_TP_ATR).toFixed(3) + '. Before any cost at all, that needs '
@@ -1538,8 +1641,8 @@ function firedSplitHtml(r){
       + esc(v.label) + ' ' + n + '</span> ';
   }
   return chips + '<div class="note">' + c.total + ' in ' + r.scanned + ' · ' + rate
-    + '<br><span style="color:#10b981">' + c.long + ' long</span> · '
-    + '<span style="color:#ef4444">' + c.short + ' short</span></div>';
+    + '<br><span style="color:var(--long)">' + c.long + ' long</span> · '
+    + '<span style="color:var(--short)">' + c.short + ' short</span></div>';
 }
 
 /* The board cell: which mechanic and side is closest, what it still needs,
@@ -1691,12 +1794,11 @@ function hg80UngatedRungs(){
 function viewControlHtml(){
   function btn(v, label){
     var on = __p.view === v;
-    return '<button type="button" class="btn ghost" data-p80-view="' + v + '"'
-      + ' style="' + (on ? 'border-color:#10b981;color:#10b981;font-weight:bold' : '') + '">'
-      + esc(label) + '</button> ';
+    return '<button type="button" class="btn ghost' + (on ? ' is-on' : '') + '"'
+      + ' data-p80-view="' + v + '">' + esc(label) + '</button> ';
   }
-  return '<div class="row" style="margin:0 0 6px 0;align-items:center">'
-    + '<span class="note" style="margin:0"><b>VIEW</b>: </span> '
+  return '<div class="p80-ctl">'
+    + '<span class="p80-ctl-k">View</span> '
     + btn('simple', 'SIMPLE') + btn('full', 'FULL')
     + '<span class="note dim" style="margin:0;font-size:11px">'
     + (__p.view === 'simple'
@@ -1711,9 +1813,8 @@ function focusControlHtml(){
   var h = '<div class="row" style="margin:6px 0 0 0;align-items:center;flex-wrap:wrap">'
     + '<span class="note" style="margin:0"><b>RUNGS</b>: </span> ';
   function btn(attr, label, on){
-    return '<button type="button" class="btn ghost" data-p80-focus="' + esc(attr) + '"'
-      + ' style="' + (on ? 'border-color:#10b981;color:#10b981;font-weight:bold' : '') + '">'
-      + esc(label) + '</button> ';
+    return '<button type="button" class="btn ghost' + (on ? ' is-on' : '') + '"'
+      + ' data-p80-focus="' + esc(attr) + '">' + esc(label) + '</button> ';
   }
   var scalp = hg80BandRungs('scalp'), swing = hg80BandRungs('swing');
   var ungated = hg80UngatedRungs();
@@ -1750,10 +1851,9 @@ function venueControlHtml(v){
   var active = (v && v.venue) ? String(v.venue).toUpperCase() : '';
   function btn(id, name, label){
     var on = active === name;
-    return '<button type="button" class="btn ghost" id="' + id + '" data-p80-venue="' + name + '"'
-      + (ovr ? ' disabled' : '')
-      + ' style="' + (on ? 'border-color:#10b981;color:#10b981;font-weight:bold' : '') + '">'
-      + esc(label) + '</button>';
+    return '<button type="button" class="btn ghost' + (on ? ' is-on' : '') + '"'
+      + ' id="' + id + '" data-p80-venue="' + name + '"'
+      + (ovr ? ' disabled' : '') + '>' + esc(label) + '</button>';
   }
   var h = '<div class="row" style="margin:8px 0 0 0;align-items:center">'
     + '<span class="note" style="margin:0"><b>EXECUTION VENUE</b>: </span> '
@@ -1808,52 +1908,56 @@ function simpleCardHtml(sig, rung, state){
   var p = sig.plan;
   if (!p) return '';
   var long = sig.dir === 'long';
-  var col = long ? '#10b981' : '#ef4444';
   var when = hg80WhenTxt(sig.t, true);
   var age = rung ? (rung.rows.length - 1) - sig.i : null;
 
-  function leg(label, px, from){
-    /* distance from the ENTRY, as points and percent. The entry row itself
-       gets no delta — "+0.00 (+0.00%)" against itself is noise in the one
-       place the eye goes first. */
+  /* .card / .card.long / .chead / .sym / .dir are the app's own, and they
+     already carry the left accent, the hover state and the type scale this
+     was reproducing by hand in inline styles. */
+  var h = '<div class="card ' + (long ? 'long' : 'short') + '" style="margin-bottom:12px">'
+    + '<div class="chead"><span class="sym">' + (long ? 'BUY' : 'SELL') + ' XAUUSD</span>'
+    + '<span class="dir">' + esc(rung ? rung.def.tf : '') + '</span></div>';
+
+  h += '<div class="p80-when">' + esc(when)
+    + (age != null && age > 0 && rung
+        ? '<span class="dim">· ' + age + ' bar' + (age === 1 ? '' : 's') + ' ago ('
+          + ageTxt(age * rung.cfg.tfSec) + ')</span>'
+        : (age === 0 ? '<span class="dim">· just closed</span>' : ''))
+    + '</div>';
+
+  if (state) h += '<div class="row" style="margin-top:7px">' + state + '</div>';
+
+  /* THE THREE NUMBERS, aligned. Label, price, distance — tabular figures in
+     one grid so the decimal points line up down the card, which is the
+     difference between a price list you can scan and one you have to read. */
+  function lvl(label, px, from){
     var d = (from == null) ? NaN : fin(px) - fin(from);
     var pct = (d / fin(from)) * 100;
-    return '<tr><td style="padding:3px 10px 3px 0"><b>' + esc(label) + '</b></td>'
-      + '<td class="hg-num" style="font-size:1.35em;font-weight:bold;padding:3px 10px 3px 0">'
-      + num(px) + '</td>'
-      + '<td class="hg-num note" style="padding:3px 0">'
-      + (isFinite(d) ? Math.abs(d).toFixed(2) + ' away  (' + Math.abs(pct).toFixed(2) + '%)' : '')
-      + '</td></tr>';
+    return '<span class="p80-lvl-k">' + esc(label) + '</span>'
+      + '<span class="p80-lvl-v">' + num(px) + '</span>'
+      + '<span class="p80-lvl-d">'
+      + (isFinite(d) ? Math.abs(d).toFixed(2) + '  (' + Math.abs(pct).toFixed(2) + '%)' : '')
+      + '</span>';
   }
-
-  var h = '<div class="panel" style="margin-top:8px;border-left:4px solid ' + col + '">'
-    + '<h3 style="color:' + col + '">' + (long ? 'BUY' : 'SELL') + ' XAUUSD'
-    + ' <span>' + esc((rung ? rung.def.tf + ' · ' : '')) + esc(when)
-    + (age != null && age > 0 && rung
-        ? ' · ' + age + ' bar' + (age === 1 ? '' : 's') + ' ago (' + ageTxt(age * rung.cfg.tfSec) + ')'
-        : (age === 0 ? ' · just closed' : '')) + '</span></h3>';
-
-  if (state) h += '<div style="margin-bottom:4px">' + state + '</div>';
-
-  h += '<table style="border:0;margin:2px 0"><tbody>'
-    + leg('ENTRY', p.entry, null)
-    + leg(long ? 'STOP LOSS' : 'STOP LOSS', p.stop, p.entry)
-    + leg('TAKE PROFIT', p.t1, p.entry)
-    + '</tbody></table>';
+  h += '<div class="p80-levels">'
+    + lvl('Entry', p.entry, null)
+    + lvl('Stop loss', p.stop, p.entry)
+    + lvl('Take profit', p.t1, p.entry)
+    + '</div>';
 
   /* p.rr is risk/reward — 5.33 here. Printed as "1:0.19" it reads as though
      the reward were the 1, which is the flattering way round and the wrong
      one. Say it as a desk says it: what you risk, for what you stand to
      make. */
-  h += '<div class="note"><b>You risk ' + num(p.risk) + ' to make ' + num(p.reward) + '</b> — '
-    + num(p.rr, 2) + ' risked for every 1 gained. That is why it has to win '
-    + ((P80_SL_ATR / (P80_SL_ATR + P80_TP_ATR)) * 100).toFixed(1) + '% of the time just to break '
-    + 'even, before any spread.</div>';
+  h += '<div class="p80-meta">You risk <b>' + num(p.risk) + '</b> to make <b>' + num(p.reward)
+    + '</b> — ' + num(p.rr, 2) + ' risked for every 1 gained, so it has to win '
+    + ((P80_SL_ATR / (P80_SL_ATR + P80_TP_ATR)) * 100).toFixed(1)
+    + '% of the time just to break even, before any spread.</div>';
 
   if (rung) h += costLineHtml(rung.be, __p.venue ? __p.venue.venue : null);
 
-  h += '<div class="note warn" style="margin-top:4px;padding:3px 6px;border-left:3px solid #b45309">'
-    + '<b>WATCH — not a signal to act on.</b> ' + esc(sig.variantLabel || 'SPEC')
+  h += '<div class="p80-caveat"><b>WATCH — not a signal to act on.</b> '
+    + esc(sig.variantLabel || 'SPEC')
     + ' has no measured record on this desk. It is logged so it can earn one.</div>';
   return h + '</div>';
 }
@@ -1869,8 +1973,8 @@ function armedHtml(rungs, livePx){
   if (!armed.length && !arming.length) return '';
 
   var nowSec = Math.floor(Date.now() / 1000);
-  var h = '<div class="panel" style="margin-top:8px;border-left:4px solid #0ea5e9">'
-    + '<h3 style="color:#0ea5e9">WHAT IS COMING <span>'
+  var h = '<div class="panel" style="border-left:3px solid var(--gold)">'
+    + '<h2>WHAT IS COMING <span>'
     + armed.length + ' armed · ' + arming.length + ' one step behind</span></h3>';
 
   h += sideCountHtml(armed, arming);
@@ -1889,7 +1993,7 @@ function armedHtml(rungs, livePx){
     h += bandBlocksHtml(arming, armingRowHtml);
   }
 
-  h += '<div class="note warn" style="margin-top:8px;padding:3px 6px;border-left:3px solid #b45309">'
+  h += '<div class="p80-caveat" style="margin-top:12px">'
     + '<b>Armed is not a promise.</b> The trend, the RSI pullback and — on the rungs where a bar '
     + 'can fit inside the window — the session are recomputed on the new candle, and any of them '
     + 'can drop out before it closes. Levels are worked from '
@@ -1913,12 +2017,12 @@ function sideCountHtml(armed, arming){
   var bands = ['scalp', 'swing'], h = '', i;
   for (i = 0; i < bands.length; i++){
     var b = bands[i];
-    h += '<span class="note" style="margin-right:14px">' + esc(b.toUpperCase())
-      + ' <span class="dim">(' + esc(hg80BandRungs(b).join(', ')) + ')</span>: '
-      + '<b style="color:#10b981">' + n(b, 'long') + ' long</b> · '
-      + '<b style="color:#ef4444">' + n(b, 'short') + ' short</b></span>';
+    h += '<span class="p80-band-k">' + esc(b.toUpperCase()) + '</span>'
+      + '<span class="note" style="margin-right:16px">'
+      + '<b style="color:var(--long)">' + n(b, 'long') + '</b> long · '
+      + '<b style="color:var(--short)">' + n(b, 'short') + '</b> short</span>';
   }
-  return '<div style="margin-top:2px">' + h + '</div>';
+  return '<div class="row" style="gap:7px;margin:2px 0 4px">' + h + '</div>';
 }
 
 /* Grouped SCALP then SWING, because those are the two different trades on
@@ -1930,8 +2034,9 @@ function bandBlocksHtml(list, rowFn){
     var b = bands[i];
     var rows = list.filter(function(x){ return x.band === b; });
     if (!rows.length) continue;
-    h += '<div class="note dim" style="margin-top:6px;letter-spacing:0.08em"><b>'
-      + esc(b.toUpperCase()) + '</b></div>';
+    h += '<div class="p80-band"><span class="p80-band-k">' + esc(b.toUpperCase()) + '</span>'
+      + '<span class="p80-band-rule"></span>'
+      + '<span class="p80-band-n">' + esc(hg80BandRungs(b).join(' · ')) + '</span></div>';
     for (j = 0; j < rows.length; j++) h += rowFn(rows[j]);
   }
   return h;
@@ -1941,28 +2046,32 @@ function armedRowHtml(a, livePx){
   var long = a.side === 'long';
   var closesAt = isFinite(fin(a.closesIn))
     ? hg80WhenTxt(Math.floor(Date.now() / 1000) + fin(a.closesIn), false) : '';
-  var h = '<div style="margin-top:6px;padding:6px 8px;border:1px solid #334155;border-radius:4px">'
-    + '<b style="color:' + (long ? '#10b981' : '#ef4444') + ';font-size:1.1em">'
-    + (long ? 'BUY' : 'SELL') + ' XAUUSD ' + esc(a.rung.def.tf) + '</b> '
-    + variantChipHtml({ variant: a.variant.key })
-    + '<div style="margin-top:3px"><b>Fires if this candle closes '
-    + (long ? 'ABOVE' : 'BELOW') + ' its open.</b> '
-    + 'The last one closed at <b>' + num(a.level) + '</b>, which is about where this one '
-    + 'opened — so watch that level.</div>'
-    + '<div class="note" style="margin-top:3px">Candle closes in <b>'
-    + hg80DurTxt(a.closesIn) + '</b>' + (closesAt ? ' — at <b>' + esc(closesAt) + '</b>' : '')
-    + '</div>'
-    + armedLiveHtml(a, livePx)
-    + '<table style="border:0;margin:4px 0"><tbody>'
-    + '<tr><td style="padding:2px 10px 2px 0">likely ENTRY</td>'
-    + '<td class="hg-num" style="font-weight:bold;padding:2px 10px 2px 0">' + num(a.entryEst) + '</td></tr>'
-    + '<tr><td style="padding:2px 10px 2px 0">likely STOP LOSS</td>'
-    + '<td class="hg-num" style="font-weight:bold;padding:2px 10px 2px 0">' + num(a.stopEst) + '</td>'
-    + '<td class="hg-num note">' + num(Math.abs(a.entryEst - a.stopEst)) + ' away</td></tr>'
-    + '<tr><td style="padding:2px 10px 2px 0">likely TAKE PROFIT</td>'
-    + '<td class="hg-num" style="font-weight:bold;padding:2px 10px 2px 0">' + num(a.targetEst) + '</td>'
-    + '<td class="hg-num note">' + num(Math.abs(a.entryEst - a.targetEst)) + ' away</td></tr>'
-    + '</tbody></table>';
+  var h = '<div class="card ' + (long ? 'long' : 'short') + '" style="margin-bottom:10px">'
+    + '<div class="chead"><span class="sym">' + (long ? 'BUY' : 'SELL') + ' XAUUSD</span>'
+    + '<span class="dir">' + esc(a.rung.def.tf) + ' · ' + variantChipHtml({ variant: a.variant.key })
+    + '</span></div>'
+    + '<div class="p80-lead" style="margin-top:0"><b>Fires if this candle closes '
+    + (long ? 'ABOVE' : 'BELOW') + ' its open.</b> The last one closed at <b>' + num(a.level)
+    + '</b>, which is about where this one opened — so watch that level.</div>'
+    + '<div class="p80-when">Candle closes in <b>' + hg80DurTxt(a.closesIn) + '</b>'
+    + (closesAt ? '<span class="dim">at ' + esc(closesAt) + '</span>' : '') + '</div>'
+    + armedLiveHtml(a, livePx);
+
+  /* "is-est" greys the figures: these are worked from the last close and the
+     current ATR, and the real ones are set by whichever candle fires. The
+     card says so in words too, but a reader scanning prices should be able
+     to see at a glance that these are not the same kind of number as the
+     ones on a fired setup. */
+  h += '<div class="p80-levels is-est">'
+    + '<span class="p80-lvl-k">Likely entry</span>'
+    + '<span class="p80-lvl-v">' + num(a.entryEst) + '</span><span class="p80-lvl-d"></span>'
+    + '<span class="p80-lvl-k">Likely stop</span>'
+    + '<span class="p80-lvl-v">' + num(a.stopEst) + '</span>'
+    + '<span class="p80-lvl-d">' + num(Math.abs(a.entryEst - a.stopEst)) + ' away</span>'
+    + '<span class="p80-lvl-k">Likely target</span>'
+    + '<span class="p80-lvl-v">' + num(a.targetEst) + '</span>'
+    + '<span class="p80-lvl-d">' + num(Math.abs(a.entryEst - a.targetEst)) + ' away</span>'
+    + '</div>';
   h += costLineHtml(a.rung.be, __p.venue ? __p.venue.venue : null);
   return h + '</div>';
 }
@@ -1981,25 +2090,34 @@ function armedLiveHtml(a, livePx){
   var long = a.side === 'long';
   var d = px - lvl;
   var leaning = long ? (d > 0) : (d < 0);
-  var col = leaning ? '#10b981' : '#b45309';
-  return '<div class="note" style="margin-top:3px;padding:3px 6px;border-left:3px solid ' + col + '">'
-    + 'Gold is <b>' + num(px) + '</b> right now — <b>' + num(Math.abs(d)) + '</b> '
-    + (d >= 0 ? 'above' : 'below') + ' that level. '
-    + '<b style="color:' + col + '">' + (leaning ? 'Leaning the right way' : 'Leaning the wrong way')
-    + '</b> for a ' + (long ? 'green' : 'red') + ' close, as of this scan. '
-    + '<span class="dim">The candle is not finished; this is where it stands, not where it '
-    + 'ends.</span></div>';
+  /* The badge says whether the forming candle is currently going the way
+     this setup needs; the line beside it says by how much and what it needs.
+     "WITH YOU / AGAINST YOU" rather than naming a colour, because a badge
+     reading "LEANING RED" is good news for a short and bad for a long, and a
+     reader should not have to hold the direction in their head to decode
+     it. */
+  return '<div class="p80-when">Gold <b>' + num(px) + '</b>'
+    + '<span class="p80-lean ' + (leaning ? 'is-with' : 'is-against') + '">'
+    + (leaning ? 'WITH YOU' : 'AGAINST YOU') + '</span>'
+    + '<span class="dim">' + num(Math.abs(d)) + ' ' + (d >= 0 ? 'above' : 'below')
+    + ' that level · needs a ' + (long ? 'green' : 'red') + ' close</span></div>'
+    + '<div class="p80-caveat" style="margin-top:5px">'
+    + (leaning ? 'Leaning the right way' : 'Leaning the wrong way') + ' as of this scan. '
+    + 'The candle is not finished; this is where it stands, not where it ends.</div>';
 }
 
 function armingRowHtml(a){
   var long = a.side === 'long';
-  return '<div style="margin-top:6px;padding:5px 8px;border:1px dashed #334155;border-radius:4px">'
-    + '<b style="color:' + (long ? '#10b981' : '#ef4444') + '">'
-    + (long ? 'BUY' : 'SELL') + ' XAUUSD ' + esc(a.rung.def.tf) + '</b> '
-    + variantChipHtml({ variant: a.variant.key })
-    + '<div class="note" style="margin-top:2px">Waiting on: <b>' + esc(a.need.txt) + '</b>. '
+  return '<div class="card" style="margin-bottom:8px;border-style:dashed">'
+    + '<div class="chead"><span class="sym" style="font-size:13px">'
+    + '<span style="color:var(--' + (long ? 'long' : 'short') + ')">' + (long ? 'BUY' : 'SELL')
+    + '</span> XAUUSD</span>'
+    + '<span class="dir">' + esc(a.rung.def.tf) + ' · '
+    + variantChipHtml({ variant: a.variant.key }) + '</span></div>'
+    + '<div class="p80-lead" style="margin:4px 0 0">Waiting on <b>' + esc(a.need.txt) + '</b>. '
     + 'Then a candle closing ' + (long ? 'ABOVE' : 'BELOW') + ' its open. '
-    + 'Trend is already aligned; last close ' + num(a.level) + '.</div></div>';
+    + '<span class="dim">Trend is already aligned; last close ' + num(a.level) + '.</span></div>'
+    + '</div>';
 }
 
 /* ---------------------------------------------------------------------
@@ -2034,42 +2152,37 @@ function hg80TargetSharePct(rungs){
 
 function livePriceHtml(gradePx, gradeTf, spot, feedRef, rungs){
   var gp = fin(gradePx), sp = fin(spot), ref = fin(feedRef);
-  var h = '<div class="note" style="margin-top:8px;padding:4px 8px;border-left:3px solid '
-    + (isFinite(gp) && gp > 0 ? '#10b981' : '#64748b') + '">';
+  var live = isFinite(gp) && gp > 0;
 
-  if (isFinite(gp) && gp > 0){
-    h += '<b>LIVE GOLD <span style="font-size:1.25em">' + num(gp) + '</span></b> '
-      + '<span class="dim">from the ' + esc(gradeTf || '') + ' bar forming right now, on the '
-      + 'same feed the levels came from</span>';
-  } else {
-    h += '<b>LIVE GOLD: not available this scan.</b> No rung returned an unfinished bar, so '
-      + 'there is no price on the same feed as the levels. Nothing below is graded against a '
-      + 'live price — every status comes from the last closed candle, which is what this tab '
-      + 'did before.';
-  }
-
+  var h = '<div class="p80-strip' + (live ? '' : ' is-blind') + '">'
+    + '<span class="p80-px-k">Live gold</span>';
+  h += live
+    ? ('<span class="p80-px">' + num(gp) + '</span>'
+       + '<span class="p80-sub">from the <b>' + esc(gradeTf || '') + '</b> bar forming now, on '
+       + 'the same feed the levels came from</span>')
+    : ('<span class="p80-sub"><b>not available this scan.</b> No rung returned an unfinished '
+       + 'bar, so there is no price on the same feed as the levels. Nothing below is graded '
+       + 'against a live price — every status comes from the last closed candle, which is what '
+       + 'this tab did before.</span>');
   if (isFinite(sp) && sp > 0){
-    h += '<br><span class="note">Spot cross-check <b>' + num(sp) + '</b>'
+    h += '<span class="p80-sub" style="flex-basis:100%">Spot cross-check <b>' + num(sp) + '</b>'
       + (isFinite(ref) && ref > 0
-          ? ' · ' + (((sp / ref) - 1) >= 0 ? '+' : '')
-            + ((((sp / ref) - 1)) * 100).toFixed(3) + '% from the feed\'s last close'
+          ? ' (' + (((sp / ref) - 1) >= 0 ? '+' : '')
+            + ((((sp / ref) - 1)) * 100).toFixed(3) + '% from the feed\'s last close)'
           : '')
-      + '. <b>It does not grade anything</b>, and that is not caution — it is arithmetic. ';
+      + ' — <b>it does not grade anything</b>, and that is arithmetic rather than caution. ';
     var share = hg80TargetSharePct(rungs);
-    if (share !== null){
-      h += 'The tightest target on the ladder right now is <b>' + share.toFixed(3) + '% of '
-        + 'price</b>'
-        + (isFinite(sp) && isFinite(ref) && ref > 0
-            ? ', and these two feeds are ' + Math.abs(((sp / ref) - 1) * 100).toFixed(3)
-              + '% apart' : '')
-        + '. Two price sources routinely sit further apart than the whole target, so a '
-        + 'cross-source comparison would decide every card on the gap between the feeds rather '
-        + 'than on anything the market did.';
-    } else {
-      h += 'The targets on this strategy are a few hundredths of a percent of price, which is '
-        + 'smaller than two price sources routinely differ by — so a cross-source comparison '
-        + 'would decide every card on the gap between the feeds.';
-    }
+    h += (share !== null)
+      ? ('The tightest target on the ladder is <b>' + share.toFixed(3) + '% of price</b>'
+         + (isFinite(ref) && ref > 0
+             ? ', and these two feeds are ' + Math.abs(((sp / ref) - 1) * 100).toFixed(3)
+               + '% apart' : '')
+         + '. Two price sources routinely sit further apart than the whole target, so a '
+         + 'cross-source comparison would decide every card on the gap between the feeds '
+         + 'rather than on anything the market did.')
+      : ('The targets here are a few hundredths of a percent of price, smaller than two price '
+         + 'sources routinely differ by — so a cross-source comparison would decide every card '
+         + 'on the gap between the feeds.');
     h += '</span>';
   }
 
@@ -2078,7 +2191,8 @@ function livePriceHtml(gradePx, gradeTf, spot, feedRef, rungs){
   var bTxt = '';
   try { bTxt = bFn ? String(bFn() || '') : ''; } catch (e){ bTxt = ''; }
   if (bTxt){
-    h += '<br><span class="warn"><b>FEED BASIS:</b> ' + esc(bTxt) + '</span>';
+    h += '<span class="p80-sub" style="flex-basis:100%;color:var(--veto)"><b>FEED BASIS:</b> '
+      + esc(bTxt) + '</span>';
   }
   return h + '</div>';
 }
@@ -2091,7 +2205,7 @@ function sessionClockHtml(rungs){
   var toOpen = hg80SecsToSession(Math.floor(Date.now() / 1000));
   var loc = hg80SessionLocalTxt();
 
-  var h = '<div class="note" style="margin-top:8px;padding:6px 8px;border-left:3px solid #64748b">'
+  var h = '<div class="note" style="margin-top:8px;padding:6px 8px;border-left:3px solid var(--dim)">'
     + '<b>WHEN THESE CAN FIRE</b> <span class="dim">(your clock: ' + esc(hg80TzName()) + ')</span><br>';
   if (gated.length){
     h += esc(gated.map(function(r){ return r.def.tf; }).join(', '))
@@ -2176,15 +2290,15 @@ function simpleSetupsHtml(rungs, livePx){
     for (k = 0; k < actable.length; k++){
       var ca = actable[k];
       h += simpleCardHtml(ca.s, ca.r,
-        (ca.fresh ? '<span class="statuschip ok">FIRED ON THE LAST CLOSED CANDLE</span>'
-                  : '<span class="statuschip ok">STILL OPEN</span> <span class="note">neither '
+        (ca.fresh ? '<span class="stamp pass">FIRED ON THE LAST CLOSED CANDLE</span>'
+                  : '<span class="stamp pass">STILL OPEN</span> <span class="note">neither '
                     + 'the stop nor the target was touched in the bars fetched</span>')
         + liveChipHtml(ca.grade, spot));
     }
     for (k = 0; k < dead.length; k++){
       var cd = dead[k];
       h += simpleCardHtml(cd.s, cd.r,
-        '<span class="statuschip na">NO LONGER TAKEABLE</span>'
+        '<span class="stamp veto">NO LONGER TAKEABLE</span>'
         + liveChipHtml(cd.grade, spot));
     }
     return h + '</div>';
@@ -2231,9 +2345,9 @@ function simpleSetupsHtml(rungs, livePx){
       + '<b>these are finished</b>, shown so you can see what they look like:</div>';
     for (i = 0; i < recent.length; i++){
       var st = recent[i].s.status;
-      var chip = st === 'win' ? '<span class="statuschip">CLOSED — reached its target</span>'
-               : st === 'loss' ? '<span class="statuschip na">CLOSED — hit its stop</span>'
-               : '<span class="statuschip na">CLOSED — ' + esc(st || 'expired') + '</span>';
+      var chip = st === 'win' ? '<span class="stamp pass">CLOSED — reached its target</span>'
+               : st === 'loss' ? '<span class="stamp veto">CLOSED — hit its stop</span>'
+               : '<span class="stamp na">CLOSED — ' + esc(st || 'expired') + '</span>';
       h += simpleCardHtml(recent[i].s, recent[i].r, chip);
     }
   }
@@ -2268,7 +2382,7 @@ function whyNothingHtml(rungs){
   }
   closest = nearestOf(live) || nearestOf(held);
 
-  var h = '<div class="note warn" style="margin:8px 0;padding:8px 10px;border-left:3px solid #b45309">'
+  var h = '<div class="note warn" style="margin:8px 0;padding:8px 10px;border-left:3px solid var(--veto)">'
     + '<b>WHY THERE IS NOTHING TO TAKE RIGHT NOW</b>';
 
   if (gated.length){
@@ -2656,7 +2770,7 @@ function variantNoteHtml(sig){
   if (!sig || !sig.variant || sig.variant === 'spec') return '';
   var v = hg80Variant(sig.variant);
   var gross = P80_SL_ATR / (P80_SL_ATR + P80_TP_ATR);
-  return '<div class="note warn" style="margin-top:4px;border-left:3px solid #b45309">'
+  return '<div class="note warn" style="margin-top:4px;border-left:3px solid var(--veto)">'
     + '<b>THIS IS THE ' + esc(v.label) + ' MECHANIC, NOT THE SUPPLIED SPEC.</b> The spec wants '
     + 'RSI below ' + P80_RSI_LONG + ' for a long and above ' + P80_RSI_SHORT + ' for a short; '
     + esc(v.label) + ' asks for below ' + v.rsiLong + ' and above ' + v.rsiShort + '. This fired '
@@ -2724,7 +2838,7 @@ function setupCardHtml(sig, be, cfg, kind){
   if (sig.res && sig.status && sig.status !== 'open'){
     h += resultLineHtml(sig);
   }
-  h += '<div class="note warn" style="margin-top:6px;padding:4px 6px;border-left:3px solid #b45309">'
+  h += '<div class="note warn" style="margin-top:6px;padding:4px 6px;border-left:3px solid var(--veto)">'
     + '<b>WATCH, NOT A TICKET.</b> This strategy has no measured record on this desk — the claimed '
     + 'rate is an assertion, and hg-v756 made measured-edge hard. Recorded to the forward log so '
     + 'it can earn one.</div>';
@@ -3219,6 +3333,7 @@ function run(){
 
 function mount(el){
   if (!el) return;
+  hg80InjectCss();
   var rungTxt = P80_LADDER.map(function(d){ return d.tf; }).join(' · ');
   el.innerHTML = '<div class="panel">'
     + '<h2>80PERCENT <span>High-Momentum Trend Dip-Buyer · XAUUSD · ' + esc(rungTxt) + '</span></h2>'
@@ -3288,6 +3403,8 @@ W.hg80LiveActs       = hg80LiveActs;
 W.livePriceHtml      = livePriceHtml;
 W.hg80TargetSharePct = hg80TargetSharePct;
 W.hg80SplitForming   = hg80SplitForming;
+W.HG_P80_CSS         = P80_CSS;
+W.hg80InjectCss      = hg80InjectCss;
 W.armedLiveHtml      = armedLiveHtml;
 W.liveChipHtml       = liveChipHtml;
 W.simpleSetupsHtml   = simpleSetupsHtml;
