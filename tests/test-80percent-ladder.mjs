@@ -2575,8 +2575,21 @@ console.log('\n== what is true of every card is said once ==');
      SAVING. With a single card on screen it would make the panel LONGER,
      so everything in it has to be load-bearing — the commentary about why
      it is said once belongs in the source, not on the page. */
+  /* THE LIMIT IS DERIVED, NOT PICKED. The preamble has to be shorter than
+     what it removes from a card, or a single-card panel comes out longer
+     than before — that is the whole test. It was 45 when the preamble
+     hoisted one invariant (the geometry clause, ~22 words a card). It now
+     hoists two: hg-v802 moved the cost framing out of every COST line as
+     well, another ~21 a card. So the per-card saving is ~43 and the
+     break-even is a shade over one card.
+
+     55 keeps that true and leaves no room to pad. If a third invariant is
+     ever hoisted, raise it by what that invariant costs a card and say so
+     here — not by whatever the preamble happens to have grown to. */
   const words = preTxt.split(/\s+/).length;
-  ok(words <= 45, `the preamble is ${words} words, short enough not to cost more than it saves`);
+  ok(words <= 55,
+     `the preamble is ${words} words against a ~43-word per-card saving, so it breaks even at `
+     + 'about one card and saves from two');
   ok(!/said here and not|What differs from card to card/.test(preTxt),
      'with no commentary about its own layout');
 
@@ -2617,8 +2630,14 @@ console.log('\n== what is true of every card is said once ==');
   /* WHAT IS CARD-SPECIFIC STAYS ON THE CARD */
   const risks = (html.match(/You risk <b>/g) || []).length;
   ok(risks === cards, `every card still states its own risk and reward (${risks}/${cards})`);
-  const costs = (html.match(/<b>COST:<\/b>/g) || []).length;
+  const costs = (html.match(/<b>COST(:<\/b>|<\/b> at )/g) || []).length;
   ok(costs === cards, `and its own cost line (${costs}/${cards})`);
+  /* the FRAMING is what was hoisted, not the figures */
+  const framing = (html.match(/of the winner gone before the trade has an opinion/g) || []).length;
+  ok(framing === 0,
+     'with the prose that is identical on every card lifted out of all of them');
+  ok(/what the venue takes out of that card's own target/.test(html.replace(/&#39;/g, "'")),
+     'and said once, where it is true once');
 
   /* THE WATCH MARK IS NOT WHAT WAS HOISTED — only the paragraph was */
   const marks = (html.match(/WATCH — not a signal to act on/g) || []).length;
@@ -2952,8 +2971,9 @@ console.log('\n== an armed row is about a candle, and it has to be the right can
   const st2 = txt(ctx.armedRealStampHtml(stale));
   ok(/THESE BARS ARE STALE/.test(st2) && /8 candles behind/.test(st2),
      'the stale row is stamped with how far behind it is');
-  ok(/the countdown below is real, the arming is not/.test(st2),
-     'separating the part that is still true from the part that is not');
+  ok(/the countdown is still real — the arming is not/.test(note),
+     'and the panel separates the part that is still true from the part that is not — once, in '
+     + 'the heading, rather than forty words on every row');
   ok(ctx.armedRealStampHtml(good) === '', 'and a real row carries no stamp');
 
   /* THE COST VERDICT IS NOT ASKED ABOUT A FIRING THAT CANNOT HAPPEN */
@@ -3007,7 +3027,17 @@ console.log('\n== an armed row the arithmetic would refuse is a wait not worth s
      'in terms of the wait, which is the decision in front of someone watching a countdown');
   ok(/even if this candle closes the right way/.test(st),
      'making clear the refusal is not about whether it will fire');
-  ok(/round trip takes \d+% of the target/.test(st), 'with the number that decided it');
+  /* THE SHARE IS ON THE ROW, not necessarily in the stamp. It is printed by
+     the cost line a few lines down, and saying it twice on one row is not
+     emphasis — this asserts the row carries the number that decided it,
+     which is the actual requirement. */
+  {
+    const row = String(ctx.armedRowHtml ? ctx.armedRowHtml(split.no[0], NaN) : '')
+      .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+    ok(/\d+%/.test(row), 'and the row carries the share that decided it');
+    ok((row.match(/\d+% of a|— \d+%/g) || []).length <= 1,
+       'stated once on the row, not repeated by the stamp above it');
+  }
   if (split.pays.length){
     ok(ctx.armedPayStampHtml(split.pays[0]) === '', 'and a row that can pay carries no stamp');
   }

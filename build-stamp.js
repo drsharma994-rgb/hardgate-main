@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v801',
-  pack: 'the 80PERCENT tab stops arming rows for a candle that cannot fire — the conditions are read off the last closed bar and the countdown from now, and when the window has shut or the feed has fallen behind, those are different candles and the panel was promising a firing nothing would deliver',
+  version: 'hg-v802',
+  pack: 'the 80PERCENT tab\u2019s armed rows stop repeating themselves — the panel says once what is true of every row and each row keeps only its own figures, taking WHAT IS COMING down by a third and the setups panel with it',
   built: '2026-09-17T00:00:00Z'
 };
 

@@ -1002,7 +1002,12 @@ function hg80PayingRungs(rungs){
 }
 
 /* One line a reader can act on, from that verdict. */
-function costLineHtml(be, venue){
+/* `compact` drops the prose and keeps the figures. The framing — what the
+   share means, what the claimed rate implies — is identical on every row
+   of a panel, and a panel that states it once in its own heading does not
+   need it again five times underneath. The NUMBERS are what differ, and
+   they all survive. */
+function costLineHtml(be, venue, compact){
   var v = hg80CostVerdict(be);
   if (v.key === 'unknown'){
     return '<div class="note" style="margin-top:4px">Cost not priced on this rung — the venue '
@@ -1010,6 +1015,20 @@ function costLineHtml(be, venue){
   }
   var bad = (v.key === 'gone' || v.key === 'negative');
   var col = bad ? 'var(--short)' : (v.key === 'heavy' ? 'var(--veto)' : 'var(--pass)');
+  if (compact){
+    return '<div class="note" style="margin-top:4px;padding:3px 6px;border-left:3px solid '
+      + col + '"><b>COST</b> at ' + esc(venue || 'this venue') + ': <b>' + num(v.cost)
+      + '</b> of a <b>' + num(v.target) + '</b> target — <b style="color:' + col + '">'
+      + (v.share * 100).toFixed(0) + '%</b>'
+      + (v.key === 'gone'
+          ? ', the whole of it'
+          : (isFinite(v.expR)
+              ? ', <b style="color:' + col + '">' + (v.expR >= 0 ? '+' : '')
+                + v.expR.toFixed(3) + 'R</b> at the claimed '
+                + (P80_CLAIMED * 100).toFixed(0) + '%'
+              : ''))
+      + '.</div>';
+  }
   var h = '<div class="note" style="margin-top:4px;padding:3px 6px;border-left:3px solid ' + col + '">'
     + '<b>COST:</b> the round trip at ' + esc(venue || 'this venue') + ' is <b>' + num(v.cost)
     + '</b> against a <b>' + num(v.target) + '</b> target — <b style="color:' + col + '">'
@@ -3046,7 +3065,10 @@ function simpleCardHtml(sig, rung, state){
   h += '<div class="p80-meta">You risk <b>' + num(p.risk) + '</b> to make <b>' + num(p.reward)
     + '</b>.</div>';
 
-  if (rung) h += costLineHtml(hg80CardBe(sig, rung), __p.venue ? __p.venue.venue : null);
+  /* compact, for the same reason the armed rows are: what the share MEANS
+     is identical on every card and is stated once by geomPreambleHtml. The
+     figures are what differ, and they all survive. */
+  if (rung) h += costLineHtml(hg80CardBe(sig, rung), __p.venue ? __p.venue.venue : null, true);
 
   h += watchLineHtml(sig);
   return h + '</div>';
@@ -3121,7 +3143,8 @@ function geomPreambleHtml(){
   return '<div class="p80-lead" style="margin-top:0"><b>Every card below is a WATCH, not a '
     + 'signal to act on</b>, and every one carries the supplied geometry: <b>'
     + (P80_SL_ATR / P80_TP_ATR).toFixed(2) + ' risked for every 1 gained</b>, needing <b>'
-    + (gross * 100).toFixed(1) + '%</b> just to break even before any spread.</div>';
+    + (gross * 100).toFixed(1) + '%</b> just to break even before any spread. Each COST line is '
+    + "what the venue takes out of that card's own target.</div>";
 }
 
 
@@ -3200,19 +3223,18 @@ function hg80ArmedSplit(rows){
 function armedRealStampHtml(a){
   var r = hg80ArmedReal(a);
   if (r.ok) return '';
+  /* WHY each of these is not a firing is stated once by armedRealNoteHtml,
+     at the top of the panel. Repeating forty words of it on every row —
+     which is what this did when it shipped in hg-v801 — buries the one
+     thing that differs between them. */
   if (r.why === 'window-shut'){
     return '<div style="margin-top:4px"><span class="stamp veto">THE NEXT CANDLE IS OUTSIDE THE '
-      + 'WINDOW</span> <span class="note">the conditions above were read off the last closed '
-      + 'candle, which was inside ' + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC. The one now '
-      + 'forming is not, so the session gate refuses it however it closes. This rung arms again '
-      + 'when the window reopens.</span></div>';
+      + 'WINDOW</span> <span class="note">arms again when the window reopens.</span></div>';
   }
   var n = fin(a.barsBehind);
   return '<div style="margin-top:4px"><span class="stamp veto">THESE BARS ARE STALE</span> '
-    + '<span class="note">the last candle this rung returned is <b>' + n + '</b> candle'
-    + (n === 1 ? '' : 's') + ' behind the one forming now, so "this candle" is not the candle '
-    + 'the conditions were tested on. Over a weekend or through a feed outage that is the normal '
-    + 'state; the countdown below is real, the arming is not.</span></div>';
+    + '<span class="note"><b>' + n + '</b> candle' + (n === 1 ? '' : 's') + ' behind the one '
+    + 'forming now.</span></div>';
 }
 
 /* the headline for the same split */
@@ -3231,7 +3253,8 @@ function armedRealNoteHtml(split){
         + 'behind the candle now forming. ' : '')
     + 'The conditions are read off the last CLOSED candle and the countdown is measured from '
     + 'now; when those are not the same candle, this panel was promising a firing the gate or '
-    + 'the feed will not deliver. Listed last, with the reason.</div>';
+    + 'the feed will not deliver. On those rows the countdown is still real — the arming is '
+    + 'not. Listed last, with the reason.</div>';
 }
 
 function armedPayNoteHtml(split, venue){
@@ -3274,7 +3297,9 @@ function armedHtml(rungs, livePx){
     var aSplit = hg80ArmedSplit(rSplit.live);
     h += '<div class="note" style="margin-top:6px"><b>ARMED — ONE CANDLE AWAY.</b> Three of the '
       + 'four conditions hold on the last closed candle. Only the candle\'s own direction is '
-      + 'outstanding, and it is decided at the close named on each row.</div>'
+      + 'outstanding, and it is decided at the close named on each row. Each row gives that '
+      + 'candle\'s last close — about where the one now forming opened, so that is the level to '
+      + 'watch.</div>'
       + armedRealNoteHtml(rSplit)
       + armedPayNoteHtml(aSplit, vn);
     /* worth the wait first; the rest keep their soonest-first order within
@@ -3350,11 +3375,11 @@ function bandBlocksHtml(list, rowFn){
 function armedPayStampHtml(a){
   if (hg80ArmedPays(a)) return '';
   var v = hg80ArmedVerdict(a);
+  /* the share is on the cost line a few lines down; saying it twice on one
+     row is not emphasis */
   return '<div style="margin-top:4px"><span class="stamp veto">NOT WORTH WAITING FOR '
-    + 'AT THIS VENUE</span> <span class="note">even if this candle closes the right way, the '
-    + 'round trip takes ' + (v.share * 100).toFixed(0) + '% of the target'
-    + (v.key === 'gone' ? ' — the whole of it' : '')
-    + '. The cost line below is that arithmetic in full.</span></div>';
+    + 'AT THIS VENUE</span> <span class="note">even if this candle closes the right way'
+    + (v.key === 'gone' ? ' — the spread is the whole target' : '') + '.</span></div>';
 }
 
 function armedRowHtml(a, livePx){
@@ -3365,9 +3390,11 @@ function armedRowHtml(a, livePx){
     + '<div class="chead"><span class="sym">' + (long ? 'BUY' : 'SELL') + ' XAUUSD</span>'
     + '<span class="dir">' + esc(a.rung.def.tf) + ' · ' + variantChipHtml({ variant: a.variant.key })
     + '</span></div>'
+    /* ", which is about where this one opened — so watch that level" was
+       on every row and is true of all of them; the panel lead says it
+       once. The LEVEL is what differs and stays. */
     + '<div class="p80-lead" style="margin-top:0"><b>Fires if this candle closes '
-    + (long ? 'ABOVE' : 'BELOW') + ' its open.</b> The last one closed at <b>' + num(a.level)
-    + '</b>, which is about where this one opened — so watch that level.</div>'
+    + (long ? 'ABOVE' : 'BELOW') + ' its open.</b> Last close: <b>' + num(a.level) + '</b>.</div>'
     + '<div class="p80-when">Candle closes in <b>' + hg80DurTxt(a.closesIn) + '</b>'
     + (closesAt ? '<span class="dim">at ' + esc(closesAt) + '</span>' : '') + '</div>'
     + armedRealStampHtml(a)
@@ -3389,7 +3416,7 @@ function armedRowHtml(a, livePx){
     + '<span class="p80-lvl-v">' + num(a.targetEst) + '</span>'
     + '<span class="p80-lvl-d">' + num(Math.abs(a.entryEst - a.targetEst)) + ' away</span>'
     + '</div>';
-  h += costLineHtml(a.rung.be, __p.venue ? __p.venue.venue : null);
+  h += costLineHtml(a.rung.be, __p.venue ? __p.venue.venue : null, true);
   return h + '</div>';
 }
 
@@ -5143,6 +5170,7 @@ W.sizeHtml           = sizeHtml;
 W.HG_P80_OZ_PER_LOT  = P80_OZ_PER_LOT;
 W.armedPayStampHtml  = armedPayStampHtml;
 W.armedRealStampHtml = armedRealStampHtml;
+W.armedRowHtml       = armedRowHtml;
 W.armedRealNoteHtml  = armedRealNoteHtml;
 W.armedPayNoteHtml   = armedPayNoteHtml;
 W.reprintHtml        = reprintHtml;
