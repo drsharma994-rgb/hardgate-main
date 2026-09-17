@@ -379,6 +379,78 @@ function hg80InSession(tSec){
    three intraday rungs are structurally unable to fire outside it, and "it
    is 05:00, the window opens in eight hours" is a better answer to "why is
    there nothing" than five rows of chips a reader has to decode. */
+/* ---------------------------------------------------------------------
+   THE CLOCK, IN THE READER'S OWN TIME
+
+   Every rule in this spec is written in UTC and every time on this tab was
+   printed in UTC, which is correct and unreadable. A desk in India reading
+   "the window opens at 13:00 UTC" has to do arithmetic before it knows
+   whether that is lunchtime or bedtime, and a five-and-a-half hour offset is
+   exactly the kind you get wrong in your head.
+
+   So times are shown in the BROWSER'S OWN zone with UTC kept beside them.
+   Not a hardcoded IST: the offset comes from the runtime, so it is right in
+   Mumbai, right in London, and right after a daylight-saving change that
+   nobody remembered to code for.
+   --------------------------------------------------------------------- */
+function hg80TzName(){
+  try {
+    var n = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (n) return String(n);
+  } catch (e){}
+  var off = -(new Date().getTimezoneOffset());
+  var sign = off >= 0 ? '+' : '-';
+  var a = Math.abs(off);
+  return 'UTC' + sign + Math.floor(a / 60) + (a % 60 ? ':' + (a % 60) : '');
+}
+
+/* Short local-zone abbreviation where the runtime offers one (IST, GMT,
+   EDT...), otherwise the offset. */
+function hg80TzShort(){
+  try {
+    var s = new Date().toLocaleTimeString('en-GB', { timeZoneName: 'short' });
+    var m = s.match(/[A-Z]{2,5}$|GMT[+-][0-9:]+$/);
+    if (m) return m[0];
+  } catch (e){}
+  return hg80TzName();
+}
+
+/* A bar's time, local first because that is the one a reader acts on, UTC
+   second because that is the one the rules are written in. */
+function hg80WhenTxt(tSec, withDate){
+  var t = fin(tSec);
+  if (!isFinite(t) || t <= 0) return '—';
+  var d = new Date(t * 1000);
+  var loc = '';
+  try {
+    loc = d.toLocaleString('en-GB', withDate
+      ? { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }
+      : { hour: '2-digit', minute: '2-digit', hour12: false });
+  } catch (e){ loc = ''; }
+  /* the date is carried once, by the local half — repeating it in the UTC
+     half doubles the length of every card header for no information */
+  var utc = d.toISOString().slice(11, 16) + ' UTC';
+  return loc ? (loc + ' ' + hg80TzShort() + ' · ' + utc)
+             : (d.toISOString().replace('T', ' ').slice(withDate ? 0 : 11, 16) + ' UTC');
+}
+
+/* The session window expressed in local time. Built by formatting real
+   instants rather than adding an offset by hand, so a half-hour zone and a
+   window that crosses midnight both come out right. */
+function hg80SessionLocalTxt(){
+  try {
+    var now = new Date();
+    var y = now.getUTCFullYear(), m = now.getUTCMonth(), dd = now.getUTCDate();
+    var a = new Date(Date.UTC(y, m, dd, P80_UTC_FROM, 0, 0));
+    var b = new Date(Date.UTC(y, m, dd, P80_UTC_TO, 0, 0));
+    var f = function(x){ return x.toLocaleString('en-GB',
+      { hour: '2-digit', minute: '2-digit', hour12: false }); };
+    var aDay = a.toLocaleDateString('en-GB', { day: '2-digit' });
+    var bDay = b.toLocaleDateString('en-GB', { day: '2-digit' });
+    return f(a) + '-' + f(b) + (aDay !== bDay ? ' (next day)' : '') + ' ' + hg80TzShort();
+  } catch (e){ return ''; }
+}
+
 function hg80SecsToSession(nowSec){
   var t = fin(nowSec);
   if (!isFinite(t)) return null;
@@ -1246,8 +1318,7 @@ function simpleCardHtml(sig, rung, state){
   if (!p) return '';
   var long = sig.dir === 'long';
   var col = long ? '#10b981' : '#ef4444';
-  var when = isFinite(fin(sig.t))
-    ? new Date(fin(sig.t) * 1000).toISOString().replace('T', ' ').slice(0, 16) + ' UTC' : '—';
+  var when = hg80WhenTxt(sig.t, true);
   var age = rung ? (rung.rows.length - 1) - sig.i : null;
 
   function leg(label, px, from){
@@ -1294,6 +1365,36 @@ function simpleCardHtml(sig, rung, state){
   return h + '</div>';
 }
 
+/* When this strategy CAN produce a trade, in the reader's own clock. It is
+   the only schedulable thing about it: whether the four conditions line up
+   inside the window is not knowable in advance, but the window itself is. */
+function sessionClockHtml(rungs){
+  var usable = rungs.filter(function(r){ return r.ok; });
+  if (!usable.length) return '';
+  var gated = usable.filter(function(r){ return r.cfg.session !== false; });
+  var free = usable.filter(function(r){ return r.cfg.session === false; });
+  var toOpen = hg80SecsToSession(Math.floor(Date.now() / 1000));
+  var loc = hg80SessionLocalTxt();
+
+  var h = '<div class="note" style="margin-top:8px;padding:6px 8px;border-left:3px solid #64748b">'
+    + '<b>WHEN THESE CAN FIRE</b> <span class="dim">(your clock: ' + esc(hg80TzName()) + ')</span><br>';
+  if (gated.length){
+    h += esc(gated.map(function(r){ return r.def.tf; }).join(', '))
+      + ' — only inside <b>' + esc(loc || (P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC')) + '</b>'
+      + ' (' + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC), '
+      + (toOpen > 0 ? 'which opens in <b>' + hg80DurTxt(toOpen) + '</b>'
+                    : '<b>open now</b>') + '.<br>';
+  }
+  if (free.length){
+    h += esc(free.map(function(r){ return r.def.tf; }).join(', '))
+      + ' — <b>any time</b>, no session rule applies at those timeframes.<br>';
+  }
+  h += '<span class="note">The window is the only part that can be put in a diary. Whether the '
+    + 'conditions actually line up inside it is not something this or any tab can know ahead of '
+    + 'time — a setup exists once a candle closes, not before.</span></div>';
+  return h;
+}
+
 function simpleSetupsHtml(rungs){
   var usable = rungs.filter(function(r){ return r.ok; });
   var live = [], open = [], recent = [], i, j;
@@ -1332,10 +1433,12 @@ function simpleSetupsHtml(rungs){
   var toOpen = hg80SecsToSession(nowSec);
   var gated = usable.filter(function(r){ return r.cfg.session !== false && toOpen > 0; });
   if (gated.length){
+    var loc = hg80SessionLocalTxt();
     h += gated.length + ' of ' + usable.length + ' rung'
-      + (usable.length === 1 ? '' : 's') + ' cannot fire until the '
-      + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC window opens in '
-      + hg80DurTxt(toOpen) + '. ';
+      + (usable.length === 1 ? '' : 's') + ' cannot fire until the trading window opens'
+      + ' — <b>' + hg80DurTxt(toOpen) + ' from now</b>'
+      + (loc ? ', at <b>' + esc(loc) + '</b>' : '')
+      + ' (' + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC). ';
   }
   var closest = null;
   for (i = 0; i < usable.length; i++){
@@ -1971,6 +2074,7 @@ function render(rungs, venue, recNotes, basis){
       return;
     }
     h += simpleSetupsHtml(rungs);
+    h += sessionClockHtml(rungs);
     h += '<div class="note" style="margin-top:8px">Priced at <b>'
       + esc((venue || 'the selected venue')) + '</b>. Switch to <b>FULL</b> for the cost '
       + 'arithmetic, the ladder board, the near misses and the census.</div>';
@@ -2291,6 +2395,10 @@ W.hg80UngatedRungs   = hg80UngatedRungs;
 W.hg80FocusText      = hg80FocusText;
 W.HG_P80_MISS_COST   = P80_MISS_COST;
 W.hg80SecsToSession  = hg80SecsToSession;
+W.hg80WhenTxt        = hg80WhenTxt;
+W.hg80TzName         = hg80TzName;
+W.hg80TzShort        = hg80TzShort;
+W.hg80SessionLocalTxt = hg80SessionLocalTxt;
 W.hg80Plan           = hg80Plan;
 W.hg80Resolve        = hg80Resolve;
 W.hg80PullbackCensus = hg80PullbackCensus;

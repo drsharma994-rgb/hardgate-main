@@ -1249,6 +1249,68 @@ console.log('\n== SIMPLE is the default, and it reads as a trade ==');
   ok(!/ 1 bars ago/.test(html), 'and ages are pluralised properly');
 }
 
+console.log('\n== the clock is shown in the reader\'s own zone, from the runtime ==');
+{
+  /* Every rule here is written in UTC and every time was printed in UTC,
+     which is correct and unreadable. A desk in India reading "13:00 UTC" has
+     to do five-and-a-half hours of arithmetic before it knows whether that is
+     lunchtime or bedtime. */
+  const tz0 = process.env.TZ;
+  try {
+    process.env.TZ = 'Asia/Kolkata';
+    const ist = ctx.hg80SessionLocalTxt();
+    ok(/18:30-23:30/.test(ist), `in Kolkata the window reads ${ist} — 18:30 to 23:30`);
+
+    process.env.TZ = 'UTC';
+    const utc = ctx.hg80SessionLocalTxt();
+    ok(/13:00-18:00/.test(utc), `in UTC the same window reads ${utc}`);
+
+    process.env.TZ = 'America/New_York';
+    const ny = ctx.hg80SessionLocalTxt();
+    ok(/09:00-14:00|08:00-13:00/.test(ny), `and in New York ${ny}`);
+
+    ok(ist !== utc && utc !== ny,
+       'three zones, three answers — the offset comes from the RUNTIME, so it is right after a '
+       + 'daylight-saving change nobody remembered to code for');
+    ok(!/5\.5|19800|\+ 5 \* 3600|330 \* 60/.test(CODE),
+       'and no offset is hardcoded anywhere — a fixed IST would be wrong for every other reader '
+       + 'and wrong in India the day the rule changes');
+    ok(/toLocaleString|toLocaleTimeString|toLocaleDateString/.test(CODE),
+       'the conversion formats a real instant rather than adding hours by hand, which is what '
+       + 'makes a half-hour zone and a window crossing midnight both come out right');
+
+    /* a half-hour zone is the case hand-rolled offset maths gets wrong */
+    process.env.TZ = 'Asia/Kolkata';
+    const w = ctx.hg80WhenTxt(Date.UTC(2026, 8, 16, 17, 50, 0) / 1000, true);
+    ok(/23:20/.test(w), `a 17:50 UTC bar reads 23:20 locally (${w})`);
+    ok(/17:50 UTC/.test(w), 'with the UTC time kept beside it, because the rules are written in UTC');
+    ok(!/2026-09-16 17:50 UTC/.test(w),
+       'and the date is carried once, by the local half — repeating it doubles every card header '
+       + 'for no information');
+  } finally {
+    if (tz0 === undefined) delete process.env.TZ; else process.env.TZ = tz0;
+  }
+}
+
+console.log('\n== the tab says WHEN it can fire, and refuses to say WHETHER ==');
+{
+  ok(/WHEN THESE CAN FIRE/.test(SRC), 'SIMPLE carries a session-clock panel');
+  ok(/your clock: /.test(SRC), 'naming the reader\'s zone so the times are not ambiguous');
+  ok(/no session rule applies at those timeframes/.test(SRC),
+     'and separating the rungs that can fire at any hour from the ones on a clock');
+  ok(/The window is the only part that can be put in a diary/.test(SRC),
+     'it says the window is schedulable');
+  ok(/a setup exists once a candle closes, not before/.test(SRC),
+     'and that whether the conditions line up inside it is NOT knowable in advance — the honest '
+     + 'answer to "show me setups that are going to happen"');
+  /* the assertive forms only — "it is not a forecast" is the disclaimer,
+     not the claim, and a pattern blunt enough to catch both catches the
+     wrong one */
+  ok(!/will fire|upcoming setup|predicted|is a forecast|expect(ed)? to fire/i.test(CODE),
+     'nothing in the code claims a future setup');
+  ok(/not a forecast/.test(CODE), 'and it says so where a reader might assume otherwise');
+}
+
 console.log('\n== and it still refuses to invent a rate from what it resolved ==');
 {
   ok(!/winRate|hitRate/.test(CODE), 'no win rate is computed anywhere in the code');

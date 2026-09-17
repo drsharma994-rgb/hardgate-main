@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v779',
-  pack: '80PERCENT opens on the setups — BUY/SELL, entry, stop loss, take profit, in points and percent; the arithmetic moved behind a FULL toggle',
+  version: 'hg-v780',
+  pack: 'every time on 80PERCENT is now in the reader own zone with UTC beside it, and the tab says when the window opens without pretending to know whether a setup will appear in it',
   built: '2026-09-17T00:00:00Z'
 };
 
