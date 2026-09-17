@@ -2166,6 +2166,128 @@ console.log('\n== every resolved trade carries how far it actually travelled =='
      'past the horizon nothing counts — the trade was closed before that bar printed');
 }
 
+console.log('\n== the tab updates itself every minute, and only while anyone is looking ==');
+{
+  /* The header's AUTO control re-runs EVERY tab and its fastest cadence is
+     two minutes, so it cannot do this. This is the tab's own timer. */
+  ok(ctx.HG_P80_AUTO_MS === 60000, `the cadence is one minute (${ctx.HG_P80_AUTO_MS}ms)`);
+
+  /* ---- which pane is showing ---- */
+  const pane = (cls, child) => {
+    const p = { className: cls, parentNode: null };
+    const c = child || { className: 'panel', parentNode: p };
+    c.parentNode = p;
+    return c;
+  };
+  ok(ctx.hg80PaneOn(pane('tabpane on')) === true, 'a pane marked on is showing');
+  ok(ctx.hg80PaneOn(pane('tabpane')) === false, 'one without the marker is not');
+  ok(ctx.hg80PaneOn(pane('tabpane on extra')) === true,
+     'and the marker is matched as a whole class, not a substring');
+  ok(ctx.hg80PaneOn(pane('tabpane onx')) === false,
+     'so a class merely STARTING with the marker does not count as showing');
+  ok(ctx.hg80PaneOn(pane('notabpane on')) === true,
+     'and "tabpane" itself is matched whole — a different class ending in it is not the shell');
+  ok(ctx.hg80PaneOn({ className: 'panel', parentNode: null }) === true,
+     'outside the tab shell entirely, nothing has said it is hidden, so it ticks');
+  ok(ctx.hg80PaneOn(null) === true, 'and a missing element is not treated as a hidden pane');
+
+  /* a cycle in parentNode must not hang the timer */
+  const loop = { className: 'a' }; loop.parentNode = loop;
+  ok(ctx.hg80PaneOn(loop) === true, 'a parent chain that loops terminates rather than spinning');
+
+  /* ---- every reason a tick is skipped, named ---- */
+  const el = pane('tabpane on');
+  const docOn = { body: { contains: () => true }, hidden: false };
+  ok(ctx.hg80AutoWhy(el, docOn, false) === null, 'on screen, idle, foreground: it ticks');
+
+  ok(ctx.hg80AutoWhy(null, docOn, false) === 'unmounted', 'no element: unmounted');
+  ok(ctx.hg80AutoWhy(el, { body: { contains: () => false }, hidden: false }, false) === 'unmounted',
+     'an element no longer in the document: unmounted');
+  ok(ctx.hg80AutoWhy(el, { body: { contains: () => true }, hidden: true }, false) === 'background',
+     'the browser tab in the background: background');
+  ok(ctx.hg80AutoWhy(pane('tabpane'), docOn, false) === 'other-tab',
+     'the reader on a different tab of the app: other-tab');
+  ok(ctx.hg80AutoWhy(el, docOn, true) === 'busy', 'a scan already running: busy');
+
+  /* ORDER MATTERS. Unmounted outranks everything — a dead tab must stop the
+     timer rather than report that it is merely busy and keep ticking. */
+  ok(ctx.hg80AutoWhy(null, { body: { contains: () => false }, hidden: true }, true) === 'unmounted',
+     'unmounted is decided first, so a dead tab always stops');
+
+  /* a document that throws on contains() must not kill the timer */
+  const angry = { body: { contains: () => { throw new Error('detached'); } }, hidden: false };
+  ok(ctx.hg80AutoWhy(el, angry, false) === null,
+     'a document that throws when asked is not treated as proof the tab is gone');
+  ok(ctx.hg80AutoWhy(el, null, false) === null, 'and a missing document does not stop it either');
+
+  /* ---- and the reason is SAID, because a tab that has quietly stopped
+     updating is worse than one that never did ---- */
+  ok(/every 60s/.test(ctx.hg80AutoNote(null)), 'when running, the line states the cadence');
+  for (const why of ['unmounted', 'background', 'other-tab', 'busy']){
+    const n = ctx.hg80AutoNote(why);
+    ok(/paused/.test(n), `${why} is shown as paused, not as silence`);
+    ok(n.length > 'auto-update paused — '.length + 8 && !/undefined/.test(n),
+       `${why} has a real reason attached, not a bare code`);
+  }
+  ok(/resumes on its own/.test(ctx.hg80AutoNote('other-tab')),
+     'and a pause that will lift says so, so nobody reaches for the button');
+  ok(!/resumes on its own/.test(ctx.hg80AutoNote('unmounted')),
+     'while the one that will not, does not claim it will');
+
+  /* ---- the timer itself: started, restartable, never stacked ---- */
+  const realSI = ctx.setInterval, realCI = ctx.clearInterval;
+  const live = new Set();
+  let nextId = 1, lastMs = null;
+  ctx.setInterval = (fn, ms) => { lastMs = ms; const id = nextId++; live.add(id); return id; };
+  ctx.clearInterval = id => { live.delete(id); };
+  try {
+    const t1 = ctx.hg80AutoStart(el);
+    ok(t1 != null && live.size === 1, 'starting the timer registers exactly one interval');
+    ok(lastMs === ctx.HG_P80_AUTO_MS, `at the one-minute cadence (${lastMs}ms)`);
+
+    /* THE BUG THIS GUARDS. Close the tab and reopen it and mount runs
+       again; without a stop first, two timers scan the same tab at once
+       and every fetch is doubled. */
+    const t2 = ctx.hg80AutoStart(el);
+    ok(live.size === 1 && !live.has(t1) && live.has(t2),
+       'starting it again replaces the previous timer instead of stacking a second');
+
+    ctx.hg80AutoStop();
+    ok(live.size === 0, 'and stopping clears it');
+    ctx.hg80AutoStop();
+    ok(live.size === 0, 'stopping twice is harmless');
+  } finally {
+    ctx.setInterval = realSI; ctx.clearInterval = realCI;
+    ctx.hg80AutoStop();
+  }
+
+  /* ---- END TO END: mount the real tab and read the line off the page ---- */
+  const realSI2 = ctx.setInterval, realCI2 = ctx.clearInterval;
+  const live2 = new Set();
+  let id2 = 100;
+  ctx.setInterval = (fn, ms) => { const i = id2++; live2.add(i); return i; };
+  ctx.clearInterval = i => { live2.delete(i); };
+  try {
+    const tab = (ctx.HG_tabs || []).find(t => t && t.id === '80percent');
+    const node = mkEl('div');
+    tab.mount(node);
+    await settle();
+    ok(live2.size === 1, 'mounting the tab starts exactly one timer');
+    const line = node.querySelector('#p80Auto');
+    ok(line, 'the header carries the element the status line is written to');
+    ok(/auto-updating every 60s/.test(String(line.textContent)),
+       `and it says so on the page (${String(line.textContent)})`);
+
+    /* remount — the timer must be replaced, not doubled */
+    tab.mount(node);
+    await settle();
+    ok(live2.size === 1, 'remounting replaces it rather than leaving two timers scanning');
+  } finally {
+    ctx.setInterval = realSI2; ctx.clearInterval = realCI2;
+    ctx.hg80AutoStop();
+  }
+}
+
 console.log('\n== the ledger is read at the bar for the number of things being tested ==');
 {
   /* THE FOURTH ARGUMENT IS NOT A ROUNDING CONSTANT. hgOmniPoolRead's

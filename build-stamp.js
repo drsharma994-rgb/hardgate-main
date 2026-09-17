@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v793',
-  pack: 'the 80PERCENT tab reads its ledger at the bar for the number of things it is testing — it had been judging up to thirty mechanics at the significance bar meant for one, which hands back winners out of noise, and the bar is now computed from the pool and printed beside the verdicts',
+  version: 'hg-v794',
+  pack: 'the 80PERCENT tab updates itself every 60 seconds while it is on screen — the live grade on every card is the thing that goes stale in seconds, and the tick names every reason it skips instead of going quietly still',
   built: '2026-09-17T00:00:00Z'
 };
 

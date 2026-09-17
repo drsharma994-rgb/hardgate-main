@@ -239,7 +239,8 @@ var P80_LADDER = [
    and three panels of caveats, and somewhere in there stopped answering
    "what is the trade". Everything still exists; it is one click away instead
    of first. */
-var __p = { ui: null, busy: false, ranOnce: false, last: null, focus: null, view: 'simple' };
+var __p = { ui: null, busy: false, ranOnce: false, last: null, focus: null, view: 'simple',
+            autoTimer: null, autoEl: null };
 
 /* the focus as an array, whatever it is stored as */
 function hg80FocusList(){
@@ -4083,6 +4084,108 @@ function run(){
   .finally(function(){ __p.busy = false; });
 }
 
+/* ---------------------------------------------------------------------
+   AUTO-UPDATE, EVERY MINUTE, WHILE THE TAB IS ON SCREEN
+
+   The header's AUTO control re-runs EVERY tab and its fastest cadence is
+   two minutes, so it cannot do this. This is the tab's own timer, the same
+   shape newgold.js has used since hg-v691, at sixty seconds.
+
+   WHAT ACTUALLY CHANGES IN A MINUTE, since the finest rung is 5m and its
+   closed bars do not: the live price does, and with it every card's grade
+   — AT ENTRY, MOVED ON, DEAD — which is the one thing on this tab that
+   goes stale in seconds rather than minutes. The forming candle the grade
+   is read from is re-fetched each tick, the armed rows' countdown to bar
+   close moves, and the session clock moves. The closed-bar scan is redone
+   too because it is the same fetch; it simply returns the same answer four
+   times out of five.
+
+   THE TICK IS NOT UNCONDITIONAL, and this is the part that matters at a
+   one-minute cadence: a scan is five bar fetches plus a spot read, so
+   ticking while nobody is looking would be 300 requests an hour spent on a
+   panel that is not on screen. Every skip reason is named rather than
+   silent, because a tab that has quietly stopped updating is worse than
+   one that never did.
+   --------------------------------------------------------------------- */
+var P80_AUTO_MS = 60000;
+
+/* Is this element inside a tab pane that is currently showing? The shell
+   marks the visible pane with `on` and hides the rest with display:none.
+   Read off className rather than classList so this is a pure string
+   decision — offsetParent would be more direct and cannot be exercised
+   without a layout engine. No .tabpane ancestor means the tab is not
+   inside the shell at all, and nothing has said it is hidden. */
+function hg80PaneOn(el){
+  var n = el, hops = 0;
+  while (n && hops++ < 64){
+    var cn = (typeof n.className === 'string') ? n.className : '';
+    if (/(^|\s)tabpane(\s|$)/.test(cn)) return /(^|\s)on(\s|$)/.test(cn);
+    n = n.parentNode;
+  }
+  return true;
+}
+
+/* WHY a tick would not run, or null to run it. Split out from the timer so
+   every branch is testable without a clock. */
+function hg80AutoWhy(el, doc, busy){
+  if (!el) return 'unmounted';
+  try {
+    if (doc && doc.body && typeof doc.body.contains === 'function' && !doc.body.contains(el)){
+      return 'unmounted';
+    }
+  } catch (e){}
+  if (doc && doc.hidden === true) return 'background';
+  if (!hg80PaneOn(el)) return 'other-tab';
+  if (busy) return 'busy';
+  return null;
+}
+
+var P80_AUTO_WHY = {
+  'unmounted':  'the tab is no longer on the page',
+  'background': 'this browser tab is in the background',
+  'other-tab':  'you are looking at another tab',
+  'busy':       'the previous scan is still running'
+};
+
+/* One line under SCAN saying whether the tab is updating itself, and if
+   not, why not. */
+function hg80AutoNote(why){
+  if (!why){
+    return 'auto-updating every ' + Math.round(P80_AUTO_MS / 1000) + 's while this tab is open';
+  }
+  return 'auto-update paused — ' + (P80_AUTO_WHY[why] || why)
+    + (why === 'unmounted' ? '' : '; it resumes on its own');
+}
+
+function hg80AutoPaint(why){
+  try {
+    if (__p.ui && __p.ui.auto) __p.ui.auto.textContent = hg80AutoNote(why);
+  } catch (e){}
+}
+
+function hg80AutoStop(){
+  try { if (__p.autoTimer != null && typeof W.clearInterval === 'function'){ W.clearInterval(__p.autoTimer); } }
+  catch (e){}
+  __p.autoTimer = null;
+}
+
+/* Started by mount, and mount ALWAYS stops the previous one first — a tab
+   closed and reopened must not end up with two timers scanning at once. */
+function hg80AutoStart(el){
+  hg80AutoStop();
+  if (typeof W.setInterval !== 'function') return null;
+  __p.autoEl = el;
+  __p.autoTimer = W.setInterval(function(){
+    var why = hg80AutoWhy(__p.autoEl, W.document, __p.busy);
+    if (why === 'unmounted'){ hg80AutoStop(); __p.autoEl = null; hg80AutoPaint('unmounted'); return; }
+    hg80AutoPaint(why);
+    if (why) return;
+    try { run(); } catch (e){}
+  }, P80_AUTO_MS);
+  hg80AutoPaint(null);
+  return __p.autoTimer;
+}
+
 function mount(el){
   if (!el) return;
   hg80InjectCss();
@@ -4102,11 +4205,14 @@ function mount(el){
     + 'each recorded apart so none lends another its numbers.</div>'
     + '<div class="row" style="margin-top:8px"><button class="btn" id="p80Run">SCAN</button>'
     + '<span class="note" id="p80Stat">auto-runs on open</span></div>'
+    + '<div class="note dim" id="p80Auto" style="margin-top:2px"></div>'
     + '<div id="p80Body" style="margin-top:8px"></div></div>';
   __p.ui = { el: el, body: el.querySelector('#p80Body'),
-             stat: el.querySelector('#p80Stat'), run: el.querySelector('#p80Run') };
+             stat: el.querySelector('#p80Stat'), run: el.querySelector('#p80Run'),
+             auto: el.querySelector('#p80Auto') };
   if (__p.ui.run) __p.ui.run.addEventListener('click', function(){ run(); });
   run();
+  hg80AutoStart(el);
 }
 
 function refresh(){
@@ -4174,6 +4280,12 @@ W.hg80PayingRungs    = hg80PayingRungs;
 W.hg80Excursions     = hg80Excursions;
 W.hg80MarkBook       = hg80MarkBook;
 W.hg80FwdBar         = hg80FwdBar;
+W.hg80PaneOn         = hg80PaneOn;
+W.hg80AutoWhy        = hg80AutoWhy;
+W.hg80AutoNote       = hg80AutoNote;
+W.hg80AutoStart      = hg80AutoStart;
+W.hg80AutoStop       = hg80AutoStop;
+W.HG_P80_AUTO_MS     = P80_AUTO_MS;
 W.familyBarHtml      = familyBarHtml;
 W.hg80MechanicCeiling = hg80MechanicCeiling;
 W.hg80FwdRead        = hg80FwdRead;
