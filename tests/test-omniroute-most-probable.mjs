@@ -268,7 +268,39 @@ console.log('== house extra hits never claim 7/7 and do not throw when engines a
   const wired = W.hgOmniHouseHits(rows, { sym: 'BTCUSD' }, {});
   ok(wired.some(h => h.kind === 'EDGE'), 'EDGE reaches the bag when the engine fires');
   ok(wired.some(h => h.kind === 'MR'), 'mean-rev reaches the bag');
-  ok(wired.some(h => h.kind === 'HOUSE-SQUEEZE'), 'squeeze fire reaches the bag');
+  /* HOUSE-SQUEEZE NO LONGER REACHES THE BAG, and that is the evidence rule
+     firing rather than a regression.
+
+     hgOmniHouseRawAllowed refuses a house extra whose measured analogue is
+     demoted unless the forward ledger has paid:
+
+       var dem = hgOmniKindDemotion(kind);
+       if (dem && !hgOmniReplayForwardPaid(...)) return false;
+
+     HOUSE-SQUEEZE aliases to SQUEEZE-FIRE, which measured -0.0485 over 45
+     on the 2026-09-10 bake — inside the -0.10 demote bar — and -0.1235 over
+     44 on the 09-12 re-bake, which is not. So the extra vote it casts is
+     withdrawn. House extras are the lowest-confidence class on this desk
+     ("extra vote, not 7/7 CLEAN"), so refusing one whose own record is
+     negative is the point of the rule, not a casualty of it. */
+  const sqAlias = W.hgOmniKindDemotion('HOUSE-SQUEEZE');
+  ok(sqAlias && sqAlias.action === 'demote',
+     'HOUSE-SQUEEZE aliases to a demoted analogue (SQUEEZE-FIRE) on the current bake');
+  ok(!wired.some(h => h.kind === 'HOUSE-SQUEEZE'),
+     'so squeeze fire is refused the bag — a demoted analogue withdraws the extra vote');
+
+  /* AND THE UN-DEMOTION ROUTE STILL WORKS. Asserting only the absence would
+     pass just as well if the whole squeeze path had been deleted, so the
+     forward-paid branch is exercised to prove the refusal is the rule and
+     not a dead engine. */
+  const paidBefore = W.hgOmni20xForwardPaid;
+  W.hgOmni20xForwardPaid = function(q){
+    return (q && /SQUEEZE-FIRE/.test(String(q.kind || ''))) ? { read: 'has paid' } : null;
+  };
+  const paidHits = W.hgOmniHouseHits(rows, { sym: 'BTCUSD' }, {});
+  ok(paidHits.some(h => h.kind === 'HOUSE-SQUEEZE'),
+     'once the forward ledger has paid for SQUEEZE-FIRE it reaches the bag again');
+  W.hgOmni20xForwardPaid = paidBefore;
   ok(!wired.some(h => h.kind === 'SNIPER'), 'SNIPER extra is refused — PIN-REJECT analogue');
   ok(wired.some(h => h.kind === 'SWING'), 'house SWING vote reaches the bag');
   ok(wired.every(h => h.clean !== true && h.extra === true),
