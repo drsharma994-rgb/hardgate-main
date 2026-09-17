@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v785',
-  pack: 'the closed-candle tables know every timeframe now \u2014 five copies stopped at 15m, so any desk reading 1m, 5m or 30m bars was evaluating a candle that had not closed, and the lookup failed open so nothing ever said so',
+  version: 'hg-v786',
+  pack: 'the 80PERCENT walk can finally run \u2014 bars from a file instead of a blocked API, the mechanics that actually fire, and a geometry sweep that prices the same entries at 25 target/stop pairs and refuses to name a winner',
   built: '2026-09-17T00:00:00Z'
 };
 

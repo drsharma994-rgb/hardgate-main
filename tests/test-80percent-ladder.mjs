@@ -816,9 +816,21 @@ console.log('\n== the default population did not change under existing callers =
      `asking for both can only add (${bare.signals.length} -> ${both.signals.length})`);
   ok(both.signals.filter(x => x.variant === 'spec').length === bare.signals.length,
      'and the spec half of the combined scan is exactly the spec-only scan — unchanged, not re-derived');
+  /* THE WALK'S DEFAULT POPULATION, which used to be asserted by grepping the
+     walk for the word "variants". It can now be asked for other mechanics —
+     it has to be, because the spec fires almost never and a walk that
+     measures nothing is what left this tab unmeasured — so the guarantee is
+     that the DEFAULT is unchanged, and that is a behaviour, not a word. */
   const WALK = fs.readFileSync(path.join(ROOT, 'scripts/walk-80percent.mjs'), 'utf8');
-  ok(!/variants/.test(WALK.replace(/\/\*[\s\S]*?\*\//g, '')),
-     'and the walk asks for no variants, so it still measures what it was written to measure');
+  const WALKCODE = WALK.replace(/\/\*[\s\S]*?\*\//g, '');
+  ok(/argOf\('mechanics', 'spec'\)/.test(WALKCODE),
+     'the walk defaults to the supplied spec and takes other mechanics only when asked');
+  ok(/if \(o\.variants && o\.variants\.length\) scanOpts\.variants = o\.variants;/.test(WALKCODE),
+     'and passes none through unless a caller supplied them, so the default scan is the '
+     + 'spec-only scan hg80Scan already performs');
+  ok(!/variants: *ctx\.HG_P80_VARIANTS/.test(WALKCODE.slice(WALKCODE.indexOf('async function main'))),
+     'main never hard-wires every mechanic — widening the default is how a measurement '
+     + 'quietly changes what it is a measurement OF');
 }
 
 console.log('\n== the venue seam is tested against the REAL function, not a mock of it ==');

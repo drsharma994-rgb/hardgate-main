@@ -1066,16 +1066,34 @@ function hg80Score(checks){
 }
 
 /* The exit protocol. Entry is the trigger candle's CLOSE, per the spec. */
-function hg80Plan(sig){
+/* `opts` lets a caller price the SAME signal at a different target/stop pair
+   without re-coding the geometry. It defaults to the supplied spec, so every
+   existing caller — the tab, the tests, the walk's normal run — is
+   unchanged.
+
+   It exists for the geometry sweep. The spec's 4.00 / 0.75 needs 84.2105%
+   before costs, which is the tab's binding constraint and the one thing no
+   entry rule can fix. Asking "what would a different pair have needed, and
+   what would it have got, on these same entries" is a question about data,
+   and answering it with a second copy of the plan arithmetic is how a sweep
+   ends up measuring a strategy nobody is running. */
+function hg80Plan(sig, opts){
   if (!sig || !sig.dir || !(sig.atr > 0)) return null;
+  var o = opts || {};
+  var tpAtr = isFinite(fin(o.tpAtr)) && fin(o.tpAtr) > 0 ? fin(o.tpAtr) : P80_TP_ATR;
+  var slAtr = isFinite(fin(o.slAtr)) && fin(o.slAtr) > 0 ? fin(o.slAtr) : P80_SL_ATR;
   var entry = sig.close;
-  var tpDist = P80_TP_ATR * sig.atr, slDist = P80_SL_ATR * sig.atr;
+  var tpDist = tpAtr * sig.atr, slDist = slAtr * sig.atr;
   var t1   = sig.dir === 'long' ? entry + tpDist : entry - tpDist;
   var stop = sig.dir === 'long' ? entry - slDist : entry + slDist;
   return { dir: sig.dir, entry: entry, stop: stop, t1: t1,
            risk: slDist, reward: tpDist, atr: sig.atr,
+           tpAtr: tpAtr, slAtr: slAtr,
            tf: sig.tf || P80_TF, variant: sig.variant || 'spec',
            rr: tpDist > 0 ? (slDist / tpDist) : NaN,
+           /* what this pair has to hit before any cost — a property of the
+              geometry alone, carried so a sweep never has to re-derive it */
+           grossBreakeven: slAtr / (slAtr + tpAtr),
            stopPct: (slDist / entry) * 100 };
 }
 
