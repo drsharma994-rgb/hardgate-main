@@ -68,13 +68,16 @@ function series(n, o){
   let px = o.start == null ? 4000 : o.start;
   const up = o.down ? -1 : 1;
   const tail = o.tail == null ? 0 : o.tail;
+  /* 2.6 drives RSI under 45 (the spec fires); 2.0 leaves it near 50, which
+     only the wide mechanic takes. That gap is what the variant tests aim at. */
+  const dip = o.dip == null ? 2.6 : o.dip;
   const trig = n - 1 - tail;
   for (let i = 0; i < n; i++){
     const t = base + i * tfSec;
     const oo = px;
     let c;
     if (i < trig - 7)      c = px + 1.2 * up;      /* the trend */
-    else if (i < trig)     c = px - 2.6 * up;      /* the pullback */
+    else if (i < trig)     c = px - dip * up;       /* the pullback, as deep as asked */
     else if (i === trig)   c = px + 1.4 * up;      /* the trigger */
     /* the tail closes the WRONG way, so it fails the candle-direction
        trigger and cannot fire — and moves too little to resolve anything.
@@ -126,9 +129,15 @@ console.log('\n== the session rule is dropped by arithmetic, and only where it c
 
 console.log('\n== the four conditions are the same four at every rung ==');
 {
-  ok((CODE.match(/rs\s*<\s*P80_RSI_LONG/g) || []).length === 1,
-     'the long pullback threshold is read in exactly one place');
-  ok((CODE.match(/rs\s*>\s*P80_RSI_SHORT/g) || []).length === 1, 'and the short one likewise');
+  /* Once a second mechanic exists the comparison reads a variant's field, so
+     a regex counting `rs < P80_RSI_LONG` proves nothing. The property that
+     matters is behavioural and is asserted that way below and in the variant
+     section: evaluated with NO variant, the thresholds are still 45 and 55. */
+  const specV = ctx.HG_P80_VARIANTS[0];
+  ok(specV.rsiLong === 45 && specV.rsiShort === 55,
+     'the first variant is the supplied spec, at 45 and 55');
+  ok(specV.rsiLong === ctx.HG_P80_SPEC.rsiLong && specV.rsiShort === ctx.HG_P80_SPEC.rsiShort,
+     'and it agrees with the published spec object, so they cannot drift apart');
   /* A regex hunting for arithmetic on the thresholds cannot tell display
      copy from logic, and the header legitimately prints 45 and 55. So this
      is asserted STRUCTURALLY instead, which is stronger: a rung's config is
@@ -287,7 +296,14 @@ console.log('\n== the tab is POPULATED when nothing fires ==');
   };
   const secOf = Object.fromEntries(ctx.HG_P80_LADDER.map(r => [r.tf, r.sec]));
   ctx.hgOgFetchRows = (tf, n) => Promise.resolve({ rows: quiet(secOf[tf], n), source: 'fixture' });
-  ctx.hgOgVenueCost = () => ({ rtFrac: 0.00020, venue: 'XM' });
+  /* THE BARS are a fixture; THE VENUE IS NOT. Mocking hgOgVenueCost here is
+     what hid the rtFrac/rtCostPct seam bug for four versions: the mock was
+     written in the shape the tab expected rather than the shape omnigold
+     returns, so the tab and its test agreed with each other while the live
+     app rendered nothing. The real function is pure and needs no network,
+     so there was never a reason to replace it. */
+  ok(typeof ctx.hgOgVenueCost === 'function' && ctx.hgOgVenueCost().rtCostPct > 0,
+     'the REAL venue cost is in play for this render, not a stand-in');
 
   const tab = (ctx.HG_tabs || []).find(t => t && t.id === '80percent');
   const node = { innerHTML: '', _q: {}, querySelector(sel){ if (!this._q[sel]) this._q[sel] = el(); return this._q[sel]; } };
@@ -301,13 +317,26 @@ console.log('\n== the tab is POPULATED when nothing fires ==');
   for (const r of ctx.HG_P80_LADDER){
     ok(new RegExp('>' + r.tf + '<').test(html), `${r.tf} has a row on it`);
   }
-  ok(/distance to fire/i.test(html), 'with a distance-to-fire column');
+  ok(/distance to SPEC/i.test(html),
+     'with a distance column, measured against the SUPPLIED thresholds even on a rung that '
+     + 'just fired the loosened mechanic');
   ok(/it needs/.test(html), 'the required-rate table renders');
   ok(/session rule N\/A/.test(html),
      'and the rungs where the session rule was dropped say so on the board');
   ok(!/NaN|undefined/.test(html), 'and nothing rendered as NaN or undefined');
+  ok(/<th>it needs<\/th>/.test(html) && /<b>[0-9]+\.[0-9]{2}%<\/b>/.test(html),
+     'the required-rate table shows a REAL cost-adjusted number — the panel that was blank in '
+     + 'the live app for four versions');
+  ok(/round trip\)/.test(html) && /0\.[0-9]+% (taker|round)/.test(html),
+     'and names the venue cost it used, straight from the desk\'s own basis string');
+  ok(!/cost-adjusted bar is not shown/.test(html),
+     'and does not fall back to the cannot-compute branch when the venue is readable');
   ok(/RSI [0-9]+\.[0-9] needs/.test(html),
      'the distance is a NUMBER, not a shrug — this is what replaced the empty panel');
+  ok(/55 \/ 45 column is wired/.test(html),
+     'and the rendered census names the loosened column as wired, with its real thresholds');
+  ok(/SPEC [0-9]+<\/span> <span class="statuschip na">WIDE [0-9]+/.test(html),
+     'the board splits each rung\'s firings by mechanic rather than pooling them into one count');
 
   const stat = String(node._q['#p80Stat'].textContent);
   ok(/rungs/.test(stat), `the status line reports the ladder: "${stat}"`);
@@ -424,15 +453,246 @@ console.log('\n== the census is a census, never a second strategy ==');
   ok(!/RSI|rsi/.test(String(ctx.hg80Breakeven)),
      'and the breakeven function never reads an RSI threshold at all');
   ok(/Moving the threshold does not change/.test(SRC), 'which is what the panel says');
-  ok(/The tab trades the spec column and nothing else/.test(SRC),
-     'and it states which column is actually traded');
+  /* v773 asserted the tab traded the spec column and nothing else. That is
+     no longer true and must not keep passing: the 55 column is now wired as
+     its own mechanic, and the panel has to say so rather than leave a reader
+     with the old promise. */
+  ok(!/The tab trades the spec column and nothing else/.test(SRC),
+     'the superseded "spec column only" promise is gone, not left behind to mislead');
+  /* built from the constants rather than typed as a literal, so the copy
+     cannot drift from the thresholds it describes */
+  ok(/P80_RSI_WIDE_LONG \+ ' \/ ' \+ P80_RSI_WIDE_SHORT \+ ' column is wired/.test(SRC),
+     'the panel says the loosened column is wired, naming it from the constants themselves');
+  ok(/recorded separately/.test(SRC), 'and that it records separately');
+  ok(/counts in that column are CUMULATIVE/.test(SRC),
+     'and warns that the census column includes the spec firings while the mechanic does not');
 }
 
 console.log('\n== the board says how often each rung fires ==');
 {
   ok(/<th>fired<\/th>/.test(SRC), 'the ladder board has a fired column');
-  ok(/r\.res\.signals\.length \+ ' in ' \+ r\.scanned/.test(SRC),
+  ok(/c\.total \+ ' in ' \+ r\.scanned/.test(SRC),
      'reporting firings over the bars actually scanned, so the count is never a mystery');
+  ok(/>SPEC ' \+ c\.spec[\s\S]{0,200}>WIDE ' \+ c\.wide/.test(SRC),
+     'and splitting that count by mechanic, so a rung carried by the loosened one cannot read '
+     + 'as a rung the spec is producing');
+}
+
+console.log('\n== the second mechanic is a second mechanic, not a loosened spec ==');
+{
+  const V = ctx.HG_P80_VARIANTS;
+  ok(V.length === 2, 'two variants are declared');
+  ok(V[0].key === 'spec' && V[1].key === 'wide', 'the spec first, the wide one second');
+  ok(V[0].mech !== V[1].mech, `they record under different mechanics (${V[0].mech} / ${V[1].mech})`);
+  ok(V[1].rsiLong === 55 && V[1].rsiShort === 45,
+     'and the wide one is the 55 / 45 column from the census, exactly as it was counted');
+
+  /* ORDERED TIGHTEST FIRST, and each a strict superset of the one before.
+     hg80Scan's "first that fires wins" is only a valid disjoint assignment
+     because of this, so it is asserted rather than assumed. */
+  for (let i = 1; i < V.length; i++){
+    ok(V[i].rsiLong > V[i - 1].rsiLong && V[i].rsiShort < V[i - 1].rsiShort,
+       `variant ${i} is strictly looser on both sides — every earlier firing also satisfies it`);
+  }
+
+  ok(ctx.hg80Variant('spec') === V[0] && ctx.hg80Variant('wide') === V[1], 'both resolve by key');
+  ok(ctx.hg80Variant('nonsense') === V[0] && ctx.hg80Variant() === V[0],
+     'and an unknown key falls back to the SPEC, never to the looser one');
+}
+
+console.log('\n== evaluated with no variant, the thresholds are still the supplied ones ==');
+{
+  /* dip 2.0 leaves RSI near 50: inside the wide band, outside the spec's.
+     A bar the two mechanics disagree about is the only fixture that can
+     prove the default did not quietly widen. */
+  const rows = series(280, { dip: 2.0 });
+  const ind = ctx.hg80Indicators(rows);
+  const bare = ctx.hg80SignalAt(rows, ind, rows.length - 1, ctx.hg80Cfg(null));
+  const spec = ctx.hg80SignalAt(rows, ind, rows.length - 1, ctx.hg80Cfg(null), ctx.hg80Variant('spec'));
+  const wide = ctx.hg80SignalAt(rows, ind, rows.length - 1, ctx.hg80Cfg(null), ctx.hg80Variant('wide'));
+
+  ok(spec.rsi > 45 && spec.rsi < 55, `the bar sits between the two thresholds (RSI ${spec.rsi.toFixed(2)})`);
+  ok(spec.dir === null && spec.longChecks.pullback === false,
+     'the SPEC turns it away, which is the whole reason it is a marginal bar');
+  ok(wide.dir === 'long' && wide.longChecks.pullback === true, 'the WIDE mechanic takes it');
+  ok(bare.dir === spec.dir && bare.longChecks.pullback === spec.longChecks.pullback,
+     'and calling hg80SignalAt with NO variant behaves exactly as the spec — the default did '
+     + 'not widen when the second mechanic landed');
+  ok(bare.variant === 'spec', 'the signal says which mechanic judged it');
+
+  for (const k of ['trend', 'trigger']){
+    ok(spec.longChecks[k] === wide.longChecks[k],
+       `${k} is identical across the two — ONLY the pullback threshold differs`);
+  }
+  const p1 = ctx.hg80Plan(wide), p2 = ctx.hg80Plan(ctx.hg80SignalAt(rows, ind, rows.length - 1, ctx.hg80Cfg(null), ctx.hg80Variant('wide')));
+  ok(near(p1.risk / wide.atr, 4.00, 1e-12) && near(p1.reward / wide.atr, 0.75, 1e-12),
+     'and a WIDE plan uses the SAME 4.00 and 0.75 — the exit was not loosened with the entry');
+  ok(p1.entry === p2.entry, 'plans are deterministic');
+}
+
+console.log('\n== the two populations are disjoint ==');
+{
+  /* a random walk, because the engineered fixture fires once and a
+     disjointness check over one signal proves nothing */
+  const walk = (tfSec, n, seed) => {
+    const out = [];
+    let px = 4358, st = seed;
+    const rnd = () => { st = (st * 1103515245 + 12345) & 0x7fffffff; return st / 0x7fffffff; };
+    const vol = 3.3 * Math.sqrt(tfSec / 300);
+    const end = Math.floor(Date.UTC(2026, 8, 17, 16, 0, 0) / 1000 / tfSec) * tfSec;
+    for (let i = 0; i < n; i++){
+      const o = px, cl = o + (rnd() - 0.48) * vol;
+      out.push({ t: end - (n - 1 - i) * tfSec, o, h: Math.max(o, cl) + rnd() * vol * 0.6,
+                 l: Math.min(o, cl) - rnd() * vol * 0.6, c: cl, v: 1 });
+      px = cl;
+    }
+    return out;
+  };
+  const def = { tf: '15m', sec: 900, bars: 500, band: 'scalp' };
+  const rows = walk(900, 500, 22);
+  const out = ctx.hg80ScanTf(rows, def, { rtFrac: 0.00020, venue: 'XM' });
+  const spec = out.res.signals.filter(x => x.variant === 'spec');
+  const wide = out.res.signals.filter(x => x.variant === 'wide');
+  ok(spec.length > 0 && wide.length > 0,
+     `the fixture produces BOTH kinds (${spec.length} spec, ${wide.length} wide) — without that `
+     + 'everything below would pass vacuously');
+
+  const byBar = {};
+  let dup = 0;
+  for (const s2 of out.res.signals){ if (byBar[s2.i]) dup++; byBar[s2.i] = true; }
+  ok(dup === 0, 'no bar produces two signals — one bar belongs to exactly one mechanic');
+
+  const ind = ctx.hg80Indicators(rows);
+  let checked = 0;
+  for (const s2 of wide){
+    const asSpec = ctx.hg80SignalAt(rows, ind, s2.i, out.cfg, ctx.hg80Variant('spec'));
+    if (asSpec.dir !== null) throw new Error('FAIL: a WIDE firing at bar ' + s2.i
+      + ' also satisfies the SPEC — the populations overlap and WIDE\'s record is contaminated');
+    checked++;
+  }
+  passed++;
+  console.log('  ok — every one of the ' + checked + ' WIDE firings is a bar the SPEC rejected — '
+    + 'WIDE\'s record holds only marginal bars, never spec-quality ones wearing its name');
+
+  let specAlsoWide = 0;
+  for (const s2 of spec){
+    const asWide = ctx.hg80SignalAt(rows, ind, s2.i, out.cfg, ctx.hg80Variant('wide'));
+    if (asWide.dir === s2.dir) specAlsoWide++;
+  }
+  ok(specAlsoWide === spec.length,
+     `and all ${spec.length} SPEC firings would ALSO satisfy WIDE — which is exactly why they `
+     + 'have to be assigned to the tighter one, and why pooling the two records reconstructs '
+     + '"wide as actually traded"');
+  ok(out.res.signals.every(x => x.variant === 'spec' || x.variant === 'wide'),
+     'every signal is attributed to one of the two');
+}
+
+console.log('\n== the record follows the mechanic, and the card says what was written ==');
+{
+  for (const k of Object.keys(store)) delete store[k];
+  const rows = series(280, { dip: 2.0, tfSec: 900 });
+  const cfg = ctx.hg80Cfg({ tf: '15m', sec: 900 });
+  const ind = ctx.hg80Indicators(rows);
+  const sig = ctx.hg80SignalAt(rows, ind, rows.length - 1, cfg, ctx.hg80Variant('wide'));
+  sig.plan = ctx.hg80Plan(sig);
+  const rec = ctx.hg80Record(sig, cfg);
+  ok(rec.ok === true, 'a WIDE setup records');
+  ok(rec.mechanic === 'P80W-15M-LONG',
+     `and the recorder REPORTS the mechanic it wrote (${rec.mechanic})`);
+  const log = ctx.hgFwdRecords(ctx.HG_P80_TAB) || [];
+  ok(log.length === 1 && log[0].mechanic === rec.mechanic,
+     'which is the string actually in the log — asserted against the LOG, not the return value');
+  ok(!/^P80-/.test(log[0].mechanic),
+     'a WIDE firing is never filed under the spec\'s mechanic, which is the bug this check exists for');
+  ok(/rec\.mechanic/.test(SRC),
+     'and the card prints the returned mechanic rather than rebuilding the name a second time');
+  ok(!/as P80-' \+/.test(SRC), 'with no stale second copy of that name left at the call site');
+  for (const k of Object.keys(store)) delete store[k];
+}
+
+console.log('\n== a WIDE card discloses what it is and what it did not buy ==');
+{
+  ok(/THIS IS THE WIDE MECHANIC, NOT THE SUPPLIED SPEC/.test(SRC),
+     'the card names itself as the second mechanic');
+  ok(/which the spec turned away/.test(SRC), 'says the spec rejected this bar');
+  ok(/the entry got easier and <b>the bar did not move<\/b>/.test(SRC),
+     'and states the trade-off: a looser entry bought no relief on the exit');
+  ok(/judged on its own record and never lends its numbers to/.test(SRC),
+     'and that the two records stay apart');
+  ok(/variantNoteHtml\(sig\)/.test(SRC), 'wired into the setup card, not just declared');
+}
+
+console.log('\n== the default population did not change under existing callers ==');
+{
+  /* the walk measures the spec. If hg80Scan had started returning WIDE
+     signals by default, the walk would silently have become a measurement
+     of a different strategy. */
+  const rows = series(280, { dip: 2.0 });
+  const bare = ctx.hg80Scan(rows);
+  ok(bare.variants.length === 1 && bare.variants[0].key === 'spec',
+     'hg80Scan with no options scans the SPEC only');
+  ok(bare.signals.every(x => x.variant === 'spec'), 'and returns nothing else');
+  const both = ctx.hg80Scan(rows, { variants: ctx.HG_P80_VARIANTS });
+  ok(both.signals.length >= bare.signals.length,
+     `asking for both can only add (${bare.signals.length} -> ${both.signals.length})`);
+  ok(both.signals.filter(x => x.variant === 'spec').length === bare.signals.length,
+     'and the spec half of the combined scan is exactly the spec-only scan — unchanged, not re-derived');
+  const WALK = fs.readFileSync(path.join(ROOT, 'scripts/walk-80percent.mjs'), 'utf8');
+  ok(!/variants/.test(WALK.replace(/\/\*[\s\S]*?\*\//g, '')),
+     'and the walk asks for no variants, so it still measures what it was written to measure');
+}
+
+console.log('\n== the venue seam is tested against the REAL function, not a mock of it ==');
+{
+  /* THE BUG THIS SECTION EXISTS FOR. From hg-v770 to hg-v774 hg80VenueRt()
+     read `rtFrac` from hgOgVenueCost(), which returns `rtCostPct`. It
+     therefore returned null on every call and the required-rate table — the
+     single most useful thing on this tab — never rendered in the live app.
+     Every test passed throughout, because they handed the tab a mock in the
+     shape the tab expected instead of the shape omnigold actually returns.
+     Two sides of a broken seam agreeing with each other is not a test.
+
+     So: no mock. This calls omnigold's own hgOgVenueCost, loaded above. */
+  ok(typeof ctx.hgOgVenueCost === 'function',
+     'omnigold.js is loaded and exports hgOgVenueCost');
+  /* built from fragments so the pattern cannot match its own source line */
+  const assignRe = new RegExp('ctx' + '\\.hgOg' + 'VenueCost\\s*=\\s*[^=]');
+  ok(!assignRe.test(fs.readFileSync(fileURLToPath(import.meta.url), 'utf8')),
+     'and NOTHING in this file replaces it — a mocked venue is how this seam broke unseen');
+  const raw = ctx.hgOgVenueCost();
+  ok(!!raw, 'it returns an object');
+  ok(typeof raw.rtCostPct === 'number' && isFinite(raw.rtCostPct) && raw.rtCostPct > 0,
+     `whose cost field is rtCostPct (${raw.rtCostPct}) — the name the tab must read`);
+  ok(raw.rtFrac === undefined,
+     'and there is NO rtFrac on it, which is exactly why reading one returned null forever');
+  ok(raw.rtCostPct < 1,
+     `it is a PERCENT, not a fraction (${raw.rtCostPct} means ${raw.rtCostPct}%, not `
+     + `${(raw.rtCostPct * 100).toFixed(1)}%) — reading it as a fraction would overstate cost 100x`);
+
+  const got = ctx.hg80VenueRt ? ctx.hg80VenueRt() : null;
+  ok(!!got, 'the tab reads it successfully — this is the assertion that was missing');
+  ok(near(got.rtFrac, raw.rtCostPct / 100, 1e-12),
+     `converting percent to fraction exactly once (${raw.rtCostPct}% -> ${got.rtFrac})`);
+  ok(got.venue === raw.venue, `carrying the venue name through (${got.venue})`);
+
+  /* and end to end: a breakeven priced off the real venue must be finite,
+     above the gross bar, and sane */
+  const be = ctx.hg80Breakeven(3.316, 4293.73, got.rtFrac);
+  ok(be.net != null && isFinite(be.net), `the net bar computes (${(be.net * 100).toFixed(2)}%)`);
+  ok(be.net > be.gross, 'and sits above the gross bar, because cost can only raise it');
+  ok(be.net < 2, 'and is not an absurd number from a units mix-up');
+}
+
+console.log('\n== when the venue genuinely cannot be read, the panel says WHICH half is missing ==');
+{
+  ok(/venue cost could not be read from the gold desk \(hgOgVenueCost\)/.test(SRC),
+     'the fallback copy names the function that failed');
+  ok(/DID report a live ATR, so the missing half is/.test(SRC),
+     'and counts the rungs that DID report an ATR, so "no live ATR or no venue cost" can never '
+     + 'again hide which one it was');
+  ok(!/no live ATR or no venue cost/.test(CODE),
+     'the old ambiguous sentence that hid this for four versions no longer reaches the page '
+     + '(it survives only in the comment explaining why it was removed)');
 }
 
 console.log('\n== and it still refuses to invent a rate from what it resolved ==');

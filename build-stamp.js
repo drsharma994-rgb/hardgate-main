@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v773',
-  pack: 'the setups moved to the top of 80PERCENT — the most recent firing on every rung, not only the last candle, plus a census of what the pullback threshold turns away',
+  version: 'hg-v774',
+  pack: 'the RSI 55 column is wired as P80W — a second mechanic on the bars the spec turned away, recorded apart so neither lends the other its numbers',
   built: '2026-09-17T00:00:00Z'
 };
 
