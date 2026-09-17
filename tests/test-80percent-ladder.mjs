@@ -2166,6 +2166,109 @@ console.log('\n== every resolved trade carries how far it actually travelled =='
      'past the horizon nothing counts — the trade was closed before that bar printed');
 }
 
+console.log('\n== the ledger is read at the bar for the number of things being tested ==');
+{
+  /* THE FOURTH ARGUMENT IS NOT A ROUNDING CONSTANT. hgOmniPoolRead's
+     barZ is the FAMILY-WISE significance bar — the z a mechanic must
+     clear once you account for how many are being tested at the same
+     time. hg-v789 passed the literal 2. Every other consumer in the app
+     computes it from the pool it just read, and omniroute states the
+     property in as many words: "the READ column and this gate cannot
+     disagree". This tab made them able to disagree, on the same mechanic,
+     on the same page.
+
+     The gap is not small. 3 variants x 5 rungs x 2 directions = 30
+     mechanics; the single-hypothesis bar is z 1.64 and the correct bar at
+     30 is z 2.93. Thirty tested at the bar for one hands back about one
+     and a half winners out of noise — the exact failure this tab exists
+     to avoid, in the one place on the page that reads out-of-sample
+     evidence. */
+  ok(!/hgOmniPoolRead\([^)]*,\s*20\s*,\s*2\s*\)/.test(LOGIC),
+     'no call reads the pool at a hardcoded bar');
+  ok(/hgOmniFamilyZ/.test(CODE),
+     'the bar comes from hgOmniFamilyZ, the same helper every other consumer uses');
+
+  const fz = ctx.hgOmniFamilyZ;
+  ok(typeof fz === 'function', 'and that helper is actually reachable from this tab');
+
+  /* computed from the POOL'S OWN KEYS, so it rises as the tab records more
+     rather than being set once from a count that may never be reached */
+  const one  = ctx.hg80FwdBar({ 'P80-5M-LONG': {} });
+  const many = ctx.hg80FwdBar({ a: {}, b: {}, c: {}, d: {}, e: {} });
+  ok(one.n === 1 && many.n === 5, 'the count is the pool\'s key count');
+  ok(many.z > one.z, `five mechanics face a higher bar than one (${many.z.toFixed(3)} > `
+     + `${one.z.toFixed(3)})`);
+  ok(Math.abs(one.z - fz(1)) < 1e-12 && Math.abs(many.z - fz(5)) < 1e-12,
+     'and it is that helper\'s answer, not an approximation of it');
+  ok(one.measured === true, 'flagged as measured when the helper is present');
+
+  /* an empty or absent pool is ONE hypothesis, never zero — z at k=0 is
+     not defined and a bar of 0 would pass everything */
+  for (const p of [null, undefined, {}]){
+    const b = ctx.hg80FwdBar(p);
+    ok(b.n === 1 && b.z > 1 && isFinite(b.z),
+       'an empty pool reads as one hypothesis with a real bar, never zero');
+  }
+
+  /* THE CEILING IS STATED, because a bar that moves needs a reason */
+  const ceil = ctx.hg80MechanicCeiling();
+  ok(ceil === ctx.HG_P80_VARIANTS.length * ctx.HG_P80_LADDER.length * 2,
+     `the ceiling is variants x rungs x directions (${ceil})`);
+  ok(ceil >= 30, 'which on the shipped ladder is at least thirty mechanics');
+  ok(fz(ceil) > 2.9, `and the bar there is z ${fz(ceil).toFixed(2)}, not 2`);
+
+  /* IT REACHES THE PAGE. A bar a reader cannot see is a bar they cannot
+     weigh a verdict against. */
+  const txt = h => String(h).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  const fb = txt(ctx.familyBarHtml());
+  ok(/the bar is z [0-9]/.test(fb),
+     'the forward panel says what bar it is holding its verdicts to');
+  ok(/Nothing recorded yet|mechanics? in this pool/.test(fb),
+     'and what that bar is set from — the mechanics the log actually holds');
+  ok(/1\.64/.test(fb), 'against the single-hypothesis bar, so the correction has a baseline');
+  /* WITH ONE HYPOTHESIS THE TWO BARS ARE THE SAME BAR, and saying both in
+     one breath reads as a correction that did not happen. Each case gets
+     its own sentence. */
+  const one1 = txt(ctx.familyBarHtml.call(null));
+  ok((one1.match(/z 1\.64/g) || []).length === 1,
+     `the single-hypothesis bar is stated once, not set against itself (${one1.slice(0, 90)})`);
+  ok(/one and a half winners from noise alone/.test(fb),
+     'stated in trades rather than in statistics, which is what a reader is weighing');
+  ok(new RegExp(String(ceil)).test(fb), 'with the ceiling named');
+  ok(/gets harder as the tab records more/.test(fb),
+     'and the direction of travel said out loud, so a moving bar is not mistaken for a moving '
+     + 'goalpost');
+  ok(!/NaN|undefined/.test(fb), 'and nothing renders as NaN or undefined');
+
+  /* WITHOUT OMNIROUTE the fallback is disclosed rather than silently used.
+
+     Mutated from INSIDE the context. A global created inside a vm lives on
+     the context's own global object, not on the sandbox object the host
+     holds, so `delete ctx.hgOmniFamilyZ` succeeds on the host side and the
+     code under test goes on seeing the function — which is how this
+     assertion first passed against a stub that was never installed. */
+  const fz0 = ctx.hgOmniFamilyZ;
+  try {
+    vm.runInContext('window.hgOmniFamilyZ = null;', ctx);
+    ok(vm.runInContext('typeof hgOmniFamilyZ', ctx) !== 'function',
+       'the helper really is gone from the context the tab reads');
+    const b = ctx.hg80FwdBar({ a: {}, b: {} });
+    ok(b.measured === false && b.z === 2, 'with the helper gone it falls back to 2, as every '
+       + 'other call site does');
+    ok(/could not be computed/.test(txt(ctx.familyBarHtml())),
+       'and the page SAYS the bar is a fallback rather than printing a verdict as if corrected');
+    ok(/Read them as indicative only/.test(txt(ctx.familyBarHtml())),
+       'telling the reader what to do about it');
+  } finally {
+    ctx.hgOmniFamilyZ = fz0;
+    vm.runInContext('window.hgOmniFamilyZ = arguments0;', Object.assign(ctx, { arguments0: fz0 }));
+    delete ctx.arguments0;
+    ok(typeof ctx.hgOmniFamilyZ === 'function'
+       && vm.runInContext('typeof hgOmniFamilyZ', ctx) === 'function',
+       'and it is restored, so nothing after this block runs against a stub');
+  }
+}
+
 console.log('\n== the tab counts the trades a desk could have held, not the firings ==');
 {
   /* THE DIVERGENCE. scripts/walk-80percent.mjs has kept ONE POSITION AT A

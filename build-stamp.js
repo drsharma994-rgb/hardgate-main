@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v792',
-  pack: 'the 80PERCENT tab counts the trades a desk could have held instead of the times the pattern printed — a firing that lands inside an open trade is marked, kept off the measurements, and told what it would mean to take; and every timestamp stops printing itself twice at offset zero',
+  version: 'hg-v793',
+  pack: 'the 80PERCENT tab reads its ledger at the bar for the number of things it is testing — it had been judging up to thirty mechanics at the significance bar meant for one, which hands back winners out of noise, and the bar is now computed from the pool and printed beside the verdicts',
   built: '2026-09-17T00:00:00Z'
 };
 

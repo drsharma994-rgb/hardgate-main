@@ -1860,6 +1860,57 @@ function hg80FwdMinRr(){ return P80_TP_ATR / P80_SL_ATR; }
 /* What the ledger says about ONE mechanic, or null when it has nothing.
    Used by the card, so a WATCH line can stop claiming there is no record
    the moment there is one. */
+/* ---------------------------------------------------------------------
+   THE BAR THIS TAB IS ACTUALLY TESTING AGAINST
+
+   hg-v789 read the ledger back through hgOmniPoolRead(p, minRr, 20, 2).
+   The fourth argument is not a rounding constant. It is the FAMILY-WISE
+   SIGNIFICANCE BAR — the z a mechanic has to clear once you account for
+   how many mechanics are being tested at the same time — and every other
+   consumer in the app computes it from the pool it just read:
+
+     hgFwdPanelHTML   hgOmniFamilyZ(keys.length)
+     hgOmni20xForwardPaid  hgOmniFamilyZ(keys.length)
+     the ledger panel      hgOmniFamilyZ(ledgerRows)
+
+   omniroute states the property in as many words — "the family-wise bar
+   over the mechanics that pool actually holds. Nothing is reimplemented:
+   the READ column and this gate cannot disagree." This tab reimplemented
+   it as the literal 2, so the READ column and this gate COULD disagree,
+   on the same mechanic, on the same page: the FORWARD panel judging it at
+   one bar and the card's watch line at another.
+
+   And the gap is not small. This tab can hold 3 variants x 5 rungs x 2
+   directions = 30 mechanics. The single-hypothesis bar is z = 1.64; the
+   correct bar at 30 is z = 2.93. Testing thirty things at a bar meant for
+   one produces roughly one and a half "this works" verdicts out of pure
+   noise, which is the exact failure this whole tab is built to avoid —
+   and it would have produced them in the one place on the page that reads
+   out-of-sample evidence.
+
+   Computed from the pool's OWN keys, so it rises as the tab records more
+   mechanics rather than being set once from a count that may never be
+   reached. The literal 2 survives only as the fallback for a page where
+   omniroute did not load, which is what every other call site does.
+   --------------------------------------------------------------------- */
+function hg80FwdBar(pool){
+  var keys = [], k, n;
+  if (pool) for (k in pool) if (Object.prototype.hasOwnProperty.call(pool, k)) keys.push(k);
+  /* the bar is taken at ONE hypothesis when the pool is empty — z at k=0
+     is not defined, and a bar of zero would pass everything. `held` keeps
+     the two cases apart so the page can say which it is. */
+  n = Math.max(1, keys.length);
+  var fz = gfn('hgOmniFamilyZ');
+  return { n: n, held: keys.length, z: fz ? fin(fz(n)) : 2, measured: !!fz };
+}
+
+/* every mechanic this tab could ever record: one per variant, per rung,
+   per direction. The ceiling the bar climbs toward — stated so a reader
+   knows the number is going to get harder, not that it moved arbitrarily. */
+function hg80MechanicCeiling(){
+  return P80_VARIANTS.length * P80_LADDER.length * 2;
+}
+
 function hg80FwdRead(mechanic){
   try {
     var poolFn = gfn('hgFwdPool');
@@ -1868,10 +1919,55 @@ function hg80FwdRead(mechanic){
     if (!pool) return null;
     var p = pool[mechanic];
     if (!p) return null;
+    var bar = hg80FwdBar(pool);
     var readFn = gfn('hgOmniPoolRead');
-    var read = readFn ? readFn(p, hg80FwdMinRr(), 20, 2) : null;
-    return { pool: p, read: read, mechanic: mechanic };
+    var read = readFn ? readFn(p, hg80FwdMinRr(), 20, bar.z) : null;
+    return { pool: p, read: read, mechanic: mechanic, bar: bar };
   } catch (e){ return null; }
+}
+
+/* HOW MANY THINGS THIS TAB IS TESTING, AND WHAT THAT COSTS. A reader
+   looking at a READ column has to know whether a verdict cleared a bar
+   meant for one hypothesis or for thirty. Stated in trades rather than in
+   statistics: at the single-hypothesis bar, testing thirty mechanics
+   produces about one and a half "this works" verdicts from noise alone. */
+function familyBarHtml(){
+  var poolFn = gfn('hgFwdPool');
+  var pool = null;
+  try { pool = poolFn ? poolFn(P80_TAB) : null; } catch (e){ pool = null; }
+  var bar = hg80FwdBar(pool);
+  if (!bar.measured){
+    return '<div class="note warn" style="margin-top:6px">The family-wise bar could not be '
+      + 'computed (omniroute did not load), so the verdicts above fall back to z 2 — a bar for '
+      + 'ONE hypothesis, not for the ' + bar.n + ' this tab holds. Read them as indicative '
+      + 'only.</div>';
+  }
+  var ceil = hg80MechanicCeiling();
+  var ceilZ = gfn('hgOmniFamilyZ');
+  var lead;
+  if (!bar.held){
+    lead = '<b>Nothing recorded yet, so the bar is z ' + bar.z.toFixed(2) + '</b> — what a '
+      + 'single pre-registered hypothesis faces. It rises as soon as this log holds more than '
+      + 'one mechanic. ';
+  } else if (bar.n === 1){
+    lead = '<b>One mechanic in this pool, so the bar is z ' + bar.z.toFixed(2) + '</b> — the '
+      + 'single-hypothesis bar, which is the right one while there is only one thing being '
+      + 'tested. It rises with the second. ';
+  } else {
+    lead = '<b>' + bar.n + ' mechanics in this pool, so the bar is z ' + bar.z.toFixed(2)
+      + '.</b> A single pre-registered hypothesis would face z '
+      + (ceilZ ? fin(ceilZ(1)).toFixed(2) : '1.64') + '. ';
+  }
+  return '<div class="note" style="margin-top:6px;padding:6px 8px;border-left:3px solid '
+    + 'var(--line)">' + lead
+    + 'Thirty tested at the single-hypothesis bar would hand back about one and a half winners '
+    + 'from noise alone, so the bar rises with the count — that is the correction, and it is '
+    + 'computed from the mechanics this log actually holds rather than assumed. '
+    + '<span class="note">This tab can reach <b>' + ceil + '</b> ('
+    + P80_VARIANTS.length + ' variants x ' + P80_LADDER.length + ' rungs x 2 directions), '
+    + 'where the bar is z ' + (gfn('hgOmniFamilyZ') ? fin(gfn('hgOmniFamilyZ')(ceil)).toFixed(2)
+        : '—') + '. It gets harder as the tab records more, which is the right direction: every '
+    + 'mechanic added is another chance for one of them to look good by accident.</span></div>';
 }
 
 function forwardPanelHtml(){
@@ -1887,6 +1983,7 @@ function forwardPanelHtml(){
   } catch (e){ body = ''; }
   if (!body) return '';
   return '<div class="panel" style="margin-top:10px">' + body
+    + familyBarHtml()
     + '<div class="note" style="margin-top:6px">Recorded under <b>' + esc(P80_TAB) + '</b>, one '
     + 'mechanic per rung per direction, judged at this strategy\'s own T1 of '
     + hg80FwdMinRr().toFixed(4) + 'R — ' + P80_TP_ATR.toFixed(2) + ' ATR of target against '
@@ -2517,9 +2614,15 @@ function watchLineHtml(sig){
       + 'fills on its own — see FORWARD below for what has accumulated.</div>';
   }
   var readTxt = (got.read && got.read.read) ? String(got.read.read) : null;
+  var bar = got.bar;
   return '<div class="p80-caveat"><b>WATCH — not a signal to act on.</b> ' + label
     + ' has <b>' + settled + '</b> settled in the forward log'
     + (readTxt ? ', which reads <b>' + esc(readTxt) + '</b>' : '')
+    + (bar && bar.measured
+        ? ' — judged at <b>z ' + bar.z.toFixed(2) + '</b>, the bar for testing '
+          + bar.n + ' mechanic' + (bar.n === 1 ? '' : 's') + ' at once, not the z 1.64 a single '
+          + 'pre-registered one would face'
+        : '')
     + '. That is out-of-sample and it is the only measured thing on this card — but it is a '
     + 'record being built, not one that has been earned. See FORWARD below.</div>';
 }
@@ -4070,6 +4173,10 @@ W.HG_P80_STOP_FLOOR  = P80_STOP_FLOOR;
 W.hg80PayingRungs    = hg80PayingRungs;
 W.hg80Excursions     = hg80Excursions;
 W.hg80MarkBook       = hg80MarkBook;
+W.hg80FwdBar         = hg80FwdBar;
+W.familyBarHtml      = familyBarHtml;
+W.hg80MechanicCeiling = hg80MechanicCeiling;
+W.hg80FwdRead        = hg80FwdRead;
 W.bookChipHtml       = bookChipHtml;
 W.excursionHtml      = excursionHtml;
 W.hg80Median         = hg80Median;
