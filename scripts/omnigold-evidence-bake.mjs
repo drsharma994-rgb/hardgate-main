@@ -297,6 +297,35 @@ function belowThreshold(rows, keyFn, minN){
   return out;
 }
 
+/* EVERY KIND THE WALK EVER SAW, BEFORE ANY FILTER TOUCHED IT.
+
+   The two maps above describe mechanics the walk OBSERVED. There is a
+   third population and it is the one nothing could name: mechanics the
+   desk has registered and runs on every scan, which this walk never
+   produced a single row for. Twelve of the 77 registered detectors are in
+   it — SMT-DIVERGE, GSR-EXTREME, COINT-SPREAD, OU-REVERT, VP-PLAYBOOK and
+   the seven part-N variants. Zero firings in 9,897 rows over five and a
+   half months.
+
+   That is a different claim from "too thin to judge" and a very different
+   one from "measured and negative". Nothing is known about them at all.
+
+   Published as RAW counts over every walk row — before the stop floor, the
+   cost veto and broker hours — precisely so the consumer can tell the
+   three apart: a kind absent from this map was never seen, while a kind
+   present here but missing from formedByKind fired and was filtered away
+   to nothing. Neither of those is a mechanic with a record.
+
+   The consumer subtracts: whatever it has registered, minus these keys, is
+   its never-observed set. Deliberately not computed here — this file has
+   no business knowing OG_MECHANICS, and a list baked on one side and
+   consumed on the other is a list that goes stale. */
+function seenRaw(rows, keyFn){
+  const out = {};
+  for (const r of rows){ const k = keyFn(r); if (k == null) continue; out[k] = (out[k] || 0) + 1; }
+  return out;
+}
+
 /* ---------- concurrency, the fact that motivates all of this ---------- */
 function concurrency(pool){
   const ev = [];
@@ -419,6 +448,8 @@ const bake = {
   formedByKind: groupBy(formed, r => r.kind, WIDTH, 40),
   /* the other side of that 40: which mechanics fired and were left out */
   kindBelowThreshold: { minN: 40, kinds: belowThreshold(formed, r => r.kind, 40) },
+  /* and the raw set, so "never observed" is distinguishable from "thin" */
+  kindSeenRaw: seenRaw(walk.trades || [], r => r.kind),
   sequentialByCell: groupBy(seq, r => r.horizon + '/' + r.tier, WIDTH, 10),
   sequentialByKind: groupBy(seq, r => r.kind, WIDTH, 10)
 };

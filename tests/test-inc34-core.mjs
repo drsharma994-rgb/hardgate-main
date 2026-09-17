@@ -51,10 +51,43 @@ ok(apRouteDecision(0.35).route === 'block', 'block below 40%');
 ok(apRouteDecision(0.65).route === 'promote', 'promote above 60%');
 
 console.log('== regime transition ==');
-let hist = rtPushScore([], 2, Date.now() - 5 * 86400000);
-hist = rtPushScore(hist, -1, Date.now());
+/* THE WINDOW EDGE IS NOT A TEST FIXTURE.
+
+   This read `Date.now() - 5 * 86400000` for the old point and let
+   rtScoreSlope recompute its own `Date.now() - 5 * 86400000` cutoff a
+   moment later. The cutoff is therefore always >= the point, and the
+   filter is `h.at >= cutoff` — so the instant ONE MILLISECOND elapsed
+   between the two calls the old point dropped out of the window, pts fell
+   to 1, slope came back null and this assertion failed.
+
+   It passed standalone because both calls landed in the same tick and
+   failed under the full suite on a loaded machine, which reads like
+   ordering and is not: it is a race against the clock, and the only flake
+   in a 473-file suite. Fixed by pinning one `now` for the whole fixture
+   and sitting the old point just INSIDE the window rather than exactly on
+   its edge, so elapsed time cannot move it out. */
+const NOW = Date.now();
+const DAY = 86400000;
+let hist = rtPushScore([], 2, NOW - 4.9 * DAY);
+hist = rtPushScore(hist, -1, NOW);
 const tr = rtDetectTransition(hist, 0.5);
 ok(tr.tag === 'REGIME TRANSITION' || tr.active, 'transition detectable on slope');
+/* and the reason it is detectable is the sign flip, not the magnitude —
+   pinned so a future change to the 0.5 threshold cannot pass this by
+   accident */
+ok(tr.crossed === true, 'because the slope crossed zero against prevSlope 0.5');
+ok(tr.slope !== null, 'and the slope is a number, not the null a dropped point produces');
 ok(rtModifiers(true).minRr === 2.5, 'transition tightens min R:R');
+
+/* THE MECHANISM ITSELF, PINNED DETERMINISTICALLY. A point OUTSIDE the
+   window is dropped, one point is not a slope, and the result is null —
+   which is what the old fixture hit whenever the clock ticked. Stamped a
+   full second past the edge so no amount of elapsed time makes this
+   ambiguous in either direction. */
+const stale = rtPushScore(rtPushScore([], 2, NOW - 5 * DAY - 1000), -1, NOW);
+ok(stale.length === 2, 'both points are in the history');
+const staleTr = rtDetectTransition(stale, 0.5);
+ok(staleTr.slope === null, 'but a point past the 5-day cutoff is dropped, leaving no slope');
+ok(staleTr.active === false, 'and no transition is claimed from one point');
 
 console.log('\ntest-inc34-core: ' + n + ' passed');

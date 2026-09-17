@@ -120,9 +120,20 @@ console.log('\n== the empty column explains itself ==');
   ok(/of 20 settled|no cleared setups have settled yet/.test(html),
      'counted against the threshold rather than merely asserted');
 
-  /* it must be rendered ABOVE the numbers a reader would scan for a ticket */
-  ok(/hgOgEdgeProofPanelHtml\(\)[\s\S]{0,200}hgOgBookExperienceHtml\(\)/.test(SRC),
-     'and it is rendered before the book-experience numbers, not after them');
+  /* IT MUST BE RENDERED ABOVE the numbers a reader would scan for a
+     ticket. Asserted by position rather than by proximity: this used to be
+     a 200-character window between the two calls, which hg-v766 broke by
+     inserting the forward-splits panel between them — a legitimate change
+     that a distance check reads as a reordering. Order is the claim; how
+     much sits between them is not. */
+  const iEdge = SRC.indexOf('+ hgOgEdgeProofPanelHtml()');
+  const iBook = SRC.indexOf('+ hgOgBookExperienceHtml()');
+  const iSplits = SRC.indexOf('+ hgOgFwdSplitsPanelHtml()');
+  ok(iEdge > 0 && iBook > 0, 'both panels are rendered in the same block');
+  ok(iEdge < iBook, 'and the edge panel comes before the book-experience numbers');
+  ok(iSplits > iEdge && iSplits < iBook,
+     'with the forward-splits panel between them — why there are no tickets first, ' +
+     'then whether the ordering of what remains is worth anything');
 
   /* and it must stop talking the moment it stops being true */
   const saved = ctx.HG_OG_REPLAY_EVIDENCE.kinds;

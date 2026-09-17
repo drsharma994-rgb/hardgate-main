@@ -252,7 +252,18 @@ console.log('\n== this is a measurement, not a trading rule ==');
   /* The session that found the 0.50% stop floor fitted to one end of an
      interval does not get to add a directional filter on in-sample
      evidence. Recorded, reported, used for nothing. */
-  ok(!/byDir/.test(OG), 'omnigold reads byDir nowhere — no gate, no weight, no ordering');
+  /* This asserted that omnigold read byDir NOWHERE. hg-v766 gave the four
+     forward-log splits a panel, so it is read once — to be displayed. The
+     claim was never "nothing may look at it", it was "nothing may DECIDE
+     on it", and that is what is checked now: every read is the panel's,
+     and the ranker's own body touches none of them. */
+  const body = OG.replace(/\/\*[\s\S]*?\*\//g, '');
+  const reads = (body.match(/\.byDir/g) || []).length;
+  const displayed = (body.match(/st\.byDir/g) || []).length;
+  ok(reads > 0 && reads === displayed, `byDir is read only to be shown (${reads})`);
+  const rankerBody = (body.split('function hgOgBalanceParts')[1] || '').split(/\n  function /)[0];
+  ok(rankerBody.length > 200 && !/byDir/.test(rankerBody),
+     'the ranker reads it nowhere — no gate, no weight, no ordering');
   ok(/used for NOTHING/.test(FWD), 'and hg-forward says so where the bucket is declared');
   ok(/100 \* tapeScore/.test(OG) && /120 \* ticketN/.test(OG), 'every ranker weight is as it was');
   ok(!/dir === 'short'.*score|score.*dir === 'short'/.test(OG), 'nothing scores a side');

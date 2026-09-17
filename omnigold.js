@@ -8174,6 +8174,12 @@ terse status, and never launches a first-time scan on a global refresh.
       /* then why there are no tickets to read at all, before the numbers a
          reader would otherwise scan looking for one */
       + hgOgEdgeProofPanelHtml()
+      /* then what the forward log says about the desk's OWN judgement —
+         its ranking, its direction, its grades, its gate stack. Below the
+         edge panel because that one explains why the ticket column is
+         empty; this one is about whether the ordering of what remains is
+         worth anything. */
+      + hgOgFwdSplitsPanelHtml()
       /* and what the book it belongs to actually did to an account */
       + hgOgBookExperienceHtml();
   }
@@ -8551,6 +8557,119 @@ terse status, and never launches a first-time scan on a global refresh.
     } catch (e) { return ''; }
   }
 
+  /* FOUR SPLITS WERE BEING COMPUTED AND NOBODY COULD READ ANY OF THEM.
+
+     hgFwdStatsOf has returned byGrade, byStack, byBal and byDir on every
+     call, and until this panel not one of them was read anywhere outside
+     hg-forward.js. They were computed on every scan and thrown away.
+
+     That is worst for byBal. hg-v763 added it under the heading "the desk
+     has ranked its gold cards since it was written and never checked the
+     ranking" — and then left the answer reachable only from a browser
+     console, which is not checking it either. byDir (hg-v765) landed in
+     the same drawer the week after.
+
+     So: one panel, four questions, each of which the desk has been
+     claiming to have made answerable.
+
+       BY RANK       does the card we put at the top beat the one we put
+                     at the bottom? If not, the ordering is decoration.
+       BY DIRECTION  the short-beats-long asymmetry the replay found in
+                     four detectors, now out of sample.
+       BY GRADE      does the engine's own letter rank outcomes?
+       BY GATE STACK do more agreeing gates mean a better trade?
+
+     Read off the GATE-CLEAR population — setups that passed everything but
+     measured-edge — because that is the population the desk judges on and
+     the only one still growing while no ticket issues.
+
+     REPORTING, NOT DECIDING. Nothing reads these buckets to rank, filter
+     or weight anything; they exist to be looked at. A bucket with nothing
+     in it prints a dash, never a rate, and when nothing has settled at all
+     the panel says that in a sentence instead of drawing a grid of dashes
+     that looks like a measurement. */
+  function hgOgFwdBucketTxt(b, be){
+    var n = fin(b && b.n), w = fin(b && b.w);
+    if (!isFinite(n) || n <= 0) return '—';
+    var hit = w / n;
+    var txt = n + ' · ' + (hit * 100).toFixed(0) + '%';
+    /* strictly ABOVE, not at: a bucket sitting exactly on breakeven made
+       nothing, and a tick beside it would read as a result */
+    if (isFinite(be)) txt += (hit > be ? ' ✓' : '');
+    return txt;
+  }
+
+  function hgOgFwdSplitsPanelHtml(){
+    try {
+      var w = W();
+      if (!w || typeof w.hgFwdStats !== 'function') return '';
+      var tabs = hgOgFwdTabsFor('SCALP').concat(hgOgFwdTabsFor('SWING'));
+      var st = null;
+      try { st = w.hgFwdStats(tabs, null, { gateClear: true }); } catch (e1) { return ''; }
+      if (!st) return '';
+      var be = 1 / (1 + OG_T1_R);
+
+      var bal = st.byBal || {}, dir = st.byDir || {}, grd = st.byGrade || {}, stk = st.byStack || {};
+      var tot = 0, k;
+      for (k in bal) tot += fin(bal[k] && bal[k].n) || 0;
+      for (k in dir) tot += fin(dir[k] && dir[k].n) || 0;
+
+      var head = '<div class="note og-fwd-splits" style="margin:8px 0;padding:6px 8px;'
+        + 'border:1px solid #64748B;border-left:3px solid #64748B;border-radius:4px;'
+        + 'background:rgba(100,116,139,0.05);font-size:0.82em">'
+        + '<b>WHAT THE FORWARD LOG SAYS ABOUT THIS DESK\'S OWN JUDGEMENT</b><br>'
+        + '<span style="opacity:0.8">Settled setups that cleared every gate but measured-edge. '
+        + 'Breakeven is ' + (be * 100).toFixed(0) + '% at ' + OG_T1_R + 'R; ✓ marks a bucket above it. '
+        + 'Reported only — nothing here ranks, filters or weights anything.</span><br>';
+
+      if (!(tot > 0)){
+        return head + '<span style="opacity:0.85">Nothing has settled yet, so every one of these '
+          + 'is genuinely unknown rather than neutral. '
+          + (isFinite(fin(st.open)) && fin(st.open) > 0
+              ? fin(st.open) + ' still running.' : 'No cleared setups are open either.')
+          + '</span></div>';
+      }
+
+      var line = function(label, pairs){
+        var bits = [], i;
+        for (i = 0; i < pairs.length; i++){
+          bits.push(esc(pairs[i][0]) + ' ' + hgOgFwdBucketTxt(pairs[i][1], be));
+        }
+        return '<b>' + label + '</b> ' + bits.join(' &nbsp;|&nbsp; ');
+      };
+
+      var rows = [];
+      rows.push(line('BY RANK', [['top', bal.top], ['mid', bal.mid], ['low', bal.low]]));
+      rows.push(line('BY DIRECTION', [['long', dir.long], ['short', dir.short]]));
+
+      var gk = Object.keys(grd), gp = [], gi;
+      for (gi = 0; gi < gk.length; gi++) if (fin(grd[gk[gi]] && grd[gk[gi]].n) > 0) gp.push([gk[gi], grd[gk[gi]]]);
+      if (gp.length) rows.push(line('BY GRADE', gp));
+
+      var sk = Object.keys(stk), sp = [], si;
+      for (si = 0; si < sk.length; si++){
+        if (!(fin(stk[sk[si]] && stk[sk[si]].n) > 0)) continue;
+        sp.push([sk[si] + (String(sk[si]) === '1' ? ' gate' : ' gates'), stk[sk[si]]]);
+      }
+      if (sp.length) rows.push(line('BY GATE STACK', sp));
+
+      /* the honest reading, stated rather than left to the eye: a ranking
+         that is backwards is the finding, not a rendering glitch */
+      var note = '';
+      var tN = fin(bal.top && bal.top.n), lN = fin(bal.low && bal.low.n);
+      if (isFinite(tN) && tN > 0 && isFinite(lN) && lN > 0){
+        var tH = fin(bal.top.w) / tN, lH = fin(bal.low.w) / lN;
+        note = '<br><span style="opacity:0.85">The ordering is '
+          + (tH > lH ? 'holding so far' : (tH < lH ? '<b>BACKWARDS so far</b>' : 'flat so far'))
+          + ' — top ' + (tH * 100).toFixed(0) + '% against bottom ' + (lH * 100).toFixed(0)
+          + '% on ' + tN + ' and ' + lN + ' settled. Too few to conclude anything either way '
+          + 'until each bucket carries ' + FWD_MIN_JUDGE + '.</span>';
+      }
+
+      return head + '<span style="opacity:0.9">' + rows.join('<br>') + '</span>' + note + '</div>';
+    } catch (e) { return ''; }
+  }
+
   function hgOgEdgeProofPanelHtml(){
     try {
       if (!OG_EDGE_PROOF_REQUIRED) return '';
@@ -8651,21 +8770,76 @@ terse status, and never launches a first-time scan on a global refresh.
     } catch (e) { return ''; }
   }
 
-  /* 'this mechanic was never measured', for the 13 that fall under the bar.
-     '' for anything with a record (that renders hgOgReplayLineHtml) and for
-     an unknown key, which is not a mechanic and has nothing to disclose. */
+  /* WHAT IS KNOWN ABOUT A MECHANIC, IN THREE STATES.
+
+     There are three and the desk used to render two of them identically —
+     as nothing at all:
+
+       MEASURED     a row in `kinds`. Renders its record and its verdict.
+       THIN         fired, settled under the 40-trade bar. hg-v765 gave it
+                    a line.
+       UNOBSERVED   registered, runs on every scan, and this walk produced
+                    NOT ONE ROW for it. Twelve of the 77.
+
+     The third is the worst of the three to render silently: a reader sees
+     a card for P8-GEO with levels, a rank and a gate verdict, and nothing
+     anywhere says the desk has never once seen this thing fire.
+
+     DERIVED, NOT LISTED. The unobserved set is OG_MECHANICS minus the two
+     baked maps, computed here, so registering a mechanic puts it straight
+     into the disclosure with no list to remember to update. That is only
+     sound while the two maps between them cover everything the walk saw —
+     a kind that fired and was filtered away to zero rows would sit in
+     neither and be misreported as never seen. It cannot happen on this
+     bake (the union is exactly the 67 kinds in sequentialBake.kindSeenRaw)
+     and test-omnigold-unobserved pins that equality against the artifact,
+     so the day a bake breaks it the suite says so instead of the card
+     lying. */
+  function hgOgKindKnownState(kind){
+    var key = String(kind || '').toUpperCase();
+    if (!key) return null;
+    var E = HG_OG_REPLAY_EVIDENCE;
+    if (!E) return null;
+    if (E.kinds && Object.prototype.hasOwnProperty.call(E.kinds, key)) return 'measured';
+    var below = E.kindsBelowBar && E.kindsBelowBar.counts;
+    if (below && Object.prototype.hasOwnProperty.call(below, key)) return 'thin';
+    /* only a REGISTERED mechanic can be unobserved. An unknown string is
+       not a mechanic of this desk's and has nothing to disclose. */
+    for (var i = 0; i < OG_MECHANICS.length; i++) if (OG_MECHANICS[i] === key) return 'unobserved';
+    return null;
+  }
+
+  /* Every registered mechanic the walk never produced a row for. Pure,
+     derived, and the number the header quotes rather than a literal. */
+  function hgOgUnobservedKinds(){
+    var out = [], i;
+    for (i = 0; i < OG_MECHANICS.length; i++){
+      if (hgOgKindKnownState(OG_MECHANICS[i]) === 'unobserved') out.push(OG_MECHANICS[i]);
+    }
+    return out;
+  }
+
   function hgOgReplayBelowBarHtml(kind){
     try {
-      var tbl = HG_OG_REPLAY_EVIDENCE && HG_OG_REPLAY_EVIDENCE.kindsBelowBar;
-      if (!tbl || !tbl.counts) return '';
-      var key = String(kind || '').toUpperCase();
-      if (!Object.prototype.hasOwnProperty.call(tbl.counts, key)) return '';
-      var n = fin(tbl.counts[key]), bar = fin(tbl.minN);
-      if (!isFinite(n) || !isFinite(bar)) return '';
-      return '<div class="dim og-replay-line og-replay-edge-none" style="font-size:11px;margin-top:2px">'
-        + 'replay: NOT MEASURED — ' + n + ' settled firing' + (n === 1 ? '' : 's')
-        + ' in the walk, under the ' + bar + ' this desk needs before it will quote a '
-        + 'record. No win rate is shown because none would mean anything at that n.</div>';
+      var state = hgOgKindKnownState(kind);
+      if (state === 'thin'){
+        var tbl = HG_OG_REPLAY_EVIDENCE.kindsBelowBar;
+        var n = fin(tbl.counts[String(kind).toUpperCase()]), bar = fin(tbl.minN);
+        if (!isFinite(n) || !isFinite(bar)) return '';
+        return '<div class="dim og-replay-line og-replay-edge-none" style="font-size:11px;margin-top:2px">'
+          + 'replay: NOT MEASURED — ' + n + ' settled firing' + (n === 1 ? '' : 's')
+          + ' in the walk, under the ' + bar + ' this desk needs before it will quote a '
+          + 'record. No win rate is shown because none would mean anything at that n.</div>';
+      }
+      if (state === 'unobserved'){
+        var tot = hgOgUnobservedKinds().length;
+        return '<div class="dim og-replay-line og-replay-edge-none" style="font-size:11px;margin-top:2px">'
+          + 'replay: NEVER OBSERVED — this mechanic is registered and runs on every scan, and the '
+          + 'walk behind every number on this page did not produce a single firing of it. Not a '
+          + 'weak record: no record. ' + tot + ' of ' + OG_MECHANICS.length
+          + ' registered mechanics are in this state.</div>';
+      }
+      return '';
     } catch (e) { return ''; }
   }
 
@@ -13722,6 +13896,10 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgReplayEvidence = hgOgReplayEvidence;
     window.hgOgReplayLineHtml = hgOgReplayLineHtml;
     window.hgOgReplayBelowBarHtml = hgOgReplayBelowBarHtml;
+    window.hgOgKindKnownState = hgOgKindKnownState;
+    window.hgOgFwdSplitsPanelHtml = hgOgFwdSplitsPanelHtml;
+    window.hgOgFwdBucketTxt = hgOgFwdBucketTxt;
+    window.hgOgUnobservedKinds = hgOgUnobservedKinds;
     window.hgOgDirSibling = hgOgDirSibling;
     window.hgOgDirSiblingLineHtml = hgOgDirSiblingLineHtml;
     window.OG_DIR_PAIRS = OG_DIR_PAIRS;

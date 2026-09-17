@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v765',
-  pack: 'the two halves of a direction-split detector are judged on their own records, the side split is recorded forward, and an unmeasured mechanic says so',
+  version: 'hg-v766',
+  pack: 'twelve registered mechanics have never been observed and now say so, four forward-log splits reach the screen for the first time, and the suite\'s only flake is gone',
   built: '2026-09-17T00:00:00Z'
 };
 
