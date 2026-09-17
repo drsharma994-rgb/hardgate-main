@@ -964,7 +964,8 @@ console.log('\n== focusing a rung scans only that rung, and shows everything it 
 
   const body = node.querySelector('#p80Body');
   const btns = body.querySelectorAll('[data-p80-focus]');
-  ok(btns.length === ctx.HG_P80_LADDER.length + 1, 'there is a button per rung plus ALL');
+  ok(btns.length === ctx.HG_P80_LADDER.length + 4,
+     'there is a button per rung, plus ALL, SCALP, SWING and NO SESSION GATE');
   const b4h = btns.find(b => b.getAttribute('data-p80-focus') === '4h');
   ok(!!b4h, 'including one for 4h');
 
@@ -989,8 +990,87 @@ console.log('\n== focusing a rung scans only that rung, and shows everything it 
   ok(/bars held/.test(html), 'with how long each was held');
   ok(/typical holding time/.test(html), 'and the rung\'s typical holding time');
 
+  /* ---- and now the ask that made it a set: 1d TOO, not 1d INSTEAD ---- */
   fetched.length = 0;
-  btns.find(b => b.getAttribute('data-p80-focus') === '').click();
+  node.querySelector('#p80Body').querySelectorAll('[data-p80-focus]')
+      .find(b => b.getAttribute('data-p80-focus') === '1d').click();
+  await new Promise(r => setImmediate(r));
+  await new Promise(r => setTimeout(r, 0));
+  ok(fetched.length === 2 && fetched.indexOf('4h') >= 0 && fetched.indexOf('1d') >= 0,
+     `clicking 1d ADDS it rather than replacing 4h (${fetched.join(', ')})`);
+  const both = String(node.querySelector('#p80Body').innerHTML);
+  ok(/EVERYTHING 4h \+ 1d FIRED/.test(both),
+     'the panel holds both, in LADDER order — 4h + 1d, never 1d + 4h whatever the click order');
+  ok(/<th>rung<\/th>/.test(both),
+     'the merged table gains a rung column, because a merged count would hide which rung '
+     + 'produced what — the whole reason for holding two at once');
+  const seq = [...both.matchAll(/<tr><td><b>(5m|15m|1h|4h|1d)<\/b><\/td><td>(2026-[0-9-]+ [0-9:]+)/g)]
+    .map(m => ({ tf: m[1], t: m[2] }));
+  ok(seq.length > 2, `the merged table has ${seq.length} rows across both rungs`);
+  ok(seq.every((r, i) => i === 0 || r.t <= seq[i - 1].t),
+     'sorted newest first ACROSS rungs, not one rung\'s table stacked on the other\'s');
+  ok(new Set(seq.map(r => r.tf)).size === 2, 'and both rungs really are interleaved in it');
+  ok(/NOT a common population/.test(both),
+     'with the warning that rows from different rungs are not one population — different cost '
+     + 'ratios, different stops in percent, different holding periods, different mechanics');
+
+  /* clicking a focused rung again drops it */
+  fetched.length = 0;
+  node.querySelector('#p80Body').querySelectorAll('[data-p80-focus]')
+      .find(b => b.getAttribute('data-p80-focus') === '4h').click();
+  await new Promise(r => setImmediate(r));
+  await new Promise(r => setTimeout(r, 0));
+  ok(fetched.length === 1 && fetched[0] === '1d',
+     `clicking 4h again drops it, leaving ${fetched.join(', ')}`);
+
+  /* SWING is exactly the rungs with no session gate — the pair a desk has
+     outside 13:00-18:00 UTC, which is why it earns a shortcut */
+  fetched.length = 0;
+  node.querySelector('#p80Body').querySelectorAll('[data-p80-focus]')
+      .find(b => b.getAttribute('data-p80-focus') === 'band:swing').click();
+  await new Promise(r => setImmediate(r));
+  await new Promise(r => setTimeout(r, 0));
+  const swing = ctx.HG_P80_LADDER.filter(d => d.band === 'swing').map(d => d.tf);
+  ok(fetched.length === swing.length && swing.every(t => fetched.indexOf(t) >= 0),
+     `SWING selects exactly the swing BAND: ${swing.join(' + ')}`);
+
+  /* and the set that actually matters at 05:00 UTC is NOT that one. 1h is
+     banded swing by holding period and is still session-gated, because a 1h
+     bar fits inside 13:00-18:00 UTC perfectly well. Claiming SWING was "the
+     rungs with no session gate" was a false sentence on the page. */
+  const ungated = ctx.hg80UngatedRungs();
+  ok(ungated.every(t => !ctx.hg80SessionApplies(ctx.HG_P80_LADDER.find(d => d.tf === t).sec)),
+     `NO SESSION GATE is computed from the timeframe: ${ungated.join(' + ')}`);
+  ok(ctx.HG_P80_LADDER.filter(d => ungated.indexOf(d.tf) < 0)
+       .every(d => ctx.hg80SessionApplies(d.sec)),
+     'and it is exhaustive — every rung left out really is gated');
+  ok(ungated.length !== swing.length || !ungated.every(t => swing.indexOf(t) >= 0),
+     `it is NOT the same set as SWING (${ungated.join('+')} vs ${swing.join('+')}), which is why `
+     + 'it needs its own button and its own words');
+  ok(new RegExp('which is not the same set as SWING').test(SRC),
+     'and the tab says so, rather than leaving a reader to assume the bands answer the question');
+
+  fetched.length = 0;
+  node.querySelector('#p80Body').querySelectorAll('[data-p80-focus]')
+      .find(b => b.getAttribute('data-p80-focus') === 'set:ungated').click();
+  await new Promise(r => setImmediate(r));
+  await new Promise(r => setTimeout(r, 0));
+  ok(fetched.length === ungated.length && ungated.every(t => fetched.indexOf(t) >= 0),
+     `and its button selects exactly them (${fetched.join(', ')})`);
+
+  /* pressing the band button already showing goes back to ALL rather than
+     doing nothing, which is the behaviour a toggle owes its user */
+  fetched.length = 0;
+  node.querySelector('#p80Body').querySelectorAll('[data-p80-focus]')
+      .find(b => b.getAttribute('data-p80-focus') === 'set:ungated').click();
+  await new Promise(r => setImmediate(r));
+  await new Promise(r => setTimeout(r, 0));
+  ok(fetched.length === ctx.HG_P80_LADDER.length,
+     'pressing a group button that is already showing returns to the whole ladder');
+
+  fetched.length = 0;
+  node.querySelector('#p80Body').querySelectorAll('[data-p80-focus]')
+      .find(b => b.getAttribute('data-p80-focus') === '').click();
   await new Promise(r => setImmediate(r));
   await new Promise(r => setTimeout(r, 0));
   ok(fetched.length === ctx.HG_P80_LADDER.length, 'ALL restores the whole ladder');

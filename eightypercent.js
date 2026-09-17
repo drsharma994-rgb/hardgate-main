@@ -191,12 +191,27 @@ var P80_LADDER = [
   { tf: '1d',  sec: 86400, bars: 400, band: 'swing' }
 ];
 
-/* focus: null scans the whole ladder; a timeframe string scans only that
-   rung and shows EVERY firing in its window instead of just the latest.
+/* focus: null scans the whole ladder; an ARRAY of timeframes scans only
+   those rungs and shows EVERY firing in their windows instead of just the
+   latest on each.
+
+   It is a set rather than a single choice because the useful comparisons on
+   this ladder are between rungs, not within one. 4h and 1d are the two that
+   carry no session gate, so they are the pair a desk watching gold outside
+   13:00-18:00 UTC actually has; 5m/15m/1h are the three that share one. A
+   control that could only hold one made you reload to compare them.
+
    Deliberately NOT persisted — the venue is desk-wide state that belongs in
    storage, a view filter is not, and this tab writing a second key would
    make "what is stored about the gold desk" two places instead of one. */
 var __p = { ui: null, busy: false, ranOnce: false, last: null, focus: null };
+
+/* the focus as an array, whatever it is stored as */
+function hg80FocusList(){
+  if (!__p.focus) return [];
+  return (typeof __p.focus === 'string') ? [__p.focus] : __p.focus.slice();
+}
+function hg80FocusHas(tf){ return hg80FocusList().indexOf(tf) >= 0; }
 
 function esc(s){
   return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
@@ -1079,20 +1094,62 @@ function ageTxt(sec){
    It also stops fetching the other four, which is the difference between
    one request and five on a rung a desk is actually watching.
    --------------------------------------------------------------------- */
+function hg80BandRungs(band){
+  var out = [], i;
+  for (i = 0; i < P80_LADDER.length; i++) if (P80_LADDER[i].band === band) out.push(P80_LADDER[i].tf);
+  return out;
+}
+
+/* The rungs the session rule CANNOT gate, computed from the timeframe rather
+   than read off the band label.
+
+   This is not the same set as SWING and saying so was a false sentence on
+   the page: 1h is banded swing by holding period and is still gated, because
+   a 1h bar fits inside 13:00-18:00 UTC perfectly well. The set that can fire
+   at 05:00 UTC is 4h and 1d, and it is the one a desk watching gold outside
+   the London-NY overlap actually has. It earns its own button precisely
+   because it is not a band. */
+function hg80UngatedRungs(){
+  var out = [], i;
+  for (i = 0; i < P80_LADDER.length; i++){
+    if (!hg80SessionApplies(P80_LADDER[i].sec)) out.push(P80_LADDER[i].tf);
+  }
+  return out;
+}
+
 function focusControlHtml(){
-  var h = '<div class="row" style="margin:6px 0 0 0;align-items:center">'
-    + '<span class="note" style="margin:0"><b>RUNG</b>: </span> ';
-  function btn(tf, label){
-    var on = (tf === null) ? (__p.focus === null) : (__p.focus === tf);
-    return '<button type="button" class="btn ghost" data-p80-focus="' + (tf === null ? '' : tf) + '"'
+  var sel = hg80FocusList();
+  var h = '<div class="row" style="margin:6px 0 0 0;align-items:center;flex-wrap:wrap">'
+    + '<span class="note" style="margin:0"><b>RUNGS</b>: </span> ';
+  function btn(attr, label, on){
+    return '<button type="button" class="btn ghost" data-p80-focus="' + esc(attr) + '"'
       + ' style="' + (on ? 'border-color:#10b981;color:#10b981;font-weight:bold' : '') + '">'
       + esc(label) + '</button> ';
   }
-  h += btn(null, 'ALL');
-  for (var i = 0; i < P80_LADDER.length; i++) h += btn(P80_LADDER[i].tf, P80_LADDER[i].tf);
+  var scalp = hg80BandRungs('scalp'), swing = hg80BandRungs('swing');
+  var ungated = hg80UngatedRungs();
+  var sameAs = function(list){
+    if (sel.length !== list.length) return false;
+    for (var i = 0; i < list.length; i++) if (sel.indexOf(list[i]) < 0) return false;
+    return true;
+  };
+  h += btn('', 'ALL', sel.length === 0);
+  h += btn('band:scalp', 'SCALP', sameAs(scalp));
+  h += btn('band:swing', 'SWING', sameAs(swing));
+  h += btn('set:ungated', 'NO SESSION GATE', sameAs(ungated));
+  h += '<span class="note dim" style="margin:0 6px">|</span> ';
+  for (var i = 0; i < P80_LADDER.length; i++){
+    h += btn(P80_LADDER[i].tf, P80_LADDER[i].tf, hg80FocusHas(P80_LADDER[i].tf));
+  }
   h += '<span class="note dim" style="margin:0;font-size:11px">'
-    + (__p.focus ? esc(__p.focus) + ' only — every firing in its window, uncapped'
-                 : 'all five rungs — SETUPS shows the most recent firing on each')
+    + (sel.length
+        ? esc(sel.join(' + ')) + ' — every firing in ' + (sel.length === 1 ? 'its' : 'their')
+          + ' window, uncapped. Click a rung again to drop it.'
+        : 'all five rungs — SETUPS shows the most recent firing on each. '
+          + 'SCALP is ' + esc(scalp.join(' + ')) + ', SWING is ' + esc(swing.join(' + '))
+          + ' by holding period. NO SESSION GATE is ' + esc(ungated.join(' + '))
+          + ' — the only rungs that can fire outside ' + P80_UTC_FROM + ':00-' + P80_UTC_TO
+          + ':00 UTC, which is not the same set as SWING.')
     + '</span></div>';
   return h;
 }
@@ -1223,46 +1280,71 @@ function whyNothingHtml(rungs){
    No cap: on one timeframe the whole list IS the answer to "show me what
    fires", and truncating it would be the same mistake as showing only the
    most recent one. */
-function focusedFiringsHtml(r){
-  if (!r || !r.ok) return '<div class="panel" style="margin-top:10px"><h3>SETUPS</h3>'
-    + '<div class="note warn">' + esc((r && r.why) || 'this rung returned no bars') + '</div></div>';
-
-  var sigs = r.res.signals.slice().reverse();
-  var c = hg80CountByVariant(r);
-  var h = '<div class="panel" style="margin-top:10px"><h3>EVERYTHING ' + esc(r.def.tf)
-    + ' FIRED <span>' + sigs.length + ' in ' + r.scanned + ' evaluable bars · '
-    + esc(r.def.band) + '</span></h3>';
-
-  h += '<div class="note">SPEC ' + c.spec + ' · WIDE ' + c.wide
-    + (r.medianBars != null ? ' · typical holding time ' + r.medianBars + ' bar'
-        + (r.medianBars === 1 ? '' : 's') + ' (' + ageTxt(r.medianBars * r.cfg.tfSec) + ')' : '')
-    + (r.cfg.session === false
-        ? ' · the ' + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC session rule does not apply '
-          + 'at this rung, so three conditions ran here, not four'
-        : ' · only bars inside ' + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC could fire')
-    + '</div>';
-
-  if (!sigs.length){
-    return h + '<div class="note warn" style="margin-top:6px">Nothing fired on this rung in the '
-      + r.scanned + ' bars evaluated — not on the spec and not on the loosened mechanic. The board '
-      + 'below says how far it stood at the last close, and the census says which condition was '
-      + 'doing the turning away.</div></div>';
+function focusedFiringsHtml(list){
+  var ok = (list || []).filter(function(r){ return r && r.ok; });
+  if (!ok.length){
+    var why = (list || []).map(function(r){ return (r && r.def ? r.def.tf + ': ' : '')
+      + ((r && r.why) || 'no bars'); });
+    return '<div class="panel" style="margin-top:10px"><h3>SETUPS</h3>'
+      + '<div class="note warn">' + esc(why.join(' · ') || 'no rung returned bars') + '</div></div>';
   }
 
-  h += '<table class="tbl" style="margin-top:6px"><tr><th>when (UTC)</th><th>mechanic</th>'
+  var label = ok.map(function(r){ return r.def.tf; }).join(' + ');
+  var multi = ok.length > 1;
+
+  /* One merged table, newest first ACROSS rungs. Two tables would make the
+     comparison the reader is here for into a scroll. */
+  var rows = [], i, j, total = 0, scanned = 0;
+  for (i = 0; i < ok.length; i++){
+    var r = ok[i];
+    scanned += r.scanned;
+    for (j = 0; j < r.res.signals.length; j++){
+      rows.push({ r: r, s: r.res.signals[j] });
+      total++;
+    }
+  }
+  rows.sort(function(a, b){ return fin(b.s.t) - fin(a.s.t); });
+
+  var h = '<div class="panel" style="margin-top:10px"><h3>EVERYTHING ' + esc(label)
+    + ' FIRED <span>' + total + ' in ' + scanned + ' evaluable bars</span></h3>';
+
+  /* a summary line per rung, because a merged count hides which rung
+     produced what — the whole reason for holding two at once */
+  for (i = 0; i < ok.length; i++){
+    var rr = ok[i], c = hg80CountByVariant(rr);
+    h += '<div class="note"><b>' + esc(rr.def.tf) + '</b> (' + esc(rr.def.band) + ') — SPEC '
+      + c.spec + ' · WIDE ' + c.wide + ' in ' + rr.scanned + ' bars'
+      + (rr.medianBars != null ? ' · typical hold ' + rr.medianBars + ' bar'
+          + (rr.medianBars === 1 ? '' : 's') + ' (' + ageTxt(rr.medianBars * rr.cfg.tfSec) + ')' : '')
+      + (rr.cfg.session === false
+          ? ' · no session gate here, so three conditions ran, not four'
+          : ' · only bars inside ' + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC could fire')
+      + '</div>';
+  }
+
+  if (!rows.length){
+    return h + '<div class="note warn" style="margin-top:6px">Nothing fired on '
+      + esc(multi ? 'either rung' : 'this rung') + ' in the ' + scanned + ' bars evaluated — not on '
+      + 'the spec and not on the loosened mechanic. The board below says how far each stood at its '
+      + 'last close, and the census says which condition was doing the turning away.</div></div>';
+  }
+
+  h += '<table class="tbl" style="margin-top:6px"><tr>'
+    + (multi ? '<th>rung</th>' : '')
+    + '<th>when (UTC)</th><th>mechanic</th>'
     + '<th>age</th><th>dir</th><th>entry</th><th>stop</th><th>target</th><th>RSI</th>'
     + '<th>ATR</th><th>outcome</th><th>R</th><th>bars held</th></tr>';
-  var i;
-  for (i = 0; i < sigs.length; i++){
-    var sg = sigs[i], p = sg.plan, rs = sg.res;
-    var age = (r.rows.length - 1) - sg.i;
+  for (i = 0; i < rows.length; i++){
+    var rg = rows[i].r, sg = rows[i].s, p = sg.plan, rs = sg.res;
+    var age = (rg.rows.length - 1) - sg.i;
     var flag = '';
     if (rs && rs.ambiguous) flag += ' <span class="statuschip na">ambiguous</span>';
     if (rs && rs.gapped) flag += ' <span class="statuschip na">gapped</span>';
-    h += '<tr><td>' + esc(isFinite(sg.t)
+    h += '<tr>' + (multi ? '<td><b>' + esc(rg.def.tf) + '</b></td>' : '')
+      + '<td>' + esc(isFinite(sg.t)
           ? new Date(sg.t * 1000).toISOString().replace('T', ' ').slice(0, 16) : '—') + '</td>'
       + '<td>' + variantChipHtml(sg) + '</td>'
-      + '<td class="hg-num">' + (age === 0 ? 'now' : age + ' · ' + ageTxt(age * r.cfg.tfSec)) + '</td>'
+      + '<td class="hg-num">' + (age === 0 ? 'now' : age + ' · ' + ageTxt(age * rg.cfg.tfSec)) + '</td>'
       + '<td>' + esc(sg.dir) + '</td>'
       + '<td class="hg-num">' + num(p.entry) + '</td>'
       + '<td class="hg-num">' + num(p.stop) + '</td>'
@@ -1279,22 +1361,33 @@ function focusedFiringsHtml(r){
     + 'followed each firing inside THIS fetch. That is not a backtest and no win rate is shown '
     + 'from it: the book here is not sequential, one fetch is not a sample, and rows marked '
     + 'ambiguous covered both the target and the stop in a single bar, which OHLC cannot order. '
-    + 'Both mechanics remain a WATCH until the forward log or scripts/walk-80percent.mjs says '
+    + (multi ? 'Rows from different rungs are NOT a common population either — they have different '
+             + 'cost ratios, different stops in percent and different holding periods, and they are '
+             + 'recorded under different mechanics for that reason. '
+             : '')
+    + 'Every mechanic here remains a WATCH until the forward log or scripts/walk-80percent.mjs says '
     + 'otherwise.</div>';
 
   /* anything still live gets a full card underneath */
-  var actionable = r.res.signals.filter(function(x){
-    return x.i === r.rows.length - 1 || x.status === 'open';
-  });
-  for (i = 0; i < actionable.length; i++){
-    h += setupCardHtml(actionable[i], r.be, r.cfg,
-      actionable[i].i === r.rows.length - 1 ? 'last closed candle' : 'still open');
+  var live = 0;
+  for (i = 0; i < ok.length; i++){
+    var r2 = ok[i];
+    for (j = 0; j < r2.res.signals.length; j++){
+      var x = r2.res.signals[j];
+      if (x.i === r2.rows.length - 1 || x.status === 'open'){
+        h += setupCardHtml(x, r2.be, r2.cfg,
+          x.i === r2.rows.length - 1 ? 'last closed candle' : 'still open');
+        live++;
+      }
+    }
   }
-  if (!actionable.length){
+  if (!live){
+    var meds = ok.filter(function(r3){ return r3.medianBars != null; })
+                 .map(function(r3){ return r3.def.tf + ' ' + r3.medianBars; });
     h += '<div class="note" style="margin-top:6px">None of these is live now — every one reached '
-      + 'its target, its stop or its horizon. At a typical '
-      + (r.medianBars != null ? r.medianBars + '-bar' : 'short') + ' holding time that is what a '
-      + 'list of past firings on this rung looks like.</div>';
+      + 'its target, its stop or its horizon. At typical holding times of '
+      + esc(meds.length ? meds.join(' bars, ') + ' bars' : 'a few bars')
+      + ' that is what a list of past firings looks like.</div>';
   }
   return h + '</div>';
 }
@@ -1625,7 +1718,7 @@ function render(rungs, venue, recNotes, basis){
     return;
   }
 
-  h += __p.focus ? focusedFiringsHtml(usable[0] || rungs[0]) : latestSetupsHtml(rungs);
+  h += hg80FocusList().length ? focusedFiringsHtml(rungs) : latestSetupsHtml(rungs);
   h += ladderBoardHtml(rungs);
 
   /* the SETUPS panel above already carries every card worth carrying, so
@@ -1654,7 +1747,7 @@ function render(rungs, venue, recNotes, basis){
     h += '</div>';
   }
 
-  if (!__p.focus) h += firedHtml(rungs);   /* the focused table already has every row */
+  if (!hg80FocusList().length) h += firedHtml(rungs);  /* focused table has every row already */
   h += nearMissHtml(rungs);
   h += censusHtml(rungs);
 
@@ -1685,9 +1778,26 @@ function wireFocusButtons(){
     (function(b){
       b.addEventListener('click', function(){
         var tf = b.getAttribute && b.getAttribute('data-p80-focus');
-        __p.focus = tf ? tf : null;
-        if (ui.stat) ui.stat.textContent = __p.focus
-          ? ('scanning ' + __p.focus + ' only…') : 'scanning the whole ladder…';
+        var sel = hg80FocusList();
+        if (!tf){
+          sel = [];                                   /* ALL */
+        } else if (tf.indexOf('band:') === 0 || tf.indexOf('set:') === 0){
+          var band = (tf === 'set:ungated') ? hg80UngatedRungs() : hg80BandRungs(tf.slice(5));
+          /* a band button toggles: pressing the one already showing goes
+             back to the whole ladder rather than doing nothing */
+          var same = sel.length === band.length && band.every(function(x){ return sel.indexOf(x) >= 0; });
+          sel = same ? [] : band;
+        } else {
+          var at = sel.indexOf(tf);
+          if (at >= 0) sel.splice(at, 1); else sel.push(tf);
+        }
+        /* keep ladder order, so 4h + 1d never renders as 1d + 4h */
+        __p.focus = sel.length
+          ? P80_LADDER.map(function(d){ return d.tf; }).filter(function(x){ return sel.indexOf(x) >= 0; })
+          : null;
+        var now = hg80FocusList();
+        if (ui.stat) ui.stat.textContent = now.length
+          ? ('scanning ' + now.join(' + ') + '…') : 'scanning the whole ladder…';
         run();
       });
     })(btns[i]);
@@ -1732,8 +1842,9 @@ function run(){
   var rungs = [];
   var chain = Promise.resolve();
 
-  var ladder = __p.focus
-    ? P80_LADDER.filter(function(d){ return d.tf === __p.focus; })
+  var sel = hg80FocusList();
+  var ladder = sel.length
+    ? P80_LADDER.filter(function(d){ return sel.indexOf(d.tf) >= 0; })
     : P80_LADDER;
   ladder.forEach(function(def){
     chain = chain.then(function(){
@@ -1778,7 +1889,8 @@ function run(){
     var okN = rungs.filter(function(x){ return x.ok; }).length;
     if (ui && ui.stat){
       ui.stat.textContent = 'updated ' + new Date().toISOString().slice(11, 19) + ' UTC · '
-        + (__p.focus ? (__p.focus + ' only') : (okN + '/' + rungs.length + ' rungs')) + ' · '
+        + (hg80FocusList().length ? (hg80FocusList().join(' + ') + ' only')
+                                  : (okN + '/' + rungs.length + ' rungs')) + ' · '
         + (fired.length ? fired.join(', ') + ' fired' : 'no rung fired on its last candle');
     }
     __p.ranOnce = true;
@@ -1837,6 +1949,8 @@ W.hg80SignalAt       = hg80SignalAt;
 W.hg80Score          = hg80Score;
 W.hg80Nearest        = hg80Nearest;
 W.hg80MissCost       = hg80MissCost;
+W.hg80BandRungs      = hg80BandRungs;
+W.hg80UngatedRungs   = hg80UngatedRungs;
 W.HG_P80_MISS_COST   = P80_MISS_COST;
 W.hg80SecsToSession  = hg80SecsToSession;
 W.hg80Plan           = hg80Plan;

@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v776',
-  pack: 'focus one rung and 80PERCENT shows every firing it produced, uncapped, with outcomes — and distance is weighted by what each missing condition costs to satisfy',
+  version: 'hg-v777',
+  pack: 'hold several rungs at once in 80PERCENT — 4h and 1d merged newest-first with a rung column, plus a computed NO SESSION GATE set that is not the same thing as SWING',
   built: '2026-09-17T00:00:00Z'
 };
 
