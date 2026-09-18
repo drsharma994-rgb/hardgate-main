@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v840',
-  pack: 'the render-integrity rule built for OMNIGOLD now runs across every gold tab — it found five live text defects in 80PERCENT (0 in undefined, from the [object Object] bar forming now, NaN bars, auto-update paused [object Object], STALE NaN candles behind) plus a STALE 0 candles behind contradiction; a sixth flag on the OMNIGOLD trade key was an over-reach and is reverted, recorded, and exempted by name because a key is not display text',
+  version: 'hg-v841',
+  pack: 'the four IIFE-scoped gold tabs are reached at last — pack 840 could only sweep module exports and had to report GOLD SCALP, GOLD SWING, GOLD PRO and TAURIC as nothing reachable rather than nothing wrong, so every gold tab is now mounted through the real HG_tabs entry the app uses and driven with its engines loaded, absent and throwing; the first harness selected HG_tabs[0] and mounted OmniRoute six times, which is recorded and guarded',
   built: '2026-09-18T00:00:00Z'
 };
 
