@@ -717,6 +717,41 @@ terse status, and never launches a first-time scan on a global refresh.
   /* Asia session = 23:00-07:00 UTC (Tokyo through pre-London). Returns the
      range of the CURRENT day's Asia session from the bar-open seconds the
      app's candle contract guarantees. Pure. */
+  /* ====================================================================
+     WHERE A TIME WINDOW STARTS, WITHOUT READING THE WHOLE ARRAY
+
+     The session helpers below each filter to a bounded recent window — Asia
+     is nine hours, the previous day is twenty-four — and each did it by
+     scanning all 1,500 bars and skipping the ones outside. That is free
+     when a helper is called once. It is not free in the walk-forward, which
+     calls the detector on EVERY scanned bar: hgOgAsiaRange alone is 0.17ms
+     on 1,500 rows, and ASIA-BREAK plus KZ-JUDAS spend 183ms of a scan
+     re-deriving the same nine hours 2,832 times.
+
+     Bars are time-ordered, so the window is a suffix and the scan can start
+     at its first bar instead of at zero. Walking back from the end and
+     stopping at the first bar before `fromT` finds that index in as many
+     steps as the window is wide.
+
+     Returns 0 when the window reaches past the start of the array, so a
+     caller whose window predates its data still reads everything it has —
+     the answer is identical, only the work changes. Callers keep their own
+     loop bodies and their own filters; this moves the starting line and
+     nothing else. */
+  function hgOgWindowStart(rows, fromT){
+    var from = fin(fromT);
+    if (!rows || !rows.length || !isFinite(from)) return 0;
+    var i = rows.length - 1, t;
+    for (; i >= 0; i--){
+      t = fin(rows[i].t);
+      /* a bar with no usable time cannot end the walk — the caller's own
+         filter will skip it, and stopping here could cut the window short */
+      if (!isFinite(t)) continue;
+      if (t < from) return i + 1;
+    }
+    return 0;
+  }
+
   function hgOgAsiaRange(rows, nowSec){
     if (!rows || rows.length < 6) return null;
     var last = num(rows[rows.length - 1].t);
@@ -725,7 +760,8 @@ terse status, and never launches a first-time scan on a global refresh.
     var ref = isFinite(refN) ? refN : last;
     var dayStart = Math.floor(ref / 86400) * 86400;
     var hi = -Infinity, lo = Infinity, n = 0, i, t, h, l, hr;
-    for (i = 0; i < rows.length; i++){
+    /* the window's own lower bound, so the scan starts where it opens */
+    for (i = hgOgWindowStart(rows, dayStart - 3600); i < rows.length; i++){
       t = num(rows[i].t);
       if (!isFinite(t)) continue;
       hr = ((t % 86400) / 3600);
@@ -1014,7 +1050,7 @@ terse status, and never launches a first-time scan on a global refresh.
     var dayStart = Math.floor(ref / 86400) * 86400;
     var prevStart = dayStart - 86400;
     var hi = -Infinity, lo = Infinity, n = 0, i, t, h, l;
-    for (i = 0; i < rows.length; i++){
+    for (i = hgOgWindowStart(rows, prevStart); i < rows.length; i++){
       t = num(rows[i].t);
       if (!isFinite(t) || t < prevStart || t >= dayStart) continue;
       h = num(rows[i].h); l = num(rows[i].l);
@@ -14151,6 +14187,7 @@ terse status, and never launches a first-time scan on a global refresh.
   /* ============================ exports ============================ */
   if (typeof window !== 'undefined'){
     window.hgOgAsiaRange = hgOgAsiaRange;
+    window.hgOgPrevDay = hgOgPrevDay;
     window.hgOgAsiaBreak = hgOgAsiaBreak;
     window.hgOgKzJudas = hgOgKzJudas;
     window.hgOgAdr = hgOgAdr;
@@ -14616,6 +14653,7 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgEvidenceHealthHtml = hgOgEvidenceHealthHtml;
     window.hgOgGroupSettled = hgOgGroupSettled;
     window.hgOgVenueNet = hgOgVenueNet;
+    window.hgOgWindowStart = hgOgWindowStart;
     /* exported so a test can drive the true-range path that a missing
        bar field used to turn into the gold price — see num() */
     window.hgOgAtrOf = atrOf;

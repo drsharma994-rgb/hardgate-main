@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v826',
-  pack: 'the OmniRoute engine stops inventing trade outcomes from absent bar fields — hgOmniWalkForward resolves every measured-edge statistic on every desk, and a null low made 0 <= stop true, stopping out a long that should have stayed open, while a null entry close priced the trade from zero and resolved it as a win on the next bar',
-  built: '2026-09-17T00:00:00Z'
+  version: 'hg-v827',
+  pack: 'the two session windows on the OMNIGOLD tab stop scanning the whole history — hgOgAsiaRange and hgOgPrevDay describe a nine-hour and a twenty-four-hour window anchored at the end of the bar array, and both walked all 1,500 bars to find them on every mechanic on every horizon; hgOgWindowStart moves the starting line to the window first bar and nothing else, taking the three affected mechanics from 320ms to 39ms per horizon with identical output over 4,800 compared readings',
+  built: '2026-09-18T00:00:00Z'
 };
 
 function hgBuildLabel(b){

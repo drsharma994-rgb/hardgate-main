@@ -724,4 +724,175 @@ console.log('\n== a missing bar field is not the price zero (hg-v824) ==');
   ok(W.hgOgAtrOf(one, 14) < wasBad / 20, 'and the shipped reading is nothing like it');
 }
 
+
+console.log('\n== the session windows scan the session, not the whole history ==');
+{
+  /* hgOgAsiaRange and hgOgPrevDay each describe a window anchored at the END
+     of the bar array — nine hours and twenty-four hours. Both walked all
+     1,500 bars to find them, on every mechanic, on every horizon. Measured
+     with the real detector map: ASIA-BREAK 58ms, KZ-JUDAS 132ms, PDH-SWEEP
+     130ms per horizon.
+
+     hgOgWindowStart moves the starting line to the window's first bar and
+     nothing else — same loop bodies, same filters. The two things that can
+     go wrong are that it overshoots (a window silently loses its early
+     bars, and a range reads narrower than it is) or that it stops early on
+     a bar with no usable time (same outcome). Both are pinned here, and
+     the ranges themselves are checked against a full-scan reimplementation
+     so a wrong starting line cannot pass. */
+  const W = boot();
+  const fin = v => { if (v === null || v === undefined || v === '') return NaN;
+                     const n = +v; return isFinite(n) ? n : NaN; };
+
+  ok(typeof W.hgOgWindowStart === 'function', 'hgOgWindowStart is exported');
+  ok(typeof W.hgOgAsiaRange === 'function' && typeof W.hgOgPrevDay === 'function',
+     'and so are both windows that use it');
+
+  /* --- the contract, stated directly --- */
+  ok(W.hgOgWindowStart(null, 100) === 0, 'no rows starts at zero rather than throwing');
+  ok(W.hgOgWindowStart([], 100) === 0, 'and neither does an empty array');
+  const three = [{ t: 100 }, { t: 200 }, { t: 300 }];
+  ok(W.hgOgWindowStart(three, null) === 0,
+     'a window with no usable lower bound reads everything — it never guesses one');
+  ok(W.hgOgWindowStart(three, NaN) === 0, 'same for NaN');
+  ok(W.hgOgWindowStart(three, 50) === 0,
+     'a window that opens before the data starts reads from bar zero');
+  ok(W.hgOgWindowStart(three, 200) === 1,
+     'a bar exactly ON the boundary is inside the window, not before it');
+  ok(W.hgOgWindowStart(three, 301) === 3,
+     'a window that opens after the last bar yields an empty scan, not a full one');
+  ok(W.hgOgWindowStart([{ t: null }, { t: null }], 200) === 0,
+     'bars with no usable time cannot end the walk — it falls through to zero');
+  ok(W.hgOgWindowStart([{ t: 100 }, { t: null }, { t: 300 }], 250) === 1,
+     'a HOLE inside the window is walked PAST, not treated as the boundary — '
+     + 'the start lands one bar early (harmless: the caller skips it) rather than one bar late');
+
+  /* --- the two invariants, over randomised fixtures --- */
+  let rnd = 20260918;
+  const rand = () => { rnd = (rnd * 1103515245 + 12345) & 0x7fffffff; return rnd / 0x7fffffff; };
+  const mkRows = (n, tf, base, holes) => {
+    const out = [];
+    for (let i = 0; i < n; i++){
+      const t = base - (n - 1 - i) * tf;
+      const px = 4000 + Math.sin(i / 7) * 40 + rand() * 6;
+      const r = { t, o: px, h: px + 3, l: px - 3, c: px + (rand() - 0.5) * 2 };
+      if (holes && rand() < 0.06) r.t = [null, undefined, '', NaN][(rand() * 4) | 0];
+      if (holes && rand() < 0.04) r.h = null;
+      if (holes && rand() < 0.04) r.l = '';
+      out.push(r);
+    }
+    return out;
+  };
+
+  let boundChecked = 0;
+  for (let trial = 0; trial < 200; trial++){
+    const tf = [300, 900, 3600, 14400, 86400][(rand() * 5) | 0];
+    const rows = mkRows(60 + ((rand() * 400) | 0), tf, 1758000000, trial % 2 === 1);
+    const from = fin(rows[(rand() * rows.length) | 0].t) || 1758000000 - rand() * 4e6;
+    const idx = W.hgOgWindowStart(rows, from);
+    for (let i = idx; i < rows.length; i++){
+      const t = fin(rows[i].t);
+      if (isFinite(t) && t < from) throw new Error('FAIL: window start overshot — bar ' + i + ' is before it');
+    }
+    if (idx > 0){
+      const prev = fin(rows[idx - 1].t);
+      if (!(isFinite(prev) && prev < from)) throw new Error('FAIL: window start is not the first bar of the window');
+    }
+    boundChecked++;
+  }
+  ok(boundChecked === 200,
+     'over 200 fixtures the start index never skips a bar inside the window, and never begins before it');
+
+  /* --- the ranges themselves, against a full scan --- */
+  const asiaBrute = (rows, nowSec) => {
+    if (!rows || rows.length < 6) return null;
+    const last = fin(rows[rows.length - 1].t);
+    if (!isFinite(last)) return null;
+    const refN = fin(nowSec);
+    const ref = isFinite(refN) ? refN : last;
+    const dayStart = Math.floor(ref / 86400) * 86400;
+    let hi = -Infinity, lo = Infinity, n = 0;
+    for (let i = 0; i < rows.length; i++){          /* the whole array, deliberately */
+      const t = fin(rows[i].t);
+      if (!isFinite(t)) continue;
+      const hr = ((t % 86400) / 3600);
+      const inAsia = (hr >= 23) || (hr < 7);
+      const sameWindow = (t >= dayStart - 3600) && (t <= dayStart + 7 * 3600);
+      if (!inAsia || !sameWindow) continue;
+      const h = fin(rows[i].h), l = fin(rows[i].l);
+      if (isFinite(h) && h > hi) hi = h;
+      if (isFinite(l) && l < lo) lo = l;
+      n++;
+    }
+    if (n < 3 || !isFinite(hi) || !isFinite(lo) || hi <= lo) return null;
+    return { hi, lo, height: hi - lo, bars: n };
+  };
+  const pdBrute = (rows, nowSec) => {
+    if (!rows || rows.length < 24) return null;
+    const last = fin(rows[rows.length - 1].t);
+    if (!isFinite(last)) return null;
+    const refN = fin(nowSec);
+    const ref = isFinite(refN) ? refN : last;
+    const dayStart = Math.floor(ref / 86400) * 86400;
+    const prevStart = dayStart - 86400;
+    let hi = -Infinity, lo = Infinity, n = 0;
+    for (let i = 0; i < rows.length; i++){          /* the whole array, deliberately */
+      const t = fin(rows[i].t);
+      if (!isFinite(t) || t < prevStart || t >= dayStart) continue;
+      const h = fin(rows[i].h), l = fin(rows[i].l);
+      if (isFinite(h) && h > hi) hi = h;
+      if (isFinite(l) && l < lo) lo = l;
+      n++;
+    }
+    if (n < 6 || !isFinite(hi) || !isFinite(lo) || !(hi > lo)) return null;
+    return { pdh: hi, pdl: lo, bars: n };
+  };
+  const same = (a, b) => {
+    if (a === null || b === null) return a === b;
+    const ka = Object.keys(a).sort(), kb = Object.keys(b).sort();
+    if (ka.join() !== kb.join()) return false;
+    return ka.every(k => a[k] === b[k] || (!isFinite(a[k]) && !isFinite(b[k])));
+  };
+
+  let cmp = 0, asiaLive = 0, pdLive = 0;
+  for (let trial = 0; trial < 240; trial++){
+    const tf = [300, 900, 3600, 14400][(rand() * 4) | 0];
+    const rows = mkRows(120 + ((rand() * 600) | 0), tf, 1758000000 + ((rand() * 86400) | 0), trial % 3 !== 0);
+    for (const now of [null, undefined, 1758000000, 1758000000 - 43200, 1758000000 + 43200, 'x']){
+      const a1 = W.hgOgAsiaRange(rows, now), a2 = asiaBrute(rows, now);
+      if (!same(a1, a2)) throw new Error('FAIL: Asia range differs from a full scan at trial ' + trial
+                                         + ' now=' + String(now) + ' ' + JSON.stringify(a1) + ' vs ' + JSON.stringify(a2));
+      const p1 = W.hgOgPrevDay(rows, now), p2 = pdBrute(rows, now);
+      if (!same(p1, p2)) throw new Error('FAIL: prior day differs from a full scan at trial ' + trial
+                                         + ' now=' + String(now) + ' ' + JSON.stringify(p1) + ' vs ' + JSON.stringify(p2));
+      if (a1) asiaLive++;
+      if (p1) pdLive++;
+      cmp++;
+    }
+  }
+  ok(cmp === 1440, `both windows agree with a full scan across ${cmp} readings`);
+  ok(asiaLive > 200 && pdLive > 200,
+     `and the comparison is not vacuous — ${asiaLive} Asia ranges and ${pdLive} prior days actually resolved`);
+
+  /* --- and the scan is genuinely bounded, which is the whole point --- */
+  const counted = (rows) => rows.map(r => {
+    const o = { o: r.o, h: r.h, l: r.l, c: r.c };
+    Object.defineProperty(o, 't', { get(){ counted.reads++; return r.t; } });
+    return o;
+  });
+  counted.reads = 0;
+  const wide = mkRows(1500, 3600, 1758000000, false);
+  const probeA = counted(wide); counted.reads = 0;
+  W.hgOgAsiaRange(probeA, null);
+  const asiaReads = counted.reads;
+  const probeP = counted(wide); counted.reads = 0;
+  W.hgOgPrevDay(probeP, null);
+  const pdReads = counted.reads;
+  ok(asiaReads > 0 && pdReads > 0, 'the probe rows really are the ones being read');
+  ok(asiaReads < 1500 / 4,
+     `the Asia window touches ${asiaReads} of 1,500 bars — a suffix, not the history`);
+  ok(pdReads < 1500 / 4,
+     `and the prior day touches ${pdReads} of 1,500 — restoring the full scan fails here`);
+}
+
 console.log(`\n${passed} passed, 0 failed`);
