@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v821',
-  pack: 'OMNIGOLD keeps the promise its header makes — four of forty-two render functions threw on input the tab can actually produce, and a render that throws does not degrade, it deletes its panel; the worst read row.grade.ticket two lines below where the same object is read defensively, emptying MOST PROBABLE at the top of the page, and 5,292 hostile calls now hold the contract',
+  version: 'hg-v822',
+  pack: 'OMNIGOLD paints with this app\'s palette, legibly — the confluence legend printed its tier labels in dark-theme greens and amber on a white card at 2.54, 2.28 and 2.15:1 where WCAG wants 4.5, and six CSS tokens it referenced were never defined by the page, five falling back to literals while two border declarations resolved to nothing and were dropped',
   built: '2026-09-17T00:00:00Z'
 };
 

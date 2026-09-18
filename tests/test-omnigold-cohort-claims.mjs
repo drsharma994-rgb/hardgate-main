@@ -509,4 +509,75 @@ console.log('\n== no render function can take its panel off the page (hg-v821) =
      + 'does not degrade, it deletes its panel');
 }
 
+
+console.log('\n== the tab paints with this app\'s palette, legibly (hg-v822) ==');
+{
+  /* TWO THINGS NOTHING CHECKED.
+
+     omnigold.js referenced six CSS custom properties index.html has never
+     defined — --fg-muted (x6), --err, --ok, --warn, --bg-muted and --hr.
+     Five fell back to a literal, so they LOOKED like design-system use
+     while being hard-coded; --hr had no fallback at all, so those two
+     border declarations resolved to nothing and were dropped.
+
+     And the confluence spectrum legend — the key a reader uses to read the
+     badge on every card — printed its tier labels in dark-theme colours on
+     a white card. Each cell tints its own background at ~6.7% alpha, which
+     over --panel #ffffff is white for contrast purposes. */
+  const W = boot();
+  const ROOT_ = path.dirname(fileURLToPath(import.meta.url)) + '/..';
+  const OG = fs.readFileSync(path.join(ROOT_, 'omnigold.js'), 'utf8');
+  const HTML = fs.readFileSync(path.join(ROOT_, 'index.html'), 'utf8');
+
+  const defined = new Map();
+  for (const m of HTML.matchAll(/--([a-z0-9-]+)\s*:\s*([^;}]+)/gi)){
+    if (!defined.has(m[1].toLowerCase())) defined.set(m[1].toLowerCase(), m[2].trim());
+  }
+  ok(defined.has('panel') && defined.has('mut'), 'index.html defines the palette');
+
+  const referenced = [...new Set([...OG.matchAll(/var\(\s*--([a-z0-9-]+)/gi)].map(m => m[1].toLowerCase()))];
+  ok(referenced.length > 3, `omnigold references ${referenced.length} tokens`);
+  const undef = referenced.filter(k => !defined.has(k));
+  if (undef.length) console.error('   undefined: ' + undef.join(', '));
+  ok(undef.length === 0,
+     'every one of them is defined by the app — a var() the page never sets is '
+     + 'a literal wearing a token\'s clothes, or a dropped declaration');
+
+  /* CONTRAST, measured. */
+  const lum = hex => {
+    let h = String(hex).replace('#', '').trim();
+    if (h.length === 3) h = h.split('').map(c => c + c).join('');
+    const v = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16) / 255)
+      .map(c => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)));
+    return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+  };
+  const ratio = (a, b) => {
+    const L1 = lum(a), L2 = lum(b);
+    return (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05);
+  };
+  ok(Math.abs(ratio('#000000', '#ffffff') - 21) < 0.01, 'the contrast helper agrees black/white is 21:1');
+  ok(Math.abs(ratio('#ffffff', '#ffffff') - 1) < 0.01, 'and white on white is 1:1');
+
+  const PANEL = defined.get('panel') || '#ffffff';
+  const legend = String(W.hgOgSpectrumLegendCellsHtml());
+  const fg = [...legend.matchAll(/color:\s*(#[0-9a-fA-F]{3,6}|var\(--([a-z0-9-]+)\))/g)]
+    .map(m => (m[2] ? defined.get(m[2]) : m[1]))
+    .filter(Boolean);
+  ok(fg.length >= 8, `the legend sets ${fg.length} foreground colours`);
+
+  const failing = fg.map(c => ({ c, r: ratio(c, PANEL) })).filter(x => x.r < 3);
+  if (failing.length) console.error('   ' + failing.map(x => x.c + ' ' + x.r.toFixed(2) + ':1').join(', '));
+  ok(failing.length === 0,
+     'every one clears 3:1 against the panel it sits on — the tier labels used to '
+     + 'read 2.54, 2.28 and 2.15:1, which is a legend you cannot use');
+
+  /* the four tiers must still be TOLD APART, or fixing contrast would have
+     flattened the thing it exists to encode */
+  const tierFg = fg.filter((c, i) => i % 2 === 0);
+  ok(new Set(tierFg).size === tierFg.length,
+     `the ${tierFg.length} tier labels remain visually distinct from one another`);
+  ok(legend.indexOf('&lt;50') >= 0 && !/>\s*<50/.test(legend),
+     'and the WEAK cell escapes its "<50" instead of emitting a stray tag start');
+}
+
 console.log(`\n${passed} passed, 0 failed`);

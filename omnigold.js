@@ -7423,7 +7423,7 @@ terse status, and never launches a first-time scan on a global refresh.
      a factor checklist stays useful even where the medal would be a lie. */
   function hgOgConfluenceFactorsHtml(setup){
     if (!setup || !setup.confluenceFactors || !setup.confluenceFactors.length) return '';
-    var html = '<div style="font-size:0.9em;color:var(--fg-muted,#666)">';
+    var html = '<div style="font-size:0.9em;color:var(--mut)">';
     setup.confluenceFactors.forEach(function(f){
       var barColor = f.value >= (f.max * 0.8) ? '#22c55e' : f.value >= (f.max * 0.6) ? '#f59e0b' : '#dc2626';
       html += '<div style="margin-bottom:6px">';
@@ -7462,7 +7462,7 @@ terse status, and never launches a first-time scan on a global refresh.
       html += hgOgCostsFirstHtml(setup, drag);
     }
     if (drag && drag.tier === 'fatal'){
-      html += '<div class="og-conf-plain" style="margin:12px 0;padding:8px;border:1px solid var(--hr);border-radius:4px">';
+      html += '<div class="og-conf-plain" style="margin:12px 0;padding:8px;border:1px solid var(--line);border-radius:4px">';
       html += '<div style="font-weight:bold;margin-bottom:4px">MULTI-FACTOR CONFLUENCE ' + score + '/100</div>';
       html += '<div class="dim" style="font-size:11px">badge withheld — the fee is ' + drag.costR.toFixed(2)
         + 'R of this stop (fatal tier): a medal on a structurally unpayable trade is a lie'
@@ -8604,11 +8604,26 @@ terse status, and never launches a first-time scan on a global refresh.
     var capA = aRec
       ? ('engine grade-A scalar only — replay ' + aRec + (A.thin ? '' : ' on scalps'))
       : 'engine grade-A scalar only';
+    /* THE TIER LABELS WERE DARK-THEME COLOURS ON A WHITE CARD.
+
+       Each cell tints its own background at ~6.7% alpha, which over
+       --panel #ffffff is still white for contrast purposes — so the label
+       sat on white. Measured against it: emerald #10b981 2.54:1, green
+       #22c55e 2.28:1, amber #f59e0b 2.15:1. WCAG AA wants 4.5:1, and 3:1
+       even for large bold text. Only the red cell passed, at 4.83:1.
+
+       This is the legend a reader uses to interpret the badge on every
+       card, so it is the last thing that should be hard to read. The app's
+       own light-theme tokens are AA by construction (--pass 5.02:1,
+       --veto 5.18:1, --short 4.83:1); the top tier takes the darker green
+       that already appears in this file at 9.11:1 so GRADE-A CLASS and
+       STRONG stay distinguishable without either dropping below the bar.
+       The tint and the left border keep the colour coding intact. */
     var h = '';
-    h += '<div style="padding:6px;border-left:3px solid #10b981;background:#10b98111"><span style="color:#10b981;font-weight:bold">🏆 ≥85</span><br>GRADE-A CLASS<br><span style="color:var(--fg-muted,#666);font-size:0.8em">' + esc(capA) + '</span></div>';
-    h += '<div style="padding:6px;border-left:3px solid #22c55e;background:#22c55e11"><span style="color:#22c55e;font-weight:bold">✓ 70-84</span><br>STRONG<br><span style="color:var(--fg-muted,#666);font-size:0.8em">' + esc(wrTxt('STRONG')) + '</span></div>';
-    h += '<div style="padding:6px;border-left:3px solid #f59e0b;background:#f59e0b11"><span style="color:#f59e0b;font-weight:bold">⚠️ 50-69</span><br>FAIR<br><span style="color:var(--fg-muted,#666);font-size:0.8em">' + esc(wrTxt('FAIR')) + '</span></div>';
-    h += '<div style="padding:6px;border-left:3px solid #dc2626;background:#dc262611"><span style="color:#dc2626;font-weight:bold">✗ <50</span><br>WEAK<br><span style="color:var(--fg-muted,#666);font-size:0.8em">' + esc(wrTxt('WEAK')) + '</span></div>';
+    h += '<div style="padding:6px;border-left:3px solid #14532d;background:#14532d11"><span style="color:#14532d;font-weight:bold">🏆 ≥85</span><br>GRADE-A CLASS<br><span style="color:var(--mut);font-size:0.8em">' + esc(capA) + '</span></div>';
+    h += '<div style="padding:6px;border-left:3px solid var(--pass);background:#15803d11"><span style="color:var(--pass);font-weight:bold">✓ 70-84</span><br>STRONG<br><span style="color:var(--mut);font-size:0.8em">' + esc(wrTxt('STRONG')) + '</span></div>';
+    h += '<div style="padding:6px;border-left:3px solid var(--veto);background:#c2410c11"><span style="color:var(--veto);font-weight:bold">⚠️ 50-69</span><br>FAIR<br><span style="color:var(--mut);font-size:0.8em">' + esc(wrTxt('FAIR')) + '</span></div>';
+    h += '<div style="padding:6px;border-left:3px solid var(--short);background:#dc262611"><span style="color:var(--short);font-weight:bold">✗ &lt;50</span><br>WEAK<br><span style="color:var(--mut);font-size:0.8em">' + esc(wrTxt('WEAK')) + '</span></div>';
     return h;
   }
 
@@ -10249,7 +10264,7 @@ terse status, and never launches a first-time scan on a global refresh.
     var h = '<section class="hg-mp og-regime-watch" data-og-regime="1" aria-label="Regime watch">';
     h += '<div class="hg-mp-eye">REGIME WATCH · CORRELATION TRACKING</div>';
     h += '<div class="hg-mp-head">DXY-GOLD DYNAMICS '
-      + '<span style="color:' + (regime.regime === 'NORMAL' ? 'var(--long,#16a34a)' : (regime.regime === 'DECOUPLING' ? 'var(--warn,#ca8a04)' : 'var(--short,#dc2626)'))
+      + '<span style="color:' + (regime.regime === 'NORMAL' ? 'var(--long)' : (regime.regime === 'DECOUPLING' ? 'var(--veto)' : 'var(--short)'))
       + '"><b>' + esc(regime.regime) + '</b></span></div>';
     var items = [];
     if (isFinite(regime.dxyValue)) items.push('DXY: ' + regime.dxyValue.toFixed(1));
@@ -10354,8 +10369,8 @@ terse status, and never launches a first-time scan on a global refresh.
         ? (stats.todayHitRate - stats.baselineHitRate) * 100 : NaN;
       var bgStyle = '';
       if (isFinite(diff)){
-        if (diff > 5) bgStyle = ' style="border-left:3px solid var(--ok,#16a34a);padding-left:10px"';  /* Green: today > baseline + 5pp */
-        else if (diff < -5) bgStyle = ' style="border-left:3px solid var(--err,#dc2626);padding-left:10px"';  /* Red: today < baseline - 5pp */
+        if (diff > 5) bgStyle = ' style="border-left:3px solid var(--pass);padding-left:10px"';  /* Green: today > baseline + 5pp */
+        else if (diff < -5) bgStyle = ' style="border-left:3px solid var(--short);padding-left:10px"';  /* Red: today < baseline - 5pp */
       }
 
       h += '<div class="hg-mp-note"' + bgStyle + '>';
@@ -10546,7 +10561,7 @@ terse status, and never launches a first-time scan on a global refresh.
       + ' + scorecard gold · Wilson lower ≥ ' + (bag.minLo * 100).toFixed(0)
       + '% · min ' + bag.minN + ' settled</span></div>';
     if (bag.go){
-      h += '<div class="hg-mp-note" style="border-left:3px solid var(--long,#16a34a);padding-left:10px">'
+      h += '<div class="hg-mp-note" style="border-left:3px solid var(--long);padding-left:10px">'
         + '<b>VERDICT: GO</b> — this scalp setup\'s settled TICKET record across gold desks clears the 90% bar. '
         + 'Measured on trades already cleared, not a win-probability forecast.</div>';
       h += hgOgScalpVerdictRowHtml(bag.go, 'go');
@@ -11471,8 +11486,8 @@ terse status, and never launches a first-time scan on a global refresh.
        states the replay's finding ABOVE the cells; each cell's caption is
        the measured record ('Trade immediately' used to sit under a tier
        whose >=85 row does not exist and whose ordering ran backwards). */
-    h += '<div style="margin:12px 0;padding:12px;border:1px solid var(--hr);border-radius:4px;background:var(--bg-muted,rgba(0,0,0,0.02))">';
-    h += '<div style="font-weight:bold;margin-bottom:8px;color:var(--fg-muted,#666)">Confluence Rating Spectrum</div>';
+    h += '<div style="margin:12px 0;padding:12px;border:1px solid var(--line);border-radius:4px;background:var(--panel2)">';
+    h += '<div style="font-weight:bold;margin-bottom:8px;color:var(--mut)">Confluence Rating Spectrum</div>';
     h += hgOgSpectrumTruthHeaderHtml();
     h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;font-size:0.85em">';
     h += hgOgSpectrumLegendCellsHtml();
