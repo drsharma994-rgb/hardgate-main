@@ -313,4 +313,93 @@ console.log('\n== the empty-ticket panel explains the bar that is actually appli
      'and the "searching N ways" clause uses the same N');
 }
 
+
+console.log('\n== the evidence reports its own condition (hg-v816) ==');
+{
+  const W = boot();
+  ok(typeof W.hgOgEvidenceHealth === 'function', 'hgOgEvidenceHealth is exported');
+  const h = W.hgOgEvidenceHealth();
+  const by = k => h.groups.filter(g => g.key === k)[0];
+
+  ok(h.groups.length === 4, 'all four baked maps are read');
+  ok(by('kinds').judgeable === 54 && by('kinds').thin === 0,
+     'every mechanic row can carry a rate — the bake drops kinds under 40');
+  ok(by('grades').blind === true && by('grades').keys === 3,
+     'the engine grades are BLIND: three rows, not one of them judgeable');
+  ok(by('grades').settled === 3,
+     'because the entire ENGINE book settled 3 trades in this window');
+  ok(by('cohorts').judgeable === 2 && by('cohorts').thin === 1,
+     'the cohorts are mixed — two carry rates, ENGINE:SWING does not');
+  ok(by('tiers').blind === false, 'the tier table is healthy');
+  ok(h.blind.length === 1 && h.blind[0].key === 'grades',
+     'so exactly one group is blind, and the read names it');
+
+  /* THE FOUR TOTALS ARE DIFFERENT ON PURPOSE, and the read must not
+     flatten them into one "settled" number. */
+  const totals = h.groups.map(g => g.settled);
+  ok(new Set(totals).size === 4, 'all four populations differ: ' + totals.join(' / '));
+  ok(by('cohorts').settled === h.declaredSettled,
+     'cohorts cover every settled trade, so they match the declared count');
+  ok(by('kinds').settled < h.declaredSettled,
+     'kinds cover fewer — small mechanics are dropped whole by the bake');
+  ok(by('tiers').settled < h.declaredSettled,
+     'and tiers cover only the trades that carried a score');
+}
+
+console.log('\n== the health panel speaks only when the bake cannot answer ==');
+{
+  const W = boot();
+  const panel = strip(W.hgOgEvidenceHealthHtml());
+  ok(panel.length > 0, 'today it speaks');
+  ok(/engine grade/.test(panel) && /report samples instead of rates/.test(panel),
+     'naming the blind group and what goes quiet because of it');
+  ok(/ENGINE:SWING \(n=3\) cannot/.test(panel),
+     'and naming the individual thin row in a mixed group');
+  ok(panel.indexOf('mechanic —') < 0, 'healthy groups are not listed');
+
+  /* REFILL THE BAKE AND IT MUST GO SILENT. A warning that cannot stop
+     warning is decoration. */
+  vm.runInContext(`HG_OG_REPLAY_EVIDENCE.grades['A'] = [70, 0.543, 0.87];
+                   HG_OG_REPLAY_EVIDENCE.grades['B'] = [60, 0.361, 0.40];
+                   HG_OG_REPLAY_EVIDENCE.grades['C'] = [60, 0.348, 0.10];
+                   HG_OG_REPLAY_EVIDENCE.cohorts['ENGINE:SWING'] = [130, 0.33, 0.85, 0.95];`, W);
+  ok(W.hgOgEvidenceHealth().blind.length === 0, 'a refilled bake has nothing blind');
+  ok(strip(W.hgOgEvidenceHealthHtml()) === '', 'and the panel renders nothing at all');
+
+  /* collapse a HEALTHY group and it must notice that one too — the check
+     is not hard-wired to grades */
+  vm.runInContext(`HG_OG_REPLAY_EVIDENCE.tiers = { WEAK: [2, 0.3, -0.4] };`, W);
+  const tPanel = strip(W.hgOgEvidenceHealthHtml());
+  ok(/confluence tier/.test(tPanel), 'a collapsed tier table is reported too');
+  ok(/the confluence spectrum cells/.test(tPanel),
+     'with the surface that depends on it, so the reader knows what went quiet');
+
+  /* an empty map is not a blind one — nothing baked is a different state
+     from something baked too thin */
+  vm.runInContext(`HG_OG_REPLAY_EVIDENCE.tiers = {};`, W);
+  const empty = W.hgOgEvidenceHealth().groups.filter(g => g.key === 'tiers')[0];
+  ok(empty.keys === 0 && empty.blind === false,
+     'a map with no rows is not reported as blind');
+}
+
+console.log('\n== a claim quotes the population it rests on ==');
+{
+  const W = boot();
+  const tierN = W.hgOgGroupSettled('tiers');
+  const declared = W.hgOgEvidenceHealth().declaredSettled;
+  ok(tierN !== declared, 'the tier population is not the desk-wide one (' + tierN + ' vs ' + declared + ')');
+  const hdr = strip(W.hgOgSpectrumTruthHeaderHtml());
+  ok(hdr.indexOf(String(tierN).replace(/\B(?=(\d{3})+(?!\d))/g, ',')) >= 0,
+     'the tier sentence quotes the tier count');
+  ok(hdr.indexOf(String(declared).replace(/\B(?=(\d{3})+(?!\d))/g, ',')) < 0,
+     'and not the desk-wide count it used to');
+  ok(W.hgOgGroupSettled('nope') !== W.hgOgGroupSettled('nope'),
+     'an unknown group yields NaN rather than a number');
+
+  /* the banner, which IS about every settled trade, keeps the full count */
+  ok(strip(W.hgOgDeskStanceBannerHtml())
+       .indexOf(String(declared).replace(/\B(?=(\d{3})+(?!\d))/g, ',')) >= 0,
+     'while the cohort banner, which covers every trade, still quotes all of them');
+}
+
 console.log(`\n${passed} passed, 0 failed`);

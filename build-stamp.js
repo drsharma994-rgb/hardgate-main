@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v815',
-  pack: 'OMNIGOLD stops printing a win rate it cannot compute — the bake settles one trade per engine grade, and the tab rendered "grade-A 0% WR (n=1) — selection edge real" and a 0% rate in a legend cell beside tiers carrying thousands; no percentage is stated from a record too thin to carry one, the grade ordering is read rather than asserted, and the panel explaining the empty ticket column now quotes the significance bar the gate actually applies',
+  version: 'hg-v816',
+  pack: 'OMNIGOLD watches its own evidence, not just its own code — the one staleness check compared gate-ledger keys and was blind to the bakes thinning underneath, which is how three rounds of stale numbers survived; the tab now reports which baked maps can still carry a rate, names what goes quiet when they cannot, and quotes the population each claim actually rests on',
   built: '2026-09-17T00:00:00Z'
 };
 

@@ -8426,6 +8426,9 @@ terse status, and never launches a first-time scan on a global refresh.
       /* if the ledger has moved on since the evidence was baked, that comes
          FIRST — every number under it is about a different system */
       + hgOgEvidenceStaleHtml()
+      /* and its sibling: the ledger check watches the CODE moving under the
+         evidence; this watches the evidence moving under the code */
+      + hgOgEvidenceHealthHtml()
       /* then why there are no tickets to read at all, before the numbers a
          reader would otherwise scan looking for one */
       + hgOgEdgeProofPanelHtml()
@@ -8445,8 +8448,13 @@ terse status, and never launches a first-time scan on a global refresh.
      took real losses on 'EXCEPTIONAL' labels. */
   function hgOgSpectrumTruthHeaderHtml(){
     var E = HG_OG_REPLAY_EVIDENCE;
-    var txt = 'measured reality: these tiers did NOT rank outcomes in the '
-      + hgOgFmtCount(E.settled) + '-trade replay (WEAK outperformed STRONG); '
+    /* THE COUNT A CLAIM RESTS ON, NOT THE DESK-WIDE ONE. E.settled is every
+       settled trade (8,155); the tier rows this sentence is about carry
+       8,152 of them, because three settled without a confluence score. */
+    var tierN = hgOgGroupSettled('tiers');
+    var txt = 'measured reality: these tiers did NOT rank outcomes across the '
+      + hgOgFmtCount(isFinite(tierN) ? tierN : E.settled)
+      + ' scored trades in the replay (WEAK outperformed STRONG); '
       /* WAS: 'grade-A selection is real but scalp costs erased it.' — an
          assertion about an ordering the bake no longer carries. Read it. */
       + hgOgGradeOrderTxt() + '. '
@@ -8727,6 +8735,134 @@ terse status, and never launches a first-time scan on a global refresh.
       if (!added.length && !removed.length) return null;
       return { added: added, removed: removed, bakedFrom: HG_OG_EVIDENCE_GATESET.bakedFrom };
     } catch (e) { return null; }
+  }
+
+  /* ====================================================================
+     THE EVIDENCE'S OWN CONDITION
+
+     hg-v814 and hg-v815 both fixed the same shape of bug: a sentence that
+     quoted a baked number after the bake underneath it had thinned or
+     vanished. ENGINE:SCALP went from a cohort to nothing. ENGINE:SWING
+     fell from 27 settled trades to 3. Every engine grade fell from tens to
+     ONE. Each was found by hand, months after the fact, by reading the
+     rendered text and not believing it.
+
+     Nothing on this tab could have said so. hgOgEvidenceStale — the only
+     detector there was — compares the baked GATE LEDGER against the live
+     one. That catches the code moving under the evidence. It is blind to
+     the evidence moving under the code, which is what actually happened
+     three times.
+
+     So this reads the shipped bake's own condition and reports what it can
+     still support. No baseline, deliberately: a fingerprint of the
+     evidence's shape would be baked WITH the evidence and would move with
+     it, which is how you get a staleness check that is never stale. The
+     honest question is not "has this changed" but "can this carry the
+     claims the tab makes on it", and MIN_SAMPLES already answers it
+     everywhere else here.
+
+     THE FOUR GROUPS COVER DIFFERENT POPULATIONS and their totals are
+     SUPPOSED to differ — which is itself worth printing, because the tab
+     quotes one settled count ('the 8,155-trade replay') beside claims that
+     rest on another. From scripts/refit-confluence-weights.mjs:
+       kinds    settled trades whose mechanic cleared the bake's 40-trade
+                floor — smaller kinds are dropped whole (7,953 today)
+       grades   settled ENGINE-source trades only (3 today: the entire
+                engine book for this window)
+       cohorts  every settled trade (8,155 — this is E.settled)
+       tiers    settled trades carrying a confluence score (8,152) */
+  var OG_EVIDENCE_GROUPS = [
+    { key: 'kinds',   label: 'mechanic',
+      covers: 'settled trades whose mechanic cleared the bake\'s 40-trade floor',
+      feeds:  'the per-mechanic replay lines and the measured-edge bar' },
+    { key: 'grades',  label: 'engine grade',
+      covers: 'settled ENGINE-source trades only',
+      feeds:  'the grade legend and the grade line on engine cards' },
+    { key: 'cohorts', label: 'cohort',
+      covers: 'every settled trade',
+      feeds:  'the replay verdict banner' },
+    { key: 'tiers',   label: 'confluence tier',
+      covers: 'settled trades carrying a confluence score',
+      feeds:  'the confluence spectrum cells' }
+  ];
+
+  /* -> { groups: [...], blind: [...], declaredSettled }. A group is BLIND
+     when it has rows but not one of them reaches MIN_SAMPLES: the tab can
+     still name those rows, and can state nothing about their rates. */
+  function hgOgEvidenceHealth(){
+    var E = HG_OG_REPLAY_EVIDENCE, out = [], i, j;
+    for (i = 0; i < OG_EVIDENCE_GROUPS.length; i++){
+      var g = OG_EVIDENCE_GROUPS[i];
+      var map = (E && E[g.key]) || {};
+      var keys = Object.keys(map);
+      var judgeable = 0, thin = 0, settled = 0, thinKeys = [];
+      for (j = 0; j < keys.length; j++){
+        var row = map[keys[j]];
+        var n = fin(row && row[0]);
+        if (!isFinite(n)) continue;
+        settled += n;
+        if (n >= MIN_SAMPLES) judgeable++;
+        else { thin++; thinKeys.push(keys[j] + ' (n=' + hgOgFmtCount(n) + ')'); }
+      }
+      out.push({ key: g.key, label: g.label, covers: g.covers, feeds: g.feeds,
+                 keys: keys.length, judgeable: judgeable, thin: thin,
+                 settled: settled, thinKeys: thinKeys,
+                 blind: keys.length > 0 && judgeable === 0 });
+    }
+    return {
+      groups: out,
+      blind: out.filter(function(x){ return x.blind; }),
+      anyThin: out.some(function(x){ return x.thin > 0; }),
+      declaredSettled: fin(E && E.settled),
+      minSamples: MIN_SAMPLES
+    };
+  }
+
+  /* The settled count a claim about ONE group rests on, rather than the
+     desk-wide total. Quoting 8,155 beside a statement about the tier table
+     overstates the tier table by three trades — small here, and the same
+     habit that let a cohort figure outlive its cohort. */
+  function hgOgGroupSettled(key){
+    var h = hgOgEvidenceHealth(), i;
+    for (i = 0; i < h.groups.length; i++) if (h.groups[i].key === key) return h.groups[i].settled;
+    return NaN;
+  }
+
+  /* Renders only when the evidence cannot carry something the tab quotes on
+     it. Silent on a healthy bake, on purpose: a warning on every render is
+     a warning on none. */
+  function hgOgEvidenceHealthHtml(){
+    try {
+      var h = hgOgEvidenceHealth();
+      if (!h.blind.length && !h.anyThin) return '';
+      var lines = [], i;
+      for (i = 0; i < h.groups.length; i++){
+        var g = h.groups[i];
+        if (!g.thin) continue;
+        lines.push('<div style="margin-top:3px">'
+          + '<b>' + esc(g.label) + '</b> — '
+          + (g.blind
+              ? ('not one of its ' + g.keys + ' rows reaches ' + h.minSamples
+                 + ' settled trades (' + hgOgFmtCount(g.settled) + ' in total), so '
+                 + esc(g.feeds) + ' report samples instead of rates')
+              : (g.judgeable + ' of ' + g.keys + ' rows can carry a rate; '
+                 + esc(g.thinKeys.join(', ')) + ' cannot'))
+          + '</div>');
+      }
+      if (!lines.length) return '';
+      return '<div class="note warn og-evidence-health" data-og-evidence-health="1" '
+        + 'style="margin:8px 0;padding:6px 8px;border:1px solid #f59e0b;'
+        + 'border-left:3px solid #f59e0b;border-radius:4px;'
+        + 'background:rgba(245,158,11,0.08);font-size:0.85em">'
+        + '<b>WHAT THIS BAKE CAN STILL ANSWER</b> — the gate ledger check beside this '
+        + 'one watches the code moving under the evidence; this watches the evidence '
+        + 'moving under the code, which is what happened three times before anyone '
+        + 'noticed. Rows under ' + h.minSamples + ' settled trades are named, never rated.'
+        + lines.join('')
+        + '<div style="margin-top:4px">Re-run scripts/backtest-omnigold.mjs then '
+        + 'scripts/refit-confluence-weights.mjs to refill them.</div>'
+        + '</div>';
+    } catch (e) { return ''; }
   }
 
   function hgOgEvidenceStaleHtml(){
@@ -14255,6 +14391,10 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgClaimRecordTxt = hgOgClaimRecordTxt;
     window.hgOgGradeOrder = hgOgGradeOrder;
     window.hgOgGradeOrderTxt = hgOgGradeOrderTxt;
+    window.hgOgEvidenceHealth = hgOgEvidenceHealth;
+    window.hgOgEvidenceHealthHtml = hgOgEvidenceHealthHtml;
+    window.hgOgGroupSettled = hgOgGroupSettled;
+    window.HG_OG_EVIDENCE_GROUPS = OG_EVIDENCE_GROUPS;
     window.hgOgSpectrumLegendCellsHtml = hgOgSpectrumLegendCellsHtml;
     window.HG_OG_MIN_SAMPLES = MIN_SAMPLES;
     /* APEX GOLD (ADDITIVE) — grade-gated, tape-aligned, cost-tiered tier
