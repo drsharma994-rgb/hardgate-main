@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v820',
-  pack: 'OMNIGOLD pins the invariant its measured-edge sigma depends on — that gate is only valid because a cooldown line in omniroute.js makes the walk sequential, nothing connected the two, and deleting it would inflate the sigma about 4.5x and start reading one move counted twenty times as a mechanic that has paid; asserted behaviourally now, and the dependency written down where the sigma is computed',
+  version: 'hg-v821',
+  pack: 'OMNIGOLD keeps the promise its header makes — four of forty-two render functions threw on input the tab can actually produce, and a render that throws does not degrade, it deletes its panel; the worst read row.grade.ticket two lines below where the same object is read defensively, emptying MOST PROBABLE at the top of the page, and 5,292 hostile calls now hold the contract',
   built: '2026-09-17T00:00:00Z'
 };
 

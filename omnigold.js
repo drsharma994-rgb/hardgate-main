@@ -6469,8 +6469,13 @@ terse status, and never launches a first-time scan on a global refresh.
                for why it is the normalised score and not the engine's raw
                tally, which graded 97% of setups A */
             var lg = hgOgConfluenceGrade(row, tape);
-            var base = tot ? (ev + '/' + tot + (row.grade.ticket ? ' TICKET' : ' checks'))
-                           : (row.grade.ticket ? 'TICKET' : 'WATCH');
+            /* ev and tot two lines up already read row.grade defensively;
+               these two did not, so a card that reached here without a grade
+               threw and took MOST PROBABLE — the panel at the top of the
+               tab — off the page entirely. */
+            var tik = !!(row.grade && row.grade.ticket);
+            var base = tot ? (ev + '/' + tot + (tik ? ' TICKET' : ' checks'))
+                           : (tik ? 'TICKET' : 'WATCH');
             return (lg ? (hgOgGradeChipHtml(lg, { large: true }) + ' ') : '') + base;
           })();
       var info = row.gates ? hgOgInfoNet(row.gates) : { n: 0, pass: 0 };
@@ -10684,7 +10689,12 @@ terse status, and never launches a first-time scan on a global refresh.
   function hgOgEngineGradeBannerHtml(ranked){
     if (!ranked || !ranked.length || hgOgEngineListHasAb(ranked)) return '';
     var bestT = 0, i;
-    for (i = 0; i < ranked.length; i++) bestT = Math.max(bestT, fin(ranked[i].tally) || 0);
+    /* a null entry in the list is skipped, not read for .tally — a render
+       function that throws takes its whole panel off the page, and this
+       file's header promises none of them do */
+    for (i = 0; i < ranked.length; i++){
+      if (ranked[i]) bestT = Math.max(bestT, fin(ranked[i].tally) || 0);
+    }
     return '<div class="hg-mp-note warn" style="margin:4px 0 0 12px">No '
       + hgOgGradeChipHtml('A') + ' / ' + hgOgGradeChipHtml('B')
       + ' this bar — best tally +' + bestT + '. Grading: '
@@ -11882,6 +11892,7 @@ terse status, and never launches a first-time scan on a global refresh.
     var ci;
     for (ci = 0; ci < cards.length; ci++){
       var hc = cards[ci];
+      if (!hc) continue;                 /* see hgOgEngineGradeBannerHtml */
       h += '<li class="dim">' + esc(hc.horizon + ' · ' + hc.kind + ' ' + String(hc.dir || '').toUpperCase());
       if (hc.plan) h += ' · ENTRY ' + fmtPx(hc.plan.entry) + ' · STOP ' + fmtPx(hc.plan.stop) + ' · T1 ' + fmtPx(hc.plan.t1);
       h += '</li>';
@@ -11891,6 +11902,12 @@ terse status, and never launches a first-time scan on a global refresh.
   }
 
   function setupCard(c){
+    /* THE ONLY UNGUARDED READ ON THE RENDER PATH. Every caller builds these
+       cards with a grade attached, so this held for as long as nobody passed
+       one that did not — and a card without a grade is exactly what a
+       half-built scan produces. A throw here empties MOST PROBABLE, the
+       panel at the top of the tab. */
+    if (!c || !c.grade) return '';
     var ev = (c.grade.evaluated || 0), tot = (c.grade.total || 0);
     var badge = c.grade.ticket ? pill('TICKET','ok') : pill(c.grade.vetoes.length ? 'VETO' : 'WATCH', c.grade.vetoes.length ? 'bad' : '');
     if (tot) badge += ' ' + pill(ev + '/' + tot + ' checks', ev * 2 >= tot ? '' : 'bad');
@@ -13755,7 +13772,15 @@ terse status, and never launches a first-time scan on a global refresh.
      dead levels). Pure over its inputs, exported for the harness. */
   function hgOgPaidCardsHtml(cards, sets){
     var list = (Object.prototype.toString.call(cards) === '[object Array]') ? cards : [];
-    var s = sets || { SCALP: [], SWING: [], union: [] };
+    /* `sets || default` accepted any truthy object and then read s.union.length
+       off it — a sets bag missing a key threw where the empty default would
+       have rendered. Fill the gaps rather than trusting the shape. */
+    var sIn = (sets && typeof sets === 'object') ? sets : {};
+    var s = {
+      SCALP: Array.isArray(sIn.SCALP) ? sIn.SCALP : [],
+      SWING: Array.isArray(sIn.SWING) ? sIn.SWING : [],
+      union: Array.isArray(sIn.union) ? sIn.union : []
+    };
     var kept = [], hidden = 0, i, c;
     for (i = 0; i < list.length; i++){
       c = list[i]; if (!c) continue;

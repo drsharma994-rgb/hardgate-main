@@ -462,4 +462,51 @@ console.log('\n== a re-pricing reproduces the record it re-prices (hg-v817) ==')
      'and the reason names the mean fee it actually subtracted');
 }
 
+
+console.log('\n== no render function can take its panel off the page (hg-v821) ==');
+{
+  /* THE HEADER PROMISES THIS AND NOTHING CHECKED IT: "Never throws at load;
+     every global is feature-checked ... refresh() is async, never throws".
+     Four of the 42 exported *Html functions did throw, and a throw in a
+     render function does not degrade — it removes that panel from the tab.
+     The worst was setupCard reading row.grade.ticket two lines below where
+     the same object is read defensively for ev and tot, which empties MOST
+     PROBABLE, the panel at the top of the page.
+
+     Fuzzed rather than enumerated: the point is the contract, so the test
+     has to cover functions nobody has thought about yet. */
+  const W = boot();
+  const HOSTILE = [
+    undefined, null, NaN, 0, -1, '', 'xx', Infinity, -Infinity,
+    {}, [], [null], [undefined], [{}],
+    { plan: null }, { plan: {} }, { plan: { entry: NaN, stop: NaN, t1: NaN } },
+    { kind: null, horizon: null, dir: null }, { grade: null }, { grade: {} },
+    { SCALP: null, SWING: null, union: null }
+  ];
+  const SECOND = [undefined, null, {}, 'SCALP', 'long', []];
+  const names = Object.keys(W).filter(k => /^hgOg.*Html$/.test(k) && typeof W[k] === 'function');
+  ok(names.length > 30, `${names.length} render functions are exported`);
+
+  const threw = [];
+  let calls = 0;
+  for (const n of names){
+    for (const a of HOSTILE){
+      for (const b of SECOND){
+        calls++;
+        let out;
+        try { out = W[n](a, b); }
+        catch (e){ threw.push(n + '(' + JSON.stringify(a) + ', ' + JSON.stringify(b) + '): ' + e.message); continue; }
+        if (out !== undefined && typeof out !== 'string'){
+          threw.push(n + ' returned ' + typeof out + ', not markup');
+        }
+      }
+    }
+  }
+  if (threw.length) console.error('   ' + threw.slice(0, 6).join('\n   '));
+  ok(calls > 3000, `${calls} hostile calls made`);
+  ok(threw.length === 0,
+     'not one of them throws or returns a non-string — a render that throws '
+     + 'does not degrade, it deletes its panel');
+}
+
 console.log(`\n${passed} passed, 0 failed`);
