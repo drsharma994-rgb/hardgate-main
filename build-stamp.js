@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v822',
-  pack: 'OMNIGOLD paints with this app\'s palette, legibly — the confluence legend printed its tier labels in dark-theme greens and amber on a white card at 2.54, 2.28 and 2.15:1 where WCAG wants 4.5, and six CSS tokens it referenced were never defined by the page, five falling back to literals while two border declarations resolved to nothing and were dropped',
+  version: 'hg-v823',
+  pack: 'OMNIGOLD scales every price on a card when it aligns to live spot — the T1 magnet was left at the proxy feed\'s price while entry, stop and both targets moved, so a card printed a target and a magnet quoted on two different instruments, forty points adrift and landing BELOW T1 on a long when the field exists to name liquidity beyond it',
   built: '2026-09-17T00:00:00Z'
 };
 

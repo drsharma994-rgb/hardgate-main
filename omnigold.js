@@ -5529,7 +5529,28 @@ terse status, and never launches a first-time scan on a global refresh.
       if (isFinite(fin(c.level))) c.level = fin(c.level) * ratio;
       p = c.plan;
       if (p){
-        keys = ['entry', 'stop', 't1', 't2', 'risk'];
+        /* EVERY PRICE ON THE PLAN, and t1Magnet is one.
+
+           hgOgFormTicket writes plan.t1Magnet — a PRICE, the first gold
+           liquidity beyond the 2R print — and it was missing from this
+           list, so a proxy feed scaled to live spot moved entry, stop, T1
+           and T2 while the magnet stayed at the kline price. The card
+           renders it (' @ 4050.00'), so the reader saw a target and a
+           magnet quoted on two different instruments.
+
+           At a 1.005 ratio on 4000 gold it printed 40 points adrift, and
+           the direction of the error is the damaging part: the magnet
+           landed BELOW T1 on a long, reading as liquidity before the
+           target when the whole point of the field is liquidity beyond it.
+           The stored t1MagnetR said 2.5R while the printed pair implied
+           0.49R.
+
+           SCALE-INVARIANT FIELDS ARE NOT LISTED AND MUST NOT BE: rr1, rr2,
+           riskPct, t1MagnetR and stopFloorAtr are ratios and multiples,
+           which a common factor cancels out of. `risk` IS listed because
+           it is a distance, and distances scale with the prices they are
+           measured between. */
+        keys = ['entry', 'stop', 't1', 't2', 'risk', 't1Magnet'];
         for (var ki = 0; ki < keys.length; ki++){
           if (isFinite(fin(p[keys[ki]]))) p[keys[ki]] = fin(p[keys[ki]]) * ratio;
         }

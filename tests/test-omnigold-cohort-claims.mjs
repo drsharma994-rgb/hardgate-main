@@ -580,4 +580,75 @@ console.log('\n== the tab paints with this app\'s palette, legibly (hg-v822) =='
      'and the WEAK cell escapes its "<50" instead of emitting a stray tag start');
 }
 
+
+console.log('\n== scaling a plan to live spot moves every price on it (hg-v823) ==');
+{
+  /* WHAT THIS CAUGHT. hgOgFormTicket writes plan.t1Magnet, a PRICE — the
+     first gold liquidity beyond the 2R print — and the spot scaler's key
+     list did not include it. On a proxy feed scaled to live spot, entry,
+     stop, T1 and T2 moved and the magnet did not, so the card printed a
+     target and a magnet quoted on two different instruments. The card
+     renders it, so this was on screen.
+
+     The direction of the error is the damaging part: at a 1.005 ratio on
+     4000 gold the magnet landed 40 points adrift and BELOW T1 on a long,
+     reading as liquidity before the target when the field exists to name
+     liquidity beyond it. */
+  const W = boot();
+  const mk = () => ({ level: 4000, plan: {
+    entry: 4000, stop: 3980, t1: 4040, t2: 4060, risk: 20,
+    t1Magnet: 4050, t1MagnetR: 2.5, riskPct: 0.5, rr1: 2, stopFloorAtr: 1.5
+  } });
+
+  const tiny = mk();
+  W.hgOgAlignPlansToSpot([tiny], 4000, 4001, 0.15);
+  ok(tiny.plan.entry === 4000 && !tiny.spotAligned,
+     'a gap under the floor leaves the plan alone');
+
+  const card = mk(), before = JSON.parse(JSON.stringify(card.plan));
+  W.hgOgAlignPlansToSpot([card], 3980, 4020, 0.15);
+  const p = card.plan, ratio = card.spotAlignRatio;
+  ok(ratio > 1.005, `the fixture really does rescale (x${ratio.toFixed(4)})`);
+
+  /* THE PROPERTY, not the key list. Every numeric field either scaled by
+     exactly the ratio or did not move at all — and anything that held still
+     has to be a declared scale-invariant. A new PRICE added to plans fails
+     here until it is either scaled or named a ratio. */
+  const INVARIANT = ['t1MagnetR', 'riskPct', 'rr1', 'rr2', 'stopFloorAtr'];
+  const scaled = [], still = [], weird = [];
+  for (const k of Object.keys(before)){
+    const a = before[k], b = p[k];
+    if (typeof a !== 'number') continue;
+    if (Math.abs(b - a * ratio) < 1e-9) scaled.push(k);
+    else if (b === a) still.push(k);
+    else weird.push(k + ' ' + a + '->' + b);
+  }
+  ok(weird.length === 0, 'no field moved by something other than the ratio'
+     + (weird.length ? ': ' + weird.join(', ') : ''));
+  const undeclared = still.filter(k => INVARIANT.indexOf(k) < 0);
+  if (undeclared.length) console.error('   left behind: ' + undeclared.join(', '));
+  ok(undeclared.length === 0,
+     'every price scaled; the only fields that held still are declared ratios ('
+     + still.join(', ') + ')');
+  ok(scaled.indexOf('t1Magnet') >= 0, 't1Magnet is among the scaled — the field this found');
+  ok(scaled.length >= 6, `${scaled.length} price fields moved together`);
+
+  ok(Math.abs((p.t1Magnet - p.entry) / p.risk - before.t1MagnetR) < 1e-9,
+     'the magnet still sits at the R-multiple the card claims for it');
+  ok(p.t1Magnet > p.t1,
+     'and still BEYOND T1 on a long, which is the only thing that makes it a magnet');
+  ok(Math.abs((p.t1 - p.entry) / p.risk - (before.t1 - before.entry) / before.risk) < 1e-9,
+     'T1 keeps its R-multiple too — scaling moves prices, never geometry');
+  ok(Math.abs(card.level - 4000 * ratio) < 1e-9,
+     'the card level scales with the plan it belongs to');
+
+  const shortCard = { plan: { entry: 4000, stop: 4020, t1: 3960, risk: 20, t1Magnet: 3950, t1MagnetR: 2.5 } };
+  W.hgOgAlignPlansToSpot([shortCard], 3980, 4020, 0.15);
+  ok(shortCard.plan.t1Magnet < shortCard.plan.t1, 'on a short the magnet stays BELOW T1');
+  const bare = { plan: { entry: 4000, stop: 3980, t1: 4040 } };
+  W.hgOgAlignPlansToSpot([bare], 3980, 4020, 0.15);
+  ok(bare.plan.entry > 4000 && bare.plan.t1Magnet === undefined,
+     'a plan with no magnet scales without inventing one');
+}
+
 console.log(`\n${passed} passed, 0 failed`);
