@@ -115,8 +115,13 @@ console.log('\n== DEMOTION: a real edge is no longer erased by a stranger ==');
   ok(A.hgOgProvenEdgeOk(a, 25, 0.02) === true,
      `the mechanic's own record proves an edge: lo ${a.wilson.lo.toFixed(4)} against a `
      + `${A.hgOgBreakevenHit(a.avgRr).toFixed(4)} breakeven`);
-  ok(Math.abs(A.hgOgEdgeMargin(a) - 0.1544) < 0.001,
-     `clearing it by ${(A.hgOgEdgeMargin(a) * 100).toFixed(1)} points`);
+  /* the margin is measured off the FAMILY-CORRECTED bound from pack 835 on,
+     which is the bar that decides — 4.9 points, not the 15.4 the displayed
+     95% bound would have flattered it with */
+  ok(Math.abs(A.hgOgEdgeMargin(a) - 0.0487) < 0.001,
+     `clearing it by ${(A.hgOgEdgeMargin(a) * 100).toFixed(1)} points at the corrected bar`);
+  ok(Math.abs((a.wilson.lo - A.hgOgBreakevenHit(a.avgRr)) - 0.1544) < 0.001,
+     'while the displayed 95% bound sits 15.4 points clear, which is why the two are kept apart');
 
   /* THE OLD RULE, reimplemented, so the harm is demonstrated not asserted */
   const scOnly = boot({ [SCORE]: JSON.stringify(score(40, 32)) }).hgOgSettledEvidence(ROW);

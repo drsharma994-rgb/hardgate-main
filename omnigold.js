@@ -6803,6 +6803,46 @@ terse status, and never launches a first-time scan on a global refresh.
     return (hit - b) / Math.sqrt(b * (1 - b) / eff);
   }
 
+  /* THE BAR A PROMOTION IS ACTUALLY TESTED AGAINST.
+
+     hgOgReplayEdgeVerdict already keeps two bounds: lo95 for the panel to
+     display and loFw at hgOgFamilyZ(77) for the verdict to act on, with the
+     note that "every other site asking 'did this beat breakeven, allowing
+     for how many were tried' calls hgOgFamilyZ(OG_MECHANICS.length)".
+
+     That was not true of the forward tiers. hgOgProvenEdgeOk asks exactly
+     that question — "the Wilson lower bound sits above breakeven by a real
+     margin" — and asked it at an uncorrected 1.96, across all 77 mechanics
+     the desk scans, on every bake.
+
+     One-sided alpha 2.5% per test over 77 tests:
+
+       P(at least one mechanic clears by luck)  85.8%
+       expected false promotions per bake       1.93
+
+     The corrected z is 3.2091, the same Sidak one-sided bar the replay
+     verdict uses over the same family. Sweeping every (wins, n) from 25 to
+     200 trades at R = 1.5 / 2 / 3: 6,296 records clear both bars, 5,304
+     clear neither, and 658 — 9.5% of everything that promoted — cleared
+     only the uncorrected one. Those are the thin just-over-the-line records
+     a 77-way search manufactures: 12/25 at R=3, 14/25 at R=2.
+
+     TWO BOUNDS, NOT ONE, deliberately. ev.wilson stays at 1.96 because the
+     card prints it as "Wilson 95% CI" and that is what a reader understands
+     a 95% interval to be. ev.wilsonFam is the bar promotion reads. Changing
+     the displayed interval instead would have relabelled a descriptive
+     statistic to make a decision rule fit, which is backwards. */
+  function hgOgPromotionZ(){
+    return hgOgFamilyZ(OG_MECHANICS.length);
+  }
+
+  /* the bound a tier tests, with the displayed 95% one as the fallback so a
+     record built before this existed is not silently un-promotable */
+  function hgOgEvBound(ev){
+    if (!ev) return null;
+    return ev.wilsonFam || ev.wilson || null;
+  }
+
   /* wins scale with the sample, or the deflation would move the observed
      rate as well as the width, which is not what overlap does */
   function hgOgWilsonHit(wins, n, z, opts){
@@ -6846,7 +6886,8 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     if (!(n > 0)) return null;
     var w = hgOgWilsonHit(wins, n);
-    return { source: 'scorecard-gold', wins: wins, samples: n, hit: wins / n, wilson: w };
+    return { source: 'scorecard-gold', wins: wins, samples: n, hit: wins / n, wilson: w,
+             wilsonFam: hgOgWilsonHit(wins, n, hgOgPromotionZ()) };
   }
 
   function hgOgFwdTicketStats(tab, mechanic){
@@ -6889,6 +6930,8 @@ terse status, and never launches a first-time scan on a global refresh.
          hgOgBreakevenHit for why an assumed R must never promote a setup. */
       avgRr: rrWins > 0 ? (rrSum / rrWins) : NaN,
       wilson: hgOgWilsonHit(wins, settled),
+      /* the family-corrected bound the tiers test — see hgOgPromotionZ */
+      wilsonFam: hgOgWilsonHit(wins, settled, hgOgPromotionZ()),
       pooled: true
     };
   }
@@ -10201,7 +10244,8 @@ terse status, and never launches a first-time scan on a global refresh.
           hit: fin(t.hit),
           expR: fin(t.expR),
           avgRr: fin(t.avgRr),
-          wilson: hgOgWilsonHit(t.wins, t.samples)
+          wilson: hgOgWilsonHit(t.wins, t.samples),
+          wilsonFam: hgOgWilsonHit(t.wins, t.samples, hgOgPromotionZ())
         };
       }
     }
@@ -10293,9 +10337,11 @@ terse status, and never launches a first-time scan on a global refresh.
   function hgOgSettledExecuteOk(ev, minLo, minN){
     if (!ev || !ev.wilson) return false;
     if (ev.specific === false) return false;
+    var b = hgOgEvBound(ev);
+    if (!b) return false;
     minLo = isFinite(fin(minLo)) ? fin(minLo) : OG_EXEC_WILSON_LO;
     minN = isFinite(fin(minN)) ? fin(minN) : OG_EXEC_MIN_N;
-    return fin(ev.samples) >= minN && ev.wilson.lo >= minLo;
+    return fin(ev.samples) >= minN && b.lo >= minLo;
   }
 
   /* The hit rate a plan needs just to break even at the reward multiple its
@@ -10317,7 +10363,9 @@ terse status, and never launches a first-time scan on a global refresh.
     margin = isFinite(fin(margin)) ? fin(margin) : OG_EDGE_MARGIN;
     var be = hgOgBreakevenHit(ev.avgRr);
     if (!isFinite(be)) return false;
-    return fin(ev.samples) >= minN && ev.wilson.lo >= (be + margin);
+    var b = hgOgEvBound(ev);
+    if (!b) return false;
+    return fin(ev.samples) >= minN && b.lo >= (be + margin);
   }
 
   /* How far the lower bound clears breakeven. The honest ranking key: a
@@ -10327,7 +10375,13 @@ terse status, and never launches a first-time scan on a global refresh.
     if (!ev || !ev.wilson) return NaN;
     var be = hgOgBreakevenHit(ev.avgRr);
     if (!isFinite(be)) return NaN;
-    return ev.wilson.lo - be;
+    /* the margin against the bar that DECIDES, not against the one on
+       display — a card reading "clears breakeven by 15.4 pts" next to a
+       mechanic the corrected bar rejects would be the ranking and the
+       verdict disagreeing in public */
+    var b = hgOgEvBound(ev);
+    if (!b) return NaN;
+    return b.lo - be;
   }
 
   function hgOgPickSettledExecutes(ranked, tapeDir, opts){
@@ -10551,8 +10605,9 @@ terse status, and never launches a first-time scan on a global refresh.
     var edgeN = bag.edgeMinN;
     var h = '<section class="hg-mp og-settled-exec-panel" data-og-settled="1" aria-label="Settled forward-tested setups">';
     h += '<div class="hg-mp-eye">PROVEN EDGE · FORWARD-TESTED</div>';
-    h += '<div class="hg-mp-head">XAUUSD <span>TICKET + settled out-of-sample record · Wilson 95% lower above breakeven · min '
-      + edgeN + ' trades</span></div>';
+    h += '<div class="hg-mp-head">XAUUSD <span>TICKET + settled out-of-sample record · Wilson lower above breakeven · min '
+      + edgeN + ' trades · corrected for ' + OG_MECHANICS.length
+      + ' mechanics (+' + hgOgPromotionZ().toFixed(2) + '&sigma;)</span></div>';
 
     /* ---- the bar the desk actually trades ---- */
     if (bag.proven && bag.proven.length){
@@ -10807,7 +10862,8 @@ terse status, and never launches a first-time scan on a global refresh.
     h += '<div class="hg-mp-head">XAUUSD <span>pooled TICKET history · '
       + bag.tabs.join(' + ')
       + ' + scorecard gold · Wilson lower ≥ ' + (bag.minLo * 100).toFixed(0)
-      + '% · min ' + bag.minN + ' settled</span></div>';
+      + '% · min ' + bag.minN + ' settled · corrected for ' + OG_MECHANICS.length
+      + ' mechanics (+' + hgOgPromotionZ().toFixed(2) + '&sigma;)</span></div>';
     if (bag.go){
       h += '<div class="hg-mp-note" style="border-left:3px solid var(--long);padding-left:10px">'
         + '<b>VERDICT: GO</b> — this scalp setup\'s settled TICKET record across gold desks clears the 90% bar. '
@@ -14818,6 +14874,8 @@ terse status, and never launches a first-time scan on a global refresh.
     window.ogTradeKey = ogTradeKey;
     window.hgOgSettledEvidence = hgOgSettledEvidence;
     window.hgOgEvidenceScopeTxt = hgOgEvidenceScopeTxt;
+    window.hgOgPromotionZ = hgOgPromotionZ;
+    window.hgOgEvBound = hgOgEvBound;
     window.hgOgSettledExecuteOk = hgOgSettledExecuteOk;
     window.hgOgPickSettledExecutes = hgOgPickSettledExecutes;
     window.hgOgProvenEdgeOk = hgOgProvenEdgeOk;

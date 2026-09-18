@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v834',
-  pack: 'an OMNIGOLD evidence tier stops being decided by whichever population flatters the mechanic most — three records can answer for one row and two of them are not about that mechanic, and the rule was highest Wilson lower bound wins; a 5-of-20 mechanic read 95% SETTLED EXECUTE true off a 294-of-300 scorecard record, while a real 20-of-30 edge at 2R read PROVEN EDGE false because the swap discarded the reward multiple its breakeven needed; the source is now fixed by specificity, a borrowed record is labelled on the card and promotes nothing',
+  version: 'hg-v835',
+  pack: 'the OMNIGOLD forward promotion bar starts counting how many mechanics were tried — the replay verdict corrects for the 77-mechanic family and says every other site asking did this beat breakeven does the same, but hgOgProvenEdgeOk asked exactly that at an uncorrected 1.96, where the chance some mechanic clears by luck is 85.8% and about two promote falsely per bake; the tiers now test the Sidak-corrected bound the replay already uses while the card keeps printing a real 95% interval',
   built: '2026-09-18T00:00:00Z'
 };
 

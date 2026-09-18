@@ -53,7 +53,15 @@ console.log('\n== pick scalp verdict at 90% bar ==');
   const W = boot();
   W.hgFwdStats = (tab, mech, ticketOnly) => {
     if (!ticketOnly) return { samples: 0, wins: 0, losses: 0 };
-    if (mech === 'FVG-FILL') return { samples: 40, wins: 39, losses: 1, hit: 0.975 };
+    /* 78/80 per tab, pooled across the three gold desks -> 234/240.
+       THIS FIXTURE WAS 39/40 (117/120 pooled) UNTIL PACK 835. That record's
+       Wilson lower is 0.9291 at the uncorrected 1.96 and 0.8797 at the
+       Sidak bar over 77 mechanics, so it cleared the 90% verdict only while
+       the bar ignored how many mechanics were screened to find it. The
+       fixture is strengthened rather than the bar loosened; the next
+       assertion pins the old one as no longer sufficient, so the move is
+       recorded and not quietly absorbed. */
+    if (mech === 'FVG-FILL') return { samples: 80, wins: 78, losses: 2, hit: 0.975 };
     return { samples: 0, wins: 0, losses: 0, hit: NaN };
   };
   const ranked = [{
@@ -62,7 +70,22 @@ console.log('\n== pick scalp verdict at 90% bar ==');
     plan: { entry: 2650, stop: 2640, t1: 2670 }
   }];
   const bag = W.hgOgPickScalpVerdict(ranked, null, 'long');
-  ok(bag.go && bag.go.kind === 'FVG-FILL', 'GO verdict when Wilson clears 90%');
+  ok(bag.go && bag.go.kind === 'FVG-FILL', 'GO verdict when Wilson clears 90% at the family-corrected bar');
+  ok(bag.go.verdictEv && bag.go.verdictEv.wilsonFam && bag.go.verdictEv.wilsonFam.lo >= 0.90,
+     `on the corrected bound (${bag.go.verdictEv.wilsonFam.lo.toFixed(4)}), not the displayed one `
+     + `(${bag.go.verdictEv.wilson.lo.toFixed(4)})`);
+  {
+    const W2 = boot();
+    W2.hgFwdStats = (tab, mech, ticketOnly) => {
+      if (!ticketOnly) return { samples: 0, wins: 0, losses: 0 };
+      if (mech === 'FVG-FILL') return { samples: 40, wins: 39, losses: 1, hit: 0.975 };
+      return { samples: 0, wins: 0, losses: 0, hit: NaN };
+    };
+    const bag2 = W2.hgOgPickScalpVerdict(ranked.map(r => Object.assign({}, r)), null, 'long');
+    ok(!bag2.go,
+       'and the old 117/120 fixture no longer clears it — 97.5% on 120 trades is not enough '
+       + 'once the bar counts the 77 mechanics it was picked from');
+  }
   ok(!W.hgOgPickScalpVerdict(ranked, null, 'short').go, 'tape filter blocks wrong direction');
 }
 
