@@ -2916,14 +2916,26 @@ console.log('\n== age in bars is a fact about the array, not about time ==');
   ok(L(cur * 1000, tf, now).bars === 0, 'milliseconds are recognised, as everywhere else here');
 
   /* ---- what the table says ---- */
+  /* WHOLE DAYS ONLY, and this is the same trap the note below names — it
+     was fixed there and left here. Shifting a fixture by an arbitrary
+     offset moves every bar to a different hour of the day, and the
+     13:00-18:00 session gate then decides whether anything fires at all:
+     at 06:29 UTC the 60-hour shift lands the last bar at 18:29, one
+     minute outside the window, and `latest` comes back null. The suite
+     passed every time it happened to run at an hour that landed inside.
+     A whole-day shift preserves every bar's hour, so the fixture that
+     fires still fires whenever the suite runs. */
+  const DAY = 86400;
   const mk = backSec => {
     const rows = series(320, { tfSec: tf, endHour: 15, tail: 0 });
-    const shift = (now - backSec) - rows[rows.length - 1].t;
-    for (const r of rows) r.t += shift;
+    const last = rows[rows.length - 1].t;
+    const days = Math.floor(((now - backSec) - last) / DAY);
+    for (const r of rows) r.t += days * DAY;
     return ctx.hg80ScanTf(rows, { tf: '15m', sec: tf, bars: 320, band: 'scalp' },
                           ctx.hg80VenueRt());
   };
   const stale = mk(60 * 3600);
+  ok(stale.latest, 'the shifted fixture still fires, whatever hour the suite runs at');
   ok(stale.latest.ageBars === 0,
      'the firing is still the last bar in the array, so ageBars is 0 — that part was never wrong');
   ok(stale.latest.lagBars > 200 && stale.latest.wallSec > 59 * 3600,

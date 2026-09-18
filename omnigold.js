@@ -7445,9 +7445,14 @@ terse status, and never launches a first-time scan on a global refresh.
          edge, hardest on tight-stop scalps.
        - engine grade ordering A > B > C holds on win rate
          (54.3 / 36.1 / 34.8%), so the selection edge is real; the cost
-         drag is not survivable on the scalp horizon (ENGINE:SCALP
-         -2.603R/trade net) while swing geometry roughly broke even
-         (ENGINE:SWING -0.056R net, PF ~0.90). */
+         drag is not survivable on the scalp horizon.
+         THE COHORT FIGURES THAT USED TO SIT HERE (ENGINE:SCALP -2.603R,
+         ENGINE:SWING -0.056R, PF 0.90) ARE FROM A PRE-v699 BAKE and are
+         deliberately not restated: they were copied out of this comment
+         into four rendered strings and went on printing after the
+         evidence was re-baked underneath them. ENGINE:SCALP has no row at
+         all now. Ask hgOgCohortClaim(key), which reads the current
+         bake. */
 
   /* Round trip cost as percent of price. PAXG-calibrated: taker both sides
      plus spread, 0.26% RT, verified against recovered per-trade costs in
@@ -7917,6 +7922,150 @@ terse status, and never launches a first-time scan on a global refresh.
   }
 
   /* ====================================================================
+     A COHORT IS QUOTED FROM THE RECORD, OR IT IS NOT QUOTED
+
+     Four places on this tab described a replay cohort in prose. All four
+     wrote the NUMBER into the sentence and the JUDGEMENT into the grammar,
+     and then the evidence was re-baked underneath them. What the reader
+     actually saw, measured on the shipped build:
+
+       "the replay's ENGINE scalp cohort lost 2.60R/trade net"
+       "replay: scalp cost drag -2.6R/trade net — swing geometry
+        survived (PF 0.90)"
+       "No cohort finished net-positive; the closest was ENGINE setups on
+        SWING geometry (0.85R/trade net, PF 0.90 — still a net loss).
+        ... Every number here is measured"
+
+     ENGINE:SCALP has no row in the current bake at all, so both -2.6
+     figures came from the literal fallback every single render — a number
+     from a previous bake, printed as a measurement. PF 0.90 is printed
+     while this file's own evidence object carries
+     pf: { 'ENGINE:SWING': null } with the note "the old 0.90 was measured
+     on n=27 pre-v699. null, not a number". And the banner calls +0.85R
+     "still a net loss" one clause after declaring that no cohort finished
+     net-positive, having just computed +0.85 from the record.
+
+     This file's header already states the rule that was broken: a count
+     written into prose drifts silently. It applied it to the mechanic
+     count and not to the cohort numbers.
+
+     So: one resolver, and every sentence derived from what it returns.
+     The sign decides the verb, the record decides the number, and a
+     cohort with no row says so instead of falling back to a literal.
+
+     SAMPLE SIZE IS PART OF THE CLAIM, not a footnote. ENGINE:SWING is
+     THREE trades. MIN_SAMPLES is this desk's own "too few to judge" bar
+     everywhere else, and a cohort under it cannot be called the closest,
+     cannot have survived, and is not evidence of an edge in either
+     direction. Reporting +0.85R without n=3 beside it would be the same
+     failure as the one above, flattering instead of stale. */
+
+  /* -> { key, missing, n, net, winRate, gross, pf, thin } — never a literal.
+     `missing` when the bake has no such cohort; `thin` when it has fewer
+     than MIN_SAMPLES settled trades. */
+  function hgOgCohortClaim(key){
+    var k = (key === null || key === undefined) ? '' : String(key);
+    var ev = k ? hgOgReplayEvidence(k) : null;
+    if (!ev) return { key: k, missing: true, n: 0, net: NaN, winRate: NaN,
+                      gross: NaN, pf: NaN, thin: true };
+    var n = fin(ev.n);
+    var pfMap = (HG_OG_REPLAY_EVIDENCE && HG_OG_REPLAY_EVIDENCE.pf) || {};
+    return {
+      key: k, missing: false,
+      n: isFinite(n) ? n : 0,
+      net: fin(ev.avgNetR), winRate: fin(ev.winRate), gross: fin(ev.avgGrossR),
+      /* A PLAIN LOOKUP, NOT hgOgReplayRow. That helper resolves aliases and
+         MERGES rows, which is right for [n, winRate, net, gross] and wrong
+         for a scalar: it only returns a bare number at all because
+         hgOgMergeReplayRows(null, x) short-circuits to x, and a second key
+         in the same group would have it index a[0] on a number. A profit
+         factor has no aliases and two of them cannot be averaged without
+         their trade counts anyway.
+         null in the pf map is a deliberate "no meaningful value" rather
+         than a missing key — fin(null) is NaN, which is exactly right. */
+      pf: fin(Object.prototype.hasOwnProperty.call(pfMap, k.toUpperCase())
+                ? pfMap[k.toUpperCase()] : null),
+      thin: !(isFinite(n) && n >= MIN_SAMPLES)
+    };
+  }
+
+  /* '-1.44R/trade net' / '+0.85R/trade net', or null when there is no
+     number to print. The sign is read off the record, never assumed. */
+  function hgOgCohortNetTxt(c, dp){
+    if (!c || c.missing || !isFinite(c.net)) return null;
+    var d = (dp === 1 || dp === 2) ? dp : 2;
+    return (c.net >= 0 ? '+' : '') + c.net.toFixed(d) + 'R/trade net';
+  }
+
+  /* How many trades the claim rests on. The thin case always says so —
+     it is the most important thing about the row — but in two lengths,
+     because a banner sentence and a dim card line punctuate differently
+     and the long form nested inside a dash clause reads as two thoughts.
+       short: '3 trades — too few to judge'  (caller parenthesises)
+       long : 'on 3 trades, under the 20 this desk needs before it will
+               judge anything' */
+  function hgOgCohortNTxt(c, short){
+    if (!c || c.missing || !(c.n > 0)) return null;
+    var n = hgOgFmtCount(c.n) + ' trade' + (c.n === 1 ? '' : 's');
+    if (short) return c.thin ? (n + ' — too few to judge') : n;
+    return c.thin
+      ? ('on ' + n + ', under the ' + MIN_SAMPLES
+         + ' this desk needs before it will judge anything')
+      : ('over ' + n);
+  }
+
+  /* ' · PF 0.90' when the bake carries one, '' when it carries null. */
+  function hgOgCohortPfTxt(c){
+    return (c && isFinite(c.pf)) ? (' · PF ' + c.pf.toFixed(2)) : '';
+  }
+
+  /* The cohort book, read rather than asserted: every cohort key in the
+     bake, the best of them by net R, and whether ANY of them finished
+     net-positive. This is what replaces "No cohort finished net-positive"
+     as a hardcoded clause. */
+  function hgOgCohortBook(){
+    var E = HG_OG_REPLAY_EVIDENCE;
+    var keys = (E && E.cohorts) ? Object.keys(E.cohorts) : [];
+    var rows = [], i, c;
+    for (i = 0; i < keys.length; i++){
+      c = hgOgCohortClaim(keys[i]);
+      if (!c.missing && isFinite(c.net)) rows.push(c);
+    }
+    rows.sort(function(a, b){ return b.net - a.net; });
+    var positive = rows.filter(function(r){ return r.net > 0; });
+    return {
+      rows: rows,
+      best: rows.length ? rows[0] : null,
+      positiveN: positive.length,
+      /* a positive cohort that is too thin to judge is NOT a finding, and
+         the banner must not be able to read it as one */
+      positiveJudgeableN: positive.filter(function(r){ return !r.thin; }).length
+    };
+  }
+
+  /* The banner's cohort sentence, in full, derived. Three shapes, and
+     which one renders is decided by the record. */
+  function hgOgCohortStanceTxt(){
+    var book = hgOgCohortBook();
+    var b = book.best;
+    if (!b) return 'No cohort carries a settled record in this window';
+    var net = hgOgCohortNetTxt(b), nTxt = hgOgCohortNTxt(b);
+    var label = 'the ' + b.key + ' cohort';
+    var pf = hgOgCohortPfTxt(b);
+    if (b.net <= 0){
+      return 'No cohort finished net-positive; the closest was ' + label
+        + ' (' + net + pf + (nTxt ? ', ' + nTxt : '') + ')';
+    }
+    if (b.thin){
+      return 'One cohort finished net-positive — ' + label + ', ' + net + pf
+        + ' — but ' + nTxt + ', so it is not evidence of an edge in either direction';
+    }
+    return book.positiveJudgeableN + ' cohort'
+      + (book.positiveJudgeableN === 1 ? '' : 's') + ' finished net-positive; the best was '
+      + label + ' (' + net + pf + (nTxt ? ', ' + nTxt : '') + ')';
+  }
+
+  /* ====================================================================
      TESTING EVERY MECHANIC, PRICED AT THE VENUE YOU ACTUALLY TRADE
      ====================================================================
 
@@ -8153,14 +8302,23 @@ terse status, and never launches a first-time scan on a global refresh.
   function hgOgCostsFirstHtml(setup, drag){
     var d = drag || hgOgCostDrag(setup);
     if (!d || (d.tier !== 'heavy' && d.tier !== 'fatal')) return '';
-    var coh = hgOgReplayEvidence('ENGINE:SCALP');
-    var cohNet = (coh && isFinite(fin(coh.avgNetR))) ? fin(coh.avgNetR) : -2.603;
-    var cohTxt = (cohNet < 0)
-      ? ('lost ' + Math.abs(cohNet).toFixed(2) + 'R/trade net')
-      : ('netted +' + cohNet.toFixed(2) + 'R/trade');
+    /* THE COST ARITHMETIC IS LIVE AND STAYS. What follows it is a claim
+       about a measured cohort, and ENGINE:SCALP has no row in this bake —
+       so the old literal fallback printed 'lost 2.60R/trade net' on every
+       single render. Quote whichever scalp cohort actually has a record,
+       named exactly, or say nothing after the cost fact. */
+    var coh = hgOgCohortClaim('ENGINE:SCALP');
+    var label = 'ENGINE scalp';
+    if (coh.missing){ coh = hgOgCohortClaim('SCAN:SCALP'); label = 'scalp scan'; }
+    var net = hgOgCohortNetTxt(coh), nTxt = hgOgCohortNTxt(coh);
     var txt = 'COSTS FIRST: ' + d.rtCostPct.toFixed(2) + '% round trip is '
-      + d.costR.toFixed(2) + 'R of this stop — the replay\'s ENGINE scalp cohort '
-      + cohTxt + ' under fee loads like this';
+      + d.costR.toFixed(2) + 'R of this stop';
+    if (net){
+      txt += ' — the replay\'s ' + label + ' cohort ran ' + net
+        + (nTxt ? ' ' + nTxt : '');
+    } else {
+      txt += ' — no settled scalp cohort in this replay window to price it against';
+    }
     return '<div class="note warn og-costs-first" style="margin:8px 0;padding:6px 8px;'
       + 'border:1px solid #f59e0b;border-left:3px solid #dc2626;border-radius:4px;'
       + 'background:rgba(245,158,11,0.08);font-weight:bold;font-size:0.85em">'
@@ -8224,22 +8382,28 @@ terse status, and never launches a first-time scan on a global refresh.
      anything. Every figure is baked from the two replay files; the median
      fee figures are the measured ones (see the medianCostR bake note).
      An earlier draft called ENGINE:SWING 'the only cohort that survived
-     costs' and its makeup 'grade-A/B' — neither traces: PF 0.90 is a net
-     LOSS (avgNetR -0.056), and its 27 settled trades were engine scalar
-     45 x21 (grade-C, low tally) + scalar 70 x6, with no grade-A at all
-     (trades[] in scripts/backtest-omnigold-results.json). */
+     costs' and its makeup 'grade-A/B' — neither traced, and the correction
+     written here then became stale in its turn: it argued against the
+     claim using the pre-v699 numbers (PF 0.90, avgNetR -0.056, n=27), all
+     three of which the current bake has moved or dropped. The cohort
+     sentence is derived from the live record now (hgOgCohortStanceTxt), so
+     neither the claim nor the rebuttal is written down as prose. What
+     survives from that audit is the part that is not a number: a cohort's
+     MAKEUP is not its grade label, and n=3 is not a finding. */
   function hgOgDeskStanceBannerHtml(){
     var E = HG_OG_REPLAY_EVIDENCE;
     var med = E.medianCostR || {};
-    var pfSw = fin(E.pf && E.pf['ENGINE:SWING']);
-    var sw = hgOgReplayEvidence('ENGINE:SWING');
-    var swNet = (sw && isFinite(fin(sw.avgNetR))) ? fin(sw.avgNetR).toFixed(2) : '-0.06';
+    /* THE CLAUSE THAT SIGNED OFF 'Every number here is measured' WAS THE
+       ONE THAT WAS NOT. It hardcoded 'No cohort finished net-positive',
+       then printed the best cohort's +0.85R from the record and called it
+       'still a net loss' in the same breath, with a PF of 0.90 the
+       evidence object sets to null. The sentence is derived now — see
+       hgOgCohortStanceTxt — so the verdict cannot disagree with the
+       numbers under it, in either direction. */
     var txt = 'REPLAY VERDICT (' + hgOgFmtCount(E.settled) + ' settled PAXG trades): '
       + 'scalp-geometry setups lost net of costs across every tier — the median trade paid '
       + fin(med.all).toFixed(2) + 'R in fees (' + fin(med.scalp).toFixed(2) + 'R on scalp geometry). '
-      + 'No cohort finished net-positive; the closest was ENGINE setups on SWING geometry ('
-      + swNet + 'R/trade net, PF ' + (isFinite(pfSw) ? pfSw.toFixed(2) : '0.90')
-      + ' — still a net loss). '
+      + hgOgCohortStanceTxt() + '. '
       + 'Confluence tiers did not rank outcomes. Every number here is measured, in '
       + E.src + ' + scripts/backtest-omnigold-results.json.';
     /* ACTIVE-VENUE LINE (hg-v537): the venue the cost machinery is pricing
@@ -8922,9 +9086,11 @@ terse status, and never launches a first-time scan on a global refresh.
   /* ENGINE pick annotations. Grade A/B carry the replay's one genuinely
      positive finding — the selection ordering held (A 54.3% > B 36.1% >
      C 34.8% win rate) — WITH its cost warning attached; a SCALP-horizon
-     pick whose fee tier is heavy/fatal gets the cohort caution too
-     (ENGINE:SCALP -2.603R/trade net vs ENGINE:SWING -0.056R). '' when the
-     grade has no record; never a throw. */
+     pick whose fee tier is heavy/fatal gets the cohort caution too, read
+     from the bake by hgOgCohortClaim rather than quoted here. The figures
+     that used to be quoted here were a pre-v699 bake's and were still
+     being printed long after it was replaced. '' when the grade has no
+     record; never a throw. */
   function hgOgEngineReplayLinesHtml(pick, horizon){
     if (!pick) return '';
     var h = '';
@@ -8943,10 +9109,24 @@ terse status, and never launches a first-time scan on a global refresh.
     if (hz === 'SCALP'){
       var d = hgOgCostDrag(pick);
       if (d && (d.tier === 'heavy' || d.tier === 'fatal')){
-        var coh = hgOgReplayEvidence('ENGINE:SCALP');
-        var drag = (coh && isFinite(fin(coh.avgNetR))) ? coh.avgNetR.toFixed(1) : '-2.6';
-        h += '<div class="dim og-replay-line" style="font-size:11px;margin-top:2px">replay: scalp cost drag '
-          + drag + 'R/trade net — swing geometry survived (PF 0.90)</div>';
+        /* BOTH HALVES OF THE OLD LINE WERE LITERALS. '-2.6' came from a
+           cohort with no row in this bake, and 'swing geometry survived
+           (PF 0.90)' quoted a profit factor this file's own evidence
+           object sets to null on n=3. A three-trade cohort did not
+           survive anything. */
+        var sc = hgOgCohortClaim('ENGINE:SCALP');
+        if (sc.missing) sc = hgOgCohortClaim('SCAN:SCALP');
+        var scNet = hgOgCohortNetTxt(sc, 1);
+        var sw = hgOgCohortClaim('ENGINE:SWING');
+        var swNet = hgOgCohortNetTxt(sw, 1), swN = hgOgCohortNTxt(sw, true);
+        var bits = [];
+        if (scNet) bits.push('scalp cost drag ' + scNet + ' on the ' + sc.key + ' cohort');
+        if (swNet) bits.push('swing geometry ' + swNet + hgOgCohortPfTxt(sw)
+                             + (swN ? ' (' + swN + ')' : ''));
+        if (bits.length){
+          h += '<div class="dim og-replay-line" style="font-size:11px;margin-top:2px">replay: '
+            + esc(bits.join(' — ')) + '</div>';
+        }
       }
     }
     return h;
@@ -10369,15 +10549,25 @@ terse status, and never launches a first-time scan on a global refresh.
   /* ================= APEX GOLD — GRADE-GATED SETUPS (ADDITIVE) =============
      The gold setups an elite, extremely selective trader would take, grounded
      ONLY in what this app has measured on the PAXG 1h replay
-     (2026-03-15..08-29, n=7270 settled — HG_OG_REPLAY_EVIDENCE):
+     (HG_OG_REPLAY_EVIDENCE — its own window and settled count, not a
+     copy of them; the copy that used to sit here said n=7270 against a
+     bake of 8,155):
        1. ENGINE grade A/B only — the one selection ordering that held
           (A 54.3% WR n=70 vs B 36.1% vs C 34.8%, ~31% scan baseline) — taken
           from the REAL pick gate hgOgPickGoldEngineFor (tape-aligned per
           horizon), never demoted grades, never grade-C FORMING fallbacks.
-       2. SWING geometry preferred — ENGINE:SWING was the only near-breakeven
-          cohort (-0.06R net, PF 0.90); a SCALP pick qualifies ONLY when its
+       2. SWING geometry preferred. A SCALP pick qualifies ONLY when its
           cost tier is ok (0.26% PAXG round trip <= 0.125R of the stop),
-          because ENGINE:SCALP was cost-dominated at -2.603R/trade net.
+          because scalp geometry is where the fee load dominates: the
+          median scalp trade in the bake paid 0.64R in fees against 0.28R
+          on swing, and every scalp score tier finished net-negative.
+          THE RULE IS UNCHANGED AND ITS JUSTIFICATION IS NOT THE ONE THAT
+          USED TO BE WRITTEN HERE. That cited ENGINE:SWING at -0.06R net
+          and PF 0.90 and ENGINE:SCALP at -2.603R; the current bake has no
+          ENGINE:SCALP row at all and puts ENGINE:SWING at +0.85R on three
+          trades, which is not evidence for the rule OR against it. The
+          fee-load argument above is, and it is read off medianCostR and
+          the tier table rather than restated from a previous bake.
           A SWING pick rides its cohort through thin/heavy tiers (the cohort
           net already paid those fees) but a FATAL tier — the stop tighter
           than the fee, 'structurally unpayable' per hgOgCostDrag — blocks
@@ -10442,11 +10632,15 @@ terse status, and never launches a first-time scan on a global refresh.
       if (costFail){
         var why;
         if (hz === 'SCALP'){
-          /* measured cohort drag, printed only when the record exists */
-          var coh = hgOgReplayEvidence('ENGINE:SCALP');
-          why = 'scalp cost drag' + ((coh && isFinite(fin(coh.avgNetR)))
-            ? ' — replay: ' + coh.avgNetR.toFixed(1) + 'R/trade net'
-            : ' — the replay cohort was cost-dominated');
+          /* THE ONE SITE THAT ALREADY GOT THIS RIGHT: printed only when
+             the record exists, no literal behind it. Routed through the
+             shared resolver so the other three cannot drift away from it
+             again. */
+          var coh = hgOgCohortClaim('ENGINE:SCALP');
+          var cohNet = hgOgCohortNetTxt(coh, 1);
+          why = 'scalp cost drag' + (cohNet
+            ? ' — replay: ' + cohNet + ' on the ' + coh.key + ' cohort'
+            : ' — no settled ' + coh.key + ' cohort in this replay window');
         } else {
           why = 'a stop tighter than the fee — ' + drag.rtCostPct.toFixed(2)
             + '% RT is ' + drag.costR.toFixed(2) + 'R of 1R (' + tier + ' tier)';
@@ -13919,6 +14113,13 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgRenderConfluenceBreakdown = hgOgRenderConfluenceBreakdown;
     window.hgOgSpectrumTruthHeaderHtml = hgOgSpectrumTruthHeaderHtml;
     window.hgOgDeskStanceBannerHtml = hgOgDeskStanceBannerHtml;
+    window.hgOgCohortClaim = hgOgCohortClaim;
+    window.hgOgCohortNetTxt = hgOgCohortNetTxt;
+    window.hgOgCohortNTxt = hgOgCohortNTxt;
+    window.hgOgCohortPfTxt = hgOgCohortPfTxt;
+    window.hgOgCohortBook = hgOgCohortBook;
+    window.hgOgCohortStanceTxt = hgOgCohortStanceTxt;
+    window.HG_OG_MIN_SAMPLES = MIN_SAMPLES;
     /* APEX GOLD (ADDITIVE) — grade-gated, tape-aligned, cost-tiered tier
        built ONLY from measured replay evidence; see hgOgApexQualify. */
     window.hgOgApexQualify = hgOgApexQualify;

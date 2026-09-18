@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v813',
-  pack: 'the 80PERCENT tab\'s forward-looking half reaches Telegram — a takeable setup and an armed candle now go out on the alert cycle, judged by the tab\'s own six tests rather than re-derived, keyed on the candle so one armed bar is one message instead of one every five minutes',
+  version: 'hg-v814',
+  pack: 'OMNIGOLD stops quoting cohort numbers it no longer has — the permanent replay banner declared no cohort net-positive, then printed +0.85R from the record and called it a net loss, beside a profit factor the evidence sets to null and a scalp figure from a bake that no longer contains that cohort; every cohort sentence is now derived from the live record or not made at all',
   built: '2026-09-17T00:00:00Z'
 };
 
