@@ -1404,8 +1404,19 @@ console.log('\n== SIMPLE is the default, and it reads as a trade ==');
     const cards = (html.match(/class="card /g) || []).length;
     const watches = (html.match(/WATCH — not a signal to act on/g) || []).length;
     ok(cards > 0, `the panel renders ${cards} card(s)`);
-    ok(watches >= cards,
-       `and each carries the WATCH mark (${watches} marks for ${cards} cards)`);
+    /* COUNT SETUP CARDS, NOT EVERY .card. The armed rows in WHAT IS COMING
+       are also .card and are not setups — they carry their own marks (NOT
+       WORTH WAITING FOR, THE NEXT CANDLE IS OUTSIDE THE WINDOW) and the
+       panel's own lead. This counted both and passed only while the
+       fixture happened to arm nothing; the first time an armed row
+       rendered beside the setups it failed for a card that was never
+       supposed to carry this mark. A setup card is one that states its own
+       risk and reward. */
+    const setups = (html.match(/You risk <b>/g) || []).length;
+    ok(setups > 0, `the panel renders ${setups} setup card(s)`);
+    ok(watches >= setups,
+       `and each carries the WATCH mark (${watches} marks for ${setups} setup cards, of `
+       + `${cards} cards in all)`);
   }
   ok(/WATCH — not a signal to act on/.test(html),
      'and the WATCH tag is on the card — simplifying the layout is not licence to drop the one '
@@ -2552,6 +2563,104 @@ console.log('\n== the ledger is read at the bar for the number of things being t
        && vm.runInContext('typeof hgOmniFamilyZ', ctx) === 'function',
        'and it is restored, so nothing after this block runs against a stub');
   }
+}
+
+console.log('\n== the FULL card answers to the ledger too ==');
+{
+  /* hg-v789 took "This strategy has no measured record on this desk" out of
+     watchLineHtml because the tab never checked whether it was true. It
+     fixed one renderer. setupCardHtml — the FULL view's card — kept saying
+     it, unconditionally, so the same setup could appear twice on one page:
+     once reading what the forward log holds, and once flatly denying it
+     holds anything. */
+  /* CODE, not SRC: the phrase survives in the comments that explain why it
+     was removed, and a comment about a removed claim is not the claim. */
+  ok(!/no measured record on this desk/.test(CODE),
+     'the claim that there is no record is emitted nowhere');
+  ok(/no measured record on this desk/.test(SRC),
+     'though the comments still record what it used to say, and why it went');
+
+  /* A THIRD RENDERER WAS MAKING IT, and the worst-placed of the three: the
+     clipboard export, which is what a reader pastes into a journal, so it
+     leaves the app carrying whatever it says. Found by this assertion, not
+     by reading. */
+  const sum = String(ctx.hg80LedgerSummaryTxt());
+  ok(!/no measured record on this desk/.test(sum), 'the export does not assert it either');
+  ok(/WATCH/.test(sum), 'while still saying every mechanic is a WATCH, which is the true part');
+  ok(/Nothing recorded in the forward log yet|recorded and none has settled|settled record/
+       .test(sum),
+     `and reports what the log actually holds (${sum.slice(0, 70)}…)`);
+  ok(/hg80LedgerSummaryTxt\(\)/.test(CODE), 'the export calls it rather than hardcoding a claim');
+  ok(/h \+= watchLineHtml\(sig\);/.test(CODE),
+     'and the FULL card calls the same ledger-reading line the SIMPLE card does');
+  ok((CODE.match(/h \+= watchLineHtml\(sig\);/g) || []).length === 2,
+     'both renderers, one implementation — which is what hg-v789 meant');
+
+  const def = { tf: '15m', sec: 900, bars: 320, band: 'scalp' };
+  const out = ctx.hg80ScanTf(series(320, { tfSec: 900, endHour: 15, tail: 0 }), def,
+                             ctx.hg80VenueRt());
+  const v = out.latest || out.res.signals[out.res.signals.length - 1];
+  const card = String(ctx.setupCardHtml
+    ? ctx.setupCardHtml(v, ctx.hg80CardBe(v, out), out.cfg, 'last closed candle') : '');
+  if (card){
+    const t = card.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+    ok(/WATCH — not a signal to act on/.test(t),
+       'the FULL card still carries the WATCH mark');
+    ok(/nothing settled in the forward log yet|settled in the forward log/.test(t),
+       'and reports what the ledger actually holds rather than asserting it holds nothing');
+  }
+}
+
+console.log('\n== and the FULL cards say their shared prose once ==');
+{
+  /* Fifty-five words explaining why the stop floor exists, on every card
+     that trips it. Another fifty-five explaining why no 4h or 1d bar fits
+     inside a five-hour window, on every card at those rungs. Both are true
+     of every card they appear on; the percentage and the timeframe are
+     what differ. */
+  const t = h => String(h).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const thin = { plan: { stopPct: 0.22 } };
+  const fat  = { plan: { stopPct: 1.40 } };
+  const gated = { tf: '5m', session: true };
+  const free  = { tf: '4h', session: false };
+
+  /* THE STANDING CLAIM IS UNCONDITIONAL; the two explanations are not. The
+     85% being a claim rather than a measurement is true of every card the
+     tab can render, so it is always said. An explanation of a floor
+     nothing hit, or of a session rule every card obeyed, is pure noise. */
+  const plain = t(ctx.fullCardPreambleHtml([fat], [gated]));
+  ok(/WATCH, not a ticket/.test(plain) && /own claim and not a measurement/.test(plain),
+     'a panel of ordinary cards still carries the standing claim');
+  ok(!/floor/.test(plain),
+     'but no explanation of a floor when every card clears it');
+  ok(!/session filter/.test(plain),
+     'and none of the session rule when every card was gated by it');
+
+  const floorOnly = t(ctx.fullCardPreambleHtml([thin, fat], [gated]));
+  ok(/Stops below the 0\.50% floor are marked, not suppressed/.test(floorOnly),
+     'one card under the floor brings the floor note');
+  ok(/turns cost into the dominant term/.test(floorOnly), 'with the reason the floor exists');
+  ok(/each card gives its own percentage/.test(floorOnly),
+     'and points at where the number that differs lives');
+  ok(!/session filter/.test(floorOnly),
+     'and says nothing about a session deviation when no card has one');
+
+  const both = t(ctx.fullCardPreambleHtml([thin], [gated, free]));
+  ok(/session filter is not applied at 4h/.test(both), 'an ungated rung brings the session note');
+  ok(/stated deviation from the spec rather than a rule that passed/.test(both),
+     'in the words that distinguish a dropped rule from a satisfied one');
+
+  const two = t(ctx.fullCardPreambleHtml([thin], [free, { tf: '1d', session: false }]));
+  ok(/at 4h or 1d/.test(two), 'two ungated rungs are named together, not explained twice');
+  ok((two.match(/five-hour window/g) || []).length === 1, 'with one explanation between them');
+
+  /* the per-card notes keep what is about THAT card */
+  const sn = t(ctx.sessionNoteHtml ? ctx.sessionNoteHtml(free) : '');
+  ok(/not applied at 4h/.test(sn) && /Three conditions ran here, not four/.test(sn),
+     'the card still says the filter was dropped HERE and what that left running');
+  ok(sn.split(/\s+/).length < 20, `in ${sn.split(/\s+/).length} words rather than fifty-five`);
+  ok(ctx.sessionNoteHtml({ tf: '5m', session: true }) === '',
+     'and a gated rung says nothing');
 }
 
 console.log('\n== what is true of every card is said once ==');

@@ -294,9 +294,21 @@ console.log('\n== nothing about the spec was quietly improved ==');
 
 console.log('\n== it is a WATCH, and it records so it can stop being one ==');
 {
-  ok(/WATCH, NOT A TICKET/.test(SRC), 'every setup renders as a WATCH');
+  /* THE RULE, NOT THE WORDING. This pinned the literal "WATCH, NOT A
+     TICKET", which was a thirty-five word block repeated on every FULL
+     card — and which also asserted, without checking, that the strategy
+     had no measured record. hg-v803 replaced it with the ledger-reading
+     line the SIMPLE card already used, and moved the standing claims into
+     the panel preamble where they are said once. What must hold is that
+     every card is marked a WATCH and that the 85% is named as a claim. */
+  ok(/WATCH — not a signal to act on/.test(SRC),
+     'every setup renders as a WATCH, through the one line both card renderers share');
+  ok(/WATCH, not a ticket/.test(SRC), 'and the panel says so over the cards too');
   ok(/hg-v756/.test(SRC), 'citing the rule that makes measured-edge hard');
-  ok(/an assertion/.test(SRC), 'and naming the 85% as an assertion rather than a measurement');
+  ok(/own claim and not a measurement/.test(SRC),
+     'and naming the 85% as a claim rather than a measurement');
+  ok(!/WATCH, NOT A TICKET/.test(SRC),
+     'with the old per-card block gone rather than duplicated alongside it');
 
   for (const k of Object.keys(store)) delete store[k];
   const rows = series(280);

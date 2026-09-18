@@ -3084,6 +3084,35 @@ function simpleCardHtml(sig, rung, state){
    It stays a WATCH either way. A handful of settled trades is not a record
    that earns anything, and the shared reader is what decides when it is;
    the change is that the sentence is now true rather than merely cautious. */
+/* What the forward log actually holds for this tab, in one line. Used by
+   the clipboard export, which cannot call the HTML renderers. */
+function hg80LedgerSummaryTxt(){
+  var poolFn = gfn('hgFwdPool');
+  var pool = null;
+  try { pool = poolFn ? poolFn(P80_TAB) : null; } catch (e){ pool = null; }
+  if (!pool) return 'Forward log not readable here, so what this tab has recorded is unknown. '
+    + 'Every mechanic is a WATCH.';
+  var keys = [], k, withSettled = 0, total = 0;
+  for (k in pool){
+    if (!Object.prototype.hasOwnProperty.call(pool, k)) continue;
+    keys.push(k);
+    var n = fin(pool[k] && pool[k].settled);
+    if (n > 0){ withSettled++; total += n; }
+  }
+  if (!keys.length){
+    return 'Nothing recorded in the forward log yet, so no mechanic has a measured record. '
+      + 'Every one is a WATCH.';
+  }
+  if (!withSettled){
+    return keys.length + ' mechanic' + (keys.length === 1 ? ' is' : 's are') + ' recorded and '
+      + 'none has settled yet, so no measured record exists. Every one is a WATCH.';
+  }
+  return withSettled + ' of ' + keys.length + ' recorded mechanic'
+    + (keys.length === 1 ? '' : 's') + ' ' + (withSettled === 1 ? 'has' : 'have') + ' a settled '
+    + 'record (' + total + ' settled in total) — see the FORWARD panel for what each reads. '
+    + 'Every one is still a WATCH: a record being built is not one that has been earned.';
+}
+
 function watchLineHtml(sig){
   var mech = sig && sig.mech ? sig.mech : null;
   var label = esc((sig && sig.variantLabel) || 'SPEC');
@@ -3908,7 +3937,11 @@ function hg80FocusText(list, venue){
   if (!rows.length) L.push('(nothing fired on these rungs in the bars evaluated)');
   L.push('');
   L.push('Outcomes resolved inside this fetch only. Not a backtest, not sequential, no win rate.');
-  L.push('All ' + P80_VARIANTS.length + ' mechanics are a WATCH: no measured record on this desk yet.');
+  /* THE THIRD PLACE THIS CLAIM WAS MADE WITHOUT CHECKING IT, and the worst
+     of them: this text is what a reader pastes into a journal, so it
+     leaves the app carrying whatever it says. Read the ledger, like the
+     two card renderers now do. */
+  L.push(hg80LedgerSummaryTxt());
   return L.join('\n');
 }
 
@@ -4074,6 +4107,10 @@ function latestSetupsHtml(rungs){
   var actionable = have.filter(function(r){
     return r.latest.ageBars === 0 || r.latest.status === 'open';
   });
+  if (actionable.length){
+    h += fullCardPreambleHtml(actionable.map(function(x){ return x.latest; }),
+                              actionable.map(function(x){ return x.cfg; }));
+  }
   for (i = 0; i < actionable.length; i++){
     var a = actionable[i];
     h += setupCardHtml(a.latest, hg80CardBe(a.latest, a), a.cfg,
@@ -4215,14 +4252,67 @@ function variantNoteHtml(sig){
     + 'the spec\'s — or borrows them.</div>';
 }
 
+/* THE DEVIATION ITSELF STAYS ON THE CARD; the fifty-five words explaining
+   WHY no 4h or 1d bar can sit inside a five-hour window are the same on
+   every card that carries them and are stated once by
+   fullCardPreambleHtml. A reader looking at one card still learns that
+   three conditions ran here rather than four — that is the part that is
+   about THIS rung. */
 function sessionNoteHtml(cfg){
   if (!cfg || cfg.session !== false) return '';
-  return '<div class="note warn" style="margin-top:4px">The ' + P80_UTC_FROM + ':00-'
-    + P80_UTC_TO + ':00 UTC session filter is <b>not applied at ' + esc(cfg.tf) + '</b>, and this '
-    + 'is a stated deviation from the spec rather than a rule that passed. No ' + esc(cfg.tf)
-    + ' bar lies wholly inside a five-hour window at this venue\'s bar alignment, so the filter '
-    + 'could only have admitted bars spending most of their life outside the session, or excluded '
-    + 'every bar for a reason the spec never intended. Three conditions ran here, not four.</div>';
+  return '<div class="note warn" style="margin-top:4px">Session filter <b>not applied at '
+    + esc(cfg.tf) + '</b>. Three conditions ran here, not four.</div>';
+}
+
+/* ---------------------------------------------------------------------
+   THE SAME TREATMENT hg-v800 AND hg-v802 GAVE THE OTHER TWO PANELS
+
+   A FULL card carried, on every one of five, the fifty-five words
+   explaining why the stop floor exists and that the spec's stop is
+   printed anyway, and — on 4h and 1d — the fifty-five explaining why the
+   session filter cannot apply at those bar lengths. Both are true of
+   every card they appear on. The percentage and the timeframe are what
+   differ, and those stay.
+
+   Rendered only when a card below will actually trip the rule, so a panel
+   of cards that all clear the floor does not carry an explanation of a
+   floor nothing hit. */
+function fullCardPreambleHtml(sigs, cfgs){
+  var anyFloor = false, ungated = [], i;
+  for (i = 0; i < (sigs || []).length; i++){
+    var p = sigs[i] && sigs[i].plan;
+    if (p && fin(p.stopPct) < P80_STOP_FLOOR) anyFloor = true;
+  }
+  for (i = 0; i < (cfgs || []).length; i++){
+    var c = cfgs[i];
+    if (c && c.session === false && ungated.indexOf(c.tf) < 0) ungated.push(c.tf);
+  }
+  /* ALWAYS SAID, because it is always true and it is the tab's whole
+     posture: the 85% is the strategy's own claim and this desk does not
+     let a claim count as an edge. It used to be thirty-five words on every
+     card; it is the same thirty-five words once. */
+  var h = '<div class="p80-lead" style="margin-top:0">'
+    + '<b>Every card below is a WATCH, not a ticket.</b> The '
+    + (P80_CLAIMED * 100).toFixed(0) + '% is the strategy\'s own claim and not a measurement, '
+    + 'and this desk has required measured edge since hg-v756 — each firing is written to the '
+    + 'forward log so it can earn one. ';
+  if (anyFloor){
+    h += '<b>Stops below the ' + P80_STOP_FLOOR.toFixed(2) + '% floor are marked, not '
+      + 'suppressed.</b> The floor exists because a stop too tight to carry a spread turns cost '
+      + 'into the dominant term — which is what the required-rate table above shows happening. '
+      + 'The spec asked for ' + P80_SL_ATR.toFixed(0) + ' ATR and ' + P80_SL_ATR.toFixed(0)
+      + ' ATR is what is printed; each card gives its own percentage. ';
+  }
+  if (ungated.length){
+    h += '<b>The ' + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC session filter is not applied '
+      + 'at ' + esc(ungated.join(' or ')) + '</b>, and this is a stated deviation from the spec '
+      + 'rather than a rule that passed. No bar that long lies wholly inside a five-hour window '
+      + 'at this venue\'s '
+      + 'alignment, so the filter could only have admitted bars spending most of their life '
+      + 'outside the session, or excluded every bar for a reason the spec never intended. Three '
+      + 'conditions ran on those rungs, not four.';
+  }
+  return h + '</div>';
 }
 
 function setupCardHtml(sig, be, cfg, kind){
@@ -4246,11 +4336,12 @@ function setupCardHtml(sig, be, cfg, kind){
      and those are not the same thing */
   var floor = P80_STOP_FLOOR;
   if (p.stopPct < floor){
-    h += '<div class="note warn" style="margin-top:4px">This stop is '
-      + num(p.stopPct, 3) + '% of entry, below this desk\'s ' + floor.toFixed(2)
-      + '% floor. The floor exists because a stop too tight to carry a spread turns cost into '
-      + 'the dominant term — which is exactly what the arithmetic above shows happening on the '
-      + 'short rungs. Shown, not suppressed: the spec asked for 4 ATR and 4 ATR is what is printed.</div>';
+    /* WHY the floor exists, and that the spec's stop is printed anyway, is
+       the same on every card that trips it — stated once by
+       floorPreambleHtml above the cards. The PERCENTAGE is what differs. */
+    h += '<div class="note warn" style="margin-top:4px">This stop is <b>'
+      + num(p.stopPct, 3) + '%</b> of entry, below this desk\'s ' + floor.toFixed(2)
+      + '% floor.</div>';
   }
 
   h += variantNoteHtml(sig);
@@ -4270,10 +4361,16 @@ function setupCardHtml(sig, be, cfg, kind){
   if (sig.res && sig.status && sig.status !== 'open'){
     h += resultLineHtml(sig);
   }
-  h += '<div class="note warn" style="margin-top:6px;padding:4px 6px;border-left:3px solid var(--veto)">'
-    + '<b>WATCH, NOT A TICKET.</b> This strategy has no measured record on this desk — the claimed '
-    + 'rate is an assertion, and hg-v756 made measured-edge hard. Recorded to the forward log so '
-    + 'it can earn one.</div>';
+  /* ANSWERABLE TO THE LEDGER, like the SIMPLE card.
+
+     This said "This strategy has no measured record on this desk" on every
+     FULL card, always — the exact assertion hg-v789 removed from
+     watchLineHtml because the tab never checked whether it was true. It
+     was fixed in one renderer and left standing in the other, so the same
+     setup could appear twice on one page: once reading what the forward
+     log holds, and once flatly denying it holds anything. One
+     implementation now, which is what hg-v789 meant. */
+  h += watchLineHtml(sig);
   return h + '</div>';
 }
 
@@ -4363,6 +4460,8 @@ function firedHtml(rungs){
     h += '<div class="panel" style="margin-top:10px"><h3>STILL OPEN '
       + '<span>fired inside the window, neither level reached yet</span></h3>';
     var shown = open.slice(-6).reverse();
+    h += fullCardPreambleHtml(shown.map(function(x){ return x.s; }),
+                              shown.map(function(x){ return x.r.cfg; }));
     for (i = 0; i < shown.length; i++){
       h += setupCardHtml(shown[i].s, hg80CardBe(shown[i].s, shown[i].r), shown[i].r.cfg,
                          'still open');
@@ -5126,6 +5225,7 @@ W.coincideHtml       = coincideHtml;
 W.hg80FwdMinRr       = hg80FwdMinRr;
 W.forwardPanelHtml   = forwardPanelHtml;
 W.watchLineHtml      = watchLineHtml;
+W.hg80LedgerSummaryTxt = hg80LedgerSummaryTxt;
 W.HG_P80_CSS         = P80_CSS;
 W.hg80InjectCss      = hg80InjectCss;
 W.armedLiveHtml      = armedLiveHtml;
@@ -5159,6 +5259,9 @@ W.hg80PlanBe         = hg80PlanBe;
 W.hg80FinStrict      = finStrict;
 W.hg80CardBe         = hg80CardBe;
 W.geomPreambleHtml   = geomPreambleHtml;
+W.fullCardPreambleHtml = fullCardPreambleHtml;
+W.setupCardHtml      = setupCardHtml;
+W.sessionNoteHtml    = sessionNoteHtml;
 W.watchLineHtml      = watchLineHtml;
 W.hg80RiskCash       = hg80RiskCash;
 W.hg80RiskSet        = hg80RiskSet;

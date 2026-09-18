@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v802',
-  pack: 'the 80PERCENT tab\u2019s armed rows stop repeating themselves — the panel says once what is true of every row and each row keeps only its own figures, taking WHAT IS COMING down by a third and the setups panel with it',
+  version: 'hg-v803',
+  pack: 'the 80PERCENT tab\u2019s FULL cards stop claiming there is no record while the panel below them reads one — two more renderers were asserting it unchecked, one of them the clipboard text, and the fifty-five word explanations they each repeated are now said once',
   built: '2026-09-17T00:00:00Z'
 };
 
