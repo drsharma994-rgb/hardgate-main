@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v829',
-  pack: 'the OMNIGOLD fill probability stops quoting a measurement it never made — hgFillProbability returns a null sentinel when it has no history, and the tab read that as a measured 0% fill chance, demoting the setup and printing thin fill on its card; a null entry or zone bound produced a fabricated rate WITH a sample size, a missing bar low counted as a touch and took a zone the tape never reached from 0% to 100%, and the note behind the verdict was computed and thrown away instead of shown',
+  version: 'hg-v830',
+  pack: 'the OMNIGOLD replay stops judging history against the wall clock — the backtest detector map called hgOgVpPlaybook with no options, so the gold VP playbook read Date.now() and scored its session gate against the moment the bake ran; the same 400 bars read 3 of 12 with sessionOk false at 03:00 UTC and 4 of 12 with sessionOk true at 15:00, making VP-PLAYBOOK measured record a property of the clock rather than the strategy, and the map is now hoisted and held to the invariant it already claimed for itself',
   built: '2026-09-18T00:00:00Z'
 };
 

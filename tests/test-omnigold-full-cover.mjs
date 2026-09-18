@@ -67,8 +67,12 @@ const MECHANICS = (CODE.slice(mechStart, mechEnd).match(/'[A-Z0-9][A-Z0-9-]*'/g)
 ok(MECHANICS.length >= 55, 'OG_MECHANICS holds at least 55 keys (found ' + MECHANICS.length + ')');
 ok(new Set(MECHANICS).size === MECHANICS.length, 'no duplicate keys in OG_MECHANICS');
 
-/* ---- 2. the backtest fns map ---- */
-const btStart = CODE.indexOf('var fns = {');
+/* ---- 2. the backtest fns map ----
+   Hoisted out of scanHorizon in pack 830 so its clock invariant could be
+   tested from outside (see test-omnigold-replay-clock.mjs). It reads the
+   same way here: the map body is still a single brace-balanced literal,
+   now returned by hgOgBtDetectors instead of assigned to a local. */
+const btStart = CODE.indexOf('function hgOgBtDetectors()');
 ok(btStart > 0, 'the walk-forward fns map is present');
 /* Brace-matched rather than regex-terminated: the map body contains nested
    object literals and function bodies, so the first '}' is not the end. */
@@ -81,7 +85,11 @@ function braceBlock(code, from){
   }
   return '';
 }
-const BT_BLOCK = braceBlock(CODE, btStart);
+/* the function's own body is the first brace block; the map literal is the
+   second, so step past `return {` to land on it */
+const BT_RETURN = CODE.indexOf('return {', btStart);
+ok(BT_RETURN > btStart, 'hgOgBtDetectors returns the map literal');
+const BT_BLOCK = braceBlock(CODE, BT_RETURN);
 ok(BT_BLOCK.length > 0, 'the fns map block is brace-balanced');
 /* Keys appear either quoted ('ICHI-KUMO':) or bare (SPRING:). */
 const BT_KEYS = new Set();
@@ -121,7 +129,15 @@ ok(orphanBt.length === 0,
    pass reaches through a helper (hgOgPdSweep via hgOgPrevDay, and the like)
    are matched by name, which is why both sets are function names rather than
    keys. */
-const btOnly = [...BT_CALLED].filter(f => !CALLED.has(f));
+/* NOT A DETECTOR, AND NAMED RATHER THAN PATTERN-MATCHED. hgOgBtLastSec reads
+   the last bar's timestamp so the replay can tell each detector when it is;
+   the live pass has the wall clock and does not need it. It is exempt because
+   it detects nothing, and it is listed here by name so the exemption cannot
+   quietly widen into "anything starting with hgOgBt". */
+const BT_HELPERS = ['hgOgBtLastSec'];
+ok(BT_HELPERS.every(h => CODE.indexOf('function ' + h + '(') > 0),
+   'every exempted backtest helper actually exists — a stale exemption is a hole');
+const btOnly = [...BT_CALLED].filter(f => !CALLED.has(f) && BT_HELPERS.indexOf(f) < 0);
 ok(btOnly.length === 0,
    'every detector in the walk-forward map is also called by hgOgDetect' +
    (btOnly.length ? ' — backtest-only: ' + btOnly.join(', ') : ''));

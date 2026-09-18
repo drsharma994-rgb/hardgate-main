@@ -2236,7 +2236,11 @@ terse status, and never launches a first-time scan on a global refresh.
     var pb = null;
     try {
       pb = f(rows, {
-        now: isFinite(opts.nowSec) ? (opts.nowSec > 1e12 ? opts.nowSec : opts.nowSec * 1000) : Date.now(),
+        /* fin(), NOT isFinite(): isFinite(null) is true and +null is 0, so a
+           null clock became midnight 1970 rather than falling back to now */
+        now: isFinite(fin(opts.nowSec))
+               ? (fin(opts.nowSec) > 1e12 ? fin(opts.nowSec) : fin(opts.nowSec) * 1000)
+               : Date.now(),
         scalp: false,
         news: opts.news || null
       });
@@ -12357,39 +12361,36 @@ terse status, and never launches a first-time scan on a global refresh.
 
   /* ==================== the scan ==================== */
 
-  function scanHorizon(cfg, shared, ui){
+  /* THE REPLAY'S DETECTOR MAP, HOISTED SO ITS INVARIANT CAN BE TESTED.
+
+     Built inline inside scanHorizon until now, which made the claim two
+     comments below — that every entry is the same pure function the live
+     pass calls — impossible to check from outside. It was not true.
+
+     A detector in here is handed a TRUNCATED slice of history and asked
+     what it sees at the end of it. Anything it reads other than those bars
+     is not a property of the setup: it is a property of the moment the bake
+     ran. hgOgVpPlaybook was called with no options at all, so its `now` fell
+     through to Date.now() and the gold VP playbook judged every historical
+     bar against the wall clock. Its session gate is one of the twelve it
+     scores, so the SAME 400 bars read 3/12 with sessionOk false at 03:00 UTC
+     and 4/12 with sessionOk true at 15:00 — the record was a property of
+     when scripts/backtest-omnigold.mjs happened to run, and not reproducible.
+
+     Every entry that accepts a clock now receives the bar's own timestamp,
+     which is the only clock a replay has any business reading.
+     test-omnigold-replay-clock.mjs holds the whole map to that: each entry
+     must answer identically under two wall clocks twelve hours apart. */
+  function hgOgBtLastSec(r){
+    if (!r || !r.length) return NaN;
+    var i = r.length - 1, t;
+    for (; i >= 0; i--){ t = fin(r[i].t); if (isFinite(t)) return t; }
+    return NaN;
+  }
+
+  function hgOgBtDetectors(){
     var w = W();
-    var dropFn = (w && typeof w.hgOmniDropForming === 'function') ? w.hgOmniDropForming : null;
-    var dailyFn = (w && typeof w.hgOmniDailyHtf === 'function') ? w.hgOmniDailyHtf : null;
-    var btFn = (w && typeof w.hgOmniBacktestOne === 'function') ? w.hgOmniBacktestOne : null;
-    var poolFn = (w && typeof w.hgOmniPoolStats === 'function') ? w.hgOmniPoolStats : null;
-
-    if (ui) ui.stat.textContent = 'fetching gold ' + cfg.tf + ' bars…';
-    return hgOgFetchRows(cfg.tf, cfg.bars).then(function(got){
-      var rows = got.rows || [];
-      /* Sanitise before anything reads a bar. dropFn (omniroute's) now does
-         this too, but it is feature-checked — without it gold would ingest a
-         hole-punched array straight into the detectors, and a venue dropping
-         one candle would take the whole horizon down. A hole in the data is a
-         data problem, not something each detector should have to guard. */
-      var okRows = [], ri, rr;
-      for (ri = 0; ri < rows.length; ri++){
-        rr = rows[ri];
-        if (!rr || typeof rr !== 'object') continue;
-        /* fin(), NOT num(): num(null) is 0 because +null is 0, which would
-           admit a null close as the price zero. */
-        if (!isFinite(fin(rr.c))) continue;
-        okRows.push(rr);
-      }
-      rows = okRows;
-      var livePx = rows.length ? fin(rows[rows.length - 1].c) : NaN;
-      if (dropFn) rows = dropFn(rows, cfg.tf);        // closed candles only
-      if (!rows.length) return { cfg: cfg, rows: [], source: got.source, cands: [], pooled: null, livePx: NaN };
-
-      /* walk-forward every mechanic on THIS horizon */
-      var stats = {}, pooled = null;
-      if (btFn){
-        var fns = {
+    return {
           /* ONE CALL, TWO REGISTERED LABELS — the EQL/EQH-SWEEP pattern.
              hgOmniSpring returns SPRING on a swept low and UTAD on a swept
              high. This entry used to return whichever came back, so UTAD
@@ -12459,7 +12460,10 @@ terse status, and never launches a first-time scan on a global refresh.
           'MFI-SQUAT':       function(r){ return hgOgMfiSquat(r); },
           'DI-CROSS':        function(r){ return hgOgDiCross(r); },
           'FVG-HVN':         function(r){ return hgOgFvgHvn(r); },
-          'VP-PLAYBOOK':     function(r){ return hgOgVpPlaybook(r); },
+          /* the bar's own timestamp, NOT the wall clock: this is the only
+             entry in the map whose engine reads a clock, and reading
+             Date.now() made its session gate a property of the bake */
+          'VP-PLAYBOOK':     function(r){ return hgOgVpPlaybook(r, { nowSec: hgOgBtLastSec(r) }); },
           'P4-NR7':          function(r){ return hgOgPart4ByKind(r, 'P4-NR7'); },
           'P4-ADRX':         function(r){ return hgOgPart4ByKind(r, 'P4-ADRX'); },
           'P4-LAF':          function(r){ return hgOgPart4ByKind(r, 'P4-LAF'); },
@@ -12480,7 +12484,42 @@ terse status, and never launches a first-time scan on a global refresh.
           'P8-VPINBO':       function(r){ return hgOgPart8ByKind(r, 'P8-VPINBO'); },
           'P9-VOLBAR':       function(r){ return hgOgPart9ByKind(r, 'P9-VOLBAR'); },
           'P9-PREM':         function(r){ return hgOgPart9ByKind(r, 'P9-PREM'); }
-        };
+    };
+  }
+
+  function scanHorizon(cfg, shared, ui){
+    var w = W();
+    var dropFn = (w && typeof w.hgOmniDropForming === 'function') ? w.hgOmniDropForming : null;
+    var dailyFn = (w && typeof w.hgOmniDailyHtf === 'function') ? w.hgOmniDailyHtf : null;
+    var btFn = (w && typeof w.hgOmniBacktestOne === 'function') ? w.hgOmniBacktestOne : null;
+    var poolFn = (w && typeof w.hgOmniPoolStats === 'function') ? w.hgOmniPoolStats : null;
+
+    if (ui) ui.stat.textContent = 'fetching gold ' + cfg.tf + ' bars…';
+    return hgOgFetchRows(cfg.tf, cfg.bars).then(function(got){
+      var rows = got.rows || [];
+      /* Sanitise before anything reads a bar. dropFn (omniroute's) now does
+         this too, but it is feature-checked — without it gold would ingest a
+         hole-punched array straight into the detectors, and a venue dropping
+         one candle would take the whole horizon down. A hole in the data is a
+         data problem, not something each detector should have to guard. */
+      var okRows = [], ri, rr;
+      for (ri = 0; ri < rows.length; ri++){
+        rr = rows[ri];
+        if (!rr || typeof rr !== 'object') continue;
+        /* fin(), NOT num(): num(null) is 0 because +null is 0, which would
+           admit a null close as the price zero. */
+        if (!isFinite(fin(rr.c))) continue;
+        okRows.push(rr);
+      }
+      rows = okRows;
+      var livePx = rows.length ? fin(rows[rows.length - 1].c) : NaN;
+      if (dropFn) rows = dropFn(rows, cfg.tf);        // closed candles only
+      if (!rows.length) return { cfg: cfg, rows: [], source: got.source, cands: [], pooled: null, livePx: NaN };
+
+      /* walk-forward every mechanic on THIS horizon */
+      var stats = {}, pooled = null;
+      if (btFn){
+        var fns = hgOgBtDetectors();
         var k;
         for (k in fns) if (Object.prototype.hasOwnProperty.call(fns, k)){
           stats[k] = btFn(rows, fns[k], { rMult: OG_T1_R, horizon: cfg.horizonBars, warm: cfg.warm });
@@ -14695,6 +14734,11 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgGroupSettled = hgOgGroupSettled;
     window.hgOgVenueNet = hgOgVenueNet;
     window.hgOgWindowStart = hgOgWindowStart;
+    /* the replay's detector map and the clock it reads, exported so a test
+       can hold every entry to the invariant this file claims for them:
+       a replayed detector sees the bars and nothing else */
+    window.hgOgBtDetectors = hgOgBtDetectors;
+    window.hgOgBtLastSec = hgOgBtLastSec;
     /* exported so a test can drive the true-range path that a missing
        bar field used to turn into the gold price — see num() */
     window.hgOgAtrOf = atrOf;
