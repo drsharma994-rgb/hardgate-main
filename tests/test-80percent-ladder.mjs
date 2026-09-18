@@ -4010,11 +4010,75 @@ console.log('\n== the census measures why the spec is silent ==');
      the exact fault this change is about — a number the tab holds and never
      shows. */
   const html = ctx.coincideHtml([{ def: { tf: '15m' }, census: c }]);
-  ok(/WHY THE SPEC IS SILENT/.test(html), 'the census renders the measurement');
+  ok(/DO TREND AND PULLBACK GET IN EACH OTHER/.test(html),
+     'the census renders the measurement, and asks its question rather than announcing its '
+     + 'answer — it said "Trend and pullback are not independent; they fight each other" above '
+     + 'a table free to measure the opposite');
   ok(/if independent/.test(html) && /rarer by/.test(html),
      'with the independence prediction beside the observed pair, which is what makes the ratio '
      + 'mean anything');
-  ok(/fight each other/.test(html), 'and states the mechanism in words');
+  ok(/50 EMA/.test(html) && /net DOWN/.test(html) && /expect them to fight/.test(html),
+     'and states the mechanism in words, as the expectation being tested');
+
+  /* THE VERDICT IS READ OFF THE ROWS. Every band, against a table built to
+     land in it. */
+  const cen = (t, p, both) => ({ bars: 300, coincide: {
+    long:  { trend: t, pullback: p, both: both, ifIndependent: t * p,
+             rarerBy: both > 0 ? (t * p) / both : null, nBoth: 1 },
+    short: { trend: 0.5, pullback: 0.5, both: 0.25, ifIndependent: 0.25, rarerBy: 1, nBoth: 1 }
+  } });
+  const say = c => ctx.coincideHtml([{ def: { tf: '5m' }, census: c }])
+    .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+
+  ok(/rarer than chance predicts/.test(say(cen(0.5, 0.5, 0.05))),
+     'a pair far below the independence prediction reads as rarer than chance');
+  ok(/MORE often than chance predicts/.test(say(cen(0.5, 0.5, 0.45))),
+     'and one ABOVE it reads as commoner — the old prose could only ever say rarer');
+  ok(/do not appear to interact/.test(say(cen(0.5, 0.5, 0.25))),
+     'a pair landing on the prediction reads as independent, not as a conflict');
+  ok(/never once coincided/.test(say(cen(0.5, 0.5, 0))), 'and one that never co-occurs says so');
+
+  /* A DEGENERATE WINDOW IS NAMED, NOT SCORED. If one condition holds on
+     every bar the ratio is 1.0 by construction and means nothing — which
+     is exactly the case the ladder fixture produces, and exactly where the
+     old prose claimed "each holds about half the time". */
+  const deg = say(cen(1.0, 0.0067, 0.0067));
+  ok(/held on every bar or on none/.test(deg),
+     'trend at 100% is reported as a fact about the window rather than as independence');
+  /* asserted on the SIDE, not on the panel: the panel carries both rows and
+     the other one is free to read differently */
+  const degRead = ctx.hg80CoincideRead({ trend: 1.0, pullback: 0.0067, both: 0.0067,
+                                         ifIndependent: 0.0067, rarerBy: 1 });
+  ok(degRead.key === 'degenerate',
+     'the side itself is NOT scored as a finding the bars cannot support');
+  for (const t of [1, 0, 0.9995, 0.0005]){
+    ok(ctx.hg80CoincideRead({ trend: t, pullback: 0.5, both: 0.25, rarerBy: 1 }).key
+         === 'degenerate',
+       `a trend that holds on ${t === 1 || t > 0.99 ? 'every bar' : 'no bar'} cannot measure an `
+       + 'interaction');
+    ok(ctx.hg80CoincideRead({ trend: 0.5, pullback: t, both: 0.25, rarerBy: 1 }).key
+         === 'degenerate',
+       'and neither can a pullback that does');
+  }
+  ok(!/about half the time/.test(html.replace(/<[^>]+>/g, ' ')),
+     'nothing claims the two conditions hold about half the time — a sentence the table on this '
+     + 'very fixture contradicts');
+
+  /* "NOT WHAT THE BARS SHOW" IS ITSELF A FINDING. A window where every side
+     is degenerate has not produced one, so it must not claim to have. */
+  const allDeg = ctx.coincideHtml([{ def: { tf: '5m' }, census: { bars: 300, coincide: {
+    long:  { trend: 1, pullback: 0.01, both: 0.01, ifIndependent: 0.01, rarerBy: 1, nBoth: 1 },
+    short: { trend: 0, pullback: 0.99, both: 0, ifIndependent: 0, rarerBy: null, nBoth: 0 }
+  } } }]).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  ok(/cannot answer it either way/.test(allDeg),
+     'with every side degenerate the panel says the window cannot answer, not that it answered no');
+  ok(!/is not what the bars show/.test(allDeg),
+     'which would be a finding these bars did not produce');
+  ok(/is not what the bars show/.test(say(cen(0.5, 0.5, 0.25))),
+     'while a window that DID measure independence says so');
+
+  ok(/display thresholds/.test(say(cen(0.5, 0.5, 0.25))),
+     'and the bands either side of 1.0 are named as display thresholds, not significance');
   ok(!/NaN|undefined/.test(html), 'nothing renders as NaN or undefined');
   ok(ctx.coincideHtml([]) === '' && ctx.coincideHtml([{ def: { tf: '5m' }, census: null }]) === '',
      'and it renders nothing at all rather than an empty table when there is no census');

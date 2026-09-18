@@ -4131,6 +4131,64 @@ function latestSetupsHtml(rungs){
    and never as a set of setups.
    --------------------------------------------------------------------- */
 /* The measurement, in the one table it is worth. */
+/* ---------------------------------------------------------------------
+   THE PANEL THAT MEASURES MUST NOT ANNOUNCE ITS ANSWER FIRST
+
+   hg-v789 built this to MEASURE whether trend and pullback coincide less
+   often than chance, instead of asserting it. The table measures. The
+   sentences around it did not: they said "Trend and pullback are not
+   independent; they fight each other" above the numbers and "Each holds
+   about half the time" below them, both hardcoded, both printed whatever
+   the table found.
+
+   On the ladder fixture the table reports trend at 100.00% long and 0.00%
+   short, and a ratio of 1.0x — exactly what independence predicts. So the
+   panel asserted a conflict directly above a measurement of no conflict,
+   and described two conditions as holding "about half the time" directly
+   above one measured at 100% and one at 0%.
+
+   The expectation is worth stating — it is why the measurement is worth
+   taking — but as the hypothesis under test, with the verdict read off
+   the data underneath it.
+
+   DEGENERATE WINDOWS ARE NAMED, NOT SCORED. If one condition holds on
+   every evaluable bar, or on none, there is no interaction to measure:
+   the ratio is 1.0 by construction and means nothing about the market.
+   That is a fact about the window, and saying "independent" there would
+   be a finding the bars cannot support.
+
+   The 1.15 / 0.87 bands are DISPLAY thresholds and are stated as such.
+   Nothing here measures whether a departure from 1.0 is significant; the
+   sample is one fetched window.
+   --------------------------------------------------------------------- */
+var P80_COINCIDE_HI = 1.15;
+var P80_COINCIDE_LO = 0.87;
+
+function hg80CoincideRead(x){
+  if (!x) return { key: 'none', txt: 'not measured' };
+  var t = fin(x.trend), p = fin(x.pullback);
+  if (!isFinite(t) || !isFinite(p)) return { key: 'none', txt: 'not measured' };
+  if (t >= 0.999 || t <= 0.001 || p >= 0.999 || p <= 0.001){
+    return { key: 'degenerate',
+             txt: 'one of the two held on every bar or on none, so these bars cannot say '
+                + 'whether they interact' };
+  }
+  if (x.rarerBy === null || !isFinite(fin(x.rarerBy))){
+    return { key: 'never', txt: 'they never once coincided on these bars' };
+  }
+  var r = fin(x.rarerBy);
+  if (r >= P80_COINCIDE_HI){
+    return { key: 'rarer', txt: 'they coincided ' + r.toFixed(1) + '× rarer than chance predicts' };
+  }
+  if (r <= P80_COINCIDE_LO){
+    return { key: 'commoner',
+             txt: 'they coincided ' + (1 / r).toFixed(1) + '× MORE often than chance predicts' };
+  }
+  return { key: 'independent',
+           txt: 'they coincided about as often as chance predicts (' + r.toFixed(2)
+              + '×), so on these bars they do not appear to interact' };
+}
+
 function coincideHtml(rows){
   var best = null, i;
   for (i = 0; i < rows.length; i++){
@@ -4144,9 +4202,10 @@ function coincideHtml(rows){
   var pc = function(v){ return (100 * v).toFixed(2) + '%'; };
   var h = '<div class="note" style="margin-top:6px;padding:6px 8px;'
     + 'border-left:3px solid var(--veto)">'
-    + '<b>WHY THE SPEC IS SILENT</b> — on ' + esc(best.tf) + '\'s ' + best.bars
-    + ' evaluable bars. Trend and pullback are not independent; they fight each other, and this '
-    + 'is by how much:'
+    + '<b>DO TREND AND PULLBACK GET IN EACH OTHER\'S WAY?</b> — measured on ' + esc(best.tf)
+    + '\'s ' + best.bars + ' evaluable bars. A long needs price ABOVE its 50 EMA while RSI(14) '
+    + 'says the last fourteen bars were net DOWN, so one would expect them to fight. Whether '
+    + 'they did, here, is the last column:'
     + '<table class="tbl" style="margin-top:4px"><tr><th>side</th><th>trend</th><th>pullback</th>'
     + '<th>together</th><th>if independent</th><th>rarer by</th></tr>';
   var sides = [['long', best.lo], ['short', best.sh]];
@@ -4160,12 +4219,38 @@ function coincideHtml(rows){
       + '<td class="hg-num"><b>' + (x.rarerBy === null ? 'never' : x.rarerBy.toFixed(1) + '×')
       + '</b></td></tr>';
   }
-  h += '</table>'
-    + '<span class="note">A long needs price ABOVE its 50 EMA while RSI(14) says the last '
-    + 'fourteen bars were net DOWN. Each holds about half the time; together they are rarer than '
-    + 'chance by the factor in the last column. That is the structural reason the supplied spec '
-    + 'fires as little as it does — not a bug, not a thin sample, and not something a looser '
-    + 'threshold repairs so much as sidesteps.</span></div>';
+  h += '</table><span class="note">';
+  /* READ OFF THE ROWS, not asserted above them */
+  for (i = 0; i < sides.length; i++){
+    var rd = hg80CoincideRead(sides[i][1]);
+    h += '<b>' + sides[i][0].toUpperCase() + ':</b> ' + esc(rd.txt) + '. ';
+  }
+  var anyRare = false, nDeg = 0, nMeasured = 0;
+  for (i = 0; i < sides.length; i++){
+    var k = hg80CoincideRead(sides[i][1]).key;
+    if (k === 'rarer' || k === 'never') anyRare = true;
+    if (k === 'degenerate') nDeg++; else if (k !== 'none') nMeasured++;
+  }
+  /* "NOT WHAT THE BARS SHOW" IS ITSELF A FINDING, and a window where every
+     side is degenerate has not produced one. There the honest sentence is
+     that it cannot answer, not that it answered no. */
+  if (anyRare){
+    h += 'Where that holds it is the structural reason the supplied spec fires as little as it '
+      + 'does — not a bug, not a thin sample, and not something a looser threshold repairs so '
+      + 'much as sidesteps. ';
+  } else if (nMeasured > 0){
+    h += 'On this window the conflict the spec\'s design implies is not what the bars show, so '
+      + 'the firing rate needs another explanation than the two conditions fighting. ';
+  } else {
+    h += 'This window cannot answer it either way. ';
+  }
+  if (nDeg){
+    h += 'A side where one condition held on every bar or on none is a fact about this window '
+      + 'rather than a finding — the ratio is 1.0 by construction there and says nothing. ';
+  }
+  h += 'One fetched window, and the ' + P80_COINCIDE_HI.toFixed(2) + ' / '
+    + P80_COINCIDE_LO.toFixed(2) + ' bands either side of 1.0 are display thresholds: nothing '
+    + 'here tests whether a departure from chance is significant.</span></div>';
   return h;
 }
 
@@ -5226,6 +5311,8 @@ W.hg80FwdMinRr       = hg80FwdMinRr;
 W.forwardPanelHtml   = forwardPanelHtml;
 W.watchLineHtml      = watchLineHtml;
 W.hg80LedgerSummaryTxt = hg80LedgerSummaryTxt;
+W.hg80CoincideRead   = hg80CoincideRead;
+W.coincideHtml       = coincideHtml;
 W.HG_P80_CSS         = P80_CSS;
 W.hg80InjectCss      = hg80InjectCss;
 W.armedLiveHtml      = armedLiveHtml;

@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v803',
-  pack: 'the 80PERCENT tab\u2019s FULL cards stop claiming there is no record while the panel below them reads one — two more renderers were asserting it unchecked, one of them the clipboard text, and the fifty-five word explanations they each repeated are now said once',
+  version: 'hg-v804',
+  pack: 'the 80PERCENT tab\u2019s census stops announcing its answer above the table that measures it — it asserted trend and pullback fight each other directly over a row measuring them exactly independent, and called two conditions half-likely over one measured at 100% and one at 0%',
   built: '2026-09-17T00:00:00Z'
 };
 
