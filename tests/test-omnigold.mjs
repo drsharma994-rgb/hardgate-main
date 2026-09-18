@@ -225,8 +225,13 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
      SCALP, z -5.38). See the block above its push in omnigold.js. */
   const SELF_SUFFICIENT = ['obv-flow', 'mfi-pressure', 'cci-stretch', 'ema-ribbon', 'heikin-trend',
                            'ema-stack', 'session-vwap', 'participation'];
+  /* inst-filter joins them in pack 839. goldind.js is not booted by this
+     harness, and a filter that cannot run now reads UNCHECKED-SOFT rather
+     than reporting a fail-open PASS — so it belongs on this list, which is
+     the list of gates this harness genuinely deprives of their inputs. */
   const INDICATOR_GATES = INFO_GATES.filter(k => SELF_SUFFICIENT.indexOf(k) < 0)
-    .concat(['measured-edge', 'consensus', 'plan-levels', 'level-fresh', 'weekend-exposure', 'shield-guard', 'momentum-stop']);
+    .concat(['measured-edge', 'consensus', 'plan-levels', 'level-fresh', 'weekend-exposure',
+             'shield-guard', 'momentum-stop', 'inst-filter']);
   const unchecked = full.filter(g => g.pass === null).map(g => g.key);
   ok(unchecked.every(k => INDICATOR_GATES.indexOf(k) >= 0),
      'every gate that can run in this harness is evaluated (unchecked: ' + (unchecked.join(', ') || 'none') + ')');
@@ -251,12 +256,22 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
      VETO, because a ticket with no entry, stop or target is a trade that
      cannot be placed. Making it info would restore the exact defect it
      was added to close. */
-  INDICATOR_GATES.filter(k => k !== 'measured-edge' && k !== 'consensus' && k !== 'plan-levels' && k !== 'level-fresh' && k !== 'weekend-exposure' && k !== 'shield-guard').forEach(k => {
+  /* inst-filter joins that company in pack 839. It is UNCHECKED here only
+     because goldind.js is not booted; when the institutional filter DOES run
+     and rejects — a spread too wide to trade, a session the desk will not
+     take — it must be able to stand the trade aside, so it is a hard veto
+     and not an info read. Being unevaluable and being non-vetoing are
+     different things, which is the whole subject of that pack. */
+  const NOT_INFO = ['measured-edge', 'consensus', 'plan-levels', 'level-fresh',
+                    'weekend-exposure', 'shield-guard', 'inst-filter'];
+  INDICATOR_GATES.filter(k => NOT_INFO.indexOf(k) < 0).forEach(k => {
     ok(full.filter(x => x.key === k)[0].info === true,
        k + ' is INFO: it reports an adverse read, it does not veto');
   });
   ok(full.filter(x => x.key === 'measured-edge')[0].info !== true,
      'measured-edge is NOT info — a mechanic that has demonstrably not paid still vetoes');
+  ok(full.filter(x => x.key === 'inst-filter')[0].info !== true,
+     'inst-filter is NOT info either — an institutional reject stands the trade aside');
   ok(full.filter(x => x.key === 'consensus')[0].info !== true,
      'consensus is NOT info — a two-sided tape must be able to stand the trade aside');
 

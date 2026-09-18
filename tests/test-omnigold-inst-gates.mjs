@@ -83,7 +83,20 @@ console.log('== kind map + fail-open without goldind ==');
   const rows = bars(80, 2400, 3600, 2);
   const hit = { kind: 'SWEEP-V2', dir: 'long', level: 2400, why: 't' };
   const g = gate(W, rows, hit, { sessionHard: true, nowMs: NY });
-  ok(g && g.pass === true && g.hard === false, 'goldind absent → inst-filter fail-open PASS');
+  /* WAS pass === true UNTIL PACK 839. A row that could not be evaluated was
+     reporting that it passed, which made a throwing filter and a clean
+     institutional check indistinguishable to everything counting passes.
+     UNCHECKED-SOFT keeps the non-veto and drops the claim. */
+  ok(g && g.pass === null && g.hard === false,
+     'goldind absent → inst-filter UNCHECKED-SOFT, not a fail-open PASS');
+  ok(/not checked/.test(String(g.why)) && !/fail-open/.test(String(g.why)),
+     `and the row says which it is: "${g.why}"`);
+  {
+    const grade = W.hgOmniGrade ? W.hgOmniGrade([g]) : null;
+    ok(grade && grade.vetoes.length === 0 && grade.unknown.length === 0,
+       'it still does not veto — the whole point of the old fail-open');
+    ok(grade && grade.evaluated === 0, 'and no longer counts as a check that ran');
+  }
   const inst = W.hgOgInstFilterHit(hit, rows, { sessionHard: true, nowMs: NY });
   ok(inst.unchecked === true && inst.dropped === false, 'hgOgInstFilterHit reports unchecked when goldind is missing');
 }

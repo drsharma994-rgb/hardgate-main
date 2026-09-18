@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v838',
-  pack: 'the 90% SCALP VERDICT rows get the same blocker walk the PROVEN EDGE rows got — their line read below 90% lower bound unconditionally, printed on a row whose own 95% interval showed a 92% lower bound and whose real blocker was the population, so it contradicted both the number beside it and the clause after it; the walk now takes the tier shape as an option rather than being copied, because the two test different things and two copies drift',
+  version: 'hg-v839',
+  pack: 'a gate that could not run stops reporting that it passed — the institutional gold filter pushed a ledger row reading pass true with a why line that said inst filter threw fail-open, so a throwing filter and a clean institutional check were indistinguishable to every consumer counting passes and the card checks badge read 35 of 57 either way; unchecked-soft does not veto either and tells the truth, and the grader was already built for it',
   built: '2026-09-18T00:00:00Z'
 };
 

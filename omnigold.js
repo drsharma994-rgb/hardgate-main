@@ -3209,15 +3209,17 @@ terse status, and never launches a first-time scan on a global refresh.
     return NaN;
   }
 
-  /* Same hgGoldInstFilter stack as GOLD SCALP / GOLD SWING. Fail-open when
-     goldind.js is not loaded (the core omnigold harness does not boot it).
-     Does not move hit.level or rewrite the stop — it only returns a veto. */
+  /* Same hgGoldInstFilter stack as GOLD SCALP / GOLD SWING. Reports
+     UNCHECKED when goldind.js is not loaded or the filter throws — the
+     caller turns that into an unchecked-soft ledger row, which does not veto
+     and does not count as a check that ran. Does not move hit.level or
+     rewrite the stop — it only returns a veto. */
   function hgOgInstFilterHit(hit, rows, extra){
     extra = extra || {};
     hit = hit || {};
     var fn = gfn('hgGoldInstFilter');
     if (typeof fn !== 'function'){
-      return { dropped: false, reason: 'goldind inst filter not loaded — fail-open', unchecked: true };
+      return { dropped: false, reason: 'goldind inst filter not loaded — not checked', unchecked: true };
     }
     var dir = String(hit.dir || extra.dir || '').toLowerCase();
     var scalp = extra.sessionHard === true;
@@ -3253,7 +3255,7 @@ terse status, and never launches a first-time scan on a global refresh.
     var r;
     try { r = fn(cand, ctx); }
     catch (eInst){
-      return { dropped: false, reason: 'inst filter threw — fail-open', unchecked: true };
+      return { dropped: false, reason: 'inst filter threw — not checked', unchecked: true };
     }
     r = r || cand;
     return {
@@ -4842,13 +4844,32 @@ terse status, and never launches a first-time scan on a global refresh.
 
     /* Institutional gold filter — same hgGoldInstFilter as GOLD SCALP/SWING.
        One hard ledger row so the INFO_GATES regex does not swallow eight
-       new keys. goldind absent → fail-open PASS (not UNCHECKED-hard). */
+       new keys.
+
+       UNCHECKED-SOFT WHEN IT CANNOT RUN, NOT PASS. This row used to read
+       pass:true whenever the filter was unavailable, with a why line that
+       said so — "inst filter threw — fail-open". The intent was right, the
+       shape was not: the comment framed the choice as PASS versus
+       UNCHECKED-HARD, and those are not the only two. pass:null with
+       hard:false is UNCHECKED-SOFT, which hgOmniGrade puts in `degraded`,
+       does not veto, and excludes from `evaluated` — the same non-veto with
+       none of the lie.
+
+       It matters because `pass === true` is what every consumer counts. A
+       throwing filter and a clean institutional check were indistinguishable:
+       both read PASS, and the card's checks badge counted 35 of 57 either
+       way. goldind.js IS loaded in the app, so the absent branch is rare —
+       but the throw branch is live on any exception inside the filter, and
+       it was recording an institutional check that never ran as one that
+       passed. Every other gate in this file that sets true does so in the
+       else of an evaluated comparison; this was the only one setting it
+       from "I could not evaluate". */
     var inst = hgOgInstFilterHit(hit, rows, x);
     var instHard = true, instOk = true, instWhy = 'institutional gold filter OK';
     if (inst.unchecked){
       instHard = false;
-      instOk = true;
-      instWhy = inst.reason || 'goldind inst filter not loaded — fail-open';
+      instOk = null;
+      instWhy = inst.reason || 'goldind inst filter not loaded — not checked';
     } else if (inst.dropped){
       instHard = true;
       instOk = false;
