@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v808',
-  pack: 'the last two 80PERCENT surfaces that showed a refused setup as a pass — the SETUPS summary row, green on every recent firing, and the FULL card, which printed \u201cneeds 178.10% to pay\u201d as an ordinary note and left the reader to notice that no rate above 100% is reachable',
+  version: 'hg-v809',
+  pack: 'the 80PERCENT setups panel stops describing a different sort from the one it ran — it named three ranking inputs while the score used six, omitting the two largest penalties, and the sentence is now generated from the model so it cannot drift again',
   built: '2026-09-17T00:00:00Z'
 };
 

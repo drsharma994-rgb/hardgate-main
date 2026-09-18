@@ -766,6 +766,20 @@ function sizeHtml(sig, q, slip){
   return h + '</div>';
 }
 
+/* ONE LINE SAYING WHY THIS CARD IS WHERE IT IS. A reader comparing two
+   cards should not have to reverse-engineer a six-term sort. Shown only
+   when the ordering is actually doing something — a single card is not in
+   an order, and a lead worth under a point is not what put it there. */
+var P80_SORT_LEAD_MIN = 1;
+
+function sortWhyHtml(q, rank, total){
+  if (!(total > 1)) return '';
+  var lead = hg80SortLead(q);
+  if (!lead || lead.points < P80_SORT_LEAD_MIN) return '';
+  return '<div class="note dim" style="margin-top:4px;font-size:11px">#' + rank + ' of ' + total
+    + ' — what weighs most on it here: <b>' + esc(lead.label) + '</b>.</div>';
+}
+
 function reprintHtml(q, venue){
   if (!q || !q.live) return '';
   var lp = q.live;
@@ -892,6 +906,41 @@ function hg80CostVerdict(be){
    it deviates, so a thin stop lowers a setup's rank and says so — it does
    not silently remove the trade the spec asked for.
    --------------------------------------------------------------------- */
+/* The ranking model, declared once. hg80Quality sums these and nothing
+   else; hg80SortWhyTxt reads the same list to say what the sort was. A
+   term that is not here does not count, and a term that counts cannot go
+   unmentioned. */
+var P80_SCORE_TERMS = [
+  { key: 'cost',    label: 'what the venue takes out of the win' },
+  { key: 'drift',   label: 'how much of the target the price has already taken' },
+  { key: 'grade',   label: 'how close price is to the entry' },
+  { key: 'variant', label: 'how tight the mechanic is' },
+  { key: 'floor',   label: 'a stop thinner than the ' + P80_STOP_FLOOR.toFixed(2) + '% floor' },
+  { key: 'doubles', label: 'doubling a trade already open on that rung' }
+];
+
+/* the sentence, generated */
+function hg80SortWhyTxt(){
+  var i, out = [];
+  for (i = 0; i < P80_SCORE_TERMS.length; i++) out.push(P80_SCORE_TERMS[i].label);
+  return out.slice(0, -1).join(', ') + ', then ' + out[out.length - 1];
+}
+
+/* WHAT PUT THIS CARD WHERE IT IS. "Best first" means nothing without it,
+   and a reader comparing two cards should not have to reverse-engineer the
+   ordering from six numbers. Returns the biggest contributor, or null when
+   nothing is really weighing on it. */
+function hg80SortLead(q){
+  if (!q || !q.terms) return null;
+  var best = null, i;
+  for (i = 0; i < P80_SCORE_TERMS.length; i++){
+    var t = P80_SCORE_TERMS[i], n = fin(q.terms[t.key]);
+    if (!isFinite(n) || n <= 0) continue;
+    if (!best || n > best.points) best = { key: t.key, label: t.label, points: n };
+  }
+  return best;
+}
+
 function hg80Quality(sig, rung, grade, livePx){
   var planV = hg80CostVerdict(hg80CardBe(sig, rung));
 
@@ -948,30 +997,40 @@ function hg80Quality(sig, rung, grade, livePx){
 
   /* Lower is better. Cost share leads because it is the one input that is
      both measured and decisive; the rest break ties. */
-  var score = 0;
-  score += isFinite(v.share) ? (v.share * 100) : 50;      /* % of the win the venue takes */
-  /* HOW MUCH HARDER THE DRIFT HAS MADE IT, in points of required accuracy.
-     This replaces a flat penalty for MOVED ON with the size of what was
-     actually lost: a setup two ticks past its entry and one that has run
-     most of its target were both worth the same +8 before, and they are
-     not the same trade. */
-  if (repriceBinds && isFinite(lp.grossBe) && isFinite(lp.planGrossBe)){
+  /* EVERY TERM, NAMED, SO THE PAGE CANNOT DESCRIBE A DIFFERENT SORT FROM
+     THE ONE IT RAN. The panel's "Best first — by A, then B, then C" was
+     written when there were three terms. There are six, and the three it
+     omitted include the two largest single penalties. It has gone stale
+     three times, because a hand-written list of what the code does drifts
+     the moment the code does more.
+
+     The terms are declared once, the score is their sum, and the sentence
+     is generated from P80_SCORE_TERMS. Adding a term to the sum without
+     naming it is now impossible. */
+  var terms = {
+    /* % of the win the venue takes — measured, and the one decisive input */
+    cost:    isFinite(v.share) ? (v.share * 100) : 50,
     /* points of required accuracy the drift has already cost. A setup two
        ticks past its entry and one that has run most of its target were
-       both a flat +8 before, and they are not the same trade. */
-    score += (lp.grossBe - lp.planGrossBe) * 100;
+       both a flat +8 before, and they are not the same trade. A setup
+       still WAITING for its entry has lost nothing and carries none of
+       this — nor earns a bonus for a fill it is not offering. */
+    drift:   (repriceBinds && isFinite(lp.grossBe) && isFinite(lp.planGrossBe))
+               ? (lp.grossBe - lp.planGrossBe) * 100 : 0,
+    grade:   (gradeRank[grade] == null ? 1 : gradeRank[grade]) * 2,
+    variant: vi * 4,                                      /* SPEC, then MID, then WIDE */
+    floor:   underFloor ? 15 : 0,
+    doubles: doubles ? 12 : 0
+  };
+  var score = 0, ti;
+  for (ti = 0; ti < P80_SCORE_TERMS.length; ti++){
+    score += fin(terms[P80_SCORE_TERMS[ti].key]) || 0;
   }
-  /* a setup still WAITING for its entry has lost nothing, so it carries no
-     drift penalty — and earns no bonus for a fill it is not offering */
-  score += (gradeRank[grade] == null ? 1 : gradeRank[grade]) * 2;
-  score += vi * 4;                                        /* SPEC ahead of MID ahead of WIDE */
-  score += underFloor ? 15 : 0;
-  score += doubles ? 12 : 0;
 
   return { score: score, pays: pays, verdict: v, costShare: v.share,
            stopPct: stopPct, underFloor: underFloor, gradeRank: gradeRank[grade],
            doubles: doubles, live: lp, liveBe: liveBe, planVerdict: planV,
-           repriced: repriceBinds };
+           repriced: repriceBinds, terms: terms };
 }
 
 /* ---------------------------------------------------------------------
@@ -3804,8 +3863,7 @@ function simpleSetupsHtml(rungs, livePx){
       h += '<div class="note ok" style="margin-bottom:4px"><b>' + actable.length
         + ' setup' + (actable.length === 1 ? '' : 's') + ' you could act on'
         + (isFinite(spot) ? ', checked against gold at <b>' + num(spot) + '</b>' : '')
-        + '.</b> <span class="dim">Best first — by what the venue takes out of the win, then '
-        + 'how close price is, then how tight the mechanic is.</span>'
+        + '.</b> <span class="dim">Best first — by ' + esc(hg80SortWhyTxt()) + '.</span>'
         + (otherN ? ' <span class="warn">' + otherN + ' more fired and ' + (otherN === 1 ? 'is' : 'are')
             + ' listed below with the reason.</span>' : '')
         + '</div>';
@@ -3821,12 +3879,14 @@ function simpleSetupsHtml(rungs, livePx){
 
     for (k = 0; k < actable.length; k++){
       var ca = actable[k];
+      ca.rank = k + 1;
       h += simpleCardHtml(ca.s, ca.r,
         (ca.fresh ? '<span class="stamp pass">FIRED ON THE LAST CLOSED CANDLE</span>'
                   : '<span class="stamp pass">STILL OPEN</span> <span class="note">neither '
                     + 'the stop nor the target was touched in the bars fetched</span>')
         + liveChipHtml(ca.grade, spot) + reprintHtml(ca.q, vn)
-        + sizeHtml(ca.s, ca.q, slip) + bookChipHtml(ca.s));
+        + sizeHtml(ca.s, ca.q, slip) + bookChipHtml(ca.s)
+        + sortWhyHtml(ca.q, ca.rank, actable.length));
     }
     if (noPay.length){
       h += '<div class="p80-band"><span class="p80-band-k">Cannot pay here</span>'
@@ -5611,6 +5671,10 @@ W.hg80MissTxt        = hg80MissTxt;
 W.hg80TakeableCount  = hg80TakeableCount;
 W.ladderBoardHtml    = ladderBoardHtml;
 W.latestSetupsHtml   = latestSetupsHtml;
+W.HG_P80_SCORE_TERMS = P80_SCORE_TERMS;
+W.hg80SortWhyTxt     = hg80SortWhyTxt;
+W.hg80SortLead       = hg80SortLead;
+W.sortWhyHtml        = sortWhyHtml;
 W.whyNothingHtml     = whyNothingHtml;
 W.coincideHtml       = coincideHtml;
 W.HG_P80_CSS         = P80_CSS;

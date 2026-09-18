@@ -2752,6 +2752,65 @@ console.log('\n== the SETUPS summary row is coloured by takeability too ==');
      'while a card the venue can pay for carries no such stamp');
 }
 
+console.log('\n== the panel cannot describe a different sort from the one it ran ==');
+{
+  /* "Best first — by what the venue takes out of the win, then how close
+     price is, then how tight the mechanic is." Three inputs, written when
+     there were three. The score has six, and the three it omitted include
+     the two LARGEST single penalties — the stop floor at 15 and doubling
+     an open trade at 12 — plus the drift term, which can be tens of
+     points. The sentence had gone stale three times, because a
+     hand-written list of what the code does drifts the moment the code
+     does more. */
+  const T = ctx.HG_P80_SCORE_TERMS;
+  ok(Array.isArray(T) && T.length >= 6, `the ranking model declares ${T.length} terms`);
+  ok(T.every(x => x.key && x.label), 'each with a key and words for it');
+
+  /* EVERY TERM IN THE SUM IS IN THE LIST. This is the guard that makes the
+     drift impossible rather than merely fixed once. */
+  const q = ctx.hg80Quality({ dir: 'long', variant: 'wide', plan: { stopPct: 0.2 },
+                              seq: false, heldBy: { dir: 'long', i: 1, t: 1,
+                                                    res: { bars: 2 }, seq: true } },
+                            { be: { cost: 0.4, target: 2, risk: 1 } }, 'past-entry', NaN);
+  ok(q.terms && typeof q.terms === 'object', 'hg80Quality returns its terms, not just a total');
+  const keys = Object.keys(q.terms);
+  ok(keys.every(k => T.some(t => t.key === k)),
+     `every scored term is declared (${keys.join(', ')})`);
+  ok(T.every(t => k1(q.terms, t.key)), 'and every declared term is scored');
+  function k1(o, k){ return Object.prototype.hasOwnProperty.call(o, k); }
+
+  const summed = T.reduce((a, t) => a + (q.terms[t.key] || 0), 0);
+  ok(near(q.score, summed, 1e-9),
+     `the score IS the sum of the declared terms (${q.score.toFixed(3)})`);
+
+  /* THE SENTENCE IS GENERATED FROM THE SAME LIST */
+  const sent = ctx.hg80SortWhyTxt();
+  ok(T.every(t => sent.indexOf(t.label) >= 0),
+     'the panel sentence names every term, because it is built from the list');
+  ok(SRC.indexOf('by what the venue takes out of the win, then how close price is') < 0,
+     'and the old three-item sentence is gone rather than sitting beside it');
+  ok(/hg80SortWhyTxt\(\)/.test(CODE), 'the panel calls it rather than repeating it');
+
+  /* WHAT PUT THIS CARD WHERE IT IS */
+  ok(ctx.hg80SortLead(q).key === 'floor' || ctx.hg80SortLead(q).points >= 12,
+     `the dominant term is named (${ctx.hg80SortLead(q).label})`);
+  ok(ctx.hg80SortLead({ terms: { cost: 0, drift: 0, grade: 0, variant: 0, floor: 0,
+                                 doubles: 0 } }) === null,
+     'a card with nothing weighing on it names nothing');
+  ok(ctx.hg80SortLead(null) === null && ctx.hg80SortLead({}) === null, 'and so does no card');
+
+  const t = h => String(h).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  ok(ctx.sortWhyHtml(q, 1, 1) === '',
+     'a single card is not in an order, so nothing is said about its position');
+  const line = t(ctx.sortWhyHtml(q, 2, 5));
+  ok(/#2 of 5/.test(line), 'with more than one, the card says where it sits');
+  ok(/what weighs most on it here/.test(line) && line.indexOf(ctx.hg80SortLead(q).label) >= 0,
+     'and what put it there');
+  ok(ctx.sortWhyHtml({ terms: { cost: 0.2, drift: 0, grade: 0, variant: 0, floor: 0,
+                                doubles: 0 } }, 1, 3) === '',
+     'a lead worth under a point is not what put it anywhere, and is not claimed to be');
+}
+
 console.log('\n== how far short, not just which condition ==');
 {
   /* hg80MissCost weights a miss by WHICH condition failed and says nothing
