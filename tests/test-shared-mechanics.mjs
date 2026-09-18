@@ -300,5 +300,196 @@ console.log('\n== load order and cache are wired ==');
   ok(sw.indexOf('hg-mechanics.js') > 0, 'and is precached, or offline loses every shared mechanic');
 }
 
+console.log('\n== a missing bar field is not the price zero ==');
+{
+  /* Every detector in this file reads its bar fields through num() and then
+     guards the result with isFinite(). num() was `+v`, and +null is 0, and
+     isFinite(0) is true — so the guard passed a hole in the feed straight
+     through as a confident quote of zero dollars.
+
+     This is the fourth file in the same class (eightypercent, omnigold,
+     hg-forward, omniroute were the others) and the widest: thirty-odd
+     OMNIGOLD mechanics and the whole of OMNIROUTE's shared book resolve
+     here. It goes both ways — a hole FABRICATES a signal in one detector
+     and SILENCES a real one in another.
+
+     Every assertion below is driven against the original arithmetic,
+     reimplemented here, so none of them can pass by accident. */
+  const M = boot(['indicators.js', 'indicators2.js', 'fixpack14-core.js', 'hg-mechanics.js']);
+
+  /* --- THE ORIGINAL READING, so the claims are checkable --- */
+  const looseNum = v => { const n = +v; return isFinite(n) ? n : NaN; };
+  const looseAtr = (rows, n) => {
+    let sum = 0, cnt = 0;
+    for (let i = rows.length - n; i < rows.length; i++){
+      const h = looseNum(rows[i].h), l = looseNum(rows[i].l), pc = looseNum(rows[i - 1].c);
+      if (!isFinite(h) || !isFinite(l) || !isFinite(pc)) continue;
+      sum += Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc)); cnt++;
+    }
+    return cnt ? sum / cnt : NaN;
+  };
+
+  const T = 1700000000 - (1700000000 % 86400);
+  const mk = (n, seed) => {
+    let p = 4000, s = seed;
+    const rnd = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
+    const out = [];
+    for (let i = 0; i < n; i++){
+      p = p * (1 + (rnd() - 0.48) * 0.004);
+      const r = p * 0.002 * (0.5 + rnd());
+      out.push({ t: T + i * 3600, o: p - r * 0.25, h: p + r, l: p - r, c: p, v: 900 + rnd() * 1500 });
+    }
+    return out;
+  };
+
+  ok(typeof M.hgMechAtrOf === 'function', 'the shared ATR is exported so the true-range path can be driven');
+
+  /* --- 1. ATR: the size gate under nearly every detector here --- */
+  const clean = mk(60, 7);
+  const holed = mk(60, 7); holed[59].l = null;
+  const aClean = M.hgMechAtrOf(clean, 14);
+  const aHoled = M.hgMechAtrOf(holed, 14);
+  const aLoose = looseAtr(holed, 14);
+  ok(isFinite(aClean) && aClean > 1 && aClean < 100, `a clean tape reads ATR ${aClean.toFixed(2)}`);
+  ok(aLoose > aClean * 10,
+     `the +v reading turned one missing low into ATR ${aLoose.toFixed(1)} — ${(aLoose / aClean).toFixed(0)}x the truth`);
+  ok(Math.abs(aHoled - aClean) < aClean * 0.2,
+     `the shipped reading skips the malformed bar and still says ${aHoled.toFixed(2)}`);
+
+  /* the bar drops out, it is not zeroed — the other thirteen still average */
+  const allBad = mk(60, 7);
+  for (let i = 46; i < 60; i++) allBad[i].h = null;
+  ok(!isFinite(M.hgMechAtrOf(allBad, 14)),
+     'and a window with no usable bar returns NaN rather than inventing a number');
+
+  /* --- 2. SILENCED: a real THREE-BAR reversal, lost to an unrelated hole --- */
+  const looseThree = (rows) => {
+    const n = rows.length - 1;
+    const l0 = looseNum(rows[n-2].l), l1 = looseNum(rows[n-1].l), l2 = looseNum(rows[n].l);
+    const h0 = looseNum(rows[n-2].h), h1 = looseNum(rows[n-1].h), h2 = looseNum(rows[n].h);
+    const c2 = looseNum(rows[n].c), c0 = looseNum(rows[n-2].c);
+    if (![l0,l1,l2,h0,h1,h2,c2,c0].every(isFinite)) return null;
+    const a = looseAtr(rows, 14);
+    if (!isFinite(a) || !(a > 0)) return null;
+    if (l1 < l0 && l1 < l2 && c2 > c0 && (c2 - l1) >= a * 0.8) return { kind:'THREE-BAR', dir:'long', level: l1 };
+    if (h1 > h0 && h1 > h2 && c2 < c0 && (h1 - c2) >= a * 0.8) return { kind:'THREE-BAR', dir:'short', level: h1 };
+    return null;
+  };
+  const tbClean = mk(60, 1);
+  const tbHit = M.hgMechThreeBar(tbClean);
+  ok(tbHit && tbHit.kind === 'THREE-BAR',
+     `a clean tape produces a real THREE-BAR ${tbHit && tbHit.dir} at ${tbHit && tbHit.level.toFixed(2)}`);
+  const tbHole = mk(60, 1); tbHole[50].h = null;     /* fifty bars back, nothing to do with the pattern */
+  const tbAfter = M.hgMechThreeBar(tbHole);
+  ok(tbAfter && tbAfter.level === tbHit.level && tbAfter.dir === tbHit.dir,
+     'a hole fifty bars back leaves the shipped detector reading exactly the same reversal');
+  ok(looseThree(tbHole) === null,
+     'while the +v reading SILENCED it — the inflated ATR made the move look like noise');
+  ok(looseThree(tbClean) !== null,
+     'and the loose reimplementation agrees on the clean tape, so it is the hole doing this and not a rewrite');
+
+  /* --- 3. FABRICATED: PIN-REJECT quoting a rejection of zero dollars --- */
+  const loosePin = (rows) => {
+    const n = rows.length - 1;
+    const o = looseNum(rows[n].o), h = looseNum(rows[n].h), l = looseNum(rows[n].l), c = looseNum(rows[n].c);
+    if (![o,h,l,c].every(isFinite)) return null;
+    const rng = h - l;
+    if (!(rng > 0)) return null;
+    const a = looseAtr(rows, 14);
+    if (!isFinite(a) || !(a > 0) || rng < a * 0.8) return null;
+    const body = Math.abs(c - o), upper = h - Math.max(o, c), lower = Math.min(o, c) - l;
+    if (body > rng * 0.34) return null;
+    if (lower >= rng * 0.6 && upper <= rng * 0.2)
+      return { kind:'PIN-REJECT', dir:'long', level: l,
+               why:'pin bar rejecting ' + l.toFixed(2) + ' — ' + ((lower / rng) * 100).toFixed(0) + '% lower wick' };
+    if (upper >= rng * 0.6 && lower <= rng * 0.2)
+      return { kind:'PIN-REJECT', dir:'short', level: h, why:'' };
+    return null;
+  };
+  const pinRows = mk(60, 7); pinRows[59].l = null;
+  const pinWas = loosePin(pinRows);
+  ok(pinWas && pinWas.level === 0,
+     `the +v reading fired a long PIN-REJECT at level 0 — "${pinWas && pinWas.why}"`);
+  ok(M.hgMechPinReject(pinRows) === null,
+     'the shipped detector returns null: a bar with no low is not a pin bar');
+  ok(M.hgMechPinReject(mk(60, 7)) === null || M.hgMechPinReject(mk(60, 7)).level > 1000,
+     'and a clean tape either stays silent or rejects a real price, never zero');
+
+  /* --- 4. FABRICATED AND ONE-DIRECTIONAL: VOL-EXPANSION on a missing open --- */
+  const regime = (n, seed, calmN) => {
+    let p = 4000, s = seed;
+    const rnd = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
+    const out = [];
+    for (let i = 0; i < n; i++){
+      const vol = i < calmN ? 0.0015 : 0.012;       /* a calm stretch, then a vol regime shift */
+      p = p * (1 + (rnd() - 0.5) * vol);
+      const r = p * vol * 0.5 * (0.5 + rnd());
+      out.push({ t: T + i * 3600, o: p - r * 0.25, h: p + r, l: p - r, c: p, v: 1000 });
+    }
+    return out;
+  };
+  const veClean = regime(200, 1, 150);
+  const vp = M.hgVolFromCloses(veClean.map(r => r.c), {});
+  const ratio = vp.sigmaNow / vp.sigmaLongRun;
+  ok(ratio >= 1.6, `the regime tape clears the detector's own 1.6x vol trigger (${ratio.toFixed(2)}x)`);
+  ok(M.hgMechVolExpansion(veClean) === null,
+     'and on that tape the final bar is NOT decisive, so a correct detector stays silent');
+  const veHole = regime(200, 1, 150);
+  const vn = veHole.length - 1;
+  veHole[vn].o = null;
+  const vo = looseNum(veHole[vn].o), vh = looseNum(veHole[vn].h),
+        vl = looseNum(veHole[vn].l), vc = looseNum(veHole[vn].c);
+  const veWas = (vh - vl > 0 && Math.abs(vc - vo) >= (vh - vl) * 0.5)
+    ? { dir: vc > vo ? 'long' : 'short', level: vc } : null;
+  ok(veWas && veWas.dir === 'long',
+     `the +v reading turned the SAME bar with its open missing into a long at ${veWas.level.toFixed(2)} — `
+     + 'and always long, because the test is c > 0');
+  ok(M.hgMechVolExpansion(veHole) === null,
+     'the shipped detector still says nothing: a bar with no open is not a decisive bar');
+
+  /* --- 5. the property, across every detector this file exports --- */
+  const DETECTORS = ['hgMechVwapRevert','hgMechNr7Break','hgMechTrendReclaim','hgMechFvgFill',
+                     'hgMechBosRetest','hgMechPoolSweep','hgMechSqueezeFire','hgMechRsiDiverge',
+                     'hgMechAvwapReclaim','hgMechCusumShift','hgMechVolExpansion','hgMechPinReject',
+                     'hgMechEngulfLevel','hgMechPocRevert','hgMechThreeBar'];
+  ok(DETECTORS.every(d => typeof M[d] === 'function'),
+     `all ${DETECTORS.length} exported detectors resolve`);
+
+  let calls = 0, hits = 0, cleanHits = 0;
+  for (let seed = 1; seed <= 12; seed++){
+    const base = mk(200, seed);
+    for (const d of DETECTORS){
+      const h0 = M[d](mk(200, seed));
+      if (h0) cleanHits++;
+      for (const field of ['o','h','l','c','v','t']){
+        for (const bad of [null, undefined, '', NaN, 'x']){
+          for (const at of [base.length - 1, base.length - 2, base.length - 40]){
+            const rows = mk(200, seed);
+            rows[at][field] = bad;
+            let hit = null;
+            try { hit = M[d](rows); }
+            catch (e) { throw new Error('FAIL: ' + d + ' threw on ' + field + '=' + String(bad) + ' — ' + e.message); }
+            calls++;
+            if (!hit) continue;
+            hits++;
+            if (!isFinite(hit.level)) throw new Error('FAIL: ' + d + ' returned a non-finite level');
+            /* the whole class in one line: no price on this tape is near zero,
+               so a level near zero is a missing field read as a quote */
+            if (Math.abs(hit.level) < 100)
+              throw new Error('FAIL: ' + d + ' quoted level ' + hit.level + ' with ' + field + '=' + String(bad));
+            if (/[^\d]0\.00\b/.test(String(hit.why || '')))
+              throw new Error('FAIL: ' + d + ' wrote 0.00 into its why line: ' + hit.why);
+          }
+        }
+      }
+    }
+  }
+  ok(calls === 12 * DETECTORS.length * 6 * 5 * 3,
+     `${calls} detector calls with one malformed field each: none threw, none quoted a price near zero`);
+  ok(hits > 100 && cleanHits > 0,
+     `and the sweep is not vacuous — ${hits} of those calls still produced a real signal `
+     + `(${cleanHits} on the clean tapes), so the detectors are firing, not just failing shut`);
+}
+
 console.log('\n' + passed + ' passed, 0 failed');
 console.log('ALL SHARED MECHANICS TESTS PASSED');

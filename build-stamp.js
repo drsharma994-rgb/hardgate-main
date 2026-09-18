@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v827',
-  pack: 'the two session windows on the OMNIGOLD tab stop scanning the whole history — hgOgAsiaRange and hgOgPrevDay describe a nine-hour and a twenty-four-hour window anchored at the end of the bar array, and both walked all 1,500 bars to find them on every mechanic on every horizon; hgOgWindowStart moves the starting line to the window first bar and nothing else, taking the three affected mechanics from 320ms to 39ms per horizon with identical output over 4,800 compared readings',
+  version: 'hg-v828',
+  pack: 'the shared mechanics library stops reading a missing bar field as the price zero — hg-mechanics.js resolves thirty-odd OMNIGOLD mechanics and the whole of OMNIROUTE shared book through a num() that made +null a confident quote of 0, which fabricated a long PIN-REJECT rejecting 0.00 and a one-directional VOL-EXPANSION, and inflated the shared ATR seventeenfold so the size gate under nearly every detector silenced real signals',
   built: '2026-09-18T00:00:00Z'
 };
 

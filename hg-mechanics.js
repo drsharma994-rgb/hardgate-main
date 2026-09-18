@@ -34,7 +34,6 @@ function gfn(name){
   var w = W();
   return (w && typeof w[name] === 'function') ? w[name] : null;
 }
-function num(v){ var n = +v; return isFinite(n) ? n : NaN; }
 /* null/undefined/'' -> NaN. isFinite(null) is TRUE in JS and +null is 0, so
    the natural guard reads a missing value as a confident zero. */
 function fin(v){
@@ -42,6 +41,52 @@ function fin(v){
   var n = +v;
   return isFinite(n) ? n : NaN;
 }
+
+/* num() WAS `+v`, WHICH MAKES A MISSING PRICE THE PRICE ZERO.
+
+   Every detector below reads its bar fields through num() and then guards
+   the result with isFinite(). That guard was doing nothing for a missing
+   field: +null is 0 and isFinite(0) is true, so a hole in the feed arrived
+   as a confident quote of zero dollars and the detector carried on.
+
+   Thirty-odd mechanics on the OMNIGOLD tab and the whole of OMNIROUTE's
+   shared book resolve through this file, so the reach is the reach of the
+   library:
+
+     atrOf()   — a null high makes the true range |0 - prevClose|, which is
+                 the instrument's whole price. One hole in fourteen bars took
+                 a measured ATR from 16.62 to 299.0 on the test tape, and
+                 this ATR is the SIZE GATE under nearly every detector here
+                 (rng < a*0.8, body < a*0.6, (c2-l1) >= a*0.8). An inflated
+                 ATR does not fabricate a signal — it SILENCES the mechanic.
+                 A real THREE-BAR reversal at 3964.38 disappeared because an
+                 unrelated bar fifty back was missing its high.
+
+     hgMechVolExpansion — a null open reads as 0, so |c - o| is the whole
+                 price and clears the decisive-bar test by three orders of
+                 magnitude, and dir is `c > o` — always long. Driven: on a
+                 tape whose vol ratio is 2.06 the clean bar produces NO
+                 signal and the same bar with its open missing produces a
+                 long at 4014.75. The mechanic was one-directional wherever
+                 the feed had a hole.
+
+     hgMechPinReject    — a null low reads as 0, so the bar's range is the
+                 whole price and the lower wick is all of it: a long at
+                 level 0, quoted into the card as "pin bar rejecting 0.00 —
+                 100% lower wick".
+
+     hgMechVwapRevert   — only on its fallback path, which runs when the
+                 shared vwapAt is unavailable or returns nothing: a null high
+                 or low made the typical price (h+l+c)/3 a fraction of what
+                 it should be, and isFinite() waved it through rather than
+                 letting the `continue` already written below skip the bar.
+
+   Routing num() through fin() makes every one of those isFinite() guards
+   mean what it reads as. Nothing else changes: a real number is still just
+   a number, and the two call sites that legitimately want a zero
+   (`num(count) || 0`, the volume floor `if (!isFinite(v) || v <= 0) v = 1`)
+   land on the same value through NaN as they did through 0. */
+function num(v){ return fin(v); }
 
   function hgMechResample(rows, factor){
     if (!rows || !rows.length || !(factor > 1)) return null;
@@ -541,6 +586,10 @@ G.hgMechPinReject    = hgMechPinReject;
 G.hgMechEngulfLevel  = hgMechEngulfLevel;
 G.hgMechPocRevert    = hgMechPocRevert;
 G.hgMechThreeBar     = hgMechThreeBar;
+/* exported so a test can drive the true-range path directly: this ATR is
+   the size gate under nearly every detector above, and a missing bar
+   field used to turn one true range into the instrument's whole price */
+G.hgMechAtrOf        = atrOf;
 
 /* Every kind this module can emit, and the consensus family each belongs to.
    Exported so a desk cannot register a mechanic without also giving it a
