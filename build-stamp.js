@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v844',
-  pack: 'three more of the gold desk\u2019s full-array indicators stop rebuilding from bar zero \u2014 atr() was 16.3% of a scan, hgGoldBvcDelta() 9.7%, and hgOgLocalHour() built a fresh Intl formatter on every one of its calls for another 6.2%. Both series now resume on an append and the formatter is kept per timezone, taking an OMNIGOLD scan from 21.5s to 13.1s at 600 bars with byte-identical output, and 3.8x cheaper than two packs ago. atr carries its running average through the resume rather than inferring it, because a series poisoned by a bad bar and one that was never seeded look identical from the outside and only one of them may be restarted',
+  version: 'hg-v845',
+  pack: 'the gold family sweeps are held against the app\u2019s own list of gold tabs instead of a hand-written one. index.html\u2019s GOLD nav group names SIXTEEN tabs; the three cross-cutting sweeps that claimed to run across \u2018every gold tab\u2019 carried tables of six and seven, and a hand-written table cannot notice a tab it was never told about \u2014 the vacuous-sweep problem those files were written to avoid, in those files. The new sweep reads the group out of index.html, loads all 201 scripts index.html loads, and drives all fifteen registered gold tabs through mount and refresh: 62 chunks, 136,434 characters, no NaN, undefined or [object Object] anywhere, and the sixteenth named as the inline GOLD SETUP pane rather than dropped from the count',
   built: '2026-09-18T00:00:00Z'
 };
 

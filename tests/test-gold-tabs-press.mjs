@@ -25,6 +25,13 @@
    backtest replays the whole send path for a minute. The alert zones and the
    lane throttle are likewise untouched.
 
+   And the count, now that pack 845 has taken it: index.html's GOLD nav group
+   holds SIXTEEN tabs. This file presses two of them. Between this file and
+   packs 840-842 the hand-written tables reach seven of the sixteen by id;
+   test-gold-family-coverage reads the group out of index.html and holds the
+   family rule against all of them, and fails if a table here ever names a tab
+   the app does not have or leaves one that nothing sweeps.
+
    Run: node tests/test-gold-tabs-press.mjs */
 import fs from 'node:fs';
 import vm from 'node:vm';

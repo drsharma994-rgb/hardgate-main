@@ -1,4 +1,4 @@
-/* HARDGATE — every gold tab mounts, and renders nothing it does not have.
+/* HARDGATE — six gold tabs mount, and render nothing they do not have.
 
    Pack 840 swept the gold family for NaN, undefined and [object Object] in
    rendered text, and had to state a caveat: GOLD SCALP, GOLD SWING, GOLD PRO
@@ -18,6 +18,14 @@
    six tabs it never touched. Every tab is now selected by its own id, and
    asserted to have rendered its OWN copy — a sweep that cannot prove it
    reached its subject is worse than no sweep, because it reads as evidence.
+
+   SCOPE, now that pack 845 counts the family: index.html's GOLD nav group
+   holds SIXTEEN tabs. This file's table holds six. That is a deliberate
+   subset — these six are the ones with the degraded-mode behaviour it was
+   written to exercise — but the title is about them, not about the group.
+   test-gold-family-coverage reads the group out of index.html and holds the
+   family rule against all sixteen, and fails if this table ever names a tab
+   the app does not have or leaves one nothing sweeps.
 
    Run: node tests/test-gold-tabs-mount.mjs */
 import fs from 'node:fs';

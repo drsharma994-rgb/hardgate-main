@@ -1,4 +1,4 @@
-/* HARDGATE — the gold tabs are clean through a real scan, not only cold.
+/* HARDGATE — six gold tabs are clean through a real scan, not only cold.
 
    Pack 841 mounted every gold tab and swept its shell. That proved the cold
    state, which is a narrow claim: a tab renders its empty copy before it has
@@ -24,6 +24,14 @@
    addEventListener and click() and presses their buttons. The assertions
    below still hold as written: what they pin is that refresh does not rescan
    these two, which is why that file exists.
+
+   SCOPE, now that pack 845 counts the family: index.html's GOLD nav group
+   holds SIXTEEN tabs. This file's table holds six. That is a deliberate
+   subset — these six are the ones with the degraded-mode behaviour it was
+   written to exercise — but the title is about them, not about the group.
+   test-gold-family-coverage reads the group out of index.html and holds the
+   family rule against all sixteen, and fails if this table ever names a tab
+   the app does not have or leaves one nothing sweeps.
 
    Run: node tests/test-gold-tabs-scan.mjs */
 import fs from 'node:fs';

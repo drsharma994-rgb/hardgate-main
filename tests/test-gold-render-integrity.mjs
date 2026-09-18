@@ -1,9 +1,16 @@
-/* HARDGATE — every gold tab prints a number it has, or says it has none.
+/* HARDGATE — seven gold MODULES print a number they have, or say they have none.
 
    Pack 832 built this sweep for OMNIGOLD and it found four places that could
    render NaN, undefined or [object Object] into a sentence. This file runs
-   the same rule across the whole gold family, which is what "update all the
+   the same rule across seven gold modules, which is what "update all the
    gold tabs" ought to mean: not a version bump, the same standard.
+
+   It is keyed by MODULE, not by tab — 'eightypercent' here is the file, and
+   '80percent' is the tab it registers. Seven modules is not the whole family
+   either: index.html's GOLD nav group holds sixteen tabs, and pack 845's
+   test-gold-family-coverage reads that group and holds the rule against all
+   of them. This file stays module-scoped because what it sweeps is exported
+   functions, which is a property of a file and not of a tab.
 
    It found five in 80PERCENT and one in OMNIGOLD, all live text:
 
