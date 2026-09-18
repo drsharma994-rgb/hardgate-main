@@ -127,27 +127,84 @@ function hgSaveFormationParams(patch){
   }catch(e){ return null; }
 }
 
-/* --- historical limit fill rate on this TF --- */
+/* null/undefined/'' -> NaN. isFinite(null) is TRUE in JS and +null is 0, so
+   the natural guard reads a missing value as a confident zero.
+
+   SCOPED DELIBERATELY. This helper is used by hgFillProbability below and
+   nowhere else yet. The rest of this file still coerces with `+` in about
+   twenty-five places and has not been audited call by call; a blanket
+   substitution without reading each site is how a guard gets moved rather
+   than fixed. Those are worth a pass of their own. */
+function hgFin(v){
+  if (v === null || v === undefined || v === '') return NaN;
+  var n = +v;
+  return isFinite(n) ? n : NaN;
+}
+
+/* --- historical limit fill rate on this TF ---
+
+   THE FILL RATE IS A MEASUREMENT, AND A MISSING INPUT IS NOT A MEASUREMENT
+   OF ZERO.
+
+   Every guard in here read its input through `+`, and +null is 0, and
+   isFinite(0) is true. Three separate ways that turned an absence into a
+   quoted statistic, all of them reaching the OMNIGOLD card through
+   plan.fillProb and plan.fillNote:
+
+     A null ENTRY cleared `isFinite(+entry)` as the price zero. The zone
+     became [0, 0], nothing touches it, and the function returned
+     "0% of past 12-bar windows touched this zone (n=177)" — a fabricated
+     measurement carrying a sample size, which is the form a reader trusts
+     most.
+
+     A null ZONE BOUND cleared `isFinite(zone.lo)` the same way and
+     collapsed the zone to [0, hi]. Every bar is inside that, so the answer
+     was "100% of past 12-bar windows touched this zone (n=177)".
+
+     A null bar LOW inside the touch test read as 0, which is below any zone
+     above zero, so a hole in the feed counted as a touch whenever the bar's
+     high cleared the zone floor. Measured: a zone the tape never reached
+     went from 0% to 100%, and a zone at the median close went from 49% to
+     82% with one bar in three missing its low. The asymmetry is the giveaway
+     — a null HIGH moves the same tape only 49% to 47%, because it fails the
+     other half of the test rather than passing this one.
+
+   The n/a sentinel stays exactly as it was: prob null, pct null, note says
+   so. What changes is that the sentinel is now the only thing returned when
+   there is nothing to measure, and that callers can tell the difference —
+   see the fill guard in omnigold.js, which read this pct:null as 0% and
+   demoted the setup for it. */
 function hgFillProbability(rows, entry, dir, zone, maxBars){
   var out = { prob: null, pct: null, note: 'fill history n/a' };
   try{
     maxBars = maxBars || 12;
-    if (!rows || rows.length < maxBars + 10 || !isFinite(+entry)) return out;
-    var lo = (zone && isFinite(zone.lo)) ? +zone.lo : +entry;
-    var hi = (zone && isFinite(zone.hi)) ? +zone.hi : +entry;
+    var ref = hgFin(entry);
+    if (!rows || rows.length < maxBars + 10 || !isFinite(ref)) return out;
+    var zLo = zone ? hgFin(zone.lo) : NaN;
+    var zHi = zone ? hgFin(zone.hi) : NaN;
+    var lo = isFinite(zLo) ? zLo : ref;
+    var hi = isFinite(zHi) ? zHi : ref;
     if (lo > hi){ var t = lo; lo = hi; hi = t; }
-    var touches = 0, trials = 0;
+    var touches = 0, trials = 0, usable = 0;
     for (var i = 10; i < rows.length - maxBars - 1; i++){
       var touched = false;
       for (var j = i; j < i + maxBars && j < rows.length; j++){
         var bar = rows[j];
         if (!bar) continue;
-        if (+bar.l <= hi && +bar.h >= lo){ touched = true; break; }
+        var bl = hgFin(bar.l), bh = hgFin(bar.h);
+        /* a bar missing either side cannot answer whether it touched the
+           zone — it is skipped, not read as a touch and not read as a miss */
+        if (!isFinite(bl) || !isFinite(bh)) continue;
+        usable++;
+        if (bl <= hi && bh >= lo){ touched = true; break; }
       }
       trials++;
       if (touched) touches++;
     }
-    if (!trials) return out;
+    /* trials counts windows, usable counts bars actually readable inside
+       them. A tape of holes produces trials without evidence, and reporting
+       a rate off that is the same fabrication in a different place. */
+    if (!trials || usable < maxBars) return out;
     out.prob = touches / trials;
     out.pct = Math.round(out.prob * 100);
     out.note = out.pct + '% of past ' + maxBars + '-bar windows touched this zone (n=' + trials + ')';

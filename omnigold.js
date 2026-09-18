@@ -5200,14 +5200,35 @@ terse status, and never launches a first-time scan on a global refresh.
       plan.fillProb = Math.max(5, Math.round(100 / (1 + gapAtr)));
       if (gapAtr > 1.5) plan.fillDemote = true;
     }
+    /* hgFillProbability RETURNS A SENTINEL, NOT A ZERO, WHEN IT CANNOT MEASURE.
+
+       Its no-evidence answer is { prob: null, pct: null, note: 'fill history
+       n/a' } — too few bars to build a window from, or a bad entry, or a
+       throw. The guard here was `isFinite(+fill.pct)`, and +null is 0 and
+       isFinite(0) is true, so "I have no history" arrived as a measured 0%
+       fill chance. That overwrote the gap-ATR estimate, tripped the < 35
+       demote, cost the setup ten conviction points and printed "· thin fill"
+       on its card — a claim about how this market fills, from a function
+       that had just said it did not know.
+
+       fin() tells the sentinel from a measurement, and fillMeasured records
+       which one the number is, so the card can quote its evidence instead of
+       only its verdict. An unmeasured fill leaves the gap-ATR estimate
+       standing and demotes nothing. */
     var fillFn = gfn('hgFillProbability');
     if (fillFn && !atMarket){
       try {
         var fill = fillFn(rows, entry, dir, null, 12);
-        if (fill && isFinite(+fill.pct)){
-          plan.fillProb = +fill.pct;
+        var fPct = fill ? fin(fill.pct) : NaN;
+        if (isFinite(fPct)){
+          plan.fillProb = fPct;
           plan.fillNote = fill.note;
+          plan.fillMeasured = true;
           if (plan.fillProb < 35) plan.fillDemote = true;
+        } else {
+          /* the estimate stands, and the card says it is an estimate */
+          plan.fillMeasured = false;
+          plan.fillNote = (fill && fill.note) ? String(fill.note) : 'fill history n/a';
         }
       } catch (eF) {}
     }
@@ -12168,6 +12189,26 @@ terse status, and never launches a first-time scan on a global refresh.
           + (isFinite(fin(c.edgeScore)) ? ' · EDGE ' + Math.round(fin(c.edgeScore)) : '')
           + (c.plan.costDemote ? ' · cost demote' : '')
           + (c.plan.fillDemote ? ' · thin fill' : '')
+          + '</div>';
+      }
+      /* The fill rate is the evidence behind "thin fill", and it was computed
+         on every limit setup and then thrown away — plan.fillNote was set and
+         never rendered. A reader saw the verdict and not the sample it came
+         from. Now the sentence appears, and an UNMEASURED fill says so rather
+         than passing the gap-ATR estimate off as a measurement. */
+      /* a string, not merely truthy: a note that is an object renders as
+         "[object Object]", which the fuzz in test-omnigold-fill-evidence
+         caught on the first pass */
+      var fillTxt = (typeof c.plan.fillNote === 'string') ? c.plan.fillNote.trim() : '';
+      if (fillTxt){
+        var fillPct = fin(c.plan.fillProb);
+        h += '<div class="dim og-fill-line">'
+          + (c.plan.fillMeasured === false
+              ? ('fill NOT measured — no usable history on this tape'
+                 + (isFinite(fillPct)
+                     ? (' · the ' + Math.round(fillPct) + '% shown is an estimate from the entry gap, not a rate')
+                     : ''))
+              : ('fill: ' + esc(fillTxt)))
           + '</div>';
       }
       if (c.plan.note) h += '<div class="dim">' + esc(c.plan.note) + '</div>';

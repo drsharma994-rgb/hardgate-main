@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v828',
-  pack: 'the shared mechanics library stops reading a missing bar field as the price zero — hg-mechanics.js resolves thirty-odd OMNIGOLD mechanics and the whole of OMNIROUTE shared book through a num() that made +null a confident quote of 0, which fabricated a long PIN-REJECT rejecting 0.00 and a one-directional VOL-EXPANSION, and inflated the shared ATR seventeenfold so the size gate under nearly every detector silenced real signals',
+  version: 'hg-v829',
+  pack: 'the OMNIGOLD fill probability stops quoting a measurement it never made — hgFillProbability returns a null sentinel when it has no history, and the tab read that as a measured 0% fill chance, demoting the setup and printing thin fill on its card; a null entry or zone bound produced a fabricated rate WITH a sample size, a missing bar low counted as a touch and took a zone the tape never reached from 0% to 100%, and the note behind the verdict was computed and thrown away instead of shown',
   built: '2026-09-18T00:00:00Z'
 };
 
