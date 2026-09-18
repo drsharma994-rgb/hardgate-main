@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v819',
-  pack: 'OMNIGOLD applies the significance bar it displays — the promotion verdict rolled its own family correction, Bonferroni two-sided over the 54 mechanics with a record, while every panel quoted Sidak one-sided over the 77 scanned, so the bar on screen was not the bar promotion used; one correction now, and three tests that re-derived their own arithmetic instead of asking the code are tied to it',
+  version: 'hg-v820',
+  pack: 'OMNIGOLD pins the invariant its measured-edge sigma depends on — that gate is only valid because a cooldown line in omniroute.js makes the walk sequential, nothing connected the two, and deleting it would inflate the sigma about 4.5x and start reading one move counted twenty times as a mechanic that has paid; asserted behaviourally now, and the dependency written down where the sigma is computed',
   built: '2026-09-17T00:00:00Z'
 };
 

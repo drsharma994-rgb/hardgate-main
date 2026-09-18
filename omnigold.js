@@ -3779,7 +3779,29 @@ terse status, and never launches a first-time scan on a global refresh.
     gates.push({ key:'fill-risk', hard:false, info:true, pass: frOk, why: frWhy });
 
     /* 12 — measured edge: this mechanic's own walk-forward on THIS horizon,
-       judged by significance against the breakeven rate for this R floor. */
+       judged by significance against the breakeven rate for this R floor.
+
+       WHY THIS Z IS NOT DEFLATED FOR OVERLAP, WHEN EVERY OTHER ONE IS.
+
+       hg-v818 put the replay panel's sigma on the effective sample and the
+       horizon-pool promotion refuses to promote at all without a measured
+       overlap ratio. This one deliberately does neither, and the reason
+       lives in ANOTHER FILE: hgOmniBacktestOne (omniroute.js) advances
+       `i += horizon` after every signal, so the samples it returns are
+       already sequential — a trade one account could have taken, one at a
+       time. hgOgEffN states the rule this satisfies: a book with no overlap
+       is not deflated, and effN == n for it.
+
+       So there is nothing here to correct, and correcting it anyway would
+       count the same discount twice. But the validity of this gate's sigma
+       is a property of a line in a different file, which is the kind of
+       coupling that gets refactored away by someone who has no idea it is
+       load-bearing: delete that stride and this sigma inflates by about
+       sqrt(horizon), 4.5x at horizon 20, and mechanics start reading "has
+       paid" on one move counted twenty times. test-omnigold-round2 asserts
+       the stride behaviourally — a detector firing on every bar must still
+       come back with about one sample per horizon — so the invariant fails
+       loudly here rather than silently promoting. */
     var minRr = isFinite(fin(x.minRr)) ? fin(x.minRr) : 2;
     var sExp = x.stats ? fin(x.stats.expR) : NaN;
     var sHit = x.stats ? fin(x.stats.hit) : NaN;

@@ -335,5 +335,66 @@ console.log('\n== nothing new became a veto ==');
   ok(hard <= 13, 'only a minority are hard vetoes (' + hard + ' of ' + gs.length + ') — the rest report');
 }
 
+
+console.log('\n== the measured-edge sigma rests on a cooldown in ANOTHER FILE (hg-v820) ==');
+{
+  /* WHAT THIS GUARDS, and why it lives next to the gate rather than beside
+     the function it tests.
+
+     The measured-edge gate computes a significance z on x.stats.samples and
+     does NOT deflate it for overlap — correctly, because hgOmniBacktestOne
+     (omniroute.js) advances `i += horizon` after every signal, so each
+     counted sample is a trade one account could have taken sequentially.
+     effN == n by construction, and hgOgEffN says so in as many words: a
+     sequential book is not deflated.
+
+     Nothing connected the two. Delete that one line in omniroute.js and
+     this gate's sigma inflates by sqrt(horizon) — about 4.5x at horizon 20,
+     matching the 3-4x the function's own comment measured — and mechanics
+     start reading "has paid" on a sample that is one move counted twenty
+     times. No test would have said a word. It cost a full round of this
+     session to establish the invariant by reading three files; it is
+     asserted here so nobody has to do that again.
+
+     Driven, not grepped: a detector that fires on EVERY bar must still come
+     back with about one sample per horizon. */
+  const W = boot();
+  ok(typeof W.hgOmniBacktestOne === 'function', 'the walk-forward the gate reads is loaded');
+
+  const HZ = 20, WARM = 45, N = 600;
+  const rows = [];
+  let px = 4000;
+  for (let i = 0; i < N; i++){
+    /* a clean stair up: every trade resolves at T1 well inside the horizon,
+       so these are SETTLED samples rather than open ones */
+    const o = px, c = px + 6;
+    rows.push({ t: 1750000000 + i * 3600, o, h: Math.max(o, c) + 2, l: Math.min(o, c) - 2, c, v: 100 });
+    px = c;
+  }
+  const everyBar = () => ({ dir: 'long' });
+  const r = W.hgOmniBacktestOne(rows, everyBar, { rMult: 2, horizon: HZ, warm: WARM });
+  ok(r, 'it returns a record');
+
+  const eligible = N - WARM - HZ;
+  const counted = r.samples + r.open;
+  ok(eligible > 500, `the fixture offers ${eligible} bars it could have counted`);
+  ok(counted > 0, `and counts ${counted} of them`);
+  ok(counted <= eligible / (HZ - 1),
+     `about one per horizon, not one per bar (${counted} from ${eligible} — ratio ${(counted / eligible).toFixed(3)})`);
+  ok(counted >= eligible / (HZ + 2),
+     'and it does not silently drop them either — the cooldown is a stride, not a filter');
+
+  /* THE CONSEQUENCE, stated as a number so the stakes are not abstract. */
+  const inflation = Math.sqrt(eligible / counted);
+  ok(inflation > 3,
+     `without it the gate's sigma would inflate about ${inflation.toFixed(1)}x, which is the `
+     + 'difference between "has paid" and "within noise"');
+
+  /* and the gate really does read it raw — if that ever changes, the
+     invariant above stops being load-bearing and this block should say so */
+  ok(!/hgOgEffN\(\s*sN/.test(SRC) && !/hgOgReplayZ\(\s*\[?\s*sN/.test(SRC),
+     'the measured-edge gate deflates nothing, because it has nothing to deflate');
+}
+
 console.log('\n' + passed + ' passed, 0 failed');
 console.log('ALL OMNIGOLD ROUND-2 TESTS PASSED');
