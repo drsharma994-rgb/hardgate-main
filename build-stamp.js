@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v825',
-  pack: 'the forward log stops reading an absent field as a measured zero — a bar with no low reported every resting BUY_LIMIT as touched, settling trades that never opened and biasing the fill-aware evidence toward long limits; settled records carrying no bankR were counted as observations of exactly break-even, and a record with no barT read as permanently stale',
+  version: 'hg-v826',
+  pack: 'the OmniRoute engine stops inventing trade outcomes from absent bar fields — hgOmniWalkForward resolves every measured-edge statistic on every desk, and a null low made 0 <= stop true, stopping out a long that should have stayed open, while a null entry close priced the trade from zero and resolved it as a win on the next bar',
   built: '2026-09-17T00:00:00Z'
 };
 

@@ -465,4 +465,70 @@ console.log('\n== cache stamp ==');
   ok(swCacheOk(read('sw.js')), 'sw.js HG_CACHE matches build-stamp');
 }
 
+
+console.log('\n== the resolver does not invent an outcome from an absent bar field (hg-v826) ==');
+{
+  /* hgOmniWalkForward decides EVERY measured-edge statistic on EVERY desk
+     that consumes this engine. It read bar fields through num(), which was
+     `+v`:
+
+       h = num(rows[i].h); l = num(rows[i].l);
+       if (!isFinite(h) || !isFinite(l)) continue;
+       var hitStop = (dir === 'long') ? (l <= stop) : (h >= stop);
+
+     +null is 0 and isFinite(0) is true, so the guard could not fire and
+     `0 <= stop` was true for every stop there has ever been. This file's
+     own fin() docstring says venues "do return nulls by design". */
+  const W = boot();
+  const wf = W.hgOmniWalkForward;
+  ok(typeof wf === 'function', 'the resolver is reachable');
+
+  /* a calm up-drift: a long entered at bar 40 cannot be stopped inside the
+     horizon, and a short cannot reach target */
+  const bars = n => {
+    const r = []; let px = 4000;
+    for (let i = 0; i < n; i++){
+      const o = px, c = px + 0.4;
+      r.push({ t: 1700000000 + i * 3600, o, h: Math.max(o, c) + 0.5, l: Math.min(o, c) - 0.5, c, v: 1 });
+      px = c;
+    }
+    return r;
+  };
+  const clean = wf(bars(80), 40, 'long', 2, 20, true);
+  ok(clean && clean.res === 'open',
+     `the clean fixture leaves a long open for the whole horizon (${clean.res})`);
+
+  /* A FABRICATED LOSS: one absent low used to stop the long out on that bar. */
+  for (const empty of [null, undefined, '']){
+    const r = bars(80); r[45].l = empty;
+    const got = wf(r, 40, 'long', 2, 20, true);
+    ok(got && got.res === 'open',
+       `a low of ${String(empty)} at bar 45 does not stop the long out (${got && got.res})`);
+  }
+  /* A FABRICATED WIN: a null entry close priced the trade from zero, so the
+     2R target sat just above it and the next bar "hit" it. */
+  for (const empty of [null, '']){
+    const r = bars(80); r[40].c = empty;
+    ok(wf(r, 40, 'long', 2, 20, true) === null,
+       `an entry close of ${String(empty)} yields no trade at all, rather than a win`);
+  }
+
+  /* the real outcomes must survive: build a series that genuinely stops out */
+  const down = bars(80);
+  for (let i = 41; i < 60; i++){ down[i].c = 4000 - (i - 40) * 30; down[i].l = down[i].c - 5; down[i].h = down[i].c + 5; }
+  const real = wf(down, 40, 'long', 2, 20, true);
+  ok(real && real.res === 'stop', `a genuine collapse still stops the long out (${real && real.res})`);
+
+  /* THE ARITHMETIC IT USED TO USE, so none of the above passes vacuously */
+  const loose = v => { const n = +v; return isFinite(n) ? n : NaN; };
+  const r2 = bars(80); r2[45].l = null;
+  let fabricated = false;
+  for (let i = 41; i <= 60; i++){
+    const l = loose(r2[i].l), h = loose(r2[i].h);
+    if (!isFinite(h) || !isFinite(l)) continue;
+    if (l <= 3990){ fabricated = (i === 45); break; }
+  }
+  ok(fabricated, 'the +v reading really did stop it at bar 45 — so these assertions bite');
+}
+
 console.log('\npassed: ' + passed);

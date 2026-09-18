@@ -192,7 +192,37 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
   /* ==================== pure: small numerics ==================== */
 
-  function num(v){ var n = +v; return isFinite(n) ? n : NaN; }
+  /* num() WAS `+v`, AND THIS FILE STATES THE RULE AGAINST THAT THREE TIMES.
+
+     fin()'s own docstring below, and the inline notes at the RSI read and at
+     hgOmniPlanFrom, all say the same thing: +null is 0, isFinite(0) is true,
+     so `isFinite(num(x))` is not a guard. Ninety num() calls here read bar
+     fields anyway — including hgOmniWalkForward, the resolver behind EVERY
+     measured-edge statistic on EVERY desk that consumes this engine.
+
+       h = num(rows[i].h); l = num(rows[i].l);
+       if (!isFinite(h) || !isFinite(l)) continue;
+       var hitStop = (dir === 'long') ? (l <= stop) : (h >= stop);
+
+     A bar with no low gives l = 0, the guard passes, and `0 <= stop` is true
+     for every stop there has ever been. Driven on a calm up-drift where a
+     long should stay open for the full 20-bar horizon: one null low at bar
+     45 resolves it as STOPPED at bar 45. A fabricated loss.
+
+     The entry is worse. `entry = num(rows[idx].c)` on a null close is 0, so
+     risk is measured from zero and the 2R target sits just above it — the
+     same fixture resolves as T1 on the very next bar. A fabricated win.
+
+     Both directions, both fabrications, in the population the significance
+     test, the demotion rules and the measured-edge gate all read. '' behaves
+     like null; undefined happens to be safe because +undefined is NaN, which
+     is luck rather than a guard.
+
+     Every one of the 97 callers reads a bar field and wants the strict
+     answer. num is fin now, kept as a name because a rename across 97 sites
+     would bury a behaviour fix in a mechanical diff. Same defect and same
+     fix as omnigold.js hg-v824 and hg-forward.js hg-v825. */
+  function num(v){ return fin(v); }
 
   /* Strict numeric coercion for EXTERNAL payload fields.
      `isFinite(null)` is TRUE in JavaScript (null coerces to 0), so the
