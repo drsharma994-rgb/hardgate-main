@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v807',
-  pack: 'the 80PERCENT ladder board stops printing a green FIRED chip for setups the page refuses — five rows of pass-coloured chips sat above a panel reading \u201cnothing here is takeable\u201d, and the chip now carries the refusal and its reason',
+  version: 'hg-v808',
+  pack: 'the last two 80PERCENT surfaces that showed a refused setup as a pass — the SETUPS summary row, green on every recent firing, and the FULL card, which printed \u201cneeds 178.10% to pay\u201d as an ordinary note and left the reader to notice that no rate above 100% is reachable',
   built: '2026-09-17T00:00:00Z'
 };
 

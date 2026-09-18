@@ -2681,6 +2681,77 @@ console.log('\n== the board\'s FIRED chip follows takeability ==');
      'and a rung that did not fire still reads "no fire"');
 }
 
+console.log('\n== the SETUPS summary row is coloured by takeability too ==');
+{
+  /* The same fault hg-v807 fixed on the board, one panel up. "last closed
+     candle" and "still open" were both printed in the PASS colour on every
+     row, so the summary table showed five green rows directly above five
+     cards each stamped CANNOT PAY AT THIS VENUE. */
+  const def = { tf: '15m', sec: 900, bars: 320, band: 'scalp' };
+  const rows = series(320, { tfSec: 900, endHour: 15, tail: 0 });
+  const t = h => String(h).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+
+  const paid = ctx.hg80ScanTf(rows, def, ctx.hg80VenueRt());
+  ok(paid.latest && paid.latest.ageBars === 0, 'the fixture fires on the last closed candle');
+  const E = paid.latest.plan.entry;
+
+  const refused = String(ctx.latestSetupsHtml([paid], E));
+  ok(/last closed candle/.test(t(refused)), 'the recency label is unchanged — it is still true');
+  ok(/statuschip veto">last closed candle · cannot pay here/.test(refused),
+     'but the colour is a refusal, with the reason, not a pass');
+  ok(!/statuschip ok">last closed candle/.test(refused),
+     'and no green row for a setup the cards below stamp CANNOT PAY');
+
+  const free = ctx.hg80ScanTf(rows, def, { rtFrac: 0, rtCostPct: 0, venue: 'ZERO-COST',
+                                           basis: 'test' });
+  ok(/statuschip ok">last closed candle<\/span>/.test(String(ctx.latestSetupsHtml([free], E))),
+     'at a venue that takes nothing the row is green again');
+  ok(/price gone/.test(t(String(ctx.latestSetupsHtml([free], free.latest.plan.stop - 5)))),
+     'and a firing price has run past says so rather than showing green');
+
+  /* A RESOLVED firing keeps its neutral chip — it is history, and history
+     is not refused, it is over. */
+  const old = { ok: true, def: { tf: '1h' }, cfg: { tf: '1h', tfSec: 3600 },
+                be: paid.be, latest: Object.assign({}, paid.latest,
+                  { ageBars: 40, status: 'win' }) };
+  ok(/statuschip na">win/.test(String(ctx.latestSetupsHtml([old], E))),
+     'a resolved firing is neutral, not refused — it is over, not declined');
+
+  /* THE NAME WAS THE TELL. The filter deciding which rows get a full card
+     was called `actionable` while testing only age; a firing on the last
+     closed candle is carded whether or not the venue can pay for it,
+     because hg-v790's rule is to show the refusal with its reason. */
+  ok(/var carded = have\.filter/.test(CODE),
+     'the filter is named for what it tests — current enough to card');
+  ok(!/var actionable = have\.filter/.test(CODE),
+     'not for a property it never checked');
+  /* SHOWN, NOT HIDDEN. Written as `|| true` first, which asserts nothing —
+     a tautology reads as a passing test and covers nothing at all. */
+  const full = t(String(ctx.latestSetupsHtml([paid], E)));
+  ok(/entry|4573/.test(full) && full.indexOf(paid.latest.plan.entry.toFixed(2)) >= 0,
+     'the refused setup still carries its levels, in full, rather than being withheld');
+  ok(/CANNOT PAY AT THIS VENUE/.test(full),
+     'with the card below the row stamped so the refusal is on both');
+
+  /* THE LAST PLACE A REFUSAL READ AS A NEUTRAL NOTE. This card printed
+     "Needs 178.10% to pay at this rung's ATR and this venue" in the
+     ordinary note style, leaving the reader to notice that a required win
+     rate above 100% cannot be met by anything. */
+  const one = String(ctx.setupCardHtml(paid.latest, ctx.hg80CardBe(paid.latest, paid),
+                                       paid.cfg, 'last closed candle'));
+  ok(/stamp veto">CANNOT PAY AT THIS VENUE/.test(one), 'the FULL card is stamped too');
+  const ot = t(one);
+  ok(/Needs .* to pay at this rung/.test(ot), 'the required rate is still printed');
+  ok(/above 100%, so no win rate can pay for it here/.test(ot)
+     || /more than the 85% the strategy claims/.test(ot),
+     'and a rate nobody can reach is named as unreachable rather than left as a number');
+
+  const okCard = String(ctx.setupCardHtml(free.latest, ctx.hg80CardBe(free.latest, free),
+                                          free.cfg, 'last closed candle'));
+  ok(!/stamp veto">CANNOT PAY/.test(okCard),
+     'while a card the venue can pay for carries no such stamp');
+}
+
 console.log('\n== how far short, not just which condition ==');
 {
   /* hg80MissCost weights a miss by WHICH condition failed and says nothing

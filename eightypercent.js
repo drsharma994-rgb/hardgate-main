@@ -4277,7 +4277,7 @@ function focusedFiringsHtml(list){
   return h + '</div>';
 }
 
-function latestSetupsHtml(rungs){
+function latestSetupsHtml(rungs, livePx){
   var have = [], i;
   for (i = 0; i < rungs.length; i++){
     if (rungs[i].ok && rungs[i].latest) have.push(rungs[i]);
@@ -4298,10 +4298,24 @@ function latestSetupsHtml(rungs){
     + '<th>entry</th><th>stop</th><th>target</th><th>state</th></tr>';
   for (i = 0; i < have.length; i++){
     var r = have[i], s = r.latest, p = s.plan;
+    /* SAME FAULT THE BOARD HAD IN hg-v807. "last closed candle" and "still
+       open" were both printed in the pass colour on every row, so the
+       summary table showed five green rows above five cards each stamped
+       CANNOT PAY AT THIS VENUE. The label is about recency and stays; the
+       COLOUR is a claim about whether it can be taken, and that follows
+       the same two questions the cards ask. */
     var fresh = s.ageBars === 0;
-    var st = fresh ? '<span class="statuschip ok">last closed candle</span>'
-      : s.status === 'open' ? '<span class="statuschip ok">still open</span>'
-      : '<span class="statuschip na">' + esc(s.status || '—') + '</span>';
+    var st;
+    if (fresh || s.status === 'open'){
+      var g = hg80LiveGrade(s, livePx);
+      var q = hg80Quality(s, r, g, livePx);
+      var no = !hg80LiveActs(g) ? 'price gone' : (!q.pays ? 'cannot pay here' : null);
+      st = '<span class="statuschip ' + (no ? 'veto' : 'ok') + '">'
+        + (fresh ? 'last closed candle' : 'still open')
+        + (no ? ' · ' + esc(no) : '') + '</span>';
+    } else {
+      st = '<span class="statuschip na">' + esc(s.status || '—') + '</span>';
+    }
     h += '<tr><td><b>' + esc(r.def.tf) + '</b></td>'
       + '<td>' + variantChipHtml(s) + '</td>'
       + '<td>' + esc(isFinite(s.t) ? new Date(s.t * 1000).toISOString().replace('T', ' ').slice(5, 16) : '—') + '</td>'
@@ -4314,21 +4328,26 @@ function latestSetupsHtml(rungs){
   }
   h += '</table>';
 
-  /* the actionable ones get a full card; a resolved firing from 200 bars
-     ago gets a row and nothing more, because it is history, not a setup */
-  var actionable = have.filter(function(r){
+  /* CURRENT ENOUGH TO CARD — which is not the same as actionable, and this
+     was called `actionable` while testing only age. A firing on the last
+     closed candle gets a full card whether or not the venue can pay for
+     it, because hg-v790's rule is to show the refusal with its reason
+     rather than hide the setup; the card's own stamp and cost line say
+     which it is. A resolved firing from 200 bars ago gets a row and
+     nothing more, because it is history. */
+  var carded = have.filter(function(r){
     return r.latest.ageBars === 0 || r.latest.status === 'open';
   });
-  if (actionable.length){
-    h += fullCardPreambleHtml(actionable.map(function(x){ return x.latest; }),
-                              actionable.map(function(x){ return x.cfg; }));
+  if (carded.length){
+    h += fullCardPreambleHtml(carded.map(function(x){ return x.latest; }),
+                              carded.map(function(x){ return x.cfg; }));
   }
-  for (i = 0; i < actionable.length; i++){
-    var a = actionable[i];
+  for (i = 0; i < carded.length; i++){
+    var a = carded[i];
     h += setupCardHtml(a.latest, hg80CardBe(a.latest, a), a.cfg,
       a.latest.ageBars === 0 ? 'last closed candle' : ('still open · ' + a.latest.ageBars + ' bars old'));
   }
-  if (!actionable.length){
+  if (!carded.length){
     h += '<div class="note warn">None of these is actionable now: every one has already reached '
       + 'its target, its stop or its horizon. They are listed because they are what the strategy '
       + 'produced, not because they can be taken.</div>';
@@ -4651,9 +4670,32 @@ function setupCardHtml(sig, be, cfg, kind){
     }
   } catch (e){}
 
+  /* THE LAST PLACE A REFUSAL WAS PRESENTED AS A NEUTRAL NOTE. The SIMPLE
+     card has stamped CANNOT PAY AT THIS VENUE since hg-v790, the board
+     since hg-v807 and the summary row since hg-v808; this card printed
+     "Needs 178.10% to pay at this rung's ATR and this venue" in the
+     ordinary note style and left the reader to notice that a required win
+     rate above 100% cannot be met by any strategy.
+
+     The price half is not judged here — this renderer takes no live price,
+     and the SIMPLE card carries that one. What needs no price is whether
+     the venue can be paid at all, and that is said. */
   if (be && be.net != null){
-    h += '<div class="note" style="margin-top:4px">Needs ' + (be.net * 100).toFixed(2)
-      + '% to pay at this rung\'s ATR and this venue.</div>';
+    var cv = hg80CostVerdict(be);
+    var refuses = (cv.key === 'gone' || cv.key === 'negative');
+    var unreachable = be.net >= 1;
+    if (refuses || unreachable){
+      h += '<div style="margin-top:4px"><span class="stamp veto">CANNOT PAY AT THIS VENUE</span>'
+        + '</div>';
+    }
+    h += '<div class="note' + (refuses || unreachable ? ' warn' : '') + '" style="margin-top:4px">'
+      + 'Needs <b>' + (be.net * 100).toFixed(2) + '%</b> to pay at this rung\'s ATR and this '
+      + 'venue'
+      + (unreachable
+          ? ' — <b>above 100%</b>, so no win rate can pay for it here.'
+          : (refuses ? ', which is more than the ' + (P80_CLAIMED * 100).toFixed(0)
+               + '% the strategy claims for itself.' : '.'))
+      + '</div>';
   }
   if (sig.res && sig.status && sig.status !== 'open'){
     h += resultLineHtml(sig);
@@ -4896,7 +4938,7 @@ function render(rungs, venue, recNotes, basis){
     return;
   }
 
-  h += hg80FocusList().length ? focusedFiringsHtml(shown) : latestSetupsHtml(shown);
+  h += hg80FocusList().length ? focusedFiringsHtml(shown) : latestSetupsHtml(shown, gradePx);
   h += ladderBoardHtml(shown, gradePx);
 
   /* the SETUPS panel above already carries every card worth carrying, so
@@ -5568,6 +5610,7 @@ W.hg80MissWorst      = hg80MissWorst;
 W.hg80MissTxt        = hg80MissTxt;
 W.hg80TakeableCount  = hg80TakeableCount;
 W.ladderBoardHtml    = ladderBoardHtml;
+W.latestSetupsHtml   = latestSetupsHtml;
 W.whyNothingHtml     = whyNothingHtml;
 W.coincideHtml       = coincideHtml;
 W.HG_P80_CSS         = P80_CSS;
