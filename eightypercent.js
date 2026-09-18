@@ -1296,6 +1296,21 @@ function hg80WhenTxt(tSec, withDate){
 /* The session window expressed in local time. Built by formatting real
    instants rather than adding an offset by hand, so a half-hour zone and a
    window that crosses midnight both come out right. */
+/* WHICH DAY THE WAIT LANDS ON. A three-hour wait needs no date; a
+   sixty-six hour one does, and before hg-v810 the countdown could not
+   produce one. "opens in 66h 0m, at 14:00 BST" leaves the reader to work
+   out that 14:00 is on Monday. */
+function hg80SessionDayTxt(secs){
+  var w = fin(secs);
+  if (!isFinite(w) || w <= 0) return '';
+  /* under a day the hour alone is unambiguous */
+  if (w < 20 * 3600) return '';
+  try {
+    var when = new Date((Math.floor(Date.now() / 1000) + w) * 1000);
+    return when.toLocaleDateString('en-GB', { weekday: 'long' });
+  } catch (e){ return ''; }
+}
+
 function hg80SessionLocalTxt(){
   try {
     var now = new Date();
@@ -1533,14 +1548,59 @@ function hg80Arming(rungs, armed){
   return out;
 }
 
+/* ---------------------------------------------------------------------
+   THE MARKET IS SHUT AT THE WEEKEND AND THIS COUNTDOWN DID NOT KNOW
+
+   It was clock-of-day arithmetic with no notion of the day. So on a Friday
+   evening it said "the window opens in 18h" — pointing at Saturday 13:00,
+   when gold does not trade — and on a Saturday morning "opens in 3h",
+   pointing at the same Saturday session. Spot gold reopens on Sunday
+   evening, well after 18:00 UTC, so Sunday's window does not exist either.
+
+   Wrong from Friday 18:00 UTC until Sunday evening: roughly 48 hours in
+   every 168, on the most prominent forward-looking number the tab prints.
+   It shows in WHEN THESE CAN FIRE, in WHY THERE IS NOTHING TO TAKE, and
+   since hg-v805 it feeds the session distance that orders near misses.
+   Nothing caught it because every fixture in the suite is anchored to a
+   Wednesday.
+
+   WHAT IS AND IS NOT MODELLED. Saturday and Sunday are not trading days
+   for a 13:00-18:00 UTC window — that much is true at every venue. The
+   exact Friday close and Sunday reopen move with the broker and with
+   daylight saving, and this does not pretend to know them: it answers
+   "when is the next weekday window", which is right in every case except
+   a Friday window truncated by an early close, and 18:00 UTC is hours
+   before any broker's Friday close.
+
+   THE FIRING RULE IS UNTOUCHED. hg80InSession still asks only what the
+   supplied spec asks — is this bar's hour inside 13:00-18:00 UTC. Adding a
+   weekday condition there would be a silent deviation from the spec, which
+   is the one thing this tab does not do, and it would change nothing on
+   real data because gold prints no weekend bars. This is the tab's own
+   forward-looking claim, not the strategy's rule.
+   --------------------------------------------------------------------- */
+function hg80IsTradingDay(dow){ return dow >= 1 && dow <= 5; }
+
 function hg80SecsToSession(nowSec){
   var t = fin(nowSec);
   if (!isFinite(t)) return null;
   var d = new Date(t * 1000);
   var secOfDay = d.getUTCHours() * 3600 + d.getUTCMinutes() * 60 + d.getUTCSeconds();
   var from = P80_UTC_FROM * 3600, to = P80_UTC_TO * 3600;
-  if (secOfDay >= from && secOfDay < to) return 0;
-  return secOfDay < from ? (from - secOfDay) : (86400 - secOfDay + from);
+  var dow = d.getUTCDay();                       /* 0 Sunday … 6 Saturday */
+
+  if (hg80IsTradingDay(dow) && secOfDay >= from && secOfDay < to) return 0;
+
+  var wait = secOfDay < from ? (from - secOfDay) : (86400 - secOfDay + from);
+  /* which day that lands on: today if the window is still ahead of us,
+     tomorrow if it has already passed */
+  var land = (secOfDay < from) ? dow : ((dow + 1) % 7);
+  var guard = 0;
+  while (!hg80IsTradingDay(land) && guard++ < 7){
+    wait += 86400;
+    land = (land + 1) % 7;
+  }
+  return wait;
 }
 
 function hg80SessionApplies(tfSec){
@@ -3779,8 +3839,11 @@ function sessionClockHtml(rungs){
     h += esc(gated.map(function(r){ return r.def.tf; }).join(', '))
       + ' — only inside <b>' + esc(loc || (P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC')) + '</b>'
       + ' (' + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC), '
-      + (toOpen > 0 ? 'which opens in <b>' + hg80DurTxt(toOpen) + '</b>'
-                    : '<b>open now</b>') + '.<br>';
+      + (toOpen > 0
+          ? 'which opens in <b>' + hg80DurTxt(toOpen) + '</b>'
+            + (hg80SessionDayTxt(toOpen) ? ' — on <b>' + esc(hg80SessionDayTxt(toOpen))
+                + '</b>, the next trading day' : '')
+          : '<b>open now</b>') + '.<br>';
   }
   if (free.length){
     h += esc(free.map(function(r){ return r.def.tf; }).join(', '))
@@ -3938,6 +4001,7 @@ function simpleSetupsHtml(rungs, livePx){
       + (usable.length === 1 ? '' : 's') + ' cannot fire until the trading window opens'
       + ' — <b>' + hg80DurTxt(toOpen) + ' from now</b>'
       + (loc ? ', at <b>' + esc(loc) + '</b>' : '')
+      + (hg80SessionDayTxt(toOpen) ? ' on <b>' + esc(hg80SessionDayTxt(toOpen)) + '</b>' : '')
       + ' (' + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC). ';
   }
   var closest = null;
@@ -5674,6 +5738,8 @@ W.latestSetupsHtml   = latestSetupsHtml;
 W.HG_P80_SCORE_TERMS = P80_SCORE_TERMS;
 W.hg80SortWhyTxt     = hg80SortWhyTxt;
 W.hg80SortLead       = hg80SortLead;
+W.hg80IsTradingDay   = hg80IsTradingDay;
+W.hg80SessionDayTxt  = hg80SessionDayTxt;
 W.sortWhyHtml        = sortWhyHtml;
 W.whyNothingHtml     = whyNothingHtml;
 W.coincideHtml       = coincideHtml;

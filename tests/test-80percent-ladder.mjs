@@ -2811,6 +2811,81 @@ console.log('\n== the panel cannot describe a different sort from the one it ran
      'a lead worth under a point is not what put it anywhere, and is not claimed to be');
 }
 
+console.log('\n== the market is shut at the weekend and the countdown knows ==');
+{
+  /* hg80SecsToSession was clock-of-day arithmetic with no notion of the
+     DAY. On a Friday evening it said "the window opens in 18h" — pointing
+     at Saturday 13:00, when gold does not trade — and on a Saturday
+     morning "opens in 3h", pointing at that same dead session. Spot gold
+     reopens on Sunday evening, well after 18:00 UTC, so Sunday's window
+     does not exist either.
+
+     Wrong from Friday 18:00 UTC until Sunday evening: roughly 48 hours in
+     every 168, on the most prominent forward-looking number the tab
+     prints. Nothing caught it because every fixture in this suite is
+     anchored to a Wednesday — asserted below, so the blind spot cannot
+     quietly return. */
+  const S = ctx.hg80SecsToSession;
+  const at = (y, m, d, h, mi) => Date.UTC(y, m, d, h, mi || 0, 0) / 1000;
+  const H = 3600;
+
+  ok(new Date(Date.UTC(2026, 8, 16)).getUTCDay() === 3,
+     'the fixture anchor 2026-09-16 is a Wednesday — which is why this went unseen');
+
+  /* 2026-09-21 is a Monday; the days below run Fri 18th to Mon 21st */
+  ok(S(at(2026, 8, 18, 15)) === 0, 'Friday inside the window is open — Friday is a trading day');
+  ok(S(at(2026, 8, 16, 15)) === 0, 'as is a Wednesday');
+
+  ok(near(S(at(2026, 8, 18, 19)), 66 * H), 'Friday 19:00 is 66h from Monday 13:00, not 18h');
+  ok(near(S(at(2026, 8, 19, 10)), 51 * H), 'Saturday 10:00 is 51h away, not 3h');
+  ok(near(S(at(2026, 8, 19, 23)), 38 * H), 'Saturday night is 38h away');
+  ok(near(S(at(2026, 8, 20, 10)), 27 * H),
+     'Sunday morning is 27h away — gold reopens Sunday EVENING, so Sunday 13:00 is still shut');
+  ok(near(S(at(2026, 8, 20, 19)), 18 * H), 'Sunday evening is 18h from Monday 13:00');
+  ok(near(S(at(2026, 8, 21, 10)), 3 * H), 'and Monday morning is the ordinary 3h');
+
+  /* NEVER LANDS ON A WEEKEND, from any minute of any day */
+  for (let day = 14; day <= 20; day++){
+    for (const h of [0, 6, 12, 13, 17, 18, 23]){
+      const now = at(2026, 8, day, h);
+      const wait = S(now);
+      const land = new Date((now + wait) * 1000);
+      ok(ctx.hg80IsTradingDay(land.getUTCDay()),
+         `from ${new Date(now * 1000).toISOString().slice(0, 16)} the wait lands on a weekday`);
+      if (wait > 0){
+        /* read off the spec, not a number typed here — a hardcoded 13
+           would keep passing if the window ever moved */
+        ok(land.getUTCHours() === ctx.HG_P80_SPEC.utcFrom && land.getUTCMinutes() === 0,
+           `and lands exactly on ${ctx.HG_P80_SPEC.utcFrom}:00, not part way through a day`);
+      }
+    }
+  }
+
+  ok(S(NaN) === null && S('x') === null, 'and a bad clock gives no answer rather than a wrong one');
+
+  /* WHICH DAY A LONG WAIT LANDS ON. Before this the countdown could not
+     produce a wait longer than 24h, so "at 14:00 BST" was unambiguous. At
+     66h it is not. */
+  ok(ctx.hg80SessionDayTxt(3 * H) === '',
+     'a short wait needs no day — the hour alone is unambiguous');
+  ok(/^[A-Z][a-z]+day$/.test(ctx.hg80SessionDayTxt(66 * H)),
+     `a 66h wait names the weekday it lands on (${ctx.hg80SessionDayTxt(66 * H)})`);
+  ok(ctx.hg80SessionDayTxt(0) === '' && ctx.hg80SessionDayTxt(NaN) === '',
+     'and no wait means no day');
+  ok((CODE.match(/hg80SessionDayTxt\(toOpen\)/g) || []).length >= 2,
+     'both places that print the countdown name the day');
+
+  /* THE FIRING RULE IS UNTOUCHED. The supplied spec says 13:00-18:00 UTC
+     and says nothing about weekdays; adding one there would be a silent
+     deviation, which is the one thing this tab does not do. It would also
+     change nothing on real data, because gold prints no weekend bars. */
+  ok(ctx.hg80InSession(at(2026, 8, 19, 15)) === true,
+     'hg80InSession still answers only the spec\'s question — a Saturday 15:00 bar is "in '
+     + 'session" by the hour, because that is what the spec asks');
+  ok(!/getUTCDay/.test(String(ctx.hg80InSession)),
+     'the firing rule does not consult the day of the week');
+}
+
 console.log('\n== how far short, not just which condition ==');
 {
   /* hg80MissCost weights a miss by WHICH condition failed and says nothing

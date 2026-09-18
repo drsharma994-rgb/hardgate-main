@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v809',
-  pack: 'the 80PERCENT setups panel stops describing a different sort from the one it ran — it named three ranking inputs while the score used six, omitting the two largest penalties, and the sentence is now generated from the model so it cannot drift again',
+  version: 'hg-v810',
+  pack: 'the 80PERCENT session countdown knows the market is shut at the weekend — on a Saturday morning it said the window opens in 3 hours, pointing at a Saturday session that does not exist, and it was wrong for about 48 hours in every 168',
   built: '2026-09-17T00:00:00Z'
 };
 
