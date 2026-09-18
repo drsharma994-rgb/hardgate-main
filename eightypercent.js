@@ -240,7 +240,7 @@ var P80_LADDER = [
    "what is the trade". Everything still exists; it is one click away instead
    of first. */
 var __p = { ui: null, busy: false, ranOnce: false, last: null, focus: null, view: 'simple',
-            autoTimer: null, autoEl: null, riskCash: null };
+            autoTimer: null, autoEl: null, riskCash: null, autoTick: 0, feedLagBars: NaN };
 
 /* the focus as an array, whatever it is stored as */
 function hg80FocusList(){
@@ -5414,6 +5414,9 @@ function run(){
         : ('Not recorded: ' + (rec.why || 'unknown'));
     }
 
+    /* what the timer needs to know about whether another fetch would find
+       anything new — see hg80AutoLagSkip */
+    __p.feedLagBars = hg80FeedLagBars(rungs);
     __p.last = { rungs: rungs, venue: venue };
     __p.venue = venue;
     render(rungs, venue ? venue.venue : null, recNotes, venue ? venue.basis : null);
@@ -5557,6 +5560,59 @@ function hg80PaneOn(el){
 
 /* WHY a tick would not run, or null to run it. Split out from the timer so
    every branch is testable without a clock. */
+/* ---------------------------------------------------------------------
+   RE-FETCHING BARS THAT CANNOT HAVE CHANGED
+
+   Since hg-v794 the tab re-runs every sixty seconds: five bar fetches and
+   a spot read, a tick. hg-v811 gave it the means to notice when those
+   fetches are returning the same bars — over a weekend, through an
+   outage, or with the page left open — and it has been doing so at full
+   cadence regardless. Fifty hours of a closed market is three thousand
+   ticks and fifteen thousand fetches for bars that cannot move.
+
+   BACKED OFF, NOT STOPPED. A stale feed is exactly the state in which the
+   tab must keep looking: a stopped timer would never notice the market
+   reopening. So it drops to one tick in P80_LAG_SKIP, which finds a
+   recovery within five minutes at the default cadence, and returns to full
+   rate the moment the feed is current again.
+
+   MEASURED, NOT ASSUMED. The trigger is the feed's own lag — the gap
+   hg80FeedLag reports between the last closed bar and the candle now
+   forming — not a calendar. It therefore covers an outage on a Tuesday as
+   well as a Saturday, and it makes no claim about broker hours, which
+   hg-v810 was careful not to model.
+
+   THE FRESHEST RUNG DECIDES. If any rung is current the feed is alive, so
+   the lag taken is the MINIMUM across rungs. A maximum would let one slow
+   or missing rung throttle a working tab.
+   --------------------------------------------------------------------- */
+var P80_LAG_STALE_BARS = 2;   /* below this the feed is doing its job */
+var P80_LAG_SKIP = 5;         /* run one tick in five while it is not */
+
+function hg80FeedLagBars(rungs){
+  var best = NaN, i;
+  for (i = 0; i < (rungs || []).length; i++){
+    var r = rungs[i];
+    if (!r || !r.ok || !r.rows || !r.rows.length || !r.cfg) continue;
+    var lag = hg80FeedLag(r.rows[r.rows.length - 1].t, r.cfg.tfSec,
+                          Math.floor(Date.now() / 1000));
+    if (!isFinite(lag.bars)) continue;
+    if (!isFinite(best) || lag.bars < best) best = lag.bars;
+  }
+  return best;
+}
+
+/* true when this tick should be skipped because the last scan found the
+   feed behind and this is not the one tick in P80_LAG_SKIP that still
+   looks */
+function hg80AutoLagSkip(lagBars, tickN){
+  var lag = fin(lagBars);
+  if (!isFinite(lag) || lag <= P80_LAG_STALE_BARS) return false;
+  var n = fin(tickN);
+  if (!isFinite(n)) return false;
+  return (n % P80_LAG_SKIP) !== 0;
+}
+
 function hg80AutoWhy(el, doc, busy){
   if (!el) return 'unmounted';
   try {
@@ -5575,7 +5631,8 @@ var P80_AUTO_WHY = {
   'unmounted':  'the tab is no longer on the page',
   'background': 'this browser tab is in the background',
   'other-tab':  'you are looking at another tab',
-  'busy':       'the previous scan is still running'
+  'busy':       'the previous scan is still running',
+  'lag':        'the feed is behind, so most ticks would re-fetch the same bars'
 };
 
 /* One line under SCAN saying whether the tab is updating itself, and if
@@ -5595,6 +5652,13 @@ function hg80AutoNote(why, ms){
   }
   if (!why){
     return 'auto-updating every ' + hg80AutoCadenceTxt(cad) + ' while this tab is open';
+  }
+  if (why === 'lag'){
+    var lb = fin(__p.feedLagBars);
+    return 'auto-update slowed — ' + P80_AUTO_WHY.lag
+      + (isFinite(lb) ? ' (' + lb + ' candles behind)' : '')
+      + '; still checking every ' + hg80AutoCadenceTxt(cad * P80_LAG_SKIP)
+      + ' until it catches up';
   }
   return 'auto-update paused — ' + (P80_AUTO_WHY[why] || why)
     + (why === 'unmounted' ? '' : '; it resumes on its own');
@@ -5700,9 +5764,14 @@ function hg80AutoStart(el){
   hg80AutoPaintCtl();
   if (ms === 0){ hg80AutoPaint('off'); return null; }
   if (typeof W.setInterval !== 'function') return null;
+  __p.autoTick = 0;
   __p.autoTimer = W.setInterval(function(){
+    __p.autoTick = (fin(__p.autoTick) || 0) + 1;
     var why = hg80AutoWhy(__p.autoEl, W.document, __p.busy);
     if (why === 'unmounted'){ hg80AutoStop(); __p.autoEl = null; hg80AutoPaint('unmounted'); return; }
+    /* a feed that is not moving is still worth looking at, just not every
+       minute — see hg80AutoLagSkip */
+    if (!why && hg80AutoLagSkip(__p.feedLagBars, __p.autoTick)) why = 'lag';
     hg80AutoPaint(why);
     if (why) return;
     try { run(); } catch (e){}
@@ -5815,6 +5884,10 @@ W.hg80SessionDayTxt  = hg80SessionDayTxt;
 W.hg80FeedLag        = hg80FeedLag;
 W.ageCellTxt         = ageCellTxt;
 W.feedLagChipHtml    = feedLagChipHtml;
+W.hg80FeedLagBars    = hg80FeedLagBars;
+W.hg80AutoLagSkip    = hg80AutoLagSkip;
+W.HG_P80_LAG_SKIP    = P80_LAG_SKIP;
+W.HG_P80_LAG_STALE_BARS = P80_LAG_STALE_BARS;
 W.sortWhyHtml        = sortWhyHtml;
 W.whyNothingHtml     = whyNothingHtml;
 W.coincideHtml       = coincideHtml;

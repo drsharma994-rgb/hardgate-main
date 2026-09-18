@@ -2811,6 +2811,68 @@ console.log('\n== the panel cannot describe a different sort from the one it ran
      'a lead worth under a point is not what put it anywhere, and is not claimed to be');
 }
 
+console.log('\n== a feed that is not moving is not re-fetched every minute ==');
+{
+  /* Since hg-v794 the tab re-runs every sixty seconds: five bar fetches and
+     a spot read. hg-v811 gave it the means to notice when those fetches
+     return the same bars, and it kept going at full cadence regardless.
+     Fifty hours of a closed market is three thousand ticks and fifteen
+     thousand fetches for bars that cannot move. */
+  const SKIP = ctx.HG_P80_LAG_SKIP, STALE = ctx.HG_P80_LAG_STALE_BARS;
+  ok(SKIP > 1 && STALE >= 0, `one tick in ${SKIP} while more than ${STALE} candles behind`);
+
+  /* A CURRENT FEED IS NEVER SKIPPED — this must not slow a working tab */
+  for (let n = 1; n <= 12; n++){
+    ok(ctx.hg80AutoLagSkip(0, n) === false, `tick ${n} runs when the feed is current`);
+    ok(ctx.hg80AutoLagSkip(STALE, n) === false, 'and at the threshold itself');
+  }
+  ok(ctx.hg80AutoLagSkip(NaN, 3) === false,
+     'an unknown lag never skips — the tab does not slow itself on a measurement it lacks');
+
+  /* BEHIND: one tick in SKIP still looks */
+  let ran = 0;
+  for (let n = 1; n <= SKIP * 4; n++) if (!ctx.hg80AutoLagSkip(STALE + 1, n)) ran++;
+  ok(ran === 4, `over ${SKIP * 4} ticks exactly 4 run (${ran}) — backed off, not stopped`);
+  ok(ran > 0,
+     'and it never stops entirely, because a stopped timer would not notice the market '
+     + 'reopening');
+
+  /* THE FRESHEST RUNG DECIDES. If any rung is current the feed is alive; a
+     maximum would let one slow or missing rung throttle a working tab. */
+  const now = Math.floor(Date.now() / 1000);
+  const rung = (tfSec, backBars) => ({ ok: true, cfg: { tfSec: tfSec },
+    rows: [{ t: Math.floor(now / tfSec) * tfSec - tfSec * (1 + backBars) }] });
+  ok(ctx.hg80FeedLagBars([rung(900, 0), rung(300, 40)]) === 0,
+     'one current rung means the feed is alive, whatever the others say');
+  ok(ctx.hg80FeedLagBars([rung(900, 10), rung(300, 40)]) === 10,
+     'and with none current it is the freshest of them');
+  ok(!isFinite(ctx.hg80FeedLagBars([])) && !isFinite(ctx.hg80FeedLagBars(null)),
+     'no rungs means no measurement rather than a zero');
+  /* written as `|| true` first, for the second time in this session. A
+     tautology reads as a passing test and covers nothing — if it is worth
+     an assertion it is worth one that can fail. */
+  ok(!isFinite(ctx.hg80FeedLagBars([{ ok: false },
+                                    { ok: true, cfg: { tfSec: 900 }, rows: [] }])),
+     'a rung with no bars is skipped rather than counted as current');
+  ok(!isFinite(ctx.hg80FeedLagBars([{ ok: true, rows: [{ t: now }] }])),
+     'and so is one with no cfg to give its timeframe');
+  ok(!isFinite(ctx.hg80FeedLagBars([{ ok: false, cfg: { tfSec: 900 }, rows: [{ t: now }] }])),
+     'a rung that did not scan contributes nothing');
+
+  /* IT IS SAID, not done silently */
+  const line = ctx.hg80AutoNote('lag', 60000);
+  ok(/auto-update slowed/.test(line), 'the status line says the cadence dropped');
+  ok(/re-fetch the same bars/.test(line), 'and why');
+  ok(/until it catches up/.test(line), 'and that it will come back on its own');
+  ok(/still checking every/.test(line), 'naming the reduced cadence rather than implying a stop');
+
+  /* the timer consults it, and the scan records it */
+  ok(/hg80AutoLagSkip\(__p\.feedLagBars, __p\.autoTick\)/.test(CODE),
+     'the tick asks before fetching');
+  ok(/__p\.feedLagBars = hg80FeedLagBars\(rungs\)/.test(CODE),
+     'and every scan records what it found');
+}
+
 console.log('\n== age in bars is a fact about the array, not about time ==');
 {
   /* latest.ageBars is (n-1) - i: how far the firing sits from the END OF

@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v811',
-  pack: 'the 80PERCENT tab stops calling a sixty-hour-old firing \u201cnow\u201d — age was counted in bars from the end of the fetched array, so when the feed stopped the age froze at zero and Friday\u2019s candle read as the present all weekend',
+  version: 'hg-v812',
+  pack: 'the 80PERCENT tab stops re-fetching bars that cannot have changed — it ran five fetches a minute through a closed market, and now backs off to one tick in five while the feed is behind, measured from the feed itself rather than from a calendar',
   built: '2026-09-17T00:00:00Z'
 };
 
