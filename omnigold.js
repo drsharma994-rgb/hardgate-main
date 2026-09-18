@@ -7443,8 +7443,12 @@ terse status, and never launches a first-time scan on a global refresh.
        - EVERY kind — including the best, OPENING RANGE BREAKOUT at +0.220R
          gross — is NET-NEGATIVE after the 0.26% RT cost. Fees eat the
          edge, hardest on tight-stop scalps.
-       - engine grade ordering A > B > C holds on win rate
-         (54.3 / 36.1 / 34.8%), so the selection edge is real; the cost
+       - engine grade ordering A > B > C held on win rate when that bake
+         ran, on n=70 at grade A. IT IS NOT RESTATED HERE, for the same
+         reason the cohort figures below are not: the current bake settles
+         ONE trade per grade, so the ordering is not measurable in it at
+         all, and this paragraph went on asserting it into four rendered
+         strings. Ask hgOgGradeOrder(). The cost
          drag is not survivable on the scalp horizon.
          THE COHORT FIGURES THAT USED TO SIT HERE (ENGINE:SCALP -2.603R,
          ENGINE:SWING -0.056R, PF 0.90) ARE FROM A PRE-v699 BAKE and are
@@ -8043,6 +8047,94 @@ terse status, and never launches a first-time scan on a global refresh.
     };
   }
 
+  /* ====================================================================
+     A WIN RATE NEEDS TRADES TO BE A RATE
+
+     hg-v814 made every COHORT sentence derive from the record. It did not
+     look at the GRADES map, which has the same disease and further along:
+     the current bake settles ONE trade per engine grade.
+
+       grades: { A: [1, 0.000, 0.874], B: [1, 1.000, 1.391], C: [1, 0.000, 0.283] }
+
+     Every site that quotes a grade divides by that n without ever reading
+     it, so the tab renders, today:
+
+       "engine grade-A scalar only — replay 0% WR, 0.87R net on scalps"
+       "replay: grade-A 0% WR (n=1) — selection edge real, mind the costs"
+       "grade-A selection is real but scalp costs erased it"
+
+     A 0% win rate beside a POSITIVE net R is not a surprising finding, it
+     is one trade that lost less than its stop; printing it as a percentage
+     invites a reader to compare it with the STRONG cell beside it, which
+     carries 1,407. And "selection edge real" is asserted in the same
+     sentence as the n=1 that refutes it — the ordering it refers to
+     (A 54.3% > B 36.1% > C 34.8%, n=70 on A) is from a pre-v699 bake and
+     survives only as prose, exactly like the cohort figures v814 removed.
+
+     So: no percentage is printed from a record too thin to carry one, and
+     whether the selection ordering holds is COMPUTED from the bake rather
+     than asserted. The grade filter itself does not move — see the note at
+     hgOgPickGoldEngineFor. Dropping a selection prior because this window
+     settled three trades would be the same overfit in the other direction. */
+
+  /* The record as a sentence, or an honest refusal to state a rate.
+     opts.net includes the net R; opts.n appends the sample. */
+  function hgOgClaimRecordTxt(c, opts){
+    if (!c || c.missing) return null;
+    var o = opts || {};
+    var bits = [];
+    if (c.thin){
+      /* A RATE FROM ONE TRADE IS THAT TRADE. Say what settled instead. */
+      if (!(c.n > 0)) return null;
+      bits.push(hgOgFmtCount(c.n) + ' settled trade' + (c.n === 1 ? '' : 's')
+                + ' (too few for a rate)');
+      if (o.net && isFinite(c.net)){
+        bits.push((c.net >= 0 ? '+' : '') + c.net.toFixed(2) + 'R on ' + (c.n === 1 ? 'it' : 'them'));
+      }
+      return bits.join(', ');
+    }
+    if (isFinite(c.winRate)) bits.push((c.winRate * 100).toFixed(0) + '% WR');
+    if (o.net && isFinite(c.net)) bits.push((c.net >= 0 ? '+' : '') + c.net.toFixed(2) + 'R net');
+    if (!bits.length) return null;
+    if (o.n && c.n > 0) return bits.join(', ') + ' (n=' + hgOgFmtCount(c.n) + ')';
+    return bits.join(', ');
+  }
+
+  /* Does the engine's selection ordering — A better than B better than C —
+     actually hold in the bake, on records big enough to mean it?
+     -> { judgeable, holds, why }. Never asserts; reads. */
+  function hgOgGradeOrder(){
+    var a = hgOgCohortClaim('A'), b = hgOgCohortClaim('B'), c = hgOgCohortClaim('C');
+    var have = [a, b, c].filter(function(x){ return !x.missing && isFinite(x.winRate); });
+    if (have.length < 3){
+      return { judgeable: false, holds: false, why: 'the bake does not carry all three grades' };
+    }
+    var thin = [a, b, c].filter(function(x){ return x.thin; });
+    if (thin.length){
+      return { judgeable: false, holds: false,
+               why: thin.length === 3
+                 ? ('every grade settled under ' + MIN_SAMPLES + ' trades in this window')
+                 : (thin.length + ' of the three grades settled under ' + MIN_SAMPLES + ' trades') };
+    }
+    var holds = (a.winRate > b.winRate && b.winRate > c.winRate);
+    return { judgeable: true, holds: holds,
+             why: 'A ' + (a.winRate * 100).toFixed(1) + '% · B ' + (b.winRate * 100).toFixed(1)
+                  + '% · C ' + (c.winRate * 100).toFixed(1) + '%' };
+  }
+
+  /* The clause the spectrum header and the grade line both used to assert.
+     One sentence, three shapes, decided by the bake. */
+  function hgOgGradeOrderTxt(short){
+    var o = hgOgGradeOrder();
+    if (!o.judgeable){
+      return short ? 'grade ordering not measurable here'
+                   : ('the grade ordering is not measurable in this window (' + o.why + ')');
+    }
+    var verb = o.holds ? 'ordered outcomes' : 'did NOT order outcomes';
+    return short ? ('grade selection ' + verb + ' here')
+                 : ('grade selection ' + verb + ' in this window (' + o.why + ')');
+  }
+
   /* The banner's cohort sentence, in full, derived. Three shapes, and
      which one renders is decided by the record. */
   function hgOgCohortStanceTxt(){
@@ -8260,8 +8352,9 @@ terse status, and never launches a first-time scan on a global refresh.
         || ((typeof setup.grade === 'string') ? setup.grade : ''))) || (s >= 85 ? 'A' : '')).toUpperCase();
       var demoted = !!(setup && (setup.engineDemoted || setup.demoted));
       var gkey = g ? (g + (demoted ? '-DEMOTED' : '')) : '';
-      var gev = gkey ? hgOgReplayEvidence(gkey) : null;
-      if (gev && isFinite(fin(gev.winRate)) && isFinite(fin(gev.avgNetR))){
+      var gclaim = gkey ? hgOgCohortClaim(gkey) : null;
+      var grec = hgOgClaimRecordTxt(gclaim, { net: true });
+      if (grec){
         /* 'on scalps' is a per-grade measured fact, not a template: the
            grade rows pool horizons, and in the replay only A / A-DEMOTED /
            B-DEMOTED / C-DEMOTED settled 100% on scalp geometry. B settled
@@ -8269,10 +8362,14 @@ terse status, and never launches a first-time scan on a global refresh.
            scripts/backtest-omnigold-results.json, keyed by the engine
            scalar: A=85, A-dem=75, B=70, B-dem=60, C=45, C-dem=35) — so the
            horizon claim prints only where it is true of every trade. */
+        /* AND THE HORIZON CLAIM RESTS ON THAT SAME TRADE COUNT. The list
+           above was derived from a distribution ('B settled 30 scalp + 6
+           swing') that this bake no longer has — every grade settles ONE
+           trade in it. A per-horizon claim off one trade says nothing, so
+           it prints only where the record can carry it. */
         var gAllScalp = (gkey === 'A' || gkey === 'A-DEMOTED'
           || gkey === 'B-DEMOTED' || gkey === 'C-DEMOTED');
-        suffix = 'replay ' + (gev.winRate * 100).toFixed(0) + '% WR, '
-          + gev.avgNetR.toFixed(2) + 'R net' + (gAllScalp ? ' on scalps' : '');
+        suffix = 'replay ' + grec + ((gAllScalp && !gclaim.thin) ? ' on scalps' : '');
       }
     } else if (s >= 85){
       /* Practically unreachable: no scan trade in the 7,270-trade replay
@@ -8350,7 +8447,9 @@ terse status, and never launches a first-time scan on a global refresh.
     var E = HG_OG_REPLAY_EVIDENCE;
     var txt = 'measured reality: these tiers did NOT rank outcomes in the '
       + hgOgFmtCount(E.settled) + '-trade replay (WEAK outperformed STRONG); '
-      + 'grade-A selection is real but scalp costs erased it. '
+      /* WAS: 'grade-A selection is real but scalp costs erased it.' — an
+         assertion about an ordering the bake no longer carries. Read it. */
+      + hgOgGradeOrderTxt() + '. '
       + 'The tiers are a checklist, not a ranking.';
     return '<div class="warn og-spectrum-truth" style="margin-bottom:8px;padding:6px 8px;'
       + 'border-left:3px solid #f59e0b;background:rgba(245,158,11,0.08);'
@@ -8361,19 +8460,24 @@ terse status, and never launches a first-time scan on a global refresh.
      instruction ('Trade immediately' told a reader to click; 34% > 30% is
      what actually happened). Numbers come from the baked tables only. */
   function hgOgSpectrumLegendCellsHtml(){
-    var A = hgOgReplayEvidence('A');
-    var wrTxt = function(ev){
-      return (ev && isFinite(fin(ev.winRate)))
-        ? ('replay ' + (ev.winRate * 100).toFixed(0) + '% WR') : 'no replay record';
+    /* THE FOUR CELLS SIT SIDE BY SIDE, so they must be comparable. STRONG
+       carries 1,407 settled trades and grade A carries one; printing both
+       as a bare percentage invited exactly the comparison the numbers
+       cannot support. */
+    var wrTxt = function(key){
+      var rec = hgOgClaimRecordTxt(hgOgCohortClaim(key), {});
+      return rec ? ('replay ' + rec) : 'no replay record';
     };
-    var capA = (A && isFinite(fin(A.avgNetR)))
-      ? ('engine grade-A scalar only — ' + wrTxt(A) + ', ' + A.avgNetR.toFixed(2) + 'R net on scalps')
+    var A = hgOgCohortClaim('A');
+    var aRec = hgOgClaimRecordTxt(A, { net: true });
+    var capA = aRec
+      ? ('engine grade-A scalar only — replay ' + aRec + (A.thin ? '' : ' on scalps'))
       : 'engine grade-A scalar only';
     var h = '';
     h += '<div style="padding:6px;border-left:3px solid #10b981;background:#10b98111"><span style="color:#10b981;font-weight:bold">🏆 ≥85</span><br>GRADE-A CLASS<br><span style="color:var(--fg-muted,#666);font-size:0.8em">' + esc(capA) + '</span></div>';
-    h += '<div style="padding:6px;border-left:3px solid #22c55e;background:#22c55e11"><span style="color:#22c55e;font-weight:bold">✓ 70-84</span><br>STRONG<br><span style="color:var(--fg-muted,#666);font-size:0.8em">' + esc(wrTxt(hgOgReplayEvidence('STRONG'))) + '</span></div>';
-    h += '<div style="padding:6px;border-left:3px solid #f59e0b;background:#f59e0b11"><span style="color:#f59e0b;font-weight:bold">⚠️ 50-69</span><br>FAIR<br><span style="color:var(--fg-muted,#666);font-size:0.8em">' + esc(wrTxt(hgOgReplayEvidence('FAIR'))) + '</span></div>';
-    h += '<div style="padding:6px;border-left:3px solid #dc2626;background:#dc262611"><span style="color:#dc2626;font-weight:bold">✗ <50</span><br>WEAK<br><span style="color:var(--fg-muted,#666);font-size:0.8em">' + esc(wrTxt(hgOgReplayEvidence('WEAK'))) + '</span></div>';
+    h += '<div style="padding:6px;border-left:3px solid #22c55e;background:#22c55e11"><span style="color:#22c55e;font-weight:bold">✓ 70-84</span><br>STRONG<br><span style="color:var(--fg-muted,#666);font-size:0.8em">' + esc(wrTxt('STRONG')) + '</span></div>';
+    h += '<div style="padding:6px;border-left:3px solid #f59e0b;background:#f59e0b11"><span style="color:#f59e0b;font-weight:bold">⚠️ 50-69</span><br>FAIR<br><span style="color:var(--fg-muted,#666);font-size:0.8em">' + esc(wrTxt('FAIR')) + '</span></div>';
+    h += '<div style="padding:6px;border-left:3px solid #dc2626;background:#dc262611"><span style="color:#dc2626;font-weight:bold">✗ <50</span><br>WEAK<br><span style="color:var(--fg-muted,#666);font-size:0.8em">' + esc(wrTxt('WEAK')) + '</span></div>';
     return h;
   }
 
@@ -8842,7 +8946,16 @@ terse status, and never launches a first-time scan on a global refresh.
       var keys = Object.keys(kinds);
       if (!keys.length) return '';
 
-      var famZ = hgOgFamilyZ(keys.length);
+      /* THE FAMILY IS WHAT THE DESK SEARCHED, NOT WHAT IT RECORDED.
+         This corrected over keys.length — the 54 mechanics that carry a
+         replay row — while the measured-edge gate that actually stands
+         setups aside corrects over OG_MECHANICS.length, all 77 scanned.
+         So the panel whose whole job is to explain the empty ticket
+         column quoted +3.11σ while the rule producing that column applied
+         +3.21σ, and a reader working out the shortfall from "+1.71σ
+         against the bar" got a different answer than the gate did. Same
+         family as the gate, so the explanation is of the rule in force. */
+      var famZ = hgOgFamilyZ(OG_MECHANICS.length);
       var be = 1 / 3;                      /* every plan this desk writes is 2R */
       var clears = 0, fails = 0, best = null;
       for (var i = 0; i < keys.length; i++){
@@ -8863,13 +8976,18 @@ terse status, and never launches a first-time scan on a global refresh.
         + 'background:rgba(100,116,139,0.07);font-size:0.85em">'
         + '<b>NO TICKETS — BY DESIGN, NOT BY FAULT</b><br>'
         + 'This desk issues a ticket only for a mechanic whose edge has been measured. '
-        + 'Of ' + keys.length + ' mechanics in the ledger, <b>none</b> clears the '
-        + keys.length + '-comparison significance bar (+' + famZ.toFixed(2) + 'σ), '
+        /* 'mechanics in the ledger' was wrong twice over: the ledger holds
+           OG_MECHANICS.length of them, and keys.length is how many carry a
+           replay row. The coverage panel on this same page prints the
+           first number, so the two disagreed in front of the reader. */
+        + 'Of ' + OG_MECHANICS.length + ' mechanics scanned, ' + keys.length
+        + ' carry a replay record and <b>none</b> of those clears the '
+        + OG_MECHANICS.length + '-comparison significance bar (+' + famZ.toFixed(2) + 'σ), '
         + fails + ' fail it outright'
         + (best ? ', and the best — ' + esc(best.kind) + ', ' + hgOgFmtCount(best.n)
                   + ' trades at ' + (best.hit * 100).toFixed(1) + '% — reaches only +'
                   + best.z.toFixed(2) + 'σ' : '')
-        + '. Searching ' + keys.length + ' ways and taking the best one is not evidence, '
+        + '. Searching ' + OG_MECHANICS.length + ' ways and taking the best one is not evidence, '
         + 'which is what that bar exists to say.<br>'
         + 'Every setup below still shows its levels, its gates and its reasoning as a '
         + '<b>WATCH</b>. What would refill this column is ' + FWD_MIN_JUDGE + ' settled setups '
@@ -9083,9 +9201,12 @@ terse status, and never launches a first-time scan on a global refresh.
     } catch (e) { return ''; }
   }
 
-  /* ENGINE pick annotations. Grade A/B carry the replay's one genuinely
-     positive finding — the selection ordering held (A 54.3% > B 36.1% >
-     C 34.8% win rate) — WITH its cost warning attached; a SCALP-horizon
+  /* ENGINE pick annotations. Grade A/B used to carry what was called the
+     replay's one genuinely positive finding, the selection ordering; that
+     is read from the bake now (hgOgGradeOrder) rather than stated, because
+     the bake it was measured on is gone and the line was rendering
+     "0% WR (n=1) — selection edge real" — its own refutation, in one
+     sentence, with the n already in it. A SCALP-horizon
      pick whose fee tier is heavy/fatal gets the cohort caution too, read
      from the bake by hgOgCohortClaim rather than quoted here. The figures
      that used to be quoted here were a pre-v699 bake's and were still
@@ -9098,11 +9219,14 @@ terse status, and never launches a first-time scan on a global refresh.
     g = String(g || '').toUpperCase();
     if (g === 'A' || g === 'B'){
       var demoted = !!(pick.engineDemoted || pick.demoted);
-      var ev = hgOgReplayEvidence(g + (demoted ? '-DEMOTED' : ''));
-      if (ev && isFinite(fin(ev.winRate))){
+      /* THIS LINE PRINTED ITS OWN REFUTATION: '0% WR (n=1) — selection
+         edge real'. The n was already right there and nothing read it. */
+      var gc = hgOgCohortClaim(g + (demoted ? '-DEMOTED' : ''));
+      var rec = hgOgClaimRecordTxt(gc, { n: true });
+      if (rec){
         h += '<div class="dim og-replay-line" style="font-size:11px;margin-top:2px">replay: grade-'
-          + g + (demoted ? ' (demoted)' : '') + ' ' + (ev.winRate * 100).toFixed(0)
-          + '% WR (n=' + ev.n + ') — selection edge real, mind the costs</div>';
+          + g + (demoted ? ' (demoted)' : '') + ' ' + esc(rec) + ' — '
+          + esc(hgOgGradeOrderTxt(true)) + '</div>';
       }
     }
     var hz = String(horizon || pick.horizon || '').toUpperCase();
@@ -10552,10 +10676,19 @@ terse status, and never launches a first-time scan on a global refresh.
      (HG_OG_REPLAY_EVIDENCE — its own window and settled count, not a
      copy of them; the copy that used to sit here said n=7270 against a
      bake of 8,155):
-       1. ENGINE grade A/B only — the one selection ordering that held
-          (A 54.3% WR n=70 vs B 36.1% vs C 34.8%, ~31% scan baseline) — taken
-          from the REAL pick gate hgOgPickGoldEngineFor (tape-aligned per
-          horizon), never demoted grades, never grade-C FORMING fallbacks.
+       1. ENGINE grade A/B only, taken from the REAL pick gate
+          hgOgPickGoldEngineFor (tape-aligned per horizon), never demoted
+          grades, never grade-C FORMING fallbacks.
+          THIS IS A SELECTION PRIOR, NOT A MEASURED EDGE, and the
+          difference matters because it used to be written down as the
+          latter: 'the one selection ordering that held (A 54.3% WR n=70
+          vs B 36.1% vs C 34.8%)'. That bake is gone; the current one
+          settles one trade per grade and can order nothing. The rule is
+          UNCHANGED deliberately — dropping a selection prior because this
+          window settled three trades would be the same overfit as keeping
+          the claim, pointing the other way — but the tab no longer tells
+          a reader it is measured. hgOgGradeOrderTxt() says what the bake
+          actually supports, wherever a grade is quoted.
        2. SWING geometry preferred. A SCALP pick qualifies ONLY when its
           cost tier is ok (0.26% PAXG round trip <= 0.125R of the stop),
           because scalp geometry is where the fee load dominates: the
@@ -14119,6 +14252,10 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgCohortPfTxt = hgOgCohortPfTxt;
     window.hgOgCohortBook = hgOgCohortBook;
     window.hgOgCohortStanceTxt = hgOgCohortStanceTxt;
+    window.hgOgClaimRecordTxt = hgOgClaimRecordTxt;
+    window.hgOgGradeOrder = hgOgGradeOrder;
+    window.hgOgGradeOrderTxt = hgOgGradeOrderTxt;
+    window.hgOgSpectrumLegendCellsHtml = hgOgSpectrumLegendCellsHtml;
     window.HG_OG_MIN_SAMPLES = MIN_SAMPLES;
     /* APEX GOLD (ADDITIVE) — grade-gated, tape-aligned, cost-tiered tier
        built ONLY from measured replay evidence; see hgOgApexQualify. */

@@ -193,4 +193,124 @@ console.log('\n== the literal fallbacks are gone from the source ==');
   ok(CODE.indexOf('-0.056') < 0, 'and the ENGINE:SWING figure it was paired with');
 }
 
+
+console.log('\n== a win rate needs trades to be a rate (hg-v815) ==');
+{
+  const W = boot();
+  const A = W.hgOgCohortClaim('A'), B = W.hgOgCohortClaim('B'), C = W.hgOgCohortClaim('C');
+  ok(A.n === 1 && B.n === 1 && C.n === 1,
+     'the state that produced this: the bake settles ONE trade per engine grade');
+  ok(A.winRate === 0 && A.net > 0,
+     'grade A is 0% WR with a POSITIVE net R — one trade that lost less than its stop');
+  ok(A.thin && B.thin && C.thin, 'all three are under the judge bar');
+
+  const legend = strip(W.hgOgSpectrumLegendCellsHtml());
+  /* A BOUNDARY, NOT A SUBSTRING: the FAIR cell legitimately reads "30% WR"
+     and contains "0% WR" inside it. The first draft of this assertion
+     failed on that, against correct output. */
+  ok(!/(^|[^\d])0% WR/.test(legend),
+     'the legend does not print a 0% win rate computed from one trade');
+  ok(/30% WR/.test(legend), 'and the cell that made that trap real is still there');
+  ok(/1 settled trade \(too few for a rate\)/.test(legend),
+     'it says what actually settled instead');
+  ok(/32% WR/.test(legend),
+     'while the tier cells beside it, which carry thousands, still quote their rate');
+  ok(legend.indexOf('on scalps') < 0,
+     'and the per-horizon claim is withheld — it came from a trade distribution this bake lost');
+
+  const line = strip(W.hgOgEngineReplayLinesHtml(
+    { kind: 'ROUND-MAGNET', horizon: 'SCALP', dir: 'long', engineGrade: 'A', grade: 'A',
+      plan: { entry: 4000, stop: 3980, t1: 4040 } }, 'SCALP'));
+  ok(line.indexOf('selection edge real') < 0,
+     'the grade line no longer asserts a selection edge beside the n=1 that refutes it');
+  ok(/too few for a rate/.test(line), 'it reports the sample instead');
+
+  const hdr = strip(W.hgOgSpectrumTruthHeaderHtml());
+  ok(hdr.indexOf('grade-A selection is real') < 0,
+     'and the spectrum header drops the same assertion');
+  ok(/not measurable in this window/.test(hdr), 'saying what the bake supports');
+}
+
+console.log('\n== the grade ordering is READ: mutate the bake, the verdict follows ==');
+{
+  const W = boot();
+  ok(W.hgOgGradeOrder().judgeable === false, 'n=1 per grade is not judgeable');
+  ok(/every grade settled under \d+ trades/.test(W.hgOgGradeOrder().why),
+     'and it names why');
+
+  /* the ordering that used to be asserted, now at a size that can carry it */
+  vm.runInContext(`HG_OG_REPLAY_EVIDENCE.grades['A'] = [70, 0.543, 0.87];
+                   HG_OG_REPLAY_EVIDENCE.grades['B'] = [60, 0.361, 0.40];
+                   HG_OG_REPLAY_EVIDENCE.grades['C'] = [60, 0.348, 0.10];`, W);
+  const held = W.hgOgGradeOrder();
+  ok(held.judgeable === true && held.holds === true, 'A > B > C at scale is judgeable AND holds');
+  ok(/grade selection ordered outcomes/.test(W.hgOgGradeOrderTxt()),
+     'and the sentence says so, unprompted');
+  ok(/A 54\.3% . B 36\.1% . C 34\.8%/.test(W.hgOgGradeOrderTxt()),
+     'quoting the rates it just read rather than remembered ones');
+  ok(/54% WR/.test(strip(W.hgOgSpectrumLegendCellsHtml())),
+     'and the legend quotes a rate again once the record can carry one');
+  ok(/on scalps/.test(strip(W.hgOgSpectrumLegendCellsHtml())),
+     'the horizon claim returns with the sample that supports it');
+
+  /* invert it: the sentence must be willing to say the ordering FAILED */
+  vm.runInContext(`HG_OG_REPLAY_EVIDENCE.grades['A'] = [70, 0.301, 0.87];`, W);
+  const broke = W.hgOgGradeOrder();
+  ok(broke.judgeable === true && broke.holds === false, 'a broken ordering is judgeable and false');
+  ok(/did NOT order outcomes/.test(W.hgOgGradeOrderTxt()),
+     'and the tab is willing to print that its own selection device failed');
+
+  /* one thin grade poisons the comparison, not just all three */
+  vm.runInContext(`HG_OG_REPLAY_EVIDENCE.grades['B'] = [2, 0.5, 0.4];`, W);
+  ok(W.hgOgGradeOrder().judgeable === false,
+     'one thin grade is enough to make the ordering unmeasurable');
+  ok(/1 of the three grades/.test(W.hgOgGradeOrder().why), 'and it counts how many');
+}
+
+console.log('\n== the record sentence never states more than the sample allows ==');
+{
+  const W = boot();
+  const t = W.hgOgClaimRecordTxt;
+  ok(t({ missing: true }) === null, 'a missing record says nothing');
+  ok(t({ missing: false, n: 1, winRate: 0, net: 0.874, thin: true })
+       === '1 settled trade (too few for a rate)', 'one trade is not a percentage');
+  ok(t({ missing: false, n: 1, winRate: 0, net: 0.874, thin: true }, { net: true })
+       === '1 settled trade (too few for a rate), +0.87R on it',
+     'its outcome can still be reported, attached to the one trade');
+  ok(t({ missing: false, n: 4, winRate: 0.5, net: -0.2, thin: true }, { net: true })
+       === '4 settled trades (too few for a rate), -0.20R on them', 'plural agrees');
+  ok(t({ missing: false, n: 6461, winRate: 0.2959, net: -1.438, thin: false }, { net: true })
+       === '30% WR, -1.44R net', 'a judgeable record reads as a rate');
+  ok(t({ missing: false, n: 6461, winRate: 0.2959, net: -1.438, thin: false }, { net: true, n: true })
+       === '30% WR, -1.44R net (n=6,461)', 'with its sample when asked');
+}
+
+console.log('\n== the empty-ticket panel explains the bar that is actually applied ==');
+{
+  const W = boot();
+  const panel = strip(W.hgOgEdgeProofPanelHtml());
+  const scanned = W.hgOgFamilyZ ? null : null;
+  /* the gate's own family size, read the way the gate reads it */
+  const nMech = Number((panel.match(/Of (\d+) mechanics scanned/) || [])[1]);
+  ok(nMech > 0, 'the panel names how many mechanics were scanned (' + nMech + ')');
+  ok(/(\d+) carry a replay record/.test(panel),
+     'and separately how many carry a replay record — they are different numbers');
+  const withRecord = Number((panel.match(/(\d+) carry a replay record/) || [])[1]);
+  ok(withRecord < nMech,
+     'the ledger is bigger than the measured set (' + withRecord + ' of ' + nMech + ')');
+  ok(panel.indexOf('mechanics in the ledger') < 0,
+     'the old label, which called the measured set "the ledger", is gone');
+
+  /* THE BAR MUST BE THE GATE'S BAR. Recompute it independently. */
+  const barInPanel = Number((panel.match(/([\d.]+)σ\)/) || [])[1]);
+  const gateBar = W.hgOgFamilyZ(nMech);
+  ok(Math.abs(barInPanel - gateBar) < 0.005,
+     'the quoted bar is hgOgFamilyZ over the SCANNED count (' + barInPanel + ')');
+  ok(Math.abs(gateBar - W.hgOgFamilyZ(withRecord)) > 0.05,
+     'which is a different number from the measured-set bar it used to quote ('
+     + W.hgOgFamilyZ(withRecord).toFixed(2) + ') — so this assertion can fail');
+  ok(new RegExp('Searching ' + nMech + ' ways').test(panel),
+     'and the "searching N ways" clause uses the same N');
+}
+
 console.log(`\n${passed} passed, 0 failed`);

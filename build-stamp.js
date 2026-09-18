@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v814',
-  pack: 'OMNIGOLD stops quoting cohort numbers it no longer has — the permanent replay banner declared no cohort net-positive, then printed +0.85R from the record and called it a net loss, beside a profit factor the evidence sets to null and a scalp figure from a bake that no longer contains that cohort; every cohort sentence is now derived from the live record or not made at all',
+  version: 'hg-v815',
+  pack: 'OMNIGOLD stops printing a win rate it cannot compute — the bake settles one trade per engine grade, and the tab rendered "grade-A 0% WR (n=1) — selection edge real" and a 0% rate in a legend cell beside tiers carrying thousands; no percentage is stated from a record too thin to carry one, the grade ordering is read rather than asserted, and the panel explaining the empty ticket column now quotes the significance bar the gate actually applies',
   built: '2026-09-17T00:00:00Z'
 };
 
