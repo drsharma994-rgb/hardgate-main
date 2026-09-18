@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v837',
-  pack: 'the OMNIGOLD evidence card names the constraint that actually binds — the below-the-bar line asserted one blocker unconditionally and printed below the 25-trade minimum on a row carrying 63 trades, then contradicted itself two clauses later with the real reason; four gates now stand between a positive margin and a promotion and the reason is read off them in the order the tier applies them, with the last branch saying the row and the gate disagree rather than inventing a fifth reason',
+  version: 'hg-v838',
+  pack: 'the 90% SCALP VERDICT rows get the same blocker walk the PROVEN EDGE rows got — their line read below 90% lower bound unconditionally, printed on a row whose own 95% interval showed a 92% lower bound and whose real blocker was the population, so it contradicted both the number beside it and the clause after it; the walk now takes the tier shape as an option rather than being copied, because the two test different things and two copies drift',
   built: '2026-09-18T00:00:00Z'
 };
 

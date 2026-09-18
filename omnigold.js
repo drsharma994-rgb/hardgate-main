@@ -10529,6 +10529,17 @@ terse status, and never launches a first-time scan on a global refresh.
      the row and the gate disagree and the card should say so rather than
      cover for it. */
   function hgOgTierBlock(ev, minN, margin){
+    /* TWO TIER SHAPES, ONE WALK. PROVEN EDGE tests the bound against this
+       mechanic's OWN breakeven; the 95% EXECUTE and 90% SCALP VERDICT tiers
+       test it against a fixed rate. Same gates in the same order up to the
+       last one, so an options object picks which final test applies rather
+       than a second copy of the walk drifting from this one. */
+    var minLo = NaN;
+    if (minN && typeof minN === 'object'){
+      minLo = fin(minN.minLo);
+      margin = isFinite(fin(minN.margin)) ? fin(minN.margin) : margin;
+      minN = minN.minN;
+    }
     if (!ev || !ev.wilson) return { key: 'no-record', txt: 'no settled record yet' };
     minN = isFinite(fin(minN)) ? fin(minN) : OG_EDGE_MIN_N;
     margin = isFinite(fin(margin)) ? fin(margin) : OG_EDGE_MARGIN;
@@ -10538,9 +10549,13 @@ terse status, and never launches a first-time scan on a global refresh.
          so spelling it out twice would be two clauses saying one thing */
       return { key: 'population', txt: 'the population it is measured on' };
     }
-    var be = hgOgBreakevenHit(ev.avgRr);
-    if (!isFinite(be)){
-      return { key: 'breakeven', txt: 'no winner has reported its R, so there is no breakeven to clear' };
+    var be = NaN;
+    if (!isFinite(minLo)){
+      /* a breakeven tier: with no reward multiple there is no bar to clear */
+      be = hgOgBreakevenHit(ev.avgRr);
+      if (!isFinite(be)){
+        return { key: 'breakeven', txt: 'no winner has reported its R, so there is no breakeven to clear' };
+      }
     }
     var n = fin(ev.samples);
     if (!(n >= minN)){
@@ -10549,12 +10564,20 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     var b = hgOgEvBound(ev);
     if (!b) return { key: 'no-record', txt: 'no usable bound' };
-    var gap = b.lo - (be + margin);
+    var target = isFinite(minLo) ? minLo : (be + margin);
+    var gap = b.lo - target;
     if (!(gap >= 0)){
+      /* THE CORRECTED BOUND, named as such. The card prints the 95% interval
+         beside this, and on a row whose displayed lower bound is 92% a bare
+         "below 90% lower bound" reads as a contradiction rather than as a
+         different bar — which is what it is. */
       return { key: 'bound',
-               txt: (Math.abs(gap) * 100).toFixed(1) + ' pts short of breakeven at the corrected bar'
+               txt: (Math.abs(gap) * 100).toFixed(1) + ' pts short of '
+                    + (isFinite(minLo) ? ((minLo * 100).toFixed(0) + '%') : 'breakeven')
+                    + ' at the corrected bar (' + (b.lo * 100).toFixed(0) + '% against the '
+                    + (ev.wilson.lo * 100).toFixed(0) + '% shown)'
                     + (hgOgOverlapKnown(ev) && fin(ev.overlapRatio) < 1
-                        ? ' (on ' + fin(ev.effSamples).toFixed(1) + ' effective trades)' : '') };
+                        ? ', on ' + fin(ev.effSamples).toFixed(1) + ' effective trades' : '') };
     }
     return { key: 'none', txt: 'nothing is blocking it — this row and the tier gate disagree' };
   }
@@ -10971,7 +10994,10 @@ terse status, and never launches a first-time scan on a global refresh.
     h += '<div class="hg-mp-note">SETTLED ' + esc(ev.source) + ' · '
       + esc(String(ev.wins)) + '/' + esc(String(ev.samples)) + ' wins · '
       + pct + '% hit · Wilson 95% CI ' + lo + '–' + hi + '%'
-      + (tier === 'go' ? ' · <b>meets 90% verdict bar</b>' : ' · below 90% lower bound') + esc(hgOgEvidenceScopeTxt(ev)) + esc(hgOgOverlapScopeTxt(ev)) + '</div>';
+      + (tier === 'go'
+          ? (' · <b>meets the ' + (OG_VERDICT_SCALP_LO * 100).toFixed(0) + '% verdict bar</b>')
+          : (' · held by: ' + hgOgTierBlock(ev, { minN: OG_VERDICT_MIN_N, minLo: OG_VERDICT_SCALP_LO }).txt))
+      + esc(hgOgEvidenceScopeTxt(ev)) + esc(hgOgOverlapScopeTxt(ev)) + '</div>';
     h += '<div class="hg-mp-grid">';
     var mkt = fin(__og.spotAnchor);
     if (mkt > 0) h += '<div><i>MARKET</i><b>' + fmtPx(mkt) + '</b><u>live spot</u></div>';
@@ -11018,7 +11044,13 @@ terse status, and never launches a first-time scan on a global refresh.
         + (bag.minLo * 100).toFixed(0) + '% across pooled gold forward logs. '
         + 'Run GOLD SCALP / SUPER GOLD regularly to build history; scorecard gold LOG also counts.</div>';
       if (bag.bestBelow && bag.bestBelow.length){
-        h += '<div class="hg-mp-note">Best available settled edge on current scalp candidates (still below 90% lower bound):</div>';
+        /* THE HEADING MADE THE SAME UNCONDITIONAL CLAIM AS THE ROWS. A list
+           whose entries are held by four different gates cannot be headed
+           "still below 90% lower bound" — some of them are not. Each row now
+           names its own blocker, so the heading points at them instead. */
+        h += '<div class="hg-mp-note">Best available settled edge on current scalp candidates — '
+          + 'none clears the ' + (OG_VERDICT_SCALP_LO * 100).toFixed(0)
+          + '% verdict, and each row says what is holding it:</div>';
         var bi;
         for (bi = 0; bi < bag.bestBelow.length; bi++) h += hgOgScalpVerdictRowHtml(bag.bestBelow[bi], 'below');
       }

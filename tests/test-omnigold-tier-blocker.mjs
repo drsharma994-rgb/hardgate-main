@@ -17,6 +17,21 @@
    The same row then contradicted itself — "NOT this mechanic's own record",
    the real blocker, two clauses after claiming the sample minimum was.
 
+   THE SCALP VERDICT PANEL HAD THE SAME SHAPE, and pack 838 gives it the
+   same walk. Its below-the-bar line read "below 90% lower bound"
+   unconditionally, which on a desk-pool row printed:
+
+     "81/83 wins · 98% hit · Wilson 95% CI 92-99% · below 90% lower bound"
+
+   A 95% interval whose lower bound is 92%, described on the same line as
+   below 90%. The real blocker was the population, stated after it, so the
+   line contradicted both the number beside it and the clause after it.
+
+   The two tiers do not test the same thing — PROVEN EDGE tests the bound
+   against this mechanic's own breakeven, the verdict against a fixed rate —
+   so the walk takes an options object rather than being copied, which is
+   how two copies start drifting.
+
    Run: node tests/test-omnigold-tier-blocker.mjs */
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -149,6 +164,80 @@ console.log('\n== the overlap shows up where it is the reason ==');
      'while an unoverlapped record does not carry the clause at all — no deflation, nothing to report');
 }
 
+console.log('\n== the 90% SCALP VERDICT row gets the same walk ==');
+{
+  /* CASE: a desk-pool row whose DISPLAYED lower bound is above 90%. The old
+     line said "below 90% lower bound" next to a printed 92%. */
+  const C = boot({ [FWD]: JSON.stringify(
+    recs('OMNIGOLD:SCALP', 'ROUND-MAGNET', 3, 3, 2)
+      .concat(recs('OMNIGOLD:SCALP', 'FVG-FILL', 80, 78, 2))) });
+  const ev = C.hgOgSettledEvidence({ horizon: 'SCALP', kind: 'ROUND-MAGNET', dir: 'long' });
+  ok(ev.specific === false && ev.samples === 83, `the row is the desk pool on ${ev.samples} trades`);
+  ok(ev.wilson.lo > 0.90,
+     `whose DISPLAYED lower bound is ${(ev.wilson.lo * 100).toFixed(0)}% — above the 90% bar`);
+  ok(C.hgOgSettledExecuteOk(ev, 0.90, 10) === false, 'and it still does not clear the verdict');
+
+  const html = strip(C.hgOgScalpVerdictPanelHtml({ go: null, bestBelow: [
+    { horizon: 'SCALP', kind: 'ROUND-MAGNET', dir: 'long',
+      plan: { entry: 4000, stop: 3980, t1: 4040, t2: 4080 }, verdictEv: ev }] }));
+  ok(/Wilson 95% CI 92/.test(html), 'the card prints that 92% lower bound');
+  ok(!/below 90% lower bound/.test(html),
+     'and no longer claims "below 90% lower bound" on the same line');
+  ok(/held by: the population it is measured on/.test(html), 'it names the population instead');
+
+  /* and the sample-minimum case names the minimum, not the bound */
+  const C2 = boot({ [FWD]: JSON.stringify(recs('OMNIGOLD:SCALP', 'ROUND-MAGNET', 4, 4, 2)) });
+  const ev2 = C2.hgOgSettledEvidence({ horizon: 'SCALP', kind: 'ROUND-MAGNET', dir: 'long' });
+  ok(ev2.samples === 4 && ev2.specific === true, 'a 4/4 record on the mechanic itself');
+  const html2 = strip(C2.hgOgScalpVerdictPanelHtml({ go: null, bestBelow: [
+    { horizon: 'SCALP', kind: 'ROUND-MAGNET', dir: 'long',
+      plan: { entry: 4000, stop: 3980, t1: 4040, t2: 4080 }, verdictEv: ev2 }] }));
+  ok(/held by: 4 of the 10 settled trades this tier needs/.test(html2),
+     'is held by the sample minimum, quoted with both counts');
+  ok(!/below 90% lower bound/.test(html2), 'not by the bound it would also miss');
+}
+
+console.log('\n== the rate tier and the breakeven tier test different things ==');
+{
+  const W = boot();
+  const base = (over) => Object.assign(
+    { samples: 60, wins: 40, avgRr: 2, specific: true, overlapRatio: 1, effSamples: 60,
+      wilson: W.hgWilson(40, 60, 1.96), wilsonFam: W.hgWilson(40, 60, 3.2091) }, over || {});
+
+  /* 40/60 at R=2: breakeven is 33%, so the PROVEN tier passes it... */
+  ok(W.hgOgTierBlock(base(), 25, 0.02).key === 'none',
+     'a 40/60 record at 2R clears its own breakeven');
+  /* ...while the 90% rate tier does not, and says by how much */
+  const rate = W.hgOgTierBlock(base(), { minN: 10, minLo: 0.90 });
+  ok(rate.key === 'bound', 'and fails the 90% rate bar');
+  ok(/pts short of 90%/.test(rate.txt), `naming the rate it missed: "${rate.txt}"`);
+  /* A REAL DISTANCE, not "NaN pts". Mutating the target to the breakeven one
+     in the rate path left the string matching the pattern above while the
+     number was NaN — the pattern passed and the sentence was nonsense, which
+     is exactly what this file exists to stop. */
+  ok(/^\d+\.\d pts short of 90%/.test(rate.txt),
+     `and quoting it as a number: "${rate.txt.split(' at the')[0]}"`);
+  ok(Math.abs(parseFloat(rate.txt) - (0.90 - W.hgWilson(40, 60, 3.2091).lo) * 100) < 0.05,
+     'which is the actual distance from the corrected bound to the 90% bar');
+  ok(/against the .*% shown/.test(rate.txt),
+     'and setting the corrected bound beside the displayed one, so the two cannot read as a contradiction');
+
+  /* a record with NO reward multiple can still be judged on a rate */
+  const noRr = base({ avgRr: undefined });
+  ok(W.hgOgTierBlock(noRr, 25, 0.02).key === 'breakeven',
+     'the breakeven tier cannot judge a record with no R');
+  ok(W.hgOgTierBlock(noRr, { minN: 10, minLo: 0.90 }).key === 'bound',
+     'while the rate tier can — it never needed one');
+
+  /* the gates before the last are shared, so they cannot drift apart */
+  for (const opts of [[25, 0.02], [{ minN: 10, minLo: 0.90 }]]){
+    ok(W.hgOgTierBlock(base({ specific: false }), ...opts).key === 'population',
+       'both tiers name the population first');
+    ok(W.hgOgTierBlock(base({ samples: 2 }), ...opts).key === 'samples',
+       'and the sample minimum before the bound');
+  }
+}
+
 console.log('\n== and nothing renders a number it does not have ==');
 {
   const W = boot();
@@ -160,20 +249,27 @@ console.log('\n== and nothing renders a number it does not have ==');
           const ev = { samples, wins: 20, avgRr, specific, overlapRatio: ratio,
                        effSamples: (ratio && samples) ? samples * ratio : NaN,
                        wilson: W.hgWilson(20, 40, 1.96), wilsonFam: W.hgWilson(20, 40, 3.2091) };
-          let blk;
-          try { blk = W.hgOgTierBlock(ev, 25, 0.02); }
-          catch (e) { throw new Error('FAIL: hgOgTierBlock threw on ' + JSON.stringify(ev) + ' — ' + e.message); }
-          rendered++;
-          if (!blk || typeof blk.txt !== 'string' || !blk.txt)
-            throw new Error('FAIL: no reason for ' + JSON.stringify(ev));
-          if (/NaN|undefined|\[object/.test(blk.txt))
-            throw new Error('FAIL: reason read "' + blk.txt + '"');
+          /* BOTH TIER SHAPES. The breakeven form alone left the rate form's
+             arithmetic unfuzzed, and a mutation that made it compute NaN
+             went unnoticed until it was tried. */
+          for (const opts of [[25, 0.02], [{ minN: 10, minLo: 0.90 }], [{ minN: 15, minLo: 0.95 }]]){
+            let blk;
+            try { blk = W.hgOgTierBlock(ev, ...opts); }
+            catch (e) { throw new Error('FAIL: hgOgTierBlock threw on ' + JSON.stringify(ev)
+                                        + ' / ' + JSON.stringify(opts) + ' — ' + e.message); }
+            rendered++;
+            if (!blk || typeof blk.txt !== 'string' || !blk.txt)
+              throw new Error('FAIL: no reason for ' + JSON.stringify(ev));
+            if (/NaN|undefined|\[object/.test(blk.txt))
+              throw new Error('FAIL: reason read "' + blk.txt + '" for ' + JSON.stringify(opts));
+          }
         }
       }
     }
   }
-  ok(rendered === 3 * 6 * 5 * 4,
-     `${rendered} evidence shapes: every one produced a reason, none printed NaN or undefined`);
+  ok(rendered === 3 * 6 * 5 * 4 * 3,
+     `${rendered} evidence shapes across both tier forms: every one produced a reason, `
+     + 'none printed NaN or undefined');
 }
 
 console.log('\n' + passed + ' passed, 0 failed');
