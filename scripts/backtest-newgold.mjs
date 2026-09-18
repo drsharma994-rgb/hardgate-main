@@ -203,18 +203,10 @@ async function cachedKlines(symbol, interval, target){
 
 /* ==================== 2. BOOT the app in a vm sandbox ==================== */
 
-/* Wilson score interval — copied VERBATIM from index.html:6624 (hgWilson);
-   it lives in no .js module and goldind/omniroute feature-check it. */
-function hgWilson(wins, n, z){
-  z = isFinite(z) ? z : 1.96;
-  wins = +wins; n = +n;
-  if (!(n > 0) || !(wins >= 0) || wins > n) return null;
-  const p = wins / n, z2 = z * z;
-  const denom = 1 + z2 / n;
-  const centre = (p + z2 / (2 * n)) / denom;
-  const half = (z / denom) * Math.sqrt(p * (1 - p) / n + z2 / (4 * n * n));
-  return { lo: Math.max(0, centre - half), hi: Math.min(1, centre + half), p: p };
-}
+/* hgWilson is no longer copied here. It lives in fixpack14-core.js, which
+   this script already loads into its sandbox below, so the backtest and the
+   live tab now compute their intervals with the same function rather than
+   with two copies kept in step by hand. */
 
 function boot(){
   const ctx = { console, Math, Date, isFinite, isNaN, parseFloat, parseInt, JSON, Array, Object,
@@ -225,7 +217,6 @@ function boot(){
                     querySelector: () => null, querySelectorAll: () => [] }),
                    getElementById: () => null, querySelector: () => null, querySelectorAll: () => [],
                    head: { appendChild(){} }, documentElement: { appendChild(){} }, addEventListener(){} };
-  ctx.hgWilson = hgWilson;
   /* Venue for the hgOgFormation stop floor: the DOCUMENTED override
      (precedence #1, omnigold.js:6833). XM is the live UI default and the
      desk's execution venue; see header + meta.deviations. */

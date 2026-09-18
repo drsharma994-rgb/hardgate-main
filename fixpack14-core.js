@@ -544,6 +544,50 @@ function hgCointHalfLifeVeto(coint, timeBarrierBars){
   return { veto: false, reason: 'half-life ' + Math.round(hl) + ' bars' };
 }
 
+/* THE WILSON SCORE INTERVAL — ONE COPY, NOT FIVE.
+
+   Every evidence tier on the OMNIGOLD tab is decided by this function.
+   hgOgWilsonHit resolves it by name at call time, and hgOgSettledExecuteOk,
+   hgOgProvenEdgeOk and hgOgEdgeMargin all return false or NaN the moment
+   ev.wilson is null — so the 95% SETTLED EXECUTE panel, the 90% SCALP
+   VERDICT and the PROVEN EDGE ranking are all downstream of it.
+
+   It lived inline in index.html and in no module, which meant every consumer
+   outside the page had to carry its own:
+
+     index.html                     the original
+     scripts/backtest-omnigold.mjs  "copied VERBATIM from index.html:6624"
+     scripts/backtest-newgold.mjs   the same copy again
+     three omnigold tests           a stub, written by hand
+
+   The two script copies were still byte-identical. The three test stubs were
+   NOT: they omit `if (!(n > 0) || !(wins >= 0) || wins > n) return null`, so
+   they answer {lo:NaN, hi:NaN, p:NaN} exactly where the shipped function
+   answers null — in the degenerate cases the promotion logic guards. Those
+   tests were validating the tab's promotion rules against a more permissive
+   estimator than the tab ships.
+
+   test-omnigold-effective-sample.mjs had already diagnosed this and worked
+   around it by lifting the source out of index.html with a brace matcher,
+   with the note "a stub would test the stub". It was right, and the answer
+   is to give the function a home rather than five ways to reach it.
+
+   Both backtest scripts already load this module. index.html loads it at
+   line ~1012, long before its own first use at ~7630. The implementation is
+   unchanged, byte for byte, from the one that produced every baked number
+   currently in data/. */
+function hgWilson(wins, n, z){
+  z = isFinite(z) ? z : 1.96;
+  wins = +wins; n = +n;
+  if (!(n > 0) || !(wins >= 0) || wins > n) return null;
+  var p = wins / n, z2 = z * z;
+  var denom = 1 + z2 / n;
+  var centre = (p + z2 / (2 * n)) / denom;
+  var half = (z / denom) * Math.sqrt(p * (1 - p) / n + z2 / (4 * n * n));
+  return { lo: Math.max(0, centre - half), hi: Math.min(1, centre + half), p: p };
+}
+
+G.hgWilson = hgWilson;
 G.hgConcurrency = hgConcurrency;
 G.hgAvgUniqueness = hgAvgUniqueness;
 G.hgEffectiveN = hgEffectiveN;

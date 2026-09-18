@@ -20,13 +20,13 @@ function boot(extra){
                     querySelector: () => null, querySelectorAll: () => [] }),
                    getElementById: () => null, querySelector: () => null, querySelectorAll: () => [],
                    head: { appendChild(){} }, documentElement: { appendChild(){} }, addEventListener(){} };
-  ctx.hgWilson = (wins, n, z) => {
-    z = z || 1.96; const p = wins / n, z2 = z * z;
-    const denom = 1 + z2 / n;
-    const centre = (p + z2 / (2 * n)) / denom;
-    const half = (z / denom) * Math.sqrt(p * (1 - p) / n + z2 / (4 * n * n));
-    return { lo: Math.max(0, centre - half), hi: Math.min(1, centre + half), p: p };
-  };
+  /* NO STUB. hgWilson used to live inline in index.html and in no module, so
+     this harness hand-wrote one — and the hand-written one dropped the
+     `if (!(n > 0) || !(wins >= 0) || wins > n) return null` guard, answering
+     {lo:NaN,...} exactly where the shipped function answers null. These
+     assertions were checking the tab's promotion rules against a more
+     permissive estimator than the tab ships. It is in fixpack14-core.js now,
+     which the loader below already reads. */
   if (extra) Object.assign(ctx, extra);
   vm.createContext(ctx);
   for (const f of ['indicators.js','indicators2.js','fixpack14-core.js','hg-mechanics.js','hg-forward.js',

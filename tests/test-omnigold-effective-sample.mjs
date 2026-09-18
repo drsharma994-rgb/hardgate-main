@@ -32,25 +32,25 @@ const ctx = { console, Math, isFinite, isNaN, parseFloat, parseInt, Number, Stri
               localStorage: { getItem: () => null, setItem(){}, removeItem(){} } };
 ctx.window = ctx; ctx.globalThis = ctx; ctx.self = ctx;
 vm.createContext(ctx);
-for (const f of ['indicators.js', 'indicators2.js', 'plans.js', 'hg-plan.js', 'hg-gates.js', 'omnigold.js']){
+for (const f of ['indicators.js', 'indicators2.js', 'fixpack14-core.js', 'plans.js', 'hg-plan.js', 'hg-gates.js', 'omnigold.js']){
   try { vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f }); }
   catch (e) { /* optional deps degrade; omnigold must still load */ }
 }
 
-/* hgOgWilsonHit looks up hgWilson at call time and it lives inline in
-   index.html. Without it EVERY interval here returns null and half these
-   assertions would pass vacuously, so it is lifted by brace matching
-   rather than stubbed — a stub would test the stub. */
+/* hgOgWilsonHit looks up hgWilson at call time. It used to live inline in
+   index.html and in no module, so this test lifted it out of the page with a
+   brace matcher — "a stub would test the stub" — because without it EVERY
+   interval here returns null and half these assertions pass vacuously.
+
+   It now lives in fixpack14-core.js, which the loader above already reads, so
+   the lift is gone and the real function is simply present. The vacuity guard
+   stays: it is the reason any of this is trustworthy. */
+if (typeof ctx.hgWilson !== 'function')
+  throw new Error('FAIL: hgWilson did not load from fixpack14-core.js — every interval below would be null');
 {
-  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-  const at = html.indexOf('function hgWilson(wins, n, z){');
-  if (at < 0) throw new Error('FAIL: hgWilson is no longer where this test lifts it from');
-  let depth = 0, end = -1;
-  for (let i = html.indexOf('{', at); i < html.length; i++){
-    if (html[i] === '{') depth++;
-    else if (html[i] === '}'){ depth--; if (depth === 0){ end = i + 1; break; } }
-  }
-  vm.runInContext(html.slice(at, end), ctx, { filename: 'index.html:hgWilson' });
+  const probe = ctx.hgWilson(20, 30);
+  if (!probe || !(probe.lo > 0) || !(probe.hi < 1))
+    throw new Error('FAIL: hgWilson loaded but does not compute an interval');
 }
 
 console.log('== the deflation itself ==');

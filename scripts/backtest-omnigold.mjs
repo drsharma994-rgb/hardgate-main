@@ -34,10 +34,9 @@
    harness injects two extra `window.X = X;` lines at that existing export
    block before eval, so the REAL functions run verbatim. The injection is
    asserted; the run aborts if the anchor or the functions are missing.
-   hgWilson lives in index.html (line 6624) and is not in any .js module, so
-   its 14-line formula is copied verbatim below and installed in the sandbox
-   (used both by the app's own hgOgWilsonHit and by this harness's
-   walk-forward evidence ledger).
+   hgWilson now lives in fixpack14-core.js, which this harness already loads,
+   so the app's own hgOgWilsonHit and this harness's walk-forward evidence
+   ledger share one implementation instead of two copies kept in step by hand.
 
    CONFLUENCE AT FIRE TIME (zero lookahead)
    ----------------------------------------
@@ -174,18 +173,10 @@ const TIMEOUT_BARS = 96;          /* bars AFTER the fill, then exit at close */
 const PREFIX_CAP = 1500;          /* live scan fetches 1500 bars max */
 const TIER = s => s >= 85 ? 'EXCEPTIONAL' : s >= 70 ? 'STRONG' : s >= 50 ? 'FAIR' : 'WEAK';
 
-/* Wilson score interval — copied VERBATIM from index.html:6624 (hgWilson).
-   It lives only in index.html, unreachable from any module load. */
-function hgWilson(wins, n, z){
-  z = isFinite(z) ? z : 1.96;
-  wins = +wins; n = +n;
-  if (!(n > 0) || !(wins >= 0) || wins > n) return null;
-  const p = wins / n, z2 = z * z;
-  const denom = 1 + z2 / n;
-  const centre = (p + z2 / (2 * n)) / denom;
-  const half = (z / denom) * Math.sqrt(p * (1 - p) / n + z2 / (4 * n * n));
-  return { lo: Math.max(0, centre - half), hi: Math.min(1, centre + half), p: p };
-}
+/* hgWilson is no longer copied here. It lives in fixpack14-core.js, which
+   this script already loads into its sandbox below, so the backtest and the
+   live tab now compute their intervals with the same function rather than
+   with two copies kept in step by hand. */
 
 /* ==================== 1. DATA — Binance spot klines, cached ==================== */
 
@@ -263,7 +254,6 @@ function boot(){
                     querySelector: () => null, querySelectorAll: () => [] }),
                    getElementById: () => null, querySelector: () => null, querySelectorAll: () => [],
                    head: { appendChild(){} }, documentElement: { appendChild(){} }, addEventListener(){} };
-  ctx.hgWilson = hgWilson;   /* index.html-only global the modules feature-check */
   vm.createContext(ctx);
 
   const REQUIRED = ['indicators.js', 'indicators2.js', 'fixpack14-core.js', 'hg-mechanics.js',
@@ -348,7 +338,7 @@ function confluenceForCandidate(W, cand, evidence){
   };
   const checksPass = Object.keys(checks).filter(k => checks[k]).length;
   const ev = evidence.get(cand.horizon + '|' + cand.kind);
-  const wl = (ev && ev.n > 0) ? hgWilson(ev.wins, ev.n) : null;
+  const wl = (ev && ev.n > 0) ? W.hgWilson(ev.wins, ev.n) : null;
   const setupObj = {
     barT: 0,
     entry, t1, stop,
@@ -904,7 +894,6 @@ const meta = {
   },
   deviations: [
     'hgOgAdvancedConfluenceScore/hgOgCompositeScore are not window-exported; two export lines were injected at the existing export block (verbatim functions, asserted at boot)',
-    'hgWilson copied verbatim from index.html:6624 (it lives in no module)',
     'extra{} lacks macro/news/yieldRows/zoneCtx/pooled-stats (live-only feeds); those gates read UNCHECKED as designed',
     'checks.riskReward replicates the live signed-ratio quirk (always false for well-formed plans) -> checksPass caps at 4/5, so EXCEPTIONAL (>=85) is unreachable for scan setups',
     'wilsonLo is a 0..1 fraction as live feeds it -> factor 5 contributes <=0.3 pts (live quirk, not fixed); evidence accumulated from this replay only, zero lookahead',

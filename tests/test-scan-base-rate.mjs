@@ -33,6 +33,11 @@ vm.createContext(ctx);
 /* hgWilson lives in index.html; load the cost/stats block so the note can use it */
 const S = html.indexOf('const HG_FEE_TAKER_PCT');
 const E = html.indexOf("const LOG_KEY='hardgate_log_v1';");
+/* hgWilson moved out of this inline block into fixpack14-core.js, so the
+   module is loaded alongside the slice rather than the formula being
+   carried inside the page. */
+vm.runInContext(fs.readFileSync(path.join(ROOT, 'fixpack14-core.js'), 'utf8'), ctx,
+                { filename: 'fixpack14-core.js' });
 vm.runInContext(html.slice(S, E), ctx, { filename: 'cost-block' });
 for (const f of ['indicators.js', 'indicators2.js', 'plans.js', 'cryptogates.js'])
   vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });

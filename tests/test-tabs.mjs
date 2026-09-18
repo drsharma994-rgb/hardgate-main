@@ -171,7 +171,7 @@ function load(name){
 
 let loadErr = null;
 try{
-  ['indicators.js', 'indicators2.js', 'store.js', 'binance.js', 'macro.js'].forEach(load);
+  ['indicators.js', 'indicators2.js', 'fixpack14-core.js', 'store.js', 'binance.js', 'macro.js'].forEach(load);
 }catch(e){ loadErr = e; }
 assert(!loadErr, 'support scripts load without throwing' + (loadErr ? ' — got: ' + loadErr.message : ''));
 

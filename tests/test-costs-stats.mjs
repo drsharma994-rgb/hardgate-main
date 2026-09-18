@@ -25,6 +25,11 @@ if (S < 0 || E < 0 || E < S) throw new Error('FAIL: cost/stats helper block not 
 const ctx = { console, Math, isFinite, parseFloat, localStorage: { getItem: () => null } };
 ctx.window = ctx; ctx.globalThis = ctx;
 vm.createContext(ctx);
+/* hgWilson moved out of this inline block into fixpack14-core.js, so the
+   module is loaded alongside the slice rather than the formula being
+   carried inside the page. */
+vm.runInContext(fs.readFileSync(path.join(ROOT, 'fixpack14-core.js'), 'utf8'), ctx,
+                { filename: 'fixpack14-core.js' });
 vm.runInContext(html.slice(S, E), ctx, { filename: 'cost-block' });
 console.log('== Delta fee model includes GST and distinguishes maker from taker ==');
 {

@@ -1,4 +1,4 @@
-/* HARDGATE — the five fixpack cores: 70 exported helpers, none ever executed.
+/* HARDGATE — the five fixpack cores: 71 exported helpers, none ever executed.
 
    Continuing the coverage measurement from v339/v340. fixpack13..17-core.js
    are ~1,890 lines exporting 70 helpers that the desks call, and no test had
@@ -166,9 +166,16 @@ console.log('\n== the helpers with live callers survive their real inputs ==');
 
 console.log('\n== exports with no caller anywhere are named, not silently carried ==');
 {
-  /* Not a defect — but 16 of 69 exported helpers are referenced by no other
-     file, which is why nothing was testing them and why their throw-on-null
-     behaviour is not worth chasing. Recorded so the number is visible. */
+  /* Not a defect — but 16 of these exported helpers are referenced by no
+     other file, which is why nothing was testing them and why their
+     throw-on-null behaviour is not worth chasing. Recorded so the number is
+     visible.
+
+     The count went 70 -> 71 in pack 833: hgWilson moved here from an inline
+     block in index.html, so the estimator every OMNIGOLD evidence tier reads
+     is a module export like the rest of the sample statistics instead of a
+     page global that two backtest scripts and four tests each had to
+     reproduce. That one has callers everywhere. */
   const files = fs.readdirSync(ROOT).filter(f => (f.endsWith('.js') || f.endsWith('.html')) && f !== 'sw.js');
   const blob = {};
   for (const f of files) blob[f] = fs.readFileSync(path.join(ROOT, f), 'utf8');
@@ -178,7 +185,7 @@ console.log('\n== exports with no caller anywhere are named, not silently carrie
   }
   const unreferenced = declared.filter(n =>
     !files.some(f => !CORES.includes(f) && blob[f].includes(n)));
-  ok(declared.length === 70, 'the export count is what the header says (' + declared.length + ')');
+  ok(declared.length === 71, 'the export count is what the header says (' + declared.length + ')');
   ok(unreferenced.length <= 16,
     'unreferenced exports have not grown beyond the 16 recorded here (' + unreferenced.length + ': ' + unreferenced.join(', ') + ')');
 }

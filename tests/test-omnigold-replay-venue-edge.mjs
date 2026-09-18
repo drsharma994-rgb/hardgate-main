@@ -49,13 +49,9 @@ function boot(venue){
                     querySelector: () => null, querySelectorAll: () => [] }),
                    getElementById: () => null, querySelector: () => null, querySelectorAll: () => [],
                    head: { appendChild(){} }, documentElement: { appendChild(){} }, addEventListener(){} };
-  ctx.hgWilson = (wins, n, z) => {
-    z = z || 1.96; const p = wins / n, z2 = z * z;
-    const denom = 1 + z2 / n;
-    const centre = (p + z2 / (2 * n)) / denom;
-    const half = (z / denom) * Math.sqrt(p * (1 - p) / n + z2 / (4 * n * n));
-    return { lo: Math.max(0, centre - half), hi: Math.min(1, centre + half), p: p };
-  };
+  /* NO STUB — hgWilson is in fixpack14-core.js, loaded below. The stub that
+     stood here dropped the null guards the shipped function has, so these
+     assertions ran against a more permissive estimator than the tab ships. */
   if (venue) ctx.HG_OG_VENUE = venue;
   vm.createContext(ctx);
   for (const f of ['indicators.js','indicators2.js','fixpack14-core.js','hg-mechanics.js','hg-forward.js',

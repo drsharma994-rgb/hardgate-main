@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v832',
-  pack: 'the OMNIGOLD panels stop being able to print a threshold they do not have — bag or defaults defaults the OBJECT and not its fields, so a partial bag rendered Wilson lower greater-or-equal NaN percent and min undefined settled into the two evidence panels, the held queue could name a row undefined and trail off mid-sentence, and four bar-walkers still threw on the dropped-bar hole this codebase documents from a real incident; a sweep now holds every exported renderer to the tab own rule across 30,154 rendered strings',
+  version: 'hg-v833',
+  pack: 'the Wilson interval that decides every OMNIGOLD evidence tier gets one definition instead of five — it lived inline in index.html and in no module, so both backtest scripts carried a verbatim copy and four omnigold tests hand-wrote a stub that DROPPED the null guards, meaning those tests validated the tab promotion rules against a more permissive estimator than the tab ships; it now lives in fixpack14-core.js, which every one of those consumers already loads',
   built: '2026-09-18T00:00:00Z'
 };
 
