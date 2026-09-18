@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v833',
-  pack: 'the Wilson interval that decides every OMNIGOLD evidence tier gets one definition instead of five — it lived inline in index.html and in no module, so both backtest scripts carried a verbatim copy and four omnigold tests hand-wrote a stub that DROPPED the null guards, meaning those tests validated the tab promotion rules against a more permissive estimator than the tab ships; it now lives in fixpack14-core.js, which every one of those consumers already loads',
+  version: 'hg-v834',
+  pack: 'an OMNIGOLD evidence tier stops being decided by whichever population flatters the mechanic most — three records can answer for one row and two of them are not about that mechanic, and the rule was highest Wilson lower bound wins; a 5-of-20 mechanic read 95% SETTLED EXECUTE true off a 294-of-300 scorecard record, while a real 20-of-30 edge at 2R read PROVEN EDGE false because the swap discarded the reward multiple its breakeven needed; the source is now fixed by specificity, a borrowed record is labelled on the card and promotes nothing',
   built: '2026-09-18T00:00:00Z'
 };
 

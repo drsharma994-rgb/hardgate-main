@@ -10205,25 +10205,94 @@ terse status, and never launches a first-time scan on a global refresh.
         };
       }
     }
-    var sc = hgOgScorecardGoldEvidence(row.dir);
-    if (sc && sc.wilson){
-      if (!out || sc.wilson.lo > (out.wilson ? out.wilson.lo : -1)){
-        out = sc;
+    /* PRECEDENCE BY SPECIFICITY, NEVER SELECTION BY OUTCOME.
+
+       Three populations can answer for a row: this mechanic's own pooled
+       TICKET record, the desk-wide scalp pool, and the scorecard's gold log
+       — and the last two are not about this mechanic at all. The rule used
+       to be "whichever has the highest Wilson lower bound wins". That is
+       picking the most flattering population and then testing it against a
+       fixed 95% bar, and it broke in both directions. Driven, both:
+
+         PROMOTION. A mechanic whose own record is 5/20 — lower bound 0.11,
+         a demonstrably bad mechanic — read 95% SETTLED EXECUTE true and 90%
+         SCALP VERDICT true off a 294/300 scorecard record. The panel headed
+         "PROVEN EDGE · FORWARD-TESTED" showed a setup whose own forward
+         evidence said the opposite.
+
+         DEMOTION. A mechanic with a real edge — 20/30 at avgRr 2.0, lower
+         bound 0.488 against a 0.333 breakeven, clearing by 15.4 points —
+         read PROVEN EDGE false once a 32/40 scorecard record outscored it
+         on RAW HIT RATE. The scorecard carries no avgRr, so the swap took
+         the reward multiple with it and hgOgProvenEdgeOk had no breakeven
+         left to test against.
+
+       That second one is the same error hgOgEdgeMargin exists to prevent,
+       pointed at the evidence rather than at the ranking: "a mechanic with
+       a smaller hit rate but a bigger payoff can carry more edge than a
+       higher-hit one". Raw hit rate is not comparable across payoffs, and
+       choosing BETWEEN populations on it is exactly that comparison.
+
+       So the order is fixed in advance and does not look at the numbers:
+       the mechanic's own record whenever it has one worth the name, then
+       the desk pool, then the scorecard. A fallback is marked specific
+       false and says so on the card, because a record about other setups is
+       not this setup's record even when it is the best available. */
+    /* `specific` is about the POPULATION, not the sample size: the mechanic's
+       own record is its own record at three trades as much as at three
+       hundred. Thinness is what triggers a fallback; it is not what makes a
+       record someone else's. Conflating the two had the card telling a
+       reader that a thin ROUND-MAGNET record was "not this mechanic's own"
+       when it was exactly that. */
+    if (out) out.specific = true;
+    var thin = !out || fin(out.samples) < OG_VERDICT_MIN_N;
+
+    if (thin && horizon === 'SCALP'){
+      var desk = hgOgMergeSettledEvidence(OG_SCALP_FWD_TABS, null, row.dir);
+      if (desk && desk.wilson){
+        desk.source = 'desk-pool · ' + desk.source;
+        desk.specific = false;
+        desk.fallbackFor = mechanic;
+        if (!out || fin(desk.samples) > fin(out.samples)) out = desk;
       }
     }
-    /* Desk-wide scalp pool when mechanic-specific history is thin. */
-    if (horizon === 'SCALP' && (!out || fin(out.samples) < OG_VERDICT_MIN_N)){
-      var desk = hgOgMergeSettledEvidence(OG_SCALP_FWD_TABS, null, row.dir);
-      if (desk && desk.wilson && (!out || desk.wilson.lo > (out.wilson ? out.wilson.lo : -1))){
-        desk.source = 'desk-pool · ' + desk.source;
-        out = desk;
+    if (thin && !(out && out.specific === false)){
+      var sc = hgOgScorecardGoldEvidence(row.dir);
+      if (sc && sc.wilson && (!out || fin(sc.samples) > fin(out.samples))){
+        sc.specific = false;
+        sc.fallbackFor = mechanic;
+        out = sc;
       }
     }
     return out;
   }
 
+  /* One sentence naming the population, for the two evidence panels. A
+     fallback row is headed by a mechanic's name and then quotes a record
+     that is not that mechanic's; the reader should not have to decode a
+     source string to notice. */
+  function hgOgEvidenceScopeTxt(ev){
+    if (!ev) return '';
+    if (ev.specific) return '';
+    return ' — NOT this mechanic\'s own record'
+         + (ev.fallbackFor ? (': ' + String(ev.fallbackFor) + ' is below the '
+            + OG_VERDICT_MIN_N + '-trade minimum, so the wider gold log is shown in its place') : '');
+  }
+
+  /* A TIER IS A CLAIM ABOUT THIS MECHANIC, SO IT NEEDS THIS MECHANIC'S
+     RECORD. Fallback evidence — the desk-wide scalp pool, the scorecard's
+     gold log — is worth showing a reader when a mechanic is too thin to
+     speak for itself, and hgOgSettledEvidence still shows it. It cannot
+     PROMOTE: the panel is headed "PROVEN EDGE · FORWARD-TESTED" and the
+     verdict says "this scalp setup's settled TICKET record", and a record
+     about other setups is neither of those however good it looks.
+
+     This is not a narrow case on this desk. The gold book's mechanics hold
+     single-digit samples each, so before this every one of them was eligible
+     to be promoted on the aggregate rather than on itself. */
   function hgOgSettledExecuteOk(ev, minLo, minN){
     if (!ev || !ev.wilson) return false;
+    if (ev.specific === false) return false;
     minLo = isFinite(fin(minLo)) ? fin(minLo) : OG_EXEC_WILSON_LO;
     minN = isFinite(fin(minN)) ? fin(minN) : OG_EXEC_MIN_N;
     return fin(ev.samples) >= minN && ev.wilson.lo >= minLo;
@@ -10243,6 +10312,7 @@ terse status, and never launches a first-time scan on a global refresh.
      above breakeven by a real margin, on enough settled trades. */
   function hgOgProvenEdgeOk(ev, minN, margin){
     if (!ev || !ev.wilson) return false;
+    if (ev.specific === false) return false;   /* see hgOgSettledExecuteOk */
     minN = isFinite(fin(minN)) ? fin(minN) : OG_EDGE_MIN_N;
     margin = isFinite(fin(margin)) ? fin(margin) : OG_EDGE_MARGIN;
     var be = hgOgBreakevenHit(ev.avgRr);
@@ -10337,7 +10407,7 @@ terse status, and never launches a first-time scan on a global refresh.
     h += '<div class="hg-mp-note">SETTLED ' + esc(ev.source) + ' · '
       + esc(String(ev.wins)) + '/' + esc(String(ev.samples)) + ' wins · '
       + pct + '% hit · Wilson 95% CI ' + lo + '–' + hi + '%'
-      + beTxt + tierTxt + '</div>';
+      + beTxt + tierTxt + esc(hgOgEvidenceScopeTxt(ev)) + '</div>';
     h += '<div class="hg-mp-grid">';
     var mkt = fin(__og.spotAnchor);
     if (mkt > 0) h += '<div><i>MARKET</i><b>' + fmtPx(mkt) + '</b><u>live spot</u></div>';
@@ -10708,7 +10778,7 @@ terse status, and never launches a first-time scan on a global refresh.
     h += '<div class="hg-mp-note">SETTLED ' + esc(ev.source) + ' · '
       + esc(String(ev.wins)) + '/' + esc(String(ev.samples)) + ' wins · '
       + pct + '% hit · Wilson 95% CI ' + lo + '–' + hi + '%'
-      + (tier === 'go' ? ' · <b>meets 90% verdict bar</b>' : ' · below 90% lower bound') + '</div>';
+      + (tier === 'go' ? ' · <b>meets 90% verdict bar</b>' : ' · below 90% lower bound') + esc(hgOgEvidenceScopeTxt(ev)) + '</div>';
     h += '<div class="hg-mp-grid">';
     var mkt = fin(__og.spotAnchor);
     if (mkt > 0) h += '<div><i>MARKET</i><b>' + fmtPx(mkt) + '</b><u>live spot</u></div>';
@@ -14747,6 +14817,7 @@ terse status, and never launches a first-time scan on a global refresh.
     window.HG_OG_FILL_RATES = HG_OG_FILL_RATES;
     window.ogTradeKey = ogTradeKey;
     window.hgOgSettledEvidence = hgOgSettledEvidence;
+    window.hgOgEvidenceScopeTxt = hgOgEvidenceScopeTxt;
     window.hgOgSettledExecuteOk = hgOgSettledExecuteOk;
     window.hgOgPickSettledExecutes = hgOgPickSettledExecutes;
     window.hgOgProvenEdgeOk = hgOgProvenEdgeOk;
