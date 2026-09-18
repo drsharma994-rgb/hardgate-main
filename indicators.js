@@ -31,12 +31,51 @@ else { g = (g*(p-1)+Math.max(d,0))/p; l = (l*(p-1)+Math.max(-d,0))/p; out[i]=(g=
 }
 return out;
 }
+/* ATR IS A RUNNING AVERAGE, SO IT NEVER NEEDS RECOMPUTING FROM BAR ZERO.
+
+   Wilder's RMA: out[i] depends only on out[i-1] and bars i-1 and i. Appending
+   a bar extends the series and cannot change a single earlier value. This
+   still rebuilt the whole series on every call, and OMNIGOLD's replay calls it
+   once per bar per detector, so once the gold sanitiser was fixed in hg-v843
+   this became the largest line left in the scan profile: 3,881ms, 16.3% of a
+   600-bar scan.
+
+   The memo carries the running average `a` as well as the series, because
+   "never seeded" (a === null) and "poisoned by a bar with a NaN price"
+   (a is NaN) are different states that out[i] alone cannot tell apart.
+   Inferring one from the other would re-seed a series the old code left NaN
+   for good. Carrying `a` means the resumed loop is the ORIGINAL loop restarted
+   from a saved state, not a reimplementation of it.
+
+   Resume only on an append: the remembered length no greater than the current
+   one, and the last bar read still the same object. A shorter array, one whose
+   last read bar was replaced, and any unseen array are all rebuilt. Keyed by
+   period as well as by rows — atr(rows,14) and atr(rows,20) are two series
+   over one tape.
+
+   Handing back the same array is safe because nothing mutates what this
+   returns: all 73 assignment sites across the repo were checked, and none
+   push, splice, sort or assign through an index into it. The map is weak, and
+   a runtime without WeakMap rebuilds every time exactly as before. */
+const __atrMemo = (typeof WeakMap === 'function') ? new WeakMap() : null;
 function atr(rows, p=14){
-const out = new Array(rows.length).fill(NaN); let a=null;
-for (let i=1;i<rows.length;i++){
+const n = rows.length;
+let out=null, a=null, i=1, byP=null, m=null;
+if (__atrMemo && n){
+byP = __atrMemo.get(rows);
+m = byP ? byP[p] : null;
+if (m && m.n <= n && m.n > 0 && rows[m.n-1] === m.tail){ out = m.out; a = m.a; i = m.n; }
+}
+if (!out) out = new Array(n).fill(NaN);
+else if (out.length < n){ for (let k=out.length;k<n;k++) out.push(NaN); }
+for (; i<n; i++){
 const tr = Math.max(rows[i].h-rows[i].l, Math.abs(rows[i].h-rows[i-1].c), Math.abs(rows[i].l-rows[i-1].c));
 if (a===null){ if(i>=p){ let s=0; for(let k=i-p+1;k<=i;k++){ s+=Math.max(rows[k].h-rows[k].l, Math.abs(rows[k].h-rows[k-1].c), Math.abs(rows[k].l-rows[k-1].c)); } a=s/p; out[i]=a; } }
 else { a=(a*(p-1)+tr)/p; out[i]=a; }
+}
+if (__atrMemo && n){
+if (!byP){ byP = Object.create(null); __atrMemo.set(rows, byP); }
+byP[p] = { n: n, tail: rows[n-1], out: out, a: a };
 }
 return out;
 }

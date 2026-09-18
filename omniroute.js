@@ -666,8 +666,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
          replay said nearly broke even.
        - PURE over the rows prefix: no fetch, no DOM, no Date.now — higher-TF
          context is aggregated from the rows already in hand — so
-         hgOmniBacktestOne's detectFn(rows.slice(0, i+1)) replays every one of
-         them with zero lookahead, and so will any future backtest. */
+         hgOmniBacktestOne's detectFn(rows[0..i]) replays every one of them
+         with zero lookahead, and so will any future backtest. */
 
   var OMNI_CV_STOP_BUF_ATR   = 0.35;  /* structure buffer — same 0.35*ATR the reversion branch uses */
   var OMNI_CV_STOP_FLOOR_ATR = 1.2;   /* stop floor — the replay's #1 killer was tight-stop geometry */

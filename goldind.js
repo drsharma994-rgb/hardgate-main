@@ -11862,12 +11862,35 @@ function hgGoldNormCdf(z){
   return z >= 0 ? (1 - tau / 2) : (tau / 2);
 }
 
-/** §2 BVC signed volume per bar. */
+/** §2 BVC signed volume per bar.
+
+    Each out[i] reads only bars i-window+1 .. i, so appending a bar cannot
+    change any earlier entry — the series extends, it does not shift. It was
+    nonetheless rebuilt in full on every call, and with an inner window loop
+    that makes it O(n x window); through the replay's per-bar walk it was
+    2,292ms, 9.7% of a 600-bar scan, the largest goldind line after atr(). Most
+    of hgGoldNormCdf's own 3.6% is called from this loop.
+
+    Same memo rule as atr() and __rows: resume only on an append (remembered
+    length no greater than the current one, last bar read still the same
+    object), keyed by window as well as by rows, everything else rebuilt. No
+    running state to carry here — out[i] is computed from bars alone, so
+    restarting the identical loop at i = remembered length reproduces it
+    exactly. */
+var __bvcMemo = (typeof WeakMap === 'function') ? new WeakMap() : null;
 function hgGoldBvcDelta(rows, window){
   rows = __rows(rows);
   window = window || HG_GOLD_P8_BVC_WIN;
-  var n = rows ? rows.length : 0, out = new Array(n), i, dp, wSum, varSum, sigma, z, frac;
-  for (i = 0; i < n; i++){
+  var n = rows ? rows.length : 0, out = null, i = 0, byW = null, m = null;
+  var dp, wSum, varSum, sigma, z, frac;
+  if (rows && __bvcMemo && n){
+    byW = __bvcMemo.get(rows);
+    m = byW ? byW[window] : null;
+    if (m && m.n <= n && m.n > 0 && rows[m.n - 1] === m.tail){ out = m.out; i = m.n; }
+  }
+  if (!out){ out = new Array(n); i = 0; }
+  else if (out.length < n) out.length = n;
+  for (; i < n; i++){
     out[i] = 0;
     if (i === 0 || !(rows[i].v > 0)) continue;
     dp = rows[i].c - rows[i - 1].c;
@@ -11882,6 +11905,10 @@ function hgGoldBvcDelta(rows, window){
     z = (sigma > 0 && isFinite(dp)) ? (dp / sigma) : 0;
     frac = hgGoldNormCdf(z);
     out[i] = rows[i].v * (2 * frac - 1);
+  }
+  if (rows && __bvcMemo && n){
+    if (!byW){ byW = Object.create(null); __bvcMemo.set(rows, byW); }
+    byW[window] = { n: n, tail: rows[n - 1], out: out };
   }
   return out;
 }

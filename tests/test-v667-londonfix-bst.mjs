@@ -17,6 +17,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
+import { omnigoldWindow } from './helpers/omnigold-exports.mjs';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 const { HG_VER } = await import('./helpers/build-version.mjs');
@@ -50,20 +52,19 @@ assert.ok(/inWindow = \(uhr === 14 \|\| uhr === 15 \|\| uhr === 16\);/.test(src)
 assert.ok(!/if \(hr !== 15 && hr !== 16\) return null;/.test(src),
   'stale strict UTC guard must be removed');
 
-/* --- runtime demonstration: extract hgOgLondonHour and prove BST vs GMT.
-   v668: hgOgLondonHour delegates to hgOgLocalHour, so if the delegated form
-   is present we must also pull hgOgLocalHour into the extracted sandbox. */
-const londonMatch = src.match(/function hgOgLondonHour\(t\)\{[\s\S]*?\n  \}/);
-assert.ok(londonMatch, 'hgOgLondonHour body must be extractable');
-const localMatch = src.match(/function hgOgLocalHour\(t, tz\)\{[\s\S]*?\n  \}/);
-/* if the source has the delegate, include it in the sandbox */
-const body = (localMatch ? (localMatch[0] + '\n') : '') + londonMatch[0];
-const wrap = new Function('num', 'isFinite',
-  body + '\nreturn hgOgLondonHour;');
-const hgOgLondonHour = wrap(
-  (v) => { var n = +v; return Number.isFinite(n) ? n : NaN; },
-  Number.isFinite
-);
+/* --- runtime demonstration: RUN omnigold.js and prove BST vs GMT.
+
+   This used to scrape the function bodies out of the source with a regex and
+   eval them in a bare sandbox. That is a copy of the code, not the code: when
+   hg-v844 gave hgOgLocalHour a per-timezone formatter cache, the scraped copy
+   called a helper the sandbox had never heard of and this file went red over a
+   change that altered no behaviour. The structural assertions above still read
+   the source, because "hgOgLondonFix must call hgOgLondonHour first" is a
+   claim ABOUT the source. A result is not, so results come from the real
+   exported function now. hgOgLondonHour is the Europe/London delegate, which
+   the assertion above pins. */
+const hgOgLondonHour = (t) => omnigoldWindow().hgOgLocalHour(
+  (Number.isFinite(+t) && t !== null) ? +t : NaN, 'Europe/London');
 
 /* Case A: BST midsummer \u2014 2026-07-01 14:00 UTC == 15:00 BST London */
 {

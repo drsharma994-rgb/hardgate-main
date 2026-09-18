@@ -1115,12 +1115,35 @@ terse status, and never launches a first-time scan on a global refresh.
      mis-shifted by an hour under BST, and NY-open-drive missed EST entirely
      (the correct EST 09..12 NY equals 14..17 UTC, but the code checked
      13..16 UTC which is EDT summer only). */
+  /* ONE FORMATTER PER TIMEZONE, NOT ONE PER CALL.
+
+     Building an Intl.DateTimeFormat is the expensive half of this function —
+     it resolves locale and timezone data — and a fresh one was built on every
+     call. Three mechanics ask for a local hour (LONDON-FIX, hgOgLondonRange,
+     hgOgNyOpenDrive), the replay walks every bar, and a 600-bar scan spent
+     1,467ms in here: 6.2% of the whole scan, more than goldADX or
+     goldVolumeProfile. A formatter is stateless and reusable, so it is built
+     once per timezone and kept.
+
+     A failed construction is remembered too, so an invalid tz answers NaN
+     once per bar instead of throwing once per bar. Behaviour is unchanged on
+     every branch: no Intl, a bad tz and a non-finite t all still read NaN,
+     and callers still guard for it. */
+  var HG_OG_TZ_FMT = Object.create(null);
+  function hgOgTzFormatter(tz){
+    if (tz in HG_OG_TZ_FMT) return HG_OG_TZ_FMT[tz];
+    var f = null;
+    try {
+      f = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', hour12: false });
+    } catch (e) { f = null; }
+    HG_OG_TZ_FMT[tz] = f;
+    return f;
+  }
   function hgOgLocalHour(t, tz){
     if (!isFinite(t) || !tz) return NaN;
+    var fmt = hgOgTzFormatter(tz);
+    if (!fmt) return NaN;
     try{
-      var fmt = new Intl.DateTimeFormat('en-GB', {
-        timeZone: tz, hour: '2-digit', hour12: false
-      });
       var parts = fmt.formatToParts(new Date(t * 1000));
       for (var i = 0; i < parts.length; i++){
         if (parts[i].type === 'hour') return parseInt(parts[i].value, 10);
@@ -14679,6 +14702,10 @@ terse status, and never launches a first-time scan on a global refresh.
 
   /* ============================ exports ============================ */
   if (typeof window !== 'undefined'){
+    /* Exported so the DST-aware local hour and its formatter cache are tested
+       directly rather than inferred from a mechanic that fires twice a day. */
+    window.hgOgLocalHour = hgOgLocalHour;
+    window.hgOgWeekOpenPx = hgOgWeekOpenPx;
     window.hgOgAsiaRange = hgOgAsiaRange;
     window.hgOgPrevDay = hgOgPrevDay;
     window.hgOgAsiaBreak = hgOgAsiaBreak;

@@ -16,6 +16,7 @@
    UTC fallback when Intl is absent. v667's hgOgLondonHour is preserved
    but now delegates to hgOgLocalHour. */
 import assert from 'node:assert/strict';
+import { omnigoldWindow } from './helpers/omnigold-exports.mjs';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -71,15 +72,16 @@ assert.ok(!/var hr = hgOgBarHour\(last\);\s+if \(!\(hr >= 13 && hr < 16\)\) retu
 assert.ok(!/hr = hgOgBarHour\(rows\[i\]\);\s+if \(!\(hr >= 7 && hr < 13\)\) continue;/.test(src),
   'stale London hour guard (bare UTC) must be gone');
 
-/* --- runtime demonstration: extract hgOgLocalHour and prove DST correctness --- */
-const helperMatch = src.match(/function hgOgLocalHour\(t, tz\)\{[\s\S]*?\n  \}/);
-assert.ok(helperMatch, 'hgOgLocalHour body must be extractable');
-const wrap = new Function('num', 'isFinite',
-  helperMatch[0] + '\nreturn hgOgLocalHour;');
-const hgOgLocalHour = wrap(
-  (v) => { var n = +v; return Number.isFinite(n) ? n : NaN; },
-  Number.isFinite
-);
+/* --- runtime demonstration: RUN omnigold.js rather than scrape it.
+
+   These used to pull the function bodies out of the source with a regex and
+   eval them in a bare sandbox — a copy of the code, not the code. hg-v844 gave
+   hgOgLocalHour a per-timezone Intl formatter cache and the scraped copy
+   started calling a helper the sandbox had never heard of, turning three green
+   files red over a change that altered no behaviour. The structural assertions
+   above still read the source, because those are claims ABOUT the source. A
+   result is not, so results come from the real exported functions. */
+const { hgOgLocalHour } = omnigoldWindow();
 
 /* Case A: BST midsummer \u2014 2026-07-01 06:00 UTC = 07:00 London (session open) */
 {

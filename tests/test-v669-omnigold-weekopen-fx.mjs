@@ -19,6 +19,7 @@
    when Intl is absent (correct under EDT, one hour early under EST but
    still much better than Monday 00:00 UTC). */
 import assert from 'node:assert/strict';
+import { omnigoldWindow } from './helpers/omnigold-exports.mjs';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -48,19 +49,16 @@ assert.ok(!/var fromMon = \(dow \+ 6\) % 7;/.test(src),
 assert.ok(!/var weekStart = dayStart - fromMon \* 86400;/.test(src),
   'stale Monday-based weekStart calculation must be gone');
 
-/* --- runtime demonstration: extract hgOgWeekOpenPx and hgOgLocalHour --- */
-const woMatch = src.match(/function hgOgWeekOpenPx\(rows\)\{[\s\S]*?\n  \}/);
-assert.ok(woMatch, 'hgOgWeekOpenPx body must be extractable');
-const lhMatch = src.match(/function hgOgLocalHour\(t, tz\)\{[\s\S]*?\n  \}/);
-assert.ok(lhMatch, 'hgOgLocalHour must be extractable');
+/* --- runtime demonstration: RUN omnigold.js rather than scrape it.
 
-const body = lhMatch[0] + '\n' + woMatch[0];
-const wrap = new Function('num', 'isFinite',
-  body + '\nreturn hgOgWeekOpenPx;');
-const hgOgWeekOpenPx = wrap(
-  (v) => { var n = +v; return Number.isFinite(n) ? n : NaN; },
-  Number.isFinite
-);
+   These used to pull the function bodies out of the source with a regex and
+   eval them in a bare sandbox — a copy of the code, not the code. hg-v844 gave
+   hgOgLocalHour a per-timezone Intl formatter cache and the scraped copy
+   started calling a helper the sandbox had never heard of, turning three green
+   files red over a change that altered no behaviour. The structural assertions
+   above still read the source, because those are claims ABOUT the source. A
+   result is not, so results come from the real exported functions. */
+const { hgOgWeekOpenPx } = omnigoldWindow();
 
 /* helper: build a rows array of hourly bars across a week window */
 function mkHourlyRows(startUtcSec, hours, priceFn){

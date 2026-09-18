@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v843',
-  pack: 'the gold desk scan is 2.4x faster and reads a missing price as missing — goldind\u2019s sanitiser ran the whole tape again on every one of 426,844 calls per scan (46.6% of all CPU, 126 million bar reads) and now resumes where it left off, taking an OMNIGOLD scan from 49.1s to 20.7s at 600 bars with byte-identical output; the replay stopped rebuilding a fresh prefix array per bar; and the filter that decided which bars are real used isFinite(), which says yes to null, so a bar with a null or empty close was read as gold at $0 \u2014 the sixth file to have that hole closed. GOLD PRO and OMNIGOLD are also scanned for the first time, by pressing their own buttons',
+  version: 'hg-v844',
+  pack: 'three more of the gold desk\u2019s full-array indicators stop rebuilding from bar zero \u2014 atr() was 16.3% of a scan, hgGoldBvcDelta() 9.7%, and hgOgLocalHour() built a fresh Intl formatter on every one of its calls for another 6.2%. Both series now resume on an append and the formatter is kept per timezone, taking an OMNIGOLD scan from 21.5s to 13.1s at 600 bars with byte-identical output, and 3.8x cheaper than two packs ago. atr carries its running average through the resume rather than inferring it, because a series poisoned by a bad bar and one that was never seeded look identical from the outside and only one of them may be restarted',
   built: '2026-09-18T00:00:00Z'
 };
 
