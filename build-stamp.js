@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v804',
-  pack: 'the 80PERCENT tab\u2019s census stops announcing its answer above the table that measures it — it asserted trend and pullback fight each other directly over a row measuring them exactly independent, and called two conditions half-likely over one measured at 100% and one at 0%',
+  version: 'hg-v805',
+  pack: 'the 80PERCENT tab measures how far short a near miss actually is — it ranked a bar at RSI 100 needing RSI under 45 exactly like one at 46, and a third renderer was measuring every variant against the spec\u2019s thresholds instead of its own',
   built: '2026-09-17T00:00:00Z'
 };
 

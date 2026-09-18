@@ -1614,6 +1614,105 @@ function hg80SignalAt(rows, ind, i, cfg, variant){
    bar, and a trend flip cannot. */
 var P80_MISS_COST = { trigger: 1, pullback: 2, session: 3, trend: 4 };
 
+/* ---------------------------------------------------------------------
+   HOW FAR, NOT JUST WHICH
+
+   hg80MissCost weights a miss by WHICH condition failed — a trend is days
+   of work on a 4h chart, a trigger is one candle — and says nothing about
+   how far that condition is from being met. So the list of near misses,
+   and the board's "closest, either mechanic", treat a bar at RSI 46
+   needing RSI below 45 exactly like a bar at RSI 100.
+
+   On the ladder fixture the near-miss table prints, in a row headed "one
+   condition short": 1h long, missed RSI pullback, RSI 100.0. A hundred is
+   as far from a long pullback as arithmetic allows. Counting it as one
+   condition short is true and useless; it is the answer to "what should I
+   watch" and it is pointing at the wrong bar.
+
+   Every condition but one has a natural distance, in its own units:
+
+     pullback  points of RSI to the variant's threshold
+     trend     how far the close sits the wrong side of EMA50, in ATR —
+               and if the EMAs themselves are crossed the wrong way, that
+               is the binding half and is reported as such
+     session   time to the window, which hg80SecsToSession already knows
+     trigger   none. It is decided at the close and a candle is either
+               green or it is not; nothing is "nearly" a green close.
+
+   The kind-weight stays the primary order — it encodes what is cheap to
+   change — and distance breaks ties inside it and is PRINTED, so "close"
+   is something a reader can check rather than take on trust.
+   --------------------------------------------------------------------- */
+function hg80MissDistance(sig, side, key){
+  var out = { key: key, has: false, n: NaN, txt: '' };
+  if (!sig) return out;
+  var long = side === 'long';
+  var rs = fin(sig.rsi), c = fin(sig.close), e50 = fin(sig.ema50), e200 = fin(sig.ema200);
+  var atr = fin(sig.atr);
+
+  if (key === 'pullback'){
+    var thr = long ? fin(sig.rsiLong) : fin(sig.rsiShort);
+    if (!isFinite(rs) || !isFinite(thr)) return out;
+    /* long needs rsi BELOW thr, short needs it ABOVE */
+    var d = long ? (rs - thr) : (thr - rs);
+    out.has = true; out.n = d;
+    out.txt = d <= 0 ? 'met' : (d.toFixed(1) + ' RSI pts away');
+    return out;
+  }
+  if (key === 'trend'){
+    if (!isFinite(c) || !isFinite(e50) || !isFinite(e200) || !(atr > 0)) return out;
+    var emaOk = long ? (e50 > e200) : (e50 < e200);
+    if (!emaOk){
+      /* the EMAs are crossed the wrong way: price catching up to EMA50
+         would not help, so reporting a price distance would be a smaller
+         number than the truth */
+      out.has = true; out.n = Infinity;
+      out.txt = 'EMA50 is the wrong side of EMA200';
+      return out;
+    }
+    var pd = long ? (e50 - c) : (c - e50);
+    out.has = true; out.n = pd / atr;
+    out.txt = pd <= 0 ? 'met' : (out.n.toFixed(2) + ' ATR of price away');
+    return out;
+  }
+  if (key === 'session'){
+    var secs = hg80SecsToSession(Math.floor(Date.now() / 1000));
+    if (!isFinite(fin(secs)) || secs <= 0) return out;
+    out.has = true; out.n = secs;
+    out.txt = hg80DurTxt(secs) + ' until the window';
+    return out;
+  }
+  /* trigger: no distance exists, and inventing one would be the flattery
+     this file keeps removing */
+  return out;
+}
+
+/* The worst distance among a bar's missing conditions, for ordering. A bar
+   is only as close as its furthest-away outstanding condition. */
+function hg80MissWorst(sig, side, score){
+  var worst = -Infinity, any = false, i;
+  if (!score || !score.missing) return { n: NaN, any: false };
+  for (i = 0; i < score.missing.length; i++){
+    var d = hg80MissDistance(sig, side, score.missing[i]);
+    if (!d.has) continue;
+    any = true;
+    if (d.n > worst) worst = d.n;
+  }
+  return { n: any ? worst : NaN, any: any };
+}
+
+/* every missing condition, with its distance, as one readable phrase */
+function hg80MissTxt(sig, side, score){
+  var out = [], i;
+  if (!score || !score.missing) return '';
+  for (i = 0; i < score.missing.length; i++){
+    var k = score.missing[i];
+    var d = hg80MissDistance(sig, side, k);
+    out.push(d.has ? (k + ' (' + d.txt + ')') : (k + ' (one candle)'));
+  }
+  return out.join(', ');
+}
+
 function hg80MissCost(score){
   var c = 0;
   for (var i = 0; i < score.missing.length; i++){
@@ -1634,9 +1733,17 @@ function hg80Nearest(rows, ind, i, cfg){
       var sc = hg80Score(ch);
       var cand = { variant: v, side: side, score: sc, sig: sg, checks: ch,
                    cost: hg80MissCost(sc) };
+      cand.worst = hg80MissWorst(sg, side, sc);
       if (!best) { best = cand; continue; }
       if (cand.cost < best.cost) { best = cand; continue; }
-      if (cand.cost === best.cost && vi < P80_VARIANTS.indexOf(best.variant)) best = cand;
+      if (cand.cost > best.cost) continue;
+      /* SAME CONDITIONS OUTSTANDING, so the one actually nearer to meeting
+         them is the nearer one. Without this, "closest" was decided by
+         variant order and could name a bar at RSI 100 over one at RSI 46. */
+      var a = fin(cand.worst.n), b = fin(best.worst.n);
+      if (isFinite(a) && isFinite(b) && a !== b){ if (a < b) best = cand; continue; }
+      if (isFinite(a) !== isFinite(b)){ if (isFinite(a)) best = cand; continue; }
+      if (vi < P80_VARIANTS.indexOf(best.variant)) best = cand;
     }
   }
   return best;
@@ -2766,14 +2873,20 @@ function nearestHtml(nr, cfg){
   var bits = [], i;
   for (i = 0; i < sc.missing.length; i++){
     var k = sc.missing[i];
+    /* ONE ARITHMETIC. These distances were computed inline here and again,
+       differently, in the near-miss list — the signed close-minus-EMA50
+       here, the directional gap there — which is how two renderers of the
+       same fact drift apart. Both read hg80MissDistance now; this one
+       keeps the richer phrasing, because naming the threshold is what
+       makes the number actionable. */
+    var dist = hg80MissDistance(sig, side, k);
     if (k === 'pullback'){
       var need = side === 'long' ? nr.variant.rsiLong : nr.variant.rsiShort;
       bits.push('RSI ' + num(sig.rsi, 1) + ' needs ' + (side === 'long' ? '&lt;' : '&gt;') + ' '
-        + need + ' (' + num(Math.abs(sig.rsi - need), 1) + ' away)');
+        + need + (dist.has ? ' (' + esc(dist.txt) + ')' : ''));
     } else if (k === 'trend'){
-      var gap = (sig.close - sig.ema50) / (sig.atr > 0 ? sig.atr : 1);
-      bits.push('trend: close is ' + num(gap, 2) + ' ATR from EMA50, EMA50 is '
-        + (sig.ema50 > sig.ema200 ? 'above' : 'below') + ' EMA200');
+      bits.push('trend: ' + (dist.has ? esc(dist.txt) : 'close is the wrong side of EMA50')
+        + ', EMA50 is ' + (sig.ema50 > sig.ema200 ? 'above' : 'below') + ' EMA200');
     } else if (k === 'trigger'){
       bits.push('needs a ' + (side === 'long' ? 'green' : 'red') + ' close');
     } else if (k === 'session'){
@@ -2801,14 +2914,20 @@ function distanceHtml(sig, cfg){
   var bits = [], i;
   for (i = 0; i < sc.missing.length; i++){
     var k = sc.missing[i];
+    /* THE THIRD COPY, and the one that was wrong. It measured the RSI
+       distance against P80_RSI_LONG / P80_RSI_SHORT — the SPEC's
+       thresholds — on a signal that may be MID or WIDE, so a MID bar was
+       told how far it stood from a threshold it does not use.
+       hg80MissDistance reads the signal's OWN rsiLong/rsiShort. */
+    var dist = hg80MissDistance(sig, side, k);
     if (k === 'pullback'){
-      var need = side === 'long' ? P80_RSI_LONG : P80_RSI_SHORT;
+      var need = side === 'long' ? fin(sig.rsiLong) : fin(sig.rsiShort);
+      if (!isFinite(need)) need = side === 'long' ? P80_RSI_LONG : P80_RSI_SHORT;
       bits.push('RSI ' + num(sig.rsi, 1) + ' needs ' + (side === 'long' ? '&lt;' : '&gt;') + ' '
-        + need + ' (' + num(Math.abs(sig.rsi - need), 1) + ' away)');
+        + need + (dist.has ? ' (' + esc(dist.txt) + ')' : ''));
     } else if (k === 'trend'){
-      var gap = (sig.close - sig.ema50) / (sig.atr > 0 ? sig.atr : 1);
-      bits.push('trend: close is ' + num(gap, 2) + ' ATR from EMA50, and EMA50 is '
-        + (sig.ema50 > sig.ema200 ? 'above' : 'below') + ' EMA200');
+      bits.push('trend: ' + (dist.has ? esc(dist.txt) : 'close is the wrong side of EMA50')
+        + ', and EMA50 is ' + (sig.ema50 > sig.ema200 ? 'above' : 'below') + ' EMA200');
     } else if (k === 'trigger'){
       bits.push('needs a ' + (side === 'long' ? 'green' : 'red') + ' close');
     } else if (k === 'session'){
@@ -4504,26 +4623,65 @@ function nearMissHtml(rungs){
   if (!rows.length) return '';
   var name = { trend: 'trend alignment', pullback: 'RSI pullback', trigger: 'candle direction',
                session: 'session window' };
+  /* NEAREST FIRST, AND HOW NEAR. "One condition short" counts conditions;
+     it said nothing about distance, so a bar at RSI 100 needing RSI below
+     45 sat in the same list, in the same words, as one at RSI 46. See
+     hg80MissDistance. */
+  for (i = 0; i < rows.length; i++){
+    rows[i].worst = hg80MissWorst(rows[i].m.sig, rows[i].m.side, rows[i].m.score);
+  }
+  /* DISTANCES IN DIFFERENT UNITS DO NOT COMPARE. RSI points, ATR of price
+     and "no distance at all" are three scales, and sorting them against
+     each other put "55 RSI points away" above "one candle" — the exact
+     inversion this change exists to fix, committed by the fix itself.
+
+     The kind-weight already answers which MISS is nearer: a trigger costs
+     1 because it is one candle, a trend costs 4 because it is days of
+     work. That stays the primary order. Distance only orders rows that are
+     missing the SAME things, where the units are the same by
+     construction. */
+  var sigOf = function(x){ return x.m.score.missing.slice().sort().join('+'); };
+  rows.sort(function(a, b){
+    var ac = hg80MissCost(a.m.score), bc = hg80MissCost(b.m.score);
+    if (ac !== bc) return ac - bc;
+    if (sigOf(a) === sigOf(b)){
+      var an = fin(a.worst.n), bn = fin(b.worst.n);
+      var ao = isFinite(an), bo = isFinite(bn);
+      if (ao && bo && an !== bn) return an - bn;
+      if (ao !== bo) return ao ? -1 : 1;    /* a knowable distance beats an unbounded one */
+    }
+    return fin(b.m.sig.t) - fin(a.m.sig.t); /* then most recent */
+  });
+
   var h = '<div class="panel" style="margin-top:10px"><h3>NEAR MISSES '
-    + '<span>one condition short, and which one</span></h3>'
+    + '<span>one condition short, and how far short</span></h3>'
     + '<table class="tbl"><tr><th>rung</th><th>time (UTC)</th><th>side</th><th>held</th>'
-    + '<th>missed</th><th>RSI</th><th>close</th></tr>';
+    + '<th>missed</th><th>how far</th><th>RSI</th><th>close</th></tr>';
   for (i = 0; i < rows.length; i++){
     var x = rows[i], s = x.m.sig;
     var missed = x.m.score.missing.map(function(k){ return name[k] || k; }).join(', ');
+    var far = [], mi;
+    for (mi = 0; mi < x.m.score.missing.length; mi++){
+      var d = hg80MissDistance(s, x.m.side, x.m.score.missing[mi]);
+      far.push(d.has ? d.txt : 'one candle');
+    }
     h += '<tr><td><b>' + esc(x.tf) + '</b></td>'
       + '<td>' + esc(isFinite(s.t) ? new Date(s.t * 1000).toISOString().replace('T', ' ').slice(5, 16) : '—') + '</td>'
       + '<td>' + esc(x.m.side) + '</td>'
       + '<td class="hg-num">' + x.m.score.met + '/' + x.m.score.total + '</td>'
       + '<td>' + esc(missed) + '</td>'
+      + '<td>' + esc(far.join(', ')) + '</td>'
       + '<td class="hg-num">' + num(s.rsi, 1) + '</td>'
       + '<td class="hg-num">' + num(s.close) + '</td></tr>';
   }
   return h + '</table><div class="note"><b>These did NOT fire and are not setups.</b> The spec '
     + 'requires every condition on the same candle and none of these had them. The held count is '
     + 'out of THREE at 4h and 1d, where the session rule is inapplicable, and out of four '
-    + 'everywhere else — the column says which. They are listed because a rung that keeps missing '
-    + 'on one named condition is telling you something a blank panel cannot.</div></div>';
+    + 'everywhere else — the column says which. <b>Nearest first.</b> "One condition short" '
+    + 'counts conditions and says nothing about distance — a bar needing RSI below 45 can sit at '
+    + '46 or at 100 and read the same — so the how-far column gives the outstanding condition in '
+    + 'its own units, and the list is ordered by the furthest one each bar still has to travel. A '
+    + 'candle\'s direction has no distance: it is decided at the close.</div></div>';
 }
 
 function firedHtml(rungs){
@@ -5312,6 +5470,9 @@ W.forwardPanelHtml   = forwardPanelHtml;
 W.watchLineHtml      = watchLineHtml;
 W.hg80LedgerSummaryTxt = hg80LedgerSummaryTxt;
 W.hg80CoincideRead   = hg80CoincideRead;
+W.hg80MissDistance   = hg80MissDistance;
+W.hg80MissWorst      = hg80MissWorst;
+W.hg80MissTxt        = hg80MissTxt;
 W.coincideHtml       = coincideHtml;
 W.HG_P80_CSS         = P80_CSS;
 W.hg80InjectCss      = hg80InjectCss;

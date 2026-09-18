@@ -2565,6 +2565,90 @@ console.log('\n== the ledger is read at the bar for the number of things being t
   }
 }
 
+console.log('\n== how far short, not just which condition ==');
+{
+  /* hg80MissCost weights a miss by WHICH condition failed and says nothing
+     about how far it is from being met. So the near-miss list — the tab's
+     answer to "what should I watch" — printed, under a heading reading
+     "one condition short": 1h long, missed RSI pullback, RSI 100.0. A
+     hundred is as far from a long pullback as arithmetic allows. */
+  const D = ctx.hg80MissDistance;
+  const sig = o => Object.assign({ rsi: 50, close: 100, ema50: 100, ema200: 90, atr: 2,
+                                   rsiLong: 45, rsiShort: 55 }, o);
+
+  /* PULLBACK — points of RSI to this variant's own threshold */
+  ok(near(D(sig({ rsi: 46 }), 'long', 'pullback').n, 1),
+     'a long at RSI 46 needing below 45 is one point away');
+  ok(near(D(sig({ rsi: 100 }), 'long', 'pullback').n, 55),
+     'and one at RSI 100 is fifty-five — the number that was missing');
+  ok(/1\.0 RSI pts away/.test(D(sig({ rsi: 46 }), 'long', 'pullback').txt),
+     'stated in RSI points, the unit the condition is written in');
+  ok(near(D(sig({ rsi: 54 }), 'short', 'pullback').n, 1),
+     'a short is measured against its own threshold, the other way round');
+  ok(D(sig({ rsi: 40 }), 'long', 'pullback').txt === 'met',
+     'and a condition already met reads met rather than a negative distance');
+  ok(D(sig({ rsi: 46, rsiLong: 55 }), 'long', 'pullback').n < 0,
+     'measured against the VARIANT\'s threshold — WIDE is nearer than SPEC on the same bar');
+
+  /* TREND — price distance to EMA50 in ATR, unless the EMAs themselves are
+     crossed the wrong way, in which case price catching up would not help
+     and a price distance would understate it */
+  ok(near(D(sig({ close: 96, ema50: 100, ema200: 90, atr: 2 }), 'long', 'trend').n, 2),
+     'four below a 100 EMA50 at ATR 2 is two ATR of price away');
+  const crossed = D(sig({ close: 96, ema50: 90, ema200: 100 }), 'long', 'trend');
+  ok(crossed.n === Infinity && /wrong side of EMA200/.test(crossed.txt),
+     'but with EMA50 under EMA200 the binding half is the cross, not the price — reported as '
+     + 'such rather than as a small number');
+
+  /* TRIGGER — no distance exists, and inventing one would be flattery */
+  ok(D(sig({}), 'long', 'trigger').has === false,
+     'a candle is green or it is not; nothing is nearly a green close');
+
+  /* THE WORST OUTSTANDING CONDITION is what a bar is as close as */
+  const w = ctx.hg80MissWorst(sig({ rsi: 100, close: 96 }), 'long',
+                              { missing: ['pullback', 'trend'] });
+  ok(w.any === true && w.n === 55, 'a bar is only as close as its furthest-away condition');
+  ok(ctx.hg80MissWorst(sig({}), 'long', { missing: ['trigger'] }).any === false,
+     'and a bar missing only the trigger has no measurable distance at all');
+
+  /* ORDERING: units that do not compare must not be compared. RSI points,
+     ATR of price and "no distance" are three scales; sorting them against
+     each other put "55 RSI points away" ABOVE "one candle" — the exact
+     inversion this change exists to fix. The kind-weight answers which
+     MISS is nearer; distance only orders rows missing the same thing. */
+  ok(/hg80MissCost\(a\.m\.score\)/.test(CODE),
+     'the near-miss list sorts on the kind-weight first');
+  ok(/sigOf\(a\) === sigOf\(b\)/.test(CODE),
+     'and compares distances only between rows missing the same conditions');
+
+  /* ONE ARITHMETIC. The board's "closest" cell computed these distances
+     inline, and the near-miss list computed them again differently — the
+     signed close-minus-EMA50 in one, the directional gap in the other.
+     Two renderers of the same fact drift; hg-v803 was the same lesson. */
+  ok((CODE.match(/hg80MissDistance\(/g) || []).length >= 3,
+     'both renderers and the ordering read the one distance helper');
+  ok(!/\(sig\.close - sig\.ema50\) \/ \(sig\.atr/.test(CODE),
+     'with no inline copy left in either cell');
+
+  /* THE THIRD COPY WAS WRONG, and this guard is what found it.
+     distanceHtml measured the RSI gap against P80_RSI_LONG /
+     P80_RSI_SHORT — the SPEC's thresholds — on a signal that may be MID or
+     WIDE, telling a MID bar how far it stood from a threshold it does not
+     use. */
+  ok(!/need = side === 'long' \? P80_RSI_LONG : P80_RSI_SHORT;[\s\S]{0,120}away/.test(CODE),
+     'no renderer measures a pullback against the SPEC threshold on a non-SPEC signal');
+  const mid = { rsi: 52, close: 100, ema50: 100, ema200: 90, atr: 2, rsiLong: 50, rsiShort: 50 };
+  ok(near(ctx.hg80MissDistance(mid, 'long', 'pullback').n, 2),
+     'a MID bar at RSI 52 is two points from ITS 50 threshold, not seven from the spec\'s 45');
+
+  /* SELECTION is what the board cell depends on, and it was picking by
+     variant order among equal-cost candidates */
+  ok(/cand\.worst = hg80MissWorst/.test(CODE),
+     'hg80Nearest measures each candidate\'s distance');
+  ok(/if \(isFinite\(a\) && isFinite\(b\) && a !== b\)/.test(CODE),
+     'and prefers the genuinely nearer one before falling back to variant order');
+}
+
 console.log('\n== the FULL card answers to the ledger too ==');
 {
   /* hg-v789 took "This strategy has no measured record on this desk" out of
