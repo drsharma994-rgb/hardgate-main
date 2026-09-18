@@ -2,14 +2,16 @@
 HARDGATE — tabalerts.js
 TELEGRAM SETUP ALERTS for tab scanners: crypto SWING, crypto SCALP, EDGE,
 BRAIN (HIGH/PRIME with 7/7 swing evidence), BEST (7/7 clean), GOLD when
-gate-clean, plus optional PINE/layers when hgAlertCleanOnly=0.
+gate-clean, 80PERCENT when the ladder tab judges a row takeable or armed,
+plus optional PINE/layers when hgAlertCleanOnly=0.
 
 Default: 7/7 CLEAN + 6/7 NEAR (watch) setups (entry + SL + TP) every 5 minutes.
 
 Runs on the 5-min alert cycle (index.html runAlertCycle) after quiet scans,
 and on hgalert's 60s evaluate() for live BRAIN/GOLD reads between cycles.
 Dedup: one push per setup key (source:sym:dir@entry) per 5 minutes via
-localStorage hg_tabalert_keys. PRIME / very-high confluence lines are tagged
+localStorage hg_tabalert_keys. 80PERCENT keys name a candle instead of a
+price and do not expire on that gap — see hgTabAlertsFresh. PRIME / very-high confluence lines are tagged
 🔥 in the message body.
 
 Never throws at load or at push time. Absent scan seams degrade to empty
@@ -45,6 +47,15 @@ function gfn(name){
 }
 
 function fin(v){ return typeof v === 'number' && isFinite(v); }
+
+/* fin(+x) COERCES, AND null COERCES TO ZERO. That is fine for a form field
+   or a feed payload, where a missing number and a zero mean much the same
+   thing. It is not fine for a number that carries a claim: a breakeven of
+   null means the venue was never priced, and +null makes it 0, so the line
+   below would have told a reader their setup 'needs 0.0% at this venue' —
+   the most flattering sentence available, about an arithmetic that was
+   never done. Same bug, same fix as eightypercent.js hg-v799. */
+function finStrict(v){ return (typeof v === 'number' && isFinite(v)) ? v : NaN; }
 
 function rowsFrom(val){
   if (Array.isArray(val)) return val;
@@ -101,7 +112,7 @@ function tabAlertSourcesAll(){
   return {
     swing: true, scalp: true, brain: true, gold: true, edge: true, pine: true,
     smart: true, oiflow: true, liqs: true, squeeze: true, carry: true,
-    termbasis: true, watch: true, best: true
+    termbasis: true, watch: true, best: true, p80: true
   };
 }
 
@@ -207,8 +218,26 @@ function setupIsNearClean6(s){
   return gp >= 6;
 }
 
+/* THE 80PERCENT LADDER HAS NO SEVEN-GATE STACK TO BE CLEAN OF.
+
+   Both default-on filters below are allowlists that drop what they do not
+   recognise, and both reject watch rows outright. A row from the 80PERCENT
+   tab would therefore have been collected and then silently thrown away in
+   the default configuration — the change would have shipped as a no-op.
+
+   Marking those rows clean7 to get them through would print '7/7 CLEAN'
+   beside a gate count that desk does not keep. GOLD already set the
+   precedent for the honest version: goldConvicted is that desk's own
+   conviction standing in for the seven gates. p80 is the same shape. What
+   it means is stated where it is produced (eightypercent.js,
+   hg80AlertRows): the tab judged the row TAKEABLE, or ARMED for a candle
+   that can actually fire with a venue that can pay for it. */
+function setupIsP80(s){
+  return !!(s && s.p80 === true);
+}
+
 function setupIsTelegramEligible(s){
-  return setupIsClean7(s) || setupIsNearClean6(s);
+  return setupIsClean7(s) || setupIsNearClean6(s) || setupIsP80(s);
 }
 
 function tabAlertsFilterClean7(list){
@@ -217,7 +246,9 @@ function tabAlertsFilterClean7(list){
 
 function tabAlertsFilterCryptoConvicted(list){
   return (list || []).filter(function(s){
-    if (!s || s.watch || s.nearClean) return false;
+    if (!s) return false;
+    if (setupIsP80(s)) return true;      /* judged by its own desk — see setupIsP80 */
+    if (s.watch || s.nearClean) return false;
     if (!setupIsClean7(s)) return false;
     if (s.goldConvicted) return true;
     if (s.src.indexOf('SWING') >= 0 || s.src.indexOf('SCALP') >= 0){
@@ -590,6 +621,106 @@ function collectCryptoWatch(out){
   }catch(e){}
 }
 
+/* ---------------- 80PERCENT ladder (eightypercent.js) ----------------
+
+   Unlike every other collector in this file, this one does not call a scan
+   function. The 80PERCENT tab fetches five timeframes of bars, and there
+   is no synchronous seam that could answer "what is armed right now". So
+   the tab publishes its verdict on each scan (hg80PublishAlerts) and this
+   reads it.
+
+   That has one consequence worth being plain about: nothing is collected
+   here unless the tab has run. It runs when the tab is open, and keeps
+   running on the auto-refresh added in hg-v794. With the tab closed this
+   contributes nothing, and says so by contributing nothing rather than by
+   sending an older answer.
+
+   TWO AGE TESTS, because "stale" means two different things.
+
+   The PUBLICATION can be stale: the levels, and the venue's verdict on
+   whether it can pay for them, were true at the moment of a scan. Past
+   P80_MAX_AGE_MS that is a reading, not a state.
+
+   The CANDLE can be dead, which is the sharper one. An armed row is a
+   claim about one specific forming candle. Once that candle has closed the
+   claim is settled — it fired or it did not — and sending it would be
+   inviting somebody into a bar that no longer exists. A scan four minutes
+   old is fresh by the first test and can still carry a 5m row whose candle
+   closed two minutes ago. */
+var P80_MAX_AGE_MS = 15 * 60 * 1000;
+/* longer than the 1d rung's candle, so a key outlives the claim it names */
+var P80_KEY_TTL_MS = 36 * 60 * 60 * 1000;
+
+function p80Rows(root){
+  var pub = null;
+  try{ pub = (root && root.__hg80Alerts) || W.__hg80Alerts || null; }catch(e){ return null; }
+  if (!pub || typeof pub !== 'object') return null;
+  var stamp = finStrict(pub.t);
+  if (!isFinite(stamp) || (Date.now() - stamp) > P80_MAX_AGE_MS) return null;
+  return pub;
+}
+
+/* Is the candle this row is about still the one now forming? */
+function p80CandleLive(row, nowSec){
+  var t = finStrict(row && row.candleT), tf = finStrict(row && row.tfSec);
+  if (!isFinite(t) || !(tf > 0)) return false;
+  return nowSec < (t + tf);
+}
+
+function p80Note(row, kind){
+  var bits = [];
+  bits.push(String(row.tf || '') + ' ' + String(row.variant || 'SPEC'));
+  bits.push(kind === 'watch'
+    ? 'armed — every condition but the trigger candle'
+    : 'fired and still takeable at the live price');
+  /* The geometry is the whole story on this desk and it is not the usual
+     one: a target well inside the stop, carried by hit rate. An alert that
+     showed entry/stop/target and left that out would read as a 1:5 loser. */
+  var be = row.be || null;
+  var net = finStrict(be && be.net), gross = finStrict(be && be.gross);
+  if (isFinite(net)) bits.push('needs ' + (net * 100).toFixed(1) + '% at this venue');
+  else if (isFinite(gross)) bits.push('needs ' + (gross * 100).toFixed(1) + '% gross — venue cost unread');
+  var closes = finStrict(row.closesIn);
+  if (kind === 'watch' && closes > 0){
+    bits.push('candle closed in ' + Math.round(closes / 60) + 'm at the scan');
+  }
+  return bits.join(' · ');
+}
+
+/* rung + candle, or nothing. A row whose candle cannot be named cannot be
+   de-duplicated, and String(NaN) would quietly give every such row on a
+   rung the same key — which is the spam this whole key exists to prevent,
+   arriving by the other door. */
+function p80Key(row){
+  var t = finStrict(row && row.candleT);
+  var tf = row && row.tf ? String(row.tf) : '';
+  if (!isFinite(t) || !tf) return null;
+  return tf + ':' + t;
+}
+
+function collectP80(out){
+  var pub = p80Rows(W);
+  if (!pub) return;
+  var nowSec = Math.floor(Date.now() / 1000);
+  var i, r, key;
+  for (i = 0; i < (pub.setups || []).length; i++){
+    r = pub.setups[i];
+    key = p80Key(r);
+    if (!key) continue;
+    pushSetup(out, '80PERCENT ' + String(r.tf), r, {
+      p80: true, p80Key: key, tier: '80% TAKEABLE', note: p80Note(r, 'setup')
+    });
+  }
+  for (i = 0; i < (pub.watch || []).length; i++){
+    r = pub.watch[i];
+    key = p80Key(r);
+    if (!key || !p80CandleLive(r, nowSec)) continue;
+    pushSetup(out, '80PERCENT ' + String(r.tf), r, {
+      p80: true, p80Key: key, watch: true, tier: '80% ARMED', note: p80Note(r, 'watch')
+    });
+  }
+}
+
 function collectSmart(out){
   var bag = W.__hgSmartResults;
   if (!bag || !Array.isArray(bag.results)) return;
@@ -760,6 +891,7 @@ function hgTabAlertsCollect(win){
       collectGoldPine(out, 8);
     }
     collectSmart(out);
+    collectP80(out);
     collectOiflow(out);
     collectLiqs(out);
     collectSqueeze(out);
@@ -772,6 +904,13 @@ function hgTabAlertsCollect(win){
 }
 
 function setupKey(s){
+  /* A p80 key names ONE CANDLE on one rung. The rung is already in src, so
+     the default watch key below would separate the ladder correctly — what
+     it cannot do is separate one candle from the next. It keys on a gate
+     tally these rows do not have, which is a constant here, so an armed 4h
+     row would carry the same key for as long as it stayed armed and the
+     NEXT candle's claim would be mistaken for a repeat of the last. */
+  if (s.p80 && s.p80Key) return s.src + ':p80:' + s.sym + ':' + s.dir + '@' + s.p80Key;
   if (s.watch) return s.src + ':watch:' + s.sym + ':' + s.dir + '@' + (s.tally || s.gatesPassed || 0);
   if (s.nearClean) return s.src + ':near:' + s.sym + ':' + s.dir + '@' + s.entry + ':' + (s.gatesPassed || 6);
   return s.src + ':' + s.sym + ':' + s.dir + '@' + s.entry;
@@ -785,7 +924,19 @@ function hgTabAlertsFresh(prevKeys, list, now, gapMs){
   for (var k in prev){
     if (!Object.prototype.hasOwnProperty.call(prev, k)) continue;
     var t = +prev[k];
-    if (isFinite(t) && t > cutoff) keys[k] = t;
+    if (!isFinite(t)) continue;
+    /* THE GAP IS A REPEAT-RATE LIMIT. A key falls out of the carried set
+       after it, so a setup that is still standing is pushed again on the
+       next cycle — the intended behaviour for a row keyed on a price that
+       is still available.
+
+       A p80 key is not that. It is an identity: one rung, one side, one
+       candle. Expiring it would push the same armed candle every five
+       minutes for as long as it stayed armed, which on a 4h rung is
+       forty-eight messages about one bar. It is held until well past any
+       candle on the ladder instead, so the map still cannot grow without
+       bound. */
+    if (k.indexOf(':p80:') >= 0 ? (t > now - P80_KEY_TTL_MS) : (t > cutoff)) keys[k] = t;
   }
   for (var i = 0; i < (list || []).length; i++){
     var s = list[i];
@@ -953,6 +1104,11 @@ async function hgTabAlertsRun(opts){
   if (opts.allSources || !allow) allow = tabAlertSourcesAll();
   if (allow && typeof allow === 'object' && !Array.isArray(allow)){
     list = list.filter(function(s){
+      /* FIRST, and on the row's own mark rather than on its src string.
+         The 80PERCENT ladder has SCALP and SWING bands, so anything that
+         put a band name in src would be claimed here by the crypto
+         scalp/swing rules and attributed to the wrong desk. */
+      if (s.p80) return !!allow.p80;
       if (s.src.indexOf('BRAIN') >= 0 && allow.brain) return true;
       if (s.src.indexOf('SWING') >= 0 && allow.swing) return true;
       if (s.src.indexOf('SCALP') >= 0 && allow.scalp) return true;
@@ -1226,7 +1382,8 @@ if (typeof module !== 'undefined' && module.exports){
     setupKey, GAP_MS, GOLD_MIN_TALLY, LS_KEYS, LS_LAST_RUN, LS_CLEAN_ONLY,
     LS_GOLD_SEPARATE, LS_GOLD_CONVICTED, LS_CRYPTO_CONVICTED, LS_GOLD_LAST_RUN,
     tabAlertSourcesAll, tabAlertsShouldRun, tabAlertsMarkRun, hgBrainInvAlertsMaybeRun,
-    setupIsClean7, setupIsNearClean6, setupIsTelegramEligible,
+    setupIsClean7, setupIsNearClean6, setupIsTelegramEligible, setupIsP80,
+    collectP80, p80CandleLive, p80Note, p80Key, P80_MAX_AGE_MS, P80_KEY_TTL_MS, finStrict,
     tabAlertsFilterClean7, tabAlertsFilterCryptoConvicted, tabAlertsCleanOnlyEnabled,
     tabAlertsGoldSeparateEnabled, tabAlertsGoldConvictedOnlyEnabled,
     tabAlertsCryptoConvictedOnlyEnabled, goldIsMostConvinced,

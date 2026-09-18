@@ -324,5 +324,185 @@ WOff.localStorage = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : nul
 await WOff.hgTabAlertsRun({ force: true });
 assert(WOff._invCalled !== true, 'brainInvAlertsOn false skips invalidation hook');
 
+
+/* ---------------------------------------------------------------------
+   80PERCENT ladder rows (hg-v813)
+
+   The tab publishes __hg80Alerts; this file only formats and de-duplicates
+   it. The tests that matter are the ones that would have caught the change
+   shipping as a silent no-op: both default-on filters are allowlists that
+   reject what they do not recognise.
+   --------------------------------------------------------------------- */
+const { setupIsP80, setupIsTelegramEligible, collectP80, p80CandleLive,
+  p80Note, P80_MAX_AGE_MS, P80_KEY_TTL_MS, tabAlertSourcesAll } = lib;
+
+assert(typeof collectP80 === 'function', 'collectP80 exported');
+assert(tabAlertSourcesAll().p80 === true, 'p80 is a source in tabAlertSourcesAll');
+
+const p80Row = { src: '80PERCENT 5m', sym: 'XAUUSD', dir: 'long', entry: 3900,
+  stop: 3880, t1: 3904, p80: true, p80Key: '5m:1000', tier: '80% TAKEABLE' };
+assert(setupIsP80(p80Row) === true, 'p80 row recognised by its own mark');
+assert(setupIsClean7(p80Row) === false, 'a p80 row does NOT claim 7/7 CLEAN');
+assert(setupIsTelegramEligible(p80Row) === true, 'p80 row survives the clean-only filter');
+assert(tabAlertsFilterClean7([p80Row]).length === 1, 'clean-only filter keeps a p80 row');
+assert(tabAlertsFilterCryptoConvicted([p80Row]).length === 1,
+       'crypto-convicted filter keeps a p80 row');
+const p80Watch = Object.assign({}, p80Row, { watch: true, tier: '80% ARMED' });
+assert(tabAlertsFilterCryptoConvicted([p80Watch]).length === 1,
+       'crypto-convicted filter keeps a p80 ARMED row (it rejects every other watch row)');
+assert(tabAlertsFilterCryptoConvicted([
+  { src: 'SWING WATCH', sym: 'A', dir: 'long', entry: 1, stop: 0.9, t1: 1.1, watch: true }
+]).length === 0, 'and still rejects a non-p80 watch row');
+/* the format line that would have lied */
+assert(hgTabAlertsFormat([Object.assign({ tally: null, rr: null, note: 'x' }, p80Row)])
+         .indexOf('7/7 CLEAN') < 0, 'a p80 row never prints a gate count it does not keep');
+
+/* THE KEY. One rung, one side, one candle — and it must not collapse the
+   ladder the way the default watch key would. */
+const k5 = setupKey({ src: '80PERCENT 5m', sym: 'XAUUSD', dir: 'long', p80: true, p80Key: '5m:600', watch: true });
+const k15 = setupKey({ src: '80PERCENT 15m', sym: 'XAUUSD', dir: 'long', p80: true, p80Key: '15m:600', watch: true });
+const k5b = setupKey({ src: '80PERCENT 5m', sym: 'XAUUSD', dir: 'long', p80: true, p80Key: '5m:900', watch: true });
+assert(k5 !== k15, '5m and 15m armed longs are different keys');
+assert(k5 !== k5b, 'a later candle on the same rung is a new key');
+assert(k5.indexOf(':p80:') >= 0, 'p80 keys are marked so the expiry can exempt them');
+/* The rung separation above comes from src, not from this branch. What the
+   branch is FOR is the candle: without it these two claims — different
+   bars, different levels to come — share one key and the second is read as
+   a repeat of the first. */
+assert(setupKey({ src: '80PERCENT 5m', sym: 'XAUUSD', dir: 'long', watch: true })
+       === setupKey({ src: '80PERCENT 5m', sym: 'XAUUSD', dir: 'long', watch: true }),
+       'default watch key is identical across two different candles');
+assert(setupKey({ src: '80PERCENT 5m', sym: 'XAUUSD', dir: 'long', watch: true, p80: true, p80Key: '5m:600' })
+       !== setupKey({ src: '80PERCENT 5m', sym: 'XAUUSD', dir: 'long', watch: true, p80: true, p80Key: '5m:900' }),
+       'the p80 branch is what separates them');
+
+/* THE EXPIRY. A still-armed 4h row must not be pushed every five minutes. */
+const p80now0 = 1_700_000_000_000;
+const armedList = [{ src: '80PERCENT 4h', sym: 'XAUUSD', dir: 'long', entry: 3900, stop: 3880,
+  t1: 3904, watch: true, p80: true, p80Key: '4h:1', tally: null, rr: null }];
+const p80fr1 = hgTabAlertsFresh({}, armedList, p80now0, GAP_MS);
+assert(p80fr1.fresh.length === 1, 'an armed p80 row is fresh the first time');
+const p80fr2 = hgTabAlertsFresh(p80fr1.keys, armedList, p80now0 + 40 * 60 * 1000, GAP_MS);
+assert(p80fr2.fresh.length === 0, 'the same armed candle is NOT re-pushed 40 minutes later');
+const p80fr3 = hgTabAlertsFresh(p80fr1.keys, armedList, p80now0 + P80_KEY_TTL_MS + 1000, GAP_MS);
+assert(p80fr3.fresh.length === 1, 'past the p80 TTL the key is dropped so the map cannot grow forever');
+/* and the exemption is confined to p80 — every other source keeps the gap */
+const otherList = [{ src: 'SWING', sym: 'SOLUSD', dir: 'long', entry: 10, stop: 9, t1: 12, tally: null, rr: null }];
+const p80of1 = hgTabAlertsFresh({}, otherList, p80now0, GAP_MS);
+assert(hgTabAlertsFresh(p80of1.keys, otherList, p80now0 + GAP_MS + 1000, GAP_MS).fresh.length === 1,
+       'a non-p80 key still expires on the 5-minute gap');
+
+/* AN UNREAD VENUE MAKES NO CLAIM.
+
+   hg80Breakeven returns net:null when the venue could not be priced, and
+   fin(+null) is fin(0) is true — so the first draft of this note told a
+   reader their setup 'needs 0.0% at this venue', which is both the most
+   flattering number available and arithmetic that was never done. */
+const unpriced = p80Note({ tf: '5m', variant: 'SPEC',
+  be: { gross: 0.842105, net: null, cost: null } }, 'setup');
+assert(unpriced.indexOf('0.0%') < 0, 'an unpriced venue never reports a 0.0% breakeven');
+assert(unpriced.indexOf('84.2% gross') >= 0 && unpriced.indexOf('venue cost unread') >= 0,
+       'it falls back to the gross breakeven and says the cost was not read');
+assert(p80Note({ tf: '5m', variant: 'SPEC', be: { gross: 0.842, net: 0.861 } }, 'setup')
+         .indexOf('86.1% at this venue') >= 0,
+       'and reports the net breakeven when the venue WAS priced');
+assert(p80Note({ tf: '5m', variant: 'SPEC', be: null }, 'setup').indexOf('needs') < 0,
+       'no breakeven at all claims nothing');
+assert(p80Note({ tf: '5m', variant: 'MID', be: null, closesIn: null }, 'watch')
+         .indexOf('closed in 0m') < 0, 'and a null countdown is not printed as 0m');
+assert(p80Note({ tf: '5m', variant: 'MID', be: null, closesIn: 240 }, 'watch')
+         .indexOf('closed in 4m') >= 0, 'a real countdown is');
+
+/* THE TWO AGE TESTS. */
+const nowSec = 1_700_000;
+assert(p80CandleLive({ candleT: nowSec - 100, tfSec: 300 }, nowSec) === true,
+       'a candle still open is live');
+assert(p80CandleLive({ candleT: nowSec - 400, tfSec: 300 }, nowSec) === false,
+       'a candle that already closed is dead — its claim is settled');
+assert(p80CandleLive({ candleT: nowSec, tfSec: null }, nowSec) === false,
+       'no timeframe means no claim about liveness');
+
+function p80Win(pub, extra){
+  const w = Object.assign({ sendTelegram: async () => true }, extra || {});
+  if (pub !== undefined) w.__hg80Alerts = pub;
+  const loaded = loadWithWindow(w);
+  loaded.localStorage = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
+  return loaded;
+}
+
+const nowMs = Date.now();
+const freshPub = {
+  t: nowMs,
+  setups: [{ sym: 'XAUUSD', tf: '15m', tfSec: 900, band: 'scalp', variant: 'SPEC', dir: 'long',
+             entry: 3900, stop: 3880, t1: 3904, candleT: Math.floor(nowMs / 1000) - 60,
+             be: { gross: 0.842, net: 0.861, cost: 0.4, risk: 20, target: 3.75 } }],
+  watch: [{ sym: 'XAUUSD', tf: '5m', tfSec: 300, band: 'scalp', variant: 'MID', dir: 'short',
+            entry: 3900, stop: 3920, t1: 3896, candleT: Math.floor(nowMs / 1000) - 60,
+            closesIn: 240, be: { gross: 0.842, net: 0.858 } }]
+};
+const W80 = p80Win(freshPub);
+const p80Collected = W80.hgTabAlertsCollect().filter(x => x.p80);
+assert(p80Collected.length === 2, 'collectP80 emits the takeable setup and the armed row');
+assert(p80Collected.every(x => x.sym === 'XAUUSD'), 'p80 rows carry the ladder symbol');
+assert(p80Collected.some(x => x.watch === true), 'the armed row is marked watch');
+assert(p80Collected.every(x => x.src.indexOf('SCALP') < 0 && x.src.indexOf('SWING') < 0),
+       'no p80 src carries a band name that the crypto source rules would claim');
+assert(p80Collected.every(x => x.clean7 !== true), 'no p80 row is marked 7/7 clean');
+assert(p80Collected.every(x => x.rr === null),
+       'rr is left unset — this desk risks more than it targets and an R multiple would misread');
+assert(p80Collected.every(x => /84\.2|86\.1|85\.8/.test(String(x.note))),
+       'every p80 note states the hit rate the geometry needs');
+
+const p80Run = await W80.hgTabAlertsRun({ force: true, dryRun: true });
+assert(p80Run.pushed === 2, 'both p80 rows survive the default filters end to end');
+assert(p80Run.body.indexOf('80PERCENT 15m') >= 0, 'the message names the rung');
+assert(p80Run.body.indexOf('7/7 CLEAN') < 0, 'and claims no gate count');
+
+/* the source switch */
+const p80Off = await p80Win(freshPub).hgTabAlertsRun({ force: true, dryRun: true, sources: { swing: true } });
+assert(p80Off.pushed === 0, 'p80 rows are withheld when the p80 source is off');
+const p80Only = await p80Win(freshPub).hgTabAlertsRun({ force: true, dryRun: true, sources: { p80: true } });
+assert(p80Only.pushed === 2, 'and sent when it is the only source on');
+
+/* a stale publication is not a state */
+const stalePub = JSON.parse(JSON.stringify(freshPub));
+stalePub.t = nowMs - P80_MAX_AGE_MS - 1000;
+assert(p80Win(stalePub).hgTabAlertsCollect().filter(x => x.p80).length === 0,
+       'a publication older than the age cap contributes nothing');
+
+/* a dead candle inside a fresh publication — the case the age cap misses */
+const deadPub = JSON.parse(JSON.stringify(freshPub));
+deadPub.t = nowMs - 4 * 60 * 1000;
+deadPub.watch[0].candleT = Math.floor(nowMs / 1000) - 3000;
+const deadRows = p80Win(deadPub).hgTabAlertsCollect().filter(x => x.p80);
+assert(deadRows.length === 1 && deadRows[0].watch !== true,
+       'a fresh scan carrying a closed armed candle sends the setup and drops the armed row');
+
+/* nothing published at all */
+assert(p80Win(undefined).hgTabAlertsCollect().filter(x => x.p80).length === 0,
+       'no publication contributes nothing rather than throwing');
+assert(p80Win({ t: nowMs, setups: [], watch: [] }).hgTabAlertsCollect().filter(x => x.p80).length === 0,
+       'an empty publication contributes nothing');
+
+/* A ROW WHOSE CANDLE CANNOT BE NAMED IS NOT SENT. Without this, String(NaN)
+   would give every such row on a rung one key, and the dedup that makes an
+   armed candle one message would silently stop working. */
+const { p80Key } = lib;
+assert(p80Key({ tf: '5m', candleT: 600 }) === '5m:600', 'a nameable candle keys on rung and time');
+assert(p80Key({ tf: '5m', candleT: NaN }) === null, 'an unnameable candle has no key');
+assert(p80Key({ tf: '5m', candleT: null }) === null, 'and null is not coerced to candle zero');
+assert(p80Key({ candleT: 600 }) === null, 'a row with no rung has no key either');
+const namelessPub = { t: nowMs, setups: [{ sym: 'XAUUSD', tf: '5m', tfSec: 300, dir: 'long',
+  entry: 3900, stop: 3880, t1: 3904, candleT: null }], watch: [] };
+assert(p80Win(namelessPub).hgTabAlertsCollect().filter(x => x.p80).length === 0,
+       'and a row without one is dropped rather than sent under a shared key');
+
+/* a row the tab published without usable levels must not become a ticket */
+assert(p80Win({ t: nowMs, setups: [{ sym: 'XAUUSD', tf: '5m', tfSec: 300, dir: 'long',
+  entry: 3900, stop: 3900, t1: 3904, candleT: Math.floor(nowMs / 1000) }], watch: [] })
+  .hgTabAlertsCollect().filter(x => x.p80).length === 0,
+  'a zero-width stop is rejected by pushSetup like any other source');
+
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail) process.exit(1);

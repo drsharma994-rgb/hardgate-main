@@ -4128,6 +4128,99 @@ function hg80TakeableCount(rungs, livePx){
   return n;
 }
 
+/* ---------------------------------------------------------------------
+   THE TAB'S JUDGEMENT, OFF THE TAB
+
+   Everything above only reaches somebody who is LOOKING at this tab. The
+   forward-looking half is the half that cannot wait for that: an armed 5m
+   row is a claim about a candle that closes in minutes, and a reader who
+   opens the page after it closed gets a history lesson instead.
+
+   tabalerts.js already pushes the other desks to Telegram every five
+   minutes. It has never had an 80PERCENT collector, and the reason is
+   worth stating because it shapes this function. Every gate that decides
+   whether a row here is worth acting on lives in THIS file: takeable
+   (hg-v783 for price having run past, hg-v790 for a venue that cannot pay),
+   can-actually-fire (hg-v801), and armed-and-paying (hg-v797). Six tests,
+   none of them one line.
+
+   Re-implementing those in the alert file is how two answers to the same
+   question get shipped. So this publishes the VERDICT rather than the
+   inputs: rows that have already passed the tab's own tests, carrying the
+   levels the tab would print, and nothing that has not. The alert file
+   formats and de-duplicates; it does not judge.
+
+   TWO THINGS DELIBERATELY NOT DONE HERE.
+
+   hg80Shown() is not applied. It is a display setting, and a 5m armed row
+   must not go unsent because somebody left the focus on 1d.
+
+   Nothing is filtered on age. The consumer is told the candle each row is
+   about and the scan's own timestamp; a row about a candle that closed an
+   hour ago is a fact about the feed, not something to hide. */
+function hg80AlertRows(rungs, livePx){
+  var out = { setups: [], watch: [] }, i, j;
+  /* hg80Armed is fed the scan's own rung list everywhere else and reads
+     r.ok off each entry unguarded. This function is called from the scan
+     too, but it is exported, so it validates before passing anything on
+     rather than relying on its caller. */
+  var rs = (rungs || []).filter(function(r){ return !!r; });
+  for (i = 0; i < rs.length; i++){
+    var r = rs[i];
+    if (!r.ok || !r.live || !r.def) continue;
+    for (j = 0; j < r.live.length; j++){
+      var sg = r.live[j];
+      var pl = sg && sg.plan;
+      if (!pl) continue;
+      /* the two tests hg80TakeableCount counts on, in its order */
+      var grade = hg80LiveGrade(sg, livePx);
+      if (!hg80LiveActs(grade)) continue;
+      if (!hg80Quality(sg, r, grade, livePx).pays) continue;
+      out.setups.push({
+        sym: 'XAUUSD', tf: r.def.tf, tfSec: r.def.sec, band: r.def.band,
+        variant: sg.variantLabel || 'SPEC',
+        dir: sg.dir, entry: pl.entry, stop: pl.stop, t1: pl.t1,
+        /* the candle it fired on — the alert file keys on this, so one
+           firing is one message however often the cycle runs */
+        candleT: fin(sg.t),
+        be: hg80CardBe(sg, r)
+      });
+    }
+  }
+  var armed = hg80ArmedRealSplit(hg80Armed(rs)).live;
+  for (i = 0; i < armed.length; i++){
+    var a = armed[i];
+    if (!a || !a.rung || !a.rung.def || !a.variant) continue;
+    if (!hg80ArmedPays(a)) continue;
+    out.watch.push({
+      sym: 'XAUUSD', tf: a.rung.def.tf, tfSec: a.rung.def.sec, band: a.band,
+      variant: a.variant.label || 'SPEC',
+      dir: a.side, entry: a.entryEst, stop: a.stopEst, t1: a.targetEst,
+      /* the candle that would fire, not the one the checks were read off —
+         see the note in hg80Armed. hg80ArmedReal has already refused the
+         rows where those two are not the same candle. */
+      candleT: fin(a.formingT),
+      closesIn: fin(a.closesIn),
+      be: a.rung.be || null
+    });
+  }
+  return out;
+}
+
+/* What the alert file reads. Published on every scan, whether or not
+   anything qualified: an empty publication from a scan two minutes ago and
+   no publication at all are different states, and only the first one means
+   "the tab looked and there was nothing". */
+function hg80PublishAlerts(rungs, livePx){
+  var rows;
+  try { rows = hg80AlertRows(rungs, livePx); }
+  catch (e){ return null; }
+  var pub = { t: Date.now(), setups: rows.setups, watch: rows.watch,
+              venue: (__p.venue && __p.venue.venue) || null };
+  try { W.__hg80Alerts = pub; } catch (e){}
+  return pub;
+}
+
 function whyNothingHtml(rungs, livePx){
   var usable = rungs.filter(function(r){ return r.ok; });
   if (!usable.length) return '';
@@ -5419,6 +5512,9 @@ function run(){
     __p.feedLagBars = hg80FeedLagBars(rungs);
     __p.last = { rungs: rungs, venue: venue };
     __p.venue = venue;
+    /* before render, so a throw in the markup cannot cost the alert —
+       everything the alert needs is already decided by this line */
+    hg80PublishAlerts(rungs, fin(__p.spot));
     render(rungs, venue ? venue.venue : null, recNotes, venue ? venue.basis : null);
 
     var okN = rungs.filter(function(x){ return x.ok; }).length;
@@ -5874,6 +5970,8 @@ W.hg80MissDistance   = hg80MissDistance;
 W.hg80MissWorst      = hg80MissWorst;
 W.hg80MissTxt        = hg80MissTxt;
 W.hg80TakeableCount  = hg80TakeableCount;
+W.hg80AlertRows      = hg80AlertRows;
+W.hg80PublishAlerts  = hg80PublishAlerts;
 W.ladderBoardHtml    = ladderBoardHtml;
 W.latestSetupsHtml   = latestSetupsHtml;
 W.HG_P80_SCORE_TERMS = P80_SCORE_TERMS;

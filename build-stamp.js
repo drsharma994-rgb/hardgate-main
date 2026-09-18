@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v812',
-  pack: 'the 80PERCENT tab stops re-fetching bars that cannot have changed — it ran five fetches a minute through a closed market, and now backs off to one tick in five while the feed is behind, measured from the feed itself rather than from a calendar',
+  version: 'hg-v813',
+  pack: 'the 80PERCENT tab\'s forward-looking half reaches Telegram — a takeable setup and an armed candle now go out on the alert cycle, judged by the tab\'s own six tests rather than re-derived, keyed on the candle so one armed bar is one message instead of one every five minutes',
   built: '2026-09-17T00:00:00Z'
 };
 

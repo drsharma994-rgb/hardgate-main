@@ -116,7 +116,16 @@ function series(n, o){
   o = o || {};
   const tfSec = o.tfSec == null ? 300 : o.tfSec;
   const endHour = o.endHour == null ? 15 : o.endHour;
-  const base = Date.UTC(2026, 8, 16, endHour, 0, 0) / 1000 - (n - 1) * tfSec;
+  /* endUtcSec anchors the LAST bar's open to a caller-chosen instant. The
+     fixed anchor below is a date in the past, which is right for almost
+     everything here and wrong for one thing: hg80ArmedReal refuses a row
+     whose bars are behind the candle now forming, so an armed row built on
+     a 2026-09-16 anchor is refused as stale and the armed path can never
+     be reached at all. */
+  const endT = o.endUtcSec == null
+    ? Date.UTC(2026, 8, 16, endHour, 0, 0) / 1000
+    : o.endUtcSec;
+  const base = endT - (n - 1) * tfSec;
   const rows = [];
   let px = o.start == null ? 4000 : o.start;
   const up = o.down ? -1 : 1;
@@ -4642,6 +4651,119 @@ console.log('\n== and it still refuses to invent a rate from what it resolved ==
      'the resolved list says so in as many words');
   ok(/one fetch is not a sample/.test(SRC), 'and says why');
   ok(/walk-80percent/.test(SRC), 'pointing at the thing that can answer it instead');
+}
+
+
+console.log('\n== the tab publishes its verdict so the alert file never has to re-derive it ==');
+{
+  const def = { tf: '15m', sec: 900, bars: 280, band: 'scalp' };
+  const rows = series(280, { tfSec: 900, endHour: 15 });
+  const freeVenue = { rtFrac: 0, rtCostPct: 0, venue: 'ZERO-COST', basis: 'test' };
+  const cheap = ctx.hg80ScanTf(rows, def, freeVenue);
+  const dear  = ctx.hg80ScanTf(rows, def, ctx.hg80VenueRt());
+  const px = cheap.live[0].plan.entry;
+
+  ok(typeof ctx.hg80AlertRows === 'function', 'hg80AlertRows is exported');
+  ok(typeof ctx.hg80PublishAlerts === 'function', 'and so is the publisher');
+
+  /* IT IS THE SAME JUDGEMENT THE PANEL USES. Not a re-implementation that
+     can drift: the takeable count and the published setups have to agree
+     on the same rungs at the same price, or the tab and Telegram are two
+     desks. */
+  const takeableCheap = ctx.hg80AlertRows([cheap], px).setups;
+  const takeableDear  = ctx.hg80AlertRows([dear], px).setups;
+  ok(takeableCheap.length === ctx.hg80TakeableCount([cheap], px),
+     'published setups match the takeable count at a venue that can pay');
+  ok(takeableDear.length === ctx.hg80TakeableCount([dear], px),
+     'and at one that cannot — which is zero, so nothing is sent');
+  ok(takeableCheap.length > 0 && takeableDear.length === 0,
+     'the two fixtures really do differ, so that pair of assertions can fail');
+
+  const row = takeableCheap[0];
+  ok(row.sym === 'XAUUSD' && row.tf === '15m' && row.tfSec === 900,
+     'a published setup names the instrument and the rung it came from');
+  ok(row.dir === cheap.live[0].dir, 'and the side it fired on');
+  ok(row.entry === cheap.live[0].plan.entry && row.stop === cheap.live[0].plan.stop
+     && row.t1 === cheap.live[0].plan.t1,
+     'carrying the plan the card would print, not a level invented downstream');
+  ok(row.candleT === cheap.live[0].t,
+     'and the candle it fired on, which is what the alert file keys on');
+  ok(row.be && row.be.gross === ctx.hg80CardBe(cheap.live[0], cheap).gross,
+     'with the breakeven priced off the PLAN, as hg-v799 settled — not the rung\'s last bar');
+
+  /* THE VIEW FILTER MUST NOT DECIDE WHAT IS SENT. */
+  ok(!/hg80Shown/.test(String(ctx.hg80AlertRows)),
+     'hg80AlertRows does not consult the focus — a 5m row must not go unsent '
+     + 'because somebody left the view on 1d');
+
+  /* THE PUBLICATION. An empty one is a statement; no publication is not. */
+  const pub = ctx.hg80PublishAlerts([dear], px);
+  ok(pub && ctx.__hg80Alerts === pub, 'the publisher puts the rows on the window');
+  ok(pub.setups.length === 0 && Array.isArray(pub.watch),
+     'and publishes an empty result rather than nothing, so "the tab looked" is distinguishable');
+  ok(Number.isFinite(pub.t), 'stamped, so a reader can refuse a stale one');
+
+  ok(/hg80PublishAlerts\(rungs, fin\(__p\.spot\)\)/.test(CODE),
+     'the scan publishes on every run');
+  ok(CODE.indexOf('hg80PublishAlerts(rungs, fin(__p.spot));')
+     < CODE.indexOf('__p.ranOnce = true;'),
+     'and does it before render, so a throw in the markup cannot cost the alert');
+}
+
+console.log('\n== an armed row is published only if its candle can fire AND the venue can pay ==');
+{
+  /* A 1d RUNG, ANCHORED TO THE BAR THAT JUST CLOSED, and neither choice is
+     cosmetic. hg80ArmedReal refuses a row whose bars lag the forming
+     candle, so the fixture has to end at the last closed bar or nothing is
+     ever real. And it refuses a row whose forming candle falls outside
+     13:00-18:00 UTC, so on a 5m or 15m rung whether this block tests
+     anything would depend on the hour the suite happened to run — the
+     clock-dependence that cost hg-v790, v806 and v811. hg80SessionApplies
+     is false for a 1d bar, so that rung is in session by definition. */
+  const day = 86400;
+  const lastClose = Math.floor(Math.floor(Date.now() / 1000) / day) * day - day;
+  const def = { tf: '1d', sec: day, bars: 280, band: 'swing' };
+  /* armed = everything but the trigger, so the fixture stops one bar short */
+  const rows = series(281, { tfSec: day, endUtcSec: lastClose + day }).slice(0, -1);
+  const freeVenue = { rtFrac: 0, rtCostPct: 0, venue: 'ZERO-COST', basis: 'test' };
+  const cheap = ctx.hg80ScanTf(rows, def, freeVenue);
+  const dear  = ctx.hg80ScanTf(rows, def, ctx.hg80VenueRt());
+  const armed = ctx.hg80Armed([cheap]);
+
+  /* ASSERTED, NOT BRANCHED ON. Guarding the block with `if (armed.length)`
+     would turn a fixture that quietly stopped arming into a silent skip,
+     and every assertion below it would report nothing while passing. */
+  ok(armed.length > 0, 'the fixture arms on the candle now forming');
+  const real = ctx.hg80ArmedRealSplit(armed).live.filter(a => ctx.hg80ArmedPays(a));
+  ok(real.length > 0, 'and that row is real and paid for, so the assertions below can fail');
+  const pubW = ctx.hg80AlertRows([cheap], NaN).watch;
+  ok(pubW.length === real.length,
+     'published watch rows are exactly the armed rows that are real AND paying');
+
+  const w = pubW[0];
+  ok(w.sym === 'XAUUSD' && w.tf === '1d' && w.tfSec === day, 'a watch row names its rung');
+  ok(w.candleT === real[0].formingT,
+     'and is keyed on the candle that WOULD fire, not the one the checks were read off');
+  ok(w.candleT !== rows[rows.length - 1].t,
+     'which is NOT the bar the conditions were read off — the distinction hg-v801 drew');
+  ok(w.entry === real[0].entryEst && w.stop === real[0].stopEst && w.t1 === real[0].targetEst,
+     'carrying the estimates the armed panel shows');
+  ok(typeof w.variant === 'string',
+     'with the mechanic as a label — hg80Armed carries the variant OBJECT, and passing '
+     + 'that to a Telegram formatter would print [object Object]');
+
+  /* the venue half, driven: the same rows at a venue that cannot pay */
+  const armedDear = ctx.hg80Armed([dear]);
+  const realDear = ctx.hg80ArmedRealSplit(armedDear).live;
+  const paysDear = realDear.filter(a => ctx.hg80ArmedPays(a));
+  ok(ctx.hg80AlertRows([dear], NaN).watch.length === paysDear.length,
+     'and the venue test decides it at the real venue too');
+  ok(realDear.length > 0, 'where the rows are still real — so if any were refused it was on cost');
+
+  /* a rung that did not scan contributes nothing rather than throwing */
+  ok(ctx.hg80AlertRows([{ ok: false }, null], 100).setups.length === 0,
+     'an unusable rung is skipped');
+  ok(ctx.hg80AlertRows(null, 100).watch.length === 0, 'and no rungs at all is not an error');
 }
 
 console.log(`\n${passed} passed, 0 failed`);
