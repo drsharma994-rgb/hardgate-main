@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v831',
-  pack: 'the OMNIGOLD drawdown control starts working — the auto-50% sizing reduction on three losses in a row read a counter whose only writer has no call site, so it was zero forever and the control could never fire, while the card sizing pill printed a percentage that ignored it entirely; the streak now comes from the forward ledger that already settles wins and losses, the pill and the panel report the same number, and Week P&L stays honestly unavailable because turning R into percent needs account equity no tab here carries',
+  version: 'hg-v832',
+  pack: 'the OMNIGOLD panels stop being able to print a threshold they do not have — bag or defaults defaults the OBJECT and not its fields, so a partial bag rendered Wilson lower greater-or-equal NaN percent and min undefined settled into the two evidence panels, the held queue could name a row undefined and trail off mid-sentence, and four bar-walkers still threw on the dropped-bar hole this codebase documents from a real incident; a sweep now holds every exported renderer to the tab own rule across 30,154 rendered strings',
   built: '2026-09-18T00:00:00Z'
 };
 

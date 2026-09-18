@@ -552,6 +552,8 @@ function num(v){ return fin(v); }
     if (!rows || rows.length < n + 1) return NaN;
     var sum = 0, cnt = 0, i, h, l, pc, tr;
     for (i = rows.length - n; i < rows.length; i++){
+      /* the same null ENTRY closesOf() below guards against */
+      if (!rows[i] || !rows[i - 1]) continue;
       h = num(rows[i].h); l = num(rows[i].l); pc = num(rows[i - 1].c);
       if (!isFinite(h) || !isFinite(l) || !isFinite(pc)) continue;
       tr = Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc));

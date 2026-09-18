@@ -743,6 +743,10 @@ terse status, and never launches a first-time scan on a global refresh.
     if (!rows || !rows.length || !isFinite(from)) return 0;
     var i = rows.length - 1, t;
     for (; i >= 0; i--){
+      /* a null ENTRY, not just a null field: a feed that drops a bar leaves a
+         hole in the middle of the array, and reaching through it threw. Same
+         hazard closesOf() in hg-mechanics.js documents. */
+      if (!rows[i]) continue;
       t = fin(rows[i].t);
       /* a bar with no usable time cannot end the walk — the caller's own
          filter will skip it, and stopping here could cut the window short */
@@ -3129,6 +3133,10 @@ terse status, and never launches a first-time scan on a global refresh.
     if (!rows || rows.length < n + 1) return NaN;
     var sum = 0, cnt = 0, i, h, l, pc, tr;
     for (i = rows.length - n; i < rows.length; i++){
+      /* a null ENTRY, not just a null field — closesOf() in hg-mechanics.js
+         documents the same hazard: a dropped bar leaves a hole in the array
+         and reaching through it threw from inside whichever gate called first */
+      if (!rows[i] || !rows[i - 1]) continue;
       h = num(rows[i].h); l = num(rows[i].l); pc = num(rows[i - 1].c);
       if (!isFinite(h) || !isFinite(l) || !isFinite(pc)) continue;
       tr = Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc));
@@ -6556,6 +6564,9 @@ terse status, and never launches a first-time scan on a global refresh.
   }
 
   function hgOgMpHorizonHtml(label, pick, tape, watchPick, heldMeta, enginePick){
+    /* the horizon's own name heads this card; a non-string reached the
+       headline as "NaN · STAND ASIDE" */
+    label = (typeof label === 'string' && label.trim()) ? label.trim() : 'HORIZON';
     var h = '<div class="og-mp-hz">';
     var row = (pick && pick.plan) ? pick
       : ((enginePick && enginePick.plan) ? enginePick
@@ -10403,10 +10414,71 @@ terse status, and never launches a first-time scan on a global refresh.
     catch (eR){ host.innerHTML = ''; }
   }
 
+  /* `bag || {defaults}` DEFAULTS THE OBJECT, NOT ITS FIELDS.
+
+     The two evidence panels each opened with that idiom. It reads like a
+     default and is not one: it fires only when the bag is entirely falsy, so
+     a bag that arrives with SOME fields set — a caller that built it from a
+     partial state, an exported entry point, a future refactor of the picker —
+     takes none of the defaults and renders the holes.
+
+     What the holes look like is the problem. These are threshold sentences:
+
+       "Wilson lower >= NaN% - min undefined settled"
+       "none has undefined+ settled TICKETs"
+
+     A NaN threshold does not read as missing. It reads as a number, in the
+     one place on this tab a reader is most likely to trust without checking,
+     and it violates the rule the rest of the file is built on — a figure is
+     quoted from the record or it is not quoted.
+
+     This file already carries the antidote and its post-mortem:
+     hgOgNormalizeDrawdownState, written after a legacy state missing two
+     fields turned both counters into NaN and silently disabled the breaker.
+     Same shape, same fix — coerce every field here so no renderer below has
+     to guard, and so a partial bag degrades to the desk's real thresholds
+     rather than to arithmetic on undefined.
+
+     NOTE ON SCOPE. No call site reaches these panels with a partial bag
+     today: both pickers populate every field on their single return path.
+     This is the exported surface being made to keep the promise the rest of
+     the tab keeps, not a live wrong number being corrected. */
+  function hgOgNum(v, dflt){
+    var n = fin(v);
+    return isFinite(n) ? n : dflt;
+  }
+  function hgOgArr(v){
+    return Array.isArray(v) ? v : [];
+  }
+  function hgOgNormalizeExecBag(bag){
+    var b = (bag && typeof bag === 'object' && !Array.isArray(bag)) ? bag : {};
+    return {
+      execute: hgOgArr(b.execute),
+      proven: hgOgArr(b.proven),
+      best: hgOgArr(b.best),
+      minLo: hgOgNum(b.minLo, OG_EXEC_WILSON_LO),
+      minN: hgOgNum(b.minN, OG_EXEC_MIN_N),
+      edgeMinN: hgOgNum(b.edgeMinN, OG_EDGE_MIN_N),
+      edgeMargin: hgOgNum(b.edgeMargin, OG_EDGE_MARGIN)
+    };
+  }
+  function hgOgNormalizeVerdictBag(bag){
+    var b = (bag && typeof bag === 'object' && !Array.isArray(bag)) ? bag : {};
+    var tabs = [], i;
+    if (Array.isArray(b.tabs)) for (i = 0; i < b.tabs.length; i++) if (b.tabs[i]) tabs.push(String(b.tabs[i]));
+    return {
+      go: (b.go && typeof b.go === 'object') ? b.go : null,
+      alternates: hgOgArr(b.alternates),
+      bestBelow: hgOgArr(b.bestBelow),
+      minLo: hgOgNum(b.minLo, OG_VERDICT_SCALP_LO),
+      minN: hgOgNum(b.minN, OG_VERDICT_MIN_N),
+      tabs: tabs.length ? tabs : OG_SCALP_FWD_TABS.slice()
+    };
+  }
+
   function hgOgSettledExecutePanelHtml(bag){
-    bag = bag || { execute: [], proven: [], best: [], minLo: OG_EXEC_WILSON_LO, minN: OG_EXEC_MIN_N,
-                   edgeMinN: OG_EDGE_MIN_N, edgeMargin: OG_EDGE_MARGIN };
-    var edgeN = bag.edgeMinN != null ? bag.edgeMinN : OG_EDGE_MIN_N;
+    bag = hgOgNormalizeExecBag(bag);
+    var edgeN = bag.edgeMinN;
     var h = '<section class="hg-mp og-settled-exec-panel" data-og-settled="1" aria-label="Settled forward-tested setups">';
     h += '<div class="hg-mp-eye">PROVEN EDGE · FORWARD-TESTED</div>';
     h += '<div class="hg-mp-head">XAUUSD <span>TICKET + settled out-of-sample record · Wilson 95% lower above breakeven · min '
@@ -10659,11 +10731,11 @@ terse status, and never launches a first-time scan on a global refresh.
   }
 
   function hgOgScalpVerdictPanelHtml(bag){
-    bag = bag || { go: null, alternates: [], bestBelow: [], minLo: OG_VERDICT_SCALP_LO, minN: OG_VERDICT_MIN_N };
+    bag = hgOgNormalizeVerdictBag(bag);
     var h = '<section class="hg-mp og-scalp-verdict" data-og-verdict="1" aria-label="Scalp verdict">';
     h += '<div class="hg-mp-eye">SCALP VERDICT · 90% SETTLED</div>';
     h += '<div class="hg-mp-head">XAUUSD <span>pooled TICKET history · '
-      + (bag.tabs ? bag.tabs.join(' + ') : OG_SCALP_FWD_TABS.join(' + '))
+      + bag.tabs.join(' + ')
       + ' + scorecard gold · Wilson lower ≥ ' + (bag.minLo * 100).toFixed(0)
       + '% · min ' + bag.minN + ' settled</span></div>';
     if (bag.go){
@@ -12002,22 +12074,42 @@ terse status, and never launches a first-time scan on a global refresh.
     return h + '</div>';
   }
 
+  /* THIS LIST NAMES SETUPS, SO IT HAS TO NAME THEM. Two reads went straight
+     into the sentence: `tape.toUpperCase()` on an unreadable tape left the
+     line ending "while gold tape reads ." with nothing after it, and
+     `hc.horizon + ' · ' + hc.kind` on a half-built card rendered
+     "undefined · undefined LONG" as the setup's identity. The single live
+     caller guards the tape and builds complete cards, so neither has shipped
+     — but a queue entry that cannot say what it is should be left out of the
+     queue, not printed as a row of undefineds. */
   function hgOgHeldQueueHtml(cards, tape){
     if (!cards || !cards.length) return '';
     tape = String(tape || '').toLowerCase();
+    var known = (tape === 'long' || tape === 'short');
     var side = (tape === 'short') ? 'LONG' : 'SHORT';
-    var h = '<div class="note og-held-queue" style="margin-top:12px"><b>HELD AGAINST TAPE</b> — '
-      + cards.length + ' cleared ' + side + ' ticket' + (cards.length === 1 ? '' : 's')
-      + ' while gold tape reads ' + esc(tape.toUpperCase())
-      + '. Not setups — they stay queued until the tape flips.<ul style="margin:8px 0 0 16px">';
-    var ci;
+    var rows = [], ci, hc, hz, kd, dir, line;
     for (ci = 0; ci < cards.length; ci++){
-      var hc = cards[ci];
+      hc = cards[ci];
       if (!hc) continue;                 /* see hgOgEngineGradeBannerHtml */
-      h += '<li class="dim">' + esc(hc.horizon + ' · ' + hc.kind + ' ' + String(hc.dir || '').toUpperCase());
-      if (hc.plan) h += ' · ENTRY ' + fmtPx(hc.plan.entry) + ' · STOP ' + fmtPx(hc.plan.stop) + ' · T1 ' + fmtPx(hc.plan.t1);
-      h += '</li>';
+      hz = (hc.horizon != null && hc.horizon !== '') ? String(hc.horizon) : '';
+      kd = (hc.kind != null && hc.kind !== '') ? String(hc.kind) : '';
+      /* a row that can name neither its horizon nor its mechanic identifies
+         nothing, and an unnamed row in a queue is worse than a shorter queue */
+      if (!hz && !kd) continue;
+      dir = String(hc.dir || '').toUpperCase();
+      line = [hz, kd].filter(function(x){ return !!x; }).join(' · ') + (dir ? ' ' + dir : '');
+      rows.push('<li class="dim">' + esc(line)
+        + (hc.plan ? (' · ENTRY ' + fmtPx(hc.plan.entry) + ' · STOP ' + fmtPx(hc.plan.stop)
+                      + ' · T1 ' + fmtPx(hc.plan.t1)) : '')
+        + '</li>');
     }
+    if (!rows.length) return '';
+    var h = '<div class="note og-held-queue" style="margin-top:12px"><b>HELD AGAINST TAPE</b> — '
+      + rows.length + ' cleared ' + side + ' ticket' + (rows.length === 1 ? '' : 's')
+      + (known ? (' while gold tape reads ' + esc(tape.toUpperCase()))
+               : ' held against the tape (tape direction unreadable this scan)')
+      + '. Not setups — they stay queued until the tape flips.<ul style="margin:8px 0 0 16px">';
+    h += rows.join('');
     h += '</ul></div>';
     return h;
   }
@@ -12384,7 +12476,11 @@ terse status, and never launches a first-time scan on a global refresh.
   function hgOgBtLastSec(r){
     if (!r || !r.length) return NaN;
     var i = r.length - 1, t;
-    for (; i >= 0; i--){ t = fin(r[i].t); if (isFinite(t)) return t; }
+    for (; i >= 0; i--){
+      if (!r[i]) continue;                      /* a hole in the slice is not a clock */
+      t = fin(r[i].t);
+      if (isFinite(t)) return t;
+    }
     return NaN;
   }
 
