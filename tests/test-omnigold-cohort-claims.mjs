@@ -651,4 +651,77 @@ console.log('\n== scaling a plan to live spot moves every price on it (hg-v823) 
      'a plan with no magnet scales without inventing one');
 }
 
+
+console.log('\n== a missing bar field is not the price zero (hg-v824) ==');
+{
+  /* runScan's sanitiser states the rule for the close — "fin(), NOT num():
+     num(null) is 0 because +null is 0, which would admit a null close as
+     the price zero" — and some fifty other sites read bar fields through
+     num() anyway, atrOf among them:
+
+       h = num(rows[i].h); l = num(rows[i].l); pc = num(rows[i-1].c);
+       if (!isFinite(h) || !isFinite(l) || !isFinite(pc)) continue;
+
+     That guard could not fire. One null high made h = 0, and the true range
+     Math.max(0 - l, |0 - pc|, |l - pc|) became the GOLD PRICE. */
+  const W = boot();
+  ok(typeof W.hgOgAtrOf === 'function', 'the true-range path is reachable from here');
+
+  const bars = n => {
+    const r = []; let px = 4000;
+    for (let i = 0; i < n; i++){
+      const o = px, c = px + Math.sin(i / 5) * 3;
+      r.push({ t: 1700000000 + i * 3600, o, h: Math.max(o, c) + 3, l: Math.min(o, c) - 3, c, v: 1 });
+      px = c;
+    }
+    return r;
+  };
+  const clean = W.hgOgAtrOf(bars(40), 14);
+  ok(clean > 5 && clean < 12, `a clean 4000-gold fixture reads ATR ${clean.toFixed(2)}`);
+
+  /* EVERY SHAPE THAT COERCES TO ZERO, on every field the true range reads */
+  const EMPTY = [null, undefined, ''];
+  const FIELDS = ['h', 'l', 'c'];
+  const seen = [];
+  for (const f of FIELDS){
+    for (const e of EMPTY){
+      const r = bars(40);
+      r[36][f] = e;
+      const got = W.hgOgAtrOf(r, 14);
+      seen.push(f + '=' + String(e) + ' -> ' + got.toFixed(2));
+      ok(isFinite(got) && Math.abs(got - clean) < clean,
+         `a ${String(e)} ${f} does not move ATR by more than its own width (${got.toFixed(2)} vs ${clean.toFixed(2)})`);
+      ok(got < clean * 3,
+         `and nowhere near the 38x it used to (${(got / clean).toFixed(2)}x)`);
+    }
+  }
+
+  /* the bar is SKIPPED, not zeroed — the remaining thirteen still average */
+  const one = bars(40); one[36].h = null;
+  ok(Math.abs(W.hgOgAtrOf(one, 14) - clean) < 1,
+     'the malformed bar drops out and the rest of the window still answers');
+
+  /* a window with nothing usable says so rather than inventing a number */
+  const allBad = bars(40);
+  for (let i = 26; i < 40; i++) allBad[i].h = null;
+  ok(!isFinite(W.hgOgAtrOf(allBad, 14)),
+     'and a window with no usable bar returns NaN, not zero');
+
+  /* THE ORIGINAL ARITHMETIC, so this cannot pass by accident */
+  const loose = (rows, n) => {
+    let sum = 0, cnt = 0;
+    for (let i = rows.length - n; i < rows.length; i++){
+      const h = +rows[i].h, l = +rows[i].l, pc = +rows[i - 1].c;
+      if (!isFinite(h) || !isFinite(l) || !isFinite(pc)) continue;
+      sum += Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc)); cnt++;
+    }
+    return cnt ? sum / cnt : NaN;
+  };
+  const wasBad = loose(one, 14);
+  ok(wasBad > clean * 20,
+     `the +v reading really did blow up (${wasBad.toFixed(0)} against ${clean.toFixed(2)}) — `
+     + 'so the assertions above are not vacuous');
+  ok(W.hgOgAtrOf(one, 14) < wasBad / 20, 'and the shipped reading is nothing like it');
+}
+
 console.log(`\n${passed} passed, 0 failed`);

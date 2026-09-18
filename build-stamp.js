@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v823',
-  pack: 'OMNIGOLD scales every price on a card when it aligns to live spot — the T1 magnet was left at the proxy feed\'s price while entry, stop and both targets moved, so a card printed a target and a magnet quoted on two different instruments, forty points adrift and landing BELOW T1 on a long when the field exists to name liquidity beyond it',
+  version: 'hg-v824',
+  pack: 'OMNIGOLD stops reading a missing bar field as the price zero — num() was +v, so a single null high in the 14-bar window made the true range the gold price and took ATR from 7.79 to 293, a 38x inflation that widened a 1.5xATR stop from 11.68 points to 440; ATR sets stop width, and stop width sets size and the cost gate',
   built: '2026-09-17T00:00:00Z'
 };
 

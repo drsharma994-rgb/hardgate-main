@@ -506,13 +506,37 @@ terse status, and never launches a first-time scan on a global refresh.
     var w = W();
     return (w && typeof w[name] === 'function') ? w[name] : null;
   }
-  function num(v){ var n = +v; return isFinite(n) ? n : NaN; }
   /* null/undefined/'' -> NaN. isFinite(null) is TRUE in JS; see omniroute. */
   function fin(v){
     if (v === null || v === undefined || v === '') return NaN;
     var n = +v;
     return isFinite(n) ? n : NaN;
   }
+
+  /* num() WAS `+v`, WHICH MAKES A MISSING PRICE THE PRICE ZERO.
+
+     The sanitiser in runScan already states this rule for the close —
+     "fin(), NOT num(): num(null) is 0 because +null is 0, which would admit
+     a null close as the price zero" — and then some fifty other sites read
+     bar fields through num() anyway, including atrOf:
+
+       h = num(rows[i].h); l = num(rows[i].l); pc = num(rows[i - 1].c);
+       if (!isFinite(h) || !isFinite(l) || !isFinite(pc)) continue;
+
+     The guard cannot fire, because num(null) is 0 and isFinite(0) is true.
+     So a single null high in the 14-bar window makes h = 0 and the true
+     range Math.max(0 - l, |0 - pc|, |l - pc|) becomes the GOLD PRICE. On a
+     4000 fixture that takes ATR from 7.79 to 293.39 — 38x — and a 1.5xATR
+     stop from 11.68 points to 440. ATR sets stop width, stop width sets
+     position size and the cost gate, so one absent field in one bar
+     rewrites every number on the card.
+
+     Every caller wants the strict reading. The three that do not read a bar
+     want it too: a null spreadZ is not a z of zero, and num(bar && bar.t)
+     on a missing bar was returning a 1970 timestamp. So num is fin now,
+     kept as a name because ~58 call sites use it and a rename would bury a
+     one-line behaviour fix in a mechanical diff. */
+  function num(v){ return fin(v); }
 
   /* Directional yield read. The scan used to freeze validateYieldCorrelation
      against 'long' and reuse that verdict on every setup — so a short into
@@ -14592,6 +14616,9 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgEvidenceHealthHtml = hgOgEvidenceHealthHtml;
     window.hgOgGroupSettled = hgOgGroupSettled;
     window.hgOgVenueNet = hgOgVenueNet;
+    /* exported so a test can drive the true-range path that a missing
+       bar field used to turn into the gold price — see num() */
+    window.hgOgAtrOf = atrOf;
     window.hgOgReplayZ = hgOgReplayZ;
     /* the family every significance bar on this tab corrects for */
     window.HG_OG_MECHANIC_COUNT = OG_MECHANICS.length;
