@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v817',
-  pack: 'OMNIGOLD prices a venue with the fee it actually measured — the re-pricing subtracted a MEDIAN cost from a MEAN gross, so it failed to reproduce its own record on 53 of 54 kinds and was generous by up to 2.77R per trade; at XM that had been calling 18 mechanics net-positive where the record supports 12, and letting UTAD escape demotion on a measured -1.04R net',
+  version: 'hg-v818',
+  pack: 'OMNIGOLD measures its replay on the sample it has, not the rows it counted — the panel reporting how far the best mechanic sits from the significance bar computed every sigma on the raw row count, while the verdict beside it had deflated for overlap since it was measured; the replay held 55 gold positions at once, so the best reads +1.09 sigma rather than +1.71 and one mechanic fails outright rather than eight',
   built: '2026-09-17T00:00:00Z'
 };
 

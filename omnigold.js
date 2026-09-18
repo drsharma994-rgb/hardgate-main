@@ -6625,6 +6625,40 @@ terse status, and never launches a first-time scan on a global refresh.
     return Math.max(1, n * OG_EFF_N_RATIO);
   }
 
+  /* THE SAME DEFLATION, FOR A Z INSTEAD OF A WILSON BOUND.
+
+     hgOgReplayEdgeVerdict has applied the effective sample since the round
+     that measured it — "the replay population overlaps, so its row count is
+     not its sample" — because that verdict promotes a mechanic to PROVEN
+     EDGE. hgOgEdgeProofPanelHtml computes a z against breakeven on THE SAME
+     baked rows and was using the raw count, so the panel that exists to
+     report how far the best mechanic sits from the bar was overstating
+     every distance by 1/sqrt(0.406) = 1.57x.
+
+     It cut both ways, which is the honest description of a sample that is
+     smaller than it looks: the best kind read +1.71σ where the effective
+     sample supports +1.09σ, and EIGHT kinds read as proven losers past -2σ
+     where only ONE is. Fewer clear AND fewer fail, because 55 simultaneous
+     gold positions carry less information about anything.
+
+     The verdict does not move: nothing cleared the family bar before and
+     nothing does now. What moves is the distance the panel reports, which
+     is the only number in it a reader can act on.
+
+     The live measured-edge gate is deliberately NOT changed. It reads
+     x.stats.samples from the FORWARD log, which publishes aggregates with
+     no timing to measure its own overlap with; borrowing this ratio there
+     would be importing a constant from a different population, which is
+     the error being fixed here, pointed the other way. */
+  function hgOgReplayZ(row, be){
+    var n = fin(row && row[0]), hit = fin(row && row[1]), b = fin(be);
+    if (!isFinite(n) || !isFinite(hit) || !(n > 0)) return NaN;
+    if (!(b > 0 && b < 1)) return NaN;
+    var eff = hgOgEffN(n, true);
+    if (!(eff > 0)) return NaN;
+    return (hit - b) / Math.sqrt(b * (1 - b) / eff);
+  }
+
   /* wins scale with the sample, or the deflation would move the observed
      rate as well as the width, which is not what overlap does */
   function hgOgWilsonHit(wins, n, z, opts){
@@ -9139,11 +9173,13 @@ terse status, and never launches a first-time scan on a global refresh.
         var row = kinds[keys[i]];
         var n = fin(row && row[0]), hit = fin(row && row[1]);
         if (!isFinite(n) || !isFinite(hit) || !(n > 0)) continue;
-        var z = (hit - be) / Math.sqrt(be * (1 - be) / n);
+        /* on the EFFECTIVE sample, not the row count — see hgOgReplayZ */
+        var z = hgOgReplayZ(row, be);
         if (!isFinite(z)) continue;
         if (z >= famZ) clears++;
         else if (z <= EDGE_VETO_Z) fails++;
-        if (!best || z > best.z) best = { kind: keys[i], z: z, n: n, hit: hit };
+        if (!best || z > best.z) best = { kind: keys[i], z: z, n: n, hit: hit,
+                                          effN: hgOgEffN(n, true) };
       }
       /* the moment something clears, this panel has nothing to say */
       if (clears > 0) return '';
@@ -9160,12 +9196,22 @@ terse status, and never launches a first-time scan on a global refresh.
         + 'Of ' + OG_MECHANICS.length + ' mechanics scanned, ' + keys.length
         + ' carry a replay record and <b>none</b> of those clears the '
         + OG_MECHANICS.length + '-comparison significance bar (+' + famZ.toFixed(2) + 'σ), '
-        + fails + ' fail it outright'
+        + fails + (fails === 1 ? ' fails' : ' fail') + ' it outright'
+        /* THE EFFECTIVE COUNT IS PRINTED, not just used. Quoting 197 trades
+           beside a z computed on 80 leaves a reader unable to reproduce the
+           number, which is how the rest of this tab's stale arithmetic
+           survived. */
         + (best ? ', and the best — ' + esc(best.kind) + ', ' + hgOgFmtCount(best.n)
-                  + ' trades at ' + (best.hit * 100).toFixed(1) + '% — reaches only +'
+                  + ' trades at ' + (best.hit * 100).toFixed(1) + '%, '
+                  + hgOgFmtCount(Math.round(best.effN))
+                  + ' after the overlap deflation — reaches only +'
                   + best.z.toFixed(2) + 'σ' : '')
         + '. Searching ' + OG_MECHANICS.length + ' ways and taking the best one is not evidence, '
         + 'which is what that bar exists to say.<br>'
+        + 'Every σ here is on the EFFECTIVE sample: the replay held a mean of 55 gold '
+        + 'positions at once, so its rows are one bet repeated rather than independent '
+        + 'draws, and ' + (OG_EFF_N_RATIO * 100).toFixed(1) + '% of them survive the '
+        + 'week-clustering. That cuts both ways — fewer clear, and fewer fail.<br>'
         + 'Every setup below still shows its levels, its gates and its reasoning as a '
         + '<b>WATCH</b>. What would refill this column is ' + FWD_MIN_JUDGE + ' settled setups '
         + 'that passed every other gate, beating breakeven — recorded whether or not they '
@@ -14442,6 +14488,8 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgEvidenceHealthHtml = hgOgEvidenceHealthHtml;
     window.hgOgGroupSettled = hgOgGroupSettled;
     window.hgOgVenueNet = hgOgVenueNet;
+    window.hgOgReplayZ = hgOgReplayZ;
+    window.HG_OG_EFF_N_RATIO = OG_EFF_N_RATIO;
     window.HG_OG_EVIDENCE_GROUPS = OG_EVIDENCE_GROUPS;
     window.hgOgSpectrumLegendCellsHtml = hgOgSpectrumLegendCellsHtml;
     window.HG_OG_MIN_SAMPLES = MIN_SAMPLES;

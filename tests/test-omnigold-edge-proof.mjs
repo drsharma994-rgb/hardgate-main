@@ -4,8 +4,11 @@
    stand a setup aside when the answer is UNKNOWN: a soft gate lets a null
    verdict through, so the ticket issued and the card read UNCHECKED. That
    is how every OMNIGOLD ticket has ever been issued, because nothing in the
-   ledger clears its bar — 54 mechanics, 0 clearing the 54-comparison
-   significance bar, the best at +1.71 sigma against a bar near +2.9.
+   ledger clears its bar. The counts and sigmas are read from the code
+   rather than restated here: hg-v815 moved the family to all 77 scanned
+   mechanics and hg-v818 put every sigma on the effective sample, and a
+   header that had pinned "+1.71 sigma against a bar near +2.9" would have
+   been wrong twice over while the assertions below stayed green.
 
    OG_EDGE_PROOF_REQUIRED makes the gate hard, so unknown stands the setup
    aside like any other missing evidence. THE TICKET COLUMN EMPTIES. That is
@@ -90,17 +93,40 @@ console.log('\n== the ledger, measured rather than asserted ==');
   ok(keys.length > 40, 'the ledger holds ' + keys.length + ' mechanics');
   ok(famZ > 2.5, 'searching ' + keys.length + ' ways sets the bar at +' + famZ.toFixed(2) + 'σ');
 
+  /* THIS LOOP USED TO RE-IMPLEMENT THE Z ITSELF, on the RAW row count, and
+     never checked the panel agreed with it. So when the panel deflated to
+     the effective sample in hg-v818 and this did not, nothing failed: both
+     reported 0 clearing, from different numbers. It reads the code's own
+     function now, and the panel is checked against it below. */
   const be = 1 / 3;
   let clears = 0, best = null;
   for (const k of keys){
-    const [n, hit] = kinds[k];
-    const z = (hit - be) / Math.sqrt(be * (1 - be) / n);
+    const z = ctx.hgOgReplayZ(kinds[k], be);
     if (z >= famZ) clears++;
-    if (!best || z > best.z) best = { k, z, n, hit };
+    if (!best || z > best.z) best = { k, z, n: kinds[k][0], hit: kinds[k][1] };
   }
   ok(clears === 0, 'and NOT ONE of them clears it');
   ok(best.z < famZ, 'the best is ' + best.k + ' at +' + best.z.toFixed(2)
      + 'σ — short of the bar, so the ticket column empties');
+
+  /* THE REPLAY POPULATION OVERLAPS. hgOgReplayEdgeVerdict has deflated for
+     that since it was measured; this panel read the raw count. */
+  const raw = (kinds[best.k][1] - be) / Math.sqrt(be * (1 - be) / kinds[best.k][0]);
+  ok(raw > best.z,
+     'the raw-count z (' + raw.toFixed(2) + 'σ) overstates the effective one ('
+     + best.z.toFixed(2) + 'σ) — 55 positions at once is not 197 draws');
+  ok(Math.abs(raw / best.z - 1 / Math.sqrt(ctx.HG_OG_EFF_N_RATIO)) < 1e-9,
+     'by exactly 1/sqrt(the measured week-clustered ratio)');
+
+  /* AND THE PANEL MUST QUOTE THE SAME NUMBER. */
+  const txt = String(ctx.hgOgEdgeProofPanelHtml()).replace(/<[^>]+>/g, ' ');
+  ok(txt.indexOf('+' + best.z.toFixed(2) + 'σ') >= 0,
+     'the panel reports the effective-sample σ it just computed');
+  ok(txt.indexOf('+' + raw.toFixed(2) + 'σ') < 0, 'and not the raw-count one');
+  ok(/after the overlap deflation/.test(txt),
+     'printing the deflated count too, so the σ can be reproduced from the page');
+  ok(new RegExp(String(Math.round(ctx.hgOgEffN(kinds[best.k][0], true)))).test(txt),
+     'and that count is the effective sample, not a rounded guess');
 }
 
 console.log('\n== the empty column explains itself ==');
