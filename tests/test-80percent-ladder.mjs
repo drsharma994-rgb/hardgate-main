@@ -2811,6 +2811,83 @@ console.log('\n== the panel cannot describe a different sort from the one it ran
      'a lead worth under a point is not what put it anywhere, and is not claimed to be');
 }
 
+console.log('\n== age in bars is a fact about the array, not about time ==');
+{
+  /* latest.ageBars is (n-1) - i: how far the firing sits from the END OF
+     THE FETCHED SERIES. When the feed is current that is also how long ago
+     it happened. When the feed stops, the end of the array stops with it
+     and the age freezes at zero.
+
+     So on a Monday morning, reading Friday's last candle, the age column —
+     the one number whose entire job is to say how old this is — printed
+     "now" for a firing whose candle had closed fifty-nine hours earlier. */
+  const L = ctx.hg80FeedLag;
+  const now = Math.floor(Date.now() / 1000);
+  const tf = 900;
+
+  /* the candle that closed immediately before the one now forming */
+  const cur = Math.floor(now / tf) * tf - tf;
+  ok(L(cur, tf, now).bars === 0, 'a current feed is zero candles behind');
+  ok(L(cur, tf, now).wallSec < tf, 'and its last close is within one candle of now');
+
+  ok(L(cur - tf, tf, now).bars === 1, 'one missed candle reads as one');
+  ok(L(cur - 10 * tf, tf, now).bars === 10, 'ten as ten');
+  const weekend = L(cur - 240 * tf, tf, now);
+  ok(weekend.bars === 240 && near(weekend.wallSec / 3600, 60, 0.5),
+     `a weekend gap reads as ${weekend.bars} candles and ${(weekend.wallSec / 3600).toFixed(1)}h`);
+
+  /* NEVER NEGATIVE. A bar timestamped in the future — a clock skew, a feed
+     quirk — is not "minus three candles behind". */
+  ok(L(cur + 5 * tf, tf, now).bars === 0 && L(cur + 5 * tf, tf, now).wallSec === 0,
+     'a bar from the future reads as current rather than as a negative age');
+  ok(!isFinite(L(NaN, tf, now).bars) && !isFinite(L(cur, 0, now).bars),
+     'and no bar or no timeframe gives no answer');
+  ok(L(cur * 1000, tf, now).bars === 0, 'milliseconds are recognised, as everywhere else here');
+
+  /* ---- what the table says ---- */
+  const mk = backSec => {
+    const rows = series(320, { tfSec: tf, endHour: 15, tail: 0 });
+    const shift = (now - backSec) - rows[rows.length - 1].t;
+    for (const r of rows) r.t += shift;
+    return ctx.hg80ScanTf(rows, { tf: '15m', sec: tf, bars: 320, band: 'scalp' },
+                          ctx.hg80VenueRt());
+  };
+  const stale = mk(60 * 3600);
+  ok(stale.latest.ageBars === 0,
+     'the firing is still the last bar in the array, so ageBars is 0 — that part was never wrong');
+  ok(stale.latest.lagBars > 200 && stale.latest.wallSec > 59 * 3600,
+     `but it closed ${(stale.latest.wallSec / 3600).toFixed(1)}h ago, with `
+     + `${stale.latest.lagBars} candles missed`);
+
+  const t = h => String(h).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  const cell = t(ctx.ageCellTxt(stale.latest));
+  ok(!/^\s*now\s*$/.test(cell), 'the age column no longer says "now"');
+  ok(/ago/.test(cell) && /candles behind/.test(cell),
+     `it says how long ago, and how far behind the feed is (${cell})`);
+
+  /* A CURRENT FEED IS UNCHANGED — this must not make every tab read stale.
+     Asserted on the cell directly: shifting a fixture's bars to "one candle
+     ago" moves every bar to a different hour, and the session gate then
+     decides whether anything fires at all. That is the wall clock leaking
+     into a test about formatting. */
+  ok(t(ctx.ageCellTxt({ ageBars: 0, ageSec: 0, lagBars: 0, wallSec: 60 })) === 'now',
+     'a current feed still reports "now", which is a claim the clock supports');
+  ok(t(ctx.ageCellTxt({ ageBars: 3, ageSec: 3 * tf, lagBars: 0, wallSec: 60 }))
+       .indexOf('3 bars') === 0,
+     'and an older firing on a current feed still counts bars, as it always did');
+  ok(ctx.feedLagChipHtml({ t: cur }, { cfg: { tfSec: tf } }) === '',
+     'with no staleness note on a card that is not stale');
+
+  /* the card carries it too, because the SIMPLE stamp reads as "just now" */
+  const chip = t(ctx.feedLagChipHtml(stale.latest, stale));
+  ok(/THAT CANDLE CLOSED/.test(chip), 'the card says when that candle actually closed');
+  ok(/candles have begun since/.test(chip), 'and how many have gone by');
+  ok(/over a weekend or through an outage is the normal state/.test(chip),
+     'naming the ordinary causes rather than implying something is broken');
+  ok(/worked from that candle, not from now/.test(chip),
+     'and what that means for every number on the card');
+}
+
 console.log('\n== the market is shut at the weekend and the countdown knows ==');
 {
   /* hg80SecsToSession was clock-of-day arithmetic with no notion of the

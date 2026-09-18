@@ -2411,6 +2411,41 @@ function hg80MarkBook(signals){
    — it is the one a desk can act on — and calling it expired would retire a
    live setup on the page.
    --------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------
+   AGE IN BARS IS A FACT ABOUT THE ARRAY, NOT ABOUT TIME
+
+   latest.ageBars is (n - 1) - i: how far the firing sits from the END OF
+   THE FETCHED SERIES. When the feed is current that is also how long ago
+   it happened. When the feed stops, the end of the array stops with it and
+   the age freezes at zero.
+
+   So on a Monday morning, reading Friday's last candle, the SETUPS table
+   printed "now" in the age column — the one number whose entire job is to
+   say how old this is — for a firing whose candle had closed fifty-nine
+   hours earlier. Measured, not inferred: a 320-bar 15m series ending 60h
+   back reports ageBars 0, ageSec 0, age "now".
+
+   The same blind spot hg-v783 closed for the price and hg-v801 for the
+   armed rows: the tab trusting the end of its own array as the present.
+
+   hg80FeedLag measures the gap in candles between a bar's CLOSE and the
+   candle now forming. Zero means current. Anything else is the feed behind
+   — over a weekend, through an outage, or with the page left open — and
+   the age is then reported in wall time, because bars nobody printed are
+   not a duration.
+   --------------------------------------------------------------------- */
+function hg80FeedLag(barT, tfSec, nowSec){
+  var t = fin(barT), tf = fin(tfSec);
+  if (!isFinite(t) || !(tf > 0)) return { bars: NaN, wallSec: NaN };
+  if (t > 1e12) t = Math.floor(t / 1000);
+  var now = fin(nowSec);
+  if (!isFinite(now)) now = Math.floor(Date.now() / 1000);
+  var closedAt = t + tf;
+  var formingOpen = Math.floor(now / tf) * tf;
+  return { bars: Math.max(0, Math.round((formingOpen - closedAt) / tf)),
+           wallSec: Math.max(0, now - closedAt) };
+}
+
 function hg80ScanTf(rows, def, venue){
   var cfg = hg80Cfg(def);
   var res = hg80Scan(rows, { cfg: cfg, variants: P80_VARIANTS });
@@ -2460,6 +2495,10 @@ function hg80ScanTf(rows, def, venue){
   if (latest){
     latest.ageBars = (n - 1) - latest.i;
     latest.ageSec = latest.ageBars * cfg.tfSec;
+    /* and how old it actually is — see hg80FeedLag */
+    var lag = hg80FeedLag(latest.t, cfg.tfSec, Math.floor(Date.now() / 1000));
+    latest.lagBars = lag.bars;
+    latest.wallSec = lag.wallSec;
   }
 
   /* near misses: three of the four (or two of three where the session rule
@@ -3872,6 +3911,21 @@ function payingRungsHtml(rungs){
     + 'to take a trade there; it is the rung where this one would have been priceable.</span>';
 }
 
+/* The same fact on the SIMPLE card. "FIRED ON THE LAST CLOSED CANDLE" is
+   true over a weekend and reads as "just now"; what a reader needs is how
+   long ago that candle closed. */
+function feedLagChipHtml(sig, rung){
+  var tf = rung && rung.cfg ? rung.cfg.tfSec : NaN;
+  var lag = hg80FeedLag(sig && sig.t, tf, Math.floor(Date.now() / 1000));
+  if (!isFinite(lag.bars) || lag.bars <= 0) return '';
+  return '<div class="note" style="margin-top:4px;padding:3px 6px;border-left:3px solid '
+    + 'var(--veto)"><b>THAT CANDLE CLOSED ' + esc(hg80DurTxt(lag.wallSec).toUpperCase())
+    + ' AGO.</b> It is still the last one this rung returned, but <b>' + lag.bars + '</b> candle'
+    + (lag.bars === 1 ? ' has' : 's have') + ' begun since — the feed is behind, which over a '
+    + 'weekend or through an outage is the normal state. Everything on this card is worked from '
+    + 'that candle, not from now.</div>';
+}
+
 function simpleSetupsHtml(rungs, livePx){
   var usable = rungs.filter(function(r){ return r.ok; });
   var live = [], open = [], recent = [], i, j;
@@ -3947,6 +4001,7 @@ function simpleSetupsHtml(rungs, livePx){
         (ca.fresh ? '<span class="stamp pass">FIRED ON THE LAST CLOSED CANDLE</span>'
                   : '<span class="stamp pass">STILL OPEN</span> <span class="note">neither '
                     + 'the stop nor the target was touched in the bars fetched</span>')
+        + feedLagChipHtml(ca.s, ca.r)
         + liveChipHtml(ca.grade, spot) + reprintHtml(ca.q, vn)
         + sizeHtml(ca.s, ca.q, slip) + bookChipHtml(ca.s)
         + sortWhyHtml(ca.q, ca.rank, actable.length));
@@ -3966,6 +4021,7 @@ function simpleSetupsHtml(rungs, livePx){
         var cn = noPay[k];
         h += simpleCardHtml(cn.s, cn.r,
           '<span class="stamp veto">CANNOT PAY AT THIS VENUE</span>'
+          + feedLagChipHtml(cn.s, cn.r)
           + liveChipHtml(cn.grade, spot) + reprintHtml(cn.q, vn)
           + sizeHtml(cn.s, cn.q, slip) + bookChipHtml(cn.s));
       }
@@ -3978,6 +4034,7 @@ function simpleSetupsHtml(rungs, livePx){
         var cd = dead[k];
         h += simpleCardHtml(cd.s, cd.r,
           '<span class="stamp veto">NO LONGER TAKEABLE</span>'
+          + feedLagChipHtml(cd.s, cd.r)
           + liveChipHtml(cd.grade, spot) + reprintHtml(cd.q, vn) + bookChipHtml(cd.s));
       }
     }
@@ -4401,6 +4458,21 @@ function focusedFiringsHtml(list){
   return h + '</div>';
 }
 
+/* "now" is a claim about the clock, and only the clock can support it. */
+function ageCellTxt(s){
+  var lag = fin(s && s.lagBars);
+  var wall = fin(s && s.wallSec);
+  if (isFinite(lag) && lag > 0){
+    /* the feed is behind: bars nobody printed are not a duration, so this
+       is said in wall time with the gap named */
+    return '<span style="color:var(--veto)">' + esc(ageTxt(wall)) + ' ago</span>'
+      + '<br><span class="note">feed is ' + lag + ' candle' + (lag === 1 ? '' : 's')
+      + ' behind</span>';
+  }
+  if (fin(s && s.ageBars) === 0) return 'now';
+  return fin(s.ageBars) + ' bars · ' + esc(ageTxt(s.ageSec));
+}
+
 function latestSetupsHtml(rungs, livePx){
   var have = [], i;
   for (i = 0; i < rungs.length; i++){
@@ -4443,7 +4515,7 @@ function latestSetupsHtml(rungs, livePx){
     h += '<tr><td><b>' + esc(r.def.tf) + '</b></td>'
       + '<td>' + variantChipHtml(s) + '</td>'
       + '<td>' + esc(isFinite(s.t) ? new Date(s.t * 1000).toISOString().replace('T', ' ').slice(5, 16) : '—') + '</td>'
-      + '<td class="hg-num">' + (s.ageBars === 0 ? 'now' : s.ageBars + ' bars · ' + ageTxt(s.ageSec)) + '</td>'
+      + '<td class="hg-num">' + ageCellTxt(s) + '</td>'
       + '<td>' + esc(s.dir) + '</td>'
       + '<td class="hg-num">' + num(p.entry) + '</td>'
       + '<td class="hg-num">' + num(p.stop) + '</td>'
@@ -5740,6 +5812,9 @@ W.hg80SortWhyTxt     = hg80SortWhyTxt;
 W.hg80SortLead       = hg80SortLead;
 W.hg80IsTradingDay   = hg80IsTradingDay;
 W.hg80SessionDayTxt  = hg80SessionDayTxt;
+W.hg80FeedLag        = hg80FeedLag;
+W.ageCellTxt         = ageCellTxt;
+W.feedLagChipHtml    = feedLagChipHtml;
 W.sortWhyHtml        = sortWhyHtml;
 W.whyNothingHtml     = whyNothingHtml;
 W.coincideHtml       = coincideHtml;

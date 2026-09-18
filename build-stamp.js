@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v810',
-  pack: 'the 80PERCENT session countdown knows the market is shut at the weekend — on a Saturday morning it said the window opens in 3 hours, pointing at a Saturday session that does not exist, and it was wrong for about 48 hours in every 168',
+  version: 'hg-v811',
+  pack: 'the 80PERCENT tab stops calling a sixty-hour-old firing \u201cnow\u201d — age was counted in bars from the end of the fetched array, so when the feed stopped the age froze at zero and Friday\u2019s candle read as the present all weekend',
   built: '2026-09-17T00:00:00Z'
 };
 
