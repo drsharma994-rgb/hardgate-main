@@ -434,8 +434,10 @@ console.log('\n== the setups are at the TOP, and are the most recent firing, not
      'and in wall time at THIS rung\'s seconds — three bars is 45m here and 3 days on 1d');
   ok(!!out.latest.plan && out.latest.plan.entry > 0, 'carrying its levels, so it can be acted on');
 
-  const iSetups = SRC.indexOf('latestSetupsHtml(shown)');
-  const iBoard = SRC.indexOf('ladderBoardHtml(shown)', SRC.indexOf('function render('));
+  /* matched on the CALL, not on its argument list — the rule is the
+     ordering, and the board has since had to take the live price */
+  const iSetups = SRC.indexOf('latestSetupsHtml(shown');
+  const iBoard = SRC.indexOf('ladderBoardHtml(shown', SRC.indexOf('function render('));
   ok(iSetups > 0 && iBoard > 0 && iSetups < iBoard,
      'and the SETUPS panel is rendered ABOVE the ladder board, not buried under it');
 }
@@ -2627,6 +2629,56 @@ console.log('\n== the ledger is read at the bar for the number of things being t
        && vm.runInContext('typeof hgOmniFamilyZ', ctx) === 'function',
        'and it is restored, so nothing after this block runs against a stub');
   }
+}
+
+console.log('\n== the board\'s FIRED chip follows takeability ==');
+{
+  /* A GREEN CHIP IS THE STRONGEST POSITIVE SIGNAL ON THE BOARD, and it was
+     printed for every firing — including ones hg-v790's arithmetic refuses
+     at the reader's venue and ones hg-v783 grades as already run past. On
+     the ladder fixture that is five rows of green FIRED sitting above a
+     SETUPS panel reading "Nothing here is takeable". The board is five
+     rows at a glance; it was contradicting the page. */
+  const def = { tf: '15m', sec: 900, bars: 320, band: 'scalp' };
+  const rows = series(320, { tfSec: 900, endHour: 15, tail: 0 });
+  const t = h => String(h).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+
+  const paid = ctx.hg80ScanTf(rows, def, ctx.hg80VenueRt());
+  ok(paid.live.length > 0, 'the fixture fires on its last closed candle');
+  const E = paid.live[0].plan.entry;
+
+  const refused = String(ctx.ladderBoardHtml([paid], E));
+  ok(/FIRED/.test(t(refused)), 'a refused firing still says FIRED — it is never hidden');
+  ok(/statuschip veto">[^<]*FIRED/.test(refused),
+     'but in the colour of a refusal, not the colour of a pass');
+  ok(/cannot pay here/.test(t(refused)), 'with the reason attached');
+  ok(!/statuschip ok">[^<]*FIRED/.test(refused),
+     'and no green chip anywhere for a setup the page refuses');
+
+  /* at a venue that takes nothing the same firing IS takeable */
+  const free = ctx.hg80ScanTf(rows, def, { rtFrac: 0, rtCostPct: 0, venue: 'ZERO-COST',
+                                           basis: 'test' });
+  const green = String(ctx.ladderBoardHtml([free], free.live[0].plan.entry));
+  ok(/statuschip ok">[^<]*FIRED/.test(green), 'a takeable one gets the green chip');
+  ok(!/cannot pay here/.test(t(green)), 'with nothing to explain away');
+
+  /* PRICE HAVING RUN PAST is the other refusal, and reads differently */
+  const past = String(ctx.ladderBoardHtml([free], free.live[0].plan.stop - 5));
+  ok(/price gone/.test(t(past)),
+     'a firing price has already run past says so, rather than showing green');
+  ok(/statuschip veto">[^<]*FIRED/.test(past), 'and is coloured as a refusal too');
+
+  /* NO LIVE PRICE MAKES NO CLAIM about the price half — the cost half still
+     binds, because it needs no price to be true */
+  const blind = t(ctx.ladderBoardHtml([free], NaN));
+  ok(/FIRED/.test(blind) && !/price gone/.test(blind),
+     'with no live price nothing is graded, so nothing is called gone');
+
+  /* a rung that did not fire is unchanged */
+  const quiet = ctx.hg80ScanTf(series(320, { tfSec: 900, endHour: 15, tail: 1 }), def,
+                               ctx.hg80VenueRt());
+  ok(quiet.live.length === 0 && /no fire/.test(t(ctx.ladderBoardHtml([quiet], E))),
+     'and a rung that did not fire still reads "no fire"');
 }
 
 console.log('\n== how far short, not just which condition ==');

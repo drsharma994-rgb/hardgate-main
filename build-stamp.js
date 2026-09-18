@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v806',
-  pack: 'the 80PERCENT tab explains the silence it reports — the panel that says why nothing is takeable went quiet the moment anything FIRED, so a page reading \u201cnothing here is takeable, 5 fired, 5 refused\u201d carried no explanation and withheld the session clock with it',
+  version: 'hg-v807',
+  pack: 'the 80PERCENT ladder board stops printing a green FIRED chip for setups the page refuses — five rows of pass-coloured chips sat above a panel reading \u201cnothing here is takeable\u201d, and the chip now carries the refusal and its reason',
   built: '2026-09-17T00:00:00Z'
 };
 

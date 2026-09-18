@@ -2760,7 +2760,7 @@ function mathPanelHtml(rungs, venue, basis){
    from firing. This is the part of the tab that is populated on every scan
    whether or not anything fired, because "how close is it" is a real
    answer and silence is not. */
-function ladderBoardHtml(rungs){
+function ladderBoardHtml(rungs, livePx){
   var h = '<div class="panel" style="margin-top:10px"><h3>THE LADDER RIGHT NOW '
     + '<span>identical rules, five timeframes</span></h3>'
     + '<table class="tbl"><tr><th>rung</th><th>band</th><th>last bar (UTC)</th><th>close</th>'
@@ -2777,10 +2777,27 @@ function ladderBoardHtml(rungs){
     var s = r.lastSig;
     var when = (s && isFinite(s.t)) ? new Date(s.t * 1000).toISOString().replace('T', ' ').slice(5, 16) : '—';
     var stopPct = (r.lastAtr > 0 && r.lastPx > 0) ? (P80_SL_ATR * r.lastAtr / r.lastPx) * 100 : NaN;
-    var state = r.live.length
-      ? variantChipHtml(r.live[0]) + ' <span class="statuschip ok">'
-        + esc(r.live[0].dir.toUpperCase()) + ' FIRED</span>'
-      : '<span class="statuschip na">no fire</span>';
+    /* A GREEN CHIP IS THE STRONGEST POSITIVE SIGNAL ON THIS BOARD, and it
+       was printed for every firing — including ones hg-v790's arithmetic
+       refuses at the reader's venue and ones hg-v783 grades as already
+       run past. Five rows showing green FIRED above a SETUPS panel saying
+       nothing is takeable is the board contradicting the page.
+
+       The chip follows takeability now. The firing is never hidden: a
+       refused one still says FIRED, in the colour of a refusal, with the
+       reason attached. */
+    var state;
+    if (!r.live.length){
+      state = '<span class="statuschip na">no fire</span>';
+    } else {
+      var lv = r.live[0];
+      var lgrade = hg80LiveGrade(lv, livePx);
+      var lq = hg80Quality(lv, r, lgrade, livePx);
+      var acts = hg80LiveActs(lgrade);
+      var why = !acts ? 'price gone' : (!lq.pays ? 'cannot pay here' : null);
+      state = variantChipHtml(lv) + ' <span class="statuschip ' + (why ? 'veto' : 'ok') + '">'
+        + esc(lv.dir.toUpperCase()) + ' FIRED' + (why ? ' · ' + esc(why) : '') + '</span>';
+    }
     h += '<tr><td><b>' + esc(r.def.tf) + '</b></td><td>' + esc(r.def.band) + '</td>'
       + '<td>' + esc(when) + '</td>'
       + '<td class="hg-num">' + num(r.lastPx) + '</td>'
@@ -4880,7 +4897,7 @@ function render(rungs, venue, recNotes, basis){
   }
 
   h += hg80FocusList().length ? focusedFiringsHtml(shown) : latestSetupsHtml(shown);
-  h += ladderBoardHtml(shown);
+  h += ladderBoardHtml(shown, gradePx);
 
   /* the SETUPS panel above already carries every card worth carrying, so
      this adds only what it cannot: what the log did with a fresh firing,
@@ -5550,6 +5567,7 @@ W.hg80MissDistance   = hg80MissDistance;
 W.hg80MissWorst      = hg80MissWorst;
 W.hg80MissTxt        = hg80MissTxt;
 W.hg80TakeableCount  = hg80TakeableCount;
+W.ladderBoardHtml    = ladderBoardHtml;
 W.whyNothingHtml     = whyNothingHtml;
 W.coincideHtml       = coincideHtml;
 W.HG_P80_CSS         = P80_CSS;
