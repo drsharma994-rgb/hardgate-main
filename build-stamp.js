@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v830',
-  pack: 'the OMNIGOLD replay stops judging history against the wall clock — the backtest detector map called hgOgVpPlaybook with no options, so the gold VP playbook read Date.now() and scored its session gate against the moment the bake ran; the same 400 bars read 3 of 12 with sessionOk false at 03:00 UTC and 4 of 12 with sessionOk true at 15:00, making VP-PLAYBOOK measured record a property of the clock rather than the strategy, and the map is now hoisted and held to the invariant it already claimed for itself',
+  version: 'hg-v831',
+  pack: 'the OMNIGOLD drawdown control starts working — the auto-50% sizing reduction on three losses in a row read a counter whose only writer has no call site, so it was zero forever and the control could never fire, while the card sizing pill printed a percentage that ignored it entirely; the streak now comes from the forward ledger that already settles wins and losses, the pill and the panel report the same number, and Week P&L stays honestly unavailable because turning R into percent needs account equity no tab here carries',
   built: '2026-09-18T00:00:00Z'
 };
 

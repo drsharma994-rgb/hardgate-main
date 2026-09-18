@@ -641,6 +641,75 @@ localStorage. Never throws.
     return changed;
   }
 
+  /* THE CONSECUTIVE-LOSS STREAK, READ OFF THE LEDGER.
+
+     OMNIGOLD carries a drawdown circuit breaker and an auto-50% sizing
+     reduction on three losses in a row. Both read a counter that nothing
+     ever wrote: hgOgUpdateDrawdownOnSettle had no call site, so the streak
+     was zero forever and the safety control could not fire. The panel was
+     honest about it — "Streak: unavailable" — but honest about a control
+     that simply did not work.
+
+     This ledger already settles wins and losses. It is the right source,
+     and it is the ONLY one available: weekPnl needs account equity and
+     risk-per-trade to turn R into %, which no tab in this app has, so that
+     half stays unavailable rather than being invented.
+
+     THE RULE, stated because it is a judgement and not an obvious one:
+
+       'stop'     extends the streak. It is a loss.
+       't1'       ends it. A winner intervened.
+       'expired'  is SKIPPED, neither extending nor ending it. A trade that
+                  ran out of horizon is a scratch, not an outcome, and
+                  counting it either way would make the control depend on
+                  how long a horizon happens to be.
+
+     Ordering is by settledT — when the outcome landed — not barT, which is
+     when the setup fired. Two setups written on the same bar can settle days
+     apart, and it is the order of OUTCOMES that a streak is about.
+
+     Returns { streak, settled, wins, losses, expired, lastT }. `settled` is
+     what separates "measured zero" from "never fed", which is the house rule
+     for every number on that tab. */
+  function hgFwdLossStreak(list, tab){
+    var out = { streak: 0, settled: 0, wins: 0, losses: 0, expired: 0, lastT: NaN };
+    var recs = Array.isArray(list) ? list : [];
+    var tabList = null, tabName = tab;
+    if (Array.isArray(tab)){
+      tabName = null;
+      if (tab.length){
+        tabList = {};
+        for (var ti = 0; ti < tab.length; ti++) if (tab[ti]) tabList[String(tab[ti])] = 1;
+      }
+    }
+    var settledRecs = [], i, r;
+    for (i = 0; i < recs.length; i++){
+      r = recs[i];
+      if (!r) continue;
+      if (r.state !== 'stop' && r.state !== 't1' && r.state !== 'expired') continue;
+      if (tabList && !tabList[String(r.tab)]) continue;
+      if (tabName && String(r.tab) !== String(tabName)) continue;
+      /* a settled record with no settle time cannot be ordered, and a streak
+         is an ordering — it is counted in the totals and left out of the run */
+      settledRecs.push({ state: r.state, t: fin(r.settledT), i: i });
+      out.settled++;
+      if (r.state === 'stop') out.losses++;
+      else if (r.state === 't1') out.wins++;
+      else out.expired++;
+    }
+    var ordered = [];
+    for (i = 0; i < settledRecs.length; i++) if (isFinite(settledRecs[i].t)) ordered.push(settledRecs[i]);
+    if (!ordered.length) return out;
+    ordered.sort(function(a, b){ return (a.t - b.t) || (a.i - b.i); });
+    out.lastT = ordered[ordered.length - 1].t;
+    for (i = ordered.length - 1; i >= 0; i--){
+      if (ordered[i].state === 'expired') continue;   /* a scratch decides nothing */
+      if (ordered[i].state !== 'stop') break;         /* a winner ends the run */
+      out.streak++;
+    }
+    return out;
+  }
+
   function hgFwdStats(list, tab, mechanic, ticketOnly, agg, nowSec){
     var recs = Array.isArray(list) ? list : [];
     /* `tab` accepts a LIST as well as a name.
@@ -1085,6 +1154,7 @@ localStorage. Never throws.
     W.hgFwdIsStale = hgFwdIsStale;
     W.hgFwdSettle = hgFwdSettle;
     W.hgFwdStatsOf = hgFwdStats;
+    W.hgFwdLossStreakOf = hgFwdLossStreak;
     W.hgFwdOverlapOf = hgFwdOverlap;
     W.hgFwdMarkShownOf = hgFwdMarkShown;
     W.hgFwdFold = hgFwdFold;
@@ -1136,6 +1206,13 @@ localStorage. Never throws.
     };
     /* Out-of-sample stats, same shape the in-sample pool uses, so
        hgOmniPoolRead() reads either without translation. */
+    /* the live streak for a tab or a pooled list of tabs */
+    W.hgFwdLossStreak = function(tab){
+      try { return hgFwdLossStreak(load(), tab); }
+      catch (e) { hgFwdWarn('lossStreak', e);
+                  return { streak: 0, settled: 0, wins: 0, losses: 0, expired: 0, lastT: NaN }; }
+    };
+
     W.hgFwdStats = function(tab, mechanic, ticketOnly){
       try { return hgFwdStats(load(), tab, mechanic, ticketOnly, loadAgg()); }
       catch (e) { hgFwdWarn('stats', e); return { samples:0, wins:0, losses:0, open:0, expired:0, hit:NaN, avgRr:NaN, expR:NaN }; }

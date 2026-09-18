@@ -14384,6 +14384,35 @@ terse status, and never launches a first-time scan on a global refresh.
     return state;
   }
 
+  /* THE DESK'S CONSECUTIVE-LOSS STREAK, FROM THE LEDGER THAT SETTLES TRADES.
+
+     hgOgUpdateDrawdownOnSettle is the only writer of state.losStreak and it
+     has no call site, so the counter was zero forever: the auto-50% sizing
+     reduction and the -2% breaker were advertised on the tab and could never
+     fire. The panel already said "unavailable" rather than printing a
+     fabricated zero, which was right — but it was honest about a control
+     that did not work, and that is not the same as the control working.
+
+     The forward ledger settles every recorded setup as a win, a loss or an
+     expiry, with the time the outcome landed. A consecutive-loss streak is
+     exactly what that record can answer, and it needs no account equity to
+     do it. weekPnl still does — R to % requires equity and risk-per-trade
+     that this app has no concept of — so that half stays unavailable rather
+     than being invented from a constant.
+
+     Both horizons pool: the drawdown control is a property of the DESK, and
+     three losses are three losses whether they came from SCALP or SWING. */
+  var OG_FWD_TABS = ['OMNIGOLD:SCALP', 'OMNIGOLD:SWING'];
+
+  function hgOgFwdLossStreak(){
+    var f = gfn('hgFwdLossStreak');
+    if (!f) return null;
+    try {
+      var r = f(OG_FWD_TABS);
+      return (r && isFinite(fin(r.streak)) && isFinite(fin(r.settled))) ? r : null;
+    } catch (e) { return null; }
+  }
+
   function hgOgCalculateRiskScale(stack3, heldCount){
     if (!isFinite(stack3)) stack3 = 3;
     if (!isFinite(heldCount)) heldCount = 0;
@@ -14430,11 +14459,24 @@ terse status, and never launches a first-time scan on a global refresh.
     };
   }
 
+  /* TWO NUMBERS ON ONE TAB HAVE TO BE THE SAME NUMBER. This pill showed a
+     sizing percentage computed from confluence and queue depth alone, while
+     the drawdown panel a few inches away announced "Sizing: auto-50%" off
+     the loss streak. hgOgApplyDrawdownSizing existed to reconcile them and
+     was called by nobody. The streak reduction now lands here too, so the
+     card cannot advertise 100% while the desk is halved. */
   function hgOgRiskBadgeHtml(stack3, heldCount){
     if (stack3 === 0) return '';
     var sizing = hgOgCalculateRiskScale(stack3, heldCount);
     var scale = sizing.scale;
     var reason = sizing.reason;
+
+    var ls = hgOgFwdLossStreak();
+    var streak = (ls && fin(ls.settled) > 0) ? fin(ls.streak) : 0;
+    if (hgOgGetConsecutiveLossReduction(streak) < 1){
+      scale = scale * hgOgGetConsecutiveLossReduction(streak);
+      reason = (reason ? reason + ' · ' : '') + 'halved on ' + streak + ' losses in a row';
+    }
 
     var cls = scale >= 1.0 ? 'ok' : (scale >= 0.5 ? 'warn' : 'bad');
     var txt = (scale * 100).toFixed(0) + '% sizing';
@@ -14452,18 +14494,35 @@ terse status, and never launches a first-time scan on a global refresh.
        (The R-denominated forward ledger cannot feed weekPnl: this file has no
        account-equity or risk-per-trade concept, so R -> % would be an invented
        constant. See the report note.) */
-    if (!(state.settles > 0)){
-      return '<span class="dim">Week P&amp;L: unavailable · Streak: unavailable '
-           + '(no settled outcome recorded — breaker and auto-sizing unread)</span>';
+    /* THE STREAK IS NOW READ, NOT WAITED FOR. The stored counter still has no
+       writer; the forward ledger does, and a consecutive-loss streak is
+       exactly what a settled record can answer. Week P&L still cannot be
+       answered — turning R into % needs account equity and risk-per-trade
+       that no tab here carries — so the two halves are reported separately
+       instead of one unavailable swallowing the other. */
+    var ls = hgOgFwdLossStreak();
+    var lsN = (ls && fin(ls.settled) > 0) ? fin(ls.settled) : 0;
+    var streak = lsN > 0 ? fin(ls.streak) : 0;
+
+    var html = '<span class="dim">Week P&amp;L: ';
+    if (state.settles > 0 && isFinite(state.weekPnl) && state.weekPnl !== 0){
+      html += (state.weekPnl >= 0 ? '+' : '') + state.weekPnl.toFixed(1) + '%';
+    } else {
+      /* not a measured zero — nothing has ever been settled in percent here */
+      html += 'unavailable (no equity basis — the ledger measures in R)';
     }
-    var html = '<span class="dim">Week P&L: ';
-    html += (isFinite(state.weekPnl) && state.weekPnl !== 0)
-      ? ((state.weekPnl >= 0 ? '+' : '') + state.weekPnl.toFixed(1) + '%')
-      : '0%';
-    html += ' | Streak: ' + state.losStreak + 'L';
-    if (state.losStreak >= 3){
-      html += ' | Sizing: auto-50%';
+
+    html += ' &middot; Streak: ';
+    if (lsN > 0){
+      html += streak + 'L';
+      html += ' (from ' + hgOgFmtCount(lsN) + ' settled ' + (lsN === 1 ? 'trade' : 'trades')
+            + ', ' + hgOgFmtCount(fin(ls.wins)) + 'W/' + hgOgFmtCount(fin(ls.losses)) + 'L'
+            + (fin(ls.expired) > 0 ? '/' + hgOgFmtCount(fin(ls.expired)) + ' expired' : '') + ')';
+      if (hgOgGetConsecutiveLossReduction(streak) < 1) html += ' | Sizing: auto-50%';
+    } else {
+      html += 'unavailable (nothing settled in the forward ledger yet)';
     }
+
     if (state.isCircuitBreakerActive){
       html += ' | <b style="color:red">CIRCUIT BREAKER ACTIVE</b>';
     }
@@ -14518,11 +14577,21 @@ terse status, and never launches a first-time scan on a global refresh.
     return (losStreak >= 3) ? 0.5 : 1.0;
   }
 
+  /* Apply the consecutive-loss auto-reduction on top of other sizing.
+
+     `state` is honoured when a caller passes one — that is the stored path,
+     and it is what a test drives. With no state, the streak comes from the
+     forward ledger rather than from the stored counter nothing writes, so
+     the default argument is the live reading and not a permanent 1.0. */
   function hgOgApplyDrawdownSizing(riskScale, state){
-    /* Apply consecutive loss auto-reduction (50%) on top of other sizing */
-    state = hgOgNormalizeDrawdownState(state || hgOgResetWeeklyDrawdown());
-    var lossReduction = hgOgGetConsecutiveLossReduction(state.losStreak);
-    return riskScale * lossReduction;
+    var streak;
+    if (state){
+      streak = hgOgNormalizeDrawdownState(state).losStreak;
+    } else {
+      var ls = hgOgFwdLossStreak();
+      streak = (ls && fin(ls.settled) > 0) ? fin(ls.streak) : 0;
+    }
+    return riskScale * hgOgGetConsecutiveLossReduction(streak);
   }
 
   window.hgOgLoadDrawdownState = hgOgLoadDrawdownState;
@@ -14536,6 +14605,8 @@ terse status, and never launches a first-time scan on a global refresh.
   window.hgOgUpdateDrawdownOnSettle = hgOgUpdateDrawdownOnSettle;
   window.hgOgGetConsecutiveLossReduction = hgOgGetConsecutiveLossReduction;
   window.hgOgApplyDrawdownSizing = hgOgApplyDrawdownSizing;
+  window.hgOgFwdLossStreak = hgOgFwdLossStreak;
+  window.HG_OG_FWD_TABS = OG_FWD_TABS;
 
     /* Exported so the ticket count can be tested apart from a live scan —
        the header and the rendered cards disagreed for want of exactly this. */
