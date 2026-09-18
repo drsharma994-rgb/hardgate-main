@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v841',
-  pack: 'the four IIFE-scoped gold tabs are reached at last — pack 840 could only sweep module exports and had to report GOLD SCALP, GOLD SWING, GOLD PRO and TAURIC as nothing reachable rather than nothing wrong, so every gold tab is now mounted through the real HG_tabs entry the app uses and driven with its engines loaded, absent and throwing; the first harness selected HG_tabs[0] and mounted OmniRoute six times, which is recorded and guarded',
+  version: 'hg-v842',
+  pack: 'the gold tabs are now driven through a real scan, not only mounted cold — every bar fetcher the family reaches for is fed synthetic candles and four tabs price setups from them, GOLD SWING grading a card at R:R 1 to 2.1 off an ATR14 it computed, with zero NaN or undefined across the rendered output; GOLD PRO and OMNIGOLD scan on a closure-scoped button this harness cannot press and are listed as unscanned rather than quietly dropped',
   built: '2026-09-18T00:00:00Z'
 };
 
