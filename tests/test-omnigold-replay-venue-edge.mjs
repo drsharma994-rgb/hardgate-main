@@ -112,12 +112,37 @@ console.log('\n== the two halves of one detector are judged separately ==');
      `and they are 19 points apart (${(100 * spring.winRate).toFixed(1)}% vs ${(100 * utad.winRate).toFixed(1)}%)`);
   ok(spring.n !== spring.n + utad.n, 'so neither reads the pooled 195-trade record');
 
-  /* the in-sample gate verdict each one now gets, which differs by side */
-  const BE = 1 / 3, z = ev => (ev.winRate - BE) / Math.sqrt(BE * (1 - BE) / ev.n);
-  ok(z(spring) <= -2, `the long half is condemned on its own record (z ${z(spring).toFixed(2)})`);
-  ok(z(utad) > -2, `and the short half is not (z ${z(utad).toFixed(2)})`);
-  ok(z(utad) < XM.hgOgFamilyZ(XM.hgOgReplayFamilySize()),
-     'while still coming nowhere near the bar to be a ticket — this buys nothing');
+  /* THE Z THE TAB ACTUALLY COMPUTES, not one this file re-derives. The
+     earlier version built its own on the RAW row count and asserted the
+     long half was "condemned" at -3.05σ — a verdict hg-v818 stopped
+     reaching, because the replay overlaps and -3.05 raw is -1.94 effective.
+     It went on passing because it never asked the code. */
+  const BE = 1 / 3;
+  const z = k => XM.hgOgReplayZ(XM.HG_OG_REPLAY_EVIDENCE.kinds[k], BE);
+  ok(z('SPRING') < z('UTAD'),
+     `the long half still measures worse than the short (${z('SPRING').toFixed(2)} vs ${z('UTAD').toFixed(2)})`);
+  ok(z('SPRING') > -2,
+     'but on the effective sample it is NOT condemned outright — 104 overlapping rows do not carry that');
+  ok(XM.hgOgKindDemotion('SPRING', XM.hgOgVenuePresetCost('PAXG')),
+     'it is stood aside anyway, on its measured gross rather than on a sigma');
+  ok(z('UTAD') < XM.hgOgFamilyZ(XM.HG_OG_MECHANIC_COUNT),
+     'and neither half comes near the bar to be a ticket — this buys nothing');
+
+  /* THE BAR THE PANEL SHOWS IS THE BAR PROMOTION APPLIES. Until hg-v819
+     hgOgReplayEdgeVerdict rolled its own — Bonferroni, two-sided, over the
+     54 kinds with a record (+3.31σ) — while every display quoted Sidak,
+     one-sided, over the 77 scanned (+3.21σ). Nothing pinned it, so the
+     two could disagree indefinitely. */
+  const verdict = XM.hgOgReplayEdgeVerdict(XM.hgOgReplayEvidence('P6-FAIL'));
+  ok(verdict, 'the promotion verdict computes');
+  ok(verdict.family === XM.HG_OG_MECHANIC_COUNT,
+     'it corrects for every mechanic SCANNED (' + verdict.family + '), like the panel');
+  ok(Math.abs(verdict.zFw - XM.hgOgFamilyZ(verdict.family)) < 1e-12,
+     'using hgOgFamilyZ, not a second correction of its own');
+  const displayed = Number((/\+(\d\.\d\d)&sigma;|\+(\d\.\d\d)σ/
+    .exec(String(XM.hgOgEdgeProofPanelHtml())) || []).slice(1).filter(Boolean)[0]);
+  ok(Math.abs(displayed - verdict.zFw) < 0.005,
+     'and it is the same bar the empty-ticket panel prints (' + displayed + 'σ)');
 
   /* and the card shows the other half rather than leaving a reader with
      one side of a two-sided measurement */

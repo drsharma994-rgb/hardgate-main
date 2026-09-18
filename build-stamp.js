@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v818',
-  pack: 'OMNIGOLD measures its replay on the sample it has, not the rows it counted — the panel reporting how far the best mechanic sits from the significance bar computed every sigma on the raw row count, while the verdict beside it had deflated for overlap since it was measured; the replay held 55 gold positions at once, so the best reads +1.09 sigma rather than +1.71 and one mechanic fails outright rather than eight',
+  version: 'hg-v819',
+  pack: 'OMNIGOLD applies the significance bar it displays — the promotion verdict rolled its own family correction, Bonferroni two-sided over the 54 mechanics with a record, while every panel quoted Sidak one-sided over the 77 scanned, so the bar on screen was not the bar promotion used; one correction now, and three tests that re-derived their own arithmetic instead of asking the code are tied to it',
   built: '2026-09-17T00:00:00Z'
 };
 

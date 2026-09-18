@@ -131,18 +131,28 @@ console.log('\n== un-pooling RAISES the bar — it does not let anything through
   /* the verdict each half now gets, which is the point and which cuts both
      ways: the long half is condemned on its own record rather than rescued
      by the short half's */
-  const BE = 1 / 3, z = ev => (ev.winRate - BE) / Math.sqrt(BE * (1 - BE) / ev.n);
+  /* READ FROM THE CODE, on the effective sample, because the replay
+     overlaps — see hgOgReplayZ. Re-deriving a raw-count z here let this
+     file go on asserting SPRING was "vetoed" for a whole version after
+     hg-v818 stopped condemning it: -3.05 raw is -1.94 effective. */
+  const BE = 1 / 3;
+  const K = ctx.HG_OG_REPLAY_EVIDENCE.kinds;
+  const z = k => ctx.hgOgReplayZ(K[k], BE);
   const spring = ctx.hgOgReplayEvidence('SPRING'), utad = ctx.hgOgReplayEvidence('UTAD');
-  ok(z(spring) <= -2, `SPRING is vetoed on its own 104 trades (z ${z(spring).toFixed(2)})`);
-  ok(z(utad) > -2, `UTAD is not (z ${z(utad).toFixed(2)})`);
-  ok(z(utad) < ctx.hgOgFamilyZ(54),
+  ok(z('SPRING') < z('UTAD'),
+     `SPRING measures worse than UTAD on its own 104 trades (${z('SPRING').toFixed(2)} vs ${z('UTAD').toFixed(2)})`);
+  ok(spring.winRate < utad.winRate - 0.15,
+     'the halves really are far apart on win rate, which is why the fold was withdrawn');
+  ok(z('UTAD') < ctx.hgOgFamilyZ(ctx.HG_OG_MECHANIC_COUNT),
      'and UTAD comes nowhere near the bar to be a ticket — this change buys the desk nothing');
 
-  /* pooled, BOTH read the midpoint and BOTH came back unchecked — which is
-     how the fold silently lifted a veto the long half had earned */
+  /* pooled, BOTH read the midpoint — which is how the fold silently lifted
+     a veto the long half had earned. Still true of the rates; the sigma it
+     used to be argued with was a raw-count one. */
   const pooledHit = (spring.winRate * spring.n + utad.winRate * utad.n) / (spring.n + utad.n);
-  const pooledZ = (pooledHit - BE) / Math.sqrt(BE * (1 - BE) / (spring.n + utad.n));
-  ok(pooledZ > -2, `the pooled record would not have vetoed either (z ${pooledZ.toFixed(2)})`);
+  const pooledZ = ctx.hgOgReplayZ([spring.n + utad.n, pooledHit], BE);
+  ok(pooledZ > z('SPRING'),
+     `pooling flatters the long half (pooled ${pooledZ.toFixed(2)} vs SPRING ${z('SPRING').toFixed(2)})`);
   ok(pooledHit > spring.winRate && pooledHit < utad.winRate,
      'because it sits between the two and describes neither');
 

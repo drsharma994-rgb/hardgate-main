@@ -8350,8 +8350,29 @@ terse status, and never launches a first-time scan on a global refresh.
     if (!(R > 0)) return null;
     var be = 1 / (1 + R);
     var wins = Math.round(wr * n);
-    var m = hgOgReplayFamilySize();
-    var zFw = hgOgInvNorm(1 - 0.05 / (2 * m));
+    /* ONE FAMILY CORRECTION, NOT A THIRD ONE. Every other site asking
+       "did this beat breakeven, allowing for how many were tried" calls
+       hgOgFamilyZ(OG_MECHANICS.length) — Sidak, one-sided, over the 77
+       mechanics the desk scans. This alone rolled its own: Bonferroni,
+       TWO-sided, over the 54 that carry a replay row. Two axes of
+       disagreement about one question, so the bar the panel displays
+       (+3.21σ) was not the bar promotion applied (+3.31σ) — the same shape
+       as hg-v815, one function further in.
+
+       ONE-SIDED IS THE CORRECT HALF: this compares a Wilson LOWER bound
+       against breakeven, which is a directional claim, and a two-sided
+       bar spends half its alpha on a tail nothing here acts on.
+       SEVENTY-SEVEN IS THE CONSERVATIVE FAMILY: the 23 mechanics without a
+       replay row were scanned, not skipped, and a larger family is the
+       stricter choice on the axis that is genuinely arguable.
+
+       Net the bar moves 3.312 -> 3.209, and being explicit about that
+       matters more than the size of it: nothing reaches either, the tier
+       assignments are unchanged, and hgOgReplayFamilySize stays as what it
+       honestly is — how many mechanics carry a record — rather than
+       doubling as a promotion family. */
+    var m = OG_MECHANICS.length;
+    var zFw = hgOgFamilyZ(m);
     /* THE REPLAY POPULATION OVERLAPS, so its row count is not its sample.
        This verdict is what promotes a mechanic to PROVEN EDGE, and it was
        reading n rows as n independent trades while the walk that produced
@@ -14489,6 +14510,8 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgGroupSettled = hgOgGroupSettled;
     window.hgOgVenueNet = hgOgVenueNet;
     window.hgOgReplayZ = hgOgReplayZ;
+    /* the family every significance bar on this tab corrects for */
+    window.HG_OG_MECHANIC_COUNT = OG_MECHANICS.length;
     window.HG_OG_EFF_N_RATIO = OG_EFF_N_RATIO;
     window.HG_OG_EVIDENCE_GROUPS = OG_EVIDENCE_GROUPS;
     window.hgOgSpectrumLegendCellsHtml = hgOgSpectrumLegendCellsHtml;
