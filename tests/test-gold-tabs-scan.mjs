@@ -17,11 +17,13 @@
      80PERCENT    the ladder view
 
    WHAT THIS DOES NOT COVER, so the green is not read as more than it is:
-   GOLD PRO and OMNIGOLD scan on an explicit user action — a button whose
-   handler is closure-scoped — and repaint rather than rescan on refresh, so
-   they produce no new output here. Their coverage stays where pack 841 left
-   it, at the mount level. They are listed below as unscanned rather than
-   quietly dropped from the table.
+   GOLD PRO and OMNIGOLD scan on an explicit user action rather than on
+   refresh, so they produce no new output HERE and are listed below as
+   unscanned rather than quietly dropped from the table. Their scans are
+   covered by test-gold-tabs-press, which gives the stub element a working
+   addEventListener and click() and presses their buttons. The assertions
+   below still hold as written: what they pin is that refresh does not rescan
+   these two, which is why that file exists.
 
    Run: node tests/test-gold-tabs-scan.mjs */
 import fs from 'node:fs';
@@ -203,10 +205,10 @@ console.log('\n== and nothing any of them printed is a number it does not have =
 console.log('\n== the two this cannot reach are named, not dropped ==');
 {
   /* A table that silently omits its failures is the vacuous-sweep problem in
-     another shape. GOLD PRO and OMNIGOLD scan on an explicit user action
-     whose handler is closure-scoped, so refresh repaints and does not
-     rescan. Asserted, so the day one of them becomes refresh-driven this
-     stops being true and someone looks. */
+     another shape. GOLD PRO and OMNIGOLD scan on an explicit user action, so
+     refresh repaints and does not rescan. Asserted, so the day one of them
+     becomes refresh-driven this stops being true and someone looks — and
+     test-gold-tabs-press covers what happens when the button IS pressed. */
   for (const [name, file] of Object.entries(UNSCANNED)){
     const r = await drive(name, file);
     ok(!!r.tab, `${name} is registered and mounts`);

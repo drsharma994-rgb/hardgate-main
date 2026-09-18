@@ -1935,8 +1935,35 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
        After a signal resolves, scanning resumes AFTER its resolution bar, so
        every counted sample is a trade that could actually have been taken
        sequentially by one account. */
+    /* ONE growing view instead of a fresh prefix per bar.
+
+       This loop used to hand each detector rows.slice(0, i + 1) — a fresh
+       copy of every bar from the start of the tape, rebuilt on every bar of
+       every detector's walk. An OMNIGOLD scan runs 77 detectors through here
+       twice (SCALP 1h, SWING 4h) at 1500 bars each, so the copying alone was
+       ~77 x n^2/2 element writes per horizon, and every downstream sanitiser
+       and full-array indicator then re-read the whole copy from bar 0. The
+       scan measured quadratic in bar count end to end: 1.4s at 150 bars, 5.6s
+       at 300, 24.1s at 600 for one horizon.
+
+       The view holds exactly rows[0 .. i], same as the slice did, and is
+       appended to rather than rebuilt. Detectors read it and do not keep it —
+       no detector in this file or in omnigold.js stores the array it was
+       handed past its own return, which is what makes reuse safe.
+
+       The values every detector sees are unchanged, and that was established
+       rather than assumed. test-goldind-rows-sanitiser watches what this loop
+       hands the detector — same array object, growing one bar at a time,
+       never rewritten — and test-gold-tabs-press presses OMNIGOLD's own scan
+       button and reads the numbers back out. Before shipping, a full scan was
+       rendered against a worktree of the previous commit on the same
+       synthetic feed and diffed: identical bytes at 300 and at 600 bars,
+       across the pooled expectancy tables, both verdict panels and the
+       coverage map. */
+    var view = rows.slice(0, warm), fed = warm;
     for (i = warm; i < rows.length - horizon; i++){
-      try { hit = detectFn(rows.slice(0, i + 1)); } catch (e) { hit = null; }
+      while (fed <= i) view.push(rows[fed++]);
+      try { hit = detectFn(view); } catch (e) { hit = null; }
       if (!hit) continue;
       r = hgOmniWalkForward(rows, i, hit.dir, rMult, horizon, true);
       if (!r) continue;

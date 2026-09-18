@@ -197,13 +197,80 @@ var _ema = (typeof ema === 'function') ? ema : __emaLocal;
 var _rsi = (typeof rsi === 'function') ? rsi : __rsiLocal;
 var _atr = (typeof atr === 'function') ? atr : __atrLocal;
 
+/* THE SANITISER EVERY GOLD INDICATOR RUNS FIRST, and it was re-reading the
+   whole tape on every call.
+
+   __rows drops bars missing an OHLC number. 163 call sites in this file reach
+   it, and an OMNIGOLD scan reaches them through a per-bar replay, so the full
+   re-reads multiply. Measured on a 600-bar tape through a real scan: 426,844
+   calls, 126,054,685 bar reads, 46.6% of the whole scan's CPU — the largest
+   single line in the profile, ahead of atr() at 8.0%. Stubbing this function
+   to a no-op cut the scan from 48.3s to 19.1s, so roughly three fifths of a
+   gold scan was this one loop re-proving a tape it had already read.
+
+   The replay feeds it the SAME array, one bar longer each time (see
+   hgOmniBacktestOne in omniroute.js). So remember where the last read got to
+   and read only the new tail. Resuming is allowed only on an append: the
+   remembered length must not exceed the current one AND the last bar that was
+   validated must still be the same object. A shorter array, one whose last
+   read bar has been replaced, and any array never seen before all fall back
+   to a full read.
+
+   THE CONTRACT, stated because it is a contract and not an implementation
+   detail: bars this function has already read are not read again. A producer
+   that rewrites history in the middle of an array it has already handed over,
+   while keeping both its length and its last bar, would be served the earlier
+   reading. Nothing in this repo does that — every resample and bucket builder
+   writes into a freshly allocated array, and the one producer that does reuse
+   an array identity across calls is the replay view, which only ever appends
+   (test-goldind-rows-sanitiser asserts that of hgOmniBacktestOne directly).
+   A producer that needs history rewritten hands over a new array.
+
+   The map is weak, so a tape the desk has finished with is collected normally;
+   an engine without WeakMap reads in full every time, exactly as before.
+
+   The same bars come out whether it resumed or read in full, and that is
+   asserted rather than assumed: test-goldind-rows-sanitiser drives each
+   branch directly, including the three that must NOT resume. End to end, an OMNIGOLD scan through
+   test-gold-tabs-press dropped from 12.2s to 5.9s at 300 bars and from 49.1s
+   to 20.7s at 600, rendering byte-identical output against a worktree of the
+   previous commit both times. */
+/* AND THE TEST THAT DECIDES IT WAS isFinite(), WHICH SAYS YES TO null.
+
+   isFinite(null) is true — Number(null) is 0 — so a bar arriving as
+   {o:1,h:2,l:0.5,c:null} passed this filter and every goldind indicator then
+   read its close as the price ZERO. Same for '' (isFinite('') is also true),
+   which is what a CSV or a JSON feed leaves behind for a missing field. The
+   desk's own scan sanitiser says exactly this a few files over — "fin(), NOT
+   num(): num(null) is 0 because +null is 0, which would admit a null close as
+   the price zero" — and then the tape reached goldind and was read again with
+   the rule it warns about. A zero close is not a small error: it is a -100%
+   bar through every ATR, every swing and every gap in this file.
+
+   __fin is the house rule (fixpack14-core's fin, omnigold's fin): null,
+   undefined and '' are NOT numbers. A numeric STRING still is, because feeds
+   deliver those and coercing them is the long-standing behaviour here —
+   narrowing that would drop a whole tape, not a hole in one. */
+function __fin(v){
+  if (v === null || v === undefined || v === '') return NaN;
+  var n = +v;
+  return isFinite(n) ? n : NaN;
+}
+function __rowOk(r){
+  return !!r && isFinite(__fin(r.o)) && isFinite(__fin(r.h))
+             && isFinite(__fin(r.l)) && isFinite(__fin(r.c));
+}
+var __rowsMemo = (typeof WeakMap === 'function') ? new WeakMap() : null;
 function __rows(rows){
   if (!Array.isArray(rows) || !rows.length) return null;
-  var out = [];
-  for (var i = 0; i < rows.length; i++){
-    var r = rows[i];
-    if (r && isFinite(r.o) && isFinite(r.h) && isFinite(r.l) && isFinite(r.c)) out.push(r);
+  var n = rows.length, i = 0, out = null, m = null;
+  if (__rowsMemo){
+    m = __rowsMemo.get(rows);
+    if (m && m.n <= n && m.n > 0 && rows[m.n - 1] === m.tail){ out = m.out; i = m.n; }
   }
+  if (!out) out = [];
+  for (; i < n; i++){ if (__rowOk(rows[i])) out.push(rows[i]); }
+  if (__rowsMemo) __rowsMemo.set(rows, { n: n, tail: rows[n - 1], out: out });
   return out.length ? out : null;
 }
 function __closes(rows){ return rows.map(function(r){ return r.c; }); }
@@ -14461,6 +14528,10 @@ function hgGoldFormingStackHtml(stack){
 
 /* ---------------- exports ---------------- */
 
+/* Exported so the sanitiser's resume rule is tested on its own branches
+   rather than inferred from a detector's output — the same reason
+   goldProClosed is exported in goldpro.js. */
+W.hgGoldSanitiseRows = __rows;
 W.goldFVG = goldFVG;
 W.goldOrderBlocks = goldOrderBlocks;
 W.goldSweeps = goldSweeps;

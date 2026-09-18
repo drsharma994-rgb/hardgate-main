@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v842',
-  pack: 'the gold tabs are now driven through a real scan, not only mounted cold — every bar fetcher the family reaches for is fed synthetic candles and four tabs price setups from them, GOLD SWING grading a card at R:R 1 to 2.1 off an ATR14 it computed, with zero NaN or undefined across the rendered output; GOLD PRO and OMNIGOLD scan on a closure-scoped button this harness cannot press and are listed as unscanned rather than quietly dropped',
+  version: 'hg-v843',
+  pack: 'the gold desk scan is 2.4x faster and reads a missing price as missing — goldind\u2019s sanitiser ran the whole tape again on every one of 426,844 calls per scan (46.6% of all CPU, 126 million bar reads) and now resumes where it left off, taking an OMNIGOLD scan from 49.1s to 20.7s at 600 bars with byte-identical output; the replay stopped rebuilding a fresh prefix array per bar; and the filter that decided which bars are real used isFinite(), which says yes to null, so a bar with a null or empty close was read as gold at $0 \u2014 the sixth file to have that hole closed. GOLD PRO and OMNIGOLD are also scanned for the first time, by pressing their own buttons',
   built: '2026-09-18T00:00:00Z'
 };
 
