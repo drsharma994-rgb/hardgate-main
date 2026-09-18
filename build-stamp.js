@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v836',
-  pack: 'the OMNIGOLD evidence tiers stop counting concurrent trades as independent bets — the measured-edge gate already deflates the forward log for overlap measured from its own timestamps, and the three tiers that promote to the headline panel read the same ledger and did not; forty firings two hours apart on a twenty-hour hold are worth about three independent trades, and the decision bound now says so while the displayed 95% interval still describes the record as recorded',
+  version: 'hg-v837',
+  pack: 'the OMNIGOLD evidence card names the constraint that actually binds — the below-the-bar line asserted one blocker unconditionally and printed below the 25-trade minimum on a row carrying 63 trades, then contradicted itself two clauses later with the real reason; four gates now stand between a positive margin and a promotion and the reason is read off them in the order the tier applies them, with the last branch saying the row and the gate disagree rather than inventing a fifth reason',
   built: '2026-09-18T00:00:00Z'
 };
 

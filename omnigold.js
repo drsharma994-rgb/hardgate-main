@@ -10505,6 +10505,60 @@ terse status, and never launches a first-time scan on a global refresh.
              minLo: minLo, minN: minN, edgeMinN: edgeN, edgeMargin: edgeMargin };
   }
 
+  /* WHICH CONSTRAINT ACTUALLY BINDS.
+
+     The below-the-bar line asserted one blocker unconditionally:
+
+       "clears breakeven by 3.8 pts, below the 25-trade minimum"
+
+     printed on a row carrying 63 trades. It was true when the sample
+     minimum was the only thing between a positive margin and a promotion.
+     Packs 834, 835 and 836 each added another — the population must be this
+     mechanic's own, the bound is corrected for the 77-mechanic family, and
+     it is deflated by the record's measured overlap — so a row can now fail
+     for four different reasons and the card named whichever one was written
+     into the template.
+
+     The result was a sentence contradicting itself: that same row went on to
+     say "NOT this mechanic's own record", which was the real blocker, two
+     clauses after claiming the sample minimum was.
+
+     So the reason is COMPUTED, by walking the tier's own gates in the order
+     the tier applies them, and the last branch says plainly that nothing is
+     blocking rather than inventing a fifth reason — if that ever renders,
+     the row and the gate disagree and the card should say so rather than
+     cover for it. */
+  function hgOgTierBlock(ev, minN, margin){
+    if (!ev || !ev.wilson) return { key: 'no-record', txt: 'no settled record yet' };
+    minN = isFinite(fin(minN)) ? fin(minN) : OG_EDGE_MIN_N;
+    margin = isFinite(fin(margin)) ? fin(margin) : OG_EDGE_MARGIN;
+    if (ev.specific === false){
+      /* terse on purpose: hgOgEvidenceScopeTxt renders straight after this
+         on the same line and names the mechanic and the minimum it missed,
+         so spelling it out twice would be two clauses saying one thing */
+      return { key: 'population', txt: 'the population it is measured on' };
+    }
+    var be = hgOgBreakevenHit(ev.avgRr);
+    if (!isFinite(be)){
+      return { key: 'breakeven', txt: 'no winner has reported its R, so there is no breakeven to clear' };
+    }
+    var n = fin(ev.samples);
+    if (!(n >= minN)){
+      return { key: 'samples',
+               txt: hgOgFmtCount(isFinite(n) ? n : 0) + ' of the ' + minN + ' settled trades this tier needs' };
+    }
+    var b = hgOgEvBound(ev);
+    if (!b) return { key: 'no-record', txt: 'no usable bound' };
+    var gap = b.lo - (be + margin);
+    if (!(gap >= 0)){
+      return { key: 'bound',
+               txt: (Math.abs(gap) * 100).toFixed(1) + ' pts short of breakeven at the corrected bar'
+                    + (hgOgOverlapKnown(ev) && fin(ev.overlapRatio) < 1
+                        ? ' (on ' + fin(ev.effSamples).toFixed(1) + ' effective trades)' : '') };
+    }
+    return { key: 'none', txt: 'nothing is blocking it — this row and the tier gate disagree' };
+  }
+
   function hgOgSettledExecuteRowHtml(c, tier){
     var p = c.plan, ev = c.settledEv;
     var w = ev && ev.wilson;
@@ -10535,12 +10589,12 @@ terse status, and never launches a first-time scan on a global refresh.
     } else if (tier === 'proven'){
       tierTxt = ' · <b>clears breakeven by ' + (mg * 100).toFixed(1)
               + ' pts — profitable at 95% confidence</b>';
-    } else if (isFinite(mg)){
-      tierTxt = ' · ' + (mg >= 0 ? 'clears breakeven by ' + (mg * 100).toFixed(1) + ' pts, below the '
-                                 + OG_EDGE_MIN_N + '-trade minimum'
-                                 : 'lower bound is ' + Math.abs(mg * 100).toFixed(1) + ' pts BELOW breakeven');
     } else {
-      tierTxt = ' · not yet judgeable';
+      /* the blocker is READ OFF THE GATE, not written into the template */
+      var blk = hgOgTierBlock(ev, OG_EDGE_MIN_N, OG_EDGE_MARGIN);
+      tierTxt = ' · ' + (isFinite(mg) && mg >= 0
+                          ? ('clears breakeven by ' + (mg * 100).toFixed(1) + ' pts, held by: ' + blk.txt)
+                          : ('held by: ' + blk.txt));
     }
     h += '<div class="hg-mp-note">SETTLED ' + esc(ev.source) + ' · '
       + esc(String(ev.wins)) + '/' + esc(String(ev.samples)) + ' wins · '
@@ -14960,6 +15014,7 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgEvidenceScopeTxt = hgOgEvidenceScopeTxt;
     window.hgOgPromotionZ = hgOgPromotionZ;
     window.hgOgOverlapKnown = hgOgOverlapKnown;
+    window.hgOgTierBlock = hgOgTierBlock;
     window.hgOgOverlapScopeTxt = hgOgOverlapScopeTxt;
     window.hgOgSettledOverlapRatio = hgOgSettledOverlapRatio;
     window.hgOgEvBound = hgOgEvBound;
