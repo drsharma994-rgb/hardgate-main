@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v839',
-  pack: 'a gate that could not run stops reporting that it passed — the institutional gold filter pushed a ledger row reading pass true with a why line that said inst filter threw fail-open, so a throwing filter and a clean institutional check were indistinguishable to every consumer counting passes and the card checks badge read 35 of 57 either way; unchecked-soft does not veto either and tells the truth, and the grader was already built for it',
+  version: 'hg-v840',
+  pack: 'the render-integrity rule built for OMNIGOLD now runs across every gold tab — it found five live text defects in 80PERCENT (0 in undefined, from the [object Object] bar forming now, NaN bars, auto-update paused [object Object], STALE NaN candles behind) plus a STALE 0 candles behind contradiction; a sixth flag on the OMNIGOLD trade key was an over-reach and is reverted, recorded, and exempted by name because a key is not display text',
   built: '2026-09-18T00:00:00Z'
 };
 

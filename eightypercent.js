@@ -3027,7 +3027,11 @@ function firedSplitHtml(r){
   /* FIRINGS AND TRADES ARE DIFFERENT NUMBERS, and the board says so rather
      than printing one and letting it be read as the other. */
   var ovl = (r.tally && r.tally.overlap) || 0;
-  return chips + '<div class="note">' + c.total + ' in ' + r.scanned + ' · ' + rate
+  /* a scan count that is not a number is not a denominator — see the
+     render-integrity sweep in test-gold-render-integrity.mjs */
+  var scannedN = fin(r && r.scanned);
+  var scannedTxt = isFinite(scannedN) ? scannedN : 'an unrecorded number of';
+  return chips + '<div class="note">' + c.total + ' in ' + scannedTxt + ' · ' + rate
     + '<br><span style="color:var(--long)">' + c.long + ' long</span> · '
     + '<span style="color:var(--short)">' + c.short + ' short</span>'
     + (ovl ? '<br><span class="warn">' + ovl + ' of them fired inside an open trade</span> '
@@ -3554,10 +3558,18 @@ function armedRealStampHtml(a){
     return '<div style="margin-top:4px"><span class="stamp veto">THE NEXT CANDLE IS OUTSIDE THE '
       + 'WINDOW</span> <span class="note">arms again when the window reopens.</span></div>';
   }
-  var n = fin(a.barsBehind);
+  var n = fin(a && a.barsBehind);
+  /* the staleness is the point; the COUNT is the detail. With no usable
+     count the stamp still stands and says the number is the part missing,
+     rather than printing "NaN candles behind". */
+  /* n > 0, not merely finite. hg80ArmedReal calls a tape stale on exactly
+     that test, and this file's fin() is Number(), so Number(null) is 0 and
+     "STALE, 0 candles behind" is a contradiction printed on the card. */
   return '<div style="margin-top:4px"><span class="stamp veto">THESE BARS ARE STALE</span> '
-    + '<span class="note"><b>' + n + '</b> candle' + (n === 1 ? '' : 's') + ' behind the one '
-    + 'forming now.</span></div>';
+    + '<span class="note">' + (isFinite(n) && n > 0
+        ? ('<b>' + n + '</b> candle' + (n === 1 ? '' : 's') + ' behind the one forming now.')
+        : 'behind the one forming now — by how many candles is not recorded.')
+    + '</span></div>';
 }
 
 /* the headline for the same split */
@@ -3825,7 +3837,8 @@ function livePriceHtml(gradePx, gradeTf, spot, feedRef, rungs){
     + '<span class="p80-px-k">Live gold</span>';
   h += live
     ? ('<span class="p80-px">' + num(gp) + '</span>'
-       + '<span class="p80-sub">from the <b>' + esc(gradeTf || '') + '</b> bar forming now, on '
+       + '<span class="p80-sub">from the <b>' + esc(typeof gradeTf === 'string' ? gradeTf : '')
+       + '</b> bar forming now, on '
        + 'the same feed the levels came from</span>')
     : ('<span class="p80-sub"><b>not available this scan.</b> No rung returned an unfinished '
        + 'bar, so there is no price on the same feed as the levels. Nothing below is graded '
@@ -4562,8 +4575,11 @@ function ageCellTxt(s){
       + '<br><span class="note">feed is ' + lag + ' candle' + (lag === 1 ? '' : 's')
       + ' behind</span>';
   }
-  if (fin(s && s.ageBars) === 0) return 'now';
-  return fin(s.ageBars) + ' bars · ' + esc(ageTxt(s.ageSec));
+  var ab = fin(s && s.ageBars);
+  if (ab === 0) return 'now';
+  /* no bar count, no bar count — the age in wall time still answers */
+  if (!isFinite(ab)) return esc(ageTxt(s && s.ageSec));
+  return ab + ' bars · ' + esc(ageTxt(s && s.ageSec));
 }
 
 function latestSetupsHtml(rungs, livePx){
@@ -5756,7 +5772,13 @@ function hg80AutoNote(why, ms){
       + '; still checking every ' + hg80AutoCadenceTxt(cad * P80_LAG_SKIP)
       + ' until it catches up';
   }
-  return 'auto-update paused — ' + (P80_AUTO_WHY[why] || why)
+  /* `why` is a reason KEY. An unmapped one is printed as itself, which is
+     useful while it is a string and reads as "[object Object]" when it is
+     not — so an unnamed reason says it is unnamed. */
+  var mapped = (typeof why === 'string' && P80_AUTO_WHY[why])
+    ? P80_AUTO_WHY[why]
+    : (typeof why === 'string' ? why : 'for an unrecorded reason');
+  return 'auto-update paused — ' + mapped
     + (why === 'unmounted' ? '' : '; it resumes on its own');
 }
 

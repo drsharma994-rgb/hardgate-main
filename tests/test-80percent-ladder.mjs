@@ -567,8 +567,18 @@ console.log('\n== the census is a census, never a second strategy ==');
 console.log('\n== the board says how often each rung fires ==');
 {
   ok(/<th>fired<\/th>/.test(SRC), 'the ladder board has a fired column');
-  ok(/c\.total \+ ' in ' \+ r\.scanned/.test(SRC),
+  /* WAS A GREP FOR THE CONCATENATION ITSELF, which broke the moment pack 840
+     put a guard between the two — a scan count that is not a number is not a
+     denominator, and "0 in undefined" was reaching the board. Pinned on the
+     RENDERED TEXT now, which is what the assertion was always about. */
+  const fired = (r) => String(ctx.firedSplitHtml(r) || '').replace(/<[^>]+>/g, ' ')
+                             .replace(/\s+/g, ' ').trim();
+  ok(/ in 1200 /.test(fired({ scanned: 1200, fired: [], tally: {} })),
      'reporting firings over the bars actually scanned, so the count is never a mystery');
+  ok(/ in 0 /.test(fired({ scanned: 0, fired: [], tally: {} })),
+     'and a REAL zero still reads as zero rather than being swallowed by the guard');
+  ok(!/undefined|NaN/.test(fired({})),
+     'while a scan with no recorded count says so instead of printing undefined');
   /* keyed by the variant table. The old ternary — variant === 'wide' ? 'wide'
      : 'spec' — filed every MID firing under SPEC the moment a third mechanic
      existed, inflating the record of the one mechanic here whose numbers are
