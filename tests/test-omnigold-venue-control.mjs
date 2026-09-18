@@ -129,14 +129,23 @@ console.log('\n== per-venue demotion counts: 18 at XM, 33 at PAXG ==');
   /* distinct MECHANICS: SPRING and UTAD are one detector under two
      direction labels (hg-v764) and now share one verdict, so filtering the
      raw label list would report one demoted mechanic as two */
-  const seenK = {};
-  const kinds = Object.keys(W.HG_OG_REPLAY_EVIDENCE.kinds)
-    .map(k => (k === 'UTAD' ? 'SPRING' : k))
-    .filter(k => (seenK[k] ? false : (seenK[k] = 1)));
+  /* THE FOLD ABOVE WAS STALE AND ONLY A COINCIDENCE HID IT. hg-v764
+     un-pooled SPRING and UTAD so each direction keeps its own record —
+     OG_KIND_ALIAS has been empty ever since — but this list went on mapping
+     UTAD onto SPRING by hand. It agreed with hgOgDemotedKindCount only
+     because neither was demoted. hg-v817's fee correction demotes UTAD
+     (gross +0.154, so the gross branch never caught it; measured PAXG net
+     -1.043, well past the -0.5 line the median fee let it clear), and the
+     two counts came apart at 37 against 36. Each label is its own mechanic. */
+  const kinds = Object.keys(W.HG_OG_REPLAY_EVIDENCE.kinds);
   const demXm = kinds.filter(k => W.hgOgKindDemotion(k, xm)).sort();
   const demPaxg = kinds.filter(k => W.hgOgKindDemotion(k, paxg)).sort();
   ok(W.hgOgDemotedKindCount(xm) === 22 && demXm.length === 22, '22 kinds stand demoted at XM costs (hg-v700 refresh)');
-  ok(W.hgOgDemotedKindCount(paxg) === 31 && demPaxg.length === 31, '31 at PAXG costs (hg-v700 refresh)');
+  /* hg-v817: 31 -> 37. The venue re-pricing used to subtract a MEDIAN fee
+     from a MEAN gross, which understated the drag on every right-skewed
+     kind and so demoted fewer than the record supports. The XM count is
+     unmoved because the gross-negative branch decides it there. */
+  ok(W.hgOgDemotedKindCount(paxg) === 37 && demPaxg.length === 37, '37 at PAXG costs');
   ok(JSON.stringify(demXm) === JSON.stringify(GROSS_NEGATIVE_XM),
      'the XM 22 are exactly the gross-negative kinds — cheap fees clear no wrong direction');
   ok(demXm.every(k => demPaxg.includes(k)), 'every XM demotion is also a PAXG demotion (fees only add)');
@@ -168,12 +177,15 @@ console.log('\n== desk-stance banner names the ACTIVE venue and both counts ==')
   const W = boot();
   W.hgOgVenueInit();                                   /* -> XM default */
   const atXm = W.hgOgDeskStanceBannerHtml();
-  ok(/venue XM XAUUSD ~0\.020% RT — 22 measured-negative kinds stood aside; at PAXG costs \(0\.260% RT\) it would be 31/.test(atXm),
-     'XM banner line: 22 stood aside, 31 at PAXG costs (hg-v700 refresh)');
+  /* hg-v817: the PAXG count moved 31 -> 37 when the venue re-pricing
+     stopped subtracting a MEDIAN fee from a MEAN gross. Under-stating the
+     fee under-demoted; the record supports 37. */
+  ok(/venue XM XAUUSD ~0\.020% RT — 22 measured-negative kinds stood aside; at PAXG costs \(0\.260% RT\) it would be 37/.test(atXm),
+     'XM banner line: 22 stood aside, 37 at PAXG costs');
   W.hgOgSetVenue('PAXG');
   const atPaxg = W.hgOgDeskStanceBannerHtml();
-  ok(/venue PAXG ~0\.260% RT — 31 measured-negative kinds stood aside; at XM costs \(0\.020% RT\) it would be 22/.test(atPaxg),
-     'PAXG banner line: 31 stood aside, 22 at XM costs (hg-v700 refresh)');
+  ok(/venue PAXG ~0\.260% RT — 37 measured-negative kinds stood aside; at XM costs \(0\.020% RT\) it would be 22/.test(atPaxg),
+     'PAXG banner line: 37 stood aside, 22 at XM costs');
 }
 
 console.log('\n== disclosure integrity at the XM default ==');

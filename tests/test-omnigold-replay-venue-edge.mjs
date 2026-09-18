@@ -153,13 +153,38 @@ console.log('\n== re-pricing uses the record\'s own numbers ==');
   ok(ev && ev.n === 206, 'MMOVE record loads (n=206)');
   const rp = XM.hgOgReplayNetAtVenue(ev);
   ok(rp && rp.repriced, 'XM re-prices the PAXG record');
-  /* gross 0.088, cost 0.233, scale 0.020/0.26 -> 0.088 - 0.0179 = 0.0701 */
-  const expect = ev.avgGrossR - ev.medianCostR * (rp.venueRt / rp.replayRt);
-  ok(near(rp.net, expect, 1e-12), 'net = gross - cost x (venueRt/replayRt)');
-  ok(rp.net > ev.avgNetR, 'a cheaper venue cannot make the same record worse');
+  /* THIS ASSERTION USED TO RE-DERIVE THE IMPLEMENTATION'S OWN EXPRESSION —
+     `expect = avgGrossR - medianCostR * ratio`, compared against the code
+     that computes exactly that. It could only fail if the code and the test
+     drifted apart; it could never catch the formula being WRONG, and it
+     did not: subtracting a MEDIAN cost from a MEAN gross meant the thing
+     failed to reproduce the record it re-prices, on 53 of 54 kinds.
 
+     The property below cannot be satisfied by a wrong formula. Priced at
+     the replay's OWN cost, a re-pricing must return the replay's OWN
+     measured net — the ratio is 1 and there is nothing left to scale. */
   const rpP = PAXG.hgOgReplayNetAtVenue(PAXG.hgOgReplayEvidence('MMOVE'));
   ok(rpP && rpP.repriced === false, 'at PAXG the record is already priced right — nothing to restate');
+  ok(near(rpP.net, ev.avgNetR, 1e-9),
+     'and re-pricing it AT the replay cost returns the measured net exactly');
+
+  /* every kind, not one */
+  const E = PAXG.HG_OG_REPLAY_EVIDENCE;
+  const offenders = Object.keys(E.kinds).filter(k => {
+    const r = PAXG.hgOgReplayNetAtVenue(PAXG.hgOgReplayEvidence(k));
+    return !r || !near(r.net, E.kinds[k][2], 1e-9);
+  });
+  ok(offenders.length === 0,
+     'the identity holds for all ' + Object.keys(E.kinds).length
+     + ' baked kinds (' + offenders.length + ' off)');
+
+  /* and the mean fee it now subtracts is the one the bake implies */
+  ok(near(XM.hgOgVenueNet(ev.avgGrossR, ev.avgNetR, 0.26, 0.26), ev.avgNetR, 1e-9),
+     'hgOgVenueNet collapses to the measured net at the replay cost');
+  ok(near(XM.hgOgVenueNet(ev.avgGrossR, ev.avgNetR, 0, 0.26), ev.avgGrossR, 1e-9),
+     'and to the gross at a venue that charges nothing');
+  ok(rp.net > ev.avgNetR, 'a cheaper venue cannot make the same record worse');
+  ok(rp.net < ev.avgGrossR, 'nor better than free');
 }
 
 console.log('\n== a record with no gross is not re-priced into existence ==');
@@ -209,7 +234,12 @@ console.log('\n== sweeping all 54: re-pricing helps, and still finds no edge =='
      19-point gap into a midpoint neither half occupies. The number moving
      back up is not the veto weakening — nothing here clears breakeven, let
      alone the family bar, and the assertions below still say so. */
-  ok(netPosXM === 18, `at XM cost, 18 are net positive (${netPosXM}) — the labelling error was real`);
+  /* hg-v817: 18 -> 12. Not the veto weakening and not the pooling change —
+     the re-pricing stopped subtracting a MEDIAN fee from a MEAN gross, and
+     six of the eighteen only cleared zero because the fee was understated.
+     Being too generous about the venue this desk actually trades is the
+     direction that would not have been questioned. */
+  ok(netPosXM === 12, `at XM cost, 12 are net positive (${netPosXM}) — six fewer than the median-fee arithmetic claimed`);
   /* WAS 1, IS NOW 0, and the change is the point rather than a regression.
      hgOgReplayEdgeVerdict used to read n replay rows as n independent
      trades. The walk that produced them published 59.4 plans a day on one

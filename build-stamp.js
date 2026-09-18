@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v816',
-  pack: 'OMNIGOLD watches its own evidence, not just its own code — the one staleness check compared gate-ledger keys and was blind to the bakes thinning underneath, which is how three rounds of stale numbers survived; the tab now reports which baked maps can still carry a rate, names what goes quiet when they cannot, and quotes the population each claim actually rests on',
+  version: 'hg-v817',
+  pack: 'OMNIGOLD prices a venue with the fee it actually measured — the re-pricing subtracted a MEDIAN cost from a MEAN gross, so it failed to reproduce its own record on 53 of 54 kinds and was generous by up to 2.77R per trade; at XM that had been calling 18 mechanics net-positive where the record supports 12, and letting UTAD escape demotion on a measured -1.04R net',
   built: '2026-09-17T00:00:00Z'
 };
 

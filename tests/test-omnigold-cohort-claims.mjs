@@ -402,4 +402,64 @@ console.log('\n== a claim quotes the population it rests on ==');
      'while the cohort banner, which covers every trade, still quotes all of them');
 }
 
+
+console.log('\n== a re-pricing reproduces the record it re-prices (hg-v817) ==');
+{
+  const W = boot();
+  const E = W.HG_OG_REPLAY_EVIDENCE;
+  const near = (a, b, e) => Math.abs(a - b) <= e;
+
+  /* THE PROPERTY, not the expression. Priced at the replay's own cost the
+     ratio is 1 and there is nothing left to scale, so the answer must be
+     the replay's own measured net. The old arithmetic — a MEDIAN fee off a
+     MEAN gross — failed this on 53 of 54 kinds and no test asked. */
+  const off = Object.keys(E.kinds).filter(k => {
+    const r = E.kinds[k];
+    return !near(W.hgOgVenueNet(r[3], r[2], E.rtCostPct, E.rtCostPct), r[2], 1e-9);
+  });
+  ok(off.length === 0, 'every one of the ' + Object.keys(E.kinds).length
+     + ' baked kinds re-prices to its own net at its own cost');
+  const offC = Object.keys(E.cohorts).filter(k => {
+    const r = E.cohorts[k];
+    return !near(W.hgOgVenueNet(r[3], r[2], E.rtCostPct, E.rtCostPct), r[2], 1e-9);
+  });
+  ok(offC.length === 0, 'and so does every cohort');
+
+  /* the two ends of the scale */
+  ok(near(W.hgOgVenueNet(0.5, -1.0, 0, 0.26), 0.5, 1e-12),
+     'a venue that charges nothing returns the gross');
+  ok(near(W.hgOgVenueNet(0.5, -1.0, 0.52, 0.26), -2.5, 1e-12),
+     'and doubling the round trip doubles the fee, not the gross');
+
+  /* IT MUST BE THE MEAN FEE. The median is smaller on a right-skewed cost
+     book, and using it is what made this flattering. */
+  const scalp = E.cohorts['SCAN:SCALP'];
+  const meanFee = scalp[3] - scalp[2];
+  ok(meanFee > E.medianCostR.scalp * 2,
+     'the mean scalp fee (' + meanFee.toFixed(3) + 'R) is more than twice the median ('
+     + E.medianCostR.scalp + 'R) — the skew that made the old formula generous');
+  ok(!near(W.hgOgVenueNet(scalp[3], scalp[2], E.rtCostPct, E.rtCostPct),
+           scalp[3] - E.medianCostR.scalp, 1e-6),
+     'so the corrected answer and the median-fee answer are genuinely different');
+
+  /* nothing is invented from a row that cannot be re-priced */
+  ok(!isFinite(W.hgOgVenueNet(null, -1, 0.02, 0.26)), 'no gross, no re-pricing');
+  ok(!isFinite(W.hgOgVenueNet(0.1, null, 0.02, 0.26)), 'no net, no re-pricing');
+  ok(!isFinite(W.hgOgVenueNet(0.1, -1, 0.02, 0)), 'and no replay cost to scale from, none either');
+
+  /* the fee correction demotes MORE, never fewer — understating a cost can
+     only let a loser through */
+  const xm = W.hgOgVenuePresetCost('XM'), paxg = W.hgOgVenuePresetCost('PAXG');
+  const nXm = W.hgOgDemotedKindCount(xm), nPaxg = W.hgOgDemotedKindCount(paxg);
+  ok(nPaxg > nXm, 'dearer fees demote more (' + nPaxg + ' at PAXG vs ' + nXm + ' at XM)');
+  const utad = W.hgOgKindDemotion('UTAD', paxg);
+  ok(utad, 'UTAD is demoted at PAXG');
+  ok(E.kinds['UTAD'][3] > 0,
+     'though its GROSS is positive — the gross branch never caught it');
+  ok(utad.reasons.some(r => /venue-adjusted netR/.test(r)),
+     'it is the venue-adjusted branch that does, which the median fee let it clear');
+  ok(utad.reasons.some(r => /meanCostR/.test(r)),
+     'and the reason names the mean fee it actually subtracted');
+}
+
 console.log(`\n${passed} passed, 0 failed`);

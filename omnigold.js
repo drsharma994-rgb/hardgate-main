@@ -8170,18 +8170,59 @@ terse status, and never launches a first-time scan on a global refresh.
 
      Re-pricing is arithmetic on numbers the record already carries:
 
-       netAtVenue = avgGrossR - medianCostR x (venueRtPct / replayRtPct)
+       netAtVenue = avgGrossR - (avgGrossR - avgNetR) x (venueRtPct / replayRtPct)
 
-     because medianCostR is the fee in R at the replay's own fee level, so
-     scaling it by the fee ratio gives the fee in R at another one. The
-     gross outcome does not move — only what it costs to take it.
+     because avgGrossR - avgNetR IS the mean fee in R at the replay's own
+     fee level (the bake defines costR as rMultiple - netR), and every
+     trade's fee is linear in the round trip, so the mean of them scales
+     with it. The gross outcome does not move — only what it costs to take
+     it. Evaluated at the replay's own cost the whole thing collapses to
+     avgNetR, which is the check the earlier version failed; see
+     hgOgVenueNet for what it used to be and why it was wrong.
 
-     At XM that turns 0 net-positive mechanics into 18. Which is the point
+     At XM that turns 0 net-positive mechanics into 12. Which is the point
      where it would be very easy to fool ourselves, so nothing here stops
-     at the sign of a number — see hgOgReplayEdgeVerdict. */
+     at the sign of a number — see hgOgReplayEdgeVerdict. The earlier
+     arithmetic said 18, and being six mechanics too generous about the
+     venue this desk actually trades is precisely the direction that would
+     not have been questioned. */
+  /* ====================================================================
+     THE RE-PRICING MUST REPRODUCE THE RECORD IT RE-PRICES
+
+     Both copies of this arithmetic subtracted a MEDIAN cost from a MEAN
+     gross:  avgGrossR - medianCostR x (venueRt / replayRt).
+
+     Each half is defensible alone. Together they fail the one check that
+     matters: evaluated at the replay's OWN cost, where the ratio is 1, the
+     formula has to return the replay's OWN measured avgNetR. It did not,
+     on 53 of the 54 baked kinds, by 0.407R per trade on average and by
+     2.774R on PD-EQUILIBRIUM (measured -5.158, formula -2.384).
+
+     The cost distribution is heavily right-skewed — costR is
+     rt% / stop%, so a tight stop produces an enormous fee in R — and the
+     median throws away exactly the trades where cost dominated, which is
+     the population a cost gate exists for. SCAN:SCALP's mean fee is
+     1.404R against a 0.635R median, 2.2x.
+
+     The mean cost needs no re-bake: scripts/refit-confluence-weights.mjs
+     defines costR as rMultiple - netR, so by linearity of the mean it is
+     exactly avgGrossR - avgNetR, and both are already in the row. Scaling
+     is exact for the mean too — every trade's costR is linear in the round
+     trip, so the mean of them is — where the median only preserved order.
+
+     The correction is not cosmetic and it is not flattering: at XM it takes
+     the count of net-positive kinds from 18 to 12, and at PAXG it demotes
+     more, not fewer. medianCostR stays in the row and keeps its own job as
+     a typical-fee-load descriptor (HG_OG_SURVIVOR_MAX_MED_COST_R). */
+  function hgOgVenueNet(gross, paxgNet, venueRt, replayRt){
+    var g = fin(gross), nR = fin(paxgNet), vrt = fin(venueRt), rrt = fin(replayRt);
+    if (!isFinite(g) || !isFinite(nR) || !(vrt >= 0) || !(rrt > 0)) return NaN;
+    return g - (g - nR) * (vrt / rrt);
+  }
+
   function hgOgReplayNetAtVenue(ev){
     if (!ev) return null;
-    var gross = fin(ev.avgGrossR), cost = fin(ev.medianCostR);
+    var gross = fin(ev.avgGrossR), cost = fin(ev.avgNetR);
     /* Engine grades and score tiers carry no gross, so they cannot be
        re-priced. Say nothing rather than quote a number as if it were. */
     if (!isFinite(gross) || !isFinite(cost)) return null;
@@ -8190,7 +8231,7 @@ terse status, and never launches a first-time scan on a global refresh.
     var venueRt = fin(vc && vc.rtCostPct);
     var replayRt = fin(HG_OG_REPLAY_EVIDENCE.rtCostPct);
     if (!(venueRt > 0) || !(replayRt > 0)) return null;
-    return { net: gross - cost * (venueRt / replayRt),
+    return { net: hgOgVenueNet(gross, cost, venueRt, replayRt),
              venue: (vc && vc.venue) || '', venueRt: venueRt, replayRt: replayRt,
              repriced: Math.abs(venueRt - replayRt) > 1e-9 };
   }
@@ -9452,10 +9493,13 @@ terse status, and never launches a first-time scan on a global refresh.
      replay rows (n >= 50 so mid-sample losers cannot hide under n<100):
        grossR <= -0.05          direction measured wrong at scale, costs aside
        venue-adj netR <= -0.5   still toxic after re-pricing fees at the venue
-     venue-adjusted netR = avgGrossR - (venueRt / 0.26) * medianCostR:
-     the kind's median fee load was measured at the 0.26% PAXG round trip,
-     so a venue's fee load is that median scaled by the round-trip ratio;
-     gross outcomes are measured facts and are NOT rescaled. */
+     venue-adjusted netR = avgGrossR - (venueRt / 0.26) * (avgGrossR - avgNetR):
+     the kind's MEAN fee load was measured at the 0.26% PAXG round trip,
+     so a venue's fee load is that mean scaled by the round-trip ratio;
+     gross outcomes are measured facts and are NOT rescaled. This used the
+     MEDIAN fee, which understated the drag on every skewed kind and so
+     demoted fewer than the record supports — 31 rather than 37 at PAXG.
+     See hgOgVenueNet. */
   var HG_OG_DEMOTE_MIN_N = 50;
   var HG_OG_DEMOTE_GROSS_R = -0.05;
   var HG_OG_DEMOTE_VENUE_NET_R = -0.5;
@@ -9469,10 +9513,10 @@ terse status, and never launches a first-time scan on a global refresh.
   /* The kind's venue-adjusted net R, or NaN when the row lacks the pieces. */
   function hgOgVenueNetR(row, venueCost){
     if (!row) return NaN;
-    var gross = fin(row.avgGrossR), med = fin(row.medianCostR);
-    var rt = fin(venueCost && venueCost.rtCostPct);
-    if (!isFinite(gross) || !isFinite(med) || !(rt > 0)) return NaN;
-    return gross - (rt / HG_OG_REPLAY_EVIDENCE.rtCostPct) * med;
+    /* one arithmetic, one place — see hgOgVenueNet */
+    return hgOgVenueNet(row.avgGrossR, row.avgNetR,
+                        fin(venueCost && venueCost.rtCostPct),
+                        HG_OG_REPLAY_EVIDENCE.rtCostPct);
   }
 
   /* Demotion verdict for ONE kind at the given (or active) venue.
@@ -9515,7 +9559,8 @@ terse status, and never launches a first-time scan on a global refresh.
         reasons.push('venue-adjusted netR ' + vnet.toFixed(3) + ' <= ' + HG_OG_DEMOTE_VENUE_NET_R
           + ' at ' + vc.venue + ' costs (gross ' + fin(ev.avgGrossR).toFixed(3)
           + ' - ' + (fin(vc.rtCostPct) / HG_OG_REPLAY_EVIDENCE.rtCostPct).toFixed(3)
-          + ' x medCostR ' + fin(ev.medianCostR).toFixed(3) + ')');
+          + ' x meanCostR '
+          + (fin(ev.avgGrossR) - fin(ev.avgNetR)).toFixed(3) + ')');
       }
       if (!reasons.length) return null;
       return {
@@ -9541,10 +9586,12 @@ terse status, and never launches a first-time scan on a global refresh.
      count describes exactly what every desk applies. */
   function hgOgDemotedKindCount(venueCost){
     var vc = (venueCost && isFinite(fin(venueCost.rtCostPct))) ? venueCost : hgOgVenueCost();
-    /* DISTINCT MECHANICS, like hgOgReplayFamilySize. With SPRING and UTAD
-       folded to one record they now share one verdict — correct — but
-       counting both labels would report one demoted mechanic as two and
-       inflate this tally by one for every aliased pair. */
+    /* DISTINCT MECHANICS, like hgOgReplayFamilySize: counting both labels of
+       an aliased pair would report one demoted mechanic as two. SPRING and
+       UTAD are NOT such a pair — hg-v764 un-pooled them so each direction
+       keeps its own record, and OG_KIND_ALIAS has been empty since — so
+       this loop is a no-op today and is kept for the next alias that is
+       added, not for those two. */
     var kinds = HG_OG_REPLAY_EVIDENCE.kinds, k, n = 0, seen = {};
     for (k in kinds){
       if (!Object.prototype.hasOwnProperty.call(kinds, k)) continue;
@@ -14394,6 +14441,7 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgEvidenceHealth = hgOgEvidenceHealth;
     window.hgOgEvidenceHealthHtml = hgOgEvidenceHealthHtml;
     window.hgOgGroupSettled = hgOgGroupSettled;
+    window.hgOgVenueNet = hgOgVenueNet;
     window.HG_OG_EVIDENCE_GROUPS = OG_EVIDENCE_GROUPS;
     window.hgOgSpectrumLegendCellsHtml = hgOgSpectrumLegendCellsHtml;
     window.HG_OG_MIN_SAMPLES = MIN_SAMPLES;
