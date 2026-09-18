@@ -189,4 +189,79 @@ console.log('\n== the desk records the mark, and the gate prefers the filled cou
   ok(/never filled, excluded/.test(og), 'and the card says how many were dropped');
 }
 
+
+console.log('\n== an absent bar field is not a price of zero (hg-v825) ==');
+{
+  /* This file is the evidence layer, and num() was `+v`. +null is 0 and
+     isFinite(0) is true, so every isFinite(num(x)) guard here admitted an
+     ABSENT value as a measured zero. Three consequences, each driven below.
+
+     The first is the worst, and it is one-directional. */
+  const touched = ctx.hgFwdOrderTouched;
+  ok(typeof touched === 'function', 'the fill question is reachable');
+
+  /* a bar that traded 4005-4010, and orders resting nowhere near it */
+  const good  = { h: 4010, l: 4005, c: 4008 };
+  ok(touched('BUY_LIMIT', good, 3900) === false,
+     'a BUY_LIMIT at 3900 is NOT touched by a bar whose low is 4005');
+  ok(touched('SELL_LIMIT', good, 4200) === false, 'nor a SELL_LIMIT at 4200');
+
+  for (const empty of [null, undefined, '']){
+    ok(touched('BUY_LIMIT', { h: 4010, l: empty, c: 4008 }, 3900) === false,
+       `a bar with l=${String(empty)} does not fabricate a BUY_LIMIT fill 105 points away`);
+    ok(touched('SELL_STOP', { h: 4010, l: empty, c: 4008 }, 3900) === false,
+       `nor a SELL_STOP — the same l <= entry test, the same absent low`);
+    ok(touched('SELL_LIMIT', { h: empty, l: 4005, c: 4008 }, 4200) === false,
+       `and a bar with h=${String(empty)} still does not fabricate the short side`);
+  }
+  /* the real touches must survive the fix */
+  ok(touched('BUY_LIMIT', good, 4006) === true, 'a BUY_LIMIT inside the bar IS touched');
+  ok(touched('SELL_LIMIT', good, 4008) === true, 'and a SELL_LIMIT inside it');
+  ok(touched('BUY', { h: null, l: null }, 1) === true,
+     'a market order is filled without consulting the bar at all');
+
+  /* THE ARITHMETIC IT USED TO USE, so these cannot pass vacuously */
+  const loose = (type, bar, entry) => {
+    const h = +bar.h, l = +bar.l;
+    if (!isFinite(h) || !isFinite(l)) return false;
+    if (type === 'BUY_LIMIT' || type === 'SELL_STOP') return l <= entry;
+    return h >= entry;
+  };
+  ok(loose('BUY_LIMIT', { h: 4010, l: null, c: 4008 }, 3900) === true,
+     'the +v reading really did report that fill — so the assertions above bite');
+  ok(loose('SELL_LIMIT', { h: null, l: 4005, c: 4008 }, 4200) === false,
+     'and really was one-sided, which is why the bias pointed at long limits');
+
+  /* A COUNTED NON-OBSERVATION: a settled record with no bankR used to be
+     an observation of exactly break-even — sample up, mean pulled to zero. */
+  const statsOf = ctx.hgFwdStatsOf;
+  ok(typeof statsOf === 'function', 'the aggregation is reachable with a list');
+  const settled = (st, bank) => ({ tab: 'T', mechanic: 'M', sym: 'X', tf: '1h', dir: 'long',
+    state: st, rr: 2, bankR: bank, barT: T0, horizonBars: 5 });
+
+  /* two real measurements at +1R, and two settled records carrying no
+     bankR at all — the shape a legacy record has */
+  const measured = statsOf([settled('t1', 1), settled('t1', 1)], 'T', null, false);
+  ok(measured.bankN === 2 && Math.abs(measured.bankExpR - 1) < 1e-9,
+     'two measured records give bankN 2 at +1.00R');
+  const withGaps = statsOf(
+    [settled('t1', 1), settled('t1', 1), settled('t1', null), settled('stop', undefined)],
+    'T', null, false);
+  ok(withGaps.bankN === 2,
+     `the two records carrying no bankR are not counted as observations (bankN ${withGaps.bankN})`);
+  ok(Math.abs(withGaps.bankExpR - 1) < 1e-9,
+     `and the mean is unmoved at ${withGaps.bankExpR.toFixed(2)}R — it used to be dragged to 0.50R `
+     + 'by two non-observations of exactly break-even');
+
+  /* A RECORD THAT IS ALWAYS STALE: no barT read as epoch zero. */
+  const stale = ctx.hgFwdIsStale;
+  ok(typeof stale === 'function', 'the staleness question is reachable');
+  ok(stale({ state: 'open', barT: null, horizonBars: 5, tf: '1h' }, T0) === false,
+     'a record with no barT is not declared stale — "cannot tell" is not "expired"');
+  ok(stale({ state: 'open', barT: T0 - 10, horizonBars: 5, tf: '1h' }, T0) === false,
+     'a fresh record is not stale');
+  ok(stale({ state: 'open', barT: T0 - 5 * 3600 * 99, horizonBars: 5, tf: '1h' }, T0) === true,
+     'and a genuinely old one still is');
+}
+
 console.log('\n' + passed + ' passed, 0 failed');

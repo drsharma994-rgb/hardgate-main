@@ -79,13 +79,43 @@ localStorage. Never throws.
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  function num(v){ var n = +v; return isFinite(n) ? n : NaN; }
   /* null/undefined/'' -> NaN. isFinite(null) is TRUE in JS. */
   function fin(v){
     if (v === null || v === undefined || v === '') return NaN;
     var n = +v;
     return isFinite(n) ? n : NaN;
   }
+
+  /* num() WAS `+v`, AND THIS FILE IS THE EVIDENCE LAYER.
+
+     +null is 0 and isFinite(0) is true, so every `isFinite(num(x))` guard
+     below admitted an ABSENT value as a measured zero. Three consequences,
+     all of them one-directional:
+
+     A FABRICATED FILL. hgFwdOrderTouched reads l = num(bar.l) and answers
+     `l <= entry` for a BUY_LIMIT. A bar with no low gives l = 0, which is
+     at or below every entry there has ever been, so a resting order far
+     from the market reads as TOUCHED and the record settles as a trade
+     that never opened. It is asymmetric: a null HIGH does not fabricate
+     the short side, because 0 >= entry is false. So the fill-aware
+     population — the one hg-v818's promotion path prefers, "the count that
+     describes a trade somebody could have had" — was biased toward long
+     limits and short stops.
+
+     A COUNTED NON-OBSERVATION. `isFinite(num(r.bankR))` gates bankN++ and
+     bankSum += num(r.bankR), so a settled record carrying no bankR became
+     an observation of exactly break-even: sample count up, mean pulled to
+     zero. balScore is worse — a missing score lands in the `mid` bucket
+     via `bs >= 0`, indexed as if it had been measured.
+
+     A RECORD THAT IS ALWAYS STALE. hgFwdIsStale reads bar = num(rec.barT);
+     with no barT that is 0, and `now - 0 > horizon` is true forever.
+
+     Every caller wants the strict reading. The sites that genuinely want a
+     zero say so themselves with `num(r.rr) || 0`, and NaN || 0 is still 0,
+     so they are unchanged. num is fin now, kept as a name because 29 call
+     sites use it. Same defect and same fix as omnigold.js hg-v824. */
+  function num(v){ return fin(v); }
 
   /* ==================== pure core ==================== */
 
@@ -1049,6 +1079,10 @@ localStorage. Never throws.
     /* the parallel fill-aware resolution, and the order-type rule it uses */
     W.hgFwdSettleFill = hgFwdSettleFill;
     W.hgFwdOrderType = hgFwdOrderType;
+    /* exported so a test can drive the fill question directly: a bar with
+       no low used to answer "touched" for every resting BUY_LIMIT — see num() */
+    W.hgFwdOrderTouched = hgFwdOrderTouched;
+    W.hgFwdIsStale = hgFwdIsStale;
     W.hgFwdSettle = hgFwdSettle;
     W.hgFwdStatsOf = hgFwdStats;
     W.hgFwdOverlapOf = hgFwdOverlap;

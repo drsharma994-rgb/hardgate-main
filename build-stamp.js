@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v824',
-  pack: 'OMNIGOLD stops reading a missing bar field as the price zero — num() was +v, so a single null high in the 14-bar window made the true range the gold price and took ATR from 7.79 to 293, a 38x inflation that widened a 1.5xATR stop from 11.68 points to 440; ATR sets stop width, and stop width sets size and the cost gate',
+  version: 'hg-v825',
+  pack: 'the forward log stops reading an absent field as a measured zero — a bar with no low reported every resting BUY_LIMIT as touched, settling trades that never opened and biasing the fill-aware evidence toward long limits; settled records carrying no bankR were counted as observations of exactly break-even, and a record with no barT read as permanently stale',
   built: '2026-09-17T00:00:00Z'
 };
 
