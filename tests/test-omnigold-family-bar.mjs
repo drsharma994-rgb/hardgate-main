@@ -60,14 +60,22 @@ function boot(seed){
 const W = boot();
 const T = 1700000000;
 const FWD = 'hg_forward_v1';
-const recs = (n, wins, rr) => {
+/* SPACED 48 HOURS APART ON PURPOSE. horizonBars 20 on a 1h tf is a 20-hour
+   hold, so firings two hours apart are one bet wearing twenty names, and
+   pack 836 deflates them for it. This file is about the FAMILY correction,
+   so its fixtures are genuinely independent trades and the overlap ratio is
+   1.0 — otherwise every number here would be testing two corrections at
+   once. test-omnigold-overlap-deflation.mjs covers the other one. */
+const SPACING_H = 48;
+const recs = (n, wins, rr, spacingH) => {
+  const gap = (spacingH || SPACING_H) * 3600;
   const out = [];
   for (let i = 0; i < n; i++){
     const w = i < wins;
     out.push({ tab: 'OMNIGOLD:SWING', mechanic: 'ROUND-MAGNET', sym: 'XAUUSD', tf: '1h', dir: 'long',
                entry: 4000, stop: 3980, t1: 4000 + 20 * rr, risk: 20, rr,
-               barT: T + i * 7200, horizonBars: 20,
-               state: w ? 't1' : 'stop', r: w ? rr : -1, settledT: T + i * 7200 + 3600,
+               barT: T + i * gap, horizonBars: 20,
+               state: w ? 't1' : 'stop', r: w ? rr : -1, settledT: T + i * gap + 3600,
                ticket: true, gateClear: true, shown: true });
   }
   return out;
@@ -108,7 +116,10 @@ console.log('\n== every evidence object carries both bounds ==');
   ok(ev.wilsonFam.lo < ev.wilson.lo,
      `the corrected bound is lower (${ev.wilsonFam.lo.toFixed(4)} against ${ev.wilson.lo.toFixed(4)}) — `
      + 'a wider interval is what a stricter z buys');
-  ok(ev.wilson.p === ev.wilsonFam.p, 'both describe the same observed rate');
+  ok(Math.abs(ev.wilson.p - ev.wilsonFam.p) < 1e-12,
+     'both describe the same observed rate — a stricter z widens an interval, it does not move it');
+  ok(ev.overlapRatio === 1,
+     'and these fixtures are spaced so the overlap ratio is 1.0, isolating the family correction');
   ok(C.hgOgEvBound(ev) === ev.wilsonFam, 'and a tier reads the corrected one');
 
   /* THE DISPLAYED INTERVAL IS STILL A 95% INTERVAL. Relabelling a

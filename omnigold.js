@@ -6836,6 +6836,45 @@ terse status, and never launches a first-time scan on a global refresh.
     return hgOgFamilyZ(OG_MECHANICS.length);
   }
 
+  /* WHY THIS IS NOT THE GATE'S "NO MEASUREMENT, NO PROMOTION".
+
+     The measured-edge gate refuses to promote when it cannot measure the
+     horizon book's overlap, and is right to: it is "the only path by which
+     anything becomes a ticket", one chokepoint, and withholding there costs
+     a ticket nobody was owed.
+
+     Applying the same rule here was my first attempt and it is wrong. The
+     evidence tiers read a record whose `samples` include history long since
+     folded into the pruned aggregate, while spans can only be measured on
+     raw records still in the live list. A mechanic with a long, strong,
+     fully-pruned history would have become permanently unpromotable — its
+     tier decided by the ledger's retention window rather than by its
+     evidence. That is not the conservative direction, it is a different
+     defect.
+
+     So: deflate by the measured ratio wherever one exists, which is the
+     common case, and say on the card when none does. The family-corrected
+     bound still stands in that case; what is withheld is a claim to have
+     measured the overlap, not the tier. */
+  function hgOgOverlapKnown(ev){
+    return !!(ev && isFinite(fin(ev.overlapRatio)) && fin(ev.overlapRatio) > 0);
+  }
+
+  /* what the card says when a tier is withheld for want of that measurement,
+     rather than the panel simply going quiet */
+  function hgOgOverlapScopeTxt(ev){
+    if (!ev || !ev.wilson) return '';
+    if (hgOgOverlapKnown(ev)){
+      var eff = fin(ev.effSamples);
+      return isFinite(eff)
+        ? (' · ' + fin(ev.samples) + ' settled, effective ' + eff.toFixed(1) + ' after overlap')
+        : '';
+    }
+    return ' · overlap not measurable on these records, so this sample is read as '
+         + 'independent trades — concurrent ones are not independent bets, and this '
+         + 'bound may be tighter than the evidence supports';
+  }
+
   /* the bound a tier tests, with the displayed 95% one as the fallback so a
      record built before this existed is not silently un-promotable */
   function hgOgEvBound(ev){
@@ -6849,12 +6888,21 @@ terse status, and never launches a first-time scan on a global refresh.
     var wf = gfn('hgWilson');
     wins = fin(wins); n = fin(n);
     if (!wf || !(n > 0) || wins < 0 || wins > n) return null;
-    if (opts && opts.overlapping === true){
-      var eff = hgOgEffN(n, true);
-      if (isFinite(eff) && eff > 0 && eff < n){
-        wins = wins * (eff / n);
-        n = eff;
-      }
+    /* A MEASURED ratio when the caller has one, the replay constant when it
+       asks for `overlapping`. The two must not be confused: 0.406 was
+       measured on the in-sample walk and belongs to it, which is the whole
+       reason hgFwdOverlap exists for the forward log. */
+    var ratio = NaN;
+    if (opts && isFinite(fin(opts.effRatio)) && fin(opts.effRatio) > 0 && fin(opts.effRatio) <= 1){
+      ratio = fin(opts.effRatio);
+    } else if (opts && opts.overlapping === true){
+      var eff0 = hgOgEffN(n, true);
+      if (isFinite(eff0) && eff0 > 0 && eff0 < n) ratio = eff0 / n;
+    }
+    if (isFinite(ratio) && ratio > 0 && ratio < 1){
+      var eff = Math.max(1, n * ratio);
+      wins = wins * (eff / n);
+      n = eff;
     }
     try { return wf(wins, n, isFinite(fin(z)) ? fin(z) : OG_EXEC_WILSON_Z); }
     catch (eW){ return null; }
@@ -6900,6 +6948,34 @@ terse status, and never launches a first-time scan on a global refresh.
     } catch (e){ return null; }
   }
 
+  /* HOW MUCH OF THIS SETTLED RECORD IS ONE BET.
+
+     The measured-edge gate already answers this for the horizon book, from
+     the log's own barT and horizonBars rather than by borrowing the replay's
+     0.406, and states the rule it acts on:
+
+       "NO MEASUREMENT, NO PROMOTION. Treating an unmeasurable overlap as 1.0
+        is precisely the assumption that inflates the statistic."
+
+     The three evidence tiers read the same ledger and did not. A mechanic
+     firing on consecutive bars holds several positions at once — that is
+     one bet wearing several names, and counting it as several independent
+     trades is what makes a Wilson bound look tighter than the evidence is.
+
+     A RATIO, not the raw effN, for the reason the gate gives: overlap is
+     counted over records with usable timing and the test runs on settled
+     ones, the two counts need not match, and the ratio is what transfers. */
+  function hgOgSettledOverlapRatio(tabs, mechanic){
+    var f = gfn('hgFwdOverlap');
+    if (!f) return NaN;
+    var o = null;
+    try { o = f(tabs, mechanic || null, null); } catch (e) { return NaN; }
+    var n = fin(o && o.n), eff = fin(o && o.effN);
+    if (!isFinite(n) || !isFinite(eff) || !(n > 0) || !(eff > 0)) return NaN;
+    var r = eff / n;
+    return (r > 0 && r <= 1) ? r : NaN;
+  }
+
   function hgOgMergeSettledEvidence(tabs, mechanic, dir){
     tabs = tabs || [];
     var wins = 0, losses = 0, sources = [], i, st;
@@ -6919,6 +6995,7 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     var settled = wins + losses;
     if (!(settled > 0)) return null;
+    var ovlRatio = hgOgSettledOverlapRatio(tabs, mechanic);
     return {
       source: sources.join(' + '),
       sources: sources,
@@ -6930,8 +7007,15 @@ terse status, and never launches a first-time scan on a global refresh.
          hgOgBreakevenHit for why an assumed R must never promote a setup. */
       avgRr: rrWins > 0 ? (rrSum / rrWins) : NaN,
       wilson: hgOgWilsonHit(wins, settled),
-      /* the family-corrected bound the tiers test — see hgOgPromotionZ */
-      wilsonFam: hgOgWilsonHit(wins, settled, hgOgPromotionZ()),
+      /* THE DECISION BOUND CARRIES EVERY CORRECTION, the displayed one none.
+         ev.wilson is the interval a reader would compute from wins/samples
+         and is printed as "Wilson 95% CI". ev.wilsonFam is what a tier
+         tests: the family z over 77 mechanics AND this population's own
+         measured overlap. One number to read, one to decide. */
+      overlapRatio: ovlRatio,
+      effSamples: isFinite(ovlRatio) ? Math.max(1, settled * ovlRatio) : NaN,
+      wilsonFam: hgOgWilsonHit(wins, settled, hgOgPromotionZ(),
+                               isFinite(ovlRatio) ? { effRatio: ovlRatio } : null),
       pooled: true
     };
   }
@@ -10461,7 +10545,7 @@ terse status, and never launches a first-time scan on a global refresh.
     h += '<div class="hg-mp-note">SETTLED ' + esc(ev.source) + ' · '
       + esc(String(ev.wins)) + '/' + esc(String(ev.samples)) + ' wins · '
       + pct + '% hit · Wilson 95% CI ' + lo + '–' + hi + '%'
-      + beTxt + tierTxt + esc(hgOgEvidenceScopeTxt(ev)) + '</div>';
+      + beTxt + tierTxt + esc(hgOgEvidenceScopeTxt(ev)) + esc(hgOgOverlapScopeTxt(ev)) + '</div>';
     h += '<div class="hg-mp-grid">';
     var mkt = fin(__og.spotAnchor);
     if (mkt > 0) h += '<div><i>MARKET</i><b>' + fmtPx(mkt) + '</b><u>live spot</u></div>';
@@ -10833,7 +10917,7 @@ terse status, and never launches a first-time scan on a global refresh.
     h += '<div class="hg-mp-note">SETTLED ' + esc(ev.source) + ' · '
       + esc(String(ev.wins)) + '/' + esc(String(ev.samples)) + ' wins · '
       + pct + '% hit · Wilson 95% CI ' + lo + '–' + hi + '%'
-      + (tier === 'go' ? ' · <b>meets 90% verdict bar</b>' : ' · below 90% lower bound') + esc(hgOgEvidenceScopeTxt(ev)) + '</div>';
+      + (tier === 'go' ? ' · <b>meets 90% verdict bar</b>' : ' · below 90% lower bound') + esc(hgOgEvidenceScopeTxt(ev)) + esc(hgOgOverlapScopeTxt(ev)) + '</div>';
     h += '<div class="hg-mp-grid">';
     var mkt = fin(__og.spotAnchor);
     if (mkt > 0) h += '<div><i>MARKET</i><b>' + fmtPx(mkt) + '</b><u>live spot</u></div>';
@@ -14875,6 +14959,9 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgSettledEvidence = hgOgSettledEvidence;
     window.hgOgEvidenceScopeTxt = hgOgEvidenceScopeTxt;
     window.hgOgPromotionZ = hgOgPromotionZ;
+    window.hgOgOverlapKnown = hgOgOverlapKnown;
+    window.hgOgOverlapScopeTxt = hgOgOverlapScopeTxt;
+    window.hgOgSettledOverlapRatio = hgOgSettledOverlapRatio;
     window.hgOgEvBound = hgOgEvBound;
     window.hgOgSettledExecuteOk = hgOgSettledExecuteOk;
     window.hgOgPickSettledExecutes = hgOgPickSettledExecutes;

@@ -74,8 +74,12 @@ const recs = (tab, mech, n, wins, rr) => {
     const w = i < wins;
     out.push({ tab, mechanic: mech, sym: 'XAUUSD', tf: '1h', dir: 'long',
                entry: 4000, stop: 3980, t1: 4000 + 20 * rr, risk: 20, rr,
-               barT: T + i * 7200, horizonBars: 20,
-               state: w ? 't1' : 'stop', r: w ? rr : -1, settledT: T + i * 7200 + 3600,
+               /* 48h apart: horizonBars 20 on a 1h tf is a 20-hour hold, so
+                  closer firings overlap and pack 836 deflates them for it.
+                  This file is about which POPULATION answers for a row, so
+                  its fixtures are genuinely independent trades. */
+               barT: T + i * 172800, horizonBars: 20,
+               state: w ? 't1' : 'stop', r: w ? rr : -1, settledT: T + i * 172800 + 3600,
                ticket: true, gateClear: true, shown: true });
   }
   return out;

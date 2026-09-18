@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v835',
-  pack: 'the OMNIGOLD forward promotion bar starts counting how many mechanics were tried — the replay verdict corrects for the 77-mechanic family and says every other site asking did this beat breakeven does the same, but hgOgProvenEdgeOk asked exactly that at an uncorrected 1.96, where the chance some mechanic clears by luck is 85.8% and about two promote falsely per bake; the tiers now test the Sidak-corrected bound the replay already uses while the card keeps printing a real 95% interval',
+  version: 'hg-v836',
+  pack: 'the OMNIGOLD evidence tiers stop counting concurrent trades as independent bets — the measured-edge gate already deflates the forward log for overlap measured from its own timestamps, and the three tiers that promote to the headline panel read the same ledger and did not; forty firings two hours apart on a twenty-hour hold are worth about three independent trades, and the decision bound now says so while the displayed 95% interval still describes the record as recorded',
   built: '2026-09-18T00:00:00Z'
 };
 
