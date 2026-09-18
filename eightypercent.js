@@ -3894,10 +3894,47 @@ function simpleSetupsHtml(rungs, livePx){
   return h + '</div>';
 }
 
-function whyNothingHtml(rungs){
+/* ---------------------------------------------------------------------
+   "SOMETHING FIRED" STOPPED MEANING "SOMETHING IS TAKEABLE" IN hg-v790
+
+   This panel exists to explain why there is nothing to take, and it
+   suppressed itself the moment ANY rung fired — a rule written when a
+   firing and a takeable setup were the same thing. They have not been
+   since hg-v790: a firing the venue's arithmetic refuses is counted as
+   not takeable, and hg-v783 does the same for one price has run past.
+
+   So the tab could say, in the SETUPS panel, "Nothing here is takeable. 5
+   setups fired — 5 the arithmetic refuses at this venue", and show no
+   explanation at all underneath it, because the explaining panel had
+   decided a firing meant there was nothing to explain. Worse, it also
+   withheld the session clock — "3 of 5 rungs cannot fire for another 13h
+   38m" — which is exactly what a reader in that state needs.
+
+   It now suppresses on TAKEABLE, and when firings exist but none of them
+   is takeable it says so, which is a different explanation from nothing
+   having fired.
+   --------------------------------------------------------------------- */
+function hg80TakeableCount(rungs, livePx){
+  var n = 0, i, j;
+  for (i = 0; i < (rungs || []).length; i++){
+    var r = rungs[i];
+    if (!r || !r.ok || !r.live) continue;
+    for (j = 0; j < r.live.length; j++){
+      var sg = r.live[j];
+      var grade = hg80LiveGrade(sg, livePx);
+      if (!hg80LiveActs(grade)) continue;
+      if (!hg80Quality(sg, r, grade, livePx).pays) continue;
+      n++;
+    }
+  }
+  return n;
+}
+
+function whyNothingHtml(rungs, livePx){
   var usable = rungs.filter(function(r){ return r.ok; });
   if (!usable.length) return '';
-  var i, gated = [], open = [], closest = null;
+  if (hg80TakeableCount(usable, livePx) > 0) return '';   /* there IS something to take */
+  var i, gated = [], open = [], closest = null, firedN = 0;
   var nowSec = Math.floor(Date.now() / 1000);
   var toOpen = hg80SecsToSession(nowSec);
 
@@ -3905,18 +3942,43 @@ function whyNothingHtml(rungs){
      "closest" that names a session-gated rung is worse than useless: it
      invites someone to watch a chart that cannot produce a trade for another
      eight hours. Gated rungs are only considered when nothing else is. */
-  var live = [], held = [];
+  /* THESE TWO LINES WERE ONLY EVER TRUE BECAUSE THE PANEL STAYED SILENT.
+
+     "N rungs can fire now and did not" counted every ungated rung,
+     including ones that had just fired — correct only while a firing
+     suppressed the whole panel. And "closest to firing" considered rungs
+     whose conditions ALL hold, which is not a rung close to firing, it is
+     a rung that fired: it printed "3 of 3, still needs ." with nothing
+     after it, because the missing list was empty.
+
+     Both are split honestly now: a rung that fired is reported as having
+     fired, and is never offered as the nearest thing to a firing. */
+  var live = [], held = [], openFired = [];
   for (i = 0; i < usable.length; i++){
     var r = usable[i];
-    if (r.live.length) return '';                 /* something fired; nothing to explain */
+    firedN += r.live.length;
     var isGated = (r.cfg.session !== false && toOpen > 0);
-    if (isGated) gated.push(r.def.tf); else open.push(r.def.tf);
-    if (r.nearest) (isGated ? held : live).push({ r: r, n: r.nearest, gated: isGated });
+    if (isGated) gated.push(r.def.tf);
+    else if (r.live.length) openFired.push(r.def.tf);
+    else open.push(r.def.tf);
+    /* a rung with every condition met did not come close to firing — it
+       fired, and belongs above, not in "closest" */
+    var nr = r.nearest;
+    var complete = nr && nr.score && nr.score.met === nr.score.total;
+    if (nr && !complete) (isGated ? held : live).push({ r: r, n: nr, gated: isGated });
   }
+  /* nearest by the kind-weight, then by how far the outstanding condition
+     actually is — the same ordering hg-v805 gave hg80Nearest, applied
+     across rungs rather than within one */
   function nearestOf(list){
     var b = null;
     for (var j = 0; j < list.length; j++){
-      if (!b || list[j].n.cost < b.n.cost) b = list[j];
+      var c = list[j];
+      if (!b){ b = c; continue; }
+      if (c.n.cost !== b.n.cost){ if (c.n.cost < b.n.cost) b = c; continue; }
+      var cw = c.n.worst ? fin(c.n.worst.n) : NaN, bw = b.n.worst ? fin(b.n.worst.n) : NaN;
+      if (isFinite(cw) && isFinite(bw) && cw !== bw){ if (cw < bw) b = c; continue; }
+      if (isFinite(cw) !== isFinite(bw) && isFinite(cw)) b = c;
     }
     return b;
   }
@@ -3925,11 +3987,25 @@ function whyNothingHtml(rungs){
   var h = '<div class="note warn" style="margin:8px 0;padding:8px 10px;border-left:3px solid var(--veto)">'
     + '<b>WHY THERE IS NOTHING TO TAKE RIGHT NOW</b>';
 
+  /* FIRED AND NOT TAKEABLE IS A DIFFERENT ANSWER FROM NOTHING FIRED, and
+     for years this panel could only give the second one. */
+  if (firedN){
+    h += '<br>· <b>' + firedN + ' setup' + (firedN === 1 ? '' : 's') + ' did fire</b>, and '
+      + (firedN === 1 ? 'it is' : 'none of them is') + ' takeable — the venue\'s round trip, '
+      + 'or the price having already moved, rules ' + (firedN === 1 ? 'it' : 'each of them')
+      + ' out. SETUPS above gives the reason on each card.';
+  }
+
   if (gated.length){
     h += '<br>· <b>' + gated.length + ' of ' + usable.length + ' rungs cannot fire at all</b> ('
       + esc(gated.join(', ')) + '): it is outside ' + P80_UTC_FROM + ':00-' + P80_UTC_TO
       + ':00 UTC and the window opens in <b>' + hg80DurTxt(toOpen) + '</b>. No price action '
       + 'changes that — the session gate is a clock, not a condition.';
+  }
+  if (openFired.length){
+    h += '<br>· ' + openFired.length + ' rung' + (openFired.length === 1 ? '' : 's') + ' ('
+      + esc(openFired.join(', ')) + ') could fire and did — see the line above for why '
+      + (openFired.length === 1 ? 'it is' : 'they are') + ' not takeable.';
   }
   if (open.length){
     h += '<br>· ' + open.length + ' rung' + (open.length === 1 ? '' : 's') + ' ('
@@ -4785,7 +4861,7 @@ function render(rungs, venue, recNotes, basis){
   h += focusControlHtml();
   h += livePriceHtml(gradePx, __p.feedLiveTf, spot, spotRef, rungs);
   h += armedHtml(rungs, gradePx);
-  h += whyNothingHtml(shown);
+  h += whyNothingHtml(shown, gradePx);
   h += forwardPanelHtml();
   h += mathPanelHtml(shown, venue, basis);
   /* directly under the geometry it is about: the required rate, then what
@@ -5473,6 +5549,8 @@ W.hg80CoincideRead   = hg80CoincideRead;
 W.hg80MissDistance   = hg80MissDistance;
 W.hg80MissWorst      = hg80MissWorst;
 W.hg80MissTxt        = hg80MissTxt;
+W.hg80TakeableCount  = hg80TakeableCount;
+W.whyNothingHtml     = whyNothingHtml;
 W.coincideHtml       = coincideHtml;
 W.HG_P80_CSS         = P80_CSS;
 W.hg80InjectCss      = hg80InjectCss;

@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v805',
-  pack: 'the 80PERCENT tab measures how far short a near miss actually is — it ranked a bar at RSI 100 needing RSI under 45 exactly like one at 46, and a third renderer was measuring every variant against the spec\u2019s thresholds instead of its own',
+  version: 'hg-v806',
+  pack: 'the 80PERCENT tab explains the silence it reports — the panel that says why nothing is takeable went quiet the moment anything FIRED, so a page reading \u201cnothing here is takeable, 5 fired, 5 refused\u201d carried no explanation and withheld the session clock with it',
   built: '2026-09-17T00:00:00Z'
 };
 

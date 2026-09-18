@@ -1068,9 +1068,73 @@ console.log('\n== the panel suppresses itself when there IS something to take ==
   const rows = series(280, { tfSec: 900, endHour: 15 });
   const out = ctx.hg80ScanTf(rows, def, ctx.hg80VenueRt());
   ok(out.live.length > 0, 'the fixture fires on its last closed candle');
-  ok(/if \(r\.live\.length\) return '';/.test(SRC),
-     'and the panel returns nothing in that case — explaining an absence that is not there '
-     + 'would bury the setup it is standing next to');
+
+  /* THE RULE, NOT THE LINE. This pinned the literal `if (r.live.length)
+     return '';` — and that line was the bug. It suppressed the panel on
+     anything FIRING, a rule written when a firing and a takeable setup
+     were the same thing. They have not been since hg-v790: the SETUPS
+     panel could say "Nothing here is takeable. 5 setups fired — 5 the
+     arithmetic refuses" while the panel that exists to explain why there
+     is nothing to take stayed silent, and withheld the session clock with
+     it. */
+  ok(!/if \(r\.live\.length\) return '';/.test(CODE),
+     'the panel no longer goes quiet merely because something fired');
+  ok(/hg80TakeableCount\(usable, livePx\) > 0\) return ''/.test(CODE),
+     'it goes quiet when something is TAKEABLE, which is what it always meant');
+
+  /* driven, not read: a takeable setup silences it, an unpayable one
+     does not */
+  const freeVenue = { rtFrac: 0, rtCostPct: 0, venue: 'ZERO-COST', basis: 'test' };
+  const cheap = ctx.hg80ScanTf(rows, def, freeVenue);
+  const px = cheap.live[0].plan.entry;
+  ok(ctx.hg80TakeableCount([cheap], px) > 0,
+     'at a venue that takes nothing, the firing is takeable');
+  ok(ctx.whyNothingHtml([cheap], px) === '',
+     'and the panel says nothing — explaining an absence that is not there would bury the '
+     + 'setup it is standing next to');
+
+  ok(ctx.hg80TakeableCount([out], out.live[0].plan.entry) === 0,
+     'at the real venue the same firing is refused by the arithmetic');
+  const spoke = String(ctx.whyNothingHtml([out], out.live[0].plan.entry));
+  ok(spoke !== '', 'so the panel speaks, where before it went silent on a page saying nothing '
+     + 'was takeable');
+  const st = spoke.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  ok(/setup did fire|setups did fire/.test(st),
+     'saying that something DID fire — a different answer from nothing having fired');
+  ok(/is takeable|none of them is\) takeable|not takeable|takeable/.test(st),
+     'and that it is not takeable');
+  ok(/SETUPS above gives the reason/.test(st),
+     'pointing at where the per-card reason already is, rather than repeating it');
+
+  /* with no live price nothing is graded, so nothing is takeable and the
+     panel still explains rather than guessing */
+  ok(ctx.whyNothingHtml([out], NaN) !== '',
+     'and with no live price at all it still explains, because nothing has been shown takeable');
+
+  /* TWO STATEMENTS THAT WERE ONLY TRUE BECAUSE THE PANEL STAYED SILENT.
+     Making it speak on an unpayable firing exposed both immediately: it
+     said "2 rungs (4h, 1d) can fire now and did not" about rungs that had
+     just fired, and offered a "closest to firing" whose conditions ALL
+     held — printing "3 of 3, still needs ." with nothing after it. */
+  /* UNGATED, so this does not depend on the hour the suite runs at. A 15m
+     rung outside 13:00-18:00 UTC is reported as gated and never reaches
+     the branch under test — the same time-dependence that has bitten this
+     file before. */
+  const ungated = Object.assign({}, out, { cfg: Object.assign({}, out.cfg, { session: false }) });
+  const ust = String(ctx.whyNothingHtml([ungated], out.live[0].plan.entry))
+    .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  ok(!/can fire now and did not/.test(ust),
+     'a rung that fired is never also counted as one that did not');
+  ok(/could fire and did/.test(ust),
+     'it is reported as having fired, pointing at the line that says why that is not enough');
+  ok(!/still needs \.|still needs\s*<\/b>\s*\./.test(spoke),
+     'and no sentence trails off with an empty list of what is outstanding');
+  ok(!/3 of 3, still needs/.test(st),
+     'because a rung with every condition met did not come CLOSE to firing — it fired');
+
+  /* the ordering fix from hg-v805 reaches this panel's own picker too */
+  ok(/c\.n\.worst \? fin\(c\.n\.worst\.n\) : NaN/.test(CODE),
+     'and "closest" across rungs breaks ties on distance, as hg80Nearest does within one');
 }
 
 console.log('\n== distance is weighted by what each missing condition would COST to satisfy ==');
