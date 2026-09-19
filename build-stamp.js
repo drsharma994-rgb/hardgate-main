@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v851',
-  pack: 'the gold formation layer is walked with each of its 28 optional dependencies forced to SUCCEED, one at a time \u2014 the branch shape that hid pack 850\u2019s bug, which only fired when a detector actually returned something. The dependency list is read out of formation.js rather than copied, so a new typeof G.X joins the sweep automatically and one with no fixture fails the run instead of being skipped. No further landmine of that class was found: all 28 can succeed without the point-of-interest ranker answering null and without the ticket builder throwing. Non-vacuity is pinned on the two the bug actually killed \u2014 forcing hgDetectOrderBlock must now yield the order block at score 90 and hgDetectFvg the FVG at 87, where both yielded null before',
+  version: 'hg-v852',
+  pack: 'XM_OMNIGOLD_MAX_LOTS did not cap. OMNIGOLD\u2019s XM bot read the size and the ceiling, and when the size was larger it RAISED THE CEILING to match \u2014 so XM_OMNIGOLD_LOTS=5.00 against a 0.10 cap sent five lots, fifty times the configured maximum, on the live gold-order path. It compounded twice: the per-order clip of a client-supplied volume uses that same cap, so once raised it was a no-op too, and the status line prints size and cap together (\u20185 lots (max 5)\u2019) so the reader saw a self-consistent pair and never the ceiling they set. The size yields to the cap now. The existing test asserted the clip HELPER was correct \u2014 it always was; what was wrong was the cap handed to it, and the only test of that wiring used a pair that never exercised the branch',
   built: '2026-09-18T00:00:00Z'
 };
 
