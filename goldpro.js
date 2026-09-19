@@ -125,7 +125,12 @@ function goldProPlan(inp){
     var stop = (dir === 'long') ? entry - stopDist : entry + stopDist;
     var t1 = (dir === 'long') ? entry + 2 * stopDist : entry - 2 * stopDist;
     var t2 = (dir === 'long') ? entry + 3.5 * stopDist : entry - 3.5 * stopDist;
-    return { dir: dir, entry: entry, stop: stop, t1: t1, t2: t2,
+    /* sym: this desk reads gold and nothing else, and the plan it returns is
+       handed straight to hgMpPin. Without it the MOST PROBABLE panel rendered
+       its `row.sym || '?'` fallback, so the pinned leader read
+       "MOST PROBABLE SETUP ? LONG ... Levels are the live ticket" — a live
+       ticket that could not name its instrument. */
+    return { sym: 'XAUUSD', dir: dir, entry: entry, stop: stop, t1: t1, t2: t2,
              risk: stopDist, riskPct: stopDist / entry * 100,
              rr1: 2, rr2: 3.5, structural: structural };
   }catch(e){ return null; }
@@ -345,17 +350,47 @@ function renderStructurePanel(st, rows1d, rows4h, src){
   return h;
 }
 
+/* ABSENCE IS NOT A READING.
+
+   isFinite(null) is TRUE, and a relational compare coerces null to 0, so a
+   guard written `isFinite(x)` lets a missing feed through and then answers
+   every question about it as if it were zero. This file already carries the
+   note twice — once on M5 below, once further down at the COT read — and
+   three rows of this ledger still had the bug. Measured by handing this
+   function four feed objects whose fields are all null, which is what a cold
+   or geo-blocked desk actually has:
+
+     M1  FRED DTWEXBGS · dollar index (20d trend)  n/a · FLAT (n/a% over 20d)  NEUT
+     M2  US 10Y yield (20d trend)                  n/a% · FLAT (n/a% rel. 20d) NEUT
+     M4  Gold/Silver ratio   n/a · <70 — silver relatively rich; risk-on regime  INFO
+
+   M4 is the worst of the three: `gsr < 70` is true when gsr is null, so with
+   no ratio at all the desk named a macro REGIME. M1 also claimed the FRED
+   series as its source for a number it did not have. The other four rows got
+   it right and said "unavailable · N/A" — which is the branch all three of
+   these had sitting unused below them.
+
+   The stamp matters as much as the text: this ledger's own legend reads
+   "BULL tailwind · BEAR headwind · NEUT/INFO · N/A", so NEUT means measured
+   and neutral while N/A means not measured. Printing NEUT for a feed that
+   never arrived is the same claim as the sentence beside it. */
+function gpFin(v){
+  if (v === null || v === undefined || v === '') return NaN;
+  var n = +v;
+  return isFinite(n) ? n : NaN;
+}
+
 function renderMacroPanel(macro, funding, ls, cot){
   var rows = [];
 
   // M1 — DXY 20d trend (FALLING dollar = gold BULL)
-  var dxy = (macro && macro.dxyOfficial && isFinite(macro.dxyOfficial.value)) ? macro.dxyOfficial
+  var dxy = (macro && macro.dxyOfficial && isFinite(gpFin(macro.dxyOfficial.value))) ? macro.dxyOfficial
     : ((macro && macro.dxy) ? macro.dxy : null);
-  var dxyLbl = (macro && macro.dxyOfficial && isFinite(macro.dxyOfficial.value)) ? 'FRED DTWEXBGS' : 'DXY proxy';
-  if (dxy && isFinite(dxy.value)){
+  var dxyLbl = (macro && macro.dxyOfficial && isFinite(gpFin(macro.dxyOfficial.value))) ? 'FRED DTWEXBGS' : 'DXY proxy';
+  if (dxy && isFinite(gpFin(dxy.value))){
     var tr = dxy.trend20 || 'FLAT';
     rows.push(lrow('M1', dxyLbl + ' · dollar index (20d trend)',
-      fnum(dxy.value, 2) + ' · ' + tr + (isFinite(dxy.change20Pct) ? ' (' + signed(dxy.change20Pct, 1) + '% over 20d)' : ''),
+      fnum(dxy.value, 2) + ' · ' + tr + (isFinite(gpFin(dxy.change20Pct)) ? ' (' + signed(dxy.change20Pct, 1) + '% over 20d)' : ''),
       tr === 'FALLING' ? 'pass' : (tr === 'RISING' ? 'veto' : 'na'),
       tr === 'FALLING' ? 'BULL' : (tr === 'RISING' ? 'BEAR' : 'NEUT')));
   } else rows.push(lrow('M1', 'DXY · dollar index (20d trend)', 'unavailable', 'na', 'N/A'));
@@ -363,9 +398,9 @@ function renderMacroPanel(macro, funding, ls, cot){
   // M2 — US10Y trend (FALLING yields = gold BULL)
   var tnxTr = macro ? macro.tnxTrend : null;
   var tnxSrc = (macro && macro.tnxSource) ? (' · ' + macro.tnxSource) : '';
-  if (macro && isFinite(macro.tnx)){
+  if (macro && isFinite(gpFin(macro.tnx))){
     rows.push(lrow('M2', 'US 10Y yield (20d trend)',
-      fnum(macro.tnx, 2) + '% · ' + (tnxTr || 'FLAT') + (isFinite(macro.tnxChange20Pct) ? ' (' + signed(macro.tnxChange20Pct, 1) + '% rel. 20d)' : '') + tnxSrc,
+      fnum(macro.tnx, 2) + '% · ' + (tnxTr || 'FLAT') + (isFinite(gpFin(macro.tnxChange20Pct)) ? ' (' + signed(macro.tnxChange20Pct, 1) + '% rel. 20d)' : '') + tnxSrc,
       tnxTr === 'FALLING' ? 'pass' : (tnxTr === 'RISING' ? 'veto' : 'na'),
       tnxTr === 'FALLING' ? 'BULL' : (tnxTr === 'RISING' ? 'BEAR' : 'NEUT')));
   } else rows.push(lrow('M2', 'US 10Y yield (20d trend)', 'unavailable', 'na', 'N/A'));
@@ -379,7 +414,7 @@ function renderMacroPanel(macro, funding, ls, cot){
     hint === 'TAILWIND' ? 'BULL' : (hint === 'HEADWIND' ? 'BEAR' : (hint === 'NEUTRAL' ? 'NEUT' : 'N/A'))));
 
   // M4 — gold/silver ratio regime (informational, not a directional stamp)
-  var gsr = macro ? macro.goldSilverRatio : null;
+  var gsr = gpFin(macro ? macro.goldSilverRatio : null);
   if (isFinite(gsr)){
     rows.push(lrow('M4', 'Gold/Silver ratio',
       fnum(gsr, 1) + (gsr > 80 ? ' · >80 — silver historically undervalued; risk-off regime'
@@ -403,7 +438,7 @@ function renderMacroPanel(macro, funding, ls, cot){
   } else rows.push(lrow('M5', 'XAU perp funding (8h)', 'unavailable', 'na', 'N/A'));
 
   // M6 — XAU perp retail positioning (global long/short accounts, 1h)
-  var lp = (ls && ls.latest && isFinite(ls.latest.longPct)) ? ls.latest.longPct : null;
+  var lp = (ls && ls.latest && isFinite(gpFin(ls.latest.longPct))) ? ls.latest.longPct : null;
   if (lp !== null){
     rows.push(lrow('M6', 'XAU retail long % (1h)',
       fnum(lp, 0) + '% long' + (lp >= 60 ? ' — retail heavily long: contrarian bearish lean'
@@ -415,7 +450,7 @@ function renderMacroPanel(macro, funding, ls, cot){
   if (cot && cot.crowding && cot.crowding !== 'N/A'){
     var cotDate = cot.reportDate ? new Date(cot.reportDate).toISOString().slice(0, 10) : 'n/a';
     var cotDetail = (cot.crowding || 'NEUTRAL') + ' · spec net/OI '
-      + (isFinite(cot.specNetPctOi) ? (cot.specNetPctOi * 100).toFixed(1) + '%' : '—')
+      + (isFinite(gpFin(cot.specNetPctOi)) ? (cot.specNetPctOi * 100).toFixed(1) + '%' : '—')
       + ' · report ' + cotDate + ' (weekly — not live)';
     var cotStamp = (cot.crowding === 'SPEC CROWDED LONG') ? 'CAUTION' : ((cot.crowding === 'SPEC CROWDED SHORT') ? 'CAUTION' : 'INFO');
     rows.push(lrow('M7', 'CFTC COT · managed money (COMEX gold)',
@@ -731,7 +766,7 @@ async function runGoldPro(ui){
               });
               if (gsd && gsd.aside === false && isFinite(gsd.entry) && isFinite(gsd.stop) &&
                   isFinite(gsd.t1) && isFinite(gsd.t2) && gsd.entry > 0){
-                lvPlan = { dir: gsd.dir, entry: gsd.entry, stop: gsd.stop, t1: gsd.t1, t2: gsd.t2,
+                lvPlan = { sym: 'XAUUSD', dir: gsd.dir, entry: gsd.entry, stop: gsd.stop, t1: gsd.t1, t2: gsd.t2,
                            risk: Math.abs(gsd.entry - gsd.stop),
                            riskPct: isFinite(gsd.riskPct) ? gsd.riskPct
                                     : Math.abs(gsd.entry - gsd.stop) / gsd.entry * 100,
@@ -875,6 +910,10 @@ if (typeof window !== 'undefined'){
      the first version of its test silently skipping when this was local. */
   window.goldProClosed = goldProClosed;
   window.goldProPlan = goldProPlan;
+  /* Exported for the same reason: the MACRO LEDGER is a pure function of
+     four feed objects, and what it prints when a feed is absent is exactly
+     what needs checking. */
+  window.goldProMacroPanel = renderMacroPanel;
   window.goldProState = function(){
     try{ return window.__hgGoldProVerdict || null; }catch(e){ return null; }
   };
