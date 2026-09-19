@@ -517,7 +517,17 @@ function runGoldPineScan(bars, ctx){
     }
   } catch(eSmc){}
 
-  return { swing: swing, scalp: scalp, levels: levels, source: source, at: Date.now() };
+  /* The tape belongs to the SCAN, not to the paint: goldPineScan() is what
+     every other consumer reads, so the verdict travels with the rows. Swing
+     against the 4H leg, scalp against the 15m one — the same candles each
+     list was formed on, the same split hgSmcEnrich uses just above. */
+  var tapeSwing = gpTapeOf(bars && bars.rows4h);
+  var tapeScalp = gpTapeOf(bars && bars.rows15m);
+  gpTapeStamp(swing, tapeSwing);
+  gpTapeStamp(scalp, tapeScalp);
+
+  return { swing: swing, scalp: scalp, levels: levels, source: source,
+           tape: { swing: tapeSwing, scalp: tapeScalp }, at: Date.now() };
 }
 
 function factorsHTML(factors){
@@ -533,6 +543,67 @@ function factorsHTML(factors){
     parts.push('<b>' + esc(cat) + '</b>: ' + esc(byCat[cat].join(' · ')));
   });
   return parts.join('<br>');
+}
+
+/* THE GOLD TAPE, WHICH THIS TAB DID NOT READ.
+
+   GOLD SCALP, GOLD SWING, OMNIGOLD and GOLD DIRECTION all read one shared
+   gold tape (hgGoldUniformTape in gold-catalog.js: last close vs EMA21 AND
+   EMA21 vs EMA50 on their own rows) and hold anything pointing the other
+   way. The rule is stated outright in AGENTS.md: against-tape plans are
+   stamped AGAINST GOLD TAPE · HELD and are never MOST PROBABLE, SETUP
+   ACTIVATED or CONFIRMED COMBINED.
+
+   GOLD PINE never called it. Measured by feeding the whole gold family one
+   synthetic tape and sweeping what each tab renders, it pinned
+
+     MOST PROBABLE SETUP · XAUUSD LONG · GOOD 66 · GOLDPINE · LEADER
+     This is the ranked leader on GOLDPINE. Levels are the live ticket.
+     ENTRY 3671.14 ...
+
+   on a tape reading SHORT, and on the mirrored bars pinned a SHORT leader
+   on a tape reading LONG. Not a bias — it simply had no tape in its path,
+   so its leader was whatever scored highest.
+
+   The side is read per horizon, not blended: the swing rows are judged
+   against the 4H tape and the scalp rows against the 15m one, which is the
+   same leg each sibling desk uses for its own half. An unread tape (a thin
+   or flat stack, or fewer than 55 bars) holds nothing, so this can only
+   ever remove a claim, never invent one. */
+function gpTapeOf(rows){
+  var fn = (typeof W.hgGoldUniformTape === 'function') ? W.hgGoldUniformTape : null;
+  if (!fn || !Array.isArray(rows) || !rows.length) return '';
+  try{ return String(fn(rows) || '').toLowerCase(); }catch(e){ return ''; }
+}
+
+function gpTapeStamp(list, tape){
+  if (!Array.isArray(list)) return;
+  for (var i = 0; i < list.length; i++) if (list[i]) list[i].goldTape = tape;
+}
+
+/** Same two chips GOLD SCALP and GOLD SWING print, on the same wording. */
+function gpTapeChipHtml(s){
+  var t = String((s && s.goldTape) || '').toLowerCase();
+  var d = String((s && s.dir) || '').toLowerCase();
+  if ((t !== 'long' && t !== 'short') || (d !== 'long' && d !== 'short')) return '';
+  return d === t
+    ? '<span class="gpip ok">WITH GOLD TAPE</span>'
+    : '<span class="gpip">AGAINST GOLD TAPE \u00b7 HELD</span>';
+}
+
+/** The rows that may lead. Cards still render either way — this only
+    decides what the MOST PROBABLE pin is allowed to choose from. */
+function gpTapeAligned(list){
+  var out = [], i, s, t, d;
+  for (i = 0; i < (list || []).length; i++){
+    s = list[i];
+    if (!s) continue;
+    t = String(s.goldTape || '').toLowerCase();
+    d = String(s.dir || '').toLowerCase();
+    if (t !== 'long' && t !== 'short'){ out.push(s); continue; }
+    if (d === t) out.push(s);
+  }
+  return out;
 }
 
 function cardHTML(s, rank){
@@ -554,6 +625,8 @@ function cardHTML(s, rank){
         if (smcHead) html = html.replace('</h2>', ' ' + smcHead + '</h2>');
       }
     }catch(eSmcP){}
+    var tapeHead = gpTapeChipHtml(s);
+    if (tapeHead) html = html.replace('</h2>', ' ' + tapeHead + '</h2>');
     return html;
   }
   var cls = s.dir === 'long' ? 'long' : 'short';
@@ -642,7 +715,7 @@ function gpHandoffBlock(s){
 
   return '<div class="panel ' + cls + ' tier-' + tier + '" style="margin-bottom:12px">'
     + '<h2>XAUUSD <span>' + esc(s.dir.toUpperCase()) + ' · ' + modeLabel + ' · Grade ' + esc(s.grade)
-    + rankBadge + badge
+    + rankBadge + badge + gpTapeChipHtml(s)
     + ((typeof W.hgBookStampChip === 'function')
       ? W.hgBookStampChip('XAUUSD', s.dir, { scanner: 'goldpine', strategy: s.mode || 'goldpine', klass: 'metals', fund: 'gold' })
       : '')
@@ -756,6 +829,11 @@ function mount(el){
       /* v694: the lists are already reordered by solidity in
          runGoldPineScan, so slice directly instead of re-sorting via
          topProbSetups (which would undo the measured-edge bucket order). */
+      /* runGoldPineScan already stamped every row and recorded the verdict;
+         the paint just reads it, so the cards and the pin cannot disagree
+         with what goldPineScan() hands anyone else. */
+      var tapeSwing = (result.tape && result.tape.swing) || '';
+      var tapeScalp = (result.tape && result.tape.scalp) || '';
       var swingTop = result.swing.slice(0, TOP_SETUPS);
       var scalpTop = result.scalp.slice(0, TOP_SETUPS);
       result.swingTop = swingTop;
@@ -772,7 +850,18 @@ function mount(el){
       var killedNote = (typeof W.hgSolidityKilledNoteHtml === 'function')
         ? (W.hgSolidityKilledNoteHtml(result.swing) + W.hgSolidityKilledNoteHtml(result.scalp))
         : '';
-      var html = killedNote
+      /* Only tape-aligned rows may be pinned as the leader. When that
+         empties a ranked list the panel says so rather than vanishing —
+         a silent desk is the thing this family keeps having to fix. */
+      var mpList = gpTapeAligned(swingTop.concat(scalpTop));
+      var ranked = swingTop.length + scalpTop.length;
+      var heldNote = (ranked && !mpList.length)
+        ? ('<div class="note warn">MOST PROBABLE stands empty \u2014 every ranked formation on this scan '
+           + 'points against the gold tape (4H ' + esc(tapeSwing || 'unread')
+           + ' \u00b7 15m ' + esc(tapeScalp || 'unread') + '). '
+           + 'The cards below still print their levels, stamped AGAINST GOLD TAPE \u00b7 HELD.</div>')
+        : '';
+      var html = heldNote + killedNote
         + sectionHTML('GOLD PINE — SWING SETUPS (4H)', swingTop,
           'No swing formations — check gold feed (4h bars). Layers need ~280×4h for full Pine stack.',
           { total: result.swing.length })
@@ -781,7 +870,7 @@ function mount(el){
           { total: result.scalp.length });
 
       if (out) out.innerHTML = html;
-      try { if (typeof W.hgMpPin === 'function') W.hgMpPin('goldpine', swingTop.concat(scalpTop), null, out); } catch (eMp) {}
+      try { if (typeof W.hgMpPin === 'function') W.hgMpPin('goldpine', mpList, null, out); } catch (eMp) {}
       var dt = ((Date.now() - t0) / 1000).toFixed(1);
       if (stat) stat.textContent = 'done · top ' + swingTop.length + '/' + result.swing.length + ' swing · top '
         + scalpTop.length + '/' + result.scalp.length + ' scalp · ' + dt + 's';
@@ -848,6 +937,9 @@ async function goldPineRefresh(){
 
 W.runGoldPineScan = runGoldPineScan;
 W.topProbSetups = topProbSetups;
+/* test seam — the tape verdict is pure and worth checking without a DOM */
+W.goldPineTapeChipHtml = gpTapeChipHtml;
+W.goldPineTapeAligned = gpTapeAligned;
 W.goldPineProbScore = probScore;
 W.GOLD_PINE_TOP_SETUPS = TOP_SETUPS;
 W.goldPineScan = function(){
