@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v845',
-  pack: 'the gold family sweeps are held against the app\u2019s own list of gold tabs instead of a hand-written one. index.html\u2019s GOLD nav group names SIXTEEN tabs; the three cross-cutting sweeps that claimed to run across \u2018every gold tab\u2019 carried tables of six and seven, and a hand-written table cannot notice a tab it was never told about \u2014 the vacuous-sweep problem those files were written to avoid, in those files. The new sweep reads the group out of index.html, loads all 201 scripts index.html loads, and drives all fifteen registered gold tabs through mount and refresh: 62 chunks, 136,434 characters, no NaN, undefined or [object Object] anywhere, and the sixteenth named as the inline GOLD SETUP pane rather than dropped from the count',
+  version: 'hg-v846',
+  pack: 'every gold tab is now scanned through its own control and the bars are shown to be load-bearing. Pack 845 reported all fifteen mounting and refreshing clean; driving the same fifteen against a STARVED feed showed six rendering byte-for-byte what they rendered fed, so that green was measuring a repaint and not any arithmetic. The sweep now finds each tab\u2019s scan control by reading the click handlers it wired \u2014 no selector table \u2014 and GOLD DIRECTION turned out to need two steps: its CONFIRM & SCAN button ships disabled until a side is armed, so a one-press harness never scanned it at all and read that as \u2018the feed does not matter here\u2019. Arming first takes it from 6,657 characters to 10,195. Twelve of fifteen now shrink past a measured noise floor when the bars are taken away; the three that do not read no candles at all, each reason checked in its own file',
   built: '2026-09-18T00:00:00Z'
 };
 
