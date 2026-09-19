@@ -6969,27 +6969,54 @@ function hgGoldMergeFedFomc(news, fedCal){
   }catch(e){ return news; }
 }
 
+/* Strict, because every guard below used to be a bare isFinite and
+   isFinite(null) is TRUE. Two things came of that, measured by handing this
+   function the shapes a quote feed actually produces:
+
+     { spreadUsd: null }        -> 0.000, unchecked FALSE
+     { spread: null }           -> 0.000, unchecked FALSE
+     { bid: null, ask: null }   -> 0.000, unchecked FALSE
+
+   an absent spread reported as a MEASURED PERFECT ZERO rather than as not
+   measured, which is the same claim-from-nothing the gold pro ledger had;
+   and worse, because +null is 0 inside the subtraction:
+
+     { bid: 4300, ask: null }   -> 4300.000, LOCK
+     { bid: null, ask: 4300 }   -> 4300.000, LOCK
+
+   half a quote produced a spread equal to the PRICE and hard-dropped the
+   candidate with "SPREAD LOCK - live bid/ask 4300.000 > 0.25". That is a
+   fail-CLOSED on missing data, and the rule this filter is written to
+   (AGENTS.md: "missing quotes fail-open") says the opposite. A one-sided
+   quote is now no quote, and a real zero is still a real zero. */
+function gdFin(v){
+  if (v === null || v === undefined || v === '') return NaN;
+  var n = +v;
+  return isFinite(n) ? n : NaN;
+}
+
 function hgGoldSpreadUsd(src){
   try{
     if (src == null) return NaN;
-    if (typeof src === 'number') return +src;
+    if (typeof src === 'number') return gdFin(src);
     if (typeof src !== 'object') return NaN;
-    if (isFinite(src.spreadUsd)) return +src.spreadUsd;
-    if (isFinite(src.spreadPoints)) return +src.spreadPoints * HG_GOLD_SPREAD_POINT;
-    if (isFinite(src.spread)){
-      if (src.spreadUnit === 'points') return +src.spread * HG_GOLD_SPREAD_POINT;
-      return +src.spread;
-    }
-    if (isFinite(src.bid) && isFinite(src.ask)) return Math.abs(+src.ask - +src.bid);
+    var v = gdFin(src.spreadUsd);
+    if (isFinite(v)) return v;
+    v = gdFin(src.spreadPoints);
+    if (isFinite(v)) return v * HG_GOLD_SPREAD_POINT;
+    v = gdFin(src.spread);
+    if (isFinite(v)) return (src.spreadUnit === 'points') ? v * HG_GOLD_SPREAD_POINT : v;
+    var bid = gdFin(src.bid), ask = gdFin(src.ask);
+    if (isFinite(bid) && isFinite(ask)) return Math.abs(ask - bid);
     var book = src.l2OrderBook || src.book || src;
     var bids = book.bids || book.bid;
     var asks = book.asks || book.ask;
     if (Array.isArray(bids) && Array.isArray(asks) && bids.length && asks.length){
       var b0 = bids[0], a0 = asks[0];
-      var bp = (typeof b0 === 'number') ? +b0
-        : (b0 && (isFinite(b0.price) ? +b0.price : +b0[0]));
-      var ap = (typeof a0 === 'number') ? +a0
-        : (a0 && (isFinite(a0.price) ? +a0.price : +a0[0]));
+      var bp = (typeof b0 === 'number') ? gdFin(b0)
+        : (b0 ? (isFinite(gdFin(b0.price)) ? gdFin(b0.price) : gdFin(b0[0])) : NaN);
+      var ap = (typeof a0 === 'number') ? gdFin(a0)
+        : (a0 ? (isFinite(gdFin(a0.price)) ? gdFin(a0.price) : gdFin(a0[0])) : NaN);
       if (isFinite(bp) && isFinite(ap)) return Math.abs(ap - bp);
     }
     return NaN;
@@ -14959,6 +14986,7 @@ W.hgGoldApplyPerpNative = hgGoldApplyPerpNative;
 W.hgGoldLoadDeltaPerp = hgGoldLoadDeltaPerp;
 W.hgGoldLoadFedCalendar = hgGoldLoadFedCalendar;
 W.hgGoldSpreadUsd = hgGoldSpreadUsd;
+W.hgGoldSpreadFin = gdFin;
 W.hgGoldSpreadLock = hgGoldSpreadLock;
 W.hgGoldMtfBias = hgGoldMtfBias;
 W.hgGoldMtfMatrix = hgGoldMtfMatrix;
