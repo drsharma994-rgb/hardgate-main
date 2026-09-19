@@ -1223,16 +1223,47 @@ localStorage. Never throws.
     };
 
     /* Record a whole scan's output in one call — the shape every tab needs.
-       barT is derived by flooring NOW to the timeframe, so re-running a scan
-       inside the same bar records each setup once, which is exactly the dedup
-       rule the log is built on. Callers pass their own setups; nothing here
-       inspects tab internals, so instrumenting a new tab is one line.
+
+       WHICH BAR. Flooring NOW to the timeframe names the FORMING bar, and an
+       engine votes on CLOSED bars: cryptoultra's closedRows drops the forming
+       one, so the bar it actually read is always the one before. Measured on
+       15m, the gap is exactly one bar for an instant scan and two when the
+       scan straddles a boundary — CRYPTO SCAN walks hundreds of contracts with
+       two sequential fetches each and calls this once at the end, so straddles
+       are routine.
+
+       Three consequences, all from the same line:
+
+         - the record names a bar that had not closed when the setup was made,
+           implying information the engine did not have;
+         - settlement walks rows STRICTLY AFTER barT, so the first bar of the
+           trade is skipped. A setup entered at the close of 13:45 was settled
+           from 14:15, never from 14:00 — and on a 15m scalp that first bar is
+           where most fills and stops happen;
+         - the dedup rule breaks on the case it exists for. Two scans that
+           voted on the SAME closed bar, one ending at 14:58 and one at 15:03,
+           get barT 14:45 and 15:00, so one firing becomes two records.
+
+       A caller that knows which bar it read now says so: a finite c.barT wins,
+       and nothing else changes. CRYPTO SCAN has always had it — res.bar.t, the
+       closed bar the card prints as "closed 15m bar ... UTC". Callers that do
+       not pass one keep the floor-of-now behaviour exactly.
+
        Returns how many NEW trades were recorded. */
     W.hgFwdRecordScan = function(tab, tf, cands, opts){
       try {
         if (!tab || !Array.isArray(cands) || !cands.length) return 0;
         var sec = TF_SEC[tf] || 14400;
-        var barT = Math.floor((Date.now() / 1000) / sec) * sec;
+        var nowSec = Date.now() / 1000;
+        var barT = Math.floor(nowSec / sec) * sec;
+        /* the bar a caller says it read, floored to the timeframe and never
+           in the future — a future bar is not a bar anything was read on */
+        function barOf(c){
+          var v = +(c && c.barT);
+          if (!isFinite(v) || v <= 0) return barT;
+          var f = Math.floor(v / sec) * sec;
+          return (f > barT) ? barT : f;
+        }
         var o = opts || {};
         var added = 0, i, c;
         for (i = 0; i < cands.length; i++){
@@ -1245,7 +1276,7 @@ localStorage. Never throws.
             tf: tf,
             dir: c.dir,
             entry: c.entry, stop: c.stop, t1: c.t1,
-            barT: barT,
+            barT: barOf(c),
             horizonBars: o.horizonBars || 20,
             ticket: (c.ticket !== undefined) ? c.ticket : (o.ticket === true),
             /* accept the grade wherever the calling desk keeps it */
