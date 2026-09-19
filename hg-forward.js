@@ -321,6 +321,36 @@ localStorage. Never throws.
     return { list: out, added: true, reason: 'recorded', folded: folded };
   }
 
+  /* Which symbols still have something to settle.
+
+     hgFwdResolve is keyed by SYMBOL and takes the bars, so a desk can only
+     settle what it has candles for — and a desk that never calls it records
+     evidence that never resolves. CRYPTO SCAN did exactly that: it has
+     written 15m records since hg-v735, no desk in the app resolves a crypto
+     symbol at 15m (goldultra resolves XAUUSD, everything else runs 4h), and
+     hgFwdSettle only matches a record when the timeframes agree. Every one of
+     its rows sat open until STALE_HORIZONS turned it into "recorded, then the
+     contract went quiet" — which was never true. The bars existed. Nothing
+     looked at them.
+
+     Returning the open symbols lets a scanner resolve only what needs it,
+     instead of loading the log once per contract across a universe of
+     hundreds. Pure. */
+  function hgFwdOpenSyms(list, tab, tf){
+    var recs = Array.isArray(list) ? list : [];
+    var seen = {}, out = [], i, r;
+    for (i = 0; i < recs.length; i++){
+      r = recs[i];
+      if (!r || r.state !== 'open' || !r.sym) continue;
+      if (tab && r.tab !== tab) continue;
+      if (tf && r.tf && r.tf !== tf) continue;
+      if (seen[r.sym]) continue;
+      seen[r.sym] = 1;
+      out.push(r.sym);
+    }
+    return out;
+  }
+
   /* An open record whose bars were never going to arrive.
 
      NOT a settlement: we do not know the outcome and must never guess one.
@@ -1175,6 +1205,7 @@ localStorage. Never throws.
        no low used to answer "touched" for every resting BUY_LIMIT — see num() */
     W.hgFwdOrderTouched = hgFwdOrderTouched;
     W.hgFwdIsStale = hgFwdIsStale;
+    W.hgFwdOpenSymsOf = hgFwdOpenSyms;
     W.hgFwdSettle = hgFwdSettle;
     W.hgFwdStatsOf = hgFwdStats;
     W.hgFwdLossStreakOf = hgFwdLossStreak;
@@ -1203,6 +1234,11 @@ localStorage. Never throws.
     /* Hand back fresh candles for a symbol; any open record whose outcome is
        now knowable settles. Call this at the START of a scan, before
        recording the current bar's setups. */
+    /* The symbols a scanner still owes bars to. */
+    W.hgFwdOpenSyms = function(tab, tf){
+      try { return hgFwdOpenSyms(load(), tab, tf); }
+      catch (e){ hgFwdWarn('openSyms', e); return []; }
+    };
     W.hgFwdResolve = function(sym, tf, rows){
       try {
         var r = hgFwdSettle(load(), sym, tf, rows);
