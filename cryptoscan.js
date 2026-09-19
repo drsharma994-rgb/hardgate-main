@@ -181,6 +181,73 @@ function csFwdRows(setups){
   return out;
 }
 
+/* ---- COVERAGE: how much of the universe the scan actually read ----
+
+   The empty state was one sentence for four different outcomes:
+
+     "No setups found — no contracts generated signals."
+
+   It said that whether every contract was read and none had a directional
+   signal, or every contract failed to fetch, or every contract was dropped for
+   having fewer than 230 closed 15m bars (the engine's MIN_15M — CoinDCX
+   carries young and thin contracts that never reach it), or some mixture. The
+   first is a finding about the market. The other three are a finding about the
+   scan, and the tab reported them as the market.
+
+   The counts existed — runScan tracks scanned / skipped / errors — but they
+   only ever reached the transient status line, which the next scan overwrites
+   and which the card block never mentions. They belong with the cards, where
+   the claim is made.
+
+   Pure and exported for the same reason csBlockerTally is: a decision that
+   lives inside runScan cannot be reached without live network. */
+function csCoverage(run){
+  var universe = Math.max(0, +(run && run.universe) || 0);
+  var scanned  = Math.max(0, +(run && run.scanned)  || 0);
+  var skipped  = Math.max(0, +(run && run.skipped)  || 0);
+  var errors   = Math.max(0, +(run && run.errors)   || 0);
+  var signals  = Array.isArray(run && run.setups) ? run.setups.length : 0;
+  /* what the engine actually got to look at */
+  var read = Math.max(0, scanned - skipped - errors);
+  return {
+    universe: universe, scanned: scanned, skipped: skipped, errors: errors,
+    read: read, signals: signals,
+    pct: universe > 0 ? read / universe : null,
+    partial: (skipped + errors) > 0,
+    known: universe > 0 || scanned > 0
+  };
+}
+
+function csCoverageHTML(run){
+  var c = csCoverage(run);
+  if (!c.known) return '';
+  var txt = c.read + ' of ' + c.universe + ' contracts read'
+    + (c.pct != null ? ' (' + Math.round(100 * c.pct) + '%)' : '');
+  if (c.skipped) txt += ' · ' + c.skipped + ' skipped, fewer than 230 closed 15m bars';
+  if (c.errors) txt += ' · ' + c.errors + ' could not be fetched';
+  return '<div style="font-size:10px;color:' + (c.partial ? '#92400E' : '#64748B')
+    + ';margin:4px 0 2px">COVERAGE · ' + esc(txt) + '</div>';
+}
+
+function csEmptyHTML(run){
+  var c = csCoverage(run);
+  if (!c.known){
+    return '<div class="cs-empty">No setups — the scan has not run in this session yet.</div>';
+  }
+  var why;
+  if (!c.read){
+    why = 'none of the ' + c.universe + ' contracts could be read, so the engine never ran. '
+        + 'This is a finding about the scan, not about the market.';
+  } else if (c.partial){
+    why = c.read + ' of ' + c.universe + ' contracts reached the engine and none produced a '
+        + 'directional signal. The other ' + (c.skipped + c.errors) + ' were never read, so '
+        + 'nothing is claimed about them.';
+  } else {
+    why = 'all ' + c.read + ' contracts were read and none produced a directional signal.';
+  }
+  return '<div class="cs-empty">No setups — ' + esc(why) + '</div>' + csCoverageHTML(run);
+}
+
 /* ---- WHY EMPTY: which gate actually closed the HIGH-QUALITY block ----
 
    An empty block used to be explained entirely in terms of signal quality
@@ -475,6 +542,9 @@ W.__csSetupCardHTML = setupCardHTML;
 W.csBlockerTally = csBlockerTally;
 W.csWhyEmptyHTML = csWhyEmptyHTML;
 W.csFooterNote = csFooterNote;
+W.csCoverage = csCoverage;
+W.csCoverageHTML = csCoverageHTML;
+W.csEmptyHTML = csEmptyHTML;
 W.csProReady = csProReady;
 
 var __ui = null, __results = null, __busy = false;
@@ -488,11 +558,11 @@ function setProgress(pctV){
   try{ if (__ui && __ui.bar) __ui.bar.style.width = Math.min(100, Math.max(0, pctV)) + '%'; }catch(e){}
 }
 
-function renderCards(setups){
+function renderCards(setups, run){
   if (!__ui || !__ui.cards) return;
   __voteStore = {};
   if (!setups || !setups.length){
-    __ui.cards.innerHTML = '<div class="cs-empty">No setups found — no contracts generated signals.</div>';
+    __ui.cards.innerHTML = csEmptyHTML(run || (setups ? { setups: setups } : null));
     return;
   }
   var hq = setups.filter(function(s){ return s.isHighQuality; });
@@ -514,7 +584,9 @@ function renderCards(setups){
   var hqSetups = setups.filter(function(s){ return s.isHighQuality; });
   var lqSetups = setups.filter(function(s){ return !s.isHighQuality; });
 
-  /* name the gate that closed the block before blaming the reads */
+  /* say how much of the universe was read before saying anything about it */
+  h += csCoverageHTML(run || { setups: setups });
+  /* then name the gate that closed the block, before blaming the reads */
   h += csWhyEmptyHTML(csBlockerTally(setups));
 
   if (hqSetups.length > 0){
@@ -787,7 +859,7 @@ async function runScan(ui){
     }catch(eFwd){ try{ if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('cryptoscan', eFwd); }catch(eW){} }
 
     __results = { at: now, setups: setups, scanned: scanned, errors: errors, skipped: skipped, universe: items.length };
-    renderCards(setups);
+    renderCards(setups, __results);
     setStat(setups.length + ' setup(s) from ' + scanned + ' scanned · ' + skipped + ' skipped (too few bars) · ' + errors + ' errors · ' + new Date().toISOString().slice(11, 19) + ' UTC', false);
     setProgress(100);
     return 'refreshed';
@@ -816,7 +888,7 @@ function mount(el){
     var bar = el.querySelector('#csBar');
     __ui = { cards: cards, stat: stat, btn: btn, bar: bar };
     if (btn) btn.addEventListener('click', function(){ runScan(__ui); });
-    if (__results && __results.setups) renderCards(__results.setups);
+    if (__results && __results.setups) renderCards(__results.setups, __results);
   }catch(e){}
 }
 
