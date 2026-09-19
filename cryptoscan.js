@@ -181,6 +181,123 @@ function csFwdRows(setups){
   return out;
 }
 
+/* ---- WHY EMPTY: which gate actually closed the HIGH-QUALITY block ----
+
+   An empty block used to be explained entirely in terms of signal quality
+   ("most signals lack sufficient confluence"), and for 14 hours of every day
+   that is not what emptied it: the session gate admits 07:00-17:00 UTC, so
+   58% of the day nothing can qualify whatever its confluence. Same shape as
+   the SWING tab's WHY EMPTY panel and cgSoleBlocker, which this follows.
+
+   Kept PURE and exported for the same reason csFwdRows and csSmcRank are:
+   everything else in the scan path lives inside runScan and cannot be reached
+   without live network, so a decision that is not lifted out cannot be tested.
+
+   `sole` is the column worth reading — setups where relaxing exactly ONE gate
+   would have produced a HIGH-QUALITY signal, which is what tells you whether
+   the clock, the regime or the reads are what you are waiting on. */
+var CS_GATE_LABELS = {
+  confidence: 'price agreement under 75%',
+  regime:     'regime reads CHOP',
+  session:    'outside 07:00-17:00 UTC',
+  voting:     'three-layer voting gate',
+  sentiment:  'major sentiment conflict'
+};
+
+/** would this setup be pro-grade if its quality gates were all clear? */
+function csProReady(s){
+  if (!s) return false;
+  var conf = +s.threeLayerConfidence;
+  if (!isFinite(conf) || conf < 0.75) return false;
+  if (s.layerAgreement !== 2) return false;
+  if (s.externalRisk && s.externalRisk.cascadeImminent) return false;
+  return true;
+}
+
+function csBlockerTally(setups){
+  var out = { n: 0, hq: 0, byGate: {}, sole: {}, proReady: 0, proBlocked: 0, clean: 0 };
+  if (!Array.isArray(setups)) return out;
+  for (var i = 0; i < setups.length; i++){
+    var s = setups[i];
+    if (!s) continue;
+    out.n++;
+    if (s.isHighQuality){ out.hq++; continue; }
+    var keys = Array.isArray(s.gateKeys) ? s.gateKeys : [];
+    var ready = csProReady(s);
+    if (ready) out.proReady++;
+    for (var k = 0; k < keys.length; k++){
+      out.byGate[keys[k]] = (out.byGate[keys[k]] || 0) + 1;
+    }
+    /* exactly one gate open, and nothing else standing in the way */
+    if (keys.length === 1 && ready) out.sole[keys[0]] = (out.sole[keys[0]] || 0) + 1;
+    /* every gate clear, so what stopped it was the pro-grade stamp itself */
+    if (!keys.length){ out.clean++; if (!ready) out.proBlocked++; }
+  }
+  return out;
+}
+
+/* The closing note used to attribute an empty block entirely to confluence.
+   One of the gates is a clock that shuts for 14 hours a day, so that
+   explanation is wrong more often than it is right — defer to the tally.
+
+   Lifted out of renderCards and exported for the same reason csBlockerTally
+   is: a branch that only renderCards can reach is a branch a test can only
+   grep for, and a source scan passed a mutation that pinned the condition to
+   false. */
+function csFooterNote(setups, hqCount, tally){
+  var n = Array.isArray(setups) ? setups.length : 0;
+  hqCount = +hqCount || 0;
+  tally = tally || csBlockerTally(setups);
+  var clockSole = (tally.sole && tally.sole.session) || 0;
+  var clockOnly = !hqCount && clockSole > 0;
+  return '<div class="cs-note">CRYPTO SCAN — FILTERED FOR QUALITY. Out of ' + n
+    + ' total signals, ' + hqCount + ' clear every quality gate AND the pro-grade stamp '
+    + '(three-layer confidence 75%+, price and order flow agreeing). Risk-reward is not among '
+    + 'those standards: the plan ladder is a fixed 1.5R, so an R:R test on it is true for every '
+    + 'setup by construction and filters nothing. '
+    + 'Lower-quality signals shown for reference but not recommended for trading. '
+    + (clockOnly
+        ? 'The block above is empty because of the SESSION GATE, not the reads: ' + clockSole
+          + ' setup' + (clockSole === 1 ? '' : 's') + ' cleared everything else. That gate passes '
+          + '07:00-17:00 UTC, 10 of 24 hours. '
+        : 'The 470-indicator voting engine produces high volume but low accuracy — '
+          + 'most signals lack sufficient confluence. ')
+    + 'Professional traders only trade the strongest setups. This tab shows why: signal quantity '
+    + '≠ signal quality. No win rates claimed. No invented thresholds.</div>';
+}
+
+function csWhyEmptyHTML(tally){
+  if (!tally || !tally.n) return '';
+  var keys = Object.keys(tally.byGate);
+  if (!keys.length && !tally.proBlocked) return '';
+  keys.sort(function(a, b){ return tally.byGate[b] - tally.byGate[a]; });
+
+  var h = '<div style="margin:10px 0;padding:8px 10px;border:1px solid #E2E8F0;border-radius:6px;background:#F8FAFC">'
+    + '<div style="font-size:11px;font-weight:700;color:#334155;letter-spacing:.06em">WHY THE HIGH-QUALITY BLOCK IS '
+    + (tally.hq ? 'THIS SIZE' : 'EMPTY') + '</div>'
+    + '<div style="font-size:10px;color:#64748B;margin:2px 0 6px">' + tally.n + ' signal'
+    + (tally.n === 1 ? '' : 's') + ' scanned · ' + tally.hq + ' high-quality · counts below are per gate, '
+    + 'so one setup can appear in more than one row</div>'
+    + '<table class="cs-vtbl"><tr><th>gate</th><th>blocked</th><th>ONLY blocker</th></tr>';
+  for (var i = 0; i < keys.length; i++){
+    var k = keys[i], sole = tally.sole[k] || 0;
+    h += '<tr><td>' + esc(CS_GATE_LABELS[k] || k) + '</td><td>' + tally.byGate[k] + '</td><td'
+      + (sole ? ' style="font-weight:700;color:#92400E"' : '') + '>' + sole + '</td></tr>';
+  }
+  if (tally.proBlocked){
+    h += '<tr><td>' + esc('pro-grade stamp (confidence / layer agreement / cascade)')
+      + '</td><td>' + tally.proBlocked + '</td><td>' + tally.proBlocked + '</td></tr>';
+  }
+  h += '</table>';
+  if (tally.sole.session){
+    h += '<div style="font-size:10px;color:#92400E;margin-top:6px">' + tally.sole.session
+      + ' setup' + (tally.sole.session === 1 ? ' was' : 's were') + ' held back by the CLOCK alone. '
+      + 'The session gate passes 07:00-17:00 UTC, which is 10 of 24 hours — outside it nothing '
+      + 'can be high-quality whatever its confluence.</div>';
+  }
+  return h + '</div>';
+}
+
 /* the plan's own expiry, so a record cannot outlive the setup it describes;
    the card prints it as "expires after N bars" */
 function csFwdHorizon(setups){
@@ -355,6 +472,10 @@ function setupCardHTML(s, idx){
    A source scan for the UNCHECKED line survived a mutation that made its
    branch unreachable, because the regex matched the dead body. */
 W.__csSetupCardHTML = setupCardHTML;
+W.csBlockerTally = csBlockerTally;
+W.csWhyEmptyHTML = csWhyEmptyHTML;
+W.csFooterNote = csFooterNote;
+W.csProReady = csProReady;
 
 var __ui = null, __results = null, __busy = false;
 
@@ -393,6 +514,9 @@ function renderCards(setups){
   var hqSetups = setups.filter(function(s){ return s.isHighQuality; });
   var lqSetups = setups.filter(function(s){ return !s.isHighQuality; });
 
+  /* name the gate that closed the block before blaming the reads */
+  h += csWhyEmptyHTML(csBlockerTally(setups));
+
   if (hqSetups.length > 0){
     h += '<div style="margin:10px 0;font-size:11px;font-weight:700;color:#166534;padding:6px 8px;background:#DCFCE7;border-radius:6px">HIGH-QUALITY SIGNALS'
       + '<br><span style="font-weight:400;font-size:10px;color:#166534">every quality gate clear (75%+ price agreement · trend regime · liquid hours · voting gate · no sentiment conflict) AND pro-grade (three-layer confidence 75%+ · price and order flow agree · no liquidation cascade)</span></div>';
@@ -410,9 +534,7 @@ function renderCards(setups){
     }
   }
 
-  h += '<div class="cs-note">CRYPTO SCAN — FILTERED FOR QUALITY. Out of ' + setups.length + ' total signals, ' + hqSetups.length + ' clear every quality gate AND the pro-grade stamp (three-layer confidence 75%+, price and order flow agreeing). Risk-reward is not among those standards: the plan ladder is a fixed 1.5R, so an R:R test on it is true for every setup by construction and filters nothing. '
-    + 'Lower-quality signals shown for reference but not recommended for trading. The 470-indicator voting engine produces high volume but low accuracy — '
-    + 'most signals lack sufficient confluence. Professional traders only trade the strongest setups. This tab shows why: signal quantity ≠ signal quality. No win rates claimed. No invented thresholds.</div>';
+  h += csFooterNote(setups, hqSetups.length, csBlockerTally(setups));
   __ui.cards.innerHTML = h;
 }
 
@@ -469,11 +591,29 @@ async function runScan(ui){
         if (res.ok && res.dir && res.plan){
           var pct = res.count ? res.count.pct : 0;
           var h = new Date(now).getUTCHours();
-          var liquidHour = (h >= 7 && h < 12) || (h >= 12 && h < 17);  // London 07-12, NY overlap 12-17 UTC
-          var qualityGates = [];
-          if (pct < 0.75) qualityGates.push('confidence ' + Math.round(pct * 100) + '% < 75%');
-          if (res.regime === 'chop') qualityGates.push('regime: CHOP');
-          if (!liquidHour) qualityGates.push('session: low liquidity');
+          /* The two ranges were decorative: (h>=7 && h<12) || (h>=12 && h<17)
+             has no gap, so it is one 10-hour block, 07:00-17:00 UTC.
+
+             It is also FIXED UTC, and summer-anchored. Read as local sessions
+             (Intl, 2026): in summer it is London 08:00-18:00 and New York
+             03:00-13:00; in winter it is London 07:00-17:00 and New York
+             02:00-12:00. London is off the offset this window assumes on 155
+             days of the year (42%), New York on 127 (35%). Which local hours
+             the author meant is not recorded, so the window is NOT moved here
+             — picking an anchor is a trading decision, the same call made for
+             the gold session-weight table in pack 860. What is no longer left
+             implicit is the consequence below.
+
+             Ten of 24 hours pass, so for 14 hours a day — 58% — no setup can
+             be HIGH-QUALITY whatever its confluence, and the footer used to
+             explain that emptiness entirely in terms of signal quality. The
+             blocker tally now says which gate actually closed the block. */
+          var liquidHour = (h >= 7 && h < 17);
+          var qualityGates = [], gateKeys = [];
+          function addGate(key, text){ gateKeys.push(key); qualityGates.push(text); }
+          if (pct < 0.75) addGate('confidence', 'confidence ' + Math.round(pct * 100) + '% < 75%');
+          if (res.regime === 'chop') addGate('regime', 'regime: CHOP');
+          if (!liquidHour) addGate('session', 'session: low liquidity (outside 07:00-17:00 UTC)');
 
           /* Layer 2: Order Flow Voting (decorrelates from price action) */
           var orderFlow = {};
@@ -529,14 +669,14 @@ async function runScan(ui){
 
           /* Apply voting result to quality gates */
           if (!voteResult.shouldTrade){
-            qualityGates.push('VOTING_GATE: ' + (voteResult.gateReasons || []).join(' + '));
+            addGate('voting', 'VOTING_GATE: ' + (voteResult.gateReasons || []).join(' + '));
           }
 
           /* Sentiment conflict detection */
           if (typeof hgSentimentGate === 'function'){
             sentimentGate = hgSentimentGate(item.sym, res.dir, pct);
             if (!sentimentGate.shouldTrade && sentimentGate.conflictLevel === 'major'){
-              qualityGates.push('sentiment: ' + res.dir + ' vs ' + (sentiment.score > 0 ? 'bullish' : 'bearish'));
+              addGate('sentiment', 'sentiment: ' + res.dir + ' vs ' + (sentiment.score > 0 ? 'bullish' : 'bearish'));
             }
           }
 
@@ -585,6 +725,7 @@ async function runScan(ui){
             votes: res.votes,
             bar: res.bar,
             qualityGates: qualityGates,
+            gateKeys: gateKeys,
             isHighQuality: qualityGates.length === 0 && proGradeCheck.isPro
           };
 
