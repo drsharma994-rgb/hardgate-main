@@ -6909,11 +6909,29 @@ function hgGoldNewsIsTier1(title){
   }catch(e){ return false; }
 }
 
+/* Returns a COPY, always. This is a reader, and what it reads is news.js's
+   module singleton — NEWS.events, the same array the NEWS tab renders and
+   newsRiskFromEvents walks for every crypto symbol. It used to hand out that
+   live array, and hgGoldNewsGate then pushed the Fed calendar's FOMC rows
+   into whatever it got back.
+
+   Measured on one goldScalpSetups pass against a 16-row fomc list: 13 gate
+   calls, 208 rows appended to the shared calendar, every scan, at the
+   hardcoded 10-minute sweep. Sixty scans (ten hours of cycles) took that
+   cache from 2 events to 12,482, and the scan itself from 22ms to 55ms,
+   because each gate call re-walks the whole list running four regexes per
+   row. GOLD SWING evaluates the same gate on the same cache.
+
+   The appended rows were also unit-foreign: news.js stores t in SECONDS (it
+   computes ev.t * 1000 wherever it reads one) and api/fed-calendar.js emits
+   epoch MS. Nothing misreads them today — all four readers of that array
+   test ev.impact first and Fed rows carry no impact — but a seconds array
+   holding ms rows is one added field away from doing so. */
 function hgGoldNewsEvents(news){
   try{
     if (!news) return [];
-    if (Array.isArray(news.events)) return news.events;
-    if (Array.isArray(news)) return news;
+    if (Array.isArray(news.events)) return news.events.slice();
+    if (Array.isArray(news)) return news.slice();
     return [];
   }catch(e){ return []; }
 }
@@ -6924,11 +6942,11 @@ function hgGoldNewsGate(news, nowMs){
     if (!isFinite(nowMs)) nowMs = Date.now();
     if (!news){ out.unchecked = true; return out; }
     var evs = hgGoldNewsEvents(news);
-    /* Official Fed calendar FOMC decision/press events (merged by callers). */
-    if (Array.isArray(news.fomc)){
-      for (var fi = 0; fi < news.fomc.length; fi++){
-        if (news.fomc[fi]) evs.push(news.fomc[fi]);
-      }
+    /* Official Fed calendar FOMC decision/press events (merged by callers).
+       concat, never push: this gate reads the desk's news cache, it does not
+       write to it. See hgGoldNewsEvents above for what the push cost. */
+    if (Array.isArray(news.fomc) && news.fomc.length){
+      evs = evs.concat(news.fomc.filter(function(f){ return !!f; }));
     }
     if (!evs.length){
       if (!Array.isArray(news) && !('events' in news) && !('fomc' in news)) out.unchecked = true;
@@ -14979,6 +14997,7 @@ W.hgGoldRealYieldBias = hgGoldRealYieldBias;
 W.hgGoldDollarBias = hgGoldDollarBias;
 W.hgGoldNewsIsTier1 = hgGoldNewsIsTier1;
 W.hgGoldNewsGate = hgGoldNewsGate;
+W.hgGoldNewsEvents = hgGoldNewsEvents;   /* test seam: proves the reader copies */
 W.hgGoldMergeFedFomc = hgGoldMergeFedFomc;
 W.hgGoldOiTrap = hgGoldOiTrap;
 W.hgGoldFundingExtreme = hgGoldFundingExtreme;
