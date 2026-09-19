@@ -718,22 +718,38 @@ var HG_GOLD_EDGE_UTC_H_FALLBACK = 22;
 var __hgGoldTzFmt = null;
 
 /** New York's UTC offset in hours at this instant, or NaN. */
-function hgGoldNyOffsetH(ms){
+/** A named zone's UTC offset in hours at this instant, or NaN. One cached
+    formatter per zone — constructing these is the expensive part. */
+var __hgTzFmts = {};
+function hgTzOffsetH(ms, tz){
   try{
     if (typeof Intl !== 'object' || typeof Intl.DateTimeFormat !== 'function') return NaN;
-    if (!__hgGoldTzFmt){
-      __hgGoldTzFmt = new Intl.DateTimeFormat('en-US',
-        { timeZone: HG_GOLD_ANCHOR_TZ, timeZoneName: 'shortOffset' });
+    tz = String(tz || HG_GOLD_ANCHOR_TZ);
+    if (!__hgTzFmts[tz]){
+      __hgTzFmts[tz] = new Intl.DateTimeFormat('en-US',
+        { timeZone: tz, timeZoneName: 'shortOffset' });
     }
-    var parts = __hgGoldTzFmt.formatToParts(new Date(ms)), name = '', i;
+    var parts = __hgTzFmts[tz].formatToParts(new Date(ms)), name = '', i;
     for (i = 0; i < parts.length; i++) if (parts[i].type === 'timeZoneName') name = parts[i].value;
     var m = /GMT([+-]\d{1,2})(?::(\d{2}))?/.exec(String(name));
-    if (!m) return NaN;
+    if (!m) return /^GMT$/.test(String(name).trim()) ? 0 : NaN;
     var hh = +m[1], mm = m[2] ? (+m[2]) / 60 : 0;
     if (!isFinite(hh)) return NaN;
     return hh + (hh < 0 ? -mm : mm);
   }catch(e){ return NaN; }
 }
+
+/** The fractional local hour in a named zone, or NaN. */
+function hgTzHourFrac(ms, tz){
+  var off = hgTzOffsetH(ms, tz);
+  if (!isFinite(off)) return NaN;
+  var d = new Date(ms);
+  var utc = d.getUTCHours() + d.getUTCMinutes() / 60 + d.getUTCSeconds() / 3600;
+  var h = utc + off;
+  return ((h % 24) + 24) % 24;
+}
+
+function hgGoldNyOffsetH(ms){ return hgTzOffsetH(ms, HG_GOLD_ANCHOR_TZ); }
 
 /** The UTC hour the gold week turns on, for the instant given. */
 function hgGoldEdgeUtcH(ms){
@@ -890,6 +906,8 @@ window.hgSecsToGoldWeekend = hgSecsToGoldWeekend;
    to PRINT the current close hour does not have to recompute it */
 window.hgGoldEdgeUtcH = hgGoldEdgeUtcH;
 window.hgGoldNyOffsetH = hgGoldNyOffsetH;
+window.hgTzOffsetH = hgTzOffsetH;
+window.hgTzHourFrac = hgTzHourFrac;
 window.hgGoldWeekendMoves = hgGoldWeekendMoves;
 window.hgGoldWeekendRisk = hgGoldWeekendRisk;
 window.hgGoldWeekendReadout = hgGoldWeekendReadout;
