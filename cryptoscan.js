@@ -220,6 +220,11 @@ function csCoverage(run){
      read out as "fewer than 230 closed 15m bars". */
   var unread   = Math.max(0, +(run && run.unread)   || 0);
   var signals  = Array.isArray(run && run.setups) ? run.setups.length : 0;
+  /* what the universe loader was offered, before its own two filters */
+  var offered  = Math.max(0, +(run && run.offered) || 0);
+  var dTurn    = Math.max(0, +(run && run.droppedTurnover) || 0);
+  var dVenue   = Math.max(0, +(run && run.droppedVenue) || 0);
+  var dNoTick  = Math.max(0, +(run && run.droppedNoTicker) || 0);
   var why = (run && run.unreadWhy && typeof run.unreadWhy === 'object') ? run.unreadWhy : {};
   /* what the engine actually got to look at */
   var read = Math.max(0, scanned - skipped - errors - unread);
@@ -227,7 +232,12 @@ function csCoverage(run){
     universe: universe, scanned: scanned, skipped: skipped, errors: errors,
     unread: unread, unreadWhy: why,
     read: read, signals: signals,
+    offered: offered, droppedTurnover: dTurn, droppedVenue: dVenue, droppedNoTicker: dNoTick,
+    dropped: dTurn + dVenue + dNoTick,
+    minTurnover: Math.max(0, +(run && run.minTurnover) || 0),
     pct: universe > 0 ? read / universe : null,
+    /* against what the source actually offered, which is the honest ceiling */
+    pctOffered: offered > 0 ? read / offered : null,
     partial: (skipped + errors + unread) > 0,
     known: universe > 0 || scanned > 0
   };
@@ -256,6 +266,17 @@ function csCoverageHTML(run){
   }
   if (c.skipped) txt += ' · ' + c.skipped + ' skipped, fewer than 230 closed 15m bars';
   if (c.errors) txt += ' · ' + c.errors + ' threw during the scan';
+  /* the universe was filtered before the scan ever saw it — say so, or "100%
+     read" reads as "everything", which it is not */
+  if (c.dropped){
+    var pre = [];
+    if (c.droppedTurnover) pre.push(c.droppedTurnover + ' under the $'
+      + (c.minTurnover >= 1e6 ? (c.minTurnover / 1e6) + 'M' : c.minTurnover) + ' turnover floor');
+    if (c.droppedVenue) pre.push(c.droppedVenue + ' on other venues');
+    if (c.droppedNoTicker) pre.push(c.droppedNoTicker + ' with no ticker');
+    txt += ' · ' + c.dropped + ' of ' + c.offered + ' never offered to the scan: ' + pre.join(', ')
+      + (c.pctOffered != null ? ' — ' + Math.round(100 * c.pctOffered) + '% of the source universe' : '');
+  }
   return '<div style="font-size:10px;color:' + (c.partial ? '#92400E' : '#64748B')
     + ';margin:4px 0 2px">COVERAGE · ' + esc(txt) + '</div>';
 }
@@ -904,8 +925,15 @@ async function runScan(ui){
       }
     }catch(eFwd){ try{ if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('cryptoscan', eFwd); }catch(eW){} }
 
+    /* universe is the list the scan was HANDED, which two filters already
+       shrank. Carry the funnel so COVERAGE can quote both. */
     __results = { at: now, setups: setups, scanned: scanned, errors: errors, skipped: skipped,
-                  unread: unread, unreadWhy: unreadWhy, universe: items.length };
+                  unread: unread, unreadWhy: unreadWhy, universe: items.length,
+                  offered: +pack.rawLen || 0,
+                  droppedTurnover: +pack.droppedTurnover || 0,
+                  droppedVenue: +pack.droppedVenue || 0,
+                  droppedNoTicker: +pack.droppedNoTicker || 0,
+                  minTurnover: +pack.minTurnover || 0 };
     renderCards(setups, __results);
     setStat(setups.length + ' setup(s) from ' + scanned + ' scanned · ' + skipped + ' skipped (too few bars) · '
       + unread + ' unread (fetch) · ' + errors + ' errors · ' + new Date().toISOString().slice(11, 19) + ' UTC', false);
