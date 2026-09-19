@@ -23,8 +23,24 @@ function gfn(name){
 }
 function pxF(n){
   if (typeof W.px === 'function') return W.px(n);
-  if (!fin(+n)) return '—';
-  return String(+n);
+  /* THE FALLBACK WAS String(+n), AND THE FALLBACK IS THE ONLY PATH.
+
+     W.px is never defined: there is no `function px(`, `window.px =` or
+     `W.px =` anywhere in this repo, so this branch has always been dead and
+     every price this file printed went through String(+n) unrounded. GOLD
+     PINE rendered "ENTRY 4050.620761151771 · SL 4069.903921366599" onto a
+     card carrying SEND TO TRADE PLAN. The sibling fmtF two lines down falls
+     back to toFixed(2), so one file degraded two ways.
+
+     This is the house rule, the one omniroute's fmtPx uses: enough digits for
+     a sub-cent alt, two for gold, and the fin() treatment of null / '' /
+     undefined rather than the price zero. The W.px delegation stays in case a
+     build ever defines it. */
+  if (n === null || n === undefined || n === '') return '—';
+  var v = +n;
+  if (!isFinite(v)) return '—';
+  var a = Math.abs(v);
+  return v.toFixed(a >= 1000 ? 2 : a >= 1 ? 4 : a >= 0.01 ? 5 : a >= 0.0001 ? 7 : 9);
 }
 function fmtF(n, d){
   if (typeof W.fmt === 'function') return W.fmt(n, d);

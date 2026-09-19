@@ -6,7 +6,17 @@ var NW_SCRIPT = { id: 'nw-envelope', label: 'NW Envelope', fn: 'pineNwEnvelope',
   opts: { bandwidth: 8.0, mult: 2.5, lookback: 50, atrLen: 100 } };
 var EDGE_NOTE = W.PINE_EDGE_UNIVERSE_NOTE || 'Run EDGE scan first.';
 function fin(v){ return typeof v === 'number' && isFinite(v); }
-function pxF(n){ return (typeof W.px === 'function') ? W.px(n) : (fin(+n) ? String(+n) : '—'); }
+function pxF(n){
+  /* see goldpine.js: W.px is defined nowhere in this repo, so the fallback is
+     the only path and String(+n) printed unrounded floats onto cards. House
+     rule, same as omniroute's fmtPx. */
+  if (typeof W.px === 'function') return W.px(n);
+  if (n === null || n === undefined || n === '') return '—';
+  var v = +n;
+  if (!isFinite(v)) return '—';
+  var a = Math.abs(v);
+  return v.toFixed(a >= 1000 ? 2 : a >= 1 ? 4 : a >= 0.01 ? 5 : a >= 0.0001 ? 7 : 9);
+}
 
 function buildPlan(dir, price, rows, res){
   var mean = res && fin(+res.meanTarget) ? +res.meanTarget : (res && fin(+res.nwCenter) ? +res.nwCenter : null);

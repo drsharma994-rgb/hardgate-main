@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v846',
-  pack: 'every gold tab is now scanned through its own control and the bars are shown to be load-bearing. Pack 845 reported all fifteen mounting and refreshing clean; driving the same fifteen against a STARVED feed showed six rendering byte-for-byte what they rendered fed, so that green was measuring a repaint and not any arithmetic. The sweep now finds each tab\u2019s scan control by reading the click handlers it wired \u2014 no selector table \u2014 and GOLD DIRECTION turned out to need two steps: its CONFIRM & SCAN button ships disabled until a side is armed, so a one-press harness never scanned it at all and read that as \u2018the feed does not matter here\u2019. Arming first takes it from 6,657 characters to 10,195. Twelve of fifteen now shrink past a measured noise floor when the bars are taken away; the three that do not read no candles at all, each reason checked in its own file',
+  version: 'hg-v847',
+  pack: 'GOLD PINE was printing ENTRY 4050.620761151771 \u00b7 SL 4069.903921366599 onto a card carrying SEND TO TRADE PLAN, and had been all along. Its price formatter delegates to W.px and falls back to String(+n) when W.px is absent \u2014 and W.px is defined nowhere in this repo, so the delegation never once fired and the raw fallback was the only path every price ever took. The sibling formatter two lines below it in the same file falls back to toFixed(2). Seven PINE tabs carry the identical line and are fixed with it. All eight now round by magnitude on the house ladder, so gold reads 4050.62 and a sub-cent alt keeps its figures instead of reading 0.00. Found by reading what pack 846\u2019s harness actually renders, and pinned by a rule over all 452 gold prices the family prints',
   built: '2026-09-18T00:00:00Z'
 };
 
