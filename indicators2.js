@@ -690,19 +690,74 @@ function hgPortfolioConcentration(positions, corr){
    fires. The data decides.
    ============================================================================= */
 var HG_GOLD_CLOSE_DOW = 5;    /* Friday */
-var HG_GOLD_CLOSE_UTC_H = 22; /* 22:00 UTC */
 var HG_GOLD_OPEN_DOW = 0;     /* Sunday */
-var HG_GOLD_OPEN_UTC_H = 22;
+
+/* THE EDGE IS A NEW YORK HOUR, NOT A UTC ONE.
+
+   These two edges used to be the constant 22 — Friday 22:00 UTC to Sunday
+   22:00 UTC. That is 17:00 New York, and 17:00 New York is what the spot /
+   CME week actually turns on; 22:00 UTC is only what it equals in EST. For
+   the 238 days a year New York sits in EDT the real edge is 21:00 UTC, so
+   the fixed hour was an hour late at BOTH ends of the weekend:
+
+     Friday 21:00-22:00 UTC   the book is closed, the gate said open
+                              -> a ticket, and on the XM path a live order,
+                                 into a market that had already shut
+     Sunday 21:00-22:00 UTC   the book is open, the gate said closed
+                              -> an hour of gold setups vetoed every week
+
+   34 weekends, ~68 wrong hours a year, and the current date falls inside
+   that window. The anchor below is derived per instant, so the spring
+   weekend correctly closes at 22:00 UTC and reopens at 21:00.
+
+   The fallback is the old constant: where Intl cannot report a named-zone
+   offset the behaviour is exactly what it has always been, never worse. */
+var HG_GOLD_ANCHOR_TZ = 'America/New_York';
+var HG_GOLD_ANCHOR_LOCAL_H = 17;   /* 17:00 NY = 22:00 UTC in EST, 21:00 in EDT */
+var HG_GOLD_EDGE_UTC_H_FALLBACK = 22;
+var __hgGoldTzFmt = null;
+
+/** New York's UTC offset in hours at this instant, or NaN. */
+function hgGoldNyOffsetH(ms){
+  try{
+    if (typeof Intl !== 'object' || typeof Intl.DateTimeFormat !== 'function') return NaN;
+    if (!__hgGoldTzFmt){
+      __hgGoldTzFmt = new Intl.DateTimeFormat('en-US',
+        { timeZone: HG_GOLD_ANCHOR_TZ, timeZoneName: 'shortOffset' });
+    }
+    var parts = __hgGoldTzFmt.formatToParts(new Date(ms)), name = '', i;
+    for (i = 0; i < parts.length; i++) if (parts[i].type === 'timeZoneName') name = parts[i].value;
+    var m = /GMT([+-]\d{1,2})(?::(\d{2}))?/.exec(String(name));
+    if (!m) return NaN;
+    var hh = +m[1], mm = m[2] ? (+m[2]) / 60 : 0;
+    if (!isFinite(hh)) return NaN;
+    return hh + (hh < 0 ? -mm : mm);
+  }catch(e){ return NaN; }
+}
+
+/** The UTC hour the gold week turns on, for the instant given. */
+function hgGoldEdgeUtcH(ms){
+  var off = hgGoldNyOffsetH(ms);
+  if (!isFinite(off)) return HG_GOLD_EDGE_UTC_H_FALLBACK;
+  var h = HG_GOLD_ANCHOR_LOCAL_H - off;
+  if (!isFinite(h)) return HG_GOLD_EDGE_UTC_H_FALLBACK;
+  return ((h % 24) + 24) % 24;
+}
+
 /* Is this instant inside the spot-gold closure? */
 function hgInGoldWeekend(tsSec){
   try{
     var t = +tsSec;
     if (!isFinite(t)) return false;
-    var d = new Date(t * 1000);
+    var ms = t * 1000;
+    var d = new Date(ms);
     var dow = d.getUTCDay(), h = d.getUTCHours();
     if (dow === 6) return true;                                  /* all Saturday */
-    if (dow === HG_GOLD_CLOSE_DOW && h >= HG_GOLD_CLOSE_UTC_H) return true;
-    if (dow === HG_GOLD_OPEN_DOW && h < HG_GOLD_OPEN_UTC_H) return true;
+    /* read at the instant under test, so each edge of one weekend gets its
+       own offset — a DST switch inside the closure is handled by that alone */
+    var edge = hgGoldEdgeUtcH(ms);
+    if (dow === HG_GOLD_CLOSE_DOW && h >= edge) return true;
+    if (dow === HG_GOLD_OPEN_DOW && h < edge) return true;
     return false;
   }catch(e){ return false; }
 }
@@ -770,12 +825,20 @@ function hgGoldWeekendRisk(stats, stopAtr){
     return out;
   }catch(e){ out.note = 'risk read failed'; return out; }
 }
-function hgFormatGoldWeekendCountdown(secs){
+/* The hour in this line used to be the literal 22, which put the wrong
+   close time in front of the reader for eight months of the year even once
+   the gate itself was right. It now names the edge the countdown is
+   actually counting to. nowSec is optional: without it the line falls back
+   to the season the caller is in, which is the best available answer. */
+function hgFormatGoldWeekendCountdown(secs, nowSec){
   try{
     if (secs === null || !isFinite(+secs)) return 'countdown unavailable';
     if (+secs === 0) return 'inside spot/CME closure now — XAUTUSD is the only live gold book';
     var h = +secs / 3600;
-    var txt = (h < 48 ? (h < 10 ? h.toFixed(1) : String(Math.round(h))) : String(Math.round(h))) + 'h to Fri 22:00 UTC close';
+    var at = (isFinite(+nowSec) && +nowSec > 0) ? (+nowSec + +secs) * 1000 : Date.now() + (+secs) * 1000;
+    var edge = hgGoldEdgeUtcH(at);
+    var txt = (h < 48 ? (h < 10 ? h.toFixed(1) : String(Math.round(h))) : String(Math.round(h)))
+            + 'h to Fri ' + (edge < 10 ? '0' : '') + edge + ':00 UTC close';
     return txt;
   }catch(e){ return 'countdown unavailable'; }
 }
@@ -797,10 +860,10 @@ function hgGoldWeekendReadout(rows, atrVal, stopAtr, tsSec){
       out.headline = hgFormatGoldWeekendCountdown(0);
       out.level = 'warn';
     } else if (out.secsToClose !== null && out.secsToClose <= 8 * 3600){
-      out.headline = hgFormatGoldWeekendCountdown(out.secsToClose);
+      out.headline = hgFormatGoldWeekendCountdown(out.secsToClose, t);
       out.level = 'caution';
     } else if (out.secsToClose !== null){
-      out.headline = hgFormatGoldWeekendCountdown(out.secsToClose);
+      out.headline = hgFormatGoldWeekendCountdown(out.secsToClose, t);
       out.level = 'muted';
     }
     if (out.stats && out.stats.p90 !== null){
@@ -823,6 +886,10 @@ if (typeof window !== 'undefined' && window){
 window.hgRelStrength = hgRelStrength;
 window.hgInGoldWeekend = hgInGoldWeekend;
 window.hgSecsToGoldWeekend = hgSecsToGoldWeekend;
+/* exported so the DST edge is testable on its own, and so a desk that wants
+   to PRINT the current close hour does not have to recompute it */
+window.hgGoldEdgeUtcH = hgGoldEdgeUtcH;
+window.hgGoldNyOffsetH = hgGoldNyOffsetH;
 window.hgGoldWeekendMoves = hgGoldWeekendMoves;
 window.hgGoldWeekendRisk = hgGoldWeekendRisk;
 window.hgGoldWeekendReadout = hgGoldWeekendReadout;

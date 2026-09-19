@@ -1,6 +1,11 @@
 /* HARDGATE — the one gold risk no gate can see.
-   Spot gold and CME futures close Friday 22:00 UTC and reopen Sunday 22:00
-   UTC; Saturday is a full closure. XAUTUSD does NOT close — it trades
+   Spot gold and CME futures close Friday 17:00 New York and reopen Sunday
+   17:00 New York; Saturday is a full closure. That is 22:00 UTC in EST and
+   21:00 UTC in EDT — pack 859 corrected the edge from a fixed 22 to the NY
+   anchor, and the fixtures below moved with it: they sit in August, where
+   New York is on EDT, so the edge is 21:00 UTC and the old 22:00 numbers
+   here were asserting the defect. tests/test-gold-weekend-dst.mjs pins both
+   seasons, both switch weekends, and the no-Intl fallback. XAUTUSD does NOT close — it trades
    24/7/365 and becomes the only venue where gold is priced during that
    window, on a book that is a fraction of its weekday depth.
    A gold position carried across a weekend is therefore exposed twice: it can
@@ -30,22 +35,29 @@ for (const f of ['indicators.js', 'indicators2.js'])
 const U = (y, m, d, h) => Math.floor(Date.UTC(y, m, d, h) / 1000);
 console.log('== the closure window matches the real gold calendar ==');
 {
-  /* 2026-08-07 is a Friday */
+  /* 2026-08-07 is a Friday, and August is EDT: the edge is 21:00 UTC */
   ok(typeof ctx.hgInGoldWeekend === 'function', 'hgInGoldWeekend is not a function');
-  ok(ctx.hgInGoldWeekend(U(2026, 7, 7, 21)) === false, 'Fri 21:00 UTC — still open');
-  ok(ctx.hgInGoldWeekend(U(2026, 7, 7, 22)) === true,  'Fri 22:00 UTC — the closure starts exactly here');
+  ok(ctx.hgInGoldWeekend(U(2026, 7, 7, 20)) === false, 'Fri 20:00 UTC — still open');
+  ok(ctx.hgInGoldWeekend(U(2026, 7, 7, 21)) === true,  'Fri 21:00 UTC — the closure starts here in EDT (17:00 NY)');
   ok(ctx.hgInGoldWeekend(U(2026, 7, 8, 12)) === true,  'Sat 12:00 UTC — full closure');
-  ok(ctx.hgInGoldWeekend(U(2026, 7, 9, 21)) === true,  'Sun 21:00 UTC — still closed');
-  ok(ctx.hgInGoldWeekend(U(2026, 7, 9, 22)) === false, 'Sun 22:00 UTC — reopen, exactly here');
+  ok(ctx.hgInGoldWeekend(U(2026, 7, 9, 20)) === true,  'Sun 20:00 UTC — still closed');
+  ok(ctx.hgInGoldWeekend(U(2026, 7, 9, 21)) === false, 'Sun 21:00 UTC — reopen, exactly here in EDT');
   ok(ctx.hgInGoldWeekend(U(2026, 7, 10, 3)) === false, 'Mon 03:00 UTC — open');
-  /* the DAILY 22:00-23:00 break is not a weekend and must not be confused with one */
-  ok(ctx.hgInGoldWeekend(U(2026, 7, 5, 22)) === false, 'Wed 22:00 UTC is the daily break, NOT a closure');
+  /* the same week in JANUARY, where New York is on EST and the edge is 22:00 */
+  ok(ctx.hgInGoldWeekend(U(2026, 0, 16, 21)) === false, 'Fri 21:00 UTC in January — still open, EST');
+  ok(ctx.hgInGoldWeekend(U(2026, 0, 16, 22)) === true,  'Fri 22:00 UTC in January — the closure starts here');
+  ok(ctx.hgInGoldWeekend(U(2026, 0, 18, 21)) === true,  'Sun 21:00 UTC in January — still closed');
+  ok(ctx.hgInGoldWeekend(U(2026, 0, 18, 22)) === false, 'Sun 22:00 UTC in January — reopen');
+  /* the DAILY break is not a weekend and must not be confused with one */
+  ok(ctx.hgInGoldWeekend(U(2026, 7, 5, 21)) === false, 'Wed 21:00 UTC is the daily break, NOT a closure');
+  ok(ctx.hgInGoldWeekend(U(2026, 7, 5, 22)) === false, 'nor is Wed 22:00 UTC');
   ok(ctx.hgInGoldWeekend(NaN) === false && ctx.hgInGoldWeekend(null) === false, 'bad input -> false, never throws');
 }
 console.log('== the countdown is in real hours ==');
 {
-  ok(Math.abs(ctx.hgSecsToGoldWeekend(U(2026, 7, 7, 20)) - 2 * 3600) < 300, 'Fri 20:00 -> ~2h to the close');
-  ok(Math.abs(ctx.hgSecsToGoldWeekend(U(2026, 7, 5, 10)) - 60 * 3600) < 300, 'Wed 10:00 -> ~60h to the close');
+  ok(Math.abs(ctx.hgSecsToGoldWeekend(U(2026, 7, 7, 20)) - 1 * 3600) < 300, 'Fri 20:00 -> ~1h to the close (EDT)');
+  ok(Math.abs(ctx.hgSecsToGoldWeekend(U(2026, 7, 5, 10)) - 59 * 3600) < 300, 'Wed 10:00 -> ~59h to the close (EDT)');
+  ok(Math.abs(ctx.hgSecsToGoldWeekend(U(2026, 0, 16, 20)) - 2 * 3600) < 300, 'Fri 20:00 in January -> ~2h (EST)');
   ok(ctx.hgSecsToGoldWeekend(U(2026, 7, 8, 12)) === 0, 'inside a closure -> 0, not a negative or a next-week number');
   ok(ctx.hgSecsToGoldWeekend(NaN) === null, 'bad input -> null');
 }
@@ -122,7 +134,11 @@ console.log('== readout picks warn level from measured history ==');
   }
   const quiet = ctx.hgGoldWeekendReadout(build(0.2), ATR, 1.5, U(2026, 7, 7, 20));
   ok(quiet.level === 'ok' || quiet.level === 'muted' || quiet.level === 'caution', 'quiet weekends read calm');
-  ok(/2\.0h to Fri 22:00/.test(quiet.headline), 'Fri 20:00 countdown in headline');
+  ok(/1\.0h to Fri 21:00/.test(quiet.headline),
+     'Fri 20:00 countdown in headline names the EDT close, 1h out at 21:00 UTC — got: ' + quiet.headline);
+  const winterQuiet = ctx.hgGoldWeekendReadout(build(0.2), ATR, 1.5, U(2026, 0, 16, 20));
+  ok(/2\.0h to Fri 22:00/.test(winterQuiet.headline),
+     'and the same clock in January names 22:00 UTC, 2h out — got: ' + winterQuiet.headline);
   const violent = ctx.hgGoldWeekendReadout(build(2.5), ATR, 1.5, U(2026, 7, 8, 12));
   ok(violent.level === 'warn', 'violent history inside closure warns');
   ok(/inside spot\/CME closure/.test(violent.headline), 'inside closure headline');
