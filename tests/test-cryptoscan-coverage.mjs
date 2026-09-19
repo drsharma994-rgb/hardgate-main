@@ -70,7 +70,7 @@ const MIXED      = { universe: 300, scanned: 300, skipped: 140, errors: 40,  set
 console.log('\n1. the counts existed and never reached the cards');
 {
   const src = stripComments(SCAN);
-  ok(/__results = \{ at: now, setups: setups, scanned: scanned, errors: errors, skipped: skipped, universe: items\.length \}/.test(src),
+  ok(/__results = \{ at: now, setups: setups, scanned: scanned, errors: errors, skipped: skipped,[\s\S]{0,120}universe: items\.length \}/.test(src),
      'runScan has recorded scanned / skipped / errors / universe all along');
   ok(/renderCards\(setups, __results\)/.test(src), 'and now hands them to renderCards');
   ok(/renderCards\(__results\.setups, __results\)/.test(src),
@@ -147,12 +147,14 @@ console.log('\n4. the coverage line rides the cards, not just the status bar');
   ok(/COVERAGE/.test(html), 'it is labelled');
   ok(/120 of 300 contracts read \(40%\)/.test(html), 'and carries the count and the share');
   ok(/140 skipped, fewer than 230 closed 15m bars/.test(html), 'naming the thin ones');
-  ok(/40 could not be fetched/.test(html), 'and the unfetchable ones');
+  /* pack 870 split this: `errors` now means a throw INSIDE the loop, and a
+     fetch that never delivered bars is counted separately as `unread`. */
+  ok(/40 threw during the scan/.test(html), 'and the ones that threw mid-scan');
   ok(/#92400E/.test(html), 'a partial run is coloured as a warning');
 
   const clean = S.csCoverageHTML(ALL_READ);
   ok(/300 of 300 contracts read \(100%\)/.test(clean), 'a clean run says so');
-  ok(!/skipped/.test(clean) && !/could not be fetched/.test(clean),
+  ok(!/skipped/.test(clean) && !/threw during the scan/.test(clean) && !/never fetched/.test(clean),
      'without inventing rows for counts that are zero');
   ok(!/#92400E/.test(clean), 'and is not coloured as a warning');
 
