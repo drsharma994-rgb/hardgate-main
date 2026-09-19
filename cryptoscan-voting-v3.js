@@ -221,11 +221,23 @@ function hgVotingSummary(l1, l2, l3, voteResult) {
  *   4. every one of the tab's quality gates clear (confidence, regime,
  *      session, voting gate, sentiment conflict)
  *
- * Two things it does NOT require, despite earlier wording here:
+ * Three things it does NOT require, despite earlier wording here:
  *
  *   - Sentiment agreement is not part of (2). layerAgreement is computed in
  *     cryptoscan.js from order flow versus price and nothing else; sentiment
  *     reaches the stamp only through the confidence number in (1).
+ *
+ *   - (3) is a live gate with a dead feed, and pack 863 listed it as a
+ *     satisfied standard without checking. Every reader in
+ *     liquidation-intelligence.js is an unwired placeholder, so
+ *     hgExternalRiskScore returns one identical object for every symbol and
+ *     cascadeImminent is a constant false — which makes noLiquidationRisk
+ *     true on every setup that has ever been stamped. Unlike positiveRR
+ *     below, this one is vacuous through ABSENCE rather than by
+ *     construction: it starts discriminating the day a feed lands, which is
+ *     why it stays in the conjunction. What changed is that the layer now
+ *     reports measured:false and the card prints UNCHECKED, so nobody reads
+ *     a missing measurement as a clean bill of health.
  *
  *   - Risk-reward is not a filter, and cannot be one as the plan is built
  *     today. positiveRR below reads plan.rr1, and cryptoultra.js sets that to

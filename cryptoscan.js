@@ -289,7 +289,10 @@ function setupCardHTML(s, idx){
     layerText += ' · Confidence ' + (s.threeLayerConfidence || 0).toFixed(2) + ' · Tier: ' + (s.voteTier || 'weak').toUpperCase() + '</small>';
   }
 
-  /* External Risk Flags (Phase 2) */
+  /* External Risk Flags (Phase 2). None of these could ever fire: every reader
+     in liquidation-intelligence.js is an unwired placeholder, so the layer
+     returns one identical object for every symbol. An empty risk line read as
+     "no risk found" when nothing had looked, so say which it is. */
   if (s.externalRisk){
     var riskFlags = [];
     if (s.externalRisk.cascadeImminent) riskFlags.push('⚡ CASCADE');
@@ -297,6 +300,10 @@ function setupCardHTML(s, idx){
     if (s.externalRisk.fundingExtreme) riskFlags.push('📊 FUNDING');
     if (riskFlags.length > 0){
       layerText += '<br><small style="color:#DC2626;font-weight:700">⚠️ RISK: ' + riskFlags.join(' + ') + '</small>';
+    } else if (s.externalRisk.unchecked){
+      layerText += '<br><small style="color:#94A3B8">○ EXTERNAL RISK UNCHECKED — no '
+        + esc((s.externalRisk.uncheckedSources || []).join(' / ') || 'external')
+        + ' feed wired; cascade and whale gates cannot fire</small>';
     }
   }
 
@@ -337,6 +344,12 @@ function setupCardHTML(s, idx){
   h += '</div></div>';
   return h;
 }
+
+/* test seam: the card is the thing that claims, so a test about what a card
+   says should render one rather than grep for the string it would contain.
+   A source scan for the UNCHECKED line survived a mutation that made its
+   branch unreachable, because the regex matched the dead body. */
+W.__csSetupCardHTML = setupCardHTML;
 
 var __ui = null, __results = null, __busy = false;
 
