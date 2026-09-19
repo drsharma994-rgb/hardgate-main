@@ -54,20 +54,59 @@ function hgComputeThreeLayerConfidence(l1, l2, l3, externalRisk) {
   var l3Raw = (l3 && l3.sentiment != null && isFinite(+l3.sentiment)) ? +l3.sentiment : 0;
   var l3Aligned = l1.dir === 'long' ? l3Raw : l1.dir === 'short' ? -l3Raw : 0;
 
+  /* Layer 2 is signed the same way (order-flow.js: -1..+1, positive = buying
+     pressure), and it used to enter as Math.abs(l2.score). The reasoning was
+     that magnitude is conviction and the +-15/20% agreement multiplier below
+     carries the direction. Composed, it does not: the multiplier is far too
+     small to undo a 0.35-weighted magnitude term, so the curve is V-SHAPED in
+     agreement with its MINIMUM at flow = 0. One long, pct 0.90, sentiment
+     +0.60, sweeping the flow read from fully against to fully with:
+
+       flow -0.9 (hard against)  0.660
+       flow -0.5                 0.548
+       flow  0.0 (NO OPINION)    0.408   <- the lowest point on the curve
+       flow +0.5                 0.788
+       flow +0.9 (hard with)     0.949
+
+     The harder order flow argued AGAINST the trade, the more confident the
+     desk became. Over 200 swept configurations that held in every one: 100%
+     non-monotone, and in 100% a neutral flow scored below an opposing one.
+
+     Two causes, and both are here. Math.abs() credits conviction-against to
+     the base. And 'neutral' is a truthy string, so the l2.dir compare below
+     read no-opinion as disagreement, charging it the 0.80 penalty and printing
+     "L1/L2 divergence" on the card while giving it none of the magnitude
+     credit an opposing read got. A flow reader that RAN and said neutral
+     therefore scored BELOW one that was never loaded at all (0.408 vs 0.510).
+
+     Layer 2 is now read relative to the trade, exactly as layer 3 is, and only
+     a real long/short call takes the multiplier. The agreeing case is
+     arithmetically untouched (|score| and the aligned score are the same
+     number whenever flow points the way the trade does), so no pro-grade
+     verdict moves - that stamp requires layerAgreement === 2, which IS the
+     agreeing case. The +-15/20% multiplier stays as it is: it now double-counts
+     direction mildly, but removing it would re-tune every number on the tab,
+     and that is a calibration decision, not this defect. */
+  var l2Raw = (l2 && l2.score != null && isFinite(+l2.score)) ? +l2.score : 0;
+  var l2Aligned = l1.dir === 'long' ? l2Raw : l1.dir === 'short' ? -l2Raw : 0;
+  /* only a real call is a call; 'neutral' and undefined are not disagreement */
+  var l2Dir = (l2 && (l2.dir === 'long' || l2.dir === 'short')) ? l2.dir : null;
+
   /* Base confidence: weighted average of three layers */
   var confidence = (l1.pct * 0.40) +           /* Layer 1: Price (40%) */
-                   (Math.abs(l2.score || 0) * 0.35) +  /* Layer 2: Order Flow (35%) */
-                   (l3Aligned * 0.25);                 /* Layer 3: Sentiment, vs THIS trade (25%) */
+                   (l2Aligned * 0.35) +        /* Layer 2: Order Flow, vs THIS trade (35%) */
+                   (l3Aligned * 0.25);         /* Layer 3: Sentiment, vs THIS trade (25%) */
 
   /* Clamp to valid range */
   confidence = Math.max(0, Math.min(1, confidence));
 
   /* --- LAYER AGREEMENT BONUSES --- */
-  if (l1.dir && l2.dir && l1.dir === l2.dir){
+  if (l1.dir && l2Dir && l1.dir === l2Dir){
     /* L1 and L2 agree: strong signal */
     confidence *= 1.15;  /* +15% */
-  } else if (l1.dir && l2.dir && l1.dir !== l2.dir){
-    /* L1 and L2 disagree: weak signal */
+  } else if (l1.dir && l2Dir){
+    /* L1 and L2 disagree: weak signal. Reached only on a real long/short
+       call from the flow layer — a neutral read is silence, not dissent. */
     confidence *= 0.80;  /* -20% */
     gates.push('L1/L2 divergence');
   }
@@ -154,10 +193,15 @@ function hgVotingSummary(l1, l2, l3, voteResult) {
   var l3Emoji = l3.sentiment > 0.3 ? '🟢' : l3.sentiment < -0.3 ? '🔴' : '🟡';
   summary += l3Emoji + ' Sentiment: ' + (l3.sentiment || 0).toFixed(2);
 
-  /* Agreement status */
-  if (l1.dir === l2.dir){
+  /* Agreement status. Same rule as hgComputeThreeLayerConfidence: 'neutral' is
+     a truthy string, so reading it as dissent would print DIVERGE at a layer
+     that simply had no opinion. Nothing calls hgVotingSummary today — the tab
+     builds its own layer line — so this corrects a copy of the defect rather
+     than a live readout, which is why it is worth correcting now. */
+  var l1d = l1 && l1.dir, l2d = (l2 && (l2.dir === 'long' || l2.dir === 'short')) ? l2.dir : null;
+  if (l1d && l2d && l1d === l2d){
     summary += ' · ✅ AGREE';
-  } else if (l1.dir && l2.dir){
+  } else if (l1d && l2d){
     summary += ' · ❌ DIVERGE';
   }
 
