@@ -198,9 +198,18 @@ function csFwdRows(setups){
     if (!isFinite(en) || !isFinite(st) || !isFinite(tp)) continue;
     /* a zero-risk plan cannot be scored in R and would divide by zero downstream */
     if (en === st) continue;
+    /* The CLOSED bar the engine voted on, which the card prints as
+       "closed 15m bar ... UTC". Without it hg-forward floors NOW to the
+       timeframe and names the FORMING bar instead — one bar ahead of the one
+       the engine read, two when the scan straddles a boundary, which sends
+       settlement past the first bar of the trade and breaks the dedup rule
+       across a bar edge. Absent means absent: no bar, no claim, and the
+       recorder falls back to its own floor. */
+    var barT = (s.bar && isFinite(+s.bar.t) && +s.bar.t > 0) ? +s.bar.t : undefined;
     out.push({
       sym: String(s.sym), dir: s.dir,
       entry: en, stop: st, t1: tp,
+      barT: barT,
       /* mechanic is the VOTE TIER, not a constant, so the log answers the
          question worth asking — do this desk's own confidence tiers actually
          separate — rather than pooling everything into one bag. The @vN suffix
