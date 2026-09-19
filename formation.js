@@ -276,7 +276,23 @@ function hgRankEntryPOI(rows, dir, style, mark, atrVal, params){
 
     if (typeof G.hgDetectOrderBlock === 'function'){
       var ob = G.hgDetectOrderBlock(rows, dir);
-      if (ob && fin(+ob.entry)){
+      /* `fin` IS NOT DEFINED ANYWHERE THE BROWSER CAN SEE IT.
+
+         Not on the window after all 201 scripts, not as a lexical in any
+         index.html inline block — `typeof fin` is "undefined" and CALLING it
+         throws. This line and the FVG one below it are the only two unguarded
+         calls to it in the file, they sit inside hgRankEntryPOI's outer try,
+         and hgDetectOrderBlock is a real global that fires on gold often. So
+         the moment an order block was detected the ReferenceError unwound the
+         whole function and it returned null: not "no order block", but NO
+         POINT OF INTEREST AT ALL, with the order block (score 90-92) and the
+         FVG (87-91) — the two highest-scoring POIs this desk has — taking the
+         rest of the ranking down with them.
+
+         hgFin is the house rule and lives forty lines up. It is given the raw
+         value, not a pre-coerced one, so a null or an empty string reads as
+         NaN rather than as the price zero. */
+      if (ob && isFinite(hgFin(ob.entry))){
         cands.push({
           score: style === 'scalp' ? 92 : 90,
           entry: ob.entry, label: ob.label || 'order block', poi: 'ob',
@@ -286,7 +302,7 @@ function hgRankEntryPOI(rows, dir, style, mark, atrVal, params){
     }
     if (typeof G.hgDetectFvg === 'function'){
       var fvgD = G.hgDetectFvg(rows, dir);
-      if (fvgD && fin(+fvgD.entry)){
+      if (fvgD && isFinite(hgFin(fvgD.entry))){   /* see the order block above */
         cands.push({
           score: style === 'scalp' ? 91 : 87,
           entry: fvgD.entry, label: fvgD.label || 'FVG', poi: 'fvg',

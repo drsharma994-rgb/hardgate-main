@@ -342,7 +342,14 @@ async function hgPostGateSetupVeto(ticker, hit, rows, style, getCandles){
         var rsOv = G.hgRegimeResolveState();
         var ov = G.hgRegimeOverlay(rsOv && !rsOv.dark ? rsOv.score : 0, dir);
         if (ov && ov.extraConfluence > 0){
-          var gp = fin(hit.gatesPassed) || fin(hit.passed) || 0;
+          /* `fin` is defined nowhere the browser can see — not on the window,
+             not as an inline lexical — so this line threw a ReferenceError
+             every time an overlay asked for extra confluence, the catch below
+             swallowed it into `unchecked`, and the requirement has never once
+             been enforced. Two lines down the same file guards the same name
+             with `typeof fin === 'function'`; this one did not. hgPlanNum,
+             further down this same file, is already the house rule. */
+          var gp = hgPlanNum(hit.gatesPassed) || hgPlanNum(hit.passed) || 0;
           var need = 7 + ov.extraConfluence;
           if (gp > 0 && gp < need){
             return { ok: false, reason: ov.note || 'regime overlay — extra confluence required', tag: 'regime-overlay' };

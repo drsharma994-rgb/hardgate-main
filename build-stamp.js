@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v849',
-  pack: 'the capability checks that can never be true are counted, and the gold tab\u2019s are gone. Of the 140 top-level const/let names index.html declares inline, exactly three are feature-checked on the window by external files \u2014 px (11 files), fmt (7) and nowSec (1) \u2014 and none of those 19 guards has ever once fired, because a top-level const does not attach to the global object. Reviving them by exposing the three was measured and refused: the house px rounds a four-figure price to ONE decimal, so GOLD PINE would print 4,050.6 while every other gold desk prints 4050.62. Its two dead guards are removed instead. nowSec was worth repairing \u2014 of the two files standing in for it, squeeze.js alone did not floor, so that desk carried a fractional clock where the rest of the app carries a whole second',
+  version: 'hg-v850',
+  pack: 'a helper that does not exist was killing the gold desk\u2019s best entry point of interest every time it found one. formation.js called fin(+ob.entry) to accept an order block, and `fin` is defined nowhere the browser can see \u2014 not on the window, not at the top level of any inline block \u2014 so the ReferenceError unwound hgRankEntryPOI and it returned null: not \u2018no order block\u2019 but NO POINT OF INTEREST AT ALL, taking the order block (score 90-92) and the FVG (87-91), the two highest this desk ranks, down with the whole ranking. It only broke when the detector SUCCEEDED, which is why nothing caught it. The same missing name silently disabled plans.js\u2019s regime-overlay confluence requirement, which has always reported itself unchecked. There IS a fin in this repo \u2014 nested inside goldSetupDecision() in index.html, one scope deep, unreachable from anywhere else',
   built: '2026-09-18T00:00:00Z'
 };
 
