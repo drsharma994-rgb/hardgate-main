@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v853',
-  pack: 'a DRY RUN preview was eating the live order that followed it. OMNIGOLD\u2019s XM bot claimed its 24-hour idempotency key on placed.ok \u2014 true for a dry run too \u2014 so previewing a ticket wrote its key, and the LIVE send of that same ticket replayed the cached dry-run response instead of placing the order: ok true, posted FALSE, not one call to the bridge, no error. DRY RUN is the default, so preview-then-arm-then-send, the obvious way to use it, was the broken path and stayed broken for a day per ticket. Only a POSTED order claims the key now, and a dry run neither reads the map nor writes to it \u2014 a preview of a ticket already sent live used to replay the LIVE receipt, answering \u2018what would this do\u2019 with \u2018posted to XM\u2019 about an earlier order. Real duplicate suppression is untouched: two live sends of one ticket still post once',
+  version: 'hg-v854',
+  pack: 'with no live gold price the XM bot now places no order at all. xmOrderType picks BUY_LIMIT / BUY_STOP / market from where the setup entry sits against the live price, and given no price it returned a LIMIT for either direction \u2014 which reads conservative and is the opposite: a buy limit ABOVE market, or a sell limit BELOW it, is not a resting order, the broker fills it immediately. The fill price is no worse than the limit, so the money is not the problem; the problem is a setup meant to WAIT for its entry becomes a position now, and the bot\u2019s own backtest replays this path as a pending fill at the setup entry. cand.livePx is absent exactly when feeds are down. The four resting cases and all six MT5 order-type ids are pinned, and the freshness gap \u2014 the payload carries a price but no timestamp \u2014 is named rather than assumed away',
   built: '2026-09-18T00:00:00Z'
 };
 
