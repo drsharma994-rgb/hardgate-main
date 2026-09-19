@@ -763,6 +763,29 @@ async function runScan(ui){
     var setups = [], scanned = 0, errors = 0, skipped = 0, unread = 0;
     var unreadWhy = {};
     var now = Date.now();
+
+    /* SETTLE WHAT WE ALREADY RECORDED.
+
+       This tab has written forward records since hg-v735 and has never
+       resolved one. hgFwdResolve is keyed by symbol and needs the bars, and no
+       desk in the app resolves a crypto symbol at 15m — goldultra resolves
+       XAUUSD, everything else runs 4h, and hgFwdSettle will not match a record
+       whose timeframe differs. So every row sat open until STALE_HORIZONS
+       relabelled it "recorded, then the contract went quiet", which was never
+       what happened: the bars existed, this scan fetches them every cycle, and
+       nothing looked at them. hg-forward.js says the principle itself — "a
+       scan that cannot record looks exactly like a quiet market" — and an
+       unsettled log is the same lie one step later.
+
+       Only the symbols that still owe bars are resolved, so the log is loaded
+       once rather than once per contract across a universe of hundreds. */
+    var owed = {}, owedN = 0, resolved = 0;
+    try{
+      if (typeof W.hgFwdOpenSyms === 'function'){
+        var openList = W.hgFwdOpenSyms('CRYPTO SCAN', '15m') || [];
+        for (var oi = 0; oi < openList.length; oi++){ owed[openList[oi]] = 1; owedN++; }
+      }
+    }catch(eOpen){}
     /* hgDeskFetchKlines resolves to an array whatever went wrong, so a
        network outage and a three-bar contract both arrive as length < 230.
        The result form says which; fall back to the array form if an older
@@ -780,6 +803,14 @@ async function runScan(ui){
           scanned++; setProgress((scanned / items.length) * 100); continue;
         }
         var rows15m = got15.rows;
+        /* the bars are in hand and fresh — settle anything still open on this
+           symbol before deciding whether it produces a new setup, and do it
+           even when it does not, because a record from an earlier scan needs
+           bars whether or not the contract fires again */
+        if (owedN && owed[item.sym] && rows15m && rows15m.length
+            && typeof W.hgFwdResolve === 'function'){
+          try{ resolved += (W.hgFwdResolve(item.sym, '15m', rows15m) || 0); }catch(eRes){}
+        }
         if (!rows15m || rows15m.length < 230){ skipped++; scanned++; setProgress((scanned / items.length) * 100); continue; }
         var rows1h = await fetchKl(item, '1h', KL_1H);
 
@@ -989,6 +1020,7 @@ async function runScan(ui){
        shrank. Carry the funnel so COVERAGE can quote both. */
     __results = { at: now, setups: setups, scanned: scanned, errors: errors, skipped: skipped,
                   unread: unread, unreadWhy: unreadWhy, universe: items.length,
+                  owed: owedN, resolved: resolved,
                   offered: +pack.rawLen || 0,
                   droppedTurnover: +pack.droppedTurnover || 0,
                   droppedVenue: +pack.droppedVenue || 0,
@@ -996,7 +1028,9 @@ async function runScan(ui){
                   minTurnover: +pack.minTurnover || 0 };
     renderCards(setups, __results);
     setStat(setups.length + ' setup(s) from ' + scanned + ' scanned · ' + skipped + ' skipped (too few bars) · '
-      + unread + ' unread (fetch) · ' + errors + ' errors · ' + new Date().toISOString().slice(11, 19) + ' UTC', false);
+      + unread + ' unread (fetch) · ' + errors + ' errors'
+      + (owedN ? ' · ' + resolved + '/' + owedN + ' open records settled' : '')
+      + ' · ' + new Date().toISOString().slice(11, 19) + ' UTC', false);
     setProgress(100);
     return 'refreshed';
   }catch(e){
