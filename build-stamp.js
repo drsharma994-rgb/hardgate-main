@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v848',
-  pack: 'GOLD PINE offered SEND TO TRADE PLAN and ADD TO BOOK on a PRIMARY pick risking 19.28 points to make 5.03 \u2014 R:R 0.26, stamped SOLIDITY GOOD. Every other gold desk floors the reward before it hands a setup over; this one had no reward test anywhere in its path, and SOLIDITY is a score out of seven gates, not a floor. Below the house floor the card now stays and the two buttons are replaced by a line naming the R:R, the floor and the shortfall; unmeasured reward is still not a veto. Also corrects pack 847: the house px formatter DOES exist, at index.html 1515, declared with const in an inline block \u2014 and a top-level const does not attach to window, which is why ten external files that guard on typeof W.px have never once reached it',
+  version: 'hg-v849',
+  pack: 'the capability checks that can never be true are counted, and the gold tab\u2019s are gone. Of the 140 top-level const/let names index.html declares inline, exactly three are feature-checked on the window by external files \u2014 px (11 files), fmt (7) and nowSec (1) \u2014 and none of those 19 guards has ever once fired, because a top-level const does not attach to the global object. Reviving them by exposing the three was measured and refused: the house px rounds a four-figure price to ONE decimal, so GOLD PINE would print 4,050.6 while every other gold desk prints 4050.62. Its two dead guards are removed instead. nowSec was worth repairing \u2014 of the two files standing in for it, squeeze.js alone did not floor, so that desk carried a fractional clock where the rest of the app carries a whole second',
   built: '2026-09-18T00:00:00Z'
 };
 

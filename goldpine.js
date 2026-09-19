@@ -22,8 +22,25 @@ function gfn(name){
   return null;
 }
 function pxF(n){
-  if (typeof W.px === 'function') return W.px(n);
-  /* THE FALLBACK WAS String(+n), AND THE FALLBACK IS THE ONLY PATH.
+  /* THE DELEGATION IS GONE, AND NOT BECAUSE IT WAS BROKEN.
+
+     This read `if (typeof W.px === 'function') return W.px(n);` and pack 848
+     established why that was never true: the house px is declared `const` in
+     an index.html inline block, and a top-level const does not attach to the
+     global object. Pack 849 then asked whether to revive it by putting px on
+     the window, measured what that would do, and decided against it. The
+     house px rounds a four-figure price to ONE decimal (a >= 1000 ? 1 : ...)
+     and groups it, so reviving the delegation would print gold as 4,050.6
+     while OMNIGOLD, GOLD SCALP and GOLD SWING all print 4050.62. The
+     delegation would cost this desk a decimal and break it away from its own
+     family.
+
+     So the line below is the intended path, not a degradation, and the dead
+     guard that implied otherwise is removed rather than left to read as a
+     capability this file is waiting for. test-dead-window-guards pins the
+     whole class.
+
+     THE FALLBACK WAS String(+n), AND THE FALLBACK IS THE ONLY PATH.
 
      W.px is never defined: there is no `function px(`, `window.px =` or
      `W.px =` anywhere in this repo, so this branch has always been dead and
@@ -43,7 +60,10 @@ function pxF(n){
   return v.toFixed(a >= 1000 ? 2 : a >= 1 ? 4 : a >= 0.01 ? 5 : a >= 0.0001 ? 7 : 9);
 }
 function fmtF(n, d){
-  if (typeof W.fmt === 'function') return W.fmt(n, d);
+  /* Same as pxF above: the house fmt is an inline const and has never been on
+     the window, so this guard was always false. Left out rather than left in,
+     and toFixed is what this desk wants anyway — the house fmt groups
+     thousands, which no other gold card does. */
   if (!fin(+n)) return '—';
   return (+n).toFixed(d === undefined ? 2 : d);
 }

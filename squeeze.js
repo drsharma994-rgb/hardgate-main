@@ -95,7 +95,12 @@ function sqDropForming(rows, tf){
   if (!sec) return rows;
   var last = rows[rows.length - 1];
   if (!last || !isFinite(last.t)) return rows;
-  var now = (typeof W.nowSec === 'function') ? W.nowSec() : (Date.now() / 1000);
+  /* The house nowSec is an inline const and has never been on the window
+     (pack 849), so this fallback is the only path — and it was the ONE of the
+     three dead-guard fallbacks in the app that did not match what it stands
+     in for: the house floors to a whole second and this did not, so this desk
+     alone carried a fractional clock. Floored now. */
+  var now = Math.floor(Date.now() / 1000);
   return (now - last.t < sec) ? rows.slice(0, -1) : rows;
 }
 
