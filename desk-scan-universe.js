@@ -200,21 +200,57 @@ function hgDeskBinanceSym(item){
   return null;
 }
 
-async function hgDeskFetchKlines(item, tf, n){
+/* Why an empty array came back, which the array itself cannot say.
+
+   hgDeskFetchKlines swallowed every failure and returned []. Downstream, a
+   desk that tests `rows.length < MIN` cannot tell a NETWORK OUTAGE from a
+   young contract with three bars — both are length 0 or 3 — so CRYPTO SCAN
+   counted a Binance 451 for every symbol as "skipped, fewer than 230 closed
+   15m bars". Five distinct causes arrived identically:
+
+     xuCandles threw (HTTP 451)          []  → "too few bars"
+     API returned a non-array error body []  → "too few bars"
+     no candle source wired              []  → "too few bars"
+     no symbol could be derived          []  → "too few bars"
+     genuinely thin contract              3  → "too few bars"
+
+   Only the last is a fact about the contract. The rest are facts about the
+   fetch, and pack 869's COVERAGE line reported them as the contract because
+   it was built on a counter that already conflated them.
+
+   hgDeskFetchKlines keeps its exact contract — it still resolves to an array,
+   always — so every existing caller is untouched. Callers that want the cause
+   use hgDeskFetchKlinesResult, which returns { rows, ok, reason, error }. The
+   branch structure below is unchanged, including the fall-through to Binance
+   when a non-binance venue has no xuCandles. */
+async function hgDeskFetchKlinesResult(item, tf, n){
+  var out = { rows: [], ok: false, reason: 'no-source', error: null };
   try{
     if (item && item.exchange && item.exchange !== 'binance' && typeof G.xuCandles === 'function'){
       var rows = await G.xuCandles(item, tf, n);
-      return Array.isArray(rows) ? rows : [];
+      if (Array.isArray(rows)){ out.rows = rows; out.ok = true; out.reason = null; return out; }
+      out.reason = 'bad-shape';
+      return out;
     }
     if (typeof G.binanceKlines === 'function'){
       var sym = hgDeskBinanceSym(item);
-      if (sym){
-        rows = await G.binanceKlines(sym, tf, n);
-        return Array.isArray(rows) ? rows : [];
-      }
+      if (!sym){ out.reason = 'no-symbol'; return out; }
+      var brows = await G.binanceKlines(sym, tf, n);
+      if (Array.isArray(brows)){ out.rows = brows; out.ok = true; out.reason = null; return out; }
+      out.reason = 'bad-shape';
+      return out;
     }
-  }catch(e){}
-  return [];
+    return out;   /* reason stays 'no-source' */
+  }catch(e){
+    out.rows = []; out.ok = false; out.reason = 'fetch-failed';
+    out.error = (e && e.message) || String(e);
+    return out;
+  }
+}
+
+async function hgDeskFetchKlines(item, tf, n){
+  var r = await hgDeskFetchKlinesResult(item, tf, n);
+  return r.rows;
 }
 
 try{
@@ -227,6 +263,7 @@ try{
   G.hgDeskLoadDeltaCoinDCX = hgDeskLoadDeltaCoinDCX;
   G.hgDeskFilterVenues = hgDeskFilterVenues;
   G.hgDeskFetchKlines = hgDeskFetchKlines;
+  G.hgDeskFetchKlinesResult = hgDeskFetchKlinesResult;
   G.hgDeskBinanceSym = hgDeskBinanceSym;
 }catch(e){}
 

@@ -201,21 +201,48 @@ function csFwdRows(setups){
 
    Pure and exported for the same reason csBlockerTally is: a decision that
    lives inside runScan cannot be reached without live network. */
+/* Why a contract never reached the engine, in the words the fetch uses. */
+var CS_UNREAD_LABELS = {
+  'fetch-failed': 'the request failed',
+  'bad-shape':    'the venue returned something that was not candles',
+  'no-symbol':    'no symbol could be derived for the venue',
+  'no-source':    'no candle source is wired for the venue',
+  'unknown':      'reason not recorded'
+};
+
 function csCoverage(run){
   var universe = Math.max(0, +(run && run.universe) || 0);
   var scanned  = Math.max(0, +(run && run.scanned)  || 0);
   var skipped  = Math.max(0, +(run && run.skipped)  || 0);
   var errors   = Math.max(0, +(run && run.errors)   || 0);
+  /* unread is a fact about the FETCH; skipped is a fact about the contract.
+     They were one counter until pack 870, and a Binance 451 for every symbol
+     read out as "fewer than 230 closed 15m bars". */
+  var unread   = Math.max(0, +(run && run.unread)   || 0);
   var signals  = Array.isArray(run && run.setups) ? run.setups.length : 0;
+  var why = (run && run.unreadWhy && typeof run.unreadWhy === 'object') ? run.unreadWhy : {};
   /* what the engine actually got to look at */
-  var read = Math.max(0, scanned - skipped - errors);
+  var read = Math.max(0, scanned - skipped - errors - unread);
   return {
     universe: universe, scanned: scanned, skipped: skipped, errors: errors,
+    unread: unread, unreadWhy: why,
     read: read, signals: signals,
     pct: universe > 0 ? read / universe : null,
-    partial: (skipped + errors) > 0,
+    partial: (skipped + errors + unread) > 0,
     known: universe > 0 || scanned > 0
   };
+}
+
+/** "the request failed (140)" joined for whatever causes were recorded */
+function csUnreadWhyText(cov){
+  var why = (cov && cov.unreadWhy) || {}, parts = [], k;
+  var keys = Object.keys(why).sort(function(a, b){ return why[b] - why[a]; });
+  for (var i = 0; i < keys.length; i++){
+    k = keys[i];
+    if (!why[k]) continue;
+    parts.push((CS_UNREAD_LABELS[k] || k) + ' (' + why[k] + ')');
+  }
+  return parts.join(', ');
 }
 
 function csCoverageHTML(run){
@@ -223,8 +250,12 @@ function csCoverageHTML(run){
   if (!c.known) return '';
   var txt = c.read + ' of ' + c.universe + ' contracts read'
     + (c.pct != null ? ' (' + Math.round(100 * c.pct) + '%)' : '');
+  if (c.unread){
+    var whyTxt = csUnreadWhyText(c);
+    txt += ' · ' + c.unread + ' never fetched' + (whyTxt ? ': ' + whyTxt : '');
+  }
   if (c.skipped) txt += ' · ' + c.skipped + ' skipped, fewer than 230 closed 15m bars';
-  if (c.errors) txt += ' · ' + c.errors + ' could not be fetched';
+  if (c.errors) txt += ' · ' + c.errors + ' threw during the scan';
   return '<div style="font-size:10px;color:' + (c.partial ? '#92400E' : '#64748B')
     + ';margin:4px 0 2px">COVERAGE · ' + esc(txt) + '</div>';
 }
@@ -237,10 +268,11 @@ function csEmptyHTML(run){
   var why;
   if (!c.read){
     why = 'none of the ' + c.universe + ' contracts could be read, so the engine never ran. '
-        + 'This is a finding about the scan, not about the market.';
+        + 'This is a finding about the scan, not about the market.'
+        + (c.unread ? ' ' + c.unread + ' were never fetched: ' + csUnreadWhyText(c) + '.' : '');
   } else if (c.partial){
     why = c.read + ' of ' + c.universe + ' contracts reached the engine and none produced a '
-        + 'directional signal. The other ' + (c.skipped + c.errors) + ' were never read, so '
+        + 'directional signal. The other ' + (c.skipped + c.errors + c.unread) + ' were never read, so '
         + 'nothing is claimed about them.';
   } else {
     why = 'all ' + c.read + ' contracts were read and none produced a directional signal.';
@@ -543,6 +575,7 @@ W.csBlockerTally = csBlockerTally;
 W.csWhyEmptyHTML = csWhyEmptyHTML;
 W.csFooterNote = csFooterNote;
 W.csCoverage = csCoverage;
+W.csUnreadWhyText = csUnreadWhyText;
 W.csCoverageHTML = csCoverageHTML;
 W.csEmptyHTML = csEmptyHTML;
 W.csProReady = csProReady;
@@ -646,13 +679,26 @@ async function runScan(ui){
     var vc = pack.venueCounts || {};
     setStat('scanning ' + items.length + ' contracts (Delta ' + (vc.delta || 0) + ' · CoinDCX ' + (vc.coindcx || 0) + ')…');
 
-    var setups = [], scanned = 0, errors = 0, skipped = 0;
+    var setups = [], scanned = 0, errors = 0, skipped = 0, unread = 0;
+    var unreadWhy = {};
     var now = Date.now();
+    /* hgDeskFetchKlines resolves to an array whatever went wrong, so a
+       network outage and a three-bar contract both arrive as length < 230.
+       The result form says which; fall back to the array form if an older
+       desk-scan-universe.js is loaded. */
+    var fetchRes = W.hgDeskFetchKlinesResult;
 
     for (var i = 0; i < items.length; i++){
       var item = items[i];
       try{
-        var rows15m = await fetchKl(item, '15m', KL_15M);
+        var got15 = fetchRes
+          ? await fetchRes(item, '15m', KL_15M)
+          : { rows: (await fetchKl(item, '15m', KL_15M)) || [], ok: true, reason: null };
+        if (!got15.ok){
+          unread++; unreadWhy[got15.reason || 'unknown'] = (unreadWhy[got15.reason || 'unknown'] || 0) + 1;
+          scanned++; setProgress((scanned / items.length) * 100); continue;
+        }
+        var rows15m = got15.rows;
         if (!rows15m || rows15m.length < 230){ skipped++; scanned++; setProgress((scanned / items.length) * 100); continue; }
         var rows1h = await fetchKl(item, '1h', KL_1H);
 
@@ -858,9 +904,11 @@ async function runScan(ui){
       }
     }catch(eFwd){ try{ if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('cryptoscan', eFwd); }catch(eW){} }
 
-    __results = { at: now, setups: setups, scanned: scanned, errors: errors, skipped: skipped, universe: items.length };
+    __results = { at: now, setups: setups, scanned: scanned, errors: errors, skipped: skipped,
+                  unread: unread, unreadWhy: unreadWhy, universe: items.length };
     renderCards(setups, __results);
-    setStat(setups.length + ' setup(s) from ' + scanned + ' scanned · ' + skipped + ' skipped (too few bars) · ' + errors + ' errors · ' + new Date().toISOString().slice(11, 19) + ' UTC', false);
+    setStat(setups.length + ' setup(s) from ' + scanned + ' scanned · ' + skipped + ' skipped (too few bars) · '
+      + unread + ' unread (fetch) · ' + errors + ' errors · ' + new Date().toISOString().slice(11, 19) + ' UTC', false);
     setProgress(100);
     return 'refreshed';
   }catch(e){
