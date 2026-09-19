@@ -7280,6 +7280,22 @@ function hgGoldMacroLock(dir, ctx){
   }
 }
 
+/* THIS TABLE IS IN UTC ON PURPOSE, AND IT DRIFTS. Measured against the same
+   bands read as London / New York local hours, 20% of the year's hours get a
+   different session name here and 15% a different weight — today, 07:30 UTC
+   is the London open hour in BST and this table calls it LONDON (weight 2)
+   while 08:30 gets LONDON_OPEN (weight 3).
+
+   It is left alone, unlike the Silver Bullet windows above, because the two
+   are not the same kind of statement. Those name a local event in their own
+   comment ("after London open") and only matched it in summer, so they
+   contradicted themselves. This table is documented in AGENTS.md as
+   "London 08:00 GMT and NY overlap 12:00-16:00 GMT", the code says exactly
+   that, and the bands are not even internally consistent about a season:
+   the London pair reads as winter-anchored and the NY pair as
+   summer-anchored. Moving them onto one local anchor means choosing which
+   schedule this desk trades, which is a trading decision and not a defect
+   to fix quietly. The numbers above are so the next reader has them. */
 function hgGoldSessionGate(nowMs, rows, stratKey, opt){
   var out = { ok: true, reject: false, demote: false, weight: 1, reason: '', session: 'OFF', asianSweep: false };
   try{
@@ -9302,10 +9318,60 @@ function hgGoldSweepObHtml(sob){
    Algorithm reference only — no third-party import into HARDGATE.
 ========================================================================= */
 
-var HG_GOLD_SB_LON_START = 7.0;   /* UTC hours */
-var HG_GOLD_SB_LON_END = 9.5;     /* 09:30 — first 60–90 min after London open */
-var HG_GOLD_SB_NY_START = 12.0;
-var HG_GOLD_SB_NY_END = 13.5;
+/* THESE WINDOWS NAME A LOCAL OPEN, SO THEY ARE KEPT IN LOCAL HOURS.
+
+   They used to be UTC constants — London 07:00-09:30, NY 12:00-13:30 — and
+   the line beside the first one said what it meant: "first 60-90 min after
+   London open". London opens at 08:00 London time, which is 07:00 UTC in
+   BST and 08:00 UTC in GMT, so for the five months London spends on GMT the
+   window opened an hour BEFORE the open it is named after and closed half
+   an hour after it. The NY pair is the same shape read against 09:30 New
+   York: 12:00-13:30 UTC is 08:00-09:30 in EDT, the ninety minutes into the
+   open, and 07:00-08:30 in EST, which is before the market is there.
+
+   So the numbers were the summer rendering of a local rule, written down as
+   if they were the rule. They are now the rule: 08:00-10:30 London and
+   08:00-09:30 New York, resolved per instant. In BST and EDT that is
+   exactly the old UTC pair, so nothing moves today; the winter months stop
+   being an hour early.
+
+   This is NOT the same call as the session-weight table in
+   hgGoldSessionGate, which is documented in UTC and means UTC. That one is
+   left alone deliberately — see the note there. */
+var HG_GOLD_SB_LON_TZ = 'Europe/London';
+var HG_GOLD_SB_LON_LOCAL_START = 8.0;    /* London open */
+var HG_GOLD_SB_LON_LOCAL_END = 10.5;     /* first 60-90 min after it */
+var HG_GOLD_SB_NY_TZ = 'America/New_York';
+var HG_GOLD_SB_NY_LOCAL_START = 8.0;
+var HG_GOLD_SB_NY_LOCAL_END = 9.5;       /* to the 09:30 equity open */
+
+/** Local hour in a named zone; NaN when Intl cannot answer. */
+function hgGoldLocalHourFrac(ms, tz){
+  try{
+    var G = (typeof window !== 'undefined') ? window : (typeof globalThis !== 'undefined' ? globalThis : null);
+    var fn = (G && typeof G.hgTzHourFrac === 'function') ? G.hgTzHourFrac
+           : (typeof hgTzHourFrac === 'function' ? hgTzHourFrac : null);
+    if (!fn) return NaN;
+    return fn(ms, tz);
+  }catch(e){ return NaN; }
+}
+
+/** Is this instant inside one of the two session-bound windows?
+    Falls back to the old UTC hours when no local hour can be read, so a
+    runtime without Intl behaves exactly as this did before. */
+function hgGoldSbIn(ms, which){
+  var lon = which === 'lon';
+  var tz = lon ? HG_GOLD_SB_LON_TZ : HG_GOLD_SB_NY_TZ;
+  var a = lon ? HG_GOLD_SB_LON_LOCAL_START : HG_GOLD_SB_NY_LOCAL_START;
+  var b = lon ? HG_GOLD_SB_LON_LOCAL_END : HG_GOLD_SB_NY_LOCAL_END;
+  var h = hgGoldLocalHourFrac(ms, tz);
+  if (!isFinite(h)){
+    h = hgGoldUtcHourFrac(ms);
+    a = lon ? 7.0 : 12.0;
+    b = lon ? 9.5 : 13.5;
+  }
+  return isFinite(h) && h >= a && h < b;
+}
 var HG_GOLD_SB_LOOKBACK = 8;      /* bars to search for sweep+reclaim */
 var HG_GOLD_SB_MIN_BREACH = 0.15; /* ×ATR wick beyond pool */
 var HG_GOLD_SB_BUF_ATR = 0.15;
@@ -9328,17 +9394,23 @@ function hgGoldSessionBoundWindow(nowMs){
   try{
     var h = hgGoldUtcHourFrac(nowMs);
     if (!isFinite(h)){ out.why = 'bad clock'; return out; }
-    if (h >= HG_GOLD_SB_LON_START && h < HG_GOLD_SB_LON_END){
+    var lh = hgGoldLocalHourFrac(nowMs, HG_GOLD_SB_LON_TZ);
+    var nh = hgGoldLocalHourFrac(nowMs, HG_GOLD_SB_NY_TZ);
+    function clk(x){ return isFinite(x)
+      ? ((x < 10 ? '0' : '') + Math.floor(x) + ':' + (Math.round((x % 1) * 60) < 10 ? '0' : '') + Math.round((x % 1) * 60))
+      : '--:--'; }
+    if (hgGoldSbIn(nowMs, 'lon')){
       out.name = 'LONDON_SB'; out.inWindow = true; out.grade = 'A';
-      out.why = 'London open Silver Bullet window 07:00–09:30 UTC';
+      out.why = 'London open Silver Bullet window 08:00–10:30 London (now ' + clk(lh) + ')';
       return out;
     }
-    if (h >= HG_GOLD_SB_NY_START && h < HG_GOLD_SB_NY_END){
+    if (hgGoldSbIn(nowMs, 'ny')){
       out.name = 'NY_SB'; out.inWindow = true; out.grade = 'A';
-      out.why = 'NY open Silver Bullet window 12:00–13:30 UTC';
+      out.why = 'NY open Silver Bullet window 08:00–09:30 New York (now ' + clk(nh) + ')';
       return out;
     }
-    out.why = 'outside session-bound windows (London 07:00–09:30 / NY 12:00–13:30 UTC)';
+    out.why = 'outside session-bound windows (London 08:00–10:30 local ' + clk(lh)
+            + ' / NY 08:00–09:30 local ' + clk(nh) + ')';
     return out;
   }catch(e){ out.why = 'window error'; return out; }
 }
@@ -9440,8 +9512,8 @@ function hgGoldSessionBoundSweep(rows, opts){
         barH = isFinite(barMs) ? hgGoldUtcHourFrac(barMs) : NaN;
         /* sweep bar should land in the same class of window (or ignoreWindow) */
         if (!opts.ignoreWindow && isFinite(barH)){
-          var barInLon = barH >= HG_GOLD_SB_LON_START && barH < HG_GOLD_SB_LON_END;
-          var barInNy = barH >= HG_GOLD_SB_NY_START && barH < HG_GOLD_SB_NY_END;
+          var barInLon = hgGoldSbIn(barMs, 'lon');
+          var barInNy = hgGoldSbIn(barMs, 'ny');
           if (win.name === 'LONDON_SB' && !barInLon) continue;
           if (win.name === 'NY_SB' && !barInNy) continue;
         }
@@ -14718,10 +14790,20 @@ W.hgGoldFreshFvg = hgGoldFreshFvg;
 W.hgGoldSweepObQuality = hgGoldSweepObQuality;
 W.hgGoldSweepOb = hgGoldSweepOb;
 W.hgGoldSweepObHtml = hgGoldSweepObHtml;
-W.HG_GOLD_SB_LON_START = HG_GOLD_SB_LON_START;
-W.HG_GOLD_SB_LON_END = HG_GOLD_SB_LON_END;
-W.HG_GOLD_SB_NY_START = HG_GOLD_SB_NY_START;
-W.HG_GOLD_SB_NY_END = HG_GOLD_SB_NY_END;
+/* The old UTC constants stay exported at their summer values, because that
+   is what they always were and other readers may still print them; the
+   window itself no longer consults them. The local anchors below are the
+   rule. */
+W.HG_GOLD_SB_LON_START = 7.0;
+W.HG_GOLD_SB_LON_END = 9.5;
+W.HG_GOLD_SB_NY_START = 12.0;
+W.HG_GOLD_SB_NY_END = 13.5;
+W.HG_GOLD_SB_LON_LOCAL_START = HG_GOLD_SB_LON_LOCAL_START;
+W.HG_GOLD_SB_LON_LOCAL_END = HG_GOLD_SB_LON_LOCAL_END;
+W.HG_GOLD_SB_NY_LOCAL_START = HG_GOLD_SB_NY_LOCAL_START;
+W.HG_GOLD_SB_NY_LOCAL_END = HG_GOLD_SB_NY_LOCAL_END;
+W.hgGoldSbIn = hgGoldSbIn;
+W.hgGoldLocalHourFrac = hgGoldLocalHourFrac;
 W.HG_GOLD_SB_LOOKBACK = HG_GOLD_SB_LOOKBACK;
 W.HG_GOLD_SB_MIN_BREACH = HG_GOLD_SB_MIN_BREACH;
 W.HG_GOLD_SB_RR_ALERT = HG_GOLD_SB_RR_ALERT;
