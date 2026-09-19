@@ -107,7 +107,15 @@ const nearBody = hgTabAlertsFormat([{ src: 'SWING', sym: 'NEARUSD', dir: 'long',
 assert(nearBody.indexOf('6/7 NEAR') >= 0, 'near-clean header labels 6/7 honestly');
 assert(!/· 7\/7 CLEAN/.test(nearBody), 'near row extra line is not tagged 7/7 CLEAN');
 
-const cleanBody = hgTabAlertsFormat([{ src: 'SWING', sym: 'BTCUSD', dir: 'long', entry: 100, stop: 95, t1: 110, clean7: true }]);
+/* v856 — the gate count was added to this fixture. The '7/7 CLEAN' strings
+   now read setupBacksSevenGates, which wants a count the row actually kept
+   rather than a bare flag, because a bare flag is how GOLD rows claimed 7/7
+   for desks that run no gates (see tests/test-gold-alert-gate-claim.mjs).
+   Every live producer in tabalerts.js pairs clean7 with gatesPassed —
+   collectCrypto emits exactly {clean7:true, gatesPassed:7, gatesTotal:7} —
+   so this makes the fixture match what the collector builds. The assertion
+   it carries is unchanged. */
+const cleanBody = hgTabAlertsFormat([{ src: 'SWING', sym: 'BTCUSD', dir: 'long', entry: 100, stop: 95, t1: 110, clean7: true, gatesPassed: 7, gatesTotal: 7 }]);
 assert(cleanBody.indexOf('7/7 CLEAN SETUP') >= 0, 'clean header when all rows are 7/7');
 assert(cleanBody.indexOf('COIN: BTCUSD') >= 0 && cleanBody.indexOf('ENTRY:') >= 0
        && cleanBody.indexOf('STOP LOSS:') >= 0 && cleanBody.indexOf('TAKE PROFIT 1:') >= 0,

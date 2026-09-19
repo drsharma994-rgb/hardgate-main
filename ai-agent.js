@@ -410,7 +410,7 @@ function runGoldSmith(){
           if (all[j] && all[j].src.indexOf('GOLD') >= 0) finds.push(finding(all[j].sym, all[j].dir, {
             src: all[j].src, entry: all[j].entry, stop: all[j].stop, t1: all[j].t1,
             clean7: !!all[j].clean7, score: all[j].goldConvicted ? 14 : 10,
-            asset: 'gold', note: all[j].tier || 'gold setup',
+            asset: 'gold', tier: all[j].tier || null, note: all[j].tier || 'gold setup',
           }));
         }
       }catch(e0){}
@@ -427,7 +427,12 @@ function runGoldSmith(){
         src: s.src, entry: s.entry, stop: s.stop, t1: s.t1,
         clean7: !!s.clean7, goldConvicted: !!s.goldConvicted,
         score: s.goldConvicted ? 14 : (s.clean7 ? 12 : 8),
-        asset: 'gold', note: s.tier || s.note || 'gold scan',
+        /* The card chip falls back to tier. A gold row is not seven-gate
+           clean (see collectGold in tabalerts.js), but it is not a nameless
+           'SETUP' either — it is MOST PROBABLE or GRADE A LOCK, and the
+           desk already worked that out. Carry it instead of burying it in
+           note, so dropping the false 7/7 does not cost a true label. */
+        asset: 'gold', tier: s.tier || null, note: s.tier || s.note || 'gold scan',
       }));
     }
   }catch(e){ return { ok: false, findings: [], summary: 'gold collect failed' }; }

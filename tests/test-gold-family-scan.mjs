@@ -56,6 +56,31 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url)) + '/..';
+
+/* ONE INSTANT FOR THE WHOLE FILE.
+
+   The sweeps below take minutes, and this test compares two of them to work
+   out how much a gold tab's render moves on its own. Handed the real clock,
+   what moved was often just the clock: a minute stamp ticking over, and once
+   an entire block appearing when a session boundary fell between the two
+   runs — 1168 characters, which is not noise, it is a different report.
+
+   Two packs have now had a threshold here fitted to one observation of that,
+   and both went red when the wall clock landed somewhere else. The threshold
+   was never the problem. Comparing two runs at two different times and
+   calling the difference "the harness's variance" is: the clock is not the
+   harness, it is an input, and this file is supposed to be asking what the
+   BARS do. So it is pinned. Every tab in every sweep reads the same instant —
+   the real one, captured here, so no tab is moved into a session or a weekend
+   it would not otherwise be in. Anything that still differs between two
+   identical runs is genuine non-determinism, and section 'the instrument is
+   checked before it is trusted' now asserts there is none rather than
+   reporting how much there was. */
+const CLOCK = Date.now();
+class FrozenDate extends Date {
+  constructor(...a){ super(...(a.length ? a : [CLOCK])); }
+  static now(){ return CLOCK; }
+}
 let passed = 0;
 const ok = (cond, label) => { if (!cond) throw new Error('FAIL: ' + label); passed++; console.log('  ok —', label); };
 
@@ -133,7 +158,7 @@ function boot(starve){
   };
   const ctx = {
     console: { log(){}, warn(){}, error(){}, info(){}, debug(){} },
-    Math, isFinite, isNaN, parseFloat, parseInt, Number, String, Object, Array, JSON, Date, RegExp,
+    Math, isFinite, isNaN, parseFloat, parseInt, Number, String, Object, Array, JSON, Date: FrozenDate, RegExp,
     Boolean, Set, Map, WeakMap, WeakSet, Symbol, Proxy, Reflect, Function,
     Promise, Error, TypeError, RangeError, NaN, Infinity, Intl,
     encodeURIComponent, decodeURIComponent, encodeURI, decodeURI, document: doc,
@@ -281,16 +306,17 @@ let noiseFloor = 0;
   const spread = FED.live.map(id => Math.abs(FED2.out[id].txt.length - FED.out[id].txt.length));
   noiseFloor = Math.max(50, ...spread);
   ok(FED2.live.length === FED.live.length, `a second identical fed run drove the same ${FED2.live.length} tabs`);
-  /* REPORTED, NOT ASSERTED. How many tabs print something different between
-     two identical runs depends on whether a minute ticks over mid-run, so a
-     fixed count is a threshold fitted to one observation — and this file went
-     red the first time five tabs straddled a minute instead of one. */
-  console.log(`  .. ${noisy.length} of them render some different TEXT between two identical runs`
-              + (noisy.length ? ` (${noisy.join(', ')} — clocks and session stamps)` : '')
-              + ' — reported, not asserted: it depends on where the minute falls');
-  ok(noiseFloor <= 200,
-     `no tab's LENGTH moved by more than ${Math.max(...spread)} characters between identical runs, so the floor `
-     + `a starved difference must clear is ${noiseFloor} — and length is what the comparison below uses`);
+  /* ASSERTED NOW, because the clock is pinned (see T0 at the top of this
+     file). This used to be a count that was reported and not checked, since
+     it moved with where the minute fell. With the same instant handed to both
+     runs there is nothing left for it to move with, so a difference here is
+     a real one and worth failing on. */
+  ok(noisy.length === 0,
+     `all ${FED.live.length} gold tabs render byte-identical text across two identical runs`
+     + (noisy.length ? ` — these did not: ${noisy.join(', ')}` : ''));
+  ok(noiseFloor === 50,
+     `no tab's LENGTH moved at all (max ${Math.max(...spread)} characters), so the floor a starved `
+     + `difference must clear is the fixed ${noiseFloor} — and length is what the comparison below uses`);
 }
 
 console.log('\n== starve the bars and the numbers go with them ==');

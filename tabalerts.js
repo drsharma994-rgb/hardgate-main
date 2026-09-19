@@ -211,6 +211,23 @@ function setupIsClean7(s){
   return false;
 }
 
+/* ELIGIBILITY IS NOT THE GATE CLAIM.
+
+   setupIsClean7 above answers "may this row go out?" and it says yes to a
+   gold row on goldConvicted alone — the gold desks' own standing, exactly
+   as the p80 note below describes. That is correct for eligibility and
+   wrong for the printed line: GOLD SCALP / GOLD SWING do not run G1-G7 at
+   all (no gold module sets gatesPassed, clean or clean7 on a setup row),
+   so no gold row has ever had a seven-gate tally to report. This predicate
+   answers the narrower question — can the row BACK a 7/7 claim with a gate
+   count it actually kept? — and it is what the '7/7 CLEAN' strings read. */
+function setupBacksSevenGates(s){
+  if (!s || s.watch || s.nearClean === true) return false;
+  if (fin(+s.gatesPassed) && fin(+s.gatesTotal) && +s.gatesPassed >= 7 && +s.gatesTotal >= 7) return true;
+  if (fin(+s.passed) && +s.passed >= 7) return true;
+  return false;
+}
+
 function setupIsNearClean6(s){
   if (!s || s.watch || setupIsClean7(s)) return false;
   if (s.nearClean !== true) return false;
@@ -559,10 +576,15 @@ function collectGold(out, kind, src, opts){
       tally: fin(+c.tally) ? +c.tally : null,
       prime: true,
       goldConvicted: true,
-      tier: tier,
-      clean7: true
+      tier: tier
     };
+    /* clean7 rides WITH the gate count or not at all. goldConvicted already
+       carries the row through every eligibility filter, so this only ever
+       decided whether the push claimed '7/7 CLEAN' beside a tally the gold
+       desks never kept. The branch below is the honest test and it was
+       already here — the unconditional flag above it was the bug. */
     if (c.clean === true || c.clean7 === true || (fin(+c.gatesPassed) && +c.gatesPassed >= 7)){
+      extra.clean7 = true;
       extra.gatesPassed = fin(+c.gatesPassed) ? +c.gatesPassed : 7;
       extra.gatesTotal = fin(+c.gatesTotal) ? +c.gatesTotal : 7;
     }
@@ -994,7 +1016,7 @@ function hgTabAlertsFormat(fresh){
     if (s.tier) extra += ' · ' + s.tier;
     if (s.rr !== null) extra += ' · ' + Number(s.rr).toFixed(2) + 'R';
     if (s.nearClean) extra += ' · ' + (s.gatesPassed >= 7 ? '7/7 NEAR' : '6/7 NEAR') + ' (watch — not ticket yet)';
-    else if (s.clean7) extra += ' · 7/7 CLEAN';
+    else if (setupBacksSevenGates(s)) extra += ' · 7/7 CLEAN';
     if (s.note && !s.watch) extra += ' · ' + s.note;
     var plan = hgTabAlertsPlanBlock(s).split('\n').map(function(l){ return '  ' + l; }).join('\n');
     var lev = levHint(s.entry, s.stop);
@@ -1006,7 +1028,7 @@ function hgTabAlertsFormat(fresh){
   }
   if (!lines.length) return '';
   var allGoldConv = fresh.length && fresh.every(function(x){ return x.goldConvicted === true; });
-  var allClean = fresh.every(setupIsClean7);
+  var allClean = fresh.every(setupBacksSevenGates);
   var anyNear = fresh.some(setupIsNearClean6);
   var hdr = fresh.length === 1
     ? (fresh[0].prime && !allGoldConv ? '🔥 HARDGATE — STRONG SETUP'
@@ -1382,7 +1404,7 @@ if (typeof module !== 'undefined' && module.exports){
     setupKey, GAP_MS, GOLD_MIN_TALLY, LS_KEYS, LS_LAST_RUN, LS_CLEAN_ONLY,
     LS_GOLD_SEPARATE, LS_GOLD_CONVICTED, LS_CRYPTO_CONVICTED, LS_GOLD_LAST_RUN,
     tabAlertSourcesAll, tabAlertsShouldRun, tabAlertsMarkRun, hgBrainInvAlertsMaybeRun,
-    setupIsClean7, setupIsNearClean6, setupIsTelegramEligible, setupIsP80,
+    setupIsClean7, setupBacksSevenGates, setupIsNearClean6, setupIsTelegramEligible, setupIsP80,
     collectP80, p80CandleLive, p80Note, p80Key, P80_MAX_AGE_MS, P80_KEY_TTL_MS, finStrict,
     tabAlertsFilterClean7, tabAlertsFilterCryptoConvicted, tabAlertsCleanOnlyEnabled,
     tabAlertsGoldSeparateEnabled, tabAlertsGoldConvictedOnlyEnabled,
