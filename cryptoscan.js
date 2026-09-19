@@ -352,14 +352,23 @@ function renderCards(setups){
   var shorts = hq.length - longs;
   var allLongs = setups.filter(function(s){ return s.dir === 'long'; }).length;
   var allShorts = setups.length - allLongs;
-  var h = '<div class="cs-summary"><b>' + hq.length + ' HIGH-QUALITY</b> setup' + (hq.length > 1 ? 's' : '') + ' (75%+ confidence, trend, liquid hours) — '
+  /* The label used to read "(75%+ confidence, trend, liquid hours)", which is
+     three of the conditions out of seven. isHighQuality is qualityGates.length
+     === 0 AND proGradeCheck.isPro, so it also needs the voting gate, no major
+     sentiment conflict, three-layer confidence >= 0.75, price and order flow
+     pointing the same way, and no liquidation cascade. Under-describing it was
+     worst at zero: "0 HIGH-QUALITY setups (75%+ confidence, trend, liquid
+     hours)" reads as "nothing cleared 75% agreement", when the thing that
+     emptied the block is usually one of the four conditions not named. */
+  var h = '<div class="cs-summary"><b>' + hq.length + ' HIGH-QUALITY</b> setup' + (hq.length === 1 ? '' : 's') + ' (every quality gate clear · three-layer confidence 75%+ · price and flow agree) — '
     + longs + ' LONG · ' + shorts + ' SHORT<br>'
     + '<span style="font-weight:400;font-size:10px;color:#64748B">' + setups.length + ' total signals (includes ' + (setups.length - hq.length) + ' lower-quality). Click to expand vote table.</span></div>';
   var hqSetups = setups.filter(function(s){ return s.isHighQuality; });
   var lqSetups = setups.filter(function(s){ return !s.isHighQuality; });
 
   if (hqSetups.length > 0){
-    h += '<div style="margin:10px 0;font-size:11px;font-weight:700;color:#166534;padding:6px 8px;background:#DCFCE7;border-radius:6px">HIGH-QUALITY SIGNALS (75%+ confidence, trend regime, liquid hours)</div>';
+    h += '<div style="margin:10px 0;font-size:11px;font-weight:700;color:#166534;padding:6px 8px;background:#DCFCE7;border-radius:6px">HIGH-QUALITY SIGNALS'
+      + '<br><span style="font-weight:400;font-size:10px;color:#166534">every quality gate clear (75%+ price agreement · trend regime · liquid hours · voting gate · no sentiment conflict) AND pro-grade (three-layer confidence 75%+ · price and order flow agree · no liquidation cascade)</span></div>';
     for (var i = 0; i < hqSetups.length; i++){
       __voteStore[setups.indexOf(hqSetups[i])] = hqSetups[i].votes;
       h += setupCardHTML(hqSetups[i], setups.indexOf(hqSetups[i]));
@@ -374,7 +383,7 @@ function renderCards(setups){
     }
   }
 
-  h += '<div class="cs-note">CRYPTO SCAN — FILTERED FOR QUALITY. Out of ' + setups.length + ' total signals, ' + hqSetups.length + ' meet professional trader standards (75%+ confidence, trend regime, liquid trading hours). '
+  h += '<div class="cs-note">CRYPTO SCAN — FILTERED FOR QUALITY. Out of ' + setups.length + ' total signals, ' + hqSetups.length + ' clear every quality gate AND the pro-grade stamp (three-layer confidence 75%+, price and order flow agreeing). Risk-reward is not among those standards: the plan ladder is a fixed 1.5R, so an R:R test on it is true for every setup by construction and filters nothing. '
     + 'Lower-quality signals shown for reference but not recommended for trading. The 470-indicator voting engine produces high volume but low accuracy — '
     + 'most signals lack sufficient confluence. Professional traders only trade the strongest setups. This tab shows why: signal quantity ≠ signal quality. No win rates claimed. No invented thresholds.</div>';
   __ui.cards.innerHTML = h;
