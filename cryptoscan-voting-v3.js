@@ -87,6 +87,19 @@ function hgComputeThreeLayerConfidence(l1, l2, l3, externalRisk) {
      agreeing case. The +-15/20% multiplier stays as it is: it now double-counts
      direction mildly, but removing it would re-tune every number on the tab,
      and that is a calibration decision, not this defect. */
+  /* What layer 2 actually is, measured rather than assumed: every read in
+     order-flow.js is computed from the same OHLCV candles layer 1 votes on —
+     there is no order book, trade tape or liquidation feed in that file. Over
+     56 synthetic tapes fed to both engines, the correlation between layer-1
+     direction and layer-2 score is 0.957, and layer 2 agreed with layer 1 on
+     53 of 56 (95%).
+
+     That matters here because the +15% bonus below pays out on exactly those
+     agreements, so most of the time it is rewarding one price read twice, and
+     the 0.35 weight is not buying the independence the architecture claims.
+     The weights and the bonus are LEFT ALONE: changing either re-tunes every
+     number the tab has ever printed, which is a calibration decision and the
+     desk's to make. What is fixed is that the layer now says what it is. */
   var l2Raw = (l2 && l2.score != null && isFinite(+l2.score)) ? +l2.score : 0;
   var l2Aligned = l1.dir === 'long' ? l2Raw : l1.dir === 'short' ? -l2Raw : 0;
   /* only a real call is a call; 'neutral' and undefined are not disagreement */

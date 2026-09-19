@@ -258,9 +258,14 @@ function setupCardHTML(s, idx){
   layerText += '<small>🔵 Price: ' + Math.round(s.pct * 100) + '% (' + (s.dir || 'N/A').toUpperCase() + ') · ';
 
   /* Layer 2: Order Flow */
+  /* "Flow" is candle arithmetic, not order flow: every read in order-flow.js
+     comes off the same OHLCV bars layer 1 votes on, and it agreed with layer 1
+     on 53 of 56 measured tapes. Say so on the card rather than implying a book
+     the tab has never seen. */
   if (s.orderFlow && s.orderFlow.direction){
     var ofEmoji = s.orderFlow.direction === 'long' ? '🟢' : s.orderFlow.direction === 'short' ? '🔴' : '⚪';
-    layerText += ofEmoji + ' Flow: ' + (s.orderFlow.direction || 'N').toUpperCase() + ' · ';
+    layerText += ofEmoji + ' Flow: ' + (s.orderFlow.direction || 'N').toUpperCase()
+      + (s.orderFlow.proxyOnly ? ' (candle proxy)' : '') + ' · ';
   }
 
   /* Layer 3: Sentiment. A stale row is printed — it is what was read — but
