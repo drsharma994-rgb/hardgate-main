@@ -79,11 +79,17 @@ console.log('== mechanic is the VOTE TIER, so the tiers can be judged separately
     mk('C', 'weak', false, plan(100, 95, 110)),
   ]);
   const mechs = rows.map(r => r.mechanic);
-  ok(mechs.join(',') === 'VOTE-STRONG,VOTE-MODERATE,VOTE-WEAK',
+  /* pack 872 appended the LABEL VERSION. hg-forward pools on this string, and
+     the rule that decides a tier changed three times in one week, so a tier
+     computed by an older rule must not average into a newer one. */
+  const V = '@V' + W.CS_LABEL_V;
+  ok(mechs.join(',') === 'VOTE-STRONG' + V + ',VOTE-MODERATE' + V + ',VOTE-WEAK' + V,
      'one pool per tier, not one undifferentiated bag — got ' + mechs.join(', '));
   ok(new Set(mechs).size === 3, 'the tiers do not collapse together');
+  ok(mechs.every(m => m.length <= 28),
+     'and every key still fits the 28 characters hgFwdNormalize keeps');
   const noTier = W.__csFwdRows([mk('D', null, false, plan(100, 95, 110))]);
-  ok(noTier[0].mechanic === 'VOTE-WEAK', 'a missing tier defaults to weak rather than undefined');
+  ok(noTier[0].mechanic === 'VOTE-WEAK' + V, 'a missing tier defaults to weak rather than undefined');
 }
 
 console.log('== ticket marks the HIGH-QUALITY cohort ==');

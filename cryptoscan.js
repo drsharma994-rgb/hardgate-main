@@ -145,6 +145,39 @@ function csSortSetups(arr){
   return arr;
 }
 
+/* THE VERSION OF THE LABEL, not of the file.
+
+   hg-forward.js pools settled records by tab + mechanic (hgFwdKey, hgFwdStats),
+   and `ticketOnly` splits inside a mechanic. So "VOTE-PROFESSIONAL, n=40,
+   +0.3R" is only evidence about one thing if all forty rows were labelled by
+   the same rule.
+
+   They were not. The pipeline that produces voteTier and isHighQuality changed
+   three times in one week, and every change moved which setups land in which
+   bucket:
+
+     v1  the original three-layer blend
+     v2  pack 863 - sentiment taken relative to the trade. Shorts had been
+         scored with the raw market sign, so a bullish read PROMOTED a short;
+         37 of 200 swept shorts held the pro-grade bar only on that.
+     v3  pack 864 - order flow taken relative to the trade, and a neutral
+         reading stopped counting as dissent. 166 of 6,840 swept cells changed
+         tier and shouldTrade.
+     v4  pack 865 - a sentiment row past its own ttl scores 0 and no longer
+         gates. 144 of 280 BTC/ETH/SOL cells changed tier.
+
+   Records written under v1 are still in a live tab's localStorage, pooling
+   with v4 records under identical keys, and nothing marked them. This repo
+   already knows the answer: hg-forward.js writes `solV`, "the stamp version",
+   beside the solidity score for exactly this reason. So the version goes into
+   the mechanic, which IS the pooling key, and old labels stop contaminating
+   new ones instead of being silently averaged with them.
+
+   Bump this whenever the label pipeline changes. tests/test-cryptoscan-label-
+   version.mjs hashes that pipeline and fails if it moves without a bump, so
+   the decision is made on purpose rather than forgotten. */
+var CS_LABEL_V = 4;
+
 /* v735: forward-log row builder, kept PURE and exported for the same reason
    csSmcRank is — everything else in the scan path lives inside runScan, which
    cannot be reached without live network, so a behaviour test is impossible
@@ -170,8 +203,11 @@ function csFwdRows(setups){
       entry: en, stop: st, t1: tp,
       /* mechanic is the VOTE TIER, not a constant, so the log answers the
          question worth asking — do this desk's own confidence tiers actually
-         separate — rather than pooling everything into one bag */
-      mechanic: ('VOTE-' + String(s.voteTier || 'weak')).toUpperCase().slice(0, 28),
+         separate — rather than pooling everything into one bag. The @vN suffix
+         is the label version: hg-forward pools on this string, so a tier
+         computed by an older rule can no longer average into a newer one.
+         hgFwdNormalize keeps 28 characters and the longest tier fits. */
+      mechanic: ('VOTE-' + String(s.voteTier || 'weak') + '@v' + CS_LABEL_V).toUpperCase().slice(0, 28),
       /* marks the HIGH-QUALITY cohort (no quality gates AND pro-grade). Not a
          claim these are tradeable — the cards say RECORD ONLY — it is the split
          that lets someone later ask whether the tab's strongest claim paid. */
@@ -595,6 +631,7 @@ W.__csSetupCardHTML = setupCardHTML;
 W.csBlockerTally = csBlockerTally;
 W.csWhyEmptyHTML = csWhyEmptyHTML;
 W.csFooterNote = csFooterNote;
+W.CS_LABEL_V = CS_LABEL_V;
 W.csCoverage = csCoverage;
 W.csUnreadWhyText = csUnreadWhyText;
 W.csCoverageHTML = csCoverageHTML;
