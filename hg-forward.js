@@ -411,8 +411,31 @@ localStorage. Never throws.
     if (!rec || !rows || !rows.length) return null;
     var type = hgFwdOrderType(rec);
     if (!type) return null;                          /* no mark: unknowable */
+    /* A MARKET ORDER HAS NO FILL BAR.
+
+       BUY / SELL means entry === mark: the plan enters at the close of
+       rec.barT, before the first bar of this walk opened. A resting limit or
+       stop is different — it waits for a touch, and if the bar that touches it
+       also spans an exit, the order inside that bar is unknown and the row is
+       excluded as unprovable. That reasoning does not apply to a market
+       order, and applying it anyway treated the bar AFTER the signal as the
+       fill bar: every market trade that resolved on its first bar came back
+       'unprovable', with the position declared unshowable when it certainly
+       existed. Measured over 4,000 synthetic 15m trades, 7.0% of market
+       records at CRYPTO SCAN's 1.5R ladder, 8.3% at 1.2R.
+
+       That is not neutral. Unprovable rows are resolved at the cautious end
+       (omnigold.js: delete unprovable wins, keep unprovable losses), so the
+       mislabel deletes real wins and keeps real losses on a population that
+       was never ambiguous. Of the 330 at 1.2R, 52 would have been targets.
+
+       Filled before the loop, the walk resolves from the first bar with the
+       same both-in-one-bar -> STOP convention hgFwdSettleOne uses, which is
+       the rule this file already states for "the position certainly exists
+       and only the exit is unknown". */
+    var market = (type === 'BUY' || type === 'SELL');
     var long = (rec.dir === 'long');
-    var filled = false, seen = 0, sinceFill = 0, i, t, h, l, hitStop, hitT1;
+    var filled = market, seen = 0, sinceFill = 0, i, t, h, l, hitStop, hitT1;
 
     for (i = 0; i < rows.length; i++){
       t = num(rows[i].t);
@@ -1276,6 +1299,14 @@ localStorage. Never throws.
             tf: tf,
             dir: c.dir,
             entry: c.entry, stop: c.stop, t1: c.t1,
+            /* THE PRICE WHEN THE PLAN FIRED. hgFwdNormalize has accepted this
+               since the fill model was written, and this entry point never
+               forwarded it — so no desk recording through hgFwdRecordScan has
+               ever had a mark, hgFwdOrderType returned null on every one of
+               their records, and the fill-aware pass stood aside for all of
+               them. Absent still means absent: a caller that passes none
+               records none, and the fill walk keeps standing aside. */
+            mark: c.mark,
             barT: barOf(c),
             horizonBars: o.horizonBars || 20,
             ticket: (c.ticket !== undefined) ? c.ticket : (o.ticket === true),

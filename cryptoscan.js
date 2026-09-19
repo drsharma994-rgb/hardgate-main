@@ -206,9 +206,23 @@ function csFwdRows(setups){
        across a bar edge. Absent means absent: no bar, no claim, and the
        recorder falls back to its own floor. */
     var barT = (s.bar && isFinite(+s.bar.t) && +s.bar.t > 0) ? +s.bar.t : undefined;
+    /* THE PRICE WHEN THE PLAN FIRED. hg-forward runs a second, fill-aware
+       settlement beside the naive one, and it needs this field to recover the
+       order type — without it hgFwdOrderType returns null and the fill walk
+       never runs, so every CRYPTO SCAN record sat outside the pool that exists
+       precisely because the naive walk is biased.
+
+       This desk enters at the close (cryptoultra prices entry = res.price and
+       stamps the plan BUY / SELL), so mark === entry and the order is a
+       MARKET one. Passing it does not assume that — it lets the log derive it,
+       and if a later change ever snaps entry away from the live price the
+       record will correctly read as a limit or a stop instead. Absent means
+       absent: no price, no mark, and the fill walk stands aside as before. */
+    var mk = isFinite(+s.price) && +s.price > 0 ? +s.price : undefined;
     out.push({
       sym: String(s.sym), dir: s.dir,
       entry: en, stop: st, t1: tp,
+      mark: mk,
       barT: barT,
       /* mechanic is the VOTE TIER, not a constant, so the log answers the
          question worth asking — do this desk's own confidence tiers actually
