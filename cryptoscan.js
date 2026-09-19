@@ -263,10 +263,19 @@ function setupCardHTML(s, idx){
     layerText += ofEmoji + ' Flow: ' + (s.orderFlow.direction || 'N').toUpperCase() + ' · ';
   }
 
-  /* Layer 3: Sentiment */
+  /* Layer 3: Sentiment. A stale row is printed — it is what was read — but
+     labelled, and it contributed 0 to the confidence above. */
   if (s.sentiment && s.sentiment.score !== undefined){
-    var sentEmoji = s.sentiment.score > 0.3 ? '🟢' : s.sentiment.score < -0.3 ? '🔴' : '🟡';
-    layerText += sentEmoji + ' Senti: ' + s.sentiment.score.toFixed(2);
+    if (s.sentiment.stale){
+      layerText += '⏱️ Senti: ' + s.sentiment.score.toFixed(2) + ' ('
+        + (s.sentiment.missing ? 'no data' :
+            ((typeof hgSentimentAgeLabel === 'function' ? hgSentimentAgeLabel(s.sentiment) : 'stale')
+             + ' old, ttl ' + s.sentiment.ttl + 's'))
+        + ' — not scored)';
+    } else {
+      var sentEmoji = s.sentiment.score > 0.3 ? '🟢' : s.sentiment.score < -0.3 ? '🔴' : '🟡';
+      layerText += sentEmoji + ' Senti: ' + s.sentiment.score.toFixed(2);
+    }
   }
   layerText += '</small>';
 
@@ -466,6 +475,7 @@ async function runScan(ui){
           if (typeof hgExternalRiskScore === 'function'){
             externalRisk = hgExternalRiskScore(item.sym);
           }
+          /* hgSentimentScoreSignal applies the same staleness rule internally */
           var sentimentAdjusted = pct;
           if (typeof hgSentimentScoreSignal === 'function' && sentiment.score !== undefined){
             sentimentAdjusted = hgSentimentScoreSignal(item.sym, pct, res.dir);
@@ -483,11 +493,18 @@ async function runScan(ui){
 
           /* Phase 3: Three-Layer Consensus Logic (v3 final) */
           var voteResult = { shouldTrade: true };
+          /* A sentiment row past its own ttl is not a reading, so it must not
+             carry 25% of the confidence that sets this card's tier and its
+             PROFESSIONAL-GRADE stamp. hgSentimentGet now reports that (it is a
+             port of scripts/sentiment-engine.py's is_cache_fresh); the raw
+             score stays on the setup so the card can print what was read and
+             how old it is. */
+          var sentimentLive = (sentiment && sentiment.stale) ? 0 : (sentiment.score || 0);
           if (typeof hgComputeThreeLayerConfidence === 'function'){
             voteResult = hgComputeThreeLayerConfidence(
               { pct: pct, dir: res.dir },
               { score: orderFlow.score || 0, dir: orderFlowDir },
-              { sentiment: sentiment.score || 0 },
+              { sentiment: sentimentLive },
               externalRisk
             );
           }
@@ -532,6 +549,7 @@ async function runScan(ui){
             voteTier: voteResult.tier || 'weak',
             sentimentAdjusted: sentimentAdjusted,
             sentiment: sentiment,
+            sentimentLive: sentimentLive,
             orderFlow: orderFlow,
             orderFlowDir: orderFlowDir,
             layerAgreement: layerAgreement,
