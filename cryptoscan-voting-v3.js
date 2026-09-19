@@ -21,10 +21,43 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 function hgComputeThreeLayerConfidence(l1, l2, l3, externalRisk) {
   var gates = [];
 
+  /* Layer 3 is an ABSOLUTE market read, not a per-trade agreement score:
+     sentiment.js scores +1 bullish / -1 bearish for the SYMBOL, and it is
+     hgSentimentScoreSignal there that turns that into agreement with a trade
+     (alignment = score for a long, -score for a short). This function used to
+     add the raw score for both directions, and on a SHORT that is exactly
+     backwards — the bullish read, the one that CONTRADICTS the trade, added
+     confidence, and the bearish read that confirms it subtracted.
+
+     Measured on one setup with identical price and flow reads, pct 0.80 and
+     flow 0.5, changing nothing but the sentiment:
+
+       short + sentiment -0.80 (bearish, CONFIRMS)     0.339  weak          no trade
+       short + sentiment +0.80 (bullish, contradicts)  0.799  professional  trade
+
+     The short was blocked when the market agreed with it and promoted to
+     PROFESSIONAL when the market disagreed. Longs were right all along, so the
+     fault was invisible on half the book.
+
+     It is not hypothetical on the shipped cache: scripts/sentiment-cache/
+     sentiment.json carries BTCUSDT, ETHUSDT and SOLUSDT all at +0.272. Over a
+     200-cell grid of short setups (price agreement 0.60-0.98 x flow 0.0-0.9),
+     37 of them — 18.5% — held the >=0.75 pro-grade bar ONLY because the sign
+     was wrong; none lost out the other way. 86 changed tier and 70 changed
+     shouldTrade. That bar is what cryptoscan.js calls HIGH-QUALITY and what it
+     writes to the forward log as `ticket`, so the desk was also grading its own
+     strongest cohort on it.
+
+     Direction unknown contributes nothing rather than a sign picked at random,
+     which is what hgSentimentScoreSignal does too (it returns the base
+     confidence untouched when direction is neither long nor short). */
+  var l3Raw = (l3 && l3.sentiment != null && isFinite(+l3.sentiment)) ? +l3.sentiment : 0;
+  var l3Aligned = l1.dir === 'long' ? l3Raw : l1.dir === 'short' ? -l3Raw : 0;
+
   /* Base confidence: weighted average of three layers */
   var confidence = (l1.pct * 0.40) +           /* Layer 1: Price (40%) */
                    (Math.abs(l2.score || 0) * 0.35) +  /* Layer 2: Order Flow (35%) */
-                   ((l3.sentiment || 0) * 0.25);       /* Layer 3: Sentiment (25%) */
+                   (l3Aligned * 0.25);                 /* Layer 3: Sentiment, vs THIS trade (25%) */
 
   /* Clamp to valid range */
   confidence = Math.max(0, Math.min(1, confidence));
@@ -134,21 +167,42 @@ function hgVotingSummary(l1, l2, l3, voteResult) {
 /**
  * Professional vs Retail Trade Filtering
  *
- * Professional traders only take trades with:
- * 1. Confluence (multiple sources agree)
- * 2. Favorable risk-reward (1:2 minimum)
- * 3. Market context (session liquidity, regime)
- * 4. No tail risks (liquidation, whale distribution)
+ * What the PROFESSIONAL-GRADE stamp actually requires, in the order the code
+ * applies it — and it is worth stating exactly, because the stamp is what
+ * cryptoscan.js turns into its HIGH-QUALITY block and into `ticket` in the
+ * forward log:
+ *   1. three-layer confidence >= 0.75
+ *   2. price and ORDER FLOW pointing the same way (layerAgreement === 2)
+ *   3. no imminent liquidation cascade
+ *   4. every one of the tab's quality gates clear (confidence, regime,
+ *      session, voting gate, sentiment conflict)
+ *
+ * Two things it does NOT require, despite earlier wording here:
+ *
+ *   - Sentiment agreement is not part of (2). layerAgreement is computed in
+ *     cryptoscan.js from order flow versus price and nothing else; sentiment
+ *     reaches the stamp only through the confidence number in (1).
+ *
+ *   - Risk-reward is not a filter, and cannot be one as the plan is built
+ *     today. positiveRR below reads plan.rr1, and cryptoultra.js sets that to
+ *     the constant RULE.t1R = 1.5 on every plan it prices, so the check is
+ *     1.5 >= 1.5 for every setup that has ever existed — true by construction.
+ *     It stays in `checks` because it is reported, not because it filters, and
+ *     it is deliberately left OUT of the conjunction: adding it would look
+ *     like a tightened standard while changing no verdict at all. A real R:R
+ *     standard needs a plan whose reward is measured per setup, not a fixed
+ *     ladder, and that belongs in cryptoultra.js.
  */
 function hgIsProGradeSetup(setup) {
-  if (!setup) return false;
+  if (!setup) return { isPro: false, checks: null, tier: 'RECORD-ONLY' };
 
   var checks = {
     highConfidence: (setup.threeLayerConfidence || 0) >= 0.75,
-    layerAgreement: setup.layerAgreement === 2,  /* All three layers agree */
+    layerAgreement: setup.layerAgreement === 2,  /* price and order flow, not sentiment */
     noLiquidationRisk: !setup.externalRisk || !setup.externalRisk.cascadeImminent,
     qualityGates: (setup.qualityGates || []).length === 0,
-    positiveRR: setup.plan && (setup.plan.rr1 || 0) >= 1.5
+    /* vacuous while plan.rr1 is cryptoultra's fixed 1.5R ladder — see above */
+    positiveRR: !!(setup.plan && (setup.plan.rr1 || 0) >= 1.5)
   };
 
   var proGrade = checks.highConfidence &&
