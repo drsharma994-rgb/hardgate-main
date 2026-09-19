@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v852',
-  pack: 'XM_OMNIGOLD_MAX_LOTS did not cap. OMNIGOLD\u2019s XM bot read the size and the ceiling, and when the size was larger it RAISED THE CEILING to match \u2014 so XM_OMNIGOLD_LOTS=5.00 against a 0.10 cap sent five lots, fifty times the configured maximum, on the live gold-order path. It compounded twice: the per-order clip of a client-supplied volume uses that same cap, so once raised it was a no-op too, and the status line prints size and cap together (\u20185 lots (max 5)\u2019) so the reader saw a self-consistent pair and never the ceiling they set. The size yields to the cap now. The existing test asserted the clip HELPER was correct \u2014 it always was; what was wrong was the cap handed to it, and the only test of that wiring used a pair that never exercised the branch',
+  version: 'hg-v853',
+  pack: 'a DRY RUN preview was eating the live order that followed it. OMNIGOLD\u2019s XM bot claimed its 24-hour idempotency key on placed.ok \u2014 true for a dry run too \u2014 so previewing a ticket wrote its key, and the LIVE send of that same ticket replayed the cached dry-run response instead of placing the order: ok true, posted FALSE, not one call to the bridge, no error. DRY RUN is the default, so preview-then-arm-then-send, the obvious way to use it, was the broken path and stayed broken for a day per ticket. Only a POSTED order claims the key now, and a dry run neither reads the map nor writes to it \u2014 a preview of a ticket already sent live used to replay the LIVE receipt, answering \u2018what would this do\u2019 with \u2018posted to XM\u2019 about an earlier order. Real duplicate suppression is untouched: two live sends of one ticket still post once',
   built: '2026-09-18T00:00:00Z'
 };
 
