@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v850',
-  pack: 'a helper that does not exist was killing the gold desk\u2019s best entry point of interest every time it found one. formation.js called fin(+ob.entry) to accept an order block, and `fin` is defined nowhere the browser can see \u2014 not on the window, not at the top level of any inline block \u2014 so the ReferenceError unwound hgRankEntryPOI and it returned null: not \u2018no order block\u2019 but NO POINT OF INTEREST AT ALL, taking the order block (score 90-92) and the FVG (87-91), the two highest this desk ranks, down with the whole ranking. It only broke when the detector SUCCEEDED, which is why nothing caught it. The same missing name silently disabled plans.js\u2019s regime-overlay confluence requirement, which has always reported itself unchecked. There IS a fin in this repo \u2014 nested inside goldSetupDecision() in index.html, one scope deep, unreachable from anywhere else',
+  version: 'hg-v851',
+  pack: 'the gold formation layer is walked with each of its 28 optional dependencies forced to SUCCEED, one at a time \u2014 the branch shape that hid pack 850\u2019s bug, which only fired when a detector actually returned something. The dependency list is read out of formation.js rather than copied, so a new typeof G.X joins the sweep automatically and one with no fixture fails the run instead of being skipped. No further landmine of that class was found: all 28 can succeed without the point-of-interest ranker answering null and without the ticket builder throwing. Non-vacuity is pinned on the two the bug actually killed \u2014 forcing hgDetectOrderBlock must now yield the order block at score 90 and hgDetectFvg the FVG at 87, where both yielded null before',
   built: '2026-09-18T00:00:00Z'
 };
 
