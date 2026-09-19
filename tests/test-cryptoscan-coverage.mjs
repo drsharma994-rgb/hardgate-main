@@ -70,8 +70,13 @@ const MIXED      = { universe: 300, scanned: 300, skipped: 140, errors: 40,  set
 console.log('\n1. the counts existed and never reached the cards');
 {
   const src = stripComments(SCAN);
-  ok(/__results = \{ at: now, setups: setups, scanned: scanned, errors: errors, skipped: skipped,[\s\S]{0,120}universe: items\.length \}/.test(src),
-     'runScan has recorded scanned / skipped / errors / universe all along');
+  /* assert the fields, not the shape of the literal: pack 871 added the
+     universe funnel to this object and a whole-literal regex broke on it. */
+  const results = (/__results = \{[\s\S]*?\};/.exec(src) || [''])[0];
+  ok(results.length > 0, 'runScan builds a __results object');
+  ok(/scanned: scanned/.test(results) && /skipped: skipped/.test(results)
+     && /errors: errors/.test(results) && /universe: items\.length/.test(results),
+     'recording scanned / skipped / errors / universe, as it has all along');
   ok(/renderCards\(setups, __results\)/.test(src), 'and now hands them to renderCards');
   ok(/renderCards\(__results\.setups, __results\)/.test(src),
      'including on tab re-open, which used to pass the setups alone');

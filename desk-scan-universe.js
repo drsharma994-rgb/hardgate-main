@@ -117,9 +117,17 @@ function hgDeskFilterVenues(items, venues){
   });
 }
 
+/* The funnel, named, because a desk that reports "300 of 300 contracts read"
+   is quoting a number that two filters already shrank. rawLen is what the
+   source offered, turnoverLen what survived the turnover floor, filteredLen
+   what survived the venue filter on top of that. Overwriting filteredLen here
+   and calling it the universe hid both. */
 async function hgDeskLoadDeltaCoinDCX(opts){
   var pack = await hgDeskLoadUniverse(opts);
+  var before = pack.items.length;
   pack.items = hgDeskFilterVenues(pack.items, ['delta', 'coindcx']);
+  pack.turnoverLen = before;
+  pack.droppedVenue = Math.max(0, before - pack.items.length);
   pack.filteredLen = pack.items.length;
   pack.venueCounts = hgDeskVenueCounts(pack.items);
   pack.source = pack.source + '+delta-coindcx';
@@ -143,6 +151,11 @@ async function hgDeskLoadUniverse(opts){
       note: note,
       source: 'xu',
       rawLen: rawLen,
+      turnoverLen: list.length,
+      droppedTurnover: Math.max(0, rawLen - list.length),
+      droppedVenue: 0,
+      minTurnover: minTurn,
+      includeUnknown: includeUnknown,
       filteredLen: list.length,
       venueCounts: hgDeskVenueCounts(list)
     };
@@ -154,12 +167,17 @@ async function hgDeskLoadUniverse(opts){
   var perps = await G.binancePerpUniverse();
   var ticks = await G.binanceTickers24h();
   if (!Array.isArray(perps) || !perps.length || !ticks) throw new Error('Binance universe unavailable');
-  var items = [];
+  var items = [], noTicker = 0;
   for (var i = 0; i < perps.length; i++){
     var s = perps[i], tk = ticks[s];
-    if (!tk) continue;
+    if (!tk){ noTicker++; continue; }
     var it = binanceItem(s, tk);
-    if (passesTurnover(it, minTurn, false)) items.push(it);
+    /* includeUnknown was hardcoded false here while the xuUniverse branch
+       above honoured the caller. Same call, same options, two different
+       universes: CRYPTO SCAN asks for { minTurnover: 0, includeUnknown: true }
+       under a button that says SCAN ALL FUTURES, and on this path every perp
+       whose ticker carried no turnover was dropped regardless. */
+    if (passesTurnover(it, minTurn, includeUnknown)) items.push(it);
   }
   items.sort(sortByTurnover);
   return {
@@ -167,6 +185,12 @@ async function hgDeskLoadUniverse(opts){
     note: 'xuUniverse absent — Binance USDT-M perps only',
     source: 'binance',
     rawLen: perps.length,
+    turnoverLen: items.length,
+    droppedTurnover: Math.max(0, perps.length - noTicker - items.length),
+    droppedNoTicker: noTicker,
+    droppedVenue: 0,
+    minTurnover: minTurn,
+    includeUnknown: includeUnknown,
     filteredLen: items.length,
     venueCounts: hgDeskVenueCounts(items)
   };
