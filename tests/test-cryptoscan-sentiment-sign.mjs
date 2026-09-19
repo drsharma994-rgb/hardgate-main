@@ -67,9 +67,19 @@ const S = boot();
 const VOTE = fs.readFileSync(root + 'cryptoscan-voting-v3.js', 'utf8');
 const SCAN = fs.readFileSync(root + 'cryptoscan.js', 'utf8');
 
-/** the call cryptoscan.js makes, with the same argument shapes */
+/** The call cryptoscan.js makes, with the same argument shapes.
+    `flow` is a MAGNITUDE here: order-flow.js derives its direction from the
+    sign of its score (positive is buying pressure), so a score labelled
+    'short' is negative and one labelled 'long' is positive. This harness used
+    to pass a positive score alongside dir 'short' — a pair the producer cannot
+    emit — and pack 864, which reads layer 2 relative to the trade instead of
+    as a bare magnitude, correctly disagreed with it. Sign it properly and
+    every assertion below is about the sentiment layer again, which is what
+    this file is for. */
 const conf = (dir, pct, flow, sent, risk) => S.hgComputeThreeLayerConfidence(
-  { pct: pct, dir: dir }, { score: flow, dir: dir }, { sentiment: sent }, risk || {});
+  { pct: pct, dir: dir },
+  { score: (dir === 'short' ? -flow : flow), dir: dir },
+  { sentiment: sent }, risk || {});
 const near = (a, b) => Math.abs(a - b) < 1e-9;
 
 /* ---------------------------------------------------------------- 1 */
@@ -142,7 +152,10 @@ console.log('\n3. longs did not move, which is how we know only the bug changed'
 console.log('\n4. no direction and no reading contribute nothing, not a guess');
 {
   const base = conf('long', 0.80, 0.5, 0).confidence;
-  ok(near(conf(null, 0.80, 0.5, 0.80).confidence, 0.80 * 0.40 + 0.5 * 0.35),
+  /* pack 864 extended this to layer 2 as well: with no trade direction there is
+     nothing for EITHER outside layer to agree or disagree with, so only the
+     price layer is left. */
+  ok(near(conf(null, 0.80, 0.5, 0.80).confidence, 0.80 * 0.40),
      'direction unknown: sentiment contributes 0 rather than a sign picked at random');
   ok(near(conf(null, 0.80, 0.5, 0.80).confidence, conf(null, 0.80, 0.5, -0.80).confidence),
      'and bullish and bearish give the same answer when there is no trade to compare them to');
@@ -150,7 +163,7 @@ console.log('\n4. no direction and no reading contribute nothing, not a guess');
   const junk = [undefined, null, '', 'bullish', NaN, {}];
   let clean = 0;
   for (const j of junk){
-    const r = S.hgComputeThreeLayerConfidence({ pct: 0.80, dir: 'short' }, { score: 0.5, dir: 'short' },
+    const r = S.hgComputeThreeLayerConfidence({ pct: 0.80, dir: 'short' }, { score: -0.5, dir: 'short' },
                                               { sentiment: j }, {});
     if (isFinite(r.confidence) && near(r.confidence, base)) clean++;
   }
@@ -169,16 +182,24 @@ console.log('\n5. the shipped cache, where every symbol reads +0.272 bullish');
      'the cache on disk is bullish on every symbol it carries (' + scores.length + ' of them)');
   const SENT = scores[0];
 
-  /* the raw formula is what shipped; compare it against what runs now */
-  const rawShort = (pct, flow) =>
+  /* This is a HISTORICAL measurement — what the v862 -> v863 sentiment-sign
+     change did, on the code as it stood then. Both sides are therefore written
+     out rather than read from the live function: pack 864 later changed the
+     layer-2 term, and re-deriving these counts under today's arithmetic would
+     answer a different question and silently move a number that is quoted in
+     cryptoscan-voting-v3.js and in the v863 commit. The live sentiment
+     behaviour is pinned by sections 2, 3 and 4 above, which do call it. */
+  const shortBefore = (pct, flow) =>    /* v862: sentiment added raw */
     Math.max(0, Math.min(1, pct * 0.40 + Math.abs(flow) * 0.35 + SENT * 0.25)) * 1.15;
+  const shortAfter = (pct, flow) =>     /* v863: sentiment negated for a short */
+    Math.max(0, Math.min(1, pct * 0.40 + Math.abs(flow) * 0.35 - SENT * 0.25)) * 1.15;
 
   let cells = 0, lost = 0, gained = 0;
   for (let pct = 0.60; pct <= 0.98001; pct += 0.02){
     for (let flow = 0; flow <= 0.9001; flow += 0.1){
       cells++;
-      const was = rawShort(pct, flow) >= 0.75;
-      const now = conf('short', +pct.toFixed(2), +flow.toFixed(2), SENT).confidence >= 0.75;
+      const was = shortBefore(pct, flow) >= 0.75;
+      const now = shortAfter(pct, flow) >= 0.75;
       if (was && !now) lost++;
       if (!was && now) gained++;
     }
@@ -189,16 +210,18 @@ console.log('\n5. the shipped cache, where every symbol reads +0.272 bullish');
   ok(Math.abs(lost / cells - 0.185) < 0.02,
      'which is the 18.5% the code comment claims (measured ' + (100 * lost / cells).toFixed(1) + '%)');
 
-  /* longs on the same cache are untouched */
-  const rawLong = (pct, flow) =>
+  /* longs on the same cache are untouched, and this half IS live: a long's
+     flow score is positive, so the aligned reading and the old magnitude are
+     the same number and the whole expression must still match v862 exactly. */
+  const longBefore = (pct, flow) =>
     Math.max(0, Math.min(1, pct * 0.40 + Math.abs(flow) * 0.35 + SENT * 0.25)) * 1.15;
   let longMoved = 0;
   for (let pct = 0.60; pct <= 0.98001; pct += 0.02){
     for (let flow = 0; flow <= 0.9001; flow += 0.1){
-      if (!near(conf('long', +pct.toFixed(2), +flow.toFixed(2), SENT).confidence, rawLong(pct, flow))) longMoved++;
+      if (!near(conf('long', +pct.toFixed(2), +flow.toFixed(2), SENT).confidence, longBefore(pct, flow))) longMoved++;
     }
   }
-  ok(longMoved === 0, 'not one of the 200 long cells moved');
+  ok(longMoved === 0, 'not one of the 200 long cells moved, measured against the live function');
 }
 
 /* ---------------------------------------------------------------- 6 */
