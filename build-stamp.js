@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v847',
-  pack: 'GOLD PINE was printing ENTRY 4050.620761151771 \u00b7 SL 4069.903921366599 onto a card carrying SEND TO TRADE PLAN, and had been all along. Its price formatter delegates to W.px and falls back to String(+n) when W.px is absent \u2014 and W.px is defined nowhere in this repo, so the delegation never once fired and the raw fallback was the only path every price ever took. The sibling formatter two lines below it in the same file falls back to toFixed(2). Seven PINE tabs carry the identical line and are fixed with it. All eight now round by magnitude on the house ladder, so gold reads 4050.62 and a sub-cent alt keeps its figures instead of reading 0.00. Found by reading what pack 846\u2019s harness actually renders, and pinned by a rule over all 452 gold prices the family prints',
+  version: 'hg-v848',
+  pack: 'GOLD PINE offered SEND TO TRADE PLAN and ADD TO BOOK on a PRIMARY pick risking 19.28 points to make 5.03 \u2014 R:R 0.26, stamped SOLIDITY GOOD. Every other gold desk floors the reward before it hands a setup over; this one had no reward test anywhere in its path, and SOLIDITY is a score out of seven gates, not a floor. Below the house floor the card now stays and the two buttons are replaced by a line naming the R:R, the floor and the shortfall; unmeasured reward is still not a veto. Also corrects pack 847: the house px formatter DOES exist, at index.html 1515, declared with const in an inline block \u2014 and a top-level const does not attach to window, which is why ten external files that guard on typeof W.px have never once reached it',
   built: '2026-09-18T00:00:00Z'
 };
 

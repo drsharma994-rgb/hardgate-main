@@ -1,74 +1,42 @@
-/* HARDGATE — every price a gold tab prints is rounded like a price.
+/* HARDGATE — no gold tab hands over a setup that risks more than it can make.
 
-   Pack 846 gave the family a harness that presses each gold tab's own scan
-   control, so for the first time there is a corpus of what these tabs
-   actually render. Reading it turned one up immediately. GOLD PINE printed:
+   Pack 847 started reading what the gold family actually renders and found a
+   formatting defect. Reading the same corpus for GEOMETRY found a worse one.
+   Every ENTRY/STOP/T1 triple the family prints is coherent — stop and target
+   on the correct sides of entry, twelve for twelve — but one card was this:
 
-     ENTRY 4050.620761151771 · SL 4069.903921366599 · T1 4045.593761805285
+     XAUUSD SHORT · #1 PICK · PRIMARY · SOLIDITY GOOD
+     ENTRY 4050.62 · SL 4069.90 · T1 4045.59        R:R 0.26
+     [SEND TO TRADE PLAN →]  [ADD TO BOOK]
 
-   onto a card carrying SEND TO TRADE PLAN →, while every other gold tab
-   printed two decimals. Its PDH, PDL, Asia range and mark went the same way.
+   19.28 points of risk for 5.03 of reward, on a GOLD PINE card offering both
+   handoff buttons.
 
-   The cause is a dead branch. goldpine.js formats prices through
+   Every other gold desk refuses this. GOLD SCALP floors at
+   HG_GOLD_SCALP_MIN_RR, GOLD SWING at HG_GOLD_SWING_MIN_RR, and the shared
+   plan layer states the rule outright: a structural target below the floor
+   REJECTS rather than pushing T1 out to meet it. GOLD PINE had no reward test
+   anywhere in its path — it drew the buttons on every card it drew.
 
-     function pxF(n){
-       if (typeof W.px === 'function') return W.px(n);   // never true
-       if (!fin(+n)) return '—';
-       return String(+n);                                 // the only path
-     }
+   SOLIDITY did not miss it, and that is worth being precise about, because
+   "SOLIDITY GOOD" on a 0.26 R:R card looks like a lie and is not one. The
+   grade is a score out of seven gates, R:R is one of them, and a card can
+   fail that one and still reach five. A summary out of seven is not a floor.
+   This tab had no floor.
 
-   and the reason that first line is never true is worth stating exactly,
-   because pack 847 first stated it wrong. There IS a house price formatter:
-   index.html line 1515,
+   The fix keeps the card — the levels are worth reading, and the sibling
+   desks keep demoted cards visible too — and replaces the two buttons with a
+   line naming the number, the floor and the shortfall. A setup whose reward
+   cannot be measured at all is left alone: unmeasured is not a failing grade
+   anywhere else on this desk and it is not one here.
 
-     const px = n => { ... adaptive price precision ... };
+   THE RULE BELOW IS NON-VACUOUS, and that is checked rather than hoped: it is
+   run against the corpus this family renders, which must contain both a
+   blocked card and a live handoff for the run to count. Against the corpus
+   from before the fix it finds the two offenders; against the corpus after
+   it, none.
 
-   It is declared with CONST, in an inline script. A top-level `const` does
-   not attach to the global object — a `function` declaration does, a `const`
-   does not — so `window.px` is undefined even though the identifier `px`
-   resolves perfectly well inside index.html's own scripts, and planBlock a
-   few thousand lines below calls it. Ten external files guard with
-   `typeof W.px === 'function'`, which reads the window property, which is the
-   one place this formatter is not. The house formatter is right there and
-   they all check for it where it cannot be.
-
-   So the delegation has never once fired, and every price these files printed
-   themselves went out through the fallback. The sibling fmtF, two lines below
-   pxF in the same file, falls back to toFixed(2). One file, two fallbacks,
-   written to two different standards.
-
-   WHAT WAS AND WAS NOT BROKEN IN THE BROWSER, corrected from what pack 847
-   claimed. GOLD PINE's ENTRY · SL · T1 line goes through W.planBlock when it
-   is present, and planBlock is an index.html inline function that formats
-   with px — so that line, the one 847 quoted, was fine in a real browser and
-   unrounded only in a harness that loads no inline blocks. The lines that
-   were genuinely unrounded live are the ones goldpine formats itself and
-   hands to nobody: `· mark ` + pxF(s.price), and the Levels strip's PDH, PDL
-   and Asia range. Those are real, and they are what this fix repairs.
-
-   Seven more files carry the identical line — pine, pinemsb, pineavwap,
-   pineht, pinenw, pinerf, pinesmc. They are PINE tabs in MODELS, not gold,
-   but it is the same one-line defect with the same live consequence, so they
-   are fixed with it rather than left knowing. book.js and chartvision-tab.js
-   already round in their own fallbacks, which is where the house rule came
-   from.
-
-   This file holds two rules. The runtime one is the real test: drive every
-   gold tab through its own scan and require every price-shaped literal it
-   renders to carry at most two decimals. The source one keeps the other seven
-   honest without booting them.
-
-   BOTH HALVES OF THE px CLAIM WERE WRONG ONCE, AND BOTH ARE WORTH RECORDING.
-   The first version proved "no global px" by grepping for `function px(` and
-   flagged three files — contract-report.js, gold-seven-step.js, omnigold1.js
-   — every one of which defines a px INSIDE an IIFE, where it is module-scoped
-   and reaches no window. The claim is now put to the RUNNING app: load all
-   201 scripts in index.html's own order and ask what typeof window.px is.
-   The second version then scanned pxF bodies for String(+n) and flagged all
-   seven fixed files, because the fix's own comment NAMES String(+n) as the
-   thing it replaced. Comments are stripped before that scan now.
-
-   Run: node tests/test-gold-rendered-prices.mjs */
+   Run: node tests/test-gold-handoff-floor.mjs */
 import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
@@ -243,120 +211,130 @@ async function sweep(starve){
     out[id] = { txt: sink.map(strip).join(' | '), afterRefresh, threw, pressed,
                 buttons: all.length, scanAtMount, armed, found: !!scan };
   }
-  return { out, live, failed, pxGlobal: typeof C.px === 'undefined' ? undefined : typeof C.px };
+  return { out, live, failed,
+           scalpFloor: +C.HG_GOLD_SCALP_MIN_RR, swingFloor: +C.HG_GOLD_SWING_MIN_RR,
+           pxGlobal: typeof C.px === 'undefined' ? undefined : typeof C.px };
 }
 
 
-/* A price literal on a gold card: four or five figures before the point,
-   which on XAUUSD is a gold price and not a percentage, a count or a sigma. */
-const PRICE = /\b\d{4,5}\.\d+\b/g;
-const decimalsOf = s => (s.split('.')[1] || '').length;
 
-console.log('== the corpus is real: every gold tab scanned ==');
+const HANDOFF = /SEND TO TRADE PLAN/g;
+const BLOCKED = /NO TRADE HANDOFF/g;
+
+/* The R:R that belongs to a handoff button is the last one printed before it.
+   Splitting the flattened text into cards is unreliable; looking backwards a
+   bounded distance from the button is not. */
+function rrBehind(txt, at){
+  const back = txt.slice(Math.max(0, at - 700), at);
+  const rrs = [...back.matchAll(/R:R\s+([\d.]+)/g)];
+  return rrs.length ? parseFloat(rrs[rrs.length - 1][1]) : NaN;
+}
+
+console.log('== the house floors exist, and this tab reads them ==');
 const FED = await sweep(false);
 {
   ok(FED.failed.length === 0, `all ${SCRIPTS.length} of index.html's scripts ran`);
   ok(FED.live.length >= 14, `${FED.live.length} gold tabs were driven through their own scan control`);
-  const withPrices = FED.live.filter(id => (FED.out[id].txt.match(PRICE) || []).length > 0);
-  ok(withPrices.length >= 5,
-     `${withPrices.length} of them printed gold-shaped prices at all (${withPrices.join(', ')}) — `
-     + 'a rounding rule over a corpus with no prices in it would pass for the wrong reason');
+  ok(isFinite(FED.scalpFloor) && FED.scalpFloor > 0,
+     `HG_GOLD_SCALP_MIN_RR is on the window at ${FED.scalpFloor}`);
+  ok(isFinite(FED.swingFloor) && FED.swingFloor > 0,
+     `HG_GOLD_SWING_MIN_RR is on the window at ${FED.swingFloor}`);
+  const gp = fs.readFileSync(path.join(ROOT, 'goldpine.js'), 'utf8');
+  ok(/W\.HG_GOLD_SCALP_MIN_RR/.test(gp) && /W\.HG_GOLD_SWING_MIN_RR/.test(gp),
+     'and goldpine.js reads both off the window rather than carrying its own copy to drift');
 }
 
-console.log('\n== and every price they print is rounded like a price ==');
+console.log('\n== the corpus can actually answer the question ==');
+{
+  const all = FED.live.map(id => FED.out[id].txt).join(' ');
+  const handoffs = (all.match(HANDOFF) || []).length;
+  const blocks = (all.match(BLOCKED) || []).length;
+  ok(handoffs > 0, `${handoffs} handoff buttons across the family — a rule over a corpus with none would pass for nothing`);
+  ok(blocks > 0, `${blocks} cards had their handoff withheld, so the floor is biting and not merely present`);
+}
+
+console.log('\n== and none of those buttons sits on a setup that risks more than it makes ==');
 {
   const offenders = [];
-  let total = 0;
+  let checked = 0, withRr = 0;
   for (const id of FED.live){
-    const found = FED.out[id].txt.match(PRICE) || [];
-    total += found.length;
-    const loose = [...new Set(found.filter(p => decimalsOf(p) > 2))];
-    if (loose.length){
-      const ctx = FED.out[id].txt.match(new RegExp('.{0,45}' + loose[0].replace('.', '\\.') + '.{0,45}'));
-      offenders.push(`${id} :: ${loose.length} of them, e.g. ${loose.slice(0, 3).join(', ')}`
-                     + (ctx ? `\n             ${ctx[0].trim()}` : ''));
+    const txt = FED.out[id].txt;
+    let m; HANDOFF.lastIndex = 0;
+    while ((m = HANDOFF.exec(txt))){
+      checked++;
+      const rr = rrBehind(txt, m.index);
+      if (!isFinite(rr)) continue;       /* unmeasured is not a veto, here either */
+      withRr++;
+      if (rr < 1){
+        const ctx = txt.slice(Math.max(0, m.index - 150), m.index).replace(/\s+/g, ' ').trim();
+        offenders.push(`${id} :: R:R ${rr} — …${ctx.slice(-110)}`);
+      }
     }
   }
-  ok(total >= 40, `${total} gold-price literals across the family`);
+  ok(checked > 0 && withRr > 0, `${checked} handoff buttons, ${withRr} of them with a printed R:R to judge`);
   ok(offenders.length === 0,
-     'none carries more than two decimals'
+     'every handoff the gold family offers is on a setup whose target is at least as far as its stop'
      + (offenders.length ? ('\n      ' + offenders.join('\n      ')) : ''));
-  /* GOLD PINE by name, because it is the one this file was written for. */
+}
+
+console.log('\n== GOLD PINE, which is the tab this was found on ==');
+{
   const gp = FED.out['goldpine'];
   ok(!!gp, 'GOLD PINE is in the sweep');
-  const gpPrices = gp.txt.match(PRICE) || [];
-  ok(gpPrices.length >= 6, `GOLD PINE printed ${gpPrices.length} prices`);
-  ok(gpPrices.every(p => decimalsOf(p) <= 2),
-     `and every one of them is at two decimals or fewer (${gpPrices.slice(0, 4).join(', ')})`);
-  ok(/ENTRY \d{4}\.\d{2} · SL \d{4}\.\d{2} · T1 \d{4}\.\d{2}/.test(gp.txt),
-     'including the ENTRY · SL · T1 line on the card that carries SEND TO TRADE PLAN');
+  const txt = gp.txt;
+  ok(/NO TRADE HANDOFF — R:R \d\.\d\d is below this desk’s \d\.\d\d floor for (SWING|SCALP)/.test(txt),
+     'a card below the floor says so, naming its R:R, the floor and the horizon');
+  ok(/the target is nearer than the stop/.test(txt),
+     'and when the reward is under 1R it says that in words, not only in a ratio');
+  ok(/The levels are shown to be read, not sent\./.test(txt),
+     'while keeping the card, because the levels are still worth reading');
+  /* The block must be surgical: a card that clears the floor keeps both. */
+  let m; HANDOFF.lastIndex = 0;
+  const kept = [];
+  while ((m = HANDOFF.exec(txt))) kept.push(rrBehind(txt, m.index));
+  ok(kept.length > 0, `${kept.length} GOLD PINE cards still carry the handoff`);
+  ok(kept.every(rr => !isFinite(rr) || rr >= FED.swingFloor || rr >= FED.scalpFloor),
+     `and every one of them clears a house floor (${kept.filter(isFinite).map(r => r.toFixed(2)).join(', ')})`);
+  ok(!/NO TRADE HANDOFF[^<]{0,200}SEND TO TRADE PLAN/.test(txt),
+     'no card both withholds the handoff and offers it');
 }
 
-console.log('\n== the branch that was supposed to round is dead, and that is why ==');
+console.log('\n== and the geometry the family prints is coherent ==');
 {
-  /* Asked of the RUNNING app, not of a regex. A first version of this check
-     scanned the source for `function px(` and flagged three files —
-     contract-report.js, gold-seven-step.js, omnigold1.js — all of which
-     define a px INSIDE an IIFE, where it is module-scoped and reaches no
-     window. Loading all 201 scripts in index.html's own order and asking the
-     context settles it in one line. */
-  ok(typeof FED.pxGlobal === 'undefined',
-     'after all ' + SCRIPTS.length + ' of index.html\'s external scripts have run, window.px is '
-     + (FED.pxGlobal === undefined ? 'undefined' : 'a ' + FED.pxGlobal));
-
-  /* That alone proves too little: px lives in an INLINE block, which those
-     201 files do not include. So run the inline blocks too, in a context that
-     already has the externals, and show that window.px is STILL undefined —
-     because the declaration is a const. */
-  const inline = [...INDEX.matchAll(/<script\b(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script>/gi)]
-    .map(m => m[1]).filter(b => b.trim());
-  ok(inline.length > 0, `index.html carries ${inline.length} inline script blocks that no file sweep sees`);
-  const declaring = inline.filter(b => /(^|\n)\s*const px\s*=/.test(b));
-  ok(declaring.length === 1,
-     'exactly one of them declares px, and it declares it with `const` — the house adaptive price formatter');
-
-  /* The mechanism, shown rather than asserted: in one classic script a
-     top-level function declaration lands on the global object and a top-level
-     const does not. */
-  const probe = { };
-  probe.window = probe; probe.globalThis = probe;
-  vm.createContext(probe);
-  vm.runInContext('const px = n => String(n); function qq(n){ return String(n); }', probe);
-  ok(typeof probe.qq === 'function' && typeof probe.px === 'undefined',
-     'a top-level function reaches window and a top-level const does not — which is why every '
-     + "`typeof W.px === 'function'` guard in an external file has always been false");
-
-  const files = fs.readdirSync(ROOT).filter(f => f.endsWith('.js'));
-  const raw = [];
-  for (const f of files){
-    const src = fs.readFileSync(path.join(ROOT, f), 'utf8');
-    const m = src.match(/function pxF\([^)]*\)\s*\{[\s\S]{0,900}?\n\}/);
-    if (!m) continue;
-    /* comments stripped first: the fix's own note NAMES String(+n) as what it
-       replaced, and the first version of this check read that note as the bug
-       still being there */
-    const code = m[0].replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-    if (/String\(\+[a-z]\)/.test(code)) raw.push(f);
+  /* The sweep that found the R:R card in the first place. The first version
+     asked only that stop and target sit on OPPOSITE sides of entry, and a
+     mutation that swapped the two on a short card sailed through it: swapped,
+     the levels are still opposite, they just read as a long. So the direction
+     the card PRINTS decides which side each belongs on. */
+  const RX = /ENTRY\s+\$?([\d,]+\.\d+)\s*[·|,]?\s*(?:STOP|SL)\s+\$?([\d,]+\.\d+)\s*[·|,]?\s*(?:T1|TP1)\s+\$?([\d,]+\.?\d*)/g;
+  const num = s => parseFloat(String(s).replace(/[$,]/g, ''));
+  const bad = [];
+  let triples = 0, withDir = 0, unstated = 0;
+  for (const id of FED.live){
+    let m; RX.lastIndex = 0;
+    while ((m = RX.exec(FED.out[id].txt))){
+      triples++;
+      const e = num(m[1]), s = num(m[2]), t = num(m[3]);
+      if (!(e > 0 && s > 0 && t > 0)) { bad.push(`${id} :: a level at zero — ${m[0]}`); continue; }
+      if (e === s) { bad.push(`${id} :: entry equals stop, zero risk — ${m[0]}`); continue; }
+      if (!((s < e && t > e) || (s > e && t < e))){ bad.push(`${id} :: ${m[0]}`); continue; }
+      /* the direction this card states, taken from the nearest one before it */
+      const back = FED.out[id].txt.slice(Math.max(0, m.index - 600), m.index);
+      const dirs = [...back.matchAll(/\b(LONG|SHORT)\b/g)];
+      if (!dirs.length) { unstated++; continue; }
+      const dir = dirs[dirs.length - 1][1];
+      const shaped = (dir === 'LONG') ? (s < e && t > e) : (s > e && t < e);
+      withDir++;
+      if (!shaped) bad.push(`${id} :: card says ${dir} but prints ${m[0]}`);
+    }
   }
-  ok(raw.length === 0,
-     'and no pxF in the repo falls back to String(+n) any more'
-     + (raw.length ? ' — still raw in: ' + raw.join(', ') : ''));
-}
-
-console.log('\n== the eight files were fixed with one rule, not eight ==');
-{
-  const RULE = /a >= 1000 \? 2 : a >= 1 \? 4 : a >= 0\.01 \? 5 : a >= 0\.0001 \? 7 : 9/;
-  const fixed = ['goldpine.js', 'pine.js', 'pinemsb.js', 'pineavwap.js',
-                 'pineht.js', 'pinenw.js', 'pinerf.js', 'pinesmc.js'];
-  for (const f of fixed)
-    ok(RULE.test(fs.readFileSync(path.join(ROOT, f), 'utf8')),
-       `${f} rounds by magnitude — the same ladder omniroute's fmtPx uses`);
-  /* The ladder is not toFixed(2): a sub-cent alt on a PINE tab would be
-     rounded to 0.00 by that, which is why the house rule is a ladder. */
-  const px = v => { const a = Math.abs(v); return v.toFixed(a >= 1000 ? 2 : a >= 1 ? 4 : a >= 0.01 ? 5 : a >= 0.0001 ? 7 : 9); };
-  ok(px(4050.620761151771) === '4050.62', 'gold at 4050.620761151771 reads 4050.62');
-  ok(px(0.00001234567) === '0.000012346', 'and a sub-cent alt keeps its figures rather than reading 0.00');
-  ok(px(1.23456789) === '1.2346' && px(0.0523456) === '0.05235', 'with the steps between behaving too');
+  ok(triples >= 8, `${triples} ENTRY/STOP/T1 triples across the family`);
+  ok(withDir >= 8,
+     `${withDir} of them state a direction near the levels, so the rule has a side to check against`
+     + (unstated ? ` (${unstated} stated none and were skipped)` : ''));
+  ok(bad.length === 0,
+     'each puts its stop and its target where the direction it prints says they belong, and none risks nothing'
+     + (bad.length ? ('\n      ' + bad.join('\n      ')) : ''));
 }
 
 console.log('\n' + passed + ' passed, 0 failed');

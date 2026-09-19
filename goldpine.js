@@ -562,8 +562,64 @@ function cardHTML(s, rank){
   var solChip = (s.solidity && typeof W.hgSolidityChipHtml === 'function')
     ? W.hgSolidityChipHtml(s.solidity) : '';
   /* v728: SMC context chip — '' when smc-setups.js is absent or s.smc unset. */
+/* THE HANDOFF FLOOR, WHICH THIS TAB DID NOT HAVE.
+
+   Every other gold desk refuses to hand a setup over below a minimum reward
+   for the risk: GOLD SCALP floors at HG_GOLD_SCALP_MIN_RR, GOLD SWING at
+   HG_GOLD_SWING_MIN_RR, and the shared plan layer states the rule outright —
+   a structural target below the floor REJECTS rather than pushing T1 out to
+   meet it. GOLD PINE emitted SEND TO TRADE PLAN and ADD TO BOOK on every card
+   it drew, with no reward test anywhere in the path.
+
+   What that looks like in practice, caught by reading what this tab actually
+   renders: a PRIMARY pick, stamped SOLIDITY GOOD, carrying both buttons, at
+
+     ENTRY 4050.62 · SL 4069.90 · T1 4045.59     R:R 0.26
+
+   — 19.28 points of risk for 5.03 of reward. SOLIDITY did not miss it; its
+   R:R gate is one of seven and a card can fail it and still score GOOD. A
+   score out of seven is a summary, not a floor, and this tab had no floor.
+
+   So: below the floor the card STAYS — the levels are worth reading and the
+   sibling desks keep demoted cards visible too — but the two action buttons
+   are replaced by a line naming the number, the floor and the shortfall. A
+   setup whose reward cannot be measured at all is left exactly as it was:
+   unmeasured is not a failing grade anywhere else in this desk and it is not
+   one here.
+
+   The floors are read from the globals at call time so this tab tracks the
+   house rather than carrying its own copy of a number that can drift. */
+function gpHandoffFloor(mode){
+  var scalp = fin(+W.HG_GOLD_SCALP_MIN_RR) ? +W.HG_GOLD_SCALP_MIN_RR : 1.2;
+  var swing = fin(+W.HG_GOLD_SWING_MIN_RR) ? +W.HG_GOLD_SWING_MIN_RR : 1.5;
+  return (String(mode) === 'scalp') ? scalp : swing;
+}
+function gpHandoffBlock(s){
+  var rr = fin(+s.rr) ? +s.rr : NaN;
+  if (!isFinite(rr)) return null;            /* unmeasured is not a veto */
+  var floor = gpHandoffFloor(s.mode);
+  if (rr >= floor) return null;
+  return { rr: rr, floor: floor };
+}
+
   var smcChip = '';
   try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(s) || ''; }catch(eSmcC){ smcChip = ''; }
+  var block = gpHandoffBlock(s);
+  var actions = block
+    ? ('<div class="note warn" style="margin-top:8px">NO TRADE HANDOFF — R:R '
+       + fmtF(block.rr, 2) + ' is below this desk\u2019s ' + fmtF(block.floor, 2)
+       + ' floor for ' + esc(String(s.mode || 'swing')).toUpperCase()
+       + (block.rr < 1
+            ? ', and the target is nearer than the stop'
+            : ', short by ' + fmtF(block.floor - block.rr, 2) + 'R')
+       + '. The levels are shown to be read, not sent.</div>')
+    : (((typeof W.hgToTradePlanOnclickAttr === 'function')
+        ? '<button class="toTrade" onclick="' + W.hgToTradePlanOnclickAttr('XAUUSD', s.dir, s.entry, s.stop, s.t1, { t2: s.t2, stack: gpStack, scanner: 'goldpine', strategy: s.mode || 'goldpine' }) + '">SEND TO TRADE PLAN \u2192</button>'
+        : '<button class="toTrade" onclick="toTrade(\'XAUUSD\',\'' + s.dir + '\',' + s.entry + ',' + s.stop + ',' + s.t1 + ')">SEND TO TRADE PLAN \u2192</button>')
+      + (typeof W.hgBookBtn === 'function'
+        ? W.hgBookBtn('XAUUSD', s.dir, s.entry, s.stop, s.t1, { scanner: 'goldpine', strategy: s.mode, t2: s.t2, stack: gpStack })
+        : ''));
+
   return '<div class="panel ' + cls + ' tier-' + tier + '" style="margin-bottom:12px">'
     + '<h2>XAUUSD <span>' + esc(s.dir.toUpperCase()) + ' · ' + modeLabel + ' · Grade ' + esc(s.grade)
     + rankBadge + badge
@@ -584,12 +640,7 @@ function cardHTML(s, rank){
     + '<div class="plan">' + (typeof W.planBlock === 'function'
       ? W.planBlock(s.dir, s.entry, s.stop, s.t1, s.t2, s.planSrc || 'Gold Pine')
       : ('ENTRY ' + pxF(s.entry) + ' · SL ' + pxF(s.stop) + ' · T1 ' + pxF(s.t1))) + '</div>'
-    + ((typeof W.hgToTradePlanOnclickAttr === 'function')
-      ? '<button class="toTrade" onclick="' + W.hgToTradePlanOnclickAttr('XAUUSD', s.dir, s.entry, s.stop, s.t1, { t2: s.t2, stack: gpStack, scanner: 'goldpine', strategy: s.mode || 'goldpine' }) + '">SEND TO TRADE PLAN →</button>'
-      : '<button class="toTrade" onclick="toTrade(\'XAUUSD\',\'' + s.dir + '\',' + s.entry + ',' + s.stop + ',' + s.t1 + ')">SEND TO TRADE PLAN →</button>')
-    + (typeof W.hgBookBtn === 'function'
-      ? W.hgBookBtn('XAUUSD', s.dir, s.entry, s.stop, s.t1, { scanner: 'goldpine', strategy: s.mode, t2: s.t2, stack: gpStack })
-      : '')
+    + actions
     + '</div>';
 }
 
