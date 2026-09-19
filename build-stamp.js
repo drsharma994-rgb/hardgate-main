@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v854',
-  pack: 'with no live gold price the XM bot now places no order at all. xmOrderType picks BUY_LIMIT / BUY_STOP / market from where the setup entry sits against the live price, and given no price it returned a LIMIT for either direction \u2014 which reads conservative and is the opposite: a buy limit ABOVE market, or a sell limit BELOW it, is not a resting order, the broker fills it immediately. The fill price is no worse than the limit, so the money is not the problem; the problem is a setup meant to WAIT for its entry becomes a position now, and the bot\u2019s own backtest replays this path as a pending fill at the setup entry. cand.livePx is absent exactly when feeds are down. The four resting cases and all six MT5 order-type ids are pinned, and the freshness gap \u2014 the payload carries a price but no timestamp \u2014 is named rather than assumed away',
+  version: 'hg-v855',
+  pack: 'one gold order is POSTed once. xmPlaceOrder knows six route names on the MT5 bridge and fell through to the next one on ANY failure, not just a 404 \u2014 measured against a bridge answering 500, the SAME order went to all six. Most bridges map several of those names onto one handler, so a transient 5xx after the broker had accepted could leave several live gold positions from one ticket, and the idempotency map sits above this and only records on success so it cannot suppress them. A 404 means the route is absent; everything else means something went wrong, which is not the same thing. And the live-order rate limit recorded its hit BEFORE the route probe, so a dead bridge burned the budget \u2014 six of eight attempts spent a slot with no order placed, locking the desk out for five minutes just as the bridge returned. The probe goes first now; six live orders in five minutes is still the ceiling',
   built: '2026-09-18T00:00:00Z'
 };
 

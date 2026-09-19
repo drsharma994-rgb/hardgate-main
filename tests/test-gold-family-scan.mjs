@@ -31,11 +31,19 @@
 
    And the instrument is checked before it is trusted. Two identical fed runs
    go first: whatever moves between THEM is this harness's own variance, and a
-   starved difference has to beat it to mean anything. One tab (OPTIGOLD) does
-   print something different between identical runs — a clock — but no tab's
-   LENGTH moves at all, so the floor is 50 characters and the smallest real
-   starved drop clears it by more than twice that. Without that control,
-   "it rendered differently" is a claim about the run and not about the bars.
+   starved difference has to beat it to mean anything. Several tabs do print
+   something different between identical runs — a clock, a session stamp — and
+   HOW MANY depends on whether a minute ticks over mid-run, so that count is
+   reported and not asserted. The first version of this file did assert it, at
+   "no more than two", a threshold fitted to one observation of a
+   clock-dependent quantity; it went red the first time five tabs happened to
+   straddle a minute.
+
+   What the starved comparison below actually uses is LENGTH, and no tab's
+   length moves between identical runs at all. That is the claim worth
+   holding, and the floor it sets (50 characters) is what a starved drop has
+   to clear. Without that control, "it rendered differently" is a claim about
+   the run and not about the bars.
 
    Pressing everything in rounds, which was the first design, exhausted an
    8GB heap: a press can re-render, each re-render re-queries, and the scans
@@ -273,12 +281,16 @@ let noiseFloor = 0;
   const spread = FED.live.map(id => Math.abs(FED2.out[id].txt.length - FED.out[id].txt.length));
   noiseFloor = Math.max(50, ...spread);
   ok(FED2.live.length === FED.live.length, `a second identical fed run drove the same ${FED2.live.length} tabs`);
-  ok(noisy.length <= 2,
-     `${noisy.length} of them render anything different between two identical runs`
-     + (noisy.length ? ` (${noisy.join(', ')} — a clock in the text)` : ''));
+  /* REPORTED, NOT ASSERTED. How many tabs print something different between
+     two identical runs depends on whether a minute ticks over mid-run, so a
+     fixed count is a threshold fitted to one observation — and this file went
+     red the first time five tabs straddled a minute instead of one. */
+  console.log(`  .. ${noisy.length} of them render some different TEXT between two identical runs`
+              + (noisy.length ? ` (${noisy.join(', ')} — clocks and session stamps)` : '')
+              + ' — reported, not asserted: it depends on where the minute falls');
   ok(noiseFloor <= 200,
-     `and no tab's LENGTH moved by more than ${Math.max(...spread)} characters, so the floor a starved `
-     + `difference must clear is ${noiseFloor}`);
+     `no tab's LENGTH moved by more than ${Math.max(...spread)} characters between identical runs, so the floor `
+     + `a starved difference must clear is ${noiseFloor} — and length is what the comparison below uses`);
 }
 
 console.log('\n== starve the bars and the numbers go with them ==');
