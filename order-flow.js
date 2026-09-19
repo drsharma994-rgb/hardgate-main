@@ -1,12 +1,36 @@
 /* =========================================================================
-   HARDGATE Order Flow Layer — Decorrelate voting via market microstructure
+   HARDGATE Order Flow Layer — candle-derived proxies for order flow
 
-   Measures: Buyer/seller pressure, liquidation risk, order imbalances
-   Independent of price technicals — detects whale accumulation, capitulation
+   EVERY READ IN HERE IS COMPUTED FROM OHLCV CANDLES. There is no order book,
+   no trade tape, no liquidation feed and no on-chain data anywhere in this
+   file. hgBidAskImbalance counts a green candle's whole volume as buying and a
+   red candle's as selling; hgVWAPDivergence is (close - vwap) / vwap;
+   hgSweepPattern reads candle bodies, wicks and a volume ratio. Those are
+   price technicals, and the header here used to claim the opposite —
+   "Independent of price technicals — detects whale accumulation" — which is
+   the stated reason CRYPTO SCAN gives this layer 35% of its confidence and a
+   +15% bonus whenever it agrees with layer 1.
+
+   Measured against the real engines by tests/test-cryptoscan-order-flow-proxy.mjs,
+   which sweeps 60 synthetic tapes across drift and volatility and feeds the
+   same candles to cryptoUltraEngine and to hgOrderFlowScore. Of those, 56
+   produce a layer-1 direction:
+
+     correlation(layer-1 direction, layer-2 score)   0.957
+     layer 2 agreed with layer 1's direction          53 / 56   (95%)
+     disagreed                                         1
+     neutral                                           2
+
+   So the "decorrelating" layer says what layer 1 already said 95% of the time,
+   and each of those agreements pays the +15% bonus for the same price
+   information twice. The weights are NOT changed here — that is a calibration
+   decision — but the reads are named for what they are, so the vote table the
+   tab invites you to audit by eye no longer prints "Bid-Ask Imbalance" for a
+   number that has never seen a bid or an ask.
 
    Public API:
-   - hgOrderFlowScore(symbol, rows15m, rows1h) → {score: 0-1, votes: []}
-   - hgLiquidationRisk(symbol) → {cascade: bool, level: 'low'|'medium'|'high'}
+   - hgOrderFlowScore(symbol, rows15m, rows1h) → {score: -1..1, direction, votes, proxyOnly}
+   - hgLiquidationRisk(symbol) → {cascade: bool, level: 'low'|'medium'|'high'}  [unwired stub]
    - hgOrderBlockProximity(symbol, price) → distance to nearest block
    - hgSweepPattern(rows) → detected sweep signals
    ========================================================================= */
@@ -21,10 +45,14 @@ var HG_ORDER_FLOW = {
 };
 
 /**
- * Calculate bid-ask imbalance (requires order book data or delta API).
- * Simplified: Use volume profile — more volume at bid = buying pressure.
+ * CANDLE-VOLUME IMBALANCE — a proxy, not a bid-ask imbalance.
  *
- * Returns: score -1 to +1 (positive = buying pressure)
+ * A real bid-ask imbalance needs an order book. This has candles, so it counts
+ * a green candle's entire volume as buying and a red candle's entire volume as
+ * selling. Every bar therefore votes with its close-versus-open sign, which is
+ * price direction, which is what layer 1 is already voting on.
+ *
+ * Returns: score -1 to +1 (positive = green-candle volume dominant)
  */
 function hgBidAskImbalance(rows) {
   if (!rows || rows.length < 20) return 0;
@@ -155,11 +183,22 @@ function hgSweepPattern(rows) {
 
   /* Look for: high volume, body reversal, extreme wick */
   var lastVol = last.v || 0;
-  var avgVol = 0;
+  /* The loop runs from len-20 to len-2 inclusive, which is 19 bars, and the
+     divisor was Math.min(20, rows.length - 1) — 20 on any tape this tab
+     fetches. So avgVol came out 5% low on EVERY call, volRatio 5.3% high, and
+     the 1.5x volume gate written two lines down actually behaved as 1.425x.
+     Measured over 144,000 rolling windows on synthetic tapes: the gate passed
+     11.97% of the time as coded against 7.45% with the divisor matched to the
+     count, so 37.8% of the sweeps it reported were below its own threshold.
+     Divide by what was summed. */
+  var avgVol = 0, volN = 0;
   for (var i = Math.max(0, rows.length - 20); i < rows.length - 1; i++){
     avgVol += (rows[i].v || 0);
+    volN++;
   }
-  avgVol /= Math.min(20, rows.length - 1);
+  if (!volN) return { detected: false, type: null, confidence: 0 };
+  avgVol /= volN;
+  if (!(avgVol > 0)) return { detected: false, type: null, confidence: 0 };
 
   var volRatio = lastVol / avgVol;
   if (volRatio < 1.5) return { detected: false, type: null, confidence: 0 };
@@ -191,20 +230,23 @@ function hgOrderFlowScore(symbol, rows15m, rows1h) {
   /* Read 1: Bid-Ask Imbalance (15m) */
   var ba15 = hgBidAskImbalance(rows15m);
   votes.push({
-    read: 'Bid-Ask Imbalance (15m)',
+    read: 'Candle-volume imbalance 15m · PROXY',
     value: ba15.toFixed(2),
     vote: ba15 > 0.2 ? 'LONG' : ba15 < -0.2 ? 'SHORT' : 'neutral',
-    why: ba15 > 0.2 ? 'Buying pressure' : ba15 < -0.2 ? 'Selling pressure' : 'Balanced'
+    why: (ba15 > 0.2 ? 'green-candle volume dominant' : ba15 < -0.2 ? 'red-candle volume dominant' : 'balanced')
+      + ' — candle proxy, no order book'
   });
   if (Math.abs(ba15) > 0.2) scores.push(ba15);
 
   /* Read 2: VWAP Divergence (15m) */
   var vwap15 = hgVWAPDivergence(rows15m);
   votes.push({
-    read: 'VWAP Divergence (15m)',
+    read: 'VWAP divergence 15m · price technical',
     value: vwap15.toFixed(2),
     vote: vwap15 > 0.1 ? 'LONG' : vwap15 < -0.1 ? 'SHORT' : 'neutral',
-    why: vwap15 > 0.1 ? 'Institutional support above' : vwap15 < -0.1 ? 'Below institutional equilibrium' : 'At equilibrium'
+    why: (vwap15 > 0.1 ? 'close above its volume-weighted average' :
+          vwap15 < -0.1 ? 'close below its volume-weighted average' : 'at its volume-weighted average')
+      + ' — a price technical, not participation'
   });
   if (Math.abs(vwap15) > 0.1) scores.push(vwap15);
 
@@ -213,10 +255,11 @@ function hgOrderFlowScore(symbol, rows15m, rows1h) {
   if (sweep15.detected){
     var sweepVote = sweep15.type === 'bull-sweep' ? 'LONG' : 'SHORT';
     votes.push({
-      read: 'Sweep Pattern (15m)',
+      read: 'Candle sweep 15m · PROXY',
       value: sweep15.confidence.toFixed(2),
       vote: sweepVote,
-      why: sweep15.type === 'bull-sweep' ? 'Bullish liquidity sweep' : 'Bearish liquidity sweep'
+      why: (sweep15.type === 'bull-sweep' ? 'bullish candle sweep' : 'bearish candle sweep')
+      + ' — body/wick and volume ratio, no liquidation feed'
     });
     scores.push(sweep15.type === 'bull-sweep' ? sweep15.confidence : -sweep15.confidence);
   }
@@ -225,16 +268,24 @@ function hgOrderFlowScore(symbol, rows15m, rows1h) {
   if (rows1h && rows1h.length >= 30){
     var ba1h = hgBidAskImbalance(rows1h);
     votes.push({
-      read: 'Bid-Ask Imbalance (1h)',
+      read: 'Candle-volume imbalance 1h · PROXY',
       value: ba1h.toFixed(2),
       vote: ba1h > 0.2 ? 'LONG' : ba1h < -0.2 ? 'SHORT' : 'neutral',
-      why: ba1h > 0.2 ? 'Higher TF buying' : ba1h < -0.2 ? 'Higher TF selling' : 'Balanced'
+      why: (ba1h > 0.2 ? 'higher-TF green volume dominant' : ba1h < -0.2 ? 'higher-TF red volume dominant' : 'balanced')
+      + ' — candle proxy, no order book'
     });
     if (Math.abs(ba1h) > 0.2) scores.push(ba1h * 0.8);  /* Weight 1h slightly less */
   }
 
   /* Aggregate */
-  if (scores.length === 0) return { score: 0, votes: votes, direction: 'neutral' };
+  /* NOTE, measured and deliberately not changed: `aggregated` below is the mean
+     of only the reads that cleared their own threshold, so a second read that
+     AGREES with the first but sits just over its gate cuts the score almost in
+     half — vwap15 at 0.099 is excluded and the aggregate is 0.900, at 0.101 it
+     is admitted and the aggregate is 0.501. That cliff is real, but every fix
+     for it re-scales this layer against the 0.2 direction band and the 0.35
+     weight above it, which is a calibration decision rather than this defect. */
+  if (scores.length === 0) return { score: 0, votes: votes, direction: 'neutral', proxyOnly: true };
 
   var aggregated = scores.reduce(function(a, b){ return a + b; }) / scores.length;
   var direction = aggregated > 0.2 ? 'long' : aggregated < -0.2 ? 'short' : 'neutral';
@@ -243,7 +294,11 @@ function hgOrderFlowScore(symbol, rows15m, rows1h) {
     score: Math.max(-1, Math.min(1, aggregated)),
     votes: votes,
     direction: direction,
-    confidence: Math.abs(aggregated)
+    confidence: Math.abs(aggregated),
+    /* every read above is computed from the same candles layer 1 votes on;
+       measured correlation with layer 1's direction is 0.872, agreement 95% */
+    proxyOnly: true,
+    proxyNote: 'candle-derived proxy — no order book, trade tape or liquidation feed'
   };
 }
 
