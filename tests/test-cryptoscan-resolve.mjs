@@ -134,17 +134,25 @@ console.log('\n3. an unsettled record really was headed for "stale"');
 console.log('\n4. the scan resolves with the bars it already has');
 {
   const scan = stripComments(SCAN);
-  ok(/W\.hgFwdOpenSyms\('CRYPTO SCAN', '15m'\)/.test(scan),
-     'runScan asks which symbols still owe bars, once, before the loop');
+  /* Pack 888 swapped hgFwdOpenSyms for hgFwdOpenTally here. hgFwdResolve is
+     keyed by symbol but returns the number of RECORDS it settled, and this
+     line's denominator was the SYMBOL count -- "3/1 open records settled".
+     The tally returns both from one pass; hgFwdOpenSyms is now a wrapper over
+     it and every other caller is untouched. */
+  ok(/W\.hgFwdOpenTally\('CRYPTO SCAN', '15m'\)/.test(scan),
+     'runScan asks what still owes bars, once, before the loop');
+  ok(/owedRows = \+openTally\.records/.test(scan),
+     'taking the RECORD count for the denominator');
   ok(/resolved \+= \(W\.hgFwdResolve\(item\.sym, '15m', rows15m\) \|\| 0\)/.test(scan),
      'and settles each one with the bars that contract just returned');
   const resolveAt = scan.indexOf("hgFwdResolve(item.sym");
   const skipAt = scan.indexOf("if (!rows15m || rows15m.length < 230){ skipped++");
   ok(resolveAt > 0 && resolveAt < skipAt,
      'BEFORE the 230-bar setup test — an old record needs bars whether or not the contract fires again');
-  ok(/owedN && owed\[item\.sym\]/.test(scan),
+  ok(/owedSyms && owed\[item\.sym\]/.test(scan),
      'only symbols that owe something are touched, so the log is loaded once, not once per contract');
-  ok(/owed: owedN, resolved: resolved,/.test(scan), 'both counts reach __results');
+  ok(/owed: owedRows, owedSyms: owedSyms, resolved: resolved,/.test(scan),
+     'and all three counts reach __results, labelled');
   ok(/open records settled/.test(scan), 'and the status line reports them');
 }
 

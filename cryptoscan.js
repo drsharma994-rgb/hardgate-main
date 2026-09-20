@@ -1490,11 +1490,19 @@ async function runScan(ui){
 
        Only the symbols that still owe bars are resolved, so the log is loaded
        once rather than once per contract across a universe of hundreds. */
-    var owed = {}, owedN = 0, resolved = 0;
+    /* TWO COUNTS, TWO UNITS. hgFwdResolve is keyed by symbol but returns the
+       number of RECORDS it settled, and one symbol holds one record per bar
+       it fired on. Pack 875 divided the record count by the symbol count and
+       this line printed "3/1 open records settled" -- a ratio able to exceed
+       its own denominator. owedSyms drives the per-contract check; owedRows is
+       what `resolved` is counted in. */
+    var owed = {}, owedSyms = 0, owedRows = 0, resolved = 0;
     try{
-      if (typeof W.hgFwdOpenSyms === 'function'){
-        var openList = W.hgFwdOpenSyms('CRYPTO SCAN', '15m') || [];
-        for (var oi = 0; oi < openList.length; oi++){ owed[openList[oi]] = 1; owedN++; }
+      if (typeof W.hgFwdOpenTally === 'function'){
+        var openTally = W.hgFwdOpenTally('CRYPTO SCAN', '15m') || { syms: [], records: 0 };
+        var openList = openTally.syms || [];
+        owedRows = +openTally.records || 0;
+        for (var oi = 0; oi < openList.length; oi++){ owed[openList[oi]] = 1; owedSyms++; }
       }
     }catch(eOpen){}
     /* hgDeskFetchKlines resolves to an array whatever went wrong, so a
@@ -1529,7 +1537,7 @@ async function runScan(ui){
            symbol before deciding whether it produces a new setup, and do it
            even when it does not, because a record from an earlier scan needs
            bars whether or not the contract fires again */
-        if (owedN && owed[item.sym] && rows15m && rows15m.length
+        if (owedSyms && owed[item.sym] && rows15m && rows15m.length
             && typeof W.hgFwdResolve === 'function'){
           try{ resolved += (W.hgFwdResolve(item.sym, '15m', rows15m) || 0); }catch(eRes){}
         }
@@ -1778,7 +1786,7 @@ async function runScan(ui){
                   unread: unread, unreadWhy: unreadWhy, universe: items.length,
                   scoreFailed: scoreFailed, scoreWhy: scoreWhy,
                   voteTmpl: voteTmpl, votePackFailed: votePackFailed,
-                  owed: owedN, resolved: resolved,
+                  owed: owedRows, owedSyms: owedSyms, resolved: resolved,
                   offered: +pack.rawLen || 0,
                   droppedTurnover: +pack.droppedTurnover || 0,
                   droppedVenue: +pack.droppedVenue || 0,
@@ -1793,7 +1801,8 @@ async function runScan(ui){
     setStat(setups.length + ' setup(s) from ' + scanned + ' scanned · ' + skipped + ' skipped (too few bars) · '
       + unread + ' unread (fetch) · ' + errors + ' errors'
       + (scoreFailed ? ' · ' + scoreFailed + ' scoring crashes' : '')
-      + (owedN ? ' · ' + resolved + '/' + owedN + ' open records settled' : '')
+      + (owedRows ? ' · ' + resolved + '/' + owedRows + ' open records settled'
+          + (owedRows > resolved ? ' (' + (owedRows - resolved) + ' whose contract the scan did not reach)' : '') : '')
       + ' · ' + new Date().toISOString().slice(11, 19) + ' UTC', false);
     setProgress(100);
     return 'refreshed';
