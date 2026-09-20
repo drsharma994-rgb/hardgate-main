@@ -88,6 +88,16 @@ var CS_CSS = ''
   + '.cs-sentiment.sentiment-neutral{background:#F1F5F9;color:#64748B;border:1px solid #CBD5E1}'
   + '.cs-sentiment.sentiment-stale{background:#E0E7FF;color:#4F46E5;border:1px dashed #A5B4FC;font-style:italic}';
 
+/* the venue's display name, shared by the chip and the cross-venue note so
+   the two can never call the same exchange different things */
+function venueName(ex){
+  var e = String(ex || '').toLowerCase();
+  if (e === 'delta') return 'Delta';
+  if (e === 'coindcx' || e === 'cdcx') return 'CoinDCX';
+  if (e === 'binance') return 'Binance';
+  return e ? e : '';
+}
+
 function venueChip(ex){
   var e = String(ex || '').toLowerCase();
   if (e === 'delta') return '<span class="cs-chip cs-chip-d">DELTA</span>';
@@ -270,6 +280,96 @@ function csClosedRows(rows, ivSec, nowMs){
     if (isFinite(t) && t <= cutoff) out.push(rows[i]);
   }
   return out.length < rows.length ? out : rows.slice(0, -1);
+}
+
+/* THE HEADLINE COUNTS LISTINGS, NOT ASSETS.
+
+   This desk scans Delta AND CoinDCX, both of which list the majors, and it
+   reconciles nothing: BTC on Delta and BTC on CoinDCX are two universe rows,
+   two engine runs, two cards, two forward records. The summary line at the top
+   of the block -- "12 HIGH-QUALITY setups — 8 LONG · 4 SHORT" -- is a count of
+   listings, and a reader counts it as a count of opportunities.
+
+   I expected the interesting case to be CONTRADICTION: the same asset shown
+   LONG on one venue and SHORT on the other. Measured over 250 paired tapes,
+   with the second venue quoting the same path plus independent noise:
+
+     venue spread  2 bps   both fired 228   agree 227   opposite 1  (0.4%)
+     venue spread  5 bps   both fired 227   agree 227   opposite 0  (0.0%)
+     venue spread 10 bps   both fired 227   agree 226   opposite 1  (0.4%)
+     venue spread 25 bps   both fired 221   agree 218   opposite 3  (1.4%)
+
+   and in none of those did BOTH sides also clear the 75% agreement bar. So the
+   contradiction I went looking for is real but rare, and never high-quality.
+
+   The finding is the other 99.6%. The second venue agrees, on nearly the same
+   bars, for nearly the same reason -- so it is not a second opinion, it is the
+   same one printed twice, and the headline counts it twice. hg-forward already
+   knows this: two records on the same bar with the same horizon are perfectly
+   concurrent, so pack 878's INDEP collapses them. The evidence layer stopped
+   double-counting; the display layer never started.
+
+   Nothing is deduplicated here. Which venue to prefer is a trading decision --
+   the fees differ (Delta 0.15% round-trip against CoinDCX 0.20%) and so does
+   the liquidity. The count says how many distinct assets it covers, and each
+   card says when the same name fired on the other venue too. */
+function csAssetTally(setups){
+  var out = { setups: 0, assets: 0, hq: 0, hqAssets: 0, paired: 0, opposed: 0, byAsset: {} };
+  if (!Array.isArray(setups)) return out;
+  var i, s, key, e;
+  for (i = 0; i < setups.length; i++){
+    s = setups[i];
+    if (!s) continue;
+    key = String(s.label || s.sym || '');
+    if (!key) continue;
+    out.setups++;
+    if (s.isHighQuality) out.hq++;
+    e = out.byAsset[key];
+    if (!e){ e = out.byAsset[key] = { n: 0, hq: 0, venues: [], dirs: {} }; out.assets++; }
+    e.n++;
+    if (s.isHighQuality){ e.hq++; if (e.hq === 1) out.hqAssets++; }
+    if (s.exchange && e.venues.indexOf(s.exchange) < 0) e.venues.push(s.exchange);
+    if (s.dir) e.dirs[s.dir] = (e.dirs[s.dir] || 0) + 1;
+  }
+  for (key in out.byAsset) if (Object.prototype.hasOwnProperty.call(out.byAsset, key)){
+    e = out.byAsset[key];
+    if (e.venues.length > 1){
+      out.paired++;
+      if (e.dirs.long && e.dirs.short) out.opposed++;
+    }
+  }
+  return out;
+}
+
+/** " across 6 assets" — printed only when the two numbers differ */
+function csAssetNote(n, assets){
+  n = +n || 0; assets = +assets || 0;
+  if (!n || !assets || assets >= n) return '';
+  return ' across ' + assets + ' asset' + (assets === 1 ? '' : 's');
+}
+
+/** the one line that says how much of the count is one asset listed twice */
+function csPairedNote(tally){
+  if (!tally || !tally.paired) return '';
+  var out = ' ' + tally.paired + ' name' + (tally.paired === 1 ? '' : 's')
+    + ' fired on both venues; hg-forward already treats those as one observation.';
+  if (tally.opposed){
+    out += ' ' + tally.opposed + ' of them fired OPPOSITE sides — stamped on the cards.';
+  }
+  return out;
+}
+
+/** the chip a card carries when the same name also fired on another venue */
+function csPairNote(s, tally){
+  if (!s || !tally) return '';
+  var e = tally.byAsset && tally.byAsset[String(s.label || s.sym || '')];
+  if (!e || e.venues.length < 2) return '';
+  var others = [], i;
+  for (i = 0; i < e.venues.length; i++) if (e.venues[i] !== s.exchange) others.push(venueName(e.venues[i]));
+  if (!others.length) return '';
+  /* a rare contradiction is the one a reader most needs flagged */
+  if (e.dirs.long && e.dirs.short) return 'OPPOSITE SIDE ON ' + others.join(' / ').toUpperCase();
+  return 'same call on ' + others.join(' / ');
 }
 
 /* SMC rank — ORDERING ONLY, deliberately not a gate. The grade is dominated by
@@ -982,7 +1082,7 @@ function csToggleCard(idx){
 }
 W.__csToggleCard = csToggleCard;
 
-function setupCardHTML(s, idx){
+function setupCardHTML(s, idx, tally){
   var p = s.plan, K = s.count ? s.count.kinds : {};
   var cardCls = s.dir === 'long' ? 'cs-long-card' : 'cs-short-card';
   var dirCls = s.dir === 'long' ? 'cs-dir-long' : 'cs-dir-short';
@@ -993,6 +1093,8 @@ function setupCardHTML(s, idx){
   h += '<span class="cs-card-num">#' + (idx + 1) + '</span>';
   h += '<span class="cs-card-sym">' + esc(s.label) + '</span>';
   h += venueChip(s.exchange);
+  var pn = csPairNote(s, tally);
+  if (pn) h += ' <span class="cs-chip" style="background:#F1F5F9;color:#475569">' + esc(pn) + '</span>';
   h += ' <span class="cs-dir ' + dirCls + '">' + (s.dir || '—').toUpperCase() + '</span>';
   try{ if (typeof W.hgSmcChipHtml === 'function') h += (W.hgSmcChipHtml(s) || ''); }catch(eSmc){}
   h += '<span class="cs-card-meta">' + pct(s.pct) + ' agree · ' + (s.count ? s.count.decisive : '—') + ' decisive · regime ' + esc((s.regime || '—').toUpperCase()) + esc(csRegimeNote(s));
@@ -1156,8 +1258,8 @@ function renderCards(setups, run){
   var hq = setups.filter(function(s){ return s.isHighQuality; });
   var longs = hq.filter(function(s){ return s.dir === 'long'; }).length;
   var shorts = hq.length - longs;
-  var allLongs = setups.filter(function(s){ return s.dir === 'long'; }).length;
-  var allShorts = setups.length - allLongs;
+  /* allLongs / allShorts were computed here and never read by anything. */
+  var tally = csAssetTally(setups);
   /* The label used to read "(75%+ confidence, trend, liquid hours)", which is
      three of the conditions out of seven. isHighQuality is qualityGates.length
      === 0 AND proGradeCheck.isPro, so it also needs the voting gate, no major
@@ -1166,9 +1268,14 @@ function renderCards(setups, run){
      worst at zero: "0 HIGH-QUALITY setups (75%+ confidence, trend, liquid
      hours)" reads as "nothing cleared 75% agreement", when the thing that
      emptied the block is usually one of the four conditions not named. */
-  var h = '<div class="cs-summary"><b>' + hq.length + ' HIGH-QUALITY</b> setup' + (hq.length === 1 ? '' : 's') + ' (every quality gate clear · three-layer confidence 75%+ · price and flow agree) — '
+  var h = '<div class="cs-summary"><b>' + hq.length + ' HIGH-QUALITY</b> setup' + (hq.length === 1 ? '' : 's')
+    + csAssetNote(tally.hq, tally.hqAssets)
+    + ' (every quality gate clear · three-layer confidence 75%+ · price and flow agree) — '
     + longs + ' LONG · ' + shorts + ' SHORT<br>'
-    + '<span style="font-weight:400;font-size:10px;color:#64748B">' + setups.length + ' total signals (includes ' + (setups.length - hq.length) + ' lower-quality). Click to expand vote table.</span></div>';
+    + '<span style="font-weight:400;font-size:10px;color:#64748B">' + setups.length + ' total signals'
+    + csAssetNote(tally.setups, tally.assets)
+    + ' (includes ' + (setups.length - hq.length) + ' lower-quality). Click to expand vote table.'
+    + csPairedNote(tally) + '</span></div>';
   var hqSetups = setups.filter(function(s){ return s.isHighQuality; });
   var lqSetups = setups.filter(function(s){ return !s.isHighQuality; });
 
@@ -1182,7 +1289,7 @@ function renderCards(setups, run){
       + '<br><span style="font-weight:400;font-size:10px;color:#166534">every quality gate clear (75%+ price agreement · trend regime · liquid hours · voting gate · no sentiment conflict) AND pro-grade (three-layer confidence 75%+ · price and order flow agree · no liquidation cascade)</span></div>';
     for (var i = 0; i < hqSetups.length; i++){
       __voteStore[setups.indexOf(hqSetups[i])] = hqSetups[i].votes;
-      h += setupCardHTML(hqSetups[i], setups.indexOf(hqSetups[i]));
+      h += setupCardHTML(hqSetups[i], setups.indexOf(hqSetups[i]), tally);
     }
   }
 
@@ -1190,7 +1297,7 @@ function renderCards(setups, run){
     h += '<div style="margin:10px 0;font-size:10px;font-weight:600;color:#64748B;padding:4px 6px;background:#F1F5F9;border-radius:4px">Lower-quality signals (' + lqSetups.length + ') — expand to see reason</div>';
     for (var i = 0; i < lqSetups.length; i++){
       __voteStore[setups.indexOf(lqSetups[i])] = lqSetups[i].votes;
-      h += setupCardHTML(lqSetups[i], setups.indexOf(lqSetups[i]));
+      h += setupCardHTML(lqSetups[i], setups.indexOf(lqSetups[i]), tally);
     }
   }
 
@@ -1601,6 +1708,11 @@ W.__csTopBlocker = csTopBlocker;
 W.__csVoteComposition = csVoteComposition;
 W.__csStopProvenance = csStopProvenance;
 W.__csScoreFailKey = csScoreFailKey;
+W.__csAssetTally = csAssetTally;
+W.__csPairNote = csPairNote;
+W.__csAssetNote = csAssetNote;
+W.__csPairedNote = csPairedNote;
+W.__csVenueName = venueName;
 W.__csScoreWhyText = csScoreWhyText;
 W.__csStopNote = csStopNote;
 W.__csRR = rr;
