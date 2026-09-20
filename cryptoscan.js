@@ -527,14 +527,81 @@ function csFwdRows(setups){
 
    Pure and exported for the same reason csBlockerTally is: a decision that
    lives inside runScan cannot be reached without live network. */
-/* Why a contract never reached the engine, in the words the fetch uses. */
+/* order-flow.js runs its 1h read only when it is handed at least this many
+   bars -- `if (rows1h && rows1h.length >= 30)`. Not a number this tab
+   invented, and tests/test-cryptoscan-h1-leg.mjs pins it against that file
+   for the same reason the 230 above is pinned against cryptoultra's MIN_15M. */
+var CS_MIN_1H = 30;
+
+/* Why a contract never reached the engine, in the words the fetch uses. The
+   same words serve the 1h leg, which fails the same five ways plus one of its
+   own. */
 var CS_UNREAD_LABELS = {
   'fetch-failed': 'the request failed',
   'bad-shape':    'the venue returned something that was not candles',
   'no-symbol':    'no symbol could be derived for the venue',
   'no-source':    'no candle source is wired for the venue',
+  'thin-1h':      'fewer than ' + CS_MIN_1H + ' closed 1h bars',
   'unknown':      'reason not recorded'
 };
+
+/* ---- THE 1H LEG, WHICH FAILED IN SILENCE ----
+
+   The 15m leg has been fetched through hgDeskFetchKlinesResult since pack 870,
+   because hgDeskFetchKlines swallows the reason and resolves to [] whatever
+   went wrong -- so a venue outage and a three-bar contract arrived
+   indistinguishable. The 1h leg was left on the swallowing wrapper and never
+   picked the instrument up.
+
+   It has exactly one consumer: read 4 of hgOrderFlowScore, the 1h candle-volume
+   imbalance, which runs only `if (rows1h && rows1h.length >= 30)`. Below that
+   it is simply not pushed -- no vote, no note, nothing on the card. And layer 2
+   aggregates as the MEAN of the reads that cleared their own gates, so dropping
+   one does not move the score toward zero. It removes a divisor.
+
+   Swept over 1,500 random tapes, full 1h leg against none:
+
+     |layer-2 score| ROSE       912 (60.8%)
+     |layer-2 score| FELL       151 (10.1%)
+     tier PROMOTED              204 (13.6%)
+     tier DEMOTED                 1 ( 0.1%)
+     gained PROFESSIONAL-GRADE   74
+     lost   PROFESSIONAL-GRADE    0
+
+   A failed fetch is a one-way promotion. The 1h read is additionally weighted
+   0.8 where the others are 1.0, so it dilutes more often than it decides, and
+   losing it concentrates whatever is left. The tier is what the card stamps,
+   what renderCards partitions on, and what hg-forward pools by -- so a contract
+   whose 1h request timed out could be recorded under a stronger mechanic than
+   the same contract on the same bars with its feed up, and nothing anywhere
+   said which had happened.
+
+   The score is NOT changed here. Re-weighting a layer whose 0.35 share and 0.2
+   direction band were fitted together is a calibration decision, the same call
+   left alone in order-flow.js's own note about the gated-mean cliff. What
+   changes is that the fact stops being invisible: the leg is fetched through
+   the instrumented form, the reason is kept, the coverage line counts it, and
+   every card scored without it says so.
+
+   Pure and exported, like every other decision lifted out of runScan. */
+function csH1State(got, closed){
+  var n = Array.isArray(closed) ? closed.length : 0;
+  /* a fetch that reported failure is a fact about the FEED, and it keeps its
+     own reason -- 'thin' would blame the contract for the venue's outage */
+  if (got && got.ok === false) return { ok: false, reason: got.reason || 'unknown', closed: n };
+  /* bars arrived, just not enough of them for read 4's own gate */
+  if (n < CS_MIN_1H) return { ok: false, reason: 'thin-1h', closed: n };
+  return { ok: true, reason: null, closed: n };
+}
+
+/* What the card says on a setup layer 2 scored without its 1h read. Empty when
+   the leg was there, so a clean card stays clean. */
+function csH1Note(s){
+  var h1 = s && s.h1;
+  if (!h1 || h1.ok !== false) return '';
+  return '1h read missing (' + (CS_UNREAD_LABELS[h1.reason] || h1.reason || 'reason not recorded')
+    + ') — layer 2 scored on 3 of its 4 reads, which raises its score more often than it lowers it';
+}
 
 function csCoverage(run){
   var universe = Math.max(0, +(run && run.universe) || 0);
@@ -555,6 +622,11 @@ function csCoverage(run){
   var dVenue   = Math.max(0, +(run && run.droppedVenue) || 0);
   var dNoTick  = Math.max(0, +(run && run.droppedNoTicker) || 0);
   var why = (run && run.unreadWhy && typeof run.unreadWhy === 'object') ? run.unreadWhy : {};
+  /* Read at 15m, past the 230-bar gate, and then scored by layer 2 WITHOUT its
+     1h read. A subset of `read`, not a sibling of it -- the contract was
+     fetched, the engine ran, and the card was drawn. See csH1State: the
+     absence promotes 204 times per 1,500 tapes and demotes once. */
+  var noH1    = Math.max(0, +(run && run.noH1) || 0);
   /* what the engine actually got to look at */
   var read = Math.max(0, scanned - skipped - errors - unread);
   return {
@@ -562,6 +634,8 @@ function csCoverage(run){
     unread: unread, unreadWhy: why,
     scoreFailed: scoreFailed,
     scoreWhy: (run && run.scoreWhy && typeof run.scoreWhy === 'object') ? run.scoreWhy : {},
+    noH1: noH1,
+    noH1Why: (run && run.noH1Why && typeof run.noH1Why === 'object') ? run.noH1Why : {},
     read: read, signals: signals,
     offered: offered, droppedTurnover: dTurn, droppedVenue: dVenue, droppedNoTicker: dNoTick,
     dropped: dTurn + dVenue + dNoTick,
@@ -601,9 +675,12 @@ function csScoreWhyText(cov){
   return parts.join(' · ');
 }
 
-/** "the request failed (140)" joined for whatever causes were recorded */
-function csUnreadWhyText(cov){
-  var why = (cov && cov.unreadWhy) || {}, parts = [], k;
+/** "the request failed (140)" joined for whatever causes were recorded. One
+    body for both legs -- the 15m fetch and the 1h fetch fail the same ways and
+    say so in the same words, and two copies of this loop would drift. */
+function csWhyText(why){
+  var parts = [], k;
+  why = (why && typeof why === 'object') ? why : {};
   var keys = Object.keys(why).sort(function(a, b){ return why[b] - why[a]; });
   for (var i = 0; i < keys.length; i++){
     k = keys[i];
@@ -612,6 +689,11 @@ function csUnreadWhyText(cov){
   }
   return parts.join(', ');
 }
+
+function csUnreadWhyText(cov){ return csWhyText(cov && cov.unreadWhy); }
+
+/** the same, for contracts layer 2 scored without their 1h read */
+function csH1WhyText(cov){ return csWhyText(cov && cov.noH1Why); }
 
 function csCoverageHTML(run){
   var c = csCoverage(run);
@@ -633,6 +715,15 @@ function csCoverageHTML(run){
     txt += ' · ' + c.scoreFailed + ' read and voted, then scoring threw'
       + (sw ? ': ' + sw : '');
   }
+  /* Read, voted on and SHOWN -- but layer 2 scored them on three reads instead
+     of four. Reported beside the other two silences rather than folded into
+     them, because unlike those this one produces a card: the reader is looking
+     at a tier that the missing read would, on the measured sweep, more often
+     have lowered. */
+  if (c.noH1){
+    var hw = csH1WhyText(c);
+    txt += ' · ' + c.noH1 + ' scored without a 1h leg' + (hw ? ': ' + hw : '');
+  }
   /* the universe was filtered before the scan ever saw it — say so, or "100%
      read" reads as "everything", which it is not */
   if (c.dropped){
@@ -644,7 +735,10 @@ function csCoverageHTML(run){
     txt += ' · ' + c.dropped + ' of ' + c.offered + ' never offered to the scan: ' + pre.join(', ')
       + (c.pctOffered != null ? ' — ' + Math.round(100 * c.pctOffered) + '% of the source universe' : '');
   }
-  return '<div style="font-size:10px;color:' + (c.partial ? '#92400E' : '#64748B')
+  /* `partial` keeps its pinned meaning -- contracts the engine never read --
+     so noH1 is not folded into it. It still colours the line: a run whose 1h
+     leg was blind on a hundred contracts is not a clean run. */
+  return '<div style="font-size:10px;color:' + ((c.partial || c.noH1) ? '#92400E' : '#64748B')
     + ';margin:4px 0 2px">COVERAGE · ' + esc(txt) + '</div>';
 }
 
@@ -1254,6 +1348,7 @@ function setupCardHTML(s, idx, tally){
       + (s.orderFlow.proxyOnly ? ' (candle proxy)' : '') + ' · ';
   }
 
+
   /* Layer 3: Sentiment. A stale row is printed — it is what was read — but
      labelled, and it contributed 0 to the confidence above. */
   if (s.sentiment && s.sentiment.score !== undefined){
@@ -1269,6 +1364,17 @@ function setupCardHTML(s, idx, tally){
     }
   }
   layerText += '</small>';
+
+  /* THE READ THAT WAS NOT THERE. Layer 2's 1h imbalance runs only on 30+
+     closed 1h bars, and below that it is not pushed at all -- no vote, no
+     note, nothing anywhere on this card. The aggregate is the MEAN of the
+     reads that cleared their own gates, so losing one removes a divisor
+     rather than pulling the score toward zero: measured over 1,500 tapes it
+     raised |score| 912 times and lowered it 151, promoting the tier 204 times
+     against a single demotion. It sits directly above the Confidence and Tier
+     line because that is the number it moved. */
+  var h1n = csH1Note(s);
+  if (h1n) layerText += '<br><small style="color:#92400E">○ ' + esc(h1n) + '</small>';
 
   /* Agreement + Confidence */
   if (s.layerAgreement !== undefined){
@@ -1361,6 +1467,10 @@ W.CS_FWD_MIN_RR = CS_FWD_MIN_RR;
 W.CS_LABEL_V = CS_LABEL_V;
 W.csCoverage = csCoverage;
 W.csUnreadWhyText = csUnreadWhyText;
+W.csH1State = csH1State;
+W.csH1Note = csH1Note;
+W.csH1WhyText = csH1WhyText;
+W.CS_MIN_1H = CS_MIN_1H;
 W.csCoverageHTML = csCoverageHTML;
 W.csEmptyHTML = csEmptyHTML;
 W.csProReady = csProReady;
@@ -1471,6 +1581,8 @@ async function runScan(ui){
 
     var setups = [], scanned = 0, errors = 0, skipped = 0, unread = 0, scoreFailed = 0;
     var unreadWhy = {}, scoreWhy = {};
+    /* contracts that WERE read and scored, but whose 1h leg layer 2 never got */
+    var noH1 = 0, noH1Why = {};
     /* the scan's shared read template, and how many contracts could not use it */
     var voteTmpl = null, votePackFailed = 0;
     var now = Date.now();
@@ -1542,7 +1654,26 @@ async function runScan(ui){
           try{ resolved += (W.hgFwdResolve(item.sym, '15m', rows15m) || 0); }catch(eRes){}
         }
         if (!rows15m || rows15m.length < 230){ skipped++; scannedThis = true; scanned++; setProgress((scanned / items.length) * 100); continue; }
-        var rows1h = await fetchKl(item, '1h', KL_1H);
+        /* THE SAME INSTRUMENT THE 15M LEG HAS HAD SINCE PACK 870.
+
+           hgDeskFetchKlines resolves to [] whatever went wrong, so this line
+           could not tell a venue outage from a contract with no 1h history --
+           and layer 2 silently dropped a read either way. See csH1State for
+           what that costs: it promotes the tier 204 times per 1,500 tapes and
+           demotes it once. The older desk-scan-universe.js has no result form,
+           so fall back to the array exactly as the 15m leg does. */
+        var got1h = fetchRes
+          ? await fetchRes(item, '1h', KL_1H)
+          : { rows: (await fetchKl(item, '1h', KL_1H)) || [], ok: true, reason: null };
+        var rows1h = got1h.rows || [];
+        /* The closed 1h tape layer 2 will actually be handed, trimmed once
+           here so the counter and the card cannot describe different tapes.
+           Classified whether or not this contract goes on to fire -- the
+           coverage line is a claim about the FEED, and a contract that
+           produced no direction still tells you whether its 1h leg arrived. */
+        var closed1h = csClosedRows(rows1h, 3600, now);
+        var h1 = csH1State(got1h, closed1h);
+        if (!h1.ok){ noH1++; noH1Why[h1.reason] = (noH1Why[h1.reason] || 0) + 1; }
 
         var res = engine({ rows15m: rows15m, rows1h: rows1h || [], now: now, venueCost: costFor(item), allowUnverified: true });
         scannedThis = true;
@@ -1593,7 +1724,8 @@ async function runScan(ui){
              15m tape is reused by the SMC block at the bottom of the loop,
              which has always wanted exactly this. */
           var closed15 = csTrimToBar(rows15m, res.bar ? res.bar.t : null);
-          var closed1h = csClosedRows(rows1h || [], 3600, now);
+          /* closed1h was trimmed beside the fetch above, so the tape layer 2
+             scores is the same one csH1State judged. */
 
           /* Layer 2: candle-derived order-flow proxies (order-flow.js) */
           var orderFlow = {};
@@ -1695,6 +1827,9 @@ async function runScan(ui){
             isPro: proGradeCheck.isPro,
             regime: res.regime,
             regimeCounts: res.regimeCounts,
+            /* whether layer 2 had its 1h read for THIS contract, so the card
+               can say so on the tier the absence helped produce */
+            h1: h1,
             atr: res.atr,
             price: res.price,
             plan: res.plan,
@@ -1785,6 +1920,7 @@ async function runScan(ui){
     __results = { at: now, setups: setups, scanned: scanned, errors: errors, skipped: skipped,
                   unread: unread, unreadWhy: unreadWhy, universe: items.length,
                   scoreFailed: scoreFailed, scoreWhy: scoreWhy,
+                  noH1: noH1, noH1Why: noH1Why,
                   voteTmpl: voteTmpl, votePackFailed: votePackFailed,
                   owed: owedRows, owedSyms: owedSyms, resolved: resolved,
                   offered: +pack.rawLen || 0,
