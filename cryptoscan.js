@@ -756,16 +756,85 @@ function csFwdHorizon(setups){
   return (isFinite(n) && n > 0) ? n : 24;
 }
 
+/* WHAT "470 READS" IS ACTUALLY MADE OF.
+
+   The tab invites you to audit 470 reads by eye, and the one summary number it
+   surfaced was the least informative of them. Counted from the engine's own
+   output rather than written down (the composition is identical on every tape
+   and every symbol, but a hand-kept number is the thing that drifts):
+
+     127  can vote LONG / SHORT / neutral
+      30  are regime reads — of which FOUR decide (see csRegimeNote)
+      35  are prints: "identical information to X — counted once"
+     278  are n/a: "needs UTXO-level on-chain data — never faked"
+
+   278 of 470 is 59% of the table, and no feed in this app can answer any of
+   them. That is not a flaw in the engine — every one of those rows says what
+   it needs and refuses to fake it, which is the right behaviour — but a
+   reader told "470-read vote engine" and nothing else will not guess it. */
+function csVoteComposition(votes){
+  var out = { total: 0, vote: 0, regime: 0, print: 0, na: 0, regimeCounted: 0, naGroups: 0 };
+  if (!Array.isArray(votes)) return out;
+  var counted = W.HG_CRYPTO_ULTRA_REGIME_COUNTED, seen = {}, i, v;
+  for (i = 0; i < votes.length; i++){
+    v = votes[i];
+    if (!v) continue;
+    out.total++;
+    if (v.kind === 'vote') out.vote++;
+    else if (v.kind === 'regime'){
+      out.regime++;
+      if (Array.isArray(counted) && counted.indexOf(v.id) >= 0) out.regimeCounted++;
+    }
+    else if (v.kind === 'print') out.print++;
+    else if (v.kind === 'n/a'){
+      out.na++;
+      if (v.group && !seen[v.group]){ seen[v.group] = 1; out.naGroups++; }
+    }
+  }
+  return out;
+}
+
+function csCompositionNote(c){
+  if (!c || !c.total) return '';
+  return c.total + ' reads — <b>' + c.vote + '</b> can vote · ' + c.regime + ' regime ('
+    + c.regimeCounted + ' of them decide) · ' + c.print
+    + ' duplicates counted once · <b>' + c.na + '</b> need a feed this app does not have'
+    + (c.naGroups ? ' (' + c.naGroups + ' groups)' : '');
+}
+
+/* csRegimeNote — the regime chip on the card head.
+
+   regimeSummaryVote has three outcomes and the engine folded the middle one
+   into TREND, so a reading nothing had established printed as a measured one
+   on about one scan in five (58 of 300 random tapes; chop 18, trend by a real
+   reading 224). It now says UNDECIDED, and the chip says how many of the
+   regime reads were consulted to get there. */
+function csRegimeNote(s){
+  var rc = s && s.regimeCounts;
+  if (!rc || !rc.emitted) return '';
+  return ' (' + rc.counted + ' of ' + rc.emitted + ' regime reads decide)';
+}
+
 function voteTableHTML(votes){
   if (!votes || !votes.length) return '';
-  var groups = [], h = '<table class="cs-vtbl"><tr><th>read</th><th>value</th><th>kind</th><th>vote</th><th>rule</th></tr>';
+  var counted = W.HG_CRYPTO_ULTRA_REGIME_COUNTED;
+  var comp = csVoteComposition(votes);
+  var groups = [], h = '';
+  h += '<div class="cs-note" style="margin:4px 0 6px">' + csCompositionNote(comp) + '</div>';
+  h += '<table class="cs-vtbl"><tr><th>read</th><th>value</th><th>kind</th><th>vote</th><th>rule</th></tr>';
   for (var i = 0; i < votes.length; i++) if (groups.indexOf(votes[i].group) < 0) groups.push(votes[i].group);
   for (var g = 0; g < groups.length; g++){
     h += '<tr><td class="cs-grp" colspan="5">' + esc(groups[g]) + '</td></tr>';
     for (var k = 0; k < votes.length; k++){
       var v = votes[k]; if (v.group !== groups[g]) continue;
       var vt = v.kind === 'vote' ? (v.vote > 0 ? 'LONG' : v.vote < 0 ? 'SHORT' : 'neutral') : v.kind === 'regime' ? (v.regime < 0 ? 'chop' : v.regime > 0 ? 'trend' : '—') : v.kind === 'n/a' ? 'n/a' : '—';
-      h += '<tr><td>' + esc(v.name) + '</td><td>' + esc(v.read) + '</td><td style="font-weight:700;letter-spacing:.06em;font-size:9px">' + esc(v.kind) + '</td><td class="cs-v' + (v.kind === 'vote' ? v.vote : 0) + '">' + vt + '</td><td>' + esc(v.why) + '</td></tr>';
+      /* a regime read that nothing consults looks exactly like one that
+         decides, unless it is marked */
+      var kindTxt = v.kind;
+      if (v.kind === 'regime'){
+        kindTxt += (Array.isArray(counted) && counted.indexOf(v.id) >= 0) ? ' · counted' : ' · not counted';
+      }
+      h += '<tr><td>' + esc(v.name) + '</td><td>' + esc(v.read) + '</td><td style="font-weight:700;letter-spacing:.06em;font-size:9px">' + esc(kindTxt) + '</td><td class="cs-v' + (v.kind === 'vote' ? v.vote : 0) + '">' + vt + '</td><td>' + esc(v.why) + '</td></tr>';
     }
   }
   h += '</table>';
@@ -805,7 +874,7 @@ function setupCardHTML(s, idx){
   h += venueChip(s.exchange);
   h += ' <span class="cs-dir ' + dirCls + '">' + (s.dir || '—').toUpperCase() + '</span>';
   try{ if (typeof W.hgSmcChipHtml === 'function') h += (W.hgSmcChipHtml(s) || ''); }catch(eSmc){}
-  h += '<span class="cs-card-meta">' + pct(s.pct) + ' agree · ' + (s.count ? s.count.decisive : '—') + ' decisive · regime ' + esc((s.regime || '—').toUpperCase());
+  h += '<span class="cs-card-meta">' + pct(s.pct) + ' agree · ' + (s.count ? s.count.decisive : '—') + ' decisive · regime ' + esc((s.regime || '—').toUpperCase()) + esc(csRegimeNote(s));
   if (p) h += '<br>entry ' + fmt(p.entry) + ' · SL ' + fmt(p.stop) + ' · TP1 ' + fmt(p.t1) + ' · R:R ' + (rrv != null ? rrv.toFixed(1) : '—');
   h += '</span>';
   h += '<span class="cs-card-arrow" id="' + id + '_a">&#9654;</span>';
@@ -911,7 +980,13 @@ function setupCardHTML(s, idx){
   if (s.gates && s.gates.length) h += '<div class="cs-gate">' + esc(s.gates.join(' · ')) + '</div>';
 
   /* vote table placeholder — rendered lazily on first expand */
-  h += '<div id="cs_v_' + idx + '" class="cs-votes-placeholder">▸ 470-indicator vote table — loading on expand…</div>';
+  /* the placeholder hard-coded 470 and the word "indicator", which reads as
+     470 things that indicate. Count the reads this setup actually carries and
+     lead with how many of them can vote. */
+  var vcomp = csVoteComposition(s.votes);
+  h += '<div id="cs_v_' + idx + '" class="cs-votes-placeholder">▸ vote table — '
+    + (vcomp.total ? (vcomp.total + ' reads, ' + vcomp.vote + ' of them voting') : 'no reads recorded')
+    + ' — loading on expand…</div>';
 
   h += '</div></div>';
   return h;
@@ -1228,6 +1303,7 @@ async function runScan(ui){
             externalRisk: externalRisk,
             isPro: proGradeCheck.isPro,
             regime: res.regime,
+            regimeCounts: res.regimeCounts,
             atr: res.atr,
             price: res.price,
             plan: res.plan,
@@ -1328,8 +1404,8 @@ function mount(el){
   try{
     el.innerHTML = '<style>' + CS_CSS + '</style>'
       + '<div class="cs-wrap">'
-      + '<h2 class="cs-hdr">CRYPTO SCAN <span>· all Delta + CoinDCX futures · 470-read vote engine · full indicator breakdown · record only</span></h2>'
-      + '<div style="margin:8px 0"><button class="btn" id="csRun">SCAN ALL FUTURES</button> <span class="cs-stat" id="csStat">idle — scans every futures contract (Delta + CoinDCX) through the unverified CRYPTO ULTRA 470-read vote engine. All setups are record only, not for trading. Full indicator breakdown on each card.</span></div>'
+      + '<h2 class="cs-hdr">CRYPTO SCAN <span>· all Delta + CoinDCX futures · CRYPTO ULTRA 470-read engine (127 of them vote) · record only</span></h2>'
+      + '<div style="margin:8px 0"><button class="btn" id="csRun">SCAN ALL FUTURES</button> <span class="cs-stat" id="csStat">idle — scans every futures contract (Delta + CoinDCX) through the unverified CRYPTO ULTRA engine. Each card carries its full read table with a composition line: how many of the reads can vote, how many are duplicates counted once, and how many need a feed this app does not have. All setups are record only, not for trading.</span></div>'
       + '<div class="cs-bar"><div class="cs-bar-fill" id="csBar" style="width:0%"></div></div>'
       + '<div id="csCards"></div>'
       /* OUTSIDE the cards host, so an empty scan does not hide the one part of
@@ -1368,6 +1444,10 @@ W.__csFwdRows = csFwdRows;
 W.__csTrimToBar = csTrimToBar;
 W.__csClosedRows = csClosedRows;
 W.__csTopBlocker = csTopBlocker;
+W.__csVoteComposition = csVoteComposition;
+W.__csCompositionNote = csCompositionNote;
+W.__csRegimeNote = csRegimeNote;
+W.__csVoteTableHTML = voteTableHTML;
 W.__csBlockerSentence = csBlockerSentence;
 W.__csAccuracySentence = csAccuracySentence;
 W.csFwdVerdict = csFwdVerdict;
