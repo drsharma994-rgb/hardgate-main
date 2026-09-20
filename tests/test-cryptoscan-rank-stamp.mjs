@@ -56,9 +56,26 @@ function stripComments(src){
 }
 const text = h => String(h).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 
+/* A PINNED CLOCK.
+
+   runScan reads `new Date(now).getUTCHours()` and adds a `session` quality
+   gate outside 07:00-17:00 UTC. isHighQuality needs every quality gate clear,
+   so for the fourteen hours a day outside that window NO setup can be
+   high-quality -- and section 6's mixed-block check quietly had nothing to
+   measure. Shipped in pack 890, it passed because the suite happened to run
+   at 13:00 UTC and failed the first time it ran at 17:59.
+
+   A test whose verdict depends on what time it is run is not a test. The
+   sandbox gets a Date pinned inside the liquid window, and the tapes are
+   anchored to that same instant so the closed-bar trim agrees with it. */
+const FIXED_NOW = Date.UTC(2026, 8, 20, 12, 0, 0);   /* 12:00 UTC — a liquid hour */
+class FixedDate extends Date {
+  constructor(){ if (arguments.length === 0) super(FIXED_NOW); else super(...arguments); }
+  static now(){ return FIXED_NOW; }
+}
 function boot(){
   const s = { console: { log(){}, warn(){}, error(){}, info(){}, debug(){} },
-              Math, isFinite, isNaN, Number, String, Object, Array, JSON, Date,
+              Math, isFinite, isNaN, Number, String, Object, Array, JSON, Date: FixedDate,
               parseInt, parseFloat, NaN, Infinity, RegExp, Promise, Error, Set, Map };
   s.window = s; s.globalThis = s; s.self = s; s.HG_tabs = []; s.HG_warmups = []; s.HG_TAB_MODS = {};
   s.setTimeout = (f) => { try{ f && f(); }catch(e){} return 0; }; s.clearTimeout = () => {};
@@ -285,14 +302,14 @@ console.log('\n6. end to end: the real runScan, over tapes that disagree');
     const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
     const drift = (rnd() - 0.5) * 0.35, vol = 0.005 + rnd() * 0.022;
     const N = 300, r15 = []; let px = 100;
-    const base = Math.floor(Date.now() / 1000 / SEC) * SEC, t0 = base - N * SEC;
+    const base = Math.floor(FIXED_NOW / 1000 / SEC) * SEC, t0 = base - N * SEC;
     for (let i = 0; i < N; i++){
       const o = px, c = px * (1 + (rnd() - 0.5 + drift) * vol);
       r15.push({ t: t0 + i * SEC, o: o, c: c, h: Math.max(o, c) * (1 + vol * 0.2),
                  l: Math.min(o, c) * (1 - vol * 0.2), v: 1000 + rnd() * 4000 });
       px = c;
     }
-    const H = Math.floor(Date.now() / 1000 / 3600) * 3600, r1h = []; let q = 100;
+    const H = Math.floor(FIXED_NOW / 1000 / 3600) * 3600, r1h = []; let q = 100;
     for (let i = 199; i >= 0; i--){
       const o = q; q = q * (1 + (rnd() - 0.5 + drift * 2) * vol * 2);
       r1h.push({ t: H - i * 3600, o: o, c: q, h: Math.max(o, q) * (1 + vol * 0.3),
