@@ -1059,13 +1059,88 @@ function csVoteComposition(votes){
   return out;
 }
 
-function csCompositionNote(c){
-  if (!c || !c.total) return '';
-  return c.total + ' reads — <b>' + c.vote + '</b> can vote · ' + c.regime + ' regime ('
-    + c.regimeCounted + ' of them decide) · ' + c.print
-    + ' duplicates counted once · <b>' + c.na + '</b> need a feed this app does not have'
-    + (c.naGroups ? ' (' + c.naGroups + ' groups)' : '');
+/* THE AUDIT TABLE COSTS 64.5 KB PER CONTRACT, AND MOST OF IT IS THE SAME
+   FIVE FIELDS REPEATED ON EVERY CARD.
+
+   This tab's pitch is that every one of the engine's reads can be audited by
+   eye, so the reads have to be kept -- dropping them would remove the feature.
+   What does not have to be kept is 470 eight-field objects PER CONTRACT.
+   Measured with --expose-gc over 200 real engine runs, retaining exactly what
+   __results.setups[].votes retains:
+
+     64.5 KB per setup
+     300 contracts  ->  18.9 MB        500 ->  31.5 MB        800 ->  50.4 MB
+
+   held for as long as the tab is mounted, which is the whole session, and
+   rebuilt every ten minutes by the auto-refresh.
+
+   Of each read's eight fields, five -- id, group, name, kind, why -- are the
+   same on every card. Checked over 200 engine runs across bar counts from 230
+   to 500, four price scales and a wide drift/vol sweep: ZERO rows differed
+   index-for-index. So they are stored once per scan, and each contract keeps
+   only what actually varies: read, vote, regime.
+
+   The guard is absolute. csVotePack compares every constant field against the
+   template and returns null on the slightest mismatch, and the caller then
+   keeps that contract's votes whole. A packed card can never show another
+   card's reads; the worst case is that it costs what it cost before.
+
+   The table is rebuilt only for a card the reader actually expands, which is
+   where the lazy render already was -- __voteStore holds the setup now rather
+   than a materialised array. */
+var CS_VOTE_CONST = ['id', 'group', 'name', 'kind', 'why'];
+
+function csVoteTemplate(votes){
+  if (!Array.isArray(votes) || !votes.length) return null;
+  var t = new Array(votes.length), i, v;
+  for (i = 0; i < votes.length; i++){
+    v = votes[i];
+    if (!v) return null;
+    t[i] = { id: v.id, group: v.group, name: v.name, kind: v.kind, why: v.why };
+  }
+  return t;
 }
+
+function csVotePack(votes, tmpl){
+  if (!Array.isArray(votes) || !Array.isArray(tmpl)) return null;
+  if (votes.length !== tmpl.length || !votes.length) return null;
+  var read = new Array(votes.length), vote = new Array(votes.length),
+      regime = new Array(votes.length), i, v, t, k;
+  for (i = 0; i < votes.length; i++){
+    v = votes[i]; t = tmpl[i];
+    if (!v || !t) return null;
+    for (k = 0; k < CS_VOTE_CONST.length; k++){
+      if (v[CS_VOTE_CONST[k]] !== t[CS_VOTE_CONST[k]]) return null;
+    }
+    read[i] = v.read; vote[i] = v.vote; regime[i] = v.regime;
+  }
+  return { read: read, vote: vote, regime: regime };
+}
+
+function csVoteUnpack(packed, tmpl){
+  if (!packed || !Array.isArray(tmpl) || !Array.isArray(packed.read)) return null;
+  if (packed.read.length !== tmpl.length) return null;
+  var out = new Array(tmpl.length), i, t;
+  for (i = 0; i < tmpl.length; i++){
+    t = tmpl[i];
+    out[i] = { id: t.id, group: t.group, name: t.name, kind: t.kind, why: t.why,
+               read: packed.read[i], vote: packed.vote[i], regime: packed.regime[i] };
+  }
+  return out;
+}
+
+/** a setup's reads, whole when they could not be packed, rebuilt when they could */
+function csVotesOf(s, tmpl){
+  if (!s) return null;
+  if (Array.isArray(s.votes)) return s.votes;
+  if (s.votesPacked) return csVoteUnpack(s.votesPacked, tmpl);
+  return null;
+}
+
+/* csCompositionNote lived here to head the vote table, and pack 881 removed
+   that call site when it de-duplicated the line against the card body's
+   "470 reads fed: …" a few lines above. Nothing has called it since. The
+   breakdown it rendered is still on every card, from s.count.kinds. */
 
 /* csRegimeNote — the regime chip on the card head.
 
@@ -1121,8 +1196,13 @@ function csToggleCard(idx){
   if (opening){
     var vhost = document.getElementById('cs_v_' + idx);
     if (vhost && !vhost.dataset.rendered && __voteStore[idx]){
-      vhost.innerHTML = voteTableHTML(__voteStore[idx]);
-      vhost.dataset.rendered = '1';
+      /* the 470 read objects are materialised HERE, for the one card the
+         reader opened, rather than held for all of them */
+      var vrows = csVotesOf(__voteStore[idx], __results && __results.voteTmpl);
+      if (vrows){
+        vhost.innerHTML = voteTableHTML(vrows);
+        vhost.dataset.rendered = '1';
+      }
     }
   }
 }
@@ -1253,7 +1333,9 @@ function setupCardHTML(s, idx, tally){
   /* the placeholder hard-coded 470 and the word "indicator", which reads as
      470 things that indicate. Count the reads this setup actually carries and
      lead with how many of them can vote. */
-  var vcomp = csVoteComposition(s.votes);
+  /* computed once at scan time and kept as eight numbers, so the placeholder
+     does not need the reads themselves to say how many there are */
+  var vcomp = s.voteComp || csVoteComposition(s.votes);
   h += '<div id="cs_v_' + idx + '" class="cs-votes-placeholder">▸ vote table — '
     + (vcomp.total ? (vcomp.total + ' reads, ' + vcomp.vote + ' of them voting') : 'no reads recorded')
     + ' — loading on expand…</div>';
@@ -1334,7 +1416,7 @@ function renderCards(setups, run){
     h += '<div style="margin:10px 0;font-size:11px;font-weight:700;color:#166534;padding:6px 8px;background:#DCFCE7;border-radius:6px">HIGH-QUALITY SIGNALS'
       + '<br><span style="font-weight:400;font-size:10px;color:#166534">every quality gate clear (75%+ price agreement · trend regime · liquid hours · voting gate · no sentiment conflict) AND pro-grade (three-layer confidence 75%+ · price and order flow agree · no liquidation cascade)</span></div>';
     for (var i = 0; i < hqSetups.length; i++){
-      __voteStore[setups.indexOf(hqSetups[i])] = hqSetups[i].votes;
+      __voteStore[setups.indexOf(hqSetups[i])] = hqSetups[i];
       h += setupCardHTML(hqSetups[i], setups.indexOf(hqSetups[i]), tally);
     }
   }
@@ -1342,7 +1424,7 @@ function renderCards(setups, run){
   if (lqSetups.length > 0){
     h += '<div style="margin:10px 0;font-size:10px;font-weight:600;color:#64748B;padding:4px 6px;background:#F1F5F9;border-radius:4px">Lower-quality signals (' + lqSetups.length + ') — expand to see reason</div>';
     for (var i = 0; i < lqSetups.length; i++){
-      __voteStore[setups.indexOf(lqSetups[i])] = lqSetups[i].votes;
+      __voteStore[setups.indexOf(lqSetups[i])] = lqSetups[i];
       h += setupCardHTML(lqSetups[i], setups.indexOf(lqSetups[i]), tally);
     }
   }
@@ -1389,6 +1471,8 @@ async function runScan(ui){
 
     var setups = [], scanned = 0, errors = 0, skipped = 0, unread = 0, scoreFailed = 0;
     var unreadWhy = {}, scoreWhy = {};
+    /* the scan's shared read template, and how many contracts could not use it */
+    var voteTmpl = null, votePackFailed = 0;
     var now = Date.now();
 
     /* SETTLE WHAT WE ALREADY RECORDED.
@@ -1611,12 +1695,22 @@ async function runScan(ui){
             fire: res.fire,
             recordOnly: res.recordOnly,
             gates: res.gates,
-            votes: res.votes,
+            voteComp: csVoteComposition(res.votes),
             bar: res.bar,
             qualityGates: qualityGates,
             gateKeys: gateKeys,
             isHighQuality: qualityGates.length === 0 && proGradeCheck.isPro
           };
+
+          /* PACK THE READS. The first setup of a scan defines the template;
+             every later one is compared against it field by field and packed
+             only on an exact match. A mismatch keeps that contract's reads
+             whole, so the worst case is the memory this used to cost —
+             never a card showing another card's reads. */
+          if (!voteTmpl) voteTmpl = csVoteTemplate(res.votes);
+          var packed = voteTmpl ? csVotePack(res.votes, voteTmpl) : null;
+          if (packed) setup.votesPacked = packed;
+          else { setup.votes = res.votes; votePackFailed++; }
 
           /* SMC context — ACTIVE on sort order as of v732 (record-only before that).
              setup.smc feeds csSortSetups below; it still does not gate, tier or change
@@ -1683,6 +1777,7 @@ async function runScan(ui){
     __results = { at: now, setups: setups, scanned: scanned, errors: errors, skipped: skipped,
                   unread: unread, unreadWhy: unreadWhy, universe: items.length,
                   scoreFailed: scoreFailed, scoreWhy: scoreWhy,
+                  voteTmpl: voteTmpl, votePackFailed: votePackFailed,
                   owed: owedN, resolved: resolved,
                   offered: +pack.rawLen || 0,
                   droppedTurnover: +pack.droppedTurnover || 0,
@@ -1759,6 +1854,10 @@ W.__csTopBlocker = csTopBlocker;
 W.__csVoteComposition = csVoteComposition;
 W.__csStopProvenance = csStopProvenance;
 W.__csScoreFailKey = csScoreFailKey;
+W.__csVoteTemplate = csVoteTemplate;
+W.__csVotePack = csVotePack;
+W.__csVoteUnpack = csVoteUnpack;
+W.__csVotesOf = csVotesOf;
 W.__csAssetTally = csAssetTally;
 W.__csPairNote = csPairNote;
 W.__csAssetNote = csAssetNote;
@@ -1767,7 +1866,6 @@ W.__csVenueName = venueName;
 W.__csScoreWhyText = csScoreWhyText;
 W.__csStopNote = csStopNote;
 W.__csRR = rr;
-W.__csCompositionNote = csCompositionNote;
 W.__csRegimeNote = csRegimeNote;
 W.__csVoteTableHTML = voteTableHTML;
 W.__csBlockerSentence = csBlockerSentence;

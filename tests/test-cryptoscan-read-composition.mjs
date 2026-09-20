@@ -220,12 +220,13 @@ let sweep = null;
   ok(c.regimeCounted === 4, 'four regime reads are marked as deciding');
   ok(c.naGroups >= 5, 'the n/a reads span ' + c.naGroups + ' groups');
 
-  const line = S.__csCompositionNote(c);
-  ok(/470 reads/.test(line) && /127<\/b> can vote/.test(line), 'the note leads with what votes');
-  ok(/278<\/b> need a feed this app does not have/.test(line), 'and names the dead bulk');
-  ok(/4 of them decide/.test(line), 'and which regime reads decide');
-  ok(S.__csCompositionNote(null) === '' && S.__csCompositionNote({ total: 0 }) === '',
-     'no reads, no note');
+  /* csCompositionNote rendered this breakdown as its own line until pack 881
+     de-duplicated it against the card body's "470 reads fed: …", which says
+     the same thing from s.count.kinds. Pack 887 removed the function, left
+     dead by that change. The BREAKDOWN is still asserted -- on the card,
+     below -- it is the second copy of it that is gone. */
+  ok(typeof S.__csCompositionNote === 'undefined',
+     'the dead composition helper is gone');
 
   /* nothing hand-counted: the composition must follow the votes it is given */
   const fake = [{ kind: 'vote', id: 'a', group: 'G' }, { kind: 'vote', id: 'b', group: 'G' },
@@ -264,12 +265,15 @@ let sweep = null;
      the same breakdown a few lines above it ("470 reads fed: 127 vote · …"),
      and pack 880 added a second copy inside the same expanded view. The
      per-row counted/not-counted marks are what this table adds. */
-  ok(html.indexOf(S.__csCompositionNote(S.__csVoteComposition(res.votes))) < 0,
+  ok(!/reads — /.test(html) && !/duplicates counted once/.test(html),
      'the table does not repeat the composition line the card body already prints');
-  ok(/reads fed: /.test(String(S.__csSetupCardHTML(
-       { plan: null, count: { total: 470, kinds: { vote: 127, regime: 30, print: 35, na: 278 } },
-         line: 'x', dir: 'long', label: 'BTC', pct: 0.8, votes: res.votes }, 0))),
+  const cardHtml = String(S.__csSetupCardHTML(
+    { plan: null, count: { total: 470, kinds: { vote: 127, regime: 30, print: 35, na: 278 } },
+      line: 'x', dir: 'long', label: 'BTC', pct: 0.8,
+      voteComp: S.__csVoteComposition(res.votes) }, 0));
+  ok(/reads fed: 127 vote/.test(cardHtml),
      'and the card body is where that breakdown lives');
+  ok(/278 not applicable/.test(cardHtml), 'naming the reads no feed can answer');
   ok(S.__csVoteTableHTML([]) === '', 'an empty vote list renders nothing');
 
   /* Every n/a row still carries its own refusal, which is the good part and
