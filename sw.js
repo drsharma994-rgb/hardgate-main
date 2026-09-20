@@ -8,11 +8,15 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v895';
+const HG_CACHE = 'hg-v896';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
 const HG_SHELL = [
+  /* v896: these 29 were in index.html and NOT in the shell, so the offline
+     app was missing whole tabs. The parity guard that should have caught
+     it matched zero scripts once every src carried a ?v= cachebuster. */
+  './hg-api-base.js', './hg-solidity.js', './hg-perf-panel.js', './engine.js', './news.js', './tauric.js', './eightypercent.js', './api-integration.js', './api-integration-bridge.js', './order-block.js', './session-volume.js', './goldultra-pro.js', './goldultra-pro-bridge.js', './sentiment.js', './order-flow.js', './liquidation-intelligence.js', './cryptoscan-voting-v3.js', './cryptoverse.js', './ninetypercent.js', './accuracy-floor.js', './hardgate-setup-intelligence.js', './hardgate-tab-integration-template.js', './hardgate-setup-intelligence-advanced.js', './hardgate-gold-ultra-integration.js', './hardgate-setup-intelligence-persistence.js', './hardgate-all-tabs-integration-factory.js', './hardgate-setup-intelligence-dashboard.js', './hardgate-setup-intelligence-bootstrap.js', './activate-setup-recording.js',
   './',
   './index.html',
   './manifest.webmanifest',

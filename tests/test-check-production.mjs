@@ -14,7 +14,11 @@ const ok = (cond, label) => {
 
 function indexScriptJs(html){
   const out = [];
-  const re = /<script\s+src="([^"]+\.js)"/g;
+  /* v896: the src carries a ?v=NNN cachebuster (scripts/stamp-cachebusters.mjs
+     writes one onto every tag), so a pattern anchored on .js" matched NOTHING
+     and this guard passed over 204 scripts without checking one of them. 29
+     files were missing from the offline shell behind it. */
+  const re = /<script\s+src="([^"?]+\.js)(?:\?[^"]*)?"/g;
   let m;
   while ((m = re.exec(html))){
     const p = m[1].replace(/^\.\//, '');
