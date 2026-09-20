@@ -103,6 +103,84 @@ function symLabel(item){
   return s.replace(/USDT?$/, '').replace(/^B-/, '').replace(/_USDT$/, '');
 }
 
+/* WHAT THE STOP CAME FROM, and what the 1.5R target has to pay for.
+
+   THE CARD HEAD PRINTED "R:R 1.5" ON EVERY CARD. cryptoultra prices
+   t1 = entry +/- |entry - stop| * RULE.t1R, so the ratio is RULE.t1R exactly,
+   for every setup, forever. Measured over 359 plans across five price scales,
+   two venues and a wide volatility sweep: ONE distinct value, 1.500000. The
+   footer already said an R:R test "is true for every setup by construction and
+   filters nothing" -- the card head went on printing it in the one row a
+   reader scans across five hundred contracts.
+
+   WHAT DOES VARY IS WHERE THE STOP CAME FROM. The engine takes
+   stopDist = max(RULE.stopAtr * ATR14, price * rtFrac * RULE.costFloorMult),
+   so the fee floor wins exactly when
+
+     ATR14 / price  <  (costFloorMult / stopAtr) * rtFrac
+
+   which with the shipped 8 and 1.5 is 0.800% on Delta (rtFrac 0.0015) and
+   1.067% on CoinDCX and Binance (0.002). That is a derivation, not a
+   simulation. Below those ratios -- which is most liquid perps most of the
+   time on a 15m bar -- the invalidation level is eight times the round-trip
+   fee and has nothing to do with the chart. Over the sweep above the floor
+   bound on 39% of plans and pushed stops to 15.15x ATR at the extreme, with a
+   median of 1.50x and a p90 of 3.67x.
+
+   AND THE DRAG IS EXACT TOO. Round-trip cost over risk is
+   rtFrac * price / stopDist, so when the floor binds it is 1 / costFloorMult
+   = 0.125R for every venue and every contract, and when it does not bind it is
+   strictly less. Of a 1.5R target, that is up to 8.3% paid to the exchange
+   before the trade can be right. Nothing here changes a threshold -- the floor
+   and the ladder are the engine's -- the card just stops showing the one
+   number that cannot vary and shows the two that do. */
+function csStopProvenance(s){
+  var p = s && s.plan;
+  if (!p || !isFinite(+p.entry) || !isFinite(+p.stop)) return null;
+  var rule = W.HG_CRYPTO_ULTRA_RULE || {};
+  var baseAtr = isFinite(+rule.stopAtr) ? +rule.stopAtr : NaN;
+  var mult = isFinite(+rule.costFloorMult) ? +rule.costFloorMult : NaN;
+  var atrMult = isFinite(+p.stopAtr) ? +p.stopAtr : NaN;
+  var risk = Math.abs(+p.entry - +p.stop);
+  var vc = s.item ? costFor(s.item) : null;
+  var rt = vc && isFinite(+vc.rtFrac) ? +vc.rtFrac : NaN;
+  var price = isFinite(+s.price) && +s.price > 0 ? +s.price : NaN;
+  /* absent means absent: no venue cost, no drag -- never a fabricated zero */
+  var dragR = (isFinite(rt) && isFinite(price) && risk > 0) ? (rt * price) / risk : NaN;
+  /* the floor bound iff the stop is wider than the volatility stop would be.
+     floorNote says so in prose; this is the same fact as a number, and it
+     survives a plan that carries no note. */
+  var byFloor = isFinite(atrMult) && isFinite(baseAtr) && atrMult > baseAtr + 1e-9;
+  return {
+    atrMult: atrMult,
+    baseAtr: baseAtr,
+    byFloor: byFloor,
+    source: byFloor ? 'fee floor' : (isFinite(atrMult) ? 'volatility' : null),
+    dragR: dragR,
+    rtFrac: rt,
+    venue: vc ? vc.venue : null,
+    /* the ATR/price below which the fee floor takes over on THIS venue */
+    bindPct: (isFinite(rt) && isFinite(mult) && isFinite(baseAtr) && baseAtr > 0)
+      ? (mult / baseAtr) * rt : NaN
+  };
+}
+
+/* One line for the card head, in place of the constant it replaces. */
+function csStopNote(s){
+  var pv = csStopProvenance(s);
+  if (!pv || !isFinite(pv.atrMult)) return '';
+  var out = 'stop ' + pv.atrMult.toFixed(2) + '×ATR';
+  out += pv.byFloor ? ' (fee floor, not volatility)' : ' (volatility)';
+  if (isFinite(pv.dragR)) out += ' · fees ' + pv.dragR.toFixed(3) + 'R of the 1.5R';
+  return out;
+}
+
+/* rr() lived here to feed the card head's "R:R" slot and had no other caller.
+   It computed |t1 - entry| / |entry - stop| on a plan whose t1 IS
+   |entry - stop| * RULE.t1R, so it returned RULE.t1R every time. Kept as an
+   exported probe rather than deleted, because the test that proves the ratio
+   is a constant needs to compute it, and computing it in the test instead
+   would let the claim drift away from the code. */
 function rr(entry, stop, t1){
   if (!isFinite(+entry) || !isFinite(+stop) || !isFinite(+t1) || +entry === +stop) return null;
   var risk = Math.abs(+entry - +stop), reward = Math.abs(+t1 - +entry);
@@ -818,9 +896,11 @@ function csRegimeNote(s){
 function voteTableHTML(votes){
   if (!votes || !votes.length) return '';
   var counted = W.HG_CRYPTO_ULTRA_REGIME_COUNTED;
-  var comp = csVoteComposition(votes);
   var groups = [], h = '';
-  h += '<div class="cs-note" style="margin:4px 0 6px">' + csCompositionNote(comp) + '</div>';
+  /* The card body already prints the same breakdown ("470 reads fed: 127 vote
+     · 30 regime · 35 print-only · 278 not applicable") a few lines above, and
+     pack 880 put a second copy here. One statement of a fact is enough; the
+     per-row counted/not-counted marks below are what this table adds. */
   h += '<table class="cs-vtbl"><tr><th>read</th><th>value</th><th>kind</th><th>vote</th><th>rule</th></tr>';
   for (var i = 0; i < votes.length; i++) if (groups.indexOf(votes[i].group) < 0) groups.push(votes[i].group);
   for (var g = 0; g < groups.length; g++){
@@ -862,7 +942,7 @@ function csToggleCard(idx){
 W.__csToggleCard = csToggleCard;
 
 function setupCardHTML(s, idx){
-  var p = s.plan, K = s.count ? s.count.kinds : {}, rrv = p ? rr(p.entry, p.stop, p.t1) : null;
+  var p = s.plan, K = s.count ? s.count.kinds : {};
   var cardCls = s.dir === 'long' ? 'cs-long-card' : 'cs-short-card';
   var dirCls = s.dir === 'long' ? 'cs-dir-long' : 'cs-dir-short';
   var id = 'cs_' + idx;
@@ -875,7 +955,8 @@ function setupCardHTML(s, idx){
   h += ' <span class="cs-dir ' + dirCls + '">' + (s.dir || '—').toUpperCase() + '</span>';
   try{ if (typeof W.hgSmcChipHtml === 'function') h += (W.hgSmcChipHtml(s) || ''); }catch(eSmc){}
   h += '<span class="cs-card-meta">' + pct(s.pct) + ' agree · ' + (s.count ? s.count.decisive : '—') + ' decisive · regime ' + esc((s.regime || '—').toUpperCase()) + esc(csRegimeNote(s));
-  if (p) h += '<br>entry ' + fmt(p.entry) + ' · SL ' + fmt(p.stop) + ' · TP1 ' + fmt(p.t1) + ' · R:R ' + (rrv != null ? rrv.toFixed(1) : '—');
+  if (p) h += '<br>entry ' + fmt(p.entry) + ' · SL ' + fmt(p.stop) + ' · TP1 ' + fmt(p.t1)
+    + (csStopNote(s) ? ' · ' + esc(csStopNote(s)) : '');
   h += '</span>';
   h += '<span class="cs-card-arrow" id="' + id + '_a">&#9654;</span>';
   h += '</div>';
@@ -1445,6 +1526,9 @@ W.__csTrimToBar = csTrimToBar;
 W.__csClosedRows = csClosedRows;
 W.__csTopBlocker = csTopBlocker;
 W.__csVoteComposition = csVoteComposition;
+W.__csStopProvenance = csStopProvenance;
+W.__csStopNote = csStopNote;
+W.__csRR = rr;
 W.__csCompositionNote = csCompositionNote;
 W.__csRegimeNote = csRegimeNote;
 W.__csVoteTableHTML = voteTableHTML;
