@@ -210,7 +210,7 @@ console.log('\n4. the closing note stops blaming confluence for a shut clock');
   const src = stripComments(SCAN);
   ok(/csWhyEmptyHTML\(csBlockerTally\(setups\)\)/.test(src),
      'renderCards paints the panel from the same tally');
-  ok(/csFooterNote\(setups, hqSetups\.length, csBlockerTally\(setups\)\)/.test(src),
+  ok(/csFooterNote\(setups, hqSetups\.length, csBlockerTally\(setups\), csFwdVerdict\(\)\)/.test(src),
      'and writes its closing note from it too');
 
   /* RENDER the note, both branches. A source scan here passed a mutation that
@@ -219,22 +219,26 @@ console.log('\n4. the closing note stops blaming confluence for a shut clock');
 
   const clockNight = [setup(['session']), setup(['session'])];
   const nightNote = S.csFooterNote(clockNight, 0, S.csBlockerTally(clockNight));
-  ok(/empty because of the SESSION GATE, not the reads/.test(nightNote),
+  ok(/outside 07:00-17:00 UTC — not the reads/.test(nightNote),
      'with nothing through and the clock sole, the note blames the clock');
   ok(/2 setups cleared everything else/.test(nightNote), 'and counts them');
-  ok(!/most signals lack sufficient confluence/.test(nightNote),
+  ok(!/lack sufficient confluence/.test(nightNote),
      'and does not also blame confluence');
 
+  /* pack 879: EVERY gate gets named, not only the clock. The old note reached
+     a hardcoded "most signals lack sufficient confluence" for four of five. */
   const readsNote = S.csFooterNote([setup(['confidence'])], 0,
                                    S.csBlockerTally([setup(['confidence'])]));
-  ok(/most signals lack sufficient confluence/.test(readsNote),
-     'when the reads ARE the reason, the confluence explanation is back');
-  ok(!/SESSION GATE/.test(readsNote), 'without the clock line');
+  ok(/price agreement under 75% — not the reads/.test(readsNote),
+     'when price agreement is the reason, the note says price agreement');
+  ok(!/lack sufficient confluence/.test(readsNote),
+     'and never falls back to a phrase naming nothing in this pipeline');
+  ok(!/07:00-17:00/.test(readsNote), 'without the clock line');
 
   const gotOne = [setup([]), setup(['session'])];
   const gotNote = S.csFooterNote(gotOne, 1, S.csBlockerTally(gotOne));
-  ok(!/SESSION GATE/.test(gotNote),
-     'and with one signal through, the clock is not blamed for an empty block that is not empty');
+  ok(!/not the reads/.test(gotNote),
+     'and with one signal through, no gate is blamed for an empty block that is not empty');
 
   ok(/Out of 0 total signals, 0 clear/.test(S.csFooterNote([], 0, S.csBlockerTally([]))),
      'an empty scan still renders a coherent note');
