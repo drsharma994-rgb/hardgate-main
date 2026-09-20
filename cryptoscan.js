@@ -442,7 +442,59 @@ function csFooterNote(setups, hqCount, tally){
         : 'The 470-indicator voting engine produces high volume but low accuracy — '
           + 'most signals lack sufficient confluence. ')
     + 'Professional traders only trade the strongest setups. This tab shows why: signal quantity '
-    + '≠ signal quality. No win rates claimed. No invented thresholds.</div>';
+    + '≠ signal quality. No invented thresholds. '
+    /* "No win rates claimed" was true while nothing was ever settled. The
+       forward panel below now prints a measured T1-FIRST column, so the
+       sentence has to distinguish the two: no rate is asserted FROM THE SCAN
+       WINDOW, which is the claim that would be circular, and the settled
+       outcomes below are evidence rather than a claim — which is why the panel
+       reads "unjudged" until the sample supports a verdict. */
+    + 'No win rate is claimed from the scan window; the forward panel below reports only '
+    + 'outcomes settled by bars that had not printed when the setup fired.</div>';
+}
+
+/* ---- THE FORWARD PANEL, which this tab has never shown ----
+
+   hg-forward.js ships hgFwdPanelHTML as "a drop-in panel any tab can render
+   with one line. Kept here rather than in each tab so the wording, the
+   thresholds and the honest empty state stay identical everywhere". Five desks
+   render it — REVERSALSNIPER, SQUEEZE, OIFLOW, OMNIGOLD, OMNIROUTE. CRYPTO
+   SCAN never did, so everything it recorded went into localStorage and stayed
+   there: no reader of this tab has ever seen whether one of its own setups
+   paid.
+
+   That is the last leg of the chain. Pack 873 gave the records the bar the
+   engine actually read, 874 let the fill model settle them, 875 made the scan
+   settle them at all — and none of it was visible. Meanwhile the closing note
+   asserts the engine "produces high volume but low accuracy" without ever
+   showing the evidence for it.
+
+   minRr is the tab's OWN ladder, not the helper's default of 2: cryptoultra
+   prices T1 at RULE.t1R = 1.5, so the breakeven hit rate this pool has to beat
+   is 1/(1+1.5) = 40%, and judging it against a 2R bar would test a plan the
+   desk does not place. The panel derives everything else — including its own
+   multiple-comparison bar — from the rows it renders.
+
+   The mechanics it tabulates are the versioned vote tiers from pack 872, so
+   the table answers the question that instrumentation was for: do this desk's
+   own confidence tiers separate? */
+var CS_FWD_MIN_RR = 1.5;              /* cryptoultra RULE.t1R */
+
+function csFwdPanelHTML(){
+  try{
+    if (typeof W.hgFwdPanelHTML !== 'function') return '';
+    return W.hgFwdPanelHTML('CRYPTO SCAN', {
+      minRr: CS_FWD_MIN_RR,
+      title: 'FORWARD — do this desk\'s own confidence tiers separate?'
+    }) || '';
+  }catch(e){ return ''; }
+}
+
+function csPaintFwd(){
+  try{
+    if (!__ui || !__ui.fwd) return;
+    __ui.fwd.innerHTML = csFwdPanelHTML();
+  }catch(e){}
 }
 
 function csWhyEmptyHTML(tally){
@@ -654,6 +706,8 @@ W.__csSetupCardHTML = setupCardHTML;
 W.csBlockerTally = csBlockerTally;
 W.csWhyEmptyHTML = csWhyEmptyHTML;
 W.csFooterNote = csFooterNote;
+W.csFwdPanelHTML = csFwdPanelHTML;
+W.CS_FWD_MIN_RR = CS_FWD_MIN_RR;
 W.CS_LABEL_V = CS_LABEL_V;
 W.csCoverage = csCoverage;
 W.csUnreadWhyText = csUnreadWhyText;
@@ -1027,6 +1081,7 @@ async function runScan(ui){
                   droppedNoTicker: +pack.droppedNoTicker || 0,
                   minTurnover: +pack.minTurnover || 0 };
     renderCards(setups, __results);
+    csPaintFwd();          /* this scan may have settled records; repaint */
     setStat(setups.length + ' setup(s) from ' + scanned + ' scanned · ' + skipped + ' skipped (too few bars) · '
       + unread + ' unread (fetch) · ' + errors + ' errors'
       + (owedN ? ' · ' + resolved + '/' + owedN + ' open records settled' : '')
@@ -1051,14 +1106,21 @@ function mount(el){
       + '<div style="margin:8px 0"><button class="btn" id="csRun">SCAN ALL FUTURES</button> <span class="cs-stat" id="csStat">idle — scans every futures contract (Delta + CoinDCX) through the unverified CRYPTO ULTRA 470-read vote engine. All setups are record only, not for trading. Full indicator breakdown on each card.</span></div>'
       + '<div class="cs-bar"><div class="cs-bar-fill" id="csBar" style="width:0%"></div></div>'
       + '<div id="csCards"></div>'
+      /* OUTSIDE the cards host, so an empty scan does not hide the one part of
+         this tab that is not computed from the window it just fetched */
+      + '<div id="csFwd" style="margin-top:14px"></div>'
       + '</div>';
     var cards = el.querySelector('#csCards');
     var stat = el.querySelector('#csStat');
     var btn = el.querySelector('#csRun');
     var bar = el.querySelector('#csBar');
-    __ui = { cards: cards, stat: stat, btn: btn, bar: bar };
+    var fwd = el.querySelector('#csFwd');
+    __ui = { cards: cards, stat: stat, btn: btn, bar: bar, fwd: fwd };
     if (btn) btn.addEventListener('click', function(){ runScan(__ui); });
     if (__results && __results.setups) renderCards(__results.setups, __results);
+    /* on every mount, whether or not a scan has run in this session — the
+       evidence outlives the session and the panel says so when it is empty */
+    csPaintFwd();
   }catch(e){}
 }
 
