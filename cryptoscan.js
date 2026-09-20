@@ -445,6 +445,9 @@ function csCoverage(run){
      They were one counter until pack 870, and a Binance 451 for every symbol
      read out as "fewer than 230 closed 15m bars". */
   var unread   = Math.max(0, +(run && run.unread)   || 0);
+  /* a contract whose BARS were read and whose engine ran, but whose scoring
+     threw. A subset of `read`, not a sibling of it — see the loop. */
+  var scoreFailed = Math.max(0, +(run && run.scoreFailed) || 0);
   var signals  = Array.isArray(run && run.setups) ? run.setups.length : 0;
   /* what the universe loader was offered, before its own two filters */
   var offered  = Math.max(0, +(run && run.offered) || 0);
@@ -457,6 +460,8 @@ function csCoverage(run){
   return {
     universe: universe, scanned: scanned, skipped: skipped, errors: errors,
     unread: unread, unreadWhy: why,
+    scoreFailed: scoreFailed,
+    scoreWhy: (run && run.scoreWhy && typeof run.scoreWhy === 'object') ? run.scoreWhy : {},
     read: read, signals: signals,
     offered: offered, droppedTurnover: dTurn, droppedVenue: dVenue, droppedNoTicker: dNoTick,
     dropped: dTurn + dVenue + dNoTick,
@@ -464,9 +469,36 @@ function csCoverage(run){
     pct: universe > 0 ? read / universe : null,
     /* against what the source actually offered, which is the honest ceiling */
     pctOffered: offered > 0 ? read / offered : null,
-    partial: (skipped + errors + unread) > 0,
+    partial: (skipped + errors + unread + scoreFailed) > 0,
     known: universe > 0 || scanned > 0
   };
+}
+
+/* A BOUNDED LABEL FOR A SCORING CRASH.
+
+   The message on a thrown Error is unbounded and can carry anything a
+   dependency put in it, and it lands in the COVERAGE panel. Take the
+   constructor name and a short slice of the message, so a hundred contracts
+   failing the same way tally as one line instead of a hundred, and a long or
+   hostile message cannot run away with the panel. Escaping still happens at
+   render; this only bounds the key. */
+function csScoreFailKey(err){
+  var name = (err && err.name) ? String(err.name) : 'Error';
+  var msg = (err && err.message) ? String(err.message) : '';
+  msg = msg.replace(/\s+/g, ' ').trim().slice(0, 60);
+  return msg ? (name + ': ' + msg) : name;
+}
+
+/** "TypeError: ... (3)" joined for whatever scoring failures were recorded */
+function csScoreWhyText(cov){
+  var why = (cov && cov.scoreWhy) || {}, parts = [], k;
+  var keys = Object.keys(why).sort(function(a, b){ return why[b] - why[a]; });
+  for (var i = 0; i < keys.length; i++){
+    k = keys[i];
+    if (!why[k]) continue;
+    parts.push(k + ' (' + why[k] + ')');
+  }
+  return parts.join(' · ');
 }
 
 /** "the request failed (140)" joined for whatever causes were recorded */
@@ -491,7 +523,16 @@ function csCoverageHTML(run){
     txt += ' · ' + c.unread + ' never fetched' + (whyTxt ? ': ' + whyTxt : '');
   }
   if (c.skipped) txt += ' · ' + c.skipped + ' skipped, fewer than 230 closed 15m bars';
-  if (c.errors) txt += ' · ' + c.errors + ' threw during the scan';
+  if (c.errors) txt += ' · ' + c.errors + ' threw before their bars could be read';
+  /* Read and voted on, then OUR scoring threw. Worth separating from `errors`
+     for the same reason pack 870 separated `unread` from `skipped`: one is a
+     fact about the feed, the other is a bug in this app, and a reader cannot
+     act on the second if it is reported as the first. */
+  if (c.scoreFailed){
+    var sw = csScoreWhyText(c);
+    txt += ' · ' + c.scoreFailed + ' read and voted, then scoring threw'
+      + (sw ? ': ' + sw : '');
+  }
   /* the universe was filtered before the scan ever saw it — say so, or "100%
      read" reads as "everything", which it is not */
   if (c.dropped){
@@ -1193,8 +1234,8 @@ async function runScan(ui){
     var vc = pack.venueCounts || {};
     setStat('scanning ' + items.length + ' contracts (Delta ' + (vc.delta || 0) + ' · CoinDCX ' + (vc.coindcx || 0) + ')…');
 
-    var setups = [], scanned = 0, errors = 0, skipped = 0, unread = 0;
-    var unreadWhy = {};
+    var setups = [], scanned = 0, errors = 0, skipped = 0, unread = 0, scoreFailed = 0;
+    var unreadWhy = {}, scoreWhy = {};
     var now = Date.now();
 
     /* SETTLE WHAT WE ALREADY RECORDED.
@@ -1227,13 +1268,24 @@ async function runScan(ui){
 
     for (var i = 0; i < items.length; i++){
       var item = items[i];
+      /* ONE CONTRACT, ONE TICK. scanned++ used to run after the engine call and
+         then AGAIN in the catch, so any throw in the ~165 lines of scoring
+         below counted the same contract twice. Driven through the real
+         runScan with layer 2 rigged to throw on one of three contracts:
+
+           scanned 4 of a 3-contract universe · progress bar 133.3%
+           status line "scanned 4/3"
+
+         Reset per iteration; the catch only counts a contract the body never
+         reached. */
+      var scannedThis = false;
       try{
         var got15 = fetchRes
           ? await fetchRes(item, '15m', KL_15M)
           : { rows: (await fetchKl(item, '15m', KL_15M)) || [], ok: true, reason: null };
         if (!got15.ok){
           unread++; unreadWhy[got15.reason || 'unknown'] = (unreadWhy[got15.reason || 'unknown'] || 0) + 1;
-          scanned++; setProgress((scanned / items.length) * 100); continue;
+          scannedThis = true; scanned++; setProgress((scanned / items.length) * 100); continue;
         }
         var rows15m = got15.rows;
         /* the bars are in hand and fresh — settle anything still open on this
@@ -1244,13 +1296,26 @@ async function runScan(ui){
             && typeof W.hgFwdResolve === 'function'){
           try{ resolved += (W.hgFwdResolve(item.sym, '15m', rows15m) || 0); }catch(eRes){}
         }
-        if (!rows15m || rows15m.length < 230){ skipped++; scanned++; setProgress((scanned / items.length) * 100); continue; }
+        if (!rows15m || rows15m.length < 230){ skipped++; scannedThis = true; scanned++; setProgress((scanned / items.length) * 100); continue; }
         var rows1h = await fetchKl(item, '1h', KL_1H);
 
         var res = engine({ rows15m: rows15m, rows1h: rows1h || [], now: now, venueCost: costFor(item), allowUnverified: true });
+        scannedThis = true;
         scanned++;
         setProgress((scanned / items.length) * 100);
 
+        /* SCORING GETS ITS OWN BOUNDARY.
+
+           Everything above is about the contract and the feed: whether bars
+           arrived, whether there are enough of them. Everything below is OUR
+           code scoring a setup -- order flow, sentiment, external risk, the
+           three-layer blend, the pro-grade stamp, SMC. A failure there is a
+           bug in this app, not a fact about the market, and pack 870 already
+           drew that line once for the fetch (unread vs skipped). Folding
+           scoring crashes into `errors` alongside network failures said
+           nothing about which, and the reader was told a contract errored
+           when its bars had in fact been read and its engine had run. */
+        try{
         if (res.ok && res.dir && res.plan){
           var pct = res.count ? res.count.pct : 0;
           var h = new Date(now).getUTCHours();
@@ -1414,14 +1479,21 @@ async function runScan(ui){
 
           setups.push(setup);
         }
+        }catch(eScore){
+          scoreFailed++;
+          var sk = csScoreFailKey(eScore);
+          scoreWhy[sk] = (scoreWhy[sk] || 0) + 1;
+        }
 
         if (scanned % 5 === 0){
           setStat('scanned ' + scanned + '/' + items.length + ' · ' + setups.length + ' setup(s) so far…');
         }
       }catch(e){
         errors++;
-        scanned++;
-        setProgress((scanned / items.length) * 100);
+        if (!scannedThis){
+          scanned++;
+          setProgress((scanned / items.length) * 100);
+        }
       }
     }
 
@@ -1457,6 +1529,7 @@ async function runScan(ui){
        shrank. Carry the funnel so COVERAGE can quote both. */
     __results = { at: now, setups: setups, scanned: scanned, errors: errors, skipped: skipped,
                   unread: unread, unreadWhy: unreadWhy, universe: items.length,
+                  scoreFailed: scoreFailed, scoreWhy: scoreWhy,
                   owed: owedN, resolved: resolved,
                   offered: +pack.rawLen || 0,
                   droppedTurnover: +pack.droppedTurnover || 0,
@@ -1527,6 +1600,8 @@ W.__csClosedRows = csClosedRows;
 W.__csTopBlocker = csTopBlocker;
 W.__csVoteComposition = csVoteComposition;
 W.__csStopProvenance = csStopProvenance;
+W.__csScoreFailKey = csScoreFailKey;
+W.__csScoreWhyText = csScoreWhyText;
 W.__csStopNote = csStopNote;
 W.__csRR = rr;
 W.__csCompositionNote = csCompositionNote;
