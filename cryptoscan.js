@@ -679,6 +679,89 @@ function csH1Note(s){
     + ') — layer 2 scored on 3 of its 4 reads, which raises its score more often than it lowers it';
 }
 
+/* ---- THE VENUE MIX, AND WHAT WENT MISSING FROM IT ----
+
+   THE BUG THIS EXISTS FOR: setups kept disappearing.
+
+   This tab's whole identity is "all Delta + CoinDCX futures". The universe
+   arrives from xuUniverse, which fetches the two venues as separate legs and
+   is explicit when one of them dies -- it returns rows from the survivor and
+   a note saying "coindcx leg failed: <reason> — Delta India contracts only".
+   hgDeskLoadUniverse carries that note straight through on the pack. EDGE,
+   OMNIROUTE, REVERSALSNIPER and cryptogates all read it. This tab never did.
+
+   So when a venue leg failed, the universe silently halved, and the tab
+   reported a clean complete scan of it. Driven through the real runScan over
+   a 16-contract universe, eight per venue, with the CoinDCX leg failing on
+   the second pass:
+
+     scan 1  universe 16   14 setups (7 Delta, 7 CoinDCX)
+             COVERAGE · 16 of 16 contracts read (100%)
+     scan 2  universe  8    7 setups (7 Delta, 0 CoinDCX)
+             COVERAGE ·  8 of  8 contracts read (100%)
+
+   Half the cards gone, "100%" both times, and the one sentence that explained
+   it discarded. On the 10-minute cycle a flaky venue does that over and over,
+   which is exactly what "constantly losing setups" looks like from the
+   outside. The counts were never wrong -- 8 of 8 WERE read -- they just
+   answered a question nobody asked, because `universe` is whatever the loader
+   handed over rather than what this tab claims to cover.
+
+   Three things change, none of them inventing a number: the mix is always on
+   the coverage line, a venue that shrank since the previous scan is named with
+   both counts, and the loader's own note rides along verbatim. */
+
+/* Venues that contributed contracts on the previous scan and fewer on this
+   one. Pure: the comparison is between two count objects, so it can be tested
+   without a network or a clock. A venue absent from `prev` is new, not lost. */
+function csVenueDrop(cov){
+  var now = (cov && cov.venueCounts) || {}, prev = cov && cov.prevVenueCounts;
+  /* An ARRAY passes `typeof x === 'object'` and would walk as indices, so a
+     [8, 3] previous mix would report losing a venue called "0". Venue names
+     are keys, never positions. */
+  if (!prev || typeof prev !== 'object' || Array.isArray(prev)) return [];
+  var out = [], k, p, n;
+  for (k in prev) if (Object.prototype.hasOwnProperty.call(prev, k)){
+    p = Math.max(0, +prev[k] || 0);
+    n = Math.max(0, +now[k] || 0);
+    /* both are clamped at zero, so `n < p` already implies p > 0 — a venue
+       that had nothing cannot have lost anything */
+    if (n < p) out.push({ venue: k, prev: p, now: n, lost: p - n });
+  }
+  out.sort(function(a, b){ return b.lost - a.lost; });
+  return out;
+}
+
+/* "Delta 120 · CoinDCX 84" — the split, every scan, not only when it breaks.
+
+   ONLY THE VENUES THAT CONTRIBUTED. hgDeskVenueCounts always returns all five
+   of its keys, zeros included, so listing them verbatim would put
+   "Binance 0 · Other 0 · Startrader 0" on this line on every single scan —
+   three dead numbers in front of the two that carry the finding, on a line
+   whose whole job is to be read. A venue at zero is not silently lost either:
+   if it had contracts on the previous scan, csVenueDropText names it with both
+   counts, and if the leg failed the loader's note says so. */
+function csVenueMixText(cov){
+  var vc = (cov && cov.venueCounts) || {}, parts = [], k, n;
+  var keys = Object.keys(vc).sort();
+  for (var i = 0; i < keys.length; i++){
+    k = keys[i];
+    n = Math.max(0, +vc[k] || 0);
+    if (!n) continue;
+    parts.push(venueName(k) + ' ' + n);
+  }
+  return parts.join(' · ');
+}
+
+/** "CoinDCX 0, was 84" — named with BOTH counts, so the loss is the claim */
+function csVenueDropText(cov){
+  var d = csVenueDrop(cov), parts = [];
+  for (var i = 0; i < d.length; i++){
+    parts.push(venueName(d[i].venue) + ' ' + d[i].now + ', was ' + d[i].prev);
+  }
+  return parts.join('; ');
+}
+
 function csCoverage(run){
   var universe = Math.max(0, +(run && run.universe) || 0);
   var scanned  = Math.max(0, +(run && run.scanned)  || 0);
@@ -712,6 +795,12 @@ function csCoverage(run){
     scoreWhy: (run && run.scoreWhy && typeof run.scoreWhy === 'object') ? run.scoreWhy : {},
     noH1: noH1,
     noH1Why: (run && run.noH1Why && typeof run.noH1Why === 'object') ? run.noH1Why : {},
+    /* which venues the universe came from, this scan and the one before it,
+       and whatever the loader said about a leg that failed */
+    venueCounts: (run && run.venueCounts && typeof run.venueCounts === 'object') ? run.venueCounts : {},
+    prevVenueCounts: (run && run.prevVenueCounts && typeof run.prevVenueCounts === 'object')
+      ? run.prevVenueCounts : null,
+    note: (run && run.note) ? String(run.note) : '',
     read: read, signals: signals,
     offered: offered, droppedTurnover: dTurn, droppedVenue: dVenue, droppedNoTicker: dNoTick,
     dropped: dTurn + dVenue + dNoTick,
@@ -800,6 +889,16 @@ function csCoverageHTML(run){
     var hw = csH1WhyText(c);
     txt += ' · ' + c.noH1 + ' scored without a 1h leg' + (hw ? ': ' + hw : '');
   }
+  /* WHERE THE UNIVERSE CAME FROM. Always, not only when it breaks: a reader
+     who can see "Delta 120 · CoinDCX 84" every scan is the one who notices
+     the scan it reads "Delta 120 · CoinDCX 0". */
+  var mix = csVenueMixText(c);
+  if (mix) txt += ' · from ' + mix;
+  var drop = csVenueDropText(c);
+  if (drop) txt += ' · A VENUE SHRANK SINCE THE LAST SCAN: ' + drop
+    + ' — those contracts were not scanned, so any setup they had is gone from the list above';
+  /* the loader's own words about a leg that failed, verbatim */
+  if (c.note) txt += ' · universe: ' + c.note;
   /* the universe was filtered before the scan ever saw it — say so, or "100%
      read" reads as "everything", which it is not */
   if (c.dropped){
@@ -814,7 +913,7 @@ function csCoverageHTML(run){
   /* `partial` keeps its pinned meaning -- contracts the engine never read --
      so noH1 is not folded into it. It still colours the line: a run whose 1h
      leg was blind on a hundred contracts is not a clean run. */
-  return '<div style="font-size:10px;color:' + ((c.partial || c.noH1) ? '#92400E' : '#64748B')
+  return '<div style="font-size:10px;color:' + ((c.partial || c.noH1 || drop || c.note) ? '#92400E' : '#64748B')
     + ';margin:4px 0 2px">COVERAGE · ' + esc(txt) + '</div>';
 }
 
@@ -1637,6 +1736,9 @@ W.CS_LABEL_V = CS_LABEL_V;
 W.csCoverage = csCoverage;
 W.csUnreadWhyText = csUnreadWhyText;
 W.csH1State = csH1State;
+W.__csVenueDrop = csVenueDrop;
+W.__csVenueMixText = csVenueMixText;
+W.__csVenueDropText = csVenueDropText;
 W.csTierRank = csTierRank;
 W.__csFwdRead = csFwdRead;
 W.__csFwdClause = csFwdClause;
@@ -1747,6 +1849,13 @@ async function runScan(ui){
     if (ui && ui.btn) ui.btn.disabled = true;
     setStat('loading universe (Delta + CoinDCX futures)…');
     setProgress(0);
+    /* THE MIX THE LAST SCAN SAW, captured before __results is replaced. A
+       venue that contributed contracts then and fewer now is the difference
+       between "the market went quiet" and "half the universe never arrived",
+       and this tab could not tell them apart. In-session only, like every
+       other number here: a reload starts the comparison over rather than
+       claiming a drop it did not witness. */
+    var prevVenues = (__results && __results.venueCounts) ? __results.venueCounts : null;
     var pack = await loadUni({ minTurnover: 0, includeUnknown: true });
     var items = pack.items || [];
     if (!items.length){ setStat('universe empty — no contracts above $5M turnover', true); return 'error: empty universe'; }
@@ -2103,6 +2212,10 @@ async function runScan(ui){
                   noH1: noH1, noH1Why: noH1Why,
                   voteTmpl: voteTmpl, votePackFailed: votePackFailed,
                   owed: owedRows, owedSyms: owedSyms, resolved: resolved,
+                  /* the loader is explicit when a venue leg dies; carry its own
+                     words rather than reporting a clean scan of the survivor */
+                  note: pack.note || null,
+                  venueCounts: vc, prevVenueCounts: prevVenues,
                   offered: +pack.rawLen || 0,
                   droppedTurnover: +pack.droppedTurnover || 0,
                   droppedVenue: +pack.droppedVenue || 0,
@@ -2114,12 +2227,16 @@ async function runScan(ui){
        `errors` and taught COVERAGE and the empty state to say so, but this
        line -- the one a reader watches while the scan runs -- kept reporting
        "0 errors" for a run where our own scoring threw on forty contracts. */
-    setStat(setups.length + ' setup(s) from ' + scanned + ' scanned · ' + skipped + ' skipped (too few bars) · '
+    /* A SHRUNK VENUE IS THE HEADLINE, not a footnote. It is the one thing on
+       this line that explains why the list above is shorter than it was. */
+    var venueDrop = csVenueDropText(csCoverage(__results));
+    setStat((venueDrop ? 'VENUE SHRANK — ' + venueDrop + ' · ' : '')
+      + setups.length + ' setup(s) from ' + scanned + ' scanned · ' + skipped + ' skipped (too few bars) · '
       + unread + ' unread (fetch) · ' + errors + ' errors'
       + (scoreFailed ? ' · ' + scoreFailed + ' scoring crashes' : '')
       + (owedRows ? ' · ' + resolved + '/' + owedRows + ' open records settled'
           + (owedRows > resolved ? ' (' + (owedRows - resolved) + ' whose contract the scan did not reach)' : '') : '')
-      + ' · ' + new Date().toISOString().slice(11, 19) + ' UTC', false);
+      + ' · ' + new Date().toISOString().slice(11, 19) + ' UTC', !!venueDrop);
     setProgress(100);
     return 'refreshed';
   }catch(e){
