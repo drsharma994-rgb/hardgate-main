@@ -5,9 +5,8 @@
    +0.3R" is evidence about one thing only if all forty rows were labelled by
    the same rule.
 
-   They were not. The pipeline producing voteTier and isHighQuality changed
-   three times in one week, and every change moved which setups land in which
-   bucket:
+   They were not. The pipeline producing voteTier and isHighQuality has changed
+   four times, and every change moved which setups land in which bucket:
 
      v1  the original three-layer blend
      v2  pack 863 — sentiment taken relative to the trade. Shorts had been
@@ -18,8 +17,17 @@
          and shouldTrade.
      v4  pack 865 — a sentiment row past its own ttl scores 0 and no longer
          gates. 144 of 280 BTC/ETH/SOL cells changed tier.
+     v5  pack 877 — layer 2 reads the same CLOSED bars layer 1 voted on rather
+         than the raw fetch. 34 of 476 swept cells changed tier, 27 changed
+         shouldTrade, 9 changed PROFESSIONAL-GRADE. v1–v4 labels had also read
+         a bar inside their own record's settlement window.
 
-   Records written under v1 sit in a live tab's localStorage pooling with v4
+   v5 is also why section 3's hash now covers the TAPE each layer is handed,
+   not only the arithmetic applied to it. The v5 change moved 7.1% of tiers
+   without touching a single hashed byte, because it is entirely upstream of
+   the formula — a guard that only watches the formula would have let it past.
+
+   Records written under v1 sit in a live tab's localStorage pooling with v5
    records under identical keys, and nothing marked them. This repo already
    knew the answer: hg-forward.js writes `solV`, "the stamp version", beside
    the solidity score for exactly this reason.
@@ -98,7 +106,7 @@ console.log('\n1. the mechanic IS the pooling key, so the label belongs in it');
 
   ok(typeof S.CS_LABEL_V === 'number' && S.CS_LABEL_V >= 1,
      'CRYPTO SCAN publishes a label version (v' + S.CS_LABEL_V + ')');
-  ok(S.CS_LABEL_V === 4, 'which is 4 — three bumps, packs 863, 864 and 865');
+  ok(S.CS_LABEL_V === 5, 'which is 5 — four bumps, packs 863, 864, 865 and 877');
   ok(/pack 863/.test(SCAN) && /pack 864/.test(SCAN) && /pack 865/.test(SCAN),
      'and the changelog beside it names each one');
 }
@@ -123,7 +131,7 @@ console.log('\n2. the version rides the key, and nothing else moved');
 
   /* the point of the whole thing: two versions cannot pool */
   const older = 'VOTE-WEAK@V' + (S.CS_LABEL_V - 1);
-  ok(rows[1].mechanic !== older, 'a v3 row and a v4 row do not share a key');
+  ok(rows[1].mechanic !== older, 'an older-version row and a current one do not share a key');
   ok(S.__csFwdRows([mk('C', null, false)])[0].mechanic === 'VOTE-WEAK@V' + S.CS_LABEL_V,
      'a missing tier still defaults to weak, versioned');
 }
@@ -142,13 +150,21 @@ console.log('\n3. the pipeline is hashed, so the version cannot be forgotten');
     (stripComments(SCAN).match(/addGate\('[a-z]+',[^;]*\);/g) || []).join('\n'),
     (stripComments(SCAN).match(/isHighQuality: [^\n]*/g) || []).join('\n'),
     (stripComments(SCAN).match(/var sentimentLive = [^\n]*/g) || []).join('\n'),
-    (stripComments(SCAN).match(/var liquidHour = [^\n]*/g) || []).join('\n')
+    (stripComments(SCAN).match(/var liquidHour = [^\n]*/g) || []).join('\n'),
+    /* WHICH BARS each layer is handed. Pack 877 moved 34 of 476 tiers without
+       touching one byte above: it changed layer 2's tape, not its arithmetic.
+       A guard that watches only the formula is blind to exactly the class of
+       change that caused this file to exist. */
+    fnBody(SCAN, 'csTrimToBar'),
+    fnBody(SCAN, 'csClosedRows'),
+    (stripComments(SCAN).match(/var closed1?5?h? = cs(TrimToBar|ClosedRows)\([^\n]*/g) || []).join('\n'),
+    (stripComments(SCAN).match(/hgOrderFlowScore\([^\n]*/g) || []).join('\n')
   ];
   ok(pieces.every(p => p && p.length > 10),
      'every piece of the label pipeline was found (' + pieces.map(p => p.length).join(', ') + ')');
 
   const hash = crypto.createHash('sha256').update(pieces.map(norm).join('\u0000')).digest('hex').slice(0, 16);
-  const RECORDED = '2be606795cd12708';
+  const RECORDED = '246775bbe517d7db';
   if (hash !== RECORDED){
     /* the guidance belongs on the failure path only — a guard that prints a
        wall of instructions every green run trains people to skip its output */
@@ -189,6 +205,16 @@ console.log('\n4. what the version is claimed to cover is actually there');
   ok(/sentiment\.stale/.test(fnBody(SENT, 'hgSentimentGate')), 'v4: nor gated on');
   ok(/sentimentLive = \(sentiment && sentiment\.stale\) \? 0/.test(stripComments(SCAN)),
      'v4: and the tab feeds the blend a zero for it');
+  const bare = stripComments(SCAN);
+  ok(/hgOrderFlowScore\(\s*item\.sym\s*,\s*closed15\s*,\s*closed1h\s*\)/.test(bare),
+     'v5: layer 2 is handed the trimmed tapes');
+  ok(!/hgOrderFlowScore\([^)]*rows1?5?h?m?\b[^)]*\)/.test(bare.replace(/closed1?5?h?/g, 'X')),
+     'v5: and never the raw fetch');
+  ok(/var closed15 = csTrimToBar\(rows15m, res\.bar/.test(bare),
+     'v5: the 15m tape ends on the bar layer 1 voted on');
+  ok(/var closed1h = csClosedRows\(rows1h \|\| \[\], 3600, now\)/.test(bare),
+     'v5: the 1h tape ends on the last closed hour');
+  ok(/var smcRows = closed15;/.test(bare), 'v5: SMC shares that same tape');
 }
 
 console.log('\n' + passed + ' assertions'

@@ -109,6 +109,91 @@ function rr(entry, stop, t1){
   return risk > 0 ? +(reward / risk).toFixed(2) : null;
 }
 
+/* ── CLOSED BARS FOR EVERY LAYER, ALIGNED TO THE BAR LAYER 1 VOTED ON ──
+
+   cryptoultra.js drops the forming bar (closedRows) before a single one of its
+   470 reads runs, so layer 1's direction, its `pct`, and res.bar all describe
+   one CLOSED bar. The SMC block below already trimmed its tape to that same
+   bar for exactly this reason, and said so: "so SMC grades the same bar".
+
+   Layer 2 did not. hgOrderFlowScore was handed the raw fetch, forming bar and
+   all, and layer 2 carries 35% of the confidence, sets layerAgreement, and
+   pays the +15% / -20% multiplier against layer 1.
+
+   Two things follow, and both are defects rather than preferences.
+
+   LOOKAHEAD. The forward record is keyed at res.bar.t (pack 873) and
+   hgFwdSettle walks bars STRICTLY AFTER it, so the forming bar is inside the
+   trade's own settlement window. A tier computed partly from it has read the
+   trade's future. That tier is the forward log's pooling key, so the one
+   question the log exists to answer -- do this desk's tiers separate? -- was
+   being asked of labels that had peeked.
+
+   A CLOCK IS NOT A MARKET FACT. A forming bar holds a fraction of its
+   eventual volume, and hgSweepPattern compares exactly that number against an
+   average of complete bars: volRatio = f x fullVol / avgVol against a 1.5
+   gate, so the read needs f >= 1.5 x avgVol / fullVol and an ordinary bar
+   (fullVol ~ avgVol) needs f >= 1.5, which cannot happen. On one fixed tape
+   with one fixed forming bar, moving only the moment the scan ran:
+
+     scanned 0-50% into the bar   layer 2 = +0.7224   3 reads   no sweep
+     scanned 75% in               layer 2 = +0.2821   4 reads   sweep fires
+     scanned 97% in               layer 2 = +0.2236   4 reads   sweep fires
+
+   Same market, same bar, 0.51 of layer-2 score -- 0.18 of confidence at the
+   0.35 weight -- decided by the clock. Trimmed, it is +0.7224 at every one of
+   those moments.
+
+   Swept over 495 tapes (9 drifts x 5 vols x 11 elapsed fractions), 476 of
+   which produce a layer-1 direction:
+
+     layer-2 score differs        405 / 495   (81.8%)
+     layer-2 direction differs     10 / 495   (2.0%)
+     voteTier differs              34 / 476   (7.1%)   <- the log's pooling key
+     shouldTrade differs           27 / 476   (5.7%)
+     PROFESSIONAL-GRADE differs     9 / 476   (1.9%)   <- the log's ticket split
+     sweep read fired    raw 3/495, and all three at 0.99 elapsed
+                         closed 8/495, spread across the grid
+
+   No threshold, weight or multiplier is touched here. The 0.2 direction band,
+   the 0.35 weight and the +15% / -20% agreement multiplier are calibration and
+   stay the desk's call. Both layers are simply shown the same bars. */
+
+/* Trim to the bar the engine reported. Absent bar -> drop the last row, which
+   is what the engine's own rule does when nothing else is droppable. */
+function csTrimToBar(rows, barT){
+  if (!Array.isArray(rows) || !rows.length) return [];
+  if (barT !== null && barT !== undefined && isFinite(+barT)){
+    for (var i = rows.length - 1; i >= 0; i--){
+      if (+rows[i].t === +barT) return rows.slice(0, i + 1);
+    }
+  }
+  return rows.slice(0, -1);
+}
+
+/* cryptoultra.js closedRows, for a tape the engine reports no bar for (it
+   ignores the 1h leg entirely, so there is no res.bar to align to). A bar
+   opening at t closes at t + ivSec; keep it only once that has passed. The
+   trailing slice mirrors the engine: if nothing was droppable the feed is
+   assumed to have handed us a forming bar anyway. */
+function csClosedRows(rows, ivSec, nowMs){
+  if (!Array.isArray(rows) || !rows.length) return [];
+  var cutoff = (nowMs / 1000) - ivSec, out = [], i, t;
+  for (i = 0; i < rows.length; i++){
+    /* +null, +undefined and +'' are all 0, and 0 <= cutoff, so a stamp-less
+       row would be KEPT as a bar that closed in 1970 -- the exact trap
+       fixpack14-core.js documents. Absent means absent: a row that cannot say
+       when it opened cannot be shown to have closed. cryptoultra's own
+       closedRows lets such a row through (it adds ivSec to both sides and
+       never tests the stamp); this diverges only there, and section 2 pins
+       parity on every well-formed tape. */
+    t = (rows[i] && rows[i].t !== null && rows[i].t !== undefined && rows[i].t !== '')
+      ? +rows[i].t : NaN;
+    if (isFinite(t) && t <= cutoff) out.push(rows[i]);
+  }
+  return out.length < rows.length ? out : rows.slice(0, -1);
+}
+
 /* SMC rank — ORDERING ONLY, deliberately not a gate. The grade is dominated by
    STRUCT_WITH/AGAINST, and that same structural fact is already voted inside pct
    by the 470-read engine (cryptoultra.js CHoCH/FVG/liq_sweep reads), which then
@@ -165,6 +250,10 @@ function csSortSetups(arr){
          tier and shouldTrade.
      v4  pack 865 - a sentiment row past its own ttl scores 0 and no longer
          gates. 144 of 280 BTC/ETH/SOL cells changed tier.
+     v5  pack 877 - layer 2 reads the same CLOSED bars layer 1 voted on
+         instead of the raw fetch. 34 of 476 swept cells changed tier and 27
+         changed shouldTrade, and the v1-v4 labels had additionally read a bar
+         inside their own record's settlement window.
 
    Records written under v1 are still in a live tab's localStorage, pooling
    with v4 records under identical keys, and nothing marked them. This repo
@@ -176,7 +265,7 @@ function csSortSetups(arr){
    Bump this whenever the label pipeline changes. tests/test-cryptoscan-label-
    version.mjs hashes that pipeline and fails if it moves without a bump, so
    the decision is made on purpose rather than forgotten. */
-var CS_LABEL_V = 4;
+var CS_LABEL_V = 5;
 
 /* v735: forward-log row builder, kept PURE and exported for the same reason
    csSmcRank is — everything else in the scan path lives inside runScan, which
@@ -899,11 +988,18 @@ async function runScan(ui){
           if (res.regime === 'chop') addGate('regime', 'regime: CHOP');
           if (!liquidHour) addGate('session', 'session: low liquidity (outside 07:00-17:00 UTC)');
 
-          /* Layer 2: Order Flow Voting (decorrelates from price action) */
+          /* The same closed bars layer 1 voted on. See csTrimToBar above for
+             the lookahead and the clock dependence this removes; the trimmed
+             15m tape is reused by the SMC block at the bottom of the loop,
+             which has always wanted exactly this. */
+          var closed15 = csTrimToBar(rows15m, res.bar ? res.bar.t : null);
+          var closed1h = csClosedRows(rows1h || [], 3600, now);
+
+          /* Layer 2: candle-derived order-flow proxies (order-flow.js) */
           var orderFlow = {};
           var orderFlowDir = 'neutral';
           if (typeof hgOrderFlowScore === 'function'){
-            orderFlow = hgOrderFlowScore(item.sym, rows15m, rows1h || []);
+            orderFlow = hgOrderFlowScore(item.sym, closed15, closed1h);
             orderFlowDir = orderFlow.direction;
           }
 
@@ -1018,13 +1114,9 @@ async function runScan(ui){
              which cards are high-quality. See csSmcRank for why it ranks but never vetoes.
              Levels live on res.plan, so a synthetic row carries them to the enricher and the
              result is copied back. The tape is trimmed to the closed bar the engine voted on
-             (the engine drops the forming bar via closedRows) so SMC grades the same bar. */
-          var smcRows = rows15m.slice(0, -1);
-          if (res.bar && res.bar.t != null){
-            for (var bi = rows15m.length - 1; bi >= 0; bi--){
-              if (rows15m[bi].t === res.bar.t){ smcRows = rows15m.slice(0, bi + 1); break; }
-            }
-          }
+             (the engine drops the forming bar via closedRows) so SMC grades the same bar --
+             csTrimToBar, which layer 2 now shares. */
+          var smcRows = closed15;
           var smcRow = { sym: item.sym, dir: res.dir, entry: res.plan.entry, stop: res.plan.stop, t1: res.plan.t1 };
           try{ if (typeof W.hgSmcEnrich === 'function') W.hgSmcEnrich(smcRow, { rows: smcRows, tab: 'CRYPTO SCAN' }); }catch(eSmc){}
           if (smcRow.smc) setup.smc = smcRow.smc;
@@ -1139,6 +1231,8 @@ W.cryptoScanState = cryptoScanState;
 W.__csSmcRank = csSmcRank;
 W.__csSortSetups = csSortSetups;
 W.__csFwdRows = csFwdRows;
+W.__csTrimToBar = csTrimToBar;
+W.__csClosedRows = csClosedRows;
 W.__csFwdHorizon = csFwdHorizon;
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: TAB_ID, label: 'CRYPTO SCAN', mount: mount, refresh: refresh });

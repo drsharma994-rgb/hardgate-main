@@ -153,7 +153,7 @@ console.log('\n4. with evidence, it tabulates the versioned tiers');
   S.hgFwdResolve('ETHUSDT', '15m', [{ t: BAR, h: 101, l: 99 }, { t: BAR + SEC, h: 101, l: 94 }]);
 
   const t = text(S.csFwdPanelHTML());
-  ok(/VOTE-PROFESSIONAL@V4/.test(t) && /VOTE-WEAK@V4/.test(t),
+  ok(/VOTE-PROFESSIONAL@V5/.test(t) && /VOTE-WEAK@V5/.test(t),
      'each versioned tier is its own row');
   ok(/MECHANIC/.test(t) && /SETTLED/.test(t) && /T1-FIRST/.test(t) && /EXPECTANCY/.test(t),
      'with the columns every other desk shows');
@@ -237,7 +237,7 @@ console.log('\n6. mounted for real, the host actually receives the panel');
   const el2 = fakeEl();
   tab.mount(el2);
   const host2 = el2._node('csFwd');
-  ok(host2 && /VOTE-PROFESSIONAL@V4/.test(host2.innerHTML),
+  ok(host2 && /VOTE-PROFESSIONAL@V5/.test(host2.innerHTML),
      'and after evidence exists, the mounted host carries the tier row');
   ok(host2 && !/Nothing recorded yet/.test(host2.innerHTML), 'not the empty state');
 

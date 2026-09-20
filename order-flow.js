@@ -296,7 +296,11 @@ function hgOrderFlowScore(symbol, rows15m, rows1h) {
     direction: direction,
     confidence: Math.abs(aggregated),
     /* every read above is computed from the same candles layer 1 votes on;
-       measured correlation with layer 1's direction is 0.872, agreement 95% */
+       measured correlation with layer 1's direction is 0.957, agreement 53/56.
+       0.872 stood here until pack 877: it was measured BEFORE pack 867 fixed
+       hgSweepPattern's volume divisor, which changes this function's output,
+       so it never described the code it was attached to. The header at the top
+       of this file was corrected then; this copy was missed. */
     proxyOnly: true,
     proxyNote: 'candle-derived proxy — no order book, trade tape or liquidation feed'
   };
