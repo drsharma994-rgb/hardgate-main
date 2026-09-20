@@ -1509,7 +1509,7 @@ function setupCardHTML(s, idx, tally){
   /* Layer 2: Order Flow */
   /* "Flow" is candle arithmetic, not order flow: every read in order-flow.js
      comes off the same OHLCV bars layer 1 votes on, and it agreed with layer 1
-     on 53 of 56 measured tapes. Say so on the card rather than implying a book
+     on 52 of 55 measured tapes. Say so on the card rather than implying a book
      the tab has never seen. */
   if (s.orderFlow && s.orderFlow.direction){
     var ofEmoji = s.orderFlow.direction === 'long' ? '🟢' : s.orderFlow.direction === 'short' ? '🔴' : '⚪';
@@ -1849,7 +1849,13 @@ async function runScan(ui){
         var h1 = csH1State(got1h, closed1h);
         if (!h1.ok){ noH1++; noH1Why[h1.reason] = (noH1Why[h1.reason] || 0) + 1; }
 
-        var res = engine({ rows15m: rows15m, rows1h: rows1h || [], now: now, venueCost: costFor(item), allowUnverified: true });
+        /* `allowUnverified: true` used to ride along here. cryptoUltraEngine
+           has never read it -- the flag was the only occurrence of that name
+           in the app -- so it described a permission this tab did not have
+           and the engine did not grant. Dropped rather than left to read as
+           a setting. The engine's own evidence gate still decides
+           recordOnly, and every card on this tab says RECORD ONLY anyway. */
+        var res = engine({ rows15m: rows15m, rows1h: rows1h || [], now: now, venueCost: costFor(item) });
         scannedThis = true;
         scanned++;
         setProgress((scanned / items.length) * 100);
