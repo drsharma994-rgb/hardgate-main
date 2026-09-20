@@ -504,34 +504,152 @@ function csBlockerTally(setups){
   return out;
 }
 
-/* The closing note used to attribute an empty block entirely to confluence.
-   One of the gates is a clock that shuts for 14 hours a day, so that
-   explanation is wrong more often than it is right — defer to the tally.
+/* WHICH GATE ACTUALLY CLOSED THE BLOCK.
 
-   Lifted out of renderCards and exported for the same reason csBlockerTally
+   Pack 868 built csBlockerTally and the ONLY-blocker column to answer this,
+   and the footer consulted it for exactly one of five gates. Every other
+   outcome fell through to a hardcoded "most signals lack sufficient
+   confluence" — a phrase naming nothing in this pipeline, since the gates are
+   confidence, regime, session, voting and sentiment, and "confluence" is not
+   among them. Measured by handing the footer 25 setups blocked by exactly one
+   gate, once per gate:
+
+     confidence   blames confluence
+     regime       blames confluence
+     session      NAMED
+     voting       blames confluence
+     sentiment    blames confluence
+
+   One of five. And it is worse than one in five in practice: the session gate
+   passes 07:00-17:00 UTC, so during those ten hours session can never be a
+   blocker, clockSole is 0 by construction, and the footer reaches the
+   confluence line whatever actually happened.
+
+   csTopBlocker returns the largest ONLY-blocker (a gate that, alone, stopped a
+   setup that was otherwise pro-ready), falling back to the pro-grade stamp,
+   then to the most common gate among setups with several open — labelled so
+   the reader knows which of the three they are being told. */
+function csTopBlocker(tally){
+  if (!tally) return null;
+  var k, best = null, n;
+  for (k in (tally.sole || {})) if (Object.prototype.hasOwnProperty.call(tally.sole, k)){
+    n = tally.sole[k] || 0;
+    if (n > 0 && (!best || n > best.n)) best = { key: k, n: n, kind: 'sole' };
+  }
+  if (best) return best;
+  if (tally.proBlocked > 0) return { key: 'pro', n: tally.proBlocked, kind: 'pro' };
+  for (k in (tally.byGate || {})) if (Object.prototype.hasOwnProperty.call(tally.byGate, k)){
+    n = tally.byGate[k] || 0;
+    if (n > 0 && (!best || n > best.n)) best = { key: k, n: n, kind: 'multi' };
+  }
+  return best;
+}
+
+/* WHAT THE FORWARD LOG ACTUALLY SAYS, so the footer stops asserting it.
+
+   The closing note claimed the engine "produces high volume but low accuracy"
+   two sentences above "no win rate is claimed" — an accuracy claim beside a
+   promise not to make one, flagged in pack 876 and left standing because
+   nothing could answer it yet. Pack 878's INDEP correction can: this reads the
+   tab's own settled records, pools them, and corrects the sample for overlap
+   exactly as the panel below does, using the same hgOmniPoolRead, the same
+   1.5R breakeven and the same family bar. Returns null when nothing has
+   settled, so the footer says that rather than inventing a verdict. */
+function csFwdVerdict(){
+  try{
+    if (typeof W.hgFwdPool !== 'function') return null;
+    var pool = W.hgFwdPool('CRYPTO SCAN') || {};
+    var keys = [], k;
+    for (k in pool) if (Object.prototype.hasOwnProperty.call(pool, k)) keys.push(k);
+    if (!keys.length) return null;
+    var wins = 0, settled = 0, open = 0, i, p;
+    for (i = 0; i < keys.length; i++){
+      p = pool[keys[i]];
+      if (!p) continue;
+      wins += (p.wins || 0);
+      settled += (p.samples || 0);
+      open += (p.open || 0);
+    }
+    var out = { settled: settled, open: open, mechanics: keys.length,
+                hit: settled ? wins / settled : NaN, effN: NaN, read: null };
+    if (!settled) return out;
+    var ov = (typeof W.hgFwdOverlap === 'function')
+      ? W.hgFwdOverlap('CRYPTO SCAN', null, {}) : null;
+    if (ov && isFinite(ov.effN)) out.effN = ov.effN;
+    if (isFinite(out.effN) && typeof W.hgOmniPoolRead === 'function'){
+      var barZ = (typeof W.hgOmniFamilyZ === 'function')
+        ? W.hgOmniFamilyZ(Math.max(1, keys.length)) : 2;
+      out.read = W.hgOmniPoolRead({ samples: out.effN, hit: out.hit },
+                                  CS_FWD_MIN_RR, 20, barZ);
+    }
+    return out;
+  }catch(e){ return null; }
+}
+
+/* The blocker sentence. Each kind is worded differently because they are
+   different claims: a SOLE blocker is the thing that, alone, stopped a setup
+   that was otherwise pro-ready; the pro-grade stamp is what stops a setup with
+   every gate clear; and a MULTI count is only the commonest gate among setups
+   with several open, which is not the same as the reason any one of them
+   failed. Saying which is which is the point. */
+function csBlockerSentence(top){
+  if (!top || !top.n) return '';
+  var label = CS_GATE_LABELS[top.key] || top.key;
+  var many = top.n === 1 ? ' setup' : ' setups';
+  /* the session gate's own arithmetic is a fact about the gate, not a guess */
+  var clock = top.key === 'session'
+    ? ' That window is 10 of 24 hours, so for 14 a day nothing here can be high-quality.' : '';
+  if (top.kind === 'sole'){
+    return 'The block above is empty because of one gate — ' + esc(label) + ' — not the reads: '
+      + top.n + many + ' cleared everything else.' + clock + ' ';
+  }
+  if (top.kind === 'pro'){
+    return 'Every quality gate was clear on ' + top.n + many
+      + '; what stopped them was the pro-grade stamp itself '
+      + '(three-layer confidence, layer agreement). ';
+  }
+  return 'No single gate closed the block — every setup had more than one open. '
+    + 'The commonest was ' + esc(label) + ', on ' + top.n + many + '.' + clock + ' ';
+}
+
+/* The accuracy sentence, MEASURED rather than asserted. See csFwdVerdict. */
+function csAccuracySentence(fwd){
+  if (!fwd || !fwd.settled){
+    return 'Whether this engine is accurate is not asserted here: nothing of its own has '
+      + 'settled yet' + (fwd && fwd.open ? ' (' + fwd.open + ' still open)' : '') + '. ';
+  }
+  var pooled = Math.round(fwd.hit * 100) + '%';
+  var be = Math.round(100 / (1 + CS_FWD_MIN_RR)) + '%';
+  if (!isFinite(fwd.effN)){
+    return 'Its own settled records so far: ' + fwd.settled + ' at ' + pooled
+      + ' T1-first against a ' + be + ' breakeven, too few to measure their overlap. ';
+  }
+  var eff = fwd.effN >= 10 ? fwd.effN.toFixed(0) : fwd.effN.toFixed(1);
+  var verdict = (fwd.read && fwd.read.read) ? fwd.read.read : 'unjudged';
+  return 'Its own settled records: ' + fwd.settled + ' at ' + pooled
+    + ' T1-first against a ' + be + ' breakeven, which after correcting for overlap is '
+    + eff + ' independent observation' + (eff === '1' ? '' : 's') + ' — ' + verdict + '. ';
+}
+
+/* Lifted out of renderCards and exported for the same reason csBlockerTally
    is: a branch that only renderCards can reach is a branch a test can only
    grep for, and a source scan passed a mutation that pinned the condition to
-   false. */
-function csFooterNote(setups, hqCount, tally){
+   false. `fwd` is passed in rather than read here so the note stays pure. */
+function csFooterNote(setups, hqCount, tally, fwd){
   var n = Array.isArray(setups) ? setups.length : 0;
   hqCount = +hqCount || 0;
   tally = tally || csBlockerTally(setups);
-  var clockSole = (tally.sole && tally.sole.session) || 0;
-  var clockOnly = !hqCount && clockSole > 0;
+  var top = hqCount ? null : csTopBlocker(tally);
   return '<div class="cs-note">CRYPTO SCAN — FILTERED FOR QUALITY. Out of ' + n
     + ' total signals, ' + hqCount + ' clear every quality gate AND the pro-grade stamp '
     + '(three-layer confidence 75%+, price and order flow agreeing). Risk-reward is not among '
     + 'those standards: the plan ladder is a fixed 1.5R, so an R:R test on it is true for every '
     + 'setup by construction and filters nothing. '
     + 'Lower-quality signals shown for reference but not recommended for trading. '
-    + (clockOnly
-        ? 'The block above is empty because of the SESSION GATE, not the reads: ' + clockSole
-          + ' setup' + (clockSole === 1 ? '' : 's') + ' cleared everything else. That gate passes '
-          + '07:00-17:00 UTC, 10 of 24 hours. '
-        : 'The 470-indicator voting engine produces high volume but low accuracy — '
-          + 'most signals lack sufficient confluence. ')
+    + csBlockerSentence(top)
     + 'Professional traders only trade the strongest setups. This tab shows why: signal quantity '
     + '≠ signal quality. No invented thresholds. '
+    + csAccuracySentence(fwd)
     /* "No win rates claimed" was true while nothing was ever settled. The
        forward panel below now prints a measured T1-FIRST column, so the
        sentence has to distinguish the two: no rate is asserted FROM THE SCAN
@@ -805,6 +923,10 @@ function setupCardHTML(s, idx){
    branch unreachable, because the regex matched the dead body. */
 W.__csSetupCardHTML = setupCardHTML;
 W.csBlockerTally = csBlockerTally;
+/* the gate key -> human label map the footer and the WHY EMPTY panel share,
+   exported so a test can assert the note names EVERY gate rather than
+   re-spelling five strings that could drift apart from the code */
+W.CS_GATE_LABELS = CS_GATE_LABELS;
 W.csWhyEmptyHTML = csWhyEmptyHTML;
 W.csFooterNote = csFooterNote;
 W.csFwdPanelHTML = csFwdPanelHTML;
@@ -875,7 +997,7 @@ function renderCards(setups, run){
     }
   }
 
-  h += csFooterNote(setups, hqSetups.length, csBlockerTally(setups));
+  h += csFooterNote(setups, hqSetups.length, csBlockerTally(setups), csFwdVerdict());
   __ui.cards.innerHTML = h;
 }
 
@@ -1245,6 +1367,10 @@ W.__csSortSetups = csSortSetups;
 W.__csFwdRows = csFwdRows;
 W.__csTrimToBar = csTrimToBar;
 W.__csClosedRows = csClosedRows;
+W.__csTopBlocker = csTopBlocker;
+W.__csBlockerSentence = csBlockerSentence;
+W.__csAccuracySentence = csAccuracySentence;
+W.csFwdVerdict = csFwdVerdict;
 W.__csFwdHorizon = csFwdHorizon;
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: TAB_ID, label: 'CRYPTO SCAN', mount: mount, refresh: refresh });
