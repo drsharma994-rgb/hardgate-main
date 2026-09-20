@@ -982,34 +982,103 @@ function csTopBlocker(tally){
    exactly as the panel below does, using the same hgOmniPoolRead, the same
    1.5R breakeven and the same family bar. Returns null when nothing has
    settled, so the footer says that rather than inventing a verdict. */
+/* ONE POPULATION, READ END TO END. `gateClear` picks which.
+
+   false  every record this tab has ever written
+   true   only the ones it recommended — see csFwdVerdict below
+
+   Both legs of the read are filtered the same way, because hgFwdOverlap takes
+   the same filter vocabulary as hgFwdStats for exactly this reason: "the
+   overlap of the whole log is not the overlap of the subset being tested".
+   The family bar counts only the mechanics that actually carry settled
+   records IN THIS population — a tier with nothing settled is not a family
+   the reader chose between. */
+function csFwdRead(gateClear){
+  var filter = gateClear ? { gateClear: true } : false;
+  var pool = W.hgFwdPool('CRYPTO SCAN') || {};
+  var keys = [], k;
+  for (k in pool) if (Object.prototype.hasOwnProperty.call(pool, k)) keys.push(k);
+  if (!keys.length) return null;
+  var wins = 0, settled = 0, open = 0, families = 0, i, st;
+  for (i = 0; i < keys.length; i++){
+    st = (typeof W.hgFwdStats === 'function')
+      ? W.hgFwdStats('CRYPTO SCAN', keys[i], filter) : null;
+    if (!st) continue;
+    wins += (st.wins || 0);
+    settled += (st.samples || 0);
+    open += (st.open || 0);
+    if ((st.samples || 0) > 0) families++;
+  }
+  var out = { settled: settled, open: open, mechanics: families,
+              hit: settled ? wins / settled : NaN, effN: NaN, read: null };
+  if (!settled) return out;
+  var ov = (typeof W.hgFwdOverlap === 'function')
+    ? W.hgFwdOverlap('CRYPTO SCAN', null, gateClear ? { gateClear: true } : {}) : null;
+  if (ov && isFinite(ov.effN)) out.effN = ov.effN;
+  if (isFinite(out.effN) && typeof W.hgOmniPoolRead === 'function'){
+    var barZ = (typeof W.hgOmniFamilyZ === 'function')
+      ? W.hgOmniFamilyZ(Math.max(1, families)) : 2;
+    out.read = W.hgOmniPoolRead({ samples: out.effN, hit: out.hit },
+                                CS_FWD_MIN_RR, 20, barZ);
+  }
+  return out;
+}
+
+/* THE FOOTER MEASURED THE POPULATION IT TELLS YOU NOT TO TRADE.
+
+   Two sentences of this footer, a line apart:
+
+     "Lower-quality signals shown for reference but not recommended for
+      trading."
+     "Its own settled records: N at X% T1-first ..."
+
+   The second was computed over the first. hgFwdPool calls hgFwdStats with
+   ticketOnly hardcoded false, so every VOTE-WEAK and VOTE-STANDARD row this
+   desk has ever written was averaged into the number offered as the tab's own
+   accuracy — and those rows are the overwhelming majority. Pack 872 recorded
+   `ticket: !!s.isHighQuality` calling it "the split that lets someone later
+   ask whether the tab's strongest claim paid". Nobody ever asked it.
+
+   Measured on a day of this desk's real shape — 96 bars, 40 contracts a bar,
+   the high-quality tier at the 5% the live sweeps show, the recommended rows
+   hitting 60% and the rest 34%:
+
+     high-quality share of the log        5.0%
+     POOLED          3,840 settled, 34.8% hit   BELOW the 40% breakeven
+     HIGH-QUALITY      192 settled, 59.9% hit   ABOVE it
+
+   The two land on opposite sides of this tab's own 1/(1+1.5R) breakeven. The
+   recommended subset is outvoted nineteen to one by rows the same paragraph
+   disclaims.
+
+   WHY gateClear AND NOT ticket. They are the same population here —
+   hgFwdNormalize sets gateClear true whenever ticket is true, "a ticket
+   cleared everything, by definition", and for this tab that holds exactly:
+   `ticket` is isHighQuality, which is every quality gate clear AND the
+   pro-grade stamp. But only the gateClear split is folded into the uncapped
+   aggregate, so a ticket-only query is a view of the last few weeks that
+   thins as records prune, while a gateClear query reads all time. Asking the
+   same question the durable way costs nothing.
+
+   AND IT COSTS ALMOST NO INDEPENDENCE. This desk is perfectly
+   cross-sectional — one bar, one horizon, every contract at once — so its
+   redundancy is in the cross-section, not along the clock. Narrowing to 5% of
+   the rows left effN at 4.96, unchanged to two decimals, because both
+   populations span the same 96 bars at the same 24-bar horizon. The subset is
+   nineteen times smaller and carries the same independent evidence.
+
+   Both reads are returned. The contrast IS this tab's thesis — the panel
+   below is titled "do this desk's own confidence tiers separate?" — so the
+   footer states the recommended population and keeps the whole book beside
+   it, rather than replacing one silence with another. The flat fields stay
+   the whole-book read so every existing caller keeps its meaning. */
 function csFwdVerdict(){
   try{
     if (typeof W.hgFwdPool !== 'function') return null;
-    var pool = W.hgFwdPool('CRYPTO SCAN') || {};
-    var keys = [], k;
-    for (k in pool) if (Object.prototype.hasOwnProperty.call(pool, k)) keys.push(k);
-    if (!keys.length) return null;
-    var wins = 0, settled = 0, open = 0, i, p;
-    for (i = 0; i < keys.length; i++){
-      p = pool[keys[i]];
-      if (!p) continue;
-      wins += (p.wins || 0);
-      settled += (p.samples || 0);
-      open += (p.open || 0);
-    }
-    var out = { settled: settled, open: open, mechanics: keys.length,
-                hit: settled ? wins / settled : NaN, effN: NaN, read: null };
-    if (!settled) return out;
-    var ov = (typeof W.hgFwdOverlap === 'function')
-      ? W.hgFwdOverlap('CRYPTO SCAN', null, {}) : null;
-    if (ov && isFinite(ov.effN)) out.effN = ov.effN;
-    if (isFinite(out.effN) && typeof W.hgOmniPoolRead === 'function'){
-      var barZ = (typeof W.hgOmniFamilyZ === 'function')
-        ? W.hgOmniFamilyZ(Math.max(1, keys.length)) : 2;
-      out.read = W.hgOmniPoolRead({ samples: out.effN, hit: out.hit },
-                                  CS_FWD_MIN_RR, 20, barZ);
-    }
-    return out;
+    var all = csFwdRead(false);
+    if (!all) return null;
+    all.hq = csFwdRead(true);
+    return all;
   }catch(e){ return null; }
 }
 
@@ -1039,23 +1108,46 @@ function csBlockerSentence(top){
     + 'The commonest was ' + esc(label) + ', on ' + top.n + many + '.' + clock + ' ';
 }
 
-/* The accuracy sentence, MEASURED rather than asserted. See csFwdVerdict. */
+/* One population's clause, so the two cannot be worded differently. */
+function csFwdClause(p){
+  var be = Math.round(100 / (1 + CS_FWD_MIN_RR)) + '%';
+  var pooled = Math.round(p.hit * 100) + '%';
+  if (!isFinite(p.effN)){
+    return p.settled + ' at ' + pooled + ' T1-first against a ' + be
+      + ' breakeven, too few to measure their overlap';
+  }
+  var eff = p.effN >= 10 ? p.effN.toFixed(0) : p.effN.toFixed(1);
+  return p.settled + ' at ' + pooled + ' T1-first against a ' + be
+    + ' breakeven, which after correcting for overlap is ' + eff
+    + ' independent observation' + (eff === '1' ? '' : 's') + ' — '
+    + ((p.read && p.read.read) ? p.read.read : 'unjudged');
+}
+
+/* The accuracy sentence, MEASURED rather than asserted, and measured on the
+   population this tab actually recommends. See csFwdVerdict for why the
+   pooled number was the wrong one to offer: the recommended rows are about 5%
+   of the log, and on this desk's real shape the two readings fall on opposite
+   sides of its own breakeven.
+
+   The high-quality clause leads because it is the tab's claim. The whole book
+   follows because the contrast is the question the panel below asks. When the
+   recommended subset has settled nothing yet — which will be the common case
+   for a long while, at 5% of a log that is itself young — that is said
+   plainly rather than papered over with the pooled number. */
 function csAccuracySentence(fwd){
   if (!fwd || !fwd.settled){
     return 'Whether this engine is accurate is not asserted here: nothing of its own has '
       + 'settled yet' + (fwd && fwd.open ? ' (' + fwd.open + ' still open)' : '') + '. ';
   }
-  var pooled = Math.round(fwd.hit * 100) + '%';
-  var be = Math.round(100 / (1 + CS_FWD_MIN_RR)) + '%';
-  if (!isFinite(fwd.effN)){
-    return 'Its own settled records so far: ' + fwd.settled + ' at ' + pooled
-      + ' T1-first against a ' + be + ' breakeven, too few to measure their overlap. ';
+  var hq = fwd.hq;
+  var whole = 'Across every record it has written, high-quality or not: ' + csFwdClause(fwd) + '. ';
+  if (!hq || !hq.settled){
+    return 'Of the setups this tab RECOMMENDS — the high-quality block — nothing has settled yet'
+      + (hq && hq.open ? ' (' + hq.open + ' still open)' : '')
+      + ', so no accuracy is claimed for them. ' + whole;
   }
-  var eff = fwd.effN >= 10 ? fwd.effN.toFixed(0) : fwd.effN.toFixed(1);
-  var verdict = (fwd.read && fwd.read.read) ? fwd.read.read : 'unjudged';
-  return 'Its own settled records: ' + fwd.settled + ' at ' + pooled
-    + ' T1-first against a ' + be + ' breakeven, which after correcting for overlap is '
-    + eff + ' independent observation' + (eff === '1' ? '' : 's') + ' — ' + verdict + '. ';
+  return 'Of the setups this tab RECOMMENDS — the high-quality block — ' + csFwdClause(hq)
+    + '. ' + whole;
 }
 
 /* Lifted out of renderCards and exported for the same reason csBlockerTally
@@ -1546,6 +1638,8 @@ W.csCoverage = csCoverage;
 W.csUnreadWhyText = csUnreadWhyText;
 W.csH1State = csH1State;
 W.csTierRank = csTierRank;
+W.__csFwdRead = csFwdRead;
+W.__csFwdClause = csFwdClause;
 W.csTierChip = csTierChip;
 W.CS_TIER_ORDER = CS_TIER_ORDER;
 W.csH1Note = csH1Note;
