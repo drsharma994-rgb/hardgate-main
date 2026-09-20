@@ -309,14 +309,81 @@ localStorage. Never throws.
       if (hgFwdKey(recs[i]) === key) return { list: recs, added: false, reason: 'already recorded' };
     }
     var out = recs.concat([norm]);
-    /* Prune oldest-first — but FOLD the dropped records' outcomes into the
-       aggregate first, so pruning costs detail and never evidence. */
+    /* PRUNE WHAT THE AGGREGATE CAN PRESERVE, BEFORE WHAT IT CANNOT.
+
+       The rule above was "oldest-first, and fold the dropped outcomes into the
+       aggregate first, so pruning costs detail and never evidence". That holds
+       for a SETTLED record -- its wins/losses/rrSum survive uncapped in the
+       aggregate, and only the detail is lost. It does not hold for an OPEN
+       one. hgFwdFold folds outcomes, and an open record has none, so pruning
+       it does not coarsen the evidence: it destroys it. The trade never
+       settles and never counts anywhere.
+
+       Oldest-first is exactly the wrong order for that, because the records
+       still waiting are by definition the old ones. CRYPTO SCAN made it
+       concrete. It writes one row per setup per 15m bar across the whole
+       Delta + CoinDCX universe, and this cap is shared by every instrumented
+       tab:
+
+          10 setups/bar     960 rows/day   a record survives ~100h
+          20 setups/bar   1,920 rows/day   ~50h
+          50 setups/bar   4,800 rows/day   ~20h
+         100 setups/bar   9,600 rows/day   ~10h
+
+       against a cap sized, in the comment below, for "a conservative 150
+       records/day across ~20 instrumented tabs". A 4h/20-bar gold setup needs
+       80 hours of bars before it CAN settle; a 4h/24 desk needs 96; a daily
+       desk 240. Driven through the real recorder: one open OMNIGOLD MMOVE
+       record, then 3.5 days of CRYPTO SCAN at 50 setups/bar -- the gold record
+       is gone and the aggregate is empty. It was not coarsened. It was lost.
+
+       So prune in the order the aggregate can absorb: settled records first
+       (evidence preserved), then ones already past their own horizon (nothing
+       left to wait for), and only then -- if the cap still is not met -- an
+       open record still inside its horizon. Within each group, oldest-first
+       as before. No cap, threshold or timeframe changes here; only which row
+       is chosen when one has to go. */
     var folded = null;
     if (out.length > MAX_RECORDS){
-      out.sort(function(a, b){ return num(a.barT) - num(b.barT); });
-      var dropped = out.slice(0, out.length - MAX_RECORDS);
-      out = out.slice(out.length - MAX_RECORDS);
-      folded = dropped;
+      var nowSec = Math.floor(Date.now() / 1000);
+      /* hgFwdIsPastHorizon answers for BOTH cases: it returns true for a
+         settled record (nothing left to wait for) and for an open one whose
+         horizon has elapsed. A separate `state` branch here was redundant --
+         a mutation that deleted it changed nothing, which is how it was
+         found. */
+      var giveable = [], owed = [], r, j;
+      for (j = 0; j < out.length; j++){
+        r = out[j];
+        if (!r) continue;
+        if (hgFwdIsPastHorizon(r, nowSec)) giveable.push(r);
+        else owed.push(r);          /* open, and still inside its own horizon */
+      }
+      var byBar = function(a, b){ return num(a.barT) - num(b.barT); };
+      giveable.sort(byBar);
+      owed.sort(byBar);
+      var over = (giveable.length + owed.length) - MAX_RECORDS;
+      var dropped = [];
+      if (over > 0){
+        var fromGiveable = Math.min(over, giveable.length);
+        dropped = giveable.slice(0, fromGiveable);
+        giveable = giveable.slice(fromGiveable);
+        over -= fromGiveable;
+        /* only if the open-and-still-waiting rows alone exceed the cap */
+        if (over > 0){
+          dropped = dropped.concat(owed.slice(0, over));
+          owed = owed.slice(over);
+        }
+      }
+      /* NOT re-sorted. The old prune left the list in barT order as a side
+         effect of how it sliced, but a plain add just concats, so the list
+         was only ever sorted immediately after a prune. Restoring that here
+         would cost an O(n log n) pass to maintain an invariant that holds
+         only sometimes and that no reader relies on -- hgFwdLossStreak orders
+         by settledT itself, omnigold.js re-sorts by barT, and the dedup scan
+         is order-free. A sometimes-sorted list invites an assumption that
+         would be wrong half the time. */
+      out = giveable.concat(owed);
+      folded = dropped.length ? dropped : null;
     }
     return { list: out, added: true, reason: 'recorded', folded: folded };
   }
@@ -359,6 +426,23 @@ localStorage. Never throws.
      are not the same evidence, and lumping them together overstates how much
      is still in flight. A live desk showed ~1,200 open records with no way to
      tell which were which. Pure. */
+  /* Has an OPEN record's own horizon already elapsed? hgFwdIsStale asks the
+     same question with STALE_HORIZONS of slack, because a record is only
+     called dead once its bars are well overdue. Pruning needs the tighter
+     question: a record whose horizon has passed has nothing left to wait for,
+     so it is a better thing to drop than one still inside it. */
+  function hgFwdIsPastHorizon(rec, nowSec){
+    if (!rec || (rec.state && rec.state !== 'open')) return true;
+    var bar = num(rec.barT);
+    var hz = num(rec.horizonBars);
+    /* a record that cannot say when it fired or how long it needs cannot be
+       shown to be still waiting — treat it as droppable rather than pinned */
+    if (!isFinite(bar) || !isFinite(hz) || hz <= 0) return true;
+    var sec = TF_SEC[rec.tf] || 14400;
+    var now = isFinite(num(nowSec)) ? num(nowSec) : Math.floor(Date.now() / 1000);
+    return (now - bar) > (hz * sec);
+  }
+
   function hgFwdIsStale(rec, nowSec){
     if (!rec || rec.state !== 'open') return false;
     var bar = num(rec.barT);
@@ -1205,6 +1289,7 @@ localStorage. Never throws.
        no low used to answer "touched" for every resting BUY_LIMIT — see num() */
     W.hgFwdOrderTouched = hgFwdOrderTouched;
     W.hgFwdIsStale = hgFwdIsStale;
+    W.hgFwdIsPastHorizon = hgFwdIsPastHorizon;
     W.hgFwdOpenSymsOf = hgFwdOpenSyms;
     W.hgFwdSettle = hgFwdSettle;
     W.hgFwdStatsOf = hgFwdStats;
