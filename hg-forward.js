@@ -1401,25 +1401,101 @@ localStorage. Never throws.
            to. */
         var barZ = isFinite(+o.barZ) && +o.barZ > 0 ? +o.barZ
                  : ((typeof W.hgOmniFamilyZ === 'function') ? W.hgOmniFamilyZ(Math.max(1, keys.length)) : 2);
+        /* ── SETTLED IS NOT INDEPENDENT ──
+
+           This file opens by stating its own target in NON-OVERLAPPING
+           trades, and hgFwdOverlap exists to count them. The panel never
+           called it: SETTLED was a raw row count, `needs ~N` is derived in
+           non-overlapping units, and hgOmniPoolRead's standard error is
+           sqrt(p(1-p)/samples) over that same raw count -- so the READ
+           column could say "has paid" on concurrency alone.
+
+           It matters most on a CROSS-SECTIONAL desk. CRYPTO SCAN fires on
+           every contract in the universe on ONE bar with ONE 24-bar horizon,
+           so every row from a scan is perfectly concurrent with every other
+           and effN collapses to (bars scanned / horizon), no matter how many
+           contracts fired. Measured with hgFwdOverlap on that exact shape:
+
+             200 setups/bar over  100 bars   n = 20,000   effN  5.13
+              40 setups/bar over   96 bars   n =  3,840   effN  4.96
+              40 setups/bar over  960 bars   n = 38,400   effN 40.96
+
+           A day of scanning is about five independent observations. The
+           ~157 this file opens with is ~39 days at that shape, not four bars.
+
+           effN is measured over the rows that still carry barT/tf/horizon.
+           Pruned rows are folded into the aggregate, which keeps no timing,
+           so this is a LOWER BOUND on all-time independence -- the honest
+           direction, and coverage is printed beside it. Where hgFwdOverlap
+           cannot answer it returns null and nothing is printed: a missing
+           measurement is not a measurement of 1.
+
+           The corrected READ is hgOmniPoolRead run again on the SAME hit rate
+           with effN in place of samples -- the same arithmetic and the same
+           20-sample floor, no new threshold and no change to any gate. The
+           uncorrected read stays visible beside it. */
+        var ovFn = (typeof W.hgFwdOverlapOf === 'function') ? W.hgFwdOverlapOf : null;
+        var liveList = null;
+        try { liveList = load(); } catch (eL){ liveList = null; }
+
         var h = healthHtml + '<h4>' + esc(title) + '</h4>';
-        h += '<table class="tbl"><thead><tr><th>MECHANIC</th><th>SETTLED</th><th>T1-FIRST</th>'
-           + '<th>EXPECTANCY</th><th>OPEN</th><th>READ</th></tr></thead><tbody>';
-        var i, p, v;
+        h += '<table class="tbl"><thead><tr><th>MECHANIC</th><th>SETTLED</th><th>INDEP</th>'
+           + '<th>T1-FIRST</th><th>EXPECTANCY</th><th>OPEN</th><th>READ</th></tr></thead><tbody>';
+        var i, p, v, anyOv = false, anyDemoted = false;
         for (i = 0; i < keys.length; i++){
           p = pool[keys[i]];
           v = readFn ? readFn(p, minRr, 20, barZ) : null;
+
+          /* independence for THIS mechanic */
+          var ov = null, effN = NaN, liveSettled = NaN;
+          if (ovFn && liveList && p.samples){
+            try { ov = ovFn(liveList, tab, keys[i], {}); } catch (eO){ ov = null; }
+            try {
+              var ls = hgFwdStats(liveList, tab, keys[i], false, null);
+              liveSettled = ls ? ls.samples : NaN;
+            } catch (eS){ liveSettled = NaN; }
+          }
+          if (ov && isFinite(ov.effN)){ effN = ov.effN; anyOv = true; }
+
+          /* the same read, on the same hit rate, with effN in place of n */
+          var vEff = null;
+          if (readFn && isFinite(effN) && p.samples){
+            try { vEff = readFn({ samples: effN, hit: p.hit }, minRr, 20, barZ); } catch (eR){ vEff = null; }
+          }
           /* A mechanic with open trades and none settled has NOT "never
              fired" — it has fired and is waiting. The shared verdict helper
              only speaks about settled samples, so that distinction has to be
              made here or the panel misreports its own pending evidence. */
-          var read;
-          if (!p.samples) read = p.open ? (p.open + ' awaiting settlement')
-                                        : (p.stale ? 'nothing settled — ' + p.stale + ' stale' : 'never fired');
-          else read = v ? v.read : 'unjudged';
-          var cls = (!p.samples) ? '' : (v ? v.cls : '');
-          var need = hgFwdNeedText(v && v.need);
+          var read, cls;
+          if (!p.samples){
+            read = p.open ? (p.open + ' awaiting settlement')
+                          : (p.stale ? 'nothing settled — ' + p.stale + ' stale' : 'never fired');
+            cls = '';
+          } else if (vEff){
+            /* corrected read leads; the uncorrected one is kept beside it so
+               nothing is hidden, and flagged when the two disagree */
+            read = vEff.read;
+            cls = vEff.cls;
+            if (v && v.read !== vEff.read){ read += ' (on n: ' + v.read + ')'; anyDemoted = true; }
+          } else {
+            read = v ? v.read : 'unjudged';
+            cls = v ? v.cls : '';
+          }
+          /* `needs ~N` is derived in NON-OVERLAPPING units, so it belongs
+             beside the independent count, not the raw one */
+          var need = hgFwdNeedText(vEff ? (vEff.need || (v && v.need)) : (v && v.need));
+          var indep;
+          if (!p.samples) indep = '<span class="dim">—</span>';
+          else if (!isFinite(effN)) indep = '<span class="dim">unmeasured</span>';
+          else {
+            indep = '<b>' + (effN >= 10 ? effN.toFixed(0) : effN.toFixed(1)) + '</b>' + need;
+            if (isFinite(liveSettled) && liveSettled < p.samples){
+              indep += ' <span class="dim">(from ' + liveSettled + ' timed)</span>';
+            }
+          }
           h += '<tr><td><b>' + esc(keys[i]) + '</b></td>'
-             + '<td>' + p.samples + need + '</td>'
+             + '<td>' + p.samples + '</td>'
+             + '<td>' + indep + '</td>'
              + '<td>' + (p.samples ? (p.hit * 100).toFixed(0) + '%' : '—') + '</td>'
              + '<td>' + (isFinite(p.expR) ? ((p.expR >= 0 ? '+' : '') + p.expR.toFixed(2) + 'R') : '—') + '</td>'
              + '<td class="dim">' + p.open
@@ -1428,6 +1504,17 @@ localStorage. Never throws.
              + '<td><span class="gpip ' + cls + '">' + esc(read) + '</span></td></tr>';
         }
         h += '</tbody></table>';
+        if (anyOv){
+          h += '<div class="note"><b>INDEP</b> — settled rows are not independent observations. '
+            + 'Records that were open at the same time move together, so the standard error behind '
+            + 'READ has to be taken over n/mean-concurrency, not over the row count. INDEP is that '
+            + 'number, measured from each record\'s own bar and horizon (hgFwdOverlap), and the '
+            + '<b>needs ~N</b> target sits beside it because that target was always in '
+            + 'non-overlapping units. Rows folded into the all-time aggregate carry no timing, so '
+            + 'INDEP is a LOWER BOUND where the counts differ. READ is now judged on INDEP; where '
+            + 'the raw count said something else it is shown in brackets'
+            + (anyDemoted ? ', which it does above' : '') + '.</div>';
+        }
         /* THE SHADOW LINE. Sums the matched pairs across every mechanic shown
            and prints both policies side by side. Nothing is recommended until
            the gap is worth acting on over a real sample — this line is the
