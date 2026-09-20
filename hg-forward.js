@@ -403,19 +403,33 @@ localStorage. Never throws.
      Returning the open symbols lets a scanner resolve only what needs it,
      instead of loading the log once per contract across a universe of
      hundreds. Pure. */
-  function hgFwdOpenSyms(list, tab, tf){
+  /* SYMBOLS AND RECORDS ARE DIFFERENT UNITS, and a caller needs both.
+
+     hgFwdResolve is keyed by SYMBOL -- it takes one symbol's bars -- but it
+     returns the number of RECORDS it settled, and one symbol easily holds
+     several: this log writes one record per bar, so a contract that fired on
+     three consecutive bars owes three. CRYPTO SCAN divided the record count
+     by the symbol count and printed "3/1 open records settled", a ratio that
+     can exceed its own denominator. Both counts come off one pass here so a
+     caller cannot pick up one and assume the other. */
+  function hgFwdOpenTally(list, tab, tf){
     var recs = Array.isArray(list) ? list : [];
-    var seen = {}, out = [], i, r;
+    var seen = {}, syms = [], records = 0, i, r;
     for (i = 0; i < recs.length; i++){
       r = recs[i];
       if (!r || r.state !== 'open' || !r.sym) continue;
       if (tab && r.tab !== tab) continue;
       if (tf && r.tf && r.tf !== tf) continue;
+      records++;
       if (seen[r.sym]) continue;
       seen[r.sym] = 1;
-      out.push(r.sym);
+      syms.push(r.sym);
     }
-    return out;
+    return { syms: syms, records: records };
+  }
+
+  function hgFwdOpenSyms(list, tab, tf){
+    return hgFwdOpenTally(list, tab, tf).syms;
   }
 
   /* An open record whose bars were never going to arrive.
@@ -1291,6 +1305,7 @@ localStorage. Never throws.
     W.hgFwdIsStale = hgFwdIsStale;
     W.hgFwdIsPastHorizon = hgFwdIsPastHorizon;
     W.hgFwdOpenSymsOf = hgFwdOpenSyms;
+    W.hgFwdOpenTallyOf = hgFwdOpenTally;
     W.hgFwdSettle = hgFwdSettle;
     W.hgFwdStatsOf = hgFwdStats;
     W.hgFwdLossStreakOf = hgFwdLossStreak;
@@ -1320,6 +1335,10 @@ localStorage. Never throws.
        now knowable settles. Call this at the START of a scan, before
        recording the current bar's setups. */
     /* The symbols a scanner still owes bars to. */
+    W.hgFwdOpenTally = function(tab, tf){
+      try { return hgFwdOpenTally(load(), tab, tf); }
+      catch (e){ hgFwdWarn('hgFwdOpenTally', e); return { syms: [], records: 0 }; }
+    };
     W.hgFwdOpenSyms = function(tab, tf){
       try { return hgFwdOpenSyms(load(), tab, tf); }
       catch (e){ hgFwdWarn('openSyms', e); return []; }
