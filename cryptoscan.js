@@ -648,22 +648,60 @@ function csCoverageHTML(run){
     + ';margin:4px 0 2px">COVERAGE · ' + esc(txt) + '</div>';
 }
 
+/* THE EMPTY STATE ACCOUNTS FOR EVERY CONTRACT, or claims nothing about it.
+
+   Pack 869 built this so an empty block could not report a broken scan as a
+   quiet market, and its rule is "nothing is claimed about a contract that was
+   never read". Pack 882 then added scoreFailed -- read, voted on, and then
+   crashed in this app's own scoring -- and folded it into `partial` without
+   reaching this sentence. Two consequences, both visible on one card:
+
+     No setups — 300 of 300 contracts reached the engine and none produced a
+     directional signal. The other 0 were never read, so nothing is claimed
+     about them.
+     COVERAGE · 300 of 300 contracts read (100%) · 2 read and voted, then
+     scoring threw: TypeError: bad row (2)
+
+   "The other 0 were never read" is not a sentence, and the line beneath it
+   names two contracts the line above says nothing about. The deeper error is
+   the claim itself: a contract whose scoring threw might well have produced a
+   signal, so "none produced a directional signal" cannot be said of it any
+   more than of one that was never fetched.
+
+   The counts now drive the wording rather than the partial flag: judged is
+   read minus the ones that crashed, and each of the two silences is named
+   only when it happened. */
 function csEmptyHTML(run){
   var c = csCoverage(run);
   if (!c.known){
     return '<div class="cs-empty">No setups — the scan has not run in this session yet.</div>';
   }
+  var neverRead = c.skipped + c.errors + c.unread;
+  var judged = Math.max(0, c.read - c.scoreFailed);
   var why;
   if (!c.read){
     why = 'none of the ' + c.universe + ' contracts could be read, so the engine never ran. '
         + 'This is a finding about the scan, not about the market.'
         + (c.unread ? ' ' + c.unread + ' were never fetched: ' + csUnreadWhyText(c) + '.' : '');
-  } else if (c.partial){
-    why = c.read + ' of ' + c.universe + ' contracts reached the engine and none produced a '
-        + 'directional signal. The other ' + (c.skipped + c.errors + c.unread) + ' were never read, so '
-        + 'nothing is claimed about them.';
+  } else if (!judged){
+    /* every contract that WAS read then crashed in scoring — the engine ran
+       and we still know nothing */
+    why = 'all ' + c.read + ' contracts that were read crashed during scoring, so none of them '
+        + 'was judged. This is a finding about the scan, not about the market.';
   } else {
-    why = 'all ' + c.read + ' contracts were read and none produced a directional signal.';
+    why = (neverRead || c.scoreFailed)
+      ? (judged + ' of ' + c.universe + ' contracts were judged and none produced a directional signal.')
+      : ('all ' + judged + ' contracts were read and none produced a directional signal.');
+    if (neverRead){
+      why += ' ' + neverRead + ' ' + (neverRead === 1 ? 'was' : 'were')
+           + ' never read, so nothing is claimed about ' + (neverRead === 1 ? 'it' : 'them') + '.';
+    }
+    if (c.scoreFailed){
+      /* "either" only when a silence has already been named above it */
+      why += ' ' + c.scoreFailed + ' ' + (c.scoreFailed === 1 ? 'was' : 'were')
+           + ' read and voted on, then scoring threw — nothing is claimed about '
+           + (c.scoreFailed === 1 ? 'it' : 'them') + (neverRead ? ' either' : '') + '.';
+    }
   }
   return '<div class="cs-empty">No setups — ' + esc(why) + '</div>' + csCoverageHTML(run);
 }
