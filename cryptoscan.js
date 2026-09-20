@@ -897,8 +897,16 @@ function csFooterNote(setups, hqCount, tally, fwd){
   hqCount = +hqCount || 0;
   tally = tally || csBlockerTally(setups);
   var top = hqCount ? null : csTopBlocker(tally);
+  /* Pack 883 taught the summary block that this desk counts LISTINGS -- BTC on
+     Delta and BTC on CoinDCX are two rows for one asset -- and qualified both
+     of its numbers with "across N assets". It did not walk down here, where
+     the same two numbers are stated again. csAssetTally is a pure function of
+     the setups, so computing it here keeps this note pure exactly as the
+     csBlockerTally fallback above does. */
+  var assets = csAssetTally(setups);
   return '<div class="cs-note">CRYPTO SCAN — FILTERED FOR QUALITY. Out of ' + n
-    + ' total signals, ' + hqCount + ' clear every quality gate AND the pro-grade stamp '
+    + ' total signals' + csAssetNote(assets.setups, assets.assets)
+    + ', ' + hqCount + ' clear every quality gate AND the pro-grade stamp '
     + '(three-layer confidence 75%+, price and order flow agreeing). Risk-reward is not among '
     + 'those standards: the plan ladder is a fixed 1.5R, so an R:R test on it is true for every '
     + 'setup by construction and filters nothing. '
@@ -1683,8 +1691,13 @@ async function runScan(ui){
                   minTurnover: +pack.minTurnover || 0 };
     renderCards(setups, __results);
     csPaintFwd();          /* this scan may have settled records; repaint */
+    /* scoreFailed belongs here too. Pack 882 split a scoring crash out of
+       `errors` and taught COVERAGE and the empty state to say so, but this
+       line -- the one a reader watches while the scan runs -- kept reporting
+       "0 errors" for a run where our own scoring threw on forty contracts. */
     setStat(setups.length + ' setup(s) from ' + scanned + ' scanned · ' + skipped + ' skipped (too few bars) · '
       + unread + ' unread (fetch) · ' + errors + ' errors'
+      + (scoreFailed ? ' · ' + scoreFailed + ' scoring crashes' : '')
       + (owedN ? ' · ' + resolved + '/' + owedN + ' open records settled' : '')
       + ' · ' + new Date().toISOString().slice(11, 19) + ' UTC', false);
     setProgress(100);
