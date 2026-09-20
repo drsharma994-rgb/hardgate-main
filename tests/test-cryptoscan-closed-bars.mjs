@@ -401,11 +401,11 @@ let clockSpread = 0, clockSweeps = 0, trimConstant = true, trimScore = null;
      hgSweepPattern's volume divisor, which changes this function's output, so
      it never described the code it sat inside. The header was corrected then;
      this copy was missed. It may still appear as history, never as a claim. */
-  ok(/measured correlation with layer 1's direction is 0\.957/.test(FLOW),
-     'the return comment now carries the re-measured 0.957');
+  ok(/measured correlation with layer 1's direction is 0\.956/.test(FLOW),
+     'the return comment now carries the re-measured 0.956');
   ok(!/is 0\.872/.test(FLOW) && !/0\.872, agreement/.test(FLOW),
      'and no longer states 0.872 as the correlation');
-  ok((FLOW.match(/0\.957/g) || []).length >= 2,
+  ok((FLOW.match(/0\.956/g) || []).length >= 2,
      'the measured figure appears in both the header and the return');
 }
 

@@ -90,9 +90,9 @@ function hgComputeThreeLayerConfidence(l1, l2, l3, externalRisk) {
   /* What layer 2 actually is, measured rather than assumed: every read in
      order-flow.js is computed from the same OHLCV candles layer 1 votes on —
      there is no order book, trade tape or liquidation feed in that file. Over
-     56 synthetic tapes fed to both engines, the correlation between layer-1
-     direction and layer-2 score is 0.957, and layer 2 agreed with layer 1 on
-     53 of 56 (95%).
+     the synthetic tapes fed to both engines, 55 of which produce a layer-1
+     direction, the correlation between layer-1 direction and layer-2 score is
+     0.956, and layer 2 agreed with layer 1 on 52 of 55 (95%).
 
      That matters here because the +15% bonus below pays out on exactly those
      agreements, so most of the time it is rewarding one price read twice, and

@@ -48,6 +48,37 @@ var RULE = {
   timeoutBars: 24
 };
 
+/* A threshold is configured only if it is actually a finite number. Anything
+   else -- absent, null, a typo'd key -- is NOT a threshold, and comparing
+   against it would pass silently forever. Returns null so the caller has to
+   decide what to do about that rather than being handed a value. */
+function ruleThreshold(rule, key){
+  var v = rule ? rule[key] : undefined;
+  return (v === null || v === undefined || !isFinite(+v)) ? null : +v;
+}
+
+/* THE RULE, AS ACTUALLY APPLIED. Both surfaces that quote the two vote floors
+   used to interpolate RULE.minAvail and RULE.minPct straight, which rendered
+   "≥undefined decisive · NaN% agree" because neither key exists. This prints
+   what is configured and names what is not, so the page stops describing a
+   standard the engine does not enforce. */
+function ruleVoteFloorText(){
+  var a = ruleThreshold(RULE, 'minAvail'), p = ruleThreshold(RULE, 'minPct');
+  if (a !== null && p !== null)
+    return '≥' + a + ' decisive · ' + Math.round(p * 100) + '% agree';
+  var missing = [];
+  if (a === null) missing.push('decisive-count floor');
+  if (p === null) missing.push('agreement floor');
+  var have = [];
+  if (a !== null) have.push('≥' + a + ' decisive');
+  if (p !== null) have.push(Math.round(p * 100) + '% agree');
+  return (have.length ? have.join(' · ') + ' · ' : '')
+    + 'no ' + missing.join(' and no ')
+    + (missing.length === 1
+        ? ' is configured, so that gate is not applied'
+        : ' are configured, so those gates are not applied');
+}
+
 var HG_CRYPTO_ULTRA_EVIDENCE = {
   measured: true,
   symbol: 'BTCUSDT',
@@ -913,16 +944,60 @@ function cryptoUltraEngine(inp){
     else if (v.kind === 'print') kP++;
     else if (v.kind === 'n/a') kN++;
   }
-  var A = L + S, lead = L >= S ? 'long' : 'short', agree = L >= S ? L : S;
+  /* A TIE IS NOT A SIDE.
+
+     `lead = L >= S ? 'long' : 'short'` handed the long side every exact split.
+     Forty reads long against forty short is the engine saying it does not
+     know, and it was reported as a LONG signal at "50% agree" — priced with a
+     real entry, stop and targets, and written into CRYPTO SCAN's forward log
+     with a direction half that hg-forward splits on. Over 400 tapes through
+     this engine, 3 of the 310 that produced a plan were exact ties.
+
+     Absent means absent, the same rule the rest of this file follows for a
+     read it cannot take. A coin flip produces no direction, and the gate
+     below says so in the tally's own numbers. */
+  var A = L + S;
+  var lead = L > S ? 'long' : S > L ? 'short' : null;
+  var agree = L > S ? L : S > L ? S : L;   /* on a tie the two are equal */
   var pctV = A ? agree / A : 0;
   out.count = { L: L, S: S, N: N, total: res.votes.length, decisive: A, agree: agree, pct: pctV, pctRaw: pctV, lead: lead, long: L, short: S, kinds: { vote: kV, regime: kR, print: kP, na: kN } };
   out.regime = res.regime; out.regimeCounts = res.regimeCounts;
   out.votes = res.votes; out.price = res.price; out.atr = res.atr; out.bar = res.bar;
   out.ok = true;
-  out.line = agree + ' of ' + A + ' decisive reads agree ' + lead.toUpperCase() + ' (' + Math.round(100 * pctV) + '%) · ' + N + ' neutral · regime ' + res.regime.toUpperCase();
+  out.line = lead
+    ? (agree + ' of ' + A + ' decisive reads agree ' + lead.toUpperCase() + ' (' + Math.round(100 * pctV) + '%) · ' + N + ' neutral · regime ' + res.regime.toUpperCase())
+    : (L + ' long against ' + S + ' short — no side · ' + N + ' neutral · regime ' + res.regime.toUpperCase());
 
-  if (A < rule.minAvail){ out.gates.push('fewer than ' + rule.minAvail + ' decisive (' + A + ')'); }
-  if (pctV < rule.minPct){ out.gates.push('agreement ' + Math.round(100 * pctV) + '% < ' + Math.round(100 * rule.minPct) + '%'); }
+  if (!lead){ out.gates.push('no side: ' + L + ' long reads against ' + S + ' short — a tie is not a direction'); }
+
+  /* TWO THRESHOLDS THIS RULE DESCRIBES AND HAS NEVER CARRIED.
+
+     `rule.minAvail` and `rule.minPct` are read in four places and appear in
+     neither RULE nor any caller's override. Both gates were therefore
+     `x < undefined`, which is false for every x, so neither has ever fired:
+     the decisive-count floor and the agreement floor — the two numbers THE
+     RULE paragraph and the VERIFIED panel both quote — were decorative. Those
+     surfaces printed them straight, so the tab has been rendering
+
+       Rule: ≥undefined decisive · NaN% agree
+
+     Measured over 400 tapes: 310 produced a direction and a priced plan, with
+     agreement as low as 50%; 45 fired under 60% agreement and 25 under 55%.
+
+     The values are NOT invented here. Choosing a decisive-count floor and an
+     agreement floor is a calibration decision for the desk, and guessing one
+     would look like a tightened standard while being a number nobody measured.
+     What changes is that an absent threshold is now an explicit, reportable
+     fact instead of a comparison that silently passes: each gate applies only
+     when its threshold is configured, and `out.unapplied` names the ones that
+     are not so every surface can say so rather than printing undefined. */
+  var minAvail = ruleThreshold(rule, 'minAvail');
+  var minPct = ruleThreshold(rule, 'minPct');
+  out.unapplied = [];
+  if (minAvail === null) out.unapplied.push('minAvail');
+  else if (A < minAvail){ out.gates.push('fewer than ' + minAvail + ' decisive (' + A + ')'); }
+  if (minPct === null) out.unapplied.push('minPct');
+  else if (pctV < minPct){ out.gates.push('agreement ' + Math.round(100 * pctV) + '% < ' + Math.round(100 * minPct) + '%'); }
   if (rule.regimeGate && res.regime === 'chop'){ out.gates.push('regime gate: ' + res.regimeCounts.chop + ' reads say CHOP'); }
   if (!isFinite(res.atr) || res.atr <= 0){ out.gates.push('ATR unreadable'); }
   if (rule.minAtrFloor && isFinite(res.atr) && res.atr < rule.minAtrFloor){ out.gates.push('volatility too low (ATR ' + fmt(res.atr, 4) + ' < ' + fmt(rule.minAtrFloor, 4) + ')'); }
@@ -960,7 +1035,7 @@ function evidenceHTML(){
   if (!ev.measured) return '<div class="cu-ev"><b>VERIFIED</b><br>' + esc(ev.note) + '</div>';
   return '<div class="cu-ev"><b>VERIFIED — CRYPTO ULTRA (BTCUSDT 15m)</b><br>'
     + 'Symbol: ' + esc(ev.symbol) + ' · bars: ' + (ev.bars || '—') + ' · interval: ' + (ev.interval || '15m')
-    + '<br>Rule: ≥' + RULE.minAvail + ' decisive · ' + Math.round(RULE.minPct * 100) + '% agree' + (RULE.regimeGate ? ' · regime gate ON' : '')
+    + '<br>Rule: ' + ruleVoteFloorText() + (RULE.regimeGate ? ' · regime gate ON' : '')
     + '<br>In-sample: ' + fmtR(ev.isAvgR) + '/trade · n=' + (ev.isN || '—') + ' · win ' + pct(ev.isWin)
     + '<br>Out-of-sample: ' + fmtR(ev.oosAvgR) + '/trade · n=' + (ev.oosN || '—') + ' · win ' + pct(ev.oosWin)
     + (ev.tradable ? '' : '<br><b>MEASURED NOT TRADABLE</b>')
@@ -1079,7 +1154,7 @@ function mount(el){
   try{
     el.innerHTML = '<style>' + CU_CSS + '</style>'
       + '<div class="panel"><h2>CRYPTO ULTRA <span>one plain scalp rule on BTCUSDT · every standard + crypto-native indicator fed in · verified out-of-sample</span></h2>'
-      + '<div class="cu-rule"><b>THE RULE:</b> on every closed 15m bar, every directional indicator read votes LONG / SHORT / neutral. When ≥' + RULE.minAvail + ' reads are decisive, <b>' + Math.round(RULE.minPct * 100) + '%</b> of them agree'
+      + '<div class="cu-rule"><b>THE RULE:</b> on every closed 15m bar, every directional indicator read votes LONG / SHORT / neutral. The side with more reads fires (a tie is no side, and stands aside) — vote floors: <b>' + ruleVoteFloorText() + '</b>'
       + (RULE.regimeGate ? ', and the REGIME reads do not say CHOP' : '') + ', that side fires: entry at the close, stop ' + RULE.stopAtr + '×ATR14 (never tighter than ' + RULE.costFloorMult + '× the venue round-trip), TP1 ' + RULE.t1R + 'R, TP2 ' + RULE.t2R + 'R, dead after ' + RULE.timeoutBars
       + ' bars. Every read, its value, its kind, its vote and its rule are printed so you can count them yourself. Reads that cannot vote a side (volatility, trend strength) feed the regime gate; reads that need external data (on-chain, derivatives, order flow, DeFi, ML models) are shown as not applicable — never faked. No strategy measures 100% — the VERIFIED panel says what this one measured.'
       + '</div>'
@@ -1099,6 +1174,8 @@ W.cryptoUltraEngine = cryptoUltraEngine;
 W.cryptoUltraVotes = cryptoUltraVotes;
 W.cryptoUltraState = function(){ return __last ? JSON.parse(JSON.stringify(__last)) : null; };
 W.HG_CRYPTO_ULTRA_RULE = RULE;
+W.HG_CRYPTO_ULTRA_RULE_THRESHOLD = ruleThreshold;
+W.HG_CRYPTO_ULTRA_VOTE_FLOOR_TEXT = ruleVoteFloorText;
 /* which regime ids decide, so a consumer can mark them rather than re-spell them */
 W.HG_CRYPTO_ULTRA_REGIME_COUNTED = REGIME_COUNTED;
 W.HG_CRYPTO_ULTRA_EVIDENCE = HG_CRYPTO_ULTRA_EVIDENCE;

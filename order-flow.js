@@ -16,8 +16,8 @@
    same candles to cryptoUltraEngine and to hgOrderFlowScore. Of those, 56
    produce a layer-1 direction:
 
-     correlation(layer-1 direction, layer-2 score)   0.957
-     layer 2 agreed with layer 1's direction          53 / 56   (95%)
+     correlation(layer-1 direction, layer-2 score)   0.956
+     layer 2 agreed with layer 1's direction          52 / 55   (95%)
      disagreed                                         1
      neutral                                           2
 
@@ -296,11 +296,17 @@ function hgOrderFlowScore(symbol, rows15m, rows1h) {
     direction: direction,
     confidence: Math.abs(aggregated),
     /* every read above is computed from the same candles layer 1 votes on;
-       measured correlation with layer 1's direction is 0.957, agreement 53/56.
+       measured correlation with layer 1's direction is 0.956, agreement 52/55.
        0.872 stood here until pack 877: it was measured BEFORE pack 867 fixed
        hgSweepPattern's volume divisor, which changes this function's output,
        so it never described the code it was attached to. The header at the top
-       of this file was corrected then; this copy was missed. */
+       of this file was corrected then; this copy was missed.
+
+       53/56 stood here until pack 892, which stopped cryptoultra reporting an
+       exact 40-long / 40-short split as a LONG. One of the 56 tapes was such a
+       tie, so it no longer has a layer-1 direction for layer 2 to agree with.
+       The finding is unchanged -- this layer is not independent of layer 1 --
+       and the coefficient moved by 0.001. */
     proxyOnly: true,
     proxyNote: 'candle-derived proxy — no order book, trade tape or liquidation feed'
   };

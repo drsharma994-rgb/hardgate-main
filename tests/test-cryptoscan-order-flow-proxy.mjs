@@ -14,10 +14,10 @@
 
    Measured against the real engines — 60 synthetic tapes swept across drift
    and volatility, the same candles handed to cryptoUltraEngine and to
-   hgOrderFlowScore, of which 56 produce a layer-1 direction:
+   hgOrderFlowScore, of which 55 produce a layer-1 direction:
 
-     correlation(layer-1 direction, layer-2 score)   0.957
-     layer 2 agreed with layer 1's direction          53 / 56   (95%)
+     correlation(layer-1 direction, layer-2 score)   0.956
+     layer 2 agreed with layer 1's direction          52 / 55   (95%)
 
    So the decorrelating layer says what layer 1 already said 95% of the time,
    and each agreement pays the bonus for one price read twice. The weights and
@@ -118,7 +118,7 @@ console.log('\n2. it is not independent of layer 1, and here is the number');
       let res = null;
       try{ res = S.cryptoUltraEngine({ rows15m: r, rows1h: r1, now: Date.now(),
                                        venueCost: { venue: 'Delta', rtFrac: 0.0015 },
-                                       allowUnverified: true }); }catch(e){ }
+                                       }); }catch(e){ }
       if (!res || !res.dir) continue;
       const of_ = S.hgOrderFlowScore('X', r, r1);
       pairs.push([res.dir === 'long' ? 1 : -1, of_.score]);
@@ -127,15 +127,22 @@ console.log('\n2. it is not independent of layer 1, and here is the number');
       else disagree++;
     }
   }
-  ok(pairs.length === 56, 'the sample is the 56 tapes that produce a layer-1 direction (' + pairs.length + ')');
+  /* 56 until pack 892. One of those tapes was an exact 40-long / 40-short
+     split, which the engine used to report as a LONG direction because
+     `lead = L >= S ? 'long' : 'short'` handed the long side every tie. It now
+     produces no side, so it is no longer a tape with a layer-1 direction and
+     no longer belongs in a sample of layer-1 directions. The correlation
+     barely moves (0.957 -> 0.956); what changed is that a coin flip has
+     stopped being counted as one of the directions layer 2 is agreeing with. */
+  ok(pairs.length === 55, 'the sample is the 55 tapes that produce a layer-1 direction (' + pairs.length + ')');
   const n = pairs.length;
   const mx = pairs.reduce((a, p) => a + p[0], 0) / n, my = pairs.reduce((a, p) => a + p[1], 0) / n;
   let sxy = 0, sxx = 0, syy = 0;
   for (const [x, y] of pairs){ sxy += (x - mx) * (y - my); sxx += (x - mx) ** 2; syy += (y - my) ** 2; }
   const r = sxy / Math.sqrt(sxx * syy);
   ok(r > 0.80, 'correlation with layer 1 is ' + r.toFixed(3) + ', not the independence the header claimed');
-  ok(Math.abs(r - 0.957) < 0.02, 'and it is the 0.957 written into the module header');
-  ok(agree === 53 && disagree === 1 && neutral === 2,
+  ok(Math.abs(r - 0.956) < 0.02, 'and it is the 0.956 written into the module header');
+  ok(agree === 52 && disagree === 1 && neutral === 2,
      'layer 2 agreed with layer 1 on ' + agree + ' of ' + n + ', disagreed on ' + disagree);
   ok(agree / n > 0.9, 'which is ' + Math.round(100 * agree / n) + '% — and every one of those pays the +15% bonus');
 }
@@ -178,8 +185,9 @@ console.log('\n3. the reads are named for what they are');
 
   ok(/proxyOnly \? ' \(candle proxy\)' : ''/.test(stripComments(SCAN)),
      'and the card prints "(candle proxy)" beside the flow direction');
-  ok(/correlation between layer-1[\s\S]{0,40}direction and layer-2 score is 0\.957/.test(VOTE),
+  ok(/correlation between layer-1\s+direction and layer-2 score is\s+0\.956/.test(VOTE),
      'the confidence function records the measurement beside the bonus it justifies');
+  ok(/52 of 55/.test(VOTE), 'including the agreement count, re-stated after pack 892');
 }
 
 /* ---------------------------------------------------------------- 4 */
