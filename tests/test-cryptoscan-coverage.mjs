@@ -152,9 +152,14 @@ console.log('\n4. the coverage line rides the cards, not just the status bar');
   ok(/COVERAGE/.test(html), 'it is labelled');
   ok(/120 of 300 contracts read \(40%\)/.test(html), 'and carries the count and the share');
   ok(/140 skipped, fewer than 230 closed 15m bars/.test(html), 'naming the thin ones');
-  /* pack 870 split this: `errors` now means a throw INSIDE the loop, and a
-     fetch that never delivered bars is counted separately as `unread`. */
-  ok(/40 threw during the scan/.test(html), 'and the ones that threw mid-scan');
+  /* Pack 870 split this: `errors` means a throw INSIDE the loop, and a fetch
+     that never delivered bars is counted separately as `unread`. Pack 882
+     split it again: a crash in this app's own SCORING -- bars in hand, engine
+     already voted -- is counted and worded apart from a fetch that threw,
+     because one is a fact about the feed and the other is a bug here. */
+  ok(/40 threw before their bars could be read/.test(html),
+     'and the ones that threw before any bars arrived');
+  ok(!/scoring threw/.test(html), 'with no scoring failures in this fixture, that clause is absent');
   ok(/#92400E/.test(html), 'a partial run is coloured as a warning');
 
   const clean = S.csCoverageHTML(ALL_READ);
