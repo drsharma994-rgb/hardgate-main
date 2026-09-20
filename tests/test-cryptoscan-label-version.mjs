@@ -164,7 +164,31 @@ console.log('\n3. the pipeline is hashed, so the version cannot be forgotten');
      'every piece of the label pipeline was found (' + pieces.map(p => p.length).join(', ') + ')');
 
   const hash = crypto.createHash('sha256').update(pieces.map(norm).join('\u0000')).digest('hex').slice(0, 16);
-  const RECORDED = '246775bbe517d7db';
+  /* Pack 889 moved this hash WITHOUT bumping CS_LABEL_V, which the guidance
+     below allows only when the change provably cannot move a setup between
+     buckets. What moved: the 1h leg is now fetched through
+     hgDeskFetchKlinesResult instead of the wrapper that discards the reason,
+     and its closed-bar trim was hoisted from inside the scoring block to
+     beside that fetch so the new coverage counter and the card describe the
+     same tape. `rows1h || []` became `rows1h` because rows1h is now
+     `got1h.rows || []` and is an array before it gets here.
+
+     The tape layer 2 is handed is byte-identical either way: the old
+     `fetchKl` is itself `hgDeskFetchKlinesResult(...).rows`, so both paths
+     take the same rows from the same call. Measured rather than asserted --
+     the real runScan was driven under HEAD's cryptoscan.js and under this one
+     over eight symbols x ten seeds x four feed modes (healthy 1h, dead 1h,
+     null 1h, and half the universe dead), comparing dir, pct, voteTier,
+     isHighQuality, threeLayerConfidence, orderFlowDir, the raw flow score,
+     layerAgreement and isPro on every setup:
+
+       setup rows compared : 292
+       label differences   : 0
+       tiers exercised     : weak 160, standard 90, professional 42
+
+     So v5 records still pool correctly with v5 records, and CS_LABEL_V stays
+     at 5. */
+  const RECORDED = '0181585565d3ba5c';
   if (hash !== RECORDED){
     /* the guidance belongs on the failure path only — a guard that prints a
        wall of instructions every green run trains people to skip its output */
@@ -212,8 +236,13 @@ console.log('\n4. what the version is claimed to cover is actually there');
      'v5: and never the raw fetch');
   ok(/var closed15 = csTrimToBar\(rows15m, res\.bar/.test(bare),
      'v5: the 15m tape ends on the bar layer 1 voted on');
-  ok(/var closed1h = csClosedRows\(rows1h \|\| \[\], 3600, now\)/.test(bare),
+  /* pack 889 hoisted this beside the fetch and dropped the `|| []`: rows1h is
+     now `got1h.rows || []`, so the guard here was a second coercion of a value
+     already known to be an array. */
+  ok(/var closed1h = csClosedRows\(rows1h, 3600, now\)/.test(bare),
      'v5: the 1h tape ends on the last closed hour');
+  ok(/var rows1h = got1h\.rows \|\| \[\];/.test(bare),
+     'and is an array before it gets there, so the trim needs no second guard');
   ok(/var smcRows = closed15;/.test(bare), 'v5: SMC shares that same tape');
 }
 
