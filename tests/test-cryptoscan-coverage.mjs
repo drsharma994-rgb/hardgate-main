@@ -133,11 +133,17 @@ console.log('\n3. the empty state names which of the four outcomes happened');
   ok(/the engine never ran/.test(thin),
      'every contract too thin reaches the same honest conclusion');
 
+  /* pack 885 reworded this: the sentence is now driven by the counts rather
+     than by the `partial` flag, because pack 882 added scoreFailed to that
+     flag and a run with only scoring crashes rendered "The other 0 were never
+     read". The claim also shrank to the contracts actually JUDGED -- a
+     contract whose scoring threw might have produced a signal. */
   const mixed = S.csEmptyHTML(MIXED);
-  ok(/120 of 300 contracts reached the engine and none produced a directional signal/.test(mixed),
-     'a partial run reports what it did read');
-  ok(/The other 180 were never read, so nothing is claimed about them/.test(mixed),
+  ok(/120 of 300 contracts were judged and none produced a directional signal/.test(mixed),
+     'a partial run reports what it did judge');
+  ok(/180 were never read, so nothing is claimed about them/.test(mixed),
      'and refuses to claim anything about the rest');
+  ok(!/The other 0/.test(mixed), 'and never says "the other 0"');
 
   ok(/has not run in this session yet/.test(S.csEmptyHTML(null)),
      'no run at all says exactly that');
