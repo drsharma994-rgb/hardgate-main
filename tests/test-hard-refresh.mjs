@@ -189,7 +189,7 @@ const groupTabs = gid => run("HG_NAV_GROUPS.filter(function(g){ return g.id===" 
    (SIGNAL LOG nav clash fix, documented at index.html HG_NAV_GROUPS). */
 assert(groupTabs('overview') === 'brain,book,trade,log,signallog,news,bias,regime,trendmx,rotation,execute,startrader',
   'COMMAND group: workflow then context (incl. signallog since v658)');
-assert(groupTabs('crypto') === 'combi,omnibtc,omnipresent,omniroute,dexscreener,setupconfirm,best,swing,scalp,edge,smart,squeeze,reversalsniper,smc,ob,trap,div,coil,apex,oiflow,liqs,onchain,chartvision,carry,venueprem,termbasis,cryptoultra,cryptoscan,cryptoverse',
+assert(groupTabs('crypto') === 'combi,omnibtc,omnipresent,omniroute,dexscreener,setupconfirm,best,swing,scalp,edge,smart,squeeze,reversalsniper,smc,ob,trap,div,coil,apex,oiflow,liqs,onchain,chartvision,carry,venueprem,termbasis,cryptoultra,cryptoscan,cryptoverse,ninetypercent',
   'CRYPTO group: BTC desk first, then anticipation, ranked scans → structure → flow → funding → ultra → scan');
 assert(groupTabs('gold') === 'super-gold,omnigold,omnigold1,optigold,newgold,golddirection,goldswing,goldscalp,goldultra,gold,goldpro,goldspot,goldcoint,goldpine,tauric,80percent',
   'GOLD group: super desk first, then scanners (signallog moved to COMMAND at v658)');

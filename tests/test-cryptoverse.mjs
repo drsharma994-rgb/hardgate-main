@@ -515,7 +515,10 @@ console.log('\n9. a setup that DOES fire carries everything it should');
 console.log('\n10. wired into the page');
 {
   ok(/<script src="cryptoverse\.js\?v=\d+"><\/script>/.test(HTML), 'the script tag is present');
-  ok(/'cryptoultra','cryptoscan','cryptoverse'\]/.test(HTML), 'and the tab is in the CRYPTO nav group');
+  /* matched without the closing bracket: this tab is no longer last in the
+     group, and an assertion pinned to its position fails the moment another
+     one is added after it */
+  ok(/'cryptoscan','cryptoverse'/.test(HTML), 'and the tab is in the CRYPTO nav group');
   ok(HTML.indexOf('cryptoverse.js') < HTML.indexOf('pinemath.js')
      || /pineVumanchuCipher/.test(stripComments(CV)),
      'the momentum filters are feature-checked at scan time, so load order cannot break them');
