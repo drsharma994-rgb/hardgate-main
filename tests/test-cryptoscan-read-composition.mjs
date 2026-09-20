@@ -260,8 +260,16 @@ let sweep = null;
     ok(!!v && v.kind === 'regime', id + ' is a regime read in the output');
   }
 
-  ok(html.indexOf(S.__csCompositionNote(S.__csVoteComposition(res.votes))) >= 0,
-     'and the table is headed by the composition line');
+  /* pack 881: the composition line is NOT repeated here. The card body prints
+     the same breakdown a few lines above it ("470 reads fed: 127 vote · …"),
+     and pack 880 added a second copy inside the same expanded view. The
+     per-row counted/not-counted marks are what this table adds. */
+  ok(html.indexOf(S.__csCompositionNote(S.__csVoteComposition(res.votes))) < 0,
+     'the table does not repeat the composition line the card body already prints');
+  ok(/reads fed: /.test(String(S.__csSetupCardHTML(
+       { plan: null, count: { total: 470, kinds: { vote: 127, regime: 30, print: 35, na: 278 } },
+         line: 'x', dir: 'long', label: 'BTC', pct: 0.8, votes: res.votes }, 0))),
+     'and the card body is where that breakdown lives');
   ok(S.__csVoteTableHTML([]) === '', 'an empty vote list renders nothing');
 
   /* Every n/a row still carries its own refusal, which is the good part and
