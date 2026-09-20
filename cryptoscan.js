@@ -389,15 +389,79 @@ function csSmcRank(s){
   return 0;
 }
 
-/* Primary key is the confidence the card actually PRINTS (whole percent — see
-   pct() and the Math.round in the card head), because two setups shown as "82%"
-   are tied to the reader even when their floats differ. SMC breaks that tie; raw
-   pct is the final key so order stays deterministic. renderCards re-partitions
-   by isHighQuality AFTER this with filter, which preserves order, so nothing can
-   cross the quality boundary here. */
+/* THE LADDER THE CARD STAMPS, weakest first — the index IS the rank.
+
+   These are the four tiers hgComputeThreeLayerConfidence returns, and nothing
+   else. tests/test-cryptoscan-rank-stamp.mjs reads that function's own return
+   statements and fails if it grows a tier this list does not carry, so a new
+   tier cannot quietly arrive and sort as `weak`. */
+var CS_TIER_ORDER = ['weak', 'standard', 'professional', 'professional-grade'];
+
+/* -1 for an unknown or absent tier, which therefore sorts BELOW `weak`. A
+   stamp this file cannot read is not a stamp the card can claim a rank for;
+   the tab's rule everywhere else is that absent means absent, never a
+   flattering default. */
+function csTierRank(s){
+  var t = s && s.voteTier;
+  return t ? CS_TIER_ORDER.indexOf(String(t)) : -1;
+}
+
+/* THE ORDER AND THE STAMP USED TO CONTRADICT EACH OTHER.
+
+   Every quality decision this tab makes is three-layer. The block a card is
+   painted into is isHighQuality; the PROFESSIONAL-GRADE badge is isPro; the
+   mechanic hg-forward pools the record by is voteTier. All three come off
+   hgComputeThreeLayerConfidence. The ranking was the one thing that did not:
+   it read layer-1 agreement alone, and layer 1 is 40% of the number the card
+   stamps beside it.
+
+   So the tab told the reader two different things on one card. Driven through
+   the real runScan over 87 multi-setup scans (870 contracts, 801 setups):
+
+     #1 card was NOT the strongest tier on screen   37 of 87 scans (42.5%)
+     adjacent pairs ordered against their own tier  100
+       of those, at an IDENTICAL printed percentage  23
+
+   The last row is the sharpest: two cards both showing "92% agree" in the
+   head, the tie broken by structure and then by a float the reader cannot
+   see, landing WEAK (confidence 0.57) above STANDARD (0.72). And because
+   layer-1 ignores quality entirely, the "#N" badge — which is the index in
+   this sorted list, while cards are PAINTED high-quality block first —
+   disagreed with the screen on 24 of 31 mixed-block scans: the first
+   high-quality card was not #1, and #1 sat further down among the
+   lower-quality ones.
+
+   The keys now run in the order the reader meets them:
+
+     1. the block renderCards will paint it into (isHighQuality)
+     2. the tier stamped on the card
+     3. the printed whole percent of layer-1 agreement
+     4. SMC structure
+     5. raw pct, so the order stays deterministic
+
+   Key 1 is not a new judgement — it is what renderCards already does with two
+   filters, moved in front of the sort so the sorted list and the painted list
+   are the same list and the badge cannot lie. Key 3 keeps its original
+   rationale: two setups shown as "82%" are tied to the reader even when their
+   floats differ.
+
+   Measured against the same 87 scans: #1-not-strongest 37 -> 0, tier
+   inversions 100 -> 0, badge disagreements 24 -> 0.
+
+   WHAT THIS IS NOT. It is not a claim that the three-layer number ranks better
+   by OUTCOME — nothing here has measured that, and the forward log is the
+   instrument that eventually will. It is that a desk must not number a card #1
+   while stamping it weaker than the card below it. Inside one tier the tab
+   makes no discrete claim, so layer-1 still orders there and the confidence
+   float is deliberately not consulted: choosing a within-tier key is a ranking
+   decision with no defect driving it. */
 function csSortSetups(arr){
   if (!Array.isArray(arr)) return arr;
   arr.sort(function(a, b){
+    var ha = (a && a.isHighQuality) ? 1 : 0, hb = (b && b.isHighQuality) ? 1 : 0;
+    if (hb !== ha) return hb - ha;
+    var ta = csTierRank(a), tb = csTierRank(b);
+    if (tb !== ta) return tb - ta;
     var pa = (a && a.pct) || 0, pb = (b && b.pct) || 0;
     var ba = Math.round(pa * 100), bb = Math.round(pb * 100);
     if (bb !== ba) return bb - ba;
@@ -406,6 +470,18 @@ function csSortSetups(arr){
     return pb - pa;
   });
   return arr;
+}
+
+/* THE KEY THE CARDS ARE ORDERED BY, ON THE CARD. The tier decided the order
+   above but lived in the collapsed body, two lines below the fold — ranking by
+   an invisible key is the same defect as ranking against a visible one. An
+   unreadable stamp says so rather than printing itself as a tier. */
+function csTierChip(s){
+  var t = s && s.voteTier;
+  if (!t) return '';
+  var known = csTierRank(s) >= 0;
+  return ' <span class="cs-chip" style="background:#F1F5F9;color:#475569">TIER '
+    + esc(String(t).toUpperCase()) + (known ? '' : ' · UNRECOGNISED') + '</span>';
 }
 
 /* THE VERSION OF THE LABEL, not of the file.
@@ -1316,6 +1392,7 @@ function setupCardHTML(s, idx, tally){
   var pn = csPairNote(s, tally);
   if (pn) h += ' <span class="cs-chip" style="background:#F1F5F9;color:#475569">' + esc(pn) + '</span>';
   h += ' <span class="cs-dir ' + dirCls + '">' + (s.dir || '—').toUpperCase() + '</span>';
+  h += csTierChip(s);
   try{ if (typeof W.hgSmcChipHtml === 'function') h += (W.hgSmcChipHtml(s) || ''); }catch(eSmc){}
   h += '<span class="cs-card-meta">' + pct(s.pct) + ' agree · ' + (s.count ? s.count.decisive : '—') + ' decisive · regime ' + esc((s.regime || '—').toUpperCase()) + esc(csRegimeNote(s));
   if (p) h += '<br>entry ' + fmt(p.entry) + ' · SL ' + fmt(p.stop) + ' · TP1 ' + fmt(p.t1)
@@ -1468,6 +1545,9 @@ W.CS_LABEL_V = CS_LABEL_V;
 W.csCoverage = csCoverage;
 W.csUnreadWhyText = csUnreadWhyText;
 W.csH1State = csH1State;
+W.csTierRank = csTierRank;
+W.csTierChip = csTierChip;
+W.CS_TIER_ORDER = CS_TIER_ORDER;
 W.csH1Note = csH1Note;
 W.csH1WhyText = csH1WhyText;
 W.CS_MIN_1H = CS_MIN_1H;
