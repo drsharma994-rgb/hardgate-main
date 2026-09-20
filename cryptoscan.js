@@ -566,7 +566,19 @@ function csFooterNote(setups, hqCount, tally){
 
    The mechanics it tabulates are the versioned vote tiers from pack 872, so
    the table answers the question that instrumentation was for: do this desk's
-   own confidence tiers separate? */
+   own confidence tiers separate?
+
+   READ ITS `INDEP` COLUMN BEFORE ITS `SETTLED` ONE (pack 878). This desk is
+   the app's only fully CROSS-SECTIONAL one: it fires on every contract in the
+   universe on ONE bar with ONE 24-bar horizon, so every row a scan writes is
+   perfectly concurrent with every other, and the independent-observation count
+   collapses to roughly (bars scanned / 24) no matter how many contracts fired.
+   Measured on that exact shape with hgFwdOverlap: 40 setups a bar for 96 bars
+   is n = 3,840 and effN = 4.96 — a day of scanning is about five independent
+   observations. The panel used to print the raw count and let hgOmniPoolRead
+   compute its standard error over it, which on this desk's shape can read
+   "has paid" out of concurrency alone. It now judges READ on INDEP and keeps
+   the raw-count verdict visible in brackets. */
 var CS_FWD_MIN_RR = 1.5;              /* cryptoultra RULE.t1R */
 
 function csFwdPanelHTML(){
