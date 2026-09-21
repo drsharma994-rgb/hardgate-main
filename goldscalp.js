@@ -1048,6 +1048,92 @@ function cardHTML(c, isBest, season, tape){
     + '</div>';
 }
 
+/* WHICH GATE IS ACTUALLY BINDING.
+
+   Every held-back setup already names its reason, and the list below prints
+   every one of them — nothing is hidden and that stays true. But a reason
+   names an INSTANCE ("opposing structure caps TP1 at 2403.87"), and a reader
+   staring at an empty GOLD SCALP wants the GATE. Measured over 600 synthetic
+   scans: 1,518 rejections, and collapsing the prices out of them leaves just
+   NINE distinct gates — of which two account for 90% (structure-too-close
+   58.6%, sweep-without-volume-climax 31.6%). A flat list made the reader
+   count that for themselves across a thousand rows.
+
+   This counts; it does not gate. No setup is held back or released by
+   anything here, and the per-instance list is rendered underneath unchanged. */
+function gsGateFamily(reason){
+  return String(reason == null ? '' : reason)
+    .replace(/[\u2212-]?\d+(?:[.,]\d+)?/g, '#')   /* prices, counts, ratios -> # */
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function gsRejectFunnel(rejected){
+  var out = [], byGate = {}, order = [], i, r, k, total = 0;
+  if (!rejected || !rejected.length) return out;
+  for (i = 0; i < rejected.length; i++){
+    r = rejected[i];
+    if (!r) continue;
+    k = gsGateFamily(r.reason || 'failed a quality gate');
+    if (!k) continue;
+    total++;
+    if (!byGate[k]){ byGate[k] = { gate: k, n: 0, example: r.reason || '', kinds: {} }; order.push(k); }
+    byGate[k].n++;
+    var kind = r.strategy || r.stratKey || null;
+    if (kind) byGate[k].kinds[kind] = (byGate[k].kinds[kind] || 0) + 1;
+  }
+  for (i = 0; i < order.length; i++){
+    var g = byGate[order[i]];
+    g.pct = total ? (100 * g.n / total) : 0;
+    g.total = total;
+    /* the setup kinds this gate stopped, commonest first */
+    var names = Object.keys(g.kinds);
+    names.sort(function(a, b){ return g.kinds[b] - g.kinds[a]; });
+    g.kindList = names;
+    out.push(g);
+  }
+  out.sort(function(a, b){
+    if (b.n !== a.n) return b.n - a.n;
+    return String(a.gate).localeCompare(String(b.gate));
+  });
+  return out;
+}
+
+function gsRejectFunnelHTML(rejected){
+  var rows = gsRejectFunnel(rejected);
+  if (!rows.length) return '';
+  var total = rows[0].total, i, g, h;
+  var lead = rows[0];
+  var leadPct = Math.round(lead.pct);
+  h = '<div class="gsx-hist"><div class="gsx-hhead">WHY NOTHING LED — '
+    + total + ' setup' + (total === 1 ? '' : 's') + ' held back across '
+    + rows.length + ' gate' + (rows.length === 1 ? '' : 's')
+    + (rows.length > 1 ? ' · binding gate: ' + esc(gsGateShort(lead.gate)) + ' (' + leadPct + '%)' : '')
+    + '</div>';
+  for (i = 0; i < rows.length; i++){
+    g = rows[i];
+    var pct = Math.round(g.pct);
+    h += '<div class="gsx-hrow rej" style="display:flex;gap:8px;align-items:baseline">'
+      + '<b style="min-width:3.2em;text-align:right">' + g.n + '</b>'
+      + '<span style="min-width:3em;color:#64748B">' + pct + '%</span>'
+      + '<span>' + esc(gsGateShort(g.gate))
+      + (g.kindList.length ? ' <span style="color:#64748B">· ' + esc(g.kindList.slice(0, 3).join(', '))
+          + (g.kindList.length > 3 ? ' +' + (g.kindList.length - 3) : '') + '</span>' : '')
+      + '</span></div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+/* the gate without its trailing detail — the clause before the first em dash,
+   which is where these reasons put the gate name */
+function gsGateShort(gate){
+  var s = String(gate || '');
+  var cut = s.indexOf(' — ');
+  if (cut > 8) s = s.slice(0, cut);
+  return s.length > 90 ? s.slice(0, 89) + '…' : s;
+}
+
 function rejectedHTML(rejected){
   if (!rejected || !rejected.length) return '';
   var rows = rejected.map(function(r){
@@ -1929,6 +2015,7 @@ async function runScan(ui, scanSt){
           + display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note, deskTape); }).join('')
           + formingLayersHtml()
           + formingNowHTML(armedAll)
+          + gsRejectFunnelHTML(rejectedAll)
           + rejectedHTML(rejectedAll)
           + historyHTML(lock.store.history);
       } else if (rejectedAll.length || armedAll.length){
@@ -1937,6 +2024,7 @@ async function runScan(ui, scanSt){
         ui.empty.style.display = 'none';
         ui.cards.innerHTML = basisHtml + mixedBanner + uniHtml + (whySilent ? whySilentHTML(whySilent) : '')
           + formingLayersHtml()
+          + gsRejectFunnelHTML(rejectedAll)
           + rejectedHTML(rejectedAll)
           + formingNowHTML(armedAll)
           + historyHTML(lock.store.history);
@@ -2123,6 +2211,15 @@ async function gsWarm(){
 }
 
 /* ---------------- registration ---------------- */
+/* gsGateFamily and gsGateShort stay INTERNAL. They normalise a reason string,
+   so String(junk) of an object is "[object Object]" by definition — correct for
+   a normaliser, and exactly what test-gold-render-integrity.mjs rightly refuses
+   to let a gold tab expose, since anything reachable on window is fuzzed as a
+   renderer. The funnel and its HTML are the surface; the test lifts the two
+   helpers out of the source to check them directly. */
+W.gsRejectFunnel = gsRejectFunnel;
+W.gsRejectFunnelHTML = gsRejectFunnelHTML;
+
 W.goldscalpState = function(){
   try{ return __snap ? __stateView(__snap) : null; }catch(e){ return null; }
 };
