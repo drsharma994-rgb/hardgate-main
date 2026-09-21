@@ -1667,6 +1667,7 @@ function __gsSnapLvls(D, dir){
    original levels verbatim; only a genuinely different structure mints a
    new id. */
 function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anchor){
+  if (D && D.__gsTally) D.__gsTally.attempts++;
   try{
     /* v54: context reads (zone state, trend strength, session structure)
        inform but NEVER veto — excluded from the oppose count. A strategy
@@ -1680,7 +1681,29 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
     }
     var myEv = (dir === 'long') ? longEv : shortEv;
     var oppose = (dir === 'long') ? shortEv.length : longEv.length;
-    if (myEv.length < 2 || myEv.length <= oppose) return null;
+    /* hg-v903: COUNT WHAT NEVER REACHED A GATE.
+
+       These two are the only ways a strategy attempt ends before any named
+       gate runs, and until now both were a bare `return null`. Measured over
+       600 scans: 2,667 attempts, of which 937 (35.1%) died here — 378 with
+       fewer than two agreeing reads, and 559 OUTVOTED, meaning the reads
+       existed and the desk's own evidence book went against them.
+
+       The first is honestly silent: no setup formed, and naming every
+       strategy that did not trigger would bury the ones that did. The second
+       is not the same thing at all — the desk had a directional read and its
+       own ledger voted it down — and a reader on an empty board could not
+       tell those apart, or tell either from the gates that DO get named.
+       So they are tallied, and the WHY NOTHING LED panel prints the split.
+
+       This counts; it does not gate. The condition is unchanged. */
+    if (myEv.length < 2 || myEv.length <= oppose){
+      if (D && D.__gsTally){
+        if (myEv.length < 2) D.__gsTally.thin++;
+        else D.__gsTally.outvoted++;
+      }
+      return null;
+    }
     var mark = D.entry;
     var entRef = __gsEntryFromZone(dir, mark, zone, anchor);
     var useEntry = entRef.entry;
@@ -2167,6 +2190,8 @@ function goldScalpSetups(inp){
     else if (inp.source) bundleOpts.candleSource = inp.source;
     var D = __goldBundle(rows, __rows(inp.rows1h), __rows(inp.rows4h), entry, a15, bundleOpts);
     D.kz = kz; D.news = news;
+    /* one tally per scan, shared by every __gsCand attempt below */
+    D.__gsTally = { thin: 0, outvoted: 0, attempts: 0 };
 
     /* quality-gate context shared by every strategy candidate:
        200-EMA-15m value + 5-bar slope (trend alignment), the 4H EMA50/200
@@ -2188,6 +2213,9 @@ function goldScalpSetups(inp){
        the main array keeps its established shape/semantics. */
     var out = [], rejected = [], seen = {};
     out.rejected = rejected;
+    /* hg-v903: the pre-gate tally rides beside .rejected, same side-channel
+       convention, so the tab can complete the WHY NOTHING LED accounting. */
+    out.preGate = D.__gsTally;
     function push(c){
       if (!c) return;
       if (c.dropped){ rejected.push(c); return; }
