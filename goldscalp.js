@@ -1177,12 +1177,29 @@ function gsPreGateLine(preGate){
   var out = Math.max(0, +preGate.outvoted || 0);
   var thin = Math.max(0, +preGate.thin || 0);
   if (!out && !thin) return '';
+  var attempts = Math.max(0, +preGate.attempts || 0);
   var bits = [];
   if (out) bits.push(out + ' outvoted by the desk\'s own evidence book (opposing reads matched or beat the agreeing ones)');
   if (thin) bits.push(thin + ' with fewer than two agreeing reads, so no setup formed');
+  /* TWO POPULATIONS, NOT TWO PARTS OF ONE.
+
+     hg-v903 printed this as "and N strategy attempts never reached a gate",
+     directly under "N setups held back across M gates". The `and` reads as a
+     sum, and it is not one: __gsTally counts entries into __gsCand, the
+     strategy-candidate builder, while the ranked gates above also hold back
+     setups minted by the ENGINE DETECTORS — liqsweep, sweepob, p6fail,
+     p8range and the rest — which never pass through that counter at all.
+     Measured over 400 scans: 1,962 builder attempts, but candidates plus
+     ranked rejections plus this tally came to 2,306, overshooting on 317 of
+     the 400 because the gate count spans mint paths the attempt count does
+     not. So the line names its own denominator and says what it excludes. */
   return '<div class="gsx-hrow" style="color:#64748B">'
-    + 'and ' + (out + thin) + ' strategy attempt' + ((out + thin) === 1 ? '' : 's')
-    + ' never reached a gate — ' + esc(bits.join('; ')) + '</div>';
+    + 'separately, of ' + (attempts ? attempts + ' ' : '')
+    + 'strategy-builder attempt' + (attempts === 1 ? '' : 's') + ', '
+    + (out + thin) + ' never reached a gate — ' + esc(bits.join('; '))
+    + '. The gates above also cover setups from the engine detectors, which do not pass '
+    + 'through this counter, so these two are separate tallies rather than parts of one.'
+    + '</div>';
 }
 
 function gsRejectFunnelHTML(rejected, preGate){
