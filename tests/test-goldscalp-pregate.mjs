@@ -135,7 +135,9 @@ console.log('\n3. the panel completes its own accounting');
                { strategy: 'C', reason: 'liquidity sweep without volume climax — V2 gate' }];
   const t = text(F.gsRejectFunnelHTML(rej, { attempts: 2667, thin: 378, outvoted: 559 }));
   ok(/3 setups held back across 2 gates/.test(t), 'the ranked gates still lead');
-  ok(/937 strategy attempts never reached a gate/.test(t), 'and the pre-gate total follows');
+  ok(/937 never reached a gate/.test(t), 'and the pre-gate total follows');
+  ok(/of 2667 strategy-builder attempts/.test(t),
+     'naming its own denominator, so the figure is not read against the gate count');
   ok(/559 outvoted by the desk's own evidence book/.test(t), 'naming the outvoted count');
   ok(/378 with fewer than two agreeing reads/.test(t), 'and the thin count');
   ok(/no setup formed/.test(t), 'saying plainly that a thin attempt is not a held-back setup');
@@ -159,6 +161,7 @@ console.log('\n4. it keeps quiet when it has nothing to add');
   const only = text(F.gsRejectFunnelHTML([], { attempts: 900, thin: 0, outvoted: 40 }));
   ok(/WHY NOTHING LED/.test(only), 'outvoted attempts alone still open the panel');
   ok(/40 outvoted/.test(only), 'and report the count');
+  ok(/of 900 strategy-builder attempts/.test(only), 'against its own denominator');
   ok(!/held back across/.test(only), 'without claiming gates that never fired');
 
   /* the ranked half is unaffected when no tally is passed */
@@ -181,6 +184,44 @@ console.log('\n5. summed across venues, and wired into both render paths');
   const body = grab(GS, 'gsPreGateLine') + grab(GS, 'gsRejectFunnelHTML');
   ok(!/\.dropped\s*=/.test(body) && !/\.demoted\s*=/.test(body) && !/\.vetoed\s*=/.test(body),
      'nothing in the panel writes dropped, demoted or vetoed');
+}
+
+/* ---------------------------------------------------------------- 6 */
+console.log('\n6. two tallies, not two parts of one — a correction to hg-v903');
+{
+  /* hg-v903 printed this line as "and N strategy attempts never reached a
+     gate" directly under "N setups held back across M gates". The `and` reads
+     as a sum, and it is not one.
+
+     __gsTally counts entries into __gsCand, the strategy-candidate builder.
+     The ranked gates above ALSO hold back setups minted by the engine
+     detectors — liqsweep, sweepob, p6fail, p8range and the rest — which never
+     pass through that counter. Measured over 400 scans: 1,962 builder
+     attempts, but candidates plus ranked rejections plus this tally came to
+     2,306, overshooting on 317 of the 400 scans. */
+  const t = text(F.gsRejectFunnelHTML(
+    [{ strategy: 'X', stratKey: 'liqsweep', reason: 'liquidity sweep without volume climax — V2 gate' }],
+    { attempts: 1962, thin: 378, outvoted: 559 }));
+
+  ok(/separately, of 1962 strategy-builder attempts/.test(t),
+     'the line says "separately" and names the population it counts');
+  ok(!/\band 937 strategy attempts never reached/.test(t),
+     'and no longer opens with an "and" that reads as a sum');
+  ok(/do not pass through this counter/.test(t),
+     'it states that the gates above cover mints this counter never saw');
+  ok(/separate tallies rather than parts of one/.test(t),
+     'and says outright that the two must not be added');
+
+  /* the engine-detector mints really are in the gate half and not the tally:
+     a rejection keyed to one of them is ranked, while the tally is untouched */
+  const engineOnly = text(F.gsRejectFunnelHTML(
+    [{ strategy: 'FIVE-LEG SWEEP', stratKey: 'liqsweep', reason: 'engine stop 0.6xATR below the 1.5xATR floor' },
+     { strategy: 'SWEEP-OB', stratKey: 'sweepob', reason: 'engine stop 0.9xATR below the 1.5xATR floor' }],
+    { attempts: 40, thin: 0, outvoted: 0 }));
+  ok(/2 setups held back/.test(engineOnly),
+     'engine-detector rejections are counted by the ranked gates');
+  ok(!/never reached a gate/.test(engineOnly),
+     'while a tally with nothing in it adds no line, even though attempts were made');
 }
 
 console.log('\n' + passed + ' assertions'
