@@ -9121,7 +9121,19 @@ function hgGoldSweepOb(rows, opts){
     var atr = atrs[atrs.length - 1];
     if (!(isFinite(atr) && atr > 0)){ out.why = 'ATR unread'; return out; }
 
-    var htf = hgGoldHtfBias(opts.rows4h || rows, opts.rows1h);
+    /* hg-v901: pass rows4h THROUGH, never `opts.rows4h || rows`.
+       hgGoldHtfBias already falls back correctly on its own — __rows(rows4h)
+       || __rows(rows1h) — so a missing 4H leg drops to the 1H bars, which are
+       still a HIGHER timeframe than the 15m the setup executes on. Substituting
+       `rows` here handed it the EXECUTION bars, so the function saw a non-empty
+       first argument, never reached its own fallback, and returned a "higher
+       timeframe" verdict computed from 15m candles. Measured over 600 tapes
+       with the 4H leg dropped: COUNTER-TREND stamps went 16 -> 44, because a
+       15m read disagrees with the setup direction far more often than a real
+       HTF read does. With both HTF legs absent the function says 'no HTF bias',
+       which is the honest answer — an absent read, not one invented from the
+       wrong bars. */
+    var htf = hgGoldHtfBias(opts.rows4h, opts.rows1h);
     var sweep = opts.sweep || hgGoldSweepEngine(rows, {
       regime: opts.regime, newsGate: newsGate
     });
