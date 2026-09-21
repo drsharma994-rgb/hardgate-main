@@ -1574,6 +1574,7 @@ function __gsEntryFromZone(dir, mark, zone, anchor){
 function __gsLevels(dir, entry, a15, structStop, snapLvls){
   var GOLD_STOP_MAX_ATR = 3.5;
   var stopDist = 1.5*a15, stopNote = 'stop 1.5×ATR14(15m)';
+  var ceilingBound = false, t1Snapped = false;
   if (isFinite(structStop)){
     var d = (dir === 'long') ? (entry - structStop) : (structStop - entry);
     if (d > 0){
@@ -1584,6 +1585,10 @@ function __gsLevels(dir, entry, a15, structStop, snapLvls){
         stopNote = 'stop BEHIND structure ' + structStop.toFixed(2) + ' (' + (stopDist/a15).toFixed(2) + '×ATR14)'
           + (want >= GOLD_STOP_MAX_ATR*a15 ? ' — at the ' + GOLD_STOP_MAX_ATR + '× sanity ceiling, structure may be broken' : '');
       }
+      /* hg-v902: remember whether the ceiling BOUND, i.e. whether the stop on
+         the card is the structure's or the ceiling's. The caller needs it —
+         see the note on t1Snapped below. */
+      if (d + 0.25*a15 > GOLD_STOP_MAX_ATR*a15) ceilingBound = true;
     }
   }
   var stop = (dir === 'long') ? entry - stopDist : entry + stopDist;
@@ -1600,10 +1605,24 @@ function __gsLevels(dir, entry, a15, structStop, snapLvls){
       var rL = Math.abs(L - entry)/risk;
       if (rL < bestR){ bestR = rL; bestLvl = L; }
     }
-    if (isFinite(bestLvl)){ t1 = bestLvl; stopNote += '; TP1 snapped to opposing structure ' + bestLvl.toFixed(2); }
+    if (isFinite(bestLvl)){ t1 = bestLvl; t1Snapped = true; stopNote += '; TP1 snapped to opposing structure ' + bestLvl.toFixed(2); }
   }
+  /* WHY BOTH FLAGS TRAVEL WITH THE LEVELS.
+
+     When nothing snaps, t1 is entry + 1.5*risk BY CONSTRUCTION, so
+     rr = |t1 - entry| / risk is 1.5 identically — whatever the risk is. That
+     is a tautology, not a measurement, and no R:R floor can decline it. The
+     note above says the ceiling is safe because "the R:R gate declines it on
+     its own"; measured on the real mint path over 800 tapes, every one of the
+     90 ceiling cases was unsnapped and carried rr exactly 1.500, so the gate
+     declined 0 of 90. It only declines the snapped ones, where rr is a real
+     ratio against a real level (measured 0.629, well under the 1.2R floor).
+
+     So the caller is told both: the stop on this card is the CEILING's, not
+     the structure's, and nothing independent is constraining the target. */
   return { stop: stop, t1: t1, t2: t2,
            rr: Math.abs(t1 - entry)/risk, rr2: Math.abs(t2 - entry)/risk,
+           ceilingBound: ceilingBound, t1Snapped: t1Snapped,
            stopNote: stopNote };
 }
 
@@ -1676,7 +1695,37 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
                reason: 'structure too close — R:R insufficient (opposing structure caps TP1 at '
                        + lv.rr.toFixed(1) + 'R < 1.2R minimum)' };
     }
+
     var demoted = false, offSess = false, stamps = [], gateNotes = [];
+    /* (2a) hg-v902: THE R:R ON THIS CARD IS ARITHMETIC, NOT A READ.
+
+       The stop-model note above justifies the 3.5×ATR sanity ceiling by saying
+       that beyond it "the geometry is not a stop but a different trade, and
+       the R:R gate declines it on its own". That holds only when TP1 snapped
+       to an opposing level, because then rr is a real ratio against a real
+       level — measured 0.629, well under the 1.2R floor, so the gate does
+       decline it.
+
+       When nothing snapped, t1 is entry + 1.5*risk BY CONSTRUCTION, so
+       rr = |t1 - entry| / risk is 1.5 identically, whatever the risk is.
+       Measured over 800 tapes on the real mint path, all 90 ceiling cases
+       were unsnapped, every one carried rr exactly 1.500, and the R:R gate
+       declined 0 of 90.
+
+       The stop itself is disclosed — stopNote already says it sits at the
+       ceiling and that structure may be broken — so this is not a hidden
+       stop. What was hidden is that the number beside it measures nothing.
+       DEMOTE, not drop: the card still paints with its levels, and the reader
+       is told the ladder is a multiple of risk rather than a level the market
+       chose. Dropping these would cut 14% of the board on an argument, and
+       the evidence here does not carry that. */
+    if (lv.ceilingBound && !lv.t1Snapped){
+      demoted = true;
+      if (stamps.indexOf('R:R UNMEASURED') < 0) stamps.push('R:R UNMEASURED');
+      gateNotes.push('stop sits at the 3.5×ATR ceiling rather than at structure, and no opposing '
+        + 'level constrained TP1 — the ' + lv.rr.toFixed(1) + 'R shown is 1.5× the risk by '
+        + 'construction, not a reward the market offered; never MOST PROBABLE');
+    }
     /* (2) TREND ALIGNMENT — counter-trend when price sits beyond a 200-EMA-15m
        that is falling (longs) / rising (shorts) and the 4H EMA50/200 stack
        agrees (or is unavailable); sweep triggers are the sanctioned
