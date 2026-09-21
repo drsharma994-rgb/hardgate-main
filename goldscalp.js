@@ -1202,6 +1202,60 @@ function gsPreGateLine(preGate){
     + '</div>';
 }
 
+/* THE MARK EVERY CARD ON THIS BOARD IS JUDGED AGAINST.
+
+   Live goldspot when the feed is up, else the last CLOSED 15m close — the bar
+   the scalp gates already judged. Named once because it now has two callers:
+   the venue loop, which stamps freshly built candidates, and the merge below,
+   which brings LOCKED convictions back from the lock store. Two copies of this
+   rule would be two things to drift. */
+function gsDeskMark(ctx, gold){
+  try{
+    var sp = ctx && ctx.spot && +ctx.spot.spotPx;
+    if (isFinite(sp) && sp > 0) return sp;
+    if (gold && gold.rows15m && gold.rows15m.length){
+      var lc = gold.rows15m[gold.rows15m.length - 1];
+      if (lc && isFinite(+lc.c)) return +lc.c;
+    }
+  }catch(e){}
+  return NaN;
+}
+
+/* A LOCKED CONVICTION IS THE CARD MOST LIKELY TO BE STALE, and it was the one
+   card that could not say so.
+
+   convictionCardFromLiveRec rebuilds a card from the stored record with its
+   entry, stop, targets, anchor and atr — but no mark, because the record has
+   no idea what price is now. mergeLiveConvictionCards then pushes it into the
+   display AFTER the venue loop that stamps marks, so it arrived with
+   mark === undefined.
+
+   gsxGeoLine hands that to hgPlanGeometryLineHtml, which deliberately "stays
+   silent when the mark is unreachable rather than claiming the plan is fine".
+   Correct on its own terms, and the result was that TARGET BEHIND PRICE and
+   its siblings never appeared on a locked card — on exactly the setups that
+   have survived rescans while price walked away from them.
+
+   Verified on the real merge: a stored record for entry 2400 / stop 2394 /
+   T1 2412 came back with mark undefined and a geometry line of "". Given a
+   mark of 2415 the same plan reads "TARGET BEHIND PRICE: T1 2412 sits between
+   the market and the entry — the retest crosses TP1 before the fill".
+
+   This stamps; it does not gate. A card with no finite desk mark is left
+   exactly as it was, still silent, because an invented mark would be worse
+   than none. */
+function gsStampMergedMarks(display, mark){
+  if (!Array.isArray(display) || !isFinite(mark) || !(mark > 0)) return 0;
+  var n = 0, i, c;
+  for (i = 0; i < display.length; i++){
+    c = display[i];
+    if (!c || isFinite(+c.mark)) continue;
+    c.mark = mark;
+    n++;
+  }
+  return n;
+}
+
 function gsRejectFunnelHTML(rejected, preGate){
   var rows = gsRejectFunnel(rejected);
   if (!rows.length) return gsPreGateLine(preGate)
@@ -1756,15 +1810,7 @@ async function runScan(ui, scanSt){
          feed is up, else the last CLOSED 15m close, which is the bar the
          scalp gates above already judged. Lets the card ask
          hgPlanMarketGeometry whether price walked through the plan. */
-      var __gsxMark = NaN;
-      try {
-        var __sp = ctx && ctx.spot && +ctx.spot.spotPx;
-        if (isFinite(__sp) && __sp > 0) __gsxMark = __sp;
-        else if (gold && gold.rows15m && gold.rows15m.length){
-          var __lc = gold.rows15m[gold.rows15m.length - 1];
-          if (__lc && isFinite(+__lc.c)) __gsxMark = +__lc.c;
-        }
-      } catch (eMk) { __gsxMark = NaN; }
+      var __gsxMark = gsDeskMark(ctx, gold);
       for (i = 0; i < got.length; i++){
         if (got[i] && isFinite(__gsxMark) && !isFinite(+got[i].mark)) got[i].mark = __gsxMark;
         cands.push(got[i]);
@@ -2004,6 +2050,10 @@ async function runScan(ui, scanSt){
     var mergeFn = (typeof mergeLiveConvictionCards === 'function') ? mergeLiveConvictionCards
       : ((typeof W !== 'undefined' && W) ? W.mergeLiveConvictionCards : null);
     var display = mergeFn ? mergeFn(cards, lock.store, { strategyDefault: 'SCALP SETUP' }) : cards.slice();
+    /* hg-v905: locked convictions arrive from the store without a mark — give
+       them the SAME one the fresh candidates got, so the geometry line can
+       speak on the cards most likely to be stale. */
+    gsStampMergedMarks(display, gsDeskMark(ctx, gold));
     if (isFinite(liveSpot) && liveSpot > 0 && display.length){
       goldSpotGuardAfterLock(lock.store, display, liveSpot);
       display = display.filter(function(c){ return c && !c.vetoed; });
@@ -2339,6 +2389,8 @@ async function gsWarm(){
    to let a gold tab expose, since anything reachable on window is fuzzed as a
    renderer. The funnel and its HTML are the surface; the test lifts the two
    helpers out of the source to check them directly. */
+W.gsDeskMark = gsDeskMark;
+W.gsStampMergedMarks = gsStampMergedMarks;
 W.gsFeedLegs = gsFeedLegs;
 W.gsRejectFunnel = gsRejectFunnel;
 W.gsRejectFunnelHTML = gsRejectFunnelHTML;
