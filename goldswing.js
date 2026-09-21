@@ -2868,8 +2868,13 @@ async function runScan(ui, scanSt){
        out-of-scope rows4h and would have failed silently inside its own
        try/catch, which is the exact pattern this work is meant to remove. */
     try {
-      if (typeof W.hgFwdResolve === 'function' && gold && gold.rows4h && gold.rows4h.length){
-        W.hgFwdResolve('XAUUSD', null, gold.rows4h);
+      /* v898: each timeframe against ITS OWN bars — a null timeframe settled
+         every open XAUUSD record, including 15m and 1h ones, against 4H. */
+      if (typeof W.hgFwdResolveMulti === 'function'){
+        W.hgFwdResolveMulti('XAUUSD', { '1h': gold && gold.rows1h,
+                                        '4h': gold && gold.rows4h });
+      } else if (typeof W.hgFwdResolve === 'function' && gold && gold.rows4h && gold.rows4h.length){
+        W.hgFwdResolve('XAUUSD', '4h', gold.rows4h);
       }
     } catch (eRes) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("goldswing", eRes); } catch (eW) {} }
     try{

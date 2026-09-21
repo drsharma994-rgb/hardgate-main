@@ -1472,8 +1472,16 @@ async function runScan(ui, scanSt){
        out-of-scope rows4h and would have failed silently inside its own
        try/catch, which is the exact pattern this work is meant to remove. */
     try {
-      if (typeof W.hgFwdResolve === 'function' && gold && gold.rows4h && gold.rows4h.length){
-        W.hgFwdResolve('XAUUSD', null, gold.rows4h);
+      /* v898: each timeframe against ITS OWN bars. This used to pass rows4h
+         with a null timeframe, which settled every open XAUUSD record on any
+         timeframe against 4H candles -- and this desk records on 1h, so its
+         own horizon ran four times too long. */
+      if (typeof W.hgFwdResolveMulti === 'function'){
+        W.hgFwdResolveMulti('XAUUSD', { '15m': gold && gold.rows15m,
+                                        '1h':  gold && gold.rows1h,
+                                        '4h':  gold && gold.rows4h });
+      } else if (typeof W.hgFwdResolve === 'function' && gold && gold.rows1h && gold.rows1h.length){
+        W.hgFwdResolve('XAUUSD', '1h', gold.rows1h);
       }
     } catch (eRes) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("goldscalp", eRes); } catch (eW) {} }
     try{

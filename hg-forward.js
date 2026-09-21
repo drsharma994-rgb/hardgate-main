@@ -653,12 +653,60 @@ localStorage. Never throws.
   }
 
   /* Settle every open record for one symbol+timeframe. Pure. */
+  /* THE BARS HAVE TO BE THE RECORD'S OWN BARS.
+
+     hgFwdSettleOne counts `seen` in the rows it is HANDED and compares that
+     count against rec.horizonBars, which is expressed in the RECORD's
+     timeframe. Hand it the wrong bars and the horizon silently rescales:
+
+       a 1h record with horizonBars 24 (a day) walked over 4H bars
+         gets four days, and a 4H bar that touches stop and target in the
+         same bar resolves as STOP, because candles cannot say which
+         printed first -- measured over 600 tapes, 5.2% of outcomes flipped
+         and EVERY ONE of them was a win turned into a loss;
+
+       a 4H record with horizonBars 20 (over three days) walked over 15m
+         bars gets five HOURS -- measured over 600 tapes, 86.3% of outcomes
+         changed, 518 of 600 real wins and losses thrown away as premature
+         EXPIRY, which the hit rate excludes entirely.
+
+     hgFwdResolve(sym, null, rows) settles EVERY open record for that symbol
+     whatever its timeframe, so any gold tab that happened to be open
+     settled every other gold tab's records with whichever bars it had
+     fetched. Measuring the rows and refusing the mismatch makes the caller's
+     mistake impossible rather than merely discouraged. */
+  function hgFwdBarSecs(rows){
+    if (!Array.isArray(rows) || rows.length < 3) return NaN;
+    var gaps = [], i, a, b;
+    for (i = 1; i < rows.length && gaps.length < 64; i++){
+      a = num(rows[i - 1].t); b = num(rows[i].t);
+      if (!isFinite(a) || !isFinite(b) || b <= a) continue;
+      gaps.push(b - a);
+    }
+    if (gaps.length < 2) return NaN;
+    /* median, so a weekend gap or one missing bar cannot decide the answer */
+    gaps.sort(function(x, y){ return x - y; });
+    return gaps[Math.floor(gaps.length / 2)];
+  }
+
+  /* Unknown on either side fails OPEN. A record with no timeframe, or bars
+     too few or too irregular to measure, settles exactly as it always did:
+     refusing those would strand records unsettled for ever, which is the
+     louder failure. Only a KNOWN mismatch is refused. */
+  function hgFwdBarsFitRec(recTf, barSecs){
+    var want = TF_SEC[String(recTf || '')];
+    if (!want || !isFinite(barSecs) || barSecs <= 0) return true;
+    return Math.abs(barSecs - want) <= want * 0.25;
+  }
+
   function hgFwdSettle(list, sym, tf, rows){
     var recs = Array.isArray(list) ? list : [];
     var out = [], changed = 0, i, r;
+    var barSecs = hgFwdBarSecs(rows);
     for (i = 0; i < recs.length; i++){
       r = recs[i];
-      if (r.state === 'open' && r.sym === sym && (!tf || !r.tf || r.tf === tf)){
+      if (r.state === 'open' && r.sym === sym && (!tf || !r.tf || r.tf === tf)
+          && hgFwdBarsFitRec(r.tf, barSecs)){
         var s = hgFwdSettleOne(r, rows);
         /* the fill-aware pass runs on the SAME bars in the same call, and is
            written into parallel fields — `state` and `r` are never touched
@@ -1350,6 +1398,26 @@ localStorage. Never throws.
         return r.changed;
       } catch (e) { return 0; }
     };
+
+    /* Settle a symbol across SEVERAL timeframes, each against its own bars.
+
+       A desk holds 15m, 1h and 4h candles and its records may sit on any of
+       them; resolving once with whichever set happened to be in scope is what
+       produced the mismatch above. Pass them all and each record is walked
+       over the bars it was written on. */
+    W.hgFwdResolveMulti = function(sym, byTf){
+      var total = 0, tf;
+      if (!byTf) return 0;
+      for (tf in byTf) if (Object.prototype.hasOwnProperty.call(byTf, tf)){
+        var rows = byTf[tf];
+        if (!rows || !rows.length) continue;
+        try { total += (W.hgFwdResolve(sym, tf, rows) || 0); } catch (e) {}
+      }
+      return total;
+    };
+
+    W.hgFwdBarSecs = hgFwdBarSecs;
+    W.hgFwdBarsFitRec = hgFwdBarsFitRec;
 
     /* This log's OWN overlap, measured from its own barT/tf/horizonBars —
        so a forward interval can be widened by what THIS population did,
