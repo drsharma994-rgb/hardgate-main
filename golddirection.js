@@ -1250,8 +1250,12 @@ function recordForward(scalpSel, swingSel, gold){
   /* Settle open XAUUSD records with the bars just fetched BEFORE recording,
      so a setup can never be settled by the bar it was written on. */
   try{
-    if (typeof W.hgFwdResolve === 'function' && gold.rows4h && gold.rows4h.length){
-      W.hgFwdResolve('XAUUSD', null, gold.rows4h);
+    /* v898: each timeframe against ITS OWN bars. This desk records on 1h and
+       used to settle with 4H candles, stretching its horizon fourfold. */
+    if (typeof W.hgFwdResolveMulti === 'function'){
+      W.hgFwdResolveMulti('XAUUSD', { '15m': gold.rows15m, '1h': gold.rows1h, '4h': gold.rows4h });
+    } else if (typeof W.hgFwdResolve === 'function' && gold.rows1h && gold.rows1h.length){
+      W.hgFwdResolve('XAUUSD', '1h', gold.rows1h);
     }
   }catch(eR){ try{ if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('golddirection', eR); }catch(eW){} }
   try{

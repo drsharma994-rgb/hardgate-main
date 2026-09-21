@@ -1853,7 +1853,12 @@ async function runScan(ui){
     if (ui && ui.cards) renderResult(ui, res, f.src, sel, lane);
     setStat(ui, (sel.pick ? 'BEST: ' + sel.pick.strategy + ' ' + sel.pick.dir.toUpperCase() + ' (against the consensus) · ' : (sel.cards.length ? sel.cards.length + ' setup' + (sel.cards.length === 1 ? '' : 's') + ' shown, none crowned · ' : 'no GOLD SCALP setup this bar · ')) + (res.ok ? res.line : 'count silent') + ' · ' + new Date().toISOString().slice(11, 19) + ' UTC', false);
     try{ if (sel.pick && typeof W.hgFwdRecordScan === 'function'){
-      if (typeof W.hgFwdResolve === 'function') W.hgFwdResolve('XAUUSD', null, f.rows15m);
+      /* v898: each timeframe against ITS OWN bars. A null timeframe here sent
+         15m candles at every open XAUUSD record, so a 4H swing record was
+         given twenty 15-minute bars instead of twenty 4-hour ones and expired
+         before it could resolve. */
+      if (typeof W.hgFwdResolveMulti === 'function') W.hgFwdResolveMulti('XAUUSD', { '15m': f.rows15m, '1h': f.rows1h });
+      else if (typeof W.hgFwdResolve === 'function') W.hgFwdResolve('XAUUSD', '15m', f.rows15m);
       W.hgFwdRecordScan('GOLDULTRA', '15m', [{ sym: 'XAUUSD', dir: sel.pick.dir, entry: sel.pick.entry, stop: sel.pick.stop, t1: sel.pick.t1, mechanic: 'GOLDSCALP-' + (sel.pick.stratKey || 'prefer') + '-AGAINST-ULTRA', ticket: true }], { horizonBars: RULE.timeoutBars });
     } }catch(eF){}
     return 'refreshed';
