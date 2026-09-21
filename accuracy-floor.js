@@ -77,15 +77,29 @@ var HG_ACCURACY_Z = 1.96;          /* 95% two-sided */
    they are checked against the source rather than trusted. hgFwdPool matches
    rec.tab with !==, so a name that is merely PLAUSIBLE pools nothing and the
    desk reads NOT YET MEASURED for ever — a wrong verdict that looks like a
-   patient one. The first cut of this roster guessed six of them (GOLD SCALP
-   for GOLDSCALP, OI FLOW for OIFLOW, REVERSAL SNIPER for REVERSALSNIPER,
-   GOLD ULTRA for GOLDULTRA, GOLD SWING for GOLDSWING, and an OMNIGOLD that
-   records nothing at all), and every one of those desks would have sat at
-   "unmeasured" while its log filled up. test-accuracy-floor.mjs now extracts
-   the recorded names from the sources and fails if the roster drifts.
+   patient one, and invisible, because that is what a new desk looks like.
+   The first cut of this roster guessed five of them: GOLD SCALP for
+   GOLDSCALP, OI FLOW for OIFLOW, REVERSAL SNIPER for REVERSALSNIPER, GOLD
+   ULTRA for GOLDULTRA and GOLD SWING for GOLDSWING.
+
+   A CORRECTION TO WHAT v896 SAID HERE. It also claimed OMNIGOLD "records
+   nothing at all" and left it off. That was wrong. OMNIGOLD records under
+   OMNIGOLD:SCALP and OMNIGOLD:SWING through a captured local —
+   `var fwdRecord = gfn('hgFwdRecord')` — which an extraction keyed on the
+   literal name at the call site could not see. The check now follows that
+   indirection, and it runs BOTH ways: a roster name the sources never write
+   fails, and a desk that records and owns a tab but is absent from the roster
+   fails too. The second direction is the one that would have caught this.
+
+   The gold tabs genuinely left off are GOLD SPOT, a spot-versus-perp basis
+   monitor, and GOLD COINT, a cointegration context ledger. Neither mentions
+   entry, stop or t1 anywhere: there is nothing to measure, so there is no
+   verdict to give.
 
    A tab may pool under SEVERAL names when one desk is split by an artefact of
-   naming rather than by strategy — NEWGOLD writes one pool per horizon. */
+   naming rather than by strategy — NEWGOLD by horizon, GOLDPINE by scalp and
+   swing, OMNIGOLD by horizon. Those are written as { prefix } and resolved
+   from the log, so a family can grow a member without this list rotting. */
 var HG_ACCURACY_TABS = {
   /* crypto */
   cryptoscan:     ['CRYPTO SCAN'],
@@ -105,17 +119,51 @@ var HG_ACCURACY_TABS = {
   'super-best':   ['SUPER:BEST'],
   'super-sniper': ['SUPER:SNIPER'],
   /* gold */
+  omnigold:       ['OMNIGOLD:SCALP', 'OMNIGOLD:SWING'],
+  omnigold1:      ['omnigold1'],
   goldscalp:      ['GOLDSCALP'],
   goldswing:      ['GOLDSWING'],
   goldultra:      ['GOLDULTRA'],
   goldpro:        ['GOLDPRO'],
+  goldpine:       [{ prefix: 'GOLDPINE:' }],
   golddirection:  ['GOLDDIRECTION'],
-  newgold:        ['NEWGOLD:1H', 'NEWGOLD:4H'],
+  newgold:        [{ prefix: 'NEWGOLD:' }],
   optigold:       ['OPTI GOLD'],
   '80percent':    ['OMNIGOLD:P80'],
   tauric:         ['OMNIGOLD:TAURIC'],
   'super-gold':   ['SUPER:GOLD']
 };
+
+/* A roster entry is an exact pool name, or { prefix } for a desk that writes
+   a FAMILY of them. Resolving a family from the log rather than listing its
+   suffixes here keeps one list instead of two: GOLDPINE splits scalp/swing,
+   NEWGOLD splits by horizon, and neither can add a third without this
+   picking it up. Exact names stay exact -- OMNIGOLD:P80 and OMNIGOLD:TAURIC
+   are separate desks that merely share a stem with OMNIGOLD, so OMNIGOLD is
+   listed by its two exact pools and NOT as a prefix, or it would swallow
+   both of them. */
+function hgAccuracyPools(entry){
+  var out = [], i, e, got;
+  for (i = 0; i < entry.length; i++){
+    e = entry[i];
+    if (typeof e === 'string'){ out.push(e); continue; }
+    if (!e || !e.prefix) continue;
+    got = (typeof W.hgFwdTabs === 'function') ? W.hgFwdTabs(e.prefix) : null;
+    if (got && got.length) out = out.concat(got);
+  }
+  return out;
+}
+
+/* What a family MIGHT resolve to is not known before the log is read, so a
+   banner names the stem rather than promising a count it has not counted. */
+function hgAccuracyStems(entry){
+  var out = [], i, e;
+  for (i = 0; i < entry.length; i++){
+    e = entry[i];
+    out.push(typeof e === 'string' ? e : (e && e.prefix ? e.prefix + '*' : '?'));
+  }
+  return out;
+}
 
 /* The label a banner prints for a tab: the desk's own pool name when it has
    one, and the shared stem when a desk pools under several. */
@@ -186,14 +234,19 @@ function hgAccuracyNeedObs(hit, floor, z){
 */
 function hgAccuracyRead(tab, floor){
   floor = isFinite(+floor) ? +floor : HG_ACCURACY_FLOOR;
-  var names = HG_ACCURACY_TABS[String(tab || '')];
-  var deskName = hgAccuracyDeskLabel(names);
+  var entry = HG_ACCURACY_TABS[String(tab || '')];
+  var names = entry ? hgAccuracyPools(entry) : null;
+  /* A family that resolves to nothing yet is still a real desk -- it has
+     simply written no records. Fall back to the stem so the banner names it
+     rather than calling an instrumented tab unwired. */
+  var deskName = entry ? (hgAccuracyDeskLabel(names) || hgAccuracyStems(entry).join(' + ')) : null;
   var out = { tab: String(tab || ''), desk: deskName || null, pools: names || null, floor: floor,
               state: 'unwired', settled: 0, open: 0, wins: 0,
               hit: NaN, effN: NaN, lower: NaN, minObs: hgAccuracyMinObs(floor),
               needObs: null };
-  if (!names || !names.length) return out;
+  if (!entry) return out;
   out.state = 'unmeasured';
+  if (!names || !names.length) return out;
   try{
     if (typeof W.hgFwdPool !== 'function') return out;
     var ni, pool, keys, i, st;
@@ -320,6 +373,32 @@ function hgAccuracyFloorPaint(tab){
   return host;
 }
 
+/* POOLS IN THE LOG THAT NO ROSTER ENTRY CLAIMS.
+
+   The roster is checked against the sources at test time, but a STATIC check
+   has one hole it cannot close: OMNIGOLD is listed by its two exact pools
+   rather than by a prefix (because OMNIGOLD:P80 and OMNIGOLD:TAURIC are
+   separate desks that merely share the stem), so a third OMNIGOLD: pool added
+   tomorrow would record evidence that no tab is judged on and no test would
+   notice. This closes that at RUN time, against the log itself: anything
+   accumulating records under a name the roster does not claim is named here,
+   rather than quietly going unjudged. */
+function hgAccuracyUnclaimed(){
+  if (typeof W.hgFwdTabs !== 'function') return [];
+  /* A prefix entry needs no separate registration here: hgAccuracyPools
+     resolves it from the SAME hgFwdTabs list this function walks, so every
+     pool under a claimed prefix is already claimed by its exact name. A
+     second prefix pass could never change the answer. */
+  var claimed = {}, id, pools, p, i;
+  for (id in HG_ACCURACY_TABS) if (Object.prototype.hasOwnProperty.call(HG_ACCURACY_TABS, id)){
+    pools = hgAccuracyPools(HG_ACCURACY_TABS[id]);
+    for (p = 0; p < pools.length; p++) claimed[pools[p]] = true;
+  }
+  var all = W.hgFwdTabs() || [], out = [];
+  for (i = 0; i < all.length; i++) if (!claimed[all[i]]) out.push(all[i]);
+  return out;
+}
+
 /* THE WHOLE BOARD AT ONCE, so "every gold and crypto tab" is a thing you can
    look at rather than a claim you have to take on faith. */
 function hgAccuracyRoster(floor){
@@ -359,6 +438,14 @@ function hgAccuracyRosterHtml(floor){
     + 'Judged on the Wilson 95% lower bound over INDEPENDENT observations (effN), never on the '
     + 'point estimate: a flawless record needs ' + hgAccuracyMinObs() + ' of them to claim '
     + f + '%.</div>';
+  /* anything writing records under a name no tab is judged on */
+  var un = hgAccuracyUnclaimed();
+  if (un.length){
+    h += '<div style="font-size:9px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;'
+      + 'border-radius:5px;padding:5px 7px;margin-top:4px">UNCLAIMED — '
+      + un.length + ' pool' + (un.length === 1 ? '' : 's') + ' accumulating records that no tab '
+      + 'on this board is judged on: ' + esc(un.join(', ')) + '</div>';
+  }
   return h;
 }
 
@@ -372,6 +459,7 @@ W.hgAccuracyText = hgAccuracyText;
 W.hgAccuracyFloorHtml = hgAccuracyFloorHtml;
 W.hgAccuracyFloorPaint = hgAccuracyFloorPaint;
 W.hgAccuracyRoster = hgAccuracyRoster;
+W.hgAccuracyUnclaimed = hgAccuracyUnclaimed;
 W.hgAccuracyRosterHtml = hgAccuracyRosterHtml;
 
 })();

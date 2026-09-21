@@ -215,11 +215,16 @@ console.log('\n5. the banner, and every desk on one board');
   const roster = S.hgAccuracyRoster();
   ok(roster.length >= 10, 'the roster covers ' + roster.length + ' instrumented desks');
   const ids = Object.keys(S.HG_ACCURACY_TABS);
-  /* OMNIGOLD is deliberately NOT here: it renders gold setups but records none
-     of its own -- GOLDSCALP and GOLDSWING carry that evidence. A roster entry
-     for it would read "not yet measured" for ever, which is a verdict, not
-     silence. */
-  ok(ids.indexOf('omnigold') < 0, 'a desk that records nothing is left off rather than mis-reported');
+  /* v897 CORRECTION. v896 left OMNIGOLD off and said in its commit message
+     that it "records none of its own". That was WRONG. It records under
+     OMNIGOLD:SCALP and OMNIGOLD:SWING through a captured local --
+     `var fwdRecord = gfn('hgFwdRecord')` -- which the v896 extraction, keyed
+     on the literal name at the call site, could not see. The desks that truly
+     record nothing are GOLD SPOT (a basis monitor) and GOLD COINT (a context
+     ledger): neither mentions entry, stop or t1 anywhere. */
+  ok(ids.indexOf('omnigold') >= 0, 'OMNIGOLD is judged — it does record, under two pools');
+  ok(ids.indexOf('goldspot') < 0 && ids.indexOf('goldcoint') < 0,
+     'while the two gold tabs that mint no setups at all are left off rather than mis-reported');
   ok(ids.indexOf('cryptoscan') >= 0 && ids.indexOf('goldscalp') >= 0,
      'spanning both crypto and gold');
   ok(ids.indexOf('goldscalp') >= 0 && ids.indexOf('goldswing') >= 0
@@ -343,81 +348,231 @@ console.log('\n8. the edges a survivor found: equality, a missing reading, and w
 }
 
 /* ---------------------------------------------------------------- 9 */
-console.log('\n9. every desk name on the roster is a name the source really records under');
+console.log('\n9. the roster is checked against the sources, in BOTH directions');
 {
-  /* WHY THIS GUARD EXISTS. hgFwdPool matches rec.tab with !==, so a roster
-     name that is merely plausible pools nothing at all, and the desk reads
-     NOT YET MEASURED for ever while its log fills up — a WRONG verdict
-     wearing the clothes of a patient one, and invisible because "no records
-     yet" is exactly what a new desk looks like.
+  /* WHY THIS GUARD EXISTS, AND WHY v896's VERSION WAS NOT ENOUGH.
 
-     The first cut of this roster guessed six: GOLD SCALP for GOLDSCALP,
-     GOLD SWING for GOLDSWING, GOLD ULTRA for GOLDULTRA, OI FLOW for OIFLOW,
-     REVERSAL SNIPER for REVERSALSNIPER, and an OMNIGOLD that records nothing.
-     So the names are extracted from the sources and compared, not trusted. */
+     hgFwdPool matches rec.tab with !==, so a roster name that is merely
+     plausible pools nothing and the desk reads NOT YET MEASURED for ever —
+     a WRONG verdict wearing the clothes of a patient one, invisible because
+     that is exactly what a new desk looks like. v896 caught five such names
+     (GOLD SCALP for GOLDSCALP, GOLD SWING for GOLDSWING, GOLD ULTRA for
+     GOLDULTRA, OI FLOW for OIFLOW, REVERSAL SNIPER for REVERSALSNIPER).
+
+     But it only checked roster -> sources. It could not see a desk that
+     records and is simply ABSENT from the roster, and it read call sites by
+     the literal name `hgFwdRecord`, so it missed every desk that captures the
+     recorder first. OMNIGOLD does exactly that —
+     `var fwdRecord = gfn('hgFwdRecord')` — and v896 concluded, wrongly and in
+     its commit message, that OMNIGOLD records nothing. So the extraction now
+     follows that indirection, and the check runs BOTH ways. */
   const skip = new Set(['hg-forward.js']);
-  const recorded = new Set();
+  const byFile = {};
   for (const f of fs.readdirSync(root).filter(n => n.endsWith('.js') && !skip.has(n))){
     const src = fs.readFileSync(root + f, 'utf8');
-    /* hgFwdRecordScan('NAME', ...) */
-    for (const m of src.matchAll(/hgFwdRecordScan\s*\(\s*'([^']+)'/g)) recorded.add(m[1]);
-    /* hgFwdRecordScan(CONST, ...) and hgFwdRecord({ tab: CONST }) */
-    for (const m of src.matchAll(/hgFwdRecord(?:Scan)?\s*\(\s*(?:\{[\s\S]{0,900}?tab:\s*)?([A-Za-z_$][\w$]*)/g)){
-      const cm = src.match(new RegExp('\\b' + m[1] + "\\s*=\\s*'([^']+)'"));
-      if (cm) recorded.add(cm[1]);
+    /* every local name that aliases one of the two recorders */
+    const alias = new Set(['hgFwdRecord', 'hgFwdRecordScan']);
+    for (const m of src.matchAll(/(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:gfn|W\.?|w\.?)?\s*\(?\s*['"](hgFwdRecord|hgFwdRecordScan)['"]/g))
+      alias.add(m[1]);
+    for (const m of src.matchAll(/(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:W|w|G)\.(hgFwdRecord|hgFwdRecordScan)\b/g))
+      alias.add(m[1]);
+    const consts = {};
+    for (const m of src.matchAll(/(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*=\s*'([^']+)'\s*;/g)) consts[m[1]] = m[2];
+    const A = [...alias].join('|');
+    const names = new Set();
+    /* scan form: NAME('POOL', ...) / NAME(CONST, ...) / NAME('STEM:' + x, ...) */
+    for (const m of src.matchAll(new RegExp('(?:' + A + ")\\s*\\(\\s*'([^']+:)'\\s*\\+", 'g'))) names.add('PREFIX:' + m[1]);
+    for (const m of src.matchAll(new RegExp('(?:' + A + ")\\s*\\(\\s*(?:'([^']+)'|([A-Za-z_$][\\w$.]*))", 'g'))){
+      if (m[1] != null) names.add(m[1]);
+      else if (consts[m[2]]) names.add(consts[m[2]]);
     }
-    /* hgFwdRecord({ tab: 'NAME' }) */
-    for (const m of src.matchAll(/hgFwdRecord\s*\(\s*\{[\s\S]{0,900}?tab:\s*'([^']+)'/g)) recorded.add(m[1]);
-    /* a desk that pools per horizon: 'STEM:' + something */
-    for (const m of src.matchAll(/hgFwdRecordScan\s*\(\s*'([^']+:)'\s*\+/g)) recorded.add('PREFIX:' + m[1]);
+    /* object form: NAME({ ... tab: 'POOL' | 'STEM:' + x | CONST ... }) */
+    for (const m of src.matchAll(new RegExp('(?:' + A + ")\\s*\\(\\s*\\{[\\s\\S]{0,1200}?tab:\\s*(?:'([^']+)'\\s*\\+|'([^']+)'|([A-Za-z_$][\\w$.]*))", 'g'))){
+      if (m[1] != null) names.add('PREFIX:' + m[1]);
+      else if (m[2] != null) names.add(m[2]);
+      else if (consts[m[3]]) names.add(consts[m[3]]);
+    }
+    if (names.size) byFile[f] = [...names];
   }
-  ok(recorded.size > 20, 'the sources record under ' + recorded.size + ' desk names');
+  const recorded = new Set();
+  for (const f of Object.keys(byFile)) for (const n of byFile[f]) recorded.add(n);
+  ok(recorded.size > 25, 'the sources record under ' + recorded.size + ' desk names');
 
+  /* THE FIX THAT MOTIVATED THIS REWRITE: the indirection is now followed */
+  ok((byFile['omnigold.js'] || []).indexOf('PREFIX:OMNIGOLD:') >= 0,
+     'OMNIGOLD is seen to record, through a captured local — the v896 extraction could not see this');
+
+  /* ---- direction 1: every roster name is one the sources write ---- */
   const roster = S.HG_ACCURACY_TABS;
   const bad = [];
   for (const tab of Object.keys(roster)){
-    for (const name of roster[tab]){
-      if (recorded.has(name)) continue;
-      /* a per-horizon pool counts when its stem is recorded as a prefix */
-      const stem = name.replace(/[^:]*$/, '');
+    for (const e of roster[tab]){
+      if (e && e.prefix){
+        if (!recorded.has('PREFIX:' + e.prefix)
+            && ![...recorded].some(n => typeof n === 'string' && n.indexOf(e.prefix) === 0))
+          bad.push(tab + ' -> prefix ' + e.prefix);
+        continue;
+      }
+      if (recorded.has(e)) continue;
+      const stem = String(e).replace(/[^:]*$/, '');
       if (stem && recorded.has('PREFIX:' + stem)) continue;
-      bad.push(tab + ' -> ' + name);
+      bad.push(tab + ' -> ' + e);
     }
   }
   ok(bad.length === 0,
-     'every roster name is one the sources actually write'
+     'every roster entry names something the sources actually write'
      + (bad.length ? ' — WRONG: ' + bad.join(', ') : ''));
 
-  /* and the guard is not vacuous: the names it rejected before must still be
-     rejected, or the extraction has gone loose enough to accept anything */
+  /* ---- direction 2: every recording desk tab is ON the roster ---- */
+  const rosterStems = new Set();
+  for (const tab of Object.keys(roster))
+    for (const e of roster[tab]) rosterStems.add(e && e.prefix ? 'PREFIX:' + e.prefix : e);
+  /* files that both record AND register a tab in the gold or crypto nav */
+  const navGold = HTML.match(/id:'gold',\s*label:'GOLD',\s*tabs:\[([^\]]*)\]/);
+  ok(!!navGold, 'the GOLD nav group is readable from index.html');
+  const goldTabs = navGold[1].split(',').map(t => t.trim().replace(/^'|'$/g, ''));
+  ok(goldTabs.length >= 14, 'it lists ' + goldTabs.length + ' gold tabs');
+
+  const orphan = [];
+  for (const f of Object.keys(byFile)){
+    const src = fs.readFileSync(root + f, 'utf8');
+    if (!/HG_tabs\.push/.test(src)) continue;          /* not a tab, e.g. a report module */
+    for (const n of byFile[f]){
+      if (rosterStems.has(n)) continue;
+      /* an exact pool covered by a roster prefix, or a prefix covered exactly */
+      const stem = String(n).replace(/^PREFIX:/, '');
+      /* covered exactly, or by a roster prefix, or -- for a recorded family --
+         by roster entries that name exact pools under that stem */
+      if ([...rosterStems].some(r => typeof r === 'string'
+            && (r === stem || r.replace(/^PREFIX:/, '') === stem
+                || String(n).indexOf(String(r).replace(/^PREFIX:/, '')) === 0
+                || (String(n).indexOf('PREFIX:') === 0 && r.indexOf(stem) === 0)))) continue;
+      orphan.push(f + ' -> ' + n);
+    }
+  }
+  ok(orphan.length === 0,
+     'every desk that records AND owns a tab is on the roster'
+     + (orphan.length ? ' — MISSING: ' + orphan.join(', ') : ''));
+
+  /* THE HOLE THIS STATIC CHECK CANNOT CLOSE, and what does close it.
+     OMNIGOLD is claimed by two EXACT pools rather than by a prefix, because
+     OMNIGOLD:P80 and OMNIGOLD:TAURIC are separate desks sharing the stem. So
+     a third OMNIGOLD: pool added tomorrow would satisfy this check while
+     going unjudged. hgAccuracyUnclaimed catches that at run time, against
+     the log itself. */
+  load([...spaced('OMNIGOLD:SCALP', 3, () => true),
+        ...spaced('OMNIGOLD:INTRADAY', 3, () => true),
+        ...spaced('CRYPTO SCAN', 3, () => true)]);
+  const unclaimed = S.hgAccuracyUnclaimed();
+  ok(unclaimed.length === 1 && unclaimed[0] === 'OMNIGOLD:INTRADAY',
+     'a pool accumulating records under an unclaimed name is named (' + unclaimed.join(', ') + ')');
+  load([...spaced('OMNIGOLD:SCALP', 3, () => true), ...spaced('CRYPTO SCAN', 3, () => true)]);
+  ok(S.hgAccuracyUnclaimed().length === 0, 'and a fully claimed log reports nothing');
+  load([...spaced('GOLDPINE:anything-new', 3, () => true)]);
+  ok(S.hgAccuracyUnclaimed().length === 0,
+     'a prefix-claimed family absorbs a new member without complaint — that is what the prefix is for');
+  /* and the board says so rather than keeping it to itself */
+  load([...spaced('OMNIGOLD:INTRADAY', 3, () => true)]);
+  ok(/UNCLAIMED/.test(text(S.hgAccuracyRosterHtml())), 'the board reports an unclaimed pool');
+  ok(/OMNIGOLD:INTRADAY/.test(text(S.hgAccuracyRosterHtml())), 'and names it');
+  load([...spaced('CRYPTO SCAN', 3, () => true)]);
+  ok(!/UNCLAIMED/.test(text(S.hgAccuracyRosterHtml())), 'and stays quiet when there is nothing to report');
+
+  /* the guard is not vacuous: the wrong names are still rejected */
   for (const wrong of ['GOLD SCALP', 'GOLD SWING', 'GOLD ULTRA', 'OI FLOW', 'REVERSAL SNIPER'])
     ok(!recorded.has(wrong), 'the plausible-but-wrong name "' + wrong + '" is still not a recorded pool');
   ok(recorded.has('GOLDSCALP') && recorded.has('OIFLOW') && recorded.has('REVERSALSNIPER'),
      'while the real ones are');
 
-  /* the roster reaches both groups, and the desk whose NAME makes the claim */
+  /* ---- gold coverage, which is what this pack was asked for ---- */
   const ids = Object.keys(roster);
-  ok(ids.length >= 24, 'the roster covers ' + ids.length + ' desks');
-  ok(ids.indexOf('80percent') >= 0,
-     'including 80PERCENT — the one desk whose name states a rate is judged against it');
-  for (const g of ['goldscalp', 'goldswing', 'goldultra', 'goldpro', 'newgold', 'tauric'])
+  const judged = goldTabs.filter(t => ids.indexOf(t) >= 0);
+  const unjudged = goldTabs.filter(t => ids.indexOf(t) < 0);
+  ok(judged.length >= 13,
+     judged.length + ' of the ' + goldTabs.length + ' gold tabs are judged against the floor');
+  /* and the ones that are not are named, with a reason that holds */
+  for (const t of unjudged){
+    const file = t === 'gold' ? null : root + t + '.js';
+    if (!file || !fs.existsSync(file)){
+      ok(t === 'gold', 'unjudged gold tab "' + t + '" is the inline scan, which records under CARD:<scanId>');
+      continue;
+    }
+    const src = fs.readFileSync(file, 'utf8');
+    ok(!/\bentry\b/.test(src) && !/\bt1\b/.test(src),
+       'unjudged gold tab "' + t + '" mints no setups at all — nothing to measure, so no verdict');
+  }
+  for (const g of ['omnigold', 'omnigold1', 'goldscalp', 'goldswing', 'goldultra',
+                   'goldpro', 'goldpine', 'golddirection', 'newgold', 'optigold',
+                   'tauric', '80percent', 'super-gold'])
     ok(ids.indexOf(g) >= 0, 'gold desk ' + g + ' is on the roster');
-  for (const c of ['cryptoscan', 'cryptoverse', 'ninetypercent', 'edge', 'brain', 'omniroute'])
-    ok(ids.indexOf(c) >= 0, 'crypto desk ' + c + ' is on the roster');
+}
 
-  /* a desk pooling under several names sums the record and takes the LARGEST
-     independent count, never the sum — NEWGOLD:1H and NEWGOLD:4H are the same
-     instrument at the same time, and adding their effN would count one market
-     move twice */
-  load([...spaced('NEWGOLD:1H', 30, () => true), ...spaced('NEWGOLD:4H', 30, () => true)]);
-  const ng = S.hgAccuracyRead('newgold');
-  ok(ng.settled === 60, 'both pools are counted in the record (' + ng.settled + ')');
-  ok(/2 pools/.test(String(ng.desk)),
-     'and the banner says it is pooling more than one (' + ng.desk + ') rather than naming only the first');
-  const one = S.hgFwdOverlap('NEWGOLD:1H', null, {});
-  ok(ng.effN <= one.effN * 1.001,
-     'but the independent count is the larger pool (' + ng.effN.toFixed(1)
-     + '), not the two added (' + (one.effN * 2).toFixed(1) + ')');
+/* ---------------------------------------------------------------- 10 */
+console.log('\n10. a desk that writes a FAMILY of pools resolves it from the log');
+{
+  /* Hard-coding the suffixes of a family puts a second list in a second file
+     to drift out of step with the first — which is exactly how a roster ends
+     up naming a pool nothing writes. hgFwdTabs lets the floor ask the log. */
+  ok(typeof S.hgFwdTabs === 'function', 'hg-forward.js exposes the log\'s own desk names');
+  load([...spaced('GOLDPINE:scalp', 20, () => true), ...spaced('GOLDPINE:swing', 20, () => true),
+        ...spaced('SOMETHING ELSE', 5, () => true)]);
+  const fam = S.hgFwdTabs('GOLDPINE:');
+  ok(fam.length === 2 && fam[0] === 'GOLDPINE:scalp' && fam[1] === 'GOLDPINE:swing',
+     'a prefix resolves to exactly the pools under it (' + fam.join(', ') + ')');
+  ok(S.hgFwdTabs().length === 3, 'and with no prefix it returns every desk in the log');
+
+
+  const gp = S.hgAccuracyRead('goldpine');
+  ok(gp.settled === 40, 'the desk pools both halves of its family (' + gp.settled + ')');
+  ok(gp.pools.length === 2, 'having resolved 2 pool names it was never told');
+  ok(/2 pools/.test(String(gp.desk)),
+     'and the banner says it is pooling more than one (' + gp.desk + ') rather than naming only the first');
+
+  /* INDEPENDENCE ACROSS POOLS IS THE LARGEST, NEVER THE SUM. A desk split by
+     horizon trades the same instrument at the same time, so adding the two
+     effN counts one market move twice and claims independence it has not
+     got. The max understates when the pools really are disjoint, and
+     understating is the safe direction for a floor. */
+  const half = S.hgFwdOverlap('GOLDPINE:scalp', null, {});
+  ok(gp.effN <= half.effN * 1.001,
+     'the independent count is the larger pool (' + gp.effN.toFixed(1)
+     + '), not the two added (' + (half.effN * 2).toFixed(1) + ')');
+
+  /* A DESK CAN EXIST ONLY IN THE AGGREGATE. hg-forward prunes live records at
+     MAX_RECORDS and folds them into hg_forward_agg_v1, so the desks with the
+     MOST evidence are exactly the ones whose live rows are gone. Reading only
+     the live list would drop them — and a prefix family would silently lose a
+     member precisely because it had been running longest. */
+  load([...spaced('GOLDPINE:scalp', 3, () => true)]);
+  S.localStorage.setItem('hg_forward_agg_v1',
+    JSON.stringify({ 'GOLDPINE:ancient|M': { samples: 40, wins: 34, losses: 6 } }));
+  const withAgg = S.hgFwdTabs('GOLDPINE:');
+  ok(withAgg.indexOf('GOLDPINE:ancient') >= 0,
+     'a desk surviving only in the aggregate is still listed (' + withAgg.join(', ') + ')');
+  ok(S.hgAccuracyRead('goldpine').settled === 43,
+     'and its evidence is pooled, not lost');
+  S.localStorage.removeItem('hg_forward_agg_v1');
+
+  /* a family with nothing in the log yet is UNMEASURED, never unwired: the
+     tab is instrumented, it simply has not fired */
+  load([]);
+  const empty = S.hgAccuracyRead('goldpine');
+  ok(empty.state === 'unmeasured', 'an unfired family is unmeasured, not unwired');
+  ok(String(empty.desk).indexOf('GOLDPINE:') === 0,
+     'and the banner still names the desk by its stem (' + empty.desk + ')');
+
+  /* THE TRAP THIS DESIGN HAD TO AVOID. OMNIGOLD:P80 and OMNIGOLD:TAURIC are
+     SEPARATE desks that merely share a stem with OMNIGOLD. A prefix entry for
+     OMNIGOLD would swallow both and credit their evidence to a tab that did
+     not earn it, so OMNIGOLD is listed by its two exact pools instead. */
+  load([...spaced('OMNIGOLD:SCALP', 20, () => true),
+        ...spaced('OMNIGOLD:P80', 30, () => false),
+        ...spaced('OMNIGOLD:TAURIC', 30, () => false)]);
+  const og = S.hgAccuracyRead('omnigold');
+  ok(og.settled === 20, 'OMNIGOLD counts only its own two pools (' + og.settled + '), not P80 or TAURIC');
+  ok(og.hit === 1, 'so its record is its own');
+  ok(S.hgAccuracyRead('80percent').settled === 30, 'while 80PERCENT keeps its 30');
+  ok(S.hgAccuracyRead('tauric').settled === 30, 'and TAURIC keeps its 30');
 }
 
 console.log('\n' + passed + ' assertions'
