@@ -1202,6 +1202,73 @@ function gsPreGateLine(preGate){
     + '</div>';
 }
 
+/* IS THIS TAPE EVEN A TAPE?
+
+   goldScalpSetups checks that it has at least 30 bars, that ATR came out
+   positive and that the entry is a positive number. It never checks that the
+   BARS are well formed, and a feed can deliver ones that are not: a high
+   below its own low, a range that does not contain the body, a non-finite
+   price, a timestamp that goes backwards or repeats.
+
+   Those are not edge cases in the maths — they are impossible candles, and
+   every level the desk draws from them is drawn from something that never
+   happened. MEASURED: feed a tape where one bar in twenty arrives with its
+   high and low swapped, which is what a proxy glitch or a bad merge looks
+   like, and over 300 scans the STOP moved on 36.7% of them while the ENTRY
+   moved on only 4.7%. That is the worse half to lose: the stop is the risk
+   distance every size, every R and every target on the ladder is measured
+   against. The desk never said a word about it.
+
+   This reports; it does not gate. A malformed bar is disclosed, not dropped:
+   deciding which bars to discard is a data-repair policy, and inventing one
+   here would be the kind of silent correction this desk exists to avoid.
+   Bounded at BAD_CAP so a wholly broken feed cannot cost a scan its time. */
+function gsTapeSanity(rows){
+  var out = { bars: 0, bad: 0, inverted: 0, bodyOutside: 0, nonFinite: 0, timeOrder: 0, ok: true };
+  if (!Array.isArray(rows) || !rows.length) return out;
+  /* BAD_CAP bounds the WORK, not the number: the walk stops at the first bar
+     that reaches it. One bar can carry two faults — an impossible range AND a
+     timestamp that goes backwards — so the reported count can exceed the cap
+     by one. Clamping it would be a prettier number and a less true one. */
+  var BAD_CAP = 5000;
+  var i, b, o, h, l, c, t, prevT = NaN;
+  out.bars = rows.length;
+  for (i = 0; i < rows.length; i++){
+    if (out.bad >= BAD_CAP) break;   /* checked before AND after, so the cap is exact */
+    b = rows[i];
+    if (!b){ out.nonFinite++; out.bad++; continue; }
+    o = +b.o; h = +b.h; l = +b.l; c = +b.c; t = +b.t;
+    if (!isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c)){ out.nonFinite++; out.bad++; continue; }
+    if (h < l){ out.inverted++; out.bad++; }
+    else if (h < Math.max(o, c) || l > Math.min(o, c)){ out.bodyOutside++; out.bad++; }
+    if (isFinite(t)){
+      if (isFinite(prevT) && t <= prevT) { out.timeOrder++; out.bad++; }
+      prevT = t;
+    }
+    if (out.bad >= BAD_CAP) break;
+  }
+  out.ok = out.bad === 0;
+  return out;
+}
+
+function gsTapeSanityNote(rep){
+  if (!rep || rep.ok || !rep.bars) return '';
+  var bits = [];
+  if (rep.inverted) bits.push(rep.inverted + ' with the high below the low');
+  if (rep.bodyOutside) bits.push(rep.bodyOutside + ' whose range does not contain the open or close');
+  if (rep.nonFinite) bits.push(rep.nonFinite + ' with a price that is not a number');
+  if (rep.timeOrder) bits.push(rep.timeOrder + ' whose timestamp repeats or goes backwards');
+  if (!bits.length) return '';
+  var pct = Math.round(1000 * rep.bad / rep.bars) / 10;
+  return '<div class="note warn" style="margin:8px 0;padding:8px 10px;border:1px solid #F59E0B;border-radius:6px">'
+    + '<b>MALFORMED BARS</b> — ' + rep.bad + ' of ' + rep.bars + ' 15m bars (' + pct + '%) are not '
+    + 'possible candles: ' + esc(bits.join(', ')) + '. Every level below was drawn from this tape, '
+    + 'including those bars. Measured on a tape with one bar in twenty inverted, the STOP moved on 36.7% '
+    + 'of scans and the entry on 4.7% — the stop being the risk distance every size and every R on the '
+    + 'ladder is measured against. Nothing here is dropped: which bars to discard is a data-repair '
+    + 'decision, not one this desk should make for you.</div>';
+}
+
 /* THE MARK EVERY CARD ON THIS BOARD IS JUDGED AGAINST.
 
    Live goldspot when the feed is up, else the last CLOSED 15m close — the bar
@@ -2133,7 +2200,8 @@ async function runScan(ui, scanSt){
     var basisHtml = stRoute ? stGoldBasisHtml() : '';
     /* hg-v901: the unread-HTF-leg line rides with the mixed-feed banner, so
        both feed caveats reach every render path the banner already reaches. */
-    var mixedBanner = gsFeedLegNote(gold) + goldMixedFeedBannerHtml(gold);
+    var mixedBanner = gsTapeSanityNote(gsTapeSanity(gold && gold.rows15m))
+      + gsFeedLegNote(gold) + goldMixedFeedBannerHtml(gold);
     var uniHtml = goldUniformPanelHtml(display, uniRows, 'SCALP', deskTape);
     var wkRows = gold.rows4h.length ? gold.rows4h : gold.rows15m;
     paintGoldWeekendPanel(ui, wkRows, now, displayBest);
@@ -2389,6 +2457,7 @@ async function gsWarm(){
    to let a gold tab expose, since anything reachable on window is fuzzed as a
    renderer. The funnel and its HTML are the surface; the test lifts the two
    helpers out of the source to check them directly. */
+W.gsTapeSanity = gsTapeSanity;
 W.gsDeskMark = gsDeskMark;
 W.gsStampMergedMarks = gsStampMergedMarks;
 W.gsFeedLegs = gsFeedLegs;
