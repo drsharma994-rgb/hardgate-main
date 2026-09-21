@@ -48,9 +48,26 @@ function stripComments(src){
 }
 const text = h => String(h).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 
+/* A PINNED CLOCK — hg-v903.
+
+   The tie sweep below anchors its tapes to Date.now() and passes now:
+   Date.now() into the engine, whose session gates are time-of-day dependent.
+   Whether any of the 400 tapes lands on an exact L == S tie therefore moved
+   with the wall clock: this file passed in isolation and failed inside a
+   suite run fourteen minutes earlier, reporting "0 of them were exact ties".
+
+   Same defect, same fix as test-cryptoscan-rank-stamp.mjs in hg-v894: pin the
+   instant and anchor the tapes to it, so the sweep asks the same question
+   every run. Nothing about what is asserted changes. */
+const FIXED_NOW = Date.UTC(2026, 8, 20, 12, 0, 0);   /* 12:00 UTC — a liquid hour */
+class FixedDate extends Date {
+  constructor(){ if (arguments.length === 0) super(FIXED_NOW); else super(...arguments); }
+  static now(){ return FIXED_NOW; }
+}
+
 function boot(){
   const s = { console: { log(){}, warn(){}, error(){}, info(){}, debug(){} },
-              Math, isFinite, isNaN, Number, String, Object, Array, JSON, Date, Intl,
+              Math, isFinite, isNaN, Number, String, Object, Array, JSON, Date: FixedDate, Intl,
               parseInt, parseFloat, NaN, Infinity, RegExp, Promise, Error, Set, Map };
   s.window = s; s.globalThis = s; s.self = s; s.HG_tabs = []; s.HG_warmups = []; s.HG_TAB_MODS = {};
   s.setTimeout = (f) => { try{ f && f(); }catch(e){} return 0; }; s.clearTimeout = () => {};
@@ -196,7 +213,7 @@ console.log('\n4. a tie is not a side');
     const r = () => { s2 = (s2 * 1103515245 + 12345) & 0x7fffffff; return s2 / 0x7fffffff; };
     const drift = (r() - 0.5) * 0.06, vol = 0.004 + r() * 0.03;
     const N = 300, out = []; let px = 100;
-    const base = Math.floor(Date.now() / 1000 / SEC) * SEC, t0 = base - N * SEC;
+    const base = Math.floor(FIXED_NOW / 1000 / SEC) * SEC, t0 = base - N * SEC;
     for (let i = 0; i < N; i++){
       const o = px, c = px * (1 + (r() - 0.5 + drift) * vol);
       out.push({ t: t0 + i * SEC, o: o, c: c, h: Math.max(o, c) * (1 + vol * 0.2),
@@ -209,7 +226,7 @@ console.log('\n4. a tie is not a side');
   let tieLine = '';
   for (let k = 0; k < 400; k++){
     const res = S.cryptoUltraEngine({ rows15m: tape(17 + k * 97), rows1h: [],
-      now: Date.now(), venueCost: { rtFrac: 0.0011, venue: 'delta' } });
+      now: FIXED_NOW, venueCost: { rtFrac: 0.0011, venue: 'delta' } });
     if (!res.ok || !res.count) continue;
     seen++;
     if (res.count.L === res.count.S && res.count.decisive > 0){
@@ -238,7 +255,7 @@ console.log('\n5. the unapplied floors are reported on the result');
     let s2 = 4242;
     const r = () => { s2 = (s2 * 1103515245 + 12345) & 0x7fffffff; return s2 / 0x7fffffff; };
     const N = 300, out = []; let px = 100;
-    const base = Math.floor(Date.now() / 1000 / SEC) * SEC, t0 = base - N * SEC;
+    const base = Math.floor(FIXED_NOW / 1000 / SEC) * SEC, t0 = base - N * SEC;
     for (let i = 0; i < N; i++){
       const o = px, c = px * (1 + (r() - 0.5 + 0.09) * 0.010);
       out.push({ t: t0 + i * SEC, o: o, c: c, h: Math.max(o, c) * 1.001,
@@ -246,7 +263,7 @@ console.log('\n5. the unapplied floors are reported on the result');
       px = c;
     }
     return out;
-  })(), rows1h: [], now: Date.now(), venueCost: { rtFrac: 0.0011, venue: 'delta' } });
+  })(), rows1h: [], now: FIXED_NOW, venueCost: { rtFrac: 0.0011, venue: 'delta' } });
   ok(res.ok, 'the engine ran');
   ok(Array.isArray(res.unapplied), 'the result carries an `unapplied` list');
   ok(res.unapplied.indexOf('minAvail') >= 0 && res.unapplied.indexOf('minPct') >= 0,
@@ -265,7 +282,7 @@ console.log('\n6. a configured floor gates, and CRYPTO SCAN stops passing a dead
     let s2 = 4242;
     const r = () => { s2 = (s2 * 1103515245 + 12345) & 0x7fffffff; return s2 / 0x7fffffff; };
     const N = 300, out = []; let px = 100;
-    const base = Math.floor(Date.now() / 1000 / SEC) * SEC, t0 = base - N * SEC;
+    const base = Math.floor(FIXED_NOW / 1000 / SEC) * SEC, t0 = base - N * SEC;
     for (let i = 0; i < N; i++){
       const o = px, c = px * (1 + (r() - 0.5 + 0.09) * 0.010);
       out.push({ t: t0 + i * SEC, o: o, c: c, h: Math.max(o, c) * 1.001,
@@ -274,7 +291,7 @@ console.log('\n6. a configured floor gates, and CRYPTO SCAN stops passing a dead
     }
     return out;
   }
-  const arg = { rows1h: [], now: Date.now(), venueCost: { rtFrac: 0.0011, venue: 'delta' } };
+  const arg = { rows1h: [], now: FIXED_NOW, venueCost: { rtFrac: 0.0011, venue: 'delta' } };
   const open = S.cryptoUltraEngine(Object.assign({ rows15m: upTape() }, arg));
   ok(open.dir && open.plan, 'with no floors configured this tape fires');
 

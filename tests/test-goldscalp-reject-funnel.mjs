@@ -52,9 +52,12 @@ function grab(name){
   return '';
 }
 const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+/* hg-v903 added gsPreGateLine, which gsRejectFunnelHTML now calls — lift it
+   too, or the renderer throws on a name this harness never supplied. */
 const F = new Function('esc',
-  grab('gsGateFamily') + grab('gsGateShort') + grab('gsRejectFunnel') + grab('gsRejectFunnelHTML')
-  + 'return { gsGateFamily, gsGateShort, gsRejectFunnel, gsRejectFunnelHTML };')(esc);
+  grab('gsGateFamily') + grab('gsGateShort') + grab('gsRejectFunnel')
+  + grab('gsPreGateLine') + grab('gsRejectFunnelHTML')
+  + 'return { gsGateFamily, gsGateShort, gsRejectFunnel, gsPreGateLine, gsRejectFunnelHTML };')(esc);
 const text = h => String(h).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 
 /* the nine gates as measured, with the instance detail that varies */
@@ -164,9 +167,11 @@ console.log('\n4. it counts; it does not gate');
   ok(!/\breturn\s+rejected\b/.test(src2), 'and it never hands back a mutated list');
 
   /* the per-instance list is still rendered, underneath */
-  ok(/gsRejectFunnelHTML\(rejectedAll\)\s*\n\s*\+ rejectedHTML\(rejectedAll\)/.test(src),
+  /* hg-v903 added the pre-gate tally as a second argument; the ORDER is what
+     this pins — the ranked panel above the per-instance list, both paths. */
+  ok(/gsRejectFunnelHTML\(rejectedAll, preGateAll\)\s*\n\s*\+ rejectedHTML\(rejectedAll\)/.test(src),
      'the ranked panel sits ABOVE the per-instance list, which is unchanged');
-  ok((src.match(/gsRejectFunnelHTML\(rejectedAll\)/g) || []).length === 2,
+  ok((src.match(/gsRejectFunnelHTML\(rejectedAll, preGateAll\)/g) || []).length === 2,
      'and it is wired into both render paths — the one with cards and the one without');
   ok(/every reason named \(never silently dropped\)/.test(src),
      'the per-instance list still promises every reason is named');

@@ -1160,9 +1160,36 @@ function gsRejectFunnel(rejected){
   return out;
 }
 
-function gsRejectFunnelHTML(rejected){
+/* hg-v903: what never reached a gate at all.
+
+   __gsCand ends a strategy attempt before any named gate when the evidence is
+   too thin (fewer than two agreeing reads) or when the desk's own ledger
+   OUTVOTES it (opposing reads >= agreeing ones). Measured over 600 scans:
+   2,667 attempts, 937 ended here — 378 thin, 559 outvoted.
+
+   The thin ones are honestly silent: no setup formed, and naming every
+   strategy that did not trigger would bury the ones that did. The outvoted
+   ones are a different thing entirely — the desk had a directional read and
+   its own book went against it — and the funnel's "N held back across M
+   gates" gave no hint that a larger set never got that far. */
+function gsPreGateLine(preGate){
+  if (!preGate) return '';
+  var out = Math.max(0, +preGate.outvoted || 0);
+  var thin = Math.max(0, +preGate.thin || 0);
+  if (!out && !thin) return '';
+  var bits = [];
+  if (out) bits.push(out + ' outvoted by the desk\'s own evidence book (opposing reads matched or beat the agreeing ones)');
+  if (thin) bits.push(thin + ' with fewer than two agreeing reads, so no setup formed');
+  return '<div class="gsx-hrow" style="color:#64748B">'
+    + 'and ' + (out + thin) + ' strategy attempt' + ((out + thin) === 1 ? '' : 's')
+    + ' never reached a gate — ' + esc(bits.join('; ')) + '</div>';
+}
+
+function gsRejectFunnelHTML(rejected, preGate){
   var rows = gsRejectFunnel(rejected);
-  if (!rows.length) return '';
+  if (!rows.length) return gsPreGateLine(preGate)
+    ? '<div class="gsx-hist"><div class="gsx-hhead">WHY NOTHING LED</div>' + gsPreGateLine(preGate) + '</div>'
+    : '';
   var total = rows[0].total, i, g, h;
   var lead = rows[0];
   var leadPct = Math.round(lead.pct);
@@ -1182,6 +1209,7 @@ function gsRejectFunnelHTML(rejected){
           + (g.kindList.length > 3 ? ' +' + (g.kindList.length - 3) : '') + '</span>' : '')
       + '</span></div>';
   }
+  h += gsPreGateLine(preGate);
   h += '</div>';
   return h;
 }
@@ -1463,6 +1491,13 @@ function buildCandidates(leg, now, news, venue, sym, bundleExtra){
           c.venue = venue; c.sym = sym;
           out.push(c);
         }
+        /* hg-v903: the pre-gate tally rides the same side-channel as .rejected */
+        if (got.preGate){
+          out.preGate = out.preGate || { attempts: 0, thin: 0, outvoted: 0 };
+          out.preGate.attempts += (+got.preGate.attempts || 0);
+          out.preGate.thin     += (+got.preGate.thin || 0);
+          out.preGate.outvoted += (+got.preGate.outvoted || 0);
+        }
         var rej = got.rejected || [];
         for (var rj = 0; rj < rej.length; rj++){
           var rc0 = rej[rj];
@@ -1591,6 +1626,8 @@ async function runScan(ui, scanSt){
     }
 
     var cands = [], legs = [], venueRows = {}, rejectedAll = [], i;
+    /* hg-v903: summed across venues — attempts that never reached a named gate */
+    var preGateAll = { attempts: 0, thin: 0, outvoted: 0 };
     var armedAll = [], watchMeta = {};
     var watchFn = gfn('goldWatch');
     function collectWatch(rows15m, rows1h, rows4h, venue){
@@ -1716,6 +1753,11 @@ async function runScan(ui, scanSt){
         cands.push(got[i]);
       }
       for (i = 0; i < (got.rejected || []).length; i++) rejectedAll.push(got.rejected[i]);
+      if (got.preGate){
+        preGateAll.attempts += (+got.preGate.attempts || 0);
+        preGateAll.thin     += (+got.preGate.thin || 0);
+        preGateAll.outvoted += (+got.preGate.outvoted || 0);
+      }
       legs.push(v + ': ' + gold.rows15m.length + ' 15m bars — '
         + (got.length ? got.length + ' strategy candidate' + (got.length === 1 ? '' : 's') : 'no qualifying confluence'));
       if (gold.mixed){
@@ -2078,7 +2120,7 @@ async function runScan(ui, scanSt){
           + display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note, deskTape); }).join('')
           + formingLayersHtml()
           + formingNowHTML(armedAll)
-          + gsRejectFunnelHTML(rejectedAll)
+          + gsRejectFunnelHTML(rejectedAll, preGateAll)
           + rejectedHTML(rejectedAll)
           + historyHTML(lock.store.history);
       } else if (rejectedAll.length || armedAll.length){
@@ -2087,7 +2129,7 @@ async function runScan(ui, scanSt){
         ui.empty.style.display = 'none';
         ui.cards.innerHTML = basisHtml + mixedBanner + uniHtml + (whySilent ? whySilentHTML(whySilent) : '')
           + formingLayersHtml()
-          + gsRejectFunnelHTML(rejectedAll)
+          + gsRejectFunnelHTML(rejectedAll, preGateAll)
           + rejectedHTML(rejectedAll)
           + formingNowHTML(armedAll)
           + historyHTML(lock.store.history);
