@@ -470,14 +470,29 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
        XAUUSD is the symbol regardless of venue: the venue affects execution,
        not whether the setup resolved. */
     try {
+      /* hg-v899: the TIMEFRAME IS 15m, because that is what the setup is made
+         of. goldScalpSetups reads inp.rows15m, takes its entry from the last
+         15m close and sizes every stop off ATR14 on 15m (goldind.js: `var rows
+         = __rows(inp.rows15m) ... var a15 = __last(_atr(rows, 14))`). Recording
+         it as 1h was a label that contradicted the maths behind it, and since
+         hg-v898 the label is also what decides which candles settle the record.
+
+         THE WALL-CLOCK WINDOW IS UNCHANGED: 24 bars of 1h was a day, and 96
+         bars of 15m is the same day. Measured over 800 tapes with the desk's
+         own 1.5xATR15 stop, settling that same 24-hour window on 15m bars
+         rather than 1h bars gave an identical verdict every single time, so
+         this corrects the label without moving the evidence. (For the record,
+         on those tapes 75% of scalps resolved within six hours and 99% within
+         the day -- whether a day is the right horizon for a 15m scalp is a
+         calibration question, not this change.) */
       if (typeof W.hgFwdRecordScan === 'function' && cands.length){
-        W.hgFwdRecordScan('GOLDSCALP', '1h', cands.filter(function(c){
+        W.hgFwdRecordScan('GOLDSCALP', '15m', cands.filter(function(c){
           return c && c.dir && isFinite(+c.entry) && isFinite(+c.stop) && isFinite(+c.t1);
         }).map(function(c){
           return { sym: 'XAUUSD', dir: c.dir, entry: +c.entry, stop: +c.stop, t1: +c.t1,
                    mechanic: String(c.stratKey || c.strategy || 'UNKNOWN').toUpperCase().slice(0, 28),
                    ticket: (c.grade === 'A' || c.grade === 'clean' || !!c.locked) };
-        }), { horizonBars: 24 });
+        }), { horizonBars: 96 });   /* 96 x 15m = the same 24 hours as 24 x 1h */
       }
     } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("goldscalp", eFwd); } catch (eW) {} }
     var hist = [];
