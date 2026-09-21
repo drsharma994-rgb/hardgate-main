@@ -1385,6 +1385,36 @@ localStorage. Never throws.
       catch (e) { hgFwdWarn('pool', e); return {}; }
     };
 
+    /* EVERY DESK NAME THE LOG ACTUALLY HOLDS, live records and aggregate both.
+
+       A reader that has to NAME a pool can only ever name the ones it was
+       told about, and several desks write a FAMILY of pools rather than one:
+       OMNIGOLD:SCALP and OMNIGOLD:SWING, NEWGOLD:1H and NEWGOLD:4H,
+       GOLDPINE:scalp and GOLDPINE:swing, CARD:<scanId> per inline scanner.
+       Hard-coding those suffixes puts a second list in a second file to drift
+       out of step with the first -- which is exactly how a roster ends up
+       naming a pool nothing writes. This lets a caller ask the log what is in
+       it and resolve a family by its stem. */
+    W.hgFwdTabs = function(prefix){
+      try {
+        var seen = {}, out = [], recs = load(), agg = loadAgg(), i, k, t;
+        for (i = 0; i < recs.length; i++){
+          t = recs[i] && recs[i].tab;
+          if (t && !seen[t]){ seen[t] = 1; out.push(t); }
+        }
+        for (k in (agg || {})) if (Object.prototype.hasOwnProperty.call(agg, k)){
+          t = String(k).split('|')[0];
+          if (t && !seen[t]){ seen[t] = 1; out.push(t); }
+        }
+        if (prefix){
+          prefix = String(prefix);
+          out = out.filter(function(n){ return n.indexOf(prefix) === 0; });
+        }
+        out.sort();
+        return out;
+      } catch (e) { hgFwdWarn('tabs', e); return []; }
+    };
+
     /* Record a whole scan's output in one call — the shape every tab needs.
 
        WHICH BAR. Flooring NOW to the timeframe names the FORMING bar, and an
