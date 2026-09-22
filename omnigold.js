@@ -9045,7 +9045,11 @@ terse status, and never launches a first-time scan on a global refresh.
       + hgOgSequentialCellsHtml()
       /* hg-v919: and what the cost ceiling asks at the venue in force —
          silent everywhere else on the default one. */
-      + hgOgCostCeilingPanelHtml();
+      + hgOgCostCeilingPanelHtml()
+      /* hg-v922: after the ceiling, because it is the same question asked of
+         the outcomes rather than of the arithmetic — and it answers it with
+         two verdicts out of ten rather than a rule. */
+      + hgOgFactorSepPanelHtml();
   }
 
   /* The legend's honest header — above the four tier cells, in warn style,
@@ -10021,6 +10025,138 @@ terse status, and never launches a first-time scan on a global refresh.
         + 'trades most likely to resolve on their own fill bar. Nothing here widens a stop or moves a ceiling.</div>'
         + '</div>';
     }catch(e){ return ''; }
+  }
+
+  /* hg-v922 — WHICH SIGNAL-TIME FACTOR ACTUALLY SEPARATES WINNERS, here.
+     Re-derive: node scripts/factor-separation.mjs. Guard:
+     tests/test-factor-separation.mjs re-runs it against the committed replay.
+
+     Same bar as the GOLD SCALP twin in goldind.js: four DISJOINT windows must
+     agree on win% AND gross AND net (hg-v920), at BOTH fill bounds (hg-v918),
+     before a factor carries a verdict. Net alone never suffices, because
+     costR = rtCostPct / stopPct exactly and so any stop-width split moves net
+     by arithmetic alone; only the gross column speaks to the setups.
+
+     TWO VERDICTS OUT OF TEN, AND ONE OF THEM IS BAD NEWS:
+
+       stop >= 0.50%   +4.7 pts win, +0.0762 gross, +0.2128 net   4/4 both ends
+       LIMIT order     -3.2 pts win, -0.0737 gross, -0.1025 net   0/4 both ends
+
+     The limit row is the uncomfortable one, and it needs a caveat the other
+     rows do not. A pending entry is unanimously WORSE in every window at both
+     ends, across 4,988 of 8,132 settled rows. But THE LOWER BOUND IS NOT
+     NEUTRAL FOR THIS PARTICULAR SPLIT: `ambiguousSameBarWin` is set only on a
+     PENDING fill (457 of 4,988 limit rows, 5 of 269 stop rows, and 0 of 2,875
+     market rows), because a market entry's touch never needs proving. So the
+     lower bound demotes only one side of this comparison and its -12.2 pts is
+     not independent evidence. The verdict rests on the as-recorded end, where
+     the same 0/4 0/4 0/4 holds at -3.2 pts and -0.0737 gross — which is the
+     conservative end here, and enough.
+     Adverse selection is the OFFERED EXPLANATION, not a measured one: a
+     resting order fills when price comes back to it, disproportionately when
+     it is about to keep going. The competing explanation is the walk's own
+     fill model, and nothing in this table separates the two. Nothing is
+     changed on it either way: the alternative is a market fill, which pays
+     the spread twice and is not what this measured.
+
+     WHAT THE DESK RANKS BY REACHES NO VERDICT. tier STRONG is 2/4 and 3/4;
+     confluence >= 50 is 1/4 at both ends; checksPass >= 4 is 2/4 at both. The
+     score this desk sorts by is not separating outcomes in a way that survives
+     four windows — which is the same finding the GOLD SCALP tally produced,
+     on a different desk and a different book. Note tier FAIR: unanimously
+     worse at the lower bound (0/4 0/4 0/4) but only 2/4 on GROSS at the
+     as-recorded end, so by the both-ends rule it carries NO verdict. Reading
+     the lower bound alone would have retired 77% of the book on one end of an
+     interval hg-v918 built precisely to stop that.
+
+     NO STOP THRESHOLD IS SHIPPED. The direction holds and a number does not:
+     unanimity across the sweep runs 0.28 no, 0.40 no, 0.50 yes, 0.60 yes,
+     0.80 no at the as-recorded end. And at 0.50% the book goes from -0.116R to
+     -0.005R — from losing to flat, not to positive — while deleting 52% of its
+     volume. Picking that bar would be choosing a number, not measuring one.
+     hg-v919's cost ceiling stays exactly where it is. */
+  var HG_OG_FACTOR_SEP = {
+    windows: 4, rtPct: 0.02,
+    book: { asRecorded: { n: 8132, win: 33.6, gross: -0.0222, net: -0.116 },
+            lower:      { n: 8132, win: 28, gross: -0.1927, net: -0.2864 } },
+    rows: [
+      { f: 'tier STRONG', n: 1420, dWin: [4.5, 10], dGross: [0.0983, 0.2638], dNet: [0.1591, 0.3247],
+        q: ['2/4 2/4 2/4', '3/4 3/4 4/4'], verdict: null },
+      { f: 'tier FAIR', n: 6300, dWin: [-6.1, -10.6], dGross: [-0.1398, -0.2753], dNet: [-0.2068, -0.3423],
+        q: ['0/4 2/4 0/4', '0/4 0/4 0/4'], verdict: null },
+      { f: 'confluence>=50', n: 7720, dWin: [-8.8, -8.6], dGross: [-0.2129, -0.2083], dNet: [-0.2736, -0.269],
+        q: ['1/4 1/4 1/4', '1/4 1/4 1/4'], verdict: null },
+      { f: 'checksPass >= 4', n: 3431, dWin: [1.9, 0.7], dGross: [0.0674, 0.0295], dNet: [-0.006, -0.0439],
+        q: ['2/4 2/4 2/4', '2/4 2/4 2/4'], verdict: null },
+      { f: 'ticket', n: 1199, dWin: [1, -1.3], dGross: [0.0268, -0.0432], dNet: [0.0686, -0.0015],
+        q: ['3/4 3/4 3/4', '3/4 1/4 3/4'], verdict: null },
+      { f: 'horizon SCALP', n: 6409, dWin: [-0.5, -0.2], dGross: [-0.0392, -0.0323], dNet: [-0.1096, -0.1027],
+        q: ['1/4 1/4 0/4', '2/4 2/4 0/4'], verdict: null },
+      { f: 'dir long', n: 4183, dWin: [-6.6, -6.7], dGross: [-0.1772, -0.1807], dNet: [-0.1693, -0.1727],
+        q: ['1/4 1/4 1/4', '1/4 1/4 1/4'], verdict: null },
+      { f: 'LIMIT order', n: 4988, dWin: [-3.2, -12.2], dGross: [-0.0737, -0.3438], dNet: [-0.1025, -0.3726],
+        q: ['0/4 0/4 0/4', '0/4 0/4 0/4'], verdict: 'worse' },
+      { f: 'stop >= 0.28%', n: 5502, dWin: [2.5, 15.9], dGross: [0.029, 0.4295], dNet: [0.2216, 0.6222],
+        q: ['3/4 2/4 4/4', '4/4 4/4 4/4'], verdict: null },
+      { f: 'stop >= 0.50%', n: 3884, dWin: [4.7, 14.7], dGross: [0.0762, 0.3759], dNet: [0.2128, 0.5125],
+        q: ['4/4 4/4 4/4', '4/4 4/4 4/4'], verdict: 'better' }
+    ],
+    bars: [{ bar: 0.28, n: 5502, holds: [false, true] },
+           { bar: 0.4, n: 4580, holds: [false, true] },
+           { bar: 0.5, n: 3884, holds: [true, true] },
+           { bar: 0.6, n: 3263, holds: [true, true] },
+           { bar: 0.8, n: 2357, holds: [false, true] }]
+  };
+
+  /* Renders every row, not the two with verdicts. Eight of ten reaching none
+     IS the finding; a shortlist of winners would read as though the desk had
+     found eight and shown the best two. */
+  function hgOgFactorSepPanelHtml(sep){
+    try{
+      var T = sep || HG_OG_FACTOR_SEP;
+      if (!T || !T.rows || !T.rows.length) return '';
+      var sg = function(x, d){ return (fin(x) >= 0 ? '+' : '') + Number(x).toFixed(d); };
+      var held = 0, judged = 0, body = '', i, r;
+      for (i = 0; i < T.rows.length; i++){
+        r = T.rows[i];
+        if (r.thin) continue;
+        judged++;
+        if (r.verdict) held++;
+        body += '<tr><td style="padding:2px 8px 2px 0"><b>' + esc(r.f) + '</b></td>'
+          + '<td style="padding:2px 8px 2px 0;text-align:right">n=' + r.n + '</td>'
+          + '<td style="padding:2px 8px 2px 0;text-align:right">' + sg(r.dWin[0], 1) + ' pts</td>'
+          + '<td style="padding:2px 8px 2px 0;text-align:right">' + sg(r.dGross[0], 4) + '</td>'
+          + '<td style="padding:2px 8px 2px 0;text-align:right">' + sg(r.dNet[0], 4) + '</td>'
+          + '<td style="padding:2px 8px 2px 0;text-align:right;opacity:.75">' + esc(r.q[0]) + ' &middot; ' + esc(r.q[1]) + '</td>'
+          + '<td style="padding:2px 0;text-align:right"><b>' + (r.verdict === 'better' ? 'HOLDS'
+              : (r.verdict === 'worse' ? 'HOLDS (WORSE)' : '&mdash;')) + '</b></td></tr>';
+      }
+      var bars = [], k;
+      for (k = 0; k < (T.bars || []).length; k++){
+        bars.push(T.bars[k].bar.toFixed(2) + '% ' + (T.bars[k].holds[0] && T.bars[k].holds[1] ? 'holds' : 'no'));
+      }
+      return '<div class="og-panel og-factorsep" style="margin-top:10px">'
+        + '<div><b>WHAT SEPARATES WINNERS</b> &mdash; ' + judged + ' signal-time factors on the '
+        + T.book.asRecorded.n + ' settled replay rows (win ' + T.book.asRecorded.win.toFixed(1)
+        + '%, gross ' + sg(T.book.asRecorded.gross, 4) + ', net ' + sg(T.book.asRecorded.net, 4)
+        + ' re-priced at XM). A factor carries a verdict only when all ' + T.windows
+        + ' <b>disjoint</b> windows agree on win rate AND gross AND net, at <b>both</b> fill bounds. '
+        + '<b>' + held + ' of ' + judged + '</b> do.</div>'
+        + '<table style="border-collapse:collapse;font-size:11px;margin-top:6px">' + body + '</table>'
+        + '<div style="margin-top:6px;opacity:.8">Columns are the difference against the rest of the '
+        + 'book at the as-recorded bound; the second-to-last is windows agreeing (win/gross/net) at '
+        + 'each bound. <b>The score this desk sorts by reaches no verdict</b> &mdash; tier STRONG 2/4, '
+        + 'confluence 1/4, checks 2/4. <b>tier FAIR is unanimous at the lower bound only</b>, so by the '
+        + 'both-ends rule it carries none either; reading one end would have retired 77% of the book. '
+        + '<b>The limit-order verdict rests on the as-recorded end alone</b>: the lower bound flags only '
+        + 'PENDING fills as unprovable (457 of 4,988 limit rows, 0 of 2,875 market rows), so it demotes '
+        + 'one side of that comparison and is not independent evidence for it. Adverse selection is the '
+        + 'explanation offered, not a measured one &mdash; the walk&rsquo;s own fill model is the competing '
+        + 'one and nothing here separates them. '
+        + '<b>No stop threshold is shipped from this</b>: unanimity across the sweep runs ' + bars.join(', ')
+        + ', and at 0.50% the book goes from ' + sg(T.book.asRecorded.net, 3) + 'R to -0.005R &mdash; '
+        + 'losing to flat, not to positive &mdash; while deleting 52% of its volume.</div></div>';
+    }catch(eFsep){ return ''; }
   }
 
   function hgOgSequentialCellsHtml(){
@@ -15646,6 +15782,8 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgCostCeilingDemand = hgOgCostCeilingDemand;
     window.hgOgCostCeilingNote = hgOgCostCeilingNote;
     window.hgOgCostCeilingPanelHtml = hgOgCostCeilingPanelHtml;
+    window.hgOgFactorSepPanelHtml = hgOgFactorSepPanelHtml;
+    window.HG_OG_FACTOR_SEP = HG_OG_FACTOR_SEP;
     window.hgOgReplayLineHtml = hgOgReplayLineHtml;
     window.hgOgReplayBelowBarHtml = hgOgReplayBelowBarHtml;
     window.hgOgKindKnownState = hgOgKindKnownState;
