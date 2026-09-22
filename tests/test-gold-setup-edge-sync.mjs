@@ -84,7 +84,11 @@ console.log('\n2. every ACTIONABLE baked row is transcribed, exactly');
     for (const k of Object.keys(J).sort()){
       const j = J[k], c = C[k];
       if (!c){
-        if (!ACTIONABLE.has(j.action)){ allowedAbsent++; continue; }   /* neutral: intentionally not transcribed */
+        /* hg-v909 CHANGED THIS. A neutral row used to be "intentionally not
+           transcribed", so the code carried nothing for a mechanic the replay
+           had measured — indistinguishable from one never measured at all.
+           Now EVERY baked row is transcribed, neutral included, and an absent
+           one is a defect whatever its action. */
         problems.push(side + '.' + k + ' is ' + j.action + ' in the evidence and MISSING from the code');
         continue;
       }
@@ -98,7 +102,25 @@ console.log('\n2. every ACTIONABLE baked row is transcribed, exactly');
     }
   }
   ok(compared >= 20, compared + ' rows present in both were compared field by field');
-  ok(allowedAbsent >= 1, allowedAbsent + ' neutral row(s) legitimately left out of the transcription');
+  /* The inverse of the old assertion, and a stronger one: neutral rows are
+     the whole point of hg-v909, so they must be present AND carry their
+     measurement. A neutral row transcribed without its n would be the same
+     silence in a different shape. */
+  let neutrals = 0, bareNeutrals = [];
+  for (const side of ['scalp', 'swing']){
+    const C = CODE[side] || {}, J = JSN[side] || {};
+    for (const k of Object.keys(J)){
+      if (ACTIONABLE.has(J[k].action)) continue;
+      neutrals++;
+      const c = C[k];
+      if (!c || !(c.n > 0) || typeof c.net !== 'number') bareNeutrals.push(side + '.' + k);
+    }
+  }
+  ok(neutrals >= 14, neutrals + ' neutral rows in the evidence — measured, and clearing no bar');
+  ok(bareNeutrals.length === 0,
+     'every one of them is transcribed WITH its n and net, so measured-and-flat cannot read as never-measured'
+     + (bareNeutrals.length ? (' — bare: ' + bareNeutrals.join(', ')) : ''));
+  ok(allowedAbsent === 0, 'and no baked row is left out of the code at all');
   ok(problems.length === 0,
      'every actionable row matches the evidence' + (problems.length ? ' — DRIFT: ' + problems.join('; ') : ''));
 }

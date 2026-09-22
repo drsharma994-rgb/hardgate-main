@@ -1246,7 +1246,51 @@ var HG_GOLD_SETUP_EDGE = {
     p6fail: { n: 85, gross: 0.387, net: 0.182, action: 'prefer',
       why: 'S30 FAILED-BREAK REVERSAL net +0.18R at XM (n=85, 54% WR, post stop-floor) — measured fee-survivor' },
     p9volbar: { n: 72, gross: 0.243, net: 0.155, action: 'prefer',
-      why: 'S62 VOLUME-BAR SWEEP net +0.16R at XM (n=72, 44% WR) — measured fee-survivor' }
+      why: 'S62 VOLUME-BAR SWEEP net +0.16R at XM (n=72, 44% WR) — measured fee-survivor' },
+
+    /* hg-v909: TWO MEASUREMENTS THAT WERE ON DISK AND NEVER REACHED THE DESK.
+       Both sit in scripts/gold-scalp-bt-analysis-FLOOR.json byStrategy — the
+       post-stop-floor twin the other scalp rows above were baked from — and both
+       clear this table's OWN documented demote bar (net < 0). Nothing here is
+       a new threshold — the bar is the one above, applied to rows that were
+       simply left out of the applied copy. Together they are 45 of the 2,193
+       settled scalp trades (2.1%) and −4.90R net at XM. */
+    p5drive: { n: 17, gross: -0.045, net: -0.224, action: 'demote',
+      why: 'S24 THREE-DRIVE EXHAUSTION net −0.22R at XM (n=17, negative before fees too) — paints, never leads' },
+    p6comp: { n: 28, gross: 0.121, net: -0.039, action: 'demote',
+      why: 'S30 SESSION-COMPOSITE PULLBACK net −0.04R at XM (n=28, gross+) — cost-eaten; paints, never leads (the SWING lane measured its own n=17 at −0.29R)' },
+
+    /* MEASURED, AND CLEARED NO BAR. These rows change nothing about ranking
+       or eligibility — that is the point. Until now the applied table simply
+       had no row for them, and "no row" meant two different things: a
+       mechanic measured 49 times and mildly positive, and a mechanic nobody
+       has ever measured. A desk cannot tell those apart, and neither could a
+       reader. Carrying the measurement with action 'neutral' separates them.
+
+       No prefer boost is invented for any of these: not one clears the
+       prefer bar (n>=50 AND gross>0 AND net>=+0.10), and sweepob misses it by
+       a single settle. An unearned boost would be exactly the fabricated
+       pseudo-row hg-v700 removed from the swing lane. */
+    sweepob:  { n: 49, gross: 0.427, net: 0.162, action: 'neutral',
+      why: 'SWEEP→OB net +0.16R at XM (n=49) — one settle short of the n>=50 prefer bar; measured, not preferred' },
+    p8range:  { n: 91, gross: 0.162, net: 0.038, action: 'neutral',
+      why: 'S52 RANGE-BAR S0 SWEEP net +0.04R at XM (n=91) — measured flat at the venue, under the prefer bar' },
+    p5vwap:   { n: 12, gross: 0.449, net: 0.249, action: 'neutral',
+      why: 'S22 SESSION VWAP 2σ REVERSION net +0.25R at XM (n=12) — positive but far under the n>=50 prefer bar' },
+    p5wyck:   { n: 12, gross: 0.222, net: 0.127, action: 'neutral',
+      why: 'S19 WYCKOFF SPRING/UPTHRUST net +0.13R at XM (n=12) — too thin to prefer' },
+    p8vpinbo: { n: 10, gross: 0.221, net: 0.159, action: 'neutral',
+      why: 'S54 VPIN-TIMED CONTRACTION BREAK net +0.16R at XM (n=10) — too thin to prefer' },
+    p7scalp:  { n: 7,  gross: 0.154, net: 0.048, action: 'neutral',
+      why: 'P7 SCALP MODULE net +0.05R at XM (n=7) — too thin to read either way' },
+    /* Negative, and deliberately NOT demoted: one settled trade is noise, not
+       evidence. The swing lane already carries an n>=12 floor on its demote
+       bar; the scalp bar as written has none, so acting on n=1 would be this
+       table demoting on a coin flip. Recorded as measured-thin instead. */
+    vpbook:   { n: 1,  gross: 0.058, net: -0.011, action: 'neutral',
+      why: 'VP PLAYBOOK net −0.01R at XM on a SINGLE settle — measured, far too thin to demote on' },
+    adrfade:  { n: 1,  gross: 1.5,   net: 1.411,  action: 'neutral',
+      why: 'ADR FADE +1.41R at XM on a SINGLE settle — measured, far too thin to prefer on' }
   },
   /* SWING rows (hg-v700): re-baked from the GOLD SWING tab's OWN 4h replay
    * (scripts/backtest-goldswing-results.json, n=243 settled, 140 days,
@@ -1269,7 +1313,33 @@ var HG_GOLD_SETUP_EDGE = {
     pullback: { n: 18, gross: -0.258, net: -0.272, action: 'demote',
       why: 'SWING 4H trend pullback net −0.27R at XM (n=18, 17% WR) — paints, never leads' },
     p6comp: { n: 17, gross: -0.267, net: -0.289, action: 'demote',
-      why: 'S30 SESSION-COMPOSITE PULLBACK net −0.29R at XM (n=17) — paints, never leads' }
+      why: 'S30 SESSION-COMPOSITE PULLBACK net −0.29R at XM (n=17) — paints, never leads' },
+
+    /* hg-v909: the bake (scripts/gold-setup-edge.json) records ribbon and ob
+       as action 'neutral' with their measurements. The applied copy above
+       said "rows removed" and dropped them, which threw the measurement away
+       and put them back among the never-measured. Restored as neutral rows,
+       carrying what was measured and changing nothing else. The rest are the
+       remaining byStrategy rows from scripts/backtest-goldswing-results.json
+       that had no row at all. */
+    ribbon:  { n: 23, gross: 0.25,   net: 0.228, action: 'neutral',
+      why: 'SWING 4H EMA ribbon net +0.23R at XM (n=23) — contradicts its old demote row but sits under the n>=25 prefer bar' },
+    ob:      { n: 4,  gross: 0.241,  net: 0.215, action: 'neutral',
+      why: 'SWING 4H order block net +0.22R at XM (n=4) — contradicts its old demote row; far too thin to prefer' },
+    bos:     { n: 9,  gross: 0.389,  net: 0.369, action: 'neutral',
+      why: 'SWING 4H BOS net +0.37R at XM (n=9) — the measurement hg-v700 described in prose, carried as data; still under the prefer bar' },
+    p8range: { n: 40, gross: 0.058,  net: 0.037, action: 'neutral',
+      why: 'S52 RANGE-BAR S0 SWEEP net +0.04R at XM (n=40) — measured flat on the swing lane too' },
+    p5wyck:  { n: 4,  gross: 0.335,  net: 0.317, action: 'neutral',
+      why: 'S19 WYCKOFF SPRING/UPTHRUST net +0.32R at XM (n=4) — too thin to prefer' },
+    p5turt:  { n: 2,  gross: 3.104,  net: 3.087, action: 'neutral',
+      why: 'S20 TURTLE-SOUP net +3.09R at XM on TWO settles — a large number on no sample; recorded, never acted on' },
+    p5vwap:  { n: 1,  gross: 1.727,  net: 1.701, action: 'neutral',
+      why: 'S22 SESSION VWAP 2σ REVERSION +1.70R at XM on a SINGLE settle — recorded, never acted on' },
+    /* Negative, and NOT demoted: the swing demote bar carries an n>=12 floor
+       and two settles are nowhere near it. */
+    p6zfade: { n: 2,  gross: -0.735, net: -0.753, action: 'neutral',
+      why: 'S33 Z-SCORE MEAN REVERSION net −0.75R at XM on TWO settles — under the n>=12 demote floor; measured-thin, not demoted' }
   }
 };
 
@@ -1380,10 +1450,12 @@ function hgGoldSetupEdgeApply(cand, opts){
     /* Swing stratKey aliases — table keys are evidence labels, not all SW_NAME keys.
        hg-v700: the fabricated inline 'bos' prefer pseudo-row is GONE. It quoted
        numbers (n=2 net 1.2) no baked table row backed — a prefer boost invented
-       in code, not measured into scripts/gold-setup-edge.json. The 140-day swing
-       replay (scripts/backtest-goldswing-results.json byStrategy.bos) measured
-       bos n=8 +0.542R/trade net at XM: positive but far too thin to earn a
-       prefer bar, so bos is NEUTRAL — no row, no boost, no fabricated label. */
+       in code, not measured into scripts/gold-setup-edge.json.
+       hg-v909: the n=8 +0.542R this comment used to quote for bos came from
+       backtest-goldswing-results-PRE-v700.json while naming the current file,
+       which says n=9 +0.369R. bos is still NEUTRAL — far under the prefer bar
+       — but it now carries a neutral ROW at the current numbers rather than no
+       row at all, so measured-and-thin stops reading as never-measured. */
     if (!row && opts.swing && table){
       if (key === 'wkbreak') row = table.weekly;
       else if (key === 'pullback') row = table.ribbon;
@@ -1433,6 +1505,17 @@ function hgGoldSetupEdgeApply(cand, opts){
     if (row.action === 'prefer'){
       cand.edgeBoost = (isFinite(cand.edgeBoost) ? cand.edgeBoost : 0) + 2;
       if (cand.stamps.indexOf('EDGE PREFER') < 0) cand.stamps.push('EDGE PREFER');
+      return cand;
+    }
+    if (row.action === 'neutral'){
+      /* hg-v909: MEASURED, AND CLEARED NO BAR. No boost, no demote, no change
+         of eligibility — deliberately. What it does change is that the reader
+         and the ranker can now tell this apart from a mechanic nobody has
+         ever measured, which is what an absent row used to mean for both.
+         cand.edge already carries n / gross / net, so the number is on the
+         candidate and not only in this table. */
+      cand.edgeMeasured = true;
+      if (cand.stamps.indexOf('EDGE MEASURED') < 0) cand.stamps.push('EDGE MEASURED');
       return cand;
     }
     return cand;
