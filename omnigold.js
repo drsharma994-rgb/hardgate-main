@@ -492,7 +492,9 @@ terse status, and never launches a first-time scan on a global refresh.
                       /* Part7 S39–S48 — separated scalp + ratio (S40 MCX-native; options frames) */
                       'P7-SCALP','P7-RATIO',
                       'P8-RESID','P8-RANGE','P8-GEO','P8-VPINBO',
-                      'P9-VOLBAR','P9-PREM'];
+                      'P9-VOLBAR','P9-PREM',
+                      /* hg-v923 — the sweep->OB model, CONFIRMED path only */
+                      'SWEEP-OB'];
 
   var __og = { ui: null, busy: false, ran: false, snap: null, lastStat: '', src: null, shared: null, btBusy: false,
                lastCardsHtml: null, lastPoolHtml: null, lastMpHtml: null,
@@ -998,6 +1000,7 @@ terse status, and never launches a first-time scan on a global refresh.
     d = hgOgVpPlaybook(rows, opts); if (d) out.push(d);
     /* Part4 S12 / S14 / S17 — call ByKind so walk-forward map detectors are
        live-reachable (full-cover parity). S9 stays a filter; S13/S16 unchecked. */
+    d = hgOgSweepObHit(rows, opts);             if (d) out.push(d);
     d = hgOgPart4ByKind(rows, 'P4-NR7', opts);  if (d) out.push(d);
     d = hgOgPart4ByKind(rows, 'P4-ADRX', opts); if (d) out.push(d);
     d = hgOgPart4ByKind(rows, 'P4-LAF', opts);  if (d) out.push(d);
@@ -2340,6 +2343,55 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     return out.length ? out : null;
   }
+  /* hg-v923 — SWEEP->OB as a native OMNIGOLD mechanic, CONFIRMED ONLY.
+
+     goldind's hgGoldSweepOb has run on every gold scan since hg-v560 and mints
+     on GOLD SCALP, stamps on GOLD SWING, and paints in the forming panel here
+     — but it was never registered as a mechanic of this desk, so OMNIGOLD
+     could not form it. Every other library model got an explicit wire pack
+     (P4 in v568, P5 v569, P6 v570, P7 v571, VP v567). This one was missed.
+
+     IT MINTS ONLY ON `confirmed`. That is the full four-leg model: HTF
+     location, liquidity raid, MSS, retrace into a fresh OB/FVG, quality
+     >= 7/10 AND R:R >= 2.0. The GOLD SCALP mint also accepts tier 'watch' and
+     demotes it; this desk does not, because an OMNIGOLD card IS a ticket
+     candidate and the watch tier has no target and no R:R to ticket with.
+
+     THIS MECHANIC HAS NO RECORD, and that is not a formality. All 62 sweepob
+     firings in the GOLD SCALP walk came from a pre-trigger early return —
+     0 confirmed — so the +0.16R on HG_GOLD_SETUP_EDGE.scalp.sweepob is the
+     precursor's record, not this one's. hgOgKindKnownState derives 'unobserved'
+     for it automatically from the baked maps, so the card says NEVER OBSERVED
+     without a list to maintain. Nothing here promotes it and no gate moves:
+     hgOgKindToInstKey maps it to `sweepob`, whose edge action is `neutral`. */
+  function hgOgSweepObHit(rows, opts){
+    var f = gfn('hgGoldSweepOb');
+    if (!f || !rows || rows.length < 40) return null;
+    opts = opts || {};
+    var sob = null;
+    try {
+      sob = f(rows, {
+        newsGate: opts.newsGate || null,
+        now: opts.nowSec ? opts.nowSec * 1000 : opts.now,
+        rows4h: opts.rows4h || null,
+        rows1h: opts.rows1h || null
+      });
+    } catch (e) { return null; }
+    /* confirmed is the whole gate. `stage` is checked too so a future edit to
+       the tier ladder cannot quietly let a precursor through this door. */
+    if (!sob || !sob.confirmed || sob.stage !== 'confirmed' || !sob.dir) return null;
+    var lv = fin(sob.entry);
+    if (!isFinite(lv)) return null;
+    var stop = fin(sob.stop), t1 = fin(sob.t1), t2 = fin(sob.t2);
+    if (!isFinite(stop) || !isFinite(t1)) return null;
+    return {
+      kind: 'SWEEP-OB', dir: sob.dir, level: lv,
+      stop: stop, t1: t1, t2: isFinite(t2) ? t2 : NaN,
+      sweepOb: sob,
+      why: String(sob.why || 'SWEEP-OB confirmed')
+    };
+  }
+
   function hgOgPart4ByKind(rows, wantKind, opts){
     var hits = hgOgPart4Hits(rows, opts);
     if (!hits) return null;
@@ -2718,6 +2770,7 @@ terse status, and never launches a first-time scan on a global refresh.
     'P4-NR7':'TREND',
     'P4-ADRX':'REVERSION',
     'P4-LAF':'SWEEP',
+    'SWEEP-OB':'SWEEP',
     'P5-WYCK':'STRUCTURE',
     'P5-TURT':'SWEEP',
     'P5-VWAP':'FLOW',
@@ -3202,11 +3255,15 @@ terse status, and never launches a first-time scan on a global refresh.
      Sweep families must clear MSS + displacement + IFVG. OB-RETEST is
      volume-weighted. ASIA-BREAK is allowed inside the Asian box. Every
      other mechanic still runs news / spread / macro / session / MTF. */
-  function hgOgKindToInstKey(kind){
+  function hgOgKindToInstKey(kind, strict){
     var k = String(kind || '').toUpperCase();
     if (k === 'ASIA-BREAK') return 'asian';
     if (k === 'OB-RETEST') return 'ob';
     if (k === 'VP-PLAYBOOK') return 'vpbook';
+    /* the same stratKey GOLD SCALP mints, so the inst filter applies the same
+       sweep rules (MSS + displacement + IFVG) and the edge table finds the
+       same `neutral` row. Nothing is given a new lane. */
+    if (k === 'SWEEP-OB') return 'sweepob';
     if (k === 'P4-NR7') return 'p4nr7';
     if (k === 'P4-ADRX') return 'p4adrx';
     if (k === 'P4-LAF') return 'p4laf';
@@ -3229,8 +3286,15 @@ terse status, and never launches a first-time scan on a global refresh.
     if (k === 'P9-PREM') return 'p9prem';
     if (k === 'KZ-JUDAS' || k === 'SWEEP-V2' || k === 'POOL-SWEEP'
         || k.indexOf('SWEEP') >= 0)
-      return 'sweep';
-    return 'vwap';
+      return (strict ? null : 'sweep');
+    /* hg-v923: the two lines above and below are FALLBACKS — a kind with no
+       named mapping still has to run through SOME institutional rule set, so
+       it gets the generic one. That is right for gating and wrong for
+       attribution: it means every unmapped mechanic resolves to `vwap`, and a
+       caller that looks up an edge record by this key would hand that
+       mechanic the vwap row's number. `strict` returns null instead, for
+       callers that need "which record is genuinely this mechanic's". */
+    return (strict ? null : 'vwap');
   }
 
   function hgOgInstNowMs(extra){
@@ -6869,26 +6933,26 @@ terse status, and never launches a first-time scan on a global refresh.
   /* THE BAR A PROMOTION IS ACTUALLY TESTED AGAINST.
 
      hgOgReplayEdgeVerdict already keeps two bounds: lo95 for the panel to
-     display and loFw at hgOgFamilyZ(77) for the verdict to act on, with the
+     display and loFw at hgOgFamilyZ(78) for the verdict to act on, with the
      note that "every other site asking 'did this beat breakeven, allowing
      for how many were tried' calls hgOgFamilyZ(OG_MECHANICS.length)".
 
      That was not true of the forward tiers. hgOgProvenEdgeOk asks exactly
      that question — "the Wilson lower bound sits above breakeven by a real
-     margin" — and asked it at an uncorrected 1.96, across all 77 mechanics
+     margin" — and asked it at an uncorrected 1.96, across all 78 mechanics
      the desk scans, on every bake.
 
-     One-sided alpha 2.5% per test over 77 tests:
+     One-sided alpha 2.5% per test over 78 tests:
 
-       P(at least one mechanic clears by luck)  85.8%
-       expected false promotions per bake       1.93
+       P(at least one mechanic clears by luck)  86.1%
+       expected false promotions per bake       1.95
 
      The corrected z is 3.2091, the same Sidak one-sided bar the replay
      verdict uses over the same family. Sweeping every (wins, n) from 25 to
      200 trades at R = 1.5 / 2 / 3: 6,296 records clear both bars, 5,304
      clear neither, and 658 — 9.5% of everything that promoted — cleared
      only the uncorrected one. Those are the thin just-over-the-line records
-     a 77-way search manufactures: 12/25 at R=3, 14/25 at R=2.
+     a 78-way search manufactures: 12/25 at R=3, 14/25 at R=2.
 
      TWO BOUNDS, NOT ONE, deliberately. ev.wilson stays at 1.96 because the
      card prints it as "Wilson 95% CI" and that is what a reader understands
@@ -9927,6 +9991,45 @@ terse status, and never launches a first-time scan on a global refresh.
     return null;
   }
 
+  /* hg-v923 — a mechanic with NO record here may still have one on the GOLD
+     SCALP walk, under the stratKey hgOgKindToInstKey maps it to. Saying only
+     'no record' would hide that; pasting the sibling number as if it were this
+     desk's would be worse. So it is named, attributed, and — where the sibling
+     row measured something other than this mechanic — said so.
+
+     SWEEP-OB is exactly that case and is why this exists: its sibling row
+     reads +0.16R over n=49, and every one of those 49 is a PRE-TRIGGER state
+     of the detector, not the confirmed setup this desk forms. Returns '' when
+     goldind is absent or has no row, so the caller appends unconditionally. */
+  function hgOgSiblingRecordNote(kind){
+    try {
+      /* Only a REGISTERED mechanic has anything to attribute. This is
+         REDUNDANT TODAY — the strict lookup below already returns null for
+         every unregistered string, because no unregistered kind has a named
+         mapping — and the test proves that rather than assuming it. It stays
+         because the two conditions are independent: the day someone adds an
+         explicit `if (k === 'X') return 'y'` for a kind that is not in
+         OG_MECHANICS, strict stops covering this and the guard does. */
+      if (hgOgKindKnownState(kind) === null) return '';
+      var key = null;
+      /* strict: a fallback mapping is not this mechanic's record. */
+      try { key = hgOgKindToInstKey(kind, true); } catch (eK) { key = null; }
+      if (!key) return '';
+      var w = W();
+      var tbl = w && w.HG_GOLD_SETUP_EDGE;
+      var row = tbl && tbl.scalp && tbl.scalp[key];
+      if (!row || !isFinite(fin(row.net))) return '';
+      var pre = !!(row.live && row.live.precursorOnly);
+      return ' <b>The GOLD SCALP walk does have a record under <code>' + esc(key)
+        + '</code></b> — net ' + (fin(row.net) >= 0 ? '+' : '') + fin(row.net).toFixed(3)
+        + 'R over n=' + (fin(row.n) || 0) + ' — but it is that desk\u2019s book, not this one\u2019s'
+        + (pre ? ', and every firing in it is a PRE-TRIGGER state of this detector rather than the '
+                 + 'confirmed setup formed here, so it is not this mechanic\u2019s record either'
+               : '')
+        + '.';
+    } catch (e) { return ''; }
+  }
+
   /* Every registered mechanic the walk never produced a row for. Pure,
      derived, and the number the header quotes rather than a literal. */
   function hgOgUnobservedKinds(){
@@ -9955,7 +10058,8 @@ terse status, and never launches a first-time scan on a global refresh.
           + 'replay: NEVER OBSERVED — this mechanic is registered and runs on every scan, and the '
           + 'walk behind every number on this page did not produce a single firing of it. Not a '
           + 'weak record: no record. ' + tot + ' of ' + OG_MECHANICS.length
-          + ' registered mechanics are in this state.</div>';
+          + ' registered mechanics are in this state.'
+          + hgOgSiblingRecordNote(kind) + '</div>';
       }
       return '';
     } catch (e) { return ''; }
@@ -11104,7 +11208,7 @@ terse status, and never launches a first-time scan on a global refresh.
      printed on a row carrying 63 trades. It was true when the sample
      minimum was the only thing between a positive margin and a promotion.
      Packs 834, 835 and 836 each added another — the population must be this
-     mechanic's own, the bound is corrected for the 77-mechanic family, and
+     mechanic's own, the bound is corrected for the 78-mechanic family, and
      it is deflated by the record's measured overlap — so a row can now fail
      for four different reasons and the card named whichever one was written
      into the template.
@@ -13446,6 +13550,7 @@ terse status, and never launches a first-time scan on a global refresh.
              entry in the map whose engine reads a clock, and reading
              Date.now() made its session gate a property of the bake */
           'VP-PLAYBOOK':     function(r){ return hgOgVpPlaybook(r, { nowSec: hgOgBtLastSec(r) }); },
+          'SWEEP-OB':        function(r){ return hgOgSweepObHit(r, { nowSec: hgOgBtLastSec(r) }); },
           'P4-NR7':          function(r){ return hgOgPart4ByKind(r, 'P4-NR7'); },
           'P4-ADRX':         function(r){ return hgOgPart4ByKind(r, 'P4-ADRX'); },
           'P4-LAF':          function(r){ return hgOgPart4ByKind(r, 'P4-LAF'); },
@@ -15790,6 +15895,7 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgFwdSplitsPanelHtml = hgOgFwdSplitsPanelHtml;
     window.hgOgFwdBucketTxt = hgOgFwdBucketTxt;
     window.hgOgUnobservedKinds = hgOgUnobservedKinds;
+    window.hgOgSiblingRecordNote = hgOgSiblingRecordNote;
     window.hgOgDirSibling = hgOgDirSibling;
     window.hgOgDirSiblingLineHtml = hgOgDirSiblingLineHtml;
     window.OG_DIR_PAIRS = OG_DIR_PAIRS;

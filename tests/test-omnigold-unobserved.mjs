@@ -18,15 +18,23 @@
                  a record on two trades is not a record — and since v765
                  the card says so, with the count, and NO win rate.
 
-     UNOBSERVED  12 registered mechanics produced NOT ONE ROW in a walk of
+     UNOBSERVED  13 registered mechanics produced NOT ONE ROW in a walk of
                  9,897 trades over five and a half months. SMT-DIVERGE,
-                 GSR-EXTREME, COINT-SPREAD, OU-REVERT, VP-PLAYBOOK and the
-                 seven part-N variants. They run on every scan and can put
-                 a card on screen. Nothing is known about them at all —
-                 which is a different claim from "thin" and a very
-                 different one from "measured and negative".
+                 GSR-EXTREME, COINT-SPREAD, OU-REVERT, VP-PLAYBOOK, the
+                 seven part-N variants, and SWEEP-OB. They run on every
+                 scan and can put a card on screen. Nothing is known about
+                 them at all — which is a different claim from "thin" and a
+                 very different one from "measured and negative".
 
-   54 + 11 + 12 = 77, the whole register.
+   54 + 11 + 13 = 78, the whole register.
+
+   hg-v923 added SWEEP-OB, and it is the case the derivation was built for:
+   a mechanic registered long after the bake, which therefore cannot appear
+   in either baked map and lands in `unobserved` with no list edited. It is
+   also the first one whose sibling desk HAS a record under the same stratKey
+   — and that record measures the detector's PRE-TRIGGER states, not the
+   confirmed setup this desk forms, so the card has to attribute it rather
+   than borrow it. hgOgSiblingRecordNote does that and is pinned below.
 
    THE SET IS DERIVED, NOT LISTED. hgOgUnobservedKinds subtracts the two
    baked maps from OG_MECHANICS, so registering a mechanic puts it into the
@@ -77,7 +85,7 @@ console.log('== every registered mechanic is in exactly one of three states ==')
      `the three states partition the register (${counts.measured}+${counts.thin}+${counts.unobserved} of ${MECH.length})`);
   ok(counts.measured === 54, `54 are measured (${counts.measured})`);
   ok(counts.thin === 11, `11 fired but settled under the bar (${counts.thin})`);
-  ok(counts.unobserved === 12, `and 12 were never observed at all (${counts.unobserved})`);
+  ok(counts.unobserved === 13, `and 13 were never observed at all (${counts.unobserved})`);
 
   /* a string that is not this desk's mechanic has nothing to disclose and
      must not be swept into "unobserved" */
@@ -88,7 +96,8 @@ console.log('== every registered mechanic is in exactly one of three states ==')
 console.log('\n== the unobserved set is derived, and the derivation is safe ==');
 {
   const U = ctx.hgOgUnobservedKinds();
-  ok(Array.isArray(U) && U.length === 12, `twelve mechanics have no record of any kind (${U.length})`);
+  ok(Array.isArray(U) && U.length === 13, `thirteen mechanics have no record of any kind (${U.length})`);
+  ok(U.indexOf('SWEEP-OB') >= 0, 'SWEEP-OB among them — registered in hg-v923, after the bake');
   ok(U.indexOf('P8-GEO') >= 0 && U.indexOf('COINT-SPREAD') >= 0, 'including P8-GEO and COINT-SPREAD');
   ok(U.indexOf('MMOVE') < 0, 'and not a measured one');
   ok(U.indexOf('POC-REVERT') < 0, 'nor a thin one — POC-REVERT fired, it just fired too little');
@@ -111,7 +120,7 @@ console.log('\n== the unobserved set is derived, and the derivation is safe ==')
 
   /* and the register genuinely contains mechanics the walk never saw */
   const neverSeen = MECH.filter(k => !seen.has(k));
-  ok(neverSeen.length === 12, 'twelve registered mechanics are absent from the walk entirely');
+  ok(neverSeen.length === 13, 'thirteen registered mechanics are absent from the walk entirely');
   ok(neverSeen.slice().sort().join(',') === U.slice().sort().join(','),
      'and the derived set is exactly those — computed, never transcribed');
 
@@ -137,7 +146,7 @@ console.log('\n== each state renders what it actually knows ==');
   ok(/NEVER OBSERVED/.test(unseen), 'an unobserved mechanic says so');
   ok(/did not produce a single firing/i.test(unseen), 'in as many words');
   ok(/Not a weak record: no record/.test(unseen), 'and names the distinction that matters');
-  ok(/12 of 77/.test(unseen), 'with how many share its state, counted rather than written');
+  ok(/13 of 78/.test(unseen), 'with how many share its state, counted rather than written');
   ok(!/%/.test(unseen) && !/n=/.test(unseen), 'and no number that could be read as a result');
   ok(!/NaN|undefined|null/.test(unseen), 'with nothing leaked');
 
@@ -156,7 +165,7 @@ console.log('\n== the count in the copy tracks the register ==');
      exactly this reason. The new line must not reintroduce one. */
   ok(/hgOgUnobservedKinds\(\)\.length/.test(OG), 'the line counts the derived set at render time');
   ok(/OG_MECHANICS\.length/.test(OG), 'and the register at render time');
-  ok(!/12 of 77 registered/.test(OG), 'with neither number written into the string');
+  ok(!/13 of 78 registered/.test(OG), 'with neither number written into the string');
 }
 
 console.log('\n' + passed + ' passed, 0 failed');
