@@ -86,8 +86,12 @@ const changes = [];
       if (cur && rows[cur]){
         const v = rows[cur];
         const fn = v.formsNone ? ', formsNone: true' : '';
+        /* hg-v923: precursorOnly is derived by the generator like every other
+           field on this line, so it is emitted here rather than hand-kept —
+           the writer stripping it is what the byte-identical guard caught. */
+        const po = v.precursorOnly ? ', precursorOnly: true' : '';
         const next = lm[1] + 'live: { n: ' + v.n + ', net: ' + g(v.net)
-          + ', oosHeld: ' + v.oosHeld + ', oosBroke: ' + v.oosBroke + fn + ' },';
+          + ', oosHeld: ' + v.oosHeld + ', oosBroke: ' + v.oosBroke + fn + po + ' },';
         if (next !== line) n++;
         out.push(next); cur = null; continue;
       }

@@ -36,6 +36,19 @@ const stopPct = (t) => {
 const mean = (v) => v.reduce((a, b) => a + b, 0) / v.length;
 const r3 = (x) => Math.round(x * 1000) / 1000;
 
+/* A quality stamp reads "<NAME> Q<score>/10". `?` in place of the score means
+   the detector returned before it scored anything. A kind is precursor-only
+   when it stamps a quality on every row and not one of them is numeric —
+   two conditions, because a kind that stamps no quality at all has told us
+   nothing either way and must not be flagged. */
+export const QUALITY_STAMP = /\sQ(\?|\d+)\/10/;
+export function precursorOnly(rowsOfKind){
+  if (!Array.isArray(rowsOfKind) || !rowsOfKind.length) return false;
+  const stamped = rowsOfKind.filter((t) => (t.stamps || []).some((s) => QUALITY_STAMP.test(s)));
+  if (stamped.length !== rowsOfKind.length) return false;
+  return !stamped.some((t) => (t.stamps || []).some((s) => /\sQ\d+\/10/.test(s)));
+}
+
 export function liveEdgePopulation(path = REPLAY){
   const raw = JSON.parse(readFileSync(path, 'utf8'));
   /* shadow rows never entered the main book — they are a separate ledger */
@@ -73,6 +86,15 @@ export function liveEdgePopulation(path = REPLAY){
     }
     const live = { n: rows.length, net: r3(mean(rows.map((t) => t.netR))), oosHeld, oosBroke };
     if (formsNone) live.formsNone = true;
+    /* hg-v923 — PRECURSOR-ONLY, derived rather than annotated.
+       A detector that stamps a quality score onto its card ("Q7/10") tells us
+       whether the row came from its scored path. When a kind carries that
+       stamp on every row and the score is NEVER numeric, every firing in the
+       book came from a pre-trigger early return and the record belongs to the
+       precursor, not to the model. That is exactly `sweepob`: 62 of 62 print
+       "Q?/10". Derived here so the literal writer emits it and a re-bake that
+       finally sees a scored firing drops the flag on its own. */
+    if (precursorOnly(book.filter((t) => t.stratKey === key))) live.precursorOnly = true;
     out[key] = live;
   }
 

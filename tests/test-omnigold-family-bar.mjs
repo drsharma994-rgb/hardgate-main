@@ -1,7 +1,7 @@
 /* HARDGATE — the promotion bar counts how many mechanics were tried.
 
    hgOgReplayEdgeVerdict keeps two bounds: lo95 for the panel to display,
-   and loFw at hgOgFamilyZ(77) for the verdict to act on. Its comment states
+   and loFw at hgOgFamilyZ(78) for the verdict to act on. Its comment states
    the rule for the whole file:
 
      "Every other site asking 'did this beat breakeven, allowing for how many
@@ -9,18 +9,18 @@
 
    That was not true of the forward tiers. hgOgProvenEdgeOk asks exactly that
    question — "the Wilson lower bound sits above breakeven by a real margin"
-   — and asked it at an uncorrected 1.96, across all 77 mechanics the desk
+   — and asked it at an uncorrected 1.96, across all 78 mechanics the desk
    scans, on every bake.
 
-   One-sided alpha 2.5% per test over 77 tests:
+   One-sided alpha 2.5% per test over 78 tests:
 
-     P(at least one mechanic clears by luck)   85.8%
-     expected false promotions per bake        1.93
+     P(at least one mechanic clears by luck)   86.1%
+     expected false promotions per bake        1.95
 
    Sweeping every (wins, n) from 25 to 200 trades at R = 1.5 / 2 / 3: 6,296
    records clear both bars, 5,304 clear neither, and 658 — 9.5% of
    everything that promoted — cleared only the uncorrected one. Those are
-   the thin just-over-the-line records a 77-way search manufactures.
+   the thin just-over-the-line records a 78-way search manufactures.
 
    Run: node tests/test-omnigold-family-bar.mjs */
 import fs from 'node:fs';
@@ -87,9 +87,13 @@ console.log('== the family, and the bar it implies ==');
   ok(typeof W.hgOgPromotionZ === 'function' && typeof W.hgOgFamilyZ === 'function',
      'the promotion bar is a function, not a literal');
   const m = W.HG_OG_MECHANIC_COUNT;
-  ok(m === 77, `the desk scans ${m} mechanics`);
+  /* hg-v923 registered SWEEP-OB, so the family the bar corrects for is 78.
+     That WIDENS the correction (z 3.2091 -> 3.2128): registering a mechanic
+     makes the promotion bar stricter for every other one, which is the
+     correct direction and the reason this number is derived, not written. */
+  ok(m === 78, `the desk scans ${m} mechanics`);
   const z = W.hgOgPromotionZ();
-  ok(Math.abs(z - 3.2091) < 0.001, `the Sidak one-sided bar over that family is +${z.toFixed(4)}σ`);
+  ok(Math.abs(z - 3.2128) < 0.001, `the Sidak one-sided bar over that family is +${z.toFixed(4)}σ`);
   ok(z === W.hgOgFamilyZ(m),
      'the SAME bar the replay verdict already uses — one family correction, not a second one');
   ok(z > 1.96, 'and it is stricter than the uncorrected 95% z it replaces');
@@ -104,7 +108,7 @@ console.log('== the family, and the bar it implies ==');
   const pAny = 1 - Math.pow(0.975, m);
   ok(pAny > 0.85 && pAny < 0.87,
      `at an uncorrected 1.96 the chance SOME mechanic clears by luck is ${(pAny * 100).toFixed(1)}%`);
-  ok(Math.abs(m * 0.025 - 1.93) < 0.01,
+  ok(Math.abs(m * 0.025 - 1.95) < 0.01,
      `— about ${(m * 0.025).toFixed(2)} false promotions per bake`);
 }
 
@@ -188,10 +192,10 @@ console.log('\n== and the panels name the bar they test at ==');
   const strip = h => String(h).replace(/<[^>]+>/g, ' ').replace(/&sigma;/g, 'σ')
                               .replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
   const exec = strip(C.hgOgSettledExecutePanelHtml({ proven: [], best: [] }));
-  ok(/corrected for 77 mechanics/.test(exec), `the PROVEN EDGE panel says so: "${exec.slice(0, 150)}"`);
+  ok(/corrected for 78 mechanics/.test(exec), `the PROVEN EDGE panel says so: "${exec.slice(0, 150)}"`);
   ok(/\+3\.21σ/.test(exec), 'quoting the bar, not just claiming a correction');
   const verdict = strip(C.hgOgScalpVerdictPanelHtml({ go: null }));
-  ok(/corrected for 77 mechanics/.test(verdict) && /\+3\.21σ/.test(verdict),
+  ok(/corrected for 78 mechanics/.test(verdict) && /\+3\.21σ/.test(verdict),
      'and so does the SCALP VERDICT panel');
   ok(!/NaN|undefined/.test(exec + verdict), 'neither printing NaN or undefined');
 

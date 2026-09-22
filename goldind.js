@@ -1533,9 +1533,21 @@ var HG_GOLD_SETUP_EDGE = {
        prefer bar (n>=50 AND gross>0 AND net>=+0.10), and sweepob misses it by
        a single settle. An unearned boost would be exactly the fabricated
        pseudo-row hg-v700 removed from the swing lane. */
+    /* hg-v923: THIS ROW DOES NOT MEASURE SWEEP->OB. All 62 sweepob firings in
+       the walk (49 settled) carry a falsy quality, which means every one came
+       from a pre-trigger early return in hgGoldSweepOb and NONE from its
+       confirmed path. What the +0.427 / +0.162 describes is the PRECURSOR:
+       a sweep with the entry leg still missing, minted with substituted
+       geometry and demoted. The confirmed setup — quality >= 7/10 and
+       R:R >= 2.0 — has n=0 and no record at all.
+       Split by precursor stage the live rows are NY-OPEN-WAIT n=3 -0.263,
+       REVERSAL n=11 +0.736, CONTINUATION n=5 +0.422, NY-CONT n=8 -0.135,
+       NY-REV n=2 +0.197 — every cell under n=12, so nothing acts on them and
+       the split is recorded rather than used. Action stays `neutral`. */
     sweepob:  { n: 49, gross: 0.427, net: 0.162, action: 'neutral',
-      live: { n: 29, net: 0.301, oosHeld: 0, oosBroke: 0 },
-      why: 'SWEEP→OB net +0.16R at XM (n=49) — one settle short of the n>=50 prefer bar; measured, not preferred' },
+      live: { n: 29, net: 0.301, oosHeld: 0, oosBroke: 0, precursorOnly: true },
+      why: 'SWEEP→OB PRECURSOR net +0.16R at XM (n=49) — every firing in the walk is a '
+        + 'pre-trigger state, not a confirmed sweep→OB; the confirmed setup has never fired' },
     p8range:  { n: 91, gross: 0.162, net: 0.038, action: 'neutral',
       live: { n: 76, net: 0.058, oosHeld: 2, oosBroke: 1 },
       why: 'S52 RANGE-BAR S0 SWEEP net +0.04R at XM (n=91) — measured flat at the venue, under the prefer bar' },
@@ -2934,9 +2946,16 @@ function goldScalpSetups(inp){
           if (isFinite(sob.t2)) sobCand.t2 = sob.t2;
           if (isFinite(sob.stop)) sobCand.stop = sob.stop;
           if (!Array.isArray(sobCand.stamps)) sobCand.stamps = [];
-          sobCand.stamps.push('SWEEP→OB Q'
-            + (sob.quality ? sob.quality.score : '?') + '/10'
-            + (sob.mode ? (' · ' + String(sob.mode).toUpperCase()) : ''));
+          /* hg-v923: this printed 'Q?/10' on every row the walk ever produced,
+             because all 62 of them came from a pre-trigger early return that
+             computes no quality. A reader saw a setup card that looked scored
+             and simply had a missing number. Name the missing leg instead. */
+          sobCand.sweepObStage = sob.stage || null;
+          sobCand.stamps.push(sob.quality
+            ? ('SWEEP→OB Q' + sob.quality.score + '/10'
+               + (sob.mode ? (' · ' + String(sob.mode).toUpperCase()) : ''))
+            : ('SWEEP→OB WAITING · ' + hgGoldSweepObStageLabel(sob.stage)
+               + (sob.mode ? (' · ' + String(sob.mode).toUpperCase()) : '')));
           if (sob.tier === 'watch' && !sob.confirmed) sobCand.demoted = true;
           push(sobCand);
         }
@@ -9634,6 +9653,19 @@ function hgGoldFreshFvg(rows, dir){
 /**
  * 10-filter quality score for sweep→OB (alert at ≥7).
  */
+/* hg-v923 — plain English for a pre-trigger stage, for a card stamp.
+   'scored'/'confirmed' never reach here: those rows have a quality to print. */
+function hgGoldSweepObStageLabel(stage){
+  switch (String(stage || '')){
+    case 'ny-open-wait':     return 'NY open, MSS not complete';
+    case 'no-entry-zone':    return 'no fresh OB/FVG yet';
+    case 'awaiting-retrace': return 'no retrace into the zone yet';
+    case 'scored':           return 'scored below the alert bar';
+    case 'confirmed':        return 'confirmed';
+    default:                 return 'not yet triggered';
+  }
+}
+
 function hgGoldSweepObQuality(hit, opts){
   var out = { score: 0, max: 10, pass: false, parts: {}, why: '' };
   try{
@@ -9666,9 +9698,32 @@ function hgGoldSweepObQuality(hit, opts){
 /**
  * Advanced sweep→OB detector.
  */
+/* hg-v923 — `stage` SAYS WHICH LEG IS STILL MISSING, and `quality` stays null
+   until all of them are in.
+
+   This detector has four early returns that set tier:'watch' and hand back a
+   row with NO quality score, and in two of them no targets and no R:R either.
+   They are the honest pre-trigger states of a sweep->OB — the sweep has
+   happened, the entry has not. What made them a problem is that nothing
+   downstream could TELL them apart from a confirmed setup: the GOLD SCALP mint
+   accepts tier 'watch', so they minted, and they minted as stratKey `sweepob`.
+
+   MEASURED on the committed GOLD SCALP replay: ALL 62 sweepob rows in the walk
+   carry a falsy quality — that is, 62 of 62 came from one of these early
+   returns and ZERO from the confirmed path. So the +0.427 gross / +0.162 net
+   on HG_GOLD_SETUP_EDGE.scalp.sweepob, and the live +0.301R on 29 rows, are
+   the record of the PRECURSOR. The confirmed SWEEP->OB — HTF location, raid,
+   MSS, fresh OB/FVG retrace, quality >= 7/10 and R:R >= 2.0 — has never once
+   fired in the walk, and therefore has no record at all.
+
+   `stage` is set on every watch return so a caller can say which leg is
+   missing instead of printing 'Q?/10'. `quality` is left null on all of them
+   deliberately: a partial setup has no score, and substituting one would put
+   the precursor back on the same footing as the real thing. */
 function hgGoldSweepOb(rows, opts){
   var out = {
     ok: false, confirmed: false, dir: null, mode: null, score: 0, tier: 'ignore',
+    stage: null,
     sweepLevel: NaN, sweepLabel: null, obZone: null, entry: NaN, stop: NaN,
     t1: NaN, t2: NaN, rr: NaN, quality: null, plan: null, why: '', alertFields: null
   };
@@ -9739,6 +9794,9 @@ function hgGoldSweepOb(rows, opts){
       out.tier = 'watch';
       out.dir = dir;
       out.mode = 'ny-open-wait';
+      /* the thinnest of the three: no sweep level, no zone, no entry, no stop.
+         A caller that mints this is minting a direction and nothing else. */
+      out.stage = 'ny-open-wait';
       return out;
     }
 
@@ -9759,6 +9817,8 @@ function hgGoldSweepOb(rows, opts){
       out.mode = mode;
       out.sweepLevel = sweep.level;
       out.tier = 'watch';
+      /* leg 2 of the model is absent: there is no zone to enter at. */
+      out.stage = 'no-entry-zone';
       return out;
     }
 
@@ -9793,6 +9853,9 @@ function hgGoldSweepOb(rows, opts){
       out.stop = stop;
       out.tier = 'watch';
       out.ok = true;
+      /* the closest of the three — entry and stop exist, but price has not
+         come back to the zone, so there is no trigger, no target and no R:R. */
+      out.stage = 'awaiting-retrace';
       return out;
     }
 
@@ -9870,6 +9933,9 @@ function hgGoldSweepOb(rows, opts){
     out.confirmed = !!(q.pass && hit.mssOk && hit.reclaimOk && hit.entryOk && hit.rrOk);
     out.ok = out.confirmed || q.score >= 5;
     out.tier = out.confirmed ? 'alert' : (q.score >= 5 ? 'watch' : 'ignore');
+    /* only here is there a scored setup. 'scored' is the one stage that has a
+       quality, targets and an R:R; everything above is a precursor. */
+    out.stage = out.confirmed ? 'confirmed' : 'scored';
     out.plan = {
       entryModel: 'balanced — retrace into OB/FVG after MSS (50% body preferred)',
       stop: stop,
@@ -15282,6 +15348,7 @@ W.hgGoldTakeEnginePlan = hgGoldTakeEnginePlan;
 W.hgGoldBindEnginePlan = hgGoldBindEnginePlan;
 W.hgGoldSetupEdgeApply = hgGoldSetupEdgeApply;
 W.hgGoldEdgeLiveNote = hgGoldEdgeLiveNote;
+W.hgGoldSweepObStageLabel = hgGoldSweepObStageLabel;
 W.hgGoldScalpStopFloor = hgGoldScalpStopFloor;
 W.hgGoldScalpCostGate = hgGoldScalpCostGate;
 W.goldCrossVenueMap = goldCrossVenueMap;

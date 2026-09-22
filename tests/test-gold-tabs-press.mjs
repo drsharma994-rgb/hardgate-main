@@ -205,7 +205,7 @@ console.log('\n== OMNIGOLD ran both horizons and rendered what it measured ==');
      'with its mechanic, hit-rate and expectancy columns');
   for (const m of ['SPRING', 'PO3', 'ORB', 'VALUE', 'KZ-JUDAS', 'ROUND-MAGNET'])
     ok(t.indexOf(m) >= 0, `and a row for ${m}`);
-  ok(/all 77 mechanics/.test(t),
+  ok(/all 78 mechanics/.test(t),
      'the coverage map states the full roster, so no mechanic was skipped to make the scan finish');
   ok(/SCALP VERDICT/.test(t) && /DESK VERDICT/.test(t), 'both verdict panels rendered');
   ok(/PROVEN EDGE/.test(t), 'and the settled-execution panel');

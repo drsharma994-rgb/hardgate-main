@@ -18,7 +18,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import vm from 'node:vm';
-import { liveEdgePopulation, COST_BAR_PCT, SUPPRESSED, SPLITS, MIN_SIDE } from '../scripts/edge-live-population.mjs';
+import { liveEdgePopulation, COST_BAR_PCT, SUPPRESSED, SPLITS, MIN_SIDE,
+         precursorOnly, QUALITY_STAMP, REPLAY } from '../scripts/edge-live-population.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 let pass = 0, fail = 0;
@@ -39,6 +40,27 @@ ok(typeof APPLY === 'function', 'goldind.js exports hgGoldSetupEdgeApply');
 
 const measured = liveEdgePopulation();
 
+/* ---- 0. the precursor-only derivation, on the replay it reads ---- */
+console.log('0. precursor-only is measured from the quality stamps, not annotated');
+{
+  const raw = JSON.parse(readFileSync(REPLAY, 'utf8'));
+  const flagged = Object.entries(measured.rows).filter(([, v]) => v.precursorOnly).map(([k]) => k);
+  eq(flagged.length, 1, 'exactly one kind is precursor-only on this replay');
+  eq(flagged[0], 'sweepob', 'and it is sweepob');
+  const sw = raw.trades.filter((t) => t.stratKey === 'sweepob');
+  const stamp = (t) => (t.stamps || []).find((x) => QUALITY_STAMP.test(x)) || '';
+  ok(sw.length > 0 && sw.every((t) => stamp(t)), 'every sweepob row carries a quality stamp (' + sw.length + ')');
+  eq(sw.filter((t) => /\sQ\d+\/10/.test(stamp(t))).length, 0, 'and not one of them is numeric');
+  /* both conditions matter: a kind that stamps NO quality has said nothing
+     either way and must not be flagged */
+  ok(!precursorOnly(raw.trades.filter((t) => t.stratKey === 'hvn')),
+     'a kind that stamps no quality at all is not flagged');
+  ok(!precursorOnly([]), 'and an empty set is not flagged');
+  ok(precursorOnly([{ stamps: ['FOO Q?/10'] }]), 'a single all-unscored row is');
+  ok(!precursorOnly([{ stamps: ['FOO Q?/10'] }, { stamps: ['FOO Q7/10'] }]),
+     'but one scored firing is enough to clear the flag — which is how a re-bake drops it');
+}
+
 /* ---- 1. every literal matches what the replay says, right now ---- */
 console.log('1. the live block on every row is re-derived from the replay');
 const scalp = TABLE.scalp || {};
@@ -58,6 +80,9 @@ for (const [key, row] of Object.entries(scalp)){
   eq(got.n, want.n, key + ' live.n');
   eq(got.net, want.net, key + ' live.net');
   eq(got.oosHeld, want.oosHeld, key + ' live.oosHeld');
+  /* hg-v923: precursorOnly is derived from the replay's own quality stamps,
+     so it is re-derived here like every other field rather than trusted. */
+  eq(!!got.precursorOnly, !!want.precursorOnly, key + ' live.precursorOnly');
   eq(got.oosBroke, want.oosBroke, key + ' live.oosBroke');
   eq(!!got.formsNone, !!want.formsNone, key + ' live.formsNone');
 }
