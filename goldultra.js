@@ -1797,8 +1797,17 @@ function voteTableHTML(res){
   if (res.participation) h += '<div class="gu-part">' + esc(res.participation.name) + ' ' + esc(res.participation.read) + ' — ' + esc(res.participation.note) + '</div>';
   return h;
 }
-function renderResult(ui, res, src, sel, lane){
+function renderResult(ui, res, src, sel, lane, tapes){
+  /* Pack 907: GOLD ULTRA moved its numbers on a malformed tape and said
+     nothing. The note leads the board — above the count, above the plan —
+     because it is a statement about the bars everything below is drawn
+     from, and it rides BOTH exits from this function (COUNT SILENT takes
+     an early return that would otherwise drop it). */
   var h = '';
+  if (tapes && typeof W.hgGoldTapeSanityNote === 'function'){
+    if (tapes.rows15m && tapes.rows15m.length) h += W.hgGoldTapeSanityNote(W.hgGoldTapeSanity(tapes.rows15m), '15m');
+    if (tapes.rows1h && tapes.rows1h.length) h += W.hgGoldTapeSanityNote(W.hgGoldTapeSanity(tapes.rows1h), '1h');
+  }
   if (sel && lane) h += setupsHTML(sel, lane, res.price, res.ok ? res.count : null);
   if (!res.ok){ ui.cards.innerHTML = h + '<div class="gu-gate"><b>COUNT SILENT</b> — ' + esc(res.reasons.join(' · ')) + '</div>' + filterEvidenceHTML() + evidenceHTML(); return; }
   var cls = res.fire ? (res.dir === 'long' ? ' long' : ' short') : '', K = res.count.kinds;
@@ -1850,7 +1859,7 @@ async function runScan(ui){
                setups: { pick: sel.pick ? { strategy: sel.pick.strategy, stratKey: sel.pick.stratKey, dir: sel.pick.dir, entry: sel.pick.entry, stop: sel.pick.stop, t1: sel.pick.t1, confluence: sel.pick.confluence } : null,
                          cards: sel.cards.map(function(c){ return { strategy: c.strategy, stratKey: c.stratKey, dir: c.dir, confluence: c.confluence, book: c.book, crownable: c.crownable, demoted: c.demoted }; }),
                          held: sel.held.concat(lane.held).length, dark: lane.dark } };
-    if (ui && ui.cards) renderResult(ui, res, f.src, sel, lane);
+    if (ui && ui.cards) renderResult(ui, res, f.src, sel, lane, f);
     setStat(ui, (sel.pick ? 'BEST: ' + sel.pick.strategy + ' ' + sel.pick.dir.toUpperCase() + ' (against the consensus) · ' : (sel.cards.length ? sel.cards.length + ' setup' + (sel.cards.length === 1 ? '' : 's') + ' shown, none crowned · ' : 'no GOLD SCALP setup this bar · ')) + (res.ok ? res.line : 'count silent') + ' · ' + new Date().toISOString().slice(11, 19) + ' UTC', false);
     try{ if (sel.pick && typeof W.hgFwdRecordScan === 'function'){
       /* v898: each timeframe against ITS OWN bars. A null timeframe here sent

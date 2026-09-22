@@ -816,7 +816,20 @@ async function runGoldPro(ui){
       }
     } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("goldpro", eFwd); } catch (eW) {} }
 
-    ui.out.innerHTML = renderStructurePanel(st, g1d.rows, g4h.rows, src)
+    /* Pack 907: GOLD PRO reads a 1D and a 4H leg. It held still on the
+       malformed tape in the pack-907 harness, but the check belongs on the
+       tape rather than on what that harness happened to exercise. A plain
+       window lookup here — this file's W is function-scoped elsewhere. */
+    var tapeNote907 = '';
+    try{
+      var __tsn = (typeof window !== 'undefined') && window.hgGoldTapeSanityNote;
+      var __ts  = (typeof window !== 'undefined') && window.hgGoldTapeSanity;
+      if (typeof __tsn === 'function' && typeof __ts === 'function'){
+        if (g1d.rows && g1d.rows.length) tapeNote907 += __tsn(__ts(g1d.rows), '1d');
+        if (g4h.rows && g4h.rows.length) tapeNote907 += __tsn(__ts(g4h.rows), '4h');
+      }
+    }catch(eTs){}
+    ui.out.innerHTML = tapeNote907 + renderStructurePanel(st, g1d.rows, g4h.rows, src)
                      + renderLevelsPanel({ plan: lvPlan, reason: lvReason, note: lvNote,
                                            src: lvSrc, rowsN: lvRowsN, cascade: lvCascade, rows4h: lvRows,
                                            context: lvContext })

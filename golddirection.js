@@ -1449,7 +1449,17 @@ async function runScan(ui, scanSt){
       if (enginesDark.length){
         html += '<div class="gdx-dark"><b>ENGINES DARK</b> — ' + enginesDark.map(esc).join(' · ') + '</div>';
       }
-      ui.cards.innerHTML = html;
+      /* Pack 907: GOLD DIRECTION reads four legs. It held still on the malformed tape in
+         the pack-907 harness, but 'did not move there' is not 'cannot move' —
+         the check belongs on the tape, not on the harness's reach. */
+      var tapeNote907 = '';
+      if (typeof W.hgGoldTapeSanityNote === 'function'){
+        [['rows15m','15m'],['rows1h','1h'],['rows4h','4h'],['rows1d','1d']].forEach(function(L){
+          var rws = gold && gold[L[0]];
+          if (rws && rws.length) tapeNote907 += W.hgGoldTapeSanityNote(W.hgGoldTapeSanity(rws), L[1]);
+        });
+      }
+      ui.cards.innerHTML = tapeNote907 + html;
       if (ui.empty) ui.empty.style.display = 'none';
     }
 
