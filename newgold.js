@@ -58,8 +58,9 @@ var MIN_RR      = 1.5;     /* T1 floor (user chose 1.5R / 2.5R ladder) */
    the VWMA-50 side, the session-htf formation class, the composed stop
    floor, MIN_RR. The loosened config's replay ships with the change. */
 var NG_RSI_CROSS_BARS = 3;
-/* hg-v702 dial, measured before ship (scripts/backtest-newgold-results.json
-   at the 0.25 trial): the RSI-window-only cohort (cross 1-2 bars ago, close
+/* hg-v702 dial, measured before ship
+   (scripts/backtest-newgold-results-edge025-trial.json — hg-v910 corrected
+   the path; the main results file does not carry the 0.25 trial): the RSI-window-only cohort (cross 1-2 bars ago, close
    INSIDE the zone) measured n=9 67% WR +0.58R net at XM — the best cohort
    this desk has produced — while every edge-tag cohort (price never closed
    inside the zone) measured negative (edge-only n=17 −0.29, window+edge
