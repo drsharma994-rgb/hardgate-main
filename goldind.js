@@ -1290,6 +1290,142 @@ var GST_NAME = {
    there on disjoint windows, every one of those refusals still stands, so
    the flaw was latent rather than load-bearing. It would have shipped this
    one. */
+/* hg-v922 — WHICH SIGNAL-TIME FACTOR ACTUALLY SEPARATES WINNERS.
+   Re-derive: node scripts/factor-separation.mjs  (--json for the raw tables).
+   Guard: tests/test-factor-separation.mjs re-runs it against both committed
+   replays, so every number below fails the suite the moment it drifts.
+
+   The question behind this is "how do we raise the win rate", and the first
+   thing the measurement does is refuse the easy version of it. A win rate can
+   be raised arbitrarily by shrinking the target, so every row carries win%,
+   gross R and net R TOGETHER, and mean planned R:R for both sides of the
+   split. Nothing here is a candidate if it buys one with another. (It never
+   came up: every split below sits at rr 1.49-1.52 on both sides, so no verdict
+   here is a target being shrunk.)
+
+   The bar a row must clear to carry a verdict:
+     - FOUR DISJOINT WINDOWS agree, on win% AND gross AND net. Not nested ones
+       (hg-v920 found five packs reading three nested splits as three
+       confirmations). Net alone is not enough: costR = rtCostPct / stopPct
+       exactly, so ANY stop-width split moves net by arithmetic. Only the gross
+       column can say the setups themselves are better.
+     - BOTH FILL BOUNDS agree (hg-v918). The lower bound deletes unprovable
+       wins and keeps unprovable losses, which punishes tight-stop rows hardest
+       — precisely the cohort a stop-width claim is about. So the as-recorded
+       end is the CONSERVATIVE one here and a verdict has to survive it.
+
+   WHAT THE DESK RANKS BY DOES NOT RANK. On the population GOLD SCALP forms
+   today, every input to its own ordering points the wrong way and NONE of them
+   is unanimous in any direction:
+     tally >= 8    -7.3 pts win, -0.186R   1 of 4 windows
+     grade A       -3.5 pts win, -0.072R   1 of 4 windows
+     not demoted   -3.0 pts win, -0.068R   1 of 4 windows
+   That is not a claim that low tally is better — 1 of 4 is noise, in the same
+   way 3 of 4 is. It is the stronger and more uncomfortable claim that the
+   ordering carries no information about the outcome. hg-v920 refused a
+   grade-A fallback on the same evidence; this says the same about the tally.
+
+   THE ONE THING THAT DOES SEPARATE IS THE STOP. stop >= 0.28% and >= 0.50%
+   are unanimous on all three columns at both bounds, and the win-rate rise is
+   not bought with a smaller target (rr 1.50 vs 1.51). At 0.28% the split is
+   +4.8 pts of win rate, +0.0965R gross and +0.1393R net — so 69% of it is the
+   setups and 31% is the fee, which means this is NOT just hg-v919's
+   arithmetic restated.
+
+   AND YET NO STOP VALUE IS SHIPPED. The direction holds; a number does not.
+   Across the bar sweep the unanimity is 0.20 no, 0.24 no, 0.28 YES, 0.32 no,
+   0.40 no, 0.50 YES, 0.60 YES. A property that appears at 0.28, vanishes at
+   0.32 and 0.40 and returns at 0.50 is a threshold being SEARCHED FOR, not
+   measured. Shipping 0.28% because it is where the windows happened to line up
+   is the hg-v920 mistake with a new number on it. The cost gate stays at
+   8x the venue round trip. */
+var HG_GOLD_FACTOR_SEP = {
+  windows: 4, rtPct: 0.02,
+  book: { asRecorded: { n: 1205, win: 43.3, gross: 0.0514, net: -0.0201 },
+          lower:      { n: 1205, win: 42.9, gross: 0.041, net: -0.0305 } },
+  rows: [
+    { f: 'tally >= 8', n: 630, dWin: [-7.3, -6.8], dGross: [-0.1958, -0.1823], dNet: [-0.1865, -0.1731],
+      q: ['1/4 1/4 1/4', '1/4 1/4 1/4'], verdict: null },
+    { f: 'grade A', n: 829, dWin: [-3.5, -3], dGross: [-0.0801, -0.0662], dNet: [-0.0716, -0.0577],
+      q: ['1/4 1/4 1/4', '1/4 1/4 1/4'], verdict: null },
+    { f: 'not demoted', n: 79, dWin: [-3, -2.6], dGross: [-0.068, -0.0569], dNet: [-0.0678, -0.0567],
+      q: ['1/4 1/4 1/4', '1/4 1/4 1/4'], verdict: null },
+    { f: 'dir long', n: 633, dWin: [3.9, 3.8], dGross: [0.0745, 0.0714], dNet: [0.0765, 0.0734],
+      q: ['3/4 2/4 2/4', '2/4 2/4 2/4'], verdict: null },
+    { f: 'London 07-11z', n: 203, dWin: [2.4, 1.7], dGross: [0.0812, 0.0641], dNet: [0.0696, 0.0525],
+      q: ['2/4 2/4 2/4', '2/4 2/4 2/4'], verdict: null },
+    { f: 'NY 12-16z', n: 358, dWin: [-1.6, -1.4], dGross: [-0.065, -0.0601], dNet: [-0.047, -0.0421],
+      q: ['2/4 2/4 2/4', '1/4 2/4 2/4'], verdict: null },
+    { f: 'LIMIT order', n: 134, dWin: [-1.7, -5.5], dGross: [-0.0104, -0.1037], dNet: [-0.0193, -0.1126],
+      q: ['1/4 2/4 1/4', '1/4 1/4 1/4'], verdict: null },
+    { f: 'stopAtr > 1.5', n: 464, dWin: [-2.8, -2.1], dGross: [-0.0745, -0.0576], dNet: [-0.046, -0.0291],
+      q: ['0/4 0/4 1/4', '2/4 1/4 2/4'], verdict: null },
+    { f: 'stop >= 0.28%', n: 599, dWin: [4.8, 5.6], dGross: [0.0965, 0.1171], dNet: [0.1393, 0.16],
+      q: ['4/4 4/4 4/4', '4/4 4/4 4/4'], verdict: 'better' },
+    { f: 'stop >= 0.50%', n: 166, dWin: [6.4, 6.8], dGross: [0.1103, 0.1223], dNet: [0.1588, 0.1709],
+      q: ['4/4 4/4 4/4', '4/4 4/4 4/4'], verdict: 'better' }
+  ],
+  bars: [{ bar: 0.2, n: 1026, holds: [false, false] },
+         { bar: 0.24, n: 782, holds: [false, false] },
+         { bar: 0.28, n: 599, holds: [true, true] },
+         { bar: 0.32, n: 441, holds: [false, false] },
+         { bar: 0.4, n: 270, holds: [false, false] },
+         { bar: 0.5, n: 166, holds: [true, true] },
+         { bar: 0.6, n: 104, holds: [true, true] }]
+};
+
+/* The panel. Prints the whole table rather than the two rows that reached a
+   verdict, because the point a reader needs is that eight of ten factors
+   reached none — a list of winners would read as though the desk had found
+   eight and picked the best two. */
+function hgGoldFactorSepHtml(sep){
+  try{
+    var T = sep || HG_GOLD_FACTOR_SEP;
+    if (!T || !T.rows || !T.rows.length) return '';
+    var sgn = function(x, d){ return (x >= 0 ? '+' : '') + Number(x).toFixed(d); };
+    var held = [], none = [];
+    for (var i = 0; i < T.rows.length; i++){
+      var r = T.rows[i];
+      if (r.thin) continue;
+      (r.verdict ? held : none).push(r);
+    }
+    var body = '';
+    for (var j = 0; j < T.rows.length; j++){
+      var x = T.rows[j];
+      if (x.thin) continue;
+      body += '<div class="gsx-fsep-row' + (x.verdict ? ' gsx-fsep-' + x.verdict : '') + '">'
+        + '<span class="gsx-fsep-f">' + x.f + '</span>'
+        + '<span class="gsx-fsep-n">n=' + x.n + '</span>'
+        + '<span class="gsx-fsep-v">' + sgn(x.dWin[0], 1) + ' pts win</span>'
+        + '<span class="gsx-fsep-v">' + sgn(x.dGross[0], 4) + ' gross</span>'
+        + '<span class="gsx-fsep-v">' + sgn(x.dNet[0], 4) + ' net</span>'
+        + '<span class="gsx-fsep-q">' + x.q[0] + ' &middot; ' + x.q[1] + '</span>'
+        + '<span class="gsx-fsep-verdict">' + (x.verdict === 'better' ? 'HOLDS'
+            : (x.verdict === 'worse' ? 'HOLDS (WORSE)' : '&mdash;')) + '</span></div>';
+    }
+    var barTxt = [];
+    for (var k = 0; k < (T.bars || []).length; k++){
+      barTxt.push(T.bars[k].bar.toFixed(2) + '% ' + (T.bars[k].holds[0] && T.bars[k].holds[1] ? 'holds' : 'no'));
+    }
+    return '<div class="gsx-fsep"><b>WHAT SEPARATES WINNERS</b> — '
+      + T.rows.length + ' signal-time factors on the ' + T.book.asRecorded.n
+      + ' trades this desk forms today (win ' + T.book.asRecorded.win.toFixed(1)
+      + '%, gross ' + sgn(T.book.asRecorded.gross, 4) + ', net ' + sgn(T.book.asRecorded.net, 4)
+      + ' at XM). A factor carries a verdict only when all ' + T.windows
+      + ' <b>disjoint</b> windows agree on win rate AND gross AND net, at <b>both</b> fill bounds. '
+      + '<b>' + held.length + ' of ' + (held.length + none.length) + '</b> do.'
+      + '<div class="gsx-fsep-tbl">' + body + '</div>'
+      + '<div class="gsx-fsep-foot">Columns are the difference against the rest of the book, at the '
+      + 'as-recorded bound; the last column is windows agreeing (win/gross/net) at each bound. '
+      + 'Every split above sits at planned R:R 1.49&ndash;1.52 on both sides, so no win-rate '
+      + 'difference here is a target being shrunk. <b>The desk&rsquo;s own ordering &mdash; tally, '
+      + 'grade, demote &mdash; reaches no verdict in either direction</b>: it is not carrying '
+      + 'information about the outcome. <b>No stop threshold is shipped from this.</b> Unanimity '
+      + 'across the sweep runs ' + barTxt.join(', ') + ' &mdash; a property that appears, vanishes '
+      + 'and returns is a number being searched for, not measured.</div></div>';
+  }catch(eFs){ return ''; }
+}
+
 var HG_GOLD_SETUP_EDGE = {
   scalp: {
     fvg: { n: 245, gross: 0.19, net: -0.211, action: 'suppress',
@@ -15139,6 +15275,8 @@ W.goldScalpLevels = __gsLevels;
 W.goldWatch = goldWatch;
 W.goldRankSetups = goldRankSetups;
 W.HG_GOLD_SETUP_EDGE = HG_GOLD_SETUP_EDGE;
+W.HG_GOLD_FACTOR_SEP = HG_GOLD_FACTOR_SEP;
+W.hgGoldFactorSepHtml = hgGoldFactorSepHtml;
 W.hgGoldPlanSidesOk = hgGoldPlanSidesOk;
 W.hgGoldTakeEnginePlan = hgGoldTakeEnginePlan;
 W.hgGoldBindEnginePlan = hgGoldBindEnginePlan;

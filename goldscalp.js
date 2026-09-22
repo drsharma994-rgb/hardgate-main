@@ -689,6 +689,17 @@ var GS_CSS = ''
 + '.gsx-wrow.idle .gsx-wst{color:#1E293B;border-color:#E2E8F0;background:#F8FAFC}'
 + '.gsx-silent{font-size:11px;color:#9A3412;border:1px solid rgba(234,88,12,.35);border-radius:6px;padding:9px 11px;margin:12px 0;line-height:1.55;background:#FFF7ED;font-weight:500}'
 + '.gsx-coverage{font-size:11px;color:#475569;border:1px dashed rgba(71,85,105,.35);border-radius:6px;padding:9px 11px;margin:8px 0 12px;line-height:1.55;background:rgba(71,85,105,.04)}'
++ '.gsx-fsep{font-size:11px;color:#475569;border:1px dashed rgba(71,85,105,.35);border-radius:6px;padding:9px 11px;margin:8px 0 12px;line-height:1.55;background:rgba(71,85,105,.04)}'
++ '.gsx-fsep-tbl{margin:7px 0 0;display:grid;grid-template-columns:auto auto auto auto auto auto auto;gap:2px 10px;font-variant-numeric:tabular-nums}'
++ '.gsx-fsep-row{display:contents}'
++ '.gsx-fsep-row>span{padding:1px 0}'
++ '.gsx-fsep-f{font-weight:600}'
++ '.gsx-fsep-n,.gsx-fsep-v{text-align:right}'
++ '.gsx-fsep-q{text-align:right;opacity:.7}'
++ '.gsx-fsep-verdict{text-align:right;font-weight:600}'
++ '.gsx-fsep-better>span{color:#166534}'
++ '.gsx-fsep-worse>span{color:#9a3412}'
++ '.gsx-fsep-foot{margin-top:7px;opacity:.9}'
 + '.gsx-silent b{letter-spacing:.12em;font-weight:800;color:#9A3412}'
 + '.gsx-weekend-wrap,.gsx-weekend-wrap{margin:0 0 12px}'
 + '.gsx-weekend,.gsx-weekend{font-size:11px;border-radius:8px;padding:10px 12px;line-height:1.55;margin:12px 0;border:1px solid}'
@@ -1490,7 +1501,11 @@ function goldCoverageNoteHTML(){
 
 function whySilentHTML(ws){
   return '<div class="gsx-silent"><b>WHY SILENT</b> — ' + esc(ws) + '</div>'
-    + goldCoverageNoteHTML();
+    + goldCoverageNoteHTML()
+    /* hg-v922: the coverage note above says how little can lead. This says
+       that what decides WHICH rows lead — the tally — does not separate
+       outcomes on four disjoint windows. Both belong on the same panel. */
+    + (typeof hgGoldFactorSepHtml === 'function' ? hgGoldFactorSepHtml() : '');
 }
 
 function goldWeekendPanelHTML(ro){
