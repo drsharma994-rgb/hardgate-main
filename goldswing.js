@@ -1655,9 +1655,13 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
        SCALP push() order in goldind.js). Every swing candidate — detector
        mkCand, the VP §10 direct-mint, and every Part4–9 hgGoldBindEnginePlan
        bind — passes the SAME gates. The 140-day swing replay
-       (scripts/backtest-goldswing-results.json, n=292 settled, XM costs)
-       measured the bypass mints (session=null, i.e. never saw
-       hgGoldInstFilter's session gate) at n=119 −0.544R/trade, and stops
+       (scripts/backtest-goldswing-results-pre-v700.json, n=292 settled, XM
+       costs — hg-v910 corrected the path) measured the bypass mints
+       (session=null, i.e. never saw hgGoldInstFilter's session gate) at
+       n=119 −0.544R/trade. That cohort is bySession['n/a'] in the PRE-v700
+       file and it is GONE from the current one: post-v700 every mint reaches
+       the session gate, so there is no null bucket left to measure. The
+       vanished cohort is the proof, and stops
        under the module's own 1.5×ATR(4h) floor (counters.stopUnderFloor=170;
        floor violators n=137 −0.448R/trade vs contract-true n=155 +0.098).
        Order matters: inst gates → sides-guarded stop floor → replay edge
@@ -3287,7 +3291,9 @@ async function runScan(ui, scanSt){
        defect class v699 removed from GOLD SCALP). It promoted a demoted card
        to MOST PROBABLE whenever nothing was lead-eligible — on the swing
        replay every one of the 100 MP settles carried CONF NO TRADE and ran
-       −0.209R/trade net of XM costs (scripts/backtest-goldswing-results.json).
+       −0.209R/trade net of XM costs
+       (scripts/backtest-goldswing-results-pre-v700.json — hg-v910 corrected
+       the path; the current bake's mpOnly cohort is n=0).
        An all-demoted board now has NO banner. */
     var deskTape = goldUniformTapeOf(gold.rows4h);
     __lastDeskTape = deskTape || '';   /* published with the scan snapshot so OMNIGOLD holds the same side */

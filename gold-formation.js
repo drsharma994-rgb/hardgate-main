@@ -57,21 +57,29 @@
    enforcing it across independent classes.
 
    SESSION EVIDENCE (recon 3.3, computed from scripts/backtest-omnigold-
-   results.json trades[], 7,270 settled, PAXGUSDT proxy 2026-03-15..08-29).
+   results.json trades[], 8,132 filled, PAXGUSDT proxy 2026-03-27..09-10).
    UTC hour cohorts, gross R per trade:
 
-     ASIA        00-06   n=2,082   gross +0.097   medCostR 0.57
-     LONDON      07-11   n=1,305   gross -0.080   medCostR 0.80
-     NY-OVERLAP  12-16   n=2,247   gross -0.061   medCostR 0.51
-     NY-PM       17-20   n=  994   gross +0.053   medCostR 0.69
-     OFF         21-23   n=  642   gross -0.011   medCostR 0.88
+     ASIA        00-06   n=2,320   gross +0.064   medCostR 0.51
+     LONDON      07-11   n=1,430   gross -0.137   medCostR 0.68
+     NY-OVERLAP  12-16   n=2,626   gross -0.081   medCostR 0.45
+     NY-PM       17-20   n=1,044   gross +0.109   medCostR 0.57
+     OFF         21-23   n=  712   gross -0.045   medCostR 0.81
+
+   (hg-v910: this block was a SECOND copy of the table, still carrying the
+   7,270-row generation — n=2,082 +0.097 for ASIA and so on — while the live
+   HG_GOLD_SESSION_EVIDENCE below had already moved to the 8,155-row re-bake
+   and the file has since moved again to 8,132. Two copies of a measurement
+   are two things to drift, and this one drifted furthest. Both are now read
+   back out of the cited file, and test-gold-evidence-citations.mjs
+   re-derives them on every run.)
 
    THE RULE THAT FOLLOWS, and nothing more: the SESSION leg of the
    session-htf class confirms only inside a window whose measured gross is
-   >= 0 — ASIA (+0.097 at n=2,082) and NY-PM (+0.053 at n=994). In LONDON
-   (-0.080 at n=1,305), NY-OVERLAP (-0.061 at n=2,247) and OFF (-0.011 at
-   n=642) the clock is not evidence FOR the trade, so it cannot be one of the
-   three confirmations. It is NOT a veto: the HTF-tape leg satisfies the same
+   >= 0 — ASIA (+0.064 at n=2,320) and NY-PM (+0.109 at n=1,044). In LONDON
+   (-0.137 at n=1,430), NY-OVERLAP (-0.081 at n=2,626) and OFF (-0.045 at
+   n=712) the clock is not evidence FOR the trade, so it cannot be one of the
+   three confirmations. Every sign is what it was across all three bakes. It is NOT a veto: the HTF-tape leg satisfies the same
    class, and the OMNIGOLD gate ledger keeps `session` soft exactly as it was.
    ASIA and OFF carry the source's own caveat (meta.proxyNote: PAXG trades
    24/7, so those buckets include weekend bars a spot broker never printed) —
@@ -221,11 +229,19 @@
      cohort kept its SIGN from the 7,270-trade bake, so `confirms` behavior
      is unchanged — only the measured magnitudes moved. */
   var HG_GOLD_SESSION_EVIDENCE = [
-    { from: 0,  to: 7,  key: 'ASIA',       label: 'ASIA 00-06 UTC',       n: 2307, grossR:  0.066, medCostR: 0.51, weekendCaveat: true },
-    { from: 7,  to: 12, key: 'LONDON',     label: 'LONDON 07-11 UTC',     n: 1428, grossR: -0.124, medCostR: 0.68, weekendCaveat: false },
-    { from: 12, to: 17, key: 'NY-OVERLAP', label: 'NY-OVERLAP 12-16 UTC', n: 2644, grossR: -0.094, medCostR: 0.45, weekendCaveat: false },
-    { from: 17, to: 21, key: 'NY-PM',      label: 'NY-PM 17-20 UTC',      n: 1055, grossR:  0.113, medCostR: 0.57, weekendCaveat: false },
-    { from: 21, to: 24, key: 'OFF',        label: 'OFF 21-23 UTC',        n:  721, grossR: -0.062, medCostR: 0.81, weekendCaveat: true }
+    /* hg-v910: re-derived from the file this table cites. The numbers above
+       were baked from an older generation of it — 8,155 rows against the
+       8,132 it now holds — so the line that claimed the derivation
+       "reproduces every line exactly" had stopped being true. medCostR was
+       the one field that still matched on all five buckets, which is what
+       said the METHOD was right and the data had moved under it.
+       No verdict changes: confirms is grossR >= 0, and all five signs are
+       what they were. */
+    { from: 0,  to: 7,  key: 'ASIA',       label: 'ASIA 00-06 UTC',       n: 2320, grossR:  0.064, medCostR: 0.51, weekendCaveat: true },
+    { from: 7,  to: 12, key: 'LONDON',     label: 'LONDON 07-11 UTC',     n: 1430, grossR: -0.137, medCostR: 0.68, weekendCaveat: false },
+    { from: 12, to: 17, key: 'NY-OVERLAP', label: 'NY-OVERLAP 12-16 UTC', n: 2626, grossR: -0.081, medCostR: 0.45, weekendCaveat: false },
+    { from: 17, to: 21, key: 'NY-PM',      label: 'NY-PM 17-20 UTC',      n: 1044, grossR:  0.109, medCostR: 0.57, weekendCaveat: false },
+    { from: 21, to: 24, key: 'OFF',        label: 'OFF 21-23 UTC',        n:  712, grossR: -0.045, medCostR: 0.81, weekendCaveat: true }
   ];
   /* The source's own caveat, carried verbatim wherever a caveated window is
      what confirmed. scripts/backtest-omnigold-results.json meta.proxyNote. */
@@ -265,11 +281,21 @@
   /* THE INSTANT THE COHORT IS KEYED ON: the SIGNAL BAR'S OPEN time, never
      the wall clock.
 
-     Verified against the source rather than assumed: bucketing
-     scripts/backtest-omnigold-results.json trades[] by
-     `new Date(t.tISO).getUTCHours()` over the 7,270 settled rows reproduces
-     every line of HG_GOLD_SESSION_EVIDENCE exactly — ASIA n=2082 +0.097,
-     LONDON n=1305 -0.080, NY-OVERLAP n=2247 -0.061, NY-PM n=994 +0.053,
+     Verified against the source rather than assumed, and RE-verified in
+     hg-v910: bucketing scripts/backtest-omnigold-results.json trades[] by
+     `new Date(t.tISO).getUTCHours()` over the 8,132 filled rows (rMultiple
+     AND netR present) reproduces every line of HG_GOLD_SESSION_EVIDENCE,
+     with grossR the mean rMultiple and medCostR the median of
+     rMultiple - netR. test-gold-session-evidence.mjs re-runs that derivation
+     against the committed file and fails on any drift, so this claim cannot
+     go stale again without the suite saying so.
+
+     The figures this paragraph carried before v910 — 7,270 rows, ASIA n=2082
+     +0.097, LONDON n=1305 -0.080, NY-OVERLAP n=2247 -0.061, NY-PM n=994
+     +0.053 — reproduce from NEITHER the table below NOR the current file.
+     They were an older generation still, and they are recorded here rather
+     than deleted because a number that once justified a live table is worth
+     being able to recognise when it turns up somewhere else.
      OFF n=642 -0.011 — and `tISO` is the SIGNAL bar's own timestamp (the
      order fills on bar sigIdx+1, meta.rules.fill). So the leg is a property
      of the closed signal bar.

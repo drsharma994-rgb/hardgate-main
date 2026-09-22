@@ -169,11 +169,18 @@
     return { gates: gates, pass: pass, halfBand: has(c.rr1) && c.rr1 >= 1.5 && c.rr1 < 2 };
   }
 
-  /* MEASURED, COHORT (hg-v700): scripts/backtest-omnigold1-results.json
-     tabLane.aggregates.byHorizon — the tab-lane replay of hgOg1Engine over
+  /* MEASURED, COHORT (hg-v700): the tab-lane replay of hgOg1Engine over
      ~83 days at XM costs settled SCALP n=250 at gross −0.287R / net −0.455R
      per trade, GROSS-NEGATIVE BEFORE FEES, while SWING n=135 ran gross
-     +0.137R / net +0.018R. A measured gross-negative cohort paints but can
+     +0.137R / net +0.018R.
+
+     hg-v910: those four figures are exact and they live in
+     scripts/backtest-omnigold1-results-pre-v700.json — this line named the
+     CURRENT file, which does not contain them. Re-read against the current
+     bake the FINDING survives and the numbers do not: SCALP n=531 gross
+     −0.127R / net −0.237R (still gross-negative before fees), SWING n=358
+     gross +0.148R / net +0.058R (still gross-positive). The rule below is
+     therefore still the measured one, on a sample twice the size. A measured gross-negative cohort paints but can
      never lead: every SCALP-horizon candidate is stamped demoted with this
      exact evidence line, and hgOg1BestSetups / hgOg1MostProbable hold the
      lead invariant (mirroring goldscalp.js hg-v699: a demoted card is never
@@ -556,12 +563,19 @@
   }
 
   /* ---------------- venue stop floor at mint (hg-v700) ----------------
-     MEASURED: scripts/backtest-omnigold1-results.json tabLane (hgOg1Engine
-     replayed per closed 1h bar over ~83 days, n=385 settled cards at XM
-     costs): 2,883 stand-asides across the run's scans — 521 of the 797
-     minted card rows, 229 of the 385 settled (tabLane.aggregates.byFormation
-     STOOD-ASIDE n=229) — died on ONE reason, "stop inside 8x the venue
-     round-trip": OG1 mints stops structurally too tight to pay at XM, then
+     MEASURED: scripts/backtest-omnigold1-results-pre-v700.json tabLane
+     (hgOg1Engine replayed per closed 1h bar over ~83 days, n=385 settled
+     cards at XM costs): 2,883 stand-asides across the run's scans — 521 of
+     the 797 minted card rows, 229 of the 385 settled
+     (tabLane.aggregates.byFormation STOOD-ASIDE n=229) — died on ONE reason,
+     "stop inside 8x the venue round-trip":
+
+     hg-v910 corrected the path: this cited the CURRENT bake, whose
+     byFormation holds only FORMED and WATCH. There is no STOOD-ASIDE bucket
+     left to cite, because composing the floor INTO the stop at mint is
+     exactly what stopped those cards being minted and then refused. The
+     missing bucket is the evidence this worked, and naming the wrong file
+     hid it. OG1 mints stops structurally too tight to pay at XM, then
      ships cards its own formation gate must refuse. The floor is therefore
      composed INTO the stop at mint time:
 

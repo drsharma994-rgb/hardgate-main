@@ -1249,7 +1249,7 @@ var HG_GOLD_SETUP_EDGE = {
       why: 'S62 VOLUME-BAR SWEEP net +0.16R at XM (n=72, 44% WR) — measured fee-survivor' },
 
     /* hg-v909: TWO MEASUREMENTS THAT WERE ON DISK AND NEVER REACHED THE DESK.
-       Both sit in scripts/gold-scalp-bt-analysis-FLOOR.json byStrategy — the
+       Both sit in scripts/gold-scalp-bt-analysis-floor.json byStrategy — the
        post-stop-floor twin the other scalp rows above were baked from — and both
        clear this table's OWN documented demote bar (net < 0). Nothing here is
        a new threshold — the bar is the one above, applied to rows that were
@@ -1293,7 +1293,7 @@ var HG_GOLD_SETUP_EDGE = {
       why: 'ADR FADE +1.41R at XM on a SINGLE settle — measured, far too thin to prefer on' }
   },
   /* SWING rows (hg-v700): re-baked from the GOLD SWING tab's OWN 4h replay
-   * (scripts/backtest-goldswing-results.json, n=243 settled, 140 days,
+   * (scripts/backtest-goldswing-results.json, n=244 settled, 140 days,
    * post stop-floor + gate-stack, netR at XM 0.020% RT). The old rows came
    * from the OMNIGOLD bridge replay at n<=6 — three of five verdicts did
    * not survive real sample sizes. Bars (swing-desk n's are smaller than
@@ -1452,7 +1452,7 @@ function hgGoldSetupEdgeApply(cand, opts){
        numbers (n=2 net 1.2) no baked table row backed — a prefer boost invented
        in code, not measured into scripts/gold-setup-edge.json.
        hg-v909: the n=8 +0.542R this comment used to quote for bos came from
-       backtest-goldswing-results-PRE-v700.json while naming the current file,
+       backtest-goldswing-results-pre-v700.json while naming the current file,
        which says n=9 +0.369R. bos is still NEUTRAL — far under the prefer bar
        — but it now carries a neutral ROW at the current numbers rather than no
        row at all, so measured-and-thin stops reading as never-measured. */
@@ -3829,10 +3829,16 @@ function hgGoldConfluenceHtml(sc){
  * hg-v700: NO_TRADE now DEMOTES (paint, never lead). The old contract —
  * "stamp only, alerts blocked, ranking untouched" — let goldRankSetups crown
  * a stamped-no-trade card MOST PROBABLE: the 140-day GOLD SWING replay
- * (scripts/backtest-goldswing-results.json, XM costs) measured the MP cohort
- * n=100 ALL carrying CONF NO TRADE at −0.209R/trade (all 292 settled swing
- * trades were stamped NO_TRADE, −0.158R/trade overall). A tier the desk's own
- * score calls "below trade bar" cannot lead; existing quality-gate demotions
+ * (scripts/backtest-goldswing-results-pre-v700.json, XM costs) measured the
+ * MP cohort n=100 ALL carrying CONF NO TRADE at −0.209R/trade (all 292
+ * settled swing trades were stamped NO_TRADE, −0.158R/trade overall).
+ * hg-v910: those four figures are exact, and they are in the PRE-v700 file —
+ * this line used to name the current one, which does not contain them. What
+ * the CURRENT bake shows is the result of this very change: mpOnly n=0 (no
+ * NO_TRADE card leads any more) and the swing lane at +0.081R/trade against
+ * −0.158R before. Citing the wrong file hid the evidence that it worked.
+ * A tier the desk's own score calls "below trade bar" cannot lead; existing
+ * quality-gate demotions
  * remain authoritative and stack with this one.
  */
 function hgGoldApplyConfluence(cand, ctx){
@@ -3867,9 +3873,11 @@ function hgGoldApplyConfluence(cand, ctx){
     if (sc.tier === 'NO_TRADE'){
       if (cand.stamps.indexOf('CONF NO TRADE') < 0) cand.stamps.push('CONF NO TRADE');
       /* hg-v700: a stamped-no-trade card can no longer lead. Measured on the
-         swing MP cohort (scripts/backtest-goldswing-results.json): every one
-         of the 100 MOST PROBABLE settles carried CONF NO TRADE and ran
-         −0.209R/trade net of XM costs. Demote — goldRankSetups' best pick
+         swing MP cohort (scripts/backtest-goldswing-results-pre-v700.json —
+         hg-v910 corrected the path; the current bake has mpOnly n=0, which is
+         this rule working): every one of the 100 MOST PROBABLE settles
+         carried CONF NO TRADE and ran −0.209R/trade net of XM costs.
+         Demote — goldRankSetups' best pick
          skips demoted cards; an all-demoted board has NO lead (v699 precedent). */
       cand.demoted = true;
       var gnConf = Array.isArray(cand.gateNotes) ? cand.gateNotes.slice() : [];

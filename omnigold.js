@@ -7778,15 +7778,26 @@ terse status, and never launches a first-time scan on a global refresh.
 
      PROVENANCE. Baked from scripts/omnigold-replay-evidence.json — a replay
      of this desk's own logged setups against PAXGUSDT 1h-proxy bars,
-     window 2026-03-15..2026-08-29, n=7270 settled. Per-trade cost was
-     recovered as rMultiple - netR and verified against the 0.26% round-trip
-     fee model. Only kinds with n >= 40 settled are baked; smaller samples
-     say nothing worth printing on a card.
+     window 2026-03-27..2026-09-10, 54 kinds summing to n=7953 settled
+     (perKind totals; the file stores the per-kind n, not the sum). Per-trade
+     cost was recovered as rMultiple - netR and verified against the 0.26%
+     round-trip fee model. Only kinds with n >= 40 settled are baked; smaller
+     samples say nothing worth printing on a card.
+
+     (hg-v910: this paragraph read "window 2026-03-15..2026-08-29, n=7270
+     settled" and the block below read AUC 0.4924 with deciles 0.929 / 0.864.
+     None of those five figures is in the file the paragraph names — 7270 is
+     gold-setup-edge.json's settledScan — so they belong to a generation of
+     the bake that has since been replaced. Every figure here is now read back
+     out of the cited file, and test-gold-evidence-citations.mjs re-reads them
+     on every run.)
 
      THE HEADLINE FINDINGS, so the numbers below have a reading:
-       - fit verdict NOT-PREDICTIVE. Test AUC 0.4924 on a chronological
-         60/40 split; top-decile lift 0.929 vs bottom-decile 0.864 — the
-         aggregate confluence score does not rank outcomes out of sample.
+       - fit verdict NOT-PREDICTIVE. Test AUC 0.5044 on a chronological
+         60/40 split; the test deciles run 0.635 at the bottom to 1.051 at
+         the top and are non-monotonic in between (decile 2 lifts 1.280,
+         decile 6 sinks to 0.829) — the aggregate confluence score does not
+         rank outcomes out of sample.
          (The records carry no per-factor breakdown, so this is the honest
          "does the total score rank outcomes" test, not a re-weighting.)
        - EVERY kind — including the best, OPENING RANGE BREAKOUT at +0.220R
@@ -9831,9 +9842,12 @@ terse status, and never launches a first-time scan on a global refresh.
   }
 
   /* One muted footnote where the confluence legend renders. The replay's
-     honest answer on the aggregate score: test AUC 0.4924, no monotonic
+     honest answer on the aggregate score: test AUC 0.5044, no monotonic
      decile ranking — so the legend's tiers are a checklist of agreement,
-     not a probability. If a future refit flips the baked verdict to
+     not a probability. (hg-v910: this comment read 0.4924, a figure from a
+     replaced generation of the bake. The RENDERED footnote was never wrong —
+     it reads fit.testAUC off HG_OG_REPLAY_EVIDENCE, which already carried
+     0.5044 — so what drifted was the prose beside the code, not the card.) If a future refit flips the baked verdict to
      predictive/weak this returns '' and hgOgConfluenceFitPwin supplies a
      fitted P(win) beside the badge instead. */
   function hgOgConfluenceFitNoteHtml(){
@@ -15188,8 +15202,10 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgTapeBannerHtml = hgOgTapeBannerHtml;
     window.hgOgZoneLevels = hgOgZoneLevels;   /* the desk's own anticipation levels, testable */
     window.hgOgZonesPanel = hgOgZonesPanel;
-    /* Replay evidence + cost drag (ADDITIVE) — PAXG 1h replay 2026-03-15..
-       08-29, n=7270 settled; see scripts/omnigold-replay-evidence.json.
+    /* Replay evidence + cost drag (ADDITIVE) — PAXG 1h replay 2026-03-27..
+       09-10, 54 kinds summing to n=7953 settled; see
+       scripts/omnigold-replay-evidence.json.
+       (hg-v910 corrected the window and n here too.)
        HG_OG_RT_COST_PCT on window is the tunable venue override that
        hgOgRtCostPct() reads back. */
     window.HG_OG_RT_COST_PCT = HG_OG_RT_COST_PCT;
