@@ -1779,11 +1779,11 @@
          the cards and both Section 0-8 panels drawn from them. */
       var tapeNote = '';
       try{
-        var tsn = gfn('hgGoldTapeSanityNote'), ts = gfn('hgGoldTapeSanity');
-        if (tsn && ts){
+        var tn = gfn('hgGoldTapeNotes');
+        if (tn){
           [['rows15m','15m'],['rows1h','1h'],['rows4h','4h']].forEach(function(L){
             var rws = inp && inp[L[0]];
-            if (rws && rws.length) tapeNote += tsn(ts(rws), L[1]);
+            if (rws && rws.length) tapeNote += tn(rws, L[1]);
           });
         }
       }catch(eTs){}

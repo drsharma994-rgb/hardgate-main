@@ -70,10 +70,17 @@ const W = { };
   vm.runInContext(fs.readFileSync(root + 'gold-tape-sanity.js', 'utf8'), c, { filename: 'gold-tape-sanity.js' });
   W.hgGoldTapeSanity = c.hgGoldTapeSanity;
   W.hgGoldTapeSanityNote = c.hgGoldTapeSanityNote;
+  W.hgGoldTapeGaps = c.hgGoldTapeGaps;
+  W.hgGoldTapeGapNote = c.hgGoldTapeGapNote;
+  W.hgGoldTapeNotes = c.hgGoldTapeNotes;
 }
 const F = new Function('esc', 'isFinite', 'Math', 'Array', 'W',
-  grab(GS, 'gsTapeSanity') + grab(GS, 'gsTapeSanityNote')
-  + 'return { gsTapeSanity, gsTapeSanityNote };')(esc, isFinite, Math, Array, W);
+  grab(GS, 'gsTapeSanity') + grab(GS, 'gsTapeNotes')
+  /* Pack 908 renamed the desk's helper: it now takes ROWS and answers both
+     tape questions (possible candles, and continuous). gsTapeSanityNote,
+     which took an already-built report, is gone. The shim keeps THIS file's
+     assertions phrased in terms of a report, which is what they are about. */
+  + 'return { gsTapeSanity, gsTapeNotes, gsTapeSanityNote: function(rep){ return W.hgGoldTapeSanityNote(rep, \'15m\'); } };')(esc, isFinite, Math, Array, W);
 const text = h => String(h).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 const clean = n => Array.from({ length: n }, (_, i) =>
   ({ t: 1000 + i * 900, o: 100, h: 101, l: 99, c: 100.5, v: 1 }));
@@ -195,7 +202,7 @@ console.log('\n4. it reports; it does not gate, and it repairs nothing');
   F.gsTapeSanity(inv);
   ok(JSON.stringify(inv) === before, 'the check does not touch a single bar it read');
 
-  const body = grab(GS, 'gsTapeSanity') + grab(GS, 'gsTapeSanityNote');
+  const body = grab(GS, 'gsTapeSanity') + grab(GS, 'gsTapeNotes');
   ok(!/\.dropped\s*=/.test(body) && !/\.demoted\s*=/.test(body) && !/\.vetoed\s*=/.test(body),
      'neither helper writes dropped, demoted or vetoed');
   ok(!/rows\.splice|rows\[\w+\]\s*=/.test(body), 'and neither rewrites the tape');
@@ -232,12 +239,12 @@ console.log('\n4. it reports; it does not gate, and it repairs nothing');
 /* ---------------------------------------------------------------- 5 */
 console.log('\n5. wired with the other feed caveats');
 {
-  ok(/gsTapeSanityNote\(gsTapeSanity\(gold && gold\.rows15m\)\)/.test(GS),
+  ok(/gsTapeNotes\(gold && gold\.rows15m\)/.test(GS),
      'the banner is built from the desk\'s own 15m tape');
-  ok(/gsTapeSanityNote\(gsTapeSanity\(gold && gold\.rows15m\)\)\s*\n\s*\+ gsFeedLegNote\(gold\)/.test(GS),
+  ok(/gsTapeNotes\(gold && gold\.rows15m\)\s*\n\s*\+ gsFeedLegNote\(gold\)/.test(GS),
      'and rides with the unread-leg and mixed-feed banners, so it reaches every path they do');
   ok(/W\.gsTapeSanity = gsTapeSanity;/.test(GS), 'the report is exported so the split is checkable');
-  ok(!/W\.gsTapeSanityNote\s*=/.test(GS),
+  ok(!/W\.gsTapeNotes\s*=/.test(GS),
      'while the HTML helper stays internal — everything on window is fuzzed as a renderer');
 }
 

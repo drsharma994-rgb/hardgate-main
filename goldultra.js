@@ -1804,9 +1804,9 @@ function renderResult(ui, res, src, sel, lane, tapes){
      from, and it rides BOTH exits from this function (COUNT SILENT takes
      an early return that would otherwise drop it). */
   var h = '';
-  if (tapes && typeof W.hgGoldTapeSanityNote === 'function'){
-    if (tapes.rows15m && tapes.rows15m.length) h += W.hgGoldTapeSanityNote(W.hgGoldTapeSanity(tapes.rows15m), '15m');
-    if (tapes.rows1h && tapes.rows1h.length) h += W.hgGoldTapeSanityNote(W.hgGoldTapeSanity(tapes.rows1h), '1h');
+  if (tapes && typeof W.hgGoldTapeNotes === 'function'){
+    if (tapes.rows15m && tapes.rows15m.length) h += W.hgGoldTapeNotes(tapes.rows15m, '15m');
+    if (tapes.rows1h && tapes.rows1h.length) h += W.hgGoldTapeNotes(tapes.rows1h, '1h');
   }
   if (sel && lane) h += setupsHTML(sel, lane, res.price, res.ok ? res.count : null);
   if (!res.ok){ ui.cards.innerHTML = h + '<div class="gu-gate"><b>COUNT SILENT</b> — ' + esc(res.reasons.join(' · ')) + '</div>' + filterEvidenceHTML() + evidenceHTML(); return; }

@@ -2125,10 +2125,10 @@ function mount(el){
     /* Pack 907: NEWGOLD moved on a malformed tape and reported nothing.
        One note per fetched timeframe, above the cards drawn from it. */
     var tapeNote = '';
-    if (typeof W.hgGoldTapeSanityNote === 'function' && pack.tapes){
+    if (typeof W.hgGoldTapeNotes === 'function' && pack.tapes){
       Object.keys(pack.tapes).forEach(function(tf){
         var rws = pack.tapes[tf] && pack.tapes[tf].rows;
-        if (rws && rws.length) tapeNote += W.hgGoldTapeSanityNote(W.hgGoldTapeSanity(rws), tf);
+        if (rws && rws.length) tapeNote += W.hgGoldTapeNotes(rws, tf);
       });
     }
     var fires = results.filter(function(r){ return r.setup; });

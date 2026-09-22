@@ -865,10 +865,10 @@ function mount(el){
          malformed tape without saying so. One note per leg that arrived,
          ahead of everything drawn from it. */
       var tapeNote = '';
-      if (typeof W.hgGoldTapeSanityNote === 'function'){
+      if (typeof W.hgGoldTapeNotes === 'function'){
         [['rows15m','15m'],['rows1h','1h'],['rows4h','4h'],['rows1d','1d']].forEach(function(L){
           var rws = bars && bars[L[0]];
-          if (rws && rws.length) tapeNote += W.hgGoldTapeSanityNote(W.hgGoldTapeSanity(rws), L[1]);
+          if (rws && rws.length) tapeNote += W.hgGoldTapeNotes(rws, L[1]);
         });
       }
       var html = tapeNote + heldNote + killedNote

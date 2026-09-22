@@ -13829,12 +13829,12 @@ terse status, and never launches a first-time scan on a global refresh.
         try {
           var __w907 = W();
           var __sh907 = __og.shared;
-          if (__w907 && __sh907 && typeof __w907.hgGoldTapeSanityNote === 'function'){
+          if (__w907 && __sh907 && typeof __w907.hgGoldTapeNotes === 'function'){
             var __tn907 = '';
             if (__sh907.rows4h && __sh907.rows4h.length)
-              __tn907 += __w907.hgGoldTapeSanityNote(__w907.hgGoldTapeSanity(__sh907.rows4h), '4h');
+              __tn907 += __w907.hgGoldTapeNotes(__sh907.rows4h, '4h');
             if (__sh907.rows1d && __sh907.rows1d.length)
-              __tn907 += __w907.hgGoldTapeSanityNote(__w907.hgGoldTapeSanity(__sh907.rows1d), '1d');
+              __tn907 += __w907.hgGoldTapeNotes(__sh907.rows1d, '1d');
             if (__tn907) h = __tn907 + h;
           }
         } catch (e907) {}

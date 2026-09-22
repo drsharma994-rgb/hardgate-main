@@ -1232,8 +1232,15 @@ function gsTapeSanity(rows){
   return { bars: 0, bad: 0, inverted: 0, bodyOutside: 0, nonFinite: 0, timeOrder: 0, ok: true };
 }
 
-function gsTapeSanityNote(rep){
-  if (typeof W.hgGoldTapeSanityNote === 'function') return W.hgGoldTapeSanityNote(rep, '15m');
+/* Pack 908 gave the tape a SECOND question — is it continuous? — so the desk
+   now asks both in one call and takes ROWS rather than an already-built
+   report. The old shape took a report, which could only answer the first
+   question; an interim draft of 908 kept that signature and reached for a
+   rows field on the report that does not exist. */
+function gsTapeNotes(rows){
+  if (typeof W.hgGoldTapeNotes === 'function') return W.hgGoldTapeNotes(rows, '15m');
+  if (typeof W.hgGoldTapeSanityNote === 'function' && typeof W.hgGoldTapeSanity === 'function')
+    return W.hgGoldTapeSanityNote(W.hgGoldTapeSanity(rows), '15m');
   return '';
 }
 
@@ -2168,7 +2175,7 @@ async function runScan(ui, scanSt){
     var basisHtml = stRoute ? stGoldBasisHtml() : '';
     /* hg-v901: the unread-HTF-leg line rides with the mixed-feed banner, so
        both feed caveats reach every render path the banner already reaches. */
-    var mixedBanner = gsTapeSanityNote(gsTapeSanity(gold && gold.rows15m))
+    var mixedBanner = gsTapeNotes(gold && gold.rows15m)
       + gsFeedLegNote(gold) + goldMixedFeedBannerHtml(gold);
     var uniHtml = goldUniformPanelHtml(display, uniRows, 'SCALP', deskTape);
     var wkRows = gold.rows4h.length ? gold.rows4h : gold.rows15m;
