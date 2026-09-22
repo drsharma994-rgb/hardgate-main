@@ -451,7 +451,33 @@ const bake = {
   /* and the raw set, so "never observed" is distinguishable from "thin" */
   kindSeenRaw: seenRaw(walk.trades || [], r => r.kind),
   sequentialByCell: groupBy(seq, r => r.horizon + '/' + r.tier, WIDTH, 10),
-  sequentialByKind: groupBy(seq, r => r.kind, WIDTH, 10)
+  sequentialByKind: groupBy(seq, r => r.kind, WIDTH, 10),
+
+  /* hg-v918 — THE MIRROR OF sequentialByCell, BECAUSE THIS FILE'S OWN RULE
+     SAYS A VERDICT CANNOT COME FROM ONE END OF AN INTERVAL.
+
+     sequentialByCell above is computed on `formed`, the LOWER bound:
+     unprovable wins dropped, unprovable losses kept. That is the right end
+     for a performance CLAIM — credit the desk only for what survives its
+     worst case. It is the wrong end for a verdict, and this file already
+     says so forty lines up: condemning at the lower bound is what once
+     marked seventeen mechanics "significantly below breakeven" when not one
+     failed at its upper bound.
+
+     SCALP/FAIR is the cell that makes this concrete. At the lower bound it
+     is the only cell in the sequential book with real power and it loses
+     hard. Anyone reading that table alone would gate it. So the same cells
+     are computed on `formedUpper` and published beside them, and a cell
+     only counts as losing when BOTH ends agree. */
+  sequentialByCellUpper: groupBy(sequential(formedUpper),
+                                 r => r.horizon + '/' + r.tier, WIDTH, 10),
+
+  /* hg-v918 — and the same mirror for the TICKET book split by horizon,
+     which is the split anyone asking "is the scalp side the problem?"
+     actually wants. One position at a time, tickets only, both ends. */
+  sequentialTicketsByHorizon: groupBy(seqTickets, r => r.horizon, WIDTH, 10),
+  sequentialTicketsByHorizonUpper: groupBy(sequential(formedUpper.filter(r => r.ticket)),
+                                           r => r.horizon, WIDTH, 10)
 };
 
 if (JSON_OUT){ console.log(JSON.stringify(bake, null, 2)); process.exit(0); }
@@ -505,7 +531,34 @@ for (const [label, rec] of Object.entries(bake.populations)){
     + '  (' + rec.effective.inflation + 'x)');
 }
 
-console.log('\n  SEQUENTIAL BOOK BY CELL (one position at a time)');
+console.log('\n  SEQUENTIAL BOOK BY CELL AT BOTH BOUNDS (one position at a time)');
+console.log('    a cell LOSES only when both ends agree — a verdict never comes from one');
+{
+  const lo = bake.sequentialByCell, hi = bake.sequentialByCellUpper;
+  const keys = [...new Set([...Object.keys(lo), ...Object.keys(hi)])]
+    .sort((a, b) => (lo[b] ? lo[b].n : 0) - (lo[a] ? lo[a].n : 0));
+  for (const k of keys){
+    const a = lo[k], b = hi[k];
+    const both = a && b && a.netR_xm < 0 && b.netR_xm < 0;
+    console.log('    ' + k.padEnd(13)
+      + ' lower n=' + String(a ? a.n : 0).padStart(4) + ' net@XM=' + (a ? r3(a.netR_xm) : '   —').padStart(8)
+      + '  |  upper n=' + String(b ? b.n : 0).padStart(4) + ' net@XM=' + (b ? r3(b.netR_xm) : '   —').padStart(8)
+      + '  ' + (both ? 'LOSES AT BOTH ENDS' : (a && b ? 'ends disagree — no verdict' : 'thin at one end')));
+  }
+}
+console.log('\n  SEQUENTIAL TICKET BOOK BY HORIZON AT BOTH BOUNDS');
+{
+  const lo = bake.sequentialTicketsByHorizon, hi = bake.sequentialTicketsByHorizonUpper;
+  for (const k of [...new Set([...Object.keys(lo), ...Object.keys(hi)])].sort()){
+    const a = lo[k], b = hi[k];
+    const both = a && b && a.netR_xm < 0 && b.netR_xm < 0;
+    console.log('    ' + k.padEnd(13)
+      + ' lower n=' + String(a ? a.n : 0).padStart(4) + ' net@XM=' + (a ? r3(a.netR_xm) : '   —').padStart(8)
+      + '  |  upper n=' + String(b ? b.n : 0).padStart(4) + ' net@XM=' + (b ? r3(b.netR_xm) : '   —').padStart(8)
+      + '  ' + (both ? 'LOSES AT BOTH ENDS' : (a && b ? 'ends disagree — no verdict' : 'thin at one end')));
+  }
+}
+console.log('\n  SEQUENTIAL BOOK BY CELL (lower bound only — the performance claim)');
 for (const [k, v] of Object.entries(bake.sequentialByCell).sort((a, b) => b[1].n - a[1].n)){
   console.log('    ' + k.padEnd(14) + 'n=' + String(v.n).padStart(4)
     + '  win=' + pct(v.winRate).padStart(7)

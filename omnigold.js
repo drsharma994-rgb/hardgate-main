@@ -8097,6 +8097,67 @@ terse status, and never launches a first-time scan on a global refresh.
       'CUSUM-SHIFT': [45, 0.2444, -0.237, 0.041, 0.247, 32, 0.3438, 0.071, 0.092],
       'EQH-SWEEP': [42, 0.3571, -0.971, 0.071, 0.612, 41, 0.3659, 0.016, 0.098]
     },
+    /* hg-v918 — THE ONE POSITION A PERSON ACTUALLY HOLDS, AT BOTH ENDS.
+
+       Every table above counts each plan the scan formed. This walk forms
+       59.4 a day on one instrument and holds a time-weighted 57 at once, so
+       those tables describe a book nobody could run. sequentialByCell in the
+       evidence file is the honest one — walk the plans in time order, take
+       one when flat, hold it to its own exit, skip whatever fires while it
+       runs — and NOTHING HAS EVER READ IT. Neither has sequentialByKind or
+       sequentialTickets. They sit in the committed JSON, unshown.
+
+       Read alone, that table says the scalp side is the problem:
+
+         SCALP/FAIR   n=210   net@XM -0.343R   effN 210
+
+       the only cell in the sequential book with real power, losing hard.
+       It is the obvious thing to gate, and gating it would be wrong.
+
+       IT IS ONE END OF AN INTERVAL. The bake computes those cells on
+       `formed`, its LOWER bound: 1,751 of 7,734 settled rows resolved on
+       their own fill bar, OHLC cannot say whether the entry printed before
+       the exit, and the lower bound deletes those wins while keeping those
+       losses. scripts/omnigold-evidence-bake.mjs states the rule in its own
+       words — performance CLAIMS belong at that end, verdicts must not come
+       from it, and condemning at the lower bound is what once marked
+       seventeen mechanics significantly below breakeven when not one failed
+       at its upper bound.
+
+       So the mirror is baked and published beside it, and a cell is only
+       read as losing when BOTH ends agree. Not one does:
+
+         SCALP/FAIR    lower -0.343R (n=210)  upper +0.145R (n=156)
+         SCALP/STRONG  lower +0.149R (n= 37)  upper +0.212R (n= 24)
+         SCALP/WEAK    lower -0.087R (n= 15)  upper +0.493R (n= 12)
+         SWING/FAIR    lower -0.133R (n= 10)  upper +0.173R (n= 10)
+
+       And on the TICKET book one at a time — the split anyone asking
+       "is the scalp side the problem" actually wants — the sign is the
+       other way round from the whole-book reading:
+
+         SCALP  lower +0.148R (n=73)  upper +0.415R (n=54)
+         SWING  lower -0.240R (n=32)  upper +0.317R (n=35)
+
+       THERE IS NO DEMONSTRATED SCALP LOSS. Positive at both ends on tickets
+       taken one at a time; the negative whole-book scalp reading is the
+       unscoped, overlapping, lower-bound view of a population nobody trades.
+       Nothing is gated on any of this — it is published so the next reader
+       who finds SCALP/FAIR at -0.343R sees the other end in the same place.
+
+       [n, winRate, netR_xm] at each bound, from the evidence file's
+       sequentialByCell / sequentialByCellUpper and the horizon twins.
+       Re-derive: node scripts/omnigold-evidence-bake.mjs */
+    sequentialCells: {
+      'SCALP/FAIR': { lo: [210, 0.2414, -0.3434], hi: [156, 0.404, 0.1449] },
+      'SCALP/STRONG': { lo: [37, 0.3889, 0.1491], hi: [24, 0.4167, 0.2122] },
+      'SCALP/WEAK': { lo: [15, 0.2857, -0.0873], hi: [12, 0.5, 0.4932] },
+      'SWING/FAIR': { lo: [10, 0.3, -0.1325], hi: [10, 0.4, 0.1731] }
+    },
+    sequentialTicketHorizon: {
+      'SCALP': { lo: [73, 0.3971, 0.1484], hi: [54, 0.4902, 0.4155] },
+      'SWING': { lo: [32, 0.2581, -0.2399], hi: [35, 0.4412, 0.3166] }
+    },
     /* THE OTHER SIDE OF THE 40-TRADE BAR.
 
        `kinds` above is every mechanic the bake could measure. These are the
@@ -8910,7 +8971,13 @@ terse status, and never launches a first-time scan on a global refresh.
          worth anything. */
       + hgOgFwdSplitsPanelHtml()
       /* and what the book it belongs to actually did to an account */
-      + hgOgBookExperienceHtml();
+      + hgOgBookExperienceHtml()
+      /* hg-v918: LAST, because it reframes every table above it. Everything
+         higher counts all 59.4 plans a day this walk forms; these rows count
+         the one a person could hold, at both ends of the fill interval. The
+         sequential book has been in the committed evidence since the v12 bake
+         and nothing has ever rendered it. */
+      + hgOgSequentialCellsHtml();
   }
 
   /* The legend's honest header — above the four tier cells, in warn style,
@@ -9757,6 +9824,58 @@ terse status, and never launches a first-time scan on a global refresh.
       }
       return '';
     } catch (e) { return ''; }
+  }
+
+  /* hg-v918 — the sequential book at both bounds, as a panel.
+
+     Never a verdict and never a gate: every cell here disagrees between its
+     ends, so the only honest output is both numbers and the word disagree.
+     Returns '' when the constant carries nothing, so a caller can append it
+     unconditionally. */
+  function hgOgSequentialCellsHtml(){
+    try{
+      var E = HG_OG_REPLAY_EVIDENCE;
+      if (!E || !E.sequentialCells) return '';
+      function rows(map, label){
+        var out = '', k, v, lo, hi, agree;
+        for (k in map){
+          if (!Object.prototype.hasOwnProperty.call(map, k)) continue;
+          v = map[k]; lo = v && v.lo; hi = v && v.hi;
+          if (!lo || !hi || !isFinite(fin(lo[2])) || !isFinite(fin(hi[2]))) continue;
+          /* both ends below zero is the ONLY reading that counts as losing */
+          agree = (lo[2] < 0 && hi[2] < 0);
+          out += '<tr><td style="padding:2px 8px 2px 0"><b>' + esc(k) + '</b></td>'
+            + '<td style="padding:2px 8px 2px 0;text-align:right">n=' + lo[0] + '</td>'
+            + '<td style="padding:2px 8px 2px 0;text-align:right">'
+              + (lo[2] >= 0 ? '+' : '') + lo[2].toFixed(3) + 'R</td>'
+            + '<td style="padding:2px 8px 2px 0;text-align:right">n=' + hi[0] + '</td>'
+            + '<td style="padding:2px 8px 2px 0;text-align:right">'
+              + (hi[2] >= 0 ? '+' : '') + hi[2].toFixed(3) + 'R</td>'
+            + '<td style="padding:2px 0">' + (agree ? '<b>loses at both ends</b>' : 'ends disagree — no verdict')
+            + '</td></tr>';
+        }
+        return out ? ('<tr><td colspan="6" style="padding:6px 0 2px;font-weight:600">' + esc(label)
+          + '</td></tr>' + out) : '';
+      }
+      var body = rows(E.sequentialCells, 'every plan formed, by horizon / tier')
+               + rows(E.sequentialTicketHorizon, 'tickets only, by horizon');
+      if (!body) return '';
+      return '<div class="og-seqcells" style="font-size:11px;margin-top:8px;line-height:1.5">'
+        + '<div style="font-weight:600">ONE POSITION AT A TIME — the book a person could actually hold</div>'
+        + '<div class="dim">This walk forms 59.4 plans a day and holds 57 at once; every other table on '
+        + 'this tab counts all of them. These rows take one plan when flat and hold it to its own exit. '
+        + 'Each is shown at BOTH ends of the fill-ambiguity interval — 1,751 of 7,734 settled rows '
+        + 'resolved on their own fill bar and OHLC cannot say whether the entry printed first. '
+        + 'A cell is read as losing only when both ends agree, and none here does.</div>'
+        + '<table style="margin-top:4px;border-collapse:collapse"><tr class="dim">'
+        + '<td style="padding:2px 8px 2px 0">cell</td>'
+        + '<td colspan="2" style="padding:2px 8px 2px 0;text-align:right">cautious end</td>'
+        + '<td colspan="2" style="padding:2px 8px 2px 0;text-align:right">generous end</td>'
+        + '<td style="padding:2px 0">reading</td></tr>' + body + '</table>'
+        + '<div class="dim" style="margin-top:4px">Nothing on this tab is gated on these rows. '
+        + 'Re-derive with <code>node scripts/omnigold-evidence-bake.mjs</code>.</div>'
+        + '</div>';
+    }catch(e){ return ''; }
   }
 
   function hgOgReplayLineHtml(kind){
@@ -15332,6 +15451,7 @@ terse status, and never launches a first-time scan on a global refresh.
     window.HG_OG_FORM_COST_R_MAX = HG_OG_FORM_COST_R_MAX;
     window.hgOgCostChipHtml = hgOgCostChipHtml;
     window.hgOgReplayEvidence = hgOgReplayEvidence;
+    window.hgOgSequentialCellsHtml = hgOgSequentialCellsHtml;
     window.hgOgReplayLineHtml = hgOgReplayLineHtml;
     window.hgOgReplayBelowBarHtml = hgOgReplayBelowBarHtml;
     window.hgOgKindKnownState = hgOgKindKnownState;

@@ -510,7 +510,7 @@
   "window": "2026-03-27..2026-09-10",
   "barBasis": "PAXGUSDT 1h proxy",
   "sequentialBake": {
-    "generated": "2026-09-17T00:15:42.980Z",
+    "generated": "2026-09-22T14:32:28.658Z",
     "gateFingerprint": {
       "count": 35,
       "keys": [
@@ -1989,6 +1989,156 @@
           "tNaive": 0.23,
           "tCluster": 0.17,
           "inflation": 1.39
+        }
+      }
+    },
+    "sequentialByCellUpper": {
+      "SWING/FAIR": {
+        "n": 10,
+        "settled": 10,
+        "wins": 4,
+        "winRate": 0.4,
+        "grossR": 0.2,
+        "netR_paxg": -0.1491,
+        "netR_xm": 0.1731,
+        "medianCostR_paxg": 0.29,
+        "effective": {
+          "n": 10,
+          "effN": 10,
+          "clusters": 8,
+          "tNaive": 0.41,
+          "tCluster": 0.45,
+          "inflation": 0.92
+        }
+      },
+      "SCALP/WEAK": {
+        "n": 12,
+        "settled": 10,
+        "wins": 5,
+        "winRate": 0.5,
+        "grossR": 0.5412,
+        "netR_paxg": -0.0821,
+        "netR_xm": 0.4932,
+        "medianCostR_paxg": 0.702,
+        "effective": {
+          "n": 12,
+          "effN": 12,
+          "clusters": 7,
+          "tNaive": 1.28,
+          "tCluster": 2.04,
+          "inflation": 0.63
+        }
+      },
+      "SCALP/FAIR": {
+        "n": 156,
+        "settled": 151,
+        "wins": 61,
+        "winRate": 0.404,
+        "grossR": 0.2233,
+        "netR_paxg": -0.7965,
+        "netR_xm": 0.1449,
+        "medianCostR_paxg": 0.702,
+        "effective": {
+          "n": 156,
+          "effN": 156,
+          "clusters": 20,
+          "tNaive": 1.92,
+          "tCluster": 2.15,
+          "inflation": 0.89
+        }
+      },
+      "SCALP/STRONG": {
+        "n": 24,
+        "settled": 24,
+        "wins": 10,
+        "winRate": 0.4167,
+        "grossR": 0.25,
+        "netR_paxg": -0.2412,
+        "netR_xm": 0.2122,
+        "medianCostR_paxg": 0.435,
+        "effective": {
+          "n": 24,
+          "effN": 23.8,
+          "clusters": 10,
+          "tNaive": 0.81,
+          "tCluster": 0.81,
+          "inflation": 1
+        }
+      }
+    },
+    "sequentialTicketsByHorizon": {
+      "SWING": {
+        "n": 32,
+        "settled": 31,
+        "wins": 8,
+        "winRate": 0.2581,
+        "grossR": -0.1822,
+        "netR_paxg": -0.9332,
+        "netR_xm": -0.2399,
+        "medianCostR_paxg": 0.439,
+        "effective": {
+          "n": 32,
+          "effN": 32,
+          "clusters": 17,
+          "tNaive": -0.77,
+          "tCluster": -0.81,
+          "inflation": 0.96
+        }
+      },
+      "SCALP": {
+        "n": 73,
+        "settled": 68,
+        "wins": 27,
+        "winRate": 0.3971,
+        "grossR": 0.2186,
+        "netR_paxg": -0.6949,
+        "netR_xm": 0.1484,
+        "medianCostR_paxg": 0.634,
+        "effective": {
+          "n": 73,
+          "effN": 73,
+          "clusters": 20,
+          "tNaive": 1.3,
+          "tCluster": 1.88,
+          "inflation": 0.69
+        }
+      }
+    },
+    "sequentialTicketsByHorizonUpper": {
+      "SWING": {
+        "n": 35,
+        "settled": 34,
+        "wins": 15,
+        "winRate": 0.4412,
+        "grossR": 0.3477,
+        "netR_paxg": -0.0565,
+        "netR_xm": 0.3166,
+        "medianCostR_paxg": 0.248,
+        "effective": {
+          "n": 35,
+          "effN": 35,
+          "clusters": 16,
+          "tNaive": 1.37,
+          "tCluster": 1.73,
+          "inflation": 0.79
+        }
+      },
+      "SCALP": {
+        "n": 54,
+        "settled": 51,
+        "wins": 25,
+        "winRate": 0.4902,
+        "grossR": 0.4782,
+        "netR_paxg": -0.3368,
+        "netR_xm": 0.4155,
+        "medianCostR_paxg": 0.518,
+        "effective": {
+          "n": 54,
+          "effN": 54,
+          "clusters": 17,
+          "tNaive": 2.38,
+          "tCluster": 2.97,
+          "inflation": 0.8
         }
       }
     }
