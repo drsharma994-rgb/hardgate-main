@@ -168,7 +168,7 @@ console.log('\n== GOLD SCALP delegates rather than keeping a second copy ==');
   ok(/W\.hgGoldTapeSanity\b/.test(gs), 'goldscalp.js calls the shared rule');
   ok(!/out\.inverted\+\+/.test(gs) && !/bodyOutside\+\+/.test(gs),
      'and no longer carries the counting loop itself — two copies of a rule are two things to drift');
-  ok(/hgGoldTapeSanityNote\(rep, '15m'\)/.test(gs), "and it passes its own timeframe, so the note says 15m");
+  ok(/hgGoldTapeNotes\(rows, '15m'\)/.test(gs), "and it passes its own timeframe, so the note says 15m");
 }
 
 console.log('\n== every gold tab that fetches candles is wired to the rule ==');
@@ -187,7 +187,9 @@ console.log('\n== every gold tab that fetches candles is wired to the rule ==');
     if (!f || !fs.existsSync(path.join(ROOT, f))) continue;
     const src = fs.readFileSync(path.join(ROOT, f), 'utf8');
     const fetches = FETCH.test(src);
-    const calls = /hgGoldTapeSanity\b/.test(src);
+    /* Pack 908: a tab is wired if it reaches ANY of the shared tape rules.
+       Most now call hgGoldTapeNotes, which asks both questions at once. */
+    const calls = /hgGoldTape(Notes|Sanity|Gaps)\b/.test(src);
     if (Object.prototype.hasOwnProperty.call(EXEMPT, f)){
       ok(!fetches, `${f} is exempt and earns it — ${EXEMPT[f]}`);
       continue;
@@ -235,7 +237,12 @@ function makeDom(sink){
 }
 const T0 = 1700000000 - (1700000000 % 86400);
 const TFS = { '1m': 60, '3m': 180, '5m': 300, '15m': 900, '30m': 1800, '1h': 3600, '2h': 7200, '4h': 14400, '1d': 86400 };
-function bars(n, tf, invertPct){
+function bars(n, tf, fault){
+  /* Two faults, driven through the same harness because they are two
+     questions about one tape: are the bars POSSIBLE (pack 907), and are they
+     CONSECUTIVE (pack 908). */
+  const invertPct = (fault && fault.invertPct) || 0;
+  const holeBars = (fault && fault.holeBars) || 0;
   let p = 4000, s = 7;
   const rnd = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
   const o = [];
@@ -246,12 +253,16 @@ function bars(n, tf, invertPct){
     if (invertPct && rnd() < invertPct){ const t = hi; hi = lo; lo = t; }
     o.push({ t: T0 + i * tf, o: p - r * 0.25, h: hi, l: lo, c: p, v: 900 + rnd() * 1200 });
   }
+  /* A contiguous run vanishes from the middle. Every remaining bar is
+     individually possible — 907's check passes — but the array is no longer a
+     continuous tape. */
+  if (holeBars > 0 && n > holeBars * 3) o.splice(Math.floor(n / 2), holeBars);
   return o;
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const strip = h => String(h).replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
 
-function boot(invertPct){
+function boot(fault){
   const sharedSink = [];
   const node = makeDom(sharedSink);
   const store = Object.create(null);
@@ -299,7 +310,7 @@ function boot(invertPct){
     try { vm.runInContext(fs.readFileSync(p, 'utf8'), ctx, { filename: f }); }
     catch (e) { failed.push(f + ' :: ' + e.message.slice(0, 80)); }
   }
-  const mk = (res, count) => bars(Math.max(60, Math.min(220, count || 200)), TFS[String(res)] || 3600, invertPct);
+  const mk = (res, count) => bars(Math.max(60, Math.min(220, count || 200)), TFS[String(res)] || 3600, fault);
   ctx.getXAUCandles    = async (r, c) => mk(r, c);
   ctx.getGoldCandles   = async (r, c) => ({ rows: mk(r, c), source: 'gold-spot' });
   ctx.getXmGoldCandles = async (r, c) => ({ rows: mk(r, c), source: 'xm-xauusd' });
@@ -308,8 +319,8 @@ function boot(invertPct){
   return { ctx, failed };
 }
 
-async function drive(invertPct){
-  const { ctx, failed } = boot(invertPct);
+async function drive(fault){
+  const { ctx, failed } = boot(fault);
   const reg = new Map((ctx.HG_tabs || []).filter(t => t && t.id).map(t => [t.id, t]));
   const out = {};
   for (const id of GOLD){
@@ -327,8 +338,8 @@ async function drive(invertPct){
 
 console.log('\n== and the measurement is re-run, not quoted ==');
 {
-  const A = await drive(0);
-  const B = await drive(0.05);
+  const A = await drive(null);
+  const B = await drive({ invertPct: 0.05 });
   ok(A.failed.length === 0 && B.failed.length === 0,
      `every script loaded on both runs — the comparison is of the real app, not a crippled one`);
 
@@ -359,6 +370,36 @@ console.log('\n== and the measurement is re-run, not quoted ==');
   const falsePositives = ids.filter(id => /MALFORMED BARS/.test(A.out[id]));
   ok(falsePositives.length === 0,
      'and no tab prints the banner on the CLEAN tape' + (falsePositives.length ? (': ' + falsePositives.join(', ')) : ''));
+
+  /* ---- THE SECOND FAULT: a tape that is continuous no longer ---- */
+  const G = await drive({ holeBars: 12 });
+  ok(G.failed.length === 0, 'the holed-tape run loaded every script too');
+  const movedG = [], silentG = [], saidG = [];
+  for (const id of ids){
+    const a = A.out[id], g = G.out[id] || '';
+    const says = /TAPE NOT CONTINUOUS/.test(g);
+    if (says) saidG.push(id);
+    if (numsOf(a) !== numsOf(g)){ movedG.push(id); if (!says) silentG.push(id); }
+  }
+  /* Before this pack the same run gave FIVE movers and ZERO disclosures. The
+     only gap check in the tree was gold-seven-step.js, on the 1H series, at a
+     three-day threshold — so a 12-bar hole was invisible everywhere. */
+  ok(movedG.length >= 4,
+     `${movedG.length} tabs render different numbers on a tape with a 12-bar hole (${movedG.join(', ')})`);
+  ok(silentG.length === 0,
+     'and not one of them changes its numbers without saying the tape is not continuous'
+     + (silentG.length ? (' — silent: ' + silentG.join(', ')) : ''));
+  ok(saidG.length >= movedG.length,
+     `${saidG.length} disclosed the hole against ${movedG.length} that moved — again the honest direction`);
+  const fpG = ids.filter(id => /TAPE NOT CONTINUOUS/.test(A.out[id]));
+  ok(fpG.length === 0,
+     'and no tab claims a hole on the continuous tape' + (fpG.length ? (': ' + fpG.join(', ')) : ''));
+  /* The two faults are independent: a holed tape must not be reported as
+     malformed, nor an inverted one as discontinuous. */
+  const crossA = ids.filter(id => /MALFORMED BARS/.test(G.out[id] || ''));
+  const crossB = ids.filter(id => /TAPE NOT CONTINUOUS/.test(B.out[id] || ''));
+  ok(crossA.length === 0 && crossB.length === 0,
+     'and the two faults never stand in for one another — a hole is not reported as a malformed bar, nor the reverse');
 
   /* Stated so the green is not read as more than it is. */
   const quiet = ids.filter(id => !disclosed.includes(id));

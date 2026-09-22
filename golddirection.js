@@ -1453,10 +1453,10 @@ async function runScan(ui, scanSt){
          the pack-907 harness, but 'did not move there' is not 'cannot move' —
          the check belongs on the tape, not on the harness's reach. */
       var tapeNote907 = '';
-      if (typeof W.hgGoldTapeSanityNote === 'function'){
+      if (typeof W.hgGoldTapeNotes === 'function'){
         [['rows15m','15m'],['rows1h','1h'],['rows4h','4h'],['rows1d','1d']].forEach(function(L){
           var rws = gold && gold[L[0]];
-          if (rws && rws.length) tapeNote907 += W.hgGoldTapeSanityNote(W.hgGoldTapeSanity(rws), L[1]);
+          if (rws && rws.length) tapeNote907 += W.hgGoldTapeNotes(rws, L[1]);
         });
       }
       ui.cards.innerHTML = tapeNote907 + html;

@@ -822,11 +822,10 @@ async function runGoldPro(ui){
        window lookup here — this file's W is function-scoped elsewhere. */
     var tapeNote907 = '';
     try{
-      var __tsn = (typeof window !== 'undefined') && window.hgGoldTapeSanityNote;
-      var __ts  = (typeof window !== 'undefined') && window.hgGoldTapeSanity;
-      if (typeof __tsn === 'function' && typeof __ts === 'function'){
-        if (g1d.rows && g1d.rows.length) tapeNote907 += __tsn(__ts(g1d.rows), '1d');
-        if (g4h.rows && g4h.rows.length) tapeNote907 += __tsn(__ts(g4h.rows), '4h');
+      var __tn = (typeof window !== 'undefined') && window.hgGoldTapeNotes;
+      if (typeof __tn === 'function'){
+        if (g1d.rows && g1d.rows.length) tapeNote907 += __tn(g1d.rows, '1d');
+        if (g4h.rows && g4h.rows.length) tapeNote907 += __tn(g4h.rows, '4h');
       }
     }catch(eTs){}
     ui.out.innerHTML = tapeNote907 + renderStructurePanel(st, g1d.rows, g4h.rows, src)

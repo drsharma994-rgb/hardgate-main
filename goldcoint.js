@@ -101,8 +101,8 @@ async function runGoldCoint(ui){
     html += '</table>';
     html += '<div class="note" style="margin-top:10px">CONTEXT ledger only — evidence for gold mean-reversion bias, not a two-leg trade.</div>';
     var tapeNote907 = '';
-    if (typeof W.hgGoldTapeSanityNote === 'function' && goldRows907.length)
-      tapeNote907 = W.hgGoldTapeSanityNote(W.hgGoldTapeSanity(goldRows907), '1d');
+    if (typeof W.hgGoldTapeNotes === 'function' && goldRows907.length)
+      tapeNote907 = W.hgGoldTapeNotes(goldRows907, '1d');
     if (ui && ui.body) ui.body.innerHTML = tapeNote907 + html;
     if (ui && ui.stat) ui.stat.textContent = 'updated ' + new Date().toISOString().slice(11, 19) + ' UTC';
     __gc.ranOnce = true;

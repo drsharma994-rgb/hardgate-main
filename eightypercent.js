@@ -5201,11 +5201,11 @@ function render(rungs, venue, recNotes, basis){
      said nothing. One note per rung whose bars are not possible candles,
      named by its timeframe, and it leads BOTH the simple and the full view
      because both are drawn from the same bars. */
-  if (typeof W.hgGoldTapeSanityNote === 'function'){
+  if (typeof W.hgGoldTapeNotes === 'function'){
     for (var __ti = 0; __ti < rungs.length; __ti++){
       var __r = rungs[__ti];
       if (!__r || !__r.rows || !__r.rows.length) continue;
-      h += W.hgGoldTapeSanityNote(W.hgGoldTapeSanity(__r.rows), __r.def && __r.def.tf);
+      h += W.hgGoldTapeNotes(__r.rows, __r.def && __r.def.tf);
     }
   }
 

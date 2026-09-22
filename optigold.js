@@ -780,10 +780,10 @@ function render(ui, lanes, mark, note){
      inverted this desk rendered roughly DOUBLE its clean output and said
      nothing; a lane drawn from impossible candles now says which lane. */
   var tapeNote = '';
-  if (typeof W.hgGoldTapeSanityNote === 'function'){
+  if (typeof W.hgGoldTapeNotes === 'function'){
     (lanes || []).forEach(function(L){
       if (!L || !L.rows || !L.rows.length) return;
-      tapeNote += W.hgGoldTapeSanityNote(W.hgGoldTapeSanity(L.rows),
+      tapeNote += W.hgGoldTapeNotes(L.rows,
         (L.cfg && L.cfg.interval ? L.cfg.interval : '') + (L.cfg && L.cfg.label ? ' ' + L.cfg.label : ''));
     });
   }

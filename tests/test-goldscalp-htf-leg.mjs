@@ -185,8 +185,8 @@ console.log('\n4. wired where the other feed caveat already goes');
      mixed-feed banner, so it reaches every path that banner reaches. */
   ok(/gsFeedLegNote\(gold\) \+ goldMixedFeedBannerHtml\(gold\);/.test(gsSrc),
      'the unread-leg line rides with the mixed-feed banner');
-  ok(/var mixedBanner = gsTapeSanityNote\(/.test(gsSrc),
-     'with the malformed-bar note ahead of both');
+  ok(/var mixedBanner = gsTapeNotes\(/.test(gsSrc),
+     'with the tape notes ahead of both (pack 908 renamed the helper: it now takes rows and answers both tape questions)');
   /* which means it reaches every path that banner reaches */
   const uses = (gsSrc.match(/mixedBanner/g) || []).length;
   ok(uses >= 3, 'and that banner is rendered on ' + (uses - 1) + ' paths');

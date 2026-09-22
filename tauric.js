@@ -148,8 +148,8 @@ function hgTauricPricePlan(dir){
          used and not a later one. */
       var tapeNote = '';
       try{
-        if (typeof W.hgGoldTapeSanityNote === 'function')
-          tapeNote = W.hgGoldTapeSanityNote(W.hgGoldTapeSanity(rows), TAURIC_TF);
+        if (typeof W.hgGoldTapeNotes === 'function')
+          tapeNote = W.hgGoldTapeNotes(rows, TAURIC_TF);
       }catch(eTs){}
       return { ok: true, plan: plan, bars: rows.length, tapeNote: tapeNote,
                lastClose: fin(rows[rows.length - 1] && rows[rows.length - 1].c) };
