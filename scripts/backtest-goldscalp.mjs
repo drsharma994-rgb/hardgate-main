@@ -352,7 +352,14 @@ function walk(W, m15, h1, h4, d1){
         stratKey: String(c.stratKey || '?'), strategy: c.strategy || null, dir: c.dir,
         grade: c.grade || null, tally: c.tally, demoted: !!c.demoted,
         mp: !!(best && best.id === c.id),
-        stamps: Array.isArray(c.stamps) ? c.stamps.slice(0, 6) : [],
+        /* hg-v912: was slice(0, 6). COST-HEAVY is the 13th stamp in the
+           scalp pipeline, so on any card carrying six earlier ones it was
+           cut from the record — the gate fired on 650 rows and the evidence
+           showed it firing on none, which is how a working gate reads as a
+           dead one. The cap is now 24 (every stamp the pipeline can add),
+           because a record that silently drops the decisive one is worse
+           than a longer record. */
+        stamps: Array.isArray(c.stamps) ? c.stamps.slice(0, 24) : [],
         killzone: c.killzone || null, killzoneWeight: c.killzoneWeight,
         rr: c.rr, stopAtr: (isFinite(c.atr) && c.atr > 0) ? Math.abs(entry - stop) / c.atr : NaN,
         entry, stop, t1,

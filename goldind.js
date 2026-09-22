@@ -1549,7 +1549,7 @@ var GS_STOP_FLOOR_ATR = 1.5;
    inp.rtCostPct; the default is the desk's XM XAUUSD preset. Never throws. */
 var GS_RT_COST_PCT_DEFAULT = 0.020;   /* XM XAUUSD: $0.35/$3500 + 0.010% slip */
 var GS_COST_RISK_MULT = 8;            /* risk ≥ 8× RT cost ⇔ cost ≤ 0.125R */
-function hgGoldScalpCostGate(c, rtCostPct){
+function hgGoldScalpCostGate(c, rtCostPct, opts){
   try{
     if (!c || c.dropped || (c.dir !== 'long' && c.dir !== 'short')) return c;
     var e = +c.entry, s = +c.stop;
@@ -1558,14 +1558,49 @@ function hgGoldScalpCostGate(c, rtCostPct){
     var riskPct = Math.abs(e - s) / e * 100;
     var barPct = GS_COST_RISK_MULT * rt;
     if (!(riskPct > 0) || riskPct >= barPct) return c;
-    c.demoted = true;
+    /* hg-v912: THIS NOW REJECTS. It demoted, and a demote does not stop a
+       trade — it only stops it leading, so the card still painted and still
+       ran.
+
+       MEASURED on the GOLD SCALP tab's own 15m replay, live rows only
+       (shadow rows excluded), net R at the XM venue:
+
+         whole live book                     n=2193  -0.148R  t=-5.71
+         stop under this bar                 n= 671  -0.363R  t=-7.54
+         what remains once they are rejected n=1522  -0.053R  t=-1.75
+
+       671 trades, 31% of the book, carried -243.3R of its -324.3R total
+       loss. Rejecting them removes three quarters of the bleeding and keeps
+       69% of the volume. The cohort is gross-POSITIVE and net-negative: the
+       setups are not wrong, the geometry cannot pay for them.
+
+       The gate was already judging these correctly — 650 of the 787 rows
+       under the bar carry its demote. What it was not doing was stopping
+       them. The SWING lane is unaffected: 0 of its 244 settled trades sit
+       under this bar, because 4h stops are rarely this tight. */
+    /* hg-v912: SCALP rejects, SWING demotes, and the split is the evidence
+       rather than a preference. The measurement above is the SCALP replay.
+       The SWING replay has ZERO trades under this bar, so there is nothing
+       measured there to reject on — and the swing engine can still produce
+       sub-bar geometry (a 4h order-block retest anchored just beyond the OB
+       base does it). Rejecting that on scalp evidence would be exactly the
+       unearned extrapolation this desk avoids, so swing keeps the demote it
+       had and says why. Callers opt in; absent opts the caller is the scalp
+       lane, which is the only one with a measurement. */
+    var reject = !(opts && opts.demoteOnly);
+    if (reject) c.dropped = true; else c.demoted = true;
     c.costHeavy = true;
     if (!Array.isArray(c.stamps)) c.stamps = [];
     if (c.stamps.indexOf('COST-HEAVY') < 0) c.stamps.push('COST-HEAVY');
+    var why = 'stop distance ' + riskPct.toFixed(3) + '% of entry is under ' + barPct.toFixed(2)
+      + '% (8× the ' + rt.toFixed(3) + '% venue round trip) — the fee is over 0.125R of the risk';
+    if (reject) c.reason = why;
     var gn = Array.isArray(c.gateNotes) ? c.gateNotes.slice() : [];
-    gn.push('stop distance ' + riskPct.toFixed(3) + '% of entry < ' + barPct.toFixed(2)
-      + '% (8× the ' + rt.toFixed(3) + '% venue round trip) — fees eat ≥0.125R; '
-      + 'replay measured this cohort gross-positive but net-negative, so it paints but can never lead');
+    gn.push(why + (reject
+      ? '; the SCALP replay measured this cohort gross-positive and net −0.363R over n=671, '
+        + 'a third of the book carrying three quarters of its loss — rejected, not demoted'
+      : '; the SWING replay has no trade under this bar, so this paints and cannot lead '
+        + 'rather than being rejected on the scalp lane\'s evidence'));
     c.gateNotes = gn;
     return c;
   }catch(eC){ return c; }
@@ -2366,8 +2401,13 @@ function goldScalpSetups(inp){
       hgGoldSetupEdgeApply(c, { scalp: true });
       if (c.dropped){ rejected.push(c); return; }
       /* (13) COST-HEAVY — quiet-tape geometry whose stop distance cannot pay
-         the venue round trip (cost > 0.125R) paints but can never lead. */
+         the venue round trip (cost > 0.125R). hg-v912: REJECTED, not demoted
+         — measured at −0.363R over n=671, three quarters of this book's loss. */
       hgGoldScalpCostGate(c, inp.rtCostPct);
+      /* hg-v912: the cost gate rejects now, so this has to read its verdict.
+         Without this line the candidate carried dropped:true straight onto
+         the board — a rejection nobody acted on. */
+      if (c.dropped){ rejected.push(c); return; }
       if (!seen[c.id]){ seen[c.id] = true; out.push(c); }
     }
     var tol = 0.5*a15;

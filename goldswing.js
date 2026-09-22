@@ -1707,10 +1707,14 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
       if (edgeFn) edgeFn(c, { swing: true });
       if (c.dropped){ out.rejected.push(c); return; }
       /* COST-HEAVY — geometry whose stop distance cannot pay the venue round
-         trip (cost > 0.125R) paints but can never lead. Demote-only; 4h-wide
-         stops rarely bind it, which is the principled outcome. */
+         trip (cost > 0.125R). hg-v912: the shared gate REJECTS now rather
+         than demoting, so this reads its verdict like the edge gate above.
+         The swing lane is unaffected in practice — 0 of the 244 settled
+         trades in its replay sit under the bar, because 4h stops are rarely
+         that tight — which is the principled outcome, not a loosened one. */
       var costFn = gfn('hgGoldScalpCostGate');
-      if (costFn) costFn(c, microOpts && microOpts.rtCostPct);
+      if (costFn) costFn(c, microOpts && microOpts.rtCostPct, { demoteOnly: true });
+      if (c.dropped){ out.rejected.push(c); return; }
       if (!seen[c.id]){ seen[c.id] = true; out.push(c); }
     }
     function bindPart(cand, hit, partLabel){
