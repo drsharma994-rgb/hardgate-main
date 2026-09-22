@@ -383,6 +383,17 @@ terse status, and never launches a first-time scan on a global refresh.
   var FWD_MIN_JUDGE = 20;   // settled out-of-sample trades before it can conclude
   var MIN_SAMPLES = 20;
   var EDGE_VETO_Z = -2;
+  /* hg-v917: VESTIGIAL ON THIS DESK, AND SAID SO RATHER THAN DELETED.
+     This is the crypto twin's bar. omniroute.js:7213 reads it — a mechanic
+     there needs 30 settled before the gate will veto, so its 20-29 window
+     counts AGAINST instead. THIS FILE NEVER READS IT: the gold measured-edge
+     gate vetoes at MIN_SAMPLES (20) above, which is hg-v420's deliberate
+     choice ("no 20-29 info free-pass") and what AGENTS.md documents.
+     It stays because gold-forward-read.js borrows 30 from it by name for its
+     own demote bar, and three tests assert that borrowing. Changing the
+     number here would silently move that bar, so the value is untouched and
+     only the misreading is fixed. test-omnigold-formed-population pins that
+     the gate does not read it. */
   var EDGE_VETO_SAMPLES = 30;
 
   /* ===== MEASURED EDGE: PROOF REQUIRED, OR NO TICKET =====================
@@ -7998,6 +8009,30 @@ terse status, and never launches a first-time scan on a global refresh.
      cohorts: [n, winRate, avgNetR, avgGrossR];
      grades: [n, winRate, avgNetR] (per-grade gross was not recoverable).
      Keys are uppercase so lookup can normalise case. */
+  /* hg-v917: `kinds` below is `perKind` from the evidence file — EVERY settled
+     firing of a detector across the whole walk, priced at the replay's PAXG
+     round trip. hgOgReplayNetAtVenue re-prices that number to the desk's venue
+     when it renders, and until now that was the only correction applied.
+
+     The SAME committed file carries sequentialBake.formedByKind: the same 54
+     mechanics scoped to the GATE-CLEAR population — what survived the 35-gate
+     stack its own fingerprint names — with netR_xm already computed. Nothing
+     read it. Re-pricing an unscoped population and measuring the scoped one
+     are different corrections, and they do not agree: for 42 of the 54 the
+     gate-clear record is WORSE than the re-priced line, net-positive at XM
+     falls from 12 kinds to 9, and 7 change sign.
+
+     So each row now carries both. Positions 0-4 are the unscoped record as
+     before; 5-8 are [formedN, formedWinRate, formedNetXm, formedGrossR].
+     Derived by scripts/omnigold-formed-population.mjs, which a test re-runs
+     against the evidence JSON rather than trusting these literals.
+
+     NOTHING IS PROMOTED OR VETOED DIFFERENTLY. At naive n — the most generous
+     case, since the real path deflates by overlap — no kind reaches the
+     family bar on either basis. One reaches the naive 95% bar as displayed
+     and not on the gate-clear record: P6-FAIL, over by +0.0005 and under by
+     -0.0260. That is the whole behavioural difference, and it is recorded
+     rather than acted on. */
   var HG_OG_REPLAY_EVIDENCE = {
     src: 'scripts/omnigold-replay-evidence.json',
     window: '2026-03-27..2026-09-10',   /* refreshed 2026-09-10 post hg-v699 */
@@ -8007,60 +8042,60 @@ terse status, and never launches a first-time scan on a global refresh.
     fit: { verdict: 'not-predictive', testAUC: 0.5044,
            topDecileLift: 1.051, bottomDecileLift: 0.635 },
     kinds: {
-      'ROUND-MAGNET': [620, 0.3403,  -0.834,   0.036, 0.630],
-      'STOCHRSI-TURN': [434, 0.3249,  -0.689,   0.026, 0.487],
-      'P8-RANGE': [358, 0.2542,  -2.163,  -0.235, 1.177],
-      'CCI-EXTREME': [328, 0.3323,  -0.748,   0.023, 0.521],
-      'P9-VOLBAR': [315, 0.2952,  -1.487,  -0.112, 0.982],
-      'PD-EQUILIBRIUM': [288, 0.3090,  -5.158,  -0.073, 2.311],
-      'THREE-BAR': [279, 0.3513,  -3.732,   0.054, 2.087],
-      'ADR-FADE': [210, 0.3476,  -1.260,   0.043, 1.353],
-      'MMOVE': [206, 0.3107,  -0.236,   0.088, 0.233],
-      'P6-FAIL': [197, 0.3909,  -1.670,   0.203, 0.914],
-      'PIN-REJECT': [192, 0.3646,  -3.838,   0.094, 2.208],
-      'SWEEP-V2': [189, 0.2963,  -1.600,  -0.087, 0.688],
-      'PIVOT-REJECT': [171, 0.2749,  -1.126,  -0.168, 0.610],
-      'PO3': [162, 0.2963,  -0.841,  -0.071, 0.484],
-      'FVG-HVN': [161, 0.2484,  -0.680,  -0.135, 0.336],
-      'P4-LAF': [156, 0.3782,  -0.653,   0.141, 0.578],
-      'FVG-FILL': [155, 0.2774,  -0.387,   0.027, 0.286],
-      'WEEKLY-OPEN': [154, 0.3312,  -0.936,   0.020, 0.639],
-      'KZ-JUDAS': [150, 0.2800,  -1.992,  -0.160, 0.924],
-      'ORB': [146, 0.2740,  -0.346,   0.028, 0.236],
-      'P5-VWAP': [139, 0.2806,  -0.805,  -0.120, 0.406],
-      'NR7-BREAK': [139, 0.2590,  -0.539,  -0.107, 0.280],
-      'FIB-618': [132, 0.2955,  -0.635,  -0.064, 0.391],
-      'P7-SCALP': [132, 0.3409,  -0.884,   0.054, 0.680],
-      'INSIDE-BREAK': [122, 0.2869,  -0.446,   0.018, 0.294],
-      'AVWAP-RECLAIM': [118, 0.3305,  -0.460,   0.046, 0.321],
-      'MFI-SQUAT': [117, 0.2821,  -0.627,  -0.041, 0.367],
-      'EMA50-HOLD': [116, 0.2586,  -0.893,  -0.144, 0.434],
-      'ENGULF-LEVEL': [114, 0.3421,  -3.175,   0.026, 1.571],
-      'DI-CROSS': [112, 0.2321,  -0.485,  -0.118, 0.241],
-      'HA-FLIP': [109, 0.2936,  -0.415,   0.052, 0.295],
-      'TREND-RECLAIM': [106, 0.3491,  -0.369,   0.121, 0.344],
-      'ICHI-KUMO': [106, 0.2358,  -0.453,  -0.106, 0.236],
-      'STRUCT-BOS': [105, 0.3048,  -0.202,   0.145, 0.213],
-      'SPRING': [104, 0.1923,  -1.429,  -0.382, 0.523],
-      'RIBBON-PULLBACK': [103, 0.2524,  -0.563,  -0.070, 0.286],
-      'P6-COMP': [ 95, 0.2526,  -0.320,  -0.018, 0.227],
-      'UTAD': [ 91, 0.3846,  -1.043,   0.154, 0.644],
-      'ASIA-BREAK': [ 90, 0.2222,  -0.461,  -0.042, 0.233],
-      'LONDON-FIX': [ 89, 0.2022,  -0.547,  -0.189, 0.256],
-      'BOS-RETEST': [ 85, 0.3059,  -0.392,   0.067, 0.233],
-      'ER-IGNITION': [ 81, 0.2593,  -1.339,  -0.222, 0.626],
-      'PDL-SWEEP': [ 81, 0.2222,  -1.452,  -0.333, 0.716],
-      'PDH-SWEEP': [ 75, 0.3467,  -0.955,   0.054, 0.648],
-      'VWAP-REVERT': [ 65, 0.3077,  -0.658,  -0.041, 0.346],
-      'VWAP-BAND': [ 63, 0.2381,  -0.890,  -0.286, 0.487],
-      'P5-WYCK': [ 58, 0.2241,  -0.693,  -0.219, 0.352],
-      'EQL-SWEEP': [ 53, 0.2075,  -1.168,  -0.366, 0.625],
-      'NY-OPEN-DRIVE': [ 51, 0.2157,  -0.358,  -0.025, 0.216],
-      'SQUEEZE-FIRE': [ 50, 0.3200,  -0.328,   0.108, 0.258],
-      'P5-DRIVE': [ 48, 0.3333,  -0.226,   0.228, 0.307],
-      'RSI-DIVERGE': [ 46, 0.3696,  -1.931,   0.123, 1.379],
-      'CUSUM-SHIFT': [ 45, 0.2444,  -0.237,   0.041, 0.247],
-      'EQH-SWEEP': [ 42, 0.3571,  -0.971,   0.071, 0.612]
+      'ROUND-MAGNET': [620, 0.3403, -0.834, 0.036, 0.630, 587, 0.3169, -0.109, -0.043],
+      'STOCHRSI-TURN': [434, 0.3249, -0.689, 0.026, 0.487, 425, 0.3318, -0.04, 0.015],
+      'P8-RANGE': [358, 0.2542, -2.163, -0.235, 1.177, 323, 0.1765, -0.613, -0.47],
+      'CCI-EXTREME': [328, 0.3323, -0.748, 0.023, 0.521, 322, 0.3385, -0.033, 0.027],
+      'P9-VOLBAR': [315, 0.2952, -1.487, -0.112, 0.982, 274, 0.2007, -0.499, -0.397],
+      'PD-EQUILIBRIUM': [288, 0.3090, -5.158, -0.073, 2.311, 237, 0.1603, -0.926, -0.519],
+      'THREE-BAR': [279, 0.3513, -3.732, 0.054, 2.087, 207, 0.1208, -0.927, -0.638],
+      'ADR-FADE': [210, 0.3476, -1.260, 0.043, 1.353, 161, 0.1988, -0.498, -0.404],
+      'MMOVE': [206, 0.3107, -0.236, 0.088, 0.233, 177, 0.3559, 0.059, 0.084],
+      'P6-FAIL': [197, 0.3909, -1.670, 0.203, 0.914, 182, 0.3736, -0.02, 0.123],
+      'PIN-REJECT': [192, 0.3646, -3.838, 0.094, 2.208, 138, 0.1232, -0.94, -0.63],
+      'SWEEP-V2': [189, 0.2963, -1.600, -0.087, 0.688, 172, 0.2558, -0.329, -0.22],
+      'PIVOT-REJECT': [171, 0.2749, -1.126, -0.168, 0.610, 159, 0.2327, -0.373, -0.303],
+      'PO3': [162, 0.2963, -0.841, -0.071, 0.484, 148, 0.2905, -0.185, -0.126],
+      'FVG-HVN': [161, 0.2484, -0.680, -0.135, 0.336, 145, 0.2621, -0.204, -0.162],
+      'P4-LAF': [156, 0.3782, -0.653, 0.141, 0.578, 150, 0.3333, -0.057, 0],
+      'FVG-FILL': [155, 0.2774, -0.387, 0.027, 0.286, 132, 0.2955, -0.069, -0.038],
+      'WEEKLY-OPEN': [154, 0.3312, -0.936, 0.020, 0.639, 140, 0.3, -0.159, -0.09],
+      'KZ-JUDAS': [150, 0.2800, -1.992, -0.160, 0.924, 140, 0.2429, -0.414, -0.271],
+      'ORB': [146, 0.2740, -0.346, 0.028, 0.236, 125, 0.296, -0.049, -0.02],
+      'P5-VWAP': [139, 0.2806, -0.805, -0.120, 0.406, 133, 0.2857, -0.188, -0.135],
+      'NR7-BREAK': [139, 0.2590, -0.539, -0.107, 0.280, 119, 0.2857, -0.164, -0.131],
+      'FIB-618': [132, 0.2955, -0.635, -0.064, 0.391, 127, 0.2992, -0.131, -0.087],
+      'P7-SCALP': [132, 0.3409, -0.884, 0.054, 0.680, 127, 0.3543, -0.01, 0.063],
+      'INSIDE-BREAK': [122, 0.2869, -0.446, 0.018, 0.294, 108, 0.3148, -0.034, 0.002],
+      'AVWAP-RECLAIM': [118, 0.3305, -0.460, 0.046, 0.321, 112, 0.3304, -0.043, -0.005],
+      'MFI-SQUAT': [117, 0.2821, -0.627, -0.041, 0.367, 105, 0.2952, -0.12, -0.077],
+      'EMA50-HOLD': [116, 0.2586, -0.893, -0.144, 0.434, 109, 0.2752, -0.201, -0.144],
+      'ENGULF-LEVEL': [114, 0.3421, -3.175, 0.026, 1.571, 95, 0.2211, -0.572, -0.337],
+      'DI-CROSS': [112, 0.2321, -0.485, -0.118, 0.241, 96, 0.2813, -0.112, -0.083],
+      'HA-FLIP': [109, 0.2936, -0.415, 0.052, 0.295, 97, 0.3196, -0.011, 0.025],
+      'TREND-RECLAIM': [106, 0.3491, -0.369, 0.121, 0.344, 99, 0.3636, 0.055, 0.092],
+      'ICHI-KUMO': [106, 0.2358, -0.453, -0.106, 0.236, 89, 0.2697, -0.161, -0.134],
+      'STRUCT-BOS': [105, 0.3048, -0.202, 0.145, 0.213, 87, 0.3448, 0.082, 0.109],
+      'SPRING': [104, 0.1923, -1.429, -0.382, 0.523, 97, 0.1649, -0.554, -0.477],
+      'RIBBON-PULLBACK': [103, 0.2524, -0.563, -0.070, 0.286, 88, 0.2614, -0.168, -0.132],
+      'P6-COMP': [95, 0.2526, -0.320, -0.018, 0.227, 82, 0.3293, 0.019, 0.042],
+      'UTAD': [91, 0.3846, -1.043, 0.154, 0.644, 83, 0.3494, -0.045, 0.048],
+      'ASIA-BREAK': [90, 0.2222, -0.461, -0.042, 0.233, 75, 0.2667, -0.073, -0.042],
+      'LONDON-FIX': [89, 0.2022, -0.547, -0.189, 0.256, 69, 0.2464, -0.233, -0.205],
+      'BOS-RETEST': [85, 0.3059, -0.392, 0.067, 0.233, 74, 0.3378, 0.003, 0.037],
+      'ER-IGNITION': [81, 0.2593, -1.339, -0.222, 0.626, 74, 0.1892, -0.504, -0.432],
+      'PDL-SWEEP': [81, 0.2222, -1.452, -0.333, 0.716, 80, 0.2, -0.484, -0.4],
+      'PDH-SWEEP': [75, 0.3467, -0.955, 0.054, 0.648, 67, 0.3284, -0.095, -0.013],
+      'VWAP-REVERT': [65, 0.3077, -0.658, -0.041, 0.346, 63, 0.3175, -0.089, -0.041],
+      'VWAP-BAND': [63, 0.2381, -0.890, -0.286, 0.487, 57, 0.2281, -0.359, -0.316],
+      'P5-WYCK': [58, 0.2241, -0.693, -0.219, 0.352, 56, 0.25, -0.231, -0.195],
+      'EQL-SWEEP': [53, 0.2075, -1.168, -0.366, 0.625, 53, 0.2264, -0.383, -0.322],
+      'NY-OPEN-DRIVE': [51, 0.2157, -0.358, -0.025, 0.216, 41, 0.2683, -0.051, -0.025],
+      'SQUEEZE-FIRE': [50, 0.3200, -0.328, 0.108, 0.258, 45, 0.3556, 0.075, 0.108],
+      'P5-DRIVE': [48, 0.3333, -0.226, 0.228, 0.307, 41, 0.3902, 0.18, 0.215],
+      'RSI-DIVERGE': [46, 0.3696, -1.931, 0.123, 1.379, 39, 0.2308, -0.457, -0.309],
+      'CUSUM-SHIFT': [45, 0.2444, -0.237, 0.041, 0.247, 32, 0.3438, 0.071, 0.092],
+      'EQH-SWEEP': [42, 0.3571, -0.971, 0.071, 0.612, 41, 0.3659, 0.016, 0.098]
     },
     /* THE OTHER SIDE OF THE 40-TRADE BAR.
 
@@ -8269,7 +8304,21 @@ terse status, and never launches a first-time scan on a global refresh.
     var E = HG_OG_REPLAY_EVIDENCE;
     var row = hgOgReplayRow(E.kinds, key);
     if (row) return { n: row[0], winRate: row[1], avgNetR: row[2], avgGrossR: row[3],
-                      medianCostR: (row.length > 4 ? row[4] : null) };
+                      medianCostR: (row.length > 4 ? row[4] : null),
+                      /* hg-v917: the gate-clear half of the SAME bake —
+                         sequentialBake.formedByKind, already priced at XM.
+                         row[2] above is every firing across the whole walk at
+                         PAXG; this is what survived the 35-gate stack, at the
+                         venue the desk's order path uses. Absent stays absent:
+                         a short row yields null, never a zero-filled record. */
+                      /* n here is SETTLED, the denominator winRate and netXm
+                         are both over - not the firing count. 43 of the 54
+                         kinds have the two differing (MMOVE fires 204 and
+                         settles 177), so quoting the firing count beside a
+                         rate computed on settles would misstate it. */
+                      formed: (row.length > 8
+                        ? { n: row[5], winRate: row[6], netXm: row[7], grossR: row[8] }
+                        : null) };
     row = hgOgReplayRow(E.grades, key);
     if (row) return { n: row[0], winRate: row[1], avgNetR: row[2], avgGrossR: null };
     row = hgOgReplayRow(E.cohorts, key);
@@ -9731,6 +9780,39 @@ terse status, and never launches a first-time scan on a global refresh.
         + rp.replayRt.toFixed(2) + '% round trip)';
     }
     h += '</div>';
+
+    /* hg-v917: AND THE GATE-CLEAR HALF, WHICH IS USUALLY WORSE.
+
+       The line above is every firing of this detector across the walk, with
+       its PAXG net re-priced to the venue. Re-pricing an unscoped population
+       is not the same correction as measuring the scoped one, and the bake
+       already did the second: sequentialBake.formedByKind, 54 of 54 kinds,
+       what survived the 35-gate stack, netR_xm computed there.
+
+       For 42 of the 54 that record is WORSE than the line above — PIN-REJECT
+       reads -0.21R re-priced and -0.94R gate-clear, THREE-BAR -0.24R against
+       -0.93R. Net-positive at XM goes from 12 kinds to 9, and 7 change sign.
+       So this is not a softer number shown next to a harsh one; it is the
+       harsher one, and it is the population the gates actually let through. */
+    var fm = ev.formed;
+    if (fm && isFinite(fin(fm.n)) && fin(fm.n) > 0 && isFinite(fin(fm.netXm))){
+      h += '<div class="dim og-replay-line og-replay-formed" style="font-size:11px;margin-top:2px">'
+        + 'gate-clear: ' + (fm.winRate * 100).toFixed(0) + '% WR, <b>'
+        + (fm.netXm >= 0 ? '+' : '') + fm.netXm.toFixed(2) + 'R at XM</b> (n=' + fm.n + ')'
+        + ' — the rows that cleared the gate stack';
+      /* THE COMPARISON IS ONLY MADE WHEN THERE IS SOMETHING TO COMPARE TO.
+         The line above is only re-priced to XM when the desk has a venue
+         preset; without one there is no XM figure on it, and the first cut of
+         this said 'better than the line above' in exactly that case — a
+         comparative claim with nothing on the other side of it. Absent stays
+         absent: no venue, no verdict, just the record. */
+      var shownXm = fin(rp && rp.repriced ? rp.net : NaN);
+      if (isFinite(shownXm)){
+        h += ', which is ' + (fm.netXm < shownXm ? 'WORSE than'
+             : (fm.netXm > shownXm ? 'better than' : 'the same as')) + ' the line above';
+      }
+      h += '</div>';
+    }
 
     /* A positive number is where self-deception starts, so the verdict goes
        on the same card: does it clear its own breakeven, and does it still
