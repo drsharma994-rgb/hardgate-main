@@ -2182,7 +2182,9 @@ async function runScan(ui, scanSt){
     var basisHtml = stRoute ? stGoldBasisHtml() : '';
     /* hg-v901: the unread-HTF-leg line rides with the mixed-feed banner, so
        both feed caveats reach every render path the banner already reaches. */
-    var mixedBanner = gsTapeNotes(gold && gold.rows15m)
+    /* hg-v913: this desk reads the records it writes. */
+    var fwdNote = (typeof W.hgGoldFwdNote === 'function' ? W.hgGoldFwdNote('goldscalp') : '');
+    var mixedBanner = fwdNote + gsTapeNotes(gold && gold.rows15m)
       + gsFeedLegNote(gold) + goldMixedFeedBannerHtml(gold);
     var uniHtml = goldUniformPanelHtml(display, uniRows, 'SCALP', deskTape);
     var wkRows = gold.rows4h.length ? gold.rows4h : gold.rows15m;

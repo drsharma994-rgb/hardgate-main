@@ -864,7 +864,8 @@ function mount(el){
       /* Pack 907: GOLD PINE draws four legs and moved its numbers on a
          malformed tape without saying so. One note per leg that arrived,
          ahead of everything drawn from it. */
-      var tapeNote = '';
+      /* hg-v913: this desk reads the records it writes. */
+      var tapeNote = (typeof W.hgGoldFwdNote === 'function' ? W.hgGoldFwdNote('goldpine') : '');
       if (typeof W.hgGoldTapeNotes === 'function'){
         [['rows15m','15m'],['rows1h','1h'],['rows4h','4h'],['rows1d','1d']].forEach(function(L){
           var rws = bars && bars[L[0]];

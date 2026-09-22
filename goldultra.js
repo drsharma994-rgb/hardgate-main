@@ -1803,7 +1803,8 @@ function renderResult(ui, res, src, sel, lane, tapes){
      because it is a statement about the bars everything below is drawn
      from, and it rides BOTH exits from this function (COUNT SILENT takes
      an early return that would otherwise drop it). */
-  var h = '';
+  /* hg-v913: this desk reads the records it writes. */
+  var h = (typeof W.hgGoldFwdNote === 'function' ? W.hgGoldFwdNote('goldultra') : '');
   if (tapes && typeof W.hgGoldTapeNotes === 'function'){
     if (tapes.rows15m && tapes.rows15m.length) h += W.hgGoldTapeNotes(tapes.rows15m, '15m');
     if (tapes.rows1h && tapes.rows1h.length) h += W.hgGoldTapeNotes(tapes.rows1h, '1h');

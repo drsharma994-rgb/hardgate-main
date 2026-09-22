@@ -977,7 +977,10 @@ function mount(el){
     var hint = minPass
       ? ('<div class="hg-note" style="margin-bottom:10px">' + minPass + ' GRADE A PASS · trade-ready</div>')
       : ('<div class="hg-note" style="margin-bottom:10px">No GRADE A PASS yet — WATCH rows show levels only</div>');
-    desk.innerHTML = hint + rows.map(function(r){
+    /* hg-v913: this desk reads the records it writes. SUPER:GOLD is pooled
+       into OMNIGOLD's gate, so its records were consulted — by a different
+       desk, for a different board. This is the one that wrote them. */
+    desk.innerHTML = (typeof W.hgGoldFwdNote === 'function' ? W.hgGoldFwdNote('super-gold') : '') + hint + rows.map(function(r){
       var tierLbl = r.tier === 'clean' ? ('GRADE ' + String(r.grade || 'A').toUpperCase()) : 'WATCH';
       var pill = superGoldDeskPill(r);
       var sel = (__sg.selectedId === r.id) ? ' sel' : '';

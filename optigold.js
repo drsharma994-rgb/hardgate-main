@@ -779,7 +779,8 @@ function render(ui, lanes, mark, note){
      answers, not an average of them. On a tape with one bar in twenty
      inverted this desk rendered roughly DOUBLE its clean output and said
      nothing; a lane drawn from impossible candles now says which lane. */
-  var tapeNote = '';
+  /* hg-v913: this desk reads the records it writes. */
+  var tapeNote = (typeof W.hgGoldFwdNote === 'function' ? W.hgGoldFwdNote('optigold') : '');
   if (typeof W.hgGoldTapeNotes === 'function'){
     (lanes || []).forEach(function(L){
       if (!L || !L.rows || !L.rows.length) return;
