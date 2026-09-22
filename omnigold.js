@@ -10168,11 +10168,15 @@ terse status, and never launches a first-time scan on a global refresh.
           out.formed = false;
           out.edgeSuppress = probe.edge || { action: 'suppress', why: probe.reason };
           out.reasons.push(probe.reason || 'gold setup edge suppress');
+          /* hg-v916: say what the suppression withholds on today's population,
+             not only the whole-replay figure the row was baked from. */
+          if (probe.edge && probe.edge.liveWhy) out.reasons.push(probe.edge.liveWhy);
         } else if (probe.demoted && probe.edge && probe.edge.action === 'demote'){
           /* Demote paints and ranks below survivors — unlike suppress it is not
              a formation kill. ORB/HVN/ribbon are fee-weak, not geometry-broken. */
           out.edgeDemote = probe.edge;
           out.reasons.push(probe.edge.why || 'gold setup edge demote');
+          if (probe.edge.liveWhy) out.reasons.push(probe.edge.liveWhy);
         } else if (probe.edgeBoost > 0 && probe.edge && probe.edge.action === 'prefer'){
           out.edgePrefer = true;
           out.edgeBoost = probe.edgeBoost;

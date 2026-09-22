@@ -479,7 +479,10 @@ function normCand(src, horizon, c, over){
        invented: absent stays null. */
     edge: (c.edge && typeof c.edge === 'object') ? {
       action: c.edge.action || null, n: fin(c.edge.n), gross: fin(c.edge.gross),
-      net: fin(c.edge.net), why: c.edge.why ? String(c.edge.why) : ''
+      net: fin(c.edge.net), why: c.edge.why ? String(c.edge.why) : '',
+      /* hg-v916: n/gross/net are the whole replay book; liveWhy is the same
+         row over the trades the desk still forms. Copied, never invented. */
+      liveWhy: c.edge.liveWhy ? String(c.edge.liveWhy) : ''
     } : null
   };
   if (!out.demoteReasons.length){
@@ -895,7 +898,8 @@ function provenOf(c, entries){
     if (c.edge && c.edge.action === 'prefer'){
       return { source: 'replay-prefer', key: String(c.stratKey || c.strategy || ''),
                n: fin(c.edge.n), gross: fin(c.edge.gross), net: fin(c.edge.net),
-               why: c.edge.why ? String(c.edge.why) : '' };
+               why: c.edge.why ? String(c.edge.why) : '',
+               liveWhy: c.edge.liveWhy ? String(c.edge.liveWhy) : '' };
     }
     var list = entries || [];
     var key = String(c.stratKey || '').toLowerCase();
