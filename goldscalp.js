@@ -1224,49 +1224,17 @@ function gsPreGateLine(preGate){
    here would be the kind of silent correction this desk exists to avoid.
    Bounded at BAD_CAP so a wholly broken feed cannot cost a scan its time. */
 function gsTapeSanity(rows){
-  var out = { bars: 0, bad: 0, inverted: 0, bodyOutside: 0, nonFinite: 0, timeOrder: 0, ok: true };
-  if (!Array.isArray(rows) || !rows.length) return out;
-  /* BAD_CAP bounds the WORK, not the number: the walk stops at the first bar
-     that reaches it. One bar can carry two faults — an impossible range AND a
-     timestamp that goes backwards — so the reported count can exceed the cap
-     by one. Clamping it would be a prettier number and a less true one. */
-  var BAD_CAP = 5000;
-  var i, b, o, h, l, c, t, prevT = NaN;
-  out.bars = rows.length;
-  for (i = 0; i < rows.length; i++){
-    if (out.bad >= BAD_CAP) break;   /* checked before AND after, so the cap is exact */
-    b = rows[i];
-    if (!b){ out.nonFinite++; out.bad++; continue; }
-    o = +b.o; h = +b.h; l = +b.l; c = +b.c; t = +b.t;
-    if (!isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c)){ out.nonFinite++; out.bad++; continue; }
-    if (h < l){ out.inverted++; out.bad++; }
-    else if (h < Math.max(o, c) || l > Math.min(o, c)){ out.bodyOutside++; out.bad++; }
-    if (isFinite(t)){
-      if (isFinite(prevT) && t <= prevT) { out.timeOrder++; out.bad++; }
-      prevT = t;
-    }
-    if (out.bad >= BAD_CAP) break;
-  }
-  out.ok = out.bad === 0;
-  return out;
+  /* The rule moved to gold-tape-sanity.js in pack 907, because seven other
+     gold tabs needed it and two copies of a rule are two things to drift.
+     Absent shared file, this reports nothing rather than guessing — a desk
+     that cannot check its tape must not claim the tape is clean. */
+  if (typeof W.hgGoldTapeSanity === 'function') return W.hgGoldTapeSanity(rows);
+  return { bars: 0, bad: 0, inverted: 0, bodyOutside: 0, nonFinite: 0, timeOrder: 0, ok: true };
 }
 
 function gsTapeSanityNote(rep){
-  if (!rep || rep.ok || !rep.bars) return '';
-  var bits = [];
-  if (rep.inverted) bits.push(rep.inverted + ' with the high below the low');
-  if (rep.bodyOutside) bits.push(rep.bodyOutside + ' whose range does not contain the open or close');
-  if (rep.nonFinite) bits.push(rep.nonFinite + ' with a price that is not a number');
-  if (rep.timeOrder) bits.push(rep.timeOrder + ' whose timestamp repeats or goes backwards');
-  if (!bits.length) return '';
-  var pct = Math.round(1000 * rep.bad / rep.bars) / 10;
-  return '<div class="note warn" style="margin:8px 0;padding:8px 10px;border:1px solid #F59E0B;border-radius:6px">'
-    + '<b>MALFORMED BARS</b> — ' + rep.bad + ' of ' + rep.bars + ' 15m bars (' + pct + '%) are not '
-    + 'possible candles: ' + esc(bits.join(', ')) + '. Every level below was drawn from this tape, '
-    + 'including those bars. Measured on a tape with one bar in twenty inverted, the STOP moved on 36.7% '
-    + 'of scans and the entry on 4.7% — the stop being the risk distance every size and every R on the '
-    + 'ladder is measured against. Nothing here is dropped: which bars to discard is a data-repair '
-    + 'decision, not one this desk should make for you.</div>';
+  if (typeof W.hgGoldTapeSanityNote === 'function') return W.hgGoldTapeSanityNote(rep, '15m');
+  return '';
 }
 
 /* THE MARK EVERY CARD ON THIS BOARD IS JUDGED AGAINST.

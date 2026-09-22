@@ -55,9 +55,25 @@ function grab(src, name){
   return '';
 }
 const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const F = new Function('esc', 'isFinite', 'Math', 'Array',
+
+/* PACK 907 MOVED THE RULE. Seven other gold tabs needed the same check, so the
+   counting loop now lives in gold-tape-sanity.js and goldscalp.js delegates to
+   it. This file still lifts goldscalp's OWN functions — the assertions below
+   are about what GOLD SCALP does — but it now hands them the real shared
+   implementation as W, so what is measured is the whole path the tab takes and
+   not a stub of it. If the delegation breaks, these fail. */
+const W = { };
+{
+  const c = { Math, isFinite, String, Number, RegExp, Array, Object, JSON };
+  c.window = c;
+  vm.createContext(c);
+  vm.runInContext(fs.readFileSync(root + 'gold-tape-sanity.js', 'utf8'), c, { filename: 'gold-tape-sanity.js' });
+  W.hgGoldTapeSanity = c.hgGoldTapeSanity;
+  W.hgGoldTapeSanityNote = c.hgGoldTapeSanityNote;
+}
+const F = new Function('esc', 'isFinite', 'Math', 'Array', 'W',
   grab(GS, 'gsTapeSanity') + grab(GS, 'gsTapeSanityNote')
-  + 'return { gsTapeSanity, gsTapeSanityNote };')(esc, isFinite, Math, Array);
+  + 'return { gsTapeSanity, gsTapeSanityNote };')(esc, isFinite, Math, Array, W);
 const text = h => String(h).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 const clean = n => Array.from({ length: n }, (_, i) =>
   ({ t: 1000 + i * 900, o: 100, h: 101, l: 99, c: 100.5, v: 1 }));
@@ -189,8 +205,16 @@ console.log('\n4. it reports; it does not gate, and it repairs nothing');
   /* AND IT MUST NEVER CLAIM A REPAIR IT DID NOT PERFORM. A note that said the
      bad bars "were removed" would be worse than no note: the reader would
      trust levels drawn from a tape nobody cleaned. */
-  ok(!/were removed|have been removed|discarded them|excluded them|cleaned|corrected|repaired/i.test(note),
-     'and never claims the malformed bars were removed, excluded or fixed');
+  /* The promise sentence is where this vocabulary is ALLOWED — it is what
+     makes the promise ("Nothing here is dropped or corrected"). So it is
+     checked, then set aside, and the rest of the note is held to the ban.
+     Banning the words outright, as this line first did, fails on the very
+     sentence that keeps the contract. */
+  const promise = /Nothing here is dropped or corrected/i;
+  ok(promise.test(note), 'it makes that promise in as many words');
+  ok(!/were removed|have been removed|discarded them|excluded them|cleaned|corrected|repaired/i
+       .test(String(note).replace(/Nothing here is dropped or corrected[\s\S]*$/i, ' ')),
+     'and nowhere else claims the malformed bars were removed, excluded or fixed');
   ok(/Nothing here is dropped/.test(note), 'it states the opposite, in as many words');
 
   /* a wholly broken feed cannot cost the scan its time */

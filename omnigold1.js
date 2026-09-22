@@ -1774,8 +1774,21 @@
       try{ __st.lastFwd = hgOg1ForwardRecord([{ horizon: 'SWING', r: rSwing }, { horizon: 'SCALP', r: rScalp }]); }catch(eF){}
       var r = rSwing;
       __st.last = r; __st.lastScalp = rScalp; __st.hasRun = true;
+      /* Pack 907: OMNIGOLD 1 reads three legs and moved its numbers on a
+         malformed tape without a word. One note per leg that arrived, above
+         the cards and both Section 0-8 panels drawn from them. */
+      var tapeNote = '';
+      try{
+        var tsn = gfn('hgGoldTapeSanityNote'), ts = gfn('hgGoldTapeSanity');
+        if (tsn && ts){
+          [['rows15m','15m'],['rows1h','1h'],['rows4h','4h']].forEach(function(L){
+            var rws = inp && inp[L[0]];
+            if (rws && rws.length) tapeNote += tsn(ts(rws), L[1]);
+          });
+        }
+      }catch(eTs){}
       if (ui && ui.out){
-        ui.out.innerHTML = hgOg1CardsHtml([{ horizon: 'SWING', r: rSwing }, { horizon: 'SCALP', r: rScalp }])
+        ui.out.innerHTML = tapeNote + hgOg1CardsHtml([{ horizon: 'SWING', r: rSwing }, { horizon: 'SCALP', r: rScalp }])
           + '<details class="og1-hz" open><summary>SWING — Sections 0–8 (4H context · 1H execution)</summary>' + hgOg1Html(rSwing) + '</details>'
           + '<details class="og1-hz"><summary>SCALP — Sections 0–8 (1H context · 15m execution)</summary>' + hgOg1Html(rScalp) + '</details>';
       }

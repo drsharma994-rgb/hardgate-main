@@ -775,7 +775,19 @@ function render(ui, lanes, mark, note){
         + 'Forward records are written per lane so each timeframe can be judged separately later.</div>';
     }
   }
-  ui.body.innerHTML = h;
+  /* Pack 907: OPTI GOLD runs three lanes off three tapes, so it gets three
+     answers, not an average of them. On a tape with one bar in twenty
+     inverted this desk rendered roughly DOUBLE its clean output and said
+     nothing; a lane drawn from impossible candles now says which lane. */
+  var tapeNote = '';
+  if (typeof W.hgGoldTapeSanityNote === 'function'){
+    (lanes || []).forEach(function(L){
+      if (!L || !L.rows || !L.rows.length) return;
+      tapeNote += W.hgGoldTapeSanityNote(W.hgGoldTapeSanity(L.rows),
+        (L.cfg && L.cfg.interval ? L.cfg.interval : '') + (L.cfg && L.cfg.label ? ' ' + L.cfg.label : ''));
+    });
+  }
+  ui.body.innerHTML = tapeNote + h;
 }
 
 /* ---------- scan ---------- */

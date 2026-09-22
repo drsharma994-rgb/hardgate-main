@@ -861,7 +861,17 @@ function mount(el){
            + ' \u00b7 15m ' + esc(tapeScalp || 'unread') + '). '
            + 'The cards below still print their levels, stamped AGAINST GOLD TAPE \u00b7 HELD.</div>')
         : '';
-      var html = heldNote + killedNote
+      /* Pack 907: GOLD PINE draws four legs and moved its numbers on a
+         malformed tape without saying so. One note per leg that arrived,
+         ahead of everything drawn from it. */
+      var tapeNote = '';
+      if (typeof W.hgGoldTapeSanityNote === 'function'){
+        [['rows15m','15m'],['rows1h','1h'],['rows4h','4h'],['rows1d','1d']].forEach(function(L){
+          var rws = bars && bars[L[0]];
+          if (rws && rws.length) tapeNote += W.hgGoldTapeSanityNote(W.hgGoldTapeSanity(rws), L[1]);
+        });
+      }
+      var html = tapeNote + heldNote + killedNote
         + sectionHTML('GOLD PINE — SWING SETUPS (4H)', swingTop,
           'No swing formations — check gold feed (4h bars). Layers need ~280×4h for full Pine stack.',
           { total: result.swing.length })

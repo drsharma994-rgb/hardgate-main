@@ -1703,6 +1703,10 @@ async function ngRunScan(){
     return { status: results.length ? 'refreshed' : 'empty', results: results, errors: errors,
       checklist: __ng.snap.checklist, forming: __ng.snap.forming, watch: __ng.snap.watch,
       hybridLaneStatus: __ng.snap.hybridLaneStatus,
+      /* Pack 907: the render layer cannot judge a tape it never sees. The
+         fetched packs come out with the results so the board can say when
+         its own bars are not possible candles. */
+      tapes: packsByTf,
       sessionEdge: __ng.snap.sessionEdge, history: __ng.snap.history };
   } catch(e){
     return { status: 'error', results: [], errors: [String(e && e.message || e)] };
@@ -2118,9 +2122,18 @@ function mount(el){
     if (btn) btn.disabled = false;
 
     var results = pack.results || [];
+    /* Pack 907: NEWGOLD moved on a malformed tape and reported nothing.
+       One note per fetched timeframe, above the cards drawn from it. */
+    var tapeNote = '';
+    if (typeof W.hgGoldTapeSanityNote === 'function' && pack.tapes){
+      Object.keys(pack.tapes).forEach(function(tf){
+        var rws = pack.tapes[tf] && pack.tapes[tf].rows;
+        if (rws && rws.length) tapeNote += W.hgGoldTapeSanityNote(W.hgGoldTapeSanity(rws), tf);
+      });
+    }
     var fires = results.filter(function(r){ return r.setup; });
     if (fires.length){
-      cardsEl.innerHTML = fires.map(cardHtml).join('');
+      cardsEl.innerHTML = tapeNote + fires.map(cardHtml).join('');
       /* v698: a fire is not a ticket. Every fire still renders; the tally
          says how many of them FORMED and how many are WATCH, so the reader
          can never mistake the one count for the other. */
@@ -2133,7 +2146,7 @@ function mount(el){
         + ' \u00b7 ' + new Date().toISOString().slice(11, 19) + ' UTC');
     } else {
       /* Show the no-fire rows anyway so the user sees which horizons were scanned and why they didn't fire. */
-      cardsEl.innerHTML = results.map(cardHtml).join('');
+      cardsEl.innerHTML = tapeNote + results.map(cardHtml).join('');
       emptyEl.style.display = results.length ? 'none' : 'block';
       setStat(results.length
         ? (results.length + ' horizon' + (results.length === 1 ? '' : 's') + ' scanned \u00b7 no triple-confirmation fires \u00b7 '

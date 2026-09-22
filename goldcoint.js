@@ -35,6 +35,7 @@ async function runGoldCoint(ui){
   if (ui && ui.stat) ui.stat.textContent = 'loading…';
   try{
     var gold = [], silver = [], paxg = [], xaut = [], xau = [], dxy = [];
+    var goldRows907 = [];
 
     /* The XAU and XAG series used to be MANUFACTURED. One spot price was
        fetched for each, then expanded into 150 "historical" points by a fixed
@@ -55,7 +56,11 @@ async function runGoldCoint(ui){
     if (typeof getGoldCandles === 'function'){
       try{
         var gc = await getGoldCandles('1d', 150);
-        if (gc && gc.rows && gc.rows.length) gold = gc.rows.map(function(r){ return +r.c; });
+        /* Pack 907: keep the raw bars as well as the closes. This desk only
+           reads .c, so an impossible high or low never reaches its maths —
+           but a close that is not a number, or a day that repeats, does,
+           and the reader is entitled to know the series came in that way. */
+        if (gc && gc.rows && gc.rows.length){ goldRows907 = gc.rows; gold = gc.rows.map(function(r){ return +r.c; }); }
       }catch(eG){}
     }
     if (typeof getSilverCandles === 'function'){
@@ -95,7 +100,10 @@ async function runGoldCoint(ui){
     else html += row('XAU / DXY', null, barrier);
     html += '</table>';
     html += '<div class="note" style="margin-top:10px">CONTEXT ledger only — evidence for gold mean-reversion bias, not a two-leg trade.</div>';
-    if (ui && ui.body) ui.body.innerHTML = html;
+    var tapeNote907 = '';
+    if (typeof W.hgGoldTapeSanityNote === 'function' && goldRows907.length)
+      tapeNote907 = W.hgGoldTapeSanityNote(W.hgGoldTapeSanity(goldRows907), '1d');
+    if (ui && ui.body) ui.body.innerHTML = tapeNote907 + html;
     if (ui && ui.stat) ui.stat.textContent = 'updated ' + new Date().toISOString().slice(11, 19) + ' UTC';
     __gc.ranOnce = true;
     return 'ok';

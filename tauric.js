@@ -142,7 +142,16 @@ function hgTauricPricePlan(dir){
       if (!plan || !isFinite(fin(plan.entry)) || !isFinite(fin(plan.stop))){
         return { ok: false, why: 'the plan layer declined this direction on these bars', bars: rows.length };
       }
-      return { ok: true, plan: plan, bars: rows.length,
+      /* Pack 907: the bars the plan was priced on, judged for whether they
+         are possible candles. Carried out with the plan rather than
+         re-fetched, so the note describes the tape this plan actually
+         used and not a later one. */
+      var tapeNote = '';
+      try{
+        if (typeof W.hgGoldTapeSanityNote === 'function')
+          tapeNote = W.hgGoldTapeSanityNote(W.hgGoldTapeSanity(rows), TAURIC_TF);
+      }catch(eTs){}
+      return { ok: true, plan: plan, bars: rows.length, tapeNote: tapeNote,
                lastClose: fin(rows[rows.length - 1] && rows[rows.length - 1].c) };
     })
     .catch(function(e){ return { ok: false, why: String((e && e.message) || e) }; });
@@ -438,7 +447,7 @@ function renderRun(out){
     var cost = (priced && priced.ok) ? hgTauricCostNote(priced.plan) : null;
     var rec = hgTauricRecord(rating, priced);
     __t.last.priced = priced; __t.last.rec = rec;
-    if (slot) slot.innerHTML = verdictHtml(rating, priced, cost, rec);
+    if (slot) slot.innerHTML = ((priced && priced.tapeNote) || '') + verdictHtml(rating, priced, cost, rec);
   });
 }
 
