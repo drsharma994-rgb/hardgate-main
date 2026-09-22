@@ -1588,7 +1588,11 @@ function guNorm(c){
            entry: f(c.entry), stop: f(c.stop), t1: f(c.t1), t2: f(c.t2), rr: f(isFinite(f(c.rr)) ? c.rr : c.rr1), rr2: f(c.rr2),
            tally: f(c.tally), confScore: f(c.confScore), demoted: !!c.demoted, vetoed: !!c.vetoed,
            stamps: Array.isArray(c.stamps) ? c.stamps.slice() : [], gateNotes: Array.isArray(c.gateNotes) ? c.gateNotes.slice() : [],
-           why: c.why || null, edge: (c.edge && typeof c.edge === 'object') ? { action: c.edge.action || null, n: f(c.edge.n), net: f(c.edge.net), why: c.edge.why ? String(c.edge.why) : '' } : null };
+           why: c.why || null, edge: (c.edge && typeof c.edge === 'object') ? { action: c.edge.action || null, n: f(c.edge.n), net: f(c.edge.net), why: c.edge.why ? String(c.edge.why) : '',
+             /* hg-v916: the baked net is the whole replay book, 45% of which
+                the desk no longer forms. liveWhy is that row read over the
+                trades it still forms. */
+             liveWhy: c.edge.liveWhy ? String(c.edge.liveWhy) : '' } : null };
 }
 function guSidesOk(c){
   if (!isFinite(c.entry) || !isFinite(c.stop) || !isFinite(c.t1)) return false;
@@ -1681,7 +1685,8 @@ function setupCardHTML(c, pxNow, crowned){
     + ' · STOP <b>$' + esc(fmt(c.stop)) + '</b> · TP1 <b>$' + esc(fmt(c.t1)) + '</b> (' + esc(fmt(rr1, 1)) + 'R) · TP2 <b>$' + esc(fmt(t2)) + '</b>'
     + '<br>At TP1 close 50%, stop to breakeven ($' + esc(fmt(c.entry)) + '); runner to TP2. A 15m close beyond the stop kills the idea.</div>'
     + guGeoLine(c, pxNow)
-    + '<div class="gu-measured">' + esc(measuredLine(c.confluence, c.book)) + (c.edge && c.edge.why ? ' · desk row: ' + esc(c.edge.why) : '') + '</div>'
+    + '<div class="gu-measured">' + esc(measuredLine(c.confluence, c.book)) + (c.edge && c.edge.why ? ' · desk row: ' + esc(c.edge.why) : '')
+      + (c.edge && c.edge.liveWhy ? '<br><span class="gu-live">' + esc(c.edge.liveWhy) + '</span>' : '') + '</div>'
     + (c.why ? '<div class="gu-why">' + esc(c.why) + '</div>' : '')
     + (c.demoted && c.gateNotes.length ? '<div class="gu-gate">' + esc(c.gateNotes.join(' · ')) + '</div>' : '')
     + '</div>';
@@ -1759,6 +1764,7 @@ var GU_CSS = ''
 + '.gu-chip.ok{color:#166534;border-color:rgba(22,163,74,.5);background:rgba(22,163,74,.08)}.gu-chip.warn{color:#9A3412;border-color:rgba(234,88,12,.45);background:rgba(234,88,12,.08)}'
 + '.gu-away{display:inline-block;font-size:9px;letter-spacing:.04em;color:#FDBA74;font-weight:600}'
 + '.gu-measured{font-size:10px;color:#92400E;margin-top:6px;line-height:1.55;border:1px dashed rgba(201,146,26,.5);border-radius:6px;padding:5px 8px;background:rgba(201,146,26,.06)}'
++ '.gu-live{display:inline-block;margin-top:3px;color:#7C2D12;font-weight:600}'
 + '.gu-why{font-size:10px;color:#475569;margin-top:5px;line-height:1.5}'
 + '.gu-demhead{font-size:11px;color:#9A3412;border:1px solid rgba(234,88,12,.35);border-radius:6px;padding:8px 11px;margin:8px 0;line-height:1.55;background:#FFF7ED;font-weight:600}'
 + '.gu-held{font-size:10px;color:#475569;margin-top:8px;line-height:1.6}.gu-held b{letter-spacing:.08em;font-size:9px}';
