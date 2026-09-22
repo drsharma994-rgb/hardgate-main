@@ -175,17 +175,26 @@ function runSwing(extra){
     'wrong-side plan rejected with BAD PLAN SIDES (v681/v698: reject, never rewrite invalid geometry)');
 }
 
-/* ---------- 5) cost gate wired after edge apply (demote-only) ---------- */
+/* ---------- 5) cost gate wired after edge apply (hg-v912: REJECTS) ------- */
 {
   /* 4h-wide stops never bind the XM 0.020% bar — force it with an absurd
-     venue override to prove the push() wire end-to-end. Demote-only: the
-     card still paints, it can never lead. */
+     venue override to prove the push() wire end-to-end.
+
+     hg-v912 changed the SCALP lane from demote to reject on its own
+     evidence (671 trades at -0.363R carrying three quarters of that book's
+     loss; a demote stopped none of them trading). SWING passes demoteOnly,
+     because its replay has 0 trades under the bar — nothing measured to
+     reject on — and its engine CAN produce sub-bar geometry, which a 4h
+     order-block retest in test-goldswing.mjs does. What this proves is the
+     WIRE, with a venue override absurd enough to bind a 4h stop. */
   stubVp({ entry: LAST, stop: LAST - 1.6 * A4, t1: LAST + 3 * A4 });
   const rk = runSwing({ rtCostPct: 5 });                 /* 8×5% = 40% risk bar */
   const vp = (rk.ranked || []).find(c => c && c.stratKey === 'vpbook');
   assert(!!vp && vp.costHeavy === true && vp.stamps.indexOf('COST-HEAVY') >= 0,
-    'inp.rtCostPct reaches the push() cost gate — COST-HEAVY demote-only (paints, never leads)');
-  assert(!!vp && !vp.dropped, 'cost gate never drops (gross-positive cohort discipline)');
+    'inp.rtCostPct reaches the push() cost gate — COST-HEAVY is stamped');
+  assert(!!vp && !vp.dropped && vp.demoted === true,
+    'and on SWING it stays a DEMOTE: the swing replay has 0 trades under the bar, so there is '
+    + 'nothing measured here to reject on (the scalp lane, which has 671, rejects)');
   /* at the real desk preset the same geometry passes untouched */
   stubVp({ entry: LAST, stop: LAST - 1.6 * A4, t1: LAST + 3 * A4 });
   const rk2 = runSwing();

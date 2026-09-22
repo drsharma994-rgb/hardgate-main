@@ -95,10 +95,26 @@ assert(typeof floor === 'function', 'hgGoldScalpStopFloor is exported');
 {
   const gate = W.hgGoldScalpCostGate;
   assert(typeof gate === 'function', 'hgGoldScalpCostGate is exported');
-  /* risk 0.05% of entry < 8x 0.020% = 0.16% -> demoted, stamped, never dropped */
+  /* hg-v912 CHANGED THIS CONTRACT ON EVIDENCE. The line used to read
+     "DEMOTED, never dropped (gross-positive cohort)" — the cohort IS
+     gross-positive, and that was the whole argument for keeping it. The
+     GOLD SCALP replay, live rows only at XM cost, says what gross-positive
+     bought:
+
+       whole live book                n=2193  -0.148R  t=-5.71
+       stop under the 0.16% bar       n= 671  -0.363R  t=-7.54
+       what remains once rejected     n=1522  -0.053R  t=-1.75
+
+     671 trades, 31% of the book, carrying -243.3R of its -324.3R loss. A
+     demote never stopped one of them: it only stopped them leading. The
+     setups are not wrong; the geometry cannot pay for them. */
   const c = { dir: 'long', entry: 4400, stop: 4397.8, t1: 4404, stamps: [] };
   gate(c);
-  assert(c.demoted === true && !c.dropped, 'sub-0.16%-risk geometry is DEMOTED, never dropped (gross-positive cohort)');
+  assert(c.dropped === true, 'sub-0.16%-risk geometry is REJECTED (hg-v912: demote did not stop it trading)');
+  assert(c.costHeavy === true && (c.stamps || []).indexOf('COST-HEAVY') >= 0,
+    'and is stamped COST-HEAVY with the reason on it');
+  assert(/0\.125R/.test(String(c.reason || '')),
+    'the reason names the fee share of the risk, not just a threshold');
   assert(c.stamps.indexOf('COST-HEAVY') >= 0, 'COST-HEAVY stamp present');
   assert(Array.isArray(c.gateNotes) && /0\.125R/.test(c.gateNotes.join(' ')), 'gate note cites the 0.125R cost bar');
   /* risk 0.32% of entry -> untouched */
