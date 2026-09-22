@@ -688,6 +688,7 @@ var GS_CSS = ''
 + '.gsx-wrow.promoted .gsx-wst{color:#0891B2;border-color:rgba(8,145,178,.45);background:rgba(8,145,178,.10)}'
 + '.gsx-wrow.idle .gsx-wst{color:#1E293B;border-color:#E2E8F0;background:#F8FAFC}'
 + '.gsx-silent{font-size:11px;color:#9A3412;border:1px solid rgba(234,88,12,.35);border-radius:6px;padding:9px 11px;margin:12px 0;line-height:1.55;background:#FFF7ED;font-weight:500}'
++ '.gsx-coverage{font-size:11px;color:#475569;border:1px dashed rgba(71,85,105,.35);border-radius:6px;padding:9px 11px;margin:8px 0 12px;line-height:1.55;background:rgba(71,85,105,.04)}'
 + '.gsx-silent b{letter-spacing:.12em;font-weight:800;color:#9A3412}'
 + '.gsx-weekend-wrap,.gsx-weekend-wrap{margin:0 0 12px}'
 + '.gsx-weekend,.gsx-weekend{font-size:11px;border-radius:8px;padding:10px 12px;line-height:1.55;margin:12px 0;border:1px solid}'
@@ -1453,8 +1454,43 @@ function whySilentText(o){
   else if (tail) lead = lead + ' · ' + tail;
   return lead;
 }
+/* hg-v920 — AN EMPTY LEADER BOARD IS THE DESIGNED OUTCOME, AND NOTHING SAID SO.
+
+   Reported as a fault: the desk "only shows weak setups". It is not the tape.
+   Measured on this desk's own replay, of everything it forms: 21.6% is
+   suppressed and never becomes a card, 62.9% is DEMOTED — it paints, and can
+   never be MOST PROBABLE — and 15.5% can lead. 94.1% of settled rows carry a
+   demote, and the six highest-volume detectors (HVN, opening range, BOS
+   align, NY exhaustion, EMA ribbon, Asian breakout) are every one of them
+   demote or suppress. MOST PROBABLE fired 111 times in 5,760 scans: once in
+   51.
+
+   A reader cannot tell that from silence, so they read "broken". The counts
+   are baked, not computed from the current scan — they describe the policy,
+   which is what the silence is caused by, not today's board.
+
+   Three attempts to justify unblocking any of it were tested and failed; the
+   refusals are recorded in goldind.js above HG_GOLD_SETUP_EDGE. Nothing here
+   loosens anything — it states the arithmetic that produces the quiet. */
+function goldCoverageNoteHTML(){
+  /* TWO DENOMINATORS, KEPT APART. 84.5% is the share of formed VOLUME that
+     cannot lead (62.9 demote + 21.6 suppress). 94.1% is the share of SETTLED
+     rows carrying a demote — a different population, because suppressed kinds
+     settle in a shadow ledger rather than the main book. Adding them together
+     was the first draft of this line and it was nonsense. */
+  return '<div class="gsx-coverage"><b>WHY SO FEW LEADERS</b> — '
+    + '<b>84.5%</b> of what this desk forms can never be MOST PROBABLE: 62.9% is demoted '
+    + '(it paints, it cannot lead) and 21.6% is suppressed (it never becomes a card). '
+    + 'The six highest-volume detectors — HVN, opening range, BOS align, NY exhaustion, '
+    + 'EMA ribbon, Asian breakout — are every one of them demote or suppress, each on its own '
+    + 'measured record at the venue. On the replay MOST PROBABLE fired <b>once in 51 scans</b>. '
+    + 'A quiet board is that policy working, not a fault. Three ways of arguing the policy is '
+    + 'too strict were tested and none survived out of sample.</div>';
+}
+
 function whySilentHTML(ws){
-  return '<div class="gsx-silent"><b>WHY SILENT</b> — ' + esc(ws) + '</div>';
+  return '<div class="gsx-silent"><b>WHY SILENT</b> — ' + esc(ws) + '</div>'
+    + goldCoverageNoteHTML();
 }
 
 function goldWeekendPanelHTML(ro){

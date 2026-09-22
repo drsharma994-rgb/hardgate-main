@@ -9084,9 +9084,16 @@ terse status, and never launches a first-time scan on a global refresh.
     };
     var A = hgOgCohortClaim('A');
     var aRec = hgOgClaimRecordTxt(A, { net: true });
-    var capA = aRec
+    /* hg-v920: AND THE SCAN PATH CANNOT REACH THIS CELL AT ALL.
+       'engine grade-A scalar only' was true and too quiet: a reader watching
+       scan cards waits for a tier the scan arithmetic cannot award. Measured
+       on the replay, the scan score tops out at 78 and ZERO of 9,897 rows
+       reached 85. Say the number, so waiting for it is a choice rather than
+       a misunderstanding. */
+    var capA = (aRec
       ? ('engine grade-A scalar only — replay ' + aRec + (A.thin ? '' : ' on scalps'))
-      : 'engine grade-A scalar only';
+      : 'engine grade-A scalar only')
+      + ' · SCAN CARDS NEVER REACH THIS: scan scoring tops out near 78 and 0 of 9,897 replay rows scored 85';
     /* THE TIER LABELS WERE DARK-THEME COLOURS ON A WHITE CARD.
 
        Each cell tints its own background at ~6.7% alpha, which over

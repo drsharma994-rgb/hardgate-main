@@ -1245,6 +1245,51 @@ var GST_NAME = {
  * NOT ONE ACTION CHANGES, and that was tested rather than assumed — see the
  * refusal recorded above the demote rows.
  */
+/* hg-v920 — WHAT THIS TABLE COSTS IN COVERAGE, AND THREE ATTEMPTS TO BUY IT BACK.
+
+   Reported symptom: GOLD SCALP and OMNIGOLD "only show weak setups". It is
+   not the tape. Measured on the replay, of everything GOLD SCALP forms:
+
+     suppress                 21.6%   never becomes a card
+     demote                   62.9%   paints, but can never be MOST PROBABLE
+     prefer / neutral / none  15.5%   can lead
+
+   So 94.1% of settled rows carry a demote, 84.5% cannot lead at all, and the
+   six highest-volume detectors — hvn, openrange, bosalign, nyexh, ribbon,
+   asian — are every one of them demote or suppress. 1,341 grade-A setups are
+   stamped demoted-A: grade A, painted, barred from leading. MOST PROBABLE
+   fires 111 times in 5,760 scans, once in 51. An empty leader board is the
+   designed outcome of this table, not a fault.
+
+   Whether that is RIGHT is a separate question, and three ways of arguing it
+   is not were tested. All three failed.
+
+   1. "The rows it crowns do worse than the rows it passes over." True on the
+      whole book: crowned -0.231R (n=111) against demoted -0.146R (n=2,064).
+      It BREAKS at every out-of-sample split, where crowned is the better of
+      the two. The whole-book gap is an early-period artefact.
+
+   2. "Tally separates outcomes inside a demoted mechanic, so a blanket
+      per-mechanic demote discards per-setup information." Breaks at the 50%
+      split; t of 1.12 and 0.68 at the others. Nothing there.
+
+   3. "Grade does." This one looked real — among demoted rows grade A beat
+      grade B/C at ALL THREE splits, +0.065 / +0.228 / +0.219, clearing
+      t>1.96 twice. It is the strongest selection signal this desk has shown,
+      and it is an artefact of the test. THE SPLITS ARE NESTED: the 70% test
+      set sits inside the 60%, which sits inside the 50%, so the final window
+      is counted three times. On four DISJOINT windows grade A is WORSE in
+      three (-0.379 t=-2.76, -0.137, -0.139) and better only in the last —
+      the one all three nested sets contained. Pooled on the population the
+      desk forms today, grade A is -0.082R (t=-2.09) against B/C at +0.007R.
+
+   Nothing is unblocked. The lead invariant stands, and hg-v699 already
+   removed a fallback of this shape after measuring it at -1.49R/trade.
+   scripts/disjoint-windows.mjs is the tool that settled it, and the nested
+   splits it replaces were used by hg-v914, v915, v916 and v918 — re-checked
+   there on disjoint windows, every one of those refusals still stands, so
+   the flaw was latent rather than load-bearing. It would have shipped this
+   one. */
 var HG_GOLD_SETUP_EDGE = {
   scalp: {
     fvg: { n: 245, gross: 0.19, net: -0.211, action: 'suppress',
