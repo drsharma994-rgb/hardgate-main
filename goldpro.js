@@ -820,7 +820,8 @@ async function runGoldPro(ui){
        malformed tape in the pack-907 harness, but the check belongs on the
        tape rather than on what that harness happened to exercise. A plain
        window lookup here — this file's W is function-scoped elsewhere. */
-    var tapeNote907 = '';
+    /* hg-v913: this desk reads the records it writes. */
+    var tapeNote907 = (typeof W.hgGoldFwdNote === 'function' ? W.hgGoldFwdNote('goldpro') : '');
     try{
       var __tn = (typeof window !== 'undefined') && window.hgGoldTapeNotes;
       if (typeof __tn === 'function'){

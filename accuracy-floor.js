@@ -459,6 +459,13 @@ W.hgAccuracyText = hgAccuracyText;
 W.hgAccuracyFloorHtml = hgAccuracyFloorHtml;
 W.hgAccuracyFloorPaint = hgAccuracyFloorPaint;
 W.hgAccuracyRoster = hgAccuracyRoster;
+/* hg-v913: the roster MAP and its family resolver, so a second reader of the
+   forward log (gold-forward-read.js) resolves the same pool names from the
+   same list. Two rosters would be two chances to name different pools, and
+   the prefix families (GOLDPINE:*, NEWGOLD:*) can only be resolved from the
+   log by this function. */
+W.HG_ACCURACY_TABS = HG_ACCURACY_TABS;
+W.hgAccuracyPools = hgAccuracyPools;
 W.hgAccuracyUnclaimed = hgAccuracyUnclaimed;
 W.hgAccuracyRosterHtml = hgAccuracyRosterHtml;
 

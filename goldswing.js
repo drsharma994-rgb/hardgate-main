@@ -3367,7 +3367,9 @@ async function runScan(ui, scanSt){
     /* Pack 907: the tape's own honesty comes first. GOLD SWING was the
        LARGEST mover on a malformed feed — a third less rendered output on a
        tape with one bar in twenty inverted — and said nothing about it. */
-    var mixedBanner = (typeof W.hgGoldTapeNotes === 'function'
+    /* hg-v913: this desk reads the records it writes. */
+    var mixedBanner = (typeof W.hgGoldFwdNote === 'function' ? W.hgGoldFwdNote('goldswing') : '')
+      + (typeof W.hgGoldTapeNotes === 'function'
         ? W.hgGoldTapeNotes(gold && gold.rows4h, '4h') : '')
       + goldMixedFeedBannerHtml(gold);
     var uniHtml = goldUniformPanelHtml(display, gold.rows4h, 'SWING', deskTape);

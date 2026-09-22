@@ -447,7 +447,9 @@ function renderRun(out){
     var cost = (priced && priced.ok) ? hgTauricCostNote(priced.plan) : null;
     var rec = hgTauricRecord(rating, priced);
     __t.last.priced = priced; __t.last.rec = rec;
-    if (slot) slot.innerHTML = ((priced && priced.tapeNote) || '') + verdictHtml(rating, priced, cost, rec);
+    /* hg-v913: this desk reads the records it writes. */
+    if (slot) slot.innerHTML = (typeof W.hgGoldFwdNote === 'function' ? W.hgGoldFwdNote('tauric') : '')
+      + ((priced && priced.tapeNote) || '') + verdictHtml(rating, priced, cost, rec);
   });
 }
 

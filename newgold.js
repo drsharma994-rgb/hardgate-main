@@ -2125,7 +2125,8 @@ function mount(el){
     var results = pack.results || [];
     /* Pack 907: NEWGOLD moved on a malformed tape and reported nothing.
        One note per fetched timeframe, above the cards drawn from it. */
-    var tapeNote = '';
+    /* hg-v913: this desk reads the records it writes. */
+    var tapeNote = (typeof W.hgGoldFwdNote === 'function' ? W.hgGoldFwdNote('newgold') : '');
     if (typeof W.hgGoldTapeNotes === 'function' && pack.tapes){
       Object.keys(pack.tapes).forEach(function(tf){
         var rws = pack.tapes[tf] && pack.tapes[tf].rows;
