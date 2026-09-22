@@ -128,6 +128,7 @@ import { fileURLToPath } from 'node:url';
 import { xmOrderType, ogXmBarTouchesEntry, ogXmFillDepth } from '../lib/omnigold-xm-bot-backtest.mjs';
 import { isPendingOrder, partitionProvable, unprovableNote } from '../lib/unprovable-fill.mjs';
 import { gateKeyOrder, encodeGateMask } from '../lib/gate-mask.mjs';
+import { klinesUrl, klinesRouteNote } from '../lib/klines-source.mjs';
 
 const ROOT = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 const CACHE_DIR = path.join(ROOT, 'scripts', '.bt-cache');
@@ -194,9 +195,10 @@ async function fetchKlines(symbol, interval, target){
   let out = [], endTime;
   while (out.length < target){
     const lim = Math.min(1000, target - out.length + 2);
-    let url = 'https://api.binance.com/api/v3/klines?symbol=' + symbol
-            + '&interval=' + interval + '&limit=' + lim;
-    if (endTime) url += '&endTime=' + endTime;
+    /* hg-v921: route is a parameter now — see lib/klines-source.mjs.
+       Unset, this is the same api.binance.com request as before. */
+    const { url } = klinesUrl({ symbol: symbol, interval: interval,
+                                limit: lim, endTime: endTime });
     const batch = await jget(url);
     if (!Array.isArray(batch) || !batch.length) break;
     out = batch.concat(out);
@@ -234,7 +236,7 @@ async function cachedKlines(symbol, interval, target){
       }
     } catch (e) { /* refetch */ }
   }
-  console.log('  fetching ' + symbol + ' ' + interval + ' x' + target + ' from Binance spot...');
+  console.log('  fetching ' + symbol + ' ' + interval + ' x' + target + ' — ' + klinesRouteNote());
   const rows = await fetchKlines(symbol, interval, target);
   fs.writeFileSync(file, JSON.stringify({ fetchedAt: Date.now(), symbol, interval, target, rows }));
   console.log('  got ' + rows.length + ' bars ('

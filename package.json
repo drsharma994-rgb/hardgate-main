@@ -27,6 +27,8 @@
     "og:resolve-1m": "node scripts/resolve-unprovable-1m.mjs",
     "og:audit": "node scripts/geometry-audit.mjs",
     "og:multi": "node scripts/backtest-multi.mjs --run --symbols=PAXGUSDT,XAUTUSDT",
-    "test": "node scripts/run-tests.mjs"
+    "test": "node scripts/run-tests.mjs",
+    "gold:rebake": "node scripts/backtest-goldscalp.mjs && node scripts/backtest-omnigold.mjs && node scripts/omnigold-evidence-bake.mjs --write && node scripts/rebake-gold-literals.mjs --write && npm test",
+    "gold:literals": "node scripts/rebake-gold-literals.mjs"
   }
 }
