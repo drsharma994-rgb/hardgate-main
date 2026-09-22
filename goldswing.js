@@ -993,6 +993,12 @@ function bannerHTML(best, ranked){
     + '<div><i>TP3</i><b>$' + pxF(best.t3) + '</b><u>' + fmtF(best.rr3, 1) + 'R — runner</u></div>'
     + '</div>'
     + '<div class="gsw-why"><b>WHY THIS ONE LEADS</b> — ' + esc(tallyTxt) + '.</div>'
+    /* hg-v911: the swing lane has its own reason to say this out loud —
+       every one of the 277 settled trades in its replay was demoted, so the
+       crown was never awarded there at all and the desk has no measurement
+       of its own leader. What it does have is the grade, and grade A rests
+       on NINE settled swing trades. */
+    + (typeof W.hgGoldRankEvidenceNote === 'function' ? W.hgGoldRankEvidenceNote('swing', 'gradeA') : '')
     + tallyChips(best)
     + '<div class="gsw-whyline">' + esc(best.why || '') + '</div>'
     + '<div class="gsw-inv"><b>INVALIDATION</b> — ' + esc(best.invalidates || 'a 4h close beyond the stop') + '. Hard stop $' + pxF(best.stop) + ' — never widen it.</div>'
