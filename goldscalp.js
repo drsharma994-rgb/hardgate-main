@@ -956,6 +956,13 @@ function bannerHTML(best, ranked){
     + '<div><i>TP2</i><b>$' + pxF(best.t2) + '</b><u>' + fmtF(best.rr2, 1) + 'R — runner</u></div>'
     + '</div>'
     + '<div class="gsx-why"><b>WHY THIS ONE LEADS</b> — ' + esc(tallyTxt) + '.</div>'
+    /* hg-v911: the sentence above says why this card leads. This says what
+       the desk's own replay measured about leading being worth anything —
+       MOST PROBABLE ran -0.231R against -0.154R for the rest over 2,445
+       settled scalp trades, at t=-0.74, which clears 95% in NEITHER
+       direction. The banner still leads the board; it no longer reads as a
+       measured claim. */
+    + (typeof W.hgGoldRankEvidenceNote === 'function' ? W.hgGoldRankEvidenceNote('scalp', 'mp') : '')
     + tallyChips(best)
     + '<div class="gsx-whyline">' + esc(best.why || '') + '</div>'
     + '<div class="gsx-inv"><b>INVALIDATION</b> — ' + esc(best.invalidates || 'a 15m close beyond the stop') + '. Hard stop $' + pxF(best.stop) + ' — never widen it.</div>'
