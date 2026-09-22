@@ -131,7 +131,19 @@ ok(W.HG_GOLD_SETUP_EDGE && W.HG_GOLD_SETUP_EDGE.scalp.fvg.action === 'suppress',
   ok(!p.dropped && !p.demoted && p.edgeBoost >= 2, 'swing p9volbar prefer — fee-survivor on both desks (hg-v700)');
   const r = { dir: 'long', entry: 2650, stop: 2600, t1: 2750, stratKey: 'ribbon', strategy: '4H EMA RIBBON PULLBACK' };
   W.hgGoldSetupEdgeApply(r, { swing: true });
-  ok(!r.dropped && !r.demoted && !(r.edgeBoost >= 2) && !r.edge, 'swing ribbon NEUTRAL — old demote contradicted, under the prefer bar (hg-v700)');
+  /* hg-v909 CHANGED THIS CONTRACT DELIBERATELY. The line used to require
+     `!r.edge` — neutral meant the candidate carried no edge data at all,
+     which made a mechanic measured 23 times indistinguishable from one
+     nobody has ever measured. That is the defect, not the spec. Neutral now
+     means: the measurement IS carried, and nothing about eligibility or rank
+     changes. Both halves are asserted, because either one alone would let
+     the bug back in. */
+  ok(!r.dropped && !r.demoted && !(r.edgeBoost >= 2),
+     'swing ribbon NEUTRAL — old demote contradicted, under the prefer bar (hg-v700): still no demote, still no boost');
+  ok(r.edge && r.edge.action === 'neutral' && r.edge.n === 23 && r.edge.net === 0.228,
+     'and hg-v909 now CARRIES the measurement (n=23, +0.228R at XM) instead of dropping the row');
+  ok(r.edgeMeasured === true && (r.stamps || []).indexOf('EDGE MEASURED') >= 0,
+     'stamped EDGE MEASURED, so measured-and-flat reads differently from never-measured');
   const pb = { dir: 'long', entry: 2650, stop: 2600, t1: 2750, stratKey: 'pullback', strategy: '4H TREND PULLBACK' };
   W.hgGoldSetupEdgeApply(pb, { swing: true });
   ok(pb.demoted === true && !pb.dropped, 'swing pullback demoted on its OWN row (n=18 −0.27 at XM, hg-v700)');
@@ -146,14 +158,22 @@ ok(W.HG_GOLD_SETUP_EDGE && W.HG_GOLD_SETUP_EDGE.scalp.fvg.action === 'suppress',
 
 /* hg-v700: SWING bos is NEUTRAL. The inline 'bos' prefer pseudo-row quoted
    numbers (n=2 net 1.2) no baked table row backed — a boost fabricated in
-   code. The 140-day swing replay measured bos n=8 +0.542R/trade net XM
-   (scripts/backtest-goldswing-results.json byStrategy.bos): positive but far
-   too thin for an honest prefer bar — no row, no boost, no demote, no drop. */
+   code. The 140-day swing replay measured bos positive but far too thin for
+   an honest prefer bar — no boost, no demote, no drop. (hg-v909: the figure
+   quoted here was n=8 +0.542R from the PRE-v700 file; the current bake says
+   n=9 +0.369R, and the table now carries that as a neutral row.) */
 {
   const c = { dir: 'long', entry: 2650, stop: 2600, t1: 2750, stratKey: 'bos', strategy: '4H BOS bullish at 2640 with EMA stack' };
   W.hgGoldSetupEdgeApply(c, { swing: true });
-  ok(!c.dropped && !c.demoted && !(c.edgeBoost >= 2) && !c.edge,
-    'swing bos stratKey is NEUTRAL — fabricated prefer pseudo-row removed (hg-v700)');
+  ok(!c.dropped && !c.demoted && !(c.edgeBoost >= 2),
+    'swing bos stratKey is NEUTRAL — fabricated prefer pseudo-row removed (hg-v700): no boost, no demote, no drop');
+  /* hg-v909: the prose above cited n=8 +0.542R. That is the PRE-v700 file
+     (backtest-goldswing-results-pre-v700.json). The current bake it names
+     says n=9 +0.369R, and the row now carries THAT — a comment citing a file
+     for a number the file does not contain is how a stale figure survives a
+     re-bake. */
+  ok(c.edge && c.edge.action === 'neutral' && c.edge.n === 9 && c.edge.net === 0.369,
+    'and the measurement hg-v700 described only in prose is now carried as data, at the CURRENT bake numbers');
   const cl = { dir: 'long', entry: 2650, stop: 2600, t1: 2750, stratKey: 'engbridge', strategy: '4H BOS ALIGNMENT' };
   W.hgGoldSetupEdgeApply(cl, { swing: true });
   ok(!cl.dropped && !cl.demoted && !(cl.edgeBoost >= 2) && !cl.edge,
