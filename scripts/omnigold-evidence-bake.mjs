@@ -341,6 +341,21 @@ function concurrency(pool){
 }
 
 const WIDTH = 'week';   /* positions run up to 5 days, so day clusters overlap */
+
+/* hg-v919 — stop width as a share of entry, the ONLY input to costR at a
+   fixed venue. Bands are the ones the shipped gates already sit on: 0.16 is
+   the hg-v912 GOLD SCALP reject, and 0.133 / 1.733 are what OMNIGOLD's own
+   0.15R scalp ceiling demands at XM and PAXG. No band edge is invented to
+   make a pattern appear. */
+const STOP_BAND_EDGES = [0.133, 0.16, 0.32, 0.50, 0.867, 1.733];
+function stopBand(r){
+  const e = r.entry, s2 = r.stop;
+  if (!(typeof e === 'number' && typeof s2 === 'number' && e > 0)) return null;
+  const pct = Math.abs(e - s2) / e * 100;
+  if (!(pct > 0)) return null;
+  for (const edge of STOP_BAND_EDGES) if (pct < edge) return '<' + edge;
+  return '>=' + STOP_BAND_EDGES[STOP_BAND_EDGES.length - 1];
+}
 const seq = sequential(formed);
 const seqTickets = sequential(formed.filter(r => r.ticket));
 
@@ -477,7 +492,22 @@ const bake = {
      actually wants. One position at a time, tickets only, both ends. */
   sequentialTicketsByHorizon: groupBy(seqTickets, r => r.horizon, WIDTH, 10),
   sequentialTicketsByHorizonUpper: groupBy(sequential(formedUpper.filter(r => r.ticket)),
-                                           r => r.horizon, WIDTH, 10)
+                                           r => r.horizon, WIDTH, 10),
+
+  /* hg-v919 — DOES A TIGHTER STOP BUY ANYTHING?
+
+     costR = rtCostPct / stopPct exactly (hgOgCostDrag computes it that way),
+     so at a fixed venue the fee load in R is a DETERMINISTIC function of stop
+     width and nothing else. That makes one question decide whether the cost
+     gates are a tax or a correction: does GROSS R rise as stops tighten?
+     If it does, the fee is buying a better entry. If it is flat, the fee is
+     pure loss and the widest geometry the structure allows is strictly better.
+
+     Banded on the sequential book at both bounds, because a stop-width band
+     is exactly the kind of cell hg-v918 showed can be created by the
+     fill-ambiguity bound rather than by the market. */
+  sequentialByStopBand: groupBy(seq, stopBand, WIDTH, 10),
+  sequentialByStopBandUpper: groupBy(sequential(formedUpper), stopBand, WIDTH, 10)
 };
 
 if (JSON_OUT){ console.log(JSON.stringify(bake, null, 2)); process.exit(0); }
@@ -544,6 +574,23 @@ console.log('    a cell LOSES only when both ends agree — a verdict never come
       + ' lower n=' + String(a ? a.n : 0).padStart(4) + ' net@XM=' + (a ? r3(a.netR_xm) : '   —').padStart(8)
       + '  |  upper n=' + String(b ? b.n : 0).padStart(4) + ' net@XM=' + (b ? r3(b.netR_xm) : '   —').padStart(8)
       + '  ' + (both ? 'LOSES AT BOTH ENDS' : (a && b ? 'ends disagree — no verdict' : 'thin at one end')));
+  }
+}
+console.log('\n  DOES A TIGHTER STOP BUY ANYTHING? gross R by stop width, both bounds');
+console.log('    costR = rt / stopPct, so the fee is fixed by geometry. If gross is flat,');
+console.log('    the fee buys nothing and the widest structural stop is strictly better.');
+{
+  const lo = bake.sequentialByStopBand, hi = bake.sequentialByStopBandUpper;
+  const keys = [...new Set([...Object.keys(lo), ...Object.keys(hi)])]
+    /* '>=1.733' is the LAST band, not the first: sort by edge, then put the
+       open-ended one after the closed one that shares its number. */
+    .sort((a, b) => (parseFloat(a.replace(/[<>=]/g, '')) - parseFloat(b.replace(/[<>=]/g, '')))
+                 || (a.startsWith('>=') ? 1 : -1));
+  for (const k of keys){
+    const a = lo[k], b = hi[k];
+    console.log('    stop% ' + k.padEnd(9)
+      + ' lower n=' + String(a ? a.n : 0).padStart(4) + ' gross=' + (a ? r3(a.grossR) : '   —').padStart(8)
+      + '  |  upper n=' + String(b ? b.n : 0).padStart(4) + ' gross=' + (b ? r3(b.grossR) : '   —').padStart(8));
   }
 }
 console.log('\n  SEQUENTIAL TICKET BOOK BY HORIZON AT BOTH BOUNDS');

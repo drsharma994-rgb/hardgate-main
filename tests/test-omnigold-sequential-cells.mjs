@@ -226,9 +226,28 @@ console.log('6. the bake records the rule it is obeying');
   for (const k of ['SCALP/FAIR', 'SCALP/STRONG', 'SCALP/WEAK', 'SWING/FAIR'])
     ok(stdout.includes(k), 'the printed table shows ' + k);
   {
-    /* every printed row must carry BOTH a lower and an upper figure */
-    const rows = stdout.split('\n').filter((l) => /lower n=.*\|.*upper n=/.test(l));
-    eq(rows.length, 6, 'six rows print at both bounds (four cells + two horizons)');
+    /* Every printed row must carry BOTH a lower and an upper figure — scoped
+       to THIS pack's two sections. hg-v919 added a stop-width table in the
+       same both-bounds shape, and a bare scan of the whole stdout counted its
+       rows too (6 -> 13) and then failed on them for not carrying a verdict
+       word they were never meant to have. Cut each section at the next
+       blank-line-separated heading rather than matching the file. */
+    const section = (head) => {
+      /* sections are blank-line separated, so stop at the first blank line
+         after the heading rather than running to end of output */
+      const after = (stdout.split(head)[1] || '').split('\n').slice(1);
+      const out = [];
+      for (const line of after){
+        if (!line.trim()) break;
+        if (/lower n=.*\|.*upper n=/.test(line)) out.push(line);
+      }
+      return out;
+    };
+    const cellRows = section('SEQUENTIAL BOOK BY CELL AT BOTH BOUNDS');
+    const horizonRows = section('SEQUENTIAL TICKET BOOK BY HORIZON AT BOTH BOUNDS');
+    eq(cellRows.length, 4, 'four cells print at both bounds');
+    eq(horizonRows.length, 2, 'and two horizons');
+    const rows = cellRows.concat(horizonRows);
     ok(rows.every((l) => /ends disagree — no verdict/.test(l)),
        'and every one of them reads as disagreeing, because not one loses at both ends');
     ok(!/LOSES AT BOTH ENDS/.test(stdout.split('SEQUENTIAL BOOK BY CELL AT BOTH BOUNDS')[1] || ''),

@@ -3829,6 +3829,14 @@ terse status, and never launches a first-time scan on a global refresh.
               + (costR * 100).toFixed(0) + '% of 1R (ceiling ' + (costCeil * 100).toFixed(0) + '%)'
               + (costR > costCeil ? ' — the spread would eat most of the edge'
                  : (costR > COST_WARN_R ? ' — material drag, size accordingly' : ''));
+      /* hg-v919: when it VETOES, say what the ceiling actually demands. A
+         reader told "43% of 1R (ceiling 15%)" knows the trade failed; they do
+         not know the rule is asking for a $78 stop because the venue is PAXG,
+         and would ask $6 at XM. The ratio is the rule; the width is the ask. */
+      if (costR > costCeil){
+        var demand = hgOgCostCeilingNote({ scalp: x.sessionHard === true, px: planEntry, venueCost: vc });
+        if (demand) costWhy += ' · ' + demand;
+      }
     }
     gates.push({ key:'cost-drag', hard: priceable, pass: cost, why: costWhy });
 
@@ -8148,6 +8156,63 @@ terse status, and never launches a first-time scan on a global refresh.
        [n, winRate, netR_xm] at each bound, from the evidence file's
        sequentialByCell / sequentialByCellUpper and the horizon twins.
        Re-derive: node scripts/omnigold-evidence-bake.mjs */
+    /* hg-v919 — THE INFERENCE THE COST ARITHMETIC INVITES, AND WHY IT IS NOT
+       TAKEN.
+
+       costR = rtCostPct / stopPct exactly. At a fixed venue the fee load in R
+       is a DETERMINISTIC function of stop width and of nothing else — not the
+       mechanic, not the session, not the direction. That is arithmetic, it
+       holds at both bounds, and it is what hgOgCostCeilingDemand inverts.
+
+       One step further is the obvious conclusion: if the fee is fixed by
+       geometry, and geometry buys nothing, then the widest stop the structure
+       allows is strictly better and the desk should be pushing stops out.
+       THAT STEP IS NOT SUPPORTED, and the reason is specific rather than a
+       shrug about sample size.
+
+       Gross R by stop-width band on the sequential book, at both ends of the
+       fill-ambiguity interval, [n, grossR]:
+
+         band        lower bound          upper bound
+         <0.133%     -0.600R (n=30)       +0.500R (n=18)
+         <0.16%      -0.471R (n=17)       +0.909R (n=11)
+         <0.32%      -0.051R (n=79)       +0.500R (n=48)
+         <0.50%      -0.195R (n=41)       +0.250R (n=36)
+         <0.867%     -0.109R (n=62)       -0.017R (n=47)
+         <1.733%     -0.080R (n=36)       -0.033R (n=36)
+         >=1.733%    +0.013R (n=10)       +0.026R (n=11)
+
+       The slope FLIPS SIGN between the ends. At the lower bound gross rises
+       as stops widen, which says tighten nothing and widen everything. At the
+       upper bound it falls, which says the opposite. Both cannot be true, and
+       the mechanism is not mysterious: a tight stop is precisely the trade
+       most likely to resolve on its own fill bar, so the tight bands are
+       where the unprovable-fill rows concentrate and where the bound swings
+       hardest. This walk cannot answer the question, and a re-bake on a feed
+       with intrabar sequence is what would.
+
+       So nothing here widens a stop, moves a ceiling, or ranks a setup. The
+       table is carried so the next reader who derives the same tempting
+       conclusion from the same correct arithmetic finds this underneath it.
+       [n, grossR] per band at each bound, from the evidence file's
+       sequentialByStopBand / sequentialByStopBandUpper. */
+    stopBandGross: {
+      '<0.133': { lo: [30, -0.6], hi: [18, 0.5] },
+      '<0.16': { lo: [17, -0.4706], hi: [11, 0.9091] },
+      '<0.32': { lo: [79, -0.0506], hi: [48, 0.5] },
+      '<0.5': { lo: [41, -0.1951], hi: [36, 0.25] },
+      '<0.867': { lo: [62, -0.1093], hi: [47, -0.0166] },
+      '<1.733': { lo: [36, -0.0796], hi: [36, -0.0326] },
+      '>=1.733': { lo: [10, 0.0128], hi: [11, 0.0262] }
+    },
+    /* What the ceiling costs the book at each venue, measured on the replay.
+       Share of rows the cost gate alone vetoes — stable across the fill
+       bounds (95.9% / 44.4% at the lower one), because the bound deletes
+       rows without changing anyone's stop. */
+    costCeilingVeto: {
+      SCALP: { XM: 0.164, PAXG: 0.961 },
+      SWING: { XM: 0.001, PAXG: 0.474 }
+    },
     sequentialCells: {
       'SCALP/FAIR': { lo: [210, 0.2414, -0.3434], hi: [156, 0.404, 0.1449] },
       'SCALP/STRONG': { lo: [37, 0.3889, 0.1491], hi: [24, 0.4167, 0.2122] },
@@ -8977,7 +9042,10 @@ terse status, and never launches a first-time scan on a global refresh.
          the one a person could hold, at both ends of the fill interval. The
          sequential book has been in the committed evidence since the v12 bake
          and nothing has ever rendered it. */
-      + hgOgSequentialCellsHtml();
+      + hgOgSequentialCellsHtml()
+      /* hg-v919: and what the cost ceiling asks at the venue in force —
+         silent everywhere else on the default one. */
+      + hgOgCostCeilingPanelHtml();
   }
 
   /* The legend's honest header — above the four tier cells, in warn style,
@@ -9105,6 +9173,62 @@ terse status, and never launches a first-time scan on a global refresh.
      hgOgVenueCost() result to price a specific venue; omitted, the ACTIVE
      venue is read (PAXG conservative fallback — identical numbers to before
      the venue model existed). Null-safe: non-finite -> null, never a throw. */
+/* hg-v919 — THE CEILING IS A STOP WIDTH, AND IT DEPENDS ENTIRELY ON VENUE.
+
+     costR = rtCostPct / stopPct exactly — hgOgCostDrag computes it that way
+     and so does the cost gate. Invert it and the two ceilings stop being
+     abstract fractions of 1R and become a minimum stop the geometry must
+     reach:
+
+       lane    ceiling      at XM (0.020% RT)       at PAXG (0.26% RT)
+       SCALP     0.15R    >= 0.133%  ($6 / $4500)   >= 1.733%  ($78 / $4500)
+       SWING     0.30R    >= 0.067%  ($3 / $4500)   >= 0.867%  ($39 / $4500)
+
+     The rule is venue-neutral in R, which is correct and is the point of
+     expressing it in R. What it is NOT is venue-neutral in what it demands
+     of a chart: at PAXG a gold scalp needs a $78 stop, and the same rule
+     asks $6 at XM. On the replay that gap is the whole desk — the ceiling
+     alone vetoes 96.1% of scalp rows and 47.4% of swing rows at PAXG,
+     against 16.4% and 0.1% at XM (stable at both fill bounds: 95.9% /
+     44.4%). PAXG is the fail-closed default, so a reader who has never
+     touched the venue selector is running the strict one and reading an
+     empty scan as a quiet market.
+
+     Returns null when the venue or lane cannot be resolved — absent stays
+     absent, and no minimum is invented for a venue this desk does not price. */
+  function hgOgCostCeilingDemand(opts){
+    try{
+      opts = opts || {};
+      var vc = (opts.venueCost && isFinite(fin(opts.venueCost.rtCostPct)))
+        ? opts.venueCost : hgOgVenueCost();
+      var rt = fin(vc && vc.rtCostPct);
+      if (!(isFinite(rt) && rt > 0)) return null;
+      var scalp = opts.scalp === true;
+      var ceil = scalp ? COST_VETO_R_SCALP : COST_VETO_R;
+      if (!(isFinite(ceil) && ceil > 0)) return null;
+      var minPct = rt / ceil;
+      if (!isFinite(minPct)) return null;
+      /* dollars are a READING AID and need a price. No price, no dollars —
+         never a default spot silently standing in for the live one. */
+      var px = fin(opts.px);
+      var minUsd = (isFinite(px) && px > 0) ? px * minPct / 100 : null;
+      return { venue: String((vc && vc.venue) || ''), rtCostPct: rt,
+               lane: scalp ? 'SCALP' : 'SWING', ceilingR: ceil,
+               minStopPct: minPct, minStopUsd: minUsd, px: (isFinite(px) && px > 0) ? px : null };
+    }catch(e){ return null; }
+  }
+
+  /* One line: what this venue's ceiling asks of the chart. '' when unknown. */
+  function hgOgCostCeilingNote(opts){
+    var d = hgOgCostCeilingDemand(opts);
+    if (!d) return '';
+    var s = d.lane + ' cost ceiling ' + d.ceilingR.toFixed(2) + 'R at ' + (d.venue || 'this venue')
+      + ' (' + d.rtCostPct.toFixed(3) + '% round trip) means a stop of at least '
+      + d.minStopPct.toFixed(3) + '% of entry';
+    if (d.minStopUsd !== null) s += ' — $' + d.minStopUsd.toFixed(2) + ' at $' + d.px.toFixed(0) + ' gold';
+    return s;
+  }
+
   function hgOgCostDrag(setup, venueCost){
     if (!setup) return null;
     var src = (setup.plan && typeof setup.plan === 'object') ? setup.plan : setup;
@@ -9832,6 +9956,66 @@ terse status, and never launches a first-time scan on a global refresh.
      ends, so the only honest output is both numbers and the word disagree.
      Returns '' when the constant carries nothing, so a caller can append it
      unconditionally. */
+/* hg-v919 — WHAT THIS VENUE'S COST CEILING ASKS, AND WHAT IT COSTS THE BOOK.
+
+     hgOgVenueCostNoteHtml only renders when the venue DIFFERS from the
+     replay's PAXG, so on the fail-closed default it says nothing at all —
+     exactly the case where the cost gate is doing the most work. On the
+     replay the ceiling alone vetoes 96.1% of scalp rows at PAXG against
+     16.4% at XM, and a reader who has never opened the venue selector reads
+     that as a quiet market rather than as their venue.
+
+     Never a verdict and never a gate: this panel moves nothing, it states
+     what the shipped ceiling demands here and what the same rule demanded on
+     the measured book at each venue. '' when the venue cannot be priced. */
+  function hgOgCostCeilingPanelHtml(opts){
+    try{
+      opts = opts || {};
+      var E = HG_OG_REPLAY_EVIDENCE;
+      var veto = E && E.costCeilingVeto;
+      var px = fin(opts.px);
+      var sc = hgOgCostCeilingDemand({ scalp: true, px: px });
+      var sw = hgOgCostCeilingDemand({ scalp: false, px: px });
+      if (!sc || !sw) return '';
+      var here = String(sc.venue || '').toUpperCase();
+      function row(d){
+        var v = veto && veto[d.lane];
+        var share = v && isFinite(fin(v[here])) ? fin(v[here]) : null;
+        return '<tr><td style="padding:2px 8px 2px 0"><b>' + esc(d.lane) + '</b></td>'
+          + '<td style="padding:2px 8px 2px 0;text-align:right">' + d.ceilingR.toFixed(2) + 'R</td>'
+          + '<td style="padding:2px 8px 2px 0;text-align:right">&ge; ' + d.minStopPct.toFixed(3) + '%</td>'
+          + '<td style="padding:2px 8px 2px 0;text-align:right">'
+            + (d.minStopUsd === null ? '<span class="dim">price unavailable</span>'
+               : '$' + d.minStopUsd.toFixed(2)) + '</td>'
+          + '<td style="padding:2px 0">'
+            + (share === null ? '<span class="dim">not measured at this venue</span>'
+               : 'vetoed <b>' + (share * 100).toFixed(1) + '%</b> of replay rows')
+          + '</td></tr>';
+      }
+      return '<div class="og-costceil" style="font-size:11px;margin-top:8px;line-height:1.5">'
+        + '<div style="font-weight:600">WHAT THE COST CEILING ASKS AT ' + esc(here || 'THIS VENUE') + '</div>'
+        + '<div class="dim">The fee load in R is fixed by geometry alone: cost = round trip / stop width. '
+        + 'So the ceiling is not a score, it is a minimum stop — and it moves with the venue, not the chart. '
+        + 'At ' + esc(here || 'this venue') + ' the round trip is ' + sc.rtCostPct.toFixed(3) + '%.</div>'
+        + '<table style="margin-top:4px;border-collapse:collapse"><tr class="dim">'
+        + '<td style="padding:2px 8px 2px 0">lane</td>'
+        + '<td style="padding:2px 8px 2px 0;text-align:right">ceiling</td>'
+        + '<td style="padding:2px 8px 2px 0;text-align:right">min stop</td>'
+        + '<td style="padding:2px 8px 2px 0;text-align:right">on live gold</td>'
+        + '<td style="padding:2px 0">on the measured book</td></tr>'
+        + row(sc) + row(sw) + '</table>'
+        + (here === 'PAXG'
+           ? '<div class="dim" style="margin-top:4px">PAXG is the fail-closed default. The same rule asks '
+             + '0.133% (SCALP) and 0.067% (SWING) at XM, where it vetoed 16.4% and 0.1% instead. '
+             + 'An empty scan here may be the venue rather than the tape.</div>'
+           : '')
+        + '<div class="dim" style="margin-top:4px">Whether a tighter stop buys better gross is NOT settled — '
+        + 'the two ends of the fill-ambiguity interval give opposite slopes, because tight stops are the '
+        + 'trades most likely to resolve on their own fill bar. Nothing here widens a stop or moves a ceiling.</div>'
+        + '</div>';
+    }catch(e){ return ''; }
+  }
+
   function hgOgSequentialCellsHtml(){
     try{
       var E = HG_OG_REPLAY_EVIDENCE;
@@ -15452,6 +15636,9 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgCostChipHtml = hgOgCostChipHtml;
     window.hgOgReplayEvidence = hgOgReplayEvidence;
     window.hgOgSequentialCellsHtml = hgOgSequentialCellsHtml;
+    window.hgOgCostCeilingDemand = hgOgCostCeilingDemand;
+    window.hgOgCostCeilingNote = hgOgCostCeilingNote;
+    window.hgOgCostCeilingPanelHtml = hgOgCostCeilingPanelHtml;
     window.hgOgReplayLineHtml = hgOgReplayLineHtml;
     window.hgOgReplayBelowBarHtml = hgOgReplayBelowBarHtml;
     window.hgOgKindKnownState = hgOgKindKnownState;
