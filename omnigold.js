@@ -8165,6 +8165,65 @@ terse status, and never launches a first-time scan on a global refresh.
      and not on the gate-clear record: P6-FAIL, over by +0.0005 and under by
      -0.0260. That is the whole behavioural difference, and it is recorded
      rather than acted on. */
+  /* hg-v935: SELECTING MECHANICS BY THEIR OWN RECORD, MEASURED AND REFUSED.
+
+     This desk forms setups from every registered mechanic, and its
+     measured-edge gate only vetoes at -2 sigma, which almost nothing reaches.
+     So the obvious improvement is "only form the mechanics whose record is
+     positive". It is obvious enough that it had to be TESTED, because ranking
+     54 mechanics on the whole book and then scoring on that same book cannot
+     fail - the selection has already seen every outcome it is judged on, and
+     hg-v920 caught that exact shape once already.
+
+     scripts/mechanic-selection.mjs never lets the selection see the window it
+     is judged on: the book is cut into four disjoint windows, the mechanics
+     are ranked on the OTHER THREE, and the chosen set is scored on the held-out
+     one. Four independent out-of-sample trials, at both fill bounds.
+
+     THE OBVIOUS RULE FAILS. "Keep the gross-positive mechanics" scores 13-14
+     of 16 at every sample floor - never unanimous, in either the gross or the
+     net column. The idea that the desk can pick its winners is not supported.
+
+     THE WEAK RULE IS UNANIMOUS AND IS STILL REFUSED. Dropping only the
+     mechanics measured at or below a bar IS unanimous at some bars - and the
+     sweep below shows it switching ON and OFF between NEIGHBOURING thresholds
+     (-0.05 yes, -0.10 yes, -0.15 no, -0.20 no, -0.25 yes, -0.30 yes, -0.40
+     no). A real effect fades as the bar moves. One that flickers is the output
+     of a search over bars, which is hg-v922's finding about stop width
+     restated, and that refusal stands for the same reason.
+
+     AND THE CEILING IS THE POINT FOR ANYONE HOPING THIS IS THE LEVER. The best
+     unanimous cell in the whole sweep lifts net expectancy by +0.03R and leaves
+     the book at about -0.09R. Mechanic selection, at its most generous reading,
+     does not make this desk profitable - it makes it slightly less negative.
+
+     NOTHING IS GATED ON ANY OF IT. No mechanic is dropped, no threshold moves,
+     and hgOgUnobservedPanelHtml's family bar is unchanged. This is published
+     so the next person to have the idea finds the measurement instead of
+     re-deriving it. Re-derive: node scripts/mechanic-selection.mjs */
+  /* --- BEGIN GENERATED HG_OG_SELECTION (scripts/mechanic-selection.mjs) ---
+     Do not hand-edit; `node scripts/mechanic-selection.mjs` is the drift check. */
+  var HG_OG_SELECTION = {
+    windows: 4, minN: 20,
+    bookN: 8132, bookGross: -0.0222, bookNet: -0.116,
+    unanimousCells: 4, runs: 2, contiguous: false,
+    bestBar: -0.05, bestLift: 0.0299, ceilingNet: -0.0861,
+    ships: false,
+    sweep: [
+      { bar: -0.05, agree: 16, keptPct: 63.8219, netLift: 0.0299, unanimous: true },
+      { bar: -0.10, agree: 16, keptPct: 73.0202, netLift: 0.0252, unanimous: true },
+      { bar: -0.15, agree: 14, keptPct: 82.0954, netLift: 0.0107, unanimous: false },
+      { bar: -0.20, agree: 15, keptPct: 91.4166, netLift: 0.0096, unanimous: false },
+      { bar: -0.25, agree: 16, keptPct: 94.4048, netLift: 0.0071, unanimous: true },
+      { bar: -0.30, agree: 16, keptPct: 95.3763, netLift: 0.0071, unanimous: true },
+      { bar: -0.40, agree: 12, keptPct: 99.336, netLift: 0.0006, unanimous: false },
+      { bar: -0.50, agree: 12, keptPct: 99.5819, netLift: 0.0001, unanimous: false },
+      { bar: -0.75, agree: 10, keptPct: 99.9754, netLift: -0.0001, unanimous: false },
+      { bar: -1.00, agree: 4, keptPct: 99.9754, netLift: -0.0001, unanimous: false }
+    ]
+  };
+  /* --- END GENERATED HG_OG_SELECTION --- */
+
   var HG_OG_REPLAY_EVIDENCE = {
     src: 'scripts/omnigold-replay-evidence.json',
     window: '2026-03-27..2026-09-10',   /* refreshed 2026-09-10 post hg-v699 */
@@ -9160,6 +9219,9 @@ terse status, and never launches a first-time scan on a global refresh.
          and this is standing disclosure. The urgent answer keeps the
          adjacency it was given. */
       + hgOgUnobservedPanelHtml()
+      /* hg-v935: and the refusal that follows from the same arithmetic —
+         selecting mechanics by their record does not survive out of sample */
+      + hgOgSelectionRefusedHtml()
       /* if the ledger has moved on since the evidence was baked, that comes
          next — every number under it is about a different system */
       + hgOgEvidenceStaleHtml()
@@ -10399,6 +10461,57 @@ terse status, and never launches a first-time scan on a global refresh.
         + 'evaluated is not a test &mdash; but it LOWERS a bar, and this desk does not loosen '
         + 'on an argument. The gate still corrects over all ' + total + '.</div>'
         + '<div style="margin-top:4px;opacity:0.85">Never observed: ' + esc(never.join(' · ')) + '</div>'
+        + '</div>';
+    }catch(e){ return ''; }
+  }
+
+  /* hg-v935: render the refusal, with the sweep that produced it.
+
+     Every figure comes from HG_OG_SELECTION, which scripts/mechanic-selection.mjs
+     writes from the replay — nothing here is transcribed, so a re-bake moves
+     the numbers instead of leaving a stale claim. It renders whether or not the
+     verdict is negative: if a future bake DOES produce a contiguous unanimous
+     rule, this panel says so rather than going quiet and leaving the old
+     refusal standing as the last word. */
+  function hgOgSelectionRefusedHtml(){
+    try{
+      var S = HG_OG_SELECTION;
+      if (!S || !S.sweep || !S.sweep.length) return '';
+      var cells = '';
+      for (var i = 0; i < S.sweep.length; i++){
+        var r = S.sweep[i];
+        cells += '<span style="display:inline-block;margin:0 6px 2px 0;'
+          + (r.unanimous ? 'font-weight:700' : 'opacity:0.65') + '">'
+          + r.bar.toFixed(2) + ' ' + (r.unanimous ? '✓' : '✗') + '</span>';
+      }
+      var head = S.ships
+        ? 'A MECHANIC-SELECTION RULE NOW SURVIVES OUT OF SAMPLE'
+        : 'SELECTING MECHANICS BY THEIR OWN RECORD WAS MEASURED, AND REFUSED';
+      return '<div class="note og-selection" style="margin:8px 0;padding:6px 8px;'
+        + 'border:1px solid #6B7280;border-left:3px solid #6B7280;border-radius:4px;'
+        + 'background:rgba(107,114,128,0.07);font-size:0.85em">'
+        + '<b>' + head + '</b> &mdash; the desk forms setups from every registered '
+        + 'mechanic, so the obvious improvement is to keep only the ones whose record '
+        + 'is positive. Tested on ' + S.windows + ' disjoint windows with the selection '
+        + 'made on the OTHER three each time, so it never sees the window it is scored '
+        + 'on, at both fill bounds. <b>Keeping the gross-positive mechanics is never '
+        + 'unanimous.</b> Dropping only those at or below a bar is unanimous at some '
+        + 'bars &mdash; and it switches on and off between NEIGHBOURING ones:'
+        + '<div style="margin-top:4px;font-family:monospace">' + cells + '</div>'
+        + '<div style="margin-top:4px">' + S.unanimousCells + ' unanimous cells in '
+        + S.runs + ' separate runs'
+        + (S.contiguous ? ' &mdash; contiguous.' : ' &mdash; <b>not contiguous</b>. A real '
+          + 'effect fades as the bar moves; one that flickers is the output of a search '
+          + 'over bars, which is why hg-v922 refused a stop-width threshold on the same '
+          + 'evidence.') + '</div>'
+        + '<div style="margin-top:4px">And the ceiling is the part worth knowing: the '
+        + 'best unanimous cell lifts net expectancy by <b>+' + S.bestLift.toFixed(4)
+        + 'R</b> and leaves the book at <b>' + S.ceilingNet.toFixed(4) + 'R</b> on '
+        + hgOgFmtCount(S.bookN) + ' filled plans. Mechanic selection at its most generous '
+        + 'reading does not make this desk pay &mdash; it makes it less negative.</div>'
+        + '<div style="margin-top:4px;opacity:0.85">Nothing is gated on this. No mechanic '
+        + 'is dropped and no threshold moved. Re-derive: '
+        + '<code>node scripts/mechanic-selection.mjs</code></div>'
         + '</div>';
     }catch(e){ return ''; }
   }
@@ -16571,6 +16684,8 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgWalkAgeDays = hgOgWalkAgeDays;
     window.hgOgWalkAgeHtml = hgOgWalkAgeHtml;
     window.hgOgUnobservedPanelHtml = hgOgUnobservedPanelHtml;
+    window.hgOgSelectionRefusedHtml = hgOgSelectionRefusedHtml;
+    window.HG_OG_SELECTION = HG_OG_SELECTION;
     window.hgOgFactorSepPanelHtml = hgOgFactorSepPanelHtml;
     window.HG_OG_FACTOR_SEP = HG_OG_FACTOR_SEP;
     window.hgOgReplayLineHtml = hgOgReplayLineHtml;
