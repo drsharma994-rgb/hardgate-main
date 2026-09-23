@@ -171,6 +171,61 @@ console.log('3b. every card carries its record, and calls it in-sample');
   ok(none.indexOf(String(R.kinds.length)) >= 0, 'naming how many mechanics it watches');
 }
 
+/* ---- 3c. hg-v938: it reads OMNIGOLD's gated cards, it does not rescan ---- */
+console.log('3c. no second scan, and the gate ledger is counted rather than claimed');
+{
+  /* hg-v936 called hgOgDetect / hgOgEvaluate with an EMPTY extra. OMNIGOLD
+     hands its evaluator about twenty fields, and without them roughly fourteen
+     gates per card FAIL OPEN to UNCHECKED — so the tab was LESS gated than the
+     desk while its own panel said nothing was loosened. The fix is structural:
+     there is no second context to keep in step because there is no second
+     scan. */
+  ok(/hgOgLastCards/.test(SRC), 'the tab reads OMNIGOLDs evaluated cards');
+  ok(!/hgOgDetect\(|hgOgEvaluate\(/.test(SRC),
+     'and no longer CALLS the detector or the evaluator itself — the names survive '
+     + 'only in the comment recording why it stopped');
+  ok(!/hgOgFetchRows\(/.test(SRC), 'nor fetches its own bars to scan');
+  ok(/refresh/.test(SRC) && /omnigold/.test(SRC),
+     'when OMNIGOLD has not scanned it ASKS that desk to, rather than scanning differently');
+  ok(/has not produced a scan/.test(SRC), 'it says OMNIGOLD has not scanned');
+  ok(/waits for it/.test(SRC) && /rather than running a second scan/.test(SRC),
+     'and says explicitly that it WAITS rather than running a thinner scan of its own '
+     + '— the two phrases are asserted separately because either alone survived a '
+     + 'mutation that deleted the promise and kept the excuse');
+  ok(!/['"]hgOgDetect['"]|['"]hgOgEvaluate['"]/.test(SRC),
+     'and does not reach for the detector or evaluator even as a fallback NAME — a '
+     + 'gfn() lookup is a call the paren-check alone does not see');
+
+  const ogSrc = readFileSync(join(ROOT, 'omnigold.js'), 'utf8');
+  ok(/window\.hgOgLastCards = function/.test(ogSrc), 'omnigold.js exports the cards');
+  ok(/window\.hgOgLastRows = function/.test(ogSrc), 'and the bars that scan ran on');
+  ok(/__og\.lastScanAt = Date\.now\(\)/.test(ogSrc), 'stamping when the scan happened');
+
+  /* The ledger tally is real counting, not a claim. */
+  const g = (pass, hard) => ({ pass, hard });
+  const cards = [{ gates: [g(true), g(true), g(false, true), g(false), g(null), g(undefined)] }];
+  const t2 = W.hgMilliGateTally(cards);
+  eq(t2.pass, 2, 'PASS gates are counted');
+  eq(t2.veto, 1, 'a failed HARD gate is a veto');
+  eq(t2.against, 1, 'a failed soft gate is AGAINST, not a veto');
+  eq(t2.unchecked, 2, 'and a null verdict is UNCHECKED — the fail-open state');
+  eq(t2.cards, 1, 'over one card');
+  eq(W.hgMilliGateTally([]).cards, 0, 'no cards, no tally');
+  eq(W.hgMilliGateTally([{}]).cards, 0, 'and a card with no ledger is not counted');
+
+  const html = W.hgMilliGateTallyHtml(t2);
+  ok(new RegExp('<b>' + t2.unchecked + ' UNCHECKED</b>').test(html),
+     'the UNCHECKED COUNT is rendered in the tally itself — asserting the bare word '
+     + 'passed even when the count was relabelled, because the sentence below also '
+     + 'contains it');
+  ok(new RegExp('' + t2.pass + ' PASS').test(html), 'and the PASS count');
+  ok(new RegExp('' + t2.veto + ' VETO').test(html), 'and the VETO count');
+  ok(/did not run for want of a feed/.test(html),
+     'saying what UNCHECKED means — a gate that did not run, not one that was satisfied');
+  ok(/fourteen/.test(html), 'and recording what this tab used to lose');
+  eq(W.hgMilliGateTallyHtml({ cards: 0 }), '', 'and nothing is rendered with no cards');
+}
+
 /* ---- 4. an empty roster shows NOTHING ---- */
 console.log('4. no measurements means no setups, not every setup');
 {
@@ -236,8 +291,14 @@ console.log('5. the panel states what the selection is worth');
 /* ---- 6. it is OMNIGOLDs engine, and it only ever removes ---- */
 console.log('6. no second engine, and no gate loosened');
 {
-  for (const fn of ['hgOgFetchRows', 'hgOgDetect', 'hgOgEvaluate'])
-    ok(SRC.indexOf(fn) > 0, 'the tab consumes ' + fn + ' rather than reimplementing it');
+  /* hg-v938 REBASED THIS. v936 asserted the tab consumed OMNIGOLD's detector
+     and evaluator — which it did, with an empty context, and that was the bug.
+     What must hold now is stronger: it consumes that desk's ALREADY-EVALUATED
+     cards, so there is no second context to starve. */
+  ok(SRC.indexOf('hgOgLastCards') > 0,
+     'the tab consumes OMNIGOLDs evaluated cards rather than reimplementing the scan');
+  ok(SRC.indexOf('hgOgLastRows') > 0,
+     'and the bars that scan ran on, so the tape rule judges the series on screen');
   ok(/no-engine/.test(SRC) && /has no engine of its own/.test(SRC),
      'and with OMNIGOLD absent it says so instead of inventing a fallback engine');
   ok(!/hgOgSetEdgeProof|hgOgSetOneAtATime|COST_VETO_R|MIN_SAMPLES\s*=/.test(SRC),

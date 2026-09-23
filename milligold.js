@@ -10,13 +10,32 @@ well-defined question with a derivable answer, and this is it — nine of
 OMNIGOLD's 54 measured mechanics are net-positive at XM on the gate-clear
 population, and this tab forms from those nine and nothing else.
 
-It is NOT a new engine. Every detector, gate, plan and grade here is
-OMNIGOLD's, reached through its own exports (hgOgFetchRows, hgOgDetect,
-hgOgEvaluate). A second copy of that engine would drift from the first the
-day either was touched, and the only thing this tab changes is WHICH
-mechanics are allowed to reach a card. The filter runs on the DETECT
-output, before evaluation, so a mechanic off the roster is never scored,
-never graded and never ranked — it cannot arrive by some other path.
+It is NOT a new engine, and as of hg-v938 it is not a new SCAN either.
+
+hg-v936 shipped this tab calling OMNIGOLD's detector and evaluator itself,
+with an EMPTY context. That desk hands its evaluator about twenty fields —
+daily and 4h bars, macro, DXY and yield rows, ADR, news, live and market
+price, zone context, PAXG basis, quote, L2, bid, ask, the scan clock, the
+pooled stats — and with none of them roughly FOURTEEN GATES PER CARD FAIL
+OPEN TO UNCHECKED. So a tab whose own panel said "nothing is loosened, the
+roster only ever removes" was in fact LESS GATED than the desk it claimed
+to be a subset of. level-fresh, fill-path, htf-daily, macro-realrate,
+dxy-inverse, yield-guard, adr-budget, news-window, fill-risk, zone-anchor,
+weekend-exposure and spot-basis read UNCHECKED on every scan, by
+construction.
+
+The fix is not to rebuild that context here — that is precisely the second
+copy that drifts. This tab now READS THE CARDS OMNIGOLD HAS ALREADY
+EVALUATED (hgOgLastCards) and keeps the ones on the roster. There is no
+second context to keep in step because there is no second scan, so "every
+gate is OMNIGOLD's, fully fed" is true by construction rather than by
+assertion. When that desk has not scanned, this tab ASKS IT TO and waits —
+it never falls back to scanning differently on thinner inputs.
+
+And because a claim like that is exactly the kind that rots, the tab COUNTS
+its own gate ledger and prints how many verdicts came back UNCHECKED. An
+UNCHECKED gate is one that did not run, not one that was satisfied, and a
+reader can now see the difference instead of taking this comment's word.
 
 AND THE HONEST PART, WHICH LEADS THE TAB RATHER THAN SITTING UNDER IT.
 
@@ -56,6 +75,7 @@ function esc(s){
       : c === '"' ? '&quot;' : '&#39;';
   });
 }
+function num(x){ var n = +x; return isFinite(n) ? n : NaN; }
 function gfn(n){ try { return (typeof W[n] === 'function') ? W[n] : null; } catch (e){ return null; } }
 function sgn(n){ return (n >= 0 ? '+' : '−') + Math.abs(n).toFixed(4); }
 
@@ -239,49 +259,118 @@ function hgMilliCardsHtml(rows){
   return out;
 }
 
+/** Count the gate ledger's verdicts on a card, so the tab can say how well fed
+    it is instead of asserting it. A gate that reads UNCHECKED is a gate that
+    did not run — the ledger's own fail-open state — and a desk that collects
+    fourteen of them is not "fully gated" however loudly its docs say so. */
+function hgMilliGateTally(cards){
+  var t = { pass: 0, veto: 0, against: 0, unchecked: 0, cards: 0 };
+  if (!cards || !cards.length) return t;
+  for (var i = 0; i < cards.length; i++){
+    var g = cards[i] && cards[i].gates;
+    if (!Array.isArray(g)) continue;
+    t.cards++;
+    for (var j = 0; j < g.length; j++){
+      var x = g[j];
+      if (!x) continue;
+      if (x.pass === true) t.pass++;
+      else if (x.pass === false && x.hard) t.veto++;
+      else if (x.pass === false) t.against++;
+      else t.unchecked++;
+    }
+  }
+  return t;
+}
+
+function hgMilliGateTallyHtml(t){
+  if (!t || !t.cards) return '';
+  var tot = t.pass + t.veto + t.against + t.unchecked;
+  if (!tot) return '';
+  return '<div class="note" style="margin-top:6px">GATE LEDGER across ' + t.cards
+    + ' card' + (t.cards === 1 ? '' : 's') + ': ' + t.pass + ' PASS · ' + t.against
+    + ' AGAINST · ' + t.veto + ' VETO · <b>' + t.unchecked + ' UNCHECKED</b> ('
+    + (100 * t.unchecked / tot).toFixed(0) + '%). An UNCHECKED gate did not run for '
+    + 'want of a feed, not because it was satisfied. These are OMNIGOLD\'s own '
+    + 'evaluated cards, so this count is that desk\'s &mdash; before hg-v938 this '
+    + 'tab ran its own scan with no macro, no daily bars, no DXY, no news and no '
+    + 'live price, and roughly fourteen gates per card failed open.</div>';
+}
+
 async function runMilliGold(ui){
   if (__mg.busy) return 'busy';
   __mg.busy = true;
-  if (ui && ui.stat) ui.stat.textContent = 'scanning…';
-  /* Declared OUT HERE on purpose. A feed fault must be reported even when the
-     scan then fails — especially then, because an error message that changes
-     with the bars while saying nothing about them is exactly how a reader
-     concludes the desk is quiet rather than that the tape is broken. The first
-     version computed this inside the success path only, and the family guard
-     caught it: on a tape with a 12-bar hole this tab's output changed and it
-     said nothing. */
+  if (ui && ui.stat) ui.stat.textContent = 'reading OMNIGOLD…';
   var tapeNote = '';
   try{
-    var fetchRows = gfn('hgOgFetchRows'), detect = gfn('hgOgDetect'), evaluate = gfn('hgOgEvaluate');
-    if (!fetchRows || !detect || !evaluate){
+    /* THIS TAB NO LONGER SCANS. hg-v936 ran its own hgOgDetect / hgOgEvaluate
+       with an EMPTY extra, which starved about fourteen gates into UNCHECKED
+       and made the tab LESS gated than OMNIGOLD while its own panel claimed
+       the opposite. The fix is not to rebuild that twenty-field context here —
+       that is the second copy that drifts — but to consume the cards OMNIGOLD
+       has already evaluated with it, and filter those to the roster. */
+    var read = gfn('hgOgLastCards');
+    if (!read){
       if (ui && ui.body) ui.body.innerHTML = hgMilliDisclosureHtml()
-        + '<div class="note warn" style="margin-top:8px">OMNIGOLD is not loaded, and this '
-        + 'tab is that desk restricted to a roster &mdash; it has no engine of its own to '
-        + 'fall back on, and inventing one here would be a second copy that drifts.</div>'
+        + '<div class="note warn" style="margin-top:8px">OMNIGOLD is not loaded. This tab '
+        + 'is that desk restricted to a roster and has no engine of its own &mdash; '
+        + 'inventing one here is exactly the mistake hg-v938 removed.</div>'
         + hgMilliRosterHtml();
       return 'no-engine';
     }
-    var got = await fetchRows('1h', 400);
-    var rows = (got && got.rows) || [];
-    /* The shared gold tape rule, same as every other candle-fetching gold tab:
-       stale feed, bad bar, hole in the series. Computed BEFORE anything reads
-       the bars. A desk restricted to the mechanics that measured well is MORE
-       exposed to a bad bar, not less — a narrow roster means each surviving
-       setup carries more weight. Fails open when goldind is absent. */
+
+    var got = read();
+    if (!got || !got.cards || !got.cards.length){
+      /* Ask OMNIGOLD to scan rather than scanning differently. */
+      var tab = null;
+      try{
+        var tabs = W.HG_tabs || [];
+        for (var i = 0; i < tabs.length; i++) if (tabs[i] && tabs[i].id === 'omnigold') tab = tabs[i];
+      }catch(eT){ tab = null; }
+      if (tab && typeof tab.refresh === 'function'){
+        try { await tab.refresh(); } catch (eR){}
+        got = read();
+      }
+    }
+
+    if (!got || !got.cards || !got.cards.length){
+      if (ui && ui.body) ui.body.innerHTML = hgMilliDisclosureHtml()
+        + '<div class="note" style="margin-top:8px">OMNIGOLD has not produced a scan yet. '
+        + 'This tab shows what that desk found, narrowed to the roster, so it waits for it '
+        + 'rather than running a second scan of its own on thinner inputs.</div>'
+        + hgMilliRosterHtml();
+      if (ui && ui.stat) ui.stat.textContent = 'waiting for OMNIGOLD';
+      return 'no-scan';
+    }
+
+    /* The shared gold tape rule, on the bars OMNIGOLD scanned. */
     try{
-      var tapeFn = gfn('hgGoldTapeNotes');
-      if (tapeFn && rows.length) tapeNote = tapeFn(rows, '1h') || '';
+      var tapeFn = gfn('hgGoldTapeNotes'), rowsFn = gfn('hgOgLastRows');
+      var rows = (typeof rowsFn === 'function') ? (rowsFn('scalp') || []) : [];
+      /* The tf label is derived from the bars themselves rather than assumed:
+         OMNIGOLD's scalp leg is not always the same resolution, and passing
+         the wrong label would make the gap check answer a different question
+         than the one the reader is looking at. */
+      var tf = '1h';
+      if (rows.length > 2){
+        var d = (num(rows[1].t) - num(rows[0].t)) * (num(rows[0].t) > 1e11 ? 0.001 : 1);
+        if (d > 0) tf = (d <= 900) ? '15m' : (d <= 3600 ? '1h' : (d <= 14400 ? '4h' : '1d'));
+      }
+      if (tapeFn && rows.length) tapeNote = tapeFn(rows, tf) || '';
     }catch(eTape){ tapeNote = ''; }
 
-    var hits = detect(rows, {}) || [];
-    var kept = hgMilliFilterHits(hits);
-    var cards = kept.length ? (evaluate(rows, kept, {}, {}) || []) : [];
-    __mg.last = { scanned: hits.length, kept: kept.length, cards: cards.length };
+    var kept = hgMilliFilterHits(got.cards);
+    var tally = hgMilliGateTally(kept);
+    __mg.last = { scanned: got.cards.length, kept: kept.length, at: got.at, tally: tally };
+
+    var ageMin = got.at ? Math.max(0, Math.round((Date.now() - got.at) / 60000)) : null;
     if (ui && ui.body){
       ui.body.innerHTML = tapeNote + hgMilliDisclosureHtml()
-        + '<div class="note" style="margin-top:8px">' + hits.length + ' mechanic hits this '
-        + 'scan, ' + kept.length + ' on the roster, ' + cards.length + ' cleared the gates.</div>'
-        + hgMilliCardsHtml(cards)
+        + '<div class="note" style="margin-top:8px">' + got.cards.length
+        + ' cards on OMNIGOLD\'s last scan'
+        + (ageMin === null ? '' : (' (' + ageMin + ' min ago)')) + ', '
+        + kept.length + ' on the roster.</div>'
+        + hgMilliGateTallyHtml(tally)
+        + hgMilliCardsHtml(kept)
         + hgMilliRosterHtml();
     }
     if (ui && ui.stat) ui.stat.textContent = 'updated ' + new Date().toISOString().slice(11, 19) + ' UTC';
@@ -297,8 +386,8 @@ async function runMilliGold(ui){
 function mountMilliGold(el){
   if (!el) return;
   el.innerHTML = '<div class="panel"><h2>MILLI GOLD <span>only the mechanics that '
-    + 'measured net-positive &middot; OMNIGOLD engine, roster-restricted</span></h2>'
-    + '<div class="row"><button class="btn" id="milliRun">RUN SCAN</button>'
+    + 'measured net-positive &middot; OMNIGOLD\'s own scan, roster-restricted</span></h2>'
+    + '<div class="row"><button class="btn" id="milliRun">REFRESH</button>'
     + '<span class="note" id="milliStat">auto-runs on open</span></div>'
     + '<div id="milliBody"></div></div>';
   __mg.ui = { el: el, body: el.querySelector('#milliBody'),
@@ -320,6 +409,8 @@ W.hgMilliRecord = hgMilliRecord;
 W.hgMilliDisclosureHtml = hgMilliDisclosureHtml;
 W.hgMilliRosterHtml = hgMilliRosterHtml;
 W.hgMilliCardsHtml = hgMilliCardsHtml;
+W.hgMilliGateTally = hgMilliGateTally;
+W.hgMilliGateTallyHtml = hgMilliGateTallyHtml;
 W.hgMilliState = function(){ return __mg.last; };
 
 W.HG_tabs = W.HG_tabs || [];

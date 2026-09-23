@@ -327,13 +327,13 @@ const STARVED = await sweep(true);
     'super-gold': { file: 'super-gold.js', mark: /__hgSuperGoldSnap/, why: "other desks' published snapshots" },
     goldspot:     { file: 'goldspot.js',   mark: /[/]api[/]proxy/,    why: 'a proxied spot print' },
     tauric:       { file: 'tauric.js',     mark: /api[/]tauric/,      why: 'the TradingAgents pipeline' },
-    /* hg-v936. MILLI GOLD DOES read candles — but only through OMNIGOLD's
-       exports (hgOgFetchRows), and this sweep does not load omnigold.js. With
-       no engine present it renders its no-engine notice, which the bars cannot
-       move. That is the tab behaving correctly, not a tab ignoring the feed,
-       and the distinction is why the `why` below says which desk it borrows
-       from rather than claiming it has no candle path at all. */
-    milligold:    { file: 'milligold.js',  mark: /hgOgFetchRows/,     why: "OMNIGOLD's exports, which this sweep does not load" }
+    /* hg-v936 listed MILLI GOLD here; hg-v938 REMOVED it, and the removal is
+       the point. That tab was running its own scan with an empty context, so
+       it could not respond to the bars in this sweep. It now reads the cards
+       OMNIGOLD has already evaluated — which do respond — so it moves with the
+       feed like every other desk and belongs on the bearing side. An exception
+       that stops being true has to come off the list, or the list starts
+       excusing the next bug. */
   };
   const bearing = [], flat = [];
   for (const id of FED.live){

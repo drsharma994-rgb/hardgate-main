@@ -15333,6 +15333,7 @@ terse status, and never launches a first-time scan on a global refresh.
                show mode — a DOM no-op when the mode is ALL. */
             try{
               __og.lastAllView = { cards: ui.cards.innerHTML, mp: ui.mp ? ui.mp.innerHTML : null };
+              __og.lastScanAt = Date.now();
               __og.lastView = { collapsed: ogCollapsed,
                                 mpArgs: { pickScalp: pickScalp, pickSwing: pickSwing, tape: deskTape,
                                           tapes: hzTapes,
@@ -16815,6 +16816,42 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgKindPaid = hgOgKindPaid;
     window.hgOgPaidCardsHtml = hgOgPaidCardsHtml;
     window.hgOgApplyShowMode = hgOgApplyShowMode;
+    /* hg-v938: THE EVALUATED CARDS, for a desk that wants this one's gates.
+
+       MILLI GOLD shipped in hg-v936 running its OWN scan — hgOgDetect and
+       hgOgEvaluate called with an EMPTY extra — and that was wrong in a way
+       the tab then advertised the opposite of. This desk hands its evaluator
+       about twenty fields (daily and 4h bars, macro, DXY and yield rows, ADR,
+       news, live and market price, zone context, PAXG basis, quote, L2, bid,
+       ask, the scan clock, the pooled stats). With none of them roughly
+       fourteen gates FAIL OPEN to UNCHECKED — so a tab that claimed "every
+       gate still applies" was in fact LESS gated than this one, which is the
+       opposite of what it promised and the opposite of safe.
+
+       Exporting the cards themselves removes the whole class of bug: there is
+       no second context to keep in step, because there is no second scan. A
+       consumer filters what this desk already gated. Returned by reference on
+       purpose — these are live card objects with their gate ledgers attached,
+       and a JSON round-trip would drop exactly the structure a consumer needs
+       (hgOgState stays the JSON-safe snapshot for anyone who wants one). */
+    /* The bars that scan ran on, for a consumer that must apply the shared
+       gold tape rule to the SAME series it is showing cards from. Reading a
+       fresh series would judge a different tape than the one on screen. */
+    window.hgOgLastRows = function hgOgLastRows(tf){
+      try{
+        var r = __og && __og.lastRows;
+        if (!r) return [];
+        if (tf === '4h') return r.swing || [];
+        return r.scalp || r.m15 || [];
+      }catch(e){ return []; }
+    };
+    window.hgOgLastCards = function hgOgLastCards(){
+      try{
+        var v = __og && __og.lastView;
+        if (!v || !Array.isArray(v.collapsed)) return null;
+        return { cards: v.collapsed, at: __og.lastScanAt || 0, ran: !!__og.ran };
+      }catch(e){ return null; }
+    };
     window.hgOgState = function hgOgState(){
       try { return __og.snap ? JSON.parse(JSON.stringify(__og.snap)) : null; } catch (e) { return null; }
     };
