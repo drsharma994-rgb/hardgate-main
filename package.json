@@ -32,6 +32,7 @@
     "gold:siblings": "node scripts/gold-sibling-records.mjs",
     "og:selection": "node scripts/mechanic-selection.mjs",
     "gold:milli": "node scripts/milli-gold-roster.mjs",
+    "gold:milli-walk": "node scripts/milli-gold-walk.mjs",
     "gold:literals": "node scripts/rebake-gold-literals.mjs"
   }
 }

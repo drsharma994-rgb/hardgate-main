@@ -186,21 +186,46 @@ console.log('4. no measurements means no setups, not every setup');
 /* ---- 5. the disclosure is load-bearing ---- */
 console.log('5. the panel states what the selection is worth');
 {
+  /* hg-v937 REPLACED THESE. The v936 panel led with the roster's IN-SAMPLE
+     figure and called it an upper bound. hg-v937 measured the bound and it is
+     NEGATIVE — the roster rebuilt on the past only beats the desk 6 of 6 and
+     pays 0 of 6 — so the panel now leads with the forward result and the
+     in-sample number is demoted to the thing it explicitly tells you to
+     distrust. The assertions are kept in spirit: the panel must still state
+     what the selection is worth, it just has a better answer to state. */
   const h = W.hgMilliDisclosureHtml();
-  ok(/13-14 of 16/.test(h), 'it quotes hg-v935s out-of-sample result');
-  ok(/never unanimous/i.test(h), 'and that it was never unanimous');
-  ok(/upper bound/i.test(h), 'and calls the cohort figure an upper bound');
-  ok(new RegExp(String(W.HG_MILLI_ROSTER.maxAbsT.toFixed(2))).test(h),
-     'it renders the largest t from the roster');
-  ok(/inside the noise/i.test(h), 'and says what that means');
-  ok(/disjoint windows/.test(h), 'and how the out-of-sample test was run');
-  /* Derived, not transcribed: the measured figures come from the literal. */
+  const F = W.HG_MILLI_FORWARD;
+  ok(!!F && F.trials > 0, 'the tab carries a forward result');
+  ok(/FORWARD-TESTED/.test(h), 'and leads with it');
+  ok(new RegExp(F.beatsDesk + ' of ' + F.trials).test(h),
+     'quoting how many forward trials beat the desk');
+  ok(new RegExp(F.pays + ' of ' + F.trials).test(h),
+     'and how many were net-positive');
+  ok(/still loses|does not make a profitable desk/i.test(h),
+     'and says plainly that beating the desk is not paying');
+  ok(/distrust/i.test(h),
+     'and names the in-sample figure as the one to distrust');
+  ok(/artefacts of having seen it|re-chosen/.test(h),
+     'and discloses that not every shipped mechanic survives the rule out of sample');
+  ok(h.indexOf(String(F.shippedSize)) >= 0, 'naming the roster size');
+
+  /* Derived, not transcribed. */
   const body = SRC.slice(SRC.indexOf('function hgMilliDisclosureHtml'),
                          SRC.indexOf('function hgMilliRosterHtml'));
-  ok(/R\.cohortNet/.test(body) && /R\.maxAbsT/.test(body) && /R\.cohortN/.test(body),
-     'every measured number in the panel comes from the roster literal');
-  ok(!/0\.0565|678|1\.55/.test(body.replace(/\/\*[\s\S]*?\*\//g, '')),
-     'and none is baked into the rendered string');
+  for (const f of ['F.beatsDesk', 'F.trials', 'F.pays', 'F.inSampleNet', 'F.deskNet',
+                   'F.worstForwardNet', 'F.sharedMin'])
+    ok(body.indexOf(f) > 0, 'the panel reads ' + f + ' from the generated literal');
+  ok(!/0\.0643|0\.0565|678|1\.55|0\.1673/.test(body.replace(/\/\*[\s\S]*?\*\//g, '')),
+     'and no measured number is baked into the rendered string');
+
+  /* With no forward result the tab must NOT fall back to the in-sample
+     figure on its own — that is the number v937 proved optimistic. */
+  const noF = load();
+  noF.HG_MILLI_FORWARD.trials = 0;
+  const bare = noF.hgMilliDisclosureHtml();
+  ok(/NO FORWARD RESULT/.test(bare), 'with no forward result the tab says so');
+  ok(!new RegExp(String(F.inSampleNet).replace('.', '\\.')).test(bare),
+     'and does NOT quote the in-sample figure on its own');
 
   const table = W.hgMilliRosterHtml();
   for (const k of W.HG_MILLI_ROSTER.kinds)
