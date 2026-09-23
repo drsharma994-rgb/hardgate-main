@@ -16,6 +16,14 @@ function loadGoldind(){
   vm.runInThisContext(fs.readFileSync(root + 'indicators.js', 'utf8'), { filename: 'indicators.js' });
   vm.runInThisContext(fs.readFileSync(root + 'indicators2.js', 'utf8'), { filename: 'indicators2.js' });
   vm.runInThisContext(fs.readFileSync(root + 'goldind.js', 'utf8'), { filename: 'goldind.js' });
+  /* hg-v928 hand-tuned four verdicts ON INSTRUCTION. This file asserts the
+     BAKED contract — what the replay's own bars produce — so it turns the
+     overlay off rather than inheriting whichever way the default points.
+     Throws instead of skipping: a swallowed no-op would silently test the
+     retuned table while claiming to test the bake. */
+  if (typeof globalThis.window.hgGoldSetEdgeRetune !== 'function')
+    throw new Error('FAIL: goldind.js did not export hgGoldSetEdgeRetune');
+  globalThis.window.hgGoldSetEdgeRetune(false);
   return globalThis.window;
 }
 

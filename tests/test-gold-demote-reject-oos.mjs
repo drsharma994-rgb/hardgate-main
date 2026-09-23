@@ -147,8 +147,13 @@ console.log('\n== so the change is not in the code ==');
 {
   const gi = fs.readFileSync(path.join(ROOT, 'goldind.js'), 'utf8');
   const applier = gi.slice(gi.indexOf('function hgGoldSetupEdgeApply'), gi.indexOf('function hgGoldScalpCostGate'));
-  ok(/if \(row\.action === 'demote'\)\{[\s\S]{0,300}?cand\.demoted = true;/.test(applier),
+  /* hg-v928 moved the branch onto the RESOLVED verdict (hgGoldEdgeAction) so
+     the retune's revert switch actually reverts. The behaviour this asserts —
+     a demote paints and cannot lead — is unchanged. */
+  ok(/if \(act === 'demote'\)\{[\s\S]{0,300}?cand\.demoted = true;/.test(applier),
      'a demote row still sets demoted');
+  ok(/var act = hgGoldEdgeAction\(row\);/.test(applier),
+     'and act is the verdict in force, baked or retuned');
   ok(!/if \(row\.action === 'demote'\)\{[\s\S]{0,300}?cand\.dropped = true;/.test(applier),
      'and does NOT set dropped — the out-of-sample test is why');
   /* The cost gate's rejection is a separate finding and stays. */

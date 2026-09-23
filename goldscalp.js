@@ -701,6 +701,8 @@ var GS_CSS = ''
 + '.gsx-fsep-worse>span{color:#9a3412}'
 + '.gsx-fsep-foot{margin-top:7px;opacity:.9}'
 + '.gsx-walkage{font-size:11px;color:#7c2d12;border:1px dashed rgba(180,83,9,.4);border-radius:6px;padding:9px 11px;margin:8px 0 12px;line-height:1.55;background:rgba(180,83,9,.05)}'
++ '.gsx-retune{font-size:11px;color:#7c2d12;border:1px solid rgba(180,83,9,.5);border-left:3px solid #b45309;border-radius:6px;padding:9px 11px;margin:8px 0 12px;line-height:1.55;background:rgba(180,83,9,.07)}'
++ '.gsx-retune-tbl{margin:6px 0 0;font-variant-numeric:tabular-nums}'
 + '.gsx-silent b{letter-spacing:.12em;font-weight:800;color:#9A3412}'
 + '.gsx-weekend-wrap,.gsx-weekend-wrap{margin:0 0 12px}'
 + '.gsx-weekend,.gsx-weekend{font-size:11px;border-radius:8px;padding:10px 12px;line-height:1.55;margin:12px 0;border:1px solid}'
@@ -1490,6 +1492,22 @@ function goldCoverageNoteHTML(){
      rows carrying a demote — a different population, because suppressed kinds
      settle in a shadow ledger rather than the main book. Adding them together
      was the first draft of this line and it was nonsense. */
+  /* hg-v928 MOVED THESE NUMBERS and they are the headline of that pack, so
+     both readings are printed rather than the old one silently replaced.
+     Recomputed on the same population the guard uses (non-shadow rows of the
+     committed replay, n=2,283) under each set of verdicts. */
+  var retuned = (typeof HG_GOLD_EDGE_RETUNE !== 'undefined') ? !!HG_GOLD_EDGE_RETUNE : true;
+  if (retuned){
+    return '<div class="gsx-coverage"><b>WHY SO FEW LEADERS</b> — '
+      + '<b>69.3%</b> of what this desk forms can never be MOST PROBABLE: 59.2% is demoted '
+      + '(it paints, it cannot lead) and 10.1% is suppressed (it never becomes a card). '
+      + '<b>Before the hg-v928 hand-tune that was 84.5%</b> — 62.9% demoted and 21.6% suppressed — '
+      + 'so four verdicts moving on instruction freed 15.2 points of formed volume to lead. '
+      + 'The six highest-volume detectors are still mostly demote or suppress, each on its own '
+      + 'measured record at the venue. On the replay MOST PROBABLE fired <b>once in 51 scans</b>, '
+      + 'and that figure predates the retune. A quiet board is policy, not a fault. '
+      + '<code>hgGoldSetEdgeRetune(false)</code> puts the original verdicts back.</div>';
+  }
   return '<div class="gsx-coverage"><b>WHY SO FEW LEADERS</b> — '
     + '<b>84.5%</b> of what this desk forms can never be MOST PROBABLE: 62.9% is demoted '
     + '(it paints, it cannot lead) and 21.6% is suppressed (it never becomes a card). '
@@ -1509,7 +1527,9 @@ function whySilentHTML(ws){
     + (typeof hgGoldFactorSepHtml === 'function' ? hgGoldFactorSepHtml() : '')
     /* hg-v927: and how old the walk behind all of it is. Last, because it
        qualifies every number in the two panels above it. */
-    + (typeof hgGoldEdgeWalkAgeNote === 'function' ? hgGoldEdgeWalkAgeNote() : '');
+    + (typeof hgGoldEdgeWalkAgeNote === 'function' ? hgGoldEdgeWalkAgeNote() : '')
+    /* hg-v928: and that the verdicts above were hand-tuned on instruction */
+    + (typeof hgGoldEdgeRetuneNote === 'function' ? hgGoldEdgeRetuneNote() : '');
 }
 
 function goldWeekendPanelHTML(ro){
