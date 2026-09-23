@@ -425,8 +425,57 @@ terse status, and never launches a first-time scan on a global refresh.
 
      One constant, so this is one line to reverse. Turning it off restores
      exactly the previous behaviour: unknown stops standing setups aside and
-     tickets issue on UNCHECKED evidence again. */
-  var OG_EDGE_PROOF_REQUIRED = true;
+     tickets issue on UNCHECKED evidence again.
+
+     ===================================================================
+     hg-v925 — RELAXED, ON INSTRUCTION. THE DEFAULT IS NOW false.
+     ===================================================================
+
+     The desk owner asked for this gate to be relaxed after several packs of
+     an empty ticket column. It is their call and it is recorded as theirs:
+     NO EVIDENCE WAS FOUND FOR IT, and none is claimed. Four separate
+     arguments for loosening this desk were tested and refused on measured
+     grounds (hg-v920 grade-A fallback and the tally/crowned splits, hg-v922
+     the 0.28% stop bar, hg-v923 promoting sweepob on a record that was not
+     its). This is not a fifth argument. It is an instruction.
+
+     WHAT IT FREES, measured on the committed replay at 78 registered
+     mechanics and a Sidak bar of +3.21 sigma:
+
+        0  of 54 measured mechanics clear the bar
+        1  fails it outright at <= -2 sigma (n=358) and STAYS VETOED
+       53  are UNKNOWN — these now ticket again
+       13  registered mechanics have no record at all, read UNCHECKED, and
+           now ticket too, including SWEEP-OB wired in hg-v923
+
+     So 66 of 78 mechanics can issue a ticket, against 0 before.
+
+     WHAT THAT COHORT MEASURED, n-weighted over its 7,595 settled firings:
+
+       win rate    30.5%    against a 33.3% breakeven at 2R
+       gross R    -0.0179
+       net R @XM  -0.0726   (median cost re-priced 0.26% -> 0.020%)
+
+     Below breakeven before costs, and about -0.07R a trade after them at XM.
+     That is what a ticket from this desk now means. It is not a prediction
+     of loss — the cohort is not significantly below breakeven either, which
+     is exactly why it reads UNKNOWN — but it is not an edge, and the card
+     must not let it read as one.
+
+     WHAT DID NOT CHANGE. The KNOWN-FAILURE veto is untouched: a mechanic
+     measured at or below -2 sigma still cannot ticket, in-sample or out.
+     That half of the gate is evidence-backed and the instruction was to
+     relax, not to remove. G1-G7, the cost ceilings, the stop floors and
+     every suppress / demote / prefer bar are also untouched.
+
+     REVERSIBLE WITHOUT AN EDIT. hgOgSetEdgeProof(true) restores it for the
+     session and persists to localStorage, and window.HG_OG_EDGE_PROOF
+     overrides both. hgOgEdgeRelaxedPanelHtml states the relaxation and these
+     numbers on the tab, so nobody meets a ticket from this desk without
+     meeting what it is worth. */
+  var OG_EDGE_PROOF_LS_KEY = 'hg_og_edge_proof';
+  var OG_EDGE_PROOF_DEFAULT = false;   /* hg-v925: relaxed on instruction */
+  var OG_EDGE_PROOF_REQUIRED = OG_EDGE_PROOF_DEFAULT;
   var DAILY_FAST = 10, DAILY_SLOW = 21;
   /* THERE WERE THREE DEFINITIONS OF "REVERSION" AND THEY DISAGREED.
 
@@ -9084,8 +9133,11 @@ terse status, and never launches a first-time scan on a global refresh.
       /* replay-vs-venue honesty (hg-v533): the cohort loss above is a
          PAXG-cost fact; a cheaper venue re-prices the fee, not the record. */
       + hgOgVenueCostNoteHtml()
+      /* hg-v925: FIRST of all when the edge requirement is off — it reframes
+         what a ticket on this page means, so it cannot sit below the tables. */
+      + hgOgEdgeRelaxedPanelHtml()
       /* if the ledger has moved on since the evidence was baked, that comes
-         FIRST — every number under it is about a different system */
+         next — every number under it is about a different system */
       + hgOgEvidenceStaleHtml()
       /* and its sibling: the ledger check watches the CODE moving under the
          evidence; this watches the evidence moving under the code */
@@ -10221,6 +10273,103 @@ terse status, and never launches a first-time scan on a global refresh.
      runs as well, because there the answer is a setting rather than the tape.
      Silent when anything ticketed — an empty ticket column is the only thing
      this claims to explain. */
+  /* hg-v925 — the setter and the override, so the instruction is reversible
+     without editing this file. Precedence matches the venue control's:
+     window.HG_OG_EDGE_PROOF wins, then the stored choice, then the default. */
+  function hgOgEdgeProofInit(){
+    try{
+      var w = W();
+      var ovr = (w && w.HG_OG_EDGE_PROOF);
+      if (ovr === true || ovr === false){ OG_EDGE_PROOF_REQUIRED = ovr; return OG_EDGE_PROOF_REQUIRED; }
+      var stored = null;
+      try { stored = localStorage.getItem(OG_EDGE_PROOF_LS_KEY); } catch (eL) { stored = null; }
+      if (stored === '1' || stored === 'true') OG_EDGE_PROOF_REQUIRED = true;
+      else if (stored === '0' || stored === 'false') OG_EDGE_PROOF_REQUIRED = false;
+      else OG_EDGE_PROOF_REQUIRED = OG_EDGE_PROOF_DEFAULT;
+    }catch(e){ OG_EDGE_PROOF_REQUIRED = OG_EDGE_PROOF_DEFAULT; }
+    return OG_EDGE_PROOF_REQUIRED;
+  }
+  function hgOgSetEdgeProof(on){
+    OG_EDGE_PROOF_REQUIRED = (on === true);
+    try { localStorage.setItem(OG_EDGE_PROOF_LS_KEY, OG_EDGE_PROOF_REQUIRED ? '1' : '0'); } catch (eS) {}
+    return OG_EDGE_PROOF_REQUIRED;
+  }
+
+  /* WHAT A TICKET FROM THIS DESK IS NOW WORTH.
+
+     The relaxation is an instruction, not a finding, and the one thing that
+     would make it dishonest is a ticket column that looks the same as one
+     earned. hgOgEdgeProofPanelHtml explained an EMPTY column; this explains a
+     FULL one. It renders whenever the gate is relaxed — there is no state in
+     which the desk issues tickets on unproven mechanics and says nothing.
+
+     Every number is from HG_OG_REPLAY_EVIDENCE and hgOgReplayZ at render
+     time, not written in, so a re-bake moves them. */
+  function hgOgEdgeRelaxedTally(){
+    try{
+      var E = HG_OG_REPLAY_EVIDENCE;
+      if (!E || !E.kinds) return null;
+      var famZ = hgOgFamilyZ(OG_MECHANICS.length), be = 1 / (1 + OG_T1_R);
+      var rtP = fin(E.rtCostPct), rtX = 0.020;
+      var clears = 0, fails = 0, unknown = 0, uN = 0, uW = 0, uG = 0, uXm = 0, k, r, z;
+      for (k in E.kinds){
+        if (!Object.prototype.hasOwnProperty.call(E.kinds, k)) continue;
+        r = E.kinds[k]; z = hgOgReplayZ(r, be);
+        if (!isFinite(z)) continue;
+        if (z >= famZ){ clears++; continue; }
+        if (z <= EDGE_VETO_Z){ fails++; continue; }
+        unknown++;
+        var n = fin(r[0]), win = fin(r[1]), gross = fin(r[3]), med = fin(r[4]);
+        if (!(isFinite(n) && n > 0)) continue;
+        uN += n; uW += win * n; uG += gross * n;
+        /* re-price the fee leg only: the measured gross does not move with
+           the venue, which is the whole hg-v533 correction */
+        if (isFinite(med) && isFinite(rtP) && rtP > 0) uXm += (gross - med * (rtX / rtP)) * n;
+      }
+      if (!uN) return null;
+      return { mechanics: OG_MECHANICS.length, famZ: famZ,
+               clears: clears, fails: fails, unknown: unknown,
+               unobserved: hgOgUnobservedKinds().length,
+               n: uN, win: uW / uN, gross: uG / uN, netXm: uXm / uN,
+               breakeven: be };
+    }catch(e){ return null; }
+  }
+
+  function hgOgEdgeRelaxedPanelHtml(){
+    try{
+      if (OG_EDGE_PROOF_REQUIRED) return '';   /* nothing to disclose */
+      var t = hgOgEdgeRelaxedTally();
+      var sg = function(x, d){ return (x >= 0 ? '+' : '') + Number(x).toFixed(d); };
+      var h = '<div class="note og-edge-relaxed" style="margin:8px 0;padding:6px 8px;'
+        + 'border:1px solid #B45309;border-left:3px solid #B45309;border-radius:4px;'
+        + 'background:rgba(180,83,9,0.07);font-size:0.85em">'
+        + '<b>MEASURED-EDGE GATE RELAXED &mdash; BY INSTRUCTION, NOT BY EVIDENCE</b><br>'
+        + 'This desk normally issues a ticket only for a mechanic whose edge has been '
+        + 'measured. That requirement is switched off, so a mechanic whose record is '
+        + '<b>UNKNOWN</b> can ticket again. No evidence was found for this and none is '
+        + 'claimed &mdash; it was asked for, and it is recorded as asked for.';
+      if (t){
+        h += '<div style="margin-top:4px">Of <b>' + t.mechanics + '</b> registered mechanics: <b>'
+          + t.clears + '</b> clear the ' + t.mechanics + '-comparison bar (+' + t.famZ.toFixed(2)
+          + '&sigma;), <b>' + t.fails + '</b> fail it outright and <b>stay vetoed</b>, <b>'
+          + t.unknown + '</b> are unknown and now ticket, and <b>' + t.unobserved
+          + '</b> have no record at all and now ticket too.</div>'
+          + '<div style="margin-top:4px">What that cohort measured over <b>'
+          + hgOgFmtCount(Math.round(t.n)) + '</b> settled firings: win rate <b>'
+          + (t.win * 100).toFixed(1) + '%</b> against a <b>' + (t.breakeven * 100).toFixed(1)
+          + '%</b> breakeven at ' + OG_T1_R + 'R, gross <b>' + sg(t.gross, 4)
+          + '</b>, net <b>' + sg(t.netXm, 4) + '</b> at XM. Below breakeven before costs. '
+          + 'It is not significantly below either &mdash; that is precisely why it reads '
+          + 'unknown &mdash; but it is not an edge, and a ticket here does not say it is.</div>';
+      }
+      h += '<div style="margin-top:4px;opacity:.9">The <b>known-failure veto is untouched</b>: '
+        + 'a mechanic measured at or below ' + EDGE_VETO_Z + '&sigma; still cannot ticket. '
+        + 'To put the requirement back for this browser, run '
+        + '<code>hgOgSetEdgeProof(true)</code> in the console and rescan.</div></div>';
+      return h;
+    }catch(e){ return ''; }
+  }
+
   function hgOgBlockerFunnelHtml(rows, opts){
     try{
       var t = hgOgCostCeilingScanTally(rows, opts);
@@ -15374,6 +15523,7 @@ terse status, and never launches a first-time scan on a global refresh.
        XM default; PAXG when storage is unavailable) must be applied before
        any HTML is built. */
     hgOgVenueInit();
+    hgOgEdgeProofInit();
     el.innerHTML =
       '<div class="panel">'
       + '<h2>OmniGold — gold desk setups <span>XAUUSD · scalp ' + HORIZONS.scalp.tf + ' + swing ' + HORIZONS.swing.tf
@@ -16119,6 +16269,10 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgCostCeilingScanTally = hgOgCostCeilingScanTally;
     window.hgOgCostCeilingScanNoteHtml = hgOgCostCeilingScanNoteHtml;
     window.hgOgBlockerFunnelHtml = hgOgBlockerFunnelHtml;
+    window.hgOgSetEdgeProof = hgOgSetEdgeProof;
+    window.hgOgEdgeProofInit = hgOgEdgeProofInit;
+    window.hgOgEdgeRelaxedTally = hgOgEdgeRelaxedTally;
+    window.hgOgEdgeRelaxedPanelHtml = hgOgEdgeRelaxedPanelHtml;
     window.hgOgFactorSepPanelHtml = hgOgFactorSepPanelHtml;
     window.HG_OG_FACTOR_SEP = HG_OG_FACTOR_SEP;
     window.hgOgReplayLineHtml = hgOgReplayLineHtml;

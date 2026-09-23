@@ -60,10 +60,18 @@ function boot(){
     try { vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f }); }
     catch (e) { throw new Error('FAIL: ' + f + ' did not load — ' + e.message); }
   }
+  /* hg-v925: the strict measured-edge mode is no longer the default (relaxed
+     on instruction). This file runs the real chain and asserts the strict
+     contract, so every boot turns the requirement on. Set HERE rather than on
+     the returned context: a caller that forgets is a silent pass. */
+  if (typeof ctx.hgOgSetEdgeProof !== 'function')
+    throw new Error('FAIL: omnigold.js did not export hgOgSetEdgeProof');
+  ctx.hgOgSetEdgeProof(true);
   return ctx;
 }
 const W = boot();
 const SRC = fs.readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
+
 const mechStart = SRC.indexOf('var OG_MECHANICS');
 const MECHS = (SRC.slice(mechStart, SRC.indexOf('];', mechStart)).match(/'[A-Z0-9][A-Z0-9-]*'/g) || [])
   .map(s => s.slice(1, -1));

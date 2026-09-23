@@ -20,6 +20,16 @@ const win = {};
 new Function('window', readFileSync(path.join(ROOT, 'hg-gates.js'), 'utf8'))(win);
 new Function('window', readFileSync(path.join(ROOT, 'omniroute.js'), 'utf8'))(win);
 new Function('window', readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8'))(win);
+/* hg-v925: the strict measured-edge mode is no longer the default (relaxed
+   on instruction). This file asserts the strict contract, so it turns the
+   requirement on explicitly instead of inheriting whatever the default is. */
+/* throws rather than skipping: a swallowed no-op here would silently
+   test the RELAXED mode while claiming to test the strict one, which is
+   how the first draft of this patch passed in test-omnigold-end-to-end. */
+if (typeof win.hgOgSetEdgeProof !== 'function')
+  throw new Error('FAIL: omnigold.js did not export hgOgSetEdgeProof');
+win.hgOgSetEdgeProof(true);
+
 
 let pass = 0, fail = 0;
 function ok(cond, msg){
