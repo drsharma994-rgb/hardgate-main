@@ -801,6 +801,48 @@
    * sides OK + not demoted + grade A/B. paid = forward ledger only.
    * Opposite-side A/B plans are kept on `held` — shown, never confirmed.
    */
+  /* hg-v940: name the rule that emptied the banner, and how many it took.
+
+     The old message was two-way — tape-aligned or not — and said nothing
+     about the candidates it had just discarded. This names the LARGEST
+     bucket, reports the total considered, and keeps the tape wording for the
+     case it was actually about. Ties break by the order below, which runs
+     from "the desk withheld it" to "the plan was unusable", so the reason a
+     reader can act on wins over one they cannot. */
+  var UNI_ASIDE_LABEL = [
+    ['demoted',     'demoted (held back, cannot lead)'],
+    ['againstTape', 'against the tape'],
+    ['grade',       'below grade B'],
+    ['excluded',    'excluded by the catalog'],
+    ['dropped',     'dropped by a gate'],
+    ['sides',       'stop or target on the wrong side'],
+    ['noLevels',    'no entry/stop/target'],
+    ['noDir',       'no direction']
+  ];
+
+  function hgGoldUniformWhyAside(skip, considered, tape, horizon){
+    var n = isFinite(+considered) ? +considered : 0;
+    var hz = String(horizon || 'SCALP');
+    if (!n) return 'no engine candidates on ' + hz + ' — stand aside';
+    var topKey = '', topN = 0, i;
+    for (i = 0; i < UNI_ASIDE_LABEL.length; i++){
+      var k = UNI_ASIDE_LABEL[i][0], v = (skip && +skip[k]) || 0;
+      if (v > topN){ topN = v; topKey = k; }
+    }
+    var head = n + ' engine candidate' + (n === 1 ? '' : 's') + ' on ' + hz;
+    if (!topN){
+      return head + ', none usable — stand aside';
+    }
+    var label = '';
+    for (i = 0; i < UNI_ASIDE_LABEL.length; i++)
+      if (UNI_ASIDE_LABEL[i][0] === topKey) label = UNI_ASIDE_LABEL[i][1];
+    var all = (topN === n) ? 'all ' : (topN + ' ');
+    var why = head + ', ' + all + label + ' — stand aside';
+    /* the tape is only named when it is actually what did the work */
+    if (topKey === 'againstTape' && tape) why += ' (tape ' + String(tape).toUpperCase() + ')';
+    return why;
+  }
+
   function hgGoldUniformCompose(cands, opts){
     opts = opts || {};
     var horizon = String(opts.horizon || '').toUpperCase() || 'SCALP';
@@ -823,17 +865,34 @@
       var best = null, bestHits = [], bestScore = -1;
       var held = null, heldHits = [], heldScore = -1, heldList = [];
       var i, c, dir, g, hits, score, aligned;
+      /* hg-v940: COUNT EVERY SILENT `continue`.
+
+         Seven rules below reject a candidate and every one of them used to do
+         it invisibly, after which the banner said "no tape-aligned engine plan
+         — stand aside" whatever had actually happened. A desk that composed
+         two setups and held both read identically to a desk that found none,
+         which is how GOLD SCALP came to look empty while carrying two cards
+         with full levels: both were DEMOTED by the hg-v930 one-at-a-time hold
+         and died at the third rule without a word.
+
+         A candidate is counted at the FIRST rule that rejected it, so the
+         buckets partition the input and never double-count. Nothing here
+         changes which candidates qualify — this only makes the answer
+         legible, the same discipline as hg-v924's blocker funnel and
+         hg-v929's R:R shortfall. */
+      var skip = { dropped: 0, excluded: 0, demoted: 0, noDir: 0,
+                   noLevels: 0, sides: 0, grade: 0, againstTape: 0 };
       for (i = 0; i < cands.length; i++){
         c = cands[i];
-        if (!c || c.dropped) continue;
-        if (c.catalogExclude) continue;
-        if (c.demoted && !c.locked) continue;
+        if (!c || c.dropped){ skip.dropped++; continue; }
+        if (c.catalogExclude){ skip.excluded++; continue; }
+        if (c.demoted && !c.locked){ skip.demoted++; continue; }
         dir = uniDir(c.dir);
-        if (!dir) continue;
-        if (!isFinite(+c.entry) || !isFinite(+c.stop) || !isFinite(+c.t1)) continue;
-        if (!uniSidesOk(c)) continue;
+        if (!dir){ skip.noDir++; continue; }
+        if (!isFinite(+c.entry) || !isFinite(+c.stop) || !isFinite(+c.t1)){ skip.noLevels++; continue; }
+        if (!uniSidesOk(c)){ skip.sides++; continue; }
         g = uniGradeLetter(c);
-        if (g !== 'A' && g !== 'B' && g !== 'CLEAN' && !c.locked) continue;
+        if (g !== 'A' && g !== 'B' && g !== 'CLEAN' && !c.locked){ skip.grade++; continue; }
         hits = uniFamilyHits(c);
         score = hits.length * 1000 + (isFinite(+c.tally) ? +c.tally : 0) * 10
           + (g === 'A' || g === 'CLEAN' ? 2 : (g === 'B' ? 1 : 0));
@@ -843,6 +902,7 @@
           best = c;
           bestHits = hits;
         } else if (!aligned){
+          skip.againstTape++;
           heldList.push({ c: c, hits: hits, score: score });
           if (score > heldScore){
             heldScore = score;
@@ -859,9 +919,9 @@
       out.heldAll = heldList.map(function(x){ return x.c; });
       out.heldAllFamilies = heldList.map(function(x){ return x.hits; });
       if (!best){
-        out.why = tape
-          ? ('no tape-aligned engine plan on ' + horizon + ' — stand aside')
-          : ('no legal engine plan on ' + horizon + ' — stand aside');
+        out.standAside = skip;
+        out.standAside.considered = cands.length;
+        out.why = hgGoldUniformWhyAside(skip, cands.length, tape, horizon);
         return out;
       }
       out.setup = best;
@@ -1061,5 +1121,6 @@
   W.hgGoldUniformTape = hgGoldUniformTape;
   W.hgGoldUniformAlignedBest = hgGoldUniformAlignedBest;
   W.hgGoldUniformCompose = hgGoldUniformCompose;
+  W.hgGoldUniformWhyAside = hgGoldUniformWhyAside;
   W.hgGoldUniformHtml = hgGoldUniformHtml;
 })(typeof window !== 'undefined' ? window : globalThis);
