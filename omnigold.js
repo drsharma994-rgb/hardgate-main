@@ -9110,6 +9110,10 @@ terse status, and never launches a first-time scan on a global refresh.
       /* hg-v919: and what the cost ceiling asks at the venue in force —
          silent everywhere else on the default one. */
       + hgOgCostCeilingPanelHtml()
+      /* hg-v924: and, when this scan's own ledger says the ceiling is the top
+         hard blocker and nothing ticketed, that the empty board is the venue
+         rather than the tape. Silent otherwise. */
+      + hgOgBlockerFunnelHtml()
       /* hg-v922: after the ceiling, because it is the same question asked of
          the outcomes rather than of the arithmetic — and it answers it with
          two verdicts out of ten rather than a rule. */
@@ -10083,6 +10087,231 @@ terse status, and never launches a first-time scan on a global refresh.
      Never a verdict and never a gate: this panel moves nothing, it states
      what the shipped ceiling demands here and what the same rule demanded on
      the measured book at each venue. '' when the venue cannot be priced. */
+  /* hg-v924 — WHEN THE COST CEILING IS WHAT EMPTIED THE SCAN, SAY SO.
+
+     hg-v919 made the ceiling legible in two places: the per-plan veto reason
+     now names the stop width it demands, and hgOgCostCeilingPanelHtml renders
+     both lanes against the replay. Neither of them fires on the case that
+     matters most. hgOgVenueCostNoteHtml renders only when the venue DIFFERS
+     from the replay's, and the replay is PAXG — so on the fail-closed default
+     the desk says nothing at all, which is exactly the setting where the
+     ceiling is doing the most work. On the replay it alone vetoes 84.5% of
+     every plan and 94.7% of the scalp lane at PAXG, against 13.0% / 16.6% at
+     XM. A near-empty board then reads as a quiet market rather than a venue.
+
+     This tallies THE SCAN IN FRONT OF THE READER, not the replay, and only
+     claims what the ledger supports:
+
+       priceable  plans whose cost-drag gate could be evaluated at all
+       vetoed     of those, how many the ceiling failed
+       sole       of THOSE, how many had cost-drag as their ONLY failing hard
+                  gate — the honest denominator for "what relaxing it buys",
+                  the same discipline as the crypto WHY EMPTY sole-blocker
+                  column. A plan that also fails confluence is not a ticket
+                  the venue is withholding.
+       wouldClear of the sole-blocker set, how many clear the SAME ceiling
+                  when re-priced at the other venue preset.
+
+     DOMINANT IS MEASURED, NOT ASSERTED. The note fires only when cost-drag is
+     the top hard blocker in this scan's own ledger — more plans failed on it
+     than on any other gate — and only when nothing ticketed. Anything less and
+     the ceiling is one reason among several, which is not what "the ceiling
+     emptied the scan" claims. Returns '' otherwise, so the caller appends it
+     unconditionally. */
+  function hgOgCostCeilingScanTally(rows, opts){
+    try{
+      opts = opts || {};
+      var list = Array.isArray(rows) ? rows
+        : ((__og && __og.snap && Array.isArray(__og.snap.rows)) ? __og.snap.rows : null);
+      if (!list || !list.length) return null;
+      var vc = (opts.venueCost && isFinite(fin(opts.venueCost.rtCostPct)))
+        ? opts.venueCost : hgOgVenueCost();
+      var venue = String((vc && vc.venue) || 'PAXG');
+      var otherName = (venue === 'XM') ? 'PAXG' : 'XM';
+      var other = null;
+      try { other = hgOgVenuePresetCost(otherName); } catch (eO) { other = null; }
+      var otherRt = fin(other && other.rtCostPct);
+
+      var scanned = 0, priceable = 0, vetoed = 0, sole = 0, wouldClear = 0, tickets = 0;
+      var byKey = {}, i, j, r, g, gl, failedHard, costGate, ceil, stopPct;
+      /* The dollar reading aid needs a price, and the honest one is THIS
+         scan's own: the median entry of the plans being counted. A module
+         global could be stale; these entries are what the plans were priced
+         at. No priceable plan -> no price -> no dollars, per
+         hgOgCostCeilingDemand's own rule. */
+      var entries = [];
+      for (i = 0; i < list.length; i++){
+        r = list[i];
+        if (!r || !Array.isArray(r.gates)) continue;
+        scanned++;
+        if (r.grade && r.grade.ticket) tickets++;
+        gl = r.gates; failedHard = []; costGate = null;
+        for (j = 0; j < gl.length; j++){
+          g = gl[j];
+          if (!g || g.hard !== true) continue;
+          if (g.key === 'cost-drag') costGate = g;
+          if (g.pass === true) continue;
+          failedHard.push(g.key);
+          byKey[g.key] = (byKey[g.key] || 0) + 1;
+        }
+        if (!costGate) continue;
+        priceable++;
+        var pe = fin(r.plan && r.plan.entry);
+        if (isFinite(pe) && pe > 0) entries.push(pe);
+        if (costGate.pass === true) continue;
+        vetoed++;
+        if (failedHard.length !== 1) continue;   /* not the sole blocker */
+        sole++;
+        /* would the SAME ceiling clear at the other venue? Only the fee
+           changes; the geometry and the lane do not. */
+        if (!(isFinite(otherRt) && otherRt > 0)) continue;
+        var pl = (r.plan && typeof r.plan === 'object') ? r.plan : null;
+        var e = fin(pl && pl.entry), st = fin(pl && pl.stop);
+        if (!(isFinite(e) && e > 0 && isFinite(st))) continue;
+        stopPct = Math.abs(e - st) / e * 100;
+        if (!(stopPct > 0)) continue;
+        ceil = (String(r.horizon).toUpperCase() === 'SCALP') ? COST_VETO_R_SCALP : COST_VETO_R;
+        if ((otherRt / stopPct) <= ceil) wouldClear++;
+      }
+      if (!priceable) return null;
+      /* STRICTLY more, and ties broken by name rather than by object key
+         order — "the binding gate" must be the same gate on every render. */
+      var topKey = null, topN = 0, topTie = false, k;
+      for (k in byKey){
+        if (!Object.prototype.hasOwnProperty.call(byKey, k)) continue;
+        if (byKey[k] > topN || (byKey[k] === topN && topKey !== null && k < topKey)){
+          if (byKey[k] === topN) topTie = true; else topTie = false;
+          topN = byKey[k]; topKey = k;
+        } else if (byKey[k] === topN){ topTie = true; }
+      }
+      entries.sort(function(x, y){ return x - y; });
+      var medPx = entries.length ? entries[Math.floor(entries.length / 2)] : null;
+      /* the WHOLE breakdown, not just the winner: "binding gate X" is only
+         readable beside the gates that also blocked, and a reader chasing an
+         empty board needs the list, not the headline. */
+      var blockers = [];
+      for (k in byKey){
+        if (!Object.prototype.hasOwnProperty.call(byKey, k)) continue;
+        blockers.push({ key: k, n: byKey[k] });
+      }
+      blockers.sort(function(x, y){ return (y.n - x.n) || (x.key < y.key ? -1 : 1); });
+      return { px: medPx, blockers: blockers, hardFails: blockers.length,
+               scanned: scanned, priceable: priceable, vetoed: vetoed, sole: sole,
+               wouldClear: wouldClear, tickets: tickets,
+               venue: venue, rtCostPct: fin(vc && vc.rtCostPct),
+               otherVenue: otherName, otherRt: isFinite(otherRt) ? otherRt : null,
+               topKey: topKey, topN: topN, topTie: topTie,
+               /* dominant = the ceiling is the SOLE leader. A tie is not a
+                  cause, it is two causes, and the note must not pick one. */
+               dominant: (topKey === 'cost-drag' && vetoed > 0 && !topTie) };
+    }catch(e){ return null; }
+  }
+
+  /* hg-v924 — WHY NOTHING TICKETED, for whatever gate is actually doing it.
+
+     GOLD SCALP has had this since gsRejectFunnelHTML: "N setups held back
+     across M gates · binding gate: X (P%)", with the per-gate breakdown under
+     it. OMNIGOLD never had one. A reader looking at an empty OMNIGOLD board
+     could read every panel on the page and still not learn which gate emptied
+     it — the panels describe the RULES and the REPLAY; none of them counts
+     this scan.
+
+     So the funnel is general, and the cost ceiling is the special case it
+     folds in: when cost-drag is the binding gate, the venue paragraph below
+     runs as well, because there the answer is a setting rather than the tape.
+     Silent when anything ticketed — an empty ticket column is the only thing
+     this claims to explain. */
+  function hgOgBlockerFunnelHtml(rows, opts){
+    try{
+      var t = hgOgCostCeilingScanTally(rows, opts);
+      if (!t || t.tickets > 0 || !t.blockers.length) return '';
+      var lead = t.blockers[0];
+      var held = 0, bi;
+      for (bi = 0; bi < t.blockers.length; bi++) held += t.blockers[bi].n;
+      var pctOf = function(n){ return t.scanned > 0 ? Math.round(n / t.scanned * 100) : 0; };
+      var h = '<div class="note og-blocker-funnel" style="margin:8px 0;padding:6px 8px;'
+        + 'border:1px solid #64748B;border-left:3px solid #64748B;border-radius:4px;'
+        + 'background:rgba(100,116,139,0.07);font-size:0.85em">'
+        + '<b>WHY NOTHING TICKETED</b> &mdash; ' + t.scanned + ' plan'
+        + (t.scanned === 1 ? '' : 's') + ' scanned, held back across '
+        + t.blockers.length + ' hard gate' + (t.blockers.length === 1 ? '' : 's')
+        /* named even when it is the ONLY gate that blocked: one blocker is
+           the clearest possible answer to "why is my board empty", and
+           leaving it unnamed there was the first draft of this line. */
+        + (!t.topTie
+            ? ' &middot; binding gate: <b>' + esc(t.topKey) + '</b> (' + pctOf(lead.n) + '%)'
+            : ' &middot; no single binding gate &mdash; ' + lead.n
+              + ' plans each on more than one')
+        + '<div style="margin-top:4px">';
+      for (bi = 0; bi < t.blockers.length; bi++){
+        h += '<div style="display:flex;gap:8px;align-items:baseline">'
+          + '<b style="min-width:3.2em;text-align:right">' + t.blockers[bi].n + '</b>'
+          + '<span style="min-width:3em;color:#64748B">' + pctOf(t.blockers[bi].n) + '%</span>'
+          + '<span>' + esc(t.blockers[bi].key) + '</span></div>';
+      }
+      h += '</div>';
+      /* a plan usually fails several gates, so the counts do not add to the
+         plan count and saying so stops a reader summing them */
+      if (held > t.scanned){
+        h += '<div style="margin-top:4px;opacity:.85">A plan can fail more than one gate, so '
+          + 'these add to more than ' + t.scanned + '.</div>';
+      }
+      h += '</div>';
+      return h + hgOgCostCeilingScanNoteHtml(rows, opts);
+    }catch(e){ return ''; }
+  }
+
+  function hgOgCostCeilingScanNoteHtml(rows, opts){
+    try{
+      var t = hgOgCostCeilingScanTally(rows, opts);
+      if (!t) return '';
+      /* the claim is "the ceiling emptied THIS scan" — both halves required */
+      if (t.tickets > 0 || !t.dominant) return '';
+      var pct = function(a, b){ return b > 0 ? (a / b * 100).toFixed(0) + '%' : '—'; };
+      var s = '<div class="note og-cost-emptied" style="margin:8px 0;padding:6px 8px;'
+        + 'border:1px solid #B45309;border-left:3px solid #B45309;border-radius:4px;'
+        + 'background:rgba(180,83,9,0.07);font-size:0.85em">'
+        + '<b>THE COST CEILING EMPTIED THIS SCAN</b> &mdash; not a quiet market. '
+        + 'Of <b>' + t.priceable + '</b> plan' + (t.priceable === 1 ? '' : 's')
+        + ' this scan could price, the ' + esc(t.venue) + ' cost ceiling vetoed <b>'
+        + t.vetoed + '</b> (' + pct(t.vetoed, t.priceable) + ') &mdash; more than any other '
+        + 'gate, which is the only sense in which it is the reason the board is empty.';
+      /* the honest denominator: only a sole-blocker plan is one the venue is
+         withholding. Saying "vetoed 14" and letting a reader read that as
+         "14 tickets lost" is the error this sentence exists to prevent. */
+      s += ' <b>' + t.sole + '</b> of those had the ceiling as their <b>only</b> failing hard gate';
+      if (t.sole === 0){
+        s += ' &mdash; so every one of them fails something else too, and a cheaper venue '
+          + 'would not have ticketed a single extra plan here.';
+      } else if (isFinite(t.otherRt)){
+        s += ', and re-priced at ' + esc(t.otherVenue) + ' (' + t.otherRt.toFixed(3)
+          + '% round trip) <b>' + t.wouldClear + '</b> of them clear the same ceiling'
+          + (t.wouldClear === 0
+              ? ' &mdash; so the venue is not what is withholding them.'
+              : '. That is what the venue setting is costing this scan, and nothing more: '
+                + 'they would still have to pass every other gate they already pass.');
+      } else {
+        s += '.';
+      }
+      /* and what the rule is actually asking of a chart, per lane */
+      var px = fin(t.px);
+      if (!(isFinite(px) && px > 0)) px = null;
+      var lines = [];
+      for (var li = 0; li < 2; li++){
+        var note = hgOgCostCeilingNote({ scalp: li === 0, px: px });
+        if (note) lines.push(note);
+      }
+      if (lines.length){
+        s += '<div style="margin-top:4px;opacity:.85">' + esc(lines.join(' · ')) + '</div>';
+      }
+      s += '<div style="margin-top:4px;opacity:.85">The ceiling is a ratio, so it asks a '
+        + 'different width of the chart at every venue. Change the venue on this tab only '
+        + 'if it is where you actually execute &mdash; the fail-closed preset is the '
+        + 'conservative one, not the wrong one.</div></div>';
+      return s;
+    }catch(e){ return ''; }
+  }
+
   function hgOgCostCeilingPanelHtml(opts){
     try{
       opts = opts || {};
@@ -15887,6 +16116,9 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgCostCeilingDemand = hgOgCostCeilingDemand;
     window.hgOgCostCeilingNote = hgOgCostCeilingNote;
     window.hgOgCostCeilingPanelHtml = hgOgCostCeilingPanelHtml;
+    window.hgOgCostCeilingScanTally = hgOgCostCeilingScanTally;
+    window.hgOgCostCeilingScanNoteHtml = hgOgCostCeilingScanNoteHtml;
+    window.hgOgBlockerFunnelHtml = hgOgBlockerFunnelHtml;
     window.hgOgFactorSepPanelHtml = hgOgFactorSepPanelHtml;
     window.HG_OG_FACTOR_SEP = HG_OG_FACTOR_SEP;
     window.hgOgReplayLineHtml = hgOgReplayLineHtml;

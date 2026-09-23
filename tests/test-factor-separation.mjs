@@ -235,11 +235,15 @@ ok(/HOLDS \(WORSE\)/.test(oHtml), 'the OMNIGOLD panel marks the limit-order row 
 console.log('8. wired into the panel chain and the WHY SILENT block');
 const osrc = readFileSync(join(ROOT, 'omnigold.js'), 'utf8');
 ok(/\+ hgOgFactorSepPanelHtml\(\);/.test(osrc), 'OMNIGOLD panel chain calls hgOgFactorSepPanelHtml');
-/* the two must be adjacent in the chain, not merely both present somewhere:
-   the ceiling asks this question of the arithmetic and this asks it of the
-   outcomes, so they are only legible together */
-ok(/\+ hgOgCostCeilingPanelHtml\(\)[\s\S]{0,400}\+ hgOgFactorSepPanelHtml\(\);/.test(osrc),
-   'and it comes directly after the cost ceiling in the same chain');
+/* Order in the chain is the argument, not decoration: the ceiling states the
+   RULE, hg-v924's funnel counts THIS SCAN against it, and this panel asks the
+   same question of the OUTCOMES. Asserting the three in sequence is stricter
+   than the "within 400 characters" window this replaced — which broke the
+   moment the funnel was inserted between them, for no reason but length. */
+ok(/\+ hgOgCostCeilingPanelHtml\(\)[\s\S]*?\+ hgOgBlockerFunnelHtml\(\)[\s\S]*?\+ hgOgFactorSepPanelHtml\(\);/.test(osrc),
+   'ceiling then scan funnel then factor separation, in that order');
+ok(osrc.indexOf('+ hgOgFactorSepPanelHtml();') > osrc.indexOf('+ hgOgBlockerFunnelHtml()'),
+   'and this panel is last of the three');
 const gssrc = readFileSync(join(ROOT, 'goldscalp.js'), 'utf8');
 ok(/hgGoldFactorSepHtml\(\)/.test(gssrc), 'GOLD SCALP WHY SILENT calls hgGoldFactorSepHtml');
 ok(/goldCoverageNoteHTML\(\)[\s\S]{0,400}hgGoldFactorSepHtml/.test(gssrc),
