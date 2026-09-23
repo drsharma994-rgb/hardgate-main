@@ -93,7 +93,18 @@ console.log('\n2. every ACTIONABLE baked row is transcribed, exactly');
         continue;
       }
       compared++;
-      if (c.action !== j.action) problems.push(side + '.' + k + ' action: code ' + c.action + ' vs evidence ' + j.action);
+      /* hg-v928: the code may carry a HAND-TUNED verdict on instruction, in
+         which case `actionBaked` holds the one the evidence produced. This
+         guard is about DRIFT between the bake and the transcription, so it
+         compares the BAKED verdict — a retune is an explicit, recorded
+         overlay, not drift, and hiding it under `action` would let a genuine
+         transcription error ride in behind it. */
+      const baked = (typeof c.actionBaked === 'string') ? c.actionBaked : c.action;
+      if (baked !== j.action) problems.push(side + '.' + k + ' action: code ' + baked + ' vs evidence ' + j.action);
+      /* and a retuned row must say so, or `actionBaked` is just a second
+         opinion nobody declared */
+      if (typeof c.actionBaked === 'string' && !c.retune)
+        problems.push(side + '.' + k + ' carries actionBaked with no retune record');
       if (c.n !== j.n) problems.push(side + '.' + k + ' n: code ' + c.n + ' vs evidence ' + j.n);
       if (!near(c.gross, j.gross)) problems.push(side + '.' + k + ' gross: code ' + c.gross + ' vs evidence ' + j.gross);
       /* the code calls it net; the evidence stores netXm and netPaxg, and the
@@ -185,7 +196,11 @@ console.log('\n5. the comparison is not vacuous');
       for (const k of Object.keys(J)){
         const j = J[k], c = C[k];
         if (!c){ if (!ACTIONABLE.has(j.action)) continue; return 'missing'; }
-        if (c.action !== j.action) return 'action';
+        /* hg-v928: same rule as the live comparison above — a hand-tuned row
+           is checked on its BAKED verdict, so this self-test exercises the
+           drift check rather than the overlay. */
+        const bk = (typeof c.actionBaked === 'string') ? c.actionBaked : c.action;
+        if (bk !== j.action) return 'action';
         if (c.n !== j.n) return 'n';
         if (!near(c.gross, j.gross)) return 'gross';
         if (!near(c.net, j.netXm)) return 'net';
@@ -195,8 +210,17 @@ console.log('\n5. the comparison is not vacuous');
   };
   ok(check(clone()) === null, 'the real table passes the comparison');
 
-  const a = clone(); a.scalp.bosalign.action = 'prefer';
-  ok(check(a) === 'action', 'a flipped action is caught');
+  /* hg-v928: bosalign is RETUNED, so its `action` is deliberately not the
+     baked verdict and flipping it is not drift. Flip a row that carries no
+     overlay, and separately flip the overlay's own baked field — between them
+     every row in the table is still covered. */
+  const a = clone(); a.scalp.hvn.action = 'prefer';
+  ok(check(a) === 'action', 'a flipped action is caught on a row with no overlay');
+  const a2 = clone(); a2.scalp.bosalign.actionBaked = 'prefer';
+  ok(check(a2) === 'action', 'and on a retuned row, flipping the BAKED verdict is caught');
+  const a3 = clone(); a3.scalp.bosalign.action = 'prefer';
+  ok(check(a3) === null,
+     'while its overlay verdict is free to differ — that is what the overlay IS');
   const b = clone(); b.scalp.hvn.n = b.scalp.hvn.n + 50;
   ok(check(b) === 'n', 'a stale sample count is caught');
   const c = clone(); c.scalp.vwap.net = 0.4;
@@ -218,16 +242,27 @@ console.log('\n6. the rows that actually govern GOLD SCALP');
   const s = CODE.scalp;
   ok(ACTIONABLE.has(s.fvg.action) && ACTIONABLE.has(s.vwap.action),
      'the fee-toxic scalp kinds carry an action');
-  ok(s.hvn.action === 'demote' && s.bosalign.action === 'demote' && s.ribbon.action === 'demote',
-     'the three kinds that dominate the mint are demoted, so none of them can lead');
+  /* hg-v928 retuned bosalign and ribbon to neutral ON INSTRUCTION, so the
+     claim this made is now about the BAKED verdicts: the bake still says all
+     three dominate-the-mint kinds are demotes, and the overlay is what lets
+     two of them lead. Both halves are asserted so neither can rot. */
+  const bakedOf = (r) => (typeof r.actionBaked === 'string') ? r.actionBaked : r.action;
+  ok(bakedOf(s.hvn) === 'demote' && bakedOf(s.bosalign) === 'demote' && bakedOf(s.ribbon) === 'demote',
+     'the three kinds that dominate the mint are demoted in the BAKE');
+  ok(s.bosalign.action === 'neutral' && s.ribbon.action === 'neutral' && s.hvn.action === 'demote',
+     'and hg-v928 lifted two of them to neutral on instruction, leaving hvn demoted');
   ok(s.p9volbar.action === 'prefer', 'and the one fee-survivor is preferred');
 
   /* a demote must not become a drop: demoted cards still paint */
   const src = fs.readFileSync(root + 'goldind.js', 'utf8');
-  ok(/if \(row\.action === 'demote'\)\{[\s\S]{0,200}?cand\.demoted = true;/.test(src),
+  /* hg-v928: the branches read the RESOLVED verdict (act) so the revert
+     switch actually reverts; the behaviour they encode is unchanged. */
+  ok(/if \(act === 'demote'\)\{[\s\S]{0,200}?cand\.demoted = true;/.test(src),
      'demote sets demoted, never dropped — the card still paints, it just cannot lead');
-  ok(/if \(row\.action === 'suppress'\)\{[\s\S]{0,200}?cand\.dropped = true;/.test(src),
+  ok(/if \(act === 'suppress'\)\{[\s\S]{0,200}?cand\.dropped = true;/.test(src),
      'and suppress is the one that drops it');
+  ok(/var act = hgGoldEdgeAction\(row\);/.test(src),
+     'and act is the verdict in force, so turning the retune off changes what they do');
 }
 
 /* ---------------------------------------------------------------- 7 */

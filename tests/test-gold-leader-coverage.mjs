@@ -154,23 +154,48 @@ console.log('3. the coverage arithmetic');
   const blk = goldind.slice(goldind.indexOf('var HG_GOLD_SETUP_EDGE'));
   const scalp = blk.slice(0, blk.indexOf('  swing:'));
   const actions = {};
-  for (const m of scalp.matchAll(/^ {4}(\w+):\s+\{ n: [^\n]*?action: '(\w+)'/gm)) actions[m[1]] = m[2];
+  /* hg-v928: a hand-tuned row carries BOTH verdicts. Parse each so the pack's
+     headline — how much formed volume the retune freed to lead — is asserted
+     rather than silently overwritten. */
+  const baked = {};
+  for (const m of scalp.matchAll(/^ {4}(\w+):\s+\{ n: [^\n]*?action: '(\w+)'(?:, actionBaked: '(\w+)')?/gm)){
+    actions[m[1]] = m[2]; baked[m[1]] = m[3] || m[2];
+  }
   ok(Object.keys(actions).length >= 25, 'parsed the scalp edge table (' + Object.keys(actions).length + ' rows)');
   const all = JSON.parse(readFileSync(join(ROOT, 'scripts/backtest-goldscalp-results-floor.json'), 'utf8'))
     .trades.filter((t) => !t.shadow);
   const by = {};
   for (const t of all) by[actions[t.stratKey] || 'none'] = (by[actions[t.stratKey] || 'none'] || 0) + 1;
   const pc = (k) => (by[k] || 0) / all.length * 100;
-  near(pc('demote'), 62.9, 0.15, 'demote is 62.9% of formed volume');
-  near(pc('suppress'), 21.6, 0.15, 'suppress is 21.6%');
-  near(pc('demote') + pc('suppress'), 84.5, 0.2, 'so 84.5% can never lead');
+  /* the BAKED verdicts still give hg-v920's arithmetic, unchanged */
+  const byB = {};
+  for (const t of all) byB[baked[t.stratKey] || 'none'] = (byB[baked[t.stratKey] || 'none'] || 0) + 1;
+  const pcB = (k) => (byB[k] || 0) / all.length * 100;
+  near(pcB('demote'), 62.9, 0.15, 'on the BAKED verdicts demote is still 62.9% of formed volume');
+  near(pcB('suppress'), 21.6, 0.15, 'and suppress still 21.6%');
+  near(pcB('demote') + pcB('suppress'), 84.5, 0.2, 'so 84.5% could never lead before the retune');
+  /* and the retune is what moved them — the headline of hg-v928 */
+  near(pc('demote'), 59.2, 0.15, 'demote is 59.2% of formed volume');
+  near(pc('suppress'), 10.1, 0.15, 'suppress is 10.1%');
+  near(pc('demote') + pc('suppress'), 69.3, 0.2, 'so 69.3% can never lead');
+  /* THE HEADLINE OF hg-v928, asserted as a delta so it cannot be read as a
+     re-measurement: four verdicts moving on instruction freed 15.2 points of
+     formed volume to lead. Nothing was re-walked. */
+  near((pcB('demote') + pcB('suppress')) - (pc('demote') + pc('suppress')), 15.2, 0.3,
+       'the retune freed 15.2 points of formed volume to lead');
   /* the six highest-volume detectors are all blocked */
   const counts = {};
   for (const t of all) counts[t.stratKey] = (counts[t.stratKey] || 0) + 1;
   const top6 = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k]) => k);
+  /* hg-v920 measured that ALL SIX highest-volume detectors were blocked. The
+     hg-v928 retune freed two of them (bosalign, ribbon), so the claim splits:
+     all six are still blocked in the BAKE, and four remain blocked in force. */
   for (const k of top6)
-    ok(actions[k] === 'demote' || actions[k] === 'suppress',
-       'the high-volume detector ' + k + ' is ' + actions[k]);
+    ok(baked[k] === 'demote' || baked[k] === 'suppress',
+       'the high-volume detector ' + k + ' is ' + baked[k] + ' in the bake');
+  const freed = top6.filter((k) => actions[k] !== 'demote' && actions[k] !== 'suppress');
+  eq(freed.sort().join(','), 'bosalign,ribbon',
+     'and exactly two of the six were freed by the retune');
   /* MOST PROBABLE fires once in 51 scans */
   const meta = JSON.parse(readFileSync(join(ROOT, 'scripts/backtest-goldscalp-results-floor.json'), 'utf8')).meta;
   const mp = book.filter((t) => t.mp).length;

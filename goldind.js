@@ -1339,6 +1339,128 @@ var GST_NAME = {
    measured. Shipping 0.28% because it is where the windows happened to line up
    is the hg-v920 mistake with a new number on it. The cost gate stays at
    8x the venue round trip. */
+/* ======================================================================
+   hg-v928 — THE VERDICTS ARE HAND-TUNED, ON INSTRUCTION
+   ======================================================================
+
+   The desk owner asked for the suppress / demote / prefer verdicts to be
+   hand-tuned. It is their call and it is recorded as theirs: NO NEW EVIDENCE
+   SUPPORTS ANY OF IT, and none is claimed.
+
+   THE TUNING IS MECHANICAL, NOT A LIST OF PICKS. The table states its own
+   bars, and until now applied them to the WHOLE 2,193-trade book — 45% of
+   which the desk no longer forms (hg-v916). The retune applies the SAME bars
+   to the population the desk actually forms, the `live` block on each row:
+
+     suppress   n>=50 AND gross <= 0 AND netXm <= -0.20
+     demote     netXm < 0
+     prefer     n>=50 AND gross > 0  AND netXm >= +0.10
+
+   FOUR VERDICTS MOVE, all of them loosening:
+
+     nyexh     suppress -> demote    live -0.183R over 117, above the -0.20 bar
+     liqsweep  suppress -> demote    live -0.048R over 54, and gross POSITIVE
+     bosalign  demote   -> neutral   live +0.013R over 125, so net<0 stops firing
+     ribbon    demote   -> neutral   live +0.027R over 102, same
+
+   nyexh and liqsweep were forming NOTHING and now paint as demoted cards.
+   bosalign and ribbon could not lead and now can.
+
+   NOT ONE OF THEM IS UNANIMOUS ON DISJOINT WINDOWS, and that is stated on the
+   row rather than buried: net-positive in 1/4, 1/4, 3/4 and 3/4 windows
+   respectively. bosalign additionally flips sign at all three walk-forward
+   splits, which is why hg-v916 refused exactly this flip. They are shipped
+   because they were asked for.
+
+   TWO FURTHER FLIPS THE RULE WOULD MAKE ARE REFUSED, and refusing them is not
+   me overriding the instruction — both TIGHTEN, so acting on them would show
+   FEWER setups, which is the opposite of what was asked, on the thinnest
+   evidence in the table:
+
+     p5vwap    neutral -> demote on n=6
+     vpbook    neutral -> demote on n=1
+
+   The demote bar has NO SAMPLE FLOOR — that is a real gap in the rule, found
+   here — and vpbook's own `why` already says it is "far too thin to demote
+   on". Applying the rule there would contradict a judgement this table makes
+   in writing, to make the board emptier. Recorded, not done.
+
+   REVERSIBLE WITHOUT AN EDIT. Every retuned row keeps `actionBaked`, so
+   hgGoldSetEdgeRetune(false) restores the original verdicts for the session
+   and persists; window.HG_GOLD_EDGE_RETUNE overrides both. */
+var HG_GOLD_EDGE_RETUNE_LS_KEY = 'hg_gold_edge_retune';
+var HG_GOLD_EDGE_RETUNE_DEFAULT = true;   /* hg-v928: retuned on instruction */
+var HG_GOLD_EDGE_RETUNE = HG_GOLD_EDGE_RETUNE_DEFAULT;
+
+function hgGoldEdgeRetuneInit(){
+  try{
+    var w = (typeof window !== 'undefined') ? window : null;
+    var ovr = w && w.HG_GOLD_EDGE_RETUNE;
+    if (ovr === true || ovr === false){ HG_GOLD_EDGE_RETUNE = ovr; return HG_GOLD_EDGE_RETUNE; }
+    var stored = null;
+    try { stored = localStorage.getItem(HG_GOLD_EDGE_RETUNE_LS_KEY); } catch (eL) { stored = null; }
+    if (stored === '1' || stored === 'true') HG_GOLD_EDGE_RETUNE = true;
+    else if (stored === '0' || stored === 'false') HG_GOLD_EDGE_RETUNE = false;
+    else HG_GOLD_EDGE_RETUNE = HG_GOLD_EDGE_RETUNE_DEFAULT;
+  }catch(e){ HG_GOLD_EDGE_RETUNE = HG_GOLD_EDGE_RETUNE_DEFAULT; }
+  return HG_GOLD_EDGE_RETUNE;
+}
+function hgGoldSetEdgeRetune(on){
+  HG_GOLD_EDGE_RETUNE = (on === true);
+  try { localStorage.setItem(HG_GOLD_EDGE_RETUNE_LS_KEY, HG_GOLD_EDGE_RETUNE ? '1' : '0'); } catch (eS) {}
+  return HG_GOLD_EDGE_RETUNE;
+}
+
+/* The verdict actually in force for a row. A row with no actionBaked was
+   never retuned and reads exactly as before, so this is safe on every row. */
+function hgGoldEdgeAction(row){
+  if (!row) return null;
+  if (!HG_GOLD_EDGE_RETUNE && typeof row.actionBaked === 'string') return row.actionBaked;
+  return row.action;
+}
+
+/* Every row whose verdict the retune moved, derived rather than listed. */
+function hgGoldEdgeRetunedRows(){
+  var out = [], k, tbl = (typeof HG_GOLD_SETUP_EDGE === 'object' && HG_GOLD_SETUP_EDGE)
+    ? (HG_GOLD_SETUP_EDGE.scalp || {}) : {};
+  for (k in tbl){
+    if (!Object.prototype.hasOwnProperty.call(tbl, k)) continue;
+    if (tbl[k] && tbl[k].retune) out.push({ key: k, row: tbl[k] });
+  }
+  return out;
+}
+
+function hgGoldEdgeRetuneNote(){
+  try{
+    if (!HG_GOLD_EDGE_RETUNE) return '';
+    var rows = hgGoldEdgeRetunedRows();
+    if (!rows.length) return '';
+    var body = '', i, r;
+    for (i = 0; i < rows.length; i++){
+      r = rows[i].row.retune;
+      body += '<div style="display:flex;gap:8px;align-items:baseline">'
+        + '<b style="min-width:6.5em">' + rows[i].key + '</b>'
+        + '<span style="min-width:11em">' + r.from + ' &rarr; <b>' + r.to + '</b></span>'
+        + '<span style="min-width:9em">live n=' + r.liveN + '</span>'
+        + '<span style="min-width:7em">' + (r.liveNet >= 0 ? '+' : '') + r.liveNet.toFixed(4) + 'R</span>'
+        + '<span>net+ in ' + r.windows + ' windows'
+        + (r.unanimous ? '' : ' &mdash; <b>split</b>') + '</span></div>';
+    }
+    return '<div class="gsx-retune"><b>VERDICTS HAND-TUNED &mdash; ON INSTRUCTION, NOT ON EVIDENCE</b><br>'
+      + 'The suppress / demote / prefer bars below are unchanged; they are now applied to the '
+      + 'trades this desk STILL forms instead of the whole 2,193-trade book, 45% of which it '
+      + 'does not. Four verdicts move, all of them loosening:'
+      + '<div class="gsx-retune-tbl">' + body + '</div>'
+      + '<div style="margin-top:6px"><b>Not one is unanimous across four disjoint windows</b>, and '
+      + 'BOS align additionally flips sign at all three walk-forward splits &mdash; which is why this '
+      + 'exact flip was refused before. They are here because they were asked for. Two further flips '
+      + 'the rule would make (<code>p5vwap</code> at n=6, <code>vpbook</code> at n=1) are <b>refused</b>: '
+      + 'both tighten, so they would show fewer setups on the thinnest evidence in the table, and the '
+      + 'demote bar has no sample floor &mdash; a real gap in the rule. '
+      + '<code>hgGoldSetEdgeRetune(false)</code> restores the original verdicts.</div></div>';
+  }catch(e){ return ''; }
+}
+
 /* hg-v927 — WHEN THE WALK BEHIND THIS TABLE ENDED.
 
    Every suppress / demote / prefer verdict in HG_GOLD_SETUP_EDGE below comes
@@ -1491,12 +1613,20 @@ var HG_GOLD_SETUP_EDGE = {
     vwap: { n: 132, gross: -0.127, net: -0.314, action: 'suppress',
       live: { n: 93, net: -0.214, oosHeld: 3, oosBroke: 0, formsNone: true },
       why: 'SCALP VWAP bounce gross −0.13R / net −0.31R at XM (n=132, 33% WR) — negative before fees, not tradable' },
-    nyexh: { n: 167, gross: -0.157, net: -0.343, action: 'suppress',
+    nyexh: { n: 167, gross: -0.157, net: -0.343, action: 'demote', actionBaked: 'suppress',
       live: { n: 117, net: -0.183, oosHeld: 3, oosBroke: 0, formsNone: true },
-      why: 'NY VOLUME EXHAUSTION gross −0.16R / net −0.34R at XM (n=167) — 61% WR but timeout losses dominate; negative before fees' },
-    liqsweep: { n: 97, gross: -0.041, net: -0.304, action: 'suppress',
+      retune: { from: 'suppress', to: 'demote', liveN: 117, liveGross: -0.1235, liveNet: -0.1827,
+                windows: '1/4', unanimous: false },
+      why: 'NY VOLUME EXHAUSTION gross −0.16R / net −0.34R at XM (n=167) — 61% WR but timeout losses dominate; negative before fees'
+        + ' · RETUNED ON INSTRUCTION: on the 117 trades the desk still forms it is −0.18R, above the −0.20 suppress bar, so the'
+        + ' table\'s own rule reads demote. Net is positive in only 1 of 4 disjoint windows, so this is the rule applied, not an edge shown.' },
+    liqsweep: { n: 97, gross: -0.041, net: -0.304, action: 'demote', actionBaked: 'suppress',
       live: { n: 54, net: -0.048, oosHeld: 0, oosBroke: 2, formsNone: true },
-      why: 'FIVE-LEG SWEEP ENGINE gross −0.04R / net −0.30R at XM (n=97, post stop-floor) — no edge at the venue' },
+      retune: { from: 'suppress', to: 'demote', liveN: 54, liveGross: 0.0313, liveNet: -0.0479,
+                windows: '1/4', unanimous: false },
+      why: 'FIVE-LEG SWEEP ENGINE gross −0.04R / net −0.30R at XM (n=97, post stop-floor) — no edge at the venue'
+        + ' · RETUNED ON INSTRUCTION: on the 54 it still forms it is −0.05R with gross POSITIVE, clearing the suppress bar on both legs,'
+        + ' so the rule reads demote. Net is positive in only 1 of 4 disjoint windows.' },
     sweep: { n: 74, gross: -0.073, net: -0.267, action: 'suppress',
       live: { n: 53, net: -0.244, oosHeld: 2, oosBroke: 0, formsNone: true },
       why: 'SCALP liquidity sweep gross −0.07R / net −0.27R at XM (n=74, 37% WR) — negative before fees; SWING 4H sweep stays preferred' },
@@ -1537,15 +1667,24 @@ var HG_GOLD_SETUP_EDGE = {
     openrange: { n: 276, gross: 0.088, net: -0.143, action: 'demote',
       live: { n: 184, net: -0.099, oosHeld: 2, oosBroke: 1 },
       why: 'SCALP ORB net −0.14R at XM (n=276, gross+) — never MOST PROBABLE / ENGINE lead' },
-    bosalign: { n: 189, gross: 0.088, net: -0.108, action: 'demote',
+    bosalign: { n: 189, gross: 0.088, net: -0.108, action: 'neutral', actionBaked: 'demote',
       live: { n: 125, net: 0.012, oosHeld: 0, oosBroke: 3 },
-      why: 'SCALP BOS align net −0.11R at XM (n=189, gross+) — never MOST PROBABLE / ENGINE lead' },
+      retune: { from: 'demote', to: 'neutral', liveN: 125, liveGross: 0.0654, liveNet: 0.0125,
+                windows: '3/4', unanimous: false },
+      why: 'SCALP BOS align net −0.11R at XM (n=189, gross+) — never MOST PROBABLE / ENGINE lead'
+        + ' · RETUNED ON INSTRUCTION: on the 125 it still forms it is +0.013R, so the demote rule (net<0) no longer fires.'
+        + ' REFUSED TWICE BEFORE: its sign flips at all three walk-forward splits and it is net-positive in only 3 of 4'
+        + ' disjoint windows. It can lead now because it was asked for, not because it was shown.' },
     asian: { n: 157, gross: 0.117, net: -0.089, action: 'demote',
       live: { n: 101, net: -0.044, oosHeld: 0, oosBroke: 3 },
       why: 'SCALP Asian breakout net −0.09R at XM (n=157, gross+) — never MOST PROBABLE / ENGINE lead' },
-    ribbon: { n: 144, gross: 0.171, net: -0.05, action: 'demote',
+    ribbon: { n: 144, gross: 0.171, net: -0.05, action: 'neutral', actionBaked: 'demote',
       live: { n: 102, net: 0.027, oosHeld: 2, oosBroke: 1 },
-      why: 'SCALP EMA ribbon net −0.05R at XM (n=144, gross+) — near-flat, never MOST PROBABLE / ENGINE lead' },
+      retune: { from: 'demote', to: 'neutral', liveN: 102, liveGross: 0.1093, liveNet: 0.0271,
+                windows: '3/4', unanimous: false },
+      why: 'SCALP EMA ribbon net −0.05R at XM (n=144, gross+) — near-flat, never MOST PROBABLE / ENGINE lead'
+        + ' · RETUNED ON INSTRUCTION: on the 102 it still forms it is +0.027R, so the demote rule no longer fires.'
+        + ' Net-positive in 3 of 4 disjoint windows — a split, not a result.' },
     rsidiv: { n: 86, gross: -0.051, net: -0.154, action: 'demote',
       live: { n: 71, net: -0.145, oosHeld: 1, oosBroke: 1 },
       why: 'SCALP RSI divergence net −0.15R at XM (n=86, 34% WR) — never MOST PROBABLE / ENGINE lead' },
@@ -1875,8 +2014,14 @@ function hgGoldSetupEdgeApply(cand, opts){
       else if (/VWAP BAND/.test(lab)) row = HG_GOLD_SETUP_EDGE.scalp.vwapband;
     }
     if (!row || !row.action) return cand;
+    /* hg-v928: the verdict IN FORCE, which is the baked one again when the
+       retune is switched off. Read once here so every branch below agrees. */
+    var act = hgGoldEdgeAction(row);
+    if (!act) return cand;
     if (!Array.isArray(cand.stamps)) cand.stamps = [];
-    cand.edge = { action: row.action, n: row.n, gross: row.gross, net: row.net, why: row.why };
+    cand.edge = { action: act, n: row.n, gross: row.gross, net: row.net, why: row.why,
+                  actionBaked: (typeof row.actionBaked === 'string') ? row.actionBaked : null,
+                  retune: row.retune || null };
     /* hg-v916: the baked net above is the whole replay book, 45% of which
        this desk no longer forms. Carry the live population and the one-line
        reading of it on the candidate, so every consumer that already renders
@@ -1885,7 +2030,7 @@ function hgGoldSetupEdgeApply(cand, opts){
     if (row.live !== undefined) cand.edge.live = row.live;
     var liveNote = hgGoldEdgeLiveNote(row);
     if (liveNote) cand.edge.liveWhy = liveNote;
-    if (row.action === 'suppress'){
+    if (act === 'suppress'){
       cand.dropped = true;
       cand.reason = row.why || ('replay suppress ' + key);
       if (cand.stamps.indexOf('EDGE SUPPRESS') < 0) cand.stamps.push('EDGE SUPPRESS');
@@ -1896,7 +2041,7 @@ function hgGoldSetupEdgeApply(cand, opts){
          a bare 'suppressed' reason cannot tell them apart. */
       return cand;
     }
-    if (row.action === 'demote'){
+    if (act === 'demote'){
       cand.demoted = true;
       if (cand.stamps.indexOf('EDGE DEMOTE') < 0) cand.stamps.push('EDGE DEMOTE');
       var gn = Array.isArray(cand.gateNotes) ? cand.gateNotes.slice() : [];
@@ -1905,12 +2050,12 @@ function hgGoldSetupEdgeApply(cand, opts){
       cand.gateNotes = gn;
       return cand;
     }
-    if (row.action === 'prefer'){
+    if (act === 'prefer'){
       cand.edgeBoost = (isFinite(cand.edgeBoost) ? cand.edgeBoost : 0) + 2;
       if (cand.stamps.indexOf('EDGE PREFER') < 0) cand.stamps.push('EDGE PREFER');
       return cand;
     }
-    if (row.action === 'neutral'){
+    if (act === 'neutral'){
       /* hg-v909: MEASURED, AND CLEARED NO BAR. No boost, no demote, no change
          of eligibility — deliberately. What it does change is that the reader
          and the ranker can now tell this apart from a mechanic nobody has
@@ -15406,6 +15551,11 @@ W.hgGoldSweepObStageLabel = hgGoldSweepObStageLabel;
 W.HG_GOLD_EDGE_WALK = HG_GOLD_EDGE_WALK;
 W.hgGoldEdgeWalkAgeDays = hgGoldEdgeWalkAgeDays;
 W.hgGoldEdgeWalkAgeNote = hgGoldEdgeWalkAgeNote;
+W.hgGoldEdgeAction = hgGoldEdgeAction;
+W.hgGoldSetEdgeRetune = hgGoldSetEdgeRetune;
+W.hgGoldEdgeRetuneInit = hgGoldEdgeRetuneInit;
+W.hgGoldEdgeRetunedRows = hgGoldEdgeRetunedRows;
+W.hgGoldEdgeRetuneNote = hgGoldEdgeRetuneNote;
 W.hgGoldScalpStopFloor = hgGoldScalpStopFloor;
 W.hgGoldScalpCostGate = hgGoldScalpCostGate;
 W.goldCrossVenueMap = goldCrossVenueMap;

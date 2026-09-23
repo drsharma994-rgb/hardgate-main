@@ -90,7 +90,11 @@ ok(checked >= 20, 're-derived at least 20 rows (got ' + checked + ')');
 /* the four suppressed-after-the-walk kinds must be flagged, or the note lies
    about the desk forming them */
 for (const k of SUPPRESSED){
-  ok(scalp[k] && scalp[k].action === 'suppress', k + ' is still a suppress row');
+  /* hg-v928 retuned nyexh and liqsweep OFF suppress on instruction, so the
+     claim is now about the BAKED verdict — which is what SUPPRESSED, and this
+     whole file's live/formsNone arithmetic, is derived from. */
+  const bakedAct = (typeof scalp[k].actionBaked === 'string') ? scalp[k].actionBaked : scalp[k].action;
+  ok(scalp[k] && bakedAct === 'suppress', k + ' is still a suppress row in the bake');
   ok(scalp[k] && scalp[k].live && scalp[k].live.formsNone === true, k + ' live is flagged formsNone');
 }
 /* fvg / vwapband were shadowed at walk time — no population, and none invented */
@@ -161,7 +165,21 @@ const ACTIONS = {
   p8range: 'neutral', p5vwap: 'neutral', p5wyck: 'neutral', p8vpinbo: 'neutral',
   p7scalp: 'neutral', vpbook: 'neutral', adrfade: 'neutral'
 };
-for (const [k, act] of Object.entries(ACTIONS)) eq(scalp[k] && scalp[k].action, act, k + ' action is unchanged');
+/* The BAKED verdict of every row is unchanged — hg-v928 is an overlay, not a
+   re-bake, and that is the property this list has always been pinning. */
+for (const [k, act] of Object.entries(ACTIONS)){
+  const bakedAct = scalp[k] && (typeof scalp[k].actionBaked === 'string' ? scalp[k].actionBaked : scalp[k].action);
+  eq(bakedAct, act, k + ' baked action is unchanged');
+}
+/* and exactly the four hg-v928 rows carry an overlay, each loosening */
+const RETUNED = { nyexh: 'demote', liqsweep: 'demote', bosalign: 'neutral', ribbon: 'neutral' };
+const overlaid = Object.keys(scalp).filter((k) => typeof scalp[k].actionBaked === 'string').sort();
+eq(overlaid.join(','), Object.keys(RETUNED).sort().join(','), 'exactly four rows carry a retune overlay');
+for (const [k, act] of Object.entries(RETUNED)){
+  eq(scalp[k].action, act, k + ' is retuned to ' + act + ' on instruction');
+  ok(scalp[k].retune && scalp[k].retune.unanimous === false,
+     k + ' records that its retune is not unanimous across disjoint windows');
+}
 eq(Object.keys(scalp).length, Object.keys(ACTIONS).length, 'no scalp row was added or dropped');
 
 /* ---- 4. the two refused flips, re-derived ---- */
@@ -172,7 +190,12 @@ console.log('4. the flips the in-sample read invites, refused on the walk');
 for (const k of ['bosalign', 'ribbon']){
   ok(measured.rows[k].net > 0, k + ' IS net-positive on the live population (the invitation is real)');
   ok(scalp[k].net < 0, k + ' baked net is negative (which is what put the demote there)');
-  eq(scalp[k].action, 'demote', k + ' is still demoted anyway');
+  /* hg-v916 refused this flip and hg-v928 made it ON INSTRUCTION. Both facts
+     are asserted: the bake still says demote (the refusal stands as the
+     measured verdict) and the overlay says neutral (the instruction). */
+  eq(scalp[k].actionBaked, 'demote', k + ' is still demoted in the bake — the refusal stands');
+  eq(scalp[k].action, 'neutral', k + ' was lifted to neutral by hg-v928, on instruction');
+  ok(/RETUNED ON INSTRUCTION/.test(scalp[k].why), k + ' says on the row that it was an instruction');
 }
 eq(measured.rows.bosalign.oosBroke, 3, 'bosalign flips sign at all three splits');
 eq(measured.rows.bosalign.oosHeld, 0, 'bosalign holds at none');
@@ -263,14 +286,18 @@ console.log('8. the derivation states its parameters');
 eq(COST_BAR_PCT, 0.16, 'the cost bar is the shipped hg-v912 one, not a new number');
 eq(MIN_SIDE, 20, 'a walk-forward side under 20 is not walked');
 assert.deepEqual(SPLITS, [0.5, 0.6, 0.7], 'the same three splits hg-v914/v915 used');
-ok(SUPPRESSED.every((k) => scalp[k] && scalp[k].action === 'suppress'),
-   'the SUPPRESSED list is exactly kinds the table suppresses — not a hand-picked set');
+ok(SUPPRESSED.every((k) => scalp[k]
+     && (typeof scalp[k].actionBaked === 'string' ? scalp[k].actionBaked : scalp[k].action) === 'suppress'),
+   'the SUPPRESSED list is exactly kinds the BAKE suppresses — not a hand-picked set');
 {
   /* and it lists ALL of them: any main-book kind the table suppresses must be
      in that list, or its 470 would be undercounted */
   const raw = JSON.parse(readFileSync(join(ROOT, 'scripts/backtest-goldscalp-results-floor.json'), 'utf8'));
   const inBook = new Set(raw.trades.filter((t) => !t.shadow).map((t) => t.stratKey));
-  const shouldBe = Object.entries(scalp).filter(([k, r]) => r.action === 'suppress' && inBook.has(k)).map(([k]) => k);
+  /* the BAKED verdict again: SUPPRESSED, and the 470 it accounts for, are
+     properties of the walk, not of the hg-v928 overlay on top of it. */
+  const bakedOf = (r) => (typeof r.actionBaked === 'string') ? r.actionBaked : r.action;
+  const shouldBe = Object.entries(scalp).filter(([k, r]) => bakedOf(r) === 'suppress' && inBook.has(k)).map(([k]) => k);
   assert.deepEqual([...SUPPRESSED].sort(), shouldBe.sort(),
     'SUPPRESSED is every suppress row that still walks in the main book');
   pass++;
