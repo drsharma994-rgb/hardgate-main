@@ -326,7 +326,14 @@ const STARVED = await sweep(true);
   const NO_CANDLES = {
     'super-gold': { file: 'super-gold.js', mark: /__hgSuperGoldSnap/, why: "other desks' published snapshots" },
     goldspot:     { file: 'goldspot.js',   mark: /[/]api[/]proxy/,    why: 'a proxied spot print' },
-    tauric:       { file: 'tauric.js',     mark: /api[/]tauric/,      why: 'the TradingAgents pipeline' }
+    tauric:       { file: 'tauric.js',     mark: /api[/]tauric/,      why: 'the TradingAgents pipeline' },
+    /* hg-v936. MILLI GOLD DOES read candles — but only through OMNIGOLD's
+       exports (hgOgFetchRows), and this sweep does not load omnigold.js. With
+       no engine present it renders its no-engine notice, which the bars cannot
+       move. That is the tab behaving correctly, not a tab ignoring the feed,
+       and the distinction is why the `why` below says which desk it borrows
+       from rather than claiming it has no candle path at all. */
+    milligold:    { file: 'milligold.js',  mark: /hgOgFetchRows/,     why: "OMNIGOLD's exports, which this sweep does not load" }
   };
   const bearing = [], flat = [];
   for (const id of FED.live){
@@ -337,7 +344,7 @@ const STARVED = await sweep(true);
      `${bearing.length} of ${FED.live.length} gold tabs shrink by more than the ${noiseFloor}-character noise floor `
      + 'when the bars are taken away, so their numbers came from the bars');
   ok(flat.every(id => Object.prototype.hasOwnProperty.call(NO_CANDLES, id)),
-     'and every tab that did not move is one that does not read candles: ' + flat.join(', '));
+     'and every tab that did not move is one with no candle path OF ITS OWN: ' + flat.join(', '));
   ok(flat.length === Object.keys(NO_CANDLES).length,
      `all ${flat.length} of them, so the exception list is exactly the set observed and not a longer one written in advance`);
   for (const [id, spec] of Object.entries(NO_CANDLES)){
