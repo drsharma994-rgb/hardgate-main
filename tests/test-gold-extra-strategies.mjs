@@ -207,10 +207,27 @@ console.log('\n5. THE DISCIPLINE — no record, so it cannot lead');
   W.hgGoldExtraSetPromotable(false);
   ok(W.hgGoldExtraPromotable() === false, 'and it goes back');
 
+  /* hg-v934 REBASED THESE FOUR. They were written against this pack's own claim
+     that every one of these detectors has NO MEASURED RECORD — and that claim was
+     wrong: goldfix's OMNIGOLD twin LONDON-FIX has 69 settled firings and
+     goldround's twin ROUND-MAGNET has 587. The assertions are kept, not deleted,
+     because what they were guarding still holds — the card must say it cannot
+     lead and why — but they now check the statement that is TRUE. The
+     unconditional version is asserted where it is still honest: on golddxy,
+     which really has no twin. See tests/test-gold-sibling-records.mjs. */
   const note = W.hgGoldExtraUncheckedNote('goldfix');
-  ok(/NO MEASURED RECORD/.test(note) && /GOLDFIX/.test(note), 'the card says it has no record');
-  ok(/cannot lead until a walk gives it one/.test(note), 'and what would change that');
-  ok(/not a comment on the idea/.test(note),
+  ok(/GOLDFIX/.test(note), 'the card names the mechanic');
+  ok(/NO RECORD ON THIS DESK/.test(note),
+     'and says it has no record HERE — which is the true statement');
+  ok(/LONDON-FIX/.test(note) && /OMNIGOLD/.test(note),
+     'naming the twin whose record it quotes, and attributing it');
+  ok(/cannot lead/.test(note), 'and what that means for the card');
+
+  const bare = W.hgGoldExtraUncheckedNote('golddxy');
+  ok(/NO MEASURED RECORD/.test(bare) && /GOLDDXY/.test(bare),
+     'the detector that genuinely has no twin still says it has no record at all');
+  ok(/cannot lead until a walk gives it one/.test(bare), 'and what would change that');
+  ok(/not a comment on the idea/.test(bare),
      'distinguishing absence of evidence from evidence of absence');
 
   const gi = fs.readFileSync(root + 'goldind.js', 'utf8');
@@ -218,8 +235,10 @@ console.log('\n5. THE DISCIPLINE — no record, so it cannot lead');
      'all three are registered as gold strategies');
   ok(/if \(!promo\) xCand\.demoted = true;/.test(gi),
      'and the mint DEMOTES them while promotion is off — the never-observed rule');
-  ok(/xCand\.stamps\.push\(String\(xr\.kind\)\.toUpperCase\(\) \+ ' · NO RECORD'\)/.test(gi),
-     'with the reason stamped on the card, not left implicit');
+  ok(/hgGoldExtraStamp/.test(gi)
+     && /String\(xr\.kind\)\.toUpperCase\(\) \+ ' · NO RECORD'/.test(gi),
+     'with the reason stamped on the card — record-aware since hg-v934, and still '
+     + 'falling back to the plain NO RECORD stamp when that helper is absent');
 
   /* NOT registered as OMNIGOLD mechanics: that would widen the family bar */
   const og = fs.readFileSync(root + 'omnigold.js', 'utf8');

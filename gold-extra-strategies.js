@@ -299,6 +299,270 @@ function hgGoldRoundReject(rows, opts){
   return null;
 }
 
+/* =================================================================
+   4. WEEKLY OPEN SWEEP  (goldwopen)                          hg-v934
+
+   Gold reopens at Sunday 22:00 UTC after the only scheduled closure in its
+   week, and the price it opens at is the reference every desk marks for the
+   next five days. OMNIGOLD has read it as WEEKLY-OPEN since round five.
+   GOLD SCALP and GOLD SWING never got it — the same gap hg-v933 closed for
+   ROUND-MAGNET, found the same way and closed the same way.
+
+   IT ARRIVES WITH A RECORD, unlike hg-v933's three. Its OMNIGOLD twin has
+   140 settled firings on the gate-clear population, and that record is
+   negative and inside the noise (HG_GOLD_SIBLING_RECORD carries the
+   numbers). So it still mints demoted — but the card now says what WAS
+   measured instead of claiming nothing is known, which is what hg-v933's
+   stamp wrongly said about two detectors whose twins had 593 and 87
+   firings behind them.
+
+   SWEEP AND RECLAIM ONLY. Price merely trading above the weekly open is not
+   a setup, it is Tuesday. The bar has to pierce the level and close back
+   through it, having opened on the far side.
+   ================================================================= */
+
+var HG_GOLD_WEEK_OPEN_UTC_H = 22;     /* Sunday 22:00 UTC — the gold reopen */
+
+/** Timestamp of a row in ms, accepting the seconds form the gold feeds use. */
+function tms(row){
+  var t = num(row && row.t);
+  if (!isFinite(t)) return NaN;
+  return t > 1e11 ? t : t * 1000;
+}
+
+/** The most recent Sunday 22:00 UTC at or before `ms`. */
+function hgGoldWeekOpenMs(ms){
+  if (!isFinite(ms)) return NaN;
+  var d = new Date(ms);
+  var anchor = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(),
+                        HG_GOLD_WEEK_OPEN_UTC_H, 0, 0, 0);
+  anchor -= d.getUTCDay() * 864e5;          /* back to Sunday */
+  if (anchor > ms) anchor -= 7 * 864e5;     /* Sunday, but before the reopen */
+  return anchor;
+}
+
+function hgGoldWeeklyOpen(rows, opts){
+  var o = opts || {};
+  if (!rows || rows.length < 20) return null;
+  var lb = last(rows);
+  var nowMs = isFinite(o.now) ? o.now : tms(lb);
+  var woMs = isFinite(o.weekOpenMs) ? o.weekOpenMs : hgGoldWeekOpenMs(nowMs);
+  if (!isFinite(woMs)) return null;
+
+  /* The weekly open is the OPEN of the first bar at or after the reopen —
+     not the close of the last bar before it. A feed that starts mid-week
+     has no weekly open in it and gets no opinion. */
+  var wo = NaN, woIdx = -1;
+  for (var i = 0; i < rows.length; i++){
+    var t = tms(rows[i]);
+    if (isFinite(t) && t >= woMs){ wo = num(rows[i].o); woIdx = i; break; }
+  }
+  if (!isFinite(wo) || woIdx < 0) return null;
+  var minBars = isFinite(o.minBars) ? o.minBars : 3;
+  if ((rows.length - 1 - woIdx) < minBars) return null;   /* week has not traded away yet */
+
+  var atr = barAtr(rows, 14);
+  if (!isFinite(atr) || !(atr > 0)) return null;
+  var minPierce = (isFinite(o.pierceAtr) ? o.pierceAtr : 0.12) * atr;
+  var h = num(lb.h), l = num(lb.l), c = num(lb.c), op = num(lb.o);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(c) || !isFinite(op)) return null;
+
+  if (h >= wo && (h - wo) >= minPierce && c < wo && op < wo){
+    return {
+      ok: true, dir: 'short', kind: 'goldwopen', level: wo,
+      entry: c, stop: h + 0.15 * atr,
+      pierceAtr: +((h - wo) / atr).toFixed(2),
+      why: 'wick took the weekly open ' + wo.toFixed(2) + ' by '
+         + ((h - wo) / atr).toFixed(2) + 'x ATR and closed back under it',
+      invalidates: 'a close above the weekly open ' + wo.toFixed(2)
+    };
+  }
+  if (l <= wo && (wo - l) >= minPierce && c > wo && op > wo){
+    return {
+      ok: true, dir: 'long', kind: 'goldwopen', level: wo,
+      entry: c, stop: l - 0.15 * atr,
+      pierceAtr: +((wo - l) / atr).toFixed(2),
+      why: 'wick took the weekly open ' + wo.toFixed(2) + ' by '
+         + ((wo - l) / atr).toFixed(2) + 'x ATR and closed back above it',
+      invalidates: 'a close below the weekly open ' + wo.toFixed(2)
+    };
+  }
+  return null;
+}
+
+/* =================================================================
+   5. 61.8 RETRACE HOLD  (goldfib)                            hg-v934
+
+   The other OMNIGOLD mechanic the two tabs lack. Same treatment, same
+   demote, and its twin FIB-618 carries the same shape of record: negative,
+   not significant.
+
+   TWO THINGS KEEP THIS FROM FIRING ON EVERY PULLBACK. The impulse is
+   measured on bars STRICTLY BEFORE the trigger bar, so the bar being judged
+   cannot define the level it is judged against — the most common way a
+   retrace detector fits itself. And the trigger bar has to have traded
+   THROUGH the level and closed back on the impulse side; a bar that merely
+   ends up near it is not a hold.
+   ================================================================= */
+
+var HG_GOLD_FIB_LEVEL = 0.618;
+var HG_GOLD_FIB_STOP = 0.786;         /* the next retrace, where the read dies */
+
+function hgGoldFib618(rows, opts){
+  var o = opts || {};
+  var look = isFinite(o.lookback) ? o.lookback : 40;
+  if (!rows || rows.length < 12) return null;
+  var atr = barAtr(rows, 14);
+  if (!isFinite(atr) || !(atr > 0)) return null;
+
+  var to = rows.length - 2;                       /* EXCLUDES the trigger bar */
+  var from = to - look + 1;
+  if (from < 0) from = 0;
+  if (to - from < 5) return null;
+
+  var hi = -Infinity, lo = Infinity, hiI = -1, loI = -1;
+  for (var i = from; i <= to; i++){
+    var bh = num(rows[i].h), bl = num(rows[i].l);
+    if (isFinite(bh) && bh > hi){ hi = bh; hiI = i; }
+    if (isFinite(bl) && bl < lo){ lo = bl; loI = i; }
+  }
+  if (hiI < 0 || loI < 0 || hiI === loI) return null;
+  var span = hi - lo;
+  var minSpan = (isFinite(o.minSpanAtr) ? o.minSpanAtr : 1.5) * atr;
+  if (!(span > 0) || span < minSpan) return null;
+
+  var lb = last(rows);
+  var h = num(lb.h), l = num(lb.l), c = num(lb.c);
+  if (!isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+
+  if (hiI > loI){
+    /* impulse UP — low first, then high. The retrace comes down into it. */
+    var lvlU = hi - HG_GOLD_FIB_LEVEL * span;
+    if (!(l <= lvlU && h >= lvlU)) return null;   /* must have traded into it */
+    if (!(c > lvlU)) return null;                 /* and closed holding it */
+    var stopU = Math.min(l, hi - HG_GOLD_FIB_STOP * span) - 0.15 * atr;
+    return {
+      ok: true, dir: 'long', kind: 'goldfib', level: lvlU,
+      entry: c, stop: stopU,
+      spanAtr: +(span / atr).toFixed(2),
+      why: 'held the 61.8 retrace ' + lvlU.toFixed(2) + ' of the '
+         + (span / atr).toFixed(2) + 'x ATR swing up from ' + lo.toFixed(2)
+         + ' to ' + hi.toFixed(2),
+      invalidates: 'a close below the 78.6 retrace ' + (hi - HG_GOLD_FIB_STOP * span).toFixed(2)
+    };
+  }
+  /* impulse DOWN — high first, then low. The retrace comes up into it. */
+  var lvlD = lo + HG_GOLD_FIB_LEVEL * span;
+  if (!(h >= lvlD && l <= lvlD)) return null;
+  if (!(c < lvlD)) return null;
+  var stopD = Math.max(h, lo + HG_GOLD_FIB_STOP * span) + 0.15 * atr;
+  return {
+    ok: true, dir: 'short', kind: 'goldfib', level: lvlD,
+    entry: c, stop: stopD,
+    spanAtr: +(span / atr).toFixed(2),
+    why: 'rejected the 61.8 retrace ' + lvlD.toFixed(2) + ' of the '
+       + (span / atr).toFixed(2) + 'x ATR swing down from ' + hi.toFixed(2)
+       + ' to ' + lo.toFixed(2),
+    invalidates: 'a close above the 78.6 retrace ' + (lo + HG_GOLD_FIB_STOP * span).toFixed(2)
+  };
+}
+
+/* =================================================================
+   6. THE SIBLING RECORD, AND THE THIRD PORT THAT IS REFUSED   hg-v934
+
+   hg-v933 stamped every one of its detectors NO MEASURED RECORD. That was
+   true of the idea and WRONG about the evidence: goldround's OMNIGOLD twin
+   ROUND-MAGNET has 587 settled firings in the committed walk and goldfix's
+   twin LONDON-FIX has 69. Telling a reader nothing is known, when hundreds
+   of measurements of the nearest thing exist, is the same failure as
+   quoting them as if they were this desk's.
+
+   So each detector names its twin, and the note carries that twin's
+   GATE-CLEAR record — the population that cleared OMNIGOLD's stack, which
+   hg-v917 showed is the honest one and is worse for 42 of 54 mechanics than
+   the unscoped line. It is attributed every time: OMNIGOLD's gates,
+   OMNIGOLD's 1h horizon, not a measurement of this desk.
+
+   golddxy has NO twin. SMT-DIVERGE is the closest registered mechanic and
+   it reads divergence where this reads agreement — and it is itself one of
+   the 24 never-observed mechanics, so there is no record there to borrow
+   even if the read matched. It keeps the honest empty note.
+
+   THE THIRD PORT IS REFUSED. PIVOT-REJECT is the remaining OMNIGOLD
+   mechanic these tabs lack, and it is not unmeasured — it is measured and
+   it fails: 159 settled firings, 23.3% to T1 first against a 33.3%
+   breakeven at 2R, gross -0.3026R, net -0.3727R at XM, -2.69 sigma on the
+   naive sample and -2.63 cluster-robust. That is past EDGE_VETO_Z, the
+   -2 sigma known-failure bar in omnigold.js that hg-v925 deliberately left
+   untouched when it relaxed everything else.
+
+   And the reason this matters more than "it looks bad": GOLD SCALP and
+   GOLD SWING HAVE NO MEASURED-EDGE GATE. OMNIGOLD refuses to ticket
+   PIVOT-REJECT; these desks have nothing that would. Porting it would move
+   a vetoed mechanic onto the one place in the gold stack that cannot veto
+   it — laundering, not adding. It is named here so nobody re-derives the
+   gap and closes it.
+   ================================================================= */
+
+/* omnigold.js EDGE_VETO_Z. Duplicated deliberately — this file must be
+   readable without loading that one — and test-gold-sibling-records.mjs
+   fails if the two ever disagree, which is the hg-v921 rule for a literal
+   that lives in two places. */
+var HG_GOLD_EXTRA_VETO_Z = -2;
+
+var HG_GOLD_SIBLING_TWIN = {
+  goldfix:   'LONDON-FIX',
+  golddxy:   null,
+  goldround: 'ROUND-MAGNET',
+  goldwopen: 'WEEKLY-OPEN',
+  goldfib:   'FIB-618',
+  goldpivot: 'PIVOT-REJECT'
+};
+
+/* --- BEGIN GENERATED HG_GOLD_SIBLING_RECORD (scripts/gold-sibling-records.mjs) ---
+   Every field is re-derived from scripts/omnigold-replay-evidence.json by that
+   script. Do not hand-edit: hg-v909 shipped a hand-transcribed block from the
+   wrong file, and hg-v921 made the literals write themselves for exactly this
+   reason. `npm run gold:siblings` is the read-only drift check. */
+var HG_GOLD_SIBLING_RECORD = {
+  'FIB-618': { n: 132, settled: 127, winRate: 0.2992, grossR: -0.0872, netXm: -0.1306, tCluster: -0.9, zBreakeven: -0.82, minRr: 2, breakevenPct: 33.3 },
+  'LONDON-FIX': { n: 87, settled: 69, winRate: 0.2464, grossR: -0.2052, netXm: -0.2332, tCluster: -1.76, zBreakeven: -1.53, minRr: 2, breakevenPct: 33.3 },
+  'PIVOT-REJECT': { n: 161, settled: 159, winRate: 0.2327, grossR: -0.3026, netXm: -0.3727, tCluster: -2.63, zBreakeven: -2.69, minRr: 2, breakevenPct: 33.3 },
+  'ROUND-MAGNET': { n: 593, settled: 587, winRate: 0.3169, grossR: -0.043, netXm: -0.1095, tCluster: -0.85, zBreakeven: -0.84, minRr: 2, breakevenPct: 33.3 },
+  'WEEKLY-OPEN': { n: 143, settled: 140, winRate: 0.3, grossR: -0.0904, netXm: -0.1591, tCluster: -1.14, zBreakeven: -0.84, minRr: 2, breakevenPct: 33.3 }
+};
+/* --- END GENERATED HG_GOLD_SIBLING_RECORD --- */
+
+/** The twin's measured record for a scalp/swing kind, or null when it has no
+    twin (golddxy) or the twin was never observed. */
+function hgGoldSiblingRecord(kind){
+  var twin = HG_GOLD_SIBLING_TWIN[String(kind || '')];
+  if (!twin) return null;
+  var rec = HG_GOLD_SIBLING_RECORD[twin];
+  if (!rec) return null;
+  var out = { twin: twin };
+  for (var k in rec){ if (Object.prototype.hasOwnProperty.call(rec, k)) out[k] = rec[k]; }
+  return out;
+}
+
+/** Is this kind's twin a MEASURED FAILURE by omnigold's own veto bar? */
+function hgGoldSiblingVetoed(kind){
+  var rec = hgGoldSiblingRecord(kind);
+  if (!rec || !isFinite(rec.zBreakeven)) return false;
+  return rec.zBreakeven <= HG_GOLD_EXTRA_VETO_Z;
+}
+
+function sgn(n){ return (n >= 0 ? '+' : '−') + Math.abs(n).toFixed(4); }
+
+/** The stamp the card carries — record-aware, so it stops saying NO RECORD
+    about a detector whose twin has hundreds of firings. */
+function hgGoldExtraStamp(kind){
+  var name = String(kind || 'mechanic').toUpperCase();
+  var rec = hgGoldSiblingRecord(kind);
+  if (!rec) return name + ' · NO RECORD';
+  return name + ' · ' + rec.twin + ' RECORD ' + sgn(rec.netXm) + 'R';
+}
+
 /* ------------------------------------------------ promotion, off by default */
 
 var HG_GOLD_EXTRA_LS_KEY = 'hg_gold_extra_promotable';
@@ -321,14 +585,32 @@ function hgGoldExtraSetPromotable(on){
 }
 function hgGoldExtraPromotable(){ return HG_GOLD_EXTRA_PROMOTABLE === true; }
 
-/** The line every one of these cards carries until it has a record. */
+/** The line every one of these cards carries until it has a record OF ITS OWN.
+
+    hg-v933's version of this said NO MEASURED RECORD unconditionally. For
+    goldround and goldfix that was false — see section 6. It now names the
+    twin and quotes the twin's gate-clear record, attributed, or says plainly
+    that there is no twin at all. */
 function hgGoldExtraUncheckedNote(kind){
-  return 'NO MEASURED RECORD — ' + String(kind || 'this mechanic').toUpperCase()
-    + ' was added in hg-v933 and has never been through a bake, so nothing is '
-    + 'known about whether it pays. It paints with its levels and cannot lead '
-    + 'until a walk gives it one. That is the same rule this desk applies to '
-    + 'its never-observed OMNIGOLD mechanics, and it is not a comment on the '
-    + 'idea — it is the absence of evidence about it.';
+  var name = String(kind || 'this mechanic').toUpperCase();
+  var rec = hgGoldSiblingRecord(kind);
+  if (!rec){
+    return 'NO MEASURED RECORD — ' + name + ' has never been through a bake, and no '
+      + 'OMNIGOLD mechanic reads the same thing, so there is not even a sibling '
+      + 'record to borrow. It paints with its levels and cannot lead until a walk '
+      + 'gives it one. That is the same rule this desk applies to its never-observed '
+      + 'OMNIGOLD mechanics, and it is not a comment on the idea — it is the absence '
+      + 'of evidence about it.';
+  }
+  return 'NO RECORD ON THIS DESK — ' + name + ' has never been through a GOLD SCALP or '
+    + 'GOLD SWING bake. Its OMNIGOLD twin ' + rec.twin + ' has one: ' + rec.settled
+    + ' settled firings on the gate-clear population, ' + (rec.winRate * 100).toFixed(1)
+    + '% to T1 first against a ' + (rec.breakevenPct).toFixed(1) + '% breakeven at '
+    + rec.minRr + 'R, ' + sgn(rec.grossR) + 'R gross, ' + sgn(rec.netXm)
+    + 'R net at XM, ' + sgn(rec.zBreakeven) + ' sigma. That is OMNIGOLD\'s record on '
+    + 'OMNIGOLD\'s gates and its 1h horizon — the nearest measurement that exists, not '
+    + 'a measurement of this. Below breakeven and inside the noise, which is why this '
+    + 'paints with its levels and still cannot lead.';
 }
 
 /** Every detector behind one call, so the desks wire once. */
@@ -340,7 +622,17 @@ function hgGoldExtraDetect(inp){
   try { var f = hgGoldFixFade(rows, o); if (f) out.push(f); }catch(e){}
   try { var d = hgGoldDxyDivergence(rows, o.dxyRows, o); if (d) out.push(d); }catch(e){}
   try { var r = hgGoldRoundReject(rows, o); if (r) out.push(r); }catch(e){}
-  return out;
+  try { var w = hgGoldWeeklyOpen(rows, o); if (w) out.push(w); }catch(e){}
+  try { var b = hgGoldFib618(rows, o); if (b) out.push(b); }catch(e){}
+  /* A detector whose twin is a MEASURED FAILURE never reaches a card. Nothing
+     in hgGoldExtraDetect mints goldpivot — this is the guard for the day
+     someone adds one, because these desks have no measured-edge gate to
+     catch it downstream. */
+  var kept = [];
+  for (var qi = 0; qi < out.length; qi++){
+    if (!hgGoldSiblingVetoed(out[qi] && out[qi].kind)) kept.push(out[qi]);
+  }
+  return kept;
 }
 
 W.HG_GOLD_FIX_HOURS = HG_GOLD_FIX_HOURS;
@@ -355,5 +647,17 @@ W.hgGoldExtraSetPromotable = hgGoldExtraSetPromotable;
 W.hgGoldExtraPromotable = hgGoldExtraPromotable;
 W.hgGoldExtraUncheckedNote = hgGoldExtraUncheckedNote;
 W.HG_GOLD_ROUND_STEPS = HG_GOLD_ROUND_STEPS;
+W.HG_GOLD_WEEK_OPEN_UTC_H = HG_GOLD_WEEK_OPEN_UTC_H;
+W.hgGoldWeekOpenMs = hgGoldWeekOpenMs;
+W.hgGoldWeeklyOpen = hgGoldWeeklyOpen;
+W.hgGoldFib618 = hgGoldFib618;
+W.HG_GOLD_FIB_LEVEL = HG_GOLD_FIB_LEVEL;
+W.HG_GOLD_FIB_STOP = HG_GOLD_FIB_STOP;
+W.HG_GOLD_SIBLING_TWIN = HG_GOLD_SIBLING_TWIN;
+W.HG_GOLD_SIBLING_RECORD = HG_GOLD_SIBLING_RECORD;
+W.HG_GOLD_EXTRA_VETO_Z = HG_GOLD_EXTRA_VETO_Z;
+W.hgGoldSiblingRecord = hgGoldSiblingRecord;
+W.hgGoldSiblingVetoed = hgGoldSiblingVetoed;
+W.hgGoldExtraStamp = hgGoldExtraStamp;
 
 })();
