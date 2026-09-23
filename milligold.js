@@ -82,6 +82,31 @@ function sgn(n){ return (n >= 0 ? '+' : '−') + Math.abs(n).toFixed(4); }
   };
   /* --- END GENERATED HG_MILLI_ROSTER --- */
 
+/* --- BEGIN GENERATED HG_MILLI_FORWARD (scripts/milli-gold-walk.mjs) ---
+   The forward test, which is the number this tab leads with. hg-v936 led with
+   the roster's in-sample figure and called it an upper bound; hg-v937 measured
+   the bound and it is NEGATIVE. Do not hand-edit — `npm run gold:milli-walk`
+   is the drift check. */
+  var HG_MILLI_FORWARD = {
+    trials: 6, beatsDesk: 6, pays: 0,
+    beatsDeskAll: true, paysAll: false,
+    shippedSize: 9, sharedMin: 6, sharedMax: 7,
+    inSampleNet: 0.0643, inSampleNetLower: 0.0527,
+    deskNet: -0.116, deskNetLower: -0.2864,
+    seqMilliNet: 0.0153, seqDeskNet: -0.0226,
+    worstForwardNet: -0.1673,
+    bestForwardNet: -0.039,
+    splits: [
+      { end: 'as-recorded', split: 0.5, n: 962, milliNet: -0.039, deskNet: -0.1111, learned: 15, shared: 7 },
+      { end: 'as-recorded', split: 0.6, n: 1050, milliNet: -0.0912, deskNet: -0.1443, learned: 19, shared: 7 },
+      { end: 'as-recorded', split: 0.7, n: 832, milliNet: -0.1389, deskNet: -0.1894, learned: 18, shared: 7 },
+      { end: 'lower', split: 0.5, n: 416, milliNet: -0.1078, deskNet: -0.2778, learned: 10, shared: 6 },
+      { end: 'lower', split: 0.6, n: 491, milliNet: -0.0797, deskNet: -0.3011, learned: 12, shared: 7 },
+      { end: 'lower', split: 0.7, n: 452, milliNet: -0.1673, deskNet: -0.3517, learned: 12, shared: 7 }
+    ]
+  };
+  /* --- END GENERATED HG_MILLI_FORWARD --- */
+
 /** The roster as a Set, for the hit filter. */
 function rosterSet(){
   var s = {};
@@ -126,27 +151,43 @@ function hgMilliDisclosureHtml(){
       + 'rather than falling back to the full register, because "only the measured '
       + 'ones" with no measurements is not a smaller desk, it is a different one.</div>';
   }
+  var F = HG_MILLI_FORWARD;
+  if (!F || !F.trials){
+    /* No forward result baked. The tab does not fall back to the in-sample
+       figure here: hg-v937 measured that number to be optimistic by more than
+       its own size, so quoting it alone is worse than quoting nothing. */
+    return '<div class="note warn" style="margin:8px 0;padding:6px 8px;'
+      + 'border:1px solid #B45309;border-left:3px solid #B45309;border-radius:4px">'
+      + '<b>NO FORWARD RESULT</b> &mdash; this roster has not been walked forward, and '
+      + 'its in-sample figure is not shown on its own because hg-v937 measured that '
+      + 'figure to be optimistic by more than its own size.</div>';
+  }
   return '<div class="note" style="margin:8px 0;padding:6px 8px;'
     + 'border:1px solid #B45309;border-left:3px solid #B45309;border-radius:4px;'
     + 'background:rgba(180,83,9,0.07);font-size:0.85em">'
-    + '<b>THESE ARE THE ' + R.kinds.length + ' MECHANICS THAT MEASURED POSITIVE, AND '
-    + 'THAT IS A WEAKER CLAIM THAN IT SOUNDS</b> &mdash; on the gate-clear population '
-    + 'of the ' + esc(R.window) + ' walk they pool to ' + R.cohortN + ' settled trades, '
-    + 'gross ' + sgn(R.cohortGross) + 'R and net ' + sgn(R.cohortNet) + 'R at XM.'
-    + '<div style="margin-top:4px"><b>That is what they did in the book they were '
-    + 'chosen from.</b> hg-v935 tested this exact selection out of sample &mdash; four '
-    + 'disjoint windows, the mechanics ranked on the other three each time, both fill '
-    + 'bounds &mdash; and keeping the net-positive mechanics scored <b>13-14 of 16, '
-    + 'never unanimous</b>. So the figure above is an <b>upper bound</b>, not a '
-    + 'forecast.</div>'
-    + '<div style="margin-top:4px">Each one is also inside the noise on its own: the '
-    + 'largest cluster-robust t on this roster is <b>' + R.maxAbsT.toFixed(2)
-    + '</b>, against a family bar above 3.1. This is the best available reading of '
-    + 'which mechanics have paid &mdash; not a demonstration that any of them pays.</div>'
+    + '<b>FORWARD-TESTED: THIS ROSTER BEATS THE DESK AND STILL LOSES</b> &mdash; the '
+    + 'roster was rebuilt on the EARLIER part of the walk only and judged on what came '
+    + 'after, at three anchored splits and both fill bounds. It beat the full OMNIGOLD '
+    + 'book in <b>' + F.beatsDesk + ' of ' + F.trials + '</b> trials'
+    + (F.beatsDeskAll ? ' &mdash; unanimously' : '')
+    + ', and was net-positive in <b>' + F.pays + ' of ' + F.trials + '</b>. Forward net '
+    + 'ran ' + sgn(F.worstForwardNet) + 'R to ' + sgn(F.bestForwardNet) + 'R against a desk '
+    + 'that ran ' + sgn(F.deskNet) + 'R to ' + sgn(F.deskNetLower) + 'R.'
+    + '<div style="margin-top:4px"><b>So the selection works as a filter and does not '
+    + 'make a profitable desk.</b> Choosing the mechanics that have paid is measurably '
+    + 'better than not choosing &mdash; and still loses money on every slice that came '
+    + 'after the choice was made.</div>'
+    + '<div style="margin-top:4px">On the walk it was chosen from, this roster reads '
+    + sgn(F.inSampleNet) + 'R and ' + sgn(F.inSampleNetLower) + 'R at the two fill bounds, '
+    + 'and one position at a time ' + sgn(F.seqMilliNet) + 'R against the desk\'s '
+    + sgn(F.seqDeskNet) + 'R. <b>That is the in-sample figure and it is the one to '
+    + 'distrust</b>: only ' + F.sharedMin + '-' + F.sharedMax + ' of its '
+    + F.shippedSize + ' mechanics are re-chosen when the rule cannot see the whole walk, '
+    + 'so the rest are artefacts of having seen it.</div>'
     + '<div style="margin-top:4px;opacity:0.85">Nothing here loosens a gate: the roster '
     + 'only ever removes mechanics from what OMNIGOLD would show, and every gate, plan '
     + 'and grade is that desk\'s own code. Re-derive: '
-    + '<code>npm run gold:milli</code></div>'
+    + '<code>npm run gold:milli</code> and <code>npm run gold:milli-walk</code></div>'
     + '</div>';
 }
 
@@ -273,6 +314,7 @@ async function refreshMilliGold(){
 }
 
 W.HG_MILLI_ROSTER = HG_MILLI_ROSTER;
+W.HG_MILLI_FORWARD = HG_MILLI_FORWARD;
 W.hgMilliFilterHits = hgMilliFilterHits;
 W.hgMilliRecord = hgMilliRecord;
 W.hgMilliDisclosureHtml = hgMilliDisclosureHtml;
