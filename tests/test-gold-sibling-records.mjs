@@ -26,7 +26,7 @@
  *   6. the two new detectors fire on the structure they claim and not on
  *      structure they do not.
  */
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import vm from 'node:vm';
@@ -70,16 +70,22 @@ console.log('1. every quoted number is derived from the committed walk');
   /* Rebuild from a corrupted tree and require byte-identical recovery — the
      hg-v921 guard shape. A generator that only agrees with what is already
      there proves nothing. */
-  const before = readFileSync(XTRA, 'utf8');
-  try {
-    const wrecked = before.replace(/var HG_GOLD_SIBLING_RECORD = \{[\s\S]*?\n\};/,
-      "var HG_GOLD_SIBLING_RECORD = { 'ROUND-MAGNET': { n: 1, settled: 1, winRate: 0.99, grossR: 9, netXm: 9, tCluster: 9, zBreakeven: 9, minRr: 2, breakevenPct: 33.3 } };");
-    ok(wrecked !== before, 'the corruption actually changed the file');
-    writeFileSync(XTRA, wrecked);
-    const again = GEN.run(true);
-    eq(again.wrote, true, 'the generator rewrites a corrupted block');
-    eq(readFileSync(XTRA, 'utf8'), before, 'and rebuilds it BYTE-IDENTICAL to the committed tree');
-  } finally { writeFileSync(XTRA, before); }
+  /* Proved in memory. hg-v935 found out the hard way what a guard that writes
+     a real source file costs: under the mutation harness one run wrote a
+     literal computed by a BROKEN generator and the restore did not survive the
+     process, leaving the repository carrying numbers no measurement produced.
+     splice() and renderBlock() are pure, so nothing here needs to touch disk. */
+  const twinsNow = GEN.readTwins(XSRC);
+  const wrecked = XSRC.replace(/var HG_GOLD_SIBLING_RECORD = \{[\s\S]*?\n\};/,
+    "var HG_GOLD_SIBLING_RECORD = { 'ROUND-MAGNET': { n: 1, settled: 1, winRate: 0.99, grossR: 9, netXm: 9, tCluster: 9, zBreakeven: 9, minRr: 2, breakevenPct: 33.3 } };");
+  ok(wrecked !== XSRC, 'the corruption actually changes the source');
+  eq(GEN.splice(wrecked, GEN.renderBlock(GEN.buildRecords(twinsNow, ART))), XSRC,
+     'and the generator rebuilds it BYTE-IDENTICAL from the corrupted text');
+  const once = GEN.splice(XSRC, GEN.renderBlock(GEN.buildRecords(twinsNow, ART)));
+  eq(GEN.splice(once, GEN.renderBlock(GEN.buildRecords(twinsNow, ART))), once,
+     'and the splice is idempotent — the committed file is the generators fixed point');
+  ok(!/writeFileSync\(XTRA/.test(readFileSync(join(ROOT, 'tests', 'test-gold-sibling-records.mjs'), 'utf8')),
+     'and THIS TEST never writes gold-extra-strategies.js');
 
   /* Each field re-derived here from the artifact, not read back from the JS. */
   const twins = GEN.readTwins(XSRC);
