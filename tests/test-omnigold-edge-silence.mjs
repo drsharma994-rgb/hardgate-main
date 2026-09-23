@@ -47,6 +47,16 @@ for (const f of ['indicators.js', 'indicators2.js', 'hg-forward.js', 'plans.js',
   try { vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f }); }
   catch (e) { /* optional deps degrade */ }
 }
+
+/* hg-v925: the strict measured-edge mode is no longer the default (relaxed
+   on instruction). This file asserts the strict contract, so it turns the
+   requirement on explicitly instead of inheriting whatever the default is. */
+/* throws rather than skipping: a swallowed no-op here would silently
+   test the RELAXED mode while claiming to test the strict one, which is
+   how the first draft of this patch passed in test-omnigold-end-to-end. */
+if (typeof ctx.hgOgSetEdgeProof !== 'function')
+  throw new Error('FAIL: omnigold.js did not export hgOgSetEdgeProof');
+ctx.hgOgSetEdgeProof(true);
 const SRC = fs.readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
 
 console.log('== the note says the true reason ==');

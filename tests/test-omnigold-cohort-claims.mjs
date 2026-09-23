@@ -47,6 +47,12 @@ function boot(){
     try { vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f }); }
     catch (e) { /* optional deps degrade */ }
   }
+  /* hg-v925: the strict measured-edge mode is no longer the default (relaxed
+     on instruction). This file asserts the strict contract, so every boot
+     turns the requirement on rather than inheriting whatever the default is. */
+  if (typeof ctx.hgOgSetEdgeProof !== 'function')
+    throw new Error('FAIL: omnigold.js did not export hgOgSetEdgeProof');
+  ctx.hgOgSetEdgeProof(true);
   return ctx;
 }
 const strip = h => String(h).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();

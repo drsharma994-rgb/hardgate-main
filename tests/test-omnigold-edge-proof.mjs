@@ -48,9 +48,24 @@ for (const f of ['indicators.js', 'indicators2.js', 'hg-forward.js', 'plans.js',
 }
 const SRC = fs.readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
 
+/* hg-v925: this whole file is about the STRICT mode — the gate hard, the
+   ticket column empty, and hgOgEdgeProofPanelHtml explaining why. That mode
+   is no longer the default (relaxed on instruction), so turn it on here
+   rather than letting the file silently test whatever the default happens to
+   be. Everything below is the contract that holds when proof is required. */
+if (typeof ctx.hgOgSetEdgeProof === 'function') ctx.hgOgSetEdgeProof(true);
+
 console.log('== the gate is hard, and it is one line to reverse ==');
 {
-  ok(/var OG_EDGE_PROOF_REQUIRED = true;/.test(SRC), 'the switch is a single named constant');
+  /* hg-v925 RELAXED THE DEFAULT ON INSTRUCTION, so the switch is now a named
+     constant plus a persisted override rather than a literal `= true`. This
+     file tests the STRICT MODE, which is one hgOgSetEdgeProof(true) away and
+     is still the contract the rest of this suite depends on — so it asserts
+     the shape of the switch, not which way it currently points. */
+  ok(/var OG_EDGE_PROOF_DEFAULT = (true|false);/.test(SRC), 'the switch is a single named constant');
+  ok(/var OG_EDGE_PROOF_REQUIRED = OG_EDGE_PROOF_DEFAULT;/.test(SRC),
+     'and the live flag is initialised from it, never from a second literal');
+  ok(/function hgOgSetEdgeProof\(on\)/.test(SRC), 'with a setter, so reversing it needs no edit');
   ok(/key:'measured-edge', hard: OG_EDGE_PROOF_REQUIRED/.test(SRC),
      'and measured-edge takes its hardness from it rather than a literal');
   /* the rest of the ledger must not have been swept along with it */
