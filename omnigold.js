@@ -10608,8 +10608,14 @@ terse status, and never launches a first-time scan on a global refresh.
      { n, keys: [..] } and NEVER throws — a store this cannot read is 0 open,
      which fails OPEN (the ticket stands). Refusing to ticket because
      localStorage is unavailable would be a gate nobody chose. */
-  function hgOgOpenGoldConvictions(){
-    var out = { n: 0, keys: [] };
+  function hgOgOpenGoldConvictions(nowMs){
+    /* hg-v941: `rows` carries what each holding record IS \u2014 symbol, direction,
+       venue and age. The hold was previously a bare count, so a record that
+       could not expire (its venue had left the feed chain, see conviction-lock
+       hg-v941) held three desks while reading exactly like a position someone
+       had just taken. An age on the line makes that visible on sight. */
+    var out = { n: 0, keys: [], rows: [] };
+    var now = (isFinite(+nowMs) && +nowMs > 0) ? +nowMs : Date.now();
     try{
       for (var i = 0; i < OG_CONVICTION_KEYS.length; i++){
         var raw = null;
@@ -10621,10 +10627,52 @@ terse status, and never launches a first-time scan on a global refresh.
         for (var k in j.live){
           if (!Object.prototype.hasOwnProperty.call(j.live, k)) continue;
           out.n++; out.keys.push(String(k));
+          var rec = j.live[k] || {};
+          var at = isFinite(+rec.issuedAt) ? +rec.issuedAt : NaN;
+          out.rows.push({
+            key: String(k),
+            store: OG_CONVICTION_KEYS[i],
+            desk: (OG_CONVICTION_KEYS[i] === 'hgGoldswingConviction') ? 'SWING' : 'SCALP',
+            sym: rec.sym || null, dir: rec.dir || null, venue: rec.venue || null,
+            issuedAt: isFinite(at) ? at : null,
+            ageMs: isFinite(at) ? Math.max(0, now - at) : null
+          });
         }
       }
     }catch(e){}
     return out;
+  }
+
+  /* One line per holding record: what it is and how old. Returns '' when
+     nothing is held or no record carries an age \u2014 an age-less store is an
+     older write, not a fault, and inventing one would be worse than silence. */
+  function hgOgHoldingRowsHtml(open){
+    try{
+      var o = open || hgOgOpenGoldConvictions();
+      var rows = (o && o.rows) || [];
+      if (!rows.length) return '';
+      var out = [], i;
+      for (i = 0; i < rows.length; i++){
+        var r = rows[i] || {};
+        var bits = [r.desk || 'GOLD'];
+        if (r.sym) bits.push(String(r.sym));
+        if (r.dir) bits.push(String(r.dir).toUpperCase());
+        if (r.venue) bits.push(String(r.venue));
+        var age = '';
+        /* NOT isFinite(+r.ageMs): +null is 0, which reads as "held 0m" — a
+           made-up age on a record whose store never recorded one. */
+        if (typeof r.ageMs === 'number' && isFinite(r.ageMs)){
+          var h = Math.floor(r.ageMs / 3600000);
+          var m = Math.floor((r.ageMs % 3600000) / 60000);
+          age = ' \u2014 held ' + (h > 0 ? (h + 'h ' + m + 'm') : (m + 'm'));
+        } else {
+          age = ' \u2014 age not recorded';
+        }
+        out.push('<div>' + esc(bits.join(' \u00b7 ')) + esc(age) + '</div>');
+      }
+      return '<div class="og-holding" style="margin-top:4px;opacity:.9">'
+        + '<b>What is holding:</b>' + out.join('') + '</div>';
+    }catch(e){ return ''; }
   }
 
   /* The gate row itself, as a pure function so it can be exercised without
@@ -10670,7 +10718,8 @@ terse status, and never launches a first-time scan on a global refresh.
         + 'clears no bar this desk applies to a mechanic. SWING disagrees between the two bounds '
         + '(&minus;0.240 / +0.317) and carries no verdict, so nothing is claimed for it. The '
         + 'concentration argument above stands without either. '
-        + '<code>hgOgSetOneAtATime(false)</code> turns this off.</div></div>';
+        + '<code>hgOgSetOneAtATime(false)</code> turns this off.</div>'
+        + hgOgHoldingRowsHtml(o) + '</div>';
     }catch(e){ return ''; }
   }
 
@@ -16679,6 +16728,7 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgSetOneAtATime = hgOgSetOneAtATime;
     window.hgOgOneAtATimeInit = hgOgOneAtATimeInit;
     window.hgOgOpenGoldConvictions = hgOgOpenGoldConvictions;
+    window.hgOgHoldingRowsHtml = hgOgHoldingRowsHtml;
     window.hgOgOneAtATimeHtml = hgOgOneAtATimeHtml;
     window.hgOgOneAtATimeGate = hgOgOneAtATimeGate;
     window.HG_OG_WALK = HG_OG_WALK;

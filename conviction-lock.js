@@ -169,14 +169,23 @@ ConvictionLockManager.prototype.evaluateSetup = function(setup, currentCandle, i
   try{
     if (!setup || !setup.levels) return null;
     if (!isFinite(nowMs)) nowMs = Date.now();
-    var c = __normCandle(currentCandle);
-    if (!c || !isFinite(c.close)) return null;
     var type = setup.type || 'scalp';
+    /* hg-v941: the TTL is the ONE invalidation that needs no price, so it is
+       checked BEFORE the candle guard. It used to sit after it, which made the
+       backstop unreachable for exactly the records that needed it most: a
+       record whose venue is absent from this scan is handed no bar, returned
+       null here, and outlived its expiry for as long as the feed label kept
+       moving. Since hg-v930 a single live record holds every gold desk, so one
+       orphan was a permanent lockout. Every price-based check below still
+       requires a bar — pricing a record against another venue's candles is
+       the wrong repair, not a stricter one. */
     var elapsed = nowMs - (setup.timestamp || setup.issuedAt || 0);
     if (elapsed > this._expiryMs(type)){
       if (this.debug) console.log('[LOCK EXPIRED] ' + setup.id + ' — exceeded TTL.');
       return 'EXPIRED';
     }
+    var c = __normCandle(currentCandle);
+    if (!c || !isFinite(c.close)) return null;
 
     var dir = setup.direction || setup.dir;
     var stop = setup.levels.stopLoss;
@@ -348,6 +357,9 @@ ConvictionLockManager.prototype.toRecord = function(setup){
 function applyHardgateConvictionLock(store, ranked, venueRows, nowMs, opts){
   opts = opts || {};
   var transitions = [];
+  /* hg-v941: live records this pass could not price — their venue is not in
+     venueRows. Reported so a hold can name what is holding it. */
+  var unpriced = 0;
   var historyLimit = isFinite(opts.historyLimit) ? opts.historyLimit : 8;
   var type = opts.type || 'scalp';
   var rowKey = opts.rowKey || 'rows15m';
@@ -379,7 +391,13 @@ function applyHardgateConvictionLock(store, ranked, venueRows, nowMs, opts){
       var vr = venueRows ? venueRows[rec.venue] : null;
       var rows = vr ? vr[rowKey] : null;
       var bar = (rows && rows.length) ? rows[rows.length - 1] : null;
-      if (!bar) continue;
+      /* hg-v941: no bar for this record's venue is NOT a reason to skip it.
+         It used to `continue` here, which is how a record whose venue left the
+         feed chain (XM XAUUSD -> Delta XAUTUSD -> proxy) survived 400x its own
+         TTL in the probe that found this. It is still not priced — only the
+         time-only expiry above can fire without a bar — but it is counted, so
+         a desk can say which of its holds this scan could not price. */
+      if (!bar) unpriced++;
       var is15 = (type === 'scalp');
       var is4h = (type === 'swing');
       var setup = mgr.activeConvictions.get(id);
@@ -468,7 +486,7 @@ function applyHardgateConvictionLock(store, ranked, venueRows, nowMs, opts){
     }
   }catch(e){ /* never throw */ }
 
-  return { store: store, transitions: transitions };
+  return { store: store, transitions: transitions, unpriced: unpriced };
 }
 
 /** Cross-strategy merge is intentional for classic scalp families (sweep↔ob

@@ -1593,7 +1593,9 @@ function gsOpenGoldConvictions(){
     if (typeof f !== 'function') return { n: 0, keys: [], reader: null };
     var o = f();
     var n = (o && isFinite(+o.n)) ? Math.max(0, +o.n) : 0;
-    return { n: n, keys: (o && o.keys) ? o.keys.slice() : [], reader: 'hgOgOpenGoldConvictions' };
+    return { n: n, keys: (o && o.keys) ? o.keys.slice() : [],
+             rows: (o && o.rows) ? o.rows.slice() : [],
+             reader: 'hgOgOpenGoldConvictions' };
   }catch(e){ return { n: 0, keys: [], reader: null }; }
 }
 
@@ -1620,7 +1622,8 @@ function gsApplyOneAtATime(ranked, open){
     held++;
   }
   if (!held) return null;
-  return { n: +o.n, keys: o.keys || [], held: held, running: running, reader: o.reader || null };
+  return { n: +o.n, keys: o.keys || [], rows: o.rows || [], held: held, running: running,
+           reader: o.reader || null };
 }
 
 /* Renders only while something is actually held. A standing lecture about
@@ -1634,6 +1637,20 @@ function gsBreakevenHtml(){
   try{
     var f = (typeof W !== 'undefined' && W) ? W.hgGoldBreakevenHtml : null;
     return (typeof f === 'function') ? (f('scalp') || '') : '';
+  }catch(e){ return ''; }
+}
+
+/* hg-v941: name what is holding, with an age on each line. The hold used to
+   be a bare count, so a record that COULD NOT EXPIRE \u2014 its venue had left the
+   feed chain, and the 6h TTL was unreachable without a bar for that venue \u2014
+   held this desk, GOLD SWING and OMNIGOLD while reading exactly like a
+   position someone had just taken. Delegates to OMNIGOLD's renderer so one
+   definition serves both panels; an absent renderer is '', never a throw. */
+function gsHoldingRowsHtml(res){
+  try{
+    var f = (typeof W !== 'undefined' && W) ? W.hgOgHoldingRowsHtml : null;
+    if (typeof f !== 'function') return '';
+    return f(res) || '';
   }catch(e){ return ''; }
 }
 
@@ -1663,6 +1680,7 @@ function gsOneAtATimeHtml(res){
     + 'disagrees between the bounds (&minus;0.240 / +0.317) and carries no verdict. What is not '
     + 'statistical is the concentration, and that is the half this acts on. '
     + '<code>gsSetOneAtATime(false)</code> turns it off.</div>'
+    + gsHoldingRowsHtml(res)
     + '</div>';
 }
 
