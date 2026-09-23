@@ -717,6 +717,13 @@ var GS_CSS = ''
 + '.gsx-oneat-why{margin-top:5px}'
 + '.gsx-oneat-limit{margin-top:5px;opacity:.88}'
 + '.gsx-heldone{margin-top:6px;color:#0F766E!important;border-top:1px dashed rgba(15,118,110,.45);padding-top:6px}'
++ '.gsx-be{font-size:11px;border-radius:6px;padding:9px 11px;margin:10px 0 12px;line-height:1.55;border:1px solid;border-left-width:3px}'
++ '.gsx-be-ok{color:#14532D;border-color:#15803D;background:rgba(21,128,61,.07)}'
++ '.gsx-be-warn{color:#7C2D12;border-color:#B45309;background:rgba(180,83,9,.07)}'
++ '.gsx-be-bad{color:#7F1D1D;border-color:#B91C1C;background:rgba(185,28,28,.07)}'
++ '.gsx-be-head{font-weight:800;letter-spacing:.03em;margin-bottom:4px}'
++ '.gsx-be-line{margin-top:4px}'
++ '.gsx-be-foot{margin-top:6px;opacity:.9}'
 + '.card.gsx-card .gsx-heldone{color:#5EEAD4!important}'
 + '.gsx-silent b{letter-spacing:.12em;font-weight:800;color:#9A3412}'
 + '.gsx-weekend-wrap,.gsx-weekend-wrap{margin:0 0 12px}'
@@ -1619,6 +1626,17 @@ function gsApplyOneAtATime(ranked, open){
 /* Renders only while something is actually held. A standing lecture about
    concentration on a flat book is noise, and noise is what gets scrolled
    past on the day it matters. */
+/* hg-v931: the breakeven readout lives in goldind.js so ONE literal serves
+   both gold desks — two copies would drift the first time either was re-baked.
+   Absent goldind is '' here, never a throw: a missing panel is a missing
+   panel, but a throw would take the whole card grid with it. */
+function gsBreakevenHtml(){
+  try{
+    var f = (typeof W !== 'undefined' && W) ? W.hgGoldBreakevenHtml : null;
+    return (typeof f === 'function') ? (f('scalp') || '') : '';
+  }catch(e){ return ''; }
+}
+
 function gsOneAtATimeHtml(res){
   if (!res || !(res.held > 0)) return '';
   var n = res.n, held = res.held;
@@ -2617,7 +2635,7 @@ async function runScan(ui, scanSt){
       if (display.length){
         ui.empty.style.display = 'none';
         ui.cards.innerHTML = basisHtml + mixedBanner + aplusPack.panel + uniHtml
-          + gsOneAtATimeHtml(oneAtATime) + bannerHTML(displayBest, display)
+          + gsOneAtATimeHtml(oneAtATime) + gsBreakevenHtml() + bannerHTML(displayBest, display)
           + display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note, deskTape); }).join('')
           + formingLayersHtml()
           + formingNowHTML(armedAll)
@@ -2629,6 +2647,7 @@ async function runScan(ui, scanSt){
            then the watch panel, then the held-back reason lines */
         ui.empty.style.display = 'none';
         ui.cards.innerHTML = basisHtml + mixedBanner + uniHtml + gsOneAtATimeHtml(oneAtATime)
+          + gsBreakevenHtml()
           + (whySilent ? whySilentHTML(whySilent) : '')
           + formingLayersHtml()
           + gsRejectFunnelHTML(rejectedAll, preGateAll)
@@ -2837,6 +2856,7 @@ W.gsSetOneAtATime = gsSetOneAtATime;
 W.gsOpenGoldConvictions = gsOpenGoldConvictions;
 W.gsApplyOneAtATime = gsApplyOneAtATime;
 W.gsOneAtATimeHtml = gsOneAtATimeHtml;
+W.gsBreakevenHtml = gsBreakevenHtml;
 /* the leader picker itself — exported so a guard can assert that a held row
    really stops leading, against the SHIPPED function rather than a copy of
    its logic that would agree with a broken one */
