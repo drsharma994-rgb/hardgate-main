@@ -226,6 +226,72 @@ console.log('3c. no second scan, and the gate ledger is counted rather than clai
   eq(W.hgMilliGateTallyHtml({ cards: 0 }), '', 'and nothing is rendered with no cards');
 }
 
+/* ---- 3d. hg-v939: never-scanned is not the same as scanned-and-empty ---- */
+console.log('3d. a quiet desk is not a pending one');
+{
+  /* hg-v938 read OMNIGOLD's lastView alone and returned null without it. But
+     that desk sets lastView = null DELIBERATELY on its honest-empty branch —
+     "scanned, nothing to show", not "never scanned". Conflating them told the
+     reader to wait for something that had already happened, and asked
+     OMNIGOLD to refresh on EVERY paint: a scan storm on exactly the quiet
+     tape where an empty board is the normal state. */
+  const ogSrc = readFileSync(join(ROOT, 'omnigold.js'), 'utf8');
+  const exp = ogSrc.slice(ogSrc.indexOf('window.hgOgLastCards = function'),
+                          ogSrc.indexOf('window.hgOgState = function'));
+  ok(/if \(!__og\.ran\) return null;/.test(exp),
+     'the export returns null only when the desk has genuinely never run');
+  ok(/\? v\.collapsed : \[\]/.test(exp),
+     'and an absent view with ran:true becomes an EMPTY LIST, not a null');
+  ok(/ran: true/.test(exp), 'carrying ran so the consumer can tell them apart');
+  ok(/deliberately|DELIBERATELY/.test(exp),
+     'and recording that the null view is OMNIGOLDs deliberate empty state');
+
+  ok(/if \(!got \|\| !got\.ran\)/.test(SRC),
+     'the tab branches on ran, not on the card count');
+  const refreshBlock = SRC.slice(SRC.indexOf('var got = read();'),
+                                 SRC.indexOf('if (!got.cards.length)'));
+  ok(/tab\.refresh/.test(refreshBlock), 'it asks OMNIGOLD to refresh');
+  ok(refreshBlock.indexOf('!got.ran') > 0 && !/got\.cards\.length/.test(refreshBlock),
+     'ONLY when that desk has never run — an empty board must not trigger a rescan');
+  /* hg-v939: and it uses the entry that actually starts a scan. */
+  /* BEHAVIOURAL, not a grep: the source mentions hgScanOneTab in the comment
+     explaining why it is used, so a mutation replacing the LOOKUP with null
+     survived a source check while silently restoring the bug. The tab is run
+     with a stub shell and the call is observed. */
+  {
+    const calls = [];
+    const c = load((cc) => {
+      cc.hgOgLastCards = () => ({ ran: false, cards: [], at: 0 });
+      cc.hgScanOneTab = async (id) => { calls.push(id); };
+      cc.HG_tabs = [];
+    });
+    const tab = (c.HG_tabs || []).filter((x) => x && x.id === 'milligold')[0];
+    ok(!!tab, 'the tab is registered in the stub shell');
+    if (tab){
+      const el = { innerHTML: '', querySelector: () => ({ textContent: '', addEventListener(){} }) };
+      try { tab.mount(el); } catch (e){}
+      await new Promise((r) => setTimeout(r, 60));
+      ok(calls.indexOf('omnigold') >= 0,
+         'with OMNIGOLD never run, the tab CALLS hgScanOneTab(omnigold) — observed, '
+         + 'not grepped');
+    }
+  }
+  ok(SRC.indexOf("scanOne('omnigold'") > 0, 'naming the desk it needs');
+  ok(SRC.indexOf('hgScanOneTab') < SRC.indexOf('tab.refresh'),
+     'BEFORE tab.refresh, which returns "skipped: not run yet" on a desk that has '
+     + 'never run — a no-op in exactly the case this fallback exists for');
+  const idxSrc = readFileSync(join(ROOT, 'index.html'), 'utf8');
+  ok(/async function hgScanOneTab/.test(idxSrc), 'the shell defines hgScanOneTab');
+  ok(/window\.hgScanOneTab/.test(idxSrc), 'and exports it');
+  ok(/omnigold: '#ogRun'/.test(idxSrc),
+     'with a RUN selector for omnigold, which is what makes the fallback work');
+  ok(/scanned and its board is empty/.test(SRC),
+     'and an empty board is reported as the desk being quiet');
+  ok(/not this tab waiting/.test(SRC), 'explicitly distinguished from waiting');
+  ok(/cannot find what its source did/.test(SRC),
+     'saying why a roster cannot rescue an empty source');
+}
+
 /* ---- 4. an empty roster shows NOTHING ---- */
 console.log('4. no measurements means no setups, not every setup');
 {

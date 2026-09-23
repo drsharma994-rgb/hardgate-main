@@ -319,20 +319,43 @@ async function runMilliGold(ui){
     }
 
     var got = read();
-    if (!got || !got.cards || !got.cards.length){
-      /* Ask OMNIGOLD to scan rather than scanning differently. */
-      var tab = null;
-      try{
-        var tabs = W.HG_tabs || [];
-        for (var i = 0; i < tabs.length; i++) if (tabs[i] && tabs[i].id === 'omnigold') tab = tabs[i];
-      }catch(eT){ tab = null; }
-      if (tab && typeof tab.refresh === 'function'){
-        try { await tab.refresh(); } catch (eR){}
+    /* NEVER SCANNED is a different state from SCANNED AND FOUND NOTHING, and
+       only the first is worth waiting for. hg-v938 conflated them — it read a
+       null view as "no scan yet" — which told the reader to wait for something
+       that had already happened AND asked OMNIGOLD to refresh on every paint,
+       a scan storm on exactly the quiet tape where an empty board is normal.
+       `ran` now distinguishes them, so the refresh below fires only when this
+       desk genuinely has nothing yet. */
+    if (!got || !got.ran){
+      /* hgScanOneTab IS THE RIGHT CALL AND tab.refresh() IS NOT.
+
+         hg-v938 asked OMNIGOLD to refresh, and refreshOmnigold returns
+         'skipped: not run yet' when that desk has never run — a no-op in
+         exactly the case this fallback exists for. Open MILLI GOLD without
+         ever opening OMNIGOLD and the tab waited forever on a desk it had
+         politely asked to do nothing. hgScanOneTab is the shell's own entry:
+         it runs HG_TAB_AUTO_SCAN[id] and, when a module refresh skips, clicks
+         that tab's real RUN button (HG_SCAN_RUN_BTN). tab.refresh() stays as
+         the fallback for a shell that predates it. */
+      var scanOne = gfn('hgScanOneTab');
+      if (scanOne){
+        try { await scanOne('omnigold', { quiet: true }); } catch (eS){}
         got = read();
+      }
+      if (!got || !got.ran){
+        var tab = null;
+        try{
+          var tabs = W.HG_tabs || [];
+          for (var i = 0; i < tabs.length; i++) if (tabs[i] && tabs[i].id === 'omnigold') tab = tabs[i];
+        }catch(eT){ tab = null; }
+        if (tab && typeof tab.refresh === 'function'){
+          try { await tab.refresh(); } catch (eR){}
+          got = read();
+        }
       }
     }
 
-    if (!got || !got.cards || !got.cards.length){
+    if (!got || !got.ran){
       if (ui && ui.body) ui.body.innerHTML = hgMilliDisclosureHtml()
         + '<div class="note" style="margin-top:8px">OMNIGOLD has not produced a scan yet. '
         + 'This tab shows what that desk found, narrowed to the roster, so it waits for it '
@@ -340,6 +363,19 @@ async function runMilliGold(ui){
         + hgMilliRosterHtml();
       if (ui && ui.stat) ui.stat.textContent = 'waiting for OMNIGOLD';
       return 'no-scan';
+    }
+    if (!got.cards.length){
+      if (ui && ui.body) ui.body.innerHTML = hgMilliDisclosureHtml()
+        + '<div class="note" style="margin-top:8px">OMNIGOLD scanned and its board is empty '
+        + '&mdash; so there is nothing for this tab to narrow. That is the desk being quiet, '
+        + 'not this tab waiting: a roster of ' + ((HG_MILLI_ROSTER && HG_MILLI_ROSTER.kinds)
+          ? HG_MILLI_ROSTER.kinds.length : 0) + ' mechanics cannot find what its source did '
+        + 'not.</div>'
+        + hgMilliRosterHtml();
+      if (ui && ui.stat) ui.stat.textContent = 'OMNIGOLD board empty';
+      __mg.last = { scanned: 0, kept: 0, at: got.at, tally: hgMilliGateTally([]) };
+      __mg.ranOnce = true;
+      return 'empty';
     }
 
     /* The shared gold tape rule, on the bars OMNIGOLD scanned. */

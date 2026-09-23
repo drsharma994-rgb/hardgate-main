@@ -16847,9 +16847,22 @@ terse status, and never launches a first-time scan on a global refresh.
     };
     window.hgOgLastCards = function hgOgLastCards(){
       try{
-        var v = __og && __og.lastView;
-        if (!v || !Array.isArray(v.collapsed)) return null;
-        return { cards: v.collapsed, at: __og.lastScanAt || 0, ran: !!__og.ran };
+        if (!__og) return null;
+        /* `ran` IS THE AUTHORITY ON WHETHER A SCAN HAPPENED, not lastView.
+
+           hg-v938 read lastView alone and returned null without it — but this
+           desk sets `__og.lastView = null` DELIBERATELY on its honest-empty /
+           no-candles branch (see the hg-v540 comment there): that is "scanned,
+           nothing to show", not "never scanned". Conflating the two told MILLI
+           GOLD to report a completed scan as still pending, and to ask this
+           desk to refresh on EVERY paint — a scan storm on the quietest tape,
+           which is exactly when the board is legitimately empty. So an empty
+           board returns an EMPTY LIST with ran:true, and only a desk that has
+           genuinely never run returns null. */
+        if (!__og.ran) return null;
+        var v = __og.lastView;
+        var cards = (v && Array.isArray(v.collapsed)) ? v.collapsed : [];
+        return { cards: cards, at: __og.lastScanAt || 0, ran: true };
       }catch(e){ return null; }
     };
     window.hgOgState = function hgOgState(){

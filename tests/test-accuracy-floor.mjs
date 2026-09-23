@@ -498,7 +498,28 @@ console.log('\n9. the roster is checked against the sources, in BOTH directions'
       continue;
     }
     const src = fs.readFileSync(file, 'utf8');
-    ok(!/\bentry\b/.test(src) && !/\bt1\b/.test(src),
+    /* hg-v939 SPLIT THIS IN TWO, because the original grep answered the wrong
+       question. "Does the file contain the words entry or t1" is a proxy for
+       "does this tab mint setups", and it is wrong in both directions: it
+       excuses a minting desk that happens to use other words, and it condemns
+       a tab that merely says "entry" in a comment — which is exactly how MILLI
+       GOLD tripped it, on the phrase "the shell's own entry".
+
+       The question the floor actually cares about is whether a tab puts
+       setups into the forward log under a pool of its own. A tab that records
+       NOTHING and only re-displays another desk's already-recorded cards has
+       its rows judged — under THAT desk's pool — so it needs no pool and no
+       verdict here. That is a real, falsifiable claim about the file, and it
+       is asserted rather than assumed. */
+    const records = /hgFwdRecord|hgAccuracyRecord/.test(src);
+    const readsAnotherDesk = /hgOgLastCards/.test(src);
+    if (!records && readsAnotherDesk){
+      ok(!/hgFwdRecord|hgAccuracyRecord/.test(src) && /hgOgLastCards/.test(src),
+         'unjudged gold tab "' + t + '" records nothing of its own and re-displays another '
+         + "desk's already-recorded cards, so its rows are judged under that desk's pool");
+      continue;
+    }
+    ok(!records && !/\bt1\b/.test(src),
        'unjudged gold tab "' + t + '" mints no setups at all — nothing to measure, so no verdict');
   }
   for (const g of ['omnigold', 'omnigold1', 'goldscalp', 'goldswing', 'goldultra',
