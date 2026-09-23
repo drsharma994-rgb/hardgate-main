@@ -106,6 +106,55 @@ const changes = [];
   else changes.push({ file: 'goldind.js', what: 'scalp live blocks', rows: 0, p, next: null });
 }
 
+/* ---- 1b. the WALK SPAN blocks on both desks (hg-v927) ----------------
+   Every verdict on either desk comes from one replay, and the only record of
+   WHEN it ran used to be prose in a comment — which no desk can read and no
+   re-bake updates. These two blocks are the machine-readable span, rewritten
+   from the artifacts' own meta so the age the tabs print can never be a
+   number somebody typed. */
+function walkBlock(src, varName, meta, trades, srcPath){
+  const a = src.indexOf('var ' + varName + ' = {');
+  if (a < 0) return { err: varName + ' block not found' };
+  const b = src.indexOf('};', a);
+  if (b < 0) return { err: varName + ' block is unterminated' };
+  /* slice to the LINE START, not to `a`: src.slice(0, a) already carries the
+     original indent, so prepending it again doubled it. */
+  const lineStart = src.lastIndexOf('\n', a) + 1;
+  const m = /^(\s*)var /.exec(src.slice(lineStart));
+  if (!m) return { err: varName + ' declaration is not at a line start' };
+  const indent = m[1];
+  const i2 = indent + '  ';
+  const next = indent + 'var ' + varName + ' = {\n'
+    + i2 + "from: '" + meta.span.from + "',\n"
+    + i2 + "to: '" + meta.span.to + "',\n"
+    + i2 + "generated: '" + meta.generated + "',\n"
+    + i2 + 'trades: ' + trades + ',\n'
+    + i2 + "src: '" + srcPath + "'\n"
+    + indent;
+  return { next: src.slice(0, lineStart) + next + src.slice(b) };
+}
+{
+  const gp = join(ROOT, 'goldind.js');
+  let gsrc = readFileSync(gp, 'utf8');
+  const gRaw = JSON.parse(readFileSync(join(ROOT, 'scripts/backtest-goldscalp-results-floor.json'), 'utf8'));
+  const r = walkBlock(gsrc, 'HG_GOLD_EDGE_WALK', gRaw.meta, gRaw.trades.length,
+                      'scripts/backtest-goldscalp-results-floor.json');
+  /* a block it cannot locate is FATAL, never skipped — the hg-v921 rule */
+  if (r.err) throw new Error('rebake: ' + r.err);
+  changes.push({ file: 'goldind.js', what: 'walk span', rows: r.next === gsrc ? 0 : 1,
+                 p: gp, next: r.next === gsrc ? null : r.next });
+}
+{
+  const op = join(ROOT, 'omnigold.js');
+  let osrc = readFileSync(op, 'utf8');
+  const oRaw = JSON.parse(readFileSync(join(ROOT, 'scripts/backtest-omnigold-results.json'), 'utf8'));
+  const r = walkBlock(osrc, 'HG_OG_WALK', oRaw.meta, oRaw.trades.length,
+                      'scripts/backtest-omnigold-results.json');
+  if (r.err) throw new Error('rebake: ' + r.err);
+  changes.push({ file: 'omnigold.js', what: 'walk span', rows: r.next === osrc ? 0 : 1,
+                 p: op, next: r.next === osrc ? null : r.next });
+}
+
 /* ---- 2. omnigold.js: kinds[5..8], and the three evidence tables ---- */
 {
   const p = join(ROOT, 'omnigold.js');

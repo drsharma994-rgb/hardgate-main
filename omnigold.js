@@ -9146,6 +9146,8 @@ terse status, and never launches a first-time scan on a global refresh.
       + hgOgVenueCostNoteHtml()
       /* hg-v925: FIRST of all when the edge requirement is off — it reframes
          what a ticket on this page means, so it cannot sit below the tables. */
+      /* hg-v927: the age of everything below, before anything below */
+      + hgOgWalkAgeHtml()
       + hgOgEdgeRelaxedPanelHtml()
       /* hg-v926: and, while something is held, why nothing new is ticketing */
       + hgOgOneAtATimeHtml()
@@ -10286,6 +10288,59 @@ terse status, and never launches a first-time scan on a global refresh.
      runs as well, because there the answer is a setting rather than the tape.
      Silent when anything ticketed — an empty ticket column is the only thing
      this claims to explain. */
+  /* hg-v927 — WHEN THE WALK BEHIND THIS DESK ENDED.
+
+     hgOgEvidenceStaleHtml watches the GATE SET moving under the evidence and
+     hgOgEvidenceHealthHtml watches the evidence's own thinness. Neither one
+     watches the CALENDAR, so a reader opening this tab was gated by a replay
+     of entirely unstated age, presented as current.
+
+     Written by scripts/rebake-gold-literals.mjs from
+     scripts/backtest-omnigold-results.json, so a re-bake moves it. The age is
+     computed at RENDER TIME against the real clock — a baked "11 days old"
+     would be wrong the next morning.
+
+     NO THRESHOLD. Nothing here measures how fast gold edge decays, so there is
+     no honest "too old to trade" line and inventing one would be the fitted
+     number this desk refuses everywhere else. It states the age and what the
+     walk cannot have seen. */
+  var HG_OG_WALK = {
+    from: '2026-03-29T14:00:00.000Z',
+    to: '2026-09-12T04:00:00.000Z',
+    generated: '2026-09-12T07:15:34.424Z',
+    trades: 9897,
+    src: 'scripts/backtest-omnigold-results.json'
+  };
+
+  function hgOgWalkAgeDays(nowMs){
+    try{
+      var end = Date.parse(HG_OG_WALK.to);
+      var now = (typeof nowMs === 'number' && isFinite(nowMs)) ? nowMs : Date.now();
+      if (!isFinite(end) || !isFinite(now) || now < end) return null;
+      return Math.floor((now - end) / 86400000);
+    }catch(e){ return null; }
+  }
+
+  function hgOgWalkAgeHtml(nowMs){
+    try{
+      var d = hgOgWalkAgeDays(nowMs);
+      if (d === null) return '';
+      return '<div class="note og-walk-age" style="margin:8px 0;padding:6px 8px;'
+        + 'border:1px solid #B45309;border-left:3px solid #B45309;border-radius:4px;'
+        + 'background:rgba(180,83,9,0.07);font-size:0.85em">'
+        + '<b>THE EVIDENCE ON THIS PAGE IS ' + d + ' DAY' + (d === 1 ? '' : 'S')
+        + ' OLD</b> &mdash; every table below, every mechanic verdict and the gate that '
+        + 'reads them come from one replay of ' + hgOgFmtCount(HG_OG_WALK.trades)
+        + ' plans spanning ' + esc(String(HG_OG_WALK.from).slice(0, 10)) + ' to '
+        + esc(String(HG_OG_WALK.to).slice(0, 10)) + '. It has not seen a bar since.'
+        + '<div style="margin-top:4px">Re-run it with <code>npm run gold:rebake</code> on a '
+        + 'machine that can reach the data and every number here, including this line, '
+        + 'rewrites itself. <b>No staleness threshold is attached</b>: nothing measures how '
+        + 'fast gold edge decays, so a "too old to trade" line would be invented rather than '
+        + 'measured.</div></div>';
+    }catch(e){ return ''; }
+  }
+
   /* ====================================================================
      hg-v926 — ONE POSITION AT A TIME
      ====================================================================
@@ -16430,6 +16485,9 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgOpenGoldConvictions = hgOgOpenGoldConvictions;
     window.hgOgOneAtATimeHtml = hgOgOneAtATimeHtml;
     window.hgOgOneAtATimeGate = hgOgOneAtATimeGate;
+    window.HG_OG_WALK = HG_OG_WALK;
+    window.hgOgWalkAgeDays = hgOgWalkAgeDays;
+    window.hgOgWalkAgeHtml = hgOgWalkAgeHtml;
     window.hgOgFactorSepPanelHtml = hgOgFactorSepPanelHtml;
     window.HG_OG_FACTOR_SEP = HG_OG_FACTOR_SEP;
     window.hgOgReplayLineHtml = hgOgReplayLineHtml;

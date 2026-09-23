@@ -1339,6 +1339,60 @@ var GST_NAME = {
    measured. Shipping 0.28% because it is where the windows happened to line up
    is the hg-v920 mistake with a new number on it. The cost gate stays at
    8x the venue round trip. */
+/* hg-v927 — WHEN THE WALK BEHIND THIS TABLE ENDED.
+
+   Every suppress / demote / prefer verdict in HG_GOLD_SETUP_EDGE below comes
+   from one replay, and until now the only record of WHEN that replay ran was
+   prose in a comment. A desk cannot read a comment. So a trader opening GOLD
+   SCALP today is gated by a walk of some unstated age, presented as current.
+
+   This is the machine-readable span, written by scripts/rebake-gold-literals.mjs
+   from scripts/backtest-goldscalp-results-floor.json, so the next re-bake moves
+   it and nobody has to remember to. hgGoldEdgeWalkAgeNote renders the age at
+   LOAD TIME against the real clock — not a baked "days old" that would itself
+   go stale the day after it was written.
+
+   NO THRESHOLD IS ATTACHED. There is no measurement here of how quickly gold
+   edge decays, so there is no honest "too old to trade" line to draw, and
+   inventing one would be the fitted-number mistake this desk keeps refusing.
+   It reports the age and what the walk cannot have seen. The reader decides. */
+var HG_GOLD_EDGE_WALK = {
+  from: '2026-07-10T00:15:00.000Z',
+  to: '2026-09-10T11:45:00.000Z',
+  generated: '2026-09-10T12:13:17.246Z',
+  trades: 2605,
+  src: 'scripts/backtest-goldscalp-results-floor.json'
+};
+
+/* Days between the end of the walk and now, or null when either is unreadable.
+   Whole days, floored: "11 days" must not become "12" an hour early. */
+function hgGoldEdgeWalkAgeDays(nowMs){
+  try{
+    var end = Date.parse(HG_GOLD_EDGE_WALK.to);
+    var now = (typeof nowMs === 'number' && isFinite(nowMs)) ? nowMs : Date.now();
+    if (!isFinite(end) || !isFinite(now) || now < end) return null;
+    return Math.floor((now - end) / 86400000);
+  }catch(e){ return null; }
+}
+
+function hgGoldEdgeWalkAgeNote(nowMs){
+  try{
+    var d = hgGoldEdgeWalkAgeDays(nowMs);
+    if (d === null) return '';
+    var W0 = HG_GOLD_EDGE_WALK;
+    return '<div class="gsx-walkage"><b>WHAT FORMS THESE SETUPS IS ' + d + ' DAY'
+      + (d === 1 ? '' : 'S') + ' OLD</b> — every suppress, demote and prefer on this '
+      + 'desk comes from one replay of ' + W0.trades + ' trades spanning '
+      + String(W0.from).slice(0, 10) + ' to ' + String(W0.to).slice(0, 10)
+      + '. It has not seen a single bar since. Re-run it with '
+      + '<code>npm run gold:rebake</code> on a machine that can reach the data '
+      + 'and these numbers, and this line, rewrite themselves.'
+      + '<div style="margin-top:4px;opacity:.85">No staleness threshold is attached, '
+      + 'because nothing here measures how fast gold edge decays and a number invented '
+      + 'for that would be exactly the fitted threshold this desk refuses elsewhere.</div></div>';
+  }catch(e){ return ''; }
+}
+
 var HG_GOLD_FACTOR_SEP = {
   windows: 4, rtPct: 0.02,
   book: { asRecorded: { n: 1205, win: 43.3, gross: 0.0514, net: -0.0201 },
@@ -15349,6 +15403,9 @@ W.hgGoldBindEnginePlan = hgGoldBindEnginePlan;
 W.hgGoldSetupEdgeApply = hgGoldSetupEdgeApply;
 W.hgGoldEdgeLiveNote = hgGoldEdgeLiveNote;
 W.hgGoldSweepObStageLabel = hgGoldSweepObStageLabel;
+W.HG_GOLD_EDGE_WALK = HG_GOLD_EDGE_WALK;
+W.hgGoldEdgeWalkAgeDays = hgGoldEdgeWalkAgeDays;
+W.hgGoldEdgeWalkAgeNote = hgGoldEdgeWalkAgeNote;
 W.hgGoldScalpStopFloor = hgGoldScalpStopFloor;
 W.hgGoldScalpCostGate = hgGoldScalpCostGate;
 W.goldCrossVenueMap = goldCrossVenueMap;

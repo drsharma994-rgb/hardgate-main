@@ -700,6 +700,7 @@ var GS_CSS = ''
 + '.gsx-fsep-better>span{color:#166534}'
 + '.gsx-fsep-worse>span{color:#9a3412}'
 + '.gsx-fsep-foot{margin-top:7px;opacity:.9}'
++ '.gsx-walkage{font-size:11px;color:#7c2d12;border:1px dashed rgba(180,83,9,.4);border-radius:6px;padding:9px 11px;margin:8px 0 12px;line-height:1.55;background:rgba(180,83,9,.05)}'
 + '.gsx-silent b{letter-spacing:.12em;font-weight:800;color:#9A3412}'
 + '.gsx-weekend-wrap,.gsx-weekend-wrap{margin:0 0 12px}'
 + '.gsx-weekend,.gsx-weekend{font-size:11px;border-radius:8px;padding:10px 12px;line-height:1.55;margin:12px 0;border:1px solid}'
@@ -1505,7 +1506,10 @@ function whySilentHTML(ws){
     /* hg-v922: the coverage note above says how little can lead. This says
        that what decides WHICH rows lead — the tally — does not separate
        outcomes on four disjoint windows. Both belong on the same panel. */
-    + (typeof hgGoldFactorSepHtml === 'function' ? hgGoldFactorSepHtml() : '');
+    + (typeof hgGoldFactorSepHtml === 'function' ? hgGoldFactorSepHtml() : '')
+    /* hg-v927: and how old the walk behind all of it is. Last, because it
+       qualifies every number in the two panels above it. */
+    + (typeof hgGoldEdgeWalkAgeNote === 'function' ? hgGoldEdgeWalkAgeNote() : '');
 }
 
 function goldWeekendPanelHTML(ro){
