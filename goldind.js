@@ -1143,6 +1143,12 @@ var GST_NAME = {
   goldfix:  'LBMA LONDON FIX FADE (AM/PM)',
   golddxy:  'DOLLAR DIVERGENCE (GOLD + DXY TOGETHER)',
   goldround:'ROUND-DOLLAR LEVEL REJECTION',
+  /* hg-v934 — the two remaining OMNIGOLD mechanics these tabs lacked. Unlike
+     the three above they arrive WITH a measured twin record, quoted and
+     attributed on the card. The third gap, PIVOT-REJECT, is REFUSED: see
+     section 6 of gold-extra-strategies.js for the -2.69 sigma that refuses it. */
+  goldwopen:'WEEKLY OPEN SWEEP + RECLAIM',
+  goldfib:  '61.8 RETRACE HOLD',
   p4disc: 'S9 DISCOUNT/PREMIUM NODE',
   p4nr7: 'S12 NR7 / RANGE CONTRACTION BREAKOUT',
   p4adrx: 'S14 ADR EXHAUSTION FADE (PART4)',
@@ -3294,7 +3300,16 @@ function goldScalpSetups(inp){
           if (isFinite(xr.entry)) xCand.entry = xr.entry;
           if (isFinite(xr.stop)) xCand.stop = xr.stop;
           if (!Array.isArray(xCand.stamps)) xCand.stamps = [];
-          xCand.stamps.push(String(xr.kind).toUpperCase() + ' · NO RECORD');
+          /* hg-v934: the stamp is record-aware. hg-v933 said NO RECORD about
+             every one of these, and two of them have OMNIGOLD twins with 587
+             and 69 settled firings — "nothing is known" was the wrong claim.
+             Falls back to the old text when the module predates this. */
+          var xStamp = null;
+          try{
+            if (typeof window.hgGoldExtraStamp === 'function')
+              xStamp = window.hgGoldExtraStamp(xr.kind);
+          }catch(eXs){ xStamp = null; }
+          xCand.stamps.push(xStamp || (String(xr.kind).toUpperCase() + ' · NO RECORD'));
           xCand.extraUnchecked = true;
           try{
             if (typeof window.hgGoldExtraUncheckedNote === 'function')

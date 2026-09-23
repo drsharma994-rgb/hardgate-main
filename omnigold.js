@@ -9152,6 +9152,14 @@ terse status, and never launches a first-time scan on a global refresh.
       + hgOgEdgeRelaxedPanelHtml()
       /* hg-v926: and, while something is held, why nothing new is ticketing */
       + hgOgOneAtATimeHtml()
+      /* hg-v934: then what that relaxation freed in the general case — the
+         mechanics with no record at all, and the bar they charge the ones
+         that have one. BELOW the hold, deliberately: hg-v926 put the hold
+         directly under the relaxation notice because it answers the live
+         question a reader has RIGHT NOW (why is nothing new ticketing),
+         and this is standing disclosure. The urgent answer keeps the
+         adjacency it was given. */
+      + hgOgUnobservedPanelHtml()
       /* if the ledger has moved on since the evidence was baked, that comes
          next — every number under it is about a different system */
       + hgOgEvidenceStaleHtml()
@@ -10333,6 +10341,65 @@ terse status, and never launches a first-time scan on a global refresh.
     try{
       var f = gfn('hgGoldBreakevenHtml');
       return (typeof f === 'function') ? (f('omnigold') || '') : '';
+    }catch(e){ return ''; }
+  }
+
+  /* hg-v934: THE MECHANICS THAT HAVE NEVER FIRED, AND WHAT THEY COST THE ONES
+     THAT HAVE.
+
+     OG_MECHANICS is the registered family. Not all of it has ever been
+     OBSERVED: a mechanic can be wired at all three sites, pass the coverage
+     guard, and still never have produced a single settled firing in the walk
+     the evidence comes from. Before hg-v925 that barely mattered, because an
+     UNKNOWN mechanic stood the setup aside. Since hg-v925 it tickets.
+
+     So this states the two things a reader cannot otherwise see:
+
+     WHAT TICKETS ON NOTHING. The never-observed count, and that those
+     mechanics reach a card with no record behind them at all — not a thin
+     record, not a negative one, none.
+
+     WHAT IT COSTS EVERYONE ELSE. hgOgFamilyZ(OG_MECHANICS.length) is a Sidak
+     correction over the whole REGISTERED family, so a mechanic that can never
+     be tested still raises the promotion bar for every mechanic that can. The
+     arithmetic is the desk's own, run twice at render — once over the whole
+     register, once over the observed subset — so the gap is measured here, not
+     asserted. Strictly speaking a hypothesis that is never evaluated is not a
+     test and should not inflate the family, which is an argument for counting
+     the observed subset; it LOOSENS the bar, so it is published and NOT acted
+     on. hgOgFamilyZ still reads OG_MECHANICS.length and nothing is gated on
+     this panel. Every figure is derived; no count is written into the string. */
+  function hgOgUnobservedPanelHtml(){
+    try{
+      var kinds = (HG_OG_REPLAY_EVIDENCE && HG_OG_REPLAY_EVIDENCE.kinds) || {};
+      var total = OG_MECHANICS.length, seen = 0, never = [];
+      for (var i = 0; i < total; i++){
+        if (Object.prototype.hasOwnProperty.call(kinds, OG_MECHANICS[i])) seen++;
+        else never.push(OG_MECHANICS[i]);
+      }
+      if (!never.length || !seen) return '';
+      var zAll = hgOgFamilyZ(total), zSeen = hgOgFamilyZ(seen);
+      return '<div class="note og-unobserved" style="margin:8px 0;padding:6px 8px;'
+        + 'border:1px solid #6B7280;border-left:3px solid #6B7280;border-radius:4px;'
+        + 'background:rgba(107,114,128,0.07);font-size:0.85em">'
+        + '<b>' + never.length + ' OF THE ' + total + ' REGISTERED MECHANICS HAVE NEVER '
+        + 'FIRED IN THIS WALK</b> &mdash; ' + seen + ' carry a measured record; the rest '
+        + 'have produced no settled firing at all in ' + esc(String(HG_OG_REPLAY_EVIDENCE.window))
+        + '. Since hg-v925 an unknown mechanic no longer stands its setup aside, so those '
+        + ' can reach a ticket on no evidence whatsoever &mdash; not a thin record, not a '
+        + 'negative one, none. Each such card says so itself.'
+        + '<div style="margin-top:4px">And they are not free to the mechanics that DO have '
+        + 'a record: the promotion bar is a Sidak correction over the whole register, so it '
+        + 'sits at +' + zAll.toFixed(4) + '&sigma; across ' + total + ' rather than +'
+        + zSeen.toFixed(4) + '&sigma; across the ' + seen + ' that can actually be tested '
+        + '&mdash; <b>+' + (zAll - zSeen).toFixed(4) + '&sigma; stricter for every measured '
+        + 'mechanic</b>, charged by mechanics no measurement can ever clear or fail.</div>'
+        + '<div style="margin-top:4px">Published, <b>not acted on</b>. Narrowing the family to '
+        + 'the observed subset is the defensible statistic &mdash; a hypothesis that is never '
+        + 'evaluated is not a test &mdash; but it LOWERS a bar, and this desk does not loosen '
+        + 'on an argument. The gate still corrects over all ' + total + '.</div>'
+        + '<div style="margin-top:4px;opacity:0.85">Never observed: ' + esc(never.join(' · ')) + '</div>'
+        + '</div>';
     }catch(e){ return ''; }
   }
 
@@ -16503,6 +16570,7 @@ terse status, and never launches a first-time scan on a global refresh.
     window.HG_OG_WALK = HG_OG_WALK;
     window.hgOgWalkAgeDays = hgOgWalkAgeDays;
     window.hgOgWalkAgeHtml = hgOgWalkAgeHtml;
+    window.hgOgUnobservedPanelHtml = hgOgUnobservedPanelHtml;
     window.hgOgFactorSepPanelHtml = hgOgFactorSepPanelHtml;
     window.HG_OG_FACTOR_SEP = HG_OG_FACTOR_SEP;
     window.hgOgReplayLineHtml = hgOgReplayLineHtml;

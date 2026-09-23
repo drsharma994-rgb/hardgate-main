@@ -28,7 +28,8 @@
     "og:audit": "node scripts/geometry-audit.mjs",
     "og:multi": "node scripts/backtest-multi.mjs --run --symbols=PAXGUSDT,XAUTUSDT",
     "test": "node scripts/run-tests.mjs",
-    "gold:rebake": "node scripts/backtest-goldscalp.mjs && node scripts/backtest-omnigold.mjs && node scripts/omnigold-evidence-bake.mjs --write && node scripts/rebake-gold-literals.mjs --write && npm test",
+    "gold:rebake": "node scripts/backtest-goldscalp.mjs && node scripts/backtest-omnigold.mjs && node scripts/omnigold-evidence-bake.mjs --write && node scripts/rebake-gold-literals.mjs --write && node scripts/gold-sibling-records.mjs --write && npm test",
+    "gold:siblings": "node scripts/gold-sibling-records.mjs",
     "gold:literals": "node scripts/rebake-gold-literals.mjs"
   }
 }
