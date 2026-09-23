@@ -1138,6 +1138,11 @@ var GST_NAME = {
   nyexh: 'NY VOLUME EXHAUSTION',
   sweepob: 'SWEEP→OB (MSS + FRESH OB/FVG)',
   silverb: 'SESSION SILVER BULLET (ASIA→LONDON)',
+  /* hg-v933 — gold-native, bars only, and MINTED DEMOTED until a bake gives
+     each one a record (see gold-extra-strategies.js for why). */
+  goldfix:  'LBMA LONDON FIX FADE (AM/PM)',
+  golddxy:  'DOLLAR DIVERGENCE (GOLD + DXY TOGETHER)',
+  goldround:'ROUND-DOLLAR LEVEL REJECTION',
   p4disc: 'S9 DISCOUNT/PREMIUM NODE',
   p4nr7: 'S12 NR7 / RANGE CONTRACTION BREAKOUT',
   p4adrx: 'S14 ADR EXHAUSTION FADE (PART4)',
@@ -3267,6 +3272,42 @@ function goldScalpSetups(inp){
         }
       }
     }catch(eSob){}
+
+    /* --- 1d3) hg-v933 GOLD-NATIVE EXTRAS (fix / dollar divergence / round) ---
+       One loop for all three: they share a shape (dir + entry + stop + why)
+       and a status — no measured record, so every one mints DEMOTED and
+       carries the reason on the card. hgGoldExtraSetPromotable(true) lifts
+       that once a bake has judged them. The module is feature-checked, so a
+       page that does not load it behaves exactly as before. */
+    try{
+      var xtraFn = (typeof window !== 'undefined') ? window.hgGoldExtraDetect : null;
+      if (typeof xtraFn === 'function'){
+        var xtras = xtraFn({ rows: rows, dxyRows: (inp && inp.macro && (inp.macro.dxyRows || inp.macro.dxyCandles)) || null,
+                             now: nowMs }) || [];
+        for (var xi = 0; xi < xtras.length; xi++){
+          var xr = xtras[xi];
+          if (!xr || !xr.dir || !isFinite(xr.stop)) continue;
+          var xCand = __gsCand(xr.kind, xr.dir, D, xr.stop, __gsSnapLvls(D, xr.dir),
+            xr.why, xr.invalidates || 'setup structure broken', null,
+            isFinite(xr.entry) ? xr.entry : undefined);
+          if (!xCand) continue;
+          if (isFinite(xr.entry)) xCand.entry = xr.entry;
+          if (isFinite(xr.stop)) xCand.stop = xr.stop;
+          if (!Array.isArray(xCand.stamps)) xCand.stamps = [];
+          xCand.stamps.push(String(xr.kind).toUpperCase() + ' · NO RECORD');
+          xCand.extraUnchecked = true;
+          try{
+            if (typeof window.hgGoldExtraUncheckedNote === 'function')
+              xCand.extraWhy = window.hgGoldExtraUncheckedNote(xr.kind);
+          }catch(eXw){}
+          /* CANNOT LEAD until measured — the never-observed rule, applied here */
+          var promo = (typeof window.hgGoldExtraPromotable === 'function')
+            ? window.hgGoldExtraPromotable() : false;
+          if (!promo) xCand.demoted = true;
+          out.push(xCand);
+        }
+      }
+    }catch(eXtra){}
 
     /* --- 1d2) SESSION SILVER BULLET (Asia→London / NY open window) --- */
     try{
