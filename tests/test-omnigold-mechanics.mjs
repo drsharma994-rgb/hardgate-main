@@ -415,7 +415,14 @@ console.log('\n== the new gates do not quietly become a wall of vetoes ==');
   /* Count gate DECLARATIONS (gates.push({ key:), not the shared-forwarding
      loop's bare gates.push(sh[si]). -2: gold's module-absent fallback and the
      shared catch-all are declarations that never fire on a healthy ledger. */
+  /* hg-v926: a gate row may also be DECLARED in a factory and pushed by
+     reference (hgOgOneAtATimeGate -> gates.push(g)), so the count has to
+     follow the declaration wherever it lives or this guard fires on a
+     refactor that changed nothing about the ledger. Matched on the gate
+     SHAPE — key + hard — so a `return { key: 'no-record', txt: ... }` that is
+     not a gate row is not swept in. */
   const total = (SRC.match(/gates\.push\(\{ key:/g) || []).length
+              + (SRC.match(/return \{ key: '[a-z0-9-]+', hard:/g) || []).length
               + (shBody.match(/gates\.push\(\{ key:/g) || []).length - 2;
   /* Not a hardcoded number: the ledger grows, and a count assertion that has
      to be edited every time teaches you to edit it without thinking. What

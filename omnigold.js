@@ -4318,6 +4318,17 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     gates.push({ key:'measured-edge', hard: OG_EDGE_PROOF_REQUIRED, info: edInfo, pass: ed, why: edWhy });
 
+    /* hg-v926 — ONE POSITION AT A TIME. Pushed as an ordinary hard gate so it
+       flows through hgOmniGrade, the blocker funnel and the card exactly like
+       every other constraint, instead of being a special case in the grader.
+       FAILS OPEN: an unreadable conviction store reads 0 open and the ticket
+       stands — refusing to ticket because localStorage is unavailable would
+       be a gate nobody chose. */
+    (function(){
+      var g = hgOgOneAtATimeGate();
+      if (g) gates.push(g);
+    })();
+
     /* The 14 indicator context reads moved to hg-gates.js so OMNIROUTE gets
        them too — a gold card carried 34 checks to crypto\'s 21, and the gap
        was exactly these. Verbatim move; verified by gate-output equivalence. */
@@ -9136,6 +9147,8 @@ terse status, and never launches a first-time scan on a global refresh.
       /* hg-v925: FIRST of all when the edge requirement is off — it reframes
          what a ticket on this page means, so it cannot sit below the tables. */
       + hgOgEdgeRelaxedPanelHtml()
+      /* hg-v926: and, while something is held, why nothing new is ticketing */
+      + hgOgOneAtATimeHtml()
       /* if the ledger has moved on since the evidence was baked, that comes
          next — every number under it is about a different system */
       + hgOgEvidenceStaleHtml()
@@ -10273,6 +10286,144 @@ terse status, and never launches a first-time scan on a global refresh.
      runs as well, because there the answer is a setting rather than the tape.
      Silent when anything ticketed — an empty ticket column is the only thing
      this claims to explain. */
+  /* ====================================================================
+     hg-v926 — ONE POSITION AT A TIME
+     ====================================================================
+
+     Every pack in this sequence has looked for BETTER SETUPS and none of the
+     dials moved: hg-v922 found that nothing either gold desk ranks by (tally,
+     grade, demote, tier, confluence, checks) separates outcomes across four
+     disjoint windows; the one factor that does — stop width — holds in
+     DIRECTION but names no value. That is a finding, not a failure to search.
+
+     This is not about which setup. It is about HOW MANY AT ONCE, and it is
+     the only result in the whole evidence base that is positive at both fill
+     bounds — the hg-v918 bar.
+
+     THE WALK PUBLISHES 59.4 PLANS A DAY ON ONE INSTRUMENT and holds a
+     time-weighted 57 at once. Every headline table on this tab describes that
+     book. Nobody can run it, and it is not 57 bets: it is ONE bet on gold at
+     57x size. That half of the argument needs no statistics.
+
+     The other half is the sequential book — walk the plans in time order,
+     take one when flat, hold it to its own exit:
+
+                        lower bound          upper bound
+       SCALP tickets    +0.1484R  n=73       +0.4155R  n=54
+       SWING tickets    -0.2399R  n=32       +0.3166R  n=35
+       all at once      -0.1160R  n=8132     (parallel book, XM)
+
+     SCALP is positive at BOTH ends. SWING disagrees between them, so by this
+     desk's own rule it carries no verdict and is not claimed here.
+
+     AND THE LIMIT, STATED: at the conservative end the scalp read is n=73 at
+     +1.16 sigma against breakeven. Positive, NOT significant. It clears no
+     bar this desk applies to a mechanic. It is not offered as proof of an
+     edge — it is offered because the comparison is stark (+0.148 against
+     -0.116), because it is the only both-bounds positive there is, and
+     because the concentration argument stands on its own without it.
+
+     WHAT IT DOES. While a gold conviction is live, a new OMNIGOLD ticket is
+     held: the card keeps its levels, its gates and its reasoning and reads
+     HELD instead of TICKET. Nothing is hidden and no gate threshold moved.
+     hgOgSetOneAtATime(false) turns it off and persists, window.HG_OG_ONE_AT_A_TIME
+     overrides both. */
+  var OG_ONE_AT_A_TIME_LS_KEY = 'hg_og_one_at_a_time';
+  var OG_ONE_AT_A_TIME_DEFAULT = true;
+  var OG_ONE_AT_A_TIME = OG_ONE_AT_A_TIME_DEFAULT;
+  /* the two gold desks that book convictions; OMNIGOLD reads both because a
+     position is a position whichever tab opened it */
+  var OG_CONVICTION_KEYS = ['hgGoldscalpConviction', 'hgGoldswingConviction'];
+
+  function hgOgOneAtATimeInit(){
+    try{
+      var w = W();
+      var ovr = (w && w.HG_OG_ONE_AT_A_TIME);
+      if (ovr === true || ovr === false){ OG_ONE_AT_A_TIME = ovr; return OG_ONE_AT_A_TIME; }
+      var stored = null;
+      try { stored = localStorage.getItem(OG_ONE_AT_A_TIME_LS_KEY); } catch (eL) { stored = null; }
+      if (stored === '1' || stored === 'true') OG_ONE_AT_A_TIME = true;
+      else if (stored === '0' || stored === 'false') OG_ONE_AT_A_TIME = false;
+      else OG_ONE_AT_A_TIME = OG_ONE_AT_A_TIME_DEFAULT;
+    }catch(e){ OG_ONE_AT_A_TIME = OG_ONE_AT_A_TIME_DEFAULT; }
+    return OG_ONE_AT_A_TIME;
+  }
+  function hgOgSetOneAtATime(on){
+    OG_ONE_AT_A_TIME = (on === true);
+    try { localStorage.setItem(OG_ONE_AT_A_TIME_LS_KEY, OG_ONE_AT_A_TIME ? '1' : '0'); } catch (eS) {}
+    return OG_ONE_AT_A_TIME;
+  }
+
+  /* Live gold convictions across both booking desks. Returns
+     { n, keys: [..] } and NEVER throws — a store this cannot read is 0 open,
+     which fails OPEN (the ticket stands). Refusing to ticket because
+     localStorage is unavailable would be a gate nobody chose. */
+  function hgOgOpenGoldConvictions(){
+    var out = { n: 0, keys: [] };
+    try{
+      for (var i = 0; i < OG_CONVICTION_KEYS.length; i++){
+        var raw = null;
+        try { raw = localStorage.getItem(OG_CONVICTION_KEYS[i]); } catch (eR) { raw = null; }
+        if (!raw) continue;
+        var j = null;
+        try { j = JSON.parse(raw); } catch (eP) { j = null; }
+        if (!j || !j.live || typeof j.live !== 'object') continue;
+        for (var k in j.live){
+          if (!Object.prototype.hasOwnProperty.call(j.live, k)) continue;
+          out.n++; out.keys.push(String(k));
+        }
+      }
+    }catch(e){}
+    return out;
+  }
+
+  /* The gate row itself, as a pure function so it can be exercised without
+     running a whole scan. Returns null when the guard is off — the ledger
+     then has no such row at all, rather than a row that always passes.
+     FAILS OPEN: hgOgOpenGoldConvictions reports 0 for an unreadable store. */
+  function hgOgOneAtATimeGate(open){
+    if (!OG_ONE_AT_A_TIME) return null;
+    var o = open || hgOgOpenGoldConvictions();
+    var free = !(o && o.n > 0);
+    return { key: 'one-at-a-time', hard: true, pass: free,
+      why: free
+        ? 'no gold conviction is live — this desk takes one position at a time'
+        : (o.n + ' gold conviction' + (o.n === 1 ? ' is' : 's are') + ' already live'
+           + ' — HELD. The walk publishes 59.4 plans a day on one instrument and holds 57'
+           + ' at once, which is one bet at 57x size; taken one at a time the SCALP ticket'
+           + ' book is +0.148R at the conservative fill bound and +0.416R at the other,'
+           + ' against -0.116R all at once. hgOgSetOneAtATime(false) turns this off.') };
+  }
+
+  /* The panel. Renders only while something is actually held — a standing
+     lecture about concentration on an empty book is noise. */
+  function hgOgOneAtATimeHtml(open){
+    try{
+      if (!OG_ONE_AT_A_TIME) return '';
+      var o = open || hgOgOpenGoldConvictions();
+      if (!o || !(o.n > 0)) return '';
+      return '<div class="note og-one-at-a-time" style="margin:8px 0;padding:6px 8px;'
+        + 'border:1px solid #0F766E;border-left:3px solid #0F766E;border-radius:4px;'
+        + 'background:rgba(15,118,110,0.07);font-size:0.85em">'
+        + '<b>ONE POSITION AT A TIME &mdash; ' + o.n + ' gold conviction'
+        + (o.n === 1 ? ' is' : 's are') + ' live</b>, so new tickets are <b>HELD</b>. '
+        + 'Cards keep their levels, gates and reasoning; none of them is hidden and no '
+        + 'threshold moved.'
+        + '<div style="margin-top:4px">This walk publishes <b>59.4 plans a day</b> on one '
+        + 'instrument and holds <b>57 at once</b> &mdash; which is not 57 bets, it is one bet '
+        + 'on gold at 57&times; size. Taken one at a time instead, the SCALP ticket book is '
+        + '<b>+0.148R</b> at the conservative fill bound and <b>+0.416R</b> at the other, '
+        + 'against <b>&minus;0.116R</b> for the all-at-once book. It is the only read in this '
+        + 'desk&rsquo;s evidence that is positive at <b>both</b> bounds.</div>'
+        + '<div style="margin-top:4px;opacity:.85">The limit, stated: at the conservative end '
+        + 'that is n=73 at <b>+1.16&sigma;</b> &mdash; positive, <b>not significant</b>, and it '
+        + 'clears no bar this desk applies to a mechanic. SWING disagrees between the two bounds '
+        + '(&minus;0.240 / +0.317) and carries no verdict, so nothing is claimed for it. The '
+        + 'concentration argument above stands without either. '
+        + '<code>hgOgSetOneAtATime(false)</code> turns this off.</div></div>';
+    }catch(e){ return ''; }
+  }
+
   /* hg-v925 — the setter and the override, so the instruction is reversible
      without editing this file. Precedence matches the venue control's:
      window.HG_OG_EDGE_PROOF wins, then the stored choice, then the default. */
@@ -15524,6 +15675,7 @@ terse status, and never launches a first-time scan on a global refresh.
        any HTML is built. */
     hgOgVenueInit();
     hgOgEdgeProofInit();
+    hgOgOneAtATimeInit();
     el.innerHTML =
       '<div class="panel">'
       + '<h2>OmniGold — gold desk setups <span>XAUUSD · scalp ' + HORIZONS.scalp.tf + ' + swing ' + HORIZONS.swing.tf
@@ -16273,6 +16425,11 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgEdgeProofInit = hgOgEdgeProofInit;
     window.hgOgEdgeRelaxedTally = hgOgEdgeRelaxedTally;
     window.hgOgEdgeRelaxedPanelHtml = hgOgEdgeRelaxedPanelHtml;
+    window.hgOgSetOneAtATime = hgOgSetOneAtATime;
+    window.hgOgOneAtATimeInit = hgOgOneAtATimeInit;
+    window.hgOgOpenGoldConvictions = hgOgOpenGoldConvictions;
+    window.hgOgOneAtATimeHtml = hgOgOneAtATimeHtml;
+    window.hgOgOneAtATimeGate = hgOgOneAtATimeGate;
     window.hgOgFactorSepPanelHtml = hgOgFactorSepPanelHtml;
     window.HG_OG_FACTOR_SEP = HG_OG_FACTOR_SEP;
     window.hgOgReplayLineHtml = hgOgReplayLineHtml;
