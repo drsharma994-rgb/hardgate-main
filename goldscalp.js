@@ -703,6 +703,15 @@ var GS_CSS = ''
 + '.gsx-walkage{font-size:11px;color:#7c2d12;border:1px dashed rgba(180,83,9,.4);border-radius:6px;padding:9px 11px;margin:8px 0 12px;line-height:1.55;background:rgba(180,83,9,.05)}'
 + '.gsx-retune{font-size:11px;color:#7c2d12;border:1px solid rgba(180,83,9,.5);border-left:3px solid #b45309;border-radius:6px;padding:9px 11px;margin:8px 0 12px;line-height:1.55;background:rgba(180,83,9,.07)}'
 + '.gsx-retune-tbl{margin:6px 0 0;font-variant-numeric:tabular-nums}'
++ '.gsx-rrsf{font-size:11px;color:#334155;border:1px dashed rgba(51,65,85,.35);border-radius:6px;padding:8px 10px;margin:7px 0 2px;line-height:1.5;background:rgba(51,65,85,.03)}'
++ '.gsx-rrsf-head{font-weight:600;letter-spacing:.02em}'
++ '.gsx-rrsf-spread{margin:3px 0 5px;font-variant-numeric:tabular-nums}'
++ '.gsx-rrsf-tbl{display:grid;grid-template-columns:auto auto auto;gap:1px 10px;font-variant-numeric:tabular-nums;justify-content:start}'
++ '.gsx-rrsf-row{display:contents}'
++ '.gsx-rrsf-n,.gsx-rrsf-p{text-align:right}'
++ '.gsx-rrsf-p{opacity:.7}'
++ '.gsx-rrsf-other{margin-top:5px;opacity:.9}'
++ '.gsx-rrsf-foot{margin-top:6px;opacity:.9}'
 + '.gsx-silent b{letter-spacing:.12em;font-weight:800;color:#9A3412}'
 + '.gsx-weekend-wrap,.gsx-weekend-wrap{margin:0 0 12px}'
 + '.gsx-weekend,.gsx-weekend{font-size:11px;border-radius:8px;padding:10px 12px;line-height:1.55;margin:12px 0;border:1px solid}'
@@ -1344,6 +1353,7 @@ function gsRejectFunnelHTML(rejected, preGate){
           + (g.kindList.length > 3 ? ' +' + (g.kindList.length - 3) : '') + '</span>' : '')
       + '</span></div>';
   }
+  h += gsRrShortfallHTML(rejected);
   h += gsPreGateLine(preGate);
   h += '</div>';
   return h;
@@ -1356,6 +1366,125 @@ function gsGateShort(gate){
   var cut = s.indexOf(' — ');
   if (cut > 8) s = s.slice(0, cut);
   return s.length > 90 ? s.slice(0, 89) + '…' : s;
+}
+
+/* hg-v929 — HOW FAR UNDER THE FLOOR, not merely which gate.
+
+   gsRejectFunnelHTML names the binding gate and its share. On a quiet tape
+   that is almost always "structure too close - R:R insufficient", and a
+   reader who gets that far asks the obvious next question: is the floor
+   shaving off trades that nearly made it, or are these setups nowhere near?
+   The funnel could not say, so the honest-looking answer -- LOWER THE FLOOR
+   -- was available with nothing to argue against it.
+
+   MEASURED, 120 consecutive synthetic scans through the real goldScalpSetups
+   (scratch harness, not the committed replay, and labelled as such):
+   294 of 385 rejections were this gate, and 94.9% of them capped TP1 below
+   0.80R against a 1.20R floor. Dropping the floor to 1.00R would have
+   returned SIX of 294. To 0.80R, fifteen. The floor is not what empties the
+   board; opposing structure is.
+
+   AND THE FIRST ATTEMPT AT THAT MEASUREMENT WAS ITSELF WRONG, which is the
+   sharpest argument for the numeric field. Binning the rejects by parsing
+   their sentences gave 92.8% below 0.80R and EIGHT returned at a 0.80R
+   floor. The sentence prints lv.rr.toFixed(1), so every value was rounded to
+   one decimal first: an 0.96R cap reads as "1.0R". On the true floats the
+   same 294 rows are 94.9% and FIFTEEN. A prose parse is not merely fragile,
+   it is LOSSY, and it published a wrong figure in the session that built
+   this panel.
+
+   That is a synthetic tape, so NO NUMBER FROM IT IS BAKED HERE. Every figure
+   this panel prints is computed from the scan in front of the reader, at
+   render time, from the numeric rr / rrFloor the reject carries.
+
+   TWO THINGS IT MUST NOT OVERSTATE, both rendered:
+
+   1. A setup dropped at this gate RETURNED BEFORE the later gates ran. So
+      "lowering the floor to X passes N" is the MOST a lower floor could give
+      back, never what it would give back. It is an upper bound and says so.
+
+   2. A lower floor does not only add trades, it adds worse ones: the same
+      stop bought for a smaller first target. Counting the trades a threshold
+      would return without saying what they would be worth is how a loosening
+      argument gets made by arithmetic alone.
+
+   THIS COUNTS; IT DOES NOT GATE. The 1.2R floor is untouched. */
+var GS_RR_STEPS = [0.1, 0.2, 0.3, 0.4, 0.6, 0.8];
+
+function gsRrFmt(x){ return (Math.round(x * 100) / 100).toFixed(2); }
+
+function gsRrShortfall(rejected){
+  if (!rejected || !rejected.length) return null;
+  var byFloor = {}, i, j, r, k;
+  for (i = 0; i < rejected.length; i++){
+    r = rejected[i];
+    if (!r) continue;
+    /* NUMERIC fields only. A prose parse would bind this readout to the
+       wording of a sentence and go quietly blank when that changed. */
+    if (!isFinite(r.rr) || !isFinite(r.rrFloor) || !(r.rrFloor > 0)) continue;
+    if (!(+r.rr < +r.rrFloor)) continue;
+    k = String(+r.rrFloor);
+    if (!byFloor[k]) byFloor[k] = { floor: +r.rrFloor, rr: [] };
+    byFloor[k].rr.push(+r.rr);
+  }
+  var keys = Object.keys(byFloor);
+  if (!keys.length) return null;
+  /* The largest group leads and ANY OTHER FLOOR IS NAMED, never merged into
+     it: two different floors averaged into one distribution is a number that
+     describes neither gate. Ties break on the floor so renders are stable. */
+  keys.sort(function(a, b){
+    var d = byFloor[b].rr.length - byFloor[a].rr.length;
+    return d || (byFloor[a].floor - byFloor[b].floor);
+  });
+  var lead = byFloor[keys[0]];
+  var rr = lead.rr.slice().sort(function(a, b){ return a - b; });
+  var n = rr.length;
+  var steps = [];
+  for (i = 0; i < GS_RR_STEPS.length; i++){
+    var f = lead.floor - GS_RR_STEPS[i];
+    if (!(f > 0)) continue;
+    var c = 0;
+    for (j = 0; j < n; j++) if (rr[j] >= f) c++;
+    steps.push({ floor: f, n: c, pct: n ? (100 * c / n) : 0 });
+  }
+  var others = [];
+  for (i = 1; i < keys.length; i++){
+    others.push({ floor: byFloor[keys[i]].floor, n: byFloor[keys[i]].rr.length });
+  }
+  var mid = (n % 2) ? rr[(n - 1) / 2] : (rr[n / 2 - 1] + rr[n / 2]) / 2;
+  return { floor: lead.floor, n: n, steps: steps, others: others,
+           worst: rr[0], median: mid, best: rr[n - 1] };
+}
+
+function gsRrShortfallHTML(rejected){
+  var sf = gsRrShortfall(rejected);
+  if (!sf || !sf.n) return '';
+  var i, h = '<div class="gsx-rrsf">'
+    + '<div class="gsx-rrsf-head">R:R SHORTFALL — how far under the '
+    + gsRrFmt(sf.floor) + 'R floor these ' + sf.n + ' sit</div>'
+    + '<div class="gsx-rrsf-spread">nearest miss <b>' + gsRrFmt(sf.best)
+    + 'R</b> · middle <b>' + gsRrFmt(sf.median) + 'R</b> · furthest <b>'
+    + gsRrFmt(sf.worst) + 'R</b></div>';
+  h += '<div class="gsx-rrsf-tbl">';
+  for (i = 0; i < sf.steps.length; i++){
+    var st = sf.steps[i];
+    h += '<div class="gsx-rrsf-row"><span>floor ' + gsRrFmt(st.floor) + 'R</span>'
+      + '<span class="gsx-rrsf-n">' + st.n + ' of ' + sf.n + '</span>'
+      + '<span class="gsx-rrsf-p">' + (Math.round(st.pct * 10) / 10) + '%</span></div>';
+  }
+  h += '</div>';
+  for (i = 0; i < sf.others.length; i++){
+    h += '<div class="gsx-rrsf-other">' + sf.others[i].n + ' further row'
+      + (sf.others[i].n === 1 ? '' : 's') + ' were held at a different floor ('
+      + gsRrFmt(sf.others[i].floor) + 'R) and are counted separately — '
+      + 'two floors averaged into one distribution would describe neither.</div>';
+  }
+  h += '<div class="gsx-rrsf-foot">UPPER BOUND: a setup dropped here returned '
+    + 'before the later gates ran, so these are the most a lower floor could '
+    + 'give back, not what it would. And a lower floor does not only add '
+    + 'trades — it adds the same stop bought for a smaller first target. '
+    + 'Counted here, not acted on: the floor is unchanged.</div>';
+  return h + '</div>';
 }
 
 function rejectedHTML(rejected){
@@ -2522,6 +2651,8 @@ W.gsStampMergedMarks = gsStampMergedMarks;
 W.gsFeedLegs = gsFeedLegs;
 W.gsRejectFunnel = gsRejectFunnel;
 W.gsRejectFunnelHTML = gsRejectFunnelHTML;
+W.gsRrShortfall = gsRrShortfall;
+W.gsRrShortfallHTML = gsRrShortfallHTML;
 
 W.goldscalpState = function(){
   try{ return __snap ? __stateView(__snap) : null; }catch(e){ return null; }

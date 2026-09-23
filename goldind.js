@@ -2401,8 +2401,13 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
     /* (3) MIN R:R AFTER SNAPPING — opposing structure too close to pay for
        the trade: dropped with a named reason, never silently. */
     if (lv.rr < 1.2){
+      /* hg-v929: rr and rrFloor are carried as NUMBERS, not left to be parsed
+         back out of the sentence. The reject funnel's shortfall readout reads
+         these; a prose parse would have coupled the panel to the wording and
+         gone quietly blank the next time the sentence was reworded. */
       return { dropped: true, id: key + '|' + dir + '|' + bucket,
                strategy: GST_NAME[key] || key, stratKey: key, dir: dir,
+               rr: lv.rr, rrFloor: 1.2,
                reason: 'structure too close — R:R insufficient (opposing structure caps TP1 at '
                        + lv.rr.toFixed(1) + 'R < 1.2R minimum)' };
     }

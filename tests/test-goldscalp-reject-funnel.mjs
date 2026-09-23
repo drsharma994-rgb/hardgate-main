@@ -54,9 +54,20 @@ function grab(name){
 const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 /* hg-v903 added gsPreGateLine, which gsRejectFunnelHTML now calls — lift it
    too, or the renderer throws on a name this harness never supplied. */
+/* hg-v929 added gsRrShortfallHTML to the renderer's body. A lifted fragment
+   that calls a name the harness never supplied throws at call time, so the
+   new helpers and the step list come across too — and the step list is READ
+   FROM SOURCE rather than retyped, so this harness cannot drift from it. */
+function grabVar(name){
+  const m = new RegExp('var ' + name + ' = [^;]+;').exec(src);
+  if (!m) throw new Error('grabVar: ' + name + ' not found in goldscalp.js');
+  return m[0];
+}
 const F = new Function('esc',
-  grab('gsGateFamily') + grab('gsGateShort') + grab('gsRejectFunnel')
-  + grab('gsPreGateLine') + grab('gsRejectFunnelHTML')
+  grabVar('GS_RR_STEPS')
+  + grab('gsGateFamily') + grab('gsGateShort') + grab('gsRejectFunnel')
+  + grab('gsPreGateLine') + grab('gsRrFmt') + grab('gsRrShortfall')
+  + grab('gsRrShortfallHTML') + grab('gsRejectFunnelHTML')
   + 'return { gsGateFamily, gsGateShort, gsRejectFunnel, gsPreGateLine, gsRejectFunnelHTML };')(esc);
 const text = h => String(h).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 

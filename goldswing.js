@@ -1775,8 +1775,9 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
         var lv = __swLevels(dir, useEntry, a4, structStop, snapLvls);
         var swBuildMinRr = 1.2;
         if (lv.rr < swBuildMinRr){
+          /* hg-v929: numeric rr / rrFloor for the shortfall readout — see goldind.js */
           return { dropped: true, id: id, strategy: SW_NAME[key], stratKey: key, dir: dir,
-                   venue: venue, sym: sym,
+                   venue: venue, sym: sym, rr: lv.rr, rrFloor: swBuildMinRr,
                    reason: 'structure too close — R:R insufficient (' + lv.rr.toFixed(1) + 'R < '
                            + swBuildMinRr.toFixed(1) + 'R minimum)' };
         }
