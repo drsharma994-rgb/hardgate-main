@@ -329,7 +329,13 @@ console.log('\n== nothing new became a veto ==');
      fallbacks that never fire on a healthy ledger; the shared-forwarding
      loop's bare gates.push(sh[si]) is not a declaration and is not counted. */
   const shBody2b = SHSRC2.slice(SHSRC2.indexOf('function hgIndicatorGates'), SHSRC2.indexOf('G.hgBarSpacingSec'));
+  /* hg-v926: a gate row may also be DECLARED in a factory and pushed by
+     reference (hgOgOneAtATimeGate -> gates.push(g)), so the count follows the
+     declaration wherever it lives. Matched on the gate SHAPE — key + hard —
+     so a `return { key: 'no-record', txt: ... }` that is not a gate row is
+     not swept in. */
   const pushes = (SRC.match(/gates\.push\(\{ key:/g) || []).length
+               + (SRC.match(/return \{ key: '[a-z0-9-]+', hard:/g) || []).length
                + (shBody2b.match(/gates\.push\(\{ key:/g) || []).length - 2;
   ok(gs.length === pushes, 'every gates.push in the source reaches the ledger (' + gs.length + ')');
   ok(hard <= 13, 'only a minority are hard vetoes (' + hard + ' of ' + gs.length + ') — the rest report');
