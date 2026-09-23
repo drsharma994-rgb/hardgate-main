@@ -712,6 +712,12 @@ var GS_CSS = ''
 + '.gsx-rrsf-p{opacity:.7}'
 + '.gsx-rrsf-other{margin-top:5px;opacity:.9}'
 + '.gsx-rrsf-foot{margin-top:6px;opacity:.9}'
++ '.gsx-oneat{font-size:11px;color:#134E4A;border:1px solid #0F766E;border-left:3px solid #0F766E;border-radius:6px;padding:9px 11px;margin:10px 0 12px;line-height:1.55;background:rgba(15,118,110,.07)}'
++ '.gsx-oneat-head{font-weight:800;letter-spacing:.04em;margin-bottom:4px}'
++ '.gsx-oneat-why{margin-top:5px}'
++ '.gsx-oneat-limit{margin-top:5px;opacity:.88}'
++ '.gsx-heldone{margin-top:6px;color:#0F766E!important;border-top:1px dashed rgba(15,118,110,.45);padding-top:6px}'
++ '.card.gsx-card .gsx-heldone{color:#5EEAD4!important}'
 + '.gsx-silent b{letter-spacing:.12em;font-weight:800;color:#9A3412}'
 + '.gsx-weekend-wrap,.gsx-weekend-wrap{margin:0 0 12px}'
 + '.gsx-weekend,.gsx-weekend{font-size:11px;border-radius:8px;padding:10px 12px;line-height:1.55;margin:12px 0;border:1px solid}'
@@ -1072,9 +1078,18 @@ function cardHTML(c, isBest, season, tape){
       : ('toTrade(' + JSON.stringify(c.sym) + ',' + JSON.stringify(c.dir) + ',' + c.entry + ',' + c.stop + ',' + c.t1 + ')')
         .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'))
     : '';
-  var tradeBtn = tradeOnclick
+  /* hg-v930: a hold that leaves the buttons live is a suggestion, not a hold.
+     hg-v611 learned this the expensive way — a demote stamp with ADD TO BOOK
+     still on the card was four stop-outs. Both CTAs go, and the space says
+     why rather than going blank. */
+  var heldOne = !!c.heldOneAtATime;
+  var heldOneLine = heldOne
+    ? '<div class="note gsx-heldone"><b>HELD &mdash; ONE POSITION AT A TIME</b> &middot; a gold '
+      + 'conviction is already live, so this setup cannot be booked or sent to TRADE PLAN. '
+      + 'Its levels and reasoning stand; it is released when the book is flat.</div>' : '';
+  var tradeBtn = (tradeOnclick && !heldOne)
     ? '<button class="toTrade" onclick="' + tradeOnclick + '">SEND TO TRADE PLAN →</button>' : '';
-  var bookBtn = (typeof bookBtnHTML === 'function' && c.sym)
+  var bookBtn = (typeof bookBtnHTML === 'function' && c.sym && !heldOne)
     ? bookBtnHTML(c.sym, c.dir, c.entry, c.stop, c.t1, { scanner: 'goldscalp', strategy: 'goldscalp', klass: 'metals', fund: 'gold', t2: c.t2, stack: c.stack }) : '';
   var stackHtml = (c.stack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(c.stack) : '';
   var metaChips = '';
@@ -1130,6 +1145,7 @@ function cardHTML(c, isBest, season, tape){
     + (c.invalidates ? '<div class="gsx-invline"><b>INVALIDATES:</b> ' + esc(c.invalidates) + '</div>' : '')
     + gateLine
     + rrNoteLine
+    + heldOneLine
     + uncheckedLine
     + xautBasisLine
     + lockLine
@@ -1485,6 +1501,151 @@ function gsRrShortfallHTML(rejected){
     + 'trades — it adds the same stop bought for a smaller first target. '
     + 'Counted here, not acted on: the floor is unchanged.</div>';
   return h + '</div>';
+}
+
+/* hg-v930 — ONE POSITION AT A TIME, on this desk too.
+
+   hg-v926 measured the only read in the whole gold evidence base that is
+   positive at BOTH fill bounds: taken one at a time the SCALP ticket book is
+   +0.1484R (n=73, conservative bound) and +0.4155R (n=54, the other), against
+   -0.1160R for the all-at-once book (n=8132, XM costs). The walk publishes
+   59.4 plans a day on ONE instrument and holds 57 at once, which is not 57
+   bets, it is one bet on gold at 57x size.
+
+   THE FIX WENT IN ON OMNIGOLD AND STOPPED THERE. hgOgOneAtATimeGate reads
+   BOTH booking stores -- 'hgGoldscalpConviction' and 'hgGoldswingConviction'
+   -- so OMNIGOLD held itself back while GOLD SCALP was in a trade, and GOLD
+   SCALP went on stacking. The desk whose ticket book supplied the measurement
+   was the one still exposed to it, and the asymmetry ran for four packs.
+
+   WHAT HOLDING MEANS HERE. This desk has no gate ledger to push a row
+   through, so the hold is expressed in the desk's own vocabulary: a held card
+   is DEMOTED, which is already understood everywhere -- it still paints, it
+   keeps its levels and its whole tally, and it can never lead. The leader
+   pickers (goldPickSpotAlignedBest, the naive scan and the display fallback)
+   all skip demoted rows, so MOST PROBABLE empties without a second code path.
+
+   AND THE HANDOFF IS THE ACTUAL ENFORCEMENT. A demote alone does not remove
+   ADD TO BOOK or SEND TO TRADE PLAN -- hg-v611 had to add a suppress verdict
+   for exactly that reason, after a demote stamp left four stop-outs bookable.
+   A hold that leaves the button live is a suggestion, not a hold, so
+   cardHTML drops both CTAs on a held card and says why in their place.
+
+   TWO THINGS IT DOES NOT DO.
+   The position you are ALREADY IN keeps running: a row carrying c.locked is
+   skipped, never demoted, so a live conviction still leads and still shows
+   its exits. Holding an open trade off its own card would be the opposite of
+   the intent.
+   It FAILS OPEN. gsOpenGoldConvictions delegates to OMNIGOLD's reader so one
+   definition of "an open gold conviction" serves both desks; when omnigold.js
+   is absent or the store cannot be read, that is 0 open and every setup
+   stands. Refusing to trade because localStorage threw would be a gate
+   nobody chose.
+
+   THE LIMIT, STATED WHEREVER THE CLAIM IS. n=73 at +1.16 sigma is positive
+   and NOT SIGNIFICANT -- it clears not even an uncorrected single test, let
+   alone the family bar this desk holds a mechanic to. SWING disagrees between
+   the bounds (-0.2399 / +0.3166) and carries no verdict at all. What is not
+   statistical is the concentration: 57 simultaneous positions on one metal is
+   arithmetic, and that is the half this acts on.
+
+   No threshold moved. G1-G7, the 1.2R floor, the stop floors, the cost
+   ceilings and every hg-v925 / v928 / v929 switch are untouched. */
+var GS_ONE_AT_A_TIME_LS_KEY = 'hg_gs_one_at_a_time';
+var GS_ONE_AT_A_TIME_DEFAULT = true;
+var GS_ONE_AT_A_TIME = GS_ONE_AT_A_TIME_DEFAULT;
+var GS_HELD_STAMP = 'HELD · ONE AT A TIME';
+
+function gsOneAtATimeInit(){
+  try{
+    var ovr = (typeof W !== 'undefined' && W) ? W.HG_GS_ONE_AT_A_TIME : undefined;
+    if (ovr === true || ovr === false){ GS_ONE_AT_A_TIME = ovr; return GS_ONE_AT_A_TIME; }
+    var stored = null;
+    try { stored = localStorage.getItem(GS_ONE_AT_A_TIME_LS_KEY); } catch (eL) { stored = null; }
+    if (stored === '1' || stored === 'true') GS_ONE_AT_A_TIME = true;
+    else if (stored === '0' || stored === 'false') GS_ONE_AT_A_TIME = false;
+    else GS_ONE_AT_A_TIME = GS_ONE_AT_A_TIME_DEFAULT;
+  }catch(e){ GS_ONE_AT_A_TIME = GS_ONE_AT_A_TIME_DEFAULT; }
+  return GS_ONE_AT_A_TIME;
+}
+
+function gsSetOneAtATime(on){
+  GS_ONE_AT_A_TIME = (on === true);
+  try { localStorage.setItem(GS_ONE_AT_A_TIME_LS_KEY, GS_ONE_AT_A_TIME ? '1' : '0'); } catch (eS) {}
+  return GS_ONE_AT_A_TIME;
+}
+
+/* ONE definition of an open gold conviction, borrowed rather than copied:
+   a second parser here would drift from OMNIGOLD's the first time either
+   store changed shape, and the two desks would disagree about whether you
+   are in a trade. reader is carried so the panel can say which answered.
+   NEVER THROWS; an absent reader is 0 open, which fails OPEN. */
+function gsOpenGoldConvictions(){
+  try{
+    var f = (typeof W !== 'undefined' && W) ? W.hgOgOpenGoldConvictions : null;
+    if (typeof f !== 'function') return { n: 0, keys: [], reader: null };
+    var o = f();
+    var n = (o && isFinite(+o.n)) ? Math.max(0, +o.n) : 0;
+    return { n: n, keys: (o && o.keys) ? o.keys.slice() : [], reader: 'hgOgOpenGoldConvictions' };
+  }catch(e){ return { n: 0, keys: [], reader: null }; }
+}
+
+/* PURE apart from the rows it is handed: marks what it holds and reports
+   what it did, so the panel and the tests read the same object the scan
+   acted on rather than recomputing it. Returns null when nothing is held —
+   the guard off, no open conviction, or nothing to hold. */
+function gsApplyOneAtATime(ranked, open){
+  if (!GS_ONE_AT_A_TIME) return null;
+  if (!Array.isArray(ranked) || !ranked.length) return null;
+  var o = open || gsOpenGoldConvictions();
+  if (!o || !(+o.n > 0)) return null;
+  var held = 0, running = 0, i, c;
+  for (i = 0; i < ranked.length; i++){
+    c = ranked[i];
+    if (!c || c.dropped || c.vetoed) continue;
+    /* the trade you are IN is not a new entry — it keeps running and can
+       still lead, which is the whole point of holding the others */
+    if (c.locked){ running++; continue; }
+    c.heldOneAtATime = true;
+    c.demoted = true;
+    if (!Array.isArray(c.stamps)) c.stamps = [];
+    if (c.stamps.indexOf(GS_HELD_STAMP) < 0) c.stamps.push(GS_HELD_STAMP);
+    held++;
+  }
+  if (!held) return null;
+  return { n: +o.n, keys: o.keys || [], held: held, running: running, reader: o.reader || null };
+}
+
+/* Renders only while something is actually held. A standing lecture about
+   concentration on a flat book is noise, and noise is what gets scrolled
+   past on the day it matters. */
+function gsOneAtATimeHtml(res){
+  if (!res || !(res.held > 0)) return '';
+  var n = res.n, held = res.held;
+  return '<div class="gsx-oneat">'
+    + '<div class="gsx-oneat-head">ONE POSITION AT A TIME &mdash; ' + n + ' gold conviction'
+    + (n === 1 ? ' is' : 's are') + ' live, so ' + held + ' new setup'
+    + (held === 1 ? ' is' : 's are') + ' HELD</div>'
+    + '<div>Held cards keep their levels, their tally and every reason on them. None is '
+    + 'hidden and no threshold moved &mdash; they simply cannot lead, and their '
+    + '<b>ADD TO BOOK</b> and <b>SEND TO TRADE PLAN</b> handoffs are off until the book is flat.'
+    + (res.running > 0
+        ? ' The ' + res.running + ' conviction' + (res.running === 1 ? '' : 's')
+          + ' you are already in ' + (res.running === 1 ? 'keeps' : 'keep')
+          + ' running and can still lead.'
+        : '')
+    + '</div>'
+    + '<div class="gsx-oneat-why">This walk publishes <b>59.4 plans a day</b> on one instrument '
+    + 'and holds <b>57 at once</b> &mdash; not 57 bets, one bet on gold at 57&times; size. Taken '
+    + 'one at a time the SCALP ticket book is <b>+0.148R</b> at the conservative fill bound and '
+    + '<b>+0.416R</b> at the other, against <b>&minus;0.116R</b> all at once. It is the only read '
+    + 'in this desk&rsquo;s evidence positive at <b>both</b> bounds.</div>'
+    + '<div class="gsx-oneat-limit">The limit, stated: that is <b>n=73 at +1.16&sigma;</b> &mdash; '
+    + 'positive, <b>not significant</b>, clearing not even an uncorrected single test. SWING '
+    + 'disagrees between the bounds (&minus;0.240 / +0.317) and carries no verdict. What is not '
+    + 'statistical is the concentration, and that is the half this acts on. '
+    + '<code>gsSetOneAtATime(false)</code> turns it off.</div>'
+    + '</div>';
 }
 
 function rejectedHTML(rejected){
@@ -2287,6 +2448,22 @@ async function runScan(ui, scanSt){
     }
     if (newsVeto) legs.push('NEWS GATE — new convictions held (existing ones keep running)');
 
+    /* hg-v930: ONE POSITION AT A TIME. Applied HERE and nowhere earlier —
+       after applyConviction has stamped c.locked (so the trade you are in is
+       recognised and left alone) and after goldWatchPromote has had its say,
+       but BEFORE the leader is picked. Every picker below skips demoted rows,
+       so this empties MOST PROBABLE without a second code path. */
+    var oneAtATime = null;
+    /* resolved per scan rather than at mount: headless warms never mount, and
+       a persisted gsSetOneAtATime(false) has to reach them too */
+    try{ gsOneAtATimeInit(); }catch(eOaI){}
+    try{ oneAtATime = gsApplyOneAtATime(ranked, null); }catch(eOaT){ oneAtATime = null; }
+    if (oneAtATime && oneAtATime.held > 0){
+      legs.push('ONE AT A TIME — ' + oneAtATime.n + ' gold conviction'
+                + (oneAtATime.n === 1 ? '' : 's') + ' live, ' + oneAtATime.held + ' new setup'
+                + (oneAtATime.held === 1 ? '' : 's') + ' held');
+    }
+
     /* MOST PROBABLE = spot-aligned leader when XAUT basis is wide vs spot ref */
     var naiveBest = null;
     for (i2 = 0; i2 < ranked.length; i2++){
@@ -2439,7 +2616,8 @@ async function runScan(ui, scanSt){
     if (ui && ui.cards && ui.empty){
       if (display.length){
         ui.empty.style.display = 'none';
-        ui.cards.innerHTML = basisHtml + mixedBanner + aplusPack.panel + uniHtml + bannerHTML(displayBest, display)
+        ui.cards.innerHTML = basisHtml + mixedBanner + aplusPack.panel + uniHtml
+          + gsOneAtATimeHtml(oneAtATime) + bannerHTML(displayBest, display)
           + display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note, deskTape); }).join('')
           + formingLayersHtml()
           + formingNowHTML(armedAll)
@@ -2450,7 +2628,8 @@ async function runScan(ui, scanSt){
         /* zero qualifying candidates but something to show: WHY SILENT leads,
            then the watch panel, then the held-back reason lines */
         ui.empty.style.display = 'none';
-        ui.cards.innerHTML = basisHtml + mixedBanner + uniHtml + (whySilent ? whySilentHTML(whySilent) : '')
+        ui.cards.innerHTML = basisHtml + mixedBanner + uniHtml + gsOneAtATimeHtml(oneAtATime)
+          + (whySilent ? whySilentHTML(whySilent) : '')
           + formingLayersHtml()
           + gsRejectFunnelHTML(rejectedAll, preGateAll)
           + rejectedHTML(rejectedAll)
@@ -2653,6 +2832,15 @@ W.gsRejectFunnel = gsRejectFunnel;
 W.gsRejectFunnelHTML = gsRejectFunnelHTML;
 W.gsRrShortfall = gsRrShortfall;
 W.gsRrShortfallHTML = gsRrShortfallHTML;
+W.gsOneAtATimeInit = gsOneAtATimeInit;
+W.gsSetOneAtATime = gsSetOneAtATime;
+W.gsOpenGoldConvictions = gsOpenGoldConvictions;
+W.gsApplyOneAtATime = gsApplyOneAtATime;
+W.gsOneAtATimeHtml = gsOneAtATimeHtml;
+/* the leader picker itself — exported so a guard can assert that a held row
+   really stops leading, against the SHIPPED function rather than a copy of
+   its logic that would agree with a broken one */
+W.goldPickSpotAlignedBest = goldPickSpotAlignedBest;
 
 W.goldscalpState = function(){
   try{ return __snap ? __stateView(__snap) : null; }catch(e){ return null; }
