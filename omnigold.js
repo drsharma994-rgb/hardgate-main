@@ -9147,6 +9147,7 @@ terse status, and never launches a first-time scan on a global refresh.
       /* hg-v925: FIRST of all when the edge requirement is off — it reframes
          what a ticket on this page means, so it cannot sit below the tables. */
       /* hg-v927: the age of everything below, before anything below */
+      + hgOgBreakevenPanelHtml()
       + hgOgWalkAgeHtml()
       + hgOgEdgeRelaxedPanelHtml()
       /* hg-v926: and, while something is held, why nothing new is ticketing */
@@ -10319,6 +10320,20 @@ terse status, and never launches a first-time scan on a global refresh.
       if (!isFinite(end) || !isFinite(now) || now < end) return null;
       return Math.floor((now - end) / 86400000);
     }catch(e){ return null; }
+  }
+
+  /* hg-v931: OMNIGOLD against ITS OWN breakeven, and the 672 trades the fill
+     bounds disagree about. The literal and the renderer live in goldind.js so
+     ONE definition serves both gold desks — a second copy here would drift the
+     first time either was re-baked, which is the hg-v921 lesson. goldind
+     absent renders nothing rather than throwing; this panel leads the chain
+     because a reader scanning for a ticket should meet the desk's own
+     unproven-edge statement before any of the numbers below it. */
+  function hgOgBreakevenPanelHtml(){
+    try{
+      var f = gfn('hgGoldBreakevenHtml');
+      return (typeof f === 'function') ? (f('omnigold') || '') : '';
+    }catch(e){ return ''; }
   }
 
   function hgOgWalkAgeHtml(nowMs){

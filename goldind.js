@@ -1430,6 +1430,108 @@ function hgGoldEdgeRetunedRows(){
   return out;
 }
 
+/* hg-v931 — each gold desk against ITS OWN breakeven, at both fill bounds.
+
+   A win rate on its own is not a fact about edge: it is a number you can
+   raise for free by shrinking the target. The quantity that matters is the
+   win rate MINUS the breakeven its own planned R:R demands — and the two gold
+   desks do not plan at the same R:R. GOLD SCALP's median is 1.50 (needs
+   40.0%); OMNIGOLD's is 2.00 (needs 33.3%). Neither tab has ever shown that.
+
+   THE TWO DESKS ARE NOT IN THE SAME STATE, and that is the finding:
+
+     GOLD SCALP  43.4% vs 40.0% needed  -> +3.4 pts, and +4.4 at the other end
+     OMNIGOLD    30.4% vs 33.3% needed  -> -3.0 pts, and +5.3 at the other end
+
+   GOLD SCALP clears its own bar at BOTH fill bounds. OMNIGOLD's SIGN FLIPS
+   between them. That is a different claim from "a bit worse": it means the
+   desk's edge is unproven in a specific, nameable way rather than measured
+   and small, and a reader had no way to tell those apart.
+
+   WHY ONE DESK IS AMBIGUOUS AND THE OTHER IS NOT. A `both-touch` row is a bar
+   holding the stop AND the target, resolved stop-first because the order
+   inside a bar is unknowable at bar resolution. OMNIGOLD has 672 of them,
+   8.3% of its filled book; GOLD SCALP has 23, 0.9%. Nine times the ambiguity,
+   and every one currently scored as a loss.
+
+   The mechanism is mundane rather than strategic: OMNIGOLD's scalp lane runs
+   on 1h bars and GOLD SCALP's on 15m, and a longer bar is likelier to contain
+   both levels. So this is a RESOLUTION artifact, not a difference in edge —
+   which is also why it is fixable, and why hg-v932 goes after it rather than
+   after either desk's gates.
+
+   NOTHING IS GATED ON ANY OF IT. No threshold moves, no setup is withheld.
+   It is published because the alternative is a desk presenting a win rate
+   with no bar beside it, which invites exactly the wrong reading.
+
+   Re-derive every number: node scripts/desk-breakeven.mjs */
+var HG_GOLD_DESK_BREAKEVEN = {
+    scalp: { tf: "15m", published: 2605, filled: 2445, unfilled: 160, unfilledPct: 6.1,
+             plannedRr: 1.50, breakevenPct: 40.0, winLowerPct: 43.4, winUpperPct: 44.4,
+             edgeLowerPts: 3.4, edgeUpperPts: 4.4, verdict: "clears",
+             bothTouch: 23, bothTouchPct: 0.9, timeout: 91, timeoutPct: 3.7 },
+    omnigold: { tf: "1h", published: 9897, filled: 8132, unfilled: 1765, unfilledPct: 17.8,
+             plannedRr: 2.00, breakevenPct: 33.3, winLowerPct: 30.4, winUpperPct: 38.6,
+             edgeLowerPts: -3.0, edgeUpperPts: 5.3, verdict: "flips",
+             bothTouch: 672, bothTouchPct: 8.3, timeout: 398, timeoutPct: 4.9 }
+};
+
+/* Which desk a caller is asking about, tolerantly — the tabs spell it several
+   ways and a typo should read as "no panel", never as the other desk's book. */
+function hgGoldBreakevenRow(which){
+  var k = String(which == null ? '' : which).toLowerCase();
+  if (k === 'scalp' || k === 'goldscalp' || k === 'gold scalp') return HG_GOLD_DESK_BREAKEVEN.scalp;
+  if (k === 'omnigold' || k === 'og') return HG_GOLD_DESK_BREAKEVEN.omnigold;
+  return null;
+}
+
+function hgGoldBreakevenPts(x){
+  var n = Number(x);
+  if (!isFinite(n)) return '—';
+  return (n >= 0 ? '+' : '−') + Math.abs(n).toFixed(1) + ' pts';
+}
+
+/* The panel. Renders the desk it is asked about AND the other one, because
+   the comparison is the point: "30.4%" means nothing until you know the bar
+   is 33.3% and that the desk next door clears its own. */
+function hgGoldBreakevenHtml(which){
+  var d = hgGoldBreakevenRow(which);
+  if (!d) return '';
+  var other = (d === HG_GOLD_DESK_BREAKEVEN.scalp)
+    ? { name: 'OMNIGOLD', row: HG_GOLD_DESK_BREAKEVEN.omnigold }
+    : { name: 'GOLD SCALP', row: HG_GOLD_DESK_BREAKEVEN.scalp };
+  var name = (d === HG_GOLD_DESK_BREAKEVEN.scalp) ? 'GOLD SCALP' : 'OMNIGOLD';
+  var verdictTxt = d.verdict === 'clears'
+      ? 'CLEARS ITS OWN BAR AT BOTH FILL BOUNDS'
+      : (d.verdict === 'flips'
+          ? 'SIGN FLIPS BETWEEN THE FILL BOUNDS — edge UNPROVEN'
+          : 'BELOW ITS OWN BAR AT BOTH FILL BOUNDS');
+  var cls = d.verdict === 'clears' ? 'ok' : (d.verdict === 'flips' ? 'warn' : 'bad');
+  return '<div class="gsx-be gsx-be-' + cls + '">'
+    + '<div class="gsx-be-head">' + name + ' vs ITS OWN BREAKEVEN — ' + verdictTxt + '</div>'
+    + '<div class="gsx-be-line">Planned R:R <b>' + d.plannedRr.toFixed(2) + '</b> needs <b>'
+      + d.breakevenPct.toFixed(1) + '%</b> to break even. Measured <b>' + d.winLowerPct.toFixed(1)
+      + '%</b> at the conservative fill bound and <b>' + d.winUpperPct.toFixed(1) + '%</b> at the other '
+      + '— <b>' + hgGoldBreakevenPts(d.edgeLowerPts) + '</b> to <b>'
+      + hgGoldBreakevenPts(d.edgeUpperPts) + '</b>.</div>'
+    + '<div class="gsx-be-line">A win rate rises for free if the target shrinks, so it is only ever '
+      + 'reported here against the bar its own R:R demands. ' + other.name + ' plans at <b>'
+      + other.row.plannedRr.toFixed(2) + '</b> (needs ' + other.row.breakevenPct.toFixed(1) + '%) and runs '
+      + hgGoldBreakevenPts(other.row.edgeLowerPts) + ' to ' + hgGoldBreakevenPts(other.row.edgeUpperPts)
+      + ' — <b>' + other.row.verdict + '</b>.</div>'
+    + '<div class="gsx-be-line">The two bounds disagree about <b>' + d.bothTouch + '</b> trades ('
+      + d.bothTouchPct.toFixed(1) + '% of ' + d.filled + ' filled): bars holding the stop AND the target, '
+      + 'scored stop-first because the order inside a bar is unknowable at <b>' + d.tf + '</b> resolution. '
+      + other.name + ' has ' + other.row.bothTouch + ' (' + other.row.bothTouchPct.toFixed(1) + '%) on '
+      + other.row.tf + ' bars — a longer bar is likelier to hold both levels, so this gap is a '
+      + '<b>resolution artifact, not a difference in edge</b>.</div>'
+    + '<div class="gsx-be-foot"><b>' + d.unfilled + '</b> of ' + d.published + ' published plans ('
+      + d.unfilledPct.toFixed(1) + '%) never filled at all; ' + d.timeout + ' (' + d.timeoutPct.toFixed(1)
+      + '%) timed out. Nothing on this desk is gated on any of it — no threshold moves and no setup '
+      + 'is withheld. Re-derive: <code>node scripts/desk-breakeven.mjs</code>.</div>'
+    + '</div>';
+}
+
 function hgGoldEdgeRetuneNote(){
   try{
     if (!HG_GOLD_EDGE_RETUNE) return '';
@@ -15561,6 +15663,9 @@ W.hgGoldSetEdgeRetune = hgGoldSetEdgeRetune;
 W.hgGoldEdgeRetuneInit = hgGoldEdgeRetuneInit;
 W.hgGoldEdgeRetunedRows = hgGoldEdgeRetunedRows;
 W.hgGoldEdgeRetuneNote = hgGoldEdgeRetuneNote;
+W.HG_GOLD_DESK_BREAKEVEN = HG_GOLD_DESK_BREAKEVEN;
+W.hgGoldBreakevenRow = hgGoldBreakevenRow;
+W.hgGoldBreakevenHtml = hgGoldBreakevenHtml;
 W.hgGoldScalpStopFloor = hgGoldScalpStopFloor;
 W.hgGoldScalpCostGate = hgGoldScalpCostGate;
 W.goldCrossVenueMap = goldCrossVenueMap;
