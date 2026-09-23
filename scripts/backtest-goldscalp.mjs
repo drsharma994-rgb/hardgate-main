@@ -77,6 +77,7 @@
    Style: modeled on scripts/backtest-omnigold.mjs. No new dependencies. */
 
 import fs from 'node:fs';
+import { excursionStep, excursionR } from '../lib/gold-excursions.mjs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -212,6 +213,9 @@ function stepTrade(tr, bar, bi){
     }
   }
   if (tr.state === 'filled'){
+    /* hg-v932: this walk tracked no excursions at all, so no gold exit
+       question was answerable from its book. Same shared rule as OMNIGOLD. */
+    excursionStep(tr, bar, dir, entry, stop, hitStop);
     if (hitStop && hitT1){ tr.outcome = 'loss'; tr.bothTouch = true; tr.rGross = -1; tr.exitIdx = bi; return true; }
     if (hitStop){ tr.outcome = 'loss'; tr.rGross = -1; tr.exitIdx = bi; return true; }
     if (hitT1){ tr.outcome = 'win'; tr.rGross = Math.abs(t1 - entry) / Math.abs(stop - entry); tr.exitIdx = bi; return true; }
@@ -266,6 +270,10 @@ function settleRecord(tr, rows, counters, results){
     costR_xm: costXm == null ? null : +costXm.toFixed(3),
     costR_paxg: costPaxg == null ? null : +costPaxg.toFixed(3),
     barsHeld: tr.fillIdx == null ? null : (tr.exitIdx - tr.fillIdx),
+    /* hg-v932: how far the trade went against and in favour before it
+       resolved. Without these the fixed 1.5R target, the stop width and any
+       breakeven rule are all unfalsifiable on this desk. */
+    ...excursionR(tr, tr.entry, tr.stop),
     exitISO: tr.exitIdx == null ? null : new Date(rows[tr.exitIdx].t * 1000).toISOString()
   });
 }
