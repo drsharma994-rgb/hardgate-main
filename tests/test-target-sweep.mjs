@@ -9,6 +9,7 @@
 
    Run: node tests/test-target-sweep.mjs */
 import fs from 'node:fs';
+import { excursionStep } from '../lib/gold-excursions.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -129,10 +130,23 @@ console.log('\n== the stop floor is a separate pool, not a silent filter ==');
 console.log('\n== the conservative excursion rule is in the walk, not just the sweep ==');
 {
   /* the sweep can only be as honest as the mfeR it is handed. The rule that
-     a stop bar contributes nothing has to live in the walk that records it. */
+     a stop bar contributes nothing has to live in the walk that records it.
+
+     hg-v932 moved that rule out of the harness and into
+     lib/gold-excursions.mjs so GOLD SCALP runs the SAME one, so this checks
+     BEHAVIOUR through the shared module rather than grepping for an inline
+     `if` that no longer exists — the rule is what matters, not where it is
+     typed. The harness is still checked for folding every bar through it. */
   const bt = fs.readFileSync(path.join(ROOT, 'scripts', 'backtest-omnigold.mjs'), 'utf8');
-  ok(/if \(!hitStop && risk > 0\)/.test(bt),
-     'backtest-omnigold.mjs excludes the stop bar from the favourable excursion');
+  ok(/excursionStep\(tr, bar, dir, entry, stop, hitStop\);/.test(bt),
+     'backtest-omnigold.mjs folds every filled bar through the shared excursion rule');
+  const stopped = {};
+  excursionStep(stopped, { h: 999, l: 1 }, 'long', 100, 95, true);
+  ok(stopped.mfe == null,
+     'and that rule excludes the stop bar from the favourable excursion — checked by running it');
+  const clean = {};
+  excursionStep(clean, { h: 106, l: 99 }, 'long', 100, 95, false);
+  ok(clean.mfe === 6, 'while a bar that did not stop out is recorded in full');
   ok(/mfeR:/.test(bt) && /maeR:/.test(bt), 'and emits both excursions on the row');
   /* whitespace-tolerant: the comment wraps across lines in the source */
   ok(/intrabar\s+order\s+is\s+unknown/.test(bt),

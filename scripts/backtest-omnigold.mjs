@@ -122,6 +122,7 @@
    Style: modeled on scripts/scalp-audit.mjs. No new dependencies. */
 
 import fs from 'node:fs';
+import { excursionStep, excursionR } from '../lib/gold-excursions.mjs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -414,13 +415,10 @@ function stepTrade(tr, bar, bi, fillWindow){
        unknown and this walk already resolves a both-touch bar as a loss.
        Crediting the high of the bar that stopped the trade out would let
        the sweep invent wins that a real fill never saw. */
-    const risk = Math.abs(stop - entry);
-    if (!hitStop && risk > 0){
-      const fav = dir === 'long' ? (+bar.h - entry) : (entry - +bar.l);
-      if (isFinite(fav) && (tr.mfe == null || fav > tr.mfe)) tr.mfe = fav;
-      const adv = dir === 'long' ? (entry - +bar.l) : (+bar.h - entry);
-      if (isFinite(adv) && (tr.mae == null || adv > tr.mae)) tr.mae = adv;
-    }
+    /* hg-v932: the rule moved to lib/gold-excursions.mjs so GOLD SCALP runs
+       the SAME one. Two copies drift, and the copy that drifts is the one
+       that flatters its own desk. */
+    excursionStep(tr, bar, dir, entry, stop, hitStop);
     if (hitStop && hitT1){ tr.outcome = 'loss'; tr.bothTouch = true; tr.rGross = -1; tr.exitIdx = bi; return true; }
     if (hitStop){ tr.outcome = 'loss'; tr.rGross = -1; tr.exitIdx = bi; return true; }
     if (hitT1){ tr.outcome = 'win'; tr.rGross = Math.abs(t1 - entry) / Math.abs(stop - entry); tr.exitIdx = bi; return true; }
@@ -511,6 +509,11 @@ function settleRecord(tr, rows, tfSec, counters, evidence, results){
     rMultiple: tr.rGross == null ? null : +tr.rGross.toFixed(3),
     netR: netR == null ? null : +netR.toFixed(3),
     barsHeld: tr.fillIdx == null ? null : (tr.exitIdx - tr.fillIdx),
+    /* hg-v932: EMITTED AT LAST. These were computed on every filled bar and
+       dropped here, so the artifact could not answer the question the
+       excursion comment in stepTrade poses. Unsigned R multiples: maeR is how
+       far against the trade went before it resolved, mfeR how far in favour. */
+    ...excursionR(tr, tr.entry, tr.stop),
     exitISO: tr.exitIdx == null ? null : new Date(rows[tr.exitIdx].t * 1000).toISOString()
   });
 }
