@@ -723,7 +723,15 @@
     { desk: 'OPTI GOLD',   probe: 'optiGoldState',    via: 'per-setup, own break bar' },
     { desk: 'GOLD PINE',   probe: 'goldPineScan',     via: 'per-mode, 4h and 15m last closed bar' },
     { desk: 'GOLD PRO',    probe: 'goldProState',     via: 'last closed bar of the series in hand' },
-    { desk: '80PERCENT',   probe: 'eightyPercentState', via: 'per-signal, own bar' }
+    { desk: '80PERCENT',   probe: 'eightyPercentState', via: 'per-signal, own bar' },
+    /* hg-v951: THE INLINE DESK. Every other row here is a module file, and
+       this reporter finds them by probing a module global. The GOLD tab is
+       ~200 lines inside index.html registered as id:'gold', so it had NO
+       probe and therefore NO bucket — not covered, not uncovered, absent.
+       The reporter built so gaps name themselves could not see this one.
+       It is listed now, and it probes the inline function the shell defines,
+       so an inline desk can never again be invisible here. */
+    { desk: 'GOLD (inline)', probe: 'hgInlineGoldShut', via: 'per-lane, 4h swing and 15m scalp; handoffs withheld' }
   ];
   function hgGoldWeekendCoverage(){
     var out = { covered: [], uncovered: [], notLoaded: [] };
