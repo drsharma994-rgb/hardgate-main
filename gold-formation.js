@@ -773,24 +773,24 @@
   var HG_GOLD_WEEKEND_PROBE_OPEN = Date.UTC(2026, 3,  8, 12, 0, 0);   /* Wednesday */
 
   var HG_GOLD_WEEKEND_MINTERS = [
-    { desk: 'NEW GOLD',    probe: 'newGoldState',     via: 'hgGoldFormation' },
-    { desk: 'OMNIGOLD 1',  probe: 'omnigold1State',   via: 'hgGoldFormation' },
-    { desk: 'OMNIGOLD',    probe: 'hgOgFormation',    via: 'own hg-v420 veto' },
+    { desk: 'NEW GOLD',    tab: 'newgold',   probe: 'newGoldState',     via: 'hgGoldFormation' },
+    { desk: 'OMNIGOLD 1',  tab: 'omnigold1', probe: 'omnigold1State',   via: 'hgGoldFormation' },
+    { desk: 'OMNIGOLD',    tab: 'omnigold',  probe: 'hgOgFormation',    via: 'own hg-v420 veto' },
     /* hg-v953: these two said 'own weekend read' and the probed function had
        none -- the read is in the tab shell, on the wall clock, and is excluded
        from the replay by the swing walk's own meta. The mint carries the mark
        now, on its own signal bar, and the route is CALLED rather than claimed. */
-    { desk: 'GOLD SWING',  probe: 'goldSwingSetups',  via: 'per-scan signal bar in the mint; marked, not withheld (the shell demote is separate and unchanged)', verdictFn: 'goldSwingWeekendVerdict' },
-    { desk: 'GOLD SCALP',  probe: 'goldScalpSetups',  via: 'per-scan signal bar in the mint; marked, not withheld (the shell demote is separate and unchanged)', verdictFn: 'goldScalpWeekendVerdict' },
-    { desk: 'SUPER GOLD',  probe: 'superGoldState',   via: 'per-candidate signal bar, wall clock only when the row carries no time', verdictFn: 'sgWeekendVerdict' },
+    { desk: 'GOLD SWING',  tab: 'goldswing', probe: 'goldSwingSetups',  via: 'per-scan signal bar in the mint; marked, not withheld (the shell demote is separate and unchanged)', verdictFn: 'goldSwingWeekendVerdict' },
+    { desk: 'GOLD SCALP',  tab: 'goldscalp', probe: 'goldScalpSetups',  via: 'per-scan signal bar in the mint; marked, not withheld (the shell demote is separate and unchanged)', verdictFn: 'goldScalpWeekendVerdict' },
+    { desk: 'SUPER GOLD',  tab: 'super-gold', probe: 'superGoldState',   via: 'per-candidate signal bar, wall clock only when the row carries no time', verdictFn: 'sgWeekendVerdict' },
     /* hg-v950: these four mint from raw bars and do not route through
        hgGoldFormation, so each calls hgGoldWeekendVerdict directly at the
        instant its own shape makes correct — per SETUP where the desk walks
        a window, per SERIES where it reads one closed bar. */
-    { desk: 'OPTI GOLD',   probe: 'optiGoldState',    via: 'per-setup, own break bar', verdictFn: '__ogWeekendVerdict' },
-    { desk: 'GOLD PINE',   probe: 'goldPineScan',     via: 'per-mode, 4h swing and 15m scalp last closed bar', verdictFn: 'gpWeekendVerdict', probeKind: 'rows' },
-    { desk: 'GOLD PRO',    probe: 'goldProState',     via: 'last closed bar of the series in hand', verdictFn: 'gpProWeekendVerdict', probeKind: 'rows' },
-    { desk: '80PERCENT',   probe: 'eightyPercentState', via: 'per-signal, own bar', verdictFn: 'hg80WeekendVerdict' },
+    { desk: 'OPTI GOLD',   tab: 'optigold',  probe: 'optiGoldState',    via: 'per-setup, own break bar', verdictFn: '__ogWeekendVerdict' },
+    { desk: 'GOLD PINE',   tab: 'goldpine',  probe: 'goldPineScan',     via: 'per-mode, 4h swing and 15m scalp last closed bar', verdictFn: 'gpWeekendVerdict', probeKind: 'rows' },
+    { desk: 'GOLD PRO',    tab: 'goldpro',   probe: 'goldProState',     via: 'last closed bar of the series in hand', verdictFn: 'gpProWeekendVerdict', probeKind: 'rows' },
+    { desk: '80PERCENT',   tab: '80percent', probe: 'eightyPercentState', via: 'per-signal, own bar', verdictFn: 'hg80WeekendVerdict' },
     /* hg-v951: THE INLINE DESK. Every other row here is a module file, and
        this reporter finds them by probing a module global. The GOLD tab is
        ~200 lines inside index.html registered as id:'gold', so it had NO
@@ -798,13 +798,63 @@
        The reporter built so gaps name themselves could not see this one.
        It is listed now, and it probes the inline function the shell defines,
        so an inline desk can never again be invisible here. */
-    { desk: 'GOLD (inline)', probe: 'hgInlineGoldShut', via: 'per-lane, 4h swing and 15m scalp; handoffs withheld', verdictFn: 'hgInlineGoldShut' },
+    { desk: 'GOLD (inline)', tab: 'gold',    probe: 'hgInlineGoldShut', via: 'per-lane, 4h swing and 15m scalp; handoffs withheld', verdictFn: 'hgInlineGoldShut' },
     /* hg-v952: TAURIC was absent from this list entirely — a second blind
        spot one pack after hg-v951 fixed the first. It prices XAUUSD and
        records entry/stop/t1 to the forward log, so it mints; it had NO
        weekend reference of any kind. */
-    { desk: 'TAURIC',      probe: 'hgTauricRecord',   via: 'per-record, the bar the pipeline priced; marked, not withheld', verdictFn: 'hgTauricWeekendVerdict' }
+    { desk: 'TAURIC',      tab: 'tauric',    probe: 'hgTauricRecord',   via: 'per-record, the bar the pipeline priced; marked, not withheld', verdictFn: 'hgTauricWeekendVerdict' },
+    /* hg-v954: both write ticket:true XAUUSD rows into the forward ledger
+       and had NO weekend reference of any kind. That is stronger than the
+       TAURIC case hg-v952 wired: those rows record ticket:false, so there
+       was no ticket to withhold. These two record TICKETS, so a
+       weekend-formed pick enters the ledger as tradeable and is judged as
+       one -- the contamination mechanism hg-v949 measured on NEW GOLD,
+       running in two more ledgers. They MARK, on the TAURIC precedent. */
+    { desk: 'GOLD DIRECTION', tab: 'golddirection', probe: 'hgGoldDirectionRecordForward', via: 'per-record, the 1h signal bar; marked on the ticket row, not withheld', verdictFn: 'gdWeekendVerdict' },
+    { desk: 'GOLD ULTRA',  tab: 'goldultra', probe: 'goldUltraState',  via: 'per-record, the 15m signal bar; marked on the ticket row, not withheld', verdictFn: 'guWeekendVerdict' }
   ];
+
+  /* hg-v954: THE CENSUS, because the list above was ITSELF HAND-TYPED.
+     hg-v951 added the inline GOLD tab to it by noticing; hg-v952 added
+     TAURIC by noticing. Each was called a blind spot fixed, and the
+     MECHANISM that produced both -- a desk list kept by hand inside the
+     reporter built so gaps name themselves -- was never touched. The shell's
+     GOLD nav group holds SEVENTEEN tabs and this reporter listed TWELVE.
+
+     So every gold tab is classified here, as a minter above or as one of
+     these, and the guard reads HG_NAV_GROUPS out of index.html and requires
+     the two lists to agree. A gold tab added to the nav with no row here
+     turns a test red rather than going quietly missing a third time. */
+  var HG_GOLD_NON_MINTERS = [
+    { desk: 'MILLI GOLD', tab: 'milligold',
+      why: 'inherits OMNIGOLD: since hg-v938 it renders the cards OMNIGOLD has already evaluated rather than scanning, so its weekend answer IS OMNIGOLD\'s and a second one here would be a second calendar',
+      inherits: 'OMNIGOLD' },
+    { desk: 'GOLD SPOT',  tab: 'goldspot',
+      why: 'spot-vs-perp basis monitor: reads a live quote and prints a verdict, prices no entry, stop or target and writes no forward record' },
+    { desk: 'GOLD COINT', tab: 'goldcoint',
+      why: 'cointegration context ledger: its own header says CONTEXT only, no spread execution path -- no levels, no ticket, no record' }
+  ];
+
+  /* Reads the shell's own nav registry when it is reachable and names any
+     gold tab classified nowhere. Returns null when the registry cannot be
+     read -- an unreadable census is NOT an empty one, which is the whole
+     failure this exists to stop. */
+  function hgGoldWeekendCensusGaps(){
+    var nav = null;
+    try{ nav = (typeof HG_NAV_GROUPS !== 'undefined') ? HG_NAV_GROUPS : (G.HG_NAV_GROUPS || null); }
+    catch(eN){ nav = null; }
+    if (!nav || !nav.length) return null;
+    var grp = null, i;
+    for (i = 0; i < nav.length; i++) if (nav[i] && nav[i].id === 'gold') grp = nav[i];
+    if (!grp || !grp.tabs || !grp.tabs.length) return null;
+    var known = {};
+    for (i = 0; i < HG_GOLD_WEEKEND_MINTERS.length; i++) known[HG_GOLD_WEEKEND_MINTERS[i].tab] = 'minter';
+    for (i = 0; i < HG_GOLD_NON_MINTERS.length; i++) known[HG_GOLD_NON_MINTERS[i].tab] = 'non-minter';
+    var gaps = [];
+    for (i = 0; i < grp.tabs.length; i++) if (!known[grp.tabs[i]]) gaps.push(grp.tabs[i]);
+    return { navTabs: grp.tabs.slice(), gaps: gaps, classified: grp.tabs.length - gaps.length };
+  }
   /* hg-v952: DOES THE ROUTE ACTUALLY WORK? Call the desk's own verdict
      function with two known instants and require it to tell them apart:
      SHUT on a Saturday, open on a Wednesday. A function that answers both
@@ -1056,6 +1106,8 @@
   G.hgGoldWeekendCoverage = hgGoldWeekendCoverage;
   G.hgGoldWeekendProbeRoute = hgGoldWeekendProbeRoute;
   G.HG_GOLD_WEEKEND_MINTERS = HG_GOLD_WEEKEND_MINTERS;
+  G.HG_GOLD_NON_MINTERS = HG_GOLD_NON_MINTERS;
+  G.hgGoldWeekendCensusGaps = hgGoldWeekendCensusGaps;
   G.hgGoldApplySessionLeg = hgGoldApplySessionLeg;
   G.hgGoldConfluence = hgGoldConfluence;
   G.hgGoldConfluenceFromGates = hgGoldConfluenceFromGates;

@@ -1346,6 +1346,37 @@ function publishScan(side, scalpSel, swingSel, tape, enginesDark, heldAll, at, p
                    at: at };
   }catch(e){ /* snapshotting must never break the scan */ }
 }
+/* hg-v954: the instant is the desk's own 1h signal bar, never the wall
+   clock -- a re-run over Friday's bars must give Friday's answer (hg-v949).
+   Delegates to the ONE calendar; a second copy would be a second calendar. */
+function gdSignalSec(gold){
+  try{
+    var rows = gold && (gold.rows1h || gold.rows4h || gold.rows15m);
+    var f = (typeof W !== 'undefined' && W && typeof W.hgGoldSignalBarMs === 'function') ? W.hgGoldSignalBarMs : null;
+    if (!f || !rows || !rows.length) return null;
+    var ms = f(rows);
+    return isFinite(ms) && ms > 0 ? Math.floor(ms / 1000) : null;
+  }catch(e){ return null; }
+}
+/* TWO SHAPES, because the probe and the mark need different answers and
+   collapsing them loses the one that matters. The coverage probe wants
+   truthy-when-shut / null-when-open, so a route that cannot tell the two
+   instants apart reads BROKEN. The MARK needs three states: shut, open, and
+   UNREADABLE -- and the probe shape makes open and unreadable identical, so
+   a Wednesday row silently carried no mark at all. Caught by this pack's own
+   guard; the full verdict is read for the mark and wrapped for the probe. */
+function gdWeekendFull(tSec){
+  try{
+    var f = (typeof W !== 'undefined' && W && typeof W.hgGoldWeekendVerdict === 'function') ? W.hgGoldWeekendVerdict : null;
+    if (!f) return null;
+    return f(tSec) || null;
+  }catch(e){ return null; }
+}
+function gdWeekendVerdict(tSec){
+  var v = gdWeekendFull(tSec);
+  return (v && v.inWeekend) ? v : null;
+}
+
 function recordForward(scalpSel, swingSel, gold){
   /* Settle open XAUUSD records with the bars just fetched BEFORE recording,
      so a setup can never be settled by the bar it was written on. */
@@ -1367,12 +1398,27 @@ function recordForward(scalpSel, swingSel, gold){
       return c && c.dir && isFinite(fin(c.entry)) && isFinite(fin(c.stop)) && isFinite(fin(c.t1));
     });
     if (!picks.length) return;
+    /* hg-v954: the gold calendar, on the 1h signal bar. This desk writes
+       ticket:true XAUUSD rows into the forward ledger and had NO weekend
+       reference of any kind -- stronger than the TAURIC case hg-v952 wired,
+       whose rows record ticket:false. A weekend-formed pick entered this
+       ledger as TRADEABLE and would be judged as one, which is the
+       contamination hg-v949 measured on NEW GOLD. MARKS, withholds nothing:
+       the row is still written, still a ticket, still resolved -- what it
+       gains is the field a later measurement needs to separate the
+       population. Fails OPEN. */
+    var gdWk = gdWeekendFull(gdSignalSec(gold));
     W.hgFwdRecordScan('GOLDDIRECTION', '1h', picks.map(function(c){
       /* mechanic = source desk + stratKey, so the ledger judges each desk's
          crowned exports separately — fwdMechName is the ONE normalization,
          shared with the proven-set live-paid match (hg-v702) */
-      return { sym: 'XAUUSD', dir: c.dir, entry: +c.entry, stop: +c.stop, t1: +c.t1,
+      var row = { sym: 'XAUUSD', dir: c.dir, entry: +c.entry, stop: +c.stop, t1: +c.t1,
                mechanic: fwdMechName(c), ticket: true };
+      if (gdWk){
+        row.goldShut = !!gdWk.inWeekend;
+        if (gdWk.inWeekend) row.goldShutWhy = gdWk.why;
+      } /* else: unreadable instant or no calendar -- no mark, nothing changes */
+      return row;
     }), { horizonBars: 24 });
   }catch(eF){ try{ if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('golddirection', eF); }catch(eW2){} }
 }
@@ -1740,6 +1786,10 @@ async function gdWarm(){
 }
 
 /* ---------------- registration ---------------- */
+W.gdWeekendVerdict = gdWeekendVerdict;
+W.__gdWeekendFull = gdWeekendFull;
+W.__gdSignalSec = gdSignalSec;
+W.hgGoldDirectionRecordForward = recordForward;
 W.goldDirectionState = function(){
   try{ return __snap ? __stateView(__snap) : null; }catch(e){ return null; }
 };
