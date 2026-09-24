@@ -516,7 +516,11 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
         W.hgFwdRecordScan('GOLDSWING', '4h', cands.filter(function(c){
           return c && c.dir && isFinite(+c.entry) && isFinite(+c.stop) && isFinite(+c.t1);
         }).map(function(c){
+          /* hg-v955: carry the hg-v953 mint mark onto the ledger row. This
+             map REBUILDS the record, so the field the mint sets was dropped
+             here -- the third place the same defect was found in one pass. */
           return { sym: 'XAUUSD', dir: c.dir, entry: +c.entry, stop: +c.stop, t1: +c.t1,
+                   goldShut: c.goldShut,
                    mechanic: String(c.stratKey || c.strategy || 'UNKNOWN').toUpperCase().slice(0, 28),
                    ticket: (c.grade === 'A' || c.grade === 'clean' || !!c.locked) };
         }), { horizonBars: 20 });

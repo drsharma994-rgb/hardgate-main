@@ -245,6 +245,37 @@ localStorage. Never throws.
          defaulting to false would silently claim every one of them was
          shown. */
       shown: (rec.shown === undefined || rec.shown === null) ? undefined : (rec.shown === true),
+      /* WAS GOLD EVEN OPEN WHEN THIS FIRED? (hg-v955)
+
+         hg-v952 marked TAURIC's rows, hg-v953 the GOLD SCALP / GOLD SWING
+         mints, hg-v954 GOLD DIRECTION's and GOLD ULTRA's ticket rows. Each
+         pack said, in as many words, that it marked rather than withheld
+         BECAUSE the replay rows need the mark so the population can be
+         separated later. Eight files write `goldShut`. Nothing read it —
+         and this function, the one place the separation had to happen,
+         built its `out` without the field, so every one of those marks was
+         discarded at the door. The work was done and dropped on the way out,
+         which is hg-v932's finding, and this time in my own packs.
+
+         The precedent is three fields up: `mark` sat accepted-but-never-
+         forwarded for exactly the same reason.
+
+         THREE STATES, NOT TWO. Every record written before this exists
+         carries no mark, and reading "not shut" as "tradeable" would count
+         the entire legacy ledger as gold-open — the same error one layer
+         out. undefined means NOT RECORDED and is reported as its own
+         bucket, never folded into either side. */
+      goldShut: (rec.goldShut === true) ? true
+        : (rec.goldShut === false) ? false
+        : undefined,   /* anything else is NOT RECORDED -- see below */
+      /* ONLY the two booleans. Writing `rec.goldShut === true` alone looks
+         equivalent and is not: it turns a truthy non-boolean (a caller
+         passing 1) into FALSE, which reads as gold-open — the precise error
+         this field exists to prevent, arriving through the coercion instead
+         of through the omission. And `!!rec.goldShut` fails the mirror,
+         turning a string 'no' into shut. A value that is neither boolean is
+         a caller this log does not understand, and the honest record of that
+         is the third state, not a guess at one of the first two. */
       /* THE SETUP'S OWN GRADE AT FIRING TIME (A/B/C/D), so the chips can be
          judged out-of-sample. The grade is a CONFLUENCE tally — A is "eight or
          more reads agree" — and confluence has never been shown to predict
@@ -1245,6 +1276,21 @@ localStorage. Never throws.
          throttled subset, so per mechanic it is thinner still: folding it is
          what makes it answerable at all. */
       if (r.shown === true) tally(out[key].sh || (out[key].sh = blank()));
+      /* AND THE BARS GOLD ACTUALLY PRINTED (hg-v955).
+
+         hg-v949 measured what pooling these costs: NEW GOLD's whole positive
+         reading was the nine of nineteen trades formed while the market was
+         shut, and hg-v953 found 26.4% of GOLD SCALP's committed walk in the
+         same state. The aggregate could not answer it because the field never
+         arrived. It folds here for the reason gateClear and shown fold —
+         the live list is capped and pruned, so a split that lives only there
+         is unanswerable past about four weeks.
+
+         STRICTLY `=== false`. A record with no mark is not evidence that
+         gold was open; it is a record from before anything asked. It lands
+         in neither bucket and the reader reports it as its own count. */
+      if (r.goldShut === false) tally(out[key].tr || (out[key].tr = blank()));
+      if (r.goldShut === true) tally(out[key].wk || (out[key].wk = blank()));
       /* AND THE SIDE, FOR THE SAME REASON THE OTHERS FOLD.
 
          The long/short split is the slowest measurement on this desk: it
@@ -1552,6 +1598,11 @@ localStorage. Never throws.
             grade: c.grade || c.engineGrade || (c.gradeObj && c.gradeObj.letter) || o.grade || '',
             /* stack3 from OMNIROUTE and OMNIGOLD, passed through unchanged */
             stack3: c.stack3,
+            /* hg-v955: the gold calendar mark. hg-v954 set this on the rows
+               GOLD DIRECTION and GOLD ULTRA hand in, and this entry point
+               dropped it — the `mark` defect above, repeated. Absent stays
+               absent: a caller that marks nothing records nothing. */
+            goldShut: c.goldShut,
             /* solidity stamp fields (hg-v533) ride through untouched;
                hgFwdNormalize attaches them only when sol is finite */
             sol: c.sol, solTier: c.solTier, solV: c.solV
@@ -2047,6 +2098,96 @@ localStorage. Never throws.
         }
         return out;
       } catch (e) { hgFwdWarn('records', e); return []; }
+    };
+
+    /* ==================== THE SPLIT THE MARK EXISTS FOR (hg-v955) ====
+
+       A mark nothing reads is ornamental. hg-v952/v953/v954 each justified
+       marking rather than withholding on the grounds that a LATER
+       MEASUREMENT would need the field to separate the population — so this
+       is that measurement, and without it the three packs are just writing
+       to a column nobody selects.
+
+       What it answers is hg-v949's question on the LIVE ledger rather than
+       on a committed walk: of the records a gold desk has written, how many
+       fired on bars XAUUSD never printed, and what does the record look like
+       with those removed.
+
+       THREE BUCKETS AND THEY DO NOT MERGE. `shut` and `open` are the marked
+       rows. `unmarked` is everything written before the desk carried a
+       calendar, or by a desk that still does not — and it is NOT evidence of
+       either state. Reading it as open is exactly the error that made
+       NEW GOLD's record read positive (hg-v949), so it is counted, named,
+       and kept out of both sides.
+
+       Reads live records AND the folded aggregate, because the live list is
+       capped and pruned; `agg` is null when the fold holds nothing for this
+       tab rather than zero, so an unfolded tab cannot read as a clean one.
+       Nothing here gates: it reports. */
+    W.hgFwdGoldCalendarSplit = function(tab, opts){
+      try {
+        var o = opts || {};
+        var recs = W.hgFwdRecords(tab) || [];
+        var want = (o.settledOnly === false) ? null : 1;
+        var out = { tab: tab || null, shut: 0, open: 0, unmarked: 0,
+                    shutR: null, openR: null, agg: null };
+        var sSum = 0, sN = 0, oSum = 0, oN = 0, i, r;
+        for (i = 0; i < recs.length; i++){
+          r = recs[i];
+          if (!r) continue;
+          if (want && r.state !== 't1' && r.state !== 'stop') continue;
+          if (r.goldShut === true){
+            out.shut++;
+            sSum += (r.state === 't1') ? (+r.rr || 0) : -1; sN++;
+          } else if (r.goldShut === false){
+            out.open++;
+            oSum += (r.state === 't1') ? (+r.rr || 0) : -1; oN++;
+          } else out.unmarked++;
+        }
+        if (sN) out.shutR = sSum / sN;
+        if (oN) out.openR = oSum / oN;
+        /* the folded counts, which outlive the live cap */
+        try {
+          var a = loadAgg() || {}, k, row, tr = null, wk = null;
+          for (k in a){
+            if (!Object.prototype.hasOwnProperty.call(a, k)) continue;
+            row = a[k];
+            if (!row) continue;
+            if (tab && String(row.tab || k.split('|')[0]) !== String(tab)) continue;
+            if (row.tr){ tr = tr || { wins: 0, losses: 0, expired: 0 };
+              tr.wins += row.tr.wins || 0; tr.losses += row.tr.losses || 0; tr.expired += row.tr.expired || 0; }
+            if (row.wk){ wk = wk || { wins: 0, losses: 0, expired: 0 };
+              wk.wins += row.wk.wins || 0; wk.losses += row.wk.losses || 0; wk.expired += row.wk.expired || 0; }
+          }
+          if (tr || wk) out.agg = { tradeable: tr, weekend: wk };
+        } catch (eA){ out.agg = null; }
+        return out;
+      } catch (e) { hgFwdWarn('goldCalendarSplit', e); return null; }
+    };
+
+    /* One line for any gold panel. Renders NOTHING when no record carries the
+       mark — an empty split is not a clean bill, and a panel that says
+       "0 weekend trades" on a ledger that never recorded the field would be
+       the false reassurance this pack exists to remove. */
+    W.hgFwdGoldCalendarHtml = function(tab){
+      try {
+        var sp = W.hgFwdGoldCalendarSplit(tab);
+        if (!sp) return '';
+        if (!sp.shut && !sp.open) return '';
+        var tot = sp.shut + sp.open;
+        var pct = tot ? (100 * sp.shut / tot) : 0;
+        var esc = function(x){ return String(x == null ? '' : x)
+          .replace(/[&<>"]/g, function(c){ return c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&quot;'; }); };
+        var h = '<div class="note" style="margin:8px 0;padding:8px 10px;border:1px solid #6B7280;border-radius:6px">';
+        h += '<b>GOLD CALENDAR SPLIT</b> · ' + sp.shut + ' of ' + tot + ' marked settled records ('
+          + pct.toFixed(1) + '%) fired while gold was shut';
+        if (sp.openR !== null) h += ' · gold-open ' + (sp.openR >= 0 ? '+' : '') + sp.openR.toFixed(4) + 'R on n=' + sp.open;
+        if (sp.shutR !== null) h += ' · weekend ' + (sp.shutR >= 0 ? '+' : '') + sp.shutR.toFixed(4) + 'R on n=' + sp.shut;
+        if (sp.unmarked) h += ' · <b>' + sp.unmarked + '</b> carry no mark and are counted as NEITHER — they predate the calendar on this desk, and reading them as open is the error this split exists to avoid';
+        h += '. Reported, not gated: nothing is withheld on it.' + esc('');
+        h += '</div>';
+        return h;
+      } catch (e) { return ''; }
     };
 
     W.hgFwdState = function(){
