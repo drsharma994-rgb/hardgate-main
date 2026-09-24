@@ -2081,6 +2081,140 @@ function hgGoldEdgeLiveNote(row){
   }catch(e){ return ''; }
 }
 
+/* ============ hg-v943 — WHEN TWO RECORDS OF THE SAME MECHANIC DISAGREE ======
+   Several mechanics on these tabs are wired OMNIGOLD mechanics: the SAME
+   detector, registered deliberately (hg-v567/568/569/570/571/575/576/923).
+   Each therefore has TWO measured records, and nothing compared them.
+
+   For two of them the records disagree IN SIGN, and the tab holds the smaller
+   sample:
+
+     p8range  (S52 RANGE-BAR S0 SWEEP)   tab n=91  +0.038R  ->  neutral, can lead
+              twin P8-RANGE   gate-clear n=323  -0.613R  z=-3.81
+     p9volbar (S62 VOLUME-BAR SWEEP)     tab n=72  +0.155R  ->  PREFER, rank +2
+              twin P9-VOLBAR  gate-clear n=274  -0.499R  z=-2.97
+
+   Both twins sit past OMNIGOLD's EDGE_VETO_Z of -2, which is the bar at which
+   OMNIGOLD refuses to ticket a mechanic at all. hg-v934 refused to port
+   PIVOT-REJECT on exactly that reasoning -- "GOLD SCALP / GOLD SWING have no
+   measured-edge gate, so porting it would move a vetoed mechanic onto the one
+   place in the gold stack that cannot veto it" -- and applied it only to a NEW
+   port. The tabs' own mechanics were never checked against it.
+
+   WHAT THIS DOES, AND DELIBERATELY DOES NOT DO.
+
+   It does NOT demote or suppress. The two records measure DIFFERENT
+   POPULATIONS -- the tab record is this desk's replay on its own gates and its
+   own 15m/4h horizon; the twin's is the gate-clear population of OMNIGOLD's
+   35-gate stack on 1h. Importing a foreign population's verdict wholesale is
+   the hg-v923 attribution error, and hg-v920 measured what acting on a
+   whole-book read does out of sample. So the tab's own verdict still stands.
+
+   What it DOES is refuse to ACTIVELY PROMOTE on the smaller of two records
+   that contradict each other: a `prefer` row whose twin is past the veto bar
+   loses its +2 rank boost and falls back to neutral. The setup still forms,
+   still paints, still carries its levels, and can still lead on its own
+   merits -- it is simply no longer pushed up the ranking by a number a
+   3.8x larger sample of the same detector contradicts.
+
+   And every affected card SAYS SO, with both samples named and the twin's
+   record attributed to OMNIGOLD, because a reader shown "measured
+   fee-survivor +0.16R" had no way to know a 274-trade record of the same
+   detector reads -0.50R.
+
+   The z is OMNIGOLD's own cluster-corrected statistic via hgOgReplayZ /
+   hgOgEffN, not a naive one: naive reads -5.98 and -4.66, and quoting those
+   would overstate the case by ignoring overlapping trades. Breakeven is 1/3
+   because the twin's record is measured on OMNIGOLD's 2R plans.
+
+   Reversible: hgGoldSetTwinCheck(false). Fails open: no OMNIGOLD, no check. */
+
+/* EXACT wires only. Each key below mints from the SAME detector as the named
+   OMNIGOLD mechanic. Loose analogies are deliberately absent -- nyexh is not
+   NY-OPEN-DRIVE, liqsweep is not PDL-SWEEP, silverb is not KZ-JUDAS, hvn is
+   not FVG-HVN -- because a record is only borrowable when it is the same
+   mechanic, which is the whole hg-v923 lesson. */
+var HG_GOLD_EXACT_TWIN = {
+  p4nr7: 'P4-NR7', p4adrx: 'P4-ADRX', p4laf: 'P4-LAF',
+  p5wyck: 'P5-WYCK', p5turt: 'P5-TURT', p5vwap: 'P5-VWAP',
+  p5drive: 'P5-DRIVE', p5news: 'P5-NEWS',
+  p6comp: 'P6-COMP', p6zfade: 'P6-ZFADE', p6smt: 'P6-SMT', p6fail: 'P6-FAIL',
+  p7scalp: 'P7-SCALP', p7ratio: 'P7-RATIO',
+  p8resid: 'P8-RESID', p8range: 'P8-RANGE', p8geo: 'P8-GEO', p8vpinbo: 'P8-VPINBO',
+  p9volbar: 'P9-VOLBAR', p9prem: 'P9-PREM',
+  vpbook: 'VP-PLAYBOOK', sweepob: 'SWEEP-OB'
+};
+
+/* Breakeven for the TWIN's record: OMNIGOLD plans 2R, so 1/3. Not this desk's
+   1.5R breakeven -- the record being judged was not measured on this desk. */
+var HG_GOLD_TWIN_BE = 1 / 3;
+var HG_GOLD_TWIN_VETO_Z = -2;          /* == omnigold.js EDGE_VETO_Z */
+
+var HG_GOLD_TWIN_CHECK_LS = 'hg_gold_twin_check';
+var HG_GOLD_TWIN_CHECK = true;
+function hgGoldTwinCheckInit(){
+  try{
+    var W2 = (typeof window !== 'undefined') ? window : null;
+    var ovr = W2 ? W2.HG_GOLD_TWIN_CHECK : undefined;
+    if (ovr === true || ovr === false){ HG_GOLD_TWIN_CHECK = ovr; return HG_GOLD_TWIN_CHECK; }
+    var v = null;
+    try { v = localStorage.getItem(HG_GOLD_TWIN_CHECK_LS); } catch (e){ v = null; }
+    if (v === '0' || v === 'false') HG_GOLD_TWIN_CHECK = false;
+    else HG_GOLD_TWIN_CHECK = true;
+  }catch(e){ HG_GOLD_TWIN_CHECK = true; }
+  return HG_GOLD_TWIN_CHECK;
+}
+function hgGoldSetTwinCheck(on){
+  HG_GOLD_TWIN_CHECK = (on !== false);
+  try { localStorage.setItem(HG_GOLD_TWIN_CHECK_LS, HG_GOLD_TWIN_CHECK ? '1' : '0'); } catch (e){}
+  return HG_GOLD_TWIN_CHECK;
+}
+
+/* The twin's gate-clear record and OMNIGOLD's own cluster-corrected z.
+   null when: not an exact wire, OMNIGOLD absent, or the twin never fired.
+   NEVER throws and never invents a record. */
+function hgGoldTwinVerdict(key){
+  try{
+    var twin = HG_GOLD_EXACT_TWIN[String(key || '')];
+    if (!twin) return null;
+    var W2 = (typeof window !== 'undefined') ? window : null;
+    if (!W2 || typeof W2.hgOgReplayEvidence !== 'function'
+            || typeof W2.hgOgReplayZ !== 'function') return null;
+    var e = W2.hgOgReplayEvidence(twin);
+    var f = e && e.formed;
+    if (!f || !(f.n > 0) || !isFinite(f.winRate)) return null;
+    var z = W2.hgOgReplayZ([f.n, f.winRate], HG_GOLD_TWIN_BE);
+    if (!isFinite(z)) return null;
+    return { twin: twin, n: f.n, winRate: f.winRate, netXm: f.netXm,
+             grossR: f.grossR, z: z, vetoed: z <= HG_GOLD_TWIN_VETO_Z };
+  }catch(e){ return null; }
+}
+
+/* The disclosure line. Says both samples, attributes the twin's record, and
+   names the population difference rather than pretending one supersedes the
+   other. '' when there is nothing to disclose. */
+function hgGoldTwinConflictNote(key, row){
+  try{
+    var v = hgGoldTwinVerdict(key);
+    if (!v || !v.vetoed) return '';
+    var tabN = (row && isFinite(row.n)) ? row.n : null;
+    var tabNet = (row && isFinite(row.net)) ? row.net : null;
+    var sgn = function(x){ return (x >= 0 ? '+' : '') + Number(x).toFixed(3); };
+    return 'TWO RECORDS DISAGREE — this desk measured ' + key
+      + (tabN !== null ? (' over ' + tabN + ' trades') : '')
+      + (tabNet !== null ? (' at ' + sgn(tabNet) + 'R net at XM') : '')
+      + ', and the SAME detector registered on OMNIGOLD as ' + v.twin
+      + ' measures ' + sgn(v.netXm) + 'R net at XM over ' + v.n
+      + ' gate-clear trades, ' + v.z.toFixed(2) + ' sigma against a '
+      + (HG_GOLD_TWIN_BE * 100).toFixed(1) + '% breakeven — past the '
+      + HG_GOLD_TWIN_VETO_Z + ' sigma bar at which OMNIGOLD refuses to ticket '
+      + 'a mechanic at all. That record is OMNIGOLD gates on a 1h horizon and '
+      + 'this one is this desk on its own; neither supersedes the other, and '
+      + 'the larger sample is the one that disagrees. Nothing is demoted on '
+      + 'it — the only thing withheld is an active rank boost.';
+  }catch(e){ return ''; }
+}
+
 function hgGoldSetupEdgeApply(cand, opts){
   try{
     if (!cand) return cand;
@@ -2172,11 +2306,45 @@ function hgGoldSetupEdgeApply(cand, opts){
       return cand;
     }
     if (act === 'prefer'){
+      /* hg-v943: a prefer row whose EXACT OMNIGOLD twin is past the -2 sigma
+         veto bar does not get the boost. Two records of the same detector
+         disagree in sign and this desk holds the smaller one — promoting on
+         that is the thing to refuse. It is NOT demoted or suppressed: the
+         setup forms, paints and can still lead on its own merits. */
+      var twinV = HG_GOLD_TWIN_CHECK ? hgGoldTwinVerdict(key) : null;
+      if (twinV && twinV.vetoed){
+        cand.edgeTwinConflict = { twin: twinV.twin, n: twinV.n,
+                                  netXm: twinV.netXm, z: twinV.z,
+                                  heldBoost: 2 };
+        if (cand.stamps.indexOf('PREFER HELD — TWIN VETOED') < 0)
+          cand.stamps.push('PREFER HELD — TWIN VETOED');
+        var gnT = Array.isArray(cand.gateNotes) ? cand.gateNotes.slice() : [];
+        var noteT = hgGoldTwinConflictNote(key, row);
+        if (noteT) gnT.push(noteT);
+        cand.gateNotes = gnT;
+        cand.edge.twinWhy = noteT || '';
+        return cand;
+      }
       cand.edgeBoost = (isFinite(cand.edgeBoost) ? cand.edgeBoost : 0) + 2;
       if (cand.stamps.indexOf('EDGE PREFER') < 0) cand.stamps.push('EDGE PREFER');
       return cand;
     }
     if (act === 'neutral'){
+      /* hg-v943: neutral already declines to boost, so there is no action to
+         withhold — but the reader still has two contradicting records and no
+         way to see the second. Disclose it; change nothing. */
+      var twinN = HG_GOLD_TWIN_CHECK ? hgGoldTwinVerdict(key) : null;
+      if (twinN && twinN.vetoed){
+        var noteN = hgGoldTwinConflictNote(key, row);
+        if (noteN){
+          cand.edge.twinWhy = noteN;
+          var gnN = Array.isArray(cand.gateNotes) ? cand.gateNotes.slice() : [];
+          gnN.push(noteN);
+          cand.gateNotes = gnN;
+        }
+        cand.edgeTwinConflict = { twin: twinN.twin, n: twinN.n,
+                                  netXm: twinN.netXm, z: twinN.z, heldBoost: 0 };
+      }
       /* hg-v909: MEASURED, AND CLEARED NO BAR. No boost, no demote, no change
          of eligibility — deliberately. What it does change is that the reader
          and the ranker can now tell this apart from a mechanic nobody has
@@ -15717,6 +15885,13 @@ W.hgGoldPlanSidesOk = hgGoldPlanSidesOk;
 W.hgGoldTakeEnginePlan = hgGoldTakeEnginePlan;
 W.hgGoldBindEnginePlan = hgGoldBindEnginePlan;
 W.hgGoldSetupEdgeApply = hgGoldSetupEdgeApply;
+W.HG_GOLD_EXACT_TWIN = HG_GOLD_EXACT_TWIN;
+W.HG_GOLD_TWIN_BE = HG_GOLD_TWIN_BE;
+W.HG_GOLD_TWIN_VETO_Z = HG_GOLD_TWIN_VETO_Z;
+W.hgGoldTwinVerdict = hgGoldTwinVerdict;
+W.hgGoldTwinConflictNote = hgGoldTwinConflictNote;
+W.hgGoldTwinCheckInit = hgGoldTwinCheckInit;
+W.hgGoldSetTwinCheck = hgGoldSetTwinCheck;
 W.hgGoldEdgeLiveNote = hgGoldEdgeLiveNote;
 W.hgGoldSweepObStageLabel = hgGoldSweepObStageLabel;
 W.HG_GOLD_EDGE_WALK = HG_GOLD_EDGE_WALK;
