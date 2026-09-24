@@ -165,9 +165,19 @@
         + 'Nothing is demoted or promoted on an unmeasured record — a desk that has not traded '
         + 'is not a desk that has failed.';
     }
+    /* hg-v955: and the calendar split beside the verdict, because this note
+       is the one seam every gold desk already renders. It appends NOTHING
+       until a record carries the mark -- an absent split is not a clean one. */
+    var cal = '';
+    try{
+      if (typeof W.hgFwdGoldCalendarHtml === 'function'){
+        var pools = (r && r.pools && r.pools.length) ? r.pools : [];
+        cal = W.hgFwdGoldCalendarHtml(pools.length === 1 ? pools[0] : null) || '';
+      }
+    }catch(eCal){ cal = ''; }
     return '<div class="note" style="margin:6px 0;padding:6px 9px;border-left:3px solid #94A3B8;font-size:11px">'
       + '<b>' + head + '</b> — ' + body
-      + ' <span style="opacity:.7">(pool: ' + esc(r.pools.join(', ')) + ')</span></div>';
+      + ' <span style="opacity:.7">(pool: ' + esc(r.pools.join(', ')) + ')</span></div>' + cal;
   }
 
   W.HG_GOLD_FWD_MIN_JUDGE = FWD_MIN_JUDGE;
