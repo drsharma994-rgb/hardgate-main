@@ -29,6 +29,31 @@
  *   node scripts/rebake-gold-literals.mjs --write  apply it
  */
 import { readFileSync, writeFileSync } from 'node:fs';
+import { createContext, runInContext } from 'node:vm';
+
+/* hg-v960: exported so the two FATAL branches below can be DRIVEN. On a clean
+   tree neither can be reached — there is no undeclared departure and the rule
+   is present — so left inline they were untestable, and a mutation disabling
+   either survived the guard. That is the "bucket nothing can land in" problem
+   this repo names; hg-v937 hit the same shape and the fix is the same, an
+   exported function exercised on injected inputs. */
+export function enforceVerdictRule(win){
+  const fn = win && win.hgGoldEdgeVerdictDepartures;
+  if (typeof fn !== 'function'){
+    throw new Error('rebake: goldind.js exports no hgGoldEdgeVerdictDepartures — the verdict rule '
+      + 'is what keeps the decision in step with the evidence; refusing to bake without it');
+  }
+  const d = fn();
+  if (d.undeclared.length){
+    throw new Error('rebake: ' + d.undeclared.length + ' edge verdict(s) no longer follow the rule and '
+      + 'declare no reason: '
+      + d.undeclared.map(x => x.key + ' in force ' + x.inForce + ', rule says ' + x.rule).join('; ')
+      + '. The live evidence moved under a hand-typed verdict. Either move the verdict, or record '
+      + 'actionWhy on the row saying why it stands.');
+  }
+  return d;
+}
+
 import { GOLD_SCALP_WALK, OMNIGOLD_WALK } from '../lib/gold-artifacts.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve, basename } from 'node:path';
@@ -91,7 +116,8 @@ const changes = [];
            field on this line, so it is emitted here rather than hand-kept —
            the writer stripping it is what the byte-identical guard caught. */
         const po = v.precursorOnly ? ', precursorOnly: true' : '';
-        const next = lm[1] + 'live: { n: ' + v.n + ', net: ' + g(v.net)
+        /* hg-v960: gross rides beside net, in the row's own n/gross/net order */
+        const next = lm[1] + 'live: { n: ' + v.n + ', gross: ' + g(v.gross) + ', net: ' + g(v.net)
           + ', oosHeld: ' + v.oosHeld + ', oosBroke: ' + v.oosBroke + fn + po + ' },';
         if (next !== line) n++;
         out.push(next); cur = null; continue;
@@ -211,3 +237,34 @@ for (const c of changes){
 }
 if (!WRITE && dirty) console.log('\n  run with --write to apply');
 if (!dirty) console.log('\n  every baked literal already equals its artifact');
+
+/* ---- hg-v960: the decision may not be left behind the evidence ----------
+   Every `action` on the scalp edge table is hand-typed; every `live` block
+   under it is generated here. Nothing kept the two in step, so a re-bake
+   moved the evidence and froze the verdict — the hg-v946 hand-typed book
+   failure, in the table that decides what GOLD SCALP, GOLD SWING, GOLD ULTRA,
+   GOLD DIRECTION and MILLI GOLD present as tradeable.
+
+   The rule now lives once, in goldind.js, and is checked HERE against the
+   file as it stands on disk after any write. A row whose verdict departs from
+   the rule is allowed — hg-v928 refused two flips the bars would have made on
+   n=6 and n=1 — but the departure must be DECLARED on the row as `actionWhy`.
+   An UNDECLARED departure is fatal, never a warning: this is the hg-v921 rule
+   (a generated thing the generator cannot account for stops the bake) applied
+   to a verdict rather than to a block. */
+{
+  const ctx = {
+    window: {}, console: { log(){}, warn(){}, error(){} },
+    Math, JSON, Date, isFinite, String, Object, Array, RegExp, Promise, Error,
+    setTimeout, localStorage: { getItem: () => null, setItem(){} }
+  };
+  ctx.window.window = ctx.window; ctx.globalThis = ctx; ctx.self = ctx.window;
+  createContext(ctx);
+  for (const f of ['indicators.js', 'indicators2.js', 'goldind.js']){
+    try{ runInContext(readFileSync(join(ROOT, f), 'utf8'), ctx, { filename: f }); }
+    catch(e){ /* a desk leg that will not boot headless is not this check's business */ }
+  }
+  const d = enforceVerdictRule(ctx.window);
+  console.log('  verdict rule: %d row(s) follow it, %d declared departure(s), 0 undeclared',
+    25 - d.declared.length - d.undeclared.length, d.declared.length);
+}

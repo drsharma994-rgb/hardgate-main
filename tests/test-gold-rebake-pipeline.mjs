@@ -85,8 +85,22 @@ console.log('3. the literal writer');
     }
     let gi = readFileSync(join(ROOT, 'goldind.js'), 'utf8');
     const giBefore = gi;
-    gi = gi.replace(/live: \{ n: 263, net: -0\.049, oosHeld: \d, oosBroke: \d \}/,
-                    'live: { n: 999, net: 0.5, oosHeld: 0, oosBroke: 0 }');
+    /* Matched by its SAMPLE and then to the closing brace, not by a fixed
+       field list: hg-v960 added `gross` to every live block and an exact-shape
+       pattern silently stopped matching, so the fixture corrupted nothing.
+       The assertion below is what caught that — it is kept for the same
+       reason, and the pattern is now robust to the next field. */
+    /* The corruption changes the NUMBERS without contradicting the VERDICT.
+       hg-v960 makes the bake refuse an in-force verdict that departs from the
+       rule with no recorded reason, and the first cut of this fixture set
+       n=999 net=+0.5, which reads `prefer` against hvn's in-force `demote` —
+       so the bake correctly refused and this round-trip could not run. That
+       refusal is the new guard working; it is simply not what THIS test is
+       about, which is whether the writer rebuilds a corrupted literal
+       byte-identically. n=10 net=-0.5 still reads `demote`, so the literal is
+       wrong and the verdict is untouched. */
+    gi = gi.replace(/live: \{ n: 263,[^}]*\}/,
+                    'live: { n: 10, gross: -0.5, net: -0.5, oosHeld: 0, oosBroke: 0 }');
     ok(gi !== giBefore, 'the goldind fixture actually corrupted a live block');
     writeFileSync(join(ROOT, 'goldind.js'), gi);
 

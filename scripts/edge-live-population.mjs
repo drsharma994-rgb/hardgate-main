@@ -36,6 +36,7 @@ const stopPct = (t) => {
 };
 const mean = (v) => v.reduce((a, b) => a + b, 0) / v.length;
 const r3 = (x) => Math.round(x * 1000) / 1000;
+const r4 = (x) => Math.round(x * 10000) / 10000;
 
 /* A quality stamp reads "<NAME> Q<score>/10". `?` in place of the score means
    the detector returned before it scored anything. A kind is precursor-only
@@ -85,7 +86,23 @@ export function liveEdgePopulation(path = REPLAY){
       if (ins.length < MIN_SIDE || oos.length < MIN_SIDE) continue;   /* too thin to walk */
       if ((mean(ins) > 0) === (mean(oos) > 0)) oosHeld++; else oosBroke++;
     }
-    const live = { n: rows.length, net: r3(mean(rows.map((t) => t.netR))), oosHeld, oosBroke };
+    /* hg-v960: GROSS on the live population, because without it the table's
+       own verdict rule is NOT COMPUTABLE. The suppress bar is
+       (n>=50 && gross<=0 && net<=-0.20) and the prefer bar is
+       (n>=50 && gross>0 && net>=+0.10) — both need a gross measured on the
+       population the desk still forms, and this block emitted only net. Four
+       rows carried a liveGross hand-recorded inside their hg-v928 retune
+       blocks; for the other 21 the number did not exist anywhere in the repo,
+       so every suppress and prefer verdict in force was unverifiable against
+       the evidence that ships beside it.
+
+       Validated rather than assumed: computed this way it reproduces all four
+       hand-recorded values EXACTLY to four decimals — nyexh -0.1235,
+       liqsweep 0.0313, bosalign 0.0654, ribbon 0.1093. Rounded to 4dp, not
+       the 3dp `net` uses, because that is the precision those four were
+       recorded at and a coarser round would not reproduce them. */
+    const live = { n: rows.length, gross: r4(mean(rows.map((t) => t.rGross))),
+                   net: r3(mean(rows.map((t) => t.netR))), oosHeld, oosBroke };
     if (formsNone) live.formsNone = true;
     /* hg-v923 — PRECURSOR-ONLY, derived rather than annotated.
        A detector that stamps a quality score onto its card ("Q7/10") tells us
