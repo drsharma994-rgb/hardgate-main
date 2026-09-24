@@ -1851,6 +1851,11 @@ function whySilentHTML(ws){
        that what decides WHICH rows lead — the tally — does not separate
        outcomes on four disjoint windows. Both belong on the same panel. */
     + (typeof hgGoldFactorSepHtml === 'function' ? hgGoldFactorSepHtml() : '')
+    /* hg-v944: and that the factor which decides WHO MAY LEAD at all — the
+       off-session demote — withholds 56.8% of the formed book and separates
+       nothing on the same four disjoint windows. It belongs beside the tally
+       panel above, because together they are the whole ranking story. */
+    + (typeof hgGoldSessionSepPanelHtml === 'function' ? hgGoldSessionSepPanelHtml() : '')
     /* hg-v927: and how old the walk behind all of it is. Last, because it
        qualifies every number in the two panels above it. */
     + (typeof hgGoldEdgeWalkAgeNote === 'function' ? hgGoldEdgeWalkAgeNote() : '')
