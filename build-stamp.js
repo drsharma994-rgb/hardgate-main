@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v957',
-  pack: 'A TAB GOT ONE AUTOMATIC RELOAD, EVER, AND THEN STAYED PINNED TO THE BUILD IT BOOTED WITH. Reported from the desk: still on hg-v951 with hg-v956 deployed - five versions of drift on an open tab. THE SERVICE WORKER WAS NEVER THE PROBLEM. sw.js calls skipWaiting on install and clients.claim on activate, and every version bumps HG_CACHE, so the new worker really does install, activate and claim the page. What did not happen is the RELOAD, and without it the page keeps executing the JavaScript it parsed at first load, so the version badge keeps reading the old build-stamp.js while the server serves a newer one. THE GUARD WAS A LOCKOUT, NOT A LOOP GUARD. It wrote sessionStorage hg_sw_reload = 1 the first time a tab ever took a new worker and returned early on every later controllerchange because the key was still there. sessionStorage lives for the life of the TAB, across reloads - and this desk auto-refreshes every ten minutes and is built to sit open all day, so the tab is never closed and the key is never cleared. A loop is a question about ELAPSED TIME - reload, claimed again at once, reload again - not about whether a reload ever happened. The key now holds the TIMESTAMP of the last automatic reload and a fresh claim is honoured whenever it is old enough, with a 60-second window: a re-claim one second or 59 seconds later still does not reload, 61 seconds later does. A legacy 1 reads as 1970 and is therefore old, so an ALREADY-PINNED TAB RECOVERS on its next update rather than staying stuck forever - which matters because every tab open right now is carrying that sentinel. SECOND DEFECT, which would have defeated even a correct reload rule: reg.update ran ONCE, at registration. A tab open for a trading day never asked the server again, so no new worker was ever discovered to claim it. It now re-checks every 15 minutes, and each tick is proved to ask again. FAILS OPEN at every seam: no stored value, an empty or non-numeric one, a negative one, or sessionStorage throwing outright in private mode or with site data blocked, and the page reloads rather than silently locking out - an unreadable guard is not a reason to withhold an update. A throwing reg.update does not stop the listener being registered, does not stop the reload, and does not kill the timer. THE GUARD LIFTS THE REAL BLOCK OUT OF index.html AND EXECUTES IT under a fake navigator, sessionStorage and location, so what is driven is the shipped code rather than a restatement of it - the hg-v951 technique, and the block had no test of any kind before this. WHAT THIS PACK CANNOT VERIFY, said plainly: this environment gets HTTP 403 on the production origin, so npm run check:prod cannot read what Render is serving and no claim is made about whether the deploy itself landed. What is fixed is the browser side, which is the half that keeps a tab on an old build even after a correct deploy. No gate, threshold or verdict moves on any desk, and no setup leaves any board. Tests: tests/test-sw-update-reload.mjs, 26 assertions, 9 of 9 behavioural mutations caught in index.html with the baseline verified green first',
+  version: 'hg-v958',
+  pack: 'THE FRESHNESS CHECK HAD NO CLOCK, AND EVERY CHECK IT DID MAKE LEAKED A CACHE ENTRY. Reported from the desk a second time: v951 STILL ON THIS. hg-v957 fixed the service-worker half - a controllerchange lockout that gave a tab exactly one automatic reload, ever. THERE ARE TWO UPDATE PATHS, NOT ONE, AND THE SECOND WAS ALSO DEAD. build-stamp.js already carries a complete staleness detector: hgBuildFreshness fetches its own source cache-busted, parses the version the server is serving, compares, paints STALE and reloads. Its reload guard is keyed PER LIVE VERSION, so it never had the hg-v957 lockout bug at all - it should have recovered a pinned tab on its own, every time. IT RAN ONCE. hgBuildInit asked the server at DOMContentLoaded - the one moment a tab is current by definition - and after that only on visibilitychange. This desk is built to sit open all day as the FOREGROUND tab, re-scanning itself every ten minutes without ever being hidden, so visibilitychange never fires. MEASURED by driving the real file before the fix: zero timers installed, one fetch at boot, none in the eight hours after, and a second only after a tab switch. That is the hg-v957 defect in the other path, and it is why five versions of drift went unnoticed. The check now runs every five minutes - deliberately the fastest of the three clocks, against 15 min for the service-worker update and 10 min for the desk re-scan, because it is one small GET of one file and it is the path that can recover a tab whose service worker is wedged. SECOND DEFECT, and the reason a clock could not simply be added: the probe is cache-busted with Date.now, and a cache entry is keyed by the FULL url - so every probe wrote its own permanent entry under a key nothing can ever read back. Measured: three probes, three distinct entries. activate deletes only caches under a DIFFERENT HG_CACHE name, so on a tab pinned to one build the version never bumps and they are never cleared - the leak is worst exactly when the desk is stuck. Polling 288 times a day without fixing it would have been a storage leak, not a fix. A request the CALLER marked no-store is now never WRITTEN to the cache, which is what no-store means. THE ONE THING THAT RULE COSTS, named and proved rather than hoped: the seven data json files are fetched no-store too, so they stop being backfilled at runtime - all seven are in the precache shell, and the guard drives an offline no-store read and requires the cached copy to still come back. An offline PROBE must NOT be answered from cache, because a stale version read as the live one would say fresh and pin the tab; that is asserted too. NEW RISK THIS PACK CARRIES: polling makes the automatic reload about a hundred times more frequent, so it must not land on someone typing - OMNIGOLD 1 takes a hand-pasted DATA BLOCK and a reload throws it away. Focus in an input, textarea, select or contenteditable defers the reload, and DEFERS rather than loses it: the per-version key is deliberately written after that check, so the next tick reloads the moment focus leaves the field. It FAILS OPEN - no document, no activeElement, or a document that throws, and the reload proceeds, because refusing an update on an unreadable guard is a new lockout of exactly the kind hg-v957 removed. ONE PAGE, ONE CLOCK: a second hgBuildInit installs no second timer and no second listener. A VACUOUS ASSERTION OF MY OWN, caught by mutation: hgBuildEditingNow(null) falls back to the global document, so asserting it inside a harness that HAS one never reaches the no-document branch and a fail-CLOSED mutation survived. It is now driven in a context with no document at all. AND A SEVENTH GREP-SATISFIABLE GUARD this session: test-build-stamp.mjs proves build-stamp.js is precached with a substring search, which is satisfied by the entry appearing inside a COMMENT - commenting the shell line out survives it, exactly like the hg-v957 localhost check that matched the word in a comment. install is now driven and the cache asked what it actually holds. NOT VERIFIED HERE, said plainly: this environment gets HTTP 403 on the production origin, so check:prod cannot read what Render serves and no claim is made about whether the deploy landed. What is fixed is the browser half, both paths of it. No gate, threshold or verdict moves on any desk, and no setup leaves any board. Tests: tests/test-build-freshness-poll.mjs, 65 assertions, 21 of 21 behavioural mutations caught across build-stamp.js and sw.js, baseline verified green first',
   built: '2026-09-24T00:00:00Z'
 };
 
@@ -116,7 +116,43 @@ function hgRenderVerBadge(res){
   }catch(e){ return null; }
 }
 
-function hgBuildMaybeReload(res, storage, reloadFn){
+/* hg-v958: THE FRESHNESS CHECK HAD NO CLOCK.
+
+   hgBuildInit ran hgBuildFreshness() once at DOMContentLoaded - the one
+   moment a tab is current by definition - and after that only when the tab
+   was hidden and shown again. This desk is built to sit open all day as the
+   FOREGROUND tab (HG_GLOBAL_SCAN_MS re-scans it every ten minutes without
+   ever hiding it), so visibilitychange never fires and the question "what is
+   the server serving?" was asked exactly once per tab, at boot.
+
+   Measured by driving the real file: zero timers installed, one fetch at
+   boot, none in the eight hours after, and a second only after a tab switch.
+   That is the hg-v957 defect in the OTHER update path - and it is why this
+   path, which has no lockout bug of its own, still never recovered a pinned
+   tab. Five minutes, deliberately the fastest of the three clocks (SW update
+   15 min, desk re-scan 10 min), because it is one small GET of one file and
+   it is the path that can recover a tab whose service worker is wedged. */
+var HG_BUILD_POLL_MS = 5 * 60 * 1000;
+
+/* Polling makes the automatic reload roughly a hundred times more frequent
+   than a boot-only check, so it must not land on top of someone's typing -
+   OMNIGOLD 1 takes a hand-pasted DATA BLOCK and a reload throws it away.
+   An absent, throwing or unreadable document is NOT editing: this fails
+   OPEN, because refusing an update on a document we cannot read would be a
+   new lockout of exactly the kind hg-v957 removed. */
+function hgBuildEditingNow(doc){
+  try{
+    var d = doc || (G.document || null);
+    if (!d) return false;
+    var el = d.activeElement;
+    if (!el) return false;
+    if (el.isContentEditable === true) return true;
+    var tag = String(el.tagName || '').toUpperCase();
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+  }catch(e){ return false; }
+}
+
+function hgBuildMaybeReload(res, storage, reloadFn, doc){
   try{
     if (!res || res.state !== 'stale' || !res.live) return false;
     var store = storage;
@@ -124,6 +160,9 @@ function hgBuildMaybeReload(res, storage, reloadFn){
     if (!store || typeof store.getItem !== 'function') return false;
     var key = 'hg_build_reload_' + String(res.live);
     if (store.getItem(key)) return false;
+    /* deliberately BEFORE the key is written, so the next poll tries again
+       the moment the field loses focus - the update is deferred, not lost */
+    if (hgBuildEditingNow(doc)) return false;
     var reload = reloadFn;
     if (!reload && G.location && typeof G.location.reload === 'function') reload = G.location.reload.bind(G.location);
     if (typeof reload !== 'function') return false;
@@ -145,8 +184,33 @@ function hgBuildApplyFreshness(res){
   }catch(e){ return res; }
 }
 
+/* ONE definition of "ask the server which build it is serving, and act on
+   the answer". The boot check, the tab-switch check and the poll are the
+   same question asked at three different times. */
+function hgBuildPoll(){
+  try{ return hgBuildFreshness().then(hgBuildApplyFreshness); }
+  catch(e){ return null; }
+}
+
+var hgPollStarted = false;
+function hgBuildStartPolling(setIntervalFn, ms){
+  try{
+    if (hgPollStarted) return null;                 /* one clock per page */
+    var si = (typeof setIntervalFn === 'function') ? setIntervalFn
+           : ((typeof G.setInterval === 'function') ? G.setInterval : null);
+    if (!si) return null;
+    var every = (typeof ms === 'number' && isFinite(ms) && ms > 0) ? ms : HG_BUILD_POLL_MS;
+    var id = si(hgBuildPoll, every);
+    hgPollStarted = true;
+    return id;
+  }catch(e){ return null; }
+}
+
+var hgInited = false;
 function hgBuildInit(){
   try{
+    if (hgInited) return false;                     /* one page, one init */
+    hgInited = true;
     hgRenderBuildChip(null, null);
     hgRenderVerBadge(null);
     hgBuildFreshness().then(function(res){
@@ -161,11 +225,14 @@ function hgBuildInit(){
       G.document.addEventListener('visibilitychange', function(){
         try{
           if (!G.document || G.document.visibilityState !== 'visible') return;
-          hgBuildFreshness().then(hgBuildApplyFreshness);
+          hgBuildPoll();
         }catch(e){}
       });
     }
-  }catch(e){}
+    /* the clock the check never had */
+    hgBuildStartPolling();
+    return true;
+  }catch(e){ return false; }
 }
 
 G.HG_BUILD = HG_BUILD;
@@ -181,6 +248,10 @@ G.hgRenderVerBadge = hgRenderVerBadge;
 G.hgBuildMaybeReload = hgBuildMaybeReload;
 G.hgBuildApplyFreshness = hgBuildApplyFreshness;
 G.hgBuildInit = hgBuildInit;
+G.HG_BUILD_POLL_MS = HG_BUILD_POLL_MS;
+G.hgBuildEditingNow = hgBuildEditingNow;
+G.hgBuildPoll = hgBuildPoll;
+G.hgBuildStartPolling = hgBuildStartPolling;
 
 try{
   if (G.document){

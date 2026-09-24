@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v957';
+const HG_CACHE = 'hg-v958';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -50,6 +50,19 @@ const HG_SHELL = [
 function hgNeverCache(req, url){
   try{
     if (!req || req.method !== 'GET') return true;
+    /* hg-v958: a request the CALLER marked no-store must never be WRITTEN to
+       the cache. build-stamp.js probes './build-stamp.js?fresh=' + Date.now()
+       with cache:'no-store', and a cache entry is keyed by the FULL url - so
+       every probe wrote its own permanent entry under a key nothing can ever
+       read back (measured: three probes, three distinct entries). activate()
+       deletes only caches under a DIFFERENT HG_CACHE name, so those entries
+       are cleared only when the version bumps - and on a tab pinned to one
+       build the version never bumps, which is precisely the condition this
+       pack exists to fix. Polling every five minutes without this rule would
+       be a storage leak that is worst exactly when the desk is stuck.
+       The other no-store callers (./data/*.json) are all in HG_SHELL, so the
+       precache still serves them offline - asserted in the guard. */
+    if (req.cache === 'no-store') return true;
     if (!url || url.origin !== self.location.origin) return true;  /* exchange/market APIs are cross-origin */
     const p = url.pathname || '';
     if (p === '/api' || p.indexOf('/api/') === 0) return true;     /* serverless API routes */
