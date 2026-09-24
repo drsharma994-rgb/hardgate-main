@@ -373,16 +373,74 @@ console.log('\n10. GOLD SWING consumes the extras at all — before this it did 
 
 console.log('\n11. they mint DEMOTED, and the lift is one deliberate call');
 {
-  const gi = src('goldind.js');
-  const at = gi.indexOf('hgGoldExtraDetect');
-  const blk = gi.slice(at, at + 2200);
+  /* This read the two source files by slicing a FIXED 2,200 / 2,600 characters
+     after `hgGoldExtraDetect` and grepping inside. hg-v945 added lines to the
+     swing block and pushed `demoted = true` past the cutoff, turning it red
+     with nothing wrong — the same fixed-width fragility hg-v944 corrected in
+     section 3 of this file. Bound the slice to the BLOCK instead: from the
+     call to the catch that closes it, whatever its length. */
+  const blockAt = (text, close) => {
+    const a = text.indexOf('hgGoldExtraDetect');
+    const b = text.indexOf(close, a);
+    ok(a > 0 && b > a, '  located the extras block, ' + close + ' (fatal if not)');
+    return text.slice(a, b);
+  };
+  const blk = blockAt(src('goldind.js'), '}catch(eXtra){}');
   ok(/hgGoldExtraPromotable/.test(blk) && /demoted = true/.test(blk),
      'GOLD SCALP demotes an extra unless promotable');
-  const gsw = src('goldswing.js');
-  const at2 = gsw.indexOf('hgGoldExtraDetect');
-  ok(/hgGoldExtraPromotable/.test(gsw.slice(at2, at2 + 2600))
-     && /demoted = true/.test(gsw.slice(at2, at2 + 2600)),
+  const blkSw = blockAt(src('goldswing.js'), '}catch(eXtraSw){}');
+  ok(/hgGoldExtraPromotable/.test(blkSw) && /demoted = true/.test(blkSw),
      'GOLD SWING does the same — one rule, both tabs');
+  /* and the demote is ATTRIBUTED on both, so a guard can tell which gate fired
+     (a row is demoted by several on most tapes — hg-v940, hg-v945) */
+  ok(/demotedWhy/.test(blk) && /demotedWhy/.test(blkSw),
+     '  both name the record they lack, rather than a bare flag');
+
+  /* BEHAVIOURAL, because a grep cannot see REACHABILITY: wrapping the swing
+     demote in `if (false)` leaves `demoted = true` in the source and the two
+     assertions above pass unchanged. It survived mutation saying so. Drive the
+     real goldSwingSetups and read the row. */
+  const dctx = vm.createContext({ Math, Date, JSON, isFinite, isNaN, parseFloat, parseInt,
+    Array, Object, String, Number, RegExp, Float64Array, Infinity, NaN,
+    console: { log(){}, warn(){}, error(){} }, setTimeout: () => 0, clearTimeout(){},
+    localStorage: { getItem: () => null, setItem(){}, removeItem(){} },
+    document: { getElementById: () => null,
+      createElement: () => ({ style: {}, innerHTML: '', appendChild(){}, setAttribute(){},
+                              querySelector: () => null, querySelectorAll: () => [] }),
+      querySelector: () => null, querySelectorAll: () => [], head: { appendChild(){} },
+      documentElement: { appendChild(){} }, addEventListener(){} } });
+  dctx.window = dctx; dctx.self = dctx; dctx.globalThis = dctx; dctx.HG_tabs = [];
+  for (const f of ['indicators.js', 'indicators2.js', 'fixpack14-core.js', 'hg-mechanics.js',
+                   'hg-forward.js', 'plans.js', 'hg-gates.js', 'hg-plan.js',
+                   'structure-levels.js', 'best-levels.js', 'gold-best-levels.js',
+                   'regime.js', 'goldind.js', 'goldswing.js']){
+    try { vm.runInContext(src(f), dctx, { filename: f }); } catch (e) {}
+  }
+  const dh = []; let dpx = 4400, dsd = 11;
+  const drnd = () => { dsd = (dsd * 1103515245 + 12345) & 0x7fffffff; return dsd / 0x7fffffff; };
+  for (let i = 0; i < 260; i++){
+    const o = dpx, c = 4400 + Math.sin(i / 9) * 26 + (i / 260) * 70 + (drnd() - 0.5) * 9;
+    dh.push({ t: 1.7e12 + i * 14400000, o: +o.toFixed(2), h: +(Math.max(o, c) + 9).toFixed(2),
+              l: +(Math.min(o, c) - 9).toFixed(2), c: +c.toFixed(2), v: 900 });
+    dpx = c;
+  }
+  const dlast = dh[dh.length - 1].c, dnow = 1.7e12 + 260 * 14400000;
+  const dlvl = +(dlast - 55).toFixed(2);
+  const driveExtra = (promotable) => {
+    dctx.hgGoldExtraDetect = () => ([{ ok: true, dir: 'long', kind: 'ogmmove',
+      level: dlvl, entry: dlvl, stop: +(dlvl - 8).toFixed(2),
+      why: 'demote probe', invalidates: 'probe' }]);
+    dctx.hgGoldExtraPromotable = () => promotable;
+    let r = null;
+    try { r = dctx.goldSwingSetups({ rows4h: dh, rows1d: dh, now: dnow }); } catch (e){}
+    return [...((r && r.ranked) || []), ...((r && r.rejected) || [])]
+      .filter((x) => x.stratKey === 'ogmmove')[0] || null;
+  };
+  const dDef = driveExtra(false), dPro = driveExtra(true);
+  ok(dDef && dDef.demoted === true && /OMNIGOLD/.test(String(dDef.demotedWhy || '')),
+     '  driven: a swing extra really is demoted, by THIS rule, naming the record');
+  ok(dPro && !dPro.demotedWhy,
+     '  and hgGoldExtraPromotable() lifts it — one deliberate call, not a default');
   globalThis.hgGoldExtraSetPromotable(false);
   ok(globalThis.hgGoldExtraPromotable() === false, 'demoted is the default');
   globalThis.hgGoldExtraSetPromotable(true);

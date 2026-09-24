@@ -43,6 +43,22 @@ export function readTwins(src){
     if (t) out[t[1]] = t[2] === undefined ? null : t[2];
   }
   if (!Object.keys(out).length) throw new Error('HG_GOLD_SIBLING_TWIN parsed empty');
+  /* hg-v945: gold-extra-strategies.js folds HG_GOLD_ROSTER_HOME into the twin
+     map at load (a home IS the twin for the three homed roster kinds), so the
+     generator has to read the same second list or it writes a literal the
+     runtime then looks past -- which is how hgGoldSiblingRecord('smcliq') came
+     back null with the twin correctly mapped. Missing map is FATAL, never
+     skipped: a silently-absent home is a record nobody notices is gone. */
+  const h = src.match(/var HG_GOLD_ROSTER_HOME = \{([\s\S]*?)\n\};/);
+  if (!h) throw new Error('HG_GOLD_ROSTER_HOME not found in ' + SRC);
+  let homes = 0;
+  for (const line of h[1].split('\n')){
+    const t = line.match(/^\s*'([A-Z0-9-]+)'\s*:\s*'([a-z0-9]+)'/);
+    if (!t) continue;
+    homes++;
+    if (out[t[2]] === undefined) out[t[2]] = t[1];
+  }
+  if (!homes) throw new Error('HG_GOLD_ROSTER_HOME parsed empty');
   return out;
 }
 

@@ -528,6 +528,42 @@ var HG_GOLD_SIBLING_TWIN = {
   ogbosretest: 'BOS-RETEST'
 };
 
+/* WHICH TAB can form each roster kind. hg-v942 asserted coverage was
+   exhaustive because every kind "is ported or has a named home" -- and the
+   home check never asked WHICH TAB the home was on. EQH-SWEEP's home is
+   smcliq, GOLD SCALP has minted it since hg-v564, and GOLD SWING only ever
+   STAMPED it, so one of the nine measured-positive gold mechanics could not
+   be formed on that tab at all. A per-kind claim cannot see a per-tab hole;
+   this table can, and hgGoldRosterTabGaps() reports it. */
+var HG_GOLD_TABS = ['goldscalp', 'goldswing'];
+var HG_GOLD_ROSTER_TABS = {
+  'P5-DRIVE':      ['goldscalp', 'goldswing'],
+  'P6-COMP':       ['goldscalp', 'goldswing'],
+  'EQH-SWEEP':     ['goldscalp', 'goldswing'],   /* swing added hg-v945 */
+  'STRUCT-BOS':    ['goldscalp', 'goldswing'],
+  'SQUEEZE-FIRE':  ['goldscalp', 'goldswing'],
+  'CUSUM-SHIFT':   ['goldscalp', 'goldswing'],
+  'MMOVE':         ['goldscalp', 'goldswing'],
+  'TREND-RECLAIM': ['goldscalp', 'goldswing'],
+  'BOS-RETEST':    ['goldscalp', 'goldswing']
+};
+
+/** Every [kind, tab] pair on the derived roster that the tab cannot form.
+    Empty is the claim; a non-empty list is the next hg-v942 hole, named. A
+    kind with no entry at all is EVERY tab's gap, never silently skipped. */
+function hgGoldRosterTabGaps(){
+  var all = hgGoldRosterAll(), out = [], i, j, kind, tabs;
+  for (i = 0; i < all.length; i++){
+    kind = all[i] && all[i].kind;
+    if (!kind) continue;
+    tabs = HG_GOLD_ROSTER_TABS[kind] || [];
+    for (j = 0; j < HG_GOLD_TABS.length; j++){
+      if (tabs.indexOf(HG_GOLD_TABS[j]) < 0) out.push([kind, HG_GOLD_TABS[j]]);
+    }
+  }
+  return out;
+}
+
 /* --- BEGIN GENERATED HG_GOLD_SIBLING_RECORD (scripts/gold-sibling-records.mjs) ---
    Every field is re-derived from scripts/omnigold-replay-evidence.json by that
    script. Do not hand-edit: hg-v909 shipped a hand-transcribed block from the
@@ -536,9 +572,12 @@ var HG_GOLD_SIBLING_TWIN = {
 var HG_GOLD_SIBLING_RECORD = {
   'BOS-RETEST': { n: 83, settled: 74, winRate: 0.3378, grossR: 0.0367, netXm: 0.0027, tCluster: 0.3, zBreakeven: 0.08, minRr: 2, breakevenPct: 33.3 },
   'CUSUM-SHIFT': { n: 44, settled: 32, winRate: 0.3438, grossR: 0.0918, netXm: 0.0707, tCluster: 0.58, zBreakeven: 0.13, minRr: 2, breakevenPct: 33.3 },
+  'EQH-SWEEP': { n: 41, settled: 41, winRate: 0.3659, grossR: 0.0976, netXm: 0.0159, tCluster: 0.36, zBreakeven: 0.44, minRr: 2, breakevenPct: 33.3 },
   'FIB-618': { n: 132, settled: 127, winRate: 0.2992, grossR: -0.0872, netXm: -0.1306, tCluster: -0.9, zBreakeven: -0.82, minRr: 2, breakevenPct: 33.3 },
   'LONDON-FIX': { n: 87, settled: 69, winRate: 0.2464, grossR: -0.2052, netXm: -0.2332, tCluster: -1.76, zBreakeven: -1.53, minRr: 2, breakevenPct: 33.3 },
   'MMOVE': { n: 204, settled: 177, winRate: 0.3559, grossR: 0.0836, netXm: 0.0587, tCluster: 1.54, zBreakeven: 0.64, minRr: 2, breakevenPct: 33.3 },
+  'P5-DRIVE': { n: 48, settled: 41, winRate: 0.3902, grossR: 0.2146, netXm: 0.1796, tCluster: 1.55, zBreakeven: 0.77, minRr: 2, breakevenPct: 33.3 },
+  'P6-COMP': { n: 98, settled: 82, winRate: 0.3293, grossR: 0.0421, netXm: 0.0186, tCluster: 0.32, zBreakeven: -0.08, minRr: 2, breakevenPct: 33.3 },
   'PIVOT-REJECT': { n: 161, settled: 159, winRate: 0.2327, grossR: -0.3026, netXm: -0.3727, tCluster: -2.63, zBreakeven: -2.69, minRr: 2, breakevenPct: 33.3 },
   'ROUND-MAGNET': { n: 593, settled: 587, winRate: 0.3169, grossR: -0.043, netXm: -0.1095, tCluster: -0.85, zBreakeven: -0.84, minRr: 2, breakevenPct: 33.3 },
   'SQUEEZE-FIRE': { n: 50, settled: 45, winRate: 0.3556, grossR: 0.1082, netXm: 0.0746, tCluster: 0.55, zBreakeven: 0.32, minRr: 2, breakevenPct: 33.3 },
@@ -662,6 +701,29 @@ var HG_GOLD_ROSTER_HOME = {
   'P6-COMP':   'p6comp',     /* S30 session-composite pullback */
   'EQH-SWEEP': 'smcliq'      /* SMC equal-high/low pool sweep (hg-v564) */
 };
+
+/* hg-v945: the three HOMED roster kinds belong in the twin map too, and they
+   are ADDED FROM HG_GOLD_ROSTER_HOME rather than retyped, so one list decides
+   both. hg-v942 declared the home -- "this tab already has a mechanic that
+   reads this" -- and stopped there, so hgGoldSiblingRecord('smcliq') returned
+   null and hgGoldExtraUncheckedNote would have told a reader that "no OMNIGOLD
+   mechanic reads the same thing", while v942's own table named one. That is
+   the hg-v934 failure exactly: claiming nothing is known where a measurement
+   of the nearest thing exists.
+
+   A home is not automatically a twin -- hg-v943 refused four loose analogies
+   (nyexh is not NY-OPEN-DRIVE, liqsweep is not PDL-SWEEP). These three are not
+   analogies: P5-DRIVE/p5drive and P6-COMP/p6comp are the same Part5/Part6
+   mechanic, and EQH-SWEEP/smcliq both read a cluster of equal swing highs or
+   lows, swept, with a close back through it. Wiring them here also puts them
+   under the measured-failure veto, which is where a re-bake that turns one
+   negative should reach them. */
+for (var __rh in HG_GOLD_ROSTER_HOME){
+  if (!Object.prototype.hasOwnProperty.call(HG_GOLD_ROSTER_HOME, __rh)) continue;
+  if (HG_GOLD_SIBLING_TWIN[HG_GOLD_ROSTER_HOME[__rh]] === undefined)
+    HG_GOLD_SIBLING_TWIN[HG_GOLD_ROSTER_HOME[__rh]] = __rh;
+}
+
 
 /* The tab key each ported kind mints under. `og` prefix says plainly whose
    mechanic it is; the name is not borrowed from a tab mechanic that already
@@ -860,6 +922,9 @@ W.HG_GOLD_ROSTER_MIN_STOP_ATR = HG_GOLD_ROSTER_MIN_STOP_ATR;
 W.hgGoldRosterAll = hgGoldRosterAll;
 W.hgGoldRosterPorts = hgGoldRosterPorts;
 W.hgGoldRosterUnmapped = hgGoldRosterUnmapped;
+W.HG_GOLD_TABS = HG_GOLD_TABS;
+W.HG_GOLD_ROSTER_TABS = HG_GOLD_ROSTER_TABS;
+W.hgGoldRosterTabGaps = hgGoldRosterTabGaps;
 W.hgGoldRosterPx = hgGoldRosterPx;
 W.hgGoldRosterStop = hgGoldRosterStop;
 W.hgGoldRosterDetect = hgGoldRosterDetect;

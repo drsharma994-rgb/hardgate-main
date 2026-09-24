@@ -233,7 +233,11 @@ console.log('\n5. THE DISCIPLINE — no record, so it cannot lead');
   const gi = fs.readFileSync(root + 'goldind.js', 'utf8');
   ok(/goldfix:\s+'LBMA LONDON FIX FADE/.test(gi) && /golddxy:/.test(gi) && /goldround:/.test(gi),
      'all three are registered as gold strategies');
-  ok(/if \(!promo\) xCand\.demoted = true;/.test(gi),
+  /* the RULE, not its formatting: this pinned the exact one-line form, so
+     hg-v945 adding an attribution alongside the demote broke it with nothing
+     changed. Reachability is proved behaviourally in test-gold-roster-ports
+     section 11, which drives the real scan and reads the row. */
+  ok(/if \(!promo\)\s*\{?\s*xCand\.demoted = true;/.test(gi),
      'and the mint DEMOTES them while promotion is off — the never-observed rule');
   ok(/hgGoldExtraStamp/.test(gi)
      && /String\(xr\.kind\)\.toUpperCase\(\) \+ ' · NO RECORD'/.test(gi),
