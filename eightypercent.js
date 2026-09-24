@@ -6015,6 +6015,7 @@ W.hg80Breakeven      = hg80Breakeven;
 W.hg80ExpectancyR    = hg80ExpectancyR;
 W.hg80Indicators     = hg80Indicators;
 W.hg80InSession      = hg80InSession;
+W.hg80WeekendVerdict = hg80WeekendVerdict;
 W.hg80SessionApplies = hg80SessionApplies;
 W.hg80VenueRt        = hg80VenueRt;
 W.hg80VenueEnsure    = hg80VenueEnsure;
