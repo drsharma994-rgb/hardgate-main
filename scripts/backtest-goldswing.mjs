@@ -258,6 +258,15 @@ function settleRecord(tr, rows, counters, results){
   if (isFinite(tr.stopAtr) && tr.stopAtr < 1.5 - 1e-9 && !tr.shadow) counters.stopUnderFloor++;
   results.push({
     tISO: new Date(rows[tr.sigIdx].t * 1000).toISOString(),
+    /* hg-v956: WAS GOLD OPEN ON THE SIGNAL BAR. hg-v953 marked the candidates
+       and said the replay rows need the mark so the population can be
+       separated later — and this row builder dropped it, the fourth seam of
+       the same defect after hgFwdNormalize, hgFwdRecordScan and the desks'
+       own .map() (hg-v955). Seven scripts read these artifacts and exactly
+       one carried a calendar of its own; emitting it here is what stops the
+       other six needing one. Taken from the candidate, never recomputed —
+       a second calendar is a second calendar (hg-v949). */
+    goldShut: (tr.goldShut === true) ? true : (tr.goldShut === false) ? false : undefined,
     shadow: tr.shadow || undefined,
     stratKey: tr.stratKey, strategy: tr.strategy, dir: tr.dir,
     grade: tr.grade || null, tally: isFinite(tr.tally) ? tr.tally : null,
@@ -372,6 +381,9 @@ function walk(W, h1, h4, d1){
         entry, stop, t1,
         orderType: xmOrderType(c.dir, entry, lastClose4h).name,
         markAtFire: lastClose4h,
+        /* hg-v956: carry the mint's calendar mark onto the trade, so
+           settleRecord can emit it. Read off the candidate, never recomputed. */
+        goldShut: c.goldShut,
         sigIdx: i
       }));
     }
@@ -404,6 +416,9 @@ function walk(W, h1, h4, d1){
         entry, stop, t1,
         orderType: xmOrderType(c.dir, entry, lastClose4h).name,
         markAtFire: lastClose4h,
+        /* hg-v956: carry the mint's calendar mark onto the trade, so
+           settleRecord can emit it. Read off the candidate, never recomputed. */
+        goldShut: c.goldShut,
         sigIdx: i
       }));
     }
