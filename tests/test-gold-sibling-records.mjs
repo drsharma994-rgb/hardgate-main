@@ -385,7 +385,8 @@ console.log('8. goldind registers the kinds and uses the record-aware stamp');
   ok(/hgGoldExtraStamp/.test(GIND), 'the mint calls hgGoldExtraStamp');
   ok(/xStamp \|\| \(String\(xr\.kind\)/.test(GIND),
      'and falls back to the old stamp when the module predates this pack');
-  ok(/if \(!promo\) xCand\.demoted = true;/.test(GIND),
+  /* as above: the rule, not the line's punctuation (hg-v945) */
+  ok(/if \(!promo\)\s*\{?\s*xCand\.demoted = true;/.test(GIND),
      'the demote is untouched — a quoted twin record does not promote anything');
   const detect = XSRC.slice(XSRC.indexOf('function hgGoldExtraDetect'));
   for (const fn of ['hgGoldWeeklyOpen', 'hgGoldFib618'])

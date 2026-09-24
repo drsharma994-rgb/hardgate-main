@@ -3630,7 +3630,15 @@ function goldScalpSetups(inp){
           /* CANNOT LEAD until measured — the never-observed rule, applied here */
           var promo = (typeof window.hgGoldExtraPromotable === 'function')
             ? window.hgGoldExtraPromotable() : false;
-          if (!promo) xCand.demoted = true;
+          /* hg-v945: record WHO demoted it. The desk has many demotes and a
+             bare flag reads the same whichever one fired (hg-v940), so a guard
+             on `demoted` alone cannot tell whether THIS line ran. One rule,
+             both tabs -- goldswing.js carries the same marker. */
+          if (!promo){
+            xCand.demoted = true;
+            xCand.demotedWhy = 'no record on this desk \u2014 the measured record '
+              + 'belongs to its OMNIGOLD twin, on OMNIGOLD gates and a 1h horizon';
+          }
           out.push(xCand);
         }
       }

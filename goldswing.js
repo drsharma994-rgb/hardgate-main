@@ -1377,6 +1377,7 @@ var SW_NAME = {
   p8range:  'S52 RANGE-BAR S0 SWEEP',
   p8geo:    'S53 GEOPOLITICAL SPIKE FADE',
   p8vpinbo: 'S54 VPIN-TIMED CONTRACTION BREAK',
+  smcliq:   'SMC LIQUIDITY POOL (CLUSTER + SWEPT)',
   p9volbar: 'S62 VOLUME-BAR S0 SWEEP',
   /* hg-v942 — gold-native extras (hg-v933/v934) now reach this tab, plus the
      MILLI GOLD roster mechanics neither gold tab could form. */
@@ -2386,7 +2387,7 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
           dxyRows: (macro && (macro.dxyRows || macro.dxyCandles)) || null,
           now: nowMs
         }) || [];
-        var xsi, xrS, xCandS, xStampS, promoS;
+        var xsi, xrS, xCandS, xStampS, promoS, xEntryS;
         promoS = false;
         try{
           var promoFnS = gfn('hgGoldExtraPromotable');
@@ -2395,9 +2396,23 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
         for (xsi = 0; xsi < xtrasSw.length; xsi++){
           xrS = xtrasSw[xsi];
           if (!xrS || !xrS.dir || !isFinite(xrS.stop)) continue;
-          xCandS = mkCand(xrS.kind, xrS.dir, xrS.stop, xrS.stop, undefined,
-            xrS.why, xrS.invalidates || 'setup structure broken',
-            { side: xrS.dir, tag: xrS.kind, label: xrS.why });
+          /* hg-v945: gate the plan this desk actually SHIPS. mkCand prices
+             its levels through __swEntryFromZone, which IGNORES the anchor
+             when no zone is given and hands back the live MARK -- so hg-v942
+             ran the 1.2R build gate against the mark and then overwrote entry
+             with the mechanic's level (hg-v423), judging a plan it does not
+             trade. A degenerate zone at the level makes both branches of that
+             helper return the level, so gate and ticket agree. A hit with no
+             readable entry keeps the old path rather than inventing one. */
+          xEntryS = isFinite(xrS.entry) ? +xrS.entry : NaN;
+          xCandS = isFinite(xEntryS)
+            ? mkCand(xrS.kind, xrS.dir, xEntryS, xrS.stop,
+                     { lo: xEntryS, hi: xEntryS },
+                     xrS.why, xrS.invalidates || 'setup structure broken',
+                     { side: xrS.dir, tag: xrS.kind, label: xrS.why })
+            : mkCand(xrS.kind, xrS.dir, xrS.stop, xrS.stop, undefined,
+                     xrS.why, xrS.invalidates || 'setup structure broken',
+                     { side: xrS.dir, tag: xrS.kind, label: xrS.why });
           if (!xCandS) continue;
           if (!xCandS.dropped){
             if (isFinite(xrS.entry)) xCandS.entry = xrS.entry;
@@ -2414,12 +2429,101 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
               var noteFnS = gfn('hgGoldExtraUncheckedNote');
               if (typeof noteFnS === 'function') xCandS.extraWhy = noteFnS(xrS.kind);
             }catch(eXwS){}
-            if (!promoS) xCandS.demoted = true;
+            if (!promoS){
+              xCandS.demoted = true;
+              xCandS.demotedWhy = 'no record on this desk \u2014 the measured record '
+                + 'belongs to its OMNIGOLD twin, on OMNIGOLD gates and a 1h horizon';
+            }
           }
           push(xCandS);
         }
       }
     }catch(eXtraSw){}
+
+    /* --- hg-v945 SMC LIQUIDITY SWEEP, MINTED AND NOT ONLY STAMPED --------
+       EQH-SWEEP is one of the nine mechanics on MILLI GOLD's DERIVED roster
+       -- gate-clear net-positive at XM on at least MIN_SAMPLES firings -- and
+       its home is `smcliq`. GOLD SCALP has minted it since hg-v564. GOLD
+       SWING read the SAME detector on its own 4h series and only STAMPED
+       candidates that already existed, inside a block guarded on got.length,
+       so on a quiet tape -- which is exactly when a desk is asked for a setup
+       -- an equal-highs sweep produced nothing here at all.
+
+       hg-v942 called its roster coverage exhaustive because every kind "is
+       ported or has a named home". The home check never asked WHICH TAB the
+       home was on, and a per-kind claim cannot see a per-tab hole.
+       hgGoldRosterTabGaps() now reports it per tab so the next one cannot
+       hide the same way.
+
+       ENTRY is the swept level (hg-v423). The stop is the desk's ONE shared
+       ported-mechanic rule -- hgGoldRosterStop, beyond the recent extreme
+       plus a pad, floored -- rather than a second invention here; an absent
+       rule mints NOTHING instead of falling back to a local guess (hg-v938).
+       Everything downstream is this tab's: mkCand still demands >= 2 agreeing
+       reads and a majority, push() still runs the inst filter, the stop-width
+       floor, the edge table, the confluence ledger and the cost gate. It
+       mints DEMOTED for the hg-v942 reason -- the record quoted on the card
+       is OMNIGOLD's gates on a 1h horizon, not this desk's. */
+    try{
+      var smcFnSw = gfn('hgGoldSmcLiquidityHit');
+      var smcStopFnSw = gfn('hgGoldRosterStop');
+      if (typeof smcFnSw === 'function' && typeof smcStopFnSw === 'function'){
+        var smcMintSw = smcFnSw(rows4, { closeBreak: true, maxAge: 12 });
+        if (smcMintSw && smcMintSw.ok && smcMintSw.dir && isFinite(smcMintSw.level)){
+          var smcLvlSw = +smcMintSw.level;
+          var smcStopSw = smcStopFnSw(rows4, smcMintSw.dir, smcLvlSw, a4);
+          if (isFinite(smcStopSw)){
+            var smcWhySw = (smcMintSw.why || 'SMC liquidity cluster swept')
+              + ' \u2014 SMC liquidity() cluster + Swept index + 4h close reclaim';
+            var smcCandSw = mkCand('smcliq', smcMintSw.dir, smcLvlSw, smcStopSw,
+              { lo: smcLvlSw, hi: smcLvlSw }, smcWhySw,
+              'a 4h close back beyond ' + smcLvlSw.toFixed(2)
+                + ' negates the SMC reclaim',
+              { side: smcMintSw.dir, tag: 'smcliq', label: smcWhySw });
+            if (smcCandSw){
+              if (!smcCandSw.dropped){
+                smcCandSw.smcSweptAge = smcMintSw.sweptAge;
+                smcCandSw.smcPoolCount = smcMintSw.pool ? smcMintSw.pool.count : NaN;
+                if (!Array.isArray(smcCandSw.stamps)) smcCandSw.stamps = [];
+                /* EXACTLY the string the live scan's SMC pass dedupes on. That
+                   pass runs after this one and adds 'SMC LIQ' to any same-dir
+                   row that lacks it, so a richer string here would sit beside
+                   a bare duplicate. Matching its key makes the two idempotent
+                   with no special case in the scan path -- and a special case
+                   there is unreachable from goldSwingSetups, so it could not
+                   be guarded by a test. The swept age and pool size stay on
+                   the row as FIELDS, which is where goldind already reads
+                   them (isFinite(cand.smcSweptAge)), not parsed out of a
+                   label. */
+                if (smcCandSw.stamps.indexOf('SMC LIQ') < 0)
+                  smcCandSw.stamps.push('SMC LIQ');
+                smcCandSw.extraUnchecked = true;
+                try{
+                  var smcNoteFnSw = gfn('hgGoldExtraUncheckedNote');
+                  if (typeof smcNoteFnSw === 'function')
+                    smcCandSw.extraWhy = smcNoteFnSw('smcliq');
+                }catch(eSmcW){}
+                /* hg-v945: record WHO demoted it, not just that something did.
+                   The desk has many demotes and hg-v940 showed that a bare
+                   flag reads the same whichever one fired; this pack's own
+                   measurement (scripts/demote-separation.mjs) is about telling
+                   them apart. It also makes this decision attributable: the
+                   row is demoted by several gates on most tapes, so a guard
+                   that only checks `demoted` cannot see whether this line ran
+                   at all. */
+                if (!promoS){
+                  smcCandSw.demoted = true;
+                  smcCandSw.demotedWhy = 'no record on this desk — the measured '
+                    + 'record belongs to its OMNIGOLD twin EQH-SWEEP, on '
+                    + 'OMNIGOLD\u2019s gates and its 1h horizon';
+                }
+              }
+              push(smcCandSw);
+            }
+          }
+        }
+      }
+    }catch(eSmcSw){}
 
     /* Master Catalog v1.0 — verdict stamps; never invents ENTER. */
     try{
