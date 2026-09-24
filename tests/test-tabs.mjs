@@ -352,11 +352,26 @@ assert(swSrc.indexOf('caches.delete') !== -1 && swSrc.indexOf('HG_CACHE') !== -1
 assert(html.indexOf("serviceWorker.register('sw.js')") !== -1, 'inline code registers sw.js');
 assert(blocks.some(b => b.indexOf("serviceWorker.register('sw.js')") !== -1),
   'sw registration lives inside an existing inline <script> block (still exactly 3 blocks)');
-const regIdx = html.indexOf("serviceWorker.register('sw.js')");
-const guardWindow = html.slice(Math.max(0, regIdx - 1500), regIdx);
+/* hg-v957: BOUNDED BY THE BLOCK, NOT BY A CHARACTER COUNT. This read a fixed
+   1,500-character window before the register call, so adding a comment above
+   the guards pushed them out of range and turned this red with the guards
+   themselves untouched and correct — the fifth fixed-width source slice this
+   session to fail for a reason unrelated to what it claims (hg-v944 and
+   hg-v945 corrected the others). The guards live in the same inline block as
+   the registration, so the block IS the honest bound. */
+const regBlock = blocks.find(b => b.indexOf("serviceWorker.register('sw.js')") !== -1) || '';
+assert(regBlock.length > 0, 'the inline block holding the sw registration is locatable');
+const guardWindow = regBlock.slice(0, regBlock.indexOf("serviceWorker.register('sw.js')"));
+assert(guardWindow.length > 0, 'and the registration is not the first thing in it — there is a guard region to read');
 assert(guardWindow.indexOf('location.protocol') !== -1 && guardWindow.indexOf("'https:'") !== -1
-    && guardWindow.indexOf('localhost') !== -1 && guardWindow.indexOf('typeof navigator') !== -1,
-  'sw registration is guarded by typeof-navigator + location.protocol https/localhost checks');
+    && guardWindow.indexOf('typeof navigator') !== -1,
+  'sw registration is guarded by typeof-navigator + location.protocol https checks');
+/* the localhost allowance must be CODE, not the word appearing in the comment
+   above it — which is what this check used to accept, so deleting the real
+   hostname test survived mutation. A string check is the right tool for "is
+   this guarded at all", but it has to look at something prose cannot satisfy. */
+assert(/location\.hostname\s*===\s*'localhost'/.test(guardWindow),
+  'the localhost allowance is a real hostname comparison, not a mention in a comment');
 
 /* ---------------- registration mapping + row-2 layout ---------------- */
 const navIds = navEl.children.map(c => c.id);
