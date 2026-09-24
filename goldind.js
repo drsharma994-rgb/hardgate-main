@@ -1438,6 +1438,65 @@ function hgGoldEdgeAction(row){
   return row.action;
 }
 
+/* hg-v960: THE VERDICT RULE, STATED ONCE, IN CODE.
+
+   Until this existed the rule lived only in prose. Every `action` on the table
+   below was HAND-TYPED on top of a `live` block the generator writes, so a
+   re-bake moved the evidence and left the decision frozen — the hg-v946
+   hand-typed-prefer-book failure, inside the very table that decides
+   suppress / demote / prefer for GOLD SCALP, GOLD SWING, GOLD ULTRA, GOLD
+   DIRECTION and MILLI GOLD.
+
+   Worse, the rule was not even COMPUTABLE from what shipped: both the
+   suppress and the prefer bar need a gross measured on the live population,
+   and the live block carried only `net`. Four rows had a liveGross recorded
+   by hand inside their hg-v928 retune blocks; for the other twenty-one the
+   number existed nowhere in the repo. hg-v960 emits it (validated: it
+   reproduces all four hand-recorded values exactly to 4dp), so the rule can
+   finally be applied to every row.
+
+   The bars are hg-v928's, unchanged, and NOTHING here moves a verdict:
+   applied to the shipped table this reproduces 23 of 25 in-force verdicts,
+   and the two it does not are the two hg-v928 deliberately REFUSED and are
+   declared on their own rows as `actionWhy`. Returns null when the row has no
+   live population, because a kind the desk forms nothing of has no verdict to
+   derive — never a default. */
+function hgGoldEdgeVerdictFromLive(row){
+  try{
+    var L = row && row.live;
+    if (!L || typeof L.n !== 'number' || typeof L.net !== 'number'
+          || typeof L.gross !== 'number') return null;
+    if (L.n >= 50 && L.gross <= 0 && L.net <= -0.20) return 'suppress';
+    if (L.n >= 50 && L.gross >  0 && L.net >= +0.10) return 'prefer';
+    if (L.net < 0) return 'demote';
+    return 'neutral';
+  }catch(e){ return null; }
+}
+
+/* Rows whose verdict in force DEPARTS from the rule above. A departure is
+   legitimate — hg-v928 refused two flips the bars would have made on n=6 and
+   n=1, because the demote bar has no sample floor and tightening on the
+   thinnest evidence in the table is not an improvement — but it must be
+   DECLARED on the row, not carried in prose. `undeclared` is the list a
+   re-bake must never grow: scripts/rebake-gold-literals.mjs throws on it. */
+function hgGoldEdgeVerdictDepartures(){
+  var out = { declared: [], undeclared: [] }, k, row, want, have;
+  var tbl = (typeof HG_GOLD_SETUP_EDGE === 'object' && HG_GOLD_SETUP_EDGE)
+    ? (HG_GOLD_SETUP_EDGE.scalp || {}) : {};
+  for (k in tbl){
+    if (!Object.prototype.hasOwnProperty.call(tbl, k)) continue;
+    row = tbl[k];
+    want = hgGoldEdgeVerdictFromLive(row);
+    if (!want) continue;                       /* no live population, nothing to check */
+    have = row && row.action;
+    if (want === have) continue;
+    (row && typeof row.actionWhy === 'string' && row.actionWhy
+      ? out.declared : out.undeclared).push({ key: k, inForce: have, rule: want,
+                                              why: (row && row.actionWhy) || null });
+  }
+  return out;
+}
+
 /* Every row whose verdict the retune moved, derived rather than listed. */
 function hgGoldEdgeRetunedRows(){
   var out = [], k, tbl = (typeof HG_GOLD_SETUP_EDGE === 'object' && HG_GOLD_SETUP_EDGE)
@@ -1732,24 +1791,24 @@ var HG_GOLD_SETUP_EDGE = {
       live: null,  /* suppressed — forms no live trade to measure */
       why: 'SCALP VWAP-band MR 0-for-7 in shadow replay — stays suppressed' },
     vwap: { n: 132, gross: -0.127, net: -0.314, action: 'suppress',
-      live: { n: 93, net: -0.214, oosHeld: 3, oosBroke: 0, formsNone: true },
+      live: { n: 93, gross: -0.1328, net: -0.214, oosHeld: 3, oosBroke: 0, formsNone: true },
       why: 'SCALP VWAP bounce gross −0.13R / net −0.31R at XM (n=132, 33% WR) — negative before fees, not tradable' },
     nyexh: { n: 167, gross: -0.157, net: -0.343, action: 'demote', actionBaked: 'suppress',
-      live: { n: 117, net: -0.183, oosHeld: 3, oosBroke: 0, formsNone: true },
+      live: { n: 117, gross: -0.1235, net: -0.183, oosHeld: 3, oosBroke: 0, formsNone: true },
       retune: { from: 'suppress', to: 'demote', liveN: 117, liveGross: -0.1235, liveNet: -0.1827,
                 windows: '1/4', unanimous: false },
       why: 'NY VOLUME EXHAUSTION gross −0.16R / net −0.34R at XM (n=167) — 61% WR but timeout losses dominate; negative before fees'
         + ' · RETUNED ON INSTRUCTION: on the 117 trades the desk still forms it is −0.18R, above the −0.20 suppress bar, so the'
         + ' table\'s own rule reads demote. Net is positive in only 1 of 4 disjoint windows, so this is the rule applied, not an edge shown.' },
     liqsweep: { n: 97, gross: -0.041, net: -0.304, action: 'demote', actionBaked: 'suppress',
-      live: { n: 54, net: -0.048, oosHeld: 0, oosBroke: 2, formsNone: true },
+      live: { n: 54, gross: 0.0313, net: -0.048, oosHeld: 0, oosBroke: 2, formsNone: true },
       retune: { from: 'suppress', to: 'demote', liveN: 54, liveGross: 0.0313, liveNet: -0.0479,
                 windows: '1/4', unanimous: false },
       why: 'FIVE-LEG SWEEP ENGINE gross −0.04R / net −0.30R at XM (n=97, post stop-floor) — no edge at the venue'
         + ' · RETUNED ON INSTRUCTION: on the 54 it still forms it is −0.05R with gross POSITIVE, clearing the suppress bar on both legs,'
         + ' so the rule reads demote. Net is positive in only 1 of 4 disjoint windows.' },
     sweep: { n: 74, gross: -0.073, net: -0.267, action: 'suppress',
-      live: { n: 53, net: -0.244, oosHeld: 2, oosBroke: 0, formsNone: true },
+      live: { n: 53, gross: -0.1769, net: -0.244, oosHeld: 2, oosBroke: 0, formsNone: true },
       why: 'SCALP liquidity sweep gross −0.07R / net −0.27R at XM (n=74, 37% WR) — negative before fees; SWING 4H sweep stays preferred' },
     /* hg-v916 — THE TWO FLIPS THE LIVE POPULATION INVITES, AND WHY NEITHER
        WAS TAKEN. This table's demote bar is netXm < 0. On the population the
@@ -1780,16 +1839,16 @@ var HG_GOLD_SETUP_EDGE = {
        tests/test-gold-edge-live-population.mjs re-derives all six numbers and
        fails if either action is ever quietly flipped on the in-sample read. */
     hvn: { n: 391, gross: 0.013, net: -0.232, action: 'demote',
-      live: { n: 263, net: -0.049, oosHeld: 2, oosBroke: 1 },
+      live: { n: 263, gross: 0.0326, net: -0.049, oosHeld: 2, oosBroke: 1 },
       why: 'SCALP HVN retest net −0.23R at XM (n=391, gross flat) — never MOST PROBABLE / ENGINE lead' },
     ob: { n: 57, gross: 0.139, net: -0.237, action: 'demote',
-      live: { n: 34, net: -0.252, oosHeld: 0, oosBroke: 0 },
+      live: { n: 34, gross: -0.1633, net: -0.252, oosHeld: 0, oosBroke: 0 },
       why: 'SCALP OB/breaker net −0.24R at XM (n=57, gross+) — never MOST PROBABLE / ENGINE lead' },
     openrange: { n: 276, gross: 0.088, net: -0.143, action: 'demote',
-      live: { n: 184, net: -0.099, oosHeld: 2, oosBroke: 1 },
+      live: { n: 184, gross: -0.0322, net: -0.099, oosHeld: 2, oosBroke: 1 },
       why: 'SCALP ORB net −0.14R at XM (n=276, gross+) — never MOST PROBABLE / ENGINE lead' },
     bosalign: { n: 189, gross: 0.088, net: -0.108, action: 'neutral', actionBaked: 'demote',
-      live: { n: 125, net: 0.012, oosHeld: 0, oosBroke: 3 },
+      live: { n: 125, gross: 0.0654, net: 0.012, oosHeld: 0, oosBroke: 3 },
       retune: { from: 'demote', to: 'neutral', liveN: 125, liveGross: 0.0654, liveNet: 0.0125,
                 windows: '3/4', unanimous: false },
       why: 'SCALP BOS align net −0.11R at XM (n=189, gross+) — never MOST PROBABLE / ENGINE lead'
@@ -1797,29 +1856,29 @@ var HG_GOLD_SETUP_EDGE = {
         + ' REFUSED TWICE BEFORE: its sign flips at all three walk-forward splits and it is net-positive in only 3 of 4'
         + ' disjoint windows. It can lead now because it was asked for, not because it was shown.' },
     asian: { n: 157, gross: 0.117, net: -0.089, action: 'demote',
-      live: { n: 101, net: -0.044, oosHeld: 0, oosBroke: 3 },
+      live: { n: 101, gross: 0.0182, net: -0.044, oosHeld: 0, oosBroke: 3 },
       why: 'SCALP Asian breakout net −0.09R at XM (n=157, gross+) — never MOST PROBABLE / ENGINE lead' },
     ribbon: { n: 144, gross: 0.171, net: -0.05, action: 'neutral', actionBaked: 'demote',
-      live: { n: 102, net: 0.027, oosHeld: 2, oosBroke: 1 },
+      live: { n: 102, gross: 0.1093, net: 0.027, oosHeld: 2, oosBroke: 1 },
       retune: { from: 'demote', to: 'neutral', liveN: 102, liveGross: 0.1093, liveNet: 0.0271,
                 windows: '3/4', unanimous: false },
       why: 'SCALP EMA ribbon net −0.05R at XM (n=144, gross+) — near-flat, never MOST PROBABLE / ENGINE lead'
         + ' · RETUNED ON INSTRUCTION: on the 102 it still forms it is +0.027R, so the demote rule no longer fires.'
         + ' Net-positive in 3 of 4 disjoint windows — a split, not a result.' },
     rsidiv: { n: 86, gross: -0.051, net: -0.154, action: 'demote',
-      live: { n: 71, net: -0.145, oosHeld: 1, oosBroke: 1 },
+      live: { n: 71, gross: -0.0776, net: -0.145, oosHeld: 1, oosBroke: 1 },
       why: 'SCALP RSI divergence net −0.15R at XM (n=86, 34% WR) — never MOST PROBABLE / ENGINE lead' },
     p4laf: { n: 24, gross: -0.261, net: -0.455, action: 'demote',
-      live: { n: 16, net: -0.292, oosHeld: 0, oosBroke: 0 },
+      live: { n: 16, gross: -0.2233, net: -0.292, oosHeld: 0, oosBroke: 0 },
       why: 'S9 LIQUIDITY ABSORPTION net −0.46R at XM (n=24, small sample) — never lead until it proves out' },
     silverb: { n: 14, gross: -0.265, net: -0.547, action: 'demote',
-      live: { n: 9, net: -1.082, oosHeld: 0, oosBroke: 0 },
+      live: { n: 9, gross: -1, net: -1.082, oosHeld: 0, oosBroke: 0 },
       why: 'SESSION SILVER BULLET net −0.55R at XM (n=14, small sample) — unproven, never lead' },
     p6fail: { n: 85, gross: 0.387, net: 0.182, action: 'prefer',
-      live: { n: 62, net: 0.244, oosHeld: 2, oosBroke: 0 },
+      live: { n: 62, gross: 0.3237, net: 0.244, oosHeld: 2, oosBroke: 0 },
       why: 'S30 FAILED-BREAK REVERSAL net +0.18R at XM (n=85, 54% WR, post stop-floor) — measured fee-survivor' },
     p9volbar: { n: 72, gross: 0.243, net: 0.155, action: 'prefer',
-      live: { n: 63, net: 0.227, oosHeld: 2, oosBroke: 0 },
+      live: { n: 63, gross: 0.2897, net: 0.227, oosHeld: 2, oosBroke: 0 },
       why: 'S62 VOLUME-BAR SWEEP net +0.16R at XM (n=72, 44% WR) — measured fee-survivor' },
 
     /* hg-v909: TWO MEASUREMENTS THAT WERE ON DISK AND NEVER REACHED THE DESK.
@@ -1830,10 +1889,10 @@ var HG_GOLD_SETUP_EDGE = {
        simply left out of the applied copy. Together they are 45 of the 2,193
        settled scalp trades (2.1%) and −4.90R net at XM. */
     p5drive: { n: 17, gross: -0.045, net: -0.224, action: 'demote',
-      live: { n: 12, net: -0.302, oosHeld: 0, oosBroke: 0 },
+      live: { n: 12, gross: -0.2488, net: -0.302, oosHeld: 0, oosBroke: 0 },
       why: 'S24 THREE-DRIVE EXHAUSTION net −0.22R at XM (n=17, negative before fees too) — paints, never leads' },
     p6comp: { n: 28, gross: 0.121, net: -0.039, action: 'demote',
-      live: { n: 24, net: -0.072, oosHeld: 0, oosBroke: 0 },
+      live: { n: 24, gross: -0.0045, net: -0.072, oosHeld: 0, oosBroke: 0 },
       why: 'S30 SESSION-COMPOSITE PULLBACK net −0.04R at XM (n=28, gross+) — cost-eaten; paints, never leads (the SWING lane measured its own n=17 at −0.29R)' },
 
     /* MEASURED, AND CLEARED NO BAR. These rows change nothing about ranking
@@ -1859,33 +1918,35 @@ var HG_GOLD_SETUP_EDGE = {
        NY-REV n=2 +0.197 — every cell under n=12, so nothing acts on them and
        the split is recorded rather than used. Action stays `neutral`. */
     sweepob:  { n: 49, gross: 0.427, net: 0.162, action: 'neutral',
-      live: { n: 29, net: 0.301, oosHeld: 0, oosBroke: 0, precursorOnly: true },
+      live: { n: 29, gross: 0.377, net: 0.301, oosHeld: 0, oosBroke: 0, precursorOnly: true },
       why: 'SWEEP→OB PRECURSOR net +0.16R at XM (n=49) — every firing in the walk is a '
         + 'pre-trigger state, not a confirmed sweep→OB; the confirmed setup has never fired' },
     p8range:  { n: 91, gross: 0.162, net: 0.038, action: 'neutral',
-      live: { n: 76, net: 0.058, oosHeld: 2, oosBroke: 1 },
+      live: { n: 76, gross: 0.1371, net: 0.058, oosHeld: 2, oosBroke: 1 },
       why: 'S52 RANGE-BAR S0 SWEEP net +0.04R at XM (n=91) — measured flat at the venue, under the prefer bar' },
     p5vwap:   { n: 12, gross: 0.449, net: 0.249, action: 'neutral',
-      live: { n: 6, net: -0.452, oosHeld: 0, oosBroke: 0 },
+      actionWhy: 'rule says demote on the live read; REFUSED at n=6 — the demote bar has no sample floor and this is among the thinnest rows in the table (hg-v928)',
+      live: { n: 6, gross: -0.3752, net: -0.452, oosHeld: 0, oosBroke: 0 },
       why: 'S22 SESSION VWAP 2σ REVERSION net +0.25R at XM (n=12) — positive but far under the n>=50 prefer bar' },
     p5wyck:   { n: 12, gross: 0.222, net: 0.127, action: 'neutral',
-      live: { n: 10, net: 0.263, oosHeld: 0, oosBroke: 0 },
+      live: { n: 10, gross: 0.3123, net: 0.263, oosHeld: 0, oosBroke: 0 },
       why: 'S19 WYCKOFF SPRING/UPTHRUST net +0.13R at XM (n=12) — too thin to prefer' },
     p8vpinbo: { n: 10, gross: 0.221, net: 0.159, action: 'neutral',
-      live: { n: 10, net: 0.159, oosHeld: 0, oosBroke: 0 },
+      live: { n: 10, gross: 0.221, net: 0.159, oosHeld: 0, oosBroke: 0 },
       why: 'S54 VPIN-TIMED CONTRACTION BREAK net +0.16R at XM (n=10) — too thin to prefer' },
     p7scalp:  { n: 7,  gross: 0.154, net: 0.048, action: 'neutral',
-      live: { n: 6, net: 0.031, oosHeld: 0, oosBroke: 0 },
+      live: { n: 6, gross: 0.09, net: 0.031, oosHeld: 0, oosBroke: 0 },
       why: 'P7 SCALP MODULE net +0.05R at XM (n=7) — too thin to read either way' },
     /* Negative, and deliberately NOT demoted: one settled trade is noise, not
        evidence. The swing lane already carries an n>=12 floor on its demote
        bar; the scalp bar as written has none, so acting on n=1 would be this
        table demoting on a coin flip. Recorded as measured-thin instead. */
     vpbook:   { n: 1,  gross: 0.058, net: -0.011, action: 'neutral',
-      live: { n: 1, net: -0.011, oosHeld: 0, oosBroke: 0 },
+      actionWhy: 'rule says demote on the live read; REFUSED at n=1 — a single settle is not evidence to withhold a setup on (hg-v928)',
+      live: { n: 1, gross: 0.058, net: -0.011, oosHeld: 0, oosBroke: 0 },
       why: 'VP PLAYBOOK net −0.01R at XM on a SINGLE settle — measured, far too thin to demote on' },
     adrfade:  { n: 1,  gross: 1.5,   net: 1.411,  action: 'neutral',
-      live: { n: 1, net: 1.411, oosHeld: 0, oosBroke: 0 },
+      live: { n: 1, gross: 1.5, net: 1.411, oosHeld: 0, oosBroke: 0 },
       why: 'ADR FADE +1.41R at XM on a SINGLE settle — measured, far too thin to prefer on' }
   },
   /* SWING rows (hg-v700): re-baked from the GOLD SWING tab's OWN 4h replay
@@ -16086,6 +16147,8 @@ W.HG_GOLD_EDGE_WALK = HG_GOLD_EDGE_WALK;
 W.hgGoldEdgeWalkAgeDays = hgGoldEdgeWalkAgeDays;
 W.hgGoldEdgeWalkAgeNote = hgGoldEdgeWalkAgeNote;
 W.hgGoldEdgeAction = hgGoldEdgeAction;
+W.hgGoldEdgeVerdictFromLive = hgGoldEdgeVerdictFromLive;
+W.hgGoldEdgeVerdictDepartures = hgGoldEdgeVerdictDepartures;
 W.hgGoldSetEdgeRetune = hgGoldSetEdgeRetune;
 W.hgGoldEdgeRetuneInit = hgGoldEdgeRetuneInit;
 W.hgGoldEdgeRetunedRows = hgGoldEdgeRetunedRows;
