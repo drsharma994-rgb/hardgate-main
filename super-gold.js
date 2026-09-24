@@ -163,6 +163,48 @@ function goldCandTier(c){
 }
 
 /** Gold desk audit — weekend, macro tilt, stand-down. Fail-closed for GRADE A trade-ready. */
+/* hg-v952: the instant a gold candidate was FORMED ON, in seconds, read from
+   whatever the desk that produced it recorded — never Date.now(). Returns
+   null when nothing on the row carries a time, so the caller can say so
+   rather than silently substituting the wall clock. `t` is seconds or
+   milliseconds by the repo's usual convention; fin-first, because `+null` is
+   0 and would read as 1970. */
+function sgCandSec(c, hit){
+  var srcs = [hit && hit.t, hit && hit.barT, hit && hit.at,
+              c && c.t, c && c.barT, c && c.at, c && c.signalT];
+  for (var i = 0; i < srcs.length; i++){
+    var v = srcs[i];
+    if (v === null || v === undefined || v === '') continue;
+    var n = +v;
+    if (!isFinite(n) || n <= 0) continue;
+    return Math.floor(Math.abs(n) > 1e12 ? n / 1000 : n);
+  }
+  return null;
+}
+/* hg-v952: the route in ONE callable place, so the coverage reporter can
+   CALL it with a known Saturday and a known Wednesday and verify it rather
+   than take this file's word for it. Before this pack the reporter reported
+   the `via` string an author typed; that is how a desk reading Date.now()
+   came to be listed as covered. Delegates to hgInGoldWeekend, never
+   re-derives the edges; null when the calendar or the instant is unreadable. */
+function sgWeekendVerdict(tSec){
+  try{
+    var f = W.hgInGoldWeekend;
+    if (typeof f !== 'function') return null;
+    if (tSec === null || tSec === undefined || tSec === '') return null;
+    var n = +tSec;
+    if (!isFinite(n) || n <= 0) return null;
+    var sec = Math.floor(Math.abs(n) > 1e12 ? n / 1000 : n);
+    return f(sec) ? { inWeekend: true, atSec: sec,
+      why: 'formed inside the gold weekend (Fri 22:00 - Sun 22:00 UTC, DST-aware)' } : null;
+  }catch(e){ return null; }
+}
+
+function sgCandSecOr(c, hit){
+  var t = sgCandSec(c, hit);
+  return (t === null) ? Math.floor(Date.now() / 1000) : t;
+}
+
 function runGoldDeskAudit(win, c, hit){
   win = win || W;
   c = c || {};
@@ -181,10 +223,23 @@ function runGoldDeskAudit(win, c, hit){
     }catch(e0){}
   }
 
+  /* hg-v952: THE SIGNAL BAR, NOT THE WALL CLOCK. This veto is real — it
+     pushes a reason and stands the candidate down — and it read Date.now()
+     at every site, which is wrong in BOTH directions: a setup formed on
+     Friday and reviewed on Saturday was vetoed for a closure it never met,
+     and one formed on Saturday and reviewed on Monday sailed through. The
+     hg-v949 rule ("a Monday re-run over Friday's bars must give Friday's
+     answer") was written into the shared formation while this desk did the
+     opposite. Falls back to the wall clock ONLY when the candidate carries
+     no instant, which is the pre-hg-v952 behaviour and is named on the
+     reason so a reader can tell the two apart. */
   if (typeof win.hgInGoldWeekend === 'function'){
     try{
-      if (win.hgInGoldWeekend(Math.floor(Date.now() / 1000))){
-        reasons.push('Gold weekend closure — spot liquidity thin');
+      var sgAt = sgCandSec(c, hit);
+      var sgWhen = (sgAt === null) ? Math.floor(Date.now() / 1000) : sgAt;
+      if (sgWeekendVerdict(sgWhen)){
+        reasons.push('Gold weekend closure — spot liquidity thin'
+          + (sgAt === null ? ' (no bar time on this candidate — read on the wall clock)' : ''));
       } else passed.push('session');
     }catch(e1){}
   }
@@ -210,8 +265,9 @@ function runGoldDeskAudit(win, c, hit){
         spot: spotSt && spotSt.spot,
         paxg: spotSt && spotSt.paxg,
         xaut: spotSt && spotSt.xaut,
+        /* hg-v952: same instant as the veto above — one candidate, one clock */
         cashOpen: !(typeof win.hgInGoldWeekend === 'function'
-          && win.hgInGoldWeekend(Math.floor(Date.now() / 1000)))
+          && win.hgInGoldWeekend(sgCandSecOr(c, hit)))
       });
       if (gvs && gvs.veto && hit.tier === 'clean'){
         reasons.push(gvs.reason || 'Cross-venue spread guard');
@@ -1140,6 +1196,11 @@ W.superGoldWarm = superGoldWarm;
 W.HG_warmups = W.HG_warmups || [];
 W.HG_warmups.push({ id: 'super-gold', label: 'SUPER GOLD', run: superGoldWarm });
 
+W.sgWeekendVerdict = sgWeekendVerdict;
+/* hg-v952: the audit and the instant reader, exported so the guard can drive
+   the REAL veto rather than assert about its source text. */
+W.__sgGoldDeskAudit = runGoldDeskAudit;
+W.__sgCandSec = sgCandSec;
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({
   id: TAB_ID,

@@ -709,21 +709,28 @@
      kept in prose -- hg-v945's lesson: a coverage claim nobody can re-run is
      a coverage claim that goes stale silently. A desk absent from the page
      reports 'not loaded', never 'covered'. */
+  /* hg-v952: TWO KNOWN INSTANTS the reporter judges a route with. A desk that
+     cannot tell these apart does not have a working calendar, whatever its
+     `via` string claims. Chosen inside one weekend so the DST edge cannot
+     make either ambiguous: Saturday is shut under both offsets. */
+  var HG_GOLD_WEEKEND_PROBE_SHUT = Date.UTC(2026, 3, 11, 12, 0, 0);   /* Saturday */
+  var HG_GOLD_WEEKEND_PROBE_OPEN = Date.UTC(2026, 3,  8, 12, 0, 0);   /* Wednesday */
+
   var HG_GOLD_WEEKEND_MINTERS = [
     { desk: 'NEW GOLD',    probe: 'newGoldState',     via: 'hgGoldFormation' },
     { desk: 'OMNIGOLD 1',  probe: 'omnigold1State',   via: 'hgGoldFormation' },
     { desk: 'OMNIGOLD',    probe: 'hgOgFormation',    via: 'own hg-v420 veto' },
     { desk: 'GOLD SWING',  probe: 'goldSwingSetups',  via: 'own weekend read' },
     { desk: 'GOLD SCALP',  probe: 'goldScalpSetups',  via: 'own weekend read' },
-    { desk: 'SUPER GOLD',  probe: 'superGoldState',   via: 'own weekend read' },
+    { desk: 'SUPER GOLD',  probe: 'superGoldState',   via: 'per-candidate signal bar, wall clock only when the row carries no time', verdictFn: 'sgWeekendVerdict' },
     /* hg-v950: these four mint from raw bars and do not route through
        hgGoldFormation, so each calls hgGoldWeekendVerdict directly at the
        instant its own shape makes correct — per SETUP where the desk walks
        a window, per SERIES where it reads one closed bar. */
-    { desk: 'OPTI GOLD',   probe: 'optiGoldState',    via: 'per-setup, own break bar' },
-    { desk: 'GOLD PINE',   probe: 'goldPineScan',     via: 'per-mode, 4h and 15m last closed bar' },
-    { desk: 'GOLD PRO',    probe: 'goldProState',     via: 'last closed bar of the series in hand' },
-    { desk: '80PERCENT',   probe: 'eightyPercentState', via: 'per-signal, own bar' },
+    { desk: 'OPTI GOLD',   probe: 'optiGoldState',    via: 'per-setup, own break bar', verdictFn: '__ogWeekendVerdict' },
+    { desk: 'GOLD PINE',   probe: 'goldPineScan',     via: 'per-mode, 4h swing and 15m scalp last closed bar', verdictFn: 'gpWeekendVerdict', probeKind: 'rows' },
+    { desk: 'GOLD PRO',    probe: 'goldProState',     via: 'last closed bar of the series in hand', verdictFn: 'gpProWeekendVerdict', probeKind: 'rows' },
+    { desk: '80PERCENT',   probe: 'eightyPercentState', via: 'per-signal, own bar', verdictFn: 'hg80WeekendVerdict' },
     /* hg-v951: THE INLINE DESK. Every other row here is a module file, and
        this reporter finds them by probing a module global. The GOLD tab is
        ~200 lines inside index.html registered as id:'gold', so it had NO
@@ -731,17 +738,81 @@
        The reporter built so gaps name themselves could not see this one.
        It is listed now, and it probes the inline function the shell defines,
        so an inline desk can never again be invisible here. */
-    { desk: 'GOLD (inline)', probe: 'hgInlineGoldShut', via: 'per-lane, 4h swing and 15m scalp; handoffs withheld' }
+    { desk: 'GOLD (inline)', probe: 'hgInlineGoldShut', via: 'per-lane, 4h swing and 15m scalp; handoffs withheld', verdictFn: 'hgInlineGoldShut' },
+    /* hg-v952: TAURIC was absent from this list entirely — a second blind
+       spot one pack after hg-v951 fixed the first. It prices XAUUSD and
+       records entry/stop/t1 to the forward log, so it mints; it had NO
+       weekend reference of any kind. */
+    { desk: 'TAURIC',      probe: 'hgTauricRecord',   via: 'per-record, the bar the pipeline priced; marked, not withheld', verdictFn: 'hgTauricWeekendVerdict' }
   ];
+  /* hg-v952: DOES THE ROUTE ACTUALLY WORK? Call the desk's own verdict
+     function with two known instants and require it to tell them apart:
+     SHUT on a Saturday, open on a Wednesday. A function that answers both
+     the same way, throws, or is absent has not demonstrated a calendar.
+     Returns 'verified' | 'broken' | null (nothing to test). */
+  /* TWO SHAPES, because the desks genuinely differ and pretending otherwise
+     is how a probe reports a working route as broken. A desk whose setups
+     carry their own instant takes a NUMBER; a desk whose setups carry none
+     (GOLD PINE, GOLD PRO) reads the last closed bar of a SERIES and takes
+     rows. The first cut of this probe called every route with a number, and
+     reported both rows-taking desks BROKEN — a false alarm from the reporter,
+     not a defect in them. */
+  function hgGoldWeekendProbeArg(kind, atMs){
+    if (kind === 'rows'){
+      var rows = [], step = 14400, t0 = Math.floor(atMs / 1000) - 3 * step;
+      for (var i = 0; i < 4; i++)
+        rows.push({ t: t0 + i * step, o: 2300, h: 2302, l: 2298, c: 2301, v: 900 });
+      return rows;                        /* last closed bar lands on atMs */
+    }
+    return atMs;
+  }
+  function hgGoldWeekendProbeRoute(fnName, kind){
+    if (!fnName) return null;
+    var f = null;
+    try{ f = G[fnName]; }catch(eG){ f = null; }
+    if (typeof f !== 'function') return null;
+    var shut, open;
+    try{
+      shut = f(hgGoldWeekendProbeArg(kind, HG_GOLD_WEEKEND_PROBE_SHUT));
+      open = f(hgGoldWeekendProbeArg(kind, HG_GOLD_WEEKEND_PROBE_OPEN));
+    }catch(eC){ return 'broken'; }
+    /* the shared shape is "truthy verdict when shut, null when open" */
+    return (shut && !open) ? 'verified' : 'broken';
+  }
+
+  /* The reporter used to report what its AUTHOR TYPED. Every `via` string was
+     a claim nothing checked — and hg-v952 found what that costs: SUPER GOLD
+     read the calendar on Date.now() rather than the signal bar at all four of
+     its sites, and the reporter called it covered because the string said so.
+     That is the hand-typed-prefer-book failure (hg-v946) living inside the
+     reporter built to stop gaps hiding.
+     So a route is now one of:
+       VERIFIED  the desk's verdict function was CALLED and told a Saturday
+                 from a Wednesday.
+       BROKEN    it was called and could not.
+       CLAIMED   there is nothing callable to test, so the `via` string is an
+                 author's claim and is labelled one rather than counted as
+                 coverage.
+     The buckets still PARTITION the list, and `covered` still holds every
+     routed desk so existing readers are unchanged — what is new is that each
+     row says which kind of answer it is. */
   function hgGoldWeekendCoverage(){
-    var out = { covered: [], uncovered: [], notLoaded: [] };
+    var out = { covered: [], uncovered: [], notLoaded: [],
+                verified: [], claimed: [], broken: [] };
     for (var i = 0; i < HG_GOLD_WEEKEND_MINTERS.length; i++){
       var m = HG_GOLD_WEEKEND_MINTERS[i];
       var loaded = false;
       try{ loaded = (typeof G[m.probe] !== 'undefined'); }catch(eL){ loaded = false; }
       if (!loaded){ out.notLoaded.push(m.desk); continue; }
-      if (m.via) out.covered.push({ desk: m.desk, via: m.via });
-      else out.uncovered.push(m.desk);
+      if (!m.via){ out.uncovered.push(m.desk); continue; }
+      var state = hgGoldWeekendProbeRoute(m.verdictFn, m.probeKind);
+      var row = { desk: m.desk, via: m.via,
+                  proof: state === 'verified' ? 'verified'
+                       : state === 'broken' ? 'broken' : 'claimed' };
+      out.covered.push(row);
+      if (row.proof === 'verified') out.verified.push(m.desk);
+      else if (row.proof === 'broken') out.broken.push(m.desk);
+      else out.claimed.push(m.desk);
     }
     return out;
   }
@@ -922,6 +993,7 @@
   G.hgGoldSignalBarMs = hgGoldSignalBarMs;
   G.hgGoldWeekendVerdict = hgGoldWeekendVerdict;
   G.hgGoldWeekendCoverage = hgGoldWeekendCoverage;
+  G.hgGoldWeekendProbeRoute = hgGoldWeekendProbeRoute;
   G.HG_GOLD_WEEKEND_MINTERS = HG_GOLD_WEEKEND_MINTERS;
   G.hgGoldApplySessionLeg = hgGoldApplySessionLeg;
   G.hgGoldConfluence = hgGoldConfluence;

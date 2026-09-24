@@ -210,6 +210,10 @@ function hgTauricRecord(rating, priced){
       ticket: false,
       /* it cleared nothing — it was never gated */
       gateClear: false,
+      /* hg-v952: was the bar this priced inside the gold weekend? Marked, not
+         withheld — see hgTauricWeekendVerdict. Absent when the calendar is
+         not loaded, never a guessed false. */
+      goldShut: !!hgTauricWeekendVerdict(barT),
       shown: true
     });
     /* hgFwdRecord returns a REASON STRING, not a boolean: 'recorded',
@@ -547,6 +551,29 @@ function refreshTauric(){
 
 W.hgTauricRating = hgTauricRating;
 W.hgTauricPricePlan = hgTauricPricePlan;
+/* hg-v952: this desk had NO weekend reference of any kind, and was absent
+   from the gold coverage reporter entirely — a second blind spot one pack
+   after hg-v951 fixed the first. It prices XAUUSD and writes entry/stop/t1
+   to the forward log, so a record formed while gold was shut is a record on
+   a bar no broker printed (hg-v949 measured NEW GOLD at 9 of 19 such).
+   NOTHING IS WITHHELD HERE, deliberately: these rows already record
+   ticket:false and gateClear:false — they were never gated, so there is no
+   ticket to withhold. What was missing is the MARK, without which a future
+   measurement of this desk cannot separate the tradeable rows from the rest,
+   which is exactly how NEW GOLD's record came to be half weekend.
+   Delegates to the shared rule; null when it or the instant is unreadable. */
+function hgTauricWeekendVerdict(tSec){
+  try{
+    var f = W.hgGoldWeekendVerdict;
+    if (typeof f !== 'function') return null;
+    var n = fin(tSec);
+    if (n === null || !isFinite(n) || n <= 0) return null;
+    var v = f(n);
+    return (v && v.inWeekend === true) ? v : null;
+  }catch(e){ return null; }
+}
+
+W.hgTauricWeekendVerdict = hgTauricWeekendVerdict;
 W.hgTauricRecord = hgTauricRecord;
 W.hgTauricCostNote = hgTauricCostNote;
 W.HG_TAURIC_TAB = TAURIC_TAB;
