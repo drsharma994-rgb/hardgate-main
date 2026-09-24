@@ -1552,8 +1552,69 @@ function goldUltraEngine(inp){
    contrarian confluence stamp on them: AGAINST CONSENSUS crowns, WITH
    CONSENSUS is shown and never crowned, NEUTRAL (thin / under 55%) is shown
    unstamped. Numbers below are the measured ones; n is small and SAID. */
-var GU_PREFER = ['p6fail', 'p9volbar'];              /* goldind HG_GOLD_SETUP_EDGE.scalp action:'prefer' */
-var GU_SHOWN = GU_PREFER.concat(['sweepob', 'p8range']); /* unproven, not discredited — shown, never crowned */
+/* hg-v946: READ from the table, not transcribed from it. The comment here used
+   to name goldind's HG_GOLD_SETUP_EDGE.scalp action:'prefer' as the source and
+   then carry a hand-typed copy of the answer — the exact shape hg-v921 made
+   these literals write themselves to avoid. The copy matched the table on the
+   day it was written; a re-bake moves the table and nothing moves this.
+
+   FAILS CLOSED, deliberately. With the table unreadable there is no prefer
+   book, so nothing is crownable and the desk says so. This tab's whole thesis
+   is "these are the GOLD SCALP prefer rows"; crowning from a stale local list
+   when the source is gone is worse than crowning nothing (hg-v938). */
+function guPreferKeys(){
+  try{
+    var W2 = (typeof window !== 'undefined') ? window : globalThis;
+    var t = W2.HG_GOLD_SETUP_EDGE && W2.HG_GOLD_SETUP_EDGE.scalp;
+    if (!t || typeof t !== 'object') return [];
+    var out = [], k;
+    for (k in t){
+      if (!Object.prototype.hasOwnProperty.call(t, k)) continue;
+      if (t[k] && t[k].action === 'prefer') out.push(k);
+    }
+    return out;
+  }catch(e){ return []; }
+}
+
+/* NOT derived, and said so. These two are 'neutral' in the table — neither
+   promoted nor discredited — and the tab shows them without ever crowning
+   them. There is no rule in the table that picks exactly these, so deriving
+   them would mean inventing one; they stay an explicit, named choice. The
+   guard asserts each still exists and is not suppressed, so a re-bake that
+   turns one toxic is caught rather than silently shown. */
+var GU_SHOWN_EXTRA = ['sweepob', 'p8range'];
+function guShownKeys(){ return guPreferKeys().concat(GU_SHOWN_EXTRA); }
+
+/* hg-v946: the twin check hg-v943 applies on GOLD SCALP and GOLD SWING, applied
+   here too. p9volbar is a prefer row on this desk's book AND its exact OMNIGOLD
+   twin P9-VOLBAR measures n=274, -0.499R net at XM, z=-2.97 — past the
+   EDGE_VETO_Z of -2 at which OMNIGOLD refuses to ticket a mechanic at all. v943
+   withholds the promotion for exactly that; this tab went on CROWNING it, so
+   the two desks disagreed about the same mechanic on the same evidence.
+
+   It withholds the CROWN and nothing else: the setup still forms, still paints,
+   keeps its levels, and is still shown. FAILS OPEN — an absent or throwing
+   reader never withholds a crown, because a missing verdict is not a negative
+   one. The read is LIVE, so a re-bake that turns the twin positive restores the
+   crown with no edit here. */
+function guTwinVeto(key){
+  try{
+    var W2 = (typeof window !== 'undefined') ? window : globalThis;
+    /* ONE lever, not a second one. hg-v943 shipped hgGoldSetTwinCheck(false)
+       to reverse this rule on GOLD SCALP and GOLD SWING; a separate switch
+       here would mean turning it off on those tabs and silently leaving it on
+       for this one, which is the same two-desks-disagreeing defect this pack
+       exists to remove. There is no exported reader of that state, so the
+       resolver is called — it honours the window override and localStorage and
+       returns the value in force. */
+    var on = W2.hgGoldTwinCheckOn;
+    if (typeof on === 'function' && on() === false) return null;
+    var f = W2.hgGoldTwinVerdict;
+    if (typeof f !== 'function') return null;
+    var v = f(key);
+    return (v && v.vetoed) ? v : null;
+  }catch(e){ return null; }
+}
 var HG_GOLD_ULTRA_FILTER = {
   generated: '2026-09-11T18:22:52Z', source: 'scripts/backtest-goldultra-filter.mjs · GOLD SCALP trades (scripts/backtest-goldscalp-results.json, XM costs) joined to the ULTRA read of their signal bar',
   x: 0.55, minAvail: 25,
@@ -1633,8 +1694,15 @@ function selectSetups(cands, count){
     var c = cands[i];
     if (!guSidesOk(c)){ sel.held.push(c.strategy + ' · ' + c.dir.toUpperCase() + ' — levels incomplete or on the wrong side; never tradable'); continue; }
     c.confluence = guConfluence(c, count);
-    c.book = GU_PREFER.indexOf(c.stratKey) >= 0 ? 'prefer' : GU_SHOWN.indexOf(c.stratKey) >= 0 ? 'unproven' : 'other';
-    c.crownable = c.book === 'prefer' && !c.demoted && !c.vetoed && c.confluence === 'AGAINST';
+    var guPref = guPreferKeys(), guShown = guShownKeys();
+    c.book = guPref.indexOf(c.stratKey) >= 0 ? 'prefer'
+           : guShown.indexOf(c.stratKey) >= 0 ? 'unproven' : 'other';
+    /* hg-v946: a prefer row whose exact OMNIGOLD twin is past the veto bar is
+       shown, never crowned. Withholds the crown only — the row keeps its
+       levels and its place on the board. */
+    c.twinVeto = (c.book === 'prefer') ? guTwinVeto(c.stratKey) : null;
+    c.crownable = c.book === 'prefer' && !c.demoted && !c.vetoed
+               && c.confluence === 'AGAINST' && !c.twinVeto;
     sel.cards.push(c);
   }
   sel.cards.sort(function(a, b){
@@ -1672,6 +1740,20 @@ function setupCardHTML(c, pxNow, crowned){
     + (isFinite(c.confScore) ? '<span class="gu-chip">conf ' + fmt(c.confScore, 0) + '</span>' : '')
     + '<span class="gu-chip ' + (c.confluence === 'AGAINST' ? 'ok' : c.confluence === 'WITH' ? 'warn' : '') + '">' + (c.confluence === 'AGAINST' ? 'AGAINST CONSENSUS — crownable' : c.confluence === 'WITH' ? 'WITH CONSENSUS — never crowned' : 'NO CONFLUENCE READ') + '</span>'
     + (c.book === 'prefer' ? '<span class="gu-chip ok">PREFER ROW (measured fee-survivor)</span>' : c.book === 'unproven' ? '<span class="gu-chip warn">UNPROVEN — not discredited, never crowned</span>' : '<span class="gu-chip warn">NOT A PREFER ROW — never crowned</span>')
+    /* hg-v946: a prefer row this desk will NOT crown has to say why on the
+       card, with both samples, or the reader sees a PREFER chip on a row that
+       never wins the pick and has nothing to read it against. Names the twin,
+       attributes the record to OMNIGOLD's gates and its 1h horizon, and says
+       plainly that nothing else is withheld (hg-v943). */
+    + (c.twinVeto ? '<span class="gu-chip warn">CROWN WITHHELD — twin '
+        + esc(c.twinVeto.twin) + ' measures ' + (c.twinVeto.netXm >= 0 ? '+' : '\u2212')
+        + Math.abs(c.twinVeto.netXm).toFixed(3) + 'R net at XM on n='
+        + c.twinVeto.n + ' (' + (c.twinVeto.z >= 0 ? '+' : '\u2212')
+        + Math.abs(c.twinVeto.z).toFixed(2) + '\u03c3), past the bar OMNIGOLD '
+        + 'refuses to ticket at. That is OMNIGOLD\u2019s record on OMNIGOLD\u2019s '
+        + 'gates and its 1h horizon, not this desk\u2019s \u2014 so the crown is '
+        + 'withheld and NOTHING else: the setup still forms, keeps its levels '
+        + 'and stays on the board.</span>' : '')
     + (c.demoted ? '<span class="gu-chip warn">DEMOTED by its desk</span>' : '') + (c.vetoed ? '<span class="gu-chip warn">VETOED</span>' : '');
   for (var s = 0; s < c.stamps.length; s++) chips += '<span class="gu-chip warn">' + esc(c.stamps[s]) + '</span>';
   try{ if (typeof W.hgSmcChipHtml === 'function') chips += W.hgSmcChipHtml(c) || ''; }catch(eSmc){}
@@ -1907,6 +1989,10 @@ W.HG_GOLD_ULTRA_RULE = RULE;
 W.HG_GOLD_ULTRA_EVIDENCE = HG_GOLD_ULTRA_EVIDENCE;
 W.HG_GOLD_ULTRA_FILTER = HG_GOLD_ULTRA_FILTER;
 W.goldUltraSelectSetups = selectSetups;   /* pure — exported for the tests */
+W.goldUltraPreferKeys = guPreferKeys;    /* derived from the edge table, read live */
+W.goldUltraShownKeys = guShownKeys;
+W.GU_SHOWN_EXTRA = GU_SHOWN_EXTRA;
+W.goldUltraSetupCardHTML = setupCardHTML;
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: TAB_ID, label: 'GOLD ULTRA', mount: mount, refresh: refresh });
 W.HG_warmups = W.HG_warmups || [];

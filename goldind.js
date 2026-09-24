@@ -2297,6 +2297,14 @@ function hgGoldTwinCheckInit(){
   }catch(e){ HG_GOLD_TWIN_CHECK = true; }
   return HG_GOLD_TWIN_CHECK;
 }
+/* hg-v946: a READER, because there was none. hgGoldTwinCheckInit RESOLVES --
+   it re-reads the window override and localStorage and OVERWRITES the value in
+   force -- so calling it to ask "is the check on?" silently discards a
+   hgGoldSetTwinCheck(false) wherever localStorage did not take the write
+   (private mode, blocked site data, a headless harness). Other desks have to
+   ask, and hg-v946 gave GOLD ULTRA the same rule, so this is what they ask. */
+function hgGoldTwinCheckOn(){ return HG_GOLD_TWIN_CHECK !== false; }
+
 function hgGoldSetTwinCheck(on){
   HG_GOLD_TWIN_CHECK = (on !== false);
   try { localStorage.setItem(HG_GOLD_TWIN_CHECK_LS, HG_GOLD_TWIN_CHECK ? '1' : '0'); } catch (e){}
@@ -16041,6 +16049,7 @@ W.hgGoldTwinVerdict = hgGoldTwinVerdict;
 W.hgGoldTwinConflictNote = hgGoldTwinConflictNote;
 W.hgGoldTwinCheckInit = hgGoldTwinCheckInit;
 W.hgGoldSetTwinCheck = hgGoldSetTwinCheck;
+W.hgGoldTwinCheckOn = hgGoldTwinCheckOn;
 W.hgGoldEdgeLiveNote = hgGoldEdgeLiveNote;
 W.hgGoldSweepObStageLabel = hgGoldSweepObStageLabel;
 W.HG_GOLD_EDGE_WALK = HG_GOLD_EDGE_WALK;

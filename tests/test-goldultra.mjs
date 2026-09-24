@@ -24,6 +24,17 @@ let pass = 0, fail = 0;
 function assert(c, m){ if (c){ pass++; console.log('ok    - ' + m); } else { fail++; console.error('FAIL  - ' + m); } }
 function boot(){
   globalThis.window = {};
+  /* hg-v946: goldind FIRST, which is the order index.html loads them in. This
+     booted the tab alone, so HG_GOLD_SETUP_EDGE was absent — and since the
+     prefer book is now READ from that table rather than hand-typed, a desk
+     booted without it has no prefer book and crowns nothing (deliberately:
+     crowning from a stale local list once the source is gone is worse than
+     crowning nothing). Loading the real dependency is the fix; seeding a fake
+     table here would be the second copy this pack exists to remove. */
+  globalThis.localStorage = globalThis.localStorage
+    || { getItem: () => null, setItem(){}, removeItem(){} };
+  try { vm.runInThisContext(fs.readFileSync(root + 'goldind.js', 'utf8'),
+                            { filename: 'goldind.js' }); } catch (e) {}
   vm.runInThisContext(fs.readFileSync(root + 'goldultra.js', 'utf8'), { filename: 'goldultra.js' });
   return globalThis.window;
 }
