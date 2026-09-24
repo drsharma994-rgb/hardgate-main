@@ -37,6 +37,30 @@ import { createContext, runInContext } from 'node:vm';
    either survived the guard. That is the "bucket nothing can land in" problem
    this repo names; hg-v937 hit the same shape and the fix is the same, an
    exported function exercised on injected inputs. */
+
+/* hg-v961: exported so this FATAL branch can be DRIVEN. Every swing removal
+   count is zero on the committed walk, so the branch is unreachable there —
+   and a branch nothing can land in is a rubber stamp, which is exactly how a
+   mutation disabling it survived the first pass. Same shape as hg-v960's
+   enforceVerdictRule, same fix. */
+export function assertSwingRemovalsModelled(removals){
+  const r = removals || {};
+  if (r.underCost || r.underFloor || r.suppressedKinds){
+    throw new Error('rebake: the swing live population is no longer the whole settled book '
+      + '(underCost=' + r.underCost + ', underFloor=' + r.underFloor
+      + ', suppressedKinds=' + r.suppressedKinds + '). liveSwingPopulation() says the desk '
+      + 'withholds nothing; it now withholds something. Model the removal before baking.');
+  }
+  /* the list of removals actually checked — the caller prints it, so
+     BYPASSING this function (passing the raw counts straight through) is
+     observable. Without it the bypass was invisible: the raw object has the
+     same shape and the same zeros, so the report read identically and a
+     mutation deleting the call survived. */
+  return { underCost: r.underCost, underFloor: r.underFloor,
+           suppressedKinds: r.suppressedKinds, settled: r.settled,
+           checked: ['underCost', 'underFloor', 'suppressedKinds'] };
+}
+
 export function enforceVerdictRule(win){
   const fn = win && win.hgGoldEdgeVerdictDepartures;
   if (typeof fn !== 'function'){
@@ -57,7 +81,7 @@ export function enforceVerdictRule(win){
 import { GOLD_SCALP_WALK, OMNIGOLD_WALK } from '../lib/gold-artifacts.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve, basename } from 'node:path';
-import { liveEdgePopulation } from './edge-live-population.mjs';
+import { liveEdgePopulation, liveSwingPopulation } from './edge-live-population.mjs';
 import { formedPopulation } from './omnigold-formed-population.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -131,6 +155,66 @@ const changes = [];
   const rebuilt = src.slice(0, a) + out.join('\n') + src.slice(b);
   if (rebuilt !== src){ changes.push({ file: 'goldind.js', what: 'scalp live blocks', rows: n, p, next: rebuilt }); }
   else changes.push({ file: 'goldind.js', what: 'scalp live blocks', rows: 0, p, next: null });
+}
+
+/* ---- 1a. hg-v961: the live block on every SWING edge row ----------------
+   The swing rows had no `live` key at all, so this INSERTS on the first bake
+   and REPLACES afterwards. Everything else about the block is the scalp
+   convention: it sits on its own line directly under the row's opening line,
+   in the row's own n/gross/net order. */
+{
+  const p = join(ROOT, 'goldind.js');
+  let src = readFileSync(p, 'utf8');
+  const a = src.indexOf('var HG_GOLD_SETUP_EDGE');
+  const sw = src.indexOf('\n  swing: {', a);
+  const end = src.indexOf('\n};', sw);
+  if (a < 0 || sw < 0 || end < 0) throw new Error('rebake: could not locate the swing edge region — refusing to guess');
+  const { rows, removals } = liveSwingPopulation();
+  const lines = src.slice(sw, end).split('\n');
+  const out = [];
+  let n = 0;
+  for (let i = 0; i < lines.length; i++){
+    const line = lines[i];
+    const km = line.match(/^\s{4}(\w+):\s+\{\s*n:\s/);
+    out.push(line);
+    if (!km) continue;
+    const v = rows[km[1]];
+    if (!v) continue;
+    const want = '      live: { n: ' + v.n + ', gross: ' + g(v.gross) + ', net: ' + g(v.net)
+      + ', oosHeld: ' + v.oosHeld + ', oosBroke: ' + v.oosBroke + ' },';
+    /* Scan forward to the END OF THIS ROW for an existing live block rather
+       than peeking at the next line only. A row may carry actionWhy between
+       its header and its live block (hg-v961 added two), and a one-line
+       lookahead would not see past it — it would insert a SECOND live block
+       and the drift check would never settle. The row ends at the first line
+       closing it, so the search cannot run into the next row. */
+    let at = -1;
+    for (let j = i + 1; j < lines.length; j++){
+      if (/^\s{4}\w+:\s+\{/.test(lines[j])) break;          /* next row started */
+      if (/^\s+live: \{/.test(lines[j])){ at = j; break; }
+      if (/\},?\s*$/.test(lines[j]) && !/^\s+\w+: \{/.test(lines[j])) break;  /* row closed */
+    }
+    if (at >= 0){
+      if (lines[at] !== want) n++;
+      lines[at] = want;                          /* replace in place, order kept */
+    } else { out.push(want); n++; }              /* insert one that was never there */
+  }
+  const rebuilt = src.slice(0, sw) + out.join('\n') + src.slice(end);
+  changes.push({ file: 'goldind.js', what: 'swing live blocks', rows: n,
+                 p, next: rebuilt === src ? null : rebuilt });
+  /* the three removals are zero TODAY and that is a coincidence, not a rule —
+     a non-zero one means the swing live population has stopped being the
+     whole settled book and the claim in edge-live-population.mjs is stale */
+  /* reported, not merely checked: with every count zero on the committed walk
+     the check produces no observable effect, so removing the CALL was
+     invisible and a mutation deleting it survived. What it verified is now
+     printed, which is also the honest line for a reader — "the live
+     population is the whole settled book" is a measurement, not a rule. */
+  const rem = assertSwingRemovalsModelled(removals);
+  console.log('  swing live population: %d settled, withheld %d cost / %d floor / %d suppressed '
+    + '(%d removals checked)',
+    rem.settled, rem.underCost, rem.underFloor, rem.suppressedKinds,
+    (rem.checked || []).length);
 }
 
 /* ---- 1b. the WALK SPAN blocks on both desks (hg-v927) ----------------
@@ -265,6 +349,10 @@ if (!dirty) console.log('\n  every baked literal already equals its artifact');
     catch(e){ /* a desk leg that will not boot headless is not this check's business */ }
   }
   const d = enforceVerdictRule(ctx.window);
-  console.log('  verdict rule: %d row(s) follow it, %d declared departure(s), 0 undeclared',
-    25 - d.declared.length - d.undeclared.length, d.declared.length);
+  /* counted from the reporter rather than from a hardcoded total — hg-v960
+     hardcoded 25, which was the scalp row count and silently wrong the moment
+     hg-v961 brought the swing table under the same rule */
+  console.log('  verdict rule: %d row(s) follow it, %d declared, %d undeclared, '
+    + '%d unrecoverable (a bar this desk uses but never wrote down)',
+    d.followed.length, d.declared.length, d.undeclared.length, d.unrecoverable.length);
 }

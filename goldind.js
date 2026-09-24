@@ -1461,15 +1461,132 @@ function hgGoldEdgeAction(row){
    declared on their own rows as `actionWhy`. Returns null when the row has no
    live population, because a kind the desk forms nothing of has no verdict to
    derive — never a default. */
-function hgGoldEdgeVerdictFromLive(row){
+/* hg-v961: THE TWO DESKS DO NOT SHARE A RULE, and only one of them had
+   theirs written down.
+
+   hg-v960 put the SCALP bars in code. The SWING half of this table runs a
+   DIFFERENT rule, and the difference was recorded in exactly one place: the
+   prose inside p6zfade's own `why` string, which says "under the n>=12 demote
+   floor". Nothing enforced it, nothing else mentioned it, and the scalp rule
+   has no sample floor on demote at all (the gap hg-v928 named).
+
+   Measured against the shipped swing table, a demote floor of n>=12
+   reproduces all five of its negative-net rows and leaves p6zfade (n=2)
+   neutral — 5 of 5, no mismatches. So the floor is real and recoverable.
+
+   THE PREFER FLOOR IS NOT RECOVERABLE, and it is left `null` rather than
+   guessed. The table's own behaviour bounds it: `ribbon` at n=23 is positive
+   on both legs and is NOT preferred, while `weekly` at n=32 is — so the floor
+   lies in (23, 32]. No value in that interval is written anywhere in this
+   repo. Picking one to reproduce two rows is fitting a bar to its own answer,
+   which hg-v922 and hg-v935 both refuse. `null` means NOT RECORDED, and a
+   verdict the bars cannot decide comes back null rather than guessed.
+
+   And the scalp bar cannot simply be reused: `prefer` and `suppress` both
+   require n>=50 there, while the LARGEST live population on the swing desk is
+   n=44. Under the scalp rule two of the four verdicts are unreachable on
+   GOLD SWING by arithmetic — the hg-v920 finding (a tier the arithmetic
+   cannot produce) in the swing edge table. */
+var HG_GOLD_EDGE_BARS = {
+  scalp: { demoteMinN: 0,  preferMinN: 50,   suppressMinN: 50,
+           preferMinNet: 0.10, suppressMaxNet: -0.20 },
+  /* demoteMinN is 0 on BOTH desks because it is ONE rule, not two. The first
+     cut of this block wrote 12 for swing, and 12 is a bar FITTED to reproduce
+     the rows it judges: the table's own behaviour bounds the swing demote bar
+     to (2, 14] - p6zfade at n=2 is negative on both legs and is not demoted,
+     sweep at n=14 is - and picking a value inside that interval is precisely
+     what this pack refuses to do for `prefer` one field along. hg-v922 and
+     hg-v935 refuse a searched bar; a bar searched to agree with the table it
+     then validates is the same error with the search hidden. So the swing
+     desk uses the scalp desk's documented demote bar, which has no sample
+     floor at all (hg-v928 called that a real gap in the rule and it is still
+     one), and the one row where that bar and the table disagree is DECLARED
+     on its own row rather than legislated away. */
+  swing: { demoteMinN: 0,  preferMinN: null, suppressMinN: null,
+           preferMinNet: 0.10, suppressMaxNet: -0.20 }
+};
+
+function hgGoldEdgeBarsFor(desk){
+  return (desk === 'swing') ? HG_GOLD_EDGE_BARS.swing : HG_GOLD_EDGE_BARS.scalp;
+}
+
+/* Is a verdict tier ACTUALLY IN USE on a desk? Derived from the table, never
+   hand-typed, because the two ways a bar can be missing are different claims
+   and must not be collapsed:
+
+     - a tier rows DO carry, whose bar is not written down   -> the bar is
+       UNRECORDED, and no row it could apply to can be checked at all;
+     - a tier NO row carries                                 -> there is no
+       evidence the tier exists on that desk, and a row simply falls through
+       to the next check.
+
+   The swing table is one of each: two rows carry `prefer` (so that bar exists
+   and is unrecorded), and ZERO rows carry `suppress`. Treating both as
+   "unrecorded" made eleven of fourteen swing verdicts read uncheckable when
+   only the prefer-candidates are. */
+function hgGoldEdgeTierInUse(desk, action){
+  try{
+    var tbl = (typeof HG_GOLD_SETUP_EDGE === 'object' && HG_GOLD_SETUP_EDGE)
+      ? (HG_GOLD_SETUP_EDGE[desk === 'swing' ? 'swing' : 'scalp'] || {}) : {};
+    for (var k in tbl){
+      if (!Object.prototype.hasOwnProperty.call(tbl, k)) continue;
+      if (tbl[k] && tbl[k].action === action) return true;
+    }
+    return false;
+  }catch(e){ return false; }
+}
+
+/* `desk` defaults to 'scalp' so every hg-v960 caller reads exactly as before. */
+function hgGoldEdgeVerdictFromLive(row, desk){
   try{
     var L = row && row.live;
     if (!L || typeof L.n !== 'number' || typeof L.net !== 'number'
           || typeof L.gross !== 'number') return null;
-    if (L.n >= 50 && L.gross <= 0 && L.net <= -0.20) return 'suppress';
-    if (L.n >= 50 && L.gross >  0 && L.net >= +0.10) return 'prefer';
-    if (L.net < 0) return 'demote';
+    var B = hgGoldEdgeBarsFor(desk);
+    /* A bar that is NOT RECORDED cannot decide anything. A row that would
+       otherwise clear it yields null — the rule saying "I cannot say" —
+       never a quietly-downgraded neutral, which would read as the rule
+       AGREEING that the row should not be preferred. */
+    var dk = (desk === 'swing') ? 'swing' : 'scalp';
+    if (typeof B.suppressMinN === 'number'){
+      if (L.n >= B.suppressMinN && L.gross <= 0 && L.net <= B.suppressMaxNet) return 'suppress';
+    } else if (L.gross <= 0 && L.net <= B.suppressMaxNet
+               && hgGoldEdgeTierInUse(dk, 'suppress')) return null;
+    if (typeof B.preferMinN === 'number'){
+      if (L.n >= B.preferMinN && L.gross > 0 && L.net >= B.preferMinNet) return 'prefer';
+    } else if (L.gross > 0 && L.net >= B.preferMinNet
+               && hgGoldEdgeTierInUse(dk, 'prefer')) return null;
+    if (L.net < 0) return (L.n >= B.demoteMinN) ? 'demote' : 'neutral';
     return 'neutral';
+  }catch(e){ return null; }
+}
+
+/* Which verdicts a desk's bars can actually PRODUCE on the populations it
+   has. hg-v920 found OMNIGOLD advertising a tier its own arithmetic topped
+   out below; this reports the same thing for the edge table, so a verdict
+   that is unreachable is named rather than assumed available. */
+function hgGoldEdgeBarReach(desk){
+  try{
+    var tbl = (typeof HG_GOLD_SETUP_EDGE === 'object' && HG_GOLD_SETUP_EDGE)
+      ? (HG_GOLD_SETUP_EDGE[desk === 'swing' ? 'swing' : 'scalp'] || {}) : {};
+    var B = hgGoldEdgeBarsFor(desk), maxN = 0, k, L;
+    for (k in tbl){
+      if (!Object.prototype.hasOwnProperty.call(tbl, k)) continue;
+      L = tbl[k] && tbl[k].live;
+      if (L && typeof L.n === 'number' && L.n > maxN) maxN = L.n;
+    }
+    var dk = (desk === 'swing') ? 'swing' : 'scalp';
+    var reach = function(minN, action){
+      if (minN === null || minN === undefined){
+        return hgGoldEdgeTierInUse(dk, action)
+          ? 'IN USE, BAR NOT RECORDED'      /* rows carry it; nothing can check them */
+          : 'tier unobserved on this desk'; /* no row carries it */
+      }
+      return (maxN >= minN) ? 'reachable' : 'UNREACHABLE';
+    };
+    return { desk: (desk === 'swing' ? 'swing' : 'scalp'), largestLiveN: maxN,
+             demote: reach(B.demoteMinN, 'demote'), prefer: reach(B.preferMinN, 'prefer'),
+             suppress: reach(B.suppressMinN, 'suppress'), bars: B };
   }catch(e){ return null; }
 }
 
@@ -1480,19 +1597,39 @@ function hgGoldEdgeVerdictFromLive(row){
    DECLARED on the row, not carried in prose. `undeclared` is the list a
    re-bake must never grow: scripts/rebake-gold-literals.mjs throws on it. */
 function hgGoldEdgeVerdictDepartures(){
-  var out = { declared: [], undeclared: [] }, k, row, want, have;
-  var tbl = (typeof HG_GOLD_SETUP_EDGE === 'object' && HG_GOLD_SETUP_EDGE)
-    ? (HG_GOLD_SETUP_EDGE.scalp || {}) : {};
-  for (k in tbl){
-    if (!Object.prototype.hasOwnProperty.call(tbl, k)) continue;
-    row = tbl[k];
-    want = hgGoldEdgeVerdictFromLive(row);
-    if (!want) continue;                       /* no live population, nothing to check */
-    have = row && row.action;
-    if (want === have) continue;
-    (row && typeof row.actionWhy === 'string' && row.actionWhy
-      ? out.declared : out.undeclared).push({ key: k, inForce: have, rule: want,
-                                              why: (row && row.actionWhy) || null });
+  /* hg-v961: BOTH desks. The swing half was outside this entirely — fourteen
+     verdicts, two of them `prefer` (which carries a +2 rank boost on GOLD
+     SWING), with no live block to judge them on and no rule that reached
+     them. `unrecoverable` is the third bucket and the honest one: a row the
+     bars cannot decide because one of them is NOT RECORDED is neither
+     following the rule nor departing from it, and folding it into either
+     would be a claim this table cannot support. */
+  var out = { declared: [], undeclared: [], unrecoverable: [], followed: [] };
+  var desks = ['scalp', 'swing'], d, i, k, row, want, have, tbl;
+  for (i = 0; i < desks.length; i++){
+    d = desks[i];
+    tbl = (typeof HG_GOLD_SETUP_EDGE === 'object' && HG_GOLD_SETUP_EDGE)
+      ? (HG_GOLD_SETUP_EDGE[d] || {}) : {};
+    for (k in tbl){
+      if (!Object.prototype.hasOwnProperty.call(tbl, k)) continue;
+      row = tbl[k];
+      var L = row && row.live;
+      var judgeable = !!(L && typeof L.n === 'number' && typeof L.net === 'number'
+                           && typeof L.gross === 'number');
+      want = hgGoldEdgeVerdictFromLive(row, d);
+      have = row && row.action;
+      if (!want){
+        /* no live population at all is not a finding; a live population the
+           bars cannot rule on IS one, and it is named */
+        if (judgeable) out.unrecoverable.push({ desk: d, key: k, inForce: have,
+          why: (row && row.actionWhy) || null });
+        continue;
+      }
+      if (want === have){ out.followed.push({ desk: d, key: k, verdict: want }); continue; }
+      (row && typeof row.actionWhy === 'string' && row.actionWhy
+        ? out.declared : out.undeclared).push({ desk: d, key: k, inForce: have, rule: want,
+                                                why: (row && row.actionWhy) || null });
+    }
   }
   return out;
 }
@@ -1960,16 +2097,24 @@ var HG_GOLD_SETUP_EDGE = {
    * rows but sit under the prefer bars -> NEUTRAL (rows removed). */
   swing: {
     sweep: { n: 14, gross: -0.109, net: -0.125, action: 'demote',
+      live: { n: 14, gross: -0.1089, net: -0.125, oosHeld: 0, oosBroke: 0 },
       why: 'SWING 4H liquidity sweep gross −0.11R / net −0.13R at XM (n=14, tab replay) — the old n=5 prefer did not survive; paints, never leads' },
     weekly: { n: 32, gross: 0.217, net: 0.2, action: 'prefer',
+      actionWhy: 'rule cannot rule: this desk PREFERS rows (so the tier exists) but its prefer sample floor is recorded nowhere. The table behaviour bounds it to (23, 32] - ribbon at n=23 is positive on both legs and is not preferred, this row at n=32 is - and hg-v961 refused to pick a value inside that interval, because fitting a bar to reproduce the rows it judges is what hg-v922 and hg-v935 refuse',
+      live: { n: 32, gross: 0.2171, net: 0.2, oosHeld: 0, oosBroke: 0 },
       why: 'SWING weekly range breakout net +0.20R at XM (n=32, 44% WR, tab replay) — the bridge-era prefer confirmed at real n' },
     p9volbar: { n: 44, gross: 0.211, net: 0.189, action: 'prefer',
+      actionWhy: 'rule cannot rule: the prefer sample floor on this desk is recorded nowhere (the table own behaviour bounds it to (23, 32]). Separately its OMNIGOLD twin P9-VOLBAR reads -0.499R at -2.97sigma, so hg-v943 already withholds the +2 rank boost this verdict would grant',
+      live: { n: 44, gross: 0.2111, net: 0.189, oosHeld: 1, oosBroke: 0 },
       why: 'S62 VOLUME-BAR SWEEP net +0.19R at XM (n=44, post stop-floor) — fee-survivor on the swing desk too (scalp n=72 +0.16 independently)' },
     fvg: { n: 34, gross: -0.036, net: -0.059, action: 'demote',
+      live: { n: 34, gross: -0.0364, net: -0.059, oosHeld: 0, oosBroke: 0 },
       why: 'SWING 4H FVG fill net −0.06R at XM (n=34) — near-flat negative; paints, never leads' },
     pullback: { n: 18, gross: -0.258, net: -0.272, action: 'demote',
+      live: { n: 18, gross: -0.2577, net: -0.272, oosHeld: 0, oosBroke: 0 },
       why: 'SWING 4H trend pullback net −0.27R at XM (n=18, 17% WR) — paints, never leads' },
     p6comp: { n: 17, gross: -0.267, net: -0.289, action: 'demote',
+      live: { n: 17, gross: -0.2675, net: -0.289, oosHeld: 0, oosBroke: 0 },
       why: 'S30 SESSION-COMPOSITE PULLBACK net −0.29R at XM (n=17) — paints, never leads' },
 
     /* hg-v909: the bake (scripts/gold-setup-edge.json) records ribbon and ob
@@ -1980,23 +2125,32 @@ var HG_GOLD_SETUP_EDGE = {
        remaining byStrategy rows from scripts/backtest-goldswing-results.json
        that had no row at all. */
     ribbon:  { n: 23, gross: 0.25,   net: 0.228, action: 'neutral',
+      live: { n: 23, gross: 0.2496, net: 0.228, oosHeld: 0, oosBroke: 0 },
       why: 'SWING 4H EMA ribbon net +0.23R at XM (n=23) — contradicts its old demote row but sits under the n>=25 prefer bar' },
     ob:      { n: 4,  gross: 0.241,  net: 0.215, action: 'neutral',
+      live: { n: 4, gross: 0.2415, net: 0.215, oosHeld: 0, oosBroke: 0 },
       why: 'SWING 4H order block net +0.22R at XM (n=4) — contradicts its old demote row; far too thin to prefer' },
     bos:     { n: 9,  gross: 0.389,  net: 0.369, action: 'neutral',
+      live: { n: 9, gross: 0.3889, net: 0.369, oosHeld: 0, oosBroke: 0 },
       why: 'SWING 4H BOS net +0.37R at XM (n=9) — the measurement hg-v700 described in prose, carried as data; still under the prefer bar' },
     p8range: { n: 40, gross: 0.058,  net: 0.037, action: 'neutral',
+      live: { n: 40, gross: 0.058, net: 0.037, oosHeld: 0, oosBroke: 0 },
       why: 'S52 RANGE-BAR S0 SWEEP net +0.04R at XM (n=40) — measured flat on the swing lane too' },
     p5wyck:  { n: 4,  gross: 0.335,  net: 0.317, action: 'neutral',
+      live: { n: 4, gross: 0.335, net: 0.317, oosHeld: 0, oosBroke: 0 },
       why: 'S19 WYCKOFF SPRING/UPTHRUST net +0.32R at XM (n=4) — too thin to prefer' },
     p5turt:  { n: 2,  gross: 3.104,  net: 3.087, action: 'neutral',
+      live: { n: 2, gross: 3.1045, net: 3.087, oosHeld: 0, oosBroke: 0 },
       why: 'S20 TURTLE-SOUP net +3.09R at XM on TWO settles — a large number on no sample; recorded, never acted on' },
     p5vwap:  { n: 1,  gross: 1.727,  net: 1.701, action: 'neutral',
+      live: { n: 1, gross: 1.727, net: 1.701, oosHeld: 0, oosBroke: 0 },
       why: 'S22 SESSION VWAP 2σ REVERSION +1.70R at XM on a SINGLE settle — recorded, never acted on' },
     /* Negative, and NOT demoted: the swing demote bar carries an n>=12 floor
        and two settles are nowhere near it. */
     p6zfade: { n: 2,  gross: -0.735, net: -0.753, action: 'neutral',
-      why: 'S33 Z-SCORE MEAN REVERSION net −0.75R at XM on TWO settles — under the n>=12 demote floor; measured-thin, not demoted' }
+      live: { n: 2, gross: -0.735, net: -0.753, oosHeld: 0, oosBroke: 0 },
+      actionWhy: 'rule says demote on the live read; REFUSED at n=2 — the demote bar has no sample floor on either desk and two settles are not evidence to withhold a setup on (the hg-v928 refusals at n=6 and n=1, same shape). The alternative was a swing demote floor of 12, which is a bar fitted to reproduce this very row',
+      why: 'S33 Z-SCORE MEAN REVERSION net −0.75R at XM on TWO settles — measured-thin, not demoted' }
   }
 };
 
@@ -16148,6 +16302,10 @@ W.hgGoldEdgeWalkAgeDays = hgGoldEdgeWalkAgeDays;
 W.hgGoldEdgeWalkAgeNote = hgGoldEdgeWalkAgeNote;
 W.hgGoldEdgeAction = hgGoldEdgeAction;
 W.hgGoldEdgeVerdictFromLive = hgGoldEdgeVerdictFromLive;
+W.HG_GOLD_EDGE_BARS = HG_GOLD_EDGE_BARS;
+W.hgGoldEdgeBarsFor = hgGoldEdgeBarsFor;
+W.hgGoldEdgeTierInUse = hgGoldEdgeTierInUse;
+W.hgGoldEdgeBarReach = hgGoldEdgeBarReach;
 W.hgGoldEdgeVerdictDepartures = hgGoldEdgeVerdictDepartures;
 W.hgGoldSetEdgeRetune = hgGoldSetEdgeRetune;
 W.hgGoldEdgeRetuneInit = hgGoldEdgeRetuneInit;

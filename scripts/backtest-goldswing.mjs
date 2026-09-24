@@ -97,6 +97,7 @@ import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { xmOrderType, ogXmBarTouchesEntry } from '../lib/omnigold-xm-bot-backtest.mjs';
+import { GOLD_SWING_WALK } from '../lib/gold-artifacts.mjs';
 
 const ROOT = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 const CACHE_DIR = path.join(ROOT, 'scripts', '.bt-cache');
@@ -112,9 +113,23 @@ const SMOKE = has('--smoke');
 const REFRESH = has('--refresh');
 const BARS_1H = +opt('--bars', SMOKE ? 700 : 3960);
 /* smoke runs write to their own file so a full-run artifact can never be
-   silently overwritten */
-const OUT_FILE = path.join(ROOT, 'scripts',
-  SMOKE ? 'backtest-goldswing-smoke-results.json' : 'backtest-goldswing-results.json');
+   silently overwritten.
+
+   The full-run path is NOT a literal here: it is the one shared constant in
+   lib/gold-artifacts.mjs that the literal writer also imports (hg-v959 — two
+   halves of one pipeline each hardcoding a filename is how the re-bake came
+   to refresh a file no literal read). */
+const OUT_FILE = SMOKE
+  ? path.join(ROOT, 'scripts', 'backtest-goldswing-smoke-results.json')
+  : GOLD_SWING_WALK;
+
+/* Report the resolved artifact and stop, so the provenance guard can ASK this
+   walk what it writes instead of parsing this file for a string that join()
+   and the --smoke branch defeat. Read-only, and costs no bars. */
+if (has('--print-out')){
+  console.log(OUT_FILE);
+  process.exit(0);
+}
 
 /* ---------- constants ---------- */
 const SYMBOL = 'PAXGUSDT';

@@ -16,7 +16,7 @@
  * Usage: node scripts/edge-live-population.mjs [--json]
  */
 import { readFileSync } from 'node:fs';
-import { GOLD_SCALP_WALK } from '../lib/gold-artifacts.mjs';
+import { GOLD_SCALP_WALK, GOLD_SWING_WALK } from '../lib/gold-artifacts.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 
@@ -49,6 +49,78 @@ export function precursorOnly(rowsOfKind){
   const stamped = rowsOfKind.filter((t) => (t.stamps || []).some((s) => QUALITY_STAMP.test(s)));
   if (stamped.length !== rowsOfKind.length) return false;
   return !stamped.some((t) => (t.stamps || []).some((s) => /\sQ\d+\/10/.test(s)));
+}
+
+/* ===================================================================
+   hg-v961 — THE SWING HALF, which had no live population at all.
+
+   hg-v916 built `live` for the scalp table and stopped there, so fourteen
+   swing verdicts — two of them `prefer`, which carries a +2 rank boost on
+   GOLD SWING — were measured on the whole-book replay and were outside the
+   hg-v960 rule entirely.
+
+   THE SCALP FILTER MUST NOT BE COPIED, and that is the trap this function
+   exists to avoid. Scalp drops rows under the cost bar because hg-v912 made
+   that gate REJECT there. goldswing.js:1734 calls the same gate with
+   `demoteOnly: true` — on swing those rows are demoted and STILL FORMED, so
+   filtering them out would delete a cohort the desk shows.
+
+   MEASURED, not assumed: of the 244 settled swing trades, 0 sit under the
+   0.16% cost bar, 0 sit under the 1.5xATR stop floor (the artifact's own
+   counters.stopUnderFloor is 0, so the floor already bound during the walk),
+   and no swing kind carries a `suppress` action, so nothing was withheld
+   after it. The live population on this desk therefore IS the settled book —
+   a coincidence, not a rule, which is why the three counts are returned
+   beside it. The day a suppression or a reject lands on swing the
+   coincidence breaks, and it breaks LOUDLY rather than silently.
+
+   THE KEY ALIAS IS NOT COSMETIC: the table calls the weekly range breakout
+   `weekly` and the walk records it as `wkbreak`. A naive join leaves the
+   desk's strongest verdict — one of only two prefers — with no population at
+   all, which is exactly the silent hole this pack is closing. */
+export const SWING_REPLAY = GOLD_SWING_WALK;
+
+/* table key -> walk stratKey, for the one pair that differs */
+export const SWING_KEY_ALIAS = { weekly: 'wkbreak' };
+
+export function liveSwingPopulation(path = SWING_REPLAY){
+  const raw = JSON.parse(readFileSync(path, 'utf8'));
+  const book = raw.trades
+    .filter((t) => typeof t.netR === 'number' && !t.shadow)
+    .sort((a, b) => String(a.tISO).localeCompare(String(b.tISO)));
+
+  /* the three removals the scalp desk makes, counted rather than applied —
+     each is zero on this walk today and each is reported so a future
+     re-bake cannot let a non-zero one pass unnoticed */
+  const underCost = book.filter((t) => (stopPct(t) ?? 0) < COST_BAR_PCT).length;
+  const underFloor = book.filter((t) => typeof t.stopAtr === 'number' && t.stopAtr < 1.5).length;
+  const suppressedKinds = 0;   /* no swing row carries a suppress action */
+
+  const out = {};
+  for (const key of [...new Set(book.map((t) => t.stratKey))]){
+    const rows = book.filter((t) => t.stratKey === key);
+    if (!rows.length) continue;
+    let oosHeld = 0, oosBroke = 0;
+    for (const sp of SPLITS){
+      const cut = Math.floor(book.length * sp);
+      const ins = book.slice(0, cut).filter((t) => t.stratKey === key).map((t) => t.netR);
+      const oos = book.slice(cut).filter((t) => t.stratKey === key).map((t) => t.netR);
+      if (ins.length < MIN_SIDE || oos.length < MIN_SIDE) continue;
+      if ((mean(ins) > 0) === (mean(oos) > 0)) oosHeld++; else oosBroke++;
+    }
+    out[key] = { n: rows.length, gross: r4(mean(rows.map((t) => t.rGross))),
+                 net: r3(mean(rows.map((t) => t.netR))), oosHeld, oosBroke };
+  }
+
+  /* re-key onto the TABLE's names so a caller never has to know the alias */
+  const rows = {};
+  for (const [tableKey, walkKey] of Object.entries(SWING_KEY_ALIAS)){
+    if (out[walkKey]) rows[tableKey] = out[walkKey];
+  }
+  const aliased = new Set(Object.values(SWING_KEY_ALIAS));
+  for (const [k, v] of Object.entries(out)) if (!aliased.has(k)) rows[k] = v;
+
+  return { rows, removals: { underCost, underFloor, suppressedKinds, settled: book.length } };
 }
 
 export function liveEdgePopulation(path = REPLAY){

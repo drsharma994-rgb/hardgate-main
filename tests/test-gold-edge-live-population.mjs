@@ -18,8 +18,9 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import vm from 'node:vm';
-import { liveEdgePopulation, COST_BAR_PCT, SUPPRESSED, SPLITS, MIN_SIDE,
-         precursorOnly, QUALITY_STAMP, REPLAY } from '../scripts/edge-live-population.mjs';
+import { liveEdgePopulation, liveSwingPopulation, COST_BAR_PCT, SUPPRESSED, SPLITS, MIN_SIDE,
+         precursorOnly, QUALITY_STAMP, REPLAY, SWING_REPLAY,
+         SWING_KEY_ALIAS } from '../scripts/edge-live-population.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 let pass = 0, fail = 0;
@@ -264,21 +265,44 @@ console.log('6. the note reaches cand.edge without moving the verdict');
   eq(p.edgeBoost, 2, 'the prefer boost is unchanged at +2');
 }
 
-/* ---- 7. the SWING lane was not touched, and the reason is measured ---- */
-console.log('7. the swing lane is unaffected, measured not assumed');
+/* ---- 7. the SWING lane now carries its own live population (hg-v961) ----
+   Until hg-v961 every swing row's verdict rested on a headline n as small as
+   1, and the desk had a 244-trade walk of its own that nothing read. The
+   swing live block is derived by liveSwingPopulation() from that walk — and
+   it is NOT the scalp derivation: goldswing calls the edge gate demoteOnly,
+   so a suppressed kind still forms there and must not be removed, and the
+   scalp cost reject is not this desk's gate either. Those three removals are
+   modelled at zero, and the zero is ASSERTED rather than assumed. */
+console.log('7. the swing lane carries its own live population');
 {
-  const sw = JSON.parse(readFileSync(join(ROOT, 'scripts/backtest-goldswing-results.json'), 'utf8'));
-  const rows = sw.trades.filter((t) => typeof t.netR === 'number' && !t.shadow);
-  const under = rows.filter((t) => {
-    const e = t.entry, s2 = t.stop;
-    if (!(typeof e === 'number' && typeof s2 === 'number' && e > 0)) return false;
-    return Math.abs(e - s2) / e * 100 < COST_BAR_PCT;
-  });
-  eq(under.length, 0, 'no swing trade falls under the scalp cost bar');
-  ok(rows.length > 200, 'on a swing book of ' + rows.length + ' settled');
+  const { rows, removals } = liveSwingPopulation();
+  eq(removals.settled, 244, 'the swing walk settles a usable book, not a headline n of 1');
+  eq(removals.underCost, 0, 'no swing trade falls under the scalp cost bar');
+  eq(removals.underFloor, 0, 'and none under the 1.5xATR stop floor');
+  eq(removals.suppressedKinds, 0,
+    'and no kind is removed for a suppress — goldswing applies the edge gate demoteOnly');
+  ok(Object.keys(rows).length > 0, 'the derivation produced populations, not an empty map');
+
+  /* the blocks in the table really ARE what that derivation produces — not a
+     hand-transcription of it (hg-v921) */
+  let checked = 0;
   for (const [k, row] of Object.entries(TABLE.swing || {})){
-    ok(!('live' in row), 'swing row ' + k + ' gets no live block — its baked population is intact');
+    ok(row && typeof row.live !== 'undefined',
+      'swing row ' + k + ' carries a live block — its verdict is measured on the '
+      + 'population the desk forms, not on a headline n of 1');
+    const want = rows[k] || null;
+    if (!want){ eq(row.live, null, k + ': a null live block means no population at all'); continue; }
+    /* field by field, not deepEqual: TABLE is evaluated in a vm realm, so its
+       objects carry that realm's prototype and deepStrictEqual refuses two
+       structurally identical records. */
+    for (const f of ['n', 'gross', 'net', 'oosHeld', 'oosBroke']){
+      eq(row.live[f], want[f], k + '.' + f + ': the baked live block equals the derivation');
+    }
+    checked++;
   }
+  ok(checked > 0, 'at least one swing row has a population — or the loop above is vacuous');
+  ok(SWING_REPLAY.endsWith('backtest-goldswing-results.json'),
+    'and it is derived from the swing walk the rebake chain now runs');
 }
 
 /* ---- 8. the derivation is honest about its own knobs ---- */
