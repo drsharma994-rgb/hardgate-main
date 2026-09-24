@@ -716,10 +716,14 @@
     { desk: 'GOLD SWING',  probe: 'goldSwingSetups',  via: 'own weekend read' },
     { desk: 'GOLD SCALP',  probe: 'goldScalpSetups',  via: 'own weekend read' },
     { desk: 'SUPER GOLD',  probe: 'superGoldState',   via: 'own weekend read' },
-    { desk: 'OPTI GOLD',   probe: 'optiGoldState',    via: null },
-    { desk: 'GOLD PINE',   probe: 'goldPineScan',     via: null },
-    { desk: 'GOLD PRO',    probe: 'goldProState',     via: null },
-    { desk: '80PERCENT',   probe: 'eightyPercentState', via: null }
+    /* hg-v950: these four mint from raw bars and do not route through
+       hgGoldFormation, so each calls hgGoldWeekendVerdict directly at the
+       instant its own shape makes correct — per SETUP where the desk walks
+       a window, per SERIES where it reads one closed bar. */
+    { desk: 'OPTI GOLD',   probe: 'optiGoldState',    via: 'per-setup, own break bar' },
+    { desk: 'GOLD PINE',   probe: 'goldPineScan',     via: 'per-mode, 4h and 15m last closed bar' },
+    { desk: 'GOLD PRO',    probe: 'goldProState',     via: 'last closed bar of the series in hand' },
+    { desk: '80PERCENT',   probe: 'eightyPercentState', via: 'per-signal, own bar' }
   ];
   function hgGoldWeekendCoverage(){
     var out = { covered: [], uncovered: [], notLoaded: [] };

@@ -171,13 +171,29 @@ console.log('== 7) the coverage reporter never claims a desk it cannot see ==');
          'the buckets PARTITION the desk list — every desk lands in exactly one (' + all.length + ')');
   assert(cov.notLoaded.includes('NEW GOLD') && cov.notLoaded.includes('OPTI GOLD'),
          'a desk absent from this context reports NOT LOADED, never "covered"');
+  /* hg-v950: every desk on the list now has a route, so `uncovered` is empty
+     on the real list. That makes the bucket untestable from the list alone —
+     and an unreachable bucket is a rubber stamp. A synthetic entry with no
+     route proves the reporter can still say UNCOVERED. */
+  W.HG_GOLD_WEEKEND_MINTERS.push({ desk: 'PROBE DESK', probe: '__hgProbeDesk', via: null });
+  W.__hgProbeDesk = function(){ return null; };
+  const cov3 = W.hgGoldWeekendCoverage();
+  assert(cov3.uncovered.includes('PROBE DESK'),
+         'a loaded desk with NO route still reports UNCOVERED — the bucket is reachable, not a rubber stamp');
+  delete W.__hgProbeDesk;
+  W.HG_GOLD_WEEKEND_MINTERS.pop();
   assert(cov.covered.some(c => c.desk === 'OMNIGOLD' && /v420/.test(c.via)),
          'OMNIGOLD is reported covered, and by its own rule rather than this one');
-  /* with a desk's probe present it must move out of notLoaded */
+  /* with a desk's probe present it must move out of notLoaded. hg-v949 had
+     OPTI GOLD land in `uncovered` here; hg-v950 gave it a route, so the same
+     probe must now land it in `covered` WITH THAT ROUTE NAMED. The assertion
+     moved with the fact rather than being deleted. */
   W.optiGoldState = function(){ return null; };
   const cov2 = W.hgGoldWeekendCoverage();
-  assert(!cov2.notLoaded.includes('OPTI GOLD') && cov2.uncovered.includes('OPTI GOLD'),
-         'once OPTI GOLD is on the page it reports UNCOVERED — the gap names itself rather than living in prose');
+  assert(!cov2.notLoaded.includes('OPTI GOLD'), 'once OPTI GOLD is on the page it leaves NOT LOADED');
+  const optiRow = cov2.covered.find(c => c.desk === 'OPTI GOLD');
+  assert(!!optiRow && /per-setup/.test(optiRow.via),
+         'and reports COVERED by its own route — per-setup, its own break bar (hg-v950)');
   delete W.optiGoldState;
 }
 

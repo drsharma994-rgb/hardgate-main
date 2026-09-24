@@ -1199,6 +1199,21 @@ function hg80Indicators(rows){
 /* The session filter, on the bar's OPEN time in UTC. Rows carry t in
    seconds (the desk's convention); a row with no usable timestamp is out of
    session rather than quietly in it. */
+/* hg-v950: the shared gold calendar, read at call time and never
+   re-derived here. Returns null when it cannot be answered — no
+   gold-formation.js, no indicators2.js, or an unreadable instant — and the
+   caller then changes nothing. */
+function hg80WeekendVerdict(tSec){
+  try{
+    var f = W.hgGoldWeekendVerdict;
+    if (typeof f !== 'function') return null;
+    var t = fin(tSec);
+    if (t === null || !isFinite(t)) return null;
+    var v = f(t);
+    return (v && v.inWeekend === true) ? v : null;
+  }catch(e){ return null; }
+}
+
 function hg80InSession(tSec){
   var t = fin(tSec);
   if (!isFinite(t) || t <= 0) return false;
@@ -1575,9 +1590,25 @@ function hg80Arming(rungs, armed){
    THE FIRING RULE IS UNTOUCHED. hg80InSession still asks only what the
    supplied spec asks — is this bar's hour inside 13:00-18:00 UTC. Adding a
    weekday condition there would be a silent deviation from the spec, which
-   is the one thing this tab does not do, and it would change nothing on
-   real data because gold prints no weekend bars. This is the tab's own
+   is the one thing this tab does not do. This is the tab's own
    forward-looking claim, not the strategy's rule.
+
+   hg-v950 — THE SPEC-FIDELITY ARGUMENT STANDS; THE PREMISE UNDER IT DOES NOT.
+   The sentence that used to sit here said a weekday condition "would change
+   nothing on real data because gold prints no weekend bars". That is true of
+   a broker feed and FALSE of the feed this desk actually reads. Bars arrive
+   through hgOgFetchRows, whose chain is getXmGoldCandles -> getGoldCandles
+   -> binanceKlines('PAXGUSDT') -> binance-xau, and PAXGUSDT is a 24/7
+   Binance spot pair. The third leg is the one that fires whenever XM is not
+   configured, which is the default. So this desk IS handed Saturday and
+   Sunday bars, and its window — 13:00-18:00 UTC — sits squarely inside them:
+   40 of the 672 hours in a 28-day span pass hg80InSession while gold is shut.
+   NEW GOLD's committed walk is the proof that this is not hypothetical —
+   9 of its 19 trades formed inside the gold weekend on PAXGUSDT (hg-v949).
+
+   So the rule that FIRES is left exactly as the spec wrote it, and the
+   calendar decides only what the desk PRESENTS AS TRADEABLE. Each signal
+   carries s.goldShut, stamped from its OWN bar. Nothing is deleted.
    --------------------------------------------------------------------- */
 function hg80IsTradingDay(dow){ return dow >= 1 && dow <= 5; }
 
@@ -2344,7 +2375,18 @@ function hg80Scan(rows, opts){
        fires it, which is what keeps the two records disjoint */
     for (vi = 0; vi < vars.length; vi++){
       var s = hg80SignalAt(rows, ind, i, cfg, vars[vi]);
-      if (s && s.dir){ s.plan = hg80Plan(s); out.push(s); break; }
+      if (s && s.dir){
+        s.plan = hg80Plan(s);
+        /* hg-v950: was this bar printed while GOLD WAS SHUT? Stamped per
+           SIGNAL, from the signal's own bar, because this scan walks the
+           whole fetched window and emits fires from many different days —
+           a scan-level "is it the weekend now" would judge all of them by
+           the last bar. The firing rule above is untouched (see the note
+           on hg80InSession); this only records what the calendar says. */
+        s.goldShut = hg80WeekendVerdict(s.t);
+        out.push(s);
+        break;
+      }
     }
   }
   return { ok: true, signals: out, bars: rows.length, ind: ind, cfg: cfg, variants: vars };
@@ -3333,6 +3375,20 @@ function simpleCardHtml(sig, rung, state){
     + '</div>';
 
   if (state) h += '<div class="row" style="margin-top:7px">' + state + '</div>';
+
+  /* hg-v950: this bar printed while GOLD WAS SHUT. The spec's firing rule is
+     deliberately left alone (see the note on hg80InSession) — a 13:00-18:00
+     UTC hour test passes on a Saturday, and on the PAXGUSDT leg of the feed
+     chain there IS a Saturday bar to pass it. So the card says so rather
+     than presenting a fill nobody could have had. Nothing is deleted: the
+     levels, the distances and the record all stay exactly where they are. */
+  if (sig.goldShut){
+    h += '<div class="p80-warn" style="margin-top:7px">GOLD WAS SHUT — '
+      + esc(String(sig.goldShut.why || 'this bar printed inside the gold weekend'))
+      + ' The ' + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC session test reads the HOUR only, '
+      + 'exactly as the spec writes it, so a weekend bar passes it; this line is the calendar '
+      + 'speaking, not a change to the rule that fired.</div>';
+  }
 
   /* THE THREE NUMBERS, aligned. Label, price, distance — tabular figures in
      one grid so the decimal points line up down the card, which is the
