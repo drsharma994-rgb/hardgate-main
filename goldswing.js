@@ -1378,6 +1378,19 @@ var SW_NAME = {
   p8geo:    'S53 GEOPOLITICAL SPIKE FADE',
   p8vpinbo: 'S54 VPIN-TIMED CONTRACTION BREAK',
   p9volbar: 'S62 VOLUME-BAR S0 SWEEP',
+  /* hg-v942 — gold-native extras (hg-v933/v934) now reach this tab, plus the
+     MILLI GOLD roster mechanics neither gold tab could form. */
+  goldfix:     'LBMA LONDON FIX FADE (AM/PM)',
+  golddxy:     'DOLLAR DIVERGENCE (GOLD + DXY TOGETHER)',
+  goldround:   'ROUND-DOLLAR LEVEL REJECTION',
+  goldwopen:   'WEEKLY OPEN SWEEP + RECLAIM',
+  goldfib:     '61.8 RETRACE HOLD',
+  ogstructbos: 'STRUCT BOS (OMNIGOLD)',
+  ogsqueeze:   'SQUEEZE FIRE (OMNIGOLD)',
+  ogcusum:     'CUSUM MEAN SHIFT (OMNIGOLD)',
+  ogmmove:     'MEASURED MOVE (OMNIGOLD)',
+  ogtrend:     'TREND RECLAIM (OMNIGOLD)',
+  ogbosretest: 'BOS RETEST (OMNIGOLD)',
   p9prem:   'S65 PERP-PREMIUM FADE'
 };
 var SW_NEWS_STAMP = 'NEWS WINDOW — expect a fade around the release; swing levels unchanged (size accordingly)';
@@ -2352,6 +2365,61 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
         }
       }catch(eP9c){}
     }
+
+    /* --- hg-v942 GOLD-NATIVE EXTRAS + ROSTER PORTS ------------------------
+       GOLD SCALP has consumed hgGoldExtraDetect since hg-v933; GOLD SWING
+       never did, so the London fix, dollar divergence, round-dollar, weekly
+       open and 61.8 retrace mechanics have not existed on this tab at all.
+       The same call now runs here on the SWING execution TF (4h), and carries
+       the hg-v942 roster ports with it.
+
+       Everything downstream is this desk's: mkCand still demands >= 2 agreeing
+       reads and a majority, push() still runs the inst filter, the stop-width
+       floor, the edge table and the cost gate. Nothing is loosened. They mint
+       DEMOTED for the same reason they do on scalp -- the record on the card
+       is OMNIGOLD's, not this desk's. */
+    try{
+      var xtraFnSw = gfn('hgGoldExtraDetect');
+      if (typeof xtraFnSw === 'function'){
+        var xtrasSw = xtraFnSw({
+          rows: rows4,
+          dxyRows: (macro && (macro.dxyRows || macro.dxyCandles)) || null,
+          now: nowMs
+        }) || [];
+        var xsi, xrS, xCandS, xStampS, promoS;
+        promoS = false;
+        try{
+          var promoFnS = gfn('hgGoldExtraPromotable');
+          promoS = (typeof promoFnS === 'function') ? !!promoFnS() : false;
+        }catch(ePr){ promoS = false; }
+        for (xsi = 0; xsi < xtrasSw.length; xsi++){
+          xrS = xtrasSw[xsi];
+          if (!xrS || !xrS.dir || !isFinite(xrS.stop)) continue;
+          xCandS = mkCand(xrS.kind, xrS.dir, xrS.stop, xrS.stop, undefined,
+            xrS.why, xrS.invalidates || 'setup structure broken',
+            { side: xrS.dir, tag: xrS.kind, label: xrS.why });
+          if (!xCandS) continue;
+          if (!xCandS.dropped){
+            if (isFinite(xrS.entry)) xCandS.entry = xrS.entry;
+            if (isFinite(xrS.stop)) xCandS.stop = xrS.stop;
+            if (!Array.isArray(xCandS.stamps)) xCandS.stamps = [];
+            xStampS = null;
+            try{
+              var stampFnS = gfn('hgGoldExtraStamp');
+              if (typeof stampFnS === 'function') xStampS = stampFnS(xrS.kind);
+            }catch(eXsS){ xStampS = null; }
+            xCandS.stamps.push(xStampS || (String(xrS.kind).toUpperCase() + ' · NO RECORD'));
+            xCandS.extraUnchecked = true;
+            try{
+              var noteFnS = gfn('hgGoldExtraUncheckedNote');
+              if (typeof noteFnS === 'function') xCandS.extraWhy = noteFnS(xrS.kind);
+            }catch(eXwS){}
+            if (!promoS) xCandS.demoted = true;
+          }
+          push(xCandS);
+        }
+      }
+    }catch(eXtraSw){}
 
     /* Master Catalog v1.0 — verdict stamps; never invents ENTER. */
     try{
