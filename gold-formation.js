@@ -686,6 +686,13 @@
       if (t === null || t === undefined || t === '') return null;
       t = +t;
       if (!isFinite(t)) return null;
+      /* hg-v953: and NOT epoch zero. '' and 0 both coerce to 0 here, which is
+         1970-01-01 -- a THURSDAY, so an unreadable instant read as "gold was
+         open" and marked a candidate accordingly, silently. That is the
+         +null === 0 trap this codebase has now hit repeatedly; an instant
+         at or before the epoch is not a gold bar, it is a failed read, and a
+         failed read must produce NO verdict rather than a cheerful one. */
+      if (!(t > 0)) return null;
       /* accept seconds or milliseconds, the convention hgGoldSignalBarMs uses */
       var ms = (Math.abs(t) < 1e12) ? t * 1000 : t;
       var fn = gfn('hgInGoldWeekend');
@@ -700,6 +707,55 @@
                     + 'so the level is one no broker quoted and the ticket is one nobody could take. '
                     + 'The card and its evidence stay; only tradable is withheld.')
                  : '' };
+    }catch(e){ return null; }
+  }
+
+  /* hg-v953 -- THE MARK THE MINT ITSELF CARRIES.
+     GOLD SCALP and GOLD SWING were listed here as covered "via own weekend
+     read". They do read one -- in the tab SHELL, in runScan, on the WALL
+     CLOCK. The functions this reporter probes (goldScalpSetups in goldind.js,
+     goldSwingSetups in goldswing.js) contain no calendar at all; goldind.js
+     has not one weekend reference in the whole file. So the claim was false
+     about the thing being probed, which is hg-v952's failure one layer down.
+
+     What that cost, beyond the reporter: every consumer of the mint that is
+     not the tab shell got NO weekend awareness -- GOLD PINE's goldScalpSetups
+     call, the OMNIGOLD bridge, STAR TRADER, and both replay harnesses. The
+     swing walk's own meta lists "weekend demotes" among the runScan stages it
+     does NOT replay, so the committed GOLD SCALP walk -- the one the
+     suppress/demote/prefer table is measured on -- was formed on PAXGUSDT
+     24/7 bars with no weekend mark of any kind.
+
+     This MARKS and does not withhold, deliberately, for two reasons. The
+     shell already demotes on the live path, and a second withhold there would
+     move the board on evidence this pack did not gather. And the replay rows
+     need the mark precisely so the population can be SEPARATED later -- which
+     is how NEW GOLD's record came to be half weekend without anyone noticing
+     (hg-v949), and the TAURIC precedent from hg-v952.
+
+     The instant is the SIGNAL BAR: both mints already take inp.now, and both
+     replay harnesses already pass the closed bar's cutoff there, so a re-run
+     over Friday's bars gives Friday's answer with no new plumbing.
+     Fails OPEN: no calendar, or an unreadable instant, and nothing is
+     marked and nothing is changed. */
+  function hgGoldMarkMintWeekend(cands, atMs){
+    try{
+      var v = hgGoldWeekendVerdict(atMs);
+      if (!v) return null;
+      var lists = [], i, j;
+      if (cands && cands.length) lists.push(cands);
+      if (cands && cands.rejected && cands.rejected.length) lists.push(cands.rejected);
+      if (cands && cands.ranked && cands.ranked.length) lists.push(cands.ranked);
+      if (cands && cands.best && typeof cands.best === 'object') lists.push([cands.best]);
+      for (i = 0; i < lists.length; i++){
+        for (j = 0; j < lists[i].length; j++){
+          var c = lists[i][j];
+          if (!c || typeof c !== 'object') continue;
+          c.goldShut = !!v.inWeekend;
+          if (v.inWeekend) c.goldShutWhy = v.why;
+        }
+      }
+      return v;
     }catch(e){ return null; }
   }
 
@@ -720,8 +776,12 @@
     { desk: 'NEW GOLD',    probe: 'newGoldState',     via: 'hgGoldFormation' },
     { desk: 'OMNIGOLD 1',  probe: 'omnigold1State',   via: 'hgGoldFormation' },
     { desk: 'OMNIGOLD',    probe: 'hgOgFormation',    via: 'own hg-v420 veto' },
-    { desk: 'GOLD SWING',  probe: 'goldSwingSetups',  via: 'own weekend read' },
-    { desk: 'GOLD SCALP',  probe: 'goldScalpSetups',  via: 'own weekend read' },
+    /* hg-v953: these two said 'own weekend read' and the probed function had
+       none -- the read is in the tab shell, on the wall clock, and is excluded
+       from the replay by the swing walk's own meta. The mint carries the mark
+       now, on its own signal bar, and the route is CALLED rather than claimed. */
+    { desk: 'GOLD SWING',  probe: 'goldSwingSetups',  via: 'per-scan signal bar in the mint; marked, not withheld (the shell demote is separate and unchanged)', verdictFn: 'goldSwingWeekendVerdict' },
+    { desk: 'GOLD SCALP',  probe: 'goldScalpSetups',  via: 'per-scan signal bar in the mint; marked, not withheld (the shell demote is separate and unchanged)', verdictFn: 'goldScalpWeekendVerdict' },
     { desk: 'SUPER GOLD',  probe: 'superGoldState',   via: 'per-candidate signal bar, wall clock only when the row carries no time', verdictFn: 'sgWeekendVerdict' },
     /* hg-v950: these four mint from raw bars and do not route through
        hgGoldFormation, so each calls hgGoldWeekendVerdict directly at the
@@ -992,6 +1052,7 @@
   G.hgGoldSessionEdge = hgGoldSessionEdge;
   G.hgGoldSignalBarMs = hgGoldSignalBarMs;
   G.hgGoldWeekendVerdict = hgGoldWeekendVerdict;
+  G.hgGoldMarkMintWeekend = hgGoldMarkMintWeekend;
   G.hgGoldWeekendCoverage = hgGoldWeekendCoverage;
   G.hgGoldWeekendProbeRoute = hgGoldWeekendProbeRoute;
   G.HG_GOLD_WEEKEND_MINTERS = HG_GOLD_WEEKEND_MINTERS;

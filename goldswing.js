@@ -2717,8 +2717,30 @@ function goldSwingSetups(inp){
         rk.rejected = side.concat(rk.rejected);
       }
     }catch(eRej){}
+    /* hg-v953: the mint carries the gold calendar now. This desk was listed
+       covered "via own weekend read" and the read is in runScan, on the wall
+       clock -- and this walk's own meta lists "weekend demotes" among the
+       runScan stages it does NOT replay. nowMs is the signal bar on the replay
+       path and the scan clock live. Marks; withholds nothing; fails open. */
+    try{
+      var mwFn953 = (typeof W !== 'undefined' && W && typeof W.hgGoldMarkMintWeekend === 'function')
+        ? W.hgGoldMarkMintWeekend : null;
+      if (mwFn953) mwFn953(rk, nowMs);
+    }catch(eWk953){}
     return rk;
   }catch(e){ return { ranked: [], best: null, rejected: [] }; }
+}
+
+/* hg-v953: the route the coverage reporter CALLS. Delegates -- a second copy
+   of a calendar is a second calendar (hg-v949). */
+function goldSwingWeekendVerdict(tSec){
+  try{
+    var f = (typeof W !== 'undefined' && W && typeof W.hgGoldWeekendVerdict === 'function')
+      ? W.hgGoldWeekendVerdict : null;
+    if (!f) return null;
+    var v = f(tSec);
+    return (v && v.inWeekend) ? v : null;
+  }catch(e){ return null; }
 }
 
 function rankSetups(cands, ctx){
@@ -3791,6 +3813,7 @@ async function gwWarm(){
 /* ---------------- registration ---------------- */
 W.goldSwingLevels = __swLevels;
 W.goldSwingSetups = goldSwingSetups;
+W.goldSwingWeekendVerdict = goldSwingWeekendVerdict;
 W.goldPurgeBadGeometry = goldPurgeBadGeometry;
 W.goldSwingCardFromLiveRec = __cardFromLiveRec;
 W.goldswingState = function(){
