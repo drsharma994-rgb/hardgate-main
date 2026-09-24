@@ -366,10 +366,55 @@ function ogAtMark(s, px){
                    the target rr R away: 1 / (1 + rr).
    Their product is the unconditional chance the order fills AND then pays.
 
-   The model's defects are known and they do not cancel: gold is not driftless,
-   ATR understates tail moves, and OHLC cannot order two touches inside one bar.
-   Read the number as a RANKING KEY WITH AN ARGUMENT BEHIND IT, not as a
-   probability anyone should size a position on. */
+   hg-v948: THAT SECOND STEP HAD NO HORIZON IN IT, AND EVERY SETUP HERE EXPIRES.
+   Gambler's ruin between two absorbing barriers is the INFINITE-horizon answer:
+   it is the chance the target is reached before the stop GIVEN that one of them
+   is reached at all. These setups die at horizonBars whether or not either was.
+   So 1/(1+rr) is an UPPER BOUND on P(win|fill), never its value -- and the leg
+   was also blind to HOW FAR the target is: a target 20xATR away and one 0.5xATR
+   away both scored 0.333, while the fill leg beside it has been distance- and
+   horizon-aware since it was written. One estimator was applied to one leg and
+   omitted from the other.
+
+   The direction of the error needs no measurement, only arithmetic: the target
+   sits rr R away and the stop 1R, so truncating at a finite horizon removes
+   winners at least as readily as losers, and the bound can only be too high.
+   The repo's one real gold book quantifies it (OMNIGOLD, 9,897 plans at the
+   same 2R): at a 16-bar horizon winners are censored more than losers in 4 of 4
+   disjoint windows (30.1/22.0, 30.8/23.3, 26.7/22.7, 24.3/17.3 per cent), but
+   at 32 and 48 bars it is 3 of 4 -- NOT unanimous. So the sign is arithmetic and
+   the MAGNITUDE carries no verdict; no number from that walk is baked here or
+   gated on, and that population is OMNIGOLD's gates, not this rule's.
+
+   The fix is the file's OWN estimator on both legs: P(win|fill) is now
+   min(1/(1+rr), P(travel to the target within the bars that remain)), the same
+   reflection-principle form the fill leg uses. It is a BOUND made of two
+   bounds, so it can only LOWER the number -- no setup can be made to look
+   better than this desk already claimed -- and where the horizon is ample it
+   returns exactly 1/(1+rr) and nothing moves. Using the full remaining bars
+   rather than those left after a fill is deliberate: it is the generous
+   choice, which is what keeps it a bound.
+
+   WHAT THIS CHANGE MAKES WORSE, SAID PLAINLY. The driftless assumption used to
+   bite only the fill leg, over short distances where it is nearly harmless. The
+   travel term applies it over LONG distances, which is exactly where a
+   driftless model is least like gold: a 20xATR move in 40 bars is a routine
+   trend and this model calls it a 0.16% event. So where the horizon binds, the
+   LEVEL is a bound and may sit far below the truth, and it must not be read as
+   a forecast. What survives that objection is the ORDERING, which is the only
+   thing this number is used for: between two setups that fill, the one whose
+   target is reachable in the bars available is the better one under drift as
+   well as without it. The infinite-horizon figure is kept on the row as
+   condInf, so a reader always sees both numbers and the size of the gap rather
+   than one number chosen for them.
+
+   The model's other defects are known and they do not cancel: gold is not
+   driftless, ATR understates tail moves, and OHLC cannot order two touches
+   inside one bar. ATR is also used as the per-bar sigma while ATR runs ABOVE
+   close-to-close sigma, so the travel term is over-generous in that respect --
+   in the direction that keeps this a bound. Read the number as a RANKING KEY
+   WITH AN ARGUMENT BEHIND IT, and an upper one, not as a probability anyone
+   should size a position on. */
 
 /* standard normal CDF - Abramowitz & Stegun 7.1.26 on erf, |error| < 1.5e-7 */
 function ogNormCdf(z){
@@ -379,6 +424,43 @@ function ogNormCdf(z){
   var t = 1 / (1 + 0.3275911 * x);
   var y = 1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
   return 0.5 * (1 + sign * y);
+}
+
+/* hg-v948: ONE travel estimator, used by BOTH legs. The chance a driftless walk
+   with per-bar scale sigma=ATR covers `distAtr` ATR within `bars` bars, by the
+   reflection principle -- the same form the fill leg has always used, stated
+   once instead of written twice. Returns null when it cannot be computed, and
+   the caller then falls back to the infinite-horizon value rather than
+   inventing one: a missing horizon term must not invent a smaller number any
+   more than it may invent a larger one. */
+function ogTravelP(distAtr, bars){
+  /* fin() on BOTH arguments, and the two failure modes are NOT the same value.
+     `bars` absent means the horizon is unreadable -> null, fall back. `bars`
+     read as <= 0 means the setup has genuinely run out -> 0. Coercing instead
+     of reading makes an absent horizon say "expired", which is the +null===0
+     trap a second time, in the other argument -- the file's existing guard on
+     a running position with no recorded barsLeft is what caught it. */
+  var dR = fin(distAtr), bR = fin(bars);
+  if (dR === null || bR === null) return null;
+  var d = dR, n = Math.floor(bR);
+  if (!isFinite(d) || d < 0) return null;
+  if (n <= 0) return 0;
+  var v = 2 * (1 - ogNormCdf(d / Math.sqrt(n)));
+  if (!isFinite(v)) return null;
+  return v < 0 ? 0 : (v > 1 ? 1 : v);
+}
+
+/* The horizon-bounded P(win|fill). `condInf` is the infinite-horizon gambler's
+   ruin this desk quoted alone until hg-v948; `reach` is the chance the target
+   is travelled to at all before the setup expires. The answer is the SMALLER --
+   both are upper bounds on the same quantity, so their min is the tighter one,
+   and it is still a bound rather than an estimate. */
+function ogCondBound(condInf, distAtr, bars){
+  var ci = +condInf;
+  if (!isFinite(ci)) return null;
+  var reach = ogTravelP(distAtr, bars);
+  if (reach === null) return { cond: ci, reach: null, bounded: false };
+  return { cond: Math.min(ci, reach), reach: reach, bounded: reach < ci };
 }
 
 function ogProb(s, px){
@@ -393,25 +475,72 @@ function ogProb(s, px){
     if (op.beyondStop) return { p: 0, kind: 'running', fill: 1, cond: 0, note: 'the mark is already at or past the stop' };
     var den = op.toStopR + op.toTargetR;
     if (!(den > 0)) return null;
-    var cond = op.toStopR / den;
-    return { p: cond, kind: 'running', fill: 1, cond: cond,
-             note: 'already filled — gambler\'s ruin between the stop and the target from where the mark sits' };
+    var condInfO = op.toStopR / den;
+    /* hg-v948: a running position expires at the same horizon as a resting
+       one, so its gambler's-ruin figure is an upper bound for the same reason.
+       Distance to the target is measured from the MARK, which is where this
+       position actually is. */
+    var aO = fin(s.atr), t1O = fin(s.t1), nO = Math.floor(+s.barsLeft);
+    var tAtrO = (aO !== null && aO > 0 && t1O !== null) ? Math.abs(t1O - p) / aO : NaN;
+    var cbO = ogCondBound(condInfO, tAtrO, nO);
+    if (!cbO) return null;
+    var noteO = 'already filled — gambler\'s ruin between the stop and the target from where the mark sits';
+    if (cbO.reach === null) noteO += '; ATR unreadable, so the travel-to-target term could not be computed and this is the infinite-horizon figure alone';
+    else if (cbO.bounded) noteO += ', bounded down because the target is ' + tAtrO.toFixed(1) + '×ATR away with ' + nO + ' bar(s) left before it expires';
+    else noteO += '; ' + nO + ' bar(s) left is ample for the ' + tAtrO.toFixed(1) + '×ATR still to travel, so the ruin figure binds';
+    return { p: cbO.cond, kind: 'running', fill: 1, cond: cbO.cond,
+             condInf: condInfO, reach: cbO.reach, horizonBound: !!cbO.bounded,
+             targetAtr: isFinite(tAtrO) ? tAtrO : null, barsLeft: nO, note: noteO };
   }
 
   if (s.state !== 'waiting') return null;
   var d = ogDistance(s, p);
   if (!d || d.atr == null || !isFinite(d.atr)) return null;
-  /* n <= 0 means no bars remain before expiry, so the order cannot fill at all */
-  var n = Math.floor(+s.barsLeft);
-  if (!isFinite(n) || n <= 0) return { p: 0, kind: 'resting', fill: 0, cond: 1 / (1 + rr), note: 'no bars left before this order expires' };
-  var z = d.atr / Math.sqrt(n);
-  var fill = 2 * (1 - ogNormCdf(z));
-  if (!(fill > 0)) fill = 0;
-  if (fill > 1) fill = 1;
-  var condR = 1 / (1 + rr);
+  /* hg-v948: ABSENT and EXPIRED are not the same state, and `+undefined` made
+     them one -- a setup whose barsLeft was never recorded read as "no bars
+     left" and scored a confident zero. An unreadable horizon yields NO
+     estimate, the same answer this function already gives when the distance
+     cannot be computed; only a horizon that READS as zero or less is expired. */
+  var nR = fin(s.barsLeft);
+  if (nR === null) return null;
+  var n = Math.floor(nR);
+  if (n <= 0) return { p: 0, kind: 'resting', fill: 0, cond: 0,
+    condInf: 1 / (1 + rr), reach: 0, horizonBound: true, targetAtr: null, barsLeft: 0,
+    note: 'no bars left before this order expires — it can neither fill nor pay, so the bound is 0 rather than the '
+          + Math.round(100 / (1 + rr)) + '% infinite-horizon figure' };
+  var fill = ogTravelP(d.atr, n);
+  if (fill === null) return null;
+  /* hg-v948: the outcome leg gets the SAME horizon and the SAME distance the
+     fill leg has always had. The target's distance is measured in ATR from the
+     ENTRY, because that is where the trade starts once the limit fills. */
+  var condInf = 1 / (1 + rr);
+  /* fin() FIRST, then coerce. `+null` is 0 and isFinite(0) is true, so reading
+     an absent t1 by coercion puts the target 575xATR from a $2300 entry and
+     hands back a confident bound of 0 -- the trap this file's own header
+     records being found five times, and the smoke check for this pack found a
+     sixth. An unreadable leg yields NaN, ogTravelP returns null, and the bound
+     falls back to the infinite-horizon figure with the reason said out loud. */
+  var aR = fin(s.atr), t1R = fin(s.t1), enR = fin(s.entry);
+  var tAtr = (aR !== null && aR > 0 && t1R !== null && enR !== null)
+    ? Math.abs(t1R - enR) / aR : NaN;
+  var cb = ogCondBound(condInf, tAtr, n);
+  if (!cb) return null;
+  var condR = cb.cond;
+  var note = 'about ' + Math.round(fill * 100) + '% chance the mark reaches the limit within ' + n
+           + ' bar(s), times an upper bound of ' + Math.round(condR * 100) + '% on paying from entry at ' + rr + 'R';
+  if (cb.reach === null){
+    note += ' — bound is the ' + Math.round(condInf * 100) + '% infinite-horizon figure alone; '
+          + 'ATR unreadable, so the travel-to-target term could not be computed';
+  } else if (cb.bounded){
+    note += ' — the target is ' + tAtr.toFixed(1) + '×ATR away with ' + n + ' bar(s) left, so the '
+          + 'horizon binds below the ' + Math.round(condInf * 100) + '% infinite-horizon figure this desk used to quote alone';
+  } else {
+    note += ' — ' + Math.round(condInf * 100) + '% is the binding bound here; the target is '
+          + tAtr.toFixed(1) + '×ATR away and ' + n + ' bar(s) is ample for it';
+  }
   return { p: fill * condR, kind: 'resting', fill: fill, cond: condR,
-           note: 'about ' + Math.round(fill * 100) + '% chance the mark reaches the limit within ' + n
-                 + ' bar(s), times the ' + Math.round(condR * 100) + '% odds from entry at ' + rr + 'R' };
+           condInf: condInf, reach: cb.reach, horizonBound: !!cb.bounded,
+           targetAtr: isFinite(tAtr) ? tAtr : null, barsLeft: n, note: note };
 }
 
 /* CAN I ACT ON THIS, AT THIS PRICE, RIGHT NOW? Distance alone does not answer
@@ -561,6 +690,25 @@ function pickCard(pk, mark, badge){
   var pct = (est && isFinite(est.p)) ? Math.round(est.p * 100) + '%' : '—';
   var am = pk.atMark;
 
+  /* hg-v948: BOTH numbers, never one chosen for the reader. When the horizon
+     binds, the figure this desk used to print alone is the infinite-horizon
+     one, and the gap between them is the whole finding -- hiding it would
+     replace an over-confident number with an unexplained one. */
+  var boundNote = '';
+  if (est && est.horizonBound && isFinite(est.condInf) && est.targetAtr != null){
+    boundNote = '<div class="note warn" style="margin-bottom:4px">HORIZON BINDS — the target is '
+      + esc(est.targetAtr.toFixed(1)) + '×ATR away with ' + esc(String(est.barsLeft))
+      + ' bar(s) before this setup expires, so paying is bounded at '
+      + esc(Math.round(est.cond * 100) + '%') + ' rather than the '
+      + esc(Math.round(est.condInf * 100) + '%') + ' this desk quoted before hg-v948, which assumed no expiry at all. '
+      + 'A bound, not a forecast: the driftless model behind it is least like gold over exactly these distances, '
+      + 'so read the ordering it produces and not the level.</div>';
+  } else if (est && est.reach === null && isFinite(est.condInf)){
+    boundNote = '<div class="note warn" style="margin-bottom:4px">the travel-to-target term could not be computed '
+      + '(a level or the ATR is unreadable), so this is the ' + esc(Math.round(est.condInf * 100) + '%')
+      + ' infinite-horizon figure alone — an upper bound with its tighter half missing, never a smaller number invented in its place.</div>';
+  }
+
   /* the line that answers "this is far from the current price": what the same
      stop and target are worth if the trade is taken HERE instead */
   var quote = '';
@@ -582,8 +730,9 @@ function pickCard(pk, mark, badge){
     + '<span class="statuschip ' + (pk.actionable ? 'ok' : 'bad') + '">'
     + (pk.actionable ? 'ACTIONABLE NOW' : 'OUT OF REACH') + '</span>'
     + '<span style="font-size:18px;font-weight:700">' + pct + '</span>'
-    + '<span class="note">estimated, under the model stated below</span></div>'
+    + '<span class="note">an UPPER BOUND, under the model stated below — not a measured win rate</span></div>'
     + (pk.why ? '<div class="note' + (pk.actionable ? '' : ' warn') + '" style="margin-bottom:4px">' + esc(pk.why) + '</div>' : '')
+    + boundNote
     + (est && est.note ? '<div class="note" style="margin-bottom:4px">' + esc(est.note) + '</div>' : '')
     + quote
     + card(s, mark)
@@ -925,6 +1074,8 @@ W.__ogLanes = LANES;
 W.__ogDistance = ogDistance;
 W.__ogOpenRead = ogOpenRead;
 W.__ogProb = ogProb;
+W.__ogTravelP = ogTravelP;
+W.__ogCondBound = ogCondBound;
 W.__ogNormCdf = ogNormCdf;
 W.__ogTopPicks = ogTopPicks;
 W.__ogAtMark = ogAtMark;
