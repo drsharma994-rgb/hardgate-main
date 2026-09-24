@@ -107,6 +107,23 @@ function goldProVerdict(opts){
    `swing` is optional; when it is missing, non-finite, or on the wrong side,
    the plain 1.5xATR stop stands (structural=false). Never throws; null on
    degenerate input. */
+/* hg-v950: the shared gold calendar, from a series' last closed bar. Null
+   when the helpers or the bars are unreadable, and the caller then changes
+   nothing — GOLD PRO had no weekend rule at all, and a calendar it cannot
+   read is not a reason to withhold a plan. */
+function gpProWeekendVerdict(rows){
+  try{
+    if (!rows || !rows.length) return null;
+    var w = (typeof window !== 'undefined') ? window : globalThis;
+    var barFn = w.hgGoldSignalBarMs, vFn = w.hgGoldWeekendVerdict;
+    if (typeof vFn !== 'function') return null;
+    var ms = (typeof barFn === 'function') ? barFn(rows) : NaN;
+    if (!isFinite(+ms)) return null;
+    var v = vFn(ms);
+    return (v && v.inWeekend === true) ? v : null;
+  }catch(e){ return null; }
+}
+
 function goldProPlan(inp){
   try{
     if (!inp || typeof inp !== 'object') return null;
@@ -722,6 +739,11 @@ async function runGoldPro(ui){
              not the old close. */
           var lvEntry = (isFinite(lvLive) && lvLive > 0) ? lvLive : lclose;
           lvPlan = goldProPlan({ dir: lvCascade, entry: lvEntry, atr: la4, swing: lswing });
+          /* hg-v950: one instant is right here, unlike the desks that walk a
+             window — this plan is composed from the LAST CLOSED BAR of the
+             series in hand, so that bar is what the calendar judges. */
+          var gpShut = gpProWeekendVerdict(lvRows);
+          if (gpShut && lvPlan) lvPlan.goldShut = gpShut;
           /* DEAD ON ARRIVAL: if the market has already crossed the structural
              stop, there is no trade — say so instead of drawing one. */
           if (lvPlan && isFinite(lvLive)){
@@ -931,6 +953,8 @@ if (typeof window !== 'undefined'){
     try{ return window.__hgGoldProVerdict || null; }catch(e){ return null; }
   };
   window.HG_tabs = window.HG_tabs || [];
+  /* hg-v950: exported so the calendar wiring is testable as a unit */
+  window.gpProWeekendVerdict = gpProWeekendVerdict;
   window.HG_tabs.push({ id: 'goldpro', label: 'GOLD PRO', mount: mount, refresh: refreshGoldPro });
 }
 })();

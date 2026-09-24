@@ -195,6 +195,12 @@ function ogSignals(rows, opts){
 
     var s = { i: t, t: rows[t].t, dir: dir, entry: eq, stop: stop, t1: t1, risk: risk,
               rr: rr, res: res, sup: sup, atr: a, brokeAt: cur, filledAt: null };
+    /* hg-v950: did this break print while GOLD WAS SHUT? Stamped PER SETUP
+       from the setup's own bar, because this rule walks 400-600 bars and
+       emits breaks from across that whole window: a scan-level "is it the
+       weekend now" would judge a Tuesday break by Saturday's clock. Null
+       when the calendar cannot be read, and then nothing changes. */
+    s.goldShut = ogWeekendVerdict(rows[t].t);
     var r = ogResolve(rows, t + 1, s, opts.horizonBars);
     s.state = r.state; s.resolvedAt = r.at;
     /* how far price must travel BACK to fill — the number that decides whether
@@ -209,6 +215,21 @@ function ogSignals(rows, opts){
     out.push(s);
   }
   return out;
+}
+
+/* hg-v950: the shared gold calendar, resolved at call time, never re-derived
+   here. Null when gold-formation.js is absent or the instant is unreadable,
+   and the caller then changes nothing — a calendar this tab cannot read is
+   not a reason to withhold a setup. */
+function ogWeekendVerdict(tSec){
+  try{
+    var f = W.hgGoldWeekendVerdict;
+    if (typeof f !== 'function') return null;
+    var t = fin(tSec);
+    if (t === null) return null;
+    var v = f(t);
+    return (v && v.inWeekend === true) ? v : null;
+  }catch(e){ return null; }
 }
 
 /* THE THREE LANES. Deliberately the SAME rule at three scales — identical swing
@@ -562,6 +583,17 @@ var MIN_RR_NOW = 1.0;  /* never risk more than the trade can pay, at any odds */
 
 function ogReach(s, px){
   if (!s) return null;
+  /* hg-v950: a break that printed while GOLD WAS SHUT is not an order you
+     place. The structure it broke, and therefore the 50% equilibrium this
+     setup rests at, were drawn on a bar XAUUSD never printed — it came from
+     the 24/7 leg of the feed chain. The setup is NOT removed: it keeps its
+     levels and its place in the list, and only its ACTIONABLE claim is
+     withheld, which is the hg-v552/v572 rule. */
+  if (s.goldShut){
+    return { ok: false, why: 'GOLD WAS SHUT when this broke — '
+      + String(s.goldShut.why || 'the bar printed inside the gold weekend')
+      + ' The level came from the 24/7 leg of the feed chain, so it is not a level anyone traded.' };
+  }
   if (s.state === 'waiting'){
     var d = ogDistance(s, px);
     if (!d || d.atr == null || !isFinite(d.atr)) return { ok: false, why: 'distance not computable' };
@@ -1080,6 +1112,7 @@ W.__ogNormCdf = ogNormCdf;
 W.__ogTopPicks = ogTopPicks;
 W.__ogAtMark = ogAtMark;
 W.__ogReach = ogReach;
+W.__ogWeekendVerdict = ogWeekendVerdict;
 W.__ogPending = ogPending;
 /* exported so the rule can be tested: runOptiGold needs a live gold feed and is
    unreachable in a test sandbox, which is exactly how a previous activation in

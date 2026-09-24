@@ -444,6 +444,23 @@ function collectPineUniverse(bars, mode, scanOpts, source){
   return list;
 }
 
+/* hg-v950: the shared gold calendar, read from a SERIES' last closed bar,
+   because a GOLD PINE setup carries no instant of its own. Delegates to
+   hgGoldSignalBarMs and hgGoldWeekendVerdict; null when either is absent or
+   the series is empty, and the caller then changes nothing. */
+function gpWeekendVerdict(rows){
+  try{
+    if (!rows || !rows.length) return null;
+    var barFn = gfn('hgGoldSignalBarMs');
+    var vFn = gfn('hgGoldWeekendVerdict');
+    if (typeof vFn !== 'function') return null;
+    var ms = (typeof barFn === 'function') ? barFn(rows) : NaN;
+    if (!isFinite(+ms)) return null;
+    var v = vFn(ms);
+    return (v && v.inWeekend === true) ? v : null;
+  }catch(e){ return null; }
+}
+
 function runGoldPineScan(bars, ctx){
   ctx = ctx || {};
   var lvFn = gfn('pineGoldLevelsFromBars');
@@ -526,7 +543,19 @@ function runGoldPineScan(bars, ctx){
   gpTapeStamp(swing, tapeSwing);
   gpTapeStamp(scalp, tapeScalp);
 
+  /* hg-v950: did the bar these setups were read on print while GOLD WAS
+     SHUT? PER MODE, from that mode's own last closed bar — swing evaluates
+     on 4h and scalp on 15m, so one instant for both would mislabel one of
+     them. These setups carry no timestamp of their own, which is why the
+     instant comes from the series rather than from the setup. Null when the
+     calendar or the bars cannot be read, and then nothing changes. */
+  var gpShutSwing = gpWeekendVerdict(bars.rows4h);
+  var gpShutScalp = gpWeekendVerdict(bars.rows15m);
+  var gpI;
+  for (gpI = 0; gpI < swing.length; gpI++) if (swing[gpI]) swing[gpI].goldShut = gpShutSwing;
+  for (gpI = 0; gpI < scalp.length; gpI++) if (scalp[gpI]) scalp[gpI].goldShut = gpShutScalp;
   return { swing: swing, scalp: scalp, levels: levels, source: source,
+           goldShut: { swing: gpShutSwing, scalp: gpShutScalp },
            tape: { swing: tapeSwing, scalp: tapeScalp }, at: Date.now() };
 }
 
@@ -970,6 +999,10 @@ W.goldPineState = function(){
   }catch(e){ return null; }
 };
 
+/* hg-v950: exported so the calendar wiring is testable as a unit — the
+   scan itself needs pinegoldmath, and a guard that cannot reach the rule
+   is a guard that proves nothing. */
+W.gpWeekendVerdict = gpWeekendVerdict;
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'goldpine', label: 'GOLD PINE', mount: mount, refresh: goldPineRefresh });
 
