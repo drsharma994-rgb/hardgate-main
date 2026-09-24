@@ -1,28 +1,28 @@
 {
   "claim": "GOLD SWING @2R: tape-aligned + regime-fit + htf-confirm + hurst-regime all agree. In-sample 44.2% hit vs 31.6% tape-alone (z +5.68, n=608, close-by-close alignment), frozen before the cutoff.",
   "cutoff": "2026-08-28T00:00:00Z",
-  "lastCheckedDate": "2026-09-23",
+  "lastCheckedDate": "2026-09-24",
   "status": "accumulating",
   "verdict": "Too few to judge yet — 10 of 40 settled stack firings.",
   "confidence": null,
   "swing2R": {
     "every": {
-      "n": 679,
-      "wins": 234,
-      "hitPct": 34.5,
-      "expR": 0.034
+      "n": 699,
+      "wins": 239,
+      "hitPct": 34.2,
+      "expR": 0.026
     },
     "tape": {
-      "n": 264,
+      "n": 279,
       "wins": 110,
-      "hitPct": 41.7,
-      "expR": 0.25
+      "hitPct": 39.4,
+      "expR": 0.183
     },
     "stack2of3": {
-      "n": 216,
+      "n": 229,
       "wins": 79,
-      "hitPct": 36.6,
-      "expR": 0.097
+      "hitPct": 34.5,
+      "expR": 0.035
     },
     "stack3of3": {
       "n": 10,
@@ -31,28 +31,28 @@
       "expR": -1
     },
     "zStackVsTape": null,
-    "judgedBars": 137,
+    "judgedBars": 143,
     "firstBar": "2026-08-28",
-    "lastBar": "2026-09-19"
+    "lastBar": "2026-09-20"
   },
   "scalpControl2R": {
     "every": {
-      "n": 3950,
-      "wins": 1095,
-      "hitPct": 27.7,
-      "expR": -0.168
+      "n": 4061,
+      "wins": 1128,
+      "hitPct": 27.8,
+      "expR": -0.167
     },
     "tape": {
-      "n": 1686,
-      "wins": 521,
-      "hitPct": 30.9,
-      "expR": -0.073
+      "n": 1741,
+      "wins": 537,
+      "hitPct": 30.8,
+      "expR": -0.075
     },
     "stack2of3": {
-      "n": 1416,
-      "wins": 488,
-      "hitPct": 34.5,
-      "expR": 0.034
+      "n": 1471,
+      "wins": 504,
+      "hitPct": 34.3,
+      "expR": 0.028
     },
     "stack3of3": {
       "n": 764,
@@ -60,29 +60,29 @@
       "hitPct": 34.2,
       "expR": 0.025
     },
-    "zStackVsTape": 1.6,
-    "judgedBars": 607,
+    "zStackVsTape": 1.64,
+    "judgedBars": 631,
     "firstBar": "2026-08-28",
-    "lastBar": "2026-09-22"
+    "lastBar": "2026-09-23"
   },
   "scalpControl1R": {
     "every": {
-      "n": 4417,
-      "wins": 2023,
-      "hitPct": 45.8,
-      "expR": -0.084
+      "n": 4551,
+      "wins": 2097,
+      "hitPct": 46.1,
+      "expR": -0.078
     },
     "tape": {
-      "n": 1889,
-      "wins": 907,
-      "hitPct": 48,
-      "expR": -0.04
+      "n": 1953,
+      "wins": 946,
+      "hitPct": 48.4,
+      "expR": -0.031
     },
     "stack2of3": {
-      "n": 1584,
-      "wins": 808,
-      "hitPct": 51,
-      "expR": 0.02
+      "n": 1648,
+      "wins": 847,
+      "hitPct": 51.4,
+      "expR": 0.028
     },
     "stack3of3": {
       "n": 818,
@@ -90,9 +90,9 @@
       "hitPct": 47.2,
       "expR": -0.056
     },
-    "zStackVsTape": -0.4,
-    "judgedBars": 607,
+    "zStackVsTape": -0.6,
+    "judgedBars": 631,
     "firstBar": "2026-08-28",
-    "lastBar": "2026-09-22"
+    "lastBar": "2026-09-23"
   }
 }
