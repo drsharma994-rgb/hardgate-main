@@ -29,8 +29,9 @@
  *   node scripts/rebake-gold-literals.mjs --write  apply it
  */
 import { readFileSync, writeFileSync } from 'node:fs';
+import { GOLD_SCALP_WALK, OMNIGOLD_WALK } from '../lib/gold-artifacts.mjs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve, basename } from 'node:path';
 import { liveEdgePopulation } from './edge-live-population.mjs';
 import { formedPopulation } from './omnigold-formed-population.mjs';
 
@@ -136,9 +137,9 @@ function walkBlock(src, varName, meta, trades, srcPath){
 {
   const gp = join(ROOT, 'goldind.js');
   let gsrc = readFileSync(gp, 'utf8');
-  const gRaw = JSON.parse(readFileSync(join(ROOT, 'scripts/backtest-goldscalp-results-floor.json'), 'utf8'));
+  const gRaw = JSON.parse(readFileSync(GOLD_SCALP_WALK, 'utf8'));
   const r = walkBlock(gsrc, 'HG_GOLD_EDGE_WALK', gRaw.meta, gRaw.trades.length,
-                      'scripts/backtest-goldscalp-results-floor.json');
+                      'scripts/' + basename(GOLD_SCALP_WALK));
   /* a block it cannot locate is FATAL, never skipped — the hg-v921 rule */
   if (r.err) throw new Error('rebake: ' + r.err);
   changes.push({ file: 'goldind.js', what: 'walk span', rows: r.next === gsrc ? 0 : 1,
@@ -147,9 +148,9 @@ function walkBlock(src, varName, meta, trades, srcPath){
 {
   const op = join(ROOT, 'omnigold.js');
   let osrc = readFileSync(op, 'utf8');
-  const oRaw = JSON.parse(readFileSync(join(ROOT, 'scripts/backtest-omnigold-results.json'), 'utf8'));
+  const oRaw = JSON.parse(readFileSync(OMNIGOLD_WALK, 'utf8'));
   const r = walkBlock(osrc, 'HG_OG_WALK', oRaw.meta, oRaw.trades.length,
-                      'scripts/backtest-omnigold-results.json');
+                      'scripts/' + basename(OMNIGOLD_WALK));
   if (r.err) throw new Error('rebake: ' + r.err);
   changes.push({ file: 'omnigold.js', what: 'walk span', rows: r.next === osrc ? 0 : 1,
                  p: op, next: r.next === osrc ? null : r.next });

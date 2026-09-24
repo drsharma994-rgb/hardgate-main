@@ -168,6 +168,15 @@ const SYMBOL = String(opt('--symbol', 'PAXGUSDT')).toUpperCase();
 if (SYMBOL !== 'PAXGUSDT'){
   OUT_FILE = path.join(ROOT, 'scripts', 'backtest-omnigold-results-' + SYMBOL.toLowerCase() + '.json');
 }
+
+/* hg-v959: report the resolved artifact and stop, so the provenance check can
+   ask this walk what it writes instead of parsing this file for a string.
+   OUT_FILE is per-symbol, so a parse would have to re-implement the branch
+   above and would drift from it. Costs no bars. */
+if (has('--print-out')){
+  console.log(OUT_FILE);
+  process.exit(0);
+}
 const FEE_SIDE = 0.0010;          /* Binance spot taker */
 const SLIP_SIDE = 0.0003;         /* PAXG book is thin */
 const COST_RT_FRAC = 2 * (FEE_SIDE + SLIP_SIDE);   /* 0.26% of entry, round trip */
