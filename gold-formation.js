@@ -647,6 +647,93 @@
 
      -> { formed, tradable, state, reasons[], confluence, og, ogAll[],
           evidence, venue, drag, stopFloor?, kindDemotion?, deskParams } */
+  /* ---------- hg-v949: the gold trading calendar ----------
+
+     GOLD IS SHUT from Friday 22:00 UTC to Sunday 22:00 UTC (DST-aware; the
+     one definition is hgInGoldWeekend in indicators2.js and this delegates to
+     it rather than re-deriving the edges -- a second copy of a calendar is a
+     second calendar). OMNIGOLD has vetoed inside that window since hg-v420.
+     The desks that route through THIS function never had the rule at all.
+
+     Why it is not merely historical hygiene: getXAUCandles walks a feed chain
+     (XM -> Delta XAUTUSD -> Binance PAXG -> proxy), and the last two are 24/7
+     crypto tokens. So on a Saturday a desk reading that chain is handed bars
+     and will mint an XAUUSD ticket nobody can take, at a price no broker
+     quoted.
+
+     WHAT IT MEASURED ON: NEW GOLD's only settled record is walked on
+     PAXGUSDT, whose own artifact meta says "24/7 weekend bars a broker never
+     printed". Nine of its nineteen trades formed inside the gold weekend and
+     the desk's entire positive reading is those nine (+0.2403R net at XM);
+     the tradeable subset is n=10, gross +0.0000R, net -0.0568R, win 40.0%
+     against the 40.0% its own 1.5R ladder demands. n=10 carries NO verdict
+     and none is claimed -- the finding is that the quoted number was not
+     measured on a population the desk can trade, not that the desk loses.
+     Re-derive: node scripts/gold-weekend-population.mjs
+
+     THE INSTANT IS THE SIGNAL BAR, NEVER Date.now(). A scan re-run on Monday
+     over Friday's bars must give the same answer it gave on Friday, and a
+     wall-clock read would flip it. Callers pass opts.atMs; there is
+     deliberately no rows fallback, because the three desks here make an
+     identical rows-less call by design and adding one would break that.
+
+     FAILS OPEN at every seam: no atMs, an unreadable atMs, or indicators2.js
+     absent and the verdict is null -- the setup stands exactly as before. A
+     calendar this desk cannot read is not a reason to withhold a setup. */
+  function hgGoldWeekendVerdict(atMs){
+    try{
+      var t = atMs;
+      if (t === null || t === undefined || t === '') return null;
+      t = +t;
+      if (!isFinite(t)) return null;
+      /* accept seconds or milliseconds, the convention hgGoldSignalBarMs uses */
+      var ms = (Math.abs(t) < 1e12) ? t * 1000 : t;
+      var fn = gfn('hgInGoldWeekend');
+      if (typeof fn !== 'function') return null;
+      var shut = fn(ms / 1000);
+      if (shut !== true && shut !== false) return null;
+      return { atMs: ms, inWeekend: !!shut,
+               why: shut
+                 ? ('formed at ' + new Date(ms).toISOString().replace('T', ' ').slice(0, 16)
+                    + ' UTC, inside the gold weekend (Fri 22:00 - Sun 22:00 UTC, DST-aware). '
+                    + 'XAUUSD prints no bar then: this candle came from a 24/7 crypto proxy in the feed chain, '
+                    + 'so the level is one no broker quoted and the ticket is one nobody could take. '
+                    + 'The card and its evidence stay; only tradable is withheld.')
+                 : '' };
+    }catch(e){ return null; }
+  }
+
+  /* Which gold desks route through this function, and therefore have the
+     calendar, versus those that mint from raw bars with no weekend rule of
+     their own. Derived from a probe of the live globals rather than a list
+     kept in prose -- hg-v945's lesson: a coverage claim nobody can re-run is
+     a coverage claim that goes stale silently. A desk absent from the page
+     reports 'not loaded', never 'covered'. */
+  var HG_GOLD_WEEKEND_MINTERS = [
+    { desk: 'NEW GOLD',    probe: 'newGoldState',     via: 'hgGoldFormation' },
+    { desk: 'OMNIGOLD 1',  probe: 'omnigold1State',   via: 'hgGoldFormation' },
+    { desk: 'OMNIGOLD',    probe: 'hgOgFormation',    via: 'own hg-v420 veto' },
+    { desk: 'GOLD SWING',  probe: 'goldSwingSetups',  via: 'own weekend read' },
+    { desk: 'GOLD SCALP',  probe: 'goldScalpSetups',  via: 'own weekend read' },
+    { desk: 'SUPER GOLD',  probe: 'superGoldState',   via: 'own weekend read' },
+    { desk: 'OPTI GOLD',   probe: 'optiGoldState',    via: null },
+    { desk: 'GOLD PINE',   probe: 'goldPineScan',     via: null },
+    { desk: 'GOLD PRO',    probe: 'goldProState',     via: null },
+    { desk: '80PERCENT',   probe: 'eightyPercentState', via: null }
+  ];
+  function hgGoldWeekendCoverage(){
+    var out = { covered: [], uncovered: [], notLoaded: [] };
+    for (var i = 0; i < HG_GOLD_WEEKEND_MINTERS.length; i++){
+      var m = HG_GOLD_WEEKEND_MINTERS[i];
+      var loaded = false;
+      try{ loaded = (typeof G[m.probe] !== 'undefined'); }catch(eL){ loaded = false; }
+      if (!loaded){ out.notLoaded.push(m.desk); continue; }
+      if (m.via) out.covered.push({ desk: m.desk, via: m.via });
+      else out.uncovered.push(m.desk);
+    }
+    return out;
+  }
+
   function hgGoldFormation(setup, opts){
     opts = opts || {};
     var out = {
@@ -735,6 +822,22 @@
       var conf = hgGoldConfluence(opts.confirmations, { min: opts.min, requireClasses: opts.requireClasses });
       out.confluence = conf;
 
+      /* ---- hg-v949: the gold trading calendar, BEFORE the outcome gates ----
+         A setup formed on a bar XAUUSD never printed is not a weaker setup,
+         it is not a setup: no broker quoted the level and nobody could take
+         the ticket. So it is decided here rather than folded into confluence,
+         and the card keeps its evidence while losing only `tradable` -- the
+         hg-v552/v572 rule that a hard drop empties a board and a demote does
+         not. Null (no atMs, unreadable, or indicators2.js absent) changes
+         nothing; `out.weekend` rides either way so a reader can tell
+         "checked and open" from "could not check". */
+      out.weekend = hgGoldWeekendVerdict(opts.atMs);
+      if (out.weekend && out.weekend.inWeekend === true){
+        out.state = 'STOOD-ASIDE'; out.formed = false; out.tradable = false;
+        out.reasons.push('GOLD IS SHUT — ' + out.weekend.why);
+        return out;
+      }
+
       if (ev.killed){ out.state = 'KILLED'; out.formed = false; out.tradable = false; return out; }
       /* UNREADABLE EVIDENCE (hg-v698 audit closeout): the kill-check threw,
          so "not killed" was never established. Same fail-closed direction as
@@ -805,6 +908,9 @@
   G.hgGoldConfClassOfFamily = hgGoldConfClassOfFamily;
   G.hgGoldSessionEdge = hgGoldSessionEdge;
   G.hgGoldSignalBarMs = hgGoldSignalBarMs;
+  G.hgGoldWeekendVerdict = hgGoldWeekendVerdict;
+  G.hgGoldWeekendCoverage = hgGoldWeekendCoverage;
+  G.HG_GOLD_WEEKEND_MINTERS = HG_GOLD_WEEKEND_MINTERS;
   G.hgGoldApplySessionLeg = hgGoldApplySessionLeg;
   G.hgGoldConfluence = hgGoldConfluence;
   G.hgGoldConfluenceFromGates = hgGoldConfluenceFromGates;

@@ -1419,7 +1419,11 @@ async function ngRunScan(){
                    every verdict in practice, and making it a named floor
                    means a future always-true read cannot silently weaken
                    the bar back to tautologies. */
-                requireClasses: ['session-htf'] })
+                requireClasses: ['session-htf'],
+                /* hg-v949: the SIGNAL BAR this card fired on -- the same
+                   instant the session leg is read on, never Date.now(), so a
+                   Monday re-run over Friday's bars gives Friday's answer. */
+                atMs: ngBarMs(rows) })
           : { formed: false, tradable: false, state: 'STOOD-ASIDE', confluence: null,
               reasons: ['shared gold formation unavailable \u2014 gold-formation.js is not loaded; fail closed'] };
         /* hg-v700: the primary lane never corrected ngAssess's minted
@@ -1562,7 +1566,10 @@ async function ngRunScan(){
                   alsoKinds: [lane.ogKind], confirmations: omniRecord.confirmations,
                   /* same explicit floor as the primary lane: the revocable
                      session-htf leg must pass for FORMED (v698 closeout) */
-                  requireClasses: ['session-htf'] })
+                  requireClasses: ['session-htf'],
+                  /* hg-v949: same signal-bar instant on the hybrid lane --
+                     one rule, both lanes, or the calendar covers half a desk. */
+                  atMs: ngBarMs(laneRows) })
             : { formed: false, tradable: false, state: 'STOOD-ASIDE', confluence: null,
                 reasons: ['shared gold formation unavailable — gold-formation.js is not loaded; fail closed'] };
           ogSetup.confluenceCount = (omniRecord.formation && omniRecord.formation.confluence)

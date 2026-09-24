@@ -907,7 +907,13 @@
         { kind: c.sid, stratKey: c.sid, horizon: hz, dir: c.dir,
           plan: { entry: c.entry, stop: c.stop, t1: c.t1, rr1: c.rr1 },
           entry: c.entry, stop: c.stop, t1: c.t1 },
-        { tab: 'omnigold1', mechanic: c.sid + '-' + hz, confirmations: confs });
+        { tab: 'omnigold1', mechanic: c.sid + '-' + hz, confirmations: confs,
+          /* hg-v949: the SIGNAL BAR, never Date.now() — the same instant the
+             session leg is read on above, so a Monday re-run over Friday's
+             bars gives Friday's answer. Unreadable -> the calendar check
+             fails open in hgGoldFormation. */
+          atMs: (typeof W.hgGoldSignalBarMs === 'function')
+            ? W.hgGoldSignalBarMs(ctx && (ctx.rows1h || ctx.rows)) : null });
     }catch(eF){
       return { formed: false, tradable: false, state: 'STOOD-ASIDE', confluence: null,
                reasons: ['gold formation threw — fail closed: ' + ((eF && eF.message) || eF)] };
