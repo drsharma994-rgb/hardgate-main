@@ -134,17 +134,33 @@ console.log('\n2. coverage of the roster is EXHAUSTIVE');
 console.log('\n3. a ported key is not a mechanic either tab already mints');
 {
   const gi = src('goldind.js');
-  const blk = gi.slice(gi.indexOf('var HG_GOLD_SETUP_EDGE'));
-  const edge = blk.slice(0, 40000);
-  const a = edge.indexOf('scalp:'), b = edge.indexOf('swing:', a);
-  /* `: *\{` not `: \{` — seven scalp rows wrap their brace onto extra spaces,
-     and the strict form silently read 20 of the 27 keys. A partial read here
-     would let a ported key collide with one of the missing seven unseen. */
-  const keyRe = /^\s{4}([a-z0-9]+): *\{/gm;
-  const scalpKeys = new Set([...edge.slice(a, b).matchAll(keyRe)].map(m => m[1]));
-  const swingKeys = new Set([...edge.slice(b, b + 12000).matchAll(keyRe)].map(m => m[1]));
-  ok(scalpKeys.size === 27 && swingKeys.size === 15,
-     'read the real edge tables off goldind.js — 27 scalp keys, 15 swing');
+  /* RUNTIME, not a regex over source. The committed form took a fixed 12,000
+     characters after `swing:` and counted `reads:` out of the NEXT literal in
+     the file, so it read 15 swing keys where the table holds 14 — it passed
+     for the wrong reason, which is the hg-v942 lesson in a second place. A
+     block added beside the table put four more foreign keys inside that window
+     and made it fail. Read the object the desk actually uses: then nothing
+     added nearby can move this count, in either direction. */
+  const ectx = vm.createContext({ Math, Date, JSON, isFinite, isNaN, parseFloat, parseInt,
+    Array, Object, String, Number, RegExp, Float64Array, Infinity, NaN,
+    console: { log(){}, warn(){}, error(){} },
+    setTimeout: () => 0, clearTimeout(){},
+    localStorage: { getItem: () => null, setItem(){}, removeItem(){} },
+    document: { getElementById: () => null,
+      createElement: () => ({ style: {}, innerHTML: '', appendChild(){}, setAttribute(){},
+                              querySelector: () => null, querySelectorAll: () => [] }),
+      querySelector: () => null, querySelectorAll: () => [], head: { appendChild(){} },
+      documentElement: { appendChild(){} }, addEventListener(){} } });
+  ectx.window = ectx; ectx.self = ectx; ectx.globalThis = ectx; ectx.HG_tabs = [];
+  try { vm.runInContext(gi, ectx, { filename: 'goldind.js' }); } catch (e) {}
+  const tbl = ectx.HG_GOLD_SETUP_EDGE;
+  /* fatal, never skipped: an unreadable table must not quietly pass the
+     collision checks below on two empty sets */
+  ok(!!(tbl && tbl.scalp && tbl.swing), 'goldind.js exposes the real edge tables');
+  const scalpKeys = new Set(Object.keys((tbl && tbl.scalp) || {}));
+  const swingKeys = new Set(Object.keys((tbl && tbl.swing) || {}));
+  ok(scalpKeys.size === 27 && swingKeys.size === 14,
+     'read the real edge tables off goldind.js — 27 scalp keys, 14 swing');
   for (const p of PORTS()){
     ok(!scalpKeys.has(p.key) && !swingKeys.has(p.key),
        '  ' + p.key + ' is a NEW key — it does not shadow an existing mechanic\'s record');

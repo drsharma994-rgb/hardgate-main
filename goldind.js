@@ -2081,6 +2081,139 @@ function hgGoldEdgeLiveNote(row){
   }catch(e){ return ''; }
 }
 
+/* --- BEGIN GENERATED HG_GOLD_SESSION_SEP (scripts/session-separation.mjs) ---
+   Re-derive with `node scripts/session-separation.mjs --write`. Do not
+   hand-edit — hg-v921 made these literals write themselves. Every figure is
+   from scripts/backtest-goldscalp-results-floor.json.
+
+   dWin / dGross / dNet are [as-recorded, lower-fill-bound]; `windows` is how
+   many of the 4 DISJOINT windows agreed, at each bound. A verdict
+   needs BOTH bounds unanimous AND agreeing — nothing here has one. */
+  var HG_GOLD_SESSION_SEP = {
+    windows: 4,
+    coverage: { n: 2605, off: 1156, offPct: 44.4,
+                offDemoted: 1156, offDemotedPct: 100,
+                sole: 6, solePctOfOff: 0.5, solePctOfBook: 0.2,
+                coTop: [["CONF NO TRADE",1504],["EDGE DEMOTE",784],["ASIA SESSION",567],["MTF BIAS",386],["S56 BALANCE",223]],
+                led: 111, ledOff: 0, ledOffPct: 0 },
+    splits: {
+    offSession: { dWin: [0.4, 0.8], dGross: [0.0287, 0.0396], dNet: [0.0212, 0.0321], windows: ['2/4', '2/4'], verdict: null },
+    kzAny: { dWin: [-0.4, -0.8], dGross: [-0.0287, -0.0396], dNet: [-0.0212, -0.0321], windows: ['2/4', '2/4'], verdict: null },
+    kzMax: { dWin: [-0.6, -0.1], dGross: [-0.0647, -0.0512], dNet: [-0.0444, -0.0309], windows: ['1/4', '1/4'], verdict: null },
+    overlap: { dWin: [-0.6, -0.1], dGross: [-0.0647, -0.0512], dNet: [-0.0444, -0.0309], windows: ['1/4', '1/4'], verdict: null },
+    london: { dWin: [2, 2.5], dGross: [0.0654, 0.0774], dNet: [0.0593, 0.0712], windows: ['1/4', '1/4'], verdict: null },
+    nyAm: { dWin: [-1.6, -3.4], dGross: [-0.0225, -0.0683], dNet: [-0.0297, -0.0755], windows: ['2/4', '2/4'], verdict: null },
+    asian: { dWin: [-0.4, -0.3], dGross: [0.0171, 0.0203], dNet: [0.0118, 0.0151], windows: ['1/4', '1/4'], verdict: null },
+    },
+    anyVerdict: false
+  };
+  /* --- END GENERATED HG_GOLD_SESSION_SEP --- */
+
+/* hg-v944 — THE OFF-SESSION DEMOTE LOOKS LIKE THE REASON THE BOARD IS THIN.
+   IT IS NOT, AND THE NUMBER THAT SHOWS THAT IS THE ONE NOBODY HAD.
+
+   goldind demotes every setup formed outside an ICT killzone and a demoted row
+   can never be MOST PROBABLE. On the committed walk that stamp lands on 1,156
+   of 2,605 formed setups (44.4%), and 0 of 111 MOST PROBABLE rows were
+   off-session. Read alone, those two figures say session filtering is what
+   empties this board, and the obvious move is to relax it.
+
+   THE SOLE-BLOCKER COUNT SAYS OTHERWISE: OFF-SESSION is the ONLY demote on
+   SIX rows — 0.5% of the rows carrying it, 0.2% of the walk. Relaxing it
+   entirely would return six setups. What is actually demoting those rows is
+   CONF NO TRADE (1,504), EDGE DEMOTE (784), ASIA SESSION (567), MTF BIAS
+   (386) and S56 BALANCE (223). This is hg-v929's finding in a second place:
+   a share is not a cost, and the loud gate is not the binding one. hg-v184
+   built the same discipline for crypto (what relaxing a gate would BUY).
+
+   SEPARATELY, TIME OF DAY SEPARATES NOTHING. On the bar every gold verdict
+   here must clear — four DISJOINT windows agreeing on win% AND gross AND net
+   at BOTH fill bounds — not one killzone split carries a verdict. The cohort
+   the rule most FAVOURS (London/NY overlap, maximum weight) points the wrong
+   way (dNet -0.044 / -0.031, 1 window of 4); the cohort it demotes reads
+   mildly positive (+0.021 / +0.032, 2 of 4). Neither is unanimous.
+
+   SO NOTHING CHANGES, for two independent reasons: the evidence does not
+   clear the bar in either direction, and even if it did the rule is not what
+   is withholding setups. A lever exists for the desk owner —
+   hgGoldSetOffSessionDemote(false) — and it defaults to TRUE, unchanged.
+   Measured on the real mint: pulling it moved lead-eligible candidates by
+   ZERO, which is what a 6-row sole-blocker count predicts. */
+var HG_GOLD_OFFSESSION_LS = 'hg_gold_offsession_demote';
+var HG_GOLD_OFFSESSION_DEMOTE = true;
+function hgGoldOffSessionDemoteInit(){
+  try{
+    var W2 = (typeof window !== 'undefined') ? window : null;
+    var ovr = W2 ? W2.HG_GOLD_OFFSESSION_DEMOTE : undefined;
+    if (ovr === true || ovr === false){ HG_GOLD_OFFSESSION_DEMOTE = ovr; return HG_GOLD_OFFSESSION_DEMOTE; }
+    var v = null;
+    try { v = localStorage.getItem(HG_GOLD_OFFSESSION_LS); } catch (e){ v = null; }
+    HG_GOLD_OFFSESSION_DEMOTE = !(v === '0' || v === 'false');
+  }catch(e){ HG_GOLD_OFFSESSION_DEMOTE = true; }
+  return HG_GOLD_OFFSESSION_DEMOTE;
+}
+function hgGoldSetOffSessionDemote(on){
+  HG_GOLD_OFFSESSION_DEMOTE = (on !== false);
+  try { localStorage.setItem(HG_GOLD_OFFSESSION_LS, HG_GOLD_OFFSESSION_DEMOTE ? '1' : '0'); } catch (e){}
+  return HG_GOLD_OFFSESSION_DEMOTE;
+}
+function hgGoldOffSessionDemoteOn(){ return HG_GOLD_OFFSESSION_DEMOTE !== false; }
+
+/* The panel. Every figure comes from the generated literal, so nothing here
+   can drift from the walk. '' when the literal is absent — never a
+   zero-filled panel, which would read as a measurement. */
+function hgGoldSessionSepPanelHtml(){
+  try{
+    var S = HG_GOLD_SESSION_SEP;
+    if (!S || !S.coverage || !S.splits) return '';
+    var c = S.coverage;
+    var sg = function(x){ return (x >= 0 ? '+' : '') + Number(x).toFixed(4); };
+    var row = function(k, label){
+      var r = S.splits[k];
+      if (!r || r.thin) return '';
+      return '<tr><td>' + label + '</td><td>' + sg(r.dNet[0]) + ' / ' + sg(r.dNet[1])
+        + '</td><td>' + sg(r.dGross[0]) + ' / ' + sg(r.dGross[1])
+        + '</td><td>' + r.windows[0] + ', ' + r.windows[1]
+        + '</td><td>' + (r.verdict ? r.verdict.toUpperCase() : 'none') + '</td></tr>';
+    };
+    var co = (c.coTop || []).map(function(p){ return p[0] + ' ' + p[1]; }).join(' &middot; ');
+    return '<div class="note gs-sessionsep" style="margin:8px 0;padding:6px 8px;'
+      + 'border:1px solid #A67C12;border-left:3px solid #A67C12;border-radius:4px;'
+      + 'background:rgba(166,124,18,0.06);font-size:0.85em">'
+      + '<b>OFF-SESSION DEMOTE &mdash; loud, and not what is emptying this board</b>'
+      + '<div style="margin-top:4px">The stamp lands on <b>' + c.off + ' of ' + c.n
+      + '</b> formed setups (' + c.offPct + '%) on the committed walk, and <b>'
+      + c.ledOff + ' of ' + c.led + '</b> leaders were off-session &mdash; which reads '
+      + 'as though session filtering decides the board. <b>It is the sole demote on '
+      + c.sole + ' rows</b> (' + c.solePctOfOff + '% of those carrying it, '
+      + c.solePctOfBook + '% of the walk), so relaxing it entirely would return '
+      + '<b>' + c.sole + '</b> setups. What is actually demoting them: ' + co + '.</div>'
+      + '<div style="margin-top:4px">Separately, time of day <b>separates nothing</b>:</div>'
+      + '<table style="margin-top:4px;border-collapse:collapse;font-size:0.95em">'
+      + '<tr><th align="left">split</th><th align="left">&Delta;net</th>'
+      + '<th align="left">&Delta;gross</th><th align="left">windows</th>'
+      + '<th align="left">verdict</th></tr>'
+      + row('offSession', 'off-session (the demoted cohort)')
+      + row('kzMax', 'killzone weight 3 (the most favoured)')
+      + row('overlap', 'London/NY overlap')
+      + row('london', 'London killzone')
+      + row('nyAm', 'NY AM')
+      + row('asian', 'Asian range')
+      + '</table>'
+      + '<div style="margin-top:4px;opacity:.9">Both columns are [as-recorded, '
+      + 'lower fill bound]; <b>windows</b> is how many of ' + S.windows + ' DISJOINT '
+      + 'windows agreed at each bound. A verdict needs both bounds unanimous and '
+      + 'agreeing. <b>' + (S.anyVerdict ? 'Some split carries one.' : 'None does.')
+      + '</b> The cohort this rule most favours points the wrong way; the cohort it '
+      + 'demotes reads mildly positive. So <b>nothing here is acted on</b>, for two '
+      + 'independent reasons &mdash; the evidence clears the bar in neither direction, '
+      + 'and the rule is not what withholds setups anyway. '
+      + '<code>hgGoldSetOffSessionDemote(false)</code> pulls the lever knowingly; on '
+      + 'the real mint it moved lead-eligible candidates by zero.</div>'
+      + '</div>';
+  }catch(e){ return ''; }
+}
+
 /* ============ hg-v943 — WHEN TWO RECORDS OF THE SAME MECHANIC DISAGREE ======
    Several mechanics on these tabs are wired OMNIGOLD mechanics: the SAME
    detector, registered deliberately (hg-v567/568/569/570/571/575/576/923).
@@ -2752,7 +2885,10 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
        Asian-range strategy trades its own session; everything else is
        demoted and held to a +2 higher tally bar in goldRankSetups. */
     var inKillzone = !!(D.kz && D.kz.weight > 0);
-    if (!inKillzone && !(key === 'asian' && D.kz && D.kz.zone === 'ASIAN')){
+    /* hg-v944: the lever, defaulting to ON (unchanged). See
+       hgGoldSessionSepPanelHtml for what this withholds and what measures it. */
+    if (hgGoldOffSessionDemoteOn()
+        && !inKillzone && !(key === 'asian' && D.kz && D.kz.zone === 'ASIAN')){
       demoted = true; offSess = true; stamps.push('OFF-SESSION');
       gateNotes.push('detected ' + (D.kz ? (D.kz.label || 'OFF-HOURS') : 'OFF-HOURS')
         + ' — outside every ICT killzone; held to a +2 higher confluence-tally bar');
@@ -15885,6 +16021,11 @@ W.hgGoldPlanSidesOk = hgGoldPlanSidesOk;
 W.hgGoldTakeEnginePlan = hgGoldTakeEnginePlan;
 W.hgGoldBindEnginePlan = hgGoldBindEnginePlan;
 W.hgGoldSetupEdgeApply = hgGoldSetupEdgeApply;
+W.HG_GOLD_SESSION_SEP = HG_GOLD_SESSION_SEP;
+W.hgGoldSessionSepPanelHtml = hgGoldSessionSepPanelHtml;
+W.hgGoldSetOffSessionDemote = hgGoldSetOffSessionDemote;
+W.hgGoldOffSessionDemoteOn = hgGoldOffSessionDemoteOn;
+W.hgGoldOffSessionDemoteInit = hgGoldOffSessionDemoteInit;
 W.HG_GOLD_EXACT_TWIN = HG_GOLD_EXACT_TWIN;
 W.HG_GOLD_TWIN_BE = HG_GOLD_TWIN_BE;
 W.HG_GOLD_TWIN_VETO_Z = HG_GOLD_TWIN_VETO_Z;
