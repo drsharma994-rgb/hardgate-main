@@ -1957,7 +1957,20 @@ async function runScan(ui){
          before it could resolve. */
       if (typeof W.hgFwdResolveMulti === 'function') W.hgFwdResolveMulti('XAUUSD', { '15m': f.rows15m, '1h': f.rows1h });
       else if (typeof W.hgFwdResolve === 'function') W.hgFwdResolve('XAUUSD', '15m', f.rows15m);
-      W.hgFwdRecordScan('GOLDULTRA', '15m', [{ sym: 'XAUUSD', dir: sel.pick.dir, entry: sel.pick.entry, stop: sel.pick.stop, t1: sel.pick.t1, mechanic: 'GOLDSCALP-' + (sel.pick.stratKey || 'prefer') + '-AGAINST-ULTRA', ticket: true }], { horizonBars: RULE.timeoutBars });
+      /* hg-v954: the gold calendar, on this desk's own 15m signal bar. This
+         row is ticket:true on XAUUSD and the desk had NO weekend reference
+         of any kind -- its only two mentions of the word are PROSE in the
+         walk metadata, which says the universe carries "24/7 weekend bars a
+         broker never printed". The desk documented the contamination and
+         did nothing about it. MARKS, withholds nothing (TAURIC precedent,
+         hg-v952); fails OPEN. */
+      var guWk = guWeekendFull(guSignalSec(f));
+      var guRow = { sym: 'XAUUSD', dir: sel.pick.dir, entry: sel.pick.entry, stop: sel.pick.stop, t1: sel.pick.t1, mechanic: 'GOLDSCALP-' + (sel.pick.stratKey || 'prefer') + '-AGAINST-ULTRA', ticket: true };
+      if (guWk){
+        guRow.goldShut = !!guWk.inWeekend;
+        if (guWk.inWeekend) guRow.goldShutWhy = guWk.why;
+      } /* else: unreadable -- no mark, nothing changes */
+      W.hgFwdRecordScan('GOLDULTRA', '15m', [guRow], { horizonBars: RULE.timeoutBars });
     } }catch(eF){}
     return 'refreshed';
   }catch(e){ setStat(ui, 'scan failed: ' + ((e && e.message) || e), true); return 'error: ' + ((e && e.message) || e); }
@@ -1984,6 +1997,34 @@ async function refresh(){ if (!__ui) return 'skipped: not mounted'; return runSc
 
 W.goldUltraEngine = goldUltraEngine;
 W.goldUltraVotes = goldUltraVotes;
+/* hg-v954: the instant is this desk's own 15m signal bar, never the wall
+   clock (hg-v949). Delegates to the ONE calendar. */
+function guSignalSec(f){
+  try{
+    var rows = f && (f.rows15m || f.rows1h || f.rows4h);
+    var fn = (typeof W !== 'undefined' && W && typeof W.hgGoldSignalBarMs === 'function') ? W.hgGoldSignalBarMs : null;
+    if (!fn || !rows || !rows.length) return null;
+    var ms = fn(rows);
+    return isFinite(ms) && ms > 0 ? Math.floor(ms / 1000) : null;
+  }catch(e){ return null; }
+}
+/* Two shapes -- see the note in golddirection.js. The probe needs
+   truthy-when-shut / null-when-open; the mark needs shut / open /
+   UNREADABLE, and the probe shape makes the last two identical. */
+function guWeekendFull(tSec){
+  try{
+    var fn = (typeof W !== 'undefined' && W && typeof W.hgGoldWeekendVerdict === 'function') ? W.hgGoldWeekendVerdict : null;
+    if (!fn) return null;
+    return fn(tSec) || null;
+  }catch(e){ return null; }
+}
+function guWeekendVerdict(tSec){
+  var v = guWeekendFull(tSec);
+  return (v && v.inWeekend) ? v : null;
+}
+W.guWeekendVerdict = guWeekendVerdict;
+W.__guWeekendFull = guWeekendFull;
+W.__guSignalSec = guSignalSec;
 W.goldUltraState = function(){ return __last ? JSON.parse(JSON.stringify(__last)) : null; };
 W.HG_GOLD_ULTRA_RULE = RULE;
 W.HG_GOLD_ULTRA_EVIDENCE = HG_GOLD_ULTRA_EVIDENCE;
