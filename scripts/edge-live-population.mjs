@@ -16,11 +16,12 @@
  * Usage: node scripts/edge-live-population.mjs [--json]
  */
 import { readFileSync } from 'node:fs';
+import { GOLD_SCALP_WALK } from '../lib/gold-artifacts.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-export const REPLAY = join(HERE, 'backtest-goldscalp-results-floor.json');
+export const REPLAY = GOLD_SCALP_WALK;   /* hg-v959: one home, lib/gold-artifacts.mjs */
 
 /* The two gates that fire between the replay and a card being minted today. */
 export const COST_BAR_PCT = 0.16;                                   /* hg-v912 scalp cost reject */

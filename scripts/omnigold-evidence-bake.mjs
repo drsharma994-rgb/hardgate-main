@@ -50,6 +50,13 @@ import { boundRows, isUnprovableFill, winRateBounds, thresholdVsInterval,
 const ROOT = path.join(fileURLToPath(new URL('../', import.meta.url)));
 const argv = process.argv.slice(2);
 const WRITE = argv.includes('--write');
+/* hg-v959: name the artifact this bake produces, so the provenance check can
+   ask rather than parse. The path is built with join() further down, which a
+   source parse cannot follow. */
+if (argv.includes('--print-out')){
+  console.log(new URL('omnigold-replay-evidence.json', import.meta.url).pathname);
+  process.exit(0);
+}
 const JSON_OUT = argv.includes('--json');
 
 const WALK = path.join(ROOT, 'scripts', 'backtest-omnigold-results.json');

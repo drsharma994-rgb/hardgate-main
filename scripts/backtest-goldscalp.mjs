@@ -85,6 +85,8 @@ import { xmOrderType, ogXmBarTouchesEntry } from '../lib/omnigold-xm-bot-backtes
 import { klinesUrl, klinesRouteNote } from '../lib/klines-source.mjs';
 
 const ROOT = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
+import { GOLD_SCALP_WALK } from '../lib/gold-artifacts.mjs';
+
 const CACHE_DIR = path.join(ROOT, 'scripts', '.bt-cache');
 
 /* ---------- CLI ---------- */
@@ -99,8 +101,44 @@ const REFRESH = has('--refresh');
 const BARS_15M = +opt('--bars', SMOKE ? 700 : 6000);
 /* smoke runs write to their own file so a full-run artifact can never be
    silently overwritten (the OP smoke/OUT_PATH incident) */
-const OUT_FILE = path.join(ROOT, 'scripts',
-  SMOKE ? 'backtest-goldscalp-smoke-results.json' : 'backtest-goldscalp-results.json');
+
+/* hg-v959: this walk could name only ONE output, and it was not the artifact
+   the gold literals are derived from. rebake-gold-literals.mjs reads
+   backtest-goldscalp-results-floor.json; this file wrote
+   backtest-goldscalp-results.json; and NOTHING in the repo wrote the floor
+   file. So `npm run gold:rebake` re-walked gold, wrote a file no literal
+   reads, then re-derived every gold literal from a file the walk had not
+   touched — and reported success. Proved both ways: deleting 80% of the
+   trades from this file leaves the drift check reporting "every baked literal
+   already equals its artifact", while the same edit to the floor file moves
+   22 scalp rows and the walk span.
+
+   --out= lets the chain name the artifact it actually derives from, so the
+   re-bake can be connected. It is REFUSED alongside --smoke: a smoke run
+   pointed at a real artifact is precisely the incident the comment above
+   records, and a flag that can recreate it is not a fix. */
+const OUT_OPT = opt('--out', null);
+if (OUT_OPT && SMOKE){
+  console.error('--out= and --smoke together would let a 700-bar smoke run overwrite a '
+    + 'full-run artifact. Refused. Drop one.');
+  process.exit(1);
+}
+if (OUT_OPT && (OUT_OPT.includes('/') || OUT_OPT.includes('..'))){
+  console.error('--out= takes a bare filename inside scripts/, not a path. Got: ' + OUT_OPT);
+  process.exit(1);
+}
+const OUT_FILE = OUT_OPT ? path.join(ROOT, 'scripts', OUT_OPT)
+  : (SMOKE ? path.join(ROOT, 'scripts', 'backtest-goldscalp-smoke-results.json')
+           : GOLD_SCALP_WALK);
+
+/* Report the resolved artifact and stop. The provenance check reads the path
+   this walk WOULD write by asking it, rather than by parsing this file for a
+   string — the same reason hg-v951 lifts and runs shipped code instead of
+   grepping it. Costs no bars, so it works where the walk itself cannot run. */
+if (has('--print-out')){
+  console.log(OUT_FILE);
+  process.exit(0);
+}
 
 /* ---------- constants ---------- */
 const SYMBOL = 'PAXGUSDT';
