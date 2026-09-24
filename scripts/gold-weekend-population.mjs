@@ -30,6 +30,14 @@ const inW = iso => IN_WEEKEND(Date.parse(iso) / 1000);
 
 const WALKS = [
   { desk: 'NEW GOLD', file: 'backtest-newgold-results.json', rr1: 1.5 },
+  /* hg-v953: the two biggest gold walks in the repo, added because nobody had
+     asked them this question. GOLD SCALP's is the walk HG_GOLD_SETUP_EDGE is
+     measured on -- the table that decides suppress / demote / prefer on that
+     desk -- and it was formed by goldScalpSetups, a function that until this
+     pack contained no calendar at all. The swing walk's own meta lists
+     "weekend demotes" among the runScan stages it does not replay. */
+  { desk: 'GOLD SCALP', file: 'backtest-goldscalp-results.json', rr1: 1.5 },
+  { desk: 'GOLD SWING', file: 'backtest-goldswing-results.json', rr1: 1.5 },
 ];
 
 function stats(rows){
@@ -85,8 +93,17 @@ for (const w of WALKS){
     const fw = fl.filter(r => r.tISO && inW(r.tISO)).length;
     console.log('   fireLog: ' + fw + '/' + fl.length + ' fires inside the gold weekend');
   }
-  console.log('   NO VERDICT is claimed from the tradeable subset: n=' + (so ? so.n : 0)
-    + ' is far too thin. The finding is that the quoted figure was not measured on a');
-  console.log('   population this desk can trade — not that the desk loses.');
+  /* hg-v953: a thin tradeable subset and a thick one are different claims, and
+     saying "far too thin" of 1,896 trades would be as false as claiming a
+     verdict from ten. Say which this is, from the number itself. */
+  if (so && so.n < 30){
+    console.log('   NO VERDICT is claimed from the tradeable subset: n=' + so.n
+      + ' is far too thin. The finding is that the quoted figure was not measured on a');
+    console.log('   population this desk can trade — not that the desk loses.');
+  } else {
+    console.log('   The finding is the SPLIT, not a verdict on either side: the quoted figure');
+    console.log('   pools bars gold printed with bars only a 24/7 crypto proxy printed. No');
+    console.log('   threshold, gate or verdict is moved on any desk from these numbers.');
+  }
 }
 process.exit(exitCode);

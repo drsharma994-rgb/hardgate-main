@@ -4339,8 +4339,31 @@ function goldScalpSetups(inp){
       }
     }catch(eCat){}
 
+    /* hg-v953: the mint carries the gold calendar now. goldind.js had not one
+       weekend reference in the whole file, while the coverage reporter listed
+       this desk covered "via own weekend read" -- a read that lives in the tab
+       shell, on the wall clock, and that the replay harness does not run at
+       all. nowMs is the signal bar on the replay path (the harness passes the
+       closed bar's cutoff) and the scan clock live. Marks; withholds nothing;
+       fails open. */
+    try{
+      var mwFn953 = (W && typeof W.hgGoldMarkMintWeekend === 'function') ? W.hgGoldMarkMintWeekend : null;
+      if (mwFn953) mwFn953(out, nowMs);
+    }catch(eWk953){}
+
     return out;
   }catch(e){ return []; }
+}
+
+/* hg-v953: the route the coverage reporter CALLS. Same calendar, same
+   delegation -- a second copy would be a second calendar (hg-v949). */
+function goldScalpWeekendVerdict(tSec){
+  try{
+    var f = (W && typeof W.hgGoldWeekendVerdict === 'function') ? W.hgGoldWeekendVerdict : null;
+    if (!f) return null;
+    var v = f(tSec);
+    return (v && v.inWeekend) ? v : null;
+  }catch(e){ return null; }
 }
 
 /* =========================================================================
@@ -16033,6 +16056,7 @@ W.goldStochRSI = goldStochRSI;
 W.goldSeason = goldSeason;
 W.goldScalpSetup = goldScalpSetup;
 W.goldScalpSetups = goldScalpSetups;
+W.goldScalpWeekendVerdict = goldScalpWeekendVerdict;
 W.goldScalpLevels = __gsLevels;
 W.goldWatch = goldWatch;
 W.goldRankSetups = goldRankSetups;
