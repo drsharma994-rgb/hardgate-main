@@ -516,7 +516,16 @@ var HG_GOLD_SIBLING_TWIN = {
   goldround: 'ROUND-MAGNET',
   goldwopen: 'WEEKLY-OPEN',
   goldfib:   'FIB-618',
-  goldpivot: 'PIVOT-REJECT'
+  goldpivot: 'PIVOT-REJECT',
+  /* hg-v942 roster ports -- the twin IS the mechanic here, not a near
+     relative, because detection is OMNIGOLD's own function. The record is
+     still OMNIGOLD's gates and 1h horizon, so it is still quoted as a twin. */
+  ogstructbos: 'STRUCT-BOS',
+  ogsqueeze:   'SQUEEZE-FIRE',
+  ogcusum:     'CUSUM-SHIFT',
+  ogmmove:     'MMOVE',
+  ogtrend:     'TREND-RECLAIM',
+  ogbosretest: 'BOS-RETEST'
 };
 
 /* --- BEGIN GENERATED HG_GOLD_SIBLING_RECORD (scripts/gold-sibling-records.mjs) ---
@@ -525,10 +534,16 @@ var HG_GOLD_SIBLING_TWIN = {
    wrong file, and hg-v921 made the literals write themselves for exactly this
    reason. `npm run gold:siblings` is the read-only drift check. */
 var HG_GOLD_SIBLING_RECORD = {
+  'BOS-RETEST': { n: 83, settled: 74, winRate: 0.3378, grossR: 0.0367, netXm: 0.0027, tCluster: 0.3, zBreakeven: 0.08, minRr: 2, breakevenPct: 33.3 },
+  'CUSUM-SHIFT': { n: 44, settled: 32, winRate: 0.3438, grossR: 0.0918, netXm: 0.0707, tCluster: 0.58, zBreakeven: 0.13, minRr: 2, breakevenPct: 33.3 },
   'FIB-618': { n: 132, settled: 127, winRate: 0.2992, grossR: -0.0872, netXm: -0.1306, tCluster: -0.9, zBreakeven: -0.82, minRr: 2, breakevenPct: 33.3 },
   'LONDON-FIX': { n: 87, settled: 69, winRate: 0.2464, grossR: -0.2052, netXm: -0.2332, tCluster: -1.76, zBreakeven: -1.53, minRr: 2, breakevenPct: 33.3 },
+  'MMOVE': { n: 204, settled: 177, winRate: 0.3559, grossR: 0.0836, netXm: 0.0587, tCluster: 1.54, zBreakeven: 0.64, minRr: 2, breakevenPct: 33.3 },
   'PIVOT-REJECT': { n: 161, settled: 159, winRate: 0.2327, grossR: -0.3026, netXm: -0.3727, tCluster: -2.63, zBreakeven: -2.69, minRr: 2, breakevenPct: 33.3 },
   'ROUND-MAGNET': { n: 593, settled: 587, winRate: 0.3169, grossR: -0.043, netXm: -0.1095, tCluster: -0.85, zBreakeven: -0.84, minRr: 2, breakevenPct: 33.3 },
+  'SQUEEZE-FIRE': { n: 50, settled: 45, winRate: 0.3556, grossR: 0.1082, netXm: 0.0746, tCluster: 0.55, zBreakeven: 0.32, minRr: 2, breakevenPct: 33.3 },
+  'STRUCT-BOS': { n: 103, settled: 87, winRate: 0.3448, grossR: 0.1085, netXm: 0.0816, tCluster: 1.22, zBreakeven: 0.23, minRr: 2, breakevenPct: 33.3 },
+  'TREND-RECLAIM': { n: 106, settled: 99, winRate: 0.3636, grossR: 0.0923, netXm: 0.0549, tCluster: 0.83, zBreakeven: 0.64, minRr: 2, breakevenPct: 33.3 },
   'WEEKLY-OPEN': { n: 143, settled: 140, winRate: 0.3, grossR: -0.0904, netXm: -0.1591, tCluster: -1.14, zBreakeven: -0.84, minRr: 2, breakevenPct: 33.3 }
 };
 /* --- END GENERATED HG_GOLD_SIBLING_RECORD --- */
@@ -613,6 +628,177 @@ function hgGoldExtraUncheckedNote(kind){
     + 'paints with its levels and still cannot lead.';
 }
 
+/* ================= hg-v942 — THE ROSTER MECHANICS THESE TABS CANNOT FORM =====
+   MILLI GOLD's roster is the nine OMNIGOLD mechanics whose GATE-CLEAR record is
+   net-positive at XM on at least MIN_SAMPLES firings. It is derived, not
+   chosen (scripts/milli-gold-roster.mjs). Six of those nine have no mechanic on
+   GOLD SCALP or GOLD SWING at all: a trader working from the two tabs cannot
+   form them, whatever the tape does.
+
+   WHAT THIS IS NOT. A positive in-sample record is not a forecast, and this
+   desk has measured that directly: hg-v937 rebuilt the roster on the earlier
+   part of the walk and judged it on what came after, and it beat the full
+   OMNIGOLD book in 6 of 6 trials and PAID IN 0 OF 6. So the claim here is the
+   narrow one -- these six are the best-measured mechanics the two tabs lack,
+   and they are absent -- not that adding them makes the desks pay.
+
+   NO SECOND COPY. Detection is OMNIGOLD's own dispatch table, hgOgBtDetectors(),
+   which is already exported and is the same pure rows->hit|null function the
+   live pass and the backtest call. Rebuilding these here is the copy that
+   drifts (hg-v938's lesson). GATING is the tab's, in full: the hit becomes an
+   ordinary candidate and goes through the inst filter, the stop-width floor,
+   the edge table, the confluence ledger and best-levels like every other.
+
+   AND THEY MINT DEMOTED, because the record quoted on the card is OMNIGOLD's,
+   on OMNIGOLD's gates and its 1h horizon -- not this desk's. Same rule the
+   hg-v933 extras carry. hgGoldExtraSetPromotable(true) lifts it. */
+
+/* Roster kinds whose mechanic the gold tabs ALREADY mint, with the tab key that
+   is its home. Kept explicit so the guard can assert the roster is covered
+   EXHAUSTIVELY: every kind is either ported or homed, and a re-bake that adds a
+   kind fails loudly here instead of being silently skipped. */
+var HG_GOLD_ROSTER_HOME = {
+  'P5-DRIVE':  'p5drive',    /* S24 three-drive exhaustion, scalp + swing */
+  'P6-COMP':   'p6comp',     /* S30 session-composite pullback */
+  'EQH-SWEEP': 'smcliq'      /* SMC equal-high/low pool sweep (hg-v564) */
+};
+
+/* The tab key each ported kind mints under. `og` prefix says plainly whose
+   mechanic it is; the name is not borrowed from a tab mechanic that already
+   exists, because two things under one key is how a record gets attributed to
+   the wrong mechanic (hg-v923). */
+var HG_GOLD_ROSTER_KEY = {
+  'STRUCT-BOS':    'ogstructbos',
+  'SQUEEZE-FIRE':  'ogsqueeze',
+  'CUSUM-SHIFT':   'ogcusum',
+  'MMOVE':         'ogmmove',
+  'TREND-RECLAIM': 'ogtrend',
+  'BOS-RETEST':    'ogbosretest'
+};
+
+/* Stop distance floor for a ported hit, in ATR. The detectors name a LEVEL and
+   no stop -- OMNIGOLD prices its own through hgOgPlanForHit, which these tabs
+   must not use (hg-v420/v423). So one shared rule, stated once rather than
+   invented per mechanic: the stop sits beyond the recent extreme on the wrong
+   side of the level, pushed a further 0.15xATR, and never closer than this. */
+var HG_GOLD_ROSTER_MIN_STOP_ATR = 0.35;
+var HG_GOLD_ROSTER_STOP_PAD_ATR = 0.15;
+var HG_GOLD_ROSTER_STOP_LOOK = 12;
+
+/* The roster, read from MILLI GOLD at call time. ONE roster: a re-bake that
+   changes which mechanics qualify changes what these tabs form, with no second
+   edit and no literal to drift. Absent milligold.js is [] -- these tabs then
+   behave exactly as they did before this pack. */
+function hgGoldRosterAll(){
+  try{
+    var r = W && W.HG_MILLI_ROSTER;
+    var k = (r && Array.isArray(r.kinds)) ? r.kinds : null;
+    return k ? k.slice() : [];
+  }catch(e){ return []; }
+}
+
+/* Roster entries this file will port: on the roster, and with no home on the
+   tabs. Each carries the roster row so the card can quote the real record. */
+function hgGoldRosterPorts(){
+  var all = hgGoldRosterAll(), out = [], i, row, kind;
+  for (i = 0; i < all.length; i++){
+    row = all[i]; kind = row && row.kind;
+    if (!kind || HG_GOLD_ROSTER_HOME[kind]) continue;
+    if (!HG_GOLD_ROSTER_KEY[kind]) continue;
+    out.push({ kind: kind, key: HG_GOLD_ROSTER_KEY[kind], row: row });
+  }
+  return out;
+}
+
+/* Roster kinds that are NEITHER homed NOR keyed -- always empty today, and the
+   guard asserts it. A re-bake that promotes a tenth mechanic shows up here
+   rather than vanishing, which is the whole point of keeping it. */
+function hgGoldRosterUnmapped(){
+  var all = hgGoldRosterAll(), out = [], i, kind;
+  for (i = 0; i < all.length; i++){
+    kind = all[i] && all[i].kind;
+    if (!kind) continue;
+    if (HG_GOLD_ROSTER_HOME[kind] || HG_GOLD_ROSTER_KEY[kind]) continue;
+    out.push(kind);
+  }
+  return out;
+}
+
+/* The shared stop rule. dir/level/atr in, stop out, NaN when it cannot be
+   computed -- a candidate with no stop is never minted. */
+/* num() coerces: +null is 0, +'' is 0, +false is 0 — so a bar carrying null
+   for its low reads as a LOW OF ZERO and the rule below happily prices a stop
+   against it. That is the same coercion trap hg-v941 hit on a null age. Here a
+   value that is not a number, and not a string that parses as one, is
+   UNREADABLE, and an unreadable series yields NaN rather than a guess. */
+function hgGoldRosterPx(x){
+  if (x === null || x === undefined || x === '' || typeof x === 'boolean') return NaN;
+  return num(x);
+}
+
+function hgGoldRosterStop(rows, dir, level, atr){
+  if (!rows || !rows.length) return NaN;
+  if (!isFinite(level) || !isFinite(atr) || !(atr > 0)) return NaN;
+  var look = HG_GOLD_ROSTER_STOP_LOOK;
+  var from = rows.length - look;
+  if (from < 0) from = 0;
+  var ext = NaN, i, v;
+  for (i = from; i < rows.length; i++){
+    v = (dir === 'long') ? hgGoldRosterPx(rows[i].l) : hgGoldRosterPx(rows[i].h);
+    if (!isFinite(v)) continue;
+    if (!isFinite(ext)) ext = v;
+    else if (dir === 'long'){ if (v < ext) ext = v; }
+    else if (v > ext) ext = v;
+  }
+  if (!isFinite(ext)) return NaN;
+  var pad = HG_GOLD_ROSTER_STOP_PAD_ATR * atr;
+  var stop = (dir === 'long') ? Math.min(ext, level) - pad : Math.max(ext, level) + pad;
+  var floor = HG_GOLD_ROSTER_MIN_STOP_ATR * atr;
+  if (dir === 'long' && level - stop < floor) stop = level - floor;
+  if (dir === 'short' && stop - level < floor) stop = level + floor;
+  return stop;
+}
+
+/* Run the ported roster detectors on ONE series -- the desk's execution TF
+   (15m on GOLD SCALP, 4h on GOLD SWING), passed by the caller. Never throws:
+   a detector that throws costs its own mechanic and nothing else, and an
+   absent dispatch table costs the whole block and leaves the desk as it was. */
+function hgGoldRosterDetect(rows, opts){
+  var o = opts || {};
+  var out = [];
+  if (!rows || rows.length < 20) return out;
+  var D = null;
+  try{ D = (W && typeof W.hgOgBtDetectors === 'function') ? W.hgOgBtDetectors() : null; }
+  catch(eD){ D = null; }
+  if (!D) return out;
+  var atr = barAtr(rows, 14);
+  if (!isFinite(atr) || !(atr > 0)) return out;
+
+  var ports = hgGoldRosterPorts(), i, p, fn, hit, stop, lvl;
+  for (i = 0; i < ports.length; i++){
+    p = ports[i];
+    fn = D[p.kind];
+    if (typeof fn !== 'function') continue;
+    hit = null;
+    try{ hit = fn(rows); }catch(eF){ hit = null; }
+    if (!hit || (hit.dir !== 'long' && hit.dir !== 'short')) continue;
+    lvl = num(hit.level);
+    if (!isFinite(lvl)) continue;
+    stop = hgGoldRosterStop(rows, hit.dir, lvl, atr);
+    if (!isFinite(stop)) continue;
+    out.push({
+      ok: true, dir: hit.dir, kind: p.key, level: lvl,
+      entry: lvl,                       /* the ticket IS the setup (hg-v423) */
+      stop: stop,
+      rosterKind: p.kind,
+      why: (hit.why ? String(hit.why) : p.kind.toLowerCase())
+         + ' — OMNIGOLD ' + p.kind + ' detector, priced at its own level',
+      invalidates: 'a close beyond ' + stop.toFixed(2) + ' breaks the level this setup is built on'
+    });
+  }
+  return out;
+}
+
 /** Every detector behind one call, so the desks wire once. */
 function hgGoldExtraDetect(inp){
   var o = inp || {};
@@ -624,6 +810,15 @@ function hgGoldExtraDetect(inp){
   try { var r = hgGoldRoundReject(rows, o); if (r) out.push(r); }catch(e){}
   try { var w = hgGoldWeeklyOpen(rows, o); if (w) out.push(w); }catch(e){}
   try { var b = hgGoldFib618(rows, o); if (b) out.push(b); }catch(e){}
+  /* hg-v942: the MILLI GOLD roster mechanics these tabs cannot form. Same
+     series the caller handed us -- the desk's execution TF, not a second
+     fetch. The veto below applies to these exactly as to the rest, so a
+     re-bake that turns one of them measured-failing stops it minting here
+     with no edit. */
+  try {
+    var rp = hgGoldRosterDetect(rows, o) || [];
+    for (var ri = 0; ri < rp.length; ri++) out.push(rp[ri]);
+  }catch(e){}
   /* A detector whose twin is a MEASURED FAILURE never reaches a card. Nothing
      in hgGoldExtraDetect mints goldpivot — this is the guard for the day
      someone adds one, because these desks have no measured-edge gate to
@@ -659,5 +854,14 @@ W.HG_GOLD_EXTRA_VETO_Z = HG_GOLD_EXTRA_VETO_Z;
 W.hgGoldSiblingRecord = hgGoldSiblingRecord;
 W.hgGoldSiblingVetoed = hgGoldSiblingVetoed;
 W.hgGoldExtraStamp = hgGoldExtraStamp;
+W.HG_GOLD_ROSTER_HOME = HG_GOLD_ROSTER_HOME;
+W.HG_GOLD_ROSTER_KEY = HG_GOLD_ROSTER_KEY;
+W.HG_GOLD_ROSTER_MIN_STOP_ATR = HG_GOLD_ROSTER_MIN_STOP_ATR;
+W.hgGoldRosterAll = hgGoldRosterAll;
+W.hgGoldRosterPorts = hgGoldRosterPorts;
+W.hgGoldRosterUnmapped = hgGoldRosterUnmapped;
+W.hgGoldRosterPx = hgGoldRosterPx;
+W.hgGoldRosterStop = hgGoldRosterStop;
+W.hgGoldRosterDetect = hgGoldRosterDetect;
 
 })();

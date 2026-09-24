@@ -1149,6 +1149,14 @@ var GST_NAME = {
      section 6 of gold-extra-strategies.js for the -2.69 sigma that refuses it. */
   goldwopen:'WEEKLY OPEN SWEEP + RECLAIM',
   goldfib:  '61.8 RETRACE HOLD',
+  /* hg-v942 — MILLI GOLD roster mechanics these tabs could not form. Detection
+     is OMNIGOLD's own dispatch (hgOgBtDetectors); the gates are this desk's. */
+  ogstructbos:'STRUCT BOS (OMNIGOLD)',
+  ogsqueeze:  'SQUEEZE FIRE (OMNIGOLD)',
+  ogcusum:    'CUSUM MEAN SHIFT (OMNIGOLD)',
+  ogmmove:    'MEASURED MOVE (OMNIGOLD)',
+  ogtrend:    'TREND RECLAIM (OMNIGOLD)',
+  ogbosretest:'BOS RETEST (OMNIGOLD)',
   p4disc: 'S9 DISCOUNT/PREMIUM NODE',
   p4nr7: 'S12 NR7 / RANGE CONTRACTION BREAKOUT',
   p4adrx: 'S14 ADR EXHAUSTION FADE (PART4)',
