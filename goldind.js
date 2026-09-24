@@ -2334,7 +2334,12 @@ function hgGoldTwinVerdict(key){
 /* The disclosure line. Says both samples, attributes the twin's record, and
    names the population difference rather than pretending one supersedes the
    other. '' when there is nothing to disclose. */
-function hgGoldTwinConflictNote(key, row){
+/* hg-v947: the third caller is GOLD DIRECTION, where the thing withheld is
+   not a rank boost but the CROWN. Copying the note to change its last clause
+   is the second copy that drifts (hg-v934/v945), so the caller names what it
+   withholds and the default is unchanged -- the two existing callers pass two
+   arguments and get byte-identical text. */
+function hgGoldTwinConflictNote(key, row, withheldWhat){
   try{
     var v = hgGoldTwinVerdict(key);
     if (!v || !v.vetoed) return '';
@@ -2352,7 +2357,8 @@ function hgGoldTwinConflictNote(key, row){
       + 'a mechanic at all. That record is OMNIGOLD gates on a 1h horizon and '
       + 'this one is this desk on its own; neither supersedes the other, and '
       + 'the larger sample is the one that disagrees. Nothing is demoted on '
-      + 'it — the only thing withheld is an active rank boost.';
+      + 'it — the only thing withheld is '
+      + (withheldWhat ? String(withheldWhat) : 'an active rank boost') + '.';
   }catch(e){ return ''; }
 }
 

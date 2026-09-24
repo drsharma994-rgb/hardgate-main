@@ -146,7 +146,8 @@ stale other-side picks survive):
                    unproven: [{source,horizon,strategy,stratKey,dir,reason}],
                    otherSide },
     swing: { … same shape … }, tape, enginesDark: [names…],
-    provenSet: [{key,horizon,source,n?,gross?,net?,why?,tab?,stats?}], at }
+    provenSet: [{key,horizon,source,n?,gross?,net?,why?,tab?,stats?}],
+    twinWithheld: [{key,horizon,n,net,twin:{twin,n,winRate,netXm,z,vetoed}}], at }
 BRAIN STATE — window.goldDirectionState():
   { results: [{ dir, horizon, grade, source }], at } | null — one row per
   crowned pick, deep-frozen, failed re-runs keep the previous good snapshot.
@@ -813,8 +814,30 @@ function fwdMechName(c){
     .toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 28);
 }
 
+/* hg-v947: the SAME rule hg-v943 gave GOLD SCALP/SWING and hg-v946 gave GOLD
+   ULTRA, applied to the one thing this tab does with a prefer row -- CROWN on
+   it. A prefer row whose EXACT OMNIGOLD twin is past the measured-failure bar
+   is not admitted to the proven set, so it cannot be the crowned pick. It is
+   scoped to the BAKED replay-prefer rows and nothing else: the omnigold-prefer
+   branch IS the OMNIGOLD record (there is no second record to disagree with),
+   and the live-paid branch is this tab's own forward ledger on its own gates
+   and horizons -- a third population, measured live, which a stale twin does
+   not speak for. Fails OPEN (no reader, no verdict, no withholding) and reads
+   the ONE lever through hgGoldTwinCheckOn(), not a third switch. */
+function twinWithheld(key){
+  try{
+    var on = gfn('hgGoldTwinCheckOn');
+    if (on && on() === false) return null;
+    var f = gfn('hgGoldTwinVerdict');
+    if (!f) return null;
+    var v = f(String(key || ''));
+    return (v && v.vetoed) ? v : null;
+  }catch(e){ return null; }
+}
+
 function buildProvenSet(allCands){
   var entries = [];
+  var withheld = [];
   function add(e){
     for (var di = 0; di < entries.length; di++){
       if (entries[di].key === e.key && entries[di].source === e.source
@@ -835,6 +858,14 @@ function buildProvenSet(allCands){
           if (!Object.prototype.hasOwnProperty.call(t, k)) continue;
           var row = t[k];
           if (!row || row.action !== 'prefer') continue;
+          var tw = twinWithheld(k);
+          if (tw){
+            /* hg-v940: a set that quietly shrinks reads exactly like a set
+               that was always this size. Named, counted, and rendered. */
+            withheld.push({ key: k, horizon: parts[pi].hz, twin: tw,
+                            n: fin(row.n), net: fin(row.net) });
+            continue;
+          }
           add({ key: k, horizon: parts[pi].hz, source: 'replay-prefer',
                 n: fin(row.n), gross: fin(row.gross), net: fin(row.net),
                 why: row.why ? String(row.why) : '' });
@@ -886,7 +917,7 @@ function buildProvenSet(allCands){
       }
     }
   }catch(eC){}
-  return entries;
+  return { entries: entries, withheld: withheld };
 }
 
 /* Is this candidate measured-proven? Returns the proving entry (source +
@@ -896,10 +927,23 @@ function provenOf(c, entries){
     /* the prefer row the candidate's own desk stamped onto it — the SAME
        row, carried with its own numbers */
     if (c.edge && c.edge.action === 'prefer'){
-      return { source: 'replay-prefer', key: String(c.stratKey || c.strategy || ''),
-               n: fin(c.edge.n), gross: fin(c.edge.gross), net: fin(c.edge.net),
-               why: c.edge.why ? String(c.edge.why) : '',
-               liveWhy: c.edge.liveWhy ? String(c.edge.liveWhy) : '' };
+      /* hg-v947: this branch NEVER consults the proven set, so withholding a
+         row in buildProvenSet alone would be a silent no-op for every
+         candidate carrying its own prefer row -- which is most of them. The
+         rule lives here too, and the two agree by construction: a withheld
+         key is also absent from the set, so the list lookup below finds
+         nothing either. The candidate is MARKED, not dropped: it keeps its
+         levels, its prefer tier and its place on the board, and only the
+         crown is withheld. */
+      var tw = twinWithheld(c.stratKey || c.strategy);
+      if (tw){
+        c.twinWithheld = tw;
+      } else {
+        return { source: 'replay-prefer', key: String(c.stratKey || c.strategy || ''),
+                 n: fin(c.edge.n), gross: fin(c.edge.gross), net: fin(c.edge.net),
+                 why: c.edge.why ? String(c.edge.why) : '',
+                 liveWhy: c.edge.liveWhy ? String(c.edge.liveWhy) : '' };
+      }
     }
     var list = entries || [];
     var key = String(c.stratKey || '').toLowerCase();
@@ -1110,9 +1154,30 @@ function cardHTML(c, tape, pxNow, crowned){
      record backs them; demoted/vetoed cards already carry their own stamps */
   if (!c.demoted && !c.vetoed){
     if (c.provenBy) chips += '<span class="gdx-chip ok">MEASURED-PROVEN · ' + esc(c.provenBy.source) + '</span>';
+    else if (c.twinWithheld) chips += '<span class="gdx-chip warn">CROWN WITHHELD — prefer row, OMNIGOLD twin '
+      + esc(String(c.twinWithheld.twin)) + ' past the measured-failure bar</span>';
     else chips += '<span class="gdx-chip warn">NOT MEASURED-PROVEN — paints, not crowned</span>';
   }
   var gates = '';
+  /* hg-v947: the full disclosure, from goldind's ONE definition rather than a
+     second copy -- both samples, the twin's gates and 1h horizon named, and
+     the statement that nothing else is withheld. A bare chip would leave the
+     reader with a verdict and no way to weigh it. */
+  if (c.twinWithheld){
+    var tnFn = gfn('hgGoldTwinConflictNote');
+    var tn = '';
+    if (tnFn){
+      try{ tn = String(tnFn(c.stratKey || c.strategy, c.edge, 'the CROWN — this card keeps its levels, its prefer tier and its place on this board') || ''); }
+      catch(eTn){ tn = ''; }
+    }
+    gates += '<div class="gdx-gate"><b>CROWN WITHHELD</b> — '
+      + (tn ? esc(tn) : ('the OMNIGOLD twin ' + esc(String(c.twinWithheld.twin))
+          + ' measures ' + esc(Number(c.twinWithheld.netXm).toFixed(3)) + 'R net at XM over '
+          + esc(String(c.twinWithheld.n)) + ' gate-clear trades, ' + esc(c.twinWithheld.z.toFixed(2))
+          + ' sigma, past the bar at which OMNIGOLD refuses to ticket a mechanic at all. This card keeps '
+          + 'its levels, its prefer tier and its place on this board; the ONLY thing withheld is the crown.'))
+      + '</div>';
+  }
   if (c.gateNotes.length) gates += '<div class="gdx-gate"><b>GATE NOTES</b> — ' + esc(c.gateNotes.join(' · ')) + '</div>';
   if (c.demoted && c.demoteReasons.length) gates += '<div class="gdx-gate"><b>DEMOTED</b> — ' + esc(c.demoteReasons.join(' · ')) + '</div>';
   var zoneTxt = c.zone ? ('$' + pxF(c.zone.lo) + '–$' + pxF(c.zone.hi)) : ('$' + pxF(c.entry));
@@ -1195,10 +1260,22 @@ function horizonHTML(sel, side, horizon, tape, pxNow, enginesDark){
   if (unpr.length){
     /* hg-v702: the clearly-headed unproven list — full cards, no execution
        banner treatment, never crowned, never recorded to the ledger */
-    h += '<div class="gdx-demhead">NOT MEASURED-PROVEN — paints, not crowned: ' + unpr.length
+    /* hg-v947: two different states used to read the same here. A candidate
+       whose surfaces are SILENT has no record; a twin-withheld candidate has
+       a prefer row and a LOUDER contradicting one. Saying "all silent on
+       them" of the second is simply false, and it is the hg-v940 failure --
+       one message for two causes -- in the header this time. */
+    var nTw = 0, ui2;
+    for (ui2 = 0; ui2 < unpr.length; ui2++){ if (unpr[ui2].twinWithheld) nTw++; }
+    var nSil = unpr.length - nTw;
+    var bits = [];
+    if (nSil > 0) bits.push(nSil + ' with no measured paid record at all (edge-table prefer / OMNIGOLD swing-prefer / live ledger all silent on '
+      + (nSil === 1 ? 'it' : 'them') + ')');
+    if (nTw > 0) bits.push(nTw + ' carrying a prefer row whose exact OMNIGOLD twin is past the measured-failure bar — '
+      + 'the crown is withheld on the smaller of two contradicting records, and nothing else is');
+    h += '<div class="gdx-demhead">NOT CROWNED: ' + unpr.length
       + ' lead-eligible ' + esc(horizon) + ' candidate' + (unpr.length === 1 ? '' : 's')
-      + ' with no measured paid record (edge-table prefer / OMNIGOLD swing-prefer / live ledger all silent on '
-      + (unpr.length === 1 ? 'it' : 'them') + '). Informational only.</div>';
+      + ' — ' + esc(bits.join(' · ')) + '. Informational only.</div>';
     h += unpr.map(function(c){ return cardHTML(c, tape, pxNow, false); }).join('');
   }
   if (sel.otherSide > 0 && (sel.pick || sel.demotedTop.length)){
@@ -1222,7 +1299,7 @@ function publishState(scalpSel, swingSel){
     __snap = { results: rows, at: Date.now() };
   }catch(e){ /* snapshotting must never break the scan */ }
 }
-function publishScan(side, scalpSel, swingSel, tape, enginesDark, heldAll, at, provenSet){
+function publishScan(side, scalpSel, swingSel, tape, enginesDark, heldAll, at, provenSet, twinHeld){
   try{
     function hz(sel){
       return {
@@ -1232,9 +1309,24 @@ function publishScan(side, scalpSel, swingSel, tape, enginesDark, heldAll, at, p
            crown is itself auditable */
         crownedProven: !!(sel.pick && sel.pick.provenBy),
         unproven: (sel.unproven || []).map(function(c){
+          /* hg-v947: the snapshot carried ONE reason for what are now two
+             different states, so a reader of the published scan could not
+             tell a candidate nothing has measured from one carrying a prefer
+             row that its own twin contradicts. Levels ride along too: the
+             claim is that this card keeps them, and a snapshot that omits
+             them cannot be used to check it. */
           return { source: c.source, horizon: c.horizon, strategy: c.strategy,
                    stratKey: c.stratKey, dir: c.dir,
-                   reason: 'lead-eligible but not measured-proven — paints, not crowned' };
+                   entry: fin(c.entry), stop: fin(c.stop), t1: fin(c.t1),
+                   twinWithheld: c.twinWithheld
+                     ? { twin: String(c.twinWithheld.twin), n: fin(c.twinWithheld.n),
+                         netXm: fin(c.twinWithheld.netXm), z: fin(c.twinWithheld.z) }
+                     : null,
+                   reason: c.twinWithheld
+                     ? ('lead-eligible and measured PREFER on this desk, but its exact OMNIGOLD twin '
+                        + c.twinWithheld.twin + ' is past the measured-failure bar — the CROWN is withheld '
+                        + 'on the smaller of two contradicting records; levels, prefer tier and board place all stand')
+                     : 'lead-eligible but not measured-proven — paints, not crowned' };
         }),
         held: heldAll.filter(function(r){ return r && r.horizon === sel.horizonName; })
           .map(function(r){ return { source: r.source, horizon: r.horizon, strategy: r.strategy, dir: r.dir, reason: r.reason }; }),
@@ -1247,6 +1339,10 @@ function publishScan(side, scalpSel, swingSel, tape, enginesDark, heldAll, at, p
     __scanSnap = { side: side, scalp: hz(scalpSel), swing: hz(swingSel),
                    tape: tape || '', enginesDark: enginesDark.slice(),
                    provenSet: JSON.parse(JSON.stringify(provenSet || [])),
+                   /* hg-v947: the rows the twin check kept OUT, published
+                      beside the set so a reader of the snapshot can see the
+                      set's true size and why it is that size. */
+                   twinWithheld: JSON.parse(JSON.stringify(twinHeld || [])),
                    at: at };
   }catch(e){ /* snapshotting must never break the scan */ }
 }
@@ -1396,8 +1492,10 @@ async function runScan(ui, scanSt){
     try{ tape = deskTapeOf(gold) || ''; }catch(eTp){ tape = ''; }
     /* hg-v702: resolve the proven whitelist from the live sources NOW, so
        the crown site and the snapshot share one resolution per scan */
-    var provenSet = [];
-    try{ provenSet = buildProvenSet(all); }catch(ePv){ provenSet = []; }
+    var provenBuilt = { entries: [], withheld: [] };
+    try{ provenBuilt = buildProvenSet(all) || provenBuilt; }catch(ePv){ provenBuilt = { entries: [], withheld: [] }; }
+    var provenSet = provenBuilt.entries || [];
+    var twinHeld = provenBuilt.withheld || [];
     /* SELECTION — per horizon, fail closed. The chosen side is the user's;
        it is NEVER flipped here, tape agreement or not. */
     var scalpSel = selectHorizon(all, side, 'SCALP', provenSet);
@@ -1472,12 +1570,17 @@ async function runScan(ui, scanSt){
 
     /* publish snapshots */
     publishState(scalpSel, swingSel);
-    publishScan(side, scalpSel, swingSel, tape, enginesDark, heldAll, now, provenSet);
+    publishScan(side, scalpSel, swingSel, tape, enginesDark, heldAll, now, provenSet, twinHeld);
 
     var secs = ((Date.now() - t0) / 1000).toFixed(1);
     var statBits = [side.toUpperCase() + ' scan (confirmed by your click)',
       (all.length + ' candidate' + (all.length === 1 ? '' : 's') + ' from ' + (lanes.length - enginesDark.length) + '/' + lanes.length + ' engines'),
       ('proven set ' + provenSet.length + ' entr' + (provenSet.length === 1 ? 'y' : 'ies')
+        + (twinHeld.length
+            ? (' (+' + twinHeld.length + ' prefer row' + (twinHeld.length === 1 ? '' : 's')
+               + ' withheld — OMNIGOLD twin past the measured-failure bar: '
+               + twinHeld.map(function(w){ return w.key + '/' + w.horizon + ' vs ' + w.twin.twin; }).join(', ') + ')')
+            : '')
         + ' · unproven held off the crown: SCALP ' + scalpSel.unproven.length + ' / SWING ' + swingSel.unproven.length),
       'SCALP ' + (scalpSel.pick ? 'pick: ' + scalpSel.pick.source + ' ' + (scalpSel.pick.stratKey || '') : (scalpSel.demotedTop.length ? 'demoted-only (no banner)' : 'silent')),
       'SWING ' + (swingSel.pick ? 'pick: ' + swingSel.pick.source + ' ' + (swingSel.pick.stratKey || '') : (swingSel.demotedTop.length ? 'demoted-only (no banner)' : 'silent'))];
