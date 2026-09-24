@@ -98,10 +98,15 @@ const scalp = W.HG_GOLD_SETUP_EDGE.scalp;
   eq(d.undeclared.length, 0,
     'no verdict departs from the rule without a recorded reason — '
     + d.undeclared.map(x => x.key).join(', '));
-  eq(d.declared.length, 2, 'exactly the two hg-v928 refusals depart, and both are declared');
-  const keys = d.declared.map(x => x.key).sort().join(',');
+  /* hg-v961 gave the SWING desk the same rule, and it departs on exactly one
+     more row — p6zfade at n=2, refused for the reason the two scalp rows were
+     refused. The scalp pair is asserted on its own so this stays the hg-v960
+     claim it was, rather than a count that any new row could satisfy. */
+  const scalpDecl = d.declared.filter(x => (x.desk || 'scalp') === 'scalp');
+  eq(scalpDecl.length, 2, 'exactly the two hg-v928 refusals depart on scalp, and both are declared');
+  const keys = scalpDecl.map(x => x.key).sort().join(',');
   ok(keys === 'p5vwap,vpbook', 'the declared departures are p5vwap and vpbook — got ' + keys);
-  for (const x of d.declared){
+  for (const x of scalpDecl){
     eq(x.rule, 'demote', x.key + ': the rule would demote it');
     eq(x.inForce, 'neutral', x.key + ': the desk keeps it neutral');
     ok(typeof x.why === 'string' && x.why.length > 20, x.key + ': the reason is recorded on the row');
@@ -182,9 +187,19 @@ const scalp = W.HG_GOLD_SETUP_EDGE.scalp;
 {
   const out = execFileSync('timeout', ['-s', 'KILL', '120', 'node', 'scripts/rebake-gold-literals.mjs'],
     { cwd: ROOT, encoding: 'utf8' });
-  ok(/verdict rule: \d+ row\(s\) follow it, 2 declared departure\(s\), 0 undeclared/.test(out),
-    'the bake reports the verdict rule it enforced — got: '
+  /* hg-v961 extended the report with the SWING desk's own partition, so the
+     line now carries a fourth bucket. What this asserts is the invariant, not
+     the wording: rows follow the rule, exactly the two hg-v928 refusals are
+     declared, and NOTHING is undeclared. */
+  const m = /verdict rule: (\d+) row\(s\) follow it, (\d+) declared, (\d+) undeclared, (\d+) unrecoverable/.exec(out);
+  ok(m, 'the bake reports the verdict rule it enforced — got: '
     + (out.split('\n').filter(l => /verdict rule/.test(l))[0] || '(no line)'));
+  ok(+m[1] > 0, 'and some rows really do follow it (' + m[1] + ')');
+  eq(+m[2], W.hgGoldEdgeVerdictDepartures().declared.length,
+    'the report counts exactly the declared refusals the table carries');
+  eq(+m[3], 0, 'and nothing undeclared');
+  ok(+m[4] > 0, 'the unrecoverable bucket is reported too — a bar the desk uses '
+    + 'but never wrote down is named, not hidden (' + m[4] + ')');
   ok(/every baked literal already equals its artifact/.test(out),
     'and the committed tree still round-trips to zero drift — no literal moved');
 }

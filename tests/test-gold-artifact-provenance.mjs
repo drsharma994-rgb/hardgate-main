@@ -34,7 +34,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { GOLD_SCALP_WALK, OMNIGOLD_WALK, OMNIGOLD_REPLAY_EVIDENCE,
+import { GOLD_SCALP_WALK, GOLD_SWING_WALK, OMNIGOLD_WALK, OMNIGOLD_REPLAY_EVIDENCE,
          GOLD_ARTIFACTS } from '../lib/gold-artifacts.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -109,6 +109,11 @@ function observeReads(script, args = [], sec = 60){
   ok(!reads.includes(strayWalk),
     'and it does NOT open backtest-goldscalp-results.json, which no step of the chain writes into');
 
+  eq(askOutput('scripts/backtest-goldswing.mjs'), GOLD_SWING_WALK,
+    'the GOLD SWING walk resolves to its shared path (hg-v961 — the literal '
+    + 'writer began reading it and the chain did not walk it)');
+  ok(reads.includes(GOLD_SWING_WALK), 'and the literal writer opens that one too');
+
   eq(askOutput('scripts/backtest-omnigold.mjs'), OMNIGOLD_WALK,
     'the OMNIGOLD walk resolves to its shared path');
   ok(reads.includes(OMNIGOLD_WALK), 'and the literal writer opens that one too');
@@ -122,7 +127,35 @@ function observeReads(script, args = [], sec = 60){
       This is the general form of the defect, not just the one instance.
    ===================================================================== */
 {
-  const produced = new Set([GOLD_SCALP_WALK, OMNIGOLD_WALK, OMNIGOLD_REPLAY_EVIDENCE]);
+  /* The produced set is DERIVED from the chain, not typed here. hg-v961: the
+     hand-typed version of this list was itself the thing that went stale —
+     the literal writer gained a fourth artifact and the list did not, which
+     is the hg-v952 hand-kept-list failure inside the guard built to stop
+     exactly this class. Each `node scripts/X.mjs` step of gold:rebake is
+     ASKED what it writes; a step that does not answer with a single artifact
+     path contributes nothing (the literal writer and the sibling records
+     write .js, not .json, and print a report instead). */
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  const steps = (pkg.scripts['gold:rebake'] || '').split('&&')
+    .map(x => x.trim())
+    .filter(x => /^node\s+scripts\/[\w.-]+\.mjs\b/.test(x))
+    .map(x => x.split(/\s+/)[1]);
+  ok(steps.length >= 4, 'the chain has node steps to ask (' + steps.length + ')');
+
+  const produced = new Set();
+  for (const step of steps){
+    let out = '';
+    try{ out = askOutput(step, [], 40); }catch(e){ out = ''; }
+    const lines = out.split('\n').map(x => x.trim()).filter(Boolean);
+    if (lines.length === 1 && path.isAbsolute(lines[0]) && lines[0].endsWith('.json')){
+      produced.add(lines[0]);
+    }
+  }
+  /* Non-vacuity: a derivation that silently produced nothing would make every
+     assertion below pass by making the loop over reads impossible to fail. */
+  ok(produced.size >= 4, 'the chain declares at least four artifacts (' + produced.size + ')');
+  ok(produced.has(GOLD_SCALP_WALK), 'the derived set really contains the GOLD SCALP walk');
+
   const reads = observeReads('scripts/rebake-gold-literals.mjs')
     .filter(p => /scripts[/\\][^/\\]+\.json$/.test(p) && !/[/\\]\.bt-cache[/\\]/.test(p));
   ok(reads.length > 0, 'the literal writer opens at least one committed artifact');
@@ -139,7 +172,9 @@ function observeReads(script, args = [], sec = 60){
   const m = await import('../scripts/edge-live-population.mjs');
   eq(m.REPLAY, GOLD_SCALP_WALK,
     'edge-live-population reads the shared constant, not a second copy of the filename');
-  eq(Object.keys(GOLD_ARTIFACTS).length, 3, 'three artifacts have a home');
+  eq(m.SWING_REPLAY, GOLD_SWING_WALK,
+    'and so does the SWING population it gained in hg-v961');
+  eq(Object.keys(GOLD_ARTIFACTS).length, 4, 'four artifacts have a home');
   for (const [k, v] of Object.entries(GOLD_ARTIFACTS)){
     ok(path.isAbsolute(v), k + ' resolves to an absolute path');
     ok(fs.existsSync(v), k + ' exists on disk — ' + path.basename(v));
@@ -199,6 +234,9 @@ function observeReads(script, args = [], sec = 60){
     'the walk runs BEFORE the literals are derived from it');
   ok(at('omnigold-evidence-bake.mjs') < at('rebake-gold-literals.mjs'),
     'the evidence is baked before the literals read it');
+  ok(at('backtest-goldswing.mjs') >= 0, 'the chain walks GOLD SWING');
+  ok(at('backtest-goldswing.mjs') < at('rebake-gold-literals.mjs'),
+    'the SWING walk runs BEFORE the swing live blocks are derived from it');
   ok(!/gold-artifact-provenance/.test(chain),
     'the chain does not contain a checker that would enumerate and spawn itself');
 }
@@ -216,6 +254,7 @@ function observeReads(script, args = [], sec = 60){
    ===================================================================== */
 {
   for (const f of ['scripts/backtest-goldscalp.mjs',
+                   'scripts/backtest-goldswing.mjs',
                    'scripts/rebake-gold-literals.mjs',
                    'scripts/edge-live-population.mjs']){
     const src = fs.readFileSync(path.join(ROOT, f), 'utf8');
@@ -230,6 +269,8 @@ function observeReads(script, args = [], sec = 60){
     const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
     ok(!/backtest-goldscalp-results-floor\.json/.test(code),
       f + ' carries no second copy of the walk filename in code');
+    ok(!/backtest-goldswing-results\.json/.test(code),
+      f + ' carries no second copy of the SWING walk filename in code');
   }
 }
 
