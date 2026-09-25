@@ -1471,6 +1471,9 @@ function recordForward(scalpSel, swingSel, gold){
                mechanic: fwdMechName(c), ticket: true };
       if (gdBarSec) row.barT = gdBarSec;   /* hg-v978 */
       if (gdFeed) row.feed = gdFeed;       /* hg-v979: the feed the levels were priced on */
+      /* hg-v980: the mark the mint sized this pick against (goldind stamps it
+         on every candidate) -- without it the ledger's fill model cannot run */
+      if (isFinite(fin(c.mark)) && fin(c.mark) > 0) row.mark = fin(c.mark);
       if (gdWk){
         row.goldShut = !!gdWk.inWeekend;
         if (gdWk.inWeekend) row.goldShutWhy = gdWk.why;

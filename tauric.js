@@ -236,6 +236,8 @@ function hgTauricRecord(rating, priced){
       entry: fin(p.entry), stop: fin(p.stop), t1: fin(p.t1),
       barT: barT,
       feed: (priced && typeof priced.feed === 'string' && priced.feed) ? priced.feed : undefined,   /* hg-v979 */
+      /* hg-v980: the last close the plan was priced on is the mark */
+      mark: (priced && isFinite(fin(priced.lastClose)) && fin(priced.lastClose) > 0) ? fin(priced.lastClose) : undefined,
       horizonBars: 30,
       ticket: false,
       /* it cleared nothing — it was never gated */

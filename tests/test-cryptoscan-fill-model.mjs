@@ -83,7 +83,9 @@ const rec = over => Object.assign({
 console.log('\n1. the field the fill model needs was never forwarded');
 {
   const fwd = stripComments(FWD);
-  ok(/mark: isFinite\(fin\(rec\.mark\)\) \? fin\(rec\.mark\) : undefined/.test(fwd),
+  /* hg-v980 tightened the normaliser to refuse a mark at or below zero; the pin
+     matches the rule (a mark is accepted and forwarded) rather than the old text. */
+  ok(/mark: (\(isFinite\(fin\(rec\.mark\)\) && fin\(rec\.mark\) > 0\)|isFinite\(fin\(rec\.mark\)\)) \? fin\(rec\.mark\) : undefined/.test(fwd),
      'hgFwdNormalize has always accepted a mark');
   ok(/mark: c\.mark,/.test(fwd), 'and hgFwdRecordScan forwards it now');
   ok(/if \(!type\) return null;/.test(fwd), 'without one, the fill walk returns null and stands aside');

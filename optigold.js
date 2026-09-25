@@ -1094,6 +1094,16 @@ function ogBreakBarSec(rows, s){
     return Math.floor(n > 1e12 ? n / 1000 : n);
   }catch(e){ return null; }
 }
+/* hg-v980: the close of the setup's break bar (rows[s.i]); null on junk --
+   +null is 0 and a mark of zero is not a mark */
+function ogBreakBarClose(rows, s){
+  if (!Array.isArray(rows) || !s) return null;
+  var i = (typeof s.i === 'number' && isFinite(s.i)) ? s.i : NaN;
+  if (!isFinite(i) || i < 0 || i >= rows.length || !rows[i]) return null;
+  var c = +rows[i].c;   /* +null, +'' and +undefined all fail the > 0 test below */
+  return (isFinite(c) && c > 0) ? c : null;
+}
+
 function ogFwdRows(setups, lane, rows, feed){
   if (!Array.isArray(setups)) return [];
   /* +null / +'' are 0 and isFinite(0) is true, so a missing level must be
@@ -1117,6 +1127,11 @@ function ogFwdRows(setups, lane, rows, feed){
     var bt = ogBreakBarSec(rows, s);   /* hg-v978: dated on the break bar */
     if (bt) row.barT = bt;
     if (typeof feed === 'string' && feed) row.feed = feed;   /* hg-v979: the feed the levels were priced on */
+    /* hg-v980: these are RESTING orders (the file header says so), so the
+       ledger's fill model is exactly the settlement they need -- and it needs
+       the mark at the break bar to know which way the order rests */
+    var mk = ogBreakBarClose(rows, s);
+    if (mk !== null) row.mark = mk;
     out.push(row);
   }
   return out;

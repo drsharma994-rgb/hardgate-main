@@ -903,6 +903,10 @@ async function runGoldPro(ui){
           sym: 'XAUUSD', dir: lvPlan.dir, entry: +lvPlan.entry, stop: +lvPlan.stop, t1: +lvPlan.t1,
           barT: gpBarSec || undefined,
           feed: lvFeed || undefined,   /* hg-v979: the feed the levels were priced on */
+          /* hg-v980: the bars ARE this desk's mark (gpGeoLine says so): the
+             last close of the series the plan was composed on */
+          mark: (lvRows && lvRows.length && isFinite(+lvRows[lvRows.length - 1].c) && +lvRows[lvRows.length - 1].c > 0)
+                ? +lvRows[lvRows.length - 1].c : undefined,
           mechanic: gpNewsLock ? 'GP-NEWS-LOCKED'
                                 : (gpAligned ? 'GP-COMPOSITE' : 'GP-ATR-FALLBACK'),
           ticket: gpAligned

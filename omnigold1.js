@@ -1597,7 +1597,8 @@
       }).map(function(c){
         var gi = c.gradeInfo || hgOg1Grade(c);
         return { sym: 'XAUUSD', dir: c.dir, entry: c.entry, stop: c.stop, t1: c.t1, mechanic: c.sid + '-' + run.horizon, grade: gi.grade, ticket: !!(c.verdict && c.verdict.qualifies),
-                 feed: (typeof feed === 'string' && feed) ? feed : undefined };   /* hg-v979 */
+                 feed: (typeof feed === 'string' && feed) ? feed : undefined,   /* hg-v979 */
+                 mark: (typeof c.mark === 'number' && isFinite(c.mark) && c.mark > 0) ? c.mark : undefined };   /* hg-v980 */
       });
       if (!list.length) return;
       out.tickets += list.filter(function(x){ return x.ticket; }).length;

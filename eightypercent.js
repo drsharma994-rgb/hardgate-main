@@ -2612,6 +2612,8 @@ function hg80Record(sig, cfg, feed){
       entry: fin(p.entry), stop: fin(p.stop), t1: fin(p.t1),
       barT: barT,
       feed: (typeof feed === 'string' && feed) ? feed : undefined,   /* hg-v979 */
+      /* hg-v980: the signal bar's close is the mark the plan was composed at */
+      mark: (isFinite(fin(sig.close)) && fin(sig.close) > 0) ? fin(sig.close) : undefined,
       horizonBars: P80_HORIZON_BARS,
       ticket: false,
       gateClear: false,

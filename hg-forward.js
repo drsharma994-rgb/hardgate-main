@@ -176,7 +176,7 @@ localStorage. Never throws.
          simply cannot be settled that way and says so rather than guessing.
          Undefined, never a substitute value: `entry` would read as a market
          order and quietly declare every legacy record filled. */
-      mark: isFinite(fin(rec.mark)) ? fin(rec.mark) : undefined,
+      mark: (isFinite(fin(rec.mark)) && fin(rec.mark) > 0) ? fin(rec.mark) : undefined,   /* hg-v980: a price, so > 0 -- a mark of zero is the +null trap wearing a number */
       /* THE SCORE THAT ORDERED THE CARD.
 
          A desk that ranks its setups is making a claim: the one at the top

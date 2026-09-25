@@ -159,6 +159,25 @@
     }catch(e){ return ''; }
   }
 
+  /* hg-v980: the fill-aware split beside the verdict. hgFwdStats has counted
+     it since the fill model was written and no gold desk fed it a mark, so
+     it read 0/0 on every gold pool. Renders NOTHING while no record carries
+     a fill resolution -- a legacy log is not evidence about fills. */
+  function hgGoldFwdFillHtml(stat){
+    try{
+      if (!stat) return '';
+      var w = +stat.fillWins || 0, l = +stat.fillLosses || 0, u = +stat.fillUnfilled || 0, p = +stat.fillUnprovable || 0;
+      if (!(w + l + u + p > 0)) return '';
+      var n = w + l;
+      return '<div class="note" style="margin:6px 0;padding:6px 9px;border-left:3px solid #94A3B8;font-size:11px">'
+        + '<b>FILL-AWARE:</b> ' + n + ' filled and settled (' + w + 'W / ' + l + 'L'
+        + (n ? ', ' + (w / n * 100).toFixed(1) + '% hit' : '') + ') · '
+        + u + ' never filled · ' + p + ' unprovable (the fill bar also touched an exit). '
+        + 'Settled as if the order had to fill first (hg-v980): a resting order that never opened '
+        + 'is excluded rather than settled as a market order, which is what the actual tally above does.</div>';
+    }catch(e){ return ''; }
+  }
+
   function hgGoldFwdNote(tabId, mechanic, feed){
     var r = hgGoldFwdRead(tabId, mechanic);
     /* hg-v979: the wait line does not depend on a verdict -- a desk with
@@ -201,6 +220,7 @@
     return '<div class="note" style="margin:6px 0;padding:6px 9px;border-left:3px solid #94A3B8;font-size:11px">'
       + '<b>' + head + '</b> — ' + body
       + ' <span style="opacity:.7">(pool: ' + esc(r.pools.join(', ')) + ')</span></div>' + cal
+      + hgGoldFwdFillHtml(r.stat)
       + heldHtml;
   }
 
@@ -211,4 +231,5 @@
   W.hgGoldFwdRead = hgGoldFwdRead;
   W.hgGoldFwdNote = hgGoldFwdNote;
   W.hgGoldFwdFeedHeldHtml = hgGoldFwdFeedHeldHtml;
+  W.hgGoldFwdFillHtml = hgGoldFwdFillHtml;
 })(typeof window !== 'undefined' ? window : this);
