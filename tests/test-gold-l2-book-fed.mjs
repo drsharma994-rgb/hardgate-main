@@ -317,7 +317,21 @@ console.log('== 7) what is deliberately NOT wired, and still zero writers ==');
      quote that always arrives on the same payload -- the book could never
      decide there. OMNIGOLD 1 passes inp.dom into a context nothing reads.
      Wiring either would be the hg-v955 ornamental field. */
-  assert(!/hgGoldL2FromPerp/.test(read('omnigold.js')) && !/hgGoldL2FromPerp/.test(read('omnigold1.js')), 'OMNIGOLD and OMNIGOLD 1 do not take the book: they have no reader that can decide on it');
+  /* hg-v974 corrected the OMNIGOLD half of this: the engine BRIDGE now reads
+     the book off the payload (hgGoldL2FromPerp, inside hgOgBridgeFeedFromShared
+     and nowhere else) and hands it to the borrowed GOLD SCALP / GOLD SWING
+     mints, which DO carry a reader -- the DOM rule this pack made venue-aware --
+     and tests/test-gold-last-borrowers-fed.mjs proves L2 READ lands through
+     it. What is still deliberately NOT wired is OMNIGOLD's NATIVE path (the
+     book sits below a quote that always arrives on the same payload) and
+     OMNIGOLD 1, so the assertion is bounded to those, not to the whole file. */
+  const og = read('omnigold.js');
+  const bStart = og.indexOf('function hgOgBridgeFeedFromShared(');
+  const bEnd = og.indexOf('function hgOgRunGoldTabEngines(', bStart);
+  assert(bStart > 0 && bEnd > bStart, 'OMNIGOLD: the hg-v974 bridge feed builder is located');
+  assert(/hgGoldL2FromPerp/.test(og.slice(bStart, bEnd)), 'OMNIGOLD: the bridge reads the book off the payload for the borrowed mints, which have a reader (hg-v974)');
+  assert(!/hgGoldL2FromPerp/.test(og.slice(0, bStart) + og.slice(bEnd)), 'OMNIGOLD native path does not take the book: it has no reader that can decide on it');
+  assert(!/hgGoldL2FromPerp/.test(read('omnigold1.js')), 'OMNIGOLD 1 does not take the book: it has no reader that can decide on it');
   const NAMES = ['__hgGoldQuote', '__hgGoldSpreadUsd', '__hgGoldL2Book'];
   let reads = 0, writes = 0;
   for (const f of fs.readdirSync(ROOT).filter(f => f.endsWith('.js'))){
