@@ -8583,6 +8583,21 @@ var HardgateGoldEngine = { evaluateScalp: evaluateScalp, evaluateSwing: evaluate
 
 /* 250 gold points at 0.001 = $0.25 = 2.5 pips at a 0.10 pip size. */
 var HG_GOLD_SPREAD_MAX_USD = 0.25;
+/* hg-v968: THE VENUE THE $0.25 BAR IS WRITTEN FOR. "250 points / 2.5 pips" is a
+   broker figure -- an XM-style XAUUSD quote. The desks' default feed chain ends
+   in Delta XAUTUSD and Binance PAXG, which are crypto-settled gold PROXIES, and
+   hg-v919 measured what happens when a bar set for one venue is applied to the
+   other: the cost ceiling alone vetoes 96.1% of the scalp book at PAXG against
+   16.4% at XM. Same arithmetic, same trap, a second gate.
+
+   So a quote that names a venue other than this one is REPORTED and does not
+   drop. A quote that names no venue behaves exactly as before, which is what
+   every existing caller and guard sees. */
+var HG_GOLD_SPREAD_BASIS_VENUE = 'xm';
+function hgGoldSpreadVenueOk(venue){
+  if (venue === null || venue === undefined || venue === '') return true;   /* unnamed: as before */
+  return String(venue).toLowerCase().indexOf(HG_GOLD_SPREAD_BASIS_VENUE) >= 0;
+}
 var HG_GOLD_SPREAD_POINT = 0.001;
 var HG_GOLD_NEWS_BEFORE_MS = 30 * 60 * 1000;
 var HG_GOLD_NEWS_AFTER_MS = 15 * 60 * 1000;
@@ -8733,20 +8748,61 @@ function hgGoldSpreadUsd(src){
 }
 
 function hgGoldSpreadLock(src){
-  var out = { lock: false, spread: NaN, max: HG_GOLD_SPREAD_MAX_USD, unchecked: false, reason: null };
+  var out = { lock: false, spread: NaN, max: HG_GOLD_SPREAD_MAX_USD, unchecked: false,
+              reason: null, venue: null, advisory: false };
   try{
     var sp = hgGoldSpreadUsd(src);
     out.spread = sp;
+    out.venue = (src && typeof src === 'object' && src.venue != null && src.venue !== '')
+      ? String(src.venue) : null;
     if (!isFinite(sp)){ out.unchecked = true; return out; }
     if (sp > HG_GOLD_SPREAD_MAX_USD){
-      out.lock = true;
-      out.reason = 'SPREAD LOCK — live bid/ask ' + sp.toFixed(3) + ' > '
-        + HG_GOLD_SPREAD_MAX_USD.toFixed(2) + ' (250 points / 2.5 pips)';
+      if (hgGoldSpreadVenueOk(out.venue)){
+        out.lock = true;
+        out.reason = 'SPREAD LOCK — live bid/ask ' + sp.toFixed(3) + ' > '
+          + HG_GOLD_SPREAD_MAX_USD.toFixed(2) + ' (250 points / 2.5 pips)';
+      } else {
+        /* hg-v968: wide, but measured on a venue this bar was not written for.
+           Reported, never dropped -- see HG_GOLD_SPREAD_BASIS_VENUE. */
+        out.advisory = true;
+        out.reason = 'SPREAD WIDE — ' + sp.toFixed(3) + ' > '
+          + HG_GOLD_SPREAD_MAX_USD.toFixed(2) + ' on ' + out.venue
+          + ', a gold proxy rather than the broker quote this bar is written for'
+          + ' — reported, not gated (hg-v919 measured what a cross-venue bar costs)';
+      }
     }
     return out;
   }catch(e){
-    return { lock: false, spread: NaN, max: HG_GOLD_SPREAD_MAX_USD, unchecked: true, reason: null };
+    return { lock: false, spread: NaN, max: HG_GOLD_SPREAD_MAX_USD, unchecked: true,
+             reason: null, venue: null, advisory: false };
   }
+}
+
+/* hg-v968 -- ONE PLACE THAT TURNS THE PERP TICKER INTO A QUOTE.
+
+   Every gold desk already calls hgGoldLoadDeltaPerp and stashes the response on
+   its ctx, and since hg-v968 that response's `ticker` carries bid / ask /
+   spreadUsd. This is the one reader, so four desks cannot grow four slightly
+   different ideas of what the gold quote is (hg-v949).
+
+   Returns null when there is no usable quote -- never a half quote, because
+   hgGoldSpreadUsd is explicit that one side alone is NO quote rather than a
+   spread equal to the price. */
+function hgGoldQuoteFromPerp(perp, venue){
+  try{
+    if (!perp || typeof perp !== 'object') return null;
+    var t = perp.ticker || perp;
+    if (!t || typeof t !== 'object') return null;
+    var bid = gdFin(t.bid), ask = gdFin(t.ask);
+    var sp = gdFin(t.spreadUsd);
+    if (!isFinite(sp) && isFinite(bid) && isFinite(ask)) sp = Math.abs(ask - bid);
+    if (!isFinite(sp)) return null;
+    var out = { spreadUsd: sp };
+    if (isFinite(bid)) out.bid = bid;
+    if (isFinite(ask)) out.ask = ask;
+    if (venue != null && venue !== '') out.venue = String(venue);
+    return out;
+  }catch(e){ return null; }
 }
 
 function hgGoldMtfBias(rows){
@@ -9256,7 +9312,10 @@ function hgGoldInstFilter(cand, ctx){
       spreadUnit: ctx.spreadUnit,
       bid: ctx.bid,
       ask: ctx.ask,
-      l2OrderBook: ctx.l2OrderBook
+      l2OrderBook: ctx.l2OrderBook,
+      /* hg-v968: the venue the quote was measured on, so a proxy spread is
+         reported rather than dropped against a broker-quote bar */
+      venue: ctx.spreadVenue || ctx.goldVenue || null
     });
     cand.spreadLock = spr;
     if (spr.lock){
@@ -16962,4 +17021,7 @@ W.hgGoldSpreadLock = hgGoldSpreadLock;
 W.hgGoldMtfBias = hgGoldMtfBias;
 W.hgGoldMtfMatrix = hgGoldMtfMatrix;
 W.HG_GOLD_SPREAD_MAX_USD = HG_GOLD_SPREAD_MAX_USD;
+W.HG_GOLD_SPREAD_BASIS_VENUE = HG_GOLD_SPREAD_BASIS_VENUE;
+W.hgGoldSpreadVenueOk = hgGoldSpreadVenueOk;
+W.hgGoldQuoteFromPerp = hgGoldQuoteFromPerp;
 })();

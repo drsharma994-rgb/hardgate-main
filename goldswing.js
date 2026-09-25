@@ -2988,7 +2988,25 @@ async function runScan(ui, scanSt){
       var waits = [];
       if (loadP){
         waits.push(Promise.resolve().then(function(){ return loadP({ symbol: 'XAUTUSD', resolution: '1h' }); })
-          .then(function(j){ ctx.perpNative = j; }).catch(function(){}));
+          .then(function(j){
+            ctx.perpNative = j;
+            /* hg-v968: the spread lock has never fired, because nothing in this
+               repo ever wrote the quote globals it reads. The quote was already
+               on this wire -- Delta's ticker carries best_bid / best_ask and the
+               parser dropped them. One shared reader turns the response into a
+               quote, and the VENUE travels with it so a gold-proxy spread is
+               reported rather than dropped against a broker-quote bar. */
+            try{
+              var qf = gfn('hgGoldQuoteFromPerp');
+              var q = qf ? qf(j, 'delta-xaut') : null;
+              if (q){
+                if (isFinite(q.spreadUsd)) ctx.spreadUsd = q.spreadUsd;
+                if (isFinite(q.bid)) ctx.bid = q.bid;
+                if (isFinite(q.ask)) ctx.ask = q.ask;
+                ctx.spreadVenue = q.venue || null;
+              }
+            }catch(eQ){ /* a quote that cannot be read is no quote */ }
+          }).catch(function(){}));
       }
       if (loadF){
         waits.push(Promise.resolve().then(function(){ return loadF(); })

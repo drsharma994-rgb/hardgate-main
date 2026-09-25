@@ -2126,7 +2126,25 @@ async function runScan(ui, scanSt){
       var waits = [];
       if (loadP){
         waits.push(Promise.resolve().then(function(){ return loadP({ symbol: 'XAUTUSD', resolution: '1h' }); })
-          .then(function(j){ ctx.perpNative = j; }).catch(function(){}));
+          .then(function(j){
+            ctx.perpNative = j;
+            /* hg-v968: the spread lock has never fired, because nothing in this
+               repo ever wrote the quote globals it reads. The quote was already
+               on this wire -- Delta's ticker carries best_bid / best_ask and the
+               parser dropped them. One shared reader turns the response into a
+               quote, and the VENUE travels with it so a gold-proxy spread is
+               reported rather than dropped against a broker-quote bar. */
+            try{
+              var qf = gfn('hgGoldQuoteFromPerp');
+              var q = qf ? qf(j, 'delta-xaut') : null;
+              if (q){
+                if (isFinite(q.spreadUsd)) ctx.spreadUsd = q.spreadUsd;
+                if (isFinite(q.bid)) ctx.bid = q.bid;
+                if (isFinite(q.ask)) ctx.ask = q.ask;
+                ctx.spreadVenue = q.venue || null;
+              }
+            }catch(eQ){ /* a quote that cannot be read is no quote */ }
+          }).catch(function(){}));
       }
       if (loadF){
         waits.push(Promise.resolve().then(function(){ return loadF(); })
@@ -2733,6 +2751,10 @@ async function runScan(ui, scanSt){
   }finally{
     scanSt.busy = false;
     scanSt.hasRun = true;
+    /* hg-v968: stamp the completion, so an auto refresh is VISIBLE. Written in
+       the finally, so a failed scan stamps too -- "last attempt 14:32, it
+       failed" is information; a frozen clock is not. */
+    try{ scanSt.lastScanAt = Date.now(); gsPaintAutoStamp(ui, scanSt); }catch(eST){}
     try{ if (ui && ui.btn) ui.btn.disabled = false; }catch(e2){}
     setProg(ui, null);
   }
@@ -2772,6 +2794,13 @@ function goldscalpMountInto(el, scanSt, cfg){
       + '<div class="row"><button class="btn" id="' + p + 'Run">RUN SCAN</button>'
       + '<span class="note" id="' + p + 'Stat">' + statIdle + '</span></div>'
       + deskNote
+      /* hg-v968: THE AUTO-REFRESH YOU COULD NOT SEE.
+         hg-v965 put GOLD SCALP on a 3-minute clock and hg-v967 fixed the
+         resolution that stopped it firing -- and this tab showed NO last-scan
+         time anywhere, so a working refresh and a dead one looked identical.
+         Asked for three times, and the first two answers changed a timer the
+         desk owner had no way to observe. This line is how you tell. */
+      + '<div class="note" id="' + p + 'AutoStamp" style="margin-top:4px;opacity:.85"></div>'
       + '<div class="prog" id="' + p + 'Prog"><i></i></div>'
       + '</div>'
       + '<div id="' + p + 'Weekend" class="gsx-weekend-wrap" style="display:none"></div>'
@@ -2787,7 +2816,12 @@ function goldscalpMountInto(el, scanSt, cfg){
       empty: el.querySelector('#' + p + 'Empty'),
       weekend: el.querySelector('#' + p + 'Weekend')
     };
+    try{ ui.autoStamp = el.querySelector('#' + p + 'AutoStamp'); }catch(eAS){ ui.autoStamp = null; }
     scanSt.ui = ui;
+    /* hg-v968: the countdown ticker starts when the tab is MOUNTED, never at
+       module load -- see the note beside the export. Idempotent: a second mount
+       installs no second timer. */
+    try{ gsAutoStampInit(); gsPaintAutoStamp(ui, scanSt); }catch(eSI){}
     scanSt.useStartraderRouting = !!cfg.useStartraderRouting;
     scanSt.deskTab = cfg.deskTab || 'GOLD SCALP';   /* same bucket label hgSetupPaintDesk uses below */
 
@@ -2836,6 +2870,59 @@ function __gsWarmShim(){
   return { innerHTML: '', textContent: '', className: '', disabled: false,
            style: {}, firstElementChild: { style: {} },
            querySelector: function(){ return null; } };
+}
+
+/* hg-v968 -- the visible half of the 3-minute clock.
+
+   Renders "AUTO 3m - last scan HH:MM:SS - next in M:SS" on the tab. The next
+   time is read from the shell's own timer (__hgGoldScalpAutoNext) rather than
+   recomputed here, so the line cannot drift from the clock it describes; with
+   the shell absent it simply omits that half rather than inventing one. */
+function gsFmtClock(ms){
+  try{
+    var d = new Date(ms);
+    var p2 = function(n){ return (n < 10 ? '0' : '') + n; };
+    return p2(d.getHours()) + ':' + p2(d.getMinutes()) + ':' + p2(d.getSeconds());
+  }catch(e){ return '--:--:--'; }
+}
+function gsFmtLeft(ms){
+  var sec = Math.max(0, Math.ceil(ms / 1000));
+  return Math.floor(sec / 60) + ':' + ('0' + (sec % 60)).slice(-2);
+}
+function gsAutoStampText(scanSt, nowMs, nextMs, everyMs){
+  var bits = [];
+  if (isFinite(everyMs) && everyMs > 0) bits.push('AUTO ' + Math.round(everyMs / 60000) + 'm');
+  else bits.push('AUTO off');
+  if (scanSt && isFinite(scanSt.lastScanAt) && scanSt.lastScanAt > 0)
+    bits.push('last scan ' + gsFmtClock(scanSt.lastScanAt));
+  else bits.push('no scan yet');
+  if (isFinite(nextMs) && nextMs > 0 && isFinite(nowMs))
+    bits.push('next in ' + gsFmtLeft(nextMs - nowMs));
+  return bits.join(' · ');
+}
+function gsPaintAutoStamp(ui, scanSt){
+  try{
+    var node = ui && ui.autoStamp;
+    if (!node) return '';
+    var every = (typeof W !== 'undefined' && W && isFinite(W.HG_GOLDSCALP_AUTO_MS))
+      ? W.HG_GOLDSCALP_AUTO_MS : NaN;
+    var next = (typeof W !== 'undefined' && W && isFinite(W.__hgGoldScalpAutoNext))
+      ? W.__hgGoldScalpAutoNext : NaN;
+    var txt = gsAutoStampText(scanSt || __scan, Date.now(), next, every);
+    node.textContent = txt;
+    return txt;
+  }catch(e){ return ''; }
+}
+var __gsStampTimer = null;
+function gsAutoStampInit(){
+  try{
+    if (__gsStampTimer !== null) return 'already';       /* one page, one clock (hg-v958) */
+    if (typeof setInterval !== 'function') return 'no timer';
+    __gsStampTimer = setInterval(function(){
+      try{ if (__scan && __scan.ui) gsPaintAutoStamp(__scan.ui, __scan); }catch(e){}
+    }, 1000);
+    return 'armed';
+  }catch(e){ __gsStampTimer = null; return 'error'; }
 }
 
 async function goldscalpRefresh(){
@@ -2926,8 +3013,21 @@ W.goldscalpMountSection = function(el, opts){
    So the HG_tabs registration stays the single route, and index.html's
    hgGoldScalpRefreshFn RESOLVES through it. That is the mechanism the shell's
    own sweep already uses. Do not 'helpfully' add the global here. */
+/* hg-v968 -- and this pack's first cut then did exactly that, two lines below
+   the warning: exporting gsAutoStampText and gsAutoStampInit took this file from
+   19 to 21 module-scope functions and turned the same guard red. Both now
+   travel on the HG_tabs registration, the one route hg-v967 established. */
+/* hg-v968: DELIBERATELY NOT ARMED AT MODULE LOAD.
+   The first cut called gsAutoStampInit() here. In a browser that is harmless;
+   in Node it installs a REAL 1-second setInterval that is never cleared, so the
+   event loop never drains and the process never exits -- every test that boots
+   this file hangs forever, and the full suite stalled on
+   test-conviction-orphan-expiry for exactly that reason. The gate caught it.
+   It is armed from the MOUNT instead, which is also the correct lifecycle: a
+   countdown for a tab nobody has opened has nothing to paint. */
 W.HG_tabs = W.HG_tabs || [];
-W.HG_tabs.push({ id: 'goldscalp', label: 'GOLD SCALP', mount: mount, refresh: goldscalpRefresh });
+W.HG_tabs.push({ id: 'goldscalp', label: 'GOLD SCALP', mount: mount, refresh: goldscalpRefresh,
+                 autoStampText: gsAutoStampText, autoStampInit: gsAutoStampInit });
 W.HG_warmups = W.HG_warmups || [];
 W.HG_warmups.push({ id: 'goldscalp', label: 'GOLD SCALP', run: gsWarm });
 })();
