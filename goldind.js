@@ -5047,20 +5047,45 @@ function goldWatchPromote(cands, armed){
   }catch(e){ return armed || []; }
 }
 
-/* Inline GOLD / Deep Scan bridge — same tab engines, read-only summary. */
+/* Inline GOLD / Deep Scan bridge — same tab engines, read-only summary.
+   hg-v975: this is a ROUTE into the two gold mints -- the seventh -- and it
+   was handed bars, macro and the wall clock only. hg-v974 called OMNIGOLD and
+   STAR TRADER "the last two borrowers" because its census was a grep for
+   lookups, which cannot see a direct call inside this file. The bridge is fed
+   like the other six now: the caller's news snapshot under the key the mint
+   reads, the feed label (volume trust), the shared live feed through the ONE
+   applier (hg-v971 / v972: only where the input carries nothing), and each
+   lane judged on its OWN signal bar -- the 15m close for the scalp mint, the
+   4h close for the swing mint (hg-v952 / v963). A caller's `now` is the
+   fallback for a series with no readable instant, never the rule. The swing
+   lane's count is reported whether or not it can crown, so the stat line can
+   say "formed, none can lead" instead of nothing (hg-v940). */
 function hgGoldInlineBridge(inp){
   var empty = { scalp: null, swing: null, at: Date.now() };
   try{
     inp = inp || {};
     var out = { scalp: null, swing: null, at: Date.now() };
-    var nowMs = __toMs(inp.now);
-    if (!isFinite(nowMs)) nowMs = Date.now();
+    var callerNow = __toMs(inp.now);
+    var barFn = (typeof W.hgGoldSignalBarMs === 'function') ? W.hgGoldSignalBarMs : null;
+    function laneNow(rows){
+      var t = barFn ? barFn(rows) : NaN;
+      if (isFinite(t) && t > 0) return t;
+      return isFinite(callerNow) ? callerNow : Date.now();
+    }
+    function laneInp(rows){
+      var o = {};
+      for (var k in inp){ if (Object.prototype.hasOwnProperty.call(inp, k)) o[k] = inp[k]; }
+      o.now = laneNow(rows);
+      return o;
+    }
+    if (inp.live && typeof inp.live === 'object'){ try{ hgGoldApplyLiveFeed(inp, inp.live); }catch(eLv){} }
     var setupsFn = goldScalpSetups;
     var rankFn = goldRankSetups;
     if (typeof setupsFn === 'function'){
-      var got = setupsFn(inp);
+      var scInp = laneInp(inp.rows15m);
+      var got = setupsFn(scInp);
       var cands = Array.isArray(got) ? got : [];
-      var ctx = { now: nowMs, macro: inp.macro || null, goldPro: inp.goldPro || null,
+      var ctx = { now: scInp.now, macro: inp.macro || null, goldPro: inp.goldPro || null,
                   crossVenue: goldCrossVenueMap(cands) };
       var rk = rankFn ? rankFn(cands, ctx) : { ranked: cands, best: cands[0] || null };
       out.scalp = {
@@ -5071,10 +5096,11 @@ function hgGoldInlineBridge(inp){
     }
     if (typeof W.goldSwingSetups === 'function'){
       try{
-        var sw = W.goldSwingSetups(inp);
-        if (sw && sw.best){
-          out.swing = { count: (sw.ranked || []).length, best: { dir: sw.best.dir, strategy: sw.best.strategy,
-            tally: sw.best.tally, grade: sw.best.grade } };
+        var swInp = laneInp(inp.rows4h);
+        var sw = W.goldSwingSetups(swInp);
+        if (sw){
+          out.swing = { count: (sw.ranked || []).length,
+            best: sw.best ? { dir: sw.best.dir, strategy: sw.best.strategy, tally: sw.best.tally, grade: sw.best.grade } : null };
         }
       }catch(eSw){}
     }
