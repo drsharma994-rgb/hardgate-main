@@ -1685,7 +1685,11 @@ async function laneGoldScalp(gold, now){
   if (!setupsFn){ out.dark = 'GOLD SCALP engine dark — goldScalpSetups (goldind.js) not loaded; no setups can be sourced'; return out; }
   if (!gold.rows15m.length){ out.held.push('no 15m bars from any feed — lane skipped'); return out; }
   var cands = null;
-  try{ cands = setupsFn({ rows15m: gold.rows15m, rows1h: gold.rows1h, rows4h: gold.rows4h, dailyCandles: (gold.rows1d && gold.rows1d.length) ? gold.rows1d : undefined, now: newsAt, news: newsSnap }); }
+  try{
+    var scInp = { rows15m: gold.rows15m, rows1h: gold.rows1h, rows4h: gold.rows4h, dailyCandles: (gold.rows1d && gold.rows1d.length) ? gold.rows1d : undefined, now: newsAt, news: newsSnap };
+    try{ var apS = gfn('hgGoldApplyLiveFeed'); if (apS && gold.live) apS(scInp, gold.live); }catch(eAp){}   /* hg-v971 */
+    cands = setupsFn(scInp);
+  }
   catch(e){ out.held.push('detector threw: ' + ((e && e.message) || e)); return out; }
   if (!Array.isArray(cands)) return out;
   var i, rj = cands.rejected || [];
@@ -1941,6 +1945,8 @@ async function runScan(ui){
     setStat(ui, 'reading closed 15m + 1h gold bars…');
     var f = await fetchRows();
     if (!f.rows15m.length){ setStat(ui, 'feeds failed — no gold klines from any source; nothing fabricated', true); return 'error: no feed'; }
+    /* hg-v971: the live quote + book for the borrowed GOLD SCALP mint */
+    try{ var lfFn = gfn('hgGoldLiveFeed'); f.live = lfFn ? await lfFn({ symbol: 'XAUTUSD' }) : null; }catch(eLive){ f.live = null; }
     var now = Date.now();
     var res = goldUltraEngine({ rows15m: f.rows15m, rows1h: f.rows1h, now: now, venueCost: venueCost() });
     /* the setups: the GOLD SCALP prefer book, stamped by the count */

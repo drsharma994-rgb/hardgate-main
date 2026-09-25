@@ -534,9 +534,11 @@ async function laneGoldScalp(gold, now){
   if (!gold.rows15m.length){ out.held.push(heldLine('GOLD SCALP', 'SCALP', null, null, 'no 15m bars from any feed — lane skipped')); return out; }
   var cands = null;
   try{
-    cands = setupsFn({ rows15m: gold.rows15m, rows1h: gold.rows1h, rows4h: gold.rows4h,
-                       dailyCandles: (gold.rows1d && gold.rows1d.length) ? gold.rows1d : undefined,
-                       now: nc.at, news: nc.snap });
+    var scInp = { rows15m: gold.rows15m, rows1h: gold.rows1h, rows4h: gold.rows4h,
+                  dailyCandles: (gold.rows1d && gold.rows1d.length) ? gold.rows1d : undefined,
+                  now: nc.at, news: nc.snap };
+    try{ var apS = gfn('hgGoldApplyLiveFeed'); if (apS && gold.live) apS(scInp, gold.live); }catch(eAp){}   /* hg-v971 */
+    cands = setupsFn(scInp);
   }catch(e){ out.held.push(heldLine('GOLD SCALP', 'SCALP', null, null, 'detector threw: ' + ((e && e.message) || e))); return out; }
   if (!Array.isArray(cands)) return out;
   var i, rj = cands.rejected || [];
@@ -604,7 +606,11 @@ function laneGoldSwing(gold, now){
   if (!fn){ out.dark = 'GOLD SWING engine dark — goldSwingSetups (goldswing.js) not loaded'; return out; }
   if (!gold.rows4h.length){ out.held.push(heldLine('GOLD SWING', 'SWING', null, null, 'no 4h bars from any feed — lane skipped')); return out; }
   var rk = null;
-  try{ rk = fn({ rows4h: gold.rows4h, rows1d: gold.rows1d, now: nw.at, news: nw.snap }); }
+  try{
+    var swInp = { rows4h: gold.rows4h, rows1d: gold.rows1d, now: nw.at, news: nw.snap };
+    try{ var apW = gfn('hgGoldApplyLiveFeed'); if (apW && gold.live) apW(swInp, gold.live); }catch(eAp){}   /* hg-v971 */
+    rk = fn(swInp);
+  }
   catch(e){ out.held.push(heldLine('GOLD SWING', 'SWING', null, null, 'engine threw: ' + ((e && e.message) || e))); return out; }
   if (!rk || !Array.isArray(rk.ranked)) return out;
   var i, rr = rk.rejected || [];
@@ -1505,6 +1511,9 @@ async function runScan(ui, scanSt){
     setStat(ui, 'pulling gold klines 15m/1h/4h/1d…');
     var now = Date.now();
     var gold = await fetchGoldKlines();
+    /* hg-v971: the live quote + book, once per scan, for every lane that
+       borrows the gold mints -- this desk fetched neither before. */
+    try{ var lfFn = gfn('hgGoldLiveFeed'); gold.live = lfFn ? await lfFn({ symbol: 'XAUTUSD' }) : null; }catch(eLive){ gold.live = null; }
     if (sideSwitchedMidScan()){ discardStat(); return 'skipped: side switched mid-scan'; }
     setProg(ui, 0.4);
     if (!gold.rows15m.length && !gold.rows1h.length && !gold.rows4h.length){

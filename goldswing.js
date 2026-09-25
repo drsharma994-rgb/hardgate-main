@@ -1705,7 +1705,8 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
           l2OrderBook: microOpts && microOpts.l2OrderBook,
           spreadUsd: microOpts && microOpts.spreadUsd,
           bid: microOpts && microOpts.bid,
-          ask: microOpts && microOpts.ask
+          ask: microOpts && microOpts.ask,
+          spreadVenue: (microOpts && microOpts.spreadVenue) || null   /* hg-v971 */
         }) || c;
         if (c.dropped){ out.rejected.push(c); return; }
       }
@@ -2690,6 +2691,9 @@ function goldSwingSetups(inp){
     if (inp.us10yCandles) microOpts.us10yCandles = inp.us10yCandles;
     if (inp.news) microOpts.news = inp.news;
     if (isFinite(inp.spreadUsd)) microOpts.spreadUsd = inp.spreadUsd;
+    if (isFinite(inp.bid)) microOpts.bid = inp.bid;
+    if (isFinite(inp.ask)) microOpts.ask = inp.ask;
+    if (inp.spreadVenue) microOpts.spreadVenue = inp.spreadVenue;   /* hg-v971 */
     if (inp.l2OrderBook) microOpts.l2OrderBook = inp.l2OrderBook;
     if (isFinite(inp.rtCostPct)) microOpts.rtCostPct = inp.rtCostPct;   /* venue RT cost override for the push() cost gate (hg-v700) */
     var got = buildCandidates(leg, nowMs, newsC, inp.macro || null, 'n/a', 'INLINE', 'XAUUSD', microOpts);
@@ -3002,6 +3006,7 @@ async function runScan(ui, scanSt){
               var qf = gfn('hgGoldQuoteFromPerp');
               var q = qf ? qf(j, 'delta-xaut') : null;
               if (q){
+                ctx.quote = q;   /* hg-v971: the whole quote, for hgGoldApplyLiveFeed */
                 if (isFinite(q.spreadUsd)) ctx.spreadUsd = q.spreadUsd;
                 if (isFinite(q.bid)) ctx.bid = q.bid;
                 if (isFinite(q.ask)) ctx.ask = q.ask;
@@ -3058,8 +3063,7 @@ async function runScan(ui, scanSt){
     if (typeof W !== 'undefined' && W){
       if (W.__hgGoldTickBuffer) microOpts.tickBuffer = W.__hgGoldTickBuffer;
       if (W.__hgGoldL2Book) microOpts.l2OrderBook = W.__hgGoldL2Book;
-      /* hg-v970: a named broker book on the global wins; the proxy book fills the seam only when nothing else has */
-      if (!microOpts.l2OrderBook && ctx.l2Book) microOpts.l2OrderBook = ctx.l2Book;
+      /* hg-v970 / hg-v971: the proxy book and quote fill the seam only when the global supplied none -- see the applier call below */
       if (isFinite(W.__hgGoldDomDepth)) microOpts.domDepth = W.__hgGoldDomDepth;
       if (isFinite(W.__hgGoldSpreadUsd)) microOpts.spreadUsd = W.__hgGoldSpreadUsd;
       if (W.__hgGoldQuote){
@@ -3068,6 +3072,10 @@ async function runScan(ui, scanSt){
         if (isFinite(W.__hgGoldQuote.spreadUsd)) microOpts.spreadUsd = W.__hgGoldQuote.spreadUsd;
       }
     }
+    /* hg-v971: the quote hg-v968 put on ctx never reached microOpts -- the
+       spread lock had still never seen one here. ONE applier carries the
+       quote and the book across, filling only what the globals left empty. */
+    try{ var apLive = gfn('hgGoldApplyLiveFeed'); if (apLive) apLive(microOpts, { quote: ctx.quote || null, l2: ctx.l2Book || null }); }catch(eAp){}
 
     var cands = [], legs = [], venueRows = {}, rejectedAll = [], i;
     var armedAll = [], watchMeta = {};
