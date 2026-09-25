@@ -2138,6 +2138,7 @@ async function runScan(ui, scanSt){
               var qf = gfn('hgGoldQuoteFromPerp');
               var q = qf ? qf(j, 'delta-xaut') : null;
               if (q){
+                ctx.quote = q;   /* hg-v971: the whole quote, for hgGoldApplyLiveFeed */
                 if (isFinite(q.spreadUsd)) ctx.spreadUsd = q.spreadUsd;
                 if (isFinite(q.bid)) ctx.bid = q.bid;
                 if (isFinite(q.ask)) ctx.ask = q.ask;
@@ -2251,8 +2252,6 @@ async function runScan(ui, scanSt){
       if (W.__hgGoldTickBuffer) scalpBundle.tickBuffer = W.__hgGoldTickBuffer;
       if (W.__hgGoldL2Book) scalpBundle.l2OrderBook = W.__hgGoldL2Book;
     }
-    /* hg-v970: a named broker book on the global wins; the proxy book fills the seam only when nothing else has */
-    if (!scalpBundle.l2OrderBook && ctx.l2Book) scalpBundle.l2OrderBook = ctx.l2Book;
     if (gold && gold.rows1d && gold.rows1d.length) scalpBundle.dailyCandles = gold.rows1d;
     if (typeof W !== 'undefined' && W && isFinite(W.__hgGoldSpreadUsd)) scalpBundle.spreadUsd = W.__hgGoldSpreadUsd;
     if (typeof W !== 'undefined' && W && W.__hgGoldQuote){
@@ -2260,6 +2259,11 @@ async function runScan(ui, scanSt){
       if (isFinite(W.__hgGoldQuote.ask)) scalpBundle.ask = W.__hgGoldQuote.ask;
       if (isFinite(W.__hgGoldQuote.spreadUsd)) scalpBundle.spreadUsd = W.__hgGoldQuote.spreadUsd;
     }
+    /* hg-v971: the quote hg-v968 put on ctx never reached this bundle -- the
+       spread lock had still never seen one here. ONE applier now carries the
+       quote and the book (hg-v970) across; a named broker quote or book on the
+       global above still wins because the applier fills only what is empty. */
+    try{ var apLive = gfn('hgGoldApplyLiveFeed'); if (apLive) apLive(scalpBundle, { quote: ctx.quote || null, l2: ctx.l2Book || null }); }catch(eAp){}
     if (gold.src && gold.src['15m']) scalpBundle.candleSource = gold.src['15m'];
     else if (gold.source) scalpBundle.candleSource = gold.source;
     if (ctx.perpNative && ctx.perpNative.ok){

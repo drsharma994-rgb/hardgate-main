@@ -3753,7 +3753,11 @@ function goldScalpSetups(inp){
         spreadUsd: inp.spreadUsd,
         spread: inp.spread,
         bid: inp.bid,
-        ask: inp.ask
+        ask: inp.ask,
+        /* hg-v971: the venue the quote was measured on -- without it the
+           hg-v968 proxy rule is unreachable through this mint and a wide
+           proxy quote LOCKS instead of being reported */
+        spreadVenue: inp.spreadVenue || null
       });
       if (inst && inst.dropped){ rejected.push(inst); return; }
       try{
@@ -8861,6 +8865,66 @@ function hgGoldL2FromPerp(perp, venue){
     if (venue != null && venue !== '') out.venue = String(venue);
     return out;
   }catch(e){ return null; }
+}
+
+/* hg-v971 -- ONE LOADER AND ONE APPLIER FOR THE LIVE GOLD FEED.
+
+   hg-v968 fed the quote and hg-v970 the book, each from the Delta payload the
+   two owning desks fetch. Two things were still wrong. (1) On GOLD SCALP and
+   GOLD SWING the quote the perp handler put on `ctx` was never copied into
+   the bundle the mint reads, so the spread lock had STILL never received a
+   quote there -- fed to a seam that dropped it (hg-v932, in my own pack).
+   (2) The mints' own institutional-filter context omitted the venue, so a
+   quote that did arrive would have LOCKED rather than been reported (the
+   hg-v968 rule, unreachable through the mint). And the three desks that
+   borrow the mints -- GOLD PINE, GOLD ULTRA, GOLD DIRECTION -- fetch no
+   payload at all.
+
+   hgGoldLiveFeed loads the payload once and turns it into { perp, quote, l2 }
+   through the two existing readers; hgGoldApplyLiveFeed puts it on a mint
+   input ONLY where the input carries nothing already, so a named broker
+   quote or book on the global still wins. One rule, five desks. */
+function hgGoldLiveFeed(opts){
+  opts = opts || {};
+  var venue = (opts.venue != null && opts.venue !== '') ? String(opts.venue) : 'delta-xaut';
+  var symbol = String(opts.symbol || 'XAUTUSD').toUpperCase();
+  var timeoutMs = isFinite(+opts.timeoutMs) && +opts.timeoutMs > 0 ? +opts.timeoutMs : 8000;
+  var empty = { perp: null, quote: null, l2: null, venue: venue };
+  var P = (typeof Promise !== 'undefined') ? Promise : null;
+  if (!P || typeof hgGoldLoadDeltaPerp !== 'function') return P ? P.resolve(empty) : null;
+  var load;
+  try{ load = P.resolve().then(function(){ return hgGoldLoadDeltaPerp({ symbol: symbol, resolution: '1h' }); }); }
+  catch(e){ return P.resolve(empty); }
+  var timer = null;
+  var late = new P(function(res){ timer = setTimeout(function(){ res(null); }, timeoutMs); });
+  return P.race([load, late]).then(function(j){
+    try{ if (timer) clearTimeout(timer); }catch(eT){}
+    if (!j || typeof j !== 'object') return empty;
+    var q = null, b = null;
+    try{ q = hgGoldQuoteFromPerp(j, venue); }catch(eQ){ q = null; }
+    try{ b = hgGoldL2FromPerp(j, venue); }catch(eB){ b = null; }
+    return { perp: j, quote: q, l2: b, venue: venue };
+  }).catch(function(){
+    try{ if (timer) clearTimeout(timer); }catch(eT2){}
+    return empty;
+  });
+}
+
+function hgGoldApplyLiveFeed(inp, feed){
+  try{
+    if (!inp || typeof inp !== 'object' || !feed || typeof feed !== 'object') return inp;
+    var q = feed.quote;
+    var hasQuote = isFinite(gdFin(inp.spreadUsd)) || (isFinite(gdFin(inp.bid)) && isFinite(gdFin(inp.ask)));
+    if (q && !hasQuote && isFinite(gdFin(q.spreadUsd))){
+      inp.spreadUsd = gdFin(q.spreadUsd);
+      if (isFinite(gdFin(q.bid))) inp.bid = gdFin(q.bid);
+      if (isFinite(gdFin(q.ask))) inp.ask = gdFin(q.ask);
+      if (q.venue != null && q.venue !== '' && (inp.spreadVenue == null || inp.spreadVenue === '')) inp.spreadVenue = String(q.venue);
+    }
+    if (feed.l2 && !inp.l2OrderBook) inp.l2OrderBook = feed.l2;
+    if (feed.perp && !inp.perpNative && feed.perp.ok) inp.perpNative = feed.perp;
+    return inp;
+  }catch(e){ return inp; }
 }
 
 function hgGoldMtfBias(rows){
@@ -17090,4 +17154,6 @@ W.HG_GOLD_SPREAD_BASIS_VENUE = HG_GOLD_SPREAD_BASIS_VENUE;
 W.hgGoldSpreadVenueOk = hgGoldSpreadVenueOk;
 W.hgGoldQuoteFromPerp = hgGoldQuoteFromPerp;
 W.hgGoldL2FromPerp = hgGoldL2FromPerp;
+W.hgGoldLiveFeed = hgGoldLiveFeed;
+W.hgGoldApplyLiveFeed = hgGoldApplyLiveFeed;
 })();

@@ -380,8 +380,10 @@ function collectNativeScalp(bars, ctx, source){
   if (!fn || !bars.rows15m || bars.rows15m.length < 30) return out;
   var got = null;
   try{
-    got = fn({ rows15m: bars.rows15m, rows1h: bars.rows1h, rows4h: bars.rows4h,
-      now: ctx.now || Date.now(), news: ctx.news || null });
+    var scInp = { rows15m: bars.rows15m, rows1h: bars.rows1h, rows4h: bars.rows4h,
+      now: ctx.now || Date.now(), news: ctx.news || null };
+    try{ var apS = gfn('hgGoldApplyLiveFeed'); if (apS && bars.live) apS(scInp, bars.live); }catch(eAp){}   /* hg-v971 */
+    got = fn(scInp);
   }catch(e){ return out; }
   if (!Array.isArray(got)) return out;
   var ranked = got;
@@ -841,6 +843,8 @@ function mount(el){
     try{
       if (stat) stat.textContent = 'Fetching gold candles + macro…';
       var bars = await fetchGoldBars();
+      /* hg-v971: the live quote + book for the borrowed GOLD SCALP mint */
+      try{ var lfFn = gfn('hgGoldLiveFeed'); bars.live = lfFn ? await lfFn({ symbol: 'XAUTUSD' }) : null; }catch(eLive){ bars.live = null; }
       var macro = null;
       try{
         var mg = gfn('getGoldMacro');

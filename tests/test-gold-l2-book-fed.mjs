@@ -302,10 +302,13 @@ console.log('== 6) the desks\' real perp handlers, lifted and run ==');
   /* Deliberately TEXTUAL, and says so (hg-v956): the bundle seams live inside
      the scan closure and are not lifted; whether the book is carried, and that
      a named book on the global still WINS, are properties of the source. */
-  assert(/if \(!scalpBundle\.l2OrderBook && ctx\.l2Book\) scalpBundle\.l2OrderBook = ctx\.l2Book;/.test(read('goldscalp.js')), 'GOLD SCALP: the bundle takes the proxy book only when the global supplied none');
-  assert(/if \(!microOpts\.l2OrderBook && ctx\.l2Book\) microOpts\.l2OrderBook = ctx\.l2Book;/.test(read('goldswing.js')), 'GOLD SWING: same, on microOpts');
+  /* hg-v971 folded the two seam lines into the ONE applier (hgGoldApplyLiveFeed),
+     which fills only what the globals left empty -- the global-wins property
+     is now proved behaviourally in tests/test-gold-live-feed-reaches-mints.mjs */
+  assert(/apLive\(scalpBundle, \{ quote: ctx\.quote \|\| null, l2: ctx\.l2Book \|\| null \}\)/.test(read('goldscalp.js')), 'GOLD SCALP: the bundle takes the proxy book through the shared applier');
+  assert(/apLive\(microOpts, \{ quote: ctx\.quote \|\| null, l2: ctx\.l2Book \|\| null \}\)/.test(read('goldswing.js')), 'GOLD SWING: same, on microOpts');
   const gs = read('goldscalp.js');
-  assert(gs.indexOf('if (W.__hgGoldL2Book) scalpBundle.l2OrderBook = W.__hgGoldL2Book;') < gs.indexOf('if (!scalpBundle.l2OrderBook && ctx.l2Book)'), 'GOLD SCALP: the global is read first, so it wins');
+  assert(gs.indexOf('if (W.__hgGoldL2Book) scalpBundle.l2OrderBook = W.__hgGoldL2Book;') < gs.indexOf('apLive(scalpBundle,'), 'GOLD SCALP: the global is read first, so it wins');
 }
 
 console.log('== 7) what is deliberately NOT wired, and still zero writers ==');
