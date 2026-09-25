@@ -2384,6 +2384,17 @@ function hg80Scan(rows, opts){
            the last bar. The firing rule above is untouched (see the note
            on hg80InSession); this only records what the calendar says. */
         s.goldShut = hg80WeekendVerdict(s.t);
+    /* hg-v965: and the OTHER gold calendar, read on the SAME instant
+       expression as the weekend line above -- a tier-1 CPI / NFP / FOMC / GDP
+       window bars NEW minting exactly as the weekend does, and two reads of
+       two calendars at two different instants is the drift hg-v964 removed by
+       construction. There is deliberately NO wrapper here: the "null unless
+       it locks" rule lives once, in hgGoldNewsMark, because this file's
+       weekend wrapper is byte-identical to two others and a third pair would
+       be six copies of one rule (hg-v949). This line is a lookup guard and
+       nothing else. Null when gold-formation.js is absent, and then nothing
+       changes. */
+        s.newsLock = (typeof W.hgGoldNewsMark === 'function') ? W.hgGoldNewsMark(s.t) : null;
         out.push(s);
         break;
       }
@@ -3388,6 +3399,19 @@ function simpleCardHtml(sig, rung, state){
       + ' The ' + P80_UTC_FROM + ':00-' + P80_UTC_TO + ':00 UTC session test reads the HOUR only, '
       + 'exactly as the spec writes it, so a weekend bar passes it; this line is the calendar '
       + 'speaking, not a change to the rule that fired.</div>';
+  }
+
+  /* hg-v965: the other gold calendar, on the same signal bar. This desk MARKS
+     and withholds nothing for the weekend (hg-v950) and does the same here,
+     for the same reason: its rows are a record of what the spec's rule fired,
+     and the calendar is a fact about that bar rather than a change to the
+     rule. The firing rule is untouched. */
+  if (sig.newsLock){
+    h += '<div class="p80-warn" style="margin-top:7px">TIER-1 GOLD NEWS LOCK — '
+      + esc(String(sig.newsLock.why || 'this bar printed inside a tier-1 gold news window'))
+      + ' Nothing is withheld on this card: the levels, the distances and the record all stay '
+      + 'exactly where they are. This line is the news calendar speaking, not a change to the '
+      + 'rule that fired.</div>';
   }
 
   /* THE THREE NUMBERS, aligned. Label, price, distance — tabular figures in

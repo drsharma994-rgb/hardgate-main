@@ -251,10 +251,20 @@ const form = (atMs, ctx) => (ctx || W).hgGoldFormation(SETUP,
   for (const t of ['newgold', 'omnigold1', 'goldpro'])
     ok(!un.has(t), t + ' no longer reports UNCOVERED');
 
-  /* the remaining four are still NAMED rather than quietly dropped — this pack
-     covers the ticket-recording desks and says so */
-  ok(c.uncovered.length > 0,
-    'the desks still without a route are reported (' + c.uncovered.map(r => r.desk).join(', ') + ')');
+  /* hg-v965: this required the uncovered bucket to be NON-EMPTY, so that the
+     four desks this pack left were "named rather than quietly dropped". hg-v965
+     routed all four and the bucket went legitimately empty, turning this red
+     with nothing wrong — the third time this session an expectation about how
+     many desks are left has gone stale in a guard. What must hold is that the
+     reporter NAMES a gap when there is one, so make one (hg-v950). */
+  const census = W.HG_GOLD_WEEKEND_MINTERS;
+  census.push({ desk: 'SYNTHETIC', tab: 'synthetic-newsless', probe: 'hgNoSuchProbe' });
+  const cGap = W.hgGoldNewsCoverage();
+  census.pop();
+  ok(cGap.uncovered.some(r => r.tab === 'synthetic-newsless'),
+    'a routeless desk is reported UNCOVERED and NAMED, not quietly dropped');
+  ok(cGap.uncovered.length === c.uncovered.length + 1,
+    'and it is the only one added — the bucket reports exactly what has no route');
 
   /* partition still holds against the census count the reporter itself saw */
   const total = c.verified.length + c.uncovered.length + c.notLoaded.length;

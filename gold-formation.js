@@ -757,6 +757,28 @@
     }catch(e){ return null; }
   }
 
+  /* hg-v965 -- THE NEWS LOCK AS A MARK, IN THE SHAPE THE RAW-BAR DESKS ALREADY USE.
+
+     optigold.js, eightypercent.js and tauric.js each carry a BYTE-IDENTICAL
+     weekend wrapper: look the calendar up, return the verdict only when it
+     says shut, null otherwise. Writing three matching NEWS wrappers beside
+     them would make SIX copies of one rule, and hg-v949 is explicit that a
+     second copy of a calendar is a second calendar. So the "null unless it
+     locks" shape lives HERE, once, and those desks call it directly with no
+     wrapper of their own -- their call sites carry a typeof guard and nothing
+     else, so there is no rule in them to drift.
+
+     It DELEGATES to hgGoldNewsVerdict and therefore inherits every seam that
+     function already fails open at: no instant, an unreadable one, epoch zero
+     (hg-v953), no snapshot, or a snapshot the gate itself reads as unchecked.
+     It adds no calendar and no threshold. */
+  function hgGoldNewsMark(tSec, snapArg){
+    try{
+      var v = hgGoldNewsVerdict(tSec, snapArg);
+      return (v && v.locked === true) ? v : null;
+    }catch(e){ return null; }
+  }
+
   function hgGoldWeekendVerdict(atMs){
     try{
       var t = atMs;
@@ -1204,6 +1226,7 @@
   G.hgGoldSessionEdge = hgGoldSessionEdge;
   G.hgGoldSignalBarMs = hgGoldSignalBarMs;
   G.hgGoldWeekendVerdict = hgGoldWeekendVerdict;
+  G.hgGoldNewsMark = hgGoldNewsMark;
   /* hg-v963 -- WHICH GOLD DESKS THE NEWS GATE ACTUALLY REACHES.
 
      The desk list is DERIVED from HG_GOLD_WEEKEND_MINTERS, never typed again:
@@ -1233,7 +1256,18 @@
        verdict. */
     newgold:       'hgGoldFormation news lock, same instant as the weekend rule (hg-v964)',
     omnigold1:     'hgGoldFormation news lock, same instant as the weekend rule (hg-v964)',
-    goldpro:       'own paired read at the last closed bar; withholds the ticket flag (hg-v964)'
+    goldpro:       'own paired read at the last closed bar; withholds the ticket flag (hg-v964)',
+    /* hg-v965: the last four, each treating the news lock EXACTLY as it
+       already treats the weekend -- no new per-desk policy is invented here.
+       OPTI GOLD withholds the ACTIONABLE claim (hg-v950), the inline GOLD
+       lanes withhold both handoffs (hg-v951), and 80PERCENT and TAURIC mark
+       without withholding (hg-v950 / hg-v952), because their rows record no
+       ticket there is anything to withhold. Each reads hgGoldNewsMark on the
+       SAME instant expression its weekend read already uses. */
+    optigold:      'hgGoldNewsMark on the break bar; withholds ACTIONABLE (hg-v965)',
+    '80percent':   'hgGoldNewsMark on the signal bar; marks the card (hg-v965)',
+    gold:          'hgGoldNewsMark per lane signal bar; withholds both handoffs (hg-v965)',
+    tauric:        'hgGoldNewsMark on the pipeline bar; marks the card (hg-v965)'
   };
 
   function hgGoldNewsProbe(){

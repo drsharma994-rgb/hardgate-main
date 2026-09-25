@@ -201,6 +201,17 @@ function ogSignals(rows, opts){
        weekend now" would judge a Tuesday break by Saturday's clock. Null
        when the calendar cannot be read, and then nothing changes. */
     s.goldShut = ogWeekendVerdict(rows[t].t);
+    /* hg-v965: and the OTHER gold calendar, read on the SAME instant
+       expression as the weekend line above -- a tier-1 CPI / NFP / FOMC / GDP
+       window bars NEW minting exactly as the weekend does, and two reads of
+       two calendars at two different instants is the drift hg-v964 removed by
+       construction. There is deliberately NO wrapper here: the "null unless
+       it locks" rule lives once, in hgGoldNewsMark, because this file's
+       weekend wrapper is byte-identical to two others and a third pair would
+       be six copies of one rule (hg-v949). This line is a lookup guard and
+       nothing else. Null when gold-formation.js is absent, and then nothing
+       changes. */
+    s.newsLock = (typeof W.hgGoldNewsMark === 'function') ? W.hgGoldNewsMark(rows[t].t) : null;
     var r = ogResolve(rows, t + 1, s, opts.horizonBars);
     s.state = r.state; s.resolvedAt = r.at;
     /* how far price must travel BACK to fill — the number that decides whether
@@ -593,6 +604,18 @@ function ogReach(s, px){
     return { ok: false, why: 'GOLD WAS SHUT when this broke — '
       + String(s.goldShut.why || 'the bar printed inside the gold weekend')
       + ' The level came from the 24/7 leg of the feed chain, so it is not a level anyone traded.' };
+  }
+  /* hg-v965: the same withhold, for the other calendar. This desk's answer to
+     the weekend is to keep the setup and remove only its ACTIONABLE claim
+     (hg-v950), and a tier-1 news lock makes the same claim about the same
+     instant -- that new minting is barred -- so it gets the same treatment
+     rather than a new per-desk policy. ENTRY / STOP / T1 and the setup's place
+     in the list are untouched. */
+  if (s.newsLock){
+    return { ok: false, why: 'TIER-1 GOLD NEWS LOCK — '
+      + String(s.newsLock.why || 'this break printed inside a tier-1 gold news window')
+      + ' The break itself stands and its levels are unchanged; what is withheld is the'
+      + ' claim that it is actionable now.' };
   }
   if (s.state === 'waiting'){
     var d = ogDistance(s, px);
