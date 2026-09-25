@@ -298,6 +298,13 @@ async function stWarmContext(){
   if (typeof g.getGoldMacro === 'function'){
     try{ ctx.goldMacro = await g.getGoldMacro(); }catch(e){}
   }
+  /* hg-v976: the shared gold live feed (hg-v971 / v972: one loader, bounded
+     by its own timer, null on every failure), loaded once per warm for the
+     gold lane in stContextVotes. Never a snapshot invented. */
+  ctx.goldLive = null;
+  if (typeof g.hgGoldLiveFeed === 'function'){
+    try{ ctx.goldLive = (await g.hgGoldLiveFeed({ symbol: 'XAUTUSD' })) || null; }catch(eLive){ ctx.goldLive = null; }
+  }
   return ctx;
 }
 
@@ -366,9 +373,22 @@ function stContextVotes(contract, dir, ctx, ticker, rows4h, rows1h, rows15m){
         var gsInp = { rows15m: rows15m, rows1h: rows1h || undefined, rows4h: rows4h || undefined,
                       news: ctx.newsState || null,
                       macro: ctx.goldMacro || ((typeof g.getGoldMacroCached === 'function') ? (g.getGoldMacroCached() || null) : null) };
+        /* hg-v976: the feed the 15m rows came from, recorded where they were
+           fetched (startrader.js), so the mint can distrust proxy volume the
+           way the GOLD SCALP desk does; nothing recorded -> nothing named. */
+        try{
+          var gsSrc = (typeof g.startraderGoldSource === 'function') ? g.startraderGoldSource('15m') : null;
+          if (gsSrc) gsInp.candleSource = gsSrc;
+        }catch(eSrc){}
         try{
           if (typeof g.hgGoldSignalBarMs === 'function'){ var gsT = g.hgGoldSignalBarMs(rows15m); if (isFinite(gsT) && gsT > 0) gsInp.now = gsT; }
         }catch(eT){}
+        /* hg-v976: the shared live feed (quote / book / perp / macro), loaded
+           once per warm onto ctx.goldLive, through the ONE applier every
+           borrowing desk uses -- it fills only what the input carries none of. */
+        try{
+          if (ctx.goldLive && typeof g.hgGoldApplyLiveFeed === 'function') g.hgGoldApplyLiveFeed(gsInp, ctx.goldLive);
+        }catch(eLv){}
         var gs = g.goldScalpSetups(gsInp);
         if (gs && gs.length){
           var top = gs[0];

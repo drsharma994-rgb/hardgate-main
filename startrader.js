@@ -229,6 +229,30 @@ async function stYahooCandles(yahooSym, tf, count){
   }catch(e){ return []; }
 }
 
+/* hg-v976: the source of the gold rows this desk votes on, per timeframe.
+   startraderCandles returns bare rows, so the STAR TRADER lane that borrows
+   the GOLD SCALP mint could not name its feed, and the mint TRUSTED proxy
+   volume the GOLD SCALP desk distrusts (the volume-trust rule fires only on
+   a NAMED paxg / xaut feed). Recorded here, where the rows are fetched, and
+   only when rows came back: the XM bridge names its own source (the broker
+   feed); getXAUCandles records its source in the shell's per-timeframe
+   record (S.goldSrcByTf, the same record the DATA chip and GOLD SCALP read);
+   the macro chain names its source on the payload; the Yahoo GC=F leg is
+   named as macro.js names it. A timeframe nothing fetched reads null -- a
+   label is never invented. */
+var __stGoldSrc = {};
+function startraderGoldSource(tf){
+  try{
+    var v = __stGoldSrc[String(tf || '')];
+    return (v === null || v === undefined || v === '') ? null : String(v);
+  }catch(e){ return null; }
+}
+function stNoteGoldSrc(tf, rows, src){
+  try{
+    __stGoldSrc[String(tf || '')] = (rows && rows.length && src !== null && src !== undefined && src !== '') ? String(src) : null;
+  }catch(e){}
+}
+
 async function startraderCandles(sym, tf, n){
   try{
     tf = tf || '4h';
@@ -246,17 +270,30 @@ async function startraderCandles(sym, tf, n){
       if (typeof G.getXmGoldCandles === 'function'){
         try{
           var xm = await G.getXmGoldCandles(tf, n);
-          if (xm && xm.rows && xm.rows.length) return xm.rows.slice(-n);
+          if (xm && xm.rows && xm.rows.length){
+            var xmRows = xm.rows.slice(-n);
+            stNoteGoldSrc(tf, xmRows, xm.source || 'xm-xauusd');
+            return xmRows;
+          }
         }catch(e0){}
       }
       if (typeof G.getXAUCandles === 'function'){
-        try{ return await G.getXAUCandles(tf, n); }catch(e1){}
+        try{
+          var xr = await G.getXAUCandles(tf, n);
+          var shellSrc = (typeof S !== 'undefined' && S && S.goldSrcByTf) ? S.goldSrcByTf[tf] : null;
+          stNoteGoldSrc(tf, xr, shellSrc);
+          return xr;
+        }catch(e1){}
       }
       if (typeof G.getGoldCandles === 'function'){
         var g = await G.getGoldCandles(tf, n);
-        return (g && g.rows) ? g.rows.slice(-n) : [];
+        var gRows = (g && g.rows) ? g.rows.slice(-n) : [];
+        stNoteGoldSrc(tf, gRows, g && g.source);
+        return gRows;
       }
-      return await stYahooCandles('GC=F', tf, n);
+      var yRows = await stYahooCandles('GC=F', tf, n);
+      stNoteGoldSrc(tf, yRows, 'yahoo');
+      return yRows;
     }
     if (c.yahoo) return await stYahooCandles(c.yahoo, tf, n);
     return [];
@@ -340,6 +377,7 @@ try{
   G.startraderBaseOf = startraderBaseOf;
   G.startraderBinanceSym = startraderBinanceSym;
   G.startraderCandles = startraderCandles;
+  G.startraderGoldSource = startraderGoldSource;   /* hg-v976 */
   G.startraderNormRows = startraderNormRows;
   G.startraderUniverseRows = startraderUniverseRows;
   G.startraderTickers = startraderTickers;
