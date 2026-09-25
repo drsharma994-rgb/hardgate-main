@@ -187,6 +187,27 @@ function hgTauricCostNote(plan){
    NOT clear this desk's gates, it was never put to them, and marking it
    otherwise would pollute the population that decides promotions.
    --------------------------------------------------------------------- */
+/* hg-v965: the bar this pipeline run belongs to, defined ONCE. It was computed
+   inline inside hgTauricRecord, which was correct while the record was the only
+   reader; the card now reads a calendar at the same moment, and two copies of
+   this expression is exactly the drift hg-v964 removed by construction on the
+   desks that carry two calendars. Flooring is also the dedup rule the forward
+   log is built on. */
+function hgTauricBarT(){
+  return Math.floor((Date.now() / 1000) / TAURIC_TF_SEC) * TAURIC_TF_SEC;
+}
+
+/* hg-v965: the news half of the gold calendar for this desk. Null unless a
+   tier-1 window is live -- the rule itself lives once, in hgGoldNewsMark
+   (gold-formation.js), so this carries a lookup guard and no rule. */
+function hgTauricNewsMark(tSec){
+  try{
+    var f = W.hgGoldNewsMark;
+    if (typeof f !== 'function') return null;
+    return f(tSec);
+  }catch(e){ return null; }
+}
+
 function hgTauricRecord(rating, priced){
   try {
     if (typeof W.hgFwdRecord !== 'function') return { ok: false, why: 'forward log not loaded' };
@@ -199,7 +220,7 @@ function hgTauricRecord(rating, priced){
        this did when it shipped, silently, while the card said it had been
        recorded. Flooring is also the dedup rule the log is built on: re-run
        the pipeline inside the same 4h bar and it records once, not twice. */
-    var barT = Math.floor((Date.now() / 1000) / TAURIC_TF_SEC) * TAURIC_TF_SEC;
+    var barT = hgTauricBarT();
     var reason = W.hgFwdRecord({
       tab: TAURIC_TAB,
       mechanic: 'TAURIC-' + String(rating.label || '').toUpperCase(),
@@ -337,6 +358,24 @@ function verdictHtml(rating, priced, cost, rec){
     return h + '<div class="note warn" style="margin-top:6px">The view has a side but no levels: '
       + esc((priced && priced.why) || 'not priced') + '. A view without levels is not a trade, and '
       + 'this tab will not print numbers it did not get.</div></div>';
+  }
+
+  /* hg-v965: was this view priced inside a tier-1 gold news window? MARKED,
+     never withheld -- the rows this desk records already carry ticket:false and
+     gateClear:false, so there is no ticket here to withhold, which is exactly
+     the reasoning hg-v952 gave for marking rather than withholding the weekend
+     on this desk. Read on hgTauricBarT(), the SAME instant the record uses.
+
+     Deliberately NOT carried into the forward record: a new ledger field needs
+     the three hg-v955 seams (hgFwdNormalize, hgFwdRecordScan and the desk map)
+     and a reader, and a field nothing reads is ornamental -- that is hg-v955's
+     own finding, and half-wiring it here would reproduce it. */
+  var tNews = hgTauricNewsMark(hgTauricBarT());
+  if (tNews){
+    h += '<div class="note warn" style="margin-top:6px"><b>TIER-1 GOLD NEWS WINDOW</b> — '
+      + esc(String(tNews.why || 'this view was priced inside a tier-1 gold news window'))
+      + ' Nothing below is withheld: these rows record no ticket and clear no gate, so there is '
+      + 'nothing here to stand down. This is the calendar telling you when the agents spoke.</div>';
   }
 
   var p = priced.plan;

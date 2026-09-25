@@ -76,7 +76,10 @@ function seriesEnding(endMs, n, stepSec){
 console.log('== 2) the helper judges per lane, from the shared calendar ==');
 let CTX;
 {
-  CTX = liftInline(['hgEsc', 'hgInlineGoldShut', 'hgInlineGoldShutHtml']);
+  /* hg-v965 gave the lane ONE shared bar read (hgInlineGoldBarMs) so both
+     gold calendars judge the same instant; hgInlineGoldShut now delegates to
+     it, so the lift has to bring it along. */
+  CTX = liftInline(['hgEsc', 'hgInlineGoldBarMs', 'hgInlineGoldShut', 'hgInlineGoldShutHtml']);
   assert(typeof CTX.hgInlineGoldShut === 'function', 'hgInlineGoldShut lifted and runs');
   const h4Shut = seriesEnding(SAT, 80, 14400), m15Open = seriesEnding(WED, 200, 900);
   assert(!!CTX.hgInlineGoldShut(h4Shut), 'a 4h series ending inside the weekend reads SHUT');
@@ -97,8 +100,9 @@ console.log('== 3) it fails OPEN at every seam ==');
                  isFinite, isNaN, parseFloat, parseInt };
   bare.window = bare; bare.globalThis = bare;
   vm.createContext(bare);
+  const bm = HTML.match(/function hgInlineGoldBarMs\([\s\S]*?\n\}/m);
   const m = HTML.match(/function hgInlineGoldShut\([\s\S]*?\n\}/m);
-  vm.runInContext(m[0], bare, { filename: 'index.html:bare' });
+  vm.runInContext(bm[0] + '\n' + m[0], bare, { filename: 'index.html:bare' });
   assert(typeof bare.hgGoldWeekendVerdict !== 'function', 'the bare context genuinely lacks the calendar');
   assert(bare.hgInlineGoldShut(seriesEnding(SAT, 80, 14400)) === null,
          'with the calendar absent a weekend series returns null — fails OPEN, never assumes shut');
@@ -128,8 +132,10 @@ function runLane(startNeedle, endNeedle, declNeedle, assignNeedle, shut, extra){
   /* the shipped helper, not a re-implementation */
   const hm = HTML.match(/function hgInlineGoldShutHtml\([\s\S]*?\n\}/m);
   const em = HTML.match(/function hgEsc\([\s\S]*?\n\}/m);
+  /* hg-v965: the lane also renders a news notice now */
+  const nm = HTML.match(/function hgInlineGoldNewsHtml\([\s\S]*?\n\}/m);
   vm.createContext(ctx);
-  vm.runInContext(em[0] + '\n' + hm[0], ctx, { filename: 'index.html:helpers' });
+  vm.runInContext(em[0] + '\n' + hm[0] + '\n' + nm[0], ctx, { filename: 'index.html:helpers' });
   Object.assign(ctx, {
     GOLD_SYM: 'XAUUSD', casc: 'long', dir: 'long', entry: 2300, lastClose: 2300,
     stop: 2280, t1: 2340, t2: 2360, oppo: 2360, h4: [], m15: [],
@@ -138,7 +144,11 @@ function runLane(startNeedle, endNeedle, declNeedle, assignNeedle, shut, extra){
     hgBookBtn: () => '<!--ADDTOBOOK-->',
     inlineScanStack: () => ({}),
     gsPlan: {}, gcPlan: {},
-    hgInlineGoldShut: () => shut
+    hgInlineGoldShut: () => shut,
+    /* hg-v965: the lane reads the news calendar too. Held at null here so
+       these sections keep asking exactly what they claim to — what the
+       WEEKEND does — with the news guard covering its own half. */
+    hgInlineGoldNews: () => null
   }, extra || {});
   ctx.swingPlanHtml = ''; ctx.planHtml = '';
   vm.runInContext(stmt, ctx, { filename: 'index.html:lane' });

@@ -278,7 +278,23 @@ const SNAP = { events: [{ title: 'US CPI m/m', t: CPI }] };
   ok(routed.has('golddirection'), 'GOLD DIRECTION is routed');
 
   /* and the gaps NAME THEMSELVES rather than living in prose */
-  ok(c.uncovered.length > 0, 'desks with no news route are reported, not assumed');
+  /* hg-v965: this asserted `c.uncovered.length > 0` -- "gaps name themselves"
+     tested by requiring a gap to EXIST in the shipped tree. hg-v965 routed the
+     last four desks and the bucket went legitimately empty, turning this red
+     with nothing wrong. That is the SAME stale-expectation defect the comment
+     below already records one line along, and the fix is the same one hg-v950
+     used: a bucket nothing can land in proves nothing, so MAKE a gap and
+     require the reporter to name it, rather than depending on one being left. */
+  const probeCensus = W.HG_GOLD_WEEKEND_MINTERS;
+  probeCensus.push({ desk: 'SYNTHETIC', tab: 'synthetic-newsless', probe: 'hgNoSuchProbe' });
+  const cGap = W.hgGoldNewsCoverage();
+  probeCensus.pop();
+  eq(cGap.uncovered.length, c.uncovered.length + 1,
+    'a routeless desk added to the census is reported UNCOVERED — gaps name themselves');
+  ok(cGap.uncovered.some(r => r.tab === 'synthetic-newsless'),
+    'and it is named, not merely counted');
+  eq(W.hgGoldNewsCoverage().uncovered.length, c.uncovered.length,
+    'and removing it restores the report — the probe left no residue');
 
   /* DERIVED, not a typed list of tabs. The first cut named the four raw-bar
      minters hg-v950 listed — and hg-v964 wired one of them (GOLD PRO), which
