@@ -3737,6 +3737,10 @@ function goldScalpSetups(inp){
     function push(c){
       if (!c) return;
       if (c.dropped){ rejected.push(c); return; }
+      /* hg-v977: the instant this candidate was judged on. SUPER GOLD's
+         sgCandSec has read `signalT` since hg-v952 and fell back to the wall
+         clock on EVERY candidate, because no mint ever wrote it. */
+      if (!(typeof c.signalT === 'number' && isFinite(c.signalT)) && isFinite(nowMs)) c.signalT = nowMs;
       var inst = hgGoldInstFilter(c, {
         rows: rows, nowMs: nowMs, scalp: true,
         /* Asia demotes (ASIA SESSION stamp) instead of hard-dropping — demoted

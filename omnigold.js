@@ -13420,6 +13420,13 @@ terse status, and never launches a first-time scan on a global refresh.
     } catch (eLoad){}
   }
 
+  function hgOgRowsBarMs(rows, fallback){
+    try{
+      var f = gfn('hgGoldSignalBarMs');
+      var t = f ? f(rows) : NaN;
+      return (isFinite(t) && t > 0) ? t : fallback;
+    }catch(e){ return fallback; }
+  }
   function hgOgPaintGoldEngines(ui, bridge, tapeDir){
     /* tapeDir is ADDITIVE optional — omitted, the APEX head block falls
        back to the tab's stored desk-tape read; nothing else changes. */
@@ -13437,7 +13444,10 @@ terse status, and never launches a first-time scan on a global refresh.
               rows4h: __og.lastRows.swing || [],
               macro: __og.shared && __og.shared.macro,
               dxyRows: __og.shared && __og.shared.macro && __og.shared.macro.dxyRows,
-              now: Date.now(),
+              /* hg-v977: the forming stack's session and news reads are the
+                 BAR's, not the paint's -- the last closed 15m bar of the rows
+                 it is handed, the wall clock only with no readable instant */
+              now: hgOgRowsBarMs(__og.lastRows.m15 || __og.lastRows.scalp || [], Date.now()),
               perpNative: __og.perpNative || null,
               oiRows: __og.perpNative && __og.perpNative.oi,
               fundingRows: __og.perpNative && __og.perpNative.funding

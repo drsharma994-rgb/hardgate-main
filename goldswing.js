@@ -473,6 +473,54 @@ function publishState(cands){
 /* ---------------- diagnostic surface (full last scan) ---------------- */
 var __scanSnap = null;
 var __lastDeskTape = '';
+/* hg-v977: the SIGNAL BAR of this desk's execution timeframe, in ms -- the
+   last closed bar's instant through the ONE reader every borrowing desk uses
+   (hg-v952 / v963 / v973). The wall clock is the fallback for a series with no
+   readable instant, never the rule. */
+function gwScanBarMs(rows, fallback){
+  try{
+    var f = gfn('hgGoldSignalBarMs');
+    var t = f ? f(rows) : NaN;
+    return (isFinite(t) && t > 0) ? t : fallback;
+  }catch(e){ return fallback; }
+}
+
+/* hg-v977: the ±30-min high-impact caution and the killzone label as ONE
+   function each, so the scan can read them again on the signal bar once the
+   bars have arrived; the read at scan start (on the wall clock) is only the
+   value in force for a series with no readable instant. */
+function gwNewsCaution(newsRaw, t, ncFn){
+  var out = { caution: false, title: null };
+  if (!newsRaw) return out;
+  if (ncFn){
+    try{ var nc = ncFn(newsRaw, t); if (nc){ out.caution = !!nc.caution; out.title = nc.title || null; } }catch(eNc){}
+    return out;
+  }
+  try{
+    var evs = Array.isArray(newsRaw.events) ? newsRaw.events : [];
+    for (var ei = 0; ei < evs.length; ei++){
+      var ev = evs[ei];
+      if (!ev || ev.impact !== 'high') continue;
+      var et = (+ev.t < 1e12) ? (+ev.t)*1000 : +ev.t;
+      if (isFinite(et) && Math.abs(et - t) <= 30*60*1000){ out.caution = true; out.title = ev.title || null; break; }
+    }
+  }catch(eNc2){}
+  return out;
+}
+function gwSessionTxt(t, kzFn){
+  var sessionTxt = 'n/a';
+  if (kzFn){
+    try{
+      var kz = kzFn(t);
+      if (kz && kz.label){
+        var hh = isFinite(kz.hourGMT) ? ('0' + kz.hourGMT).slice(-2) + ':00 GMT' : 'n/a';
+        sessionTxt = kz.label + ' · ' + hh;
+      }
+    }catch(eK){}
+  }
+  return sessionTxt;
+}
+
 function publishScan(ranked, best, history, at, rejected, armed, whySilent){
   try{
     var cands = [];
@@ -500,7 +548,10 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
         /* v731: carry the SMC read across the publish boundary — see the same
            note in goldscalp.js publishScan. Re-rankers downstream have no
            candles, so the read has to travel or it is lost. No bars in .smc. */
-        smc: (c.smc && typeof c.smc === 'object') ? c.smc : null
+        smc: (c.smc && typeof c.smc === 'object') ? c.smc : null,
+        /* hg-v977: the instant the mint judged this candidate on -- SUPER GOLD's
+           sgCandSec has read `signalT` since hg-v952 and no mint ever wrote it */
+        signalT: (typeof c.signalT === 'number' && isFinite(c.signalT)) ? c.signalT : null
       });
     }
     /* FORWARD LOG, split by STRATEGY. This desk runs several distinct setups
@@ -1694,6 +1745,10 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
       if (!c) return;
       if (c.dropped){ out.rejected.push(c); return; }
       if (!c.session) c.session = sessionTxt || 'n/a';
+      /* hg-v977: the instant this candidate was judged on. SUPER GOLD's
+         sgCandSec has read `signalT` since hg-v952 and fell back to the wall
+         clock on EVERY candidate, because no mint ever wrote it. */
+      if (!(typeof c.signalT === 'number' && isFinite(c.signalT)) && isFinite(nowMs)) c.signalT = nowMs;
       var filt = gfn('hgGoldInstFilter');
       if (filt){
         c = filt(c, {
@@ -2947,37 +3002,14 @@ async function runScan(ui, scanSt){
     if (seasonFn){ try{ season = seasonFn(now); }catch(eSe){ season = null; } }
 
     /* shared ±30-min high-impact window check (goldind.js export preferred,
-       identical local math as the honest fallback) */
-    var newsC = { caution: false, title: null };
+       identical local math as the honest fallback) -- read here on the scan
+       clock, read AGAIN on the signal bar once the bars arrive (hg-v977) */
     var ncFn = gfn('goldNewsCaution');
-    if (newsRaw){
-      if (ncFn){
-        try{ var nc = ncFn(newsRaw, now); if (nc){ newsC.caution = !!nc.caution; newsC.title = nc.title || null; } }catch(eNc){}
-      } else {
-        try{
-          var evs = Array.isArray(newsRaw.events) ? newsRaw.events : [];
-          for (var ei = 0; ei < evs.length; ei++){
-            var ev = evs[ei];
-            if (!ev || ev.impact !== 'high') continue;
-            var et = (+ev.t < 1e12) ? (+ev.t)*1000 : +ev.t;
-            if (isFinite(et) && Math.abs(et - now) <= 30*60*1000){ newsC.caution = true; newsC.title = ev.title || null; break; }
-          }
-        }catch(eNc2){}
-      }
-    }
+    var newsC = gwNewsCaution(newsRaw, now, ncFn);
 
     /* session context (goldKillzone) — shown on cards, never a swing gate */
-    var sessionTxt = 'n/a';
     var kzFn = gfn('goldKillzone');
-    if (kzFn){
-      try{
-        var kz = kzFn(now);
-        if (kz && kz.label){
-          var hh = isFinite(kz.hourGMT) ? ('0' + kz.hourGMT).slice(-2) + ':00 GMT' : 'n/a';
-          sessionTxt = kz.label + ' · ' + hh;
-        }
-      }catch(eK){}
-    }
+    var sessionTxt = gwSessionTxt(now, kzFn);
 
     /* ranking context legs — every one optional, every one catch-isolated */
     var ctx = { now: now, news: newsC, season: season, macro: null, spot: null, fng: null,
@@ -3087,7 +3119,7 @@ async function runScan(ui, scanSt){
           watchMeta[venue] = { atr: (aArr && aArr.length) ? aArr[aArr.length - 1] : NaN,
                                lastClose: (lc && isFinite(lc.c)) ? lc.c : NaN };
         }
-        var wl = buildWatch(leg, now, ctx.macro, venue);
+        var wl = buildWatch(leg, barNow, ctx.macro, venue);
         for (var wi = 0; wi < wl.length; wi++){ if (wl[wi]) armedAll.push(wl[wi]); }
       }catch(eW){}
     }
@@ -3095,6 +3127,25 @@ async function runScan(ui, scanSt){
     var stRoute = !!(scanSt && scanSt.useStartraderRouting);
     /* leg 1: primary gold feed */
     var gold = stRoute ? await fetchStartraderGoldKlines() : await fetchGoldKlines();
+    /* hg-v977: the SIGNAL BAR, not the wall clock -- on this desk the last
+       closed 4h bar can sit FOUR HOURS behind the clock, which is exactly what
+       hg-v973 fixed on GOLD PINE's swing lane while this desk went on judging
+       its own mint, the news caution, the killzone label, the watch list, the
+       Part-engine news gates, the best-levels session boost, the A+ cash-open
+       read and the forming stack on Date.now(). `now` stays the instant for
+       what IS wall time: conviction age, the weekend-exposure countdown and
+       demote, the scan stamp, the 7-step feed-staleness read. Measured on the
+       shipped tree with the same bars: both candidates read NY AM with the
+       clock 5 min past the bar and OFF-HOURS with it 6 h past; a CPI 10 min
+       after the bar locked the desk under the first clock and not the second. */
+    var barNow = gwScanBarMs(gold.rows4h, now);
+    if (barNow !== now){
+      if (seasonFn){ try{ season = seasonFn(barNow); ctx.season = season; }catch(eSb){} }
+      newsC = gwNewsCaution(newsRaw, barNow, ncFn);
+      ctx.news = newsC;
+      sessionTxt = gwSessionTxt(barNow, kzFn);
+      ctx.now = barNow;
+    }
     /* 1H execution leg for the 7-step engine (400 × 1H) — catch-isolated, 8s cap,
        never blocks the 4H swing scan. */
     try{
@@ -3141,7 +3192,7 @@ async function runScan(ui, scanSt){
       var sym1 = (gold.source === 'xm-xauusd' || stRoute) ? ST_GOLD_SYM
         : ((gold.source === 'binance-paxg') ? 'PAXGUSDT' : 'XAUUSDT');
       venueRows[v] = { rows4h: gold.rows4h };
-      var got = buildCandidates(gold, now, newsC, ctx.macro, sessionTxt, v, sym1, microOpts);
+      var got = buildCandidates(gold, barNow, newsC, ctx.macro, sessionTxt, v, sym1, microOpts);
       try{
         var oiFn = gfn('hgGoldOiTrap');
         var fundFn = gfn('hgGoldFundingExtreme');
@@ -3155,7 +3206,7 @@ async function runScan(ui, scanSt){
         if (sweepFn && got.length){
           var swEng = sweepFn(gold.rows4h, {
             regime: null,
-            newsGate: newsRaw ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(newsRaw, now) : null) : null
+            newsGate: newsRaw ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(newsRaw, barNow) : null) : null
           });
           if (swEng && swEng.dir){
             for (var si = 0; si < got.length; si++){
@@ -3175,8 +3226,8 @@ async function runScan(ui, scanSt){
         if (nyFn && got.length){
           var nyEng = nyFn(gold.rows4h, {
             regime: null,
-            newsGate: newsRaw ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(newsRaw, now) : null) : null,
-            now: now
+            newsGate: newsRaw ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(newsRaw, barNow) : null) : null,
+            now: barNow
           });
           if (nyEng && nyEng.dir){
             for (var ni = 0; ni < got.length; ni++){
@@ -3197,8 +3248,8 @@ async function runScan(ui, scanSt){
         if (sobFn && got.length){
           var sobEng = sobFn(gold.rows4h, {
             regime: null,
-            newsGate: newsRaw ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(newsRaw, now) : null) : null,
-            now: now,
+            newsGate: newsRaw ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(newsRaw, barNow) : null) : null,
+            now: barNow,
             rows4h: gold.rows4h,
             rows1h: gold.rows1h || gold.rows4h
           });
@@ -3220,8 +3271,8 @@ async function runScan(ui, scanSt){
         var sbFn = gfn('hgGoldSessionBoundSweep');
         if (sbFn && got.length){
           var sbEng = sbFn(gold.rows4h, {
-            newsGate: newsRaw ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(newsRaw, now) : null) : null,
-            now: now
+            newsGate: newsRaw ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(newsRaw, barNow) : null) : null,
+            now: barNow
           });
           if (sbEng && sbEng.dir && (sbEng.confirmed || sbEng.reclaimOk)){
             for (var sbi = 0; sbi < got.length; sbi++){
@@ -3242,7 +3293,7 @@ async function runScan(ui, scanSt){
         var p4Filt = gfn('hgGoldPart4ApplyDiscountFilter');
         if (p4Fn && got.length){
           var p4Eng = p4Fn(gold.rows4h, {
-            newsGate: newsRaw ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(newsRaw, now) : null) : null
+            newsGate: newsRaw ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(newsRaw, barNow) : null) : null
           });
           if (p4Eng){
             for (var p4si = 0; p4si < got.length; p4si++){
@@ -3258,8 +3309,8 @@ async function runScan(ui, scanSt){
         var p5Bias = gfn('hgGoldPart5ApplyWeeklyBiasFilter');
         if (p5Fn && got.length){
           var p5Eng = p5Fn(gold.rows4h, {
-            newsGate: newsRaw ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(newsRaw, now) : null) : null,
-            now: now
+            newsGate: newsRaw ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(newsRaw, barNow) : null) : null,
+            now: barNow
           });
           if (p5Eng){
             for (var p5si = 0; p5si < got.length; p5si++){
@@ -3276,8 +3327,8 @@ async function runScan(ui, scanSt){
         var p6Corr = gfn('hgGoldPart6ApplyCorrFilter');
         if (p6Fn && got.length){
           var p6Eng = p6Fn(gold.rows4h, {
-            newsGate: newsRaw ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(newsRaw, now) : null) : null,
-            now: now
+            newsGate: newsRaw ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(newsRaw, barNow) : null) : null,
+            now: barNow
           });
           if (p6Eng){
             for (var p6si = 0; p6si < got.length; p6si++){
@@ -3292,8 +3343,8 @@ async function runScan(ui, scanSt){
         var p7Fn = gfn('hgGoldPart7Engine');
         if (p7Fn && got.length){
           var p7Eng = p7Fn(gold.rows4h, {
-            newsGate: newsRaw ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(newsRaw, now) : null) : null,
-            now: now,
+            newsGate: newsRaw ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(newsRaw, barNow) : null) : null,
+            now: barNow,
             silverRows: microOpts && microOpts.silverRows,
             usdInr: microOpts && microOpts.usdInr
           });
@@ -3328,8 +3379,8 @@ async function runScan(ui, scanSt){
         var vpPbFn = gfn('hgGoldVpPlaybook');
         if (vpPbFn && got.length){
           var vpPb = vpPbFn(gold.rows4h, {
-            now: now,
-            newsGate: newsRaw ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(newsRaw, now) : null) : null,
+            now: barNow,
+            newsGate: newsRaw ? (gfn('hgGoldNewsGate') ? gfn('hgGoldNewsGate')(newsRaw, barNow) : null) : null,
             rows4h: gold.rows4h
           });
           if (vpPb && vpPb.ok){
@@ -3467,7 +3518,7 @@ async function runScan(ui, scanSt){
     }
     var applyBlFn = gfn('hgApplyGoldBestLevels');
     if (applyBlFn && gold.rows4h && gold.rows4h.length){
-      goldApplyBestLevelsBatch(ranked, gold, atrW, now);
+      goldApplyBestLevelsBatch(ranked, gold, atrW, barNow);
     } else {
     var formFn = gfn('hgFormTicket');
     if (formFn && gold.rows4h && gold.rows4h.length){
@@ -3616,7 +3667,7 @@ async function runScan(ui, scanSt){
       + goldMixedFeedBannerHtml(gold);
     var uniHtml = goldUniformPanelHtml(display, gold.rows4h, 'SWING', deskTape);
     paintGoldWeekendPanel(ui, gold.rows4h, now, displayBest);
-    var aplusCtx = goldBuildAPlusCtx(ctx, gold, now, newsC);
+    var aplusCtx = goldBuildAPlusCtx(ctx, gold, barNow, newsC);
     var aplusPack = goldEvalAPlusBatch(ranked, aplusCtx);
     try{
       var auditFn = gfn('hgTallyLegAudit');
@@ -3652,7 +3703,7 @@ async function runScan(ui, scanSt){
         var fhFn = gfn('hgGoldFormingStackHtml');
         if (fsFn && fhFn) forming = fhFn(fsFn({
           rows15m: gold.rows4h, rows4h: gold.rows4h, macro: ctx.macro,
-          dxyRows: ctx.macro && ctx.macro.dxyRows, now: now,
+          dxyRows: ctx.macro && ctx.macro.dxyRows, now: barNow,
           perpNative: ctx.perpNative,
           oiRows: ctx.perpNative && ctx.perpNative.oi,
           fundingRows: ctx.perpNative && ctx.perpNative.funding

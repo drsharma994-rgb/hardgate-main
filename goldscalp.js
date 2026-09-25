@@ -427,6 +427,18 @@ function publishState(cands){
 /* ---------------- diagnostic surface (full last scan) ---------------- */
 var __scanSnap = null;
 var __lastDeskTape = '';
+/* hg-v977: the SIGNAL BAR of this desk's execution timeframe, in ms -- the
+   last closed bar's instant through the ONE reader every borrowing desk uses
+   (hg-v952 / v963 / v973). The wall clock is the fallback for a series with no
+   readable instant, never the rule. */
+function gsScanBarMs(rows, fallback){
+  try{
+    var f = gfn('hgGoldSignalBarMs');
+    var t = f ? f(rows) : NaN;
+    return (isFinite(t) && t > 0) ? t : fallback;
+  }catch(e){ return fallback; }
+}
+
 function publishScan(ranked, best, history, at, rejected, armed, whySilent){
   try{
     var cands = [];
@@ -450,6 +462,9 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
         zone: (c.zone && isFinite(c.zone.lo) && isFinite(c.zone.hi)) ? { lo: c.zone.lo, hi: c.zone.hi } : null,
         demoted: !!c.demoted,
         stamps: Array.isArray(c.stamps) ? c.stamps.slice() : [],
+        /* hg-v977: the instant the mint judged this candidate on -- SUPER GOLD's
+           sgCandSec has read `signalT` since hg-v952 and no mint ever wrote it */
+        signalT: (typeof c.signalT === 'number' && isFinite(c.signalT)) ? c.signalT : null,
         vetoed: !!c.vetoed, merged: !!c.merged,
         locked: !!c.locked, issuedAt: isFinite(c.issuedAt) ? c.issuedAt : null,
         asOf: c.asOf || null, why: c.why || null, invalidates: c.invalidates || null,
@@ -2195,7 +2210,7 @@ async function runScan(ui, scanSt){
                                lastClose: (lc && isFinite(lc.c)) ? lc.c : NaN };
         }
         if (!watchFn) return;
-        var wl = watchFn({ rows15m: rows15m, rows1h: rows1h, rows4h: rows4h, now: now, tf: '15m' });
+        var wl = watchFn({ rows15m: rows15m, rows1h: rows1h, rows4h: rows4h, now: barNow, tf: '15m' });
         for (var wi = 0; wi < (wl || []).length; wi++){
           if (wl[wi]){ wl[wi].venue = venue; armedAll.push(wl[wi]); }
         }
@@ -2205,6 +2220,20 @@ async function runScan(ui, scanSt){
     var stRoute = !!(scanSt && scanSt.useStartraderRouting);
     /* leg 1: primary gold feed */
     var gold = stRoute ? await fetchStartraderGoldKlines() : await fetchGoldKlines();
+    /* hg-v977: the SIGNAL BAR, not the wall clock. `now` above is the scan
+       clock and stays the instant for what IS wall time -- conviction age,
+       the weekend-exposure countdown and demote, the scan stamp, the 7-step
+       feed-staleness read. Everything that judges the BAR -- the mint's news
+       gate and weekend mark, the killzone stamp, the ranker's news caution,
+       the watch list, the best-levels session boost, the A+ cash-open read,
+       the forming stack -- reads barNow: the last closed 15m bar. Measured on
+       the shipped tree with the same bars: 7 grade-A candidates in the NY
+       session with the clock 5 min past the bar, 7 with two downgraded to B
+       and every one stamped OFF-SESSION with it 6 h past; a CPI 10 min after
+       the bar locked the desk under the first clock and not the second. */
+    var barNow = gsScanBarMs(gold.rows15m, now);
+    if (seasonFn){ try{ season = seasonFn(barNow); ctx.season = season; }catch(eSb){} }
+    ctx.now = barNow;
     /* Deeper 1H leg for the 7-step engine (400 × 1H) when the scalp feed carried
        fewer — catch-isolated, 8s cap, never blocks the 15m scan. */
     try{
@@ -2294,7 +2323,7 @@ async function runScan(ui, scanSt){
         }catch(eEv){ if (typeof W !== 'undefined' && W) W.hgLastScalpEval = null; }
       }
       venueRows[v] = { rows15m: gold.rows15m };
-      var got = buildCandidates(gold, now, news, v, sym1, scalpBundle);
+      var got = buildCandidates(gold, barNow, news, v, sym1, scalpBundle);
       collectWatch(gold.rows15m, gold.rows1h, gold.rows4h, v);
       /* the mark this candidate was sized against — live goldspot when the
          feed is up, else the last CLOSED 15m close, which is the bar the
@@ -2424,7 +2453,7 @@ async function runScan(ui, scanSt){
     }
     var applyBlFn = gfn('hgApplyGoldBestLevels');
     if (applyBlFn){
-      goldApplyBestLevelsBatch(ranked, venueRows, gold, atrW, now);
+      goldApplyBestLevelsBatch(ranked, venueRows, gold, atrW, barNow);
     } else {
     var formFn = gfn('hgFormTicket');
     if (formFn){
@@ -2482,12 +2511,12 @@ async function runScan(ui, scanSt){
     var ncFn = gfn('goldNewsCaution');
     if (ngFn && news){
       try{
-        var ng = ngFn(news, now);
+        var ng = ngFn(news, barNow);
         if (ng && ng.lock){ newsVeto = true; newsVetoTitle = ng.title || null; }
       }catch(eV){ newsVeto = false; }
     } else if (ncFn && news){
       try{
-        var nc2 = ncFn(news, now);
+        var nc2 = ncFn(news, barNow);
         if (nc2 && nc2.caution){ newsVeto = true; newsVetoTitle = nc2.title || null; }
       }catch(eV2){ newsVeto = false; }
     }
@@ -2623,7 +2652,7 @@ async function runScan(ui, scanSt){
       var kzFn2 = gfn('goldKillzone');
       if (kzFn2){
         try{
-          var kz2 = kzFn2(now);
+          var kz2 = kzFn2(barNow);
           if (kz2){ kzW = kz2.weight; kzL = kz2.label; asiaSession = kz2.zone === 'ASIAN'; }
         }catch(eK2){}
       }
@@ -2646,7 +2675,7 @@ async function runScan(ui, scanSt){
     var uniHtml = goldUniformPanelHtml(display, uniRows, 'SCALP', deskTape);
     var wkRows = gold.rows4h.length ? gold.rows4h : gold.rows15m;
     paintGoldWeekendPanel(ui, wkRows, now, displayBest);
-    var aplusCtx = goldBuildAPlusCtx(ctx, gold, now, news);
+    var aplusCtx = goldBuildAPlusCtx(ctx, gold, barNow, news);
     var aplusPack = goldEvalAPlusBatch(ranked, aplusCtx);
     try{
       var auditFn = gfn('hgTallyLegAudit');
@@ -2681,7 +2710,7 @@ async function runScan(ui, scanSt){
         var fhFn = gfn('hgGoldFormingStackHtml');
         if (fsFn && fhFn) forming = fhFn(fsFn({
           rows15m: gold.rows15m, rows4h: gold.rows4h, macro: ctx.macro,
-          dxyRows: ctx.macro && ctx.macro.dxyRows, now: now,
+          dxyRows: ctx.macro && ctx.macro.dxyRows, now: barNow,
           perpNative: ctx.perpNative,
           oiRows: ctx.perpNative && ctx.perpNative.oi,
           fundingRows: ctx.perpNative && ctx.perpNative.funding
