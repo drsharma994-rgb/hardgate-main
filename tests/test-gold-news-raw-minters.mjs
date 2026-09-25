@@ -471,6 +471,82 @@ console.log('== 7) GOLD SCALP runs on its own 3-minute clock ==');
   assert(ctx.hgGoldScalpAutoInit() === 'already' && timers.length === 1,
          'a SECOND init installs no second timer — one page, one clock (hg-v958)');
 
+  /* hg-v967 -- THE ASSERTION THIS SECTION WAS MISSING, and the defect it hid.
+
+     Everything below STUBS ctx.goldscalpRefresh and then checks the tick calls
+     it. That tests the tick and says nothing about whether anything in the
+     shipped tree PROVIDES that function -- and nothing did: goldscalp.js
+     exported it only as the .refresh property of its HG_tabs entry, so in a
+     real browser every tick resolved undefined, returned 'unavailable', and
+     the 3-minute refresh never ran once.
+
+     So resolve it against the REAL module, booted, with no stub in sight. */
+  {
+    const real = boot(CAL.concat(['goldscalp.js']));
+    const resolver = HTML.match(/function hgGoldScalpRefreshFn\(\)[\s\S]*?\n\}/m);
+    assert(!!resolver, 'the shell has a resolver for the refresh');
+    vm.runInContext(resolver[0], real, { filename: 'index.html:resolver' });
+    const found = real.hgGoldScalpRefreshFn();
+    assert(typeof found === 'function',
+           'and against the REAL goldscalp.js it FINDS a refresh — hg-v965 read a global nothing exported');
+    /* DELIBERATELY ABSENT from window, and asserted so a later pack does not
+       "helpfully" add it: goldscalpRefresh starts a network scan, and
+       test-gold-render-integrity.mjs fuzzes every module-scope export of this
+       file on the premise that its surface is small. Exporting it to fix the
+       clock would weaken that guard to fix a caller -- it turned that test red
+       by tipping goldscalp from 19 exports to 20. The registration is the route. */
+    assert(typeof real.goldscalpRefresh !== 'function',
+           'and goldscalpRefresh is deliberately NOT on window — an async scan-starter does not belong there');
+    const entry = (real.HG_tabs || []).find(t => t && t.id === 'goldscalp');
+    assert(!!(entry && typeof entry.refresh === 'function'),
+           'and the HG_tabs registration still carries it, so the fallback path is real too');
+
+    /* a DECOY tab: without one, a resolver matching the first tab with any
+       refresh at all looks identical to one matching GOLD SCALP, and a
+       mutation dropping the id check survived exactly that */
+    const decoy = boot(CAL.concat(['goldscalp.js']));
+    vm.runInContext(resolver[0], decoy, { filename: 'index.html:resolverDecoy' });
+    decoy.goldscalpRefresh = undefined;
+    let decoyCalled = 0;
+    decoy.HG_tabs.unshift({ id: 'goldswing', label: 'GOLD SWING',
+                            refresh: function(){ decoyCalled++; return 'decoy'; } });
+    const picked = decoy.hgGoldScalpRefreshFn();
+    assert(typeof picked === 'function' && picked() !== 'decoy' && decoyCalled === 0,
+           'and it picks the GOLD SCALP entry, not merely the first tab that has a refresh');
+
+    /* the global PATH still works when something else provides it (the shell's
+       other desks do export their refresh), so both branches stay live */
+    const withGlobal = boot(CAL.concat(['goldscalp.js']));
+    vm.runInContext(resolver[0], withGlobal, { filename: 'index.html:resolver2' });
+    let direct = 0;
+    withGlobal.goldscalpRefresh = function(){ direct++; return 'direct'; };
+    assert(withGlobal.hgGoldScalpRefreshFn()() === 'direct' && direct === 1,
+           'a global, where one exists, is preferred — the resolver has two live branches, not one');
+
+    /* and it reports nothing rather than inventing one */
+    const bare = boot([]);
+    vm.runInContext(resolver[0], bare, { filename: 'index.html:resolver3' });
+    assert(bare.hgGoldScalpRefreshFn() === null,
+           'with the module absent it resolves null — the tick then reports unavailable honestly');
+  }
+
+  /* THE TICK MUST GO THROUGH THE RESOLVER, not read a bare global. Asserting
+     this with ctx.goldscalpRefresh stubbed cannot tell the two apart -- a
+     mutation reverting the tick to the bare global survived -- so this case
+     removes the global entirely and leaves only the HG_tabs registration,
+     which is the shape hg-v965 actually shipped into. */
+  {
+    let viaTab = 0;
+    ctx.goldscalpRefresh = undefined;
+    ctx.HG_tabs = [{ id: 'goldscalp', label: 'GOLD SCALP',
+                     refresh: function(){ viaTab++; return Promise.resolve('ok'); } }];
+    assert(ctx.hgGoldScalpAutoTick() === 'ran' && viaTab === 1,
+           'with NO global and only the HG_tabs entry, the tick still refreshes — it resolves, it does not assume');
+    ctx.HG_tabs = [];
+    assert(ctx.hgGoldScalpAutoTick() === 'unavailable',
+           'and with neither, it reports unavailable rather than pretending');
+  }
+
   /* the tick drives the real entry point */
   let calls = 0;
   ctx.goldscalpRefresh = () => { calls++; return Promise.resolve('ok'); };
