@@ -695,7 +695,9 @@ function publishSuperGoldSnap(snap){
             && +c.entry !== +c.stop;
       }).map(function(c){
         return { sym: c.sym, dir: c.dir, entry: +c.entry, stop: +c.stop, t1: +c.t1,
-                 mechanic: 'CONVICTION-PICK', ticket: true };
+                 mechanic: 'CONVICTION-PICK', ticket: true,
+                 /* hg-v978: the bar the source desk judged it on */
+                 barT: c.barT, signalT: c.signalT };
       }), { horizonBars: 20 });
     }
   } catch (eFwd) { try { if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('super-gold', eFwd); } catch (eW) {} }

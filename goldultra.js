@@ -1998,6 +1998,10 @@ async function runScan(ui){
         guRow.goldShut = !!guWk.inWeekend;
         if (guWk.inWeekend) guRow.goldShutWhy = guWk.why;
       } /* else: unreadable -- no mark, nothing changes */
+      /* hg-v978: the bar this desk read -- its own 15m signal bar (hg-v954),
+         the same instant the weekend mark is judged on */
+      var guSec = guSignalSec(f);
+      if (guSec) guRow.barT = guSec;
       W.hgFwdRecordScan('GOLDULTRA', '15m', [guRow], { horizonBars: RULE.timeoutBars });
     } }catch(eF){}
     return 'refreshed';

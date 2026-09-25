@@ -1042,7 +1042,7 @@ async function runOptiGold(ui){
          matters — whether the same rule pays differently at different scales. */
       try{
         if (typeof W.hgFwdRecordScan === 'function'){
-          var fwd = ogFwdRows(setups, L.key);
+          var fwd = ogFwdRows(setups, L.key, rows);
           if (fwd.length) W.hgFwdRecordScan('OPTI GOLD', L.interval, fwd, { horizonBars: L.horizonBars });
         }
       }catch(eFwd){ try{ if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('optigold', eFwd); }catch(eW){} }
@@ -1079,7 +1079,22 @@ async function runOptiGold(ui){
 
 /* forward-log rows, pure and exported so the recording can be tested without
    a live scan — runOptiGold needs network and is unreachable offline */
-function ogFwdRows(setups, lane){
+/* hg-v978: the break bar a setup fired on, in seconds, for the forward
+   ledger -- the same bar the weekend and news marks are judged on (hg-v950 /
+   hg-v965). Null when unreadable. */
+function ogBreakBarSec(rows, s){
+  try{
+    if (!rows || !s) return null;
+    var i = +s.i;
+    if (!isFinite(i) || i < 0 || i >= rows.length) return null;
+    var t = rows[i] && rows[i].t;
+    if (t === null || t === undefined || t === '') return null;
+    var n = +t;
+    if (!isFinite(n) || n <= 0) return null;
+    return Math.floor(n > 1e12 ? n / 1000 : n);
+  }catch(e){ return null; }
+}
+function ogFwdRows(setups, lane, rows){
   if (!Array.isArray(setups)) return [];
   /* +null / +'' are 0 and isFinite(0) is true, so a missing level must be
      rejected BEFORE coercion or it records as a fabricated zero */
@@ -1096,9 +1111,12 @@ function ogFwdRows(setups, lane){
        the same rule pays differently at 15m, 1h and 4h. One pooled bucket
        would average that question away before it could be asked. */
     var laneKey = String(lane || s.lane || 'na').toUpperCase();
-    out.push({ sym: 'XAUUSD', dir: s.dir, entry: en, stop: st, t1: tp,
+    var row = { sym: 'XAUUSD', dir: s.dir, entry: en, stop: st, t1: tp,
                mechanic: ('BOS-RETRACE-' + laneKey + '-' + (s.dir === 'long' ? 'LONG' : 'SHORT')).slice(0, 28),
-               ticket: false });   /* never a ticket: unmeasured rule, by design */
+               ticket: false };   /* never a ticket: unmeasured rule, by design */
+    var bt = ogBreakBarSec(rows, s);   /* hg-v978: dated on the break bar */
+    if (bt) row.barT = bt;
+    out.push(row);
   }
   return out;
 }
