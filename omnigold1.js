@@ -233,7 +233,7 @@
     L('4H', rows4hAll.length ? (derived4h ? 'derived' : 'live') : 'unavailable', rows4hAll.length + ' bars' + (derived4h ? ' derived from 1H @ 22:00 UTC' : ''));
     L('horizon', 'live', horizon + ' — context ' + CTX_LABEL + ' (' + rows4h.length + ' bars) · execution ' + TF_LABEL + ' (' + rows1h.length + ' bars)');
     var bid = fin(inp.bid), ask = fin(inp.ask), spread = has(inp.spreadUsd) ? +inp.spreadUsd : (has(bid) && has(ask) ? ask - bid : NaN), spreadAvg = fin(inp.spreadAvgHour);
-    L('bid/ask + 20d avg spread', has(spread) ? (has(spreadAvg) ? 'live' : 'partial') : 'unavailable', has(spread) ? ('spread $' + num(spread) + (has(spreadAvg) ? ' vs avg $' + num(spreadAvg) : ' · 20d average unavailable')) : 'no quote');
+    L('bid/ask + 20d avg spread', has(spread) ? (has(spreadAvg) ? 'live' : 'partial') : 'unavailable', has(spread) ? ('spread $' + num(spread) + (has(spreadAvg) ? ' vs avg $' + num(spreadAvg) : ' · 20d average unavailable') + (inp.spreadVenue ? ' · measured on ' + inp.spreadVenue + ' (gold proxy, not the broker book)' : '')) : 'no quote');
     var dxy = g.dxyRead(inp), dxyRows = g.normRows(inp.dxyRows || (inp.macro && inp.macro.dxyRows));
     var dxy4h = 'unavailable';
     if (dxyRows.length >= 30){
@@ -1765,6 +1765,16 @@
     await Promise.all(waits);
     inp.news = news;
     try{ var q = W.__hgGoldQuote; if (q){ inp.bid = q.bid; inp.ask = q.ask; inp.spreadUsd = q.spreadUsd; } if (has(W.__hgGoldSpreadUsd) && !has(inp.spreadUsd)) inp.spreadUsd = W.__hgGoldSpreadUsd; }catch(e){}
+    /* hg-v969: the global above has no writer anywhere in the repo (hg-v968), so
+       the bid/ask load line read "no quote" on every scan. The Delta payload
+       this tab already awaited carries the quote; one shared reader, and the
+       venue travels with it because XAUT is a gold proxy, not the broker book. */
+    try{
+      if (!has(inp.spreadUsd) && inp.perpNative){
+        var qfP = gfn('hgGoldQuoteFromPerp'), pq = qfP ? qfP(inp.perpNative, 'delta-xaut') : null;
+        if (pq){ inp.bid = pq.bid; inp.ask = pq.ask; inp.spreadUsd = pq.spreadUsd; inp.spreadVenue = pq.venue || null; }
+      }
+    }catch(eQP){}
     /* hg-v700 (the v698 wall-clock class): the tape cut used Date.now() while
        the engine keys every other read on inp.now — a replayed/injected now
        (DATA BLOCK JSON, a harness) silently mixed clocks: the desk tape was

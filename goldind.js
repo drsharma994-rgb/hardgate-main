@@ -9318,6 +9318,13 @@ function hgGoldInstFilter(cand, ctx){
       venue: ctx.spreadVenue || ctx.goldVenue || null
     });
     cand.spreadLock = spr;
+    /* hg-v969: hg-v968 wrote the advisory verdict here and nothing read it --
+       the ornamental field hg-v955 names. GOLD SCALP and GOLD SWING both paint
+       c.notes, and OMNIGOLD folds spreadLock into its inst-filter ledger row. */
+    if (spr.advisory && spr.reason){
+      if (!Array.isArray(cand.notes)) cand.notes = [];
+      if (cand.notes.indexOf(spr.reason) < 0) cand.notes.push(spr.reason);
+    }
     if (spr.lock){
       cand.dropped = true;
       cand.reason = spr.reason;
