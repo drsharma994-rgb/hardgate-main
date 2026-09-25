@@ -3567,9 +3567,15 @@ async function runScan(ui, scanSt){
        LARGEST mover on a malformed feed — a third less rendered output on a
        tape with one bar in twenty inverted — and said nothing about it. */
     /* hg-v913: this desk reads the records it writes. */
+    /* hg-v962: and the honesty of the EVIDENCE that gates this desk. Every
+       swing edge verdict is measured on a walk that does not replay the
+       best-levels pass rewriting entry / stop / T1, so the population the desk
+       forms is unmeasured. Fail-open: goldind absent renders nothing. */
+    var scopeFn = gfn('hgGoldSwingScopeHtml');
     var mixedBanner = (typeof W.hgGoldFwdNote === 'function' ? W.hgGoldFwdNote('goldswing') : '')
       + (typeof W.hgGoldTapeNotes === 'function'
         ? W.hgGoldTapeNotes(gold && gold.rows4h, '4h') : '')
+      + (typeof scopeFn === 'function' ? (scopeFn() || '') : '')
       + goldMixedFeedBannerHtml(gold);
     var uniHtml = goldUniformPanelHtml(display, gold.rows4h, 'SWING', deskTape);
     paintGoldWeekendPanel(ui, gold.rows4h, now, displayBest);
