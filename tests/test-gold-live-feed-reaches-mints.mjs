@@ -220,6 +220,10 @@ console.log('== 5) the borrowing desks: each lane, lifted and RUN, hands the fee
       gfn: n => (n === 'goldScalpSetups' || n === 'goldSwingSetups') ? rec : (n === 'hgGoldApplyLiveFeed' ? W.hgGoldApplyLiveFeed : null),
       heldLine: () => '', gdNewsCtx: () => ({ at: Date.now(), snap: null }), normCand: () => ({}), setupFromNative: () => null }, extra || {});
     vm.createContext(sb);
+    /* hg-v973: the lane reads the signal bar through a module helper; lift the
+       real one rather than stub it */
+    { const gp = read('goldpine.js'); const gi = gp.indexOf('function gpMintBarMs(rows, fallback){');
+      vm.runInContext(gp.slice(gi, gp.indexOf('\n}\n', gi) + 2), sb, { filename: 'goldpine.js:gpMintBarMs' }); }
     return sb;
   }
   const rows = [{ t: 1, o: 1, h: 1, l: 1, c: 1, v: 1 }];

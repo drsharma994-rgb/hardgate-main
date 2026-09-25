@@ -1686,7 +1686,9 @@ async function laneGoldScalp(gold, now){
   if (!gold.rows15m.length){ out.held.push('no 15m bars from any feed — lane skipped'); return out; }
   var cands = null;
   try{
-    var scInp = { rows15m: gold.rows15m, rows1h: gold.rows1h, rows4h: gold.rows4h, dailyCandles: (gold.rows1d && gold.rows1d.length) ? gold.rows1d : undefined, now: newsAt, news: newsSnap };
+    var scInp = { rows15m: gold.rows15m, rows1h: gold.rows1h, rows4h: gold.rows4h, dailyCandles: (gold.rows1d && gold.rows1d.length) ? gold.rows1d : undefined,
+                  candleSource: gold.src || undefined,   /* hg-v973: the mint distrusts PAXG / XAUT volume only when told the feed */
+                  now: newsAt, news: newsSnap };
     try{ var apS = gfn('hgGoldApplyLiveFeed'); if (apS && gold.live) apS(scInp, gold.live); }catch(eAp){}   /* hg-v971 */
     cands = setupsFn(scInp);
   }

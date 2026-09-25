@@ -140,6 +140,18 @@ function setupFromUniverseItem(item, mode, source){
   return setupFromEval(item, mode, source);
 }
 
+/* hg-v973: the instant the borrowed mints judge on is the SIGNAL BAR, not the
+   wall clock (hg-v952 / hg-v963: a scan re-run after a release must give the
+   release bar's answer). Falls back to the caller's clock when the series
+   carries no readable instant. */
+function gpMintBarMs(rows, fallback){
+  try{
+    var fn = gfn('hgGoldSignalBarMs');
+    if (fn){ var t = fn(rows); if (isFinite(t) && t > 0) return t; }
+  }catch(e){}
+  return fallback;
+}
+
 function setupFromNative(c, mode, source, forming){
   if (!c || !c.dir) return null;
   var tally = fin(+c.tally) ? +c.tally : (fin(+c.agree) ? +c.agree : 0);
@@ -169,7 +181,18 @@ function setupFromNative(c, mode, source, forming){
     atr: fin(+c.atr) ? +c.atr : null,
     familyCount: fin(+c.agree) ? +c.agree : null,
     nativeStrategy: c.strategy || c.stratKey || null,
-    kind: 'native'
+    kind: 'native',
+    /* hg-v973: the mint's own demote and advisory notes used to stop HERE --
+       this adapter kept levels, grade and tally and dropped the rest, so a
+       CONF NO TRADE / EDGE DEMOTE / MTF BIAS verdict, or a SPREAD WIDE read,
+       never reached the card (hg-v955: a mark nothing reads is ornamental).
+       Carried as a MARK: this tab's own solidity, tape and handoff-floor
+       rules still decide the leader; nothing is withheld on it. */
+    mintDemoted: !!c.demoted,
+    mintDemotedWhy: c.demoted
+      ? (c.demotedWhy || (Array.isArray(c.stamps) && c.stamps.length ? c.stamps.join(' \u00b7 ') : 'demoted by the borrowed mint'))
+      : null,
+    mintNotes: Array.isArray(c.notes) ? c.notes.filter(Boolean).map(String) : []
   };
 }
 
@@ -381,7 +404,13 @@ function collectNativeScalp(bars, ctx, source){
   var got = null;
   try{
     var scInp = { rows15m: bars.rows15m, rows1h: bars.rows1h, rows4h: bars.rows4h,
-      now: ctx.now || Date.now(), news: ctx.news || null,
+      /* hg-v973: the daily bars this desk already fetched (the MTF matrix's
+         Daily leg was unchecked here), the feed label (the mint distrusts
+         PAXG / XAUT volume only when told which feed it is on), and the 15m
+         signal bar as the instant */
+      dailyCandles: (bars.rows1d && bars.rows1d.length) ? bars.rows1d : undefined,
+      candleSource: bars.source || undefined,
+      now: gpMintBarMs(bars.rows15m, ctx.now || Date.now()), news: ctx.news || null,
       /* hg-v972: this desk fetched the macro snapshot for its own scoring and
          dropped it at this seam, so the borrowed mint ran its DXY+TNX lock
          unchecked. The desk's own read goes first; the shared feed below
@@ -426,7 +455,17 @@ function collectNativeSwing(bars, ctx, source){
   if (!fn || !bars.rows4h || bars.rows4h.length < 60) return out;
   var leg = { rows4h: bars.rows4h, rows1d: bars.rows1d, rows1h: bars.rows1h };
   var got = null;
-  try{ got = fn(leg, ctx); }catch(e){ return out; }
+  try{
+    /* hg-v973: this lane handed the route bars, a wall clock and the raw
+       snapshot, and nothing else -- so the swing mint ran here without the
+       news gate, the quote, the book or its venue. It is fed the way GOLD
+       DIRECTION's swing lane is: the desk's own news + macro, the shared
+       live feed where the input carries nothing, and the 4h signal bar. */
+    var swCtx = Object.assign({}, ctx, { now: gpMintBarMs(bars.rows4h, ctx.now || Date.now()),
+      news: ctx.news || null, macro: ctx.macro || null });
+    try{ var apW = gfn('hgGoldApplyLiveFeed'); if (apW && bars.live) apW(swCtx, bars.live); }catch(eAp){}
+    got = fn(leg, swCtx);
+  }catch(e){ return out; }
   if (!Array.isArray(got)) return out;
   for (var i = 0; i < got.length && out.length < 6; i++){
     var s = setupFromNative(got[i], 'swing', source, false);
@@ -627,6 +666,21 @@ function gpTapeChipHtml(s){
     : '<span class="gpip">AGAINST GOLD TAPE \u00b7 HELD</span>';
 }
 
+/* hg-v973: the borrowed mint's verdicts, READ. A demote the mint applied
+   (CONF NO TRADE, EDGE DEMOTE, MTF BIAS, ...) is named on the card; an
+   advisory it wrote (SPREAD WIDE / L2 READ on a proxy venue) is printed once.
+   Neither moves this tab's leader -- that is a policy this pack does not set. */
+function gpMintMarkChipHtml(s){
+  if (!s || !s.mintDemoted) return '';
+  var why = String(s.mintDemotedWhy || 'demoted by the borrowed mint');
+  return ' <span class="gpip" title="' + esc(why) + '">MINT DEMOTED \u00b7 ' + esc(why.length > 48 ? why.slice(0, 45) + '\u2026' : why) + '</span>';
+}
+function gpMintNotesHtml(s){
+  var notes = (s && Array.isArray(s.mintNotes)) ? s.mintNotes : [];
+  if (!notes.length) return '';
+  return '<div class="note" style="margin-top:4px;font-size:11px">' + notes.map(function(n){ return esc(n); }).join('<br>') + '</div>';
+}
+
 /** The rows that may lead. Cards still render either way — this only
     decides what the MOST PROBABLE pin is allowed to choose from. */
 function gpTapeAligned(list){
@@ -751,7 +805,7 @@ function gpHandoffBlock(s){
 
   return '<div class="panel ' + cls + ' tier-' + tier + '" style="margin-bottom:12px">'
     + '<h2>XAUUSD <span>' + esc(s.dir.toUpperCase()) + ' · ' + modeLabel + ' · Grade ' + esc(s.grade)
-    + rankBadge + badge + gpTapeChipHtml(s)
+    + rankBadge + badge + gpTapeChipHtml(s) + gpMintMarkChipHtml(s)
     + ((typeof W.hgBookStampChip === 'function')
       ? W.hgBookStampChip('XAUUSD', s.dir, { scanner: 'goldpine', strategy: s.mode || 'goldpine', klass: 'metals', fund: 'gold' })
       : '')
@@ -765,6 +819,7 @@ function gpHandoffBlock(s){
     + (smcChip ? (' ' + smcChip) : '')
     + '</div>'
     + '<div class="note" style="margin-top:6px;font-size:11px">' + factorsHTML(s.factors) + '</div>'
+    + gpMintNotesHtml(s)
     + gpStackHtml
     + '<div class="plan">' + (typeof W.planBlock === 'function'
       ? W.planBlock(s.dir, s.entry, s.stop, s.t1, s.t2, s.planSrc || 'Gold Pine')

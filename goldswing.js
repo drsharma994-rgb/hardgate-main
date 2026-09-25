@@ -3869,17 +3869,22 @@ W.goldswingState = function(){
 W.goldswingScan = function(){
   try{ return __scanSnap ? __stateView(__scanSnap) : null; }catch(e){ return null; }
 };
+/* hg-v973: GOLD PINE's swing lane reaches this desk's mint through HERE, and
+   until now this was a THIRD route into buildCandidates beside goldSwingSetups
+   and runScan -- one that handed it NO microOpts (so the news gate read
+   `news: null` and failed open, hg-v963's literal in a seventh place; the
+   quote, book, venue and cost override of hg-v968..v971 never arrived), passed
+   the raw news snapshot where a caution object was expected, and ranked with
+   NO rows for the confluence scorer (CONF UNCHECKED, so the CONF NO TRADE
+   demote this desk applies could not fire -- hg-v700's starvation, one route
+   over). It DELEGATES now: one route, one home. `leg` supplies the bars, `ctx`
+   everything else in goldSwingSetups' own input shape. */
 W.goldswingCollectCandidates = function(leg, ctx){
   try{
-    ctx = ctx || {};
-    var now = ctx.now || Date.now();
-    var newsC = ctx.news || { caution: false, title: null };
-    var macro = ctx.macro || null;
-    var got = buildCandidates(leg, now, newsC, macro, 'n/a', 'GOLD', 'XAUUSD');
-    var cands = [];
-    for (var i = 0; i < got.length; i++) cands.push(got[i]);
-    var rk = rankSetups(cands, ctx);
-    return rk.ranked || cands;
+    ctx = ctx || {}; leg = leg || {};
+    var inp = Object.assign({}, ctx, { rows4h: leg.rows4h, rows1d: leg.rows1d });
+    var rk = goldSwingSetups(inp);
+    return (rk && Array.isArray(rk.ranked)) ? rk.ranked : [];
   }catch(e){ return []; }
 };
 W.goldswingMountSection = function(el, opts){
