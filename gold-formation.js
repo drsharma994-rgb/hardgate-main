@@ -1108,6 +1108,31 @@
         return out;
       }
 
+      /* ---- hg-v964: the tier-1 news lock, on the SAME instant ----
+         hg-v963 gave the gold news gate a shared route and its own reporter
+         then named seven desks with no route at all -- among them the two that
+         reach formation through here, NEW GOLD and OMNIGOLD 1. Putting it here
+         rather than in each desk is the hg-v949 rule: one rule, one home, so a
+         desk that routes through formation cannot acquire a second calendar or
+         miss this one.
+
+         It sits beside the weekend check and reads the SAME opts.atMs, so the
+         two calendars can never judge different moments -- the drift behind the
+         hg-v952 wall-clock defect and its hg-v963 repeat.
+
+         Same shape as the weekend rule, deliberately: this is not a weaker
+         setup, it is one whose minting is barred, so the card keeps its
+         evidence and loses only `tradable` (hg-v552/v572 -- a hard drop empties
+         a board, a demote does not). `out.news` rides either way so a reader
+         can tell "checked and clear" from "could not check". Null -- no atMs,
+         unreadable, no snapshot, or goldind absent -- changes nothing. */
+      out.news = hgGoldNewsVerdict(opts.atMs);
+      if (out.news && out.news.locked === true){
+        out.state = 'STOOD-ASIDE'; out.formed = false; out.tradable = false;
+        out.reasons.push('GOLD NEWS LOCK — ' + out.news.why);
+        return out;
+      }
+
       if (ev.killed){ out.state = 'KILLED'; out.formed = false; out.tradable = false; return out; }
       /* UNREADABLE EVIDENCE (hg-v698 audit closeout): the kill-check threw,
          so "not killed" was never established. Same fail-closed direction as
@@ -1199,7 +1224,16 @@
     goldswing:     'ctx.news + ctx.nowMs through hgGoldInstFilter',
     omnigold:      'hgOgGates inst-filter ledger row',
     'super-gold':  'own hgNewsState read',
-    goldpine:      'passes a live snapshot into the shared mint'
+    goldpine:      'passes a live snapshot into the shared mint',
+    /* hg-v964: the three desks that record a CONDITIONALLY TRUE ticket, so a
+       news-window pick entered the forward ledger as tradeable. The first two
+       reach it through hgGoldFormation, which now checks the lock beside the
+       weekend rule on the same instant; GOLD PRO decides `ticket` at its own
+       forward-record site and reads the gate at the same bar as its weekend
+       verdict. */
+    newgold:       'hgGoldFormation news lock, same instant as the weekend rule (hg-v964)',
+    omnigold1:     'hgGoldFormation news lock, same instant as the weekend rule (hg-v964)',
+    goldpro:       'own paired read at the last closed bar; withholds the ticket flag (hg-v964)'
   };
 
   function hgGoldNewsProbe(){
@@ -1239,7 +1273,51 @@
     }catch(e){ return null; }
   }
 
+  /* hg-v964 -- ONE INSTANT, BOTH GOLD CALENDARS.
+
+     hg-v963 gave the news gate a shared route and its reporter then named
+     SEVEN desks with no route at all: NEW GOLD, OMNIGOLD 1, OPTI GOLD,
+     GOLD PRO, 80PERCENT, GOLD (inline) and TAURIC. This pairs the two
+     calendars so a desk adding one cannot end up judging them at different
+     moments -- which is exactly the drift that produced the hg-v952 wall-clock
+     defect and its hg-v963 repeat.
+
+     Both verdicts are derived from the SAME atMs, by construction rather than
+     by a caller remembering to pass the same value twice. Each half fails open
+     independently: a desk whose weekend calendar is readable and whose news
+     snapshot is absent still gets the weekend verdict, and the reverse. */
+  function hgGoldGateAt(atMs, snapArg){
+    var out = { atMs: null, weekend: null, news: null };
+    try{
+      out.weekend = hgGoldWeekendVerdict(atMs);
+      out.news = hgGoldNewsVerdict(atMs, snapArg);
+      /* the instant is reported from whichever half could read it, so a caller
+         can prove the two were judged together */
+      if (out.weekend && isFinite(out.weekend.atMs)) out.atMs = out.weekend.atMs;
+      else if (out.news && isFinite(out.news.atMs)) out.atMs = out.news.atMs;
+      return out;
+    }catch(e){ return out; }
+  }
+
+  /* What a desk must WITHHOLD at this instant, and why, as one line. Returns
+     null when neither calendar withholds anything -- never an empty string,
+     because '' and null read the same at a call site and only one of them
+     means "asked and nothing is wrong". */
+  function hgGoldGateBlock(atMs, snapArg){
+    try{
+      var g = hgGoldGateAt(atMs, snapArg);
+      var parts = [];
+      if (g.weekend && g.weekend.inWeekend === true) parts.push(g.weekend.why || 'gold is shut');
+      if (g.news && g.news.locked === true) parts.push(g.news.why || 'tier-1 gold news window');
+      if (!parts.length) return null;
+      return { atMs: g.atMs, weekend: !!(g.weekend && g.weekend.inWeekend === true),
+               news: !!(g.news && g.news.locked === true), why: parts.join(' · ') };
+    }catch(e){ return null; }
+  }
+
   G.hgGoldNewsVerdict = hgGoldNewsVerdict;
+  G.hgGoldGateAt = hgGoldGateAt;
+  G.hgGoldGateBlock = hgGoldGateBlock;
   G.hgGoldNewsCoverage = hgGoldNewsCoverage;
   G.hgGoldNewsProbe = hgGoldNewsProbe;
   G.HG_GOLD_NEWS_ROUTES = HG_GOLD_NEWS_ROUTES;

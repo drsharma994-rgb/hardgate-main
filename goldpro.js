@@ -124,6 +124,44 @@ function gpProWeekendVerdict(rows){
   }catch(e){ return null; }
 }
 
+/* hg-v964 -- THE GOLD NEWS GATE ON THIS DESK, AT THE SAME BAR.
+
+   hg-v963 gave the gate a shared route and its own reporter then named this
+   desk as one of SEVEN with no route at all. GOLD PRO records `ticket:
+   gpAligned` into the forward ledger, so a plan composed inside a CPI / NFP /
+   FOMC / GDP window entered that ledger as TRADEABLE and would be judged as
+   one -- the contamination hg-v949 measured for the weekend, from the other
+   calendar.
+
+   ONE bar read serves both calendars. The weekend verdict above and this one
+   are derived from the same series by the same reader, so they cannot end up
+   judging different instants -- the drift that produced the hg-v952 wall-clock
+   defect and its hg-v963 repeat.
+
+   WHY THIS WITHHOLDS THE TICKET WHERE THE WEEKEND ONLY MARKS: hg-v950 chose to
+   mark for the weekend here because withholding would have moved the board on
+   evidence that pack had not gathered. A tier-1 news lock is a different
+   claim -- not that the edge is worse, but that new minting is barred -- and
+   the repo already treats it as a HARD block on GOLD SCALP, GOLD SWING and
+   OMNIGOLD, where hgGoldInstFilter rejects the candidate outright. Withholding
+   the ticket FLAG on a desk that records one is the same policy, not a new one.
+   The card, the levels and the ledger row all stay.
+
+   Fails OPEN: no rows, no reader, no snapshot, or gold-formation absent, and
+   there is no verdict and nothing is withheld. */
+function gpProNewsVerdict(rows){
+  try{
+    if (!rows || !rows.length) return null;
+    var w = (typeof window !== 'undefined') ? window : globalThis;
+    var barFn = w.hgGoldSignalBarMs, vFn = w.hgGoldNewsVerdict;
+    if (typeof vFn !== 'function') return null;
+    var ms = (typeof barFn === 'function') ? barFn(rows) : NaN;
+    if (!isFinite(+ms)) return null;
+    var v = vFn(ms);
+    return (v && v.locked === true) ? v : null;
+  }catch(e){ return null; }
+}
+
 function goldProPlan(inp){
   try{
     if (!inp || typeof inp !== 'object') return null;
@@ -744,6 +782,11 @@ async function runGoldPro(ui){
              series in hand, so that bar is what the calendar judges. */
           var gpShut = gpProWeekendVerdict(lvRows);
           if (gpShut && lvPlan) lvPlan.goldShut = gpShut;
+          /* hg-v964: the news gate, judged at the SAME bar as the weekend read
+             above. Marked on the plan here; the ticket flag is withheld at the
+             forward-record site below, which is where `ticket` is decided. */
+          var gpNews = gpProNewsVerdict(lvRows);
+          if (gpNews && lvPlan) lvPlan.newsLock = gpNews;
           /* DEAD ON ARRIVAL: if the market has already crossed the structural
              stop, there is no trade — say so instead of drawing one. */
           if (lvPlan && isFinite(lvLive)){
@@ -830,9 +873,16 @@ async function runGoldPro(ui){
       if (lvPlan && typeof W.hgFwdRecordScan === 'function'
           && isFinite(+lvPlan.entry) && isFinite(+lvPlan.stop) && isFinite(+lvPlan.t1)){
         var gpAligned = !!(lvNote && lvNote.indexOf('aligned with the GOLD SETUP') >= 0);
+        /* hg-v964: a plan composed inside a tier-1 gold news window is not a
+           ticket. The row is still recorded -- with its levels and its reason --
+           so the population can be separated later (hg-v955); what is withheld
+           is the claim that it was tradeable. */
+        var gpNewsLock = !!(lvPlan && lvPlan.newsLock && lvPlan.newsLock.locked === true);
+        if (gpNewsLock) gpAligned = false;
         W.hgFwdRecordScan('GOLDPRO', '4h', [{
           sym: 'XAUUSD', dir: lvPlan.dir, entry: +lvPlan.entry, stop: +lvPlan.stop, t1: +lvPlan.t1,
-          mechanic: gpAligned ? 'GP-COMPOSITE' : 'GP-ATR-FALLBACK',
+          mechanic: gpNewsLock ? 'GP-NEWS-LOCKED'
+                                : (gpAligned ? 'GP-COMPOSITE' : 'GP-ATR-FALLBACK'),
           ticket: gpAligned
         }], { horizonBars: 20 });
       }
@@ -955,6 +1005,7 @@ if (typeof window !== 'undefined'){
   window.HG_tabs = window.HG_tabs || [];
   /* hg-v950: exported so the calendar wiring is testable as a unit */
   window.gpProWeekendVerdict = gpProWeekendVerdict;
+  window.gpProNewsVerdict = gpProNewsVerdict;
   window.HG_tabs.push({ id: 'goldpro', label: 'GOLD PRO', mount: mount, refresh: refreshGoldPro });
 }
 })();

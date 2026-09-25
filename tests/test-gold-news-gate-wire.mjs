@@ -279,9 +279,24 @@ const SNAP = { events: [{ title: 'US CPI m/m', t: CPI }] };
 
   /* and the gaps NAME THEMSELVES rather than living in prose */
   ok(c.uncovered.length > 0, 'desks with no news route are reported, not assumed');
-  const un = new Set(c.uncovered.map(r => r.tab));
-  for (const t of ['optigold', 'goldpro', 'newgold', '80percent'])
-    ok(un.has(t), t + ' is reported UNCOVERED — the four raw-bar minters hg-v950 named');
+
+  /* DERIVED, not a typed list of tabs. The first cut named the four raw-bar
+     minters hg-v950 listed — and hg-v964 wired one of them (GOLD PRO), which
+     turned this red with nothing wrong. A guard that has to be edited every
+     time a desk is covered is the stale-list defect these packs keep finding,
+     living in the guard. What must hold is the PROPERTY: every desk in the
+     uncovered bucket genuinely has no route, and every routed desk is not in
+     it. */
+  const routeMap = W.HG_GOLD_NEWS_ROUTES || {};
+  for (const r of c.uncovered){
+    ok(!routeMap[r.tab],
+      r.tab + ' is in the uncovered bucket and genuinely has no route');
+    eq(r.route, null, r.tab + ' carries no route string either');
+  }
+  for (const r of [...c.verified, ...c.notLoaded]){
+    ok(!!routeMap[r.tab], r.tab + ' is routed and has a route entry');
+    ok(!c.uncovered.some(u => u.tab === r.tab), r.tab + ' is not also uncovered');
+  }
 
   /* the probe is NOT a rubber stamp: a route that cannot tell the two
      instants apart must read BROKEN (a bucket nothing can land in is a
