@@ -4147,12 +4147,15 @@ terse status, and never launches a first-time scan on a global refresh.
       var judgeSrc = (isFinite(tN) && tN >= FWD_MIN_JUDGE) ? tix
                    : ((isFinite(cN) && cN >= FWD_MIN_JUDGE) ? clr : null);
       if (judgeSrc){
-        var fillN = fin(judgeSrc.fillSamples), fillHit = fin(judgeSrc.fillHit);
-        if (isFinite(fillN) && fillN >= FWD_MIN_JUDGE && isFinite(fillHit)){
-          judgeN = fillN; judgeHit = fillHit;
+        /* hg-v982: the rule lives in hg-forward.js (hgFwdJudgeSample) and
+           OMNIROUTE reads the same one; this block only labels the result. */
+        var wJ = (typeof window !== 'undefined') ? window : ((typeof globalThis !== 'undefined') ? globalThis : null);
+        var jS = (wJ && typeof wJ.hgFwdJudgeSample === 'function') ? wJ.hgFwdJudgeSample(judgeSrc, FWD_MIN_JUDGE) : null;
+        if (jS && jS.fillAware){
+          judgeN = jS.n; judgeHit = jS.hit;
           judgeLabel = judgeLabel.replace(/^settled /, 'FILLED ');
-          if (fin(judgeSrc.fillUnfilled) > 0){
-            judgeLabel += ' (' + fin(judgeSrc.fillUnfilled) + ' never filled, excluded)';
+          if (jS.unfilled > 0){
+            judgeLabel += ' (' + jS.unfilled + ' never filled, excluded)';
           }
         }
       }

@@ -580,6 +580,35 @@ localStorage. Never throws.
     return out;
   }
 
+  /* hg-v982: WHICH SAMPLE A MEASURED-EDGE JUDGE READS, ONE RULE FOR EVERY
+     DESK. A judge is handed the population it chose (tickets, or the
+     gate-clear set) and the floor it needs; it reads that population's
+     actual tally (samples / hit) -- and when enough of those records know
+     whether the order FILLED (fillSamples at or over the same floor), the
+     fill-aware tally instead, because that is the one that describes a
+     trade somebody could have had: a resting order the tape never reached
+     is not a win or a loss, it is nothing. Preferred only when it clears the
+     floor on its own, so a log that is mostly legacy records keeps deciding
+     exactly as before rather than on a handful of new ones. OMNIGOLD carried
+     this rule inline since the fill model shipped; OMNIROUTE, the desk whose
+     every order rests (hg-v424) and whose replay never fills 34.3% of what
+     it opens, judged on the actual tally alone. Both read this now. */
+  function hgFwdJudgeSample(stats, minN){
+    var out = { n: NaN, hit: NaN, fillAware: false, unfilled: 0, unprovable: 0 };
+    if (!stats || typeof stats !== 'object') return out;
+    var floor = fin(minN);
+    if (!isFinite(floor) || floor < 0) floor = 0;
+    var n = fin(stats.samples), hit = fin(stats.hit);
+    if (isFinite(n) && n >= floor && isFinite(hit)){ out.n = n; out.hit = hit; }
+    var fn = fin(stats.fillSamples), fh = fin(stats.fillHit);
+    if (isFinite(fn) && fn >= floor && isFinite(fh)){
+      out.n = fn; out.hit = fh; out.fillAware = true;
+      out.unfilled = isFinite(fin(stats.fillUnfilled)) ? fin(stats.fillUnfilled) : 0;
+      out.unprovable = isFinite(fin(stats.fillUnprovable)) ? fin(stats.fillUnprovable) : 0;
+    }
+    return out;
+  }
+
   /* Did this bar reach a resting order? A market order is already filled. */
   function hgFwdOrderTouched(type, bar, entry){
     if (type === 'BUY' || type === 'SELL') return true;
@@ -1478,6 +1507,7 @@ localStorage. Never throws.
     W.hgFwdSettleFill = hgFwdSettleFill;
     W.hgFwdOrderType = hgFwdOrderType;
     W.hgFwdLastBar = hgFwdLastBar;   /* hg-v981 */
+    W.hgFwdJudgeSample = hgFwdJudgeSample;   /* hg-v982 */
     /* exported so a test can drive the fill question directly: a bar with
        no low used to answer "touched" for every resting BUY_LIMIT — see num() */
     W.hgFwdOrderTouched = hgFwdOrderTouched;
