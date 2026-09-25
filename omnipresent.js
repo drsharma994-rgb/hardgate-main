@@ -387,6 +387,11 @@
 
       out.push({
         dir: dir, status: status, zone: z, entry: entry, stop: stop, t1: t1, t2: t2,
+        /* hg-v981: a TRIGGERED entry IS livePx (a market order), an ARMED one
+           the zone edge; the forward record needs the mark to tell them apart
+           and the bar the rejection closed on. */
+        mark: livePx,
+        barT: (rows[rows.length - 1] && isFinite(+rows[rows.length - 1].t) && +rows[rows.length - 1].t > 0) ? +rows[rows.length - 1].t : undefined,
         risk: risk, rr1: 2, rr2: t2r, atr: a,
         evidence: opEvidence(rows, dir, livePx),
         trigger: (dir === 'short')
@@ -1072,6 +1077,7 @@
           if (gfn('hgFwdRecordScan')){
             var fwd = top.filter(function (c){ return c.status === 'TRIGGERED'; })
               .map(function (c){ return { sym: c.sym, dir: c.dir, entry: c.entry, stop: c.stop, t1: c.t1,
+                                          mark: c.mark, barT: c.barT,   /* hg-v981 */
                                           mechanic: 'OP-' + (c.dir === 'short' ? 'HIGH-REJECT' : 'LOW-REJECT'),
                                           ticket: !!(c.grade && c.grade.ticket) }; });
             if (fwd.length){ try{ W.hgFwdRecordScan('OMNIPRESENT', TF, fwd, { horizonBars: 24 }); }catch(e){} }

@@ -556,6 +556,30 @@ localStorage. Never throws.
     return entry > mark ? 'SELL_LIMIT' : 'SELL_STOP';
   }
 
+  /* hg-v981: THE MARK AND THE BAR, READ OFF THE ROWS A DESK ALREADY HOLDS.
+     The crypto desks compose their plans on a series they fetched (the 4h
+     tape on SQUEEZE, OI FLOW, EDGE, REVERSAL SNIPER, TRENDMX and the GATES
+     tab; the decision bar's series on OMNIROUTE, OMNIPRESENT and DEX
+     SCREENER; the signal's own rows on PINE), and the last closed bar of
+     that series IS the price when the plan fired and the bar it was judged
+     on. One reader, so thirteen record maps do not carry thirteen copies of
+     the same two guards (hg-v949). Absent stays absent: a series with no
+     readable close or time yields undefined for that field, never zero
+     (isFinite(+null) is the +null trap this ledger has met before). */
+  function hgFwdLastBar(rows){
+    var out = { mark: undefined, barT: undefined };
+    try{
+      if (!Array.isArray(rows) || !rows.length) return out;
+      var b = rows[rows.length - 1];
+      if (!b || typeof b !== 'object') return out;
+      var c = (typeof b.c === 'number') ? b.c : NaN;
+      var t = (typeof b.t === 'number') ? b.t : NaN;
+      if (isFinite(c) && c > 0) out.mark = c;
+      if (isFinite(t) && t > 0) out.barT = t;
+    }catch(e){}
+    return out;
+  }
+
   /* Did this bar reach a resting order? A market order is already filled. */
   function hgFwdOrderTouched(type, bar, entry){
     if (type === 'BUY' || type === 'SELL') return true;
@@ -1453,6 +1477,7 @@ localStorage. Never throws.
     /* the parallel fill-aware resolution, and the order-type rule it uses */
     W.hgFwdSettleFill = hgFwdSettleFill;
     W.hgFwdOrderType = hgFwdOrderType;
+    W.hgFwdLastBar = hgFwdLastBar;   /* hg-v981 */
     /* exported so a test can drive the fill question directly: a bar with
        no low used to answer "touched" for every resting BUY_LIMIT — see num() */
     W.hgFwdOrderTouched = hgFwdOrderTouched;

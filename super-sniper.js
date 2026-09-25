@@ -170,7 +170,9 @@ function publishSuperSniperSnap(snap){
             && isFinite(+c.entry) && isFinite(+c.stop) && isFinite(+c.t1)
             && +c.entry !== +c.stop;
       }).map(function(c){
+        var lb = (typeof W.hgFwdLastBar === 'function') ? W.hgFwdLastBar(c.rows) : {};   /* hg-v981 */
         return { sym: c.sym, dir: c.dir, entry: +c.entry, stop: +c.stop, t1: +c.t1,
+                 mark: lb.mark, barT: lb.barT,
                  mechanic: 'CONVICTION-PICK', ticket: true };
       }), { horizonBars: 20 });
     }

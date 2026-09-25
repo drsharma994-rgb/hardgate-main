@@ -1472,6 +1472,10 @@ async function edgeScanList(list, fetchCandles, hooks){
           entry: f.sig && f.sig.entry,
           stop: f.sig && f.sig.stop,
           t1: f.sig && f.sig.t1,
+          /* hg-v981: the signal decided MARKET vs LIMIT on this very mark and
+             the record never carried it; the bar is the last closed 4h bar. */
+          mark: (f.sig && isFinite(+f.sig.mark) && +f.sig.mark > 0) ? +f.sig.mark : undefined,
+          barT: (typeof W.hgFwdLastBar === 'function') ? W.hgFwdLastBar(f.rows4h).barT : undefined,
           mechanic: (f.sig && f.sig.edge) || 'UNKNOWN',
           ticket: true            /* it cleared EDGE's tally to be in `found` */
         };

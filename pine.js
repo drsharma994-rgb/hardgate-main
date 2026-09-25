@@ -800,6 +800,9 @@ function mount(el){
                 && fin(+sg.entry) && fin(+sg.stop) && fin(+sg.t1) && +sg.entry !== +sg.stop;
           }).map(function(sg){
             return { sym: sg.sym, dir: sg.dir, entry: +sg.entry, stop: +sg.stop, t1: +sg.t1,
+                     /* hg-v981: the signal's own close and its last closed bar */
+                     mark: (isFinite(+sg.price) && +sg.price > 0) ? +sg.price : undefined,
+                     barT: (typeof W.hgFwdLastBar === 'function') ? W.hgFwdLastBar(sg.rows).barT : undefined,
                      mechanic: String(sg.scriptId || 'PINE').toUpperCase().slice(0, 24),
                      ticket: !!sg.edgeTicket };
           });

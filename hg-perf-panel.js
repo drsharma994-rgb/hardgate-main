@@ -125,9 +125,31 @@
       + '<span style="font-family:monospace">' + _esc(row.kind) + '</span>'
       + '<span style="display:flex;gap:8px;align-items:center">'
       + '<span style="opacity:0.7">n=' + samples + ' \u00b7 ' + hitStr + ' \u00b7 ' + expRStr + '</span>'
+      + hgPerfFillHtml(s)
       + '<span class="gpip ' + chipCls + '" style="font-size:10px">' + chipLabel + '</span>'
       + '</span>'
       + '</div>';
+  }
+
+  /* hg-v981: THE FILL SPLIT, BESIDE THE ACTUAL TALLY. hgFwdStats has carried
+     fillWins / fillLosses / fillUnfilled / fillUnprovable since the fill model
+     shipped and no crypto reader printed them; until hg-v981 every crypto
+     record maps' mark was absent, so they read 0 everywhere. Renders NOTHING
+     while no record carries a fill resolution -- a legacy log is not evidence
+     about fills -- and never replaces the actual tally (by design: the two
+     are counted beside each other, hg-forward.js says why). */
+  function hgPerfFillHtml(s){
+    if (!s) return '';
+    var w = _fin(s.fillWins) || 0, l = _fin(s.fillLosses) || 0;
+    var u = _fin(s.fillUnfilled) || 0, p = _fin(s.fillUnprovable) || 0;
+    if (!(w + l + u + p > 0)) return '';
+    var n = w + l;
+    var hit = n ? Math.round(w / n * 100) + '%' : '\u2014';
+    return '<span style="opacity:0.6;font-size:10px" title="settled as if the order had to fill first">'
+      + 'fill ' + n + ' (' + w + 'W/' + l + 'L ' + hit + ')'
+      + (u ? ' \u00b7 ' + u + ' unfilled' : '')
+      + (p ? ' \u00b7 ' + p + ' unprovable' : '')
+      + '</span>';
   }
 
   /* Render the full panel HTML for a tab. Empty state: shown when the log
@@ -175,6 +197,7 @@
   G.hgPerfRows = hgPerfRows;
   G.hgPerfSummary = hgPerfSummary;
   G.hgPerfRowHtml = hgPerfRowHtml;
+  G.hgPerfFillHtml = hgPerfFillHtml;   /* hg-v981 */
   G.hgPerfPanelHtml = hgPerfPanelHtml;
   G.HG_PERF_PANEL_VERSION = 'v688';
   G.HG_PERF_MIN_SAMPLES = HG_PERF_MIN_SAMPLES;

@@ -868,6 +868,9 @@ function trendmxLimitBoardHTML(rows){
       W.hgFwdRecordScan('TRENDMX', '4h', cands.map(function(c){
         return { sym: c.row && c.row.sym, dir: c.dir,
                  entry: c.plan && c.plan.entry, stop: c.plan && c.plan.stop, t1: c.plan && c.plan.t1,
+                 /* hg-v981: the mark trendmxAttachMeta already kept, the bar off the row's series */
+                 mark: (c.plan && isFinite(+c.plan.mark) && +c.plan.mark > 0) ? +c.plan.mark : undefined,
+                 barT: (typeof W.hgFwdLastBar === 'function') ? W.hgFwdLastBar(c.row && c.row.rows4h).barT : undefined,
                  mechanic: (c.row && c.row.gate && c.row.gate.clean7) ? 'TM-CLEAN7' : 'TM-CONVICTION',
                  ticket: !!(c.row && c.row.gate && c.row.gate.clean7) };
       }), { horizonBars: 20 });

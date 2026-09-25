@@ -10523,6 +10523,13 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                                entry: found[k].plan.entry, stop: found[k].plan.stop, t1: found[k].plan.t1,
                                mechanic: found[k].kind,
                                ticket: !!(found[k].grade && found[k].grade.ticket),
+                               /* hg-v981: the price when the plan fired -- the decision bar's
+                                  close, the same livePx the evaluator measured distAtr on. This
+                                  desk prices ENTRY at hit.level (hg-v424), so every plan rests
+                                  away from the mark and the fill model needs it to know which
+                                  way: the committed walk fills nothing on its signal bar and
+                                  never fills 34.3% of what it opens. */
+                               mark: (num(held[j].livePx) > 0) ? num(held[j].livePx) : undefined,
                                /* barT keying must match OMNIGOLD: the decision bar's open time,
                                   not current time. Without this, hgFwdRecordScan defaults to
                                   Date.now() and invalidates cross-desk out-of-sample comparison. */

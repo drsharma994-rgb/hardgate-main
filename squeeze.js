@@ -935,7 +935,10 @@ function publishSqueezeState(results){
           if (!fr || !fr.dir) continue;
           if (fr.kind !== 'fired' && fr.kind !== 'break') continue;
           if (!isFinite(+fr.entry) || !isFinite(+fr.stop) || !isFinite(+fr.t1)) continue;
+          /* hg-v981: the last closed 4h bar is the mark and the bar (one reader, hg-forward.js) */
+          var lb = (typeof W.hgFwdLastBar === 'function') ? W.hgFwdLastBar(fr.rows4h) : {};
           fwd.push({ sym: fr.sym, dir: fr.dir, entry: +fr.entry, stop: +fr.stop, t1: +fr.t1,
+                     mark: lb.mark, barT: lb.barT,
                      mechanic: (fr.kind === 'fired') ? 'SQZ-FIRED' : 'SQZ-BREAK',
                      ticket: fr.kind === 'fired' });
         }
