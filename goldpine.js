@@ -381,7 +381,12 @@ function collectNativeScalp(bars, ctx, source){
   var got = null;
   try{
     var scInp = { rows15m: bars.rows15m, rows1h: bars.rows1h, rows4h: bars.rows4h,
-      now: ctx.now || Date.now(), news: ctx.news || null };
+      now: ctx.now || Date.now(), news: ctx.news || null,
+      /* hg-v972: this desk fetched the macro snapshot for its own scoring and
+         dropped it at this seam, so the borrowed mint ran its DXY+TNX lock
+         unchecked. The desk's own read goes first; the shared feed below
+         fills it only when this is null. */
+      macro: ctx.macro || null };
     try{ var apS = gfn('hgGoldApplyLiveFeed'); if (apS && bars.live) apS(scInp, bars.live); }catch(eAp){}   /* hg-v971 */
     got = fn(scInp);
   }catch(e){ return out; }

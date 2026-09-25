@@ -8883,13 +8883,23 @@ function hgGoldL2FromPerp(perp, venue){
    hgGoldLiveFeed loads the payload once and turns it into { perp, quote, l2 }
    through the two existing readers; hgGoldApplyLiveFeed puts it on a mint
    input ONLY where the input carries nothing already, so a named broker
-   quote or book on the global still wins. One rule, five desks. */
+   quote or book on the global still wins. One rule, five desks.
+
+   hg-v972: a MACRO leg. GOLD PINE, GOLD ULTRA and GOLD DIRECTION handed the
+   borrowed mints no macro snapshot at all (GOLD PINE fetched one for its own
+   scoring and dropped it at the mint seam), so hgGoldMacroLock -- the
+   DXY+TNX gold-long kill, a hard drop on both filter paths -- and the forming
+   regime's dollar / real-yield reads were UNCHECKED on those desks on every
+   scan. The snapshot is the same getGoldMacro() every fed desk already reads;
+   it rides the same timeout, and on a timeout the last cached snapshot is
+   used rather than nothing (getGoldMacroCached), because the band rule reads
+   20-day trends that do not move inside a scan. Null on every failure. */
 function hgGoldLiveFeed(opts){
   opts = opts || {};
   var venue = (opts.venue != null && opts.venue !== '') ? String(opts.venue) : 'delta-xaut';
   var symbol = String(opts.symbol || 'XAUTUSD').toUpperCase();
   var timeoutMs = isFinite(+opts.timeoutMs) && +opts.timeoutMs > 0 ? +opts.timeoutMs : 8000;
-  var empty = { perp: null, quote: null, l2: null, venue: venue };
+  var empty = { perp: null, quote: null, l2: null, macro: null, venue: venue };
   var P = (typeof Promise !== 'undefined') ? Promise : null;
   if (!P || typeof hgGoldLoadDeltaPerp !== 'function') return P ? P.resolve(empty) : null;
   var load;
@@ -8897,13 +8907,30 @@ function hgGoldLiveFeed(opts){
   catch(e){ return P.resolve(empty); }
   var timer = null;
   var late = new P(function(res){ timer = setTimeout(function(){ res(null); }, timeoutMs); });
-  return P.race([load, late]).then(function(j){
+  /* hg-v972: the macro leg -- the SAME getGoldMacro() every fed desk reads,
+     under the SAME timer. A timed-out or failed read falls back to the last
+     cached snapshot; with none, null. Never a snapshot invented here. */
+  var mFn = (typeof W !== 'undefined' && W && typeof W.getGoldMacro === 'function') ? W.getGoldMacro : null;
+  var mCached = function(){
+    try{ return (typeof W !== 'undefined' && W && typeof W.getGoldMacroCached === 'function') ? (W.getGoldMacroCached() || null) : null; }
+    catch(eC){ return null; }
+  };
+  /* the shape check and the catch live ONCE, on the raced promise below:
+     the first cut carried both on this leg too, and the duplicates were
+     equivalent mutants (removing either changed nothing) */
+  var mLoad = mFn ? P.resolve().then(function(){ return mFn(); }) : P.resolve(null);
+  var mRaced = P.race([mLoad, late.then(function(){ return { __late: true }; })]).then(function(m){
+    if (m && m.__late) return mCached();
+    return (m && typeof m === 'object') ? m : null;
+  }).catch(function(){ return null; });
+  return P.all([P.race([load, late]), mRaced]).then(function(pair){
     try{ if (timer) clearTimeout(timer); }catch(eT){}
-    if (!j || typeof j !== 'object') return empty;
+    var j = pair[0], m = pair[1];
+    if (!j || typeof j !== 'object') return { perp: null, quote: null, l2: null, macro: m || null, venue: venue };
     var q = null, b = null;
     try{ q = hgGoldQuoteFromPerp(j, venue); }catch(eQ){ q = null; }
     try{ b = hgGoldL2FromPerp(j, venue); }catch(eB){ b = null; }
-    return { perp: j, quote: q, l2: b, venue: venue };
+    return { perp: j, quote: q, l2: b, macro: m || null, venue: venue };
   }).catch(function(){
     try{ if (timer) clearTimeout(timer); }catch(eT2){}
     return empty;
@@ -8923,6 +8950,14 @@ function hgGoldApplyLiveFeed(inp, feed){
     }
     if (feed.l2 && !inp.l2OrderBook) inp.l2OrderBook = feed.l2;
     if (feed.perp && !inp.perpNative && feed.perp.ok) inp.perpNative = feed.perp;
+    /* hg-v972: the macro snapshot, only where the input carries none -- a
+       desk's own fetch (GOLD PINE) wins. This sets inp.macro and NOTHING
+       ELSE: in particular it never writes inp.us10yCandles, the field the
+       5-bar yield guard reads. macro.js supplies no such series, so that
+       guard has been unfed on every desk since it shipped; feeding it here
+       would hand a series to an unmeasured rule that is NOT the 20-day band
+       the macro lock runs on (the hg-v966 trap). Reported, not fed. */
+    if (feed.macro && typeof feed.macro === 'object' && !inp.macro) inp.macro = feed.macro;
     return inp;
   }catch(e){ return inp; }
 }
