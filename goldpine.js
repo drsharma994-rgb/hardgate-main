@@ -381,6 +381,9 @@ function hgGpRecord(list, mode, bars){
         stop: +s.stop,
         t1: +s.t1,
         feed: feed,   /* hg-v979 */
+        /* hg-v980: the detector's mark (s.price) -- the price the setup was
+           judged at; absent stays absent */
+        mark: (fin(+s.price) && +s.price > 0) ? +s.price : undefined,
         barT: barT,   /* hg-v979: the lane's own signal bar */
         sol: (s.solidity && fin(+s.solidity.score)) ? +s.solidity.score : undefined,
         solTier: (s.solidity && s.solidity.grade) ? s.solidity.grade : undefined

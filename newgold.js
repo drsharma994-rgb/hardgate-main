@@ -1632,6 +1632,8 @@ async function ngRunScan(){
             entry: r.setup.entry, stop: r.setup.stop, t1: r.setup.t1,
             mechanic: r.setup.kind || 'TRIPLE-CONF',
             feed: (typeof r.feed === 'string' && r.feed) ? r.feed : undefined,   /* hg-v979 */
+            /* hg-v980: the mark the setup was sized from (lastClose) */
+            mark: (r.setup && typeof r.setup.mark === 'number' && isFinite(r.setup.mark) && r.setup.mark > 0) ? r.setup.mark : undefined,
             /* v698: a fire is a TICKET only when it FORMED — cleared the
                venue stop floor, the measured-evidence checks and the
                >= 3-distinct-class confluence bar — and still clears the

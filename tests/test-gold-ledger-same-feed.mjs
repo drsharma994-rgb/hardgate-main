@@ -275,7 +275,7 @@ console.log('== 4) the other desks ==');
   /* OPTI GOLD: the row builder, driven */
   const og = sandbox({ window: { hgGoldSignalBarMs: rows => rows[rows.length - 1].t * 1000 } });
   og.W = og.window;
-  vm.runInContext(lift('optigold.js', 'function ogBreakBarSec(rows, s){') + '\n' + lift('optigold.js', 'function ogFwdRows(setups, lane, rows, feed){'), og);
+  vm.runInContext(lift('optigold.js', 'function ogBreakBarSec(rows, s){') + '\n' + lift('optigold.js', 'function ogBreakBarClose(rows, s){') + '\n' + lift('optigold.js', 'function ogFwdRows(setups, lane, rows, feed){'), og);   /* hg-v980 lifted its mark reader too */
   og.ogFwdRows = vm.runInContext('ogFwdRows', og);
   const rows = tapeEnding(WED, 30, 900, 9, 24);
   const setups = [{ dir: 'long', state: 'waiting', entry: 2300, stop: 2290, t1: 2320, i: 3 }];
@@ -371,7 +371,7 @@ console.log('== 4) the other desks ==');
   assert(/fwdResolve\('XAUUSD', '4h', bars\.rows4h, bars\.srcByTf && bars\.srcByTf\['4h'\]\)/.test(gpS) && /fwdResolve\('XAUUSD', '15m', bars\.rows15m, bars\.srcByTf && bars\.srcByTf\['15m'\]\)/.test(gpS) && /out\.srcByTf\['15m'\] = feedOf\(legs\[0\]\)/.test(gpS), 'GOLD PINE resolves each timeframe against the leg\'s own feed');
   const prS = strip(read('goldpro.js'));
   assert(/lvFeed = 'perp:XAUUSDT'/.test(prS) && /lvFeed = 'perp:PAXGUSDT'/.test(prS) && /lvFeed = \(typeof g4h\.source === 'string' && g4h\.source\) \? g4h\.source : null;/.test(prS) && /feed: lvFeed \|\| undefined,/.test(prS), 'GOLD PRO names the feed at all three places the plan\'s rows can come from, and records it');
-  assert(/barT: c\.barT, signalT: c\.signalT,\s*feed: c\.feed \}/.test(strip(read('super-gold.js'))), 'SUPER GOLD forwards the source desk\'s feed across its record map');
+  assert(/barT: c\.barT, signalT: c\.signalT,\s*feed: c\.feed[,\s]/.test(strip(read('super-gold.js'))), 'SUPER GOLD forwards the source desk\'s feed across its record map');
   assert(/gsStampFeed\(display, gold && gold\.src && gold\.src\['15m'\]\);/.test(strip(read('goldscalp.js'))) && /gwStampFeed\(display, gold && gold\.src && gold\.src\['4h'\]\);/.test(strip(read('goldswing.js'))), 'the home desks stamp the leg the mint priced on: 15m on SCALP, 4h on SWING');
   /* the home desks' own resolve runs BEFORE their scan records, so a single
      headless scan cannot observe it -- textual, and says so (hg-v956) */
@@ -463,9 +463,9 @@ console.log('== 5) the census, derived from source ==');
 
 console.log('== 6) build stamps ==');
 {
-  const stamp = read('build-stamp.js');
-  assert(/hg-v979/.test(stamp) && HG_VER === 'hg-v979', 'build-stamp.js is hg-v979 (' + HG_VER + ')');
-  assert(swCacheOk(read('sw.js')), 'sw.js HG_CACHE is hg-v979');
+  /* keyed to whatever version is current (a guard pinning its own literal
+     goes red on the next pack -- hg-v980 found this one that way) */
+  assert(swCacheOk(read('sw.js')), 'sw.js HG_CACHE is ' + HG_VER);
   assert(/hg-v979/.test(read('AGENTS.md')), 'AGENTS.md carries the hg-v979 entry');
 }
 

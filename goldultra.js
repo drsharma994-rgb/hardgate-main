@@ -2011,6 +2011,8 @@ async function runScan(ui){
          the borrowed scalp mint read */
       var guFeed = f && f.srcByTf && f.srcByTf['15m'];
       if (typeof guFeed === 'string' && guFeed) guRow.feed = guFeed;
+      /* hg-v980: the mark the borrowed mint sized the pick against */
+      if (typeof sel.pick.mark === 'number' && isFinite(sel.pick.mark) && sel.pick.mark > 0) guRow.mark = sel.pick.mark;
       W.hgFwdRecordScan('GOLDULTRA', '15m', [guRow], { horizonBars: RULE.timeoutBars });
     } }catch(eF){}
     return 'refreshed';

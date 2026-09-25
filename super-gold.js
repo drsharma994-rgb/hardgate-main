@@ -699,7 +699,10 @@ function publishSuperGoldSnap(snap){
                  /* hg-v978: the bar the source desk judged it on */
                  barT: c.barT, signalT: c.signalT,
                  /* hg-v979: the feed the source desk priced the levels on */
-                 feed: c.feed };
+                 feed: c.feed,
+                 /* hg-v980: the mark the source desk sized it against, so the
+                    fill model can tell a resting order from a market one */
+                 mark: c.mark };
       }), { horizonBars: 20 });
     }
   } catch (eFwd) { try { if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('super-gold', eFwd); } catch (eW) {} }

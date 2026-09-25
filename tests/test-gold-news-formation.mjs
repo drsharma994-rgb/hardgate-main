@@ -192,7 +192,12 @@ const form = (atMs, ctx) => (ctx || W).hgGoldFormation(SETUP,
   const at = src.indexOf("W.hgFwdRecordScan('GOLDPRO'");
   ok(at > 0, 'the GOLD PRO forward record site is locatable');
   const blockStart = src.lastIndexOf('var gpAligned', 0 + at);
-  const stmt = src.slice(blockStart, at + 400);
+  /* hg-v980: bounded to the call's own closing `}], {` rather than a fixed
+     character count -- a field added to the record map (feed in v979, mark in
+     v980) pushed the label past a fixed slice with the rule untouched. */
+  const recEnd = src.indexOf('}], {', at);
+  ok(recEnd > at, 'the record call closes after the site');
+  const stmt = src.slice(blockStart, recEnd + 5);
   ok(/gpNewsLock/.test(stmt), 'the record site reads the news lock');
   ok(/if \(gpNewsLock\) gpAligned = false;/.test(stmt),
     'and a locked window withholds the ticket flag');

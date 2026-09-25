@@ -591,6 +591,17 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
                    signalT: c.signalT,
                    /* hg-v979: the feed the levels were priced on */
                    feed: c.feed,
+                   /* hg-v980: THE PRICE WHEN THE PLAN FIRED. hgFwdNormalize has
+                      accepted `mark` since the fill model was written and
+                      hgFwdRecordScan forwards it -- and this map, which
+                      REBUILDS the row, never passed one, so hgFwdOrderType
+                      returned null on every record of this desk and the
+                      fill-aware settlement stood aside for all of them: a
+                      limit that never filled was settled as a market order
+                      and could record a win it never opened for. The
+                      snapshot already carries the mark this candidate was
+                      sized against; null (no mark) stays absent. */
+                   mark: c.mark,
                    mechanic: String(c.stratKey || c.strategy || 'UNKNOWN').toUpperCase().slice(0, 28),
                    ticket: (c.grade === 'A' || c.grade === 'clean' || !!c.locked) };
         }), { horizonBars: 20 });
