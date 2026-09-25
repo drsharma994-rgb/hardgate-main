@@ -729,7 +729,9 @@ function publishRsDeskSnap(results){
         var fwd = cands.filter(function(c){
           return c && c.dir && isFinite(+c.entry) && isFinite(+c.stop) && isFinite(+c.t1);
         }).map(function(c){
+          var lb = (typeof W.hgFwdLastBar === 'function') ? W.hgFwdLastBar(c.rows) : {};   /* hg-v981 */
           return { sym: c.sym, dir: c.dir, entry: +c.entry, stop: +c.stop, t1: +c.t1,
+                   mark: lb.mark, barT: lb.barT,
                    mechanic: 'SNIPER-BOUNCE', ticket: !!(c.ticket && c.conviction) };
         });
         if (fwd.length) W.hgFwdRecordScan('REVERSALSNIPER', '4h', fwd, { horizonBars: 20 });

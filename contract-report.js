@@ -702,6 +702,7 @@ function hgContractReportRecord(rep){
              : String(p.source || 'ENGINE').toUpperCase().replace(/[^A-Z0-9]+/g, '-').slice(0, 24));
     return W.hgFwdRecordScan(REPORT_TAB, '4h', [{
       sym: rep.sym, dir: p.dir, entry: p.entry, stop: p.stop, t1: p.t1,
+      mark: (isFinite(fin(p.mark)) && fin(p.mark) > 0) ? fin(p.mark) : undefined,   /* hg-v981: planFrom's last close */
       mechanic: mech, ticket: false
     }], { horizonBars: 20 });
   }catch(e){

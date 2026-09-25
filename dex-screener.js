@@ -299,6 +299,9 @@ async function dexRunScan(ui){
         if (fin(c.dexExplode) < 2 && !(c.grade && c.grade.ticket)) continue;
         c.meme = true;
         c.exchange = f.item.exchange;
+        /* hg-v981: the decision bar's close and time, off the series the
+           evaluator read (f.livePx IS that close). */
+        if (gfn('hgFwdLastBar')){ var lbDex = W.hgFwdLastBar(f.rows); c.mark = lbDex.mark; c.barT = lbDex.barT; }
         c.turnoverUsd = f.item.turnoverUsd;
         /* SMC CONTEXT (smc-setups.js). Attaches c.smc (bias, structure, zone
            confluence score/grade/tags) and records one SMC_CONTEXT signal per
@@ -379,6 +382,7 @@ async function dexRunScan(ui){
           return {
             sym: c.sym, dir: c.dir,
             entry: c.plan && c.plan.entry, stop: c.plan && c.plan.stop, t1: c.plan && c.plan.t1,
+            mark: c.mark, barT: c.barT,   /* hg-v981 */
             mechanic: c.kind, ticket: true
           };
         });

@@ -571,7 +571,9 @@ function publishOiflowState(results){
           try { fs = oiflowSetup(fr.cls, fr.rows4h, fr.rows1h); } catch (eS) { fs = null; }
           if (!fs || !isFinite(+fs.entry) || !isFinite(+fs.stop) || !isFinite(+fs.t1)) continue;
           var reg = (typeof fr.cls.regime === 'string' && fr.cls.regime) ? fr.cls.regime : 'UNCLASSIFIED';
+          var lb = (typeof W.hgFwdLastBar === 'function') ? W.hgFwdLastBar(fr.rows4h) : {};   /* hg-v981 */
           fwd.push({ sym: fr.sym, dir: fr.cls.dir, entry: +fs.entry, stop: +fs.stop, t1: +fs.t1,
+                     mark: lb.mark, barT: lb.barT,
                      mechanic: 'OI-' + String(reg).toUpperCase().replace(/[^A-Z0-9]+/g, '-').slice(0, 24),
                      ticket: !!fs.confirmed });
         }

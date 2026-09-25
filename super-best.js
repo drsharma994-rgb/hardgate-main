@@ -281,7 +281,11 @@ function publishSuperBestSnap(snap){
             && isFinite(+c.entry) && isFinite(+c.stop) && isFinite(+c.t1)
             && +c.entry !== +c.stop;
       }).map(function(c){
+        /* hg-v981: the pick's own mark (the BEST candidate carries one), else the
+           last bar of the rows it rode in on; the bar off those rows */
+        var lb = (typeof W.hgFwdLastBar === 'function') ? W.hgFwdLastBar(c.rows) : {};
         return { sym: c.sym, dir: c.dir, entry: +c.entry, stop: +c.stop, t1: +c.t1,
+                 mark: (isFinite(+c.mark) && +c.mark > 0) ? +c.mark : lb.mark, barT: lb.barT,
                  mechanic: 'CONVICTION-PICK', ticket: true };
       }), { horizonBars: 20 });
     }

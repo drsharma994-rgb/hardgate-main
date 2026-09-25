@@ -5560,6 +5560,10 @@ async function runBrain(el){
           if (!isFinite(fe) || !isFinite(fs) || !isFinite(ft) || fe === fs) continue;
           fwdOwn.push({
             sym: fr.sym, dir: fr.dec.dir, entry: fe, stop: fs, t1: ft,
+            /* hg-v981: the row's own mark (boardMarkFor: positioning cache, then
+               the row's snapshot, never a fetch). No candle series rides a BRAIN
+               row, so no barT is claimed here -- the clock bar stays. */
+            mark: (function(){ var bm = boardMarkFor(fr); return (isFinite(bm) && bm > 0) ? bm : undefined; })(),
             mechanic: ('BRAIN-' + String(fp.src || 'own').toUpperCase()
                         .replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '')).slice(0, 24),
             ticket: fr.dec.tier === 'PRIME'

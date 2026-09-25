@@ -293,6 +293,8 @@ function pineSubRunScan(cfg, opts){
               && +sg.entry !== +sg.stop;
         }).map(function(sg){
           return { sym: sg.sym, dir: sg.dir, entry: +sg.entry, stop: +sg.stop, t1: +sg.t1,
+                   mark: (isFinite(+sg.price) && +sg.price > 0) ? +sg.price : undefined,   /* hg-v981 */
+                   barT: (typeof W.hgFwdLastBar === 'function') ? W.hgFwdLastBar(sg.rows).barT : undefined,
                    mechanic: String(sg.scriptId || statLabel || 'PINE').toUpperCase().slice(0, 24),
                    ticket: !!sg.edgeTicket };
         });
