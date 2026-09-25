@@ -746,15 +746,20 @@ async function runGoldPro(ui){
        When index.html's goldSetupDecision is reachable it gets the final say:
        its plan levels override, its stand-aside verdict is shown as a warn. */
     var lvPlan = null, lvReason = null, lvNote = null, lvSrc = null, lvRowsN = 0, lvCascade = null;
+    /* hg-v979: the feed the plan's levels are priced on, named as the
+       resolvers name it (g4h.source is the gold chain's own label; the
+       exchange perp legs are named as what they are, a perp on the
+       selected exchange, which no gold-chain resolver reads) */
+    var lvFeed = null;
     if (typeof ema !== 'function' || typeof atr !== 'function'){
       lvReason = 'levels unavailable — the indicator layer (ema/atr) is missing.';
     } else {
       var lvRows = null, lvContext = null;
       if (typeof getCandles === 'function'){
-        try{ var xa = await getCandles('XAUUSDT', '4h', 200); if (xa && xa.length){ lvRows = xa; lvSrc = 'XAUUSDT perp'; } }catch(e){}
-        if (!lvRows){ try{ var xp = await getCandles('PAXGUSDT', '4h', 200); if (xp && xp.length){ lvRows = xp; lvSrc = 'PAXGUSDT perp'; } }catch(e){} }
+        try{ var xa = await getCandles('XAUUSDT', '4h', 200); if (xa && xa.length){ lvRows = xa; lvSrc = 'XAUUSDT perp'; lvFeed = 'perp:XAUUSDT'; } }catch(e){}
+        if (!lvRows){ try{ var xp = await getCandles('PAXGUSDT', '4h', 200); if (xp && xp.length){ lvRows = xp; lvSrc = 'PAXGUSDT perp'; lvFeed = 'perp:PAXGUSDT'; } }catch(e){} }
       }
-      if (!lvRows && g4h.rows.length){ lvRows = g4h.rows; lvSrc = srcLabel(g4h.source) + ' gold chain'; }
+      if (!lvRows && g4h.rows.length){ lvRows = g4h.rows; lvSrc = srcLabel(g4h.source) + ' gold chain'; lvFeed = (typeof g4h.source === 'string' && g4h.source) ? g4h.source : null; }
       if (!lvRows || !lvRows.length){
         lvReason = 'levels unavailable — no 4H gold candles from any source (getCandles XAUUSDT/PAXGUSDT, gold chain).';
       } else {
@@ -897,6 +902,7 @@ async function runGoldPro(ui){
         W.hgFwdRecordScan('GOLDPRO', '4h', [{
           sym: 'XAUUSD', dir: lvPlan.dir, entry: +lvPlan.entry, stop: +lvPlan.stop, t1: +lvPlan.t1,
           barT: gpBarSec || undefined,
+          feed: lvFeed || undefined,   /* hg-v979: the feed the levels were priced on */
           mechanic: gpNewsLock ? 'GP-NEWS-LOCKED'
                                 : (gpAligned ? 'GP-COMPOSITE' : 'GP-ATR-FALLBACK'),
           ticket: gpAligned

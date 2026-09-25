@@ -697,7 +697,9 @@ function publishSuperGoldSnap(snap){
         return { sym: c.sym, dir: c.dir, entry: +c.entry, stop: +c.stop, t1: +c.t1,
                  mechanic: 'CONVICTION-PICK', ticket: true,
                  /* hg-v978: the bar the source desk judged it on */
-                 barT: c.barT, signalT: c.signalT };
+                 barT: c.barT, signalT: c.signalT,
+                 /* hg-v979: the feed the source desk priced the levels on */
+                 feed: c.feed };
       }), { horizonBars: 20 });
     }
   } catch (eFwd) { try { if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('super-gold', eFwd); } catch (eW) {} }

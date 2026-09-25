@@ -1881,17 +1881,21 @@ var __ui = null, __last = null, __busy = false;
 function setStat(ui, s, bad){ try{ if (ui && ui.stat){ ui.stat.textContent = s; ui.stat.style.color = bad ? '#DC2626' : ''; } }catch(e){} }
 function gfn(name){ try{ if (typeof W[name] === 'function') return W[name]; }catch(e){} return null; }
 async function fetchRows(){
-  var out = { rows15m: [], rows1h: [], rows4h: [], rows1d: [], src: null }, ggc = gfn('getGoldCandles'), bk = gfn('binanceKlines');
+  /* hg-v979: srcByTf names the feed of EACH leg (the ledger settles a record
+     only on bars of the feed its levels were priced on); `src` stays the
+     display label it always was. A leg whose source is unnamed names none. */
+  var out = { rows15m: [], rows1h: [], rows4h: [], rows1d: [], src: null, srcByTf: {} }, ggc = gfn('getGoldCandles'), bk = gfn('binanceKlines');
+  function feedOf(a){ return (a && typeof a.source === 'string' && a.source) ? a.source : null; }
   if (ggc){
-    try{ var a = await ggc('15m', KL_15M); if (a && a.rows && a.rows.length){ out.rows15m = a.rows; out.src = a.source || 'gold'; } }catch(e1){}
-    try{ var b = await ggc('1h', KL_1H); if (b && b.rows && b.rows.length) out.rows1h = b.rows; }catch(e2){}
-    try{ var c4 = await ggc('4h', 220); if (c4 && c4.rows && c4.rows.length) out.rows4h = c4.rows; }catch(e5){}
-    try{ var d1 = await ggc('1d', 260); if (d1 && d1.rows && d1.rows.length) out.rows1d = d1.rows; }catch(e6){}
+    try{ var a = await ggc('15m', KL_15M); if (a && a.rows && a.rows.length){ out.rows15m = a.rows; out.src = a.source || 'gold'; if (feedOf(a)) out.srcByTf['15m'] = feedOf(a); } }catch(e1){}
+    try{ var b = await ggc('1h', KL_1H); if (b && b.rows && b.rows.length){ out.rows1h = b.rows; if (feedOf(b)) out.srcByTf['1h'] = feedOf(b); } }catch(e2){}
+    try{ var c4 = await ggc('4h', 220); if (c4 && c4.rows && c4.rows.length){ out.rows4h = c4.rows; if (feedOf(c4)) out.srcByTf['4h'] = feedOf(c4); } }catch(e5){}
+    try{ var d1 = await ggc('1d', 260); if (d1 && d1.rows && d1.rows.length){ out.rows1d = d1.rows; if (feedOf(d1)) out.srcByTf['1d'] = feedOf(d1); } }catch(e6){}
   }
   if (bk){
-    if (!out.rows15m.length){ try{ var p = await bk('PAXGUSDT', '15m', KL_15M); if (p && p.length){ out.rows15m = p; out.src = 'binance-paxg'; } }catch(e3){} }
-    if (!out.rows1h.length){ try{ var q = await bk('PAXGUSDT', '1h', KL_1H); if (q && q.length) out.rows1h = q; }catch(e4){} }
-    if (!out.rows4h.length){ try{ var z = await bk('PAXGUSDT', '4h', 220); if (z && z.length) out.rows4h = z; }catch(e7){} }
+    if (!out.rows15m.length){ try{ var p = await bk('PAXGUSDT', '15m', KL_15M); if (p && p.length){ out.rows15m = p; out.src = 'binance-paxg'; out.srcByTf['15m'] = 'binance-paxg'; } }catch(e3){} }
+    if (!out.rows1h.length){ try{ var q = await bk('PAXGUSDT', '1h', KL_1H); if (q && q.length){ out.rows1h = q; out.srcByTf['1h'] = 'binance-paxg'; } }catch(e4){} }
+    if (!out.rows4h.length){ try{ var z = await bk('PAXGUSDT', '4h', 220); if (z && z.length){ out.rows4h = z; out.srcByTf['4h'] = 'binance-paxg'; } }catch(e7){} }
   }
   return out;
 }
@@ -1918,7 +1922,7 @@ function renderResult(ui, res, src, sel, lane, tapes){
      from, and it rides BOTH exits from this function (COUNT SILENT takes
      an early return that would otherwise drop it). */
   /* hg-v913: this desk reads the records it writes. */
-  var h = (typeof W.hgGoldFwdNote === 'function' ? W.hgGoldFwdNote('goldultra') : '');
+  var h = (typeof W.hgGoldFwdNote === 'function' ? W.hgGoldFwdNote('goldultra', undefined, tapes && tapes.srcByTf && tapes.srcByTf['15m']) : '');
   if (tapes && typeof W.hgGoldTapeNotes === 'function'){
     if (tapes.rows15m && tapes.rows15m.length) h += W.hgGoldTapeNotes(tapes.rows15m, '15m');
     if (tapes.rows1h && tapes.rows1h.length) h += W.hgGoldTapeNotes(tapes.rows1h, '1h');
@@ -1983,8 +1987,9 @@ async function runScan(ui){
          15m candles at every open XAUUSD record, so a 4H swing record was
          given twenty 15-minute bars instead of twenty 4-hour ones and expired
          before it could resolve. */
-      if (typeof W.hgFwdResolveMulti === 'function') W.hgFwdResolveMulti('XAUUSD', { '15m': f.rows15m, '1h': f.rows1h });
-      else if (typeof W.hgFwdResolve === 'function') W.hgFwdResolve('XAUUSD', '15m', f.rows15m);
+      /* hg-v979: each timeframe against its own feed (f.srcByTf) */
+      if (typeof W.hgFwdResolveMulti === 'function') W.hgFwdResolveMulti('XAUUSD', { '15m': f.rows15m, '1h': f.rows1h }, f.srcByTf);
+      else if (typeof W.hgFwdResolve === 'function') W.hgFwdResolve('XAUUSD', '15m', f.rows15m, f.srcByTf && f.srcByTf['15m']);
       /* hg-v954: the gold calendar, on this desk's own 15m signal bar. This
          row is ticket:true on XAUUSD and the desk had NO weekend reference
          of any kind -- its only two mentions of the word are PROSE in the
@@ -2002,6 +2007,10 @@ async function runScan(ui){
          the same instant the weekend mark is judged on */
       var guSec = guSignalSec(f);
       if (guSec) guRow.barT = guSec;
+      /* hg-v979: the feed the pick's levels were priced on -- the 15m leg
+         the borrowed scalp mint read */
+      var guFeed = f && f.srcByTf && f.srcByTf['15m'];
+      if (typeof guFeed === 'string' && guFeed) guRow.feed = guFeed;
       W.hgFwdRecordScan('GOLDULTRA', '15m', [guRow], { horizonBars: RULE.timeoutBars });
     } }catch(eF){}
     return 'refreshed';

@@ -72,7 +72,10 @@ var SRC_LABEL = { 'binance-xau': 'BINANCE XAUUSDT', 'binance-paxg': 'BINANCE PAX
   'twelvedata': 'TWELVE DATA', 'yahoo': 'YAHOO GC=F' };
 
 async function fetchGoldBars(){
-  var out = { rows15m: [], rows1h: [], rows4h: [], rows1d: [], source: null };
+  /* hg-v979: srcByTf names the feed of EACH leg, for the ledger; `source`
+     stays the first leg's label as it always was */
+  var out = { rows15m: [], rows1h: [], rows4h: [], rows1d: [], source: null, srcByTf: {} };
+  function feedOf(a){ return (a && typeof a.source === 'string' && a.source) ? a.source : null; }
   var ggc = gfn('getGoldCandles');
   if (ggc){
     try{
@@ -82,22 +85,22 @@ async function fetchGoldBars(){
         ggc('4h', KL_4H).catch(function(){ return null; }),
         ggc('1d', KL_1D).catch(function(){ return null; })
       ]);
-      if (legs[0] && legs[0].rows && legs[0].rows.length){ out.rows15m = legs[0].rows; out.source = legs[0].source; }
-      if (legs[1] && legs[1].rows && legs[1].rows.length){ out.rows1h = legs[1].rows; if (!out.source) out.source = legs[1].source; }
-      if (legs[2] && legs[2].rows && legs[2].rows.length){ out.rows4h = legs[2].rows; if (!out.source) out.source = legs[2].source; }
-      if (legs[3] && legs[3].rows && legs[3].rows.length){ out.rows1d = legs[3].rows; if (!out.source) out.source = legs[3].source; }
+      if (legs[0] && legs[0].rows && legs[0].rows.length){ out.rows15m = legs[0].rows; out.source = legs[0].source; if (feedOf(legs[0])) out.srcByTf['15m'] = feedOf(legs[0]); }
+      if (legs[1] && legs[1].rows && legs[1].rows.length){ out.rows1h = legs[1].rows; if (!out.source) out.source = legs[1].source; if (feedOf(legs[1])) out.srcByTf['1h'] = feedOf(legs[1]); }
+      if (legs[2] && legs[2].rows && legs[2].rows.length){ out.rows4h = legs[2].rows; if (!out.source) out.source = legs[2].source; if (feedOf(legs[2])) out.srcByTf['4h'] = feedOf(legs[2]); }
+      if (legs[3] && legs[3].rows && legs[3].rows.length){ out.rows1d = legs[3].rows; if (!out.source) out.source = legs[3].source; if (feedOf(legs[3])) out.srcByTf['1d'] = feedOf(legs[3]); }
     }catch(e){}
   }
   var bk = gfn('binanceKlines');
   if (bk){
     if (!out.rows15m.length){
-      try{ var p = await bk('PAXGUSDT', '15m', KL_15M); if (p && p.length){ out.rows15m = p; out.source = out.source || 'binance-paxg'; } }catch(e5){}
+      try{ var p = await bk('PAXGUSDT', '15m', KL_15M); if (p && p.length){ out.rows15m = p; out.source = out.source || 'binance-paxg'; out.srcByTf['15m'] = 'binance-paxg'; } }catch(e5){}
     }
     if (!out.rows1h.length){
-      try{ var q = await bk('PAXGUSDT', '1h', KL_1H);  if (q && q.length) out.rows1h = q; }catch(e6){}
+      try{ var q = await bk('PAXGUSDT', '1h', KL_1H);  if (q && q.length){ out.rows1h = q; out.srcByTf['1h'] = 'binance-paxg'; } }catch(e6){}
     }
     if (!out.rows4h.length){
-      try{ var z = await bk('PAXGUSDT', '4h', KL_4H);  if (z && z.length){ out.rows4h = z; out.source = out.source || 'binance-paxg'; } }catch(e7){}
+      try{ var z = await bk('PAXGUSDT', '4h', KL_4H);  if (z && z.length){ out.rows4h = z; out.source = out.source || 'binance-paxg'; out.srcByTf['4h'] = 'binance-paxg'; } }catch(e7){}
     }
     if (!out.rows1d.length){
       try{ var y = await bk('PAXGUSDT', '1d', KL_1D);  if (y && y.length) out.rows1d = y; }catch(e8){}
@@ -350,11 +353,22 @@ function hgGpStampSolidity(list, mode, ctx){
 /* Record every fire that carries a plan into the forward log. The
    mechanic key must equal hgGpKind(s) so the solidity G6/G7 lookup and
    this record resolve to the same (scanner, mechanic) cell. */
-function hgGpRecord(list, mode){
+/* hg-v979: `bars` is the desk's own fetch. Each lane's rows name the FEED the
+   levels were priced on (bars.srcByTf, per timeframe) and the BAR the lane
+   read (the last closed bar of its own series, through the one bar reader),
+   so the ledger settles these on their own feed and dates them on the bar
+   rather than the floor of the scan clock (hg-v978 -- whose census read the
+   entry point by name and could not see this desk's alias `rec`). Absent
+   stays absent: no rows, no reader, no feed -> the record as before. */
+function hgGpRecord(list, mode, bars){
   try {
     var rec = gfn('hgFwdRecordScan');
     if (!rec || !Array.isArray(list) || !list.length) return 0;
     var tf = (mode === 'swing') ? '4h' : '15m';
+    var rows = bars ? (mode === 'swing' ? bars.rows4h : bars.rows15m) : null;
+    var feed = (bars && bars.srcByTf && typeof bars.srcByTf[tf] === 'string' && bars.srcByTf[tf]) ? bars.srcByTf[tf] : undefined;
+    var barMs = (rows && rows.length && typeof W.hgGoldSignalBarMs === 'function') ? W.hgGoldSignalBarMs(rows) : NaN;
+    var barT = (typeof barMs === 'number' && isFinite(barMs) && barMs > 0) ? Math.floor(barMs / 1000) : undefined;
     var cands = [];
     for (var i = 0; i < list.length; i++){
       var s = list[i];
@@ -366,6 +380,8 @@ function hgGpRecord(list, mode){
         entry: +s.entry,
         stop: +s.stop,
         t1: +s.t1,
+        feed: feed,   /* hg-v979 */
+        barT: barT,   /* hg-v979: the lane's own signal bar */
         sol: (s.solidity && fin(+s.solidity.score)) ? +s.solidity.score : undefined,
         solTier: (s.solidity && s.solidity.grade) ? s.solidity.grade : undefined
       });
@@ -520,8 +536,9 @@ function runGoldPineScan(bars, ctx){
   try {
     var fwdResolve = gfn('hgFwdResolve');
     if (fwdResolve){
-      if (bars.rows4h && bars.rows4h.length) fwdResolve('XAUUSD', '4h', bars.rows4h);
-      if (bars.rows15m && bars.rows15m.length) fwdResolve('XAUUSD', '15m', bars.rows15m);
+      /* hg-v979: each against its own feed */
+      if (bars.rows4h && bars.rows4h.length) fwdResolve('XAUUSD', '4h', bars.rows4h, bars.srcByTf && bars.srcByTf['4h']);
+      if (bars.rows15m && bars.rows15m.length) fwdResolve('XAUUSD', '15m', bars.rows15m, bars.srcByTf && bars.srcByTf['15m']);
     }
   } catch(eResolve){}
 
@@ -559,8 +576,8 @@ function runGoldPineScan(bars, ctx){
      arrays carry a non-enumerable .killedCount for the UI's killed note. */
   hgGpStampSolidity(swing, 'swing', scanCtx);
   hgGpStampSolidity(scalp, 'scalp', scanCtx);
-  hgGpRecord(swing, 'swing');
-  hgGpRecord(scalp, 'scalp');
+  hgGpRecord(swing, 'swing', bars);
+  hgGpRecord(scalp, 'scalp', bars);
   swing = hgGpReorder(swing);
   scalp = hgGpReorder(scalp);
 

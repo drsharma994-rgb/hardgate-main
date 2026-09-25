@@ -2589,7 +2589,7 @@ function hg80ScanTf(rows, def, venue){
    record for two strategies, which is the exact mistake hg-v770 un-pooled
    SPRING and UTAD to stop making.
    --------------------------------------------------------------------- */
-function hg80Record(sig, cfg){
+function hg80Record(sig, cfg, feed){
   try {
     if (typeof W.hgFwdRecord !== 'function') return { ok: false, why: 'forward log not loaded' };
     if (!sig || !sig.dir || !sig.plan) return { ok: false, why: 'no fired setup to record' };
@@ -2611,6 +2611,7 @@ function hg80Record(sig, cfg){
       sym: 'XAUUSD', tf: c.tf, dir: sig.dir,
       entry: fin(p.entry), stop: fin(p.stop), t1: fin(p.t1),
       barT: barT,
+      feed: (typeof feed === 'string' && feed) ? feed : undefined,   /* hg-v979 */
       horizonBars: P80_HORIZON_BARS,
       ticket: false,
       gateClear: false,
@@ -5537,6 +5538,8 @@ function run(){
       return Promise.resolve().then(function(){ return fetchFn(def.tf, def.bars); })
         .then(function(got){
           var rows = (got && got.rows) ? got.rows : got;
+          /* hg-v979: the feed these bars came from (the fetcher's own label) */
+          var feed = (got && typeof got.feed === 'string' && got.feed) ? got.feed : null;
           if (!rows || !rows.length){
             rungs.push({ def: def, ok: false, why: 'no ' + def.tf + ' gold bars came back' });
             return;
@@ -5561,9 +5564,11 @@ function run(){
           }
           /* settle anything this rung already has open before recording
              today's, so the log's own resolution stays ahead of its input */
-          try { if (typeof W.hgFwdResolve === 'function') W.hgFwdResolve('XAUUSD', def.tf, rows); }
+          try { if (typeof W.hgFwdResolve === 'function') W.hgFwdResolve('XAUUSD', def.tf, rows, feed || undefined); }
           catch (e){}
-          rungs.push(hg80ScanTf(rows, def, venue));
+          var rung = hg80ScanTf(rows, def, venue);
+          rung.feed = feed;   /* hg-v979: rides to hg80Record */
+          rungs.push(rung);
         })
         .catch(function(e){
           rungs.push({ def: def, ok: false, why: String((e && e.message) || e) });
@@ -5609,7 +5614,7 @@ function run(){
       if (!r.ok || !r.live.length) continue;
       fired.push(r.def.tf + ' ' + (r.live[0].variantLabel || 'SPEC') + ' '
                  + r.live[0].dir.toUpperCase());
-      var rec = hg80Record(r.live[0], r.cfg);
+      var rec = hg80Record(r.live[0], r.cfg, r.feed);
       recNotes[r.def.tf] = rec.ok
         ? ('Recorded to ' + P80_TAB + ' as ' + rec.mechanic
            + ' — the claim is now testable on this rung, under this mechanic.')

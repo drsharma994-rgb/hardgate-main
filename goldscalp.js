@@ -431,6 +431,19 @@ var __lastDeskTape = '';
    last closed bar's instant through the ONE reader every borrowing desk uses
    (hg-v952 / v963 / v973). The wall clock is the fallback for a series with no
    readable instant, never the rule. */
+/* hg-v979: stamp the feed the scalp levels were priced on -- the 15m leg's
+   own label (gold.src['15m']), the same field the mint reads for volume
+   trust. Only where absent: a conviction-locked row keeps the feed it was
+   priced on. A feed nothing named stamps nothing. */
+function gsStampFeed(cands, feed){
+  if (typeof feed !== 'string' || !feed || !Array.isArray(cands)) return cands;
+  for (var i = 0; i < cands.length; i++){
+    var c = cands[i];
+    if (c && !(typeof c.feed === 'string' && c.feed)) c.feed = feed;
+  }
+  return cands;
+}
+
 function gsScanBarMs(rows, fallback){
   try{
     var f = gfn('hgGoldSignalBarMs');
@@ -447,6 +460,10 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
       if (!c || !c.dir) continue;
       cands.push({
         id: c.id || null, venue: c.venue || null, sym: c.sym || null,
+        /* hg-v979: the feed these levels were priced on (gsStampFeed) --
+           the ledger settles them on that feed only; SUPER GOLD records
+           from this snapshot and forwards it */
+        feed: (typeof c.feed === 'string' && c.feed) ? c.feed : null,
         dir: c.dir, strategy: c.strategy || null, stratKey: c.stratKey || null,
         grade: c.grade || null, entry: c.entry, stop: c.stop, t1: c.t1, t2: c.t2,
         rr: c.rr, rr2: c.rr2,
@@ -512,6 +529,8 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
                    /* hg-v978: the bar this candidate was judged on (hg-v977),
                       so the ledger dates the record on it, not on the clock */
                    signalT: c.signalT,
+                   /* hg-v979: the feed the levels were priced on */
+                   feed: c.feed,
                    mechanic: String(c.stratKey || c.strategy || 'UNKNOWN').toUpperCase().slice(0, 28),
                    ticket: (c.grade === 'A' || c.grade === 'clean' || !!c.locked) };
         }), { horizonBars: 96 });   /* 96 x 15m = the same 24 hours as 24 x 1h */
@@ -2264,11 +2283,13 @@ async function runScan(ui, scanSt){
          timeframe against 4H candles -- and this desk records on 1h, so its
          own horizon ran four times too long. */
       if (typeof W.hgFwdResolveMulti === 'function'){
+        /* hg-v979: and each against ITS OWN FEED -- gold.src names the
+           feed per timeframe; a record priced on another feed waits */
         W.hgFwdResolveMulti('XAUUSD', { '15m': gold && gold.rows15m,
                                         '1h':  gold && gold.rows1h,
-                                        '4h':  gold && gold.rows4h });
+                                        '4h':  gold && gold.rows4h }, gold && gold.src);
       } else if (typeof W.hgFwdResolve === 'function' && gold && gold.rows1h && gold.rows1h.length){
-        W.hgFwdResolve('XAUUSD', '1h', gold.rows1h);
+        W.hgFwdResolve('XAUUSD', '1h', gold.rows1h, gold.src && gold.src['1h']);
       }
     } catch (eRes) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("goldscalp", eRes); } catch (eW) {} }
     try{
@@ -2672,7 +2693,7 @@ async function runScan(ui, scanSt){
     /* hg-v901: the unread-HTF-leg line rides with the mixed-feed banner, so
        both feed caveats reach every render path the banner already reaches. */
     /* hg-v913: this desk reads the records it writes. */
-    var fwdNote = (typeof W.hgGoldFwdNote === 'function' ? W.hgGoldFwdNote('goldscalp') : '');
+    var fwdNote = (typeof W.hgGoldFwdNote === 'function' ? W.hgGoldFwdNote('goldscalp', undefined, gold && gold.src && gold.src['15m']) : '');
     var mixedBanner = fwdNote + gsTapeNotes(gold && gold.rows15m)
       + gsFeedLegNote(gold) + goldMixedFeedBannerHtml(gold);
     var uniHtml = goldUniformPanelHtml(display, uniRows, 'SCALP', deskTape);
@@ -2767,6 +2788,7 @@ async function runScan(ui, scanSt){
     setProg(ui, null);
     if (gold.rows15m.length){
       publishState(display);
+      gsStampFeed(display, gold && gold.src && gold.src['15m']);   /* hg-v979 */
       publishScan(display, displayBest, lock.store.history, now, rejectedAll, armedAll, whySilent);
       var visionEnrich = gfn('hgChartVisionEnrichSetups');
       var visionRefresh = gfn('hgChartVisionRefreshGoldCards');

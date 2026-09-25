@@ -140,9 +140,32 @@
    zero would hide. test-null-formatting caught it. */
   function pct(x){ return (typeof x === 'number' && isFinite(x)) ? (x * 100).toFixed(1) + '%' : 'n/a'; }
 
-  function hgGoldFwdNote(tabId, mechanic){
+  /* hg-v979: the records this desk priced on another feed and is now
+     waiting to settle on it. Renders NOTHING unless a known mismatch is
+     counted -- an absent feed on either side is not a wait. */
+  function hgGoldFwdFeedHeldHtml(pools, feed){
+    try{
+      if (typeof feed !== 'string' || !feed || typeof W.hgFwdFeedHeld !== 'function') return '';
+      var h = W.hgFwdFeedHeld(pools, feed);
+      if (!h || !(h.held > 0)) return '';
+      var parts = [], k;
+      for (k in h.feeds) if (Object.prototype.hasOwnProperty.call(h.feeds, k)) parts.push(h.feeds[k] + ' on ' + k);
+      return '<div class="note" style="margin:6px 0;padding:6px 9px;border-left:3px solid #94A3B8;font-size:11px">'
+        + '<b>' + h.held + ' OPEN RECORD' + (h.held === 1 ? '' : 'S') + ' PRICED ON ANOTHER FEED</b> — '
+        + esc(parts.join(', ')) + '; this scan reads <b>' + esc(feed) + '</b>. '
+        + 'The ledger settles a record only on bars of the feed its levels were priced on '
+        + '(hg-v979): a stop narrower than the basis between two gold feeds is hit on the first bar '
+        + 'whatever the tape did. These wait for their own feed to return.</div>';
+    }catch(e){ return ''; }
+  }
+
+  function hgGoldFwdNote(tabId, mechanic, feed){
     var r = hgGoldFwdRead(tabId, mechanic);
-    if (!r) return '';
+    /* hg-v979: the wait line does not depend on a verdict -- a desk with
+       nothing settled yet can still have records waiting for their feed */
+    var heldHtml = '';
+    try{ heldHtml = hgGoldFwdFeedHeldHtml(hgGoldFwdPools(tabId), feed); }catch(eH){ heldHtml = ''; }
+    if (!r) return heldHtml;
     var s = r.stat, n = +s.samples;
     var head, body;
     if (r.verdict === 'losing'){
@@ -177,7 +200,8 @@
     }catch(eCal){ cal = ''; }
     return '<div class="note" style="margin:6px 0;padding:6px 9px;border-left:3px solid #94A3B8;font-size:11px">'
       + '<b>' + head + '</b> — ' + body
-      + ' <span style="opacity:.7">(pool: ' + esc(r.pools.join(', ')) + ')</span></div>' + cal;
+      + ' <span style="opacity:.7">(pool: ' + esc(r.pools.join(', ')) + ')</span></div>' + cal
+      + heldHtml;
   }
 
   W.HG_GOLD_FWD_MIN_JUDGE = FWD_MIN_JUDGE;
@@ -186,4 +210,5 @@
   W.hgGoldFwdVerdict = hgGoldFwdVerdict;
   W.hgGoldFwdRead = hgGoldFwdRead;
   W.hgGoldFwdNote = hgGoldFwdNote;
+  W.hgGoldFwdFeedHeldHtml = hgGoldFwdFeedHeldHtml;
 })(typeof window !== 'undefined' ? window : this);

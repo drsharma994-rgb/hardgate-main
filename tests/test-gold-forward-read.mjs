@@ -93,7 +93,9 @@ console.log('== the write/read split this pack closes ==');
   for (const id of ['super-gold','optigold','newgold','goldswing','goldscalp',
                     'goldultra','goldpro','goldpine','tauric']){
     const f = FILE[id] || (id + '.js');
-    ok(new RegExp("hgGoldFwdNote\\('" + id + "'\\)").test(S(f)),
+    /* hg-v979: matched on the call (tab id first), not its closing paren --
+       the desks now also hand the note the feed they read */
+    ok(new RegExp("hgGoldFwdNote\\('" + id + "'[,)]").test(S(f)),
        `${id} renders its own forward verdict, keyed to its own roster id`);
   }
 }

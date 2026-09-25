@@ -1582,7 +1582,7 @@
   }
 
   /* ---------------- forward log: record trade-ready setups, read measured R ---------------- */
-  function hgOg1ForwardRecord(runs){
+  function hgOg1ForwardRecord(runs, feed){
     var rec = gfn('hgFwdRecordScan'), out = { recorded: 0, tickets: 0 };
     if (!rec) return out;
     (runs || []).forEach(function(run){
@@ -1596,7 +1596,8 @@
         return !!(gi.tradeReady || (c.verdict && c.verdict.qualifies));
       }).map(function(c){
         var gi = c.gradeInfo || hgOg1Grade(c);
-        return { sym: 'XAUUSD', dir: c.dir, entry: c.entry, stop: c.stop, t1: c.t1, mechanic: c.sid + '-' + run.horizon, grade: gi.grade, ticket: !!(c.verdict && c.verdict.qualifies) };
+        return { sym: 'XAUUSD', dir: c.dir, entry: c.entry, stop: c.stop, t1: c.t1, mechanic: c.sid + '-' + run.horizon, grade: gi.grade, ticket: !!(c.verdict && c.verdict.qualifies),
+                 feed: (typeof feed === 'string' && feed) ? feed : undefined };   /* hg-v979 */
       });
       if (!list.length) return;
       out.tickets += list.filter(function(x){ return x.ticket; }).length;
@@ -1798,10 +1799,10 @@
       if (ui && ui.btn) ui.btn.disabled = true;
       var inp = await loadInputs(ui, setStat);
       setStat('scoring SWING (4H/1H) and SCALP (1H/15m) setups…');
-      try{ var res = gfn('hgFwdResolve'); if (res && inp.rows1h && inp.rows1h.length) res('XAUUSD', null, inp.rows1h); }catch(eR){}
+      try{ var res = gfn('hgFwdResolve'); if (res && inp.rows1h && inp.rows1h.length) res('XAUUSD', null, inp.rows1h, (typeof inp.feed === 'string' && inp.feed) ? inp.feed : undefined); }catch(eR){}
       var rSwing = hgOg1Engine(Object.assign({}, inp, { horizon: 'SWING' }));
       var rScalp = hgOg1Engine(Object.assign({}, inp, { horizon: 'SCALP' }));
-      try{ __st.lastFwd = hgOg1ForwardRecord([{ horizon: 'SWING', r: rSwing }, { horizon: 'SCALP', r: rScalp }]); }catch(eF){}
+      try{ __st.lastFwd = hgOg1ForwardRecord([{ horizon: 'SWING', r: rSwing }, { horizon: 'SCALP', r: rScalp }], inp.feed); }catch(eF){}
       var r = rSwing;
       __st.last = r; __st.lastScalp = rScalp; __st.hasRun = true;
       /* Pack 907: OMNIGOLD 1 reads three legs and moved its numbers on a
