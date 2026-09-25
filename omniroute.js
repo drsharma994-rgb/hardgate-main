@@ -7308,11 +7308,26 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       var tHit = tix ? fin(tix.hit) : NaN;
       var judgeN = (isFinite(tN) && tN >= FWD_MIN_JUDGE) ? tN : NaN;
       var judgeHit = isFinite(judgeN) ? tHit : NaN;
+      /* hg-v982: AND IF THOSE TICKETS KNOW WHETHER THE ORDER FILLED, JUDGE ON
+         THAT. Every order this desk records rests at the setup level
+         (hg-v424); its replay never fills on the signal bar and leaves 34.3%
+         of what it opens unfilled, and the tally above counted each of those
+         as if it had opened. The rule is hg-forward.js's (hgFwdJudgeSample),
+         the one OMNIGOLD's judge has read since the fill model shipped;
+         it prefers the fill-aware count only when it clears FWD_MIN_JUDGE on
+         its own, so a log of legacy records decides exactly as before. */
+      var judgeFill = false, judgeUnfilled = 0;
+      if (isFinite(judgeN)){
+        var wJ = (typeof window !== 'undefined') ? window : ((typeof globalThis !== 'undefined') ? globalThis : null);
+        var jS = (wJ && typeof wJ.hgFwdJudgeSample === 'function') ? wJ.hgFwdJudgeSample(tix, FWD_MIN_JUDGE) : null;
+        if (jS && jS.fillAware){ judgeN = jS.n; judgeHit = jS.hit; judgeFill = true; judgeUnfilled = jS.unfilled; }
+      }
 
       if (isFinite(judgeN) && isFinite(judgeHit)){
         var fz = (judgeHit - fBreak) / Math.sqrt(Math.max(1e-9, fBreak * (1 - fBreak) / judgeN));
         var fzTxt = ' [' + (fz >= 0 ? '+' : '') + fz.toFixed(2) + 'σ vs breakeven]';
-        var tixTxt = judgeN + ' settled TICKETS · ' + (judgeHit * 100).toFixed(0) + '% T1-first';
+        var tixTxt = judgeN + (judgeFill ? ' FILLED TICKETS' : ' settled TICKETS') + ' · ' + (judgeHit * 100).toFixed(0) + '% T1-first'
+                   + ((judgeFill && judgeUnfilled > 0) ? ' (' + judgeUnfilled + ' never filled, excluded)' : '');
         if (fz <= EDGE_VETO_Z){
           ed = false;
           edWhy = tixTxt + fzTxt + ' — the trades this ledger actually cleared have not paid'

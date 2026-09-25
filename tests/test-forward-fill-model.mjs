@@ -183,9 +183,11 @@ console.log('\n== the desk records the mark, and the gate prefers the filled cou
 {
   const og = fs.readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
   ok(/mark: \(function\(\)\{/.test(og), 'omnigold stamps a mark on every forward record');
-  ok(/judgeSrc\.fillSamples/.test(og), 'and measured-edge reads the fill-aware count');
-  ok(/fillN >= FWD_MIN_JUDGE/.test(og),
-     'preferring it only when it stands on its own, so a legacy log decides as before');
+  /* hg-v982: the rule moved to hg-forward.js (hgFwdJudgeSample), shared with OMNIROUTE */
+  ok(/hgFwdJudgeSample\(judgeSrc, FWD_MIN_JUDGE\)/.test(og), 'and measured-edge reads the fill-aware count');
+  const fwdSrc = fs.readFileSync(path.join(ROOT, 'hg-forward.js'), 'utf8');
+  ok(/if \(isFinite\(fn\) && fn >= floor && isFinite\(fh\)\)/.test(fwdSrc),
+     'preferring it only when it stands on its own, so a legacy log decides as before (the rule lives in hg-forward.js since hg-v982)');
   ok(/never filled, excluded/.test(og), 'and the card says how many were dropped');
 }
 
