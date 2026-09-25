@@ -2909,6 +2909,23 @@ W.goldscalpMountSection = function(el, opts){
     deskTab: 'STAR TRADER · GOLD SCALP'
   }, opts));
 };
+/* hg-v967: DELIBERATELY NOT EXPORTED ON WINDOW, and the reason matters because
+   the obvious fix was to export it.
+
+   hg-v965 added a 3-minute clock in index.html that read
+   window.goldscalpRefresh, which this file never set -- the function existed
+   only as the .refresh property of the HG_tabs entry below -- so every tick
+   resolved undefined and the refresh never ran once.
+
+   Exporting it fixes that and costs two things. It puts a function that STARTS
+   A NETWORK SCAN on the global object, reachable by anything; and
+   test-gold-render-integrity.mjs fuzzes every module-scope export of the gold
+   tabs precisely because this file keeps a small surface -- adding to it
+   weakens a guard to fix a caller.
+
+   So the HG_tabs registration stays the single route, and index.html's
+   hgGoldScalpRefreshFn RESOLVES through it. That is the mechanism the shell's
+   own sweep already uses. Do not 'helpfully' add the global here. */
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'goldscalp', label: 'GOLD SCALP', mount: mount, refresh: goldscalpRefresh });
 W.HG_warmups = W.HG_warmups || [];
