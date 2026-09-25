@@ -536,6 +536,7 @@ async function laneGoldScalp(gold, now){
   try{
     var scInp = { rows15m: gold.rows15m, rows1h: gold.rows1h, rows4h: gold.rows4h,
                   dailyCandles: (gold.rows1d && gold.rows1d.length) ? gold.rows1d : undefined,
+                  candleSource: gold.source || undefined,   /* hg-v973: the mint distrusts PAXG / XAUT volume only when told the feed */
                   now: nc.at, news: nc.snap };
     try{ var apS = gfn('hgGoldApplyLiveFeed'); if (apS && gold.live) apS(scInp, gold.live); }catch(eAp){}   /* hg-v971 */
     cands = setupsFn(scInp);
