@@ -357,10 +357,22 @@ function stContextVotes(contract, dir, ctx, ticker, rows4h, rows1h, rows15m){
     }
     if (typeof g.goldScalpSetups === 'function' && rows15m && rows15m.length >= 30){
       try{
-        var gs = g.goldScalpSetups({ rows15m: rows15m, newsState: ctx.newsState });
+        /* hg-v974: this call handed the mint `newsState`, a key it has never
+           read (its key is `news`), so the news gate failed open here on every
+           scan; and it handed 15m bars alone -- no 1h / 4h legs, no macro (the
+           lock ran unchecked), and the wall clock. The same mint input shape
+           the other borrowing desks use. The desk carries no feed label on
+           this path, so volume trust stays as it was (reported, not invented). */
+        var gsInp = { rows15m: rows15m, rows1h: rows1h || undefined, rows4h: rows4h || undefined,
+                      news: ctx.newsState || null,
+                      macro: ctx.goldMacro || ((typeof g.getGoldMacroCached === 'function') ? (g.getGoldMacroCached() || null) : null) };
+        try{
+          if (typeof g.hgGoldSignalBarMs === 'function'){ var gsT = g.hgGoldSignalBarMs(rows15m); if (isFinite(gsT) && gsT > 0) gsInp.now = gsT; }
+        }catch(eT){}
+        var gs = g.goldScalpSetups(gsInp);
         if (gs && gs.length){
           var top = gs[0];
-          if (top && top.dir === dir) votes.push({ src: 'GOLD SCALP', dir: dir, pts: 2, detail: top.kind || 'gold scalp' });
+          if (top && top.dir === dir) votes.push({ src: 'GOLD SCALP', dir: dir, pts: 2, detail: top.strategy || top.stratKey || top.kind || 'gold scalp' });
         }
       }catch(e){}
     }

@@ -13250,7 +13250,39 @@ terse status, and never launches a first-time scan on a global refresh.
     return apex + h;
   }
 
-  function hgOgRunGoldTabEngines(shared, scalpRows, swingRows){
+  /* hg-v974: the bridge into the GOLD SCALP / GOLD SWING mints. `shared` has
+     carried this desk's quote (bid / ask / spread / venue from the Delta
+     payload, hg-v969), its perp payload and its feed label since those packs
+     shipped, and the bridge copied NONE of them into the mint input -- so the
+     two borrowed mints ran here without the spread lock, the L2 book, the OI /
+     funding reads or the volume-trust rule, and on the wall clock. `feedLabel`
+     is the scan's own source (res.scalp.source), passed by both call sites. */
+  function hgOgBridgeFeedFromShared(shared){
+    var out = { quote: null, l2: null, perp: null, macro: null };
+    /* +null === 0, so isFinite(+null) is TRUE and a null spread would become a
+       zero-width quote -- the trap this codebase has hit nine times. A
+       missing value is NaN here, never zero. */
+    var fnum = function(v){ return (v === null || v === undefined || v === '') ? NaN : +v; };
+    try{
+      if (!shared || typeof shared !== 'object') return out;
+      var q = shared.quote;
+      if (q && isFinite(fnum(q.bid)) && isFinite(fnum(q.ask))){
+        out.quote = { bid: fnum(q.bid), ask: fnum(q.ask),
+                      spreadUsd: isFinite(fnum(q.spreadUsd)) ? fnum(q.spreadUsd) : (fnum(q.ask) - fnum(q.bid)),
+                      venue: (q.venue != null && q.venue !== '') ? String(q.venue) : (shared.spreadVenue || null) };
+      } else if (isFinite(fnum(shared.spreadUsd))){
+        out.quote = { spreadUsd: fnum(shared.spreadUsd), bid: fnum(shared.bid), ask: fnum(shared.ask), venue: shared.spreadVenue || null };
+      }
+      if (shared.l2) out.l2 = shared.l2;
+      else if (shared.perpNative){
+        var l2f = gfn('hgGoldL2FromPerp');
+        try{ out.l2 = l2f ? l2f(shared.perpNative, shared.spreadVenue || 'delta-xaut') : null; }catch(eL){ out.l2 = null; }
+      }
+      if (shared.perpNative && shared.perpNative.ok) out.perp = shared.perpNative;
+      return out;
+    }catch(e){ return out; }
+  }
+  function hgOgRunGoldTabEngines(shared, scalpRows, swingRows, feedLabel){
     var setupsFn = gfn('goldScalpSetups');
     var swingFn = gfn('goldSwingSetups');
     if (!setupsFn && !swingFn){
@@ -13287,6 +13319,24 @@ terse status, and never launches a first-time scan on a global refresh.
       };
       var gpsFn = gfn('goldProState');
       if (gpsFn){ try { inp.goldPro = gpsFn(); } catch (eGp){} }
+      /* hg-v974: the quote, book and payload this scan already holds, through
+         the ONE applier every borrowing desk uses (hg-v971); the daily bars
+         under the scalp mint's own key; the feed label so proxy volume is
+         distrusted here as it is on GOLD SCALP; the instant is each lane's
+         own signal bar, not the wall clock (hg-v952 / hg-v963). */
+      try{
+        var apB = gfn('hgGoldApplyLiveFeed');
+        if (apB) apB(inp, hgOgBridgeFeedFromShared(shared));
+      }catch(eApB){}
+      if (feedLabel && !inp.candleSource) inp.candleSource = String(feedLabel);
+      var barFnB = gfn('hgGoldSignalBarMs');
+      var inpSwing = inp;
+      try{
+        if (barFnB){
+          var tS = barFnB(m15); if (isFinite(tS) && tS > 0) inp.now = tS;
+          var tW = barFnB(swingRows); inpSwing = Object.assign({}, inp, { now: (isFinite(tW) && tW > 0) ? tW : inp.now });
+        }
+      }catch(eBar){ inpSwing = inp; }
       var scalpOut = { ranked: [], best: null, rejected: [] };
       if (setupsFn){
         var got = setupsFn(inp);
@@ -13297,7 +13347,7 @@ terse status, and never launches a first-time scan on a global refresh.
         scalpOut = rankFn ? rankFn(cands, ctx) : { ranked: cands, best: cands[0] || null, rejected: [] };
         if (got && got.rejected) scalpOut.rejected = (scalpOut.rejected || []).concat(got.rejected);
       }
-      var swingOut = swingFn ? swingFn(inp) : { ranked: [], best: null, rejected: [] };
+      var swingOut = swingFn ? swingFn(inpSwing) : { ranked: [], best: null, rejected: [] };
       hgOgApplyBridgeBestLevels(inp, scalpOut, swingOut);
       var anchor = fin(__og.spotAnchor);
       if (anchor > 0){
@@ -13429,7 +13479,7 @@ terse status, and never launches a first-time scan on a global refresh.
       hgOgInjectSection(hostRc, 'data-og-rolling', hgOgRollingConfidencePanelHtml(__og.rollingStats));
     } catch (eRoll) {}
     var bridgeP = bridgeIn ? Promise.resolve(bridgeIn)
-      : hgOgRunGoldTabEngines(shared, res.scalp.rows, res.swing.rows);
+      : hgOgRunGoldTabEngines(shared, res.scalp.rows, res.swing.rows, res.scalp.source);
     return bridgeP.then(function(bridge){
       __og.bridge = bridge;
       hgOgPaintGoldEngines(ui, bridge, deskTape);
@@ -15388,7 +15438,7 @@ terse status, and never launches a first-time scan on a global refresh.
         try {
           hgOgPaintGoldEngines(ui, { ok: false, why: 'loading GOLD SCALP / GOLD SWING engines…' }, deskTape);
         } catch (eGe0) {}
-        return hgOgRunGoldTabEngines(shared, res.scalp.rows, res.swing.rows).then(function(bridge){
+        return hgOgRunGoldTabEngines(shared, res.scalp.rows, res.swing.rows, res.scalp.source).then(function(bridge){
           __og.bridge = bridge;
           var engineScalp = !pickScalp ? hgOgPickGoldEngineForMp(bridge, HORIZONS.scalp.label, scalpTape) : null;
           var engineSwing = !pickSwing ? hgOgPickGoldEngineForMp(bridge, HORIZONS.swing.label, swingTape) : null;
@@ -16633,6 +16683,7 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgBuildScanCoverage = hgOgBuildScanCoverage;
     window.hgOgScanCoveragePanelHtml = hgOgScanCoveragePanelHtml;
     window.hgOgRunGoldTabEngines = hgOgRunGoldTabEngines;
+    window.hgOgBridgeFeedFromShared = hgOgBridgeFeedFromShared;   /* hg-v974 */
     window.hgOgGoldEngineGradeOk = hgOgGoldEngineGradeOk;
     window.hgOgApplyBridgeBestLevels = hgOgApplyBridgeBestLevels;
     window.hgOgBridgeSetupToPick = hgOgBridgeSetupToPick;
