@@ -2144,6 +2144,13 @@ async function runScan(ui, scanSt){
                 ctx.spreadVenue = q.venue || null;
               }
             }catch(eQ){ /* a quote that cannot be read is no quote */ }
+            /* hg-v970: the L2 book, from the same payload, through the one
+               reader -- the third quote global has never had a writer. */
+            try{
+              var lf = gfn('hgGoldL2FromPerp');
+              var bk = lf ? lf(j, 'delta-xaut') : null;
+              if (bk) ctx.l2Book = bk;
+            }catch(eL2){ /* a book that cannot be read is no book */ }
           }).catch(function(){}));
       }
       if (loadF){
@@ -2244,6 +2251,8 @@ async function runScan(ui, scanSt){
       if (W.__hgGoldTickBuffer) scalpBundle.tickBuffer = W.__hgGoldTickBuffer;
       if (W.__hgGoldL2Book) scalpBundle.l2OrderBook = W.__hgGoldL2Book;
     }
+    /* hg-v970: a named broker book on the global wins; the proxy book fills the seam only when nothing else has */
+    if (!scalpBundle.l2OrderBook && ctx.l2Book) scalpBundle.l2OrderBook = ctx.l2Book;
     if (gold && gold.rows1d && gold.rows1d.length) scalpBundle.dailyCandles = gold.rows1d;
     if (typeof W !== 'undefined' && W && isFinite(W.__hgGoldSpreadUsd)) scalpBundle.spreadUsd = W.__hgGoldSpreadUsd;
     if (typeof W !== 'undefined' && W && W.__hgGoldQuote){

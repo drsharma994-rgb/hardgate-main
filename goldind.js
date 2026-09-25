@@ -3773,6 +3773,12 @@ function goldScalpSetups(inp){
         hgGoldApplyPerpNative(c, D.__oiTrap, D.__fundExt);
       }catch(eFr){}
       var mv = __gsMicroVeto(c.dir, c.stratKey, D, bundleOpts);
+      if (mv && mv.advisory){
+        /* hg-v970: a read, not a verdict -- it lands on the card and nothing moves */
+        if (!Array.isArray(c.notes)) c.notes = [];
+        if (mv.note && c.notes.indexOf(mv.note) < 0) c.notes.push(mv.note);
+        mv = null;
+      }
       if (mv){
         if (mv.demote){
           c.demoted = true;
@@ -4939,6 +4945,7 @@ function __gsMicroVeto(dir, stratKey, D, opts){
   try{
     opts = opts || {};
     if (dir !== 'long' && dir !== 'short') return null;
+    var domNote = null;   /* hg-v970: a proxy-venue L2 read is reported, never a veto */
     if (opts.us10yCandles){
       var yg = validateYieldCorrelation(opts.us10yCandles, dir);
       if (yg && !yg.valid) return { demote: true, reason: yg.reason };
@@ -4952,12 +4959,13 @@ function __gsMicroVeto(dir, stratKey, D, opts){
     if (opts.l2OrderBook){
       var dom = validateDomLiquidity(dir, opts.l2OrderBook, opts.domDepth);
       if (dom && !dom.triggerValid) return { reason: dom.reason };
+      if (dom && dom.advisory && dom.reason) domNote = dom.reason;
     }
     if (stratKey === 'ob' && D.obRetest && D.obRetest.trigger && D.obRetest.direction === dir){
       var cvd = D.scalpEval && D.scalpEval.obCvdCheck;
       if (cvd && !cvd.triggerValid) return { reason: cvd.reason };
     }
-    return null;
+    return domNote ? { advisory: true, note: domNote } : null;
   }catch(e){ return null; }
 }
 
@@ -4966,6 +4974,7 @@ function __swMicroVeto(dir, stratKey, swingEval, opts){
   try{
     opts = opts || {};
     if (dir !== 'long' && dir !== 'short') return null;
+    var domNote = null;   /* hg-v970: see __gsMicroVeto */
     if (opts.us10yCandles){
       var yg = validateYieldCorrelation(opts.us10yCandles, dir);
       if (yg && !yg.valid) return { reason: yg.reason };
@@ -4979,13 +4988,14 @@ function __swMicroVeto(dir, stratKey, swingEval, opts){
     if (opts.l2OrderBook){
       var dom = validateDomLiquidity(dir, opts.l2OrderBook, opts.domDepth);
       if (dom && !dom.triggerValid) return { reason: dom.reason };
+      if (dom && dom.advisory && dom.reason) domNote = dom.reason;
     }
     if (stratKey === 'ob' && swingEval && swingEval.obSetup && swingEval.obSetup.trigger
         && swingEval.obSetup.direction === dir){
       var cvd2 = swingEval.obCvdCheck;
       if (cvd2 && !cvd2.triggerValid) return { reason: cvd2.reason };
     }
-    return null;
+    return domNote ? { advisory: true, note: domNote } : null;
   }catch(e){ return null; }
 }
 
@@ -6516,21 +6526,42 @@ function validateDomLiquidity(direction, l2OrderBook, depthTicks){
     var obi = calculateOrderBookImbalance(l2OrderBook, depthTicks);
     ok.obi = obi;
     var dir = String(direction || '').toLowerCase();
-    if (dir === 'long' && !obi.isBullishLiquidity){
+    var against = (dir === 'long' && !obi.isBullishLiquidity) || (dir === 'short' && !obi.isBearishLiquidity);
+    if (!against) return ok;
+    /* hg-v970: this rule vetoes unless the book skews >= 20% TOWARD the trade
+       -- a balanced book vetoes both sides. It was written for the broker
+       book, and it has never run because nothing wrote that book. The book
+       that IS on the wire is Delta XAUT's, a gold proxy, and handing a thin
+       proxy book to a rule this strict, unmeasured, would empty every gold
+       board (the hg-v966 trap). So the venue rule is the spread lock's
+       (hg-v968): a book naming a non-broker venue is REPORTED, never gated. A
+       book naming no venue behaves exactly as before. One rule, not two --
+       hgGoldSpreadVenueOk is the basis-venue test for both. */
+    var venue = (l2OrderBook && typeof l2OrderBook === 'object' && l2OrderBook.venue != null
+                 && l2OrderBook.venue !== '') ? String(l2OrderBook.venue) : null;
+    if (venue && !hgGoldSpreadVenueOk(venue)){
+      var pct = (Math.abs(obi.obiValue) * 100).toFixed(0);
+      var lean = obi.obiValue > 0 ? 'toward buyers' : (obi.obiValue < 0 ? 'toward sellers' : 'balanced');
+      return {
+        triggerValid: true, advisory: true, obi: obi, venue: venue,
+        reason: 'L2 READ — book ' + (lean === 'balanced' ? 'balanced' : pct + '% ' + lean)
+          + ' on ' + venue + ', a gold proxy rather than the broker book this rule is written for;'
+          + ' the DOM rule wants a 20% skew toward the trade and does not see one'
+          + ' — reported, not gated (hg-v919 measured what a cross-venue bar costs)'
+      };
+    }
+    if (dir === 'long'){
       return {
         triggerValid: false,
         reason: 'L2 VETO: Order book heavily skewed to sellers.',
         obi: obi
       };
     }
-    if (dir === 'short' && !obi.isBearishLiquidity){
-      return {
-        triggerValid: false,
-        reason: 'L2 VETO: Order book heavily skewed to buyers.',
-        obi: obi
-      };
-    }
-    return ok;
+    return {
+      triggerValid: false,
+      reason: 'L2 VETO: Order book heavily skewed to buyers.',
+      obi: obi
+    };
   }catch(e){ return ok; }
 }
 
@@ -6615,6 +6646,7 @@ function __wireDomAndRegime(ctx, out){
       var domDir = ctx.setupDirection || ctx.positionDirection;
       if (domDir){
         out.domCheck = validateDomLiquidity(domDir, ctx.l2OrderBook, ctx.domDepth);
+        if (out.domCheck && out.domCheck.advisory) out.domNote = out.domCheck.reason;   /* hg-v970 */
         if (out.domCheck && !out.domCheck.triggerValid){
           out.valid = false;
           out.vetoReason = out.vetoReason
@@ -8800,6 +8832,32 @@ function hgGoldQuoteFromPerp(perp, venue){
     var out = { spreadUsd: sp };
     if (isFinite(bid)) out.bid = bid;
     if (isFinite(ask)) out.ask = ask;
+    if (venue != null && venue !== '') out.venue = String(venue);
+    return out;
+  }catch(e){ return null; }
+}
+
+/* hg-v970 -- ONE PLACE THAT TURNS THE PERP PAYLOAD INTO AN L2 BOOK.
+
+   The third quote global (__hgGoldL2Book) has had zero writers since it
+   shipped, so the DOM rule below never ran on any desk. The book rides the
+   same Delta payload the quote does (hg-v968); this is the one reader, so the
+   desks cannot grow different ideas of what a book is (hg-v949). The VENUE
+   travels with it for the same reason it travels with the quote: XAUT on
+   Delta is a gold PROXY, and its imbalance is not the broker book the ticket
+   is written for. Returns null unless BOTH sides carry a readable best level. */
+function hgGoldL2FromPerp(perp, venue){
+  try{
+    if (!perp || typeof perp !== 'object') return null;
+    var b = perp.l2 || perp.book || null;
+    if (!b || typeof b !== 'object') return null;
+    var bids = Array.isArray(b.bids) ? b.bids : (Array.isArray(b.bid) ? b.bid : null);
+    var asks = Array.isArray(b.asks) ? b.asks : (Array.isArray(b.ask) ? b.ask : null);
+    if (!bids || !asks || !bids.length || !asks.length) return null;
+    var okLv = function(l){ return !!l && typeof l === 'object' && isFinite(gdFin(l.price)) && __l2LevelSize(l) > 0; };
+    if (!okLv(bids[0]) || !okLv(asks[0])) return null;
+    var out = { bids: bids, asks: asks };
+    if (isFinite(gdFin(b.at))) out.at = gdFin(b.at);
     if (venue != null && venue !== '') out.venue = String(venue);
     return out;
   }catch(e){ return null; }
@@ -17031,4 +17089,5 @@ W.HG_GOLD_SPREAD_MAX_USD = HG_GOLD_SPREAD_MAX_USD;
 W.HG_GOLD_SPREAD_BASIS_VENUE = HG_GOLD_SPREAD_BASIS_VENUE;
 W.hgGoldSpreadVenueOk = hgGoldSpreadVenueOk;
 W.hgGoldQuoteFromPerp = hgGoldQuoteFromPerp;
+W.hgGoldL2FromPerp = hgGoldL2FromPerp;
 })();

@@ -1776,9 +1776,11 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
                    venue: venue, sym: sym,
                    reason: 'macro tailwind against the daily bear stack — short setup suppressed (real-rate backdrop favors longs)' };
         }
-        var mvFn = gfn('__swMicroVeto');
+        var mvFn = gfn('__swMicroVeto'), mvNote = null;
         if (mvFn){
           var mv = mvFn(dir, key, swingEval, microOpts);
+          /* hg-v970: a proxy-venue L2 read is a note on the card, not a drop */
+          if (mv && mv.advisory){ mvNote = mv.note || null; mv = null; }
           if (mv){
             return { dropped: true, id: id, strategy: SW_NAME[key], stratKey: key, dir: dir,
                      venue: venue, sym: sym, reason: mv.reason || 'microstructure veto' };
@@ -1821,7 +1823,7 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
           atr: a4, anchor: anchor, stopFloorAtr: 1.5,
           zone: zone || { lo: entry - 0.25*a4, hi: entry + 0.25*a4 },
           why: why, invalidates: invalidates,
-          notes: notes.concat([lv.stopNote]),
+          notes: notes.concat([lv.stopNote]).concat(mvNote ? [mvNote] : []),
           venue: venue, sym: sym
         };
         /* hg-v700: hgGoldInstFilter + hgGoldSetupEdgeApply moved from here to
@@ -3006,6 +3008,13 @@ async function runScan(ui, scanSt){
                 ctx.spreadVenue = q.venue || null;
               }
             }catch(eQ){ /* a quote that cannot be read is no quote */ }
+            /* hg-v970: the L2 book, from the same payload, through the one
+               reader -- the third quote global has never had a writer. */
+            try{
+              var lf = gfn('hgGoldL2FromPerp');
+              var bk = lf ? lf(j, 'delta-xaut') : null;
+              if (bk) ctx.l2Book = bk;
+            }catch(eL2){ /* a book that cannot be read is no book */ }
           }).catch(function(){}));
       }
       if (loadF){
@@ -3049,6 +3058,8 @@ async function runScan(ui, scanSt){
     if (typeof W !== 'undefined' && W){
       if (W.__hgGoldTickBuffer) microOpts.tickBuffer = W.__hgGoldTickBuffer;
       if (W.__hgGoldL2Book) microOpts.l2OrderBook = W.__hgGoldL2Book;
+      /* hg-v970: a named broker book on the global wins; the proxy book fills the seam only when nothing else has */
+      if (!microOpts.l2OrderBook && ctx.l2Book) microOpts.l2OrderBook = ctx.l2Book;
       if (isFinite(W.__hgGoldDomDepth)) microOpts.domDepth = W.__hgGoldDomDepth;
       if (isFinite(W.__hgGoldSpreadUsd)) microOpts.spreadUsd = W.__hgGoldSpreadUsd;
       if (W.__hgGoldQuote){
