@@ -242,8 +242,13 @@ async function macroOnly(setR, klines){
 /* ================= Part 4: getGoldMacro shape + hints + Yahoo last resort ================= */
 console.log('\n== Part 4: getGoldMacro shape, realRateHint, Yahoo last resort ==');
 {
-  const SHAPE = ['dfii10Rows', 'dxy', 'dxyOfficial', 'goldPx', 'goldSilverRatio', 'realRateHint', 'realRateMeasured', 'realRateSource',
-    'realYield10Y', 'realYieldChange20Pct', 'realYieldTrend', 'silver', 'tnx', 'tnxChange20Pct', 'tnxSource', 'tnxTrend'];
+  /* hg-v966 added dxyRows / tnxRows: the DXY and 10-year SERIES that
+     goldind's hgGoldMacroLock documents an EMA50 read of and had never been
+     given. Both are nullable and null here, because these fixtures stub the
+     scalar legs only -- which is the point of listing them: the shape says the
+     supplier offers them even when a route cannot fill them. */
+  const SHAPE = ['dfii10Rows', 'dxy', 'dxyOfficial', 'dxyRows', 'goldPx', 'goldSilverRatio', 'realRateHint', 'realRateMeasured', 'realRateSource',
+    'realYield10Y', 'realYieldChange20Pct', 'realYieldTrend', 'silver', 'tnx', 'tnxChange20Pct', 'tnxRows', 'tnxSource', 'tnxTrend'];
 
   const m = await macroOnly(macroRoutes('falling', FALLING_YIELDS, 50), async () => synthRows(10, 4000));
   assert(Object.keys(m).sort().join('|') === SHAPE.join('|'), 'exact return shape keys: ' + SHAPE.join(', '));

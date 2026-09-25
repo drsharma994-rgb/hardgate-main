@@ -150,10 +150,21 @@ console.log('\n== macro conviction lock, news-gate, spread, MTF ==');
   const rows = bars(40, 2400, 3600, 3);
   const up = emaRows(80, 100, 0.15, 86400);
   const down = emaRows(80, 100, -0.15, 86400);
+  /* hg-v966: the rule in force is the 20-day trend band, not the EMA50 level
+     test -- see the note in tests/test-gold-inst-gates.mjs for why supplying
+     the series deliberately did NOT hand the verdict to EMA50. The native
+     ticket kill is asserted on BOTH reads, so neither claim is lost. */
+  const lockedBand = gate(W, rows, { kind: 'ORB', dir: 'long', level: 2400, why: 't' },
+    { sessionHard: true, nowMs: NY, macro: { dxy: { trend20: 'RISING' }, tnxTrend: 'RISING' } });
+  ok(lockedBand && lockedBand.pass === false && /CONVICTION LOCK/i.test(lockedBand.why),
+     'long + both DXY/TNX bullish on the rule in force kills the native ticket');
+
+  W.HG_GOLD_MACRO_RULE = 'ema50';
   const locked = gate(W, rows, { kind: 'ORB', dir: 'long', level: 2400, why: 't' },
     { sessionHard: true, nowMs: NY, dxyRows: up, tnxRows: up });
+  W.HG_GOLD_MACRO_RULE = undefined;
   ok(locked && locked.pass === false && /CONVICTION LOCK/i.test(locked.why),
-     'long + both DXY/TNX bullish kills the native ticket');
+     'and under the ema50 lever the series kills it too');
   const shortOk = gate(W, rows, { kind: 'ORB', dir: 'short', level: 2400, why: 't' },
     { sessionHard: true, nowMs: NY, dxyRows: up, tnxRows: up });
   ok(shortOk && shortOk.pass === true, 'short is not killed by a strong dollar/yield tape');

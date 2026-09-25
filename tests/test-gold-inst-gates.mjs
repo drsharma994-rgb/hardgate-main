@@ -85,13 +85,51 @@ console.log('\n== macro conviction lock: DXY+TNX above EMA50 kills gold longs ==
   const W = boot();
   const up = emaRows(80, 100, 0.15, 86400);
   const down = emaRows(80, 100, -0.15, 86400);
+  /* hg-v966 -- THIS EXPECTATION CHANGED DELIBERATELY, and the reason belongs
+     here rather than in a changelog.
+
+     This section asserted that supplying dxyRows / tnxRows locks a gold long by
+     EMA50. That was the file's INTENT and it was tested -- but getGoldMacro(),
+     the only macro supplier on every gold desk, returned neither field, so the
+     EMA50 read had never run on a live scan and the 20-day trend band was
+     silently the rule in force.
+
+     hg-v966 supplies those series. Had EMA50 stayed primary, merely fixing the
+     feed would have switched the gold-long kill on every desk from a change
+     band to a level test, unmeasured -- and a market is above its EMA50 far
+     more often than it is up 0.3% over twenty days. It is also the rule every
+     forward record, walk and edge verdict on these desks was generated under,
+     so switching it would put today's board out of step with all the recorded
+     evidence those desks are judged on.
+
+     So the band decides by default and the level test is computed and its
+     disagreement REPORTED. Both branches are asserted below; nothing is lost. */
+  const byBand = W.hgGoldMacroLock('long', { dxyRows: up, tnxRows: up });
+  ok(byBand.lock === false && byBand.unchecked === true,
+     'rows alone no longer lock: the rule in force is the trend band, and no band reading was supplied');
+  ok(byBand.altLock === true && byBand.altAgrees === false,
+     'but the EMA50 read IS taken, and its disagreement is reported (altLock ' + byBand.altLock + ')');
+
+  W.HG_GOLD_MACRO_RULE = 'ema50';
   const longLock = W.hgGoldMacroLock('long', { dxyRows: up, tnxRows: up });
+  W.HG_GOLD_MACRO_RULE = undefined;
   ok(longLock.lock === true && /CONVICTION LOCK/i.test(longLock.reason),
-     'long + both above 50 EMA → lock (' + longLock.reason + ')');
+     'and under the ema50 lever, long + both above 50 EMA → lock (' + longLock.reason + ')');
+
+  const bandLock = W.hgGoldMacroLock('long', { macro: { dxy: { trend20: 'RISING' }, tnxTrend: 'RISING' } });
+  ok(bandLock.lock === true && /CONVICTION LOCK/i.test(bandLock.reason),
+     'the rule in force still locks on its own terms (' + bandLock.reason + ')');
   const shortOk = W.hgGoldMacroLock('short', { dxyRows: up, tnxRows: up });
   ok(shortOk.lock === false, 'short is not killed by a strong dollar/yield tape');
+  /* the "only one leg bullish" claim is about the READ, so it is driven under
+     the lever that makes the rows decide -- otherwise it would pass for the
+     unrelated reason that rows are not the deciding input by default */
+  W.HG_GOLD_MACRO_RULE = 'ema50';
   const mixed = W.hgGoldMacroLock('long', { dxyRows: up, tnxRows: down });
+  W.HG_GOLD_MACRO_RULE = undefined;
   ok(mixed.lock === false, 'only one of DXY/TNX bullish does not lock');
+  const mixedBand = W.hgGoldMacroLock('long', { macro: { dxy: { trend20: 'RISING' }, tnxTrend: 'FALLING' } });
+  ok(mixedBand.lock === false, 'and the same holds for the rule in force');
   const missing = W.hgGoldMacroLock('long', {});
   ok(missing.lock === false && missing.unchecked === true, 'missing DXY/TNX fail-open');
 }

@@ -588,6 +588,71 @@ async function __yahooLastClose(symbol, range){
   }catch(e){ return null; }
 }
 
+/* hg-v966 -- THE SERIES THE GOLD MACRO LOCK DOCUMENTS AND NEVER RECEIVED.
+
+   hgGoldMacroLock offers two reads of "is the dollar bullish": an EMA50 LEVEL
+   test (hgGoldEma50Above) and a 20-day CHANGE band. Both call sites of the
+   first sit behind ctx.dxyRows / ctx.tnxRows, and getGoldMacro() -- the only
+   macro supplier on every gold desk -- returned NEITHER field. So the read
+   this repo documents in goldind.js, in AGENTS.md and on the card had never
+   run on a live scan, and the band was silently the rule in force.
+
+   These two functions supply the series. They are DELIBERATELY SEPARATE
+   fetches from the trend20 legs above: folding a longer window into those
+   would move change20Pct and therefore the rule that is actually deciding,
+   which is the one thing hg-v966 refuses to do. getDXY / getTNX are untouched.
+
+   Close-only by construction -- a DXY computed from FX rates per date has no
+   open, high or low, and fabricating them would be putting made-up numbers in
+   a feed. goldind's hgGoldEma50Above reads closes and only closes.
+
+   Every leg is individually nullable and this never throws: a missing series
+   simply leaves the EMA50 read unavailable, exactly as before. */
+async function getDXYRows(days){
+  try{
+    const n = (isFinite(+days) && +days > 0) ? Math.floor(+days) : 270;
+    const hit = __macroCacheGet('dxyRows', DXY_CACHE_MS); if (hit !== undefined) return hit;
+    const SYMS = 'EUR,JPY,GBP,CAD,SEK,CHF';
+    const to = new Date();
+    if (isNaN(to)) return null;
+    const toIso = to.toISOString().slice(0, 10);
+    const fromIso = new Date(to.getTime() - n * 86400000).toISOString().slice(0, 10);
+    const range = await __macroFetchJson(FRANKFURTER_API + '/v1/' + fromIso + '..' + toIso +
+                                         '?base=USD&symbols=' + SYMS);
+    if (!range || !range.rates) return null;
+    const dates = Object.keys(range.rates).sort();
+    const rows = [];
+    for (let i = 0; i < dates.length; i++){
+      const v = computeDXYfromRates(range.rates[dates[i]]);
+      if (v === null || !isFinite(v)) continue;
+      const t = Date.parse(dates[i] + 'T00:00:00Z');
+      if (!isFinite(t)) continue;
+      rows.push({ t: Math.floor(t / 1000), c: v });
+    }
+    return __macroCachePut('dxyRows', rows.length ? rows : null);
+  }catch(e){ return null; }
+}
+
+async function getTNXRows(range){
+  try{
+    const hit = __macroCacheGet('tnxRows', DXY_CACHE_MS); if (hit !== undefined) return hit;
+    const rows = await __yahooLastClose('^TNX', range || '1y');
+    if (!rows || !rows.length) return __macroCachePut('tnxRows', null);
+    /* ^TNX quotes the yield x10 on some feeds -- the same normalisation the
+       scalar leg above applies, kept identical so the two cannot disagree
+       about what a 10-year yield is. A monotone scale does not move an
+       above/below-EMA50 test, but a series that disagrees with its own scalar
+       is a trap for the next reader. */
+    const out = [];
+    for (let i = 0; i < rows.length; i++){
+      const c = +rows[i].c;
+      if (!isFinite(c)) continue;
+      out.push({ t: rows[i].t, c: (c > 20) ? c / 10 : c });
+    }
+    return __macroCachePut('tnxRows', out.length ? out : null);
+  }catch(e){ return null; }
+}
+
 /* Macro dashboard for gold. Every leg is individually nullable. Never throws.
    Legs: DXY (Frankfurter) · US10Y (Treasury CSV, Yahoo ^TNX via /api/proxy as
    last resort) · silver (gold-api.com XAG, Yahoo SI=F as last resort) ·
@@ -693,8 +758,23 @@ async function getGoldMacro(){
       }
     }catch(eRR){ realRateMeasured = null; }
 
+    /* hg-v966: the series for the EMA50 read. Fetched in parallel and fully
+       fail-open -- a null here restores exactly the pre-hg-v966 situation, in
+       which the level test simply cannot be taken. */
+    let dxyRows = null, tnxRows = null;
+    try{
+      const pair = await Promise.all([
+        getDXYRows(270).catch(function(){ return null; }),
+        getTNXRows('1y').catch(function(){ return null; })
+      ]);
+      dxyRows = pair[0] || null;
+      tnxRows = pair[1] || null;
+    }catch(eRows){ dxyRows = null; tnxRows = null; }
+
     return __macroCachePut('macro', {
       dxy: dxy,
+      dxyRows: dxyRows,
+      tnxRows: tnxRows,
       dxyOfficial: dxyOfficial,
       tnx: tnx,
       tnxTrend: tnxTrend,
@@ -712,7 +792,8 @@ async function getGoldMacro(){
       dfii10Rows: dfii10Rows
     });
   }catch(e){
-    return { dxy: null, dxyOfficial: null, tnx: null, tnxTrend: null, tnxChange20Pct: null,
+    return { dxy: null, dxyRows: null, tnxRows: null,
+             dxyOfficial: null, tnx: null, tnxTrend: null, tnxChange20Pct: null,
              tnxSource: null, realYield10Y: null, realYieldTrend: null, realYieldChange20Pct: null,
              silver: null, goldPx: null, goldSilverRatio: null, realRateHint: 'NEUTRAL',
              realRateMeasured: null, realRateSource: 'hint' };

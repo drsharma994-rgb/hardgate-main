@@ -274,6 +274,20 @@ function __rows(rows){
   return out.length ? out : null;
 }
 function __closes(rows){ return rows.map(function(r){ return r.c; }); }
+/* hg-v966: __rows() for series that legitimately carry only a close -- a macro
+   index computed per date, not a traded candle. Deliberately SEPARATE from
+   __rows rather than a loosening of it: every candle consumer still gets the
+   strict o/h/l/c check, and only a caller that reads closes exclusively may ask
+   for this one. */
+function __rowsCloseOnly(rows){
+  if (!Array.isArray(rows) || !rows.length) return null;
+  var out = [];
+  for (var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if (r && isFinite(__fin(r.c))) out.push(r);
+  }
+  return out.length ? out : null;
+}
 function __last(a){ return (a && a.length) ? a[a.length - 1] : NaN; }
 function __toMs(d){
   try{
@@ -8787,7 +8801,22 @@ function hgGoldMtfMatrix(inp){
 
 function hgGoldEma50Above(rows){
   try{
-    rows = __rows(rows);
+    /* hg-v966: CLOSE-ONLY SERIES ARE VALID HERE, and refusing them is why this
+       read could not have worked even once the feed was supplied. __rowOk
+       demands finite o/h/l/c and drops every row without them -- correct for a
+       candle, wrong for a macro index. The DXY series this is meant to judge is
+       COMPUTED from FX rates per date, so it has a close and nothing else, and
+       __rows() would have handed back null on a perfectly good 180-point
+       series. This function consumes closes and only closes (see __closes just
+       below), so a close-only series is not a degraded input to it.
+
+       Found by driving the real function on a real close-only series rather
+       than assuming the supply fix was enough -- naively feeding the rows would
+       have left this returning null and the read still dead, while the pack
+       claimed it was live. */
+    var norm = __rows(rows);
+    if (!norm || norm.length < 52) norm = __rowsCloseOnly(rows);
+    rows = norm;
     if (!rows || rows.length < 52) return null;
     var closes = __closes(rows);
     var e = _ema(closes, 50);
@@ -8969,37 +8998,177 @@ function hgGoldImpulseVolIndex(rows, disp){
   }catch(e){ return disp && disp.index; }
 }
 
+/* hg-v966 -- TWO DIFFERENT RULES LIVED HERE AND NOTHING SAID WHICH ONE RAN.
+
+   This function offers two tests of "is the dollar / are yields bullish", and
+   they are NOT a strict and a loose version of one rule:
+
+     * hgGoldEma50Above is a LEVEL test -- last close above its own EMA50.
+     * the trend20 fallback is a 20-day CHANGE band -- DXY above +0.3%, TNX
+       above +2% (macro.js getDXY / getTNX).
+
+   They disagree in BOTH directions. A market sitting well above its EMA50 but
+   flat over twenty days is bullish to the first and FLAT to the second, so the
+   first locks a gold long and the second does not; one below its EMA50 while
+   rising 1% over twenty days is the reverse. Told only "DXY+TNX bullish", a
+   reader has not been told the rule.
+
+   AND THE EMA50 HALF HAD NEVER RUN ON A LIVE SCAN. Its two call sites are both
+   behind ctx.dxyRows / ctx.tnxRows, and getGoldMacro() -- the only macro
+   supplier on every gold desk -- returned neither field, so every live verdict
+   came from the fallback while this file, AGENTS.md and the card all named
+   EMA50. hg-v966 supplies the rows, so the documented read is computed.
+
+   THE VERDICT IS DELIBERATELY STILL THE RULE IN FORCE. Letting EMA50 decide
+   the moment the feed arrives would change how often a gold long is killed --
+   a market is above its EMA50 far more often than it is up 0.3% over twenty
+   days -- and nothing in this environment measures which rule is better (403
+   CONNECT on every route, and no DXY or TNX series is committed). Choosing on
+   that basis is the loosening hg-v920 refused three times and hg-v922 and
+   hg-v944 twice more. So both legs are computed, the rule in force decides,
+   and the DISAGREEMENT IS REPORTED so a machine that can fetch has the
+   measurement this one cannot make. HG_GOLD_MACRO_RULE is the one lever.
+
+   Under the default rule the band decides ALONE -- supplying the feed changes
+   no verdict, proved differentially against the replaced function on the full
+   cross-product of inputs a live desk can produce. Under the ema50 lever the
+   level test is preferred and the band is the fallback when the series cannot
+   be read, which the old chain got wrong: it branched on the rows EXISTING
+   rather than on a verdict having been reached, so a corrupt feed refused a
+   question the other feed could still answer. */
+var HG_GOLD_MACRO_RULE = 'trend20';
+
+function hgGoldMacroRule(){
+  try{
+    var W2 = (typeof window !== 'undefined') ? window : globalThis;
+    var v = W2 && W2.HG_GOLD_MACRO_RULE;
+    return (v === 'ema50' || v === 'trend20') ? v : HG_GOLD_MACRO_RULE;
+  }catch(e){ return HG_GOLD_MACRO_RULE; }
+}
+
+function hgGoldMacroViaLabel(via){
+  return via === 'ema50' ? 'EMA50 level'
+       : via === 'trend20' ? '20-day trend band'
+       : 'no read';
+}
+
+/* one leg, both reads. Returns the verdict under the rule in force, what the
+   other rule said, and which read produced each -- null where a read could not
+   be made at all, never a guessed false (the +null === 0 trap this codebase
+   has hit repeatedly). */
+function hgGoldMacroLeg(rows, trend){
+  var out = { bull: null, via: 'none', ema50: null, trend20: null, alt: null, agree: null };
+  try{
+    if (rows && rows.length >= 52) out.ema50 = hgGoldEma50Above(rows);
+    if (trend === 'RISING') out.trend20 = true;
+    else if (trend === 'FALLING') out.trend20 = false;
+    var rule = hgGoldMacroRule();
+    if (rule === 'ema50'){
+      /* the LEVER, off by default. Prefer the level test, fall back to the band
+         when the series cannot be read -- a feed arriving corrupt is not a
+         reason to refuse a question the other feed can still answer. */
+      if (out.ema50 !== null){ out.bull = out.ema50; out.via = 'ema50'; }
+      else if (out.trend20 !== null){ out.bull = out.trend20; out.via = 'trend20'; }
+      out.alt = out.trend20;
+    } else {
+      /* THE RULE IN FORCE DECIDES ALONE, and there is deliberately NO
+         fall-through to EMA50 here. The first cut of this function fell
+         through whenever the band read FLAT, and that is not a gap in the
+         reading -- FLAT means NOT RISING, which is an answer. Falling through
+         would have let merely SUPPLYING the feed start locking gold longs the
+         desk does not lock today, which is exactly the unmeasured change this
+         pack exists to refuse. Driving it on a constructed series caught it. */
+      if (out.trend20 !== null){ out.bull = out.trend20; out.via = 'trend20'; }
+      out.alt = out.ema50;
+    }
+    if (out.ema50 !== null && out.trend20 !== null) out.agree = (out.ema50 === out.trend20);
+    return out;
+  }catch(e){ return out; }
+}
+
 function hgGoldMacroLock(dir, ctx){
-  var out = { lock: false, reason: '', dxyBull: null, tnxBull: null, unchecked: false };
+  var out = { lock: false, reason: '', dxyBull: null, tnxBull: null,
+              dxyVia: 'none', tnxVia: 'none', rule: 'trend20',
+              dxyLeg: null, tnxLeg: null, altLock: null, altAgrees: null,
+              unchecked: false };
   try{
     if (dir !== 'long') return out;
     ctx = ctx || {};
-    var dxyBull = null, tnxBull = null;
-    if (ctx.dxyRows && ctx.dxyRows.length >= 52) dxyBull = hgGoldEma50Above(ctx.dxyRows);
-    else if (ctx.macro && ctx.macro.dxy && ctx.macro.dxy.trend20 === 'RISING') dxyBull = true;
-    else if (ctx.macro && ctx.macro.dxy && ctx.macro.dxy.trend20 === 'FALLING') dxyBull = false;
-    else if (ctx.macro && ctx.macro.trend20 === 'RISING') dxyBull = true;
-    else if (ctx.macro && ctx.macro.trend20 === 'FALLING') dxyBull = false;
+    out.rule = hgGoldMacroRule();
 
-    if (ctx.tnxRows && ctx.tnxRows.length >= 52) tnxBull = hgGoldEma50Above(ctx.tnxRows);
-    else if (ctx.macro && ctx.macro.tnxTrend === 'RISING') tnxBull = true;
-    else if (ctx.macro && ctx.macro.tnxTrend === 'FALLING') tnxBull = false;
+    /* the DXY trend read keeps its original precedence exactly: macro.dxy.trend20
+       first, then a flat macro.trend20 -- and FLAT falls through to the second,
+       which an || chain would have swallowed */
+    var md = ctx.macro || null;
+    var dxT = (md && md.dxy && (md.dxy.trend20 === 'RISING' || md.dxy.trend20 === 'FALLING'))
+      ? md.dxy.trend20
+      : ((md && (md.trend20 === 'RISING' || md.trend20 === 'FALLING')) ? md.trend20 : null);
 
-    out.dxyBull = dxyBull;
-    out.tnxBull = tnxBull;
-    if (dxyBull == null && tnxBull == null){
+    var dxy = hgGoldMacroLeg(ctx.dxyRows || (md && md.dxyRows), dxT);
+    var tnx = hgGoldMacroLeg(ctx.tnxRows || (md && md.tnxRows),
+                             (md && md.tnxTrend) || null);
+
+    out.dxyBull = dxy.bull; out.dxyVia = dxy.via; out.dxyLeg = dxy;
+    out.tnxBull = tnx.bull; out.tnxVia = tnx.via; out.tnxLeg = tnx;
+
+    /* What the OTHER rule would have said, computed BEFORE the unchecked
+       return. The first cut put this after it, so the measurement was thrown
+       away in exactly the case that matters most -- the band silent while the
+       level test has a clear answer, which is where the two rules are furthest
+       apart. Reported, never acted on: this is the measurement, not a second
+       verdict. */
+    var lockNow = (dxy.bull === true && tnx.bull === true);
+    if (dxy.alt !== null && tnx.alt !== null){
+      out.altLock = (dxy.alt === true && tnx.alt === true);
+      out.altAgrees = (out.altLock === lockNow);
+    }
+
+    if (dxy.bull == null && tnx.bull == null){
       out.unchecked = true;
       return out;
     }
-    if (dxyBull === true && tnxBull === true){
+    if (lockNow){
       out.lock = true;
-      out.reason = 'CONVICTION LOCK — DXY+TNX bullish vs gold long';
+      out.reason = 'CONVICTION LOCK — DXY+TNX bullish vs gold long'
+        + ' (DXY by ' + hgGoldMacroViaLabel(dxy.via)
+        + ', TNX by ' + hgGoldMacroViaLabel(tnx.via) + ')';
     }
     return out;
   }catch(e){
     out.unchecked = true;
     return out;
   }
+}
+
+/* hg-v966: cand.macroLock was WRITTEN AND READ BY NOTHING -- the ornamental
+   field hg-v955 found in the forward ledger, here in the gold mint. This is the
+   reader: one line naming which read decided, and saying so when the other rule
+   would have answered differently. Renders nothing without a verdict. */
+function hgGoldMacroLockNote(m){
+  try{
+    if (!m || typeof m !== 'object') return '';
+    if (m.unchecked === true)
+      return 'MACRO UNCHECKED — neither the dollar nor the 10-year could be read, '
+        + 'so no gold-long lock was asked for. Missing feeds fail open.';
+    /* == null, not === null: an object carrying NO verdict has these fields
+       undefined rather than null, and a strict check let it through to render
+       a MACRO OK line about reads that were never made. Caught by handing the
+       note a bare {}. */
+    if (m.dxyBull == null && m.tnxBull == null) return '';
+    var head = m.lock
+      ? 'MACRO LOCK — the dollar and the 10-year are both bullish against a gold long'
+      : 'MACRO OK — the dollar and the 10-year are not both bullish against a gold long';
+    var reads = ' Read by DXY ' + hgGoldMacroViaLabel(m.dxyVia)
+      + ' and TNX ' + hgGoldMacroViaLabel(m.tnxVia) + '.';
+    var alt = '';
+    if (m.altAgrees === false){
+      alt = ' The other rule in this file disagrees: on the same feeds it would '
+        + (m.altLock ? 'LOCK' : 'not lock')
+        + '. An EMA50 level test and a 20-day change band are different questions, '
+        + 'not a strict and a loose one, and which is better is NOT measured here.';
+    }
+    return head + '.' + reads + alt;
+  }catch(e){ return ''; }
 }
 
 /* THIS TABLE IS IN UTC ON PURPOSE, AND IT DRIFTS. Measured against the same
@@ -16554,7 +16723,15 @@ W.hgGoldDisplacementBar = hgGoldDisplacementBar;
 W.hgGoldIfvg = hgGoldIfvg;
 W.hgGoldSweepConfirmed = hgGoldSweepConfirmed;
 W.hgGoldObVolumeOk = hgGoldObVolumeOk;
+/* hg-v966: exported because it is the READ this desk documents, and it was
+   unreachable from outside the file -- part of why nobody noticed it had never
+   run on a live scan. */
+W.hgGoldEma50Above = hgGoldEma50Above;
 W.hgGoldMacroLock = hgGoldMacroLock;
+W.hgGoldMacroLeg = hgGoldMacroLeg;
+W.hgGoldMacroRule = hgGoldMacroRule;
+W.hgGoldMacroViaLabel = hgGoldMacroViaLabel;
+W.hgGoldMacroLockNote = hgGoldMacroLockNote;
 W.hgGoldSessionGate = hgGoldSessionGate;
 W.hgGoldInstFilter = hgGoldInstFilter;
 W.hgGoldAtrVolPercentile = hgGoldAtrVolPercentile;
