@@ -509,6 +509,9 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
              here -- the third place the same defect was found in one pass. */
           return { sym: 'XAUUSD', dir: c.dir, entry: +c.entry, stop: +c.stop, t1: +c.t1,
                    goldShut: c.goldShut,
+                   /* hg-v978: the bar this candidate was judged on (hg-v977),
+                      so the ledger dates the record on it, not on the clock */
+                   signalT: c.signalT,
                    mechanic: String(c.stratKey || c.strategy || 'UNKNOWN').toUpperCase().slice(0, 28),
                    ticket: (c.grade === 'A' || c.grade === 'clean' || !!c.locked) };
         }), { horizonBars: 96 });   /* 96 x 15m = the same 24 hours as 24 x 1h */

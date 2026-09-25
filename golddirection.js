@@ -1442,12 +1442,17 @@ function recordForward(scalpSel, swingSel, gold){
        gains is the field a later measurement needs to separate the
        population. Fails OPEN. */
     var gdWk = gdWeekendFull(gdSignalSec(gold));
+    /* hg-v978: the bar this desk read -- its own 1h signal bar (hg-v954), the
+       same instant the weekend mark above is judged on. Without it the ledger
+       dated every record on the floor of the scan clock. */
+    var gdBarSec = gdSignalSec(gold);
     W.hgFwdRecordScan('GOLDDIRECTION', '1h', picks.map(function(c){
       /* mechanic = source desk + stratKey, so the ledger judges each desk's
          crowned exports separately — fwdMechName is the ONE normalization,
          shared with the proven-set live-paid match (hg-v702) */
       var row = { sym: 'XAUUSD', dir: c.dir, entry: +c.entry, stop: +c.stop, t1: +c.t1,
                mechanic: fwdMechName(c), ticket: true };
+      if (gdBarSec) row.barT = gdBarSec;   /* hg-v978 */
       if (gdWk){
         row.goldShut = !!gdWk.inWeekend;
         if (gdWk.inWeekend) row.goldShutWhy = gdWk.why;

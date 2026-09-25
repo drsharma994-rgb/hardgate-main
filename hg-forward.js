@@ -1567,6 +1567,15 @@ localStorage. Never throws.
            in the future — a future bar is not a bar anything was read on */
         function barOf(c){
           var v = +(c && c.barT);
+          /* hg-v978: a candidate carrying the instant its mint judged it on
+             (signalT, ms, hg-v977) has said which bar it read. Read when no
+             barT was given; absent both, the floor-of-now behaviour exactly.
+             Seven gold desks recorded on the floor of now for the whole life
+             of this ledger, with every consequence the note above names. */
+          if (!(isFinite(v) && v > 0)){
+            var st = (c && typeof c.signalT === 'number' && isFinite(c.signalT) && c.signalT > 0) ? c.signalT : NaN;
+            if (isFinite(st)) v = (st > 1e12) ? st / 1000 : st;
+          }
           if (!isFinite(v) || v <= 0) return barT;
           var f = Math.floor(v / sec) * sec;
           return (f > barT) ? barT : f;

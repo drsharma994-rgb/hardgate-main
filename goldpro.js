@@ -124,6 +124,20 @@ function gpProWeekendVerdict(rows){
   }catch(e){ return null; }
 }
 
+/* hg-v978: the bar this desk composed its plan on -- the last closed bar of
+   the series in hand (hg-v950) -- in seconds for the forward ledger, which
+   dated every GOLD PRO record on the floor of the scan clock without it.
+   Null when unreadable: the ledger then keeps its own behaviour. */
+function gpProBarSec(rows){
+  try{
+    if (!rows || !rows.length) return null;
+    var w = (typeof window !== 'undefined') ? window : globalThis;
+    var barFn = w.hgGoldSignalBarMs;
+    var ms = (typeof barFn === 'function') ? barFn(rows) : NaN;
+    return (isFinite(+ms) && +ms > 0) ? Math.floor(+ms / 1000) : null;
+  }catch(e){ return null; }
+}
+
 /* hg-v964 -- THE GOLD NEWS GATE ON THIS DESK, AT THE SAME BAR.
 
    hg-v963 gave the gate a shared route and its own reporter then named this
@@ -879,8 +893,10 @@ async function runGoldPro(ui){
            is the claim that it was tradeable. */
         var gpNewsLock = !!(lvPlan && lvPlan.newsLock && lvPlan.newsLock.locked === true);
         if (gpNewsLock) gpAligned = false;
+        var gpBarSec = gpProBarSec(lvRows);   /* hg-v978 */
         W.hgFwdRecordScan('GOLDPRO', '4h', [{
           sym: 'XAUUSD', dir: lvPlan.dir, entry: +lvPlan.entry, stop: +lvPlan.stop, t1: +lvPlan.t1,
+          barT: gpBarSec || undefined,
           mechanic: gpNewsLock ? 'GP-NEWS-LOCKED'
                                 : (gpAligned ? 'GP-COMPOSITE' : 'GP-ATR-FALLBACK'),
           ticket: gpAligned
