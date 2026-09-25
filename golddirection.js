@@ -500,9 +500,35 @@ function heldLine(src, horizon, strategy, dir, reason){
            dir: dir || null, reason: reason || 'held back by its own desk' };
 }
 
+/* hg-v963 -- the gold news gate, read once and keyed PER LANE.
+
+   Both lanes here handed the gated mint a literal `news: null`, and
+   hgGoldNewsGate returns { lock:false, unchecked:true } on null -- so the
+   CPI / NFP / FOMC lock (-30/+15 min) was FAIL-OPEN BY CONSTRUCTION on every
+   scan of this desk. The snapshot is a global (window.hgNewsState) that SUPER
+   GOLD already reads.
+
+   The instant is each lane's OWN signal bar, not the wall clock `now`: the
+   scalp lane reads 15m and the swing lane 4h, so one shared instant would
+   mislabel one of them (the hg-v950 per-shape rule). Falls back to `now` when
+   the series carries no readable instant; the gate fails open with no
+   snapshot, which is exactly today's behaviour when there is genuinely no
+   news to read. */
+function gdNewsCtx(rows, now){
+  var out = { snap: null, at: now };
+  try{
+    var snapFn = gfn('hgGoldNewsSnapshot');
+    if (snapFn) out.snap = snapFn();
+    var barFn = gfn('hgGoldSignalBarMs');
+    if (barFn){ var t = barFn(rows); if (isFinite(t) && t > 0) out.at = t; }
+  }catch(e){ out.snap = null; }
+  return out;
+}
+
 /* ---------------- engine lanes (each feature-checked + catch-isolated) ---------------- */
 async function laneGoldScalp(gold, now){
   var out = { cands: [], held: [], dark: null };
+  var nc = gdNewsCtx(gold && gold.rows15m, now);
   var setupsFn = gfn('goldScalpSetups');
   if (!setupsFn){ out.dark = 'GOLD SCALP engine dark — goldScalpSetups (goldind.js) not loaded'; return out; }
   if (!gold.rows15m.length){ out.held.push(heldLine('GOLD SCALP', 'SCALP', null, null, 'no 15m bars from any feed — lane skipped')); return out; }
@@ -510,7 +536,7 @@ async function laneGoldScalp(gold, now){
   try{
     cands = setupsFn({ rows15m: gold.rows15m, rows1h: gold.rows1h, rows4h: gold.rows4h,
                        dailyCandles: (gold.rows1d && gold.rows1d.length) ? gold.rows1d : undefined,
-                       now: now, news: null });
+                       now: nc.at, news: nc.snap });
   }catch(e){ out.held.push(heldLine('GOLD SCALP', 'SCALP', null, null, 'detector threw: ' + ((e && e.message) || e))); return out; }
   if (!Array.isArray(cands)) return out;
   var i, rj = cands.rejected || [];
@@ -524,7 +550,7 @@ async function laneGoldScalp(gold, now){
   if (rankFn){
     /* hg-v700: the confluence scorer must be FED — rows-free it stamps
        CONF UNCHECKED and cannot verdict. */
-    var ctx = { now: now, news: null, style: 'goldscalp',
+    var ctx = { now: nc.at, news: nc.snap, style: 'goldscalp',
                 rows15m: gold.rows15m, rows1h: gold.rows1h, rows4h: gold.rows4h };
     try{
       var seasonFn = gfn('goldSeason');
@@ -573,11 +599,12 @@ async function laneGoldScalp(gold, now){
 
 function laneGoldSwing(gold, now){
   var out = { cands: [], held: [], dark: null };
+  var nw = gdNewsCtx(gold && gold.rows4h, now);
   var fn = gfn('goldSwingSetups');
   if (!fn){ out.dark = 'GOLD SWING engine dark — goldSwingSetups (goldswing.js) not loaded'; return out; }
   if (!gold.rows4h.length){ out.held.push(heldLine('GOLD SWING', 'SWING', null, null, 'no 4h bars from any feed — lane skipped')); return out; }
   var rk = null;
-  try{ rk = fn({ rows4h: gold.rows4h, rows1d: gold.rows1d, now: now, news: null }); }
+  try{ rk = fn({ rows4h: gold.rows4h, rows1d: gold.rows1d, now: nw.at, news: nw.snap }); }
   catch(e){ out.held.push(heldLine('GOLD SWING', 'SWING', null, null, 'engine threw: ' + ((e && e.message) || e))); return out; }
   if (!rk || !Array.isArray(rk.ranked)) return out;
   var i, rr = rk.rejected || [];

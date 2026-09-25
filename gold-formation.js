@@ -680,6 +680,83 @@
      FAILS OPEN at every seam: no atMs, an unreadable atMs, or indicators2.js
      absent and the verdict is null -- the setup stands exactly as before. A
      calendar this desk cannot read is not a reason to withhold a setup. */
+  /* hg-v963 -- THE GOLD NEWS GATE, AS A SHARED ROUTE KEYED ON THE SIGNAL BAR.
+
+     `hgGoldNewsGate` (goldind.js) has locked new gold minting 30 min before
+     and 15 min after CPI / NFP / FOMC / GDP since hg-v554, and it works:
+     driven on a real snapshot it locks at -10 min and +10 min around a CPI
+     instant and releases by +3h. It is reached inside hgGoldInstFilter, which
+     reads `ctx.news` and `ctx.nowMs`.
+
+     THE GATE IS NOT MISSING ON THE OTHER DESKS -- IT IS DEFEATED, three
+     different ways, and the distinction matters because two of them are one
+     literal each:
+
+       1. `news: null` HARDCODED. GOLD ULTRA (2 sites) and GOLD DIRECTION
+          (3 sites) call the gated mint and hand it a literal null. The gate
+          then returns { lock:false, unchecked:true } -- FAIL-OPEN BY
+          CONSTRUCTION, every scan, forever. Proved by driving it. And the
+          snapshot they needed is a global their sibling SUPER GOLD already
+          reads (`window.hgNewsState()`), so nothing was unavailable.
+       2. NO news read at all -- OPTI GOLD, GOLD PRO, NEW GOLD, 80PERCENT,
+          the same four raw-bar minters hg-v950 named. These are REPORTED by
+          the coverage reporter below and deliberately not wired here:
+          withholding on a desk that never had the read changes what leaves
+          the board, and this pack fixes what is broken before widening.
+       3. PRESENT BUT ON THE WALL CLOCK -- GOLD PINE passes `news` and never
+          sets `nowMs`, so the gate dates the lock by Date.now() instead of
+          the bar being judged. That is the hg-v952 SUPER GOLD defect in a
+          third place: a scan re-run after the window gives the wrong answer
+          in both directions.
+
+     So the rule lives once, here, and DELEGATES to hgGoldNewsGate rather than
+     re-deciding what a tier-1 event is -- a second copy of a calendar is a
+     second calendar (hg-v949). The instant is the SIGNAL BAR, never the wall
+     clock. It fails OPEN at every seam: no instant, an unreadable one, no
+     snapshot, or goldind absent, and there is no verdict and nothing is
+     withheld, because a gate the desk cannot read is not a reason to withhold
+     a setup. */
+  function hgGoldNewsSnapshot(){
+    try{
+      var fn = gfn('hgNewsState');
+      if (typeof fn !== 'function') return null;
+      var snap = fn();
+      return (snap && typeof snap === 'object') ? snap : null;
+    }catch(e){ return null; }
+  }
+
+  function hgGoldNewsVerdict(atMs, snapArg){
+    try{
+      var t = atMs;
+      if (t === null || t === undefined || t === '') return null;
+      t = +t;
+      if (!isFinite(t)) return null;
+      /* the same epoch-zero refusal the weekend rule makes, for the same
+         reason: 0 is a readable number and an unreadable instant, and a gate
+         must not answer on the second (hg-v953). */
+      if (!(t > 0)) return null;
+      var ms = (Math.abs(t) < 1e12) ? t * 1000 : t;
+      var gate = gfn('hgGoldNewsGate');
+      if (typeof gate !== 'function') return null;
+      var snap = (snapArg === undefined) ? hgGoldNewsSnapshot() : snapArg;
+      /* No snapshot is NOT "no news" -- it is no reading, and the gate says so
+         itself via `unchecked`. Returning a cheerful open verdict here would
+         reproduce the `news: null` defect this function exists to remove. */
+      if (!snap) return null;
+      var v = gate(snap, ms);
+      if (!v || typeof v !== 'object') return null;
+      if (v.unchecked) return null;
+      return { atMs: ms, locked: !!v.lock, title: v.title || null,
+               why: v.lock
+                 ? ((v.reason || 'tier-1 gold news window')
+                    + ' — judged at the signal bar '
+                    + new Date(ms).toISOString().replace('T', ' ').slice(0, 16)
+                    + ' UTC, not the wall clock. The card and its evidence stay; '
+                    + 'only the trade handoff is withheld.')
+                 : '' };
+    }catch(e){ return null; }
+  }
+
   function hgGoldWeekendVerdict(atMs){
     try{
       var t = atMs;
@@ -1102,6 +1179,71 @@
   G.hgGoldSessionEdge = hgGoldSessionEdge;
   G.hgGoldSignalBarMs = hgGoldSignalBarMs;
   G.hgGoldWeekendVerdict = hgGoldWeekendVerdict;
+  /* hg-v963 -- WHICH GOLD DESKS THE NEWS GATE ACTUALLY REACHES.
+
+     The desk list is DERIVED from HG_GOLD_WEEKEND_MINTERS, never typed again:
+     that census is the repo's one list of gold desks that mint, and hg-v954
+     established that a hand-kept second copy inside a reporter is exactly what
+     goes stale (it had gone stale twice by then).
+
+     A desk is VERIFIED only when it supplies the gate a real snapshot, which
+     is asked BEHAVIOURALLY: the probe hands the shared verdict an instant
+     inside a tier-1 window and one outside it and requires the two to differ.
+     A route that cannot tell them apart is BROKEN, not covered -- the
+     `news: null` sites this pack fixed would have read BROKEN, because a gate
+     that answers the same way on both instants is not a gate. */
+  var HG_GOLD_NEWS_ROUTES = {
+    goldultra:     'per-lane 15m signal bar, live hgNewsState snapshot (hg-v963)',
+    golddirection: 'per-lane signal bar (15m scalp / 4h swing), live snapshot (hg-v963)',
+    goldscalp:     'ctx.news + ctx.nowMs through hgGoldInstFilter',
+    goldswing:     'ctx.news + ctx.nowMs through hgGoldInstFilter',
+    omnigold:      'hgOgGates inst-filter ledger row',
+    'super-gold':  'own hgNewsState read',
+    goldpine:      'passes a live snapshot into the shared mint'
+  };
+
+  function hgGoldNewsProbe(){
+    /* Two known instants around one synthetic tier-1 event. Synthetic on
+       purpose: a probe that needed the live calendar would report BROKEN on
+       any quiet week, which is the opposite of what it is for. */
+    var t = Date.UTC(2026, 9, 13, 12, 30);
+    var snap = { events: [{ title: 'US CPI m/m', t: t }] };
+    var inside = hgGoldNewsVerdict(t - 10 * 60000, snap);
+    var outside = hgGoldNewsVerdict(t + 3 * 3600000, snap);
+    if (!inside || !outside) return 'BROKEN';
+    if (inside.locked === true && outside.locked === false) return 'VERIFIED';
+    return 'BROKEN';
+  }
+
+  function hgGoldNewsCoverage(){
+    try{
+      if (!HG_GOLD_WEEKEND_MINTERS || !HG_GOLD_WEEKEND_MINTERS.length) return null;
+      var shared = hgGoldNewsProbe();
+      /* censusSize is reported so a reader (and the guard) can check the
+         partition against the SOURCE rather than against a typed number —
+         a hardcoded expected count is the stale-list defect one layer along. */
+      var out = { shared: shared, censusSize: 0, verified: [], uncovered: [], notLoaded: [] };
+      for (var i = 0; i < HG_GOLD_WEEKEND_MINTERS.length; i++){
+        var d = HG_GOLD_WEEKEND_MINTERS[i];
+        if (!d || !d.tab) continue;
+        out.censusSize++;
+        var route = HG_GOLD_NEWS_ROUTES[d.tab] || null;
+        var loaded = false;
+        try{ loaded = (typeof gfn(d.probe) === 'function'); }catch(e){ loaded = false; }
+        var row = { desk: d.desk, tab: d.tab, route: route };
+        if (!route) out.uncovered.push(row);
+        else if (!loaded) out.notLoaded.push(row);
+        else { row.probe = shared; out.verified.push(row); }
+      }
+      return out;
+    }catch(e){ return null; }
+  }
+
+  G.hgGoldNewsVerdict = hgGoldNewsVerdict;
+  G.hgGoldNewsCoverage = hgGoldNewsCoverage;
+  G.hgGoldNewsProbe = hgGoldNewsProbe;
+  G.HG_GOLD_NEWS_ROUTES = HG_GOLD_NEWS_ROUTES;
+  G.hgGoldNewsSnapshot = hgGoldNewsSnapshot;
   G.hgGoldMarkMintWeekend = hgGoldMarkMintWeekend;
   G.hgGoldWeekendCoverage = hgGoldWeekendCoverage;
   G.hgGoldWeekendProbeRoute = hgGoldWeekendProbeRoute;
