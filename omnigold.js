@@ -3394,6 +3394,7 @@ terse status, and never launches a first-time scan on a global refresh.
       rows1d: extra.rows1d || extra.dailyCandles,
       l2OrderBook: l2,
       spreadUsd: extra.spreadUsd,
+      spreadVenue: extra.spreadVenue || (quote && quote.venue) || null,
       spread: extra.spread,
       bid: extra.bid || (quote && (quote.bid != null ? quote.bid : quote.b)),
       ask: extra.ask || (quote && (quote.ask != null ? quote.ask : quote.a)),
@@ -3412,6 +3413,8 @@ terse status, and never launches a first-time scan on a global refresh.
       demoted: !!r.demoted,
       sessionWeight: r.sessionWeight,
       stopFloorAtr: r.stopFloorAtr,
+      /* hg-v969: a wide quote on a proxy venue is reported, never dropped */
+      spreadNote: (r.spreadLock && r.spreadLock.advisory && r.spreadLock.reason) ? r.spreadLock.reason : null,
       cand: r
     };
   }
@@ -5047,6 +5050,7 @@ terse status, and never launches a first-time scan on a global refresh.
       if (inst.demoted) instWhy = inst.reason || 'ASIA SESSION — swing demote';
       if (isFinite(fin(inst.sessionWeight)) && fin(inst.sessionWeight) >= 3)
         instWhy += ' · session weight ' + fin(inst.sessionWeight);
+      if (inst.spreadNote) instWhy += ' · ' + inst.spreadNote;
     }
     gates.push({ key:'inst-filter', hard: instHard, pass: instOk, why: instWhy });
 
@@ -14489,6 +14493,7 @@ terse status, and never launches a first-time scan on a global refresh.
         quote: shared.quote || null,
         l2: shared.l2 || null,
         spreadUsd: shared.spreadUsd,
+        spreadVenue: shared.spreadVenue || null,
         bid: shared.bid,
         ask: shared.ask
       };
@@ -14500,6 +14505,7 @@ terse status, and never launches a first-time scan on a global refresh.
         extra.bid = extra.bid != null ? extra.bid : shared.bid;
         extra.ask = extra.ask != null ? extra.ask : shared.ask;
         extra.spreadUsd = extra.spreadUsd != null ? extra.spreadUsd : shared.spreadUsd;
+        extra.spreadVenue = extra.spreadVenue || shared.spreadVenue || null;
         var cands = hgOgEvaluate(rows, hits, extra, cfg);
 
         /* hg-v729: Smart-Money-Concepts context on every card that carries
@@ -14766,6 +14772,23 @@ terse status, and never launches a first-time scan on a global refresh.
           ]).then(function(pair){
             __og.perpNative = pair[0] || null;
             shared.perpNative = __og.perpNative;
+            /* hg-v969: hg-v968 fed the spread lock on GOLD SCALP / GOLD SWING
+               from this same Delta payload and left THIS desk reading only the
+               __hgGoldQuote global -- which nothing writes -- while its inst
+               filter is a HARD ledger row (hg-v551). One shared reader; a named
+               broker quote on the global still wins over the proxy. */
+            try{
+              if (!shared.quote){
+                var qfP = gfn('hgGoldQuoteFromPerp');
+                var qP = qfP ? qfP(pair[0], 'delta-xaut') : null;
+                if (qP){
+                  if (isFinite(qP.spreadUsd)) shared.spreadUsd = qP.spreadUsd;
+                  if (isFinite(qP.bid)) shared.bid = qP.bid;
+                  if (isFinite(qP.ask)) shared.ask = qP.ask;
+                  shared.spreadVenue = qP.venue || null;
+                }
+              }
+            }catch(eQP){ /* a quote that cannot be read is no quote */ }
             var mergeF = gfn('hgGoldMergeFedFomc');
             if (mergeF && pair[1] && pair[1].ok){
               shared.news = mergeF(shared.news || {}, pair[1]);
