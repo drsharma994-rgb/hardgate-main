@@ -76,7 +76,11 @@ console.log('== gold swing formation wiring ==');
   const iBatch = gs.indexOf('function goldApplyBestLevelsBatch');
   ok(iBatch >= 0 && gs.indexOf('for (var fi = 0; fi < ranked.length; fi++)', iBatch) >= 0,
     'formation runs on all ranked candidates after weekend demotes');
-  const iRun = gs.indexOf('goldApplyBestLevelsBatch(ranked, gold, atrW, now);', iWk);
+  /* hg-v977: the call's last argument is the SIGNAL BAR now (barNow), not the
+     scan clock; this guard's claim is ORDERING, so it matches the call without
+     pinning the instant's name -- pinning it turned this red with the ordering
+     untouched */
+  const iRun = gs.indexOf('goldApplyBestLevelsBatch(ranked, gold, atrW, ', iWk);
   ok(iRun > iWk, 'runScan calls formation batch after weekend demotes');
 }
 

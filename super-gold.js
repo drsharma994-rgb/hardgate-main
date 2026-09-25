@@ -337,7 +337,10 @@ function refineSuperGoldLevels(win, c, hit){
         rows15m: rows15m,
         rows1h: rows1h,
         rows4h: rows4h,
-        nowMs: Date.now(),
+        /* hg-v977: the candidate's own instant (the session boost inside the
+           best-levels pass is the BAR's session), the wall clock only when the
+           candidate carries none */
+        nowMs: sgCandSecOr(c, hit) * 1000,
         rankBoost: hit.tier === 'clean'
       };
       var gc = Object.assign({}, c);
@@ -468,9 +471,23 @@ function enrichSuperGoldRow(c, tier, riskOpts, meta){
 }
 
 /** Ranking context — mirrors gold scalp/swing scan legs (all optional). */
-function buildGoldRankCtx(win){
+/* hg-v977: ONE instant per ranking pass -- the newest signal bar among the
+   candidates being ranked (the ranker's news caution reads it), the wall
+   clock only when none carries an instant. */
+function sgRankInstant(cands){
+  var best = null;
+  try{
+    (Array.isArray(cands) ? cands : []).forEach(function(c){
+      var t = sgCandSec(c, null);
+      if (t !== null && (best === null || t > best)) best = t;
+    });
+  }catch(e){ best = null; }
+  return (best !== null) ? best * 1000 : Date.now();
+}
+
+function buildGoldRankCtx(win, cands){
   win = win || W;
-  var ctx = { now: Date.now(), style: 'super-gold' };
+  var ctx = { now: sgRankInstant(cands), style: 'super-gold' };
   try{
     if (typeof win.hgNewsState === 'function') ctx.news = win.hgNewsState();
   }catch(e0){}
@@ -494,7 +511,7 @@ function rankRawGoldCands(win, rawCands, ctx){
   if (!Array.isArray(rawCands) || !rawCands.length) return rawCands || [];
   if (typeof win.goldRankSetups !== 'function') return rawCands.slice();
   try{
-    var ranked = win.goldRankSetups(rawCands, ctx || buildGoldRankCtx(win));
+    var ranked = win.goldRankSetups(rawCands, ctx || buildGoldRankCtx(win, rawCands));
     if (!ranked || !Array.isArray(ranked.ranked) || !ranked.ranked.length) return rawCands.slice();
     var byId = {};
     rawCands.forEach(function(c){ if (c && c.id) byId[c.id] = c; });
@@ -609,7 +626,7 @@ function buildSnapFromGoldScans(win, riskOpts, opts){
   var whySilent = bag.whySilent;
   var scanned = bag.scanned;
   audit.venues = bag.venues.slice();
-  var rankCtx = (opts && opts.rankCtx) ? opts.rankCtx : buildGoldRankCtx(win);
+  var rankCtx = (opts && opts.rankCtx) ? opts.rankCtx : buildGoldRankCtx(win, bag.raw);
   var rankedRaw = rankRawGoldCands(win, bag.raw, rankCtx);
 
   rankedRaw.forEach(function(c){
@@ -1177,6 +1194,7 @@ W.superGoldDeskPill = superGoldDeskPill;
 W.runGoldDeskAudit = runGoldDeskAudit;
 W.goldCandTier = goldCandTier;
 W.buildGoldRankCtx = buildGoldRankCtx;
+W.sgRankInstant = sgRankInstant;   /* hg-v977 */
 W.rankRawGoldCands = rankRawGoldCands;
 W.collectRawGoldDeskCands = collectRawGoldDeskCands;
 W.collectSuperGoldScanHits = collectSuperGoldScanHits;
