@@ -25,7 +25,7 @@ const src = readFileSync(resolve(ROOT, 'goldpine.js'), 'utf8');
 /* --- helper functions exist --- */
 assert.ok(/function hgGpKind\(s\)\{/.test(src), 'hgGpKind defined');
 assert.ok(/function hgGpStampSolidity\(list, mode, ctx\)\{/.test(src), 'hgGpStampSolidity defined');
-assert.ok(/function hgGpRecord\(list, mode\)\{/.test(src), 'hgGpRecord defined');
+assert.ok(/function hgGpRecord\(list, mode(, bars)?\)\{/.test(src), 'hgGpRecord defined');   /* hg-v979: takes the desk's own fetch */
 assert.ok(/function hgGpReorder\(list\)\{/.test(src), 'hgGpReorder defined');
 
 /* --- hgGpKind: layerLabel > nativeStrategy > kind --- */
@@ -71,17 +71,17 @@ assert.ok(/\{ tab: 'GOLDPINE' \}/.test(src),
 /* --- runGoldPineScan wires settle -> stamp -> record -> reorder --- */
 assert.ok(/var fwdResolve = gfn\('hgFwdResolve'\);/.test(src),
   'runGoldPineScan settles forward records at scan start');
-assert.ok(/fwdResolve\('XAUUSD', '4h', bars\.rows4h\)/.test(src),
+assert.ok(/fwdResolve\('XAUUSD', '4h', bars\.rows4h[,)]/.test(src),   /* hg-v979: the call now also names the feed */
   'settles 4h forward records');
-assert.ok(/fwdResolve\('XAUUSD', '15m', bars\.rows15m\)/.test(src),
+assert.ok(/fwdResolve\('XAUUSD', '15m', bars\.rows15m[,)]/.test(src),
   'settles 15m forward records');
 assert.ok(/hgGpStampSolidity\(swing, 'swing', scanCtx\);/.test(src),
   'stamps swing solidity');
 assert.ok(/hgGpStampSolidity\(scalp, 'scalp', scanCtx\);/.test(src),
   'stamps scalp solidity');
-assert.ok(/hgGpRecord\(swing, 'swing'\);/.test(src),
+assert.ok(/hgGpRecord\(swing, 'swing'(, bars)?\);/.test(src),
   'records swing fires');
-assert.ok(/hgGpRecord\(scalp, 'scalp'\);/.test(src),
+assert.ok(/hgGpRecord\(scalp, 'scalp'(, bars)?\);/.test(src),
   'records scalp fires');
 assert.ok(/swing = hgGpReorder\(swing\);/.test(src),
   'reorders swing');

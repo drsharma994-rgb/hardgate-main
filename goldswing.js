@@ -477,6 +477,18 @@ var __lastDeskTape = '';
    last closed bar's instant through the ONE reader every borrowing desk uses
    (hg-v952 / v963 / v973). The wall clock is the fallback for a series with no
    readable instant, never the rule. */
+/* hg-v979: stamp the feed the swing levels were priced on -- the 4h leg's
+   own label (gold.src['4h']). Only where absent: a conviction-locked row
+   keeps the feed it was priced on. A feed nothing named stamps nothing. */
+function gwStampFeed(cands, feed){
+  if (typeof feed !== 'string' || !feed || !Array.isArray(cands)) return cands;
+  for (var i = 0; i < cands.length; i++){
+    var c = cands[i];
+    if (c && !(typeof c.feed === 'string' && c.feed)) c.feed = feed;
+  }
+  return cands;
+}
+
 function gwScanBarMs(rows, fallback){
   try{
     var f = gfn('hgGoldSignalBarMs');
@@ -529,6 +541,8 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
       if (!c || !c.dir) continue;
       cands.push({
         id: c.id || null, venue: c.venue || null, sym: c.sym || null,
+        /* hg-v979: the feed these levels were priced on (gwStampFeed) */
+        feed: (typeof c.feed === 'string' && c.feed) ? c.feed : null,
         dir: c.dir, strategy: c.strategy || null, stratKey: c.stratKey || null,
         grade: c.grade || null, entry: c.entry, stop: c.stop,
         t1: c.t1, t2: c.t2, t3: c.t3, rr: c.rr, rr2: c.rr2, rr3: c.rr3,
@@ -575,6 +589,8 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
                    /* hg-v978: the bar this candidate was judged on (hg-v977),
                       so the ledger dates the record on it, not on the clock */
                    signalT: c.signalT,
+                   /* hg-v979: the feed the levels were priced on */
+                   feed: c.feed,
                    mechanic: String(c.stratKey || c.strategy || 'UNKNOWN').toUpperCase().slice(0, 28),
                    ticket: (c.grade === 'A' || c.grade === 'clean' || !!c.locked) };
         }), { horizonBars: 20 });
@@ -3175,10 +3191,11 @@ async function runScan(ui, scanSt){
       /* v898: each timeframe against ITS OWN bars — a null timeframe settled
          every open XAUUSD record, including 15m and 1h ones, against 4H. */
       if (typeof W.hgFwdResolveMulti === 'function'){
+        /* hg-v979: and each against ITS OWN FEED (gold.src, per timeframe) */
         W.hgFwdResolveMulti('XAUUSD', { '1h': gold && gold.rows1h,
-                                        '4h': gold && gold.rows4h });
+                                        '4h': gold && gold.rows4h }, gold && gold.src);
       } else if (typeof W.hgFwdResolve === 'function' && gold && gold.rows4h && gold.rows4h.length){
-        W.hgFwdResolve('XAUUSD', '4h', gold.rows4h);
+        W.hgFwdResolve('XAUUSD', '4h', gold.rows4h, gold.src && gold.src['4h']);
       }
     } catch (eRes) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("goldswing", eRes); } catch (eW) {} }
     try{
@@ -3663,7 +3680,7 @@ async function runScan(ui, scanSt){
        best-levels pass rewriting entry / stop / T1, so the population the desk
        forms is unmeasured. Fail-open: goldind absent renders nothing. */
     var scopeFn = gfn('hgGoldSwingScopeHtml');
-    var mixedBanner = (typeof W.hgGoldFwdNote === 'function' ? W.hgGoldFwdNote('goldswing') : '')
+    var mixedBanner = (typeof W.hgGoldFwdNote === 'function' ? W.hgGoldFwdNote('goldswing', undefined, gold && gold.src && gold.src['4h']) : '')
       + (typeof W.hgGoldTapeNotes === 'function'
         ? W.hgGoldTapeNotes(gold && gold.rows4h, '4h') : '')
       + (typeof scopeFn === 'function' ? (scopeFn() || '') : '')
@@ -3755,6 +3772,7 @@ async function runScan(ui, scanSt){
     setProg(ui, null);
     if (gold.rows4h.length){
       publishState(display);                        /* only a real data run overwrites the snapshots */
+      gwStampFeed(display, gold && gold.src && gold.src['4h']);   /* hg-v979 */
       publishScan(display, displayBest, lock.store.history, now, rejectedAll, armedAll, whySilent);
       var visionEnrichGw = gfn('hgChartVisionEnrichSetups');
       var visionRefreshGw = gfn('hgChartVisionRefreshGoldCards');

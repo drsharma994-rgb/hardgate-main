@@ -187,7 +187,7 @@ console.log('\n4. wired where the other feed caveat already goes');
      'the unread-leg line rides with the mixed-feed banner');
   ok(/var mixedBanner = fwdNote \+ gsTapeNotes\(/.test(gsSrc),
      'with the tape notes ahead of both (908 renamed the helper; 913 put this desk\'s own forward verdict at the head of the same chain)');
-  ok(/hgGoldFwdNote\('goldscalp'\)/.test(gsSrc),
+  ok(/hgGoldFwdNote\('goldscalp'[,)]/.test(gsSrc),   /* hg-v979: the call now also names the feed */
      'and that verdict is this desk reading the records it writes, keyed to its own roster id');
   /* which means it reaches every path that banner reaches */
   const uses = (gsSrc.match(/mixedBanner/g) || []).length;

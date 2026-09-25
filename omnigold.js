@@ -5766,16 +5766,16 @@ terse status, and never launches a first-time scan on a global refresh.
       .then(function(){ return xm ? xm(tf, n) : null; })
       .catch(function(){ return null; })
       .then(function(a){
-        if (a && a.rows && a.rows.length) return { rows: trim(a.rows), source: a.source || 'xm-xauusd' };
+        if (a && a.rows && a.rows.length) return { rows: trim(a.rows), source: a.source || 'xm-xauusd', feed: a.source || 'xm-xauusd' };
         return Promise.resolve().then(function(){ return gg ? gg(tf, n) : null; })
           .catch(function(){ return null; })
           .then(function(b){
-            if (b && b.rows && b.rows.length) return { rows: trim(b.rows), source: b.source || 'gold-spot' };
+            if (b && b.rows && b.rows.length) return { rows: trim(b.rows), source: b.source || 'gold-spot', feed: (typeof b.source === 'string' && b.source) ? b.source : null };
             return Promise.resolve().then(function(){ return bk ? bk('PAXGUSDT', tf, n) : null; })
               .catch(function(){ return null; })
               .then(function(c){
-                if (c && c.length) return { rows: trim(c), source: 'binance-paxg' };
-                return { rows: [], source: null };
+                if (c && c.length) return { rows: trim(c), source: 'binance-paxg', feed: 'binance-paxg' };
+                return { rows: [], source: null, feed: null };
               });
           });
       });
@@ -5789,7 +5789,9 @@ terse status, and never launches a first-time scan on a global refresh.
         .then(function(){ return xauFn(tf, n); })
         .then(function(rows){
           if (rows && rows.length){
-            return { rows: rows, source: hgOgFeedSourceFor(tf) || 'binance-xau' };
+            /* hg-v979: `feed` is the shell's own record of which feed served
+               this timeframe, or null -- never the display fallback */
+            return { rows: rows, source: hgOgFeedSourceFor(tf) || 'binance-xau', feed: hgOgFeedSourceFor(tf) || null };
           }
           return hgOgFetchRowsLegacy(tf, n);
         })
@@ -14520,7 +14522,8 @@ terse status, and never launches a first-time scan on a global refresh.
          FINER, not coarser; the reverse is conservative under the "one bar
          spanning both counts as a stop" rule. Both directions are safe. */
       if (fwdResolve){
-        try { fwdResolve('XAUUSD', null, rows); }
+        /* hg-v979: and only records priced on THIS feed (got.feed) */
+        try { fwdResolve('XAUUSD', null, rows, (got && typeof got.feed === 'string' && got.feed) ? got.feed : undefined); }
         catch (e) { var wf = gfn('hgFwdWarn'); if (wf) { try { wf('omnigold:resolve', e); } catch (eW) {} } }
       }
 
@@ -14614,6 +14617,7 @@ terse status, and never launches a first-time scan on a global refresh.
                 tab: 'OMNIGOLD:' + cfg.label, mechanic: c.kind, sym: 'XAUUSD', tf: cfg.tf,
                 dir: c.dir, entry: c.plan.entry, stop: c.plan.stop, t1: c.plan.t1,
                 barT: barT, horizonBars: cfg.horizonBars, ticket: !!(c.grade && c.grade.ticket),
+                feed: (got && typeof got.feed === 'string' && got.feed) ? got.feed : undefined,   /* hg-v979 */
                 /* EVERY GATE PASSED EXCEPT THE ONE UNDER TEST.
 
                    measured-edge promotes a mechanic on twenty settled

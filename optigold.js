@@ -1042,7 +1042,7 @@ async function runOptiGold(ui){
          matters — whether the same rule pays differently at different scales. */
       try{
         if (typeof W.hgFwdRecordScan === 'function'){
-          var fwd = ogFwdRows(setups, L.key, rows);
+          var fwd = ogFwdRows(setups, L.key, rows, (got && typeof got.source === 'string') ? got.source : null);
           if (fwd.length) W.hgFwdRecordScan('OPTI GOLD', L.interval, fwd, { horizonBars: L.horizonBars });
         }
       }catch(eFwd){ try{ if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('optigold', eFwd); }catch(eW){} }
@@ -1094,7 +1094,7 @@ function ogBreakBarSec(rows, s){
     return Math.floor(n > 1e12 ? n / 1000 : n);
   }catch(e){ return null; }
 }
-function ogFwdRows(setups, lane, rows){
+function ogFwdRows(setups, lane, rows, feed){
   if (!Array.isArray(setups)) return [];
   /* +null / +'' are 0 and isFinite(0) is true, so a missing level must be
      rejected BEFORE coercion or it records as a fabricated zero */
@@ -1116,6 +1116,7 @@ function ogFwdRows(setups, lane, rows){
                ticket: false };   /* never a ticket: unmeasured rule, by design */
     var bt = ogBreakBarSec(rows, s);   /* hg-v978: dated on the break bar */
     if (bt) row.barT = bt;
+    if (typeof feed === 'string' && feed) row.feed = feed;   /* hg-v979: the feed the levels were priced on */
     out.push(row);
   }
   return out;

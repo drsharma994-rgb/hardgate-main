@@ -133,7 +133,15 @@ function hgTauricPricePlan(dir){
     return Promise.resolve({ ok: false, why: 'no direction to price' });
   }
   return Promise.resolve().then(function(){ return fetchFn(TAURIC_TF, TAURIC_BARS); })
-    .then(function(rows){
+    .then(function(got){
+      /* hg-v979: hgOgFetchRows resolves to a PACK ({ rows, source, feed }),
+         and this read `rows.length` on it -- undefined -- so every fetch
+         that succeeded reported "no gold bars came back" and no plan was
+         ever priced here. The tab's own guard stubbed the fetcher with a
+         bare array, which is why it passed. Both shapes are read now, and
+         the pack's feed label rides with the plan into the record. */
+      var rows = (got && got.rows) ? got.rows : got;
+      var feed = (got && typeof got.feed === 'string' && got.feed) ? got.feed : null;
       if (!rows || !rows.length){
         return { ok: false, why: 'no gold bars came back — the plan is not priced rather than priced on nothing' };
       }
@@ -151,7 +159,7 @@ function hgTauricPricePlan(dir){
         if (typeof W.hgGoldTapeNotes === 'function')
           tapeNote = W.hgGoldTapeNotes(rows, TAURIC_TF);
       }catch(eTs){}
-      return { ok: true, plan: plan, bars: rows.length, tapeNote: tapeNote,
+      return { ok: true, plan: plan, bars: rows.length, tapeNote: tapeNote, feed: feed,
                lastClose: fin(rows[rows.length - 1] && rows[rows.length - 1].c) };
     })
     .catch(function(e){ return { ok: false, why: String((e && e.message) || e) }; });
@@ -227,6 +235,7 @@ function hgTauricRecord(rating, priced){
       sym: 'XAUUSD', tf: TAURIC_TF, dir: rating.dir,
       entry: fin(p.entry), stop: fin(p.stop), t1: fin(p.t1),
       barT: barT,
+      feed: (priced && typeof priced.feed === 'string' && priced.feed) ? priced.feed : undefined,   /* hg-v979 */
       horizonBars: 30,
       ticket: false,
       /* it cleared nothing — it was never gated */

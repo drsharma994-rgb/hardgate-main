@@ -308,6 +308,24 @@ localStorage. Never throws.
         var n = +v;
         return (isFinite(n) && n >= 0 && n <= 3) ? Math.floor(n) : -1;
       })(rec.stack3),
+      /* hg-v979: THE FEED THE LEVELS WERE PRICED ON.
+
+         Every gold desk records sym 'XAUUSD', and hgFwdSettle matches on
+         sym + tf, so a record is settled by whichever desk next hands the
+         ledger bars of that timeframe -- and the gold desks do not read one
+         feed. GOLD SCALP / GOLD SWING price on the XM bridge first;
+         GOLD ULTRA / GOLD DIRECTION / GOLD PRO / OPTI GOLD have no XM leg
+         and read Binance XAUUSDT, then PAXG. macro.js itself puts PAXG
+         "within ~0.5%" of spot, and 91.4% of the stops in GOLD SCALP's
+         committed walk (2,605 trades, median 0.219%) are narrower than
+         that. A record priced on one feed and settled on another is decided
+         by the basis and the trade's direction, not by the tape.
+
+         A string label, exactly as the desk's own feed chain names it
+         (xm-xauusd, binance-xau, binance-paxg, delta-xaut, ...). ABSENT
+         MEANS ABSENT: a caller that names no feed records none, and such a
+         record settles as it always did (hgFwdFeedFits fails open). */
+      feed: (typeof rec.feed === 'string' && rec.feed) ? rec.feed : undefined,
       state: 'open', r: null, settledT: null,
       at: isFinite(fin(rec.at)) ? fin(rec.at) : barT
     };
@@ -730,14 +748,36 @@ localStorage. Never throws.
     return Math.abs(barSecs - want) <= want * 0.25;
   }
 
-  function hgFwdSettle(list, sym, tf, rows){
+  /* hg-v979: THE BARS HAVE TO BE THE RECORD'S OWN FEED, TOO.
+
+     The timeframe rule above stops a horizon being rescaled; it says nothing
+     about WHOSE PRICES the bars carry. Two desks that fetch the same
+     timeframe of XAUUSD from different feeds hand this function bars that
+     sit a basis apart, and a stop narrower than that basis is hit -- or a
+     target reached -- on the first bar whatever the tape did. Only a KNOWN
+     mismatch is refused: a record with no feed, or bars whose caller named
+     none, settle exactly as they always did, because refusing what cannot
+     be checked would strand records unsettled for ever (the louder
+     failure, as the timeframe rule says). A held record is not lost: the
+     desk that priced it re-reads its own feed on its next scan and settles
+     it there. */
+  function hgFwdFeedFits(recFeed, barsFeed){
+    var a = (typeof recFeed === 'string' && recFeed) ? recFeed : '';
+    var b = (typeof barsFeed === 'string' && barsFeed) ? barsFeed : '';
+    if (!a || !b) return true;
+    return a === b;
+  }
+
+  function hgFwdSettle(list, sym, tf, rows, feed){
     var recs = Array.isArray(list) ? list : [];
-    var out = [], changed = 0, i, r;
+    var out = [], changed = 0, heldFeed = 0, i, r;
     var barSecs = hgFwdBarSecs(rows);
     for (i = 0; i < recs.length; i++){
       r = recs[i];
       if (r.state === 'open' && r.sym === sym && (!tf || !r.tf || r.tf === tf)
           && hgFwdBarsFitRec(r.tf, barSecs)){
+        /* hg-v979: a record priced on another feed waits for its own */
+        if (!hgFwdFeedFits(r.feed, feed)){ heldFeed++; out.push(r); continue; }
         var s = hgFwdSettleOne(r, rows);
         /* the fill-aware pass runs on the SAME bars in the same call, and is
            written into parallel fields — `state` and `r` are never touched
@@ -752,7 +792,27 @@ localStorage. Never throws.
         out.push(s);
       } else out.push(r);
     }
-    return { list: out, changed: changed };
+    return { list: out, changed: changed, heldFeed: heldFeed };
+  }
+
+  /* hg-v979: how many of a tab's OPEN records are priced on a feed other
+     than the one named -- what a desk whose feed changed would leave
+     waiting. Counts only KNOWN mismatches (a record with no feed is not
+     waiting for anything). Pure. */
+  function hgFwdFeedHeld(list, tab, feed){
+    var recs = Array.isArray(list) ? list : [];
+    var tabs = null, i, r, out = { held: 0, feeds: {} };
+    if (Array.isArray(tab)){ tabs = {}; for (i = 0; i < tab.length; i++) if (tab[i]) tabs[String(tab[i])] = 1; }
+    if (typeof feed !== 'string' || !feed) return out;
+    for (i = 0; i < recs.length; i++){
+      r = recs[i];
+      if (!r || r.state !== 'open') continue;
+      if (tabs ? !tabs[r.tab] : (tab && r.tab !== tab)) continue;
+      if (hgFwdFeedFits(r.feed, feed)) continue;
+      out.held++;
+      out.feeds[r.feed] = (out.feeds[r.feed] || 0) + 1;
+    }
+    return out;
   }
 
   /* Pool settled records into a stat block per mechanic. Mirrors the
@@ -1437,12 +1497,25 @@ localStorage. Never throws.
       try { return hgFwdOpenSyms(load(), tab, tf); }
       catch (e){ hgFwdWarn('openSyms', e); return []; }
     };
-    W.hgFwdResolve = function(sym, tf, rows){
+    /* hg-v979: `feed` names whose prices the bars carry (the desk's own
+       feed label for that timeframe). A caller that names none settles as
+       it always did; a record priced on a different named feed is HELD for
+       its own. hgFwdResolveInfo returns both counts; hgFwdResolve keeps
+       returning the settled count every existing caller reads. */
+    W.hgFwdResolveInfo = function(sym, tf, rows, feed){
       try {
-        var r = hgFwdSettle(load(), sym, tf, rows);
+        var r = hgFwdSettle(load(), sym, tf, rows, feed);
         if (r.changed) save(r.list);
-        return r.changed;
-      } catch (e) { return 0; }
+        return { changed: r.changed, heldFeed: r.heldFeed || 0 };
+      } catch (e) { return { changed: 0, heldFeed: 0 }; }
+    };
+    W.hgFwdResolve = function(sym, tf, rows, feed){
+      return W.hgFwdResolveInfo(sym, tf, rows, feed).changed;
+    };
+    W.hgFwdFeedFits = hgFwdFeedFits;
+    W.hgFwdFeedHeld = function(tab, feed){
+      try { return hgFwdFeedHeld(load(), tab, feed); }
+      catch (e) { return { held: 0, feeds: {} }; }
     };
 
     /* Settle a symbol across SEVERAL timeframes, each against its own bars.
@@ -1451,13 +1524,18 @@ localStorage. Never throws.
        them; resolving once with whichever set happened to be in scope is what
        produced the mismatch above. Pass them all and each record is walked
        over the bars it was written on. */
-    W.hgFwdResolveMulti = function(sym, byTf){
+    W.hgFwdResolveMulti = function(sym, byTf, feedByTf){
       var total = 0, tf;
       if (!byTf) return 0;
       for (tf in byTf) if (Object.prototype.hasOwnProperty.call(byTf, tf)){
         var rows = byTf[tf];
         if (!rows || !rows.length) continue;
-        try { total += (W.hgFwdResolve(sym, tf, rows) || 0); } catch (e) {}
+        /* hg-v979: one label for every timeframe, or a per-timeframe map
+           (the desks' own gold.src shape) -- a timeframe the map does not
+           name passes no feed and settles as before */
+        var feed = (typeof feedByTf === 'string') ? feedByTf
+                 : ((feedByTf && typeof feedByTf === 'object' && typeof feedByTf[tf] === 'string') ? feedByTf[tf] : undefined);
+        try { total += (W.hgFwdResolve(sym, tf, rows, feed) || 0); } catch (e) {}
       }
       return total;
     };
@@ -1600,6 +1678,10 @@ localStorage. Never throws.
                them. Absent still means absent: a caller that passes none
                records none, and the fill walk keeps standing aside. */
             mark: c.mark,
+            /* hg-v979: the feed the levels were priced on -- per candidate,
+               or one label for the scan. Absent stays absent. */
+            feed: (typeof c.feed === 'string' && c.feed) ? c.feed
+                : ((typeof o.feed === 'string' && o.feed) ? o.feed : undefined),
             barT: barOf(c),
             horizonBars: o.horizonBars || 20,
             ticket: (c.ticket !== undefined) ? c.ticket : (o.ticket === true),

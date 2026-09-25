@@ -1268,20 +1268,33 @@ function ngHistoryRecords(limit){
 
 /* --- fetch ------------------------------------------------------------ */
 
+/* hg-v979: the shell records which feed served each timeframe (S.goldSrcByTf,
+   written by getXAUCandles); read it, or name none. */
+function ngShellFeed(tf){
+  try{
+    var S = W.S;
+    if (S && S.goldSrcByTf && typeof S.goldSrcByTf[tf] === 'string' && S.goldSrcByTf[tf]) return S.goldSrcByTf[tf];
+  }catch(e){}
+  return null;
+}
+
 function fetchXau(tf, n){
   /* Prefer omnigold's shared fetcher when present, else the raw
      getXAUCandles global. */
   if (typeof W.hgOgFetchRows === 'function'){
     try {
       return W.hgOgFetchRows(tf, n).then(function(pack){
-        return { rows: (pack && pack.rows) || [], source: (pack && pack.source) || 'unknown' };
+        /* hg-v979: `feed` is the fetcher's own feed label or null -- never
+           the 'unknown' placeholder `source` falls back to */
+        return { rows: (pack && pack.rows) || [], source: (pack && pack.source) || 'unknown',
+                 feed: (pack && typeof pack.feed === 'string' && pack.feed) ? pack.feed : null };
       });
     } catch(e){ /* fall through */ }
   }
   if (typeof W.getXAUCandles === 'function'){
     try {
       return Promise.resolve(W.getXAUCandles(tf, n))
-        .then(function(rows){ return { rows: rows || [], source: 'getXAUCandles' }; })
+        .then(function(rows){ return { rows: rows || [], source: 'getXAUCandles', feed: ngShellFeed(tf) }; })
         .catch(function(){ return { rows: [], source: 'error' }; });
     } catch(e){}
   }
@@ -1387,6 +1400,7 @@ async function ngRunScan(){
         horizon: h.label,
         tf: h.tf,
         source: pack.source,
+        feed: (pack && typeof pack.feed === 'string' && pack.feed) ? pack.feed : null,   /* hg-v979 */
         setup: setup,
         tape: tape,
         rows: rows
@@ -1487,12 +1501,13 @@ async function ngRunScan(){
         /* Cache tf->rows to avoid double-fetching. Seed from the primary
            horizons above (1H/4H). */
         var tfRows = {};
-        var tfSource = {};
+        var tfSource = {}, tfFeed = {};   /* hg-v979: tfFeed beside it */
         for (var pi = 0; pi < results.length; pi++){
           var pr = results[pi];
           if (pr && pr.rows && pr.rows.length){
             tfRows[pr.tf] = pr.rows;
             tfSource[pr.tf] = pr.source;
+            tfFeed[pr.tf] = pr.feed || null;
           }
         }
         /* Fetch any missing tf rows the OMNI lanes need. 4h is almost
@@ -1510,6 +1525,7 @@ async function ngRunScan(){
             if (mpack && mpack.rows && mpack.rows.length){
               tfRows[mtf] = mpack.rows;
               tfSource[mtf] = mpack.source;
+              tfFeed[mtf] = mpack.feed || null;
             }
           } catch(eFm){}
         }
@@ -1547,6 +1563,7 @@ async function ngRunScan(){
             horizon: lane.horizonLabel,
             tf: lane.tf,
             source: tfSource[lane.tf] || 'omnigold',
+            feed: tfFeed[lane.tf] || null,   /* hg-v979 */
             setup: ogSetup,
             tape: laneTape,
             rows: laneRows
@@ -1614,6 +1631,7 @@ async function ngRunScan(){
             sym: 'XAUUSD', dir: r.setup.dir,
             entry: r.setup.entry, stop: r.setup.stop, t1: r.setup.t1,
             mechanic: r.setup.kind || 'TRIPLE-CONF',
+            feed: (typeof r.feed === 'string' && r.feed) ? r.feed : undefined,   /* hg-v979 */
             /* v698: a fire is a TICKET only when it FORMED — cleared the
                venue stop floor, the measured-evidence checks and the
                >= 3-distinct-class confluence bar — and still clears the
@@ -1628,7 +1646,7 @@ async function ngRunScan(){
           for (var rj = 0; rj < results.length; rj++){
             var rr = results[rj];
             if (!rr.rows || !rr.rows.length) continue;
-            try { W.hgFwdResolve('XAUUSD', rr.tf, rr.rows); } catch(eR){}
+            try { W.hgFwdResolve('XAUUSD', rr.tf, rr.rows, (typeof rr.feed === 'string' && rr.feed) ? rr.feed : undefined); } catch(eR){}
           }
         }
       }

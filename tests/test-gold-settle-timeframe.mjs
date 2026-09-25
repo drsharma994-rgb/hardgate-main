@@ -213,9 +213,11 @@ console.log('\n6. the four gold desks pass their own bars');
        f + ' no longer settles every timeframe with one set of candles');
   }
   /* the desks that already did it right are untouched */
-  ok(/hgFwdResolve\('XAUUSD', def\.tf, rows\)/.test(src('eightypercent.js')),
+  /* hg-v979: matched on the rule (timeframe passed), not the closing paren --
+     the call now also names its feed */
+  ok(/hgFwdResolve\('XAUUSD', def\.tf, rows[,)]/.test(src('eightypercent.js')),
      'eightypercent.js already passed its timeframe and still does');
-  ok(/hgFwdResolve\('XAUUSD', rr\.tf, rr\.rows\)/.test(src('newgold.js')),
+  ok(/hgFwdResolve\('XAUUSD', rr\.tf, rr\.rows[,)]/.test(src('newgold.js')),
      'and so does newgold.js');
 }
 

@@ -364,6 +364,21 @@ async function fetchGoldKlines(){
   return out;
 }
 
+/* hg-v979: the ONE feed every fetched leg came from, or null. This desk's
+   picks are minted on more than one timeframe and recorded on one, so the
+   only honest single label is the label all its legs share; a mixed fetch
+   names none (fails open) rather than naming the wrong one. */
+function gdFeedUniform(gold){
+  var src = (gold && gold.src) || {}, seen = null, k;
+  for (k in src) if (Object.prototype.hasOwnProperty.call(src, k)){
+    var v = src[k];
+    if (typeof v !== 'string' || !v) continue;
+    if (seen === null) seen = v;
+    else if (seen !== v) return null;
+  }
+  return seen;
+}
+
 function lastClose(rows){
   if (!rows || !rows.length) return NaN;
   var lc = rows[rows.length - 1];
@@ -1418,9 +1433,10 @@ function recordForward(scalpSel, swingSel, gold){
     /* v898: each timeframe against ITS OWN bars. This desk records on 1h and
        used to settle with 4H candles, stretching its horizon fourfold. */
     if (typeof W.hgFwdResolveMulti === 'function'){
-      W.hgFwdResolveMulti('XAUUSD', { '15m': gold.rows15m, '1h': gold.rows1h, '4h': gold.rows4h });
+      /* hg-v979: each timeframe against its own feed (gold.src) */
+      W.hgFwdResolveMulti('XAUUSD', { '15m': gold.rows15m, '1h': gold.rows1h, '4h': gold.rows4h }, gold.src);
     } else if (typeof W.hgFwdResolve === 'function' && gold.rows1h && gold.rows1h.length){
-      W.hgFwdResolve('XAUUSD', '1h', gold.rows1h);
+      W.hgFwdResolve('XAUUSD', '1h', gold.rows1h, gold.src && gold.src['1h']);
     }
   }catch(eR){ try{ if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('golddirection', eR); }catch(eW){} }
   try{
@@ -1446,6 +1462,7 @@ function recordForward(scalpSel, swingSel, gold){
        same instant the weekend mark above is judged on. Without it the ledger
        dated every record on the floor of the scan clock. */
     var gdBarSec = gdSignalSec(gold);
+    var gdFeed = gdFeedUniform(gold);   /* hg-v979 */
     W.hgFwdRecordScan('GOLDDIRECTION', '1h', picks.map(function(c){
       /* mechanic = source desk + stratKey, so the ledger judges each desk's
          crowned exports separately — fwdMechName is the ONE normalization,
@@ -1453,6 +1470,7 @@ function recordForward(scalpSel, swingSel, gold){
       var row = { sym: 'XAUUSD', dir: c.dir, entry: +c.entry, stop: +c.stop, t1: +c.t1,
                mechanic: fwdMechName(c), ticket: true };
       if (gdBarSec) row.barT = gdBarSec;   /* hg-v978 */
+      if (gdFeed) row.feed = gdFeed;       /* hg-v979: the feed the levels were priced on */
       if (gdWk){
         row.goldShut = !!gdWk.inWeekend;
         if (gdWk.inWeekend) row.goldShutWhy = gdWk.why;
