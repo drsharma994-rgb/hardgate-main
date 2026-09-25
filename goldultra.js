@@ -1660,12 +1660,32 @@ function guSidesOk(c){
   return c.dir === 'long' ? (c.stop < c.entry && c.t1 > c.entry) : (c.stop > c.entry && c.t1 < c.entry);
 }
 async function laneGoldScalp(gold, now){
+  /* hg-v963: the gold news gate (CPI / NFP / FOMC, -30/+15 min) is reached
+     inside hgGoldInstFilter, which reads ctx.news. This lane handed it a
+     literal `news: null` at both call sites, and hgGoldNewsGate returns
+     { lock:false, unchecked:true } on null -- FAIL-OPEN BY CONSTRUCTION, every
+     scan. The snapshot is a global (window.hgNewsState) that SUPER GOLD
+     already reads, so nothing was unavailable. Read once here, used at both
+     sites, so the two cannot drift apart.
+
+     The instant is the 15m SIGNAL BAR, not `now` (the wall clock): hg-v954
+     wired this desk's weekend mark on that bar for the same reason, and a
+     scan re-run after a release must give the release bar's answer. Falls back
+     to `now` only when the series carries no readable instant, and the gate
+     itself fails open when the snapshot is absent. */
+  var newsSnap = null, newsAt = now;
+  try{
+    var snapFn = gfn('hgGoldNewsSnapshot');
+    if (snapFn) newsSnap = snapFn();
+    var barFn = gfn('hgGoldSignalBarMs');
+    if (barFn){ var bt = barFn(gold && gold.rows15m); if (isFinite(bt) && bt > 0) newsAt = bt; }
+  }catch(eN){ newsSnap = null; }
   var out = { cands: [], held: [], dark: null };
   var setupsFn = gfn('goldScalpSetups');
   if (!setupsFn){ out.dark = 'GOLD SCALP engine dark — goldScalpSetups (goldind.js) not loaded; no setups can be sourced'; return out; }
   if (!gold.rows15m.length){ out.held.push('no 15m bars from any feed — lane skipped'); return out; }
   var cands = null;
-  try{ cands = setupsFn({ rows15m: gold.rows15m, rows1h: gold.rows1h, rows4h: gold.rows4h, dailyCandles: (gold.rows1d && gold.rows1d.length) ? gold.rows1d : undefined, now: now, news: null }); }
+  try{ cands = setupsFn({ rows15m: gold.rows15m, rows1h: gold.rows1h, rows4h: gold.rows4h, dailyCandles: (gold.rows1d && gold.rows1d.length) ? gold.rows1d : undefined, now: newsAt, news: newsSnap }); }
   catch(e){ out.held.push('detector threw: ' + ((e && e.message) || e)); return out; }
   if (!Array.isArray(cands)) return out;
   var i, rj = cands.rejected || [];
@@ -1673,7 +1693,7 @@ async function laneGoldScalp(gold, now){
   for (i = 0; i < cands.length; i++) if (cands[i]){ cands[i].venue = 'GOLD ULTRA'; cands[i].sym = 'XAUUSD'; }
   var ranked = cands, rankFn = gfn('goldRankSetups');
   if (rankFn){
-    var ctx = { now: now, news: null, style: 'goldscalp', rows15m: gold.rows15m, rows1h: gold.rows1h, rows4h: gold.rows4h };
+    var ctx = { now: newsAt, news: newsSnap, style: 'goldscalp', rows15m: gold.rows15m, rows1h: gold.rows1h, rows4h: gold.rows4h };
     try{ var sf = gfn('goldSeason'); if (sf) ctx.season = sf(now); }catch(eS){}
     try{ var cv = gfn('goldCrossVenueMap'); if (cv) ctx.crossVenue = cv(cands); }catch(eC){}
     var rk = null; try{ rk = rankFn(cands, ctx); }catch(eR){ rk = null; }
