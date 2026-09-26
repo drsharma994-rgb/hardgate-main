@@ -270,11 +270,32 @@ function cryptoGateRows(rows4h, rows1h, rows15m, ticker){
     return row('SQUEEZE', { state: d ? 'signal' : 'idle', dir: d, detail: String(s.state || s.label || '—') });
   }));
 
-  out.push(attempt('TREND MATRIX', ['trendmxClassify'], function(){
-    var t = W.trendmxClassify(rows4h, rows1h || rows4h);
-    if (!t) return row('TREND MATRIX', { state: 'idle', detail: 'no reading' });
-    return row('TREND MATRIX', { state: dirOf(t.dir) ? 'signal' : 'idle', dir: dirOf(t.dir),
-      detail: String(t.label || t.state || t.score || '—') });
+  /* hg-v995: this row used to hand trendmxClassify two candle ARRAYS where it
+     wants a scored row and a direction, so it read idle with no detail on
+     every tape, including one the composite scores +5/5. The composite needs
+     the 1d legs (EMA200, the EMA50/200 cross, the cloud, ADX) and this
+     report fetches 4h/1h/15m only, so the honest source is the TREND MATRIX
+     desk's own published row for the contract, read through its one home;
+     with no row the report says UNCHECKED and names what it could not read,
+     rather than a 4h-cascade-only score dressed as the composite. */
+  out.push(attempt('TREND MATRIX', ['hgTrendMatrixRowOf', 'trendmxClassify', 'trendScore'], function(){
+    var sym = (ticker && ticker.symbol) || '';
+    var snap = W.hgTrendMatrixRowOf(sym);
+    if (snap && typeof snap.score === 'number' && isFinite(snap.score)){
+      var d = has('tmDirOf') ? dirOf(W.tmDirOf(snap)) : null;
+      var cls = W.trendmxClassify(snap, d) || {};
+      var ev = d === 'long' ? (cls.longEv || []) : (d === 'short' ? (cls.shortEv || []) : []);
+      return row('TREND MATRIX', { state: d ? 'signal' : 'idle', dir: d, passed: Math.abs(snap.score), total: 5,
+        detail: 'composite ' + (snap.score > 0 ? '+' : '') + snap.score + '/5'
+          + (d ? '' : ' — short of the majority either way')
+          + (ev.length ? ' · ' + ev.join(' · ') : '') + ' · TREND MATRIX scan row' });
+    }
+    var ts = W.trendScore(null, rows4h);
+    var casc = (ts && ts.comps) ? ts.comps.h4Cascade : 0;
+    return row('TREND MATRIX', { state: 'unchecked',
+      detail: 'TREND MATRIX has not scanned ' + (sym || 'this contract') + ' — the 4h cascade alone reads '
+        + (casc > 0 ? 'bull' : casc < 0 ? 'bear' : 'flat') + ' here, and the other four legs need daily bars '
+        + 'this report does not fetch; open TREND MATRIX for the composite' });
   }));
 
   out.push(attempt('MEAN REVERSION', ['mrSignal'], function(){
@@ -535,7 +556,11 @@ function measuredRows(rows4h, ticker, plan, sections){
   /* --- out-of-sample forward log, per desk whose engine fired --- */
   var TABS = [
     ['SWING gate matrix', 'CRYPTOGATES'], ['EDGE', 'EDGE'], ['SQUEEZE', 'SQUEEZE'],
-    ['TREND MATRIX', 'TRENDTABLE'], ['REVERSAL SNIPER', 'REVERSALSNIPER'],
+    /* hg-v995: TREND MATRIX records under 'TRENDMX' (trendtable.js); this
+       table said 'TRENDTABLE', a pool no writer has ever written to, so once
+       the row above fired the lookup would have read "nothing settled yet"
+       for the life of the ledger. */
+    ['TREND MATRIX', 'TRENDMX'], ['REVERSAL SNIPER', 'REVERSALSNIPER'],
     ['PINE ·', 'PINE'], ['MEAN REVERSION', 'MEANREV']
   ];
   var fired = {};
@@ -947,6 +972,10 @@ function hgContractReportRun(inp){
   var rows15m = Array.isArray(inp.rows15m) ? inp.rows15m : [];
   var ticker = inp.ticker || { symbol: inp.sym || '', fundingPct: null };
   var sym = String(inp.sym || ticker.symbol || '—');
+  /* hg-v995: the gate rows read the contract off the ticker; a caller that
+     names the symbol only on the input still gets it there (a copy, so the
+     caller's ticker is not written to) */
+  if (!ticker.symbol && inp.sym) ticker = Object.assign({}, ticker, { symbol: inp.sym });
 
   var report = {
     sym: sym, venue: inp.venue || '', at: inp.nowMs || null,

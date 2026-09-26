@@ -352,7 +352,7 @@ console.log('\n== the report records its own plan, kept apart from the desks =='
   ok(own.samples === 0, 'and counts as nothing settled until it resolves');
 
   /* The whole point: the desks must be untouched. */
-  for (const desk of ['CRYPTOGATES', 'EDGE', 'PINE', 'SQUEEZE', 'TRENDTABLE']){
+  for (const desk of ['CRYPTOGATES', 'EDGE', 'PINE', 'SQUEEZE', 'TRENDMX']){   /* hg-v995: TRENDMX is the pool TREND MATRIX writes */
     const d = ctx.hgFwdStats(desk, null, false);
     ok(d.samples === 0 && d.open === 0, desk + ' pool is untouched by a user-chosen lookup');
   }
