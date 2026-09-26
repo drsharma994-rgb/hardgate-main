@@ -128,7 +128,7 @@
   function hgNewsGate(news){
     var nw = null, nwWhy = 'news module has not run', nwInfo = false;
     var nwNote = (news && typeof news.note === 'string') ? news.note : '';
-    var nwUnloaded = /not loaded|news error/i.test(nwNote);
+    var nwUnloaded = (news && news.unchecked === true) || /not loaded|news error/i.test(nwNote);   /* hg-v992: the flag, and the note for older shapes */
     if (news && news.risk && !nwUnloaded){
       var nwBlack = (news.blackout === true);
       var nwHigh = (String(news.risk) === 'high');

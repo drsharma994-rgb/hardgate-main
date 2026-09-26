@@ -324,6 +324,14 @@ localStorage. Never throws.
         : undefined,
       /* hg-v989: the named read marks, booleans only, absent when none */
       reads: hgFwdReadsNormalize(rec.reads),
+      /* hg-v992: THE CALENDAR READ AND THE SENTIMENT GUARD AT FIRE TIME.
+         newsRisk is one of four classes or NOT RECORDED (an unchecked calendar
+         is not 'low'); fng is the Fear & Greed value as a number, never
+         coerced; fngVeto is the BIAS S2 guard's verdict, the two booleans
+         only. Same three-state rule as every mark above. */
+      newsRisk: (rec.newsRisk === 'blackout' || rec.newsRisk === 'high' || rec.newsRisk === 'med' || rec.newsRisk === 'low') ? rec.newsRisk : undefined,
+      fng: (typeof rec.fng === 'number' && isFinite(rec.fng)) ? rec.fng : undefined,
+      fngVeto: (rec.fngVeto === true) ? true : (rec.fngVeto === false) ? false : undefined,
       /* ONLY the two booleans. Writing `rec.goldShut === true` alone looks
          equivalent and is not: it turns a truthy non-boolean (a caller
          passing 1) into FALSE, which reads as gold-open — the precise error
@@ -1483,6 +1491,13 @@ localStorage. Never throws.
       /* hg-v985: the directional funding rule's verdict folds the same way */
       if (r.fundAgainst === true) tally(out[key].fa || (out[key].fa = blank()));
       if (r.fundAgainst === false) tally(out[key].fw || (out[key].fw = blank()));
+      /* hg-v992: the calendar class and the sentiment guard fold too */
+      if (r.newsRisk === 'blackout' || r.newsRisk === 'high' || r.newsRisk === 'med' || r.newsRisk === 'low'){
+        var nw = out[key].nw || (out[key].nw = {});
+        tally(nw[r.newsRisk] || (nw[r.newsRisk] = blank()));
+      }
+      if (r.fngVeto === true) tally(out[key].fv || (out[key].fv = blank()));
+      if (r.fngVeto === false) tally(out[key].fo || (out[key].fo = blank()));
       /* hg-v989: each named read folds into its own yes/no pair, so the split
          outlives the live cap exactly as the other marks do. STRICTLY the two
          booleans per read; an unmarked read is neither bucket. */
@@ -1823,6 +1838,28 @@ localStorage. Never throws.
             return (fm && (fm.against === true || fm.against === false)) ? fm.against : undefined;
           } catch (eF){ return undefined; }
         }
+        /* hg-v992: the calendar read and the sentiment guard, from the one
+           home each (news.js), unless the desk handed a valid value in. A
+           news module that is absent or unchecked records NOTHING. */
+        function newsMarkOf(c){
+          var v = c && c.newsRisk;
+          if (v === 'blackout' || v === 'high' || v === 'med' || v === 'low') return v;
+          if (typeof W.hgNewsMark !== 'function') return undefined;
+          try { var m = W.hgNewsMark(c && (c.sym || c.symbol)); return (m && m.risk) ? m.risk : undefined; }
+          catch (eN){ return undefined; }
+        }
+        function fngOf(c){
+          if (c && typeof c.fng === 'number' && isFinite(c.fng)) return c.fng;
+          if (typeof W.hgNewsState !== 'function') return undefined;
+          try { var st = W.hgNewsState(); var v = st && st.fng && st.fng.value; return (typeof v === 'number' && isFinite(v)) ? v : undefined; }
+          catch (eG){ return undefined; }
+        }
+        function fngVetoOf(c, fng){
+          if (c && (c.fngVeto === true || c.fngVeto === false)) return c.fngVeto;
+          if (fng === undefined || typeof W.hgFngExtremeMark !== 'function') return undefined;
+          try { var fv = W.hgFngExtremeMark(fng, c && c.dir, c && (c.sym || c.symbol)); return (fv === true || fv === false) ? fv : undefined; }
+          catch (eV){ return undefined; }
+        }
         function macroMarkOf(c){
           if (c && (c.macroBlock === true || c.macroBlock === false)) return c.macroBlock;
           if (typeof W.hgMacroAltMark !== 'function') return undefined;
@@ -1879,6 +1916,10 @@ localStorage. Never throws.
                desk at fire time (booleans only; the normaliser decides). A
                desk that marks nothing records nothing. */
             reads: c.reads,
+            /* hg-v992 */
+            newsRisk: newsMarkOf(c),
+            fng: fngOf(c),
+            fngVeto: fngVetoOf(c, fngOf(c)),
             /* solidity stamp fields (hg-v533) ride through untouched;
                hgFwdNormalize attaches them only when sol is finite */
             sol: c.sol, solTier: c.solTier, solV: c.solV
@@ -2125,6 +2166,8 @@ localStorage. Never throws.
         try { h += W.hgFwdMacroSplitHtml(tab) || ''; } catch (eMs){}
         try { h += W.hgFwdFundingSplitHtml(tab) || ''; } catch (eFs){}   /* hg-v985 */
         try { h += W.hgFwdReadSplitHtml(tab) || ''; } catch (eRs){}   /* hg-v989 */
+        try { h += W.hgFwdNewsSplitHtml(tab) || ''; } catch (eNs){}   /* hg-v992 */
+        try { h += W.hgFwdSentimentSplitHtml(tab) || ''; } catch (eSs){}   /* hg-v992 */
         h += '<div class="note">Recorded once per firing when it fires, settled later by bars that did '
            + 'not exist at the time. A bar spanning both stop and target counts as a STOP; expiry is '
            + 'excluded rather than counted as a win. This is the only measurement here that accumulates.</div>';
@@ -2697,6 +2740,131 @@ localStorage. Never throws.
           h += '</div>';
         }
         h += '<div class="dim" style="margin-top:4px">Reported, not gated: a read that separates on the replay AND here is still a measurement until someone decides otherwise, and nothing is withheld on this line.</div>';
+        h += '</div>';
+        return h;
+      } catch (e) { return ''; }
+    };
+
+    /* hg-v992: THE NEWS BLACKOUT, MEASURED WHERE IT IS APPLIED AND WHERE IT
+       IS NOT. Settled live records by calendar class at fire time plus the
+       folded counts; records with no class (before the mark, or fired with
+       the calendar unchecked) are counted as NEITHER. Nothing gates. */
+    W.hgFwdNewsSplit = function(tab, opts){
+      try {
+        var o = opts || {};
+        var recs = W.hgFwdRecords(tab) || [];
+        var want = (o.settledOnly === false) ? null : 1;
+        var CLASSES = ['blackout', 'high', 'med', 'low'];
+        var out = { tab: tab || null, settled: 0, marked: 0, unmarked: 0, classes: {}, agg: null };
+        var cell = function(){ return { n: 0, wins: 0, rSum: 0, r: null, hit: null }; };
+        var i, r, k;
+        for (i = 0; i < CLASSES.length; i++) out.classes[CLASSES[i]] = cell();
+        for (i = 0; i < recs.length; i++){
+          r = recs[i];
+          if (!r) continue;
+          if (want && r.state !== 't1' && r.state !== 'stop') continue;
+          out.settled++;
+          if (CLASSES.indexOf(r.newsRisk) < 0){ out.unmarked++; continue; }
+          out.marked++;
+          var c2 = out.classes[r.newsRisk];
+          c2.n++; if (r.state === 't1') c2.wins++; c2.rSum += (r.state === 't1') ? (+r.rr || 0) : -1;
+        }
+        for (k in out.classes){ var e = out.classes[k]; if (e.n){ e.r = e.rSum / e.n; e.hit = e.wins / e.n; } }
+        try {
+          var a = loadAgg() || {}, ak, row, any = false, agg = {};
+          for (ak in a){
+            if (!Object.prototype.hasOwnProperty.call(a, ak)) continue;
+            row = a[ak];
+            if (!row || !row.nw) continue;
+            if (tab && String(row.tab || ak.split('|')[0]) !== String(tab)) continue;
+            for (k in row.nw){
+              if (!Object.prototype.hasOwnProperty.call(row.nw, k) || !row.nw[k]) continue;
+              agg[k] = agg[k] || { wins: 0, losses: 0, expired: 0 };
+              agg[k].wins += row.nw[k].wins || 0; agg[k].losses += row.nw[k].losses || 0; agg[k].expired += row.nw[k].expired || 0;
+              any = true;
+            }
+          }
+          if (any) out.agg = agg;
+        } catch (eA){}
+        return out;
+      } catch (e) { hgFwdWarn('newsSplit', e); return null; }
+    };
+    W.hgFwdNewsSplitHtml = function(tab){
+      try {
+        var sp = W.hgFwdNewsSplit(tab);
+        if (!sp || (!sp.marked && !sp.agg)) return '';
+        var fmtR = function(v){ return (v >= 0 ? '+' : '') + v.toFixed(3) + 'R'; };
+        var h = '<div class="note" style="margin:8px 0;padding:8px 10px;border:1px solid #6B7280;border-radius:6px">';
+        h += '<b>NEWS CALENDAR SPLIT</b> \u00b7 what hgNewsRisk read at fire time on ' + sp.marked + ' of ' + sp.settled + ' settled records (blackout = the window GATES, STAR TRADER and BOOK veto on; high = a red print inside 24h, the caution OMNIROUTE and OMNIGOLD report)';
+        var CL = ['blackout', 'high', 'med', 'low'];
+        for (var i = 0; i < CL.length; i++){
+          var e = sp.classes[CL[i]];
+          if (!e.n) continue;
+          h += ' \u00b7 ' + CL[i] + ' ' + fmtR(e.r) + ' at ' + Math.round(100 * e.hit) + '% on n=' + e.n;
+        }
+        if (sp.unmarked) h += ' \u00b7 <b>' + sp.unmarked + '</b> carry no class and are counted as NEITHER \u2014 they predate the mark, or fired with the calendar unchecked';
+        if (sp.agg){
+          var bits = [];
+          for (var k in sp.agg) if (Object.prototype.hasOwnProperty.call(sp.agg, k)) bits.push(k + ' ' + sp.agg[k].wins + 'W/' + sp.agg[k].losses + 'L');
+          if (bits.length) h += ' \u00b7 folded beyond the live cap: ' + bits.join(', ');
+        }
+        h += '. Reported, not gated: nothing is withheld on this line.';
+        h += '</div>';
+        return h;
+      } catch (e) { return ''; }
+    };
+
+    /* hg-v992: THE BIAS S2 SENTIMENT GUARD, MEASURED. Would the guard in force
+       (Fear & Greed >= 80 blocks fresh longs, <= 20 fresh shorts) have vetoed
+       the plan? Settled records that would have been vetoed against those
+       that would not, unmarked as NEITHER. */
+    W.hgFwdSentimentSplit = function(tab, opts){
+      try {
+        var o = opts || {};
+        var recs = W.hgFwdRecords(tab) || [];
+        var want = (o.settledOnly === false) ? null : 1;
+        var out = { tab: tab || null, settled: 0, veto: 0, ok: 0, unmarked: 0, vetoWins: 0, okWins: 0,
+                    vetoR: null, okR: null, vetoHit: null, okHit: null, agg: null };
+        var vSum = 0, oSum = 0, i, r, rr;
+        for (i = 0; i < recs.length; i++){
+          r = recs[i];
+          if (!r) continue;
+          if (want && r.state !== 't1' && r.state !== 'stop') continue;
+          out.settled++;
+          rr = (r.state === 't1') ? (+r.rr || 0) : -1;
+          if (r.fngVeto === true){ out.veto++; if (r.state === 't1') out.vetoWins++; vSum += rr; }
+          else if (r.fngVeto === false){ out.ok++; if (r.state === 't1') out.okWins++; oSum += rr; }
+          else out.unmarked++;
+        }
+        if (out.veto){ out.vetoR = vSum / out.veto; out.vetoHit = out.vetoWins / out.veto; }
+        if (out.ok){ out.okR = oSum / out.ok; out.okHit = out.okWins / out.ok; }
+        try {
+          var a = loadAgg() || {}, ak, row, fv = null, fo = null;
+          for (ak in a){
+            if (!Object.prototype.hasOwnProperty.call(a, ak)) continue;
+            row = a[ak];
+            if (!row) continue;
+            if (tab && String(row.tab || ak.split('|')[0]) !== String(tab)) continue;
+            if (row.fv){ fv = fv || { wins: 0, losses: 0, expired: 0 }; fv.wins += row.fv.wins || 0; fv.losses += row.fv.losses || 0; fv.expired += row.fv.expired || 0; }
+            if (row.fo){ fo = fo || { wins: 0, losses: 0, expired: 0 }; fo.wins += row.fo.wins || 0; fo.losses += row.fo.losses || 0; fo.expired += row.fo.expired || 0; }
+          }
+          if (fv || fo) out.agg = { veto: fv, ok: fo };
+        } catch (eA){ out.agg = null; }
+        return out;
+      } catch (e) { hgFwdWarn('sentimentSplit', e); return null; }
+    };
+    W.hgFwdSentimentSplitHtml = function(tab){
+      try {
+        var sp = W.hgFwdSentimentSplit(tab);
+        if (!sp || (!sp.veto && !sp.ok && !sp.agg)) return '';
+        var fmtR = function(v){ return (v >= 0 ? '+' : '') + v.toFixed(3) + 'R'; };
+        var h = '<div class="note" style="margin:8px 0;padding:8px 10px;border:1px solid #6B7280;border-radius:6px">';
+        h += '<b>SENTIMENT GUARD SPLIT</b> \u00b7 ' + sp.veto + ' of ' + (sp.veto + sp.ok) + ' marked settled records fired where the BIAS S2 guard (Fear &amp; Greed \u2265 80 blocks fresh longs, \u2264 20 fresh shorts) would have VETOED them';
+        if (sp.vetoR !== null) h += ' \u00b7 vetoed ' + fmtR(sp.vetoR) + ' at ' + Math.round(100 * sp.vetoHit) + '% on n=' + sp.veto;
+        if (sp.okR !== null) h += ' \u00b7 allowed ' + fmtR(sp.okR) + ' at ' + Math.round(100 * sp.okHit) + '% on n=' + sp.ok;
+        if (sp.unmarked) h += ' \u00b7 <b>' + sp.unmarked + '</b> carry no mark and are counted as NEITHER \u2014 they predate the mark, fired with no Fear &amp; Greed read, or are gold-lane records the index does not speak for';
+        if (sp.agg) h += ' \u00b7 folded beyond the live cap: vetoed ' + (sp.agg.veto ? sp.agg.veto.wins + 'W/' + sp.agg.veto.losses + 'L' : '\u2014') + ', allowed ' + (sp.agg.ok ? sp.agg.ok.wins + 'W/' + sp.agg.ok.losses + 'L' : '\u2014');
+        h += '. Reported, not gated: this desk does not apply the guard, and nothing is withheld on this line.';
         h += '</div>';
         return h;
       } catch (e) { return ''; }

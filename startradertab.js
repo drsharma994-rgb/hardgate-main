@@ -316,6 +316,11 @@ function stContextVotes(contract, dir, ctx, ticker, rows4h, rows1h, rows15m){
   if (typeof g.hgNewsRisk === 'function'){
     try{
       var nr = g.hgNewsRisk(stNewsSym(contract));
+      /* hg-v992: an unchecked calendar casts NO vote. It used to cast
+         'calendar clear' (+1) on every setup while the news module had never
+         fetched -- a fabricated agreeing read, and since hg-v991 a fabricated
+         vote:NEWS mark on the forward record. Absent means absent. */
+      if (nr && nr.unchecked === true) nr = null;
       if (nr){
         if (nr.blackout) return { veto: true, reason: nr.note || 'NEWS BLACKOUT', votes: [] };
         if (nr.risk === 'high') votes.push({ src: 'NEWS', dir: dir, pts: 0, detail: 'high-impact horizon', caution: true });
