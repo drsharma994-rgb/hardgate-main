@@ -657,8 +657,9 @@ function measuredRows(rows4h, ticker, plan, sections){
    the strategy. Kept apart, it answers a different and still useful
    question: how do the plans I actually look at work out?
 
-   hgFwdRecordScan dedups by bar, so pressing FULL REPORT repeatedly inside
-   one 4h bar records once. */
+   hgFwdRecordScan dedups by bar — since hg-v986 the bar the plan was composed
+   on (the last closed 4h bar), so pressing FULL REPORT repeatedly before the
+   next 4h bar closes records once, however many clock bars that spans. */
 var REPORT_TAB = 'SEARCH-REPORT';
 
 /* Settle whatever this contract already has open, using the bars that have
@@ -703,6 +704,8 @@ function hgContractReportRecord(rep){
     return W.hgFwdRecordScan(REPORT_TAB, '4h', [{
       sym: rep.sym, dir: p.dir, entry: p.entry, stop: p.stop, t1: p.t1,
       mark: (isFinite(fin(p.mark)) && fin(p.mark) > 0) ? fin(p.mark) : undefined,   /* hg-v981: planFrom's last close */
+      barT: (isFinite(fin(p.barT)) && fin(p.barT) > 0) ? fin(p.barT) : undefined,   /* hg-v986: planFrom's last closed bar, not the clock */
+      fundingPct: (typeof p.fundingPct === 'number' && isFinite(p.fundingPct)) ? p.fundingPct : undefined,   /* hg-v986: the rate the plan read */
       mechanic: mech, ticket: false
     }], { horizonBars: 20 });
   }catch(e){
@@ -783,11 +786,29 @@ function planFrom(rows4h, ticker, sections, lean){
   var out = {
     ok: false, dir: null, source: null, entry: null, stop: null,
     t1: null, t2: null, t3: null, rr1: null, rr2: null, rr3: null,
-    mark: null, entryType: null, distancePct: null, reason: null, risk: null
+    mark: null, entryType: null, distancePct: null, reason: null, risk: null,
+    barT: null, fundingPct: undefined
   };
   var last = rows4h && rows4h.length ? rows4h[rows4h.length - 1] : null;
   var mark = fin(last && last.c);
   out.mark = isFinite(mark) ? mark : null;
+  /* hg-v986: the plan is composed on the last CLOSED 4h bar in hand, so the
+     plan says which bar that was. Without it the forward record was dated on
+     the floor of the clock (the hg-v978 defect, on this desk): settlement
+     walks strictly after barT, so the first closed bar after the signal — the
+     one a resting entry most often fills on — was skipped, and a FULL REPORT
+     pressed across a clock boundary on the SAME closed bar wrote a second
+     record. An unreadable bar time stays null and the ledger falls back to
+     the clock exactly as before. Seconds, as the rows carry them. */
+  var barT = fin(last && last.t);
+  out.barT = (isFinite(barT) && barT > 0) ? barT : null;
+  /* hg-v986: the funding this plan was composed against. The venue's rate is
+     on the ticker the report was handed; it never reached the record because
+     the record site only sees the plan (hg-v985 named this desk as having no
+     figure in reach — true of that site, and the plan is where the figure
+     is). A number or nothing: +null is 0, a real rate, and a rate of exactly
+     zero is a READ zero. */
+  out.fundingPct = (ticker && typeof ticker.fundingPct === 'number' && isFinite(ticker.fundingPct)) ? ticker.fundingPct : undefined;
 
   var all = [];
   sections.forEach(function(s){ all = all.concat(s.rows); });
