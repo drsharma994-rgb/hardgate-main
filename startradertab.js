@@ -419,13 +419,18 @@ function stContextVotes(contract, dir, ctx, ticker, rows4h, rows1h, rows15m){
     if (ctx.onchain && ctx.onchain.bias && ctx.onchain.bias === dir){
       votes.push({ src: 'ONCHAIN', dir: dir, pts: 1, detail: 'on-chain ' + dir });
     }
-    if (ctx.rotation && typeof g.rotationSignal === 'function'){
+    /* hg-v994: the snapshot IS the signal (season 'alt' | 'btc' | 'mixed').
+       This block used to feed the snapshot back into rotationSignal, which
+       wants the raw market list and so answered 'mixed' every time, and then
+       compared against 'altseason' / 'btcseason', strings that function never
+       emits -- so this vote had never fired. The favour rule lives once, in
+       rotation.js; with it absent this desk casts no ROTATION vote. */
+    if (ctx.rotation && typeof g.hgRotationFavours === 'function'){
       try{
-        var rot = g.rotationSignal(ctx.rotation);
-        if (rot && rot.season === 'altseason' && dir === 'long' && contract.base !== 'BTC'){
-          votes.push({ src: 'ROTATION', dir: 'long', pts: 1, detail: 'altseason tailwind' });
-        } else if (rot && rot.season === 'btcseason' && contract.base === 'BTC' && dir === 'long'){
-          votes.push({ src: 'ROTATION', dir: 'long', pts: 1, detail: 'BTC season' });
+        var rotFav = g.hgRotationFavours(ctx.rotation.season, dir, contract.sym);
+        if (rotFav === true){
+          votes.push({ src: 'ROTATION', dir: 'long', pts: 1,
+                       detail: ctx.rotation.season === 'alt' ? 'altseason tailwind' : 'BTC season' });
         }
       }catch(e){}
     }

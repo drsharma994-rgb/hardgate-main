@@ -193,14 +193,17 @@ function hgSetupStack(inp){
     else _bump(fundamental, _item('on-chain', oc.bias + ' — against', 'against'), vetoes, cautions);
   }
 
+  /* hg-v994: the snapshot carries `season`, never `btcSeason`, so this
+     caution had never fired on any desk. The rule lives once in rotation.js
+     (BRAIN's reading: BTC season is a headwind for an ALT long, not for BTC);
+     with the home absent nothing is bumped. */
   var rot = inp.rotation;
-  if (rot && rot.btcSeason && hasDir){
-    var season = String(rot.btcSeason).toLowerCase();
-    if (season.indexOf('btc') >= 0 && dir === 'long' && asset === 'crypto'){
-      _bump(fundamental, _item('rotation', rot.btcSeason, 'caution'), vetoes, cautions);
-    } else if (rot.btcSeason){
-      _bump(fundamental, _item('rotation', rot.btcSeason, 'neutral'), vetoes, cautions);
-    }
+  if (rot && hasDir && asset === 'crypto' && typeof G.hgRotationAgainst === 'function'){
+    var rotAg = G.hgRotationAgainst(rot.season, dir, sym);
+    var rotLbl = rot.season === 'alt' ? 'ALT SEASON' : (rot.season === 'btc' ? 'BTC SEASON' : 'ROTATION / MIXED');
+    var rotAp = (typeof rot.altPct === 'number' && isFinite(rot.altPct)) ? ' (' + Math.round(rot.altPct) + '% alts)' : '';
+    if (rotAg === true) _bump(fundamental, _item('rotation', rotLbl + rotAp + ' — headwind for alt longs', 'caution'), vetoes, cautions);
+    else if (rotAg === false) _bump(fundamental, _item('rotation', rotLbl + rotAp, 'neutral'), vetoes, cautions);
   }
 
   if (asset === 'gold' && inp.macro){
