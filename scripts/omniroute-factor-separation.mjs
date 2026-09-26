@@ -38,13 +38,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { separate } from './omniroute-regime-separation.mjs';
+import { runFactors, literalFor, spliceBetween, cliTail, printRows, WINDOWS as CORE_WINDOWS, MIN_SIDE as CORE_MIN_SIDE } from './factor-sep-core.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const ARTIFACT = path.join(HERE, 'backtest-omniroute-v701-results.json');
 export const TARGET = path.join(HERE, '..', 'omniroute.js');
-export const WINDOWS = 4;
-export const MIN_SIDE = 20;
+export const WINDOWS = CORE_WINDOWS;
+export const MIN_SIDE = CORE_MIN_SIDE;
 export const BEGIN = '/* --- BEGIN GENERATED HG_OMNI_FACTOR_SEP (scripts/omniroute-factor-separation.mjs) ---';
 export const END = '/* --- END GENERATED HG_OMNI_FACTOR_SEP --- */';
 
@@ -109,88 +109,23 @@ export function run(rows){
   rows = rows || loadRows();
   const sorted = rows.slice().sort((a, b) => (a.tISO < b.tISO ? -1 : a.tISO > b.tISO ? 1 : 0));
   const { factors: F, inventory } = factors(sorted);
-  const out = [];
-  for (const f of F){
-    const s = separate(sorted, f.pick, WINDOWS, MIN_SIDE);
-    const w = s.whole;
-    const row = {
-      f: f.key, group: f.group, label: f.label,
-      n: w.in ? w.in.n : 0,
-      win: w.in ? r3(w.in.win) : null, gross: w.in ? r3(w.in.gross) : null, net: w.in ? r3(w.in.net) : null,
-      outWin: w.out ? r3(w.out.win) : null, outNet: w.out ? r3(w.out.net) : null,
-      /* windows where the cohort was BETTER than its complement, win/gross/net */
-      q: s.better.win + '/' + s.better.gross + '/' + s.better.net,
-      thin: s.thin,
-      verdict: (s.verdict === 'none') ? null : s.verdict
-    };
-    /* a lean: net unanimous (all judged windows one way) while the verdict
-       did not form — win or gross disagreed somewhere */
-    /* (a count can only reach WINDOWS when every window was judged, so a
-       thin window rules a lean out by arithmetic — no second guard) */
-    if (!row.verdict){
-      if (s.better.net === WINDOWS) row.lean = 'better';
-      else if (s.worse.net === WINDOWS) row.lean = 'worse';
-    }
-    /* a cohort that is the whole book (or none of it) has no complement to
-       be compared against: that is a degenerate read, not a thin one */
-    if (!w.in || !w.out) row.degenerate = true;
-    if (f.inSample) row.inSample = true;
-    out.push(row);
-  }
-  return {
-    artifact: path.basename(ARTIFACT), n: sorted.length, windows: WINDOWS, minSide: MIN_SIDE,
-    span: [sorted[0].tISO.slice(0, 10), sorted[sorted.length - 1].tISO.slice(0, 10)],
+  const R = runFactors(sorted, F);
+  delete R.sorted;
+  return Object.assign({ artifact: path.basename(ARTIFACT) }, R, {
     bound: 'as-recorded only — the artifact carries no same-bar ambiguity flag, so the lower bound cannot be read here',
-    starved: inventory.starved,
-    rows: out,
-    verdicts: out.filter(r => r.verdict && !r.inSample).map(r => r.f),
-    leans: out.filter(r => r.lean && !r.inSample).map(r => r.f),
-    inSampleVerdicts: out.filter(r => r.verdict && r.inSample).map(r => r.f)
-  };
+    starved: inventory.starved
+  });
 }
 
 export function literal(res){
   const R = res || run();
-  const rows = R.rows.map(r => {
-    const parts = ['f: ' + JSON.stringify(r.f), 'g: ' + JSON.stringify(r.group), 'n: ' + r.n,
-      'win: ' + r.win, 'gross: ' + r.gross, 'net: ' + r.net, 'outWin: ' + r.outWin, 'outNet: ' + r.outNet,
-      'q: ' + JSON.stringify(r.q), 'verdict: ' + JSON.stringify(r.verdict)];
-    if (r.thin) parts.push('thin: ' + r.thin);
-    if (r.degenerate) parts.push('degenerate: true');
-    if (r.lean) parts.push('lean: ' + JSON.stringify(r.lean));
-    if (r.inSample) parts.push('inSample: true');
-    return '      { ' + parts.join(', ') + ' }';
-  });
-  return [
-    BEGIN,
-    '     Re-derive with `node scripts/omniroute-factor-separation.mjs --write`. Do not',
-    '     hand-edit — generated literals write themselves (hg-v921). Every figure is',
-    '     read off ' + R.artifact + '; the guard re-runs the generator and fails on drift. */',
-    '  var HG_OMNI_FACTOR_SEP = {',
-    '    artifact: ' + JSON.stringify(R.artifact) + ', n: ' + R.n + ', windows: ' + R.windows + ', minSide: ' + R.minSide + ',',
-    '    span: ' + JSON.stringify(R.span) + ',',
-    '    bound: ' + JSON.stringify(R.bound) + ',',
-    '    starved: ' + JSON.stringify(R.starved) + ',',
-    '    verdicts: ' + JSON.stringify(R.verdicts) + ',',
-    '    leans: ' + JSON.stringify(R.leans) + ',',
-    '    inSampleVerdicts: ' + JSON.stringify(R.inSampleVerdicts) + ',',
-    '    rows: [',
-    rows.join(',\n'),
-    '    ]',
-    '  };',
-    '  ' + END
-  ].join('\n');
+  return literalFor('HG_OMNI_FACTOR_SEP', R, { begin: BEGIN, end: END, script: 'scripts/omniroute-factor-separation.mjs',
+    extra: { bound: R.bound, starved: R.starved } });
 }
 
 /* write the literal between the markers; a marker that cannot be found is
-   fatal, never skipped */
-export function splice(src, lit){
-  const i = src.indexOf(BEGIN);
-  if (i < 0) throw new Error('BEGIN marker not found in omniroute.js — fatal, never skipped');
-  const j = src.indexOf(END, i);
-  if (j < 0) throw new Error('END marker not found in omniroute.js — fatal, never skipped');
-  return src.slice(0, i) + lit.slice(0, lit.length - END.length) + src.slice(j);
-}
+   fatal, never skipped (the core rule, named for this file) */
+export function splice(src, lit){ return spliceBetween(src, lit, BEGIN, END, 'omniroute.js'); }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain){
@@ -199,18 +134,7 @@ if (isMain){
   else {
     console.log(`OMNIROUTE ${res.artifact}: ${res.n} walked rows, ${res.span[0]} -> ${res.span[1]}, ${res.windows} disjoint windows (min ${res.minSide} a side)`);
     console.log(`starved in the replay (constant on every row): ${res.starved.join(', ')}`);
-    for (const r of res.rows){
-      const pc = (x) => (typeof x === 'number') ? (100 * x).toFixed(1) + '%' : '—';
-      const sR = (x) => (typeof x === 'number') ? ((x >= 0 ? '+' : '') + x.toFixed(3)) : '—';
-      console.log(`  ${r.f.padEnd(34)} n=${String(r.n).padStart(4)} win ${pc(r.win)} net ${sR(r.net)} | out win ${pc(r.outWin)} net ${sR(r.outNet)} | better w/g/n ${r.q}${r.thin ? ' thin ' + r.thin : ''} -> ${r.verdict ? r.verdict.toUpperCase() : (r.lean ? 'lean ' + r.lean : (r.degenerate ? 'no complement' : '-'))}${r.inSample ? '  [IN-SAMPLE]' : ''}`);
-    }
-    console.log(`\nverdicts (out of sample): ${res.verdicts.length ? res.verdicts.join(', ') : 'NONE'}`);
-    console.log(`leans (net unanimous, win or gross not): ${res.leans.join(', ') || 'none'}`);
-    console.log(`in-sample verdicts (fitted on this window, no confirmation): ${res.inSampleVerdicts.join(', ') || 'none'}`);
+    printRows(res);
   }
-  const src = fs.readFileSync(TARGET, 'utf8');
-  const next = splice(src, literal(res));
-  if (next === src){ console.log('\nHG_OMNI_FACTOR_SEP: zero drift'); }
-  else if (process.argv.includes('--write')){ fs.writeFileSync(TARGET, next); console.log('\nHG_OMNI_FACTOR_SEP written'); }
-  else { console.log('\nDRIFT — run with --write'); process.exitCode = 1; }
+  cliTail(res, literal(res), TARGET, 'omniroute.js', { begin: BEGIN, end: END, literal: 'HG_OMNI_FACTOR_SEP' });
 }

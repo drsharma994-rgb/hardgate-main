@@ -32,6 +32,7 @@
     "gold:siblings": "node scripts/gold-sibling-records.mjs",
     "og:selection": "node scripts/mechanic-selection.mjs",
     "omni:factor-sep": "node scripts/omniroute-factor-separation.mjs",
+    "op:factor-sep": "node scripts/omnipresent-factor-separation.mjs",
     "gold:milli": "node scripts/milli-gold-roster.mjs",
     "gold:milli-walk": "node scripts/milli-gold-walk.mjs",
     "gold:swing-scope": "node scripts/swing-live-scope.mjs",
