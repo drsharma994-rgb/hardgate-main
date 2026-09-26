@@ -234,9 +234,12 @@ console.log('\n4. nothing is gated; the literals round-trip; the reads are read 
 
 console.log('\n5. version stamps');
 {
-  const bs = read('build-stamp.js');
-  ok(/version: 'hg-v989'/.test(bs), 'build-stamp.js is hg-v989');
-  ok(swCacheOk(read('sw.js')), 'sw.js cache matches');
+  /* the version is READ, never pinned: a guard that names its own pack's number
+     turns red on the next pack with nothing wrong (the hg-v989 guard did exactly
+     that on the hg-v990 suite run) */
+  const v = (read('build-stamp.js').match(/version:\s*'(hg-v\d+)'/) || [])[1];
+  ok(/^hg-v\d+$/.test(v) && parseInt(v.slice(4), 10) >= 989, 'build-stamp version ' + v);
+  ok(swCacheOk(read('sw.js')), 'sw.js HG_CACHE matches build-stamp.js');
 }
 
 console.log('\n' + passed + ' assertions passed');
