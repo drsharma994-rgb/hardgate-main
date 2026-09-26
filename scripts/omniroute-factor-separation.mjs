@@ -111,16 +111,22 @@ export function run(rows){
   const { factors: F, inventory } = factors(sorted);
   const R = runFactors(sorted, F);
   delete R.sorted;
+  /* hg-v989: the bar each varying pillar was judged at (half its replay
+     max), written into the literal so the live desk marks the SAME read on
+     its forward record rather than re-deriving a threshold of its own */
+  const pillarHalf = {};
+  for (const p of inventory.varying) pillarHalf[p] = inventory.max[p] / 2;
   return Object.assign({ artifact: path.basename(ARTIFACT) }, R, {
+    tab: 'OMNIROUTE',
     bound: 'as-recorded only — the artifact carries no same-bar ambiguity flag, so the lower bound cannot be read here',
-    starved: inventory.starved
+    starved: inventory.starved, pillarHalf
   });
 }
 
 export function literal(res){
   const R = res || run();
   return literalFor('HG_OMNI_FACTOR_SEP', R, { begin: BEGIN, end: END, script: 'scripts/omniroute-factor-separation.mjs',
-    extra: { bound: R.bound, starved: R.starved } });
+    extra: { tab: R.tab, bound: R.bound, starved: R.starved, pillarHalf: R.pillarHalf } });
 }
 
 /* write the literal between the markers; a marker that cannot be found is

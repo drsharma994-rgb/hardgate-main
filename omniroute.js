@@ -5089,7 +5089,18 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         sym: (ex && ex.sym) || null
       }, String(TF || '').toUpperCase() || undefined);
       if (s && isFinite(fin(s.score))){
-        return { score: s.score, maxScore: s.maxScore, tier: s.tier, detail: s.detail };
+        /* hg-v989: each pillar's score and max ride as two numbers apiece,
+           so the forward record can mark the pillar reads the replay
+           flagged (hgOmniReadMarks) from the SAME scorer that graded the
+           card -- eighteen pairs, not the breakdown with its detail strings */
+        var pillars = null, bk = s.breakdown || {}, pk;
+        for (pk in bk){
+          if (!Object.prototype.hasOwnProperty.call(bk, pk) || !bk[pk]) continue;
+          if (!isFinite(fin(bk[pk].score)) || !isFinite(fin(bk[pk].maxScore))) continue;
+          if (!pillars) pillars = {};
+          pillars[pk] = [fin(bk[pk].score), fin(bk[pk].maxScore)];
+        }
+        return { score: s.score, maxScore: s.maxScore, tier: s.tier, detail: s.detail, pillars: pillars || undefined };
       }
       return null;
     } catch (eStamp) { return null; }
@@ -5217,8 +5228,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   var HG_OMNI_FACTOR_SEP = {
     artifact: "backtest-omniroute-v701-results.json", n: 2833, windows: 4, minSide: 20,
     span: ["2026-06-13","2026-09-11"],
+    tab: "OMNIROUTE",
     bound: "as-recorded only — the artifact carries no same-bar ambiguity flag, so the lower bound cannot be read here",
     starved: ["fvg","atrExpansion","orderFlow","newsCalendar"],
+    pillarHalf: {"orderBlock":7.5,"multiTfCascade":5,"riskReward":10,"regime":5,"sessionTiming":3.5,"liquidation":6,"expectancy":4,"structureConfluence":7.5,"momentumConvergence":6,"liquidationRecovery":6,"volTermStructure":5,"riskAdjusted":4,"sectorMomentum":4,"multiAsset":3.5},
     verdicts: [],
     leans: ["pillar:regime:half","pillar:momentumConvergence:half","gate:liveFresh","grade:liveFresh","pop:cluster","geom:stopLt05","geom:stopGe1","geom:stopGe2","session:ASIA"],
     inSampleVerdicts: ["insample:kindDemoted"],
@@ -5267,6 +5280,66 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   };
   /* --- END GENERATED HG_OMNI_FACTOR_SEP --- */
 
+  /* hg-v989: THE READS THE REPLAY FLAGGED, MARKED ON THE FORWARD RECORD.
+
+     HG_OMNI_FACTOR_SEP names the reads whose replay cohort separated
+     (verdicts) or leaned; hg-v987 named two of the leans -- momentum
+     convergence and the live-fresh read -- as worth a forward measurement
+     and nothing recorded either. Each read this desk can compute at fire
+     time is marked on the record as a named boolean, so hgFwdReadSplit can
+     count the same read on trades logged before their outcomes existed.
+
+     The set of reads is READ off the literal, never typed here. Readers:
+       pillar:<p>:half  the compact solidity stamp's pillar score against
+                        the replay's own half-max bar (T.pillarHalf), the
+                        same number the replay judged at; ABSENT on a row
+                        with no stamp (non-tickets are stamped late, after
+                        recording) -- absent means absent, never false
+       gate:liveFresh   hg-solidity's own G2 (hgSolGateLiveFresh) on the
+                        plan and the decision bar's livePx -- one rule
+       grade:liveFresh  the grade that gate read is exactly FRESH
+     A read with no reader here is left absent, never guessed. */
+  function hgOmniReadMarks(c, livePx){
+    try {
+      var T = HG_OMNI_FACTOR_SEP;
+      if (!c || !c.plan || !T) return undefined;
+      var keys = [].concat(Array.isArray(T.verdicts) ? T.verdicts : [], Array.isArray(T.leans) ? T.leans : []);
+      if (!keys.length) return undefined;
+      var W = (typeof window !== 'undefined') ? window : ((typeof globalThis !== 'undefined') ? globalThis : {});
+      var halves = (T.pillarHalf && typeof T.pillarHalf === 'object') ? T.pillarHalf : {};
+      var pillars = (c.solidity && c.solidity.pillars && typeof c.solidity.pillars === 'object') ? c.solidity.pillars : null;
+      var lf = null, lfTried = false;
+      var liveFresh = function(){
+        if (lfTried) return lf;
+        lfTried = true;
+        if (typeof W.hgSolGateLiveFresh !== 'function' || !(fin(livePx) > 0)) return (lf = null);
+        try {
+          var g = W.hgSolGateLiveFresh({ dir: c.dir, entry: c.plan.entry, stop: c.plan.stop, t1: c.plan.t1, t2: c.plan.t2, livePx: fin(livePx) });
+          var grade = g && g.grade ? String(g.grade).toLowerCase() : '';
+          /* 'unknown' is the gate saying it could not grade the plan against
+             the price (a level it cannot read) -- not a read of the plan, so
+             not a mark. 'no-live' cannot reach here: the livePx test above
+             already returned, and a duplicate of that test would be an
+             unkillable mutant. */
+          if (!grade || grade === 'unknown') return (lf = null);
+          return (lf = { pass: g.pass === true, grade: grade });
+        } catch (eG){ return (lf = null); }
+      };
+      var out = null, k, v, m, i;
+      for (i = 0; i < keys.length; i++){
+        k = String(keys[i]); v = undefined;
+        if ((m = /^pillar:([A-Za-z0-9]+):half$/.exec(k))){
+          var pr = pillars && pillars[m[1]], half = halves[m[1]];
+          if (pr && isFinite(fin(pr[0])) && typeof half === 'number' && isFinite(half)) v = fin(pr[0]) >= half;
+        }
+        else if (k === 'gate:liveFresh'){ var g1 = liveFresh(); if (g1) v = g1.pass; }
+        else if (k === 'grade:liveFresh'){ var g2 = liveFresh(); if (g2) v = g2.grade === 'fresh'; }
+        if (v === true || v === false){ if (!out) out = {}; out[k] = v; }
+      }
+      return out || undefined;
+    } catch (e) { return undefined; }
+  }
+
   function hgOmniFactorSepHtml(T){
     try{
       T = (T === undefined) ? HG_OMNI_FACTOR_SEP : T;
@@ -5300,11 +5373,30 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       if (Array.isArray(T.starved) && T.starved.length){
         h += '<div class="dim" style="margin-top:4px"><b>STARVED</b> in the replay (constant on every row, so unmeasured, not "no separation"): ' + T.starved.map(esc).join(', ') + '.</div>';
       }
-      h += '<table class="tbl" style="margin-top:6px;font-size:11px"><thead><tr><th>read</th><th>n</th><th>win in / out</th><th>net in / out</th><th>better w/g/n</th><th></th></tr></thead><tbody>';
+      /* hg-v989: the FORWARD half. The desk marks the reads named above on
+         every record it writes (hgOmniReadMarks / opReadMarks), and the
+         ledger counts them on settled records (hgFwdReadSplit). Replay beside
+         forward on one row, so a verdict or a lean can be read against the
+         trades logged after it was baked. Silent with no ledger or no marks. */
+      var fw = null;
+      try {
+        var WW = (typeof window !== 'undefined') ? window : ((typeof globalThis !== 'undefined') ? globalThis : {});
+        if (T.tab && typeof WW.hgFwdReadSplit === 'function') fw = WW.hgFwdReadSplit(T.tab);
+      } catch (eFw){ fw = null; }
+      var fwCell = function (key){
+        var e = fw && fw.reads && fw.reads[key];
+        if (!e || !(e.yes.n + e.no.n)) return '—';
+        var side = function (c, label){ return c.n ? (label + ' ' + sR(c.r) + ' at ' + pct(c.hit) + ' n=' + c.n) : ''; };
+        return [side(e.yes, 'carried'), side(e.no, 'not')].filter(Boolean).join(' · ');
+      };
+      if (fw && fw.marked){
+        h += '<div class="dim" style="margin-top:4px"><b>FORWARD</b> · ' + fw.marked + ' of ' + fw.settled + ' settled forward records on this desk carry these read marks (stamped at fire time since hg-v989, counted after settlement) — the column on the right is that count, replay beside forward; a read that separates on both is still a measurement, not a gate.</div>';
+      }
+      h += '<table class="tbl" style="margin-top:6px;font-size:11px"><thead><tr><th>read</th><th>n</th><th>win in / out</th><th>net in / out</th><th>better w/g/n</th><th></th><th>forward (settled)</th></tr></thead><tbody>';
       rows.forEach(function (r){
         var tag = r.verdict ? ('<b>' + esc(String(r.verdict).toUpperCase()) + '</b>' + (r.inSample ? ' · in-sample' : ''))
                 : (r.lean ? ('lean ' + esc(r.lean)) : (r.degenerate ? 'no complement' : (r.thin ? ('thin ×' + r.thin) : '—')));
-        h += '<tr><td>' + esc(r.f) + '</td><td>' + r.n + '</td><td>' + pct(r.win) + ' / ' + pct(r.outWin) + '</td><td>' + sR(r.net) + ' / ' + sR(r.outNet) + '</td><td>' + esc(r.q) + '</td><td>' + tag + '</td></tr>';
+        h += '<tr><td>' + esc(r.f) + '</td><td>' + r.n + '</td><td>' + pct(r.win) + ' / ' + pct(r.outWin) + '</td><td>' + sR(r.net) + ' / ' + sR(r.outNet) + '</td><td>' + esc(r.q) + '</td><td>' + tag + '</td><td>' + fwCell(r.f) + '</td></tr>';
       });
       h += '</tbody></table></div>';
       return h;
@@ -10657,6 +10749,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                                mark: (num(held[j].livePx) > 0) ? num(held[j].livePx) : undefined,
                                /* hg-v985: the same funding the desk's own funding gate read */
                                fundingPct: (ex.positioning && typeof ex.positioning.fundingPct === 'number' && isFinite(ex.positioning.fundingPct)) ? ex.positioning.fundingPct : undefined,
+                               /* hg-v989: the reads the replay flagged, on the same livePx the mark reads */
+                               reads: hgOmniReadMarks(found[k], held[j].livePx),
                                /* barT keying must match OMNIGOLD: the decision bar's open time,
                                   not current time. Without this, hgFwdRecordScan defaults to
                                   Date.now() and invalidates cross-desk out-of-sample comparison. */
@@ -11760,6 +11854,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniMarketSideHtml = hgOmniMarketSideHtml;
     window.HG_OMNI_FACTOR_SEP = HG_OMNI_FACTOR_SEP;   /* hg-v987: read by the panel and by nothing else */
     window.hgOmniFactorSepHtml = hgOmniFactorSepHtml;   /* hg-v987 */
+    window.hgOmniReadMarks = hgOmniReadMarks;   /* hg-v989 */
     window.hgOmniEvaluate = hgOmniEvaluate;
     window.hgOmniPlanForHit = hgOmniPlanForHit;
     window.hgOmniFormTicket = hgOmniFormTicket;

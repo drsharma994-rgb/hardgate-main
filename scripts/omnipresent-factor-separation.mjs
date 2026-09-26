@@ -93,6 +93,7 @@ export function run(rows){
   const R = runFactors(rows, F);
   delete R.sorted;
   return Object.assign({ artifact: path.basename(ARTIFACT) }, R, {
+    tab: 'OMNIPRESENT',   /* hg-v989: the desk whose forward records mark these reads */
     bound: 'as-recorded only — the artifact carries no same-bar ambiguity flag; this desk enters at the live print so the fill model has little to add',
     sources: inv.srcs, evidenceKinds: inv.evs
   });
@@ -101,7 +102,7 @@ export function run(rows){
 export function literal(res){
   const R = res || run();
   return literalFor('HG_OP_FACTOR_SEP', R, { begin: BEGIN, end: END, script: 'scripts/omnipresent-factor-separation.mjs',
-    extra: { bound: R.bound, sources: R.sources, evidenceKinds: R.evidenceKinds } });
+    extra: { tab: R.tab, bound: R.bound, sources: R.sources, evidenceKinds: R.evidenceKinds } });
 }
 
 export function splice(src, lit){ return spliceBetween(src, lit, BEGIN, END, 'omnipresent.js'); }

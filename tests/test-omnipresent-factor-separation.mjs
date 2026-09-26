@@ -146,8 +146,11 @@ console.log('\n6. wired on both card paths, read by nothing else');
   const src = read('omnipresent.js');
   const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
   const codeReads = (code.match(/\bHG_OP_FACTOR_SEP\b/g) || []).length;
-  /* declaration, the renderer call's guard and its argument, and both sides of the export line */
-  ok(codeReads === 5, 'in code the literal appears five times: declaration, renderer guard, renderer argument, both sides of the export (' + codeReads + ') — nothing else reads it');
+  /* declaration, the renderer call's guard and its argument, both sides of the
+     export line, and — since hg-v989 — the read-mark builder that marks the
+     reads the literal names on every forward record */
+  ok(codeReads === 6, 'in code the literal appears six times: declaration, renderer guard, renderer argument, both sides of the export, and the hg-v989 read-mark builder (' + codeReads + ') — nothing else reads it');
+  ok(/function opReadMarks\(c\)\{\s*try\{\s*var T = HG_OP_FACTOR_SEP;/.test(code), 'the sixth is the read-mark builder');
   ok(/\+ \(h \|\| empty\) \+ opFactorSepHtml\(\);/.test(src), 'the scan paint appends the panel under the cards (textual, and says so: the paint lives inside runScan)');
   ok(/opPaidCardsHtml\(__op\.lastView\.top, __op\.lastView\.sideRead, paid\) \+ opFactorSepHtml\(\);/.test(src), 'the PAID view keeps the panel (textual)');
   ok(!/HG_OP_FACTOR_SEP/.test(read('hg-gates.js')) && !/HG_OP_FACTOR_SEP/.test(read('omniroute.js')), 'no gate module and no other desk reads it');
