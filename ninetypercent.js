@@ -620,6 +620,40 @@ function npEvaluate(inp){
   return out;
 }
 
+/* -------------------------------------------- the crypto macro read */
+
+/* hg-v984: the same read CRYPTOVERSE takes, for the same reason -- see
+   cvMacroMark. Six indicators over one price series never asked whether BTC
+   dominance or the dollar was against an alt long; the shared filter that
+   asks is applied on SWING, SCALP, EDGE and BEST and measured on none. Read,
+   printed, recorded; never gated here. */
+function npMacroMark(sym, dir){
+  try{
+    if (typeof W.hgMacroAltMark !== 'function') return null;
+    var m = W.hgMacroAltMark(sym, dir);
+    if (!m || !(m.block === true || m.block === false)) return null;
+    return { block: m.block, why: m.why || null };
+  }catch(e){ return null; }
+}
+
+function npMacroChipHTML(row){
+  var m = row && row.macro;
+  if (!m || m.block !== true) return '';
+  return '<span class="np-chip" style="background:#FEF3C7;color:#92400E" title="'
+    + esc(m.why || '') + '">MACRO FILTER WOULD BLOCK</span>';
+}
+
+function npMacroNoteHTML(row){
+  var m = row && row.macro;
+  if (!m || m.block !== true) return '';
+  return '<div class="np-note"><b>THE SHARED CRYPTO MACRO FILTER WOULD HAVE BLOCKED THIS.</b> '
+    + esc(m.why || 'BTC dominance or the dollar reads risk-off for alt longs') + '. '
+    + 'SWING, SCALP, EDGE and BEST refuse an alt long on that read; this desk has never asked it, '
+    + 'and does not gate on it here because the filter is measured on no desk. '
+    + 'The verdict rides on this setup\'s forward record, so the FORWARD panel below can say '
+    + 'whether the setups it would have removed paid. Reported, not gated.</div>';
+}
+
 /* --------------------------------------------------- forward log */
 
 function npFwdRows(setups){
@@ -638,7 +672,9 @@ function npFwdRows(setups){
       /* the mechanic carries the TREND the setup was taken in, so the log can
          answer whether this rule works in both directions or only one */
       mechanic: ('NP90-' + String(p.dir) + '@v' + NP_LABEL_V).toUpperCase().slice(0, 28),
-      ticket: true
+      ticket: true,
+      /* hg-v984: the macro read the card shows, or NOT RECORDED */
+      macroBlock: (s.macro && (s.macro.block === true || s.macro.block === false)) ? s.macro.block : undefined
     });
   }
   return out;
@@ -689,6 +725,7 @@ function npAuditText(a){
 }
 
 W.__npClosedRows = npClosedRows;
+W.__npMacroMark = npMacroMark;   /* hg-v984 */
 W.__npTrend = npTrend;
 W.__npPivots = npPivots;
 W.__npLevels = npLevels;
@@ -792,6 +829,7 @@ function npCardHTML(row, idx){
   h += '<span class="np-chip">TREND ' + esc(s.trend.toUpperCase()) + '</span>';
   h += '<span class="np-chip">3/3 PAIRS</span>';
   h += '<span class="np-chip">RECORD ONLY</span>';
+  h += npMacroChipHTML(row);   /* hg-v984 */
   h += '<span class="np-meta">entry ' + fmt(s.entry) + ' · stop ' + fmt(s.stop)
     + ' · target ' + fmt(s.t1) + ' (' + fmt(s.rr1, 2) + 'R) · breakeven '
     + Math.round(s.breakeven * 100) + '%'
@@ -809,6 +847,7 @@ function npCardHTML(row, idx){
     + '</div>';
   h += npStepsHTML(row.ledger);
   h += npPairsHTML(row.pairs);
+  h += npMacroNoteHTML(row);   /* hg-v984 */
   h += '<div class="np-note"><b>WHAT THE THREE PAIRINGS ARE AND ARE NOT.</b> '
     + 'RSI, the Stochastic, MACD and Bollinger %B are all computed from the same closes, '
     + 'so their agreement is largely one price series agreeing with itself — it is not six '
@@ -922,7 +961,8 @@ async function runScan(ui){
           continue;
         }
         rows.push({ sym: item.sym, exchange: item.exchange, bar: res.bar, price: res.price,
-                    setup: res.setup, ledger: res.ledger, pairs: res.pairs });
+                    setup: res.setup, ledger: res.ledger, pairs: res.pairs,
+                    macro: npMacroMark(item.sym, res.setup.dir) });
         setStat('scanned ' + scanned + '/' + items.length + ' · ' + rows.length + ' setup(s) so far…');
       }catch(eC){ errors++; }
     }

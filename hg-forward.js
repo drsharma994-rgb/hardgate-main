@@ -268,6 +268,14 @@ localStorage. Never throws.
       goldShut: (rec.goldShut === true) ? true
         : (rec.goldShut === false) ? false
         : undefined,   /* anything else is NOT RECORDED -- see below */
+      /* hg-v984: WOULD THE CRYPTO MACRO ALT FILTER HAVE BLOCKED THIS? The rule
+         hgMacroAllowsCrypto applies on six desks and is measured on none; the
+         crypto desks that record most never ask it. Same three states, same
+         booleans-only reading, for the same reason as goldShut: a record from
+         before anything asked is NOT RECORDED, never "allowed". */
+      macroBlock: (rec.macroBlock === true) ? true
+        : (rec.macroBlock === false) ? false
+        : undefined,
       /* ONLY the two booleans. Writing `rec.goldShut === true` alone looks
          equivalent and is not: it turns a truthy non-boolean (a caller
          passing 1) into FALSE, which reads as gold-open — the precise error
@@ -1419,6 +1427,11 @@ localStorage. Never throws.
          in neither bucket and the reader reports it as its own count. */
       if (r.goldShut === false) tally(out[key].tr || (out[key].tr = blank()));
       if (r.goldShut === true) tally(out[key].wk || (out[key].wk = blank()));
+      /* hg-v984: the crypto macro alt filter's verdict folds for the same
+         reason the calendar does. STRICTLY the two booleans; unmarked is
+         neither bucket. */
+      if (r.macroBlock === true) tally(out[key].mb || (out[key].mb = blank()));
+      if (r.macroBlock === false) tally(out[key].ma || (out[key].ma = blank()));
       /* AND THE SIDE, FOR THE SAME REASON THE OTHERS FOLD.
 
          The long/short split is the slowest measurement on this desk: it
@@ -1729,6 +1742,14 @@ localStorage. Never throws.
           return (f > barT) ? barT : f;
         }
         var o = opts || {};
+        function macroMarkOf(c){
+          if (c && (c.macroBlock === true || c.macroBlock === false)) return c.macroBlock;
+          if (typeof W.hgMacroAltMark !== 'function') return undefined;
+          try {
+            var mm = W.hgMacroAltMark(c && (c.sym || c.symbol), c && c.dir);
+            return (mm && (mm.block === true || mm.block === false)) ? mm.block : undefined;
+          } catch (eM){ return undefined; }
+        }
         var added = 0, i, c;
         for (i = 0; i < cands.length; i++){
           c = cands[i];
@@ -1764,6 +1785,13 @@ localStorage. Never throws.
                dropped it — the `mark` defect above, repeated. Absent stays
                absent: a caller that marks nothing records nothing. */
             goldShut: c.goldShut,
+            /* hg-v984: the crypto macro alt filter's verdict at fire time. A
+               desk that read it hands it in (CRYPTOVERSE, 90PERCENT: the same
+               read the card shows, so card and record agree by construction);
+               every other crypto writer gets it here, from the one rule in
+               plans.js, with nothing to edit in 26 record maps. Absent rule,
+               unread snapshot or a gold-lane symbol stay undefined. */
+            macroBlock: macroMarkOf(c),
             /* solidity stamp fields (hg-v533) ride through untouched;
                hgFwdNormalize attaches them only when sol is finite */
             sol: c.sol, solTier: c.solTier, solV: c.solV
@@ -2004,6 +2032,10 @@ localStorage. Never throws.
             + (tot < 40 ? 'Too few to judge yet — accumulating.' : stackCtx)
             + '</div>';
         })();
+        /* hg-v984: the macro alt filter split, on every desk that renders this
+           panel. Silent on a desk whose records carry no mark (every gold
+           tab; every crypto record written before this). */
+        try { h += W.hgFwdMacroSplitHtml(tab) || ''; } catch (eMs){}
         h += '<div class="note">Recorded once per firing when it fires, settled later by bars that did '
            + 'not exist at the time. A bar spanning both stop and target counts as a STOP; expiry is '
            + 'excluded rather than counted as a win. This is the only measurement here that accumulates.</div>';
@@ -2324,6 +2356,83 @@ localStorage. Never throws.
         } catch (eA){ out.agg = null; }
         return out;
       } catch (e) { hgFwdWarn('goldCalendarSplit', e); return null; }
+    };
+
+    /* hg-v984: THE CRYPTO MACRO ALT FILTER, MEASURED WHERE IT IS NOT APPLIED.
+
+       hgMacroAllowsCrypto (BTC.D > 55% or a rising DXY blocks alt longs) is
+       applied on SWING, SCALP, EDGE, BEST, SETUP CONFIRM and SUPER SETUP and
+       on none of OMNIROUTE, OMNIPRESENT, SQUEEZE, OI FLOW, DEX SCREENER,
+       CRYPTO SCAN, CRYPTOVERSE or 90PERCENT -- and it has never been
+       measured anywhere. The desks that apply it write only records it
+       allowed, so their split is one-sided by construction; the desks that
+       do not are where the question is answerable. Same shape as the gold
+       calendar split: settled live records plus the folded counts, and
+       unmarked records counted as NEITHER. Expectancy per bucket is the
+       actual tally (t1 => +rr, stop => -1), the same figure hgFwdStats
+       calls expR. */
+    W.hgFwdMacroSplit = function(tab, opts){
+      try {
+        var o = opts || {};
+        var recs = W.hgFwdRecords(tab) || [];
+        var want = (o.settledOnly === false) ? null : 1;
+        var out = { tab: tab || null, blocked: 0, allowed: 0, unmarked: 0,
+                    blockedWins: 0, allowedWins: 0,
+                    blockedR: null, allowedR: null, blockedHit: null, allowedHit: null, agg: null };
+        var bSum = 0, aSum = 0, i, r;
+        for (i = 0; i < recs.length; i++){
+          r = recs[i];
+          if (!r) continue;
+          if (want && r.state !== 't1' && r.state !== 'stop') continue;
+          if (r.macroBlock === true){
+            out.blocked++; if (r.state === 't1') out.blockedWins++;
+            bSum += (r.state === 't1') ? (+r.rr || 0) : -1;
+          } else if (r.macroBlock === false){
+            out.allowed++; if (r.state === 't1') out.allowedWins++;
+            aSum += (r.state === 't1') ? (+r.rr || 0) : -1;
+          } else out.unmarked++;
+        }
+        if (out.blocked){ out.blockedR = bSum / out.blocked; out.blockedHit = out.blockedWins / out.blocked; }
+        if (out.allowed){ out.allowedR = aSum / out.allowed; out.allowedHit = out.allowedWins / out.allowed; }
+        try {
+          var a = loadAgg() || {}, k, row, mb = null, ma = null;
+          for (k in a){
+            if (!Object.prototype.hasOwnProperty.call(a, k)) continue;
+            row = a[k];
+            if (!row) continue;
+            if (tab && String(row.tab || k.split('|')[0]) !== String(tab)) continue;
+            if (row.mb){ mb = mb || { wins: 0, losses: 0, expired: 0 };
+              mb.wins += row.mb.wins || 0; mb.losses += row.mb.losses || 0; mb.expired += row.mb.expired || 0; }
+            if (row.ma){ ma = ma || { wins: 0, losses: 0, expired: 0 };
+              ma.wins += row.ma.wins || 0; ma.losses += row.ma.losses || 0; ma.expired += row.ma.expired || 0; }
+          }
+          if (mb || ma) out.agg = { blocked: mb, allowed: ma };
+        } catch (eA){ out.agg = null; }
+        return out;
+      } catch (e) { hgFwdWarn('macroSplit', e); return null; }
+    };
+
+    /* Renders NOTHING while no record carries the mark -- a legacy log is not
+       evidence about the filter either way -- and never gates: the line says
+       what the filter would have removed and what those records did. */
+    W.hgFwdMacroSplitHtml = function(tab){
+      try {
+        var sp = W.hgFwdMacroSplit(tab);
+        if (!sp) return '';
+        if (!sp.blocked && !sp.allowed) return '';
+        var tot = sp.blocked + sp.allowed;
+        var pct = tot ? (100 * sp.blocked / tot) : 0;
+        var fmtR = function(v){ return (v >= 0 ? '+' : '') + v.toFixed(3) + 'R'; };
+        var h = '<div class="note" style="margin:8px 0;padding:8px 10px;border:1px solid #6B7280;border-radius:6px">';
+        h += '<b>MACRO ALT FILTER SPLIT</b> \u00b7 ' + sp.blocked + ' of ' + tot + ' marked settled records ('
+          + pct.toFixed(1) + '%) fired where the shared crypto macro filter (BTC.D &gt; 55% or DXY rising, alt longs) would have BLOCKED them';
+        if (sp.blockedR !== null) h += ' \u00b7 blocked ' + fmtR(sp.blockedR) + ' at ' + Math.round(100 * sp.blockedHit) + '% on n=' + sp.blocked;
+        if (sp.allowedR !== null) h += ' \u00b7 allowed ' + fmtR(sp.allowedR) + ' at ' + Math.round(100 * sp.allowedHit) + '% on n=' + sp.allowed;
+        if (sp.unmarked) h += ' \u00b7 <b>' + sp.unmarked + '</b> carry no mark and are counted as NEITHER \u2014 they predate the mark on this desk, or fired with the regime snapshot unread';
+        h += '. Reported, not gated: this desk does not apply the filter, and nothing is withheld on this line.';
+        h += '</div>';
+        return h;
+      } catch (e) { return ''; }
     };
 
     /* One line for any gold panel. Renders NOTHING when no record carries the
