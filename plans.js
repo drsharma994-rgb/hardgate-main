@@ -132,6 +132,44 @@ function hgRegimeAllowsSetup(rows, style){
   }
 }
 
+/* hg-v993: WOULD THE PER-SYMBOL TAPE REGIME VETO HAVE REMOVED THIS PLAN?
+
+   hgRegimeAllowsSetup above is a HARD veto on SWING, SCALP, BEST, SUPER
+   SETUP, CHART VISION, CONTRACT REPORT and the FTS setup stack: a VOLATILE
+   tape kills trend continuation, a COMPRESSION tape kills swing/edge/best.
+   OMNIROUTE, OMNIPRESENT, SQUEEZE, OI FLOW, DEX SCREENER, CRYPTOVERSE and
+   90PERCENT never ask it, and no record anywhere carried the tape label or
+   the verdict beside an outcome. Three states:
+
+     regime   the detectRegime key on the series in hand (volatile,
+              compression, trend, range, weak_trend) or undefined when the
+              series is too thin to read (DATA THIN is not a regime)
+     veto     true  -- the gate in force for `style` would have removed it
+              false -- it would have let it through
+              undefined -- no readable regime
+
+   `veto` equals hgRegimeAllowsSetup(...).allow === false on every readable
+   series (asserted); on an unreadable one the gate fails open and the mark
+   says NOT RECORDED, because 'allowed' is the wrong word for 'unread'.
+   It decides nothing. */
+function hgTapeRegimeMark(rows, style){
+  var out = { regime: undefined, veto: undefined, label: undefined };
+  try{
+    /* the thin-series rule is detectRegime's own (under 60 bars it reads
+       'unknown', which the key whitelist below refuses) -- not duplicated here */
+    if (typeof detectRegime !== 'function' || !Array.isArray(rows)) return out;
+    var dr = detectRegime(rows);
+    var k = dr && typeof dr.regime === 'string' ? dr.regime : '';
+    if (k !== 'volatile' && k !== 'compression' && k !== 'trend' && k !== 'range' && k !== 'weak_trend') return out;
+    out.regime = k;
+    out.label = (dr.label && typeof dr.label === 'string') ? dr.label : undefined;
+    var v = hgRegimeAllowsSetup(rows, style);
+    if (!v || v.unchecked) return out;
+    out.veto = v.allow === false;
+    return out;
+  }catch(e){ return out; }
+}
+
 /* --- 4H tape regime label (STRONG TREND / WEAK TREND / …) for card UI --- */
 function hgTapeRegimeLabel(rows){
   try{
@@ -2470,6 +2508,7 @@ G.hgIsGoldLaneSym = hgIsGoldLaneSym;   /* hg-v984 */
 G.hgBtcdPct = hgBtcdPct;
 G.hgIsCryptoMajor = hgIsCryptoMajor;
 G.hgTapeRegimeLabel = hgTapeRegimeLabel;
+G.hgTapeRegimeMark = hgTapeRegimeMark;   /* hg-v993 */
 G.hgEnrichTickerFundingTwin = hgEnrichTickerFundingTwin;
 G.hgPostGateSetupVeto = hgPostGateSetupVeto;
 G.hgPostGateGoldVeto = hgPostGateGoldVeto;

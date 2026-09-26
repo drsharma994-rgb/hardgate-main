@@ -925,6 +925,56 @@ W.regimePlaybook = regimePlaybook;
 W.regimeState = function(){
   try{ return __rgSnap ? __rgStateView(__rgSnap) : null; }catch(e){ return null; }
 };
+
+/* hg-v993: WOULD THE REGIME PLAYBOOK HAVE STOOD THIS PLAN DOWN?  Three states.
+
+   The playbook bias (LONG-ONLY / SHORT-ONLY / BOTH / STAND-ASIDE) is a HARD
+   block on PINE (pineRegimeAllows), an 'against' on the FTS setup stack, a
+   +2 vote on STAR TRADER and a BRAIN layer -- and no forward record has ever
+   carried its verdict beside an outcome (STAR TRADER's hg-v991 vote mark
+   collapses STAND-ASIDE and BOTH into one 'false'). This is the ONE rule the
+   PINE gate and the ledger's mark both read, so the two cannot drift:
+
+     true       the playbook would have BLOCKED a fresh plan in this
+                direction: STAND-ASIDE, or an ONLY bias on the other side
+     false      it would have let it through (the ONLY side, or BOTH)
+     undefined  NOT RECORDED: no readable bias, or no direction
+
+   hgRegimeBiasMark reads the live snapshot for a record at fire time and
+   carries the snapshot's age, because regimeState().at has never been read
+   by anything: a snapshot hours old is applied as current on every desk. A
+   gold-lane symbol gets no verdict -- this is a crypto regime. It decides
+   nothing; a reader that gates on it has to say so and measure it first. */
+function hgRegimeBiasBlocks(bias, dir){
+  try{
+    var b = String(bias || '').toUpperCase();
+    dir = String(dir || '').toLowerCase();
+    if (dir !== 'long' && dir !== 'short') return undefined;
+    if (b === 'STAND-ASIDE') return true;
+    if (b === 'LONG-ONLY') return dir === 'short';
+    if (b === 'SHORT-ONLY') return dir === 'long';
+    if (b === 'BOTH') return false;
+    return undefined;
+  }catch(e){ return undefined; }
+}
+function hgRegimeBiasMark(dir, sym){
+  var out = { bias: undefined, against: undefined, ageMin: undefined };
+  try{
+    if (typeof W.hgIsGoldLaneSym === 'function' && sym !== undefined && sym !== null && W.hgIsGoldLaneSym(sym)) return out;
+    var rs = W.regimeState ? W.regimeState() : null;
+    if (!rs || typeof rs !== 'object') return out;
+    var b = (rs.playbook && typeof rs.playbook.bias === 'string') ? rs.playbook.bias.toUpperCase() : '';
+    if (b === 'LONG-ONLY' || b === 'SHORT-ONLY' || b === 'BOTH' || b === 'STAND-ASIDE') out.bias = b;
+    if (typeof rs.at === 'number' && isFinite(rs.at) && rs.at > 0){
+      var age = (Date.now() - rs.at) / 60000;
+      if (isFinite(age) && age >= 0) out.ageMin = Math.round(age);
+    }
+    out.against = hgRegimeBiasBlocks(out.bias, dir);
+    return out;
+  }catch(e){ return out; }
+}
+W.hgRegimeBiasBlocks = hgRegimeBiasBlocks;   /* hg-v993 */
+W.hgRegimeBiasMark = hgRegimeBiasMark;       /* hg-v993 */
 /* ---------------- BRAIN warm-up hook ----------------
    Runs the real 8-gauge scan against inert stub nodes so the BRAIN tab can
    warm this layer without mounting it. Never throws; the BRAIN prints the

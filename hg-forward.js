@@ -332,6 +332,19 @@ localStorage. Never throws.
       newsRisk: (rec.newsRisk === 'blackout' || rec.newsRisk === 'high' || rec.newsRisk === 'med' || rec.newsRisk === 'low') ? rec.newsRisk : undefined,
       fng: (typeof rec.fng === 'number' && isFinite(rec.fng)) ? rec.fng : undefined,
       fngVeto: (rec.fngVeto === true) ? true : (rec.fngVeto === false) ? false : undefined,
+      /* hg-v993: THE REGIME LAYER AT FIRE TIME. regimeBias is the playbook's
+         four-way bias or NOT RECORDED; regimeAgainst is whether the bias rule
+         in force (hgRegimeBiasBlocks, the PINE hard block) would have stood
+         the plan down, the two booleans only; regimeAgeMin is the snapshot's
+         age in whole minutes, a finite non-negative number, never coerced;
+         tapeRegime is the per-symbol detectRegime key on the series the desk
+         held (DATA THIN is not a regime and reads NOT RECORDED); tapeVeto is
+         whether hgRegimeAllowsSetup would have removed it, booleans only. */
+      regimeBias: (rec.regimeBias === 'LONG-ONLY' || rec.regimeBias === 'SHORT-ONLY' || rec.regimeBias === 'BOTH' || rec.regimeBias === 'STAND-ASIDE') ? rec.regimeBias : undefined,
+      regimeAgainst: (rec.regimeAgainst === true) ? true : (rec.regimeAgainst === false) ? false : undefined,
+      regimeAgeMin: (typeof rec.regimeAgeMin === 'number' && isFinite(rec.regimeAgeMin) && rec.regimeAgeMin >= 0) ? rec.regimeAgeMin : undefined,
+      tapeRegime: (rec.tapeRegime === 'volatile' || rec.tapeRegime === 'compression' || rec.tapeRegime === 'trend' || rec.tapeRegime === 'range' || rec.tapeRegime === 'weak_trend') ? rec.tapeRegime : undefined,
+      tapeVeto: (rec.tapeVeto === true) ? true : (rec.tapeVeto === false) ? false : undefined,
       /* ONLY the two booleans. Writing `rec.goldShut === true` alone looks
          equivalent and is not: it turns a truthy non-boolean (a caller
          passing 1) into FALSE, which reads as gold-open — the precise error
@@ -1498,6 +1511,15 @@ localStorage. Never throws.
       }
       if (r.fngVeto === true) tally(out[key].fv || (out[key].fv = blank()));
       if (r.fngVeto === false) tally(out[key].fo || (out[key].fo = blank()));
+      /* hg-v993: the regime playbook verdict and the tape regime fold too */
+      if (r.regimeAgainst === true) tally(out[key].ra || (out[key].ra = blank()));
+      if (r.regimeAgainst === false) tally(out[key].ro || (out[key].ro = blank()));
+      if (r.tapeRegime === 'volatile' || r.tapeRegime === 'compression' || r.tapeRegime === 'trend' || r.tapeRegime === 'range' || r.tapeRegime === 'weak_trend'){
+        var tp = out[key].tp || (out[key].tp = {});
+        tally(tp[r.tapeRegime] || (tp[r.tapeRegime] = blank()));
+      }
+      if (r.tapeVeto === true) tally(out[key].tv || (out[key].tv = blank()));
+      if (r.tapeVeto === false) tally(out[key].tw || (out[key].tw = blank()));
       /* hg-v989: each named read folds into its own yes/no pair, so the split
          outlives the live cap exactly as the other marks do. STRICTLY the two
          booleans per read; an unmarked read is neither bucket. */
@@ -1868,10 +1890,68 @@ localStorage. Never throws.
             return (mm && (mm.block === true || mm.block === false)) ? mm.block : undefined;
           } catch (eM){ return undefined; }
         }
+        /* hg-v993: the regime layer at fire time, from the one home each
+           (regime.js for the playbook, plans.js for the tape), unless the desk
+           handed a valid value in. The tape mark needs the series the desk
+           held: the first candle array the candidate carries under the names
+           the writers use (rows, rows4h, rows1h) with at least 60 bars; a
+           candidate carrying none records NOT RECORDED. The veto is judged
+           under the style the record's timeframe implies -- scalp for the
+           intraday frames, swing otherwise -- and says so. */
+        function regimeBiasMarkOf(c){
+          try {
+            if (typeof W.hgRegimeBiasMark !== 'function') return null;
+            var m = W.hgRegimeBiasMark(c && c.dir, c && (c.sym || c.symbol));
+            return (m && typeof m === 'object') ? m : null;
+          } catch (eR){ return null; }
+        }
+        function regimeBiasOf(c, m){
+          var v = c && c.regimeBias;
+          if (v === 'LONG-ONLY' || v === 'SHORT-ONLY' || v === 'BOTH' || v === 'STAND-ASIDE') return v;
+          return (m && (m.bias === 'LONG-ONLY' || m.bias === 'SHORT-ONLY' || m.bias === 'BOTH' || m.bias === 'STAND-ASIDE')) ? m.bias : undefined;
+        }
+        function regimeAgainstOf(c, m){
+          if (c && (c.regimeAgainst === true || c.regimeAgainst === false)) return c.regimeAgainst;
+          return (m && (m.against === true || m.against === false)) ? m.against : undefined;
+        }
+        function regimeAgeOf(c, m){
+          if (c && typeof c.regimeAgeMin === 'number' && isFinite(c.regimeAgeMin) && c.regimeAgeMin >= 0) return c.regimeAgeMin;
+          return (m && typeof m.ageMin === 'number' && isFinite(m.ageMin) && m.ageMin >= 0) ? m.ageMin : undefined;
+        }
+        function tapeRowsOf(c){
+          var names = ['rows', 'rows4h', 'rows1h'], i2, a;
+          for (i2 = 0; i2 < names.length; i2++){
+            a = c && c[names[i2]];
+            if (Array.isArray(a) && a.length >= 60) return a;
+          }
+          return null;
+        }
+        function tapeStyleOf(tfv){
+          return /^(1|3|5|15|30)m$/.test(String(tfv || '')) ? 'scalp' : 'swing';
+        }
+        function tapeMarkOf(c){
+          var out = { regime: undefined, veto: undefined };
+          var v = c && c.tapeRegime;
+          if (v === 'volatile' || v === 'compression' || v === 'trend' || v === 'range' || v === 'weak_trend'){
+            out.regime = v;
+            if (c.tapeVeto === true || c.tapeVeto === false) out.veto = c.tapeVeto;
+            return out;
+          }
+          if (typeof W.hgTapeRegimeMark !== 'function') return out;
+          var rows = tapeRowsOf(c);
+          if (!rows) return out;
+          try {
+            var m = W.hgTapeRegimeMark(rows, tapeStyleOf(tf));
+            if (m && typeof m.regime === 'string') out.regime = m.regime;
+            if (m && (m.veto === true || m.veto === false)) out.veto = m.veto;
+          } catch (eT){}
+          return out;
+        }
         var added = 0, i, c;
         for (i = 0; i < cands.length; i++){
           c = cands[i];
           if (!c) continue;
+          var rgM = regimeBiasMarkOf(c), tpM = tapeMarkOf(c);
           var r = W.hgFwdRecord({
             tab: tab,
             mechanic: c.mechanic || c.strategy || o.mechanic || tf,
@@ -1920,6 +2000,12 @@ localStorage. Never throws.
             newsRisk: newsMarkOf(c),
             fng: fngOf(c),
             fngVeto: fngVetoOf(c, fngOf(c)),
+            /* hg-v993 */
+            regimeBias: regimeBiasOf(c, rgM),
+            regimeAgainst: regimeAgainstOf(c, rgM),
+            regimeAgeMin: regimeAgeOf(c, rgM),
+            tapeRegime: tpM.regime,
+            tapeVeto: tpM.veto,
             /* solidity stamp fields (hg-v533) ride through untouched;
                hgFwdNormalize attaches them only when sol is finite */
             sol: c.sol, solTier: c.solTier, solV: c.solV
@@ -2168,6 +2254,8 @@ localStorage. Never throws.
         try { h += W.hgFwdReadSplitHtml(tab) || ''; } catch (eRs){}   /* hg-v989 */
         try { h += W.hgFwdNewsSplitHtml(tab) || ''; } catch (eNs){}   /* hg-v992 */
         try { h += W.hgFwdSentimentSplitHtml(tab) || ''; } catch (eSs){}   /* hg-v992 */
+        try { h += W.hgFwdRegimeSplitHtml(tab) || ''; } catch (eRg){}   /* hg-v993 */
+        try { h += W.hgFwdTapeRegimeSplitHtml(tab) || ''; } catch (eTr){}   /* hg-v993 */
         h += '<div class="note">Recorded once per firing when it fires, settled later by bars that did '
            + 'not exist at the time. A bar spanning both stop and target counts as a STOP; expiry is '
            + 'excluded rather than counted as a win. This is the only measurement here that accumulates.</div>';
@@ -2865,6 +2953,152 @@ localStorage. Never throws.
         if (sp.unmarked) h += ' \u00b7 <b>' + sp.unmarked + '</b> carry no mark and are counted as NEITHER \u2014 they predate the mark, fired with no Fear &amp; Greed read, or are gold-lane records the index does not speak for';
         if (sp.agg) h += ' \u00b7 folded beyond the live cap: vetoed ' + (sp.agg.veto ? sp.agg.veto.wins + 'W/' + sp.agg.veto.losses + 'L' : '\u2014') + ', allowed ' + (sp.agg.ok ? sp.agg.ok.wins + 'W/' + sp.agg.ok.losses + 'L' : '\u2014');
         h += '. Reported, not gated: this desk does not apply the guard, and nothing is withheld on this line.';
+        h += '</div>';
+        return h;
+      } catch (e) { return ''; }
+    };
+
+    /* hg-v993: THE REGIME PLAYBOOK, MEASURED WHERE IT IS APPLIED AND WHERE IT
+       IS NOT. Settled live records split by whether hgRegimeBiasBlocks would
+       have stood the plan down at fire time, plus the folded counts; records
+       with no mark are NEITHER. Carries the per-bias cells and the median
+       snapshot age at fire, because that age was never read by anything. */
+    W.hgFwdRegimeSplit = function(tab, opts){
+      try {
+        var o = opts || {};
+        var recs = W.hgFwdRecords(tab) || [];
+        var want = (o.settledOnly === false) ? null : 1;
+        var BIASES = ['LONG-ONLY', 'SHORT-ONLY', 'BOTH', 'STAND-ASIDE'];
+        var out = { tab: tab || null, settled: 0, against: 0, ok: 0, unmarked: 0, againstWins: 0, okWins: 0,
+                    againstR: null, okR: null, againstHit: null, okHit: null, byBias: {}, ageMedianMin: null, agg: null };
+        var cell = function(){ return { n: 0, wins: 0, rSum: 0, r: null, hit: null }; };
+        var aSum = 0, oSum = 0, ages = [], i, r, rr, k;
+        for (i = 0; i < BIASES.length; i++) out.byBias[BIASES[i]] = cell();
+        for (i = 0; i < recs.length; i++){
+          r = recs[i];
+          if (!r) continue;
+          if (want && r.state !== 't1' && r.state !== 'stop') continue;
+          out.settled++;
+          rr = (r.state === 't1') ? (+r.rr || 0) : -1;
+          if (typeof r.regimeAgeMin === 'number' && isFinite(r.regimeAgeMin)) ages.push(r.regimeAgeMin);
+          if (BIASES.indexOf(r.regimeBias) >= 0){
+            var c2 = out.byBias[r.regimeBias];
+            c2.n++; if (r.state === 't1') c2.wins++; c2.rSum += rr;
+          }
+          if (r.regimeAgainst === true){ out.against++; if (r.state === 't1') out.againstWins++; aSum += rr; }
+          else if (r.regimeAgainst === false){ out.ok++; if (r.state === 't1') out.okWins++; oSum += rr; }
+          else out.unmarked++;
+        }
+        if (out.against){ out.againstR = aSum / out.against; out.againstHit = out.againstWins / out.against; }
+        if (out.ok){ out.okR = oSum / out.ok; out.okHit = out.okWins / out.ok; }
+        for (k in out.byBias){ var e = out.byBias[k]; if (e.n){ e.r = e.rSum / e.n; e.hit = e.wins / e.n; } }
+        if (ages.length){ ages.sort(function(a, b){ return a - b; }); out.ageMedianMin = ages[Math.floor(ages.length / 2)]; }
+        try {
+          var a = loadAgg() || {}, ak, row, ra = null, ro = null;
+          for (ak in a){
+            if (!Object.prototype.hasOwnProperty.call(a, ak)) continue;
+            row = a[ak];
+            if (!row) continue;
+            if (tab && String(row.tab || ak.split('|')[0]) !== String(tab)) continue;
+            if (row.ra){ ra = ra || { wins: 0, losses: 0, expired: 0 }; ra.wins += row.ra.wins || 0; ra.losses += row.ra.losses || 0; ra.expired += row.ra.expired || 0; }
+            if (row.ro){ ro = ro || { wins: 0, losses: 0, expired: 0 }; ro.wins += row.ro.wins || 0; ro.losses += row.ro.losses || 0; ro.expired += row.ro.expired || 0; }
+          }
+          if (ra || ro) out.agg = { against: ra, ok: ro };
+        } catch (eA){}
+        return out;
+      } catch (e) { hgFwdWarn('regimeSplit', e); return null; }
+    };
+    W.hgFwdRegimeSplitHtml = function(tab){
+      try {
+        var sp = W.hgFwdRegimeSplit(tab);
+        if (!sp || (!sp.against && !sp.ok && !sp.agg)) return '';
+        var fmtR = function(v){ return (v >= 0 ? '+' : '') + v.toFixed(3) + 'R'; };
+        var h = '<div class="note" style="margin:8px 0;padding:8px 10px;border:1px solid #6B7280;border-radius:6px">';
+        h += '<b>REGIME PLAYBOOK SPLIT</b> · ' + sp.against + ' of ' + (sp.against + sp.ok) + ' marked settled records fired where the REGIME playbook bias (the PINE hard block: STAND-ASIDE, or an ONLY bias on the other side) would have stood them down';
+        if (sp.againstR !== null) h += ' · stood down ' + fmtR(sp.againstR) + ' at ' + Math.round(100 * sp.againstHit) + '% on n=' + sp.against;
+        if (sp.okR !== null) h += ' · allowed ' + fmtR(sp.okR) + ' at ' + Math.round(100 * sp.okHit) + '% on n=' + sp.ok;
+        var parts = [], k;
+        for (k in sp.byBias){ if (sp.byBias[k].n) parts.push(k + ' ' + fmtR(sp.byBias[k].r) + ' at ' + Math.round(100 * sp.byBias[k].hit) + '% n=' + sp.byBias[k].n); }
+        if (parts.length) h += ' · by bias: ' + parts.join(', ');
+        if (sp.ageMedianMin !== null) h += ' · snapshot age at fire: median ' + sp.ageMedianMin + ' min';
+        if (sp.unmarked) h += ' · <b>' + sp.unmarked + '</b> carry no mark and are counted as NEITHER — they predate the mark, fired with the regime snapshot unread, or are gold-lane records a crypto regime does not speak for';
+        if (sp.agg) h += ' · folded beyond the live cap: stood down ' + (sp.agg.against ? sp.agg.against.wins + 'W/' + sp.agg.against.losses + 'L' : '—') + ', allowed ' + (sp.agg.ok ? sp.agg.ok.wins + 'W/' + sp.agg.ok.losses + 'L' : '—');
+        h += '. Reported, not gated: nothing on this line withholds a setup.';
+        h += '</div>';
+        return h;
+      } catch (e) { return ''; }
+    };
+
+    /* hg-v993: THE PER-SYMBOL TAPE REGIME VETO, MEASURED. Settled live records
+       by detectRegime key on the series the desk held, and by whether
+       hgRegimeAllowsSetup would have removed the plan under the style its
+       timeframe implies; unmarked is NEITHER. */
+    W.hgFwdTapeRegimeSplit = function(tab, opts){
+      try {
+        var o = opts || {};
+        var recs = W.hgFwdRecords(tab) || [];
+        var want = (o.settledOnly === false) ? null : 1;
+        var KEYS = ['volatile', 'compression', 'trend', 'range', 'weak_trend'];
+        var out = { tab: tab || null, settled: 0, veto: 0, ok: 0, unmarked: 0, vetoWins: 0, okWins: 0,
+                    vetoR: null, okR: null, vetoHit: null, okHit: null, labels: {}, agg: null };
+        var cell = function(){ return { n: 0, wins: 0, rSum: 0, r: null, hit: null }; };
+        var vSum = 0, oSum = 0, i, r, rr, k;
+        for (i = 0; i < KEYS.length; i++) out.labels[KEYS[i]] = cell();
+        for (i = 0; i < recs.length; i++){
+          r = recs[i];
+          if (!r) continue;
+          if (want && r.state !== 't1' && r.state !== 'stop') continue;
+          out.settled++;
+          rr = (r.state === 't1') ? (+r.rr || 0) : -1;
+          if (KEYS.indexOf(r.tapeRegime) >= 0){
+            var c2 = out.labels[r.tapeRegime];
+            c2.n++; if (r.state === 't1') c2.wins++; c2.rSum += rr;
+          }
+          if (r.tapeVeto === true){ out.veto++; if (r.state === 't1') out.vetoWins++; vSum += rr; }
+          else if (r.tapeVeto === false){ out.ok++; if (r.state === 't1') out.okWins++; oSum += rr; }
+          else out.unmarked++;
+        }
+        if (out.veto){ out.vetoR = vSum / out.veto; out.vetoHit = out.vetoWins / out.veto; }
+        if (out.ok){ out.okR = oSum / out.ok; out.okHit = out.okWins / out.ok; }
+        for (k in out.labels){ var e = out.labels[k]; if (e.n){ e.r = e.rSum / e.n; e.hit = e.wins / e.n; } }
+        try {
+          var a = loadAgg() || {}, ak, row, tv = null, tw = null, tp = null;
+          for (ak in a){
+            if (!Object.prototype.hasOwnProperty.call(a, ak)) continue;
+            row = a[ak];
+            if (!row) continue;
+            if (tab && String(row.tab || ak.split('|')[0]) !== String(tab)) continue;
+            if (row.tv){ tv = tv || { wins: 0, losses: 0, expired: 0 }; tv.wins += row.tv.wins || 0; tv.losses += row.tv.losses || 0; tv.expired += row.tv.expired || 0; }
+            if (row.tw){ tw = tw || { wins: 0, losses: 0, expired: 0 }; tw.wins += row.tw.wins || 0; tw.losses += row.tw.losses || 0; tw.expired += row.tw.expired || 0; }
+            if (row.tp){
+              tp = tp || {};
+              for (k in row.tp){
+                if (!Object.prototype.hasOwnProperty.call(row.tp, k) || !row.tp[k]) continue;
+                tp[k] = tp[k] || { wins: 0, losses: 0, expired: 0 };
+                tp[k].wins += row.tp[k].wins || 0; tp[k].losses += row.tp[k].losses || 0; tp[k].expired += row.tp[k].expired || 0;
+              }
+            }
+          }
+          if (tv || tw || tp) out.agg = { veto: tv, ok: tw, labels: tp };
+        } catch (eA){}
+        return out;
+      } catch (e) { hgFwdWarn('tapeRegimeSplit', e); return null; }
+    };
+    W.hgFwdTapeRegimeSplitHtml = function(tab){
+      try {
+        var sp = W.hgFwdTapeRegimeSplit(tab);
+        if (!sp || (!sp.veto && !sp.ok && !sp.agg)) return '';
+        var fmtR = function(v){ return (v >= 0 ? '+' : '') + v.toFixed(3) + 'R'; };
+        var h = '<div class="note" style="margin:8px 0;padding:8px 10px;border:1px solid #6B7280;border-radius:6px">';
+        h += '<b>TAPE REGIME SPLIT</b> · ' + sp.veto + ' of ' + (sp.veto + sp.ok) + ' marked settled records fired where the per-symbol tape regime veto (SWING/SCALP/BEST: VOLATILE kills trend continuation, COMPRESSION kills swing) would have removed them';
+        if (sp.vetoR !== null) h += ' · vetoed ' + fmtR(sp.vetoR) + ' at ' + Math.round(100 * sp.vetoHit) + '% on n=' + sp.veto;
+        if (sp.okR !== null) h += ' · allowed ' + fmtR(sp.okR) + ' at ' + Math.round(100 * sp.okHit) + '% on n=' + sp.ok;
+        var parts = [], k;
+        for (k in sp.labels){ if (sp.labels[k].n) parts.push(k + ' ' + fmtR(sp.labels[k].r) + ' at ' + Math.round(100 * sp.labels[k].hit) + '% n=' + sp.labels[k].n); }
+        if (parts.length) h += ' · by tape: ' + parts.join(', ');
+        if (sp.unmarked) h += ' · <b>' + sp.unmarked + '</b> carry no mark and are counted as NEITHER — they predate the mark, or fired from a desk whose candidate carried no series to read';
+        if (sp.agg) h += ' · folded beyond the live cap: vetoed ' + (sp.agg.veto ? sp.agg.veto.wins + 'W/' + sp.agg.veto.losses + 'L' : '—') + ', allowed ' + (sp.agg.ok ? sp.agg.ok.wins + 'W/' + sp.agg.ok.losses + 'L' : '—');
+        h += '. Reported, not gated: the veto stays exactly where it is applied and is applied nowhere new.';
         h += '</div>';
         return h;
       } catch (e) { return ''; }
