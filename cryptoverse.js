@@ -571,6 +571,47 @@ function cvWebhook(item, res){
   };
 }
 
+/* -------------------------------------------- the crypto macro read */
+
+/* hg-v984: THIS DESK NEVER ASKED THE CRYPTO MACRO FILTER, AND SAYS SO.
+
+   hgMacroAllowsCrypto -- an alt long is blocked while BTC.D > 55% or the
+   dollar is rising -- is applied on SWING, SCALP, EDGE, BEST, SETUP CONFIRM
+   and SUPER SETUP. This desk reads price alone and never asked it. It is not
+   wired as a gate here: the filter has been measured on no desk at all, and
+   a new veto with no measurement of what it removes is the hg-v966 trap. So
+   the verdict is READ, printed on the card, and handed to the forward record
+   (the same read, so card and record agree by construction), and the shared
+   forward panel splits this desk's settled record on it. When the split says
+   the filter would have paid here, a later pack can wire it on evidence.
+   Fails open to "not read": absent rule, unread snapshot, no verdict. */
+function cvMacroMark(sym, dir){
+  try{
+    if (typeof W.hgMacroAltMark !== 'function') return null;
+    var m = W.hgMacroAltMark(sym, dir);
+    if (!m || !(m.block === true || m.block === false)) return null;
+    return { block: m.block, why: m.why || null };
+  }catch(e){ return null; }
+}
+
+function cvMacroChipHTML(row){
+  var m = row && row.macro;
+  if (!m || m.block !== true) return '';
+  return '<span class="cv-chip" style="background:#FEF3C7;color:#92400E" title="'
+    + esc(m.why || '') + '">MACRO FILTER WOULD BLOCK</span>';
+}
+
+function cvMacroNoteHTML(row){
+  var m = row && row.macro;
+  if (!m || m.block !== true) return '';
+  return '<div class="cv-note"><b>THE SHARED CRYPTO MACRO FILTER WOULD HAVE BLOCKED THIS.</b> '
+    + esc(m.why || 'BTC dominance or the dollar reads risk-off for alt longs') + '. '
+    + 'SWING, SCALP, EDGE and BEST refuse an alt long on that read; this desk has never asked it, '
+    + 'and does not gate on it here because the filter is measured on no desk. '
+    + 'The verdict rides on this setup\'s forward record, so the FORWARD panel below can say '
+    + 'whether the setups it would have removed paid. Reported, not gated.</div>';
+}
+
 /* ------------------------------------------------------ forward log */
 
 /* Same instrument CRYPTO SCAN uses, so this tab's claim can be settled out
@@ -592,7 +633,9 @@ function cvFwdRows(setups){
       mechanic: ('CVERSE-' + String(p.kind || 'SWEEP') + '@v' + CV_LABEL_V).toUpperCase().slice(0, 28),
       /* every card this tab shows cleared all three gates, so they are one
          population; there is no weaker tier to split against yet */
-      ticket: true
+      ticket: true,
+      /* hg-v984: the macro read the card shows, or NOT RECORDED */
+      macroBlock: (s.macro && (s.macro.block === true || s.macro.block === false)) ? s.macro.block : undefined
     });
   }
   return out;
@@ -610,6 +653,7 @@ W.__cvBreakeven = cvBreakeven;
 W.__cvEvaluate = cvEvaluate;
 W.__cvWebhook = cvWebhook;
 W.__cvFwdRows = cvFwdRows;
+W.__cvMacroMark = cvMacroMark;   /* hg-v984 */
 W.__cvAtr = cvAtr;
 W.HG_CRYPTOVERSE_RULE = {
   lookback: CV_LOOKBACK, k: CV_K, labelH: CV_LABEL_H, scoreLimit: CV_SCORE_LIMIT,
@@ -682,6 +726,7 @@ function cvCardHTML(row, idx){
     + s.dir.toUpperCase() + '</span>';
   h += '<span class="cv-chip">' + esc(s.kind) + '</span>';
   h += '<span class="cv-chip">RECORD ONLY</span>';
+  h += cvMacroChipHTML(row);   /* hg-v984 */
   h += '<span class="cv-meta">entry ' + fmt(s.entry) + ' · SL ' + fmt(s.stop)
     + ' · TP1 ' + fmt(s.t1) + ' (' + s.rr1 + 'R) · breakeven hit rate '
     + Math.round(s.breakeven * 100) + '%'
@@ -698,6 +743,7 @@ function cvCardHTML(row, idx){
     + '<div><small>TP2 (' + s.rr2 + 'R)</small><b style="color:#166534">' + fmt(s.t2) + '</b></div>'
     + '</div>';
   h += cvLedgerHTML(row.ledger);
+  h += cvMacroNoteHTML(row);   /* hg-v984 */
   h += '<div class="cv-note"><b>WHAT THIS DOES AND DOES NOT CLAIM.</b> No win rate is asserted. '
     + 'At ' + s.rr1 + 'R the trade only has to be right '
     + Math.round(s.breakeven * 100) + '% of the time to break even before costs, '
@@ -827,7 +873,8 @@ async function runScan(ui){
         }
         rows.push({ sym: item.sym, label: item.sym, exchange: item.exchange,
                     bar: res.bar, price: res.price, setup: res.setup,
-                    ledger: res.ledger, webhook: cvWebhook(item, res) });
+                    ledger: res.ledger, webhook: cvWebhook(item, res),
+                    macro: cvMacroMark(item.sym, res.setup.dir) });
         setStat('scanned ' + scanned + '/' + items.length + ' · ' + rows.length + ' setup(s) so far…');
       }catch(eC){ errors++; }
     }

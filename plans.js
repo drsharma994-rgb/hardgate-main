@@ -962,7 +962,11 @@ function hgBtcdPct(){
   try{
     if (typeof G.regimeState === 'function'){
       var rs = G.regimeState();
-      if (rs && isFinite(+rs.btcdPct)) return +rs.btcdPct;
+      /* hg-v984: `+null` is 0, so a snapshot whose BTC.D gauge was dark read
+         as BTC dominance 0% -- harmless to the gate (0 never blocks) and
+         wrong for anything that asks whether the leg was READ. null means
+         unread; a number means read. */
+      if (rs && rs.btcdPct !== null && rs.btcdPct !== undefined && isFinite(+rs.btcdPct)) return +rs.btcdPct;
     }
     if (typeof G.hgBtcdPctOverride === 'number' && isFinite(G.hgBtcdPctOverride)) return G.hgBtcdPctOverride;
     return null;
@@ -977,6 +981,48 @@ function hgDxyTrend(){
     }
     return null;
   }catch(e){ return null; }
+}
+
+/* hg-v984: ONE HOME for "is this symbol the gold lane". hgTicketFinalGates
+   carried this regex inline; the forward ledger's macro mark needs the same
+   answer, and two copies of a symbol test drift the way two calendars do. */
+function hgIsGoldLaneSym(sym){
+  return /(XAU|PAXG|GOLD)/i.test(String(sym || ''));
+}
+
+/* hg-v984: WOULD THE CRYPTO MACRO ALT FILTER HAVE BLOCKED THIS?  Three states.
+
+   hgMacroAllowsCrypto below is applied on SWING, SCALP, EDGE, BEST, SETUP
+   CONFIRM and SUPER SETUP, and on none of the crypto desks that record most
+   (OMNIROUTE, OMNIPRESENT, SQUEEZE, OI FLOW, DEX SCREENER, CRYPTO SCAN,
+   CRYPTOVERSE, 90PERCENT ...). It has never been measured on any of them.
+   This is the mark the forward ledger stamps on every crypto record at fire
+   time so the question can be answered out of sample instead of asserted:
+
+     true       the filter would have BLOCKED this plan (alt long under
+                BTC.D > 55% or a rising DXY)
+     false      the filter would have let it through (a short, a major, or
+                an alt long with the macro read benign)
+     undefined  NOT RECORDED: no direction, a gold-lane symbol (a crypto
+                dominance rule has nothing to say about XAUUSD), or a
+                regime snapshot with NEITHER leg readable. hgMacroAllowsCrypto
+                itself returns allow:true on an unread snapshot -- fail-open
+                is right for a gate and wrong for a measurement, because it
+                would count every cold-start record as "allowed".
+
+   It decides nothing. A reader that gates on it has to say so and measure it
+   first (the hg-v966 trap). */
+function hgMacroAltMark(sym, dir){
+  try{
+    dir = String(dir || '').toLowerCase();
+    if (!(dir === 'long' || dir === 'short')) return { block: undefined, why: 'no direction' };
+    if (hgIsGoldLaneSym(sym)) return { block: undefined, why: 'gold lane -- the crypto macro filter does not apply' };
+    var btcd = hgBtcdPct(), dxy = hgDxyTrend();
+    if (btcd === null && dxy === null) return { block: undefined, why: 'regime snapshot unread', btcd: null, dxy: null };
+    var v = hgMacroAllowsCrypto(sym, dir);
+    if (!v || v.unchecked) return { block: undefined, why: (v && v.reason) || 'macro check unreadable', btcd: btcd, dxy: dxy };
+    return { block: v.allow === false, why: v.reason || null, btcd: btcd, dxy: dxy };
+  }catch(e){ return { block: undefined, why: 'macro mark threw: ' + hgErrText(e) }; }
 }
 
 /* BTC.D + DXY macro gate for crypto alts (majors always pass; null macro = no block). */
@@ -2301,7 +2347,7 @@ function hgTicketFinalGates(plan, ctx){
   try{
     if (!plan || !plan.dir) return { ok: true, chips: [] };
     var chips = [];
-    var lane = ctx.lane || ((/(XAU|PAXG|GOLD)/i.test(String(plan.sym || ''))) ? 'gold' : 'crypto');
+    var lane = ctx.lane || (hgIsGoldLaneSym(plan.sym) ? 'gold' : 'crypto');   /* hg-v984: one regex home */
 
     if (typeof G.hgRegimeResolveState === 'function' && typeof G.hgRegimeAdjust === 'function'){
       var rs = G.hgRegimeResolveState();
@@ -2419,6 +2465,8 @@ G.hgFormatEntryType = hgFormatEntryType;
 G.hgConfirmedCascade = hgConfirmedCascade;
 G.hgRegimeAllowsSetup = hgRegimeAllowsSetup;
 G.hgMacroAllowsCrypto = hgMacroAllowsCrypto;
+G.hgMacroAltMark = hgMacroAltMark;   /* hg-v984 */
+G.hgIsGoldLaneSym = hgIsGoldLaneSym;   /* hg-v984 */
 G.hgBtcdPct = hgBtcdPct;
 G.hgIsCryptoMajor = hgIsCryptoMajor;
 G.hgTapeRegimeLabel = hgTapeRegimeLabel;
