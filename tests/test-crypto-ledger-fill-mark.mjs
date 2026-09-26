@@ -227,6 +227,9 @@ console.log('== 5) every crypto record map forwards the mark it had in hand (tex
     'index.html: the BEST/SWING/SCALP publish spreads the candidate (its mark rides the spread) and reads the bar off its rows, CLEAN and NEAR alike');
 }
 
+/* hg-v991: `entry` must not be preceded by a dot -- `p.entry : null`, a ternary in a
+     card renderer within the window, read as the record literal's key and sent the
+     census to the wrong braces (it judged STAR TRADER's new writer bare) */
 console.log('== 6) the census, derived by call shape: every record writer carries a mark ==');
 {
   /* Every hgFwdRecordScan call site in the repo (definition excluded). The
@@ -268,10 +271,10 @@ console.log('== 6) the census, derived by call shape: every record writer carrie
         const asg = pre.match(new RegExp('\\b' + arg3 + '\\s*=\\s*([A-Za-z_$][\\w$]*)\\s*\\('));
         const at = asg ? src.indexOf('function ' + asg[1] + '(') : -1;
         region = at >= 0 ? src.slice(at, at + 2500) : pre;
-        for (const em of region.matchAll(/\bentry\s*:/g)) li = em.index;
+        for (const em of region.matchAll(/(?<![.\w])entry\s*:/g)) li = em.index;
       } else {
         region = span;
-        const em = region.match(/\bentry\s*:/); li = em ? em.index : -1;
+        const em = region.match(/(?<![.\w])entry\s*:/); li = em ? em.index : -1;
       }
       if (li < 0 && !spread) continue;               /* no record literal: not a writer */
       const lit = li >= 0 ? literalAround(region, li) : '';
