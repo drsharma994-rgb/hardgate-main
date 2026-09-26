@@ -175,10 +175,12 @@ console.log('\n5. nothing is gated on it, and the panel is wired where the forwa
   const src = read('omniroute.js');
   const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
   const codeReads = (code.match(/\bHG_OMNI_FACTOR_SEP\b/g) || []).length;
-  /* the declaration, the renderer's default argument, and the export line
-     (which names it twice: window.X = X) — four, and nothing else */
-  ok(codeReads === 4, 'in code it appears exactly four times: declaration, renderer default, and both sides of the export (' + codeReads + ') — nothing else reads it');
-  ok(/T = \(T === undefined\) \? HG_OMNI_FACTOR_SEP : T;/.test(code) && /window\.HG_OMNI_FACTOR_SEP = HG_OMNI_FACTOR_SEP;/.test(code), 'and those are the reads: the renderer default and the export');
+  /* the declaration, the renderer's default argument, the export line
+     (which names it twice: window.X = X) and — since hg-v989 — the read-mark
+     builder that marks the reads the literal names on every forward record:
+     five, and nothing else */
+  ok(codeReads === 5, 'in code it appears exactly five times: declaration, renderer default, both sides of the export, and the hg-v989 read-mark builder (' + codeReads + ') — nothing else reads it');
+  ok(/T = \(T === undefined\) \? HG_OMNI_FACTOR_SEP : T;/.test(code) && /window\.HG_OMNI_FACTOR_SEP = HG_OMNI_FACTOR_SEP;/.test(code) && /function hgOmniReadMarks\(c, livePx\)\{\s*try \{\s*var T = HG_OMNI_FACTOR_SEP;/.test(code), 'and those are the reads: the renderer default, the export, and the read-mark builder');
   ok(/renderPooled\(res\.pooled\) \+ fwdPanel \+ factorSepPanel;/.test(src), 'the panel is appended under the pooled table after the forward panel (textual, and says so: the pool line lives inside runScan)');
   ok(/try \{ factorSepPanel = hgOmniFactorSepHtml\(\) \|\| ''; \} catch \(eFs\) \{ factorSepPanel = ''; \}/.test(src), 'a panel failure degrades to nothing, never a blank pool');
   ok(!/HG_OMNI_FACTOR_SEP/.test(read('hg-solidity.js')) && !/HG_OMNI_FACTOR_SEP/.test(read('hg-gates.js')), 'no gate module reads it');

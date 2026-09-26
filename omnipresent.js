@@ -1079,7 +1079,8 @@
               .map(function (c){ return { sym: c.sym, dir: c.dir, entry: c.entry, stop: c.stop, t1: c.t1,
                                           mark: c.mark, barT: c.barT,   /* hg-v981 */
                                           mechanic: 'OP-' + (c.dir === 'short' ? 'HIGH-REJECT' : 'LOW-REJECT'),
-                                          ticket: !!(c.grade && c.grade.ticket) }; });
+                                          ticket: !!(c.grade && c.grade.ticket),
+                                          reads: opReadMarks(c) }; });   /* hg-v989 */
             if (fwd.length){ try{ W.hgFwdRecordScan('OMNIPRESENT', TF, fwd, { horizonBars: 24 }); }catch(e){} }
           }
           if (gfn('hgAlertZones')){
@@ -1331,6 +1332,7 @@
   var HG_OP_FACTOR_SEP = {
     artifact: "backtest-omnipresent-results.json", n: 8502, windows: 4, minSide: 20,
     span: ["2026-06-13","2026-09-11"],
+    tab: "OMNIPRESENT",
     bound: "as-recorded only — the artifact carries no same-bar ambiguity flag; this desk enters at the live print so the fill model has little to add",
     sources: ["round number","swing low","swing high","AVWAP +2σ","AVWAP −2σ","prior-day high","prior-day low","value-area low","value-area high"],
     evidenceKinds: ["volume climax","stretched","bullish RSI divergence","bearish RSI divergence","squeeze released this bar"],
@@ -1373,6 +1375,48 @@
     ]
   };
   /* --- END GENERATED HG_OP_FACTOR_SEP --- */
+
+  /* hg-v989: THE READS THE REPLAY FLAGGED, MARKED ON THE FORWARD RECORD.
+
+     HG_OP_FACTOR_SEP names the reads whose replay cohort separated (verdicts)
+     or leaned. Each one this desk can compute at fire time is marked on the
+     candidate as a named boolean, so the forward ledger can count the same
+     read on trades logged before their outcomes existed (hgFwdReadSplit) --
+     the confirmation hg-v988 said the ledger was for. The set of reads is
+     READ off the literal, never typed here: a re-bake that finds a new
+     verdict marks it with no edit, and a read this desk has no reader for is
+     left ABSENT (not recorded), never guessed. The predicates are the
+     generator's own: an evidence family is a PREFIX of the evidence string
+     (hasEv), a zone source is membership (hasSrc), the two hard gates are
+     the counts hg-v421 gates on, the distance bands read zone.distAtr. */
+  function opReadMarks(c){
+    try{
+      var T = HG_OP_FACTOR_SEP;
+      if (!c || !T) return undefined;
+      var keys = [].concat(Array.isArray(T.verdicts) ? T.verdicts : [], Array.isArray(T.leans) ? T.leans : []);
+      if (!keys.length) return undefined;
+      var ev = Array.isArray(c.evidence) ? c.evidence : null;
+      var z = c.zone || null;
+      var srcs = (z && Array.isArray(z.srcs)) ? z.srcs : null;
+      var conf = (z && typeof z.confluence === 'number' && isFinite(z.confluence)) ? z.confluence : NaN;
+      var dist = (z && typeof z.distAtr === 'number' && isFinite(z.distAtr)) ? z.distAtr : NaN;
+      var out = null, k, v, m;
+      for (var i = 0; i < keys.length; i++){
+        k = String(keys[i]); v = undefined;
+        if ((m = /^ev:(.+)$/.exec(k))){ if (ev) v = ev.some(function (e){ return String(e).indexOf(m[1]) === 0; }); }
+        else if ((m = /^src:(.+)$/.exec(k))){ if (srcs) v = srcs.indexOf(m[1]) >= 0; }
+        else if (k === 'gate:confluence3'){ if (isFinite(conf)) v = conf >= 3; }
+        else if (k === 'gate:evidence2'){ if (ev) v = ev.length >= 2; }
+        else if (k === 'gate:both'){ if (isFinite(conf) && ev) v = conf >= 3 && ev.length >= 2; }
+        else if (k === 'zone:confluence4'){ if (isFinite(conf)) v = conf >= 4; }
+        else if (k === 'zone:evidence1'){ if (ev) v = ev.length >= 1; }
+        else if (k === 'zone:distLt025'){ if (isFinite(dist)) v = dist < 0.25; }
+        else if (k === 'zone:distGe1'){ if (isFinite(dist)) v = dist >= 1.0; }
+        if (v === true || v === false){ if (!out) out = {}; out[k] = v; }
+      }
+      return out || undefined;
+    }catch(e){ return undefined; }
+  }
 
   function opFactorSepHtml(){
     try{
@@ -2203,6 +2247,7 @@
     window.hgOpRunScan = runScan;   /* the scan loop itself, for the stability harness */
     window.HG_OP_FACTOR_SEP = HG_OP_FACTOR_SEP;   /* hg-v988: read by the panel and by nothing else */
     window.opFactorSepHtml = opFactorSepHtml;   /* hg-v988 */
+    window.opReadMarks = opReadMarks;   /* hg-v989 */
     window.hgOpState = function (){ try{ return __op.snap ? JSON.parse(JSON.stringify(__op.snap)) : null; }catch(e){ return null; } };
     window.HG_tabs = window.HG_tabs || [];
     window.HG_tabs.push({ id: 'omnipresent', label: 'OMNIPRESENT', mount: mountOmnipresent, refresh: refreshOmnipresent });

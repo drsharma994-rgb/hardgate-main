@@ -130,6 +130,43 @@ localStorage. Never throws.
   /* Validate and normalise a candidate record. Returns null when the setup
      cannot be resolved later — a record we could never settle is worse than
      no record, because it would sit in the log looking like pending evidence. */
+  /* hg-v989: NAMED READ MARKS -- the reads a desk's own replay flagged,
+     carried onto the record so the forward ledger can answer the replay.
+
+     hg-v987 measured every signal-time read OMNIROUTE scores by on four
+     disjoint windows and named two leans "worth a forward measurement";
+     hg-v988 found one out-of-sample verdict on OMNIPRESENT and wrote that
+     "the forward ledger is where a confirmation would come from". Neither
+     desk's record carried any of those reads, so the ledger could confirm
+     nothing: the replay named the reads and nothing recorded them going
+     forward -- the hg-v955 shape one pack later.
+
+     `reads` is a small object of named booleans. Each read has THREE states
+     for the reasons goldShut and macroBlock do: true (the record carried
+     the read), false (it did not), absent (NOT RECORDED -- a desk that never
+     asked, or a record from before it asked). ONLY the two booleans are
+     kept, per key; anything else is dropped, never coerced (1 is not true,
+     'no' is not false). Keys are bounded in length and count so a caller
+     cannot turn the record store into a dumping ground; a read the desk
+     names is a read the desk can compute at fire time. Nothing reads
+     `reads` to gate: the split it feeds is reported beside the replay row. */
+  var FWD_READS_MAX = 16, FWD_READ_KEY = /^[A-Za-z0-9][A-Za-z0-9:_. -]{0,47}$/;
+  function hgFwdReadsNormalize(reads){
+    if (!reads || typeof reads !== 'object' || Array.isArray(reads)) return undefined;
+    var out = null, n = 0, k;
+    var keys = Object.keys(reads).sort();
+    for (var i = 0; i < keys.length; i++){
+      k = keys[i];
+      if (!FWD_READ_KEY.test(k)) continue;
+      var v = reads[k];
+      if (v !== true && v !== false) continue;   /* the two booleans, nothing else */
+      if (n >= FWD_READS_MAX) break;
+      if (!out) out = {};
+      out[k] = v; n++;
+    }
+    return out || undefined;
+  }
+
   function hgFwdNormalize(rec){
     if (!rec || typeof rec !== 'object') return null;
     var entry = fin(rec.entry), stop = fin(rec.stop), t1 = fin(rec.t1), barT = fin(rec.barT);
@@ -285,6 +322,8 @@ localStorage. Never throws.
       fundAgainst: (rec.fundAgainst === true) ? true
         : (rec.fundAgainst === false) ? false
         : undefined,
+      /* hg-v989: the named read marks, booleans only, absent when none */
+      reads: hgFwdReadsNormalize(rec.reads),
       /* ONLY the two booleans. Writing `rec.goldShut === true` alone looks
          equivalent and is not: it turns a truthy non-boolean (a caller
          passing 1) into FALSE, which reads as gold-open — the precise error
@@ -1444,6 +1483,18 @@ localStorage. Never throws.
       /* hg-v985: the directional funding rule's verdict folds the same way */
       if (r.fundAgainst === true) tally(out[key].fa || (out[key].fa = blank()));
       if (r.fundAgainst === false) tally(out[key].fw || (out[key].fw = blank()));
+      /* hg-v989: each named read folds into its own yes/no pair, so the split
+         outlives the live cap exactly as the other marks do. STRICTLY the two
+         booleans per read; an unmarked read is neither bucket. */
+      if (r.reads && typeof r.reads === 'object'){
+        var rd = out[key].rd || (out[key].rd = {}), rk;
+        for (rk in r.reads){
+          if (!Object.prototype.hasOwnProperty.call(r.reads, rk)) continue;
+          if (r.reads[rk] !== true && r.reads[rk] !== false) continue;
+          var pair = rd[rk] || (rd[rk] = { t: blank(), f: blank() });
+          tally(r.reads[rk] === true ? pair.t : pair.f);
+        }
+      }
       /* AND THE SIDE, FOR THE SAME REASON THE OTHERS FOLD.
 
          The long/short split is the slowest measurement on this desk: it
@@ -1824,6 +1875,10 @@ localStorage. Never throws.
             macroBlock: macroMarkOf(c),
             fundingPct: fundingOf(c),   /* hg-v985 */
             fundAgainst: fundMarkOf(c),
+            /* hg-v989: the reads the desk's own replay flagged, marked by the
+               desk at fire time (booleans only; the normaliser decides). A
+               desk that marks nothing records nothing. */
+            reads: c.reads,
             /* solidity stamp fields (hg-v533) ride through untouched;
                hgFwdNormalize attaches them only when sol is finite */
             sol: c.sol, solTier: c.solTier, solV: c.solV
@@ -2069,6 +2124,7 @@ localStorage. Never throws.
            tab; every crypto record written before this). */
         try { h += W.hgFwdMacroSplitHtml(tab) || ''; } catch (eMs){}
         try { h += W.hgFwdFundingSplitHtml(tab) || ''; } catch (eFs){}   /* hg-v985 */
+        try { h += W.hgFwdReadSplitHtml(tab) || ''; } catch (eRs){}   /* hg-v989 */
         h += '<div class="note">Recorded once per firing when it fires, settled later by bars that did '
            + 'not exist at the time. A bar spanning both stop and target counts as a STOP; expiry is '
            + 'excluded rather than counted as a win. This is the only measurement here that accumulates.</div>';
@@ -2545,6 +2601,102 @@ localStorage. Never throws.
         }
         if (sp.unmarked) h += ' \u00b7 <b>' + sp.unmarked + '</b> carry no mark and are counted as NEITHER \u2014 they predate the mark, or fired on a venue that reports no funding';
         h += '. Reported, not gated: this desk does not apply the rule, and nothing is withheld on this line.';
+        h += '</div>';
+        return h;
+      } catch (e) { return ''; }
+    };
+
+    /* hg-v989: THE FORWARD SPLIT OF EVERY NAMED READ A DESK MARKS.
+
+       Settled live records plus the folded pairs, per read key, the marked
+       cohort (true) against the unmarked-false cohort, with the records that
+       carry no mark for that read counted as NEITHER. This is the forward
+       half of the factor separation the two crypto desks bake from their
+       replays: a replay VERDICT or LEAN on a read is a claim about the past,
+       and this is the same read counted on trades logged before their
+       outcomes existed. Nothing here gates. */
+    W.hgFwdReadSplit = function(tab, opts){
+      try {
+        var o = opts || {};
+        var recs = W.hgFwdRecords(tab) || [];
+        var want = (o.settledOnly === false) ? null : 1;
+        var out = { tab: tab || null, settled: 0, marked: 0, reads: {} };
+        var cell = function(){ return { n: 0, wins: 0, rSum: 0, r: null, hit: null }; };
+        var i, r, rr, k, e;
+        for (i = 0; i < recs.length; i++){
+          r = recs[i];
+          if (!r) continue;
+          if (want && r.state !== 't1' && r.state !== 'stop') continue;
+          out.settled++;
+          if (!r.reads || typeof r.reads !== 'object') continue;
+          var any = false;
+          rr = (r.state === 't1') ? (+r.rr || 0) : -1;
+          for (k in r.reads){
+            if (!Object.prototype.hasOwnProperty.call(r.reads, k)) continue;
+            /* no boolean check here: hgFwdReadsNormalize is the one door, and a
+               second check of the same rule is an unkillable duplicate */
+            any = true;
+            e = out.reads[k] || (out.reads[k] = { yes: cell(), no: cell(), unmarked: 0, agg: null });
+            var c2 = r.reads[k] ? e.yes : e.no;
+            c2.n++; if (r.state === 't1') c2.wins++; c2.rSum += rr;
+          }
+          if (any) out.marked++;
+        }
+        for (k in out.reads){
+          if (!Object.prototype.hasOwnProperty.call(out.reads, k)) continue;
+          e = out.reads[k];
+          e.unmarked = out.settled - e.yes.n - e.no.n;
+          if (e.yes.n){ e.yes.r = e.yes.rSum / e.yes.n; e.yes.hit = e.yes.wins / e.yes.n; }
+          if (e.no.n){ e.no.r = e.no.rSum / e.no.n; e.no.hit = e.no.wins / e.no.n; }
+        }
+        try {
+          var a = loadAgg() || {}, ak, row, pr, sum;
+          sum = function(dst, src){ dst.wins += src.wins || 0; dst.losses += src.losses || 0; dst.expired += src.expired || 0; return dst; };
+          for (ak in a){
+            if (!Object.prototype.hasOwnProperty.call(a, ak)) continue;
+            row = a[ak];
+            if (!row || !row.rd) continue;
+            if (tab && String(row.tab || ak.split('|')[0]) !== String(tab)) continue;
+            for (k in row.rd){
+              if (!Object.prototype.hasOwnProperty.call(row.rd, k)) continue;
+              pr = row.rd[k];
+              if (!pr) continue;
+              e = out.reads[k] || (out.reads[k] = { yes: cell(), no: cell(), unmarked: out.settled, agg: null });
+              e.agg = e.agg || { yes: { wins: 0, losses: 0, expired: 0 }, no: { wins: 0, losses: 0, expired: 0 } };
+              if (pr.t) sum(e.agg.yes, pr.t);
+              if (pr.f) sum(e.agg.no, pr.f);
+            }
+          }
+        } catch (eA){}
+        return out;
+      } catch (e) { hgFwdWarn('readSplit', e); return null; }
+    };
+
+    /* Renders NOTHING while no record carries a read mark -- the shape every
+       split here keeps -- and never gates. One line per read, the marked
+       cohort against its complement, unmarked counted as NEITHER. */
+    W.hgFwdReadSplitHtml = function(tab){
+      try {
+        var sp = W.hgFwdReadSplit(tab);
+        if (!sp) return '';
+        var keys = Object.keys(sp.reads).filter(function(k){ var e = sp.reads[k]; return (e.yes.n + e.no.n) > 0 || e.agg; });
+        if (!keys.length) return '';
+        keys.sort(function(a, b){ return (sp.reads[b].yes.n + sp.reads[b].no.n) - (sp.reads[a].yes.n + sp.reads[a].no.n) || (a < b ? -1 : 1); });
+        var fmtR = function(v){ return (v >= 0 ? '+' : '') + v.toFixed(3) + 'R'; };
+        var h = '<div class="note" style="margin:8px 0;padding:8px 10px;border:1px solid #6B7280;border-radius:6px">';
+        h += '<b>REPLAY READ SPLIT</b> \u00b7 the reads this desk\u2019s own replay flagged (a verdict or a lean under WHICH READS SEPARATE), marked on each record at fire time and counted here on settled records \u2014 the forward half of that table. '
+          + sp.marked + ' of ' + sp.settled + ' settled records carry a read mark.';
+        for (var i = 0; i < keys.length; i++){
+          var k = keys[i], e = sp.reads[k];
+          h += '<div style="margin-top:4px"><b>' + esc(k) + '</b>';
+          if (e.yes.n) h += ' \u00b7 carried ' + fmtR(e.yes.r) + ' at ' + Math.round(100 * e.yes.hit) + '% on n=' + e.yes.n;
+          if (e.no.n) h += ' \u00b7 not carried ' + fmtR(e.no.r) + ' at ' + Math.round(100 * e.no.hit) + '% on n=' + e.no.n;
+          if (!e.yes.n && !e.no.n) h += ' \u00b7 no settled live record is marked for it yet';
+          if (e.unmarked > 0) h += ' \u00b7 ' + e.unmarked + ' settled carry no mark for this read and count as NEITHER';
+          if (e.agg) h += ' \u00b7 folded beyond the live cap: carried ' + e.agg.yes.wins + 'W/' + e.agg.yes.losses + 'L, not carried ' + e.agg.no.wins + 'W/' + e.agg.no.losses + 'L';
+          h += '</div>';
+        }
+        h += '<div class="dim" style="margin-top:4px">Reported, not gated: a read that separates on the replay AND here is still a measurement until someone decides otherwise, and nothing is withheld on this line.</div>';
         h += '</div>';
         return h;
       } catch (e) { return ''; }
