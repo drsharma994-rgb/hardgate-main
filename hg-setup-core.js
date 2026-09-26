@@ -235,6 +235,36 @@
     return gateResult('FUND', 'Funding', bad ? 'veto' : 'pass', 'funding ' + fundingPct.toFixed(4) + '%/interval', opts);
   }
 
+  /* hg-v985: WOULD THE DIRECTIONAL FUNDING RULE HAVE VETOED THIS? Three states.
+
+     fundingGateDirectional above is the SWING/SCALP G4 rule (funding running
+     AGAINST the trade at or beyond 0.04%/interval vetoes; |funding| over 0.30%
+     is a broken feed). It is applied by the matrices and asked by none of the
+     crypto desks that record most; no artifact records its verdict beside an
+     outcome. This is the mark the forward ledger carries so the question can
+     be answered out of sample:
+
+       true       the rule would have VETOED (funding against the trade)
+       false      the rule would have let it through
+       undefined  NOT RECORDED: no finite funding (CoinDCX reports none), no
+                  direction, or a feed reading out of range -- a broken feed
+                  is not a read, and gateResult's degrade would otherwise turn
+                  "n/a" into a veto, which is right for a gate and wrong for a
+                  measurement.
+
+     Delegates to the gate so the two can never disagree on a threshold; the
+     raw funding rides beside it because OMNIROUTE's own soft funding gate
+     reads a different bar (0.05, crowded) and a reader may want either. */
+  function fundingAgainstMark(fundingPct, dir, opts){
+    var f = fin(fundingPct);
+    dir = String(dir || '').toLowerCase();
+    if (f === null || !(dir === 'long' || dir === 'short')) return { against: undefined, fundingPct: undefined, why: (f === null) ? 'funding n/a' : 'no direction' };
+    var g = fundingGateDirectional(f, dir, Object.assign({}, opts || {}, { degradeMode: 'na' }));
+    if (!g || g.state === 'na') return { against: undefined, fundingPct: f, why: 'funding n/a' };
+    if (g.state === 'veto' && /out of range/.test(String(g.detail || ''))) return { against: undefined, fundingPct: f, why: 'funding feed out of range' };
+    return { against: g.state === 'veto', fundingPct: f, why: g.detail || null };
+  }
+
   /** Post-cost min R:R — returns gateResult tuple for plan builders. */
   function planMinRrGate(entry, stop, tp, minRr, opts){
     minRr = fin(minRr); if (minRr === null) minRr = 2.0;
@@ -285,4 +315,5 @@
   G.hgUniverseFilter = universeFilter;
   G.hgCalcTradeSizing = calcTradeSizing;
   G.hgFundingGateDirectional = fundingGateDirectional;
+  G.hgFundingAgainstMark = fundingAgainstMark;   /* hg-v985 */
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -197,12 +197,20 @@ console.log('== 5) every crypto record map forwards the mark it had in hand (tex
   const T = (file, re, why) => assert(re.test(strip(read(file))), file + ': ' + why);
   T('omniroute.js', /mark: \(num\(held\[j\]\.livePx\) > 0\) \? num\(held\[j\]\.livePx\) : undefined,/, 'the decision bar\'s close (the evaluator\'s own livePx) is the mark');
   T('omnipresent.js', /mark: livePx,\s*barT: \(rows\[rows\.length - 1\] && isFinite\(\+rows\[rows\.length - 1\]\.t\) && \+rows\[rows\.length - 1\]\.t > 0\) \? \+rows\[rows\.length - 1\]\.t : undefined,/, 'opAssess stamps livePx and the last bar on every candidate');
-  T('squeeze.js', /var lb = \(typeof W\.hgFwdLastBar === 'function'\) \? W\.hgFwdLastBar\(fr\.rows4h\) : \{\};\s*fwd\.push\(\{ sym: fr\.sym, dir: fr\.dir, entry: \+fr\.entry, stop: \+fr\.stop, t1: \+fr\.t1,\s*mark: lb\.mark, barT: lb\.barT,/, 'SQUEEZE reads its 4h series through the one reader');
-  T('oiflow.js', /var lb = \(typeof W\.hgFwdLastBar === 'function'\) \? W\.hgFwdLastBar\(fr\.rows4h\) : \{\};\s*fwd\.push\(\{ sym: fr\.sym, dir: fr\.cls\.dir, entry: \+fs\.entry, stop: \+fs\.stop, t1: \+fs\.t1,\s*mark: lb\.mark, barT: lb\.barT,/, 'OI FLOW reads its 4h series through the one reader');
+  /* hg-v985: the published row carries no candles, so this pin used to assert the
+     DEAD read (fr.rows4h was undefined on every record); the series is read off
+     the source result kept beside the published row */
+  T('squeeze.js', /var lb = \(typeof W\.hgFwdLastBar === 'function'\) \? W\.hgFwdLastBar\(fsrc\.rows4h\) : \{\};\s*fwd\.push\(\{ sym: fr\.sym, dir: fr\.dir, entry: \+fr\.entry, stop: \+fr\.stop, t1: \+fr\.t1,\s*mark: lb\.mark, barT: lb\.barT,/, 'SQUEEZE reads its 4h series through the one reader (off the source result, hg-v985)');
+  /* hg-v985: this file's alias is G (W was undefined here, and the whole block
+     threw); the direction is lower-cased for the normaliser */
+  T('oiflow.js', /var lb = \(typeof G\.hgFwdLastBar === 'function'\) \? G\.hgFwdLastBar\(fr\.rows4h\) : \{\};\s*fwd\.push\(\{ sym: fr\.sym, dir: String\(fr\.cls\.dir \|\| ''\)\.toLowerCase\(\), entry: \+fs\.entry, stop: \+fs\.stop, t1: \+fs\.t1,\s*mark: lb\.mark, barT: lb\.barT,/, 'OI FLOW reads its 4h series through the one reader (through the alias it defines, hg-v985)');
   T('reversalsniper.js', /var lb = \(typeof W\.hgFwdLastBar === 'function'\) \? W\.hgFwdLastBar\(c\.rows\) : \{\};\s*return \{ sym: c\.sym, dir: c\.dir, entry: \+c\.entry, stop: \+c\.stop, t1: \+c\.t1,\s*mark: lb\.mark, barT: lb\.barT,/, 'REVERSAL SNIPER reads the candidate\'s rows through the one reader');
   T('edge.js', /mark: \(f\.sig && isFinite\(\+f\.sig\.mark\) && \+f\.sig\.mark > 0\) \? \+f\.sig\.mark : undefined,\s*barT: \(typeof W\.hgFwdLastBar === 'function'\) \? W\.hgFwdLastBar\(f\.rows4h\)\.barT : undefined,/, 'EDGE forwards the mark its signal decided MARKET vs LIMIT on, and the bar off its 4h rows');
   T('brain.js', /mark: \(function\(\)\{ var bm = boardMarkFor\(fr\); return \(isFinite\(bm\) && bm > 0\) \? bm : undefined; \}\)\(\),/, 'BRAIN forwards the row\'s own zero-fetch mark (no series rides a BRAIN row, so no bar is claimed)');
-  T('engine.js', /svBar\.push\(\(typeof G\.hgFwdLastBar === 'function'\) \? G\.hgFwdLastBar\(rec\.rows4h\) : \{\}\);\s*sv\.push\(\{ sym: rec\.sym, dir: res\.dir, conviction: res\.conviction, plan: plan,/, 'the GATES tab reads each survivor\'s own 4h series beside the state row (whose shape is BRAIN\'s contract, pinned by test-engine)');
+  /* hg-v985: the parallel row also carries the candidate funding, so the push
+     wraps the reader's result in Object.assign; the reader and its source are
+     what the pin guards */
+  T('engine.js', /svBar\.push\(Object\.assign\(\{\}, \(typeof G\.hgFwdLastBar === 'function'\) \? G\.hgFwdLastBar\(rec\.rows4h\) : \{\},[\s\S]{0,200}?\)\);\s*sv\.push\(\{ sym: rec\.sym, dir: res\.dir, conviction: res\.conviction, plan: plan,/, 'the GATES tab reads each survivor\'s own 4h series beside the state row (whose shape is BRAIN\'s contract, pinned by test-engine)');
   T('engine.js', /fwd\.push\(\{ sym: s0\.sym, dir: s0\.dir, entry: e0, stop: st0, t1: t10,\s*mark: \(svBar\[i\] \|\| \{\}\)\.mark, barT: \(svBar\[i\] \|\| \{\}\)\.barT,/, 'and its record map forwards both from that array at the same index');
   T('dex-screener.js', /if \(gfn\('hgFwdLastBar'\)\)\{ var lbDex = W\.hgFwdLastBar\(f\.rows\); c\.mark = lbDex\.mark; c\.barT = lbDex\.barT; \}/, 'DEX SCREENER stamps each candidate off the series it was evaluated on');
   T('dex-screener.js', /t1: c\.plan && c\.plan\.t1,\s*mark: c\.mark, barT: c\.barT,/, 'and its record map forwards both');

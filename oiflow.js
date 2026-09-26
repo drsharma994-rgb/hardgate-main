@@ -540,6 +540,15 @@ function __oiStateView(v){
   Object.freeze(out);
   return out;
 }
+function oiflowPaintFwd(el){
+  try {
+    var oiFwdEl = el && el.querySelector ? el.querySelector('#oiflowFwd') : null;
+    if (oiFwdEl && typeof G.hgFwdPanelHTML === 'function'){   /* hg-v985: was W, undefined in this file */
+      oiFwdEl.innerHTML = G.hgFwdPanelHTML('OIFLOW', { minRr: oiMinRr(), title: 'FORWARD — do OI regimes resolve differently?' });
+    }
+  } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("oiflow", eFwd); } catch (eW) {} }
+}
+
 function publishOiflowState(results){
   try{
     var rows = [], syms = [], i, r, clsTxt;
@@ -563,7 +572,12 @@ function publishOiflowState(results){
        whole claim is that those regimes mean different things, and nothing
        until now could check whether they resolve differently. */
     try {
-      if (typeof W.hgFwdRecordScan === 'function' && typeof oiflowSetup === 'function'){
+      /* hg-v985: this file's global alias is G. The block below referenced W --
+         undefined here -- from the day it was written (686a2cc), so the whole
+         try threw on its first line and the catch swallowed it: OI FLOW never
+         wrote a forward record, and the panel that reads them (same alias, same
+         file) never painted. */
+      if (typeof G.hgFwdRecordScan === 'function' && typeof oiflowSetup === 'function'){
         var fwd = [], fi, fr, fs;
         for (fi = 0; fi < results.length; fi++){
           fr = results[fi];
@@ -571,15 +585,21 @@ function publishOiflowState(results){
           try { fs = oiflowSetup(fr.cls, fr.rows4h, fr.rows1h); } catch (eS) { fs = null; }
           if (!fs || !isFinite(+fs.entry) || !isFinite(+fs.stop) || !isFinite(+fs.t1)) continue;
           var reg = (typeof fr.cls.regime === 'string' && fr.cls.regime) ? fr.cls.regime : 'UNCLASSIFIED';
-          var lb = (typeof W.hgFwdLastBar === 'function') ? W.hgFwdLastBar(fr.rows4h) : {};   /* hg-v981 */
-          fwd.push({ sym: fr.sym, dir: fr.cls.dir, entry: +fs.entry, stop: +fs.stop, t1: +fs.t1,
+          var lb = (typeof G.hgFwdLastBar === 'function') ? G.hgFwdLastBar(fr.rows4h) : {};   /* hg-v981 */
+          /* hg-v985: the classifier writes LONG / SHORT and hgFwdNormalize accepts
+             only long / short -- so this desk had never written a forward record
+             since the log was wired, and its FORWARD panel had nothing to show.
+             The desk lower-cases the same field at every other read of it. */
+          fwd.push({ sym: fr.sym, dir: String(fr.cls.dir || '').toLowerCase(), entry: +fs.entry, stop: +fs.stop, t1: +fs.t1,
                      mark: lb.mark, barT: lb.barT,
+                     fundingPct: (typeof fr.fundingPct === 'number' && isFinite(fr.fundingPct)) ? fr.fundingPct : undefined,   /* hg-v985 */
                      mechanic: 'OI-' + String(reg).toUpperCase().replace(/[^A-Z0-9]+/g, '-').slice(0, 24),
                      ticket: !!fs.confirmed });
         }
-        if (fwd.length) W.hgFwdRecordScan('OIFLOW', '4h', fwd, { horizonBars: 20 });
+        if (fwd.length) G.hgFwdRecordScan('OIFLOW', '4h', fwd, { horizonBars: 20 });
       }
     } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("oiflow", eFwd); } catch (eW) {} }
+    oiflowPaintFwd(__mountedEl);   /* hg-v985: the panel reads what was just recorded */
     /* engine.js Stage-0 contract reads {syms, at} from this key; `results`
        mirrors window.oiflowState() for the BRAIN. */
     G.HG_oiflowResults = { results: rows, syms: syms, at: at };
@@ -769,13 +789,11 @@ function mount(el){
     if (btn) btn.addEventListener('click', function(){ runScan(el); });
     /* Shared forward panel — OI FLOW's regimes recorded, and read back here.
        The tab's whole claim is that squeeze / trend-fuel / capitulation mean
-       different things; this is the first thing able to check that. */
-    try {
-      var oiFwdEl = el.querySelector('#oiflowFwd');
-      if (oiFwdEl && typeof W.hgFwdPanelHTML === 'function'){
-        oiFwdEl.innerHTML = W.hgFwdPanelHTML('OIFLOW', { minRr: oiMinRr(), title: 'FORWARD — do OI regimes resolve differently?' });
-      }
-    } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("oiflow", eFwd); } catch (eW) {} }
+       different things; this is the first thing able to check that.
+       hg-v985: painted at mount (an empty ledger says so) and AGAIN after every
+       publish -- it used to paint at mount only, so a scan that had just
+       recorded left "Nothing recorded yet" on screen until the next mount. */
+    oiflowPaintFwd(el);
     try{
       if (typeof hgSetupPaintDesk === 'function'){
         hgSetupPaintDesk('oiflowDesk', { kind: 'oiflow', tab: 'OI FLOW',
