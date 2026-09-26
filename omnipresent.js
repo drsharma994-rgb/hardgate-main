@@ -1150,7 +1150,8 @@
                + ' zone in range — TAKE ' + (ranked.side === 'long' ? 'LONGS' : 'SHORTS')
                + ' stands; the other side is not shown.</div>')
             : ('<div class="empty">no zone within ' + ARM_MAX_ATR + 'xATR of any market — the detectors are meant to be quiet when nothing is near.</div>');
-          ui.cards.innerHTML = opUniformLeadHtml(ranked.one && ranked.one.length ? ranked.one : top, ranked.side || (sideRead && sideRead.side)) + (h || empty);
+          /* hg-v988: the measurement table under the cards, gating nothing */
+          ui.cards.innerHTML = opUniformLeadHtml(ranked.one && ranked.one.length ? ranked.one : top, ranked.side || (sideRead && sideRead.side)) + (h || empty) + opFactorSepHtml();
           try { if (typeof W.hgMpPin === 'function') W.hgMpPin('omnipresent', top, null, ui.cards); } catch (eMp) {}
           /* 20X — judged on the same collapsed one-per-contract list the
              desk ranks; kept for remount restore. */
@@ -1314,6 +1315,71 @@
   };
 
   var HG_OP_COST_TOXIC_R = 0.12;
+
+  /* hg-v988 — which signal-time read separates winners on this desk's own
+     replay, on four DISJOINT windows (win AND gross AND net must all agree):
+     the two hard gates the desk tickets on, the zone sources, the exhaustion
+     reads, the distance to the zone, the score, the cost and the stop bands.
+     Rendered through OMNIROUTE's one renderer (hgOmniFactorSepHtml, hg-v987)
+     so there is one panel for two desks; with omniroute.js absent it renders
+     nothing. Nothing here gates anything: the literal is read by
+     opFactorSepHtml and by nothing else. */
+  /* --- BEGIN GENERATED HG_OP_FACTOR_SEP (scripts/omnipresent-factor-separation.mjs) ---
+     Re-derive with `node scripts/omnipresent-factor-separation.mjs --write`. Do not
+     hand-edit — generated literals write themselves (hg-v921). Every figure is
+     read off backtest-omnipresent-results.json; the guard re-runs the generator and fails on drift. */
+  var HG_OP_FACTOR_SEP = {
+    artifact: "backtest-omnipresent-results.json", n: 8502, windows: 4, minSide: 20,
+    span: ["2026-06-13","2026-09-11"],
+    bound: "as-recorded only — the artifact carries no same-bar ambiguity flag; this desk enters at the live print so the fill model has little to add",
+    sources: ["round number","swing low","swing high","AVWAP +2σ","AVWAP −2σ","prior-day high","prior-day low","value-area low","value-area high"],
+    evidenceKinds: ["volume climax","stretched","bullish RSI divergence","bearish RSI divergence","squeeze released this bar"],
+    verdicts: ["ev:stretched"],
+    leans: ["gate:confluence3","zone:distLt025","zone:distGe1","src:round number","src:prior-day high","geom:costGe012","geom:costGe03","geom:stopLt05","geom:stopGe1"],
+    inSampleVerdicts: [],
+    rows: [
+      { f: "gate:confluence3", g: "gate", n: 2740, win: 0.312, gross: -0.016, net: -0.145, outWin: 0.302, outNet: -0.271, q: "2/2/4", verdict: null, lean: "better" },
+      { f: "gate:evidence2", g: "gate", n: 596, win: 0.285, gross: -0.116, net: -0.265, outWin: 0.307, outNet: -0.228, q: "1/1/1", verdict: null },
+      { f: "gate:both", g: "gate", n: 165, win: 0.255, gross: -0.212, net: -0.334, outWin: 0.306, outNet: -0.228, q: "1/1/1", verdict: null },
+      { f: "zone:confluence4", g: "zone", n: 688, win: 0.288, gross: -0.067, net: -0.152, outWin: 0.307, outNet: -0.237, q: "1/2/3", verdict: null },
+      { f: "zone:evidence1", g: "zone", n: 3375, win: 0.295, gross: -0.068, net: -0.225, outWin: 0.312, outNet: -0.233, q: "1/1/1", verdict: null },
+      { f: "zone:scoreHi", g: "zone", n: 4251, win: 0.306, gross: -0.048, net: -0.208, outWin: 0.305, outNet: -0.252, q: "1/1/3", verdict: null },
+      { f: "zone:distLt025", g: "zone", n: 3963, win: 0.314, gross: -0.05, net: -0.293, outWin: 0.297, outNet: -0.176, q: "3/2/0", verdict: null, lean: "worse" },
+      { f: "zone:distGe1", g: "zone", n: 1010, win: 0.276, gross: 0.004, net: -0.027, outWin: 0.309, outNet: -0.258, q: "0/3/4", verdict: null, lean: "better" },
+      { f: "src:round number", g: "source", n: 4958, win: 0.305, gross: -0.061, net: -0.191, outWin: 0.306, outNet: -0.285, q: "2/1/4", verdict: null, lean: "better" },
+      { f: "src:swing low", g: "source", n: 3930, win: 0.307, gross: -0.037, net: -0.206, outWin: 0.304, outNet: -0.251, q: "3/3/3", verdict: null },
+      { f: "src:swing high", g: "source", n: 3916, win: 0.316, gross: -0.017, net: -0.214, outWin: 0.297, outNet: -0.244, q: "3/3/2", verdict: null },
+      { f: "src:AVWAP +2σ", g: "source", n: 1710, win: 0.3, gross: -0.061, net: -0.267, outWin: 0.307, outNet: -0.221, q: "2/3/2", verdict: null },
+      { f: "src:AVWAP −2σ", g: "source", n: 1661, win: 0.287, gross: -0.09, net: -0.265, outWin: 0.31, outNet: -0.222, q: "1/2/2", verdict: null },
+      { f: "src:prior-day high", g: "source", n: 1464, win: 0.327, gross: 0.023, net: -0.183, outWin: 0.301, outNet: -0.24, q: "3/4/4", verdict: null, lean: "better" },
+      { f: "src:prior-day low", g: "source", n: 1394, win: 0.311, gross: -0.018, net: -0.188, outWin: 0.304, outNet: -0.238, q: "3/3/3", verdict: null },
+      { f: "src:value-area low", g: "source", n: 860, win: 0.263, gross: -0.169, net: -0.312, outWin: 0.31, outNet: -0.221, q: "0/0/1", verdict: null },
+      { f: "src:value-area high", g: "source", n: 683, win: 0.306, gross: -0.037, net: -0.201, outWin: 0.305, outNet: -0.233, q: "3/3/3", verdict: null },
+      { f: "ev:volume climax", g: "evidence", n: 1990, win: 0.293, gross: -0.06, net: -0.208, outWin: 0.309, outNet: -0.237, q: "1/2/2", verdict: null },
+      { f: "ev:stretched", g: "evidence", n: 836, win: 0.264, gross: -0.2, net: -0.369, outWin: 0.31, outNet: -0.215, q: "0/0/0", verdict: "worse" },
+      { f: "ev:bullish RSI divergence", g: "evidence", n: 501, win: 0.307, gross: -0.032, net: -0.157, outWin: 0.305, outNet: -0.235, q: "1/2/3", verdict: null },
+      { f: "ev:bearish RSI divergence", g: "evidence", n: 473, win: 0.321, gross: -0.006, net: -0.203, outWin: 0.304, outNet: -0.232, q: "3/3/2", verdict: null },
+      { f: "ev:squeeze released this bar", g: "evidence", n: 207, win: 0.333, gross: 0.039, net: -0.125, outWin: 0.305, outNet: -0.233, q: "4/3/3", verdict: null },
+      { f: "pop:long", g: "population", n: 4241, win: 0.299, gross: -0.067, net: -0.237, outWin: 0.312, outNet: -0.223, q: "1/2/2", verdict: null },
+      { f: "geom:costGe012", g: "geometry", n: 4300, win: 0.313, gross: -0.05, net: -0.361, outWin: 0.297, outNet: -0.097, q: "3/3/0", verdict: null, lean: "worse" },
+      { f: "geom:costGe03", g: "geometry", n: 1430, win: 0.325, gross: -0.02, net: -0.582, outWin: 0.301, outNet: -0.159, q: "3/3/0", verdict: null, lean: "worse" },
+      { f: "geom:stopLt05", g: "geometry", n: 1600, win: 0.319, gross: -0.039, net: -0.572, outWin: 0.302, outNet: -0.151, q: "3/3/0", verdict: null, lean: "worse" },
+      { f: "geom:stopGe1", g: "geometry", n: 4776, win: 0.295, gross: -0.059, net: -0.116, outWin: 0.319, outNet: -0.376, q: "0/2/4", verdict: null, lean: "better" },
+      { f: "session:ASIA 00-08", g: "session", n: 2713, win: 0.315, gross: -0.033, net: -0.206, outWin: 0.301, outNet: -0.241, q: "4/2/3", verdict: null },
+      { f: "session:LONDON 08-13", g: "session", n: 1592, win: 0.313, gross: -0.045, net: -0.247, outWin: 0.304, outNet: -0.226, q: "3/1/1", verdict: null },
+      { f: "session:OVERLAP 13-17", g: "session", n: 2059, win: 0.288, gross: -0.076, net: -0.244, outWin: 0.311, outNet: -0.226, q: "0/1/1", verdict: null },
+      { f: "session:NY PM 17-21", g: "session", n: 1318, win: 0.308, gross: -0.029, net: -0.198, outWin: 0.305, outNet: -0.236, q: "2/3/3", verdict: null },
+      { f: "session:LATE 21-24", g: "session", n: 820, win: 0.299, gross: -0.079, net: -0.294, outWin: 0.306, outNet: -0.223, q: "1/1/1", verdict: null }
+    ]
+  };
+  /* --- END GENERATED HG_OP_FACTOR_SEP --- */
+
+  function opFactorSepHtml(){
+    try{
+      if (!HG_OP_FACTOR_SEP || typeof W.hgOmniFactorSepHtml !== 'function') return '';
+      return W.hgOmniFactorSepHtml(HG_OP_FACTOR_SEP) || '';
+    }catch(e){ return ''; }
+  }
 
   function opReplayGoldSym(sym){
     return /XAU|XAG|PAXG|XAUT/.test(String(sym || '').toUpperCase());
@@ -1896,7 +1962,7 @@
       if (!__op.lastView) return;   /* no scan yet — nothing to filter */
       var paid = opPaidKinds();
       ui.cards.innerHTML = opUniformLeadHtml(__op.lastView.one || __op.lastView.top, __op.lastView.sideRead && __op.lastView.sideRead.side)
-        + opPaidCardsHtml(__op.lastView.top, __op.lastView.sideRead, paid);
+        + opPaidCardsHtml(__op.lastView.top, __op.lastView.sideRead, paid) + opFactorSepHtml();   /* hg-v988: the PAID view keeps the table */
       /* MOST PROBABLE pin follows the same filter. */
       try{
         if (typeof W.hgMpPin === 'function'){
@@ -2135,6 +2201,8 @@
     window.opPaidCardsHtml = opPaidCardsHtml;
     window.opApplyShowMode = opApplyShowMode;
     window.hgOpRunScan = runScan;   /* the scan loop itself, for the stability harness */
+    window.HG_OP_FACTOR_SEP = HG_OP_FACTOR_SEP;   /* hg-v988: read by the panel and by nothing else */
+    window.opFactorSepHtml = opFactorSepHtml;   /* hg-v988 */
     window.hgOpState = function (){ try{ return __op.snap ? JSON.parse(JSON.stringify(__op.snap)) : null; }catch(e){ return null; } };
     window.HG_tabs = window.HG_tabs || [];
     window.HG_tabs.push({ id: 'omnipresent', label: 'OMNIPRESENT', mount: mountOmnipresent, refresh: refreshOmnipresent });
