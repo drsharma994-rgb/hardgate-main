@@ -598,15 +598,15 @@ function stSynthesize(contract, rows4h, rows1h, rows15m, ticker, ctx){
     if (agreePts >= 7 && kindN >= 3 && (hasCleanSwing || hasEdgeStrong || hasContext)) tier = 'PRIME';
     else if (agreePts >= 5 && kindN >= 2 && (hasCleanSwing || hasCleanScalp || hasEdgeStrong || hasContext)) tier = 'HIGH';
 
-    var plan = null;
+    var plan = null, planFamily = null;
     for (var p = 0; p < agree.length; p++){
-      if (agree[p].plan){ plan = agree[p].plan; break; }
+      if (agree[p].plan){ plan = agree[p].plan; planFamily = stVoteFamily(agree[p].src); break; }
     }
-    if (!plan && agree[0] && agree[0].edge && agree[0].edge.plan) plan = agree[0].edge.plan;
+    if (!plan && agree[0] && agree[0].edge && agree[0].edge.plan){ plan = agree[0].edge.plan; planFamily = 'EDGE'; }
     var planDraft = false;
     if (!plan){
       var near = stNearPlan(contract, dir, rows4h, rows1h, rows15m, ticker);
-      if (near){ plan = near; planDraft = true; }
+      if (near){ plan = near; planDraft = true; planFamily = 'NEAR'; }
     }
     if (plan && rows4h && typeof W.hgStrategyRefine === 'function'){
       var kls = String(contract.klass || '').toLowerCase();
@@ -644,11 +644,108 @@ function stSynthesize(contract, rows4h, rows1h, rows15m, ticker, ctx){
       allVotes: votes,
       plan: plan,
       planDraft: planDraft,
+      /* hg-v991: which vote supplied the plan (SWING / SCALP / EDGE / SMART /
+         NEAR), so the forward record can be judged per plan source */
+      planFamily: planFamily,
+      ticker: ticker,
       rows4h: rows4h,
       rows1h: rows1h,
       mark: (ticker && isFinite(ticker.mark)) ? ticker.mark : (rows4h.length ? rows4h[rows4h.length - 1].c : null)
     };
   }catch(e){ return null; }
+}
+
+/* ==================== hg-v991: THE FORWARD RECORD THIS DESK NEVER WROTE ====
+
+   STAR TRADER crowns PRIME and HIGH, prints ADD TO BOOK and SEND TO TRADE
+   PLAN, pins MOST PROBABLE and feeds ChartVision -- and until this pack wrote
+   no forward record of any kind. The hg-v981 census of crypto writers counted
+   28 and was derived from the files that call the ledger, so a desk that
+   never called it was invisible to it. Every synthesized setup on a crypto
+   contract is recorded now, whether PRIME, HIGH or a WATCH draft, so the pool
+   measures the raw synthesis and the ticket flag separates what was crowned.
+
+   The record carries what the other crypto writers carry (mark, the last
+   closed 4h bar, the venue funding the ticker had) plus the hg-v989 read
+   marks: one boolean per vote FAMILY that cast a vote on this setup -- true
+   when the family agreed with the direction with points, false when it voted
+   against or only cautioned. A family absent from the votes is NOT RECORDED,
+   whether it was silent or its module was never loaded; the record cannot
+   tell those apart and does not pretend to. So the forward split can ask, on
+   trades logged before their outcomes existed, whether REGIME, NEWS,
+   SENTIMENT, ROTATION, SWING, EDGE ... separate on THIS desk -- the question
+   none of those layers has ever been asked here.
+
+   The gold lane and the non-crypto contracts are NOT recorded, by choice and
+   said: an FX or index symbol would be read by the ledger's crypto macro mark
+   as an alt long, and a gold row would have to enter the three gold-writer
+   censuses and carry its feed -- a pack of its own. The guard asserts both
+   record nothing. */
+var ST_FWD_TAB = 'STAR TRADER', ST_FWD_TF = '4h', ST_FWD_HORIZON = 20;
+function stVoteFamily(src){
+  var w = String(src || '').split(' ')[0].toUpperCase();
+  if (w === 'CRYPTO') return 'NEWS';      /* CRYPTO NEWS is the same calendar */
+  if (w === 'MEAN') return 'MEANREV';
+  return w || null;
+}
+function stReadMarks(setup){
+  try{
+    if (!setup || !Array.isArray(setup.allVotes) || !setup.dir) return undefined;
+    var out = null, i, v, fam, agree;
+    for (i = 0; i < setup.allVotes.length; i++){
+      v = setup.allVotes[i];
+      if (!v || !v.src) continue;
+      fam = stVoteFamily(v.src);
+      if (!fam) continue;
+      agree = (v.dir === setup.dir) && (+v.pts > 0);
+      if (!out) out = {};
+      /* one family, several votes (SWING + SWING PLAN): agreed if any did */
+      out['vote:' + fam] = (out['vote:' + fam] === true) || agree;
+    }
+    return out || undefined;
+  }catch(e){ return undefined; }
+}
+function stFwdRows(found){
+  var rows = [], i, r, p, last;
+  for (i = 0; i < (found || []).length; i++){
+    r = found[i];
+    if (!r || !r.plan || r.klass !== 'crypto') continue;
+    p = r.plan;
+    if (!isFinite(+p.entry) || !isFinite(+p.stop) || !isFinite(+p.t1)) continue;
+    last = (r.rows4h && r.rows4h.length) ? r.rows4h[r.rows4h.length - 1] : null;
+    rows.push({
+      sym: r.sym, dir: r.dir,
+      entry: +p.entry, stop: +p.stop, t1: +p.t1,
+      mechanic: 'ST-' + (r.planFamily || 'PLAN'),
+      /* crowned and bookable: PRIME or HIGH with a real plan, never a draft */
+      ticket: !r.planDraft && (r.tier === 'PRIME' || r.tier === 'HIGH'),
+      /* the price when the plan fired -- the fill model's one field (hg-v981) */
+      mark: (isFinite(+r.mark) && +r.mark > 0) ? +r.mark : undefined,
+      /* the last CLOSED 4h bar (stDropForming at the fetch site), never the clock */
+      barT: (last && isFinite(+last.t) && +last.t > 0) ? +last.t : undefined,
+      /* the venue funding the ticker carried; the ledger derives the rule's verdict (hg-v985) */
+      fundingPct: (r.ticker && typeof r.ticker.fundingPct === 'number' && isFinite(r.ticker.fundingPct)) ? r.ticker.fundingPct : undefined,
+      reads: stReadMarks(r)
+    });
+  }
+  return rows;
+}
+function stRecordForward(found){
+  try{
+    if (typeof W.hgFwdRecordScan !== 'function') return 0;
+    var rows = stFwdRows(found);
+    if (!rows.length) return 0;
+    return W.hgFwdRecordScan(ST_FWD_TAB, ST_FWD_TF, rows, { horizonBars: ST_FWD_HORIZON }) || 0;
+  }catch(e){
+    try{ if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('startrader:record', e); }catch(e2){}
+    return 0;
+  }
+}
+function stFwdPanelHtml(){
+  try{
+    if (typeof W.hgFwdPanelHTML !== 'function') return '';
+    return W.hgFwdPanelHTML(ST_FWD_TAB, { title: 'FORWARD \u2014 out-of-sample, every crypto synthesis this desk formed' }) || '';
+  }catch(e){ return ''; }
 }
 
 function klassChip(k){
@@ -799,6 +896,7 @@ function mount(el){
     + '</div>'
     + '<div class="cards" id="stCards"></div>'
     + '<div class="empty" id="stEmpty" style="display:none">No solid STARTRADER setups right now. Standing aside is a position.</div>'
+    + '<div id="stFwd"></div>'
     + '</div>'
     + '<div id="stPaneEdge" style="display:none">'
     + '<div class="panel">'
@@ -931,6 +1029,12 @@ function mount(el){
             var h4 = stDropForming(await startraderCandles(c.sym, '4h', 280), '4h');
             var h1 = stDropForming(await startraderCandles(c.sym, '1h', 160), '1h');
             var m15 = stDropForming(await startraderCandles(c.sym, '15m', 180), '15m');
+            /* hg-v991: settle this contract's open records on the bars just
+               fetched, BEFORE this bar's setups are recorded (every desk that
+               records does this at the top of its scan) */
+            if (c.klass === 'crypto' && h4 && h4.length && typeof W.hgFwdResolve === 'function'){
+              try{ W.hgFwdResolve(c.sym, ST_FWD_TF, h4); }catch(eRs){}
+            }
             if (!h4 || h4.length < MIN_BARS_4H){ skipped++; return; }
             var tk = tmap[c.sym] || { symbol: c.sym, fundingPct: null, mark: null };
             var setup = stSynthesize(c, h4, h1, m15, tk, ctx);
@@ -962,6 +1066,13 @@ function mount(el){
       found.sort(function(a, b){
         return stTierRank(b.tier) - stTierRank(a.tier) || b.points - a.points;
       });
+
+      /* hg-v991: every crypto synthesis with a plan goes to the forward ledger,
+         shown or not -- the pool measures the raw synthesis, `ticket` marks
+         what was crowned -- and the panel under the cards reads it back */
+      var recorded = stRecordForward(found);
+      var fwdHost = el.querySelector('#stFwd');
+      if (fwdHost) fwdHost.innerHTML = stFwdPanelHtml();
 
       var show = found.filter(function(x){ return x.tier === 'PRIME' || x.tier === 'HIGH'; });
       if (!show.length) show = found.slice(0, 12);
@@ -997,7 +1108,8 @@ function mount(el){
       var primes = show.filter(function(x){ return x.tier === 'PRIME'; }).length;
       var highs = show.filter(function(x){ return x.tier === 'HIGH'; }).length;
       setStat('done — ' + show.length + ' shown (' + primes + ' PRIME · ' + highs + ' HIGH) / '
-        + contracts.length + ' contracts · ' + Math.floor((Date.now() - t0) / 1000) + 's');
+        + contracts.length + ' contracts · ' + recorded + ' forward record' + (recorded === 1 ? '' : 's') + ' written · '
+        + Math.floor((Date.now() - t0) / 1000) + 's');
     }catch(e){
       setStat('scan failed: ' + ((e && e.message) || e), true);
     }finally{
@@ -1095,6 +1207,11 @@ W.stEdgeScanList = stEdgeScanList;
 W.stEdgeHasCore = stEdgeHasCore;
 W.stBuildContext = stBuildContext;
 W.stContextVotes = stContextVotes;
+W.stVoteFamily = stVoteFamily;     /* hg-v991 */
+W.stReadMarks = stReadMarks;       /* hg-v991 */
+W.stFwdRows = stFwdRows;           /* hg-v991 */
+W.stRecordForward = stRecordForward;   /* hg-v991 */
+W.stFwdPanelHtml = stFwdPanelHtml;     /* hg-v991 */
 W.stWarmContext = stWarmContext;
 W.cardHTML = cardHTML;
 

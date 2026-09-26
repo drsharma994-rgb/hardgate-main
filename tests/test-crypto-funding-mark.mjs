@@ -365,6 +365,9 @@ console.log('\n9. OI FLOW, through a real scan');
 }
 
 /* ---------------------------------------------------------------- 10 */
+/* hg-v991: `entry` must not be preceded by a dot -- `p.entry : null`, a ternary in a
+     card renderer within the window, read as the record literal's key and sent the
+     census to the wrong braces (it judged STAR TRADER's new writer bare) */
 console.log('\n10. the census, derived by call shape: which record writers carry the funding they had in hand');
 {
   function literalAround(t, idx){
@@ -391,10 +394,10 @@ console.log('\n10. the census, derived by call shape: which record writers carry
         const asg = pre.match(new RegExp('\\b' + arg3 + '\\s*=\\s*([A-Za-z_$][\\w$]*)\\s*\\('));
         const at = asg ? src.indexOf('function ' + asg[1] + '(') : -1;
         region = at >= 0 ? src.slice(at, at + 3000) : pre;
-        for (const em of region.matchAll(/\bentry\s*:/g)) li = em.index;
+        for (const em of region.matchAll(/(?<![.\w])entry\s*:/g)) li = em.index;
       } else {
         region = span;
-        const em = region.match(/\bentry\s*:/); li = em ? em.index : -1;
+        const em = region.match(/(?<![.\w])entry\s*:/); li = em ? em.index : -1;
       }
       if (li < 0 && !spread) continue;
       const lit = li >= 0 ? literalAround(region, li) : '';
