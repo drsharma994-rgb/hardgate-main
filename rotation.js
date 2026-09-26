@@ -27,6 +27,9 @@ AbortController timeout, Promise.allSettled legs degrade independently, and
 results are cached 5 minutes so re-polls do not hammer the free API.
 
 Exports (and ONLY these): window.rotationSignal (pure altseason classifier),
+window.hgRotationAgainst / window.hgRotationFavours (hg-v994: the two
+directional reads of the season, one home) and window.hgRotationMark (the
+forward-ledger mark read off the live snapshot),
 window.rotationDomSnapshot (pure daily-dedupe history push),
 window.rotationTrendTag (pure attention tag), window.rotationMergeTrending
 (pure trending/markets merge), window.rotationLeaders (pure rank helper),
@@ -429,6 +432,74 @@ function setRotSnapshot(sig){
     };
   }catch(e){ /* snapshotting must never break the scan */ }
 }
+
+/* hg-v994: THE ROTATION LAYER'S TWO DIRECTIONAL READS, ONE HOME EACH.
+
+   The snapshot above carries season 'alt' | 'btc' | 'mixed'. Three of its
+   four consumers read it wrong: STAR TRADER fed the snapshot back into
+   rotationSignal (which wants the raw market list) and compared the result
+   against 'altseason' / 'btcseason', strings this file never emits, so its
+   ROTATION vote never fired; the FTS setup stack read `rot.btcSeason`, a
+   field the snapshot never carried, so its caution never fired; AI AGENT
+   read `rot.leader`, also never carried. Only BRAIN read `season`. These
+   two functions are BRAIN's reading, stated once, so every consumer and
+   the forward ledger agree by construction:
+
+     hgRotationAgainst(season, dir, sym)  -- BTC season is a headwind for an
+       ALT long (true); any other readable season/direction is not (false);
+       an unreadable season or direction is no verdict (undefined). It never
+       cautions a BTC long in BTC season, because BTC is what leads it.
+     hgRotationFavours(season, dir, sym)  -- alt season favours an alt long,
+       BTC season favours a BTC long (true); readable otherwise false;
+       unreadable undefined. Longs only: this layer has never voted a short.
+
+   hgRotationMark(dir, sym) reads the live snapshot for a forward record at
+   fire time: the season, the alt share, the snapshot age in whole minutes
+   (regimeState().at had no reader either -- hg-v993) and the against
+   verdict; a gold-lane symbol gets no verdict. Nothing gates on any of it. */
+function hgRotationIsBtc(sym){
+  var s = String(sym || '').toUpperCase().replace(/[-_\/:. ]/g, '');
+  return s === 'BTC' || /^BTC(USDT|USDC|USD|PERP|BUSD)$/.test(s);
+}
+function hgRotationSeasonOk(season){
+  return season === 'alt' || season === 'btc' || season === 'mixed';
+}
+function hgRotationAgainst(season, dir, sym){
+  try{
+    season = String(season || '').toLowerCase(); dir = String(dir || '').toLowerCase();
+    if (dir !== 'long' && dir !== 'short') return undefined;
+    if (!hgRotationSeasonOk(season)) return undefined;
+    return season === 'btc' && dir === 'long' && !hgRotationIsBtc(sym);
+  }catch(e){ return undefined; }
+}
+function hgRotationFavours(season, dir, sym){
+  try{
+    season = String(season || '').toLowerCase(); dir = String(dir || '').toLowerCase();
+    if (dir !== 'long' && dir !== 'short') return undefined;
+    if (!hgRotationSeasonOk(season)) return undefined;
+    if (dir !== 'long') return false;
+    var btc = hgRotationIsBtc(sym);
+    return (season === 'alt' && !btc) || (season === 'btc' && btc);
+  }catch(e){ return undefined; }
+}
+function hgRotationMark(dir, sym){
+  var out = { season: undefined, altPct: undefined, against: undefined, ageMin: undefined };
+  try{
+    var W2 = (typeof window !== 'undefined') ? window : globalThis;
+    if (typeof W2.hgIsGoldLaneSym === 'function' && sym !== undefined && sym !== null && W2.hgIsGoldLaneSym(sym)) return out;
+    var rs = (typeof W2.rotationState === 'function') ? W2.rotationState() : null;
+    if (!rs || typeof rs !== 'object') return out;
+    var season = String(rs.season || '').toLowerCase();
+    if (hgRotationSeasonOk(season)) out.season = season;
+    if (typeof rs.altPct === 'number' && isFinite(rs.altPct)) out.altPct = rs.altPct;
+    if (typeof rs.at === 'number' && isFinite(rs.at) && rs.at > 0){
+      var age = (Date.now() - rs.at) / 60000;
+      if (isFinite(age) && age >= 0) out.ageMin = Math.round(age);
+    }
+    out.against = hgRotationAgainst(out.season, dir, sym);
+    return out;
+  }catch(e){ return out; }
+}
 function rotStateView(v){
   if (v === null || typeof v !== 'object') return v;
   var out = Array.isArray(v) ? [] : {};
@@ -564,6 +635,9 @@ if (typeof window !== 'undefined'){
   window.rotationTrendTag = rotationTrendTag;
   window.rotationMergeTrending = rotationMergeTrending;
   window.rotationLeaders = rotationLeaders;
+  window.hgRotationAgainst = hgRotationAgainst;   /* hg-v994 */
+  window.hgRotationFavours = hgRotationFavours;   /* hg-v994 */
+  window.hgRotationMark = hgRotationMark;         /* hg-v994 */
   window.rotationState = function(){
     try{ return __rot.stateSnap ? rotStateView(__rot.stateSnap) : null; }catch(e){ return null; }
   };

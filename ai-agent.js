@@ -349,8 +349,11 @@ function runMarketAnalyst(){
   if (rotFn){
     try{
       var rot = rotFn();
-      if (rot && rot.leader){
-        finds.push(finding(String(rot.leader), 'long', { src: 'ROTATION', score: 4, note: 'rotation leader' }));
+      /* hg-v994: the snapshot carries season / altPct and has never carried
+         `leader`, so the finding this read used to push never fired. The
+         season is reported as a note; no finding is invented from it. */
+      if (rot && (rot.season === 'alt' || rot.season === 'btc' || rot.season === 'mixed')){
+        notes.push('rotation ' + rot.season + ((typeof rot.altPct === 'number' && isFinite(rot.altPct)) ? ' (' + Math.round(rot.altPct) + '% alts)' : ''));
       }
     }catch(e3){}
   }

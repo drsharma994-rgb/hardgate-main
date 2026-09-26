@@ -345,6 +345,13 @@ localStorage. Never throws.
       regimeAgeMin: (typeof rec.regimeAgeMin === 'number' && isFinite(rec.regimeAgeMin) && rec.regimeAgeMin >= 0) ? rec.regimeAgeMin : undefined,
       tapeRegime: (rec.tapeRegime === 'volatile' || rec.tapeRegime === 'compression' || rec.tapeRegime === 'trend' || rec.tapeRegime === 'range' || rec.tapeRegime === 'weak_trend') ? rec.tapeRegime : undefined,
       tapeVeto: (rec.tapeVeto === true) ? true : (rec.tapeVeto === false) ? false : undefined,
+      /* hg-v994: THE ROTATION SEASON AT FIRE TIME. rotSeason is the snapshot's
+         season (alt / btc / mixed) or NOT RECORDED; rotAltPct the alt share as
+         a number, never coerced; rotAgainst is hgRotationAgainst's verdict
+         (BTC season is a headwind for an alt long), the two booleans only. */
+      rotSeason: (rec.rotSeason === 'alt' || rec.rotSeason === 'btc' || rec.rotSeason === 'mixed') ? rec.rotSeason : undefined,
+      rotAltPct: (typeof rec.rotAltPct === 'number' && isFinite(rec.rotAltPct)) ? rec.rotAltPct : undefined,
+      rotAgainst: (rec.rotAgainst === true) ? true : (rec.rotAgainst === false) ? false : undefined,
       /* ONLY the two booleans. Writing `rec.goldShut === true` alone looks
          equivalent and is not: it turns a truthy non-boolean (a caller
          passing 1) into FALSE, which reads as gold-open — the precise error
@@ -1520,6 +1527,13 @@ localStorage. Never throws.
       }
       if (r.tapeVeto === true) tally(out[key].tv || (out[key].tv = blank()));
       if (r.tapeVeto === false) tally(out[key].tw || (out[key].tw = blank()));
+      /* hg-v994: the rotation season and its against verdict fold too */
+      if (r.rotSeason === 'alt' || r.rotSeason === 'btc' || r.rotSeason === 'mixed'){
+        var rt = out[key].rt || (out[key].rt = {});
+        tally(rt[r.rotSeason] || (rt[r.rotSeason] = blank()));
+      }
+      if (r.rotAgainst === true) tally(out[key].rta || (out[key].rta = blank()));
+      if (r.rotAgainst === false) tally(out[key].rto || (out[key].rto = blank()));
       /* hg-v989: each named read folds into its own yes/no pair, so the split
          outlives the live cap exactly as the other marks do. STRICTLY the two
          booleans per read; an unmarked read is neither bucket. */
@@ -1947,11 +1961,30 @@ localStorage. Never throws.
           } catch (eT){}
           return out;
         }
+        /* hg-v994: the rotation season at fire time, from the one home
+           (rotation.js), unless the desk handed valid values in. */
+        function rotMarkOf(c){
+          var out = { season: undefined, altPct: undefined, against: undefined };
+          var v = c && c.rotSeason;
+          if (v === 'alt' || v === 'btc' || v === 'mixed') out.season = v;
+          if (c && typeof c.rotAltPct === 'number' && isFinite(c.rotAltPct)) out.altPct = c.rotAltPct;
+          if (c && (c.rotAgainst === true || c.rotAgainst === false)) out.against = c.rotAgainst;
+          if (out.season !== undefined && out.against !== undefined && out.altPct !== undefined) return out;
+          if (typeof W.hgRotationMark !== 'function') return out;
+          try {
+            var m = W.hgRotationMark(c && c.dir, c && (c.sym || c.symbol));
+            if (!m || typeof m !== 'object') return out;
+            if (out.season === undefined && (m.season === 'alt' || m.season === 'btc' || m.season === 'mixed')) out.season = m.season;
+            if (out.altPct === undefined && typeof m.altPct === 'number' && isFinite(m.altPct)) out.altPct = m.altPct;
+            if (out.against === undefined && (m.against === true || m.against === false)) out.against = m.against;
+          } catch (eRo){}
+          return out;
+        }
         var added = 0, i, c;
         for (i = 0; i < cands.length; i++){
           c = cands[i];
           if (!c) continue;
-          var rgM = regimeBiasMarkOf(c), tpM = tapeMarkOf(c);
+          var rgM = regimeBiasMarkOf(c), tpM = tapeMarkOf(c), roM = rotMarkOf(c);
           var r = W.hgFwdRecord({
             tab: tab,
             mechanic: c.mechanic || c.strategy || o.mechanic || tf,
@@ -2006,6 +2039,10 @@ localStorage. Never throws.
             regimeAgeMin: regimeAgeOf(c, rgM),
             tapeRegime: tpM.regime,
             tapeVeto: tpM.veto,
+            /* hg-v994 */
+            rotSeason: roM.season,
+            rotAltPct: roM.altPct,
+            rotAgainst: roM.against,
             /* solidity stamp fields (hg-v533) ride through untouched;
                hgFwdNormalize attaches them only when sol is finite */
             sol: c.sol, solTier: c.solTier, solV: c.solV
@@ -2256,6 +2293,7 @@ localStorage. Never throws.
         try { h += W.hgFwdSentimentSplitHtml(tab) || ''; } catch (eSs){}   /* hg-v992 */
         try { h += W.hgFwdRegimeSplitHtml(tab) || ''; } catch (eRg){}   /* hg-v993 */
         try { h += W.hgFwdTapeRegimeSplitHtml(tab) || ''; } catch (eTr){}   /* hg-v993 */
+        try { h += W.hgFwdRotationSplitHtml(tab) || ''; } catch (eRo){}   /* hg-v994 */
         h += '<div class="note">Recorded once per firing when it fires, settled later by bars that did '
            + 'not exist at the time. A bar spanning both stop and target counts as a STOP; expiry is '
            + 'excluded rather than counted as a win. This is the only measurement here that accumulates.</div>';
@@ -3099,6 +3137,80 @@ localStorage. Never throws.
         if (sp.unmarked) h += ' · <b>' + sp.unmarked + '</b> carry no mark and are counted as NEITHER — they predate the mark, or fired from a desk whose candidate carried no series to read';
         if (sp.agg) h += ' · folded beyond the live cap: vetoed ' + (sp.agg.veto ? sp.agg.veto.wins + 'W/' + sp.agg.veto.losses + 'L' : '—') + ', allowed ' + (sp.agg.ok ? sp.agg.ok.wins + 'W/' + sp.agg.ok.losses + 'L' : '—');
         h += '. Reported, not gated: the veto stays exactly where it is applied and is applied nowhere new.';
+        h += '</div>';
+        return h;
+      } catch (e) { return ''; }
+    };
+
+    /* hg-v994: THE ROTATION SEASON, MEASURED. Settled live records by season
+       at fire time and by whether the one against-rule (BTC season is a
+       headwind for an alt long) would have cautioned; unmarked is NEITHER. */
+    W.hgFwdRotationSplit = function(tab, opts){
+      try {
+        var o = opts || {};
+        var recs = W.hgFwdRecords(tab) || [];
+        var want = (o.settledOnly === false) ? null : 1;
+        var KEYS = ['alt', 'btc', 'mixed'];
+        var out = { tab: tab || null, settled: 0, against: 0, ok: 0, unmarked: 0, againstWins: 0, okWins: 0,
+                    againstR: null, okR: null, againstHit: null, okHit: null, seasons: {}, agg: null };
+        var cell = function(){ return { n: 0, wins: 0, rSum: 0, r: null, hit: null }; };
+        var aSum = 0, oSum = 0, i, r, rr, k;
+        for (i = 0; i < KEYS.length; i++) out.seasons[KEYS[i]] = cell();
+        for (i = 0; i < recs.length; i++){
+          r = recs[i];
+          if (!r) continue;
+          if (want && r.state !== 't1' && r.state !== 'stop') continue;
+          out.settled++;
+          rr = (r.state === 't1') ? (+r.rr || 0) : -1;
+          if (KEYS.indexOf(r.rotSeason) >= 0){
+            var c2 = out.seasons[r.rotSeason];
+            c2.n++; if (r.state === 't1') c2.wins++; c2.rSum += rr;
+          }
+          if (r.rotAgainst === true){ out.against++; if (r.state === 't1') out.againstWins++; aSum += rr; }
+          else if (r.rotAgainst === false){ out.ok++; if (r.state === 't1') out.okWins++; oSum += rr; }
+          else out.unmarked++;
+        }
+        if (out.against){ out.againstR = aSum / out.against; out.againstHit = out.againstWins / out.against; }
+        if (out.ok){ out.okR = oSum / out.ok; out.okHit = out.okWins / out.ok; }
+        for (k in out.seasons){ var e = out.seasons[k]; if (e.n){ e.r = e.rSum / e.n; e.hit = e.wins / e.n; } }
+        try {
+          var a = loadAgg() || {}, ak, row, ra = null, ro = null, rt = null;
+          for (ak in a){
+            if (!Object.prototype.hasOwnProperty.call(a, ak)) continue;
+            row = a[ak];
+            if (!row) continue;
+            if (tab && String(row.tab || ak.split('|')[0]) !== String(tab)) continue;
+            if (row.rta){ ra = ra || { wins: 0, losses: 0, expired: 0 }; ra.wins += row.rta.wins || 0; ra.losses += row.rta.losses || 0; ra.expired += row.rta.expired || 0; }
+            if (row.rto){ ro = ro || { wins: 0, losses: 0, expired: 0 }; ro.wins += row.rto.wins || 0; ro.losses += row.rto.losses || 0; ro.expired += row.rto.expired || 0; }
+            if (row.rt){
+              rt = rt || {};
+              for (k in row.rt){
+                if (!Object.prototype.hasOwnProperty.call(row.rt, k) || !row.rt[k]) continue;
+                rt[k] = rt[k] || { wins: 0, losses: 0, expired: 0 };
+                rt[k].wins += row.rt[k].wins || 0; rt[k].losses += row.rt[k].losses || 0; rt[k].expired += row.rt[k].expired || 0;
+              }
+            }
+          }
+          if (ra || ro || rt) out.agg = { against: ra, ok: ro, seasons: rt };
+        } catch (eA){}
+        return out;
+      } catch (e) { hgFwdWarn('rotationSplit', e); return null; }
+    };
+    W.hgFwdRotationSplitHtml = function(tab){
+      try {
+        var sp = W.hgFwdRotationSplit(tab);
+        if (!sp || (!sp.against && !sp.ok && !sp.agg)) return '';
+        var fmtR = function(v){ return (v >= 0 ? '+' : '') + v.toFixed(3) + 'R'; };
+        var h = '<div class="note" style="margin:8px 0;padding:8px 10px;border:1px solid #6B7280;border-radius:6px">';
+        h += '<b>ROTATION SEASON SPLIT</b> · ' + sp.against + ' of ' + (sp.against + sp.ok) + ' marked settled records fired where the ROTATION read (BTC season is a headwind for an alt long) would have cautioned them';
+        if (sp.againstR !== null) h += ' · cautioned ' + fmtR(sp.againstR) + ' at ' + Math.round(100 * sp.againstHit) + '% on n=' + sp.against;
+        if (sp.okR !== null) h += ' · not cautioned ' + fmtR(sp.okR) + ' at ' + Math.round(100 * sp.okHit) + '% on n=' + sp.ok;
+        var parts = [], k;
+        for (k in sp.seasons){ if (sp.seasons[k].n) parts.push(k + ' ' + fmtR(sp.seasons[k].r) + ' at ' + Math.round(100 * sp.seasons[k].hit) + '% n=' + sp.seasons[k].n); }
+        if (parts.length) h += ' · by season: ' + parts.join(', ');
+        if (sp.unmarked) h += ' · <b>' + sp.unmarked + '</b> carry no mark and are counted as NEITHER — they predate the mark, fired with the rotation snapshot unread, or are gold-lane records the altseason index does not speak for';
+        if (sp.agg) h += ' · folded beyond the live cap: cautioned ' + (sp.agg.against ? sp.agg.against.wins + 'W/' + sp.agg.against.losses + 'L' : '—') + ', not cautioned ' + (sp.agg.ok ? sp.agg.ok.wins + 'W/' + sp.agg.ok.losses + 'L' : '—');
+        h += '. Reported, not gated: nothing on this line withholds a setup.';
         h += '</div>';
         return h;
       } catch (e) { return ''; }
