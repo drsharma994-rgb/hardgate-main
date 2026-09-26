@@ -5201,6 +5201,116 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     source: 'scripts/solidity-refit.json (generated 2026-08-29)'
   };
 
+  /* hg-v987 — which signal-time read separates winners on this desk's own
+     replay, on four DISJOINT windows (win AND gross AND net must all agree).
+     The refit above asked whether the pillar SCORE ranks winners; this asks
+     each read on its own — the pillars the replay could score, the solidity
+     gates, the HTF alignment tags, the session, the cluster tag, the
+     conviction cert, the live-price grade and the stop width — and reports
+     what separates, what only leans, and what the replay could not score at
+     all. Nothing here gates anything: it is read by hgOmniFactorSepHtml and
+     by nothing else. */
+  /* --- BEGIN GENERATED HG_OMNI_FACTOR_SEP (scripts/omniroute-factor-separation.mjs) ---
+     Re-derive with `node scripts/omniroute-factor-separation.mjs --write`. Do not
+     hand-edit — generated literals write themselves (hg-v921). Every figure is
+     read off backtest-omniroute-v701-results.json; the guard re-runs the generator and fails on drift. */
+  var HG_OMNI_FACTOR_SEP = {
+    artifact: "backtest-omniroute-v701-results.json", n: 2833, windows: 4, minSide: 20,
+    span: ["2026-06-13","2026-09-11"],
+    bound: "as-recorded only — the artifact carries no same-bar ambiguity flag, so the lower bound cannot be read here",
+    starved: ["fvg","atrExpansion","orderFlow","newsCalendar"],
+    verdicts: [],
+    leans: ["pillar:regime:half","pillar:momentumConvergence:half","gate:liveFresh","grade:liveFresh","pop:cluster","geom:stopLt05","geom:stopGe1","geom:stopGe2","session:ASIA"],
+    inSampleVerdicts: ["insample:kindDemoted"],
+    rows: [
+      { f: "pillar:orderBlock:half", g: "pillar", n: 1028, win: 0.268, gross: -0.089, net: -0.195, outWin: 0.273, outNet: -0.228, q: "1/2/2", verdict: null },
+      { f: "pillar:multiTfCascade:half", g: "pillar", n: 792, win: 0.271, gross: -0.061, net: -0.173, outWin: 0.271, outNet: -0.233, q: "1/1/2", verdict: null },
+      { f: "pillar:riskReward:half", g: "pillar", n: 2833, win: 0.271, gross: -0.088, net: -0.216, outWin: null, outNet: null, q: "0/0/0", verdict: null, thin: 4, degenerate: true },
+      { f: "pillar:regime:half", g: "pillar", n: 1412, win: 0.273, gross: -0.104, net: -0.273, outWin: 0.269, outNet: -0.16, q: "3/1/0", verdict: null, lean: "worse" },
+      { f: "pillar:sessionTiming:half", g: "pillar", n: 1161, win: 0.268, gross: -0.093, net: -0.211, outWin: 0.273, outNet: -0.22, q: "2/2/3", verdict: null },
+      { f: "pillar:liquidation:half", g: "pillar", n: 1584, win: 0.254, gross: -0.128, net: -0.25, outWin: 0.292, outNet: -0.173, q: "1/1/1", verdict: null },
+      { f: "pillar:expectancy:half", g: "pillar", n: 697, win: 0.278, gross: -0.055, net: -0.159, outWin: 0.269, outNet: -0.234, q: "3/3/3", verdict: null },
+      { f: "pillar:structureConfluence:half", g: "pillar", n: 2157, win: 0.275, gross: -0.08, net: -0.209, outWin: 0.257, outNet: -0.24, q: "3/3/3", verdict: null },
+      { f: "pillar:momentumConvergence:half", g: "pillar", n: 1290, win: 0.273, gross: -0.034, net: -0.105, outWin: 0.27, outNet: -0.309, q: "2/3/4", verdict: null, lean: "better" },
+      { f: "pillar:liquidationRecovery:half", g: "pillar", n: 2833, win: 0.271, gross: -0.088, net: -0.216, outWin: null, outNet: null, q: "0/0/0", verdict: null, thin: 4, degenerate: true },
+      { f: "pillar:volTermStructure:half", g: "pillar", n: 1277, win: 0.267, gross: -0.092, net: -0.197, outWin: 0.274, outNet: -0.232, q: "2/2/3", verdict: null },
+      { f: "pillar:riskAdjusted:half", g: "pillar", n: 2833, win: 0.271, gross: -0.088, net: -0.216, outWin: null, outNet: null, q: "0/0/0", verdict: null, thin: 4, degenerate: true },
+      { f: "pillar:sectorMomentum:half", g: "pillar", n: 1014, win: 0.281, gross: -0.067, net: -0.213, outWin: 0.266, outNet: -0.217, q: "4/4/2", verdict: null },
+      { f: "pillar:multiAsset:half", g: "pillar", n: 1311, win: 0.26, gross: -0.125, net: -0.245, outWin: 0.281, outNet: -0.191, q: "1/1/2", verdict: null },
+      { f: "gate:families", g: "gate", n: 395, win: 0.278, gross: -0.106, net: -0.269, outWin: 0.27, outNet: -0.207, q: "3/2/1", verdict: null },
+      { f: "gate:liveFresh", g: "gate", n: 1119, win: 0.262, gross: -0.055, net: -0.084, outWin: 0.277, outNet: -0.302, q: "2/3/4", verdict: null, lean: "better" },
+      { f: "gate:tape", g: "gate", n: 2595, win: 0.267, gross: -0.099, net: -0.232, outWin: 0.315, outNet: -0.04, q: "2/2/2", verdict: null },
+      { f: "gate:nAgree1", g: "gate", n: 1569, win: 0.281, gross: -0.064, net: -0.196, outWin: 0.259, outNet: -0.241, q: "3/3/3", verdict: null },
+      { f: "gate:nAgree2", g: "gate", n: 395, win: 0.278, gross: -0.106, net: -0.269, outWin: 0.27, outNet: -0.207, q: "3/2/1", verdict: null },
+      { f: "grade:good", g: "grade", n: 91, win: 0.297, gross: 0.022, net: -0.007, outWin: 0.27, outNet: -0.223, q: "3/3/3", verdict: null },
+      { f: "grade:tierFair", g: "grade", n: 1011, win: 0.268, gross: -0.09, net: -0.208, outWin: 0.273, outNet: -0.22, q: "2/2/2", verdict: null },
+      { f: "grade:liveFresh", g: "grade", n: 754, win: 0.272, gross: -0.016, net: -0.044, outWin: 0.271, outNet: -0.278, q: "2/3/4", verdict: null, lean: "better" },
+      { f: "grade:pastEntry", g: "grade", n: 1363, win: 0.288, gross: -0.065, net: -0.176, outWin: 0.256, outNet: -0.253, q: "3/2/3", verdict: null },
+      { f: "trend:withTrend", g: "trend", n: 759, win: 0.269, gross: -0.079, net: -0.159, outWin: 0.272, outNet: -0.237, q: "1/2/3", verdict: null },
+      { f: "trend:h1", g: "trend", n: 1295, win: 0.258, gross: -0.1, net: -0.187, outWin: 0.282, outNet: -0.241, q: "1/1/3", verdict: null },
+      { f: "trend:daily", g: "trend", n: 1560, win: 0.282, gross: -0.062, net: -0.193, outWin: 0.258, outNet: -0.244, q: "3/3/3", verdict: null },
+      { f: "pop:cluster", g: "population", n: 536, win: 0.248, gross: -0.188, net: -0.315, outWin: 0.276, outNet: -0.193, q: "1/0/0", verdict: null, lean: "worse" },
+      { f: "pop:conviction", g: "population", n: 349, win: 0.258, gross: -0.189, net: -0.228, outWin: 0.273, outNet: -0.214, q: "2/2/2", verdict: null },
+      { f: "pop:long", g: "population", n: 1410, win: 0.285, gross: -0.058, net: -0.188, outWin: 0.257, outNet: -0.244, q: "2/2/2", verdict: null },
+      { f: "geom:band20x", g: "geometry", n: 563, win: 0.297, gross: -0.08, net: -0.169, outWin: 0.265, outNet: -0.228, q: "4/2/3", verdict: null },
+      { f: "geom:stopLt05", g: "geometry", n: 434, win: 0.258, gross: -0.226, net: -0.828, outWin: 0.273, outNet: -0.105, q: "1/0/0", verdict: null, lean: "worse" },
+      { f: "geom:stopGe1", g: "geometry", n: 2012, win: 0.265, gross: -0.065, net: -0.077, outWin: 0.285, outNet: -0.557, q: "1/3/4", verdict: null, lean: "better" },
+      { f: "geom:stopGe2", g: "geometry", n: 1337, win: 0.248, gross: -0.062, net: -0.034, outWin: 0.291, outNet: -0.379, q: "0/2/4", verdict: null, lean: "better" },
+      { f: "session:ASIA", g: "session", n: 667, win: 0.28, gross: -0.052, net: -0.153, outWin: 0.268, outNet: -0.235, q: "3/3/4", verdict: null, lean: "better" },
+      { f: "session:LONDON OPEN", g: "session", n: 598, win: 0.278, gross: -0.064, net: -0.199, outWin: 0.269, outNet: -0.22, q: "3/3/3", verdict: null },
+      { f: "session:LONDON/NY OVERLAP", g: "session", n: 563, win: 0.258, gross: -0.124, net: -0.223, outWin: 0.274, outNet: -0.214, q: "1/1/2", verdict: null },
+      { f: "session:NY OPEN", g: "session", n: 622, win: 0.278, gross: -0.072, net: -0.225, outWin: 0.269, outNet: -0.214, q: "3/2/2", verdict: null },
+      { f: "session:QUIET HOURS", g: "session", n: 311, win: 0.273, gross: -0.106, net: -0.273, outWin: 0.271, outNet: -0.209, q: "2/1/1", verdict: null },
+      { f: "session:OFF-SESSION", g: "session", n: 72, win: 0.167, gross: -0.403, net: -0.562, outWin: 0.274, outNet: -0.207, q: "0/0/0", verdict: null, thin: 3 },
+      { f: "insample:kindDemoted", g: "in-sample", n: 1634, win: 0.255, gross: -0.177, net: -0.375, outWin: 0.294, outNet: 0.001, q: "0/0/0", verdict: "worse", inSample: true }
+    ]
+  };
+  /* --- END GENERATED HG_OMNI_FACTOR_SEP --- */
+
+  function hgOmniFactorSepHtml(T){
+    try{
+      T = (T === undefined) ? HG_OMNI_FACTOR_SEP : T;
+      if (!T || !Array.isArray(T.rows) || !T.rows.length) return '';
+      var rows = T.rows;
+      var verdicts = Array.isArray(T.verdicts) ? T.verdicts : [];
+      var leans = Array.isArray(T.leans) ? T.leans : [];
+      var byKey = {};
+      rows.forEach(function (r){ byKey[r.f] = r; });
+      var pct = function (x){ return (typeof x === 'number' && isFinite(x)) ? (100 * x).toFixed(1) + '%' : '—'; };
+      var sR = function (x){ return (typeof x === 'number' && isFinite(x)) ? ((x >= 0 ? '+' : '') + x.toFixed(3) + 'R') : '—'; };
+      var h = '<div class="note" style="margin-top:10px"><b>WHICH READS SEPARATE · ' + T.windows + ' disjoint windows · '
+        + T.n + ' walked trades · ' + esc(T.artifact) + ' · ' + esc(T.span[0]) + ' → ' + esc(T.span[1]) + '</b>';
+      h += '<div class="dim" style="margin-top:4px">A read separates when the cohort carrying it is better (or worse) than its complement in <b>all ' + T.windows + ' windows</b> on win rate <b>and</b> gross R <b>and</b> net R. ' + esc(T.bound) + '.</div>';
+      var measured = rows.filter(function (r){ return !r.inSample && !r.degenerate; }).length;
+      if (verdicts.length){
+        h += '<div style="margin-top:6px"><b>VERDICT:</b> ' + verdicts.map(function (k){
+          var r = byKey[k]; return esc(r.f) + ' is unanimously <b>' + esc(String(r.verdict).toUpperCase()) + '</b> (n=' + r.n + ', win ' + pct(r.win) + ' vs ' + pct(r.outWin) + ', net ' + sR(r.net) + ' vs ' + sR(r.outNet) + ')';
+        }).join(' · ') + '. A verdict here is a measurement, not a gate — nothing on this desk is wired to it until a forward record confirms it.</div>';
+      } else {
+        h += '<div style="margin-top:6px"><b>NONE of the ' + measured + ' signal-time reads this desk scores by separates on all ' + T.windows + ' windows</b> on win, gross and net together.';
+        if (Array.isArray(T.inSampleVerdicts) && T.inSampleVerdicts.length){
+          h += ' The module\'s own baked demotion (' + T.inSampleVerdicts.map(esc).join(', ') + ') does — and it was <b>fitted on this window</b>, so it is offered as no confirmation; it shows the method is not blind on this book.';
+        }
+        h += '</div>';
+      }
+      if (leans.length){
+        h += '<div class="dim" style="margin-top:4px"><b>LEANS</b> (net unanimous in all ' + T.windows + ', win or gross not — a lean is not a verdict, and net moves with stop width by cost arithmetic alone): '
+          + leans.map(function (k){ var r = byKey[k]; return esc(r.f) + ' ' + esc(r.lean) + ' (better w/g/n ' + esc(r.q) + ')'; }).join(' · ') + '.</div>';
+      }
+      if (Array.isArray(T.starved) && T.starved.length){
+        h += '<div class="dim" style="margin-top:4px"><b>STARVED</b> in the replay (constant on every row, so unmeasured, not "no separation"): ' + T.starved.map(esc).join(', ') + '.</div>';
+      }
+      h += '<table class="tbl" style="margin-top:6px;font-size:11px"><thead><tr><th>read</th><th>n</th><th>win in / out</th><th>net in / out</th><th>better w/g/n</th><th></th></tr></thead><tbody>';
+      rows.forEach(function (r){
+        var tag = r.verdict ? ('<b>' + esc(String(r.verdict).toUpperCase()) + '</b>' + (r.inSample ? ' · in-sample' : ''))
+                : (r.lean ? ('lean ' + esc(r.lean)) : (r.degenerate ? 'no complement' : (r.thin ? ('thin ×' + r.thin) : '—')));
+        h += '<tr><td>' + esc(r.f) + '</td><td>' + r.n + '</td><td>' + pct(r.win) + ' / ' + pct(r.outWin) + '</td><td>' + sR(r.net) + ' / ' + sR(r.outNet) + '</td><td>' + esc(r.q) + '</td><td>' + tag + '</td></tr>';
+      });
+      h += '</tbody></table></div>';
+      return h;
+    }catch(e){ return ''; }
+  }
+
   /* ============ forward refit monitor (hg-v533) ============
      The offline refit above judged the 200-pt score on REPLAY-time stamps
      — which were starved of most pillar inputs — and found it
@@ -10693,7 +10803,12 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             try { fwdPanel = W.hgFwdPanelHTML('OMNIROUTE', { minRr: MIN_RR, title: 'FORWARD — out-of-sample' }) || ''; }
             catch (eFp) { fwdPanel = ''; }
           }
-          ui.pool.innerHTML = renderPooled(res.pooled) + fwdPanel;
+          /* hg-v987: what separates on this desk's own replay, under the forward
+             panel — a measurement table, gating nothing; renders nothing
+             without its literal */
+          var factorSepPanel = '';
+          try { factorSepPanel = hgOmniFactorSepHtml() || ''; } catch (eFs) { factorSepPanel = ''; }
+          ui.pool.innerHTML = renderPooled(res.pooled) + fwdPanel + factorSepPanel;
         }catch(eP){
           try{ ui.pool.innerHTML = '<div class="note warn">measurement table failed to render.</div>'; }catch(eP2){}
         }
@@ -11643,6 +11758,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniApexSectionHtml = hgOmniApexSectionHtml;
     window.hgOmniMarketSide = hgOmniMarketSide;
     window.hgOmniMarketSideHtml = hgOmniMarketSideHtml;
+    window.HG_OMNI_FACTOR_SEP = HG_OMNI_FACTOR_SEP;   /* hg-v987: read by the panel and by nothing else */
+    window.hgOmniFactorSepHtml = hgOmniFactorSepHtml;   /* hg-v987 */
     window.hgOmniEvaluate = hgOmniEvaluate;
     window.hgOmniPlanForHit = hgOmniPlanForHit;
     window.hgOmniFormTicket = hgOmniFormTicket;
