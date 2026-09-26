@@ -147,6 +147,7 @@
     var hit = n ? Math.round(w / n * 100) + '%' : '\u2014';
     return '<span style="opacity:0.6;font-size:10px" title="settled as if the order had to fill first">'
       + 'fill ' + n + ' (' + w + 'W/' + l + 'L ' + hit + ')'
+      + (isFinite(_fin(s.fillExpR)) ? ' ' + (_fin(s.fillExpR) >= 0 ? '+' : '') + _fin(s.fillExpR).toFixed(2) + 'R' : '')   /* hg-v983 */
       + (u ? ' \u00b7 ' + u + ' unfilled' : '')
       + (p ? ' \u00b7 ' + p + ' unprovable' : '')
       + '</span>';

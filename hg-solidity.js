@@ -235,6 +235,21 @@
 
      v687: this gate now also stamps the raw stats on the returned object
      so G7 (auto-promotion) can read them without a second lookup. */
+  /* hg-v983: one call into the ledger's judge rule. Returns { fill, n, expR,
+     unfilled }; `fill` is true only when the fill-aware tally clears the
+     gate's own sample floor AND carries a finite expectancy -- otherwise the
+     caller reads the actual tally exactly as it always did. */
+  function hgSolJudge(W, stats){
+    var out = { fill: false, n: NaN, expR: NaN, unfilled: 0 };
+    try{
+      if (!W || typeof W.hgFwdJudgeSample !== 'function') return out;
+      var js = W.hgFwdJudgeSample(stats, HG_SOL_MIN_EDGE_SAMPLES);
+      if (js && js.fillAware && isFinite(_fin(js.expR))){
+        out.fill = true; out.n = js.n; out.expR = _fin(js.expR); out.unfilled = _fin(js.unfilled) || 0;
+      }
+    }catch(e){}
+    return out;
+  }
   function hgSolGateMeasuredEdge(plan, opts){
     opts = opts || {};
     if (!opts.tab || !opts.kind) return { pass: true, source: 'no-lookup' };
@@ -252,14 +267,20 @@
     if (!stats || !isFinite(stats.samples) || stats.samples < HG_SOL_MIN_EDGE_SAMPLES){
       return { pass: true, source: 'too-few-samples', samples: stats && stats.samples || 0, expR: stats && stats.expR };
     }
-    var expR = _fin(stats.expR);
+    /* hg-v983: WHICH SAMPLE DECIDES is the ledger's one rule (hgFwdJudgeSample,
+       shared with OMNIGOLD's and OMNIROUTE's judges): the actual tally, or the
+       fill-aware tally when enough of these records know whether the order
+       opened. A resting order the tape never reached is neither a win nor a
+       loss, and this gate had been reading it as one. */
+    var js = hgSolJudge(W, stats);
+    var expR = js.fill ? js.expR : _fin(stats.expR);
     /* Not-a-number expR with samples present means every settled trade
        lost 1R (hgFwdStats sets expR = -1 when wins=0) or a data glitch;
        treat the -1 case as an explicit veto. NaN with samples is a data
        shape we do not want to penalize on. */
     if (!isFinite(expR)) return { pass: true, source: 'expR-nan', samples: stats.samples, expR: NaN };
     var pass = expR >= HG_SOL_EDGE_FLOOR;
-    return { pass: pass, source: 'measured', samples: stats.samples, expR: expR };
+    return { pass: pass, source: 'measured', samples: js.fill ? js.n : stats.samples, expR: expR, fill: js.fill, unfilled: js.unfilled };
   }
 
   /* v689 KILL-LIST check. Returns { killed: bool, samples, expR } for a
@@ -313,10 +334,11 @@
     if (!stats || !isFinite(stats.samples) || stats.samples < HG_SOL_MIN_EDGE_SAMPLES){
       return { pass: false, source: 'too-few-samples', samples: stats && stats.samples || 0, expR: stats && stats.expR };
     }
-    var expR = _fin(stats.expR);
+    var js7 = hgSolJudge(W, stats);   /* hg-v983: same rule as G6 */
+    var expR = js7.fill ? js7.expR : _fin(stats.expR);
     if (!isFinite(expR)) return { pass: false, source: 'expR-nan', samples: stats.samples, expR: NaN };
     var pass = expR >= HG_SOL_EDGE_PRIME;
-    return { pass: pass, source: 'measured', samples: stats.samples, expR: expR, threshold: HG_SOL_EDGE_PRIME };
+    return { pass: pass, source: 'measured', samples: js7.fill ? js7.n : stats.samples, expR: expR, threshold: HG_SOL_EDGE_PRIME, fill: js7.fill, unfilled: js7.unfilled };
   }
 
   /* --- composite grade -------------------------------------------------- */
@@ -436,7 +458,8 @@
     else if (g6.source === 'expR-nan' || g6.source === 'fwdlog-error') edgeStr = 'no data';
     else if (g6.source === 'measured'){
       var er = isFinite(g6.expR) ? g6.expR.toFixed(2) + 'R' : '?';
-      edgeStr = 'measured ' + er + ' over ' + (g6.samples || 0) + ' samples (floor ' + HG_SOL_EDGE_FLOOR.toFixed(2) + 'R)';
+      edgeStr = 'measured ' + er + ' over ' + (g6.samples || 0) + (g6.fill ? ' FILLED' : '') + ' samples (floor ' + HG_SOL_EDGE_FLOOR.toFixed(2) + 'R)'
+              + ((g6.fill && g6.unfilled > 0) ? ' · ' + g6.unfilled + ' never filled, excluded' : '');
     } else edgeStr = 'unknown';
     lines.push((g6.pass ? '✓' : '✗') + ' measured-edge: ' + edgeStr);
     /* G7 MEASURED-WINNING (v687): auto-promotion. Only shows a check when
@@ -448,7 +471,8 @@
     else if (g7.source === 'expR-nan' || g7.source === 'fwdlog-error') winStr = 'no data';
     else if (g7.source === 'measured'){
       var er7 = isFinite(g7.expR) ? g7.expR.toFixed(2) + 'R' : '?';
-      winStr = 'measured ' + er7 + ' over ' + (g7.samples || 0) + ' samples (prime floor ' + HG_SOL_EDGE_PRIME.toFixed(2) + 'R)';
+      winStr = 'measured ' + er7 + ' over ' + (g7.samples || 0) + (g7.fill ? ' FILLED' : '') + ' samples (prime floor ' + HG_SOL_EDGE_PRIME.toFixed(2) + 'R)'
+             + ((g7.fill && g7.unfilled > 0) ? ' · ' + g7.unfilled + ' never filled, excluded' : '');
     } else winStr = 'unknown';
     lines.push((g7.pass ? '✓' : '✗') + ' measured-winning: ' + winStr);
     /* v687 omnigold tape-override marker: shown only when the override

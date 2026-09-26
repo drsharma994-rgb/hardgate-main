@@ -594,15 +594,16 @@ localStorage. Never throws.
      every order rests (hg-v424) and whose replay never fills 34.3% of what
      it opens, judged on the actual tally alone. Both read this now. */
   function hgFwdJudgeSample(stats, minN){
-    var out = { n: NaN, hit: NaN, fillAware: false, unfilled: 0, unprovable: 0 };
+    var out = { n: NaN, hit: NaN, expR: NaN, fillAware: false, unfilled: 0, unprovable: 0 };
     if (!stats || typeof stats !== 'object') return out;
     var floor = fin(minN);
     if (!isFinite(floor) || floor < 0) floor = 0;
     var n = fin(stats.samples), hit = fin(stats.hit);
-    if (isFinite(n) && n >= floor && isFinite(hit)){ out.n = n; out.hit = hit; }
+    if (isFinite(n) && n >= floor && isFinite(hit)){ out.n = n; out.hit = hit; out.expR = fin(stats.expR); }
     var fn = fin(stats.fillSamples), fh = fin(stats.fillHit);
     if (isFinite(fn) && fn >= floor && isFinite(fh)){
       out.n = fn; out.hit = fh; out.fillAware = true;
+      out.expR = fin(stats.fillExpR);   /* hg-v983: the expectancy of the orders that opened */
       out.unfilled = isFinite(fin(stats.fillUnfilled)) ? fin(stats.fillUnfilled) : 0;
       out.unprovable = isFinite(fin(stats.fillUnprovable)) ? fin(stats.fillUnprovable) : 0;
     }
@@ -1095,7 +1096,7 @@ localStorage. Never throws.
     var bankN = 0, bankSum = 0, bankActualSum = 0;
     /* the same records settled as if the order had to fill first — see
        hgFwdSettleFill. Counted separately so neither population is hidden. */
-    var fillWins = 0, fillLosses = 0, fillUnfilled = 0, fillUnprovable = 0;
+    var fillWins = 0, fillLosses = 0, fillUnfilled = 0, fillUnprovable = 0, fillRrSum = 0;   /* hg-v983: fillRrSum */
     /* Settled outcomes split by the grade the setup carried WHEN IT FIRED, so
        the A/B/C chips can be judged rather than trusted. */
     var byGrade = { A:{n:0,w:0}, B:{n:0,w:0}, C:{n:0,w:0}, D:{n:0,w:0} };
@@ -1168,6 +1169,7 @@ localStorage. Never throws.
         expired += (ga.expired || 0); rrSum += (ga.rrSum || 0);
         fillWins += (ga.fillWins || 0); fillLosses += (ga.fillLosses || 0);
         fillUnfilled += (ga.fillUnfilled || 0); fillUnprovable += (ga.fillUnprovable || 0);
+        fillRrSum += (ga.fillRrSum || 0);   /* hg-v983 */
       }
     }
     for (i = 0; i < recs.length; i++){
@@ -1196,7 +1198,7 @@ localStorage. Never throws.
          'unfilled' is not a loss and 'unprovable' is not an outcome —
          neither counts, and fillUnfilled/fillUnprovable report how many
          were set aside so the gap is visible rather than implied. */
-      if (r.stateFill === 't1') fillWins++;
+      if (r.stateFill === 't1'){ fillWins++; fillRrSum += (isFinite(num(r.rFill)) ? num(r.rFill) : (num(r.rr) || 0)); }   /* hg-v983: the R the fill walk booked */
       else if (r.stateFill === 'stop') fillLosses++;
       else if (r.fillState === 'unfilled') fillUnfilled++;
       else if (r.fillState === 'unprovable') fillUnprovable++;
@@ -1269,6 +1271,19 @@ localStorage. Never throws.
              fillHit: (fillWins + fillLosses) ? fillWins / (fillWins + fillLosses) : NaN,
              fillUnfilled: fillUnfilled,
              fillUnprovable: fillUnprovable,
+             /* hg-v983: THE EXPECTANCY OF THE ORDERS THAT OPENED. Mirrors expR
+                exactly (NaN with no fill-settled record, -1 when none won, else
+                hit * avgRr - (1 - hit)), so the two are comparable term for
+                term. The solidity grader's G6 / G7 judge on expectancy and had
+                no fill-aware figure to read; this is it. */
+             fillAvgRr: fillWins ? (fillRrSum / fillWins) : NaN,
+             fillExpR: (function(){
+               var fs = fillWins + fillLosses;
+               if (!fs) return NaN;
+               if (!fillWins) return -1;
+               var fa = fillRrSum / fillWins, fh = fillWins / fs;
+               return isFinite(fa) ? fh * fa - (1 - fh) : NaN;
+             })(),
              byGrade: byGrade, byStack: byStack, byBal: byBal, byDir: byDir };
   }
 
@@ -1365,13 +1380,13 @@ localStorage. Never throws.
          decides is the one measured on orders that would actually have
          filled rather than the one that assumed they did. */
       var blank = function(){ return { wins: 0, losses: 0, expired: 0, rrSum: 0,
-                                       fillWins: 0, fillLosses: 0,
+                                       fillWins: 0, fillLosses: 0, fillRrSum: 0,   /* hg-v983 */
                                        fillUnfilled: 0, fillUnprovable: 0 }; };
       var tally = function(b){
         if (r.state === 't1'){ b.wins++; b.rrSum += (num(r.rr) || 0); }
         else if (r.state === 'stop') b.losses++;
         else b.expired++;
-        if (r.stateFill === 't1') b.fillWins++;
+        if (r.stateFill === 't1'){ b.fillWins++; b.fillRrSum += (isFinite(num(r.rFill)) ? num(r.rFill) : (num(r.rr) || 0)); }   /* hg-v983 */
         else if (r.stateFill === 'stop') b.fillLosses++;
         else if (r.fillState === 'unfilled') b.fillUnfilled++;
         else if (r.fillState === 'unprovable') b.fillUnprovable++;
