@@ -408,12 +408,14 @@ console.log('\n10. the census, derived by call shape: which record writers carry
   const candRow = idx.slice(idx.indexOf('function hgCryptoCandRow'), idx.indexOf('function hgCryptoCandRow') + 900);
   ok(/fundingPct: \(t && typeof t\.fundingPct === 'number' && isFinite\(t\.fundingPct\)\) \? t\.fundingPct : undefined/.test(candRow),
      'hgCryptoCandRow puts the ticker funding on the candidate row the SWING/SCALP publish spreads');
-  const want = ['cryptoverse.js', 'ninetypercent.js', 'squeeze.js', 'oiflow.js', 'edge.js', 'omniroute.js', 'cryptoscan.js', 'engine.js'];
+  /* contract-report.js joined the carriers in hg-v986: the figure was never at
+     its record site, and the plan site one function up had it all along */
+  const want = ['cryptoverse.js', 'ninetypercent.js', 'squeeze.js', 'oiflow.js', 'edge.js', 'omniroute.js', 'cryptoscan.js', 'engine.js', 'contract-report.js'];
   for (const w of want) ok(carriers.some(c => c.startsWith(w + ' ')), w + ' hands its funding in');
   ok(carriers.some(c => c.startsWith('index.html ')), 'the SWING/SCALP publish spread carries it');
   /* the ones that do NOT, named rather than remembered: none of these has a
      funding figure in reach at its record site today */
-  const byDesign = ['omnipresent.js', 'dex-screener.js', 'reversalsniper.js', 'brain.js', 'trendtable.js', 'pine.js', 'pine-sub.js', 'contract-report.js', 'super-best.js', 'super-sniper.js'];
+  const byDesign = ['omnipresent.js', 'dex-screener.js', 'reversalsniper.js', 'brain.js', 'trendtable.js', 'pine.js', 'pine-sub.js', 'super-best.js', 'super-sniper.js'];
   for (const b of byDesign) ok(bare.some(c => c.startsWith(b + ' ')), b + ' records without funding (no figure in reach at its record site) -- reported');
   const unexplained = bare.filter(c => !byDesign.some(b => c.startsWith(b + ' ')) && !/^index\.html /.test(c) && !/^gold|^omnigold|^newgold|^optigold|^tauric|^eightypercent|^super-gold|^milligold/.test(c));
   ok(unexplained.length === 0, 'every other bare writer is a gold desk or the inline CARD site' + (unexplained.length ? ' -- UNEXPLAINED: ' + unexplained.join(', ') : ''));

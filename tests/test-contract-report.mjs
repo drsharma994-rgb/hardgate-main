@@ -60,6 +60,11 @@ function boot(files){
 function gen(n, base, mode){
   const out = [];
   let c = base;
+  /* hg-v986: rows are dated relative to the clock, last closed bar one 4h
+     bar behind it. They used to sit in November 2023, which passed only
+     because the record was dated on the CLOCK bar rather than on the bar the
+     plan was composed on; dated honestly, a 2023 bar is stale, not open. */
+  const t0 = Math.floor(Date.now() / 1000 / 14400) * 14400 - n * 14400;
   for (let i = 0; i < n; i++){
     const k = n - 1 - i;
     if (mode === 'up') c = c * 1.005;
@@ -67,7 +72,7 @@ function gen(n, base, mode){
     else if (mode === 'pullback') c = k < 3 ? c * 1.012 : (k < 12 ? c * 0.996 : c * 1.006);
     else c = c * (1 + (i % 2 ? 0.003 : -0.0029));
     const r = c * 0.006;
-    out.push({ t: 1700000000 + i * 14400, o: c - r * 0.3, h: c + r, l: c - r, c: c,
+    out.push({ t: t0 + i * 14400, o: c - r * 0.3, h: c + r, l: c - r, c: c,
                v: 1000 + (i > n - 8 ? 3000 : 0) });
   }
   return out;
