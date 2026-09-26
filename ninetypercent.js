@@ -636,6 +636,32 @@ function npMacroMark(sym, dir){
   }catch(e){ return null; }
 }
 
+/* hg-v985: the same funding read CRYPTOVERSE takes -- see cvFundingMark. */
+function npFundingMark(item, dir){
+  try{
+    if (typeof W.hgFundingAgainstMark !== 'function') return null;
+    var m = W.hgFundingAgainstMark(item && item.fundingPct, dir);
+    if (!m || !(m.against === true || m.against === false)) return null;
+    return { against: m.against, fundingPct: m.fundingPct, why: m.why || null };
+  }catch(e){ return null; }
+}
+
+function npFundingChipHTML(row){
+  var m = row && row.funding;
+  if (!m || m.against !== true) return '';
+  return '<span class="np-chip" style="background:#FEE2E2;color:#991B1B" title="'
+    + esc(m.why || '') + '">FUNDING AGAINST ' + esc(fmt(m.fundingPct, 4)) + '%</span>';
+}
+
+function npFundingNoteHTML(row){
+  var m = row && row.funding;
+  if (!m || m.against !== true) return '';
+  return '<div class="np-note"><b>FUNDING RUNS AGAINST THIS TRADE.</b> The venue prints '
+    + esc(fmt(m.fundingPct, 4)) + '% per interval, which the SWING and SCALP matrices veto at the G4 bar (0.04% against the side). '
+    + 'This desk read price alone and never asked; it does not gate on it here because the rule is measured on no desk. '
+    + 'The rate and the verdict ride on this setup\'s forward record, so the FORWARD panel below can say whether it should have. Reported, not gated.</div>';
+}
+
 function npMacroChipHTML(row){
   var m = row && row.macro;
   if (!m || m.block !== true) return '';
@@ -674,7 +700,13 @@ function npFwdRows(setups){
       mechanic: ('NP90-' + String(p.dir) + '@v' + NP_LABEL_V).toUpperCase().slice(0, 28),
       ticket: true,
       /* hg-v984: the macro read the card shows, or NOT RECORDED */
-      macroBlock: (s.macro && (s.macro.block === true || s.macro.block === false)) ? s.macro.block : undefined
+      macroBlock: (s.macro && (s.macro.block === true || s.macro.block === false)) ? s.macro.block : undefined,
+      /* hg-v985: the funding the card read, or NOT RECORDED. Only the RATE is
+         handed in: the ledger derives the verdict from it through the same
+         rule the card used, so the two agree by construction and a second
+         hand-in of the verdict would be a duplicated check (unkillable, and
+         a place for the two to drift). */
+      fundingPct: (s.funding && typeof s.funding.fundingPct === 'number' && isFinite(s.funding.fundingPct)) ? s.funding.fundingPct : undefined
     });
   }
   return out;
@@ -726,6 +758,7 @@ function npAuditText(a){
 
 W.__npClosedRows = npClosedRows;
 W.__npMacroMark = npMacroMark;   /* hg-v984 */
+W.__npFundingMark = npFundingMark;   /* hg-v985 */
 W.__npTrend = npTrend;
 W.__npPivots = npPivots;
 W.__npLevels = npLevels;
@@ -830,6 +863,7 @@ function npCardHTML(row, idx){
   h += '<span class="np-chip">3/3 PAIRS</span>';
   h += '<span class="np-chip">RECORD ONLY</span>';
   h += npMacroChipHTML(row);   /* hg-v984 */
+  h += npFundingChipHTML(row);   /* hg-v985 */
   h += '<span class="np-meta">entry ' + fmt(s.entry) + ' · stop ' + fmt(s.stop)
     + ' · target ' + fmt(s.t1) + ' (' + fmt(s.rr1, 2) + 'R) · breakeven '
     + Math.round(s.breakeven * 100) + '%'
@@ -848,6 +882,7 @@ function npCardHTML(row, idx){
   h += npStepsHTML(row.ledger);
   h += npPairsHTML(row.pairs);
   h += npMacroNoteHTML(row);   /* hg-v984 */
+  h += npFundingNoteHTML(row);   /* hg-v985 */
   h += '<div class="np-note"><b>WHAT THE THREE PAIRINGS ARE AND ARE NOT.</b> '
     + 'RSI, the Stochastic, MACD and Bollinger %B are all computed from the same closes, '
     + 'so their agreement is largely one price series agreeing with itself — it is not six '
@@ -962,7 +997,8 @@ async function runScan(ui){
         }
         rows.push({ sym: item.sym, exchange: item.exchange, bar: res.bar, price: res.price,
                     setup: res.setup, ledger: res.ledger, pairs: res.pairs,
-                    macro: npMacroMark(item.sym, res.setup.dir) });
+                    macro: npMacroMark(item.sym, res.setup.dir),
+                    funding: npFundingMark(item, res.setup.dir) });
         setStat('scanned ' + scanned + '/' + items.length + ' · ' + rows.length + ' setup(s) so far…');
       }catch(eC){ errors++; }
     }

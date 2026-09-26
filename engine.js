@@ -1175,7 +1175,8 @@ function setSnapshot(survivors, rejected){
          and bar. Kept BESIDE the state row, not on it: window.engineState's
          survivor shape is a contract BRAIN reads (test-engine pins it exactly),
          so the two fields ride a parallel array at the same index. */
-      svBar.push((typeof G.hgFwdLastBar === 'function') ? G.hgFwdLastBar(rec.rows4h) : {});
+      svBar.push(Object.assign({}, (typeof G.hgFwdLastBar === 'function') ? G.hgFwdLastBar(rec.rows4h) : {},
+                               { fundingPct: (typeof rec.fundingPct === 'number' && isFinite(rec.fundingPct)) ? rec.fundingPct : undefined }));   /* hg-v985 */
       sv.push({ sym: rec.sym, dir: res.dir, conviction: res.conviction, plan: plan,
                 gatesPassed: (typeof res.gatesPassed === 'number' && isFinite(res.gatesPassed)) ? res.gatesPassed : 0 });
     }
@@ -1215,6 +1216,7 @@ function setSnapshot(survivors, rejected){
           if (!isFinite(e0) || !isFinite(st0) || !isFinite(t10) || e0 === st0) continue;
           fwd.push({ sym: s0.sym, dir: s0.dir, entry: e0, stop: st0, t1: t10,
                      mark: (svBar[i] || {}).mark, barT: (svBar[i] || {}).barT,   /* hg-v981 */
+                     fundingPct: (svBar[i] || {}).fundingPct,   /* hg-v985 */
                      /* Conviction is this tab's own claim about the setup, so
                         STRONG and MODERATE are measured apart rather than
                         pooled into one undifferentiated EXECUTE number. */

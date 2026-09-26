@@ -567,6 +567,8 @@ function csFwdRows(setups){
       entry: en, stop: st, t1: tp,
       mark: mk,
       barT: barT,
+      /* hg-v985: the universe item's funding, which this desk only ever read as a boolean flag */
+      fundingPct: (s.item && typeof s.item.fundingPct === 'number' && isFinite(s.item.fundingPct)) ? s.item.fundingPct : undefined,
       /* mechanic is the VOTE TIER, not a constant, so the log answers the
          question worth asking — do this desk's own confidence tiers actually
          separate — rather than pooling everything into one bag. The @vN suffix

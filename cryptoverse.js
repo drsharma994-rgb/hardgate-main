@@ -594,6 +594,37 @@ function cvMacroMark(sym, dir){
   }catch(e){ return null; }
 }
 
+/* hg-v985: THE FUNDING THIS DESK HAD IN HAND AND NEVER READ. The universe
+   item carries the venue's funding rate (Delta; CoinDCX reports none) and
+   this desk read price alone. The SWING/SCALP G4 rule -- funding running
+   against the trade at or beyond 0.04%/interval vetoes -- is applied by the
+   matrices and measured on no desk, so it is read here, printed, handed to
+   the record, and gated on nothing; the rule lives in hg-setup-core.js. */
+function cvFundingMark(item, dir){
+  try{
+    if (typeof W.hgFundingAgainstMark !== 'function') return null;
+    var m = W.hgFundingAgainstMark(item && item.fundingPct, dir);
+    if (!m || !(m.against === true || m.against === false)) return null;
+    return { against: m.against, fundingPct: m.fundingPct, why: m.why || null };
+  }catch(e){ return null; }
+}
+
+function cvFundingChipHTML(row){
+  var m = row && row.funding;
+  if (!m || m.against !== true) return '';
+  return '<span class="cv-chip" style="background:#FEE2E2;color:#991B1B" title="'
+    + esc(m.why || '') + '">FUNDING AGAINST ' + esc(fmt(m.fundingPct, 4)) + '%</span>';
+}
+
+function cvFundingNoteHTML(row){
+  var m = row && row.funding;
+  if (!m || m.against !== true) return '';
+  return '<div class="cv-note"><b>FUNDING RUNS AGAINST THIS TRADE.</b> The venue prints '
+    + esc(fmt(m.fundingPct, 4)) + '% per interval, which the SWING and SCALP matrices veto at the G4 bar (0.04% against the side). '
+    + 'This desk read price alone and never asked; it does not gate on it here because the rule is measured on no desk. '
+    + 'The rate and the verdict ride on this setup\'s forward record, so the FORWARD panel below can say whether it should have. Reported, not gated.</div>';
+}
+
 function cvMacroChipHTML(row){
   var m = row && row.macro;
   if (!m || m.block !== true) return '';
@@ -635,7 +666,13 @@ function cvFwdRows(setups){
          population; there is no weaker tier to split against yet */
       ticket: true,
       /* hg-v984: the macro read the card shows, or NOT RECORDED */
-      macroBlock: (s.macro && (s.macro.block === true || s.macro.block === false)) ? s.macro.block : undefined
+      macroBlock: (s.macro && (s.macro.block === true || s.macro.block === false)) ? s.macro.block : undefined,
+      /* hg-v985: the funding the card read, or NOT RECORDED. Only the RATE is
+         handed in: the ledger derives the verdict from it through the same
+         rule the card used, so the two agree by construction and a second
+         hand-in of the verdict would be a duplicated check (unkillable, and
+         a place for the two to drift). */
+      fundingPct: (s.funding && typeof s.funding.fundingPct === 'number' && isFinite(s.funding.fundingPct)) ? s.funding.fundingPct : undefined
     });
   }
   return out;
@@ -654,6 +691,7 @@ W.__cvEvaluate = cvEvaluate;
 W.__cvWebhook = cvWebhook;
 W.__cvFwdRows = cvFwdRows;
 W.__cvMacroMark = cvMacroMark;   /* hg-v984 */
+W.__cvFundingMark = cvFundingMark;   /* hg-v985 */
 W.__cvAtr = cvAtr;
 W.HG_CRYPTOVERSE_RULE = {
   lookback: CV_LOOKBACK, k: CV_K, labelH: CV_LABEL_H, scoreLimit: CV_SCORE_LIMIT,
@@ -727,6 +765,7 @@ function cvCardHTML(row, idx){
   h += '<span class="cv-chip">' + esc(s.kind) + '</span>';
   h += '<span class="cv-chip">RECORD ONLY</span>';
   h += cvMacroChipHTML(row);   /* hg-v984 */
+  h += cvFundingChipHTML(row);   /* hg-v985 */
   h += '<span class="cv-meta">entry ' + fmt(s.entry) + ' · SL ' + fmt(s.stop)
     + ' · TP1 ' + fmt(s.t1) + ' (' + s.rr1 + 'R) · breakeven hit rate '
     + Math.round(s.breakeven * 100) + '%'
@@ -744,6 +783,7 @@ function cvCardHTML(row, idx){
     + '</div>';
   h += cvLedgerHTML(row.ledger);
   h += cvMacroNoteHTML(row);   /* hg-v984 */
+  h += cvFundingNoteHTML(row);   /* hg-v985 */
   h += '<div class="cv-note"><b>WHAT THIS DOES AND DOES NOT CLAIM.</b> No win rate is asserted. '
     + 'At ' + s.rr1 + 'R the trade only has to be right '
     + Math.round(s.breakeven * 100) + '% of the time to break even before costs, '
@@ -874,7 +914,8 @@ async function runScan(ui){
         rows.push({ sym: item.sym, label: item.sym, exchange: item.exchange,
                     bar: res.bar, price: res.price, setup: res.setup,
                     ledger: res.ledger, webhook: cvWebhook(item, res),
-                    macro: cvMacroMark(item.sym, res.setup.dir) });
+                    macro: cvMacroMark(item.sym, res.setup.dir),
+                    funding: cvFundingMark(item, res.setup.dir) });
         setStat('scanned ' + scanned + '/' + items.length + ' · ' + rows.length + ' setup(s) so far…');
       }catch(eC){ errors++; }
     }

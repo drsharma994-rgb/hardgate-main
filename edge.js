@@ -1476,6 +1476,8 @@ async function edgeScanList(list, fetchCandles, hooks){
              the record never carried it; the bar is the last closed 4h bar. */
           mark: (f.sig && isFinite(+f.sig.mark) && +f.sig.mark > 0) ? +f.sig.mark : undefined,
           barT: (typeof W.hgFwdLastBar === 'function') ? W.hgFwdLastBar(f.rows4h).barT : undefined,
+          /* hg-v985: the funding the enricher scored (funding tailwind / crowded) */
+          fundingPct: (f.item && typeof f.item.fundingPct === 'number' && isFinite(f.item.fundingPct)) ? f.item.fundingPct : undefined,
           mechanic: (f.sig && f.sig.edge) || 'UNKNOWN',
           ticket: true            /* it cleared EDGE's tally to be in `found` */
         };

@@ -882,7 +882,7 @@ function __sqStateView(v){
 }
 function publishSqueezeState(results){
   try{
-    var rows = [], syms = [], i, r;
+    var pubSrc = [], rows = [], syms = [], i, r;
     for (i = 0; i < results.length; i++){
       r = results[i];
       if (!r) continue;
@@ -917,6 +917,12 @@ function publishSqueezeState(results){
         }catch(eSmc){}
       }
       rows.push(row);
+      /* hg-v985: the source result rides BESIDE the published row at the same
+         index -- the published row carries no candles (the snapshot is
+         persisted), so hg-v981's `fr.rows4h` below read undefined and that
+         desk's mark and bar never landed; the funding it fired under rides
+         the same way. */
+      pubSrc.push(r);
       syms.push(r.sym);
     }
     var at = Date.now();
@@ -935,10 +941,13 @@ function publishSqueezeState(results){
           if (!fr || !fr.dir) continue;
           if (fr.kind !== 'fired' && fr.kind !== 'break') continue;
           if (!isFinite(+fr.entry) || !isFinite(+fr.stop) || !isFinite(+fr.t1)) continue;
-          /* hg-v981: the last closed 4h bar is the mark and the bar (one reader, hg-forward.js) */
-          var lb = (typeof W.hgFwdLastBar === 'function') ? W.hgFwdLastBar(fr.rows4h) : {};
+          /* hg-v981: the last closed 4h bar is the mark and the bar (one reader, hg-forward.js);
+             hg-v985: read off the SOURCE result, which holds the candles the row does not */
+          var fsrc = pubSrc[fi] || {};
+          var lb = (typeof W.hgFwdLastBar === 'function') ? W.hgFwdLastBar(fsrc.rows4h) : {};
           fwd.push({ sym: fr.sym, dir: fr.dir, entry: +fr.entry, stop: +fr.stop, t1: +fr.t1,
                      mark: lb.mark, barT: lb.barT,
+                     fundingPct: (fsrc.tick && typeof fsrc.tick.fundingPct === 'number' && isFinite(fsrc.tick.fundingPct)) ? fsrc.tick.fundingPct : undefined,   /* hg-v985 */
                      mechanic: (fr.kind === 'fired') ? 'SQZ-FIRED' : 'SQZ-BREAK',
                      ticket: fr.kind === 'fired' });
         }

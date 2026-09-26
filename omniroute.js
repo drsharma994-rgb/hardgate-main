@@ -10545,6 +10545,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                                   way: the committed walk fills nothing on its signal bar and
                                   never fills 34.3% of what it opens. */
                                mark: (num(held[j].livePx) > 0) ? num(held[j].livePx) : undefined,
+                               /* hg-v985: the same funding the desk's own funding gate read */
+                               fundingPct: (ex.positioning && typeof ex.positioning.fundingPct === 'number' && isFinite(ex.positioning.fundingPct)) ? ex.positioning.fundingPct : undefined,
                                /* barT keying must match OMNIGOLD: the decision bar's open time,
                                   not current time. Without this, hgFwdRecordScan defaults to
                                   Date.now() and invalidates cross-desk out-of-sample comparison. */

@@ -276,6 +276,15 @@ localStorage. Never throws.
       macroBlock: (rec.macroBlock === true) ? true
         : (rec.macroBlock === false) ? false
         : undefined,
+      /* hg-v985: THE FUNDING THE PLAN FIRED UNDER, and whether the directional
+         funding rule (SWING/SCALP G4, hg-setup-core.js) would have vetoed it.
+         The raw figure is kept because two rules read it at two bars (0.04
+         against-direction, OMNIROUTE's 0.05 crowded) and a reader may want
+         either; a number, never a coerced one (+null is 0, a real rate). */
+      fundingPct: (typeof rec.fundingPct === 'number' && isFinite(rec.fundingPct)) ? rec.fundingPct : undefined,
+      fundAgainst: (rec.fundAgainst === true) ? true
+        : (rec.fundAgainst === false) ? false
+        : undefined,
       /* ONLY the two booleans. Writing `rec.goldShut === true` alone looks
          equivalent and is not: it turns a truthy non-boolean (a caller
          passing 1) into FALSE, which reads as gold-open — the precise error
@@ -1432,6 +1441,9 @@ localStorage. Never throws.
          neither bucket. */
       if (r.macroBlock === true) tally(out[key].mb || (out[key].mb = blank()));
       if (r.macroBlock === false) tally(out[key].ma || (out[key].ma = blank()));
+      /* hg-v985: the directional funding rule's verdict folds the same way */
+      if (r.fundAgainst === true) tally(out[key].fa || (out[key].fa = blank()));
+      if (r.fundAgainst === false) tally(out[key].fw || (out[key].fw = blank()));
       /* AND THE SIDE, FOR THE SAME REASON THE OTHERS FOLD.
 
          The long/short split is the slowest measurement on this desk: it
@@ -1742,6 +1754,24 @@ localStorage. Never throws.
           return (f > barT) ? barT : f;
         }
         var o = opts || {};
+        /* hg-v985: the funding a desk had in hand when it fired, and the
+           directional rule's verdict on it -- from the one rule in
+           hg-setup-core.js unless the desk handed a verdict in. No central
+           lookup: the ledger has no venue-safe symbol map, so a desk that
+           hands in no funding records none. */
+        function fundingOf(c){
+          var v = c && c.fundingPct;
+          return (typeof v === 'number' && isFinite(v)) ? v : undefined;
+        }
+        function fundMarkOf(c){
+          if (c && (c.fundAgainst === true || c.fundAgainst === false)) return c.fundAgainst;
+          var f = fundingOf(c);
+          if (f === undefined || typeof W.hgFundingAgainstMark !== 'function') return undefined;
+          try {
+            var fm = W.hgFundingAgainstMark(f, c && c.dir);
+            return (fm && (fm.against === true || fm.against === false)) ? fm.against : undefined;
+          } catch (eF){ return undefined; }
+        }
         function macroMarkOf(c){
           if (c && (c.macroBlock === true || c.macroBlock === false)) return c.macroBlock;
           if (typeof W.hgMacroAltMark !== 'function') return undefined;
@@ -1792,6 +1822,8 @@ localStorage. Never throws.
                plans.js, with nothing to edit in 26 record maps. Absent rule,
                unread snapshot or a gold-lane symbol stay undefined. */
             macroBlock: macroMarkOf(c),
+            fundingPct: fundingOf(c),   /* hg-v985 */
+            fundAgainst: fundMarkOf(c),
             /* solidity stamp fields (hg-v533) ride through untouched;
                hgFwdNormalize attaches them only when sol is finite */
             sol: c.sol, solTier: c.solTier, solV: c.solV
@@ -2036,6 +2068,7 @@ localStorage. Never throws.
            panel. Silent on a desk whose records carry no mark (every gold
            tab; every crypto record written before this). */
         try { h += W.hgFwdMacroSplitHtml(tab) || ''; } catch (eMs){}
+        try { h += W.hgFwdFundingSplitHtml(tab) || ''; } catch (eFs){}   /* hg-v985 */
         h += '<div class="note">Recorded once per firing when it fires, settled later by bars that did '
            + 'not exist at the time. A bar spanning both stop and target counts as a STOP; expiry is '
            + 'excluded rather than counted as a win. This is the only measurement here that accumulates.</div>';
@@ -2430,6 +2463,88 @@ localStorage. Never throws.
         if (sp.allowedR !== null) h += ' \u00b7 allowed ' + fmtR(sp.allowedR) + ' at ' + Math.round(100 * sp.allowedHit) + '% on n=' + sp.allowed;
         if (sp.unmarked) h += ' \u00b7 <b>' + sp.unmarked + '</b> carry no mark and are counted as NEITHER \u2014 they predate the mark on this desk, or fired with the regime snapshot unread';
         h += '. Reported, not gated: this desk does not apply the filter, and nothing is withheld on this line.';
+        h += '</div>';
+        return h;
+      } catch (e) { return ''; }
+    };
+
+    /* hg-v985: THE DIRECTIONAL FUNDING RULE, MEASURED WHERE IT IS NOT APPLIED.
+
+       Same shape as the macro split: settled live records plus the folded
+       counts at the rule's own bar (fundAgainst, 0.04%/interval against the
+       trade), unmarked counted as NEITHER. And because the raw funding rides
+       on the record, the live records are ALSO split at OMNIROUTE's soft bar
+       (0.05, "crowded on our side") -- two rules read the same figure at two
+       bars and nothing had ever said whether either separates. The second
+       split has no aggregate (only the rule's verdict folds) and says so. */
+    var FWD_FUND_CROWDED = 0.05;
+    W.hgFwdFundingSplit = function(tab, opts){
+      try {
+        var o = opts || {};
+        var recs = W.hgFwdRecords(tab) || [];
+        var want = (o.settledOnly === false) ? null : 1;
+        var out = { tab: tab || null, against: 0, with: 0, unmarked: 0, againstWins: 0, withWins: 0,
+                    againstR: null, withR: null, againstHit: null, withHit: null,
+                    crowded: { bar: FWD_FUND_CROWDED, n: 0, wins: 0, rest: 0, restWins: 0, r: null, restR: null },
+                    agg: null };
+        var aSum = 0, wSum = 0, cSum = 0, rSum = 0, i, r, rr;
+        for (i = 0; i < recs.length; i++){
+          r = recs[i];
+          if (!r) continue;
+          if (want && r.state !== 't1' && r.state !== 'stop') continue;
+          rr = (r.state === 't1') ? (+r.rr || 0) : -1;
+          if (r.fundAgainst === true){ out.against++; if (r.state === 't1') out.againstWins++; aSum += rr; }
+          else if (r.fundAgainst === false){ out.with++; if (r.state === 't1') out.withWins++; wSum += rr; }
+          else out.unmarked++;
+          if (typeof r.fundingPct === 'number' && isFinite(r.fundingPct) && (r.dir === 'long' || r.dir === 'short')){
+            var crowded = (r.dir === 'long' && r.fundingPct > FWD_FUND_CROWDED) || (r.dir === 'short' && r.fundingPct < -FWD_FUND_CROWDED);
+            if (crowded){ out.crowded.n++; if (r.state === 't1') out.crowded.wins++; cSum += rr; }
+            else { out.crowded.rest++; if (r.state === 't1') out.crowded.restWins++; rSum += rr; }
+          }
+        }
+        if (out.against){ out.againstR = aSum / out.against; out.againstHit = out.againstWins / out.against; }
+        if (out.with){ out.withR = wSum / out.with; out.withHit = out.withWins / out.with; }
+        if (out.crowded.n) out.crowded.r = cSum / out.crowded.n;
+        if (out.crowded.rest) out.crowded.restR = rSum / out.crowded.rest;
+        try {
+          var a = loadAgg() || {}, k, row, fa = null, fw = null;
+          for (k in a){
+            if (!Object.prototype.hasOwnProperty.call(a, k)) continue;
+            row = a[k];
+            if (!row) continue;
+            if (tab && String(row.tab || k.split('|')[0]) !== String(tab)) continue;
+            if (row.fa){ fa = fa || { wins: 0, losses: 0, expired: 0 };
+              fa.wins += row.fa.wins || 0; fa.losses += row.fa.losses || 0; fa.expired += row.fa.expired || 0; }
+            if (row.fw){ fw = fw || { wins: 0, losses: 0, expired: 0 };
+              fw.wins += row.fw.wins || 0; fw.losses += row.fw.losses || 0; fw.expired += row.fw.expired || 0; }
+          }
+          if (fa || fw) out.agg = { against: fa, with: fw };
+        } catch (eA){ out.agg = null; }
+        return out;
+      } catch (e) { hgFwdWarn('fundingSplit', e); return null; }
+    };
+
+    W.hgFwdFundingSplitHtml = function(tab){
+      try {
+        var sp = W.hgFwdFundingSplit(tab);
+        if (!sp) return '';
+        if (!sp.against && !sp.with) return '';
+        var tot = sp.against + sp.with;
+        var pct = tot ? (100 * sp.against / tot) : 0;
+        var fmtR = function(v){ return (v >= 0 ? '+' : '') + v.toFixed(3) + 'R'; };
+        var h = '<div class="note" style="margin:8px 0;padding:8px 10px;border:1px solid #6B7280;border-radius:6px">';
+        h += '<b>FUNDING RULE SPLIT</b> \u00b7 ' + sp.against + ' of ' + tot + ' marked settled records ('
+          + pct.toFixed(1) + '%) fired with funding AGAINST the trade at the SWING/SCALP G4 bar (0.04%/interval)';
+        if (sp.againstR !== null) h += ' \u00b7 against ' + fmtR(sp.againstR) + ' at ' + Math.round(100 * sp.againstHit) + '% on n=' + sp.against;
+        if (sp.withR !== null) h += ' \u00b7 with ' + fmtR(sp.withR) + ' at ' + Math.round(100 * sp.withHit) + '% on n=' + sp.with;
+        if (sp.crowded.n || sp.crowded.rest){
+          h += ' \u00b7 at OMNIROUTE own crowded bar (' + FWD_FUND_CROWDED + '): '
+            + sp.crowded.n + ' crowded' + (sp.crowded.r !== null ? ' ' + fmtR(sp.crowded.r) : '')
+            + ' vs ' + sp.crowded.rest + ' not' + (sp.crowded.restR !== null ? ' ' + fmtR(sp.crowded.restR) : '')
+            + ' (live records only; the aggregate folds the G4 verdict alone)';
+        }
+        if (sp.unmarked) h += ' \u00b7 <b>' + sp.unmarked + '</b> carry no mark and are counted as NEITHER \u2014 they predate the mark, or fired on a venue that reports no funding';
+        h += '. Reported, not gated: this desk does not apply the rule, and nothing is withheld on this line.';
         h += '</div>';
         return h;
       } catch (e) { return ''; }
