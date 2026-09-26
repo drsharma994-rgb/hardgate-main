@@ -322,6 +322,105 @@ function meanrevPlanHtml(p){
     + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(p.entry, p.stop) : '');
 }
 
+/* The plan the card trades: meanrevPlan on the row's own stats, refined by
+   hgStrategyRefine where that layer is loaded. cardHTML built this inline; the
+   forward record (hg-v997) must record the levels the two handoff buttons
+   would book, so it lives once and both read it. */
+function mrTradedPlan(r){
+  try{
+    var sig = r && r.sig, st = r && r.stats;
+    if (!sig || !st) return null;
+    var lv = meanrevPlan({ dir: sig.dir, entry: sig.entry, extreme: st.extreme,
+                           atr: st.atr, mean: sig.target, oppBand: st.oppBand });
+    if (lv && typeof hgStrategyRefine === 'function' && r.rows){
+      try{ lv = hgStrategyRefine(lv, r.rows, { style: 'meanrev', reversion: true }) || lv; }catch(eRf){}
+    }
+    return lv || null;
+  }catch(e){ return null; }
+}
+
+/* ---------------- forward ledger (hg-v997) ----------------
+   MEAN REV printed SEND TO TRADE PLAN and ADD TO BOOK on every levelled card
+   and wrote NO forward record of any kind: the only record on the card was
+   the in-sample SETUP RECORD (mrBacktest on the same bars the signal reads),
+   and CONTRACT REPORT looked this desk's forward log up under 'MEANREV', a
+   pool nothing wrote (named in hg-v995). Every levelled plan is recorded
+   here -- dated on the last CLOSED 4h bar the desk read (mrClosed at the
+   fetch site), never the clock; carrying the mark (the decision bar's close),
+   the venue funding the desk item had, and three hg-v989 read marks:
+     record:positive  the in-sample SETUP RECORD's expectancy is > 0 (absent
+                      when the record is THIN, under MIN_RECORD occurrences)
+     context:adverse  the shared 20-read context called this fade AGAINST
+                      (absent when the context layer did not run)
+     omni:demoted     the OMNI day book stood aside on this plan (absent when
+                      the principal layer is not loaded)
+   so the ledger can ask, out of sample, whether the in-sample record this
+   desk sorts by predicts anything -- the question the card's own SETUP
+   RECORD line cannot answer about itself. `ticket` is the desk's own claim:
+   a card with levels prints both handoffs, so every levelled plan is one.
+   The horizon is the replay's own MAX_HOLD, so forward and in-sample judge
+   the same holding window. Nothing here is read back by the scan. */
+var MR_FWD_TAB = 'MEANREV', MR_FWD_TF = '4h', MR_FWD_HORIZON = MAX_HOLD;
+function mrFwdReads(r){
+  var out = {};
+  var bt = r && r.bt;
+  /* numbers only: a string n or expectancy is not a read (+'5' is 5, the coercion trap) */
+  if (bt && typeof bt.n === 'number' && isFinite(bt.n) && bt.n >= MIN_RECORD
+      && typeof bt.expR === 'number' && isFinite(bt.expR)) out['record:positive'] = (bt.expR > 0);
+  if (r && r.contextRead) out['context:adverse'] = (r.contextAdverse === true);
+  if (typeof W.hgOmniPrincipalApply === 'function') out['omni:demoted'] = (r && r.omniDemoted === true);
+  return out;
+}
+function mrFwdRows(results){
+  var rows = [], i, r, lv, last;
+  for (i = 0; i < (results || []).length; i++){
+    r = results[i];
+    if (!r || !r.sig || !r.sym) continue;
+    lv = mrTradedPlan(r);
+    if (!lv || !isFinite(+lv.entry) || !isFinite(+lv.stop) || !isFinite(+lv.t1)) continue;
+    last = (typeof W.hgFwdLastBar === 'function') ? W.hgFwdLastBar(r.rows) : {};
+    rows.push({
+      sym: r.sym, dir: r.sig.dir,
+      entry: +lv.entry, stop: +lv.stop, t1: +lv.t1,
+      mechanic: 'MEANREV-RSI2',
+      ticket: true,
+      /* the price when the plan fired: the decision bar's close, read off the
+         closed series through the one reader (hg-v981) -- tick.mark IS this
+         close in the scan, so a second branch on it would be a duplicated read */
+      mark: last.mark,
+      /* the last CLOSED 4h bar (mrClosed at the fetch site), never the clock */
+      barT: last.barT,
+      /* the venue funding the desk item carried; the ledger derives the verdict (hg-v985) */
+      fundingPct: (typeof r.fundingPct === 'number' && isFinite(r.fundingPct)) ? r.fundingPct : undefined,
+      reads: mrFwdReads(r)
+    });
+  }
+  return rows;
+}
+function mrRecordForward(results){
+  try{
+    if (typeof W.hgFwdRecordScan !== 'function') return 0;
+    var recs = mrFwdRows(results);
+    if (!recs.length) return 0;
+    return W.hgFwdRecordScan(MR_FWD_TAB, MR_FWD_TF, recs, { horizonBars: MR_FWD_HORIZON }) || 0;
+  }catch(e){
+    try{ if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('meanrev:record', e); }catch(e2){}
+    return 0;
+  }
+}
+function mrSettleForward(sym, rows){
+  try{
+    if (typeof W.hgFwdResolve !== 'function' || !sym || !Array.isArray(rows) || !rows.length) return 0;
+    return W.hgFwdResolve(sym, MR_FWD_TF, rows) || 0;
+  }catch(e){ return 0; }
+}
+function mrFwdPanelHtml(){
+  try{
+    if (typeof W.hgFwdPanelHTML !== 'function') return '';
+    return W.hgFwdPanelHTML(MR_FWD_TAB, { title: 'FORWARD \u2014 out-of-sample, every 4H mean-reversion plan this desk formed' }) || '';
+  }catch(e){ return ''; }
+}
+
 /* ---------------- scanner (UI) ---------------- */
 function cardHTML(r){
   var sig = r.sig, bt = r.bt, st = r.stats;
@@ -347,11 +446,7 @@ function cardHTML(r){
   /* live execution levels (SL/TP audit): the stretch entry, a stop beyond the
      extreme by 1.5×ATR, T1 at the mean, T2 at the opposite band. Honest
      fallback when the band/ATR ingredients are missing. */
-  var lv = meanrevPlan({ dir: sig.dir, entry: sig.entry, extreme: st.extreme,
-                         atr: st.atr, mean: sig.target, oppBand: st.oppBand });
-  if (lv && typeof hgStrategyRefine === 'function' && r.rows){
-    try{ lv = hgStrategyRefine(lv, r.rows, { style: 'meanrev', reversion: true }) || lv; }catch(eRf){}
-  }
+  var lv = mrTradedPlan(r);
   var mrStack = null;
   if (lv && typeof hgSetupStackForInlineScan === 'function'){
     try{
@@ -441,6 +536,7 @@ function mount(el){
     + '<div class="cards" id="mrCards"></div>'
     + '<div class="empty" id="mrEmpty" style="display:none">No RSI(' + RSI_LEN + ')/%B extremes against the SMA'
     + REGIME_LEN + ' regime right now.</div>'
+    + '<div id="mrFwd"></div>'
     + '</div>';
 
   var btn = el.querySelector('#mrRun'), statEl = el.querySelector('#mrStat'),
@@ -448,6 +544,9 @@ function mount(el){
       emptyEl = el.querySelector('#mrEmpty');
   if (!btn || !statEl || !progEl || !cardsEl || !emptyEl) return;
 
+  var fwdEl = el.querySelector('#mrFwd');
+  function paintFwd(){ try{ if (fwdEl) fwdEl.innerHTML = mrFwdPanelHtml(); }catch(ePf){} }
+  paintFwd();
   function setStat(t, warn){ statEl.textContent = t; statEl.className = warn ? 'note warn' : 'note'; }
   function setProg(f){
     progEl.style.display = (f === null) ? 'none' : 'block';
@@ -504,6 +603,10 @@ function mount(el){
                table must read the same closed tape the signal reads */
             rows = mrClosed(rows);
             var sig = mrSignal(rows);
+            /* hg-v997: open forward records settle on the closed bars this scan
+               fetched -- every symbol, signal or not -- BEFORE this bar's plans
+               are recorded after the loop (the ST pattern) */
+            mrSettleForward(sym, rows);
             if (!sig) return;
             /* The shared indicator context — this desk read five arrays of
                its own and nothing else (the 2026-08 audit's thinnest desk).
@@ -520,9 +623,13 @@ function mount(el){
             var atrArr = atr(rows, ATR_LEN);
             var exLow = lowest(rows.map(function(r){ return r.l; }), EXT_LEN)[k];
             var exHigh = highest(rows.map(function(r){ return r.h; }), EXT_LEN)[k];
-            var tick = { symbol: sym, turnoverUsd: item.turnoverUsd, mark: rows[k].c, chg24: null };
+            var tick = { symbol: sym, turnoverUsd: item.turnoverUsd, mark: rows[k].c, chg24: null,
+              fundingPct: (typeof item.fundingPct === 'number' && isFinite(item.fundingPct)) ? item.fundingPct : null };
             var row = {
               sym: sym, sig: sig, bt: bt, tick: tick, rows: rows, venue: item.exchange || null,
+              /* hg-v997: the venue funding the desk item carried (Delta reports one, CoinDCX none) --
+                 the forward record hands it in and the ledger derives the directional verdict */
+              fundingPct: tick.fundingPct,
               contextRead: cx ? cx.read : null, contextAdverse: !!(cx && cx.adverse),
               stats: {
                 last: rows[k].c,
@@ -583,8 +690,13 @@ function mount(el){
         return tb - ta;
       });
 
+      /* hg-v997: every plan this scan formed is recorded, shown or not, once
+         per closed 4h bar (the ledger dedups on the bar) */
+      var recorded = mrRecordForward(results);
+
       if (!results.length) emptyEl.style.display = 'block';
       else cardsEl.innerHTML = results.map(cardHTML).join('');
+      paintFwd();
       try {
         if (typeof window.hgMpPin === 'function'){
           window.hgMpPin('meanrev', results.map(function(r){
@@ -604,7 +716,9 @@ function mount(el){
 
       var secs = ((Date.now() - t0) / 1000).toFixed(1);
       setStat('universe ' + uni.length + ' · signals ' + results.length + ' · failed ' + failed
-              + ' · ' + secs + 's — sorted by expectancy R');
+              + ' · ' + secs + 's — sorted by expectancy R'
+              + ((typeof W.hgFwdRecordScan === 'function')
+                ? ' · ' + recorded + ' forward record' + (recorded === 1 ? '' : 's') + ' written' : ''));
     }catch(e){
       setStat('scan failed: ' + ((e && e.message) ? e.message : String(e)), true);
       status = 'failed: ' + ((e && e.message) ? e.message : String(e));
@@ -646,6 +760,8 @@ W.mrClosed = mrClosed;   /* exported so the closed-bars contract is testable, no
 W.mrBacktest = mrBacktest;
 W.meanrevPlan = meanrevPlan;
 W.meanrevPlanHtml = meanrevPlanHtml;
+W.mrTradedPlan = mrTradedPlan;   /* hg-v997: the one plan the card books and the ledger records */
+W.mrFwdRows = mrFwdRows;         /* hg-v997: the rows the desk hands the ledger */
 /* meanrevAssess(rows) — pure read for BRAIN/BEST: live signal + replay stats. */
 function meanrevAssess(rows){
   try{
