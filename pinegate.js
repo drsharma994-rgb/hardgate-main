@@ -145,12 +145,17 @@ function pineGateRelaxedPairs(maps, opts){
   return out;
 }
 
+/* hg-v993: the bias rule lives ONCE, in regime.js (hgRegimeBiasBlocks), and
+   the forward ledger's regime mark reads the same function -- so what this
+   gate blocks and what the ledger records as 'would have blocked' cannot
+   drift. With regime.js absent there is no rule to apply and the gate FAILS
+   OPEN, saying so, rather than carrying a second copy of the bias table. */
 function pineRegimeAllows(dir, regime){
   if (!regime || !regime.playbook) return { ok: true, note: 'regime unknown — not blocking' };
   var bias = String(regime.playbook.bias || '').toUpperCase();
-  if (bias === 'STAND-ASIDE') return { ok: false, note: 'REGIME STAND-ASIDE' };
-  if (bias === 'LONG-ONLY' && dir === 'short') return { ok: false, note: 'REGIME LONG-ONLY' };
-  if (bias === 'SHORT-ONLY' && dir === 'long') return { ok: false, note: 'REGIME SHORT-ONLY' };
+  if (typeof G.hgRegimeBiasBlocks !== 'function') return { ok: true, note: 'regime rule unavailable — not blocking' };
+  var blocks = G.hgRegimeBiasBlocks(bias, dir);
+  if (blocks === true) return { ok: false, note: 'REGIME ' + bias };
   return { ok: true, note: bias || 'REGIME OK' };
 }
 

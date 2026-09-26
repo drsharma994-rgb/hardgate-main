@@ -13,6 +13,8 @@ function assert(cond, msg){
 
 const ctx = vm.createContext({ window: {}, console, Math, JSON, Date, isFinite, parseInt, String, Object, Array, module: { exports: {} } });
 ctx.window = ctx;
+/* hg-v993: the regime bias rule lives in regime.js and pineRegimeAllows delegates to it, as index.html loads them */
+vm.runInContext(fs.readFileSync(path.join(root, 'regime.js'), 'utf8'), ctx, { filename: 'regime.js' });
 vm.runInContext(fs.readFileSync(path.join(root, 'pinegate.js'), 'utf8'), ctx, { filename: 'pinegate.js' });
 const G = ctx.window;
 
