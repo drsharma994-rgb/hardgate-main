@@ -360,20 +360,24 @@ function hgSetupStack(inp){
     }
   }
 
+  /* hg-v995: the composite's stance toward the plan is read through the ONE home
+     (hgTrendMatrixAlign in trendtable.js, the desk's own majority) instead of a
+     second copy of the |2| bar here. STRONG at |4| is this stack's own tier and
+     stays. Only WITH bumps, as before: no against-item is invented. With the
+     home absent nothing is bumped rather than a second rule applied (and no
+     snapshot can exist without trendtable.js loaded). */
   var trendSnap = inp.trendmx;
-  if (trendSnap && hasDir && Array.isArray(trendSnap.rows)){
+  if (trendSnap && hasDir && Array.isArray(trendSnap.rows) && typeof G.hgTrendMatrixAlign === 'function'){
     var symBase = String(sym || '').toUpperCase().replace(/USD(T)?$/, '');
     for (var ti = 0; ti < trendSnap.rows.length; ti++){
       var tr = trendSnap.rows[ti];
-      if (!tr || String(tr.dir || '').toLowerCase() !== dir) continue;
+      if (!tr) continue;
       var trSym = String(tr.sym || '').toUpperCase();
       if (trSym && symBase && trSym !== symBase && trSym.indexOf(symBase.replace(/USDT$/, '')) < 0) continue;
-      var tsc = (typeof tr.score === 'number' && isFinite(tr.score)) ? tr.score : 0;
-      if ((dir === 'long' && tsc >= 4) || (dir === 'short' && tsc <= -4)){
-        _bump(fundamental, _item('Trend matrix', 'composite ' + (tsc > 0 ? '+' : '') + tsc + '/5 STRONG', 'with'), vetoes, cautions);
-        break;
-      } else if ((dir === 'long' && tsc >= 2) || (dir === 'short' && tsc <= -2)){
-        _bump(fundamental, _item('Trend matrix', 'composite ' + (tsc > 0 ? '+' : '') + tsc + '/5', 'with'), vetoes, cautions);
+      var tsc = tr.score;
+      var tAl = G.hgTrendMatrixAlign(tsc, dir);   /* never throws; the typeof guard above is the one check */
+      if (tAl === 'with'){
+        _bump(fundamental, _item('Trend matrix', 'composite ' + (tsc > 0 ? '+' : '') + tsc + '/5' + (Math.abs(tsc) >= 4 ? ' STRONG' : ''), 'with'), vetoes, cautions);
         break;
       }
     }

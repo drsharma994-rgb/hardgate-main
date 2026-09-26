@@ -871,6 +871,9 @@ function trendmxLimitBoardHTML(rows){
                  /* hg-v981: the mark trendmxAttachMeta already kept, the bar off the row's series */
                  mark: (c.plan && isFinite(+c.plan.mark) && +c.plan.mark > 0) ? +c.plan.mark : undefined,
                  barT: (typeof W.hgFwdLastBar === 'function') ? W.hgFwdLastBar(c.row && c.row.rows4h).barT : undefined,
+                 /* hg-v995: the composite is NOT handed in here -- the ledger reads it off
+                    this desk's own published snapshot (hgTrendMatrixMark), the same row the
+                    board painted, so a second copy would be the same number twice */
                  mechanic: (c.row && c.row.gate && c.row.gate.clean7) ? 'TM-CLEAN7' : 'TM-CONVICTION',
                  ticket: !!(c.row && c.row.gate && c.row.gate.clean7) };
       }), { horizonBars: 20 });
@@ -1043,10 +1046,73 @@ function publishTrendmxSnap(rows){
     __tmSnap = {
       at: Date.now(),
       rows: rows.map(function(r){
-        return { sym: r.sym, score: r.score, dir: tmDirOf(r) };
+        return { sym: r.sym, score: r.score, dir: tmDirOf(r), comps: r.comps || null };
       })
     };
   }catch(e){ __tmSnap = null; }
+}
+
+/* ---------------- hg-v995: the composite as a MARK, one home ----------------
+   The composite (-5..+5) is read by four consumers: this desk's own board
+   (tmDirOf, majority at |2|), the PINE universe filter (aligned at |2|), the
+   FTS setup stack (+1 with at |2|, STRONG at |4|) and CONTRACT REPORT. None
+   of them recorded it beside an outcome, and CONTRACT REPORT handed
+   trendmxClassify two candle arrays where it wants a scored row and a
+   direction, so that report row read idle on every tape.
+
+   hgTrendMatrixAlign(score, dir): the composite's stance toward a plan --
+   'with' (majority in the plan's direction), 'against' (majority the other
+   way), 'neutral' (short of the majority either way), undefined when the
+   score is not a finite number or there is no direction. TM_MAJORITY is the
+   one bar, tmDirOf's bar, stated here through tmDirOf rather than retyped.
+
+   hgTrendMatrixRowOf(sym): this desk's last published row for a contract,
+   matched on the base (BTCUSDT, BTC-PERP, BTCUSD all read the BTC row), or
+   null when the desk has not scanned it. hgTrendMatrixMark(dir, sym) reads
+   that row for a record at fire time: { score, align, ageMin }, every field
+   NOT RECORDED when the snapshot has no row, a string score or a zero stamp
+   (+null is 0, the trap), and a gold-lane symbol gets nothing, because this
+   is a crypto trend desk. Nothing here gates. */
+function tmBaseOf(sym){
+  var s = String(sym || '').toUpperCase().replace(/[-_\/:. ]/g, '');
+  s = s.replace(/(USDT|USDC|BUSD|USD|PERP)+$/, '');
+  return s;
+}
+function hgTrendMatrixAlign(score, dir){
+  var d = (typeof dir === 'string') ? dir.toLowerCase() : '';
+  if (d !== 'long' && d !== 'short') return undefined;
+  if (typeof score !== 'number' || !isFinite(score)) return undefined;
+  var maj = tmDirOf({ score: score });
+  if (!maj) return 'neutral';
+  return maj === d ? 'with' : 'against';
+}
+function hgTrendMatrixRowOf(sym){
+  try{
+    if (!__tmSnap || !Array.isArray(__tmSnap.rows)) return null;
+    var want = tmBaseOf(sym);
+    if (!want) return null;
+    for (var i = 0; i < __tmSnap.rows.length; i++){
+      var r = __tmSnap.rows[i];
+      if (r && tmBaseOf(r.sym) === want) return r;
+    }
+    return null;
+  }catch(e){ return null; }
+}
+function hgTrendMatrixMark(dir, sym){
+  var out = { score: undefined, align: undefined, ageMin: undefined };
+  try{
+    if (typeof W.hgIsGoldLaneSym === 'function' && W.hgIsGoldLaneSym(sym)) return out;
+    var r = hgTrendMatrixRowOf(sym);
+    if (!r) return out;
+    /* the row's score is trendScore's own output (a number, zeroResult on failure); the one
+       check on its shape is hgTrendMatrixAlign's, and the ledger door has its own. A second
+       typeof here was an unkillable mutant in the first cut -- a duplicated check. */
+    out.score = r.score;
+    var at = __tmSnap && __tmSnap.at;
+    if (typeof at === 'number' && isFinite(at) && at > 0) out.ageMin = Math.max(0, Math.round((Date.now() - at) / 60000));
+    out.align = hgTrendMatrixAlign(out.score, dir);
+  }catch(e){}
+  return out;
 }
 
 /* refresh contract: async, NEVER throws, returns a terse status string —
@@ -1381,6 +1447,9 @@ W.trendScore = trendScore;
 W.tmDirOf = tmDirOf;
 W.trendmxGateEval = trendmxGateEval;
 W.trendmxClassify = trendmxClassify;
+W.hgTrendMatrixAlign = hgTrendMatrixAlign;   /* hg-v995 */
+W.hgTrendMatrixRowOf = hgTrendMatrixRowOf;
+W.hgTrendMatrixMark = hgTrendMatrixMark;
 W.trendmxPlan = trendmxPlan;
 W.trendmxPlanHTML = trendmxPlanHTML;
 W.trendmxPlanBlock = trendmxPlanBlock;

@@ -352,6 +352,15 @@ localStorage. Never throws.
       rotSeason: (rec.rotSeason === 'alt' || rec.rotSeason === 'btc' || rec.rotSeason === 'mixed') ? rec.rotSeason : undefined,
       rotAltPct: (typeof rec.rotAltPct === 'number' && isFinite(rec.rotAltPct)) ? rec.rotAltPct : undefined,
       rotAgainst: (rec.rotAgainst === true) ? true : (rec.rotAgainst === false) ? false : undefined,
+      /* hg-v995: THE TREND MATRIX COMPOSITE AT FIRE TIME. tmScore is the
+         desk's five-leg composite (-5..+5, an integer the desk produced, so a
+         value outside that range is a caller this log does not understand);
+         tmAlign is hgTrendMatrixAlign's stance toward the plan (with /
+         against / neutral); tmAgeMin the snapshot's age in whole minutes.
+         Nothing is coerced. */
+      tmScore: (typeof rec.tmScore === 'number' && isFinite(rec.tmScore) && rec.tmScore >= -5 && rec.tmScore <= 5) ? rec.tmScore : undefined,
+      tmAlign: (rec.tmAlign === 'with' || rec.tmAlign === 'against' || rec.tmAlign === 'neutral') ? rec.tmAlign : undefined,
+      tmAgeMin: (typeof rec.tmAgeMin === 'number' && isFinite(rec.tmAgeMin) && rec.tmAgeMin >= 0) ? rec.tmAgeMin : undefined,
       /* ONLY the two booleans. Writing `rec.goldShut === true` alone looks
          equivalent and is not: it turns a truthy non-boolean (a caller
          passing 1) into FALSE, which reads as gold-open — the precise error
@@ -1534,6 +1543,11 @@ localStorage. Never throws.
       }
       if (r.rotAgainst === true) tally(out[key].rta || (out[key].rta = blank()));
       if (r.rotAgainst === false) tally(out[key].rto || (out[key].rto = blank()));
+      /* hg-v995: the trend matrix stance folds too */
+      if (r.tmAlign === 'with' || r.tmAlign === 'against' || r.tmAlign === 'neutral'){
+        var tmf = out[key].tm || (out[key].tm = {});
+        tally(tmf[r.tmAlign] || (tmf[r.tmAlign] = blank()));
+      }
       /* hg-v989: each named read folds into its own yes/no pair, so the split
          outlives the live cap exactly as the other marks do. STRICTLY the two
          booleans per read; an unmarked read is neither bucket. */
@@ -1980,11 +1994,35 @@ localStorage. Never throws.
           } catch (eRo){}
           return out;
         }
+        /* hg-v995: the trend matrix composite at fire time. A desk that
+           hands its own score in wins (TREND MATRIX does, so its record and
+           its board agree by construction); the shared read fills what the
+           desk did not name; the stance is derived through the ONE rule from
+           whichever score decided, never handed in twice. */
+        function tmMarkOf(c){
+          var out = { score: undefined, align: undefined, ageMin: undefined };
+          if (c && typeof c.tmScore === 'number' && isFinite(c.tmScore)) out.score = c.tmScore;
+          if (c && (c.tmAlign === 'with' || c.tmAlign === 'against' || c.tmAlign === 'neutral')) out.align = c.tmAlign;
+          if (c && typeof c.tmAgeMin === 'number' && isFinite(c.tmAgeMin) && c.tmAgeMin >= 0) out.ageMin = c.tmAgeMin;
+          if ((out.score === undefined || out.ageMin === undefined) && typeof W.hgTrendMatrixMark === 'function'){
+            try {
+              var m = W.hgTrendMatrixMark(c && c.dir, c && (c.sym || c.symbol));
+              if (m && typeof m === 'object'){
+                if (out.score === undefined && typeof m.score === 'number' && isFinite(m.score)) out.score = m.score;
+                if (out.ageMin === undefined && typeof m.ageMin === 'number' && isFinite(m.ageMin) && m.ageMin >= 0) out.ageMin = m.ageMin;
+              }
+            } catch (eTm){}
+          }
+          if (out.align === undefined && out.score !== undefined && typeof W.hgTrendMatrixAlign === 'function'){
+            try { out.align = W.hgTrendMatrixAlign(out.score, c && c.dir); } catch (eTa){}
+          }
+          return out;
+        }
         var added = 0, i, c;
         for (i = 0; i < cands.length; i++){
           c = cands[i];
           if (!c) continue;
-          var rgM = regimeBiasMarkOf(c), tpM = tapeMarkOf(c), roM = rotMarkOf(c);
+          var rgM = regimeBiasMarkOf(c), tpM = tapeMarkOf(c), roM = rotMarkOf(c), tmM = tmMarkOf(c);
           var r = W.hgFwdRecord({
             tab: tab,
             mechanic: c.mechanic || c.strategy || o.mechanic || tf,
@@ -2043,6 +2081,10 @@ localStorage. Never throws.
             rotSeason: roM.season,
             rotAltPct: roM.altPct,
             rotAgainst: roM.against,
+            /* hg-v995 */
+            tmScore: tmM.score,
+            tmAlign: tmM.align,
+            tmAgeMin: tmM.ageMin,
             /* solidity stamp fields (hg-v533) ride through untouched;
                hgFwdNormalize attaches them only when sol is finite */
             sol: c.sol, solTier: c.solTier, solV: c.solV
@@ -2294,6 +2336,7 @@ localStorage. Never throws.
         try { h += W.hgFwdRegimeSplitHtml(tab) || ''; } catch (eRg){}   /* hg-v993 */
         try { h += W.hgFwdTapeRegimeSplitHtml(tab) || ''; } catch (eTr){}   /* hg-v993 */
         try { h += W.hgFwdRotationSplitHtml(tab) || ''; } catch (eRo){}   /* hg-v994 */
+        try { h += W.hgFwdTrendMatrixSplitHtml(tab) || ''; } catch (eTm){}   /* hg-v995 */
         h += '<div class="note">Recorded once per firing when it fires, settled later by bars that did '
            + 'not exist at the time. A bar spanning both stop and target counts as a STOP; expiry is '
            + 'excluded rather than counted as a win. This is the only measurement here that accumulates.</div>';
@@ -3210,6 +3253,78 @@ localStorage. Never throws.
         if (parts.length) h += ' · by season: ' + parts.join(', ');
         if (sp.unmarked) h += ' · <b>' + sp.unmarked + '</b> carry no mark and are counted as NEITHER — they predate the mark, fired with the rotation snapshot unread, or are gold-lane records the altseason index does not speak for';
         if (sp.agg) h += ' · folded beyond the live cap: cautioned ' + (sp.agg.against ? sp.agg.against.wins + 'W/' + sp.agg.against.losses + 'L' : '—') + ', not cautioned ' + (sp.agg.ok ? sp.agg.ok.wins + 'W/' + sp.agg.ok.losses + 'L' : '—');
+        h += '. Reported, not gated: nothing on this line withholds a setup.';
+        h += '</div>';
+        return h;
+      } catch (e) { return ''; }
+    };
+
+    /* hg-v995: THE TREND MATRIX COMPOSITE, MEASURED. Settled live records by
+       the composite's stance toward the plan at fire time (with / against /
+       neutral), the median snapshot age at fire, and the folded tails; a
+       record carrying no stance is NEITHER. */
+    W.hgFwdTrendMatrixSplit = function(tab, opts){
+      try {
+        var o = opts || {};
+        var recs = W.hgFwdRecords(tab) || [];
+        var want = (o.settledOnly === false) ? null : 1;
+        var KEYS = ['with', 'against', 'neutral'];
+        var out = { tab: tab || null, settled: 0, marked: 0, unmarked: 0, cells: {}, ageMedianMin: null, agg: null };
+        var cell = function(){ return { n: 0, wins: 0, rSum: 0, r: null, hit: null }; };
+        var ages = [], i, r, rr, k;
+        for (i = 0; i < KEYS.length; i++) out.cells[KEYS[i]] = cell();
+        for (i = 0; i < recs.length; i++){
+          r = recs[i];
+          if (!r) continue;
+          if (want && r.state !== 't1' && r.state !== 'stop') continue;
+          out.settled++;
+          rr = (r.state === 't1') ? (+r.rr || 0) : -1;
+          if (KEYS.indexOf(r.tmAlign) >= 0){
+            var c2 = out.cells[r.tmAlign];
+            c2.n++; if (r.state === 't1') c2.wins++; c2.rSum += rr;
+            out.marked++;
+            if (typeof r.tmAgeMin === 'number' && isFinite(r.tmAgeMin)) ages.push(r.tmAgeMin);
+          } else out.unmarked++;
+        }
+        for (k in out.cells){ var e = out.cells[k]; if (e.n){ e.r = e.rSum / e.n; e.hit = e.wins / e.n; } }
+        if (ages.length){ ages.sort(function(a, b){ return a - b; }); out.ageMedianMin = ages[Math.floor(ages.length / 2)]; }
+        try {
+          var a = loadAgg() || {}, ak, row, tm = null;
+          for (ak in a){
+            if (!Object.prototype.hasOwnProperty.call(a, ak)) continue;
+            row = a[ak];
+            if (!row || !row.tm) continue;
+            if (tab && String(row.tab || ak.split('|')[0]) !== String(tab)) continue;
+            tm = tm || {};
+            for (k in row.tm){
+              if (!Object.prototype.hasOwnProperty.call(row.tm, k) || !row.tm[k]) continue;
+              tm[k] = tm[k] || { wins: 0, losses: 0, expired: 0 };
+              tm[k].wins += row.tm[k].wins || 0; tm[k].losses += row.tm[k].losses || 0; tm[k].expired += row.tm[k].expired || 0;
+            }
+          }
+          if (tm) out.agg = tm;
+        } catch (eA){}
+        return out;
+      } catch (e) { hgFwdWarn('trendMatrixSplit', e); return null; }
+    };
+    W.hgFwdTrendMatrixSplitHtml = function(tab){
+      try {
+        var sp = W.hgFwdTrendMatrixSplit(tab);
+        if (!sp || (!sp.marked && !sp.agg)) return '';
+        var fmtR = function(v){ return (v >= 0 ? '+' : '') + v.toFixed(3) + 'R'; };
+        var ag = sp.cells.against, wi = sp.cells.with, ne = sp.cells.neutral;
+        var h = '<div class="note" style="margin:8px 0;padding:8px 10px;border:1px solid #6B7280;border-radius:6px">';
+        h += '<b>TREND MATRIX SPLIT</b> · ' + ag.n + ' of ' + sp.marked + ' marked settled records fired with the five-leg composite AGAINST them (majority the other way)';
+        if (ag.r !== null) h += ' · against ' + fmtR(ag.r) + ' at ' + Math.round(100 * ag.hit) + '% on n=' + ag.n;
+        if (wi.r !== null) h += ' · with ' + fmtR(wi.r) + ' at ' + Math.round(100 * wi.hit) + '% on n=' + wi.n;
+        if (ne.r !== null) h += ' · neutral ' + fmtR(ne.r) + ' at ' + Math.round(100 * ne.hit) + '% on n=' + ne.n;
+        if (sp.ageMedianMin !== null) h += ' · median snapshot age at fire ' + sp.ageMedianMin + ' min';
+        if (sp.unmarked) h += ' · <b>' + sp.unmarked + '</b> carry no mark and are counted as NEITHER — they predate the mark, fired on a contract TREND MATRIX had not scanned, or are gold-lane records this crypto desk does not speak for';
+        if (sp.agg){
+          var parts = [], k;
+          for (k in sp.agg){ if (sp.agg[k]) parts.push(k + ' ' + sp.agg[k].wins + 'W/' + sp.agg[k].losses + 'L'); }
+          if (parts.length) h += ' · folded beyond the live cap: ' + parts.join(', ');
+        }
         h += '. Reported, not gated: nothing on this line withholds a setup.';
         h += '</div>';
         return h;
