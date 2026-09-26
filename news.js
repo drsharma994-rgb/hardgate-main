@@ -345,13 +345,68 @@ function __dur(ms){
 /* ---------------- synchronous risk gate (the exported API) ---------------- */
 function hgNewsRisk(symbol, opts){
   try{
+    /* hg-v992: A DEFAULT IS NOT A MEASUREMENT, AND IT SAYS SO.
+
+       This returned risk 'low' / blackout false with the note 'news not
+       loaded' before the first fetch -- and every consumer that read `risk`
+       or `blackout` alone (GATES G5, STAR TRADER's NEWS vote) read that as
+       a CLEAR calendar. Worse: `loaded` flips true when ANY leg lands, so a
+       calendar fetch that failed while Fear & Greed succeeded fed an EMPTY
+       event list to the classifier, which answered 'no high-impact USD
+       events within 48h' -- a false clear no note could reveal. Both cases
+       carry `unchecked: true` now; the risk fields stay at their old values
+       for callers that only know the old shape, and every consumer on this
+       app's critical path reads the flag. */
     if (!NEWS.loaded){
-      return { risk: 'low', events: [], blackout: false, note: 'news not loaded' };
+      return { risk: 'low', events: [], blackout: false, unchecked: true, note: 'news not loaded' };
+    }
+    if (!NEWS.calendarOk){
+      return { risk: 'low', events: [], blackout: false, unchecked: true,
+               note: 'news calendar not loaded — the calendar leg failed while other legs loaded; blackout unverified' };
     }
     return newsRiskFromEvents(symbol, NEWS.events, Date.now(), opts);
   }catch(e){
-    return { risk: 'low', events: [], blackout: false, note: 'news error: ' + (e && e.message) };
+    return { risk: 'low', events: [], blackout: false, unchecked: true, note: 'news error: ' + (e && e.message) };
   }
+}
+
+/* hg-v992: THE TWO CONTEXT READS AS MEASUREMENTS, ONE HOME EACH.
+
+   hgNewsMark(symbol) says what the calendar read at fire time -- 'blackout',
+   'high', 'med' or 'low' -- or nothing at all when the calendar is unchecked.
+   The forward ledger stamps it on every record it writes, so the news
+   blackout (a hard veto on GATES, STAR TRADER, BOOK; a soft gate on
+   OMNIROUTE / OMNIGOLD) can be asked, on trades logged before their
+   outcomes existed, whether it separates. A record from before the mark, or
+   fired with the calendar unchecked, is NOT RECORDED -- never 'low'.
+
+   hgFngExtremeMark(value, dir, symbol) is the BIAS S2 sentiment guard as a
+   mark: would the guard in force (block fresh longs at Fear & Greed >= 80,
+   fresh shorts at <= 20 -- the same bar hgOmniMarketSide stands aside on)
+   have VETOED this plan? true / false, or undefined when the value is not a
+   number (+null is 0, which would read as extreme fear), the direction is
+   missing, or the symbol is a gold-lane symbol (a crypto sentiment index has
+   nothing to say about XAUUSD). STAR TRADER casts its SENTIMENT vote at
+   75 / 25, a different bar, said in its own file; the mark is the guard's. */
+var HG_FNG_GUARD = { greed: 80, fear: 20 };
+function hgNewsMark(symbol){
+  try{
+    var r = hgNewsRisk(symbol);
+    if (!r || r.unchecked === true) return undefined;
+    if (r.blackout === true) return { risk: 'blackout' };
+    var k = String(r.risk || '');
+    if (k === 'high' || k === 'med' || k === 'low') return { risk: k };
+    return undefined;
+  }catch(e){ return undefined; }
+}
+function hgFngExtremeMark(value, dir, symbol){
+  try{
+    if (typeof value !== 'number' || !isFinite(value)) return undefined;
+    if (dir !== 'long' && dir !== 'short') return undefined;
+    if (symbol !== undefined && symbol !== null && newsIsGoldSymbol(symbol)) return undefined;
+    if (dir === 'long') return value >= HG_FNG_GUARD.greed;
+    return value <= HG_FNG_GUARD.fear;
+  }catch(e){ return undefined; }
 }
 
 /* ---------------- async refresh (fire-and-forget, never throws) ---------------- */
@@ -639,12 +694,16 @@ W.newsRiskFromEvents  = newsRiskFromEvents;
 W.hgNewsRisk          = hgNewsRisk;
 W.hgNewsRefresh       = hgNewsRefresh;
 W.hgNewsState         = hgNewsState;
+W.hgNewsMark          = hgNewsMark;          /* hg-v992 */
+W.hgFngExtremeMark    = hgFngExtremeMark;    /* hg-v992 */
+W.HG_FNG_GUARD        = HG_FNG_GUARD;        /* hg-v992 */
 // test hook: seed the cache synchronously (used by tests only)
 W.__hgNewsSeed = function(events, fng, headlines){
   NEWS.events = Array.isArray(events) ? events : [];
   NEWS.fng = fng || null;
   NEWS.headlines = Array.isArray(headlines) ? headlines : [];
   NEWS.loaded = true; NEWS.at = Date.now(); NEWS.errors = [];
+  NEWS.calendarOk = NEWS.events.length > 0;   /* hg-v992: a seed with no events is a calendar that did not load */
   return NEWS;
 };
 W.__hgNewsReset = function(){

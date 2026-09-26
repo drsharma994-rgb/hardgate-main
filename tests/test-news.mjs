@@ -337,9 +337,11 @@ console.log('--- risk classification ---');
   assert(r.risk === 'low' && r.blackout === false, 'empty calendar -> low');
 
   /* hgNewsRisk cold-cache contract */
+  /* hg-v992: the cold-cache answer carries `unchecked: true` -- a default, not a
+     measurement, and every critical-path consumer reads the flag */
   assert(JSON.stringify(w.hgNewsRisk('BTCUSDT')) === JSON.stringify({
-    risk: 'low', events: [], blackout: false, note: 'news not loaded'
-  }), 'hgNewsRisk before any data: low + note "news not loaded" (never blocks)');
+    risk: 'low', events: [], blackout: false, unchecked: true, note: 'news not loaded'
+  }), 'hgNewsRisk before any data: low + unchecked + note "news not loaded" (never blocks, never reads as clear)');
 
   /* seeded cache drives hgNewsRisk (event placed 2h in the REAL future —
      hgNewsRisk classifies against Date.now()) */
@@ -349,8 +351,14 @@ console.log('--- risk classification ---');
   const rr = w.hgNewsRisk('BTCUSDT');
   assert(rr.risk === 'high' && rr.events.length === 1, 'after seed, hgNewsRisk reflects the USD event only');
   assert(rr.events[0].title === 'CPI m/m', 'seeded event surfaced with title');
+  assert(rr.unchecked === undefined, 'a real calendar read carries no unchecked flag');
+  /* hg-v992: loaded with NO calendar (F&G landed, the calendar leg failed) is UNCHECKED,
+     not 'no high-impact USD events within 48h' */
+  w.__hgNewsSeed([], { value: 40, classification: 'Fear', t: null }, []);
+  const noCal = w.hgNewsRisk('BTCUSDT');
+  assert(noCal.unchecked === true && /calendar not loaded/.test(noCal.note) && noCal.blackout === false, 'loaded without a calendar -> unchecked, note names the calendar leg');
   w.__hgNewsReset();
-  assert(w.hgNewsRisk('BTCUSDT').note === 'news not loaded', 'reset restores the cold-cache contract');
+  assert(w.hgNewsRisk('BTCUSDT').note === 'news not loaded' && w.hgNewsRisk('BTCUSDT').unchecked === true, 'reset restores the cold-cache contract');
 }
 
 /* ================================================================

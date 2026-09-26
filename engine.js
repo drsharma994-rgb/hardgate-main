@@ -675,7 +675,15 @@ function gateCandidate(inp){
   var news = (inp.news !== undefined) ? inp.news : undefined, newsNA = null, newsClear = false;
   if (news === undefined){
     if (typeof hgNewsRisk === 'function'){
-      try{ news = hgNewsRisk(sym); newsClear = true; }
+      try{
+        news = hgNewsRisk(sym);
+        /* hg-v992: a news module that has not loaded its calendar answers
+           risk 'low' with `unchecked: true`. That is a DEFAULT, not a read;
+           this gate used to print "no high-impact events inside the blackout
+           window" on it. UNCHECKED, like the module-absent branch. */
+        if (news && news.unchecked === true){ newsNA = 'news calendar not loaded — blackout unverified; check the calendar manually'; }
+        else newsClear = true;
+      }
       catch(e){ news = null; newsNA = 'hgNewsRisk errored (' + (e && e.message ? e.message : e) + ') — treated as no read; check the calendar manually'; }
     }else{
       newsNA = 'hgNewsRisk not loaded — news blackout unverified; check the calendar manually';
