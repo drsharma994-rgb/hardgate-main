@@ -58,7 +58,7 @@ async function cachedKlines(symbol, interval, target){
   fs.writeFileSync(file, JSON.stringify({ fetchedAt: Date.now(), symbol, interval, target, rows }));
   return rows;
 }
-function boot(){
+export function boot(){
   const ctx = { console, Math, Date, isFinite, parseFloat, parseInt, JSON, Array, Object, Number, String, Promise, RegExp, setTimeout, clearTimeout, NaN, Infinity };
   ctx.window = ctx; ctx.globalThis = ctx; vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'cryptoultra.js'), 'utf8'), ctx, { filename: 'cryptoultra.js' });
@@ -67,8 +67,17 @@ function boot(){
 }
 
 /* ---------- 1. per-bar signal scan ---------- */
-let READS = { total: 0, vote: 0 };
-function scanBars(W, m15, h1){
+export let READS = { total: 0, vote: 0, unpriced: 0 };
+/* hg-v990: refuse to report on a walk whose plans had no geometry. `sigs` is
+   scanBars' output; any row flagged unpriced means the engine handed back a
+   plan with a non-finite level, and an artifact written from that would say
+   "zero trades" about a strategy it never walked. Fatal, never skipped. */
+export function assertPriced(sigs){
+  const bad = (sigs || []).filter(s => s && s.unpriced).length;
+  if (bad > 0) throw new Error('CRYPTO ULTRA walk: ' + bad + ' plan(s) carried no stop or target -- the engine was handed a rule without geometry (the hg-v990 seam). Nothing written.');
+  return 0;
+}
+export function scanBars(W, m15, h1){
   const sigs = []; let h1Ptr = 0; const t0 = Date.now();
   const RULE = W.HG_CRYPTO_ULTRA_RULE;
   for (let i = MIN_15M - 1; i < m15.length - 1; i++){
@@ -80,8 +89,14 @@ function scanBars(W, m15, h1){
     try{ r = W.cryptoUltraEngine({ rows15m: rows15, rows1h, now, allowUnverified: true, venueCost: { venue: 'Binance', rtFrac: COST_FRAC },
                                    rule: { minPct: 0, minAvail: 0, regimeGate: false } }); }
     catch(e){ sigs.push({ i, err: String(e && e.message || e) }); continue; }
-    if (r.count) READS = { total: r.count.total, vote: r.count.kinds.vote };
+    if (r.count){ READS.total = r.count.total; READS.vote = r.count.kinds.vote; }   /* hg-v990: mutate, never reassign -- a reassignment wiped the unpriced counter every bar */
     if (!r.ok || !r.plan){ sigs.push({ i, ok: r.ok, pct: r.count ? r.count.pct : 0, decisive: r.count ? r.count.decisive : 0, regime: r.regime, gates: r.gates }); continue; }
+    /* hg-v990: a plan the walk cannot price is a HARNESS defect, counted and
+       fatal below -- never a trade that quietly times out with NaN R and
+       drops out of every aggregate, which is how the committed artifact came
+       to report zero settled trades in every cell. */
+    const priced = isFinite(r.plan.entry) && isFinite(r.plan.stop) && isFinite(r.plan.t1) && Math.abs(r.plan.entry - r.plan.stop) > 0;
+    if (!priced){ READS.unpriced = (READS.unpriced || 0) + 1; sigs.push({ i, ok: true, unpriced: true, pct: r.count.pct, decisive: r.count.decisive, lead: r.count.lead, regime: r.regime }); continue; }
     sigs.push({ i, ok: true, pct: r.count.pct, decisive: r.count.decisive, lead: r.count.lead, regime: r.regime, atr: r.atr,
                 plan: { entry: r.plan.entry, stop: r.plan.stop, t1: r.plan.t1, stopAtr: r.plan.stopAtr } });
     if ((i - MIN_15M) % 500 === 0) console.log('  bar ' + i + '/' + m15.length + ' · ' + ((Date.now() - t0) / 1000).toFixed(0) + 's');
@@ -90,7 +105,7 @@ function scanBars(W, m15, h1){
 }
 
 /* ---------- 2. trade walk per candidate rule ---------- */
-function walkRule(sigs, m15, minPct, gate, timeoutBars){
+export function walkRule(sigs, m15, minPct, gate, timeoutBars){
   const live = { long: null, short: null }, trades = [], counters = { fired: 0, merged: 0 };
   const settle = (tr, exitIdx, outcome, rGross, bothTouch) => {
     const risk = Math.abs(tr.stop - tr.entry);
@@ -126,17 +141,19 @@ function walkRule(sigs, m15, minPct, gate, timeoutBars){
   }
   return { trades, counters };
 }
-function agg(trades){
+export function agg(trades){
   const settled = trades.filter(t => t.netR != null && isFinite(t.netR)), wins = settled.filter(t => t.outcome === 'win').length, sum = k => settled.reduce((s, t) => s + t[k], 0);
   return { n: settled.length, unfilled: trades.filter(t => t.outcome === 'unfilled').length, winRate: settled.length ? +(wins / settled.length).toFixed(3) : null,
            avgR_gross: settled.length ? +(sum('rGross') / settled.length).toFixed(3) : null, avgR_net: settled.length ? +(sum('netR') / settled.length).toFixed(3) : null,
            sumR_net: +sum('netR').toFixed(2),
            bothTouch: settled.filter(t => t.bothTouch).length, timeouts: settled.filter(t => t.outcome === 'timeout').length };
 }
-function groupAgg(trades, keyFn){ const g = {}; for (const t of trades){ const k = keyFn(t); (g[k] = g[k] || []).push(t); } const out = {}; for (const k of Object.keys(g).sort()) out[k] = agg(g[k]); return out; }
+export function groupAgg(trades, keyFn){ const g = {}; for (const t of trades){ const k = keyFn(t); (g[k] = g[k] || []).push(t); } const out = {}; for (const k of Object.keys(g).sort()) out[k] = agg(g[k]); return out; }
 const sessionOf = h => h < 7 ? 'ASIA(00-07)' : h < 12 ? 'LONDON(07-12)' : h < 17 ? 'NY-OVERLAP(12-17)' : 'NY-LATE(17-24)';
 
 /* ---------- 3. main ---------- */
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain){
 console.log('=== CRYPTO ULTRA backtest — ' + (SMOKE ? 'SMOKE' : 'FULL') + ' · ' + new Date().toISOString() + ' ===');
 const m15 = await cachedKlines(SYMBOL, '15m', BARS_15M);
 const h1 = await cachedKlines(SYMBOL, '1h', Math.ceil(BARS_15M / 4) + WIN_1H + 8);
@@ -146,8 +163,9 @@ console.log('scanning ' + m15.length + ' x 15m bars (engine once per bar, ' + WI
 const sigs = scanBars(W, m15, h1);
 const errs = sigs.filter(s => s.err);
 const withPlan = sigs.filter(s => s.plan);
-console.log('  bars scanned ' + sigs.length + ' · engine errors ' + errs.length + ' · bars with a lead+plan ' + withPlan.length);
+console.log('  bars scanned ' + sigs.length + ' · engine errors ' + errs.length + ' · bars with a lead+plan ' + withPlan.length + ' · unpriced ' + (READS.unpriced || 0));
 if (errs.length) console.log('  first error: ' + errs[0].err);
+assertPriced(sigs);   /* hg-v990: fatal on any unpriced plan */
 const splitIdx = Math.floor((MIN_15M - 1) + (m15.length - MIN_15M) * IS_SHARE);
 const grid = [];
 for (const gate of GRID_GATE) for (const minPct of GRID_PCT){
@@ -197,7 +215,7 @@ const evidence = chosen ? {
 const out = { meta: { generated: new Date().toISOString(), mode: SMOKE ? 'smoke' : 'full', symbol: SYMBOL, bars: { m15: m15.length, h1: h1.length },
                       span: span(0, m15.length - 1), window: { m15: WIN_15M, h1: WIN_1H }, costs: { binance: COST_FRAC },
                       grid: { minPct: GRID_PCT, regimeGate: GRID_GATE, minAvail: MIN_AVAIL, isShare: IS_SHARE, minNPick: MIN_N_PICK }, engineErrors: errs.length,
-                      barsWithLead: withPlan.length, limitations },
+                      barsWithLead: withPlan.length, unpriced: READS.unpriced || 0, limitations },
               grid: grid.map(g => ({ minPct: g.minPct, regimeGate: g.gate, fired: g.counters.fired, merged: g.counters.merged, all: g.all, ins: g.ins, oos: g.oos })),
               chosen: chosen ? { minPct: chosen.minPct, regimeGate: chosen.gate, note: chosenNote } : null,
               oosCohorts: cohorts, evidence,
@@ -216,3 +234,4 @@ if (cohorts){ for (const k of Object.keys(cohorts)){ console.log('\n--- OOS ' + 
 console.log('\nVERDICT: ' + verdict + (tradable ? '  [tradable]' : '  [NOT tradable]'));
 console.log('\nSTATED LIMITATIONS:'); for (const l of limitations) console.log('  * ' + l);
 console.log('\nwritten: ' + OUT_FILE);
+}

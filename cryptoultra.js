@@ -79,12 +79,17 @@ function ruleVoteFloorText(){
         : ' are configured, so those gates are not applied');
 }
 
+/* --- BEGIN GENERATED HG_CRYPTO_ULTRA_EVIDENCE (scripts/cryptoultra-evidence-literal.mjs) ---
+   Re-derive with `node scripts/cryptoultra-evidence-literal.mjs --write`. Do not
+   hand-edit -- generated literals write themselves (hg-v921). Every figure is
+   read off backtest-cryptoultra-results.json; the guard re-runs the generator and fails on drift. */
 var HG_CRYPTO_ULTRA_EVIDENCE = {
-  measured: true,
-  symbol: 'BTCUSDT',
-  bars: 5999,
-  interval: '15m',
-  span: '2026-07-11 .. 2026-09-12',
+  measured: false,
+  symbol: "BTCUSDT",
+  bars: 1999,
+  interval: "15m",
+  span: "2026-08-22 .. 2026-09-12",
+  walk: {"cells":14,"fired":1628,"merged":1512,"settled":0,"barsWithLead":1768},
   rule: null,
   isAvgR: null,
   isN: 0,
@@ -93,17 +98,11 @@ var HG_CRYPTO_ULTRA_EVIDENCE = {
   oosN: 0,
   oosWin: null,
   tradable: false,
-  verdict: 'NOT tradable — architectural failure. Tested across BTCUSDT (15m + 1h), ETHUSDT 15m, SOLUSDT 15m: zero trades on every symbol/timeframe. The 470-indicator voting model does not work for directional crypto trading. Indicator votes are too correlated; long and short always fire on identical bars, canceling each other through merge logic. This is not a tuning issue or symbol-specific — it is a fundamental design flaw. Setups shown are audit-only signals. Do not trade.',
-  limitations: [
-    'ARCHITECTURAL FAILURE: 470-indicator voting model tested and confirmed non-functional across BTC, ETH, SOL at 15m and BTC at 1h — zero trades produced on any symbol/timeframe',
-    'INDICATOR CORRELATION: the indicator set (127 directional reads out of 470) is too highly correlated; long and short votes fire on the same bars with perfect balance across all tested cryptocurrencies',
-    'MERGE-CANCELING: every position is canceled by overlap — one-per-side merge logic prevents any trade from settling when votes lack clear separation',
-    'NOT SYMBOL-SPECIFIC: unlike some rules that work on BTC but not alts, this fails universally — rules out tuning as a solution',
-    'NOT TIMEFRAME-SPECIFIC: tested 15m and 1h — same zero-trade result rules out "add more bar history"',
-    'MARKET FILL AT THE SIGNAL CLOSE: fills at signal close, ignoring next-bar open gap',
-    'STANDARD EXCHANGE COSTS: Binance spot 0.10% maker+taker = 0.20% round-trip (cost floor also applies)'
-  ]
+  verdict: null,
+  note: "NOT YET MEASURED — the committed walk (2026-08-22 .. 2026-09-12, 1999 x 15m bars) fired 1628 times at its loosest cell and settled 0 trades in every one of its 14 cells — the walk had priced every plan without a stop or a target (a harness override replaced the rule, hg-v990), so no rule was chosen and NOTHING WAS MEASURED. A zero here is a defect of the walk, not a verdict on the strategy; fires print as RECORD ONLY until a walk that prices its plans is re-run.",
+  limitations: ["MARKET FILL AT THE SIGNAL CLOSE: the walk fills at the signal close, ignoring the next-bar open gap; BTC 15m gaps are typically small but can be large on liquidation cascades","SAME-BAR FILL->TARGET OPTIMISM: 0 of 0 OOS wins settle on the fill bar; both-touch bars ARE losses (0)","PORTFOLIO STATS NOT ATTAINABLE: one live trade per side, unlimited overlap between sides; read per-trade expectancy only","THE RULE WAS PICKED ON THE FIRST 70% AND REPORTED ON THE LAST 30%: one split, one regime of BTC history — a different quarter can measure differently; the grid rows show how sensitive the choice is","BTCUSDT spot on Binance: 0.10% maker+taker each side = 0.20% round-trip; actual fees depend on VIP tier and BNB holdings","the 127 directional reads (of 470 fed) are heavily correlated (dozens are moving-average variants); agreement % is a count, not an independence-weighted probability — the backtest measures what the count is worth, nothing more"]
 };
+/* --- END GENERATED HG_CRYPTO_ULTRA_EVIDENCE --- */
 
 /* =========================== kernel =========================== */
 function nanArr(n){ var a = new Array(n); for (var i = 0; i < n; i++) a[i] = NaN; return a; }
@@ -930,7 +929,17 @@ function cryptoUltraVotes(rows, rows1h){
 function closedRows(rows, ivSec, nowMs){ if (!rows || !rows.length) return []; var cutoff = (nowMs / 1000) - ivSec; var out2 = []; for (var i = 0; i < rows.length; i++){ if (rows[i].t + ivSec <= cutoff + ivSec) out2.push(rows[i]); } return out2.length < rows.length ? out2 : rows.slice(0, -1); }
 
 function cryptoUltraEngine(inp){
-  var nowMs = inp.now || Date.now(), rule = inp.rule || RULE;
+  var nowMs = inp.now || Date.now();
+  /* hg-v990: AN OVERRIDE TUNES THE FIELDS IT NAMES AND INHERITS THE REST.
+
+     This read `inp.rule || RULE`, so a caller that passed `{ minPct: 0,
+     minAvail: 0, regimeGate: false }` -- every replay harness in scripts/ --
+     replaced the WHOLE rule, and stopAtr, costFloorMult, t1R, t2R and
+     timeoutBars were undefined for the whole walk. Every plan was priced at
+     stop null, target null; nothing could exit on price; every cell of the
+     committed artifact settled zero trades, and the desk gated itself
+     MEASURED NOT TRADABLE on a walk that had measured nothing. */
+  var rule = inp.rule ? Object.assign({}, RULE, inp.rule) : RULE;
   var rows = closedRows(inp.rows15m, 900, nowMs);
   var r1h = inp.rows1h ? closedRows(inp.rows1h, 3600, nowMs) : [];
   var out = { ok: false, fire: false, dir: null, reasons: [], gates: [], line: '', count: null, regime: null, plan: null, recordOnly: false };
@@ -1017,6 +1026,16 @@ function cryptoUltraEngine(inp){
   var rawStop = rule.stopAtr * res.atr;
   var costFloor = isFinite(costFrac) ? res.price * costFrac * rule.costFloorMult : 0;
   var stopDist = Math.max(rawStop, costFloor);
+  /* hg-v990: a plan with no readable stop distance is NO plan. A NaN stop
+     compares false against every bar, so a walk never exits it on price and
+     a card would print a level that does not exist. Refused as a named gate
+     rather than handed back as a plan whose stop is null. */
+  var finPos = function(v){ return typeof v === 'number' && isFinite(v) && v > 0; };   /* +null is 0: a null ladder is not a ladder */
+  if (!finPos(stopDist) || !finPos(rule.t1R) || !finPos(rule.t2R)){
+    out.gates.push('plan geometry unreadable: stop distance ' + String(stopDist) + ' (stopAtr ' + String(rule.stopAtr) + ', costFloorMult ' + String(rule.costFloorMult) + '), t1R ' + String(rule.t1R) + ', t2R ' + String(rule.t2R));
+    out.fire = false;   /* out.plan is still its initial null: the return is before the plan is built */
+    return out;
+  }
   var floorNote = costFloor > rawStop ? 'stop widened from ' + fmt(rawStop) + ' to ' + fmt(stopDist) + ' (' + rule.costFloorMult + '× the ' + ((vc && vc.venue) || 'venue') + ' round-trip ' + pct(costFrac) + ')' : '';
   var entry = res.price;
   var dir2 = out.dir === 'long' ? 1 : -1;
