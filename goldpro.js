@@ -16,6 +16,13 @@ GOLD PRO tab: professional gold context panel.
                           Needs >= 30 overlapping pairs, else '—'.
   4) VERDICT              STRUCTURAL BULL / STRUCTURAL BEAR / NEUTRAL.
 
+  5) FUNDAMENTAL STACK    hg-v1005: the house fundamental board (real rates,
+                          CFTC COT, the USD calendar, DXY/US10Y/GSR priors)
+                          renders between the macro ledger and the verdict;
+                          the levels plan's direction and the verdict word
+                          both wear the stack's verdict chip (headwind /
+                          tailwind / blackout) beside their own read.
+
 Classic script, loaded AFTER indicators.js / indicators2.js / binance.js /
 macro.js. Never throws at load or run time: every external global is
 feature-checked, every network call is async with an AbortController timeout,
@@ -592,12 +599,23 @@ function renderLevelsPanel(o){
   var stackHtml = (gpStack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(gpStack) : '';
   var gpSmcChip = '';
   try{ if (typeof window !== 'undefined' && typeof window.hgSmcChipHtml === 'function') gpSmcChip = window.hgSmcChipHtml(p) || ''; }catch(eSmc){ gpSmcChip = ''; }
+  /* hg-v1005: the fundamental-stack verdict chip on the plan's direction —
+     the same gate the buttons already answer to (hg-v1003), visible on the
+     levels row itself. '' when the stack is absent or has nothing to say. */
+  var gpFundChip = '';
+  try{
+    if (typeof window !== 'undefined' && typeof window.hgFundamentalGate === 'function'
+        && typeof window.hgFundamentalChipHtml === 'function'){
+      gpFundChip = window.hgFundamentalChipHtml(window.hgFundamentalGate('XAUUSD', p.dir, { scanner: 'goldpro' })) || '';
+    }
+  }catch(eFund){ gpFundChip = ''; }
   h += '<div class="row">'
      + '<span class="statuschip">dir <b>' + esc(p.dir.toUpperCase()) + '</b></span>'
      + '<span class="statuschip">4H cascade <b>' + esc(String(o.cascade || '').toUpperCase()) + '</b></span>'
      + (o.src ? '<span class="statuschip">src <b>' + esc(o.src) + '</b></span>' : '')
      + (o.rowsN ? '<span class="statuschip">4H bars <b>' + o.rowsN + '</b></span>' : '')
      + gpSmcChip
+     + gpFundChip
      + '</div>';
   h += '<div class="plan">ENTRY <b>' + esc(pxF(p.entry)) + '</b>'
      + ' · STOP <b>' + esc(pxF(p.stop)) + '</b>'
@@ -640,8 +658,21 @@ function renderCorrPanel(cr, corrErr){  var h = '<div class="panel"><h2>GOLD–D
 
 function renderVerdictPanel(v){
   var cls = v.word === 'STRUCTURAL BULL' ? 'long' : (v.word === 'STRUCTURAL BEAR' ? 'short' : 'aside');
+  /* hg-v1005: the verdict answers to the fundamental stack out loud — when
+     the structural read and the stack disagree (2+ net checked votes
+     against the bias), the card says so beside the word instead of letting
+     the two reads sit on the page unconnected. */
+  var fundChipV = '';
+  try{
+    var bias = (v.word === 'STRUCTURAL BULL') ? 'long' : ((v.word === 'STRUCTURAL BEAR') ? 'short' : null);
+    if (bias && typeof window !== 'undefined' && typeof window.hgFundamentalGate === 'function'
+        && typeof window.hgFundamentalChipHtml === 'function'){
+      fundChipV = window.hgFundamentalChipHtml(window.hgFundamentalGate('XAUUSD', bias, { scanner: 'goldpro' })) || '';
+    }
+  }catch(eFundV){ fundChipV = ''; }
   return '<div class="panel"><h2>VERDICT <span>structural gold bias — context, not a trade signal</span></h2>'
        + '<div class="verdict ' + cls + '"><span class="vword">' + esc(v.word) + '</span><span class="vwhy">' + esc(v.why) + '</span></div>'
+       + (fundChipV ? '<div style="margin-top:6px">' + fundChipV + '</div>' : '')
        + '<div class="note" style="margin-top:8px">Context panel for orientation only — not financial advice.</div></div>';
 }
 
@@ -927,11 +958,22 @@ async function runGoldPro(ui){
         if (g4h.rows && g4h.rows.length) tapeNote907 += __tn(g4h.rows, '4h');
       }
     }catch(eTs){}
+    /* hg-v1005: the full gold fundamental board (real rates / COT /
+       calendar / DXY·US10Y·GSR priors) renders between the macro ledger
+       and the verdict — the verdict answers to it. */
+    var gpFundPanel = '';
+    try{
+      if (typeof window !== 'undefined' && typeof window.hgFundamentalRegime === 'function'
+          && typeof window.hgFundamentalPanelHtml === 'function'){
+        gpFundPanel = window.hgFundamentalPanelHtml(window.hgFundamentalRegime('gold')) || '';
+      }
+    }catch(eFundP){ gpFundPanel = ''; }
     ui.out.innerHTML = tapeNote907 + renderStructurePanel(st, g1d.rows, g4h.rows, src)
                      + renderLevelsPanel({ plan: lvPlan, reason: lvReason, note: lvNote,
                                            src: lvSrc, rowsN: lvRowsN, cascade: lvCascade, rows4h: lvRows,
                                            context: lvContext })
                      + renderMacroPanel(macro, funding, ls, cot)
+                     + gpFundPanel
                      + renderCorrPanel(cr, corrErr)
                      + renderVerdictPanel(verdict);
     try { if (typeof window.hgMpPin === 'function') window.hgMpPin('goldpro', lvPlan ? [lvPlan] : [], null, ui.out); } catch (eMp) {}

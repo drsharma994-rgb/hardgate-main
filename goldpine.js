@@ -1,6 +1,12 @@
 /* HARDGATE — goldpine.js
    GOLD PINE tab: combined ported Pine math + gold session/SMC confluence.
-   SWING setups on 4H (+ 1D HTF) · SCALP setups on 15m (+ 1H/4H HTF). */
+   SWING setups on 4H (+ 1D HTF) · SCALP setups on 15m (+ 1H/4H HTF).
+   hg-v1005: the desk answers to the FUNDAMENTAL STACK (fundamental-stack.js)
+   — a red-folder blackout refuses fresh formations outright (the sections
+   print empty with the reason named); outside a blackout the scan-time pass
+   demotes a setup the stack stands decisively against (it still prints,
+   sunk below every clean row and off the top picks) and chips the rest,
+   and the full gold board panel renders above the sections. */
 (function(){
 'use strict';
 
@@ -236,6 +242,12 @@ function dedupeSetups(list){
 
 function sortSetups(list){
   list.sort(function(a, b){
+    /* hg-v1005: a setup the fundamental stack demoted still prints but
+       never leads — it sinks below every row the stack did not speak
+       against, before any probability comparison. The same leadership
+       exclusion GOLD SCALP's best and GOLD SWING's lead already run. */
+    var ad = (a && a.demoted) ? 1 : 0, bd = (b && b.demoted) ? 1 : 0;
+    if (ad !== bd) return ad - bd;
     var pr = probScore(b) - probScore(a);
     if (pr) return pr;
     var tr = tierRank(a.tier) - tierRank(b.tier);
@@ -620,6 +632,39 @@ function runGoldPineScan(bars, ctx){
   var gpI;
   for (gpI = 0; gpI < swing.length; gpI++) if (swing[gpI]) swing[gpI].goldShut = gpShutSwing;
   for (gpI = 0; gpI < scalp.length; gpI++) if (scalp[gpI]) scalp[gpI].goldShut = gpShutScalp;
+
+  /* hg-v1005: THE FUNDAMENTAL STACK, at the scan seam every other gold desk
+     runs it at. A red-folder blackout refuses fresh formations outright —
+     the sections print empty with the reason named and the stood-down count
+     carried for the board, mirroring the entry veto GOLD SCALP runs and the
+     no-mint lock GOLD SWING runs. An unchecked calendar answers false and
+     refuses nothing (a dark board blocks nothing). Outside a blackout the
+     shared per-candidate pass demotes a setup the stack stands decisively
+     against (s.demoted + the stamp + the gate note, and the compact
+     s.fundGate the card chip reads) — it still prints and is still
+     recorded, sunk below every clean row by sortSetups. */
+  var fundBlackout = false;
+  try{
+    var fbFn = gfn('hgFundamentalBlackout');
+    if (fbFn) fundBlackout = fbFn('XAUUSD') === true;
+  }catch(eFB){ fundBlackout = false; }
+  if (fundBlackout){
+    return { swing: [], scalp: [], levels: levels, source: source,
+             goldShut: { swing: gpShutSwing, scalp: gpShutScalp },
+             tape: { swing: tapeSwing, scalp: tapeScalp }, at: Date.now(),
+             fundBlackout: true, fundStoodDown: swing.length + scalp.length };
+  }
+  try{
+    var fsFn = gfn('hgFundamentalScanCands');
+    if (fsFn){
+      fsFn(swing, { scanner: 'goldpine' });
+      fsFn(scalp, { scanner: 'goldpine' });
+      /* the demotes land after the first ordering, so order once more —
+         sortSetups sinks a demoted row below every clean one */
+      swing = sortSetups(swing);
+      scalp = sortSetups(scalp);
+    }
+  }catch(eFS){}
   return { swing: swing, scalp: scalp, levels: levels, source: source,
            goldShut: { swing: gpShutSwing, scalp: gpShutScalp },
            tape: { swing: tapeSwing, scalp: tapeScalp }, at: Date.now() };
@@ -684,6 +729,29 @@ function gpTapeChipHtml(s){
   return d === t
     ? '<span class="gpip ok">WITH GOLD TAPE</span>'
     : '<span class="gpip">AGAINST GOLD TAPE \u00b7 HELD</span>';
+}
+
+/* hg-v1005: the fundamental-stack verdict chip — the same .gpip the other
+   gold desks print, fed by the compact fundGate the scan-time pass stamped
+   (refuse / demote / chips). '' when the stack saw nothing to say. */
+function gpFundChipHtml(s){
+  try{
+    var fn = gfn('hgFundamentalChipHtml');
+    var g = s && s.fundGate;
+    if (!fn || !g || !Array.isArray(g.chips) || !g.chips.length) return '';
+    return fn(g) || '';
+  }catch(e){ return ''; }
+}
+
+/* The full gold fundamental board — the same panel every gold desk shows,
+   rendered above the sections so the reader sees sentiment, positioning,
+   real rates, COT and the calendar beside the formations. */
+function gpFundPanelHtml(){
+  try{
+    var rFn = gfn('hgFundamentalRegime'), pFn = gfn('hgFundamentalPanelHtml');
+    if (!rFn || !pFn) return '';
+    return pFn(rFn('gold')) || '';
+  }catch(e){ return ''; }
 }
 
 /* hg-v973: the borrowed mint's verdicts, READ. A demote the mint applied
@@ -825,7 +893,7 @@ function gpHandoffBlock(s){
 
   return '<div class="panel ' + cls + ' tier-' + tier + '" style="margin-bottom:12px">'
     + '<h2>XAUUSD <span>' + esc(s.dir.toUpperCase()) + ' · ' + modeLabel + ' · Grade ' + esc(s.grade)
-    + rankBadge + badge + gpTapeChipHtml(s) + gpMintMarkChipHtml(s)
+    + rankBadge + badge + gpTapeChipHtml(s) + gpMintMarkChipHtml(s) + gpFundChipHtml(s)
     + ((typeof W.hgBookStampChip === 'function')
       ? W.hgBookStampChip('XAUUSD', s.dir, { scanner: 'goldpine', strategy: s.mode || 'goldpine', klass: 'metals', fund: 'gold' })
       : '')
@@ -985,7 +1053,20 @@ function mount(el){
           if (rws && rws.length) tapeNote += W.hgGoldTapeNotes(rws, L[1]);
         });
       }
-      var html = tapeNote + heldNote + killedNote
+      /* hg-v1005: the fundamental stack, on the board. A blackout names
+         itself ahead of everything drawn from the scan; the full gold
+         board panel renders above the sections either way. */
+      var fundNote = '';
+      if (result.fundBlackout){
+        fundNote = '<div class="note warn" style="margin-bottom:10px;padding:8px 10px;border-left:3px solid #b45309">'
+          + '<b>EVENT BLACKOUT</b> — a red-folder macro print is inside its window; no fresh setup '
+          + 'forms into it.'
+          + (result.fundStoodDown ? ' ' + result.fundStoodDown + ' formation'
+              + (result.fundStoodDown === 1 ? '' : 's') + ' stood down.' : '')
+          + ' The sections stay empty until the window clears; the board below still shows the '
+          + 'stack\'s full read.</div>';
+      }
+      var html = fundNote + gpFundPanelHtml() + tapeNote + heldNote + killedNote
         + sectionHTML('GOLD PINE — SWING SETUPS (4H)', swingTop,
           'No swing formations — check gold feed (4h bars). Layers need ~280×4h for full Pine stack.',
           { total: result.swing.length })
@@ -997,7 +1078,8 @@ function mount(el){
       try { if (typeof W.hgMpPin === 'function') W.hgMpPin('goldpine', mpList, null, out); } catch (eMp) {}
       var dt = ((Date.now() - t0) / 1000).toFixed(1);
       if (stat) stat.textContent = 'done · top ' + swingTop.length + '/' + result.swing.length + ' swing · top '
-        + scalpTop.length + '/' + result.scalp.length + ' scalp · ' + dt + 's';
+        + scalpTop.length + '/' + result.scalp.length + ' scalp'
+        + (result.fundBlackout ? ' · EVENT BLACKOUT — no fresh formations' : '') + ' · ' + dt + 's';
       setProg(null);
       return 'refreshed';
     }catch(e){
@@ -1063,6 +1145,10 @@ W.runGoldPineScan = runGoldPineScan;
 W.topProbSetups = topProbSetups;
 /* test seam — the tape verdict is pure and worth checking without a DOM */
 W.goldPineTapeChipHtml = gpTapeChipHtml;
+/* hg-v1005: the stack seams, exported for the guard — the chip and the
+   panel are pure reads of stamped state and never throw. */
+W.gpFundChipHtml = gpFundChipHtml;
+W.gpFundPanelHtml = gpFundPanelHtml;
 W.goldPineTapeAligned = gpTapeAligned;
 W.goldPineProbScore = probScore;
 W.GOLD_PINE_TOP_SETUPS = TOP_SETUPS;
@@ -1088,6 +1174,7 @@ W.goldPineState = function(){
    is a guard that proves nothing. */
 W.gpWeekendVerdict = gpWeekendVerdict;
 W.HG_tabs = W.HG_tabs || [];
-W.HG_tabs.push({ id: 'goldpine', label: 'GOLD PINE', mount: mount, refresh: goldPineRefresh });
+W.HG_tabs.push({ id: 'goldpine', label: 'GOLD PINE', mount: mount, refresh: goldPineRefresh,
+                 fundamentalChip: gpFundChipHtml, fundPanelHtml: gpFundPanelHtml });
 
 })();

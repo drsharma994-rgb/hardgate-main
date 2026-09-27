@@ -2,6 +2,12 @@
    HARDGATE — super-gold.js
    SUPER GOLD tab (id 'super-gold'): conviction desk merging GOLD SCALP + GOLD SWING.
    Grade-based tiers (A/B), goldAttachPositionSize, weekend/macro/spread audit.
+   hg-v1005: the desk answers to the FUNDAMENTAL STACK (fundamental-stack.js) —
+   a red-folder blackout refuses every fresh pick at superGoldEvaluate; the
+   source desk's compact fund verdict (refuse / demote / chips) travels on
+   the candidate through hitFromGoldCand, keeps a headwinded row off the
+   pick in all three fallback loops, and renders as the per-card verdict
+   chip plus the full gold board panel above the desk.
    Never throws at load time.
    ========================================================================= */
 (function(){
@@ -147,6 +153,15 @@ function hitFromGoldCand(c, meta){
     vetoReason: c.vetoReason || null,
     locked: !!c.locked,
     stamps: c.stamps || null,
+    /* hg-v1005: the source desk's fundamental-stack verdict travels with the
+       candidate exactly as published (refuse / demote / chips — the compact
+       carry, never recomputed here), so the pick loops and the card chip
+       hold THAT desk's read at THAT scan's instant. Same copy-forward
+       pattern .smc already uses across this boundary. */
+    fund: (c.fund && typeof c.fund === 'object')
+      ? { refuse: !!c.fund.refuse, demote: !!c.fund.demote,
+          chips: Array.isArray(c.fund.chips) ? c.fund.chips.slice() : [] }
+      : null,
     scanner: meta.scanner || meta.source
   };
 }
@@ -586,9 +601,33 @@ function collectSuperGoldScanHits(win){
   return hits;
 }
 
+/* hg-v1005: a candidate the fundamental stack has spoken against never
+   becomes this desk's pick. The verdict arrives two ways — the source desk's
+   demote pass already flipped c.demoted (which sinks the row to WATCH tier),
+   and the compact .fund verdict rides the published snapshot for the rows
+   that kept their grade. A row the stack refused (blackout carry) or demoted
+   is skipped in every pick loop; it still renders on the board as WATCH. */
+function sgFundBlocked(h){
+  return !!(h && h.fund && (h.fund.refuse === true || h.fund.demote === true));
+}
+
 function superGoldEvaluate(win, opts){
   win = win || W;
   opts = opts || {};
+  /* hg-v1005: the direction-free red-folder probe — inside a blackout window
+     NO fresh setup forms on this desk, in either direction, whatever the
+     source snapshots hold. An unchecked calendar answers false and refuses
+     nothing (a dark board blocks nothing). */
+  var fundBlackout = false;
+  try{
+    if (typeof win.hgFundamentalBlackout === 'function'){
+      fundBlackout = win.hgFundamentalBlackout('XAUUSD') === true;
+    }
+  }catch(eFB){ fundBlackout = false; }
+  if (fundBlackout){
+    return { ready: false, idle: true,
+      reason: 'EVENT BLACKOUT — a red-folder macro print is inside its window; no fresh setup forms into it' };
+  }
   var hits = collectSuperGoldScanHits(win);
   var hit = null, i;
   if (opts.selectedId){
@@ -598,15 +637,25 @@ function superGoldEvaluate(win, opts){
   }
   if (!hit){
     for (i = 0; i < hits.length; i++){
-      if (hits[i] && hits[i].minimalLossPass){ hit = hits[i]; break; }
+      if (hits[i] && hits[i].minimalLossPass && !sgFundBlocked(hits[i])){ hit = hits[i]; break; }
     }
   }
   if (!hit){
     for (i = 0; i < hits.length; i++){
-      if (hits[i] && hits[i].tier === 'clean'){ hit = hits[i]; break; }
+      if (hits[i] && hits[i].tier === 'clean' && !sgFundBlocked(hits[i])){ hit = hits[i]; break; }
     }
   }
-  if (!hit && hits.length) hit = hits[0];
+  if (!hit && hits.length){
+    for (i = 0; i < hits.length; i++){
+      if (hits[i] && !sgFundBlocked(hits[i])){ hit = hits[i]; break; }
+    }
+  }
+  if (!hit && hits.length){
+    /* every candidate on the board is fundamental-blocked — say so instead
+       of crowning one; the board below still shows them as WATCH. */
+    return { ready: false, idle: true,
+      reason: 'FUNDAMENTAL HEADWIND — every desk candidate is fundamental-blocked right now; the board below still shows them as WATCH' };
+  }
   if (!hit || !(N(hit.entry) > 0 && N(hit.stop) > 0)){
     return { ready: false, idle: true, reason: 'No SUPER GOLD setup on desk' };
   }
@@ -735,23 +784,38 @@ function syncDeskFromExisting(win, riskOpts){
 function autoSelectFirstSetup(snap){
   snap = snap || superGoldScan();
   if (!snap || !Array.isArray(snap.cands) || !snap.cands.length) return null;
+  /* hg-v1005: the board's auto-crowned pick answers to the same fundamental
+     stack superGoldEvaluate does — never a row the stack refused or demoted,
+     and inside a red-folder blackout nothing fresh is crowned at all. An
+     explicitly (re)selected card still resolves, so the reader can inspect
+     a held row without the desk presenting it as the pick. */
+  var fundBlackout = false;
+  try{
+    if (typeof W.hgFundamentalBlackout === 'function'){
+      fundBlackout = W.hgFundamentalBlackout('XAUUSD') === true;
+    }
+  }catch(eFB){ fundBlackout = false; }
   var hit = null, i;
   if (__sg.selectedId){
     for (i = 0; i < snap.cands.length; i++){
       if (snap.cands[i] && snap.cands[i].id === __sg.selectedId){ hit = snap.cands[i]; break; }
     }
   }
-  if (!hit){
+  if (!hit && !fundBlackout){
     for (i = 0; i < snap.cands.length; i++){
-      if (snap.cands[i] && snap.cands[i].minimalLossPass){ hit = snap.cands[i]; break; }
+      if (snap.cands[i] && snap.cands[i].minimalLossPass && !sgFundBlocked(snap.cands[i])){ hit = snap.cands[i]; break; }
     }
   }
-  if (!hit){
+  if (!hit && !fundBlackout){
     for (i = 0; i < snap.cands.length; i++){
-      if (snap.cands[i] && snap.cands[i].tier === 'clean'){ hit = snap.cands[i]; break; }
+      if (snap.cands[i] && snap.cands[i].tier === 'clean' && !sgFundBlocked(snap.cands[i])){ hit = snap.cands[i]; break; }
     }
   }
-  if (!hit) hit = snap.cands[0];
+  if (!hit && !fundBlackout){
+    for (i = 0; i < snap.cands.length; i++){
+      if (snap.cands[i] && !sgFundBlocked(snap.cands[i])){ hit = snap.cands[i]; break; }
+    }
+  }
   if (hit && hit.id) __sg.selectedId = hit.id;
   return hit;
 }
@@ -974,8 +1038,21 @@ function mount(el){
       var oz = hit.positionSize && hit.positionSize.positionSizeUnits;
       $('#sg-size').value = Number.isFinite(oz) ? String(oz) : fmt(hit.qty, 3);
     }
+    /* hg-v1005: the money path answers to the calendar LIVE — a blackout
+       that started after the source desks scanned still stands the button
+       down, because the probe runs at render time, not scan time. A row
+       carrying the stack's refuse verdict never sends either. */
+    var sendBlackout = false;
+    try{
+      if (typeof W.hgFundamentalBlackout === 'function'){
+        sendBlackout = W.hgFundamentalBlackout('XAUUSD') === true;
+      }
+    }catch(eSB){ sendBlackout = false; }
     if ($('#sg-guidance')){
       var g = ev.note || '';
+      if (sendBlackout){
+        g += (g ? ' · ' : '') + 'EVENT BLACKOUT — no fresh setup forms into a red-folder macro print';
+      }
       if (hit && hit.goldAudit && hit.goldAudit.layerSummary){
         g += (g ? ' · ' : '') + hit.goldAudit.layerSummary;
       }
@@ -983,7 +1060,8 @@ function mount(el){
     }
     var btn = $('#sg-send-trade');
     if (btn){
-      var canSend = !!(hit && hit.minimalLossPass && N(hit.entry) > 0 && N(hit.stop) > 0);
+      var canSend = !!(hit && !sendBlackout && !(hit.fund && hit.fund.refuse === true)
+        && hit.minimalLossPass && N(hit.entry) > 0 && N(hit.stop) > 0);
       btn.disabled = !canSend;
       btn.onclick = canSend ? function(){
         var dir = String(hit.dir || '').toLowerCase();
@@ -1049,8 +1127,18 @@ function mount(el){
     }
     if (!desk) return;
     var rows = (snap && Array.isArray(snap.cands)) ? snap.cands : [];
+    /* hg-v1005: the full gold fundamental board — sentiment, positioning,
+       real rates, COT and the calendar, the same panel every gold desk
+       shows — renders above the desk in BOTH outcomes, because the empty
+       board is exactly when the reader needs the stack's reason. */
+    var sgFundPanel = '';
+    try{
+      if (typeof W.hgFundamentalRegime === 'function' && typeof W.hgFundamentalPanelHtml === 'function'){
+        sgFundPanel = W.hgFundamentalPanelHtml(W.hgFundamentalRegime('gold')) || '';
+      }
+    }catch(eFP){ sgFundPanel = ''; }
     if (!rows.length){
-      desk.innerHTML = '<div class="hg-note">No GRADE A/B gold setups on last scan. Weekend / macro / tally filters may be standing aside.</div>';
+      desk.innerHTML = sgFundPanel + '<div class="hg-note">No GRADE A/B gold setups on last scan. Weekend / macro / tally filters may be standing aside.</div>';
       return;
     }
     var minPass = rows.filter(function(r){ return r.minimalLossPass; }).length;
@@ -1060,7 +1148,7 @@ function mount(el){
     /* hg-v913: this desk reads the records it writes. SUPER:GOLD is pooled
        into OMNIGOLD's gate, so its records were consulted — by a different
        desk, for a different board. This is the one that wrote them. */
-    desk.innerHTML = (typeof W.hgGoldFwdNote === 'function' ? W.hgGoldFwdNote('super-gold') : '') + hint + rows.map(function(r){
+    desk.innerHTML = (typeof W.hgGoldFwdNote === 'function' ? W.hgGoldFwdNote('super-gold') : '') + sgFundPanel + hint + rows.map(function(r){
       var tierLbl = r.tier === 'clean' ? ('GRADE ' + String(r.grade || 'A').toUpperCase()) : 'WATCH';
       var pill = superGoldDeskPill(r);
       var sel = (__sg.selectedId === r.id) ? ' sel' : '';
@@ -1068,6 +1156,16 @@ function mount(el){
       /* SMC chip — pure read of r.smc; '' when the row has none. */
       var smcChip = '';
       try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(r) || ''; }catch(eSmcChip){ smcChip = ''; }
+      /* hg-v1005: the fundamental-stack verdict chip — the compact fund read
+         the source desk stamped at scan time (carried through
+         hitFromGoldCand), never recomputed here. '' when the stack saw
+         nothing to say. */
+      var fundChip = '';
+      try{
+        if (typeof W.hgFundamentalChipHtml === 'function' && r.fund && Array.isArray(r.fund.chips) && r.fund.chips.length){
+          fundChip = W.hgFundamentalChipHtml(Object.assign({ asset: 'gold' }, r.fund)) || '';
+        }
+      }catch(eFundChip){ fundChip = ''; }
       return '<div class="hg-desk-card' + sel + '" data-id="' + String(r.id).replace(/"/g, '') + '">'
         + '<div class="hg-desk-top">'
         + '<div class="hg-desk-sym">' + String(r.sym || 'XAU') + ' · ' + String(r.dir || '').toUpperCase() + '</div>'
@@ -1076,6 +1174,7 @@ function mount(el){
         + '<span class="hg-pill">' + String(r.scanner || '') + '</span>'
         + '<span class="hg-pill ' + pill.cls + '">' + pill.label + '</span>'
         + smcChip
+        + fundChip
         + '</div></div>'
         + '<div class="hg-desk-levels">'
         + '<div><div class="k">ENTRY</div><div class="v">' + fmt(r.entry, 2) + '</div></div>'
@@ -1111,6 +1210,10 @@ function mount(el){
     paintDesk(snap);
     var hit = autoSelectFirstSetup(snap);
     if (hit) applyEvaluation(hitToEvaluation(hit));
+    /* hg-v1005: nothing crownable (blackout, or every row fundamental-
+       blocked) — take the send button dark too rather than leave a stale
+       ticket live. */
+    else applyEvaluation(null);
   }
 
   function syncFromExistingDesks(){
@@ -1226,6 +1329,9 @@ W.sgWeekendVerdict = sgWeekendVerdict;
    the REAL veto rather than assert about its source text. */
 W.__sgGoldDeskAudit = runGoldDeskAudit;
 W.__sgCandSec = sgCandSec;
+/* hg-v1005: the fundamental-block predicate the pick loops share, exported
+   so the guard drives the REAL check rather than re-deriving it. */
+W.sgFundBlocked = sgFundBlocked;
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({
   id: TAB_ID,

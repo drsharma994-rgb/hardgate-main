@@ -192,8 +192,11 @@ console.log('== 5) the OMNIGOLD engines panel, and the seats that keep the clock
   const gs = read('goldscalp.js').replace(/\/\*[\s\S]*?\*\//g, ''), gw = read('goldswing.js').replace(/\/\*[\s\S]*?\*\//g, '');
   /* hg-v1004 re-point: the fourth argument became entryVeto (newsVeto || the
      fundamental stack's blackout) — what this pin guards is untouched: the
-     THIRD argument, the wall-clock `now` the conviction age is judged on. */
-  assert(/applyConviction\(ranked, venueRows, now, (newsVeto|entryVeto)\)/.test(gs) && /applyConviction\(ranked, venueRows, now\)/.test(gw), 'conviction age is judged on the wall clock on both desks (a position\'s age is wall time)');
+     THIRD argument, the wall-clock `now` the conviction age is judged on.
+     hg-v1005 re-point: GOLD SWING's fourth argument became fundBlackout (the
+     stack's blackout locks NEW swing minting beside the tier-1 window) —
+     the guarded third argument stands. */
+  assert(/applyConviction\(ranked, venueRows, now, (newsVeto|entryVeto)\)/.test(gs) && /applyConviction\(ranked, venueRows, now, fundBlackout\)/.test(gw), 'conviction age is judged on the wall clock on both desks (a position\'s age is wall time)');
   assert(/publishScan\(display, displayBest, lock\.store\.history, now,/.test(gs) && /publishScan\(display, displayBest, lock\.store\.history, now,/.test(gw), 'the scan stamp is the wall clock on both desks');
   assert(/paintGoldWeekendPanel\(ui, wkRows, now, displayBest\)/.test(gs) && /paintGoldWeekendPanel\(ui, gold\.rows4h, now, displayBest\)/.test(gw) && /wkFn\(ranked, gold\.rows4h, atrW, now\)/.test(gs) && /wkFn\(ranked, gold\.rows4h, atrW, now\)/.test(gw), 'the weekend-exposure countdown and demote read the wall clock (how far the close is from NOW)');
   /* and the signal seats read the bar, on both desks */

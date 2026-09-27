@@ -6596,6 +6596,16 @@ terse status, and never launches a first-time scan on a global refresh.
      ticket. hgOgEdgeSilenceNote returns '' whenever the gate is not the
      reason, so this collapses to exactly the old copy. */
   function hgOgMpNoneWhy(tape, held){
+    /* hg-v1005: when the calendar is the reason nothing was crowned, name
+       it first — the generic tape/gate copy would read as though the desk
+       simply found nothing. */
+    try {
+      var fundBoFnNw = gfn('hgFundamentalBlackout');
+      if (fundBoFnNw && fundBoFnNw('XAUUSD') === true){
+        return 'EVENT BLACKOUT — a red-folder macro print is inside its window: no fresh ticket forms into it. '
+             + 'Live convictions keep running; issuance resumes when the window clears.';
+      }
+    } catch (eBoNw) {}
     var base = hgOgMpNoneWhyTape(tape, held);
     var edge = hgOgEdgeSilenceNote();
     return edge ? (base + ' ' + edge) : base;
@@ -6829,10 +6839,20 @@ terse status, and never launches a first-time scan on a global refresh.
         var smcChipFnMp = gfn('hgSmcChipHtml');
         if (smcChipFnMp) smcChipMp = smcChipFnMp(row) || '';
       } catch (eSmcMp) { smcChipMp = ''; }
+      /* hg-v1005: the fundamental-stack verdict chip — the crowned card
+         wears the read it survived (TAILWIND / extreme reads; a headwind
+         never reaches this card — the pick holds those out). '' when the
+         stack is absent or the row was never stamped. */
+      var fundChipMp = '';
+      try {
+        var fundChipFnMp = gfn('hgFundamentalChipHtml');
+        if (fundChipFnMp && row.fundGate && row.fundGate.chips && row.fundGate.chips.length)
+          fundChipMp = fundChipFnMp(row.fundGate) || '';
+      } catch (eFundMp) { fundChipMp = ''; }
 
       h += '<div class="hg-mp-head">XAUUSD ' + esc(String(row.dir || '').toUpperCase())
         +  ' <span>' + esc(label) + ' · ' + esc(isEngine ? String(row.kind).slice(0, 48) : row.kind) + ' · ' + grade
-        +  (solChip ? ' ' + solChip : '') + (smcChipMp ? ' ' + smcChipMp : '')
+        +  (solChip ? ' ' + solChip : '') + (smcChipMp ? ' ' + smcChipMp : '') + (fundChipMp ? ' ' + fundChipMp : '')
         +  (isWatch ? ' · VETO' : '')
         +  (isEngine
              /* AGAINST THE TAPE IS NOT ACTIONABLE, whoever found it.
@@ -13823,6 +13843,15 @@ terse status, and never launches a first-time scan on a global refresh.
      nothing nearer survived. */
   function hgOgPickFor(ranked, horizon, tapeDir){
     if (!ranked || !ranked.length) return null;
+    /* hg-v1005: a checked red-folder BLACKOUT crowns no fresh ticket, on any
+       horizon — the gate checks the blackout before direction, so one probe
+       stands the whole pick down. An UNCHECKED calendar refuses nothing;
+       the stack absent skips the probe. Live convictions are not this path:
+       they were crowned already and keep running. */
+    try {
+      var fundBoFn = gfn('hgFundamentalBlackout');
+      if (fundBoFn && fundBoFn('XAUUSD') === true) return null;
+    } catch (eFb) {}
     var i, c, structural = [], vol = [];
     for (i = 0; i < ranked.length; i++){
       c = ranked[i];
@@ -13836,6 +13865,11 @@ terse status, and never launches a first-time scan on a global refresh.
          pick either — otherwise the tab prints ENTRY/STOP/T1 for a card it
          simultaneously reports as hidden. Same shape as the formed check. */
       if (c.solidity && c.solidity.killed === true) continue;
+      /* hg-v1005: FUNDAMENTAL HEADWIND / blackout-stamped at scan time (the
+         hgFundamentalScanCands pass) — the card paints and sinks, its
+         buttons already say WATCH ONLY (hg-v1003), and it can never be the
+         pick. Unstamped rows (other callers' lists) are untouched. */
+      if (c.fundGate && (c.fundGate.refuse === true || c.fundGate.demote === true)) continue;
       if (c.plan.momentumStop === true) vol.push(c);
       else structural.push(c);
     }
@@ -15259,6 +15293,32 @@ terse status, and never launches a first-time scan on a global refresh.
             + ')';
           ui.stat.textContent = __og.lastStat + warn;
         }
+
+        /* hg-v1005: THE FUNDAMENTAL STACK SPEAKS BEFORE THE CROWN. The same
+           house pass every gold desk runs (hgFundamentalScanCands — ONE
+           definition): it stamps c.fundGate on every judged candidate (the
+           MOST PROBABLE card chips from it) and demotes a candidate taking
+           2+ NET checked votes against its direction — real rates and CFTC
+           COT, the feeds this desk's ledger already scores as gates. A
+           tailwind CHIPS only; the ledger counts those legs already. The
+           blackout probe rides __og so the WHY path can name the window.
+           A dark board touches nothing; the stack absent is a no-op. */
+        try {
+          var ogFundScanFn = gfn('hgFundamentalScanCands');
+          __og.fundScan = ogFundScanFn ? ogFundScanFn(ogCollapsed, { scanner: 'omnigold' }) : null;
+          var ogFundBoFn = gfn('hgFundamentalBlackout');
+          __og.fundBlackout = !!(ogFundBoFn && ogFundBoFn('XAUUSD'));
+          if (__og.fundScan && __og.fundScan.demoted > 0){
+            __og.lastStat += '  ·  FUNDAMENTAL STACK — ' + __og.fundScan.demoted
+              + ' candidate' + (__og.fundScan.demoted === 1 ? '' : 's')
+              + ' demoted to watch (2+ net checked votes against)';
+            ui.stat.textContent = __og.lastStat;
+          }
+          if (__og.fundBlackout){
+            __og.lastStat += '  ·  EVENT BLACKOUT — no fresh ticket into a red-folder macro print';
+            ui.stat.textContent = __og.lastStat;
+          }
+        } catch (eFund) {}
 
         /* KILL-LIST BEFORE THE PICK (v689 repair). hgOgDeskOrder stamps
            .solidity and then drops sol.killed cards. Stamping there and

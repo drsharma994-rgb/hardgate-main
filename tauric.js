@@ -48,6 +48,14 @@ forward log under OMNIGOLD:TAURIC, so in time the same machinery that
 judges SPRING and MMOVE can say whether a Tauric Buy on gold pays. That is
 the only honest route from "the agents are confident" to "this is a trade".
 
+hg-v1005: THE FUNDAMENTAL STACK ON THIS DESK. The agents argue their case
+without seeing COT positioning, real rates, DXY or the macro calendar —
+this desk does not get to. The stack's verdict is MARKED beside the view
+(a blackout or a decisive headwind is named on the card, and the full gold
+board renders under the controls), never withheld: these rows record
+ticket:false and gateClear:false, so there is no ticket here to stand
+down — the same reasoning hg-v965 gave for marking the news window.
+
 Classic script + HG_tabs, like every other module.
 ========================================================================= */
 (function(){
@@ -214,6 +222,69 @@ function hgTauricNewsMark(tSec){
     if (typeof f !== 'function') return null;
     return f(tSec);
   }catch(e){ return null; }
+}
+
+/* hg-v1005: the fundamental-stack read for this desk. The agents do not
+   see positioning, real rates or the calendar; the card now carries what
+   the stack says about the direction they argued for. MARKED, never
+   withheld — the record still writes either way, exactly as hg-v965
+   reasoned for the news window: nothing here issues a ticket, so there is
+   nothing to stand down. All reads feature-checked; an absent stack is an
+   empty note, never an error. */
+function hgTauricFundGate(dir){
+  try{
+    var f = W.hgFundamentalGate;
+    if (typeof f !== 'function') return null;
+    if (dir !== 'long' && dir !== 'short') return null;
+    return f('XAUUSD', dir, { scanner: 'tauric' });
+  }catch(e){ return null; }
+}
+
+function hgTauricFundNote(rating){
+  try{
+    if (!rating || rating.state !== 'directional') return '';
+    var g = hgTauricFundGate(rating.dir);
+    if (!g) return '';
+    var chip = (typeof W.hgFundamentalChipHtml === 'function') ? (W.hgFundamentalChipHtml(g) || '') : '';
+    if (g.refuse === true){
+      return '<div class="note warn" style="margin-top:6px"><b>EVENT BLACKOUT</b> — '
+        + esc(g.reason || 'a red-folder macro print is inside its blackout window')
+        + '. Nothing below is withheld: these rows record no ticket and clear no gate, so there is '
+        + 'nothing here to stand down. This is the calendar telling you when the agents spoke.'
+        + (chip ? '<br>' + chip : '') + '</div>';
+    }
+    if (g.demote === true){
+      return '<div class="note warn" style="margin-top:6px"><b>FUNDAMENTAL HEADWIND</b> — the '
+        + 'fundamental stack stands decisively against this ' + esc(String(rating.dir).toUpperCase())
+        + ' view' + (g.reason ? ' (' + esc(g.reason) + ')' : '')
+        + '. The agents argued their case without seeing positioning, real rates or the calendar; '
+        + 'this desk does not. Marked, never withheld — the call is still recorded either way.'
+        + (chip ? '<br>' + chip : '') + '</div>';
+    }
+    if (chip){
+      return '<div class="note" style="margin-top:6px">FUNDAMENTAL STACK — no decisive vote '
+        + 'against this view: ' + chip + '</div>';
+    }
+    return '';
+  }catch(e){ return ''; }
+}
+
+/* The full gold board under the controls — the same panel every gold desk
+   shows, so the reader sees sentiment, positioning, real rates, COT and
+   the calendar whether or not a pipeline run is on screen. */
+function tauricFundPanelHtml(){
+  try{
+    var rFn = W.hgFundamentalRegime, pFn = W.hgFundamentalPanelHtml;
+    if (typeof rFn !== 'function' || typeof pFn !== 'function') return '';
+    return pFn(rFn('gold')) || '';
+  }catch(e){ return ''; }
+}
+
+function paintTauricFund(){
+  try{
+    var slot = __t.ui && __t.ui.fund;
+    if (slot) slot.innerHTML = tauricFundPanelHtml();
+  }catch(e){}
 }
 
 function hgTauricRecord(rating, priced){
@@ -389,6 +460,11 @@ function verdictHtml(rating, priced, cost, rec){
       + 'nothing here to stand down. This is the calendar telling you when the agents spoke.</div>';
   }
 
+  /* hg-v1005: the fundamental stack's verdict on the direction the agents
+     argued for — blackout and decisive headwind are named on the card.
+     Marked, never withheld, for the same reason as the news window above. */
+  h += hgTauricFundNote(rating);
+
   var p = priced.plan;
   h += '<table class="tbl" style="margin-top:6px">'
     + '<tr><th>entry</th><th>stop</th><th>T1 (' + TAURIC_T1_R + 'R)</th><th>risk</th><th>bars</th></tr>'
@@ -492,6 +568,7 @@ function renderRun(out){
   h += '</div>';
 
   ui.body.innerHTML = h;
+  paintTauricFund();   /* hg-v1005: the gold board repaints with each run */
 
   /* price + record after the prose is on screen, so a slow bar fetch never
      holds up showing what the agents actually said */
@@ -516,6 +593,7 @@ function runPreflight(){
     .then(function(pre){
       __t.pre = pre;
       if (ui && ui.body) ui.body.innerHTML = blockedHtml(pre) + preflightHtml(pre);
+      paintTauricFund();   /* hg-v1005: the board repaints with each preflight */
       if (ui && ui.stat){
         ui.stat.textContent = pre && pre.ok ? 'ready — press RUN PIPELINE'
                                             : 'blocked: ' + ((pre && pre.blocked) || 'unknown');
@@ -578,13 +656,16 @@ function mountTauric(el){
     + '<button class="btn" id="tauricRun" disabled>RUN PIPELINE</button>'
     + '<button class="btn" id="tauricPre">RE-CHECK</button>'
     + '<span class="note" id="tauricStat">preflight…</span></div>'
+    + '<div id="tauricFund" style="margin-top:8px"></div>'
     + '<div id="tauricBody" style="margin-top:8px"></div></div>';
 
   __t.ui = { el: el,
              body: el.querySelector('#tauricBody'),
              stat: el.querySelector('#tauricStat'),
              run: el.querySelector('#tauricRun'),
-             pre: el.querySelector('#tauricPre') };
+             pre: el.querySelector('#tauricPre'),
+             fund: el.querySelector('#tauricFund') };
+  paintTauricFund();
 
   if (__t.ui.run) __t.ui.run.addEventListener('click', function(){ runPipeline(); });
   if (__t.ui.pre) __t.ui.pre.addEventListener('click', function(){ runPreflight(); });
@@ -629,5 +710,8 @@ W.hgTauricCostNote = hgTauricCostNote;
 W.HG_TAURIC_TAB = TAURIC_TAB;
 
 W.HG_tabs = W.HG_tabs || [];
-W.HG_tabs.push({ id: 'tauric', label: 'TAURIC', mount: mountTauric, refresh: refreshTauric });
+/* hg-v1005: the stack seams ride the registration object, not new window
+   exports — this desk stays under the house export guard. */
+W.HG_tabs.push({ id: 'tauric', label: 'TAURIC', mount: mountTauric, refresh: refreshTauric,
+                 fundamentalGate: hgTauricFundGate, fundPanelHtml: tauricFundPanelHtml });
 })();

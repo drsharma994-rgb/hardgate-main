@@ -107,6 +107,15 @@
    crowned; unproven / non-prefer / demoted cards are shown with their
    reasons. The measured record (with its small n) prints on every card and
    in the VERIFIED filter panel. HG_GOLD_ULTRA_FILTER holds the numbers.
+
+   hg-v1005: the desk answers to the FUNDAMENTAL STACK (fundamental-stack.js).
+   The borrowed scalp mint's candidates arrive WITHOUT the desk-side verdict
+   (that pass runs in goldscalp's own scan flow, not in the mint), so this
+   desk asks the stack itself at selectSetups: a 2+-net-vote headwind demotes
+   (c.demoted flips, and the crown rule already refuses a demoted row), the
+   compact fundGate rides the card as the verdict chip, a red-folder blackout
+   crowns nothing and says so, and the full gold board panel renders above
+   the count. No existing threshold is recalibrated.
    ================================================================================ */
 (function(){
 'use strict';
@@ -1716,6 +1725,26 @@ async function laneGoldScalp(gold, now){
 }
 function selectSetups(cands, count){
   var sel = { pick: null, cards: [], held: [] };
+  /* hg-v1005: THE FUNDAMENTAL STACK, before the crown is computed. The
+     shared per-candidate pass demotes a card the stack stands decisively
+     against — c.demoted flips, and the crown rule below already refuses a
+     demoted row, so leadership exclusion needs no new branch. The compact
+     fundGate stays on the card for the verdict chip. The cards on this
+     desk ARE XAUUSD (guNorm whitelists the symbol away), so the pass is
+     told so. A blackout is probed once, carried on sel, and the crown
+     loop reads it: nothing is crowned into a red-folder print. */
+  sel.fundBlackout = false;
+  try{
+    var fbFn = gfn('hgFundamentalBlackout');
+    if (fbFn) sel.fundBlackout = fbFn('XAUUSD') === true;
+  }catch(eFB){ sel.fundBlackout = false; }
+  try{
+    var fsFn = gfn('hgFundamentalScanCands');
+    if (fsFn){
+      for (var si = 0; si < cands.length; si++){ if (cands[si] && !cands[si].sym) cands[si].sym = 'XAUUSD'; }
+      fsFn(cands, { scanner: 'goldultra' });
+    }
+  }catch(eFS){}
   for (var i = 0; i < cands.length; i++){
     var c = cands[i];
     if (!guSidesOk(c)){ sel.held.push(c.strategy + ' · ' + c.dir.toUpperCase() + ' — levels incomplete or on the wrong side; never tradable'); continue; }
@@ -1737,8 +1766,21 @@ function selectSetups(cands, count){
     var ca = isFinite(a.confScore) ? a.confScore : -1, cb = isFinite(b.confScore) ? b.confScore : -1;
     return cb - ca || ((isFinite(b.tally) ? b.tally : 0) - (isFinite(a.tally) ? a.tally : 0));
   });
-  for (var k = 0; k < sel.cards.length; k++) if (sel.cards[k].crownable){ sel.pick = sel.cards[k]; break; }
+  /* hg-v1005: a blackout crowns nothing — the cards still print for the
+     record, and setupsHTML names why no crown sits on the board. */
+  if (!sel.fundBlackout){
+    for (var k = 0; k < sel.cards.length; k++) if (sel.cards[k].crownable){ sel.pick = sel.cards[k]; break; }
+  }
   return sel;
+}
+/* hg-v1005: the full gold fundamental board — the same panel every gold
+   desk shows, rendered above the count on every scan outcome. */
+function guFundPanelHtml(){
+  try{
+    var rFn = gfn('hgFundamentalRegime'), pFn = gfn('hgFundamentalPanelHtml');
+    if (!rFn || !pFn) return '';
+    return pFn(rFn('gold')) || '';
+  }catch(e){ return ''; }
 }
 function measuredLine(kind, book){
   var F = HG_GOLD_ULTRA_FILTER, b = book === 'prefer' ? F.prefer : F.notDiscredited;
@@ -1783,6 +1825,9 @@ function setupCardHTML(c, pxNow, crowned){
     + (c.demoted ? '<span class="gu-chip warn">DEMOTED by its desk</span>' : '') + (c.vetoed ? '<span class="gu-chip warn">VETOED</span>' : '');
   for (var s = 0; s < c.stamps.length; s++) chips += '<span class="gu-chip warn">' + esc(c.stamps[s]) + '</span>';
   try{ if (typeof W.hgSmcChipHtml === 'function') chips += W.hgSmcChipHtml(c) || ''; }catch(eSmc){}
+  /* hg-v1005: the fundamental-stack verdict chip, fed by the fundGate the
+     selectSetups pass stamped. '' when the stack saw nothing to say. */
+  try{ if (typeof W.hgFundamentalChipHtml === 'function' && c.fundGate) chips += W.hgFundamentalChipHtml(c.fundGate) || ''; }catch(eFu){}
   var risk = Math.abs(c.entry - c.stop), t2 = isFinite(c.t2) ? c.t2 : (c.dir === 'long' ? c.entry + 2.5 * risk : c.entry - 2.5 * risk);
   var rr1 = isFinite(c.rr) ? c.rr : Math.abs(c.t1 - c.entry) / risk, away = isFinite(pxNow) ? (c.entry - pxNow) : NaN;
   return '<div class="gu-setup' + (crowned ? ' crowned' : '') + '">'
@@ -1804,7 +1849,8 @@ function setupsHTML(sel, lane, pxNow, count){
   if (lane.dark){ h += '<div class="gu-gate"><b>ENGINE DARK</b> — ' + esc(lane.dark) + '</div>'; return h; }
   if (!sel.cards.length){ h += '<div class="gu-gate"><b>NO SETUPS</b> — GOLD SCALP produced no candidate this bar' + (lane.held.length ? ' (' + lane.held.length + ' held back below)' : '') + '. Nothing is fabricated.</div>'; }
   else {
-    if (!sel.pick) h += '<div class="gu-demhead">no crowned setup — no prefer-row candidate reads AGAINST the consensus (count ' + (count ? Math.round(count.pct * 100) + '% ' + count.lead.toUpperCase() : '—') + '); the cards below are shown for the record</div>';
+    if (!sel.pick && sel.fundBlackout) h += '<div class="gu-demhead"><b>EVENT BLACKOUT</b> — a red-folder macro print is inside its window; nothing is crowned into it. The cards below are shown for the record.</div>';
+    else if (!sel.pick) h += '<div class="gu-demhead">no crowned setup — no prefer-row candidate reads AGAINST the consensus (count ' + (count ? Math.round(count.pct * 100) + '% ' + count.lead.toUpperCase() : '—') + '); the cards below are shown for the record</div>';
     for (var i = 0; i < sel.cards.length; i++) h += setupCardHTML(sel.cards[i], pxNow, sel.cards[i] === sel.pick);
   }
   var held = sel.held.concat(lane.held);
@@ -1927,6 +1973,9 @@ function renderResult(ui, res, src, sel, lane, tapes){
     if (tapes.rows15m && tapes.rows15m.length) h += W.hgGoldTapeNotes(tapes.rows15m, '15m');
     if (tapes.rows1h && tapes.rows1h.length) h += W.hgGoldTapeNotes(tapes.rows1h, '1h');
   }
+  /* hg-v1005: the fundamental board rides BOTH exits from this function
+     (COUNT SILENT takes an early return), beside the tape notes. */
+  h += guFundPanelHtml();
   if (sel && lane) h += setupsHTML(sel, lane, res.price, res.ok ? res.count : null);
   if (!res.ok){ ui.cards.innerHTML = h + '<div class="gu-gate"><b>COUNT SILENT</b> — ' + esc(res.reasons.join(' · ')) + '</div>' + filterEvidenceHTML() + evidenceHTML(); return; }
   var cls = res.fire ? (res.dir === 'long' ? ' long' : ' short') : '', K = res.count.kinds;
@@ -2078,7 +2127,9 @@ W.goldUltraShownKeys = guShownKeys;
 W.GU_SHOWN_EXTRA = GU_SHOWN_EXTRA;
 W.goldUltraSetupCardHTML = setupCardHTML;
 W.HG_tabs = W.HG_tabs || [];
-W.HG_tabs.push({ id: TAB_ID, label: 'GOLD ULTRA', mount: mount, refresh: refresh });
+W.HG_tabs.push({ id: TAB_ID, label: 'GOLD ULTRA', mount: mount, refresh: refresh,
+                 /* hg-v1005: the stack seams ride the registration object */
+                 fundPanelHtml: guFundPanelHtml });
 W.HG_warmups = W.HG_warmups || [];
 W.HG_warmups.push({ id: TAB_ID, label: 'GOLD ULTRA', run: async function(){ if (!__ui) return 'unavailable: not mounted'; return runScan(__ui); } });
 })();

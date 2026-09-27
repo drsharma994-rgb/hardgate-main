@@ -53,6 +53,26 @@ before and 15 min after the release (spread-expansion window). Already-live
 convictions keep running. A live bid/ask wider than 250 points / 2.5 pips
 ($0.25) also locks the entry gate. HTF conflict does not block Gold Wing.
 
+FUNDAMENTAL STACK (hg-v1005, fundamental-stack.js) — the combined
+fundamental + sentiment + positioning gate hg-v1004 proved on GOLD SCALP,
+at the swing horizon:
+  *) a checked red-folder BLACKOUT locks NEW conviction minting (noMint on
+     the conviction lock — the same semantics as the tier-1 news window:
+     live convictions keep running untouched; an UNCHECKED calendar locks
+     nothing);
+  *) 2+ NET checked votes AGAINST the direction — real rates (FRED DFII10
+     first, DXY+US10Y heuristic second) and CFTC COT crowding, the same
+     feeds the tally already scores as points — demote the candidate right
+     after the lock (stamped FUNDAMENTAL HEADWIND; it paints, the reason
+     is named, and the lead is re-picked from the next eligible card — a
+     headwind can never be MOST PROBABLE);
+  *) a tailwind CHIPS but never adds tally points — the tally already
+     counts those legs;
+  *) the full gold board (real rates / COT / calendar / DXY·US10Y·GSR
+     priors) renders beside every scan outcome.
+  Live locked convictions are skipped — the trade you are IN keeps
+  running; a dark board touches nothing.
+
 goldind.js detector layer is consumed READ-ONLY and every export is
 feature-checked (gfn): goldSweeps / goldOrderBlocks / goldFVG / goldVWAP /
 goldVolumeSpike / goldVolumeProfile / goldSweepV2 / goldFVGV2 (V2 triggers:
@@ -94,7 +114,10 @@ DIAGNOSTIC SURFACE — window.goldswingScan(): the last successful scan in
 full (deep-frozen, never throws, null before the first scan):
   { cands: [{ id, venue, sym, dir, strategy, stratKey, grade, entry, stop,
              t1, t2, t3, rr, rr2, rr3, tally, tallyParts, agree, oppose,
-             session, atr, locked, issuedAt, asOf, why, invalidates, anchor }],
+             session, atr, locked, issuedAt, asOf, why, invalidates, anchor,
+             fund }],   (hg-v1005: fund = refuse / demote / chips — the
+             fundamental-stack verdict at scan time, null when the board
+             was dark or the stack absent)
     bestId, history: [{ id, dir, strategy, venue, sym, entry, stop, t1, t2,
                         t3, status, issuedAt, closedAt, closePrice }],
     rejected: [{ id, strategy, stratKey, dir, venue, sym, reason }], at } | null
@@ -563,6 +586,13 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
            note in goldscalp.js publishScan. Re-rankers downstream have no
            candles, so the read has to travel or it is lost. No bars in .smc. */
         smc: (c.smc && typeof c.smc === 'object') ? c.smc : null,
+        /* hg-v1005: the fundamental-stack verdict at scan time (refuse /
+           demote / chips) — SUPER GOLD & OMNIGOLD hold THIS desk's read at
+           THIS instant, not a recomputed-later one. */
+        fund: (c.fundGate && typeof c.fundGate === 'object')
+          ? { refuse: !!c.fundGate.refuse, demote: !!c.fundGate.demote,
+              chips: Array.isArray(c.fundGate.chips) ? c.fundGate.chips.slice() : [] }
+          : null,
         /* hg-v977: the instant the mint judged this candidate on -- SUPER GOLD's
            sgCandSec has read `signalT` since hg-v952 and no mint ever wrote it */
         signalT: (typeof c.signalT === 'number' && isFinite(c.signalT)) ? c.signalT : null
@@ -681,7 +711,10 @@ function saveConvictions(store){
 
 /* venueRows: { venueLabel: { rows4h } } — latest 4h closes per venue for
    invalidation checks. Mutates the ranked candidates (restores levels). */
-function applyConviction(ranked, venueRows, nowMs){
+/* hg-v1005: noMint (FUNDAMENTAL BLACKOUT) — inside a checked red-folder
+   window NO new conviction mints; already-live ones keep running untouched.
+   The same semantics the tier-1 news window carries, from the house stack. */
+function applyConviction(ranked, venueRows, nowMs, noMint){
   var store = loadConvictions();
   var lockFn = (typeof applyHardgateConvictionLock === 'function')
     ? applyHardgateConvictionLock
@@ -691,6 +724,7 @@ function applyConviction(ranked, venueRows, nowMs){
       type: 'swing',
       rowKey: 'rows4h',
       historyLimit: CONVICTION_HIST,
+      noMint: !!noMint,
       venueScopedKeys: true,
       expiryMs: CONVICTION_TTL_MS
     });
@@ -698,6 +732,49 @@ function applyConviction(ranked, venueRows, nowMs){
     return got;
   }
   return { store: store, transitions: [] };
+}
+
+/* hg-v1005: THE SWING LEAD ANSWERS TO THE FUNDAMENTAL STACK.
+
+   The tally has always read these feeds as POINTS (macro realRate ±2, COT
+   crowding ∓1, F&G +1) — points let a structurally strong card outscore a
+   DECISIVE headwind and lead. hg-v1004 proved the fix on GOLD SCALP; this
+   desk runs the SAME house pass (hgFundamentalScanCands — one definition,
+   or the copies drift): 2+ NET checked votes against demote the candidate
+   (stamped FUNDAMENTAL HEADWIND — the card paints, the reason is named,
+   it can never be MOST PROBABLE). A tailwind only CHIPS — the tally
+   already counts those same legs as points, so points here would count
+   them twice. Live locked convictions are skipped (the trade you are IN
+   keeps running); dropped/vetoed rows are already spoken for; a dark
+   board touches nothing. */
+function gwFundamentalScan(ranked){
+  var scanFn = gfn('hgFundamentalScanCands');
+  if (!scanFn || !Array.isArray(ranked)) return { demoted: 0, gated: 0 };
+  try{
+    var res = scanFn(ranked, { scanner: 'goldswing' });
+    return res || { demoted: 0, gated: 0 };
+  }catch(e){ return { demoted: 0, gated: 0 }; }
+}
+
+/* The card/banner chip is the stack's own renderer reading the verdict this
+   desk stored at scan time — never a parallel rendering of it. */
+function gwFundChipHtml(c){
+  try{
+    var fn = gfn('hgFundamentalChipHtml');
+    var g = c && c.fundGate;
+    if (!fn || !g || !Array.isArray(g.chips) || !g.chips.length) return '';
+    return fn(g) || '';
+  }catch(e){ return ''; }
+}
+
+/* The full gold board — real rates, COT, the calendar, the priors — renders
+   beside every scan outcome, dark feeds honestly UNCHECKED. */
+function gwFundPanelHtml(){
+  try{
+    var rFn = gfn('hgFundamentalRegime'), pFn = gfn('hgFundamentalPanelHtml');
+    if (!rFn || !pFn) return '';
+    return pFn(rFn('gold')) || '';
+  }catch(e){ return ''; }
 }
 
 /* When a scan finds zero new qualifying candidates but live convictions remain
@@ -1085,6 +1162,8 @@ function bannerHTML(best, ranked){
        on NINE settled swing trades. */
     + (typeof W.hgGoldRankEvidenceNote === 'function' ? W.hgGoldRankEvidenceNote('swing', 'gradeA') : '')
     + tallyChips(best)
+    /* hg-v1005: the crowned card wears its fundamental verdict on the banner */
+    + (function(){ var fc = gwFundChipHtml(best); return fc ? '<div style="margin-top:6px">' + fc + '</div>' : ''; })()
     + '<div class="gsw-whyline">' + esc(best.why || '') + '</div>'
     + '<div class="gsw-inv"><b>INVALIDATION</b> — ' + esc(best.invalidates || 'a 4h close beyond the stop') + '. Hard stop $' + pxF(best.stop) + ' — never widen it.</div>'
     + lock
@@ -1192,6 +1271,7 @@ function cardHTML(c, isBest, season, tape){
     + '<div class="gates">'
     + '<span class="gpip ' + gradeCls + '"' + gswPipAttr(gradeCls === 'ok') + '>GRADE ' + c.grade + '</span>'
     + goldTapeChipHtml(c, tape)
+    + gwFundChipHtml(c)   /* hg-v1005: the fundamental-stack verdict chip */
     + chips + metaChips
     + '</div>'
     + tallyChips(c)
@@ -1313,6 +1393,10 @@ function whySilentText(o){
   var lead = null;
   if (o.newsCaution) lead = 'high-impact news window ±30 min' + (o.newsTitle ? ' — ' + o.newsTitle : '')
     + ': fade risk — new reads held for the release';
+  /* hg-v1005: the fundamental stack's checked blackout is the same event
+     class as the news window — name it when it empties the board. */
+  else if (o.fundBlackout) lead = 'EVENT BLACKOUT — a red-folder macro print is inside its blackout window'
+    + ': new convictions held, issuance resumes when the window clears';
   else if (o.feedsFailed) lead = 'feeds failed — no 4h klines from any source (macro chain + PAXGUSDT + Delta all quiet)';
   else if (o.liveN > 0) lead = o.liveN + ' live conviction' + (o.liveN === 1 ? '' : 's')
     + ' already locked — re-confirmations, not new issuance';
@@ -3597,10 +3681,22 @@ async function runScan(ui, scanSt){
       goldAlignLevelsToSpot(ranked, klineSpot, liveSpot);
     }
 
+    /* hg-v1005: the house fundamental stack's checked red-folder BLACKOUT
+       locks NEW conviction minting — same event class as the tier-1 news
+       window, same semantics: NO new conviction mints, already-live ones
+       keep running untouched. An UNCHECKED calendar locks nothing, and
+       with the stack absent the probe is simply skipped. Direction-free by
+       construction — the gate checks the blackout before direction. */
+    var fundBlackout = false;
+    var fundBlackoutFn = gfn('hgFundamentalBlackout');
+    if (fundBlackoutFn){
+      try{ fundBlackout = fundBlackoutFn('XAUUSD') === true; }catch(eFB){ fundBlackout = false; }
+    }
+
     /* CONVICTION LOCK — restore issued levels verbatim; transitions only on
        invalidation against the latest 4h close (STOPPED / TARGET HIT /
        EXPIRED after 5 days); never re-pick levels for a live conviction */
-    var lock = applyConviction(ranked, venueRows, now);
+    var lock = applyConviction(ranked, venueRows, now, fundBlackout);
     if (isFinite(liveSpot) && liveSpot > 0){
       var guardedSw = goldSpotGuardAfterLock(lock.store, ranked, liveSpot);
       if (guardedSw){
@@ -3609,7 +3705,39 @@ async function runScan(ui, scanSt){
       }
     }
 
+    /* hg-v1005: blackout-vetoed candidates render as named reason lines,
+       never as cards and never silently dropped. */
+    if (fundBlackout){
+      for (var vb2 = 0; vb2 < ranked.length; vb2++){
+        var vbc2 = ranked[vb2];
+        if (vbc2 && vbc2.vetoed){
+          rejectedAll.push({ id: vbc2.id || null, strategy: vbc2.strategy || null, stratKey: vbc2.stratKey || null,
+                             dir: vbc2.dir, venue: vbc2.venue || null, sym: vbc2.sym || null,
+                             reason: 'EVENT BLACKOUT — no fresh setup forms into a red-folder macro print' });
+        }
+      }
+      legs.push('EVENT BLACKOUT — new convictions held (existing ones keep running)');
+    }
+
+    /* hg-v1005: the fundamental stack demotes at LEADERSHIP, not only at the
+       buttons — a 2+-vote headwind can never be MOST PROBABLE, exactly the
+       rule hg-v1003 enforced on every card's CTAs. Runs after the lock so a
+       live conviction is recognised and left alone. The lead was picked
+       BEFORE the lock on this desk, so when the pass demotes it the crown
+       moves to the next eligible card — never sits on a headwind. */
+    var fundScan = null;
+    try{ fundScan = gwFundamentalScan(ranked); }catch(eFS){ fundScan = null; }
+    if (fundScan && fundScan.demoted > 0){
+      legs.push('FUNDAMENTAL STACK — ' + fundScan.demoted + ' candidate' + (fundScan.demoted === 1 ? '' : 's')
+        + ' demoted to watch (2+ net checked votes against)');
+      if (best && (best.demoted || best.vetoed)) best = goldPickSpotAlignedBest(ranked, spotRef);
+    }
+
     var display = mergeLiveDisplayCards(ranked, lock.store);
+    /* hg-v1005: a vetoed row is never a card. The filter used to ride the
+       liveSpot condition below because the spot guard was the ONLY veto
+       path; the blackout veto must hold with or without a spot ref. */
+    display = display.filter(function(c){ return c && !c.vetoed; });
     if (isFinite(liveSpot) && liveSpot > 0 && display.length){
       goldSpotGuardAfterLock(lock.store, display, liveSpot);
       display = display.filter(function(c){ return c && !c.vetoed; });
@@ -3676,6 +3804,7 @@ async function runScan(ui, scanSt){
     if (!display.length){
       whySilent = whySilentText({
         newsCaution: !!(newsC && newsC.caution), newsTitle: newsC ? newsC.title : null,
+        fundBlackout: fundBlackout,   /* hg-v1005 */
         feedsFailed: !gold.rows4h.length,
         liveN: liveN, armed: armedAll, watchMeta: watchMeta
       });
@@ -3742,10 +3871,13 @@ async function runScan(ui, scanSt){
       }catch(eFs){ forming = ''; }
       return seven + forming;
     }
+    /* hg-v1005: the full gold fundamental board renders beside every scan
+       outcome — cards, held-back, feeds-failed and the vision refresh bag. */
+    var fundPanelHtml = gwFundPanelHtml();
     if (ui && ui.cards && ui.empty){
       if (display.length){
         ui.empty.style.display = 'none';
-        ui.cards.innerHTML = basisHtml + mixedBanner + aplusPack.panel + uniHtml + bannerHTML(displayBest, display)
+        ui.cards.innerHTML = basisHtml + mixedBanner + fundPanelHtml + aplusPack.panel + uniHtml + bannerHTML(displayBest, display)
           + display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note, deskTape); }).join('')
           + formingLayersHtml()
           + formingNowHTML(armedAll)
@@ -3755,7 +3887,7 @@ async function runScan(ui, scanSt){
         /* zero qualifying candidates but something to show: WHY SILENT leads,
            then the watch panel, then the held-back reason lines */
         ui.empty.style.display = 'none';
-        ui.cards.innerHTML = basisHtml + mixedBanner + uniHtml + (whySilent ? whySilentHTML(whySilent) : '')
+        ui.cards.innerHTML = basisHtml + mixedBanner + fundPanelHtml + uniHtml + (whySilent ? whySilentHTML(whySilent) : '')
           + formingLayersHtml()
           + rejectedHTML(rejectedAll)
           + formingNowHTML(armedAll)
@@ -3764,7 +3896,7 @@ async function runScan(ui, scanSt){
         /* feeds failed: cards stay empty (no fabricated setups);
            the 7-step readout still prints — NO SETUP or DATA_UNAVAILABLE is
            itself the answer the playbook asks for. Catalog lives on empty. */
-        ui.cards.innerHTML = basisHtml + uniHtml + sevenStepHtml();
+        ui.cards.innerHTML = basisHtml + fundPanelHtml + uniHtml + sevenStepHtml();
         var catH = '';
         try{
           var cFn = gfn('hgGoldCatalogHtml');
@@ -3796,7 +3928,7 @@ async function runScan(ui, scanSt){
           if (typeof visionRefreshGw === 'function'){
             visionRefreshGw({
               scanSt: scanSt, scanGen: visionGen, ui: ui, display: display, displayBest: displayBest,
-              basisHtml: basisHtml + mixedBanner + aplusPack.panel + uniHtml, bannerHTML: bannerHTML, cardHTML: cardHTML,
+              basisHtml: basisHtml + mixedBanner + fundPanelHtml + aplusPack.panel + uniHtml, bannerHTML: bannerHTML, cardHTML: cardHTML,
               formingNowHTML: formingNowHTML, rejectedHTML: rejectedHTML, historyHTML: historyHTML,
               formingLayersHTML: formingLayersHtml,
               armedAll: armedAll, rejectedAll: rejectedAll, history: lock.store.history,
@@ -3985,7 +4117,11 @@ W.goldswingMountSection = function(el, opts){
   }, opts));
 };
 W.HG_tabs = W.HG_tabs || [];
-W.HG_tabs.push({ id: 'goldswing', label: 'GOLD SWING', mount: mount, refresh: goldswingRefresh });
+/* hg-v1005: the fundamental pass + panel ride the registration (the
+   hg-v967/v968 route) — zero new module-scope window exports, so the
+   render-integrity guard stays green. */
+W.HG_tabs.push({ id: 'goldswing', label: 'GOLD SWING', mount: mount, refresh: goldswingRefresh,
+                 fundamentalScan: gwFundamentalScan, fundPanelHtml: gwFundPanelHtml });
 W.HG_warmups = W.HG_warmups || [];
 W.HG_warmups.push({ id: 'goldswing', label: 'GOLD SWING', run: gwWarm });
 })();

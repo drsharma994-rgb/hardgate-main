@@ -1,7 +1,11 @@
 /* =========================================================================
-HARDGATE — fundamental-stack.js  (hg-v1003)
+HARDGATE — fundamental-stack.js  (hg-v1003; leadership pass hg-v1005)
 THE FUNDAMENTAL STACK, HOUSE-WIDE. One asset-aware read of the fundamental
 feeds the app ALREADY fetches, shared by every crypto and gold setup tab.
+hg-v1005 adds the two desk-side primitives the gold tabs share:
+hgFundamentalScanCands (the v1004 leadership demote pass, generalized) and
+hgFundamentalBlackout (the direction-free red-folder probe the entry vetoes
+share) — one definition each, or eleven desk copies drift.
 
 WHY THIS FILE EXISTS. hg-v1002 proved the pattern on OMNIBTC: the tape is
 only half the read. But the stack lived inside omnibtc-engines.js, keyed to
@@ -448,6 +452,64 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
     }catch(e){ return out; }
   }
 
+  /* hg-v1005: THE LEADERSHIP PASS, HOUSE-WIDE. hg-v1004 proved this loop on
+     GOLD SCALP; every gold desk that crowns a lead now runs the SAME one —
+     one definition, or eleven copies drift.
+
+     For every candidate with a symbol and a direction: the gate speaks.
+     2+ NET checked votes AGAINST demote the candidate (stamped FUNDAMENTAL
+     HEADWIND, the reason named in gateNotes — the card paints, it can
+     never lead). A tailwind or an extreme CHIPS only: the desks' tallies
+     already score these same legs as points, so adding points here would
+     count them twice. Skipped rows: dropped / vetoed / locked (the trade
+     you are IN keeps running — gate semantics, never re-judged). A dark
+     board touches nothing — unchecked is not a veto.
+
+     PURE apart from the gate it calls: it marks what it demotes and
+     returns the counts, so the scan line and the tests read the same
+     object the scan acted on. The compact verdict it stores (c.fundGate)
+     is what publishes with the desk's snapshot — downstream desks hold
+     THIS read at THIS instant, never a recomputed-later one. */
+  function hgFundamentalScanCands(cands, opts){
+    var out = { demoted: 0, gated: 0 };
+    if (!Array.isArray(cands)) return out;
+    var scanner = (opts && opts.scanner) || 'gold';
+    for (var i = 0; i < cands.length; i++){
+      var c = cands[i];
+      if (!c || !c.sym || !c.dir || c.dropped || c.vetoed || c.locked) continue;
+      var g = null;
+      try{ g = hgFundamentalGate(c.sym, c.dir, { scanner: scanner }); }catch(eG){ g = null; }
+      if (!g || (g.refuse !== true && g.demote !== true && !(g.chips && g.chips.length))) continue;
+      out.gated++;
+      c.fundGate = { refuse: g.refuse === true, demote: g.demote === true,
+                     chips: (g.chips || []).slice(), reason: g.reason || '',
+                     asset: g.asset || 'gold',
+                     regime: g.regime ? { bulls: g.regime.bulls, bears: g.regime.bears, checked: g.regime.checked } : null };
+      if (g.demote === true){
+        c.demoted = true;
+        if (!Array.isArray(c.stamps)) c.stamps = [];
+        if (c.stamps.indexOf('FUNDAMENTAL HEADWIND') < 0) c.stamps.push('FUNDAMENTAL HEADWIND');
+        var gn = Array.isArray(c.gateNotes) ? c.gateNotes.slice() : [];
+        gn.push(g.reason || 'fundamental headwind — 2+ net checked votes against this direction');
+        c.gateNotes = gn;
+        out.demoted++;
+      }
+    }
+    return out;
+  }
+
+  /* The direction-free blackout probe the desks' entry vetoes share. The
+     gate checks the blackout before direction, so one ask serves a whole
+     desk: TRUE only when the calendar leg is CHECKED and inside a
+     red-folder window. An unchecked calendar answers false — it refuses
+     nothing (a dark board blocks nothing). */
+  function hgFundamentalBlackout(sym){
+    try{
+      var g = hgFundamentalGate(sym || 'XAUUSD', 'long', { scanner: 'gold' });
+      return !!(g && g.refuse === true);
+    }catch(e){ return false; }
+  }
+
   /* ---------------- display ---------------- */
 
   /* One .gpip chip — the established honest-display pattern. ok on a
@@ -525,6 +587,8 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
   W.hgFundamentalLegs = hgFundamentalLegs;
   W.hgFundamentalRegime = hgFundamentalRegime;
   W.hgFundamentalGate = hgFundamentalGate;
+  W.hgFundamentalScanCands = hgFundamentalScanCands;
+  W.hgFundamentalBlackout = hgFundamentalBlackout;
   W.hgFundamentalChipHtml = hgFundamentalChipHtml;
   W.hgFundamentalBlockedNoteHtml = hgFundamentalBlockedNoteHtml;
   W.hgFundamentalNotify = hgFundamentalNotify;

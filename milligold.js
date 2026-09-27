@@ -63,6 +63,20 @@ NOTHING HERE LOOSENS A GATE. The roster only ever REMOVES mechanics from
 what OMNIGOLD would have shown. G1-G7, the cost ceiling, the one-at-a-time
 hold and the measured-edge veto all still apply, because they are the same
 code path.
+
+FUNDAMENTAL STACK (hg-v1005, fundamental-stack.js). The cards this tab
+shows are OMNIGOLD's OWN evaluated cards, so the house fundamental pass
+hg-v1005 gave that desk already speaks on them: every judged card carries
+its c.fundGate verdict (EVENT BLACKOUT / FUNDAMENTAL HEADWIND / TAILWIND
+/ extremes), and the refused-and-demoted never reach this board — that is
+the same one-definition rule the rest of this tab runs on. What THIS file
+adds is display, not a second gate: the full gold fundamental board (real
+rates / COT / calendar / priors) beside every outcome, each card's
+at-scan verdict chip under its roster record, and — when the direction-
+free probe says a red-folder window is live RIGHT NOW — an EVENT BLACKOUT
+banner that names the cards for what they are: OMNIGOLD's last scan, with
+its age, not fresh formations into the print. Absent stack -> byte-
+identical to before.
 ========================================================================= */
 (function(){
 'use strict';
@@ -78,6 +92,31 @@ function esc(s){
 function num(x){ var n = +x; return isFinite(n) ? n : NaN; }
 function gfn(n){ try { return (typeof W[n] === 'function') ? W[n] : null; } catch (e){ return null; } }
 function sgn(n){ return (n >= 0 ? '+' : '−') + Math.abs(n).toFixed(4); }
+
+/* hg-v1005: the fundamental-stack surface, from the ONE shared
+   implementation (fundamental-stack.js) — reached through the HG_tabs
+   registration (the hg-v967 route), zero new module-scope exports. The
+   cards already carry their verdicts from OMNIGOLD's own pass; these are
+   display only. Never throw; absent stack -> '' / false. */
+function mgFundChipHtml(c){
+  try{
+    var fn = gfn('hgFundamentalChipHtml');
+    var g = c && c.fundGate;
+    if (!fn || !g) return '';
+    return fn(g) || '';
+  }catch(e){ return ''; }
+}
+function mgFundPanelHtml(){
+  try{
+    var rFn = gfn('hgFundamentalRegime'), pFn = gfn('hgFundamentalPanelHtml');
+    if (!rFn || !pFn) return '';
+    var r = rFn('gold');
+    return r ? (pFn(r) || '') : '';
+  }catch(e){ return ''; }
+}
+function mgFundBlackout(){
+  try{ var f = gfn('hgFundamentalBlackout'); return !!(f && f('XAUUSD')); }catch(e){ return false; }
+}
 
 /* --- BEGIN GENERATED HG_MILLI_ROSTER (scripts/milli-gold-roster.mjs) ---
    Every figure is re-derived from scripts/omnigold-replay-evidence.json by
@@ -252,6 +291,9 @@ function hgMilliCardsHtml(rows){
       + rec.settled + ' settled, ' + (rec.winRate * 100).toFixed(1) + '% to T1 first, net '
       + sgn(rec.netXm) + 'R at XM, t ' + (rec.tCluster >= 0 ? '+' : '')
       + rec.tCluster.toFixed(2) + ' &mdash; in sample, and inside the noise.</div>') : '';
+    /* hg-v1005: the fundamental-stack verdict OMNIGOLD's own pass stamped
+       on this card at scan time — display only, never a second gate. */
+    chip += mgFundChipHtml(c);
     if (card){ try { out += card(c) + chip; continue; } catch (e){} }
     out += '<div class="panel"><b>' + esc(String(c.kind || c.mech || 'SETUP')) + '</b> '
       + esc(String(c.dir || '')) + chip + '</div>';
@@ -311,6 +353,7 @@ async function runMilliGold(ui){
     var read = gfn('hgOgLastCards');
     if (!read){
       if (ui && ui.body) ui.body.innerHTML = hgMilliDisclosureHtml()
+        + mgFundPanelHtml()   /* hg-v1005: the board renders even with the engine dark — it depends on neither */
         + '<div class="note warn" style="margin-top:8px">OMNIGOLD is not loaded. This tab '
         + 'is that desk restricted to a roster and has no engine of its own &mdash; '
         + 'inventing one here is exactly the mistake hg-v938 removed.</div>'
@@ -357,6 +400,7 @@ async function runMilliGold(ui){
 
     if (!got || !got.ran){
       if (ui && ui.body) ui.body.innerHTML = hgMilliDisclosureHtml()
+        + mgFundPanelHtml()   /* hg-v1005 */
         + '<div class="note" style="margin-top:8px">OMNIGOLD has not produced a scan yet. '
         + 'This tab shows what that desk found, narrowed to the roster, so it waits for it '
         + 'rather than running a second scan of its own on thinner inputs.</div>'
@@ -366,6 +410,7 @@ async function runMilliGold(ui){
     }
     if (!got.cards.length){
       if (ui && ui.body) ui.body.innerHTML = hgMilliDisclosureHtml()
+        + mgFundPanelHtml()   /* hg-v1005 */
         + '<div class="note" style="margin-top:8px">OMNIGOLD scanned and its board is empty '
         + '&mdash; so there is nothing for this tab to narrow. That is the desk being quiet, '
         + 'not this tab waiting: a roster of ' + ((HG_MILLI_ROSTER && HG_MILLI_ROSTER.kinds)
@@ -399,8 +444,21 @@ async function runMilliGold(ui){
     __mg.last = { scanned: got.cards.length, kept: kept.length, at: got.at, tally: tally };
 
     var ageMin = got.at ? Math.max(0, Math.round((Date.now() - got.at) / 60000)) : null;
+    /* hg-v1005: a LIVE red-folder window is named for what it is — the
+       cards below are OMNIGOLD's last scan (age printed), not fresh
+       formations into the print. The source desk's own pass already
+       refused fresh tickets into it; this banner keeps the reader from
+       mistaking an older board for a new one. */
+    var mgBo = mgFundBlackout();
     if (ui && ui.body){
       ui.body.innerHTML = tapeNote + hgMilliDisclosureHtml()
+        + mgFundPanelHtml()
+        + (mgBo
+          ? '<div class="note warn" style="margin-top:8px"><b>EVENT BLACKOUT</b> &mdash; a checked red-folder macro print '
+            + 'is inside its window RIGHT NOW: no FRESH setup forms into the print. The cards below are '
+            + 'OMNIGOLD\'s last scan' + (ageMin === null ? '' : (' (' + ageMin + ' min ago)'))
+            + ', not new formations.</div>'
+          : '')
         + '<div class="note" style="margin-top:8px">' + got.cards.length
         + ' cards on OMNIGOLD\'s last scan'
         + (ageMin === null ? '' : (' (' + ageMin + ' min ago)')) + ', '
@@ -450,6 +508,7 @@ W.hgMilliGateTallyHtml = hgMilliGateTallyHtml;
 W.hgMilliState = function(){ return __mg.last; };
 
 W.HG_tabs = W.HG_tabs || [];
-W.HG_tabs.push({ id: 'milligold', label: 'MILLI GOLD', mount: mountMilliGold, refresh: refreshMilliGold });
+W.HG_tabs.push({ id: 'milligold', label: 'MILLI GOLD', mount: mountMilliGold, refresh: refreshMilliGold,
+                 fundPanelHtml: mgFundPanelHtml, fundamentalBlackout: mgFundBlackout });   /* hg-v1005 */
 
 })();

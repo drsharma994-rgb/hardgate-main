@@ -127,13 +127,19 @@ console.log('\n== a dark board blocks nothing ==');
 console.log('\n== the stack absent -> the pass is a no-op, never a throw ==');
 {
   hostileLongBoard();
-  const saved = W.hgFundamentalGate, savedR = W.hgFundamentalRegime, savedP = W.hgFundamentalPanelHtml;
+  /* hg-v1005: gsFundamentalScan now delegates to W.hgFundamentalScanCands
+     (the shared house pass), which calls the module closure — so "stack
+     absent" means the SHARED ENTRY POINT is gone, not only the gate. */
+  const saved = W.hgFundamentalGate, savedR = W.hgFundamentalRegime, savedP = W.hgFundamentalPanelHtml,
+        savedS = W.hgFundamentalScanCands;
   delete W.hgFundamentalGate; delete W.hgFundamentalRegime; delete W.hgFundamentalPanelHtml;
+  delete W.hgFundamentalScanCands;
   let threw = null, res = null;
   try{ res = reg.fundamentalScan([cand('long')]); }catch(e){ threw = e; }
   ok(!threw && res && res.demoted === 0 && res.gated === 0, 'without fundamental-stack.js the desk runs exactly as before');
   ok(reg.fundPanelHtml() === '', 'and the panel renders empty, not an error');
   W.hgFundamentalGate = saved; W.hgFundamentalRegime = savedR; W.hgFundamentalPanelHtml = savedP;
+  W.hgFundamentalScanCands = savedS;
 }
 
 console.log('\n== the blackout joins the entry veto (wiring pins on the shipped source) ==');

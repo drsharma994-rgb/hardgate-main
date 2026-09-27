@@ -37,6 +37,14 @@ is. Risk is roughly half the range plus 1.5xATR, which is a WIDE stop; R:R is
 2.0 by construction, not by measurement. Nothing here is backtested: the tab
 prints what the rule produced and records each setup to the forward log so it
 can be judged later on evidence rather than on its geometry.
+
+hg-v1005: the desk answers to the FUNDAMENTAL STACK (fundamental-stack.js).
+Every lane's setups pass the shared scan gate before the board and the picks
+are computed: a red-folder blackout refuses (and, refusing every directional
+setup, leaves BOTH pick slots empty with the reason named) and a 2+-net-vote
+headwind demotes — a demoted or refused setup never takes a BEST SCALP /
+BEST SWING slot (ogTopPicks skips it) but still renders in its lane, chipped
+with the stack's verdict. The full gold board panel renders above the board.
 ========================================================================= */
 (function(){
 'use strict';
@@ -634,6 +642,30 @@ function ogReach(s, px){
   return { ok: false, why: 'not live' };
 }
 
+/* hg-v1005: the fundamental-stack seams. ogFundBlocked is the single
+   predicate the pick loop reads; the chip renders the verdict the scan-time
+   pass stamped; the panel is the same gold board every gold desk shows.
+   All feature-checked — an absent stack blocks nothing and prints nothing. */
+function ogFundBlocked(s){
+  return !!(s && s.fundGate && (s.fundGate.refuse === true || s.fundGate.demote === true));
+}
+function ogFundChipHtml(s){
+  try{
+    var fn = (typeof W.hgFundamentalChipHtml === 'function') ? W.hgFundamentalChipHtml : null;
+    var g = s && s.fundGate;
+    if (!fn || !g || !Array.isArray(g.chips) || !g.chips.length) return '';
+    return fn(g) || '';
+  }catch(e){ return ''; }
+}
+function ogFundPanelHtml(){
+  try{
+    var rFn = (typeof W.hgFundamentalRegime === 'function') ? W.hgFundamentalRegime : null;
+    var pFn = (typeof W.hgFundamentalPanelHtml === 'function') ? W.hgFundamentalPanelHtml : null;
+    if (!rFn || !pFn) return '';
+    return pFn(rFn('gold')) || '';
+  }catch(e){ return ''; }
+}
+
 /* The single best live setup in each of the two lanes the panel leads with.
    Deliberately ONE EACH and never "top two overall" - two scalps at the top
    would answer a different question than the one asked. A lane with nothing
@@ -644,6 +676,9 @@ function ogTopPicks(setups, px){
   (setups || []).forEach(function(s){
     if (!s || (s.state !== 'waiting' && s.state !== 'open')) return;
     if (s.lane !== 'scalp' && s.lane !== 'swing') return;
+    /* hg-v1005: a setup the fundamental stack refused or demoted never
+       takes a pick slot — it still renders in its lane list, chipped. */
+    if (ogFundBlocked(s)) return;
     var e = ogProb(s, px);
     if (!e || !isFinite(e.p)) return;
     var reach = ogReach(s, px);
@@ -682,6 +717,7 @@ function card(s, mark){
   var d = ogDistance(s, mark);
   var smcChip = '';
   try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(s) || ''; }catch(e){}
+  var fundChip = ogFundChipHtml(s);   /* hg-v1005: the stack's verdict beside the state */
 
   /* The reading depends on whether the order has FILLED. A resting order is
      described by how far the mark is from its entry; a running position by
@@ -706,7 +742,7 @@ function card(s, mark){
     + '<span class="stamp">' + esc(s.laneLabel || '') + '</span>'
     + '<span class="dir">' + (filled ? (s.dir === 'long' ? 'LONG — filled' : 'SHORT — filled')
                                      : (s.dir === 'long' ? 'BUY LIMIT' : 'SELL LIMIT')) + '</span></div>'
-    + '<div class="row" style="gap:6px;margin:4px 0"><span class="stamp ' + stateCls + '">' + esc(stateLabel) + '</span>' + smcChip + '</div>'
+    + '<div class="row" style="gap:6px;margin:4px 0"><span class="stamp ' + stateCls + '">' + esc(stateLabel) + '</span>' + smcChip + fundChip + '</div>'
     + '<div class="mini">'
     + (filled && op
         ? '<span class="k">unrealised</span><span><b>' + (op.unrealR >= 0 ? '+' : '') + fmt(op.unrealR, 2) + 'R</b></span>'
@@ -794,8 +830,9 @@ function pickCard(pk, mark, badge){
     + '</div>';
 }
 
-function render(ui, lanes, mark, note){
+function render(ui, lanes, mark, note, opts){
   if (!ui || !ui.body) return;
+  opts = opts || {};
   var all = [];
   lanes.forEach(function(L){ all = all.concat(L.setups || []); });
   var live = all.filter(function(s){ return s.state === 'waiting' || s.state === 'open'; });
@@ -868,7 +905,10 @@ function render(ui, lanes, mark, note){
     if (!pk){
       h += '<div class="card"><div class="chead"><span class="sym">XAUUSD</span>'
         + '<span class="stamp">' + (k === 'scalp' ? 'SCALP 15m' : 'SWING 4h') + '</span></div>'
-        + '<div class="note">Nothing live in this lane — an empty slot rather than a setup promoted from another timeframe.</div></div>';
+        + (opts.fundBlackout
+          ? '<div class="note"><b>EVENT BLACKOUT</b> — a red-folder macro print is inside its window; no fresh setup forms into it, so this slot stays empty until it clears.</div>'
+          : '<div class="note">Nothing live in this lane — an empty slot rather than a setup promoted from another timeframe.</div>')
+        + '</div>';
       return;
     }
     h += pickCard(pk, mark, k === 'scalp' ? 'BEST SCALP' : 'BEST SWING');
@@ -992,7 +1032,14 @@ function render(ui, lanes, mark, note){
         (L.cfg && L.cfg.interval ? L.cfg.interval : '') + (L.cfg && L.cfg.label ? ' ' + L.cfg.label : ''));
     });
   }
-  ui.body.innerHTML = tapeNote + h;
+  /* hg-v1005: the blackout alarm first when it is live, then the full gold
+     fundamental board — both ahead of everything drawn from the scan. */
+  ui.body.innerHTML = (opts.fundBlackout
+      ? '<div class="note warn" style="margin-bottom:10px;padding:8px 10px;border-left:3px solid #b45309">'
+        + '<b>EVENT BLACKOUT</b> — a red-folder macro print is inside its window; no fresh setup forms into it. '
+        + 'The rule\'s existing orders and settles still render below, chipped with the stack\'s verdict.</div>'
+      : '')
+    + ogFundPanelHtml() + tapeNote + h;
 }
 
 /* ---------- scan ---------- */
@@ -1060,12 +1107,31 @@ async function runOptiGold(ui){
     var total = lanes.reduce(function(n, L){ return n + (L.setups ? L.setups.length : 0); }, 0);
     __og.last = { at: Date.now(), mark: mark, lanes: lanes, setups: [].concat.apply([], lanes.map(function(L){ return L.setups || []; })) };
 
+    /* hg-v1005: the fundamental stack across every lane's setups, BEFORE
+       the board and the picks are computed from them — a blackout refuses
+       every directional setup (both pick slots stay empty and the board
+       says why), a decisive headwind demotes. The pass needs s.sym, which
+       the lane loop already stamps. */
+    var ogFundBlackout = false;
+    try{
+      var ogFbFn = (typeof W.hgFundamentalBlackout === 'function') ? W.hgFundamentalBlackout : null;
+      if (ogFbFn) ogFundBlackout = ogFbFn('XAUUSD') === true;
+    }catch(eFB){ ogFundBlackout = false; }
+    try{
+      var ogFsFn = (typeof W.hgFundamentalScanCands === 'function') ? W.hgFundamentalScanCands : null;
+      if (ogFsFn){
+        var ogAll = [];
+        for (var ogi = 0; ogi < lanes.length; ogi++){ ogAll = ogAll.concat(lanes[ogi].setups || []); }
+        ogFsFn(ogAll, { scanner: 'optigold' });
+      }
+    }catch(eFS){}
     var note = 'mark is the last closed ' + markLane.cfg.interval + ' bar from ' + esc(String(markLane.src || 'gold'))
       + ' · same rule on every lane: swing 5 · ATR 14 · stop 1.5×ATR · target 2R'
       + ' · ' + total + ' setup(s) across ' + lanes.length + ' lanes'
       + ' · ' + new Date().toISOString().slice(11, 19) + ' UTC';
-    render(ui, lanes, mark, note);
-    if (ui && ui.stat) ui.stat.textContent = total + ' setup(s) · mark ' + fmt(mark);
+    render(ui, lanes, mark, note, { fundBlackout: ogFundBlackout });
+    if (ui && ui.stat) ui.stat.textContent = total + ' setup(s) · mark ' + fmt(mark)
+      + (ogFundBlackout ? ' · EVENT BLACKOUT — no fresh setup forms' : '');
     __og.ranOnce = true;
     return 'ok';
   }catch(e){
@@ -1180,6 +1246,10 @@ W.__ogAtr = ogAtr;
 W.__ogFwdRows = ogFwdRows;
 
 W.HG_tabs = W.HG_tabs || [];
-W.HG_tabs.push({ id: 'optigold', label: 'OPTI GOLD', mount: mountOptiGold, refresh: refreshOptiGold });
+/* hg-v1005: the stack seams, on the registration object and one export for
+   the guard — ogFundBlocked is the predicate the pick loop reads. */
+W.__ogFundBlocked = ogFundBlocked;
+W.HG_tabs.push({ id: 'optigold', label: 'OPTI GOLD', mount: mountOptiGold, refresh: refreshOptiGold,
+                 fundBlocked: ogFundBlocked, fundPanelHtml: ogFundPanelHtml });
 
 })();

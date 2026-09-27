@@ -2,6 +2,14 @@
 HARDGATE — goldcoint.js
 GOLD COINT tab: Engle–Granger cointegration context ledger for gold pairs.
 CONTEXT only — no spread execution path. Classic script + HG_tabs.
+
+FUNDAMENTAL STACK (hg-v1005, fundamental-stack.js): the full gold board —
+real rates (FRED DFII10 first, DXY+US10Y heuristic second), CFTC COT
+crowding, the USD calendar, and the DXY / US10Y / gold-silver priors —
+renders beside the cointegration ledger, from the ONE shared panel
+implementation every gold desk uses. This tab forms NO setups, so the
+stack demotes and crowns nothing here: the board is context beside the
+context. Absent stack -> the ledger is byte-identical to before.
 ========================================================================= */
 (function(){
 'use strict';
@@ -23,6 +31,19 @@ function row(label, coint, barrier){
     + '<td class="hg-num">' + (coint.spreadZ != null ? coint.spreadZ.toFixed(2) : '—') + '</td>'
     + '<td class="hg-num">' + (coint.halfLifeBars != null ? Math.round(coint.halfLifeBars) : '—') + '</td>'
     + '<td class="note">' + esc(veto ? veto.reason : coint.note) + '</td></tr>';
+}
+
+/* hg-v1005: the gold fundamental board, from the ONE shared
+   implementation — reached through the HG_tabs registration (the hg-v967
+   route), zero new module-scope exports. Never throws; absent stack -> ''. */
+function gcFundPanelHtml(){
+  try{
+    var rFn = (typeof W.hgFundamentalRegime === 'function') ? W.hgFundamentalRegime : null;
+    var pFn = (typeof W.hgFundamentalPanelHtml === 'function') ? W.hgFundamentalPanelHtml : null;
+    if (!rFn || !pFn) return '';
+    var r = rFn('gold');
+    return r ? (pFn(r) || '') : '';
+  }catch(e){ return ''; }
 }
 
 async function fetchSeries(pairFn){
@@ -103,7 +124,7 @@ async function runGoldCoint(ui){
     var tapeNote907 = '';
     if (typeof W.hgGoldTapeNotes === 'function' && goldRows907.length)
       tapeNote907 = W.hgGoldTapeNotes(goldRows907, '1d');
-    if (ui && ui.body) ui.body.innerHTML = tapeNote907 + html;
+    if (ui && ui.body) ui.body.innerHTML = gcFundPanelHtml() + tapeNote907 + html;   /* hg-v1005: the fundamental board beside the ledger */
     if (ui && ui.stat) ui.stat.textContent = 'updated ' + new Date().toISOString().slice(11, 19) + ' UTC';
     __gc.ranOnce = true;
     return 'ok';
@@ -133,6 +154,7 @@ async function refreshGoldCoint(){
 }
 
 W.HG_tabs = W.HG_tabs || [];
-W.HG_tabs.push({ id: 'goldcoint', label: 'GOLD COINT', mount: mountGoldCoint, refresh: refreshGoldCoint });
+W.HG_tabs.push({ id: 'goldcoint', label: 'GOLD COINT', mount: mountGoldCoint, refresh: refreshGoldCoint,
+                 fundPanelHtml: gcFundPanelHtml });   /* hg-v1005 */
 
 })();

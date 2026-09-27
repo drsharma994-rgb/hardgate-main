@@ -20,6 +20,17 @@ hgSolidityGrade with tab='NEWGOLD:1H'|'NEWGOLD:4H' and kind='TRIPLE-CONF',
 records to the forward log so v685 veto / v687 PRIME / v689 kill-list all
 apply automatically.
 
+hg-v1005: the desk answers to the FUNDAMENTAL STACK (fundamental-stack.js).
+Every fire's direction is gated against sentiment, positioning, real rates,
+COT and the macro calendar BEFORE the forward log and the render: a
+red-folder blackout refuses and a 2+-net-vote headwind demotes, and either
+stands the card down from TRADABLE with the reason named on the NOT A
+TICKET line — the same v698 semantics (a level on a card the desk declined
+to call tradable is an invitation), a separate named layer beside the
+formation verdict, never a recalibration of it. The ledger's ticket flag
+reads the same verdict, and the full gold board panel renders above the
+cards.
+
 Registers window.HG_tabs so the shell can render it.
 
 Feature-checked throughout: missing getXAUCandles, missing plans helpers,
@@ -1617,6 +1628,27 @@ async function ngRunScan(){
       }
     } catch(eOmniLane){}
 
+    /* hg-v1005: THE FUNDAMENTAL STACK, per card, BEFORE the log and the
+       render. Each fire's direction answers to sentiment, positioning, real
+       rates, COT and the calendar: a red-folder blackout REFUSES and a
+       2+-net-vote headwind DEMOTES, and either stands the card down from
+       TRADABLE (cardHtml reads r.fund through ngFundBlockedRec) with the
+       reason named underneath. The formation verdict is never recalibrated
+       — this is a separate, named layer beside it. The scan-level probe is
+       carried on the pack so the stat line can name a blackout. */
+    var ngFundBlackout = false;
+    try {
+      var ngFbFn = gfn('hgFundamentalBlackout');
+      if (ngFbFn) ngFundBlackout = ngFbFn('XAUUSD') === true;
+    } catch(eFB){ ngFundBlackout = false; }
+    try {
+      for (var nfi = 0; nfi < results.length; nfi++){
+        var nfr = results[nfi];
+        if (!nfr || !nfr.setup || !nfr.setup.dir) continue;
+        nfr.fund = ngFundGateFor(nfr.setup.dir);
+      }
+    } catch(eFund){}
+
     /* Forward log every firing so the accumulated evidence grows. */
     try {
       if (typeof W.hgFwdRecordScan === 'function'){
@@ -1640,7 +1672,11 @@ async function ngRunScan(){
                shared solidity lead bar. Every fire is still RECORDED; the
                flag only says which ones the desk called tradable. */
             ticket: !!(r.formation && r.formation.tradable === true
-                       && r.solidity && r.solidity.leadEligible)
+                       && r.solidity && r.solidity.leadEligible
+                       /* hg-v1005: a card the fundamental stack refused or
+                          demoted is never a ticket in the ledger either —
+                          the log must not count what the desk stood down. */
+                       && !ngFundBlockedRec(r))
           }], { horizonBars: 30 });
         }
         /* Also settle any prior open records for this scan's rows. */
@@ -1729,6 +1765,7 @@ async function ngRunScan(){
       sessionEdge: ngDeepFreeze(sessionEdge),
       history: ngDeepFreeze(history) };
     return { status: results.length ? 'refreshed' : 'empty', results: results, errors: errors,
+      fundBlackout: ngFundBlackout,   /* hg-v1005 */
       checklist: __ng.snap.checklist, forming: __ng.snap.forming, watch: __ng.snap.watch,
       hybridLaneStatus: __ng.snap.hybridLaneStatus,
       /* Pack 907: the render layer cannot judge a tape it never sees. The
@@ -1755,6 +1792,59 @@ function ngGeoLine(s){
     if (typeof fn !== 'function' || !s) return '';
     return fn({ dir: s.dir, entry: s.entry, stop: s.stop, t1: s.t1 },
               s.mark, { cls: 'note warn', style: 'margin-top:6px;font-size:11px' }) || '';
+  }catch(e){ return ''; }
+}
+
+/* hg-v1005: the fundamental-stack seams. ngFundGateFor asks the stack
+   about one direction on XAUUSD (null when the stack is not loaded — a
+   dark board blocks nothing). ngFundBlockedRec is the single predicate the
+   tradable line, the ticket flag and the stat tally all read, so they can
+   never disagree about whether the stack stood a card down. */
+function ngFundGateFor(dir){
+  try{
+    var fn = gfn('hgFundamentalGate');
+    if (!fn || (dir !== 'long' && dir !== 'short')) return null;
+    return fn('XAUUSD', dir, { scanner: 'newgold' });
+  }catch(e){ return null; }
+}
+
+function ngFundBlockedRec(r){
+  return !!(r && r.fund && (r.fund.refuse === true || r.fund.demote === true));
+}
+
+/* The verdict chip — the same .gpip every gold desk prints, fed by the
+   gate the scan stamped on the record. '' when the stack saw nothing. */
+function ngFundChipHtml(r){
+  try{
+    var fn = gfn('hgFundamentalChipHtml');
+    var g = r && r.fund;
+    if (!fn || !g || !Array.isArray(g.chips) || !g.chips.length) return '';
+    return fn(g) || '';
+  }catch(e){ return ''; }
+}
+
+/* The NOT A TICKET reason line. The formation's own reasons still say
+   what the technical verdict decided; when the fundamental stack stood
+   the card down, its verdict LEADS the line so the two layers are never
+   confused — the reader can tell "the structure did not form" from "the
+   structure formed into a blackout". */
+function ngNotTicketReasons(r, fm){
+  var out = ((fm && fm.reasons) || ['formation verdict unavailable']).slice();
+  if (ngFundBlockedRec(r)){
+    out.unshift(r.fund.refuse === true
+      ? ('EVENT BLACKOUT \u2014 ' + (r.fund.reason || 'a red-folder macro print is inside its window'))
+      : ('FUNDAMENTAL HEADWIND \u2014 ' + (r.fund.reason || 'the fundamental stack stands decisively against this direction')));
+  }
+  return out;
+}
+
+/* The full gold fundamental board above the cards — the same panel every
+   gold desk shows. */
+function ngFundPanelHtml(){
+  try{
+    var rFn = gfn('hgFundamentalRegime'), pFn = gfn('hgFundamentalPanelHtml');
+    if (!rFn || !pFn) return '';
+    return pFn(rFn('gold')) || '';
   }catch(e){ return ''; }
 }
 
@@ -1792,7 +1882,12 @@ function cardHtml(r){
      aside, keeps its evidence on screen and loses the tradable styling and
      its levels \u2014 a level on a card the desk declined to call tradable is an
      invitation. Nothing is hidden: the reason is printed underneath. */
-  var tradable = !!(fm && fm.tradable === true);
+  /* hg-v1005: the fundamental stack's verdict stands a card down from
+     TRADABLE exactly the way the formation verdict does — a level on a
+     card the desk declined to call tradable is an invitation, so a
+     blackout-refused or headwind-demoted fire prints its evidence and the
+     stack's reason, and no levels. */
+  var tradable = !!(fm && fm.tradable === true) && !ngFundBlockedRec(r);
   var isBest = tradable && r.solidity && r.solidity.leadEligible;
   var formChip = '';
   try {
@@ -1822,7 +1917,7 @@ function cardHtml(r){
       + '<div class="note" style="margin-top:6px;font-size:11px;opacity:0.7">Risk ' + fmtF(s.riskPct, 2) + '% \u00b7 not a win probability</div>'
       + ngGeoLine(s))
     : ('<div class="note warn" style="margin-top:6px;font-size:11px">NOT A TICKET \u2014 no levels printed. '
-      + esc(((fm && fm.reasons) || ['formation verdict unavailable']).join(' \u00b7 ')) + '</div>');
+      + esc(ngNotTicketReasons(r, fm).join(' \u00b7 ')) + '</div>');
 
   return '<div class="card ' + (s.dir === 'long' ? 'long' : 'short') + (isBest ? ' best' : '')
     + '" data-ng-form="' + esc((fm && fm.state) || 'UNKNOWN') + '">'
@@ -1831,6 +1926,7 @@ function cardHtml(r){
     + (formChip ? ' ' + formChip : '')
     + (solChip ? ' ' + solChip : '')
     + (smcChip ? ' ' + smcChip : '')
+    + ngFundChipHtml(r)   /* hg-v1005: the stack's verdict beside the rest */
     + '</div>'
     + '<div class="mini">'
     + '<span class="k">ml baseline</span><span>' + fmtF(s.ml.baseline, 2) + ' \u00b7 ' + esc(s.ml.regime) + '</span>'
@@ -2162,20 +2258,25 @@ function mount(el){
     }
     var fires = results.filter(function(r){ return r.setup; });
     if (fires.length){
-      cardsEl.innerHTML = tapeNote + fires.map(cardHtml).join('');
+      /* hg-v1005: the gold fundamental board renders above the cards on
+         every outcome, and the formed tally reads the SAME predicate the
+         cards do — a stack-stood-down fire counts as WATCH, never as
+         formed, or the tally would disagree with the cards under it. */
+      cardsEl.innerHTML = ngFundPanelHtml() + tapeNote + fires.map(cardHtml).join('');
       /* v698: a fire is not a ticket. Every fire still renders; the tally
          says how many of them FORMED and how many are WATCH, so the reader
          can never mistake the one count for the other. */
-      var nTicket = fires.filter(function(r){ return r.formation && r.formation.tradable === true; }).length;
+      var nTicket = fires.filter(function(r){ return r.formation && r.formation.tradable === true && !ngFundBlockedRec(r); }).length;
       var nWatch = fires.length - nTicket;
       setStat(fires.length + ' fire' + (fires.length === 1 ? '' : 's')
         + ' \u00b7 ' + nTicket + ' formed'
         + (nWatch ? (' \u00b7 ' + nWatch + ' WATCH (short of 3 confirmation classes or stood aside)') : '')
+        + (pack.fundBlackout ? ' \u00b7 EVENT BLACKOUT \u2014 no fresh setup forms' : '')
         + ' \u00b7 ' + results.length + ' horizon' + (results.length === 1 ? '' : 's') + ' scanned'
         + ' \u00b7 ' + new Date().toISOString().slice(11, 19) + ' UTC');
     } else {
       /* Show the no-fire rows anyway so the user sees which horizons were scanned and why they didn't fire. */
-      cardsEl.innerHTML = tapeNote + results.map(cardHtml).join('');
+      cardsEl.innerHTML = ngFundPanelHtml() + tapeNote + results.map(cardHtml).join('');
       emptyEl.style.display = results.length ? 'none' : 'block';
       setStat(results.length
         ? (results.length + ' horizon' + (results.length === 1 ? '' : 's') + ' scanned \u00b7 no triple-confirmation fires \u00b7 '
@@ -2286,6 +2387,9 @@ W.ngBoardHtml = ngBoardHtml;
 W.ngCardHtml = cardHtml;
 W.newGoldScan = function(){ return __ng.snap; };
 W.HG_tabs = W.HG_tabs || [];
-W.HG_tabs.push({ id: 'newgold', label: 'NEW GOLD', mount: mount, refresh: ngRefresh });
+W.HG_tabs.push({ id: 'newgold', label: 'NEW GOLD', mount: mount, refresh: ngRefresh,
+                 /* hg-v1005: the stack seams ride the registration object */
+                 fundamentalGate: ngFundGateFor, fundBlocked: ngFundBlockedRec,
+                 fundamentalChip: ngFundChipHtml, fundPanelHtml: ngFundPanelHtml });
 
 })();

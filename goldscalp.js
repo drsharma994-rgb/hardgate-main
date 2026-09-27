@@ -1719,32 +1719,17 @@ function gsApplyOneAtATime(ranked, open){
    PURE apart from the gate it calls: marks what it demotes and reports the
    counts, so the scan line and the tests read the same object the scan
    acted on rather than recomputing it. */
+/* hg-v1005: the pass itself moved into fundamental-stack.js
+   (hgFundamentalScanCands) so every gold desk runs the ONE definition —
+   this delegate keeps the desk's scanner label and its absent-stack
+   no-op contract. Behavior is byte-identical to the v1004 loop. */
 function gsFundamentalScan(ranked){
-  var gateFn = gfn('hgFundamentalGate');
-  if (!gateFn || !Array.isArray(ranked)) return { demoted: 0, gated: 0 };
-  var demoted = 0, gated = 0;
-  for (var i = 0; i < ranked.length; i++){
-    var c = ranked[i];
-    if (!c || !c.sym || !c.dir || c.dropped || c.vetoed || c.locked) continue;
-    var g = null;
-    try{ g = gateFn(c.sym, c.dir, { scanner: 'goldscalp' }); }catch(eG){ g = null; }
-    if (!g || (g.refuse !== true && g.demote !== true && !(g.chips && g.chips.length))) continue;
-    gated++;
-    c.fundGate = { refuse: g.refuse === true, demote: g.demote === true,
-                   chips: (g.chips || []).slice(), reason: g.reason || '',
-                   asset: g.asset || 'gold',
-                   regime: g.regime ? { bulls: g.regime.bulls, bears: g.regime.bears, checked: g.regime.checked } : null };
-    if (g.demote === true){
-      c.demoted = true;
-      if (!Array.isArray(c.stamps)) c.stamps = [];
-      if (c.stamps.indexOf('FUNDAMENTAL HEADWIND') < 0) c.stamps.push('FUNDAMENTAL HEADWIND');
-      var gn = Array.isArray(c.gateNotes) ? c.gateNotes.slice() : [];
-      gn.push(g.reason || 'fundamental headwind — 2+ net checked votes against this direction');
-      c.gateNotes = gn;
-      demoted++;
-    }
-  }
-  return { demoted: demoted, gated: gated };
+  var scanFn = gfn('hgFundamentalScanCands');
+  if (!scanFn || !Array.isArray(ranked)) return { demoted: 0, gated: 0 };
+  try{
+    var res = scanFn(ranked, { scanner: 'goldscalp' });
+    return res || { demoted: 0, gated: 0 };
+  }catch(e){ return { demoted: 0, gated: 0 }; }
 }
 
 /* The card/banner chip is the stack's own renderer reading the verdict this

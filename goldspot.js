@@ -36,6 +36,16 @@ null before the first successful run, otherwise a DEEP-FROZEN deep copy:
 (i.e. the goldBasisSignal result PLUS `at`). A failed re-run (spot and perp
 both down) keeps the PREVIOUS good snapshot with its original `at` — good
 data is never replaced by a failed run.
+
+FUNDAMENTAL STACK (hg-v1005, fundamental-stack.js): the full gold
+fundamental board — real rates (FRED DFII10 first, DXY+US10Y heuristic
+second), CFTC COT crowding, the USD calendar, and the DXY / US10Y /
+gold-silver priors — renders beside the basis panel, from the ONE shared
+panel implementation every gold desk uses. This tab forms NO setups (its
+basis verdict feeds the gold desks' tallies as the positioning leg), so
+the stack demotes and crowns nothing here: the board is context beside
+the monitor. Reached through the HG_tabs registration — the Exports list
+above is unchanged. Absent stack -> the panel is byte-identical.
 ========================================================================= */
 (function(){
 'use strict';
@@ -74,6 +84,19 @@ function gfn(name){
   try{ if (typeof globalThis !== 'undefined' && typeof globalThis[name] === 'function') return globalThis[name]; }catch(e){}
   try{ if (typeof window !== 'undefined' && window && typeof window[name] === 'function') return window[name]; }catch(e){}
   return null;
+}
+
+/* hg-v1005: the gold fundamental board, from the ONE shared
+   implementation (fundamental-stack.js) — reached through the HG_tabs
+   registration, zero new module-scope exports. Never throws; absent
+   stack -> ''. */
+function gsFundPanelHtml(){
+  try{
+    var rFn = gfn('hgFundamentalRegime'), pFn = gfn('hgFundamentalPanelHtml');
+    if (!rFn || !pFn) return '';
+    var r = rFn('gold');
+    return r ? (pFn(r) || '') : '';
+  }catch(e){ return ''; }
 }
 
 /* fetch JSON with timeout; null on any failure (never throws) */
@@ -328,7 +351,9 @@ async function runGoldSpot(ui, opts){
     if (ui && ui.out){
       if (!data.spot && !data.perp){
         var why = (data.perpInfo && data.perpInfo.reason) ? (' Perp: ' + data.perpInfo.reason + '.') : '';
-        ui.out.innerHTML = '<div class="empty">No gold basis data available — gold-api.com spot (direct and via /api/proxy) '
+        /* hg-v1005: the fundamental board renders even when the basis legs
+           are both down — it depends on neither. */
+        ui.out.innerHTML = gsFundPanelHtml() + '<div class="empty">No gold basis data available — gold-api.com spot (direct and via /api/proxy) '
           + 'and the Binance perp mark both failed.' + esc(why) + ' Check network, then re-run.</div>';
         setNote(ui, 'all sources unavailable — showing empty state.', true);
       } else {
@@ -356,7 +381,7 @@ async function runGoldSpot(ui, opts){
         if (data.perp && data.perp.degraded) degraded.push('XAUUSDT (using PAXGUSDT)');
         if (data.perp && data.perp.fundingPct !== null && (!data.finfo || !data.finfo[data.perp.symbol]))
           degraded.push('funding interval (assumed 8h)');
-        ui.out.innerHTML = renderBasisPanel(data, sig);
+        ui.out.innerHTML = gsFundPanelHtml() + renderBasisPanel(data, sig);   /* hg-v1005: the fundamental board beside the monitor */
         setNote(ui, 'done · ' + new Date().toISOString().slice(11, 19) + ' UTC'
           + (degraded.length ? ' — degraded: ' + degraded.join(', ') : ''), degraded.length > 0);
       }
@@ -417,6 +442,7 @@ if (typeof window !== 'undefined'){
     try{ return __gs.stateSnap ? gsStateView(__gs.stateSnap) : null; }catch(e){ return null; }
   };
   window.HG_tabs = window.HG_tabs || [];
-  window.HG_tabs.push({ id: 'goldspot', label: 'GOLD SPOT', mount: mount, refresh: refreshGoldSpot });
+  window.HG_tabs.push({ id: 'goldspot', label: 'GOLD SPOT', mount: mount, refresh: refreshGoldSpot,
+                        fundPanelHtml: gsFundPanelHtml });   /* hg-v1005 */
 }
 })();

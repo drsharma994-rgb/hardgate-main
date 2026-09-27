@@ -118,6 +118,31 @@ flight discards that scan whole (generation-guarded): its cards are never
 painted, its snapshots never published, its picks never recorded — the
 board a switch cleared can never be repainted by a stale async scan.
 
+FUNDAMENTAL STACK (hg-v1005, fundamental-stack.js) — the combined
+fundamental + sentiment + positioning gate hg-v1004 proved on GOLD SCALP,
+run HERE on the merged five-engine board, once per scan:
+  - every aggregated candidate is stamped sym XAUUSD where a lane left it
+    blank and passed through hgFundamentalScanCands — the ONE house
+    leadership loop: 2+ NET checked votes AGAINST the direction (real
+    rates: FRED DFII10 first, DXY+US10Y heuristic second; CFTC COT
+    crowding — the same feeds the source desks already score as points)
+    demote the card, stamped FUNDAMENTAL HEADWIND with the reason in
+    gateNotes, and this desk's own lead invariant does the rest — a
+    demoted card is never crowned. Tailwinds and extremes CHIP only:
+    there is no tally here to double-count;
+  - a CHECKED red-folder blackout crowns NOTHING this scan: the crown
+    guard lives in selectHorizon (provenBy still stamps — the card keeps
+    its measured record and its board place — but no banner, and with no
+    crowned pick nothing reaches the forward ledger), and horizonHTML
+    heads the horizon with an honest EVENT BLACKOUT line above the
+    uncrowned cards instead of a WHY SILENT that would blame the engines;
+  - the full gold board (real rates / COT / calendar / DXY·US10Y·GSR
+    priors) renders beside every scan outcome (gdFundPanelHtml, spliced
+    ahead of the cards), every card wears the compact verdict chip from
+    the at-scan read (c.fundGate), and the snapshot carries fundBlackout
+    so the refusal to crown is itself auditable.
+  An UNCHECKED calendar refuses nothing — a dark board blocks nothing.
+
 Classic script, no build step, loads AFTER the engines it polls (all
 optional). Never throws at load, mount, scan or refresh: every external
 global is feature-checked (gfn), every network leg is async with its own
@@ -147,7 +172,9 @@ stale other-side picks survive):
                    otherSide },
     swing: { … same shape … }, tape, enginesDark: [names…],
     provenSet: [{key,horizon,source,n?,gross?,net?,why?,tab?,stats?}],
-    twinWithheld: [{key,horizon,n,net,twin:{twin,n,winRate,netXm,z,vetoed}}], at }
+    twinWithheld: [{key,horizon,n,net,twin:{twin,n,winRate,netXm,z,vetoed}}],
+    fundBlackout (hg-v1005: true when a CHECKED red-folder window held
+    every crown this scan; false on a clear OR an unchecked calendar), at }
 BRAIN STATE — window.goldDirectionState():
   { results: [{ dir, horizon, grade, source }], at } | null — one row per
   crowned pick, deep-frozen, failed re-runs keep the previous good snapshot.
@@ -1053,7 +1080,7 @@ function cmpCands(a, b){
   if (ka.tally !== kb.tally) return kb.tally - ka.tally;
   return kb.rr - ka.rr;
 }
-function selectHorizon(all, side, horizon, provenEntries){
+function selectHorizon(all, side, horizon, provenEntries, fundBlackout){
   var matched = [], rejected = [], otherSide = 0, i;
   for (i = 0; i < all.length; i++){
     var c = all[i];
@@ -1091,7 +1118,14 @@ function selectHorizon(all, side, horizon, provenEntries){
     var pv = provenOf(m, provenEntries);
     if (pv){
       m.provenBy = pv;
-      if (!pick) pick = m;
+      /* hg-v1005: a CHECKED red-folder blackout crowns NOTHING — the
+         proven card keeps its measured record on the board (provenBy
+         still stamps, the chip still paints, the ledger of evidence is
+         untouched) but no fresh setup LEADS into the print, and with no
+         crowned pick recordForward writes nothing this scan. An unchecked
+         calendar never reaches here as true — a dark board crowns as
+         usual. */
+      if (!pick && !fundBlackout) pick = m;
     } else {
       unproven.push(m);
     }
@@ -1103,10 +1137,34 @@ function selectHorizon(all, side, horizon, provenEntries){
     }
   }
   return { pick: pick, matched: matched, demotedTop: demotedTop, unproven: unproven,
-           rejected: rejected, otherSide: otherSide };
+           rejected: rejected, otherSide: otherSide, fundBlackout: !!fundBlackout };
 }
 
 /* ---------------- renderers ---------------- */
+/* hg-v1005: the fundamental-stack surface, from the ONE shared
+   implementation (fundamental-stack.js) — reached through the HG_tabs
+   registration (the hg-v967 route), zero new module-scope exports.
+   gdFundChipHtml paints the compact at-scan verdict the scan stamped on
+   the card (c.fundGate: EVENT BLACKOUT / FUNDAMENTAL HEADWIND 2v0 /
+   TAILWIND / extremes); gdFundPanelHtml renders the full gold board
+   beside every scan outcome. Absent stack or absent verdict -> '' — the
+   card and the board are byte-identical to before. */
+function gdFundChipHtml(c){
+  try{
+    var fn = gfn('hgFundamentalChipHtml');
+    var g = c && c.fundGate;
+    if (!fn || !g) return '';
+    return fn(g) || '';
+  }catch(e){ return ''; }
+}
+function gdFundPanelHtml(){
+  try{
+    var rFn = gfn('hgFundamentalRegime'), pFn = gfn('hgFundamentalPanelHtml');
+    if (!rFn || !pFn) return '';
+    var r = rFn('gold');
+    return r ? (pFn(r) || '') : '';
+  }catch(e){ return ''; }
+}
 function srcChip(c){ return '<span class="gdx-src">' + esc(c.source) + '</span>'; }
 function tapeStamp(c, tape){
   if ((tape !== 'long' && tape !== 'short') || c.dir === tape) return '';
@@ -1192,6 +1250,7 @@ function cardHTML(c, tape, pxNow, crowned){
      carries a context. Context, never a verdict — it ranks nothing. Absent
      helper or absent c.smc -> '' and the card is byte-identical to before. */
   try{ if (typeof W.hgSmcChipHtml === 'function') chips += (W.hgSmcChipHtml(c) || ''); }catch(eSmcChip){}
+  chips += gdFundChipHtml(c);   /* hg-v1005: the fundamental-stack verdict at scan time */
   if ((tape === 'long' || tape === 'short') && c.dir !== tape)
     chips += '<span class="gdx-chip warn">AGAINST DESK TAPE — your call</span>';
   else if ((tape === 'long' || tape === 'short') && c.dir === tape)
@@ -1283,7 +1342,24 @@ function heldListHTML(lines, title){
 function horizonHTML(sel, side, horizon, tape, pxNow, enginesDark){
   var h = '<div class="gdx-hzhead">BEST ' + esc(horizon) + ' — ' + esc(side.toUpperCase()) + '</div>';
   var unpr = sel.unproven || [];
-  if (sel.pick){
+  if (sel.fundBlackout){
+    /* hg-v1005: a CHECKED red-folder blackout held every crown this scan.
+       The honest header names the real cause — the CALENDAR, not the
+       engines — and every matched card still paints below it, uncrowned
+       and wearing its own verdict chips (EVENT BLACKOUT included). Never
+       the WHY SILENT line: the engines spoke; the window held the crown.
+       Matched-minus-unproven, same split as the crowned branch, so the
+       unproven list below still renders each card exactly once. */
+    h += '<div class="gdx-demhead">EVENT BLACKOUT — a checked red-folder macro print is inside its window: '
+      + 'no fresh ' + esc(horizon) + ' setup is crowned into the print'
+      + (sel.matched.length
+          ? ' — ' + sel.matched.length + ' candidate' + (sel.matched.length === 1 ? '' : 's')
+            + ' paint below for information only (none crowned, none recorded)'
+          : ' — and no ' + esc(side.toUpperCase()) + ' candidates formed this scan anyway')
+      + '.</div>';
+    h += sel.matched.filter(function(c){ return unpr.indexOf(c) < 0; })
+      .map(function(c){ return cardHTML(c, tape, pxNow, false); }).join('');
+  } else if (sel.pick){
     h += bannerHTML(sel.pick, horizon, tape, pxNow);
     /* main list = matched minus the unproven cards, which render below under
        their own honest header — never mixed in as if crownable */
@@ -1392,6 +1468,10 @@ function publishScan(side, scalpSel, swingSel, tape, enginesDark, heldAll, at, p
                       beside the set so a reader of the snapshot can see the
                       set's true size and why it is that size. */
                    twinWithheld: JSON.parse(JSON.stringify(twinHeld || [])),
+                   /* hg-v1005: the blackout that held every crown this scan
+                      (false on a clear OR an unchecked calendar) — the
+                      refusal to crown is itself auditable. */
+                   fundBlackout: !!(scalpSel.fundBlackout || swingSel.fundBlackout),
                    at: at };
   }catch(e){ /* snapshotting must never break the scan */ }
 }
@@ -1597,6 +1677,34 @@ async function runScan(ui, scanSt){
       }
       all = kept;
     })();
+    /* hg-v1005: THE FUNDAMENTAL STACK AT THE AGGREGATOR. This desk polls
+       five engines and crowns the best card on the user's side — so the
+       house stack speaks HERE, once, on the merged board:
+         - the blackout probe is direction-free (hgFundamentalBlackout):
+           TRUE only when the calendar leg is CHECKED and inside a
+           red-folder window — an unchecked calendar refuses nothing;
+         - hgFundamentalScanCands is the ONE house leadership loop: 2+ NET
+           checked votes AGAINST a direction demote that card (stamped
+           FUNDAMENTAL HEADWIND, reason in gateNotes) — and this desk's
+           own lead invariant does the rest, a demoted card is never
+           crowned. Tailwinds/extremes CHIP only (no tally here).
+       Every lane is a gold engine, so a candidate with no sym is XAUUSD
+       — stamped before the pass (the shared loop keys on sym + dir, and
+       normCand's normalized cards carry no sym of their own). A dark
+       board touches nothing. */
+    var fundBlackout = false;
+    try{
+      var fundBlackoutFn = gfn('hgFundamentalBlackout');
+      if (fundBlackoutFn) fundBlackout = fundBlackoutFn('XAUUSD') === true;
+    }catch(eFB){ fundBlackout = false; }
+    var fundScanRes = null;
+    try{
+      var fundScanFn = gfn('hgFundamentalScanCands');
+      if (fundScanFn){
+        for (i = 0; i < all.length; i++){ if (all[i] && !all[i].sym) all[i].sym = 'XAUUSD'; }
+        fundScanRes = fundScanFn(all, { scanner: 'golddirection' });
+      }
+    }catch(eFS){ fundScanRes = null; }
     var tape = '';
     try{ tape = deskTapeOf(gold) || ''; }catch(eTp){ tape = ''; }
     /* hg-v702: resolve the proven whitelist from the live sources NOW, so
@@ -1607,8 +1715,8 @@ async function runScan(ui, scanSt){
     var twinHeld = provenBuilt.withheld || [];
     /* SELECTION — per horizon, fail closed. The chosen side is the user's;
        it is NEVER flipped here, tape agreement or not. */
-    var scalpSel = selectHorizon(all, side, 'SCALP', provenSet);
-    var swingSel = selectHorizon(all, side, 'SWING', provenSet);
+    var scalpSel = selectHorizon(all, side, 'SCALP', provenSet, fundBlackout);
+    var swingSel = selectHorizon(all, side, 'SWING', provenSet, fundBlackout);
 
     /* SMC CONTEXT (hg-v728) — RECORD-ONLY. One read per card that can paint,
        fed this desk's own closed bars: 15m for SCALP, 4h for SWING, 1h when
@@ -1670,7 +1778,11 @@ async function runScan(ui, scanSt){
           if (rws && rws.length) tapeNote907 += W.hgGoldTapeNotes(rws, L[1]);
         });
       }
-      ui.cards.innerHTML = tapeNote907 + html;
+      /* hg-v1005: the full gold fundamental board (real rates / COT /
+         calendar / DXY·US10Y·GSR priors) beside every scan outcome — the
+         same panel every gold desk renders, from the ONE shared
+         implementation. Absent stack -> '' and the board is unchanged. */
+      ui.cards.innerHTML = gdFundPanelHtml() + tapeNote907 + html;
       if (ui.empty) ui.empty.style.display = 'none';
     }
 
@@ -1695,6 +1807,11 @@ async function runScan(ui, scanSt){
       'SWING ' + (swingSel.pick ? 'pick: ' + swingSel.pick.source + ' ' + (swingSel.pick.stratKey || '') : (swingSel.demotedTop.length ? 'demoted-only (no banner)' : 'silent'))];
     if (dupCollapsed) statBits.push(dupCollapsed + ' duplicate card' + (dupCollapsed === 1 ? '' : 's')
       + ' collapsed (same desk · strategy · side · levels — counted once, never twice)');
+    /* hg-v1005: the stack's say on the stat line — the blackout that held
+       every crown, and the headwind demotes the lead invariant enforced */
+    if (fundBlackout) statBits.push('EVENT BLACKOUT — checked red-folder window: nothing crowned, nothing recorded');
+    if (fundScanRes && fundScanRes.demoted > 0) statBits.push('FUNDAMENTAL STACK — ' + fundScanRes.demoted
+      + ' candidate' + (fundScanRes.demoted === 1 ? '' : 's') + ' demoted to watch (2+ net checked votes against; they paint, they never lead)');
     if (enginesDark.length) statBits.push(enginesDark.length + ' engine' + (enginesDark.length === 1 ? '' : 's') + ' dark');
     statBits.push(secs + 's · ' + new Date().toISOString().slice(11, 19) + ' UTC');
     setStat(ui, statBits.join(' · '), false);
@@ -1860,7 +1977,16 @@ W.goldDirectionScan = function(){
   try{ return __scanSnap ? __stateView(__scanSnap) : null; }catch(e){ return null; }
 };
 W.HG_tabs = W.HG_tabs || [];
-W.HG_tabs.push({ id: TAB_ID, label: 'GOLD DIRECTION', mount: mount, refresh: goldDirectionRefresh });
+W.HG_tabs.push({ id: TAB_ID, label: 'GOLD DIRECTION', mount: mount, refresh: goldDirectionRefresh,
+                 /* hg-v1005: the fundamental-stack surface, reached through
+                    the registration (the hg-v967 route) — zero new
+                    module-scope exports. fundPanelHtml renders the full
+                    gold board; fundamentalBlackout is the direction-free
+                    red-folder probe the crown guard consults. */
+                 fundPanelHtml: gdFundPanelHtml,
+                 fundamentalBlackout: function(){
+                   try{ var f = gfn('hgFundamentalBlackout'); return f ? f('XAUUSD') === true : false; }catch(e){ return false; }
+                 } });
 W.HG_warmups = W.HG_warmups || [];
 W.HG_warmups.push({ id: TAB_ID, label: 'GOLD DIRECTION', run: gdWarm });
 })();
