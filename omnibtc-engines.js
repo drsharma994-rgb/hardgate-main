@@ -18,6 +18,18 @@ EVIDENCE, not tickets:
   ONCHAIN, TERM BASIS, CARRY, flow-trap / post-gate veto, chart-vision boost.
   Silent = UNCHECKED. They confirm, demote or refuse. They never mint levels.
 
+  hg-v1002 — THE FUNDAMENTAL STACK. The tape is only half the read; the
+  desk now also weighs what the app ALREADY fetches but this tab never
+  read: FEAR & GREED extremes (contrarian, the house S2 80/20 lines),
+  Deribit 25d risk-reversal extremes (the house |8| line), DVOL and BTC
+  dominance as info-only priors (a vol prior and a dominance print never
+  vote), and the event calendar — a red-folder blackout REFUSES, the same
+  severity as the flow veto. A decisive fundamental headwind (2+ net
+  checked votes against the candidate's direction) demotes to watch-only;
+  ONE WITNESS NEVER FLIPS A SETUP. 2+ net votes with the direction print a
+  TAILWIND chip. Chips inform, gates decide: the stack never mints levels,
+  never moves rank math, and an unread feed stays UNCHECKED, never faked.
+
 WHAT THIS FILE WILL NOT DO.
   - Claim 7/7 CLEAN. That badge stays on swingTryClean / scalpTryClean.
     Every extra engine is stamped near or forming.
@@ -90,6 +102,20 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
 
   function ledgerRow(name, state, dir, detail){
     return { name: name, state: state || 'idle', dir: dir || null, detail: detail || '' };
+  }
+
+  function esc(s){
+    return String(s === null || s === undefined ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  /* hg-v1002: index.html keeps its macro reads on a top-level `const S` —
+     reachable from classic scripts by bare name, NEVER on window. Probe
+     both, guard both; TDZ and a missing binding both read as absent. */
+  function hostS(){
+    try{ if (W.S) return W.S; }catch(e0){}
+    try{ if (typeof S !== 'undefined' && S) return S; }catch(e1){}
+    return null;
   }
 
   /* ---- COIL (same gates as runCoilScanLeg) ------------------------- */
@@ -397,6 +423,180 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
     return { candidates: out, ledger: ledger };
   }
 
+  /* ---- hg-v1002: THE FUNDAMENTAL STACK -----------------------------
+     Legs read ONLY feeds the app already fetches. Each leg is
+       { key, label, vote: 'bull'|'bear'|'neutral', state: 'checked'|'unchecked',
+         text, info?, blackout?, extreme? }
+     A leg that was not measured says UNCHECKED — a missing feed is never
+     a neutral vote. info legs (DVOL, BTC.D) are priors: they render, they
+     never vote. news never votes either; its blackout refuses elsewhere.
+     Every threshold below is a house line already enforced elsewhere —
+     F&G 80/20 is the S2 gate, |8| is the P9 risk-reversal line, DVOL
+     85/65/40 is deribitVolClassify. Nothing is recalibrated here. */
+  function hgObtcFundamentalLegs(extra){
+    extra = extra || {};
+    var legs = [];
+    var hS = hostS();
+
+    /* ON-CHAIN — the house composite (mempool.space). A real vote. */
+    var oc = extra.onchain;
+    if (oc && oc.bias){
+      var ocVote = oc.bias === 'bullish' ? 'bull' : (oc.bias === 'bearish' ? 'bear' : 'neutral');
+      var fl = oc.flags || {}, bits = [];
+      if (fl.feeSpike) bits.push('fee spike');
+      if (fl.congestion === 'clogged') bits.push('mempool clogged');
+      if (fl.capitulation) bits.push('capitulation');
+      if (isFinite(fin(oc.hashrateTrendPct))) bits.push('hashrate ' + (+fin(oc.hashrateTrendPct)).toFixed(1) + '%');
+      legs.push({ key: 'onchain', label: 'ON-CHAIN', vote: ocVote, state: 'checked',
+        text: 'bias ' + oc.bias + (bits.length ? ' · ' + bits.join(' · ') : '') });
+    } else {
+      legs.push({ key: 'onchain', label: 'ON-CHAIN', vote: 'neutral', state: 'unchecked',
+        text: 'mempool.space read absent' });
+    }
+
+    /* TERM BASIS — same reads hgObtcEvidenceDecide already gates on. */
+    var term = extra.term;
+    var tReg = term && term.regime;
+    if (tReg){
+      var tVote = (tReg === 'contango' || tReg === 'perp rich') ? 'bear'
+        : (tReg === 'backwardation' || tReg === 'perp cheap') ? 'bull' : 'neutral';
+      legs.push({ key: 'term', label: 'TERM BASIS', vote: tVote, state: 'checked',
+        text: String(tReg) + (tVote === 'bear' ? ' — longs pay to be long' : tVote === 'bull' ? ' — perp cheap / spot leads' : '') });
+    } else {
+      legs.push({ key: 'term', label: 'TERM BASIS', vote: 'neutral', state: 'unchecked',
+        text: 'futures curve read absent' });
+    }
+
+    /* FEAR & GREED — contrarian at the house S2 extremes only. undefined
+       means "never probed" (fall back to the host S); explicit null means
+       "probed, absent" and stays unchecked. */
+    var fng = extra.fng;
+    if (fng === undefined) fng = (hS && hS.fng) ? hS.fng : null;
+    if (fng && isFinite(fin(fng.v))){
+      var fv = +fin(fng.v);
+      var fVote = fv >= 80 ? 'bear' : (fv <= 20 ? 'bull' : 'neutral');
+      legs.push({ key: 'fng', label: 'FEAR & GREED', vote: fVote, state: 'checked',
+        extreme: fVote !== 'neutral',
+        text: fv + ' ' + (fng.c || '')
+          + (fVote === 'bear' ? ' — contrarian bear (house S2 ≥80 line)'
+            : fVote === 'bull' ? ' — contrarian bull (house S2 ≤20 line)'
+            : ' — no extreme, no vote') });
+    } else {
+      legs.push({ key: 'fng', label: 'FEAR & GREED', vote: 'neutral', state: 'unchecked',
+        text: 'alternative.me read absent' });
+    }
+
+    /* 25Δ RISK REVERSAL — Deribit options positioning, state-only (the
+       boot warmup fetched the book; a scan never refetches it). */
+    var opt = extra.options;
+    if (opt === undefined && gfn('deribitOptionsState')){
+      try{ opt = W.deribitOptionsState(); }catch(eO){ opt = null; }
+    }
+    var rr = opt && opt.rr25d;
+    if (rr && isFinite(fin(rr.rr25d))){
+      var rv = +fin(rr.rr25d);
+      var rExt = rr.extreme === true || (rr.extreme === undefined && Math.abs(rv) >= 8);
+      var rBias = rr.bias || (rv > 0 ? 'CALLS RICH' : 'PUTS RICH');
+      var rVote = rExt ? (rBias === 'PUTS RICH' ? 'bear' : 'bull') : 'neutral';
+      legs.push({ key: 'rr25d', label: '25Δ RISK REVERSAL', vote: rVote, state: 'checked',
+        extreme: rExt,
+        text: 'rr ' + rv.toFixed(1) + ' · ' + rBias
+          + (rExt ? ' · extreme (house |8| line)' : ' · inside the |8| line, no vote') });
+    } else {
+      legs.push({ key: 'rr25d', label: '25Δ RISK REVERSAL', vote: 'neutral', state: 'unchecked',
+        text: 'Deribit options snap absent' });
+    }
+
+    /* DVOL — vol prior. INFO ONLY, never a vote. */
+    var dv = extra.dvol;
+    if (dv === undefined && gfn('deribitVolState')){
+      try{ dv = W.deribitVolState(); }catch(eD){ dv = null; }
+    }
+    if (dv && isFinite(fin(dv.dvol))){
+      legs.push({ key: 'dvol', label: 'DVOL (Deribit)', vote: 'neutral', state: 'checked', info: true,
+        extreme: dv.regime === 'extreme',
+        text: 'DVOL ' + (+fin(dv.dvol)).toFixed(1) + ' · ' + (dv.regime || 'normal') + ' — vol prior, never a vote' });
+    } else {
+      legs.push({ key: 'dvol', label: 'DVOL (Deribit)', vote: 'neutral', state: 'unchecked', info: true,
+        text: 'DVOL snap absent' });
+    }
+
+    /* BTC DOMINANCE — house F1 convention: informational, judge it yourself. */
+    var dom = extra.dom;
+    if (dom === undefined) dom = (hS && hS.dom != null) ? hS.dom : null;
+    if (isFinite(fin(dom))){
+      legs.push({ key: 'dom', label: 'BTC DOMINANCE', vote: 'neutral', state: 'checked', info: true,
+        text: (+fin(dom)).toFixed(1) + '% — informational (house F1: judge it yourself)' });
+    } else {
+      legs.push({ key: 'dom', label: 'BTC DOMINANCE', vote: 'neutral', state: 'unchecked', info: true,
+        text: 'coingecko global read absent' });
+    }
+
+    /* EVENT RISK — never a vote. A checked blackout is the stack's one
+       hard refuse; an unchecked calendar says so (hg-v992 honesty). */
+    var news = extra.news;
+    if (news === undefined && gfn('hgNewsRisk')){
+      try{ news = W.hgNewsRisk('BTC'); }catch(eN){ news = null; }
+    }
+    if (news && !news.unchecked){
+      legs.push({ key: 'news', label: 'EVENT RISK', vote: 'neutral', state: 'checked',
+        blackout: news.blackout === true,
+        text: news.blackout
+          ? 'BLACKOUT — red-folder window: no fresh setup forms into the print'
+          : 'risk ' + (news.risk || 'low') + ' — calendar checked, no blackout' });
+    } else {
+      legs.push({ key: 'news', label: 'EVENT RISK', vote: 'neutral', state: 'unchecked',
+        text: 'calendar unchecked' + (news && news.note ? ' — ' + news.note : '') });
+    }
+
+    return legs;
+  }
+
+  /* Votes are counted among checked DIRECTIONAL legs only (onchain, term,
+     fng, rr25d). unknown = nothing directional was measured; quiet = read
+     but no extremes; mixed = tied. */
+  function hgObtcFundamentalRegime(extra){
+    var legs = hgObtcFundamentalLegs(extra);
+    var bulls = 0, bears = 0, checked = 0, blackout = false;
+    legs.forEach(function(l){
+      if (!l) return;
+      if (l.blackout) blackout = true;
+      if (l.info || l.key === 'news') return;
+      if (l.state !== 'checked') return;
+      checked++;
+      if (l.vote === 'bull') bulls++;
+      else if (l.vote === 'bear') bears++;
+    });
+    var regime = 'unknown';
+    if (checked > 0){
+      if (bulls === 0 && bears === 0) regime = 'quiet';
+      else if (bulls === bears) regime = 'mixed';
+      else regime = bulls > bears ? 'bullish' : 'bearish';
+    }
+    return { regime: regime, bulls: bulls, bears: bears, checked: checked, blackout: blackout, legs: legs };
+  }
+
+  function hgObtcFundamentalPanelHtml(regime){
+    if (!regime || !Array.isArray(regime.legs)) return '';
+    var html = '<div class="note" style="margin-top:10px" data-obtc-fundamental="1"><b>FUNDAMENTAL REGIME — '
+      + esc(String(regime.regime || 'unknown').toUpperCase()) + '</b>'
+      + ' · ' + regime.bulls + ' bull / ' + regime.bears + ' bear of ' + regime.checked + ' directional checked'
+      + (regime.blackout ? ' · <b>EVENT BLACKOUT — no fresh setup forms</b>' : '')
+      + '<br><span class="dim">Evidence, not tickets: a 2+-vote headwind demotes to watch, a blackout refuses, one witness never flips a setup. DVOL and BTC.D are priors — they never vote.</span></div>';
+    html += '<div class="cr-ind-wrap">';
+    regime.legs.forEach(function(l){
+      if (!l) return;
+      var mark = '—';
+      if (l.blackout) mark = 'BLACKOUT';
+      else if (l.state !== 'checked') mark = '—';
+      else if (l.info) mark = 'INFO';
+      else mark = l.vote === 'bull' ? 'BULL' : l.vote === 'bear' ? 'BEAR' : 'NEUTRAL';
+      html += '<div class="kv"><span class="k">' + esc(l.label) + '</span><span class="v">'
+        + esc(mark) + (l.text ? ' · ' + esc(l.text) : '') + '</span></div>';
+    });
+    return html + '</div>';
+  }
+
   /* Evidence. Silent feeds stay UNCHECKED. Never mint levels. */
   function hgObtcEvidenceDecide(plan, ctx){
     var out = { ok: true, refuse: false, demote: false, chips: [], reason: '', unchecked: [] };
@@ -436,6 +636,37 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
       }
       if (typeof ctx.visionBoost === 'number' && ctx.visionBoost <= -10)
         out.demote = true;
+
+      /* hg-v1002: the fundamental stack. Blackout REFUSES at flow-veto
+         severity. A DECISIVE headwind (2+ net checked votes against the
+         candidate's direction) demotes to watch — one witness never
+         flips a setup. Tailwind and extremes print chips; chips inform,
+         gates decide. Absent stack = UNCHECKED, never a fake read. */
+      var fund = ctx.fundamental;
+      if (fund && Array.isArray(fund.legs)){
+        if (fund.blackout){
+          out.ok = false; out.refuse = true;
+          if (!out.reason) out.reason = 'macro event blackout — no fresh setup forms into a red-folder print';
+          out.chips.push('EVENT BLACKOUT');
+        } else {
+          var against = dir === 'long' ? (fund.bears || 0) : (fund.bulls || 0);
+          var withDir = dir === 'long' ? (fund.bulls || 0) : (fund.bears || 0);
+          if (against - withDir >= 2){
+            out.demote = true;
+            out.chips.push('FUNDAMENTAL HEADWIND ' + against + 'v' + withDir);
+          } else if (withDir - against >= 2){
+            out.chips.push('FUNDAMENTAL TAILWIND ' + withDir + 'v' + against);
+          }
+          fund.legs.forEach(function(l){
+            if (!l || l.state !== 'checked' || !l.extreme) return;
+            if (l.key === 'fng') out.chips.push('F&G EXTREME');
+            else if (l.key === 'rr25d') out.chips.push('RR25 EXTREME');
+            else if (l.key === 'dvol') out.chips.push('DVOL EXTREME');
+          });
+        }
+      } else {
+        out.unchecked.push('fundamental');
+      }
     }catch(e){}
     return out;
   }
@@ -468,6 +699,16 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
         ctx.carry = btcRowFromList((cr && (cr.rows || cr.results || cr.pairs)) || []) || null;
       }catch(e2){}
     }
+    /* hg-v1002: the fundamental stack rides the same ctx. The RESOLVED
+       onchain/term feeds (fallbacks included) feed the regime so the card
+       and the gate never read two different truths. */
+    try{
+      ctx.fundamental = hgObtcFundamentalRegime({
+        onchain: ctx.onchain, term: ctx.term, carry: ctx.carry,
+        fng: extra.fng, dom: extra.dom,
+        options: extra.options, dvol: extra.dvol, news: extra.news
+      });
+    }catch(e3){}
     return ctx;
   }
 
@@ -486,6 +727,19 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
     }catch(e2){}
     extra.term = evidenceFromExtra(extra).term;
     extra.carry = evidenceFromExtra(extra).carry;
+    /* hg-v1002: sentiment / options positioning / event risk join the
+       evidence bag. STATE-ONLY reads — the Deribit book is boot-warmed
+       (HG_warmups 'dvol'), so a scan never refetches it; F&G and BTC.D
+       sit on the host S; hgNewsRisk is synchronous by contract. */
+    try{
+      if (extra.fng === undefined){ var hS = hostS(); extra.fng = (hS && hS.fng) ? hS.fng : null; }
+    }catch(eF){}
+    try{
+      if (extra.dom === undefined){ var hS2 = hostS(); extra.dom = (hS2 && hS2.dom != null) ? hS2.dom : null; }
+    }catch(eD){}
+    try{ if (gfn('deribitOptionsState')) extra.options = W.deribitOptionsState(); }catch(eO){}
+    try{ if (gfn('deribitVolState')) extra.dvol = W.deribitVolState(); }catch(eV){}
+    try{ if (gfn('hgNewsRisk')) extra.news = W.hgNewsRisk('BTC'); }catch(eN){}
     return extra;
   }
 
@@ -517,4 +771,7 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
   W.hgObtcEvidenceDecide = hgObtcEvidenceDecide;
   W.hgObtcGatherExtra = hgObtcGatherExtra;
   W.hgObtcApplyEvidence = hgObtcApplyEvidence;
+  W.hgObtcFundamentalLegs = hgObtcFundamentalLegs;
+  W.hgObtcFundamentalRegime = hgObtcFundamentalRegime;
+  W.hgObtcFundamentalPanelHtml = hgObtcFundamentalPanelHtml;
 })();

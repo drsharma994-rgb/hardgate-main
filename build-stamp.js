@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1001',
-  pack: 'THE ACCURACY LEVERS — STACKED ONLY + the zero-fill gap. Multi-desk agreement: desk-agree.js keeps a per-session board (45-min TTL, in-memory, never the ledger) of which mechanic families currently print each base asset+direction, written at the card choke points for tradeable prints only; BEST merges into SWING (same cascade — correlated confirmation is not confirmation). A STACK ×N DESKS chip prints whenever a second independent desk agrees; the opt-in STACKED ONLY drawer toggle (default OFF, anti-deadlock) additionally gates buttons on that agreement. Zero-fill gap: a pool whose resting orders NEVER fill produced raw-tally target-hits nobody could have taken (OMNIROUTE replay: 34.3% never fill); when the decidable fill record clears the desk floor with zero fills, the verdict is now unproven-with-the-reason (0/N orders ever filled) instead of proven on paper wins. Fill-aware judging itself shipped in v999 via hgFwdJudgeSample — v1001 pins it with tests. Floors unchanged, still the desks own committed rows. Tests: tests/test-desk-agree-v1001.mjs (new).',
-  built: '2026-09-27T14:50:00Z'
+  version: 'hg-v1002',
+  pack: 'THE FUNDAMENTAL STACK — OMNIBTC now reads sentiment, options positioning and event risk beside the tape. The tab already weighed onchain/term/carry/flow/vision as evidence; it never read the feeds the app was already fetching: Fear & Greed (contrarian votes at the house S2 80/20 extremes only), Deribit 25Δ risk reversal (positioning votes at the house P9 |8| extreme line only), DVOL and BTC dominance (INFO priors that never vote), and the event calendar (a checked red-folder blackout REFUSES a fresh setup at flow-veto severity; an unchecked calendar says UNCHECKED and refuses nothing). A decisive fundamental headwind — 2+ net checked votes against the candidate — demotes CLEAN to watch; one witness never flips a setup, a 2v1 split is not decisive, and the stack never mints levels, never moves rank math, never recalibrates a house threshold. The full read renders as a FUNDAMENTAL REGIME panel under the card, picked or WAIT. Mock macro feeds (dxyMock) deliberately excluded — no fabricated fundamentals. Tests: tests/test-omnibtc-fundamentals-v1002.mjs (new).',
+  built: '2026-09-27T15:51:00Z'
 };
 
 function hgBuildLabel(b){

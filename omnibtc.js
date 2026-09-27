@@ -26,6 +26,15 @@ invoked (squeeze, PINE and structure were listed and never wired):
   SMC ...................... pineSmcCore last-bar ChoCh
   STAR TRADER .............. stSynthesize (votes the engines above)
   ONCHAIN / TERM / CARRY ... evidence only — confirm / demote / refuse
+  FUNDAMENTAL STACK ........ hg-v1002, evidence only (omnibtc-engines.js):
+                             FEAR & GREED extremes contrarian on the house
+                             S2 80/20 lines; Deribit 25Δ risk-reversal
+                             extremes on the house |8| line; DVOL + BTC.D
+                             are info-only priors that never vote; the news
+                             blackout is a hard REFUSE. 2+ net checked votes
+                             against the candidate demote it to watch — one
+                             witness never flips a setup. The stack never
+                             mints levels and never moves rank math.
   PINE ..................... READ ONLY. pineScan() is a snapshot the PINE tab
                              computes; this reads a BTC row when one is
                              already there and contributes nothing when it is
@@ -733,7 +742,13 @@ a global hard refresh.
         else if (gfn('hgMostProbablePanelHTML')) ui.cards.innerHTML = W.hgMostProbablePanelHTML('omnibtc', pick);
       }
     }
-    if (ui.detail) ui.detail.innerHTML = pick ? detailHtml(pick, snap && snap.omniInfo) : waitHtml();
+    if (ui.detail){
+      var dhtml = pick ? detailHtml(pick, snap && snap.omniInfo) : waitHtml();
+      if (snap && snap.fundamental && gfn('hgObtcFundamentalPanelHtml')){
+        try{ dhtml += W.hgObtcFundamentalPanelHtml(snap.fundamental) || ''; }catch(eFu){}
+      }
+      ui.detail.innerHTML = dhtml;
+    }
     if (ui.ind) ui.ind.innerHTML = indicatorsHtml(snap && snap.indicators);
     if (ui.ledger){
       var extraHtml = '';
@@ -829,6 +844,13 @@ a global hard refresh.
         cands.forEach(function(c){ c._rows = r4; c._ticker = tk; c._extra = extra; });
         all = all.concat(cands);
       }
+      /* hg-v1002: the fundamental read is taken once per scan from the
+         same extra bag the candidates carried into the pick, and rendered
+         under the card whether the desk picked or waited. */
+      var fundamental = null;
+      if (gfn('hgObtcFundamentalRegime')){
+        try{ fundamental = W.hgObtcFundamentalRegime(extra || {}); }catch(eFu){}
+      }
       var pick = hgObtcPick(all);
       if (pick && pick.row && gfn('hgPostGateSetupVeto')){
         try{
@@ -922,7 +944,8 @@ a global hard refresh.
         indicators: indicators,
         report: winRep,
         omniInfo: omniInfo,
-        extraLedger: extraLedger
+        extraLedger: extraLedger,
+        fundamental: fundamental
       };
       __obtc.snap = snap;
       __obtc.ran = true;
@@ -950,7 +973,9 @@ a global hard refresh.
       + 'COIL, DIV, TRAP, SMC, STAR TRADER, <b>OMNIROUTE (full ledger on 4H + 1H + 15m)</b> and the SEARCH report. '
       + 'The OMNIROUTE tab principal runs first: replay demote, nightly aside, analogue map, desk-edge suppress/demote. '
       + 'Only survivors become a result. Then the desk keeps <b>one</b> setup: 7/7 CLEAN with real ENTRY / STOP / T1; '
-      + 'otherwise the nearest watch; otherwise WAIT. Extra engines never claim 7/7. G1–G7 stay as they are.</div>'
+      + 'otherwise the nearest watch; otherwise WAIT. Extra engines never claim 7/7. G1–G7 stay as they are. '
+      + 'The desk also reads the fundamental stack — Fear &amp; Greed extremes, Deribit options positioning, DVOL, BTC dominance and the event calendar — as evidence: '
+      + 'a red-folder blackout refuses, a 2+-vote fundamental headwind demotes to watch, and the full read prints under the card.</div>'
       + hgObtcPrincipalBannerHtml()
       + '<div class="note" id="obtcStat" aria-live="polite">idle — press SCAN BTC.</div>'
       + '<div class="row" style="margin-top:8px"><button type="button" class="btn" id="obtcRun">SCAN BTC</button></div>'
