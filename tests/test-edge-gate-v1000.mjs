@@ -457,9 +457,12 @@ const VM_FIXTURES = `(function(){
   const nChip = (src.match(/\$\{bestPEChip\}/g) || []).length;
   /* hg-v1001 re-pointed this pin: the gate expression gained the agreement
      condition (desk-agree.js) — (bestPEBlocks || bestAgreeBlocks) ? (bestPENote
-     + bestAgreeNote) — the intent is unchanged: both button blocks collapse
-     into the gated note when either gate says so. */
-  const nGated = (src.match(/\(bestPEBlocks \|\| bestAgreeBlocks\) \? \(bestPENote \+ bestAgreeNote\)/g) || []).length;
+     + bestAgreeNote). hg-v1003 extended it once more with the fundamental
+     gate (fundamental-stack.js): (bestPEBlocks || bestAgreeBlocks ||
+     bestFundBlocks) ? (bestPENote + bestAgreeNote + bestFundNote). The intent
+     is unchanged: both button blocks collapse into the gated note when ANY
+     gate says so. */
+  const nGated = (src.match(/\(bestPEBlocks \|\| bestAgreeBlocks( \|\| bestFundBlocks)?\) \? \(bestPENote \+ bestAgreeNote( \+ bestFundNote)?\)/g) || []).length;
   assert(nVerdict === 2, 'B4: both BEST render paths (dual-venue + legacy) judge BEST:swing / SWING-CLEAN (found ' + nVerdict + ')');
   assert(nSlot === 2 && nChip === 2, 'B4: both templates carry the chip and the single gated button slot (slots ' + nSlot + ', chips ' + nChip + ')');
   assert(nGated === 2, 'B4: no ungated BEST button site survives — both button blocks collapse into the WATCH ONLY note when the record says so (found ' + nGated + ')');

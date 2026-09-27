@@ -51,7 +51,9 @@ function boot(extra){
   };
   Object.assign(ctx, extra || {});
   vm.createContext(ctx);
-  for (const f of ['indicators.js', 'indicators2.js', 'plans.js', 'omnibtc-engines.js', 'omnibtc.js']){
+  /* hg-v1003: the stack moved to fundamental-stack.js (house-wide, shared);
+     omnibtc-engines.js delegates. Load it first, exactly as index.html does. */
+  for (const f of ['indicators.js', 'indicators2.js', 'plans.js', 'fundamental-stack.js', 'omnibtc-engines.js', 'omnibtc.js']){
     vm.runInContext(read(f), ctx, { filename: f });
   }
   return ctx;

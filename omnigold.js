@@ -12228,6 +12228,18 @@ terse status, and never launches a first-time scan on a global refresh.
     if (!host) return;
     try { host.innerHTML = hgOgRegimeWatchPanelHtml(regime); }
     catch (eR){ host.innerHTML = ''; }
+    /* hg-v1003: the fundamental stack renders beside the correlation regime
+       — real rates (FRED DFII10 measured first, DXY+US10Y heuristic second),
+       CFTC COT managed-money crowding contrarian at the house |z|>=2 line,
+       and the USD calendar blackout as the hard refuse, with DXY / US10Y /
+       gold-silver as INFO priors that never vote. The same gate answers the
+       gold desks' action buttons; this panel shows its full board.
+       Feature-checked: without fundamental-stack.js nothing is appended. */
+    try{
+      if (typeof hgFundamentalRegime === 'function' && typeof hgFundamentalPanelHtml === 'function'){
+        host.innerHTML += hgFundamentalPanelHtml(hgFundamentalRegime('gold')) || '';
+      }
+    }catch(eF){}
   }
 
   /* `bag || {defaults}` DEFAULTS THE OBJECT, NOT ITS FIELDS.

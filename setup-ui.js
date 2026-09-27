@@ -727,6 +727,21 @@ function hgSetupPanelHTML(sig, opts){
 /** Build onclick JS for SEND TO TRADE PLAN — carries FTS stack when helper exists. */
 function hgToTradePlanOnclickJs(sym, dir, entry, stop, t1, meta){
   meta = meta || {};
+  /* hg-v1003: the fundamental gate answers the trade-plan action too — the
+     desks that never render through index.html's cardHTML still call this
+     builder. A checked blackout or a decisive (2+ net vote) headwind turns
+     the click into the reason, not a handoff; one witness never blocks; a
+     dark feed blocks nothing. meta.fundGate === false opts out.
+     Feature-checked: without fundamental-stack.js nothing changes. */
+  try{
+    if (meta.fundGate !== false && typeof W.hgFundamentalGate === 'function'
+        && typeof W.hgFundamentalNotify === 'function'){
+      var __fg = W.hgFundamentalGate(sym, dir, { scanner: meta.scanner || meta.strategy || meta.source });
+      if (__fg && (__fg.refuse === true || __fg.demote === true)){
+        return 'hgFundamentalNotify(' + JSON.stringify(String(sym)) + ',' + JSON.stringify(String(dir)) + ')';
+      }
+    }
+  }catch(eFund){}
   if (typeof W.hgToTradePlan === 'function'){
     return 'hgToTradePlan(' + JSON.stringify(sym) + ',' + JSON.stringify(dir) + ','
       + entry + ',' + stop + ',' + t1 + ',' + JSON.stringify(meta) + ')';

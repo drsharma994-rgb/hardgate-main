@@ -712,6 +712,27 @@ async function bookFetchOpenKeys(){
 
 function bookBtnHTML(sym, dir, entry, stop, t1, meta){
   meta = meta || {};
+  /* hg-v1003: THE FUNDAMENTAL GATE AT THE ACTION ITSELF. The desks with
+     bespoke card renderers (EDGE, OI FLOW, MEAN REV, LIQS, SQUEEZE's own
+     cards, the gold desks' own cards, ...) never pass through index.html's
+     cardHTML, so the stack answers here — the one builder every desk's ADD
+     button calls. A checked red-folder blackout or a decisive (2+ net vote)
+     fundamental headwind swaps the button for a WATCH ONLY stamp that names
+     the reason; one witness never blocks; a dark feed blocks nothing.
+     meta.fundGate === false opts out (internal / non-setup callers).
+     Feature-checked: without fundamental-stack.js nothing changes. */
+  try{
+    if (meta.fundGate !== false && typeof W.hgFundamentalGate === 'function'){
+      var __fg = W.hgFundamentalGate(sym, dir, { scanner: meta.scanner || meta.strategy || meta.source });
+      if (__fg && (__fg.refuse === true || __fg.demote === true)){
+        var __fgHead = __fg.refuse ? 'EVENT BLACKOUT' : 'FUNDAMENTAL HEADWIND';
+        var __fgWhy = (__fg.reason || 'the fundamental stack stands against this direction')
+          + ' — the card still prints and is still recorded; the button returns when the read clears';
+        return '<span class="stamp na" title="' + esc(__fgWhy) + '">'
+          + esc(__fgHead) + ' · WATCH ONLY</span>';
+      }
+    }
+  }catch(eFund){}
   var fund = bookResolveFund(meta);
   var payload = JSON.stringify({
     sym: sym, dir: dir, entry: entry, stop: stop,

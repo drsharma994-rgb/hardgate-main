@@ -371,6 +371,12 @@ try{
   load('hg-forward.js');
   load('proven-edge.js');
   load('desk-agree.js');
+  /* hg-v1003: the fundamental stack now sits beside the agreement gate in
+     cardHTML / smartCardHTML / both BEST paths. Load it so the combined
+     system is what runs here; every feed is dark in this vm, so its regime
+     reads unknown and it blocks NOTHING — the assertions below keep their
+     exact v1001 meaning. */
+  load('fundamental-stack.js');
   blocks.forEach((body, i) => vm.runInContext(body, ctx, { filename: 'index.html:inline-' + (i + 1) }));
 }catch(e){ loadErr = e; }
 assert(!loadErr, 'B: inline blocks execute with the v1001 levers loaded'
@@ -494,8 +500,8 @@ const VM_FIXTURES = `(function(){
       + (src.match(/!smartPEBlocks && !smartAgreeBlocks/g) || []).length + '/2 button gates)');
   assert((src.match(/hgDeskAgreeNote\('swing', w\.t\.symbol, w\.dir\)/g) || []).length === 2
       && (src.match(/\$\{bestPEChip\}\$\{bestAgreeChip\}/g) || []).length === 2
-      && (src.match(/\(bestPEBlocks \|\| bestAgreeBlocks\)/g) || []).length === 2,
-    'B2: BOTH BEST render paths note as swing, carry the chip beside the proven-edge chip, and gate — no ungated BEST button site survives');
+      && (src.match(/\(bestPEBlocks \|\| bestAgreeBlocks( \|\| bestFundBlocks)?\)/g) || []).length === 2,
+    'B2: BOTH BEST render paths note as swing, carry the chip beside the proven-edge chip, and gate — no ungated BEST button site survives (hg-v1003 added the fundamental gate to the same slot)');
   const swSrc = readFileSync(path.join(root, 'sw.js'), 'utf8');
   assert(swSrc.indexOf("'./desk-agree.js'") !== -1, 'B2: sw.js precaches desk-agree.js in the app shell');
 
