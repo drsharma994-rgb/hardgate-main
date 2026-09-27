@@ -25,7 +25,7 @@ import { dirname, resolve } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
-const { HG_VER } = await import('./helpers/build-version.mjs');
+const { HG_VER, hgVerGte } = await import('./helpers/build-version.mjs');
 
 /* --- 1. helper file exists + expected shape --- */
 const solSrc = readFileSync(resolve(ROOT, 'hg-solidity.js'), 'utf8');
@@ -262,7 +262,7 @@ const reorder = api.hgSolidityReorder;
 }
 
 /* --- 5. version + cache-buster --- */
-assert.ok(/^hg-v(?:682|68[3-9]|69\d|[7-9]\d\d|\d{4,})$/.test(HG_VER) && HG_VER >= 'hg-v682',
+assert.ok(/^hg-v(?:682|68[3-9]|69\d|[7-9]\d\d|\d{4,})$/.test(HG_VER) && hgVerGte(HG_VER, 682),
   'HG_VER must be >= hg-v682 (saw ' + HG_VER + ')');
 const sw = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
 assert.ok(new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'").test(sw),

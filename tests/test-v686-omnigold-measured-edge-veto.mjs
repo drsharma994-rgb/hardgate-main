@@ -20,7 +20,7 @@ import { dirname, resolve } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
-const { HG_VER } = await import('./helpers/build-version.mjs');
+const { HG_VER, hgVerGte } = await import('./helpers/build-version.mjs');
 
 /* --- structural: omnigold stamper passes tab + kind --- */
 const omnigold = readFileSync(resolve(ROOT, 'omnigold.js'), 'utf8');
@@ -119,7 +119,7 @@ const basePlan = {
 }
 
 /* --- version + cache-buster --- */
-assert.ok(/^hg-v(?:686|68[7-9]|69\d|[7-9]\d\d|\d{4,})$/.test(HG_VER) && HG_VER >= 'hg-v686',
+assert.ok(/^hg-v(?:686|68[7-9]|69\d|[7-9]\d\d|\d{4,})$/.test(HG_VER) && hgVerGte(HG_VER, 686),
   'HG_VER must be >= hg-v686');
 const sw = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
 assert.ok(new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'").test(sw));

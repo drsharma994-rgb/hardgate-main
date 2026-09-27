@@ -221,8 +221,13 @@ console.log('== 5) every crypto record map forwards the mark it had in hand (tex
   T('super-sniper.js', /var lb = \(typeof W\.hgFwdLastBar === 'function'\) \? W\.hgFwdLastBar\(c\.rows\) : \{\};\s*return \{ sym: c\.sym, dir: c\.dir, entry: \+c\.entry, stop: \+c\.stop, t1: \+c\.t1,\s*mark: lb\.mark, barT: lb\.barT,/, 'SUPER SNIPER reads the pick\'s rows through the one reader');
   T('contract-report.js', /mark: \(isFinite\(fin\(p\.mark\)\) && fin\(p\.mark\) > 0\) \? fin\(p\.mark\) : undefined,/, 'CONTRACT REPORT forwards planFrom\'s last close');
   const shell = strip(read('index.html'));
-  assert(/const fwdMark = \(typeof hgMpMarkOf === 'function'\) \? hgMpMarkOf\(bookMeta, bookMeta, \{\}\) : NaN;\s*const fwdBar = \(typeof hgFwdLastBar === 'function'\) \? hgFwdLastBar\(bookMeta\.rows\) : \{\};\s*hgFwdRecordScan\('CARD:' \+ scanId, '4h',\s*\[\{ sym: sym, dir: dir, entry: entry, stop: stop, t1: t1,\s*mark: \(isFinite\(fwdMark\) && fwdMark > 0\) \? fwdMark : undefined, barT: fwdBar\.barT,/.test(shell),
-    'index.html: the inline CARD choke point (SMC, ORDER BLOCKS, TRAP, DIV, COIL, APEX) forwards the mark its own geometry line reads and the bar off bookMeta.rows');
+  /* hg-v1000: the sym is recorded RAW — cardHTML strips the venue display tag
+     ('[Delta India] BTCUSD') before recording, because a decorated key could
+     never match the raw-sym resolves the scan loops hand back; that evidence
+     looked recorded and was frozen. The mark/bar contract this pin guards is
+     unchanged — tests/test-edge-gate-v1000.mjs drives the strip behaviorally. */
+  assert(/const fwdMark = \(typeof hgMpMarkOf === 'function'\) \? hgMpMarkOf\(bookMeta, bookMeta, \{\}\) : NaN;\s*const fwdBar = \(typeof hgFwdLastBar === 'function'\) \? hgFwdLastBar\(bookMeta\.rows\) : \{\};\s*hgFwdRecordScan\('CARD:' \+ scanId, '4h',\s*\[\{ sym: String\(sym\)\.replace\(\/\^\\\[\[\^\\\]\]\*\\\]\\s\*\/, ''\), dir: dir, entry: entry, stop: stop, t1: t1,\s*mark: \(isFinite\(fwdMark\) && fwdMark > 0\) \? fwdMark : undefined, barT: fwdBar\.barT,/.test(shell),
+    'index.html: the inline CARD choke point (SMC, ORDER BLOCKS, TRAP, DIV, COIL, APEX) records the RAW sym (venue tag stripped, hg-v1000) and forwards the mark its own geometry line reads and the bar off bookMeta.rows');
   assert((shell.match(/\.\.\.c, barT: \(typeof hgFwdLastBar === 'function'\) \? hgFwdLastBar\(c\.rows\)\.barT : undefined, mechanic: kind\.toUpperCase\(\) \+ '-(CLEAN|NEAR)'/g) || []).length === 2,
     'index.html: the BEST/SWING/SCALP publish spreads the candidate (its mark rides the spread) and reads the bar off its rows, CLEAN and NEAR alike');
 }

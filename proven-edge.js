@@ -127,9 +127,16 @@ Classic script, IIFE, feature-checked by every caller, never throws.
        { state:'unproven', n(<floor), floor, note }          — not enough
          settled yet, the ledger unreadable, or the log absent
 
+     opts.pool / opts.mechanic override the default 'CARD:<scanId>' /
+     '<STRATID>' attribution — the MOST PROBABLE tab's cards are the swing
+     cascade's CLEAN cohort, whose evidence lives in the BEST:swing pool the
+     scan snap publisher writes, under the mechanic SWING-CLEAN. The floor
+     still comes from scanId: the desk the card trades as, not the pool the
+     evidence happens to live in.
+
      Never throws; the worst answer it can give is 'unproven', which is the
      safe one: a verdict that cannot be read blocks nothing but buttons. */
-  function hgProvenEdgeVerdict(scanId, stratId){
+  function hgProvenEdgeVerdict(scanId, stratId, opts){
     var out = { state: 'unproven', n: 0, floor: FLOOR_DEFAULT, hit: NaN, expR: NaN, fillAware: false, note: '' };
     try{
       if (!scanId){ out.note = 'no scanner id'; return out; }
@@ -138,8 +145,11 @@ Classic script, IIFE, feature-checked by every caller, never throws.
         out.note = 'forward log not loaded';
         return out;
       }
-      var mech = String(stratId || scanId).toUpperCase();
-      var stats = W.hgFwdStats('CARD:' + scanId, mech, false);
+      var pool = (opts && typeof opts.pool === 'string' && opts.pool) ? opts.pool : ('CARD:' + scanId);
+      var mech = (opts && typeof opts.mechanic === 'string' && opts.mechanic)
+        ? opts.mechanic : String(stratId || scanId).toUpperCase();
+      out.pool = pool; out.mechanic = mech;
+      var stats = W.hgFwdStats(pool, mech, false);
       var j = W.hgFwdJudgeSample(stats, out.floor);
       if (!isFinite(fin(j && j.n))){
         /* Below the floor. Report progress against it: the larger of the two
@@ -231,6 +241,89 @@ Classic script, IIFE, feature-checked by every caller, never throws.
     return '<div class="note warn" style="margin-top:6px;font-size:11px"><b>PROVEN EDGE</b> · ' + msg + '</div>';
   }
 
+  /* ==================== state-flip alerts ==================== */
+
+  /* THE MOMENT THE MACHINERY PRODUCES SOMETHING ACTIONABLE is not a card
+     printing — it is a strategy's verdict CHANGING: a record that earned
+     its buttons (into PROVEN) or an edge that just died (into LOSING). Both
+     are worth a push; a pool slipping back under the floor (UNPROVEN) is
+     just evidence thinning and is recorded but never pushed.
+
+     THE RULES, same conventions as the alert bell:
+       FIRST SIGHTING SEEDS SILENTLY. A browser that loads this pack onto an
+     established ledger must not fire twenty pushes for transitions that
+     happened before it could see them. Only a CHANGE OBSERVED BY THIS
+     BROWSER alerts.
+       ONE PUSH PER KEY PER HOUR at most. A pool oscillating around zero
+     expectancy still needs new settled trades to flip, but the cap is cheap
+     insurance.
+       THE MODE DOES NOT GATE THE ALERT. The record is still true when the
+     gate is opted out; the push is information, and information was never
+     the thing being gated.
+
+     State lives in localStorage under hg_proven_edge_states_v1, capped —
+     the app's existing convention; losing it costs a re-seed, not
+     correctness. */
+  var LS_STATES = 'hg_proven_edge_states_v1';
+  var STATES_MAX = 200;
+  var FLIP_ALERT_MIN_MS = 60 * 60 * 1000;
+
+  function readStates(){
+    try{
+      if (typeof localStorage === 'undefined') return {};
+      var j = JSON.parse(localStorage.getItem(LS_STATES) || '{}');
+      return (j && typeof j === 'object' && !Array.isArray(j)) ? j : {};
+    }catch(e){ return {}; }
+  }
+  function writeStates(m){
+    try{
+      if (typeof localStorage === 'undefined') return;
+      var keys = Object.keys(m);
+      if (keys.length > STATES_MAX){
+        keys.sort(function(a, b){ return (m[a].at || 0) - (m[b].at || 0); });
+        for (var i = 0; i < keys.length - STATES_MAX; i++) delete m[keys[i]];
+      }
+      localStorage.setItem(LS_STATES, JSON.stringify(m));
+    }catch(e){}
+  }
+
+  /* Record the verdict for one (pool, mechanic) and, when it CHANGED into a
+     state worth knowing about, push it — Telegram first, ntfy second, the
+     established cascade. Returns the transition {from, to} or null. Never
+     throws, never blocks a render. */
+  function hgProvenEdgeTrack(scanId, stratId, v, opts){
+    try{
+      if (!v || !v.state || !scanId) return null;
+      var pool = (opts && opts.pool) || v.pool || ('CARD:' + scanId);
+      var mech = (opts && opts.mechanic) || v.mechanic || String(stratId || scanId).toUpperCase();
+      var key = pool + '|' + mech;
+      var states = readStates();
+      var prev = states[key];
+      var now = Date.now();
+      states[key] = { state: v.state, at: now, alertAt: (prev && prev.alertAt) || 0 };
+      /* first sighting seeds silently — a state we never saw before is not
+         a change, it is the baseline */
+      if (!prev){ writeStates(states); return null; }
+      var from = prev.state, to = v.state;
+      if (from === to){ writeStates(states); return null; }
+      var trans = { from: from, to: to };
+      var worthPush = (to === 'proven' || to === 'losing');
+      var throttled = (now - (states[key].alertAt || 0)) < FLIP_ALERT_MIN_MS;
+      if (worthPush && !throttled){
+        states[key].alertAt = now;
+        var tabName = String(scanId).toUpperCase();
+        var title = 'HARDGATE · ' + tabName + ' ' + mech + ' — EDGE ' + to.toUpperCase();
+        var body = (to === 'proven')
+          ? ('the settled forward record just earned its buttons: n=' + v.n + ', expR ' + fmtSignedR(v.expR) + 'R on ' + tabName + '.')
+          : ('the settled forward record stopped paying: n=' + v.n + ', expR ' + fmtSignedR(v.expR) + 'R on ' + tabName + ' — buttons withdrawn, cards still print and record.');
+        try{ if (typeof W.sendTelegram === 'function') W.sendTelegram(title, body); }catch(eT){}
+        try{ if (typeof W.sendAlertPush === 'function') W.sendAlertPush(title, body, { priority: 4 }); }catch(eP){}
+      }
+      writeStates(states);
+      return trans;
+    }catch(e){ return null; }
+  }
+
   /* ==================== the toggle ==================== */
 
   function hgProvenEdgePaint(){
@@ -260,6 +353,7 @@ Classic script, IIFE, feature-checked by every caller, never throws.
   W.hgProvenEdgeMode = hgProvenEdgeMode;
   W.hgProvenEdgeFloor = hgProvenEdgeFloor;
   W.hgProvenEdgeVerdict = hgProvenEdgeVerdict;
+  W.hgProvenEdgeTrack = hgProvenEdgeTrack;
   W.hgProvenEdgeBlocks = hgProvenEdgeBlocks;
   W.hgProvenEdgeChipHtml = hgProvenEdgeChipHtml;
   W.hgProvenEdgeBlockedNoteHtml = hgProvenEdgeBlockedNoteHtml;

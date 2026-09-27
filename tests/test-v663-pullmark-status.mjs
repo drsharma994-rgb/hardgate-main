@@ -25,7 +25,7 @@ import { dirname, resolve } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
-const { HG_VER } = await import('./helpers/build-version.mjs');
+const { HG_VER, hgVerGte } = await import('./helpers/build-version.mjs');
 const idx = readFileSync(resolve(ROOT, 'index.html'), 'utf8');
 
 /* --- inline status span exists next to the PULL MARK button --- */
@@ -65,7 +65,7 @@ assert.ok(!/alert\('mark pull failed:/.test(idx),
   'old alert("mark pull failed: ...") must be gone');
 
 /* --- version --- */
-assert.ok(/^hg-v(?:663|66[4-9]|67\d|6[8-9]\d|[7-9]\d\d|\d{4,})$/.test(HG_VER) && HG_VER >= 'hg-v663',
+assert.ok(/^hg-v(?:663|66[4-9]|67\d|6[8-9]\d|[7-9]\d\d|\d{4,})$/.test(HG_VER) && hgVerGte(HG_VER, 663),
   'HG_VER must be >= hg-v663 (saw ' + HG_VER + ')');
 const sw = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
 assert.ok(new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'").test(sw),

@@ -24,7 +24,7 @@ import { dirname, resolve } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
-const { HG_VER } = await import('./helpers/build-version.mjs');
+const { HG_VER, hgVerGte } = await import('./helpers/build-version.mjs');
 
 /* --- 1. helper file exists + expected shape --- */
 const src = readFileSync(resolve(ROOT, 'hg-perf-panel.js'), 'utf8');
@@ -201,7 +201,7 @@ assert.equal(api.HG_PERF_PANEL_VERSION, 'v688');
 }
 
 /* --- 6. version + cache-buster --- */
-assert.ok(/^hg-v(?:688|689|69\d|[7-9]\d\d|\d{4,})$/.test(HG_VER) && HG_VER >= 'hg-v688',
+assert.ok(/^hg-v(?:688|689|69\d|[7-9]\d\d|\d{4,})$/.test(HG_VER) && hgVerGte(HG_VER, 688),
   'HG_VER must be >= hg-v688');
 const sw = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
 assert.ok(new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'").test(sw));

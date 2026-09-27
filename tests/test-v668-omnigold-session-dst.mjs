@@ -23,7 +23,7 @@ import { dirname, resolve } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
-const { HG_VER } = await import('./helpers/build-version.mjs');
+const { HG_VER, hgVerGte } = await import('./helpers/build-version.mjs');
 const src = readFileSync(resolve(ROOT, 'omnigold.js'), 'utf8');
 
 /* --- rationale comment must be present --- */
@@ -164,7 +164,7 @@ assert.ok(!londonInWindow(Date.UTC(2026, 6, 1, 13, 0, 0) / 1000),
   'BST 13:00 UTC (= 14:00 London) must not qualify \u2014 session closed');
 
 /* --- version --- */
-assert.ok(/^hg-v(?:668|66[9]|67\d|6[8-9]\d|[7-9]\d\d|\d{4,})$/.test(HG_VER) && HG_VER >= 'hg-v668',
+assert.ok(/^hg-v(?:668|66[9]|67\d|6[8-9]\d|[7-9]\d\d|\d{4,})$/.test(HG_VER) && hgVerGte(HG_VER, 668),
   'HG_VER must be >= hg-v668 (saw ' + HG_VER + ')');
 const sw = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
 assert.ok(new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'").test(sw),

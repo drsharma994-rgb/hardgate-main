@@ -19,7 +19,7 @@ import { dirname, resolve } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
-const { HG_VER } = await import('./helpers/build-version.mjs');
+const { HG_VER, hgVerGte } = await import('./helpers/build-version.mjs');
 
 const src = readFileSync(resolve(ROOT, 'newgold.js'), 'utf8');
 
@@ -82,7 +82,7 @@ assert.ok(/source: tfSource\[lane\.tf\] \|\| 'omnigold'/.test(src),
 }
 
 /* --- version + cache-buster --- */
-assert.ok(/^hg-v(?:696|69[7-9]|[7-9]\d\d|\d{4,})$/.test(HG_VER) && HG_VER >= 'hg-v696',
+assert.ok(/^hg-v(?:696|69[7-9]|[7-9]\d\d|\d{4,})$/.test(HG_VER) && hgVerGte(HG_VER, 696),
   'HG_VER must be >= hg-v696');
 
 console.log('OK - v696: NEW GOLD OMNIGOLD lane fetches its own rows');

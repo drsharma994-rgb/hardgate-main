@@ -21,7 +21,7 @@ import { dirname, resolve } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
-const { HG_VER } = await import('./helpers/build-version.mjs');
+const { HG_VER, hgVerGte } = await import('./helpers/build-version.mjs');
 const src = readFileSync(resolve(ROOT, 'omniroute.js'), 'utf8');
 
 /* --- rationale --- */
@@ -146,7 +146,7 @@ function classify(s){
 }
 
 /* --- version --- */
-assert.ok(/^hg-v(?:673|67[4-9]|6[8-9]\d|[7-9]\d\d|\d{4,})$/.test(HG_VER) && HG_VER >= 'hg-v673',
+assert.ok(/^hg-v(?:673|67[4-9]|6[8-9]\d|[7-9]\d\d|\d{4,})$/.test(HG_VER) && hgVerGte(HG_VER, 673),
   'HG_VER must be >= hg-v673 (saw ' + HG_VER + ')');
 const sw = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
 assert.ok(new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'").test(sw),

@@ -512,8 +512,51 @@ localStorage. Never throws.
         over -= fromGiveable;
         /* only if the open-and-still-waiting rows alone exceed the cap */
         if (over > 0){
-          dropped = dropped.concat(owed.slice(0, over));
-          owed = owed.slice(over);
+          /* hg-v1000: EVICT THE FLOODER'S OWN PENDING RECORDS FIRST, NOT THE
+             SLOWEST POOL'S.
+
+             Owed eviction used to be oldest-barT-first across the whole
+             group. Under two hot 15m tabs (CRYPTO SCAN + CRYPTOVERSE at the
+             documented 90+ setups/bar) the owed group alone overflows the
+             cap, and the oldest rows in it are always the SLOW pools' — an
+             80h CARD/BEST 4h record is older than every 6h 15m record by
+             construction. The ledger's scarcest evidence (a slow pool's
+             unsettled record is unrecoverable — it settles or it is gone)
+             was the first thing destroyed, by volume it never produced.
+
+             Now the owed group is evicted LARGEST-TAB-FIRST: the tab whose
+             pending volume is what overflowed the cap gives up its own
+             oldest pending rows before any small pool loses one. Within a
+             tab, oldest-first as before (owed is barT-sorted, and grouping
+             preserves that order inside each tab). A record lost this way
+             is still lost evidence — the rule only chooses WHOSE, and the
+             honest answer is the tab that has the most of it. */
+          var owedByTab = {}, owedTabs = [], otab;
+          for (j = 0; j < owed.length; j++){
+            otab = String(owed[j].tab || '');
+            if (!owedByTab[otab]){ owedByTab[otab] = []; owedTabs.push(otab); }
+            owedByTab[otab].push(owed[j]);
+          }
+          owedTabs.sort(function(a, b){ return owedByTab[b].length - owedByTab[a].length; });
+          /* how many each tab gives up: largest tab first, oldest-first
+             inside it (owed was barT-sorted, and grouping preserves that
+             order within each tab). No Set — the bare vm contexts the tests
+             run this file in do not all provide one. */
+          var take = {}, left = over, ti;
+          for (ti = 0; ti < owedTabs.length && left > 0; ti++){
+            var give = Math.min(left, owedByTab[owedTabs[ti]].length);
+            take[owedTabs[ti]] = give;
+            left -= give;
+          }
+          var keptOwed = [], seenByTab = {};
+          for (j = 0; j < owed.length; j++){
+            otab = String(owed[j].tab || '');
+            var seen = seenByTab[otab] || 0;
+            seenByTab[otab] = seen + 1;
+            if (seen < (take[otab] || 0)){ dropped.push(owed[j]); continue; }
+            keptOwed.push(owed[j]);
+          }
+          owed = keptOwed;
         }
       }
       /* NOT re-sorted. The old prune left the list in barT order as a side

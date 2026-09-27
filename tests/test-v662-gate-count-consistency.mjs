@@ -27,7 +27,7 @@ import { dirname, resolve } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
-const { HG_VER } = await import('./helpers/build-version.mjs');
+const { HG_VER, hgVerGte } = await import('./helpers/build-version.mjs');
 const src = readFileSync(resolve(ROOT, 'signallog.js'), 'utf8');
 
 /* --- gateSummary: rationale comment + new counter shape --- */
@@ -138,7 +138,7 @@ assert.ok(line.includes('avg gates 2.0/2.5'),
   'stats line must show avg gates 2.0/2.5 (post-v662); got: ' + line);
 
 /* --- version --- */
-assert.ok(/^hg-v(?:662|66[3-9]|67\d|6[8-9]\d|[7-9]\d\d|\d{4,})$/.test(HG_VER) && HG_VER >= 'hg-v662',
+assert.ok(/^hg-v(?:662|66[3-9]|67\d|6[8-9]\d|[7-9]\d\d|\d{4,})$/.test(HG_VER) && hgVerGte(HG_VER, 662),
   'HG_VER must be >= hg-v662 (saw ' + HG_VER + ')');
 const sw = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
 assert.ok(new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'").test(sw),

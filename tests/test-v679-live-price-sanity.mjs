@@ -21,7 +21,7 @@ import { dirname, resolve } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
-const { HG_VER } = await import('./helpers/build-version.mjs');
+const { HG_VER, hgVerGte } = await import('./helpers/build-version.mjs');
 const orSrc = readFileSync(resolve(ROOT, 'omniroute.js'), 'utf8');
 const ogSrc = readFileSync(resolve(ROOT, 'omnigold.js'), 'utf8');
 const rsSrc = readFileSync(resolve(ROOT, 'reversalsniper.js'), 'utf8');
@@ -174,7 +174,7 @@ assert.equal(20 * 1 - 20 * (-1), 40, 'omni fresh vs past-t1 delta = 40 pts');
 /* ============================================================
    PART E \u2014 version hygiene
    ============================================================ */
-assert.ok(/^hg-v(?:679|6[8-9]\d|[7-9]\d\d|\d{4,})$/.test(HG_VER) && HG_VER >= 'hg-v679',
+assert.ok(/^hg-v(?:679|6[8-9]\d|[7-9]\d\d|\d{4,})$/.test(HG_VER) && hgVerGte(HG_VER, 679),
   'HG_VER must be >= hg-v679 (saw ' + HG_VER + ')');
 const sw = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
 assert.ok(new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'").test(sw),

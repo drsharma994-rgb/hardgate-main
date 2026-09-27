@@ -23,7 +23,7 @@ import { dirname, resolve } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
-const { HG_VER } = await import('./helpers/build-version.mjs');
+const { HG_VER, hgVerGte } = await import('./helpers/build-version.mjs');
 
 /* --- structural asserts --- */
 const solSrc = readFileSync(resolve(ROOT, 'hg-solidity.js'), 'utf8');
@@ -208,7 +208,7 @@ const p = {
 }
 
 /* --- version + cache-buster --- */
-assert.ok(/^hg-v(?:685|68[6-9]|69\d|[7-9]\d\d|\d{4,})$/.test(HG_VER) && HG_VER >= 'hg-v685',
+assert.ok(/^hg-v(?:685|68[6-9]|69\d|[7-9]\d\d|\d{4,})$/.test(HG_VER) && hgVerGte(HG_VER, 685),
   'HG_VER must be >= hg-v685');
 const sw = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
 assert.ok(new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'").test(sw));

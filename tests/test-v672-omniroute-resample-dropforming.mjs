@@ -22,7 +22,7 @@ import { dirname, resolve } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
-const { HG_VER } = await import('./helpers/build-version.mjs');
+const { HG_VER, hgVerGte } = await import('./helpers/build-version.mjs');
 const src = readFileSync(resolve(ROOT, 'omniroute.js'), 'utf8');
 
 /* --- rationale comment must be present --- */
@@ -145,7 +145,7 @@ function mk4hBars(days, partialBars){
 }
 
 /* --- version --- */
-assert.ok(/^hg-v(?:672|67[3-9]|6[8-9]\d|[7-9]\d\d|\d{4,})$/.test(HG_VER) && HG_VER >= 'hg-v672',
+assert.ok(/^hg-v(?:672|67[3-9]|6[8-9]\d|[7-9]\d\d|\d{4,})$/.test(HG_VER) && hgVerGte(HG_VER, 672),
   'HG_VER must be >= hg-v672 (saw ' + HG_VER + ')');
 const sw = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
 assert.ok(new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'").test(sw),

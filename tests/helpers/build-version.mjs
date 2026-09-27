@@ -21,3 +21,12 @@ export function swCacheOk(swText){
   if (typeof swText !== 'string' || !swText) return false;
   return new RegExp('HG_CACHE\\s*=\\s*[\'"]' + HG_VER + '[\'"]').test(swText);
 }
+
+/* hg-v1000: numeric version compare — a STRING compare lies across the
+   4-digit boundary: 'hg-v1000' >= 'hg-v661' is FALSE as a string ('1' < '6'),
+   which failed 39 version guards the day the build crossed v1000 even though
+   their regexes already allowed \d{4,}. Compare the numbers. */
+export function hgVerGte(a, b){
+  const n = s => { const m = String(s).match(/(\d+)\s*$/); return m ? +m[1] : 0; };
+  return n(a) >= n(b);
+}

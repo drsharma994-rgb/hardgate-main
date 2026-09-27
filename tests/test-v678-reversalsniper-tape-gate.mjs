@@ -24,7 +24,7 @@ import { dirname, resolve } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
-const { HG_VER } = await import('./helpers/build-version.mjs');
+const { HG_VER, hgVerGte } = await import('./helpers/build-version.mjs');
 const src = readFileSync(resolve(ROOT, 'reversalsniper.js'), 'utf8');
 
 /* --- rsTape defined and prefers shared cascade --- */
@@ -128,7 +128,7 @@ assert.equal(convDelta('long') - convDelta('short'), 4,
   'with-tape vs against-tape delta = 4 conviction pts (one MIN_CONVICTION step)');
 
 /* --- version --- */
-assert.ok(/^hg-v(?:678|679|6[8-9]\d|[7-9]\d\d|\d{4,})$/.test(HG_VER) && HG_VER >= 'hg-v678',
+assert.ok(/^hg-v(?:678|679|6[8-9]\d|[7-9]\d\d|\d{4,})$/.test(HG_VER) && hgVerGte(HG_VER, 678),
   'HG_VER must be >= hg-v678 (saw ' + HG_VER + ')');
 const sw = readFileSync(resolve(ROOT, 'sw.js'), 'utf8');
 assert.ok(new RegExp("HG_CACHE\\s*=\\s*'" + HG_VER + "'").test(sw),
