@@ -42,8 +42,18 @@ function hgDetectFVG(candles, index){
   }catch(e){ return null; }
 }
 
-/* Order block detection: rejection candle after swing high/low */
-function hgDetectOrderBlock(candles, index){
+/* Order block detection: rejection candle after swing high/low.
+
+   Renamed hgDetectOrderBlock -> hgDetectOrderBlockAt. This file loads AFTER
+   structure-levels.js, whose hgDetectOrderBlock(rows, dir) is a different
+   function under the same name — direction-based, returns {entry, zone, poi}.
+   The old export assignment below overwrote it, so formation.js,
+   supersetup.js, contract-report.js and gold-best-levels.js — all calling
+   hgDetectOrderBlock(rows, dir) — landed here with a STRING for `index`,
+   threw on candles['long'].close inside the try, and got null back on every
+   single call: the order-block POI has never once fired in production.
+   Distinct name, both detectors live. */
+function hgDetectOrderBlockAt(candles, index){
   if (!candles || candles.length < 5 || index < 4) return null;
   try{
     var current = candles[index];
@@ -157,7 +167,7 @@ function hgDetectSmartMoneyZones(candles){
     var index = candles.length - 1;
 
     /* Recent order block */
-    var ob = hgDetectOrderBlock(candles, index);
+    var ob = hgDetectOrderBlockAt(candles, index);
     if (ob) zones.push(ob);
 
     /* Recent FVG */
@@ -186,7 +196,9 @@ function hgDetectSmartMoneyZones(candles){
 }
 
 G.hgDetectFVG = hgDetectFVG;
-G.hgDetectOrderBlock = hgDetectOrderBlock;
+/* NOT G.hgDetectOrderBlock — that name belongs to structure-levels.js's
+   direction-based detector (see the rename note above). */
+G.hgDetectOrderBlockAt = hgDetectOrderBlockAt;
 G.hgDetectBreakerBlock = hgDetectBreakerBlock;
 G.hgDetectLiquidityVoid = hgDetectLiquidityVoid;
 G.hgDetectSmartMoneyZones = hgDetectSmartMoneyZones;

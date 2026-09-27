@@ -2359,13 +2359,28 @@ function hgEnrichSmartPlan(plan, rows4h){
     plan.anchor = e21;
     plan.planSrc = plan.planSrc || 'smartSetup';
     if (!plan.targetPolicy) plan.targetPolicy = 'R-multiples (2R/3.5R)';
+    /* hg-v998: the rebuild may TIGHTEN structure, never LOOSEN the ambition
+       it was handed. It used to rebuild every SWING plan at the global
+       2R/3.5R policy with minRr HG_MIN_RR_SWING (1.5) regardless of the
+       caller, so a plan aimed at its tab floor — hgTabMinRr reads 3.25 for
+       div, 3.0 for smc, 2.5 for ob from data/desk-tab-params.json — came
+       back carrying a 2R target instead. Legs that re-check the refined
+       rr1 against the floor (ob, div) could never print a card; legs that
+       gate before refinement (smc) shipped a plan looser than the gate
+       they had just passed. The caller's floor now rides in on plan.minRr
+       and the policy multiples are raised to meet it; a caller that sets
+       no floor gets exactly the old 2R/3.5R. */
+    var callerFloor = (isFinite(+plan.minRr) && +plan.minRr > 0) ? +plan.minRr : 0;
+    var polT1R = Math.max(HG_T1_R, callerFloor);
+    var polT2R = Math.max(HG_T2_R, polT1R + 1.5);
+    if (callerFloor > HG_T1_R) plan.targetPolicy = 'R-multiples (' + polT1R + 'R/' + polT2R + 'R)';
     var swLook2 = (typeof window !== 'undefined' && window.CG_SWING_LOOK > 1)
       ? window.CG_SWING_LOOK : 30;
     var st = hgStructureStop(dir, entry, rows4h, { atrLen: 14, look: swLook2 });
     if (st){
       plan.stop = st.stop;
       /* v681: enables minimum-stop-distance ATR floor */
-      var pr = hgPlanFromRisk(dir, entry, st.stop, { minRr: HG_MIN_RR_SWING, targetPolicy: plan.targetPolicy, rows: rows4h });
+      var pr = hgPlanFromRisk(dir, entry, st.stop, { minRr: Math.max(HG_MIN_RR_SWING, callerFloor), t1R: polT1R, t2R: polT2R, targetPolicy: plan.targetPolicy, rows: rows4h });
       if (pr){
         plan.t1 = pr.t1; plan.t2 = pr.t2; plan.rr1 = pr.rr1; plan.rr2 = pr.rr2; plan.riskPct = pr.riskPct;
       }
