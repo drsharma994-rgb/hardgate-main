@@ -166,6 +166,33 @@ Classic script, IIFE, feature-checked by every caller, never throws.
       out.hit = fin(j.hit);
       out.expR = fin(j.expR);
       out.fillAware = j.fillAware === true;
+      /* hg-v1001: THE ZERO-FILL GAP. A pool of resting-limit entries whose
+         orders NEVER fill has fillWins + fillLosses = 0 forever, so
+         fillSamples never reaches the floor, the judge falls back to the
+         raw tally, and marks that ran to target with nobody aboard read as
+         wins. The OMNIROUTE replay put 34.3% of plans in that never-fill
+         bucket — a third of the ledger eligible for 'proven' on entries
+         the tape never reached. When the fill record is DECIDABLE at the
+         desk's floor — fills plus provable unfills, the records carrying a
+         mark the tape can rule on — and the fills are ZERO, the verdict is
+         unproven with the reason named. Not 'losing': an order that never
+         opened lost nothing, and this gate never claims losses that did
+         not happen. But never 'proven' either: nobody could have taken
+         those wins. fillUnprovable stays out of the count — a bar that
+         cannot order fill against exit says nothing about whether the
+         order opened. */
+      if (!out.fillAware){
+        var fW = fin(stats && stats.fillWins), fL = fin(stats && stats.fillLosses), fU = fin(stats && stats.fillUnfilled);
+        var fFilled = (isFinite(fW) ? fW : 0) + (isFinite(fL) ? fL : 0);
+        var fDecidable = fFilled + (isFinite(fU) ? fU : 0);
+        if (fFilled === 0 && fDecidable >= out.floor){
+          out.state = 'unproven';
+          out.n = fDecidable;
+          out.hit = NaN; out.expR = NaN;
+          out.note = '0/' + fDecidable + ' orders ever filled — the entries are never reached';
+          return out;
+        }
+      }
       if (!isFinite(out.expR)){
         /* n cleared the floor but the expectancy did not compute. That is
            not a pass and it is not a loss: it is a record this gate cannot

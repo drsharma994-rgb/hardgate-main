@@ -455,7 +455,11 @@ const VM_FIXTURES = `(function(){
   const nVerdict = (src.match(/hgProvenEdgeVerdict\('swing','best',\{pool:'BEST:swing',mechanic:'SWING-CLEAN'\}\)/g) || []).length;
   const nSlot = (src.match(/\$\{bestBtnsHtml\}/g) || []).length;
   const nChip = (src.match(/\$\{bestPEChip\}/g) || []).length;
-  const nGated = (src.match(/bestPEBlocks \? bestPENote/g) || []).length;
+  /* hg-v1001 re-pointed this pin: the gate expression gained the agreement
+     condition (desk-agree.js) — (bestPEBlocks || bestAgreeBlocks) ? (bestPENote
+     + bestAgreeNote) — the intent is unchanged: both button blocks collapse
+     into the gated note when either gate says so. */
+  const nGated = (src.match(/\(bestPEBlocks \|\| bestAgreeBlocks\) \? \(bestPENote \+ bestAgreeNote\)/g) || []).length;
   assert(nVerdict === 2, 'B4: both BEST render paths (dual-venue + legacy) judge BEST:swing / SWING-CLEAN (found ' + nVerdict + ')');
   assert(nSlot === 2 && nChip === 2, 'B4: both templates carry the chip and the single gated button slot (slots ' + nSlot + ', chips ' + nChip + ')');
   assert(nGated === 2, 'B4: no ungated BEST button site survives — both button blocks collapse into the WATCH ONLY note when the record says so (found ' + nGated + ')');
