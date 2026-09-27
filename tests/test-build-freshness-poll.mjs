@@ -46,6 +46,13 @@ const eq = (a, b, m) => { assert.strictEqual(a, b, m); n++; };
 const STAMP = fs.readFileSync(path.join(ROOT, 'build-stamp.js'), 'utf8');
 const SW = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
 
+/* A build one AHEAD of the real stamp, computed from the stamp itself.
+   The harness's default "server version" was hardcoded hg-v999 — a future
+   build only until the desk actually shipped hg-v999, at which point every
+   "server ahead" case below compared equal and read fresh. "Ahead" is a
+   property of the current stamp, so it is derived here, once. */
+const AHEAD = 'hg-v' + (parseInt((STAMP.match(/version:\s*'hg-v(\d+)'/) || [null, '0'])[1], 10) + 1);
+
 /* ===================================================================
    Harness: run the REAL build-stamp.js under a fake browser whose
    clock, storage, focus and network are all controllable.
@@ -79,7 +86,7 @@ function boot(opts){
       fetched.push({ url: u, opts: o });
       if (opts.offline) return Promise.reject(new Error('offline'));
       return Promise.resolve({ ok: true, status: 200,
-        text: () => Promise.resolve("version: '" + (opts.liveVersion || 'hg-v999') + "'") });
+        text: () => Promise.resolve("version: '" + (opts.liveVersion || AHEAD) + "'") });
     },
     setInterval(fn, ms){ intervals.push({ fn, ms }); return intervals.length; },
     clearInterval(){}, setTimeout, clearTimeout,
@@ -160,17 +167,17 @@ const settle = () => new Promise(r => setTimeout(r, 15));
       This is the whole point of the pack.
    ===================================================================== */
 {
-  const env = boot({ readyState: 'complete', liveVersion: 'hg-v999' });
+  const env = boot({ readyState: 'complete', liveVersion: AHEAD });
   await settle();
-  /* boot already saw v999 and reloaded once; clear that and prove the
-     POLL path reaches the reload on its own */
+  /* boot already saw the newer build and reloaded once; clear that and
+     prove the POLL path reaches the reload on its own */
   env.reloads.length = 0;
   env.G.sessionStorage.data = {};
 
   env.intervals[0].fn();
   await settle();
   eq(env.reloads.length, 1, 'a tick that finds a newer build reloads the tab');
-  ok(env.G.sessionStorage.data['hg_build_reload_hg-v999'] === '1',
+  ok(env.G.sessionStorage.data['hg_build_reload_' + AHEAD] === '1',
     'the reload is recorded against the live version it saw');
 
   /* and it does not loop: the next fifty ticks must not reload again */
@@ -303,7 +310,7 @@ const settle = () => new Promise(r => setTimeout(r, 15));
                 addEventListener(){}, getElementById(){ return null; } },
     sessionStorage: { data: {}, getItem(){ return null; }, setItem(){} },
     location: { reload(){} },
-    fetch(){ return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve("version: 'hg-v999'") }); },
+    fetch(){ return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve("version: '" + AHEAD + "'") }); },
     console: { log(){}, warn(){}, error(){} },
     Promise, Date, Math, JSON, String, Number, Object, Array, RegExp, isFinite, Error
   };

@@ -91,9 +91,13 @@ const okRes = (body) => Promise.resolve({ ok: true, status: 200, text: () => Pro
 const r1 = await G.hgBuildFreshness(() => okRes("version: '" + G.HG_BUILD.version + "'"));
 eq(r1.state, 'fresh', 'server matching -> fresh');
 
-const r2 = await G.hgBuildFreshness(() => okRes("version: 'hg-v999'"));
+/* "server ahead" is computed FROM the live stamp, never hardcoded: the old
+   fixture said hg-v999, which was a future version only until the day the
+   build reached it — the test went stale in exactly the way it guards against. */
+const aheadVer = 'hg-v' + (parseInt(String(G.HG_BUILD.version).replace('hg-v', ''), 10) + 1);
+const r2 = await G.hgBuildFreshness(() => okRes("version: '" + aheadVer + "'"));
 eq(r2.state, 'stale', 'server ahead -> stale');
-eq(r2.live, 'hg-v999', 'reports the live version it saw');
+eq(r2.live, aheadVer, 'reports the live version it saw');
 
 const r3 = await G.hgBuildFreshness(() => Promise.reject(new Error('offline')));
 eq(r3.state, 'unknown', 'network failure -> unknown, never a false STALE');
