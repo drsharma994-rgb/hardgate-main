@@ -89,6 +89,17 @@ a small reason line — nothing is dropped silently):
      ≥0.125R) demotes the card: it paints but can never lead. Replay measured
      that cohort gross-positive but net-negative — real setups, unpayable
      geometry.
+ 14) FUNDAMENTAL STACK (hg-v1004, fundamental-stack.js) — the desk's LEAD
+     answers to the house fundamental stack, not just its buttons: a checked
+     red-folder BLACKOUT joins the entry veto beside gate 5 (no new
+     convictions mint; live ones keep running; an unchecked calendar
+     refuses nothing), and 2+ NET checked votes AGAINST the direction —
+     real rates and CFTC COT, the same feeds the tally scores as points —
+     demote the candidate (stamped FUNDAMENTAL HEADWIND; it paints, the
+     reason is named, it can never be MOST PROBABLE). A tailwind CHIPS but
+     never adds tally points — the tally already counts those legs. The
+     full gold board (real rates / COT / calendar / DXY·US10Y·gold-silver
+     priors) renders beside every scan outcome.
 
 Feeds (in preference order):
   1) window.getGoldCandles (macro.js) — XAUUSDT TradFi perp first, PAXGUSDT
@@ -123,7 +134,9 @@ full (deep-frozen, never throws, null before the first scan):
   { cands: [{ id, venue, sym, dir, strategy, grade, entry, stop, t1, t2, rr,
              rr2, tally, tallyParts, agree, oppose, killzone, atr, anchor,
              zone, demoted, stamps, vetoed, merged, locked, issuedAt, asOf,
-             why, invalidates }],
+             why, invalidates, fund }],   (hg-v1004: fund = refuse / demote /
+             chips — the fundamental-stack verdict at scan time, null when
+             the board was dark or the stack absent)
     bestId, history: [{ id, dir, strategy, venue, sym, entry, stop, t1, t2,
                         status, issuedAt, closedAt, closePrice }],
     rejected: [{ id, strategy, stratKey, dir, venue, sym, reason }], at } | null
@@ -490,7 +503,14 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
            no candles of their own, so without this the grade is neither
            inheritable nor recomputable, and their solidity scores silently
            differ from this desk's. Counts only — .smc holds no bars. */
-        smc: (c.smc && typeof c.smc === 'object') ? c.smc : null
+        smc: (c.smc && typeof c.smc === 'object') ? c.smc : null,
+        /* hg-v1004: the fundamental-stack verdict at scan time (refuse /
+           demote / chips) — SUPER GOLD & OMNIGOLD hold THIS desk's read at
+           THIS instant, not a recomputed-later one. */
+        fund: (c.fundGate && typeof c.fundGate === 'object')
+          ? { refuse: !!c.fundGate.refuse, demote: !!c.fundGate.demote,
+              chips: Array.isArray(c.fundGate.chips) ? c.fundGate.chips.slice() : [] }
+          : null
       });
     }
     /* FORWARD LOG, split by STRATEGY. This desk runs several distinct setups
@@ -1045,6 +1065,7 @@ function bannerHTML(best, ranked){
     + '<div><i>TP2</i><b>$' + pxF(best.t2) + '</b><u>' + fmtF(best.rr2, 1) + 'R — runner</u></div>'
     + '</div>'
     + '<div class="gsx-why"><b>WHY THIS ONE LEADS</b> — ' + esc(tallyTxt) + '.</div>'
+    + (function(){ var fc = gsFundChipHtml(best); return fc ? '<div style="margin-top:6px">' + fc + '</div>' : ''; })()
     /* hg-v911: the sentence above says why this card leads. This says what
        the desk's own replay measured about leading being worth anything —
        MOST PROBABLE ran -0.231R against -0.154R for the rest over 2,445
@@ -1187,6 +1208,7 @@ function cardHTML(c, isBest, season, tape){
     + '<span class="gpip ' + gradeCls + '"' + gsxPipAttr(gradeCls === 'ok') + '>GRADE ' + c.grade + '</span>'
     + '<span class="gpip"' + gsxPipAttr(false) + '>' + esc(c.killzone) + '</span>'
     + goldTapeChipHtml(c, tape)
+    + gsFundChipHtml(c)
     + chips + metaChips
     + '</div>'
     + tallyChips(c)
@@ -1678,6 +1700,74 @@ function gsApplyOneAtATime(ranked, open){
            reader: o.reader || null };
 }
 
+/* hg-v1004: THE DESK'S LEAD ANSWERS TO THE FUNDAMENTAL STACK.
+
+   The tally has always read these feeds as POINTS (macro realRate ±2, COT
+   crowding ∓1, F&G +1). Points let a structurally strong card outscore a
+   DECISIVE fundamental headwind and lead — while its own ADD/SEND buttons
+   (the hg-v1003 backstops) already say WATCH ONLY. The same gate now speaks
+   where the crown is decided: 2+ NET checked votes against demote the
+   candidate (stamped FUNDAMENTAL HEADWIND — the gsApplyOneAtATime pattern:
+   the card paints, the reason is named, it can never be MOST PROBABLE);
+   the stack's checked blackout is handled one step earlier, where it joins
+   the entry veto beside gate 5. A tailwind only CHIPS — the tally already
+   counts those same legs as points, so adding points here would count them
+   twice. A dark board touches nothing (unchecked is not a veto). Live
+   locked convictions are skipped — the trade you are IN keeps running
+   (gate 5 semantics); dropped/vetoed rows are already spoken for.
+
+   PURE apart from the gate it calls: marks what it demotes and reports the
+   counts, so the scan line and the tests read the same object the scan
+   acted on rather than recomputing it. */
+function gsFundamentalScan(ranked){
+  var gateFn = gfn('hgFundamentalGate');
+  if (!gateFn || !Array.isArray(ranked)) return { demoted: 0, gated: 0 };
+  var demoted = 0, gated = 0;
+  for (var i = 0; i < ranked.length; i++){
+    var c = ranked[i];
+    if (!c || !c.sym || !c.dir || c.dropped || c.vetoed || c.locked) continue;
+    var g = null;
+    try{ g = gateFn(c.sym, c.dir, { scanner: 'goldscalp' }); }catch(eG){ g = null; }
+    if (!g || (g.refuse !== true && g.demote !== true && !(g.chips && g.chips.length))) continue;
+    gated++;
+    c.fundGate = { refuse: g.refuse === true, demote: g.demote === true,
+                   chips: (g.chips || []).slice(), reason: g.reason || '',
+                   asset: g.asset || 'gold',
+                   regime: g.regime ? { bulls: g.regime.bulls, bears: g.regime.bears, checked: g.regime.checked } : null };
+    if (g.demote === true){
+      c.demoted = true;
+      if (!Array.isArray(c.stamps)) c.stamps = [];
+      if (c.stamps.indexOf('FUNDAMENTAL HEADWIND') < 0) c.stamps.push('FUNDAMENTAL HEADWIND');
+      var gn = Array.isArray(c.gateNotes) ? c.gateNotes.slice() : [];
+      gn.push(g.reason || 'fundamental headwind — 2+ net checked votes against this direction');
+      c.gateNotes = gn;
+      demoted++;
+    }
+  }
+  return { demoted: demoted, gated: gated };
+}
+
+/* The card/banner chip is the stack's own renderer reading the verdict this
+   desk stored at scan time — never a parallel rendering of it. */
+function gsFundChipHtml(c){
+  try{
+    var fn = gfn('hgFundamentalChipHtml');
+    var g = c && c.fundGate;
+    if (!fn || !g || !Array.isArray(g.chips) || !g.chips.length) return '';
+    return fn(g) || '';
+  }catch(e){ return ''; }
+}
+
+/* The full gold board — real rates, COT, the calendar, the priors — renders
+   beside every scan outcome, dark feeds honestly UNCHECKED. */
+function gsFundPanelHtml(){
+  try{
+    var rFn = gfn('hgFundamentalRegime'), pFn = gfn('hgFundamentalPanelHtml');
+    if (!rFn || !pFn) return '';
+    return pFn(rFn('gold')) || '';
+  }catch(e){ return ''; }
+}
+
 /* Renders only while something is actually held. A standing lecture about
    concentration on a flat book is noise, and noise is what gets scrolled
    past on the day it matters. */
@@ -1829,6 +1919,8 @@ function whySilentText(o){
   var lead = null;
   if (o.newsVeto) lead = 'NEWS GATE — no new entries 30 min before / 15 min after CPI·NFP·FOMC·GDP' + (o.newsVetoTitle ? ' — ' + o.newsVetoTitle : '')
     + ': new convictions held, issuance resumes after the window';
+  else if (o.fundBlackout) lead = 'EVENT BLACKOUT — a red-folder macro print is inside its blackout window'
+    + ': new convictions held, issuance resumes when the window clears';
   else if (o.feedsFailed) lead = 'feeds failed — no 15m klines from any source (macro chain + PAXGUSDT + Delta all quiet)';
   else if (o.asiaSession) lead = 'ASIA SESSION (00:00–07:00 GMT) — only ASIAN RANGE breakout or a violent AH/AL sweep may lead; other strategies are demoted (ASIA SESSION) and cannot lead';
   else if (o.kzWeight === 0) lead = 'outside every ICT killzone (' + (o.kzLabel || 'OFF-HOURS')
@@ -2556,10 +2648,28 @@ async function runScan(ui, scanSt){
       }catch(eV2){ newsVeto = false; }
     }
 
+    /* hg-v1004: the house fundamental stack's checked red-folder BLACKOUT
+       joins the entry veto — same event class as gate 5, same semantics:
+       NO new conviction mints, already-live ones keep running untouched.
+       An UNCHECKED calendar refuses nothing (hg-v992 honesty), and with the
+       stack absent the probe is simply skipped. Direction-independent by
+       construction — the gate checks the blackout before direction. */
+    var fundBlackout = false;
+    if (!newsVeto){
+      var fundGateProbe = gfn('hgFundamentalGate');
+      if (fundGateProbe){
+        try{
+          var gProbe = fundGateProbe('XAUUSD', 'long', { scanner: 'goldscalp' });
+          if (gProbe && gProbe.refuse === true) fundBlackout = true;
+        }catch(eFB){ fundBlackout = false; }
+      }
+    }
+    var entryVeto = newsVeto || fundBlackout;
+
     /* CONVICTION LOCK — restore issued levels verbatim; transitions only on
        invalidation against the latest 15m close (STOPPED / TARGET HIT /
        EXPIRED); never re-pick levels for a live conviction */
-    var lock = applyConviction(ranked, venueRows, now, newsVeto);
+    var lock = applyConviction(ranked, venueRows, now, entryVeto);
     if (isFinite(liveSpot) && liveSpot > 0){
       var guarded = goldSpotGuardAfterLock(lock.store, ranked, liveSpot);
       if (guarded){
@@ -2582,11 +2692,14 @@ async function runScan(ui, scanSt){
       if (vc && vc.vetoed){
         rejectedAll.push({ id: vc.id || null, strategy: vc.strategy || null, stratKey: vc.stratKey || null,
                            dir: vc.dir, venue: vc.venue || null, sym: vc.sym || null,
-                           reason: 'NEWS GATE — no new entries, wait 15 min after release'
+                           reason: (!newsVeto && fundBlackout)
+                             ? 'EVENT BLACKOUT — no fresh setup forms into a red-folder macro print'
+                             : 'NEWS GATE — no new entries, wait 15 min after release'
                                    + (newsVetoTitle ? ' (' + newsVetoTitle + ')' : '') });
       } else if (vc) cards.push(vc);
     }
     if (newsVeto) legs.push('NEWS GATE — new convictions held (existing ones keep running)');
+    else if (fundBlackout) legs.push('EVENT BLACKOUT — new convictions held (existing ones keep running)');
 
     /* hg-v930: ONE POSITION AT A TIME. Applied HERE and nowhere earlier —
        after applyConviction has stamped c.locked (so the trade you are in is
@@ -2602,6 +2715,17 @@ async function runScan(ui, scanSt){
       legs.push('ONE AT A TIME — ' + oneAtATime.n + ' gold conviction'
                 + (oneAtATime.n === 1 ? '' : 's') + ' live, ' + oneAtATime.held + ' new setup'
                 + (oneAtATime.held === 1 ? '' : 's') + ' held');
+    }
+
+    /* hg-v1004: the fundamental stack demotes at LEADERSHIP, not only at the
+       buttons — a 2+-vote headwind can never be MOST PROBABLE, exactly the
+       rule hg-v1003 enforced on every card's CTAs. Runs after the lock so a
+       live conviction is recognised and left alone. */
+    var fundScan = null;
+    try{ fundScan = gsFundamentalScan(ranked); }catch(eFS){ fundScan = null; }
+    if (fundScan && fundScan.demoted > 0){
+      legs.push('FUNDAMENTAL STACK — ' + fundScan.demoted + ' candidate' + (fundScan.demoted === 1 ? '' : 's')
+        + ' demoted to watch (2+ net checked votes against)');
     }
 
     /* MOST PROBABLE = spot-aligned leader when XAUT basis is wide vs spot ref */
@@ -2693,6 +2817,7 @@ async function runScan(ui, scanSt){
       }
       whySilent = whySilentText({
         newsVeto: newsVeto, newsVetoTitle: newsVetoTitle,
+        fundBlackout: fundBlackout,
         feedsFailed: !gold.rows15m.length,
         asiaSession: asiaSession,
         kzWeight: kzW, kzLabel: kzL,
@@ -2708,6 +2833,9 @@ async function runScan(ui, scanSt){
     var mixedBanner = fwdNote + gsTapeNotes(gold && gold.rows15m)
       + gsFeedLegNote(gold) + goldMixedFeedBannerHtml(gold);
     var uniHtml = goldUniformPanelHtml(display, uniRows, 'SCALP', deskTape);
+    /* hg-v1004: the desk shows the board it answers to — real rates, COT,
+       the calendar and the priors render beside every scan outcome. */
+    var fundPanelHtml = gsFundPanelHtml();
     var wkRows = gold.rows4h.length ? gold.rows4h : gold.rows15m;
     paintGoldWeekendPanel(ui, wkRows, now, displayBest);
     var aplusCtx = goldBuildAPlusCtx(ctx, gold, barNow, news);
@@ -2756,7 +2884,7 @@ async function runScan(ui, scanSt){
     if (ui && ui.cards && ui.empty){
       if (display.length){
         ui.empty.style.display = 'none';
-        ui.cards.innerHTML = basisHtml + mixedBanner + aplusPack.panel + uniHtml
+        ui.cards.innerHTML = basisHtml + mixedBanner + fundPanelHtml + aplusPack.panel + uniHtml
           + gsOneAtATimeHtml(oneAtATime) + gsBreakevenHtml() + bannerHTML(displayBest, display)
           + display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note, deskTape); }).join('')
           + formingLayersHtml()
@@ -2768,7 +2896,7 @@ async function runScan(ui, scanSt){
         /* zero qualifying candidates but something to show: WHY SILENT leads,
            then the watch panel, then the held-back reason lines */
         ui.empty.style.display = 'none';
-        ui.cards.innerHTML = basisHtml + mixedBanner + uniHtml + gsOneAtATimeHtml(oneAtATime)
+        ui.cards.innerHTML = basisHtml + mixedBanner + fundPanelHtml + uniHtml + gsOneAtATimeHtml(oneAtATime)
           + gsBreakevenHtml()
           + (whySilent ? whySilentHTML(whySilent) : '')
           + formingLayersHtml()
@@ -2780,7 +2908,7 @@ async function runScan(ui, scanSt){
         /* feeds failed: cards stay empty (no fabricated setups);
            the 7-step readout still prints — NO SETUP or DATA_UNAVAILABLE is
            itself the answer the playbook asks for. Catalog lives on empty. */
-        ui.cards.innerHTML = basisHtml + uniHtml + sevenStepHtml();
+        ui.cards.innerHTML = basisHtml + fundPanelHtml + uniHtml + sevenStepHtml();
         var catH = '';
         try{
           var cFn = gfn('hgGoldCatalogHtml');
@@ -2812,7 +2940,7 @@ async function runScan(ui, scanSt){
           if (typeof visionRefresh === 'function'){
             visionRefresh({
               scanSt: scanSt, scanGen: visionGen, ui: ui, display: display, displayBest: displayBest,
-              basisHtml: basisHtml + mixedBanner + aplusPack.panel + uniHtml, bannerHTML: bannerHTML, cardHTML: cardHTML,
+              basisHtml: basisHtml + mixedBanner + fundPanelHtml + aplusPack.panel + uniHtml, bannerHTML: bannerHTML, cardHTML: cardHTML,
               formingNowHTML: formingNowHTML, rejectedHTML: rejectedHTML, historyHTML: historyHTML,
               formingLayersHTML: formingLayersHtml,
               armedAll: armedAll, rejectedAll: rejectedAll, history: lock.store.history,
@@ -3104,8 +3232,13 @@ W.goldscalpMountSection = function(el, opts){
    It is armed from the MOUNT instead, which is also the correct lifecycle: a
    countdown for a tab nobody has opened has nothing to paint. */
 W.HG_tabs = W.HG_tabs || [];
+/* hg-v1004: the fundamental pass + panel travel on the HG_tabs
+   registration — the hg-v967/v968 route — so tests reach the SHIPPED
+   functions without adding a single module-scope export (the render
+   integrity guard counts them). */
 W.HG_tabs.push({ id: 'goldscalp', label: 'GOLD SCALP', mount: mount, refresh: goldscalpRefresh,
-                 autoStampText: gsAutoStampText, autoStampInit: gsAutoStampInit });
+                 autoStampText: gsAutoStampText, autoStampInit: gsAutoStampInit,
+                 fundamentalScan: gsFundamentalScan, fundPanelHtml: gsFundPanelHtml });
 W.HG_warmups = W.HG_warmups || [];
 W.HG_warmups.push({ id: 'goldscalp', label: 'GOLD SCALP', run: gsWarm });
 })();

@@ -289,7 +289,10 @@ console.log('== vision repaint keeps the 7-STEP + FORMING LAYERS block ==');
   const gs = read('goldscalp.js'), gw = read('goldswing.js');
   ok(/formingLayersHTML:\s*formingLayersHtml/.test(gs) && /formingLayersHTML:\s*formingLayersHtml/.test(gw), 'GOLD SCALP + GOLD SWING hand the block to the vision repaint');
   ok(/var seven = sevenStepHtml\(\);[\s\S]*?return seven \+ forming;/.test(gs) && /var seven = sevenStepHtml\(\);[\s\S]*?return seven \+ forming;/.test(gw), 'seven-step render is isolated from a forming-stack throw on both desks');
-  ok(/basisHtml \+ uniHtml \+ sevenStepHtml\(\)/.test(gs) && /basisHtml \+ uniHtml \+ sevenStepHtml\(\)/.test(gw), 'feeds-failed / nothing-armed branch still prints the 7-step readout');
+  /* hg-v1004 re-point: GOLD SCALP's feeds-failed branch gained the
+     fundamental board (basisHtml + fundPanelHtml + uniHtml + sevenStepHtml()).
+     The guarded fact stands — the 7-step readout still prints on that branch. */
+  ok(/basisHtml( \+ fundPanelHtml)? \+ uniHtml \+ sevenStepHtml\(\)/.test(gs) && /basisHtml \+ uniHtml \+ sevenStepHtml\(\)/.test(gw), 'feeds-failed / nothing-armed branch still prints the 7-step readout');
 }
 
 console.log('== desks wired + deploy stamp ==');
