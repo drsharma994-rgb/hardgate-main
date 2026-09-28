@@ -62,6 +62,13 @@ forward ledger measures.
     FUNDING CROWDED — squeeze risk. A caution chip, never a gate, the tier
     unchanged (brain.js's own crowding pattern). Chip only; the tally's
     points stay untouched.
+
+DIRECTION PARITY (hg-v1013) — trendmxConviction measured the composite's
+strength on the long side only (sc >= 4 / sc >= 2), so a row at -5 had
+less standing than a row at +2: no short reached the LIMIT BOARD, the
+promoted slice or the CONVICTION filter except through a 7/7 clean. The
+reader now takes |score| — the same bars, both directions. The golden
+desk stays long-only by design (a golden cross IS a bull cross).
 ========================================================================= */
 (function(){
 'use strict';
@@ -584,10 +591,24 @@ var tmTab = { run: null, busy: false, hasRun: false, missing: 0, mountEl: null }
 var __tmSnap = null;
 var __tmScanSnap = null;
 
+/* hg-v1013: conviction is the STRENGTH of the majority, not its side.
+   Every other reader of the composite is direction-agnostic — tmDirOf
+   (|score| >= 2), the FORMING predicate (|score|), the board rank
+   (|score|), the summary's strong counts (+4/-4) — while this one read
+   sc >= 4 / sc >= 2, so a row at -5, the maximum bearish alignment the
+   composite can print, had less standing than a row at +2. The practical
+   effect: no short ever reached the LIMIT BOARD or the promoted slice
+   (SMC + taker flow) except through a 7/7 clean, and the CONVICTION
+   filter never showed a short. The bars do not move — 4 and TM_MAJORITY,
+   exactly as before; they just stop pointing one way. Not a
+   recalibration: the same numbers, applied to the side they always
+   claimed to measure. The golden desk is untouched — it enforces
+   dir === 'long' before conviction is ever asked. */
 function trendmxConviction(row){
   var sc = (row && typeof row.score === 'number' && isFinite(row.score)) ? row.score : 0;
-  if (sc >= 4) return { tier: 'STRONG', label: 'STRONG CONVICTION', prime: true };
-  if (sc >= TM_MAJORITY) return { tier: 'CONVICTION', label: 'CONVICTION', prime: false };
+  var a = Math.abs(sc);
+  if (a >= 4) return { tier: 'STRONG', label: 'STRONG CONVICTION', prime: true };
+  if (a >= TM_MAJORITY) return { tier: 'CONVICTION', label: 'CONVICTION', prime: false };
   return null;
 }
 

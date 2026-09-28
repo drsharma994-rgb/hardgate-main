@@ -104,9 +104,11 @@ console.log('== the read — real flow, probed numbers ==');
   const w = boot();
   const calls = [];
   w.binanceTakerRatio = async (sym, period, limit) => { calls.push(sym + '|' + period + '|' + limit); return SELL; };
-  /* the promoted slice is the SMC pass's own: clean7 OR conviction — and
-     trendmxConviction is long-side (score >= 2), so a short row is promoted
-     through clean7. The flow pass mirrors that slice exactly, never widens it. */
+  /* the promoted slice is the SMC pass's own: clean7 OR conviction. The
+     flow pass mirrors that slice exactly, never widens it. (Pre-hg-v1013
+     trendmxConviction read the long side only, so this short carries a
+     clean7 gate; since v1013 a -5 score is conviction on its own — the
+     v1013 test pins that.) */
   const rowL = mkRow('AAAUSDT', 'long'), rowS = mkRow('BBBUSDT', 'short', { gate: gate7() });
   const res = await w.trendmxFlowScan([rowL, rowS]);
   ok(res.read === 'taker' && res.scanned === 2, 'pass reads the promoted slice, read=taker');
