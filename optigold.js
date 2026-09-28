@@ -85,6 +85,28 @@ the reason named). The posture rides the forward ledger as row.regime so the
 book can later measure whether regime-aligned breaks pay better — on evidence,
 not assertion. An unreadable regime (thin tape, absent library, a failed swing
 lane) bars nothing and says so once, on the panel above the board.
+
+hg-v1009: the confirmation floor grows its fourth and fifth families — VWAP
+and CVD — and both arrive with the independence the floor's logic requires.
+FAMILY 4, VWAP (indicators.js's vwapAt / vwapReclaim, unused on gold until
+now): the break bar must HOLD the volume-weighted mean — the close beyond the
+rolling VWAP-20 on the break's side. The STATE read, deliberately, not the
+reclaim event: counting "no reclaim printed" as a failure would penalise
+exactly the strong trend breaks that never pierce the mean, and when a
+reclaim DID print the note says so — the mean probed and defended is the
+stronger form of the same evidence. FAMILY 5, CVD (omniroute.js's hgOmniCvd),
+REAL Binance taker flow only: the candle-approximated stand-in is derived
+from the same closes the momentum family already reads, so it is not
+independent evidence and does not count. The taker series is fetched per
+lane — only where the lane's own feed is a Binance gold perp ('binance-xau'
+/ 'binance-paxg' -> XAUUSDT / PAXGUSDT) — and sliced at the break bar before
+the read, so a break 200 bars back is judged on the flow that existed THEN.
+The bar stays exactly where v1006 put it: at least TWO CHECKED families must
+back the break. What widened is the evidence, not the threshold — with five
+families an UNCONFIRMED verdict now means broader checked disagreement than
+it did with three, and a volume-less feed (Twelve Data / Yahoo) checks
+neither new family, degrading exactly as it did. The verdict enum is
+unchanged, so every stored ledger row still groups with the new ones.
 ========================================================================= */
 (function(){
 'use strict';
@@ -737,11 +759,17 @@ var OG_VOLZ_LOOK = 20;    /* the house z-score lookback */
 var OG_RSI_SLOPE = 3;     /* engine.js's own RSI slope span */
 var OG_TREND_EMA = 50;    /* the prevailing-trend read on the lane's own tape */
 var OG_TREND_SLOPE = 5;   /* the bars over which the EMA's slope is judged */
+var OG_VWAP_LOOK = 20;    /* hg-v1009: vwapAt / vwapReclaim's own window (indicators.js) — reused, not refit */
+var OG_CVD_LOOK = 30;     /* hg-v1009: hgOmniCvd's own default window (omniroute.js) — reused */
+var OG_CVD_MIN_WIN = 10;  /* hg-v1009: hgOmniCvd's own minimum window count for a flow read — reused */
 
-/* The read itself. Pure: the lane's rows and a setup in, the three family
-   verdicts and the floor's answer out — never null-safe by coercion, every
-   absent input returns null so junk can never fabricate a confirmation. */
-function ogConfirmRead(rows, s){
+/* The read itself. Pure apart from the optional taker series the caller
+   hands in: the lane's rows and a setup in, the family verdicts and the
+   floor's answer out — never null-safe by coercion, every absent input
+   returns null so junk can never fabricate a confirmation. hg-v1009: five
+   families now (VWAP and real-flow CVD joined v1006's three); the THIRD
+   argument is optional and old callers behave exactly as v1006 did. */
+function ogConfirmRead(rows, s, extra){
   try{
     if (!Array.isArray(rows) || !rows.length || !s) return null;
     var dir = s.dir;
@@ -752,7 +780,7 @@ function ogConfirmRead(rows, s){
     if (i < 0 || i >= rows.length) return null;
     var seg = rows.slice(0, i + 1);            /* the evidence stops at the break bar */
     var closes = seg.map(function(r){ return +r.c; });
-    var vol = null, mom = null, trend = null;
+    var vol = null, mom = null, trend = null, vwap = null, cvd = null;
 
     /* family 1 — VOLUME participation at the break bar. The all-zero and
        one-repeated-figure tapes are detected BEFORE the z-score is read:
@@ -823,27 +851,102 @@ function ogConfirmRead(rows, s){
       }
     }
 
+    /* family 4 — VWAP: does the break HOLD the volume-weighted mean?
+       (hg-v1009) The STATE read, built on indicators.js's own vwapAt — the
+       primitive vwapReclaim is made of: the break bar's close beyond the
+       rolling VWAP-20 on the break's side. Deliberately the state and not
+       the reclaim EVENT: counting "no reclaim printed" as a failure would
+       penalise exactly the strong trend breaks that never pierce the mean —
+       the opposite of what a floor is for. When a reclaim DID print the
+       note says so: the mean probed and defended is the stronger form of
+       the same evidence. UNCHECKED where the tape carries no usable volume
+       (vwapAt's NaN answer) — the Twelve Data / Yahoo legs, the same tapes
+       where family 1 stands aside. */
+    var _vwr = (typeof vwapReclaim === 'function') ? vwapReclaim : null;
+    if (_vwr && seg.length >= OG_VWAP_LOOK + 2){
+      var vr = _vwr(seg, OG_VWAP_LOOK, dir);
+      if (vr && isFinite(vr.vwap)){
+        var cLst = closes[closes.length - 1];
+        if (isFinite(cLst)){
+          var vSide = dir === 'long' ? (cLst > vr.vwap) : (cLst < vr.vwap);
+          vwap = { ok: vSide, val: vr.vwap,
+                   note: 'the break bar closed ' + (vSide ? (dir === 'long' ? 'ABOVE' : 'BELOW') : (dir === 'long' ? 'below' : 'above'))
+                       + ' the rolling VWAP-20 (' + fmt(vr.vwap, 2) + ')'
+                       + (vr.ok === true ? ' — and a VWAP reclaim printed into it: the mean was probed and defended'
+                         : vSide ? ' — the volume-weighted mean sits behind the break'
+                         : ' — the break never took the volume-weighted mean back') };
+        }
+      }
+    }
+
+    /* family 5 — CVD: the REAL order flow behind the break (hg-v1009), and
+       only real flow. omniroute.js's hgOmniCvd reads a Binance taker series
+       into a signed imbalance; its candle-approximated stand-in is derived
+       from the SAME closes the momentum family already reads, so it is not
+       an independent family and does not count here — the floor's whole
+       logic is agreement from INDEPENDENT families. The series is sliced at
+       the break bar (window stamps up to the bar's own open) before the
+       read, so a setup whose break printed 200 bars back is judged on the
+       flow that existed THEN, never on windows that had not printed yet.
+       UNCHECKED without a taker series, with fewer than hgOmniCvd's own 10
+       readable windows up to the break, or when the read falls back to the
+       candle stand-in (junk ratios). */
+    var _cvdFn = (typeof W.hgOmniCvd === 'function') ? W.hgOmniCvd : null;
+    var _tk = (extra && extra.taker && Array.isArray(extra.taker.series)) ? extra.taker.series : null;
+    if (_cvdFn && _tk && seg.length >= OG_CVD_LOOK){
+      var bts = +rows[i].t;
+      if (isFinite(bts)){
+        if (bts > 1e12) bts = bts / 1000;   /* -> seconds, the taker series' own clock */
+        var cut = [];
+        for (var tw = 0; tw < _tk.length; tw++){
+          var wt = +(_tk[tw] && _tk[tw].t);
+          if (isFinite(wt) && wt <= bts) cut.push(_tk[tw]);
+        }
+        if (cut.length >= OG_CVD_MIN_WIN){
+          var cv = _cvdFn(seg, OG_CVD_LOOK, { series: cut });
+          if (cv && cv.source === 'taker' && isFinite(cv.delta)){
+            var cWith = cv.dir === dir;
+            cvd = { ok: cWith, val: cv.delta,
+                    note: 'CVD ' + (cv.delta >= 0 ? '+' : '') + cv.delta.toFixed(2)
+                        + ' of Binance taker flow over ' + cv.bars + ' windows to the break bar'
+                        + (cWith ? ' — the order flow backs the break'
+                                 : ' — the order flow runs AGAINST the break (the crowd filled the other side)')
+                        + (cv.divergence ? (' · ' + cv.divergence + ' divergence across the window') : '') };
+          }
+        }
+      }
+    }
+
     var fams = [];
     if (vol) fams.push(vol);
     if (mom) fams.push(mom);
     if (trend) fams.push(trend);
+    if (vwap) fams.push(vwap);
+    if (cvd) fams.push(cvd);
     var checked = fams.length;
     var agreeN = 0, fi;
     for (fi = 0; fi < fams.length; fi++){ if (fams[fi].ok === true) agreeN++; }
+    /* hg-v1009: the bar is EXACTLY where v1006 put it — two checked
+       families or the break is UNCONFIRMED. What widened is the evidence:
+       with five families an UNCONFIRMED verdict now means broader checked
+       disagreement than it did with three, and a volume-less feed checks
+       neither new family and degrades exactly as it did. */
     var verdict = checked < 2 ? 'unverified' : (agreeN >= 2 ? 'confirmed' : 'unconfirmed');
     var head = verdict === 'confirmed' ? ('CONFIRMED ' + agreeN + '/' + checked)
              : verdict === 'unconfirmed' ? ('UNCONFIRMED ' + agreeN + '/' + checked)
-             : ('CONF UNCHECKED — only ' + checked + ' of 3 families readable');
+             : ('CONF UNCHECKED — only ' + checked + ' of 5 families readable');
     var line = head + ': ' + (vol ? vol.note : 'volume unreadable on this tape')
       + ' · ' + (mom ? mom.note : 'momentum unreadable on this tape')
       + ' · ' + (trend ? trend.note : 'the EMA-50 trend read is not warmed up on this tape')
+      + ' · ' + (vwap ? vwap.note : 'VWAP unreadable on this tape (no usable volume leg)')
+      + ' · ' + (cvd ? cvd.note : 'no real order-flow read on this lane')
       + (verdict === 'unconfirmed'
          ? '. Fewer than two checked families back this break, so it never takes a TOP PICK slot — it renders with its evidence, nothing more.'
          : verdict === 'confirmed'
          ? '. At least two checked families back the break — the confirmation floor is answered.'
          : '. The floor bites only where evidence exists to judge, so this setup stays eligible.');
-    return { vol: vol, mom: mom, trend: trend, checked: checked, agree: agreeN,
-             verdict: verdict, line: line };
+    return { vol: vol, mom: mom, trend: trend, vwap: vwap, cvd: cvd,
+             checked: checked, agree: agreeN, verdict: verdict, line: line };
   }catch(e){ return null; }
 }
 
@@ -861,7 +964,8 @@ function ogConfirmChipHtml(s){
   if (!c || !c.verdict) return '';
   if (c.verdict === 'confirmed') return '<span class="stamp ok">CONFIRMED ' + c.agree + '/' + c.checked + '</span>';
   if (c.verdict === 'unconfirmed') return '<span class="stamp bad">UNCONFIRMED ' + c.agree + '/' + c.checked + ' — never a TOP PICK</span>';
-  return '<span class="stamp warn">CONF UNCHECKED — ' + c.checked + '/3 readable</span>';
+  /* hg-v1009: five families now — VWAP and real-flow CVD joined v1006's three */
+  return '<span class="stamp warn">CONF UNCHECKED — ' + c.checked + '/5 readable</span>';
 }
 
 /* hg-v1007: THE HOUSE REGIME seams. ogRegimeBlocked is the single predicate
@@ -896,9 +1000,10 @@ function ogTopPicks(setups, px){
        takes a pick slot — it still renders in its lane list, chipped. */
     if (ogFundBlocked(s)) return;
     /* hg-v1006: nor does a break the CHECKED evidence fails to back — fewer
-       than two of the three confirmation families with it. An UNVERIFIED
-       setup (too little readable evidence to judge) stays eligible: the
-       floor bites only where evidence exists to judge. */
+       than two of the confirmation families with it (five since hg-v1009:
+       VWAP and real-flow CVD joined volume, momentum and trend). An
+       UNVERIFIED setup (too little readable evidence to judge) stays
+       eligible: the floor bites only where evidence exists to judge. */
     if (ogConfirmBlocked(s)) return;
     /* hg-v1007: nor does a break the house regime is positioned AGAINST — a
        ranging or compressed 4h tape is where breaks fade. Only that posture
@@ -1161,10 +1266,10 @@ function render(ui, lanes, mark, note, opts){
     + 'within ' + REACH_ATR.toFixed(1) + '×ATR that still has bars left to fill, or a running position that pays at least '
     + MIN_RR_NOW.toFixed(1) + ':1 joined at the mark. Anything else is shown badged OUT OF REACH rather than hidden — '
     + 'the rule found it, but price has left it behind.'
-    + '<br>A pick must also clear the <b>confirmation floor</b> (hg-v1006): at least two of the three checked families — '
-    + 'volume participation, momentum (RSI-14), and the prevailing EMA-50 trend, all read on the lane\'s own tape at the '
-    + 'break bar — must back the break. A break whose evidence cannot be read stays eligible as CONF UNCHECKED; a break the '
-    + 'checked evidence does not back is UNCONFIRMED and never takes a slot, however well it scores.'
+    + '<br>A pick must also clear the <b>confirmation floor</b> (hg-v1006, five families since hg-v1009): at least two of the checked families — '
+    + 'volume participation, momentum (RSI-14), the prevailing EMA-50 trend, the VWAP-20 hold, and on Binance perp-fed lanes the real '
+    + 'taker-flow CVD, all read on the lane\'s own tape at the break bar — must back the break. A break whose evidence cannot be read stays '
+    + 'eligible as CONF UNCHECKED; a break the checked evidence does not back is UNCONFIRMED and never takes a slot, however well it scores.'
     + '<br>And a pick must not fight the <b>house regime</b> (hg-v1007): one shared read of what the 4h tape is '
     + 'doing — trending, ranging, compressed or exploding — from regime-stack.js, computed off the swing lane\'s '
     + 'own rows. A break with the 4h trend is favored; a break into a ranging or compressed 4h tape is in the '
@@ -1316,6 +1421,24 @@ async function runOptiGold(ui){
         lanes.push({ cfg: L, rows: [], setups: [], err: err || ('no ' + L.interval + ' candles') });
         continue;
       }
+      /* hg-v1009: the CVD confirmation family reads REAL Binance taker
+         flow, and only where the lane's OWN feed is a Binance gold perp —
+         'binance-xau' is XAUUSDT and 'binance-paxg' is PAXGUSDT (macro.js's
+         own source labels). Every other feed hands in nothing and the
+         family stands aside: the candle-approximated stand-in is derived
+         from the same closes the momentum family already reads, so it is
+         not independent evidence and the floor does not count it. 500
+         windows of the lane's own interval reach back across the whole
+         loaded tape on 1h and 4h and most of it on 15m; a break older than
+         that simply reads UNCHECKED. One cached call per lane, soft
+         everywhere — a failed fetch is a null, never an error up. */
+      var ogTaker = null;
+      try{
+        var ogTkSym = (got && got.source === 'binance-xau') ? 'XAUUSDT'
+                    : (got && got.source === 'binance-paxg') ? 'PAXGUSDT' : null;
+        var ogTkFn = (typeof W.binanceTakerRatio === 'function') ? W.binanceTakerRatio : null;
+        if (ogTkSym && ogTkFn) ogTaker = await ogTkFn(ogTkSym, L.interval, 500);
+      }catch(eTk){ ogTaker = null; }
       var setups = ogSignals(rows, L);
       setups.forEach(function(s){
         s.lane = L.key; s.laneLabel = L.label; s.interval = L.interval;
@@ -1324,8 +1447,11 @@ async function runOptiGold(ui){
            sliced at the break bar — never pooled across lanes, never read on
            a bar that had not closed when the break printed. Stamped for
            every state: it is a property of the break, like the weekend and
-           news marks, not of the setup's current liveness. */
-        s.confirm = ogConfirmRead(rows, s);
+           news marks, not of the setup's current liveness. hg-v1009: and the
+           lane's taker series rides along — the reader slices it at the
+           break bar itself, so a stale break is judged on the flow that
+           existed THEN, never on windows that had not printed. */
+        s.confirm = ogConfirmRead(rows, s, { taker: ogTaker });
       });
       lanes.push({ cfg: L, rows: rows, setups: setups, src: (got && got.source) || 'gold',
                    /* hg-v1007: the feed, kept for the forward recording, which

@@ -14,12 +14,20 @@
 
    hg-v1006 stamps every setup with ogConfirmRead(rows, s) — three families
    on the lane's OWN tape, sliced at the break bar so nothing after the
-   signal informs the read:
+   signal informs the read (hg-v1009 added two more — VWAP-20 hold and, on
+   Binance perp-fed lanes, real taker-flow CVD — and this file's family
+   COUNTS were updated to that truth; every VERDICT below is unchanged):
      VOLUME    volZ(20) > 0.5 (engine.js's G2 floor, reused, not refit)
      MOMENTUM  RSI-14 past the 50 midline AND sloping with the break over
                engine.js's 3-bar span; an exhausted RSI (>70 long, <30
                short) never counts as confirmation
      TREND     the close beyond EMA-50 with EMA-50 sloping the same way
+     VWAP      (hg-v1009) the break bar closes beyond the rolling VWAP-20 on
+               the break's side — the state read, with a reclaim named when
+               one printed
+     CVD       (hg-v1009) real Binance taker flow, sliced at the break bar —
+               tested in test-optigold-cvd-vwap-v1009.mjs; null here (no
+               taker series handed in), so every tape below checks four
    Fewer than two CHECKED families backing the break = UNCONFIRMED: the
    setup still renders with its evidence named, but ogTopPicks never hands
    it a TOP PICK slot. A family that cannot be read is UNCHECKED — it
@@ -124,11 +132,12 @@ console.log('== a backed break is CONFIRMED — all three families, with their n
 {
   const r = R(upTape(), { dir: 'long', i: 55 });
   ok(r && r.verdict === 'confirmed', 'the constructed break is CONFIRMED');
-  ok(!!r && r.checked === 3 && r.agree === 3, 'all three families readable and with it (3/3)');
+  ok(!!r && r.checked === 4 && r.agree === 4, 'all four readable families with it (4/4 — hg-v1009: VWAP joined, CVD null without a taker series)');
   ok(!!r && r.vol && r.vol.ok === true && r.vol.val > 0.5, 'volume: expanding participation at the house\'s 0.5 z-floor');
   ok(!!r && r.mom && r.mom.ok === true && r.mom.val > 50 && r.mom.val <= 70, 'momentum: RSI past the midline, rising, not exhausted');
   ok(!!r && r.trend && r.trend.ok === true, 'trend: above a rising EMA-50');
-  ok(!!r && typeof r.line === 'string' && r.line.indexOf('CONFIRMED 3/3') === 0, 'the evidence line opens with the verdict and the count');
+  ok(!!r && r.vwap && r.vwap.ok === true, 'vwap (hg-v1009): the break bar holds above the rolling VWAP-20');
+  ok(!!r && typeof r.line === 'string' && r.line.indexOf('CONFIRMED 4/4') === 0, 'the evidence line opens with the verdict and the count');
   ok(!!r && r.line.indexOf('volume') >= 0 && r.line.indexOf('RSI') >= 0 && r.line.indexOf('EMA-50') >= 0,
      'and names every family — evidence, not just a badge');
 }
@@ -152,7 +161,11 @@ console.log('== a break the checked evidence opposes is UNCONFIRMED — and only
 {
   const r = R(counterTape(), { dir: 'long', i: 55 });
   ok(r && r.verdict === 'unconfirmed', 'a countertrend break on no volume is UNCONFIRMED');
-  ok(!!r && r.checked === 3 && r.agree === 0, 'all three families read, none back it (0/3)');
+  /* hg-v1009: the VWAP family DOES back this one — the bounce off the low
+     pierced and reclaimed the volume-weighted mean, a genuine family for a
+     countertrend break. One family of four is still short of the two the
+     floor demands, so the verdict stands. */
+  ok(!!r && r.checked === 4 && r.agree === 1, 'four families read, only the VWAP reclaim backs it (1/4) — still short of two');
   ok(!!r && r.vol && r.vol.ok === false, 'volume: below the tape\'s norm');
   ok(!!r && r.mom && r.mom.ok === false, 'momentum: below the midline');
   ok(!!r && r.trend && r.trend.ok === false, 'trend: against the prevailing EMA-50 direction');
@@ -163,8 +176,8 @@ console.log('== a break the checked evidence opposes is UNCONFIRMED — and only
 console.log('== direction symmetry: the mirror tape CONFIRMS a short ==');
 {
   const r = R(dnTape(), { dir: 'short', i: 55 });
-  ok(r && r.verdict === 'confirmed' && r.checked === 3 && r.agree === 3,
-     'the downtrend break is CONFIRMED 3/3 for a short');
+  ok(r && r.verdict === 'confirmed' && r.checked === 4 && r.agree === 4,
+     'the downtrend break is CONFIRMED 4/4 for a short (hg-v1009: VWAP joined)');
   ok(!!r && r.mom && r.mom.ok && r.mom.val < 50 && r.mom.val >= 30, 'momentum: RSI under the midline, falling, not exhausted');
   ok(!!r && r.trend && r.trend.ok, 'trend: below a falling EMA-50');
 }
@@ -180,8 +193,8 @@ console.log('== exhaustion is not confirmation ==');
   const r = R(rows, { dir: 'long', i: 55 });
   ok(r && r.mom && r.mom.ok === false && r.mom.val > 70,
      'RSI ' + (r && r.mom ? r.mom.val.toFixed(0) : '?') + ' — the chase is named, not counted');
-  ok(r && r.verdict === 'confirmed' && r.agree === 2,
-     'volume and trend still carry it to 2/3 — one refusing family never vetoes alone');
+  ok(r && r.verdict === 'confirmed' && r.agree === 3,
+     'volume, trend and the VWAP hold still carry it to 3/4 — one refusing family never vetoes alone');
 }
 
 console.log('== honest degradation: unreadable evidence neither confirms nor vetoes ==');
@@ -192,12 +205,15 @@ console.log('== honest degradation: unreadable evidence neither confirms nor vet
   ok(!!noVol && noVol.line.indexOf('volume unreadable') >= 0, 'the absence is named, not hidden');
 
   const constVol = R(upTape().map(r => Object.assign({}, r, { v: 100 })), { dir: 'long', i: 55 });
-  ok(constVol && constVol.vol === null && constVol.checked === 2,
-     'a feed printing one repeated volume figure carries no information — UNCHECKED, not a z of 0 read as failure');
+  /* hg-v1009: VWAP still reads a constant-volume tape — the equal-weighted
+     mean is defined and the hold question answerable, so checked is 3 now.
+     The VOLUME family's answer is unchanged: no information, UNCHECKED. */
+  ok(constVol && constVol.vol === null && constVol.checked === 3 && constVol.vwap && constVol.vwap.ok === true,
+     'a feed printing one repeated volume figure carries no z information — UNCHECKED, not a z of 0 read as failure');
 
   const early = R(upTape(), { dir: 'long', i: 30 });
   ok(early && early.trend === null, 'an EMA-50 not yet warmed up is UNCHECKED, never fabricated');
-  ok(!!early && early.checked === 2 && early.verdict === 'confirmed', 'volume and momentum still answer it (2/2)');
+  ok(!!early && early.checked === 3 && early.verdict === 'confirmed', 'volume, momentum and the VWAP hold still answer it (3/3 — hg-v1009)');
 
   const W2 = boot(false);
   const R2 = (...a) => (typeof W2.__ogConfirmRead === 'function') ? W2.__ogConfirmRead(...a) : null;
@@ -246,13 +262,13 @@ console.log('== the chip and the card ==');
 console.log('== wiring: the floor is on the real path, not a parallel copy ==');
 {
   const src = fs.readFileSync(path.join(ROOT, 'optigold.js'), 'utf8');
-  ok(/s\.confirm = ogConfirmRead\(rows, s\)/.test(src),
-     'the scan stamps every setup from its own lane\'s rows');
+  ok(/s\.confirm = ogConfirmRead\(rows, s, \{ taker: ogTaker \}\)/.test(src),
+     'the scan stamps every setup from its own lane\'s rows, with the lane\'s taker series riding along (hg-v1009)');
   ok(/if \(ogConfirmBlocked\(s\)\) return;/.test(src),
      'ogTopPicks reads the predicate — the exclusion is the tested one');
   ok(/row\.conf = s\.confirm\.verdict/.test(src),
      'the verdict rides the forward ledger, so the floor can be judged on outcomes later');
-  ok(/confirmation floor<\/b> \(hg-v1006\)/.test(src),
+  ok(/confirmation floor<\/b> \(hg-v1006, five families since hg-v1009\)/.test(src),
      'the TOP PICKS note states the floor to the reader');
   ok(/hg-v1006: the break itself now answers to a CONFIRMATION FLOOR/.test(src),
      'the file header documents the pack');
