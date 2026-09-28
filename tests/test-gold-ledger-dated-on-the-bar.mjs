@@ -175,7 +175,10 @@ console.log('== 4) the other five desks say which bar they read ==');
   /* hg-v979 widened the gaps: the feed stamp now sits between these lines */
   assert(/var guSec = guSignalSec\(f\);\s*if \(guSec\) guRow\.barT = guSec;[\s\S]{0,400}W\.hgFwdRecordScan\('GOLDULTRA'/.test(gu), 'GOLD ULTRA dates its row on its own 15m signal bar (guSignalSec)');
   assert(/var gpBarSec = gpProBarSec\(lvRows\);\s*W\.hgFwdRecordScan\('GOLDPRO', '4h', \[\{[\s\S]{0,200}barT: gpBarSec \|\| undefined,/.test(gp), 'GOLD PRO passes the bar it composed on');
-  assert(/ogFwdRows\(setups, L\.key, rows[,)]/.test(og) && /var bt = ogBreakBarSec\(rows, s\);\s*if \(bt\) row\.barT = bt;/.test(og), 'OPTI GOLD passes each setup\'s break bar');
+  /* hg-v1007 moved the recording below the regime pass (row.regime rides
+     beside row.barT), so the call now reads off the lane entry fL — same
+     per-lane setups, key and rows, only the WHEN changed. */
+  assert(/ogFwdRows\(fL\.setups, fL\.cfg\.key, fL\.rows[,)]/.test(og) && /var bt = ogBreakBarSec\(rows, s\);\s*if \(bt\) row\.barT = bt;/.test(og), 'OPTI GOLD passes each setup\'s break bar');
   assert(/mechanic: 'CONVICTION-PICK', ticket: true,\s*barT: c\.barT, signalT: c\.signalT[,\s]/.test(sg), 'SUPER GOLD forwards the source desk\'s bar and instant across its record map');
   assert(/goldShut: c\.goldShut,\s*signalT: c\.signalT,/.test(gs) && /goldShut: c\.goldShut,\s*signalT: c\.signalT,/.test(gw), 'GOLD SCALP and GOLD SWING forward signalT across the record map that rebuilds the row (the hg-v955 seam)');
   /* the census, derived: every gold desk that records through the ledger

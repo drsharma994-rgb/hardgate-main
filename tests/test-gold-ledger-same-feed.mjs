@@ -281,7 +281,11 @@ console.log('== 4) the other desks ==');
   const setups = [{ dir: 'long', state: 'waiting', entry: 2300, stop: 2290, t1: 2320, i: 3 }];
   assert(og.ogFwdRows(setups, 'M15', rows, 'binance-xau')[0].feed === 'binance-xau', 'OPTI GOLD stamps the lane\'s feed on the row');
   assert(!('feed' in og.ogFwdRows(setups, 'M15', rows, null)[0]) && !('feed' in og.ogFwdRows(setups, 'M15', rows)[0]) && !('feed' in og.ogFwdRows(setups, 'M15', rows, 7)[0]), 'no feed, or a non-string, stamps nothing');
-  assert(/ogFwdRows\(setups, L\.key, rows, \(got && typeof got\.source === 'string'\) \? got\.source : null\)/.test(strip(read('optigold.js'))), 'OPTI GOLD hands the lane\'s own source (textual)');
+  /* hg-v1007 moved the recording below the regime pass (so row.regime can
+     ride beside row.feed), so the pin now covers BOTH halves of the moved
+     pipeline: the lane entry keeps the fetch's own source as `feed`, and the
+     recording hands exactly that string to ogFwdRows. */
+  assert(/feed: \(got && typeof got\.source === 'string'\) \? got\.source : null/.test(strip(read('optigold.js'))) && /ogFwdRows\(fL\.setups, fL\.cfg\.key, fL\.rows, \(typeof fL\.feed === 'string'\) \? fL\.feed : null\)/.test(strip(read('optigold.js'))), 'OPTI GOLD hands the lane\'s own source (textual)');
 
   /* NEW GOLD: the fetch wrapper, driven */
   const ngW = {};

@@ -68,6 +68,23 @@ where evidence exists to judge. The rule is unchanged; what changed is which
 setups the panel may LEAD with. The verdict is written into the forward
 ledger with each order, so whether CONFIRMED breaks actually pay better is a
 question the book will answer on evidence rather than one this desk asserts.
+
+hg-v1007: the desk answers to the HOUSE REGIME (regime-stack.js) — one shared
+read of what the 4h gold tape is DOING, so a breakout rule stops leading with
+breaks in weather where breaks fade. The swing lane's own 4h rows feed
+hgGoldRegime (no extra fetch — the 4h tape is already here): detectRegime's
+structure read owns volatility and compression, the trend state uses
+detectRegime's own ADX bar (30) with direction from the close beyond EMA-50
+with EMA-50 sloping the same way. hgRegimePosture maps desk style x regime x
+the setup's direction: a with-trend break is FAVORED, a break against the
+trend or into a volatility expansion is CAUTION (informed, never barred), and
+a break in a RANGING or COMPRESSED 4h tape is AGAINST — the population where
+breaks fade — and never takes a BEST SCALP / BEST SWING slot (ogRegimeBlocked,
+beside the v1005 and v1006 exclusions; the setup still renders, chipped, with
+the reason named). The posture rides the forward ledger as row.regime so the
+book can later measure whether regime-aligned breaks pay better — on evidence,
+not assertion. An unreadable regime (thin tape, absent library, a failed swing
+lane) bars nothing and says so once, on the panel above the board.
 ========================================================================= */
 (function(){
 'use strict';
@@ -847,6 +864,24 @@ function ogConfirmChipHtml(s){
   return '<span class="stamp warn">CONF UNCHECKED — ' + c.checked + '/3 readable</span>';
 }
 
+/* hg-v1007: THE HOUSE REGIME seams. ogRegimeBlocked is the single predicate
+   the pick loop reads — only 'against' bars a slot, because a ranging or
+   compressed 4h tape is the population where breaks fade; favored, caution
+   and neutral inform and never bar, and an unstamped setup (regime-stack.js
+   absent or the tape unreadable) stays eligible. The chip is the shared
+   renderer behind a call-time feature-check, exactly like the v1005 stack
+   chip: an absent regime-stack.js blocks nothing and prints nothing. */
+function ogRegimeBlocked(s){
+  return !!(s && s.regime && s.regime.posture === 'against');
+}
+function ogRegimeChipHtml(s){
+  try{
+    var fn = (typeof W.hgRegimeChipHtml === 'function') ? W.hgRegimeChipHtml : null;
+    if (!fn || !s || !s.regime) return '';
+    return fn(s.regime) || '';
+  }catch(e){ return ''; }
+}
+
 /* The single best live setup in each of the two lanes the panel leads with.
    Deliberately ONE EACH and never "top two overall" - two scalps at the top
    would answer a different question than the one asked. A lane with nothing
@@ -865,6 +900,11 @@ function ogTopPicks(setups, px){
        setup (too little readable evidence to judge) stays eligible: the
        floor bites only where evidence exists to judge. */
     if (ogConfirmBlocked(s)) return;
+    /* hg-v1007: nor does a break the house regime is positioned AGAINST — a
+       ranging or compressed 4h tape is where breaks fade. Only that posture
+       bars a slot; favored, caution and neutral inform and never bar, and an
+       unstamped setup (module absent, tape unreadable) stays eligible. */
+    if (ogRegimeBlocked(s)) return;
     var e = ogProb(s, px);
     if (!e || !isFinite(e.p)) return;
     var reach = ogReach(s, px);
@@ -905,6 +945,7 @@ function card(s, mark){
   try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(s) || ''; }catch(e){}
   var fundChip = ogFundChipHtml(s);   /* hg-v1005: the stack's verdict beside the state */
   var confChip = ogConfirmChipHtml(s); /* hg-v1006: and the confirmation floor's verdict beside both */
+  var regimeChip = ogRegimeChipHtml(s); /* hg-v1007: and the house regime's posture beside all three */
 
   /* The reading depends on whether the order has FILLED. A resting order is
      described by how far the mark is from its entry; a running position by
@@ -929,7 +970,7 @@ function card(s, mark){
     + '<span class="stamp">' + esc(s.laneLabel || '') + '</span>'
     + '<span class="dir">' + (filled ? (s.dir === 'long' ? 'LONG — filled' : 'SHORT — filled')
                                      : (s.dir === 'long' ? 'BUY LIMIT' : 'SELL LIMIT')) + '</span></div>'
-    + '<div class="row" style="gap:6px;margin:4px 0"><span class="stamp ' + stateCls + '">' + esc(stateLabel) + '</span>' + smcChip + fundChip + confChip + '</div>'
+    + '<div class="row" style="gap:6px;margin:4px 0"><span class="stamp ' + stateCls + '">' + esc(stateLabel) + '</span>' + smcChip + fundChip + confChip + regimeChip + '</div>'
     + '<div class="mini">'
     + (filled && op
         ? '<span class="k">unrealised</span><span><b>' + (op.unrealR >= 0 ? '+' : '') + fmt(op.unrealR, 2) + 'R</b></span>'
@@ -951,6 +992,11 @@ function card(s, mark){
        taken on trust. Printed for every state: the read is a property of
        the break bar, which is immutable history for a settled setup too. */
     + ((s.confirm && s.confirm.line) ? '<div class="note" style="margin:4px 0">' + esc(s.confirm.line) + '</div>' : '')
+    /* hg-v1007: the regime's REASON when it speaks against or cautions —
+       favored and neutral need no prose (the chip carries those), and an
+       unreadable regime is reported once on the panel, not per card. */
+    + ((s.regime && (s.regime.posture === 'against' || s.regime.posture === 'caution') && s.regime.why)
+        ? '<div class="note" style="margin:4px 0">House regime: ' + esc(s.regime.why) + '</div>' : '')
     /* PRICE MAY HAVE WALKED THROUGH THIS PLAN ALREADY — the shared rule in
        hg-plan.js. Every OPTI GOLD ticket is a RESTING LIMIT at the midpoint
        of a broken range, so it is a retest by construction: the population
@@ -1119,6 +1165,10 @@ function render(ui, lanes, mark, note, opts){
     + 'volume participation, momentum (RSI-14), and the prevailing EMA-50 trend, all read on the lane\'s own tape at the '
     + 'break bar — must back the break. A break whose evidence cannot be read stays eligible as CONF UNCHECKED; a break the '
     + 'checked evidence does not back is UNCONFIRMED and never takes a slot, however well it scores.'
+    + '<br>And a pick must not fight the <b>house regime</b> (hg-v1007): one shared read of what the 4h tape is '
+    + 'doing — trending, ranging, compressed or exploding — from regime-stack.js, computed off the swing lane\'s '
+    + 'own rows. A break with the 4h trend is favored; a break into a ranging or compressed 4h tape is in the '
+    + 'population where breaks fade and never takes a slot, however well it scores. An unreadable regime bars nothing.'
     + '</div>';
 
   h += '<div class="row" style="gap:14px;margin-bottom:10px;flex-wrap:wrap">'
@@ -1235,7 +1285,12 @@ function render(ui, lanes, mark, note, opts){
         + '<b>EVENT BLACKOUT</b> — a red-folder macro print is inside its window; no fresh setup forms into it. '
         + 'The rule\'s existing orders and settles still render below, chipped with the stack\'s verdict.</div>'
       : '')
-    + ogFundPanelHtml() + tapeNote + h;
+    + ogFundPanelHtml()
+    /* hg-v1007: the house regime line beside the gold board — one read for
+       every lane, honest when unreadable rather than absent, and absent only
+       when regime-stack.js itself is not loaded. */
+    + ((typeof W.hgRegimePanelHtml === 'function' && opts.regime) ? (W.hgRegimePanelHtml(opts.regime) || '') : '')
+    + tapeNote + h;
 }
 
 /* ---------- scan ---------- */
@@ -1273,6 +1328,11 @@ async function runOptiGold(ui){
         s.confirm = ogConfirmRead(rows, s);
       });
       lanes.push({ cfg: L, rows: rows, setups: setups, src: (got && got.source) || 'gold',
+                   /* hg-v1007: the feed, kept for the forward recording, which
+                      moved below the regime pass — the ledger needs the feed
+                      the levels were priced on, and `got` does not survive
+                      the loop. Same value the old in-loop call passed. */
+                   feed: (got && typeof got.source === 'string') ? got.source : null,
                    pending: ogPending(rows, L) });
 
       /* SMC context on the live ones — the chip only, never a gate */
@@ -1286,15 +1346,14 @@ async function runOptiGold(ui){
         }
       }catch(eSmc){}
 
-      /* forward log PER LANE, with the lane in the mechanic. Pooling all three
-         into one bucket would make it impossible to ask the question that
-         matters — whether the same rule pays differently at different scales. */
-      try{
-        if (typeof W.hgFwdRecordScan === 'function'){
-          var fwd = ogFwdRows(setups, L.key, rows, (got && typeof got.source === 'string') ? got.source : null);
-          if (fwd.length) W.hgFwdRecordScan('OPTI GOLD', L.interval, fwd, { horizonBars: L.horizonBars });
-        }
-      }catch(eFwd){ try{ if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('optigold', eFwd); }catch(eW){} }
+      /* hg-v1007: the forward recording moved OUT of this loop to below the
+         regime pass — a ledger row now carries the house regime's posture
+         (row.regime), and the regime is only knowable once the swing lane's
+         4h tape has loaded, which is after the scalp and intraday lanes have
+         already been walked. Same per-lane rows, same mechanic, same lane in
+         the mechanic; only the WHEN moved. The per-lane split itself stands:
+         pooling all three into one bucket would make it impossible to ask
+         whether the same rule pays differently at different scales. */
     }
 
     /* THE MARK: the last close of the shortest lane that loaded — the freshest
@@ -1327,11 +1386,59 @@ async function runOptiGold(ui){
         ogFsFn(ogAll, { scanner: 'optigold' });
       }
     }catch(eFS){}
+
+    /* hg-v1007: THE HOUSE REGIME — one read of what the 4h gold tape is
+       DOING, computed from the SWING lane's own rows (no extra fetch: the 4h
+       tape is already here), then stamped on EVERY lane's setups, because
+       every lane trades the same metal: a 15m break into a compressed 4h
+       tape sits in the population where breaks fade whatever the 15m chart
+       shows. When the swing lane failed, the tape is thin, or regime-stack.js
+       is absent, the read is UNREADABLE — it bars nothing, and the panel
+       says so once. Feature-checked throughout: an absent module stamps
+       nothing and blocks nothing. */
+    var ogRegime = null;
+    try{
+      var ogRgFn = (typeof W.hgGoldRegime === 'function') ? W.hgGoldRegime : null;
+      if (ogRgFn){
+        var ogSwingRows = null;
+        for (var ogr = 0; ogr < lanes.length; ogr++){
+          if (lanes[ogr] && lanes[ogr].cfg && lanes[ogr].cfg.key === 'swing'
+              && lanes[ogr].rows && lanes[ogr].rows.length){ ogSwingRows = lanes[ogr].rows; break; }
+        }
+        /* an empty argument is deliberate: a failed swing lane is an
+           unreadable regime with the reason named, never a fabricated one */
+        ogRegime = ogRgFn(ogSwingRows || []);
+      }
+    }catch(eRG){ ogRegime = null; }
+    try{
+      var ogRsFn = (typeof W.hgRegimeScanCands === 'function') ? W.hgRegimeScanCands : null;
+      if (ogRsFn && ogRegime){
+        var ogAllR = [];
+        for (var ogr2 = 0; ogr2 < lanes.length; ogr2++){ ogAllR = ogAllR.concat(lanes[ogr2].setups || []); }
+        ogRsFn(ogAllR, { style: 'breakout', regime: ogRegime });
+      }
+    }catch(eRS){}
+
+    /* hg-v1007: the forward log, per lane exactly as it ran inside the fetch
+       loop, moved to here so every recorded row can carry row.regime beside
+       row.conf — the book can then ask whether regime-ALIGNED breaks pay
+       better, per lane, on evidence. Recording stays a no-op when the
+       forward module is absent, exactly as before. */
+    for (i = 0; i < lanes.length; i++){
+      var fL = lanes[i];
+      if (!fL || !fL.setups || !fL.setups.length || !fL.cfg) continue;
+      try{
+        if (typeof W.hgFwdRecordScan === 'function'){
+          var fwd = ogFwdRows(fL.setups, fL.cfg.key, fL.rows, (typeof fL.feed === 'string') ? fL.feed : null);
+          if (fwd.length) W.hgFwdRecordScan('OPTI GOLD', fL.cfg.interval, fwd, { horizonBars: fL.cfg.horizonBars });
+        }
+      }catch(eFwd){ try{ if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('optigold', eFwd); }catch(eW){} }
+    }
     var note = 'mark is the last closed ' + markLane.cfg.interval + ' bar from ' + esc(String(markLane.src || 'gold'))
       + ' · same rule on every lane: swing 5 · ATR 14 · stop 1.5×ATR · target 2R'
       + ' · ' + total + ' setup(s) across ' + lanes.length + ' lanes'
       + ' · ' + new Date().toISOString().slice(11, 19) + ' UTC';
-    render(ui, lanes, mark, note, { fundBlackout: ogFundBlackout });
+    render(ui, lanes, mark, note, { fundBlackout: ogFundBlackout, regime: ogRegime });
     /* hg-v1006: the floor's tally beside the count, over the LIVE setups —
        the number a reader checks first, named rather than left to be
        inferred card by card. Omitted when no setup carried a readable
@@ -1346,7 +1453,11 @@ async function runOptiGold(ui){
     });
     if (ui && ui.stat) ui.stat.textContent = total + ' setup(s) · mark ' + fmt(mark)
       + (ogFloor.stamped ? ' · floor: ' + ogFloor.confirmed + ' confirmed · ' + ogFloor.unconfirmed + ' unconfirmed · ' + ogFloor.unverified + ' unchecked' : '')
-      + (ogFundBlackout ? ' · EVENT BLACKOUT — no fresh setup forms' : '');
+      + (ogFundBlackout ? ' · EVENT BLACKOUT — no fresh setup forms' : '')
+      /* hg-v1007: the house regime beside the count and the floor — one
+         label, only when the 4h tape could actually be read. */
+      + ((ogRegime && ogRegime.state && ogRegime.state !== 'unreadable' && ogRegime.label)
+          ? ' · regime ' + ogRegime.label : '');
     __og.ranOnce = true;
     return 'ok';
   }catch(e){
@@ -1420,6 +1531,12 @@ function ogFwdRows(setups, lane, rows, feed){
        folded into the mechanic string: the mechanic's grouping must stay
        continuous with every row already logged. */
     if (s.confirm && typeof s.confirm.verdict === 'string') row.conf = s.confirm.verdict;
+    /* hg-v1007: and the house regime's posture rides beside it — favored /
+       neutral / caution / against — so the forward book can measure whether
+       regime-ALIGNED breaks pay better. A separate field again, never folded
+       into the mechanic string: the mechanic's grouping must stay continuous
+       with every row already logged. An unstamped setup invents none. */
+    if (s.regime && typeof s.regime.posture === 'string') row.regime = s.regime.posture;
     out.push(row);
   }
   return out;
@@ -1474,12 +1591,19 @@ W.__ogConfirmRead = ogConfirmRead;
 W.__ogConfirmBlocked = ogConfirmBlocked;
 W.__ogConfirmChipHtml = ogConfirmChipHtml;
 
+/* hg-v1007: the house-regime seams — ogRegimeBlocked is the pure pick-loop
+   predicate (drivable in tests without a feed, like the v1006 floor's),
+   ogRegimeChipHtml the card chip behind its call-time feature-check. */
+W.__ogRegimeBlocked = ogRegimeBlocked;
+W.__ogRegimeChipHtml = ogRegimeChipHtml;
+
 W.HG_tabs = W.HG_tabs || [];
 /* hg-v1005: the stack seams, on the registration object and one export for
    the guard — ogFundBlocked is the predicate the pick loop reads. */
 W.__ogFundBlocked = ogFundBlocked;
 W.HG_tabs.push({ id: 'optigold', label: 'OPTI GOLD', mount: mountOptiGold, refresh: refreshOptiGold,
                  fundBlocked: ogFundBlocked, fundPanelHtml: ogFundPanelHtml,
-                 confirmRead: ogConfirmRead, confirmBlocked: ogConfirmBlocked });
+                 confirmRead: ogConfirmRead, confirmBlocked: ogConfirmBlocked,
+                 regimeBlocked: ogRegimeBlocked });
 
 })();
