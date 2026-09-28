@@ -100,6 +100,21 @@ a small reason line — nothing is dropped silently):
      never adds tally points — the tally already counts those legs. The
      full gold board (real rates / COT / calendar / DXY·US10Y·gold-silver
      priors) renders beside every scan outcome.
+ 15) SESSION FLOOR (hg-v1008, session-volume.js + gold-session.js) — a scalp
+     is a bet on the next few bars, and the next few bars belong to whoever
+     is actually trading. A judged bar whose volume sits below the 20th
+     percentile of ITS OWN session's distribution over the loaded tape
+     (session-of-day bucketing on the house's five UTC sessions, strict-below
+     percentile, 20+ same-session samples required) is DEAD TAPE: demoted —
+     it paints, the reason is named, it can never be MOST PROBABLE. The 20 is
+     a stated PRIOR, not a measurement; the forward ledger's new sess field
+     is how the floor earns a measured one. The COMEX opening-range read
+     (today's 8:20-8:50 ET grid, DST-correct) rides as EVIDENCE ONLY: a
+     morning break with the setup chips COMEX ORB WITH IT, against it chips
+     COMEX ORB AGAINST — it informs, it never gates, it never adds tally
+     points. Unreadable volume legs (constant-volume feeds, all-zero, a bar
+     not on the tape) demote nothing: the floor bites only where evidence
+     exists to judge (the hg-v700 honest-degradation rule).
 
 Feeds (in preference order):
   1) window.getGoldCandles (macro.js) — XAUUSDT TradFi perp first, PAXGUSDT
@@ -134,9 +149,13 @@ full (deep-frozen, never throws, null before the first scan):
   { cands: [{ id, venue, sym, dir, strategy, grade, entry, stop, t1, t2, rr,
              rr2, tally, tallyParts, agree, oppose, killzone, atr, anchor,
              zone, demoted, stamps, vetoed, merged, locked, issuedAt, asOf,
-             why, invalidates, fund }],   (hg-v1004: fund = refuse / demote /
-             chips — the fundamental-stack verdict at scan time, null when
-             the board was dark or the stack absent)
+             why, invalidates, fund, sess, orb }],   (hg-v1004: fund = refuse /
+             demote / chips — the fundamental-stack verdict at scan time,
+             null when the board was dark or the stack absent; hg-v1008:
+             sess = 'thin' / 'participating' / 'unreadable' — the
+             session-floor verdict at scan time, null when the floor could
+             not speak or had not run; orb = 'with' / 'against' / 'none' —
+             the COMEX opening-range state beside it, evidence never a gate)
     bestId, history: [{ id, dir, strategy, venue, sym, entry, stop, t1, t2,
                         status, issuedAt, closedAt, closePrice }],
     rejected: [{ id, strategy, stratKey, dir, venue, sym, reason }], at } | null
@@ -510,7 +529,16 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
         fund: (c.fundGate && typeof c.fundGate === 'object')
           ? { refuse: !!c.fundGate.refuse, demote: !!c.fundGate.demote,
               chips: Array.isArray(c.fundGate.chips) ? c.fundGate.chips.slice() : [] }
-          : null
+          : null,
+        /* hg-v1008: the session-floor verdict at scan time ('thin' /
+           'participating' / 'unreadable') — SUPER GOLD & OMNIGOLD hold THIS
+           desk's read at THIS instant, and the ledger measures dead tape on
+           the stamp the desk actually acted on. */
+        sess: (c.sessionFloor && typeof c.sessionFloor.verdict === 'string') ? c.sessionFloor.verdict : null,
+        /* hg-v1008: the COMEX opening-range state beside it ('with' /
+           'against' / 'none') — evidence, never a gate; the ledger measures
+           whether an ORB-aligned morning actually pays. */
+        orb: (c.sessionFloor && typeof c.sessionFloor.orb === 'string') ? c.sessionFloor.orb : null
       });
     }
     /* FORWARD LOG, split by STRATEGY. This desk runs several distinct setups
@@ -562,6 +590,17 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
                       snapshot already carries the mark this candidate was
                       sized against; null (no mark) stays absent. */
                    mark: c.mark,
+                   /* hg-v1008: the session-floor verdict + COMEX ORB state at
+                      scan time ride the ledger row, read off the snapshot's
+                      own sess/orb fields above (this map's c IS the snapshot
+                      object — sessionFloor itself never crosses publish).
+                      hgFwdNormalize enum-gates them again ('thin'/
+                      'participating'/'unreadable', 'with'/'against'/'none'),
+                      so a null simply never lands. The hg-v1008 last-inch fix
+                      in hg-forward.js is what makes these STORE at all
+                      (v1006's conf and v1007's regime died at exactly this
+                      inch before it). */
+                   sess: c.sess, orb: c.orb,
                    mechanic: String(c.stratKey || c.strategy || 'UNKNOWN').toUpperCase().slice(0, 28),
                    ticket: (c.grade === 'A' || c.grade === 'clean' || !!c.locked) };
         }), { horizonBars: 96 });   /* 96 x 15m = the same 24 hours as 24 x 1h */
@@ -1209,6 +1248,7 @@ function cardHTML(c, isBest, season, tape){
     + '<span class="gpip"' + gsxPipAttr(false) + '>' + esc(c.killzone) + '</span>'
     + goldTapeChipHtml(c, tape)
     + gsFundChipHtml(c)
+    + gsSessionChipHtml(c)
     + chips + metaChips
     + '</div>'
     + tallyChips(c)
@@ -1750,6 +1790,98 @@ function gsFundPanelHtml(){
     var rFn = gfn('hgFundamentalRegime'), pFn = gfn('hgFundamentalPanelHtml');
     if (!rFn || !pFn) return '';
     return pFn(rFn('gold')) || '';
+  }catch(e){ return ''; }
+}
+
+/* hg-v1008: THE SESSION FLOOR. Gate 1 knows what TIME it is; until this
+   pack nothing knew whether the CROWD showed up. A scalp is a short-horizon
+   trade — it needs participation NOW — and a candidate minted on a bar
+   whose volume sits in the bottom quintile of ITS OWN session's
+   distribution over the loaded tape is in the population where scalps
+   drift and die: DEAD TAPE. Demoted (the gsApplyOneAtATime pattern: the
+   card paints, the reason is named, it can never be MOST PROBABLE), never
+   hidden. The 20th percentile is a stated PRIOR, not a measurement — the
+   forward ledger's new sess field is how the floor earns a measured one.
+
+   The COMEX opening-range read rides as EVIDENCE ONLY: a morning break of
+   today's 8:20 ET opening range (DST-correct, gold-session.js) chips WITH
+   IT / AGAINST — it informs, it never gates, and it never adds tally
+   points (the tally already has its session leg: killzone weight).
+
+   Stamps EVERY candidate it can read, demotes only the thin. The skip list
+   is the fundamental scan's own: dropped / vetoed / locked rows are spoken
+   for — the trade you are IN keeps running. Unreadable volume legs (a feed
+   printing one repeated figure, all-zero, a bar not on the tape) demote
+   nothing: the floor bites only where evidence exists to judge, the
+   hg-v700 honest-degradation rule. Feature-checked throughout: absent
+   session modules stamp nothing and block nothing.
+
+   PURE apart from the two readers it calls: marks what it demotes and
+   reports the counts, so the scan line and the tests read the same object
+   the scan acted on rather than recomputing it. */
+var GS_SESS_FLOOR_PCT = 20;   /* the prior, stated: below the 20th percentile of its own session, a scalp bar has no crowd */
+function gsSessionFloorScan(ranked, rows15m){
+  var out = { demoted: 0, stamped: 0 };
+  try{
+    var pctFn = gfn('hgSessionVolPct'), orbFn = gfn('hgComexOrbRead');
+    if ((!pctFn && !orbFn) || !Array.isArray(ranked)) return out;
+    for (var i = 0; i < ranked.length; i++){
+      var c = ranked[i];
+      if (!c || !c.sym || !c.dir || c.dropped || c.vetoed || c.locked) continue;
+      var pct = pctFn ? pctFn(rows15m, c.signalT) : null;
+      var orb = orbFn ? orbFn(rows15m, c.dir, c.signalT) : null;
+      var verdict = (pct && typeof pct.pct === 'number' && isFinite(pct.pct))
+        ? (pct.pct < GS_SESS_FLOOR_PCT ? 'thin' : 'participating')
+        : 'unreadable';
+      c.sessionFloor = {
+        verdict: verdict,
+        pct: pct ? Math.round(pct.pct * 10) / 10 : null,
+        session: pct ? pct.session : null,
+        n: pct ? pct.n : 0,
+        orb: (orb && typeof orb.state === 'string') ? orb.state : 'unreadable',
+        orbWhy: (orb && orb.why) || null,
+        orbVol: (orb && (orb.volOk === true || orb.volOk === false)) ? orb.volOk : null
+      };
+      out.stamped++;
+      if (verdict === 'thin'){
+        c.demoted = true;
+        if (!Array.isArray(c.stamps)) c.stamps = [];
+        if (c.stamps.indexOf('DEAD TAPE') < 0) c.stamps.push('DEAD TAPE');
+        var gn = Array.isArray(c.gateNotes) ? c.gateNotes.slice() : [];
+        gn.push('dead tape — the judged bar\'s volume sits at the ' + c.sessionFloor.pct
+          + 'th percentile of its own session (' + (c.sessionFloor.session || '?') + ', ' + c.sessionFloor.n
+          + ' bars); below the house floor of ' + GS_SESS_FLOOR_PCT + ' a scalp has no crowd to move it');
+        c.gateNotes = gn;
+        out.demoted++;
+      }
+    }
+  }catch(e){}
+  return out;
+}
+
+/* The chip — reads the verdict the scan stamped, never recomputes (the same
+   rule as gsFundChipHtml). bad on dead tape, ok on an ORB-aligned morning,
+   neutral on AGAINST / unreadable, nothing when the stamp is absent or the
+   tape was merely participating: the absence of a chip is not a demerit. */
+function gsSessionChipHtml(c){
+  try{
+    var f = c && c.sessionFloor;
+    if (!f || !f.verdict) return '';
+    if (f.verdict === 'thin'){
+      return '<span class="gpip bad" title="' + esc('session floor (hg-v1008): the judged bar\'s volume sits at the '
+        + f.pct + 'th percentile of its own ' + (f.session || '?') + ' session over ' + f.n
+        + ' bars — below the house floor of ' + GS_SESS_FLOOR_PCT + '. Demoted: it paints, it can never be MOST PROBABLE.') + '">DEAD TAPE · never MOST PROBABLE</span>';
+    }
+    if (f.verdict === 'unreadable'){
+      return '<span class="gpip" title="' + esc('session floor (hg-v1008): no readable volume leg for this bar — the floor cannot speak, and what cannot speak bars nothing') + '">SESS FLOOR UNREAD</span>';
+    }
+    if (f.orb === 'with'){
+      return '<span class="gpip ok" title="' + esc(f.orbWhy || 'COMEX opening-range break aligned') + (f.orbVol === false ? ' — though the break bar\'s volume did not expand over the range bars' : '') + '">COMEX ORB WITH IT</span>';
+    }
+    if (f.orb === 'against'){
+      return '<span class="gpip" title="' + esc(f.orbWhy || 'the COMEX opening-range break opposes this setup') + ' — evidence, never a gate' + '">COMEX ORB AGAINST</span>';
+    }
+    return '';
   }catch(e){ return ''; }
 }
 
@@ -2713,6 +2845,22 @@ async function runScan(ui, scanSt){
         + ' demoted to watch (2+ net checked votes against)');
     }
 
+    /* hg-v1008: SESSION FLOOR — a scalp is a bet on the next few bars, and
+       the next few bars belong to whoever is actually trading. A judged bar
+       whose volume sits below the 20th percentile of ITS OWN session's
+       distribution (session-volume.js hgSessionVolPct) has no crowd to move
+       it: demoted, stamped DEAD TAPE, never MOST PROBABLE — the same
+       leadership pattern as the fundamental stack above, no tally points
+       touched. The COMEX opening-range read (gold-session.js hgComexOrbRead)
+       rides as evidence chips only. Runs after the lock for the same reason
+       as the fundamental scan: the trade you are IN keeps running. */
+    var sessScan = null;
+    try{ sessScan = gsSessionFloorScan(ranked, gold && gold.rows15m); }catch(eSF){ sessScan = null; }
+    if (sessScan && sessScan.demoted > 0){
+      legs.push('SESSION FLOOR — ' + sessScan.demoted + ' candidate' + (sessScan.demoted === 1 ? '' : 's')
+        + ' demoted (bottom-quintile participation for its session — a scalp needs a crowd)');
+    }
+
     /* MOST PROBABLE = spot-aligned leader when XAUT basis is wide vs spot ref */
     var naiveBest = null;
     for (i2 = 0; i2 < ranked.length; i2++){
@@ -3223,7 +3371,12 @@ W.HG_tabs = W.HG_tabs || [];
    integrity guard counts them). */
 W.HG_tabs.push({ id: 'goldscalp', label: 'GOLD SCALP', mount: mount, refresh: goldscalpRefresh,
                  autoStampText: gsAutoStampText, autoStampInit: gsAutoStampInit,
-                 fundamentalScan: gsFundamentalScan, fundPanelHtml: gsFundPanelHtml });
+                 fundamentalScan: gsFundamentalScan, fundPanelHtml: gsFundPanelHtml,
+                 /* hg-v1008: the session-floor pass travels on the same
+                    hg-v967/v968 registration route — tests reach the SHIPPED
+                    function without a 20th module-scope export (the render
+                    integrity guard turns red at 21). */
+                 sessionFloorScan: gsSessionFloorScan });
 W.HG_warmups = W.HG_warmups || [];
 W.HG_warmups.push({ id: 'goldscalp', label: 'GOLD SCALP', run: gsWarm });
 })();

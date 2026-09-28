@@ -419,6 +419,22 @@ localStorage. Never throws.
          MEANS ABSENT: a caller that names no feed records none, and such a
          record settles as it always did (hgFwdFeedFits fails open). */
       feed: (typeof rec.feed === 'string' && rec.feed) ? rec.feed : undefined,
+      /* hg-v1008: THE DESKS' OWN EVIDENCE STAMPS, KEPT. hg-v1006 stamped
+         row.conf (OPTI GOLD's confirmation-floor verdict) and hg-v1007
+         row.regime (the house-regime posture) — and BOTH died at this
+         whitelist, so "the verdict rides the forward ledger" was true of
+         the row and false of the RECORD: the question those packs wrote the
+         field for — do CONFIRMED / regime-aligned breaks actually pay
+         better — could never have been answered. Forwarded now, and
+         GOLDSCALP's hg-v1008 session stamps beside them. The same
+         three-state rule as every mark above: a value outside the enum is
+         a caller this log does not understand, and the honest record of
+         that is NOTHING, never a coerced string. None of these join the
+         dedup key — a firing's identity is unchanged. */
+      conf: (rec.conf === 'confirmed' || rec.conf === 'unconfirmed' || rec.conf === 'unverified') ? rec.conf : undefined,
+      regime: (rec.regime === 'favored' || rec.regime === 'neutral' || rec.regime === 'caution' || rec.regime === 'against' || rec.regime === 'unreadable') ? rec.regime : undefined,
+      sess: (rec.sess === 'participating' || rec.sess === 'thin' || rec.sess === 'unreadable') ? rec.sess : undefined,
+      orb: (rec.orb === 'with' || rec.orb === 'against' || rec.orb === 'none') ? rec.orb : undefined,
       state: 'open', r: null, settledT: null,
       at: isFinite(fin(rec.at)) ? fin(rec.at) : barT
     };
@@ -2092,6 +2108,15 @@ localStorage. Never throws.
             grade: c.grade || c.engineGrade || (c.gradeObj && c.gradeObj.letter) || o.grade || '',
             /* stack3 from OMNIROUTE and OMNIGOLD, passed through unchanged */
             stack3: c.stack3,
+            /* hg-v1008: the desks' own stamps, passed through raw — the
+               normaliser's enums decide. hg-v1006/v1007 stamped these on
+               the row and this assembly DROPPED them before the record was
+               ever built; a desk that marks nothing records nothing, as
+               every field above. */
+            conf: c.conf,
+            regime: c.regime,
+            sess: c.sess,
+            orb: c.orb,
             /* hg-v955: the gold calendar mark. hg-v954 set this on the rows
                GOLD DIRECTION and GOLD ULTRA hand in, and this entry point
                dropped it — the `mark` defect above, repeated. Absent stays
