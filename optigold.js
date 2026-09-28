@@ -45,6 +45,29 @@ setup, leaves BOTH pick slots empty with the reason named) and a 2+-net-vote
 headwind demotes — a demoted or refused setup never takes a BEST SCALP /
 BEST SWING slot (ogTopPicks skips it) but still renders in its lane, chipped
 with the stack's verdict. The full gold board panel renders above the board.
+
+hg-v1006: the break itself now answers to a CONFIRMATION FLOOR. Until this
+pack a bare close through a swing level could take a TOP PICK slot with no
+cross-family evidence behind it — every other gold desk crowns only with
+agreement from independent families, and this one crowned on structure alone.
+Each setup is now read against three independent families on its OWN lane's
+tape, sliced at the break bar so nothing after the signal informs the read
+(ogConfirmRead): VOLUME participation (volZ over 20 bars at the house's 0.5,
+engine.js's number, not a new fit), MOMENTUM (RSI-14 past the 50 midline and
+sloping with the break over 3 bars, engine.js's span; a break into an
+exhausted RSI does not confirm), and the PREVAILING TREND (the close beyond
+EMA-50 with EMA-50 sloping the same way, the higher-horizon read the lane's
+own tape carries). At least TWO of the CHECKED families must back the break
+or it is UNCONFIRMED: it still renders in its lane with the evidence named,
+but ogTopPicks never hands it a BEST SCALP / BEST SWING slot — the same
+exclusion route the v1005 stack verdict takes. A family that cannot be read
+(no volume leg on the tape, an EMA-50 not warmed up) is UNCHECKED — it
+neither confirms nor vetoes — and when fewer than two families can even be
+checked the setup is UNVERIFIED and stays eligible: the floor bites only
+where evidence exists to judge. The rule is unchanged; what changed is which
+setups the panel may LEAD with. The verdict is written into the forward
+ledger with each order, so whether CONFIRMED breaks actually pay better is a
+question the book will answer on evidence rather than one this desk asserts.
 ========================================================================= */
 (function(){
 'use strict';
@@ -666,6 +689,164 @@ function ogFundPanelHtml(){
   }catch(e){ return ''; }
 }
 
+/* hg-v1006: THE CONFIRMATION FLOOR. The audit behind it: GOLDSCALP blends a
+dozen detectors, GOLD SWING demands strictly more agreeing reads than
+opposing ones, OMNIGOLD and OMNIGOLD1 demand a minimum of confirmation
+classes, NEW GOLD demands three, and this desk demanded NOTHING — a close
+through a swing level crowned itself. These are the three families every
+breakout desk in the house already answers to, read on the lane's OWN rows
+and sliced at the break bar (the hg-v950 per-shape rule: a 4h setup is
+judged on 4h bars, never on the 15m tape, and never on a bar that had not
+closed when the break printed).
+
+   The thresholds are the house's own, reused rather than fitted here:
+volZ(20) > 0.5 is engine.js's G2 participation floor and squeeze.js's fire
+bar read; the RSI slope span of 3 bars is engine.js's; RSI > 70 / < 30 is
+engine.js's never-chase-exhaustion veto, applied here only as "not a
+confirm", never as a veto of the setup. Nothing existing moved.
+
+   Degradation is honest in both directions. A family whose evidence is not
+on the tape — the Twelve Data / Yahoo legs can carry no usable volume, an
+EMA-50 needs 55 closed bars before its slope is readable — is UNCHECKED: it
+neither confirms nor vetoes. When fewer than two families can even be
+checked, the setup is UNVERIFIED and stays eligible for the picks, because a
+floor that bites without evidence would be a veto dressed as a standard
+(hg-v700's rule: never punish a setup for evidence the feed never carried).
+Only a CHECKED failure — two or more families readable, fewer than two of
+them backing the break — marks the setup UNCONFIRMED, and only then does
+ogTopPicks refuse it a slot. */
+var OG_VOLZ_MIN = 0.5;    /* the house participation floor (engine.js G2, squeeze.js) — reused, not refit */
+var OG_VOLZ_LOOK = 20;    /* the house z-score lookback */
+var OG_RSI_SLOPE = 3;     /* engine.js's own RSI slope span */
+var OG_TREND_EMA = 50;    /* the prevailing-trend read on the lane's own tape */
+var OG_TREND_SLOPE = 5;   /* the bars over which the EMA's slope is judged */
+
+/* The read itself. Pure: the lane's rows and a setup in, the three family
+   verdicts and the floor's answer out — never null-safe by coercion, every
+   absent input returns null so junk can never fabricate a confirmation. */
+function ogConfirmRead(rows, s){
+  try{
+    if (!Array.isArray(rows) || !rows.length || !s) return null;
+    var dir = s.dir;
+    if (dir !== 'long' && dir !== 'short') return null;
+    var iR = fin(s.i);
+    if (iR === null) return null;
+    var i = Math.floor(iR);
+    if (i < 0 || i >= rows.length) return null;
+    var seg = rows.slice(0, i + 1);            /* the evidence stops at the break bar */
+    var closes = seg.map(function(r){ return +r.c; });
+    var vol = null, mom = null, trend = null;
+
+    /* family 1 — VOLUME participation at the break bar. The all-zero and
+       one-repeated-figure tapes are detected BEFORE the z-score is read:
+       volZ returns 0 for both, and 0 would read as a checked failure where
+       the truth is the feed carries no volume information at all. */
+    var _volZ = (typeof volZ === 'function') ? volZ : null;
+    if (_volZ && seg.length >= OG_VOLZ_LOOK + 1){
+      var vwin = seg.slice(-(OG_VOLZ_LOOK + 1)), vArr = [], vi;
+      for (vi = 0; vi < vwin.length; vi++){
+        var vv = +vwin[vi].v;
+        if (isFinite(vv)) vArr.push(vv);
+      }
+      var vTot = 0, vMin = Infinity, vMax = -Infinity;
+      for (vi = 0; vi < vArr.length; vi++){
+        vTot += vArr[vi];
+        if (vArr[vi] < vMin) vMin = vArr[vi];
+        if (vArr[vi] > vMax) vMax = vArr[vi];
+      }
+      if (vTot > 0 && (vMax - vMin) > 1e-8){
+        var vz = _volZ(seg, OG_VOLZ_LOOK);
+        if (isFinite(vz)){
+          vol = { ok: vz > OG_VOLZ_MIN, val: vz,
+                  note: 'volume z ' + (vz >= 0 ? '+' : '') + vz.toFixed(1)
+                      + (vz > OG_VOLZ_MIN ? ' — the break printed on expanding participation'
+                                          : ' — the break printed WITHOUT participation above the tape\'s norm') };
+        }
+      }
+    }
+
+    /* family 2 — MOMENTUM: RSI-14 past the 50 midline AND sloping with the
+       break over engine.js's 3-bar span. A break into an exhausted RSI
+       (>70 long, <30 short) is not momentum confirmation — it is the chase
+       engine.js's G2 refuses; here it simply does not count. */
+    var _rsi = (typeof rsi === 'function') ? rsi : null;
+    if (_rsi && seg.length >= 14 + OG_RSI_SLOPE + 1){
+      var ra = _rsi(closes, 14);
+      var rNow = ra[ra.length - 1], rPrev = ra[ra.length - 1 - OG_RSI_SLOPE];
+      if (isFinite(rNow) && isFinite(rPrev)){
+        var rWith = dir === 'long' ? (rNow > 50 && rNow > rPrev) : (rNow < 50 && rNow < rPrev);
+        var rExh = dir === 'long' ? (rNow > 70) : (rNow < 30);
+        mom = { ok: rWith && !rExh, val: rNow,
+                note: 'RSI ' + rNow.toFixed(0) + (rNow > rPrev ? ' and rising' : (rNow < rPrev ? ' and falling' : ' and flat'))
+                    + (rExh ? (dir === 'long' ? ' — overbought: the break is chasing exhaustion, not confirmation'
+                                              : ' — oversold: the break is chasing exhaustion, not confirmation')
+                            : (rWith ? ' — momentum runs with the break'
+                                     : ' — momentum does not run with the break')) };
+      }
+    }
+
+    /* family 3 — the PREVAILING TREND on the lane's own tape: the close
+       beyond EMA-50 with EMA-50 sloping the same way. On the 15m lane that
+       is roughly a 12-hour trend against a 5-bar swing signal; on 4h, eight
+       days. It is the higher-horizon read this single-tape desk can honestly
+       carry, and it is read on the lane's own rows, never borrowed. */
+    var _ema = (typeof ema === 'function') ? ema : null;
+    if (_ema && seg.length >= OG_TREND_EMA + OG_TREND_SLOPE){
+      var ea = _ema(closes, OG_TREND_EMA);
+      var eNow = ea[ea.length - 1], ePrev = ea[ea.length - 1 - OG_TREND_SLOPE];
+      var cNow = closes[closes.length - 1];
+      if (isFinite(eNow) && isFinite(ePrev) && isFinite(cNow)){
+        var tSide = dir === 'long' ? (cNow > eNow) : (cNow < eNow);
+        var tSlope = dir === 'long' ? (eNow > ePrev) : (eNow < ePrev);
+        trend = { ok: tSide && tSlope, val: eNow,
+                  note: (tSide ? (dir === 'long' ? 'above' : 'below') : (dir === 'long' ? 'below' : 'above'))
+                      + ' an EMA-50 that is ' + (eNow > ePrev ? 'rising' : (eNow < ePrev ? 'falling' : 'flat'))
+                      + ((tSide && tSlope) ? ' — the prevailing trend backs the break'
+                                           : ' — the prevailing trend does not back the break') };
+      }
+    }
+
+    var fams = [];
+    if (vol) fams.push(vol);
+    if (mom) fams.push(mom);
+    if (trend) fams.push(trend);
+    var checked = fams.length;
+    var agreeN = 0, fi;
+    for (fi = 0; fi < fams.length; fi++){ if (fams[fi].ok === true) agreeN++; }
+    var verdict = checked < 2 ? 'unverified' : (agreeN >= 2 ? 'confirmed' : 'unconfirmed');
+    var head = verdict === 'confirmed' ? ('CONFIRMED ' + agreeN + '/' + checked)
+             : verdict === 'unconfirmed' ? ('UNCONFIRMED ' + agreeN + '/' + checked)
+             : ('CONF UNCHECKED — only ' + checked + ' of 3 families readable');
+    var line = head + ': ' + (vol ? vol.note : 'volume unreadable on this tape')
+      + ' · ' + (mom ? mom.note : 'momentum unreadable on this tape')
+      + ' · ' + (trend ? trend.note : 'the EMA-50 trend read is not warmed up on this tape')
+      + (verdict === 'unconfirmed'
+         ? '. Fewer than two checked families back this break, so it never takes a TOP PICK slot — it renders with its evidence, nothing more.'
+         : verdict === 'confirmed'
+         ? '. At least two checked families back the break — the confirmation floor is answered.'
+         : '. The floor bites only where evidence exists to judge, so this setup stays eligible.');
+    return { vol: vol, mom: mom, trend: trend, checked: checked, agree: agreeN,
+             verdict: verdict, line: line };
+  }catch(e){ return null; }
+}
+
+/* The single predicate the pick loop reads. Only a CHECKED failure blocks —
+   an unreadable floor never does. */
+function ogConfirmBlocked(s){
+  return !!(s && s.confirm && s.confirm.verdict === 'unconfirmed');
+}
+
+/* The floor's verdict beside the state, the SMC read and the stack's chip —
+   the evidence line under the stats names every family, so the chip only
+   ever carries the answer and the count. */
+function ogConfirmChipHtml(s){
+  var c = s && s.confirm;
+  if (!c || !c.verdict) return '';
+  if (c.verdict === 'confirmed') return '<span class="stamp ok">CONFIRMED ' + c.agree + '/' + c.checked + '</span>';
+  if (c.verdict === 'unconfirmed') return '<span class="stamp bad">UNCONFIRMED ' + c.agree + '/' + c.checked + ' — never a TOP PICK</span>';
+  return '<span class="stamp warn">CONF UNCHECKED — ' + c.checked + '/3 readable</span>';
+}
+
 /* The single best live setup in each of the two lanes the panel leads with.
    Deliberately ONE EACH and never "top two overall" - two scalps at the top
    would answer a different question than the one asked. A lane with nothing
@@ -679,6 +860,11 @@ function ogTopPicks(setups, px){
     /* hg-v1005: a setup the fundamental stack refused or demoted never
        takes a pick slot — it still renders in its lane list, chipped. */
     if (ogFundBlocked(s)) return;
+    /* hg-v1006: nor does a break the CHECKED evidence fails to back — fewer
+       than two of the three confirmation families with it. An UNVERIFIED
+       setup (too little readable evidence to judge) stays eligible: the
+       floor bites only where evidence exists to judge. */
+    if (ogConfirmBlocked(s)) return;
     var e = ogProb(s, px);
     if (!e || !isFinite(e.p)) return;
     var reach = ogReach(s, px);
@@ -718,6 +904,7 @@ function card(s, mark){
   var smcChip = '';
   try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(s) || ''; }catch(e){}
   var fundChip = ogFundChipHtml(s);   /* hg-v1005: the stack's verdict beside the state */
+  var confChip = ogConfirmChipHtml(s); /* hg-v1006: and the confirmation floor's verdict beside both */
 
   /* The reading depends on whether the order has FILLED. A resting order is
      described by how far the mark is from its entry; a running position by
@@ -742,7 +929,7 @@ function card(s, mark){
     + '<span class="stamp">' + esc(s.laneLabel || '') + '</span>'
     + '<span class="dir">' + (filled ? (s.dir === 'long' ? 'LONG — filled' : 'SHORT — filled')
                                      : (s.dir === 'long' ? 'BUY LIMIT' : 'SELL LIMIT')) + '</span></div>'
-    + '<div class="row" style="gap:6px;margin:4px 0"><span class="stamp ' + stateCls + '">' + esc(stateLabel) + '</span>' + smcChip + fundChip + '</div>'
+    + '<div class="row" style="gap:6px;margin:4px 0"><span class="stamp ' + stateCls + '">' + esc(stateLabel) + '</span>' + smcChip + fundChip + confChip + '</div>'
     + '<div class="mini">'
     + (filled && op
         ? '<span class="k">unrealised</span><span><b>' + (op.unrealR >= 0 ? '+' : '') + fmt(op.unrealR, 2) + 'R</b></span>'
@@ -759,6 +946,11 @@ function card(s, mark){
     + '<span class="k">opposite level</span><span>' + fmt(s.dir === 'long' ? s.sup : s.res) + '</span>'
     + '</div>'
     + (travel ? '<div class="note" style="margin:4px 0">' + esc(travel) + '</div>' : '')
+    /* hg-v1006: the floor's EVIDENCE, not just its verdict — all three
+       family reads with their numbers, so the chip above never has to be
+       taken on trust. Printed for every state: the read is a property of
+       the break bar, which is immutable history for a settled setup too. */
+    + ((s.confirm && s.confirm.line) ? '<div class="note" style="margin:4px 0">' + esc(s.confirm.line) + '</div>' : '')
     /* PRICE MAY HAVE WALKED THROUGH THIS PLAN ALREADY — the shared rule in
        hg-plan.js. Every OPTI GOLD ticket is a RESTING LIMIT at the midpoint
        of a broken range, so it is a retest by construction: the population
@@ -923,6 +1115,10 @@ function render(ui, lanes, mark, note, opts){
     + 'within ' + REACH_ATR.toFixed(1) + '×ATR that still has bars left to fill, or a running position that pays at least '
     + MIN_RR_NOW.toFixed(1) + ':1 joined at the mark. Anything else is shown badged OUT OF REACH rather than hidden — '
     + 'the rule found it, but price has left it behind.'
+    + '<br>A pick must also clear the <b>confirmation floor</b> (hg-v1006): at least two of the three checked families — '
+    + 'volume participation, momentum (RSI-14), and the prevailing EMA-50 trend, all read on the lane\'s own tape at the '
+    + 'break bar — must back the break. A break whose evidence cannot be read stays eligible as CONF UNCHECKED; a break the '
+    + 'checked evidence does not back is UNCONFIRMED and never takes a slot, however well it scores.'
     + '</div>';
 
   h += '<div class="row" style="gap:14px;margin-bottom:10px;flex-wrap:wrap">'
@@ -1069,6 +1265,12 @@ async function runOptiGold(ui){
       setups.forEach(function(s){
         s.lane = L.key; s.laneLabel = L.label; s.interval = L.interval;
         s.horizonBars = L.horizonBars; s.sym = 'XAUUSD';
+        /* hg-v1006: the confirmation floor, read on THIS lane's own tape and
+           sliced at the break bar — never pooled across lanes, never read on
+           a bar that had not closed when the break printed. Stamped for
+           every state: it is a property of the break, like the weekend and
+           news marks, not of the setup's current liveness. */
+        s.confirm = ogConfirmRead(rows, s);
       });
       lanes.push({ cfg: L, rows: rows, setups: setups, src: (got && got.source) || 'gold',
                    pending: ogPending(rows, L) });
@@ -1130,7 +1332,20 @@ async function runOptiGold(ui){
       + ' · ' + total + ' setup(s) across ' + lanes.length + ' lanes'
       + ' · ' + new Date().toISOString().slice(11, 19) + ' UTC';
     render(ui, lanes, mark, note, { fundBlackout: ogFundBlackout });
+    /* hg-v1006: the floor's tally beside the count, over the LIVE setups —
+       the number a reader checks first, named rather than left to be
+       inferred card by card. Omitted when no setup carried a readable
+       stamp at all, rather than printing three confident zeroes. */
+    var ogFloor = { confirmed: 0, unconfirmed: 0, unverified: 0, stamped: 0 };
+    (__og.last.setups || []).forEach(function(s){
+      if (!s || (s.state !== 'waiting' && s.state !== 'open') || !s.confirm || !s.confirm.verdict) return;
+      ogFloor.stamped++;
+      if (s.confirm.verdict === 'confirmed') ogFloor.confirmed++;
+      else if (s.confirm.verdict === 'unconfirmed') ogFloor.unconfirmed++;
+      else ogFloor.unverified++;
+    });
     if (ui && ui.stat) ui.stat.textContent = total + ' setup(s) · mark ' + fmt(mark)
+      + (ogFloor.stamped ? ' · floor: ' + ogFloor.confirmed + ' confirmed · ' + ogFloor.unconfirmed + ' unconfirmed · ' + ogFloor.unverified + ' unchecked' : '')
       + (ogFundBlackout ? ' · EVENT BLACKOUT — no fresh setup forms' : '');
     __og.ranOnce = true;
     return 'ok';
@@ -1198,6 +1413,13 @@ function ogFwdRows(setups, lane, rows, feed){
        the mark at the break bar to know which way the order rests */
     var mk = ogBreakBarClose(rows, s);
     if (mk !== null) row.mark = mk;
+    /* hg-v1006: the floor's verdict rides the ledger row, so the forward
+       book can later answer the only question that matters about the floor
+       — do CONFIRMED breaks actually pay better than UNCONFIRMED ones — on
+       evidence, rather than this desk asserting it. A separate field, never
+       folded into the mechanic string: the mechanic's grouping must stay
+       continuous with every row already logged. */
+    if (s.confirm && typeof s.confirm.verdict === 'string') row.conf = s.confirm.verdict;
     out.push(row);
   }
   return out;
@@ -1245,11 +1467,19 @@ W.__ogSwings = ogSwings;
 W.__ogAtr = ogAtr;
 W.__ogFwdRows = ogFwdRows;
 
+/* hg-v1006: the confirmation floor, drivable in tests without a feed —
+   ogConfirmRead is the pure reader, ogConfirmBlocked the pick-loop
+   predicate, ogConfirmChipHtml the card chip. */
+W.__ogConfirmRead = ogConfirmRead;
+W.__ogConfirmBlocked = ogConfirmBlocked;
+W.__ogConfirmChipHtml = ogConfirmChipHtml;
+
 W.HG_tabs = W.HG_tabs || [];
 /* hg-v1005: the stack seams, on the registration object and one export for
    the guard — ogFundBlocked is the predicate the pick loop reads. */
 W.__ogFundBlocked = ogFundBlocked;
 W.HG_tabs.push({ id: 'optigold', label: 'OPTI GOLD', mount: mountOptiGold, refresh: refreshOptiGold,
-                 fundBlocked: ogFundBlocked, fundPanelHtml: ogFundPanelHtml });
+                 fundBlocked: ogFundBlocked, fundPanelHtml: ogFundPanelHtml,
+                 confirmRead: ogConfirmRead, confirmBlocked: ogConfirmBlocked });
 
 })();
