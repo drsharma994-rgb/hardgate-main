@@ -32,6 +32,36 @@ when present and sane, else the house fallback: entry = last 4h close,
 stop = lastSwing(4h,30) structure buffered 0.25xATR when within 2.5xATR,
 else 1.5xATR against dir; T1 = 2R, T2 = 3.5R. Levels are never fabricated:
 rows without cached 4h history or a computable ATR print an honest note.
+
+EVIDENCE LAYER (hg-v1012) — the composite's five components are five reads
+of the same closes; this layer adds the two independent legs the desk
+carried but never judged on. The composite score itself is NOT touched:
+a sixth component would silently re-scale every recorded tmScore the
+forward ledger measures.
+  TAKER FLOW — one capped, paced pass per scan (the promoted slice only,
+    <= TM_FLOW_MAX rows, chunks of CHUNK) reads REAL Binance taker
+    long/short flow — binanceTakerRatio on the row's hgDeskBinanceSym twin,
+    4h x 120 windows — through omniroute.js's hgOmniCvd over the last
+    TM_FLOW_LOOK windows. Flow AGAINST the row's own majority holds the row
+    off the LIMIT BOARD and caps it at NEAR (it paints, the chip names why
+    — nothing is dropped silently); flow WITH chips TAKER FLOW WITH IT.
+    Anything unreadable — no Binance twin, fewer than TM_FLOW_MIN_WIN
+    windows, a junk ratio series hgOmniCvd itself refuses to call taker, a
+    failed fetch — demotes nothing (the hg-v700 honest-degradation rule).
+    The candle-approximated stand-in never speaks here (the hg-v1009 rule:
+    it derives from the same closes the composite already read, so it is
+    not independent evidence). The look and the floor are stated PRIORS,
+    not measurements; the forward record now carries fundingPct and a
+    takerFlowWith read-mark (hg-v985/hg-v989 seams) so the ledger can
+    answer the split out of sample. The GOLDEN CROSS desk is deliberately
+    out of scope: its premise is a fresh multi-week cross, which five days
+    of 4h flow would misjudge.
+  FUNDING CROWDING — the fundingPct the universe already carried, read
+    through the ONE house rule (hg-setup-core.js hgFundingAgainstMark, the
+    G4 directional bar): leaning the same way as the row's direction chips
+    FUNDING CROWDED — squeeze risk. A caution chip, never a gate, the tier
+    unchanged (brain.js's own crowding pattern). Chip only; the tally's
+    points stay untouched.
 ========================================================================= */
 (function(){
 'use strict';
@@ -511,6 +541,9 @@ function trendmxPlanBlock(r){
     inner += ' · <span class="gpip ' + (s.clean7 ? 'ok' : (s.nearClean ? '' : '')) + '">' + escH(s.gateLabel) + '</span>';
   }
   inner += tmSmcChip(r);
+  /* hg-v1012: the evidence layer beside the plan an operator expanded to
+     inspect — the stamps the scan left, never recomputed here */
+  inner += trendmxFlowChipHtml(r) + trendmxFundingChipHtml(r);
   var tradeOnclick = (s && (typeof hgToTradePlanOnclickAttr === 'function' || typeof toTrade === 'function'))
     ? ((typeof hgToTradePlanOnclickAttr === 'function')
       ? hgToTradePlanOnclickAttr(r.sym, s.dir, s.entry, s.stop, s.t1, { t2: s.t2, stack: tmStack, scanner: 'trendmx', strategy: 'trendmx' })
@@ -666,6 +699,166 @@ function tmSmcScanPass(rows, golden){
   }catch(e){}
 }
 
+/* ---------------- hg-v1012: EVIDENCE LAYER — real taker flow ----------------
+   The composite is five reads of the same closes (1D EMA200, the 50/200
+   cross, the 4H cascade, the cloud, the ADX point): five ways to agree
+   with yourself. This pass adds the read that CANNOT be derived from
+   those closes — which side is aggressing the tape. A TREND MATRIX row is
+   a multi-day swing claim, and a swing minted into five days of net
+   aggressive selling (for a long) is a claim against the crowd that is
+   actually hitting the market.
+
+   REAL Binance taker long/short flow only, read on the row's own
+   hgDeskBinanceSym twin through hgOmniCvd (omniroute.js) over the last
+   TM_FLOW_LOOK 4h windows. The candle-approximated stand-in never speaks
+   here — the hg-v1009 rule: it derives from the same closes the composite
+   already read, so it is not independent evidence (the caller hands the
+   taker series straight through; hgOmniCvd only returns source 'taker'
+   when enough real windows were used).
+
+   Flow AGAINST the row's own majority: the row is HELD OFF — capped at
+   NEAR (trendmxRowTier), excluded from the LIMIT BOARD and from the
+   forward record the board writes (the ledger measures what the desk
+   judged tradeable WITH the evidence in hand), and the chip names why.
+   Flow WITH: a chip, never a point — the composite's five points stay
+   exactly what they were. Fewer than TM_FLOW_MIN_WIN readable windows
+   (hg-v1009's floor), a junk ratio series, a missing Binance twin or a
+   failed fetch: UNREAD, and what cannot be read demotes nothing (hg-v700).
+
+   ONE PASS PER SCAN over the promoted slice only — the same candidates
+   the SMC pass picks (a direction, no gate veto, clean7 or conviction),
+   the same rank, capped at the same TM_SMC_MAX-sized slice — paced in
+   CHUNK-sized chunks like the universe fetch itself. The matrix holds the
+   whole universe; fetching flow for every row would be a hundred calls
+   for rows the desk never promotes. Rows are stamped row.flow =
+   { verdict: 'with' | 'against' | 'unreadable', delta, bars, divergence,
+   sym, why? } and every render path READS the stamp — nothing recomputes
+   in a paint loop. The look, the floor and the cap are stated PRIORS, not
+   measurements; the forward record's new reads.takerFlowWith mark is how
+   the layer earns a measured one. PURE apart from the two readers it
+   calls; it reports the counts so the scan line and the tests read the
+   same object the scan acted on. */
+var TM_FLOW_LOOK = 30;      /* hgOmniCvd's own default look — five days of 4h flow, the horizon a swing row is judged on */
+var TM_FLOW_MIN_WIN = 10;   /* hg-v1009's floor: fewer readable windows than this is UNREAD, never a verdict */
+var TM_FLOW_MAX = 24;       /* the SMC pass's own cap — flow is fetched for the slice the desk promotes, never the whole universe */
+
+function trendmxFlowScan(rows){
+  var out = { with: 0, against: 0, unreadable: 0, scanned: 0, read: 'unavailable' };
+  var cvdFn = (typeof W.hgOmniCvd === 'function') ? W.hgOmniCvd : null;
+  var tkFn = (typeof W.binanceTakerRatio === 'function') ? W.binanceTakerRatio : null;
+  var symFn = (typeof W.hgDeskBinanceSym === 'function') ? W.hgDeskBinanceSym : null;
+  if (!cvdFn || !tkFn || !symFn || !Array.isArray(rows) || !rows.length) return Promise.resolve(out);
+  var cands = [], i;
+  for (i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if (!r || !r.rows4h || !r.rows4h.length) continue;
+    if (r.gate && r.gate.veto) continue;
+    if (!tmDirOf(r)) continue;
+    if (!(r.gate && r.gate.clean7) && !trendmxConviction(r)) continue;
+    cands.push(r);
+  }
+  if (!cands.length) return Promise.resolve(out);
+  /* the limit board's own rank, so the capped slice is the slice this desk
+     promotes first rather than an arbitrary universe order — the SMC
+     pass's own ordering, one rank for both reads */
+  cands.sort(function(a, b){
+    var ra = ((a.gate && a.gate.clean7) ? 1000 : 0) + Math.abs(a.score) * 10 + ((a.gate && a.gate.gatesPassed) || 0);
+    var rb = ((b.gate && b.gate.clean7) ? 1000 : 0) + Math.abs(b.score) * 10 + ((b.gate && b.gate.gatesPassed) || 0);
+    return rb - ra;
+  });
+  cands = cands.slice(0, TM_FLOW_MAX);
+  out.read = 'taker';
+  var idx = 0;
+  function oneChunk(){
+    var chunk = cands.slice(idx, idx + CHUNK);
+    idx += CHUNK;
+    return Promise.all(chunk.map(function(r){
+      var dir = tmDirOf(r);
+      out.scanned++;
+      return Promise.resolve().then(function(){
+        var bSym = symFn(r);
+        if (!bSym){ r.flow = { verdict: 'unreadable', why: 'no Binance twin' }; out.unreadable++; return; }
+        return tkFn(bSym, '4h', 120).then(function(tk){
+          var series = (tk && Array.isArray(tk.series)) ? tk.series : null;
+          if (!series || !series.length){
+            r.flow = { verdict: 'unreadable', why: 'no real flow', sym: bSym }; out.unreadable++; return;
+          }
+          /* no signal-bar slice: a matrix row is minted by THIS scan, so the
+             last closed 4h bar IS its judging bar — the windows that exist
+             are the windows that had printed */
+          var cv = cvdFn(r.rows4h, TM_FLOW_LOOK, { series: series });
+          if (!cv || cv.source !== 'taker' || !isFinite(cv.delta) || cv.bars < TM_FLOW_MIN_WIN || cv.delta === 0){
+            r.flow = { verdict: 'unreadable', why: 'no real-flow verdict', sym: bSym }; out.unreadable++; return;
+          }
+          var withDir = (dir === 'long') ? (cv.delta > 0) : (cv.delta < 0);
+          r.flow = { verdict: withDir ? 'with' : 'against',
+                     delta: Math.round(cv.delta * 100) / 100, bars: cv.bars,
+                     divergence: cv.divergence || null, sym: bSym };
+          if (withDir) out.with++; else out.against++;
+        });
+      }).catch(function(){
+        try{ r.flow = { verdict: 'unreadable', why: 'fetch failed' }; out.unreadable++; }catch(e2){}
+      });
+    })).then(function(){
+      if (idx < cands.length) return sleepMs(CHUNK_SLEEP_MS).then(oneChunk);
+    });
+  }
+  return oneChunk().then(function(){ return out; }, function(){ return out; });
+}
+
+/* The chips — read the verdict the scan stamped, never recompute (the same
+   rule as goldscalp's gsTakerFlowChipHtml). bad on AGAINST, ok on WITH,
+   neutral on UNREAD (the desk looked and could not read — said, because a
+   read that looked and could not speak is different from one that never
+   looked), nothing when the stamp is absent (a row outside the promoted
+   slice was never judged). Same stamp-with-margin markup as hgSmcChipHtml
+   so the chip sits naturally beside it on every card. */
+function trendmxFlowChipHtml(r){
+  try{
+    var f = r && r.flow;
+    if (!f || !f.verdict) return '';
+    var dir = tmDirOf(r) || '';
+    if (f.verdict === 'against'){
+      return '<span class="stamp bad" style="margin-left:6px" title="' + escH('trendmx evidence layer (hg-v1012): real Binance taker flow over '
+        + (f.bars || '?') + ' 4h windows on ' + (f.sym || 'the Binance twin') + ' reads net against this ' + dir
+        + ' (delta ' + (f.delta != null ? f.delta : '?') + ')'
+        + (f.divergence ? ' — ' + f.divergence + ' divergence on the tape' : '')
+        + '. Held off the LIMIT BOARD, never CLEAN — the row paints, the reason is named.') + '">TAKER FLOW AGAINST · HELD OFF</span>';
+    }
+    if (f.verdict === 'with'){
+      return '<span class="stamp pass" style="margin-left:6px" title="' + escH('trendmx evidence layer (hg-v1012): real Binance taker flow over '
+        + (f.bars || '?') + ' 4h windows on ' + (f.sym || 'the Binance twin') + ' backs this ' + dir
+        + ' (delta ' + (f.delta != null ? f.delta : '?') + ')'
+        + (f.divergence ? ' — ' + f.divergence + ' divergence on the tape' : '')
+        + '. Evidence, never a composite point.') + '">TAKER FLOW WITH IT</span>';
+    }
+    return '<span class="stamp" style="margin-left:6px" title="' + escH('trendmx evidence layer (hg-v1012): '
+      + (f.why || 'no real-flow read for this row') + ' — the read cannot speak, and what cannot speak holds nothing off') + '">TAKER FLOW UNREAD</span>';
+  }catch(e){ return ''; }
+}
+
+/* FUNDING CROWDING — the fundingPct the universe already carried, read
+   through the ONE house rule (hg-setup-core.js hgFundingAgainstMark — the
+   G4 directional bar — so this chip can never disagree with the ledger's
+   fundAgainst mark on the same row). Leaning the same way as the row's
+   direction = the crowd is already stacked here = squeeze risk: a caution
+   chip, never a gate, the tier unchanged — brain.js's own funding-crowding
+   pattern. Absent rule, absent funding or a non-crowded read: no chip. */
+function trendmxFundingChipHtml(r){
+  try{
+    var dir = tmDirOf(r);
+    var fp = r && r.fundingPct;
+    if (!dir || typeof fp !== 'number' || !isFinite(fp)) return '';
+    var markFn = (typeof W.hgFundingAgainstMark === 'function') ? W.hgFundingAgainstMark : null;
+    if (!markFn) return '';
+    var m = markFn(fp, dir);
+    if (!m || m.against !== true) return '';
+    return '<span class="stamp" style="margin-left:6px" title="' + escH('funding crowding (hg-v1012, the one rule in hg-setup-core.js): funding '
+      + fp.toFixed(4) + '%/interval leans the same way as this ' + dir
+      + ' — the crowd is already stacked here, squeeze risk. A caution chip, never a gate, the tier unchanged.') + '">FUNDING CROWDED</span>';
+  }catch(e){ return ''; }
+}
+
 async function trendmxScanCore(hooks){
   hooks = hooks || {};
 /* Map before asking Binance — a venue code means nothing to fapi. This is the
@@ -729,9 +922,16 @@ async function trendmxScan(opts){
   var core = await trendmxScanCore(opts);
   var golden = trendmxGoldenCrossSetups(core.rows);
   tmSmcScanPass(core.rows, golden);
+  /* hg-v1012: the evidence layer — one capped, paced pass over the promoted
+     slice, AFTER the tier inputs (score/gate/conviction) exist and BEFORE
+     the snap the boards read. Never throws; what it cannot read it leaves
+     unstamped, and an unstamped row is an unjudged row. */
+  var flow = null;
+  try{ flow = await trendmxFlowScan(core.rows); }catch(eFl){ flow = null; }
   __tmScanSnap = {
     at: core.at, rows: core.rows, failed: core.failed, uniLen: core.uniLen, scanned: core.scanned,
-    goldenCross: golden, note: core.note, source: core.source, venueCounts: core.venueCounts
+    goldenCross: golden, note: core.note, source: core.source, venueCounts: core.venueCounts,
+    flow: flow
   };
   publishTrendmxSnap(core.rows);
   return __tmScanSnap;
@@ -759,6 +959,11 @@ function trendmxRowTier(r, plan){
   if (!r) return 'forming';
   if (plan && plan.omniDemoted) return 'near';
   if (r.gate && r.gate.veto) return 'forming';
+  /* hg-v1012: real taker flow AGAINST the row's own majority caps the row
+     at NEAR — it paints, the chip names why, it can never be CLEAN or sit
+     on the LIMIT BOARD (the same leadership pattern as the omni principal
+     above it). An unread flow caps nothing. */
+  if (r.flow && r.flow.verdict === 'against') return 'near';
   if (plan && tmValidSetup(plan) && r.gate && r.gate.clean7) return 'clean';
   if (r.gate && r.gate.nearClean) return 'near';
   return 'forming';
@@ -767,13 +972,17 @@ function trendmxRowTier(r, plan){
 function trendmxSummaryLine(rows, golden, venueCounts){
   rows = rows || [];
   golden = golden || [];
-  var sl = 0, ss = 0, fx = 0, clean = 0, near = 0;
+  var sl = 0, ss = 0, fx = 0, clean = 0, near = 0, flowW = 0, flowA = 0;
   for (var i = 0; i < rows.length; i++){
     var r = rows[i];
     if (!r) continue;
     if (r.score >= 4) sl++;
     if (r.score <= -4) ss++;
     if (r.freshCross) fx++;
+    /* hg-v1012: the flow split, read off the stamps the scan left — the
+       summary names the evidence the same way the cards do */
+    if (r.flow && r.flow.verdict === 'with') flowW++;
+    else if (r.flow && r.flow.verdict === 'against') flowA++;
     var dir = tmDirOf(r);
     var plan = dir ? trendmxPlan(Object.assign({}, r, { dir: dir })) : null;
     var tier = trendmxRowTier(r, plan);
@@ -785,7 +994,8 @@ function trendmxSummaryLine(rows, golden, venueCounts){
   return 'scanned ' + rows.length + ven
     + ' · golden ' + golden.length
     + ' · strong +' + sl + '/−' + ss + ' · fresh crosses ' + fx
-    + ' · CLEAN ' + clean + ' · NEAR ' + near;
+    + ' · CLEAN ' + clean + ' · NEAR ' + near
+    + ((flowW + flowA) > 0 ? ' · taker flow ' + flowW + ' with / ' + flowA + ' held off' : '');
 }
 
 function trendmxGoldenCardHTML(g){
@@ -835,7 +1045,9 @@ function trendmxLimitCardHTML(item){
   var tradeOn = (typeof hgToTradePlanOnclickAttr === 'function')
     ? hgToTradePlanOnclickAttr(r.sym, dir, p.entry, p.stop, p.t1, { t2: p.t2, stack: item.stack, scanner: 'trendmx', strategy: 'trendmx' }) : '';
   return '<div style="flex:1 1 260px;max-width:360px;border:1px solid #E2E8F0;border-left:3px solid ' + col + ';border-radius:8px;padding:10px 12px;background:#fff">'
-    + '<div><b>' + escH(r.sym) + '</b>' + tmVenueChip(r) + ' · ' + dir.toUpperCase() + stHtml + tmSmcChip(r) + '</div>'
+    + '<div><b>' + escH(r.sym) + '</b>' + tmVenueChip(r) + ' · ' + dir.toUpperCase() + stHtml + tmSmcChip(r)
+    + trendmxFlowChipHtml(r)   /* hg-v1012: the flow verdict the scan stamped — reads the stamp, never recomputes */
+    + trendmxFundingChipHtml(r) + '</div>'
     + '<div style="font-size:18px;font-weight:800;color:' + col + ';margin:4px 0">' + pxFmt(p.entry) + '</div>'
     + '<div class="note">' + trendmxPlanHTML(p) + '</div>'
     + (tradeOn ? '<button class="toTrade" onclick="' + tradeOn + '">SEND TO TRADE PLAN →</button>' : '')
@@ -843,12 +1055,18 @@ function trendmxLimitCardHTML(item){
 }
 
 function trendmxLimitBoardHTML(rows){
-  var cands = [];
+  var cands = [], heldOff = 0;
   for (var i = 0; i < rows.length; i++){
     var r = rows[i];
     if (!r || !r.gate || r.gate.veto) continue;
     var dir = tmDirOf(r);
     if (!dir) continue;
+    /* hg-v1012: flow-AGAINST rows are held off the board. The row still
+       paints in the matrix with its chip — nothing is dropped silently —
+       but the board and the record below are what the desk judged
+       tradeable WITH the evidence in hand, and a swing minted against the
+       real aggressor flow is not it. */
+    if (r.flow && r.flow.verdict === 'against'){ heldOff++; continue; }
     var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
     if (!tmValidSetup(plan)) continue;
     if (!(r.gate.clean7 || trendmxConviction(r))) continue;
@@ -871,6 +1089,18 @@ function trendmxLimitBoardHTML(rows){
                  /* hg-v981: the mark trendmxAttachMeta already kept, the bar off the row's series */
                  mark: (c.plan && isFinite(+c.plan.mark) && +c.plan.mark > 0) ? +c.plan.mark : undefined,
                  barT: (typeof W.hgFwdLastBar === 'function') ? W.hgFwdLastBar(c.row && c.row.rows4h).barT : undefined,
+                 /* hg-v1012: the funding the row already carried — a desk that
+                    has it in hand hands it in (hg-v985: the ledger has no
+                    venue-safe symbol map, so a desk that hands in no funding
+                    records none, and this desk recorded none until now).
+                    fundAgainst then comes from the one rule in hg-setup-core.js. */
+                 fundingPct: (c.row && typeof c.row.fundingPct === 'number' && isFinite(c.row.fundingPct)) ? c.row.fundingPct : undefined,
+                 /* hg-v1012: the flow verdict at fire time, on the hg-v989
+                    reads seam — true when real taker flow backed the row,
+                    absent when the flow never spoke (NOT RECORDED, the third
+                    state). Flow-AGAINST rows never reach this map: they were
+                    held off above. The split is the layer's measurement. */
+                 reads: (c.row && c.row.flow && c.row.flow.verdict === 'with') ? { takerFlowWith: true } : undefined,
                  /* hg-v995: the composite is NOT handed in here -- the ledger reads it off
                     this desk's own published snapshot (hgTrendMatrixMark), the same row the
                     board painted, so a second copy would be the same number twice */
@@ -880,9 +1110,17 @@ function trendmxLimitBoardHTML(rows){
     }
   } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("trendtable", eFwd); } catch (eW) {} }
   cands = cands.slice(0, 8);
-  if (!cands.length) return '';
+  if (!cands.length){
+    /* every qualified row held off is a verdict, not an empty board — name it */
+    return heldOff
+      ? '<div class="panel" style="margin:12px 0">'
+        + '<h2>LIMIT BOARD <span>CLEAN + conviction rows · exact resting limits · sorted by gates + composite</span></h2>'
+        + '<div class="note">' + heldOff + ' qualified row' + (heldOff === 1 ? '' : 's') + ' held off — real Binance taker flow reads against the trend (hg-v1012). The rows paint in the matrix with their chips.</div></div>'
+      : '';
+  }
   return '<div class="panel" style="margin:12px 0">'
-    + '<h2>LIMIT BOARD <span>CLEAN + conviction rows · exact resting limits · sorted by gates + composite</span></h2>'
+    + '<h2>LIMIT BOARD <span>CLEAN + conviction rows · exact resting limits · sorted by gates + composite'
+    + (heldOff ? ' · ' + heldOff + ' held off — taker flow against' : '') + '</span></h2>'
     + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + cands.map(trendmxLimitCardHTML).join('') + '</div></div>';
 }
 
@@ -908,7 +1146,7 @@ function trendmxSetupCardHTML(r, tier){
   return hgSetupCardHTML({
     sym: r.sym, dir: dir, tier: tier,
     mini: mini, gates: gates,
-    plan: plan ? (trendmxPlanHTML(plan) + tmSmcChip(r)) : '',
+    plan: plan ? (trendmxPlanHTML(plan) + tmSmcChip(r) + trendmxFlowChipHtml(r) + trendmxFundingChipHtml(r)) : '',
     entry: plan ? plan.entry : null, stop: plan ? plan.stop : null, t1: plan ? plan.t1 : null,
     chartId: (tier === 'clean' && plan) ? ('tmx_' + String(r.sym).replace(/[^A-Za-z0-9]/g, '')) : '',
     stack: stack,
@@ -1411,7 +1649,11 @@ function mountTrendMatrix(el){
       var venNote = ' · Δ' + (vc.delta || 0) + ' CDX' + (vc.coindcx || 0) + ' BN' + (vc.binance || 0);
       setStatus('raw ' + uniLen + ' · scanned ' + symsLen + venNote
                 + ' (≥ $' + floorM + 'M) · ' + results.length + ' ok / ' + failed +
-                ' failed · ' + dt + 's' + (snap && snap.note ? ' · ' + snap.note : ''), results.length === 0);
+                ' failed · ' + dt + 's' + (snap && snap.note ? ' · ' + snap.note : '')
+                /* hg-v1012: name the evidence pass the same way the board does */
+                + ((snap && snap.flow && snap.flow.read === 'taker' && (snap.flow.with + snap.flow.against) > 0)
+                  ? ' · taker flow: ' + snap.flow.with + ' with / ' + snap.flow.against + ' held off' : ''),
+                results.length === 0);
       if (!results.length){
         out.innerHTML = '<div class="empty">All symbol fetches failed — check connection.</div>';
       }
@@ -1454,6 +1696,15 @@ W.trendmxPlan = trendmxPlan;
 W.trendmxPlanHTML = trendmxPlanHTML;
 W.trendmxPlanBlock = trendmxPlanBlock;
 W.trendmxConviction = trendmxConviction;
+/* hg-v1012: the evidence layer's seams — the pass, the chips, and the two
+   pre-existing readers the layer's behavior lives through (no export cap
+   on this desk; the tests read these rather than re-deriving behavior) */
+W.trendmxFlowScan = trendmxFlowScan;
+W.trendmxFlowChipHtml = trendmxFlowChipHtml;
+W.trendmxFundingChipHtml = trendmxFundingChipHtml;
+W.trendmxRowTier = trendmxRowTier;
+W.trendmxLimitBoardHTML = trendmxLimitBoardHTML;
+W.trendmxSummaryLine = trendmxSummaryLine;
 W.trendmxGoldenCrossSetups = trendmxGoldenCrossSetups;
 W.trendmxScan = trendmxScan;
 W.trendmxWarm = trendmxWarm;
