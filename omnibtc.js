@@ -40,6 +40,22 @@ invoked (squeeze, PINE and structure were listed and never wired):
                              already there and contributes nothing when it is
                              not. It never runs pine and never mints a signal
                              pine did not produce.
+  REAL-FLOW CVD ............ hg-v1011: the contract report's CVD row always
+                             accepted a taker series and was never fed one —
+                             the candle-approximated stand-in answered for the
+                             life of the desk. hgObtcGatherExtra now fetches
+                             Binance's BTCUSDT taker long/short series (4h,
+                             cached), so the row reads REAL aggressor flow
+                             when the feed is up, the labelled stand-in when
+                             it is not.
+  FORWARD LEDGER ........... hg-v1011: the crowned pick is recorded to
+                             hg-forward ('OMNIBTC', 4h tape, 20-bar horizon)
+                             with the winner leg's own rows (the central
+                             regime mark reads them) and the ticker's funding
+                             — the desk's word is measured now, out-of-sample,
+                             and the book renders under the card. Dedup keys
+                             on the levels: a re-scan of the same crown
+                             records once.
 
 Extra engines never claim 7/7 CLEAN. That badge stays on swingTryClean /
 scalpTryClean. APEX is alts-versus-BTC, so it is not called. BEST is the
@@ -749,6 +765,12 @@ a global hard refresh.
       }
       ui.detail.innerHTML = dhtml;
     }
+    /* hg-v1011: the desk's own forward book under the card — does the crown
+       pay. Rides the drop-in panel every other recording desk renders; the
+       module absent leaves the mount's note standing, never a throw. */
+    if (ui.fwd){
+      try{ if (gfn('hgFwdPanelHTML')) ui.fwd.innerHTML = W.hgFwdPanelHTML('OMNIBTC') || ''; }catch(eFp){}
+    }
     if (ui.ind) ui.ind.innerHTML = indicatorsHtml(snap && snap.indicators);
     if (ui.ledger){
       var extraHtml = '';
@@ -926,6 +948,36 @@ a global hard refresh.
             });
           }catch(eRef){}
         }
+        /* hg-v1011: THE PICK JOINS THE FORWARD BOOK. Every desk that crowns
+           a setup writes it to hg-forward; this desk has crowned one MOST
+           PROBABLE per scan for its whole life and never recorded one —
+           nothing could ever answer "does the crown pay?". The record
+           carries the winner leg's own 4h tape (hg-v993's regime mark reads
+           the series the desk held, 60+ bars required) and the ticker's
+           funding (hg-v985's central mark); the tf is '4h' because the
+           desk's book is the 4h tape, and the 20-bar horizon is the house
+           default every 4h writer already uses. The bar is the tape's own
+           last closed bar (hg-v978), never the wall clock. Dedup keys on
+           the levels, so a re-scan of the same crown records once. A
+           watch-tier pick records with ticket:false — it is still the
+           desk's output, marked for what it is. */
+        try{
+          if (gfn('hgFwdRecordScan') && winnerRows && winnerRows.length){
+            var fwdTk = (match && match._ticker) || null;
+            var fwdLast = winnerRows[winnerRows.length - 1];
+            W.hgFwdRecordScan('OMNIBTC', '4h', [{
+              sym: 'BTCUSD',
+              dir: pick.row.dir,
+              entry: +pick.row.entry, stop: +pick.row.stop, t1: +pick.row.t1,
+              signalT: fwdLast && fwdLast.t,
+              mark: fwdLast && fwdLast.c,
+              rows4h: winnerRows,
+              fundingPct: (fwdTk && typeof fwdTk.fundingPct === 'number' && isFinite(fwdTk.fundingPct)) ? fwdTk.fundingPct : undefined,
+              mechanic: String(pick.row.omniKind || pick.row.kind || pick.row.engine || 'UNKNOWN').toUpperCase().slice(0, 28),
+              ticket: String(pick.tier || 'clean').toLowerCase() === 'clean'
+            }], { horizonBars: 20 });
+          }
+        }catch(eFwd2){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eFwd2); }catch(eW){} }
       }
       var nClean = all.filter(function(c){ return c.clean; }).length;
       var stat = pick
@@ -981,6 +1033,8 @@ a global hard refresh.
       + '<div class="row" style="margin-top:8px"><button type="button" class="btn" id="obtcRun">SCAN BTC</button></div>'
       + '<div class="cards" id="obtcCards" style="margin-top:12px"></div>'
       + '<div id="obtcDetail" style="margin-top:12px"></div>'
+      + '<h3 style="margin:18px 0 6px;letter-spacing:.08em;font-size:12px">FORWARD — DOES THE CROWN PAY?</h3>'
+      + '<div id="obtcFwd" class="note">The crowned pick is recorded out-of-sample from the next scan on (hg-v1011) — the book fills as scans run and settles on bars that had not printed at the time.</div>'
       + '<h3 style="margin:18px 0 6px;letter-spacing:.08em;font-size:12px">INDICATOR BANK</h3>'
       + '<div id="obtcInd" class="note">Run a scan to read BTC.</div>'
       + '<h3 style="margin:18px 0 6px;letter-spacing:.08em;font-size:12px">STRATEGY LEDGER</h3>'
@@ -993,12 +1047,16 @@ a global hard refresh.
       stat: el.querySelector('#obtcStat'),
       cards: el.querySelector('#obtcCards'),
       detail: el.querySelector('#obtcDetail'),
+      fwd: el.querySelector('#obtcFwd'),
       ind: el.querySelector('#obtcInd'),
       ledger: el.querySelector('#obtcLedger')
     };
     if (!ui.btn || !ui.stat || !ui.cards) return;
     __obtc.ui = ui;
     ui.btn.addEventListener('click', function(){ return hgObtcRunScan(ui); });
+    /* hg-v1011: the forward book renders on mount too — records from
+       previous sessions are the point of an accumulating ledger. */
+    try{ if (ui.fwd && gfn('hgFwdPanelHTML')) ui.fwd.innerHTML = W.hgFwdPanelHTML('OMNIBTC') || ui.fwd.innerHTML; }catch(eFm){}
     if (__obtc.snap) paint(ui, __obtc.snap);
   }
 

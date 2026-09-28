@@ -105,6 +105,10 @@ var HG_ACCURACY_TABS = {
   cryptoscan:     ['CRYPTO SCAN'],
   cryptoverse:    ['CRYPTOVERSE'],
   ninetypercent:  ['90PERCENT'],
+  /* hg-v1011: OMNIBTC records now — the crowned pick joins the forward
+     book under 'OMNIBTC', so the desk answers to the floor like every
+     other recording desk. */
+  omnibtc:        ['OMNIBTC'],
   omniroute:      ['OMNIROUTE'],
   omnipresent:    ['OMNIPRESENT'],
   reversalsniper: ['REVERSALSNIPER'],

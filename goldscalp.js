@@ -115,6 +115,25 @@ a small reason line — nothing is dropped silently):
      points. Unreadable volume legs (constant-volume feeds, all-zero, a bar
      not on the tape) demote nothing: the floor bites only where evidence
      exists to judge (the hg-v700 honest-degradation rule).
+ 16) TAKER-FLOW CONFIRMATION (hg-v1011, omniroute.js hgOmniCvd reading
+     Binance's taker long/short series) — a scalp borrows the next few bars
+     from whoever is hitting the tape, and until this pack the desk had
+     never read the aggressor tape itself. Where the 15m leg's OWN feed is
+     a Binance gold perp ('binance-xau' -> XAUUSDT / 'binance-paxg' ->
+     PAXGUSDT — the hg-v1009 rule: flow must be the flow OF the tape the
+     setup was judged on, and the candle-approximated stand-in derives from
+     the same closes the tape gates already read, so it never speaks here),
+     real taker flow over the 30 windows up to the candidate's own signal
+     bar (hg-v977's mint instant — a stale setup is judged on the flow that
+     existed THEN, never on windows that had not printed) is read per
+     candidate: net flow AGAINST the scalp side demotes (the card paints,
+     the reason is named, it can never be MOST PROBABLE — the same
+     leadership pattern as gates 14 and 15), flow WITH chips TAKER FLOW
+     WITH IT. Fewer than 10 readable windows (hg-v1009's floor), a junk
+     ratio series hgOmniCvd itself refuses to call taker, a thin sliced
+     tape, a non-Binance feed or a failed fetch: UNREAD — and what cannot
+     be read demotes nothing. Chips inform; the tally's points stay
+     untouched. The stated bar is a PRIOR, not a measurement.
 
 Feeds (in preference order):
   1) window.getGoldCandles (macro.js) — XAUUSDT TradFi perp first, PAXGUSDT
@@ -1249,6 +1268,7 @@ function cardHTML(c, isBest, season, tape){
     + goldTapeChipHtml(c, tape)
     + gsFundChipHtml(c)
     + gsSessionChipHtml(c)
+    + gsTakerFlowChipHtml(c)   /* hg-v1011: the flow verdict the scan stamped — reads the stamp, never recomputes */
     + chips + metaChips
     + '</div>'
     + tallyChips(c)
@@ -1882,6 +1902,120 @@ function gsSessionChipHtml(c){
       return '<span class="gpip" title="' + esc(f.orbWhy || 'the COMEX opening-range break opposes this setup') + ' — evidence, never a gate' + '">COMEX ORB AGAINST</span>';
     }
     return '';
+  }catch(e){ return ''; }
+}
+
+/* hg-v1011: TAKER-FLOW CONFIRMATION. Gate 1 knows what time it is, gate 15
+   knows whether the crowd showed up — this read knows which SIDE the crowd
+   is hitting. A scalp borrows the next few bars from whoever is
+   aggressing the tape, and a long minted into net aggressive selling (or
+   a short into net aggressive buying) is borrowing against the lender.
+   REAL Binance taker long/short flow only, and only when the 15m leg's own
+   feed is the Binance gold perp the flow belongs to (the hg-v1009 rule:
+   the candle-approximated stand-in derives from the same closes the tape
+   gates already read, so it is not independent evidence and never speaks
+   here — the caller hands in null and this pass stands aside). Read over
+   the 30 windows up to EACH CANDIDATE'S OWN signal bar (hg-v977's mint
+   instant), so a stale setup is judged on the flow that existed when it
+   printed, never on windows that had not printed yet.
+
+   Net flow AGAINST the scalp side: demoted — the gsApplyOneAtATime /
+   session-floor leadership pattern: the card paints, the reason is named
+   in gateNotes, it can never be MOST PROBABLE. Flow WITH: a chip, never a
+   tally point. Fewer than GS_TAKER_MIN_WIN readable windows (hg-v1009's
+   floor), a ratio series hgOmniCvd itself refuses to call taker, a thin
+   sliced tape, or a zero delta: UNREAD, and what cannot be read demotes
+   nothing (hg-v700). The skip list is the session floor's own: dropped /
+   vetoed / locked rows are spoken for — the trade you are IN keeps
+   running. The stated look and floor are PRIORS, not measurements.
+
+   PURE apart from the one reader it calls: marks what it demotes and
+   reports the counts, so the scan line and the tests read the same object
+   the scan acted on rather than recomputing it. */
+var GS_TAKER_LOOK = 30;      /* hgOmniCvd's own default look — the flow window a 15m scalp is judged on */
+var GS_TAKER_MIN_WIN = 10;   /* hg-v1009's floor: fewer readable windows than this is UNREAD, never a verdict */
+function gsTakerFlowScan(ranked, rows15m, taker){
+  var out = { demoted: 0, stamped: 0, read: 'unavailable' };
+  try{
+    var cvdFn = gfn('hgOmniCvd');
+    var series = (taker && Array.isArray(taker.series)) ? taker.series : null;
+    if (!cvdFn || !Array.isArray(ranked)) return out;
+    if (!series || !series.length || !Array.isArray(rows15m) || rows15m.length < 30){
+      out.read = 'no real flow';
+      return out;
+    }
+    out.read = 'taker';
+    for (var i = 0; i < ranked.length; i++){
+      var c = ranked[i];
+      if (!c || !c.sym || !c.dir || c.dropped || c.vetoed || c.locked) continue;
+      /* slice at the candidate's own mint instant — the flow that existed
+         THEN. Bars and windows normalise their own clocks (s vs ms), the
+         same tolerance hgSessionVolPct shows. A candidate with no readable
+         instant is judged at the tape's end — the scan just ran, so the
+         last closed bar IS its judging bar. */
+      var cutMs = +(c.signalT);
+      var seg = rows15m, cut = series;
+      if (isFinite(cutMs) && cutMs > 0){
+        seg = rows15m.filter(function(r){ return r && ((r.t > 1e12 ? r.t : r.t * 1000) <= cutMs); });
+        cut = series.filter(function(w){ return w && ((w.t > 1e12 ? w.t : w.t * 1000) <= cutMs); });
+      }
+      if (seg.length < 30 || cut.length < GS_TAKER_MIN_WIN){
+        c.takerFlow = { verdict: 'unreadable', why: 'thin slice at the signal bar' };
+        continue;
+      }
+      var cv = cvdFn(seg, GS_TAKER_LOOK, { series: cut });
+      if (!cv || cv.source !== 'taker' || !isFinite(cv.delta) || cv.bars < GS_TAKER_MIN_WIN || cv.delta === 0){
+        c.takerFlow = { verdict: 'unreadable', why: 'no real-flow verdict' };
+        continue;
+      }
+      var withDir = (c.dir === 'long') ? (cv.delta > 0) : (cv.delta < 0);
+      c.takerFlow = { verdict: withDir ? 'with' : 'against',
+                      delta: Math.round(cv.delta * 100) / 100, bars: cv.bars,
+                      divergence: cv.divergence || null };
+      out.stamped++;
+      if (!withDir){
+        c.demoted = true;
+        if (!Array.isArray(c.stamps)) c.stamps = [];
+        if (c.stamps.indexOf('FLOW AGAINST') < 0) c.stamps.push('FLOW AGAINST');
+        var gn = Array.isArray(c.gateNotes) ? c.gateNotes.slice() : [];
+        gn.push('taker flow against — real Binance aggressor flow over ' + cv.bars
+          + ' windows to the signal bar reads net ' + (cv.delta < 0 ? 'selling' : 'buying')
+          + ' (' + (cv.delta > 0 ? '+' : '') + Math.round(cv.delta * 100) / 100 + ') against a '
+          + c.dir + ' scalp' + (cv.divergence ? ' (' + cv.divergence + ' divergence on the tape)' : '')
+          + '; a scalp borrows the next few bars from whoever is hitting the tape (hg-v1011 prior)');
+        c.gateNotes = gn;
+        out.demoted++;
+      }
+    }
+  }catch(e){}
+  return out;
+}
+
+/* The chip — reads the verdict the scan stamped, never recomputes (the same
+   rule as gsSessionChipHtml). bad on AGAINST, ok on WITH, neutral on
+   UNREAD (the desk looked and could not read — said, because a gate that
+   looked and could not speak is different from one that never looked),
+   nothing when the stamp is absent. */
+function gsTakerFlowChipHtml(c){
+  try{
+    var f = c && c.takerFlow;
+    if (!f || !f.verdict) return '';
+    if (f.verdict === 'against'){
+      return '<span class="gpip bad" title="' + esc('taker-flow confirmation (hg-v1011): real Binance aggressor flow over '
+        + (f.bars || '?') + ' windows to the signal bar reads net against this ' + (c.dir || '') + ' scalp (delta '
+        + (f.delta != null ? f.delta : '?') + ')'
+        + (f.divergence ? ' — ' + f.divergence + ' divergence on the tape' : '')
+        + '. Demoted: it paints, it can never be MOST PROBABLE.') + '">TAKER FLOW AGAINST · never MOST PROBABLE</span>';
+    }
+    if (f.verdict === 'with'){
+      return '<span class="gpip ok" title="' + esc('taker-flow confirmation (hg-v1011): real Binance aggressor flow over '
+        + (f.bars || '?') + ' windows to the signal bar backs this ' + (c.dir || '') + ' scalp (delta '
+        + (f.delta != null ? f.delta : '?') + ')'
+        + (f.divergence ? ' — ' + f.divergence + ' divergence on the tape' : '')
+        + '. Evidence, never a tally point.') + '">TAKER FLOW WITH IT</span>';
+    }
+    return '<span class="gpip" title="' + esc('taker-flow confirmation (hg-v1011): '
+      + (f.why || 'no real-flow read for this bar') + ' — the read cannot speak, and what cannot speak bars nothing') + '">TAKER FLOW UNREAD</span>';
   }catch(e){ return ''; }
 }
 
@@ -2861,6 +2995,32 @@ async function runScan(ui, scanSt){
         + ' demoted (bottom-quintile participation for its session — a scalp needs a crowd)');
     }
 
+    /* hg-v1011: TAKER-FLOW CONFIRMATION — the session floor knows the crowd
+       showed up; this read knows which SIDE it is hitting. Real Binance
+       taker flow only, and only when the 15m leg's OWN feed is the Binance
+       gold perp the flow belongs to (the hg-v1009 rule: the candle
+       stand-in derives from the same closes the tape gates already read,
+       so it is not independent evidence and never speaks here). One cached
+       fetch per scan; every ranked candidate is priced on this one tape
+       (the Delta XAUT second leg is retired), so the feed check is made
+       once here, not per candidate. The pass demotes flow-AGAINST (named
+       reason, never MOST PROBABLE), chips flow-WITH, demotes nothing it
+       cannot read. Runs after the lock for the same reason as the session
+       floor: the trade you are IN keeps running. */
+    var gsTaker = null;
+    var gsTkFeed = (gold && gold.src && gold.src['15m']) || null;
+    try{
+      var gsTkSym = (gsTkFeed === 'binance-xau') ? 'XAUUSDT' : (gsTkFeed === 'binance-paxg') ? 'PAXGUSDT' : null;
+      var gsTkFn = gfn('binanceTakerRatio');
+      if (gsTkSym && gsTkFn) gsTaker = await gsTkFn(gsTkSym, '15m', 500);
+    }catch(eTk){ gsTaker = null; }
+    var flowScan = null;
+    try{ flowScan = gsTakerFlowScan(ranked, gold && gold.rows15m, gsTaker); }catch(eTF){ flowScan = null; }
+    if (flowScan && flowScan.demoted > 0){
+      legs.push('TAKER FLOW — ' + flowScan.demoted + ' candidate' + (flowScan.demoted === 1 ? '' : 's')
+        + ' demoted (real Binance aggressor flow against the scalp side at the signal bar)');
+    }
+
     /* MOST PROBABLE = spot-aligned leader when XAUT basis is wide vs spot ref */
     var naiveBest = null;
     for (i2 = 0; i2 < ranked.length; i2++){
@@ -3376,7 +3536,10 @@ W.HG_tabs.push({ id: 'goldscalp', label: 'GOLD SCALP', mount: mount, refresh: go
                     hg-v967/v968 registration route — tests reach the SHIPPED
                     function without a 20th module-scope export (the render
                     integrity guard turns red at 21). */
-                 sessionFloorScan: gsSessionFloorScan });
+                 sessionFloorScan: gsSessionFloorScan,
+                 /* hg-v1011: the taker-flow pass + chip ride the same route —
+                    same guard, same reason. */
+                 takerFlowScan: gsTakerFlowScan, takerFlowChipHtml: gsTakerFlowChipHtml });
 W.HG_warmups = W.HG_warmups || [];
 W.HG_warmups.push({ id: 'goldscalp', label: 'GOLD SCALP', run: gsWarm });
 })();

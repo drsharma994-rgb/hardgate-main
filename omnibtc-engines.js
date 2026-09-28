@@ -32,6 +32,12 @@ EVIDENCE, not tickets:
   hg-v1003: the stack itself now lives in fundamental-stack.js — one shared
   asset-aware source of truth for every crypto and gold desk; the
   hgObtcFundamental* wrappers below delegate to it and fail open without it.
+  hg-v1011 — REAL FLOW. hgObtcGatherExtra now fetches Binance's BTCUSDT
+  taker long/short series (4h, 120 windows, cached) into extra.takerSeries
+  — the seam contract-report's CVD row always accepted and was never fed,
+  so it read the candle-approximated stand-in for the life of the desk.
+  Real aggressor flow when the feed is up; the honest stand-in, labelled,
+  when it is not.
 
 WHAT THIS FILE WILL NOT DO.
   - Claim 7/7 CLEAN. That badge stays on swingTryClean / scalpTryClean.
@@ -580,6 +586,26 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
       var st = gfn('onchainState') ? W.onchainState() : null;
       extra.onchain = (gfn('onchainSignal') && st) ? W.onchainSignal(st.snap) : null;
     }catch(e2){}
+    /* hg-v1011: REAL FLOW FOR THE CVD SEAM. contract-report's CVD row has
+       always accepted a taker series (inp.takerSeries -> hgOmniCvd) and this
+       bag never carried one, so the row has read the candle-approximated
+       stand-in for the whole life of the desk — derived from the same
+       closes the momentum gates already read, labelled an approximation.
+       One soft call to Binance's taker long/short endpoint makes it REAL
+       aggressor flow. BTCUSDT is read whatever the execution leg: it is
+       the global price-discovery perp for BTC, the same cross-venue read
+       the desk already makes for positioning (smartScanSymbol('BTCUSDT')
+       above). '4h' because the report's CVD row reads the 4h tape; 120
+       windows cover its 30-window look with slack for missing prints.
+       binance.js caches the call, so the second venue leg costs nothing.
+       A failed fetch is a null, never an error up — the row then honestly
+       keeps the stand-in and says so. */
+    try{
+      if (extra.takerSeries === undefined && gfn('binanceTakerRatio')){
+        var tk = await W.binanceTakerRatio('BTCUSDT', '4h', 120);
+        extra.takerSeries = (tk && Array.isArray(tk.series) && tk.series.length) ? tk.series : null;
+      }
+    }catch(eT){ extra.takerSeries = null; }
     extra.term = evidenceFromExtra(extra).term;
     extra.carry = evidenceFromExtra(extra).carry;
     /* hg-v1002: sentiment / options positioning / event risk join the
