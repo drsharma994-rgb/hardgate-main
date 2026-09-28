@@ -217,10 +217,23 @@
         cal = W.hgFwdGoldCalendarHtml(pools.length === 1 ? pools[0] : null) || '';
       }
     }catch(eCal){ cal = ''; }
+    /* hg-v1010: and the EVIDENCE SPLIT beside the verdict — the read the
+       hg-v1006 … v1009 stamps (conf / regime / sess / orb) were written
+       FOR, on this desk's own pools. Silent until a settled row carries a
+       mark; a desk whose roster pools cannot be resolved renders NONE
+       rather than a house-wide split wearing this desk's name. */
+    var evHtml = '';
+    try{
+      var evPools = hgGoldFwdPools(tabId);
+      if (evPools && evPools.length && typeof W.hgFwdEvidenceSplitHtml === 'function'){
+        evHtml = W.hgFwdEvidenceSplitHtml(evPools) || '';
+      }
+    }catch(eEv){ evHtml = ''; }
     return '<div class="note" style="margin:6px 0;padding:6px 9px;border-left:3px solid #94A3B8;font-size:11px">'
       + '<b>' + head + '</b> — ' + body
       + ' <span style="opacity:.7">(pool: ' + esc(r.pools.join(', ')) + ')</span></div>' + cal
       + hgGoldFwdFillHtml(r.stat)
+      + evHtml
       + heldHtml;
   }
 

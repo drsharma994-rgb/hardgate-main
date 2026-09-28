@@ -2405,6 +2405,7 @@ localStorage. Never throws.
         try { h += W.hgFwdTapeRegimeSplitHtml(tab) || ''; } catch (eTr){}   /* hg-v993 */
         try { h += W.hgFwdRotationSplitHtml(tab) || ''; } catch (eRo){}   /* hg-v994 */
         try { h += W.hgFwdTrendMatrixSplitHtml(tab) || ''; } catch (eTm){}   /* hg-v995 */
+        try { h += W.hgFwdEvidenceSplitHtml(tab) || ''; } catch (eEv){}   /* hg-v1010 */
         h += '<div class="note">Recorded once per firing when it fires, settled later by bars that did '
            + 'not exist at the time. A bar spanning both stop and target counts as a STOP; expiry is '
            + 'excluded rather than counted as a win. This is the only measurement here that accumulates.</div>';
@@ -3394,6 +3395,133 @@ localStorage. Never throws.
           if (parts.length) h += ' · folded beyond the live cap: ' + parts.join(', ');
         }
         h += '. Reported, not gated: nothing on this line withholds a setup.';
+        h += '</div>';
+        return h;
+      } catch (e) { return ''; }
+    };
+
+    /* hg-v1010: THE EVIDENCE SPLIT — the read the hg-v1006 … v1009 stamps were
+       written FOR. A mark nothing selects is ornamental; this is the select.
+
+       FOUR FIELDS, FOUR QUESTIONS, all over the SETTLED rows (t1 / stop —
+       expired is excluded here exactly as in every sibling split):
+         conf   (hg-v1006, OPTI GOLD)  do CONFIRMED breaks pay better than
+                UNCONFIRMED ones?
+         regime (hg-v1007, OPTI GOLD)  do regime-ALIGNED breaks pay better?
+         sess   (hg-v1008, GOLDSCALP)  does DEAD TAPE underperform?
+         orb    (hg-v1008, GOLDSCALP)  does an ORB-aligned morning pay
+                better?
+       A row carries a field only when the desk stamped it AND it survived
+       the normaliser's enum — hg-v1008's last-inch fix is why any of these
+       store at all. Rows without a field are counted as NEITHER and named:
+       every row written before the stamp shipped, and every desk that never
+       stamps. The folded aggregate does not carry these marks, so this reads
+       the LIVE window and says so.
+
+       Descriptive, never a gate, and it refuses to dress small numbers up:
+       a side under EVIDENCE_MIN settled prints with its n and the caveat,
+       never as a verdict. And like every sibling here, it is SILENT on a tab
+       whose records carry none of the four marks — an absent split is not a
+       clean one. `tabs` is one tab id, an array of them (the gold desks
+       resolve their pool names through gold-forward-read.js), or null for
+       the whole book. */
+    var HG_EVIDENCE_MIN = 20;   /* the house's own per-side judging floor — gold-forward-read.js's FWD_MIN_JUDGE, hgFwdJudgeSample's callers */
+    W.hgFwdEvidenceSplit = function(tabs){
+      try {
+        var tset = null;
+        if (typeof tabs === 'string' && tabs) tset = [tabs];
+        else if (Array.isArray(tabs) && tabs.length) tset = tabs.slice();
+        var recs = W.hgFwdRecords(null) || [];
+        var FIELDS = [
+          { key: 'conf',   vals: ['confirmed', 'unconfirmed', 'unverified'] },
+          { key: 'regime', vals: ['favored', 'neutral', 'caution', 'against', 'unreadable'] },
+          { key: 'sess',   vals: ['participating', 'thin', 'unreadable'] },
+          { key: 'orb',    vals: ['with', 'against', 'none'] }
+        ];
+        var cell = function(){ return { n: 0, wins: 0, rSum: 0, r: null, hit: null }; };
+        var out = { tabs: tset, rows: 0, openMarked: 0, settled: 0, fields: {} };
+        var i, j, r, rr, v;
+        for (j = 0; j < FIELDS.length; j++){
+          var b0 = { stamped: 0, unmarked: 0, cells: {} };
+          for (i = 0; i < FIELDS[j].vals.length; i++) b0.cells[FIELDS[j].vals[i]] = cell();
+          out.fields[FIELDS[j].key] = b0;
+        }
+        for (i = 0; i < recs.length; i++){
+          r = recs[i];
+          if (!r) continue;
+          if (tset && tset.indexOf(r.tab) < 0) continue;
+          out.rows++;
+          if (r.state !== 't1' && r.state !== 'stop'){
+            /* the collecting state: the stamp is alive from the first scan
+               that carries it, the answers only once horizons close */
+            if (r.state === 'open'){
+              for (j = 0; j < FIELDS.length; j++){
+                if (typeof r[FIELDS[j].key] === 'string'){ out.openMarked++; break; }
+              }
+            }
+            continue;
+          }
+          out.settled++;
+          rr = (r.state === 't1') ? (+r.rr || 0) : -1;
+          for (j = 0; j < FIELDS.length; j++){
+            var f = FIELDS[j], b = out.fields[f.key];
+            v = r[f.key];
+            if (typeof v === 'string' && b.cells[v]){
+              b.stamped++;
+              var c2 = b.cells[v];
+              c2.n++; if (r.state === 't1') c2.wins++; c2.rSum += rr;
+            } else b.unmarked++;
+          }
+        }
+        for (j = 0; j < FIELDS.length; j++){
+          var b2 = out.fields[FIELDS[j].key];
+          for (var k in b2.cells){ var e = b2.cells[k]; if (e.n){ e.r = e.rSum / e.n; e.hit = e.wins / e.n; } }
+        }
+        return out;
+      } catch (e) { hgFwdWarn('evidenceSplit', e); return null; }
+    };
+    W.hgFwdEvidenceSplitHtml = function(tabs){
+      try {
+        var sp = W.hgFwdEvidenceSplit(tabs);
+        if (!sp || !sp.rows) return '';
+        var F = sp.fields, anyMarked = 0, j;
+        for (j in F){ if (F[j] && F[j].stamped > 0) anyMarked++; }
+        if (!anyMarked && !sp.openMarked) return '';   /* silent until a row carries a mark — the siblings' own rule */
+        var fmtR = function(v){ return (v >= 0 ? '+' : '') + v.toFixed(3) + 'R'; };
+        var QUESTIONS = {
+          conf:   ['CONFIRMATION FLOOR', 'hg-v1006', 'do CONFIRMED breaks pay better than UNCONFIRMED ones'],
+          regime: ['HOUSE REGIME', 'hg-v1007', 'do regime-ALIGNED breaks pay better'],
+          sess:   ['SESSION FLOOR', 'hg-v1008', 'does DEAD TAPE underperform'],
+          orb:    ['COMEX ORB', 'hg-v1008', 'does an ORB-aligned morning pay better']
+        };
+        var KEYS = ['conf', 'regime', 'sess', 'orb'];
+        var h = '<div class="note" style="margin:8px 0;padding:8px 10px;border:1px solid #6B7280;border-radius:6px">';
+        h += '<b>EVIDENCE SPLIT</b> · the question each stamp was written to answer, on settled rows'
+           + (sp.tabs ? ' <span style="opacity:.7">(pool: ' + sp.tabs.join(', ') + ')</span>' : '');
+        if (!anyMarked){
+          h += ' — the stamps are live: <b>' + sp.openMarked + '</b> open record'
+             + (sp.openMarked === 1 ? '' : 's') + ' carry'
+             + (sp.openMarked === 1 ? 's' : '') + ' them, none settled yet. The answers fill in as those horizons close.';
+        } else {
+          for (j = 0; j < KEYS.length; j++){
+            var key = KEYS[j], b = F[key], q = QUESTIONS[key];
+            h += '<br><b>' + q[0] + '</b> <span style="opacity:.7">(' + q[1] + ')</span> — ' + q[2] + ': ';
+            if (!b.stamped){ h += 'no settled row carries the mark yet'; continue; }
+            var parts = [], maxN = 0, k2;
+            for (k2 in b.cells){
+              var e2 = b.cells[k2];
+              if (!e2.n) continue;
+              if (e2.n > maxN) maxN = e2.n;
+              parts.push(k2 + ' ' + fmtR(e2.r) + ' at ' + Math.round(100 * e2.hit) + '% on n=' + e2.n);
+            }
+            h += parts.join(' · ');
+            if (b.unmarked) h += ' · <b>' + b.unmarked + '</b> settled carry no mark (they predate the stamp, or a desk that never stamps) — counted as NEITHER';
+            if (maxN < HG_EVIDENCE_MIN) h += ' · under ~' + HG_EVIDENCE_MIN + ' settled on a side — descriptive, not a verdict';
+          }
+          h += '<br><span style="opacity:.7">Reads the live window — rows pruned beyond the cap folded before these marks existed.';
+        }
+        h += ' Reported, not gated: nothing on this panel withholds a setup.';
+        if (anyMarked) h += '</span>';
         h += '</div>';
         return h;
       } catch (e) { return ''; }
