@@ -78,6 +78,13 @@ filter chip joins the bar, the SMC pass enriches both ticket kinds inside
 the one capped envelope, and the Telegram cycle (tabalerts.js) keys,
 formats and pushes death crosses under their own dedup namespace
 (TRENDMX:DEATH) — golden keys and formats are byte-identical to before.
+
+TWO CROSS DESKS (hg-v1015) — at the operator's ask the combined panel is
+split: the ⚡ GOLDEN CROSS DESK (bull, green) and the ⚡ DEATH CROSS DESK
+(bear, red) stand on their own, each its own panel and container
+(data-r=golden / data-r=death), each rendering only its own bag through
+the shared dir-aware card renderer. The 4-card cap per desk is the cap
+each half already had — the split changes presentation, not exposure.
 ========================================================================= */
 (function(){
 'use strict';
@@ -1096,22 +1103,31 @@ function trendmxCrossCardHTML(g){
     + '</div>';
 }
 
-/* hg-v1014: the FRESH CROSS DESK — golden longs and death shorts, one
-   panel, each half named. Both halves render whenever they have tickets;
-   the panel itself renders when either does. */
-function trendmxCrossDeskHTML(golden, death){
+/* hg-v1015: TWO CROSS DESKS — the v1014 combined panel is split at the
+   operator's ask: the bull desk and the bear desk stand on their own, each
+   its own panel, its own palette, its own sub-line. The card renderer
+   stays the shared dir-aware one (hg-v1014); a desk differs only in which
+   bag it renders. The 4-card cap is the cap each half already had — the
+   split changes no exposure. A desk with no tickets renders nothing. */
+function trendmxGoldenDeskHTML(golden){
   golden = golden || [];
+  if (!golden.length) return '';
+  var cards = '';
+  for (var i = 0; i < Math.min(golden.length, 4); i++) cards += trendmxCrossCardHTML(golden[i]);
+  return '<div class="panel tier-clean" style="margin:12px 0;border-left:4px solid #047857">'
+    + '<h2>⚡ GOLDEN CROSS DESK <span>EMA50/200 BULL cross ≤10 daily bars — fresh LONGS · conviction + valid plan · Telegram every 15m</span></h2>'
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + cards + '</div>'
+    + '</div>';
+}
+
+function trendmxDeathDeskHTML(death){
   death = death || [];
-  if (!golden.length && !death.length) return '';
-  var gcards = '', dcards = '', i;
-  for (i = 0; i < Math.min(golden.length, 4); i++) gcards += trendmxCrossCardHTML(golden[i]);
-  for (i = 0; i < Math.min(death.length, 4); i++) dcards += trendmxCrossCardHTML(death[i]);
-  return '<div class="panel tier-clean" style="margin:12px 0">'
-    + '<h2>⚡ FRESH CROSS DESK <span>EMA50/200 cross ≤10 daily bars — GOLDEN longs + DEATH shorts · conviction + valid plan · Telegram every 15m</span></h2>'
-    + (gcards ? '<div class="note" style="margin:0 0 6px"><b>⚡ GOLDEN</b> — fresh bull crosses, longs</div>'
-              + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + gcards + '</div>' : '')
-    + (dcards ? '<div class="note" style="margin:' + (gcards ? '10px' : '0') + ' 0 6px"><b>⚡ DEATH</b> — fresh bear crosses, shorts</div>'
-              + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + dcards + '</div>' : '')
+  if (!death.length) return '';
+  var cards = '';
+  for (var i = 0; i < Math.min(death.length, 4); i++) cards += trendmxCrossCardHTML(death[i]);
+  return '<div class="panel" style="margin:12px 0;border-left:4px solid #b91c1c">'
+    + '<h2>⚡ DEATH CROSS DESK <span>EMA50/200 BEAR cross ≤10 daily bars — fresh SHORTS · conviction + valid plan · Telegram every 15m</span></h2>'
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + cards + '</div>'
     + '</div>';
 }
 
@@ -1278,7 +1294,9 @@ function trendmxPaintDeskSections(refs, state){
   }
   var vc = state.venueCounts || null;
   if (refs.summary) refs.summary.textContent = rows.length ? trendmxSummaryLine(rows, golden, vc) : 'Idle — run a scan to build the desk.';
-  if (refs.golden) refs.golden.innerHTML = trendmxCrossDeskHTML(golden, death);   /* hg-v1014: one desk, both crosses */
+  /* hg-v1015: two desks, two containers — each renders only its own cross */
+  if (refs.golden) refs.golden.innerHTML = trendmxGoldenDeskHTML(golden);
+  if (refs.death) refs.death.innerHTML = trendmxDeathDeskHTML(death);
   var clean = [], near = [], forming = [];
   for (var i = 0; i < rows.length; i++){
     var r = rows[i];
@@ -1296,7 +1314,7 @@ function trendmxPaintDeskSections(refs, state){
   if (refs.cards){
     if (!clean.length){
       refs.cards.innerHTML = (typeof hgSetupEmptyHTML === 'function')
-        ? hgSetupEmptyHTML({ title: 'No CLEAN trend tickets right now.', body: 'NEAR and FORMING rows below are watch-only. Golden cross desk and limit board surface actionable rows when gates + plan align.' })
+        ? hgSetupEmptyHTML({ title: 'No CLEAN trend tickets right now.', body: 'NEAR and FORMING rows below are watch-only. The golden and death cross desks and the limit board surface actionable rows when gates + plan align.' })   /* hg-v1015: two cross desks now */
         : '<div class="empty">No CLEAN tickets.</div>';
     } else {
       var ch = '<div class="note" style="margin:0 0 10px"><b>CLEAN TICKETS</b> — 7/7 gates + valid plan + min R:R ' + TM_MIN_RR + '.</div>';
@@ -1345,6 +1363,7 @@ function hgPaintTrendmxFromSnap(){
     var refs = {
       summary: el.querySelector('[data-r="summary"]'),
       golden: el.querySelector('[data-r="golden"]'),
+      death: el.querySelector('[data-r="death"]'),   /* hg-v1015 */
       cards: el.querySelector('[data-r="cards"]'),
       near: el.querySelector('[data-r="near"]'),
       forming: el.querySelector('[data-r="forming"]'),
@@ -1497,6 +1516,7 @@ function mountTrendMatrix(el){
       '<div class="note" data-r="summary" style="margin-top:8px;font-weight:600">Idle — run a scan to build the desk.</div>' +
       '<div class="note" data-r="status" style="margin-top:4px">Press RUN SCAN to warm the full matrix + ticket desk.</div>' +
       '<div data-r="golden"></div>' +
+      '<div data-r="death"></div>' +   /* hg-v1015: the bear desk stands on its own, right under the bull desk */
       '<div class="cards" data-r="cards"></div>' +
       '<div data-r="near"></div>' +
       '<div data-r="forming"></div>' +
@@ -1508,7 +1528,7 @@ function mountTrendMatrix(el){
   if (typeof hgSetupPaintDesk === 'function'){
     hgSetupPaintDesk(el.querySelector('#trendmxDesk'), {
       kind: 'trendmx', tab: 'TREND MATRIX',
-      note: 'CLEAN = 7/7 + plan + min R:R. Golden cross desk + limit board promote the best rows. NEAR/FORMING are watch-only.'
+      note: 'CLEAN = 7/7 + plan + min R:R. The golden/death cross desks + limit board promote the best rows. NEAR/FORMING are watch-only.'   /* hg-v1015 */
     });
   }
 
@@ -1521,6 +1541,7 @@ function mountTrendMatrix(el){
   var refs = {
     summary: summary,
     golden: el.querySelector('[data-r="golden"]'),
+    death: el.querySelector('[data-r="death"]'),   /* hg-v1015 */
     cards: el.querySelector('[data-r="cards"]'),
     near: el.querySelector('[data-r="near"]'),
     forming: el.querySelector('[data-r="forming"]'),
@@ -1531,7 +1552,7 @@ function mountTrendMatrix(el){
   var chips  = Array.prototype.slice.call(el.querySelectorAll('[data-f]'));
   var vChips = Array.prototype.slice.call(el.querySelectorAll('[data-v]'));
 
-  var state = { rows: [], golden: [], filter: 'ALL', venue: 'ALL', sortKey: 'score', sortDir: -1, running: false };
+  var state = { rows: [], golden: [], death: [], filter: 'ALL', venue: 'ALL', sortKey: 'score', sortDir: -1, running: false };   /* hg-v1015: death bag initialized with golden */
   tmTab._state = state;
 
   function setProg(f){
@@ -1798,6 +1819,9 @@ W.trendmxSummaryLine = trendmxSummaryLine;
 W.trendmxGoldenCrossSetups = trendmxGoldenCrossSetups;
 W.trendmxDeathCrossSetups = trendmxDeathCrossSetups;   /* hg-v1014 */
 W.tmSmcScanPass = tmSmcScanPass;   /* hg-v1014: the shared ticket cap is desk behavior — the tests read it, never re-derive it */
+W.trendmxGoldenDeskHTML = trendmxGoldenDeskHTML;   /* hg-v1015 */
+W.trendmxDeathDeskHTML = trendmxDeathDeskHTML;   /* hg-v1015 */
+W.trendmxPaintDeskSections = trendmxPaintDeskSections;   /* hg-v1015: the desk routing is desk behavior too */
 W.trendmxScan = trendmxScan;
 W.trendmxWarm = trendmxWarm;
 W.trendmxCrossState = function(){
