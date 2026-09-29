@@ -96,8 +96,12 @@ console.log('== the board admits a conviction short (no clean7 needed) ==');
      'a valid short plan exists (stop above, T1 below — mirrored geometry)');
   let rec = null;
   w.hgFwdRecordScan = (tab, tf, list, opts) => { rec = { tab, tf, list, opts }; return list.length; };
-  const html = w.trendmxLimitBoardHTML([row]);
-  ok(text(html).indexOf('SHTUSDT') >= 0 && text(html).indexOf('SHORT') >= 0, 'a 5/7 conviction short paints on the LIMIT BOARD');
+  /* hg-v1018: the mixed board split into the two class desks — a conviction
+     short WITHOUT clean7 belongs to the CONVICTION desk */
+  const cls = w.trendmxLimitClasses([row]);
+  const html = w.trendmxConvictionDeskHTML(cls.conv, cls.heldConv);
+  ok(cls.conv.length === 1 && cls.clean.length === 0, 'a 5/7 conviction short is collected into the conviction class (hg-v1018)');
+  ok(text(html).indexOf('SHTUSDT') >= 0 && text(html).indexOf('SHORT') >= 0, 'a 5/7 conviction short paints on the CONVICTION DESK (hg-v1018)');
   ok(rec && rec.list.length === 1 && rec.list[0].dir === 'short', 'and records as a short');
   ok(rec.list[0].mechanic === 'TM-CONVICTION' && rec.list[0].ticket === false, 'mechanic string + ticket semantics unchanged');
 }
@@ -115,8 +119,9 @@ console.log('== the promoted slice (SMC + taker flow) covers conviction shorts =
   ok(w.trendmxRowTier(row, plan) === 'near', 'flow-against caps the short at NEAR (v1012 leadership, both directions)');
   let rec = null;
   w.hgFwdRecordScan = (tab, tf, list) => { rec = { list }; return list.length; };
-  const html = w.trendmxLimitBoardHTML([row]);
-  ok((rec === null) && text(html).indexOf('held off') >= 0, 'and the short is held off the board, named, unrecorded');
+  const cls2 = w.trendmxLimitClasses([row]);   /* hg-v1018 */
+  const html = w.trendmxConvictionDeskHTML(cls2.conv, cls2.heldConv);
+  ok((rec === null) && cls2.heldConv === 1 && text(html).indexOf('held off') >= 0, 'and the short is held off the conviction desk, named, unrecorded');
 }
 
 console.log('== the golden desk stays long-only by design ==');

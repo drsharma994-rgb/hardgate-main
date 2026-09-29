@@ -95,7 +95,11 @@ console.log('== the seams ==');
   ok(typeof W.trendmxFlowChipHtml === 'function', 'trendmxFlowChipHtml exported');
   ok(typeof W.trendmxFundingChipHtml === 'function', 'trendmxFundingChipHtml exported');
   ok(typeof W.trendmxRowTier === 'function', 'trendmxRowTier exported (the tier the cap lives in)');
-  ok(typeof W.trendmxLimitBoardHTML === 'function', 'trendmxLimitBoardHTML exported (the board the hold-off lives in)');
+  /* hg-v1018: the mixed LIMIT BOARD split into the two class desks — the
+     hold-off lives in the collector + the per-desk renderers now */
+  ok(typeof W.trendmxLimitClasses === 'function', 'trendmxLimitClasses exported (the collector the hold-off lives in, hg-v1018)');
+  ok(typeof W.trendmxGateCleanDeskHTML === 'function' && typeof W.trendmxConvictionDeskHTML === 'function',
+     'both class desks exported (hg-v1018)');
   ok(typeof W.trendmxSummaryLine === 'function', 'trendmxSummaryLine exported');
 }
 
@@ -134,15 +138,21 @@ console.log('== the demote — held off, never CLEAN, never recorded ==');
   ok(plan && w.trendmxRowTier(row, plan) === 'near', 'a 7/7 CLEAN row with flow against caps at NEAR');
   let rec = 'unset';
   w.hgFwdRecordScan = (tab, tf, list, opts) => { rec = { tab, tf, list, opts }; return list.length; };
-  const html = w.trendmxLimitBoardHTML([row]);
+  /* hg-v1018: a held-off clean7 row belongs to the GATE-CLEAN desk */
+  const clsHeld = w.trendmxLimitClasses([row]);
+  const html = w.trendmxGateCleanDeskHTML(clsHeld.clean, clsHeld.heldClean);
   ok(rec === 'unset' || rec === null, 'no forward record when every qualified row is held off');
+  ok(clsHeld.heldClean === 1 && clsHeld.clean.length === 0,
+     'the held-off clean7 row is counted on its own class (hg-v1018)');
   ok(text(html).indexOf('held off') >= 0 && text(html).indexOf('taker flow') >= 0,
-     'the empty board names the hold-off — nothing dropped silently');
+     'the empty desk names the hold-off — nothing dropped silently');
   const rowOk = mkRow('BBBUSDT', 'short', { gate: gate7() });
   await w.trendmxFlowScan([rowOk]);
   rec = null;
-  const html2 = w.trendmxLimitBoardHTML([rowOk]);
-  ok(text(html2).indexOf('TAKER FLOW WITH IT') >= 0, 'board card carries the WITH chip');
+  const clsOk = w.trendmxLimitClasses([rowOk]);
+  const html2 = w.trendmxGateCleanDeskHTML(clsOk.clean, clsOk.heldClean);
+  ok(clsOk.clean.length === 1, 'the with-row lands in the gate-clean class (hg-v1018)');
+  ok(text(html2).indexOf('TAKER FLOW WITH IT') >= 0, 'desk card carries the WITH chip');
   ok(rec && rec.tab === 'TRENDMX' && rec.tf === '4h' && rec.list.length === 1, 'the with-row records (TM-CLEAN7 mechanics untouched)');
   ok(rec.list[0].mechanic === 'TM-CLEAN7' && rec.list[0].ticket === true, 'mechanic string + ticket unchanged');
   ok(rec.list[0].fundingPct === 0.01, 'the record carries the fundingPct the row held (hg-v985)');
@@ -170,8 +180,9 @@ console.log('== UNREAD demotes nothing (hg-v700) ==');
     ok(w.trendmxRowTier(row, plan) === 'clean', k + ': tier untouched — what cannot be read demotes nothing');
     let rec = null;
     w.hgFwdRecordScan = (tab, tf, list) => { rec = { list }; return list.length; };
-    const html = w.trendmxLimitBoardHTML([row]);
-    ok(rec && rec.list.length === 1 && rec.list[0].reads === undefined, k + ': board keeps the row, records no read-mark');
+    const clsU = w.trendmxLimitClasses([row]);   /* hg-v1018: collector records, desk renders */
+    const html = w.trendmxGateCleanDeskHTML(clsU.clean, clsU.heldClean);
+    ok(rec && rec.list.length === 1 && rec.list[0].reads === undefined, k + ': desk keeps the row, records no read-mark');
     ok(text(html).indexOf('TAKER FLOW UNREAD') >= 0, k + ': the UNREAD chip says the desk looked and could not read');
   }
   /* no Binance twin */

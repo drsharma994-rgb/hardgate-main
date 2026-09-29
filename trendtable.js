@@ -85,6 +85,30 @@ split: the ⚡ GOLDEN CROSS DESK (bull, green) and the ⚡ DEATH CROSS DESK
 (data-r=golden / data-r=death), each rendering only its own bag through
 the shared dir-aware card renderer. The 4-card cap per desk is the cap
 each half already had — the split changes presentation, not exposure.
+
+THE CLASS DESKS (hg-v1018) — the LIMIT BOARD painted two different
+formation CLASSES in one mixed bag and ranked them against each other,
+while the forward log already recorded them under different mechanics
+(TM-CLEAN7 / TM-CONVICTION) precisely because the desk's own claim is
+that they are different things. They stand on their own now:
+  LIMIT BOARD · GATE-CLEAN DESK (data-r=gateclean) — the 7/7 swing-gate
+    matrix (spread · vol-Z · EMA21 anchor · funding · regime · structure
+    · R:R) CONFIRMS the composite majority. Ordered by |composite| then
+    gates passed — the old board's intra-class rank, unchanged.
+  LIMIT BOARD · CONVICTION DESK (data-r=conviction) — the five-leg
+    composite majority speaks WITHOUT the 7/7 stamp (|score| ≥ 2, STRONG
+    at |4|). Ordered by |composite| with the ADX strength indicator
+    breaking ties — the class's own claim is trend strength, so the
+    strength read orders it (a ±4 at ADX 38 outranks a ±4 at 25); gate
+    count is the other class's evidence and does not order this desk.
+One collection (trendmxLimitClasses), ONE forward record over both bags
+before either desk slices (mechanics byte-identical), two renders off
+the shared card renderer. Each desk caps at 4 cards — the old mixed
+board's 8 — so the split changes presentation, not exposure. Every
+desk's panel header names its own formation criteria; each card carries
+its class stamp. Taker-flow-AGAINST rows are still held off, now counted
+and named per desk. The cross desks, the composite, the gates and every
+bar are exactly what they were — no threshold moved.
 ========================================================================= */
 (function(){
 'use strict';
@@ -1144,8 +1168,14 @@ function trendmxLimitCardHTML(item){
   }
   var tradeOn = (typeof hgToTradePlanOnclickAttr === 'function')
     ? hgToTradePlanOnclickAttr(r.sym, dir, p.entry, p.stop, p.t1, { t2: p.t2, stack: item.stack, scanner: 'trendmx', strategy: 'trendmx' }) : '';
+  /* hg-v1018: the card names its own formation class — the desks are
+     separated by criteria now, and the stamp keeps the class legible where
+     a card is screenshotted or shared off the desk. */
+  var clsStamp = (r.gate && r.gate.clean7)
+    ? '<span class="stamp" style="margin-left:6px">GATE-CLEAN 7/7</span>'
+    : '<span class="stamp" style="margin-left:6px">CONVICTION ' + (r.score > 0 ? '+' : '') + r.score + '/5</span>';
   return '<div style="flex:1 1 260px;max-width:360px;border:1px solid #E2E8F0;border-left:3px solid ' + col + ';border-radius:8px;padding:10px 12px;background:#fff">'
-    + '<div><b>' + escH(r.sym) + '</b>' + tmVenueChip(r) + ' · ' + dir.toUpperCase() + stHtml + tmSmcChip(r)
+    + '<div><b>' + escH(r.sym) + '</b>' + tmVenueChip(r) + ' · ' + dir.toUpperCase() + clsStamp + stHtml + tmSmcChip(r)
     + trendmxFlowChipHtml(r)   /* hg-v1012: the flow verdict the scan stamped — reads the stamp, never recomputes */
     + trendmxFundingChipHtml(r) + '</div>'
     + '<div style="font-size:18px;font-weight:800;color:' + col + ';margin:4px 0">' + pxFmt(p.entry) + '</div>'
@@ -1154,33 +1184,64 @@ function trendmxLimitCardHTML(item){
     + '</div>';
 }
 
-function trendmxLimitBoardHTML(rows){
-  var cands = [], heldOff = 0;
+/* hg-v1018: each desk caps at 4 cards — two desks x 4 = the old mixed
+   board's 8. The split changes presentation, not exposure. */
+var TM_LIMIT_DESK_CAP = 4;
+
+/* hg-v1018: ONE collection of the limit board's two formation CLASSES.
+   The old board walked the rows once, ranked gate-clean and conviction
+   rows against each other in one mixed bag (the clean7 1000-bonus made
+   the ordering a class ordering, not a quality one) and recorded them
+   under two mechanics while painting one panel. The classes are
+   collected separately here and painted on their own desks; the bars
+   themselves — gate veto, majority, valid plan, clean7-or-conviction,
+   the hg-v1012 flow hold-off — are exactly the old board's, per row. */
+function trendmxLimitClasses(rows){
+  var out = { clean: [], conv: [], heldClean: 0, heldConv: 0 };
   for (var i = 0; i < rows.length; i++){
     var r = rows[i];
     if (!r || !r.gate || r.gate.veto) continue;
     var dir = tmDirOf(r);
     if (!dir) continue;
-    /* hg-v1012: flow-AGAINST rows are held off the board. The row still
+    var isClean = !!r.gate.clean7;
+    var conv = isClean ? null : trendmxConviction(r);
+    if (!isClean && !conv) continue;
+    /* hg-v1012: flow-AGAINST rows are held off the desks. The row still
        paints in the matrix with its chip — nothing is dropped silently —
-       but the board and the record below are what the desk judged
+       but the desks and the record below are what the desk judged
        tradeable WITH the evidence in hand, and a swing minted against the
-       real aggressor flow is not it. */
-    if (r.flow && r.flow.verdict === 'against'){ heldOff++; continue; }
+       real aggressor flow is not it. hg-v1018: counted per class, so each
+       desk names its own held-off rows. */
+    if (r.flow && r.flow.verdict === 'against'){
+      if (isClean) out.heldClean++; else out.heldConv++;
+      continue;
+    }
     var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
     if (!tmValidSetup(plan)) continue;
-    if (!(r.gate.clean7 || trendmxConviction(r))) continue;
-    cands.push({
-      row: r, plan: plan, dir: dir, stack: trendmxCardStack(r, dir),
-      rank: (r.gate.clean7 ? 1000 : 0) + Math.abs(r.score) * 10 + (r.gate.gatesPassed || 0)
-    });
+    var item = { row: r, plan: plan, dir: dir, stack: trendmxCardStack(r, dir) };
+    if (isClean){
+      /* the old board's intra-class rank, unchanged: composite, then gates */
+      item.rank = Math.abs(r.score) * 10 + (r.gate.gatesPassed || 0);
+      out.clean.push(item);
+    } else {
+      /* the conviction class orders on its OWN claim: trend strength.
+         Composite first, the ADX strength indicator breaking ties (a ±4 at
+         ADX 38 is a stronger trend than a ±4 at 25); the gate count is the
+         other class's evidence and does not order this desk. */
+      item.rank = Math.abs(r.score) * 10 + (fin(r.adx) ? r.adx / 10 : 0);
+      item.conv = conv;
+      out.conv.push(item);
+    }
   }
-  cands.sort(function(a, b){ return b.rank - a.rank; });
-  /* FORWARD LOG — recorded BEFORE the top-8 slice, so the measurement covers
-     every setup the tab judged tradeable rather than only the eight it had
-     room to show. The mechanic splits on clean7, which is the tab's own claim
-     about quality: if the 7/7 rows resolve like the merely-convicted ones,
-     that distinction is not doing work. */
+  out.clean.sort(function(a, b){ return b.rank - a.rank; });
+  out.conv.sort(function(a, b){ return b.rank - a.rank; });
+  /* FORWARD LOG — recorded over BOTH classes BEFORE either desk slices, so
+     the measurement covers every setup the tab judged tradeable rather than
+     only the four per desk it had room to show. The mechanic splits on
+     clean7, which is the tab's own claim about quality: if the 7/7 rows
+     resolve like the merely-convicted ones, that distinction is not doing
+     work. Fields byte-identical to the mixed board's record. */
+  var cands = out.clean.concat(out.conv);
   try {
     if (typeof W.hgFwdRecordScan === 'function' && cands.length){
       W.hgFwdRecordScan('TRENDMX', '4h', cands.map(function(c){
@@ -1209,19 +1270,42 @@ function trendmxLimitBoardHTML(rows){
       }), { horizonBars: 20 });
     }
   } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("trendtable", eFwd); } catch (eW) {} }
-  cands = cands.slice(0, 8);
-  if (!cands.length){
-    /* every qualified row held off is a verdict, not an empty board — name it */
-    return heldOff
+  return out;
+}
+
+/* hg-v1018: one desk renderer serves both formation classes — the desks
+   differ in WHICH bag they render and the criteria their header names,
+   nothing else. An empty bag with held-off rows renders the held-off
+   verdict (never a blank desk pretending nothing qualified); an empty bag
+   with nothing held off renders nothing, by design (the hg-v1015 rule). */
+function trendmxLimitDeskHTML(title, crit, bag, held){
+  bag = (bag || []).slice(0, TM_LIMIT_DESK_CAP);
+  if (!bag.length){
+    /* every qualified row held off is a verdict, not an empty desk — name it */
+    return held
       ? '<div class="panel" style="margin:12px 0">'
-        + '<h2>LIMIT BOARD <span>CLEAN + conviction rows · exact resting limits · sorted by gates + composite</span></h2>'
-        + '<div class="note">' + heldOff + ' qualified row' + (heldOff === 1 ? '' : 's') + ' held off — real Binance taker flow reads against the trend (hg-v1012). The rows paint in the matrix with their chips.</div></div>'
+        + '<h2>' + title + ' <span>' + crit + '</span></h2>'
+        + '<div class="note">' + held + ' qualified row' + (held === 1 ? '' : 's') + ' held off — real Binance taker flow reads against the trend (hg-v1012). The rows paint in the matrix with their chips.</div></div>'
       : '';
   }
   return '<div class="panel" style="margin:12px 0">'
-    + '<h2>LIMIT BOARD <span>CLEAN + conviction rows · exact resting limits · sorted by gates + composite'
-    + (heldOff ? ' · ' + heldOff + ' held off — taker flow against' : '') + '</span></h2>'
-    + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + cands.map(trendmxLimitCardHTML).join('') + '</div></div>';
+    + '<h2>' + title + ' <span>' + crit
+    + (held ? ' · ' + held + ' held off — taker flow against' : '') + '</span></h2>'
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + bag.map(trendmxLimitCardHTML).join('') + '</div></div>';
+}
+
+function trendmxGateCleanDeskHTML(bag, held){
+  return trendmxLimitDeskHTML(
+    'LIMIT BOARD · GATE-CLEAN DESK',
+    'criteria: the 7/7 swing-gate matrix (spread · vol-Z · EMA21 anchor · funding · regime · structure · R:R) confirms the composite majority · exact resting limits · taker flow not against · sorted by composite + gates',
+    bag, held);
+}
+
+function trendmxConvictionDeskHTML(bag, held){
+  return trendmxLimitDeskHTML(
+    'LIMIT BOARD · CONVICTION DESK',
+    'criteria: five-leg composite majority |≥2| (STRONG |≥4|) without the 7/7 stamp — 1D EMA200 · EMA50/200 cross · 4H EMA9/21/50 cascade · Ichimoku cloud · ADX strength · exact resting limits · taker flow not against · ADX breaks composite ties',
+    bag, held);
 }
 
 function trendmxSetupCardHTML(r, tier){
@@ -1353,7 +1437,14 @@ function trendmxPaintDeskSections(refs, state){
         }), { title: 'FORMING · TREND RADAR', subtitle: 'fresh crosses + strong composite without CLEAN ticket yet' })
       : '';
   }
-  if (refs.limit) refs.limit.innerHTML = trendmxLimitBoardHTML(rows);
+  /* hg-v1018: the two limit classes, one collection, one forward record,
+     two desks — each renders only its own formation class, like the cross
+     desks above them (hg-v1015). */
+  if (refs.gateclean || refs.conviction){
+    var tmClasses = trendmxLimitClasses(rows);
+    if (refs.gateclean) refs.gateclean.innerHTML = trendmxGateCleanDeskHTML(tmClasses.clean, tmClasses.heldClean);
+    if (refs.conviction) refs.conviction.innerHTML = trendmxConvictionDeskHTML(tmClasses.conv, tmClasses.heldConv);
+  }
 }
 
 function hgPaintTrendmxFromSnap(){
@@ -1367,7 +1458,8 @@ function hgPaintTrendmxFromSnap(){
       cards: el.querySelector('[data-r="cards"]'),
       near: el.querySelector('[data-r="near"]'),
       forming: el.querySelector('[data-r="forming"]'),
-      limit: el.querySelector('[data-r="limit"]'),
+      gateclean: el.querySelector('[data-r="gateclean"]'),   /* hg-v1018 */
+      conviction: el.querySelector('[data-r="conviction"]'),  /* hg-v1018 */
       out: el.querySelector('[data-r="out"]'),
       status: el.querySelector('[data-r="status"]')
     };
@@ -1520,7 +1612,8 @@ function mountTrendMatrix(el){
       '<div class="cards" data-r="cards"></div>' +
       '<div data-r="near"></div>' +
       '<div data-r="forming"></div>' +
-      '<div data-r="limit"></div>' +
+      '<div data-r="gateclean"></div>' +   /* hg-v1018: the gate-clean class on its own desk */
+      '<div data-r="conviction"></div>' +  /* hg-v1018: the composite-conviction class under it */
       '<h3 style="margin:16px 0 8px;font-size:11px;letter-spacing:.14em;color:#475569">FULL MATRIX · sortable · expandable plans</h3>' +
       '<div data-r="out"><div class="empty">Press RUN SCAN to build the matrix.</div></div>' +
     '</div>';
@@ -1528,7 +1621,7 @@ function mountTrendMatrix(el){
   if (typeof hgSetupPaintDesk === 'function'){
     hgSetupPaintDesk(el.querySelector('#trendmxDesk'), {
       kind: 'trendmx', tab: 'TREND MATRIX',
-      note: 'CLEAN = 7/7 + plan + min R:R. The golden/death cross desks + limit board promote the best rows. NEAR/FORMING are watch-only.'   /* hg-v1015 */
+      note: 'CLEAN = 7/7 + plan + min R:R. The golden/death cross desks + the two limit class desks (gate-clean / conviction) promote the best rows. NEAR/FORMING are watch-only.'   /* hg-v1015 / hg-v1018 */
     });
   }
 
@@ -1545,7 +1638,8 @@ function mountTrendMatrix(el){
     cards: el.querySelector('[data-r="cards"]'),
     near: el.querySelector('[data-r="near"]'),
     forming: el.querySelector('[data-r="forming"]'),
-    limit: el.querySelector('[data-r="limit"]'),
+    gateclean: el.querySelector('[data-r="gateclean"]'),   /* hg-v1018 */
+    conviction: el.querySelector('[data-r="conviction"]'),  /* hg-v1018 */
     out: out,
     status: status
   };
@@ -1814,7 +1908,13 @@ W.trendmxFlowScan = trendmxFlowScan;
 W.trendmxFlowChipHtml = trendmxFlowChipHtml;
 W.trendmxFundingChipHtml = trendmxFundingChipHtml;
 W.trendmxRowTier = trendmxRowTier;
-W.trendmxLimitBoardHTML = trendmxLimitBoardHTML;
+/* hg-v1018: the mixed board is superseded by the two class desks — the
+   collector and both renderers are the desk's behavior, exported the same
+   way (the tests read them rather than re-deriving behavior) */
+W.trendmxLimitClasses = trendmxLimitClasses;
+W.trendmxGateCleanDeskHTML = trendmxGateCleanDeskHTML;
+W.trendmxConvictionDeskHTML = trendmxConvictionDeskHTML;
+W.trendmxLimitDeskHTML = trendmxLimitDeskHTML;
 W.trendmxSummaryLine = trendmxSummaryLine;
 W.trendmxGoldenCrossSetups = trendmxGoldenCrossSetups;
 W.trendmxDeathCrossSetups = trendmxDeathCrossSetups;   /* hg-v1014 */
