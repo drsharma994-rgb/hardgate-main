@@ -9278,7 +9278,20 @@ function hgGoldImpulseVolIndex(rows, disp){
    level test is preferred and the band is the fallback when the series cannot
    be read, which the old chain got wrong: it branched on the rows EXISTING
    rather than on a verdict having been reached, so a corrupt feed refused a
-   question the other feed could still answer. */
+   question the other feed could still answer.
+
+   hg-v1016: AND THE LOCK RUNS BOTH WAYS NOW. Everything above was written
+   when the lock only ever stood a gold LONG down -- the short side was never
+   evaluated. But a dollar and a 10-year both BEARISH is the same tape fight
+   for a gold short that both-bullish is for a gold long, so the mirror now
+   runs: both legs bearish (FALLING under the band, below EMA50 under the
+   lever) stands a gold SHORT down, on the same bars, the same rule in force
+   and the same both-legs bar. FLAT stays a non-verdict both ways, missing
+   feeds still fail open, and the long path is byte-identical to what hg-v966
+   shipped. It is a TIGHTENING -- it only ever removes setups -- so it ships
+   as a stated prior, the same shape hg-v920's refusals were defending: no
+   threshold moved, no feed changed, and the alt-rule measurement now reports
+   per side. */
 var HG_GOLD_MACRO_RULE = 'trend20';
 
 function hgGoldMacroRule(){
@@ -9300,7 +9313,8 @@ function hgGoldMacroViaLabel(via){
    be made at all, never a guessed false (the +null === 0 trap this codebase
    has hit repeatedly). */
 function hgGoldMacroLeg(rows, trend){
-  var out = { bull: null, via: 'none', ema50: null, trend20: null, alt: null, agree: null };
+  var out = { bull: null, via: 'none', ema50: null, trend20: null, alt: null, agree: null,
+              bear: null, bearVia: 'none', altBear: null };
   try{
     if (rows && rows.length >= 52) out.ema50 = hgGoldEma50Above(rows);
     if (trend === 'RISING') out.trend20 = true;
@@ -9324,6 +9338,19 @@ function hgGoldMacroLeg(rows, trend){
       if (out.trend20 !== null){ out.bull = out.trend20; out.via = 'trend20'; }
       out.alt = out.ema50;
     }
+    /* hg-v1016: THE BEAR MIRROR, taken from the SAME read that decided the
+       bull verdict (out.via) -- so the ema50 lever's band fallback mirrors
+       too. A leg is BEARISH exactly when the rule in force reached a verdict
+       and it was not bullish: FALLING under the band, below EMA50 under the
+       level test. FLAT is a NON-VERDICT both ways -- "not rising" is not
+       "falling", and a mirror that fired on FLAT would start locking gold
+       shorts the desk never agreed to lock, the same unmeasured change the
+       fall-through above was refused for. altBear is the OTHER rule's bear
+       verdict, for the disagreement report; out.alt already names which read
+       that is. */
+    if (out.via === 'ema50'){ out.bear = (out.ema50 === false); out.bearVia = 'ema50'; }
+    else if (out.via === 'trend20'){ out.bear = (out.trend20 === false); out.bearVia = 'trend20'; }
+    out.altBear = (out.alt === null) ? null : (out.alt === false);
     if (out.ema50 !== null && out.trend20 !== null) out.agree = (out.ema50 === out.trend20);
     return out;
   }catch(e){ return out; }
@@ -9333,9 +9360,24 @@ function hgGoldMacroLock(dir, ctx){
   var out = { lock: false, reason: '', dxyBull: null, tnxBull: null,
               dxyVia: 'none', tnxVia: 'none', rule: 'trend20',
               dxyLeg: null, tnxLeg: null, altLock: null, altAgrees: null,
-              unchecked: false };
+              unchecked: false,
+              dir: null, dxyBear: null, tnxBear: null,
+              dxyBearVia: 'none', tnxBearVia: 'none' };
   try{
-    if (dir !== 'long') return out;
+    /* hg-v1016: THE LOCK RUNS BOTH WAYS NOW. It was born LONG-only: DXY and
+       TNX both bullish stands a gold long down, and a gold short was never
+       even evaluated. But the mirror is the same tape fight in the other
+       direction -- a dollar and a 10-year both BEARISH is a gold tailwind,
+       and a short minted into it is the trade the long side is protected
+       from taking the other way. So the short side is now evaluated on the
+       same bars, the same rule in force and the same both-legs bar: both
+       legs BEARISH (FALLING under the band, below EMA50 under the lever)
+       stands a gold SHORT down. One leg, a FLAT read or a missing feed still
+       fails open, exactly as the long side always has. This is a TIGHTENING
+       -- it only ever removes setups -- and the long path below is
+       byte-identical to hg-v966's. */
+    if (dir !== 'long' && dir !== 'short') return out;
+    out.dir = dir;
     ctx = ctx || {};
     out.rule = hgGoldMacroRule();
 
@@ -9353,28 +9395,44 @@ function hgGoldMacroLock(dir, ctx){
 
     out.dxyBull = dxy.bull; out.dxyVia = dxy.via; out.dxyLeg = dxy;
     out.tnxBull = tnx.bull; out.tnxVia = tnx.via; out.tnxLeg = tnx;
+    out.dxyBear = dxy.bear; out.dxyBearVia = dxy.bearVia;
+    out.tnxBear = tnx.bear; out.tnxBearVia = tnx.bearVia;
 
     /* What the OTHER rule would have said, computed BEFORE the unchecked
        return. The first cut put this after it, so the measurement was thrown
        away in exactly the case that matters most -- the band silent while the
        level test has a clear answer, which is where the two rules are furthest
        apart. Reported, never acted on: this is the measurement, not a second
-       verdict. */
-    var lockNow = (dxy.bull === true && tnx.bull === true);
-    if (dxy.alt !== null && tnx.alt !== null){
-      out.altLock = (dxy.alt === true && tnx.alt === true);
+       verdict. hg-v1016: the measurement is SIDE-AWARE -- what the other rule
+       would say about THIS side's lock, the bear verdicts for a short. */
+    var shortSide = (dir === 'short');
+    var lockNow = shortSide
+      ? (dxy.bear === true && tnx.bear === true)
+      : (dxy.bull === true && tnx.bull === true);
+    var altA = shortSide ? dxy.altBear : dxy.alt;
+    var altB = shortSide ? tnx.altBear : tnx.alt;
+    if (altA !== null && altB !== null){
+      out.altLock = (altA === true && altB === true);
       out.altAgrees = (out.altLock === lockNow);
     }
 
-    if (dxy.bull == null && tnx.bull == null){
+    var unchA = shortSide ? dxy.bear : dxy.bull;
+    var unchB = shortSide ? tnx.bear : tnx.bull;
+    if (unchA == null && unchB == null){
       out.unchecked = true;
       return out;
     }
     if (lockNow){
       out.lock = true;
-      out.reason = 'CONVICTION LOCK — DXY+TNX bullish vs gold long'
-        + ' (DXY by ' + hgGoldMacroViaLabel(dxy.via)
-        + ', TNX by ' + hgGoldMacroViaLabel(tnx.via) + ')';
+      if (shortSide){
+        out.reason = 'CONVICTION LOCK — DXY+TNX bearish vs gold short'
+          + ' (DXY by ' + hgGoldMacroViaLabel(dxy.bearVia)
+          + ', TNX by ' + hgGoldMacroViaLabel(tnx.bearVia) + ')';
+      } else {
+        out.reason = 'CONVICTION LOCK — DXY+TNX bullish vs gold long'
+          + ' (DXY by ' + hgGoldMacroViaLabel(dxy.via)
+          + ', TNX by ' + hgGoldMacroViaLabel(tnx.via) + ')';
+      }
     }
     return out;
   }catch(e){
@@ -9390,19 +9448,30 @@ function hgGoldMacroLock(dir, ctx){
 function hgGoldMacroLockNote(m){
   try{
     if (!m || typeof m !== 'object') return '';
+    /* hg-v1016: the note speaks for the side the lock evaluated. A pre-v1016
+       record carries no dir and renders as the long it always was. */
+    var shortSide = (m.dir === 'short');
     if (m.unchecked === true)
       return 'MACRO UNCHECKED — neither the dollar nor the 10-year could be read, '
-        + 'so no gold-long lock was asked for. Missing feeds fail open.';
+        + (shortSide
+            ? 'so no gold-short lock was asked for. Missing feeds fail open.'
+            : 'so no gold-long lock was asked for. Missing feeds fail open.');
     /* == null, not === null: an object carrying NO verdict has these fields
        undefined rather than null, and a strict check let it through to render
        a MACRO OK line about reads that were never made. Caught by handing the
        note a bare {}. */
-    if (m.dxyBull == null && m.tnxBull == null) return '';
+    var dxyV = shortSide ? m.dxyBear : m.dxyBull;
+    var tnxV = shortSide ? m.tnxBear : m.tnxBull;
+    if (dxyV == null && tnxV == null) return '';
     var head = m.lock
-      ? 'MACRO LOCK — the dollar and the 10-year are both bullish against a gold long'
-      : 'MACRO OK — the dollar and the 10-year are not both bullish against a gold long';
-    var reads = ' Read by DXY ' + hgGoldMacroViaLabel(m.dxyVia)
-      + ' and TNX ' + hgGoldMacroViaLabel(m.tnxVia) + '.';
+      ? (shortSide
+          ? 'MACRO LOCK — the dollar and the 10-year are both bearish against a gold short'
+          : 'MACRO LOCK — the dollar and the 10-year are both bullish against a gold long')
+      : (shortSide
+          ? 'MACRO OK — the dollar and the 10-year are not both bearish against a gold short'
+          : 'MACRO OK — the dollar and the 10-year are not both bullish against a gold long');
+    var reads = ' Read by DXY ' + hgGoldMacroViaLabel(shortSide ? m.dxyBearVia : m.dxyVia)
+      + ' and TNX ' + hgGoldMacroViaLabel(shortSide ? m.tnxBearVia : m.tnxVia) + '.';
     var alt = '';
     if (m.altAgrees === false){
       alt = ' The other rule in this file disagrees: on the same feeds it would '

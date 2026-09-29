@@ -70,8 +70,11 @@ a small reason line — nothing is dropped silently):
   8) VOLUME-WEIGHTED OB — displacement-bar volume must exceed the prior
      5-bar average or the block is an OB TRAP.
   9) MACRO CONVICTION LOCK — gold longs are killed when DXY and TNX are
-     both bullish (close > EMA50 / RISING). Missing feeds fail-open. This
-     kills the signal; it does not mint a booked conviction-lock.js record.
+     both bullish (close > EMA50 / RISING); hg-v1016: gold shorts are
+     killed when DXY and TNX are both bearish (FALLING / below EMA50) —
+     the same tape fight in the other direction. FLAT is a non-verdict
+     both ways. Missing feeds fail-open. This kills the signal; it does
+     not mint a booked conviction-lock.js record.
  10) SPREAD LOCK — live bid/ask wider than 250 points / 2.5 pips ($0.25)
      locks the entry gate regardless of setup strength. Missing quotes fail-open.
  11) MTF CONFLUENCE — scalp longs require H4 and Daily both bullish

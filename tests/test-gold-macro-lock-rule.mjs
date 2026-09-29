@@ -261,7 +261,7 @@ console.log('== 6) a reader for a field nothing read ==');
   assert(/MACRO UNCHECKED/.test(unchecked) && /fail open/.test(unchecked),
          'and an unreadable macro says so, naming that it fails open');
   assert(W.hgGoldMacroLockNote({ unchecked: false, dxyBull: null, tnxBull: null }) === '',
-         'a short direction, which is never locked, renders nothing');
+         'a verdict-less object renders nothing (hg-v1016: shorts are evaluated now — the short-side note pins live in test-gold-macro-lock-short-mirror-v1016)');
 }
 
 console.log('== 7) macro.js supplies the series, and fails open ==');
@@ -368,8 +368,14 @@ console.log('== 8) the rule in force is NOT moved by this pack ==');
   const G = fs.readFileSync(path.join(ROOT, 'goldind.js'), 'utf8');
   assert(/out\.reason = 'CONVICTION LOCK — DXY\+TNX bullish vs gold long'/.test(G),
          'the lock still says what it always said');
-  assert(/if \(dir !== 'long'\) return out;/.test(G),
-         'and it still applies to LONGS only — the dollar and yields do not kill a gold short here');
+  /* hg-v1016 moved this pin DELIBERATELY: the lock now runs both ways — both
+     legs BEARISH stands a gold SHORT down, the same tape fight mirrored, a
+     tightening that only ever removes setups. What this section still pins is
+     that the LONG side did not move: same guard shape, same bands, same
+     reason. The short-side behaviour is pinned behaviourally in
+     test-gold-macro-lock-short-mirror-v1016. */
+  assert(/if \(dir !== 'long' && dir !== 'short'\) return out;/.test(G),
+         'the guard evaluates both directions now (hg-v1016) — anything else is still not evaluated');
 }
 
 console.log('\n' + (fail === 0
