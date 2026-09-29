@@ -78,7 +78,10 @@ a small reason line — nothing is dropped silently):
  10) SPREAD LOCK — live bid/ask wider than 250 points / 2.5 pips ($0.25)
      locks the entry gate regardless of setup strength. Missing quotes fail-open.
  11) MTF CONFLUENCE — scalp longs require H4 and Daily both bullish
-     (price > EMA20 > EMA50). HTF conflict (Daily bull / H4 bear or the
+     (price > EMA20 > EMA50); hg-v1017: scalp shorts require H4 and Daily
+     both bearish (price < EMA20 < EMA50) — the same bar mirrored, so a
+     short into a full bull stack can no longer lead. An unstacked tape
+     demotes both directions. HTF conflict (Daily bull / H4 bear or the
      reverse) locks the entire scalp desk and leaves Gold Wing open.
      Missing H4 or Daily fail-open.
  12) STOP-WIDTH FLOOR (goldind hgGoldScalpStopFloor) — engine plan overrides

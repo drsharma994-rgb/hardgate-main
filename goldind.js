@@ -9010,6 +9010,24 @@ function hgGoldMtfBias(rows){
   }catch(e){ return out; }
 }
 
+/* hg-v1017: THE SHORT SIDE OF THE MTF BAR. hgGoldMtfBias has always read
+   both stacks (bull and bear are computed together), but the verdict this
+   matrix published was one-sided: scalpLongOk = both timeframes bull-stacked, while scalpShortOk
+   sat at its fail-open initializer on EVERY non-conflict tape -- and the one
+   consumer (hgGoldInstFilter) only ever asked about longs. So a scalp SHORT
+   minted into a full H4+Daily BULL stack -- the strongest bull alignment this
+   desk reads -- passed the MTF gate untouched and could lead, while a long
+   into the mirror tape was demoted or dropped. The same one-sided family as
+   the hg-v1016 macro lock, one gate up the list.
+
+   The mirror is the long side's OWN bar, not a weaker one: a scalp short
+   needs H4 and Daily both BEAR-stacked (price < EMA20 < EMA50) to lead,
+   exactly as a long needs both bull-stacked. An unstacked tape therefore
+   demotes BOTH directions -- that is what the long side has always done, and
+   halving the bar for shorts would be a second rule, not a mirror. Conflict
+   still locks the desk both ways, missing feeds still fail open both ways.
+   A TIGHTENING, stated as a prior: it only ever demotes or drops, no
+   threshold moves, and the forward ledger is how it earns a measured one. */
 function hgGoldMtfMatrix(inp){
   inp = inp || {};
   var h4 = hgGoldMtfBias(inp.rows4h);
@@ -9022,7 +9040,8 @@ function hgGoldMtfMatrix(inp){
     swingOnly: false,
     conflict: false,
     unchecked: !!(h4.unchecked || d1.unchecked),
-    reason: null
+    reason: null,
+    reasonShort: null
   };
   try{
     if (h4.unchecked || d1.unchecked) return out;
@@ -9038,6 +9057,11 @@ function hgGoldMtfMatrix(inp){
     out.scalpLongOk = !!(h4.bull && d1.bull);
     if (!out.scalpLongOk)
       out.reason = 'MTF BIAS — scalp longs need H4 and Daily price > EMA20 > EMA50';
+    /* hg-v1017: the mirrored bar. reason stays the long side's text verbatim
+       (cards and pins read it); the short side's reason is additive. */
+    out.scalpShortOk = !!(h4.bear && d1.bear);
+    if (!out.scalpShortOk)
+      out.reasonShort = 'MTF BIAS — scalp shorts need H4 and Daily price < EMA20 < EMA50';
     return out;
   }catch(e){ return out; }
 }
@@ -9592,23 +9616,31 @@ function hgGoldInstFilter(cand, ctx){
         rows1d: ctx.rows1d || ctx.dailyCandles
       });
       cand.mtf = mtf;
-      var mtfBlock = !!(mtf.scalpLocked || (dir === 'long' && mtf.scalpLongOk === false));
+      /* hg-v1017: the short side is asked the mirrored question. A scalp
+         short into an H4+Daily BULL stack fought the strongest alignment the
+         desk reads and passed anyway -- now it answers the same bar the long
+         side answers: both timeframes stacked ITS way or it cannot lead. */
+      var mtfBlock = !!(mtf.scalpLocked
+        || (dir === 'long' && mtf.scalpLongOk === false)
+        || (dir === 'short' && mtf.scalpShortOk === false));
       if (mtfBlock){
         /* GOLD SCALP (hardReject:false): demote so cards still populate —
            MTF cannot lead, but the desk must not go blank. OMNIGOLD / hard
            path keeps the hard drop. */
+        var mtfReason = mtf.scalpLocked ? mtf.reason
+          : (dir === 'short' ? (mtf.reasonShort || mtf.reason) : mtf.reason);
         if (ctx.hardReject === false){
           cand.demoted = true;
           if (!Array.isArray(cand.stamps)) cand.stamps = [];
           var mtfStamp = mtf.scalpLocked ? 'MTF CONFLICT' : 'MTF BIAS';
           if (cand.stamps.indexOf(mtfStamp) < 0) cand.stamps.push(mtfStamp);
           var gnM = Array.isArray(cand.gateNotes) ? cand.gateNotes.slice() : [];
-          gnM.push(mtf.reason || mtfStamp);
+          gnM.push(mtfReason || mtfStamp);
           cand.gateNotes = gnM;
-          cand.reason = mtf.reason;
+          cand.reason = mtfReason;
         } else {
           cand.dropped = true;
-          cand.reason = mtf.reason;
+          cand.reason = mtfReason;
           return cand;
         }
       }
