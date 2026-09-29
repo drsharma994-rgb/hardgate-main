@@ -471,7 +471,11 @@ const flat4 = mkRows(lin(120, 50, 0));      // pinned 4h closes
   assert(/hgDeskLoadUniverse/.test(tt), 'full universe via hgDeskLoadUniverse');
   assert(/fetchK\(item, '1h', 120\)/.test(tt), 'scan fetches 1h klines for exact entry');
   assert(/data-v="delta"/.test(tt), 'venue filter chips wired');
-  assert(/GOLDEN CROSS DESK/.test(tt), 'golden cross desk wired');
+  /* hg-v1014: the desk is both crosses now — the title moved from GOLDEN
+     CROSS DESK to FRESH CROSS DESK; the behavior pins live in
+     test-trendmx-death-cross-v1014.mjs */
+  assert(/FRESH CROSS DESK/.test(tt), 'fresh cross desk wired (golden + death, hg-v1014)');
+  assert(/trendmxDeathCrossSetups/.test(tt), 'death cross desk wired');
   assert(/LIMIT BOARD/.test(tt), 'limit board wired');
   assert(/data-r="cards"/.test(tt), 'clean ticket cards mount');
   assert(/hgPaintTrendmxFromSnap/.test(tt), 'snap restore export wired');

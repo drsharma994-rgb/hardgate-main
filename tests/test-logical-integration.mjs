@@ -62,7 +62,10 @@ console.log('== tab alert warm chain ==');
 console.log('== advanced trend matrix desk ==');
 {
   const trend = fs.readFileSync(path.join(root, 'trendtable.js'), 'utf8');
-  ok(/GOLDEN CROSS DESK/.test(trend), 'golden cross desk panel');
+  /* hg-v1014: the desk is both crosses now — GOLDEN CROSS DESK became
+     FRESH CROSS DESK; behavior pins live in test-trendmx-death-cross-v1014.mjs */
+  ok(/FRESH CROSS DESK/.test(trend), 'fresh cross desk panel (golden + death, hg-v1014)');
+  ok(/trendmxDeathCrossSetups/.test(trend), 'death cross desk builder wired');
   ok(/LIMIT BOARD/.test(trend), 'limit board panel');
   ok(/data-r="cards"/.test(trend), 'clean ticket cards mount');
   ok(/hgPaintTrendmxFromSnap/.test(trend), 'snap restore helper');

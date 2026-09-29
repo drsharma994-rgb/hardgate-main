@@ -67,8 +67,17 @@ DIRECTION PARITY (hg-v1013) — trendmxConviction measured the composite's
 strength on the long side only (sc >= 4 / sc >= 2), so a row at -5 had
 less standing than a row at +2: no short reached the LIMIT BOARD, the
 promoted slice or the CONVICTION filter except through a 7/7 clean. The
-reader now takes |score| — the same bars, both directions. The golden
-desk stays long-only by design (a golden cross IS a bull cross).
+reader now takes |score| — the same bars, both directions.
+
+THE DEATH CROSS DESK (hg-v1014) — the last one-sided surface: the golden
+desk's exact mirror. trendmxDeathCrossSetups rows carry a fresh ⚡DEATH
+(EMA50/200 cross under, <=10 daily bars) + bear cross + short majority +
+conviction (the v1013 bars) + a valid short plan; the FRESH CROSS DESK
+panel renders golden longs and death shorts side by side, a ⚡ DEATH
+filter chip joins the bar, the SMC pass enriches both ticket kinds inside
+the one capped envelope, and the Telegram cycle (tabalerts.js) keys,
+formats and pushes death crosses under their own dedup namespace
+(TRENDMX:DEATH) — golden keys and formats are byte-identical to before.
 ========================================================================= */
 (function(){
 'use strict';
@@ -640,6 +649,41 @@ function trendmxGoldenCrossSetups(rows){
   return out;
 }
 
+/* hg-v1014: the mirrored desk — rows with fresh ⚡DEATH (EMA50/200 cross
+   UNDER, <=10 daily bars) + bear cross + short majority + conviction +
+   valid short plan. The exact mirror of the golden desk, bar for bar:
+   the same freshness window, the same conviction bars (|score|, hg-v1013
+   — a fresh death cross at -2 earns the standing a golden cross earns at
+   +2), the same veto respect, the same plan-validity bar. A death cross
+   IS a bear cross; leaving shorts off this desk was the last one-sided
+   surface on the tab. Pure. */
+function trendmxDeathCrossSetups(rows){
+  var out = [];
+  if (!Array.isArray(rows)) return out;
+  for (var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if (!r || r.freshCross !== 'DEATH') continue;
+    if (!r.comps || r.comps.d1Cross >= 0) continue;
+    var dir = tmDirOf(r);
+    if (dir !== 'short') continue;
+    var conv = trendmxConviction(r);
+    if (!conv) continue;
+    if (r.gate && r.gate.veto) continue;
+    var plan = trendmxPlan({ dir: dir, score: r.score, rows4h: r.rows4h, rows1h: r.rows1h, entry: r.price, gate: r.gate, comps: r.comps, sym: r.sym, fundingPct: r.fundingPct });
+    if (!tmValidSetup(plan)) continue;
+    out.push({
+      sym: r.sym, dir: 'short', entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2,
+      rr: fin(+plan.rr1) ? +plan.rr1 : TM_T1_R, score: r.score, adx: r.adx,
+      clean7: !!(plan.clean7 || (r.gate && r.gate.clean7)),
+      freshCross: 'DEATH', conviction: conv.label, tier: conv.tier, prime: conv.prime,
+      comps: r.comps, gateLabel: plan.gateLabel || (r.gate && r.gate.label),
+      note: '⚡DEATH CROSS (EMA50/200 · ≤10 daily bars) · composite ' + (r.score > 0 ? '+' : '') + r.score + '/5'
+        + (plan.gateLabel ? ' · ' + plan.gateLabel : '')
+    });
+  }
+  return out;
+}
+
 function fin(v){ return typeof v === 'number' && isFinite(v); }
 
 /* ---------------- SMC context (record-only) ----------------
@@ -683,14 +727,16 @@ function tmSmcChip(o){
    trendmxPlan reads inp.entry as an entry OVERRIDE and tmDirOf reads inp.dir,
    so writing those onto the row would change the plan the desk builds. A
    synthetic ticket is enriched instead and only .smc is copied back. */
-function tmSmcScanPass(rows, golden){
+function tmSmcScanPass(rows, golden, death){
   try{
     if (!tmSmcOn() || !Array.isArray(rows) || !rows.length) return;
     var i, r, byRows = {};
     for (i = 0; i < rows.length; i++){ if (rows[i] && rows[i].sym) byRows[rows[i].sym] = rows[i].rows4h; }
-    golden = golden || [];
-    for (i = 0; i < golden.length && i < TM_SMC_MAX; i++){
-      if (golden[i]) tmSmcMark(golden[i], byRows[golden[i].sym]);
+    /* hg-v1014: golden AND death tickets share the one capped envelope —
+       the cap is a compute budget, not a per-desk allowance */
+    var tickets = (golden || []).concat(death || []);
+    for (i = 0; i < tickets.length && i < TM_SMC_MAX; i++){
+      if (tickets[i]) tmSmcMark(tickets[i], byRows[tickets[i].sym]);
     }
     var cands = [];
     for (i = 0; i < rows.length; i++){
@@ -942,7 +988,8 @@ async function trendmxScan(opts){
   }
   var core = await trendmxScanCore(opts);
   var golden = trendmxGoldenCrossSetups(core.rows);
-  tmSmcScanPass(core.rows, golden);
+  var death = trendmxDeathCrossSetups(core.rows);   /* hg-v1014: the mirrored desk */
+  tmSmcScanPass(core.rows, golden, death);
   /* hg-v1012: the evidence layer — one capped, paced pass over the promoted
      slice, AFTER the tier inputs (score/gate/conviction) exist and BEFORE
      the snap the boards read. Never throws; what it cannot read it leaves
@@ -951,7 +998,7 @@ async function trendmxScan(opts){
   try{ flow = await trendmxFlowScan(core.rows); }catch(eFl){ flow = null; }
   __tmScanSnap = {
     at: core.at, rows: core.rows, failed: core.failed, uniLen: core.uniLen, scanned: core.scanned,
-    goldenCross: golden, note: core.note, source: core.source, venueCounts: core.venueCounts,
+    goldenCross: golden, deathCross: death, note: core.note, source: core.source, venueCounts: core.venueCounts,
     flow: flow
   };
   publishTrendmxSnap(core.rows);
@@ -1019,20 +1066,27 @@ function trendmxSummaryLine(rows, golden, venueCounts){
     + ((flowW + flowA) > 0 ? ' · taker flow ' + flowW + ' with / ' + flowA + ' held off' : '');
 }
 
-function trendmxGoldenCardHTML(g){
+/* hg-v1014: one card serves both cross kinds — golden (bull, green) and
+   death (bear, red). The stamp, the strategy tag and the palette read the
+   ticket's own freshCross/dir; everything else is identical, because the
+   desks are the same bar in both directions. */
+function trendmxCrossCardHTML(g){
   if (!g || !fin(+g.entry) || !fin(+g.stop) || !fin(+g.t1)) return '';
-  var col = '#047857';
+  var isDeath = (g.freshCross === 'DEATH') || (g.dir === 'short');
+  var col = isDeath ? '#b91c1c' : '#047857';
+  var strat = isDeath ? 'trendmx-death' : 'trendmx-golden';
   var tradeOn = (typeof hgToTradePlanOnclickAttr === 'function')
-    ? hgToTradePlanOnclickAttr(g.sym, g.dir, g.entry, g.stop, g.t1, { t2: g.t2, scanner: 'trendmx', strategy: 'trendmx-golden' })
+    ? hgToTradePlanOnclickAttr(g.sym, g.dir, g.entry, g.stop, g.t1, { t2: g.t2, scanner: 'trendmx', strategy: strat })
     : '';
   var tradeBtn = tradeOn ? '<button class="toTrade" onclick="' + tradeOn + '">SEND TO TRADE PLAN →</button>' : '';
   var bookBtn = (typeof bookBtnHTML === 'function')
-    ? bookBtnHTML(g.sym, g.dir, g.entry, g.stop, g.t1, { scanner: 'trendmx', strategy: 'trendmx-golden', t2: g.t2 }) : '';
-  return '<div style="flex:1 1 280px;max-width:380px;border:1px solid rgba(5,150,105,.45);border-left:4px solid ' + col + ';border-radius:8px;padding:12px;background:rgba(5,150,105,.06)">'
+    ? bookBtnHTML(g.sym, g.dir, g.entry, g.stop, g.t1, { scanner: 'trendmx', strategy: strat, t2: g.t2 }) : '';
+  return '<div style="flex:1 1 280px;max-width:380px;border:1px solid ' + (isDeath ? 'rgba(185,28,28,.45)' : 'rgba(5,150,105,.45)') + ';border-left:4px solid ' + col + ';border-radius:8px;padding:12px;background:' + (isDeath ? 'rgba(185,28,28,.06)' : 'rgba(5,150,105,.06)') + '">'
     + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">'
     + '<span style="font-size:14px;font-weight:800">' + escH(g.sym) + tmVenueChip(g) + '</span>'
-    + '<span class="stamp pass">⚡GOLDEN</span>'
+    + '<span class="stamp ' + (isDeath ? 'bad' : 'pass') + '">' + (isDeath ? '⚡DEATH' : '⚡GOLDEN') + '</span>'
     + '<span class="stamp pass">' + escH(g.conviction || g.tier || 'CONVICTION') + '</span>'
+    + '<span class="stamp ' + (isDeath ? 'bad' : 'pass') + '">' + (isDeath ? 'SHORT' : 'LONG') + '</span>'
     + tmSmcChip(g)
     + '</div>'
     + '<div style="margin-top:6px;font-size:10px;color:#64748B">' + escH(g.note || '') + '</div>'
@@ -1042,14 +1096,23 @@ function trendmxGoldenCardHTML(g){
     + '</div>';
 }
 
-function trendmxGoldenDeskHTML(golden){
+/* hg-v1014: the FRESH CROSS DESK — golden longs and death shorts, one
+   panel, each half named. Both halves render whenever they have tickets;
+   the panel itself renders when either does. */
+function trendmxCrossDeskHTML(golden, death){
   golden = golden || [];
-  if (!golden.length) return '';
-  var cards = '';
-  for (var i = 0; i < Math.min(golden.length, 4); i++) cards += trendmxGoldenCardHTML(golden[i]);
+  death = death || [];
+  if (!golden.length && !death.length) return '';
+  var gcards = '', dcards = '', i;
+  for (i = 0; i < Math.min(golden.length, 4); i++) gcards += trendmxCrossCardHTML(golden[i]);
+  for (i = 0; i < Math.min(death.length, 4); i++) dcards += trendmxCrossCardHTML(death[i]);
   return '<div class="panel tier-clean" style="margin:12px 0">'
-    + '<h2>⚡ GOLDEN CROSS DESK <span>fresh EMA50/200 bull cross ≤10 daily bars · conviction + valid plan · Telegram every 15m</span></h2>'
-    + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + cards + '</div></div>';
+    + '<h2>⚡ FRESH CROSS DESK <span>EMA50/200 cross ≤10 daily bars — GOLDEN longs + DEATH shorts · conviction + valid plan · Telegram every 15m</span></h2>'
+    + (gcards ? '<div class="note" style="margin:0 0 6px"><b>⚡ GOLDEN</b> — fresh bull crosses, longs</div>'
+              + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + gcards + '</div>' : '')
+    + (dcards ? '<div class="note" style="margin:' + (gcards ? '10px' : '0') + ' 0 6px"><b>⚡ DEATH</b> — fresh bear crosses, shorts</div>'
+              + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + dcards + '</div>' : '')
+    + '</div>';
 }
 
 function trendmxLimitCardHTML(item){
@@ -1200,20 +1263,22 @@ function trendmxPaintMiniCharts(cardsEl, rows){
 }
 
 function trendmxPaintDeskSections(refs, state){
-  var allRows = state.rows || [], golden = state.golden || [];
+  var allRows = state.rows || [], golden = state.golden || [], death = state.death || [];
   var rows = allRows;
   if (state.venue && state.venue !== 'ALL'){
     rows = allRows.filter(function(r){ return tmRowVenue(r) === state.venue; });
-    golden = golden.filter(function(g){
+    var onVenue = function(g){
       for (var gi = 0; gi < allRows.length; gi++){
         if (allRows[gi].sym === g.sym && tmRowVenue(allRows[gi]) === state.venue) return true;
       }
       return false;
-    });
+    };
+    golden = golden.filter(onVenue);
+    death = death.filter(onVenue);   /* hg-v1014 */
   }
   var vc = state.venueCounts || null;
   if (refs.summary) refs.summary.textContent = rows.length ? trendmxSummaryLine(rows, golden, vc) : 'Idle — run a scan to build the desk.';
-  if (refs.golden) refs.golden.innerHTML = trendmxGoldenDeskHTML(golden);
+  if (refs.golden) refs.golden.innerHTML = trendmxCrossDeskHTML(golden, death);   /* hg-v1014: one desk, both crosses */
   var clean = [], near = [], forming = [];
   for (var i = 0; i < rows.length; i++){
     var r = rows[i];
@@ -1287,7 +1352,7 @@ function hgPaintTrendmxFromSnap(){
       out: el.querySelector('[data-r="out"]'),
       status: el.querySelector('[data-r="status"]')
     };
-    var state = { rows: __tmScanSnap.rows, golden: __tmScanSnap.goldenCross || [], filter: 'ALL', sortKey: 'score', sortDir: -1 };
+    var state = { rows: __tmScanSnap.rows, golden: __tmScanSnap.goldenCross || [], death: __tmScanSnap.deathCross || [], filter: 'ALL', sortKey: 'score', sortDir: -1 };
     tmTab._state = state;
     trendmxPaintDeskSections(refs, state);
     if (refs.status && __tmScanSnap.at){
@@ -1417,6 +1482,7 @@ function mountTrendMatrix(el){
         '<button class="chip" data-f="CL">CLEAN 7/7</button>' +
         '<button class="chip" data-f="NR">NEAR 6/7</button>' +
         '<button class="chip" data-f="GD">⚡ GOLDEN</button>' +
+        '<button class="chip" data-f="DT">⚡ DEATH</button>' +   /* hg-v1014 */
         '<button class="chip" data-f="CV">CONVICTION</button>' +
         '<button class="chip" data-f="SL">STRONG LONG</button>' +
         '<button class="chip" data-f="SS">STRONG SHORT</button>' +
@@ -1520,6 +1586,7 @@ function mountTrendMatrix(el){
     if (state.filter === 'CL') return tier === 'clean';
     if (state.filter === 'NR') return tier === 'near';
     if (state.filter === 'GD') return r.freshCross === 'GOLDEN';
+    if (state.filter === 'DT') return r.freshCross === 'DEATH';   /* hg-v1014 */
     if (state.filter === 'CV') return !!trendmxConviction(r);
     if (state.filter === 'SL') return r.score >= 4;
     if (state.filter === 'SS') return r.score <= -4;
@@ -1652,6 +1719,7 @@ function mountTrendMatrix(el){
 
       state.rows = results;
       state.golden = (snap && snap.goldenCross) ? snap.goldenCross : [];
+      state.death = (snap && snap.deathCross) ? snap.deathCross : [];   /* hg-v1014 */
       state.venueCounts = vc;
       renderAll();
       if (typeof globalThis !== 'undefined' && typeof globalThis.hgChartVisionEnrichDeskRows === 'function'){
@@ -1697,6 +1765,7 @@ function mountTrendMatrix(el){
       __tmScanSnap.at && (Date.now() - __tmScanSnap.at) < (5 * 60 * 1000)){
     state.rows = __tmScanSnap.rows;
     state.golden = __tmScanSnap.goldenCross || [];
+    state.death = __tmScanSnap.deathCross || [];   /* hg-v1014 */
     tmTab.hasRun = true;
     renderAll();
     setStatus('restored from cache · ' + trendmxSummaryLine(state.rows, state.golden)
@@ -1727,6 +1796,8 @@ W.trendmxRowTier = trendmxRowTier;
 W.trendmxLimitBoardHTML = trendmxLimitBoardHTML;
 W.trendmxSummaryLine = trendmxSummaryLine;
 W.trendmxGoldenCrossSetups = trendmxGoldenCrossSetups;
+W.trendmxDeathCrossSetups = trendmxDeathCrossSetups;   /* hg-v1014 */
+W.tmSmcScanPass = tmSmcScanPass;   /* hg-v1014: the shared ticket cap is desk behavior — the tests read it, never re-derive it */
 W.trendmxScan = trendmxScan;
 W.trendmxWarm = trendmxWarm;
 W.trendmxCrossState = function(){
@@ -1736,6 +1807,11 @@ W.trendmxCrossState = function(){
       at: __tmScanSnap.at,
       scanned: __tmScanSnap.scanned,
       goldenCross: (__tmScanSnap.goldenCross || []).map(function(s){
+        return { sym: s.sym, dir: s.dir, entry: s.entry, stop: s.stop, t1: s.t1, score: s.score,
+          conviction: s.conviction, tier: s.tier, freshCross: s.freshCross };
+      }),
+      /* hg-v1014: the mirrored half — the alert cycle reads both */
+      deathCross: (__tmScanSnap.deathCross || []).map(function(s){
         return { sym: s.sym, dir: s.dir, entry: s.entry, stop: s.stop, t1: s.t1, score: s.score,
           conviction: s.conviction, tier: s.tier, freshCross: s.freshCross };
       })

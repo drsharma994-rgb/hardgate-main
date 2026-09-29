@@ -133,6 +133,22 @@ function collectSetupsForDisplay(desk){
           note: g.note || ('⚡GOLDEN · composite ' + g.score),
         });
       }
+      /* hg-v1014: the mirrored half. The display sort adds `score` raw, so a
+         death ticket hands in |composite| — strength, not side (the v1013
+         principle) — and keeps the signed print in the note. A -5 death
+         cross ranks exactly where its +5 golden twin ranks. */
+      var death = (tx && tx.deathCross) ? tx.deathCross : [];
+      for (var td = 0; td < death.length; td++){
+        var d = death[td];
+        if (!d || !hasSetupLevels(d)) continue;
+        add({
+          sym: d.sym, dir: d.dir, entry: d.entry, stop: d.stop, t1: d.t1, t2: d.t2,
+          rr: d.rr, score: fin(+d.score) ? Math.abs(+d.score) : d.score, clean7: !!d.clean7, nearClean: false,
+          prime: !!d.prime, tier: d.tier || d.conviction,
+          style: 'swing', agentLabel: 'Trend Matrix', src: 'TRENDMX DEATH',
+          note: d.note || ('⚡DEATH · composite ' + d.score),
+        });
+      }
     }catch(eTx){}
   }
   applyAgentConfluence(out);
@@ -208,6 +224,18 @@ function runTrendmxScout(){
           note: g.note || ('⚡GOLDEN · composite ' + g.score),
         }));
       }
+      /* hg-v1014: death crosses scout too — same levels bar, own src stamp */
+      var dead = (cs && cs.deathCross) ? cs.deathCross : [];
+      for (var di2 = 0; di2 < dead.length; di2++){
+        var dd = dead[di2];
+        if (!dd || !hasSetupLevels(dd)) continue;
+        finds.push(finding(dd.sym, dd.dir, {
+          src: 'TRENDMX DEATH', entry: dd.entry, stop: dd.stop, t1: dd.t1, t2: dd.t2,
+          rr: dd.rr, score: dd.score != null ? Math.abs(+dd.score) : 12, clean7: !!dd.clean7,
+          tier: dd.tier || dd.conviction, prime: !!dd.prime,
+          note: dd.note || ('⚡DEATH · composite ' + dd.score),
+        }));
+      }
     }catch(e1){}
   }
   if (!finds.length && scanFn){
@@ -249,7 +277,32 @@ function runTrendmxScoutFromRows(rows){
       }
     }catch(e){}
   }
-  return { ok: true, findings: finds.slice(0, 6), summary: finds.length + ' trend matrix golden setup(s)' };
+  /* hg-v1014: the rows fallback reads the mirrored desk too, or a death
+     cross would only scout when the live state happened to be warm */
+  var deathFn = gfn('trendmxDeathCrossSetups');
+  if (deathFn){
+    try{
+      var dlist = deathFn(rows) || [];
+      var byD = {};
+      if (Array.isArray(rows)){
+        for (var dk = 0; dk < rows.length; dk++){
+          if (rows[dk] && rows[dk].sym && Array.isArray(rows[dk].rows4h)) byD[rows[dk].sym] = rows[dk].rows4h;
+        }
+      }
+      for (var dj = 0; dj < dlist.length; dj++){
+        var dt = dlist[dj];
+        if (!dt || !hasSetupLevels(dt)) continue;
+        var df = finding(dt.sym, dt.dir, {
+          src: 'TRENDMX DEATH', entry: dt.entry, stop: dt.stop, t1: dt.t1, t2: dt.t2,
+          rr: dt.rr, score: dt.score != null ? Math.abs(+dt.score) : 12, clean7: !!dt.clean7,
+          tier: dt.tier || dt.conviction, prime: !!dt.prime, note: dt.note,
+        });
+        try{ if (typeof W.hgSmcEnrich === 'function' && Array.isArray(byD[dt.sym])) W.hgSmcEnrich(df, { rows: byD[dt.sym], tab: 'AI AGENT' }); }catch(eSmc2){}
+        finds.push(df);
+      }
+    }catch(eD){}
+  }
+  return { ok: true, findings: finds.slice(0, 6), summary: finds.length + ' trend matrix cross setup(s)' };
 }
 
 var AGENTS = [

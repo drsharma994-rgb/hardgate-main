@@ -1207,6 +1207,13 @@ function saveTrendmxCrossKeys(keys, root){
 }
 
 function trendmxCrossSetupKey(s){
+  /* hg-v1014: the desk runs BOTH crosses now — a fresh DEATH ticket keys on
+     its own side, so a death cross is never swallowed by the symbol's golden
+     dedup slot (nor the reverse). Golden keys stay byte-identical to the
+     hg-v1011 desk; only short/death tickets take the new branch. */
+  if (s && (s.dir === 'short' || s.freshCross === 'DEATH')){
+    return 'TRENDMX:DEATH:' + String(s.sym || '') + ':short';
+  }
   return 'TRENDMX:GOLDEN:' + String(s.sym || '') + ':long';
 }
 
@@ -1233,16 +1240,21 @@ function trendmxCrossFreshKeys(prevKeys, list, now, gapMs){
 
 function hgTrendmxCrossAlertFormat(s){
   s = s || {};
-  var tag = s.prime ? '🔥 ' : '📈 ';
+  /* hg-v1014: one formatter, two crosses. The DEATH branch mirrors the golden
+     body line for line — same conviction/score/ADX line, same plan block,
+     same leverage footer — with the cross name, the ⚡DEATH stamp and the
+     SHORT header swapped in. The golden path is byte-identical to hg-v1011. */
+  var isDeath = (s.dir === 'short' || s.freshCross === 'DEATH');
+  var tag = s.prime ? '🔥 ' : (isDeath ? '📉 ' : '📈 ');
   var plan = hgTabAlertsPlanBlock(s).split('\n').map(function(l){ return '  ' + l; }).join('\n');
   var adx = fin(+s.adx) ? ('ADX ' + Number(s.adx).toFixed(1)) : 'ADX —';
   var sc = fin(+s.score) ? (s.score > 0 ? '+' : '') + s.score + '/5 composite' : 'composite —';
   var conv = s.conviction ? String(s.conviction) : (s.tier || 'CONVICTION');
   var extra = s.note ? (' · ' + s.note) : '';
-  return tag + 'HARDGATE — TREND MATRIX GOLDEN CROSS\n'
-    + 'Tab: TREND MATRIX · ⚡GOLDEN fresh cross · 15-min alert cycle\n'
+  return tag + 'HARDGATE — TREND MATRIX ' + (isDeath ? 'DEATH' : 'GOLDEN') + ' CROSS\n'
+    + 'Tab: TREND MATRIX · ' + (isDeath ? '⚡DEATH' : '⚡GOLDEN') + ' fresh cross · 15-min alert cycle\n'
     + 'Conviction: ' + conv + ' · ' + sc + ' · ' + adx + extra + '\n\n'
-    + s.sym + ' LONG\n'
+    + s.sym + (isDeath ? ' SHORT\n' : ' LONG\n')
     + '  Tab/source: TREND MATRIX\n'
     + plan
     + (s.rr !== null && fin(+s.rr) ? '\n  Target: ' + Number(s.rr).toFixed(1) + 'R to T1' : '')
@@ -1250,12 +1262,19 @@ function hgTrendmxCrossAlertFormat(s){
     + SITE;
 }
 
-function collectTrendmxGolden(out){
+/* hg-v1014: was collectTrendmxGolden — the collector now reads BOTH halves
+   of the cross desk. Golden tickets push with the golden extras unchanged;
+   death tickets push with dir 'short' (carried on the ticket itself) and a
+   DEATH tier/note fallback so the alert names what it is. Either bag being
+   non-empty means the live state answered — the scanner fallback below only
+   runs when the tab has no state at all. */
+function collectTrendmxCrosses(out){
   var stFn = gfn('trendmxCrossState');
   if (stFn){
     try{
       var st = stFn();
       var bag = (st && Array.isArray(st.goldenCross)) ? st.goldenCross : [];
+      var dead = (st && Array.isArray(st.deathCross)) ? st.deathCross : [];
       for (var i = 0; i < bag.length; i++){
         var c = bag[i];
         pushSetup(out, 'TREND MATRIX', c, {
@@ -1268,18 +1287,33 @@ function collectTrendmxGolden(out){
           adx: c.adx
         });
       }
-      if (bag.length) return;
+      for (var d = 0; d < dead.length; d++){
+        var cd = dead[d];
+        pushSetup(out, 'TREND MATRIX', cd, {
+          prime: cd.prime === true || cd.tier === 'STRONG',
+          tier: cd.tier || 'DEATH',
+          clean7: false,
+          note: cd.note || '⚡DEATH CROSS',
+          conviction: cd.conviction,
+          score: cd.score,
+          adx: cd.adx
+        });
+      }
+      if (bag.length || dead.length) return;
     }catch(e){}
   }
   var rowsFn = gfn('trendmxGoldenCrossSetups');
+  var deathFn = gfn('trendmxDeathCrossSetups');   /* hg-v1014 */
   var scanFn = gfn('trendmxScan');
-  if (!rowsFn) return;
-  var rows = [];
+  if (!rowsFn && !deathFn) return;
+  var rows = [], drows = [];
   if (scanFn){
     try{
       var snap = scanFn();
       if (snap && Array.isArray(snap.goldenCross)) rows = snap.goldenCross;
-      else if (snap && Array.isArray(snap.rows)) rows = rowsFn(snap.rows);
+      else if (snap && Array.isArray(snap.rows) && rowsFn) rows = rowsFn(snap.rows);
+      if (snap && Array.isArray(snap.deathCross)) drows = snap.deathCross;
+      else if (snap && Array.isArray(snap.rows) && deathFn) drows = deathFn(snap.rows);
     }catch(e){}
   }
   for (var j = 0; j < rows.length; j++){
@@ -1292,6 +1326,18 @@ function collectTrendmxGolden(out){
       conviction: r.conviction,
       score: r.score,
       adx: r.adx
+    });
+  }
+  for (var k = 0; k < drows.length; k++){
+    var dr = drows[k];
+    pushSetup(out, 'TREND MATRIX', dr, {
+      prime: dr.prime === true || dr.tier === 'STRONG',
+      tier: dr.tier || 'DEATH',
+      clean7: false,
+      note: dr.note || '⚡DEATH CROSS',
+      conviction: dr.conviction,
+      score: dr.score,
+      adx: dr.adx
     });
   }
 }
@@ -1308,12 +1354,12 @@ async function hgTrendmxCrossAlertsRun(opts){
     try{ await warmFn({ quiet: true, force: !!(opts && opts.force) }); }catch(e){}
   }
   var list = [];
-  collectTrendmxGolden(list);
+  collectTrendmxCrosses(list);   /* hg-v1014: both crosses */
   var now = Date.now();
   var prev = opts.prevKeys || loadTrendmxCrossKeys(root);
   var fr = trendmxCrossFreshKeys(prev, list, now, opts.gapMs || TRENDMX_CROSS_GAP_MS);
   if (!fr.fresh.length){
-    return { pushed: 0, fresh: [], keys: fr.keys, status: 'none-new-golden-cross' };
+    return { pushed: 0, fresh: [], keys: fr.keys, status: 'none-new-fresh-cross' };   /* hg-v1014: desk is both crosses now */
   }
   if (opts.dryRun){
     return {
@@ -1334,7 +1380,8 @@ async function hgTrendmxCrossAlertsRun(opts){
     var nt = gfn('sendAlertPush');
     if (nt){
       try{
-        await nt('HARDGATE GOLDEN CROSS: ' + fr.fresh[i].sym, body,
+        var fDeath = (fr.fresh[i].dir === 'short' || fr.fresh[i].freshCross === 'DEATH');   /* hg-v1014 */
+        await nt('HARDGATE ' + (fDeath ? 'DEATH' : 'GOLDEN') + ' CROSS: ' + fr.fresh[i].sym, body,
           { priority: fr.fresh[i].prime ? 5 : 4 });
         sent++;
         lastStatus = 'ntfy-fallback';
@@ -1411,7 +1458,7 @@ if (typeof module !== 'undefined' && module.exports){
     tabAlertsCryptoConvictedOnlyEnabled, goldIsMostConvinced,
     cryptoSetupId, cryptoIsMostProbable,
     trendmxCrossSetupKey, trendmxCrossFreshKeys, hgTrendmxCrossAlertFormat,
-    collectTrendmxGolden, hgTrendmxCrossAlertsRun, TRENDMX_CROSS_GAP_MS, TRENDMX_ALERT_CYCLE_MS,
+    collectTrendmxCrosses, hgTrendmxCrossAlertsRun, TRENDMX_CROSS_GAP_MS, TRENDMX_ALERT_CYCLE_MS,
     LS_TRENDMX_CROSS, LS_TRENDMX_LAST_RUN };
 }
 
