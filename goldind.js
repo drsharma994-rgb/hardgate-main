@@ -9066,6 +9066,61 @@ function hgGoldMtfMatrix(inp){
   }catch(e){ return out; }
 }
 
+/* hg-v1019: GATE 17 — THE MOMENTUM EXHAUSTION witness. Gate 11 asks where
+   price SITS (the H4/Daily EMA stacks) and it answers with the SAME recent
+   closes an RSI range-break would read — a stack and a broken RSI range are
+   one information on a real tape, so a momentum-regime bar would mostly
+   restate gate 11. What gate 11 structurally CANNOT see is the other
+   failure: a PERFECT stack at its exhaustion extreme. The canonical range
+   read (Cardwell/Constance Brown) puts a bull momentum range at RSI 40–80
+   and a bear range at 20–60 — so an H4 RSI(14) at or beyond 80 is momentum
+   stretched past even the healthy bull range (a blow-off), and at or below
+   20 past the bear range (capitulation). A scalp is a bet on the next few
+   bars: buying the blow-off (or shorting the capitulation) is the classic
+   bad fill — and it arrives with gate 11 fully stacked and smiling. That is
+   the independent hole this gate closes, and it closes it exactly when the
+   alignment bar is happiest.
+
+   The witness only ever REMOVES: 'against' demotes on the GOLD SCALP soft
+   path and drops on the OMNIGOLD hard path (the gate-11 split exactly);
+   'ok' — anything inside the ranges — passes silently; 'na' (fewer than 16
+   clean closes, a NaN tail, a missing feed) fails open and never bites
+   (the hg-v700 honest-degradation rule). The 80/20 extremes are stated
+   PRIORS, not measurements; the forward ledger is how they earn a measured
+   one. */
+var HG_GOLD_MOM_EXH_LONG = 80, HG_GOLD_MOM_EXH_SHORT = 20;
+function hgGoldMomRegime(rows4h, dir){
+  var out = { rsi: NaN, state: 'na', reason: null, bars: 0,
+              exhLong: HG_GOLD_MOM_EXH_LONG, exhShort: HG_GOLD_MOM_EXH_SHORT };
+  try{
+    if (dir !== 'long' && dir !== 'short') return out;
+    var rows = Array.isArray(rows4h) ? rows4h : [];
+    var closes = [];
+    for (var i = 0; i < rows.length; i++){
+      var c = rows[i] && +rows[i].c;
+      if (isFinite(c)) closes.push(c);
+    }
+    out.bars = closes.length;
+    /* RSI(14) wants 15 closes minimum — fewer is an unreadable tape, and an
+       unreadable tape demotes nothing */
+    if (closes.length < 16) return out;
+    var rr = _rsi(closes, 14);
+    var rv = (rr && rr.length) ? rr[rr.length - 1] : NaN;
+    if (!isFinite(rv)) return out;
+    out.rsi = rv;
+    if (dir === 'long' && rv >= HG_GOLD_MOM_EXH_LONG){
+      out.state = 'against';
+      out.reason = 'MOMENTUM EXHAUSTION — H4 RSI ' + rv.toFixed(1) + ' ≥ ' + HG_GOLD_MOM_EXH_LONG
+        + ': stretched past the bull range, a scalp long here buys the blow-off';
+    } else if (dir === 'short' && rv <= HG_GOLD_MOM_EXH_SHORT){
+      out.state = 'against';
+      out.reason = 'MOMENTUM EXHAUSTION — H4 RSI ' + rv.toFixed(1) + ' ≤ ' + HG_GOLD_MOM_EXH_SHORT
+        + ': stretched past the bear range, a scalp short here shorts the capitulation';
+    } else out.state = 'ok';
+    return out;
+  }catch(e){ return out; }
+}
+
 function hgGoldEma50Above(rows){
   try{
     /* hg-v966: CLOSE-ONLY SERIES ARE VALID HERE, and refusing them is why this
@@ -9641,6 +9696,31 @@ function hgGoldInstFilter(cand, ctx){
         } else {
           cand.dropped = true;
           cand.reason = mtfReason;
+          return cand;
+        }
+      }
+      /* hg-v1019: GATE 17 rides the same scalp block, one witness past the
+         alignment bar. Gate 11 stacks the scalp WITH the trend; this stops
+         the ENTRY at that trend's exhaustion extreme — an H4 RSI past the
+         range edge (long ≥ 80, short ≤ 20) arrives with gate 11 fully
+         stacked, which is exactly the bad fill it cannot see. The witness
+         only ever removes: AGAINST demotes on the soft path and drops on
+         the hard path (the gate-11 split exactly); OK and unreadable pass
+         silently. */
+      var mom = hgGoldMomRegime(ctx.rows4h, dir);
+      cand.momRegime = mom;
+      if (mom.state === 'against'){
+        if (ctx.hardReject === false){
+          cand.demoted = true;
+          if (!Array.isArray(cand.stamps)) cand.stamps = [];
+          if (cand.stamps.indexOf('MOM EXHAUSTION') < 0) cand.stamps.push('MOM EXHAUSTION');
+          var gnMo = Array.isArray(cand.gateNotes) ? cand.gateNotes.slice() : [];
+          gnMo.push(mom.reason);
+          cand.gateNotes = gnMo;
+          cand.reason = mom.reason;
+        } else {
+          cand.dropped = true;
+          cand.reason = mom.reason;
           return cand;
         }
       }
@@ -17315,6 +17395,7 @@ W.hgGoldSpreadFin = gdFin;
 W.hgGoldSpreadLock = hgGoldSpreadLock;
 W.hgGoldMtfBias = hgGoldMtfBias;
 W.hgGoldMtfMatrix = hgGoldMtfMatrix;
+W.hgGoldMomRegime = hgGoldMomRegime;   /* hg-v1019: gate 17 — the momentum regime witness */
 W.HG_GOLD_SPREAD_MAX_USD = HG_GOLD_SPREAD_MAX_USD;
 W.HG_GOLD_SPREAD_BASIS_VENUE = HG_GOLD_SPREAD_BASIS_VENUE;
 W.hgGoldSpreadVenueOk = hgGoldSpreadVenueOk;

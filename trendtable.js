@@ -109,6 +109,38 @@ desk's panel header names its own formation criteria; each card carries
 its class stamp. Taker-flow-AGAINST rows are still held off, now counted
 and named per desk. The cross desks, the composite, the gates and every
 bar are exactly what they were — no threshold moved.
+
+THE MOMENTUM WITNESS (hg-v1019) — the composite's five legs are all SLOW
+trend/strength reads of the same closes (two EMA stacks, a cascade, a
+cloud, ADX); until this pack the desk carried no momentum oscillator at
+all. Trend legs lag: a row keeps a ±3 composite while the momentum regime
+has already turned. The witness is the canonical RSI range read
+(Cardwell/Constance Brown): a bull momentum range holds RSI(14) above 40
+(the 40–50 pullback floor), a bear range caps it under 60 — so a LONG row
+whose 1D RSI has broken UNDER 40, or a SHORT row whose RSI has broken
+OVER 60, is a slow composite fighting a turned momentum regime. The
+mechanic mirrors the hg-v1012 taker-flow hold-off exactly:
+  - trendScore carries out.rsi — EVIDENCE ONLY. The composite stays five
+    legs: a sixth would silently re-scale every tmScore the forward
+    ledger measures (the hg-v1012 rule). rsi missing/unreadable -> NaN,
+    and NaN holds nothing off (the hg-v700 honest-degradation rule).
+  - momentum-AGAINST rows cap at NEAR (trendmxRowTier, beside the flow
+    cap) and are HELD OFF both limit desks — counted per class
+    (heldWhy.clean/heldWhy.mom), the desk verdict naming each reason that
+    actually fired; the row still paints in the matrix with its
+    MOMENTUM AGAINST · HELD OFF chip. Nothing is dropped silently.
+  - momentum-WITH rows (RSI on the regime side of the 50 midline: long
+    ≥ 50, short ≤ 50) chip MOMENTUM WITH IT and hand the forward log a
+    momWith read-mark (the hg-v989 reads seam, beside takerFlowWith) —
+    the 40/60 bars and the 50 midline are stated PRIORS, and the ledger
+    is how they earn a measured verdict.
+  - the abstain zone is honest: RSI 40–50 against a long (50–60 against
+    a short) is the pullback zone inside an INTACT regime — momentum has
+    nothing to add, no chip, no hold, no read.
+  - the GOLDEN/DEATH cross desks stay out of scope: a fresh multi-week
+    cross prints RSI climbing out of the OLD range by construction, and
+    the witness would misjudge the turn (the same reason flow stands
+    down there, hg-v1012).
 ========================================================================= */
 (function(){
 'use strict';
@@ -132,11 +164,13 @@ function cmp(a, b){
 function zeroResult(){
   return { score: 0,
            comps: { d1Trend: 0, d1Cross: 0, h4Cascade: 0, cloud: 0, adxPt: 0 },
-           freshCross: null, adx: NaN };
+           freshCross: null, adx: NaN, rsi: NaN };
 }
 
-/* window.trendScore(rows1d, rows4h) -> {score, comps, freshCross, adx}
-   Pure: no DOM, no network, never throws. Rows are {t,o,h,l,c,v} ascending. */
+/* window.trendScore(rows1d, rows4h) -> {score, comps, freshCross, adx, rsi}
+   Pure: no DOM, no network, never throws. Rows are {t,o,h,l,c,v} ascending.
+   hg-v1019: rsi is EVIDENCE — it is NOT a composite leg; score is the same
+   five legs it always was. */
 function trendScore(rows1d, rows4h){
   var out = zeroResult();
   try{
@@ -184,6 +218,15 @@ function trendScore(rows1d, rows4h){
     if (ok1){
       var a = adx(rows1d, 14);
       out.adx = (a && a.adx && a.adx.length) ? a.adx[a.adx.length - 1] : NaN;
+      /* hg-v1019: THE MOMENTUM WITNESS rides the same 1D tape — RSI(14) as
+         EVIDENCE. NOT a sixth composite leg: the score sum below is
+         byte-identical, so every recorded tmScore stays on its own scale
+         (the hg-v1012 rule). rsi missing -> NaN, and NaN holds nothing off
+         (hg-v700 honest degradation). */
+      if (typeof rsi === 'function'){
+        var r1d = rsi(c1, 14);
+        out.rsi = (r1d && r1d.length) ? r1d[r1d.length - 1] : NaN;
+      }
       var trendSum = out.comps.d1Trend + out.comps.d1Cross +
                      out.comps.h4Cascade + out.comps.cloud;
       if (isFinite(out.adx) && out.adx >= 25) out.comps.adxPt = sgn(trendSum);
@@ -992,6 +1035,7 @@ async function trendmxScanCore(hooks){
             var row = {
               sym: item.sym, base: item.base, exchange: item.exchange || 'binance', alsoOn: item.alsoOn,
               xu: item, score: ts.score, comps: ts.comps, freshCross: ts.freshCross, adx: ts.adx,
+              rsi: ts.rsi,   /* hg-v1019: the momentum witness rides the row — chips/tier/collector read the stamp, never recompute */
               price: r1[r1.length - 1].c, rows4h: r4, rows1h: (r1h && r1h.length) ? r1h : null,
               fundingPct: item.fundingPct, turnoverUsd: item.turnoverUsd, mark: item.mark
             };
@@ -1063,6 +1107,10 @@ function trendmxRowTier(r, plan){
      on the LIMIT BOARD (the same leadership pattern as the omni principal
      above it). An unread flow caps nothing. */
   if (r.flow && r.flow.verdict === 'against') return 'near';
+  /* hg-v1019: the momentum witness caps the same way — a row whose 1D RSI
+     range has TURNED against its direction can never be CLEAN. An unread
+     or abstaining witness caps nothing. */
+  if (trendmxMomState(r, tmDirOf(r)) === 'against') return 'near';
   if (plan && tmValidSetup(plan) && r.gate && r.gate.clean7) return 'clean';
   if (r.gate && r.gate.nearClean) return 'near';
   return 'forming';
@@ -1177,6 +1225,7 @@ function trendmxLimitCardHTML(item){
   return '<div style="flex:1 1 260px;max-width:360px;border:1px solid #E2E8F0;border-left:3px solid ' + col + ';border-radius:8px;padding:10px 12px;background:#fff">'
     + '<div><b>' + escH(r.sym) + '</b>' + tmVenueChip(r) + ' · ' + dir.toUpperCase() + clsStamp + stHtml + tmSmcChip(r)
     + trendmxFlowChipHtml(r)   /* hg-v1012: the flow verdict the scan stamped — reads the stamp, never recomputes */
+    + trendmxMomChipHtml(r)    /* hg-v1019: the momentum witness's stamp — same read-the-stamp seam */
     + trendmxFundingChipHtml(r) + '</div>'
     + '<div style="font-size:18px;font-weight:800;color:' + col + ';margin:4px 0">' + pxFmt(p.entry) + '</div>'
     + '<div class="note">' + trendmxPlanHTML(p) + '</div>'
@@ -1188,6 +1237,57 @@ function trendmxLimitCardHTML(item){
    board's 8. The split changes presentation, not exposure. */
 var TM_LIMIT_DESK_CAP = 4;
 
+/* hg-v1019: THE MOMENTUM WITNESS bands — the canonical RSI range read
+   (Cardwell/Constance Brown): a bull momentum range holds RSI(14) above
+   TM_MOM_BULL_FLOOR (the 40–50 pullback floor), a bear range caps it under
+   TM_MOM_BEAR_CEIL. Stated PRIORS, not measurements — the forward log's
+   momWith read-mark is how they earn a measured one. */
+var TM_MOM_BULL_FLOOR = 40, TM_MOM_BEAR_CEIL = 60, TM_MOM_MID = 50;
+
+/* trendmxMomState(row, dir) -> 'against' | 'with' | 'flat' | null.
+   Pure read of the rsi stamp the scan put on the row (never recomputes):
+     against — the momentum range has TURNED against the direction
+       (long under the bull floor / short over the bear ceiling);
+     with    — RSI on the regime side of the midline;
+     flat    — the abstain zone: a pullback inside an INTACT regime, where
+       momentum has nothing to add (no chip, no hold, no read);
+     null    — no readable rsi: the witness cannot speak, and what cannot
+       speak holds nothing off (the hg-v700 honest-degradation rule). */
+function trendmxMomState(r, dir){
+  var rv = (r && typeof r.rsi === 'number' && isFinite(r.rsi)) ? r.rsi : NaN;
+  if (!isFinite(rv)) return null;
+  if (dir === 'long'){
+    if (rv < TM_MOM_BULL_FLOOR) return 'against';
+    return rv >= TM_MOM_MID ? 'with' : 'flat';
+  }
+  if (dir === 'short'){
+    if (rv > TM_MOM_BEAR_CEIL) return 'against';
+    return rv <= TM_MOM_MID ? 'with' : 'flat';
+  }
+  return null;
+}
+
+/* the witness's chip — reads the row's rsi stamp exactly like the flow chip
+   reads the flow stamp (hg-v1012). AGAINST rows name the hold-off on the
+   card (nothing is dropped silently); WITH rows carry the pass chip; FLAT
+   and unread rows paint NO chip — the abstain states stay silent. */
+function trendmxMomChipHtml(r){
+  try{
+    var dir = tmDirOf(r);
+    var st = trendmxMomState(r, dir);
+    if (!st || st === 'flat') return '';
+    var rv = isFinite(r.rsi) ? r.rsi.toFixed(1) : '?';
+    if (st === 'against'){
+      return '<span class="stamp bad" style="margin-left:6px" title="' + escH('trendmx momentum witness (hg-v1019): 1D RSI(14) ' + rv
+        + (dir === 'long' ? ' has broken under the bull-range floor ' + TM_MOM_BULL_FLOOR : ' has broken over the bear-range ceiling ' + TM_MOM_BEAR_CEIL)
+        + ' — the slow composite is fighting a turned momentum regime. Held off the LIMIT BOARD, never CLEAN — the row paints, the reason is named.') + '">MOMENTUM AGAINST · HELD OFF</span>';
+    }
+    return '<span class="stamp pass" style="margin-left:6px" title="' + escH('trendmx momentum witness (hg-v1019): 1D RSI(14) ' + rv
+      + ' sits on the regime side of the ' + TM_MOM_MID + ' midline for this ' + dir
+      + '. Evidence, never a composite point.') + '">MOMENTUM WITH IT</span>';
+  }catch(e){ return ''; }
+}
+
 /* hg-v1018: ONE collection of the limit board's two formation CLASSES.
    The old board walked the rows once, ranked gate-clean and conviction
    rows against each other in one mixed bag (the clean7 1000-bonus made
@@ -1197,7 +1297,11 @@ var TM_LIMIT_DESK_CAP = 4;
    themselves — gate veto, majority, valid plan, clean7-or-conviction,
    the hg-v1012 flow hold-off — are exactly the old board's, per row. */
 function trendmxLimitClasses(rows){
-  var out = { clean: [], conv: [], heldClean: 0, heldConv: 0 };
+  /* hg-v1019: heldClean/heldConv stay the TOTALS the v1018 desks published;
+     heldWhy splits the reasons so each desk's verdict names only the
+     witnesses that actually fired (taker flow hg-v1012 · momentum hg-v1019). */
+  var out = { clean: [], conv: [], heldClean: 0, heldConv: 0,
+              heldWhy: { clean: { flow: 0, mom: 0 }, conv: { flow: 0, mom: 0 } } };
   for (var i = 0; i < rows.length; i++){
     var r = rows[i];
     if (!r || !r.gate || r.gate.veto) continue;
@@ -1213,7 +1317,19 @@ function trendmxLimitClasses(rows){
        real aggressor flow is not it. hg-v1018: counted per class, so each
        desk names its own held-off rows. */
     if (r.flow && r.flow.verdict === 'against'){
-      if (isClean) out.heldClean++; else out.heldConv++;
+      if (isClean){ out.heldClean++; out.heldWhy.clean.flow++; }
+      else { out.heldConv++; out.heldWhy.conv.flow++; }
+      continue;
+    }
+    /* hg-v1019: THE MOMENTUM WITNESS hold-off — the same mechanic one leg
+       down. A row whose 1D RSI range has TURNED against its own majority
+       (long under the 40 bull floor, short over the 60 bear ceiling) is a
+       slow composite fighting a turned regime: held off the desks, counted
+       and named per class, still painting in the matrix with its chip.
+       WITH and FLAT and UNREAD rows pass — the witness only ever removes. */
+    if (trendmxMomState(r, dir) === 'against'){
+      if (isClean){ out.heldClean++; out.heldWhy.clean.mom++; }
+      else { out.heldConv++; out.heldWhy.conv.mom++; }
       continue;
     }
     var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
@@ -1261,7 +1377,17 @@ function trendmxLimitClasses(rows){
                     absent when the flow never spoke (NOT RECORDED, the third
                     state). Flow-AGAINST rows never reach this map: they were
                     held off above. The split is the layer's measurement. */
-                 reads: (c.row && c.row.flow && c.row.flow.verdict === 'with') ? { takerFlowWith: true } : undefined,
+                 reads: (function(){
+                   var rd = {};
+                   if (c.row && c.row.flow && c.row.flow.verdict === 'with') rd.takerFlowWith = true;
+                   /* hg-v1019: the momentum witness's read-mark rides the same
+                      hg-v989 seam — true when the 1D RSI regime backed the row
+                      at fire time, absent when the witness abstained or could
+                      not read (NOT RECORDED, the third state). Momentum-AGAINST
+                      rows never reach this map: they were held off above. */
+                   if (trendmxMomState(c.row, c.dir) === 'with') rd.momWith = true;
+                   return Object.keys(rd).length ? rd : undefined;
+                 })(),
                  /* hg-v995: the composite is NOT handed in here -- the ledger reads it off
                     this desk's own published snapshot (hgTrendMatrixMark), the same row the
                     board painted, so a second copy would be the same number twice */
@@ -1278,34 +1404,55 @@ function trendmxLimitClasses(rows){
    nothing else. An empty bag with held-off rows renders the held-off
    verdict (never a blank desk pretending nothing qualified); an empty bag
    with nothing held off renders nothing, by design (the hg-v1015 rule). */
-function trendmxLimitDeskHTML(title, crit, bag, held){
+/* hg-v1019: the held-off verdict names each witness that actually fired.
+   why = {flow, mom} per class; a legacy caller passing no why is the
+   hg-v1012/hg-v1018 flow-only world, and its text stays byte-identical. */
+function trendmxHeldBits(held, why){
+  var w = why || { flow: held, mom: 0 };
+  var bits = [];
+  if (w.flow) bits.push('real Binance taker flow reads against the trend (hg-v1012)');
+  if (w.mom) bits.push('the 1D RSI momentum range has turned against the trend (hg-v1019)');
+  if (!bits.length) bits.push('real Binance taker flow reads against the trend (hg-v1012)');
+  return bits;
+}
+
+function trendmxLimitDeskHTML(title, crit, bag, held, why){
   bag = (bag || []).slice(0, TM_LIMIT_DESK_CAP);
   if (!bag.length){
     /* every qualified row held off is a verdict, not an empty desk — name it */
     return held
       ? '<div class="panel" style="margin:12px 0">'
         + '<h2>' + title + ' <span>' + crit + '</span></h2>'
-        + '<div class="note">' + held + ' qualified row' + (held === 1 ? '' : 's') + ' held off — real Binance taker flow reads against the trend (hg-v1012). The rows paint in the matrix with their chips.</div></div>'
+        + '<div class="note">' + held + ' qualified row' + (held === 1 ? '' : 's') + ' held off — ' + trendmxHeldBits(held, why).join('; ') + '. The rows paint in the matrix with their chips.</div></div>'
       : '';
+  }
+  var heldTag = '';
+  if (held){
+    var w2 = why || { flow: held, mom: 0 };
+    var tags = [];
+    if (w2.flow) tags.push('taker flow against');
+    if (w2.mom) tags.push('momentum regime against');
+    if (!tags.length) tags.push('taker flow against');
+    heldTag = ' · ' + held + ' held off — ' + tags.join(' · ');
   }
   return '<div class="panel" style="margin:12px 0">'
     + '<h2>' + title + ' <span>' + crit
-    + (held ? ' · ' + held + ' held off — taker flow against' : '') + '</span></h2>'
+    + heldTag + '</span></h2>'
     + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + bag.map(trendmxLimitCardHTML).join('') + '</div></div>';
 }
 
-function trendmxGateCleanDeskHTML(bag, held){
+function trendmxGateCleanDeskHTML(bag, held, why){
   return trendmxLimitDeskHTML(
     'LIMIT BOARD · GATE-CLEAN DESK',
-    'criteria: the 7/7 swing-gate matrix (spread · vol-Z · EMA21 anchor · funding · regime · structure · R:R) confirms the composite majority · exact resting limits · taker flow not against · sorted by composite + gates',
-    bag, held);
+    'criteria: the 7/7 swing-gate matrix (spread · vol-Z · EMA21 anchor · funding · regime · structure · R:R) confirms the composite majority · exact resting limits · taker flow not against · 1D RSI momentum range not turned against · sorted by composite + gates',
+    bag, held, why);
 }
 
-function trendmxConvictionDeskHTML(bag, held){
+function trendmxConvictionDeskHTML(bag, held, why){
   return trendmxLimitDeskHTML(
     'LIMIT BOARD · CONVICTION DESK',
-    'criteria: five-leg composite majority |≥2| (STRONG |≥4|) without the 7/7 stamp — 1D EMA200 · EMA50/200 cross · 4H EMA9/21/50 cascade · Ichimoku cloud · ADX strength · exact resting limits · taker flow not against · ADX breaks composite ties',
-    bag, held);
+    'criteria: five-leg composite majority |≥2| (STRONG |≥4|) without the 7/7 stamp — 1D EMA200 · EMA50/200 cross · 4H EMA9/21/50 cascade · Ichimoku cloud · ADX strength · exact resting limits · taker flow not against · 1D RSI momentum range not turned against · ADX breaks composite ties',
+    bag, held, why);
 }
 
 function trendmxSetupCardHTML(r, tier){
@@ -1330,7 +1477,7 @@ function trendmxSetupCardHTML(r, tier){
   return hgSetupCardHTML({
     sym: r.sym, dir: dir, tier: tier,
     mini: mini, gates: gates,
-    plan: plan ? (trendmxPlanHTML(plan) + tmSmcChip(r) + trendmxFlowChipHtml(r) + trendmxFundingChipHtml(r)) : '',
+    plan: plan ? (trendmxPlanHTML(plan) + tmSmcChip(r) + trendmxFlowChipHtml(r) + trendmxMomChipHtml(r) + trendmxFundingChipHtml(r)) : '',
     entry: plan ? plan.entry : null, stop: plan ? plan.stop : null, t1: plan ? plan.t1 : null,
     chartId: (tier === 'clean' && plan) ? ('tmx_' + String(r.sym).replace(/[^A-Za-z0-9]/g, '')) : '',
     stack: stack,
@@ -1442,8 +1589,10 @@ function trendmxPaintDeskSections(refs, state){
      desks above them (hg-v1015). */
   if (refs.gateclean || refs.conviction){
     var tmClasses = trendmxLimitClasses(rows);
-    if (refs.gateclean) refs.gateclean.innerHTML = trendmxGateCleanDeskHTML(tmClasses.clean, tmClasses.heldClean);
-    if (refs.conviction) refs.conviction.innerHTML = trendmxConvictionDeskHTML(tmClasses.conv, tmClasses.heldConv);
+    /* hg-v1019: each desk gets its OWN reason split, so its verdict names
+       only the witnesses that fired on ITS class */
+    if (refs.gateclean) refs.gateclean.innerHTML = trendmxGateCleanDeskHTML(tmClasses.clean, tmClasses.heldClean, tmClasses.heldWhy.clean);
+    if (refs.conviction) refs.conviction.innerHTML = trendmxConvictionDeskHTML(tmClasses.conv, tmClasses.heldConv, tmClasses.heldWhy.conv);
   }
 }
 
@@ -1906,6 +2055,9 @@ W.trendmxConviction = trendmxConviction;
    on this desk; the tests read these rather than re-deriving behavior) */
 W.trendmxFlowScan = trendmxFlowScan;
 W.trendmxFlowChipHtml = trendmxFlowChipHtml;
+W.trendmxMomState = trendmxMomState;       /* hg-v1019: the momentum witness */
+W.trendmxMomChipHtml = trendmxMomChipHtml;
+W.trendmxSetupCardHTML = trendmxSetupCardHTML;   /* hg-v1019: the matrix card — where a held row's chip must paint (the NEAR section) */
 W.trendmxFundingChipHtml = trendmxFundingChipHtml;
 W.trendmxRowTier = trendmxRowTier;
 /* hg-v1018: the mixed board is superseded by the two class desks — the

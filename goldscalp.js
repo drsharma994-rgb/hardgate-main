@@ -140,6 +140,24 @@ a small reason line — nothing is dropped silently):
      tape, a non-Binance feed or a failed fetch: UNREAD — and what cannot
      be read demotes nothing. Chips inform; the tally's points stay
      untouched. The stated bar is a PRIOR, not a measurement.
+ 17) MOMENTUM EXHAUSTION (hg-v1019, goldind.js hgGoldMomRegime) — gate 11
+     asks where price SITS (the H4/Daily EMA stacks), and it answers with
+     the same recent closes an RSI range-break would read — so a
+     momentum-regime bar would mostly restate gate 11. What gate 11
+     structurally cannot see is a PERFECT stack at its exhaustion extreme:
+     the canonical Cardwell ranges put bull momentum at RSI 40–80 and bear
+     momentum at 20–60, so an H4 RSI(14) ≥ 80 is stretched past even the
+     healthy bull range (a blow-off) and ≤ 20 past the bear range
+     (capitulation) — and it arrives with gate 11 fully stacked. A scalp is
+     a bet on the next few bars: buying the blow-off or shorting the
+     capitulation is the classic bad fill. Such a scalp is demoted on the
+     GOLD SCALP soft path (the card paints, stamped MOM EXHAUSTION, the
+     reason names the RSI — it can never be MOST PROBABLE) and dropped on
+     the OMNIGOLD hard path — the gate-11 split exactly. Anything inside
+     the ranges passes silently; an unreadable tape (fewer than 16 clean 4H
+     closes, a NaN tail, a missing feed) fails open and never bites. The
+     witness only ever removes — the 80/20 extremes are stated PRIORS, and
+     the forward ledger is how they earn a measured verdict.
 
 Feeds (in preference order):
   1) window.getGoldCandles (macro.js) — XAUUSDT TradFi perp first, PAXGUSDT
