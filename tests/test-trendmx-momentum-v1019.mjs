@@ -196,8 +196,11 @@ console.log('== 5) the chips name the verdict; the abstain states stay silent ==
   const deskCard = w.trendmxGateCleanDeskHTML([{ row: withRow, plan: w.trendmxPlan(Object.assign({}, withRow, { dir: 'long' })), dir: 'long', stack: null }], 0, { flow: 0, mom: 0 });
   assert(/MOMENTUM WITH IT/.test(deskCard), 'the desk card carries the witness chip beside the flow chip');
   const src5 = fs.readFileSync(path.join(ROOT, 'trendtable.js'), 'utf8');
-  assert(/trendmxPlanHTML\(plan\) \+ tmSmcChip\(r\) \+ trendmxFlowChipHtml\(r\) \+ trendmxMomChipHtml\(r\) \+ trendmxFundingChipHtml\(r\)/.test(src5),
-         'the MATRIX card\'s chip chain carries the witness between the flow and funding chips');
+  /* hg-v1020 repoint: the chain gained the volume witness between momentum
+     and funding — the momentum witness still rides the same seam, one chip
+     earlier in the order. */
+  assert(/trendmxPlanHTML\(plan\) \+ tmSmcChip\(r\) \+ trendmxFlowChipHtml\(r\) \+ trendmxMomChipHtml\(r\) \+ trendmxVolChipHtml\(r\) \+ trendmxFundingChipHtml\(r\)/.test(src5),
+         'the MATRIX card\'s chip chain carries the witness between the flow and funding chips (volume witness between them, hg-v1020)');
 }
 
 console.log('== 6) the forward log: momWith rides the reads seam, held rows never record ==');

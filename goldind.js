@@ -9121,6 +9121,60 @@ function hgGoldMomRegime(rows4h, dir){
   }catch(e){ return out; }
 }
 
+/* hg-v1020: GATE 18 — THE VWAP STRETCH witness. Gate 17 watches the
+   MOMENTUM axis (H4 RSI at its range extreme); this watches the PRICE axis
+   the scalper actually fills on: distance from the session's volume-weighted
+   mean. A scalp minted at 2.5+ volume-sigmas above the session VWAP is
+   buying the day's extension extreme — the chase fill, and it arrives on
+   grind days where RSI sits in the 70s and gate 17 has nothing to say (the
+   two witnesses measure different quantities: an oscillator extreme vs a
+   mean-extension extreme). The read reuses the desk's OWN definitions —
+   goldSessionAnchor for the session anchor, goldVWAP for the value and the
+   volume-weighted sigma (one definition, two users; the vwap strategy's
+   bounce/rejection reads the same numbers).
+
+   The witness only ever REMOVES: 'against' demotes on the GOLD SCALP soft
+   path and drops on the OMNIGOLD hard path (the gate-11/17 split exactly);
+   'ok' passes silently; 'na' — fewer than 20 bars in the anchor window (a
+   young session has no stable sigma), a zero sigma, a flat tape's own
+   anchor missing, a missing feed — fails open and never bites (hg-v700).
+   The 2.5×σ bar is a stated PRIOR, not a measurement; the forward ledger
+   is how it earns a measured one. */
+var HG_GOLD_VWAP_STRETCH_SD = 2.5;
+function hgGoldVwapStretch(rows15m, dir){
+  var out = { state: 'na', stretch: NaN, sd: NaN, vwap: NaN, bars: 0,
+              anchor: null, mult: HG_GOLD_VWAP_STRETCH_SD, reason: null };
+  try{
+    if (dir !== 'long' && dir !== 'short') return out;
+    var rows = __rows(rows15m);
+    if (!rows || rows.length < 20) return out;
+    var anchor = goldSessionAnchor(rows);
+    if (!(anchor >= 0) || anchor >= rows.length) return out;
+    out.anchor = anchor;
+    var vw = goldVWAP(rows, anchor);
+    if (!vw || !isFinite(vw.value) || !isFinite(vw.stdev) || !(vw.stdev > 0)) return out;
+    out.bars = rows.length - anchor;
+    /* an anchor this young has no stable sigma — the read cannot speak */
+    if (out.bars < 20) return out;
+    var c = rows[rows.length - 1] && +rows[rows.length - 1].c;
+    if (!isFinite(c)) return out;
+    out.vwap = vw.value;
+    out.sd = vw.stdev;
+    var st = (c - vw.value) / vw.stdev;
+    out.stretch = st;
+    if (dir === 'long' && st >= HG_GOLD_VWAP_STRETCH_SD){
+      out.state = 'against';
+      out.reason = 'VWAP STRETCH — price ' + st.toFixed(1) + '×σ above the session VWAP ('
+        + vw.value.toFixed(2) + '): a scalp long here buys the day\'s extension extreme';
+    } else if (dir === 'short' && st <= -HG_GOLD_VWAP_STRETCH_SD){
+      out.state = 'against';
+      out.reason = 'VWAP STRETCH — price ' + Math.abs(st).toFixed(1) + '×σ below the session VWAP ('
+        + vw.value.toFixed(2) + '): a scalp short here shorts the day\'s extension extreme';
+    } else out.state = 'ok';
+    return out;
+  }catch(e){ return out; }
+}
+
 function hgGoldEma50Above(rows){
   try{
     /* hg-v966: CLOSE-ONLY SERIES ARE VALID HERE, and refusing them is why this
@@ -9721,6 +9775,29 @@ function hgGoldInstFilter(cand, ctx){
         } else {
           cand.dropped = true;
           cand.reason = mom.reason;
+          return cand;
+        }
+      }
+      /* hg-v1020: GATE 18, the price-axis twin of gate 17 — judged on the
+         15m execution tape ITSELF (ctx.rows — the hg-v1009 rule: the read
+         must be the read OF the tape the setup was judged on). A scalp
+         minted 2.5+ volume-sigmas from the session VWAP is the chase fill;
+         the witness only ever removes, and what it cannot read it leaves
+         alone. */
+      var vws = hgGoldVwapStretch(rows, dir);
+      cand.vwapStretch = vws;
+      if (vws.state === 'against'){
+        if (ctx.hardReject === false){
+          cand.demoted = true;
+          if (!Array.isArray(cand.stamps)) cand.stamps = [];
+          if (cand.stamps.indexOf('VWAP STRETCH') < 0) cand.stamps.push('VWAP STRETCH');
+          var gnV = Array.isArray(cand.gateNotes) ? cand.gateNotes.slice() : [];
+          gnV.push(vws.reason);
+          cand.gateNotes = gnV;
+          cand.reason = vws.reason;
+        } else {
+          cand.dropped = true;
+          cand.reason = vws.reason;
           return cand;
         }
       }
@@ -17396,6 +17473,7 @@ W.hgGoldSpreadLock = hgGoldSpreadLock;
 W.hgGoldMtfBias = hgGoldMtfBias;
 W.hgGoldMtfMatrix = hgGoldMtfMatrix;
 W.hgGoldMomRegime = hgGoldMomRegime;   /* hg-v1019: gate 17 — the momentum regime witness */
+W.hgGoldVwapStretch = hgGoldVwapStretch;   /* hg-v1020: gate 18 — the VWAP stretch witness */
 W.HG_GOLD_SPREAD_MAX_USD = HG_GOLD_SPREAD_MAX_USD;
 W.HG_GOLD_SPREAD_BASIS_VENUE = HG_GOLD_SPREAD_BASIS_VENUE;
 W.hgGoldSpreadVenueOk = hgGoldSpreadVenueOk;

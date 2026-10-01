@@ -158,6 +158,21 @@ a small reason line — nothing is dropped silently):
      closes, a NaN tail, a missing feed) fails open and never bites. The
      witness only ever removes — the 80/20 extremes are stated PRIORS, and
      the forward ledger is how they earn a measured verdict.
+ 18) VWAP STRETCH (hg-v1020, goldind.js hgGoldVwapStretch) — the price-axis
+     twin of gate 17. Gate 17 watches the MOMENTUM extreme (H4 RSI); this
+     watches the mean-extension extreme the scalper actually fills on:
+     distance from the session's volume-weighted mean, read through the
+     desk's OWN definitions (goldSessionAnchor + goldVWAP — one definition,
+     two users). A scalp minted at 2.5+ volume-sigmas above the session
+     VWAP is buying the day's extension extreme — the chase fill — and it
+     arrives on grind days where RSI sits in the 70s and gate 17 has
+     nothing to say; mirrored at 2.5×σ below for shorts. Judged on the 15m
+     execution tape itself (the hg-v1009 rule). Demoted on the GOLD SCALP
+     soft path (stamped VWAP STRETCH, the reason names the stretch — it can
+     never be MOST PROBABLE), dropped on the OMNIGOLD hard path. A young
+     anchor window (< 20 bars — no stable sigma yet), a zero sigma or a
+     missing feed fails open and never bites. The 2.5×σ bar is a stated
+     PRIOR; the forward ledger is how it earns a measured one.
 
 Feeds (in preference order):
   1) window.getGoldCandles (macro.js) — XAUUSDT TradFi perp first, PAXGUSDT

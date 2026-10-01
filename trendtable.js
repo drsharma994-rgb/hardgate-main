@@ -141,6 +141,27 @@ mechanic mirrors the hg-v1012 taker-flow hold-off exactly:
     cross prints RSI climbing out of the OLD range by construction, and
     the witness would misjudge the turn (the same reason flow stands
     down there, hg-v1012).
+
+THE VOLUME WITNESS (hg-v1020) — the composite reads closes, the momentum
+witness reads closes, and the flow witness reads ONE venue's 4h taker
+prints; until this pack NOTHING read the swing-scale volume trend on the
+row's own 1D tape. Granville's rule is the canonical one: volume must
+confirm. The read is the textbook OBV DIVERGENCE over the last two 20-bar
+daily windows (windowed swing extremes, not the raw cumulative line):
+price making a HIGHER 20-bar high while OBV makes a LOWER one is
+distribution under the rally (AGAINST longs); a LOWER price low with a
+HIGHER OBV low is accumulation under the fall (AGAINST shorts); price and
+OBV making the new extreme TOGETHER is confirmation (WITH). The mechanic
+is the momentum witness's own (hg-v1019): trendScore carries volDiv /
+volConf as EVIDENCE (never composite legs), AGAINST rows cap at NEAR and
+hold off both class desks (heldWhy gains the vol reason; each desk names
+only the witnesses that fired), WITH rows chip VOLUME TREND WITH IT and
+hand the ledger a volWith read-mark on the same hg-v989 seam, flat and
+unreadable stay silent — fewer than 40 daily bars or a volume-deaf feed
+(all-zero v) cannot speak, and what cannot speak holds nothing off. A
+pullback does NOT false-fire: divergence needs price at a NEW 20-bar
+extreme, which a pullback by definition is not. The 20-bar windows are
+stated PRIORS; the ledger earns them a measured verdict.
 ========================================================================= */
 (function(){
 'use strict';
@@ -164,7 +185,60 @@ function cmp(a, b){
 function zeroResult(){
   return { score: 0,
            comps: { d1Trend: 0, d1Cross: 0, h4Cascade: 0, cloud: 0, adxPt: 0 },
-           freshCross: null, adx: NaN, rsi: NaN };
+           freshCross: null, adx: NaN, rsi: NaN, volDiv: null, volConf: null };
+}
+
+/* hg-v1020: THE VOLUME WITNESS — OBV on the row's own 1D tape. Local copy
+   of the canonical definition (cumulative signed volume; identical math to
+   every charting package — indicators.js does not export one), plus the
+   windowed divergence read: the last two 20-bar daily windows compared on
+   swing extremes, price vs OBV. -> { div: 'bear'|'bull'|null,
+   conf: 'up'|'down'|null }; nulls when the tape cannot speak (fewer than
+   40 bars, or a volume-deaf feed: every v zero/missing). */
+var TM_VOL_WIN = 20;
+function tmObvSeries(rows){
+  var n = rows.length, out = new Array(n).fill(NaN), acc = 0, anyV = false;
+  for (var i = 0; i < n; i++){
+    var r = rows[i];
+    if (!r || !isFinite(r.c)) continue;
+    var v = (isFinite(r.v) && r.v > 0) ? r.v : 0;
+    if (v > 0) anyV = true;
+    if (i > 0 && rows[i - 1] && isFinite(rows[i - 1].c)){
+      if (r.c > rows[i - 1].c) acc += v;
+      else if (r.c < rows[i - 1].c) acc -= v;
+    }
+    out[i] = acc;
+  }
+  return anyV ? out : null;
+}
+function tmVolWitness(rows){
+  var out = { div: null, conf: null };
+  var n = rows.length;
+  if (n < TM_VOL_WIN * 2) return out;
+  var obv = tmObvSeries(rows);
+  if (!obv) return out;
+  var pHi1 = -Infinity, pHi2 = -Infinity, pLo1 = Infinity, pLo2 = Infinity,
+      oHi1 = -Infinity, oHi2 = -Infinity, oLo1 = Infinity, oLo2 = Infinity;
+  for (var i = n - TM_VOL_WIN * 2; i < n; i++){
+    var r = rows[i];
+    if (!r || !isFinite(r.c) || !isFinite(obv[i])) continue;
+    if (i >= n - TM_VOL_WIN){
+      if (r.c > pHi2) pHi2 = r.c; if (r.c < pLo2) pLo2 = r.c;
+      if (obv[i] > oHi2) oHi2 = obv[i]; if (obv[i] < oLo2) oLo2 = obv[i];
+    } else {
+      if (r.c > pHi1) pHi1 = r.c; if (r.c < pLo1) pLo1 = r.c;
+      if (obv[i] > oHi1) oHi1 = obv[i]; if (obv[i] < oLo1) oLo1 = obv[i];
+    }
+  }
+  if (!isFinite(pHi1) || !isFinite(pHi2) || !isFinite(oHi1) || !isFinite(oHi2)
+      || !isFinite(pLo1) || !isFinite(pLo2) || !isFinite(oLo1) || !isFinite(oLo2)) return out;
+  /* distribution under the rally / accumulation under the fall — the
+     textbook OBV divergences; confirmation is the new extreme TOGETHER */
+  if (pHi2 > pHi1 && oHi2 < oHi1) out.div = 'bear';
+  if (pLo2 < pLo1 && oLo2 > oLo1) out.div = 'bull';
+  if (pHi2 > pHi1 && oHi2 > oHi1) out.conf = 'up';
+  if (pLo2 < pLo1 && oLo2 < oLo1) out.conf = 'down';
+  return out;
 }
 
 /* window.trendScore(rows1d, rows4h) -> {score, comps, freshCross, adx, rsi}
@@ -227,6 +301,13 @@ function trendScore(rows1d, rows4h){
         var r1d = rsi(c1, 14);
         out.rsi = (r1d && r1d.length) ? r1d[r1d.length - 1] : NaN;
       }
+      /* hg-v1020: THE VOLUME WITNESS rides the same 1D tape — OBV
+         divergence as EVIDENCE, the momentum witness's own seam. Never a
+         composite leg (the hg-v1012 rule); a tape that cannot speak stamps
+         nulls, and nulls hold nothing off. */
+      var vw1020 = tmVolWitness(rows1d);
+      out.volDiv = vw1020.div;
+      out.volConf = vw1020.conf;
       var trendSum = out.comps.d1Trend + out.comps.d1Cross +
                      out.comps.h4Cascade + out.comps.cloud;
       if (isFinite(out.adx) && out.adx >= 25) out.comps.adxPt = sgn(trendSum);
@@ -1036,6 +1117,7 @@ async function trendmxScanCore(hooks){
               sym: item.sym, base: item.base, exchange: item.exchange || 'binance', alsoOn: item.alsoOn,
               xu: item, score: ts.score, comps: ts.comps, freshCross: ts.freshCross, adx: ts.adx,
               rsi: ts.rsi,   /* hg-v1019: the momentum witness rides the row — chips/tier/collector read the stamp, never recompute */
+              volDiv: ts.volDiv, volConf: ts.volConf,   /* hg-v1020: the volume witness's stamps, same seam */
               price: r1[r1.length - 1].c, rows4h: r4, rows1h: (r1h && r1h.length) ? r1h : null,
               fundingPct: item.fundingPct, turnoverUsd: item.turnoverUsd, mark: item.mark
             };
@@ -1111,6 +1193,9 @@ function trendmxRowTier(r, plan){
      range has TURNED against its direction can never be CLEAN. An unread
      or abstaining witness caps nothing. */
   if (trendmxMomState(r, tmDirOf(r)) === 'against') return 'near';
+  /* hg-v1020: and the volume witness — a swing rally the OBV trend refuses
+     to confirm (or a fall it refuses to join) caps at NEAR the same way. */
+  if (trendmxVolState(r, tmDirOf(r)) === 'against') return 'near';
   if (plan && tmValidSetup(plan) && r.gate && r.gate.clean7) return 'clean';
   if (r.gate && r.gate.nearClean) return 'near';
   return 'forming';
@@ -1226,6 +1311,7 @@ function trendmxLimitCardHTML(item){
     + '<div><b>' + escH(r.sym) + '</b>' + tmVenueChip(r) + ' · ' + dir.toUpperCase() + clsStamp + stHtml + tmSmcChip(r)
     + trendmxFlowChipHtml(r)   /* hg-v1012: the flow verdict the scan stamped — reads the stamp, never recomputes */
     + trendmxMomChipHtml(r)    /* hg-v1019: the momentum witness's stamp — same read-the-stamp seam */
+    + trendmxVolChipHtml(r)    /* hg-v1020: the volume witness's stamp — same seam */
     + trendmxFundingChipHtml(r) + '</div>'
     + '<div style="font-size:18px;font-weight:800;color:' + col + ';margin:4px 0">' + pxFmt(p.entry) + '</div>'
     + '<div class="note">' + trendmxPlanHTML(p) + '</div>'
@@ -1267,6 +1353,48 @@ function trendmxMomState(r, dir){
   return null;
 }
 
+/* hg-v1020: THE VOLUME WITNESS state — reads the row's volDiv/volConf
+   stamps exactly like the momentum witness reads rsi (never recomputes):
+     against — the swing volume trend DIVERGES against the direction
+       (distribution under the rally for longs / accumulation under the
+       fall for shorts);
+     with    — price and OBV made the new 20-bar extreme TOGETHER;
+     flat    — a readable tape with neither divergence nor confirmation:
+       volume has nothing to add (no chip, no hold, no read);
+     null    — the witness never ran or the tape cannot speak: holds
+       nothing off (the hg-v700 rule). */
+function trendmxVolState(r, dir){
+  if (!r || (r.volDiv === undefined && r.volConf === undefined)) return null;
+  if (r.volDiv === null && r.volConf === null) return null;
+  if (dir === 'long'){
+    if (r.volDiv === 'bear') return 'against';
+    return r.volConf === 'up' ? 'with' : 'flat';
+  }
+  if (dir === 'short'){
+    if (r.volDiv === 'bull') return 'against';
+    return r.volConf === 'down' ? 'with' : 'flat';
+  }
+  return null;
+}
+
+/* the volume witness's chip — the momentum chip's own pattern (hg-v1019).
+   AGAINST names the hold-off; WITH carries the pass chip; FLAT and unread
+   paint NO chip. */
+function trendmxVolChipHtml(r){
+  try{
+    var dir = tmDirOf(r);
+    var st = trendmxVolState(r, dir);
+    if (!st || st === 'flat') return '';
+    if (st === 'against'){
+      return '<span class="stamp bad" style="margin-left:6px" title="' + escH('trendmx volume witness (hg-v1020): the 1D OBV trend diverges against this ' + dir
+        + ' — ' + (dir === 'long' ? 'price made a higher 20-bar high on a lower OBV high: distribution under the rally' : 'price made a lower 20-bar low on a higher OBV low: accumulation under the fall')
+        + ' (Granville: volume must confirm). Held off the LIMIT BOARD, never CLEAN — the row paints, the reason is named.') + '">VOLUME TREND AGAINST · HELD OFF</span>';
+    }
+    return '<span class="stamp pass" style="margin-left:6px" title="' + escH('trendmx volume witness (hg-v1020): price and OBV made the new 20-bar extreme together — the 1D volume trend confirms this ' + dir
+      + '. Evidence, never a composite point.') + '">VOLUME TREND WITH IT</span>';
+  }catch(e){ return ''; }
+}
+
 /* the witness's chip — reads the row's rsi stamp exactly like the flow chip
    reads the flow stamp (hg-v1012). AGAINST rows name the hold-off on the
    card (nothing is dropped silently); WITH rows carry the pass chip; FLAT
@@ -1299,9 +1427,10 @@ function trendmxMomChipHtml(r){
 function trendmxLimitClasses(rows){
   /* hg-v1019: heldClean/heldConv stay the TOTALS the v1018 desks published;
      heldWhy splits the reasons so each desk's verdict names only the
-     witnesses that actually fired (taker flow hg-v1012 · momentum hg-v1019). */
+     witnesses that actually fired (taker flow hg-v1012 · momentum hg-v1019
+     · volume hg-v1020). */
   var out = { clean: [], conv: [], heldClean: 0, heldConv: 0,
-              heldWhy: { clean: { flow: 0, mom: 0 }, conv: { flow: 0, mom: 0 } } };
+              heldWhy: { clean: { flow: 0, mom: 0, vol: 0 }, conv: { flow: 0, mom: 0, vol: 0 } } };
   for (var i = 0; i < rows.length; i++){
     var r = rows[i];
     if (!r || !r.gate || r.gate.veto) continue;
@@ -1330,6 +1459,16 @@ function trendmxLimitClasses(rows){
     if (trendmxMomState(r, dir) === 'against'){
       if (isClean){ out.heldClean++; out.heldWhy.clean.mom++; }
       else { out.heldConv++; out.heldWhy.conv.mom++; }
+      continue;
+    }
+    /* hg-v1020: THE VOLUME WITNESS hold-off — the same mechanic, the third
+       witness. A row whose swing volume trend DIVERGES against its own
+       majority (distribution under the rally / accumulation under the
+       fall) is held off, counted and named per class, still painting with
+       its chip. WITH, FLAT and UNREAD pass — it only ever removes. */
+    if (trendmxVolState(r, dir) === 'against'){
+      if (isClean){ out.heldClean++; out.heldWhy.clean.vol++; }
+      else { out.heldConv++; out.heldWhy.conv.vol++; }
       continue;
     }
     var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
@@ -1386,6 +1525,10 @@ function trendmxLimitClasses(rows){
                       not read (NOT RECORDED, the third state). Momentum-AGAINST
                       rows never reach this map: they were held off above. */
                    if (trendmxMomState(c.row, c.dir) === 'with') rd.momWith = true;
+                   /* hg-v1020: the volume witness's read-mark — true when the
+                      swing OBV trend CONFIRMED the row's new extreme at fire
+                      time, absent when it abstained or could not read. */
+                   if (trendmxVolState(c.row, c.dir) === 'with') rd.volWith = true;
                    return Object.keys(rd).length ? rd : undefined;
                  })(),
                  /* hg-v995: the composite is NOT handed in here -- the ledger reads it off
@@ -1412,6 +1555,7 @@ function trendmxHeldBits(held, why){
   var bits = [];
   if (w.flow) bits.push('real Binance taker flow reads against the trend (hg-v1012)');
   if (w.mom) bits.push('the 1D RSI momentum range has turned against the trend (hg-v1019)');
+  if (w.vol) bits.push('the 1D OBV volume trend diverges against the trend (hg-v1020)');
   if (!bits.length) bits.push('real Binance taker flow reads against the trend (hg-v1012)');
   return bits;
 }
@@ -1432,6 +1576,7 @@ function trendmxLimitDeskHTML(title, crit, bag, held, why){
     var tags = [];
     if (w2.flow) tags.push('taker flow against');
     if (w2.mom) tags.push('momentum regime against');
+    if (w2.vol) tags.push('volume trend against');
     if (!tags.length) tags.push('taker flow against');
     heldTag = ' · ' + held + ' held off — ' + tags.join(' · ');
   }
@@ -1444,14 +1589,14 @@ function trendmxLimitDeskHTML(title, crit, bag, held, why){
 function trendmxGateCleanDeskHTML(bag, held, why){
   return trendmxLimitDeskHTML(
     'LIMIT BOARD · GATE-CLEAN DESK',
-    'criteria: the 7/7 swing-gate matrix (spread · vol-Z · EMA21 anchor · funding · regime · structure · R:R) confirms the composite majority · exact resting limits · taker flow not against · 1D RSI momentum range not turned against · sorted by composite + gates',
+    'criteria: the 7/7 swing-gate matrix (spread · vol-Z · EMA21 anchor · funding · regime · structure · R:R) confirms the composite majority · exact resting limits · taker flow not against · 1D RSI momentum range not turned against · 1D OBV volume trend not diverging against · sorted by composite + gates',
     bag, held, why);
 }
 
 function trendmxConvictionDeskHTML(bag, held, why){
   return trendmxLimitDeskHTML(
     'LIMIT BOARD · CONVICTION DESK',
-    'criteria: five-leg composite majority |≥2| (STRONG |≥4|) without the 7/7 stamp — 1D EMA200 · EMA50/200 cross · 4H EMA9/21/50 cascade · Ichimoku cloud · ADX strength · exact resting limits · taker flow not against · 1D RSI momentum range not turned against · ADX breaks composite ties',
+    'criteria: five-leg composite majority |≥2| (STRONG |≥4|) without the 7/7 stamp — 1D EMA200 · EMA50/200 cross · 4H EMA9/21/50 cascade · Ichimoku cloud · ADX strength · exact resting limits · taker flow not against · 1D RSI momentum range not turned against · 1D OBV volume trend not diverging against · ADX breaks composite ties',
     bag, held, why);
 }
 
@@ -1477,7 +1622,7 @@ function trendmxSetupCardHTML(r, tier){
   return hgSetupCardHTML({
     sym: r.sym, dir: dir, tier: tier,
     mini: mini, gates: gates,
-    plan: plan ? (trendmxPlanHTML(plan) + tmSmcChip(r) + trendmxFlowChipHtml(r) + trendmxMomChipHtml(r) + trendmxFundingChipHtml(r)) : '',
+    plan: plan ? (trendmxPlanHTML(plan) + tmSmcChip(r) + trendmxFlowChipHtml(r) + trendmxMomChipHtml(r) + trendmxVolChipHtml(r) + trendmxFundingChipHtml(r)) : '',
     entry: plan ? plan.entry : null, stop: plan ? plan.stop : null, t1: plan ? plan.t1 : null,
     chartId: (tier === 'clean' && plan) ? ('tmx_' + String(r.sym).replace(/[^A-Za-z0-9]/g, '')) : '',
     stack: stack,
@@ -2058,6 +2203,9 @@ W.trendmxFlowChipHtml = trendmxFlowChipHtml;
 W.trendmxMomState = trendmxMomState;       /* hg-v1019: the momentum witness */
 W.trendmxMomChipHtml = trendmxMomChipHtml;
 W.trendmxSetupCardHTML = trendmxSetupCardHTML;   /* hg-v1019: the matrix card — where a held row's chip must paint (the NEAR section) */
+W.trendmxVolState = trendmxVolState;       /* hg-v1020: the volume witness */
+W.trendmxVolChipHtml = trendmxVolChipHtml;
+W.tmVolWitness = tmVolWitness;             /* the pure 1D-tape read, exported for the tests */
 W.trendmxFundingChipHtml = trendmxFundingChipHtml;
 W.trendmxRowTier = trendmxRowTier;
 /* hg-v1018: the mixed board is superseded by the two class desks — the
