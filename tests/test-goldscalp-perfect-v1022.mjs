@@ -87,8 +87,10 @@ assert(/MOST PROBABLE SETUP' \+ perfectBadge/.test(src), 'the badge rides the ba
 
 /* ---- 3) the forward-ledger read-mark (source wiring) ---- */
 console.log('== the forward-ledger read-mark ==');
-assert(/perfect: gsxPerfect\(c\) \? true : undefined/.test(src),
-  'the record rebuild adds the `perfect` read-mark (measured, not promised)');
+assert(/perfect: \(!c\.demoted && !c\.vetoed && c\.grade === 'A' && c\.oppose === 0/.test(src),
+  'the record rebuild adds the `perfect` read-mark — inlined (not gsxPerfect) so the lifted-map test stays self-contained');
+assert(/typeof c\.tally === 'number' && isFinite\(c\.tally\) && c\.tally > 0\) \? true : undefined/.test(src),
+  'the read-mark is strictly-positive-tally gated and stores true/undefined (measured, not promised)');
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail) process.exit(1);

@@ -666,8 +666,15 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
                       · grade A · no opposing reads · strictly positive tally),
                       absent otherwise. The split is how the forward ledger
                       measures whether the PERFECT cohort pays any differently
-                      from the rest, exactly as it already does for MOST PROBABLE. */
-                   perfect: gsxPerfect(c) ? true : undefined };
+                      from the rest, exactly as it already does for MOST PROBABLE.
+                      INLINED (not gsxPerfect(c)) on purpose: test-gold-forward-
+                      calendar.mjs LIFTS this exact .map() body out of the IIFE
+                      and runs it in a bare vm sandbox, so it must stay self-
+                      contained — the five legs below are gsxPerfect's own legs,
+                      written out so the lifted record builder never needs the
+                      IIFE's scope. */
+                   perfect: (!c.demoted && !c.vetoed && c.grade === 'A' && c.oppose === 0
+                     && typeof c.tally === 'number' && isFinite(c.tally) && c.tally > 0) ? true : undefined };
         }), { horizonBars: 96 });   /* 96 x 15m = the same 24 hours as 24 x 1h */
       }
     } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("goldscalp", eFwd); } catch (eW) {} }
