@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1021',
-  pack: 'THE SCALP G4 FUNDING PARITY FIX — a missing funding feed on the scalp matrix now vetoes instead of passing. scalpGateMatrix initialized g4 to true and only reassigned it when funding was present, so a venue that should report funding but returned null (a broken Delta feed) stamped G4 as clean and could still reach 7/7 CLEAN — while the swing matrix in the same file vetoed the identical case, and the scalp gateMeta already declared degradeMode veto. Restructured scalp G4 to mirror the swing matrix: funding present -> directional check; CoinDCX (legitimately no funding) -> pass; a venue that should report funding but returns null/NaN -> VETO. Also collapsed a nested block comment whose inner comment opener silently closed the outer one mid-sentence.',
-  built: '2026-10-01T09:05:31Z'
+  version: 'hg-v1022',
+  pack: 'THE PERFECT SETUP TIER — a max-confluence filter on GOLD SCALP and TREND MATRIX, plus a volatility-regime read. TREND MATRIX crowns a PERFECT desk when the composite maxes |5/5| AND 7/7 gate-clean AND both the momentum and volume witnesses confirm WITH AND taker flow never runs against AND funding is not crowded, alongside a new ATR-regime read (4h ATR14 percentile against its own trailing distribution: DEAD below the 20th, BLOWOFF above the 80th, HEALTHY between) — the one close-derived read the composite could not already see from its own closes. GOLD SCALP stamps ★ PERFECT on its MOST PROBABLE banner when the leader is not demoted or vetoed AND grade A AND zero opposing reads AND a strictly positive tally. Both record a `perfect` read-mark to the forward ledger so the cohort is measured like the rest — evidence-only, never a gate, a filter not a promise.',
+  built: '2026-10-01T12:08:01Z'
 };
 
 function hgBuildLabel(b){

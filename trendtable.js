@@ -1304,15 +1304,21 @@ function trendmxLimitCardHTML(item){
   /* hg-v1018: the card names its own formation class — the desks are
      separated by criteria now, and the stamp keeps the class legible where
      a card is screenshotted or shared off the desk. */
+  /* hg-v1022: a PERFECT row carries its own stamp ahead of the class stamp —
+     the strictest confluence read, distinguished so it survives a screenshot. */
+  var perfectStamp = item.perfect
+    ? '<span class="stamp pass" style="margin-left:6px;background:#fef3c7;color:#92400e">\u2605 PERFECT</span>'
+    : '';
   var clsStamp = (r.gate && r.gate.clean7)
     ? '<span class="stamp" style="margin-left:6px">GATE-CLEAN 7/7</span>'
     : '<span class="stamp" style="margin-left:6px">CONVICTION ' + (r.score > 0 ? '+' : '') + r.score + '/5</span>';
   return '<div style="flex:1 1 260px;max-width:360px;border:1px solid #E2E8F0;border-left:3px solid ' + col + ';border-radius:8px;padding:10px 12px;background:#fff">'
-    + '<div><b>' + escH(r.sym) + '</b>' + tmVenueChip(r) + ' · ' + dir.toUpperCase() + clsStamp + stHtml + tmSmcChip(r)
+    + '<div><b>' + escH(r.sym) + '</b>' + tmVenueChip(r) + ' · ' + dir.toUpperCase() + perfectStamp + clsStamp + stHtml + tmSmcChip(r)
     + trendmxFlowChipHtml(r)   /* hg-v1012: the flow verdict the scan stamped — reads the stamp, never recomputes */
     + trendmxMomChipHtml(r)    /* hg-v1019: the momentum witness's stamp — same read-the-stamp seam */
     + trendmxVolChipHtml(r)    /* hg-v1020: the volume witness's stamp — same seam */
-    + trendmxFundingChipHtml(r) + '</div>'
+    + trendmxFundingChipHtml(r)
+    + trendmxAtrRegimeChipHtml(r) + '</div>'
     + '<div style="font-size:18px;font-weight:800;color:' + col + ';margin:4px 0">' + pxFmt(p.entry) + '</div>'
     + '<div class="note">' + trendmxPlanHTML(p) + '</div>'
     + (tradeOn ? '<button class="toTrade" onclick="' + tradeOn + '">SEND TO TRADE PLAN →</button>' : '')
@@ -1375,6 +1381,73 @@ function trendmxVolState(r, dir){
     return r.volConf === 'down' ? 'with' : 'flat';
   }
   return null;
+}
+
+/* hg-v1022: THE PERFECT SETUP tier — the strictest confluence read the desk
+   can honestly print. NOT a new composite leg and NOT a win guarantee (the
+   forward ledger measures it like every other mechanic): it is a FILTER that
+   asks every independent confirmation to say WITH and none to say AGAINST, on
+   top of a 7/7 gate-clean row at maximum composite alignment. Criteria,
+   stated plainly:
+     |composite| = 5/5  (all five legs maxed the same way)
+     7/7 swing-gate clean (spread · vol-Z · EMA21 anchor · funding · regime · structure · R:R)
+     momentum witness WITH  (1D RSI on the regime side — not flat, not null)
+     volume witness WITH     (1D OBV confirms the new extreme — not flat, not null)
+     taker flow never AGAINST (WITH when readable; an unreadable flow never confirms but never disqualifies)
+     funding not crowded      (not against the direction)
+   Evidence-only: nothing here gates, moves a tier or drops a row — it only
+   earns a desk and a read-mark. A row is PERFECT, not "guaranteed". */
+function trendmxPerfectState(r){
+  if (!r || !r.gate || !r.gate.clean7 || r.gate.veto) return false;
+  if (typeof r.score !== 'number' || !isFinite(r.score)) return false;
+  if (Math.abs(r.score) !== 5) return false;
+  var dir = tmDirOf(r);
+  if (!dir) return false;
+  if (trendmxMomState(r, dir) !== 'with') return false;
+  if (trendmxVolState(r, dir) !== 'with') return false;
+  if (r.flow && r.flow.verdict === 'against') return false;
+  var fp = r.fundingPct;
+  if (typeof fp === 'number' && isFinite(fp) && typeof W.hgFundingAgainstMark === 'function'){
+    try{ var m = W.hgFundingAgainstMark(fp, dir); if (m && m.against === true) return false; }catch(e){}
+  }
+  return true;
+}
+
+/* hg-v1022: VOLATILITY REGIME — a new independent read the composite's five
+   close-derived legs cannot see: WHERE the row's own ATR sits in ITS trailing
+   distribution. hgAtrPercentile(4h,14,100) ranks the latest 4h ATR against
+   its last 100 values: <20th percentile is DEAD TAPE (chop — trend legs drift
+   but nothing trades), >80th is BLOWOFF (a move already spent), the middle
+   is HEALTHY (a trend with room to run). Evidence-only — a chip on the card,
+   never a gate, never a composite point: it informs and records, it never
+   drops a row (the hg-v700 honest-degradation rule applies on unreadable). */
+function trendmxAtrRegime(r){
+  try{
+    if (!r || !r.rows4h || !Array.isArray(r.rows4h) || r.rows4h.length < 30) return null;
+    if (typeof hgAtrPercentile !== 'function') return null;
+    var pct = hgAtrPercentile(r.rows4h, 14, 100);
+    if (!isFinite(pct)) return null;
+    if (pct < 20) return { pct: pct, regime: 'DEAD' };
+    if (pct > 80) return { pct: pct, regime: 'BLOWOFF' };
+    return { pct: pct, regime: 'HEALTHY' };
+  }catch(e){ return null; }
+}
+
+/* the ATR-regime chip — the volume witness's own pattern (hg-v1020): DEAD and
+   BLOWOFF name the danger; HEALTHY carries the pass chip; unreadable paints
+   NO chip. Evidence, never a gate. */
+function trendmxAtrRegimeChipHtml(r){
+  try{
+    var reg = trendmxAtrRegime(r);
+    if (!reg) return '';
+    if (reg.regime === 'DEAD'){
+      return '<span class="stamp bad" style="margin-left:6px" title="' + escH('trendmx volatility regime (hg-v1022): 4h ATR(14) sits at the ' + reg.pct.toFixed(0) + 'th percentile of its own trailing distribution — bottom-quintile chop. The trend legs drift but nothing trades here. Evidence, never a gate.') + '">ATR REGIME DEAD</span>';
+    }
+    if (reg.regime === 'BLOWOFF'){
+      return '<span class="stamp bad" style="margin-left:6px" title="' + escH('trendmx volatility regime (hg-v1022): 4h ATR(14) sits at the ' + reg.pct.toFixed(0) + 'th percentile — top-quintile blowoff, a move already spent. Evidence, never a gate.') + '">ATR REGIME BLOWOFF</span>';
+    }
+    return '<span class="stamp pass" style="margin-left:6px" title="' + escH('trendmx volatility regime (hg-v1022): 4h ATR(14) sits at the ' + reg.pct.toFixed(0) + 'th percentile — healthy volatility, a trend with room to run. Evidence, never a gate.') + '">ATR REGIME HEALTHY</span>';
+  }catch(e){ return ''; }
 }
 
 /* the volume witness's chip — the momentum chip's own pattern (hg-v1019).
@@ -1535,7 +1608,11 @@ function trendmxLimitClasses(rows){
                     this desk's own published snapshot (hgTrendMatrixMark), the same row the
                     board painted, so a second copy would be the same number twice */
                  mechanic: (c.row && c.row.gate && c.row.gate.clean7) ? 'TM-CLEAN7' : 'TM-CONVICTION',
-                 ticket: !!(c.row && c.row.gate && c.row.gate.clean7) };
+                 ticket: !!(c.row && c.row.gate && c.row.gate.clean7),
+                 /* hg-v1022: the PERFECT read-mark — true when the row met the
+                    strictest confluence bar at fire time, absent otherwise. The
+                    split is how the PERFECT desk earns a measured outcome. */
+                 perfect: (trendmxPerfectState(c.row) ? true : undefined) };
       }), { horizonBars: 20 });
     }
   } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("trendtable", eFwd); } catch (eW) {} }
@@ -1600,6 +1677,34 @@ function trendmxConvictionDeskHTML(bag, held, why){
     bag, held, why);
 }
 
+/* hg-v1022: the PERFECT desk collects the rows trendmxPerfectState crowned and
+   builds a valid plan for each, ranked by |composite| then gates passed (the
+   gate-clean desk's own intra-class rank). The bag reuses the shared card
+   renderer with item.perfect set, so each card carries the ★ PERFECT stamp. */
+function trendmxPerfectSetups(rows){
+  var out = [];
+  if (!Array.isArray(rows)) return out;
+  for (var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if (!trendmxPerfectState(r)) continue;
+    var dir = tmDirOf(r);
+    var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
+    if (!tmValidSetup(plan)) continue;
+    out.push({ row: r, plan: plan, dir: dir, stack: trendmxCardStack(r, dir), perfect: true,
+               rank: Math.abs(r.score) * 10 + (r.gate.gatesPassed || 0) });
+  }
+  out.sort(function(a, b){ return b.rank - a.rank; });
+  return out;
+}
+
+function trendmxPerfectDeskHTML(bag){
+  bag = (bag || []).slice(0, TM_LIMIT_DESK_CAP);
+  if (!bag.length) return '';   /* a perfect row is rare by design — an empty desk is policy, not a fault */
+  return '<div class="panel" style="margin:12px 0">'
+    + '<h2>PERFECT SETUP DESK <span>criteria: max composite |5/5| · 7/7 gate-clean · momentum witness WITH · volume witness WITH · taker flow never against · funding not crowded · evidence-only, measured by the forward ledger — a filter, not a promise</span></h2>'
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + bag.map(trendmxLimitCardHTML).join('') + '</div></div>';
+}
+
 function trendmxSetupCardHTML(r, tier){
   tier = tier || 'clean';
   var dir = tmDirOf(r);
@@ -1622,7 +1727,7 @@ function trendmxSetupCardHTML(r, tier){
   return hgSetupCardHTML({
     sym: r.sym, dir: dir, tier: tier,
     mini: mini, gates: gates,
-    plan: plan ? (trendmxPlanHTML(plan) + tmSmcChip(r) + trendmxFlowChipHtml(r) + trendmxMomChipHtml(r) + trendmxVolChipHtml(r) + trendmxFundingChipHtml(r)) : '',
+    plan: plan ? (trendmxPlanHTML(plan) + tmSmcChip(r) + trendmxFlowChipHtml(r) + trendmxMomChipHtml(r) + trendmxVolChipHtml(r) + trendmxFundingChipHtml(r) + trendmxAtrRegimeChipHtml(r)) : '',
     entry: plan ? plan.entry : null, stop: plan ? plan.stop : null, t1: plan ? plan.t1 : null,
     chartId: (tier === 'clean' && plan) ? ('tmx_' + String(r.sym).replace(/[^A-Za-z0-9]/g, '')) : '',
     stack: stack,
@@ -1739,6 +1844,13 @@ function trendmxPaintDeskSections(refs, state){
     if (refs.gateclean) refs.gateclean.innerHTML = trendmxGateCleanDeskHTML(tmClasses.clean, tmClasses.heldClean, tmClasses.heldWhy.clean);
     if (refs.conviction) refs.conviction.innerHTML = trendmxConvictionDeskHTML(tmClasses.conv, tmClasses.heldConv, tmClasses.heldWhy.conv);
   }
+  /* hg-v1022: the PERFECT desk — the strictest confluence tier, built off the
+     same rows the two limit desks just judged. Empty is policy (a perfect
+     row is rare by design), not a fault — trendmxPerfectDeskHTML names it
+     honestly with nothing when nothing qualifies. */
+  if (refs.perfect){
+    refs.perfect.innerHTML = trendmxPerfectDeskHTML(trendmxPerfectSetups(rows));
+  }
 }
 
 function hgPaintTrendmxFromSnap(){
@@ -1754,6 +1866,7 @@ function hgPaintTrendmxFromSnap(){
       forming: el.querySelector('[data-r="forming"]'),
       gateclean: el.querySelector('[data-r="gateclean"]'),   /* hg-v1018 */
       conviction: el.querySelector('[data-r="conviction"]'),  /* hg-v1018 */
+      perfect: el.querySelector('[data-r="perfect"]'),        /* hg-v1022 */
       out: el.querySelector('[data-r="out"]'),
       status: el.querySelector('[data-r="status"]')
     };
@@ -1908,6 +2021,7 @@ function mountTrendMatrix(el){
       '<div data-r="forming"></div>' +
       '<div data-r="gateclean"></div>' +   /* hg-v1018: the gate-clean class on its own desk */
       '<div data-r="conviction"></div>' +  /* hg-v1018: the composite-conviction class under it */
+      '<div data-r="perfect"></div>' +     /* hg-v1022: the strictest confluence tier on its own desk */
       '<h3 style="margin:16px 0 8px;font-size:11px;letter-spacing:.14em;color:#475569">FULL MATRIX · sortable · expandable plans</h3>' +
       '<div data-r="out"><div class="empty">Press RUN SCAN to build the matrix.</div></div>' +
     '</div>';
@@ -1934,6 +2048,7 @@ function mountTrendMatrix(el){
     forming: el.querySelector('[data-r="forming"]'),
     gateclean: el.querySelector('[data-r="gateclean"]'),   /* hg-v1018 */
     conviction: el.querySelector('[data-r="conviction"]'),  /* hg-v1018 */
+    perfect: el.querySelector('[data-r="perfect"]'),        /* hg-v1022 */
     out: out,
     status: status
   };
@@ -2205,6 +2320,11 @@ W.trendmxMomChipHtml = trendmxMomChipHtml;
 W.trendmxSetupCardHTML = trendmxSetupCardHTML;   /* hg-v1019: the matrix card — where a held row's chip must paint (the NEAR section) */
 W.trendmxVolState = trendmxVolState;       /* hg-v1020: the volume witness */
 W.trendmxVolChipHtml = trendmxVolChipHtml;
+W.trendmxPerfectState = trendmxPerfectState;       /* hg-v1022: the perfect predicate */
+W.trendmxPerfectSetups = trendmxPerfectSetups;     /* hg-v1022: the perfect bag collector */
+W.trendmxPerfectDeskHTML = trendmxPerfectDeskHTML; /* hg-v1022: the perfect desk renderer */
+W.trendmxAtrRegime = trendmxAtrRegime;             /* hg-v1022: the volatility regime read */
+W.trendmxAtrRegimeChipHtml = trendmxAtrRegimeChipHtml;
 W.tmVolWitness = tmVolWitness;             /* the pure 1D-tape read, exported for the tests */
 W.trendmxFundingChipHtml = trendmxFundingChipHtml;
 W.trendmxRowTier = trendmxRowTier;

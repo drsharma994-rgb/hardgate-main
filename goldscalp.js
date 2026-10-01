@@ -660,7 +660,14 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
                       inch before it). */
                    sess: c.sess, orb: c.orb,
                    mechanic: String(c.stratKey || c.strategy || 'UNKNOWN').toUpperCase().slice(0, 28),
-                   ticket: (c.grade === 'A' || c.grade === 'clean' || !!c.locked) };
+                   ticket: (c.grade === 'A' || c.grade === 'clean' || !!c.locked),
+                   /* hg-v1022: the PERFECT read-mark — true when this record met
+                      the strictest confluence bar at fire time (leader-not-vetoed
+                      · grade A · no opposing reads · strictly positive tally),
+                      absent otherwise. The split is how the forward ledger
+                      measures whether the PERFECT cohort pays any differently
+                      from the rest, exactly as it already does for MOST PROBABLE. */
+                   perfect: gsxPerfect(c) ? true : undefined };
         }), { horizonBars: 96 });   /* 96 x 15m = the same 24 hours as 24 x 1h */
       }
     } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("goldscalp", eFwd); } catch (eW) {} }
@@ -1135,6 +1142,25 @@ function goldAPlusPanelHTML(today, nearest, ranked){
   return h;
 }
 
+/* hg-v1022: GOLD SCALP PERFECT — the strictest confluence tier on this desk.
+   A candidate is PERFECT only when ALL of: it is not demoted or vetoed (so it
+   leads on its own merit), its grade is exactly 'A', nothing on the books
+   opposes it (oppose === 0), and its confluence tally is strictly positive
+   and readable. This is a filter that names every condition it satisfied on
+   the way in — a filter, not a promise. It never gates, moves or drops a
+   candidate: it only earns the banner a ★ PERFECT badge and a measured
+   read-mark in the forward ledger (the split by which the PERFECT cohort's
+   outcome is measured against the rest, exactly as the MOST PROBABLE cohort
+   already is). */
+function gsxPerfect(c){
+  if (!c) return false;
+  if (c.demoted || c.vetoed) return false;
+  if (c.grade !== 'A') return false;
+  if (c.oppose !== 0) return false;
+  if (typeof c.tally !== 'number' || !isFinite(c.tally) || c.tally <= 0) return false;
+  return true;
+}
+
 function bannerHTML(best, ranked){
   if (!best) return '';
   var dirUp = best.dir.toUpperCase();
@@ -1150,8 +1176,15 @@ function bannerHTML(best, ranked){
   var lock = best.locked
     ? '<div class="gsx-lock">⬤ CONVICTION LOCK — issued as of ' + esc(best.asOf || '') + '; entry/stop/targets held verbatim, never re-picked on re-scans.</div>'
     : '<div class="gsx-lock new">○ NEW CONVICTION — issued this scan at ' + esc(best.asOf || '') + '; these levels are now locked until invalidated.</div>';
+  /* hg-v1022: the ★ PERFECT badge rides the banner's own eye. It appears only
+     when the lead clears the strictest confluence bar — a filter that names
+     every condition it met, never a promise. Screenshot-durable, same amber
+     vocabulary as the TREND MATRIX perfect stamp. */
+  var perfectBadge = gsxPerfect(best)
+    ? '<span style="display:inline-block;margin-left:8px;font-size:10px;font-weight:800;letter-spacing:.15em;color:#92400E;background:#FEF3C7;padding:2px 7px;border-radius:4px;border:1px solid #F59E0B;vertical-align:middle">\u2605 PERFECT</span>'
+    : '';
   return '<div class="gsx-banner"><div class="gsx-banner-in">'
-    + '<div class="gsx-eye">MOST PROBABLE SETUP</div>'
+    + '<div class="gsx-eye">MOST PROBABLE SETUP' + perfectBadge + '</div>'
     + '<div class="gsx-dir ' + best.dir + '">' + dirUp
     + '<span>' + esc(best.strategy) + ' · ' + esc(best.venue) + (best.sym ? ' (' + esc(best.sym) + ')' : '')
     + ' · GRADE ' + esc(best.grade) + ' · ' + esc(best.killzone || '') + '</span></div>'
@@ -3578,7 +3611,11 @@ W.HG_tabs.push({ id: 'goldscalp', label: 'GOLD SCALP', mount: mount, refresh: go
                  sessionFloorScan: gsSessionFloorScan,
                  /* hg-v1011: the taker-flow pass + chip ride the same route —
                     same guard, same reason. */
-                 takerFlowScan: gsTakerFlowScan, takerFlowChipHtml: gsTakerFlowChipHtml });
+                 takerFlowScan: gsTakerFlowScan, takerFlowChipHtml: gsTakerFlowChipHtml,
+                 /* hg-v1022: the PERFECT predicate rides the same route —
+                    same guard, same reason — so tests can assert against the
+                    SHIPPED function without a 20th module-scope export. */
+                 gsxPerfect: gsxPerfect });
 W.HG_warmups = W.HG_warmups || [];
 W.HG_warmups.push({ id: 'goldscalp', label: 'GOLD SCALP', run: gsWarm });
 })();
