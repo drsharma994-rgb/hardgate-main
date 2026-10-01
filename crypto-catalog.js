@@ -685,6 +685,16 @@
       if (cand.dir != null) cand.dir = prevDir;
       if (cand.plan && cand.plan.plan && cand.plan.plan.dir != null) cand.plan.plan.dir = prevDir;
     }
+    /* hg-v1023: crypto PERFECT formation — the Master Catalog's own max-confluence
+       read. A candidate is perfect when it is not demoted/excluded AND the
+       catalog's cross-direction scoring picks its own direction (winner === dir,
+       no tie): every readable family/indicator/strategy that agrees is already
+       folded into that winner. Evidence-only — never a gate. */
+    try{
+      var csP = cand.catalogSides;
+      var dP = String((cand.dir != null) ? cand.dir : ((cand.plan && cand.plan.plan && cand.plan.plan.dir) || '')).toLowerCase();
+      cand.perfect = (!cand.demoted && !cand.catalogExclude && csP && csP.winner && !csP.tie && csP.winner === dP) ? true : undefined;
+    }catch(eP){ cand.perfect = undefined; }
     cand.catalogVerdict = verdict || cand.catalogVerdict || 'CORE';
     return cand;
   }

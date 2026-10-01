@@ -324,6 +324,14 @@ localStorage. Never throws.
         : undefined,
       /* hg-v989: the named read marks, booleans only, absent when none */
       reads: hgFwdReadsNormalize(rec.reads),
+      /* hg-v1023: THE PERFECT read-mark — true when the record met the
+         strictest confluence bar at fire time (hg-perfect-setup.js), absent
+         otherwise. Same three-states rule as goldShut above: undefined is
+         NOT RECORDED, never a coerced 'not perfect' (a legacy row from
+         before anything asked is its own bucket). The split is how the
+         forward ledger measures whether the PERFECT cohort pays any
+         differently from the rest. */
+      perfect: (rec.perfect === true) ? true : undefined,
       /* hg-v992: THE CALENDAR READ AND THE SENTIMENT GUARD AT FIRE TIME.
          newsRisk is one of four classes or NOT RECORDED (an unchecked calendar
          is not 'low'); fng is the Fear & Greed value as a number, never

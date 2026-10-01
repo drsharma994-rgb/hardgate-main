@@ -573,6 +573,8 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
         tallyParts: Array.isArray(c.tallyParts)
           ? c.tallyParts.map(function(p){ return { label: p && p.label, pts: p && p.pts }; }) : [],
         agree: isFinite(c.agree) ? c.agree : null, oppose: isFinite(c.oppose) ? c.oppose : null,
+        /* hg-v1023: the shared PERFECT formation flag (hg-perfect-setup.js / goldRankSetups) — carries across the publish boundary so the forward ledger can measure the PERFECT cohort. */
+        perfect: (c.perfect === true) ? true : undefined,
         session: c.session || null, atr: isFinite(c.atr) ? c.atr : null,
         locked: !!c.locked, issuedAt: isFinite(c.issuedAt) ? c.issuedAt : null,
         asOf: c.asOf || null, why: c.why || null, invalidates: c.invalidates || null,
@@ -633,7 +635,8 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
                       sized against; null (no mark) stays absent. */
                    mark: c.mark,
                    mechanic: String(c.stratKey || c.strategy || 'UNKNOWN').toUpperCase().slice(0, 28),
-                   ticket: (c.grade === 'A' || c.grade === 'clean' || !!c.locked) };
+                   ticket: (c.grade === 'A' || c.grade === 'clean' || !!c.locked),
+                   perfect: c.perfect };
         }), { horizonBars: 20 });
       }
     } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("goldswing", eFwd); } catch (eW) {} }
@@ -1129,8 +1132,9 @@ function bannerHTML(best, ranked){
   var lock = best.locked
     ? '<div class="gsw-lock">⬤ CONVICTION LOCK — issued as of ' + esc(best.asOf || '') + '; entry/stop/targets held verbatim, never re-picked on re-scans.</div>'
     : '<div class="gsw-lock new">○ NEW CONVICTION — issued this scan at ' + esc(best.asOf || '') + '; these levels are now locked until invalidated.</div>';
+  var perfectBadge = (typeof W.hgPerfectStamp === 'function') ? W.hgPerfectStamp(best) : '';
   return '<div class="gsw-banner"><div class="gsw-banner-in">'
-    + '<div class="gsw-eye">MOST PROBABLE SETUP</div>'
+    + '<div class="gsw-eye">MOST PROBABLE SETUP' + perfectBadge + '</div>'
     + '<div class="gsw-dir ' + best.dir + '">' + dirUp
     + '<span>' + esc(best.strategy) + ' · ' + esc(best.venue) + (best.sym ? ' (' + esc(best.sym) + ')' : '')
     + ' · GRADE ' + esc(best.grade)

@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1022',
-  pack: 'THE PERFECT SETUP TIER — a max-confluence filter on GOLD SCALP and TREND MATRIX, plus a volatility-regime read. TREND MATRIX crowns a PERFECT desk when the composite maxes |5/5| AND 7/7 gate-clean AND both the momentum and volume witnesses confirm WITH AND taker flow never runs against AND funding is not crowded, alongside a new ATR-regime read (4h ATR14 percentile against its own trailing distribution: DEAD below the 20th, BLOWOFF above the 80th, HEALTHY between) — the one close-derived read the composite could not already see from its own closes. GOLD SCALP stamps ★ PERFECT on its MOST PROBABLE banner when the leader is not demoted or vetoed AND grade A AND zero opposing reads AND a strictly positive tally. Both record a `perfect` read-mark to the forward ledger so the cohort is measured like the rest — evidence-only, never a gate, a filter not a promise.',
-  built: '2026-10-01T12:08:01Z'
+  version: 'hg-v1023',
+  pack: 'THE PERFECT FORMATION TIER, APP-WIDE — a single shared predicate (hg-perfect-setup.js) now crowns a max-confluence PERFECT formation on every setup-forming desk: top grade, nothing opposing, strictly-positive confluence tally, R:R floor, and no readable evidence leg (taker flow, funding crowd, ATR blowoff, structure) running against — a filter, never a gate. goldRankSetups stamps rc.perfect on every tallied gold desk (SCALP/SWING/ULTRA/PINE/OMNIGOLD/SUPER-GOLD/GOLD-DIRECTION) and the Master Catalog stamps the crypto equivalent (winner-side, no excluded family, no tie). The forward ledger stores a first-class perfect read-mark so the cohort is measured against the rest, and GOLD SWING is fully wired (snapshot + record + ★ PERFECT banner); GOLD SCALP and TREND MATRIX carried the tier since v1022. Evidence-only, measured, not promised.',
+  built: '2026-10-01T18:50:00Z'
 };
 
 function hgBuildLabel(b){

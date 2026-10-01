@@ -5757,6 +5757,20 @@ function goldRankSetups(cands, ctx){
           if (ctx.__p6eng.corr) hgGoldPart6ApplyCorrFilter(rc, ctx.__p6eng.corr);
         }
       }catch(eP6f){}
+      /* hg-v1023: the shared PERFECT formation tier. hgPerfectFormation reads
+         the row's own legs (top grade · not demoted/vetoed · nothing opposing ·
+         strictly-positive tally · R:R floor) plus the readable evidence legs,
+         and marks the row perfect only when every always-computable leg passes
+         and nothing runs against. The flag travels on the ranked row to every
+         desk that consumes goldRankSetups (scalp/swing/ultra/pine/omnigold/…),
+         so each earns the tier from one source of truth. Evidence-only: it
+         never demotes, moves or drops a row. */
+      try{
+        var pf = (typeof window !== 'undefined' && typeof window.hgPerfectFormation === 'function')
+          ? window.hgPerfectFormation(rc) : null;
+        rc.perfect = (pf && pf.perfect) ? true : undefined;
+        if (pf && pf.why && pf.why.length) rc.perfectWhy = pf.why;
+      }catch(ePf){}
       ranked.push(rc);
     }
     var gOrd = { A: 0, B: 1, C: 2 };
