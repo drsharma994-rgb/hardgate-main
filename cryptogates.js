@@ -18,7 +18,7 @@
      being measured over TWICE the horizon the R:R is scaled to, so the median
      setup could not reach even 1:1 — G6 was not "tight", it was arithmetically
      asking for a rare geometry.
-  /* CHANGED 30 -> 20 in fix pack 22, on outcome evidence from two independent
+     CHANGED 30 -> 20 in fix pack 22, on outcome evidence from two independent
      120-symbol walk-forward samples (see the pack notes). 30 produced 19
      settled trades per sample — a number you cannot measure anything from, and
      the reason this app has shown zero setups for twenty-one packs. */
@@ -451,8 +451,11 @@
       : (pullbackHold ? 'EMA21 hold' : (orb.ok ? orb.detail : (vwr && vwr.ok ? vwr.detail : 'no trigger')));
     var r15 = last(rsi(c15, 14));
     var g3 = dir === 'long' ? (r15 >= 40 && r15 <= 65) : (r15 >= 35 && r15 <= 60);
+    var scalpNoFundingVenue = !!(ticker && (ticker.exchange === 'coindcx' || ticker.exchange === 'cdcx' || ticker.noFunding));
+    var fundMissingScalp = !(ticker && ticker.fundingPct !== null && isFinite(ticker.fundingPct));
     var g4 = true;
-    if (ticker && ticker.fundingPct !== null){
+    var g4Detail = '';
+    if (!fundMissingScalp){
       var fr = ticker.fundingPct;
       /* DIRECTIONAL. The old |fr| <= 0.05 cap vetoed a LONG at funding -0.06%
          — shorts paying you, on a setup where short crowding is squeeze fuel.
@@ -461,6 +464,13 @@
          check for a broken feed. */
       var frAgainst = (dir === 'long' && fr >= CG_FUND_DIR) || (dir === 'short' && fr <= -CG_FUND_DIR);
       g4 = isFinite(fr) && Math.abs(fr) <= CG_FUND_SANITY && !frAgainst;
+      g4Detail = 'funding ' + fr.toFixed(4) + '%';
+    } else if (scalpNoFundingVenue){
+      g4 = true; /* CoinDCX has no funding — allowed to degrade (swing G4 parity) */
+      g4Detail = 'no funding feed (CoinDCX)';
+    } else {
+      g4 = false; /* missing funding on a venue that should have it → veto (swing G4 parity) */
+      g4Detail = 'missing funding on a venue that should have it';
     }
     var g4b = (minsToFunding == null || !isFinite(minsToFunding)) ? true : minsToFunding >= 25;
     var atrArr = atr(m15, 14);
@@ -518,8 +528,6 @@
        - G5 settle:   pass when minsToFunding null (Delta between windows)
        - G6 vol+wick: veto (structural commit gate)
        - G7 R:R:      veto (must clear 1.5R vol-capped floor) */
-    var scalpNoFundingVenue = !!(ticker && (ticker.exchange === 'coindcx' || ticker.exchange === 'cdcx' || ticker.noFunding));
-    var fundMissingScalp = !(ticker && ticker.fundingPct !== null && isFinite(ticker.fundingPct));
     metaPush('G1', 'G1 1H trend (' + dir + ')', true,
       'EMA9/21/50 cascade ' + dir, { degradeMode: 'veto' });
     metaPush('G2', 'G2 sweep/reclaim · ORB · VWAP', g2, g2Detail,
@@ -527,9 +535,7 @@
     metaPush('G3', 'G3 RSI band', g3,
       'RSI15 ' + (isFinite(r15) ? r15.toFixed(1) : 'n/a'),
       { degradeMode: 'veto' });
-    metaPush('G4', 'G4 funding', g4,
-      fundMissingScalp ? (scalpNoFundingVenue ? 'no funding feed (CoinDCX)' : 'missing funding on a venue that should have it')
-                       : ('funding ' + ticker.fundingPct.toFixed(4) + '%'),
+    metaPush('G4', 'G4 funding', g4, g4Detail,
       { degradeMode: scalpNoFundingVenue ? 'pass' : 'veto' });
     metaPush('G5', 'G5 settle>25m', g4b,
       (minsToFunding == null || !isFinite(minsToFunding)) ? 'not near settlement window' : (Math.round(minsToFunding) + ' min to funding'),

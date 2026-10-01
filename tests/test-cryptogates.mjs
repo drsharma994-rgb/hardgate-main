@@ -153,6 +153,18 @@ console.log('\n== scalp gate matrix ==');
 
   const badFund = globalThis.scalpGateMatrix(h1, m15, { fundingPct: 0.05, mark: tick.mark }, 120);
   ok(badFund && badFund.gates.some(g => g[0] === 'G4 funding' && g[1] === false), 'scalpGateMatrix: extreme funding fails G4');
+
+  /* MISSING FUNDING PARITY (regression): a venue that should report funding
+     but hands back null must VETO G4 — the old code defaulted g4 to true and
+     left it there, so a broken Delta feed stamped G4 as clean. CoinDCX, which
+     legitimately has no funding, still degrades to pass. */
+  const missFund = globalThis.scalpGateMatrix(h1, m15, { symbol: 'BTCUSDT', fundingPct: null, mark: tick.mark }, 120);
+  ok(missFund && missFund.gates.some(g => g[0] === 'G4 funding' && g[1] === false),
+     'scalpGateMatrix: missing funding (should-report venue) vetoes G4');
+  ok(missFund && missFund.passed < 7, 'scalpGateMatrix: missing funding blocks clean');
+  const cdcxFund = globalThis.scalpGateMatrix(h1, m15, { symbol: 'B-BTC_USDT', exchange: 'coindcx', fundingPct: null, mark: tick.mark }, 120);
+  ok(cdcxFund && cdcxFund.gates.some(g => g[0] === 'G4 funding' && g[1] === true),
+     'scalpGateMatrix: CoinDCX (no funding) still degrades G4 to pass');
   ok(isFinite(mFar.e21), 'scalpGateMatrix: e21 is finite (off-by-one fix)');
   const mNullSettle = globalThis.scalpGateMatrix(h1, m15, tick, null);
   ok(mNullSettle && mNullSettle.gates.some(g => g[0].indexOf('settle') >= 0 && g[1] === true), 'scalpGateMatrix: null minsToFunding passes settle gate');
