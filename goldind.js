@@ -5771,6 +5771,32 @@ function goldRankSetups(cands, ctx){
         rc.perfect = (pf && pf.perfect) ? true : undefined;
         if (pf && pf.why && pf.why.length) rc.perfectWhy = pf.why;
       }catch(ePf){}
+      /* hg-v1024: MEASURED-EDGE veto in the RANKER. OMNIGOLD/NEW GOLD already
+         demote measured-losing mechanics through gold-formation.js; the core
+         ranked desks (SCALP/SWING/ULTRA/PINE/SUPER-GOLD/GOLD-DIRECTION) ranked
+         by confluence alone, so a mechanic the forward ledger had measured at
+         negative expectancy could still crown MOST PROBABLE — the exact defect
+         the ledger's own −0.231R MP cohort exposed. hgSolGateMeasuredEdge
+         (hg-solidity.js, v685: n≥20 & expR<−0.25) keys on (tab, kind); the desk
+         passes its own forward-tab as ctx.scanner. A missing tab or helper
+         stands aside (fail-open) — it never invents a veto. */
+      try{
+        var edgeTab = (ctx && (ctx.scanner || ctx.tab || ctx.lane)) || null;
+        var edgeFn = (typeof window !== 'undefined' && typeof window.hgSolGateMeasuredEdge === 'function')
+          ? window.hgSolGateMeasuredEdge : null;
+        if (edgeTab && edgeFn){
+          var edgeKind = String(rc.stratKey || rc.strategy || rc.mechanic || '').toUpperCase().slice(0, 28);
+          var e = edgeFn(rc, { tab: edgeTab, kind: edgeKind });
+          if (e && e.pass === false){
+            rc.edgeVetoed = true;
+            (rc.stamps = rc.stamps || []).push('measured-edge veto — ' + (edgeKind || 'this mechanic') + ' expR '
+              + (isFinite(e.expR) ? e.expR.toFixed(2) : '?') + 'R over ' + (e.samples || 0) + ' settled outcomes');
+            rc.demoted = true;   /* a measured-losing mechanic can never lead */
+          } else if (e && e.source === 'measured' && e.pass === true && isFinite(e.expR)){
+            rc.edgeProven = true;   /* measured at or above the floor — keeps its rank, honestly */
+          }
+        }
+      }catch(eE){}
       ranked.push(rc);
     }
     var gOrd = { A: 0, B: 1, C: 2 };

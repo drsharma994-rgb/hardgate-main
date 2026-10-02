@@ -1708,7 +1708,7 @@ async function laneGoldScalp(gold, now){
   for (i = 0; i < cands.length; i++) if (cands[i]){ cands[i].venue = 'GOLD ULTRA'; cands[i].sym = 'XAUUSD'; }
   var ranked = cands, rankFn = gfn('goldRankSetups');
   if (rankFn){
-    var ctx = { now: newsAt, news: newsSnap, style: 'goldscalp', rows15m: gold.rows15m, rows1h: gold.rows1h, rows4h: gold.rows4h };
+    var ctx = { now: newsAt, news: newsSnap, style: 'goldscalp', scanner: 'GOLDULTRA', rows15m: gold.rows15m, rows1h: gold.rows1h, rows4h: gold.rows4h };
     try{ var sf = gfn('goldSeason'); if (sf) ctx.season = sf(now); }catch(eS){}
     try{ var cv = gfn('goldCrossVenueMap'); if (cv) ctx.crossVenue = cv(cands); }catch(eC){}
     var rk = null; try{ rk = rankFn(cands, ctx); }catch(eR){ rk = null; }

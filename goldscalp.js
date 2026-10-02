@@ -2845,6 +2845,10 @@ async function runScan(ui, scanSt){
     ctx.rows15m = gold.rows15m;
     ctx.rows1h = gold.rows1h;
     ctx.rows4h = gold.rows4h;
+    /* hg-v1024: the desk's own forward-tab — measured-edge veto (goldRankSetups)
+       keys on (tab, kind) so a mechanic measured-losing on GOLD SCALP is not
+       judged by GOLD SWING's records. */
+    ctx.scanner = 'GOLDSCALP';
     if (rankFn){
       var rk = null;
       try{ rk = rankFn(cands, ctx); }catch(eR){ rk = null; }

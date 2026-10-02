@@ -3561,6 +3561,8 @@ async function runScan(ui, scanSt){
     ctx.rows4h = gold.rows4h;
     ctx.rows = gold.rows4h;
     if (gold.rows1h && gold.rows1h.length) ctx.rows1h = gold.rows1h;
+    /* hg-v1024: forward-tab for the measured-edge veto (see goldscalp.js). */
+    ctx.scanner = 'GOLDSWING';
     var klineSpot = goldSpotRefFromRows(gold.rows4h);
     var liveSpot = await goldLiveSpotRef(klineSpot);
     var spotRef = (isFinite(liveSpot) && liveSpot > 0) ? liveSpot : klineSpot;

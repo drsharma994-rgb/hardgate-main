@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1023',
-  pack: 'THE PERFECT FORMATION TIER, APP-WIDE — a single shared predicate (hg-perfect-setup.js) now crowns a max-confluence PERFECT formation on every setup-forming desk: top grade, nothing opposing, strictly-positive confluence tally, R:R floor, and no readable evidence leg (taker flow, funding crowd, ATR blowoff, structure) running against — a filter, never a gate. goldRankSetups stamps rc.perfect on every tallied gold desk (SCALP/SWING/ULTRA/PINE/OMNIGOLD/SUPER-GOLD/GOLD-DIRECTION) and the Master Catalog stamps the crypto equivalent (winner-side, no excluded family, no tie). The forward ledger stores a first-class perfect read-mark so the cohort is measured against the rest, and GOLD SWING is fully wired (snapshot + record + ★ PERFECT banner); GOLD SCALP and TREND MATRIX carried the tier since v1022. Evidence-only, measured, not promised.',
-  built: '2026-10-01T18:50:00Z'
+  version: 'hg-v1024',
+  pack: 'MEASURED-EDGE VETO IN THE RANKER — the core ranked desks (SCALP/SWING/ULTRA) now ask hgSolGateMeasuredEdge per mechanic (n≥20 & expR≤−0.25) and DEMOTE a measured-losing mechanic so it can never crown MOST PROBABLE — the ledger\'s own −0.231R MP cohort said ranking by confluence alone was not adding edge. Plus the app-wide PERFECT formation tier: a shared predicate (hg-perfect-setup.js) crowns ★ PERFECT (top grade · nothing opposing · positive tally · R:R floor · no evidence leg against) on every setup-forming desk — gold via goldRankSetups, crypto via the Master Catalog — recorded to the forward ledger as a first-class read-mark. Evidence-only, measured, not promised.',
+  built: '2026-10-02T05:11:39Z'
 };
 
 function hgBuildLabel(b){
