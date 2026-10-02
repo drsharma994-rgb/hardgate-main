@@ -596,7 +596,11 @@ async function laneGoldScalp(gold, now){
     /* hg-v700: the confluence scorer must be FED — rows-free it stamps
        CONF UNCHECKED and cannot verdict. */
     var ctx = { now: nc.at, news: nc.snap, style: 'goldscalp',
-                rows15m: gold.rows15m, rows1h: gold.rows1h, rows4h: gold.rows4h };
+                rows15m: gold.rows15m, rows1h: gold.rows1h, rows4h: gold.rows4h,
+                /* hg-v1026: the cands are GOLD SCALP mechanics (goldScalpSetups),
+                   measured under the source desk's ledger keyed by stratKey. Thread
+                   that tab so the measured-edge veto (v1024) holds on this re-rank. */
+                scanner: 'GOLDSCALP' };
     try{
       var seasonFn = gfn('goldSeason');
       if (seasonFn) ctx.season = seasonFn(now);

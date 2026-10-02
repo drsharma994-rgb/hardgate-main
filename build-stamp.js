@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1025',
-  pack: 'ANTI-CHASE (WALK-AWAY) DEMOTION — a plan whose stop is already breached or whose target already sits behind the entry is dead on arrival, and goldRankSetups now demotes it so a chased move can never lead, stamps it, and records the `chased` read-mark to the forward ledger so the cohort is measured, not assumed. Shares the hgPlanMarketGeometry rule (hg-plan.js hgPlanChaseVerdict) — a missing mark never invents a demotion. Built on v1023/v1024 (app-wide PERFECT tier + measured-edge veto in the ranker).',
-  built: '2026-10-02T05:51:58Z'
+  version: 'hg-v1026',
+  pack: 'MEASURED-EDGE VETO ON THE BORROWED-CAND DESKS — GOLD PINE and GOLD DIRECTION re-rank borrowed goldScalpSetups cands on the SOURCE desk ledger (scanner GOLDSCALP, keyed by stratKey), so a measured-losing scalp mechanic can never crown their view either. goldRankSetups now honours ctx.edgeKindOf for desks that record under their own mechanic normalization (hgGpKind / fwdMechName), falling back to stratKey (the v1024 default) otherwise. Strictly backward-compatible.',
+  built: '2026-10-02T06:49:13Z'
 };
 
 function hgBuildLabel(b){

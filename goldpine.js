@@ -455,7 +455,12 @@ function collectNativeScalp(bars, ctx, source){
   var rejected = got.rejected || [];
   if (rankFn){
     try{
-      var rk = rankFn(got, ctx);
+      /* hg-v1026: the cands are GOLD SCALP mechanics (goldScalpSetups), whose
+         measured edge lives in the SOURCE desk's ledger keyed by stratKey.
+         Thread that tab so the measured-edge veto v1024 added to
+         goldRankSetups also holds on this re-rank — a measured-losing scalp
+         mechanic can never crown the GOLD PINE view either. */
+      var rk = rankFn(got, Object.assign({}, ctx, { scanner: 'GOLDSCALP' }));
       ranked = rk && rk.ranked ? rk.ranked : got;
       if (rk && rk.rejected) rejected = rejected.concat(rk.rejected);
     }catch(e2){}

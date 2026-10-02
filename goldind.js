@@ -5810,7 +5810,16 @@ function goldRankSetups(cands, ctx){
         var edgeFn = (typeof window !== 'undefined' && typeof window.hgSolGateMeasuredEdge === 'function')
           ? window.hgSolGateMeasuredEdge : null;
         if (edgeTab && edgeFn){
-          var edgeKind = String(rc.stratKey || rc.strategy || rc.mechanic || '').toUpperCase().slice(0, 28);
+          /* hg-v1026: the desk may name its OWN mechanic key. The core desks
+             (SCALP/SWING/ULTRA) record `mechanic = stratKey`, so the default
+             is stratKey. The aggregator desks (PINE/DIRECTION/SUPER-GOLD)
+             record under a DIFFERENT normalization (hgGpKind / fwdMechName),
+             and pass ctx.edgeKindOf so the measured-edge lookup resolves to
+             the SAME cell their ledger writes. A missing hook stands aside —
+             the default is the same stratKey rule v1024 shipped. */
+          var edgeKind = (ctx && typeof ctx.edgeKindOf === 'function')
+            ? String(ctx.edgeKindOf(rc) || '').toUpperCase().slice(0, 28)
+            : String(rc.stratKey || rc.strategy || rc.mechanic || '').toUpperCase().slice(0, 28);
           var e = edgeFn(rc, { tab: edgeTab, kind: edgeKind });
           if (e && e.pass === false){
             rc.edgeVetoed = true;
