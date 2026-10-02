@@ -544,11 +544,20 @@ function gsScanBarMs(rows, fallback){
 
 function publishScan(ranked, best, history, at, rejected, armed, whySilent){
   try{
+    /* hg-v1027: the USD-macro calendar read at fire time (hgNewsMark, news.js)
+       — blackout / high / med / low, or absent when the calendar is unchecked.
+       Stamped once per scan and set as a property on each cand (NOT computed
+       inside the record map) so the forward ledger can split the PERFECT /
+       MOST-PROBABLE cohorts by session/news quality, and the lifted-map test
+       stays self-contained. */
+    var __nwSc = (typeof W.hgNewsMark === 'function') ? W.hgNewsMark('XAUUSD') : null;
+    var __nwRiskSc = (__nwSc && __nwSc.risk) ? __nwSc.risk : null;
     var cands = [];
     for (var i = 0; i < ranked.length; i++){
       var c = ranked[i];
       if (!c || !c.dir) continue;
       cands.push({
+        newsRisk: __nwRiskSc,
         id: c.id || null, venue: c.venue || null, sym: c.sym || null,
         /* hg-v979: the feed these levels were priced on (gsStampFeed) --
            the ledger settles them on that feed only; SUPER GOLD records
@@ -680,7 +689,10 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
                      && typeof c.tally === 'number' && isFinite(c.tally) && c.tally > 0) ? true : undefined,
                    /* hg-v1025: the anti-chase (walk-away) read-mark — property
                       access only, so the lifted-map test stays self-contained */
-                   chased: c.chased, chaseCode: c.chaseCode };
+                   chased: c.chased, chaseCode: c.chaseCode,
+                   /* hg-v1027: the session/news-quality read-mark, set on the cand
+                      in publishScan so the lifted map stays self-contained */
+                   newsRisk: c.newsRisk };
         }), { horizonBars: 96 });   /* 96 x 15m = the same 24 hours as 24 x 1h */
       }
     } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("goldscalp", eFwd); } catch (eW) {} }

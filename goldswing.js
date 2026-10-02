@@ -558,11 +558,19 @@ function gwSessionTxt(t, kzFn){
 
 function publishScan(ranked, best, history, at, rejected, armed, whySilent){
   try{
+    /* hg-v1027: the USD-macro calendar read at fire time (hgNewsMark, news.js)
+       — blackout / high / med / low, or absent when unchecked. Stamped once
+       per scan and set as a cand property (not computed inside the record
+       map) so the ledger can split the PERFECT / MOST-PROBABLE cohorts and the
+       lifted-map test stays self-contained. */
+    var __nwSw = (typeof W.hgNewsMark === 'function') ? W.hgNewsMark('XAUUSD') : null;
+    var __nwRiskSw = (__nwSw && __nwSw.risk) ? __nwSw.risk : null;
     var cands = [];
     for (var i = 0; i < ranked.length; i++){
       var c = ranked[i];
       if (!c || !c.dir) continue;
       cands.push({
+        newsRisk: __nwRiskSw,
         id: c.id || null, venue: c.venue || null, sym: c.sym || null,
         /* hg-v979: the feed these levels were priced on (gwStampFeed) */
         feed: (typeof c.feed === 'string' && c.feed) ? c.feed : null,
@@ -640,7 +648,10 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
                    mechanic: String(c.stratKey || c.strategy || 'UNKNOWN').toUpperCase().slice(0, 28),
                    ticket: (c.grade === 'A' || c.grade === 'clean' || !!c.locked),
                    perfect: c.perfect,
-                   chased: c.chased, chaseCode: c.chaseCode };
+                   chased: c.chased, chaseCode: c.chaseCode,
+                   /* hg-v1027: the session/news-quality read-mark, set on the cand
+                      in publishScan so the lifted map stays self-contained */
+                   newsRisk: c.newsRisk };
         }), { horizonBars: 20 });
       }
     } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("goldswing", eFwd); } catch (eW) {} }

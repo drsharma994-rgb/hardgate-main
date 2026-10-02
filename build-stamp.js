@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1026',
-  pack: 'MEASURED-EDGE VETO ON THE BORROWED-CAND DESKS — GOLD PINE and GOLD DIRECTION re-rank borrowed goldScalpSetups cands on the SOURCE desk ledger (scanner GOLDSCALP, keyed by stratKey), so a measured-losing scalp mechanic can never crown their view either. goldRankSetups now honours ctx.edgeKindOf for desks that record under their own mechanic normalization (hgGpKind / fwdMechName), falling back to stratKey (the v1024 default) otherwise. Strictly backward-compatible.',
+  version: 'hg-v1027',
+  pack: 'SESSION/NEWS CONDITIONING ON THE GOLD LEDGER — GOLD SCALP and GOLD SWING now write the USD-macro calendar read (hgNewsMark XAUUSD: blackout / high / med / low) at fire time, so the forward ledger NEWs CALENDAR SPLIT can separate the PERFECT and MOST-PROBABLE cohorts by session/news quality. Marked, never gated: a cohort that pays differently is measured, not assumed.',
   built: '2026-10-02T06:49:13Z'
 };
 
