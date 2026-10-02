@@ -568,6 +568,9 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
         mark: isFinite(c.mark) ? c.mark : null,
         zone: (c.zone && isFinite(c.zone.lo) && isFinite(c.zone.hi)) ? { lo: c.zone.lo, hi: c.zone.hi } : null,
         demoted: !!c.demoted,
+        /* hg-v1025: the anti-chase (walk-away) flag (goldRankSetups) — a plan dead on arrival at fire time. Carries across the publish boundary so the forward ledger measures the chased cohort. */
+        chased: (c.chased === true) ? true : undefined,
+        chaseCode: (c.chaseCode === 'stop-breached' || c.chaseCode === 'target-crossed') ? c.chaseCode : null,
         stamps: Array.isArray(c.stamps) ? c.stamps.slice() : [],
         /* hg-v977: the instant the mint judged this candidate on -- SUPER GOLD's
            sgCandSec has read `signalT` since hg-v952 and no mint ever wrote it */
@@ -674,7 +677,10 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
                       written out so the lifted record builder never needs the
                       IIFE's scope. */
                    perfect: (!c.demoted && !c.vetoed && c.grade === 'A' && c.oppose === 0
-                     && typeof c.tally === 'number' && isFinite(c.tally) && c.tally > 0) ? true : undefined };
+                     && typeof c.tally === 'number' && isFinite(c.tally) && c.tally > 0) ? true : undefined,
+                   /* hg-v1025: the anti-chase (walk-away) read-mark — property
+                      access only, so the lifted-map test stays self-contained */
+                   chased: c.chased, chaseCode: c.chaseCode };
         }), { horizonBars: 96 });   /* 96 x 15m = the same 24 hours as 24 x 1h */
       }
     } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("goldscalp", eFwd); } catch (eW) {} }

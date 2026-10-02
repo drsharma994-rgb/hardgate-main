@@ -5757,6 +5757,31 @@ function goldRankSetups(cands, ctx){
           if (ctx.__p6eng.corr) hgGoldPart6ApplyCorrFilter(rc, ctx.__p6eng.corr);
         }
       }catch(eP6f){}
+      /* hg-v1025: ANTI-CHASE (walk-away) demotion. A plan whose stop is already
+         breached, or whose target already sits behind the entry, is dead on
+         arrival — reaching the fill would cross the invalidation or the
+         target first, so entering now is chasing a move that has left, not
+         taking the setup the plan described. hgPlanMarketGeometry
+         (hg-plan.js) is the shared rule; an unjudgeable plan (no mark, no
+         levels) stands aside, so a missing feed never invents a demotion.
+         The `chased` read-mark travels on the ranked row so the forward
+         ledger can measure the chased cohort against the rest. */
+      try{
+        var chaseFn = (typeof window !== 'undefined' && typeof window.hgPlanMarketGeometry === 'function')
+          ? window.hgPlanMarketGeometry : null;
+        var markPx = isFinite(+rc.mark) ? +rc.mark : (isFinite(+ctx.mark) ? +ctx.mark : NaN);
+        if (chaseFn && isFinite(markPx) && markPx > 0){
+          var gGeo = chaseFn(rc, markPx);
+          if (gGeo && gGeo.ok === false){
+            rc.chased = true;
+            rc.chaseCode = gGeo.code || null;
+            rc.demoted = true;
+            (rc.stamps = rc.stamps || []).push('anti-chase walk-away — ' + (gGeo.code === 'stop-breached'
+              ? 'stop already breached before the fill'
+              : 'target already behind the entry') + ' (mark ' + markPx + ')');
+          }
+        }
+      }catch(eCh){}
       /* hg-v1023: the shared PERFECT formation tier. hgPerfectFormation reads
          the row's own legs (top grade · not demoted/vetoed · nothing opposing ·
          strictly-positive tally · R:R floor) plus the readable evidence legs,

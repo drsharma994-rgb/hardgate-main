@@ -332,6 +332,15 @@ localStorage. Never throws.
          forward ledger measures whether the PERFECT cohort pays any
          differently from the rest. */
       perfect: (rec.perfect === true) ? true : undefined,
+      /* hg-v1025: THE ANTI-CHASE (walk-away) read-mark — true when the plan was
+         dead on arrival at fire time (stop already breached or target already
+         behind the entry, hg-plan.js hgPlanChaseVerdict), absent otherwise.
+         Same three-states rule as perfect: undefined is NOT RECORDED, never a
+         coerced 'not chased'. The split measures whether chased setups pay any
+         differently from the rest — the claim that a chased plan should be
+         walked away from is how it is TESTED, not assumed. */
+      chased: (rec.chased === true) ? true : undefined,
+      chaseCode: (rec.chaseCode === 'stop-breached' || rec.chaseCode === 'target-crossed') ? rec.chaseCode : undefined,
       /* hg-v992: THE CALENDAR READ AND THE SENTIMENT GUARD AT FIRE TIME.
          newsRisk is one of four classes or NOT RECORDED (an unchecked calendar
          is not 'low'); fng is the Fear & Greed value as a number, never

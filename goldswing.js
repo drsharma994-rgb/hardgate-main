@@ -575,6 +575,9 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
         agree: isFinite(c.agree) ? c.agree : null, oppose: isFinite(c.oppose) ? c.oppose : null,
         /* hg-v1023: the shared PERFECT formation flag (hg-perfect-setup.js / goldRankSetups) — carries across the publish boundary so the forward ledger can measure the PERFECT cohort. */
         perfect: (c.perfect === true) ? true : undefined,
+        /* hg-v1025: the anti-chase (walk-away) flag (goldRankSetups) — a plan dead on arrival at fire time. Carries the same way so the ledger measures the chased cohort. */
+        chased: (c.chased === true) ? true : undefined,
+        chaseCode: (c.chaseCode === 'stop-breached' || c.chaseCode === 'target-crossed') ? c.chaseCode : null,
         session: c.session || null, atr: isFinite(c.atr) ? c.atr : null,
         locked: !!c.locked, issuedAt: isFinite(c.issuedAt) ? c.issuedAt : null,
         asOf: c.asOf || null, why: c.why || null, invalidates: c.invalidates || null,
@@ -636,7 +639,8 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
                    mark: c.mark,
                    mechanic: String(c.stratKey || c.strategy || 'UNKNOWN').toUpperCase().slice(0, 28),
                    ticket: (c.grade === 'A' || c.grade === 'clean' || !!c.locked),
-                   perfect: c.perfect };
+                   perfect: c.perfect,
+                   chased: c.chased, chaseCode: c.chaseCode };
         }), { horizonBars: 20 });
       }
     } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("goldswing", eFwd); } catch (eW) {} }

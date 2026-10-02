@@ -256,9 +256,28 @@
     return n ? n.html : '';
   }
 
+  /* ANTI-CHASE / WALK-AWAY verdict. A pending plan is already CHASED when
+     price has walked through it by fire time: the stop is breached (the
+     invalidation happened before the fill) or the target already sits
+     behind the entry (reaching the entry crosses T1 first). Both are dead
+     on arrival — entering now is chasing a move that has left, not taking
+     the setup the plan described.
+
+     It is hgPlanMarketGeometry's verdict, renamed for the ranker: chased
+     is true only for an explicitly bad geometry. An unjudgeable plan (no
+     mark, no level) gets chased=false and code null — a missing feed must
+     never be able to invent a chase, the same fail-open contract the
+     geometry rule itself keeps. Pure, no DOM, no globals. */
+  function hgPlanChaseVerdict(plan, mark){
+    var g = hgPlanMarketGeometry(plan, mark);
+    if (!g || g.ok) return { chased: false, code: g ? g.code : null, why: g ? g.why : '' };
+    return { chased: true, code: g.code, why: g.why };
+  }
+
   G.applyExactEntry = applyExactEntry;
   G.hgPlanLevels    = hgPlanLevels;
   G.hgPlanMarketGeometry = hgPlanMarketGeometry;
+  G.hgPlanChaseVerdict = hgPlanChaseVerdict;
   G.hgPlanGeometryNote = hgPlanGeometryNote;
   G.hgPlanGeometryLineHtml = hgPlanGeometryLineHtml;
 

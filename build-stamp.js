@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1024',
-  pack: 'MEASURED-EDGE VETO IN THE RANKER — the core ranked desks (SCALP/SWING/ULTRA) now ask hgSolGateMeasuredEdge per mechanic (n≥20 & expR≤−0.25) and DEMOTE a measured-losing mechanic so it can never crown MOST PROBABLE — the ledger\'s own −0.231R MP cohort said ranking by confluence alone was not adding edge. Plus the app-wide PERFECT formation tier: a shared predicate (hg-perfect-setup.js) crowns ★ PERFECT (top grade · nothing opposing · positive tally · R:R floor · no evidence leg against) on every setup-forming desk — gold via goldRankSetups, crypto via the Master Catalog — recorded to the forward ledger as a first-class read-mark. Evidence-only, measured, not promised.',
-  built: '2026-10-02T05:11:39Z'
+  version: 'hg-v1025',
+  pack: 'ANTI-CHASE (WALK-AWAY) DEMOTION — a plan whose stop is already breached or whose target already sits behind the entry is dead on arrival, and goldRankSetups now demotes it so a chased move can never lead, stamps it, and records the `chased` read-mark to the forward ledger so the cohort is measured, not assumed. Shares the hgPlanMarketGeometry rule (hg-plan.js hgPlanChaseVerdict) — a missing mark never invents a demotion. Built on v1023/v1024 (app-wide PERFECT tier + measured-edge veto in the ranker).',
+  built: '2026-10-02T05:51:58Z'
 };
 
 function hgBuildLabel(b){
