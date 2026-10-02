@@ -3432,6 +3432,7 @@ function goldscalpMountInto(el, scanSt, cfg){
       + '<div class="panel">'
       + '<h2>' + h2 + ' <span>' + span + '</span></h2>'
       + '<div class="row"><button class="btn" id="' + p + 'Run">RUN SCAN</button>'
+      + '<button class="btn" id="' + p + 'Auto5m" style="margin-left:6px">AUTO-REFRESH 5m: OFF</button>'
       + '<span class="note" id="' + p + 'Stat">' + statIdle + '</span></div>'
       + deskNote
       /* hg-v968: THE AUTO-REFRESH YOU COULD NOT SEE.
@@ -3457,6 +3458,11 @@ function goldscalpMountInto(el, scanSt, cfg){
       weekend: el.querySelector('#' + p + 'Weekend')
     };
     try{ ui.autoStamp = el.querySelector('#' + p + 'AutoStamp'); }catch(eAS){ ui.autoStamp = null; }
+    try{ ui.auto5m = el.querySelector('#' + p + 'Auto5m'); }catch(eA5){ ui.auto5m = null; }
+    /* hg-v1031: the 5-minute auto-refresh button paints its current state from
+       the SHARED clock (one page, one 5m timer, same as the 3m countdown),
+       so a re-mount never shows a stale ON/OFF. */
+    try{ gsPaintAuto5m(ui); }catch(eP5){}
     scanSt.ui = ui;
     /* hg-v968: the countdown ticker starts when the tab is MOUNTED, never at
        module load -- see the note beside the export. Idempotent: a second mount
@@ -3475,6 +3481,7 @@ function goldscalpMountInto(el, scanSt, cfg){
     if (missing.length) setStat(ui, 'missing: ' + missing.join(', ') + ' — check script load order.', true);
 
     if (ui.btn) ui.btn.addEventListener('click', function(){ return runScan(ui, scanSt); });
+    if (ui.auto5m) ui.auto5m.addEventListener('click', function(){ return gsAuto5mToggle(ui, scanSt); });
     try{
       var catFnM = gfn('hgGoldCatalogEngine');
       var catHtmlM = gfn('hgGoldCatalogHtml');
@@ -3553,6 +3560,47 @@ function gsPaintAutoStamp(ui, scanSt){
     return txt;
   }catch(e){ return ''; }
 }
+/* hg-v1031: THE 5-MINUTE AUTO-REFRESH BUTTON.
+
+   A visible ON/OFF button in the tab's control row that turns a five-minute
+   re-scan of THIS desk on or off. It is the tab-local companion to the header's
+   global AUTO control and to the always-on 3-minute countdown: where those are
+   app-wide / invisible, this one is one click, in the tab, with the cadence the
+   trader asked for. One page, one 5m clock (same rule as the 1s countdown): a
+   second mount shares this timer and never installs a second. The interval is
+   a NETWORK SCAN, so it is armed only from the button click — never at module
+   load, which would install a real setInterval in Node that never exits (the
+   hg-v958 lesson). The tick is busy-guarded so it can never double-scan on top
+   of a manual RUN or the global sweep. */
+var __gsAuto5mTimer = null;
+var __gsAuto5mOn = false;
+function gsPaintAuto5m(ui){
+  try{
+    var b = ui && ui.auto5m;
+    if (!b) return;
+    b.textContent = 'AUTO-REFRESH 5m: ' + (__gsAuto5mOn ? 'ON' : 'OFF');
+    if (__gsAuto5mOn){ b.style.background = '#16A34A'; b.style.color = '#fff'; b.style.borderColor = '#15803D'; }
+    else { b.style.background = ''; b.style.color = ''; b.style.borderColor = ''; }
+  }catch(e){}
+}
+function gsAuto5mToggle(ui, scanSt){
+  try{
+    if (__gsAuto5mTimer !== null){
+      if (typeof clearInterval === 'function') clearInterval(__gsAuto5mTimer);
+      __gsAuto5mTimer = null; __gsAuto5mOn = false;
+      gsPaintAuto5m(ui);
+      return 'off';
+    }
+    if (typeof setInterval !== 'function') return 'no timer';
+    __gsAuto5mTimer = setInterval(function(){
+      try{ if (scanSt && !scanSt.busy) runScan(ui, scanSt); }catch(e){}
+    }, 5 * 60 * 1000);
+    __gsAuto5mOn = true;
+    gsPaintAuto5m(ui);
+    return 'on';
+  }catch(e){ return 'error'; }
+}
+
 var __gsStampTimer = null;
 function gsAutoStampInit(){
   try{
@@ -3684,7 +3732,10 @@ W.HG_tabs.push({ id: 'goldscalp', label: 'GOLD SCALP', mount: mount, refresh: go
                  /* hg-v1022: the PERFECT predicate rides the same route —
                     same guard, same reason — so tests can assert against the
                     SHIPPED function without a 20th module-scope export. */
-                 gsxPerfect: gsxPerfect });
+                 gsxPerfect: gsxPerfect,
+                 /* hg-v1031: the 5-minute auto-refresh button rides the same
+                    route — tests toggle the SHIPPED function, not a copy. */
+                 auto5mToggle: gsAuto5mToggle, auto5mPaint: gsPaintAuto5m });
 W.HG_warmups = W.HG_warmups || [];
 W.HG_warmups.push({ id: 'goldscalp', label: 'GOLD SCALP', run: gsWarm });
 })();

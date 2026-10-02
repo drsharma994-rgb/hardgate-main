@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1030',
-  pack: 'PERFECT v2 — three new fail-open evidence legs (news BLACKOUT, thin/dead tape, volume witness RVOL below the floor), the PERFECT⁺ headline sub-tier (every readable evidence leg WITH, at least one favourable witness), a ★ PERFECT⁺ stamp + perfectPlus ledger mark, a costR read-mark (round-trip as a fraction of R) and session (killzone) marks carried on the gold ledgers, and a hgPerfectCohortEdge self-audit plus a measured-edge note beside every gold banner badge. Evidence-only, never a gate.',
-  built: '2026-10-02T07:20:00Z'
+  version: 'hg-v1031',
+  pack: 'GOLD SCALP 5-MINUTE AUTO-REFRESH BUTTON — a visible ON/OFF toggle in the tab control row that re-runs the desk every five minutes. Armed only from a click (never at load), busy-guarded so it cannot double-scan on a manual RUN or the global sweep, one page one 5m clock, and it paints ON/OFF honestly.',
+  built: '2026-10-02T12:06:34Z'
 };
 
 function hgBuildLabel(b){
