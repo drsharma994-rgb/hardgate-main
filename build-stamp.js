@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1028',
-  pack: 'OOS REPLAY CAN NOW SAY DEGRADED — gate-replay-oos.js (browser) mirrored lib/gate-replay-oos.mjs but its verdict collapsed to HOLDS whenever 8+ outcomes settled, so a gate whose edge had decayed out of sample could never read as degraded. It now follows the lib rule: HOLDS only when the test expectancy sustains 0.7× the best train expectancy, else DEGRADED (the signal a periodic auto-demotion keys on); <8 settled is INSUFFICIENT.',
+  version: 'hg-v1029',
+  pack: 'THE DIVERSIFICATION THROTTLE PRIMITIVE — hgCorrelationRedundancy (indicators2.js) names WHICH same-direction positions are the redundant shadows of a correlated cluster (greedy keep by riskPct desc, corr ≥ maxCorr 0.8). A read-mark, never a gate: a desk can flag the shadows so the forward ledger measures whether they pay differently from the heads. Makes hgCorrMatrix usable.',
   built: '2026-10-02T06:49:13Z'
 };
 

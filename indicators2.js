@@ -671,6 +671,56 @@ function hgPortfolioConcentration(positions, corr){
   }catch(e){ out.note = 'concentration failed'; return out; }
 }
 
+/* The diversification throttle: WHICH same-direction positions are REDUNDANT.
+   hgPortfolioConcentration quantifies HOW concentrated a book is; this names
+   the specific positions that do not add an independent bet, so a desk can
+   flag (not gate) the shadows of a correlated cluster and the forward ledger
+   can measure whether they pay any differently from the head.
+
+   For each direction, positions are sorted by riskPct descending and greedily
+   KEPT: a position is marked redundant when its correlation to an ALREADY-KEPT
+   same-direction position is at or above opts.maxCorr (default 0.8). The head
+   of each correlated cluster survives; the rest are `redundant`. Unmeasurable
+   pairs read as independent (0, hgPairCorr's contract), so a missing pair
+   never fabricates a shadow. A read-mark, never a gate: nothing is dropped
+   or moved. Pure — no DOM, no globals beyond the helpers above. */
+function hgCorrelationRedundancy(positions, seriesBySym, opts){
+  opts = opts || {};
+  var maxCorr = (typeof opts.maxCorr === 'number' && isFinite(opts.maxCorr)) ? opts.maxCorr : 0.8;
+  var out = { redundant: {}, kept: [], note: '' };
+  try{
+    var list = Array.isArray(positions)
+      ? positions.filter(function(p){ return p && p.sym && (p.dir === 'long' || p.dir === 'short') && isFinite(+p.riskPct) && +p.riskPct > 0; })
+      : [];
+    if (list.length < 2){ out.note = 'needs 2+ sized positions'; return out; }
+    var corr = hgCorrMatrix(seriesBySym, list.map(function(p){ return p.sym; }));
+    if (!corr || corr.n < 2){ out.note = (corr && corr.note) || 'needs 2+ symbols with 21+ daily bars'; return out; }
+    var idx = {};
+    for (var a = 0; a < corr.syms.length; a++) idx[corr.syms[a]] = a;
+    /* biggest bet leads each cluster; shadows fall behind it */
+    var sorted = list.slice().sort(function(x, y){ return (+y.riskPct) - (+x.riskPct); });
+    var keptByDir = { long: [], short: [] };
+    for (var i = 0; i < sorted.length; i++){
+      var p = sorted[i];
+      var ci = idx[p.sym];
+      var kept = keptByDir[p.dir];
+      var shadow = false;
+      for (var k = 0; k < kept.length; k++){
+        var q = kept[k];
+        var cj = idx[q.sym];
+        if (ci !== undefined && cj !== undefined && ci !== cj){
+          var c = corr.m[ci][cj];
+          if (isFinite(c) && c >= maxCorr){ shadow = true; break; }
+        }
+      }
+      if (shadow){ out.redundant[p.sym] = true; }
+      else { kept.push(p); out.kept.push(p.sym); }
+    }
+    out.note = out.kept.length + ' kept / ' + sorted.length + ' total · maxCorr ' + maxCorr.toFixed(2);
+    return out;
+  }catch(e){ out.note = 'correlation redundancy failed'; return out; }
+}
+
 /* =============================================================================
    WEEKEND EXPOSURE ON GOLD — the one risk XAUTUSD carries that no gate sees.
    Spot gold and CME futures close Friday 22:00 UTC and reopen Sunday 22:00 UTC.
@@ -915,6 +965,7 @@ window.hgFormatGoldWeekendCountdown = hgFormatGoldWeekendCountdown;
 window.hgCorrMatrix = hgCorrMatrix;
 window.hgPairCorr = hgPairCorr;
 window.hgPortfolioConcentration = hgPortfolioConcentration;
+window.hgCorrelationRedundancy = hgCorrelationRedundancy;
 window.HG_RS_LOOK = HG_RS_LOOK;
 window.hgStructure = hgStructure;
 window.hgStructureGate = hgStructureGate;
