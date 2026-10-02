@@ -332,6 +332,10 @@ localStorage. Never throws.
          forward ledger measures whether the PERFECT cohort pays any
          differently from the rest. */
       perfect: (rec.perfect === true) ? true : undefined,
+      /* hg-v1030: the PERFECT⁺ (headline max-confluence) read-mark — true when
+         the candidate met the strictest bar AND every readable evidence leg
+         was WITH, absent otherwise. Same three-states rule. */
+      perfectPlus: (rec.perfectPlus === true) ? true : undefined,
       /* hg-v1025: THE ANTI-CHASE (walk-away) read-mark — true when the plan was
          dead on arrival at fire time (stop already breached or target already
          behind the entry, hg-plan.js hgPlanChaseVerdict), absent otherwise.
@@ -452,6 +456,12 @@ localStorage. Never throws.
       regime: (rec.regime === 'favored' || rec.regime === 'neutral' || rec.regime === 'caution' || rec.regime === 'against' || rec.regime === 'unreadable') ? rec.regime : undefined,
       sess: (rec.sess === 'participating' || rec.sess === 'thin' || rec.sess === 'unreadable') ? rec.sess : undefined,
       orb: (rec.orb === 'with' || rec.orb === 'against' || rec.orb === 'none') ? rec.orb : undefined,
+      /* hg-v1030: the ICT-session identity the setup fired in (killzone label,
+         e.g. "London · 08:00 GMT"), and the round-trip cost as a fraction of R
+         (costR = rtCostPct / stopPct), both read-marks so the PERFECT cohort can
+         be split by session and measured net of cost. */
+      session: (typeof rec.session === 'string' && rec.session) ? rec.session : undefined,
+      costR: (typeof rec.costR === 'number' && isFinite(rec.costR) && rec.costR >= 0) ? rec.costR : undefined,
       state: 'open', r: null, settledT: null,
       at: isFinite(fin(rec.at)) ? fin(rec.at) : barT
     };
@@ -2678,6 +2688,43 @@ localStorage. Never throws.
         }
         return out;
       } catch (e) { hgFwdWarn('records', e); return []; }
+    };
+
+    /* hg-v1030: THE SELF-AUDIT — does the PERFECT cohort actually pay?
+
+       The banner stamps PERFECT; this is the measurement that says whether
+       the filter is earning it. It reads the LIVE ledger (not a replay) and
+       splits the settled PERFECT records, and within them the PERFECT⁺
+       headline, into win/loss/hit/expR — the same gross R the rest of the
+       log reports, so the cohorts are comparable. A negative expR is said
+       plainly; nothing is coerced toward a story. `tab` optional: pass a
+       forward-tab to ask about one desk, omit for the app-wide cohort. */
+    W.hgPerfectCohortEdge = function(tab){
+      try{
+        var recs = (typeof tab === 'string' && tab) ? W.hgFwdRecords(tab) : W.hgFwdRecords();
+        var wins = 0, losses = 0, rrSum = 0, expired = 0;
+        var plusW = 0, plusL = 0, plusRrSum = 0;
+        for (var i = 0; i < recs.length; i++){
+          var r = recs[i];
+          if (!r || r.perfect !== true) continue;
+          if (r.state === 't1'){
+            wins++; rrSum += num(r.rr) || 0;
+            if (r.perfectPlus === true){ plusW++; plusRrSum += num(r.rr) || 0; }
+          } else if (r.state === 'stop'){
+            losses++;
+            if (r.perfectPlus === true) plusL++;
+          } else if (r.state === 'expired'){ expired++; }
+        }
+        var settled = wins + losses;
+        var plusSettled = plusW + plusL;
+        return {
+          settled: settled, wins: wins, losses: losses, expired: expired,
+          hit: settled ? wins / settled : NaN,
+          expR: settled ? (rrSum - losses) / settled : NaN,
+          plusSettled: plusSettled,
+          plusExpR: plusSettled ? (plusRrSum - plusL) / plusSettled : NaN
+        };
+      }catch(e){ hgFwdWarn('perfectCohortEdge', e); return { settled:0, wins:0, losses:0, expired:0, hit:NaN, expR:NaN, plusSettled:0, plusExpR:NaN }; }
     };
 
     /* ==================== THE SPLIT THE MARK EXISTS FOR (hg-v955) ====

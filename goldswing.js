@@ -569,6 +569,16 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
     for (var i = 0; i < ranked.length; i++){
       var c = ranked[i];
       if (!c || !c.dir) continue;
+      /* hg-v1030: the round-trip cost as a fraction of R (costR = rtCostPct /
+         stopPct). 0.020 is the desk's XM XAUUSD round-trip
+         (GS_RT_COST_PCT_DEFAULT in goldind.js) — inlined here so the
+         lifted-map test stays self-contained and this IIFE never reaches
+         goldind's scope. Read-only: it never moves a row. */
+      var __costRSw = null;
+      if (isFinite(+c.entry) && isFinite(+c.stop) && +c.entry > 0){
+        var __stopPctSw = Math.abs(+c.stop - +c.entry) / +c.entry * 100;
+        if (__stopPctSw > 0) __costRSw = 0.020 / __stopPctSw;
+      }
       cands.push({
         newsRisk: __nwRiskSw,
         id: c.id || null, venue: c.venue || null, sym: c.sym || null,
@@ -586,7 +596,12 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
         /* hg-v1025: the anti-chase (walk-away) flag (goldRankSetups) — a plan dead on arrival at fire time. Carries the same way so the ledger measures the chased cohort. */
         chased: (c.chased === true) ? true : undefined,
         chaseCode: (c.chaseCode === 'stop-breached' || c.chaseCode === 'target-crossed') ? c.chaseCode : null,
+        /* hg-v1030: the PERFECT⁺ headline flag (goldRankSetups) — carries so the banner and the ledger record the max-confluence sub-tier. */
+        perfectPlus: (c.perfectPlus === true) ? true : undefined,
         session: c.session || null, atr: isFinite(c.atr) ? c.atr : null,
+        /* hg-v1030: the round-trip cost as a fraction of R (costR) — a read-mark
+           so the PERFECT cohort can be split net of cost. */
+        costR: __costRSw,
         locked: !!c.locked, issuedAt: isFinite(c.issuedAt) ? c.issuedAt : null,
         asOf: c.asOf || null, why: c.why || null, invalidates: c.invalidates || null,
         anchor: isFinite(c.anchor) ? c.anchor : null,
@@ -649,6 +664,14 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
                    ticket: (c.grade === 'A' || c.grade === 'clean' || !!c.locked),
                    perfect: c.perfect,
                    chased: c.chased, chaseCode: c.chaseCode,
+                   /* hg-v1030: the PERFECT⁺ headline read-mark (property access) */
+                   perfectPlus: c.perfectPlus,
+                   /* hg-v1030: the ICT killzone label this 4h setup fired in +
+                      the round-trip cost as a fraction of R — property access
+                      only, so the lifted-map test stays self-contained;
+                      hgFwdNormalize enum/range-gates them. No sess/orb here: a
+                      4h swing is session-agnostic by design. */
+                   session: c.session, costR: c.costR,
                    /* hg-v1027: the session/news-quality read-mark, set on the cand
                       in publishScan so the lifted map stays self-contained */
                    newsRisk: c.newsRisk };
@@ -1148,8 +1171,24 @@ function bannerHTML(best, ranked){
     ? '<div class="gsw-lock">⬤ CONVICTION LOCK — issued as of ' + esc(best.asOf || '') + '; entry/stop/targets held verbatim, never re-picked on re-scans.</div>'
     : '<div class="gsw-lock new">○ NEW CONVICTION — issued this scan at ' + esc(best.asOf || '') + '; these levels are now locked until invalidated.</div>';
   var perfectBadge = (typeof W.hgPerfectStamp === 'function') ? W.hgPerfectStamp(best) : '';
+  /* hg-v1030: the measured edge of the PERFECT cohort rides beside the badge.
+     hgPerfectCohortEdge reads the LIVE ledger and reports expR; a negative is
+     said plainly and an unmeasured cohort says so — nothing is coerced toward
+     a story. Evidence-only, never a gate on this banner. */
+  var perfectEdgeNote = '';
+  if (perfectBadge && typeof W.hgPerfectCohortEdge === 'function'){
+    try{
+      var __peSw = W.hgPerfectCohortEdge('GOLDSWING');
+      if (__peSw && __peSw.settled > 0 && isFinite(__peSw.expR)){
+        perfectEdgeNote = '<span style="margin-left:6px;font-size:10px;font-weight:700;color:#57534E">measured '
+          + (__peSw.expR > 0 ? '+' : '') + __peSw.expR.toFixed(1) + 'R · n=' + __peSw.settled + '</span>';
+      } else {
+        perfectEdgeNote = '<span style="margin-left:6px;font-size:10px;font-weight:700;color:#57534E">unmeasured (n=0)</span>';
+      }
+    }catch(ePeSw){}
+  }
   return '<div class="gsw-banner"><div class="gsw-banner-in">'
-    + '<div class="gsw-eye">MOST PROBABLE SETUP' + perfectBadge + '</div>'
+    + '<div class="gsw-eye">MOST PROBABLE SETUP' + perfectBadge + perfectEdgeNote + '</div>'
     + '<div class="gsw-dir ' + best.dir + '">' + dirUp
     + '<span>' + esc(best.strategy) + ' · ' + esc(best.venue) + (best.sym ? ' (' + esc(best.sym) + ')' : '')
     + ' · GRADE ' + esc(best.grade)

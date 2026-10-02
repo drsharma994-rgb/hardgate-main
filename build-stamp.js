@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1029',
-  pack: 'THE DIVERSIFICATION THROTTLE PRIMITIVE — hgCorrelationRedundancy (indicators2.js) names WHICH same-direction positions are the redundant shadows of a correlated cluster (greedy keep by riskPct desc, corr ≥ maxCorr 0.8). A read-mark, never a gate: a desk can flag the shadows so the forward ledger measures whether they pay differently from the heads. Makes hgCorrMatrix usable.',
-  built: '2026-10-02T06:49:13Z'
+  version: 'hg-v1030',
+  pack: 'PERFECT v2 — three new fail-open evidence legs (news BLACKOUT, thin/dead tape, volume witness RVOL below the floor), the PERFECT⁺ headline sub-tier (every readable evidence leg WITH, at least one favourable witness), a ★ PERFECT⁺ stamp + perfectPlus ledger mark, a costR read-mark (round-trip as a fraction of R) and session (killzone) marks carried on the gold ledgers, and a hgPerfectCohortEdge self-audit plus a measured-edge note beside every gold banner badge. Evidence-only, never a gate.',
+  built: '2026-10-02T07:20:00Z'
 };
 
 function hgBuildLabel(b){

@@ -5791,9 +5791,25 @@ function goldRankSetups(cands, ctx){
          so each earns the tier from one source of truth. Evidence-only: it
          never demotes, moves or drops a row. */
       try{
-        var pf = (typeof window !== 'undefined' && typeof window.hgPerfectFormation === 'function')
-          ? window.hgPerfectFormation(rc) : null;
+        var pfFn = (typeof window !== 'undefined' && typeof window.hgPerfectFormation === 'function')
+          ? window.hgPerfectFormation : null;
+        var pf = null;
+        if (pfFn){
+          /* hg-v1030: feed the evidence legs the desks actually hold at rank
+             time. newsRisk via hgNewsMark (the USD-macro calendar), sess via the
+             session floor where a desk already stamped it, volume via ctx.rvol.
+             Anything missing stays unreadable — the predicate's honest third
+             state (never mint or deny on a missing feed). */
+          var pfReads = {};
+          var __nwPf = (typeof window !== 'undefined' && typeof window.hgNewsMark === 'function')
+            ? window.hgNewsMark('XAUUSD') : null;
+          if (__nwPf && __nwPf.risk) pfReads.newsRisk = __nwPf.risk;
+          if (rc.sessionFloor && typeof rc.sessionFloor.verdict === 'string') pfReads.sess = rc.sessionFloor.verdict;
+          if (isFinite(+ctx.rvol)) pfReads.volumeRvol = +ctx.rvol;
+          pf = pfFn(rc, pfReads);
+        }
         rc.perfect = (pf && pf.perfect) ? true : undefined;
+        rc.perfectPlus = (pf && pf.plus) ? true : undefined;
         if (pf && pf.why && pf.why.length) rc.perfectWhy = pf.why;
       }catch(ePf){}
       /* hg-v1024: MEASURED-EDGE veto in the RANKER. OMNIGOLD/NEW GOLD already
