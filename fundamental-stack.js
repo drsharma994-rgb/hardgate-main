@@ -314,6 +314,68 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
       text: 'COT read absent — weekly CFTC managed-money feed has not landed' };
   }
 
+  /* Gold risk-sentiment: crypto Fear & Greed read as a risk-off / risk-on
+     proxy, contrarian at the house S2 80/20 extremes ONLY (the same line
+     goldRankSetups chips +1 at, and index.html blocks fresh sets at).
+     Extreme GREED (≥80) = risk-on = weighs on gold = BEAR; extreme FEAR
+     (≤20) = risk-off = bid for gold = BULL. Inside the line it is CHECKED
+     but never a vote — weather is not a signal at 55. */
+  function legFngGold(extra){
+    var fng = extra && extra.fng;
+    if (fng === undefined){
+      var hSf = hostS();
+      fng = (hSf && hSf.fng) ? hSf.fng : null;
+    }
+    if (fng && isFinite(fin(fng.v))){
+      var fv = +fin(fng.v);
+      var vote = fv >= 80 ? 'bear' : (fv <= 20 ? 'bull' : 'neutral');
+      return { key: 'fng', label: 'RISK SENTIMENT (F&G)', vote: vote, state: 'checked',
+        extreme: vote !== 'neutral',
+        text: fv + ' ' + (fng.c || '')
+          + (vote === 'bear' ? ' — extreme greed (risk-on) weighs on gold'
+            : vote === 'bull' ? ' — extreme fear (risk-off) bids gold'
+            : ' — no extreme, no vote') };
+    }
+    return { key: 'fng', label: 'RISK SENTIMENT (F&G)', vote: 'neutral', state: 'unchecked',
+      text: 'alternative.me read absent' };
+  }
+
+  /* Gold positioning: spot-vs-perp basis (goldBasisSignal verdict) carried on
+     the LAST goldspotState snapshot. Crowding is a positioning VOTE, exactly
+     in line with the ranker chip: longs-crowding (perp premium) fades longs =
+     BEAR; shorts-crowding (perp discount) is squeeze fuel = BULL. The PAXG
+     proxy verdicts (paxg-premium / paxg-discount) are a TOKEN SPREAD, not
+     XAUUSDT crowding — INFO, never a vote (they would otherwise mint a fake
+     positioning read). Balanced and unavailable never vote either. */
+  function legGoldPosition(extra){
+    var spot = extra && extra.spot;
+    if (spot === undefined && gfn('goldspotState')){
+      try{ spot = W.goldspotState(); }catch(eSp){ spot = null; }
+    }
+    var v = spot && spot.verdict;
+    if (v === 'longs-crowding'){
+      return { key: 'position', label: 'PAXG BASIS (POSITIONING)', vote: 'bear', state: 'checked',
+        extreme: false,
+        text: 'perp premium — leveraged longs crowding, fade risk for fresh longs' };
+    }
+    if (v === 'shorts-crowding'){
+      return { key: 'position', label: 'PAXG BASIS (POSITIONING)', vote: 'bull', state: 'checked',
+        extreme: false,
+        text: 'perp discount — shorts crowding, squeeze fuel for a bounce' };
+    }
+    if (v === 'paxg-premium' || v === 'paxg-discount'){
+      return { key: 'position', label: 'PAXG BASIS (POSITIONING)', vote: 'neutral', state: 'checked', info: true,
+        text: (v === 'paxg-premium' ? 'PAXG premium' : 'PAXG discount')
+          + ' — token spread, not XAUUSDT crowding; the proxy never votes' };
+    }
+    if (v === 'balanced'){
+      return { key: 'position', label: 'PAXG BASIS (POSITIONING)', vote: 'neutral', state: 'checked', info: true,
+        text: 'basis inside the ±0.15% band — no leveraged crowding edge' };
+    }
+    return { key: 'position', label: 'PAXG BASIS (POSITIONING)', vote: 'neutral', state: 'unchecked',
+      text: 'spot-vs-perp read absent' };
+  }
+
   function goldInfoLegs(macro){
     var legs = [];
     if (macro && macro.dxy && isFinite(fin(macro.dxy.value))){
@@ -353,9 +415,18 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
       if (macro === undefined && gfn('getGoldMacroCached')){
         try{ macro = W.getGoldMacroCached(); }catch(eM){ macro = null; }
       }
+      /* hg-v1033: the gold board now votes on ALL of T+F+S, not just the two
+         macro legs. real-rate (F) + COT (F) + risk-sentiment (S, contrarian
+         F&G) + PAXG positioning (S) are the four DIRECTIONAL legs; the USD
+         calendar stays the blackout; DXY / US10Y / GSR stay INFO priors.
+         "2+ net against" now means any two of the four checked witnesses —
+         still never one, still honest (every leg stays UNCHECKED absent its
+         feed). */
       return [
         legRealRate(extra),
         legCot(extra),
+        legFngGold(extra),
+        legGoldPosition(extra),
         legNews(extra, 'XAU')
       ].concat(goldInfoLegs(macro));
     }

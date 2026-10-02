@@ -98,10 +98,11 @@ console.log('\n== the boards: 7 legs BTC / 7 crypto / 6 gold ==');
       && /BTC-only/.test(leg(alt, 'onchain').text),
     'an alt\'s on-chain leg says BTC-only instead of faking a read');
   const gold = W.hgFundamentalRegime('gold', {});
-  ok(gold.legs.length === 6 && gold.regime === 'unknown' && gold.blackout === false,
-    'gold board: real rates, COT, event risk + three INFO priors — dark until fetched');
-  ok(leg(gold, 'realrate').state === 'unchecked' && leg(gold, 'cot').state === 'unchecked',
-    'gold votes stay UNCHECKED while macro/COT have never landed');
+  ok(gold.legs.length === 8 && gold.regime === 'unknown' && gold.blackout === false,
+    'gold board: real rates, COT, risk-sentiment, PAXG positioning, event risk + three INFO priors — dark until fetched');
+  ok(leg(gold, 'realrate').state === 'unchecked' && leg(gold, 'cot').state === 'unchecked'
+      && leg(gold, 'fng').state === 'unchecked' && leg(gold, 'position').state === 'unchecked',
+    'gold votes stay UNCHECKED while macro / COT / F&G / spot have never landed');
 }
 
 console.log('\n== ETH/alts: the BTC options snap is a PRIOR, never their vote ==');
@@ -168,6 +169,39 @@ console.log('\n== GOLD legs: real rates and COT vote, the priors never do ==');
   }});
   ok(gs.demote === false && gs.chips.some(function(c){ return /FUNDAMENTAL TAILWIND 2v0/.test(c); }),
     'the same board WITH a gold short prints the tailwind and touches nothing');
+
+  /* hg-v1033: SENTIMENT now votes in the gate, not just chips. F&G extreme
+     (risk-on → bear) + PAXG crowding join real-rate + COT as the four
+     directional legs. Two witnesses still demote; one never does. */
+  const fgGreed = leg(W.hgFundamentalRegime('gold', { fng: { v: 88, c: 'Extreme Greed' } }), 'fng');
+  ok(fgGreed.vote === 'bear' && fgGreed.extreme === true,
+    'gold F&G extreme greed votes BEAR (risk-on weighs on gold)');
+  const fgFear = leg(W.hgFundamentalRegime('gold', { fng: { v: 12, c: 'Extreme Fear' } }), 'fng');
+  ok(fgFear.vote === 'bull' && fgFear.extreme === true,
+    'gold F&G extreme fear votes BULL (risk-off bids gold)');
+  const posCrowd = leg(W.hgFundamentalRegime('gold', { spot: { verdict: 'longs-crowding' } }), 'position');
+  ok(posCrowd.vote === 'bear' && posCrowd.info !== true,
+    'PAXG longs-crowding votes BEAR (fade longs) — a real positioning vote');
+  const posSqueeze = leg(W.hgFundamentalRegime('gold', { spot: { verdict: 'shorts-crowding' } }), 'position');
+  ok(posSqueeze.vote === 'bull', 'PAXG shorts-crowding votes BULL (squeeze fuel)');
+  const posProxy = leg(W.hgFundamentalRegime('gold', { spot: { verdict: 'paxg-premium' } }), 'position');
+  ok(posProxy.info === true && posProxy.vote === 'neutral',
+    'a PAXG proxy premium is INFO — token spread, never a vote');
+  const gSent = W.hgFundamentalGate('XAUUSD', 'long', { extra: {
+    fng: { v: 88, c: 'Extreme Greed' }, spot: { verdict: 'longs-crowding' }
+  }});
+  ok(gSent.demote === true && gSent.chips.some(function(c){ return /FUNDAMENTAL HEADWIND 2v0/.test(c); }),
+    'two SENTIMENT witnesses (F&G greed + PAXG crowding) demote the gold long — sentiment now gates');
+  ok(gSent.chips.indexOf('F&G EXTREME') >= 0, 'the F&G extreme chips beside the headwind');
+  const gOneSent = W.hgFundamentalGate('XAUUSD', 'long', { extra: {
+    fng: { v: 88, c: 'Extreme Greed' }
+  }});
+  ok(gOneSent.demote === false && gOneSent.refuse === false,
+    'one sentiment witness never flips the gold setup');
+  const gMixed = W.hgFundamentalGate('XAUUSD', 'long', { extra: {
+    fng: { v: 88, c: 'Extreme Greed' }, spot: { verdict: 'shorts-crowding' }
+  }});
+  ok(gMixed.demote === false, 'a 1v1 sentiment split is not decisive — the 2-vote bar is real');
 }
 
 console.log('\n== the blackout refuses — crypto and gold alike ==');

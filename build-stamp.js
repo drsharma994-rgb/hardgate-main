@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1032',
-  pack: 'PER-TAB 5-MINUTE AUTO-REFRESH — every tab gets its own ON/OFF toggle injected into its pane header, re-scanning that tab every five minutes on a click, independent per tab (one timer per tab, never at load), riding the same hgScanOneTab the HARD REFRESH uses.',
-  built: '2026-10-02T12:17:38Z'
+  version: 'hg-v1033',
+  pack: 'GOLD SENTIMENT JOINS THE DECISION GATE — the gold fundamental gate now casts FOUR directional votes (real-rate, COT, contrarian risk-sentiment F&G, PAXG-basis positioning), so a 2+ net checked headwind demotes with fundamental AND sentimental witnesses combined instead of only the macro pair; every leg stays UNCHECKED when its feed is absent, one witness still never flips a setup.',
+  built: '2026-10-02T14:28:01Z'
 };
 
 function hgBuildLabel(b){
