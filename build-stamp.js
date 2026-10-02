@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1031',
-  pack: 'GOLD SCALP 5-MINUTE AUTO-REFRESH BUTTON — a visible ON/OFF toggle in the tab control row that re-runs the desk every five minutes. Armed only from a click (never at load), busy-guarded so it cannot double-scan on a manual RUN or the global sweep, one page one 5m clock, and it paints ON/OFF honestly.',
-  built: '2026-10-02T12:06:34Z'
+  version: 'hg-v1032',
+  pack: 'PER-TAB 5-MINUTE AUTO-REFRESH — every tab gets its own ON/OFF toggle injected into its pane header, re-scanning that tab every five minutes on a click, independent per tab (one timer per tab, never at load), riding the same hgScanOneTab the HARD REFRESH uses.',
+  built: '2026-10-02T12:17:38Z'
 };
 
 function hgBuildLabel(b){
