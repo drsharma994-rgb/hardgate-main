@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1033',
-  pack: 'GOLD SENTIMENT JOINS THE DECISION GATE — the gold fundamental gate now casts FOUR directional votes (real-rate, COT, contrarian risk-sentiment F&G, PAXG-basis positioning), so a 2+ net checked headwind demotes with fundamental AND sentimental witnesses combined instead of only the macro pair; every leg stays UNCHECKED when its feed is absent, one witness still never flips a setup.',
-  built: '2026-10-02T14:28:01Z'
+  version: 'hg-v1034',
+  pack: 'TREND MATRIX GAINS THE FUNDAMENTAL + SENTIMENT WITNESS — the crypto universe desk now reads the house fundamental stack (on-chain, term curve, F&G, options positioning, calendar) as a fourth evidence witness beside taker-flow / momentum / volume: a red-folder blackout refuses and a 2+ net checked headwind demotes each row to watch (held off both limit desks, counted and named), a tailwind chips and records a fundWith read-mark; the composite score stays five legs untouched.',
+  built: '2026-10-02T22:47:58Z'
 };
 
 function hgBuildLabel(b){

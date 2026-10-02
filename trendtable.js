@@ -1196,6 +1196,11 @@ function trendmxRowTier(r, plan){
   /* hg-v1020: and the volume witness — a swing rally the OBV trend refuses
      to confirm (or a fall it refuses to join) caps at NEAR the same way. */
   if (trendmxVolState(r, tmDirOf(r)) === 'against') return 'near';
+  /* hg-v1034: the fundamental + sentiment witness caps the same way — a row
+     whose coin sits in a red-folder blackout (refuse) or against a 2+ net
+     checked headwind (against) can never be CLEAN. */
+  var fundSt = trendmxFundState(r, tmDirOf(r));
+  if (fundSt === 'refuse' || fundSt === 'against') return 'near';
   if (plan && tmValidSetup(plan) && r.gate && r.gate.clean7) return 'clean';
   if (r.gate && r.gate.nearClean) return 'near';
   return 'forming';
@@ -1383,6 +1388,67 @@ function trendmxVolState(r, dir){
   return null;
 }
 
+/* hg-v1034: THE FUNDAMENTAL + SENTIMENT WITNESS — the composite reads closes,
+   the momentum and volume witnesses read closes, the flow witness reads ONE
+   venue's taker prints; until this pack NOTHING read what the market is
+   POSITIONED to do and what the macro/sentiment says, on the row's own coin.
+   This is the house fundamental stack (fundamental-stack.js hgFundamentalGate),
+   shared with OmniBTC and the gold desks, read ONCE per row and memoized:
+     BTC ..... ON-CHAIN (mempool.space, votes) + TERM (own curve, votes) +
+               FEAR & GREED (contrarian 80/20, votes) + 25Δ RISK REVERSAL
+               (Deribit, |8| extreme, votes) + EVENT RISK (red-folder blackout).
+     ALTS .... F&G (market-wide, votes at extremes) + the coin's OWN TERM row
+               (votes) + the coin's OWN calendar (blackout); BTC on-chain and
+               the 25Δ RR render as prior INFO, never vote for an alt.
+   The mechanic mirrors the flow/mom/vol witnesses (hg-v1012/1019/1020):
+     - EVIDENCE ONLY — the composite stays five legs (a sixth would re-scale
+       every tmScore the forward ledger measures).
+     - refuse  (red-folder blackout) / against  (2+ net checked votes AGAINST
+       the row's direction) hold the row off BOTH class desks and cap it at
+       NEAR — counted per class in heldWhy (the fund reason). Still paints
+       with its chip; nothing dropped silently. One witness never flips.
+     - with    (2+ net checked votes WITH) chips TAILWIND and hands the
+       ledger a fundWith read-mark — never a composite point.
+     - flat / null  — a readable board with no decisive vote, or a dark
+       board: silent, holds nothing off (the hg-v700 honest-degradation rule).
+   The GOLDEN/DEATH cross desks stay out of scope (the fresh multi-week
+   cross premise misjudges a momentary positioning/sentiment snap, the same
+   reason flow and momentum stand down there). */
+function trendmxFundGate(r, dir){
+  if (!r) return null;
+  dir = dir || tmDirOf(r);
+  if (!dir) return null;
+  var key = (dir === 'short') ? '_fundGateShort' : '_fundGate';
+  if (r[key] !== undefined) return r[key];
+  var g = null;
+  if (typeof hgFundamentalGate === 'function'){
+    try{ g = hgFundamentalGate(r.sym, dir, { scanner: 'trendmx' }); }catch(e){ g = null; }
+  }
+  r[key] = g || null;
+  return g || null;
+}
+function trendmxFundState(r, dir){
+  var g = trendmxFundGate(r, dir);
+  if (!g) return null;
+  if (g.refuse) return 'refuse';
+  if (g.demote) return 'against';
+  if (g.chips && g.chips.some(function(c){ return /TAILWIND/.test(c); })) return 'with';
+  return (g.regime && g.regime.checked) ? 'flat' : null;
+}
+
+/* the fundamental + sentiment chip — the volume witness's own pattern
+   (hg-v1020). It reuses the house renderer (hgFundamentalChipHtml) so the
+   chip is byte-identical to the gold desk's and OmniBTC's; an absent stack
+   or a dark board paints NO chip. */
+function trendmxFundChipHtml(r){
+  try{
+    var g = trendmxFundGate(r);
+    if (!g || !g.chips || !g.chips.length) return '';
+    if (typeof hgFundamentalChipHtml === 'function') return hgFundamentalChipHtml(g) || '';
+    return '';
+  }catch(e){ return ''; }
+}
+
 /* hg-v1022: THE PERFECT SETUP tier — the strictest confluence read the desk
    can honestly print. NOT a new composite leg and NOT a win guarantee (the
    forward ledger measures it like every other mechanic): it is a FILTER that
@@ -1406,6 +1472,11 @@ function trendmxPerfectState(r){
   if (trendmxMomState(r, dir) !== 'with') return false;
   if (trendmxVolState(r, dir) !== 'with') return false;
   if (r.flow && r.flow.verdict === 'against') return false;
+  /* hg-v1034: the fundamental + sentiment witness — a blackout (refuse) or a
+     2+ net checked headwind (against) disqualifies PERFECT exactly like flow
+     against. WITH chips; a dark or flat board never disqualifies. */
+  var fundSt = trendmxFundState(r, dir);
+  if (fundSt === 'refuse' || fundSt === 'against') return false;
   var fp = r.fundingPct;
   if (typeof fp === 'number' && isFinite(fp) && typeof W.hgFundingAgainstMark === 'function'){
     try{ var m = W.hgFundingAgainstMark(fp, dir); if (m && m.against === true) return false; }catch(e){}
@@ -1503,7 +1574,7 @@ function trendmxLimitClasses(rows){
      witnesses that actually fired (taker flow hg-v1012 · momentum hg-v1019
      · volume hg-v1020). */
   var out = { clean: [], conv: [], heldClean: 0, heldConv: 0,
-              heldWhy: { clean: { flow: 0, mom: 0, vol: 0 }, conv: { flow: 0, mom: 0, vol: 0 } } };
+              heldWhy: { clean: { flow: 0, mom: 0, vol: 0, fund: 0 }, conv: { flow: 0, mom: 0, vol: 0, fund: 0 } } };
   for (var i = 0; i < rows.length; i++){
     var r = rows[i];
     if (!r || !r.gate || r.gate.veto) continue;
@@ -1542,6 +1613,19 @@ function trendmxLimitClasses(rows){
     if (trendmxVolState(r, dir) === 'against'){
       if (isClean){ out.heldClean++; out.heldWhy.clean.vol++; }
       else { out.heldConv++; out.heldWhy.conv.vol++; }
+      continue;
+    }
+    /* hg-v1034: THE FUNDAMENTAL + SENTIMENT WITNESS hold-off — the fourth
+       witness, the ONLY one that reads off-chart evidence (on-chain, the
+       coin's own term curve, F&G, options positioning, the calendar). A
+       red-folder blackout REFUSES and a 2+ net checked headwind DEMOTES:
+       held off both class desks, counted per class under the fund reason,
+       still painting with its chip. WITH, FLAT and a dark board pass — it
+       only ever removes, and one witness never flips. */
+    var fundSt = trendmxFundState(r, dir);
+    if (fundSt === 'refuse' || fundSt === 'against'){
+      if (isClean){ out.heldClean++; out.heldWhy.clean.fund++; }
+      else { out.heldConv++; out.heldWhy.conv.fund++; }
       continue;
     }
     var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
@@ -1602,6 +1686,11 @@ function trendmxLimitClasses(rows){
                       swing OBV trend CONFIRMED the row's new extreme at fire
                       time, absent when it abstained or could not read. */
                    if (trendmxVolState(c.row, c.dir) === 'with') rd.volWith = true;
+                   /* hg-v1034: the fundamental + sentiment read-mark — true
+                      when the house stack backed the row (2+ net with) at
+                      fire time, absent when it was silent or dark. Against /
+                      refuse rows never reach this map (held off above). */
+                   if (trendmxFundState(c.row, c.dir) === 'with') rd.fundWith = true;
                    return Object.keys(rd).length ? rd : undefined;
                  })(),
                  /* hg-v995: the composite is NOT handed in here -- the ledger reads it off
@@ -1633,6 +1722,7 @@ function trendmxHeldBits(held, why){
   if (w.flow) bits.push('real Binance taker flow reads against the trend (hg-v1012)');
   if (w.mom) bits.push('the 1D RSI momentum range has turned against the trend (hg-v1019)');
   if (w.vol) bits.push('the 1D OBV volume trend diverges against the trend (hg-v1020)');
+  if (w.fund) bits.push('the fundamental + sentiment stack stands against the trend — a calendar blackout or 2+ net checked votes (hg-v1034)');
   if (!bits.length) bits.push('real Binance taker flow reads against the trend (hg-v1012)');
   return bits;
 }
@@ -1654,6 +1744,7 @@ function trendmxLimitDeskHTML(title, crit, bag, held, why){
     if (w2.flow) tags.push('taker flow against');
     if (w2.mom) tags.push('momentum regime against');
     if (w2.vol) tags.push('volume trend against');
+    if (w2.fund) tags.push('fundamental headwind');
     if (!tags.length) tags.push('taker flow against');
     heldTag = ' · ' + held + ' held off — ' + tags.join(' · ');
   }
@@ -1727,7 +1818,7 @@ function trendmxSetupCardHTML(r, tier){
   return hgSetupCardHTML({
     sym: r.sym, dir: dir, tier: tier,
     mini: mini, gates: gates,
-    plan: plan ? (trendmxPlanHTML(plan) + tmSmcChip(r) + trendmxFlowChipHtml(r) + trendmxMomChipHtml(r) + trendmxVolChipHtml(r) + trendmxFundingChipHtml(r) + trendmxAtrRegimeChipHtml(r)) : '',
+    plan: plan ? (trendmxPlanHTML(plan) + tmSmcChip(r) + trendmxFlowChipHtml(r) + trendmxMomChipHtml(r) + trendmxVolChipHtml(r) + trendmxFundingChipHtml(r) + trendmxAtrRegimeChipHtml(r) + trendmxFundChipHtml(r)) : '',
     entry: plan ? plan.entry : null, stop: plan ? plan.stop : null, t1: plan ? plan.t1 : null,
     chartId: (tier === 'clean' && plan) ? ('tmx_' + String(r.sym).replace(/[^A-Za-z0-9]/g, '')) : '',
     stack: stack,
@@ -2320,6 +2411,9 @@ W.trendmxMomChipHtml = trendmxMomChipHtml;
 W.trendmxSetupCardHTML = trendmxSetupCardHTML;   /* hg-v1019: the matrix card — where a held row's chip must paint (the NEAR section) */
 W.trendmxVolState = trendmxVolState;       /* hg-v1020: the volume witness */
 W.trendmxVolChipHtml = trendmxVolChipHtml;
+W.trendmxFundGate = trendmxFundGate;       /* hg-v1034: the fundamental + sentiment witness */
+W.trendmxFundState = trendmxFundState;
+W.trendmxFundChipHtml = trendmxFundChipHtml;
 W.trendmxPerfectState = trendmxPerfectState;       /* hg-v1022: the perfect predicate */
 W.trendmxPerfectSetups = trendmxPerfectSetups;     /* hg-v1022: the perfect bag collector */
 W.trendmxPerfectDeskHTML = trendmxPerfectDeskHTML; /* hg-v1022: the perfect desk renderer */
