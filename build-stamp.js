@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1027',
-  pack: 'SESSION/NEWS CONDITIONING ON THE GOLD LEDGER — GOLD SCALP and GOLD SWING now write the USD-macro calendar read (hgNewsMark XAUUSD: blackout / high / med / low) at fire time, so the forward ledger NEWs CALENDAR SPLIT can separate the PERFECT and MOST-PROBABLE cohorts by session/news quality. Marked, never gated: a cohort that pays differently is measured, not assumed.',
+  version: 'hg-v1028',
+  pack: 'OOS REPLAY CAN NOW SAY DEGRADED — gate-replay-oos.js (browser) mirrored lib/gate-replay-oos.mjs but its verdict collapsed to HOLDS whenever 8+ outcomes settled, so a gate whose edge had decayed out of sample could never read as degraded. It now follows the lib rule: HOLDS only when the test expectancy sustains 0.7× the best train expectancy, else DEGRADED (the signal a periodic auto-demotion keys on); <8 settled is INSUFFICIENT.',
   built: '2026-10-02T06:49:13Z'
 };
 

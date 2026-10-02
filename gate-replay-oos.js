@@ -58,9 +58,18 @@ function hgReplaySweepOos(replay, gate, thresholds, cmp){
     }
     oos = {
       threshold: best.t,
+      setups: n2,
       settled: settled2,
+      hitPct: settled2 ? wins2 / settled2 : null,
       expectancyR: settled2 ? sumR2 / settled2 : null,
-      verdict: settled2 < 8 ? 'INSUFFICIENT' : 'HOLDS',
+      /* hg-v1028: align with lib/gate-replay-oos.mjs — the browser verdict was
+         'HOLDS' whenever settled2 >= 8, so a gate whose edge had DECAYED out of
+         sample could never read as degraded. The hold bar is the best train
+         expectancy sustained to within 0.7× on the test set; below that, the
+         edge is DEGRADED (the signal a periodic auto-demotion keys on). */
+      verdict: settled2 < 8 ? 'INSUFFICIENT'
+        : (settled2 && best.expectancyR != null && (sumR2 / settled2) >= best.expectancyR * 0.7
+          ? 'HOLDS' : 'DEGRADED'),
     };
   }
   return { gate: gate, rows: trainRows, oos: oos, note: train.length + ' train / ' + test.length + ' test' };
