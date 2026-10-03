@@ -272,6 +272,7 @@ function tabAlertsFilterCryptoConvicted(list){
       return s.cryptoConvicted === true;
     }
     if (s.src === 'BEST') return true;
+    if (s.src === 'OMNIBTC') return true;   /* hg-v1053: the desk's own gate-clean MOST PROBABLE crown */
     if (s.src.indexOf('EDGE') >= 0) return true;
     if (s.src.indexOf('BRAIN') >= 0) return true;
     return false;
@@ -878,12 +879,37 @@ function collectTermBasisWatch(out){
   });
 }
 
+/* hg-v1053: the OMNIBTC crown joins the unified batch — ticket-tier only
+   (the measured-edge stand-aside already forces tier near on a losing
+   crown), PERFECT badges ride the note, and the dedup keys on the levels
+   like every other collector. */
+function collectOmnibtc(out){
+  try{
+    if (typeof W.hgObtcSnap !== 'function') return;
+    var s = W.hgObtcSnap();
+    if (!s || !s.pick || !s.pick.row) return;
+    if (String(s.tier || 'clean').toLowerCase() !== 'clean') return;
+    var row = s.pick.row;
+    if (!row.dir || !fin(+row.entry) || !fin(+row.stop) || !fin(+row.t1)) return;
+    var tierLbl = row.perfectPlus ? 'PERFECT+' : (row.perfect ? 'PERFECT' : 'CLEAN');
+    var note = (row.perfectPlus ? 'STAR PERFECT+ ' : (row.perfect ? 'STAR PERFECT ' : ''))
+      + (s.measured && s.measured.state === 'proven' ? 'EDGE PROVEN' : '')
+      + (row.entryRefined ? ' refined entry' : '');
+    pushSetup(out, 'OMNIBTC', {
+      sym: row.sym, dir: row.dir, entry: row.entry, stop: row.stop, t1: row.t1, t2: row.t2,
+      clean: true, tier: tierLbl,
+      mechanic: String(row.omniKind || row.kind || row.engine || 'OMNIBTC').toUpperCase().slice(0, 28)
+    }, { clean7: true, prime: row.perfect === true, note: note || null });
+  }catch(e){ /* never breaks the batch */ }
+}
+
 function hgTabAlertsCollect(win){
   var out = [];
   var root = win || W;
   var saved = W;
   if (win) W = root;
   try{
+    collectOmnibtc(out);   /* hg-v1053: the desk's one crown, first - it is the most selective read */
     collectCrypto(out, 'swing', 'SWING');
     collectCrypto(out, 'scalp', 'SCALP');
     collectCryptoWatch(out);
@@ -1396,6 +1422,7 @@ async function hgTrendmxCrossAlertsRun(opts){
 
 /* browser globals */
 W.hgTabAlertsCollect = function(){ return hgTabAlertsCollect(W); };
+W.collectOmnibtc = collectOmnibtc;   /* hg-v1053: test seam */
 W.hgTabAlertsCollectGold = function(){ return hgTabAlertsCollectGold(W); };
 W.hgTabAlertsRun = function(opts){ return hgTabAlertsRun(opts || {}); };
 W.hgTabAlertsCheckLive = function(){
@@ -1459,6 +1486,7 @@ if (typeof module !== 'undefined' && module.exports){
     cryptoSetupId, cryptoIsMostProbable,
     trendmxCrossSetupKey, trendmxCrossFreshKeys, hgTrendmxCrossAlertFormat,
     collectTrendmxCrosses, hgTrendmxCrossAlertsRun, TRENDMX_CROSS_GAP_MS, TRENDMX_ALERT_CYCLE_MS,
+    collectOmnibtc,
     LS_TRENDMX_CROSS, LS_TRENDMX_LAST_RUN };
 }
 

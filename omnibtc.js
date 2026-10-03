@@ -1592,7 +1592,8 @@ a global hard refresh.
         omniInfo: omniInfo,
         extraLedger: extraLedger,
         fundamental: fundamental,
-        measured: measured
+        measured: measured,
+        at: Date.now()
       };
       __obtc.snap = snap;
       __obtc.ran = true;
@@ -1674,6 +1675,30 @@ a global hard refresh.
   W.hgObtcCandidateFromOmniHit = hgObtcCandidateFromOmniHit;
   W.hgObtcPrincipalBannerHtml = hgObtcPrincipalBannerHtml;
   W.hgObtcPick = hgObtcPick;
+  /* hg-v1053: the alert / auto-scan seam — the last crown in a light
+     shape the unified Telegram batch and the background cycle read. */
+  W.hgObtcSnap = function(){
+    try{
+      var s = __obtc.snap;
+      if (!s || !s.pick) return null;
+      var row = s.pick.row || {};
+      return {
+        at: s.at || null,
+        tier: s.pick.tier || 'clean',
+        pick: { row: {
+          sym: row.sym || 'BTCUSD', dir: row.dir || null,
+          entry: row.entry, stop: row.stop, t1: row.t1, t2: row.t2,
+          engine: row.engine || null, omniKind: row.omniKind || null, kind: row.kind || null,
+          perfect: row.perfect === true, perfectPlus: row.perfectPlus === true,
+          measuredStandAside: row.measuredStandAside === true,
+          measuredRanked: row.measuredRanked === true,
+          entryRefined: row.entryRefined === true
+        } },
+        measured: s.measured ? { state: s.measured.state, n: s.measured.n, hit: s.measured.hit,
+          expR: s.measured.expR, floor: s.measured.floor } : null
+      };
+    }catch(e){ return null; }
+  };
   W.hgObtcPerfectCandidate = hgObtcPerfectCandidate;   /* hg-v1035: the PERFECT tier */
   W.hgObtcPerfectFormation = hgObtcPerfectFormation;
   W.hgObtcPerfectStamp = hgObtcPerfectStamp;
