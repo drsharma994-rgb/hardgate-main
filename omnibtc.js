@@ -731,6 +731,74 @@ a global hard refresh.
     }catch(e){ return ''; }
   }
 
+  /* hg-v1055: THE SETUP CARD — the prompt's per-answer template, generated
+     deterministically from the desk's own measured reads: a 2-sentence
+     market thesis, the setup block (bias, entry zone, SL, TP1-3, R:R),
+     indicator convergence with the numbers, and the automation blueprint
+     (webhook JSON for the crowned venue). A WATCH payload carries
+     formation WATCH_ONLY - the bridge must drop it. */
+  function hgObtcSetupCardHtml(pick, snap){
+    try{
+      if (!pick || !pick.row) return '';
+      var r = pick.row, reads = r.perfectReads || {};
+      var dir = String(r.dir || '').toLowerCase();
+      if (dir !== 'long' && dir !== 'short') return '';
+      var entry = +r.entry, stop = +r.stop, t1 = +r.t1, t2 = +r.t2, a = isFinite(reads.atrVal) ? +reads.atrVal : NaN;
+      if (!(isFinite(entry) && isFinite(stop) && isFinite(t1))) return '';
+      var risk = Math.abs(entry - stop);
+      var rr = risk > 0 ? Math.abs(t1 - entry) / risk : NaN;
+      /* ---- market thesis: exactly two dense sentences ---- */
+      var s1 = [];
+      if (reads.structureTrend) s1.push('structure: EMA50/200 4h reads ' + String(reads.structureTrend).toUpperCase() + ' - ' + (String(reads.structureTrend) === dir ? 'WITH' : 'AGAINST') + ' the ' + dir);
+      else s1.push('structure UNREAD');
+      s1.push('momentum: ' + (isFinite(+r.rsi) ? 'RSI ' + (+r.rsi).toFixed(1) : 'RSI UNREAD'));
+      var s2 = [];
+      if (isFinite(reads.slotRvol)) s2.push('volume: fire bar ' + (+reads.slotRvol).toFixed(2) + 'x its time-of-day norm');
+      else s2.push('volume UNREAD');
+      if (isFinite(reads.venueFundingPct)) s2.push('funding ' + (+reads.venueFundingPct).toFixed(4) + '%');
+      if (reads.sessName) s2.push(reads.sessName + ' session');
+      var thesis = s1.join('; ') + '. ' + s2.join('; ') + '.';
+      /* ---- the setup block ---- */
+      var zoneTxt = isFinite(a) ? '[' + (entry - 0.25 * a).toFixed(2) + ' - ' + (entry + 0.25 * a).toFixed(2) + ']' : '[n/a - ATR UNREAD]';
+      var tp3Txt = isFinite(a) ? ((dir === 'long' ? entry + 6.5 * a : entry - 6.5 * a).toFixed(2) + ' (EXTENSION - not graded)') : 'n/a';
+      var tierLbl = String(pick.tier || 'clean').toLowerCase() === 'clean' ? 'TICKET' : 'WATCH';
+      var conv = [];
+      if (reads.structureTrend) conv.push('EMA50/200 4h: ' + String(reads.structureTrend).toUpperCase());
+      if (isFinite(+r.rsi)) conv.push('RSI ' + (+r.rsi).toFixed(1));
+      if (isFinite(reads.slotRvol)) conv.push('RVOL ' + (+reads.slotRvol).toFixed(2) + ' vs the 0.6/1.0 house bars');
+      if (isFinite(reads.atrVal)) conv.push('ATR14 ' + (+reads.atrVal).toFixed(2));
+      if (isFinite(reads.venueFundingPct)) conv.push('funding ' + (+reads.venueFundingPct).toFixed(4) + '%');
+      /* ---- the automation blueprint ---- */
+      var venue = r.venue ? String(r.venue).toLowerCase() : 'delta';
+      var symTxt = venue === 'coindcx' ? 'B-BTC_USDT' : 'BTCUSD';
+      var payload = {
+        v: 1,
+        id: 'OBTC-' + (isFinite(entry) ? entry.toFixed(2) : 'x'),
+        venue: venue,
+        symbol: symTxt,
+        side: dir,
+        entry: entry, stop: stop, t1: t1, t2: isFinite(t2) ? t2 : null,
+        gates: ((r.gatesPassed != null ? r.gatesPassed : (r.passed != null ? r.passed : 0)) + '/7'),
+        formation: tierLbl === 'TICKET' ? (r.perfectPlus ? 'PERFECT_PLUS' : (r.perfect ? 'PERFECT' : 'CLEAN')) : 'WATCH_ONLY',
+        measured: (snap && snap.measured && snap.measured.state) ? String(snap.measured.state).toUpperCase() : 'UNREAD',
+        exitPolicy: 'scale50_t1_be_trail',
+        ts: Math.floor(Date.now() / 1000)
+      };
+      var jsonTxt = JSON.stringify(payload, null, 2);
+      var dropNote = tierLbl === 'TICKET' ? '' : '<div class="note warn" style="margin-top:4px">formation WATCH_ONLY - the bridge must drop this payload.</div>';
+      return '<div class="panel" style="margin-top:10px"><h3>SETUP CARD <span>the prompt\'s per-answer template, generated from the desk\'s own reads</span></h3>'
+        + '<div class="kv"><span class="k">Market Thesis</span><span class="v">' + esc(thesis) + '</span></div>'
+        + '<div class="kv"><span class="k">Bias</span><span class="v ' + (dir === 'long' ? 'pos' : 'neg') + '">' + dir.toUpperCase() + '</span></div>'
+        + '<div class="kv"><span class="k">Entry Zone</span><span class="v">' + esc(zoneTxt) + '</span></div>'
+        + '<div class="kv"><span class="k">Invalidation (SL)</span><span class="v">' + stop.toFixed(2) + '</span></div>'
+        + '<div class="kv"><span class="k">Targets (TP)</span><span class="v">TP1 ' + t1.toFixed(2) + ' | TP2 ' + (isFinite(t2) ? t2.toFixed(2) : 'n/a') + ' | TP3 ' + esc(tp3Txt) + '</span></div>'
+        + '<div class="kv"><span class="k">Risk/Reward</span><span class="v">' + (isFinite(rr) ? rr.toFixed(2) + 'R vs TP1' : 'n/a') + '</span></div>'
+        + '<div class="kv"><span class="k">Indicator Convergence</span><span class="v">' + esc(conv.join(' | ') || 'no measurable reads') + '</span></div>'
+        + '<div class="kv"><span class="k">Automation Blueprint</span><span class="v"><pre style="margin:4px 0;white-space:pre-wrap;font-size:10px">' + esc(jsonTxt) + '</pre>' + dropNote + '</span></div>'
+        + '</div>';
+    }catch(e){ return ''; }
+  }
+
   /* the TRADE COST + TIMING WITNESSES — round-trip cost in R, session
      participation, day-range exhaustion and the cross-venue funding
      premium. All evidence, never a gate: they tell the operator what the
@@ -1200,6 +1268,7 @@ a global hard refresh.
       }
       dhtml += hgObtcAutoRuleHtml(pick);
       dhtml += hgObtcPlanMathHtml(pick);
+      dhtml += hgObtcSetupCardHtml(pick, snap);
       dhtml += hgObtcScoreboardHtml();
       ui.detail.innerHTML = dhtml;
     }
@@ -1532,6 +1601,15 @@ a global hard refresh.
           }catch(eSw){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eSw); }catch(eWs){} }
           if (match && match._ticker && isFinite(+match._ticker.mark) && isFinite(+pick.row.entry) && +match._ticker.mark > 0){
             pfReads.markDistPct = (+match._ticker.mark - +pick.row.entry) / +pick.row.entry * 100;
+          }
+          if (winnerRows && winnerRows.length >= 20 && typeof W.atr === 'function'){
+            try{
+              var atrArr = W.atr(winnerRows, 14);
+              if (atrArr && atrArr.length){
+                var aLast = +atrArr[atrArr.length - 1];
+                if (isFinite(aLast) && aLast > 0) pfReads.atrVal = aLast;
+              }
+            }catch(eAt2){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eAt2); }catch(eWa){} }
           }
           /* hg-v1049: the fire bar's session and the multi-timeframe
              agreement, read off the tapes the desk already holds */

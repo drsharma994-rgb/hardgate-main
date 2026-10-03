@@ -121,6 +121,17 @@ console.log('== all seven legs readable-and-WITH crowns PERFECT⁺ and prints th
      asserted by shape, not by the pre-refinement number */
   ok(d.indexOf('Mark distance') >= 0 && /mark is [0-9.]+% (ABOVE|BELOW) the entry/.test(d), 'the mark-distance witness prints the mark vs the crowned entry');
   ok(d.indexOf('ENGINE SCOREBOARD') >= 0 && d.indexOf('n=40 - hit 55% - expR +0.30R') >= 0, 'the engine scoreboard prints the settled per-engine record');
+  ok(d.indexOf('SETUP CARD') >= 0, 'the prompt setup card prints');
+  ok(d.indexOf('Market Thesis') >= 0 && d.indexOf('structure: EMA50/200') >= 0 && d.indexOf('momentum: RSI') >= 0, 'the 2-sentence market thesis prints from the measured reads');
+  ok(d.indexOf('Bias') >= 0 && d.indexOf('LONG') >= 0, 'the setup block names the bias');
+  ok(d.indexOf('Entry Zone') >= 0 && d.indexOf('Invalidation (SL)') >= 0, 'the setup block carries the zone and the invalidation');
+  ok(/TP1 [0-9.]+ \| TP2 [0-9.]+ \| TP3/.test(d), 'the three targets print (TP3 as extension)');
+  ok(d.indexOf('EXTENSION - not graded') >= 0, 'TP3 is honestly stamped as the ungraded extension');
+  ok(/Risk\/Reward<\/span><span class="v">[0-9.]+R vs TP1/.test(d), 'the R:R line is calculated against TP1');
+  ok(d.indexOf('Indicator Convergence') >= 0, 'the convergence block prints');
+  /* the JSON renders HTML-escaped inside the pre block */
+  ok(d.indexOf('Automation Blueprint') >= 0 && d.indexOf('&quot;formation&quot;: &quot;PERFECT_PLUS&quot;') >= 0, 'the webhook JSON prints with the real formation');
+  ok(d.indexOf('&quot;exitPolicy&quot;: &quot;scale50_t1_be_trail&quot;') >= 0 && d.indexOf('&quot;venue&quot;: &quot;delta&quot;') >= 0, 'the payload carries the exit policy and the venue');
   ok(d.indexOf('PLAN MATH') >= 0, 'the plan-math panel prints');
   ok(d.indexOf('Break-even requirement') >= 0 && d.indexOf('T1 wins to break even') >= 0, 'the break-even line names what the numbers require');
   ok(d.indexOf('Timeframe agreement') >= 0 && d.indexOf('4h WITH') >= 0 && d.indexOf('1d WITH') >= 0, 'the timeframe agreement reads every tape (all WITH on the fixture)');
@@ -258,6 +269,8 @@ console.log('== wiring pins — the shipped files actually read and print it all
   ok(src.indexOf('pfReadsEntryRefined') >= 0, 'the refinement stamp is declared in the scan scope');
   ok(src.indexOf('function hgObtcVerdictHtml') >= 0 && src.indexOf('function hgObtcScoreboardHtml') >= 0, 'the verdict + scoreboard helpers are defined');
   ok(src.indexOf('pfReads.markDistPct') >= 0, 'the mark-distance read rides the bag');
+  ok(src.indexOf('function hgObtcSetupCardHtml') >= 0, 'the setup-card renderer is defined');
+  ok(src.indexOf('pfReads.atrVal') >= 0, 'the ATR value rides the bag for the zone and TP3');
   const esrc = read('omnibtc-engines.js');
   ok(esrc.indexOf("binanceFunding('BTCUSDT')") >= 0, 'the gather fetches Binance BTCUSDT funding for the spread');
   const tsrc = read('trendtable.js');
