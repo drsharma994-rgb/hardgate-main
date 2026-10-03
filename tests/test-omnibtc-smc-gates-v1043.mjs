@@ -72,10 +72,14 @@ console.log('== a counter-cascade SMC short carries the REAL gate tally, named g
   const realCount = row.gateMeta.filter(function(g){ return g.pass === true && g.id !== 'DIR'; }).length;
   ok(row.gatesPassed === Math.min(realCount, 6) && row.gatesPassed < 7 && row.gatesPassed !== 6,
      'the tally is the real count (' + row.gatesPassed + '/7), not the hardcoded 6');
-  ok(Array.isArray(row.missing) && row.missing.indexOf('G3') >= 0,
-     'the genuinely failing gate is named (G3 RSI ' + (row.missing || []).join(',') + ')');
+  ok(Array.isArray(row.missing) && row.missing.indexOf('G3') < 0,
+     'the long-side G3 verdict is NOT stamped on the counter-cascade short (it reads na)');
+  ok(row.gateMeta.some(function(g){ return g.id === 'G3' && g.state === 'na' && /cascade side/.test(String(g.detail || '')); }),
+     'G3 is marked unevaluated for the cascade side, with the reason named');
   ok(row.missing.indexOf('DIRECTION') >= 0,
      'the counter-cascade fact is named: the SMC short runs against a long-reading cascade');
+  ok(row.gateMeta.some(function(g){ return g.id === 'DIR' && /p \d+ vs EMA200 \d+/.test(String(g.detail || '')); }),
+     'the DIRECTION gate carries the cascade\'s measured read (p vs EMA200)');
   ok(row.gateMeta.some(function(g){ return g.id === 'DIR' && /counter-trend|against the 7-gate/.test(String(g.detail || '')); }),
      'the direction gate prints its measured reason');
   ok(row.clean === false, 'a counter-cascade signal never mints a ticket');

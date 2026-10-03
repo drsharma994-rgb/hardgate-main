@@ -350,11 +350,39 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
               else if (!wasOk && g6Ok){ passCount++; missing = missing.filter(function(x){ return x !== 'G6'; }); }
             }
             if (m.dir && m.dir !== row.dir){
+              /* counter-cascade: the direction-dependent gates (G2/G3/G7) were
+                 evaluated for the CASCADE's side — mark them unevaluated for this
+                 row instead of printing their long-side verdicts as if they
+                 certified the short. The DIRECTION gate carries the cascade's
+                 measured read instead. */
+              var di;
+              for (di = 0; di < meta.length; di++){
+                var dg = meta[di];
+                if (dg && /G2|G3|G7/.test(String(dg.id || ''))){
+                  if (dg.pass === true) passCount--;
+                  meta[di] = Object.assign({}, dg, { pass: false, state: 'na',
+                    detail: 'evaluated for the cascade side (' + m.dir + ') — see DIRECTION' });
+                }
+              }
               passCount = Math.min(passCount, 6);
               meta.push({ id: 'DIR', label: 'Direction', state: 'veto', pass: false,
-                detail: 'SMC ChoCh ' + row.dir + ' runs against the 7-gate cascade, which reads ' + m.dir + ' — counter-trend, watch only' });
+                detail: 'SMC ChoCh ' + row.dir + ' runs against the 7-gate cascade, which reads ' + m.dir
+                  + ' (p ' + (isFinite(m.p) ? m.p.toFixed(0) : 'n/a') + ' vs EMA200 ' + (isFinite(m.e200) ? m.e200.toFixed(0) : 'n/a')
+                  + ', RSI ' + (isFinite(m.r14) ? m.r14.toFixed(1) : 'n/a') + ') — counter-trend, watch only' });
               missing.push('DIRECTION');
             }
+            /* rebuild the missing list from the FINAL meta — a gate the
+               counter-cascade override turned into 'na' is not a failing
+               gate of this row */
+            missing = [];
+            for (var mi = 0; mi < meta.length; mi++){
+              /* a VETO is a failing gate; an 'na' (evaluated for the other
+                 side) is not — only vetoes join the Waiting list */
+              if (meta[mi] && meta[mi].state === 'veto' && meta[mi].id !== 'DIR'){
+                missing.push(String(meta[mi].id || meta[mi].label || 'G?'));
+              }
+            }
+            if (m.dir && m.dir !== row.dir) missing.push('DIRECTION');
             row.gateMeta = meta;
             row.passed = passCount;
             row.gatesPassed = passCount;
