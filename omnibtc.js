@@ -427,6 +427,66 @@ a global hard refresh.
     return pick;
   }
 
+  /* hg-v1035: THE PERFECT SETUP tier — the shared PERFECT formation predicate
+     (hg-perfect-setup.js hgPerfectFormation) applied to the desk's ONE MOST
+     PROBABLE crown. OmniBTC already combines every engine (technical) with
+     the fundamental + sentiment stack (on-chain / term / F&G / 25Δ RR /
+     calendar) at pick time — this tier is the SYNTHESIS that says the crown is
+     max-confluence, never a gate and never a promise (the forward ledger
+     measures the PERFECT cohort like every other mechanic).
+
+     The desk's row is a different shape from the graded ranked rows the gold
+     desks hand the predicate, so hgObtcPerfectCandidate adapts it honestly:
+       grade  — 'A' when the row is a 7/7 CLEAN engine ticket (the desk's own
+                max bar); a near/watch row is NOT top grade and never perfect.
+       tally  — the gates-passed count (the desk's positive-confluence proxy;
+                clean carries 6+ and clear 7/7 rows carry 7).
+       oppose — 0: the OMNIROUTE principal and the evidence pass in hgObtcPick
+                already dropped every row a decisive read opposed.
+     The evidence legs the desk actually holds (real CVD/taker flow, the event
+     calendar blackout, perp funding) ride the reads bag; a leg the desk does
+     not read stays null and neither confirms nor denies (the honest third
+     state). */
+  function hgObtcPerfectCandidate(r){
+    if (!r) return null;
+    var clean = !!r.clean;
+    var tally = (typeof r.passed === 'number' && isFinite(r.passed)) ? r.passed
+      : (typeof r.gatesPassed === 'number' && isFinite(r.gatesPassed)) ? r.gatesPassed
+      : (clean ? 7 : 0);
+    return {
+      sym: r.sym, dir: r.dir, entry: r.entry, stop: r.stop, t1: r.t1,
+      grade: clean ? 'A' : null,
+      tally: tally,
+      oppose: 0,
+      demoted: !!(r.demoted), vetoed: !!(r.vetoed)
+    };
+  }
+
+  function hgObtcPerfectFormation(pick, reads){
+    if (!pick || !pick.row || !hgObtcHasLevels(pick.row)) return { perfect: false, plus: false, why: ['no pick or levels'] };
+    var r = pick.row;
+    var c = hgObtcPerfectCandidate(r);
+    if (!c) return { perfect: false, plus: false, why: ['no candidate'] };
+    if (typeof hgPerfectFormation !== 'function') return { perfect: false, plus: false, why: ['perfect stack absent'] };
+    var pf = hgPerfectFormation(c, reads || {});
+    r.perfect = pf.perfect ? true : undefined;
+    r.perfectPlus = pf.plus ? true : undefined;
+    r.perfectWhy = (pf.why && pf.why.length) ? pf.why : undefined;
+    return pf;
+  }
+
+  function hgObtcPerfectStamp(r){
+    try{
+      if (!r || r.perfect !== true) return '';
+      if (typeof hgPerfectStamp !== 'function') return '';
+      var c = hgObtcPerfectCandidate(r);
+      if (!c) return '';
+      /* prefer the stamped verdict so the banner agrees with the ledger */
+      c.perfectPlus = (r.perfectPlus === true);
+      return hgPerfectStamp(c);
+    }catch(e){ return ''; }
+  }
+
   function hgObtcDefaultLegs(){
     var dual = true;
     try{ if (gfn('hgDualScanEnabled')) dual = !!W.hgDualScanEnabled(); }catch(e){}
@@ -667,7 +727,8 @@ a global hard refresh.
     var clean = tier === 'clean';
     var html = '<div class="card" data-obtc-winner="1">';
     html += '<div class="row" style="justify-content:space-between;gap:8px;flex-wrap:wrap">';
-    html += '<div><b>' + esc(r.sym) + '</b> ' + esc(String(r.dir || '').toUpperCase());
+    html += '<div><b>' + esc(r.sym) + '</b> ' + esc(String(r.dir || '').toUpperCase())
+      + hgObtcPerfectStamp(r);
     html += '<div class="dim">' + esc(r.engine || r.strategy || 'engine');
     if (r.venue) html += ' · ' + esc(String(r.venue).toUpperCase());
     html += clean ? ' · ticket' : ' · watch only</div></div>';
@@ -948,6 +1009,22 @@ a global hard refresh.
             });
           }catch(eRef){}
         }
+        /* hg-v1035: THE PERFECT SETUP tier — stamp the crown with the shared
+           formation predicate, reading the desk's own evidence: real CVD/
+           taker flow, the event-calendar blackout, and perp funding. A leg
+           the desk did not read stays null (neither confirms nor denies). */
+        var pfReads = {};
+        try{
+          if (fundamental && fundamental.blackout) pfReads.newsRisk = 'blackout';
+          if (pick.row.omniCvdWith === true) pfReads.takerFlowVerdict = 'with';
+          else if (pick.row.omniCvdWith === false) pfReads.takerFlowVerdict = 'against';
+          if (match && match._ticker && typeof match._ticker.fundingPct === 'number' && isFinite(match._ticker.fundingPct)
+              && typeof hgFundingAgainstMark === 'function'){
+            var fam = hgFundingAgainstMark(match._ticker.fundingPct, pick.row.dir);
+            if (fam) pfReads.fundingAgainst = (fam.against === true);
+          }
+        }catch(ePfR){}
+        hgObtcPerfectFormation(pick, pfReads);
         /* hg-v1011: THE PICK JOINS THE FORWARD BOOK. Every desk that crowns
            a setup writes it to hg-forward; this desk has crowned one MOST
            PROBABLE per scan for its whole life and never recorded one —
@@ -974,7 +1051,13 @@ a global hard refresh.
               rows4h: winnerRows,
               fundingPct: (fwdTk && typeof fwdTk.fundingPct === 'number' && isFinite(fwdTk.fundingPct)) ? fwdTk.fundingPct : undefined,
               mechanic: String(pick.row.omniKind || pick.row.kind || pick.row.engine || 'UNKNOWN').toUpperCase().slice(0, 28),
-              ticket: String(pick.tier || 'clean').toLowerCase() === 'clean'
+              ticket: String(pick.tier || 'clean').toLowerCase() === 'clean',
+              /* hg-v1035: the PERFECT / PERFECT⁺ read-marks — true when the
+                 crown met the max-confluence bar at fire time, absent when it
+                 did not. The ledger measures the PERFECT cohort against the
+                 rest, exactly like every other mechanic. */
+              perfect: (pick.row.perfect ? true : undefined),
+              perfectPlus: (pick.row.perfectPlus ? true : undefined)
             }], { horizonBars: 20 });
           }
         }catch(eFwd2){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eFwd2); }catch(eW){} }
@@ -1079,6 +1162,9 @@ a global hard refresh.
   W.hgObtcCandidateFromOmniHit = hgObtcCandidateFromOmniHit;
   W.hgObtcPrincipalBannerHtml = hgObtcPrincipalBannerHtml;
   W.hgObtcPick = hgObtcPick;
+  W.hgObtcPerfectCandidate = hgObtcPerfectCandidate;   /* hg-v1035: the PERFECT tier */
+  W.hgObtcPerfectFormation = hgObtcPerfectFormation;
+  W.hgObtcPerfectStamp = hgObtcPerfectStamp;
   W.hgObtcDefaultLegs = hgObtcDefaultLegs;
   W.hgObtcRunScan = hgObtcRunScan;
   /* exported so the engine wiring is testable on its own: which engines get

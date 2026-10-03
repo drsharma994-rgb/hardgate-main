@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1034',
-  pack: 'TREND MATRIX GAINS THE FUNDAMENTAL + SENTIMENT WITNESS — the crypto universe desk now reads the house fundamental stack (on-chain, term curve, F&G, options positioning, calendar) as a fourth evidence witness beside taker-flow / momentum / volume: a red-folder blackout refuses and a 2+ net checked headwind demotes each row to watch (held off both limit desks, counted and named), a tailwind chips and records a fundWith read-mark; the composite score stays five legs untouched.',
-  built: '2026-10-02T22:47:58Z'
+  version: 'hg-v1035',
+  pack: 'OMNIBTC GAINS THE PERFECT SETUP TIER — the desk\'s single MOST PROBABLE crown now stamps the shared ★ PERFECT / ★ PERFECT⁺ formation badge (hg-perfect-setup.js), synthesizing every engine (technical) with the fundamental + sentiment stack (on-chain / term / F&G / 25Δ RR / calendar): a 7/7 CLEAN ticket with R:R over the floor and nothing against (real CVD/taker flow WITH, no blackout, no crowded funding) earns the tier; the PERFECT and PERFECT⁺ read-marks join the forward ledger so the max-confluence cohort is measured, never promised.',
+  built: '2026-10-03T02:51:33Z'
 };
 
 function hgBuildLabel(b){
