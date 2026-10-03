@@ -585,6 +585,23 @@ a global hard refresh.
     }catch(e){ return null; }
   }
 
+  /* hg-v1047: EXIT POLICY — the book's measured auto-rule for a ticket.
+     Scale 50% at T1, trail the stop to breakeven, ride the rest. Evidence,
+     never a guarantee — printed on tickets only, never on watches. */
+  function hgObtcAutoRuleHtml(pick){
+    try{
+      if (!pick || !pick.row) return '';
+      var r = pick.row;
+      if (!isFinite(+r.t1) || String(pick.tier || 'clean').toLowerCase() !== 'clean') return '';
+      var rr1 = (isFinite(+r.entry) && isFinite(+r.stop) && Math.abs(+r.entry - +r.stop) > 0 && isFinite(+r.t1))
+        ? Math.abs(+r.t1 - +r.entry) / Math.abs(+r.entry - +r.stop) : NaN;
+      var t2Txt = isFinite(+r.t2) ? ' move the stop to breakeven and ride the rest to T2' : ' move the stop to breakeven';
+      return '<div class="panel" style="margin-top:10px"><h3>EXIT POLICY <span>the book\'s measured auto-rule — tScale 50, trail to breakeven</span></h3>'
+        + '<div class="kv"><span class="k">At T1' + (isFinite(rr1) ? ' (' + rr1.toFixed(1) + 'R here)' : '') + '</span><span class="v">scale 50% of the position,' + t2Txt + ' — bank half at target, let the runner run</span></div>'
+        + '</div>';
+    }catch(e){ return ''; }
+  }
+
   /* the TRADE COST + TIMING WITNESSES — round-trip cost in R, session
      participation, day-range exhaustion and the cross-venue funding
      premium. All evidence, never a gate: they tell the operator what the
@@ -1011,6 +1028,15 @@ a global hard refresh.
       dhtml += hgObtcFundingWitnessHtml(snap, pick);
       dhtml += hgObtcEvidenceWitnessesHtml(pick);
       dhtml += hgObtcPerfectLedgerHtml(pick);
+      if (snap && snap.measured && gfn('hgProvenEdgeChipHtml')){
+        try{
+          var meNote = (snap.measured.state === 'losing' && gfn('hgProvenEdgeBlockedNoteHtml'))
+            ? W.hgProvenEdgeBlockedNoteHtml(snap.measured) : '';
+          dhtml += '<div class="panel" style="margin-top:10px"><h3>MEASURED EDGE <span>the desk\'s own settled record for this mechanic — the shared proven-edge gate, judged at its evidence floor</span></h3>'
+            + W.hgProvenEdgeChipHtml(snap.measured) + meNote + '</div>';
+        }catch(eChip){}
+      }
+      dhtml += hgObtcAutoRuleHtml(pick);
       ui.detail.innerHTML = dhtml;
     }
     /* hg-v1011: the desk's own forward book under the card — does the crown
@@ -1287,6 +1313,30 @@ a global hard refresh.
         }catch(ePfR){}
         hgObtcPerfectFormation(pick, pfReads);
         pick.row.perfectReads = pfReads;   /* the ledger reads the same bag the predicate consumed */
+        /* hg-v1047: THE MEASURED-EDGE TIER (the shared proven-edge gate).
+           The desk's own settled forward record for this mechanic, judged
+           at the desk evidence floor (hgDeskParam minEvidence, default 20)
+           by hgFwdJudgeSample. Below the floor the crown still trades and
+           the chip says so — accumulating mode, nothing blocked. A LOSING
+           record AT the floor stands the desk aside: the crown stays
+           visible with honest levels but becomes a watch, not a ticket —
+           the same veto the gold desks run. The record keeps writing
+           either way: the card is still recorded, which is the anti-
+           deadlock invariant. */
+        var measured = null;
+        try{
+          if (gfn('hgProvenEdgeVerdict')){
+            var mechName = String(pick.row.omniKind || pick.row.kind || pick.row.engine || 'UNKNOWN').toUpperCase().slice(0, 28);
+            measured = W.hgProvenEdgeVerdict('omnibtc', mechName, { pool: 'OMNIBTC', mechanic: mechName });
+          }
+        }catch(eMe){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eMe); }catch(eWm){} }
+        if (measured && measured.state === 'losing'){
+          pick.tier = 'near';
+          pick.row.measuredStandAside = true;
+        }
+        if (measured && gfn('hgProvenEdgeTrack')){
+          try{ W.hgProvenEdgeTrack('omnibtc', mechName, measured, {}); }catch(eTr){}
+        }
         /* hg-v1011: THE PICK JOINS THE FORWARD BOOK. Every desk that crowns
            a setup writes it to hg-forward; this desk has crowned one MOST
            PROBABLE per scan for its whole life and never recorded one —
@@ -1331,7 +1381,11 @@ a global hard refresh.
               perfectPlus: (pick.row.perfectPlus ? true : undefined),
               /* hg-v1046: how many scanned venues crowned this direction —
                  the cross-venue confirmation read mark */
-              venueAgreeCount: isFinite(pfReads.venuesAgree) ? pfReads.venuesAgree : undefined
+              venueAgreeCount: isFinite(pfReads.venuesAgree) ? pfReads.venuesAgree : undefined,
+              /* hg-v1047: the measured-edge verdict for this mechanic —
+                 recorded only once armed (proven / losing), never while
+                 the floor has not been reached */
+              measuredState: (measured && measured.state !== 'unproven') ? measured.state : undefined
             };
             if (fwdScalp){ fwdRow.rows = fwdTape; } else { fwdRow.rows4h = winnerRows; }
             W.hgFwdRecordScan('OMNIBTC', fwdTf, [fwdRow], { horizonBars: fwdHorizon });
@@ -1356,7 +1410,8 @@ a global hard refresh.
         report: winRep,
         omniInfo: omniInfo,
         extraLedger: extraLedger,
-        fundamental: fundamental
+        fundamental: fundamental,
+        measured: measured
       };
       __obtc.snap = snap;
       __obtc.ran = true;
