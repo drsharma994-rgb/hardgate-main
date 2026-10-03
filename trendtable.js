@@ -2024,6 +2024,62 @@ function trendmxPaintFwd(refs){
   }catch(e){ try{ refs.fwd.innerHTML = ''; }catch(e2){} }
 }
 
+/* hg-v1045: THE BULL / BEAR COLUMN VIEW — the full matrix regrouped into
+   three columns by the row's own majority direction (composite >= +2 BULL,
+   <= -2 BEAR, everything between MIXED / CHOP). Each column reuses the desk's
+   own card renderer, ordered by |composite| then gates. Same rows, same
+   gates, same evidence — a different reading order. */
+function trendmxColumnsHTML(rows){
+  try{
+    if (!Array.isArray(rows) || !rows.length) return '<div class="empty">No rows to group.</div>';
+    var bull = [], bear = [], mixed = [], i, r, d;
+    for (i = 0; i < rows.length; i++){
+      r = rows[i];
+      d = tmDirOf(r);
+      if (d === 'long') bull.push(r);
+      else if (d === 'short') bear.push(r);
+      else mixed.push(r);
+    }
+    function byStrength(list){
+      return list.slice().sort(function(a, b){
+        var pa = Math.abs(+a.score || 0), pb = Math.abs(+b.score || 0);
+        if (pb !== pa) return pb - pa;
+        var ga = (a.gate && isFinite(a.gate.gatesPassed)) ? a.gate.gatesPassed : -1;
+        var gb = (b.gate && isFinite(b.gate.gatesPassed)) ? b.gate.gatesPassed : -1;
+        return gb - ga;
+      });
+    }
+    /* a direction-less row cannot mint levels, so the mixed column prints a
+       compact honest row instead of a setup card */
+    function mixedRow(r){
+      try{
+        return '<div class="card" style="padding:8px;margin-bottom:6px"><b>' + escH(r.sym) + '</b>' + tmVenueChip(r)
+          + '<div style="opacity:.75;font-size:11px;margin-top:2px">composite ' + (r.score > 0 ? '+' : '') + r.score + '/5 · no majority — no levels minted · ADX '
+          + (isFinite(r.adx) ? (+r.adx).toFixed(1) : '—') + '</div></div>';
+      }catch(e){ return ''; }
+    }
+    function col(title, cls, titleCls, list, emptyTxt){
+      var h = '<div class="panel tm-col" style="border-top:3px solid ' + cls + '"><h3 style="margin:0 0 8px">'
+        + '<span class="' + titleCls + '">' + title + '</span> <span style="opacity:.6;font-weight:400">· ' + list.length + ' row' + (list.length === 1 ? '' : 's') + '</span></h3>';
+      if (!list.length) h += '<div class="empty" style="margin:6px 0">' + emptyTxt + '</div>';
+      else h += list.map(function(rr){
+        var dd = tmDirOf(rr);
+        if (!dd) return mixedRow(rr);
+        var plan = dd ? trendmxPlan(Object.assign({}, rr, { dir: dd })) : null;
+        var tier = trendmxRowTier(rr, plan);
+        return trendmxSetupCardHTML(rr, tier === 'clean' ? 'clean' : 'near');
+      }).join('');
+      return h + '</div>';
+    }
+    var bullS = byStrength(bull), bearS = byStrength(bear), mixedS = byStrength(mixed);
+    return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;align-items:start">'
+      + col('BULL', '#26a69a', 'pos', bullS, 'no bullish rows — composite below +2')
+      + col('BEAR', '#ef5350', 'neg', bearS, 'no bearish rows — composite above -2')
+      + col('MIXED / CHOP', '#94a3b8', '', mixedS, 'no mixed rows')
+      + '</div>';
+  }catch(e){ return ''; }
+}
+
 function hgPaintTrendmxFromSnap(){
   try{
     if (!__tmScanSnap || !__tmScanSnap.rows || !__tmScanSnap.rows.length || !tmTab.mountEl) return;
@@ -2197,6 +2253,10 @@ function mountTrendMatrix(el){
       '<div data-r="perfect"></div>' +     /* hg-v1022: the strictest confluence tier on its own desk */
       '<div data-r="fwd"></div>' +         /* hg-v1039: the measured book — does the crown pay */
       '<h3 style="margin:16px 0 8px;font-size:11px;letter-spacing:.14em;color:#475569">FULL MATRIX · sortable · expandable plans</h3>' +
+      '<div style="margin:4px 0 8px">' +
+        '<button class="chip on" data-view="table">TABLE</button>' +
+        '<button class="chip" data-view="columns">BULL / BEAR COLUMNS</button>' +
+      '</div>' +
       '<div data-r="out"><div class="empty">Press RUN SCAN to build the matrix.</div></div>' +
     '</div>';
 
@@ -2230,7 +2290,7 @@ function mountTrendMatrix(el){
   var chips  = Array.prototype.slice.call(el.querySelectorAll('[data-f]'));
   var vChips = Array.prototype.slice.call(el.querySelectorAll('[data-v]'));
 
-  var state = { rows: [], golden: [], death: [], filter: 'ALL', venue: 'ALL', sortKey: 'score', sortDir: -1, running: false };   /* hg-v1015: death bag initialized with golden */
+  var state = { rows: [], golden: [], death: [], filter: 'ALL', venue: 'ALL', sortKey: 'score', sortDir: -1, running: false, view: 'table' };   /* hg-v1015: death bag initialized with golden; hg-v1045: view toggle */
   tmTab._state = state;
 
   function setProg(f){
@@ -2260,6 +2320,14 @@ function mountTrendMatrix(el){
       state.venue = ch.getAttribute('data-v');
       vChips.forEach(function(c){ c.classList.toggle('on', c === ch); });
       renderAll();
+    });
+  });
+  var vwChips = Array.prototype.slice.call(el.querySelectorAll('[data-view]'));
+  vwChips.forEach(function(ch){
+    ch.addEventListener('click', function(){
+      state.view = ch.getAttribute('data-view');
+      vwChips.forEach(function(c){ c.classList.toggle('on', c === ch); });
+      renderMatrix();
     });
   });
   btn.addEventListener('click', runScan);
@@ -2314,6 +2382,10 @@ function mountTrendMatrix(el){
     var rows = state.rows.filter(passFilter);
     if (!rows.length){
       out.innerHTML = '<div class="empty">No symbols match this filter.</div>';
+      return;
+    }
+    if (state.view === 'columns'){
+      out.innerHTML = trendmxColumnsHTML(rows);
       return;
     }
     rows.sort(function(a, b){
@@ -2533,6 +2605,7 @@ W.trendmxSetupCardHTML = trendmxSetupCardHTML;   /* hg-v1019: the matrix card �
 W.trendmxVolState = trendmxVolState;       /* hg-v1020: the volume witness */
 W.trendmxVolChipHtml = trendmxVolChipHtml;
 W.trendmxFundGate = trendmxFundGate;       /* hg-v1034: the fundamental + sentiment witness */
+W.trendmxColumnsHTML = trendmxColumnsHTML; /* hg-v1045: the bull / bear column view */
 W.trendmxFundState = trendmxFundState;
 W.trendmxFundChipHtml = trendmxFundChipHtml;
 W.trendmxPerfectState = trendmxPerfectState;       /* hg-v1022: the perfect predicate */
