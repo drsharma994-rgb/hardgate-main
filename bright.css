@@ -33,6 +33,9 @@
   --ease-spring:cubic-bezier(.34,1.2,.64,1);
   --radius:8px;
   --radius-sm:6px;
+  color-scheme:light;
+  accent-color:#0f5cc0;
+  --focus-ring:0 0 0 2px #ffffff, 0 0 0 4px rgba(15,92,192,.45);
 }
 
 /* ---------- 2. page background — soft neutral (no mesh / no fixed gradients) ---------- */
@@ -45,6 +48,27 @@ a{color:var(--gold-dim)}
 ::selection{background:rgba(15,92,192,.18);color:var(--txt)}
 ::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:4px}
 ::-webkit-scrollbar-thumb:hover{background:var(--dim)}
+
+/* ---------- 2b. focus — visible, consistent rings on keyboard focus ---------- */
+:focus-visible{
+  outline:2px solid var(--gold-dim);
+  outline-offset:2px;
+}
+.btn:focus-visible,
+.btn.ghost:focus-visible,
+.chip:focus-visible,
+.navgroups button:focus-visible,
+nav button:focus-visible,
+.card .toTrade:focus-visible,
+.card .toBook:focus-visible,
+.header-menu-btn:focus-visible,
+.chrome-min-btn:focus-visible,
+.statuschip[onclick]:focus-visible,
+.xtoggle button:focus-visible,
+.hgauto button:focus-visible,
+.header-field-btn:focus-visible{
+  box-shadow:var(--focus-ring);
+}
 
 /* ---------- 3. motion — short, GPU-friendly ---------- */
 @keyframes hgFadeIn{

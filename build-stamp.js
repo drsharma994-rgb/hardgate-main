@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1035',
-  pack: 'OMNIBTC GAINS THE PERFECT SETUP TIER — the desk\'s single MOST PROBABLE crown now stamps the shared ★ PERFECT / ★ PERFECT⁺ formation badge (hg-perfect-setup.js), synthesizing every engine (technical) with the fundamental + sentiment stack (on-chain / term / F&G / 25Δ RR / calendar): a 7/7 CLEAN ticket with R:R over the floor and nothing against (real CVD/taker flow WITH, no blackout, no crowded funding) earns the tier; the PERFECT and PERFECT⁺ read-marks join the forward ledger so the max-confluence cohort is measured, never promised.',
-  built: '2026-10-03T02:51:33Z'
+  version: 'hg-v1036',
+  pack: 'MODERN LAYOUT — the desktop chrome is now one deliberate dark frame: the tool sidebar joins the title and status bars in dark chrome (title bar on top, navigation column on the left, status bar on the bottom) around the light data canvas, with a clearer active-tab accent and refined hover states; keyboard focus-visible rings added across every control; no id, class, SVG-icon, or mount contract changed (still data-dense light).',
+  built: '2026-10-03T04:05:59Z'
 };
 
 function hgBuildLabel(b){

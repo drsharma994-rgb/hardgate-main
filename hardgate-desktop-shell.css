@@ -48,6 +48,9 @@
   --hg-chrome-dim:#8595ae;
   --hg-sidebar:250px;
   --hg-statusbar:28px;
+  --hg-sidebar-bg:#0e1929;
+  --hg-sidebar-hover:#1f2b42;
+  --hg-sidebar-accent:#7ea2ff;
   --hg-chrome-h:76px;           /* measured at runtime */
   --hg-groups-h:184px;          /* measured at runtime */
 }
@@ -197,22 +200,31 @@
     display:flex;
     flex-direction:column;
     flex-wrap:nowrap;
-    gap:2px;
+    gap:3px;
     z-index:55;
     padding:10px 8px;
     overflow:visible;
-    background:var(--panel2);
-    border-right:1px solid var(--line);
-    border-bottom:1px solid var(--line);
+    background:var(--hg-sidebar-bg);
+    border-right:1px solid var(--hg-chrome-line);
+    border-bottom:1px solid var(--hg-chrome-line);
   }
   .navgroups button{
     display:flex;
     align-items:center;
     width:100%;
-    padding:7px 11px;
+    padding:8px 11px;
     text-align:left;
     font-size:10px;
     letter-spacing:.15em;
+    background:transparent;
+    border:1px solid transparent;
+    color:var(--hg-chrome-dim);
+    transition:color .14s,background .14s,border-color .14s;
+  }
+  .navgroups button:hover:not(.on){
+    background:var(--hg-sidebar-hover);
+    color:var(--hg-chrome-txt);
+    border-color:var(--hg-chrome-line);
   }
   .navgroups button .cnt{ margin-left:auto; opacity:.7 }
 
@@ -232,11 +244,13 @@
     overflow-y:auto;
     overflow-x:hidden;
     scrollbar-width:thin;
-    background:var(--panel2);
-    border-right:1px solid var(--line);
+    background:var(--hg-sidebar-bg);
+    border-right:1px solid var(--hg-chrome-line);
+    border-top:1px solid var(--hg-chrome-line);
     border-bottom:0;
   }
   nav#navTabs::-webkit-scrollbar{ width:6px }
+  nav#navTabs::-webkit-scrollbar-thumb{ background:var(--hg-chrome-line); border-radius:4px }
   nav#navTabs button{
     flex:none;
     width:100%;
@@ -246,18 +260,20 @@
     font-size:11.5px;
     letter-spacing:.07em;
     border:1px solid transparent;
+    color:var(--hg-chrome-dim);
+    transition:color .14s,background .14s,border-color .14s;
   }
-  nav#navTabs button:hover{
-    background:var(--panel);
-    color:var(--txt);
-    border-color:var(--line);
+  nav#navTabs button:hover:not(.on){
+    background:var(--hg-sidebar-hover);
+    color:var(--hg-chrome-txt);
+    border-color:var(--hg-chrome-line);
   }
   nav#navTabs button.on{
-    background:var(--panel);
-    color:var(--gold);
+    background:var(--hg-sidebar-hover);
+    color:var(--hg-sidebar-accent);
     font-weight:700;
-    border-color:var(--line-strong);
-    box-shadow:inset 3px 0 0 var(--gold);
+    border-color:var(--hg-chrome-line);
+    box-shadow:inset 3px 0 0 var(--hg-sidebar-accent);
   }
   /* the sliding underline belongs to a horizontal tab bar */
   nav#navTabs button::after{ display:none }
