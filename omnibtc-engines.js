@@ -306,11 +306,67 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
     }catch(e){ return null; }
   }
 
-  function hgObtcTrySmc(rows4h){
+  function hgObtcTrySmc(rows4h, ticker){
     try{
       if (!gfn('pineSmcCore') || !rows4h) return null;
       var sig = W.pineSmcCore(rows4h);
-      return watchRow(sig, 'SMC ChoCh', 'near');
+      var row = watchRow(sig, 'SMC ChoCh', 'near');
+      if (!row) return null;
+      /* hg-v1043: the 6/7 was a HARDCODED label — no gate was ever evaluated
+         behind it, so the card's 'one gate away' was invented and the banner
+         had no measured gate to name. Evaluate the real shared 7-gate matrix
+         (swingGateMatrix — the raw matrix, NOT swingTryNear, which returns
+         null below 6 passes by its NEAR-watch contract) and stamp the honest
+         tally, gateMeta and missing-gate list. G6 is re-priced on the SMC
+         levels themselves (the matrix's own G6 is priced on ITS plan, which
+         this row does not trade). A signal against the matrix's own
+         direction is named counter-cascade and stays a watch — the SMC
+         levels ride, the gates decide the badge. */
+      try{
+        if (gfn('swingGateMatrix')){
+          var m = W.swingGateMatrix(rows4h, ticker || { symbol: 'BTCUSDT' });
+          if (m && Array.isArray(m.gateMeta) && m.gateMeta.length){
+            var meta = [], missing = [], passCount = 0, i, g, ok;
+            for (i = 0; i < m.gateMeta.length; i++){
+              g = m.gateMeta[i];
+              if (!g) continue;
+              ok = (g.state === 'pass') || (g.pass === true);
+              meta.push(Object.assign({}, g, { pass: ok }));
+              if (ok) passCount++; else if (g.state === 'veto' || g.pass === false) missing.push(String(g.id || g.label || 'G?'));
+            }
+            var rr = isFinite(row.rr) ? row.rr : NaN;
+            var g6Idx = -1;
+            for (i = 0; i < meta.length; i++){
+              if (/G6/.test(String(meta[i].id || ''))){ g6Idx = i; break; }
+            }
+            if (g6Idx >= 0){
+              var g6Ok = isFinite(rr) && rr >= 2.0;
+              var wasOk = meta[g6Idx].pass === true;
+              meta[g6Idx] = Object.assign({}, meta[g6Idx], {
+                pass: g6Ok, state: g6Ok ? 'pass' : 'veto',
+                detail: 'SMC plan R:R ' + (isFinite(rr) ? rr.toFixed(2) : 'n/a') + ' (need ≥ 2.0)'
+              });
+              if (wasOk && !g6Ok){ passCount--; missing.push('G6'); }
+              else if (!wasOk && g6Ok){ passCount++; missing = missing.filter(function(x){ return x !== 'G6'; }); }
+            }
+            if (m.dir && m.dir !== row.dir){
+              passCount = Math.min(passCount, 6);
+              meta.push({ id: 'DIR', label: 'Direction', state: 'veto', pass: false,
+                detail: 'SMC ChoCh ' + row.dir + ' runs against the 7-gate cascade, which reads ' + m.dir + ' — counter-trend, watch only' });
+              missing.push('DIRECTION');
+            }
+            row.gateMeta = meta;
+            row.passed = passCount;
+            row.gatesPassed = passCount;
+            row.gatesTotal = 7;
+            if (missing.length) row.missing = missing;
+            if (passCount >= 7 && (!m.dir || m.dir === row.dir)){
+              row.clean = true; row.near = false; row.nearClean = false;
+            }
+          }
+        }
+      }catch(eM){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eM); }catch(eW){} }
+      return row;
     }catch(e){ return null; }
   }
 
@@ -420,7 +476,7 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
     take('OI FLOW', hgObtcTryOiFlow(oiCls, rows4h, rows1h),
       oiCls && oiCls.dir ? 'classify fired, setup builder refused' : 'OI/price legs silent');
 
-    take('SMC ChoCh', hgObtcTrySmc(rows4h), 'no last-bar ChoCh with FVG levels');
+    take('SMC ChoCh', hgObtcTrySmc(rows4h, ticker), 'no last-bar ChoCh with FVG levels');
     take('STAR TRADER', hgObtcTryStarTrader(rows4h, rows1h, rows15m, ticker),
       'no majority, or synthesis vetoed');
 
