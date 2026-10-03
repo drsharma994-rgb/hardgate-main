@@ -347,7 +347,9 @@ a global hard refresh.
       clean: clean,
       near: near,
       nearClean: near,
-      forming: forming
+      forming: forming,
+      missing: Array.isArray(r.missing) ? r.missing.slice() : undefined,
+      gateMeta: Array.isArray(r.gateMeta) ? r.gateMeta : undefined
     };
     if (isFinite(t2) && t2 > 0) row.t2 = t2;
     if (clean){ row.near = false; row.nearClean = false; row.forming = false; }
@@ -408,6 +410,11 @@ a global hard refresh.
       n.engine = n.engine || raw.engine;
       n.strategy = n.strategy || raw.strategy;
       n.kind = n.kind || raw.kind;
+      /* Carry the gate evidence the near-clean path dropped: setup-ui.js's
+         MOST PROBABLE banner reads row.missing to NAME the exact gate that
+         kept a 6/7 NEAR from printing 7/7 CLEAN (e.g. G6 R:R below the floor). */
+      if (n.missing == null && Array.isArray(raw.missing)) n.missing = raw.missing.slice();
+      if ((n.gateMeta == null || !n.gateMeta.length) && Array.isArray(raw.gateMeta)) n.gateMeta = raw.gateMeta;
       var prin = hgObtcApplyOmniPrincipal(n, { rows: raw._rows || n._rows });
       if (!prin.pickable) continue;
       btc.push(n);
@@ -424,6 +431,8 @@ a global hard refresh.
     pick.row.kind = pick.row.kind || win.kind;
     pick.row.omniKind = pick.row.omniKind || win.omniKind;
     pick.row.omniPrincipal = pick.row.omniPrincipal || win.omniPrincipal;
+    if (pick.row.missing == null && Array.isArray(win.missing)) pick.row.missing = win.missing.slice();
+    if ((pick.row.gateMeta == null || !pick.row.gateMeta.length) && Array.isArray(win.gateMeta)) pick.row.gateMeta = win.gateMeta;
     return pick;
   }
 

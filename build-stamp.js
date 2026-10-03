@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1036',
-  pack: 'MODERN LAYOUT — the desktop chrome is now one deliberate dark frame: the tool sidebar joins the title and status bars in dark chrome (title bar on top, navigation column on the left, status bar on the bottom) around the light data canvas, with a clearer active-tab accent and refined hover states; keyboard focus-visible rings added across every control; no id, class, SVG-icon, or mount contract changed (still data-dense light).',
-  built: '2026-10-03T04:05:59Z'
+  version: 'hg-v1037',
+  pack: 'OMNIBTC NEAR NAMES ITS RED GATE — a 6/7 NEAR watch now names exactly which hard gate kept it off 7/7 CLEAN (the swingTryNear missing label is carried through the candidate and the pick into the MOST PROBABLE banner, so the operator sees Waiting: G6 ATR-capacity R:R… instead of a bare 6/7 NEAR); no threshold moved, no setup leaves any board.',
+  built: '2026-10-03T04:45:09Z'
 };
 
 function hgBuildLabel(b){

@@ -269,6 +269,27 @@ console.log('\n== one pick, never invented ==');
   ok(pickR && pickR.row.entry === 100, 'report harvest still collapses to one pick');
 }
 
+console.log('\n== a 6/7 NEAR names the exact gate that kept it off CLEAN ==');
+{
+  const W = boot();
+  /* The near-clean path (cryptogates swingTryNear) returns a `missing` array
+     that names the failed gate (e.g. G6 R:R below the CoinDCX-raised floor).
+     OmniBTC must carry it through the candidate + pick so setup-ui.js prints
+     "Waiting: G6 ATR-capacity R:R..." instead of a bare "6/7 NEAR". */
+  const near = {
+    sym: 'B-BTC_USDT', dir: 'short', entry: 84567.3, stop: 85572.99, t1: 82555.91, t2: 81047.37,
+    nearClean: true, passed: 6, gatesTotal: 7, engine: 'SWING near-clean watch', venue: 'coindcx',
+    missing: ['G6 ATR-capacity R:R≥2.5']
+  };
+  const c = W.hgObtcCandidateFromSignal(near, { symbol: 'B-BTC_USDT', exchange: 'coindcx' });
+  ok(c && Array.isArray(c.missing) && c.missing[0] === 'G6 ATR-capacity R:R≥2.5',
+    'candidate carries the near path missing-gate label');
+  const pick = W.hgObtcPick([c]);
+  ok(pick && pick.tier === 'near' && pick.row.sym === 'B-BTC_USDT', 'the NEAR row still picks');
+  ok(Array.isArray(pick.row.missing) && pick.row.missing[0] === 'G6 ATR-capacity R:R≥2.5',
+    'the picked row names the red gate setup-ui.js prints');
+}
+
 console.log('\n== default legs are BTC on both venues ==');
 {
   const W = boot();
