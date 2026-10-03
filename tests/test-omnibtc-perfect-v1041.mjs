@@ -85,6 +85,7 @@ function stubs(cap, fundingPct, rows4h){
     hgContractReportRun: (inp) => { cap.taker = inp && inp.takerSeries; return { sym: 'BTCUSD', sections: [], indicators: [], plan: { ok: false } }; },
     hgFwdRecordScan: (tab, tf, rows, opts) => { cap.rec = { tab, tf, rows, opts }; return 1; },
     hgFwdPanelHTML: (tab) => 'FWD:' + tab,
+    hgFwdPool: (tab) => (tab === 'OMNIBTC' ? { 'SWING': { samples: 40, hit: 0.55, expR: 0.3 } } : {}),
     hgPickMostProbableAny: (rows) => ({ row: rows[0], tier: rows[0] && rows[0].clean ? 'clean' : 'near' })
   };
 }
@@ -114,6 +115,12 @@ console.log('== all seven legs readable-and-WITH crowns PERFECT⁺ and prints th
   ok(d.indexOf('Venue premium') >= 0 && d.indexOf('vs Binance') >= 0, 'the cross-venue funding spread row shows Delta vs Binance');
   ok(d.indexOf('Venue confirmation') >= 0, 'the venue-confirmation witness prints beside the pick');
   ok(d.indexOf('single venue only') >= 0, 'a single-venue scan says so honestly');
+  ok(d.indexOf('CROWN VERDICT') >= 0, 'the crown verdict line prints on top');
+  ok(d.indexOf('TICKET') >= 0 && d.indexOf('PERFECT+') >= 0 && d.indexOf('EDGE ACCUMULATING') >= 0, 'the verdict names the ticket, the PERFECT+ badge and the measured state');
+  /* the entry is refinement-moved in this scenario, so the distance is
+     asserted by shape, not by the pre-refinement number */
+  ok(d.indexOf('Mark distance') >= 0 && /mark is [0-9.]+% (ABOVE|BELOW) the entry/.test(d), 'the mark-distance witness prints the mark vs the crowned entry');
+  ok(d.indexOf('ENGINE SCOREBOARD') >= 0 && d.indexOf('n=40 - hit 55% - expR +0.30R') >= 0, 'the engine scoreboard prints the settled per-engine record');
   ok(d.indexOf('PLAN MATH') >= 0, 'the plan-math panel prints');
   ok(d.indexOf('Break-even requirement') >= 0 && d.indexOf('T1 wins to break even') >= 0, 'the break-even line names what the numbers require');
   ok(d.indexOf('Timeframe agreement') >= 0 && d.indexOf('4h WITH') >= 0 && d.indexOf('1d WITH') >= 0, 'the timeframe agreement reads every tape (all WITH on the fixture)');
@@ -249,6 +256,8 @@ console.log('== wiring pins — the shipped files actually read and print it all
   ok(src.indexOf('hgApplyExactEntry') >= 0 && src.indexOf('rrAfter') >= 0, 'the entry refinement is wired with the 2.0R re-check');
   ok(src.indexOf('measured-rank') >= 0 && src.indexOf('measuredRanked') >= 0, 'the measured ranking is wired, fails open');
   ok(src.indexOf('pfReadsEntryRefined') >= 0, 'the refinement stamp is declared in the scan scope');
+  ok(src.indexOf('function hgObtcVerdictHtml') >= 0 && src.indexOf('function hgObtcScoreboardHtml') >= 0, 'the verdict + scoreboard helpers are defined');
+  ok(src.indexOf('pfReads.markDistPct') >= 0, 'the mark-distance read rides the bag');
   const esrc = read('omnibtc-engines.js');
   ok(esrc.indexOf("binanceFunding('BTCUSDT')") >= 0, 'the gather fetches Binance BTCUSDT funding for the spread');
   const tsrc = read('trendtable.js');

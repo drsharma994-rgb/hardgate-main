@@ -680,6 +680,57 @@ a global hard refresh.
     }catch(e){ return null; }
   }
 
+  /* hg-v1054: THE CROWN VERDICT — every badge the desk earned for this
+     pick in one line: engine, ticket tier, PERFECT formation, refined
+     entry, the measured verdict and the timeframe agreement. */
+  function hgObtcVerdictHtml(pick, snap){
+    try{
+      if (!pick || !pick.row) return '';
+      var r = pick.row, bits = [];
+      bits.push(String(r.engine || r.omniKind || 'CROWN').toUpperCase().slice(0, 24));
+      bits.push(String(pick.tier || 'clean').toLowerCase() === 'clean' ? 'TICKET' : 'WATCH');
+      if (r.perfectPlus) bits.push('PERFECT+');
+      else if (r.perfect) bits.push('PERFECT');
+      if (r.entryRefined) bits.push('REFINED ENTRY');
+      var m = snap && snap.measured;
+      if (m && m.state === 'proven') bits.push('EDGE PROVEN');
+      else if (m && m.state === 'losing') bits.push('EDGE LOSING - STAND ASIDE');
+      else bits.push('EDGE ACCUMULATING');
+      var reads = r.perfectReads || {};
+      if (reads.tfAgree) bits.push(String(reads.tfAgree));
+      return '<div class="panel" style="margin-top:10px"><h3>CROWN VERDICT <span>the desk\'s complete verdict on this pick</span></h3>'
+        + '<div style="font-size:12px;letter-spacing:.03em">' + esc(bits.join(' | ')) + '</div></div>';
+    }catch(e){ return ''; }
+  }
+
+  /* hg-v1054: THE ENGINE SCOREBOARD — the desk's own settled record per
+     engine (hgFwdPool on the OMNIBTC pool): which mechanics actually
+     earn their crowns. Nothing renders with zero settled records. */
+  function hgObtcScoreboardHtml(){
+    try{
+      if (typeof W.hgFwdPool !== 'function') return '';
+      var pool = W.hgFwdPool('OMNIBTC');
+      if (!pool || typeof pool !== 'object') return '';
+      var keys = Object.keys(pool).filter(function(k){
+        var s = pool[k]; return s && isFinite(s.samples) && s.samples >= 1;
+      }).sort(function(a, b){
+        var ea = isFinite(pool[b] && pool[b].expR) ? pool[b].expR : -999;
+        var eb = isFinite(pool[a] && pool[a].expR) ? pool[a].expR : -999;
+        return ea - eb;
+      });
+      if (!keys.length) return '';
+      var rows = keys.slice(0, 8).map(function(k){
+        var s = pool[k];
+        var hit = isFinite(s.hit) ? (s.hit * 100).toFixed(0) + '%' : '--';
+        var expR = isFinite(s.expR) ? ((s.expR > 0 ? '+' : '') + s.expR.toFixed(2) + 'R') : '--';
+        return '<div class="kv"><span class="k">' + esc(k) + '</span><span class="v'
+          + (isFinite(s.expR) && s.expR > 0 ? ' ok' : (isFinite(s.expR) && s.expR < 0 ? ' bad' : ''))
+          + '">n=' + s.samples + ' - hit ' + hit + ' - expR ' + expR + '</span></div>';
+      }).join('');
+      return '<div class="panel" style="margin-top:10px"><h3>ENGINE SCOREBOARD <span>the desk\'s settled record per engine - which mechanics earn their crowns</span></h3>' + rows + '</div>';
+    }catch(e){ return ''; }
+  }
+
   /* the TRADE COST + TIMING WITNESSES — round-trip cost in R, session
      participation, day-range exhaustion and the cross-venue funding
      premium. All evidence, never a gate: they tell the operator what the
@@ -726,6 +777,12 @@ a global hard refresh.
         var swTxt = reads.sweepCount + '/' + reads.sweepLook + ' prior bars wicked through the stop width'
           + (reads.sweepCount >= 10 ? ' - the stop sits where noise trades' : '');
         rows.push('<div class="kv"><span class="k">Stop sensitivity</span><span class="v' + (reads.sweepCount >= 10 ? ' bad' : '') + '">' + swTxt + '</span></div>');
+      }
+      if (reads.markDistPct != null){
+        var md = +reads.markDistPct;
+        var mdTxt = Math.abs(md) < 0.5 ? 'mark sits ON the entry zone - the levels are live'
+          : (md > 0 ? 'mark is ' + md.toFixed(1) + '% ABOVE the entry' : 'mark is ' + Math.abs(md).toFixed(1) + '% BELOW the entry');
+        rows.push('<div class="kv"><span class="k">Mark distance</span><span class="v' + (Math.abs(md) < 0.5 ? ' ok' : '') + '">' + mdTxt + '</span></div>');
       }
       if (!rows.length) return '';
       return '<div class="panel" style="margin-top:10px"><h3>TRADE COST + TIMING WITNESSES <span>what the levels cost and whether the tape is worth paying for — evidence, never a gate</span></h3>' + rows.join('') + '</div>';
@@ -1116,7 +1173,7 @@ a global hard refresh.
       }
     }
     if (ui.detail){
-      var dhtml = pick ? detailHtml(pick, snap && snap.omniInfo) : waitHtml();
+      var dhtml = hgObtcVerdictHtml(pick, snap) + (pick ? detailHtml(pick, snap && snap.omniInfo) : waitHtml());
       if (snap && snap.fundamental && gfn('hgObtcFundamentalPanelHtml')){
         try{ dhtml += W.hgObtcFundamentalPanelHtml(snap.fundamental) || ''; }catch(eFu){}
       }
@@ -1143,6 +1200,7 @@ a global hard refresh.
       }
       dhtml += hgObtcAutoRuleHtml(pick);
       dhtml += hgObtcPlanMathHtml(pick);
+      dhtml += hgObtcScoreboardHtml();
       ui.detail.innerHTML = dhtml;
     }
     /* hg-v1011: the desk's own forward book under the card — does the crown
@@ -1472,6 +1530,9 @@ a global hard refresh.
               pfReads.sweepLook = look;
             }
           }catch(eSw){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eSw); }catch(eWs){} }
+          if (match && match._ticker && isFinite(+match._ticker.mark) && isFinite(+pick.row.entry) && +match._ticker.mark > 0){
+            pfReads.markDistPct = (+match._ticker.mark - +pick.row.entry) / +pick.row.entry * 100;
+          }
           /* hg-v1049: the fire bar's session and the multi-timeframe
              agreement, read off the tapes the desk already holds */
           if (winnerRows && winnerRows.length){
