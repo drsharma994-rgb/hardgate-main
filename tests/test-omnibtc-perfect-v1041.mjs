@@ -179,6 +179,51 @@ console.log('== the liquidation + volume reads print when the map speaks ==');
   ok(d.indexOf('Liquidation map') >= 0 && d.indexOf('SL-hunt risk') >= 0, 'the stop-in-cluster read prints');
 }
 
+console.log('== entry-edge refinement: accepted when the 2.0R floor survives ==');
+{
+  const cap = {};
+  const W = boot(Object.assign(stubs(cap, -0.002, R4), {
+    swingTryClean: () => Object.assign({}, PLAN),
+    hgApplyExactEntry: (p) => Object.assign({}, p, { entry: 99 })
+  }));
+  const ui = { btn: mk(), stat: mk(), cards: mk(), detail: mk(), fwd: mk(), ind: mk(), ledger: mk() };
+  await W.hgObtcRunScan(ui);
+  const rr = cap.rec && cap.rec.rows && cap.rec.rows[0];
+  ok(rr && rr.entry === 99, 'the record carries the refined entry (99)');
+  ok(rr && rr.entryRefined === true, 'the refinement stamp rides the record');
+}
+
+console.log('== entry-edge refinement: refused when the 2.0R floor breaks ==');
+{
+  const cap = {};
+  const W = boot(Object.assign(stubs(cap, -0.002, R4), {
+    swingTryClean: () => Object.assign({}, PLAN),
+    hgApplyExactEntry: (p) => Object.assign({}, p, { entry: 101 })
+  }));
+  const ui = { btn: mk(), stat: mk(), cards: mk(), detail: mk(), fwd: mk(), ind: mk(), ledger: mk() };
+  await W.hgObtcRunScan(ui);
+  const rr = cap.rec && cap.rec.rows && cap.rec.rows[0];
+  ok(rr && rr.entry === 100, 'a refinement that breaks the 2.0R floor is refused - the original levels stand');
+  ok(rr && rr.entryRefined === undefined, 'no stamp on a refused refinement');
+}
+
+console.log('== measured ranking: the armed PROVEN mechanic takes the crown ==');
+{
+  const cap = {};
+  const W = boot(Object.assign(stubs(cap, -0.002, R4), {
+    swingTryClean: () => Object.assign({}, PLAN),
+    scalpTryClean: () => Object.assign({}, PLAN, { engine: 'SCALP clean plan' }),
+    /* the normalized scalp row's mechanic is whatever hgNormalizeSetupRow
+       derives - everything but the SWING crown reads proven here */
+    hgProvenEdgeVerdict: (scan, mech, o) => ({ state: mech !== 'SWING' ? 'proven' : 'unproven', n: 60, floor: 20 })
+  }));
+  const ui = { btn: mk(), stat: mk(), cards: mk(), detail: mk(), fwd: mk(), ind: mk(), ledger: mk() };
+  await W.hgObtcRunScan(ui);
+  const rr = cap.rec && cap.rec.rows && cap.rec.rows[0];
+  ok(rr && rr.mechanic !== 'SWING' && rr.mechanic, 'the PROVEN mechanic takes the crown over the unproven first row (' + rr.mechanic + ')');
+  ok(rr && rr.ticket === true, 'and the proven crown stays a ticket');
+}
+
 console.log('== wiring pins — the shipped files actually read and print it all ==');
 {
   const src = read('omnibtc.js');
@@ -201,6 +246,9 @@ console.log('== wiring pins — the shipped files actually read and print it all
   ok(src.indexOf('c._rows1d = r1d') >= 0, 'the daily tape rides the candidates');
   ok(src.indexOf('pfReads.fillPct') >= 0 && src.indexOf('pfReads.sweepCount') >= 0, 'the accuracy reads ride the same bag the predicate consumed');
   ok(src.indexOf('hgFillProbability(winnerRows') >= 0, 'the fill odds come from the house touch-rate read');
+  ok(src.indexOf('hgApplyExactEntry') >= 0 && src.indexOf('rrAfter') >= 0, 'the entry refinement is wired with the 2.0R re-check');
+  ok(src.indexOf('measured-rank') >= 0 && src.indexOf('measuredRanked') >= 0, 'the measured ranking is wired, fails open');
+  ok(src.indexOf('pfReadsEntryRefined') >= 0, 'the refinement stamp is declared in the scan scope');
   const esrc = read('omnibtc-engines.js');
   ok(esrc.indexOf("binanceFunding('BTCUSDT')") >= 0, 'the gather fetches Binance BTCUSDT funding for the spread');
   const tsrc = read('trendtable.js');

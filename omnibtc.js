@@ -422,6 +422,29 @@ a global hard refresh.
     if (!btc.length) return null;
     var pick = gfn('hgPickMostProbableAny') ? W.hgPickMostProbableAny(btc) : { row: btc[0], tier: 'clean', source: 'clean' };
     if (!pick || !pick.row || !hgObtcIsBtc(pick.row.sym) || !hgObtcHasLevels(pick.row)) return null;
+    /* hg-v1051: MEASURED RANKING — when the ledger is armed, a CLEAN
+       candidate from a PROVEN mechanic beats the rest; while records
+       accumulate (every verdict unproven) the desk's own ranking stands.
+       Fails open: the shared gate absent or unreadable changes nothing. */
+    try{
+      if (gfn('hgProvenEdgeVerdict') && btc.length > 1){
+        var mechOf = function(r){ return String(r.omniKind || r.kind || r.engine || 'UNKNOWN').toUpperCase().slice(0, 28); };
+        var pickMech = mechOf(pick.row);
+        var pickV = W.hgProvenEdgeVerdict('omnibtc', pickMech, { pool: 'OMNIBTC', mechanic: pickMech });
+        if (!(pickV && pickV.state === 'proven')){
+          for (var bi = 0; bi < btc.length; bi++){
+            if (!btc[bi].clean) continue;
+            var bm = mechOf(btc[bi]);
+            var bv = W.hgProvenEdgeVerdict('omnibtc', bm, { pool: 'OMNIBTC', mechanic: bm });
+            if (bv && bv.state === 'proven'){
+              pick = { row: btc[bi], tier: 'clean', source: 'measured-rank' };
+              pick.row.measuredRanked = true;
+              break;
+            }
+          }
+        }
+      }
+    }catch(eMr){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eMr); }catch(eWm){} }
     var win = btc.filter(function(r){
       return r && r.sym === pick.row.sym && r.dir === pick.row.dir
         && r.entry === pick.row.entry && r.stop === pick.row.stop;
@@ -1266,11 +1289,39 @@ a global hard refresh.
         }
       }
       if (pick && pick.row){
+        var pfReadsEntryRefined = false;   /* hg-v1051: refinement stamp for the record */
         var match = all.filter(function(c){
           return c.sym === pick.row.sym && c.dir === pick.row.dir
             && c.entry === pick.row.entry && c.stop === pick.row.stop;
         })[0];
         winnerRows = match && match._rows;
+        /* hg-v1051: ENTRY-EDGE REFINEMENT — the pick's entry is snapped
+           to the structure edge the house exact-entry seam prices (edge
+           signal / swing enrichment on the winner's own tape), then
+           re-verified: the refined plan must still clear the 2.0R floor
+           or the refinement is REFUSED and the original levels stand.
+           The reads bag, the PERFECT formation, the measured tier and
+           the forward record all consume the refined levels. */
+        try{
+          if (gfn('hgApplyExactEntry') && winnerRows && winnerRows.length >= 60 && pick.row.dir){
+            var refined = W.hgApplyExactEntry(Object.assign({}, pick.row, { type: 'SWING' }), winnerRows, { style: 'swing', preferEdge: true });
+            if (refined && refined.entry != null && refined.stop != null && refined.t1 != null
+                && isFinite(+refined.entry) && isFinite(+refined.stop) && isFinite(+refined.t1)){
+              var rrAfter = Math.abs(+refined.t1 - +refined.entry) / Math.max(1e-9, Math.abs(+refined.entry - +refined.stop));
+              if (isFinite(rrAfter) && rrAfter >= 2.0 && Math.abs(+refined.entry - +pick.row.entry) > 1e-9){
+                pick.row.entry = +refined.entry;
+                pick.row.stop = +refined.stop;
+                pick.row.t1 = +refined.t1;
+                if (isFinite(+refined.t2)) pick.row.t2 = +refined.t2;
+                pick.row.rr = rrAfter;
+                pick.row.rr1 = rrAfter;
+                if (isFinite(+pick.row.t2)) pick.row.rr2 = Math.abs(+pick.row.t2 - +pick.row.entry) / Math.abs(+pick.row.entry - +pick.row.stop);
+                pick.row.entryRefined = true;
+                pfReadsEntryRefined = true;
+              }
+            }
+          }
+        }catch(eRef){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eRef); }catch(eWr){} }
         if (omniInfo.length){
           omniInfo.forEach(function(r){
             var det = String(r.detail || '');
@@ -1503,7 +1554,9 @@ a global hard refresh.
               /* hg-v1047: the measured-edge verdict for this mechanic —
                  recorded only once armed (proven / losing), never while
                  the floor has not been reached */
-              measuredState: (measured && measured.state !== 'unproven') ? measured.state : undefined
+              measuredState: (measured && measured.state !== 'unproven') ? measured.state : undefined,
+              /* hg-v1051: the entry was refined to the structure edge */
+              entryRefined: (pfReadsEntryRefined ? true : undefined)
             };
             if (fwdScalp){ fwdRow.rows = fwdTape; } else { fwdRow.rows4h = winnerRows; }
             W.hgFwdRecordScan('OMNIBTC', fwdTf, [fwdRow], { horizonBars: fwdHorizon });

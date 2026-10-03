@@ -112,7 +112,11 @@ console.log('== the crowned pick joins the forward book ==');
 {
   const cap = {};
   const W = boot(Object.assign({
-    swingTryClean: () => Object.assign({}, PLAN)
+    swingTryClean: () => Object.assign({}, PLAN),
+    /* hg-v1051: the entry-refinement layer has its own dedicated tests
+       (test-omnibtc-perfect-v1041) - here it passes through so this pin
+       keeps proving the record writes exactly what the desk crowned */
+    hgApplyExactEntry: (p) => Object.assign({}, p)
   }, venueStubs(cap)));
   const ui = { btn: mk(), stat: mk(), cards: mk(), detail: mk(), fwd: mk(), ind: mk(), ledger: mk() };
   const stat = await W.hgObtcRunScan(ui);
@@ -138,7 +142,8 @@ console.log('== a watch-tier pick records marked for what it is ==');
 {
   const cap = {};
   const W = boot(Object.assign({
-    swingTryNear: () => ({ dir: 'short', entry: 110, stop: 118, t1: 96, passed: 6 })
+    swingTryNear: () => ({ dir: 'short', entry: 110, stop: 118, t1: 96, passed: 6 }),
+    hgApplyExactEntry: (p) => Object.assign({}, p)   /* refinement has its own tests */
   }, venueStubs(cap)));
   const ui = { btn: mk(), stat: mk(), cards: mk(), detail: mk(), fwd: mk(), ind: mk(), ledger: mk() };
   const stat = await W.hgObtcRunScan(ui);
