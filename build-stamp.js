@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1037',
-  pack: 'OMNIBTC NEAR NAMES ITS RED GATE — a 6/7 NEAR watch now names exactly which hard gate kept it off 7/7 CLEAN (the swingTryNear missing label is carried through the candidate and the pick into the MOST PROBABLE banner, so the operator sees Waiting: G6 ATR-capacity R:R… instead of a bare 6/7 NEAR); no threshold moved, no setup leaves any board.',
-  built: '2026-10-03T04:45:09Z'
+  version: 'hg-v1038',
+  pack: 'GATE TRANSPARENCY — the MOST PROBABLE watch banner now prints the MEASURED value of the failed gate, not only its name: a 6/7 NEAR shows the red gate plus what it actually read versus its threshold (e.g. R:R 2.00, need ≥ 2.5), so the operator sees exactly how far off it is and what must flip; degrades to the label alone when gateMeta is absent; no threshold moved, no setup leaves any board.',
+  built: '2026-10-03T06:06:02Z'
 };
 
 function hgBuildLabel(b){

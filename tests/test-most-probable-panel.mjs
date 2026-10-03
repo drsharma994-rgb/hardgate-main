@@ -106,6 +106,29 @@ console.log('== panel: ENTRY / STOP / T1 / T2 on the banner ==');
   });
   ok(/CLOSEST/.test(draftHtml) && /not a ticket/.test(draftHtml) && /2245/.test(draftHtml),
      'closest banner prints draft levels and refuses the ticket label');
+
+  /* a NEAR row that carries gateMeta names BOTH the red gate AND its measured
+     value (what the gate read vs its threshold), so the operator sees exactly
+     how far off it is and what must flip. */
+  const nearMeta = W.hgMostProbablePanelHTML('swing', {
+    tier: 'near',
+    row: {
+      sym: 'B-BTC_USDT', dir: 'short', entry: 84541.2, stop: 85573.69, t1: 82476.23, t2: 80927.5,
+      rr: 2, gatesPassed: 6, venue: 'coindcx',
+      missing: ['G6 ATR-capacity R:R≥2.5'],
+      gateMeta: [
+        { id: 'G6', label: 'G6 ATR-capacity R:R≥2.5', state: 'veto', pass: false, detail: 'R:R 2.00 (need ≥ 2.5)' }
+      ]
+    }
+  });
+  ok(/Waiting: G6 ATR-capacity/.test(nearMeta), 'near names the failed gate');
+  ok(/R:R 2\.00 \(need ≥ 2\.5\)/.test(nearMeta),
+    'near prints the measured gate value, not only the threshold');
+  const noMeta = W.hgMostProbablePanelHTML('scalp', {
+    tier: 'near', row: { sym: 'ETHUSD', dir: 'short', entry: 4000, stop: 4080, t1: 3840, rr: 2, gatesPassed: 6, missing: ['G5 vol+wick'] }
+  });
+  ok(/Waiting: G5 vol\+wick\./.test(noMeta) && !/need ≥/.test(noMeta),
+    'a near row without gateMeta degrades to the label alone');
 }
 
 console.log('== SWING / SCALP / EDGE / BEST pin the banner ==');

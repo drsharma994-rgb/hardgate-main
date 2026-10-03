@@ -205,7 +205,25 @@ function hgMostProbablePanelHTML(kind, pick){
       grade = (isFinite(passed) ? (passed + '/' + total + ' CLOSEST') : 'CLOSEST') + ' — not a ticket';
       note = 'No CLEAN or 6/7 NEAR. This is the nearest cascade with draft levels. Standing aside is the position.';
     }
-    if (missing) note += ' Waiting: ' + missing + '.';
+    if (missing){
+      note += ' Waiting: ' + missing;
+      /* Surface the MEASURED value of the failed gate(s), not just its name —
+         e.g. G6 ATR-capacity R:R with detail "R:R 2.00 (need ≥ 2.5)" tells the
+         operator exactly how far off it is and what must flip, instead of a
+         bare gate label. gateMeta rides the row (carried by omnibtc.js since
+         hg-v1037); its absence degrades to the label alone, never a crash. */
+      if (Array.isArray(row.gateMeta)){
+        var waitMeta = [];
+        for (var waitI = 0; waitI < row.gateMeta.length; waitI++){
+          var waitG = row.gateMeta[waitI];
+          if (waitG && (waitG.state === 'veto' || waitG.pass === false) && waitG.detail){
+            waitMeta.push(String(waitG.detail));
+          }
+        }
+        if (waitMeta.length) note += ' — ' + waitMeta.join(' · ');
+      }
+      note += '.';
+    }
     var t2Cell = isFinite(t2)
       ? ('<div><i>T2</i><b>' + suEsc(hgMpPx(t2)) + '</b><u>' + (isFinite(rr2) ? suFmt(rr2, 1) + 'R runner' : 'runner') + '</u></div>')
       : '<div><i>T2</i><b>—</b><u>not set</u></div>';
