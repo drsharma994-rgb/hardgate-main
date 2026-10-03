@@ -49,7 +49,7 @@ function boot(extra){
                    documentElement: { appendChild(){} }, addEventListener(){} };
   vm.createContext(ctx);
   for (const f of ['indicators.js', 'indicators2.js', 'hg-gates.js', 'hg-perfect-setup.js', 'hg-setup-core.js',
-                   'crypto-position-risk.js', 'plans.js', 'setup-ui.js', 'omnibtc-engines.js', 'omnibtc.js'])
+                   'crypto-position-risk.js', 'formation.js', 'plans.js', 'setup-ui.js', 'omnibtc-engines.js', 'omnibtc.js'])
     vm.runInContext(read(f), ctx, { filename: f });
   Object.assign(ctx, extra || {});   /* stubs land AFTER load — they win */
   return ctx;
@@ -118,6 +118,8 @@ console.log('== all seven legs readable-and-WITH crowns PERFECT⁺ and prints th
   ok(d.indexOf('Break-even requirement') >= 0 && d.indexOf('T1 wins to break even') >= 0, 'the break-even line names what the numbers require');
   ok(d.indexOf('Timeframe agreement') >= 0 && d.indexOf('4h WITH') >= 0 && d.indexOf('1d WITH') >= 0, 'the timeframe agreement reads every tape (all WITH on the fixture)');
   ok(d.indexOf('LONDON session') >= 0, 'the fire bar session is named');
+  ok(d.indexOf('Fill odds') >= 0 && d.indexOf('12-bar windows') >= 0, 'the fill-odds witness prints');
+  ok(d.indexOf('Stop sensitivity') >= 0 && d.indexOf('0/40 prior bars wicked') >= 0, 'the stop-sensitivity witness prints the tape truth');
   ok(cap.tkArgs && cap.tkArgs[0] === 'BTCUSDT', 'the taker-series fetch still names BTCUSDT');
 }
 
@@ -197,6 +199,8 @@ console.log('== wiring pins — the shipped files actually read and print it all
   ok(src.indexOf('function hgObtcPlanMathHtml') >= 0, 'the plan-math panel is defined');
   ok(src.indexOf('function hgObtcSessionOf') >= 0 && src.indexOf('function hgObtcTapeDir') >= 0, 'the session + tape-dir readers are defined');
   ok(src.indexOf('c._rows1d = r1d') >= 0, 'the daily tape rides the candidates');
+  ok(src.indexOf('pfReads.fillPct') >= 0 && src.indexOf('pfReads.sweepCount') >= 0, 'the accuracy reads ride the same bag the predicate consumed');
+  ok(src.indexOf('hgFillProbability(winnerRows') >= 0, 'the fill odds come from the house touch-rate read');
   const esrc = read('omnibtc-engines.js');
   ok(esrc.indexOf("binanceFunding('BTCUSDT')") >= 0, 'the gather fetches Binance BTCUSDT funding for the spread');
   const tsrc = read('trendtable.js');

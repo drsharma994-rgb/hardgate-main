@@ -696,6 +696,14 @@ a global hard refresh.
       if (pick.row.omniVolOverBudget === true){
         rows.push('<div class="kv"><span class="k">Volume budget</span><span class="v bad">volume targeting over budget - the expected move may be capped</span></div>');
       }
+      if (reads.fillPct != null){
+        rows.push('<div class="kv"><span class="k">Fill odds</span><span class="v">' + (+reads.fillPct).toFixed(0) + '% of past 12-bar windows touched this entry zone on this tape</span></div>');
+      }
+      if (reads.sweepCount != null){
+        var swTxt = reads.sweepCount + '/' + reads.sweepLook + ' prior bars wicked through the stop width'
+          + (reads.sweepCount >= 10 ? ' - the stop sits where noise trades' : '');
+        rows.push('<div class="kv"><span class="k">Stop sensitivity</span><span class="v' + (reads.sweepCount >= 10 ? ' bad' : '') + '">' + swTxt + '</span></div>');
+      }
       if (!rows.length) return '';
       return '<div class="panel" style="margin-top:10px"><h3>TRADE COST + TIMING WITNESSES <span>what the levels cost and whether the tape is worth paying for — evidence, never a gate</span></h3>' + rows.join('') + '</div>';
     }catch(e){ return ''; }
@@ -1375,6 +1383,34 @@ a global hard refresh.
           if (match && match._ticker && typeof match._ticker.fundingPct === 'number' && isFinite(match._ticker.fundingPct)){
             pfReads.venueFundingPct = match._ticker.fundingPct;
           }
+          /* hg-v1050: SETUP ACCURACY reads - how often this entry zone
+             actually fills on the winner tape (hgFillProbability, the
+             house 12-bar touch rate) and how often noise wicks through
+             the full stop width (prior bars that traded the whole risk
+             distance on the wrong side). Facts about the tape, never a
+             forecast. */
+          try{
+            if (typeof hgFillProbability === 'function' && winnerRows && pick.row.entry != null){
+              var fp = hgFillProbability(winnerRows, +pick.row.entry, pick.row.dir, null, 12);
+              if (fp && fp.pct != null && isFinite(fp.pct)) pfReads.fillPct = fp.pct;
+            }
+          }catch(eFp){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eFp); }catch(eWf){} }
+          try{
+            if (winnerRows && winnerRows.length >= 45 && isFinite(+pick.row.entry) && isFinite(+pick.row.stop)){
+              var riskPx = Math.abs(+pick.row.entry - +pick.row.stop);
+              var sweeps = 0, look = 40;
+              for (var si = winnerRows.length - look; si < winnerRows.length; si++){
+                var sbar = winnerRows[si];
+                if (!sbar) continue;
+                var sl = +sbar.l, sh = +sbar.h;
+                if (!isFinite(sl) || !isFinite(sh)) continue;
+                if (pick.row.dir === 'long' && sl <= +pick.row.entry - riskPx) sweeps++;
+                else if (pick.row.dir === 'short' && sh >= +pick.row.entry + riskPx) sweeps++;
+              }
+              pfReads.sweepCount = sweeps;
+              pfReads.sweepLook = look;
+            }
+          }catch(eSw){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eSw); }catch(eWs){} }
           /* hg-v1049: the fire bar's session and the multi-timeframe
              agreement, read off the tapes the desk already holds */
           if (winnerRows && winnerRows.length){
