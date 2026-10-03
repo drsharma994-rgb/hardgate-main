@@ -92,7 +92,7 @@ async function scanOnce(poolStats){
 
 console.log('== below the floor: accumulating mode — the crown still trades, the chip says so ==');
 {
-  const { cap, ui, stat } = await scanOnce({ samples: 12, hit: 60, expR: 0.5 });
+  const { cap, ui, stat } = await scanOnce({ samples: 12, hit: 0.6, expR: 0.5 });
   ok(/MOST PROBABLE/.test(stat), 'the scan crowns: ' + stat);
   /* the mechanic name is the same expression the forward record writes
      (omniKind first), so the gate and the record always agree on the pool */
@@ -101,6 +101,7 @@ console.log('== below the floor: accumulating mode — the crown still trades, t
   const d = ui.detail.innerHTML;
   ok(d.indexOf('MEASURED EDGE') >= 0, 'the measured-edge panel prints');
   ok(d.indexOf('EDGE UNPROVEN') >= 0 && d.indexOf('12/20 settled') >= 0, 'the chip reports progress against the floor (12/20)');
+  ok(d.indexOf('Settled T1 hit rate') < 0, 'no hit-rate line below the floor - nothing armed to quote');
   ok(d.indexOf('WATCH ONLY') < 0, 'accumulating mode blocks nothing — no watch-only note');
   ok(d.indexOf('EXIT POLICY') >= 0, 'a ticket prints the exit policy');
   const rec = cap.rec && cap.rec.rows && cap.rec.rows[0];
@@ -110,9 +111,11 @@ console.log('== below the floor: accumulating mode — the crown still trades, t
 
 console.log('== armed and profitable: EDGE PROVEN — the ticket stands ==');
 {
-  const { cap, ui } = await scanOnce({ samples: 60, hit: 55, expR: 0.4 });
+  const { cap, ui } = await scanOnce({ samples: 60, hit: 0.55, expR: 0.4 });
   const d = ui.detail.innerHTML;
   ok(d.indexOf('EDGE PROVEN') >= 0 && d.indexOf('n=60') >= 0, 'the chip shows the proven record');
+  ok(d.indexOf('Settled T1 hit rate') >= 0 && d.indexOf('55% over n=60') >= 0, 'the settled T1 hit rate prints beside the verdict');
+  ok(d.indexOf('the T2 runner is not graded') >= 0, 'the runner is named ungraded, honestly');
   ok(d.indexOf('EXIT POLICY') >= 0, 'the ticket keeps its exit policy');
   const rec = cap.rec && cap.rec.rows && cap.rec.rows[0];
   ok(rec && rec.ticket === true && rec.measuredState === 'proven', 'the record reads ticket:true with measuredState proven');
@@ -120,7 +123,7 @@ console.log('== armed and profitable: EDGE PROVEN — the ticket stands ==');
 
 console.log('== armed and losing: the desk stands aside — watch, not a ticket ==');
 {
-  const { cap, ui, stat } = await scanOnce({ samples: 60, hit: 30, expR: -0.35 });
+  const { cap, ui, stat } = await scanOnce({ samples: 60, hit: 0.3, expR: -0.35 });
   ok(/MOST PROBABLE/.test(stat), 'the crown still prints: ' + stat);
   const d = ui.detail.innerHTML;
   ok(d.indexOf('EDGE LOSING') >= 0 && d.indexOf('n=60') >= 0, 'the chip names the losing record');
@@ -138,6 +141,7 @@ console.log('== wiring pins ==');
   ok(src.indexOf('measuredStandAside') >= 0, 'the stand-aside stamp exists');
   ok(src.indexOf('function hgObtcAutoRuleHtml') >= 0, 'the exit-policy panel is defined');
   ok(src.indexOf('measuredState') >= 0, 'the measured mark rides the record');
+  ok(src.indexOf('Settled T1 hit rate') >= 0, 'the T1 hit-rate line is wired in the measured panel');
   const html = read('index.html');
   ok(html.indexOf('proven-edge.js') < html.indexOf('omnibtc.js'), 'proven-edge loads before omnibtc in the shell');
 }

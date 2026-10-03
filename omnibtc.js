@@ -1125,10 +1125,20 @@ a global hard refresh.
       dhtml += hgObtcPerfectLedgerHtml(pick);
       if (snap && snap.measured && gfn('hgProvenEdgeChipHtml')){
         try{
+          /* hg-v1052: the settled T1 hit rate beside the verdict — the
+             ledger settles T1-first by design, so the hit rate IS the
+             T1 rate; the runner is recorded but never graded. Compare
+             it with the break-even requirement PLAN MATH prints above. */
+          var meHit = '';
+          if (isFinite(snap.measured.hit) && snap.measured.n >= (snap.measured.floor || 20)){
+            meHit = '<div class="kv"><span class="k">Settled T1 hit rate</span><span class="v">'
+              + (snap.measured.hit * 100).toFixed(0) + '% over n=' + snap.measured.n
+              + ' - the ledger settles T1-first; the T2 runner is not graded</span></div>';
+          }
           var meNote = (snap.measured.state === 'losing' && gfn('hgProvenEdgeBlockedNoteHtml'))
             ? W.hgProvenEdgeBlockedNoteHtml(snap.measured) : '';
           dhtml += '<div class="panel" style="margin-top:10px"><h3>MEASURED EDGE <span>the desk\'s own settled record for this mechanic — the shared proven-edge gate, judged at its evidence floor</span></h3>'
-            + W.hgProvenEdgeChipHtml(snap.measured) + meNote + '</div>';
+            + W.hgProvenEdgeChipHtml(snap.measured) + meHit + meNote + '</div>';
         }catch(eChip){}
       }
       dhtml += hgObtcAutoRuleHtml(pick);
