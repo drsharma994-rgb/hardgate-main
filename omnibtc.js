@@ -496,6 +496,34 @@ a global hard refresh.
     }catch(e){ return ''; }
   }
 
+  /* hg-v1039: THE FUNDING WITNESS — the same one-rule read the shared
+     PERFECT formation consumes (hgFundingAgainstMark), printed beside the
+     pick so the crowding verdict that shaped the crown is visible.
+     Caution, never a gate. */
+  function hgObtcFundingWitnessHtml(snap, pick){
+    try{
+      if (!snap || !pick || !pick.row || !pick.row.dir) return '';
+      var fp = null;
+      var legs = snap.legs || [];
+      for (var li = 0; li < legs.length; li++){
+        var l = legs[li];
+        if (l && l._ticker && typeof l._ticker.fundingPct === 'number' && isFinite(l._ticker.fundingPct)){
+          fp = l._ticker.fundingPct; break;
+        }
+      }
+      if (fp === null || typeof hgFundingAgainstMark !== 'function') return '';
+      var m = hgFundingAgainstMark(fp, pick.row.dir);
+      if (!m) return '';
+      var cls = (m.against === true) ? 'warn' : 'ok';
+      return '<div class="note ' + cls + '" style="margin-top:8px">'
+        + '<b>FUNDING WITNESS</b> — funding ' + fp.toFixed(4) + '%/interval '
+        + (m.against === true
+          ? ('is CROWDED AGAINST this ' + esc(pick.row.dir) + ' (the crowd is already stacked on your side — squeeze risk; the shared PERFECT formation reads the same verdict).')
+          : ('is not crowded for this ' + esc(pick.row.dir) + ' (the shared PERFECT formation reads the same verdict).'))
+        + '</div>';
+    }catch(e){ return ''; }
+  }
+
   function hgObtcDefaultLegs(){
     var dual = true;
     try{ if (gfn('hgDualScanEnabled')) dual = !!W.hgDualScanEnabled(); }catch(e){}
@@ -833,6 +861,7 @@ a global hard refresh.
       if (snap && snap.fundamental && gfn('hgObtcFundamentalPanelHtml')){
         try{ dhtml += W.hgObtcFundamentalPanelHtml(snap.fundamental) || ''; }catch(eFu){}
       }
+      dhtml += hgObtcFundingWitnessHtml(snap, pick);
       ui.detail.innerHTML = dhtml;
     }
     /* hg-v1011: the desk's own forward book under the card — does the crown

@@ -5,8 +5,8 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1039',
-  pack: 'LOGIC-AUDIT FIX RELEASE — 70+ defects repaired across the desk: engine G4 anchor NaN (EXECUTE/GATES + BRAIN engine layer), GOLD DEEP mean-rev stop side, VP half-size band, inverted real-rate fallback, inverted funding-arb harvest labels, TIME_STOP unwind, null-R stats pollution, reversion-family vetoes, FVG geometry, paper-book money fixes and ~50 smaller logic repairs; verified against the 690-suite gate (the 5 Windows-only harness failures are pre-existing and unchanged). Also carries the GATE TRANSPARENCY banner (measured failed-gate values).',
+  version: 'hg-v1040',
+  pack: 'TREND MATRIX + OMNIBTC EVIDENCE RELEASE — the trend-matrix crown joins the forward book (every 7/7 CLEAN / PERFECT row is recorded and the measured panel answers does-the-crown-pay on the desk, including the stance split); OMNIBTC prints the funding witness beside the pick. Also carries the LOGIC-AUDIT FIX RELEASE — 70+ defects repaired across the desk: engine G4 anchor NaN (EXECUTE/GATES + BRAIN engine layer), GOLD DEEP mean-rev stop side, VP half-size band, inverted real-rate fallback, inverted funding-arb harvest labels, TIME_STOP unwind, null-R stats pollution, reversion-family vetoes, FVG geometry, paper-book money fixes and ~50 smaller logic repairs; verified against the 690-suite gate (the 5 Windows-only harness failures are pre-existing and unchanged). Also carries the GATE TRANSPARENCY banner (measured failed-gate values).',
   built: '2026-10-03T07:14:49.651Z'
 };
 

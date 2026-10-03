@@ -1942,6 +1942,21 @@ function trendmxPaintDeskSections(refs, state){
   }
 }
 
+/* hg-v1039: THE MEASURED BOOK — the desk records every crowned CLEAN /
+   PERFECT row (runScan) and this panel answers 'does the crown pay?' from
+   settled forward records, including the TREND MATRIX stance split every
+   other recording desk inherits. Evidence, never a gate. */
+function trendmxPaintFwd(refs){
+  if (!refs || !refs.fwd) return;
+  try{
+    if (typeof W.hgFwdPanelHTML === 'function'){
+      refs.fwd.innerHTML = W.hgFwdPanelHTML('TRENDMX') || '';
+    } else {
+      refs.fwd.innerHTML = '<div class="note">Forward ledger absent — crowns are recorded nowhere to be measured.</div>';
+    }
+  }catch(e){ try{ refs.fwd.innerHTML = ''; }catch(e2){} }
+}
+
 function hgPaintTrendmxFromSnap(){
   try{
     if (!__tmScanSnap || !__tmScanSnap.rows || !__tmScanSnap.rows.length || !tmTab.mountEl) return;
@@ -1956,12 +1971,14 @@ function hgPaintTrendmxFromSnap(){
       gateclean: el.querySelector('[data-r="gateclean"]'),   /* hg-v1018 */
       conviction: el.querySelector('[data-r="conviction"]'),  /* hg-v1018 */
       perfect: el.querySelector('[data-r="perfect"]'),        /* hg-v1022 */
+      fwd: el.querySelector('[data-r="fwd"]'),                /* hg-v1039 */
       out: el.querySelector('[data-r="out"]'),
       status: el.querySelector('[data-r="status"]')
     };
     var state = { rows: __tmScanSnap.rows, golden: __tmScanSnap.goldenCross || [], death: __tmScanSnap.deathCross || [], filter: 'ALL', sortKey: 'score', sortDir: -1 };
     tmTab._state = state;
     trendmxPaintDeskSections(refs, state);
+    trendmxPaintFwd(refs);
     if (refs.status && __tmScanSnap.at){
       refs.status.textContent = 'desk synced from cache · ' + trendmxSummaryLine(state.rows, state.golden)
         + ' · age ' + Math.round((Date.now() - __tmScanSnap.at) / 1000) + 's';
@@ -2111,6 +2128,7 @@ function mountTrendMatrix(el){
       '<div data-r="gateclean"></div>' +   /* hg-v1018: the gate-clean class on its own desk */
       '<div data-r="conviction"></div>' +  /* hg-v1018: the composite-conviction class under it */
       '<div data-r="perfect"></div>' +     /* hg-v1022: the strictest confluence tier on its own desk */
+      '<div data-r="fwd"></div>' +         /* hg-v1039: the measured book — does the crown pay */
       '<h3 style="margin:16px 0 8px;font-size:11px;letter-spacing:.14em;color:#475569">FULL MATRIX · sortable · expandable plans</h3>' +
       '<div data-r="out"><div class="empty">Press RUN SCAN to build the matrix.</div></div>' +
     '</div>';
@@ -2138,6 +2156,7 @@ function mountTrendMatrix(el){
     gateclean: el.querySelector('[data-r="gateclean"]'),   /* hg-v1018 */
     conviction: el.querySelector('[data-r="conviction"]'),  /* hg-v1018 */
     perfect: el.querySelector('[data-r="perfect"]'),        /* hg-v1022 */
+    fwd: el.querySelector('[data-r="fwd"]'),                /* hg-v1039: the measured book */
     out: out,
     status: status
   };
@@ -2178,6 +2197,9 @@ function mountTrendMatrix(el){
   });
   btn.addEventListener('click', runScan);
   if (syncBtn) syncBtn.addEventListener('click', function(){ renderAll(); setStatus('desk repainted from latest scan.'); });
+  /* the measured book renders on mount too — records from previous sessions
+     are the point of an accumulating ledger (OMNIBTC's hg-v1011 pattern). */
+  trendmxPaintFwd(refs);
 
   function sortVal(r, k){
     if (k === 'sym')   return r.sym;
@@ -2293,6 +2315,7 @@ function mountTrendMatrix(el){
 
   function renderAll(){
     trendmxPaintDeskSections(refs, state);
+    trendmxPaintFwd(refs);
     renderMatrix();
   }
 
@@ -2335,6 +2358,39 @@ function mountTrendMatrix(el){
       state.death = (snap && snap.deathCross) ? snap.deathCross : [];   /* hg-v1014 */
       state.venueCounts = vc;
       renderAll();
+      /* hg-v1039: THE CROWN JOINS THE FORWARD BOOK — the desk has crowned
+         CLEAN / PERFECT rows for its whole life and never recorded one, so
+         'does the trend-matrix crown pay?' could never be asked. Each 7/7
+         gate-clean row with a valid plan is recorded (max 10, strongest
+         |composite| first); the ledger dedups on the bar and settles on
+         bars the desk already fetched. Evidence, never a gate. */
+      try{
+        if (typeof W.hgFwdRecordScan === 'function'){
+          var recRows = [];
+          var cands = state.rows.slice().sort(function(a, b){ return Math.abs(+b.score || 0) - Math.abs(+a.score || 0); });
+          for (var ri = 0; ri < cands.length && recRows.length < 10; ri++){
+            var cr = cands[ri];
+            var cdir = tmDirOf(cr);
+            if (!cdir || !cr.gate || !cr.gate.clean7 || cr.gate.veto) continue;
+            var cplan = trendmxPlan(Object.assign({}, cr, { dir: cdir }));
+            if (!cplan || !isFinite(+cplan.entry) || !isFinite(+cplan.stop) || !isFinite(+cplan.t1)) continue;
+            var crh4 = cr.rows4h;
+            if (!Array.isArray(crh4) || !crh4.length) continue;
+            var cLast = crh4[crh4.length - 1];
+            recRows.push({
+              sym: cr.sym, dir: cdir,
+              entry: +cplan.entry, stop: +cplan.stop, t1: +cplan.t1,
+              signalT: (cLast && cLast.t != null) ? cLast.t : undefined,
+              mark: (cLast && cLast.c != null) ? +cLast.c : undefined,
+              rows4h: crh4,
+              fundingPct: (typeof cr.fundingPct === 'number' && isFinite(cr.fundingPct)) ? cr.fundingPct : undefined,
+              mechanic: trendmxPerfectState(cr) ? 'PERFECT' : 'CLEAN',
+              ticket: true
+            });
+          }
+          if (recRows.length) W.hgFwdRecordScan('TRENDMX', '4h', recRows, { horizonBars: 20 });
+        }
+      }catch(eRec){ try{ if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('trendmx', eRec); }catch(eW){} }
       if (typeof globalThis !== 'undefined' && typeof globalThis.hgChartVisionEnrichDeskRows === 'function'){
         var tmClean = state.rows.filter(function(r){
           var d = tmDirOf(r);
