@@ -1168,6 +1168,24 @@ async function trendmxScanCore(hooks){
   }
   var uniPack = await W.hgDeskLoadUniverse({ force: true, minTurnover: TURNOVER_FLOOR });
   var items = uniPack.items || [];
+  /* hg-v1048: ALL COINDCX FUTURES - the floored universe drops small
+     CoinDCX contracts, so the matrix re-reads the universe at floor 0 and
+     merges in every CoinDCX future it missed (deduped on venue+sym). The
+     other venues keep their floor. */
+  try{
+    if (gfn('hgDeskLoadUniverse')){
+      var allPack = await W.hgDeskLoadUniverse({ force: false, minTurnover: 0, includeUnknown: true });
+      var cdcxAll = (gfn('hgDeskFilterVenues') && Array.isArray(allPack.items))
+        ? W.hgDeskFilterVenues(allPack.items, ['coindcx']) : [];
+      var seenU = {};
+      for (var ui = 0; ui < items.length; ui++) seenU[String(items[ui].exchange || '') + '|' + String(items[ui].sym || '')] = 1;
+      for (var uj = 0; uj < cdcxAll.length; uj++){
+        var uitem = cdcxAll[uj];
+        var uk = String(uitem.exchange || '') + '|' + String(uitem.sym || '');
+        if (!seenU[uk]){ items.push(uitem); seenU[uk] = 1; }
+      }
+    }
+  }catch(eUni){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('trendmx', eUni); }catch(eWu){} }
   if (!items.length) throw new Error('universe empty' + (uniPack.note ? ' — ' + uniPack.note : ''));
   var results = [], failed = 0;
   for (var i = 0; i < items.length; i += CHUNK){
@@ -1993,6 +2011,9 @@ function trendmxPaintDeskSections(refs, state){
   /* hg-v1018: the two limit classes, one collection, one forward record,
      two desks — each renders only its own formation class, like the cross
      desks above them (hg-v1015). */
+  if (refs.trendform){
+    refs.trendform.innerHTML = trendmxTrendFormHTML(rows);
+  }
   if (refs.gateclean || refs.conviction){
     var tmClasses = trendmxLimitClasses(rows);
     /* hg-v1019: each desk gets its OWN reason split, so its verdict names
@@ -2076,6 +2097,64 @@ function trendmxColumnsHTML(rows){
       + col('BULL', '#26a69a', 'pos', bullS, 'no bullish rows — composite below +2')
       + col('BEAR', '#ef5350', 'neg', bearS, 'no bearish rows — composite above -2')
       + col('MIXED / CHOP', '#94a3b8', '', mixedS, 'no mixed rows')
+      + '</div>';
+  }catch(e){ return ''; }
+}
+
+/* hg-v1048: the COINDCX TRENDING / FORMING board - every CoinDCX future
+   the matrix scanned, in two columns. TRENDING = the composite has a
+   majority direction (|score| >= 2); FORMING = it does not yet. Both
+   print TP/SL: minted ticket levels where the plan exists (7/7 CLEAN /
+   6/7 NEAR), the house DRAFT ladder where it does not. */
+function trendmxTrendFormHTML(rows){
+  try{
+    if (!Array.isArray(rows) || !rows.length) return '<div class="empty">Run a scan to classify the CoinDCX board.</div>';
+    var cdcx = [];
+    for (var i = 0; i < rows.length; i++){
+      if (rows[i] && String(tmRowVenue(rows[i])).toLowerCase() === 'coindcx') cdcx.push(rows[i]);
+    }
+    if (!cdcx.length) return '<div class="empty">No CoinDCX rows on this board.</div>';
+    var trending = [], forming = [];
+    for (i = 0; i < cdcx.length; i++){
+      var r = cdcx[i];
+      if (tmDirOf(r)) trending.push(r); else forming.push(r);
+    }
+    function byStrength(list){ return list.slice().sort(function(a, b){ return Math.abs(+b.score || 0) - Math.abs(+a.score || 0); }); }
+    function px(v){ return isFinite(v) ? String(+v) : '--'; }
+    function lvlLine(rr, dd){
+      var plan = dd ? trendmxPlan(Object.assign({}, rr, { dir: dd })) : null;
+      if (plan){
+        var tier = trendmxRowTier(rr, plan);
+        var gates = (rr.gate && isFinite(rr.gate.gatesPassed)) ? rr.gate.gatesPassed : 6;
+        return 'ENTRY ' + px(plan.entry) + ' - STOP ' + px(plan.stop) + ' - T1 ' + px(plan.t1)
+          + (isFinite(plan.t2) ? ' - T2 ' + px(plan.t2) : '') + ' - ' + (tier === 'clean' ? '7/7 CLEAN' : gates + '/7 NEAR');
+      }
+      return 'no levels - the gates have not met';
+    }
+    function cell(rr){
+      var dd = tmDirOf(rr);
+      var lean = dd ? 0 : (+rr.score > 0 ? 1 : (+rr.score < 0 ? -1 : 0));
+      var tag = dd === 'long' ? '<span class="pos">LONG</span>'
+        : dd === 'short' ? '<span class="neg">SHORT</span>'
+        : lean === 1 ? '<span class="pos">LONG-LEAN</span>'
+        : lean === -1 ? '<span class="neg">SHORT-LEAN</span>'
+        : '<span>NO LEAN</span>';
+      var lvl = (dd || lean !== 0) ? lvlLine(rr, dd || (lean === 1 ? 'long' : 'short'))
+        : 'no lean - composite 0/5, no levels';
+      return '<div class="card" style="padding:8px;margin-bottom:6px"><b>' + escH(rr.sym) + '</b> ' + tag
+        + '<div style="opacity:.9;font-size:11px;margin-top:2px">composite ' + (rr.score > 0 ? '+' : '') + rr.score + '/5' + (rr.freshCross ? ' - !' + escH(rr.freshCross) : '') + '</div>'
+        + '<div style="font-size:11px;margin-top:4px;letter-spacing:.02em">' + lvl + '</div></div>';
+    }
+    function col(title, cls, list, emptyTxt){
+      var h = '<div class="panel" style="border-top:3px solid ' + cls + '"><h3 style="margin:0 0 8px">' + title
+        + ' <span style="opacity:.6;font-weight:400">- ' + list.length + ' contract' + (list.length === 1 ? '' : 's') + '</span></h3>';
+      if (!list.length) h += '<div class="empty" style="margin:6px 0">' + emptyTxt + '</div>';
+      else h += list.map(cell).join('');
+      return h + '</div>';
+    }
+    return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;align-items:start">'
+      + col('TRENDING', '#26a69a', byStrength(trending), 'no trending CoinDCX contracts - composite below +/-2')
+      + col('FORMING', '#f59e0b', byStrength(forming), 'no forming CoinDCX contracts')
       + '</div>';
   }catch(e){ return ''; }
 }
@@ -2252,6 +2331,8 @@ function mountTrendMatrix(el){
       '<div data-r="conviction"></div>' +  /* hg-v1018: the composite-conviction class under it */
       '<div data-r="perfect"></div>' +     /* hg-v1022: the strictest confluence tier on its own desk */
       '<div data-r="fwd"></div>' +         /* hg-v1039: the measured book — does the crown pay */
+      '<h3 style="margin:16px 0 8px;font-size:11px;letter-spacing:.14em;color:#475569">COINDCX - ALL FUTURES - TRENDING / FORMING</h3>' +   /* hg-v1048 */
+      '<div data-r="trendform"></div>' +
       '<h3 style="margin:16px 0 8px;font-size:11px;letter-spacing:.14em;color:#475569">FULL MATRIX · sortable · expandable plans</h3>' +
       '<div style="margin:4px 0 8px">' +
         '<button class="chip on" data-view="table">TABLE</button>' +
@@ -2284,6 +2365,7 @@ function mountTrendMatrix(el){
     conviction: el.querySelector('[data-r="conviction"]'),  /* hg-v1018 */
     perfect: el.querySelector('[data-r="perfect"]'),        /* hg-v1022 */
     fwd: el.querySelector('[data-r="fwd"]'),                /* hg-v1039: the measured book */
+    trendform: el.querySelector('[data-r="trendform"]'),    /* hg-v1048: coindcx trending / forming */
     out: out,
     status: status
   };
@@ -2484,7 +2566,7 @@ function mountTrendMatrix(el){
     var t0 = Date.now();
     try{
       setProg(0.05);
-      setStatus('Scanning full universe (≥ $' + floorM + 'M turnover · Delta + CoinDCX + Binance)…');
+      setStatus('Scanning full universe (floor ' + floorM + 'M, Delta + CoinDCX + Binance, + ALL CoinDCX futures)...');
       var snap = await trendmxScan({ force: true });
       var results = (snap && snap.rows) ? snap.rows : [];
       var failed = (snap && snap.failed) ? snap.failed : 0;
@@ -2606,6 +2688,7 @@ W.trendmxVolState = trendmxVolState;       /* hg-v1020: the volume witness */
 W.trendmxVolChipHtml = trendmxVolChipHtml;
 W.trendmxFundGate = trendmxFundGate;       /* hg-v1034: the fundamental + sentiment witness */
 W.trendmxColumnsHTML = trendmxColumnsHTML; /* hg-v1045: the bull / bear column view */
+W.trendmxTrendFormHTML = trendmxTrendFormHTML; /* hg-v1048: the coindcx trending / forming board */
 W.trendmxFundState = trendmxFundState;
 W.trendmxFundChipHtml = trendmxFundChipHtml;
 W.trendmxPerfectState = trendmxPerfectState;       /* hg-v1022: the perfect predicate */
