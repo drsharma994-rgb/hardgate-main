@@ -112,6 +112,8 @@ console.log('== all seven legs readable-and-WITH crowns PERFECT⁺ and prints th
   ok(d.indexOf('Session participation') >= 0 && d.indexOf('time-of-day norm') >= 0, 'the session participation row shows the fire bar against its own slot');
   ok(d.indexOf('Day range') >= 0 && d.indexOf('% consumed') >= 0, 'the day-range exhaustion row shows how much of the day is spent');
   ok(d.indexOf('Venue premium') >= 0 && d.indexOf('vs Binance') >= 0, 'the cross-venue funding spread row shows Delta vs Binance');
+  ok(d.indexOf('Venue confirmation') >= 0, 'the venue-confirmation witness prints beside the pick');
+  ok(d.indexOf('single venue only') >= 0, 'a single-venue scan says so honestly');
   ok(cap.tkArgs && cap.tkArgs[0] === 'BTCUSDT', 'the taker-series fetch still names BTCUSDT');
 }
 
@@ -137,6 +139,23 @@ console.log('== a dead-tape fire bar disqualifies through the NEW volume legs ==
   const rec = cap.rec && cap.rec.rows && cap.rec.rows[0];
   ok(rec && rec.perfect === undefined, 'RVOL 0.30 is a THIN tape — the session + volume legs read AGAINST and the crown is not PERFECT');
   ok(ui.detail.innerHTML.indexOf('PERFECT CRITERIA LEDGER') < 0, 'no ledger on a thin tape');
+}
+
+console.log('== a 15m-priced scalp crown records on ITS OWN grid ==');
+{
+  const cap = {};
+  const W = boot(Object.assign({
+    scalpTryClean: () => Object.assign({}, PLAN, { engine: 'SCALP clean plan' })
+  }, stubs(cap, -0.002, R4)));
+  const ui = { btn: mk(), stat: mk(), cards: mk(), detail: mk(), fwd: mk(), ind: mk(), ledger: mk() };
+  const stat = await W.hgObtcRunScan(ui);
+  ok(/MOST PROBABLE/.test(stat), 'the scalp crowns: ' + stat);
+  ok(cap.rec && cap.rec.tf === '15m', 'the record rides the 15m book, not the 4h one');
+  ok(cap.rec && cap.rec.opts && cap.rec.opts.horizonBars === 24, 'the scalp horizon is the house 24 bars (6h)');
+  const rr = cap.rec && cap.rec.rows && cap.rec.rows[0];
+  ok(rr && Array.isArray(rr.rows) && rr.rows.length >= 60, 'the scalp record hands its own 15m tape under the rows carrier');
+  ok(rr && rr.rows4h === undefined, 'and does not hand the 4h tape to a 15m record');
+  ok(rr && rr.venueAgreeCount === 1, 'the venue-confirmation mark rides the record');
 }
 
 console.log('== wiring pins — the shipped files actually read and print it all ==');

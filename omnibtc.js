@@ -606,6 +606,15 @@ a global hard refresh.
         var spread = reads.venueFundingPct - reads.btcFundingBinance;
         rows.push('<div class="kv"><span class="k">Venue premium</span><span class="v">Delta ' + (+reads.venueFundingPct).toFixed(4) + '% vs Binance ' + (+reads.btcFundingBinance).toFixed(4) + '% — spread ' + (spread >= 0 ? '+' : '') + spread.toFixed(4) + '%/interval' + (Math.abs(spread) > 0.01 ? ' (wide — locals price it differently)' : '') + '</span></div>');
       }
+      if (reads.venuesAgree != null){
+        var vBoth = reads.venuesAgree >= 2;
+        var vTxt = vBoth
+          ? (reads.venuesNames || 'both venues') + ' crown the same direction'
+          : (reads.venuesScanned >= 2
+            ? 'only ' + (reads.venuesNames || 'one venue') + ' crowns this direction — the other book reads against or nothing'
+            : 'single venue only — no cross-venue confirmation');
+        rows.push('<div class="kv"><span class="k">Venue confirmation</span><span class="v' + (vBoth ? ' ok' : '') + '">' + vTxt + '</span></div>');
+      }
       if (!rows.length) return '';
       return '<div class="panel" style="margin-top:10px"><h3>TRADE COST + TIMING WITNESSES <span>what the levels cost and whether the tape is worth paying for — evidence, never a gate</span></h3>' + rows.join('') + '</div>';
     }catch(e){ return ''; }
@@ -1102,7 +1111,7 @@ a global hard refresh.
               extraLedger = extraLedger.concat(extraRun.ledger);
           }catch(eEx){}
         }
-        cands.forEach(function(c){ c._rows = r4; c._ticker = tk; c._extra = extra; });
+        cands.forEach(function(c){ c._rows = r4; c._rows1 = r1; c._rows15 = r15; c._ticker = tk; c._extra = extra; });
         all = all.concat(cands);
       }
       /* hg-v1002: the fundamental read is taken once per scan from the
@@ -1192,6 +1201,23 @@ a global hard refresh.
            taker flow, the event-calendar blackout, and perp funding. A leg
            the desk did not read stays null (neither confirms nor denies). */
         var pfReads = {};
+        /* hg-v1046: VENUE CONFIRMATION — how many of the scanned venues
+           crown the pick's own direction. A crown echoed by both Delta and
+           CoinDCX is confirmed by two independent books; a single-venue
+           crown is a single book. Evidence, never a gate. */
+        try{
+          var agreeVenues = {};
+          var ci;
+          for (ci = 0; ci < all.length; ci++){
+            var cc = all[ci];
+            if (!cc || cc.dir !== pick.row.dir) continue;
+            if (cc._ticker && cc._ticker.exchange) agreeVenues[String(cc._ticker.exchange)] = true;
+          }
+          var venueList = Object.keys(agreeVenues);
+          pfReads.venuesAgree = venueList.length;
+          pfReads.venuesNames = venueList.join(' + ');
+          pfReads.venuesScanned = legs.length;
+        }catch(eVen){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eVen); }catch(eWv){} }
         try{
           if (fundamental && fundamental.blackout) pfReads.newsRisk = 'blackout';
           if (pick.row.omniCvdWith === true) pfReads.takerFlowVerdict = 'with';
@@ -1265,26 +1291,35 @@ a global hard refresh.
            a setup writes it to hg-forward; this desk has crowned one MOST
            PROBABLE per scan for its whole life and never recorded one —
            nothing could ever answer "does the crown pay?". The record
-           carries the winner leg's own 4h tape (hg-v993's regime mark reads
+           carries the winner leg's own tape (hg-v993's regime mark reads
            the series the desk held, 60+ bars required) and the ticker's
-           funding (hg-v985's central mark); the tf is '4h' because the
-           desk's book is the 4h tape, and the 20-bar horizon is the house
-           default every 4h writer already uses. The bar is the tape's own
-           last closed bar (hg-v978), never the wall clock. Dedup keys on
-           the levels, so a re-scan of the same crown records once. A
-           watch-tier pick records with ticket:false — it is still the
+           funding (hg-v985's central mark). hg-v1046: the tf is the CROWN'S
+           OWN grid — a 15m-priced scalp (SCALP / TRAP engines) records on
+           the 15m book with the house 24-bar horizon instead of being
+           graded on an 80-hour 4h window, and hands its own 15m tape under
+           the `rows` carrier the shared mark reads first; swing-priced
+           crowns keep the 4h book and the 20-bar horizon. The bar is the
+           tape's own last closed bar (hg-v978), never the wall clock. Dedup
+           keys on the levels, so a re-scan of the same crown records once.
+           A watch-tier pick records with ticket:false — it is still the
            desk's output, marked for what it is. */
         try{
           if (gfn('hgFwdRecordScan') && winnerRows && winnerRows.length){
             var fwdTk = (match && match._ticker) || null;
-            var fwdLast = winnerRows[winnerRows.length - 1];
-            W.hgFwdRecordScan('OMNIBTC', '4h', [{
+            var fwdEng = String(pick.row.engine || '');
+            var fwdScalp = /SCALP|TRAP/i.test(fwdEng);
+            var fwdTf = fwdScalp ? '15m' : '4h';
+            var fwdHorizon = fwdScalp ? 24 : 20;
+            var fwdTape = fwdScalp
+              ? ((match && Array.isArray(match._rows15) && match._rows15.length >= 60) ? match._rows15 : winnerRows)
+              : winnerRows;
+            var fwdLast = fwdTape[fwdTape.length - 1];
+            var fwdRow = {
               sym: 'BTCUSD',
               dir: pick.row.dir,
               entry: +pick.row.entry, stop: +pick.row.stop, t1: +pick.row.t1,
               signalT: fwdLast && fwdLast.t,
               mark: fwdLast && fwdLast.c,
-              rows4h: winnerRows,
               fundingPct: (fwdTk && typeof fwdTk.fundingPct === 'number' && isFinite(fwdTk.fundingPct)) ? fwdTk.fundingPct : undefined,
               mechanic: String(pick.row.omniKind || pick.row.kind || pick.row.engine || 'UNKNOWN').toUpperCase().slice(0, 28),
               ticket: String(pick.tier || 'clean').toLowerCase() === 'clean',
@@ -1293,8 +1328,13 @@ a global hard refresh.
                  did not. The ledger measures the PERFECT cohort against the
                  rest, exactly like every other mechanic. */
               perfect: (pick.row.perfect ? true : undefined),
-              perfectPlus: (pick.row.perfectPlus ? true : undefined)
-            }], { horizonBars: 20 });
+              perfectPlus: (pick.row.perfectPlus ? true : undefined),
+              /* hg-v1046: how many scanned venues crowned this direction —
+                 the cross-venue confirmation read mark */
+              venueAgreeCount: isFinite(pfReads.venuesAgree) ? pfReads.venuesAgree : undefined
+            };
+            if (fwdScalp){ fwdRow.rows = fwdTape; } else { fwdRow.rows4h = winnerRows; }
+            W.hgFwdRecordScan('OMNIBTC', fwdTf, [fwdRow], { horizonBars: fwdHorizon });
           }
         }catch(eFwd2){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eFwd2); }catch(eW){} }
       }

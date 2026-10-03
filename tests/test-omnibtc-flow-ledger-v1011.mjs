@@ -174,8 +174,12 @@ console.log('== the mount wires the panel ==');
 console.log('== wiring pins — the shipped file actually does it ==');
 {
   const src = read('omnibtc.js');
-  ok(src.indexOf("W.hgFwdRecordScan('OMNIBTC', '4h'") >= 0, 'the record call names the desk and the 4h book');
-  ok(/rows4h: winnerRows/.test(src), 'the winner leg\'s tape rides the record');
+  /* hg-v1046: the record is priced on the crown's OWN grid now — a scalp
+     records on 15m/24 and hands its own tape; a swing keeps 4h/20 */
+  ok(src.indexOf("W.hgFwdRecordScan('OMNIBTC', fwdTf, [fwdRow], { horizonBars: fwdHorizon })") >= 0,
+     'the record call names the desk and prices the horizon on the crown\'s own grid');
+  ok(/fwdRow\.rows4h = winnerRows/.test(src), 'the winner leg\'s 4h tape rides a swing record');
+  ok(/fwdScalp = \/SCALP\|TRAP\/i\.test\(fwdEng\)/.test(src), 'the scalp family is named by its engines');
   ok(/ticket: String\(pick\.tier/.test(src), 'the ticket flag reads the tier, never assumed');
   ok(src.indexOf('FORWARD LEDGER ........... hg-v1011') >= 0 && src.indexOf('REAL-FLOW CVD ............ hg-v1011') >= 0,
      'the header documents both halves of the pack');
