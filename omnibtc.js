@@ -524,6 +524,88 @@ a global hard refresh.
     }catch(e){ return ''; }
   }
 
+  /* hg-v1041: the four remaining PERFECT evidence legs the shared predicate
+     consumes (hg-perfect-setup.js) — the desk always held this data (the
+     winner's own 4h tape) but never read it. RVOL = the fire bar's volume
+     against the tape's own 20-bar mean (participation + volume witness). */
+  function hgObtcFireRvol(rows){
+    try{
+      if (!Array.isArray(rows) || rows.length < 21) return NaN;
+      var n = rows.length, last = rows[n - 1], sum = 0, cnt = 0, i;
+      for (i = n - 21; i < n - 1; i++){ var v = +rows[i].v; if (isFinite(v) && v > 0){ sum += v; cnt++; } }
+      if (!cnt) return NaN;
+      var mean = sum / cnt, lv = +last.v;
+      if (!isFinite(lv) || lv <= 0 || mean <= 0) return NaN;
+      return lv / mean;
+    }catch(e){ return NaN; }
+  }
+
+  function hgObtcStructureTrend(rows){
+    try{
+      if (!Array.isArray(rows) || rows.length < 200) return null;
+      var emaFn = (typeof ema === 'function') ? ema : null;
+      if (!emaFn) return null;
+      var c = rows.map(function(r){ return +r.c; });
+      var e50 = emaFn(c, 50), e200 = emaFn(c, 200);
+      var a = e50[e50.length - 1], b = e200[e200.length - 1];
+      if (!isFinite(a) || !isFinite(b)) return null;
+      if (a > b) return 'up';
+      if (a < b) return 'down';
+      return 'range';
+    }catch(e){ return null; }
+  }
+
+  /* the PERFECT CRITERIA LEDGER — every leg the shared predicate consumed,
+     printed with its measured value and verdict, so the ★ badge is fully
+     auditable: what passed, what was read against (and therefore blocked
+     PERFECT⁺), and what the desk could not read (the honest third state).
+     A filter, not a promise. */
+  function hgObtcPerfectLedgerHtml(pick){
+    try{
+      if (!pick || !pick.row || pick.row.perfect !== true) return '';
+      var r = pick.row, reads = r.perfectReads || {}, rows = [];
+      function row(name, verdict, note){
+        var cls = verdict === 'WITH' ? 'ok' : (verdict === 'AGAINST' ? 'bad' : 'na');
+        rows.push('<div class="kv"><span class="k">' + esc(name) + '</span><span class="v ' + cls + '">' + esc(verdict) + (note ? ' · ' + esc(note) : '') + '</span></div>');
+      }
+      var tally = (typeof r.passed === 'number' && isFinite(r.passed)) ? r.passed
+        : (typeof r.gatesPassed === 'number' && isFinite(r.gatesPassed)) ? r.gatesPassed : null;
+      var rr = null;
+      if (isFinite(r.entry) && isFinite(r.stop) && isFinite(r.t1) && Math.abs(r.entry - r.stop) > 0){
+        rr = r.dir === 'short' ? (r.entry - r.t1) / Math.abs(r.entry - r.stop) : (r.t1 - r.entry) / Math.abs(r.entry - r.stop);
+      }
+      rows.push('<div class="kv"><span class="k">Grade</span><span class="v ok">A — the desk\'s own max bar</span></div>');
+      rows.push('<div class="kv"><span class="k">Opposing reads</span><span class="v ok">0 — the OMNIROUTE principal + evidence pass dropped every opposed row</span></div>');
+      rows.push('<div class="kv"><span class="k">Confluence tally</span><span class="v ok">' + (tally != null ? tally : 'positive') + ' gates passed</span></div>');
+      rows.push('<div class="kv"><span class="k">R:R</span><span class="v ok">' + (rr != null ? rr.toFixed(2) : 'unread') + ' vs the 0.25 floor</span></div>');
+      var dir = r.dir;
+      row('Taker flow', reads.takerFlowVerdict === 'with' ? 'WITH' : (reads.takerFlowVerdict === 'against' ? 'AGAINST' : 'UNREAD'),
+        reads.takerFlowVerdict == null ? 'no CVD/taker prints for this crown' : (r.omniCvdWith === true ? 'CVD with' : 'CVD against'));
+      row('Perp funding', reads.fundingAgainst === false ? 'WITH' : (reads.fundingAgainst === true ? 'AGAINST' : 'UNREAD'),
+        reads.fundingAgainst == null ? 'no funding print on the venue leg' : 'the one hgFundingAgainstMark rule');
+      row('Volatility regime', reads.atrRegime === 'HEALTHY' ? 'WITH' : (reads.atrRegime === 'BLOWOFF' ? 'AGAINST' : (reads.atrRegime === 'DEAD' ? 'NEUTRAL' : 'UNREAD')),
+        reads.atrRegime == null ? 'ATR percentile unread' : 'ATR at the ' + Math.round(reads.atrPct) + 'th percentile of its trailing 100');
+      var st = reads.structureTrend;
+      if (st === 'up' || st === 'down'){
+        var stWith = (dir === 'long') ? st === 'up' : st === 'down';
+        row('Structure trend', stWith ? 'WITH' : 'AGAINST', '4h EMA50 ' + (st === 'up' ? 'above' : 'below') + ' EMA200 for a ' + esc(dir));
+      } else row('Structure trend', 'UNREAD', '4h tape under 200 bars — EMA200 cannot warm');
+      row('News calendar', reads.newsRisk === 'low' ? 'WITH' : (reads.newsRisk === 'blackout' ? 'AGAINST' : 'UNREAD'),
+        reads.newsRisk == null ? 'no calendar verdict for this crown' : 'no high-impact event in the window');
+      row('Session volume', reads.sess === 'participating' ? 'WITH' : (reads.sess === 'thin' ? 'AGAINST' : 'UNREAD'),
+        isFinite(reads.volumeRvol) ? 'fire bar traded ' + (+reads.volumeRvol).toFixed(2) + 'x its 20-bar norm' : 'RVOL unread');
+      row('Volume witness', (isFinite(reads.volumeRvol) && reads.volumeRvol >= 1.0) ? 'WITH' : (isFinite(reads.volumeRvol) && reads.volumeRvol < 0.6 ? 'AGAINST' : 'NEUTRAL'),
+        isFinite(reads.volumeRvol) ? 'RVOL ' + (+reads.volumeRvol).toFixed(2) + ' vs the 0.6 / 1.0 house bars' : 'unread');
+      var plus = (r.perfectPlus === true);
+      var title = plus
+        ? '★ PERFECT⁺ — every readable evidence leg is explicitly WITH: max confluence, nothing unknown'
+        : '★ PERFECT — the always-computable bar passed and nothing readable runs against; ' + (r.perfectWhy && r.perfectWhy.length ? esc(r.perfectWhy.join(' · ')) : 'some evidence legs are unread or neutral, so the headline tier is not earned');
+      return '<div class="panel" style="margin-top:10px"><h3>PERFECT CRITERIA LEDGER <span>every leg the predicate consumed, with its measured value — a filter, not a promise</span></h3>'
+        + '<div class="note ' + (plus ? 'ok' : 'warn') + '">' + title + '</div>'
+        + rows.join('') + '</div>';
+    }catch(e){ return ''; }
+  }
+
   function hgObtcDefaultLegs(){
     var dual = true;
     try{ if (gfn('hgDualScanEnabled')) dual = !!W.hgDualScanEnabled(); }catch(e){}
@@ -862,6 +944,7 @@ a global hard refresh.
         try{ dhtml += W.hgObtcFundamentalPanelHtml(snap.fundamental) || ''; }catch(eFu){}
       }
       dhtml += hgObtcFundingWitnessHtml(snap, pick);
+      dhtml += hgObtcPerfectLedgerHtml(pick);
       ui.detail.innerHTML = dhtml;
     }
     /* hg-v1011: the desk's own forward book under the card — does the crown
@@ -1061,8 +1144,36 @@ a global hard refresh.
             var fam = hgFundingAgainstMark(match._ticker.fundingPct, pick.row.dir);
             if (fam) pfReads.fundingAgainst = (fam.against === true);
           }
+          /* hg-v1041: the four remaining evidence legs the shared predicate
+             consumes — read off the winner's own 4h tape the desk already
+             holds. Unreadable stays null: neither confirms nor denies. */
+          if (winnerRows && winnerRows.length >= 21){
+            try{
+              var rvolW = hgObtcFireRvol(winnerRows);
+              if (isFinite(rvolW)){
+                pfReads.volumeRvol = rvolW;
+                pfReads.sess = (rvolW >= 0.6) ? 'participating' : 'thin';
+              }
+            }catch(eRv){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eRv); }catch(eW2){} }
+            try{
+              if (typeof hgAtrPercentile === 'function'){
+                var atrP = hgAtrPercentile(winnerRows, 14, 100);
+                if (isFinite(atrP)){
+                  pfReads.atrRegime = atrP < 20 ? 'DEAD' : (atrP > 80 ? 'BLOWOFF' : 'HEALTHY');
+                  pfReads.atrPct = atrP;
+                }
+              }
+            }catch(eAt){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eAt); }catch(eW3){} }
+          }
+          if (winnerRows && winnerRows.length >= 200){
+            try{
+              var stT = hgObtcStructureTrend(winnerRows);
+              if (stT) pfReads.structureTrend = stT;
+            }catch(eSt){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eSt); }catch(eW4){} }
+          }
         }catch(ePfR){}
         hgObtcPerfectFormation(pick, pfReads);
+        pick.row.perfectReads = pfReads;   /* the ledger reads the same bag the predicate consumed */
         /* hg-v1011: THE PICK JOINS THE FORWARD BOOK. Every desk that crowns
            a setup writes it to hg-forward; this desk has crowned one MOST
            PROBABLE per scan for its whole life and never recorded one —
