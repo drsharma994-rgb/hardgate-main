@@ -585,6 +585,34 @@ a global hard refresh.
     }catch(e){ return null; }
   }
 
+  /* hg-v1049: PLAN MATH + TIMEFRAME AGREEMENT — what the numbers REQUIRE
+     (the break-even win rate at this R:R after costs) and whether the
+     other timeframes agree with the pick. Arithmetic and facts, never a
+     forecast. */
+  function hgObtcPlanMathHtml(pick){
+    try{
+      if (!pick || !pick.row) return '';
+      var r = pick.row, reads = r.perfectReads || {};
+      var e = +r.entry, s = +r.stop, t1 = +r.t1;
+      if (!(isFinite(e) && isFinite(s) && isFinite(t1) && Math.abs(e - s) > 0)) return '';
+      var risk = Math.abs(e - s);
+      var grossR = Math.abs(t1 - e) / risk;
+      var costR = isFinite(reads.costR) ? +reads.costR : 0;
+      var rows = [];
+      if (typeof hgCryptoBreakevenWinRate === 'function'){
+        var need = hgCryptoBreakevenWinRate(grossR, costR);
+        if (need != null){
+          rows.push('<div class="kv"><span class="k">Break-even requirement</span><span class="v">this plan needs ' + (need * 100).toFixed(0) + '% T1 wins to break even at ' + grossR.toFixed(1) + 'R after costs</span></div>');
+        }
+      }
+      if (reads.tfAgree){
+        rows.push('<div class="kv"><span class="k">Timeframe agreement</span><span class="v">' + esc(reads.tfAgree) + '</span></div>');
+      }
+      if (!rows.length) return '';
+      return '<div class="panel" style="margin-top:10px"><h3>PLAN MATH <span>what the numbers require - arithmetic, not a forecast</span></h3>' + rows.join('') + '</div>';
+    }catch(e){ return ''; }
+  }
+
   /* hg-v1047: EXIT POLICY — the book's measured auto-rule for a ticket.
      Scale 50% at T1, trail the stop to breakeven, ride the rest. Evidence,
      never a guarantee — printed on tickets only, never on watches. */
@@ -602,6 +630,33 @@ a global hard refresh.
     }catch(e){ return ''; }
   }
 
+  /* hg-v1049: the fire bar's session by UTC hour (the gold desks' own
+     session map). Evidence, never a gate. */
+  function hgObtcSessionOf(t){
+    try{
+      if (!isFinite(+t)) return null;
+      var h = Math.floor((((+t % 86400) + 86400) % 86400) / 3600);
+      if (h < 8) return 'ASIA';
+      if (h < 12) return 'LONDON';
+      if (h < 16) return 'NY-LONDON OVERLAP';
+      return 'NY PM';
+    }catch(e){ return null; }
+  }
+
+  /* hg-v1049: one tape's EMA9/EMA21 cascade direction — the agreement
+     read per timeframe. Unreadable tape = no verdict, never a guess. */
+  function hgObtcTapeDir(rows){
+    try{
+      if (!Array.isArray(rows) || rows.length < 30 || typeof W.ema !== 'function') return null;
+      var c = rows.map(function(x){ return x.c; });
+      var e9 = W.ema(c, 9), e21 = W.ema(c, 21);
+      if (!e9 || !e21 || e9.length < 2) return null;
+      var a = e9[e9.length - 1], b = e21[e21.length - 1];
+      if (!isFinite(a) || !isFinite(b) || a === b) return null;
+      return a > b ? 'long' : 'short';
+    }catch(e){ return null; }
+  }
+
   /* the TRADE COST + TIMING WITNESSES — round-trip cost in R, session
      participation, day-range exhaustion and the cross-venue funding
      premium. All evidence, never a gate: they tell the operator what the
@@ -614,7 +669,7 @@ a global hard refresh.
         rows.push('<div class="kv"><span class="k">Round-trip cost</span><span class="v' + (reads.costR > 0.25 ? ' bad' : ' ok') + '">' + (+reads.costR).toFixed(2) + 'R of the risk window' + (reads.costR > 0.25 ? ' — COST-HEAVY: fees eat over a quarter of the stop' : '') + '</span></div>');
       }
       if (isFinite(reads.slotRvol)){
-        rows.push('<div class="kv"><span class="k">Session participation</span><span class="v' + (reads.slotRvol < 0.7 ? ' bad' : ' ok') + '">' + (+reads.slotRvol).toFixed(2) + 'x the fire bar\'s own time-of-day norm' + (reads.slotRvol < 0.7 ? ' — QUIET HOURS: the slot is thin' : '') + '</span></div>');
+        rows.push('<div class="kv"><span class="k">Session participation</span><span class="v' + (reads.slotRvol < 0.7 ? ' bad' : ' ok') + '">' + (+reads.slotRvol).toFixed(2) + 'x the fire bar\'s own time-of-day norm' + (reads.slotRvol < 0.7 ? ' — QUIET HOURS: the slot is thin' : '') + (reads.sessName ? ' — ' + reads.sessName + ' session' : '') + '</span></div>');
       }
       if (reads.dayExhaustionPct != null){
         rows.push('<div class="kv"><span class="k">Day range</span><span class="v' + (reads.dayExhaustionPct >= 85 ? ' bad' : ' ok') + '">' + reads.dayExhaustionPct + '% consumed' + (reads.dayExhaustionPct >= 85 ? ' — CHASE RISK: the move may be spent' : '') + '</span></div>');
@@ -631,6 +686,15 @@ a global hard refresh.
             ? 'only ' + (reads.venuesNames || 'one venue') + ' crowns this direction — the other book reads against or nothing'
             : 'single venue only — no cross-venue confirmation');
         rows.push('<div class="kv"><span class="k">Venue confirmation</span><span class="v' + (vBoth ? ' ok' : '') + '">' + vTxt + '</span></div>');
+      }
+      if (pick.row.omniLiqStopCluster === true){
+        rows.push('<div class="kv"><span class="k">Liquidation map</span><span class="v bad">the stop sits inside a liquidation cluster - SL-hunt risk (coinglass read)</span></div>');
+      }
+      if (pick.row.omniLiqFuel === true){
+        rows.push('<div class="kv"><span class="k">Liquidation map</span><span class="v ok">liquidations fuel toward the trade side</span></div>');
+      }
+      if (pick.row.omniVolOverBudget === true){
+        rows.push('<div class="kv"><span class="k">Volume budget</span><span class="v bad">volume targeting over budget - the expected move may be capped</span></div>');
       }
       if (!rows.length) return '';
       return '<div class="panel" style="margin-top:10px"><h3>TRADE COST + TIMING WITNESSES <span>what the levels cost and whether the tape is worth paying for — evidence, never a gate</span></h3>' + rows.join('') + '</div>';
@@ -1037,6 +1101,7 @@ a global hard refresh.
         }catch(eChip){}
       }
       dhtml += hgObtcAutoRuleHtml(pick);
+      dhtml += hgObtcPlanMathHtml(pick);
       ui.detail.innerHTML = dhtml;
     }
     /* hg-v1011: the desk's own forward book under the card — does the crown
@@ -1137,7 +1202,7 @@ a global hard refresh.
               extraLedger = extraLedger.concat(extraRun.ledger);
           }catch(eEx){}
         }
-        cands.forEach(function(c){ c._rows = r4; c._rows1 = r1; c._rows15 = r15; c._ticker = tk; c._extra = extra; });
+        cands.forEach(function(c){ c._rows = r4; c._rows1 = r1; c._rows15 = r15; c._rows1d = r1d; c._ticker = tk; c._extra = extra; });
         all = all.concat(cands);
       }
       /* hg-v1002: the fundamental read is taken once per scan from the
@@ -1310,6 +1375,23 @@ a global hard refresh.
           if (match && match._ticker && typeof match._ticker.fundingPct === 'number' && isFinite(match._ticker.fundingPct)){
             pfReads.venueFundingPct = match._ticker.fundingPct;
           }
+          /* hg-v1049: the fire bar's session and the multi-timeframe
+             agreement, read off the tapes the desk already holds */
+          if (winnerRows && winnerRows.length){
+            try{ pfReads.sessName = hgObtcSessionOf(+winnerRows[winnerRows.length - 1].t); }catch(eSn){}
+          }
+          try{
+            var tfList = [];
+            var t4 = hgObtcTapeDir(winnerRows);
+            if (t4) tfList.push('4h ' + (t4 === pick.row.dir ? 'WITH' : 'AGAINST'));
+            var t1h = hgObtcTapeDir(match && match._rows1);
+            if (t1h) tfList.push('1h ' + (t1h === pick.row.dir ? 'WITH' : 'AGAINST'));
+            var t15 = hgObtcTapeDir(match && match._rows15);
+            if (t15) tfList.push('15m ' + (t15 === pick.row.dir ? 'WITH' : 'AGAINST'));
+            var t1d = hgObtcTapeDir(match && match._rows1d);
+            if (t1d) tfList.push('1d ' + (t1d === pick.row.dir ? 'WITH' : 'AGAINST'));
+            if (tfList.length) pfReads.tfAgree = tfList.join(' - ');
+          }catch(eTf){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eTf); }catch(eWt){} }
         }catch(ePfR){}
         hgObtcPerfectFormation(pick, pfReads);
         pick.row.perfectReads = pfReads;   /* the ledger reads the same bag the predicate consumed */

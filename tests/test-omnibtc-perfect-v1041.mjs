@@ -114,6 +114,10 @@ console.log('== all seven legs readable-and-WITH crowns PERFECT⁺ and prints th
   ok(d.indexOf('Venue premium') >= 0 && d.indexOf('vs Binance') >= 0, 'the cross-venue funding spread row shows Delta vs Binance');
   ok(d.indexOf('Venue confirmation') >= 0, 'the venue-confirmation witness prints beside the pick');
   ok(d.indexOf('single venue only') >= 0, 'a single-venue scan says so honestly');
+  ok(d.indexOf('PLAN MATH') >= 0, 'the plan-math panel prints');
+  ok(d.indexOf('Break-even requirement') >= 0 && d.indexOf('T1 wins to break even') >= 0, 'the break-even line names what the numbers require');
+  ok(d.indexOf('Timeframe agreement') >= 0 && d.indexOf('4h WITH') >= 0 && d.indexOf('1d WITH') >= 0, 'the timeframe agreement reads every tape (all WITH on the fixture)');
+  ok(d.indexOf('LONDON session') >= 0, 'the fire bar session is named');
   ok(cap.tkArgs && cap.tkArgs[0] === 'BTCUSDT', 'the taker-series fetch still names BTCUSDT');
 }
 
@@ -158,6 +162,21 @@ console.log('== a 15m-priced scalp crown records on ITS OWN grid ==');
   ok(rr && rr.venueAgreeCount === 1, 'the venue-confirmation mark rides the record');
 }
 
+console.log('== the liquidation + volume reads print when the map speaks ==');
+{
+  const cap = {};
+  const W = boot(Object.assign(stubs(cap, -0.002, R4), {
+    swingTryClean: () => Object.assign({}, PLAN),
+    hgContractReportRun: () => ({ sym: 'BTCUSD', sections: [{ id: 'omniinfo', rows: [
+      { name: 'Liquidation map', detail: 'stop sits inside' },
+    ] }], indicators: [], plan: { ok: false } })
+  }));
+  const ui = { btn: mk(), stat: mk(), cards: mk(), detail: mk(), fwd: mk(), ind: mk(), ledger: mk() };
+  await W.hgObtcRunScan(ui);
+  const d = ui.detail.innerHTML;
+  ok(d.indexOf('Liquidation map') >= 0 && d.indexOf('SL-hunt risk') >= 0, 'the stop-in-cluster read prints');
+}
+
 console.log('== wiring pins — the shipped files actually read and print it all ==');
 {
   const src = read('omnibtc.js');
@@ -175,6 +194,9 @@ console.log('== wiring pins — the shipped files actually read and print it all
   ok(src.indexOf('pfReads.btcFundingBinance') >= 0 && src.indexOf('pfReads.venueFundingPct') >= 0,
      'the cross-venue funding spread reads ride the bag');
   ok(src.indexOf('hgObtcEvidenceWitnessesHtml(pick)') >= 0, 'the witnesses are painted in the detail pass');
+  ok(src.indexOf('function hgObtcPlanMathHtml') >= 0, 'the plan-math panel is defined');
+  ok(src.indexOf('function hgObtcSessionOf') >= 0 && src.indexOf('function hgObtcTapeDir') >= 0, 'the session + tape-dir readers are defined');
+  ok(src.indexOf('c._rows1d = r1d') >= 0, 'the daily tape rides the candidates');
   const esrc = read('omnibtc-engines.js');
   ok(esrc.indexOf("binanceFunding('BTCUSDT')") >= 0, 'the gather fetches Binance BTCUSDT funding for the spread');
   const tsrc = read('trendtable.js');
