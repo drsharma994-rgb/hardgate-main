@@ -555,6 +555,62 @@ a global hard refresh.
     }catch(e){ return null; }
   }
 
+  /* hg-v1042: DAY-RANGE EXHAUSTION — today's hi-lo range against the
+     trailing 20-day mean, read off the winner's own tape. A crown at
+     85%+ consumed is chasing a move that may already be spent. */
+  function hgObtcDayExhaustion(rows){
+    try{
+      if (!Array.isArray(rows) || rows.length < 30) return null;
+      var days = {}, i, t, key, d;
+      for (i = 0; i < rows.length; i++){
+        t = +rows[i].t; if (!isFinite(t)) continue;
+        key = String(Math.floor(t / 86400));
+        d = days[key];
+        if (!d) days[key] = { hi: rows[i].h, lo: rows[i].l };
+        else { if (+rows[i].h > d.hi) d.hi = +rows[i].h; if (+rows[i].l < d.lo) d.lo = +rows[i].l; }
+      }
+      var keys = Object.keys(days).sort(), ranges = [], k;
+      for (i = 0; i < keys.length; i++){
+        var dd = days[keys[i]];
+        if (dd.hi > dd.lo) ranges.push(dd.hi - dd.lo);
+      }
+      if (ranges.length < 5) return null;
+      var prev = ranges.slice(-21, -1);
+      if (!prev.length) return null;
+      var mean = 0;
+      for (k = 0; k < prev.length; k++) mean += prev[k];
+      mean /= prev.length;
+      if (!(mean > 0)) return null;
+      return Math.round(ranges[ranges.length - 1] / mean * 100);
+    }catch(e){ return null; }
+  }
+
+  /* the TRADE COST + TIMING WITNESSES — round-trip cost in R, session
+     participation, day-range exhaustion and the cross-venue funding
+     premium. All evidence, never a gate: they tell the operator what the
+     levels cost and whether the tape is worth paying for. */
+  function hgObtcEvidenceWitnessesHtml(pick){
+    try{
+      if (!pick || !pick.row) return '';
+      var reads = pick.row.perfectReads || {}, rows = [];
+      if (isFinite(reads.costR)){
+        rows.push('<div class="kv"><span class="k">Round-trip cost</span><span class="v' + (reads.costR > 0.25 ? ' bad' : ' ok') + '">' + (+reads.costR).toFixed(2) + 'R of the risk window' + (reads.costR > 0.25 ? ' — COST-HEAVY: fees eat over a quarter of the stop' : '') + '</span></div>');
+      }
+      if (isFinite(reads.slotRvol)){
+        rows.push('<div class="kv"><span class="k">Session participation</span><span class="v' + (reads.slotRvol < 0.7 ? ' bad' : ' ok') + '">' + (+reads.slotRvol).toFixed(2) + 'x the fire bar\'s own time-of-day norm' + (reads.slotRvol < 0.7 ? ' — QUIET HOURS: the slot is thin' : '') + '</span></div>');
+      }
+      if (reads.dayExhaustionPct != null){
+        rows.push('<div class="kv"><span class="k">Day range</span><span class="v' + (reads.dayExhaustionPct >= 85 ? ' bad' : ' ok') + '">' + reads.dayExhaustionPct + '% consumed' + (reads.dayExhaustionPct >= 85 ? ' — CHASE RISK: the move may be spent' : '') + '</span></div>');
+      }
+      if (isFinite(reads.venueFundingPct) && isFinite(reads.btcFundingBinance)){
+        var spread = reads.venueFundingPct - reads.btcFundingBinance;
+        rows.push('<div class="kv"><span class="k">Venue premium</span><span class="v">Delta ' + (+reads.venueFundingPct).toFixed(4) + '% vs Binance ' + (+reads.btcFundingBinance).toFixed(4) + '% — spread ' + (spread >= 0 ? '+' : '') + spread.toFixed(4) + '%/interval' + (Math.abs(spread) > 0.01 ? ' (wide — locals price it differently)' : '') + '</span></div>');
+      }
+      if (!rows.length) return '';
+      return '<div class="panel" style="margin-top:10px"><h3>TRADE COST + TIMING WITNESSES <span>what the levels cost and whether the tape is worth paying for — evidence, never a gate</span></h3>' + rows.join('') + '</div>';
+    }catch(e){ return ''; }
+  }
+
   /* the PERFECT CRITERIA LEDGER — every leg the shared predicate consumed,
      printed with its measured value and verdict, so the ★ badge is fully
      auditable: what passed, what was read against (and therefore blocked
@@ -944,6 +1000,7 @@ a global hard refresh.
         try{ dhtml += W.hgObtcFundamentalPanelHtml(snap.fundamental) || ''; }catch(eFu){}
       }
       dhtml += hgObtcFundingWitnessHtml(snap, pick);
+      dhtml += hgObtcEvidenceWitnessesHtml(pick);
       dhtml += hgObtcPerfectLedgerHtml(pick);
       ui.detail.innerHTML = dhtml;
     }
@@ -1170,6 +1227,36 @@ a global hard refresh.
               var stT = hgObtcStructureTrend(winnerRows);
               if (stT) pfReads.structureTrend = stT;
             }catch(eSt){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eSt); }catch(eW4){} }
+          }
+          /* hg-v1042: the cost + timing witnesses — round-trip cost in R,
+             time-of-day participation, day-range exhaustion and the
+             cross-venue funding spread. Evidence, never a gate. */
+          if (pick.row.entry != null && pick.row.stop != null && typeof hgCryptoCostR === 'function'){
+            try{
+              var costR = hgCryptoCostR(+pick.row.entry, +pick.row.stop, 'taker', 'taker');
+              if (isFinite(costR)) pfReads.costR = costR;
+            }catch(eCst){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eCst); }catch(eW5){} }
+          }
+          if (winnerRows && winnerRows.length >= 21 && typeof hgSlotMeanVol === 'function'){
+            try{
+              var slot = hgSlotMeanVol(winnerRows, 20);
+              if (slot && isFinite(slot.mean) && slot.mean > 0){
+                var lvSlot = +winnerRows[winnerRows.length - 1].v;
+                if (isFinite(lvSlot) && lvSlot > 0) pfReads.slotRvol = lvSlot / slot.mean;
+              }
+            }catch(eSlt){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eSlt); }catch(eW6){} }
+          }
+          if (winnerRows && winnerRows.length >= 30){
+            try{
+              var dex = hgObtcDayExhaustion(winnerRows);
+              if (dex != null) pfReads.dayExhaustionPct = dex;
+            }catch(eDx){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eDx); }catch(eW7){} }
+          }
+          if (extra && typeof extra.btcFundingBinance === 'number' && isFinite(extra.btcFundingBinance)){
+            pfReads.btcFundingBinance = extra.btcFundingBinance;
+          }
+          if (match && match._ticker && typeof match._ticker.fundingPct === 'number' && isFinite(match._ticker.fundingPct)){
+            pfReads.venueFundingPct = match._ticker.fundingPct;
           }
         }catch(ePfR){}
         hgObtcPerfectFormation(pick, pfReads);

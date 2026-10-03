@@ -1081,6 +1081,73 @@ function trendmxFundingChipHtml(r){
   }catch(e){ return ''; }
 }
 
+/* hg-v1042: SESSION PARTICIPATION — the fire bar's volume against ITS OWN
+   time-of-day slot (hgSlotMeanVol, the same correction omniroute applies).
+   A quiet-hours fire on a strong composite is evidence, never a gate. */
+function trendmxSlotChipHtml(r){
+  try{
+    if (!r || !Array.isArray(r.rows4h) || r.rows4h.length < 21) return '';
+    var slotFn = (typeof W.hgSlotMeanVol === 'function') ? W.hgSlotMeanVol : null;
+    if (!slotFn) return '';
+    var slot = slotFn(r.rows4h, 20);
+    if (!slot || !isFinite(slot.mean) || !(slot.mean > 0)) return '';
+    var lv = +r.rows4h[r.rows4h.length - 1].v;
+    if (!isFinite(lv) || lv <= 0) return '';
+    var rv = lv / slot.mean;
+    if (rv >= 0.7) return '';
+    return '<span class="stamp" style="margin-left:6px" title="' + escH('session participation (hg-v1042): the fire bar traded ' + rv.toFixed(2) + 'x its own time-of-day norm — quiet hours fire on thin participation. Evidence, never a gate.') + '">SESSION THIN</span>';
+  }catch(e){ return ''; }
+}
+
+/* hg-v1042: DAY-RANGE EXHAUSTION — today's range against the trailing
+   20-day mean. A crown at 85%+ consumed is chasing a move already spent. */
+function trendmxDayChipHtml(r){
+  try{
+    if (!r || !Array.isArray(r.rows4h) || r.rows4h.length < 30) return '';
+    var days = {}, i, t, key, d;
+    for (i = 0; i < r.rows4h.length; i++){
+      t = +r.rows4h[i].t; if (!isFinite(t)) continue;
+      key = String(Math.floor(t / 86400));
+      d = days[key];
+      if (!d) days[key] = { hi: r.rows4h[i].h, lo: r.rows4h[i].l };
+      else { if (+r.rows4h[i].h > d.hi) d.hi = +r.rows4h[i].h; if (+r.rows4h[i].l < d.lo) d.lo = +r.rows4h[i].l; }
+    }
+    var keys = Object.keys(days).sort(), ranges = [], k;
+    for (i = 0; i < keys.length; i++){
+      var dd = days[keys[i]];
+      if (dd.hi > dd.lo) ranges.push(dd.hi - dd.lo);
+    }
+    if (ranges.length < 5) return '';
+    var prev = ranges.slice(-21, -1);
+    if (!prev.length) return '';
+    var mean = 0;
+    for (k = 0; k < prev.length; k++) mean += prev[k];
+    mean /= prev.length;
+    if (!(mean > 0)) return '';
+    var pct = Math.round(ranges[ranges.length - 1] / mean * 100);
+    if (pct < 85) return '';
+    return '<span class="stamp bad" style="margin-left:6px" title="' + escH('day-range exhaustion (hg-v1042): ' + pct + '% of the average daily range already consumed — chasing a move that may be spent. Evidence, never a gate.') + '">DAY ' + pct + '% SPENT</span>';
+  }catch(e){ return ''; }
+}
+
+/* hg-v1042: ROUND-TRIP COST — fees as R of the stop window (the house
+   hgCryptoCostR). A crown whose fees eat over a quarter of its stop is
+   COST-HEAVY — the gold ledger measured that cohort to bleed. Evidence,
+   never a gate. */
+function trendmxCostChipHtml(r, plan){
+  try{
+    if (!plan || !isFinite(+plan.entry) || !isFinite(+plan.stop)) return '';
+    var costFn = (typeof W.hgCryptoCostR === 'function') ? W.hgCryptoCostR : null;
+    if (!costFn) return '';
+    var costR = costFn(+plan.entry, +plan.stop, 'taker', 'taker');
+    if (!isFinite(costR)) return '';
+    if (costR > 0.25){
+      return '<span class="stamp bad" style="margin-left:6px" title="' + escH('round-trip cost (hg-v1042): fees eat ' + costR.toFixed(2) + 'R of the stop window — COST-HEAVY. The gold ledger measured this cohort to bleed. Evidence, never a gate.') + '">COST-HEAVY ' + costR.toFixed(2) + 'R</span>';
+    }
+    return '<span class="stamp ok" style="margin-left:6px" title="' + escH('round-trip cost (hg-v1042): ' + costR.toFixed(2) + 'R of the stop window. Evidence, never a gate.') + '">COST ' + costR.toFixed(2) + 'R</span>';
+  }catch(e){ return ''; }
+}
+
 async function trendmxScanCore(hooks){
   hooks = hooks || {};
 /* Map before asking Binance — a venue code means nothing to fapi. This is the
@@ -1818,7 +1885,7 @@ function trendmxSetupCardHTML(r, tier){
   return hgSetupCardHTML({
     sym: r.sym, dir: dir, tier: tier,
     mini: mini, gates: gates,
-    plan: plan ? (trendmxPlanHTML(plan) + tmSmcChip(r) + trendmxFlowChipHtml(r) + trendmxMomChipHtml(r) + trendmxVolChipHtml(r) + trendmxFundingChipHtml(r) + trendmxAtrRegimeChipHtml(r) + trendmxFundChipHtml(r)) : '',
+    plan: plan ? (trendmxPlanHTML(plan) + tmSmcChip(r) + trendmxFlowChipHtml(r) + trendmxMomChipHtml(r) + trendmxVolChipHtml(r) + trendmxFundingChipHtml(r) + trendmxAtrRegimeChipHtml(r) + trendmxFundChipHtml(r) + trendmxSlotChipHtml(r) + trendmxDayChipHtml(r) + trendmxCostChipHtml(r, plan)) : '',
     entry: plan ? plan.entry : null, stop: plan ? plan.stop : null, t1: plan ? plan.t1 : null,
     chartId: (tier === 'clean' && plan) ? ('tmx_' + String(r.sym).replace(/[^A-Za-z0-9]/g, '')) : '',
     stack: stack,

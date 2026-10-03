@@ -1,4 +1,5 @@
-/* HARDGATE — hg-v1041: OMNIBTC READS ALL SEVEN PERFECT EVIDENCE LEGS.
+/* HARDGATE — hg-v1041/v1042: OMNIBTC READS ALL SEVEN PERFECT EVIDENCE LEGS
+   PLUS THE COST + TIMING WITNESS BUNDLE.
 
    The shared PERFECT predicate (hg-perfect-setup.js) consumes seven evidence
    legs — taker flow, perp funding, volatility regime, structure trend, news
@@ -6,10 +7,15 @@
    three (flow, funding, news) and left the other four permanently UNREAD on
    data the desk already held: the winner's own 4h tape.
 
-   This pack reads the remaining four (ATR percentile regime, EMA50/200
-   structure trend, fire-bar RVOL → session + volume witness) and prints the
+   hg-v1041 reads the remaining four (ATR percentile regime, EMA50/200
+   structure trend, fire-bar RVOL -> session + volume witness) and prints the
    PERFECT CRITERIA LEDGER beside the pick so every leg the predicate consumed
    is visible with its measured value and verdict.
+
+   hg-v1042 adds the cost + timing witnesses on top: round-trip cost in R
+   (hgCryptoCostR), time-of-day session participation (hgSlotMeanVol),
+   day-range exhaustion and the cross-venue funding spread (Binance BTCUSDT
+   vs the venue ticker). All evidence, never a gate.
 
    Harness: the test-omnibtc.mjs route — classic scripts in a vm context, the
    REAL scan driven end to end with the engine, venue, report and ledger
@@ -42,17 +48,17 @@ function boot(extra){
                    head: { appendChild(){} }, body: { appendChild(){} },
                    documentElement: { appendChild(){} }, addEventListener(){} };
   vm.createContext(ctx);
-  for (const f of ['indicators.js', 'indicators2.js', 'hg-perfect-setup.js', 'hg-setup-core.js',
-                   'plans.js', 'setup-ui.js', 'omnibtc-engines.js', 'omnibtc.js'])
+  for (const f of ['indicators.js', 'indicators2.js', 'hg-gates.js', 'hg-perfect-setup.js', 'hg-setup-core.js',
+                   'crypto-position-risk.js', 'plans.js', 'setup-ui.js', 'omnibtc-engines.js', 'omnibtc.js'])
     vm.runInContext(read(f), ctx, { filename: f });
   Object.assign(ctx, extra || {});   /* stubs land AFTER load — they win */
   return ctx;
 }
 
 const T4 = 14400, N4 = 220, LAST_T = 1760000000;
-/* The crafted 4h tape: rising closes (EMA50 > EMA200 → structure 'up'), the
-   trailing 100 ATRs split 50x wide / 49x narrow so the last ATR (mid width)
-   ranks ~50th → HEALTHY, and a controllable fire-bar volume. */
+/* The crafted 4h tape: rising closes (EMA50 > EMA200 -> structure 'up'), the
+   trailing 100 ATRs split wide/narrow so the last ATR (mid width) ranks
+   mid-percentile -> HEALTHY, and a controllable fire-bar volume. */
 function tape(rangeOf, volOf){
   const rows = [];
   for (let i = 0; i < N4; i++){
@@ -75,6 +81,7 @@ function stubs(cap, fundingPct, rows4h){
     xuUniverse: async () => [{ sym: 'BTCUSD', base: 'BTC', exchange: 'delta', fundingPct: fundingPct, mark: 105 }],
     xuCandles: async (item, tf) => (tf === '4h' ? rows4h : tf === '1h' ? R1 : tf === '15m' ? R15 : R1D),
     binanceTakerRatio: async (sym, period, limit) => { cap.tkArgs = [sym, period, limit]; return { latest: TSERIES[TSERIES.length - 1], series: TSERIES }; },
+    binanceFunding: async () => ({ fundingPct: 0.004, markPrice: 105, nextFundingTime: 0 }),
     hgContractReportRun: (inp) => { cap.taker = inp && inp.takerSeries; return { sym: 'BTCUSD', sections: [], indicators: [], plan: { ok: false } }; },
     hgFwdRecordScan: (tab, tf, rows, opts) => { cap.rec = { tab, tf, rows, opts }; return 1; },
     hgFwdPanelHTML: (tab) => 'FWD:' + tab,
@@ -82,7 +89,7 @@ function stubs(cap, fundingPct, rows4h){
   };
 }
 
-console.log('== all seven legs readable-and-WITH crowns PERFECT⁺ and prints the ledger ==');
+console.log('== all seven legs readable-and-WITH crowns PERFECT⁺ and prints the ledger + witnesses ==');
 {
   const cap = {};
   const W = boot(Object.assign({ swingTryClean: () => Object.assign({}, PLAN) }, stubs(cap, -0.002, R4)));
@@ -95,11 +102,17 @@ console.log('== all seven legs readable-and-WITH crowns PERFECT⁺ and prints th
   const d = ui.detail.innerHTML;
   ok(d.indexOf('PERFECT CRITERIA LEDGER') >= 0, 'the criteria ledger prints beside the pick');
   ok(d.indexOf('PERFECT⁺') >= 0, 'the headline tier is named');
-  ok(d.indexOf('Structure trend') >= 0 && /Structure trend<\/span><span class="v ok">WITH/.test(d),
-     'the structure leg shows its verdict: EMA50 above EMA200 = WITH for the long');
+  ok(/Structure trend<\/span><span class="v ok">WITH/.test(d), 'the structure leg shows its verdict: EMA50 above EMA200 = WITH for the long');
   ok(d.indexOf('RVOL 3.00') >= 0, 'the volume witness shows its measured value');
   ok(/Volatility regime<\/span><span class="v ok">WITH/.test(d), 'the volatility regime leg reads WITH (mid ATR percentile)');
   ok(/Perp funding<\/span><span class="v ok">WITH/.test(d), 'the funding leg reads WITH (long collects at -0.002)');
+  /* hg-v1042 bundle: the cost + timing witnesses */
+  ok(d.indexOf('TRADE COST + TIMING WITNESSES') >= 0, 'the cost + timing witnesses panel prints beside the pick');
+  ok(d.indexOf('Round-trip cost') >= 0 && d.indexOf('R of the risk window') >= 0, 'the round-trip cost row shows fees in R');
+  ok(d.indexOf('Session participation') >= 0 && d.indexOf('time-of-day norm') >= 0, 'the session participation row shows the fire bar against its own slot');
+  ok(d.indexOf('Day range') >= 0 && d.indexOf('% consumed') >= 0, 'the day-range exhaustion row shows how much of the day is spent');
+  ok(d.indexOf('Venue premium') >= 0 && d.indexOf('vs Binance') >= 0, 'the cross-venue funding spread row shows Delta vs Binance');
+  ok(cap.tkArgs && cap.tkArgs[0] === 'BTCUSDT', 'the taker-series fetch still names BTCUSDT');
 }
 
 console.log('== a crowded funding leg disqualifies — the ledger stays silent ==');
@@ -122,12 +135,11 @@ console.log('== a dead-tape fire bar disqualifies through the NEW volume legs ==
   const stat = await W.hgObtcRunScan(ui);
   ok(/MOST PROBABLE/.test(stat), 'the scan crowns: ' + stat);
   const rec = cap.rec && cap.rec.rows && cap.rec.rows[0];
-  ok(rec && rec.perfect === undefined,
-     'RVOL 0.30 is a THIN tape — the session + volume legs read AGAINST and the crown is not PERFECT');
+  ok(rec && rec.perfect === undefined, 'RVOL 0.30 is a THIN tape — the session + volume legs read AGAINST and the crown is not PERFECT');
   ok(ui.detail.innerHTML.indexOf('PERFECT CRITERIA LEDGER') < 0, 'no ledger on a thin tape');
 }
 
-console.log('== wiring pins — the shipped file actually reads and prints them ==');
+console.log('== wiring pins — the shipped files actually read and print it all ==');
 {
   const src = read('omnibtc.js');
   ok(src.indexOf('function hgObtcFireRvol') >= 0, 'the RVOL reader is defined');
@@ -137,6 +149,21 @@ console.log('== wiring pins — the shipped file actually reads and prints them 
      'all four new legs ride the reads bag the predicate consumes');
   ok(src.indexOf('perfectReads = pfReads') >= 0, 'the ledger reads the same bag the predicate consumed');
   ok(src.indexOf('hgObtcPerfectLedgerHtml(pick)') >= 0, 'the ledger is painted in the detail pass');
+  ok(src.indexOf('function hgObtcDayExhaustion') >= 0, 'the day-range exhaustion reader is defined');
+  ok(src.indexOf('function hgObtcEvidenceWitnessesHtml') >= 0, 'the cost + timing witnesses panel is defined');
+  ok(src.indexOf('pfReads.costR') >= 0 && src.indexOf('pfReads.slotRvol') >= 0 && src.indexOf('pfReads.dayExhaustionPct') >= 0,
+     'cost, session and day-exhaustion reads ride the same bag the predicate consumed');
+  ok(src.indexOf('pfReads.btcFundingBinance') >= 0 && src.indexOf('pfReads.venueFundingPct') >= 0,
+     'the cross-venue funding spread reads ride the bag');
+  ok(src.indexOf('hgObtcEvidenceWitnessesHtml(pick)') >= 0, 'the witnesses are painted in the detail pass');
+  const esrc = read('omnibtc-engines.js');
+  ok(esrc.indexOf("binanceFunding('BTCUSDT')") >= 0, 'the gather fetches Binance BTCUSDT funding for the spread');
+  const tsrc = read('trendtable.js');
+  ok(tsrc.indexOf('function trendmxSlotChipHtml') >= 0, 'TREND MATRIX: the session chip is defined');
+  ok(tsrc.indexOf('function trendmxDayChipHtml') >= 0, 'TREND MATRIX: the day-exhaustion chip is defined');
+  ok(tsrc.indexOf('function trendmxCostChipHtml') >= 0, 'TREND MATRIX: the round-trip cost chip is defined');
+  ok(tsrc.indexOf('trendmxSlotChipHtml(r) + trendmxDayChipHtml(r) + trendmxCostChipHtml(r, plan)') >= 0,
+     'TREND MATRIX: the three chips ride the plan block');
 }
 
 console.log('\ntest-omnibtc-perfect-v1041: ' + passed + ' passed, 0 failed');

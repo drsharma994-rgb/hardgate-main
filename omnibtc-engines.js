@@ -606,6 +606,17 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
         extra.takerSeries = (tk && Array.isArray(tk.series) && tk.series.length) ? tk.series : null;
       }
     }catch(eT){ extra.takerSeries = null; }
+    /* hg-v1042: CROSS-VENUE FUNDING SPREAD — Binance's BTCUSDT funding (the
+       global price-discovery perp) beside the venue ticker's own print, so
+       the desk can show the local premium the CARRY tab already reads for
+       every other coin. Evidence only; binance.js caches the call and a
+       failure is a null, never an error up. */
+    try{
+      if (gfn('binanceFunding')){
+        var bf = await W.binanceFunding('BTCUSDT');
+        extra.btcFundingBinance = (bf && typeof bf.fundingPct === 'number' && isFinite(bf.fundingPct)) ? bf.fundingPct : null;
+      }
+    }catch(eBf){ extra.btcFundingBinance = null; }
     extra.term = evidenceFromExtra(extra).term;
     extra.carry = evidenceFromExtra(extra).carry;
     /* hg-v1002: sentiment / options positioning / event risk join the
