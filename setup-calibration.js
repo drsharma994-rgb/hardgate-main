@@ -292,7 +292,7 @@ function scExecutionDragSuspend(setupKind){
     var sk = scNormalizeSetupKind(r.setupKind || r.strategy || r.scanner || 'swing');
     if (sk !== kind) return;
     if (isFinite(r.idealR)) ideal.push(+r.idealR);
-    else if (isFinite(r.r)) ideal.push(+r.r);
+    else if (typeof r.r === 'number' && isFinite(r.r)) ideal.push(+r.r);
     if (isFinite(r.realisticR)) real.push(+r.realisticR);
   });
   if (!ideal.length) return { suspend: false, n: 0, idealExpectancy: null, realisticExpectancy: null, executionDrag: null };

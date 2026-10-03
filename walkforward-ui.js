@@ -27,7 +27,7 @@ function walkForwardSplit(records, trainFrac){
   var rs = [];
   for (var i = 0; i < arr.length; i++){
     var r = arr[i];
-    if (r && r.status === 'settled' && isFinite(+r.r)) rs.push(+r.r);
+    if (r && r.status === 'settled' && typeof r.r === 'number' && isFinite(r.r)) rs.push(r.r);
   }
   var cut = Math.floor(rs.length * trainFrac);
   var train = wfExpectancy(rs.slice(0, cut));

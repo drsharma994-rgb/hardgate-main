@@ -184,7 +184,8 @@ class HardgateSetupIntelligence {
     if (risk === 0) return 0;
 
     const reward1 = Math.abs(setup.takeProfit1 - setup.entryPrice);
-    const reward2 = Math.abs(setup.takeProfit2 - setup.entryPrice);
+    const hasTp2 = typeof setup.takeProfit2 === 'number' && isFinite(setup.takeProfit2) && setup.takeProfit2 > 0;
+    const reward2 = hasTp2 ? Math.abs(setup.takeProfit2 - setup.entryPrice) : reward1;
     const avgReward = (reward1 + reward2) / 2;
 
     return avgReward / risk;

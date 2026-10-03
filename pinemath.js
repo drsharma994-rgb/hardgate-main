@@ -979,7 +979,7 @@ function pineRangeFilter(rows, opts){
       absDiff[j] = Math.abs(source[j] - source[j - 1]);
     }
     var smrng = pineEma(absDiff, per);
-    var rngEma = pineEma(smrng, per);
+    var rngEma = pineEma(smrng, per * 2 - 1);   /* gu5tavo original smooths with wper = 2*per-1 */
     var rngArr = rngEma.map(function(v){ return isFinite(v) ? v * mult : NaN; });
 
     var rfArr = new Array(n).fill(NaN);

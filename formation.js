@@ -186,7 +186,7 @@ function hgFillProbability(rows, entry, dir, zone, maxBars){
     var hi = isFinite(zHi) ? zHi : ref;
     if (lo > hi){ var t = lo; lo = hi; hi = t; }
     var touches = 0, trials = 0, usable = 0;
-    for (var i = 10; i < rows.length - maxBars - 1; i++){
+    for (var i = 10; i <= rows.length - maxBars - 1; i++){
       var touched = false;
       for (var j = i; j < i + maxBars && j < rows.length; j++){
         var bar = rows[j];
@@ -940,9 +940,10 @@ function hgFormKeepLevels(hit, ctx, params, dir, mark, a4, rows, style, baseStyl
   plan.rr1 = plan.rr;
   plan.rr2 = isFinite(t2) ? Math.abs(t2 - entry0) / risk : plan.rr2;
   ctx = Object.assign({}, ctx, { rankBoost: rankBoost });
+  /* hgFormationScore already includes plan.liveScoreDelta — do not add it a
+     second time here (hgFormKeepLevels used to double-count it, skewing the
+     formation score by up to ±18). */
   plan.formationScore = hgFormationScore(plan, ctx);
-  if (isFinite(+plan.liveScoreDelta))
-    plan.formationScore = Math.round((isFinite(+plan.formationScore) ? +plan.formationScore : 0) + +plan.liveScoreDelta);
   return { ok: true, hit: plan, formationScore: plan.formationScore, fillNote: fill.note };
 }
 

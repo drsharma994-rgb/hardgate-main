@@ -92,7 +92,9 @@ function hgComputeThreeLayerConfidence(l1, l2, l3, externalRisk) {
      there is no order book, trade tape or liquidation feed in that file. Over
      the synthetic tapes fed to both engines, 55 of which produce a layer-1
      direction, the correlation between layer-1 direction and layer-2 score is
-     0.956, and layer 2 agreed with layer 1 on 52 of 55 (95%).
+     0.972, and layer 2 agreed with layer 1 on 53 of 55 (96%). Re-measured after the
+     cryptoultra fixes (PVT self-comparison + Connors streak constant) changed the
+     layer-1 direction on one borderline tape.
 
      That matters here because the +15% bonus below pays out on exactly those
      agreements, so most of the time it is rewarding one price read twice, and

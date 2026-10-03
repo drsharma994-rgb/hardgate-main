@@ -4974,8 +4974,8 @@ function brainRowBookOpts(row){
     var plan = row.plan;
     if (!plan || !isFinite(plan.entry) || !isFinite(plan.stop)) return null;
     if (!familyEvOk(plan)) return null;
-    if (edgeArchetypeVeto(row, dir)) return null;
     var dir = dec.dir;
+    if (edgeArchetypeVeto(row, dir)) return null;
     var sym = row.lane === 'gold' ? 'XAUTUSD' : row.sym;
     var agreeing = [];
     var votes = (row.col && Array.isArray(row.col.votes)) ? row.col.votes : [];

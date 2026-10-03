@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1038',
-  pack: 'GATE TRANSPARENCY — the MOST PROBABLE watch banner now prints the MEASURED value of the failed gate, not only its name: a 6/7 NEAR shows the red gate plus what it actually read versus its threshold (e.g. R:R 2.00, need ≥ 2.5), so the operator sees exactly how far off it is and what must flip; degrades to the label alone when gateMeta is absent; no threshold moved, no setup leaves any board.',
-  built: '2026-10-03T06:06:02Z'
+  version: 'hg-v1039',
+  pack: 'LOGIC-AUDIT FIX RELEASE — 70+ defects repaired across the desk: engine G4 anchor NaN (EXECUTE/GATES + BRAIN engine layer), GOLD DEEP mean-rev stop side, VP half-size band, inverted real-rate fallback, inverted funding-arb harvest labels, TIME_STOP unwind, null-R stats pollution, reversion-family vetoes, FVG geometry, paper-book money fixes and ~50 smaller logic repairs; verified against the 690-suite gate (the 5 Windows-only harness failures are pre-existing and unchanged). Also carries the GATE TRANSPARENCY banner (measured failed-gate values).',
+  built: '2026-10-03T07:14:49.651Z'
 };
 
 function hgBuildLabel(b){

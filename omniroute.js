@@ -3070,14 +3070,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         if (!isFinite(h1) || !isFinite(l1) || !isFinite(h2) || !isFinite(l2) ||
             !isFinite(h3) || !isFinite(l3)) continue;
 
-        /* Bullish FVG: bar 1 low > bar 2 high */
-        if (l1 > h2 && h2 < l3){
-          fvgLevel = { type: 'bullish', level: h2, top: l1 };
+        /* Bullish FVG (house rule, smc-lib parity): older high < newer low */
+        if (h1 < l3){
+          fvgLevel = { type: 'bullish', level: h1, top: l3 };
           break;
         }
-        /* Bearish FVG: bar 1 high < bar 2 low */
-        if (h1 < l2 && l2 > h3){
-          fvgLevel = { type: 'bearish', level: l2, bottom: h1 };
+        /* Bearish FVG: older low > newer high */
+        if (l1 > h3){
+          fvgLevel = { type: 'bearish', level: l1, bottom: h3 };
           break;
         }
       }
@@ -3318,7 +3318,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     } else if (regimeLabel === 'COMPRESSION' || regimeLabel === 'COILING'){
       score = 5;
       regimeDetail = 'compression regime — caution flag but tradeable';
-    } else if (regimeLabel === 'REVERSAL' || regimeLabel === 'FLIP'){
+    } else if (regimeLabel === 'REVERSAL' || regimeLabel === 'FLIP' || regimeLabel === 'REVERSAL TO UP' || regimeLabel === 'REVERSAL TO DOWN'){
       /* Reversal regime suggests opposite direction */
       if ((direction === 'SHORT' || direction === 'DOWN') && regimeLabel === 'REVERSAL TO UP'){
         score = 2;
@@ -3355,7 +3355,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     var i, idx, atrVal;
     for (i = Math.max(0, rows.length - 5); i < rows.length; i++){
       idx = Math.max(0, i);
-      var subRows = rows.slice(Math.max(0, idx - 13), idx + 1);
+      var subRows = rows.slice(Math.max(0, idx - 14), idx + 1);   /* atrOf needs n+1 bars */
       atrVal = atrOf(subRows, 14);
       if (isFinite(atrVal)) recentAtrs.push(atrVal);
     }
@@ -3365,7 +3365,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     var historicalAtrs = [];
     for (i = Math.max(0, rows.length - 24); i < rows.length; i++){
       idx = Math.max(0, i);
-      var histRows = rows.slice(Math.max(0, idx - 13), idx + 1);
+      var histRows = rows.slice(Math.max(0, idx - 14), idx + 1);   /* atrOf needs n+1 bars */
       atrVal = atrOf(histRows, 14);
       if (isFinite(atrVal)) historicalAtrs.push(atrVal);
     }
@@ -4481,7 +4481,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       }
 
       var riskPercentage = (stopDistance / entry) * 100;
-      var portfolioRiskPercentage = (stopDistance / accountSize) * 100;
+      /* stopDistance is in PRICE units and accountSize in USD — mixing them
+         made this pillar instrument-biased. Without a position-size field the
+         honest portfolio-risk figure is the price-relative stop. */
+      var portfolioRiskPercentage = riskPercentage;
 
       /* Calculate reward using T1 or T2 */
       var targetDistance = 0;
@@ -7163,7 +7166,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       gates[gates.length - 1].fillRiskGapR = frGapR;
     }
 
-    var reversion = REVERSION_KINDS[hit.kind] === true;
+    var reversion = REVERSION_KINDS[hit.kind] === true || hgOmniIsReversion(hit.kind);
     var trendOk = null, trendWhy = 'EMA unavailable';
     if (isFinite(e21) && isFinite(e50) && isFinite(last)){
       var up = e21 >= e50;
@@ -7726,9 +7729,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
        shipped on the gold desk. */
     var idxW = (typeof window !== 'undefined') ? window : null;
     function idxFn(n){ return (idxW && typeof idxW[n] === 'function') ? idxW[n] : null; }
-    var isRev = (hit.kind === 'SPRING' || hit.kind === 'UTAD' || hit.kind === 'VALUE'
-              || hit.kind === 'ABSORB' || hit.kind === 'VWAP-REVERT' || hit.kind === 'RSI-DIVERGE'
-              || hit.kind === 'POC-REVERT' || hit.kind === 'AVWAP-RECLAIM');
+    var isRev = (typeof hgOmniIsReversion === 'function')
+      ? hgOmniIsReversion(hit.kind)
+      : (REVERSION_KINDS[hit.kind] === true);
 
     /* ADX — is there a trend here at all, and does it point our way? */
     var adxOk = null, adxWhy = 'ADX unavailable';
@@ -10823,7 +10826,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
           }
           return gradeStep(0).then(function(){
             return { cands: cands, scanned: list.length, uni: uni.length,
-                   fired: nPass1Fired, held: held.length, enriched: subset.length, thin: thin,
+                   fired: nPass1Fired, held: held.length, enriched: enriched.length, thin: thin,
                    failed: failed, pooled: pooled, pass1Err: pass1Err, pass1Done: done,
                    /* The live enrichment map rides to the render pass so the
                       LATE SOLIDITY STAMP can score renderable non-tickets on

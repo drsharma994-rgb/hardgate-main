@@ -988,7 +988,7 @@ async function runScan(ui){
 
         var res = npEvaluate({ rows15: closed, venueCost: costFor(item) });
         if (!res.ok){
-          var stopped = res.ledger.length ? 'too few closed bars' : 'too few closed bars';
+          var stopped = (res.gates && res.gates.length) ? String(res.gates[0]) : 'too few closed bars';
           for (var g = 0; g < res.ledger.length; g++){
             if (!res.ledger[g].pass){ stopped = res.ledger[g].step; break; }
           }

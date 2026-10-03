@@ -121,8 +121,10 @@ if (typeof G.hgReplaySweepPurged !== 'function'){
         if(isMax?!(v2<=best.t):!(v2>=best.t))continue;
         n2++; if(smp.r!==null){settled2++;sumR2+=smp.r;if(smp.r>0)wins2++;}
       }
-      oos={ threshold:best.t, setups:n2, settled:settled2, expectancyR:settled2?sumR2/settled2:null,
-        verdict:settled2<8?'INSUFFICIENT':'HOLDS' };
+      var oosExp = settled2 ? sumR2/settled2 : null;
+      oos={ threshold:best.t, setups:n2, settled:settled2, expectancyR:oosExp,
+        verdict: settled2 < 8 ? 'INSUFFICIENT'
+          : ((oosExp != null && best && isFinite(best.expectancyR) && best.expectancyR > 0 && oosExp < best.expectancyR * 0.7) ? 'DEGRADED' : 'HOLDS') };
     }
     return { gate: gate, rows: res.rows, note: split.note, oos: oos, purged: { count: split.purged, embargo: split.embargo } };
   };

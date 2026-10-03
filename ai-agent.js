@@ -762,7 +762,7 @@ function buildDeskFromAgents(agents){
   top.sort(function(a, b){
     var ca = (a.confluence || 0) * 50;
     var cb = (b.confluence || 0) * 50;
-    return ((b.clean7 ? 100 : 0) + ca + (fin(+b.score) ? +b.score : 0))
+    return ((b.clean7 ? 100 : 0) + cb + (fin(+b.score) ? +b.score : 0))
          - ((a.clean7 ? 100 : 0) + ca + (fin(+a.score) ? +a.score : 0));
   });
   return {

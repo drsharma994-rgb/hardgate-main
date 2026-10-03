@@ -7859,7 +7859,7 @@ terse status, and never launches a first-time scan on a global refresh.
     /* 5. WIN RATE CONFIDENCE (15 pts max) — Wilson Lower Bound */
     var wilsonScore = 0;
     if (setup.wilsonLo && isFinite(setup.wilsonLo)){
-      wilsonScore = Math.min(15, setup.wilsonLo * 0.3);  /* Scale 0-50% to 0-15 pts */
+      wilsonScore = Math.min(15, setup.wilsonLo * 30);  /* wilsonLo is a 0..1 fraction: 0.5 -> 15 pts */
     }
     factors.push({ name: 'Win Rate Confidence', value: wilsonScore, max: 15 });
     totalScore += wilsonScore;
@@ -10463,9 +10463,14 @@ terse status, and never launches a first-time scan on a global refresh.
   function hgOgUnobservedPanelHtml(){
     try{
       var kinds = (HG_OG_REPLAY_EVIDENCE && HG_OG_REPLAY_EVIDENCE.kinds) || {};
+      var belowBar = (HG_OG_REPLAY_EVIDENCE && HG_OG_REPLAY_EVIDENCE.kindsBelowBar
+        && HG_OG_REPLAY_EVIDENCE.kindsBelowBar.counts) || {};
       var total = OG_MECHANICS.length, seen = 0, never = [];
       for (var i = 0; i < total; i++){
-        if (Object.prototype.hasOwnProperty.call(kinds, OG_MECHANICS[i])) seen++;
+        /* kindsBelowBar mechanics DID fire and settle (under the bake floor) —
+           counting them as "never fired" contradicted the bake's own counts */
+        if (Object.prototype.hasOwnProperty.call(kinds, OG_MECHANICS[i])
+            || Object.prototype.hasOwnProperty.call(belowBar, OG_MECHANICS[i])) seen++;
         else never.push(OG_MECHANICS[i]);
       }
       if (!never.length || !seen) return '';
@@ -10657,7 +10662,7 @@ terse status, and never launches a first-time scan on a global refresh.
           if (!Object.prototype.hasOwnProperty.call(j.live, k)) continue;
           out.n++; out.keys.push(String(k));
           var rec = j.live[k] || {};
-          var at = isFinite(+rec.issuedAt) ? +rec.issuedAt : NaN;
+          var at = fin(rec.issuedAt);   /* fin: a missing stamp is NaN, never epoch 0 */
           out.rows.push({
             key: String(k),
             store: OG_CONVICTION_KEYS[i],
@@ -10801,9 +10806,11 @@ terse status, and never launches a first-time scan on a global refresh.
         var n = fin(r[0]), win = fin(r[1]), gross = fin(r[3]), med = fin(r[4]);
         if (!(isFinite(n) && n > 0)) continue;
         uN += n; uW += win * n; uG += gross * n;
-        /* re-price the fee leg only: the measured gross does not move with
-           the venue, which is the whole hg-v533 correction */
-        if (isFinite(med) && isFinite(rtP) && rtP > 0) uXm += (gross - med * (rtX / rtP)) * n;
+        /* re-price the fee leg with the MEAN fee (avgGrossR - avgNetR), not the
+           median: hg-v868 replaced the median form everywhere — the median
+           discards the tight-stop trades where fees dominate (row[2] = avgNetR). */
+        var net = fin(r[2]);
+        if (isFinite(gross) && isFinite(net) && isFinite(rtP) && rtP > 0) uXm += hgOgVenueNet(gross, net, rtX, rtP) * n;
       }
       if (!uN) return null;
       return { mechanics: OG_MECHANICS.length, famZ: famZ,

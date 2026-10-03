@@ -1885,7 +1885,7 @@ function mount(el){
       var fundRow = (__book.funds || []).find(function(f){ return f.id === fundLabel; });
       if (fundRow && fundRow.label) fundLabel = fundRow.label + ' (' + fundRow.id + ')';
       summary.innerHTML =
-        '<span class="k">Fund</span><span class="v">' + esc(fundLabel) + '</span>'
+        '<span class="k">Fund</span><span class="v">' + esc(fundLabel) + '</span>' +
         '<span class="k">NAV</span><span class="v">' + fmtUsd(s.navUsd) + '</span>'
         + '<span class="k">Equity</span><span class="v">' + fmtUsd(s.equityUsd) + '</span>'
         + '<span class="k">Day P&amp;L</span><span class="v">' + fmtUsd(s.dayPnlUsd)
@@ -1933,7 +1933,7 @@ function mount(el){
     }
     if (tableHead){
       tableHead.innerHTML = (multiFund ? '<th>Fund</th>' : '')
-        + '<th>Symbol</th><th>Side</th><th>Strategy</th><th>Notional</th><th>Entry</th><th>Mark</th>'
+        + '<th>Symbol</th><th>Side</th><th>Strategy</th><th>Notional</th><th>Lots</th><th>Entry</th><th>Mark</th>'
         + '<th>R</th><th>UPL</th><th>Risk</th><th>Bracket</th><th>OMS</th>';
     }
     if (body){

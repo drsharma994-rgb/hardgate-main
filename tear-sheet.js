@@ -7,7 +7,7 @@ function settledRs(records){
   var out = [];
   for (var i = 0; i < (records || []).length; i++){
     var r = records[i];
-    if (r && r.status === 'settled' && isFinite(+r.r)) out.push(+r.r);
+    if (r && r.status === 'settled' && typeof r.r === 'number' && isFinite(r.r)) out.push(r.r);
   }
   return out;
 }

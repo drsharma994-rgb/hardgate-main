@@ -125,7 +125,7 @@ console.log('4. the disclosure numbers come from the replay at render time');
     if (z <= -2){ fl++; continue; }
     unk++;
     n += r[0]; w += r[1] * r[0]; g += r[3] * r[0];
-    xm += (r[3] - r[4] * (rtX / rtP)) * r[0];
+    xm += (r[3] - (r[3] - r[2]) * (rtX / rtP)) * r[0];   /* mean fee = avgGrossR - avgNetR (hg-v868 form) */
   }
   const t = TALLY();
   eq(t.clears, cl, 'clears matches an independent count');

@@ -489,7 +489,9 @@ is in flight it reports 'busy' (overlaps never double-fetch).
       if (typeof window.hgMpPin === 'function'){
         window.hgMpPin('carry', cards.map(function(c){
           var lv = (c && c.levels) || {};
-          return { sym: c.base, dir: 'long', entry: lv.entry, stop: lv.stopLong || lv.stopShort, t1: lv.t1Px, t2: lv.t2Px };
+          var pinT1 = (isFinite(lv.entry) && isFinite(lv.t1Px)) ? lv.entry + lv.t1Px : lv.t1Px;
+          var pinT2 = (isFinite(lv.entry) && isFinite(lv.t2Px)) ? lv.entry + lv.t2Px : lv.t2Px;
+          return { sym: c.base, dir: 'long', entry: lv.entry, stop: lv.stopLong || lv.stopShort, t1: pinT1, t2: pinT2 };
         }), null, ui.cards);
       }
     } catch (eMp) {}

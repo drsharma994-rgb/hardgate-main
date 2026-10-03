@@ -25,7 +25,7 @@ function records(){
 function settledN(recs){
   var n = 0;
   for (var i = 0; i < recs.length; i++){
-    if (recs[i] && recs[i].status === 'settled' && isFinite(+recs[i].r)) n++;
+    if (recs[i] && recs[i].status === 'settled' && typeof recs[i].r === 'number' && isFinite(recs[i].r)) n++;
   }
   return n;
 }

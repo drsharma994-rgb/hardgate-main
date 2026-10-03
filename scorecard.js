@@ -143,7 +143,7 @@ function hgScoreNetR(rec, state, grossR, closedAtSec){
     var W2 = (typeof window !== 'undefined') ? window : null;
     if (!W2 || typeof W2.hgCostR !== 'function') return null;
     if (typeof grossR !== 'number' || !isFinite(grossR)) return null;
-    var exitSide = (state === 'SL' || state === 'EXPIRED') ? 'taker' : 'maker';
+    var exitSide = (state === 'SL' || state === 'EXPIRED' || state === 'T1S') ? 'taker' : 'maker';  /* T1S exits at the stop */
     var cost = W2.hgCostR(rec.entry, rec.stop, 'maker', exitSide);
     if (typeof cost !== 'number' || !isFinite(cost)) return null;
     var net = grossR - cost;

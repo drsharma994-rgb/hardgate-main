@@ -744,11 +744,14 @@ async function getGoldMacro(){
       if (typeof hgRealRate === 'function'){
         realRateMeasured = hgRealRate({ dfii10Rows: dfii10Rows, t10yieRows: t10yieRows });
       }else if (dfii10Rows && dfii10Rows.length){
-        var lvl = dfii10Rows[0].value;
-        var chg20 = (dfii10Rows.length > 20) ? lvl - dfii10Rows[20].value : null;
+        /* __fredSeries reverses FRED (newest-first) to oldest-first, so the
+           LATEST observation is the LAST element — read from the end. */
+        var dfLast = dfii10Rows.length - 1;
+        var lvl = dfii10Rows[dfLast].value;
+        var chg20 = (dfii10Rows.length > 20) ? lvl - dfii10Rows[dfLast - 20].value : null;
         var tr = 'FLAT';
         if (chg20 !== null){ if (chg20 <= -0.05) tr = 'FALLING'; else if (chg20 >= 0.05) tr = 'RISING'; }
-        realRateMeasured = { level: lvl, chg20d: chg20, trend: tr, asOf: dfii10Rows[0].date, measured: true, stale: false, source: 'fred-dfii10' };
+        realRateMeasured = { level: lvl, chg20d: chg20, trend: tr, asOf: dfii10Rows[dfLast].date, measured: true, stale: false, source: 'fred-dfii10' };
       }
       if (realRateMeasured && realRateMeasured.measured){
         realRateSource = 'fred-dfii10';

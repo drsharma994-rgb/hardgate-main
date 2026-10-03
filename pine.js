@@ -195,8 +195,10 @@ function signalFromScript(item, script, res, rows){
     t2 = fin(+res.t2) ? +res.t2 : (dir === 'long' ? entry + 3.5 * riskHt : entry - 3.5 * riskHt);
     planSrc = 'HalfTrend trailing line';
   } else if (sid === 'nw-envelope'){
-    var bandLo = fin(+res.lower) ? +res.lower - (fin(+res.atr) ? res.atr * 0.25 : price * 0.005) : null;
-    var planNw = buildPlanWithTarget(dir, price, rows, res.meanTarget || res.nwCenter, bandLo);
+    var bandStop = null;
+    if (dir === 'long' && fin(+res.lower)) bandStop = +res.lower - (fin(+res.atr) ? +res.atr * 0.25 : price * 0.005);
+    if (dir === 'short' && fin(+res.upper)) bandStop = +res.upper + (fin(+res.atr) ? +res.atr * 0.25 : price * 0.005);
+    var planNw = buildPlanWithTarget(dir, price, rows, res.meanTarget || res.nwCenter, bandStop);
     entry = planNw.entry; stop = planNw.stop; t1 = planNw.t1; t2 = planNw.t2; planSrc = planNw.planSrc;
   } else if (sid === 'weekly-avwap'){
     var bandLoAv = null;

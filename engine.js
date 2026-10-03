@@ -469,6 +469,18 @@ function gateCandidate(inp){
     }catch(eS7){ usedSwingSeven = false; }
   }
 
+  /* G4 needs EMA21 on the shared-matrix path too: the legacy block below is
+     skipped when swingSevenGateCheck ran, which left e21 undefined and made
+     the anchor check NaN (vetoing every survivor). Read it from the matrix
+     the shared check already computed, then from the indicator layer. */
+  if (usedSwingSeven && !isFinite(e21)){
+    if (s7 && s7.matrix && isFinite(s7.matrix.e21)) e21 = s7.matrix.e21;
+    else {
+      var _emaAnchor = (typeof ema === 'function') ? ema : null;
+      if (_emaAnchor) e21 = __last(_emaAnchor(c4, 21));
+    }
+  }
+
   /* ---------- G1 STRUCTURE (legacy path when swingSevenGateCheck unavailable) ---------- */
   if (!usedSwingSeven){
   var _ema = (typeof ema === 'function') ? ema : null;

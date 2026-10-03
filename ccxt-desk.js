@@ -68,8 +68,8 @@ function ccxtFundingArbFromDesk(desk){
   var annSpread = (annA != null && annB != null) ? annA - annB : null;
   var label = 'NEUTRAL';
   if (annSpread != null){
-    if (annSpread >= 15) label = 'HARVEST-LONG-A';
-    else if (annSpread <= -15) label = 'HARVEST-SHORT-A';
+    if (annSpread >= 15) label = 'HARVEST-SHORT-A';   /* A's funding higher -> longs pay more on A -> short A / long B */
+    else if (annSpread <= -15) label = 'HARVEST-LONG-A';
     else if (Math.abs(annSpread) >= 8) label = 'CARRY-SKEW';
   }
   return {

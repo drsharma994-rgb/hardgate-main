@@ -42,7 +42,9 @@ function hgBuildVolumeProfile(candles, sessionStart, sessionEnd){
 
     for (var i = 0; i < candles.length; i++){
       var c = candles[i];
-      var timestamp = c.time || (c.ts * 1000);
+      var rawT = (c.time != null) ? c.time : (c.ts != null ? c.ts : null);
+      var timestamp = (rawT != null && rawT < 1e12) ? rawT * 1000 : rawT;
+      if (timestamp == null) continue;
 
       /* Only candles in session window */
       if (timestamp < sessionStart || timestamp > sessionEnd) continue;
@@ -89,11 +91,26 @@ function hgFindValueArea(volumeProfile){
     var targetVolume = volumeProfile.totalVolume * 0.70;
     var valueAreaPrices = [];
 
-    /* Find middle price with most volume, expand outward */
-    var startIdx = Math.floor(prices.length / 2);
-    for (var i = startIdx; i < prices.length && cumVolume < targetVolume; i++){
-      valueAreaPrices.push(prices[i]);
-      cumVolume += volumeProfile.profile[prices[i]];
+    /* Start at the POC (max volume) and expand outward, taking the heavier
+       side first, until 70% of the session volume is enclosed. The old walk
+       started at the mid-price and moved up only, so VAL was always the
+       middle price and the lower half of the profile was never included. */
+    var pocIdx = 0, maxVol = -1, p;
+    for (p = 0; p < prices.length; p++){
+      if (volumeProfile.profile[prices[p]] > maxVol){ maxVol = volumeProfile.profile[prices[p]]; pocIdx = p; }
+    }
+    var pocPrice = prices[pocIdx];
+    valueAreaPrices.push(pocPrice);
+    cumVolume += volumeProfile.profile[pocPrice];
+    var lo = pocIdx - 1, hi = pocIdx + 1;
+    while (cumVolume < targetVolume && (lo >= 0 || hi < prices.length)){
+      var volLo = lo >= 0 ? volumeProfile.profile[prices[lo]] : -1;
+      var volHi = hi < prices.length ? volumeProfile.profile[prices[hi]] : -1;
+      if (volLo >= volHi && lo >= 0){
+        valueAreaPrices.push(prices[lo]); cumVolume += volLo; lo--;
+      } else if (hi < prices.length){
+        valueAreaPrices.push(prices[hi]); cumVolume += volHi; hi++;
+      } else break;
     }
 
     valueAreaPrices.sort(function(a,b){ return a - b; });
@@ -105,7 +122,7 @@ function hgFindValueArea(volumeProfile){
       vah: vah,
       width: vah - val,
       volumeEnclosed: cumVolume,
-      poc: (val + vah) / 2
+      poc: pocPrice
     };
   }catch(e){ return null; }
 }
@@ -163,8 +180,16 @@ function hgAnalyzeSessionVolume(candles){
     var poc = hgFindPOC(volumeProfile);
     var valueArea = hgFindValueArea(volumeProfile);
 
-    var sessionOpen = candles[0] && candles[0].open;
-    var sessionClose = candles[candles.length - 1] && candles[candles.length - 1].close;
+    /* open/close pivots must come from the SESSION window, not the whole tape */
+    var sessionCandles = [];
+    for (var si = 0; si < candles.length; si++){
+      var sc = candles[si];
+      var sT = (sc.time != null) ? sc.time : (sc.ts != null ? sc.ts : null);
+      var sMs = (sT != null && sT < 1e12) ? sT * 1000 : sT;
+      if (sMs != null && sMs >= sessionWindow.startTime && sMs <= sessionWindow.endTime) sessionCandles.push(sc);
+    }
+    var sessionOpen = sessionCandles.length ? sessionCandles[0].open : null;
+    var sessionClose = sessionCandles.length ? sessionCandles[sessionCandles.length - 1].close : null;
 
     return {
       session: sessionWindow.session,
@@ -172,7 +197,9 @@ function hgAnalyzeSessionVolume(candles){
       valueArea: valueArea,
       sessionOpen: sessionOpen,
       sessionClose: sessionClose,
-      direction: sessionClose > sessionOpen ? 'UP' : 'DOWN',
+      direction: (sessionOpen != null && sessionClose != null)
+        ? (sessionClose > sessionOpen ? 'UP' : (sessionClose < sessionOpen ? 'DOWN' : 'FLAT'))
+        : 'UNKNOWN',
       totalSessionVolume: volumeProfile.totalVolume,
       liquidityProfile: sessionWindow.liquidity,
       confidence: Math.min(0.95, (volumeProfile.totalVolume / 1000000) * 0.1)

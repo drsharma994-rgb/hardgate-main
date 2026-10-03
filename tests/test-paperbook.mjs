@@ -23,6 +23,10 @@ ok(book.navUsd === PB_DEFAULTS.navUsd, 'new book NAV');
 var intent = { sym: 'BTCUSD', dir: 'long', entry: 100, stop: 95, t1: 110, strategy: 'test' };
 var chk = pbRiskCheck(book, intent);
 ok(chk.ok && chk.notionalUsd > 0 && chk.riskUsd > 0, 'risk check passes empty book');
+/* cap policy is SIZE TO FIT: the requested notional is clamped, never vetoed */
+var clampChk = pbRiskCheck(book, { sym: 'BTCUSD', dir: 'long', entry: 100, stop: 95, t1: 110, strategy: 'clamp' });
+ok(clampChk.ok && clampChk.clampedFrom != null && clampChk.clampedFrom > clampChk.notionalUsd,
+   'over-cap notional is clamped to the cap, and the clamp is reported');
 
 var add = pbAddIntent(book, intent);
 ok(add.ok && add.book.positions.length === 1, 'add position');

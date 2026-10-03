@@ -67,7 +67,8 @@ function blClosed(rows){
 
 function blTicker(inp, rows){
   inp = inp || {};
-  var mark = fin(+inp.mark) ? +inp.mark
+  var mv = (inp.mark === null || inp.mark === undefined || inp.mark === '') ? NaN : +inp.mark;
+  var mark = isFinite(mv) && mv > 0 ? mv
     : (rows && rows.length ? +rows[rows.length - 1].c : null);
   return {
     symbol: inp.sym || inp.symbol,

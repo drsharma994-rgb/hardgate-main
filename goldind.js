@@ -3875,7 +3875,7 @@ function goldScalpSetups(inp){
                 stop: isFinite(eng.level) ? eng.level + (eng.dir === 'long' ? -1 : 1) * a15 : NaN,
                 vprof: vpSwProf, bundle: vpSw, thin: true,
                 mssOk: !!(eng.mss && eng.mss.ok) || !!eng.confirmed,
-                vwap: (D.vw && isFinite(D.vw.vwap)) ? D.vw.vwap : NaN,
+                vwap: (D.vw && isFinite(D.vw.value)) ? D.vw.value : NaN,
                 sweepExtreme: eng.level, atr: a15,
                 auction: vpSw && vpSw.auction,
                 external: {
@@ -3929,7 +3929,7 @@ function goldScalpSetups(inp){
               var tgNy = hgGoldVpTargets({
                 dir: nyx.dir, entry: entry, stop: nyStop, vprof: vpNy, bundle: vpNyB, thin: true,
                 mssOk: !!(nyx.takeover && nyx.takeover.mss && nyx.takeover.mss.ok) || !!nyx.confirmed,
-                vwap: (D.vw && isFinite(D.vw.vwap)) ? D.vw.vwap : NaN,
+                vwap: (D.vw && isFinite(D.vw.value)) ? D.vw.value : NaN,
                 sweepExtreme: (nyx.raid && isFinite(nyx.level)) ? nyx.level : nyx.level,
                 atr: a15,
                 auction: vpNyB && vpNyB.auction,
@@ -4672,7 +4672,7 @@ function goldScalpSetups(inp){
       if (adir === 'short' && D.vwb && D.vwb.pos === 'ABOVE') adrOk = true;
       if (adir === 'long' && D.vwb && D.vwb.pos === 'BELOW') adrOk = true;
       if (adrOk){
-        var adrStop = (adir === 'long') ? entry + 1.2*D.a15 : entry - 1.2*D.a15;
+        var adrStop = (adir === 'long') ? entry - 1.2*D.a15 : entry + 1.2*D.a15;
         push(__gsCand('adrfade', adir, D, adrStop, __gsSnapLvls(D, adir),
           'ADR exhaustion fade — ' + (adr.pctOfADR*100).toFixed(0) + '% of daily range consumed, momentum stretched. '
             + (adir==='long'?'Buy the dip':'Sell the rip') + ' with tight stop.',
@@ -4805,7 +4805,7 @@ function goldWatch(inp){
        liquidity pool; the trigger is a wick beyond it + a reclaim close. */
     if (n >= 26){
       var sH = -Infinity, sL = Infinity;
-      for (var i = Math.max(0, n - 25); i < n; i++){
+      for (var i = Math.max(0, n - 25); i < n - 1; i++){   /* exclude the forming bar (goldSweeps parity) */
         if (rows[i].h > sH) sH = rows[i].h;
         if (rows[i].l < sL) sL = rows[i].l;
       }
@@ -5215,8 +5215,9 @@ function hgGoldConfluenceScore(cand, ctx){
 
     /* --- Location (20) — VWAP, S/R, VP, Fib overlap --- */
     var vw = ctx.vwap || (rows ? goldVWAP(rows) : null);
-    if (vw && isFinite(vw.vwap) && isFinite(cand.entry)){
-      var aboveVw = cand.entry >= vw.vwap;
+    var vwVal = vw && (vw.vwap !== undefined ? vw.vwap : vw.value);
+    if (vw && isFinite(vwVal) && isFinite(cand.entry)){
+      var aboveVw = cand.entry >= vwVal;
       if ((dir === 'long' && aboveVw) || (dir === 'short' && !aboveVw)){
         p.location += 7; tools.push('VWAP align');
       } else p.location += 2;
@@ -5994,7 +5995,7 @@ function goldADR(rows, lookback){
     rows = __rows(rows);
     if (!rows || rows.length < 50) return null;
     lookback = lookback || 14;
-    var n = rows.length, c = rows[n-1], todayR = c.h - c.l;
+    var n = rows.length, c = rows[n-1];
     var days = {}, i, t, ds, key;
     for (i = 0; i < n; i++){
       t = rows[i].t; if (!isFinite(t)) continue;
@@ -6003,6 +6004,9 @@ function goldADR(rows, lookback){
       if (!days[key]) days[key] = { hi: rows[i].h, lo: rows[i].l };
       else { if (rows[i].h > days[key].hi) days[key].hi = rows[i].h; if (rows[i].l < days[key].lo) days[key].lo = rows[i].l; }
     }
+    var todayKey = String(Math.floor((c && isFinite(c.t) ? c.t : 0)/86400)*86400);
+    var todayAgg = days[todayKey];
+    var todayR = (todayAgg && todayAgg.hi > todayAgg.lo) ? (todayAgg.hi - todayAgg.lo) : (c.h - c.l);
     var ranges = [];
     var keys = Object.keys(days).map(Number).sort(function(a,b){ return a-b; });
     for (i = 0; i < keys.length; i++){
@@ -8058,7 +8062,7 @@ function hgGoldVpPlaybook(rows, opts){
     out.ok = true;
     var failing = out.gates.filter(function(g){ return !g.pass; }).map(function(g){ return g.n; });
     if (out.gatesPass === 12){
-      out.decision = 'ENTER'; out.halfSize = false;
+      out.decision = 'ENTER'; out.halfSize = !!rrHalf;
     } else if (out.gatesPass === 11 && rrHalf && failing.length === 1 && failing[0] === 9){
       out.decision = 'ENTER'; out.halfSize = true;
     } else if (out.gatesPass >= 8 && (failing.indexOf(4) >= 0 || failing.indexOf(5) >= 0 || failing.indexOf(7) >= 0)){
@@ -13731,8 +13735,12 @@ function hgGoldPart6FailedSweep(rows){
     if (springDir === 'long' && last.c < wick) failed = true;
     if (springDir === 'short' && last.c > wick) failed = true;
     if (!failed){
-      out.ok = true; out.dir = springDir === 'long' ? 'short' : 'long';
-      out.grade = 'forming'; out.entry = reclaim; out.stop = reclaim;
+      var watchDir = springDir === 'long' ? 'short' : 'long';
+      out.ok = true; out.dir = watchDir;
+      out.grade = 'forming'; out.entry = reclaim;
+      /* provisional stop on the correct side — the old entry==stop mint was
+         a zero-risk plan */
+      out.stop = watchDir === 'short' ? reclaim + 0.2 * atr : reclaim - 0.2 * atr;
       out.why = 'S37 watching failed-sweep after reclaim @ ' + reclaim.toFixed(2);
       return out;
     }
@@ -13752,12 +13760,15 @@ function hgGoldPart6FailedSweep(rows){
       t1 = best;
     }
     if (!isFinite(t1)) t1 = contDir === 'short' ? wick - 2 * atr : wick + 2 * atr;
-    var R = Math.abs(last.c - reclaim);
+    /* gate the R:R against the REAL stop (reclaim +/- 0.2*ATR), not the
+       unbuffered reclaim distance the old code measured */
+    var stopC = reclaim + (contDir === 'short' ? 0.2 * atr : -0.2 * atr);
+    var R = Math.abs(last.c - stopC);
     if (!(R > 0) || Math.abs(t1 - last.c) / R < 2.0){
       out.why = 'S37 RR < 2.0 to next HVN'; return out;
     }
     out.ok = true; out.dir = contDir; out.grade = 'confirmed';
-    out.entry = last.c; out.stop = reclaim + (contDir === 'short' ? 0.2 * atr : -0.2 * atr);
+    out.entry = last.c; out.stop = stopC;
     out.t1 = t1;
     out.why = 'S37 failed-sweep continuation ' + contDir.toUpperCase()
       + ' after stop through ' + wick.toFixed(2);
@@ -15732,7 +15743,9 @@ function hgGoldCarryAwareRr(plan, opts){
     if (!(R > 0)){ out.why = 'S64 zero R'; return out; }
     out.R = R;
     out.rr = Math.abs(plan.t1 - plan.entry) / R;
-    var fr = Math.abs(isFinite(opts.fundingRate) ? opts.fundingRate : 0);
+    var frRaw = isFinite(opts.fundingRate) ? opts.fundingRate : 0;
+    /* gold feeds carry PERCENT units; __normFundingPct returns percent, so /100 gives the fraction */
+    var fr = Math.abs(((typeof __normFundingPct === 'function') ? __normFundingPct(frRaw) : frRaw) / 100);
     var nPay = isFinite(opts.nPayments) ? opts.nPayments
       : (isFinite(opts.holdHours) ? Math.floor(opts.holdHours / 8) : 0);
     out.nPayments = nPay;
@@ -15816,7 +15829,6 @@ function hgGoldPremiumFade(rows, opts){
       /* If premium spike but index at extreme, move may not be perp-specific */
       if (opts.indexAtExtreme){ out.why = 'S65 index at session extreme — not perp-specific'; return out; }
     }
-    if (opts.indexAtExtreme){ out.why = 'S65 index at session extreme'; return out; }
 
     var atrs = _atr(rows, 14);
     var atr = atrs[atrs.length - 1];
@@ -16444,8 +16456,10 @@ function hgGoldOiTrap(priceRows, oiRows, opts){
     if (!(priorHi > priorLo)){ out.why = 'prior window flat'; return out; }
 
     var bar = priceRows[n - 1];
-    var oiNow = hgGoldSeriesCloseAt(oiRows, bar.t);
-    var oiPrev = hgGoldSeriesCloseAt(oiRows, priceRows[n - 1 - look].t);
+    /* measure OI build over the SAME window as priorHi/priorLo
+       (indices n-look-1 .. n-2): window end -> just before window start */
+    var oiNow = hgGoldSeriesCloseAt(oiRows, priceRows[n - 2] && priceRows[n - 2].t);
+    var oiPrev = hgGoldSeriesCloseAt(oiRows, (n - look - 2 >= 0 && priceRows[n - look - 2]) ? priceRows[n - look - 2].t : NaN);
     if (!(isFinite(oiNow) && isFinite(oiPrev) && oiPrev > 0)){
       out.unchecked = true; out.why = 'OI not alignable to price timestamps'; return out;
     }

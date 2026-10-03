@@ -36,9 +36,6 @@ var MIN_15M = 230, MIN_1H = 210;
 
 var RULE = {
   minWeightedScore: 2.0,
-  multiTfGate: true,
-  volumeGate: true,
-  sessionGate: true,
   regimeGate: true,
   minAtrFloor: 0.001,
   stopAtr: 1.5,
@@ -633,7 +630,7 @@ function cryptoUltraVotes(rows, rows1h){
   var lagRsi = (function(){ var g2 = 0.8, L0 = 0, L1 = 0, L2 = 0, L3 = 0, cu2 = 0, cd2 = 0; for (var k = 0; k < n; k++){ var pL0 = L0, pL1 = L1, pL2 = L2; L0 = (1 - g2) * C[k] + g2 * pL0; L1 = -g2 * L0 + pL0 + g2 * pL1; L2 = -g2 * L1 + pL1 + g2 * pL2; L3 = -g2 * L2 + pL2 + g2 * L3; cu2 = 0; cd2 = 0; if (L0 >= L1) cu2 += L0 - L1; else cd2 += L1 - L0; if (L1 >= L2) cu2 += L1 - L2; else cd2 += L2 - L1; if (L2 >= L3) cu2 += L2 - L3; else cd2 += L3 - L2; } return (cu2 + cd2) ? 100 * cu2 / (cu2 + cd2) : 50; })();
   push(R('laguerre', G, 'Laguerre RSI (Ehlers γ=0.8)', 'vote', band(lagRsi, 60, 40), fmt(lagRsi, 1), '>60 long · <40 short'));
   /* Connors RSI */
-  var connRsi = (function(){ var r1 = last(rsi(C, 3)), streak = 0; for (var k = n - 1; k > 0; k--){ if (C[k] > C[k - 1]) { if (streak >= 0) streak++; else break; } else if (C[k] < C[k - 1]) { if (streak <= 0) streak--; else break; } else break; } var r2 = last(rsi([streak], 1)) || 50; var pctR = 0, cur2 = 100 * (C[i] - C[i - 1]) / C[i - 1], cnt2 = 0; for (var j = 1; j < 100 && i - j >= 1; j++){ if (100 * (C[i - j] - C[i - j - 1]) / C[i - j - 1] < cur2) cnt2++; } pctR = cnt2 / Math.min(99, i); return (r1 + r2 + 100 * pctR) / 3; })();
+  var connRsi = (function(){ var r1 = last(rsi(C, 3)), streak = 0; for (var k = n - 1; k > 0; k--){ if (C[k] > C[k - 1]) { if (streak >= 0) streak++; else break; } else if (C[k] < C[k - 1]) { if (streak <= 0) streak--; else break; } else break; } var r2 = Math.min(100, Math.max(0, 50 + streak * 10)); /* streak rank: bounded linear approximation of Connors' RSI-of-streak */ var pctR = 0, cur2 = 100 * (C[i] - C[i - 1]) / C[i - 1], cnt2 = 0; for (var j = 1; j < 100 && i - j >= 1; j++){ if (100 * (C[i - j] - C[i - j - 1]) / C[i - j - 1] < cur2) cnt2++; } pctR = cnt2 / Math.min(99, i); return (r1 + r2 + 100 * pctR) / 3; })();
   push(R('crsi', G, 'Connors RSI (3, streak, %rank)', 'vote', band(connRsi, 60, 40), fmt(connRsi, 1), '>60 long · <40 short'));
   /* BW Market Facilitation Index */
   var bwMfi = (b0.h - b0.l) / (b0.v || 1), bwMfiP = (b1.h - b1.l) / (b1.v || 1);
@@ -650,7 +647,7 @@ function cryptoUltraVotes(rows, rows1h){
   push(R('vfi', G, 'Volume Flow Indicator (VFI)', 'vote', sgn(vfi), fmt(vfi, 0), 'positive = institutional accumulation'));
   /* PVT (Price Volume Trend) */
   var pvt = (function(){ var o2 = 0; for (var k = 1; k < n; k++) o2 += ((C[k] - C[k - 1]) / C[k - 1]) * rows[k].v; return o2; })();
-  push(R('pvt', G, 'Price Volume Trend (PVT)', 'vote', slopeVote([0, pvt], 0, 0), fmt(pvt, 0), 'positive = accumulation'));
+  push(R('pvt', G, 'Price Volume Trend (PVT)', 'vote', sgn(pvt), fmt(pvt, 0), 'positive = accumulation'));
   /* EMV / EOM (Ease of Movement) */
   var emv = (function(){ var o2 = nanArr(n); for (var k = 1; k < n; k++){ var dm = ((rows[k].h + rows[k].l) / 2) - ((rows[k - 1].h + rows[k - 1].l) / 2); var br = rows[k].v / (rows[k].h - rows[k].l || 1); o2[k] = dm / br; } return last(sma(fill0(o2), 14)); })();
   push(R('emv', G, 'Ease of Movement 14 (EMV)', 'vote', band(emv, 0, 0), fmt(emv, 4), 'positive = price moving easily upward'));

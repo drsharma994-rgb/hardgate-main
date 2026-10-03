@@ -649,7 +649,7 @@ function regimePlaybook(state){
       setups.push('breakout continuation while BTC holds above the 200EMA (R1)');
       if (r8 && +r8.score > 0) setups.push('carry/basis — harvest funding while stablecoin dry powder expands (R8)');
       else setups.push('mean-revert dips only at higher-timeframe demand, never against a fresh breakdown');
-      if (r4 && +r4.score > 0) setups.push('size discipline — F&G already in greed: add on pullbacks, not on stretched candles');
+      if (r4 && +r4.score > 0) setups.push('size discipline — fed liquidity expanding (R4): add on pullbacks, not on stretched candles');
       invalidation = 'This regime thesis dies if the composite score closes back under +3 — watch ' +
         drivers(bulls) + ' to flip first; the first daily close back in MIXED cuts longs to probe size.';
     }else if (cls === 'short'){
@@ -661,7 +661,7 @@ function regimePlaybook(state){
       setups.push('breakdown continuation while BTC stays under the 200EMA (R1)');
       if (r8 && +r8.score < 0) setups.push('carry/basis — short-side funding harvest while dry powder drains (R8)');
       else setups.push('hedged carry only — no naked dip-buying while liquidity is not expanding');
-      if (r4 && +r4.score < 0) setups.push('mean-revert bounces allowed at quarter size only — F&G already in fear = capitulation stretch, not a long signal');
+      if (r4 && +r4.score < 0) setups.push('mean-revert bounces allowed at quarter size only — fed liquidity draining (R4) = capitulation stretch, not a long signal');
       invalidation = 'This regime thesis dies if the composite score closes back above -3 — watch ' +
         drivers(bears) + ' to flip first; the first daily close back in MIXED covers momentum shorts.';
     }else{

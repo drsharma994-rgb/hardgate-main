@@ -126,12 +126,15 @@ function hgCryptoMeasuredWinRate(sym, dir){
   }catch(e){ return null; }
 }
 
-function hgCryptoFundingCostR(notionalUSD, riskAmountUSD, holdHours, fundingRate8h){
+function hgCryptoFundingCostR(notionalUSD, riskAmountUSD, holdHours, fundingRate8h, dir){
   var n = num(notionalUSD), risk = num(riskAmountUSD);
   var hrs = num(holdHours);
   var rate = num(fundingRate8h) != null ? num(fundingRate8h) : HG_FUNDING_8H_DEFAULT;
   if (n === null || risk === null || !(risk > 0) || hrs === null || !(hrs > 0)) return 0;
-  return (n * rate * (hrs / 8)) / risk;
+  /* positive funding = longs pay shorts: a position collecting funding has
+     NEGATIVE cost (the worksheet used to charge every side). */
+  var sign = String(dir || '').toLowerCase() === 'short' ? -1 : 1;
+  return (n * rate * sign * (hrs / 8)) / risk;
 }
 
 function hgCryptoIndiaTaxDragR(grossR, costR, notionalUSD, riskAmountUSD, opts){
@@ -209,7 +212,7 @@ function hgCryptoPositionRisk(plan, ctx){
   var holdHours = num(ctx.holdHours);
   var fundingRate8h = num(ctx.fundingRate8h) != null ? num(ctx.fundingRate8h) : HG_FUNDING_8H_DEFAULT;
   var fundingCostR = (holdHours != null && holdHours > 0)
-    ? hgCryptoFundingCostR(size.notionalUSD, size.riskAmountUSD, holdHours, fundingRate8h) : 0;
+    ? hgCryptoFundingCostR(size.notionalUSD, size.riskAmountUSD, holdHours, fundingRate8h, dir) : 0;
   var netRAfterFunding = netR != null ? netR - fundingCostR : null;
   var taxDragR = hgCryptoIndiaTaxDragR(grossR, costR, size.notionalUSD, size.riskAmountUSD, {
     indiaTax: !!ctx.indiaTax, indiaTaxRate: ctx.indiaTaxRate, indiaCess: ctx.indiaCess, indiaTds: ctx.indiaTds

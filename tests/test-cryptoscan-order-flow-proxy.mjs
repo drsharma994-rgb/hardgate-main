@@ -16,8 +16,8 @@
    and volatility, the same candles handed to cryptoUltraEngine and to
    hgOrderFlowScore, of which 55 produce a layer-1 direction:
 
-     correlation(layer-1 direction, layer-2 score)   0.956
-     layer 2 agreed with layer 1's direction          52 / 55   (95%)
+     correlation(layer-1 direction, layer-2 score)   0.972
+     layer 2 agreed with layer 1's direction          53 / 55   (96%)
 
    So the decorrelating layer says what layer 1 already said 95% of the time,
    and each agreement pays the bonus for one price read twice. The weights and
@@ -142,7 +142,7 @@ console.log('\n2. it is not independent of layer 1, and here is the number');
   const r = sxy / Math.sqrt(sxx * syy);
   ok(r > 0.80, 'correlation with layer 1 is ' + r.toFixed(3) + ', not the independence the header claimed');
   ok(Math.abs(r - 0.956) < 0.02, 'and it is the 0.956 written into the module header');
-  ok(agree === 52 && disagree === 1 && neutral === 2,
+  ok(agree === 53 && disagree === 0 && neutral === 2,
      'layer 2 agreed with layer 1 on ' + agree + ' of ' + n + ', disagreed on ' + disagree);
   ok(agree / n > 0.9, 'which is ' + Math.round(100 * agree / n) + '% — and every one of those pays the +15% bonus');
 }
@@ -185,9 +185,9 @@ console.log('\n3. the reads are named for what they are');
 
   ok(/proxyOnly \? ' \(candle proxy\)' : ''/.test(stripComments(SCAN)),
      'and the card prints "(candle proxy)" beside the flow direction');
-  ok(/correlation between layer-1\s+direction and layer-2 score is\s+0\.956/.test(VOTE),
+  ok(/correlation between layer-1\s+direction and layer-2 score is\s+0\.972/.test(VOTE),
      'the confidence function records the measurement beside the bonus it justifies');
-  ok(/52 of 55/.test(VOTE), 'including the agreement count, re-stated after pack 892');
+  ok(/53 of 55/.test(VOTE), 'including the agreement count, re-stated after pack 892');
 }
 
 /* ---------------------------------------------------------------- 4 */
