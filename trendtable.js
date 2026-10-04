@@ -2252,6 +2252,30 @@ function trendmxTrendFormHTML(rows){
   }catch(e){ return ''; }
 }
 
+/* hg-v1069: the grid-setup block — the OMNIBTC dual-grid treatment on
+   the matrix crown: each grid stands on its own direction, tier and
+   levels, and a grid that disagrees with the call is stamped, never
+   hidden. */
+function trendmxGridBlockHtml(title, gridLbl, s, callDir){
+  try{
+    if (!s || !isFinite(+s.entry) || !isFinite(+s.stop) || !isFinite(+s.t1)) return '';
+    var dir = String(s.dir || '').toLowerCase();
+    var against = dir && callDir && dir !== callDir;
+    var risk = Math.abs(+s.entry - +s.stop);
+    var rr = risk > 0 ? Math.abs(+s.t1 - +s.entry) / risk : NaN;
+    var tierTxt = s.tier === 'CLEAN' ? '7/7 CLEAN' : (s.tier === 'NEAR' ? (s.gates != null ? s.gates + '/7 NEAR' : '6/7 NEAR') : 'DRAFT');
+    var color = dir === 'long' ? '#26a69a' : (dir === 'short' ? '#ef5350' : '#94a3b8');
+    return '<div class="panel" style="margin-top:10px;border-top:3px solid ' + color + '"><h3>' + title
+      + ' <span>' + gridLbl + ' - ' + tierTxt + (s.source ? ' - ' + escH(s.source) : '') + (against ? ' - AGAINST THE CALL' : '') + '</span></h3>'
+      + '<div class="kv"><span class="k">Bias</span><span class="v ' + (dir === 'long' ? 'pos' : 'neg') + '">' + dir.toUpperCase() + '</span></div>'
+      + '<div class="kv"><span class="k">ENTRY</span><span class="v">' + (+s.entry).toFixed(2) + '</span></div>'
+      + '<div class="kv"><span class="k">STOP</span><span class="v">' + (+s.stop).toFixed(2) + '</span></div>'
+      + '<div class="kv"><span class="k">T1</span><span class="v">' + (+s.t1).toFixed(2) + (isFinite(rr) ? ' (' + rr.toFixed(1) + 'R)' : '') + '</span></div>'
+      + (isFinite(+s.t2) ? '<div class="kv"><span class="k">T2</span><span class="v">' + (+s.t2).toFixed(2) + '</span></div>' : '')
+      + '</div>';
+  }catch(e){ return ''; }
+}
+
 /* hg-v1066: THE CROWN — the OMNIBTC treatment on the TREND MATRIX: a
    single bold call (the strongest majority row with a minted plan), a
    verdict line, the five-dimension complete analysis from the row's own
@@ -2353,6 +2377,29 @@ function trendmxCrownPanelHTML(state){
     }
     html += dim('MICRO', mic.length ? 'NEUTRAL' : 'UNREAD', '', mic);
     html += '</div>';
+    /* ---- ANCHOR (day VWAP + Bollinger on the row's own tape) ---- */
+    var anchorHtml = '';
+    try{
+      if (Array.isArray(crown.rows4h) && crown.rows4h.length >= 30 && typeof hgAVWAP === 'function' && typeof bollinger === 'function'){
+        var anIdx = Math.max(0, crown.rows4h.length - 6);
+        var av = hgAVWAP(crown.rows4h, anIdx);
+        var cArr = crown.rows4h.map(function(x){ return x.c; });
+        var bb = bollinger(cArr, 20, 2);
+        var lastC = +crown.rows4h[crown.rows4h.length - 1].c;
+        if (av && isFinite(+av.value) && bb && bb.widthPct){
+          var devPct = (lastC - +av.value) / +av.value * 100;
+          var wNow = +bb.widthPct[bb.widthPct.length - 1];
+          var wPrev = bb.widthPct.slice(-21, -1).filter(isFinite);
+          var wAvg = wPrev.length ? wPrev.reduce(function(a, b){ return a + b; }, 0) / wPrev.length : NaN;
+          var bbState = isFinite(wAvg) ? (wNow < 0.85 * wAvg ? 'SQUEEZE' : (wNow > 1.3 * wAvg ? 'EXPANSION' : 'NORMAL')) : null;
+          anchorHtml = '<div class="panel" style="margin-top:10px"><h3>ANCHOR <span>day VWAP + Bollinger on the row\'s own tape - evidence, never a gate</span></h3>'
+            + '<div class="kv"><span class="k">VWAP (1 day, 4h)</span><span class="v">' + (+av.value).toFixed(2) + ' - price ' + (devPct >= 0 ? '+' : '') + devPct.toFixed(2) + '% from it</span></div>'
+            + '<div class="kv"><span class="k">Bollinger (20,2)</span><span class="v">' + (bbState || 'UNREAD') + (isFinite(wNow) ? ' (width ' + wNow.toFixed(2) + '% vs trailing ' + (isFinite(wAvg) ? wAvg.toFixed(2) : '--') + '%)' : '') + (bbState === 'SQUEEZE' ? ' - compression precedes expansion' : '') + '</span></div>'
+            + '</div>';
+        }
+      }
+    }catch(eAn){ }
+    html += anchorHtml;
     /* ---- SETUP CARD ---- */
     var aArr = (typeof W.atr === 'function' && Array.isArray(crown.rows4h)) ? W.atr(crown.rows4h, 14) : null;
     var aV = (aArr && aArr.length) ? +aArr[aArr.length - 1] : NaN;
@@ -2375,6 +2422,28 @@ function trendmxCrownPanelHTML(state){
       + '<div class="kv"><span class="k">Targets (TP)</span><span class="v">TP1 ' + (+plan.t1).toFixed(2) + ' | TP2 ' + (isFinite(+plan.t2) ? (+plan.t2).toFixed(2) : 'n/a') + ' | TP3 ' + tp3Txt + '</span></div>'
       + '<div class="kv"><span class="k">Automation Blueprint</span><span class="v"><pre style="margin:4px 0;white-space:pre-wrap;font-size:10px">' + escH(jsonTxt) + '</pre>' + (tier === 'clean' ? '' : '<div class="note warn" style="margin-top:4px">formation WATCH_ONLY - the bridge must drop this payload.</div>') + '</span></div>'
       + '</div>';
+    /* ---- the dual grid setups, OMNIBTC style ---- */
+    var swingS = { dir: dir, entry: +plan.entry, stop: +plan.stop, t1: +plan.t1, t2: isFinite(+plan.t2) ? +plan.t2 : null,
+      tier: tier === 'clean' ? 'CLEAN' : 'NEAR', gates: (crown.gate && isFinite(crown.gate.gatesPassed)) ? crown.gate.gatesPassed : null };
+    html += trendmxGridBlockHtml('SWING SETUP', '4h grid', swingS, dir);
+    var scalpS = null, altS = null;
+    if (Array.isArray(crown.rows1h) && crown.rows1h.length >= 60 && typeof W.atr === 'function'){
+      var a1arr = W.atr(crown.rows1h, 14);
+      var a1 = (a1arr && a1arr.length) ? +a1arr[a1arr.length - 1] : NaN;
+      var p1 = +crown.rows1h[crown.rows1h.length - 1].c;
+      if (isFinite(a1) && a1 > 0 && isFinite(p1)){
+        function tmxLadder(side){
+          return { dir: side, entry: p1, stop: side === 'long' ? p1 - 1.5 * a1 : p1 + 1.5 * a1,
+            t1: side === 'long' ? p1 + 3.5 * a1 : p1 - 3.5 * a1,
+            t2: side === 'long' ? p1 + 4.9 * a1 : p1 - 4.9 * a1,
+            tier: 'DRAFT', gates: null, source: '1h draft ladder ATR14' };
+        }
+        scalpS = tmxLadder(dir);
+        altS = tmxLadder(dir === 'long' ? 'short' : 'long');
+      }
+    }
+    html += trendmxGridBlockHtml('SCALP SETUP', '1h grid', scalpS, dir);
+    html += trendmxGridBlockHtml('SCALP SETUP - ALT SIDE', '1h grid', altS, dir);
     /* ---- MEASURED EDGE ---- */
     try{
       if (typeof W.hgProvenEdgeVerdict === 'function'){

@@ -51,7 +51,8 @@ function row(sym, score, exchange){
     comps: { d200: score > 0 ? 1 : -1, x: score > 0 ? 1 : -1, h4: score > 0 ? 1 : -1, cloud: score > 0 ? 1 : -1, adx: 0 },
     adx: 28, price: 100 + score, fundingPct: 0.001,
     gate: { label: 'trend', clean7: true, veto: false, gatesPassed: 7 },
-    rows4h: mkRows(60, score >= 0 ? 0.05 : -0.05) };
+    rows4h: mkRows(60, score >= 0 ? 0.05 : -0.05),
+    rows1h: mkRows(60, score >= 0 ? 0.05 : -0.05) };
 }
 
 console.log('== the crown renders the OMNIBTC stack on the matrix lead ==');
@@ -73,6 +74,10 @@ console.log('== the crown renders the OMNIBTC stack on the matrix lead ==');
   ok(html.indexOf('TP3') >= 0 && html.indexOf('EXTENSION - not graded') >= 0, 'TP3 is the honest ungraded extension');
   ok(html.indexOf('Automation Blueprint') >= 0 && html.indexOf('&quot;venue&quot;: &quot;delta&quot;') >= 0, 'the automation JSON prints for the row venue');
   ok(html.indexOf('MEASURED EDGE') >= 0 && html.indexOf('CHIP:proven') >= 0, 'the measured chip reads the TRENDMX pool');
+  ok(html.indexOf('ANCHOR') >= 0 && html.indexOf('VWAP') >= 0 && html.indexOf('Bollinger') >= 0, 'the VWAP + Bollinger anchor prints');
+  ok(html.indexOf('SWING SETUP') >= 0 && html.indexOf('4h grid') >= 0, 'the swing grid prints');
+  ok(html.indexOf('SCALP SETUP') >= 0 && html.indexOf('1h grid') >= 0 && html.indexOf('1h draft ladder ATR14') >= 0, 'the 1h scalp grid prints as the honest draft ladder');
+  ok(html.indexOf('SCALP SETUP - ALT SIDE') >= 0 && html.indexOf('AGAINST THE CALL') >= 0, 'the alt side prints stamped against the call');
 }
 
 console.log('== no minted plan, no crown ==');
@@ -88,6 +93,7 @@ console.log('== wiring pins ==');
   ok(src.indexOf('function trendmxCrownPanelHTML') >= 0, 'the crown renderer is defined');
   ok(src.indexOf('W.trendmxCrownPanelHTML = trendmxCrownPanelHTML') >= 0, 'the seam is exported');
   ok(src.indexOf('data-r="crown"') >= 0, 'the mount exists');
+  ok(src.indexOf('function trendmxGridBlockHtml') >= 0, 'the grid-block helper is defined');
   ok(src.indexOf('trendmxCrownPanelHTML(state)') >= 0, 'the panel paints from the desk state');
 }
 
