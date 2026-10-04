@@ -1055,20 +1055,28 @@ a global hard refresh.
     }catch(e){ return ''; }
   }
 
-  /* hg-v1056: THE SCALP TARGET — an intraday target on the winner leg's
-     own 15m grid: the real 15m scalp matrix when it AGREES with the call,
-     otherwise the honest draft ladder (1.5x stop / 3.5x TP ATR15) stamped
-     DRAFT. Never shown against the call. */
-  function hgObtcScalpPlanHtml(snap){
+  /* hg-v1060: THE TWO GRID SETUPS — a SWING SETUP on the 4h grid and a
+     SCALP SETUP on the 15m grid, each standing on its own: its own
+     direction, its own tier (7/7 CLEAN from the real matrix, n/7 NEAR,
+     or DRAFT from the ATR ladder), and an AGAINST THE CALL stamp when
+     the grid disagrees with the crowned call. */
+  function hgObtcGridSetupHtml(title, gridLbl, s, callDir){
     try{
-      var sp = snap && snap.scalpPlan;
-      if (!sp || !isFinite(+sp.entry) || !isFinite(+sp.stop) || !isFinite(+sp.t1)) return '';
-      var risk = Math.abs(+sp.entry - +sp.stop);
-      var rr = risk > 0 ? Math.abs(+sp.t1 - +sp.entry) / risk : NaN;
-      return '<div class="panel" style="margin-top:10px"><h3>SCALP TARGET <span>15m grid - ' + esc(sp.source) + (sp.draft ? ' - DRAFT' : '') + '</span></h3>'
-        + '<div class="kv"><span class="k">ENTRY</span><span class="v">' + (+sp.entry).toFixed(2) + '</span></div>'
-        + '<div class="kv"><span class="k">STOP</span><span class="v">' + (+sp.stop).toFixed(2) + '</span></div>'
-        + '<div class="kv"><span class="k">TP</span><span class="v">' + (+sp.t1).toFixed(2) + (isFinite(rr) ? ' (' + rr.toFixed(1) + 'R)' : '') + '</span></div>'
+      if (!s || !isFinite(+s.entry) || !isFinite(+s.stop) || !isFinite(+s.t1)) return '';
+      var dir = String(s.dir || '').toLowerCase();
+      var against = dir && callDir && dir !== callDir;
+      var risk = Math.abs(+s.entry - +s.stop);
+      var rr = risk > 0 ? Math.abs(+s.t1 - +s.entry) / risk : NaN;
+      var tierTxt = s.tier === 'CLEAN' ? '7/7 CLEAN'
+        : (s.tier === 'NEAR' ? (s.gates != null ? s.gates + '/7 NEAR' : '6/7 NEAR') : 'DRAFT');
+      var color = dir === 'long' ? '#26a69a' : (dir === 'short' ? '#ef5350' : '#94a3b8');
+      return '<div class="panel" style="margin-top:10px;border-top:3px solid ' + color + '"><h3>' + title
+        + ' <span>' + gridLbl + ' - ' + tierTxt + (s.source && s.tier !== 'CLEAN' ? ' - ' + esc(s.source) : '') + (against ? ' - AGAINST THE CALL' : '') + '</span></h3>'
+        + '<div class="kv"><span class="k">Bias</span><span class="v ' + (dir === 'long' ? 'pos' : 'neg') + '">' + dir.toUpperCase() + '</span></div>'
+        + '<div class="kv"><span class="k">ENTRY</span><span class="v">' + (+s.entry).toFixed(2) + '</span></div>'
+        + '<div class="kv"><span class="k">STOP</span><span class="v">' + (+s.stop).toFixed(2) + '</span></div>'
+        + '<div class="kv"><span class="k">T1</span><span class="v">' + (+s.t1).toFixed(2) + (isFinite(rr) ? ' (' + rr.toFixed(1) + 'R)' : '') + '</span></div>'
+        + (isFinite(+s.t2) ? '<div class="kv"><span class="k">T2</span><span class="v">' + (+s.t2).toFixed(2) + '</span></div>' : '')
         + '</div>';
     }catch(e){ return ''; }
   }
@@ -1610,7 +1618,8 @@ a global hard refresh.
       dhtml += hgObtcAutoRuleHtml(pick);
       dhtml += hgObtcPlanMathHtml(pick);
       dhtml += hgObtcSetupCardHtml(pick, snap);
-      dhtml += hgObtcScalpPlanHtml(snap);
+      dhtml += hgObtcGridSetupHtml('SWING SETUP', '4h grid', snap && snap.swingSetup, pick && pick.row && pick.row.dir);
+      dhtml += hgObtcGridSetupHtml('SCALP SETUP', '15m grid', snap && snap.scalpSetup, pick && pick.row && pick.row.dir);
       dhtml += hgObtcScoreboardHtml();
       /* hg-v1057 A8: SESSION ODDS — the desk's own settled record split by the
          fire bar's session, read off the forward ledger (the split the shared
@@ -1776,7 +1785,8 @@ a global hard refresh.
       }
       if (pick && pick.row){
         var pfReadsEntryRefined = false;   /* hg-v1051: refinement stamp for the record */
-        var scalpPlan = null;              /* hg-v1056: the 15m scalp target beside the call */
+        var scalpSetup = null;             /* hg-v1060: the distinct 15m scalp setup */
+        var swingSetup = null;             /* hg-v1060: the distinct 4h swing setup */
         /* hg-v1057: liquidation magnitudes captured off the omniInfo rows
            (declared here; filled by the loop below, copied into pfReads) */
         var liqClusterUsdCap = null, liqFuelUsdCap = null;
@@ -2127,30 +2137,70 @@ a global hard refresh.
         }catch(eAn){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eAn); }catch(eWan){} }
         hgObtcPerfectFormation(pick, pfReads);
         pick.row.perfectReads = pfReads;   /* the ledger reads the same bag the predicate consumed */
-        /* hg-v1056: the scalp target — the real 15m scalp matrix when it
-           AGREES with the call; otherwise the draft ATR15 ladder in the
-           call's own direction, stamped DRAFT. Never shown against. */
+        /* hg-v1060: THE TWO GRID SETUPS — each grid stands on its own:
+           the real matrix when it prints (CLEAN), the near matrix when it
+           nearly does (NEAR), else the honest ATR ladder (DRAFT). A grid
+           that disagrees with the call keeps its own direction and is
+           stamped AGAINST THE CALL in the panel. */
         try{
-          if (match && Array.isArray(match._rows15) && match._rows15.length >= 60 && pick.row.dir){
+          if (match && Array.isArray(match._rows15) && match._rows15.length >= 60){
+            var h1src = (match._rows1 && match._rows1.length) ? match._rows1 : match._rows15;
+            var minsF = (gfn('tickClock') ? W.tickClock() : 120);
             if (gfn('scalpTryClean')){
-              var minsF = (gfn('tickClock') ? W.tickClock() : 120);
-              var sc = W.scalpTryClean((match._rows1 && match._rows1.length ? match._rows1 : match._rows15), match._rows15, match._ticker || {}, minsF);
-              if (sc && isFinite(+sc.entry) && isFinite(+sc.stop) && isFinite(+sc.t1) && sc.dir === pick.row.dir){
-                scalpPlan = { entry: +sc.entry, stop: +sc.stop, t1: +sc.t1,
-                  t2: isFinite(+sc.t2) ? +sc.t2 : null, source: '15m scalp matrix', draft: false };
+              var sc = W.scalpTryClean(h1src, match._rows15, match._ticker || {}, minsF);
+              if (sc && isFinite(+sc.entry) && isFinite(+sc.stop) && isFinite(+sc.t1)){
+                scalpSetup = { dir: sc.dir, entry: +sc.entry, stop: +sc.stop, t1: +sc.t1,
+                  t2: isFinite(+sc.t2) ? +sc.t2 : null, tier: 'CLEAN', gates: 7, source: '15m scalp matrix' };
               }
             }
-            if (!scalpPlan){
+            if (!scalpSetup && gfn('scalpTryNear')){
+              var sn = W.scalpTryNear(h1src, match._rows15, match._ticker || {}, minsF);
+              if (sn && isFinite(+sn.entry) && isFinite(+sn.stop) && isFinite(+sn.t1)){
+                scalpSetup = { dir: sn.dir, entry: +sn.entry, stop: +sn.stop, t1: +sn.t1,
+                  t2: isFinite(+sn.t2) ? +sn.t2 : null, tier: 'NEAR',
+                  gates: isFinite(+sn.passed) ? +sn.passed : (isFinite(+sn.gatesPassed) ? +sn.gatesPassed : 6), source: '15m scalp near' };
+              }
+            }
+            if (!scalpSetup && pick.row.dir){
               var a15arr = (typeof W.atr === 'function') ? W.atr(match._rows15, 14) : null;
               var a15 = (a15arr && a15arr.length) ? +a15arr[a15arr.length - 1] : NaN;
               var p15 = +match._rows15[match._rows15.length - 1].c;
               if (isFinite(a15) && a15 > 0 && isFinite(p15)){
                 var d = pick.row.dir;
-                scalpPlan = { entry: p15, stop: d === 'long' ? p15 - 1.5 * a15 : p15 + 1.5 * a15,
+                scalpSetup = { dir: d, entry: p15, stop: d === 'long' ? p15 - 1.5 * a15 : p15 + 1.5 * a15,
                   t1: d === 'long' ? p15 + 3.5 * a15 : p15 - 3.5 * a15,
                   t2: d === 'long' ? p15 + 4.9 * a15 : p15 - 4.9 * a15,
-                  source: 'draft ladder ATR15', draft: true };
+                  tier: 'DRAFT', gates: null, source: 'draft ladder ATR15' };
               }
+            }
+          }
+          if (winnerRows && winnerRows.length >= 60){
+            var sw = null, swTier = null;
+            if (gfn('swingTryClean')){
+              sw = W.swingTryClean(winnerRows, match && match._ticker || {});
+              if (sw && isFinite(+sw.entry) && isFinite(+sw.stop) && isFinite(+sw.t1)) swTier = 'CLEAN';
+            }
+            if (!swTier && gfn('swingTryNear')){
+              var swn = W.swingTryNear(winnerRows, match && match._ticker || {});
+              if (swn && isFinite(+swn.entry) && isFinite(+swn.stop) && isFinite(+swn.t1)){ sw = swn; swTier = 'NEAR'; }
+            }
+            if (!swTier && pick.row.dir){
+              var a4arr = (typeof W.atr === 'function') ? W.atr(winnerRows, 14) : null;
+              var a4v = (a4arr && a4arr.length) ? +a4arr[a4arr.length - 1] : NaN;
+              var p4 = +winnerRows[winnerRows.length - 1].c;
+              if (isFinite(a4v) && a4v > 0 && isFinite(p4)){
+                var d4 = pick.row.dir;
+                sw = { entry: p4, stop: d4 === 'long' ? p4 - 1.5 * a4v : p4 + 1.5 * a4v,
+                  t1: d4 === 'long' ? p4 + 3.5 * a4v : p4 - 3.5 * a4v,
+                  t2: d4 === 'long' ? p4 + 4.9 * a4v : p4 - 4.9 * a4v, dir: d4 };
+                swTier = 'DRAFT';
+              }
+            }
+            if (sw && swTier){
+              swingSetup = { dir: sw.dir || pick.row.dir, entry: +sw.entry, stop: +sw.stop, t1: +sw.t1,
+                t2: isFinite(+sw.t2) ? +sw.t2 : null, tier: swTier,
+                gates: isFinite(+sw.passed) ? +sw.passed : (isFinite(+sw.gatesPassed) ? +sw.gatesPassed : null),
+                source: swTier === 'CLEAN' ? '4h swing matrix' : (swTier === 'NEAR' ? '4h swing near' : 'draft ladder ATR14') };
             }
           }
         }catch(eSc2){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eSc2); }catch(eWs2){} }
@@ -2277,7 +2327,8 @@ a global hard refresh.
         extraLedger: extraLedger,
         fundamental: fundamental,
         measured: measured,
-        scalpPlan: scalpPlan,
+        swingSetup: swingSetup,
+        scalpSetup: scalpSetup,
         extra: extra,             /* hg-v1057: the cycle-context panel reads the on-chain bag */
         at: Date.now()
       };
