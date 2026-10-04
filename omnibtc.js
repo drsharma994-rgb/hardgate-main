@@ -1712,6 +1712,7 @@ a global hard refresh.
       dhtml += hgObtcSetupCardHtml(pick, snap);
       dhtml += hgObtcGridSetupHtml('SWING SETUP', '4h grid', snap && snap.swingSetup, pick && pick.row && pick.row.dir);
       dhtml += hgObtcGridSetupHtml('SCALP SETUP', '15m grid', snap && snap.scalpSetup, pick && pick.row && pick.row.dir);
+      dhtml += hgObtcGridSetupHtml('SCALP SETUP - ALT SIDE', '15m grid', snap && snap.scalpSetupAlt, pick && pick.row && pick.row.dir);
       dhtml += hgObtcScoreboardHtml();
       /* hg-v1057 A8: SESSION ODDS — the desk's own settled record split by the
          fire bar's session, read off the forward ledger (the split the shared
@@ -1878,6 +1879,7 @@ a global hard refresh.
       if (pick && pick.row){
         var pfReadsEntryRefined = false;   /* hg-v1051: refinement stamp for the record */
         var scalpSetup = null;             /* hg-v1060: the distinct 15m scalp setup */
+        var scalpSetupAlt = null;          /* hg-v1063: the opposite-side scalp, same structure */
         var swingSetup = null;             /* hg-v1060: the distinct 4h swing setup */
         /* hg-v1057: liquidation magnitudes captured off the omniInfo rows
            (declared here; filled by the loop below, copied into pfReads) */
@@ -2246,33 +2248,40 @@ a global hard refresh.
           if (match && Array.isArray(match._rows15) && match._rows15.length >= 60){
             var h1src = (match._rows1 && match._rows1.length) ? match._rows1 : match._rows15;
             var minsF = (gfn('tickClock') ? W.tickClock() : 120);
+            var scClean = null;
             if (gfn('scalpTryClean')){
               var sc = W.scalpTryClean(h1src, match._rows15, match._ticker || {}, minsF);
-              if (sc && isFinite(+sc.entry) && isFinite(+sc.stop) && isFinite(+sc.t1)){
-                scalpSetup = { dir: sc.dir, entry: +sc.entry, stop: +sc.stop, t1: +sc.t1,
-                  t2: isFinite(+sc.t2) ? +sc.t2 : null, tier: 'CLEAN', gates: 7, source: '15m scalp matrix' };
-              }
+              if (sc && isFinite(+sc.entry) && isFinite(+sc.stop) && isFinite(+sc.t1)) scClean = { s: sc, tier: 'CLEAN', gates: 7 };
             }
-            if (!scalpSetup && gfn('scalpTryNear')){
+            if (!scClean && gfn('scalpTryNear')){
               var sn = W.scalpTryNear(h1src, match._rows15, match._ticker || {}, minsF);
-              if (sn && isFinite(+sn.entry) && isFinite(+sn.stop) && isFinite(+sn.t1)){
-                scalpSetup = { dir: sn.dir, entry: +sn.entry, stop: +sn.stop, t1: +sn.t1,
-                  t2: isFinite(+sn.t2) ? +sn.t2 : null, tier: 'NEAR',
-                  gates: isFinite(+sn.passed) ? +sn.passed : (isFinite(+sn.gatesPassed) ? +sn.gatesPassed : 6), source: '15m scalp near' };
-              }
+              if (sn && isFinite(+sn.entry) && isFinite(+sn.stop) && isFinite(+sn.t1)) scClean = { s: sn, tier: 'NEAR',
+                gates: isFinite(+sn.passed) ? +sn.passed : (isFinite(+sn.gatesPassed) ? +sn.gatesPassed : 6) };
             }
-            if (!scalpSetup && pick.row.dir){
-              var a15arr = (typeof W.atr === 'function') ? W.atr(match._rows15, 14) : null;
-              var a15 = (a15arr && a15arr.length) ? +a15arr[a15arr.length - 1] : NaN;
-              var p15 = +match._rows15[match._rows15.length - 1].c;
+            var a15arr = (typeof W.atr === 'function') ? W.atr(match._rows15, 14) : null;
+            var a15 = (a15arr && a15arr.length) ? +a15arr[a15arr.length - 1] : NaN;
+            var p15 = +match._rows15[match._rows15.length - 1].c;
+            /* hg-v1063: BOTH scalp sides, same structure — the side the
+               15m matrix backs gets its real levels; the other side gets
+               the honest DRAFT ladder and names that the matrix reads the
+               other way. */
+            function scalpFor(side){
+              if (scClean && scClean.s.dir === side){
+                return { dir: side, entry: +scClean.s.entry, stop: +scClean.s.stop, t1: +scClean.s.t1,
+                  t2: isFinite(+scClean.s.t2) ? +scClean.s.t2 : null, tier: scClean.tier, gates: scClean.gates,
+                  source: '15m scalp matrix' };
+              }
               if (isFinite(a15) && a15 > 0 && isFinite(p15)){
-                var d = pick.row.dir;
-                scalpSetup = { dir: d, entry: p15, stop: d === 'long' ? p15 - 1.5 * a15 : p15 + 1.5 * a15,
-                  t1: d === 'long' ? p15 + 3.5 * a15 : p15 - 3.5 * a15,
-                  t2: d === 'long' ? p15 + 4.9 * a15 : p15 - 4.9 * a15,
-                  tier: 'DRAFT', gates: null, source: 'draft ladder ATR15' };
+                var againstM = !!(scClean && scClean.s.dir && scClean.s.dir !== side);
+                return { dir: side, entry: p15, stop: side === 'long' ? p15 - 1.5 * a15 : p15 + 1.5 * a15,
+                  t1: side === 'long' ? p15 + 3.5 * a15 : p15 - 3.5 * a15,
+                  t2: side === 'long' ? p15 + 4.9 * a15 : p15 - 4.9 * a15,
+                  tier: 'DRAFT', gates: null, source: 'draft ladder ATR15' + (againstM ? ' (matrix reads ' + scClean.s.dir + ')' : '') };
               }
+              return null;
             }
+            scalpSetup = scalpFor(pick.row.dir);
+            scalpSetupAlt = scalpFor(pick.row.dir === 'long' ? 'short' : 'long');
           }
             if (scalpSetup){
               /* hg-v1061: the scalp grid's own witnesses — fire-bar RVOL
@@ -2289,6 +2298,7 @@ a global hard refresh.
               if (pfReads.sessName) wits.push(String(pfReads.sessName));
               if (isFinite(pfReads.venueFundingPct)) wits.push('funding ' + (+pfReads.venueFundingPct).toFixed(4) + '%');
               scalpSetup.wits = wits;
+              if (scalpSetupAlt) scalpSetupAlt.wits = wits.slice();
             }
           if (winnerRows && winnerRows.length >= 60){
             var sw = null, swTier = null;
@@ -2445,6 +2455,7 @@ a global hard refresh.
         measured: measured,
         swingSetup: swingSetup,
         scalpSetup: scalpSetup,
+        scalpSetupAlt: scalpSetupAlt,
         extra: extra,             /* hg-v1057: the cycle-context panel reads the on-chain bag */
         at: Date.now()
       };

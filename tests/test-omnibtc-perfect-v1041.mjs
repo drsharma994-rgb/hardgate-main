@@ -120,6 +120,8 @@ console.log('== all seven legs readable-and-WITH crowns PERFECT⁺ and prints th
   ok(d.indexOf('SWING SETUP') >= 0 && d.indexOf('4h grid') >= 0, 'the distinct swing setup prints');
   ok(/4h grid - 7\/7 CLEAN/.test(d), 'the swing grid reads CLEAN off the real matrix');
   ok(d.indexOf('SCALP SETUP') >= 0 && d.indexOf('15m grid') >= 0, 'the distinct scalp setup prints');
+  ok(d.indexOf('SCALP SETUP - ALT SIDE') >= 0, 'the opposite-side scalp prints with the same structure');
+  ok(d.indexOf('AGAINST THE CALL') >= 0, 'the alt side is stamped against the long call');
   ok(d.indexOf('draft ladder ATR15') >= 0 && d.indexOf('DRAFT') >= 0, 'without a 15m matrix the ladder is honestly stamped DRAFT');
   ok(/ENTRY<\/span><span class="v">[0-9.]+/.test(d), 'each grid block carries an entry');
   ok(d.indexOf('Witnesses') >= 0 && d.indexOf('RVOL15') >= 0, 'the scalp grid prints its own witnesses (RVOL15, session, funding)');
@@ -284,6 +286,7 @@ console.log('== wiring pins — the shipped files actually read and print it all
   ok(src.indexOf('pfReads.atrVal') >= 0, 'the ATR value rides the bag for the zone and TP3');
   ok(src.indexOf('function hgObtcTheCallHtml') >= 0 && src.indexOf('function hgObtcGridSetupHtml') >= 0, 'the call + grid-setup helpers are defined');
   ok(src.indexOf('swingSetup: swingSetup') >= 0 && src.indexOf('scalpSetup: scalpSetup') >= 0, 'both grid setups ride the snap');
+  ok(src.indexOf('scalpSetupAlt') >= 0 && src.indexOf('SCALP SETUP - ALT SIDE') >= 0, 'the alt-side scalp is wired end to end');
   ok(src.indexOf('AGAINST THE CALL') >= 0, 'a disagreeing grid is stamped, never hidden');
   ok(src.indexOf('Options vol (Deribit)') >= 0 && src.indexOf('dvolState') >= 0, 'the Deribit DVOL read is wired into the witnesses');
   ok(src.indexOf('scalpSetup.wits') >= 0, 'the scalp grid witnesses ride the setup');
