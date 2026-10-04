@@ -122,6 +122,7 @@ console.log('== all seven legs readable-and-WITH crowns PERFECT⁺ and prints th
   ok(d.indexOf('SCALP SETUP') >= 0 && d.indexOf('15m grid') >= 0, 'the distinct scalp setup prints');
   ok(d.indexOf('draft ladder ATR15') >= 0 && d.indexOf('DRAFT') >= 0, 'without a 15m matrix the ladder is honestly stamped DRAFT');
   ok(/ENTRY<\/span><span class="v">[0-9.]+/.test(d), 'each grid block carries an entry');
+  ok(d.indexOf('Witnesses') >= 0 && d.indexOf('RVOL15') >= 0, 'the scalp grid prints its own witnesses (RVOL15, session, funding)');
   ok(d.indexOf('CROWN VERDICT') >= 0, 'the crown verdict line prints on top');
   ok(d.indexOf('TICKET') >= 0 && d.indexOf('PERFECT+') >= 0 && d.indexOf('EDGE ACCUMULATING') >= 0, 'the verdict names the ticket, the PERFECT+ badge and the measured state');
   /* the entry is refinement-moved in this scenario, so the distance is
@@ -281,6 +282,8 @@ console.log('== wiring pins — the shipped files actually read and print it all
   ok(src.indexOf('function hgObtcTheCallHtml') >= 0 && src.indexOf('function hgObtcGridSetupHtml') >= 0, 'the call + grid-setup helpers are defined');
   ok(src.indexOf('swingSetup: swingSetup') >= 0 && src.indexOf('scalpSetup: scalpSetup') >= 0, 'both grid setups ride the snap');
   ok(src.indexOf('AGAINST THE CALL') >= 0, 'a disagreeing grid is stamped, never hidden');
+  ok(src.indexOf('Options vol (Deribit)') >= 0 && src.indexOf('dvolState') >= 0, 'the Deribit DVOL read is wired into the witnesses');
+  ok(src.indexOf('scalpSetup.wits') >= 0, 'the scalp grid witnesses ride the setup');
   const esrc = read('omnibtc-engines.js');
   ok(esrc.indexOf("binanceFunding('BTCUSDT')") >= 0, 'the gather fetches Binance BTCUSDT funding for the spread');
   const tsrc = read('trendtable.js');

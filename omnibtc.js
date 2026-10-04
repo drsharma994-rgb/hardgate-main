@@ -1077,6 +1077,7 @@ a global hard refresh.
         + '<div class="kv"><span class="k">STOP</span><span class="v">' + (+s.stop).toFixed(2) + '</span></div>'
         + '<div class="kv"><span class="k">T1</span><span class="v">' + (+s.t1).toFixed(2) + (isFinite(rr) ? ' (' + rr.toFixed(1) + 'R)' : '') + '</span></div>'
         + (isFinite(+s.t2) ? '<div class="kv"><span class="k">T2</span><span class="v">' + (+s.t2).toFixed(2) + '</span></div>' : '')
+        + ((s.wits && s.wits.length) ? '<div class="kv"><span class="k">Witnesses</span><span class="v">' + esc(s.wits.join(' | ')) + '</span></div>' : '')
         + '</div>';
     }catch(e){ return ''; }
   }
@@ -1119,6 +1120,13 @@ a global hard refresh.
       }
       if (pick.row.omniVolOverBudget === true){
         rows.push('<div class="kv"><span class="k">Volume budget</span><span class="v bad">volume targeting over budget - the expected move may be capped</span></div>');
+      }
+      if (pick.row.dvolState){
+        var dv = pick.row.dvolState;
+        var dvTxt = 'DVOL ' + (+dv.dvol).toFixed(1)
+          + (isFinite(+dv.dvolPrev) && +dv.dvolPrev > 0 ? ((+dv.dvol >= +dv.dvolPrev ? ' rising from ' : ' falling from ') + (+dv.dvolPrev).toFixed(1)) : '')
+          + (dv.regime ? ' - regime ' + esc(String(dv.regime)) : '');
+        rows.push('<div class="kv"><span class="k">Options vol (Deribit)</span><span class="v">' + dvTxt + '</span></div>');
       }
       if (reads.fillPct != null){
         rows.push('<div class="kv"><span class="k">Fill odds</span><span class="v">' + (+reads.fillPct).toFixed(0) + '% of past 12-bar windows touched this entry zone on this tape</span></div>');
@@ -1861,6 +1869,14 @@ a global hard refresh.
            taker flow, the event-calendar blackout, and perp funding. A leg
            the desk did not read stays null (neither confirms nor denies). */
         var pfReads = {};
+        /* hg-v1061: the Deribit options-vol read (already gathered into
+           extra.dvol) rides the pick so the witnesses panel can show it. */
+        try{
+          if (extra && extra.dvol && isFinite(+extra.dvol.dvol)){
+            pick.row.dvolState = { dvol: +extra.dvol.dvol, dvolPrev: extra.dvol.dvolPrev,
+              regime: extra.dvol.regime, at: extra.dvol.at };
+          }
+        }catch(eDv){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eDv); }catch(eWd){} }
         /* hg-v1057: ACCURACY-PACK FETCHES — OI change, funding history, spot
            taker flow and the perp basis, for the leverage-cycle, spot-vs-perp
            and basis-momentum legs. Each is one soft cached call; a failure is
@@ -2174,6 +2190,22 @@ a global hard refresh.
               }
             }
           }
+            if (scalpSetup){
+              /* hg-v1061: the scalp grid's own witnesses — fire-bar RVOL
+                 on the 15m tape, session, funding, and the tier's source. */
+              var wits = [];
+              var last15 = match._rows15[match._rows15.length - 1];
+              if (last15 && isFinite(+last15.v) && +last15.v > 0){
+                var vs = 0, vn = 0;
+                for (var vi = match._rows15.length - 21; vi < match._rows15.length - 1; vi++){
+                  if (vi >= 0 && isFinite(+match._rows15[vi].v)){ vs += +match._rows15[vi].v; vn++; }
+                }
+                if (vn > 0 && vs > 0) wits.push('RVOL15 ' + (+last15.v / (vs / vn)).toFixed(2) + 'x');
+              }
+              if (pfReads.sessName) wits.push(String(pfReads.sessName));
+              if (isFinite(pfReads.venueFundingPct)) wits.push('funding ' + (+pfReads.venueFundingPct).toFixed(4) + '%');
+              scalpSetup.wits = wits;
+            }
           if (winnerRows && winnerRows.length >= 60){
             var sw = null, swTier = null;
             if (gfn('swingTryClean')){
