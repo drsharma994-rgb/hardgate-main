@@ -125,11 +125,12 @@ function trendmxPerfectSetups(rows){
 }
 
 
-/* hg-v1078: FIVE-PILLAR STACK — technical, fundamental, sentiment, macro, micro.
+/* hg-v1081: FIVE-PILLAR STACK — technical, fundamental, sentiment, macro, micro.
    A FULL STACK row is one where every pillar is readable AND with the row's
-   own majority. An unread pillar does not confirm. An against pillar vetoes
-   the stack. This does not change the composite, the PERFECT predicate, or
-   any tier. It is a stricter desk, not a profit claim. */
+   own majority. WITH is a positive read. An unread ATR, a mixed tape, and
+   BTC funding that is merely not crowded do not count as WITH. An against
+   pillar vetoes the stack. The composite, the PERFECT predicate, and the
+   tiers are unchanged. A stricter desk, not a profit claim. */
 var __tmMacro = null;
 function trendmxMacroSet(snap){ __tmMacro = snap || null; return __tmMacro; }
 function trendmxFivePillars(r){
@@ -157,7 +158,7 @@ function trendmxFivePillars(r){
         if ((dir === 'long' && st === 'down') || (dir === 'short' && st === 'up')) against = true;
       }
     }catch(eSt){}
-    if (!against && mom === 'with' && vol === 'with' && Math.abs(+r.score || 0) >= 4 && (!atr || atr.regime === 'HEALTHY')) withIt = true;
+    if (!against && mom === 'with' && vol === 'with' && Math.abs(+r.score || 0) >= 4 && atr && atr.regime === 'HEALTHY' && chop && chop.state === 'trend') withIt = true;
     pillars.push({ name: 'TECHNICAL', state: against ? 'against' : (withIt ? 'with' : 'flat'), detail: notes.join(' · ') });
   }
   var fund = dir ? trendmxFundState(r, dir) : null;
@@ -186,7 +187,8 @@ function trendmxFivePillars(r){
       try{
         var bm = W.hgFundingAgainstMark(+macro.btcFunding, dir);
         macroBits.push('BTC funding ' + (+macro.btcFunding).toFixed(4) + '%');
-        if (bm && bm.against === true) mAgainst = true; else mWith = true;
+        if (bm && bm.against === true){ mAgainst = true; macroBits[macroBits.length - 1] += ' crowded'; }
+        else macroBits[macroBits.length - 1] += ' not crowded';
       }catch(eBm){}
     }
     if (macro.btcStructure){
