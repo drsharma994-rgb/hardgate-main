@@ -1082,6 +1082,90 @@ a global hard refresh.
     }catch(e){ return ''; }
   }
 
+  /* hg-v1062: THE COMPLETE ANALYSIS — five dimensions in one panel,
+     every line a measured read the desk already holds, each dimension
+     carrying its own verdict: ALIGNED / CAUTION / AGAINST / UNREAD.
+     Nothing is invented; a dimension with no readable data says UNREAD.
+     The setup blocks follow AFTER the analysis. */
+  function hgObtcCompleteAnalysisHtml(pick, snap){
+    try{
+      if (!pick || !pick.row) return '';
+      var r = pick.row, reads = r.perfectReads || {}, extra = (snap && snap.extra) || {};
+      var dir = String(r.dir || '').toLowerCase();
+      function chip(v, cls){ return '<span class="gpip' + (cls || '') + '">' + esc(v) + '</span>'; }
+      function dim(title, verdict, cls, lines){
+        if (!lines.length) return '';
+        return '<div style="margin:8px 0 2px"><b>' + title + '</b> ' + chip(verdict, cls)
+          + '<div style="font-size:11px;opacity:.9;margin-top:2px">' + lines.join(' | ') + '</div></div>';
+      }
+      var html = '<div class="panel" style="margin-top:10px"><h3>COMPLETE ANALYSIS <span>fundamental - technical - sentimental - macro - micro, every line measured</span></h3>';
+      /* ---- FUNDAMENTAL: network flow, supply, term structure ---- */
+      var fLines = [], fVerd = 'UNREAD', fCls = '';
+      if (isFinite(reads.netflowZ)){ fLines.push('netflow Z ' + (+reads.netflowZ).toFixed(2)); fVerd = reads.netflowZ > 0 ? 'ALIGNED' : 'CAUTION'; }
+      if (reads.onchainVeto === true){ fLines.push('on-chain veto'); fVerd = 'AGAINST'; fCls = ' bad'; }
+      if (reads.netflowNote) fLines.push(esc(String(reads.netflowNote)));
+      if (extra && extra.carry && isFinite(+extra.carry)) fLines.push('carry ' + (+extra.carry).toFixed(4) + '%');
+      if (extra && extra.term && isFinite(+extra.term)) fLines.push('term basis ' + (+extra.term).toFixed(4) + '%');
+      html += dim('FUNDAMENTAL', fVerd, fCls, fLines);
+      /* ---- TECHNICAL: structure, momentum, regime ---- */
+      var tLines = [], tVerd = 'UNREAD', tCls = '';
+      if (reads.tfAgree){ tLines.push(String(reads.tfAgree));
+        var withN = (String(reads.tfAgree).match(/WITH/g) || []).length;
+        var againstN = (String(reads.tfAgree).match(/AGAINST/g) || []).length;
+        tVerd = againstN === 0 && withN > 0 ? 'ALIGNED' : (againstN > 0 ? 'CAUTION' : 'UNREAD');
+        if (againstN > 0) tCls = ' bad'; }
+      if (reads.structureTrend) tLines.push('structure EMA50/200 ' + String(reads.structureTrend).toUpperCase());
+      if (reads.atrRegime) tLines.push('ATR regime ' + reads.atrRegime + ' (pct ' + (+reads.atrPct || 0).toFixed(0) + ')');
+      if (reads.trendQuality) tLines.push('trend quality ' + reads.trendQuality + (isFinite(reads.chopVal) ? ' chop ' + (+reads.chopVal).toFixed(0) : '') + (isFinite(reads.erVal) ? ' ER ' + (+reads.erVal).toFixed(2) : ''));
+      if (reads.bbSqueeze) tLines.push('Bollinger ' + reads.bbSqueeze);
+      if (isFinite(reads.vwapDevPct)) tLines.push('VWAP dev ' + (reads.vwapDevPct >= 0 ? '+' : '') + (+reads.vwapDevPct).toFixed(2) + '%');
+      if (isFinite(+r.rsi)) tLines.push('RSI ' + (+r.rsi).toFixed(1));
+      html += dim('TECHNICAL', tVerd, tCls, tLines);
+      /* ---- SENTIMENTAL: flow, positioning, fear/greed, vol ---- */
+      var sLines = [], sVerd = 'UNREAD', sCls = '';
+      if (reads.takerFlowVerdict){
+        var flowTxt = 'taker flow ' + reads.takerFlowVerdict;
+        if (reads.flowAbsorbed) flowTxt += ' (absorbed)';
+        sLines.push(flowTxt);
+        if (reads.takerFlowVerdict === 'with') sVerd = 'ALIGNED';
+        else if (reads.takerFlowVerdict === 'against-absorbed'){ sVerd = 'CAUTION'; sCls = ' bad'; }
+        else { sVerd = 'AGAINST'; sCls = ' bad'; }
+      }
+      if (isFinite(+extra.fng)) sLines.push('F+G ' + (+extra.fng).toFixed(0));
+      if (extra && extra.options && isFinite(+extra.options.rr25d)) sLines.push('25d RR ' + (+extra.options.rr25d).toFixed(1));
+      if (reads.fundingAgainst === true){ sLines.push('funding crowded'); if (sVerd === 'ALIGNED' || sVerd === 'UNREAD'){ sVerd = 'CAUTION'; sCls = ' bad'; } }
+      if (r.dvolState) sLines.push('DVOL ' + (+r.dvolState.dvol).toFixed(1));
+      if (isFinite(reads.cvdContext)) { } /* context string below */
+      if (reads.cvdContext) sLines.push('CVD ' + reads.cvdContext);
+      html += dim('SENTIMENTAL', sVerd, sCls, sLines);
+      /* ---- MACRO: dominance, news, leverage cycle, basis ---- */
+      var mLines = [], mVerd = 'UNREAD', mCls = '';
+      if (isFinite(+extra.dom)) mLines.push('BTC.D ' + (+extra.dom).toFixed(1) + '%');
+      if (reads.newsRisk) mLines.push('news ' + reads.newsRisk);
+      if (reads.leverageState) mLines.push('leverage cycle ' + reads.leverageState + (isFinite(reads.oiChgPct) ? ' OI ' + (reads.oiChgPct >= 0 ? '+' : '') + (+reads.oiChgPct).toFixed(1) + '%' : ''));
+      if (reads.basisMom) mLines.push('basis momentum ' + reads.basisMom);
+      if (reads.leverageState === 'EXTENDED'){ mVerd = 'CAUTION'; mCls = ' bad'; }
+      else if (reads.leverageState === 'RESET' || reads.leverageState === 'FLAT') mVerd = 'ALIGNED';
+      else if (mLines.length) mVerd = 'NEUTRAL';
+      html += dim('MACRO', mVerd, mCls, mLines);
+      /* ---- MICRO: execution-level reads ---- */
+      var uLines = [], uVerd = 'UNREAD', uCls = '';
+      if (r.omniLiqStopCluster === true){ uLines.push('stop inside a liq cluster - SL-hunt risk'); uVerd = 'AGAINST'; uCls = ' bad'; }
+      if (r.omniLiqFuel === true){ uLines.push('liquidations fuel toward the trade'); }
+      if (isFinite(reads.liqClusterUsd)) uLines.push('liq cluster ' + (+reads.liqClusterUsd).toFixed(0) + ' USD');
+      if (r.omniVolOverBudget === true){ uLines.push('volume over budget'); if (uVerd !== 'AGAINST'){ uVerd = 'CAUTION'; uCls = ' bad'; } }
+      if (isFinite(reads.fillPct)) uLines.push('fill odds ' + (+reads.fillPct).toFixed(0) + '%');
+      if (reads.sweepCount != null) uLines.push('stop sensitivity ' + reads.sweepCount + '/' + reads.sweepLook);
+      if (isFinite(reads.markDistPct)) uLines.push('mark dist ' + (reads.markDistPct >= 0 ? '+' : '') + (+reads.markDistPct).toFixed(1) + '%');
+      if (isFinite(reads.costR)) uLines.push('cost ' + (+reads.costR).toFixed(2) + 'R');
+      if (reads.venuesAgree != null) uLines.push('venues ' + reads.venuesAgree + '/' + (reads.venuesScanned || 1));
+      if (reads.sessName) uLines.push(String(reads.sessName));
+      if (uVerd === 'UNREAD' && uLines.length) uVerd = 'NEUTRAL';
+      html += dim('MICRO', uVerd, uCls, uLines);
+      return html + '</div>';
+    }catch(e){ return ''; }
+  }
+
   /* the TRADE COST + TIMING WITNESSES — round-trip cost in R, session
      participation, day-range exhaustion and the cross-venue funding
      premium. All evidence, never a gate: they tell the operator what the
@@ -1593,7 +1677,7 @@ a global hard refresh.
       }
     }
     if (ui.detail){
-      var dhtml = hgObtcTheCallHtml(pick, snap) + hgObtcVerdictHtml(pick, snap) + (pick ? detailHtml(pick, snap && snap.omniInfo) : waitHtml());
+      var dhtml = hgObtcTheCallHtml(pick, snap) + hgObtcVerdictHtml(pick, snap) + hgObtcCompleteAnalysisHtml(pick, snap) + (pick ? detailHtml(pick, snap && snap.omniInfo) : waitHtml());
       if (snap && snap.fundamental && gfn('hgObtcFundamentalPanelHtml')){
         try{ dhtml += W.hgObtcFundamentalPanelHtml(snap.fundamental) || ''; }catch(eFu){}
       }
