@@ -2079,6 +2079,9 @@ function trendmxPaintDeskSections(refs, state){
   if (refs.trendform){
     refs.trendform.innerHTML = trendmxTrendFormHTML(rows);
   }
+  if (refs.crown){
+    refs.crown.innerHTML = trendmxCrownPanelHTML(state);
+  }
   if (refs.gateclean || refs.conviction){
     var tmClasses = trendmxLimitClasses(rows);
     /* hg-v1019: each desk gets its OWN reason split, so its verdict names
@@ -2244,6 +2247,129 @@ function trendmxTrendFormHTML(rows){
       + col('TRENDING', '#26a69a', byStrength(trending), 'no trending CoinDCX contracts - composite below +/-2')
       + col('FORMING', '#f59e0b', byStrength(forming), 'no forming CoinDCX contracts')
       + '</div>';
+  }catch(e){ return ''; }
+}
+
+/* hg-v1066: THE CROWN — the OMNIBTC treatment on the TREND MATRIX: a
+   single bold call (the strongest majority row with a minted plan), a
+   verdict line, the five-dimension complete analysis from the row's own
+   reads plus the world tilt, the setup card with the automation JSON,
+   and the measured-edge chip for the TRENDMX pool. Evidence, never a
+   gate. */
+function trendmxCrownPanelHTML(state){
+  try{
+    state = state || {};
+    var rows = Array.isArray(state.rows) ? state.rows.slice() : [];
+    if (!rows.length) return '';
+    rows.sort(function(a, b){ return Math.abs(+b.score || 0) - Math.abs(+a.score || 0); });
+    var crown = null, plan = null, dir = null, i, r, d;
+    for (i = 0; i < rows.length; i++){
+      r = rows[i];
+      d = tmDirOf(r);
+      if (!d) continue;
+      var p = trendmxPlan(Object.assign({}, r, { dir: d }));
+      if (p){ crown = r; plan = p; dir = d; break; }
+    }
+    if (!crown || !plan) return '';
+    var tier = trendmxRowTier(crown, plan);
+    var tierTxt = tier === 'clean' ? 'TICKET' : (tier === 'near' ? 'WATCH' : 'LEADER');
+    var conv = trendmxConviction(crown);
+    var color = dir === 'long' ? '#26a69a' : (dir === 'short' ? '#ef5350' : '#94a3b8');
+    var html = '';
+    /* ---- THE CALL ---- */
+    html += '<div class="panel" style="margin-top:10px;border-top:3px solid ' + color + '"><h3>THE CALL</h3>'
+      + '<div style="font-size:16px;font-weight:700">' + dir.toUpperCase() + ' - ' + tierTxt
+      + ' - composite ' + (crown.score > 0 ? '+' : '') + crown.score + '/5'
+      + (conv ? ' - ' + conv.label : '') + '</div></div>';
+    /* ---- VERDICT ---- */
+    var gatesTxt = (crown.gate && isFinite(crown.gate.gatesPassed)) ? crown.gate.gatesPassed + '/7' : '?/7';
+    html += '<div class="panel" style="margin-top:10px"><h3>CROWN VERDICT <span>the desk\'s complete verdict on the leading row</span></h3>'
+      + '<div style="font-size:12px;letter-spacing:.03em">TREND MATRIX | ' + tierTxt
+      + (crown.perfect ? ' | PERFECT' : '') + ' | gates ' + gatesTxt + '</div></div>';
+    /* ---- COMPLETE ANALYSIS ---- */
+    var comps = crown.comps || {};
+    function chip(v, cls){ return '<span class="gpip' + (cls || '') + '">' + escH(v) + '</span>'; }
+    function dim(title, verdict, cls, lines){
+      if (!lines.length) return '';
+      return '<div style="margin:8px 0 2px"><b>' + title + '</b> ' + chip(verdict, cls)
+        + '<div style="font-size:11px;opacity:.9;margin-top:2px">' + lines.join(' | ') + '</div></div>';
+    }
+    var tech = [];
+    if (comps.d200 !== undefined && comps.d200 !== null) tech.push('1D vs EMA200 ' + (comps.d200 > 0 ? 'BULL' : 'BEAR'));
+    if (comps.x !== undefined && comps.x !== null) tech.push('EMA50/200 ' + (comps.x > 0 ? 'GOLDEN' : 'DEATH'));
+    if (comps.h4 !== undefined && comps.h4 !== null) tech.push('4H cascade ' + (comps.h4 > 0 ? 'bull' : 'bear'));
+    if (comps.cloud !== undefined && comps.cloud !== null) tech.push('cloud ' + (comps.cloud > 0 ? 'above' : 'below'));
+    if (isFinite(+crown.adx)) tech.push('ADX ' + (+crown.adx).toFixed(1));
+    html += '<div class="panel" style="margin-top:10px"><h3>COMPLETE ANALYSIS <span>technical - sentimental - fundamental - macro - micro</span></h3>';
+    html += dim('TECHNICAL', Math.abs(+crown.score || 0) >= 2 ? 'ALIGNED' : 'NEUTRAL', '', tech);
+    var sent = [];
+    if (isFinite(+crown.fundingPct)) sent.push('funding ' + (+crown.fundingPct).toFixed(4) + '%');
+    if (crown.flow) sent.push('flow ' + escH(String(crown.flow)));
+    html += dim('SENTIMENTAL', sent.length ? 'NEUTRAL' : 'UNREAD', '', sent);
+    var fund = [];
+    if (crown.fundState) fund.push(escH(String(crown.fundState)));
+    html += dim('FUNDAMENTAL', fund.length ? 'NEUTRAL' : 'UNREAD', '', fund);
+    var mac = [], mTilt = 'UNREAD', mCls = '';
+    try{
+      var wm = (typeof W.getWorldMonitorDeskCached === 'function') ? W.getWorldMonitorDeskCached() : null;
+      var rg = (typeof W.regimeState === 'function') ? W.regimeState() : null;
+      if (wm && wm.macro && wm.macro.verdict) mac.push('WM ' + String(wm.macro.verdict).toUpperCase());
+      if (wm && wm.stress && wm.stress.label) mac.push('stress ' + String(wm.stress.label).toUpperCase());
+      if (rg && rg.playbook && rg.playbook.bias) mac.push('bias ' + String(rg.playbook.bias).toUpperCase());
+      if (rg && rg.dxy && (rg.dxy.trend20 || rg.dxy.trend)) mac.push('DXY ' + String(rg.dxy.trend20 || rg.dxy.trend).toUpperCase());
+      if (mac.length){
+        var off = (wm && wm.macro && (wm.macro.verdict === 'SELL' || wm.macro.verdict === 'AVOID'))
+          || (rg && rg.playbook && rg.playbook.bias === 'STAND-ASIDE')
+          || (wm && wm.stress && /HIGH|ELEVATED/i.test(String(wm.stress.label)));
+        mTilt = off ? 'RISK-OFF' : ((wm && wm.macro && wm.macro.verdict === 'BUY') ? 'RISK-ON' : 'NEUTRAL');
+        if (mTilt === 'RISK-OFF') mCls = ' bad';
+      }
+    }catch(eWm){ }
+    mac.push('world tilt ' + mTilt);
+    html += dim('MACRO', mTilt, mCls, mac);
+    var mic = [];
+    var risk = Math.abs(+plan.entry - +plan.stop);
+    if (risk > 0 && isFinite(+plan.t1)) mic.push('R:R ' + (Math.abs(+plan.t1 - +plan.entry) / risk).toFixed(1) + 'R');
+    if (typeof hgCryptoCostR === 'function' && isFinite(+plan.entry) && isFinite(+plan.stop)){
+      var costR = hgCryptoCostR(+plan.entry, +plan.stop, 'taker', 'taker');
+      if (isFinite(costR)) mic.push('cost ' + costR.toFixed(2) + 'R' + (costR > 0.25 ? ' - COST-HEAVY' : ''));
+    }
+    if (isFinite(+crown.price) && isFinite(+plan.entry)) mic.push('mark dist ' + (((+crown.price - +plan.entry) / +plan.entry) * 100).toFixed(1) + '%');
+    html += dim('MICRO', mic.length ? 'NEUTRAL' : 'UNREAD', '', mic);
+    html += '</div>';
+    /* ---- SETUP CARD ---- */
+    var aArr = (typeof W.atr === 'function' && Array.isArray(crown.rows4h)) ? W.atr(crown.rows4h, 14) : null;
+    var aV = (aArr && aArr.length) ? +aArr[aArr.length - 1] : NaN;
+    var thesis = 'structure: composite ' + (crown.score > 0 ? '+' : '') + crown.score + '/5 across the 1D/4H legs'
+      + (crown.freshCross ? ' with a fresh ' + crown.freshCross + ' cross' : '')
+      + '; context: ' + (isFinite(+crown.adx) ? 'ADX ' + (+crown.adx).toFixed(1) : 'ADX UNREAD')
+      + (isFinite(+crown.fundingPct) ? ' and funding ' + (+crown.fundingPct).toFixed(4) + '%' : '') + '.';
+    var tp3Txt = isFinite(aV) ? ((dir === 'long' ? +plan.entry + 6.5 * aV : +plan.entry - 6.5 * aV).toFixed(2) + ' (EXTENSION - not graded)') : 'n/a';
+    var venue = tmRowVenue(crown);
+    var payload = { v: 1, id: 'TMX-' + String(crown.sym), venue: venue, symbol: crown.sym,
+      side: dir, entry: +plan.entry, stop: +plan.stop, t1: +plan.t1, t2: isFinite(+plan.t2) ? +plan.t2 : null,
+      gates: gatesTxt, formation: tier === 'clean' ? 'CLEAN' : 'WATCH_ONLY', measured: 'UNREAD',
+      exitPolicy: 'scale50_t1_be_trail', ts: Math.floor(Date.now() / 1000) };
+    var jsonTxt = JSON.stringify(payload, null, 2);
+    html += '<div class="panel" style="margin-top:10px"><h3>SETUP CARD <span>the OMNIBTC template on the matrix crown</span></h3>'
+      + '<div class="kv"><span class="k">Market Thesis</span><span class="v">' + escH(thesis) + '</span></div>'
+      + '<div class="kv"><span class="k">Bias</span><span class="v ' + (dir === 'long' ? 'pos' : 'neg') + '">' + dir.toUpperCase() + '</span></div>'
+      + '<div class="kv"><span class="k">Entry Zone</span><span class="v">[' + (+plan.entry).toFixed(2) + ']' + (isFinite(aV) ? ' +/- ' + (0.25 * aV).toFixed(2) : '') + '</span></div>'
+      + '<div class="kv"><span class="k">Invalidation (SL)</span><span class="v">' + (+plan.stop).toFixed(2) + '</span></div>'
+      + '<div class="kv"><span class="k">Targets (TP)</span><span class="v">TP1 ' + (+plan.t1).toFixed(2) + ' | TP2 ' + (isFinite(+plan.t2) ? (+plan.t2).toFixed(2) : 'n/a') + ' | TP3 ' + tp3Txt + '</span></div>'
+      + '<div class="kv"><span class="k">Automation Blueprint</span><span class="v"><pre style="margin:4px 0;white-space:pre-wrap;font-size:10px">' + escH(jsonTxt) + '</pre>' + (tier === 'clean' ? '' : '<div class="note warn" style="margin-top:4px">formation WATCH_ONLY - the bridge must drop this payload.</div>') + '</span></div>'
+      + '</div>';
+    /* ---- MEASURED EDGE ---- */
+    try{
+      if (typeof W.hgProvenEdgeVerdict === 'function'){
+        var v = W.hgProvenEdgeVerdict('trendmx', 'TRENDMX', { pool: 'TRENDMX', mechanic: 'TRENDMX' });
+        if (v && typeof W.hgProvenEdgeChipHtml === 'function'){
+          html += '<div class="panel" style="margin-top:10px"><h3>MEASURED EDGE <span>the TRENDMX pool\'s settled record</span></h3>'
+            + W.hgProvenEdgeChipHtml(v) + '</div>';
+        }
+      }
+    }catch(eMe){ }
+    return html;
   }catch(e){ return ''; }
 }
 
@@ -2421,6 +2547,8 @@ function mountTrendMatrix(el){
       '<div data-r="fwd"></div>' +         /* hg-v1039: the measured book — does the crown pay */
       '<h3 style="margin:16px 0 8px;font-size:11px;letter-spacing:.14em;color:#475569">COINDCX - ALL FUTURES - TRENDING / FORMING</h3>' +   /* hg-v1048 */
       '<div data-r="trendform"></div>' +
+      '<h3 style="margin:16px 0 8px;font-size:11px;letter-spacing:.14em;color:#475569">THE CROWN</h3>' +   /* hg-v1066 */
+      '<div data-r="crown"></div>' +
       '<h3 style="margin:16px 0 8px;font-size:11px;letter-spacing:.14em;color:#475569">FULL MATRIX · sortable · expandable plans</h3>' +
       '<div style="margin:4px 0 8px">' +
         '<button class="chip on" data-view="table">TABLE</button>' +
@@ -2454,6 +2582,7 @@ function mountTrendMatrix(el){
     perfect: el.querySelector('[data-r="perfect"]'),        /* hg-v1022 */
     fwd: el.querySelector('[data-r="fwd"]'),                /* hg-v1039: the measured book */
     trendform: el.querySelector('[data-r="trendform"]'),    /* hg-v1048: coindcx trending / forming */
+    crown: el.querySelector('[data-r="crown"]'),            /* hg-v1066: the OMNIBTC-style crown */
     out: out,
     status: status
   };
@@ -2777,6 +2906,7 @@ W.trendmxVolChipHtml = trendmxVolChipHtml;
 W.trendmxFundGate = trendmxFundGate;       /* hg-v1034: the fundamental + sentiment witness */
 W.trendmxColumnsHTML = trendmxColumnsHTML; /* hg-v1045: the bull / bear column view */
 W.trendmxTrendFormHTML = trendmxTrendFormHTML; /* hg-v1048: the coindcx trending / forming board */
+W.trendmxCrownPanelHTML = trendmxCrownPanelHTML; /* hg-v1066: the OMNIBTC-style crown */
 W.trendmxFundState = trendmxFundState;
 W.trendmxFundChipHtml = trendmxFundChipHtml;
 W.trendmxChopState = trendmxChopState;      /* hg-v1057: the trend-quality witness */
