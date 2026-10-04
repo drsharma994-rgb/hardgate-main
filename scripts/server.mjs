@@ -238,6 +238,26 @@ const server = http.createServer(async (req, res) => {
       return chartVisionHandler(req, res);
     }
 
+    /* hg-v1080: /trendtable.js on disk is a fetch+eval loader. The page
+       CSP (script-src 'self' 'unsafe-inline') refuses eval, so the loader
+       never registers TREND MATRIX and the tab disappears. The real source
+       is trendtable-src-N.js. Serve those parts, in order, as one classic
+       script. If the parts are absent, fall through to the file on disk. */
+    if (u.pathname === '/trendtable.js') {
+      const chunks = [];
+      for (let i = 0; i < 32; i++) {
+        const part = path.join(ROOT, 'trendtable-src-' + i + '.js');
+        if (!fs.existsSync(part)) break;
+        chunks.push(fs.readFileSync(part));
+      }
+      if (chunks.length) {
+        res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.statusCode = 200;
+        return res.end(Buffer.concat(chunks));
+      }
+    }
+
     /* static: resolve safely inside ROOT, index.html at '/', cleanUrls-style
        .html fallback (/x -> /x.html), no directory listings */
     let p = decodeURIComponent(u.pathname);
