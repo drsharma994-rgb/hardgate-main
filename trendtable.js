@@ -11,7 +11,7 @@
       catch (e) { try { console.error('trendtable assemble', e); } catch (e2) {} }
       return;
     }
-    var url = 'trendtable-src-' + i + '.js?v=1078';
+    var url = 'trendtable-src-' + i + '.js?v=1079';
     fetch(url, { cache: 'no-store' }).then(function (r) {
       if (!r.ok) throw new Error('trendtable part ' + i + ' ' + r.status);
       return r.text();
@@ -20,7 +20,7 @@
       i += 1;
       step();
     }).catch(function (e) {
-      try { console.error(e); } catch (e2) {}
+      try { console.error(e); } catch (e2) {} }
     });
   }
   step();
