@@ -103,6 +103,7 @@ async function refreshWorldMonitorDesk(force){
 }
 
 W.getWorldMonitorDeskCached = getWorldMonitorDeskCached;   /* hg-v1064: the OMNIBTC world-tilt read */
+W.getWorldMonitorDeskAge = function(){ return __wmAt || null; };   /* hg-v1070: staleness stamps */
 
 function hgWorldMonitorDeskPanelHtml(){
   var d = getWorldMonitorDeskCached();

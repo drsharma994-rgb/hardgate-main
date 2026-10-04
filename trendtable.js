@@ -2351,6 +2351,11 @@ function trendmxCrownPanelHTML(state){
         if (mTilt === 'RISK-OFF') mCls = ' bad';
       }
     }catch(eWm){ }
+    try{
+      var wmAtT = (typeof W.getWorldMonitorDeskAge === 'function') ? W.getWorldMonitorDeskAge() : null;
+      if (wmAtT) mac.push('WM ' + Math.max(0, Math.round((Date.now() - wmAtT) / 60000)) + 'm old');
+      if (rg && rg.at) mac.push('regime ' + Math.max(0, Math.round((Date.now() - +rg.at) / 60000)) + 'm old');
+    }catch(eAge){ }
     mac.push('world tilt ' + mTilt);
     html += dim('MACRO', mTilt, mCls, mac);
     var mic = [];

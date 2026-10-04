@@ -1149,6 +1149,12 @@ a global hard refresh.
         if (reads.macroTilt === 'RISK-OFF'){ if (mVerd !== 'CAUTION'){ mVerd = 'CAUTION'; mCls = ' bad'; } }
         else if (reads.macroTilt === 'RISK-ON' && mVerd === 'UNREAD') mVerd = 'ALIGNED';
       }
+      if (reads.wmAgeMin != null || reads.regimeAgeMin != null){
+        var ageBits = [];
+        if (reads.wmAgeMin != null) ageBits.push('WM ' + reads.wmAgeMin + 'm old');
+        if (reads.regimeAgeMin != null) ageBits.push('regime ' + reads.regimeAgeMin + 'm old');
+        mLines.push('feed age: ' + ageBits.join(', '));
+      }
       if (reads.leverageState === 'EXTENDED'){ mVerd = 'CAUTION'; mCls = ' bad'; }
       else if (reads.leverageState === 'RESET' || reads.leverageState === 'FLAT') mVerd = 'ALIGNED';
       else if (mLines.length) mVerd = 'NEUTRAL';
@@ -2241,6 +2247,9 @@ a global hard refresh.
               pfReads.fedLiqWowPct = +rg.fedliq.wowPct;
               tiltBits.push('fed liq ' + (pfReads.fedLiqWowPct >= 0 ? '+' : '') + pfReads.fedLiqWowPct.toFixed(1) + '% w/w');
             }
+            var wmAt = (typeof W.getWorldMonitorDeskAge === 'function') ? W.getWorldMonitorDeskAge() : null;
+            if (wmAt) pfReads.wmAgeMin = Math.max(0, Math.round((Date.now() - wmAt) / 60000));
+            if (rg && rg.at) pfReads.regimeAgeMin = Math.max(0, Math.round((Date.now() - +rg.at) / 60000));
             if (tiltBits.length) pfReads.macroTiltBits = tiltBits;
             var off = (pfReads.wmMacroVerdict === 'SELL' || pfReads.wmMacroVerdict === 'AVOID'
                 || pfReads.wmMacroVerdict === 'RISK-OFF')
@@ -2337,7 +2346,7 @@ a global hard refresh.
                 }
                 if (vn > 0 && vs > 0) wits.push('RVOL15 ' + (+last15.v / (vs / vn)).toFixed(2) + 'x');
               }
-              if (pfReads.sessName) wits.push(String(pfReads.sessName));
+              if (pfReads.sessName) wits.push(String(pfReads.sessName) + (pfReads.sessName === 'ASIA' ? ' - quiet hours (kill zone)' : ''));
               if (isFinite(pfReads.venueFundingPct)) wits.push('funding ' + (+pfReads.venueFundingPct).toFixed(4) + '%');
               scalpSetup.wits = wits;
               if (scalpSetupAlt) scalpSetupAlt.wits = wits.slice();
