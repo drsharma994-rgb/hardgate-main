@@ -820,6 +820,85 @@ a global hard refresh.
     }catch(e){ return ''; }
   }
 
+  /* hg-v1058: THE SCALP ANCHOR — the honest version of the fixed-dollar
+     "scalp prompt" metrics. A REAL day-anchored VWAP on the winner's own
+     tape (15m for scalp-priced engines, 4h otherwise — the intraday VWAP
+     reference, exactly as the gold desks anchor their session VWAP),
+     mean-reversion bands ATR-scaled around it (never fixed dollars), the
+     Bollinger squeeze state and the session. Evidence on the card + two
+     forward marks; never a gate, and every unreadable input fails open. */
+  function hgObtcScalpAnchorRead(pick, match){
+    try{
+      if (!pick || !pick.row) return null;
+      var scalp = /SCALP|TRAP/i.test(String(pick.row.engine || ''));
+      var tape = scalp
+        ? ((match && Array.isArray(match._rows15) && match._rows15.length >= 40) ? match._rows15 : null)
+        : ((match && Array.isArray(match._rows) && match._rows.length >= 40) ? match._rows : null);
+      if (!tape) return null;
+      if (typeof vwapAt !== 'function' || typeof atr !== 'function' || typeof bollinger !== 'function') return null;
+      var n = tape.length;
+      var last = tape[n - 1];
+      /* the anchor is the CURRENT UTC DAY's VWAP so far (a rolling window
+         drifts with the trend and can never read a mean-reversion stretch) */
+      var day0 = Math.floor(+last.t / 86400);
+      var start = n - 1;
+      while (start > 0 && Math.floor(+tape[start].t / 86400) === day0) start--;
+      start++;
+      if (n - start < 2) return null;   /* a 1-bar day has no readable anchor; the
+                                           panel prints the bar count so a thin
+                                           day is visible, never hidden */
+      var vwap = vwapAt(tape, n - 1, n - start);
+      if (!isFinite(vwap) || vwap <= 0) return null;
+      var aArr = atr(tape, 14);
+      var aNow = aArr && isFinite(aArr[aArr.length - 1]) && aArr[aArr.length - 1] > 0 ? aArr[aArr.length - 1] : NaN;
+      if (!isFinite(aNow)) return null;
+      var closes = tape.map(function(r){ return +r.c; });
+      var bb = bollinger(closes, 20, 2);
+      var wNow = (bb && isFinite(bb.widthPct[n - 1])) ? bb.widthPct[n - 1] : NaN;
+      var widths = bb ? bb.widthPct.slice(Math.max(0, n - 51), n - 1).filter(function(v){ return isFinite(v); }) : [];
+      var wAvg = widths.length ? widths.reduce(function(a, b){ return a + b; }, 0) / widths.length : NaN;
+      var bbState = null;
+      if (isFinite(wNow) && isFinite(wAvg) && wAvg > 0){
+        bbState = wNow < wAvg * 0.75 ? 'SQUEEZE' : (wNow > wAvg * 1.3 ? 'EXPANSION' : 'NORMAL');
+      }
+      var devPct = (last.c - vwap) / vwap * 100;
+      var bandUp = vwap + 2 * aNow, bandLo = vwap - 2 * aNow;
+      return {
+        vwap: vwap, devPct: devPct,
+        bandUp: bandUp, bandLo: bandLo,
+        over: (last.c > bandUp) || (last.c < bandLo),
+        overSide: last.c > bandUp ? 'upper' : 'lower',
+        bbState: bbState, wNow: wNow, wAvg: wAvg,
+        tapeLabel: scalp ? '15m' : '4h',
+        dayBars: n - start
+      };
+    }catch(e){ return null; }
+  }
+
+  function hgObtcScalpAnchorHtml(pick){
+    try{
+      var a = pick && pick.row && pick.row.scalpAnchor;
+      if (!a) return '';
+      var rows = [];
+      rows.push('<div class="kv"><span class="k">VWAP anchor (' + a.tapeLabel + ', day-anchored · ' + a.dayBars + ' bars)</span><span class="v">'
+        + a.vwap.toFixed(2) + ' — price ' + (a.devPct >= 0 ? '+' : '') + a.devPct.toFixed(2) + '% from it</span></div>');
+      rows.push('<div class="kv"><span class="k">Mean-reversion bands</span><span class="v">'
+        + a.bandLo.toFixed(2) + ' – ' + a.bandUp.toFixed(2) + ' (2×ATR14 around the anchor — the fixed-dollar band idea, ATR-scaled)</span></div>');
+      rows.push('<div class="kv"><span class="k">Band state</span><span class="v' + (a.over ? ' bad' : ' ok') + '">'
+        + (a.over
+          ? 'price OVEREXTENDED ' + ((a.devPct >= 0 ? '+' : '') + a.devPct.toFixed(2)) + '% beyond the ' + a.overSide + ' band — the mean-reversion stretch your scalp prompt describes'
+          : 'inside the bands — no mean-reversion stretch to fade')
+        + '</span></div>');
+      rows.push('<div class="kv"><span class="k">Bollinger state</span><span class="v' + (a.bbState === 'SQUEEZE' ? ' warn' : '') + '">'
+        + (a.bbState
+          ? (a.bbState + ' (width ' + a.wNow.toFixed(2) + '% vs trailing ' + a.wAvg.toFixed(2) + '%)' + (a.bbState === 'SQUEEZE' ? ' — compression precedes expansion' : ''))
+          : 'UNREAD')
+        + '</span></div>');
+      return '<div class="panel" style="margin-top:10px"><h3>SCALP ANCHOR <span>real VWAP + volatility bands on the winner\'s own tape — evidence, never a gate</span></h3>'
+        + rows.join('') + '</div>';
+    }catch(e){ return ''; }
+  }
+
 
   /* hg-v1049: one tape's EMA9/EMA21 cascade direction — the agreement
      read per timeframe. Unreadable tape = no verdict, never a guess. */
@@ -950,6 +1029,46 @@ a global hard refresh.
         + '<div class="kv"><span class="k">Risk/Reward</span><span class="v">' + (isFinite(rr) ? rr.toFixed(2) + 'R vs TP1' : 'n/a') + '</span></div>'
         + '<div class="kv"><span class="k">Indicator Convergence</span><span class="v">' + esc(conv.join(' | ') || 'no measurable reads') + '</span></div>'
         + '<div class="kv"><span class="k">Automation Blueprint</span><span class="v"><pre style="margin:4px 0;white-space:pre-wrap;font-size:10px">' + esc(jsonTxt) + '</pre>' + dropNote + '</span></div>'
+        + '</div>';
+    }catch(e){ return ''; }
+  }
+
+  /* hg-v1056: THE CALL — the direction the desk stands behind, in one
+     bold line, with the caveat that matters (counter-cascade, measured
+     stand-aside). No pick = STAND ASIDE, stated plainly. */
+  function hgObtcTheCallHtml(pick, snap){
+    try{
+      if (!pick || !pick.row){
+        return '<div class="panel" style="margin-top:10px"><h3>THE CALL</h3>'
+          + '<div style="font-size:16px;font-weight:700">STAND ASIDE</div>'
+          + '<div style="font-size:11px;opacity:.8">no engine produced a ticket - the tide is traded, not forced</div></div>';
+      }
+      var r = pick.row, dir = String(r.dir || '').toLowerCase();
+      var tierTxt = String(pick.tier || 'clean').toLowerCase() === 'clean' ? 'TICKET' : 'WATCH';
+      var caveats = [];
+      if (Array.isArray(r.missing) && r.missing.indexOf('DIRECTION') >= 0) caveats.push('counter-cascade vs the trend');
+      if (r.measuredStandAside) caveats.push('the measured record does not pay - stand aside');
+      var caveat = caveats.length ? ' - ' + caveats.join('; ') : '';
+      var color = dir === 'long' ? '#26a69a' : (dir === 'short' ? '#ef5350' : '#94a3b8');
+      return '<div class="panel" style="margin-top:10px;border-top:3px solid ' + color + '"><h3>THE CALL</h3>'
+        + '<div style="font-size:16px;font-weight:700">' + (dir ? dir.toUpperCase() : 'NO DIRECTION') + ' - ' + tierTxt + esc(caveat) + '</div></div>';
+    }catch(e){ return ''; }
+  }
+
+  /* hg-v1056: THE SCALP TARGET — an intraday target on the winner leg's
+     own 15m grid: the real 15m scalp matrix when it AGREES with the call,
+     otherwise the honest draft ladder (1.5x stop / 3.5x TP ATR15) stamped
+     DRAFT. Never shown against the call. */
+  function hgObtcScalpPlanHtml(snap){
+    try{
+      var sp = snap && snap.scalpPlan;
+      if (!sp || !isFinite(+sp.entry) || !isFinite(+sp.stop) || !isFinite(+sp.t1)) return '';
+      var risk = Math.abs(+sp.entry - +sp.stop);
+      var rr = risk > 0 ? Math.abs(+sp.t1 - +sp.entry) / risk : NaN;
+      return '<div class="panel" style="margin-top:10px"><h3>SCALP TARGET <span>15m grid - ' + esc(sp.source) + (sp.draft ? ' - DRAFT' : '') + '</span></h3>'
+        + '<div class="kv"><span class="k">ENTRY</span><span class="v">' + (+sp.entry).toFixed(2) + '</span></div>'
+        + '<div class="kv"><span class="k">STOP</span><span class="v">' + (+sp.stop).toFixed(2) + '</span></div>'
+        + '<div class="kv"><span class="k">TP</span><span class="v">' + (+sp.t1).toFixed(2) + (isFinite(rr) ? ' (' + rr.toFixed(1) + 'R)' : '') + '</span></div>'
         + '</div>';
     }catch(e){ return ''; }
   }
@@ -1458,7 +1577,7 @@ a global hard refresh.
       }
     }
     if (ui.detail){
-      var dhtml = hgObtcVerdictHtml(pick, snap) + (pick ? detailHtml(pick, snap && snap.omniInfo) : waitHtml());
+      var dhtml = hgObtcTheCallHtml(pick, snap) + hgObtcVerdictHtml(pick, snap) + (pick ? detailHtml(pick, snap && snap.omniInfo) : waitHtml());
       if (snap && snap.fundamental && gfn('hgObtcFundamentalPanelHtml')){
         try{ dhtml += W.hgObtcFundamentalPanelHtml(snap.fundamental) || ''; }catch(eFu){}
       }
@@ -1468,6 +1587,7 @@ a global hard refresh.
       dhtml += hgObtcCycleContextHtml(snap && snap.extra, snap);
       dhtml += hgObtcFundingWitnessHtml(snap, pick);
       dhtml += hgObtcEvidenceWitnessesHtml(pick);
+      dhtml += hgObtcScalpAnchorHtml(pick);   /* hg-v1058: the honest scalp anchor — real VWAP + ATR bands */
       dhtml += hgObtcPerfectLedgerHtml(pick);
       if (snap && snap.measured && gfn('hgProvenEdgeChipHtml')){
         try{
@@ -1991,8 +2111,47 @@ a global hard refresh.
             if (tfList.length) pfReads.tfAgree = tfList.join(' - ');
           }catch(eTf){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eTf); }catch(eWt){} }
         }catch(ePfR){}
+        /* hg-v1058: THE SCALP ANCHOR — computed once here, stashed on the row
+           (the panel reads the stash, never recomputes), and recorded as two
+           forward marks so the ledger can later split on the mean-reversion
+           state. Evidence, never a gate. */
+        try{
+          var accAnchor = hgObtcScalpAnchorRead(pick, match);
+          if (accAnchor){
+            pick.row.scalpAnchor = accAnchor;
+            pfReads.vwapDevPct = accAnchor.devPct;
+            pfReads.bbSqueeze = accAnchor.bbState;
+          }
+        }catch(eAn){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eAn); }catch(eWan){} }
         hgObtcPerfectFormation(pick, pfReads);
         pick.row.perfectReads = pfReads;   /* the ledger reads the same bag the predicate consumed */
+        /* hg-v1056: the scalp target — the real 15m scalp matrix when it
+           AGREES with the call; otherwise the draft ATR15 ladder in the
+           call's own direction, stamped DRAFT. Never shown against. */
+        try{
+          if (match && Array.isArray(match._rows15) && match._rows15.length >= 60 && pick.row.dir){
+            if (gfn('scalpTryClean')){
+              var minsF = (gfn('tickClock') ? W.tickClock() : 120);
+              var sc = W.scalpTryClean((match._rows1 && match._rows1.length ? match._rows1 : match._rows15), match._rows15, match._ticker || {}, minsF);
+              if (sc && isFinite(+sc.entry) && isFinite(+sc.stop) && isFinite(+sc.t1) && sc.dir === pick.row.dir){
+                scalpPlan = { entry: +sc.entry, stop: +sc.stop, t1: +sc.t1,
+                  t2: isFinite(+sc.t2) ? +sc.t2 : null, source: '15m scalp matrix', draft: false };
+              }
+            }
+            if (!scalpPlan){
+              var a15arr = (typeof W.atr === 'function') ? W.atr(match._rows15, 14) : null;
+              var a15 = (a15arr && a15arr.length) ? +a15arr[a15arr.length - 1] : NaN;
+              var p15 = +match._rows15[match._rows15.length - 1].c;
+              if (isFinite(a15) && a15 > 0 && isFinite(p15)){
+                var d = pick.row.dir;
+                scalpPlan = { entry: p15, stop: d === 'long' ? p15 - 1.5 * a15 : p15 + 1.5 * a15,
+                  t1: d === 'long' ? p15 + 3.5 * a15 : p15 - 3.5 * a15,
+                  t2: d === 'long' ? p15 + 4.9 * a15 : p15 - 4.9 * a15,
+                  source: 'draft ladder ATR15', draft: true };
+              }
+            }
+          }
+        }catch(eSc2){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eSc2); }catch(eWs2){} }
         /* hg-v1047: THE MEASURED-EDGE TIER (the shared proven-edge gate).
            The desk's own settled forward record for this mechanic, judged
            at the desk evidence floor (hgDeskParam minEvidence, default 20)
@@ -2079,6 +2238,10 @@ a global hard refresh.
               basisMom: (pfReads.basisMom || undefined),
               liqClusterUsd: (isFinite(pfReads.liqClusterUsd) ? pfReads.liqClusterUsd : undefined),
               liqFuelUsd: (isFinite(pfReads.liqFuelUsd) ? pfReads.liqFuelUsd : undefined),
+              /* hg-v1058: the scalp-anchor marks — signed VWAP deviation % and
+                 the Bollinger squeeze state, recorded only when readable */
+              vwapDevPct: (isFinite(pfReads.vwapDevPct) ? pfReads.vwapDevPct : undefined),
+              bbSqueeze: (pfReads.bbSqueeze || undefined),
               session: (pfReads.sessName || undefined)
             };
             if (fwdScalp){ fwdRow.rows = fwdTape; } else { fwdRow.rows4h = winnerRows; }
@@ -2203,6 +2366,8 @@ a global hard refresh.
   W.hgObtcCvdSlopeDir = hgObtcCvdSlopeDir;
   W.hgObtcNetflowZOf = hgObtcNetflowZOf;
   W.hgObtcCycleContextHtml = hgObtcCycleContextHtml;
+  W.hgObtcScalpAnchorRead = hgObtcScalpAnchorRead;      /* hg-v1058: the honest scalp anchor */
+  W.hgObtcScalpAnchorHtml = hgObtcScalpAnchorHtml;
   /* hg-v1053: the alert / auto-scan seam — the last crown in a light
      shape the unified Telegram batch and the background cycle read. */
   W.hgObtcSnap = function(){

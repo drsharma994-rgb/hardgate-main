@@ -115,6 +115,11 @@ console.log('== all seven legs readable-and-WITH crowns PERFECT⁺ and prints th
   ok(d.indexOf('Venue premium') >= 0 && d.indexOf('vs Binance') >= 0, 'the cross-venue funding spread row shows Delta vs Binance');
   ok(d.indexOf('Venue confirmation') >= 0, 'the venue-confirmation witness prints beside the pick');
   ok(d.indexOf('single venue only') >= 0, 'a single-venue scan says so honestly');
+  ok(d.indexOf('THE CALL') >= 0, 'the call line prints first');
+  ok(d.indexOf('LONG - TICKET') >= 0, 'the call names the direction and the tier unambiguously');
+  ok(d.indexOf('SCALP TARGET') >= 0, 'the scalp target prints beside the crown');
+  ok(d.indexOf('draft ladder ATR15') >= 0 && d.indexOf('DRAFT') >= 0, 'without a 15m matrix the ladder is honestly stamped DRAFT');
+  ok(/ENTRY<\/span><span class="v">[0-9.]+/.test(d), 'the scalp block carries an entry');
   ok(d.indexOf('CROWN VERDICT') >= 0, 'the crown verdict line prints on top');
   ok(d.indexOf('TICKET') >= 0 && d.indexOf('PERFECT+') >= 0 && d.indexOf('EDGE ACCUMULATING') >= 0, 'the verdict names the ticket, the PERFECT+ badge and the measured state');
   /* the entry is refinement-moved in this scenario, so the distance is
@@ -271,6 +276,8 @@ console.log('== wiring pins — the shipped files actually read and print it all
   ok(src.indexOf('pfReads.markDistPct') >= 0, 'the mark-distance read rides the bag');
   ok(src.indexOf('function hgObtcSetupCardHtml') >= 0, 'the setup-card renderer is defined');
   ok(src.indexOf('pfReads.atrVal') >= 0, 'the ATR value rides the bag for the zone and TP3');
+  ok(src.indexOf('function hgObtcTheCallHtml') >= 0 && src.indexOf('function hgObtcScalpPlanHtml') >= 0, 'the call + scalp-plan helpers are defined');
+  ok(src.indexOf('scalpPlan: scalpPlan') >= 0, 'the scalp plan rides the snap');
   const esrc = read('omnibtc-engines.js');
   ok(esrc.indexOf("binanceFunding('BTCUSDT')") >= 0, 'the gather fetches Binance BTCUSDT funding for the spread');
   const tsrc = read('trendtable.js');
