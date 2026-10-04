@@ -273,6 +273,7 @@ function tabAlertsFilterCryptoConvicted(list){
     }
     if (s.src === 'BEST') return true;
     if (s.src === 'OMNIBTC') return true;   /* hg-v1053: the desk's own gate-clean MOST PROBABLE crown */
+    if (s.src === 'TRENDMX CROWN') return true;   /* hg-v1068: the matrix's own gate-clean crown */
     if (s.src.indexOf('EDGE') >= 0) return true;
     if (s.src.indexOf('BRAIN') >= 0) return true;
     return false;
@@ -903,6 +904,26 @@ function collectOmnibtc(out){
   }catch(e){ /* never breaks the batch */ }
 }
 
+/* hg-v1068: the TREND MATRIX crown joins the unified batch — clean tier
+   only, PERFECT badges in the note, levels for the push line. */
+function collectTrendmxCrown(out){
+  try{
+    if (typeof W.trendmxCrownState !== 'function') return;
+    var s = W.trendmxCrownState();
+    if (!s || !s.crown) return;
+    var c = s.crown;
+    if (String(c.tier || 'near') !== 'clean') return;
+    if (!c.dir || !fin(+c.entry) || !fin(+c.stop) || !fin(+c.t1)) return;
+    var tierLbl = c.perfectPlus ? 'PERFECT+' : (c.perfect ? 'PERFECT' : 'CLEAN');
+    var note = (c.perfectPlus ? 'STAR PERFECT+ ' : (c.perfect ? 'STAR PERFECT ' : ''))
+      + 'composite ' + (c.score > 0 ? '+' : '') + c.score + '/5';
+    pushSetup(out, 'TRENDMX CROWN', {
+      sym: c.sym, dir: c.dir, entry: c.entry, stop: c.stop, t1: c.t1, t2: c.t2,
+      clean: true, tier: tierLbl
+    }, { clean7: true, prime: c.perfect === true, note: note || null });
+  }catch(e){ /* never breaks the batch */ }
+}
+
 function hgTabAlertsCollect(win){
   var out = [];
   var root = win || W;
@@ -910,6 +931,7 @@ function hgTabAlertsCollect(win){
   if (win) W = root;
   try{
     collectOmnibtc(out);   /* hg-v1053: the desk's one crown, first - it is the most selective read */
+    collectTrendmxCrown(out);   /* hg-v1068: the matrix's one crown, right after */
     collectCrypto(out, 'swing', 'SWING');
     collectCrypto(out, 'scalp', 'SCALP');
     collectCryptoWatch(out);
@@ -1423,6 +1445,7 @@ async function hgTrendmxCrossAlertsRun(opts){
 /* browser globals */
 W.hgTabAlertsCollect = function(){ return hgTabAlertsCollect(W); };
 W.collectOmnibtc = collectOmnibtc;   /* hg-v1053: test seam */
+W.collectTrendmxCrown = collectTrendmxCrown;   /* hg-v1068: test seam */
 W.hgTabAlertsCollectGold = function(){ return hgTabAlertsCollectGold(W); };
 W.hgTabAlertsRun = function(opts){ return hgTabAlertsRun(opts || {}); };
 W.hgTabAlertsCheckLive = function(){

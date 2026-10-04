@@ -2337,6 +2337,20 @@ function trendmxCrownPanelHTML(state){
       if (isFinite(costR)) mic.push('cost ' + costR.toFixed(2) + 'R' + (costR > 0.25 ? ' - COST-HEAVY' : ''));
     }
     if (isFinite(+crown.price) && isFinite(+plan.entry)) mic.push('mark dist ' + (((+crown.price - +plan.entry) / +plan.entry) * 100).toFixed(1) + '%');
+    if (Array.isArray(crown.rows4h) && crown.rows4h.length >= 45 && typeof hgFillProbability === 'function' && isFinite(+plan.entry)){
+      try{ var fp = hgFillProbability(crown.rows4h, +plan.entry, dir, null, 12); if (fp && fp.pct != null && isFinite(fp.pct)) mic.push('fill odds ' + Math.round(fp.pct) + '%'); }catch(eFp){ }
+    }
+    if (Array.isArray(crown.rows4h) && crown.rows4h.length >= 45 && isFinite(+plan.entry) && isFinite(+plan.stop)){
+      try{
+        var rp = Math.abs(+plan.entry - +plan.stop); var sweeps = 0;
+        for (var si2 = crown.rows4h.length - 40; si2 < crown.rows4h.length; si2++){
+          var sb = crown.rows4h[si2]; if (!sb) continue;
+          if (dir === 'long' && (+sb.l || 0) <= +plan.entry - rp) sweeps++;
+          else if (dir === 'short' && (+sb.h || 0) >= +plan.entry + rp) sweeps++;
+        }
+        mic.push('stop sensitivity ' + sweeps + '/40');
+      }catch(eSw2){ }
+    }
     html += dim('MICRO', mic.length ? 'NEUTRAL' : 'UNREAD', '', mic);
     html += '</div>';
     /* ---- SETUP CARD ---- */
@@ -2456,6 +2470,39 @@ async function trendmxPerfectEvidencePass(rows){
     }
     return rows;
   }catch(e){ try{ if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('trendmx', e); }catch(e2){ } return rows; }
+}
+
+/* hg-v1068: THE CROWN STATE — the strongest majority row with a minted
+   plan in a light shape the alert batch and the auto-scan read. */
+function trendmxCrownOfRows(rows){
+  try{
+    if (!Array.isArray(rows) || !rows.length) return null;
+    var list = rows.slice().sort(function(a, b){ return Math.abs(+b.score || 0) - Math.abs(+a.score || 0); });
+    for (var i = 0; i < list.length; i++){
+      var r = list[i];
+      var dir = tmDirOf(r);
+      if (!dir) continue;
+      var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
+      if (!plan) continue;
+      var tier = trendmxRowTier(r, plan);
+      return { sym: r.sym, dir: dir, entry: +plan.entry, stop: +plan.stop, t1: +plan.t1,
+        t2: isFinite(+plan.t2) ? +plan.t2 : null, score: r.score, venue: tmRowVenue(r),
+        gatesPassed: (r.gate && isFinite(r.gate.gatesPassed)) ? r.gate.gatesPassed : null,
+        perfect: r.perfect === true, perfectPlus: r.perfectPlus === true,
+        tier: tier === 'clean' ? 'clean' : 'near' };
+    }
+    return null;
+  }catch(e){ return null; }
+}
+
+function trendmxCrownState(){
+  try{
+    var rows = (__tmScanSnap && Array.isArray(__tmScanSnap.rows)) ? __tmScanSnap.rows : null;
+    if (!rows) return null;
+    var c = trendmxCrownOfRows(rows);
+    if (!c) return null;
+    return { at: __tmScanSnap.at || null, crown: c };
+  }catch(e){ return null; }
 }
 
 function hgPaintTrendmxFromSnap(){
@@ -2993,6 +3040,8 @@ W.trendmxColumnsHTML = trendmxColumnsHTML; /* hg-v1045: the bull / bear column v
 W.trendmxTrendFormHTML = trendmxTrendFormHTML; /* hg-v1048: the coindcx trending / forming board */
 W.trendmxCrownPanelHTML = trendmxCrownPanelHTML; /* hg-v1066: the OMNIBTC-style crown */
 W.trendmxPerfectEvidencePass = trendmxPerfectEvidencePass; /* hg-v1067: the OMNIBTC evidence stack */
+W.trendmxCrownOfRows = trendmxCrownOfRows;   /* hg-v1068: the crown, pure and testable */
+W.trendmxCrownState = trendmxCrownState;     /* hg-v1068: the alert seam */
 W.trendmxFundState = trendmxFundState;
 W.trendmxFundChipHtml = trendmxFundChipHtml;
 W.trendmxChopState = trendmxChopState;      /* hg-v1057: the trend-quality witness */

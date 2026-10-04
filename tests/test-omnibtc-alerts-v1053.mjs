@@ -126,7 +126,8 @@ console.log('== wiring pins ==');
   const osrc = read('omnibtc.js');
   ok(osrc.indexOf('W.hgObtcSnap') >= 0 && osrc.indexOf('at: Date.now()') >= 0, 'the alert seam + scan time are wired');
   const html = read('index.html');
-  ok(html.indexOf("|| t === 'omnibtc');") >= 0, 'the background cycle force-scans the desk');
+  /* hg-v1068 added trendmx to the same line - the pin reads the pair */
+  ok(html.indexOf("|| t === 'omnibtc'") >= 0 && html.indexOf("|| t === 'trendmx')") >= 0, 'the background cycle force-scans both crowns');
   ok(html.indexOf("'omnibtc': async function(opts){") >= 0, 'the headless auto-scan entry exists');
 }
 
