@@ -1708,7 +1708,13 @@ a global hard refresh.
               entryRefined: (pfReadsEntryRefined ? true : undefined)
             };
             if (fwdScalp){ fwdRow.rows = fwdTape; } else { fwdRow.rows4h = winnerRows; }
-            W.hgFwdRecordScan('OMNIBTC', fwdTf, [fwdRow], { horizonBars: fwdHorizon });
+            /* the record array is a named variable so the call-shape censuses
+               (test-crypto-funding-mark / test-crypto-ledger-fill-mark) read the
+               record literal itself, not the first `entry:` that follows the call
+               (the candidates map) — an inline [fwdRow] sent both censuses to the
+               wrong braces and judged this writer bare. */
+            var fwdRows = [fwdRow];
+            W.hgFwdRecordScan('OMNIBTC', fwdTf, fwdRows, { horizonBars: fwdHorizon });
           }
         }catch(eFwd2){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eFwd2); }catch(eW){} }
       }

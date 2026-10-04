@@ -40,6 +40,15 @@ let n = 0;
 const ok = (c, m) => { assert.ok(c, m); n++; };
 const eq = (a, b, m) => { assert.strictEqual(a, b, m); n++; };
 
+/* GNU `timeout -s KILL` does not exist on Windows; execFileSync's own
+   `timeout` option provides the same bound there (CI keeps the GNU wrapper). */
+function boundedNode(sec, nodeArgs, opts){
+  if (process.platform === 'win32'){
+    return execFileSync(process.execPath, nodeArgs, Object.assign({}, opts, { timeout: sec * 1000 }));
+  }
+  return execFileSync('timeout', ['-s', 'KILL', String(sec), 'node', ...nodeArgs], opts);
+}
+
 function boot(){
   const ctx = { window: {}, console: { log(){}, warn(){}, error(){} },
     Math, JSON, Date, isFinite, String, Object, Array, RegExp, Promise, Error,
@@ -185,7 +194,7 @@ const scalp = W.HG_GOLD_SETUP_EDGE.scalp;
    7. The bake reports the rule and exits clean on the committed tree.
    ===================================================================== */
 {
-  const out = execFileSync('timeout', ['-s', 'KILL', '120', 'node', 'scripts/rebake-gold-literals.mjs'],
+  const out = boundedNode(120, ['scripts/rebake-gold-literals.mjs'],
     { cwd: ROOT, encoding: 'utf8' });
   /* hg-v961 extended the report with the SWING desk's own partition, so the
      line now carries a fourth bucket. What this asserts is the invariant, not

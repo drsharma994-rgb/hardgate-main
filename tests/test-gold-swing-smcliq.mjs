@@ -27,7 +27,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 let passed = 0;
@@ -250,7 +250,8 @@ console.log('\n6. a ported mechanic is gated on the plan it SHIPS');
 
 console.log('\n7. the demote separation says verdict and lean are different things');
 {
-  const M = await import(root + 'scripts/demote-separation.mjs');
+  /* a Windows path needs a file:// URL before dynamic import() will take it */
+  const M = await import(pathToFileURL(root + 'scripts/demote-separation.mjs').href);
   const out = M.run();
   ok(out.bookN > 0 && out.family > 0,
      'it measures a non-empty book over a stated family (' + out.bookN

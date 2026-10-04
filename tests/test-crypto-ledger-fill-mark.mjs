@@ -290,7 +290,7 @@ console.log('== 6) the census, derived by call shape: every record writer carrie
   }
   assert(writers.length >= 27, 'the census sees the record writers (' + writers.length + ')');
   assert(bare.length === 0, 'none records without a mark carrier' + (bare.length ? ' -- BARE: ' + bare.join(', ') : ''));
-  for (const need of ['omniroute.js', 'omnipresent.js', 'squeeze.js', 'oiflow.js', 'edge.js', 'reversalsniper.js', 'brain.js', 'engine.js', 'dex-screener.js', 'trendtable.js', 'pine.js', 'pine-sub.js', 'contract-report.js', 'index.html', 'cryptoscan.js', 'cryptoverse.js', 'ninetypercent.js', 'super-best.js', 'super-sniper.js'])
+  for (const need of ['omniroute.js', 'omnipresent.js', 'squeeze.js', 'oiflow.js', 'edge.js', 'reversalsniper.js', 'brain.js', 'engine.js', 'dex-screener.js', 'trendtable.js', 'pine.js', 'pine-sub.js', 'contract-report.js', 'index.html', 'cryptoscan.js', 'cryptoverse.js', 'ninetypercent.js', 'super-best.js', 'super-sniper.js', 'omnibtc.js'])
     assert(writers.some(w => w.startsWith(need + ' ')), 'the census counts ' + need);
 }
 

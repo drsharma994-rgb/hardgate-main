@@ -180,8 +180,10 @@ console.log('== wiring pins — the shipped file actually does it ==');
 {
   const src = read('omnibtc.js');
   /* hg-v1046: the record is priced on the crown's OWN grid now — a scalp
-     records on 15m/24 and hands its own tape; a swing keeps 4h/20 */
-  ok(src.indexOf("W.hgFwdRecordScan('OMNIBTC', fwdTf, [fwdRow], { horizonBars: fwdHorizon })") >= 0,
+     records on 15m/24 and hands its own tape; a swing keeps 4h/20. The record
+     array is a named variable so the call-shape censuses read the record
+     literal itself, not the first `entry:` after the call. */
+  ok(src.indexOf("W.hgFwdRecordScan('OMNIBTC', fwdTf, fwdRows, { horizonBars: fwdHorizon })") >= 0,
      'the record call names the desk and prices the horizon on the crown\'s own grid');
   ok(/fwdRow\.rows4h = winnerRows/.test(src), 'the winner leg\'s 4h tape rides a swing record');
   ok(/fwdScalp = \/SCALP\|TRAP\/i\.test\(fwdEng\)/.test(src), 'the scalp family is named by its engines');

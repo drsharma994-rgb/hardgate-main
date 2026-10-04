@@ -2120,14 +2120,26 @@ function trendmxTrendFormHTML(rows){
       if (tmDirOf(r)) trending.push(r); else forming.push(r);
     }
     function byStrength(list){ return list.slice().sort(function(a, b){ return Math.abs(+b.score || 0) - Math.abs(+a.score || 0); }); }
-    function px(v){ return isFinite(v) ? String(+v) : '--'; }
+    /* typeof guard, not bare isFinite: isFinite(null) is TRUE and +null is 0,
+       so a null plan level would print a confident "0" (the null-formatting
+       trap this codebase has hit five times). */
+    function px(v){ return (typeof v === 'number' && isFinite(v)) ? String(v) : '--'; }
     function lvlLine(rr, dd){
       var plan = dd ? trendmxPlan(Object.assign({}, rr, { dir: dd })) : null;
       if (plan){
         var tier = trendmxRowTier(rr, plan);
-        var gates = (rr.gate && isFinite(rr.gate.gatesPassed)) ? rr.gate.gatesPassed : 6;
-        return 'ENTRY ' + px(plan.entry) + ' - STOP ' + px(plan.stop) + ' - T1 ' + px(plan.t1)
-          + (isFinite(plan.t2) ? ' - T2 ' + px(plan.t2) : '') + ' - ' + (tier === 'clean' ? '7/7 CLEAN' : gates + '/7 NEAR');
+        var lvl = 'ENTRY ' + px(plan.entry) + ' - STOP ' + px(plan.stop) + ' - T1 ' + px(plan.t1)
+          + (isFinite(plan.t2) ? ' - T2 ' + px(plan.t2) : '');
+        /* hg-v1048: the tier is the label — 7/7 CLEAN and 6/7 NEAR are the
+           minted tiers; anything below the NEAR floor (or a forming row with
+           no majority, whose gate is null) is the house DRAFT ladder, never
+           a fabricated 6/7 NEAR. */
+        if (tier === 'clean') return lvl + ' - 7/7 CLEAN';
+        if (tier === 'near'){
+          var gates = (rr.gate && isFinite(rr.gate.gatesPassed)) ? rr.gate.gatesPassed : 0;
+          return lvl + ' - ' + gates + '/7 NEAR';
+        }
+        return lvl + ' - DRAFT';
       }
       return 'no levels - the gates have not met';
     }

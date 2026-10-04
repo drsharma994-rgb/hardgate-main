@@ -42,11 +42,22 @@ let n = 0;
 const ok = (c, m) => { assert.ok(c, m); n++; };
 const eq = (a, b, m) => { assert.strictEqual(a, b, m); n++; };
 
+/* GNU `timeout -s KILL` does not exist on Windows — the bundled `timeout`
+   command is a different program. On Windows the same bounded semantics come
+   from execFileSync's own `timeout` option, which kills the child on expiry.
+   The POSIX path keeps the GNU wrapper for CI. */
+function runBounded(sec, nodeArgs, opts){
+  if (process.platform === 'win32'){
+    return execFileSync(process.execPath, nodeArgs, Object.assign({}, opts, { timeout: sec * 1000 }));
+  }
+  return execFileSync('timeout', ['-s', 'KILL', String(sec), 'node', ...nodeArgs], opts);
+}
+
 /* Ask a script what it writes. Bounded: a script that does NOT support
    --print-out simply runs with an unrecognised flag, and one of them takes
    over 30 seconds to do its whole derivation. */
 function askOutput(script, args = [], sec = 20){
-  return execFileSync('timeout', ['-s', 'KILL', String(sec), 'node', script, ...args, '--print-out'],
+  return runBounded(sec, [script, ...args, '--print-out'],
     { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
 }
 /* Observe what a script really opens. */
@@ -55,8 +66,7 @@ function observeReads(script, args = [], sec = 60){
   const trace = path.join(dir, 't.txt');
   fs.writeFileSync(trace, '');
   try{
-    execFileSync('timeout', ['-s', 'KILL', String(sec), 'node',
-                             '--require', path.join(ROOT, 'lib/fs-trace.cjs'), script, ...args],
+    runBounded(sec, ['--require', path.join(ROOT, 'lib/fs-trace.cjs'), script, ...args],
       { cwd: ROOT, encoding: 'utf8', env: { ...process.env, HG_FS_TRACE: trace },
         stdio: ['ignore', 'ignore', 'ignore'] });
   }catch(e){ /* reads happen at startup; the trace is read either way */ }
@@ -195,8 +205,7 @@ function observeReads(script, args = [], sec = 60){
 
   const refuses = (args) => {
     try{
-      execFileSync('timeout', ['-s', 'KILL', '20', 'node', 'scripts/backtest-goldscalp.mjs',
-                               ...args, '--print-out'],
+      runBounded(20, ['scripts/backtest-goldscalp.mjs', ...args, '--print-out'],
         { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
       return false;
     }catch(e){ return true; }

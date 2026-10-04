@@ -51,11 +51,14 @@ function mkRows(n, slope){
   return rows;
 }
 function row(sym, score, exchange){
+  /* mirrors the real scan (trendtable.js line ~1210): a row with a majority
+     direction carries its gate evaluation; a forming row carries null. */
+  const hasDir = Math.abs(score) >= 2;
   return {
     sym: sym, score: score, exchange: exchange || 'coindcx',
     comps: { d200: score > 0 ? 1 : (score < 0 ? -1 : 0), x: 0, h4: 0, cloud: 0, adx: 0 },
     adx: 24, price: 100 + Math.abs(score) * 2,
-    gate: { label: 'trend', clean7: false, veto: false, gatesPassed: 5 },
+    gate: hasDir ? { label: 'trend', clean7: false, nearClean: false, veto: false, gatesPassed: 5 } : null,
     rows4h: mkRows(60, score >= 0 ? 0.05 : -0.05)
   };
 }
@@ -87,14 +90,23 @@ console.log('== the levels: minted plan or the honest DRAFT ladder ==');
 {
   const W = boot();
   const html = W.trendmxTrendFormHTML(FIX);
-  /* The fixture rows are 5/7 — no minted plan — so both columns print the
-     house DRAFT ladder with ENTRY / STOP / T1 / T2 stamped DRAFT. */
+  /* The fixture rows are 5/7 (below the 6/7 NEAR floor) and the forming rows
+     carry no majority (gate null), so every direction-bearing row prints the
+     house DRAFT ladder — levels stamped DRAFT, never a fabricated NEAR. */
   ok((html.match(/ENTRY /g) || []).length === 4, 'every direction-bearing row prints ENTRY (4 of them)');
   ok((html.match(/STOP /g) || []).length === 4, 'every direction-bearing row prints STOP');
   ok((html.match(/T1 /g) || []).length === 4, 'every direction-bearing row prints T1');
   ok((html.match(/T2 /g) || []).length === 4, 'every direction-bearing row prints T2');
-  ok(html.indexOf('5/7 NEAR') >= 0, 'minted plans carry the REAL gate count (5/7, never inflated)');
+  ok(html.indexOf(' - DRAFT') >= 0, 'a below-6/7 or no-majority row stamps DRAFT');
+  ok(html.indexOf('5/7 NEAR') < 0 && html.indexOf('6/7 NEAR') < 0, 'a 5/7 row never prints a NEAR stamp');
   ok(html.indexOf('7/7 CLEAN') < 0, 'a 5/7 row never prints a CLEAN stamp');
+  /* the minted tiers keep their real labels: 7/7 CLEAN and 6/7 NEAR */
+  const cleanRow = row('CX7', 3); cleanRow.gate = { label: '7/7 CLEAN', clean7: true, nearClean: false, veto: false, gatesPassed: 7 };
+  const nearRow = row('CX8', 3); nearRow.gate = { label: '6/7 NEAR', clean7: false, nearClean: true, veto: false, gatesPassed: 6 };
+  const html3 = W.trendmxTrendFormHTML([cleanRow, nearRow]);
+  ok(html3.indexOf('7/7 CLEAN') >= 0, 'a 7/7 gate-clean row keeps 7/7 CLEAN');
+  ok(html3.indexOf('6/7 NEAR') >= 0, 'a 6/7 row keeps the real 6/7 NEAR');
+  ok(html3.indexOf(' - DRAFT') < 0, 'a minted-tier row never stamps DRAFT');
   const bareRow = row('CX6', 2);
   bareRow.rows4h = null;
   const html2 = W.trendmxTrendFormHTML([bareRow]);

@@ -32,7 +32,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const HTML = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
@@ -97,7 +97,9 @@ console.log('== 2) the parser keeps bid/ask, in BOTH copies ==');
   const TICK = { result: { symbol: 'XAUTUSD', mark_price: '4300.5', close: '4300.4',
     quotes: { best_bid: '4300.40', best_ask: '4300.60', mark_price: '4300.5' } } };
 
-  const mjs = await import(path.join(ROOT, 'lib/delta-perp-history.mjs'));
+  /* a Windows path needs a file:// URL before dynamic import() will take it
+     (ERR_UNSUPPORTED_ESM_URL_SCHEME) — pathToFileURL is a no-op risk on POSIX */
+  const mjs = await import(pathToFileURL(path.join(ROOT, 'lib/delta-perp-history.mjs')).href);
   const a = mjs.parseDeltaTicker(TICK);
   assert(a.bid === 4300.4 && a.ask === 4300.6, 'the .mjs parser keeps best_bid / best_ask');
   assert(Math.abs(a.spreadUsd - 0.2) < 1e-9, 'and derives the spread in dollars (' + a.spreadUsd.toFixed(3) + ')');

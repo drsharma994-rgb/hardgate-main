@@ -54,7 +54,9 @@ const WRITE = argv.includes('--write');
    ask rather than parse. The path is built with join() further down, which a
    source parse cannot follow. */
 if (argv.includes('--print-out')){
-  console.log(new URL('omnigold-replay-evidence.json', import.meta.url).pathname);
+  /* the printed path must equal the written one on every platform: URL.pathname
+     yields /C:/Users/... on Windows, which is not the path join() writes */
+  console.log(path.join(ROOT, 'scripts', 'omnigold-replay-evidence.json'));
   process.exit(0);
 }
 const JSON_OUT = argv.includes('--json');
