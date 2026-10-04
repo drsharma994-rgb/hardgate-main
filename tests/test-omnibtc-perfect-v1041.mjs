@@ -255,6 +255,23 @@ console.log('== measured ranking: the armed PROVEN mechanic takes the crown ==')
   ok(rr && rr.ticket === true, 'and the proven crown stays a ticket');
 }
 
+console.log('== the world feeds tilt the macro read and ride the record ==');
+{
+  const cap = {};
+  const W = boot(Object.assign(stubs(cap, -0.002, R4), {
+    swingTryClean: () => Object.assign({}, PLAN),
+    getWorldMonitorDeskCached: () => ({ macro: { verdict: 'SELL', bullishCount: 1, totalCount: 5, fearGreed: { value: 35 } }, stress: { label: 'HIGH' } }),
+    regimeState: () => ({ playbook: { bias: 'STAND-ASIDE' }, fedliq: { wowPct: -2.1 }, dxy: { trend20: 'RISING' } })
+  }));
+  const ui = { btn: mk(), stat: mk(), cards: mk(), detail: mk(), fwd: mk(), ind: mk(), ledger: mk() };
+  await W.hgObtcRunScan(ui);
+  const d = ui.detail.innerHTML;
+  ok(d.indexOf('world tilt RISK-OFF') >= 0, 'the world tilt prints RISK-OFF on the risk-off feeds');
+  ok(d.indexOf('WM SELL') >= 0 && d.indexOf('stress HIGH') >= 0 && d.indexOf('bias STAND-ASIDE') >= 0 && d.indexOf('DXY RISING') >= 0 && d.indexOf('fed liq -2.1%') >= 0, 'every world feed line prints with its measured value');
+  const rr = cap.rec && cap.rec.rows && cap.rec.rows[0];
+  ok(rr && rr.macroTilt === 'RISK-OFF' && rr.wmMacroVerdict === 'SELL' && rr.playbookBias === 'STAND-ASIDE', 'the tilt marks ride the record for the ledger to split on');
+}
+
 console.log('== wiring pins — the shipped files actually read and print it all ==');
 {
   const src = read('omnibtc.js');
@@ -291,6 +308,8 @@ console.log('== wiring pins — the shipped files actually read and print it all
   ok(src.indexOf('Options vol (Deribit)') >= 0 && src.indexOf('dvolState') >= 0, 'the Deribit DVOL read is wired into the witnesses');
   ok(src.indexOf('scalpSetup.wits') >= 0, 'the scalp grid witnesses ride the setup');
   ok(src.indexOf('function hgObtcCompleteAnalysisHtml') >= 0, 'the complete-analysis renderer is defined');
+  ok(src.indexOf('world tilt') >= 0 && src.indexOf('getWorldMonitorDeskCached') >= 0, 'the world-feeds read is wired');
+  ok(src.indexOf('macroTilt:') >= 0, 'the tilt mark rides the record');
   const esrc = read('omnibtc-engines.js');
   ok(esrc.indexOf("binanceFunding('BTCUSDT')") >= 0, 'the gather fetches Binance BTCUSDT funding for the spread');
   const tsrc = read('trendtable.js');

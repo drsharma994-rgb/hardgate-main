@@ -1144,6 +1144,11 @@ a global hard refresh.
       if (reads.newsRisk) mLines.push('news ' + reads.newsRisk);
       if (reads.leverageState) mLines.push('leverage cycle ' + reads.leverageState + (isFinite(reads.oiChgPct) ? ' OI ' + (reads.oiChgPct >= 0 ? '+' : '') + (+reads.oiChgPct).toFixed(1) + '%' : ''));
       if (reads.basisMom) mLines.push('basis momentum ' + reads.basisMom);
+      if (reads.macroTilt && reads.macroTilt !== 'UNREAD'){
+        mLines.push('world tilt ' + reads.macroTilt + (reads.macroTiltBits && reads.macroTiltBits.length ? ' (' + reads.macroTiltBits.join(', ') + ')' : ''));
+        if (reads.macroTilt === 'RISK-OFF'){ if (mVerd !== 'CAUTION'){ mVerd = 'CAUTION'; mCls = ' bad'; } }
+        else if (reads.macroTilt === 'RISK-ON' && mVerd === 'UNREAD') mVerd = 'ALIGNED';
+      }
       if (reads.leverageState === 'EXTENDED'){ mVerd = 'CAUTION'; mCls = ' bad'; }
       else if (reads.leverageState === 'RESET' || reads.leverageState === 'FLAT') mVerd = 'ALIGNED';
       else if (mLines.length) mVerd = 'NEUTRAL';
@@ -2207,6 +2212,43 @@ a global hard refresh.
               }
             }
           }catch(eNf){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eNf); }catch(eWnf){} }
+          /* hg-v1064: THE WORLD FEEDS — world-monitor macro verdict +
+             stress, the REGIME playbook bias, DXY 20d trend and the fed
+             liquidity w/w change, read once per scan. Evidence, never a
+             gate: the tilt is shown, recorded as forward marks, and the
+             ledger later splits on it. */
+          try{
+            var wm = (typeof W.getWorldMonitorDeskCached === 'function') ? W.getWorldMonitorDeskCached() : null;
+            var rg = (typeof W.regimeState === 'function') ? W.regimeState() : null;
+            var tiltBits = [];
+            if (wm && wm.macro && wm.macro.verdict){
+              pfReads.wmMacroVerdict = String(wm.macro.verdict).toUpperCase();
+              tiltBits.push('WM ' + pfReads.wmMacroVerdict);
+            }
+            if (wm && wm.stress && wm.stress.label){
+              pfReads.wmStress = String(wm.stress.label).toUpperCase();
+              tiltBits.push('stress ' + pfReads.wmStress);
+            }
+            if (rg && rg.playbook && rg.playbook.bias){
+              pfReads.playbookBias = String(rg.playbook.bias).toUpperCase();
+              tiltBits.push('bias ' + pfReads.playbookBias);
+            }
+            if (rg && rg.dxy && (rg.dxy.trend20 || rg.dxy.trend)){
+              pfReads.dxyTrend = String(rg.dxy.trend20 || rg.dxy.trend).toUpperCase();
+              tiltBits.push('DXY ' + pfReads.dxyTrend);
+            }
+            if (rg && rg.fedliq && isFinite(+rg.fedliq.wowPct)){
+              pfReads.fedLiqWowPct = +rg.fedliq.wowPct;
+              tiltBits.push('fed liq ' + (pfReads.fedLiqWowPct >= 0 ? '+' : '') + pfReads.fedLiqWowPct.toFixed(1) + '% w/w');
+            }
+            if (tiltBits.length) pfReads.macroTiltBits = tiltBits;
+            var off = (pfReads.wmMacroVerdict === 'SELL' || pfReads.wmMacroVerdict === 'AVOID'
+                || pfReads.wmMacroVerdict === 'RISK-OFF')
+              || pfReads.playbookBias === 'STAND-ASIDE'
+              || (pfReads.wmStress && /HIGH|ELEVATED/.test(pfReads.wmStress));
+            var on = (pfReads.wmMacroVerdict === 'BUY') && !off;
+            pfReads.macroTilt = off ? 'RISK-OFF' : (on ? 'RISK-ON' : (tiltBits.length ? 'NEUTRAL' : 'UNREAD'));
+          }catch(eWm){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eWm); }catch(eWwd){} }
           /* hg-v1049: the fire bar's session and the multi-timeframe
              agreement, read off the tapes the desk already holds */
           if (winnerRows && winnerRows.length){
@@ -2405,6 +2447,11 @@ a global hard refresh.
               measuredState: (measured && measured.state !== 'unproven') ? measured.state : undefined,
               /* hg-v1051: the entry was refined to the structure edge */
               entryRefined: (pfReadsEntryRefined ? true : undefined),
+              /* hg-v1064: the world-feeds marks — recorded so the ledger
+                 can split on the tilt; gate nothing */
+              macroTilt: (pfReads.macroTilt && pfReads.macroTilt !== 'UNREAD') ? pfReads.macroTilt : undefined,
+              wmMacroVerdict: pfReads.wmMacroVerdict || undefined,
+              playbookBias: pfReads.playbookBias || undefined,
               /* hg-v1057: the accuracy-pack read marks — each rides the
                  record only when the leg actually read something, so the
                  ledger can split on them later */

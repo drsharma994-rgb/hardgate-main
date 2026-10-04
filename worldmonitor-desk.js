@@ -102,6 +102,8 @@ async function refreshWorldMonitorDesk(force){
   return __wmSnap;
 }
 
+W.getWorldMonitorDeskCached = getWorldMonitorDeskCached;   /* hg-v1064: the OMNIBTC world-tilt read */
+
 function hgWorldMonitorDeskPanelHtml(){
   var d = getWorldMonitorDeskCached();
   if (!d){
