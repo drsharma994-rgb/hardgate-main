@@ -80,5 +80,42 @@ ok(!/<button class="toTrade"/.test(card), 'card has no SEND TO TRADE PLAN button
 ok(!/onclick="addToBook/.test(card) && !/class="bookBtn"/.test(card), 'card has no ADD TO BOOK button');
 ok(!/class="card long best"/.test(card), 'watch card is not MOST PROBABLE / best');
 
+/* v696: relaxed mode (NON-default). Default stays sniper-grade; flipping the
+   knob loosens every hard threshold, relabels cards, but must NOT override the
+   PIN-REJECT suppress (relaxed rows stay watch-only). */
+ok(W.rsRelaxedOn() === false, 'relaxed: default OFF (sniper-grade)');
+ok(W.rsMinLev() === 30, 'relaxed: default min lev = 30');
+ok(W.rsMinConviction() === 4, 'relaxed: default min conviction = 4');
+ok(W.rsMinRr() === 1.5, 'relaxed: default min RR = 1.5');
+ok(W.rsMinDrawdown() === 0.02, 'relaxed: default min drawdown = 2%');
+ok(W.rsConviction({ triggers: ['sweep'], tape: 'short' }) === 1,
+   'relaxed: default against-tape penalty -3 (sweep 4 - 3 = 1)');
+
+W.rsSetRelaxed(true);
+ok(W.rsRelaxedOn() === true, 'relaxed: ON after rsSetRelaxed(true)');
+ok(W.rsMinLev() === 20, 'relaxed: min lev loosened to 20');
+ok(W.rsMinConviction() === 3, 'relaxed: min conviction loosened to 3');
+ok(W.rsMinRr() === 1.2, 'relaxed: min RR loosened to 1.2');
+ok(W.rsMinDrawdown() === 0.01, 'relaxed: min drawdown loosened to 1%');
+ok(W.rsConviction({ triggers: ['sweep'], tape: 'short' }) === 3,
+   'relaxed: against-tape penalty -1 (sweep 4 - 1 = 3)');
+
+/* Relaxed still applies the measured-negative suppression: a relaxed
+   candidate is WATCH-only, never a ticket. cardHTML reads rsRelaxedOn()
+   at render time, so re-render the already-suppressed WATCH setup with the
+   knob ON and assert the RELAXED stamp + continued suppression. */
+const relaxedCard = W.rsCardHTML({ setup: watched, item: { sym: 'ETHUSD' }, sym: 'ETHUSD' });
+ok(/RELAXED/.test(relaxedCard) && /LOWER CONVICTION/.test(relaxedCard),
+   'relaxed: card stamped RELAXED · LOWER CONVICTION');
+ok(!/<button class="toTrade"/.test(relaxedCard),
+   'relaxed: no trade button (stay watch-only)');
+ok(!/onclick="addToBook/.test(relaxedCard) && !/class="bookBtn"/.test(relaxedCard),
+   'relaxed: no ADD TO BOOK button');
+ok(/SNIPER GRADE /.test(relaxedCard) === false, 'relaxed: never labelled sniper-grade');
+
+W.rsSetRelaxed(false);
+ok(W.rsRelaxedOn() === false && W.rsMinLev() === 30,
+   'relaxed: toggling back OFF restores sniper-grade thresholds');
+
 console.log('\n' + pass + ' passed' + (fail ? ', ' + fail + ' FAILED' : ''));
 process.exit(fail ? 1 : 0);

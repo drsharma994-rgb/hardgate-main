@@ -35,7 +35,7 @@ assert.ok(/W\.hgFwdWarn\('reversalsniper:resolve', eR\)/.test(src),
   'must warn via hgFwdWarn on resolve error');
 
 /* --- structural: resolve happens AFTER fetch and BEFORE rsAssess --- */
-const loopMatch = src.match(/var rows = await rsFetchKlines\(item, '4h', KL_LIMIT\);[\s\S]{0,1500}?var setup = rsAssess\(rows\);/);
+const loopMatch = src.match(/var rows = await rsFetchKlines\(item, '4h', KL_LIMIT\);[\s\S]{0,1500}?var setup = rsAssess\(rows, \{ gates: gates \}\);/);
 assert.ok(loopMatch, 'must find the fetch->resolve->assess ordering');
 assert.ok(/W\.hgFwdResolve\(item\.sym, '4h', rows\);/.test(loopMatch[0]),
   'the resolve must sit between fetch and assess');

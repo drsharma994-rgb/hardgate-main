@@ -43,9 +43,9 @@ assert.ok(/var tape = rsTape\(rows\);/.test(src),
 assert.ok(/tape: tape/.test(src),
   'setup must carry the tape field');
 
-/* --- rsConviction: +1 long, -3 short, neutral null --- */
-assert.ok(/if \(setup\.tape === 'long'\) c \+= 1;\s*else if \(setup\.tape === 'short'\) c -= 3;/.test(src),
-  'rsConviction must add +1 for long tape and -3 for short tape');
+/* --- rsConviction: +1 long, -3 short (relaxed -1), neutral null --- */
+assert.ok(/if \(setup\.tape === 'long'\) c \+= 1;\s*else if \(setup\.tape === 'short'\) c -= \(rsRelaxedOn\(\) \? 1 : 3\);/.test(src),
+  'rsConviction must add +1 for long tape and -3 for short tape (relaxed softens to -1)');
 
 /* --- card chip present --- */
 assert.ok(/s\.tape === 'long'\s*\?\s*'<span class=\"gpip ok\">TAPE LONG<\/span>'/.test(src),
