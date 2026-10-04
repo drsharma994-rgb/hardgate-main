@@ -336,6 +336,11 @@ localStorage. Never throws.
          the candidate met the strictest bar AND every readable evidence leg
          was WITH, absent otherwise. Same three-states rule. */
       perfectPlus: (rec.perfectPlus === true) ? true : undefined,
+      /* hg-v1064: the world-feeds marks — valid enums only, anything
+         outside records NOTHING (the same three-states rule). */
+      macroTilt: (rec.macroTilt === 'RISK-ON' || rec.macroTilt === 'RISK-OFF' || rec.macroTilt === 'NEUTRAL') ? rec.macroTilt : undefined,
+      wmMacroVerdict: (typeof rec.wmMacroVerdict === 'string' && /^(BUY|SELL|HOLD|AVOID|RISK-ON|RISK-OFF)$/i.test(rec.wmMacroVerdict)) ? String(rec.wmMacroVerdict).toUpperCase() : undefined,
+      playbookBias: (typeof rec.playbookBias === 'string' && /^(LONG-ONLY|SHORT-ONLY|BOTH|STAND-ASIDE)$/i.test(rec.playbookBias)) ? String(rec.playbookBias).toUpperCase() : undefined,
       /* hg-v1025: THE ANTI-CHASE (walk-away) read-mark — true when the plan was
          dead on arrival at fire time (stop already breached or target already
          behind the entry, hg-plan.js hgPlanChaseVerdict), absent otherwise.
@@ -1832,7 +1837,105 @@ localStorage. Never throws.
     } catch (e) { return ''; }
   }
 
+  /* hg-v1065: THE PERFECT COHORT SPLIT — the question the normalize
+     comment has been waiting for since hg-v1030: does the PERFECT /
+     PERFECT+ cohort settle any differently from the rest? Reported,
+     never a gate. */
+  function hgFwdPerfectSplit(poolOrRecords, opts){
+    try {
+      var arr = Array.isArray(poolOrRecords);
+      var recs = arr ? poolOrRecords : hgFwdSessionRecordsOf(poolOrRecords);
+      var out = { settled: 0, marked: 0, unmarked: 0, cells: {} };
+      var cell = function(){ return { n: 0, wins: 0, rSum: 0, r: null, hit: null }; };
+      for (var i = 0; i < recs.length; i++){
+        var r = recs[i];
+        if (!r || (r.state !== 't1' && r.state !== 'stop')) continue;
+        out.settled++;
+        var rr = (r.state === 't1') ? (+r.rr || 0) : -1;
+        var k = r.perfectPlus === true ? 'PERFECT+' : (r.perfect === true ? 'PERFECT' : null);
+        if (k){
+          var c = out.cells[k] || (out.cells[k] = cell());
+          c.n++; if (r.state === 't1') c.wins++; c.rSum += rr;
+          out.marked++;
+        } else out.unmarked++;
+      }
+      var k2; for (k2 in out.cells){ var e = out.cells[k2]; if (e.n){ e.r = e.rSum / e.n; e.hit = e.wins / e.n; } }
+      if (!out.marked) return null;
+      return out;
+    } catch (e) { hgFwdWarn('perfectSplit', e); return null; }
+  }
+
+  function hgFwdPerfectSplitHtml(poolOrRecords){
+    try {
+      var sp = hgFwdPerfectSplit(poolOrRecords);
+      if (!sp) return '';
+      var fmtR = function(v){ return (v >= 0 ? '+' : '') + v.toFixed(2) + 'R'; };
+      var lines = [], k;
+      for (k in sp.cells){
+        if (!Object.prototype.hasOwnProperty.call(sp.cells, k)) continue;
+        var c = sp.cells[k];
+        if (!c || !c.n) continue;
+        lines.push('<div>' + esc(k) + ' - n ' + c.n + ' . hit ' + Math.round(100 * c.hit) + '% . ' + fmtR(c.r) + '</div>');
+      }
+      if (sp.unmarked) lines.push('<div>REST - n ' + sp.unmarked + ' (records without a PERFECT mark)</div>');
+      if (!lines.length) return '';
+      var h = '<div class="note" style="margin:8px 0;padding:8px 10px;border:1px solid #6B7280;border-radius:6px">';
+      h += '<b>PERFECT COHORT</b> . ' + sp.marked + ' of ' + sp.settled + ' settled records carried a PERFECT mark';
+      h += lines.join('');
+      h += '<div style="opacity:.75">Reported, not gated: nothing on this line withholds a setup.</div>';
+      h += '</div>';
+      return h;
+    } catch (e) { return ''; }
+  }
+
+  function hgFwdMacroTiltSplit(poolOrRecords, opts){
+    try {
+      var arr = Array.isArray(poolOrRecords);
+      var recs = arr ? poolOrRecords : hgFwdSessionRecordsOf(poolOrRecords);
+      var out = { settled: 0, marked: 0, unmarked: 0, cells: {} };
+      var cell = function(){ return { n: 0, wins: 0, rSum: 0, r: null, hit: null }; };
+      for (var i = 0; i < recs.length; i++){
+        var r = recs[i];
+        if (!r || (r.state !== 't1' && r.state !== 'stop')) continue;
+        out.settled++;
+        var rr = (r.state === 't1') ? (+r.rr || 0) : -1;
+        if (typeof r.macroTilt === 'string' && r.macroTilt){
+          var c = out.cells[r.macroTilt] || (out.cells[r.macroTilt] = cell());
+          c.n++; if (r.state === 't1') c.wins++; c.rSum += rr;
+          out.marked++;
+        } else out.unmarked++;
+      }
+      var k2; for (k2 in out.cells){ var e = out.cells[k2]; if (e.n){ e.r = e.rSum / e.n; e.hit = e.wins / e.n; } }
+      if (!out.marked) return null;
+      return out;
+    } catch (e) { hgFwdWarn('macroTiltSplit', e); return null; }
+  }
+
+  function hgFwdMacroTiltSplitHtml(poolOrRecords){
+    try {
+      var sp = hgFwdMacroTiltSplit(poolOrRecords);
+      if (!sp) return '';
+      var fmtR = function(v){ return (v >= 0 ? '+' : '') + v.toFixed(2) + 'R'; };
+      var lines = [], k;
+      for (k in sp.cells){
+        if (!Object.prototype.hasOwnProperty.call(sp.cells, k)) continue;
+        var c = sp.cells[k];
+        if (!c || !c.n) continue;
+        lines.push('<div>' + esc(k) + ' - n ' + c.n + ' . hit ' + Math.round(100 * c.hit) + '% . ' + fmtR(c.r) + '</div>');
+      }
+      if (sp.unmarked) lines.push('<div>NEITHER - n ' + sp.unmarked + ' (records without a tilt mark)</div>');
+      if (!lines.length) return '';
+      var h = '<div class="note" style="margin:8px 0;padding:8px 10px;border:1px solid #6B7280;border-radius:6px">';
+      h += '<b>WORLD TILT ODDS</b> . ' + sp.marked + ' of ' + sp.settled + ' settled records carried a tilt mark';
+      h += lines.join('');
+      h += '<div style="opacity:.75">Reported, not gated: nothing on this line withholds a setup.</div>';
+      h += '</div>';
+      return h;
+    } catch (e) { return ''; }
+  }
+
   /* ==================== health ====================
+
      Every call site into this module is wrapped in try/catch, because a
      logging failure must never break a scan. But a SILENT logging failure is
      worse than the crash it prevents: evidence stops accumulating, the panel
@@ -2617,6 +2720,8 @@ localStorage. Never throws.
         try { h += W.hgFwdRotationSplitHtml(tab) || ''; } catch (eRo){}   /* hg-v994 */
         try { h += W.hgFwdTrendMatrixSplitHtml(tab) || ''; } catch (eTm){}   /* hg-v995 */
         try { h += W.hgFwdEvidenceSplitHtml(tab) || ''; } catch (eEv){}   /* hg-v1010 */
+        try { h += W.hgFwdPerfectSplitHtml(tab) || ''; } catch (ePf2){}   /* hg-v1065 */
+        try { h += W.hgFwdMacroTiltSplitHtml(tab) || ''; } catch (eMt2){}   /* hg-v1065 */
         h += '<div class="note">Recorded once per firing when it fires, settled later by bars that did '
            + 'not exist at the time. A bar spanning both stop and target counts as a STOP; expiry is '
            + 'excluded rather than counted as a win. This is the only measurement here that accumulates.</div>';
@@ -3652,6 +3757,10 @@ localStorage. Never throws.
        trend-matrix split above; reported, never a gate. */
     W.hgFwdSessionSplit = hgFwdSessionSplit;
     W.hgFwdSessionSplitHtml = hgFwdSessionSplitHtml;
+    W.hgFwdPerfectSplit = hgFwdPerfectSplit;           /* hg-v1065 */
+    W.hgFwdPerfectSplitHtml = hgFwdPerfectSplitHtml;
+    W.hgFwdMacroTiltSplit = hgFwdMacroTiltSplit;
+    W.hgFwdMacroTiltSplitHtml = hgFwdMacroTiltSplitHtml;
 
     /* hg-v1010: THE EVIDENCE SPLIT — the read the hg-v1006 … v1009 stamps were
        written FOR. A mark nothing selects is ornamental; this is the select.
