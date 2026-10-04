@@ -71,7 +71,10 @@ function rsMinConviction(){ return rsRelaxedOn() ? MIN_CONVICTION_RELAXED : rsDe
 function rsMinLev(){ return rsRelaxedOn() ? MIN_LEV_RELAXED : MIN_LEV; }
 function rsMinDrawdown(){ return rsRelaxedOn() ? MIN_DRAWDOWN_RELAXED : MIN_DRAWDOWN; }
 function rsSniperMaxStopPct(){ return rsRelaxedOn() ? SNIPER_MAX_STOP_PCT_RELAXED : SNIPER_MAX_STOP_PCT; }
-var MIN_TURNOVER    = 5e6;
+/* v696: full CoinDCX universe — a liquidity floor must not shrink the
+   scan. Turnover is a WITNESS on the card (shown when known), never a
+   gate that silently drops a CoinDCX contract from the board. */
+var MIN_TURNOVER    = 0;
 var MAX_UNIVERSE    = 0;
 var KL_LIMIT        = 300;
 var CHUNK           = 4;
@@ -505,7 +508,7 @@ async function rsLoadUniverse(force){
     var loadFn = (typeof W.hgDeskLoadDeltaCoinDCX === 'function') ? W.hgDeskLoadDeltaCoinDCX
       : ((typeof W.hgDeskLoadUniverse === 'function') ? W.hgDeskLoadUniverse : null);
     if (loadFn){
-      var u = await loadFn({ force: !!force, minTurnover: MIN_TURNOVER, includeUnknown: false });
+      var u = await loadFn({ force: !!force, minTurnover: MIN_TURNOVER, includeUnknown: true });
       var items = (u.items || []).filter(function(it){ return it && rsIsDeskVenue(it.exchange); });
       if (MAX_UNIVERSE > 0) items = items.slice(0, MAX_UNIVERSE);
       return {
@@ -1097,8 +1100,7 @@ function mount(el){
     + '<h2>Reversal Sniper <span id="rsSub"></span></h2>'
     + (typeof W.hgDeskFormationEdgeBannerHtml === 'function' ? W.hgDeskFormationEdgeBannerHtml('reversalsniper') : '')
     + (typeof W.hgFormationNightlyBannerHtml === 'function' ? W.hgFormationNightlyBannerHtml() : '')
-    + '<div class="note" style="margin-bottom:8px">Scans every Delta India + CoinDCX USDT perpetual (≥ $'
-    + fmtF(MIN_TURNOVER / 1e6, 0) + 'M turnover when known). Conviction = agreeing triggers + paying mean-rev backtest. '
+    + '<div class="note" style="margin-bottom:8px">Scans every Delta India + CoinDCX USDT perpetual (full universe — 24h turnover shown when known). Conviction = agreeing triggers + paying mean-rev backtest. '
     + '<b>PIN-REJECT lost −1.03R at n=115 — bounce tickets stand aside (WATCH only)</b>.</div>'
     + '<div class="row"><button class="btn" id="rsRun">SCAN REVERSALS</button>'
     + '<button class="btn" id="rsRelaxBtn"></button>'
