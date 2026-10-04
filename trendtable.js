@@ -1,3 +1,1 @@
-/* =========================================================================
-HARDGATE — trendtable.js
-PLACEHOLDER2
+WILL_BE_REPLACED_BY_FULL_FILE
