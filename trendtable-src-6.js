@@ -125,12 +125,13 @@ function trendmxPerfectSetups(rows){
 }
 
 
-/* hg-v1081: FIVE-PILLAR STACK — technical, fundamental, sentiment, macro, micro.
+/* hg-v1082: FIVE-PILLAR STACK — technical, fundamental, sentiment, macro, micro.
    A FULL STACK row is one where every pillar is readable AND with the row's
-   own majority. WITH is a positive read. An unread ATR, a mixed tape, and
-   BTC funding that is merely not crowded do not count as WITH. An against
-   pillar vetoes the stack. The composite, the PERFECT predicate, and the
-   tiers are unchanged. A stricter desk, not a profit claim. */
+   own majority. WITH is a positive read. An unread ATR, a mixed tape, a
+   missing 4h structure, and BTC funding that is merely not crowded do not
+   count as WITH. Structure must agree (EMA50 vs EMA200). An against pillar
+   vetoes the stack. The composite, the PERFECT predicate, and the tiers are
+   unchanged. A stricter desk, not a profit claim. */
 var __tmMacro = null;
 function trendmxMacroSet(snap){ __tmMacro = snap || null; return __tmMacro; }
 function trendmxFivePillars(r){
@@ -151,14 +152,16 @@ function trendmxFivePillars(r){
     if (chop && chop.state) notes.push('tape ' + chop.state);
     if (mom === 'against' || vol === 'against' || (chop && chop.state === 'chop')) against = true;
     if (atr && (atr.regime === 'DEAD' || atr.regime === 'BLOWOFF')) against = true;
+    var structWith = false;
     try{
       var st = tmStructureDir(r.rows4h);
       if (st){
         notes.push('structure ' + st);
         if ((dir === 'long' && st === 'down') || (dir === 'short' && st === 'up')) against = true;
+        if ((dir === 'long' && st === 'up') || (dir === 'short' && st === 'down')) structWith = true;
       }
     }catch(eSt){}
-    if (!against && mom === 'with' && vol === 'with' && Math.abs(+r.score || 0) >= 4 && atr && atr.regime === 'HEALTHY' && chop && chop.state === 'trend') withIt = true;
+    if (!against && structWith && mom === 'with' && vol === 'with' && Math.abs(+r.score || 0) >= 4 && atr && atr.regime === 'HEALTHY' && chop && chop.state === 'trend') withIt = true;
     pillars.push({ name: 'TECHNICAL', state: against ? 'against' : (withIt ? 'with' : 'flat'), detail: notes.join(' · ') });
   }
   var fund = dir ? trendmxFundState(r, dir) : null;
