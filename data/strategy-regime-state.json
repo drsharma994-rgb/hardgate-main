@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-16T04:44:44.103Z",
+  "updated": "2026-10-04T04:09:34.086Z",
   "note": "Backtest-derived 60d-style expectancy prior + hand-tuned RISK-ON boosts. Negative → REGIME PAUSED.",
   "expectancy": {
     "SWING": {

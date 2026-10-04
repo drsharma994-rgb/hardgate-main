@@ -484,6 +484,12 @@ localStorage. Never throws.
       netflowZ: (typeof rec.netflowZ === 'number' && isFinite(rec.netflowZ)) ? rec.netflowZ : undefined,
       liqClusterUsd: (typeof rec.liqClusterUsd === 'number' && isFinite(rec.liqClusterUsd) && rec.liqClusterUsd >= 0) ? rec.liqClusterUsd : undefined,
       liqFuelUsd: (typeof rec.liqFuelUsd === 'number' && isFinite(rec.liqFuelUsd) && rec.liqFuelUsd >= 0) ? rec.liqFuelUsd : undefined,
+      /* hg-v1058: THE SCALP-ANCHOR MARKS — the signed VWAP deviation % on the
+         winner's own tape (a number; zero is a READ zero) and the Bollinger
+         squeeze state (an enum). Same three-state rule: anything outside the
+         enum records NOTHING. */
+      vwapDevPct: (typeof rec.vwapDevPct === 'number' && isFinite(rec.vwapDevPct)) ? rec.vwapDevPct : undefined,
+      bbSqueeze: (rec.bbSqueeze === 'SQUEEZE' || rec.bbSqueeze === 'NORMAL' || rec.bbSqueeze === 'EXPANSION') ? rec.bbSqueeze : undefined,
       state: 'open', r: null, settledT: null,
       at: isFinite(fin(rec.at)) ? fin(rec.at) : barT
     };
@@ -1688,6 +1694,17 @@ localStorage. Never throws.
         var nz = out[key].nz || (out[key].nz = { sum: 0, n: 0 });
         nz.sum += r.netflowZ; nz.n++;
       }
+      /* hg-v1058: the scalp-anchor marks fold too — bbSqueeze per enum value,
+         vwapDevPct as sum+count so the mean signed deviation of pruned rows
+         survives as a mean. */
+      if (r.bbSqueeze === 'SQUEEZE' || r.bbSqueeze === 'NORMAL' || r.bbSqueeze === 'EXPANSION'){
+        var bbs = out[key].bbs || (out[key].bbs = {});
+        tally(bbs[r.bbSqueeze] || (bbs[r.bbSqueeze] = blank()));
+      }
+      if (typeof r.vwapDevPct === 'number' && isFinite(r.vwapDevPct)){
+        var vwp = out[key].vwp || (out[key].vwp = { sum: 0, n: 0 });
+        vwp.sum += r.vwapDevPct; vwp.n++;
+      }
       /* hg-v989: each named read folds into its own yes/no pair, so the split
          outlives the live cap exactly as the other marks do. STRICTLY the two
          booleans per read; an unmarked read is neither bucket. */
@@ -2344,6 +2361,9 @@ localStorage. Never throws.
             netflowZ: c.netflowZ,
             liqClusterUsd: c.liqClusterUsd,
             liqFuelUsd: c.liqFuelUsd,
+            /* hg-v1058: the scalp-anchor marks, the same raw pass-through */
+            vwapDevPct: c.vwapDevPct,
+            bbSqueeze: c.bbSqueeze,
             /* solidity stamp fields (hg-v533) ride through untouched;
                hgFwdNormalize attaches them only when sol is finite */
             sol: c.sol, solTier: c.solTier, solV: c.solV

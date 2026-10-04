@@ -1610,6 +1610,7 @@ a global hard refresh.
       dhtml += hgObtcAutoRuleHtml(pick);
       dhtml += hgObtcPlanMathHtml(pick);
       dhtml += hgObtcSetupCardHtml(pick, snap);
+      dhtml += hgObtcScalpPlanHtml(snap);
       dhtml += hgObtcScoreboardHtml();
       /* hg-v1057 A8: SESSION ODDS — the desk's own settled record split by the
          fire bar's session, read off the forward ledger (the split the shared
@@ -1775,6 +1776,7 @@ a global hard refresh.
       }
       if (pick && pick.row){
         var pfReadsEntryRefined = false;   /* hg-v1051: refinement stamp for the record */
+        var scalpPlan = null;              /* hg-v1056: the 15m scalp target beside the call */
         /* hg-v1057: liquidation magnitudes captured off the omniInfo rows
            (declared here; filled by the loop below, copied into pfReads) */
         var liqClusterUsdCap = null, liqFuelUsdCap = null;
@@ -2275,6 +2277,7 @@ a global hard refresh.
         extraLedger: extraLedger,
         fundamental: fundamental,
         measured: measured,
+        scalpPlan: scalpPlan,
         extra: extra,             /* hg-v1057: the cycle-context panel reads the on-chain bag */
         at: Date.now()
       };
