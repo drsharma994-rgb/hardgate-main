@@ -34,10 +34,15 @@ var W = (typeof window !== 'undefined') ? window
    remains the default. Relaxed rows are NEVER tickets: the PIN-REJECT
    desk-edge suppression still applies downstream (rsTradeable stays false),
    they are explicitly stamped RELAXED / LOWER CONVICTION, and they are
-   never labelled sniper-grade. Loosened: min lev 30 -> 20, stop cap
-   1.88% -> 3.0% (the stop cap is what actually encodes the leverage floor),
-   min drawdown 2% -> 1%, min conviction 4 -> 3, against-tape penalty
-   -3 -> -1, min RR 1.5 -> 1.2. */
+   never labelled sniper-grade. Loosened: stop cap 1.88% -> 3.0% (the stop
+   cap is the ONE knob — it encodes the max-safe leverage floor via
+   rsMaxSafeLev, so min lev 30 -> 20 is the SAME change expressed as the
+   derived lever, never two independent loosens), min drawdown 2% -> 1%,
+   min conviction 4 -> 3, against-tape penalty -3 -> -2 (NOT -1, see
+   rsConviction: the penalty's job is "deprioritise, don't veto", and it
+   must stay a ~2/3-of-floor step the same way -3 is ~3/4 of the sniper
+   floor of 4 — -1 would be a 1/3 step too weak to matter), min RR
+   1.5 -> 1.2. */
 var RELAXED_KEY = 'hg.rsRelaxed';
 var __relaxed = false;
 try {
@@ -296,9 +301,16 @@ function rsConviction(setup){
        against-tape cards off the board while strong ones (many triggers,
        deep RSI(2), big drawdown, positive backtest) survive. Tape null =
        neutral (mixed/ranging market where dip-buys and reversal-shorts are
-       both reasonable). */
+       both reasonable).
+
+       Relaxed softens the penalty to -2, not -1: the penalty is scaled to
+       the conviction floor (sniper -3 vs floor 4 = 3/4; relaxed -2 vs
+       floor 3 = 2/3), so "deprioritise against-tape, don't veto" stays
+       meaningful. At -1 (1/3 of the floor) an against-tape long would lose
+       only what a single mild bonus scores, which effectively deletes the
+       falling-knife protection this gate exists to provide. */
     if (setup.tape === 'long') c += 1;
-    else if (setup.tape === 'short') c -= (rsRelaxedOn() ? 1 : 3);
+    else if (setup.tape === 'short') c -= (rsRelaxedOn() ? 2 : 3);
     /* v679: live-price sanity. If the shared hgLivePriceGrade helper (from
        omniroute.js) is available and setup carries a live price hint,
        classify the plan against current price. Reversal snipes are

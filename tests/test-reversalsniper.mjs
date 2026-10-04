@@ -97,8 +97,8 @@ ok(W.rsMinLev() === 20, 'relaxed: min lev loosened to 20');
 ok(W.rsMinConviction() === 3, 'relaxed: min conviction loosened to 3');
 ok(W.rsMinRr() === 1.2, 'relaxed: min RR loosened to 1.2');
 ok(W.rsMinDrawdown() === 0.01, 'relaxed: min drawdown loosened to 1%');
-ok(W.rsConviction({ triggers: ['sweep'], tape: 'short' }) === 3,
-   'relaxed: against-tape penalty -1 (sweep 4 - 1 = 3)');
+ok(W.rsConviction({ triggers: ['sweep'], tape: 'short' }) === 2,
+   'relaxed: against-tape penalty -2 (sweep 4 - 2 = 2)');
 
 /* Relaxed still applies the measured-negative suppression: a relaxed
    candidate is WATCH-only, never a ticket. cardHTML reads rsRelaxedOn()

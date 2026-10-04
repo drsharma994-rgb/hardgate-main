@@ -43,9 +43,9 @@ assert.ok(/var tape = rsTape\(rows\);/.test(src),
 assert.ok(/tape: tape/.test(src),
   'setup must carry the tape field');
 
-/* --- rsConviction: +1 long, -3 short (relaxed -1), neutral null --- */
-assert.ok(/if \(setup\.tape === 'long'\) c \+= 1;\s*else if \(setup\.tape === 'short'\) c -= \(rsRelaxedOn\(\) \? 1 : 3\);/.test(src),
-  'rsConviction must add +1 for long tape and -3 for short tape (relaxed softens to -1)');
+/* --- rsConviction: +1 long, -3 short (relaxed -2), neutral null --- */
+assert.ok(/if \(setup\.tape === 'long'\) c \+= 1;\s*else if \(setup\.tape === 'short'\) c -= \(rsRelaxedOn\(\) \? 2 : 3\);/.test(src),
+  'rsConviction must add +1 for long tape and -3 for short tape (relaxed softens to -2, not -1)' );
 
 /* --- card chip present --- */
 assert.ok(/s\.tape === 'long'\s*\?\s*'<span class=\"gpip ok\">TAPE LONG<\/span>'/.test(src),
@@ -126,6 +126,16 @@ assert.equal(convDelta(null), 0, 'null tape is neutral');
    MIN_CONVICTION step */
 assert.equal(convDelta('long') - convDelta('short'), 4,
   'with-tape vs against-tape delta = 4 conviction pts (one MIN_CONVICTION step)');
+/* relaxed keeps the penalty proportional to its lower conviction floor:
+   -2 vs floor 3 (~2/3) mirrors the sniper -3 vs floor 4 (~3/4), so the
+   falling-knife deprioritisation survives the relaxed loosening. -1 would
+   collapse to a 1/3 step and lose that protection. */
+{
+  const rConvDelta = tape => tape === 'long' ? 1 : (tape === 'short' ? -2 : 0);
+  assert.equal(rConvDelta('short'), -2, 'relaxed against-tape penalty is -2');
+  assert.equal(rConvDelta('long') - rConvDelta('short'), 3,
+    'relaxed with-tape vs against-tape delta = 3 pts (a ~2/3 step of the floor of 4-ish, proportional to the sniper 4-pt delta)');
+}
 
 /* --- version --- */
 assert.ok(/^hg-v(?:678|679|6[8-9]\d|[7-9]\d\d|\d{4,})$/.test(HG_VER) && hgVerGte(HG_VER, 678),
