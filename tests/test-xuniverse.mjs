@@ -259,6 +259,17 @@ const CDCX_MARKS_BODY = { ts: 1784547924253, vs: 346946280, prices: {
   assert(st && st.count === 9 && st.delta === 6 && st.cdcx === 6 && typeof st.at === 'number',
          'universe: xuState reports {count:9, delta:6, cdcx:6, at}');
   assert(st.note === null && w.xuUniverseNote() === null, 'universe: healthy run -> note null (marks stub has no prices map -> merges nothing, not a failure)');
+  /* hg-v1074: raw CoinDCX leg - the deduped merge tags BTC 'delta' (higher
+     turnover), so a venue filter would hide B-BTC_USDT. The raw accessor must
+     still surface every CoinDCX contract under its own 'coindcx' tag. */
+  assert(typeof w.xuCoinDCXRows === 'function', 'universe: xuCoinDCXRows exported');
+  const rawC = await w.xuCoinDCXRows(false);
+  assert(Array.isArray(rawC) && rawC.length === 6, 'universe: raw CoinDCX leg = all 6 contracts (got ' + (rawC && rawC.length) + ')');
+  const rawBtc = rawC.filter(function(r){ return r.base === 'BTC'; })[0];
+  assert(rawBtc && rawBtc.exchange === 'coindcx' && rawBtc.sym === 'B-BTC_USDT',
+         'universe: raw CoinDCX keeps B-BTC_USDT as coindcx even though the merge tagged BTC delta');
+  const rawEvery = rawC.every(function(r){ return r.exchange === 'coindcx'; });
+  assert(rawEvery, 'universe: every raw CoinDCX row stays tagged coindcx');
   const uni2 = await w.xuUniverse();
   assert(f.urls.length === 3 && uni2 === uni, 'universe: second call within 15 min served from cache (no new fetch, same array)');
   const uni3 = await w.xuUniverse(true);

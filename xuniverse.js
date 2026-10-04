@@ -803,6 +803,20 @@ function xuPositioning(baseOrSym){
   }catch(e){ return null; }
 }
 
+/* Raw CoinDCX rows (post norm + marks merge, PRE base-dedup). The merged
+   universe tags exactly one 'exchange' per base (higher-turnover venue wins),
+   so a CoinDCX contract that is also listed on Delta/Startrader hides behind
+   the winning venue's tag and is invisible to a venue filter on the merged
+   list. Desks that must see EVERY CoinDCX contract read THIS list instead.
+   Never throws; [] when the leg is down or not yet fetched. Mirrors
+   xuUniverse's cache/force/busy-guard semantics via the shared cache. */
+async function xuCoinDCXRows(force){
+  try{
+    await xuUniverse(!!force);
+    return (cache && Array.isArray(cache.cdcxRows)) ? cache.cdcxRows.slice() : [];
+  }catch(e){ return []; }
+}
+
 /* ---------------- exports ---------------- */
 try{
   G.xuUniverse = xuUniverse;
@@ -815,6 +829,7 @@ try{
   G.xuNormBinanceExt = xuNormBinanceExt;
   G.xuMergeCdcxMarks = xuMergeCdcxMarks;
   G.xuPositioning = xuPositioning;
+  G.xuCoinDCXRows = xuCoinDCXRows;
   G.xuState = xuState;
   G.xuUniverseNote = xuUniverseNote;
   G.xuErrMsg = errMsg;

@@ -1168,15 +1168,22 @@ async function trendmxScanCore(hooks){
   }
   var uniPack = await W.hgDeskLoadUniverse({ force: true, minTurnover: TURNOVER_FLOOR });
   var items = uniPack.items || [];
-  /* hg-v1048: ALL COINDCX FUTURES - the floored universe drops small
-     CoinDCX contracts, so the matrix re-reads the universe at floor 0 and
-     merges in every CoinDCX future it missed (deduped on venue+sym). The
-     other venues keep their floor. */
+  /* hg-v1048/hg-v1074: ALL COINDCX FUTURES - the floored universe drops
+     small CoinDCX contracts, so the matrix re-reads the universe at floor 0
+     and merges in every CoinDCX future it missed (deduped on venue+sym).
+     hg-v1074 reads the RAW CoinDCX leg (hgDeskLoadCoinDCXAll), not the
+     deduped merged universe: xuMergeLegs tags one 'exchange' per base and
+     the higher-turnover venue wins, so a CoinDCX contract also listed on
+     Delta/Startrader was invisible to a ['coindcx'] filter on the merged
+     list. Every CoinDCX active_instruments contract now appears regardless.
+     The other venues keep their floor. */
   try{
-    if (gfn('hgDeskLoadUniverse')){
-      var allPack = await W.hgDeskLoadUniverse({ force: false, minTurnover: 0, includeUnknown: true });
-      var cdcxAll = (gfn('hgDeskFilterVenues') && Array.isArray(allPack.items))
-        ? W.hgDeskFilterVenues(allPack.items, ['coindcx']) : [];
+    /* Raw CoinDCX only makes sense when a CoinDCX data source exists
+       (xuniverse.js). Guarding on xuCoinDCXRows also avoids a pointless
+       second universe fetch on the Binance-only fallback path. */
+    if (typeof W.xuCoinDCXRows === 'function' && typeof W.hgDeskLoadCoinDCXAll === 'function'){
+      var allPack = await W.hgDeskLoadCoinDCXAll({ force: false, minTurnover: 0, includeUnknown: true });
+      var cdcxAll = Array.isArray(allPack.items) ? allPack.items : [];
       var seenU = {};
       for (var ui = 0; ui < items.length; ui++) seenU[String(items[ui].exchange || '') + '|' + String(items[ui].sym || '')] = 1;
       for (var uj = 0; uj < cdcxAll.length; uj++){
