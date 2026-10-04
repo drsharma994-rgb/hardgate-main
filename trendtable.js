@@ -1,1 +1,3 @@
-PLACEHOLDER_WILL_FAIL
+/* =========================================================================
+HARDGATE — trendtable.js
+PLACEHOLDER2
