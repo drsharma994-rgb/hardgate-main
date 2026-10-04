@@ -1286,6 +1286,13 @@ function trendmxRowTier(r, plan){
      checked headwind (against) can never be CLEAN. */
   var fundSt = trendmxFundState(r, tmDirOf(r));
   if (fundSt === 'refuse' || fundSt === 'against') return 'near';
+  /* hg-v1057: the trend-quality witness caps the same way — a row whose own
+     4h tape is CHOPPY (Choppiness >= 61.8 AND Efficiency Ratio < 0.3, the two
+     instruments agreeing) can never be CLEAN: this desk trades trends and
+     that tape has none to ride. Mixed or unreadable caps nothing (fail open
+     — one instrument alone is not a verdict). */
+  var chopSt = trendmxChopState(r);
+  if (chopSt && chopSt.state === 'chop') return 'near';
   if (plan && tmValidSetup(plan) && r.gate && r.gate.clean7) return 'clean';
   if (r.gate && r.gate.nearClean) return 'near';
   return 'forming';
@@ -1531,6 +1538,64 @@ function trendmxFundChipHtml(r){
     if (!g || !g.chips || !g.chips.length) return '';
     if (typeof hgFundamentalChipHtml === 'function') return hgFundamentalChipHtml(g) || '';
     return '';
+  }catch(e){ return ''; }
+}
+
+/* hg-v1057: THE TREND-QUALITY WITNESS state — the matrix's own measure of
+   whether the tape the row was scored on has a trend to ride AT ALL. Reads
+   the row's own 4h series (never recomputes the composite); the two house
+   trend-quality instruments, both from indicators.js:
+     Choppiness Index (Dreiss, TASC 2009) — 0..100, >61.8 choppy, <38.2 trending
+     Kaufman Efficiency Ratio — 0..1, ~1 clean directional tape, near 0 noise
+     chop   — CHOP(14) >= 61.8 AND ER(20) < 0.3 TOGETHER: sideways noise.
+       Caps the row at NEAR (never CLEAN) — the matrix is a TREND desk and
+       this tape has no trend to ride.
+     trend  — CHOP(14) <= 38.2 AND ER(20) > 0.4 TOGETHER: a clean directional
+       tape (the FORMING board stamps it EARLY FORMING).
+     null   — mixed or unreadable: NO verdict, holds nothing off (the hg-v700
+       honest-degradation rule). The readable scalars still ride the object.
+   The two instruments must AGREE: one saying chop and the other trend is a
+   mixed tape, and a mixed tape is not a cap — fail open, evidence first. */
+function trendmxChopState(r){
+  var chop = null, er = null;
+  if (!r || !Array.isArray(r.rows4h) || r.rows4h.length < 25
+      || typeof hgChoppiness !== 'function' || typeof hgKaufmanER !== 'function'){
+    return { chop: chop, er: er, state: null };
+  }
+  try{
+    var ch = hgChoppiness(r.rows4h, 14);
+    if (ch && ch.length){
+      var lc = ch[ch.length - 1];
+      if (isFinite(lc)) chop = lc;
+    }
+    var closes = r.rows4h.map(function(x){ return +x.c; });
+    var erArr = hgKaufmanER(closes, 20);
+    if (erArr && erArr.length){
+      var le = erArr[erArr.length - 1];
+      if (isFinite(le)) er = le;
+    }
+  }catch(e){ /* an unreadable tape is no verdict — the scalars stay null */ }
+  var state = null;
+  if (isFinite(chop) && isFinite(er)){
+    if (chop >= 61.8 && er < 0.3) state = 'chop';
+    else if (chop <= 38.2 && er > 0.4) state = 'trend';
+  }
+  return { chop: chop, er: er, state: state };
+}
+
+/* hg-v1057: the trend-quality chip — the momentum chip's own pattern.
+   CHOP prints the bad stamp with BOTH measured values (a cap is never
+   silent); TREND and mixed/unreadable paint NO chip (evidence, never a
+   brag, and a mixed tape is not a verdict). */
+function trendmxChopChipHtml(r){
+  try{
+    var st = trendmxChopState(r);
+    if (!st || st.state !== 'chop') return '';
+    var chopTxt = isFinite(st.chop) ? st.chop.toFixed(0) : '?';
+    var erTxt = isFinite(st.er) ? st.er.toFixed(2) : '?';
+    return '<span class="stamp bad" style="margin-left:6px" title="' + escH('trend-quality witness (hg-v1057): this 4h tape reads CHOP ' + chopTxt
+      + ' and efficiency ratio ' + erTxt
+      + ' — the trend matrix\'s own trend-quality measure says there is no trend to ride. Capped at NEAR, never CLEAN — evidence, never a gate.') + '">CHOP ' + chopTxt + ' · ER ' + erTxt + '</span>';
   }catch(e){ return ''; }
 }
 
@@ -1903,7 +1968,7 @@ function trendmxSetupCardHTML(r, tier){
   return hgSetupCardHTML({
     sym: r.sym, dir: dir, tier: tier,
     mini: mini, gates: gates,
-    plan: plan ? (trendmxPlanHTML(plan) + tmSmcChip(r) + trendmxFlowChipHtml(r) + trendmxMomChipHtml(r) + trendmxVolChipHtml(r) + trendmxFundingChipHtml(r) + trendmxAtrRegimeChipHtml(r) + trendmxFundChipHtml(r) + trendmxSlotChipHtml(r) + trendmxDayChipHtml(r) + trendmxCostChipHtml(r, plan)) : '',
+    plan: plan ? (trendmxPlanHTML(plan) + tmSmcChip(r) + trendmxFlowChipHtml(r) + trendmxMomChipHtml(r) + trendmxVolChipHtml(r) + trendmxFundingChipHtml(r) + trendmxAtrRegimeChipHtml(r) + trendmxFundChipHtml(r) + trendmxSlotChipHtml(r) + trendmxDayChipHtml(r) + trendmxCostChipHtml(r, plan) + trendmxChopChipHtml(r)) : '',
     entry: plan ? plan.entry : null, stop: plan ? plan.stop : null, t1: plan ? plan.t1 : null,
     chartId: (tier === 'clean' && plan) ? ('tmx_' + String(r.sym).replace(/[^A-Za-z0-9]/g, '')) : '',
     stack: stack,
@@ -2151,10 +2216,21 @@ function trendmxTrendFormHTML(rows){
         : lean === 1 ? '<span class="pos">LONG-LEAN</span>'
         : lean === -1 ? '<span class="neg">SHORT-LEAN</span>'
         : '<span>NO LEAN</span>';
+      /* hg-v1057: the FORMING column names WHY nothing formed — a choppy tape
+         is CHOP (no trend to ride, whatever the lean), a clean directional
+         tape with a lean but no majority is EARLY FORMING, and a mixed tape
+         prints neither (no verdict). The TRENDING column is untouched: its
+         rows already have a majority. */
+      var formTag = '';
+      if (!dd){
+        var fs = trendmxChopState(rr);
+        if (fs && fs.state === 'chop') formTag = ' · CHOP';
+        else if (fs && fs.state === 'trend') formTag = ' · EARLY FORMING';
+      }
       var lvl = (dd || lean !== 0) ? lvlLine(rr, dd || (lean === 1 ? 'long' : 'short'))
         : 'no lean - composite 0/5, no levels';
       return '<div class="card" style="padding:8px;margin-bottom:6px"><b>' + escH(rr.sym) + '</b> ' + tag
-        + '<div style="opacity:.9;font-size:11px;margin-top:2px">composite ' + (rr.score > 0 ? '+' : '') + rr.score + '/5' + (rr.freshCross ? ' - !' + escH(rr.freshCross) : '') + '</div>'
+        + '<div style="opacity:.9;font-size:11px;margin-top:2px">composite ' + (rr.score > 0 ? '+' : '') + rr.score + '/5' + formTag + (rr.freshCross ? ' - !' + escH(rr.freshCross) : '') + '</div>'
         + '<div style="font-size:11px;margin-top:4px;letter-spacing:.02em">' + lvl + '</div></div>';
     }
     function col(title, cls, list, emptyTxt){
@@ -2703,6 +2779,8 @@ W.trendmxColumnsHTML = trendmxColumnsHTML; /* hg-v1045: the bull / bear column v
 W.trendmxTrendFormHTML = trendmxTrendFormHTML; /* hg-v1048: the coindcx trending / forming board */
 W.trendmxFundState = trendmxFundState;
 W.trendmxFundChipHtml = trendmxFundChipHtml;
+W.trendmxChopState = trendmxChopState;      /* hg-v1057: the trend-quality witness */
+W.trendmxChopChipHtml = trendmxChopChipHtml;
 W.trendmxPerfectState = trendmxPerfectState;       /* hg-v1022: the perfect predicate */
 W.trendmxPerfectSetups = trendmxPerfectSetups;     /* hg-v1022: the perfect bag collector */
 W.trendmxPerfectDeskHTML = trendmxPerfectDeskHTML; /* hg-v1022: the perfect desk renderer */

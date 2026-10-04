@@ -418,6 +418,189 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
     }catch(e){ return null; }
   }
 
+  /* ---- hg-v1057 accuracy pack: KAMA + SuperTrend local primitives ------
+     Self-contained (cryptoultra.js keeps its own copies; this file never
+     imports across desks). Feature-checked at the call sites. */
+  function levelsLocal(dir, rows, entry){
+    /* the house fallback ladder (trendmxPlanLegacy's own shape): structure
+       stop via lastSwing buffered 0.25xATR14 when within 2.5xATR14, else
+       1.5xATR14 against the direction; 2R / 3.5R targets. */
+    if (!gfn('atr') || !gfn('lastSwing') || !rows || !rows.length || !isFinite(entry) || entry <= 0) return null;
+    var aArr = W.atr(rows, 14);
+    var a = aArr && isFinite(aArr[aArr.length - 1]) && aArr[aArr.length - 1] > 0 ? aArr[aArr.length - 1] : NaN;
+    if (!isFinite(a)) return null;
+    var stop = NaN;
+    var sw = W.lastSwing(rows, dir, 30);
+    if (isFinite(sw)){
+      var s = (dir === 'long') ? sw - 0.25 * a : sw + 0.25 * a;
+      var risk0 = (dir === 'long') ? entry - s : s - entry;
+      if (risk0 > 0 && risk0 <= 2.5 * a) stop = s;
+    }
+    if (!isFinite(stop)) stop = (dir === 'long') ? entry - 1.5 * a : entry + 1.5 * a;
+    var risk = Math.abs(entry - stop);
+    if (!(risk > 0)) return null;
+    return {
+      dir: dir, entry: entry, stop: stop,
+      t1: entry + (dir === 'long' ? 1 : -1) * 2 * risk,
+      t2: entry + (dir === 'long' ? 1 : -1) * 3.5 * risk,
+      rr: 2
+    };
+  }
+
+  function kamaLocal(closes, erWin, fastP, slowP){
+    erWin = erWin || 10; fastP = fastP || 2; slowP = slowP || 30;
+    var n = closes.length;
+    var out = new Array(n).fill(NaN);
+    if (n < erWin + 1) return out;
+    var fastC = 2 / (fastP + 1), slowC = 2 / (slowP + 1);
+    var kama = closes[erWin];
+    out[erWin] = kama;
+    for (var i = erWin + 1; i < n; i++){
+      var net = Math.abs(closes[i] - closes[i - erWin]);
+      var gross = 0;
+      for (var k = i - erWin + 1; k <= i; k++) gross += Math.abs(closes[k] - closes[k - 1]);
+      var er = gross > 0 ? net / gross : 0;
+      var sc = Math.pow(er * (fastC - slowC) + slowC, 2);
+      kama = kama + sc * (closes[i] - kama);
+      out[i] = kama;
+    }
+    return out;
+  }
+
+  function superTrendLocal(rows, p, mult){
+    p = p || 10; mult = mult || 3;
+    var n = rows.length;
+    var aArr = (gfn('atr') && typeof W.atr === 'function') ? W.atr(rows, p) : null;
+    if (!aArr || n < p + 1) return null;
+    var up = new Array(n).fill(NaN), dn = new Array(n).fill(NaN), side = new Array(n).fill(0);
+    for (var i = p; i < n; i++){
+      if (!isFinite(aArr[i])) continue;
+      var mid = (rows[i].h + rows[i].l) / 2;
+      var ub = mid + mult * aArr[i], db = mid - mult * aArr[i];
+      if (i === p){ up[i] = ub; dn[i] = db; side[i] = rows[i].c >= ub ? 1 : -1; continue; }
+      up[i] = (ub < up[i - 1] || rows[i - 1].c > up[i - 1]) ? ub : up[i - 1];
+      dn[i] = (db > dn[i - 1] || rows[i - 1].c < dn[i - 1]) ? db : dn[i - 1];
+      side[i] = (side[i - 1] === 1) ? (rows[i].c < dn[i] ? -1 : 1) : (rows[i].c > up[i] ? 1 : -1);
+    }
+    return { up: up, dn: dn, side: side };
+  }
+
+  /* ---- hg-v1057: TSI CROSS mechanic (research B1). The double-smoothed
+     momentum line crossing its signal EMA on the 4h tape — the Gate
+     Research trend-change read, shipped as a WATCH mechanic the ledger
+     measures like every other engine. */
+  function hgObtcTryTsi(rows4h){
+    try{
+      if (!rows4h || rows4h.length < 60) return null;
+      if (!gfn('tsi') || !gfn('ema')) return null;
+      var c = rows4h.map(function(r){ return r.c; });
+      var t = W.tsi(c, 13, 25);
+      /* tsi's seed bar is NaN (0/0) — the NaN-skipping ema keeps the signal
+         finite through the warmup head; the classic ema would poison it. */
+      var sig = (gfn('nanEmaLocal')) ? W.nanEmaLocal(t, 13) : W.ema(t, 13);
+      var n = c.length;
+      var lastT = t[n - 1], lastSig = sig[n - 1];
+      if (!isFinite(lastT) || !isFinite(lastSig)) return null;
+      /* epsilon comparisons: a tape pinned at -100 leaves float dust on the
+         signal (-100.00000000000003), which would read "below" forever and
+         swallow the very cross this mechanic exists to catch. */
+      var EPS = 1e-9;
+      var dir = null;
+      for (var i = n - 2; i >= n - 3 && i >= 0; i--){
+        var a = t[i], b = sig[i];
+        if (!isFinite(a) || !isFinite(b)) break;
+        if (a <= b + EPS && t[i + 1] > sig[i + 1] + EPS){ dir = 'long'; break; }
+        if (a + EPS >= b && t[i + 1] < sig[i + 1] - EPS){ dir = 'short'; break; }
+      }
+      if (!dir) return null;
+      /* no sign guard: a long cross out of deeply negative TSI is exactly the
+         trend-change read this mechanic ships for (the Gate TSI framing) —
+         the cross itself is the signal, and the ledger will judge it. */
+      var pl = levelsLocal(dir, rows4h, c[n - 1]);
+      if (!pl || !hasLevels(pl)) return null;
+      var row = watchRow(Object.assign({}, pl, { dir: dir }), 'TSI CROSS', 'near');
+      if (row) row.detail = 'TSI 13/25 ' + lastT.toFixed(2) + ' vs signal ' + lastSig.toFixed(2) + ' — fresh cross';
+      return row;
+    }catch(e){ return null; }
+  }
+
+  /* ---- hg-v1057: ADAPTIVE TREND mechanic (research B3). KAMA(10,2,30)
+     side + SuperTrend(10,3) side must agree on the 4h tape — the Adaptive
+     Trend Shield pattern. Levels are the house plan off the last close. */
+  function hgObtcTryAdaptive(rows4h){
+    try{
+      if (!rows4h || rows4h.length < 80) return null;
+      var c = rows4h.map(function(r){ return r.c; });
+      var n = c.length;
+      var ka = kamaLocal(c);
+      if (!isFinite(ka[n - 1]) || !isFinite(ka[n - 2])) return null;
+      var st = superTrendLocal(rows4h, 10, 3);
+      if (!st || !st.side[n - 1]) return null;
+      var kamaUp = ka[n - 1] > ka[n - 2], kamaDn = ka[n - 1] < ka[n - 2];
+      var stSide = st.side[n - 1];
+      var dir = null;
+      if (kamaUp && stSide === 1) dir = 'long';
+      else if (kamaDn && stSide === -1) dir = 'short';
+      if (!dir) return null;
+      var pl = levelsLocal(dir, rows4h, c[n - 1]);
+      if (!pl || !hasLevels(pl)) return null;
+      var row = watchRow(Object.assign({}, pl, { dir: dir }), 'ADAPTIVE TREND', 'near');
+      if (row) row.detail = 'KAMA 10,2,30 ' + ka[n - 1].toFixed(2) + ' + SuperTrend 10,3 agree ' + dir;
+      return row;
+    }catch(e){ return null; }
+  }
+
+  /* ---- hg-v1057: WYCKOFF SPRING mechanic (research B4). A liquidity
+     sweep BELOW a range low (choppy precondition) that the last bar
+     reclaims on springboard volume (>= 2x the 20-bar norm). The stop
+     sits beyond the sweep extreme — the spring's whole geometry. */
+  function hgObtcTrySpring(rows4h){
+    try{
+      if (!rows4h || rows4h.length < 60) return null;
+      if (!gfn('hgChoppiness') || !gfn('atr')) return null;
+      var n = rows4h.length;
+      var chopArr = W.hgChoppiness(rows4h, 14);
+      /* the range precondition reads the PRE-SWEEP bar (n-5): the sweep and
+         its reclaim are the range's end, and they widen the last window's
+         hi-lo so much that the chop read would call the spring's own exit
+         "trending". A Wyckoff spring is a range first, a sweep second. */
+      var chopPre = (n >= 20) ? chopArr[n - 5] : NaN;
+      if (!isFinite(chopPre) || chopPre < 61.8) return null;
+      var atrArr = W.atr(rows4h, 14);
+      var aNow = atrArr[n - 1];
+      if (!isFinite(aNow) || aNow <= 0) return null;
+      var last = rows4h[n - 1];
+      var volSum = 0, volN = 0;
+      for (var k = n - 21; k < n - 1; k++){ var v = +rows4h[k].v; if (isFinite(v) && v > 0){ volSum += v; volN++; } }
+      if (!volN) return null;
+      var volMean = volSum / volN;
+      if (!(+last.v >= 2 * volMean)) return null;               /* springboard volume */
+      var dir = null, sweepExt = NaN;
+      for (var i = n - 5; i <= n - 1; i++){
+        var prior = rows4h.slice(Math.max(0, i - 20), i);
+        if (prior.length < 5) continue;
+        var priorLow = Math.min.apply(null, prior.map(function(r){ return +r.l; }));
+        var priorHigh = Math.max.apply(null, prior.map(function(r){ return +r.h; }));
+        if (rows4h[i].l < priorLow && last.c > priorLow){ dir = 'long'; sweepExt = +rows4h[i].l; break; }
+        if (rows4h[i].h > priorHigh && last.c < priorHigh){ dir = 'short'; sweepExt = +rows4h[i].h; break; }
+      }
+      if (!dir || !isFinite(sweepExt)) return null;
+      var entry = +last.c;
+      var risk = (dir === 'long') ? (entry - (sweepExt - 0.2 * aNow)) : ((sweepExt + 0.2 * aNow) - entry);
+      if (!(risk > 0)) return null;
+      var pl = {
+        dir: dir, entry: entry,
+        stop: dir === 'long' ? sweepExt - 0.2 * aNow : sweepExt + 0.2 * aNow,
+        t1: entry + (dir === 'long' ? 1 : -1) * 2 * risk,
+        t2: entry + (dir === 'long' ? 1 : -1) * 3.5 * risk,
+        rr: 2
+      };
+      var row = watchRow(pl, 'SPRING', 'near');
+      if (row) row.detail = 'range chop ' + chopPre.toFixed(0) + ' (pre-sweep) · sweep ' + sweepExt.toFixed(2) + ' reclaimed on ' + (+last.v / volMean).toFixed(1) + 'x volume';
+      return row;
+    }catch(e){ return null; }
+  }
+
   function classifySmart(extra, ticker, live){
     if (!gfn('smartClassify')) return null;
     var snap = extra && extra.smart;
@@ -507,6 +690,13 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
     take('SMC ChoCh', hgObtcTrySmc(rows4h, ticker), 'no last-bar ChoCh with FVG levels');
     take('STAR TRADER', hgObtcTryStarTrader(rows4h, rows1h, rows15m, ticker),
       'no majority, or synthesis vetoed');
+    /* hg-v1057 accuracy pack: the three measured WATCH mechanics — TSI cross,
+       adaptive trend (KAMA + SuperTrend) and the Wyckoff spring. Each mints
+       only on its own tape; the ledger judges whether any of them earns a
+       crown, exactly like every other engine. */
+    take('TSI CROSS', hgObtcTryTsi(rows4h), 'no TSI 13/25 cross in the last 3 bars');
+    take('ADAPTIVE TREND', hgObtcTryAdaptive(rows4h), 'KAMA + SuperTrend disagree or unreadable');
+    take('SPRING', hgObtcTrySpring(rows4h), 'no range-bound spring with springboard volume');
 
     return { candidates: out, ledger: ledger };
   }
@@ -743,6 +933,9 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
   W.hgObtcTryOiFlow = hgObtcTryOiFlow;
   W.hgObtcTrySmc = hgObtcTrySmc;
   W.hgObtcTryStarTrader = hgObtcTryStarTrader;
+  W.hgObtcTryTsi = hgObtcTryTsi;          /* hg-v1057 accuracy pack */
+  W.hgObtcTryAdaptive = hgObtcTryAdaptive;
+  W.hgObtcTrySpring = hgObtcTrySpring;
   W.hgObtcRunExtraEngines = hgObtcRunExtraEngines;
   W.hgObtcEvidenceDecide = hgObtcEvidenceDecide;
   W.hgObtcGatherExtra = hgObtcGatherExtra;

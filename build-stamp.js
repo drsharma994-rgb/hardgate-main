@@ -5,9 +5,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1056',
-  pack: 'LOGIC-AUDIT FOLLOW-UP + WINDOWS HARNESS REPAIR — the TREND MATRIX CoinDCX board now stamps DRAFT for rows below the 6/7 NEAR floor or with no majority (never a fabricated gate verdict), and its px formatter no longer prints 0 for an absent plan level (the null-formatting trap). The OMNIBTC forward record array is a named variable so the call-shape censuses read the record literal itself (funding + mark carriers visible again). The five Windows-only test-harness failures are repaired: GNU timeout -s KILL became a cross-platform bounded runner, C: paths fed to dynamic import() go through pathToFileURL, and omnigold-evidence-bake --print-out now prints the path it writes on every platform. Full chain: 696 suites, 0 failed.',
-  built: '2026-10-04T02:04:24.672Z'
+  version: 'hg-v1057',
+  pack: 'ACCURACY PACK — the research-driven upgrade set for OMNIBTC + TREND MATRIX (hardgate-omnibtc-trendmx-accuracy-research.md): the TREND-QUALITY leg (Choppiness Index + Kaufman Efficiency Ratio) feeds the PERFECT formation and caps choppy TREND MATRIX rows at NEAR (never CLEAN), with CHOP vs EARLY FORMING stamps on the CoinDCX board; taker-flow ACCEPTANCE distinguishes absorption from distribution (against-but-absorbed no longer vetoes PERFECT); the LEVERAGE-CYCLE leg (OI change + funding reset) reads RESET / EXTENDED / FLAT; liquidation-map magnitudes (fuel + cluster USD) ride the record; the on-chain netflow verdict joins the evidence bag; a CYCLE CONTEXT panel prints MVRV-Z / SOPR / miner / netflow reads (UNREAD - never faked when data is absent); SESSION ODDS split the desk own settled record by session; spot-vs-perp CVD context (BOTH-WITH / PERP-ONLY / SPOT-ONLY / AGAINST) and basis momentum are read on the winner tape; and three new measured WATCH mechanics join the candidate pool: TSI CROSS (13/25 double-smoothed momentum), ADAPTIVE TREND (KAMA 10,2,30 + SuperTrend 10,3) and SPRING (range-bound liquidity sweep + springboard volume). Every new leg records forward marks the ledger splits later. Evidence first, never a gate.',
+  built: '2026-10-04T03:27:55.205Z'
 };
 
 function hgBuildLabel(b){

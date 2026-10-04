@@ -22,13 +22,24 @@ Two tiers of legs, stated plainly:
   EVIDENCE (only disqualifies when an explicitly AGAINST read is present;
   an UNREADABLE read never confirms and never disqualifies — the honest
   third state):
-    - taker flow verdict === 'against'
+    - taker flow verdict === 'against' (an 'against-absorbed' read — flow
+      opposing but price HOLDING against it — is absorption, not
+      distribution, and does NOT disqualify; hg-v1057, the JDK spot-CVD
+      context research)
     - funding mark against the direction
     - volatility regime BLOWOFF (a move already spent)
     - structure trend against the direction (a confirmed opposite)
     - news calendar in BLACKOUT (a scheduled high-impact event)
     - session floor THIN (dead tape, no participation)
     - volume witness AGAINST (RVOL below the participation floor)
+    - trend-quality CHOP (chop high AND efficiency low — a trend setup on a
+      tape with no trend to ride; hg-v1057)
+    - leverage cycle EXTENDED (OI up hard AND funding hot — crowded
+      positioning; hg-v1057)
+    - on-chain veto (exchange-flow z-spike against the direction;
+      hg-v1057)
+    - spot-vs-perp CVD context AGAINST / PERP-ONLY (both books oppose, or a
+      leverage-driven move with spot not participating; hg-v1057)
 
 The reason it never *requires* the evidence legs to be READABLE is honesty:
 a missing feed must not be able to either mint or deny a PERFECT. A candidate
@@ -101,6 +112,12 @@ function hgPerfectFormation(c, reads){
     var leg = {};
 
     var flow = reads.takerFlowVerdict != null ? reads.takerFlowVerdict : c.takerFlowVerdict;
+    /* hg-v1057: only the plain 'against' disqualifies. 'against-absorbed' —
+       taker flow opposing but the last three closed bars still advancing in
+       the plan's direction — is absorption, not distribution (the JDK
+       spot-CVD research: the same CVD signature means opposite things
+       depending on price acceptance). It stays readable, it just is not
+       WITH, so it can never earn PERFECT⁺ either. */
     if (flow === 'against'){ out.why.push('taker flow against'); return out; }
     leg.flowWith = (flow === 'with');
     leg.flowReadable = (flow != null);
@@ -138,6 +155,44 @@ function hgPerfectFormation(c, reads){
     leg.volWith = (isFinite(rvol) && rvol >= VOLUME_WITH);
     leg.volReadable = isFinite(rvol);
 
+    /* hg-v1057: TREND-QUALITY — the Dreiss Choppiness Index and the Kaufman
+       efficiency ratio, read together off the winner's own tape. CHOP means
+       BOTH chop is high AND efficiency is low: a trend setup on a tape with
+       no trend to ride. TREND is the with-state; an unreadable tape is no
+       verdict, exactly like every other leg. */
+    var tq = reads.trendQuality != null ? reads.trendQuality : c.trendQuality;
+    if (tq === 'CHOP'){ out.why.push('chop tape — no trend to ride (trend-quality against)'); return out; }
+    leg.tqWith = (tq === 'TREND');
+    leg.tqReadable = (tq != null);
+
+    /* hg-v1057: LEVERAGE CYCLE — OI change plus the last funding prints.
+       EXTENDED (OI up hard AND funding hot) is crowded positioning and
+       disqualifies; RESET (deleveraging — the Gate Research rebound
+       condition) is the with-state; FLAT is readable-neutral. */
+    var lv = reads.leverageState != null ? reads.leverageState : c.leverageState;
+    if (lv === 'EXTENDED'){ out.why.push('leverage extended (crowded positioning)'); return out; }
+    leg.levWith = (lv === 'RESET');
+    leg.levReadable = (lv != null);
+
+    /* hg-v1057: ON-CHAIN — the exchange-netflow z gate against the pick's
+       direction. A veto (heavy inflow against a long / outflow squeeze
+       against a short) disqualifies; a readable non-veto is WITH. Absent
+       data is no verdict — fail open. */
+    var ocv = reads.onchainVeto != null ? reads.onchainVeto : c.onchainVeto;
+    if (ocv === true){ out.why.push('on-chain distribution/squeeze veto'); return out; }
+    leg.onchainWith = (ocv === false);
+    leg.onchainReadable = (ocv != null);
+
+    /* hg-v1057: SPOT-VS-PERP CVD CONTEXT — the JDK venue comparison. AGAINST
+       (both books oppose) and PERP-ONLY (a leverage-driven move spot is not
+       participating in) disqualify; BOTH-WITH and SPOT-ONLY (genuine spot
+       participation) are the with-states. */
+    var cvd = reads.cvdContext != null ? reads.cvdContext : c.cvdContext;
+    if (cvd === 'AGAINST'){ out.why.push('spot + perp flow both against'); return out; }
+    if (cvd === 'PERP-ONLY'){ out.why.push('perp-only move — leverage-driven, spot not participating'); return out; }
+    leg.cvdWith = (cvd === 'BOTH-WITH' || cvd === 'SPOT-ONLY');
+    leg.cvdReadable = (cvd != null);
+
     out.perfect = true;
 
     /* ---- the headline tier (hg-v1030): PERFECT⁺ is earned when AT LEAST ONE
@@ -151,14 +206,19 @@ function hgPerfectFormation(c, reads){
        It also keeps the tier meaningful for desks that feed a subset (e.g.
        gold feeds news + volume, not the trend-matrix witnesses). ---- */
     var anyReadable = leg.flowReadable || leg.fundReadable || leg.atrReadable
-      || leg.strucReadable || leg.newsReadable || leg.sessReadable || leg.volReadable;
+      || leg.strucReadable || leg.newsReadable || leg.sessReadable || leg.volReadable
+      || leg.tqReadable || leg.levReadable || leg.onchainReadable || leg.cvdReadable;
     out.plus = anyReadable && (!leg.flowReadable || leg.flowWith)
              && (!leg.fundReadable || leg.fundWith)
              && (!leg.atrReadable || leg.atrWith)
              && (!leg.strucReadable || leg.strucWith)
              && (!leg.newsReadable || leg.newsWith)
              && (!leg.sessReadable || leg.sessWith)
-             && (!leg.volReadable || leg.volWith);
+             && (!leg.volReadable || leg.volWith)
+             && (!leg.tqReadable || leg.tqWith)
+             && (!leg.levReadable || leg.levWith)
+             && (!leg.onchainReadable || leg.onchainWith)
+             && (!leg.cvdReadable || leg.cvdWith);
 
     return out;
   }catch(e){

@@ -666,6 +666,161 @@ a global hard refresh.
     }catch(e){ return null; }
   }
 
+  /* hg-v1057: TAKER-FLOW ACCEPTANCE — the JDK spot-CVD context read: an
+     opposed flow verdict means opposite things depending on what PRICE did
+     while the flow opposed it. When the last n CLOSED bars each closed
+     advancing in the plan's direction, the opposing flow is being ABSORBED
+     (passive buyers stepping into it), not distributing. True only on a
+     readable tape with n+1 closed bars; anything unreadable is false —
+     never a verdict on data we cannot see. */
+  function hgObtcFlowAcceptance(rows, dir, n){
+    try{
+      n = (isFinite(+n) && +n >= 1) ? Math.floor(+n) : 3;
+      if (!Array.isArray(rows) || rows.length < n + 1) return false;
+      dir = String(dir || '').toLowerCase();
+      if (dir !== 'long' && dir !== 'short') return false;
+      for (var i = rows.length - n; i < rows.length; i++){
+        var cNow = +rows[i].c, cPrev = +rows[i - 1].c;
+        if (!isFinite(cNow) || !isFinite(cPrev)) return false;
+        if (dir === 'long' && cNow < cPrev) return false;
+        if (dir === 'short' && cNow > cPrev) return false;
+      }
+      return true;
+    }catch(e){ return false; }
+  }
+
+  /* hg-v1057: TREND-QUALITY — Dreiss Choppiness Index + Kaufman efficiency
+     ratio read together off the winner's own 4h tape. 'CHOP' only when BOTH
+     agree (chop >= 61.8 AND efficiency < 0.3 — a trend setup on a tape with
+     no trend to ride); 'TREND' when both agree the other way (chop <= 38.2
+     AND efficiency > 0.4); anything else, or an unreadable tape, is null —
+     no verdict. */
+  function hgObtcTrendQualityOf(rows){
+    try{
+      if (!Array.isArray(rows) || rows.length < 25) return null;
+      if (typeof hgChoppiness !== 'function' || typeof hgKaufmanER !== 'function') return null;
+      var closes = rows.map(function(x){ return +x.c; });
+      var chopS = hgChoppiness(rows, 14), erS = hgKaufmanER(closes, 20);
+      if (!Array.isArray(chopS) || !Array.isArray(erS)) return null;
+      var chop = +chopS[chopS.length - 1], er = +erS[erS.length - 1];
+      if (!isFinite(chop)) return null;
+      var out = { chop: chop, er: (isFinite(er) ? er : null) };
+      if (chop >= 61.8 && isFinite(er) && er < 0.3) out.state = 'CHOP';
+      else if (chop <= 38.2 && isFinite(er) && er > 0.4) out.state = 'TREND';
+      else out.state = null;
+      return out;
+    }catch(e){ return null; }
+  }
+
+  /* hg-v1057: LIQUIDATION MAGNITUDES — the omniInfo 'Liquidation map' rows
+     carry weights (counts), not dollars today; when a detail string ever
+     carries a USD figure ($517.2M / $25K / $1.2B), capture it as a number.
+     No figure = null, never an invented zero. */
+  function hgObtcUsdOf(detail){
+    try{
+      var s = String(detail || '');
+      var m = s.match(/\$\s*([\d.,]+)\s*([KMB])?/i);
+      if (!m) return null;
+      var v = parseFloat(String(m[1]).replace(/,/g, ''));
+      if (!isFinite(v)) return null;
+      var mult = (String(m[2] || '').toUpperCase() === 'B') ? 1e9
+        : (String(m[2] || '').toUpperCase() === 'M') ? 1e6
+        : (String(m[2] || '').toUpperCase() === 'K') ? 1e3 : 1;
+      return Math.round(v * mult);   /* whole dollars: 517.2*1e6 is not exact in float */
+    }catch(e){ return null; }
+  }
+
+  /* hg-v1057: CVD SLOPE — cumulative(2*ratio-1) over a taker buy/sell-ratio
+     series (the task spec's signed-imbalance proxy), then the sign of the
+     change over the last 20 values. true = rising, false = falling,
+     null = unreadable or flat — a flat read is no verdict. */
+  function hgObtcCvdSlopeDir(series){
+    try{
+      if (!Array.isArray(series)) return null;
+      var cvd = 0, arr = [], valid = 0, i;
+      for (i = 0; i < series.length; i++){
+        var r = +series[i].buySellRatio;
+        if (!isFinite(r) || r <= 0) continue;
+        cvd += 2 * r - 1;
+        arr.push(cvd);
+        valid++;
+      }
+      if (valid < 25) return null;
+      var d = arr[arr.length - 1] - arr[arr.length - 21];
+      if (!isFinite(d) || Math.abs(d) < 1e-9) return null;
+      return d > 0;
+    }catch(e){ return null; }
+  }
+
+  /* hg-v1057: ON-CHAIN NETFLOW Z — reach into whatever the on-chain state
+     carried: a precomputed z object, a bare z number, or a 7-day flows
+     series the house parser can score. Absent data = null = no verdict. */
+  function hgObtcNetflowZOf(onchain){
+    try{
+      if (!onchain || typeof onchain !== 'object') return null;
+      if (onchain.netflowZ && typeof onchain.netflowZ === 'object' && isFinite(+onchain.netflowZ.z)) return +onchain.netflowZ.z;
+      if (isFinite(+onchain.netflowZ)) return +onchain.netflowZ;
+      if (Array.isArray(onchain.flows7d) && onchain.flows7d.length >= 3 && typeof hgCalcNetflowZ === 'function'){
+        var zobj = hgCalcNetflowZ(onchain.flows7d);
+        if (zobj && isFinite(zobj.z)) return zobj.z;
+      }
+      return null;
+    }catch(e){ return null; }
+  }
+
+  /* hg-v1057: CYCLE CONTEXT — the four signals the research says survive
+     (HTX's MVRV-Z / SOPR / ETF-flow / macro framework, minus the ETF leg
+     this repo cannot read). Resonance only, never a single-signal gate,
+     and every missing datum prints UNREAD — never faked. */
+  function hgObtcCycleContextHtml(extra, snap){
+    try{
+      extra = extra || {};
+      var oc = (extra && typeof extra.onchain === 'object') ? extra.onchain : null;
+      var reads = (snap && snap.pick && snap.pick.row && snap.pick.row.perfectReads) || {};
+      var rows = [];
+      rows.push('<div class="kv"><span class="k">MVRV Z-Score</span><span class="v na">UNREAD — needs realized-cap data, never faked</span></div>');
+      rows.push('<div class="kv"><span class="k">SOPR (28d)</span><span class="v na">UNREAD — needs UTXO-level on-chain data, never faked</span></div>');
+      var puell = oc && isFinite(+oc.puellMultiple) ? +oc.puellMultiple : null;
+      var res30 = oc && isFinite(+oc.reserve30dChangePct) ? +oc.reserve30dChangePct : null;
+      var hrState = oc && typeof oc.hashRibbonState === 'string' && oc.hashRibbonState ? String(oc.hashRibbonState) : null;
+      if ((puell != null || res30 != null || hrState) && typeof hgMinerCycleContext === 'function'){
+        try{
+          var mc = hgMinerCycleContext(puell, res30, hrState || 'neutral');
+          if (mc && mc.cycleSignal){
+            rows.push('<div class="kv"><span class="k">Miner cycle</span><span class="v'
+              + (mc.cycleTop ? ' bad' : (mc.cycleBottom ? ' ok' : '')) + '">' + esc(mc.cycleSignal)
+              + (mc.puell != null ? ' · Puell ' + (+mc.puell).toFixed(2) : '') + '</span></div>');
+          } else rows.push('<div class="kv"><span class="k">Miner cycle</span><span class="v na">UNREAD — miner-cycle inputs unusable</span></div>');
+        }catch(eM){ rows.push('<div class="kv"><span class="k">Miner cycle</span><span class="v na">UNREAD — miner-cycle inputs unusable</span></div>'); }
+      } else {
+        rows.push('<div class="kv"><span class="k">Miner cycle</span><span class="v na">UNREAD — Puell / miner-reserve / hash-ribbon inputs not fetched</span></div>');
+      }
+      if (isFinite(+reads.netflowZ)){
+        rows.push('<div class="kv"><span class="k">Exchange netflow</span><span class="v'
+          + (reads.onchainVeto === true ? ' bad' : ' ok') + '">netflow z ' + (+reads.netflowZ).toFixed(1) + 'σ'
+          + (reads.onchainVeto === true ? ' — distribution/squeeze veto' : ' — no veto') + '</span></div>');
+      } else {
+        rows.push('<div class="kv"><span class="k">Exchange netflow</span><span class="v na">UNREAD — no 7-day flow series in the on-chain state</span></div>');
+      }
+      var stTot = oc && isFinite(+oc.stableTotalUsd) ? +oc.stableTotalUsd : null;
+      if (stTot != null && typeof hgAnalyzeStableCadence === 'function'){
+        try{
+          var sc = hgAnalyzeStableCadence(stTot, oc.stableDelta7dUsd, oc.stableDelta30dUsd, oc.stableContractingDays);
+          if (sc){
+            rows.push('<div class="kv"><span class="k">Stablecoin cadence</span><span class="v'
+              + (sc.contracting14d ? ' bad' : '') + '">' + esc(sc.flowTilt) + ' · 30d ' + (sc.d30Pct >= 0 ? '+' : '') + (+sc.d30Pct).toFixed(1) + '%'
+              + (sc.contracting14d ? ' — 14d+ contraction, liquidity tightening' : '') + '</span></div>');
+          } else rows.push('<div class="kv"><span class="k">Stablecoin cadence</span><span class="v na">UNREAD — supply deltas unusable</span></div>');
+        }catch(eS){ rows.push('<div class="kv"><span class="k">Stablecoin cadence</span><span class="v na">UNREAD — supply deltas unusable</span></div>'); }
+      } else {
+        rows.push('<div class="kv"><span class="k">Stablecoin cadence</span><span class="v na">UNREAD — supply deltas not fetched</span></div>');
+      }
+      return '<div class="panel" style="margin-top:10px"><h3>CYCLE CONTEXT <span>the four signals the research says survive — resonance only, never a single-signal gate</span></h3>'
+        + rows.join('') + '</div>';
+    }catch(e){ return ''; }
+  }
+
+
   /* hg-v1049: one tape's EMA9/EMA21 cascade direction — the agreement
      read per timeframe. Unreadable tape = no verdict, never a guess. */
   function hgObtcTapeDir(rows){
@@ -852,6 +1007,57 @@ a global hard refresh.
           : (md > 0 ? 'mark is ' + md.toFixed(1) + '% ABOVE the entry' : 'mark is ' + Math.abs(md).toFixed(1) + '% BELOW the entry');
         rows.push('<div class="kv"><span class="k">Mark distance</span><span class="v' + (Math.abs(md) < 0.5 ? ' ok' : '') + '">' + mdTxt + '</span></div>');
       }
+      /* hg-v1057: the accuracy-pack witnesses — leverage cycle, trend
+         quality, spot-vs-perp flow, on-chain netflow, basis momentum,
+         absorption and liquidation magnitudes. Evidence, never a gate. */
+      if (reads.leverageState){
+        var levTxt = reads.leverageState === 'RESET'
+          ? 'positioning RESET — OI ' + (isFinite(reads.oiChgPct) ? ((+reads.oiChgPct >= 0 ? '+' : '') + (+reads.oiChgPct).toFixed(1) + '%/24h') : 'n/a') + (isFinite(reads.fundLatestPct) ? ', funding ' + (+reads.fundLatestPct).toFixed(4) + '%' : '') + ' — deleveraging, the rebound-fuel condition'
+          : reads.leverageState === 'EXTENDED'
+          ? 'positioning EXTENDED — OI ' + (isFinite(reads.oiChgPct) ? ('+' + (+reads.oiChgPct).toFixed(1) + '%/24h') : 'n/a') + (isFinite(reads.fundLatestPct) ? ', funding ' + (+reads.fundLatestPct).toFixed(4) + '%' : '') + ' — crowded positioning, squeeze risk'
+          : 'positioning FLAT — OI ' + (isFinite(reads.oiChgPct) ? ((+reads.oiChgPct >= 0 ? '+' : '') + (+reads.oiChgPct).toFixed(1) + '%/24h') : 'n/a') + (isFinite(reads.fundLatestPct) ? ', funding ' + (+reads.fundLatestPct).toFixed(4) + '%' : '');
+        rows.push('<div class="kv"><span class="k">Leverage cycle</span><span class="v'
+          + (reads.leverageState === 'RESET' ? ' ok' : (reads.leverageState === 'EXTENDED' ? ' bad' : ''))
+          + '">' + levTxt + '</span></div>');
+      }
+      if (reads.trendQuality){
+        var tqTxt = reads.trendQuality === 'CHOP'
+          ? 'CHOP — Choppiness ' + (isFinite(reads.chopVal) ? (+reads.chopVal).toFixed(1) : 'n/a') + ', efficiency ' + (isFinite(reads.erVal) ? (+reads.erVal).toFixed(2) : 'n/a') + ' — no trend to ride'
+          : 'TREND — Choppiness ' + (isFinite(reads.chopVal) ? (+reads.chopVal).toFixed(1) : 'n/a') + ', efficiency ' + (isFinite(reads.erVal) ? (+reads.erVal).toFixed(2) : 'n/a');
+        rows.push('<div class="kv"><span class="k">Trend quality</span><span class="v'
+          + (reads.trendQuality === 'CHOP' ? ' bad' : ' ok') + '">' + tqTxt + '</span></div>');
+      }
+      if (reads.cvdContext){
+        var cvdTxt = reads.cvdContext === 'BOTH-WITH' ? 'spot and perp both with the trade'
+          : reads.cvdContext === 'PERP-ONLY' ? 'perp with, spot against — leverage-driven, spot not participating'
+          : reads.cvdContext === 'SPOT-ONLY' ? 'spot with, perp against — genuine spot participation'
+          : 'spot and perp both against the trade';
+        var cvdSlope = ' (spot ' + (reads.spotCvdUp ? 'rising' : 'falling') + ', perp ' + (reads.perpCvdUp ? 'rising' : 'falling') + ')';
+        rows.push('<div class="kv"><span class="k">Spot vs perp flow</span><span class="v'
+          + (reads.cvdContext === 'BOTH-WITH' || reads.cvdContext === 'SPOT-ONLY' ? ' ok' : ' bad')
+          + '">' + cvdTxt + cvdSlope + '</span></div>');
+      }
+      if (isFinite(reads.netflowZ)){
+        rows.push('<div class="kv"><span class="k">Exchange netflow</span><span class="v'
+          + (reads.onchainVeto === true ? ' bad' : ' ok') + '">netflow z ' + (+reads.netflowZ).toFixed(1) + 'σ'
+          + (reads.onchainVeto === true ? ' — distribution/squeeze veto' : ' — no veto') + '</span></div>');
+      }
+      if (reads.basisMom){
+        var basisTxt = 'perp basis ' + (isFinite(reads.basisNowPct) ? (+reads.basisNowPct).toFixed(2) + '% now' : 'n/a')
+          + ' vs ' + (isFinite(reads.basisPrevPct) ? (+reads.basisPrevPct).toFixed(2) + '% seven prints ago' : 'n/a')
+          + ' — ' + (reads.basisMom === 'ACCEL' ? 'ACCELERATING' : 'ROLLING OVER') + ' (evidence only, never a veto)';
+        rows.push('<div class="kv"><span class="k">Basis momentum</span><span class="v">' + basisTxt + '</span></div>');
+      }
+      if (reads.flowAbsorbed === true){
+        rows.push('<div class="kv"><span class="k">Flow absorption</span><span class="v ok">taker flow against but price holds — absorption, not distribution (the JDK spot-CVD context read)</span></div>');
+      }
+      var liqUsdTxt = function(v){ return (v >= 1e9) ? (v / 1e9).toFixed(2) + 'B' : (v >= 1e6) ? (v / 1e6).toFixed(1) + 'M' : (v >= 1e3) ? (v / 1e3).toFixed(0) + 'K' : v.toFixed(0); };
+      if (isFinite(reads.liqClusterUsd)){
+        rows.push('<div class="kv"><span class="k">Liquidation map</span><span class="v bad">the stop sits inside a liquidation cluster — $' + liqUsdTxt(+reads.liqClusterUsd) + ' projected - SL-hunt risk</span></div>');
+      }
+      if (isFinite(reads.liqFuelUsd)){
+        rows.push('<div class="kv"><span class="k">Liquidation map</span><span class="v ok">$' + liqUsdTxt(+reads.liqFuelUsd) + ' of liquidations fuel toward the trade side</span></div>');
+      }
       if (!rows.length) return '';
       return '<div class="panel" style="margin-top:10px"><h3>TRADE COST + TIMING WITNESSES <span>what the levels cost and whether the tape is worth paying for — evidence, never a gate</span></h3>' + rows.join('') + '</div>';
     }catch(e){ return ''; }
@@ -881,8 +1087,9 @@ a global hard refresh.
       rows.push('<div class="kv"><span class="k">Confluence tally</span><span class="v ok">' + (tally != null ? tally : 'positive') + ' gates passed</span></div>');
       rows.push('<div class="kv"><span class="k">R:R</span><span class="v ok">' + (rr != null ? rr.toFixed(2) : 'unread') + ' vs the 0.25 floor</span></div>');
       var dir = r.dir;
-      row('Taker flow', reads.takerFlowVerdict === 'with' ? 'WITH' : (reads.takerFlowVerdict === 'against' ? 'AGAINST' : 'UNREAD'),
-        reads.takerFlowVerdict == null ? 'no CVD/taker prints for this crown' : (r.omniCvdWith === true ? 'CVD with' : 'CVD against'));
+      row('Taker flow', reads.takerFlowVerdict === 'with' ? 'WITH' : (reads.takerFlowVerdict === 'against' ? 'AGAINST' : (reads.takerFlowVerdict === 'against-absorbed' ? 'NEUTRAL' : 'UNREAD')),
+        reads.takerFlowVerdict == null ? 'no CVD/taker prints for this crown'
+          : (reads.takerFlowVerdict === 'against-absorbed' ? 'flow against but price holds — absorption, not distribution (hg-v1057)' : (r.omniCvdWith === true ? 'CVD with' : 'CVD against')));
       row('Perp funding', reads.fundingAgainst === false ? 'WITH' : (reads.fundingAgainst === true ? 'AGAINST' : 'UNREAD'),
         reads.fundingAgainst == null ? 'no funding print on the venue leg' : 'the one hgFundingAgainstMark rule');
       row('Volatility regime', reads.atrRegime === 'HEALTHY' ? 'WITH' : (reads.atrRegime === 'BLOWOFF' ? 'AGAINST' : (reads.atrRegime === 'DEAD' ? 'NEUTRAL' : 'UNREAD')),
@@ -898,6 +1105,16 @@ a global hard refresh.
         isFinite(reads.volumeRvol) ? 'fire bar traded ' + (+reads.volumeRvol).toFixed(2) + 'x its 20-bar norm' : 'RVOL unread');
       row('Volume witness', (isFinite(reads.volumeRvol) && reads.volumeRvol >= 1.0) ? 'WITH' : (isFinite(reads.volumeRvol) && reads.volumeRvol < 0.6 ? 'AGAINST' : 'NEUTRAL'),
         isFinite(reads.volumeRvol) ? 'RVOL ' + (+reads.volumeRvol).toFixed(2) + ' vs the 0.6 / 1.0 house bars' : 'unread');
+      /* hg-v1057: the accuracy-pack legs, same row shape as the rest */
+      row('Trend quality', reads.trendQuality === 'TREND' ? 'WITH' : (reads.trendQuality === 'CHOP' ? 'AGAINST' : 'UNREAD'),
+        reads.trendQuality == null ? 'choppiness/efficiency unread' : 'Choppiness ' + (isFinite(reads.chopVal) ? (+reads.chopVal).toFixed(1) : 'n/a') + ' · efficiency ' + (isFinite(reads.erVal) ? (+reads.erVal).toFixed(2) : 'n/a'));
+      row('Leverage cycle', reads.leverageState === 'RESET' ? 'WITH' : (reads.leverageState === 'EXTENDED' ? 'AGAINST' : (reads.leverageState === 'FLAT' ? 'NEUTRAL' : 'UNREAD')),
+        reads.leverageState == null ? 'OI/funding unread' : 'OI ' + (isFinite(reads.oiChgPct) ? ((+reads.oiChgPct >= 0 ? '+' : '') + (+reads.oiChgPct).toFixed(1) + '%/24h') : 'n/a') + (isFinite(reads.fundLatestPct) ? ' · funding ' + (+reads.fundLatestPct).toFixed(4) + '%' : ''));
+      row('Spot vs perp flow', (reads.cvdContext === 'BOTH-WITH' || reads.cvdContext === 'SPOT-ONLY') ? 'WITH' : ((reads.cvdContext === 'PERP-ONLY' || reads.cvdContext === 'AGAINST') ? 'AGAINST' : 'UNREAD'),
+        reads.cvdContext == null ? 'spot/perp taker series unread' : 'spot ' + (reads.spotCvdUp ? 'rising' : 'falling') + ' · perp ' + (reads.perpCvdUp ? 'rising' : 'falling'));
+      row('On-chain', reads.onchainVeto === true ? 'AGAINST' : (reads.onchainVeto === false ? 'WITH' : 'UNREAD'),
+        reads.onchainVeto == null ? 'no netflow z in the on-chain state' : 'netflow z ' + (+reads.netflowZ).toFixed(1) + 'σ' + (reads.onchainVeto ? ' — distribution/squeeze veto' : ' — no veto'));
+      row('Basis momentum', 'NEUTRAL', reads.basisMom ? ('perp basis ' + (isFinite(reads.basisNowPct) ? (+reads.basisNowPct).toFixed(2) + '%' : 'n/a') + ' → ' + reads.basisMom + ' — evidence only, never a veto') : 'basis series unread');
       var plus = (r.perfectPlus === true);
       var title = plus
         ? '★ PERFECT⁺ — every readable evidence leg is explicitly WITH: max confluence, nothing unknown'
@@ -1245,6 +1462,10 @@ a global hard refresh.
       if (snap && snap.fundamental && gfn('hgObtcFundamentalPanelHtml')){
         try{ dhtml += W.hgObtcFundamentalPanelHtml(snap.fundamental) || ''; }catch(eFu){}
       }
+      /* hg-v1057: CYCLE CONTEXT — the MVRV-Z / SOPR / miner / stablecoin /
+         netflow resonance panel. Prints UNREAD where the data is not
+         fetched; never fakes a number. */
+      dhtml += hgObtcCycleContextHtml(snap && snap.extra, snap);
       dhtml += hgObtcFundingWitnessHtml(snap, pick);
       dhtml += hgObtcEvidenceWitnessesHtml(pick);
       dhtml += hgObtcPerfectLedgerHtml(pick);
@@ -1270,6 +1491,13 @@ a global hard refresh.
       dhtml += hgObtcPlanMathHtml(pick);
       dhtml += hgObtcSetupCardHtml(pick, snap);
       dhtml += hgObtcScoreboardHtml();
+      /* hg-v1057 A8: SESSION ODDS — the desk's own settled record split by the
+         fire bar's session, read off the forward ledger (the split the shared
+         panel does not print). Absent module or no session-marked records
+         prints nothing, never a throw. */
+      try{
+        if (gfn('hgFwdSessionSplitHtml')) dhtml += W.hgFwdSessionSplitHtml('OMNIBTC') || '';
+      }catch(eSess){}
       ui.detail.innerHTML = dhtml;
     }
     /* hg-v1011: the desk's own forward book under the card — does the crown
@@ -1427,6 +1655,9 @@ a global hard refresh.
       }
       if (pick && pick.row){
         var pfReadsEntryRefined = false;   /* hg-v1051: refinement stamp for the record */
+        /* hg-v1057: liquidation magnitudes captured off the omniInfo rows
+           (declared here; filled by the loop below, copied into pfReads) */
+        var liqClusterUsdCap = null, liqFuelUsdCap = null;
         var match = all.filter(function(c){
           return c.sym === pick.row.sym && c.dir === pick.row.dir
             && c.entry === pick.row.entry && c.stop === pick.row.stop;
@@ -1465,7 +1696,17 @@ a global hard refresh.
             if (/Vol targeting/.test(r.name || '')) pick.row.omniVolOverBudget = /over budget/i.test(det);
             if (/CVD/.test(r.name || '')) pick.row.omniCvdWith = (r.state === 'signal');
             else if (/CVD/.test(r.name || '') && r.state === 'idle' && /against/.test(det)) pick.row.omniCvdWith = false;
-            if (/Liquidation map/.test(r.name || '')) pick.row.omniLiqStopCluster = /stop sits inside/i.test(det);
+            if (/Liquidation map/.test(r.name || '')){
+              pick.row.omniLiqStopCluster = /stop sits inside/i.test(det);
+              /* hg-v1057: magnitudes, not just booleans — the house rows
+                 carry weights today; when a detail carries a USD figure it
+                 is captured here and rides the forward record */
+              var liqUsd = hgObtcUsdOf(det);
+              if (liqUsd != null){
+                if (/stop sits inside/i.test(det)) liqClusterUsdCap = liqUsd;
+                else if (/fuel toward/i.test(det)) liqFuelUsdCap = liqUsd;
+              }
+            }
             else if (/Liquidation map/.test(r.name || '') && /fuel toward/i.test(det)) pick.row.omniLiqFuel = true;
           });
         }
@@ -1488,6 +1729,18 @@ a global hard refresh.
            taker flow, the event-calendar blackout, and perp funding. A leg
            the desk did not read stays null (neither confirms nor denies). */
         var pfReads = {};
+        /* hg-v1057: ACCURACY-PACK FETCHES — OI change, funding history, spot
+           taker flow and the perp basis, for the leverage-cycle, spot-vs-perp
+           and basis-momentum legs. Each is one soft cached call; a failure is
+           a null, never an error up, and a null read is no verdict. */
+        var accOI = null, accFundHist = null, accSpotFlow = null, accBasis = null;
+        try{ if (gfn('coinalyzeOIChg')) accOI = await W.coinalyzeOIChg('BTCUSDT', 24); }catch(eAccOI){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eAccOI); }catch(eWoi){} }
+        try{ if (gfn('binanceFundingHist')) accFundHist = await W.binanceFundingHist('BTCUSDT', 30); }catch(eAccFh){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eAccFh); }catch(eWfh){} }
+        try{ if (gfn('binanceSpotTakerFlow')) accSpotFlow = await W.binanceSpotTakerFlow('BTCUSDT', '4h', 100); }catch(eAccSf){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eAccSf); }catch(eWsf){} }
+        try{ if (gfn('binanceBasis')) accBasis = await W.binanceBasis('BTCUSDT', 'PERPETUAL', '8h', 40); }catch(eAccBs){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eAccBs); }catch(eWbs){} }
+        /* hg-v1057: liquidation magnitudes captured off the omniInfo rows */
+        if (liqClusterUsdCap != null) pfReads.liqClusterUsd = liqClusterUsdCap;
+        if (liqFuelUsdCap != null) pfReads.liqFuelUsd = liqFuelUsdCap;
         /* hg-v1046: VENUE CONFIRMATION — how many of the scanned venues
            crown the pick's own direction. A crown echoed by both Delta and
            CoinDCX is confirmed by two independent books; a single-venue
@@ -1509,6 +1762,17 @@ a global hard refresh.
           if (fundamental && fundamental.blackout) pfReads.newsRisk = 'blackout';
           if (pick.row.omniCvdWith === true) pfReads.takerFlowVerdict = 'with';
           else if (pick.row.omniCvdWith === false) pfReads.takerFlowVerdict = 'against';
+          /* hg-v1057: TAKER-FLOW ACCEPTANCE — an opposed flow verdict that
+             price keeps defying is absorption, not distribution (the JDK
+             spot-CVD context: the same signature means opposite things
+             depending on acceptance). The last three CLOSED bars advancing
+             in the plan's direction downgrade 'against' to 'against-absorbed',
+             which the shared predicate does not veto. */
+          if (pfReads.takerFlowVerdict === 'against'
+              && hgObtcFlowAcceptance(winnerRows, pick.row.dir, 3) === true){
+            pfReads.takerFlowVerdict = 'against-absorbed';
+            pfReads.flowAbsorbed = true;
+          }
           if (match && match._ticker && typeof match._ticker.fundingPct === 'number' && isFinite(match._ticker.fundingPct)
               && typeof hgFundingAgainstMark === 'function'){
             var fam = hgFundingAgainstMark(match._ticker.fundingPct, pick.row.dir);
@@ -1540,6 +1804,21 @@ a global hard refresh.
               var stT = hgObtcStructureTrend(winnerRows);
               if (stT) pfReads.structureTrend = stT;
             }catch(eSt){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eSt); }catch(eW4){} }
+          }
+          /* hg-v1057: TREND-QUALITY — the Dreiss Choppiness Index and the
+             Kaufman efficiency ratio, read together off the winner's own
+             tape. CHOP vetoes PERFECT (a trend setup on a tape with no
+             trend to ride); TREND is the with-state; anything else is no
+             verdict. */
+          if (winnerRows && winnerRows.length >= 25){
+            try{
+              var tq = hgObtcTrendQualityOf(winnerRows);
+              if (tq && tq.state){
+                pfReads.trendQuality = tq.state;
+                pfReads.chopVal = tq.chop;
+                if (tq.er != null) pfReads.erVal = tq.er;
+              }
+            }catch(eTq){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eTq); }catch(eWtq){} }
           }
           /* hg-v1042: the cost + timing witnesses — round-trip cost in R,
              time-of-day participation, day-range exhaustion and the
@@ -1611,6 +1890,89 @@ a global hard refresh.
               }
             }catch(eAt2){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eAt2); }catch(eWa){} }
           }
+          /* hg-v1057: LEVERAGE CYCLE — OI % change (coinalyze, 24h) plus the
+             last three Binance funding prints. RESET (deleveraging) is the
+             Gate-Research rebound condition; EXTENDED (OI up hard AND funding
+             hot) is crowded positioning; FLAT is readable-neutral. Either
+             feed unreadable = null = no verdict. */
+          try{
+            var accOiChg = (accOI && isFinite(+accOI.chgPct)) ? +accOI.chgPct : null;
+            var accFundLast = null, accFund3 = [];
+            if (Array.isArray(accFundHist) && accFundHist.length){
+              var af3 = accFundHist.slice(-3);
+              for (var afi = 0; afi < af3.length; afi++){
+                if (af3[afi] && isFinite(+af3[afi].rate)) accFund3.push((+af3[afi].rate) * 100);   /* decimal -> percent, the house convention */
+              }
+              if (accFund3.length) accFundLast = accFund3[accFund3.length - 1];
+            }
+            if (accOiChg != null) pfReads.oiChgPct = accOiChg;
+            if (accFundLast != null) pfReads.fundLatestPct = accFundLast;
+            if (accOiChg != null && accFund3.length){
+              if (accOiChg <= -10 || (accOiChg <= 0 && accFund3.some(function(f){ return f <= 0; }))){
+                pfReads.leverageState = 'RESET';
+              } else if (accOiChg >= 15 && accFundLast > 0.03){
+                pfReads.leverageState = 'EXTENDED';
+              } else {
+                pfReads.leverageState = 'FLAT';
+              }
+            }
+          }catch(eLev){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eLev); }catch(eWlv){} }
+          /* hg-v1057: SPOT-VS-PERP CVD CONTEXT — cumulative taker-buy
+             imbalance slopes over the last 20 prints, spot (Binance spot
+             klines) versus perp (the desk's own taker series). Relative to
+             the pick's direction: both with / perp-only / spot-only /
+             against. Either side unreadable = null = no verdict. */
+          try{
+            var accSpotUp = hgObtcCvdSlopeDir(accSpotFlow && accSpotFlow.series);
+            var accPerpUp = hgObtcCvdSlopeDir(extra && extra.takerSeries);
+            if (accSpotUp != null && accPerpUp != null && pick.row.dir){
+              var accSpotWith = (pick.row.dir === 'long') ? accSpotUp : !accSpotUp;
+              var accPerpWith = (pick.row.dir === 'long') ? accPerpUp : !accPerpUp;
+              pfReads.spotCvdUp = accSpotUp;
+              pfReads.perpCvdUp = accPerpUp;
+              pfReads.cvdContext = (accSpotWith && accPerpWith) ? 'BOTH-WITH'
+                : (accPerpWith && !accSpotWith) ? 'PERP-ONLY'
+                : (!accPerpWith && accSpotWith) ? 'SPOT-ONLY'
+                : 'AGAINST';
+            }
+          }catch(eCvd){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eCvd); }catch(eWcv){} }
+          /* hg-v1057: BASIS MOMENTUM (evidence only, never a veto) — the
+             perp basis vs ~7 periods earlier: crossing above zero while
+             rising reads ACCEL; falling by more than half from its recent
+             high, or crossing below zero from positive, reads ROLL. */
+          try{
+            var accBSer = (accBasis && Array.isArray(accBasis.series)) ? accBasis.series : null;
+            if (accBSer && accBSer.length >= 9){
+              var accBN = accBSer.length;
+              var accBPrev = +accBSer[accBN - 1 - 7].basisRatePct, accBNow = +accBSer[accBN - 1].basisRatePct;
+              if (isFinite(accBPrev) && isFinite(accBNow)){
+                pfReads.basisPrevPct = accBPrev;
+                pfReads.basisNowPct = accBNow;
+                if (accBPrev <= 0 && accBNow > 0) pfReads.basisMom = 'ACCEL';
+                else {
+                  var accBRec = accBSer.slice(-15).map(function(x){ return +x.basisRatePct; }).filter(isFinite);
+                  var accBHigh = accBRec.length ? Math.max.apply(null, accBRec) : null;
+                  if ((isFinite(accBHigh) && accBHigh > 0 && accBNow < accBHigh / 2) || (accBPrev > 0 && accBNow < 0)) pfReads.basisMom = 'ROLL';
+                }
+              }
+            }
+          }catch(eBm){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eBm); }catch(eWbm){} }
+          /* hg-v1057: ON-CHAIN VERDICT — the exchange-netflow z-score, when
+             the on-chain state carries one, run through the house gate for
+             the pick's direction. A veto marks the leg; a readable non-veto
+             is WITH. Absent data = no verdict (fail open). */
+          try{
+            var accNz = hgObtcNetflowZOf(extra && extra.onchain);
+            if (isFinite(accNz)){
+              pfReads.netflowZ = accNz;
+              if (typeof hgNetflowGate === 'function'){
+                var accNg = hgNetflowGate('BTC', pick.row.dir, { z: accNz });
+                if (accNg && accNg.state === 'veto') pfReads.onchainVeto = true;
+                else pfReads.onchainVeto = false;
+                if (accNg && accNg.note) pfReads.netflowNote = accNg.note;
+              }
+            }
+          }catch(eNf){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('omnibtc', eNf); }catch(eWnf){} }
           /* hg-v1049: the fire bar's session and the multi-timeframe
              agreement, read off the tapes the desk already holds */
           if (winnerRows && winnerRows.length){
@@ -1705,7 +2067,19 @@ a global hard refresh.
                  the floor has not been reached */
               measuredState: (measured && measured.state !== 'unproven') ? measured.state : undefined,
               /* hg-v1051: the entry was refined to the structure edge */
-              entryRefined: (pfReadsEntryRefined ? true : undefined)
+              entryRefined: (pfReadsEntryRefined ? true : undefined),
+              /* hg-v1057: the accuracy-pack read marks — each rides the
+                 record only when the leg actually read something, so the
+                 ledger can split on them later */
+              trendQuality: (pfReads.trendQuality || undefined),
+              leverageState: (pfReads.leverageState || undefined),
+              flowAbsorbed: (pfReads.flowAbsorbed ? true : undefined),
+              netflowZ: (isFinite(pfReads.netflowZ) ? pfReads.netflowZ : undefined),
+              cvdContext: (pfReads.cvdContext || undefined),
+              basisMom: (pfReads.basisMom || undefined),
+              liqClusterUsd: (isFinite(pfReads.liqClusterUsd) ? pfReads.liqClusterUsd : undefined),
+              liqFuelUsd: (isFinite(pfReads.liqFuelUsd) ? pfReads.liqFuelUsd : undefined),
+              session: (pfReads.sessName || undefined)
             };
             if (fwdScalp){ fwdRow.rows = fwdTape; } else { fwdRow.rows4h = winnerRows; }
             /* the record array is a named variable so the call-shape censuses
@@ -1738,6 +2112,7 @@ a global hard refresh.
         extraLedger: extraLedger,
         fundamental: fundamental,
         measured: measured,
+        extra: extra,             /* hg-v1057: the cycle-context panel reads the on-chain bag */
         at: Date.now()
       };
       __obtc.snap = snap;
@@ -1820,6 +2195,14 @@ a global hard refresh.
   W.hgObtcCandidateFromOmniHit = hgObtcCandidateFromOmniHit;
   W.hgObtcPrincipalBannerHtml = hgObtcPrincipalBannerHtml;
   W.hgObtcPick = hgObtcPick;
+  /* hg-v1057: the accuracy-pack seams, exported so the test drives the real
+     computation rather than a re-implementation */
+  W.hgObtcFlowAcceptance = hgObtcFlowAcceptance;
+  W.hgObtcTrendQualityOf = hgObtcTrendQualityOf;
+  W.hgObtcUsdOf = hgObtcUsdOf;
+  W.hgObtcCvdSlopeDir = hgObtcCvdSlopeDir;
+  W.hgObtcNetflowZOf = hgObtcNetflowZOf;
+  W.hgObtcCycleContextHtml = hgObtcCycleContextHtml;
   /* hg-v1053: the alert / auto-scan seam — the last crown in a light
      shape the unified Telegram batch and the background cycle read. */
   W.hgObtcSnap = function(){

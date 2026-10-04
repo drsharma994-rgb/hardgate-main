@@ -459,9 +459,31 @@ localStorage. Never throws.
       /* hg-v1030: the ICT-session identity the setup fired in (killzone label,
          e.g. "London · 08:00 GMT"), and the round-trip cost as a fraction of R
          (costR = rtCostPct / stopPct), both read-marks so the PERFECT cohort can
-         be split by session and measured net of cost. */
-      session: (typeof rec.session === 'string' && rec.session) ? rec.session : undefined,
+         be split by session and measured net of cost. hg-v1057 caps the label
+         at 48 chars: a session identity is a label, not a memo, and an
+         over-long one is a caller this log does not understand. */
+      session: (typeof rec.session === 'string' && rec.session && rec.session.length <= 48) ? rec.session : undefined,
       costR: (typeof rec.costR === 'number' && isFinite(rec.costR) && rec.costR >= 0) ? rec.costR : undefined,
+      /* hg-v1057: THE SETUP-ACCURACY MARKS AT FIRE TIME (the OMNIBTC /
+         TREND MATRIX witness legs from the accuracy research). trendQuality is
+         the chop/efficiency verdict on the winner's own tape; leverageState
+         the OI/funding-reset cycle read; cvdContext the spot-vs-perp flow
+         context; basisMom the basis-momentum tilt; flowAbsorbed is ONE boolean
+         (true only — false is not recorded, it is the absence of the mark);
+         netflowZ is the exchange-netflow z-score as a number (zero is a READ
+         zero, so the number itself is kept, never coerced); liqClusterUsd /
+         liqFuelUsd are the liquidation-map magnitudes in USD, finite and
+         non-negative. Every value outside its enum is a caller this log does
+         not understand, and the honest record of that is NOTHING — the same
+         three-state rule as every mark above. */
+      trendQuality: (rec.trendQuality === 'CHOP' || rec.trendQuality === 'TREND') ? rec.trendQuality : undefined,
+      leverageState: (rec.leverageState === 'RESET' || rec.leverageState === 'EXTENDED' || rec.leverageState === 'FLAT') ? rec.leverageState : undefined,
+      cvdContext: (rec.cvdContext === 'BOTH-WITH' || rec.cvdContext === 'PERP-ONLY' || rec.cvdContext === 'SPOT-ONLY' || rec.cvdContext === 'AGAINST') ? rec.cvdContext : undefined,
+      basisMom: (rec.basisMom === 'ACCEL' || rec.basisMom === 'ROLL') ? rec.basisMom : undefined,
+      flowAbsorbed: (rec.flowAbsorbed === true) ? true : undefined,
+      netflowZ: (typeof rec.netflowZ === 'number' && isFinite(rec.netflowZ)) ? rec.netflowZ : undefined,
+      liqClusterUsd: (typeof rec.liqClusterUsd === 'number' && isFinite(rec.liqClusterUsd) && rec.liqClusterUsd >= 0) ? rec.liqClusterUsd : undefined,
+      liqFuelUsd: (typeof rec.liqFuelUsd === 'number' && isFinite(rec.liqFuelUsd) && rec.liqFuelUsd >= 0) ? rec.liqFuelUsd : undefined,
       state: 'open', r: null, settledT: null,
       at: isFinite(fin(rec.at)) ? fin(rec.at) : barT
     };
@@ -1634,6 +1656,38 @@ localStorage. Never throws.
         var tmf = out[key].tm || (out[key].tm = {});
         tally(tmf[r.tmAlign] || (tmf[r.tmAlign] = blank()));
       }
+      /* hg-v1057: the setup-accuracy marks fold too — the session split's
+         folded tail keeps per-session counts past the live cap exactly as the
+         tm/rt folds keep theirs. Enum marks fold per value; flowAbsorbed is
+         the one boolean (true only — false never survives the normaliser, it
+         is the absence of the mark), folded under `fab` because `fa` is the
+         fundAgainst bucket; netflowZ folds sum+count so the mean of pruned
+         rows survives as a mean, never a coerced bucket. */
+      if (typeof r.session === 'string' && r.session){
+        var se = out[key].sess || (out[key].sess = {});
+        tally(se[r.session] || (se[r.session] = blank()));
+      }
+      if (r.trendQuality === 'CHOP' || r.trendQuality === 'TREND'){
+        var tq = out[key].tq || (out[key].tq = {});
+        tally(tq[r.trendQuality] || (tq[r.trendQuality] = blank()));
+      }
+      if (r.leverageState === 'RESET' || r.leverageState === 'EXTENDED' || r.leverageState === 'FLAT'){
+        var ls = out[key].ls || (out[key].ls = {});
+        tally(ls[r.leverageState] || (ls[r.leverageState] = blank()));
+      }
+      if (r.cvdContext === 'BOTH-WITH' || r.cvdContext === 'PERP-ONLY' || r.cvdContext === 'SPOT-ONLY' || r.cvdContext === 'AGAINST'){
+        var cv = out[key].cvd || (out[key].cvd = {});
+        tally(cv[r.cvdContext] || (cv[r.cvdContext] = blank()));
+      }
+      if (r.basisMom === 'ACCEL' || r.basisMom === 'ROLL'){
+        var bm = out[key].bm || (out[key].bm = {});
+        tally(bm[r.basisMom] || (bm[r.basisMom] = blank()));
+      }
+      if (r.flowAbsorbed === true) tally(out[key].fab || (out[key].fab = blank()));
+      if (typeof r.netflowZ === 'number' && isFinite(r.netflowZ)){
+        var nz = out[key].nz || (out[key].nz = { sum: 0, n: 0 });
+        nz.sum += r.netflowZ; nz.n++;
+      }
       /* hg-v989: each named read folds into its own yes/no pair, so the split
          outlives the live cap exactly as the other marks do. STRICTLY the two
          booleans per read; an unmarked read is neither bucket. */
@@ -1662,6 +1716,103 @@ localStorage. Never throws.
       }
     }
     return out;
+  }
+
+  /* hg-v1057: THE SESSION ODDS — which sessions the desk's own crowns pay
+     in. Settled live records grouped by their `session` mark at fire time
+     (per-session cells; a settled record without the mark is NEITHER), plus
+     the folded tails from the aggregate. Reads the live list exactly like
+     hgFwdTrendMatrixSplit reads its stance. `poolOrRecords` is a pool name
+     (fetched from storage) or the records array itself — the array path is
+     pure, which is how the tests drive it with hand-dated outcomes.
+     Reported, never a gate. */
+  function hgFwdSessionRecordsOf(tab){
+    try {
+      var l = load(), out = [], i;
+      for (i = 0; i < l.length; i++){
+        if (!l[i]) continue;
+        if (tab && l[i].tab !== tab) continue;
+        out.push(l[i]);
+      }
+      return out;
+    } catch (e) { return []; }
+  }
+
+  function hgFwdSessionSplit(poolOrRecords, opts){
+    try {
+      var o = opts || {};
+      var arr = Array.isArray(poolOrRecords);
+      var recs = arr ? poolOrRecords : hgFwdSessionRecordsOf(poolOrRecords);
+      var want = (o.settledOnly === false) ? null : 1;
+      var out = { tab: arr ? null : (poolOrRecords || null), settled: 0, marked: 0, unmarked: 0, cells: {}, agg: null };
+      var cell = function(){ return { n: 0, wins: 0, rSum: 0, r: null, hit: null }; };
+      var i, r, rr, k;
+      for (i = 0; i < recs.length; i++){
+        r = recs[i];
+        if (!r) continue;
+        if (want && r.state !== 't1' && r.state !== 'stop') continue;
+        out.settled++;
+        rr = (r.state === 't1') ? (+r.rr || 0) : -1;
+        if (typeof r.session === 'string' && r.session){
+          var c2 = out.cells[r.session] || (out.cells[r.session] = cell());
+          c2.n++; if (r.state === 't1') c2.wins++; c2.rSum += rr;
+          out.marked++;
+        } else out.unmarked++;
+      }
+      for (k in out.cells){ var e = out.cells[k]; if (e.n){ e.r = e.rSum / e.n; e.hit = e.wins / e.n; } }
+      /* the folded tails: the aggregate keeps per-session counts past the
+         live cap, so a session whose rows were all pruned still answers */
+      try {
+        var a = loadAgg() || {}, ak, row, sess = null;
+        for (ak in a){
+          if (!Object.prototype.hasOwnProperty.call(a, ak)) continue;
+          row = a[ak];
+          if (!row || !row.sess) continue;
+          if (out.tab && String(row.tab || ak.split('|')[0]) !== String(out.tab)) continue;
+          sess = sess || {};
+          for (k in row.sess){
+            if (!Object.prototype.hasOwnProperty.call(row.sess, k) || !row.sess[k]) continue;
+            sess[k] = sess[k] || { wins: 0, losses: 0, expired: 0 };
+            sess[k].wins += row.sess[k].wins || 0; sess[k].losses += row.sess[k].losses || 0; sess[k].expired += row.sess[k].expired || 0;
+          }
+        }
+        if (sess) out.agg = sess;
+      } catch (eA){}
+      /* an honest empty: no settled record carries the mark and the fold
+         holds none either — an absent measurement, not a clean bill */
+      if (!out.marked && !out.agg) return null;
+      return out;
+    } catch (e) { hgFwdWarn('sessionSplit', e); return null; }
+  }
+
+  function hgFwdSessionSplitHtml(poolOrRecords){
+    try {
+      var sp = hgFwdSessionSplit(poolOrRecords);
+      if (!sp) return '';
+      var fmtR = function(v){ return (v >= 0 ? '+' : '') + v.toFixed(2) + 'R'; };
+      var lines = [], k, ap = [];
+      for (k in sp.cells){
+        if (!Object.prototype.hasOwnProperty.call(sp.cells, k)) continue;
+        var c = sp.cells[k];
+        if (!c || !c.n) continue;
+        lines.push('<div>' + esc(k) + ' — n ' + c.n + ' · hit ' + Math.round(100 * c.hit) + '% · ' + fmtR(c.r) + '</div>');
+      }
+      if (sp.unmarked) lines.push('<div>NEITHER — n ' + sp.unmarked + ' (records without a session mark)</div>');
+      if (sp.agg){
+        for (k in sp.agg){
+          if (!Object.prototype.hasOwnProperty.call(sp.agg, k) || !sp.agg[k]) continue;
+          ap.push(esc(k) + ' ' + sp.agg[k].wins + 'W/' + sp.agg[k].losses + 'L');
+        }
+        if (ap.length) lines.push('<div style="opacity:.75">folded beyond the live cap: ' + ap.join(', ') + '</div>');
+      }
+      if (!lines.length) return '';
+      var h = '<div class="note" style="margin:8px 0;padding:8px 10px;border:1px solid #6B7280;border-radius:6px">';
+      h += '<b>SESSION ODDS</b> · ' + sp.marked + ' of ' + sp.settled + ' settled records carried a session mark';
+      h += lines.join('');
+      h += '<div style="opacity:.75">Reported, not gated: nothing on this line withholds a setup.</div>';
+      h += '</div>';
+      return h;
+    } catch (e) { return ''; }
   }
 
   /* ==================== health ====================
@@ -2180,6 +2331,19 @@ localStorage. Never throws.
             tmScore: tmM.score,
             tmAlign: tmM.align,
             tmAgeMin: tmM.ageMin,
+            /* hg-v1057: the setup-accuracy marks, passed through raw — the
+               normaliser's enums decide, exactly as conf/regime/sess/orb above
+               (a desk that stamps them hands them in on the candidate; a desk
+               that marks nothing records nothing). */
+            session: c.session,
+            trendQuality: c.trendQuality,
+            leverageState: c.leverageState,
+            cvdContext: c.cvdContext,
+            basisMom: c.basisMom,
+            flowAbsorbed: c.flowAbsorbed,
+            netflowZ: c.netflowZ,
+            liqClusterUsd: c.liqClusterUsd,
+            liqFuelUsd: c.liqFuelUsd,
             /* solidity stamp fields (hg-v533) ride through untouched;
                hgFwdNormalize attaches them only when sol is finite */
             sol: c.sol, solTier: c.solTier, solV: c.solV
@@ -3463,6 +3627,11 @@ localStorage. Never throws.
         return h;
       } catch (e) { return ''; }
     };
+    /* hg-v1057: THE SESSION ODDS — which sessions the desk's own crowns pay
+       in, split from the settled records' session marks. Same family as the
+       trend-matrix split above; reported, never a gate. */
+    W.hgFwdSessionSplit = hgFwdSessionSplit;
+    W.hgFwdSessionSplitHtml = hgFwdSessionSplitHtml;
 
     /* hg-v1010: THE EVIDENCE SPLIT — the read the hg-v1006 … v1009 stamps were
        written FOR. A mark nothing selects is ornamental; this is the select.

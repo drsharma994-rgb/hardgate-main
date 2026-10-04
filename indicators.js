@@ -398,3 +398,68 @@ if (upV >= dnV){ hiI++; covered += upV; } else { loI--; covered += dnV; }
 }
 return { poc: outBins[pocIdx].price, vah: lo + (hiI+1)*size, val: lo + loI*size, bins: outBins };
 }
+
+/* -------------------------------------------------------------------------
+hg-v1057 accuracy pack (research report: hardgate-omnibtc-trendmx-accuracy):
+TREND-QUALITY + TSI primitives. Namespaced (hgChoppiness / hgKaufmanER) so the
+gold desks' own kaufmanER seams are not silently activated by this file;
+tsi() is the classic Blau double-smoothed momentum the ULTRA desks already
+vote with — lifted here once, pure, no DOM.
+------------------------------------------------------------------------- */
+
+/* Choppiness Index (E.W. Dreiss, TASC 2009): 100*log10(sum(TR over p) /
+   (maxH-minL over p)) / log10(p). >61.8 = choppy/sideways, <38.2 = trending.
+   Returns a series (NaN before p bars warm up); a degenerate window (no
+   range or no movement) stays NaN — unreadable is not a verdict. */
+function hgChoppiness(rows, p){
+p = p || 14;
+if (!rows || !rows.length) return [];
+const n = rows.length;
+const out = new Array(n).fill(NaN);
+if (n < p) return out;
+for (let i = p - 1; i < n; i++){
+let sumTr = 0, hi = -Infinity, lo = Infinity;
+for (let k = i - p + 1; k <= i; k++){
+const r = rows[k];
+sumTr += Math.max(r.h - r.l, k > 0 ? Math.abs(r.h - rows[k-1].c) : 0, k > 0 ? Math.abs(r.l - rows[k-1].c) : 0);
+hi = Math.max(hi, r.h); lo = Math.min(lo, r.l);
+}
+if (!(hi > lo) || !(sumTr > 0)) continue;
+out[i] = 100 * Math.log10(sumTr / (hi - lo)) / Math.log10(p);
+}
+return out;
+}
+
+/* Kaufman Efficiency Ratio over `win` bars: |net change| / sum(|bar change|).
+   0..1; ~1 = clean directional tape, near 0 = noise. Accepts closes. */
+function hgKaufmanER(vals, win){
+win = win || 20;
+if (!vals || !vals.length) return [];
+const n = vals.length;
+const out = new Array(n).fill(NaN);
+if (n < win + 1) return out;
+for (let i = win; i < n; i++){
+const net = Math.abs(vals[i] - vals[i - win]);
+let gross = 0;
+for (let k = i - win + 1; k <= i; k++) gross += Math.abs(vals[k] - vals[k - 1]);
+if (gross > 0) out[i] = net / gross;
+}
+return out;
+}
+
+/* True Strength Index (William Blau): double-smoothed momentum over
+   double-smoothed |momentum|, x100. Defaults fast 13 / slow 25 (the Gate
+   Research parameterisation). The zero bar seeds at 0, and the smoothing is
+   the NaN-skipping ema (nanEmaLocal) so the second smoothing pass survives
+   the first pass's warmup NaNs. */
+function tsi(vals, fast, slow){
+fast = fast || 13; slow = slow || 25;
+if (!vals || vals.length < 2) return [];
+const n = vals.length;
+const mom = new Array(n).fill(0), absM = new Array(n).fill(0);
+for (let i = 1; i < n; i++){ const d = vals[i] - vals[i-1]; mom[i] = d; absM[i] = Math.abs(d); }
+const e1 = nanEmaLocal(mom, fast), e2 = nanEmaLocal(e1, slow), e3 = nanEmaLocal(absM, fast), e4 = nanEmaLocal(e3, slow);
+const out = new Array(n).fill(NaN);
+for (let i = 0; i < n; i++){ if (isFinite(e2[i]) && isFinite(e4[i]) && e4[i] !== 0) out[i] = 100 * e2[i] / e4[i]; }
+return out;
+}
