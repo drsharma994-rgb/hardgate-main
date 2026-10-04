@@ -1238,6 +1238,8 @@ async function trendmxScan(opts){
      unstamped, and an unstamped row is an unjudged row. */
   var flow = null;
   try{ flow = await trendmxFlowScan(core.rows); }catch(eFl){ flow = null; }
+  /* hg-v1067: the shared-perfect evidence pass — the OMNIBTC read stack */
+  try{ await trendmxPerfectEvidencePass(core.rows); }catch(ePf3){ }
   __tmScanSnap = {
     at: core.at, rows: core.rows, failed: core.failed, uniLen: core.uniLen, scanned: core.scanned,
     goldenCross: golden, deathCross: death, note: core.note, source: core.source, venueCounts: core.venueCounts,
@@ -2285,7 +2287,7 @@ function trendmxCrownPanelHTML(state){
     var gatesTxt = (crown.gate && isFinite(crown.gate.gatesPassed)) ? crown.gate.gatesPassed + '/7' : '?/7';
     html += '<div class="panel" style="margin-top:10px"><h3>CROWN VERDICT <span>the desk\'s complete verdict on the leading row</span></h3>'
       + '<div style="font-size:12px;letter-spacing:.03em">TREND MATRIX | ' + tierTxt
-      + (crown.perfect ? ' | PERFECT' : '') + ' | gates ' + gatesTxt + '</div></div>';
+      + (crown.perfectPlus ? ' | PERFECT+' : (crown.perfect ? ' | PERFECT' : '')) + ' | gates ' + gatesTxt + '</div></div>';
     /* ---- COMPLETE ANALYSIS ---- */
     var comps = crown.comps || {};
     function chip(v, cls){ return '<span class="gpip' + (cls || '') + '">' + escH(v) + '</span>'; }
@@ -2371,6 +2373,89 @@ function trendmxCrownPanelHTML(state){
     }catch(eMe){ }
     return html;
   }catch(e){ return ''; }
+}
+
+/* hg-v1067: THE SHARED PERFECT EVIDENCE PASS — the SAME reads bag and
+   the SAME enrichment + predicate OMNIBTC consumes (hgObtcPerfectFormation),
+   fed by the SAME external data (real Binance taker flow, Binance funding,
+   ATR percentile regime, EMA50/200 structure, session RVOL, the news
+   calendar), applied to the matrix's strongest rows. PERFECT / PERFECT+
+   on a matrix row now means byte-identically what it means on OMNIBTC.
+   Evidence, never a gate. */
+function tmStructureDir(rows){
+  try{
+    if (!Array.isArray(rows) || rows.length < 210 || typeof W.ema !== 'function') return null;
+    var c = rows.map(function(x){ return x.c; });
+    var e50 = W.ema(c, 50), e200 = W.ema(c, 200);
+    if (!e50 || !e200 || e50.length < 2) return null;
+    var a = e50[e50.length - 1], b = e200[e200.length - 1];
+    if (!isFinite(a) || !isFinite(b) || a === b) return null;
+    return a > b ? 'up' : 'down';
+  }catch(e){ return null; }
+}
+
+async function trendmxPerfectEvidencePass(rows){
+  try{
+    if (!Array.isArray(rows) || !rows.length) return rows;
+    var capped = rows.slice().sort(function(a, b){ return Math.abs(+b.score || 0) - Math.abs(+a.score || 0); }).slice(0, 8);
+    var taker = null, binFund = null;
+    try{ if (typeof W.binanceTakerRatio === 'function') taker = await W.binanceTakerRatio('BTCUSDT', '4h', 120); }catch(eT){ }
+    try{ if (typeof W.binanceFunding === 'function'){ var bf = await W.binanceFunding('BTCUSDT'); binFund = (bf && isFinite(+bf.fundingPct)) ? +bf.fundingPct : null; } }catch(eB){ }
+    for (var i = 0; i < capped.length; i++){
+      var r = capped[i];
+      var dir = tmDirOf(r);
+      if (!dir) continue;
+      var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
+      if (!plan) continue;
+      var reads = {};
+      if (isFinite(+r.fundingPct)){
+        reads.venueFundingPct = +r.fundingPct;
+        if (typeof hgFundingAgainstMark === 'function'){
+          try{ var fam = hgFundingAgainstMark(+r.fundingPct, dir); if (fam) reads.fundingAgainst = (fam.against === true); }catch(eF){ }
+        }
+      }
+      if (binFund != null) reads.btcFundingBinance = binFund;
+      if (taker && Array.isArray(taker.series) && taker.series.length >= 30){
+        try{
+          var half = Math.floor(taker.series.length / 2);
+          var prev = taker.series.slice(0, half).map(function(x){ return +x.buySellRatio; }).filter(isFinite);
+          var last = taker.series.slice(half).map(function(x){ return +x.buySellRatio; }).filter(isFinite);
+          if (prev.length && last.length){
+            var pm = prev.reduce(function(a, b){ return a + b; }, 0) / prev.length;
+            var lm = last.reduce(function(a, b){ return a + b; }, 0) / last.length;
+            var up = lm > pm;
+            reads.takerFlowVerdict = up ? (dir === 'long' ? 'with' : 'against') : (dir === 'long' ? 'against' : 'with');
+          }
+        }catch(eCv){ }
+      }
+      if (Array.isArray(r.rows4h) && r.rows4h.length >= 120 && typeof hgAtrPercentile === 'function'){
+        try{ var atrP = hgAtrPercentile(r.rows4h, 14, 100); if (atrP != null){ reads.atrRegime = atrP < 20 ? 'DEAD' : (atrP > 80 ? 'BLOWOFF' : 'HEALTHY'); reads.atrPct = atrP; } }catch(eA){ }
+      }
+      try{ var st = tmStructureDir(r.rows4h); if (st) reads.structureTrend = st; }catch(eS){ }
+      if (Array.isArray(r.rows4h) && r.rows4h.length >= 21 && typeof hgSlotMeanVol === 'function'){
+        try{
+          var slot = hgSlotMeanVol(r.rows4h, 20);
+          var lv = +r.rows4h[r.rows4h.length - 1].v;
+          if (slot && isFinite(slot.mean) && slot.mean > 0 && isFinite(lv) && lv > 0){
+            var rvolW = lv / slot.mean;
+            reads.volumeRvol = rvolW;
+            reads.sess = rvolW >= 0.6 ? 'participating' : 'thin';
+          }
+        }catch(eSl){ }
+      }
+      try{ if (typeof W.hgNewsRisk === 'function'){ var nw = W.hgNewsRisk(r.base || 'BTC'); if (nw && nw.blackout) reads.newsRisk = 'blackout'; } }catch(eN){ }
+      try{
+        if (typeof W.hgObtcPerfectFormation === 'function'){
+          var pick = { row: Object.assign({}, r, { entry: plan.entry, stop: plan.stop, t1: plan.t1, dir: dir }), tier: 'clean' };
+          W.hgObtcPerfectFormation(pick, reads);
+          r.perfect = pick.row.perfect === true;
+          r.perfectPlus = pick.row.perfectPlus === true;
+          r.perfectReads = pick.row.perfectReads || reads;
+        }
+      }catch(ePf){ }
+    }
+    return rows;
+  }catch(e){ try{ if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('trendmx', e); }catch(e2){ } return rows; }
 }
 
 function hgPaintTrendmxFromSnap(){
@@ -2907,6 +2992,7 @@ W.trendmxFundGate = trendmxFundGate;       /* hg-v1034: the fundamental + sentim
 W.trendmxColumnsHTML = trendmxColumnsHTML; /* hg-v1045: the bull / bear column view */
 W.trendmxTrendFormHTML = trendmxTrendFormHTML; /* hg-v1048: the coindcx trending / forming board */
 W.trendmxCrownPanelHTML = trendmxCrownPanelHTML; /* hg-v1066: the OMNIBTC-style crown */
+W.trendmxPerfectEvidencePass = trendmxPerfectEvidencePass; /* hg-v1067: the OMNIBTC evidence stack */
 W.trendmxFundState = trendmxFundState;
 W.trendmxFundChipHtml = trendmxFundChipHtml;
 W.trendmxChopState = trendmxChopState;      /* hg-v1057: the trend-quality witness */
