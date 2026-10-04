@@ -37,12 +37,14 @@ var W = (typeof window !== 'undefined') ? window
    never labelled sniper-grade. Loosened: stop cap 1.88% -> 3.0% (the stop
    cap is the ONE knob — it encodes the max-safe leverage floor via
    rsMaxSafeLev, so min lev 30 -> 20 is the SAME change expressed as the
-   derived lever, never two independent loosens), min drawdown 2% -> 1%,
-   min conviction 4 -> 3, against-tape penalty -3 -> -2 (NOT -1, see
+   derived lever, never two independent loosens), min drawdown 2% -> 1.5%
+   (a real dip, not 1% noise), min conviction 4 -> 3, against-tape penalty
+   -3 -> -2 (NOT -1, see
    rsConviction: the penalty's job is "deprioritise, don't veto", and it
    must stay a ~2/3-of-floor step the same way -3 is ~3/4 of the sniper
    floor of 4 — -1 would be a 1/3 step too weak to matter), min RR
-   1.5 -> 1.2. */
+   1.5 -> 1.3 (a real net edge after ~0.2R round-trip cost, not 1.2 which
+   nets barely 1R). */
 var RELAXED_KEY = 'hg.rsRelaxed';
 var __relaxed = false;
 try {
@@ -64,7 +66,7 @@ function rsSetRelaxed(v){
 var MIN_LEV         = 30;
 var MIN_LEV_RELAXED = 20;
 var MIN_RR          = 1.5;
-var MIN_RR_RELAXED  = 1.2;
+var MIN_RR_RELAXED  = 1.3;
 var MIN_CONVICTION  = 4;
 var MIN_CONVICTION_RELAXED = 3;
 function rsDeskParam(key, fb){
@@ -87,7 +89,7 @@ var CHUNK_SLEEP_MS  = 150;
 var SWING_LOOKBACK  = 30;
 var SWING_EXCLUDE   = 4;
 var MIN_DRAWDOWN    = 0.02;
-var MIN_DRAWDOWN_RELAXED = 0.01;
+var MIN_DRAWDOWN_RELAXED = 0.015;
 var SNIPER_MMR      = 0.005;
 var SNIPER_MAX_STOP_PCT = 0.0188;   /* ~1.88% — enables ≥30× max-safe lev */
 var SNIPER_MAX_STOP_PCT_RELAXED = 0.03;   /* ~3.00% — enables ≥20× max-safe lev */
@@ -355,7 +357,10 @@ function rsAssess(rows, opts){
 
     var minDrawdown = rsMinDrawdown();
     var dd = rsDrawdownPct(rows, 20);
-    if (dd < minDrawdown && !opts.relaxDrawdown){ rsGateFail(opts, 'drawdown'); return null; }
+    /* minDrawdown is already relaxed-aware via rsMinDrawdown(); the old
+       opts.relaxDrawdown escape was a dead second knob no caller ever set.
+       One source of truth for the drawdown floor: rsMinDrawdown(). */
+    if (dd < minDrawdown){ rsGateFail(opts, 'drawdown'); return null; }
 
     var triggers = [];
     if (dd >= minDrawdown) triggers.push('drawdown');

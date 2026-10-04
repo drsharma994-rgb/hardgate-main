@@ -95,8 +95,8 @@ W.rsSetRelaxed(true);
 ok(W.rsRelaxedOn() === true, 'relaxed: ON after rsSetRelaxed(true)');
 ok(W.rsMinLev() === 20, 'relaxed: min lev loosened to 20');
 ok(W.rsMinConviction() === 3, 'relaxed: min conviction loosened to 3');
-ok(W.rsMinRr() === 1.2, 'relaxed: min RR loosened to 1.2');
-ok(W.rsMinDrawdown() === 0.01, 'relaxed: min drawdown loosened to 1%');
+ok(W.rsMinRr() === 1.3, 'relaxed: min RR loosened to 1.3');
+ok(W.rsMinDrawdown() === 0.015, 'relaxed: min drawdown loosened to 1.5%');
 ok(W.rsConviction({ triggers: ['sweep'], tape: 'short' }) === 2,
    'relaxed: against-tape penalty -2 (sweep 4 - 2 = 2)');
 
