@@ -440,6 +440,7 @@ async function cvRunScan(opts){
     }
 
     cvPublishState(results, { style: style, venue: venue, uniLen: items.length });
+    try { if (__cv.ui && __cv.ui.crown) __cv.ui.crown.innerHTML = cvCrownHtml(__cvSnap); } catch(eCr2){ }   /* hg-v1071 */
 
     if (typeof W.hgChartVisionEnrichDeskRows === 'function' && shown.length){
       var wraps = shown.map(function(r){
@@ -489,6 +490,91 @@ async function cvRunScan(opts){
   }
 }
 
+/* hg-v1071: THE CROWN — the OMNIBTC treatment on the strongest vision
+   read: a bold call, the verdict, the complete analysis (technical -
+   macro - micro), the setup card with the automation JSON and the
+   measured-edge chip. 7/7 CLEAN leads as TICKET; 6/7 NEAR stays WATCH. */
+function cvCrownHtml(snap){
+  try{
+    if (!snap || !Array.isArray(snap.results) || !snap.results.length) return '';
+    var rows = snap.results.slice().sort(function(a, b){ return (+b.gatesPassed || 0) - (+a.gatesPassed || 0); });
+    var top = null;
+    for (var i = 0; i < rows.length; i++){
+      var r = rows[i];
+      if (r && isFinite(+r.entry) && isFinite(+r.stop) && isFinite(+r.t1)){ top = r; break; }
+    }
+    if (!top) return '';
+    var dir = String(top.dir || 'long').toLowerCase();
+    var ticket = (top.gatesPassed >= 7 && top.clean7 === true);
+    var color = dir === 'long' ? '#26a69a' : (dir === 'short' ? '#ef5350' : '#94a3b8');
+    var html = '<div class="panel" style="margin-top:10px;border-top:3px solid ' + color + '"><h3>THE CALL</h3>'
+      + '<div style="font-size:16px;font-weight:700">' + dir.toUpperCase() + ' - ' + (ticket ? 'TICKET' : 'WATCH') + ' - ' + esc(String(top.sym)) + '</div></div>'
+      + '<div class="panel" style="margin-top:10px"><h3>CROWN VERDICT <span>the desk\'s complete verdict on its strongest vision read</span></h3>'
+      + '<div style="font-size:12px;letter-spacing:.03em">CHART VISION | ' + (ticket ? 'TICKET' : 'WATCH') + ' | gates ' + (top.gatesPassed || 0) + '/' + (top.gatesTotal || 7) + '</div></div>';
+    function dim(title, verdict, cls, ls){
+      if (!ls.length) return '';
+      return '<div style="margin:8px 0 2px"><b>' + title + '</b> <span class="gpip' + (cls || '') + '">' + verdict
+        + '</span><div style="font-size:11px;opacity:.9;margin-top:2px">' + ls.join(' | ') + '</div></div>';
+    }
+    var tech = [];
+    tech.push('gates ' + (top.gatesPassed || 0) + '/' + (top.gatesTotal || 7));
+    if (top.visionChip) tech.push('vision ' + esc(String(top.visionChip)));
+    if (isFinite(+top.rr)) tech.push('plan R:R ' + (+top.rr).toFixed(1));
+    if (top.style) tech.push('style ' + esc(String(top.style)));
+    html += '<div class="panel" style="margin-top:10px"><h3>COMPLETE ANALYSIS <span>technical - macro - micro</span></h3>';
+    html += dim('TECHNICAL', ticket ? 'ALIGNED' : (top.gatesPassed >= 6 ? 'NEAR' : 'UNREAD'), '', tech);
+    var mac = [], mTilt = 'UNREAD', mCls = '';
+    try{
+      var wm = (typeof W.getWorldMonitorDeskCached === 'function') ? W.getWorldMonitorDeskCached() : null;
+      var rg = (typeof W.regimeState === 'function') ? W.regimeState() : null;
+      if (wm && wm.macro && wm.macro.verdict) mac.push('WM ' + String(wm.macro.verdict).toUpperCase());
+      if (wm && wm.stress && wm.stress.label) mac.push('stress ' + String(wm.stress.label).toUpperCase());
+      if (rg && rg.playbook && rg.playbook.bias) mac.push('bias ' + String(rg.playbook.bias).toUpperCase());
+      if (mac.length){
+        var off = (wm && wm.macro && (wm.macro.verdict === 'SELL' || wm.macro.verdict === 'AVOID'))
+          || (rg && rg.playbook && rg.playbook.bias === 'STAND-ASIDE')
+          || (wm && wm.stress && /HIGH|ELEVATED/i.test(String(wm.stress.label)));
+        mTilt = off ? 'RISK-OFF' : ((wm && wm.macro && wm.macro.verdict === 'BUY') ? 'RISK-ON' : 'NEUTRAL');
+        if (mTilt === 'RISK-OFF') mCls = ' bad';
+      }
+      mac.push('world tilt ' + mTilt);
+    }catch(eWm){ }
+    html += dim('MACRO', mTilt, mCls, mac);
+    var mic = [];
+    var risk = Math.abs(+top.entry - +top.stop);
+    if (risk > 0 && isFinite(+top.t1)) mic.push('R:R ' + (Math.abs(+top.t1 - +top.entry) / risk).toFixed(1) + 'R');
+    if (typeof hgCryptoCostR === 'function'){
+      var costR = hgCryptoCostR(+top.entry, +top.stop, 'taker', 'taker');
+      if (isFinite(costR)) mic.push('cost ' + costR.toFixed(2) + 'R');
+    }
+    html += dim('MICRO', mic.length ? 'NEUTRAL' : 'UNREAD', '', mic);
+    html += '</div>';
+    var payload = { v: 1, id: 'CV-' + String(top.sym), venue: top.exchange || top.venue || 'delta', symbol: top.sym,
+      side: dir, entry: +top.entry, stop: +top.stop, t1: +top.t1, t2: isFinite(+top.t2) ? +top.t2 : null,
+      gates: (top.gatesPassed || 0) + '/' + (top.gatesTotal || 7), vision: top.visionChip || 'UNREAD', style: top.style || 'swing',
+      tier: ticket ? 'TICKET' : 'WATCH', measured: 'UNREAD',
+      exitPolicy: 'scale50_t1_be_trail', ts: Math.floor(Date.now() / 1000) };
+    html += '<div class="panel" style="margin-top:10px"><h3>SETUP CARD <span>the OMNIBTC template on the leading vision read</span></h3>'
+      + '<div class="kv"><span class="k">Market Thesis</span><span class="v">' + esc('gates ' + (top.gatesPassed || 0) + '/' + (top.gatesTotal || 7)
+        + (top.visionChip ? ' with an independent vision read of ' + String(top.visionChip) : ' with the vision read UNREAD')
+        + ' on the ' + (top.style || 'swing') + ' grid.') + '</span></div>'
+      + '<div class="kv"><span class="k">Bias</span><span class="v ' + (dir === 'long' ? 'pos' : 'neg') + '">' + dir.toUpperCase() + '</span></div>'
+      + '<div class="kv"><span class="k">Entry</span><span class="v">' + (+top.entry).toFixed(4) + '</span></div>'
+      + '<div class="kv"><span class="k">Invalidation (SL)</span><span class="v">' + (+top.stop).toFixed(4) + '</span></div>'
+      + '<div class="kv"><span class="k">Targets</span><span class="v">TP1 ' + (+top.t1).toFixed(4) + (isFinite(+top.t2) ? ' | TP2 ' + (+top.t2).toFixed(4) : '') + '</span></div>'
+      + '<div class="kv"><span class="k">Automation Blueprint</span><span class="v"><pre style="margin:4px 0;white-space:pre-wrap;font-size:10px">' + esc(JSON.stringify(payload, null, 2)) + '</pre>'
+      + (ticket ? '' : '<div class="note warn" style="margin-top:4px">formation WATCH ONLY - the bridge must drop this payload.</div>') + '</span></div>'
+      + '</div>';
+    try{
+      if (typeof W.hgProvenEdgeVerdict === 'function' && typeof W.hgProvenEdgeChipHtml === 'function'){
+        var v = W.hgProvenEdgeVerdict('chartvision', 'CHARTVISION', { pool: 'CHARTVISION', mechanic: 'CHARTVISION' });
+        if (v) html += '<div class="panel" style="margin-top:10px"><h3>MEASURED EDGE <span>the vision desk\'s settled record</span></h3>' + W.hgProvenEdgeChipHtml(v) + '</div>';
+      }
+    }catch(eMe){ }
+    return html;
+  }catch(e){ return ''; }
+}
+
 function mount(el){
   if (!el) return;
   el.innerHTML = '<div class="panel">'
@@ -503,6 +589,7 @@ function mount(el){
     + '<span class="note" id="cvStat">idle</span></div>'
     + '<div class="prog" id="cvProg" style="display:none"><i style="width:0"></i></div>'
     + '<div id="cvFunnel"></div>'
+    + '<div id="cvCrown"></div>'
     + '<div class="cards" id="cvCards"></div>'
     + '<div class="empty" id="cvEmpty" style="display:none">No 6/7+ gate setups right now — zero is a valid, honest result.</div>'
     + '</div>';
@@ -511,6 +598,7 @@ function mount(el){
     btn: el.querySelector('#cvRun'),
     stat: el.querySelector('#cvStat'),
     cards: el.querySelector('#cvCards'),
+    crown: el.querySelector('#cvCrown'),   /* hg-v1071: the crown mount */
     empty: el.querySelector('#cvEmpty'),
     funnel: el.querySelector('#cvFunnel'),
     prog: el.querySelector('#cvProg'),
@@ -544,6 +632,7 @@ async function chartvisionRefresh(){
   }catch(e){ return 'error'; }
 }
 
+W.cvCrownHtml = cvCrownHtml;   /* hg-v1071: test seam */
 W.chartVisionState = function(){
   try{ return __cvSnap; }catch(e){ return null; }
 };

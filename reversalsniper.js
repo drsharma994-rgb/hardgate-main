@@ -917,6 +917,92 @@ async function rsRunScan(opts){
   }
 }
 
+/* hg-v1071: THE CROWN — the OMNIBTC treatment on the sniper's leading
+   bounce: a bold call, the verdict, the complete analysis (technical -
+   macro - micro), the setup card with the automation JSON and the
+   measured-edge chip. The desk is LONG-only by design; the crown never
+   invents a short. */
+function rsCrownHtml(results){
+  try{
+    if (!Array.isArray(results) || !results.length) return '';
+    var top = null, ticket = false, i, r;
+    for (i = 0; i < results.length; i++){
+      r = results[i];
+      if (!r || !r.setup || !isFinite(+r.setup.entry) || !isFinite(+r.setup.stop) || !isFinite(+r.setup.t1)) continue;
+      top = r;
+      if (rsTradeable(r.setup)){ ticket = true; break; }
+    }
+    if (!top) return '';
+    var s = top.setup;
+    var html = '<div class="panel" style="margin-top:10px;border-top:3px solid #26a69a"><h3>THE CALL</h3>'
+      + '<div style="font-size:16px;font-weight:700">LONG - ' + (ticket ? 'TICKET' : 'WATCH ONLY') + ' - ' + esc(String(top.sym)) + '</div></div>'
+      + '<div class="panel" style="margin-top:10px"><h3>CROWN VERDICT <span>the desk\'s complete verdict on its leading bounce</span></h3>'
+      + '<div style="font-size:12px;letter-spacing:.03em">REVERSAL SNIPER | ' + (ticket ? 'TICKET' : 'WATCH ONLY (PIN-REJECT policy)') + '</div></div>';
+    function dim(title, verdict, cls, ls){
+      if (!ls.length) return '';
+      return '<div style="margin:8px 0 2px"><b>' + title + '</b> <span class="gpip' + (cls || '') + '">' + verdict
+        + '</span><div style="font-size:11px;opacity:.9;margin-top:2px">' + ls.join(' | ') + '</div></div>';
+    }
+    var tech = [];
+    if (isFinite(+s.drawdownPct)) tech.push('drawdown ' + (+s.drawdownPct).toFixed(1) + '%');
+    if (isFinite(+s.rsi2)) tech.push('RSI(2) ' + (+s.rsi2).toFixed(1));
+    if (Array.isArray(s.triggers)) tech.push('triggers ' + s.triggers.length);
+    if (isFinite(+s.lev)) tech.push('lev ' + (+s.lev).toFixed(1) + 'x');
+    html += '<div class="panel" style="margin-top:10px"><h3>COMPLETE ANALYSIS <span>technical - macro - micro</span></h3>';
+    html += dim('TECHNICAL', tech.length ? 'ALIGNED' : 'UNREAD', '', tech);
+    var mac = [], mTilt = 'UNREAD', mCls = '';
+    try{
+      var wm = (typeof W.getWorldMonitorDeskCached === 'function') ? W.getWorldMonitorDeskCached() : null;
+      var rg = (typeof W.regimeState === 'function') ? W.regimeState() : null;
+      if (wm && wm.macro && wm.macro.verdict) mac.push('WM ' + String(wm.macro.verdict).toUpperCase());
+      if (wm && wm.stress && wm.stress.label) mac.push('stress ' + String(wm.stress.label).toUpperCase());
+      if (rg && rg.playbook && rg.playbook.bias) mac.push('bias ' + String(rg.playbook.bias).toUpperCase());
+      if (mac.length){
+        var off = (wm && wm.macro && (wm.macro.verdict === 'SELL' || wm.macro.verdict === 'AVOID'))
+          || (rg && rg.playbook && rg.playbook.bias === 'STAND-ASIDE')
+          || (wm && wm.stress && /HIGH|ELEVATED/i.test(String(wm.stress.label)));
+        mTilt = off ? 'RISK-OFF' : ((wm && wm.macro && wm.macro.verdict === 'BUY') ? 'RISK-ON' : 'NEUTRAL');
+        if (mTilt === 'RISK-OFF') mCls = ' bad';
+      }
+      mac.push('world tilt ' + mTilt);
+    }catch(eWm){ }
+    html += dim('MACRO', mTilt, mCls, mac);
+    var mic = [];
+    if (isFinite(+s.rr1)) mic.push('R:R1 ' + (+s.rr1).toFixed(1) + 'R');
+    if (isFinite(+s.rr2)) mic.push('R:R2 ' + (+s.rr2).toFixed(1) + 'R');
+    if (isFinite(+s.riskPct)) mic.push('risk ' + (+s.riskPct).toFixed(2) + '%');
+    if (typeof hgCryptoCostR === 'function' && isFinite(+s.entry) && isFinite(+s.stop)){
+      var costR = hgCryptoCostR(+s.entry, +s.stop, 'taker', 'taker');
+      if (isFinite(costR)) mic.push('cost ' + costR.toFixed(2) + 'R');
+    }
+    html += dim('MICRO', mic.length ? 'NEUTRAL' : 'UNREAD', '', mic);
+    html += '</div>';
+    var payload = { v: 1, id: 'RS-' + String(top.sym), venue: top.venue || top.exchange || 'delta', symbol: top.sym,
+      side: 'long', entry: +s.entry, stop: +s.stop, t1: +s.t1, t2: isFinite(+s.t2) ? +s.t2 : null,
+      tier: ticket ? 'TICKET' : 'WATCH', measured: 'UNREAD',
+      exitPolicy: 'scale50_t1_be_trail', ts: Math.floor(Date.now() / 1000) };
+    html += '<div class="panel" style="margin-top:10px"><h3>SETUP CARD <span>the OMNIBTC template on the leading bounce</span></h3>'
+      + '<div class="kv"><span class="k">Market Thesis</span><span class="v">' + esc('bounce: '
+        + (isFinite(+s.drawdownPct) ? (+s.drawdownPct).toFixed(1) + '% drawdown' : 'drawdown UNREAD')
+        + (isFinite(+s.rsi2) ? ' with RSI(2) ' + (+s.rsi2).toFixed(1) : '')
+        + '; sniper-style tight stop for max-safe leverage.') + '</span></div>'
+      + '<div class="kv"><span class="k">Bias</span><span class="v pos">LONG</span></div>'
+      + '<div class="kv"><span class="k">Entry</span><span class="v">' + (+s.entry).toFixed(4) + '</span></div>'
+      + '<div class="kv"><span class="k">Invalidation (SL)</span><span class="v">' + (+s.stop).toFixed(4) + '</span></div>'
+      + '<div class="kv"><span class="k">Targets</span><span class="v">TP1 ' + (+s.t1).toFixed(4) + ' | TP2 ' + (isFinite(+s.t2) ? (+s.t2).toFixed(4) : 'n/a') + '</span></div>'
+      + '<div class="kv"><span class="k">Automation Blueprint</span><span class="v"><pre style="margin:4px 0;white-space:pre-wrap;font-size:10px">' + esc(JSON.stringify(payload, null, 2)) + '</pre>'
+      + (ticket ? '' : '<div class="note warn" style="margin-top:4px">formation WATCH ONLY - the bridge must drop this payload.</div>') + '</span></div>'
+      + '</div>';
+    try{
+      if (typeof W.hgProvenEdgeVerdict === 'function' && typeof W.hgProvenEdgeChipHtml === 'function'){
+        var v = W.hgProvenEdgeVerdict('reversalsniper', 'REVERSALSNIPER', { pool: 'REVERSALSNIPER', mechanic: 'REVERSALSNIPER' });
+        if (v) html += '<div class="panel" style="margin-top:10px"><h3>MEASURED EDGE <span>the sniper\'s settled record</span></h3>' + W.hgProvenEdgeChipHtml(v) + '</div>';
+      }
+    }catch(eMe){ }
+    return html;
+  }catch(e){ return ''; }
+}
+
 function mount(el){
   if (!el) return;
   el.innerHTML = '<div class="panel">'
@@ -932,6 +1018,7 @@ function mount(el){
     + ' · lev ≥ ' + MIN_LEV + '×</span></div>'
     + '<div class="prog" id="rsProg"><i></i></div>'
     + '<div id="rsKilledNote"></div>'
+    + '<div id="rsCrown"></div>'
     + '<div class="cards" id="rsCards"></div>'
     + '<div id="rsFwd"></div>'
     + '<div class="empty" id="rsEmpty" style="display:none">No sniper-grade long reversals right now — '
@@ -943,6 +1030,7 @@ function mount(el){
   var statEl = el.querySelector('#rsStat');
   var progEl = el.querySelector('#rsProg');
   var cardsEl = el.querySelector('#rsCards');
+  var rsCrownEl = el.querySelector('#rsCrown');   /* hg-v1071: the crown mount */
   var emptyEl = el.querySelector('#rsEmpty');
   var idleEl = el.querySelector('#rsIdle');
   /* Paint the shared forward panel on mount — the tab's accumulated
@@ -1008,6 +1096,7 @@ function mount(el){
             + results.length + ' bounce print' + (results.length === 1 ? '' : 's')
             + ' · none are tickets · no SEND TO TRADE PLAN / ADD TO BOOK.</div>';
         cardsEl.innerHTML = head + results.map(cardHTML).join('');
+        try { if (rsCrownEl) rsCrownEl.innerHTML = rsCrownHtml(results); } catch(eCr){ }
         try {
           if (tradeableN && typeof W.hgMpPin === 'function') W.hgMpPin('reversalsniper', results, null, cardsEl);
         } catch (eMp) {}
@@ -1015,6 +1104,7 @@ function mount(el){
         try { refreshKilledNote(); } catch(eKr){}
       } else {
         emptyEl.style.display = 'block';
+        if (rsCrownEl) rsCrownEl.innerHTML = '';   /* hg-v1071: no bounce, no crown */
         emptyEl.textContent = 'No sniper-grade long reversals right now — need post-drop (≥2%) + sweep/mean-rev/RSI(2) confluence, stop tight enough for ≥'
           + MIN_LEV + '× leverage, conviction ≥ ' + MIN_CONVICTION + '. Quiet tape is normal; re-scan after a flush.';
         /* v689: refresh KILLED note in the empty branch too so the user
@@ -1067,6 +1157,7 @@ W.reversalSniperScan = function(){ return __rs.snap; };
 W.rsLoadUniverse = rsLoadUniverse;
 W.rsIsDeskVenue = rsIsDeskVenue;
 W.HG_tabs = W.HG_tabs || [];
+W.rsCrownHtml = rsCrownHtml;   /* hg-v1071: test seam */
 W.HG_tabs.push({ id: 'reversalsniper', label: 'REVERSAL SNIPER', mount: mount, refresh: rsRefresh });
 
 })();
