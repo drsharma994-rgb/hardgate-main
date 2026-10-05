@@ -347,7 +347,25 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <body>
 <header class="hg-header">
   <div class="header-primary">
-    <div class="brand">HARDGATE<span id="hgVerBadge" class="verbadge" title="build version — bumped on every deploy">v?</span><small>DELTA · COINDCX · STARTRADER · BINANCE · GOLD (PAXG) · GATES, NOT SCORES · 23+ TOOLS</small></div>
+    <div class="brand">HARDGATE<span id="hgVerBadge" class="verbadge" title="build version — bumped on every deploy">v?</span><script>
+(function(){
+  var el = document.getElementById('hgVerBadge');
+  fetch('build-stamp.js?live=' + Date.now(), { cache: 'no-store' }).then(function(r){
+    if (!r.ok) throw new Error('stamp');
+    return r.text();
+  }).then(function(t){
+    var m = String(t || '').match(/version\s*:\s*['"]hg-v(\d+)['"]/);
+    if (!m || !el) return;
+    el.textContent = 'v' + m[1];
+    el.title = 'server build hg-v' + m[1];
+  }).catch(function(){});
+  try {
+    if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
+      navigator.serviceWorker.getRegistration().then(function(reg){ if (reg) reg.update(); });
+    }
+  } catch (e) {}
+})();
+</script><small>DELTA · COINDCX · STARTRADER · BINANCE · GOLD (PAXG) · GATES, NOT SCORES · 23+ TOOLS</small></div>
     <div class="xtoggle">
       <button id="xDelta" class="on" onclick="setExchange('delta')">DELTA INDIA</button>
       <button id="xCdcx" onclick="setExchange('coindcx')">COINDCX</button>
@@ -834,7 +852,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 </main>
 
 
-  <script src="build-stamp.js?v=1076"></script>
+  <script src="build-stamp.js?v=1138"></script>
   <script src="hg-setup-core.js?v=1076"></script>
   <script src="hg-perfect-setup.js?v=1076"></script>
 <script src="hghost.js?v=1076"></script>

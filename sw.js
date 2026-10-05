@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v1137';
+const HG_CACHE = 'hg-v1138';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -152,6 +152,8 @@ self.addEventListener('fetch', function(ev){
     }).catch(function(netErr){
       return caches.match(req).then(function(hit){
         if (hit) return hit;                                       /* offline fallback: static shell only */
+        var path = (url && url.pathname) || '';
+        if (/build-stamp\.js$|\/sw\.js$/.test(path)) throw netErr;
         if (req.mode === 'navigate'){
           return caches.match('./index.html').then(function(shell){
             return shell || Promise.reject(netErr);
