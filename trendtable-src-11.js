@@ -1,3 +1,257 @@
+eshCross === 'GOLDEN';
+    if (state.filter === 'DT') return r.freshCross === 'DEATH';   /* hg-v1014 */
+    if (state.filter === 'CV') return !!trendmxConviction(r);
+    if (state.filter === 'SL') return r.score >= 4;
+    if (state.filter === 'SS') return r.score <= -4;
+    if (state.filter === 'FX') return !!r.freshCross;
+    return true;
+  }
+  function tri(v, up, dn){
+    if (v > 0) return '<span class="pos">' + up + '</span>';
+    if (v < 0) return '<span class="neg">' + dn + '</span>';
+    return '<span>—</span>';
+  }
+  function cloudCell(v){
+    if (v > 0) return '<span class="pos">ABOVE</span>';
+    if (v < 0) return '<span class="neg">BELOW</span>';
+    return '<span>INSIDE</span>';
+  }
+
+  function renderMatrix(){
+    if (!state.rows.length){
+      out.innerHTML = '<div class="empty">No results — run a scan.</div>';
+      return;
+    }
+    var rows = state.rows.filter(passFilter);
+    if (!rows.length){
+      out.innerHTML = '<div class="empty">No symbols match this filter.</div>';
+      return;
+    }
+    if (state.view === 'columns'){
+      out.innerHTML = trendmxColumnsHTML(rows);
+      return;
+    }
+    rows.sort(function(a, b){
+      var va = sortVal(a, state.sortKey), vb = sortVal(b, state.sortKey);
+      var c = (typeof va === 'string') ? va.localeCompare(vb) : (va - vb);
+      return state.sortDir * c;
+    });
+
+    var h = '<table class="hg-table"><thead><tr>';
+    h += '<th>COMP</th>';
+    COLS.forEach(function(col){
+      var arrow = (!col.nosort && state.sortKey === col.k) ? (state.sortDir > 0 ? ' ▲' : ' ▼') : '';
+      h += col.nosort
+        ? '<th>' + col.label + '</th>'
+        : '<th data-k="' + col.k + '" style="cursor:pointer">' + col.label + arrow + '</th>';
+    });
+    h += '</tr></thead><tbody>';
+
+    rows.forEach(function(r){
+      var sc = r.score;
+      var scls = sc > 0 ? 'pos' : (sc < 0 ? 'neg' : '');
+      var xcls = r.comps.d1Cross > 0 ? 'pos' : (r.comps.d1Cross < 0 ? 'neg' : '');
+      var xtxt = r.comps.d1Cross > 0 ? 'BULL' : (r.comps.d1Cross < 0 ? 'BEAR' : '—');
+      var fx = r.freshCross
+        ? ' <b class="' + (r.freshCross === 'GOLDEN' ? 'pos' : 'neg') + '">⚡' + r.freshCross + '</b>' : '';
+      var adxTxt = isFinite(r.adx) ? r.adx.toFixed(1) : '—';
+      var adxMark = r.comps.adxPt > 0 ? ' <span class="pos">▲</span>'
+                  : (r.comps.adxPt < 0 ? ' <span class="neg">▼</span>' : '');
+      var gate = r.gate;
+      var gateTxt = gate ? gate.label : '—';
+      var gateCls = gate && gate.clean7 ? 'ok' : (gate && gate.veto ? 'bad' : '');
+      var pdir = tmDirOf(r);
+      h += '<tr>' +
+        '<td>' + trendmxCompPipsHtml(r.comps) + '</td>' +
+        '<td><b>' + r.sym + '</b>' + tmVenueChip(r) + '</td>' +
+        '<td class="' + scls + '"><b>' + (sc > 0 ? '+' : '') + sc + '</b></td>' +
+        '<td><span class="gpip ' + gateCls + '">' + escH(gateTxt) + '</span></td>' +
+        '<td>' + tri(r.comps.d1Trend, '▲ UP', '▼ DOWN') + '</td>' +
+        '<td><span class="' + xcls + '">' + xtxt + '</span>' + fx + '</td>' +
+        '<td>' + tri(r.comps.h4Cascade, '▲ ALIGN', '▼ INVERSE') + '</td>' +
+        '<td>' + cloudCell(r.comps.cloud) + '</td>' +
+        '<td>' + adxTxt + adxMark + '</td>' +
+        '<td>' + pxFmt(r.price) + '</td>' +
+        '<td>' + (pdir
+          ? '<button class="chip tmPlanBtn" data-sym="' + escH(r.sym) + '">' + pdir.toUpperCase() + ' PLAN ▸</button>'
+          : '<span class="note">—</span>') + '</td>' +
+      '</tr>' +
+      '<tr class="tmPlanRow" data-sym="' + escH(r.sym) + '" style="display:none"><td colspan="' + (COLS.length + 1) + '"></td></tr>';
+    });
+    h += '</tbody></table>';
+    out.innerHTML = h;
+
+    Array.prototype.slice.call(out.querySelectorAll('th[data-k]')).forEach(function(th){
+      th.addEventListener('click', function(){
+        var k = th.getAttribute('data-k');
+        if (state.sortKey === k) state.sortDir = -state.sortDir;
+        else { state.sortKey = k; state.sortDir = (k === 'sym') ? 1 : -1; }
+        renderMatrix();
+      });
+    });
+    Array.prototype.slice.call(out.querySelectorAll('.tmPlanBtn')).forEach(function(b){
+      b.addEventListener('click', function(){ togglePlan(b.getAttribute('data-sym')); });
+    });
+  }
+  tmTab._renderMatrix = renderMatrix;
+
+  function renderAll(){
+    trendmxPaintDeskSections(refs, state);
+    trendmxPaintFwd(refs);
+    renderMatrix();
+  }
+
+  function togglePlan(sym){
+    var row = out.querySelector('tr.tmPlanRow[data-sym="' + sym + '"]');
+    if (!row) return;
+    var btnEl = out.querySelector('.tmPlanBtn[data-sym="' + sym + '"]');
+    var open = row.style.display !== 'none';
+    if (open){
+      row.style.display = 'none';
+      if (btnEl) btnEl.textContent = btnEl.textContent.replace('▾', '▸');
+      return;
+    }
+    var r = null;
+    for (var i = 0; i < state.rows.length; i++){ if (state.rows[i].sym === sym){ r = state.rows[i]; break; } }
+    var td = row.querySelector('td');
+    if (td && r) td.innerHTML = trendmxPlanBlock(r);
+    row.style.display = '';
+    if (btnEl) btnEl.textContent = btnEl.textContent.replace('▸', '▾');
+  }
+
+  async function runScan(){
+    if (state.running || missing.length) return;
+    state.running = true;
+    tmTab.busy = true;
+    btn.disabled = true;
+    var t0 = Date.now();
+    try{
+      setProg(0.05);
+      setStatus('Scanning full universe (floor ' + floorM + 'M, Delta + CoinDCX + Binance, + ALL CoinDCX futures)...');
+      var snap = await trendmxScan({ force: true });
+      var results = (snap && snap.rows) ? snap.rows : [];
+      var failed = (snap && snap.failed) ? snap.failed : 0;
+      var symsLen = (snap && snap.scanned) ? snap.scanned : results.length;
+      var uniLen = (snap && snap.uniLen) ? snap.uniLen : symsLen;
+      var vc = (snap && snap.venueCounts) ? snap.venueCounts : {};
+
+      state.rows = results;
+      state.golden = (snap && snap.goldenCross) ? snap.goldenCross : [];
+      state.death = (snap && snap.deathCross) ? snap.deathCross : [];   /* hg-v1014 */
+      state.venueCounts = vc;
+      renderAll();
+      /* hg-v1039: THE CROWN JOINS THE FORWARD BOOK — the desk has crowned
+         CLEAN / PERFECT rows for its whole life and never recorded one, so
+         'does the trend-matrix crown pay?' could never be asked. Each 7/7
+         gate-clean row with a valid plan is recorded (max 10, strongest
+         |composite| first); the ledger dedups on the bar and settles on
+         bars the desk already fetched. Evidence, never a gate. */
+      try{
+        if (typeof W.hgFwdRecordScan === 'function'){
+          var recRows = [];
+          var cands = state.rows.slice().sort(function(a, b){ return Math.abs(+b.score || 0) - Math.abs(+a.score || 0); });
+          for (var ri = 0; ri < cands.length && recRows.length < 10; ri++){
+            var cr = cands[ri];
+            var cdir = tmDirOf(cr);
+            if (!cdir || !cr.gate || !cr.gate.clean7 || cr.gate.veto) continue;
+            var cplan = trendmxPlan(Object.assign({}, cr, { dir: cdir }));
+            if (!cplan || !isFinite(+cplan.entry) || !isFinite(+cplan.stop) || !isFinite(+cplan.t1)) continue;
+            var crh4 = cr.rows4h;
+            if (!Array.isArray(crh4) || !crh4.length) continue;
+            var cLast = crh4[crh4.length - 1];
+            recRows.push({
+              sym: cr.sym, dir: cdir,
+              entry: +cplan.entry, stop: +cplan.stop, t1: +cplan.t1,
+              signalT: (cLast && cLast.t != null) ? cLast.t : undefined,
+              mark: (cLast && cLast.c != null) ? +cLast.c : undefined,
+              rows4h: crh4,
+              fundingPct: (typeof cr.fundingPct === 'number' && isFinite(cr.fundingPct)) ? cr.fundingPct : undefined,
+              mechanic: trendmxPerfectState(cr) ? 'PERFECT' : 'CLEAN',
+              ticket: true
+            });
+          }
+          if (recRows.length) W.hgFwdRecordScan('TRENDMX', '4h', recRows, { horizonBars: 20 });
+        }
+      }catch(eRec){ try{ if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('trendmx', eRec); }catch(eW){} }
+      if (typeof globalThis !== 'undefined' && typeof globalThis.hgChartVisionEnrichDeskRows === 'function'){
+        var tmClean = state.rows.filter(function(r){
+          var d = tmDirOf(r);
+          if (!d || !r.rows4h) return false;
+          var plan = trendmxPlan(Object.assign({}, r, { dir: d }));
+          return trendmxRowTier(r, plan) === 'clean';
+        });
+        globalThis.hgChartVisionEnrichDeskRows(tmClean, function(r){ return r.rows4h; }, {
+          limit: 12,
+          repaint: function(){ renderAll(); }
+        });
+      }
+      var dt = ((Date.now() - t0) / 1000).toFixed(1);
+      var venNote = ' · Δ' + (vc.delta || 0) + ' CDX' + (vc.coindcx || 0) + ' BN' + (vc.binance || 0);
+      setStatus('raw ' + uniLen + ' · scanned ' + symsLen + venNote
+                + ' (≥ $' + floorM + 'M) · ' + results.length + ' ok / ' + failed +
+                ' failed · ' + dt + 's' + (snap && snap.note ? ' · ' + snap.note : '')
+                /* hg-v1012: name the evidence pass the same way the board does */
+                + ((snap && snap.flow && snap.flow.read === 'taker' && (snap.flow.with + snap.flow.against) > 0)
+                  ? ' · taker flow: ' + snap.flow.with + ' with / ' + snap.flow.against + ' held off' : ''),
+                results.length === 0);
+      if (!results.length){
+        out.innerHTML = '<div class="empty">All symbol fetches failed — check connection.</div>';
+      }
+    }catch(e){
+      setStatus('Scan failed: ' + ((e && e.message) || e), true);
+      if (!state.rows.length) out.innerHTML = '<div class="empty">Scan could not complete.</div>';
+    }finally{
+      state.running = false;
+      tmTab.busy = false;
+      tmTab.hasRun = true;
+      btn.disabled = missing.length > 0;
+      setProg(null);
+    }
+  }
+
+  tmTab.run = runScan;
+  tmTab.missing = missing.length;
+
+  if (__tmScanSnap && __tmScanSnap.rows && __tmScanSnap.rows.length &&
+      __tmScanSnap.at && (Date.now() - __tmScanSnap.at) < (5 * 60 * 1000)){
+    state.rows = __tmScanSnap.rows;
+    state.golden = __tmScanSnap.goldenCross || [];
+    state.death = __tmScanSnap.deathCross || [];   /* hg-v1014 */
+    tmTab.hasRun = true;
+    renderAll();
+    setStatus('restored from cache · ' + trendmxSummaryLine(state.rows, state.golden)
+      + ' · age ' + Math.round((Date.now() - __tmScanSnap.at) / 1000) + 's');
+  }
+}
+
+/* ---------------- exports + tab registration ---------------- */
+
+W.trendScore = trendScore;
+W.tmDirOf = tmDirOf;
+W.trendmxGateEval = trendmxGateEval;
+W.trendmxClassify = trendmxClassify;
+W.hgTrendMatrixAlign = hgTrendMatrixAlign;   /* hg-v995 */
+W.hgTrendMatrixRowOf = hgTrendMatrixRowOf;
+W.hgTrendMatrixMark = hgTrendMatrixMark;
+W.trendmxPlan = trendmxPlan;
+W.trendmxPlanHTML = trendmxPlanHTML;
+W.trendmxPlanBlock = trendmxPlanBlock;
+W.trendmxConviction = trendmxConviction;
+/* hg-v1012: the evidence layer's seams — the pass, the chips, and the two
+   pre-existing readers the layer's behavior lives through (no export cap
+   on this desk; the tests read these rather than re-deriving behavior) */
+W.trendmxFlowScan = trendmxFlowScan;
+W.trendmxFlowChipHtml = trendmxFlowChipHtml;
+W.trendmxMomState = trendmxMomState;       /* hg-v1019: the momentum witness */
+W.trendmxMomChipHtml = trendmxMomChipHtml;
+W.trendmxSetupCardHTML = trendmxSetupCardHTML;   /* hg-v1019: the matrix card — where a held row's chip must paint (the NEAR section) */
+W.trendmxVolState = trendmxVolState;       /* hg-v1020: the volume witness */
+W.trendmxVolChipHtml = trendmxVolChipHtml;
+W.trendmxFundGate = trendmxFundGate;       /* hg-v1034: the fundamental + sentiment witness */
+W.trendmxColumnsHTML = trendmxColumnsHTML; /* hg-v1045: the bull / bear column view */
+W.trendmxTrendFormHTML = trendmxTrendFormHTML; /* hg-v1048: the coindcx trending / forming board */
+W.trendmxCrownPanelHTML = trendmxCrownPanelHTML; /* hg-v1066: the OMNIBTC-style crown */
+W.trendmxPerfectEvidencePass = trendmxPerfectEvidencePass; /* hg-v1067: the OMNIBTC evidence stack */
 W.trendmxCrownOfRows = trendmxCrownOfRows;   /* hg-v1068: the crown, pure and testable */
 W.trendmxCrownState = trendmxCrownState;     /* hg-v1068: the alert seam */
 W.trendmxFundState = trendmxFundState;

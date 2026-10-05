@@ -292,7 +292,6 @@ function trendScore(rows1d, rows4h){
     if (ok1){
       var a = adx(rows1d, 14);
       out.adx = (a && a.adx && a.adx.length) ? a.adx[a.adx.length - 1] : NaN;
-
       /* hg-v1019: THE MOMENTUM WITNESS rides the same 1D tape — RSI(14) as
          EVIDENCE. NOT a sixth composite leg: the score sum below is
          byte-identical, so every recorded tmScore stays on its own scale
@@ -658,7 +657,6 @@ function trendmxPlanHTML(s){
       ? hgStrategyConfirmChipHtml(s.strategyConfirm, s.strategyWith, s.strategyAgainst) : '')
     + (s.contextRead ? '<div class="dim">' + escH(s.contextRead)
         + (s.contextWarn ? ' — context AGAINST this direction' : '') + '</div>' : '')
-
     + ((typeof hgStrategyTradeDetailHtml === 'function')
       ? hgStrategyTradeDetailHtml(s, { skipChip: true }) : '');
 }
@@ -969,7 +967,6 @@ var TM_FLOW_MAX = 24;       /* the SMC pass's own cap — flow is fetched for th
 function trendmxFlowScan(rows){
   var out = { with: 0, against: 0, unreadable: 0, scanned: 0, read: 'unavailable' };
   var cvdFn = (typeof W.hgOmniCvd === 'function') ? W.hgOmniCvd : null;
-
   var tkFn = (typeof W.binanceTakerRatio === 'function') ? W.binanceTakerRatio : null;
   var symFn = (typeof W.hgDeskBinanceSym === 'function') ? W.hgDeskBinanceSym : null;
   if (!cvdFn || !tkFn || !symFn || !Array.isArray(rows) || !rows.length) return Promise.resolve(out);
@@ -1151,6 +1148,44 @@ function trendmxCostChipHtml(r, plan){
   }catch(e){ return ''; }
 }
 
+async function tmLoadCoinDcxContracts(){
+  var urls = [
+    '/api/coindcx/instruments',
+    '/api/proxy?url=' + encodeURIComponent('https://api.coindcx.com/exchange/v1/derivatives/futures/data/active_instruments?margin_currency_short_name[]=USDT')
+  ];
+  var last = 'coindcx list failed';
+  for (var i = 0; i < urls.length; i++){
+    try{
+      var r = await fetch(urls[i]);
+      if (!r || !r.ok){ last = 'HTTP ' + (r ? r.status : '?'); continue; }
+      var j = await r.json();
+      var list = Array.isArray(j) ? j : (j && Array.isArray(j.data) ? j.data : (j && Array.isArray(j.instruments) ? j.instruments : null));
+      if (!list){ last = 'bad shape'; continue; }
+      var out = [];
+      for (var k = 0; k < list.length; k++){
+        var s = String((list[k] && list[k].symbol) ? list[k].symbol : (list[k] || ''));
+        if (/^B-[A-Z0-9]+_USDT$/.test(s) && out.indexOf(s) < 0) out.push(s);
+      }
+      if (out.length) return out;
+    }catch(e){ last = (e && e.message) || String(e); }
+  }
+  throw new Error(last);
+}
+function tmBinanceTwin(item, tf, n){
+  try{
+    var base = item && item.base ? String(item.base).toUpperCase() : '';
+    if (!base || typeof W.binanceKlines !== 'function') return Promise.resolve([]);
+    return W.binanceKlines(base + 'USDT', tf, n).then(function(rows){ return Array.isArray(rows) ? rows : []; }).catch(function(){ return []; });
+  }catch(e){ return Promise.resolve([]); }
+}
+function tmUnreadRow(item){
+  return {
+    sym: item && item.sym, base: item && item.base, exchange: (item && item.exchange) || 'coindcx',
+    alsoOn: item && item.alsoOn, xu: item, score: null, comps: null, freshCross: null, adx: NaN,
+    unread: true, price: null, rows4h: null, rows1h: null,
+    fundingPct: item && item.fundingPct, turnoverUsd: item && item.turnoverUsd, mark: item && item.mark
+  };
+}
 async function trendmxScanCore(hooks){
   hooks = hooks || {};
 /* Map before asking Binance — a venue code means nothing to fapi. This is the
@@ -1196,6 +1231,27 @@ async function trendmxScanCore(hooks){
       }
     }
   }catch(eUni){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('trendmx', eUni); }catch(eWu){} }
+  /* BATCH 1130 — the instrument list is the source of truth. Every active
+     CoinDCX USDT future is on the board, including contracts the merged
+     universe dropped because another venue won the base or the $5M floor
+     cut them. A symbol already queued is not added twice. */
+  try{
+    var cdcxSyms = await tmLoadCoinDcxContracts();
+    var seenSym = {};
+    for (var si = 0; si < items.length; si++) seenSym[String(items[si].sym || '')] = 1;
+    for (var ci2 = 0; ci2 < cdcxSyms.length; ci2++){
+      var csym = cdcxSyms[ci2];
+      if (seenSym[csym]) continue;
+      items.push({
+        sym: csym,
+        base: csym.replace(/^B-/, '').replace(/_USDT$/, ''),
+        exchange: 'coindcx',
+        turnoverUsd: null, mark: null, fundingPct: null, alsoOn: null
+      });
+      seenSym[csym] = 1;
+    }
+    uniPack.cdcxListed = cdcxSyms.length;
+  }catch(eCdx){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('trendmx', eCdx); }catch(eW2){} }
   if (!items.length) throw new Error('universe empty' + (uniPack.note ? ' — ' + uniPack.note : ''));
   var results = [], failed = 0;
   for (var i = 0; i < items.length; i += CHUNK){
@@ -1203,10 +1259,16 @@ async function trendmxScanCore(hooks){
     if (typeof hooks.setProg === 'function') hooks.setProg((i + chunk.length) / items.length);
     var rs = await Promise.all(chunk.map(function(item){
       return fetchK(item, '4h', 120).then(function(r4){
-          if (!r4 || !r4.length) return null;
-          return Promise.all([fetchK(item, '1d', 260), fetchK(item, '1h', 120)]).then(function(rr){
+          if (r4 && r4.length) return r4;
+          return tmBinanceTwin(item, '4h', 120);
+        }).then(function(r4){
+          if (!r4 || !r4.length) return tmUnreadRow(item);
+          return Promise.all([
+            fetchK(item, '1d', 260).then(function(r1){ return (r1 && r1.length) ? r1 : tmBinanceTwin(item, '1d', 260); }),
+            fetchK(item, '1h', 120).then(function(r1h){ return (r1h && r1h.length) ? r1h : tmBinanceTwin(item, '1h', 120); })
+          ]).then(function(rr){
             var r1 = rr[0], r1h = rr[1];
-            if (!r1 || !r1.length) return null;
+            if (!r1 || !r1.length) return tmUnreadRow(item);
             var ts = trendScore(r1, r4);
             var row = {
               sym: item.sym, base: item.base, exchange: item.exchange || 'binance', alsoOn: item.alsoOn,
@@ -1256,7 +1318,6 @@ async function trendmxScan(opts){
     flow: flow
   };
   publishTrendmxSnap(core.rows);
-
   return __tmScanSnap;
 }
 
@@ -1332,7 +1393,9 @@ function trendmxSummaryLine(rows, golden, venueCounts){
     else if (tier === 'near') near++;
   }
   var vc = venueCounts || {};
-  var ven = ' · Δ' + (vc.delta || 0) + ' · CDX' + (vc.coindcx || 0) + ' · BN' + (vc.binance || 0);
+  var cdxN = 0;
+  for (var ci = 0; ci < rows.length; ci++) if (rows[ci] && String(rows[ci].exchange || '').toLowerCase() === 'coindcx') cdxN++;
+  var ven = ' · Δ' + (vc.delta || 0) + ' · CDX ' + cdxN + ' contracts · BN' + (vc.binance || 0);
   return 'scanned ' + rows.length + ven
     + ' · golden ' + golden.length
     + ' · strong +' + sl + '/−' + ss + ' · fresh crosses ' + fx
@@ -1549,7 +1612,6 @@ function trendmxFundChipHtml(r){
   try{
     var g = trendmxFundGate(r);
     if (!g || !g.chips || !g.chips.length) return '';
-
     if (typeof hgFundamentalChipHtml === 'function') return hgFundamentalChipHtml(g) || '';
     return '';
   }catch(e){ return ''; }
@@ -1826,7 +1888,6 @@ function trendmxLimitClasses(rows){
                  /* hg-v981: the mark trendmxAttachMeta already kept, the bar off the row's series */
                  mark: (c.plan && isFinite(+c.plan.mark) && +c.plan.mark > 0) ? +c.plan.mark : undefined,
                  barT: (typeof W.hgFwdLastBar === 'function') ? W.hgFwdLastBar(c.row && c.row.rows4h).barT : undefined,
-
                  /* hg-v1012: the funding the row already carried — a desk that
                     has it in hand hands it in (hg-v985: the ledger has no
                     venue-safe symbol map, so a desk that hands in no funding
@@ -2111,7 +2172,6 @@ function trendmxPerfectDeskHTML(bag){
   if (!bag.length) return '';   /* a perfect row is rare by design — an empty desk is policy, not a fault */
   return '<div class="panel" style="margin:12px 0">'
     + '<h2>PERFECT SETUP DESK <span>criteria: max composite |5/5| · 7/7 gate-clean · momentum witness WITH · volume witness WITH · taker flow never against · funding not crowded · evidence-only, measured by the forward ledger — a filter, not a promise</span></h2>'
-
     + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + bag.map(trendmxLimitCardHTML).join('') + '</div></div>';
 }
 
@@ -2312,6 +2372,8 @@ function trendmxColumnsHTML(rows){
        compact honest row instead of a setup card */
     function mixedRow(r){
       try{
+        if (r.unread) return '<div class="card" style="padding:8px;margin-bottom:6px"><b>' + escH(r.sym) + '</b>' + tmVenueChip(r)
+          + '<div style="opacity:.75;font-size:11px;margin-top:2px">UNREAD · CoinDCX contract with no candle series · not a setup</div></div>';
         return '<div class="card" style="padding:8px;margin-bottom:6px"><b>' + escH(r.sym) + '</b>' + tmVenueChip(r)
           + '<div style="opacity:.75;font-size:11px;margin-top:2px">composite ' + (r.score > 0 ? '+' : '') + r.score + '/5 · no majority — no levels minted · ADX '
           + (isFinite(r.adx) ? (+r.adx).toFixed(1) : '—') + '</div></div>';
@@ -2402,13 +2464,16 @@ function trendmxTrendFormHTML(rows){
       }
       var lvl = (dd || lean !== 0) ? lvlLine(rr, dd || (lean === 1 ? 'long' : 'short'))
         : 'no lean - composite 0/5, no levels';
+      if (rr.unread){
+        return '<div class="card" style="padding:8px;margin-bottom:6px"><b>' + escH(rr.sym) + '</b> <span>UNREAD</span>'
+          + '<div style="opacity:.9;font-size:11px;margin-top:2px">CoinDCX contract on the board. No candle series, so no setup.</div></div>';
+      }
       return '<div class="card" style="padding:8px;margin-bottom:6px"><b>' + escH(rr.sym) + '</b> ' + tag
         + '<div style="opacity:.9;font-size:11px;margin-top:2px">composite ' + (rr.score > 0 ? '+' : '') + rr.score + '/5' + formTag + (rr.freshCross ? ' - !' + escH(rr.freshCross) : '') + '</div>'
         + '<div style="font-size:11px;margin-top:4px;letter-spacing:.02em">' + lvl + '</div></div>';
     }
     function col(title, cls, list, emptyTxt){
       var h = '<div class="panel" style="border-top:3px solid ' + cls + '"><h3 style="margin:0 0 8px">' + title
-
         + ' <span style="opacity:.6;font-weight:400">- ' + list.length + ' contract' + (list.length === 1 ? '' : 's') + '</span></h3>';
       if (!list.length) h += '<div class="empty" style="margin:6px 0">' + emptyTxt + '</div>';
       else h += list.map(cell).join('');
@@ -2637,7 +2702,6 @@ function trendmxCrownPanelHTML(state){
    fed by the SAME external data (real Binance taker flow, Binance funding,
    ATR percentile regime, EMA50/200 structure, session RVOL, the news
    calendar), applied to the matrix's strongest rows. PERFECT / PERFECT+
-
    on a matrix row now means byte-identically what it means on OMNIBTC.
    Evidence, never a gate. */
 function tmStructureDir(rows){
@@ -2896,7 +2960,7 @@ function mountTrendMatrix(el){
   var floorM = (TURNOVER_FLOOR / 1e6).toFixed(0);
   el.innerHTML =
     '<div class="panel hg-panel">' +
-      '<h2>TREND MATRIX <span>advanced multi-TF desk · full universe (Delta + CoinDCX + Binance · ≥ $' + floorM + 'M turnover)</span></h2>' +
+      '<h2>TREND MATRIX <span>advanced multi-TF desk · every active CoinDCX USDT future · other venues ≥ $' + floorM + 'M</span></h2>' +
       (typeof W.hgOmniPrincipalNoteHtml === 'function' ? (W.hgOmniPrincipalNoteHtml('trendmx') || '') : '') +
       '<div id="trendmxDesk"></div>' +
       '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · golden cross Telegram every 15m.</div>' +
@@ -2949,7 +3013,6 @@ function mountTrendMatrix(el){
       note: 'CLEAN = 7/7 + plan + min R:R. The golden/death cross desks + the two limit class desks (gate-clean / conviction) promote the best rows. NEAR/FORMING are watch-only.'   /* hg-v1015 / hg-v1018 */
     });
   }
-
 
   var btn    = el.querySelector('[data-r="run"]');
   var syncBtn = el.querySelector('[data-r="sync"]');
@@ -3295,7 +3358,6 @@ W.trendmxColumnsHTML = trendmxColumnsHTML; /* hg-v1045: the bull / bear column v
 W.trendmxTrendFormHTML = trendmxTrendFormHTML; /* hg-v1048: the coindcx trending / forming board */
 W.trendmxCrownPanelHTML = trendmxCrownPanelHTML; /* hg-v1066: the OMNIBTC-style crown */
 W.trendmxPerfectEvidencePass = trendmxPerfectEvidencePass; /* hg-v1067: the OMNIBTC evidence stack */
-
 W.trendmxCrownOfRows = trendmxCrownOfRows;   /* hg-v1068: the crown, pure and testable */
 W.trendmxCrownState = trendmxCrownState;     /* hg-v1068: the alert seam */
 W.trendmxFundState = trendmxFundState;

@@ -1,3 +1,35 @@
+rns source 'taker'
+   when enough real windows were used).
+
+   Flow AGAINST the row's own majority: the row is HELD OFF — capped at
+   NEAR (trendmxRowTier), excluded from the LIMIT BOARD and from the
+   forward record the board writes (the ledger measures what the desk
+   judged tradeable WITH the evidence in hand), and the chip names why.
+   Flow WITH: a chip, never a point — the composite's five points stay
+   exactly what they were. Fewer than TM_FLOW_MIN_WIN readable windows
+   (hg-v1009's floor), a junk ratio series, a missing Binance twin or a
+   failed fetch: UNREAD, and what cannot be read demotes nothing (hg-v700).
+
+   ONE PASS PER SCAN over the promoted slice only — the same candidates
+   the SMC pass picks (a direction, no gate veto, clean7 or conviction),
+   the same rank, capped at the same TM_SMC_MAX-sized slice — paced in
+   CHUNK-sized chunks like the universe fetch itself. The matrix holds the
+   whole universe; fetching flow for every row would be a hundred calls
+   for rows the desk never promotes. Rows are stamped row.flow =
+   { verdict: 'with' | 'against' | 'unreadable', delta, bars, divergence,
+   sym, why? } and every render path READS the stamp — nothing recomputes
+   in a paint loop. The look, the floor and the cap are stated PRIORS, not
+   measurements; the forward record's new reads.takerFlowWith mark is how
+   the layer earns a measured one. PURE apart from the two readers it
+   calls; it reports the counts so the scan line and the tests read the
+   same object the scan acted on. */
+var TM_FLOW_LOOK = 30;      /* hgOmniCvd's own default look — five days of 4h flow, the horizon a swing row is judged on */
+var TM_FLOW_MIN_WIN = 10;   /* hg-v1009's floor: fewer readable windows than this is UNREAD, never a verdict */
+var TM_FLOW_MAX = 24;       /* the SMC pass's own cap — flow is fetched for the slice the desk promotes, never the whole universe */
+
+function trendmxFlowScan(rows){
+  var out = { with: 0, against: 0, unreadable: 0, scanned: 0, read: 'unavailable' };
+  var cvdFn = (typeof W.hgOmniCvd === 'function') ? W.hgOmniCvd : null;
   var tkFn = (typeof W.binanceTakerRatio === 'function') ? W.binanceTakerRatio : null;
   var symFn = (typeof W.hgDeskBinanceSym === 'function') ? W.hgDeskBinanceSym : null;
   if (!cvdFn || !tkFn || !symFn || !Array.isArray(rows) || !rows.length) return Promise.resolve(out);
@@ -179,6 +211,44 @@ function trendmxCostChipHtml(r, plan){
   }catch(e){ return ''; }
 }
 
+async function tmLoadCoinDcxContracts(){
+  var urls = [
+    '/api/coindcx/instruments',
+    '/api/proxy?url=' + encodeURIComponent('https://api.coindcx.com/exchange/v1/derivatives/futures/data/active_instruments?margin_currency_short_name[]=USDT')
+  ];
+  var last = 'coindcx list failed';
+  for (var i = 0; i < urls.length; i++){
+    try{
+      var r = await fetch(urls[i]);
+      if (!r || !r.ok){ last = 'HTTP ' + (r ? r.status : '?'); continue; }
+      var j = await r.json();
+      var list = Array.isArray(j) ? j : (j && Array.isArray(j.data) ? j.data : (j && Array.isArray(j.instruments) ? j.instruments : null));
+      if (!list){ last = 'bad shape'; continue; }
+      var out = [];
+      for (var k = 0; k < list.length; k++){
+        var s = String((list[k] && list[k].symbol) ? list[k].symbol : (list[k] || ''));
+        if (/^B-[A-Z0-9]+_USDT$/.test(s) && out.indexOf(s) < 0) out.push(s);
+      }
+      if (out.length) return out;
+    }catch(e){ last = (e && e.message) || String(e); }
+  }
+  throw new Error(last);
+}
+function tmBinanceTwin(item, tf, n){
+  try{
+    var base = item && item.base ? String(item.base).toUpperCase() : '';
+    if (!base || typeof W.binanceKlines !== 'function') return Promise.resolve([]);
+    return W.binanceKlines(base + 'USDT', tf, n).then(function(rows){ return Array.isArray(rows) ? rows : []; }).catch(function(){ return []; });
+  }catch(e){ return Promise.resolve([]); }
+}
+function tmUnreadRow(item){
+  return {
+    sym: item && item.sym, base: item && item.base, exchange: (item && item.exchange) || 'coindcx',
+    alsoOn: item && item.alsoOn, xu: item, score: null, comps: null, freshCross: null, adx: NaN,
+    unread: true, price: null, rows4h: null, rows1h: null,
+    fundingPct: item && item.fundingPct, turnoverUsd: item && item.turnoverUsd, mark: item && item.mark
+  };
+}
 async function trendmxScanCore(hooks){
   hooks = hooks || {};
 /* Map before asking Binance — a venue code means nothing to fapi. This is the
@@ -201,86 +271,4 @@ async function trendmxScanCore(hooks){
   var items = uniPack.items || [];
   /* hg-v1048/hg-v1074: ALL COINDCX FUTURES - the floored universe drops
      small CoinDCX contracts, so the matrix re-reads the universe at floor 0
-     and merges in every CoinDCX future it missed (deduped on venue+sym).
-     hg-v1074 reads the RAW CoinDCX leg (hgDeskLoadCoinDCXAll), not the
-     deduped merged universe: xuMergeLegs tags one 'exchange' per base and
-     the higher-turnover venue wins, so a CoinDCX contract also listed on
-     Delta/Startrader was invisible to a ['coindcx'] filter on the merged
-     list. Every CoinDCX active_instruments contract now appears regardless.
-     The other venues keep their floor. */
-  try{
-    /* Raw CoinDCX only makes sense when a CoinDCX data source exists
-       (xuniverse.js). Guarding on xuCoinDCXRows also avoids a pointless
-       second universe fetch on the Binance-only fallback path. */
-    if (typeof W.xuCoinDCXRows === 'function' && typeof W.hgDeskLoadCoinDCXAll === 'function'){
-      var allPack = await W.hgDeskLoadCoinDCXAll({ force: false, minTurnover: 0, includeUnknown: true });
-      var cdcxAll = Array.isArray(allPack.items) ? allPack.items : [];
-      var seenU = {};
-      for (var ui = 0; ui < items.length; ui++) seenU[String(items[ui].exchange || '') + '|' + String(items[ui].sym || '')] = 1;
-      for (var uj = 0; uj < cdcxAll.length; uj++){
-        var uitem = cdcxAll[uj];
-        var uk = String(uitem.exchange || '') + '|' + String(uitem.sym || '');
-        if (!seenU[uk]){ items.push(uitem); seenU[uk] = 1; }
-      }
-    }
-  }catch(eUni){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('trendmx', eUni); }catch(eWu){} }
-  if (!items.length) throw new Error('universe empty' + (uniPack.note ? ' — ' + uniPack.note : ''));
-  var results = [], failed = 0;
-  for (var i = 0; i < items.length; i += CHUNK){
-    var chunk = items.slice(i, i + CHUNK);
-    if (typeof hooks.setProg === 'function') hooks.setProg((i + chunk.length) / items.length);
-    var rs = await Promise.all(chunk.map(function(item){
-      return fetchK(item, '4h', 120).then(function(r4){
-          if (!r4 || !r4.length) return null;
-          return Promise.all([fetchK(item, '1d', 260), fetchK(item, '1h', 120)]).then(function(rr){
-            var r1 = rr[0], r1h = rr[1];
-            if (!r1 || !r1.length) return null;
-            var ts = trendScore(r1, r4);
-            var row = {
-              sym: item.sym, base: item.base, exchange: item.exchange || 'binance', alsoOn: item.alsoOn,
-              xu: item, score: ts.score, comps: ts.comps, freshCross: ts.freshCross, adx: ts.adx,
-              rsi: ts.rsi,   /* hg-v1019: the momentum witness rides the row — chips/tier/collector read the stamp, never recompute */
-              volDiv: ts.volDiv, volConf: ts.volConf,   /* hg-v1020: the volume witness's stamps, same seam */
-              price: r1[r1.length - 1].c, rows4h: r4, rows1h: (r1h && r1h.length) ? r1h : null,
-              fundingPct: item.fundingPct, turnoverUsd: item.turnoverUsd, mark: item.mark
-            };
-            var dir = tmDirOf(row);
-            row.gate = dir ? trendmxGateEval(row, dir) : null;
-            return row;
-          });
-        }).catch(function(){ return null; });
-    }));
-    for (var j = 0; j < rs.length; j++){ if (rs[j]) results.push(rs[j]); else failed++; }
-    if (i + CHUNK < items.length) await sleepMs(CHUNK_SLEEP_MS);
-  }
-  return {
-    rows: results, failed: failed, uniLen: uniPack.rawLen || items.length,
-    scanned: items.length, at: Date.now(), note: uniPack.note, source: uniPack.source,
-    venueCounts: uniPack.venueCounts
-  };
-}
-
-async function trendmxScan(opts){
-  opts = opts || {};
-  var maxAge = (opts.maxAgeMs > 0) ? opts.maxAgeMs : (5 * 60 * 1000);
-  if (!opts.force && __tmScanSnap && __tmScanSnap.at && (Date.now() - __tmScanSnap.at) < maxAge){
-    return __tmScanSnap;
-  }
-  var core = await trendmxScanCore(opts);
-  var golden = trendmxGoldenCrossSetups(core.rows);
-  var death = trendmxDeathCrossSetups(core.rows);   /* hg-v1014: the mirrored desk */
-  tmSmcScanPass(core.rows, golden, death);
-  /* hg-v1012: the evidence layer — one capped, paced pass over the promoted
-     slice, AFTER the tier inputs (score/gate/conviction) exist and BEFORE
-     the snap the boards read. Never throws; what it cannot read it leaves
-     unstamped, and an unstamped row is an unjudged row. */
-  var flow = null;
-  try{ flow = await trendmxFlowScan(core.rows); }catch(eFl){ flow = null; }
-  /* hg-v1067: the shared-perfect evidence pass — the OMNIBTC read stack */
-  try{ await trendmxPerfectEvidencePass(core.rows); }catch(ePf3){ }
-  __tmScanSnap = {
-    at: core.at, rows: core.rows, failed: core.failed, uniLen: core.uniLen, scanned: core.scanned,
-    goldenCross: golden, deathCross: death, note: core.note, source: core.source, venueCounts: core.venueCounts,
-    flow: flow
-  };
-  publishTrendmxSnap(core.rows);
+     and merges in every CoinDCX future i

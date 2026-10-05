@@ -1,3 +1,22 @@
+loud = 1;
+      else if (st && st.priceVsCloud === 'BELOW') out.comps.cloud = -1;
+    }
+
+    /* 3) 4h cascade ema9 / ema21 / ema50 */
+    if (ok4){
+      var c4 = rows4h.map(function(r){ return r ? r.c : NaN; });
+      var i4 = c4.length - 1;
+      var e9 = ema(c4, 9)[i4], e21 = ema(c4, 21)[i4], e50h = ema(c4, 50)[i4];
+      if (isFinite(e9) && isFinite(e21) && isFinite(e50h)){
+        if (e9 > e21 && e21 > e50h) out.comps.h4Cascade = 1;
+        else if (e9 < e21 && e21 < e50h) out.comps.h4Cascade = -1;
+      }
+    }
+
+    /* 5) ADX strength point in the direction of the trend-sum so far */
+    if (ok1){
+      var a = adx(rows1d, 14);
+      out.adx = (a && a.adx && a.adx.length) ? a.adx[a.adx.length - 1] : NaN;
       /* hg-v1019: THE MOMENTUM WITNESS rides the same 1D tape — RSI(14) as
          EVIDENCE. NOT a sixth composite leg: the score sum below is
          byte-identical, so every recorded tmScore stays on its own scale
@@ -345,21 +364,4 @@ function trendmxPlanLegacy(inp){
 function trendmxPlanHTML(s){
   if (!s) return '';
   var risk = (isFinite(s.entry) && isFinite(s.stop)) ? Math.abs(s.entry - s.stop) : NaN;
-  var rr1 = isFinite(s.rr1) ? s.rr1 : ((isFinite(risk) && risk > 0) ? Math.abs(s.t1 - s.entry) / risk : NaN);
-  var rr2 = isFinite(s.rr2) ? s.rr2 : ((isFinite(risk) && risk > 0) ? Math.abs(s.t2 - s.entry) / risk : NaN);
-  return 'ENTRY <b>' + pxFmt(s.entry) + '</b> · STOP <b>' + pxFmt(s.stop) + '</b>'
-    + ' · T1 <b>' + pxFmt(s.t1) + '</b> (' + fmtN(rr1, 1) + 'R)'
-    + ' · T2 <b>' + pxFmt(s.t2) + '</b> (' + fmtN(rr2, 1) + 'R)'
-    + (isFinite(s.riskPct) ? ' · risk ' + fmtN(s.riskPct, 2) + '%' : '')
-    + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(s.entry, s.stop) : '')
-    + (s.note ? ' — ' + escH(s.note) : '')
-    /* price may have walked through this plan already — the shared rule in
-       hg-plan.js, judged against the mark trendmxAttachMeta carried over */
-    + ((typeof W !== 'undefined' && W && typeof W.hgPlanGeometryLineHtml === 'function')
-      ? (W.hgPlanGeometryLineHtml({ dir: s.dir, entry: s.entry, stop: s.stop, t1: s.t1 },
-                                  s.mark, { cls: 'note warn', style: 'margin-top:6px' }) || '') : '')
-    /* the shared 14-gate indicator read attached by hgBestLevels */
-    + ((typeof hgStrategyConfirmChipHtml === 'function')
-      ? hgStrategyConfirmChipHtml(s.strategyConfirm, s.strategyWith, s.strategyAgainst) : '')
-    + (s.contextRead ? '<div class="dim">' + escH(s.contextRead)
-        + (s.contextWarn ? ' — context AGAINST this direction' : '') + '</div>' : '')
+  var

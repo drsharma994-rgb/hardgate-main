@@ -1,3 +1,113 @@
+t missed (deduped on venue+sym).
+     hg-v1074 reads the RAW CoinDCX leg (hgDeskLoadCoinDCXAll), not the
+     deduped merged universe: xuMergeLegs tags one 'exchange' per base and
+     the higher-turnover venue wins, so a CoinDCX contract also listed on
+     Delta/Startrader was invisible to a ['coindcx'] filter on the merged
+     list. Every CoinDCX active_instruments contract now appears regardless.
+     The other venues keep their floor. */
+  try{
+    /* Raw CoinDCX only makes sense when a CoinDCX data source exists
+       (xuniverse.js). Guarding on xuCoinDCXRows also avoids a pointless
+       second universe fetch on the Binance-only fallback path. */
+    if (typeof W.xuCoinDCXRows === 'function' && typeof W.hgDeskLoadCoinDCXAll === 'function'){
+      var allPack = await W.hgDeskLoadCoinDCXAll({ force: false, minTurnover: 0, includeUnknown: true });
+      var cdcxAll = Array.isArray(allPack.items) ? allPack.items : [];
+      var seenU = {};
+      for (var ui = 0; ui < items.length; ui++) seenU[String(items[ui].exchange || '') + '|' + String(items[ui].sym || '')] = 1;
+      for (var uj = 0; uj < cdcxAll.length; uj++){
+        var uitem = cdcxAll[uj];
+        var uk = String(uitem.exchange || '') + '|' + String(uitem.sym || '');
+        if (!seenU[uk]){ items.push(uitem); seenU[uk] = 1; }
+      }
+    }
+  }catch(eUni){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('trendmx', eUni); }catch(eWu){} }
+  /* BATCH 1130 — the instrument list is the source of truth. Every active
+     CoinDCX USDT future is on the board, including contracts the merged
+     universe dropped because another venue won the base or the $5M floor
+     cut them. A symbol already queued is not added twice. */
+  try{
+    var cdcxSyms = await tmLoadCoinDcxContracts();
+    var seenSym = {};
+    for (var si = 0; si < items.length; si++) seenSym[String(items[si].sym || '')] = 1;
+    for (var ci2 = 0; ci2 < cdcxSyms.length; ci2++){
+      var csym = cdcxSyms[ci2];
+      if (seenSym[csym]) continue;
+      items.push({
+        sym: csym,
+        base: csym.replace(/^B-/, '').replace(/_USDT$/, ''),
+        exchange: 'coindcx',
+        turnoverUsd: null, mark: null, fundingPct: null, alsoOn: null
+      });
+      seenSym[csym] = 1;
+    }
+    uniPack.cdcxListed = cdcxSyms.length;
+  }catch(eCdx){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('trendmx', eCdx); }catch(eW2){} }
+  if (!items.length) throw new Error('universe empty' + (uniPack.note ? ' — ' + uniPack.note : ''));
+  var results = [], failed = 0;
+  for (var i = 0; i < items.length; i += CHUNK){
+    var chunk = items.slice(i, i + CHUNK);
+    if (typeof hooks.setProg === 'function') hooks.setProg((i + chunk.length) / items.length);
+    var rs = await Promise.all(chunk.map(function(item){
+      return fetchK(item, '4h', 120).then(function(r4){
+          if (r4 && r4.length) return r4;
+          return tmBinanceTwin(item, '4h', 120);
+        }).then(function(r4){
+          if (!r4 || !r4.length) return tmUnreadRow(item);
+          return Promise.all([
+            fetchK(item, '1d', 260).then(function(r1){ return (r1 && r1.length) ? r1 : tmBinanceTwin(item, '1d', 260); }),
+            fetchK(item, '1h', 120).then(function(r1h){ return (r1h && r1h.length) ? r1h : tmBinanceTwin(item, '1h', 120); })
+          ]).then(function(rr){
+            var r1 = rr[0], r1h = rr[1];
+            if (!r1 || !r1.length) return tmUnreadRow(item);
+            var ts = trendScore(r1, r4);
+            var row = {
+              sym: item.sym, base: item.base, exchange: item.exchange || 'binance', alsoOn: item.alsoOn,
+              xu: item, score: ts.score, comps: ts.comps, freshCross: ts.freshCross, adx: ts.adx,
+              rsi: ts.rsi,   /* hg-v1019: the momentum witness rides the row — chips/tier/collector read the stamp, never recompute */
+              volDiv: ts.volDiv, volConf: ts.volConf,   /* hg-v1020: the volume witness's stamps, same seam */
+              price: r1[r1.length - 1].c, rows4h: r4, rows1h: (r1h && r1h.length) ? r1h : null,
+              fundingPct: item.fundingPct, turnoverUsd: item.turnoverUsd, mark: item.mark
+            };
+            var dir = tmDirOf(row);
+            row.gate = dir ? trendmxGateEval(row, dir) : null;
+            return row;
+          });
+        }).catch(function(){ return null; });
+    }));
+    for (var j = 0; j < rs.length; j++){ if (rs[j]) results.push(rs[j]); else failed++; }
+    if (i + CHUNK < items.length) await sleepMs(CHUNK_SLEEP_MS);
+  }
+  return {
+    rows: results, failed: failed, uniLen: uniPack.rawLen || items.length,
+    scanned: items.length, at: Date.now(), note: uniPack.note, source: uniPack.source,
+    venueCounts: uniPack.venueCounts
+  };
+}
+
+async function trendmxScan(opts){
+  opts = opts || {};
+  var maxAge = (opts.maxAgeMs > 0) ? opts.maxAgeMs : (5 * 60 * 1000);
+  if (!opts.force && __tmScanSnap && __tmScanSnap.at && (Date.now() - __tmScanSnap.at) < maxAge){
+    return __tmScanSnap;
+  }
+  var core = await trendmxScanCore(opts);
+  var golden = trendmxGoldenCrossSetups(core.rows);
+  var death = trendmxDeathCrossSetups(core.rows);   /* hg-v1014: the mirrored desk */
+  tmSmcScanPass(core.rows, golden, death);
+  /* hg-v1012: the evidence layer — one capped, paced pass over the promoted
+     slice, AFTER the tier inputs (score/gate/conviction) exist and BEFORE
+     the snap the boards read. Never throws; what it cannot read it leaves
+     unstamped, and an unstamped row is an unjudged row. */
+  var flow = null;
+  try{ flow = await trendmxFlowScan(core.rows); }catch(eFl){ flow = null; }
+  /* hg-v1067: the shared-perfect evidence pass — the OMNIBTC read stack */
+  try{ await trendmxPerfectEvidencePass(core.rows); }catch(ePf3){ }
+  __tmScanSnap = {
+    at: core.at, rows: core.rows, failed: core.failed, uniLen: core.uniLen, scanned: core.scanned,
+    goldenCross: golden, deathCross: death, note: core.note, source: core.source, venueCounts: core.venueCounts,
+    flow: flow
+  };
+  publishTrendmxSnap(core.rows);
   return __tmScanSnap;
 }
 
@@ -73,7 +183,9 @@ function trendmxSummaryLine(rows, golden, venueCounts){
     else if (tier === 'near') near++;
   }
   var vc = venueCounts || {};
-  var ven = ' · Δ' + (vc.delta || 0) + ' · CDX' + (vc.coindcx || 0) + ' · BN' + (vc.binance || 0);
+  var cdxN = 0;
+  for (var ci = 0; ci < rows.length; ci++) if (rows[ci] && String(rows[ci].exchange || '').toLowerCase() === 'coindcx') cdxN++;
+  var ven = ' · Δ' + (vc.delta || 0) + ' · CDX ' + cdxN + ' contracts · BN' + (vc.binance || 0);
   return 'scanned ' + rows.length + ven
     + ' · golden ' + golden.length
     + ' · strong +' + sl + '/−' + ss + ' · fresh crosses ' + fx
@@ -161,132 +273,4 @@ function trendmxLimitCardHTML(item){
     ? '<span class="stamp pass" style="margin-left:6px;background:#fef3c7;color:#92400e">\u2605 PERFECT</span>'
     : '';
   var clsStamp = (r.gate && r.gate.clean7)
-    ? '<span class="stamp" style="margin-left:6px">GATE-CLEAN 7/7</span>'
-    : '<span class="stamp" style="margin-left:6px">CONVICTION ' + (r.score > 0 ? '+' : '') + r.score + '/5</span>';
-  return '<div style="flex:1 1 260px;max-width:360px;border:1px solid #E2E8F0;border-left:3px solid ' + col + ';border-radius:8px;padding:10px 12px;background:#fff">'
-    + '<div><b>' + escH(r.sym) + '</b>' + tmVenueChip(r) + ' · ' + dir.toUpperCase() + perfectStamp + clsStamp + stHtml + tmSmcChip(r)
-    + trendmxFlowChipHtml(r)   /* hg-v1012: the flow verdict the scan stamped — reads the stamp, never recomputes */
-    + trendmxMomChipHtml(r)    /* hg-v1019: the momentum witness's stamp — same read-the-stamp seam */
-    + trendmxVolChipHtml(r)    /* hg-v1020: the volume witness's stamp — same seam */
-    + trendmxFundingChipHtml(r)
-    + trendmxAtrRegimeChipHtml(r) + '</div>'
-    + '<div style="font-size:18px;font-weight:800;color:' + col + ';margin:4px 0">' + pxFmt(p.entry) + '</div>'
-    + '<div class="note">' + trendmxPlanHTML(p) + '</div>'
-    + (tradeOn ? '<button class="toTrade" onclick="' + tradeOn + '">SEND TO TRADE PLAN →</button>' : '')
-    + '</div>';
-}
-
-/* hg-v1018: each desk caps at 4 cards — two desks x 4 = the old mixed
-   board's 8. The split changes presentation, not exposure. */
-var TM_LIMIT_DESK_CAP = 4;
-
-/* hg-v1019: THE MOMENTUM WITNESS bands — the canonical RSI range read
-   (Cardwell/Constance Brown): a bull momentum range holds RSI(14) above
-   TM_MOM_BULL_FLOOR (the 40–50 pullback floor), a bear range caps it under
-   TM_MOM_BEAR_CEIL. Stated PRIORS, not measurements — the forward log's
-   momWith read-mark is how they earn a measured one. */
-var TM_MOM_BULL_FLOOR = 40, TM_MOM_BEAR_CEIL = 60, TM_MOM_MID = 50;
-
-/* trendmxMomState(row, dir) -> 'against' | 'with' | 'flat' | null.
-   Pure read of the rsi stamp the scan put on the row (never recomputes):
-     against — the momentum range has TURNED against the direction
-       (long under the bull floor / short over the bear ceiling);
-     with    — RSI on the regime side of the midline;
-     flat    — the abstain zone: a pullback inside an INTACT regime, where
-       momentum has nothing to add (no chip, no hold, no read);
-     null    — no readable rsi: the witness cannot speak, and what cannot
-       speak holds nothing off (the hg-v700 honest-degradation rule). */
-function trendmxMomState(r, dir){
-  var rv = (r && typeof r.rsi === 'number' && isFinite(r.rsi)) ? r.rsi : NaN;
-  if (!isFinite(rv)) return null;
-  if (dir === 'long'){
-    if (rv < TM_MOM_BULL_FLOOR) return 'against';
-    return rv >= TM_MOM_MID ? 'with' : 'flat';
-  }
-  if (dir === 'short'){
-    if (rv > TM_MOM_BEAR_CEIL) return 'against';
-    return rv <= TM_MOM_MID ? 'with' : 'flat';
-  }
-  return null;
-}
-
-/* hg-v1020: THE VOLUME WITNESS state — reads the row's volDiv/volConf
-   stamps exactly like the momentum witness reads rsi (never recomputes):
-     against — the swing volume trend DIVERGES against the direction
-       (distribution under the rally for longs / accumulation under the
-       fall for shorts);
-     with    — price and OBV made the new 20-bar extreme TOGETHER;
-     flat    — a readable tape with neither divergence nor confirmation:
-       volume has nothing to add (no chip, no hold, no read);
-     null    — the witness never ran or the tape cannot speak: holds
-       nothing off (the hg-v700 rule). */
-function trendmxVolState(r, dir){
-  if (!r || (r.volDiv === undefined && r.volConf === undefined)) return null;
-  if (r.volDiv === null && r.volConf === null) return null;
-  if (dir === 'long'){
-    if (r.volDiv === 'bear') return 'against';
-    return r.volConf === 'up' ? 'with' : 'flat';
-  }
-  if (dir === 'short'){
-    if (r.volDiv === 'bull') return 'against';
-    return r.volConf === 'down' ? 'with' : 'flat';
-  }
-  return null;
-}
-
-/* hg-v1034: THE FUNDAMENTAL + SENTIMENT WITNESS — the composite reads closes,
-   the momentum and volume witnesses read closes, the flow witness reads ONE
-   venue's taker prints; until this pack NOTHING read what the market is
-   POSITIONED to do and what the macro/sentiment says, on the row's own coin.
-   This is the house fundamental stack (fundamental-stack.js hgFundamentalGate),
-   shared with OmniBTC and the gold desks, read ONCE per row and memoized:
-     BTC ..... ON-CHAIN (mempool.space, votes) + TERM (own curve, votes) +
-               FEAR & GREED (contrarian 80/20, votes) + 25Δ RISK REVERSAL
-               (Deribit, |8| extreme, votes) + EVENT RISK (red-folder blackout).
-     ALTS .... F&G (market-wide, votes at extremes) + the coin's OWN TERM row
-               (votes) + the coin's OWN calendar (blackout); BTC on-chain and
-               the 25Δ RR render as prior INFO, never vote for an alt.
-   The mechanic mirrors the flow/mom/vol witnesses (hg-v1012/1019/1020):
-     - EVIDENCE ONLY — the composite stays five legs (a sixth would re-scale
-       every tmScore the forward ledger measures).
-     - refuse  (red-folder blackout) / against  (2+ net checked votes AGAINST
-       the row's direction) hold the row off BOTH class desks and cap it at
-       NEAR — counted per class in heldWhy (the fund reason). Still paints
-       with its chip; nothing dropped silently. One witness never flips.
-     - with    (2+ net checked votes WITH) chips TAILWIND and hands the
-       ledger a fundWith read-mark — never a composite point.
-     - flat / null  — a readable board with no decisive vote, or a dark
-       board: silent, holds nothing off (the hg-v700 honest-degradation rule).
-   The GOLDEN/DEATH cross desks stay out of scope (the fresh multi-week
-   cross premise misjudges a momentary positioning/sentiment snap, the same
-   reason flow and momentum stand down there). */
-function trendmxFundGate(r, dir){
-  if (!r) return null;
-  dir = dir || tmDirOf(r);
-  if (!dir) return null;
-  var key = (dir === 'short') ? '_fundGateShort' : '_fundGate';
-  if (r[key] !== undefined) return r[key];
-  var g = null;
-  if (typeof hgFundamentalGate === 'function'){
-    try{ g = hgFundamentalGate(r.sym, dir, { scanner: 'trendmx' }); }catch(e){ g = null; }
-  }
-  r[key] = g || null;
-  return g || null;
-}
-function trendmxFundState(r, dir){
-  var g = trendmxFundGate(r, dir);
-  if (!g) return null;
-  if (g.refuse) return 'refuse';
-  if (g.demote) return 'against';
-  if (g.chips && g.chips.some(function(c){ return /TAILWIND/.test(c); })) return 'with';
-  return (g.regime && g.regime.checked) ? 'flat' : null;
-}
-
-/* the fundamental + sentiment chip — the volume witness's own pattern
-   (hg-v1020). It reuses the house renderer (hgFundamentalChipHtml) so the
-   chip is byte-identical to the gold desk's and OmniBTC's; an absent stack
-   or a dark board paints NO chip. */
-function trendmxFundChipHtml(r){
-  try{
-    var g = trendmxFundGate(r);
-    if (!g || !g.chips || !g.chips.length) return '';
+    ? '<span class="stamp" style

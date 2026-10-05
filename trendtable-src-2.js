@@ -1,3 +1,21 @@
+ rr1 = isFinite(s.rr1) ? s.rr1 : ((isFinite(risk) && risk > 0) ? Math.abs(s.t1 - s.entry) / risk : NaN);
+  var rr2 = isFinite(s.rr2) ? s.rr2 : ((isFinite(risk) && risk > 0) ? Math.abs(s.t2 - s.entry) / risk : NaN);
+  return 'ENTRY <b>' + pxFmt(s.entry) + '</b> · STOP <b>' + pxFmt(s.stop) + '</b>'
+    + ' · T1 <b>' + pxFmt(s.t1) + '</b> (' + fmtN(rr1, 1) + 'R)'
+    + ' · T2 <b>' + pxFmt(s.t2) + '</b> (' + fmtN(rr2, 1) + 'R)'
+    + (isFinite(s.riskPct) ? ' · risk ' + fmtN(s.riskPct, 2) + '%' : '')
+    + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(s.entry, s.stop) : '')
+    + (s.note ? ' — ' + escH(s.note) : '')
+    /* price may have walked through this plan already — the shared rule in
+       hg-plan.js, judged against the mark trendmxAttachMeta carried over */
+    + ((typeof W !== 'undefined' && W && typeof W.hgPlanGeometryLineHtml === 'function')
+      ? (W.hgPlanGeometryLineHtml({ dir: s.dir, entry: s.entry, stop: s.stop, t1: s.t1 },
+                                  s.mark, { cls: 'note warn', style: 'margin-top:6px' }) || '') : '')
+    /* the shared 14-gate indicator read attached by hgBestLevels */
+    + ((typeof hgStrategyConfirmChipHtml === 'function')
+      ? hgStrategyConfirmChipHtml(s.strategyConfirm, s.strategyWith, s.strategyAgainst) : '')
+    + (s.contextRead ? '<div class="dim">' + escH(s.contextRead)
+        + (s.contextWarn ? ' — context AGAINST this direction' : '') + '</div>' : '')
     + ((typeof hgStrategyTradeDetailHtml === 'function')
       ? hgStrategyTradeDetailHtml(s, { skipChip: true }) : '');
 }
@@ -276,35 +294,4 @@ function tmSmcScanPass(rows, golden, death){
    TM_FLOW_LOOK 4h windows. The candle-approximated stand-in never speaks
    here — the hg-v1009 rule: it derives from the same closes the composite
    already read, so it is not independent evidence (the caller hands the
-   taker series straight through; hgOmniCvd only returns source 'taker'
-   when enough real windows were used).
-
-   Flow AGAINST the row's own majority: the row is HELD OFF — capped at
-   NEAR (trendmxRowTier), excluded from the LIMIT BOARD and from the
-   forward record the board writes (the ledger measures what the desk
-   judged tradeable WITH the evidence in hand), and the chip names why.
-   Flow WITH: a chip, never a point — the composite's five points stay
-   exactly what they were. Fewer than TM_FLOW_MIN_WIN readable windows
-   (hg-v1009's floor), a junk ratio series, a missing Binance twin or a
-   failed fetch: UNREAD, and what cannot be read demotes nothing (hg-v700).
-
-   ONE PASS PER SCAN over the promoted slice only — the same candidates
-   the SMC pass picks (a direction, no gate veto, clean7 or conviction),
-   the same rank, capped at the same TM_SMC_MAX-sized slice — paced in
-   CHUNK-sized chunks like the universe fetch itself. The matrix holds the
-   whole universe; fetching flow for every row would be a hundred calls
-   for rows the desk never promotes. Rows are stamped row.flow =
-   { verdict: 'with' | 'against' | 'unreadable', delta, bars, divergence,
-   sym, why? } and every render path READS the stamp — nothing recomputes
-   in a paint loop. The look, the floor and the cap are stated PRIORS, not
-   measurements; the forward record's new reads.takerFlowWith mark is how
-   the layer earns a measured one. PURE apart from the two readers it
-   calls; it reports the counts so the scan line and the tests read the
-   same object the scan acted on. */
-var TM_FLOW_LOOK = 30;      /* hgOmniCvd's own default look — five days of 4h flow, the horizon a swing row is judged on */
-var TM_FLOW_MIN_WIN = 10;   /* hg-v1009's floor: fewer readable windows than this is UNREAD, never a verdict */
-var TM_FLOW_MAX = 24;       /* the SMC pass's own cap — flow is fetched for the slice the desk promotes, never the whole universe */
-
-function trendmxFlowScan(rows){
-  var out = { with: 0, against: 0, unreadable: 0, scanned: 0, read: 'unavailable' };
-  var cvdFn = (typeof W.hgOmniCvd === 'function') ? W.hgOmniCvd : null;
+   taker series straight through; hgOmniCvd only retu

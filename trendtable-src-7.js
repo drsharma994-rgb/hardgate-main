@@ -1,3 +1,158 @@
+n unread ATR, a mixed tape, a
+   missing 4h structure, and BTC funding that is merely not crowded do not
+   count as WITH. Structure must agree (EMA50 vs EMA200). An against pillar
+   vetoes the stack. The composite, the PERFECT predicate, and the tiers are
+   unchanged. A stricter desk, not a profit claim. */
+var __tmMacro = null;
+function trendmxMacroSet(snap){ __tmMacro = snap || null; return __tmMacro; }
+function trendmxFivePillars(r){
+  r = r || {};
+  var dir = tmDirOf(r);
+  var pillars = [];
+  if (!dir){
+    pillars.push({ name: 'TECHNICAL', state: 'unread', detail: 'no majority' });
+  } else {
+    var against = false, withIt = false, notes = ['composite ' + r.score + '/5'];
+    var mom = trendmxMomState(r, dir);
+    var vol = trendmxVolState(r, dir);
+    var chop = trendmxChopState(r);
+    var atr = trendmxAtrRegime(r);
+    if (mom) notes.push('momentum ' + mom);
+    if (vol) notes.push('volume ' + vol);
+    if (atr) notes.push('ATR ' + atr.regime);
+    if (chop && chop.state) notes.push('tape ' + chop.state);
+    if (mom === 'against' || vol === 'against' || (chop && chop.state === 'chop')) against = true;
+    if (atr && (atr.regime === 'DEAD' || atr.regime === 'BLOWOFF')) against = true;
+    var structWith = false;
+    try{
+      var st = tmStructureDir(r.rows4h);
+      if (st){
+        notes.push('structure ' + st);
+        if ((dir === 'long' && st === 'down') || (dir === 'short' && st === 'up')) against = true;
+        if ((dir === 'long' && st === 'up') || (dir === 'short' && st === 'down')) structWith = true;
+      }
+    }catch(eSt){}
+    if (!against && structWith && mom === 'with' && vol === 'with' && Math.abs(+r.score || 0) >= 4 && atr && atr.regime === 'HEALTHY' && chop && chop.state === 'trend') withIt = true;
+    pillars.push({ name: 'TECHNICAL', state: against ? 'against' : (withIt ? 'with' : 'flat'), detail: notes.join(' · ') });
+  }
+  var fund = dir ? trendmxFundState(r, dir) : null;
+  pillars.push({ name: 'FUNDAMENTAL', state: fund || 'unread', detail: fund ? ('fundamental stack ' + fund) : 'fundamental stack dark' });
+  var sentAgainst = false, sentWith = false, sentRead = false, sentNotes = [];
+  if (r.flow && r.flow.verdict && r.flow.verdict !== 'unreadable'){
+    sentRead = true;
+    sentNotes.push('taker ' + r.flow.verdict);
+    if (r.flow.verdict === 'against') sentAgainst = true;
+    if (r.flow.verdict === 'with') sentWith = true;
+  }
+  if (dir && typeof r.fundingPct === 'number' && isFinite(r.fundingPct) && typeof W.hgFundingAgainstMark === 'function'){
+    sentRead = true;
+    try{
+      var fm = W.hgFundingAgainstMark(r.fundingPct, dir);
+      if (fm && fm.against === true){ sentAgainst = true; sentWith = false; sentNotes.push('funding crowded'); }
+      else sentNotes.push('funding clean');
+    }catch(eFm){}
+  }
+  pillars.push({ name: 'SENTIMENT', state: !sentRead ? 'unread' : (sentAgainst ? 'against' : (sentWith ? 'with' : 'flat')), detail: sentNotes.join(' · ') || 'no flow or funding' });
+  var macroState = 'unread', macroBits = [];
+  var macro = __tmMacro;
+  if (macro && dir){
+    var mAgainst = false, mWith = false;
+    if (macro.btcFunding != null && typeof W.hgFundingAgainstMark === 'function'){
+      try{
+        var bm = W.hgFundingAgainstMark(+macro.btcFunding, dir);
+        macroBits.push('BTC funding ' + (+macro.btcFunding).toFixed(4) + '%');
+        if (bm && bm.against === true){ mAgainst = true; macroBits[macroBits.length - 1] += ' crowded'; }
+        else macroBits[macroBits.length - 1] += ' not crowded';
+      }catch(eBm){}
+    }
+    if (macro.btcStructure){
+      macroBits.push('BTC structure ' + macro.btcStructure);
+      if ((dir === 'long' && macro.btcStructure === 'down') || (dir === 'short' && macro.btcStructure === 'up')) mAgainst = true;
+      if ((dir === 'long' && macro.btcStructure === 'up') || (dir === 'short' && macro.btcStructure === 'down')) mWith = true;
+    }
+    if (typeof W.hgMacroBias === 'function'){
+      try{
+        var mb = W.hgMacroBias(dir, r.sym);
+        if (mb && (mb.state === 'with' || mb.state === 'against')){
+          macroBits.push('desk macro ' + mb.state);
+          if (mb.state === 'against') mAgainst = true;
+          if (mb.state === 'with') mWith = true;
+        }
+      }catch(eMb){}
+    }
+    if (macroBits.length) macroState = mAgainst ? 'against' : (mWith ? 'with' : 'flat');
+  }
+  pillars.push({ name: 'MACRO', state: macroState, detail: macroBits.join(' · ') || 'BTC macro unread' });
+  var microAgainst = false, microWith = false, microRead = false, microBits = [];
+  if (r.rows4h && r.rows4h.length >= 21 && typeof W.hgSlotMeanVol === 'function'){
+    try{
+      var slot = W.hgSlotMeanVol(r.rows4h, 20);
+      var lv = +r.rows4h[r.rows4h.length - 1].v;
+      if (slot && isFinite(slot.mean) && slot.mean > 0 && isFinite(lv) && lv > 0){
+        microRead = true;
+        var rv = lv / slot.mean;
+        microBits.push('session RVOL ' + rv.toFixed(2));
+        if (rv < 0.7) microAgainst = true; else microWith = true;
+      }
+    }catch(eSl){}
+  }
+  if (dir && typeof W.hgCryptoCostR === 'function'){
+    try{
+      var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
+      if (plan && isFinite(+plan.entry) && isFinite(+plan.stop)){
+        var costR = W.hgCryptoCostR(+plan.entry, +plan.stop, 'taker', 'taker');
+        if (isFinite(costR)){
+          microRead = true;
+          microBits.push('cost ' + costR.toFixed(2) + 'R');
+          if (costR > 0.25){ microAgainst = true; microWith = false; }
+        }
+      }
+    }catch(eC){}
+  }
+  pillars.push({ name: 'MICRO', state: !microRead ? 'unread' : (microAgainst ? 'against' : (microWith ? 'with' : 'flat')), detail: microBits.join(' · ') || 'no participation or cost read' });
+  var complete = pillars.every(function(x){ return x.state === 'with'; });
+  var blocked = pillars.some(function(x){ return x.state === 'against' || x.state === 'refuse'; });
+  return { dir: dir, pillars: pillars, complete: complete, blocked: blocked };
+}
+function trendmxPillarHtml(r){
+  try{
+    var pack = trendmxFivePillars(r);
+    var chips = pack.pillars.map(function(x){
+      var cls = x.state === 'with' ? 'pass' : ((x.state === 'against' || x.state === 'refuse') ? 'bad' : 'na');
+      return '<span class="stamp ' + cls + '" title="' + escH(x.detail) + '" style="margin-right:4px">' + escH(x.name) + ' ' + escH(String(x.state).toUpperCase()) + '</span>';
+    }).join('');
+    var head = pack.complete ? 'FULL STACK' : (pack.blocked ? 'STACK VETO' : 'STACK INCOMPLETE');
+    return '<div class="note" style="margin-top:6px"><b>' + head + '</b> ' + chips + '</div>';
+  }catch(e){ return ''; }
+}
+function trendmxFullStackSetups(rows){
+  var out = [];
+  if (!Array.isArray(rows)) return out;
+  for (var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if (!trendmxPerfectState(r)) continue;
+    var pack = trendmxFivePillars(r);
+    if (!pack.complete) continue;
+    var dir = tmDirOf(r);
+    var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
+    if (!tmValidSetup(plan)) continue;
+    out.push({ row: r, plan: plan, dir: dir, stack: trendmxCardStack(r, dir), perfect: true,
+               rank: Math.abs(r.score) * 10 + ((r.gate && r.gate.gatesPassed) || 0) });
+  }
+  out.sort(function(a, b){ return b.rank - a.rank; });
+  return out;
+}
+function trendmxFullStackDeskHTML(bag){
+  bag = (bag || []).slice(0, TM_LIMIT_DESK_CAP);
+  if (!bag.length) return '<div class="panel" style="margin:12px 0"><h2>FULL STACK DESK <span>prints only when technical, fundamental, sentiment, macro and micro are all readable and all with the majority, on top of a PERFECT row. Empty is the honest result. A pass is the right shape, not a profit.</span></h2><div class="note">No full-stack row this scan.</div></div>';
+  return '<div class="panel" style="margin:12px 0"><h2>FULL STACK DESK <span>technical · fundamental · sentiment · macro · micro all WITH, on a PERFECT row. Shape filter, not a profit claim.</span></h2><div style="display:flex;gap:10px;flex-wrap:wrap">' + bag.map(trendmxLimitCardHTML).join('') + '</div></div>';
+}
+
+function trendmxPerfectDeskHTML(bag){
+  bag = (bag || []).slice(0, TM_LIMIT_DESK_CAP);
+  if (!bag.length) return '';   /* a perfect row is rare by design — an empty desk is policy, not a fault */
+  return '<div class="panel" style="margin:12px 0">'
+    + '<h2>PERFECT SETUP DESK <span>criteria: max composite |5/5| · 7/7 gate-clean · momentum witness WITH · volume witness WITH · taker flow never against · funding not crowded · evidence-only, measured by the forward ledger — a filter, not a promise</span></h2>'
     + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + bag.map(trendmxLimitCardHTML).join('') + '</div></div>';
 }
 
@@ -122,175 +277,4 @@ function trendmxPaintDeskSections(refs, state){
           return {
             state: (r.gate && r.gate.gatesPassed >= 5) ? 'armed' : 'idle',
             sym: r.sym, strategy: 'TRENDMX',
-            condition: (r.freshCross ? '⚡' + r.freshCross + ' · ' : '') + 'composite ' + (r.score > 0 ? '+' : '') + r.score + '/5',
-            gatesPassed: r.gate ? r.gate.gatesPassed : null, gatesTotal: 7
-          };
-        }), { title: 'FORMING · TREND RADAR', subtitle: 'fresh crosses + strong composite without CLEAN ticket yet' })
-      : '';
-  }
-  /* hg-v1018: the two limit classes, one collection, one forward record,
-     two desks — each renders only its own formation class, like the cross
-     desks above them (hg-v1015). */
-  if (refs.trendform){
-    refs.trendform.innerHTML = trendmxTrendFormHTML(rows);
-  }
-  if (refs.crown){
-    refs.crown.innerHTML = trendmxCrownPanelHTML(state);
-  }
-  if (refs.gateclean || refs.conviction){
-    var tmClasses = trendmxLimitClasses(rows);
-    /* hg-v1019: each desk gets its OWN reason split, so its verdict names
-       only the witnesses that fired on ITS class */
-    if (refs.gateclean) refs.gateclean.innerHTML = trendmxGateCleanDeskHTML(tmClasses.clean, tmClasses.heldClean, tmClasses.heldWhy.clean);
-    if (refs.conviction) refs.conviction.innerHTML = trendmxConvictionDeskHTML(tmClasses.conv, tmClasses.heldConv, tmClasses.heldWhy.conv);
-  }
-  /* hg-v1022: the PERFECT desk — the strictest confluence tier, built off the
-     same rows the two limit desks just judged. Empty is policy (a perfect
-     row is rare by design), not a fault — trendmxPerfectDeskHTML names it
-     honestly with nothing when nothing qualifies. */
-  if (refs.perfect){
-    refs.perfect.innerHTML = trendmxFullStackDeskHTML(trendmxFullStackSetups(rows))
-      + trendmxPerfectDeskHTML(trendmxPerfectSetups(rows));
-  }
-}
-
-/* hg-v1039: THE MEASURED BOOK — the desk records every crowned CLEAN /
-   PERFECT row (runScan) and this panel answers 'does the crown pay?' from
-   settled forward records, including the TREND MATRIX stance split every
-   other recording desk inherits. Evidence, never a gate. */
-function trendmxPaintFwd(refs){
-  if (!refs || !refs.fwd) return;
-  try{
-    if (typeof W.hgFwdPanelHTML === 'function'){
-      refs.fwd.innerHTML = W.hgFwdPanelHTML('TRENDMX') || '';
-    } else {
-      refs.fwd.innerHTML = '<div class="note">Forward ledger absent — crowns are recorded nowhere to be measured.</div>';
-    }
-  }catch(e){ try{ refs.fwd.innerHTML = ''; }catch(e2){} }
-}
-
-/* hg-v1045: THE BULL / BEAR COLUMN VIEW — the full matrix regrouped into
-   three columns by the row's own majority direction (composite >= +2 BULL,
-   <= -2 BEAR, everything between MIXED / CHOP). Each column reuses the desk's
-   own card renderer, ordered by |composite| then gates. Same rows, same
-   gates, same evidence — a different reading order. */
-function trendmxColumnsHTML(rows){
-  try{
-    if (!Array.isArray(rows) || !rows.length) return '<div class="empty">No rows to group.</div>';
-    var bull = [], bear = [], mixed = [], i, r, d;
-    for (i = 0; i < rows.length; i++){
-      r = rows[i];
-      d = tmDirOf(r);
-      if (d === 'long') bull.push(r);
-      else if (d === 'short') bear.push(r);
-      else mixed.push(r);
-    }
-    function byStrength(list){
-      return list.slice().sort(function(a, b){
-        var pa = Math.abs(+a.score || 0), pb = Math.abs(+b.score || 0);
-        if (pb !== pa) return pb - pa;
-        var ga = (a.gate && isFinite(a.gate.gatesPassed)) ? a.gate.gatesPassed : -1;
-        var gb = (b.gate && isFinite(b.gate.gatesPassed)) ? b.gate.gatesPassed : -1;
-        return gb - ga;
-      });
-    }
-    /* a direction-less row cannot mint levels, so the mixed column prints a
-       compact honest row instead of a setup card */
-    function mixedRow(r){
-      try{
-        return '<div class="card" style="padding:8px;margin-bottom:6px"><b>' + escH(r.sym) + '</b>' + tmVenueChip(r)
-          + '<div style="opacity:.75;font-size:11px;margin-top:2px">composite ' + (r.score > 0 ? '+' : '') + r.score + '/5 · no majority — no levels minted · ADX '
-          + (isFinite(r.adx) ? (+r.adx).toFixed(1) : '—') + '</div></div>';
-      }catch(e){ return ''; }
-    }
-    function col(title, cls, titleCls, list, emptyTxt){
-      var h = '<div class="panel tm-col" style="border-top:3px solid ' + cls + '"><h3 style="margin:0 0 8px">'
-        + '<span class="' + titleCls + '">' + title + '</span> <span style="opacity:.6;font-weight:400">· ' + list.length + ' row' + (list.length === 1 ? '' : 's') + '</span></h3>';
-      if (!list.length) h += '<div class="empty" style="margin:6px 0">' + emptyTxt + '</div>';
-      else h += list.map(function(rr){
-        var dd = tmDirOf(rr);
-        if (!dd) return mixedRow(rr);
-        var plan = dd ? trendmxPlan(Object.assign({}, rr, { dir: dd })) : null;
-        var tier = trendmxRowTier(rr, plan);
-        return trendmxSetupCardHTML(rr, tier === 'clean' ? 'clean' : 'near');
-      }).join('');
-      return h + '</div>';
-    }
-    var bullS = byStrength(bull), bearS = byStrength(bear), mixedS = byStrength(mixed);
-    return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;align-items:start">'
-      + col('BULL', '#26a69a', 'pos', bullS, 'no bullish rows — composite below +2')
-      + col('BEAR', '#ef5350', 'neg', bearS, 'no bearish rows — composite above -2')
-      + col('MIXED / CHOP', '#94a3b8', '', mixedS, 'no mixed rows')
-      + '</div>';
-  }catch(e){ return ''; }
-}
-
-/* hg-v1048: the COINDCX TRENDING / FORMING board - every CoinDCX future
-   the matrix scanned, in two columns. TRENDING = the composite has a
-   majority direction (|score| >= 2); FORMING = it does not yet. Both
-   print TP/SL: minted ticket levels where the plan exists (7/7 CLEAN /
-   6/7 NEAR), the house DRAFT ladder where it does not. */
-function trendmxTrendFormHTML(rows){
-  try{
-    if (!Array.isArray(rows) || !rows.length) return '<div class="empty">Run a scan to classify the CoinDCX board.</div>';
-    var cdcx = [];
-    for (var i = 0; i < rows.length; i++){
-      if (rows[i] && String(tmRowVenue(rows[i])).toLowerCase() === 'coindcx') cdcx.push(rows[i]);
-    }
-    if (!cdcx.length) return '<div class="empty">No CoinDCX rows on this board.</div>';
-    var trending = [], forming = [];
-    for (i = 0; i < cdcx.length; i++){
-      var r = cdcx[i];
-      if (tmDirOf(r)) trending.push(r); else forming.push(r);
-    }
-    function byStrength(list){ return list.slice().sort(function(a, b){ return Math.abs(+b.score || 0) - Math.abs(+a.score || 0); }); }
-    /* typeof guard, not bare isFinite: isFinite(null) is TRUE and +null is 0,
-       so a null plan level would print a confident "0" (the null-formatting
-       trap this codebase has hit five times). */
-    function px(v){ return (typeof v === 'number' && isFinite(v)) ? String(v) : '--'; }
-    function lvlLine(rr, dd){
-      var plan = dd ? trendmxPlan(Object.assign({}, rr, { dir: dd })) : null;
-      if (plan){
-        var tier = trendmxRowTier(rr, plan);
-        var lvl = 'ENTRY ' + px(plan.entry) + ' - STOP ' + px(plan.stop) + ' - T1 ' + px(plan.t1)
-          + (isFinite(plan.t2) ? ' - T2 ' + px(plan.t2) : '');
-        /* hg-v1048: the tier is the label — 7/7 CLEAN and 6/7 NEAR are the
-           minted tiers; anything below the NEAR floor (or a forming row with
-           no majority, whose gate is null) is the house DRAFT ladder, never
-           a fabricated 6/7 NEAR. */
-        if (tier === 'clean') return lvl + ' - 7/7 CLEAN';
-        if (tier === 'near'){
-          var gates = (rr.gate && isFinite(rr.gate.gatesPassed)) ? rr.gate.gatesPassed : 0;
-          return lvl + ' - ' + gates + '/7 NEAR';
-        }
-        return lvl + ' - DRAFT';
-      }
-      return 'no levels - the gates have not met';
-    }
-    function cell(rr){
-      var dd = tmDirOf(rr);
-      var lean = dd ? 0 : (+rr.score > 0 ? 1 : (+rr.score < 0 ? -1 : 0));
-      var tag = dd === 'long' ? '<span class="pos">LONG</span>'
-        : dd === 'short' ? '<span class="neg">SHORT</span>'
-        : lean === 1 ? '<span class="pos">LONG-LEAN</span>'
-        : lean === -1 ? '<span class="neg">SHORT-LEAN</span>'
-        : '<span>NO LEAN</span>';
-      /* hg-v1057: the FORMING column names WHY nothing formed — a choppy tape
-         is CHOP (no trend to ride, whatever the lean), a clean directional
-         tape with a lean but no majority is EARLY FORMING, and a mixed tape
-         prints neither (no verdict). The TRENDING column is untouched: its
-         rows already have a majority. */
-      var formTag = '';
-      if (!dd){
-        var fs = trendmxChopState(rr);
-        if (fs && fs.state === 'chop') formTag = ' · CHOP';
-        else if (fs && fs.state === 'trend') formTag = ' · EARLY FORMING';
-      }
-      var lvl = (dd || lean !== 0) ? lvlLine(rr, dd || (lean === 1 ? 'long' : 'short'))
-        : 'no lean - composite 0/5, no levels';
-      return '<div class="card" style="padding:8px;margin-bottom:6px"><b>' + escH(rr.sym) + '</b> ' + tag
-        + '<div style="opacity:.9;font-size:11px;margin-top:2px">composite ' + (rr.score > 0 ? '+' : '') + rr.score + '/5' + formTag + (rr.freshCross ? ' - !' + escH(rr.freshCross) : '') + '</div>'
-        + '<div style="font-size:11px;margin-top:4px;letter-spacing:.02em">' + lvl + '</div></div>';
-    }
-    function col(title, cls, list, emptyTxt){
-      var h = '<div class="panel" style="border-top:3px solid ' + cls + '"><h3 style="margin:0 0 8px">' + title
+            condition: (r.freshCross ? '⚡' + r.freshCross + ' · ' : '') +
