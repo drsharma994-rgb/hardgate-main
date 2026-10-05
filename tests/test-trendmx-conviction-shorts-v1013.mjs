@@ -28,13 +28,18 @@ const ok = (cond, label) => { if (!cond) throw new Error('FAIL: ' + label); pass
 const text = h => String(h || '').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
 
 const FILES = ['indicators.js', 'indicators2.js', 'hg-setup-core.js', 'desk-scan-universe.js', 'omniroute.js', 'trendtable.combined.js'];
-function boot(){
+/* hg-v1150: boot takes an optional extra-file list — the golden-desk
+   section needs cryptogates.js + plans.js because the cross builders now
+   run the REAL closed 7-gate matrix (trendmxClosedGate -> swingGateMatrix);
+   without them a gate >= 6/7 can never exist in this context. The other
+   sections boot unchanged. */
+function boot(extraFiles){
   const ctx = { console: { log(){}, warn(){}, error(){} }, Math, Date, Number, String, Object, Array,
     JSON, Error, Promise, RegExp, isFinite, isNaN, parseFloat, parseInt, setTimeout, clearTimeout };
   ctx.window = ctx; ctx.globalThis = ctx; ctx.HG_tabs = []; ctx.HG_warmups = [];
   ctx.localStorage = { getItem: () => null, setItem(){}, removeItem(){} };
   vm.createContext(ctx);
-  for (const f of FILES)
+  for (const f of FILES.concat(extraFiles || []))
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
   return ctx;
 }
@@ -126,12 +131,33 @@ console.log('== the promoted slice (SMC + taker flow) covers conviction shorts =
 
 console.log('== the golden desk stays long-only by design ==');
 {
-  const w = boot();
+  /* hg-v1150: cryptogates + plans join THIS boot (the builders now run the
+     real closed 7-gate matrix), with the house gate stubs — the exact
+     test-cryptogates route — and the 4h tape is the gated pullback-reclaim
+     shape a linear ramp can never clear G3/G5/G6 with. */
+  const w = boot(['cryptogates.js', 'plans.js']);
+  w.hgStructureGate = () => ({ veto: false, bos: true });
+  w.detectRegime = () => ({ regime: 'trend', label: 'trend' });
   const death = mkShort('DTHUSDT', { freshCross: 'DEATH' });
   const golden = w.trendmxGoldenCrossSetups([death]);
   ok(golden.length === 0, 'a fresh DEATH cross with max bear conviction yields no golden setup (a golden cross IS a bull cross)');
+  const gNow = Math.floor(Date.now() / 1000);
+  const gated = (function(){
+    const cfg = { drift: 0.005, pullPct: 0.003, pullBars: 12, recBars: 2, recPct: 0.004, volPop: 2 };
+    const out = []; let c = 50000;
+    const t0 = Math.floor(gNow / 14400) * 14400 - 241 * 14400;
+    for (let i = 0; i < 240; i++){
+      const k = 239 - i; let vol = 1000;
+      if (k >= cfg.pullBars + cfg.recBars) c = c * (1 + cfg.drift);
+      else if (k >= cfg.recBars)           c = c * (1 - cfg.pullPct);
+      else                                 { c = c * (1 + cfg.recPct); vol = 1000 * cfg.volPop; }
+      const rng = c * 0.006; const nearHigh = k < cfg.recBars;
+      out.push({ t: t0 + i * 14400, o: c - rng * (nearHigh ? 0.7 : 0.3), h: c + rng * (nearHigh ? 0.08 : 0.5), l: c - rng * (nearHigh ? 0.9 : 0.5), c, v: vol });
+    }
+    return out;
+  })();
   const long = { sym: 'GLDUSDT', score: 5, comps: TS_UP.comps, freshCross: 'GOLDEN',
-                 adx: TS_UP.adx, price: UP1[UP1.length - 1].c, rows4h: UP4, rows1h: null,
+                 adx: TS_UP.adx, price: gated[gated.length - 1].c, rows4h: gated, rows1h: null,
                  gate: { veto: null } };
   ok(w.trendmxGoldenCrossSetups([long]).length === 1, 'the golden long still surfaces exactly as before');
 }

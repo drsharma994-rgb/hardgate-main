@@ -21,7 +21,17 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 let passed = 0;
 const ok = (cond, label) => { if (!cond) throw new Error('FAIL: ' + label); passed++; console.log('  ok —', label); };
 
-const FILES = ['indicators.js', 'indicators2.js', 'hg-setup-core.js', 'desk-scan-universe.js', 'omniroute.js', 'trendtable.combined.js'];
+/* hg-v1150: the cross builders now run the REAL closed 7-gate matrix
+   (trendmxClosedGate -> swingGateMatrix), require a TRADE grade and an
+   EMA tag (dip-and-reclaim within the last 6 closed bars). A boot without
+   cryptogates.js can never produce a gate >= 6/7, and a linear ramp can
+   never clear G3 (RSI pins at the band edge) / G5 (no volume or wick
+   commitment) / G6 (structure stop too far for R:R) — the same lesson
+   test-cryptogates.mjs learned in its own gatedRows note. cryptogates +
+   plans join the boot, the house gate stubs ride with them (the exact
+   test-cryptogates route), and the 4h tapes below are the gated
+   pullback-reclaim shape. */
+const FILES = ['indicators.js', 'indicators2.js', 'hg-setup-core.js', 'desk-scan-universe.js', 'omniroute.js', 'cryptogates.js', 'plans.js', 'trendtable.combined.js'];
 function boot(){
   const ctx = { console: { log(){}, warn(){}, error(){} }, Math, Date, Number, String, Object, Array,
     JSON, Error, Promise, RegExp, isFinite, isNaN, parseFloat, parseInt, setTimeout, clearTimeout };
@@ -30,6 +40,9 @@ function boot(){
   vm.createContext(ctx);
   for (const f of FILES)
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
+  /* the house test-cryptogates stubs — same route, same file */
+  ctx.hgStructureGate = () => ({ veto: false, bos: true });
+  ctx.detectRegime = () => ({ regime: 'trend', label: 'trend' });
   return ctx;
 }
 
@@ -52,8 +65,41 @@ const dxAll = lin(240, 100, 0.8).concat((() => { const a = []; for (let i = 1; i
 const di = W.crossUnder(W.ema(dxAll, 50), W.ema(dxAll, 200)).lastIndexOf(true);
 const gDaily = mkRows(cxAll.slice(0, gi + 1 + 5));
 const dDaily = mkRows(dxAll.slice(0, di + 1 + 5));
-const up4 = mkRows(lin(120, 100, 0.6), 14400);
-const dn4 = mkRows(lin(120, 400, -0.6), 14400);
+/* the gated pullback-reclaim tapes (fresh timestamps, all bars closed):
+   trend -> shallow pullback -> reclaim bar closing at the extreme on
+   expanded volume — the shape the 7 gates were written to find. The SHORT
+   tape is the exact mirror (falling drift, upward pullback, reclaim at
+   the low on expanded volume). */
+const NOW = Math.floor(Date.now() / 1000);
+function gatedLong(cfg, n){
+  const out = []; let c = 50000;
+  const t0 = Math.floor(NOW / 14400) * 14400 - (n + 1) * 14400;
+  for (let i = 0; i < n; i++){
+    const k = n - 1 - i; let vol = 1000;
+    if (k >= cfg.pullBars + cfg.recBars) c = c * (1 + cfg.drift);
+    else if (k >= cfg.recBars)           c = c * (1 - cfg.pullPct);
+    else                                 { c = c * (1 + cfg.recPct); vol = 1000 * cfg.volPop; }
+    const rng = c * 0.006; const nearHigh = k < cfg.recBars;
+    out.push({ t: t0 + i * 14400, o: c - rng * (nearHigh ? 0.7 : 0.3), h: c + rng * (nearHigh ? 0.08 : 0.5), l: c - rng * (nearHigh ? 0.9 : 0.5), c, v: vol });
+  }
+  return out;
+}
+function gatedShort(cfg, n){
+  const out = []; let c = 50000;
+  const t0 = Math.floor(NOW / 14400) * 14400 - (n + 1) * 14400;
+  for (let i = 0; i < n; i++){
+    const k = n - 1 - i; let vol = 1000;
+    if (k >= cfg.pullBars + cfg.recBars) c = c * (1 - cfg.drift);
+    else if (k >= cfg.recBars)           c = c * (1 + cfg.pullPct);
+    else                                 { c = c * (1 - cfg.recPct); vol = 1000 * cfg.volPop; }
+    const rng = c * 0.006; const nearLow = k < cfg.recBars;
+    out.push({ t: t0 + i * 14400, o: c + rng * (nearLow ? 0.7 : 0.3), h: c + rng * (nearLow ? 0.9 : 0.5), l: c - rng * (nearLow ? 0.08 : 0.5), c, v: vol });
+  }
+  return out;
+}
+const CLEAN_CFG = { drift: 0.005, pullPct: 0.003, pullBars: 12, recBars: 2, recPct: 0.004, volPop: 2 };
+const up4 = gatedLong(CLEAN_CFG, 240);
+const dn4 = gatedShort(CLEAN_CFG, 240);
 const tsG = W.trendScore(gDaily, up4), tsD = W.trendScore(dDaily, dn4);
 ok(tsG.freshCross === 'GOLDEN' && tsD.freshCross === 'DEATH', 'fixtures carry fresh crosses (probed in v1014)');
 
@@ -88,9 +134,13 @@ console.log('== each desk renders only its own cross ==');
   ok(d.indexOf('#b91c1c') >= 0, 'the bear desk wears the red palette');
   ok(d.indexOf('GLDUSDT') === -1 && d.indexOf('⚡GOLDEN') === -1 && d.indexOf('>LONG<') === -1,
      'no bull language leaks onto the bear desk');
-  ok(W.trendmxGoldenDeskHTML([]) === '' && W.trendmxGoldenDeskHTML(null) === ''
+  /* hg-v1150: the shipped golden desk renders its HONEST EMPTY STATE (the
+     full-stack note naming every layer that has to agree) instead of a blank
+     panel; the death desk still renders nothing when empty. Pin the shipped
+     contract per desk. */
+  ok(W.trendmxGoldenDeskHTML([]).indexOf('No golden setup') >= 0 && W.trendmxGoldenDeskHTML(null).indexOf('No golden setup') >= 0
      && W.trendmxDeathDeskHTML([]) === '' && W.trendmxDeathDeskHTML(undefined) === '',
-     'a desk with no tickets renders nothing');
+     'a desk with no tickets renders the honest empty state, no cards');
 }
 
 console.log('== the 4-card cap is the cap each half already had ==');

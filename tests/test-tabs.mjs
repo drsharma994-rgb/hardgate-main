@@ -235,8 +235,9 @@ while ((m = re.exec(html)) !== null){ if (m[1].trim()) blocks.push(m[1]); }
    always had 5, so it had never once passed and therefore never protected
    anything. Three separate test files carried the same stale number.
    Corrected to 5 in hg-v762, with the same kind of exemption already
-   written out for block 1. */
-assert(blocks.length === 5, 'index.html yields exactly 5 non-empty inline <script> blocks (got ' + blocks.length + ')');
+   written out for block 1. hg-v1142 added the one-link cache-nuke block
+   (second in the file, after the diag probe) — 6 is the shipped count. */
+assert(blocks.length === 6, 'index.html yields exactly 6 non-empty inline <script> blocks (got ' + blocks.length + ')');
 assert(/\?diag=1/.test(blocks[0]), 'and the first of them is the ?diag=1 probe, ahead of every app script');
 
 /* xuniverse.js library tag: no-tab IIFE consumed by engine.js/brain.js —
@@ -289,8 +290,8 @@ assert(REQUIRED_TABS.every(([id]) => run('HG_TAB_MODS[' + JSON.stringify(id) + '
    so COMMAND is the honest home (see the HG_NAV_GROUPS comment in
    index.html). Spec updated to match. */
 const EXPECTED_GROUPS = {
-  overview:   ['brain', 'book', 'trade', 'log', 'signallog', 'news', 'bias', 'regime', 'trendmx', 'rotation', 'execute', 'startrader'],
-  crypto:     ['combi', 'omnibtc', 'omnipresent', 'omniroute', 'dexscreener', 'setupconfirm', 'best', 'swing', 'scalp', 'edge', 'smart', 'squeeze', 'reversalsniper', 'smc', 'ob', 'trap', 'div', 'coil', 'apex', 'oiflow', 'liqs', 'onchain', 'chartvision', 'carry', 'venueprem', 'termbasis', 'cryptoultra', 'cryptoscan', 'cryptoverse', 'ninetypercent'],
+  overview:   ['brain', 'book', 'trade', 'log', 'setupconfirm', 'signallog', 'news', 'bias', 'regime', 'trendmx', 'rotation', 'execute', 'startrader'],
+  crypto:     ['combi', 'omnibtc', 'omnipresent', 'omniroute', 'dexscreener', 'best', 'swing', 'scalp', 'edge', 'smart', 'squeeze', 'reversalsniper', 'smc', 'ob', 'trap', 'div', 'coil', 'apex', 'oiflow', 'liqs', 'onchain', 'chartvision', 'carry', 'venueprem', 'termbasis', 'cryptoultra', 'cryptoscan', 'cryptoverse', 'ninetypercent'],
   /* v749 added optigold, newgold and golddirection. They were in NO group
      at all, so HG_GROUP_FALLBACK filed three gold desks under TOOLS next to
      the risk sizer and the search box; index.html says so where the list is
@@ -298,7 +299,7 @@ const EXPECTED_GROUPS = {
      behind the stale inline-block count in the same file until hg-v762 —
      which is what a permanently red suite costs. Checked against the live
      list: the other four groups match exactly, only gold had drifted. */
-  gold:       ['super-gold', 'omnigold', 'omnigold1', 'milligold', 'optigold', 'newgold', 'golddirection', 'goldswing', 'goldscalp', 'goldultra', 'gold', 'goldpro', 'goldspot', 'goldcoint', 'goldpine', 'tauric', '80percent'],
+  gold:       ['super-gold', 'omnigold', 'omnigold1', 'milligold', 'optigold', 'newgold', 'golddirection', 'goldswing', 'goldscalp', 'ganeshgold', 'goldultra', 'gold', 'goldpro', 'goldspot', 'goldcoint', 'goldpine', 'tauric', '80percent'],
   strategies: ['super-setup', 'super-best', 'super-sniper', 'super-book', 'super-calibrate', 'pine', 'pine-msb', 'pine-sqz', 'pine-smf', 'pine-ht', 'pine-smc', 'pine-cipher', 'pine-rf', 'pine-nw', 'pine-avwap', 'strats', 'meanrev', 'formationlab', 'scorecard', 'reliability'],
   tools:      ['risk', 'recon', 'basis', 'search', 'finder', 'tradeos', 'hey', 'aiagent']
 };
@@ -310,7 +311,7 @@ assert(Object.keys(EXPECTED_GROUPS).every(gid =>
   run("HG_NAV_GROUPS.filter(function(g){ return g.id===" + JSON.stringify(gid) + "; })[0].tabs.join(',')") === EXPECTED_GROUPS[gid].join(',')),
   'group membership matches the spec (incl. not-yet-registered brain/strats/meanrev — groups render with missing ids)');
 const ID2GROUP = { squeeze:'crypto', trendmx:'overview', oiflow:'crypto', liqs:'crypto', chartvision:'crypto', regime:'overview',
-                   carry:'crypto', venueprem:'crypto', termbasis:'crypto', goldpro:'gold', goldcoint:'gold', strats:'strategies', meanrev:'strategies', 'super-setup':'strategies', 'super-best':'strategies', 'super-sniper':'strategies', 'super-book':'strategies', 'super-calibrate':'strategies', reversalsniper:'crypto', edge:'crypto', dexscreener:'crypto', setupconfirm:'crypto', combi:'crypto', pine:'strategies', 'pine-msb':'strategies', 'pine-sqz':'strategies', 'pine-smf':'strategies', 'pine-ht':'strategies', 'pine-smc':'strategies', 'pine-cipher':'strategies', 'pine-rf':'strategies', 'pine-nw':'strategies', 'pine-avwap':'strategies',
+                   carry:'crypto', venueprem:'crypto', termbasis:'crypto', goldpro:'gold', goldcoint:'gold', ganeshgold:'gold', strats:'strategies', meanrev:'strategies', 'super-setup':'strategies', 'super-best':'strategies', 'super-sniper':'strategies', 'super-book':'strategies', 'super-calibrate':'strategies', reversalsniper:'crypto', edge:'crypto', dexscreener:'crypto', setupconfirm:'overview', combi:'crypto', pine:'strategies', 'pine-msb':'strategies', 'pine-sqz':'strategies', 'pine-smf':'strategies', 'pine-ht':'strategies', 'pine-smc':'strategies', 'pine-cipher':'strategies', 'pine-rf':'strategies', 'pine-nw':'strategies', 'pine-avwap':'strategies',
                    scorecard:'strategies', reliability:'strategies', formationlab:'strategies',
                    brain:'overview', startrader:'overview', execute:'overview', news:'overview', rotation:'overview', onchain:'crypto', goldspot:'gold' };
 assert(Object.keys(ID2GROUP).every(id => run('HG_TAB_GROUP[' + JSON.stringify(id) + ']') === ID2GROUP[id]),

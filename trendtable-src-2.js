@@ -134,11 +134,25 @@ function trendmxGoldenCrossSetups(rows){
     var r = rows[i];
     if (!r || r.freshCross !== 'GOLDEN') continue;
     if (!r.comps || r.comps.d1Cross <= 0) continue;
+    /* hg-v1150: an unpriceable row is not a setup. hgBestLevels can price a
+       plan straight off the tape, which is right for a THIN row — but a row
+       whose own published price is unreadable is corrupt, and a corrupt row
+       must not mint a ticket the board would show beside a price it cannot
+       print. */
+    if (!isFinite(+r.price)) continue;
     var dir = tmDirOf(r);
     if (dir !== 'long') continue;
     var conv = trendmxConviction(r);
     if (!conv) continue;
     if (tmCascadeDir(r.rows4h) !== 1){ out.held.cascade++; continue; }
+    /* hg-v1150: THE ROW-CARRIED VETO IS RESPECTED. The closed-gate recompute
+       below re-derives the 7-gate matrix off the tape, but it can never
+       reproduce a veto the SCAN stamped on the row (a chase block, a
+       formation-edge suppression) — those live on r.gate, written by the
+       upstream layers that know them. An explicit r.gate.veto holds the row
+       off this desk no matter what the bare tape says; the recompute then
+       serves the rows that arrive without one. */
+    if (r.gate && r.gate.veto){ out.held.gates++; continue; }
     var gate = trendmxClosedGate(r, dir);
     if (!gate || gate.veto || !(gate.gatesPassed >= 6)){ out.held.gates++; continue; }
     var grade = trendmxSetupGrade(r, dir);
@@ -178,11 +192,16 @@ function trendmxDeathCrossSetups(rows){
     var r = rows[i];
     if (!r || r.freshCross !== 'DEATH') continue;
     if (!r.comps || r.comps.d1Cross >= 0) continue;
+    /* hg-v1150: the mirror carries the same corrupt-row rule. */
+    if (!isFinite(+r.price)) continue;
     var dir = tmDirOf(r);
     if (dir !== 'short') continue;
     var conv = trendmxConviction(r);
     if (!conv) continue;
     if (tmCascadeDir(r.rows4h) !== -1){ out.held.cascade++; continue; }
+    /* hg-v1150: the row-carried veto is respected on the mirror too — the
+       same rule the golden desk gained one screen up. */
+    if (r.gate && r.gate.veto){ out.held.gates++; continue; }
     var gate = trendmxClosedGate(r, dir);
     if (!gate || gate.veto || !(gate.gatesPassed >= 6)){ out.held.gates++; continue; }
     var grade = trendmxSetupGrade(r, dir);

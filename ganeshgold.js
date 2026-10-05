@@ -282,6 +282,12 @@ async function ganeshGoldScan(opts){
         W.hgFwdRecordScan('GANESHGOLD', (style === 'scalp') ? '15m' : '4h', [{
           sym: 'XAUUSD', dir: plan.dir, entry: +plan.entry, stop: +plan.stop,
           t1: fin(plan.t1) ? +plan.t1 : undefined, t2: fin(plan.t2) ? +plan.t2 : undefined,
+          /* hg-v1150: THE MARK CARRIER — the ledger census requires every
+             record writer to carry the price the plan was minted against
+             (without it the fill-aware settlement stands aside, and a limit
+             that never filled could be settled as a market order). ev.px is
+             the last closed tape price the whole model read. */
+          mark: fin(ev.px) ? +ev.px : undefined,
           mechanic: 'GANESHGOLD-' + (style === 'scalp' ? 'SCALP' : 'SWING'),
           ticket: true, style: 'ganeshgold-' + style
         }]);

@@ -119,12 +119,14 @@ function collectSetupsForDisplay(desk){
   }
   var trendFn = gfn('trendmxCrossState');
   if (trendFn){
+    var addedTx = 0;
     try{
       var tx = trendFn();
       var golden = (tx && tx.goldenCross) ? tx.goldenCross : [];
       for (var ti = 0; ti < golden.length; ti++){
         var g = golden[ti];
         if (!g || !hasSetupLevels(g)) continue;
+        addedTx++;
         add({
           sym: g.sym, dir: g.dir, entry: g.entry, stop: g.stop, t1: g.t1, t2: g.t2,
           rr: g.rr, score: g.score, clean7: !!g.clean7, nearClean: false,
@@ -141,6 +143,7 @@ function collectSetupsForDisplay(desk){
       for (var td = 0; td < death.length; td++){
         var d = death[td];
         if (!d || !hasSetupLevels(d)) continue;
+        addedTx++;
         add({
           sym: d.sym, dir: d.dir, entry: d.entry, stop: d.stop, t1: d.t1, t2: d.t2,
           rr: d.rr, score: fin(+d.score) ? Math.abs(+d.score) : d.score, clean7: !!d.clean7, nearClean: false,
@@ -150,6 +153,52 @@ function collectSetupsForDisplay(desk){
         });
       }
     }catch(eTx){}
+    /* hg-v1150: THE SAME ROWS FALLBACK THE SCOUT HAS. The cross DESKS hold
+       their tickets at the full-stack gate (BATCH 1144/1148) — right for the
+       desk — but this collector read ONLY the held state, so the Trend
+       Matrix agent went silent whenever the external world was unread
+       while the Trend Scout kept reporting the same twins off the rows.
+       Both feeds must agree (the v1014 symmetry): when the held state
+       carries nothing, the builders run on the scan rows exactly the way
+       runTrendmxScoutFromRows does. */
+    if (!addedTx){
+      /* trendmxScanRows is the FULL scan rows (trendmxState is the light
+         mark snapshot — no tape, no freshCross, the builders cannot run on
+         it). */
+      var txStateFn = gfn('trendmxScanRows') || gfn('trendmxState');
+      var txGBuilder = gfn('trendmxGoldenCrossSetups');
+      var txDBuilder = gfn('trendmxDeathCrossSetups');
+      if (txStateFn && txGBuilder && txDBuilder){
+        try{
+          var txSt = txStateFn();
+          var txRows = Array.isArray(txSt) ? txSt : ((txSt && Array.isArray(txSt.rows)) ? txSt.rows : []);
+          var txG = txGBuilder(txRows) || [];
+          for (var tgi = 0; tgi < txG.length; tgi++){
+            var gg = txG[tgi];
+            if (!gg || !hasSetupLevels(gg)) continue;
+            add({
+              sym: gg.sym, dir: gg.dir, entry: gg.entry, stop: gg.stop, t1: gg.t1, t2: gg.t2,
+              rr: gg.rr, score: gg.score, clean7: !!gg.clean7, nearClean: false,
+              prime: !!gg.prime, tier: gg.tier || gg.conviction,
+              style: 'swing', agentLabel: 'Trend Matrix', src: 'TRENDMX GOLDEN',
+              note: gg.note || ('⚡GOLDEN · composite ' + gg.score),
+            });
+          }
+          var txD = txDBuilder(txRows) || [];
+          for (var tdi = 0; tdi < txD.length; tdi++){
+            var dd2 = txD[tdi];
+            if (!dd2 || !hasSetupLevels(dd2)) continue;
+            add({
+              sym: dd2.sym, dir: dd2.dir, entry: dd2.entry, stop: dd2.stop, t1: dd2.t1, t2: dd2.t2,
+              rr: dd2.rr, score: fin(+dd2.score) ? Math.abs(+dd2.score) : dd2.score, clean7: !!dd2.clean7, nearClean: false,
+              prime: !!dd2.prime, tier: dd2.tier || dd2.conviction,
+              style: 'swing', agentLabel: 'Trend Matrix', src: 'TRENDMX DEATH',
+              note: dd2.note || ('⚡DEATH · composite ' + dd2.score),
+            });
+          }
+        }catch(eFb2){}
+      }
+    }
   }
   applyAgentConfluence(out);
   out.sort(function(a, b){

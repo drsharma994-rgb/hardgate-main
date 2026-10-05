@@ -78,12 +78,14 @@ ok(badgeStale.text.indexOf('STALE') >= 0 && badgeStale.text.indexOf('2 behind') 
 
 const store = { data: {}, getItem(k){ return this.data[k] || null; }, setItem(k, v){ this.data[k] = String(v); } };
 let reloaded = false;
-ok(G.hgBuildMaybeReload({ state: 'stale', live: 'hg-v544' }, store, function(){ reloaded = true; }) === true,
-  'first stale -> reload scheduled');
-ok(reloaded, 'reload fn was called');
-ok(store.data['hg_build_reload_hg-v544'] === '1', 'reload key is set');
+/* BATCH 1140 killed the stale auto-reload (a stale badge was looping clients
+   through reloads); the shipped contract is that maybeReload NEVER schedules,
+   on the first stale read or any other. The old assertions pinned the removed
+   behavior, so they were failing on the shipped tree itself. */
 ok(G.hgBuildMaybeReload({ state: 'stale', live: 'hg-v544' }, store, function(){ reloaded = true; }) === false,
-  'second call does not loop');
+  'stale never schedules a reload (the reload loop is dead by design)');
+ok(!reloaded, 'the reload fn is never called');
+ok(store.data['hg_build_reload_hg-v544'] === undefined, 'no reload key is written');
 
 /* ---- freshness over an injected fetch ---- */
 const okRes = (body) => Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(body) });
@@ -109,10 +111,12 @@ eq(r4.state, 'unknown', 'http 503 -> unknown');
 const r5 = await G.hgBuildFreshness(() => okRes('garbage with no version'));
 eq(r5.state, 'unknown', 'unparseable body -> unknown, not stale');
 
-/* cache-busted and no-store, or the check is worthless */
+/* cache-busted and no-store, or the check is worthless. The shipped fetch
+   cache-busts with ?live=<ms> (it was ?fresh= before the reload-loop
+   rework); either param satisfies the intent, so both are accepted. */
 let seenUrl = null, seenOpts = null;
 await G.hgBuildFreshness((u, o) => { seenUrl = u; seenOpts = o; return okRes("version: 'hg-v269'"); });
-ok(/[?&]fresh=\d+/.test(seenUrl), 'freshness fetch is cache-busted — got ' + seenUrl);
+ok(/[?&](fresh|live)=\d+/.test(seenUrl), 'freshness fetch is cache-busted — got ' + seenUrl);
 eq(seenOpts && seenOpts.cache, 'no-store', 'freshness fetch uses cache:no-store');
 
 /* ---- DRIFT GUARD: sw.js cache version must equal the build stamp ---- */

@@ -840,8 +840,11 @@ console.log('== 13) wiring edits (index.html HG_NAV_GROUPS + sw.js) ==');
   /* v658 moved signallog GOLD -> COMMAND (SIGNAL LOG nav clash fix); v749
      added optigold, newgold and golddirection, which had been in NO group and
      so fell through HG_GROUP_FALLBACK into TOOLS. Membership is otherwise
-     pinned: composites and pick engines first, then swing/scalp, then context. */
-  assert(/tabs:\['super-gold','omnigold','omnigold1','milligold','optigold','newgold','golddirection','goldswing','goldscalp','goldultra','gold','goldpro','goldspot','goldcoint','goldpine','tauric','80percent'\]/.test(gLine),
+     pinned: composites and pick engines first, then swing/scalp, then context.
+     The ganeshgold desk (the 17-step SMC/ICT framework) joined the group
+     after the scalp scanners — the pin below includes it, so the shipped
+     nav and the pin can no longer drift apart silently. */
+  assert(/tabs:\['super-gold','omnigold','omnigold1','milligold','optigold','newgold','golddirection','goldswing','goldscalp','ganeshgold','goldultra','gold','goldpro','goldspot','goldcoint','goldpine','tauric','80percent'\]/.test(gLine),
          'GOLD group: super desk first, then swing/scalp scanners — got: ' + gLine.trim());
   const sw = fs.readFileSync(root + 'sw.js', 'utf8');
   assert(/HG_CACHE\s*=\s*'hg-v\d+'/.test(sw), 'service worker cache is hg-vN (alerts workstream)');

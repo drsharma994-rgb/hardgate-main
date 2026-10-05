@@ -131,7 +131,10 @@ console.log('== wiring pins ==');
   ok(src.indexOf('1.5 * atrV') >= 0, 'displacement uses the 1.5xATR bar');
   ok(src.indexOf('sweep extreme + 0.5xATR') >= 0, 'the SL rule is the structural invalidation + buffer');
   const html = read('index.html');
-  ok(html.indexOf('ganeshgold.js?v=1072') >= 0, 'the module ships');
+  /* version-agnostic: the cache-buster is re-stamped on every bump, so a
+     pinned ?v=1072 broke the moment the tree moved past it. The intent is
+     that the module ships cache-busted at all. */
+  ok(/ganeshgold\.js\?v=\d+/.test(html), 'the module ships');
   ok(html.indexOf("'ganeshgold'") >= 0, 'the tab is in the GOLD group and the cycle');
   const al = read('tabalerts.js');
   ok(al.indexOf('function collectGaneshGold') >= 0 && al.indexOf("if (s.src === 'GANESH GOLD') return true;") >= 0, 'the crown joins the Telegram batch');

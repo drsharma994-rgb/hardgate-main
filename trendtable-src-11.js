@@ -224,6 +224,18 @@
         setProg: setProg,
         onBatch: function(info){
           state.rows = info.rows;
+          /* hg-v1150: THE PARTIAL BOARD IS THE PUBLISHED BOARD for as long as
+             it is the one on screen. renderAll() paints the desks and the
+             desks write the forward record (trendmxLimitClasses) — and the
+             record's tmScore / tmAlign / tmAgeMin marks are read off the
+             PUBLISHED snapshot (hgTrendMatrixMark). The full publish happens
+             only at the end of trendmxScan, so every mid-scan batch painted
+             its record against a stale-or-null snapshot: tmScore undefined on
+             records whose row sat on the board with a perfectly readable
+             composite. Publish the partial rows here so a mid-scan record
+             always carries the composite of the exact row it was minted
+             from — the same row the operator saw. */
+          try { publishTrendmxSnap(info.rows); } catch (ePub) {}
           try {
             trendmxStampBtcStructure(state.rows);
             state.golden = trendmxGoldenCrossSetups(state.rows);
@@ -414,6 +426,16 @@ W.trendmxCrossState = function(){
 };
 W.trendmxState = function(){
   try{ return __tmSnap ? JSON.parse(JSON.stringify(__tmSnap)) : null; }catch(e){ return null; }
+};
+/* hg-v1150: THE SCAN ROWS, SYNC AND FULL. trendmxState() publishes the LIGHT
+   mark snapshot ({sym, score, dir, comps} — the ledger reads it) and the
+   cross state publishes the held tickets; but the desk's own last scan
+   holds FULL rows (tape · gate · witnesses · freshCross), and consumers
+   that re-run the builders on them — the AI workforce's rows fallback —
+   had no sync seam to reach them. Same rows trendmxScan returned; null
+   before the first scan. */
+W.trendmxScanRows = function(){
+  try{ return (__tmScanSnap && Array.isArray(__tmScanSnap.rows) && __tmScanSnap.rows.length) ? __tmScanSnap.rows : null; }catch(e){ return null; }
 };
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'trendmx', label: 'TREND MATRIX', mount: mountTrendMatrix, refresh: refreshTrendMatrix });
