@@ -347,6 +347,26 @@ async function runGoldSpot(ui, opts){
       else status = 'failed: spot and perp both unavailable';
     }
     __gs.ranOnce = true;
+    if (data && (data.spot || data.perp) && status === 'refreshed'){
+      var fundingH = null;
+      if (data.perp && data.perp.fundingPct !== null){
+        var hrsH = null;
+        try{
+          if (data.finfo && data.finfo[data.perp.symbol] && isFinite(+data.finfo[data.perp.symbol].intervalHours))
+            hrsH = +data.finfo[data.perp.symbol].intervalHours;
+        }catch(eH){}
+        fundingH = { fundingPct: data.perp.fundingPct, intervalHours: hrsH };
+      }
+      try{
+        setGsSnapshot(goldBasisSignal({
+          spot: data.spot ? data.spot.price : null,
+          perp: data.perp ? data.perp.mark : null,
+          funding: fundingH,
+          perpSymbol: data.perp ? data.perp.symbol : null,
+          perpDegraded: !!(data.perp && data.perp.degraded)
+        }));
+      }catch(eSnap){}
+    }
 
     if (ui && ui.out){
       if (!data.spot && !data.perp){
@@ -441,6 +461,7 @@ if (typeof window !== 'undefined'){
   window.goldspotState = function(){
     try{ return __gs.stateSnap ? gsStateView(__gs.stateSnap) : null; }catch(e){ return null; }
   };
+  window.hgGoldSpotWarm = function(){ return runGoldSpot(null, {}); };
   window.HG_tabs = window.HG_tabs || [];
   window.HG_tabs.push({ id: 'goldspot', label: 'GOLD SPOT', mount: mount, refresh: refreshGoldSpot,
                         fundPanelHtml: gsFundPanelHtml });   /* hg-v1005 */
