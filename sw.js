@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v1141';
+const HG_CACHE = 'hg-v1142';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -132,8 +132,8 @@ self.addEventListener('activate', function(ev){
           return Promise.all((list || []).map(function(c){
             try {
               var u = new URL(c.url);
-              if (u.searchParams.get('hg') === '1141') return null;
-              u.searchParams.set('hg', '1141');
+              if (u.searchParams.get('hg') === '1142') return null;
+              u.searchParams.set('hg', '1142');
               if (typeof c.navigate === 'function') return c.navigate(u.toString());
             } catch (e) {}
             return null;
@@ -141,6 +141,24 @@ self.addEventListener('activate', function(ev){
         });
       })
   );
+});
+
+/* hg-v1142: THE KILL SWITCH — a page can ask the worker to wipe every
+   cache and unregister itself, so a client stuck on an old shell can be
+   recovered with ONE link instead of DevTools. */
+self.addEventListener('message', function(ev){
+  try{
+    var d = ev && ev.data;
+    if (d && d.type === 'HG_KILL'){
+      ev.waitUntil(
+        caches.keys().then(function(keys){
+          return Promise.all(keys.map(function(k){ return caches.delete(k); }));
+        }).then(function(){
+          try{ if (self.registration) return self.registration.unregister(); }catch(e){}
+        }).catch(function(){})
+      );
+    }
+  }catch(e){}
 });
 
 self.addEventListener('fetch', function(ev){
