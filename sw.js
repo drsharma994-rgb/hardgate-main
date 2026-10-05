@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v1140';
+const HG_CACHE = 'hg-v1141';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -127,6 +127,19 @@ self.addEventListener('activate', function(ev){
       })
       .catch(function(){ /* cleanup failure must not block activation */ })
       .then(function(){ try{ return self.clients.claim(); }catch(e){} })
+      .then(function(){
+        return self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(list){
+          return Promise.all((list || []).map(function(c){
+            try {
+              var u = new URL(c.url);
+              if (u.searchParams.get('hg') === '1141') return null;
+              u.searchParams.set('hg', '1141');
+              if (typeof c.navigate === 'function') return c.navigate(u.toString());
+            } catch (e) {}
+            return null;
+          }));
+        });
+      })
   );
 });
 
@@ -143,7 +156,9 @@ self.addEventListener('fetch', function(ev){
     fetch(req).then(function(res){
       try{
         const cc = (res && res.headers && res.headers.get('cache-control')) || '';
-        if (cacheable && res && res.ok && !/no-store|private/i.test(cc) && hgIsShellRequest(url)){
+        var pth = (url && url.pathname) || '';
+        var noStoreFile = pth === '/' || /\/index\.html$|\/build-stamp\.js$|\/sw\.js$/.test(pth);
+        if (!noStoreFile && cacheable && res && res.ok && !/no-store|private/i.test(cc) && hgIsShellRequest(url)){
           const copy = res.clone();
           caches.open(HG_CACHE).then(function(c){ c.put(req, copy); }).catch(function(){});
         }
