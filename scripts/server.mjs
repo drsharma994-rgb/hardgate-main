@@ -276,7 +276,7 @@ function goldLiveSource(kind, src){
       '    }catch(eFg2){}',
       '    try{',
       '      if (typeof W !== "undefined" && W && !W.__hgGoldCot && typeof W.hgGoldCotParse === "function" && typeof W.hgGoldCotAssess === "function" && typeof fetch === "function"){',
-      '        var cotUrl = "/api/proxy?url=" + encodeURIComponent("https://publicreporting.cftc.gov/resource/jun7-fc8e.json?$limit=520&$order=report_date_as_yyyy_mm_dd%20DESC");',
+      '        var cotUrl = "/api/proxy?url=" + encodeURIComponent("https://publicreporting.cftc.gov/resource/jun7-fc8e.json?$limit=160&$order=report_date_as_yyyy_mm_dd%20DESC&$where=market_and_exchange_names=%27GOLD%20-%20COMMODITY%20EXCHANGE%20INC.%27");',
       '        var cotRes = await Promise.race([fetch(cotUrl), new Promise(function(res){ setTimeout(function(){ res(null); }, 8000); })]);',
       '        if (cotRes && cotRes.ok){',
       '          var cotRows = await cotRes.json();',
@@ -591,5 +591,5 @@ if (process.env.HARDGATE_DAEMON_AUTOSTART === '1' || process.env.HARDGATE_DAEMON
   setTimeout(ping, 60000).unref?.();              /* first ping 1 min after boot */
   const t = setInterval(ping, 10 * 60 * 1000);    /* then every 10 min (< 15 min sleep threshold) */
   try{ t.unref(); }catch(e){}
-  console.log('[keep-alive] armed — self-ping every 10 min → ' + url);
+  console.log('[keep-alive] armed — self-ping every 10 min \u2192 ' + url);
 })();
