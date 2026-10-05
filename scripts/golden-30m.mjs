@@ -1,4 +1,4 @@
-/* BATCH 1135 — a CoinDCX cross is sent only after the daily bar has closed,
+/* BATCH 1136 — a CoinDCX cross is sent only after the daily bar has closed,
    the 4h cascade and at least 6 of 7 gates agree, and a closed 4h bar has
    tagged the nearer EMA9 or EMA21. TRADE means RSI, OBV and funding are not
    against the long and Bitcoin structure is not down for an alt. SKIP is
