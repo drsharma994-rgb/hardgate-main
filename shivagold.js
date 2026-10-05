@@ -8,12 +8,9 @@
 var W = (typeof window !== 'undefined') ? window : globalThis;
 if (W.__hgShivaBoot === 1111) return;
 W.__hgShivaBoot = 1111;
-if (W.HG_BUILD){
-  W.HG_BUILD.version = 'hg-v1111';
-  if (!W.HG_BUILD.pack || W.HG_BUILD.pack.indexOf('BATCH 1111') !== 0){
-    W.HG_BUILD.pack = 'BATCH 1111 — SHIVA GOLD leaves the reading-the-tape state. The scan starts on open, a hung feed cannot hold the board, and an unread calendar is stamped instead of hiding the card. ' + (W.HG_BUILD.pack || '');
-  }
-}
+/* hg-v1143: this module must never stamp the global build version. The
+   BATCH-1111 boot banner used to overwrite W.HG_BUILD.version, which made
+   every later page paint a stale stamp no cache wipe could fix. Removed. */
 
 function num(v){ return (typeof v === 'number' && isFinite(v)) ? v : NaN; }
 function px(v){ v = num(v); return isFinite(v) ? v.toFixed(2) : '—'; }
@@ -449,16 +446,9 @@ async function loadFast(interval, count){
   return { rows: null, source: null };
 }
 function bumpBadge(){
-  try{
-    var nodes = document.querySelectorAll('b, span, div, small');
-    var i, n, t;
-    for (i = 0; i < nodes.length && i < 800; i++){
-      n = nodes[i];
-      if (!n || n.children.length) continue;
-      t = n.textContent || '';
-      if (/hg-v1110|HARDGATE v1110|\bv1110\b/.test(t)) n.textContent = t.replace(/hg-v1110/g, 'hg-v1111').replace(/v1110/g, 'v1111');
-    }
-  }catch(e){}
+  /* hg-v1143: neutralized - this used to rewrite DOM text v1110 -> v1111,
+     which painted a stale stamp on the live page. The real version comes
+     from build-stamp.js alone now. */
 }
 var painting = false;
 async function refresh(){

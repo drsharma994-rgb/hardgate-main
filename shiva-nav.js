@@ -8,12 +8,14 @@
 
   function restoreVersion(){
     try{
-      if (W.HG_BUILD && W.HG_BUILD.version === 'hg-v1111') W.HG_BUILD.version = 'hg-v1112';
       var node = document.getElementById('hgVerBadge');
-      if (node && /v1111|STALE/.test(node.textContent || '')){
-        node.textContent = 'v1112';
+      if (!node) return;
+      var real = (W.HG_BUILD && W.HG_BUILD.version) ? String(W.HG_BUILD.version) : '';
+      if (/STALE/.test(node.textContent || '') && real){
+        var v = real.replace(/^hg-/, '');
+        node.textContent = v;
         node.className = 'verbadge';
-        node.title = 'hg-v1112';
+        node.title = real;
       }
     }catch(e){}
   }
