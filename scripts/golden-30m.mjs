@@ -1,11 +1,12 @@
-/* BATCH 1129 — every 10 minutes, Telegram gets only a golden cross that
-   has just formed on a coin with an active CoinDCX USDT future.
-   Binance-only coins are not sent. A cross already sent is not repeated. */
+/* BATCH 1131 — every 10 minutes, Telegram reports the CoinDCX scan.
+   A golden cross that just formed is sent with levels. If none formed,
+   Telegram still says there were no fresh crosses. Every active CoinDCX
+   USDT future is scanned. Binance-only coins are not sent. A cross
+   already sent is not repeated. */
 import fs from 'fs';
 
 const STATE_FILE = 'golden-alert-state.json';
 const SITE = 'https://hardgate-main.onrender.com/';
-const FLOOR = 5e6;
 const SKIP = new Set(['USDC','USDT','FDUSD','TUSD','BUSD','DAI','USDP','EUR','USD','USDE','USD1','USDD']);
 const HOSTS = ['https://data-api.binance.vision', 'https://api.binance.com'];
 
@@ -200,13 +201,13 @@ async function main(){
   const listed = await coindcxBases();
   const tick = await getJson('/api/v3/ticker/24hr');
   if (!Array.isArray(tick)) throw new Error('ticker was not a list');
-  const universe = tick
-    .filter(function(t){
-      if (!t || typeof t.symbol !== 'string' || !t.symbol.endsWith('USDT')) return false;
-      const base = t.symbol.replace(/USDT$/, '');
-      return listed.has(base) && !SKIP.has(base) && +t.quoteVolume > FLOOR;
-    })
-    .sort(function(a, b){ return +b.quoteVolume - +a.quoteVolume; });
+  const vol = new Map();
+  for (const t of tick){
+    if (t && typeof t.symbol === 'string') vol.set(t.symbol, +t.quoteVolume || 0);
+  }
+  const universe = Array.from(listed).map(function(base){
+    return { symbol: base + 'USDT', quoteVolume: vol.get(base + 'USDT') || 0 };
+  }).sort(function(a, b){ return b.quoteVolume - a.quoteVolume; });
   const state = loadState();
   const sent = state.sent || {};
   const hits = [];
@@ -241,7 +242,16 @@ async function main(){
   state.cards = hits.length;
   fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2) + '\n');
   if (!hits.length){
-    console.log('no newly formed golden cross · scanned', universe.length);
+    const quiet = [
+      'HARDGATE — NO FRESH CROSS',
+      'CoinDCX active USDT futures · ' + new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC',
+      'no fresh crosses · scanned ' + universe.length + ' CoinDCX contracts',
+      '',
+      'next check in 10 minutes',
+      SITE
+    ].join('\n');
+    const quietId = await send(quiet);
+    console.log('sent quiet', quietId, 'scanned', universe.length, 'cards', 0);
     return;
   }
   const when = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
