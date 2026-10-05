@@ -132,7 +132,7 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1139',
+  version: 'hg-v1140',
   pack: 'TREND MATRIX FULL STACK — a golden or death card prints only after structure, location, EMA 20/50/200, VWAP, volume, the 15m sweep, open interest, CVD, macro, the calendar, BTC.D, ETH, stablecoin liquidity and news all agree. GANESH GOLD TRADING FIRM — the complete 17-step SMC/ICT framework as a new gold desk: HTF bias, BOS/CHOCH/MSS structure, buy-side and sell-side liquidity (PDH/PDL/week/Asia), premium/discount, order blocks and FVGs, 1.5xATR displacement, volume profile (POC/VAH/VAL), VWAP, ATR regime, squeeze, DXY + yields, the news calendar and sessions - both models (LONG/SHORT) graded on 12 independent legs (A+ >= 10, A >= 8, B >= 5), the better grade crowns, entry on the FVG/OB retest, SL beyond the sweep extreme + 0.5xATR, TP1/TP2/TP3 at the opposing liquidity, R:R must clear the style minimum, TICKET mints write the forward record under GANESHGOLD, and the crown joins the Telegram batch. Merged on top of hg-v1110: SHIVA GOLD trading firm, IUX XAUUSD feed alignment, Hurst + GARCH(1,1) on every gold tab, the London fixes, the OmniGold ledger lead rules and the Gold Scalp accuracy locks.',
   built: '2026-10-05T19:18:36.000Z'
 };
@@ -280,25 +280,6 @@ function hgBuildEditingNow(doc){
 }
 
 function hgBuildMaybeReload(res, storage, reloadFn, doc){
-  try{
-    if (!res || res.state !== 'stale' || !res.live) return false;
-    if (hgBuildEditingNow(doc)) return false;
-    var loc = G.location;
-    if (!loc || typeof loc.replace !== 'function') return false;
-    var base = loc.pathname || '/';
-    var next = base + '?hgbuild=' + encodeURIComponent(String(res.live)) + '&r=' + Date.now();
-    try {
-      var sw = G.navigator && G.navigator.serviceWorker;
-      if (sw && typeof sw.getRegistrations === 'function') {
-        sw.getRegistrations().then(function(regs){
-          return Promise.all((regs || []).map(function(reg){ return reg.unregister(); }));
-        }).then(function(){ loc.replace(next); }, function(){ loc.replace(next); });
-        return true;
-      }
-    } catch (eSw) {}
-    loc.replace(next);
-    return true;
-  }catch(e){}
   return false;
 }
 

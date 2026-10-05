@@ -658,13 +658,7 @@ const server = http.createServer(async (req, res) => {
        refuses a second reload. For a short window, that exact request
        clears the saved copy and reloads the tab. The current page polls
        ?live= and is left alone. The window ends on its own. */
-    var wipeStuck = u.pathname === '/build-stamp.js' && String(u.search || '').indexOf('fresh=') !== -1 && Date.now() < Date.parse('2026-10-05T21:30:00.000Z');
-    if (wipeStuck) {
-      res.setHeader('Clear-Site-Data', '"cache", "storage", "executionContexts"');
-      res.setHeader('Cache-Control', 'no-store');
-    } else {
-      res.setHeader('Cache-Control', 'no-cache');
-    }
+    res.setHeader('Cache-Control', 'no-store');
     fs.createReadStream(file).pipe(res);
   }catch(e){
     try{ res.statusCode = 500; res.end('server error'); }catch(e2){}
