@@ -57,11 +57,12 @@
       "crossDay": "2026-10-02"
     },
     "QNT": {
-      "at": "2026-10-05T19:06:08.933Z",
+      "at": "2026-10-05T19:16:19.017Z",
       "score": 5,
       "fresh": true,
-      "ago": 9,
-      "crossDay": "2026-09-26"
+      "ago": 8,
+      "crossDay": "2026-09-26",
+      "expired": true
     },
     "WLD": {
       "at": "2026-10-05T16:25:34.998Z",
@@ -120,11 +121,12 @@
       "ago": -1
     },
     "VIRTUAL": {
-      "at": "2026-10-05T19:06:10.601Z",
+      "at": "2026-10-05T19:16:20.192Z",
       "score": 5,
       "fresh": true,
-      "ago": 9,
-      "crossDay": "2026-09-26"
+      "ago": 8,
+      "crossDay": "2026-09-26",
+      "expired": true
     },
     "STRK": {
       "at": "2026-10-05T19:06:10.226Z",
@@ -435,11 +437,12 @@
       "crossDay": "2026-09-26"
     },
     "BANANA": {
-      "at": "2026-10-05T19:06:26.604Z",
-      "score": 2,
+      "at": "2026-10-05T19:16:31.385Z",
+      "score": 3,
       "fresh": true,
-      "ago": 8,
-      "crossDay": "2026-09-27"
+      "ago": 7,
+      "crossDay": "2026-09-27",
+      "expired": true
     },
     "SFP": {
       "at": "2026-10-05T19:06:27.102Z",
@@ -468,9 +471,17 @@
       "fresh": true,
       "ago": 9,
       "crossDay": "2026-09-26"
+    },
+    "SAGA": {
+      "at": "2026-10-05T19:16:20.431Z",
+      "score": 3,
+      "fresh": true,
+      "ago": 9,
+      "crossDay": "2026-09-25",
+      "expired": true
     }
   },
-  "lastRunAt": "2026-10-05T19:06:31.797Z",
+  "lastRunAt": "2026-10-05T19:16:35.112Z",
   "scanned": 504,
   "cards": 0
 }
