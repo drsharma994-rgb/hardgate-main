@@ -10,10 +10,11 @@ Render, a small same-origin handler (`/api/proxy`) covers the CORS-blocked CoinD
 
 Licensed under [MIT](LICENSE). Technique provenance for clean-room ports is documented in [PROVENANCE.md](PROVENANCE.md).
 
-## The 23 tabs
+## App tabs
 
-Seventeen tabs are static markup in `index.html`; six more (SQUEEZE through GOLD PRO below) are classic-script
-modules that register on `window.HG_tabs` and get a nav button + pane at boot, mounted lazily on first open.
+The app groups its specialist tabs into COMMAND, CRYPTO, GOLD, MODELS, and TOOLS. Most tabs register from classic-script
+modules on `window.HG_tabs` and mount lazily on first open. The table below highlights the main trading and analysis workflows;
+the app also includes dedicated strategy, market-structure, and reliability desks.
 
 | Tab | What it does |
 |---|---|
@@ -42,6 +43,7 @@ modules that register on `window.HG_tabs` and get a nav button + pane at boot, m
 | **TRADE PLAN** | Fixed-R ticket builder with portfolio-heat check; **ADD TO BOOK** + EXECUTE BRACKET (T1 + optional T2 runner) when `EXECUTE_BACKEND_URL` is set on Render |
 | **BOOK** | Multi-fund paper OMS — positions, heat limits, auto desk rules (T1 scale / BE / trail), consolidated desk rollup, LP digest, live + proxy bracket execution |
 | **FIND TRADE** | Per-symbol evaluation of all strategies + full backtest context; valid plans get **ADD TO BOOK** + TRADE PLAN handoff |
+| **SETUP CONFIRM** | Cross-desk confirmation for crypto and gold using fresh, already-qualified tickets from existing scan snapshots; stale and record-only rows cannot vote |
 
 ## Free data sources
 
