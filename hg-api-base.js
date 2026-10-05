@@ -4,8 +4,9 @@
    /port/10000/ at upload, which routes to the sandbox backend.
    On Render / localhost / GitHub Pages, we leave /api/* untouched.
    Zero deps. Load BEFORE any app script. Safe if loaded twice.
-   BATCH 1117 — no redirect, no service-worker unregister, no cache wipe.
-   Those three were reloading the desk in a loop. */
+   BATCH 1119 — shim only. No redirect, no service-worker unregister, no cache wipe.
+   The v1116 loader called location.replace('?bust=1116') and unregistered the
+   worker; controllerchange reloaded the page and the redirect ran again. */
 (function(){
   if (typeof window === 'undefined') return;
   if (window.__hgApiBaseInstalled) return;
