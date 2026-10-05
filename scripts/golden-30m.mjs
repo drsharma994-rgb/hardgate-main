@@ -1,8 +1,5 @@
-/* BATCH 1125 — complete golden list every 30 minutes.
-   Every liquid USDT pair (24h quote volume > $5M).
-   TREND MATRIX GOLDEN CROSS (EMA50 crossed above EMA200 within 10 daily bars)
-   and composite +5/5 !GOLDEN. Death crosses are dropped.
-   Each card has entry, SL, TP1 (2R) and TP2 (3.5R). */
+/* BATCH 1126 — every 30 minutes, Telegram gets only a golden cross that
+   has just formed. A cross already sent is not repeated. */
 import fs from 'fs';
 
 const STATE_FILE = 'golden-alert-state.json';
@@ -205,8 +202,12 @@ async function main(){
       const plan = planOf(h4);
       if (!plan) return;
       const base = t.symbol.replace(/USDT$/, '');
-      hits.push({ base: base, s: s, plan: plan, isNew: !sent[base] });
-      sent[base] = { at: new Date().toISOString(), score: s.score, fresh: s.fresh, ago: s.ago };
+      const crossDay = new Date(Date.now() - s.ago * 86400000).toISOString().slice(0, 10);
+      const prev = sent[base];
+      const formed = s.fresh && (!prev || prev.fresh === false || (prev.crossDay && prev.crossDay !== crossDay));
+      if (s.fresh) sent[base] = { at: new Date().toISOString(), score: s.score, fresh: true, ago: s.ago, crossDay: crossDay };
+      if (!formed) return;
+      hits.push({ base: base, s: s, plan: plan });
     } catch (e) {
       console.error(t.symbol, e.message || e);
     }
@@ -221,22 +222,21 @@ async function main(){
   state.scanned = universe.length;
   state.cards = hits.length;
   fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2) + '\n');
+  if (!hits.length){
+    console.log('no newly formed golden cross · scanned', universe.length);
+    return;
+  }
   const when = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
   const lines = hits.map(function(h, i){
-    const labels = [];
-    if (h.s.fresh) labels.push('TREND MATRIX GOLDEN CROSS');
-    if (h.s.score === 5) labels.push('composite +5/5 !GOLDEN');
-    if (h.isNew) labels.push('NEW');
-    const cross = h.s.fresh ? ('cross ' + h.s.ago + 'd ago') : 'EMA50>EMA200';
     const p = h.plan;
-    return (i + 1) + '. ' + h.base + ' LONG · ' + labels.join(' · ') + ' · ' + cross + ' · +' + h.s.score + '/5'
+    const comp = h.s.score === 5 ? ' · composite +5/5 !GOLDEN' : '';
+    return (i + 1) + '. ' + h.base + ' LONG · NEW TREND MATRIX GOLDEN CROSS · cross ' + h.s.ago + 'd ago · +' + h.s.score + '/5' + comp
       + '\n   entry ' + px(p.entry) + ' · SL ' + px(p.stop) + ' · TP1 ' + px(p.t1) + ' (2R) · TP2 ' + px(p.t2) + ' (3.5R)';
   });
   const head = [
-    'HARDGATE — TREND MATRIX GOLDEN CROSS',
-    '30-minute check · complete list · SL = 4h swing or 1.5×ATR · TP1 2R · TP2 3.5R · ' + when,
-    'scanned ' + universe.length + ' liquid USDT · ' + hits.length + ' card' + (hits.length === 1 ? '' : 's'),
-    hits.length ? '' : 'none — no fresh golden cross and no composite +5/5'
+    'HARDGATE — NEW GOLDEN CROSS',
+    'only crosses that just formed · ' + when,
+    hits.length + ' new · scanned ' + universe.length + ' liquid USDT'
   ].join('\n');
   const bodyParts = lines.length ? chunks(lines) : [''];
   const ids = [];
@@ -246,7 +246,7 @@ async function main(){
       '',
       bodyParts[p],
       '',
-      'next check in 30 minutes',
+      'next new cross check in 30 minutes',
       SITE
     ].join('\n');
     ids.push(await send(text));
