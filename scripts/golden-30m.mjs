@@ -1,4 +1,4 @@
-/* BATCH 1134 — a CoinDCX cross is sent only after the daily bar has closed,
+/* BATCH 1135 — a CoinDCX cross is sent only after the daily bar has closed,
    the 4h cascade and at least 6 of 7 gates agree, and a closed 4h bar has
    tagged the nearer EMA9 or EMA21. TRADE means RSI, OBV and funding are not
    against the long and Bitcoin structure is not down for an alt. SKIP is
@@ -387,6 +387,120 @@ async function coindcxBases(){
   if (!bases.size) throw new Error('coindcx returned no active USDT futures');
   return bases;
 }
+
+async function getText(url){
+  const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  if (!r.ok) return null;
+  return await r.text();
+}
+async function getAny(url){
+  const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  if (!r.ok) return null;
+  return await r.json();
+}
+function yahooUp(j){
+  try {
+    const q = j.chart.result[0].indicators.quote[0].close.filter(function(v){ return Number.isFinite(v); });
+    if (q.length < 2) return null;
+    return q[q.length - 1] > q[q.length - 2];
+  } catch (e) { return null; }
+}
+async function stackContext(){
+  const ctx = { ok: false, riskOff: false, eventBlock: false, btcDomRising: false, ethDown: false, stableFalling: false, headlines: '' };
+  const names = [['dxy','DX-Y.NYB'],['us10y','%5ETNX'],['us2y','2YY%3DF'],['nq','NQ%3DF'],['spx','%5EGSPC'],['vix','%5EVIX']];
+  const dirs = {};
+  await Promise.all(names.map(async function(pair){
+    try { dirs[pair[0]] = yahooUp(await getAny('https://query1.finance.yahoo.com/v8/finance/chart/' + pair[1] + '?interval=1d&range=5d')); }
+    catch (e) { dirs[pair[0]] = null; }
+  }));
+  const readable = names.filter(function(pair){ return dirs[pair[0]] === true || dirs[pair[0]] === false; }).length;
+  if (readable < 4) return ctx;
+  let against = 0;
+  if (dirs.dxy === true) against++;
+  if (dirs.us10y === true) against++;
+  if (dirs.us2y === true) against++;
+  if (dirs.nq === false) against++;
+  if (dirs.spx === false) against++;
+  if (dirs.vix === true) against++;
+  ctx.riskOff = against >= 3;
+  try {
+    const cal = await getAny('https://nfs.faireconomy.media/ff_calendar_thisweek.json');
+    if (!Array.isArray(cal)) return ctx;
+    const now = Date.now();
+    for (const ev of cal){
+      if (!ev || ev.country !== 'USD' || String(ev.impact || '').toLowerCase() !== 'high') continue;
+      const title = String(ev.title || '').toLowerCase();
+      if (!/cpi|nfp|fomc|ppi|gdp|powell|unemployment|payroll|fed rate|retail sales/.test(title)) continue;
+      const when = Date.parse(ev.date);
+      if (Number.isFinite(when) && when - now <= 2 * 60 * 60 * 1000 && now - when <= 30 * 60 * 1000) ctx.eventBlock = true;
+    }
+  } catch (e) { return ctx; }
+  try {
+    const btc = await getAny('https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=2');
+    const eth = await getAny('https://api.coingecko.com/api/v3/coins/ethereum/market_chart?vs_currency=usd&days=2');
+    const chg = function(j){
+      const caps = j && j.market_caps;
+      if (!caps || caps.length < 2 || !(caps[0][1] > 0)) return null;
+      return (caps[caps.length - 1][1] - caps[0][1]) / caps[0][1];
+    };
+    const b = chg(btc), e = chg(eth);
+    if (b == null || e == null) return ctx;
+    ctx.btcDomRising = b > 0.005 && e < b - 0.01;
+    ctx.ethDown = e < 0;
+  } catch (e) { return ctx; }
+  try {
+    const stables = await getAny('https://stablecoins.llama.fi/stablecoincharts/all');
+    if (Array.isArray(stables) && stables.length >= 2){
+      const a = stables[stables.length - 2], b = stables[stables.length - 1];
+      const av = a && a.totalCirculatingUSD && +a.totalCirculatingUSD.peggedUSD;
+      const bv = b && b.totalCirculatingUSD && +b.totalCirculatingUSD.peggedUSD;
+      if (!(av > 0) || !(bv > 0)) return ctx;
+      ctx.stableFalling = bv < av * 0.997;
+    } else return ctx;
+  } catch (e) { return ctx; }
+  try {
+    ctx.headlines = await getText('https://cointelegraph.com/rss') || '';
+  } catch (e) { ctx.headlines = ''; }
+  if (!ctx.headlines) return ctx;
+  ctx.ok = true;
+  return ctx;
+}
+async function stackOk(symbol, base, h4, ctx){
+  if (!ctx || ctx.ok !== true) return 'stack unread';
+  if (ctx.riskOff) return 'macro risk-off';
+  if (ctx.eventBlock) return 'high-impact USD event';
+  if (base !== 'BTC' && ctx.btcDomRising) return 'BTC.D rising';
+  if (base !== 'BTC' && base !== 'ETH' && ctx.ethDown) return 'ETH lagging';
+  if (ctx.stableFalling) return 'stablecoin liquidity falling';
+  const name = base.toLowerCase();
+  if (ctx.headlines.toLowerCase().indexOf(name) >= 0 && /hack|exploit|unlock|delist|lawsuit|insolven|halt/.test(ctx.headlines.toLowerCase())) return 'adverse headline';
+  const closes = h4.map(function(r){ return r.c; });
+  const px = closes[closes.length - 1];
+  const e20 = emaLast(closes, 20), e50 = emaLast(closes, 50), e200 = emaLast(closes, 200);
+  if (!(px > e20 && e20 > e50 && px > e200)) return 'EMA 20/50/200 against';
+  let oi;
+  try { oi = await getAny('https://fapi.binance.com/futures/data/openInterestHist?symbol=' + symbol + '&period=4h&limit=8'); } catch (e) { oi = null; }
+  if (!Array.isArray(oi) || oi.length < 3) return 'OI unread';
+  const oiNow = +oi[oi.length - 1].sumOpenInterest, oiPrev = +oi[oi.length - 3].sumOpenInterest;
+  const pxPrev = closes[Math.max(0, closes.length - 3)];
+  if (!(oiPrev > 0) || !(px > pxPrev && oiNow > oiPrev * 1.005)) return 'OI not confirming';
+  let tk;
+  try { tk = await getAny('https://fapi.binance.com/futures/data/takerlongshortRatio?symbol=' + symbol + '&period=4h&limit=6'); } catch (e) { tk = null; }
+  if (!Array.isArray(tk) || !tk.length || !(+tk[tk.length - 1].buySellRatio > 1)) return 'CVD not with the long';
+  let m15;
+  try { m15 = await klines(symbol, '15m', 80); } catch (e) { m15 = null; }
+  m15 = closedBars(m15, 15 * 60 * 1000);
+  if (!m15 || m15.length < 30) return '15m unread';
+  let sweep = false;
+  for (let i = Math.max(10, m15.length - 12); i < m15.length; i++){
+    const prior = m15.slice(i - 10, i);
+    const lo = Math.min.apply(null, prior.map(function(r){ return r.l; }));
+    if (m15[i].l < lo && m15[i].c > lo) sweep = true;
+  }
+  if (!sweep) return '15m no liquidity sweep';
+  return null;
+}
+
 async function main(){
   const listed = await coindcxBases();
   const tick = await getJson('/api/v3/ticker/24hr');
@@ -403,6 +517,7 @@ async function main(){
   const funds = await fundingMap();
   let btcDown = null;
   try { btcDown = btcStructureDown(await klines('BTCUSDT', '4h', 260)); } catch (e) { btcDown = null; }
+  const stack = await stackContext();
   const hits = [];
   await pool(universe, 6, async function(t){
     try {
@@ -435,8 +550,11 @@ async function main(){
       if (obvDivergesLong(d1) === true) reasons.push('OBV diverging');
       if (fund != null && fund >= 0.04) reasons.push('funding crowded ' + fund.toFixed(3) + '%');
       if (base !== 'BTC' && btcDown === true) reasons.push('BTC structure down');
+      if (reasons.length) return;
+      const blocked = await stackOk(t.symbol, base, h4, stack);
+      if (blocked) return;
       sent[base] = { at: new Date().toISOString(), score: s.score, fresh: true, ago: s.ago, crossDay: crossDay, alerted: true };
-      hits.push({ base: base, s: s, plan: plan, grade: reasons.length ? 'SKIP' : 'TRADE', reasons: reasons });
+      hits.push({ base: base, s: s, plan: plan, grade: 'TRADE', reasons: [] });
     } catch (e) {
       console.error(t.symbol, e.message || e);
     }

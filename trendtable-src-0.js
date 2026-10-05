@@ -293,3 +293,27 @@ function trendmxSetupGrade(r, dir){
   if (dir === 'long'){
     if (isFinite(rsiV) && rsiV < 40) reasons.push('RSI ' + rsiV.toFixed(0) + ' against');
     if (volDiv === 'bear') reasons.push('OBV diverging');
+    if (typeof r.fundingPct === 'number' && isFinite(r.fundingPct) && r.fundingPct >= 0.04) reasons.push('funding crowded');
+    if (tmAltLongBlockedByBtc(r)) reasons.push('BTC structure down');
+  } else if (dir === 'short'){
+    if (isFinite(rsiV) && rsiV > 60) reasons.push('RSI ' + rsiV.toFixed(0) + ' against');
+    if (volDiv === 'bull') reasons.push('OBV diverging');
+    if (typeof r.fundingPct === 'number' && isFinite(r.fundingPct) && r.fundingPct <= -0.04) reasons.push('funding crowded');
+  }
+  return { grade: reasons.length ? 'SKIP' : 'TRADE', reasons: reasons, volConf: volConf };
+}
+function trendmxEmaTag(rows4h, dir){
+  var rows = tmClosedRows(rows4h, 14400);
+  if (!rows || rows.length < 30 || typeof ema !== 'function') return { state: 'waiting' };
+  var closes = rows.map(function(r){ return r ? r.c : NaN; });
+  var e9 = ema(closes, 9), e21 = ema(closes, 21);
+  var i = closes.length - 1, px = closes[i];
+  var cands = [];
+  if (dir === 'long'){
+    if (isFinite(e9[i]) && e9[i] < px) cands.push(['EMA9', e9]);
+    if (isFinite(e21[i]) && e21[i] < px) cands.push(['EMA21', e21]);
+  } else {
+    if (isFinite(e9[i]) && e9[i] > px) cands.push(['EMA9', e9]);
+    if (isFinite(e21[i]) && e21[i] > px) cands.push(['EMA21', e21]);
+  }
+  if (!cands.length) return { state: 'waiting' };

@@ -1,3 +1,57 @@
+        if (fs && fs.state === 'chop') formTag = ' · CHOP';
+        else if (fs && fs.state === 'trend') formTag = ' · EARLY FORMING';
+      }
+      var lvl = (dd || lean !== 0) ? lvlLine(rr, dd || (lean === 1 ? 'long' : 'short'))
+        : 'no lean - composite 0/5, no levels';
+      if (rr.unread){
+        return '<div class="card" style="padding:8px;margin-bottom:6px"><b>' + escH(rr.sym) + '</b> <span>UNREAD</span>'
+          + '<div style="opacity:.9;font-size:11px;margin-top:2px">CoinDCX contract on the board. No candle series, so no setup.</div></div>';
+      }
+      return '<div class="card" style="padding:8px;margin-bottom:6px"><b>' + escH(rr.sym) + '</b> ' + tag
+        + '<div style="opacity:.9;font-size:11px;margin-top:2px">composite ' + (rr.score > 0 ? '+' : '') + rr.score + '/5' + formTag + (rr.freshCross ? ' - !' + escH(rr.freshCross) : '') + '</div>'
+        + '<div style="font-size:11px;margin-top:4px;letter-spacing:.02em">' + lvl + '</div></div>';
+    }
+    function col(title, cls, list, emptyTxt){
+      var h = '<div class="panel" style="border-top:3px solid ' + cls + '"><h3 style="margin:0 0 8px">' + title
+        + ' <span style="opacity:.6;font-weight:400">- ' + list.length + ' contract' + (list.length === 1 ? '' : 's') + '</span></h3>';
+      if (!list.length) h += '<div class="empty" style="margin:6px 0">' + emptyTxt + '</div>';
+      else h += list.map(cell).join('');
+      return h + '</div>';
+    }
+    return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;align-items:start">'
+      + col('TRENDING', '#26a69a', byStrength(trending), 'no trending CoinDCX contracts - composite below +/-2')
+      + col('FORMING', '#f59e0b', byStrength(forming), 'no forming CoinDCX contracts')
+      + '</div>';
+  }catch(e){ return ''; }
+}
+
+/* hg-v1069: the grid-setup block — the OMNIBTC dual-grid treatment on
+   the matrix crown: each grid stands on its own direction, tier and
+   levels, and a grid that disagrees with the call is stamped, never
+   hidden. */
+function trendmxGridBlockHtml(title, gridLbl, s, callDir){
+  try{
+    if (!s || !isFinite(+s.entry) || !isFinite(+s.stop) || !isFinite(+s.t1)) return '';
+    var dir = String(s.dir || '').toLowerCase();
+    var against = dir && callDir && dir !== callDir;
+    var risk = Math.abs(+s.entry - +s.stop);
+    var rr = risk > 0 ? Math.abs(+s.t1 - +s.entry) / risk : NaN;
+    var tierTxt = s.tier === 'CLEAN' ? '7/7 CLEAN' : (s.tier === 'NEAR' ? (s.gates != null ? s.gates + '/7 NEAR' : '6/7 NEAR') : 'DRAFT');
+    var color = dir === 'long' ? '#26a69a' : (dir === 'short' ? '#ef5350' : '#94a3b8');
+    return '<div class="panel" style="margin-top:10px;border-top:3px solid ' + color + '"><h3>' + title
+      + ' <span>' + gridLbl + ' - ' + tierTxt + (s.source ? ' - ' + escH(s.source) : '') + (against ? ' - AGAINST THE CALL' : '') + '</span></h3>'
+      + '<div class="kv"><span class="k">Bias</span><span class="v ' + (dir === 'long' ? 'pos' : 'neg') + '">' + dir.toUpperCase() + '</span></div>'
+      + '<div class="kv"><span class="k">ENTRY</span><span class="v">' + (+s.entry).toFixed(2) + '</span></div>'
+      + '<div class="kv"><span class="k">STOP</span><span class="v">' + (+s.stop).toFixed(2) + '</span></div>'
+      + '<div class="kv"><span class="k">T1</span><span class="v">' + (+s.t1).toFixed(2) + (isFinite(rr) ? ' (' + rr.toFixed(1) + 'R)' : '') + '</span></div>'
+      + (isFinite(+s.t2) ? '<div class="kv"><span class="k">T2</span><span class="v">' + (+s.t2).toFixed(2) + '</span></div>' : '')
+      + '</div>';
+  }catch(e){ return ''; }
+}
+
+/* hg-v1066: THE CROWN — the OMNIBTC treatment on the TREND MATRIX: a
+   single bold call (the strongest majority row with a minted plan), a
+   verdict line, the five-dimension complete analysis from the row's own
    reads plus the world tilt, the setup card with the automation JSON,
    and the measured-edge chip for the TRENDMX pool. Evidence, never a
    gate. */
@@ -192,51 +246,3 @@ function trendmxCrownPanelHTML(state){
 function tmStructureDir(rows){
   try{
     if (!Array.isArray(rows) || rows.length < 210 || typeof W.ema !== 'function') return null;
-    var c = rows.map(function(x){ return x.c; });
-    var e50 = W.ema(c, 50), e200 = W.ema(c, 200);
-    if (!e50 || !e200 || e50.length < 2) return null;
-    var a = e50[e50.length - 1], b = e200[e200.length - 1];
-    if (!isFinite(a) || !isFinite(b) || a === b) return null;
-    return a > b ? 'up' : 'down';
-  }catch(e){ return null; }
-}
-
-async function trendmxPerfectEvidencePass(rows){
-  try{
-    if (!Array.isArray(rows) || !rows.length) return rows;
-    var capped = rows.slice().sort(function(a, b){ return Math.abs(+b.score || 0) - Math.abs(+a.score || 0); }).slice(0, 8);
-    var taker = null, binFund = null;
-    try{ if (typeof W.binanceTakerRatio === 'function') taker = await W.binanceTakerRatio('BTCUSDT', '4h', 120); }catch(eT){ }
-    try{ if (typeof W.binanceFunding === 'function'){ var bf = await W.binanceFunding('BTCUSDT'); binFund = (bf && isFinite(+bf.fundingPct)) ? +bf.fundingPct : null; } }catch(eB){ }
-    var btcStructure = null;
-    for (var bi = 0; bi < rows.length; bi++){
-      var br = rows[bi];
-      var bbase = String(br.base || br.sym || '').toUpperCase();
-      if (bbase === 'BTC' || bbase.indexOf('BTC') === 0){
-        try{ btcStructure = tmStructureDir(br.rows4h); }catch(eBs){ btcStructure = null; }
-        if (btcStructure) break;
-      }
-    }
-    trendmxMacroSet({ btcFunding: binFund, btcStructure: btcStructure });
-    for (var i = 0; i < capped.length; i++){
-      var r = capped[i];
-      var dir = tmDirOf(r);
-      if (!dir) continue;
-      var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
-      if (!plan) continue;
-      var reads = {};
-      if (isFinite(+r.fundingPct)){
-        reads.venueFundingPct = +r.fundingPct;
-        if (typeof hgFundingAgainstMark === 'function'){
-          try{ var fam = hgFundingAgainstMark(+r.fundingPct, dir); if (fam) reads.fundingAgainst = (fam.against === true); }catch(eF){ }
-        }
-      }
-      if (binFund != null) reads.btcFundingBinance = binFund;
-      if (taker && Array.isArray(taker.series) && taker.series.length >= 30){
-        try{
-          var half = Math.floor(taker.series.length / 2);
-          var prev = taker.series.slice(0, half).map(function(x){ return +x.buySellRatio; }).filter(isFinite);
-          var last = taker.series.slice(half).map(function(x){ return +x.buySellRatio; }).filter(isFinite);
-          if (prev.length && last.length){
-            var pm = prev.reduce(function(a, b){ return a + b; }, 0) / prev.length;
-            var lm = last.reduce(function(a, b){ return a + b; }, 0) / last.length;

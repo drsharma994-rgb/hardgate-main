@@ -1,86 +1,3 @@
-   IS a bear cross; leaving shorts off this desk was the last one-sided
-   surface on the tab. Pure. */
-function trendmxDeathCrossSetups(rows){
-  var out = [];
-  out.held = { waiting: 0, grade: 0, cascade: 0, gates: 0 };
-  if (!Array.isArray(rows)) return out;
-  for (var i = 0; i < rows.length; i++){
-    var r = rows[i];
-    if (!r || r.freshCross !== 'DEATH') continue;
-    if (!r.comps || r.comps.d1Cross >= 0) continue;
-    var dir = tmDirOf(r);
-    if (dir !== 'short') continue;
-    var conv = trendmxConviction(r);
-    if (!conv) continue;
-    if (tmCascadeDir(r.rows4h) !== -1){ out.held.cascade++; continue; }
-    var gate = trendmxClosedGate(r, dir);
-    if (!gate || gate.veto || !(gate.gatesPassed >= 6)){ out.held.gates++; continue; }
-    var grade = trendmxSetupGrade(r, dir);
-    if (grade.grade !== 'TRADE'){ out.held.grade++; continue; }
-    var tag = trendmxEmaTag(r.rows4h, dir);
-    if (!tag || tag.state !== 'ready'){ out.held.waiting++; continue; }
-    var plan = trendmxPlan({ dir: dir, score: r.score, rows4h: tmClosedRows(r.rows4h, 14400), rows1h: r.rows1h, entry: r.price, gate: gate, comps: r.comps, sym: r.sym, fundingPct: r.fundingPct, freshCross: r.freshCross, base: r.base });
-    if (!tmValidSetup(plan)) continue;
-    out.push({
-      sym: r.sym, dir: 'short', entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2,
-      rr: fin(+plan.rr1) ? +plan.rr1 : TM_T1_R, score: r.score, adx: r.adx,
-      clean7: !!(plan.clean7 || gate.clean7),
-      freshCross: 'DEATH', conviction: conv.label, tier: conv.tier, prime: conv.prime,
-      comps: r.comps, gateLabel: plan.gateLabel || gate.label,
-      note: '⚡DEATH CROSS on a closed daily bar · composite ' + r.score + '/5'
-        + ' · 4h cascade · ' + (gate.gatesPassed || 0) + '/7'
-        + ' · TRADE'
-        + (plan.entryType === 'LIMIT' ? (' · 4h ' + plan.limitEma + ' tagged') : ' · tagged at the 4h EMAs')
-    });
-  }
-  return out;
-}
-
-function fin(v){ return typeof v === 'number' && isFinite(v); }
-
-/* ---------------- SMC context (record-only) ----------------
-   hgSmcEnrich attaches .smc (structure bias, OB/FVG confluence, a grade) and
-   records one SMC_CONTEXT signal. Nothing in this file reads .smc except the
-   chip helper below: composite score, gate label, tier, sort order, the venue
-   and quality filters and whether a card is shown are all untouched.
-
-   Cost: the matrix holds the whole universe and every row carries its own
-   120-bar 4h array, so SMC runs ONCE per scan over a capped, ranked slice of
-   the rows the desk itself promotes — never from a render path, which
-   repaints on every venue chip, SYNC DESK and chart-vision callback. */
-var TM_SMC_MAX = 24;
-
-function tmSmcOn(){
-  try{ return !!(W && typeof W.hgSmcEnrich === 'function'); }catch(e){ return false; }
-}
-
-/* enrich a finished ticket in place; a ticket that already carries .smc, or a
-   row with no cached 4h history, is left exactly as it was. */
-function tmSmcMark(ticket, rows4h){
-  try{
-    if (!ticket || ticket.smc) return ticket;
-    if (!Array.isArray(rows4h) || !rows4h.length) return ticket;
-    if (W && typeof W.hgSmcEnrich === 'function') W.hgSmcEnrich(ticket, { rows: rows4h, tab: 'TREND MATRIX' });
-  }catch(e){}
-  return ticket;
-}
-
-function tmSmcChip(o){
-  var out = '';
-  try{
-    if (o && o.smc && W && typeof W.hgSmcChipHtml === 'function') out = W.hgSmcChipHtml(o) || '';
-  }catch(e){ out = ''; }
-  return out;
-}
-
-/* One pass per scan. Golden tickets carry their levels but drop their candles;
-   matrix rows carry their candles but not their levels — the two are joined
-   here by symbol. The matrix row is never given dir/entry/stop of its own:
-   trendmxPlan reads inp.entry as an entry OVERRIDE and tmDirOf reads inp.dir,
-   so writing those onto the row would change the plan the desk builds. A
-   synthetic ticket is enriched instead and only .smc is copied back. */
-function tmSmcScanPass(rows, golden, death){
-  try{
     if (!tmSmcOn() || !Array.isArray(rows) || !rows.length) return;
     var i, r, byRows = {};
     for (i = 0; i < rows.length; i++){ if (rows[i] && rows[i].sym) byRows[rows[i].sym] = rows[i].rows4h; }
@@ -296,3 +213,104 @@ function trendmxSlotChipHtml(r){
   }catch(e){ return ''; }
 }
 
+/* hg-v1042: DAY-RANGE EXHAUSTION — today's range against the trailing
+   20-day mean. A crown at 85%+ consumed is chasing a move already spent. */
+function trendmxDayChipHtml(r){
+  try{
+    if (!r || !Array.isArray(r.rows4h) || r.rows4h.length < 30) return '';
+    var days = {}, i, t, key, d;
+    for (i = 0; i < r.rows4h.length; i++){
+      t = +r.rows4h[i].t; if (!isFinite(t)) continue;
+      key = String(Math.floor(t / 86400));
+      d = days[key];
+      if (!d) days[key] = { hi: r.rows4h[i].h, lo: r.rows4h[i].l };
+      else { if (+r.rows4h[i].h > d.hi) d.hi = +r.rows4h[i].h; if (+r.rows4h[i].l < d.lo) d.lo = +r.rows4h[i].l; }
+    }
+    var keys = Object.keys(days).sort(), ranges = [], k;
+    for (i = 0; i < keys.length; i++){
+      var dd = days[keys[i]];
+      if (dd.hi > dd.lo) ranges.push(dd.hi - dd.lo);
+    }
+    if (ranges.length < 5) return '';
+    var prev = ranges.slice(-21, -1);
+    if (!prev.length) return '';
+    var mean = 0;
+    for (k = 0; k < prev.length; k++) mean += prev[k];
+    mean /= prev.length;
+    if (!(mean > 0)) return '';
+    var pct = Math.round(ranges[ranges.length - 1] / mean * 100);
+    if (pct < 85) return '';
+    return '<span class="stamp bad" style="margin-left:6px" title="' + escH('day-range exhaustion (hg-v1042): ' + pct + '% of the average daily range already consumed — chasing a move that may be spent. Evidence, never a gate.') + '">DAY ' + pct + '% SPENT</span>';
+  }catch(e){ return ''; }
+}
+
+/* hg-v1042: ROUND-TRIP COST — fees as R of the stop window (the house
+   hgCryptoCostR). A crown whose fees eat over a quarter of its stop is
+   COST-HEAVY — the gold ledger measured that cohort to bleed. Evidence,
+   never a gate. */
+function trendmxCostChipHtml(r, plan){
+  try{
+    if (!plan || !isFinite(+plan.entry) || !isFinite(+plan.stop)) return '';
+    var costFn = (typeof W.hgCryptoCostR === 'function') ? W.hgCryptoCostR : null;
+    if (!costFn) return '';
+    var costR = costFn(+plan.entry, +plan.stop, 'taker', 'taker');
+    if (!isFinite(costR)) return '';
+    if (costR > 0.25){
+      return '<span class="stamp bad" style="margin-left:6px" title="' + escH('round-trip cost (hg-v1042): fees eat ' + costR.toFixed(2) + 'R of the stop window — COST-HEAVY. The gold ledger measured this cohort to bleed. Evidence, never a gate.') + '">COST-HEAVY ' + costR.toFixed(2) + 'R</span>';
+    }
+    return '<span class="stamp ok" style="margin-left:6px" title="' + escH('round-trip cost (hg-v1042): ' + costR.toFixed(2) + 'R of the stop window. Evidence, never a gate.') + '">COST ' + costR.toFixed(2) + 'R</span>';
+  }catch(e){ return ''; }
+}
+
+async function tmLoadCoinDcxContracts(){
+  var urls = [
+    '/api/coindcx/instruments',
+    '/api/proxy?url=' + encodeURIComponent('https://api.coindcx.com/exchange/v1/derivatives/futures/data/active_instruments?margin_currency_short_name[]=USDT')
+  ];
+  var last = 'coindcx list failed';
+  for (var i = 0; i < urls.length; i++){
+    try{
+      var r = await fetch(urls[i]);
+      if (!r || !r.ok){ last = 'HTTP ' + (r ? r.status : '?'); continue; }
+      var j = await r.json();
+      var list = Array.isArray(j) ? j : (j && Array.isArray(j.data) ? j.data : (j && Array.isArray(j.instruments) ? j.instruments : null));
+      if (!list){ last = 'bad shape'; continue; }
+      var out = [];
+      for (var k = 0; k < list.length; k++){
+        var s = String((list[k] && list[k].symbol) ? list[k].symbol : (list[k] || ''));
+        if (/^B-[A-Z0-9]+_USDT$/.test(s) && out.indexOf(s) < 0) out.push(s);
+      }
+      if (out.length) return out;
+    }catch(e){ last = (e && e.message) || String(e); }
+  }
+  throw new Error(last);
+}
+function tmBinanceTwin(item, tf, n){
+  try{
+    var base = item && item.base ? String(item.base).toUpperCase() : '';
+    if (!base || typeof W.binanceKlines !== 'function') return Promise.resolve([]);
+    return W.binanceKlines(base + 'USDT', tf, n).then(function(rows){ return Array.isArray(rows) ? rows : []; }).catch(function(){ return []; });
+  }catch(e){ return Promise.resolve([]); }
+}
+function tmUnreadRow(item){
+  return {
+    sym: item && item.sym, base: item && item.base, exchange: (item && item.exchange) || 'coindcx',
+    alsoOn: item && item.alsoOn, xu: item, score: null, comps: null, freshCross: null, adx: NaN,
+    unread: true, price: null, rows4h: null, rows1h: null,
+    fundingPct: item && item.fundingPct, turnoverUsd: item && item.turnoverUsd, mark: item && item.mark
+  };
+}
+async function trendmxScanCore(hooks){
+  hooks = hooks || {};
+/* Map before asking Binance — a venue code means nothing to fapi. This is the
+   same defect fixed in desk-scan-universe.js (v431) and brain.js (v450);
+   reuse the mapping those export rather than a fifth private copy. When it is
+   unavailable the Binance leg is skipped: no usable symbol means no Binance
+   data, and inventing one is how this family started. */
+  var fetchK = (typeof W.hgDeskFetchKlines === 'function') ? W.hgDeskFetchKlines.bind(W)
+    : function(it, tf, n){
+        var bSym = (typeof W.hgDeskBinanceSym === 'function')
+          ? W.hgDeskBinanceSym(typeof it === 'string' ? { sym: it } : it)
+          : (typeof it === 'string' ? it : null);
+        return bSym ? W.binanceKlines(bSym, tf, n) : Promise.resolve([]);
+      };

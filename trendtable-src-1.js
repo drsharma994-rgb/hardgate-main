@@ -1,27 +1,3 @@
-    if (typeof r.fundingPct === 'number' && isFinite(r.fundingPct) && r.fundingPct >= 0.04) reasons.push('funding crowded');
-    if (tmAltLongBlockedByBtc(r)) reasons.push('BTC structure down');
-  } else if (dir === 'short'){
-    if (isFinite(rsiV) && rsiV > 60) reasons.push('RSI ' + rsiV.toFixed(0) + ' against');
-    if (volDiv === 'bull') reasons.push('OBV diverging');
-    if (typeof r.fundingPct === 'number' && isFinite(r.fundingPct) && r.fundingPct <= -0.04) reasons.push('funding crowded');
-  }
-  return { grade: reasons.length ? 'SKIP' : 'TRADE', reasons: reasons, volConf: volConf };
-}
-function trendmxEmaTag(rows4h, dir){
-  var rows = tmClosedRows(rows4h, 14400);
-  if (!rows || rows.length < 30 || typeof ema !== 'function') return { state: 'waiting' };
-  var closes = rows.map(function(r){ return r ? r.c : NaN; });
-  var e9 = ema(closes, 9), e21 = ema(closes, 21);
-  var i = closes.length - 1, px = closes[i];
-  var cands = [];
-  if (dir === 'long'){
-    if (isFinite(e9[i]) && e9[i] < px) cands.push(['EMA9', e9]);
-    if (isFinite(e21[i]) && e21[i] < px) cands.push(['EMA21', e21]);
-  } else {
-    if (isFinite(e9[i]) && e9[i] > px) cands.push(['EMA9', e9]);
-    if (isFinite(e21[i]) && e21[i] > px) cands.push(['EMA21', e21]);
-  }
-  if (!cands.length) return { state: 'waiting' };
   cands.sort(function(a, b){ return Math.abs(a[1][i] - px) - Math.abs(b[1][i] - px); });
   var name = cands[0][0], series = cands[0][1];
   var from = Math.max(1, rows.length - 6);
@@ -370,3 +346,71 @@ function trendmxApplyCrossLimit(plan, inp, dir){
   if (kind !== 'GOLDEN' && kind !== 'DEATH') return plan;
   var rows = inp.rows4h;
   if (!rows || rows.length < 21) return plan;
+  var closes = rows.map(function(r){ return r ? r.c : NaN; });
+  var px = closes[closes.length - 1];
+  var e9 = tmEmaLast(closes, 9), e21 = tmEmaLast(closes, 21);
+  if (!isFinite(px)) return plan;
+  var cands = [];
+  if (dir === 'long'){
+    if (isFinite(e9) && e9 < px) cands.push(['EMA9', e9]);
+    if (isFinite(e21) && e21 < px) cands.push(['EMA21', e21]);
+  } else {
+    if (isFinite(e9) && e9 > px) cands.push(['EMA9', e9]);
+    if (isFinite(e21) && e21 > px) cands.push(['EMA21', e21]);
+  }
+  var entry = px, emaName = 'MARKET', entryType = 'MARKET';
+  if (cands.length){
+    cands.sort(function(a, b){ return Math.abs(a[1] - px) - Math.abs(b[1] - px); });
+    entry = cands[0][1];
+    emaName = cands[0][0];
+    entryType = 'LIMIT';
+  }
+  var stop = plan.stop;
+  var a = tmAtrLast(rows);
+  if (dir === 'long' && !(entry > stop) && isFinite(a) && a > 0) stop = entry - 1.5 * a;
+  if (dir === 'short' && !(stop > entry) && isFinite(a) && a > 0) stop = entry + 1.5 * a;
+  var risk = dir === 'long' ? entry - stop : stop - entry;
+  if (!(risk > 0)) return plan;
+  var bit = entryType === 'LIMIT'
+    ? ('LIMIT @ 4h ' + emaName + ' · cancel if not tagged in 6×4h')
+    : 'price already at the 4h EMAs';
+  return Object.assign({}, plan, {
+    entry: entry, stop: stop,
+    t1: dir === 'long' ? entry + 2 * risk : entry - 2 * risk,
+    t2: dir === 'long' ? entry + 3.5 * risk : entry - 3.5 * risk,
+    rr1: 2, rr2: 3.5, riskPct: risk / entry * 100,
+    entryType: entryType, limitEma: emaName,
+    note: (plan.note ? plan.note + ' · ' : '') + bit
+  });
+}
+
+function trendmxPlan(inp){
+  try{
+    inp = inp || {};
+    var dir = tmDirOf(inp);
+    if (!dir) return null;
+    if (dir === 'long' && tmAltLongBlockedByBtc(inp)) return null;
+    var plan = null;
+    if (typeof hgBestLevels === 'function'){
+      var gate = inp.gate || trendmxGateEval(inp, dir);
+      var bl = hgBestLevels(Object.assign({}, inp, {
+        tab: 'trendmx', style: 'swing', dir: dir, gate: gate,
+      }));
+      if (bl && bl.ok && bl.plan && tmValidSetup(bl.plan)){
+        plan = trendmxAttachMeta(bl.plan, bl.gate || gate, { formationScore: bl.formationScore, rows4h: inp.rows4h, price: inp.price });
+      } else if (bl && bl.veto) return null;
+    }
+    if (!plan) plan = trendmxPlanLegacy(inp);
+    return trendmxApplyCrossLimit(plan, inp, dir);
+  }catch(e){ return null; }
+}
+
+function trendmxPlanLegacy(inp){
+  try{
+    inp = inp || {};
+    var dir = tmDirOf(inp);
+    if (!dir) return null;
+    var rows = inp.rows4h;
+    if (!Array.isArray(rows) || !rows.length) return null;
+    var lastBar = rows[rows.length - 1];
+    if (!lastBar) return null;

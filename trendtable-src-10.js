@@ -1,3 +1,51 @@
+    var c = rows.map(function(x){ return x.c; });
+    var e50 = W.ema(c, 50), e200 = W.ema(c, 200);
+    if (!e50 || !e200 || e50.length < 2) return null;
+    var a = e50[e50.length - 1], b = e200[e200.length - 1];
+    if (!isFinite(a) || !isFinite(b) || a === b) return null;
+    return a > b ? 'up' : 'down';
+  }catch(e){ return null; }
+}
+
+async function trendmxPerfectEvidencePass(rows){
+  try{
+    if (!Array.isArray(rows) || !rows.length) return rows;
+    var capped = rows.slice().sort(function(a, b){ return Math.abs(+b.score || 0) - Math.abs(+a.score || 0); }).slice(0, 8);
+    var taker = null, binFund = null;
+    try{ if (typeof W.binanceTakerRatio === 'function') taker = await W.binanceTakerRatio('BTCUSDT', '4h', 120); }catch(eT){ }
+    try{ if (typeof W.binanceFunding === 'function'){ var bf = await W.binanceFunding('BTCUSDT'); binFund = (bf && isFinite(+bf.fundingPct)) ? +bf.fundingPct : null; } }catch(eB){ }
+    var btcStructure = null;
+    for (var bi = 0; bi < rows.length; bi++){
+      var br = rows[bi];
+      var bbase = String(br.base || br.sym || '').toUpperCase();
+      if (bbase === 'BTC' || bbase.indexOf('BTC') === 0){
+        try{ btcStructure = tmStructureDir(br.rows4h); }catch(eBs){ btcStructure = null; }
+        if (btcStructure) break;
+      }
+    }
+    trendmxMacroSet({ btcFunding: binFund, btcStructure: btcStructure });
+    for (var i = 0; i < capped.length; i++){
+      var r = capped[i];
+      var dir = tmDirOf(r);
+      if (!dir) continue;
+      var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
+      if (!plan) continue;
+      var reads = {};
+      if (isFinite(+r.fundingPct)){
+        reads.venueFundingPct = +r.fundingPct;
+        if (typeof hgFundingAgainstMark === 'function'){
+          try{ var fam = hgFundingAgainstMark(+r.fundingPct, dir); if (fam) reads.fundingAgainst = (fam.against === true); }catch(eF){ }
+        }
+      }
+      if (binFund != null) reads.btcFundingBinance = binFund;
+      if (taker && Array.isArray(taker.series) && taker.series.length >= 30){
+        try{
+          var half = Math.floor(taker.series.length / 2);
+          var prev = taker.series.slice(0, half).map(function(x){ return +x.buySellRatio; }).filter(isFinite);
+          var last = taker.series.slice(half).map(function(x){ return +x.buySellRatio; }).filter(isFinite);
+          if (prev.length && last.length){
+            var pm = prev.reduce(function(a, b){ return a + b; }, 0) / prev.length;
+            var lm = last.reduce(function(a, b){ return a + b; }, 0) / last.length;
             var up = lm > pm;
             reads.takerFlowVerdict = up ? (dir === 'long' ? 'with' : 'against') : (dir === 'long' ? 'against' : 'with');
           }
@@ -287,39 +335,3 @@ function mountTrendMatrix(el){
 
   function setProg(f){
     if (!prog) return;
-    prog.style.display = (f === null) ? 'none' : 'block';
-    if (f !== null) prog.firstElementChild.style.width = (f * 100).toFixed(1) + '%';
-  }
-  function setStatus(txt, warn){
-    status.className = warn ? 'note warn' : 'note';
-    status.textContent = txt;
-  }
-
-  if (missing.length){
-    setStatus('Missing globals: ' + missing.join(', ') + ' — tab cannot scan until the data/indicator scripts load.', true);
-    btn.disabled = true;
-  }
-
-  chips.forEach(function(ch){
-    ch.addEventListener('click', function(){
-      state.filter = ch.getAttribute('data-f');
-      chips.forEach(function(c){ c.classList.toggle('on', c === ch); });
-      renderMatrix();
-    });
-  });
-  vChips.forEach(function(ch){
-    ch.addEventListener('click', function(){
-      state.venue = ch.getAttribute('data-v');
-      vChips.forEach(function(c){ c.classList.toggle('on', c === ch); });
-      renderAll();
-    });
-  });
-  var vwChips = Array.prototype.slice.call(el.querySelectorAll('[data-view]'));
-  vwChips.forEach(function(ch){
-    ch.addEventListener('click', function(){
-      state.view = ch.getAttribute('data-view');
-      vwChips.forEach(function(c){ c.classList.toggle('on', c === ch); });
-      renderMatrix();
-    });
-  });
-  btn.addEventListener('click', runScan);

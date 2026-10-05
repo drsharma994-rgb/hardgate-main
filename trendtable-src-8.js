@@ -1,3 +1,90 @@
+  if (!Array.isArray(rows)) return out;
+  for (var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if (!trendmxPerfectState(r)) continue;
+    var pack = trendmxFivePillars(r);
+    if (!pack.complete) continue;
+    var dir = tmDirOf(r);
+    var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
+    if (!tmValidSetup(plan)) continue;
+    out.push({ row: r, plan: plan, dir: dir, stack: trendmxCardStack(r, dir), perfect: true,
+               rank: Math.abs(r.score) * 10 + ((r.gate && r.gate.gatesPassed) || 0) });
+  }
+  out.sort(function(a, b){ return b.rank - a.rank; });
+  return out;
+}
+function trendmxFullStackDeskHTML(bag){
+  bag = (bag || []).slice(0, TM_LIMIT_DESK_CAP);
+  if (!bag.length) return '<div class="panel" style="margin:12px 0"><h2>FULL STACK DESK <span>prints only when technical, fundamental, sentiment, macro and micro are all readable and all with the majority, on top of a PERFECT row. Empty is the honest result. A pass is the right shape, not a profit.</span></h2><div class="note">No full-stack row this scan.</div></div>';
+  return '<div class="panel" style="margin:12px 0"><h2>FULL STACK DESK <span>technical · fundamental · sentiment · macro · micro all WITH, on a PERFECT row. Shape filter, not a profit claim.</span></h2><div style="display:flex;gap:10px;flex-wrap:wrap">' + bag.map(trendmxLimitCardHTML).join('') + '</div></div>';
+}
+
+function trendmxPerfectDeskHTML(bag){
+  bag = (bag || []).slice(0, TM_LIMIT_DESK_CAP);
+  if (!bag.length) return '';   /* a perfect row is rare by design — an empty desk is policy, not a fault */
+  return '<div class="panel" style="margin:12px 0">'
+    + '<h2>PERFECT SETUP DESK <span>criteria: max composite |5/5| · 7/7 gate-clean · momentum witness WITH · volume witness WITH · taker flow never against · funding not crowded · evidence-only, measured by the forward ledger — a filter, not a promise</span></h2>'
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + bag.map(trendmxLimitCardHTML).join('') + '</div></div>';
+}
+
+function trendmxSetupCardHTML(r, tier){
+  tier = tier || 'clean';
+  var dir = tmDirOf(r);
+  if (!dir) return '';
+  var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
+  var stack = trendmxCardStack(r, dir);
+  var cls = trendmxClassify(r, dir);
+  var conv = trendmxConviction(r);
+  var mini = [
+    ['SCORE', (r.score > 0 ? '+' : '') + r.score + '/5'],
+    ['ADX', isFinite(r.adx) ? r.adx.toFixed(1) : '—'],
+    ['REGIME', cls.regime || '—']
+  ];
+  if (plan) mini.push(['ENTRY', pxFmt(plan.entry)], ['R:R', fmtN(plan.rr1, 1) + 'R']);
+  var gates = [];
+  if (r.gate) gates.push([r.gate.label, r.gate.clean7 && !r.gate.veto]);
+  if (typeof hgSetupCardHTML !== 'function'){
+    return '<div class="card ' + dir + '"><b>' + escH(r.sym) + '</b>' + tmVenueChip(r) + ' · ' + dir.toUpperCase() + '</div>';
+  }
+  return hgSetupCardHTML({
+    sym: r.sym, dir: dir, tier: tier,
+    mini: mini, gates: gates,
+    plan: plan ? (trendmxPlanHTML(plan) + tmSmcChip(r) + trendmxFlowChipHtml(r) + trendmxMomChipHtml(r) + trendmxVolChipHtml(r) + trendmxFundingChipHtml(r) + trendmxAtrRegimeChipHtml(r) + trendmxFundChipHtml(r) + trendmxSlotChipHtml(r) + trendmxDayChipHtml(r) + trendmxCostChipHtml(r, plan) + trendmxChopChipHtml(r) + trendmxPillarHtml(r)) : '',
+    entry: plan ? plan.entry : null, stop: plan ? plan.stop : null, t1: plan ? plan.t1 : null,
+    chartId: (tier === 'clean' && plan) ? ('tmx_' + String(r.sym).replace(/[^A-Za-z0-9]/g, '')) : '',
+    stack: stack,
+    visionChip: r.visionChip, visionNextBar: r.visionNextBar, visionNextMove: r.visionNextMove, visionPrediction: r.visionPrediction,
+    bookMeta: { scanner: 'trendmx', strategy: 'trendmx', t2: plan ? plan.t2 : null,
+      venue: (typeof W.hgDeskVenueLabel === 'function') ? W.hgDeskVenueLabel(r.exchange) : 'BINANCE',
+      visionChip: r.visionChip, visionNextBar: r.visionNextBar, visionNextMove: r.visionNextMove, visionPrediction: r.visionPrediction },
+    note: tier !== 'clean' ? (tier === 'near' ? '6/7 NEAR — watch only, not a ticket.' : 'FORMING — trend signal without CLEAN ticket.') : null
+  });
+}
+
+function trendmxPaintMiniCharts(cardsEl, rows){
+  try{
+    if (!cardsEl || typeof hgMiniChart !== 'function') return;
+    var nodes = cardsEl.querySelectorAll('.hgchart');
+    for (var i = 0; i < nodes.length; i++){
+      var node = nodes[i], id = node.id || '', symGuess = id.replace(/^tmx_/, ''), row = null;
+      for (var j = 0; j < rows.length; j++){
+        if (rows[j] && String(rows[j].sym).replace(/[^A-Za-z0-9]/g, '') === symGuess){ row = rows[j]; break; }
+      }
+      if (!row || !row.rows4h) continue;
+      var dir = tmDirOf(row);
+      var plan = dir ? trendmxPlan(Object.assign({}, row, { dir: dir })) : null;
+      hgMiniChart(node, row.rows4h, {
+        dir: dir, entry: plan ? plan.entry : null, stop: plan ? plan.stop : null,
+        t1: plan ? plan.t1 : null, t2: plan ? plan.t2 : null
+      });
+    }
+  }catch(e){}
+}
+
+function trendmxPaintDeskSections(refs, state){
+  var allRows = state.rows || [], golden = state.golden || [], death = state.death || [];
+  var rows = allRows;
+  if (state.venue && state.venue !== 'ALL'){
     rows = allRows.filter(function(r){ return tmRowVenue(r) === state.venue; });
     var onVenue = function(g){
       for (var gi = 0; gi < allRows.length; gi++){
@@ -226,57 +313,3 @@ function trendmxTrendFormHTML(rows){
       var formTag = '';
       if (!dd){
         var fs = trendmxChopState(rr);
-        if (fs && fs.state === 'chop') formTag = ' · CHOP';
-        else if (fs && fs.state === 'trend') formTag = ' · EARLY FORMING';
-      }
-      var lvl = (dd || lean !== 0) ? lvlLine(rr, dd || (lean === 1 ? 'long' : 'short'))
-        : 'no lean - composite 0/5, no levels';
-      if (rr.unread){
-        return '<div class="card" style="padding:8px;margin-bottom:6px"><b>' + escH(rr.sym) + '</b> <span>UNREAD</span>'
-          + '<div style="opacity:.9;font-size:11px;margin-top:2px">CoinDCX contract on the board. No candle series, so no setup.</div></div>';
-      }
-      return '<div class="card" style="padding:8px;margin-bottom:6px"><b>' + escH(rr.sym) + '</b> ' + tag
-        + '<div style="opacity:.9;font-size:11px;margin-top:2px">composite ' + (rr.score > 0 ? '+' : '') + rr.score + '/5' + formTag + (rr.freshCross ? ' - !' + escH(rr.freshCross) : '') + '</div>'
-        + '<div style="font-size:11px;margin-top:4px;letter-spacing:.02em">' + lvl + '</div></div>';
-    }
-    function col(title, cls, list, emptyTxt){
-      var h = '<div class="panel" style="border-top:3px solid ' + cls + '"><h3 style="margin:0 0 8px">' + title
-        + ' <span style="opacity:.6;font-weight:400">- ' + list.length + ' contract' + (list.length === 1 ? '' : 's') + '</span></h3>';
-      if (!list.length) h += '<div class="empty" style="margin:6px 0">' + emptyTxt + '</div>';
-      else h += list.map(cell).join('');
-      return h + '</div>';
-    }
-    return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;align-items:start">'
-      + col('TRENDING', '#26a69a', byStrength(trending), 'no trending CoinDCX contracts - composite below +/-2')
-      + col('FORMING', '#f59e0b', byStrength(forming), 'no forming CoinDCX contracts')
-      + '</div>';
-  }catch(e){ return ''; }
-}
-
-/* hg-v1069: the grid-setup block — the OMNIBTC dual-grid treatment on
-   the matrix crown: each grid stands on its own direction, tier and
-   levels, and a grid that disagrees with the call is stamped, never
-   hidden. */
-function trendmxGridBlockHtml(title, gridLbl, s, callDir){
-  try{
-    if (!s || !isFinite(+s.entry) || !isFinite(+s.stop) || !isFinite(+s.t1)) return '';
-    var dir = String(s.dir || '').toLowerCase();
-    var against = dir && callDir && dir !== callDir;
-    var risk = Math.abs(+s.entry - +s.stop);
-    var rr = risk > 0 ? Math.abs(+s.t1 - +s.entry) / risk : NaN;
-    var tierTxt = s.tier === 'CLEAN' ? '7/7 CLEAN' : (s.tier === 'NEAR' ? (s.gates != null ? s.gates + '/7 NEAR' : '6/7 NEAR') : 'DRAFT');
-    var color = dir === 'long' ? '#26a69a' : (dir === 'short' ? '#ef5350' : '#94a3b8');
-    return '<div class="panel" style="margin-top:10px;border-top:3px solid ' + color + '"><h3>' + title
-      + ' <span>' + gridLbl + ' - ' + tierTxt + (s.source ? ' - ' + escH(s.source) : '') + (against ? ' - AGAINST THE CALL' : '') + '</span></h3>'
-      + '<div class="kv"><span class="k">Bias</span><span class="v ' + (dir === 'long' ? 'pos' : 'neg') + '">' + dir.toUpperCase() + '</span></div>'
-      + '<div class="kv"><span class="k">ENTRY</span><span class="v">' + (+s.entry).toFixed(2) + '</span></div>'
-      + '<div class="kv"><span class="k">STOP</span><span class="v">' + (+s.stop).toFixed(2) + '</span></div>'
-      + '<div class="kv"><span class="k">T1</span><span class="v">' + (+s.t1).toFixed(2) + (isFinite(rr) ? ' (' + rr.toFixed(1) + 'R)' : '') + '</span></div>'
-      + (isFinite(+s.t2) ? '<div class="kv"><span class="k">T2</span><span class="v">' + (+s.t2).toFixed(2) + '</span></div>' : '')
-      + '</div>';
-  }catch(e){ return ''; }
-}
-
-/* hg-v1066: THE CROWN — the OMNIBTC treatment on the TREND MATRIX: a
-   single bold call (the strongest majority row with a minted plan), a
-   verdict line, the five-dimension complete analysis from the row's own

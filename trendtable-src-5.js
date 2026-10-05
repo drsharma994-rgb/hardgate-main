@@ -1,3 +1,176 @@
+  if (!tmAtLocation(rows4, rowsD, dir)) bad.push('no sweep, FVG or order block');
+  if (!rows1 || rows1.length < 40 || typeof hgStructure !== 'function') bad.push('1h unread');
+  else {
+    var h1 = hgStructure(rows1);
+    if (h1 && h1.trend === (dir === 'long' ? 'down' : 'up')) bad.push('1h structure against');
+  }
+  if (!ctx || ctx.macroOk !== true) bad.push('macro unread');
+  else if (dir === 'long' && ctx.riskOff) bad.push('macro risk-off');
+  else if (dir === 'short' && ctx.riskOn) bad.push('macro risk-on');
+  if (!ctx || ctx.calendarOk !== true) bad.push('calendar unread');
+  else if (ctx.eventBlock) bad.push('high-impact USD event');
+  if (tmBaseOf(row) !== 'BTC'){
+    if (!ctx || ctx.domOk !== true) bad.push('BTC.D unread');
+    else if (dir === 'long' && ctx.btcDomRising) bad.push('BTC.D rising');
+  }
+  if (!ctx || ctx.ethOk !== true) bad.push('ETH structure unread');
+  else if (dir === 'long' && ctx.ethStructure === 'down' && tmBaseOf(row) !== 'BTC' && tmBaseOf(row) !== 'ETH') bad.push('ETH structure down');
+  if (!ctx || ctx.stableOk !== true) bad.push('stablecoin liquidity unread');
+  else if (dir === 'long' && ctx.stableFalling) bad.push('stablecoin liquidity falling');
+  if (!ctx || ctx.newsOk !== true) bad.push('news unread');
+  else if (tmNewsVeto(ctx.headlines, tmBaseOf(row))) bad.push('adverse headline');
+  var cvd = await tmCvdVerdict(row, dir);
+  if (cvd !== 'with') bad.push(cvd === 'against' ? 'CVD against' : 'CVD unread');
+  var oi = await tmOiRead(row);
+  if (!oi) bad.push('OI unread');
+  else if (dir === 'long' && !(oi.priceUp && oi.oiUp)) bad.push('OI not confirming the rise');
+  else if (dir === 'short' && !(oi.priceDown && oi.oiUp)) bad.push('OI not confirming the drop');
+  var m15 = await tmFetch15(row);
+  if (!m15) bad.push('15m unread');
+  else if (!tm15Confirm(m15, dir)) bad.push('15m no sweep and CHOCH');
+  var a = tmAtrLast(rows4);
+  var risk = Math.abs(+ticket.entry - +ticket.stop);
+  if (!(a > 0) || !(risk >= 0.8 * a && risk <= 2.5 * a)) bad.push('stop outside ATR');
+  return bad;
+}
+async function trendmxFormationPass(golden, death, rows){
+  var ctx = await trendmxLoadContext(rows);
+  async function keep(list){
+    var out = [];
+    out.held = (list && list.held) ? list.held : { waiting: 0, grade: 0, cascade: 0, gates: 0 };
+    out.held.stack = [];
+    var bySym = {};
+    for (var i = 0; i < rows.length; i++) if (rows[i] && rows[i].sym) bySym[rows[i].sym] = rows[i];
+    for (var k = 0; k < list.length; k++){
+      var ticket = list[k];
+      var row = bySym[ticket.sym];
+      var bad = [];
+      try{ bad = await trendmxFormOne(ticket, row, ctx); }catch(eOne){ bad = ['formation unread']; }
+      if (bad.length){ out.held.stack.push({ sym: ticket.sym, reasons: bad }); continue; }
+      ticket.note = (ticket.note || '') + ' · full stack';
+      out.push(ticket);
+    }
+    return out;
+  }
+  return { golden: await keep(golden || []), death: await keep(death || []) };
+}
+
+async function trendmxScan(opts){
+  opts = opts || {};
+  var maxAge = (opts.maxAgeMs > 0) ? opts.maxAgeMs : (5 * 60 * 1000);
+  if (!opts.force && __tmScanSnap && __tmScanSnap.at && (Date.now() - __tmScanSnap.at) < maxAge){
+    return __tmScanSnap;
+  }
+  var core = await trendmxScanCore(opts);
+  trendmxStampBtcStructure(core.rows);
+  var golden = trendmxGoldenCrossSetups(core.rows);
+  var death = trendmxDeathCrossSetups(core.rows);   /* hg-v1014: the mirrored desk */
+  tmSmcScanPass(core.rows, golden, death);
+  /* hg-v1012: the evidence layer — one capped, paced pass over the promoted
+     slice, AFTER the tier inputs (score/gate/conviction) exist and BEFORE
+     the snap the boards read. Never throws; what it cannot read it leaves
+     unstamped, and an unstamped row is an unjudged row. */
+  var flow = null;
+  try{ flow = await trendmxFlowScan(core.rows); }catch(eFl){ flow = null; }
+  /* hg-v1067: the shared-perfect evidence pass — the OMNIBTC read stack */
+  try{ await trendmxPerfectEvidencePass(core.rows); }catch(ePf3){ }
+  try{
+    var formed = await trendmxFormationPass(golden, death, core.rows);
+    golden = formed.golden;
+    death = formed.death;
+  }catch(eForm){
+    golden = [];
+    golden.held = { waiting: 0, grade: 0, cascade: 0, gates: 0, stack: [{ sym: 'desk', reasons: ['formation pass failed'] }] };
+    death = [];
+    death.held = { stack: [] };
+  }
+  __tmScanSnap = {
+    at: core.at, rows: core.rows, failed: core.failed, uniLen: core.uniLen, scanned: core.scanned,
+    goldenCross: golden, deathCross: death, note: core.note, source: core.source, venueCounts: core.venueCounts,
+    flow: flow
+  };
+  publishTrendmxSnap(core.rows);
+  return __tmScanSnap;
+}
+
+async function trendmxWarm(opts){
+  try{
+    var r = await trendmxScan({ force: !!(opts && opts.force) });
+    if (r && r.rows && r.rows.length) return 'warmed';
+    return 'unavailable: trend matrix scan returned no rows';
+  }catch(e){ return 'error: ' + ((e && e.message) || e); }
+}
+
+function trendmxCompPipsHtml(comps){
+  comps = comps || {};
+  return ''
+    + '<span class="gpip ' + (comps.d1Trend > 0 ? 'ok' : (comps.d1Trend < 0 ? 'bad' : '')) + '" title="1D trend">1D</span>'
+    + '<span class="gpip ' + (comps.d1Cross > 0 ? 'ok' : (comps.d1Cross < 0 ? 'bad' : '')) + '" title="EMA cross">X</span>'
+    + '<span class="gpip ' + (comps.h4Cascade > 0 ? 'ok' : (comps.h4Cascade < 0 ? 'bad' : '')) + '" title="4H cascade">4H</span>'
+    + '<span class="gpip ' + (comps.cloud > 0 ? 'ok' : (comps.cloud < 0 ? 'bad' : '')) + '" title="Cloud">CL</span>'
+    + '<span class="gpip ' + (comps.adxPt !== 0 ? 'ok' : '') + '" title="ADX strength">ADX</span>';
+}
+
+function trendmxRowTier(r, plan){
+  if (!r) return 'forming';
+  if (plan && plan.omniDemoted) return 'near';
+  if (r.gate && r.gate.veto) return 'forming';
+  /* hg-v1012: real taker flow AGAINST the row's own majority caps the row
+     at NEAR — it paints, the chip names why, it can never be CLEAN or sit
+     on the LIMIT BOARD (the same leadership pattern as the omni principal
+     above it). An unread flow caps nothing. */
+  if (r.flow && r.flow.verdict === 'against') return 'near';
+  /* hg-v1019: the momentum witness caps the same way — a row whose 1D RSI
+     range has TURNED against its direction can never be CLEAN. An unread
+     or abstaining witness caps nothing. */
+  if (trendmxMomState(r, tmDirOf(r)) === 'against') return 'near';
+  /* hg-v1020: and the volume witness — a swing rally the OBV trend refuses
+     to confirm (or a fall it refuses to join) caps at NEAR the same way. */
+  if (trendmxVolState(r, tmDirOf(r)) === 'against') return 'near';
+  /* hg-v1034: the fundamental + sentiment witness caps the same way — a row
+     whose coin sits in a red-folder blackout (refuse) or against a 2+ net
+     checked headwind (against) can never be CLEAN. */
+  var fundSt = trendmxFundState(r, tmDirOf(r));
+  if (fundSt === 'refuse' || fundSt === 'against') return 'near';
+  /* hg-v1057: the trend-quality witness caps the same way — a row whose own
+     4h tape is CHOPPY (Choppiness >= 61.8 AND Efficiency Ratio < 0.3, the two
+     instruments agreeing) can never be CLEAN: this desk trades trends and
+     that tape has none to ride. Mixed or unreadable caps nothing (fail open
+     — one instrument alone is not a verdict). */
+  var chopSt = trendmxChopState(r);
+  if (chopSt && chopSt.state === 'chop') return 'near';
+  if (plan && tmValidSetup(plan) && r.gate && r.gate.clean7) return 'clean';
+  if (r.gate && r.gate.nearClean) return 'near';
+  return 'forming';
+}
+
+function trendmxSummaryLine(rows, golden, venueCounts){
+  rows = rows || [];
+  golden = golden || [];
+  var sl = 0, ss = 0, fx = 0, clean = 0, near = 0, flowW = 0, flowA = 0;
+  for (var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if (!r) continue;
+    if (r.score >= 4) sl++;
+    if (r.score <= -4) ss++;
+    if (r.freshCross) fx++;
+    /* hg-v1012: the flow split, read off the stamps the scan left — the
+       summary names the evidence the same way the cards do */
+    if (r.flow && r.flow.verdict === 'with') flowW++;
+    else if (r.flow && r.flow.verdict === 'against') flowA++;
+    var dir = tmDirOf(r);
+    var plan = dir ? trendmxPlan(Object.assign({}, r, { dir: dir })) : null;
+    var tier = trendmxRowTier(r, plan);
+    if (tier === 'clean') clean++;
+    else if (tier === 'near') near++;
+  }
+  var vc = venueCounts || {};
+  var cdxN = 0;
+  for (var ci = 0; ci < rows.length; ci++) if (rows[ci] && String(rows[ci].exchange || '').toLowerCase() === 'coindcx') cdxN++;
+  var ven = ' · Δ' + (vc.delta || 0) + ' · CDX ' + cdxN + ' contracts · BN' + (vc.binance || 0);
+  return 'scanned ' + rows.length + ven
+    + ' · golden ' + golden.length
+    + ' · strong +' + sl + '/−' + ss + ' · fresh crosses ' + fx
     + ' · CLEAN ' + clean + ' · NEAR ' + near
     + ((flowW + flowA) > 0 ? ' · taker flow ' + flowW + ' with / ' + flowA + ' held off' : '');
 }
@@ -43,14 +216,15 @@ function trendmxGoldenDeskHTML(golden){
   var held = golden.held || {};
   var cards = '';
   for (var i = 0; i < Math.min(golden.length, 4); i++) cards += trendmxCrossCardHTML(golden[i]);
-  var why = golden.length ? '' : ('<div class="note">No golden setup. A card needs a closed daily cross, the 4h EMA cascade, at least 6/7 gates, a 4h EMA tag in the last 6 closed bars, and RSI, OBV and funding not against.'
+  var why = golden.length ? '' : ('<div class="note">No golden setup. Price has to clear structure, the 4h EMA cascade, 6/7 gates, the EMA tag, the TRADE grade, then the full stack: HH/HL, location, EMA 20/50/200, VWAP, rising volume, 1h, 15m sweep plus CHOCH, OI, CVD, macro, the calendar, BTC.D, ETH, stablecoin liquidity and the news feed.'
     + (held.waiting ? ' ' + held.waiting + ' waiting for the EMA tag.' : '')
     + (held.gates ? ' ' + held.gates + ' failed the gates.' : '')
     + (held.cascade ? ' ' + held.cascade + ' have no 4h cascade.' : '')
     + (held.grade ? ' ' + held.grade + ' failed the TRADE grade.' : '')
+    + ((held.stack && held.stack.length) ? ' ' + held.stack.slice(0, 3).map(function(x){ return x.sym + ' blocked: ' + x.reasons.slice(0, 3).join(', '); }).join(' · ') + '.' : '')
     + '</div>');
   return '<div class="panel tier-clean" style="margin:12px 0;border-left:4px solid #047857">'
-    + '<h2>⚡ GOLDEN CROSS DESK <span>closed daily cross · 4h cascade · 6/7 gates · EMA tag · TRADE grade'
+    + '<h2>⚡ GOLDEN CROSS DESK <span>full stack only · structure, location, volume, OI, CVD, VWAP, 15m, macro, calendar'
     + ((__tmMacro && __tmMacro.btcStructure === 'down') ? ' · alt longs stood down, BTC structure is down' : '')
     + '</span></h2>'
     + why
@@ -130,161 +304,3 @@ function trendmxMomState(r, dir){
   var rv = (r && typeof r.rsi === 'number' && isFinite(r.rsi)) ? r.rsi : NaN;
   if (!isFinite(rv)) return null;
   if (dir === 'long'){
-    if (rv < TM_MOM_BULL_FLOOR) return 'against';
-    return rv >= TM_MOM_MID ? 'with' : 'flat';
-  }
-  if (dir === 'short'){
-    if (rv > TM_MOM_BEAR_CEIL) return 'against';
-    return rv <= TM_MOM_MID ? 'with' : 'flat';
-  }
-  return null;
-}
-
-/* hg-v1020: THE VOLUME WITNESS state — reads the row's volDiv/volConf
-   stamps exactly like the momentum witness reads rsi (never recomputes):
-     against — the swing volume trend DIVERGES against the direction
-       (distribution under the rally for longs / accumulation under the
-       fall for shorts);
-     with    — price and OBV made the new 20-bar extreme TOGETHER;
-     flat    — a readable tape with neither divergence nor confirmation:
-       volume has nothing to add (no chip, no hold, no read);
-     null    — the witness never ran or the tape cannot speak: holds
-       nothing off (the hg-v700 rule). */
-function trendmxVolState(r, dir){
-  if (!r || (r.volDiv === undefined && r.volConf === undefined)) return null;
-  if (r.volDiv === null && r.volConf === null) return null;
-  if (dir === 'long'){
-    if (r.volDiv === 'bear') return 'against';
-    return r.volConf === 'up' ? 'with' : 'flat';
-  }
-  if (dir === 'short'){
-    if (r.volDiv === 'bull') return 'against';
-    return r.volConf === 'down' ? 'with' : 'flat';
-  }
-  return null;
-}
-
-/* hg-v1034: THE FUNDAMENTAL + SENTIMENT WITNESS — the composite reads closes,
-   the momentum and volume witnesses read closes, the flow witness reads ONE
-   venue's taker prints; until this pack NOTHING read what the market is
-   POSITIONED to do and what the macro/sentiment says, on the row's own coin.
-   This is the house fundamental stack (fundamental-stack.js hgFundamentalGate),
-   shared with OmniBTC and the gold desks, read ONCE per row and memoized:
-     BTC ..... ON-CHAIN (mempool.space, votes) + TERM (own curve, votes) +
-               FEAR & GREED (contrarian 80/20, votes) + 25Δ RISK REVERSAL
-               (Deribit, |8| extreme, votes) + EVENT RISK (red-folder blackout).
-     ALTS .... F&G (market-wide, votes at extremes) + the coin's OWN TERM row
-               (votes) + the coin's OWN calendar (blackout); BTC on-chain and
-               the 25Δ RR render as prior INFO, never vote for an alt.
-   The mechanic mirrors the flow/mom/vol witnesses (hg-v1012/1019/1020):
-     - EVIDENCE ONLY — the composite stays five legs (a sixth would re-scale
-       every tmScore the forward ledger measures).
-     - refuse  (red-folder blackout) / against  (2+ net checked votes AGAINST
-       the row's direction) hold the row off BOTH class desks and cap it at
-       NEAR — counted per class in heldWhy (the fund reason). Still paints
-       with its chip; nothing dropped silently. One witness never flips.
-     - with    (2+ net checked votes WITH) chips TAILWIND and hands the
-       ledger a fundWith read-mark — never a composite point.
-     - flat / null  — a readable board with no decisive vote, or a dark
-       board: silent, holds nothing off (the hg-v700 honest-degradation rule).
-   The GOLDEN/DEATH cross desks stay out of scope (the fresh multi-week
-   cross premise misjudges a momentary positioning/sentiment snap, the same
-   reason flow and momentum stand down there). */
-function trendmxFundGate(r, dir){
-  if (!r) return null;
-  dir = dir || tmDirOf(r);
-  if (!dir) return null;
-  var key = (dir === 'short') ? '_fundGateShort' : '_fundGate';
-  if (r[key] !== undefined) return r[key];
-  var g = null;
-  if (typeof hgFundamentalGate === 'function'){
-    try{ g = hgFundamentalGate(r.sym, dir, { scanner: 'trendmx' }); }catch(e){ g = null; }
-  }
-  r[key] = g || null;
-  return g || null;
-}
-function trendmxFundState(r, dir){
-  var g = trendmxFundGate(r, dir);
-  if (!g) return null;
-  if (g.refuse) return 'refuse';
-  if (g.demote) return 'against';
-  if (g.chips && g.chips.some(function(c){ return /TAILWIND/.test(c); })) return 'with';
-  return (g.regime && g.regime.checked) ? 'flat' : null;
-}
-
-/* the fundamental + sentiment chip — the volume witness's own pattern
-   (hg-v1020). It reuses the house renderer (hgFundamentalChipHtml) so the
-   chip is byte-identical to the gold desk's and OmniBTC's; an absent stack
-   or a dark board paints NO chip. */
-function trendmxFundChipHtml(r){
-  try{
-    var g = trendmxFundGate(r);
-    if (!g || !g.chips || !g.chips.length) return '';
-    if (typeof hgFundamentalChipHtml === 'function') return hgFundamentalChipHtml(g) || '';
-    return '';
-  }catch(e){ return ''; }
-}
-
-/* hg-v1057: THE TREND-QUALITY WITNESS state — the matrix's own measure of
-   whether the tape the row was scored on has a trend to ride AT ALL. Reads
-   the row's own 4h series (never recomputes the composite); the two house
-   trend-quality instruments, both from indicators.js:
-     Choppiness Index (Dreiss, TASC 2009) — 0..100, >61.8 choppy, <38.2 trending
-     Kaufman Efficiency Ratio — 0..1, ~1 clean directional tape, near 0 noise
-     chop   — CHOP(14) >= 61.8 AND ER(20) < 0.3 TOGETHER: sideways noise.
-       Caps the row at NEAR (never CLEAN) — the matrix is a TREND desk and
-       this tape has no trend to ride.
-     trend  — CHOP(14) <= 38.2 AND ER(20) > 0.4 TOGETHER: a clean directional
-       tape (the FORMING board stamps it EARLY FORMING).
-     null   — mixed or unreadable: NO verdict, holds nothing off (the hg-v700
-       honest-degradation rule). The readable scalars still ride the object.
-   The two instruments must AGREE: one saying chop and the other trend is a
-   mixed tape, and a mixed tape is not a cap — fail open, evidence first. */
-function trendmxChopState(r){
-  var chop = null, er = null;
-  if (!r || !Array.isArray(r.rows4h) || r.rows4h.length < 25
-      || typeof hgChoppiness !== 'function' || typeof hgKaufmanER !== 'function'){
-    return { chop: chop, er: er, state: null };
-  }
-  try{
-    var ch = hgChoppiness(r.rows4h, 14);
-    if (ch && ch.length){
-      var lc = ch[ch.length - 1];
-      if (isFinite(lc)) chop = lc;
-    }
-    var closes = r.rows4h.map(function(x){ return +x.c; });
-    var erArr = hgKaufmanER(closes, 20);
-    if (erArr && erArr.length){
-      var le = erArr[erArr.length - 1];
-      if (isFinite(le)) er = le;
-    }
-  }catch(e){ /* an unreadable tape is no verdict — the scalars stay null */ }
-  var state = null;
-  if (isFinite(chop) && isFinite(er)){
-    if (chop >= 61.8 && er < 0.3) state = 'chop';
-    else if (chop <= 38.2 && er > 0.4) state = 'trend';
-  }
-  return { chop: chop, er: er, state: state };
-}
-
-/* hg-v1057: the trend-quality chip — the momentum chip's own pattern.
-   CHOP prints the bad stamp with BOTH measured values (a cap is never
-   silent); TREND and mixed/unreadable paint NO chip (evidence, never a
-   brag, and a mixed tape is not a verdict). */
-function trendmxChopChipHtml(r){
-  try{
-    var st = trendmxChopState(r);
-    if (!st || st.state !== 'chop') return '';
-    var chopTxt = isFinite(st.chop) ? st.chop.toFixed(0) : '?';
-    var erTxt = isFinite(st.er) ? st.er.toFixed(2) : '?';
-    return '<span class="stamp bad" style="margin-left:6px" title="' + escH('trend-quality witness (hg-v1057): this 4h tape reads CHOP ' + chopTxt
-      + ' and efficiency ratio ' + erTxt
-      + ' — the trend matrix\'s own trend-quality measure says there is no trend to ride. Capped at NEAR, never CLEAN — evidence, never a gate.') + '">CHOP ' + chopTxt + ' · ER ' + erTxt + '</span>';
-  }catch(e){ return ''; }
-}
-
-/* hg-v1022: THE PERFECT SETUP tier — the strictest confluence read the desk
-   can honestly print. NOT a new composite leg and NOT a win guarantee (the
-   forward ledger measures it like every other mechanic): it is a FILTER that
-   asks every independent confirmation to say WITH and none to say AGAINST, on
-   top of a 7/7 gate-clean row at maximum composite alignment. Criteria,

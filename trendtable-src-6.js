@@ -1,3 +1,161 @@
+    if (rv < TM_MOM_BULL_FLOOR) return 'against';
+    return rv >= TM_MOM_MID ? 'with' : 'flat';
+  }
+  if (dir === 'short'){
+    if (rv > TM_MOM_BEAR_CEIL) return 'against';
+    return rv <= TM_MOM_MID ? 'with' : 'flat';
+  }
+  return null;
+}
+
+/* hg-v1020: THE VOLUME WITNESS state — reads the row's volDiv/volConf
+   stamps exactly like the momentum witness reads rsi (never recomputes):
+     against — the swing volume trend DIVERGES against the direction
+       (distribution under the rally for longs / accumulation under the
+       fall for shorts);
+     with    — price and OBV made the new 20-bar extreme TOGETHER;
+     flat    — a readable tape with neither divergence nor confirmation:
+       volume has nothing to add (no chip, no hold, no read);
+     null    — the witness never ran or the tape cannot speak: holds
+       nothing off (the hg-v700 rule). */
+function trendmxVolState(r, dir){
+  if (!r || (r.volDiv === undefined && r.volConf === undefined)) return null;
+  if (r.volDiv === null && r.volConf === null) return null;
+  if (dir === 'long'){
+    if (r.volDiv === 'bear') return 'against';
+    return r.volConf === 'up' ? 'with' : 'flat';
+  }
+  if (dir === 'short'){
+    if (r.volDiv === 'bull') return 'against';
+    return r.volConf === 'down' ? 'with' : 'flat';
+  }
+  return null;
+}
+
+/* hg-v1034: THE FUNDAMENTAL + SENTIMENT WITNESS — the composite reads closes,
+   the momentum and volume witnesses read closes, the flow witness reads ONE
+   venue's taker prints; until this pack NOTHING read what the market is
+   POSITIONED to do and what the macro/sentiment says, on the row's own coin.
+   This is the house fundamental stack (fundamental-stack.js hgFundamentalGate),
+   shared with OmniBTC and the gold desks, read ONCE per row and memoized:
+     BTC ..... ON-CHAIN (mempool.space, votes) + TERM (own curve, votes) +
+               FEAR & GREED (contrarian 80/20, votes) + 25Δ RISK REVERSAL
+               (Deribit, |8| extreme, votes) + EVENT RISK (red-folder blackout).
+     ALTS .... F&G (market-wide, votes at extremes) + the coin's OWN TERM row
+               (votes) + the coin's OWN calendar (blackout); BTC on-chain and
+               the 25Δ RR render as prior INFO, never vote for an alt.
+   The mechanic mirrors the flow/mom/vol witnesses (hg-v1012/1019/1020):
+     - EVIDENCE ONLY — the composite stays five legs (a sixth would re-scale
+       every tmScore the forward ledger measures).
+     - refuse  (red-folder blackout) / against  (2+ net checked votes AGAINST
+       the row's direction) hold the row off BOTH class desks and cap it at
+       NEAR — counted per class in heldWhy (the fund reason). Still paints
+       with its chip; nothing dropped silently. One witness never flips.
+     - with    (2+ net checked votes WITH) chips TAILWIND and hands the
+       ledger a fundWith read-mark — never a composite point.
+     - flat / null  — a readable board with no decisive vote, or a dark
+       board: silent, holds nothing off (the hg-v700 honest-degradation rule).
+   The GOLDEN/DEATH cross desks stay out of scope (the fresh multi-week
+   cross premise misjudges a momentary positioning/sentiment snap, the same
+   reason flow and momentum stand down there). */
+function trendmxFundGate(r, dir){
+  if (!r) return null;
+  dir = dir || tmDirOf(r);
+  if (!dir) return null;
+  var key = (dir === 'short') ? '_fundGateShort' : '_fundGate';
+  if (r[key] !== undefined) return r[key];
+  var g = null;
+  if (typeof hgFundamentalGate === 'function'){
+    try{ g = hgFundamentalGate(r.sym, dir, { scanner: 'trendmx' }); }catch(e){ g = null; }
+  }
+  r[key] = g || null;
+  return g || null;
+}
+function trendmxFundState(r, dir){
+  var g = trendmxFundGate(r, dir);
+  if (!g) return null;
+  if (g.refuse) return 'refuse';
+  if (g.demote) return 'against';
+  if (g.chips && g.chips.some(function(c){ return /TAILWIND/.test(c); })) return 'with';
+  return (g.regime && g.regime.checked) ? 'flat' : null;
+}
+
+/* the fundamental + sentiment chip — the volume witness's own pattern
+   (hg-v1020). It reuses the house renderer (hgFundamentalChipHtml) so the
+   chip is byte-identical to the gold desk's and OmniBTC's; an absent stack
+   or a dark board paints NO chip. */
+function trendmxFundChipHtml(r){
+  try{
+    var g = trendmxFundGate(r);
+    if (!g || !g.chips || !g.chips.length) return '';
+    if (typeof hgFundamentalChipHtml === 'function') return hgFundamentalChipHtml(g) || '';
+    return '';
+  }catch(e){ return ''; }
+}
+
+/* hg-v1057: THE TREND-QUALITY WITNESS state — the matrix's own measure of
+   whether the tape the row was scored on has a trend to ride AT ALL. Reads
+   the row's own 4h series (never recomputes the composite); the two house
+   trend-quality instruments, both from indicators.js:
+     Choppiness Index (Dreiss, TASC 2009) — 0..100, >61.8 choppy, <38.2 trending
+     Kaufman Efficiency Ratio — 0..1, ~1 clean directional tape, near 0 noise
+     chop   — CHOP(14) >= 61.8 AND ER(20) < 0.3 TOGETHER: sideways noise.
+       Caps the row at NEAR (never CLEAN) — the matrix is a TREND desk and
+       this tape has no trend to ride.
+     trend  — CHOP(14) <= 38.2 AND ER(20) > 0.4 TOGETHER: a clean directional
+       tape (the FORMING board stamps it EARLY FORMING).
+     null   — mixed or unreadable: NO verdict, holds nothing off (the hg-v700
+       honest-degradation rule). The readable scalars still ride the object.
+   The two instruments must AGREE: one saying chop and the other trend is a
+   mixed tape, and a mixed tape is not a cap — fail open, evidence first. */
+function trendmxChopState(r){
+  var chop = null, er = null;
+  if (!r || !Array.isArray(r.rows4h) || r.rows4h.length < 25
+      || typeof hgChoppiness !== 'function' || typeof hgKaufmanER !== 'function'){
+    return { chop: chop, er: er, state: null };
+  }
+  try{
+    var ch = hgChoppiness(r.rows4h, 14);
+    if (ch && ch.length){
+      var lc = ch[ch.length - 1];
+      if (isFinite(lc)) chop = lc;
+    }
+    var closes = r.rows4h.map(function(x){ return +x.c; });
+    var erArr = hgKaufmanER(closes, 20);
+    if (erArr && erArr.length){
+      var le = erArr[erArr.length - 1];
+      if (isFinite(le)) er = le;
+    }
+  }catch(e){ /* an unreadable tape is no verdict — the scalars stay null */ }
+  var state = null;
+  if (isFinite(chop) && isFinite(er)){
+    if (chop >= 61.8 && er < 0.3) state = 'chop';
+    else if (chop <= 38.2 && er > 0.4) state = 'trend';
+  }
+  return { chop: chop, er: er, state: state };
+}
+
+/* hg-v1057: the trend-quality chip — the momentum chip's own pattern.
+   CHOP prints the bad stamp with BOTH measured values (a cap is never
+   silent); TREND and mixed/unreadable paint NO chip (evidence, never a
+   brag, and a mixed tape is not a verdict). */
+function trendmxChopChipHtml(r){
+  try{
+    var st = trendmxChopState(r);
+    if (!st || st.state !== 'chop') return '';
+    var chopTxt = isFinite(st.chop) ? st.chop.toFixed(0) : '?';
+    var erTxt = isFinite(st.er) ? st.er.toFixed(2) : '?';
+    return '<span class="stamp bad" style="margin-left:6px" title="' + escH('trend-quality witness (hg-v1057): this 4h tape reads CHOP ' + chopTxt
+      + ' and efficiency ratio ' + erTxt
+      + ' — the trend matrix\'s own trend-quality measure says there is no trend to ride. Capped at NEAR, never CLEAN — evidence, never a gate.') + '">CHOP ' + chopTxt + ' · ER ' + erTxt + '</span>';
+  }catch(e){ return ''; }
+}
+
+/* hg-v1022: THE PERFECT SETUP tier — the strictest confluence read the desk
+   can honestly print. NOT a new composite leg and NOT a win guarantee (the
+   forward ledger measures it like every other mechanic): it is a FILTER that
+   asks every independent confirmation to say WITH and none to say AGAINST, on
+   top of a 7/7 gate-clean row at maximum composite alignment. Criteria,
    stated plainly:
      |composite| = 5/5  (all five legs maxed the same way)
      7/7 swing-gate clean (spread · vol-Z · EMA21 anchor · funding · regime · structure · R:R)
@@ -155,103 +313,3 @@ function trendmxLimitClasses(rows){
        fall) is held off, counted and named per class, still painting with
        its chip. WITH, FLAT and UNREAD pass — it only ever removes. */
     if (trendmxVolState(r, dir) === 'against'){
-      if (isClean){ out.heldClean++; out.heldWhy.clean.vol++; }
-      else { out.heldConv++; out.heldWhy.conv.vol++; }
-      continue;
-    }
-    /* hg-v1034: THE FUNDAMENTAL + SENTIMENT WITNESS hold-off — the fourth
-       witness, the ONLY one that reads off-chart evidence (on-chain, the
-       coin's own term curve, F&G, options positioning, the calendar). A
-       red-folder blackout REFUSES and a 2+ net checked headwind DEMOTES:
-       held off both class desks, counted per class under the fund reason,
-       still painting with its chip. WITH, FLAT and a dark board pass — it
-       only ever removes, and one witness never flips. */
-    var fundSt = trendmxFundState(r, dir);
-    if (fundSt === 'refuse' || fundSt === 'against'){
-      if (isClean){ out.heldClean++; out.heldWhy.clean.fund++; }
-      else { out.heldConv++; out.heldWhy.conv.fund++; }
-      continue;
-    }
-    var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
-    if (!tmValidSetup(plan)) continue;
-    var item = { row: r, plan: plan, dir: dir, stack: trendmxCardStack(r, dir) };
-    if (isClean){
-      /* the old board's intra-class rank, unchanged: composite, then gates */
-      item.rank = Math.abs(r.score) * 10 + (r.gate.gatesPassed || 0);
-      out.clean.push(item);
-    } else {
-      /* the conviction class orders on its OWN claim: trend strength.
-         Composite first, the ADX strength indicator breaking ties (a ±4 at
-         ADX 38 is a stronger trend than a ±4 at 25); the gate count is the
-         other class's evidence and does not order this desk. */
-      item.rank = Math.abs(r.score) * 10 + (fin(r.adx) ? r.adx / 10 : 0);
-      item.conv = conv;
-      out.conv.push(item);
-    }
-  }
-  out.clean.sort(function(a, b){ return b.rank - a.rank; });
-  out.conv.sort(function(a, b){ return b.rank - a.rank; });
-  /* FORWARD LOG — recorded over BOTH classes BEFORE either desk slices, so
-     the measurement covers every setup the tab judged tradeable rather than
-     only the four per desk it had room to show. The mechanic splits on
-     clean7, which is the tab's own claim about quality: if the 7/7 rows
-     resolve like the merely-convicted ones, that distinction is not doing
-     work. Fields byte-identical to the mixed board's record. */
-  var cands = out.clean.concat(out.conv);
-  try {
-    if (typeof W.hgFwdRecordScan === 'function' && cands.length){
-      W.hgFwdRecordScan('TRENDMX', '4h', cands.map(function(c){
-        return { sym: c.row && c.row.sym, dir: c.dir,
-                 entry: c.plan && c.plan.entry, stop: c.plan && c.plan.stop, t1: c.plan && c.plan.t1,
-                 /* hg-v981: the mark trendmxAttachMeta already kept, the bar off the row's series */
-                 mark: (c.plan && isFinite(+c.plan.mark) && +c.plan.mark > 0) ? +c.plan.mark : undefined,
-                 barT: (typeof W.hgFwdLastBar === 'function') ? W.hgFwdLastBar(c.row && c.row.rows4h).barT : undefined,
-                 /* hg-v1012: the funding the row already carried — a desk that
-                    has it in hand hands it in (hg-v985: the ledger has no
-                    venue-safe symbol map, so a desk that hands in no funding
-                    records none, and this desk recorded none until now).
-                    fundAgainst then comes from the one rule in hg-setup-core.js. */
-                 fundingPct: (c.row && typeof c.row.fundingPct === 'number' && isFinite(c.row.fundingPct)) ? c.row.fundingPct : undefined,
-                 /* hg-v1012: the flow verdict at fire time, on the hg-v989
-                    reads seam — true when real taker flow backed the row,
-                    absent when the flow never spoke (NOT RECORDED, the third
-                    state). Flow-AGAINST rows never reach this map: they were
-                    held off above. The split is the layer's measurement. */
-                 reads: (function(){
-                   var rd = {};
-                   if (c.row && c.row.flow && c.row.flow.verdict === 'with') rd.takerFlowWith = true;
-                   /* hg-v1019: the momentum witness's read-mark rides the same
-                      hg-v989 seam — true when the 1D RSI regime backed the row
-                      at fire time, absent when the witness abstained or could
-                      not read (NOT RECORDED, the third state). Momentum-AGAINST
-                      rows never reach this map: they were held off above. */
-                   if (trendmxMomState(c.row, c.dir) === 'with') rd.momWith = true;
-                   /* hg-v1020: the volume witness's read-mark — true when the
-                      swing OBV trend CONFIRMED the row's new extreme at fire
-                      time, absent when it abstained or could not read. */
-                   if (trendmxVolState(c.row, c.dir) === 'with') rd.volWith = true;
-                   /* hg-v1034: the fundamental + sentiment read-mark — true
-                      when the house stack backed the row (2+ net with) at
-                      fire time, absent when it was silent or dark. Against /
-                      refuse rows never reach this map (held off above). */
-                   if (trendmxFundState(c.row, c.dir) === 'with') rd.fundWith = true;
-                   return Object.keys(rd).length ? rd : undefined;
-                 })(),
-                 /* hg-v995: the composite is NOT handed in here -- the ledger reads it off
-                    this desk's own published snapshot (hgTrendMatrixMark), the same row the
-                    board painted, so a second copy would be the same number twice */
-                 mechanic: (c.row && c.row.gate && c.row.gate.clean7) ? 'TM-CLEAN7' : 'TM-CONVICTION',
-                 ticket: !!(c.row && c.row.gate && c.row.gate.clean7),
-                 /* hg-v1022: the PERFECT read-mark — true when the row met the
-                    strictest confluence bar at fire time, absent otherwise. The
-                    split is how the PERFECT desk earns a measured outcome. */
-                 perfect: (trendmxPerfectState(c.row) ? true : undefined) };
-      }), { horizonBars: 20 });
-    }
-  } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("trendtable", eFwd); } catch (eW) {} }
-  return out;
-}
-
-/* hg-v1018: one desk renderer serves both formation classes — the desks
-   differ in WHICH bag they render and the criteria their header names,
-   nothing else. An empty bag with held-off rows renders the held-off

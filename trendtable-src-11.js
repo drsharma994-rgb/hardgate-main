@@ -1,3 +1,39 @@
+    prog.style.display = (f === null) ? 'none' : 'block';
+    if (f !== null) prog.firstElementChild.style.width = (f * 100).toFixed(1) + '%';
+  }
+  function setStatus(txt, warn){
+    status.className = warn ? 'note warn' : 'note';
+    status.textContent = txt;
+  }
+
+  if (missing.length){
+    setStatus('Missing globals: ' + missing.join(', ') + ' — tab cannot scan until the data/indicator scripts load.', true);
+    btn.disabled = true;
+  }
+
+  chips.forEach(function(ch){
+    ch.addEventListener('click', function(){
+      state.filter = ch.getAttribute('data-f');
+      chips.forEach(function(c){ c.classList.toggle('on', c === ch); });
+      renderMatrix();
+    });
+  });
+  vChips.forEach(function(ch){
+    ch.addEventListener('click', function(){
+      state.venue = ch.getAttribute('data-v');
+      vChips.forEach(function(c){ c.classList.toggle('on', c === ch); });
+      renderAll();
+    });
+  });
+  var vwChips = Array.prototype.slice.call(el.querySelectorAll('[data-view]'));
+  vwChips.forEach(function(ch){
+    ch.addEventListener('click', function(){
+      state.view = ch.getAttribute('data-view');
+      vwChips.forEach(function(c){ c.classList.toggle('on', c === ch); });
+      renderMatrix();
+    });
+  });
+  btn.addEventListener('click', runScan);
   if (syncBtn) syncBtn.addEventListener('click', function(){ renderAll(); setStatus('desk repainted from latest scan.'); });
   /* the measured book renders on mount too — records from previous sessions
      are the point of an accumulating ledger (OMNIBTC's hg-v1011 pattern). */
