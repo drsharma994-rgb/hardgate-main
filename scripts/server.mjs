@@ -255,12 +255,47 @@ function goldLiveSource(kind, src){
       '    var news = null;',
       '    try{',
       "      var nref = gfn('hgNewsRefresh');",
-      '      if (nref) await Promise.race([Promise.resolve(nref(false)), new Promise(function(res){ setTimeout(res, 4000); })]);',
+      '      if (nref) await Promise.race([Promise.resolve(nref(false)), new Promise(function(res){ setTimeout(res, 8000); })]);',
       '    }catch(eNr){}',
       "    var ns = gfn('hgNewsState');",
-      '    if (ns){ try{ news = ns(); }catch(eN){ news = null; } }'
+      '    if (ns){ try{ news = ns(); }catch(eN){ news = null; } }',
+      '    try{',
+      '      if (news && news.fng && isFinite(+news.fng.value) && typeof S !== "undefined" && S && !S.fng){',
+      '        S.fng = { v: +news.fng.value, c: String(news.fng.classification || "") };',
+      '      }',
+      '    }catch(eFg){}',
+      '    try{',
+      '      if (typeof S !== "undefined" && S && !S.fng && typeof fetch === "function"){',
+      '        var fj = await Promise.race([',
+      '          fetch("https://api.alternative.me/fng/?limit=1").then(function(r){ return r && r.ok ? r.json() : null; }),',
+      '          new Promise(function(res){ setTimeout(function(){ res(null); }, 6000); })',
+      '        ]);',
+      '        var fd = fj && fj.data && fj.data[0];',
+      '        if (fd && isFinite(+fd.value)) S.fng = { v: +fd.value, c: String(fd.value_classification || "") };',
+      '      }',
+      '    }catch(eFg2){}',
+      '    try{',
+      '      if (typeof W !== "undefined" && W && !W.__hgGoldCot && typeof W.hgGoldCotParse === "function" && typeof W.hgGoldCotAssess === "function" && typeof fetch === "function"){',
+      '        var cotUrl = "/api/proxy?url=" + encodeURIComponent("https://publicreporting.cftc.gov/resource/jun7-fc8e.json?$limit=520&$order=report_date_as_yyyy_mm_dd%20DESC");',
+      '        var cotRes = await Promise.race([fetch(cotUrl), new Promise(function(res){ setTimeout(function(){ res(null); }, 8000); })]);',
+      '        if (cotRes && cotRes.ok){',
+      '          var cotRows = await cotRes.json();',
+      '          if (Array.isArray(cotRows)) W.__hgGoldCot = W.hgGoldCotAssess(W.hgGoldCotParse(cotRows));',
+      '        }',
+      '      }',
+      '    }catch(eCot){}',
+      '    try{',
+      "      var gsWarm = gfn('hgGoldSpotWarm');",
+      '      if (gsWarm) await Promise.race([Promise.resolve(gsWarm()), new Promise(function(res){ setTimeout(res, 8000); })]);',
+      '    }catch(eGs){}'
     ].join('\n');
-    if (src.indexOf("gfn('hgNewsRefresh')") < 0 && src.indexOf(anchor) >= 0) return src.replace(anchor, gate);
+    if (src.indexOf("hgGoldSpotWarm") < 0 && src.indexOf(anchor) >= 0) src = src.replace(anchor, gate);
+    const macroAnchor = "        ctx.macro = await Promise.race([\n          Promise.resolve().then(function(){ return gm(); }),\n          new Promise(function(r){ setTimeout(function(){ r(null); }, 12000); })\n        ]);";
+    const macroGate = macroAnchor + "\n        if (!ctx.macro){ var gmc = gfn('getGoldMacroCached'); if (gmc){ try{ ctx.macro = gmc() || null; }catch(eMc){ ctx.macro = null; } } }";
+    if (src.indexOf("getGoldMacroCached") < 0 && src.indexOf(macroAnchor) >= 0) src = src.replace(macroAnchor, macroGate);
+    const bundleAnchor = "    if (ctx.macro) scalpBundle.macro = ctx.macro;\n    if (ctx.macro && ctx.macro.us10yCandles) scalpBundle.us10yCandles = ctx.macro.us10yCandles;";
+    const bundleGate = bundleAnchor + "\n    if (ctx.macro && ctx.macro.tnxRows && !scalpBundle.us10yCandles) scalpBundle.us10yCandles = ctx.macro.tnxRows;\n    if (ctx.macro && ctx.macro.dxyRows && !scalpBundle.dxyCandles) scalpBundle.dxyCandles = ctx.macro.dxyRows;\n    if (ctx.macro && ctx.macro.tnxRows && !scalpBundle.tnxRows) scalpBundle.tnxRows = ctx.macro.tnxRows;\n    if (ctx.macro && ctx.macro.dxyRows && !scalpBundle.dxyRows) scalpBundle.dxyRows = ctx.macro.dxyRows;";
+    if (src.indexOf("scalpBundle.dxyRows") < 0 && src.indexOf(bundleAnchor) >= 0) src = src.replace(bundleAnchor, bundleGate);
     return src;
   }
   if (kind === 'goldswing'){
