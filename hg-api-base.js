@@ -4,7 +4,7 @@
    /port/10000/ at upload, which routes to the sandbox backend.
    On Render / localhost / GitHub Pages, we leave /api/* untouched.
    Zero deps. Load BEFORE any app script. Safe if loaded twice.
-   BATCH 1120 — load SHIVA GOLD and its nav chip. No navigation. */
+   BATCH 1121 — load SHIVA GOLD. No navigation. No worker unregister. */
 (function(){
   if (typeof window === 'undefined') return;
   if (window.__hgApiBaseInstalled) return;
@@ -47,7 +47,7 @@
 })();
 (function(){
   if (typeof document === 'undefined') return;
-  if (document.getElementById('hgShivaDesk')) return;
+  if (document.getElementById('hgShivaDesk1121')) return;
   function add(id, src){
     if (document.getElementById(id)) return;
     var s = document.createElement('script');
@@ -56,6 +56,6 @@
     s.async = false;
     (document.head || document.documentElement).appendChild(s);
   }
-  add('hgShivaDesk', 'shivagold.js?v=1120');
-  add('hgShivaNav', 'shiva-nav.js?v=1120');
+  add('hgShivaDesk1121', 'shivagold.js?v=1121');
+  add('hgShivaNav1121', 'shiva-nav.js?v=1121');
 })();

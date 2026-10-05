@@ -1,8 +1,23 @@
-/* BATCH 1115 — SHIVA GOLD was registered but not in the GOLD chip list, so the tab never showed. */
+/* BATCH 1121 — SHIVA GOLD chip, and do not leave the badge pinned at v1111.
+   No location change. No service-worker unregister. */
 (function(){
   var W = (typeof window !== 'undefined') ? window : globalThis;
-  if (W.__hgShivaNav === 1115) return;
-  W.__hgShivaNav = 1115;
+  if (W.__hgShivaNav === 1121) return;
+  W.__hgShivaNav = 1121;
+
+  function restoreVersion(){
+    try{
+      if (!W.HG_BUILD) return;
+      if (W.HG_BUILD.version === 'hg-v1111') W.HG_BUILD.version = 'hg-v1112';
+      var node = document.getElementById('hgVerBadge');
+      if (node && /v1111|STALE/.test(node.textContent || '')){
+        node.textContent = 'v1112';
+        node.className = 'verbadge';
+        node.title = 'hg-v1112';
+      }
+    }catch(e){}
+  }
+
   function place(){
     var groups = W.HG_NAV_GROUPS;
     if (!groups || !groups.length) return false;
@@ -20,16 +35,36 @@
     if (typeof W.hgRenderGroupChips === 'function'){
       try{ W.hgRenderGroupChips(); }catch(e){}
     }
-    if (typeof W.hgLayoutNav === 'function'){
-      try{ W.hgLayoutNav(); }catch(e2){}
-    }
     return hit;
   }
+
+  function ensureChip(){
+    if (document.getElementById('tabB_shivagold')) return;
+    var buttons = document.querySelectorAll('button');
+    var anchor = null, i, t;
+    for (i = 0; i < buttons.length; i++){
+      t = (buttons[i].textContent || '') + ' ' + (buttons[i].getAttribute('onclick') || '');
+      if (/goldscalp|GOLD SCALP|omnigold/i.test(t)){ anchor = buttons[i]; break; }
+    }
+    if (!anchor || !anchor.parentNode) return;
+    var b = document.createElement('button');
+    b.id = 'tabB_shivagold';
+    b.type = 'button';
+    b.className = anchor.className || '';
+    b.textContent = 'SHIVA GOLD';
+    b.onclick = function(){
+      if (typeof W.showTab === 'function') W.showTab('shivagold');
+    };
+    anchor.parentNode.insertBefore(b, anchor);
+  }
+
   var n = 0;
-  var t = setInterval(function(){
+  var timer = setInterval(function(){
     n += 1;
-    if (place() || n > 60) clearInterval(t);
-  }, 400);
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', place);
-  else place();
+    restoreVersion();
+    place();
+    ensureChip();
+    if (n > 40 && document.getElementById('tabB_shivagold')) clearInterval(timer);
+  }, 500);
+  restoreVersion();
 })();
