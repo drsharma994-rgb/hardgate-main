@@ -75,7 +75,7 @@ function fmtF(n, d){
 }
 
 var SRC_LABEL = { 'binance-xau': 'BINANCE XAUUSDT', 'binance-paxg': 'BINANCE PAXGUSDT',
-  'twelvedata': 'TWELVE DATA', 'yahoo': 'YAHOO GC=F' };
+  'twelvedata': 'TWELVE DATA', 'yahoo': 'IUX XAUUSD' };
 
 async function fetchGoldBars(){
   /* hg-v979: srcByTf names the feed of EACH leg, for the ledger; `source`

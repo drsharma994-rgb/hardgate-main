@@ -761,6 +761,25 @@ async function getGoldMacro(){
       }
     }catch(eRR){ realRateMeasured = null; }
 
+    /* FRED DFII10 is often unconfigured. getRealYield10Y already read the
+       keyless Treasury TIPS curve into realYield. Copy that measured print
+       so a missing FRED key is not reported as an unread real yield. */
+    if (!(realRateMeasured && realRateMeasured.measured) && realYield && isFinite(+realYield.value) && realYield.trend20){
+      realRateMeasured = {
+        level: +realYield.value,
+        chg20d: null,
+        trend: String(realYield.trend20),
+        asOf: realYield.date || null,
+        measured: true,
+        stale: false,
+        source: realYield.source || 'treasury-tips'
+      };
+      realRateSource = realRateMeasured.source;
+      if (realRateMeasured.trend === 'FALLING') realRateHint = 'TAILWIND';
+      else if (realRateMeasured.trend === 'RISING') realRateHint = 'HEADWIND';
+      else realRateHint = 'NEUTRAL';
+    }
+
     /* hg-v966: the series for the EMA50 read. Fetched in parallel and fully
        fail-open -- a null here restores exactly the pre-hg-v966 situation, in
        which the level test simply cannot be taken. */

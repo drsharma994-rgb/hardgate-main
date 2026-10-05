@@ -117,7 +117,10 @@ console.log('== the scan merges ALL CoinDCX futures + wiring pins ==');
 {
   const src = read('trendtable.js');
   ok(src.indexOf('minTurnover: 0, includeUnknown: true') >= 0, 'the scan re-reads the universe at floor 0');
-  ok(src.indexOf("hgDeskFilterVenues(allPack.items, ['coindcx'])") >= 0, 'the floor-0 read is sliced to CoinDCX');
+  /* hg-v1074: the floor-0 pass reads the RAW CoinDCX leg, not the deduped
+     merged universe (which tags one 'exchange' per base and hides CoinDCX
+     contracts also listed on Delta/Startrader). */
+  ok(src.indexOf('hgDeskLoadCoinDCXAll') >= 0, 'the floor-0 read uses the raw CoinDCX leg (hgDeskLoadCoinDCXAll)');
   ok(src.indexOf('ALL COINDCX FUTURES') >= 0, 'the merge documents itself');
   ok(src.indexOf('gates + /7 NEAR') >= 0 || src.indexOf('gates + \'/7 NEAR\'') >= 0, 'the NEAR stamp reads the real gate count');
   ok(src.indexOf("W.trendmxTrendFormHTML = trendmxTrendFormHTML") >= 0, 'the seam export is pinned');

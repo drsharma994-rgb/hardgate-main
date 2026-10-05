@@ -730,10 +730,9 @@ terse status, and never launches a first-time scan on a global refresh.
     /* Calculate real rate */
     realRate = hgOgRealRate(yields, macro);
     /* Apply regime rules */
-    if (!isFinite(dxyValue)) dxyValue = 103;   /* fallback */
-    if (!isFinite(correlation)) correlation = -0.92;   /* fallback */
-    if (!isFinite(beta)) beta = -0.95;   /* fallback */
-    if (!isFinite(realRate)) realRate = 2.1;   /* fallback */
+    if (!isFinite(dxyValue) || !isFinite(correlation) || !isFinite(beta) || !isFinite(realRate)){
+      return { regime: 'UNREAD', dxyValue: dxyValue, correlation: correlation, beta: beta, realRate: realRate, reason: 'DXY or real-rate feed unread. A missing internet print is not a normal gold regime' };
+    }
     /* EXTREME regime: beta < -1.5 (unusual inverse) or real rates shift +50bp */
     if (beta < -1.5){
       regime = 'EXTREME';
@@ -5720,7 +5719,7 @@ terse status, and never launches a first-time scan on a global refresh.
     'binance-paxg':'BINANCE PAXGUSDT (tokenised gold)',
     'binance-xaut':'BINANCE XAUTUSDT (tokenised gold)',
     'twelvedata':  'TWELVE DATA XAU/USD',
-    'yahoo':       'YAHOO GC=F'
+    'yahoo':       'IUX XAUUSD'
   };
   function hgOgSrcLabel(src){
     var k = String(src || '');
@@ -6509,7 +6508,7 @@ terse status, and never launches a first-time scan on a global refresh.
         minRr: (typeof MIN_RR === 'number') ? MIN_RR : 2.0,
         tab: ogTab,
         kind: c.kind,
-        tapeOverride: true /* v687 omnigold-only opt-in */
+        tapeOverride: false /* v1099: a past winner against the tape is not put on top */
       }); }
       catch(eSol){}
     }
@@ -13228,8 +13227,7 @@ terse status, and never launches a first-time scan on a global refresh.
       for (i = 0; i < hzs.length; i++){
         pick = null;
         try {
-          pick = hgOgPickGoldEngineFor(bridge, hzs[i], tape,
-            { allowC: false, allowAgainstTape: false });
+          pick = null; /* v1099: an engine grade is not the OmniGold lead */
         } catch (ePk){ pick = null; }
         if (!pick) continue;
         q = hgOgApexQualify(pick, hzs[i], tape);
@@ -13240,7 +13238,7 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     h += cards + near;
     if (!cards){
-      h += '<div class="hg-mp-note">no grade-A/B tape-aligned pick clears the APEX bar right now — the bar existing is the point.'
+      h += '<div class="hg-mp-note">A Gold Scalp or Gold Swing grade is not the OmniGold lead. The lead has to be positive after the spread, at the 2R on the card, and past the family bar.'
         + ((tape === 'long' || tape === 'short') ? ''
            : ' Gold tape reads UNREAD/MIXED — an unread tape is a stand-aside, not a coin flip.')
         + '</div>';
@@ -13848,6 +13846,26 @@ terse status, and never launches a first-time scan on a global refresh.
      ticket on the list; it is not the first card when a sweep two points
      off the market already has matching entry/stop. Far tickets remain if
      nothing nearer survived. */
+  function hgOgLeadMeasOk(c){
+    try{
+      if (!c || !c.kind) return false;
+      var fwdPaid = null;
+      try { fwdPaid = hgOgForwardPaid(c.kind, c.horizon); } catch (eFp) { fwdPaid = null; }
+      if (fwdPaid && fwdPaid.read === 'has paid') return true;
+      var ev = hgOgReplayEvidence(c.kind);
+      if (!ev || !(fin(ev.n) >= MIN_SAMPLES)) return false;
+      var priced = null;
+      try { priced = hgOgReplayNetAtVenue(ev); } catch (ePx) { priced = null; }
+      var net = (priced && isFinite(fin(priced.net))) ? fin(priced.net) : NaN;
+      if (!(net > 0)) return false;
+      var hit = fin(ev.winRate), n = fin(ev.n);
+      if (!isFinite(hit) || !(n > 0)) return false;
+      var pBreak = 1 / (1 + OG_T1_R);
+      var se = Math.sqrt(pBreak * (1 - pBreak) / n);
+      var z = se > 0 ? ((hit - pBreak) / se) : 0;
+      return z >= hgOgFamilyZ(OG_MECHANICS.length);
+    }catch(eLm){ return false; }
+  }
   function hgOgPickFor(ranked, horizon, tapeDir){
     if (!ranked || !ranked.length) return null;
     /* hg-v1005: a checked red-folder BLACKOUT crowns no fresh ticket, on any
@@ -13877,6 +13895,7 @@ terse status, and never launches a first-time scan on a global refresh.
          buttons already say WATCH ONLY (hg-v1003), and it can never be the
          pick. Unstamped rows (other callers' lists) are untouched. */
       if (c.fundGate && (c.fundGate.refuse === true || c.fundGate.demote === true)) continue;
+      if (!hgOgLeadMeasOk(c)) continue;
       if (c.plan.momentumStop === true) vol.push(c);
       else structural.push(c);
     }
@@ -15536,8 +15555,8 @@ terse status, and never launches a first-time scan on a global refresh.
         } catch (eGe0) {}
         return hgOgRunGoldTabEngines(shared, res.scalp.rows, res.swing.rows, res.scalp.source).then(function(bridge){
           __og.bridge = bridge;
-          var engineScalp = !pickScalp ? hgOgPickGoldEngineForMp(bridge, HORIZONS.scalp.label, scalpTape) : null;
-          var engineSwing = !pickSwing ? hgOgPickGoldEngineForMp(bridge, HORIZONS.swing.label, swingTape) : null;
+          var engineScalp = null; /* v1099: the ledger is the only lead */
+          var engineSwing = null;
           try {
             hgOgPaintMostProbable(ui, pickScalp, pickSwing, deskTape, mpBag, ogHeld, watchScalp, watchSwing, engineScalp, engineSwing, hzTapes);
           } catch (eRender) {

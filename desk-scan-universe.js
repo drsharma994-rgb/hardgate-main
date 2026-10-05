@@ -134,6 +134,46 @@ async function hgDeskLoadDeltaCoinDCX(opts){
   return pack;
 }
 
+/* RAW CoinDCX only — the merged universe tags one 'exchange' per base
+   (higher-turnover venue wins), so a CoinDCX contract also listed on
+   Delta/Startrader is invisible to a venue filter on the merged list.
+   This reads the RAW CoinDCX leg (xuCoinDCXRows) so every CoinDCX
+   `active_instruments` contract appears regardless of the tag dedup chose.
+   Falls back to the merged-universe venue filter when xuniverse is absent. */
+async function hgDeskLoadCoinDCXAll(opts){
+  opts = opts || {};
+  var minTurn = (opts.minTurnover !== undefined) ? opts.minTurnover : DESK_MIN_TURNOVER;
+  var includeUnknown = opts.includeUnknown !== false;
+  if (typeof G.xuCoinDCXRows === 'function'){
+    var rows = await G.xuCoinDCXRows(!!opts.force);
+    rows = Array.isArray(rows) ? rows.slice() : [];
+    var rawLen = rows.length;
+    rows = rows.filter(function(it){ return passesTurnover(it, minTurn, includeUnknown); });
+    rows.sort(sortByTurnover);
+    return {
+      items: rows,
+      note: (typeof G.xuUniverseNote === 'function') ? G.xuUniverseNote() : null,
+      source: 'xu-cdcx-raw',
+      rawLen: rawLen,
+      turnoverLen: rows.length,
+      droppedTurnover: Math.max(0, rawLen - rows.length),
+      droppedVenue: 0,
+      minTurnover: minTurn,
+      includeUnknown: includeUnknown,
+      filteredLen: rows.length,
+      venueCounts: hgDeskVenueCounts(rows)
+    };
+  }
+  var pack = await hgDeskLoadUniverse(opts);
+  var before = pack.items.length;
+  pack.items = hgDeskFilterVenues(pack.items, ['coindcx']);
+  pack.droppedVenue = Math.max(0, before - pack.items.length);
+  pack.filteredLen = pack.items.length;
+  pack.venueCounts = hgDeskVenueCounts(pack.items);
+  pack.source = pack.source + '+coindcx-only';
+  return pack;
+}
+
 async function hgDeskLoadUniverse(opts){
   opts = opts || {};
   var minTurn = (opts.minTurnover !== undefined) ? opts.minTurnover : DESK_MIN_TURNOVER;
@@ -285,6 +325,7 @@ try{
   G.hgDeskVenueCounts = hgDeskVenueCounts;
   G.hgDeskLoadUniverse = hgDeskLoadUniverse;
   G.hgDeskLoadDeltaCoinDCX = hgDeskLoadDeltaCoinDCX;
+  G.hgDeskLoadCoinDCXAll = hgDeskLoadCoinDCXAll;
   G.hgDeskFilterVenues = hgDeskFilterVenues;
   G.hgDeskFetchKlines = hgDeskFetchKlines;
   G.hgDeskFetchKlinesResult = hgDeskFetchKlinesResult;

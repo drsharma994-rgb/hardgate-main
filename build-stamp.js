@@ -1,3 +1,130 @@
+/* hg-v1101: IUX XAUUSD. The gold desks fall through to Yahoo GC=F, which
+   is the COMEX future, about $28 above the XAUUSD.iux chart. Shift that
+   payload (and any other gold candle whose last close sits $8 to $80 above
+   live spot) onto api.gold-api.com XAU before a tab parses it. A feed
+   already on spot is left alone. DXY, TNX and silver are not touched. */
+(function(){
+  var G = (typeof window !== 'undefined') ? window : globalThis;
+  if (typeof G.fetch !== 'function' || G.fetch.__hgIux) return;
+  var orig = G.fetch.bind(G);
+  var spotPx = NaN, spotAt = 0, spotInflight = null;
+  function loadSpot(){
+    var now = Date.now();
+    if (spotPx > 1000 && (now - spotAt) < 45000) return Promise.resolve(spotPx);
+    if (spotInflight) return spotInflight;
+    spotInflight = orig('https://api.gold-api.com/price/XAU', { cache: 'no-store' }).then(function(r){
+      return r && r.json ? r.json() : null;
+    }).then(function(j){
+      var p = j && +j.price;
+      if (p > 1000 && p < 20000){ spotPx = p; spotAt = Date.now(); }
+      return spotPx;
+    }).catch(function(){ return spotPx; }).then(function(p){
+      spotInflight = null;
+      return p;
+    });
+    return spotInflight;
+  }
+  function goldUrl(url){
+    return /GC=F|GC%3DF|GC%253DF|symbol=XAU|symbol=PAXG|XAU%2FUSD|XAU\/USD|\/api\/xm\/candles/i.test(url);
+  }
+  function lastClose(j){
+    try{
+      var q = j.chart.result[0].indicators.quote[0].close;
+      for (var i = q.length - 1; i >= 0; i--) if (q[i] != null && +q[i] > 0) return +q[i];
+    }catch(e){}
+    try{
+      var rows = j.rows;
+      if (Array.isArray(rows) && rows.length){
+        var b = rows[rows.length - 1];
+        var c = +(b.c != null ? b.c : b.close);
+        if (c > 0) return c;
+      }
+    }catch(e2){}
+    try{
+      if (Array.isArray(j) && j.length && Array.isArray(j[j.length - 1])){
+        var c2 = +j[j.length - 1][4];
+        if (c2 > 0) return c2;
+      }
+    }catch(e3){}
+    return NaN;
+  }
+  function shiftNum(v, d){
+    var n = +v;
+    if (!(n > 0)) return v;
+    return Math.round((n - d) * 100) / 100;
+  }
+  function apply(j, d){
+    try{
+      if (j && j.chart && j.chart.result && j.chart.result[0]){
+        var r = j.chart.result[0];
+        var q = r.indicators && r.indicators.quote && r.indicators.quote[0];
+        if (q){
+          ['open','high','low','close'].forEach(function(k){
+            if (!q[k]) return;
+            for (var i = 0; i < q[k].length; i++) if (q[k][i] != null) q[k][i] = shiftNum(q[k][i], d);
+          });
+        }
+        if (r.meta && r.meta.regularMarketPrice != null) r.meta.regularMarketPrice = shiftNum(r.meta.regularMarketPrice, d);
+        return true;
+      }
+    }catch(e){}
+    try{
+      if (j && Array.isArray(j.rows)){
+        j.rows.forEach(function(b){
+          if (!b) return;
+          ['o','h','l','c','open','high','low','close'].forEach(function(k){
+            if (b[k] != null) b[k] = shiftNum(b[k], d);
+          });
+        });
+        j.symbol = 'XAUUSD.iux';
+        j.iux = true;
+        return true;
+      }
+    }catch(e2){}
+    try{
+      if (Array.isArray(j) && j.length && Array.isArray(j[0])){
+        for (var i = 0; i < j.length; i++){
+          var row = j[i];
+          if (!row || row.length < 5) continue;
+          row[1] = String(shiftNum(row[1], d));
+          row[2] = String(shiftNum(row[2], d));
+          row[3] = String(shiftNum(row[3], d));
+          row[4] = String(shiftNum(row[4], d));
+        }
+        return true;
+      }
+    }catch(e3){}
+    return false;
+  }
+  function wrapped(input, init){
+    var url = '';
+    try{ url = (typeof input === 'string') ? input : ((input && input.url) || ''); }catch(e){ url = ''; }
+    var pending = orig(input, init);
+    if (!goldUrl(url)) return pending;
+    return pending.then(function(res){
+      if (!res || !res.ok || typeof res.clone !== 'function') return res;
+      var copy;
+      try{ copy = res.clone(); }catch(e){ return res; }
+      return copy.json().then(function(j){
+        var last = lastClose(j);
+        return loadSpot().then(function(spot){
+          var gap = last - spot;
+          if (!(spot > 1000) || !(last > 1000) || gap < 8 || gap > 80) return res;
+          if (!apply(j, gap)) return res;
+          G.__hgIux = { spot: spot, gap: Math.round(gap * 100) / 100, at: Date.now() };
+          return new Response(JSON.stringify(j), {
+            status: res.status,
+            statusText: res.statusText || 'OK',
+            headers: { 'Content-Type': 'application/json' }
+          });
+        });
+      }).catch(function(){ return res; });
+    });
+  }
+  wrapped.__hgIux = true;
+  G.fetch = wrapped;
+})();
+
 /* HARDGATE — build stamp. Single source of truth for "which version am I running?"
    Loaded FIRST so every later script can read G.HG_BUILD. */
 (function(){
@@ -5,9 +132,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1072',
-  pack: 'GANESH GOLD TRADING FIRM — the complete 17-step SMC/ICT framework as a new gold desk: HTF bias, BOS/CHOCH/MSS structure, buy-side and sell-side liquidity (PDH/PDL/week/Asia), premium/discount, order blocks and FVGs, 1.5xATR displacement, volume profile (POC/VAH/VAL), VWAP, ATR regime, squeeze, DXY + yields, the news calendar and sessions - both models (LONG/SHORT) graded on 12 independent legs (A+ >= 10, A >= 8, B >= 5), the better grade crowns, entry on the FVG/OB retest, SL beyond the sweep extreme + 0.5xATR, TP1/TP2/TP3 at the opposing liquidity, R:R must clear the style minimum, TICKET mints write the forward record under GANESHGOLD, and the crown joins the Telegram batch. Also carries the RS + CV CROWNS — the OMNIBTC treatment reaches the last two list-style desks. REVERSAL SNIPER crowns its leading bounce (LONG-only by design, TICKET or WATCH-ONLY under the PIN-REJECT policy) and CHART VISION crowns its strongest read (7/7 CLEAN leads as TICKET, 6/7 NEAR stays WATCH) — each with THE CALL, CROWN VERDICT, a COMPLETE ANALYSIS (technical - macro - micro, world tilt), a SETUP CARD with the automation JSON and the MEASURED EDGE chip. An empty scan prints no crown. Also carries the FEED FRESHNESS + KILL-ZONE LABELS — both crowns now stamp the AGE of the world feeds (WM + regime, in minutes) so a stale macro read is visible as stale, and the ASIA session on the scalp witnesses carries its quiet-hours kill-zone label. The prompt document gained its final two sections (Risk Management + Constraints). Also carries the TREND MATRIX FULL PARITY — the crown now carries the last OMNIBTC pieces: the ANCHOR panel (day VWAP + Bollinger state on the row\'s own tape), a SWING SETUP on the 4h grid, a SCALP SETUP on the 1h grid (honest DRAFT ATR14 ladder) and the SCALP SETUP - ALT SIDE stamped AGAINST THE CALL. The two desks are now feature-identical. Also carries the TREND MATRIX FINAL MILE — the matrix crown now reaches the operator: W.trendmxCrownState + a pure crown-of-rows seam feed a Telegram collector (clean tier only, PERFECT badges in the note, convicted-filter seat), the background auto-scan cycle force-scans the desk so records accumulate with the tab closed, and the crown MICRO gains the accuracy witnesses (fill odds + stop sensitivity). Also carries the TREND MATRIX SHARED PERFECT STACK — the matrix\'s eight strongest rows now run through the SAME reads bag and the SAME enrichment + predicate OMNIBTC consumes (hgObtcPerfectFormation), fed by the SAME external data: real Binance taker flow, Binance funding, the ATR-percentile regime, EMA50/200 structure, session RVOL and the news calendar. A PERFECT / PERFECT+ badge on a matrix row now means byte-identically what it means on OMNIBTC, and the crown verdict shows the shared badge. Evidence, never a gate. Also carries the TREND MATRIX CROWN — the OMNIBTC treatment on the matrix: a single bold THE CALL for the strongest majority row with a minted plan, a CROWN VERDICT line, a COMPLETE ANALYSIS (technical/sentimental/fundamental/macro/micro with the world tilt), a SETUP CARD (market thesis, bias, entry zone, SL, TP1-3 with the ungraded extension, automation JSON) and the MEASURED EDGE chip for the TRENDMX pool. An honest empty when no plan is minted. Also carries the PERFECT COHORT + WORLD TILT SPLITS — the shared forward panel now answers the desk\'s core question outright: the PERFECT COHORT split grades settled records by their badge (PERFECT+ / PERFECT / REST, n-hit-expR each) and the WORLD TILT ODDS split grades them by the fire-time macro tilt (RISK-ON / RISK-OFF / NEITHER). Both render on every recording desk and are reported, never gated - the marks the desks have written for months finally have their split. Also carries the OMNIBTC WORLD FEEDS — the desk now reads the world: the World Monitor macro verdict (QQQ/XLP/BTC/F+G + FRED economic stress), the REGIME playbook bias (LONG-ONLY/SHORT-ONLY/BOTH/STAND-ASIDE), the DXY 20d trend and the fed-liquidity w/w change, once per scan. The MACRO dimension prints a WORLD TILT chip (RISK-ON / RISK-OFF / NEUTRAL) with every feed line measured, and the tilt + verdicts ride the forward record so the ledger can later split on it. Evidence, never a gate. Also carries the OMNIBTC BOTH SCALP SIDES — the 15m grid now prints BOTH directions with the same structure: the side the matrix backs gets its real levels (CLEAN/NEAR), the opposite side gets the honest DRAFT ATR15 ladder stamped AGAINST THE CALL and names when the matrix reads the other way. A long scalp is always shown beside the short one. Also carries the OMNIBTC COMPLETE ANALYSIS — five dimensions in one panel, rendered BEFORE the setup: FUNDAMENTAL (netflow, carry, term basis), TECHNICAL (MTF agreement, structure, ATR regime, trend quality, Bollinger, VWAP), SENTIMENTAL (taker flow incl. absorption, F+G, 25d RR, funding crowd, DVOL, CVD context), MACRO (BTC.D, news, leverage cycle, basis momentum) and MICRO (liq clusters, volume budget, fill odds, stop sensitivity, mark distance, cost, venues, session) — each with its own verdict chip ALIGNED / CAUTION / AGAINST / UNREAD. Also carries the OMNIBTC SCALP WITNESSES + DVOL — the SCALP SETUP block now prints its own witnesses (fire-bar RVOL on the 15m tape, session, funding), and the Deribit options-vol read (DVOL + regime, already gathered every scan) finally renders in the witnesses panel. External resources are surfaced, never faked. Also carries the OMNIBTC DUAL GRID SETUPS — the desk now prints TWO distinct setups: a SWING SETUP on the 4h grid and a SCALP SETUP on the 15m grid, each standing on its own direction, tier (7/7 CLEAN from the real matrix, n/7 NEAR, or the honest DRAFT ATR ladder) and levels, with AGAINST THE CALL stamped when a grid disagrees with the crowned call. Also carries the SCALP-ANCHOR MARKS + SESSION-ODDS COMPLETION — the forward ledger records the signed VWAP deviation % and the Bollinger squeeze state on the winner tape (folding into the aggregate so the splits survive pruning), the OMNIBTC session-odds split and liquidation-magnitude capture complete the ACCURACY PACK wiring, and the cycle-context bag rides the snap. Desk state files refreshed. Also carries the OMNIBTC THE CALL + SCALP TARGET — the direction is now unambiguous: a bold THE CALL line prints first (LONG/SHORT - TICKET/WATCH with the counter-cascade and stand-aside caveats, or STAND ASIDE with no crown), and a SCALP TARGET block prints on the 15m grid (the real 15m scalp matrix when it agrees with the call, otherwise the honest DRAFT ATR15 ladder, never shown against the call). Also carries the ACCURACY PACK — the research-driven upgrade set for OMNIBTC + TREND MATRIX (hardgate-omnibtc-trendmx-accuracy-research.md): the TREND-QUALITY leg (Choppiness Index + Kaufman Efficiency Ratio) feeds the PERFECT formation and caps choppy TREND MATRIX rows at NEAR (never CLEAN), with CHOP vs EARLY FORMING stamps on the CoinDCX board; taker-flow ACCEPTANCE distinguishes absorption from distribution (against-but-absorbed no longer vetoes PERFECT); the LEVERAGE-CYCLE leg (OI change + funding reset) reads RESET / EXTENDED / FLAT; liquidation-map magnitudes (fuel + cluster USD) ride the record; the on-chain netflow verdict joins the evidence bag; a CYCLE CONTEXT panel prints MVRV-Z / SOPR / miner / netflow reads (UNREAD - never faked when data is absent); SESSION ODDS split the desk own settled record by session; spot-vs-perp CVD context (BOTH-WITH / PERP-ONLY / SPOT-ONLY / AGAINST) and basis momentum are read on the winner tape; and three new measured WATCH mechanics join the candidate pool: TSI CROSS (13/25 double-smoothed momentum), ADAPTIVE TREND (KAMA 10,2,30 + SuperTrend 10,3) and SPRING (range-bound liquidity sweep + springboard volume). Every new leg records forward marks the ledger splits later. Evidence first, never a gate.',
-  built: '2026-10-04T03:27:55.205Z'
+  version: 'hg-v1112',
+  pack: 'GANESH GOLD TRADING FIRM — the complete 17-step SMC/ICT framework as a new gold desk: HTF bias, BOS/CHOCH/MSS structure, buy-side and sell-side liquidity (PDH/PDL/week/Asia), premium/discount, order blocks and FVGs, 1.5xATR displacement, volume profile (POC/VAH/VAL), VWAP, ATR regime, squeeze, DXY + yields, the news calendar and sessions - both models (LONG/SHORT) graded on 12 independent legs (A+ >= 10, A >= 8, B >= 5), the better grade crowns, entry on the FVG/OB retest, SL beyond the sweep extreme + 0.5xATR, TP1/TP2/TP3 at the opposing liquidity, R:R must clear the style minimum, TICKET mints write the forward record under GANESHGOLD, and the crown joins the Telegram batch. Merged on top of hg-v1110: SHIVA GOLD trading firm, IUX XAUUSD feed alignment, Hurst + GARCH(1,1) on every gold tab, the London fixes, the OmniGold ledger lead rules and the Gold Scalp accuracy locks.',
+  built: '2026-10-05T13:55:00.000Z'
 };
 
 function hgBuildLabel(b){

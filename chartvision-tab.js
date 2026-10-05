@@ -365,7 +365,9 @@ async function cvRunScan(opts){
       return 'failed';
     }
 
-    var uniPack = await W.hgDeskLoadUniverse({ force: !!opts.force });
+    /* v696: full universe — a turnover floor must not shrink the CoinDCX
+       (or Delta) leg of the scan. Turnover is a witness, not a scan gate. */
+    var uniPack = await W.hgDeskLoadUniverse({ force: !!opts.force, minTurnover: 0, includeUnknown: true });
     var items = cvFilterVenue(uniPack.items || [], venue);
     if (!items.length){
       stat.textContent = 'universe empty for venue filter';

@@ -237,7 +237,7 @@ function lrow(gid, name, detail, stampCls, stampTxt){
   return '<div class="lrow"><span class="gid">' + esc(gid) + '</span><span class="gname">' + esc(name) + '</span>'
        + '<span class="gdetail">' + esc(detail) + '</span><span class="stamp ' + stampCls + '">' + esc(stampTxt) + '</span></div>';
 }
-var SRC_LABEL = { 'binance-xau': 'BINANCE XAU', 'binance-paxg': 'BINANCE PAXG', 'twelvedata': 'TWELVE DATA', 'yahoo': 'YAHOO GC=F' };
+var SRC_LABEL = { 'binance-xau': 'BINANCE XAU', 'binance-paxg': 'BINANCE PAXG', 'twelvedata': 'TWELVE DATA', 'yahoo': 'IUX XAUUSD' };
 function srcLabel(src){ return SRC_LABEL[src] || (src ? String(src).toUpperCase() : 'NONE'); }
 
 function setNote(ui, msg, warn){

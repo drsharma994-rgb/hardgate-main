@@ -39,6 +39,39 @@ assert(G.hgDeskMinTurnover() === 5e6, 'default turnover floor $5M');
   const dcx = await G.hgDeskLoadDeltaCoinDCX({ force: true });
   assert(dcx.items.length === 3 && dcx.venueCounts.delta === 1 && dcx.venueCounts.coindcx === 2,
          'hgDeskLoadDeltaCoinDCX keeps only Delta + CoinDCX rows');
+  /* hg-v1074 fallback: no xuCoinDCXRows -> merged-universe venue filter */
+  const cdcxOnly = await G.hgDeskLoadCoinDCXAll({ force: true, minTurnover: 0, includeUnknown: true });
+  assert(cdcxOnly.venueCounts.coindcx === 2 && cdcxOnly.items.length === 2 &&
+         cdcxOnly.items.every(function(r){ return /coindcx|cdcx/.test(String(r.exchange).toLowerCase()); }),
+         'hgDeskLoadCoinDCXAll (fallback) returns CoinDCX-only rows when xuCoinDCXRows absent');
+}
+
+/* hg-v1074: raw CoinDCX leg — a contract also on Delta (higher turnover)
+   would be tagged 'delta' by the merge, but the raw accessor must still
+   surface it under 'coindcx' so it cannot be dropped from the scan. */
+{
+  const ctxRaw = vm.createContext(Object.create(null));
+  ctxRaw.window = ctxRaw;
+  vm.runInContext(readFileSync(path.join(root, 'desk-scan-universe.js'), 'utf8'), ctxRaw, { filename: 'desk-scan-universe.js' });
+  ctxRaw.xuCoinDCXRows = async function(){
+    return [
+      { sym: 'B-BTC_USDT', base: 'BTC', exchange: 'coindcx', turnoverUsd: 50e6 },
+      { sym: 'B-ETH_USDT', base: 'ETH', exchange: 'coindcx', turnoverUsd: 30e6 },
+      { sym: 'B-NEW_USDT', base: 'NEW', exchange: 'coindcx', turnoverUsd: null }
+    ];
+  };
+  ctxRaw.xuUniverseNote = function(){ return null; };
+  const raw = await ctxRaw.hgDeskLoadCoinDCXAll({ force: true, minTurnover: 0, includeUnknown: true });
+  assert(raw.source === 'xu-cdcx-raw', 'raw leg: hgDeskLoadCoinDCXAll uses xuCoinDCXRows when present');
+  assert(raw.items.length === 3 && raw.venueCounts.coindcx === 3,
+         'raw leg: all 3 CoinDCX contracts survive (got ' + raw.items.length + ')');
+  const btc = raw.items.filter(function(r){ return r.base === 'BTC'; })[0];
+  assert(btc && btc.exchange === 'coindcx' && btc.sym === 'B-BTC_USDT',
+         'raw leg: BTC stays tagged coindcx regardless of any Delta overlap');
+  /* turnover floor honoured on the raw leg too */
+  const floored = await ctxRaw.hgDeskLoadCoinDCXAll({ force: true, minTurnover: 40e6, includeUnknown: false });
+  assert(floored.items.length === 1 && floored.items[0].base === 'BTC',
+         'raw leg: turnover floor still applied (only BTC ≥ $40M, got ' + floored.items.length + ')');
 }
 
 /* binance fallback when xu absent */
