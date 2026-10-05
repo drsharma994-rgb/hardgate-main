@@ -368,6 +368,12 @@ function goldLiveSource(kind, src){
       if (gsAcc) legs.push('ACCURACY — ' + gsAcc + ' scalp' + (gsAcc === 1 ? '' : 's') + ' cannot lead');
     }catch(eAcc){}`;
     if (src.indexOf('walk-forward did not hold') < 0 && src.indexOf(accAnchor) >= 0) src = src.replace(accAnchor, accGate);
+    const ttlAnchor = "var CONVICTION_TTL_MS = 6*60*60*1000;";
+    const ttlGate = "var CONVICTION_TTL_MS = 90*60*1000;";
+    if (src.indexOf(ttlGate) < 0 && src.indexOf(ttlAnchor) >= 0) src = src.replace(ttlAnchor, ttlGate);
+    const relAnchor = "    var lock = applyConviction(ranked, venueRows, now, entryVeto);";
+    const relGate = relAnchor + "\n    try{\n      if (lock && lock.store && lock.store.live){\n        for (var ri = 0; ri < ranked.length; ri++){\n          var rc = ranked[ri];\n          if (!rc || !rc.id) continue;\n          var accFail = Array.isArray(rc.stamps) && rc.stamps.indexOf('ACCURACY') >= 0;\n          if (!accFail) continue;\n          delete lock.store.live[rc.id];\n          if (rc.venue) delete lock.store.live[rc.venue + '|' + rc.id];\n          rc.locked = false;\n          rc.vetoed = true;\n          if (!rc.reason) rc.reason = 'ACCURACY — this scalp is not valid on the closed bar.';\n        }\n        if (typeof saveConvictions === 'function') saveConvictions(lock.store);\n      }\n    }catch(eRel){}";
+    if (src.indexOf('not valid on the closed bar') < 0 && src.indexOf(relAnchor) >= 0) src = src.replace(relAnchor, relGate);
     return src;
   }
   if (kind === 'goldswing'){
@@ -663,5 +669,5 @@ if (process.env.HARDGATE_DAEMON_AUTOSTART === '1' || process.env.HARDGATE_DAEMON
   setTimeout(ping, 60000).unref?.();              /* first ping 1 min after boot */
   const t = setInterval(ping, 10 * 60 * 1000);    /* then every 10 min (< 15 min sleep threshold) */
   try{ t.unref(); }catch(e){}
-  console.log('[keep-alive] armed — self-ping every 10 min \u2192 ' + url);
+  console.log('[keep-alive] armed — self-ping every 10 min → ' + url);
 })();
