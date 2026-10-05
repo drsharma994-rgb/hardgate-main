@@ -1,43 +1,3 @@
-   forward record the board writes (the ledger measures what the desk
-   judged tradeable WITH the evidence in hand), and the chip names why.
-   Flow WITH: a chip, never a point — the composite's five points stay
-   exactly what they were. Fewer than TM_FLOW_MIN_WIN readable windows
-   (hg-v1009's floor), a junk ratio series, a missing Binance twin or a
-   failed fetch: UNREAD, and what cannot be read demotes nothing (hg-v700).
-
-   ONE PASS PER SCAN over the promoted slice only — the same candidates
-   the SMC pass picks (a direction, no gate veto, clean7 or conviction),
-   the same rank, capped at the same TM_SMC_MAX-sized slice — paced in
-   CHUNK-sized chunks like the universe fetch itself. The matrix holds the
-   whole universe; fetching flow for every row would be a hundred calls
-   for rows the desk never promotes. Rows are stamped row.flow =
-   { verdict: 'with' | 'against' | 'unreadable', delta, bars, divergence,
-   sym, why? } and every render path READS the stamp — nothing recomputes
-   in a paint loop. The look, the floor and the cap are stated PRIORS, not
-   measurements; the forward record's new reads.takerFlowWith mark is how
-   the layer earns a measured one. PURE apart from the two readers it
-   calls; it reports the counts so the scan line and the tests read the
-   same object the scan acted on. */
-var TM_FLOW_LOOK = 30;      /* hgOmniCvd's own default look — five days of 4h flow, the horizon a swing row is judged on */
-var TM_FLOW_MIN_WIN = 10;   /* hg-v1009's floor: fewer readable windows than this is UNREAD, never a verdict */
-var TM_FLOW_MAX = 24;       /* the SMC pass's own cap — flow is fetched for the slice the desk promotes, never the whole universe */
-
-function trendmxFlowScan(rows){
-  var out = { with: 0, against: 0, unreadable: 0, scanned: 0, read: 'unavailable' };
-  var cvdFn = (typeof W.hgOmniCvd === 'function') ? W.hgOmniCvd : null;
-  var tkFn = (typeof W.binanceTakerRatio === 'function') ? W.binanceTakerRatio : null;
-  var symFn = (typeof W.hgDeskBinanceSym === 'function') ? W.hgDeskBinanceSym : null;
-  if (!cvdFn || !tkFn || !symFn || !Array.isArray(rows) || !rows.length) return Promise.resolve(out);
-  var cands = [], i;
-  for (i = 0; i < rows.length; i++){
-    var r = rows[i];
-    if (!r || !r.rows4h || !r.rows4h.length) continue;
-    if (r.gate && r.gate.veto) continue;
-    if (!tmDirOf(r)) continue;
-    if (!(r.gate && r.gate.clean7) && !trendmxConviction(r)) continue;
-    cands.push(r);
-  }
-  if (!cands.length) return Promise.resolve(out);
   /* the limit board's own rank, so the capped slice is the slice this desk
      promotes first rather than an arbitrary universe order — the SMC
      pass's own ordering, one rank for both reads */
@@ -329,3 +289,93 @@ async function trendmxScanCore(hooks){
   var results = [], failed = 0;
   for (var i = 0; i < items.length; i += CHUNK){
     var chunk = items.slice(i, i + CHUNK);
+    if (typeof hooks.setProg === 'function') hooks.setProg((i + chunk.length) / items.length);
+    var rs = await Promise.all(chunk.map(function(item){
+      return Promise.all([
+        tmFetchTf(item, '4h', 260, 210),
+        tmFetchTf(item, '1d', 260, 1),
+        tmFetchTf(item, '1h', 72, 1)
+      ]).then(function(got){
+        var r4 = got[0], r1 = got[1], r1h = got[2];
+        if (!r4 || !r4.length || !r1 || !r1.length) return tmUnreadRow(item);
+        /* Score, gates and plan formation must share one closed-bar snapshot.
+           The 15m confirmation and forward ledger already judge closed bars;
+           partial daily / 4H candles let the same row disagree with them. */
+        var r4c = tmClosedRows(r4, 14400);
+        var r1c = tmClosedRows(r1, 86400);
+        var r1hc = tmClosedRows(r1h, 3600);
+        if (!r4c.length || !r1c.length) return tmUnreadRow(item);
+        var ts = trendScore(r1c, r4c);
+        var row = {
+          sym: item.sym, base: item.base, exchange: item.exchange || 'binance', alsoOn: item.alsoOn,
+          xu: item, score: ts.score, comps: ts.comps, freshCross: ts.freshCross, adx: ts.adx,
+          rsi: ts.rsi,
+          volDiv: ts.volDiv, volConf: ts.volConf,
+          price: r4c[r4c.length - 1].c, rows4h: r4c, rows1d: r1c, rows1h: r1hc.length ? r1hc : null,
+          fundingPct: item.fundingPct, turnoverUsd: item.turnoverUsd, mark: item.mark
+        };
+        var dir = tmDirOf(row);
+        row.gate = dir ? trendmxGateEval(row, dir) : null;
+        return row;
+      }).catch(function(){ return null; });
+    }));
+    for (var j = 0; j < rs.length; j++){ if (rs[j]) results.push(rs[j]); else failed++; }
+    if (typeof hooks.onBatch === 'function'){
+      try {
+        hooks.onBatch({
+          rows: results.slice(),
+          done: Math.min(i + chunk.length, items.length),
+          total: items.length,
+          batch: Math.floor(i / CHUNK) + 1,
+          batches: Math.ceil(items.length / CHUNK),
+          failed: failed
+        });
+      } catch (eBatch) {}
+    }
+    if (i + CHUNK < items.length) await sleepMs(CHUNK_SLEEP_MS);
+  }
+  return {
+    rows: results, failed: failed, uniLen: uniPack.rawLen || items.length,
+    scanned: items.length, at: Date.now(), note: uniPack.note, source: uniPack.source,
+    venueCounts: uniPack.venueCounts
+  };
+}
+
+
+async function tmProxyJson(url){
+  try{
+    var r = await fetch('/api/proxy?url=' + encodeURIComponent(url));
+    if (!r || !r.ok) return null;
+    return await r.json();
+  }catch(e){ return null; }
+}
+async function tmProxyText(url){
+  try{
+    var r = await fetch('/api/proxy?url=' + encodeURIComponent(url));
+    if (!r || !r.ok) return null;
+    return await r.text();
+  }catch(e){ return null; }
+}
+function tmYahooChange(j){
+  try{
+    var q = j.chart.result[0].indicators.quote[0].close.filter(function(v){ return isFinite(v); });
+    if (q.length < 2 || !(q[0] > 0)) return null;
+    return (q[q.length - 1] - q[0]) / q[0];
+  }catch(e){ return null; }
+}
+function tmSeriesEnds(j, key){
+  var caps = j && j[key];
+  if (!caps || caps.length < 2) return null;
+  var a = +caps[0][1], b = +caps[caps.length - 1][1];
+  if (!(a > 0) || !(b > 0)) return null;
+  return { a: a, b: b };
+}
+function tmSpreadChange(total, parts){
+  if (!total) return null;
+  var a = total.a, b = total.b, i;
+  for (i = 0; i < parts.length; i++){
+    if (!parts[i]) return null;
+    a -= parts[i].a;
+    b -= parts[i].b;
+  }
+  if (!(a > 0)) return null;

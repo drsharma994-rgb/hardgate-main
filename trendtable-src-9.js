@@ -1,3 +1,34 @@
+          + '<div style="opacity:.75;font-size:11px;margin-top:2px">UNREAD · CoinDCX contract with no candle series · not a setup</div></div>';
+        return '<div class="card" style="padding:8px;margin-bottom:6px"><b>' + escH(r.sym) + '</b>' + tmVenueChip(r)
+          + '<div style="opacity:.75;font-size:11px;margin-top:2px">composite ' + (r.score > 0 ? '+' : '') + r.score + '/5 · no majority — no levels minted · ADX '
+          + (isFinite(r.adx) ? (+r.adx).toFixed(1) : '—') + '</div></div>';
+      }catch(e){ return ''; }
+    }
+    function col(title, cls, titleCls, list, emptyTxt){
+      var h = '<div class="panel tm-col" style="border-top:3px solid ' + cls + '"><h3 style="margin:0 0 8px">'
+        + '<span class="' + titleCls + '">' + title + '</span> <span style="opacity:.6;font-weight:400">· ' + list.length + ' row' + (list.length === 1 ? '' : 's') + '</span></h3>';
+      if (!list.length) h += '<div class="empty" style="margin:6px 0">' + emptyTxt + '</div>';
+      else h += list.map(function(rr){
+        var dd = tmDirOf(rr);
+        if (!dd) return mixedRow(rr);
+        var plan = dd ? trendmxPlan(Object.assign({}, rr, { dir: dd })) : null;
+        var tier = trendmxRowTier(rr, plan);
+        return trendmxSetupCardHTML(rr, tier === 'clean' ? 'clean' : 'near');
+      }).join('');
+      return h + '</div>';
+    }
+    var bullS = byStrength(bull), bearS = byStrength(bear), mixedS = byStrength(mixed);
+    return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;align-items:start">'
+      + col('BULL', '#26a69a', 'pos', bullS, 'no bullish rows — composite below +2')
+      + col('BEAR', '#ef5350', 'neg', bearS, 'no bearish rows — composite above -2')
+      + col('MIXED / CHOP', '#94a3b8', '', mixedS, 'no mixed rows')
+      + '</div>';
+  }catch(e){ return ''; }
+}
+
+/* hg-v1048: the COINDCX TRENDING / FORMING board - every CoinDCX future
+   the matrix scanned, in two columns. TRENDING = the composite has a
+   majority direction (|score| >= 2); FORMING = it does not yet. Both
    print TP/SL: minted ticket levels where the plan exists (7/7 CLEAN /
    6/7 NEAR), the house DRAFT ladder where it does not. */
 function trendmxTrendFormHTML(rows){
@@ -251,14 +282,3 @@ function trendmxCrownPanelHTML(state){
       + '<div class="kv"><span class="k">Market Thesis</span><span class="v">' + escH(thesis) + '</span></div>'
       + '<div class="kv"><span class="k">Bias</span><span class="v ' + (dir === 'long' ? 'pos' : 'neg') + '">' + dir.toUpperCase() + '</span></div>'
       + '<div class="kv"><span class="k">Entry Zone</span><span class="v">[' + (+plan.entry).toFixed(2) + ']' + (isFinite(aV) ? ' +/- ' + (0.25 * aV).toFixed(2) : '') + '</span></div>'
-      + '<div class="kv"><span class="k">Invalidation (SL)</span><span class="v">' + (+plan.stop).toFixed(2) + '</span></div>'
-      + '<div class="kv"><span class="k">Targets (TP)</span><span class="v">TP1 ' + (+plan.t1).toFixed(2) + ' | TP2 ' + (isFinite(+plan.t2) ? (+plan.t2).toFixed(2) : 'n/a') + ' | TP3 ' + tp3Txt + '</span></div>'
-      + '<div class="kv"><span class="k">Automation Blueprint</span><span class="v"><pre style="margin:4px 0;white-space:pre-wrap;font-size:10px">' + escH(jsonTxt) + '</pre>' + (tier === 'clean' ? '' : '<div class="note warn" style="margin-top:4px">formation WATCH_ONLY - the bridge must drop this payload.</div>') + '</span></div>'
-      + '</div>';
-    /* ---- the dual grid setups, OMNIBTC style ---- */
-    var swingS = { dir: dir, entry: +plan.entry, stop: +plan.stop, t1: +plan.t1, t2: isFinite(+plan.t2) ? +plan.t2 : null,
-      tier: tier === 'clean' ? 'CLEAN' : 'NEAR', gates: (crown.gate && isFinite(crown.gate.gatesPassed)) ? crown.gate.gatesPassed : null };
-    html += trendmxGridBlockHtml('SWING SETUP', '4h grid', swingS, dir);
-    var scalpS = null, altS = null;
-    if (Array.isArray(crown.rows1h) && crown.rows1h.length >= 60 && typeof W.atr === 'function'){
-      var a1arr = W.atr(crown.rows1h, 14);

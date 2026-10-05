@@ -1,3 +1,64 @@
+  if (r.flow && r.flow.verdict === 'against') return false;
+  /* hg-v1034: the fundamental + sentiment witness — a blackout (refuse) or a
+     2+ net checked headwind (against) disqualifies PERFECT exactly like flow
+     against. WITH chips; a dark or flat board never disqualifies. */
+  var fundSt = trendmxFundState(r, dir);
+  if (fundSt === 'refuse' || fundSt === 'against') return false;
+  var fp = r.fundingPct;
+  if (typeof fp === 'number' && isFinite(fp) && typeof W.hgFundingAgainstMark === 'function'){
+    try{ var m = W.hgFundingAgainstMark(fp, dir); if (m && m.against === true) return false; }catch(e){}
+  }
+  return true;
+}
+
+/* hg-v1022: VOLATILITY REGIME — a new independent read the composite's five
+   close-derived legs cannot see: WHERE the row's own ATR sits in ITS trailing
+   distribution. hgAtrPercentile(4h,14,100) ranks the latest 4h ATR against
+   its last 100 values: <20th percentile is DEAD TAPE (chop — trend legs drift
+   but nothing trades), >80th is BLOWOFF (a move already spent), the middle
+   is HEALTHY (a trend with room to run). Evidence-only — a chip on the card,
+   never a gate, never a composite point: it informs and records, it never
+   drops a row (the hg-v700 honest-degradation rule applies on unreadable). */
+function trendmxAtrRegime(r){
+  try{
+    if (!r || !r.rows4h || !Array.isArray(r.rows4h) || r.rows4h.length < 30) return null;
+    if (typeof hgAtrPercentile !== 'function') return null;
+    var pct = hgAtrPercentile(r.rows4h, 14, 100);
+    if (!isFinite(pct)) return null;
+    if (pct < 20) return { pct: pct, regime: 'DEAD' };
+    if (pct > 80) return { pct: pct, regime: 'BLOWOFF' };
+    return { pct: pct, regime: 'HEALTHY' };
+  }catch(e){ return null; }
+}
+
+/* the ATR-regime chip — the volume witness's own pattern (hg-v1020): DEAD and
+   BLOWOFF name the danger; HEALTHY carries the pass chip; unreadable paints
+   NO chip. Evidence, never a gate. */
+function trendmxAtrRegimeChipHtml(r){
+  try{
+    var reg = trendmxAtrRegime(r);
+    if (!reg) return '';
+    if (reg.regime === 'DEAD'){
+      return '<span class="stamp bad" style="margin-left:6px" title="' + escH('trendmx volatility regime (hg-v1022): 4h ATR(14) sits at the ' + reg.pct.toFixed(0) + 'th percentile of its own trailing distribution — bottom-quintile chop. The trend legs drift but nothing trades here. Evidence, never a gate.') + '">ATR REGIME DEAD</span>';
+    }
+    if (reg.regime === 'BLOWOFF'){
+      return '<span class="stamp bad" style="margin-left:6px" title="' + escH('trendmx volatility regime (hg-v1022): 4h ATR(14) sits at the ' + reg.pct.toFixed(0) + 'th percentile — top-quintile blowoff, a move already spent. Evidence, never a gate.') + '">ATR REGIME BLOWOFF</span>';
+    }
+    return '<span class="stamp pass" style="margin-left:6px" title="' + escH('trendmx volatility regime (hg-v1022): 4h ATR(14) sits at the ' + reg.pct.toFixed(0) + 'th percentile — healthy volatility, a trend with room to run. Evidence, never a gate.') + '">ATR REGIME HEALTHY</span>';
+  }catch(e){ return ''; }
+}
+
+/* the volume witness's chip — the momentum chip's own pattern (hg-v1019).
+   AGAINST names the hold-off; WITH carries the pass chip; FLAT and unread
+   paint NO chip. */
+function trendmxVolChipHtml(r){
+  try{
+    var dir = tmDirOf(r);
+    var st = trendmxVolState(r, dir);
+    if (!st || st === 'flat') return '';
+    if (st === 'against'){
+      return '<span class="stamp bad" style="margin-left:6px" title="' + escH('trendmx volume witness (hg-v1020): the 1D OBV trend diverges against this ' + dir
+        + ' — ' + (dir === 'long' ? 'price made a higher 20-bar high on a lower OBV high: distribution under the rally' : 'price made a lower 20-bar low on a higher OBV low: accumulation under the fall')
         + ' (Granville: volume must confirm). Held off the LIMIT BOARD, never CLEAN — the row paints, the reason is named.') + '">VOLUME TREND AGAINST · HELD OFF</span>';
     }
     return '<span class="stamp pass" style="margin-left:6px" title="' + escH('trendmx volume witness (hg-v1020): price and OBV made the new 20-bar extreme together — the 1D volume trend confirms this ' + dir
@@ -257,57 +318,3 @@ function trendmxPerfectSetups(rows){
 
 /* hg-v1082: FIVE-PILLAR STACK — technical, fundamental, sentiment, macro, micro.
    A FULL STACK row is one where every pillar is readable AND with the row's
-   own majority. WITH is a positive read. An unread ATR, a mixed tape, a
-   missing 4h structure, and BTC funding that is merely not crowded do not
-   count as WITH. Structure must agree (EMA50 vs EMA200). An against pillar
-   vetoes the stack. The composite, the PERFECT predicate, and the tiers are
-   unchanged. A stricter desk, not a profit claim. */
-var __tmMacro = null;
-function trendmxMacroSet(snap){ __tmMacro = snap || null; return __tmMacro; }
-function trendmxFivePillars(r){
-  r = r || {};
-  var dir = tmDirOf(r);
-  var pillars = [];
-  if (!dir){
-    pillars.push({ name: 'TECHNICAL', state: 'unread', detail: 'no majority' });
-  } else {
-    var against = false, withIt = false, notes = ['composite ' + r.score + '/5'];
-    var mom = trendmxMomState(r, dir);
-    var vol = trendmxVolState(r, dir);
-    var chop = trendmxChopState(r);
-    var atr = trendmxAtrRegime(r);
-    if (mom) notes.push('momentum ' + mom);
-    if (vol) notes.push('volume ' + vol);
-    if (atr) notes.push('ATR ' + atr.regime);
-    if (chop && chop.state) notes.push('tape ' + chop.state);
-    if (mom === 'against' || vol === 'against' || (chop && chop.state === 'chop')) against = true;
-    if (atr && (atr.regime === 'DEAD' || atr.regime === 'BLOWOFF')) against = true;
-    var structWith = false;
-    try{
-      var st = tmStructureDir(r.rows4h);
-      if (st){
-        notes.push('structure ' + st);
-        if ((dir === 'long' && st === 'down') || (dir === 'short' && st === 'up')) against = true;
-        if ((dir === 'long' && st === 'up') || (dir === 'short' && st === 'down')) structWith = true;
-      }
-    }catch(eSt){}
-    if (!against && structWith && mom === 'with' && vol === 'with' && Math.abs(+r.score || 0) >= 4 && atr && atr.regime === 'HEALTHY' && chop && chop.state === 'trend') withIt = true;
-    pillars.push({ name: 'TECHNICAL', state: against ? 'against' : (withIt ? 'with' : 'flat'), detail: notes.join(' · ') });
-  }
-  var fund = dir ? trendmxFundState(r, dir) : null;
-  pillars.push({ name: 'FUNDAMENTAL', state: fund || 'unread', detail: fund ? ('fundamental stack ' + fund) : 'fundamental stack dark' });
-  var sentAgainst = false, sentWith = false, sentRead = false, sentNotes = [];
-  if (r.flow && r.flow.verdict && r.flow.verdict !== 'unreadable'){
-    sentRead = true;
-    sentNotes.push('taker ' + r.flow.verdict);
-    if (r.flow.verdict === 'against') sentAgainst = true;
-    if (r.flow.verdict === 'with') sentWith = true;
-  }
-  if (dir && typeof r.fundingPct === 'number' && isFinite(r.fundingPct) && typeof W.hgFundingAgainstMark === 'function'){
-    sentRead = true;
-    try{
-      var fm = W.hgFundingAgainstMark(r.fundingPct, dir);
-      if (fm && fm.against === true){ sentAgainst = true; sentWith = false; sentNotes.push('funding crowded'); }
-      else sentNotes.push('funding clean');
-    }catch(eFm){}
-  }

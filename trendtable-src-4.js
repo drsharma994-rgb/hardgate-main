@@ -1,69 +1,4 @@
-    if (typeof hooks.setProg === 'function') hooks.setProg((i + chunk.length) / items.length);
-    var rs = await Promise.all(chunk.map(function(item){
-      return Promise.all([
-        tmFetchTf(item, '4h', 260, 210),
-        tmFetchTf(item, '1d', 260, 1),
-        tmFetchTf(item, '1h', 72, 1)
-      ]).then(function(got){
-        var r4 = got[0], r1 = got[1], r1h = got[2];
-        if (!r4 || !r4.length || !r1 || !r1.length) return tmUnreadRow(item);
-        /* Score, gates and plan formation must share one closed-bar snapshot.
-           The 15m confirmation and forward ledger already judge closed bars;
-           partial daily / 4H candles let the same row disagree with them. */
-        var r4c = tmClosedRows(r4, 14400);
-        var r1c = tmClosedRows(r1, 86400);
-        var r1hc = tmClosedRows(r1h, 3600);
-        if (!r4c.length || !r1c.length) return tmUnreadRow(item);
-        var ts = trendScore(r1c, r4c);
-        var row = {
-          sym: item.sym, base: item.base, exchange: item.exchange || 'binance', alsoOn: item.alsoOn,
-          xu: item, score: ts.score, comps: ts.comps, freshCross: ts.freshCross, adx: ts.adx,
-          rsi: ts.rsi,
-          volDiv: ts.volDiv, volConf: ts.volConf,
-          price: r4c[r4c.length - 1].c, rows4h: r4c, rows1d: r1c, rows1h: r1hc.length ? r1hc : null,
-          fundingPct: item.fundingPct, turnoverUsd: item.turnoverUsd, mark: item.mark
-        };
-        var dir = tmDirOf(row);
-        row.gate = dir ? trendmxGateEval(row, dir) : null;
-        return row;
-      }).catch(function(){ return null; });
-    }));
-    for (var j = 0; j < rs.length; j++){ if (rs[j]) results.push(rs[j]); else failed++; }
-    if (typeof hooks.onBatch === 'function'){
-      try {
-        hooks.onBatch({
-          rows: results.slice(),
-          done: Math.min(i + chunk.length, items.length),
-          total: items.length,
-          batch: Math.floor(i / CHUNK) + 1,
-          batches: Math.ceil(items.length / CHUNK),
-          failed: failed
-        });
-      } catch (eBatch) {}
-    }
-    if (i + CHUNK < items.length) await sleepMs(CHUNK_SLEEP_MS);
-  }
-  return {
-    rows: results, failed: failed, uniLen: uniPack.rawLen || items.length,
-    scanned: items.length, at: Date.now(), note: uniPack.note, source: uniPack.source,
-    venueCounts: uniPack.venueCounts
-  };
-}
-
-
-async function tmProxyJson(url){
-  try{
-    var r = await fetch('/api/proxy?url=' + encodeURIComponent(url));
-    if (!r || !r.ok) return null;
-    return await r.json();
-  }catch(e){ return null; }
-}
-async function tmProxyText(url){
-  try{
-    var r = await fetch('/api/proxy?url=' + encodeURIComponent(url));
-    if (!r || !r.ok) return null;
-    return await r.text();
-  }catch(e){ return null; }
+  return (b - a) / a;
 }
 function tmYahooDir(j){
   try{
@@ -148,7 +83,16 @@ function tmVolumeProfile(rows){
     if (right >= left){ hiI++; acc += vol[hiI]; }
     else { loI--; acc += vol[loI]; }
   }
-  return { poc: lo + (pocI + 0.5) * step, vah: lo + (hiI + 1) * step, val: lo + loI * step };
+  var vals = vol.filter(function(v){ return v > 0; }).slice().sort(function(a, b){ return a - b; });
+  var med = vals.length ? vals[Math.floor(vals.length / 2)] : 0;
+  var hvn = [], lvn = [];
+  for (j = 1; j < bins - 1; j++){
+    var node = lo + (j + 0.5) * step;
+    if (med > 0 && vol[j] >= med * 1.6 && vol[j] >= vol[j - 1] && vol[j] >= vol[j + 1]) hvn.push(node);
+    if (med > 0 && vol[j] > 0 && vol[j] <= med * 0.45 && vol[j] <= vol[j - 1] && vol[j] <= vol[j + 1]) lvn.push(node);
+  }
+  if (!hvn.length) hvn.push(lo + (pocI + 0.5) * step);
+  return { poc: lo + (pocI + 0.5) * step, vah: lo + (hiI + 1) * step, val: lo + loI * step, hvn: hvn, lvn: lvn };
 }
 function tmEqualSweep(rows, dir){
   if (!rows || rows.length < 20) return false;
@@ -199,6 +143,40 @@ function tmAtLocation(rows4, rowsD, dir){
   if (dir === 'long') return sweepLow || fvg || ob || tmEqualSweep(rows4, dir);
   return sweepHigh || fvg || ob || tmEqualSweep(rows4, dir);
 }
+function tmSupplyDemand(rows){
+  if (!rows || rows.length < 30) return null;
+  var atr = tmAtrLast(rows);
+  if (!(atr > 0)) return null;
+  var demand = null, supply = null, k;
+  for (k = 2; k < rows.length; k++){
+    var impulse = rows[k], base = rows[k - 1];
+    var move = impulse.c - impulse.o;
+    if (move > 1.2 * atr && base.c < base.o){
+      var broken = false, n;
+      for (n = k + 1; n < rows.length; n++) if (rows[n].c < base.l) broken = true;
+      if (!broken) demand = { lo: base.l, hi: base.h };
+    }
+    if (move < -1.2 * atr && base.c > base.o){
+      var brokenS = false, m;
+      for (m = k + 1; m < rows.length; m++) if (rows[m].c > base.h) brokenS = true;
+      if (!brokenS) supply = { lo: base.l, hi: base.h };
+    }
+  }
+  if (!demand && !supply) return null;
+  return { demand: demand, supply: supply };
+}
+function tmNodeVeto(prof, px, dir, atr, vz){
+  if (!prof || !prof.hvn || !prof.hvn.length) return 'HVN/LVN unread';
+  var i, gap;
+  for (i = 0; i < prof.lvn.length; i++){
+    if (atr > 0 && Math.abs(px - prof.lvn[i]) <= 0.35 * atr && !(vz > 0.5)) return 'inside a low-volume node';
+  }
+  for (i = 0; i < prof.hvn.length; i++){
+    gap = (dir === 'long') ? (prof.hvn[i] - px) : (px - prof.hvn[i]);
+    if (atr > 0 && gap > 0 && gap <= 0.4 * atr) return dir === 'long' ? 'HVN overhead' : 'HVN underfoot';
+  }
+  return null;
+}
 function tm15Confirm(rows, dir){
   if (!rows || rows.length < 30 || typeof hgStructure !== 'function') return false;
   var hs = hgStructure(rows);
@@ -226,12 +204,35 @@ function tm15Confirm(rows, dir){
   }
   return false;
 }
-function tmNewsVeto(text, base){
-  if (!text || !base) return false;
-  var hay = String(text).toLowerCase();
-  var name = String(base).toLowerCase();
-  if (hay.indexOf(name) < 0) return false;
-  return /hack|exploit|unlock|delist|lawsuit|insolven|halt|sec charge|bank run/.test(hay);
+function tmHeadlineBook(text){
+  var items = String(text || '').split(/<item\b/i).slice(1);
+  var book = { marketHack: false, marketReg: false, etfOutflow: false, etfInflow: false, items: [] };
+  var i;
+  for (i = 0; i < items.length && i < 40; i++){
+    var title = items[i].replace(/<[^>]+>/g, ' ').toLowerCase();
+    book.items.push(title);
+    if (/etf outflow|outflows from .{0,20}etf|spot etf.{0,20}outflow/.test(title)) book.etfOutflow = true;
+    if (/etf inflow|inflows into .{0,20}etf|spot etf.{0,20}inflow/.test(title)) book.etfInflow = true;
+    if (/exchange hack|funds drained|stablecoin depeg|depegs/.test(title)) book.marketHack = true;
+    if (/sec charges|sec sues|crypto ban|crackdown|doj charges/.test(title)) book.marketReg = true;
+  }
+  return book.items.length ? book : null;
+}
+function tmCoinHeadline(book, base){
+  var hit = { hack: false, delist: false, listing: false, lawsuit: false };
+  if (!book || !book.items) return hit;
+  var name = String(base || '').toLowerCase();
+  if (name.length < 2) return hit;
+  var i;
+  for (i = 0; i < book.items.length; i++){
+    var title = book.items[i];
+    if (title.indexOf(name) < 0) continue;
+    if (/hack|exploit|drained/.test(title)) hit.hack = true;
+    if (/delist/.test(title)) hit.delist = true;
+    if (/will list|lists |listing /.test(title)) hit.listing = true;
+    if (/lawsuit|sec charge|charged/.test(title)) hit.lawsuit = true;
+  }
+  return hit;
 }
 async function trendmxLoadContext(rows){
   var ctx = { macroOk: false, calendarOk: false, domOk: false, ethOk: false, stableOk: false, newsOk: false, riskOff: false, riskOn: false, eventBlock: false, btcDomRising: false, ethStructure: null, stableFalling: false, headlines: '' };
@@ -269,7 +270,9 @@ async function trendmxLoadContext(rows){
     tmProxyJson('https://stablecoins.llama.fi/stablecoincharts/all'),
     tmProxyText('https://cointelegraph.com/rss').then(function(t){ return t || tmProxyText('https://www.coindesk.com/arc/outboundfeeds/rss/'); }),
     tmProxyJson('https://api.coingecko.com/api/v3/global/market_cap_chart?days=2'),
-    tmProxyJson('https://api.llama.fi/emissions')
+    tmProxyJson('https://api.llama.fi/emissions'),
+    tmProxyJson('https://query1.finance.yahoo.com/v8/finance/chart/IBIT?interval=1d&range=5d'),
+    tmProxyJson('https://query1.finance.yahoo.com/v8/finance/chart/FBTC?interval=1d&range=5d')
   ]);
   var cal = pack[0];
   if (Array.isArray(cal)){
@@ -300,10 +303,22 @@ async function trendmxLoadContext(rows){
     if (aV > 0 && bV > 0){ ctx.stableOk = true; ctx.stableFalling = bV < aV * 0.997; }
   }
   var news = pack[4];
-  if (news && news.length > 80){ ctx.newsOk = true; ctx.headlines = news; }
+  if (news && news.length > 80){
+    ctx.newsOk = true;
+    ctx.headlines = news;
+    ctx.newsBook = tmHeadlineBook(news);
+  }
+  var ibitChg = tmYahooChange(pack[7]);
+  var fbtcChg = tmYahooChange(pack[8]);
+  ctx.etfOk = ibitChg != null && fbtcChg != null;
+  ctx.etfFalling = ctx.etfOk && ibitChg < -0.02 && fbtcChg < -0.02;
   ctx.totalOk = false;
   ctx.totalFalling = false;
   ctx.altsFalling = false;
+  ctx.total2Ok = false;
+  ctx.total2Falling = false;
+  ctx.total3Ok = false;
+  ctx.total3Falling = false;
   try {
     var tot = pack[5];
     var caps = tot && (tot.market_cap || tot.market_caps);
@@ -312,6 +327,15 @@ async function trendmxLoadContext(rows){
       ctx.totalOk = true;
       ctx.totalFalling = tchg < -0.01;
       if (btcChg != null && ethChg != null) ctx.altsFalling = (tchg - btcChg) < -0.01 && ethChg < 0;
+      var totEnds = tmSeriesEnds(tot, 'market_cap') || tmSeriesEnds(tot, 'market_caps');
+      var btcEnds = tmSeriesEnds(btcJ, 'market_caps');
+      var ethEnds = tmSeriesEnds(ethJ, 'market_caps');
+      var t2 = tmSpreadChange(totEnds, [btcEnds]);
+      var t3 = tmSpreadChange(totEnds, [btcEnds, ethEnds]);
+      ctx.total2Ok = t2 != null;
+      ctx.total2Falling = t2 != null && t2 < -0.01;
+      ctx.total3Ok = t3 != null;
+      ctx.total3Falling = t3 != null && t3 < -0.01;
     }
   } catch (eTot) {}
   if (!ctx.totalOk && btcChg != null && ethChg != null){
@@ -393,32 +417,7 @@ async function tmLiqRead(row){
   var j = await tmProxyJson('https://www.okx.com/api/v5/public/liquidation-orders?instType=SWAP&uly=' + encodeURIComponent(base + '-USDT') + '&state=filled&limit=100');
   var details = j && j.data && j.data[0] && j.data[0].details;
   if (!Array.isArray(details)) return null;
-  var now = Date.now(), longLiq = 0, shortLiq = 0, i;
+  var now = Date.now(), longLiq = 0, shortLiq = 0, buckets = {}, i;
   for (i = 0; i < details.length; i++){
     var d = details[i] || {};
     var ts = +d.ts || +d.time;
-    if (!(ts > 0) || now - ts > 6 * 60 * 60 * 1000) continue;
-    var sz = +d.sz || 0;
-    var side = String(d.posSide || d.side || '').toLowerCase();
-    if (side === 'long' || side === 'sell') longLiq += sz;
-    else if (side === 'short' || side === 'buy') shortLiq += sz;
-  }
-  return { longLiq: longLiq, shortLiq: shortLiq };
-}
-async function tm5mVolumeOk(row, dir){
-  var got = null;
-  try {
-    if (typeof W.binanceKlines === 'function') got = await W.binanceKlines(tmBaseOf(row) + 'USDT', '5m', 40);
-  } catch (e) { got = null; }
-  var rows = tmClosedRows(got, 300);
-  if (!rows || rows.length < 15) return null;
-  var last = rows[rows.length - 1], avg = 0, i;
-  for (i = rows.length - 11; i < rows.length - 1; i++) avg += rows[i].v || 0;
-  avg /= 10;
-  if (!(avg > 0)) return null;
-  if (dir === 'long') return last.c >= last.o && last.v > avg;
-  return last.c <= last.o && last.v > avg;
-}
-async function tmCrowdRatio(row){
-  if (typeof W.binanceLongShort !== 'function') return null;
-  try {

@@ -337,3 +337,21 @@ function trendScore(rows1d, rows4h){
       return out; // indicator globals missing -> graceful zero
     }
     var ok1 = Array.isArray(rows1d) && rows1d.length > 0;
+    var ok4 = Array.isArray(rows4h) && rows4h.length > 0;
+    if (!ok1 && !ok4) return out;
+
+    if (ok1){
+      var c1 = rows1d.map(function(r){ return r ? r.c : NaN; });
+      var i1 = c1.length - 1;
+      var e50 = ema(c1, 50), e200 = ema(c1, 200);
+      var cL = c1[i1], e50L = e50[i1], e200L = e200[i1];
+
+      /* 1) 1d close vs ema200 */
+      if (isFinite(cL) && isFinite(e200L)) out.comps.d1Trend = cmp(cL, e200L);
+
+      /* 2) 1d ema50 vs ema200 + fresh-cross marker (<=10 bars) */
+      if (isFinite(e50L) && isFinite(e200L)) out.comps.d1Cross = cmp(e50L, e200L);
+      /* A cross on the daily bar that is still forming does not count. */
+      var dClosed = tmClosedRows(rows1d, 86400);
+      var cClosed = dClosed.map(function(r){ return r ? r.c : NaN; });
+      var e50c = ema(cClosed, 50), e200c = ema(cClosed, 200);

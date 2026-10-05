@@ -1533,6 +1533,31 @@ async function tmProxyText(url){
     return await r.text();
   }catch(e){ return null; }
 }
+function tmYahooChange(j){
+  try{
+    var q = j.chart.result[0].indicators.quote[0].close.filter(function(v){ return isFinite(v); });
+    if (q.length < 2 || !(q[0] > 0)) return null;
+    return (q[q.length - 1] - q[0]) / q[0];
+  }catch(e){ return null; }
+}
+function tmSeriesEnds(j, key){
+  var caps = j && j[key];
+  if (!caps || caps.length < 2) return null;
+  var a = +caps[0][1], b = +caps[caps.length - 1][1];
+  if (!(a > 0) || !(b > 0)) return null;
+  return { a: a, b: b };
+}
+function tmSpreadChange(total, parts){
+  if (!total) return null;
+  var a = total.a, b = total.b, i;
+  for (i = 0; i < parts.length; i++){
+    if (!parts[i]) return null;
+    a -= parts[i].a;
+    b -= parts[i].b;
+  }
+  if (!(a > 0)) return null;
+  return (b - a) / a;
+}
 function tmYahooDir(j){
   try{
     var q = j.chart.result[0].indicators.quote[0].close.filter(function(v){ return isFinite(v); });
@@ -1616,7 +1641,16 @@ function tmVolumeProfile(rows){
     if (right >= left){ hiI++; acc += vol[hiI]; }
     else { loI--; acc += vol[loI]; }
   }
-  return { poc: lo + (pocI + 0.5) * step, vah: lo + (hiI + 1) * step, val: lo + loI * step };
+  var vals = vol.filter(function(v){ return v > 0; }).slice().sort(function(a, b){ return a - b; });
+  var med = vals.length ? vals[Math.floor(vals.length / 2)] : 0;
+  var hvn = [], lvn = [];
+  for (j = 1; j < bins - 1; j++){
+    var node = lo + (j + 0.5) * step;
+    if (med > 0 && vol[j] >= med * 1.6 && vol[j] >= vol[j - 1] && vol[j] >= vol[j + 1]) hvn.push(node);
+    if (med > 0 && vol[j] > 0 && vol[j] <= med * 0.45 && vol[j] <= vol[j - 1] && vol[j] <= vol[j + 1]) lvn.push(node);
+  }
+  if (!hvn.length) hvn.push(lo + (pocI + 0.5) * step);
+  return { poc: lo + (pocI + 0.5) * step, vah: lo + (hiI + 1) * step, val: lo + loI * step, hvn: hvn, lvn: lvn };
 }
 function tmEqualSweep(rows, dir){
   if (!rows || rows.length < 20) return false;
@@ -1667,6 +1701,40 @@ function tmAtLocation(rows4, rowsD, dir){
   if (dir === 'long') return sweepLow || fvg || ob || tmEqualSweep(rows4, dir);
   return sweepHigh || fvg || ob || tmEqualSweep(rows4, dir);
 }
+function tmSupplyDemand(rows){
+  if (!rows || rows.length < 30) return null;
+  var atr = tmAtrLast(rows);
+  if (!(atr > 0)) return null;
+  var demand = null, supply = null, k;
+  for (k = 2; k < rows.length; k++){
+    var impulse = rows[k], base = rows[k - 1];
+    var move = impulse.c - impulse.o;
+    if (move > 1.2 * atr && base.c < base.o){
+      var broken = false, n;
+      for (n = k + 1; n < rows.length; n++) if (rows[n].c < base.l) broken = true;
+      if (!broken) demand = { lo: base.l, hi: base.h };
+    }
+    if (move < -1.2 * atr && base.c > base.o){
+      var brokenS = false, m;
+      for (m = k + 1; m < rows.length; m++) if (rows[m].c > base.h) brokenS = true;
+      if (!brokenS) supply = { lo: base.l, hi: base.h };
+    }
+  }
+  if (!demand && !supply) return null;
+  return { demand: demand, supply: supply };
+}
+function tmNodeVeto(prof, px, dir, atr, vz){
+  if (!prof || !prof.hvn || !prof.hvn.length) return 'HVN/LVN unread';
+  var i, gap;
+  for (i = 0; i < prof.lvn.length; i++){
+    if (atr > 0 && Math.abs(px - prof.lvn[i]) <= 0.35 * atr && !(vz > 0.5)) return 'inside a low-volume node';
+  }
+  for (i = 0; i < prof.hvn.length; i++){
+    gap = (dir === 'long') ? (prof.hvn[i] - px) : (px - prof.hvn[i]);
+    if (atr > 0 && gap > 0 && gap <= 0.4 * atr) return dir === 'long' ? 'HVN overhead' : 'HVN underfoot';
+  }
+  return null;
+}
 function tm15Confirm(rows, dir){
   if (!rows || rows.length < 30 || typeof hgStructure !== 'function') return false;
   var hs = hgStructure(rows);
@@ -1694,12 +1762,35 @@ function tm15Confirm(rows, dir){
   }
   return false;
 }
-function tmNewsVeto(text, base){
-  if (!text || !base) return false;
-  var hay = String(text).toLowerCase();
-  var name = String(base).toLowerCase();
-  if (hay.indexOf(name) < 0) return false;
-  return /hack|exploit|unlock|delist|lawsuit|insolven|halt|sec charge|bank run/.test(hay);
+function tmHeadlineBook(text){
+  var items = String(text || '').split(/<item\b/i).slice(1);
+  var book = { marketHack: false, marketReg: false, etfOutflow: false, etfInflow: false, items: [] };
+  var i;
+  for (i = 0; i < items.length && i < 40; i++){
+    var title = items[i].replace(/<[^>]+>/g, ' ').toLowerCase();
+    book.items.push(title);
+    if (/etf outflow|outflows from .{0,20}etf|spot etf.{0,20}outflow/.test(title)) book.etfOutflow = true;
+    if (/etf inflow|inflows into .{0,20}etf|spot etf.{0,20}inflow/.test(title)) book.etfInflow = true;
+    if (/exchange hack|funds drained|stablecoin depeg|depegs/.test(title)) book.marketHack = true;
+    if (/sec charges|sec sues|crypto ban|crackdown|doj charges/.test(title)) book.marketReg = true;
+  }
+  return book.items.length ? book : null;
+}
+function tmCoinHeadline(book, base){
+  var hit = { hack: false, delist: false, listing: false, lawsuit: false };
+  if (!book || !book.items) return hit;
+  var name = String(base || '').toLowerCase();
+  if (name.length < 2) return hit;
+  var i;
+  for (i = 0; i < book.items.length; i++){
+    var title = book.items[i];
+    if (title.indexOf(name) < 0) continue;
+    if (/hack|exploit|drained/.test(title)) hit.hack = true;
+    if (/delist/.test(title)) hit.delist = true;
+    if (/will list|lists |listing /.test(title)) hit.listing = true;
+    if (/lawsuit|sec charge|charged/.test(title)) hit.lawsuit = true;
+  }
+  return hit;
 }
 async function trendmxLoadContext(rows){
   var ctx = { macroOk: false, calendarOk: false, domOk: false, ethOk: false, stableOk: false, newsOk: false, riskOff: false, riskOn: false, eventBlock: false, btcDomRising: false, ethStructure: null, stableFalling: false, headlines: '' };
@@ -1737,7 +1828,9 @@ async function trendmxLoadContext(rows){
     tmProxyJson('https://stablecoins.llama.fi/stablecoincharts/all'),
     tmProxyText('https://cointelegraph.com/rss').then(function(t){ return t || tmProxyText('https://www.coindesk.com/arc/outboundfeeds/rss/'); }),
     tmProxyJson('https://api.coingecko.com/api/v3/global/market_cap_chart?days=2'),
-    tmProxyJson('https://api.llama.fi/emissions')
+    tmProxyJson('https://api.llama.fi/emissions'),
+    tmProxyJson('https://query1.finance.yahoo.com/v8/finance/chart/IBIT?interval=1d&range=5d'),
+    tmProxyJson('https://query1.finance.yahoo.com/v8/finance/chart/FBTC?interval=1d&range=5d')
   ]);
   var cal = pack[0];
   if (Array.isArray(cal)){
@@ -1768,10 +1861,22 @@ async function trendmxLoadContext(rows){
     if (aV > 0 && bV > 0){ ctx.stableOk = true; ctx.stableFalling = bV < aV * 0.997; }
   }
   var news = pack[4];
-  if (news && news.length > 80){ ctx.newsOk = true; ctx.headlines = news; }
+  if (news && news.length > 80){
+    ctx.newsOk = true;
+    ctx.headlines = news;
+    ctx.newsBook = tmHeadlineBook(news);
+  }
+  var ibitChg = tmYahooChange(pack[7]);
+  var fbtcChg = tmYahooChange(pack[8]);
+  ctx.etfOk = ibitChg != null && fbtcChg != null;
+  ctx.etfFalling = ctx.etfOk && ibitChg < -0.02 && fbtcChg < -0.02;
   ctx.totalOk = false;
   ctx.totalFalling = false;
   ctx.altsFalling = false;
+  ctx.total2Ok = false;
+  ctx.total2Falling = false;
+  ctx.total3Ok = false;
+  ctx.total3Falling = false;
   try {
     var tot = pack[5];
     var caps = tot && (tot.market_cap || tot.market_caps);
@@ -1780,6 +1885,15 @@ async function trendmxLoadContext(rows){
       ctx.totalOk = true;
       ctx.totalFalling = tchg < -0.01;
       if (btcChg != null && ethChg != null) ctx.altsFalling = (tchg - btcChg) < -0.01 && ethChg < 0;
+      var totEnds = tmSeriesEnds(tot, 'market_cap') || tmSeriesEnds(tot, 'market_caps');
+      var btcEnds = tmSeriesEnds(btcJ, 'market_caps');
+      var ethEnds = tmSeriesEnds(ethJ, 'market_caps');
+      var t2 = tmSpreadChange(totEnds, [btcEnds]);
+      var t3 = tmSpreadChange(totEnds, [btcEnds, ethEnds]);
+      ctx.total2Ok = t2 != null;
+      ctx.total2Falling = t2 != null && t2 < -0.01;
+      ctx.total3Ok = t3 != null;
+      ctx.total3Falling = t3 != null && t3 < -0.01;
     }
   } catch (eTot) {}
   if (!ctx.totalOk && btcChg != null && ethChg != null){
@@ -1861,17 +1975,27 @@ async function tmLiqRead(row){
   var j = await tmProxyJson('https://www.okx.com/api/v5/public/liquidation-orders?instType=SWAP&uly=' + encodeURIComponent(base + '-USDT') + '&state=filled&limit=100');
   var details = j && j.data && j.data[0] && j.data[0].details;
   if (!Array.isArray(details)) return null;
-  var now = Date.now(), longLiq = 0, shortLiq = 0, i;
+  var now = Date.now(), longLiq = 0, shortLiq = 0, buckets = {}, i;
   for (i = 0; i < details.length; i++){
     var d = details[i] || {};
     var ts = +d.ts || +d.time;
     if (!(ts > 0) || now - ts > 6 * 60 * 60 * 1000) continue;
     var sz = +d.sz || 0;
     var side = String(d.posSide || d.side || '').toLowerCase();
+    var pxL = +d.bkPx || +d.px || +d.price;
     if (side === 'long' || side === 'sell') longLiq += sz;
     else if (side === 'short' || side === 'buy') shortLiq += sz;
+    if (row && row.price > 0 && pxL > 0 && sz > 0){
+      var key = Math.round(pxL / (row.price * 0.005));
+      if (!buckets[key]) buckets[key] = { price: key * row.price * 0.005, long: 0, short: 0 };
+      if (side === 'long' || side === 'sell') buckets[key].long += sz;
+      else buckets[key].short += sz;
+    }
   }
-  return { longLiq: longLiq, shortLiq: shortLiq };
+  var clusters = [];
+  for (var key in buckets) clusters.push(buckets[key]);
+  clusters.sort(function(x, y){ return (y.long + y.short) - (x.long + x.short); });
+  return { longLiq: longLiq, shortLiq: shortLiq, clusters: clusters.slice(0, 8) };
 }
 async function tm5mVolumeOk(row, dir){
   var got = null;
@@ -1886,6 +2010,44 @@ async function tm5mVolumeOk(row, dir){
   if (!(avg > 0)) return null;
   if (dir === 'long') return last.c >= last.o && last.v > avg;
   return last.c <= last.o && last.v > avg;
+}
+async function tmMicroOk(row, dir){
+  async function one(tf, n, sec){
+    if (typeof W.binanceKlines !== 'function') return null;
+    try {
+      var got = await W.binanceKlines(tmBaseOf(row) + 'USDT', tf, n);
+      var rows = tmClosedRows(got, sec);
+      if (!rows || rows.length < 30 || typeof hgStructure !== 'function') return null;
+      var hs = hgStructure(rows);
+      if (!hs) return null;
+      if (hs.trend === (dir === 'long' ? 'down' : 'up')) return false;
+      var last = rows[rows.length - 1];
+      if (dir === 'long' && last.c < last.o) return false;
+      if (dir === 'short' && last.c > last.o) return false;
+      return true;
+    } catch (e) { return null; }
+  }
+  var both = await Promise.all([one('3m', 80, 180), one('1m', 60, 60)]);
+  return { m3: both[0], m1: both[1] };
+}
+async function tmTradingView(row){
+  var base = tmBaseOf(row);
+  if (!base) return null;
+  async function ask(ticker){
+    var r = await fetch('/api/tv-scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbols: { tickers: [ticker] } })
+    });
+    if (!r || !r.ok) return null;
+    var j = await r.json();
+    var d = j && j.data && j.data[0] && j.data[0].d;
+    if (!d || !isFinite(+d[0])) return null;
+    return { recommend: +d[0], rsi: +d[1] };
+  }
+  try {
+    return await ask('BINANCE:' + base + 'USDT.P') || await ask('BINANCE:' + base + 'USDT');
+  } catch (e) { return null; }
 }
 async function tmCrowdRatio(row){
   if (typeof W.binanceLongShort !== 'function') return null;
@@ -1950,8 +2112,15 @@ async function trendmxFormOne(ticket, row, ctx){
   else if (dir === 'long' && ctx.ethStructure === 'down' && tmBaseOf(row) !== 'BTC' && tmBaseOf(row) !== 'ETH') bad.push('ETH structure down');
   if (!ctx || ctx.stableOk !== true) bad.push('stablecoin liquidity unread');
   else if (dir === 'long' && ctx.stableFalling) bad.push('stablecoin liquidity falling');
-  if (!ctx || ctx.newsOk !== true) bad.push('news unread');
-  else if (tmNewsVeto(ctx.headlines, tmBaseOf(row))) bad.push('adverse headline');
+  if (!ctx || ctx.newsOk !== true || !ctx.newsBook) bad.push('news unread');
+  else {
+    var hit = tmCoinHeadline(ctx.newsBook, tmBaseOf(row));
+    if (dir === 'long' && (ctx.newsBook.marketHack || ctx.newsBook.marketReg || ctx.newsBook.etfOutflow)) bad.push('market headline against longs');
+    if (dir === 'long' && (hit.hack || hit.delist || hit.lawsuit)) bad.push('coin headline against');
+    if (dir === 'short' && hit.listing) bad.push('fresh listing against a short');
+  }
+  if (!ctx || ctx.etfOk !== true) bad.push('ETF unread');
+  else if (dir === 'long' && ctx.etfFalling && !(ctx.newsBook && ctx.newsBook.etfInflow)) bad.push('ETF proxies falling');
   var a = tmAtrLast(rows4);
   var risk = Math.abs(+ticket.entry - +ticket.stop);
   if (!(a > 0) || !(risk >= 0.8 * a && risk <= 2.5 * a)) bad.push('stop outside ATR');
@@ -1975,11 +2144,26 @@ async function trendmxFormOne(ticket, row, ctx){
   else if (dir === 'long' && px > prof.vah && !(vz > 0)) bad.push('VAH break on declining volume');
   else if (dir === 'short' && px > prof.vah) bad.push('above value area');
   else if (dir === 'short' && px < prof.val && !(vz > 0)) bad.push('VAL break on declining volume');
+  var node = tmNodeVeto(prof, px, dir, a, vz);
+  if (node) bad.push(node);
+  var zones = tmSupplyDemand(rows4);
+  if (!zones) bad.push('supply/demand unread');
+  else if (dir === 'long'){
+    if (zones.supply && px >= zones.supply.lo && px <= zones.supply.hi) bad.push('inside supply');
+    if (!zones.demand || px < zones.demand.lo || px > zones.demand.hi + a) bad.push('not at demand');
+  } else {
+    if (zones.demand && px >= zones.demand.lo && px <= zones.demand.hi) bad.push('inside demand');
+    if (!zones.supply || px > zones.supply.hi || px < zones.supply.lo - a) bad.push('not at supply');
+  }
   if (typeof row.fundingPct !== 'number' || !isFinite(row.fundingPct)) bad.push('funding unread');
   else if (dir === 'long' && row.fundingPct >= 0.04) bad.push('funding crowded long');
   else if (dir === 'short' && row.fundingPct <= -0.04) bad.push('funding crowded short');
   if (!ctx || ctx.totalOk !== true) bad.push('total market unread');
   else if (dir === 'long' && (ctx.totalFalling || ctx.altsFalling) && tmBaseOf(row) !== 'BTC') bad.push('TOTAL / alts falling');
+  if (!ctx || ctx.total2Ok !== true) bad.push('TOTAL2 unread');
+  else if (dir === 'long' && ctx.total2Falling && tmBaseOf(row) !== 'BTC') bad.push('TOTAL2 falling');
+  if (!ctx || ctx.total3Ok !== true) bad.push('TOTAL3 unread');
+  else if (dir === 'long' && ctx.total3Falling && tmBaseOf(row) !== 'BTC' && tmBaseOf(row) !== 'ETH') bad.push('TOTAL3 falling');
   if (!ctx || ctx.unlockOk !== true) bad.push('unlock calendar unread');
   else if (ctx.unlockBases && ctx.unlockBases[tmBaseOf(row)]) bad.push('token unlock within 48h');
   if (bad.length) return bad;
@@ -1989,9 +2173,11 @@ async function trendmxFormOne(ticket, row, ctx){
     tmFetch15(row),
     tmCrowdRatio(row),
     tmLiqRead(row),
-    tm5mVolumeOk(row, dir)
+    tm5mVolumeOk(row, dir),
+    tmMicroOk(row, dir),
+    tmTradingView(row)
   ]);
-  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5];
+  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7];
   if (cvd !== 'with') bad.push(cvd === 'against' ? 'CVD against' : 'CVD unread');
   if (!oi) bad.push('OI unread');
   else if (dir === 'long' && !((oi.priceUp && oi.oiUp) || (oi.priceDown && oi.oiDown))) bad.push('OI not confirming the rise');
@@ -2005,8 +2191,25 @@ async function trendmxFormOne(ticket, row, ctx){
   if (!liq) bad.push('liquidations unread');
   else if (dir === 'long' && liq.shortLiq > liq.longLiq * 2 && liq.shortLiq > 0 && prof && px > prof.poc) bad.push('short-liquidation spike into strength');
   else if (dir === 'short' && liq.longLiq > liq.shortLiq * 2 && liq.longLiq > 0 && prof && px < prof.poc) bad.push('long-liquidation spike into weakness');
+  if (liq && liq.clusters && liq.clusters.length){
+    var top = liq.clusters[0];
+    if (top.price > 0 && Math.abs(px - top.price) / px < 0.004) bad.push('inside liquidation cluster');
+    var over = false, under = false, ci;
+    for (ci = 0; ci < liq.clusters.length && !(over && under); ci++){
+      var cl = liq.clusters[ci];
+      if (!over && dir === 'long' && cl.long > cl.short * 2 && cl.price > px && a > 0 && (cl.price - px) <= 0.5 * a){ bad.push('long-liquidation cluster overhead'); over = true; }
+      if (!under && dir === 'short' && cl.short > cl.long * 2 && cl.price < px && a > 0 && (px - cl.price) <= 0.5 * a){ bad.push('short-liquidation cluster underfoot'); under = true; }
+    }
+  }
   if (m5 == null) bad.push('5m unread');
   else if (m5 !== true) bad.push('5m volume not confirming');
+  if (!micro || micro.m3 == null) bad.push('3m unread');
+  else if (micro.m3 !== true) bad.push('3m structure against');
+  if (!micro || micro.m1 == null) bad.push('1m unread');
+  else if (micro.m1 !== true) bad.push('1m structure against');
+  if (!tv) bad.push('TradingView unread');
+  else if (dir === 'long' && tv.recommend < 0) bad.push('TradingView against');
+  else if (dir === 'short' && tv.recommend > 0) bad.push('TradingView against');
   return bad;
 }
 
@@ -2220,7 +2423,7 @@ function trendmxGoldenDeskHTML(golden){
   var held = golden.held || {};
   var cards = '';
   for (var i = 0; i < Math.min(golden.length, 4); i++) cards += trendmxCrossCardHTML(golden[i]);
-  var why = golden.length ? '' : ('<div class="note">No golden setup. Price has to clear structure, the 4h EMA cascade, 6/7 gates, the EMA tag, the TRADE grade, then the full stack: weekly and 4h structure, BOS, equal highs/lows, daily and weekly open, volume profile, EMA 20/50/200, VWAP, 1h, 15m sweep CHOCH and retest, 5m volume, OI, funding, positioning, liquidations, CVD, DXY yields Nasdaq S&P gold VIX, the calendar, BTC ETH BTC.D TOTAL, stables, news and the unlock calendar.'
+  var why = golden.length ? '' : ('<div class="note">No golden setup. Price has to clear structure, the 4h EMA cascade, 6/7 gates, the EMA tag, the TRADE grade, then the full stack: weekly and 4h structure, BOS, equal highs/lows, daily and weekly open, volume profile, HVN and LVN, supply and demand, EMA 20/50/200, VWAP, 1h, 15m sweep CHOCH and retest, 5m volume, 3m and 1m structure, OI, funding, positioning, liquidation clusters, CVD, DXY yields Nasdaq S&P gold VIX, the calendar, BTC ETH BTC.D TOTAL TOTAL2 TOTAL3, ETF flows, stables, headlines, listings and the unlock calendar. The TradingView technical summary has to agree.'
     + (held.waiting ? ' ' + held.waiting + ' waiting for the EMA tag.' : '')
     + (held.gates ? ' ' + held.gates + ' failed the gates.' : '')
     + (held.cascade ? ' ' + held.cascade + ' have no 4h cascade.' : '')

@@ -1,3 +1,57 @@
+   own majority. WITH is a positive read. An unread ATR, a mixed tape, a
+   missing 4h structure, and BTC funding that is merely not crowded do not
+   count as WITH. Structure must agree (EMA50 vs EMA200). An against pillar
+   vetoes the stack. The composite, the PERFECT predicate, and the tiers are
+   unchanged. A stricter desk, not a profit claim. */
+var __tmMacro = null;
+function trendmxMacroSet(snap){ __tmMacro = snap || null; return __tmMacro; }
+function trendmxFivePillars(r){
+  r = r || {};
+  var dir = tmDirOf(r);
+  var pillars = [];
+  if (!dir){
+    pillars.push({ name: 'TECHNICAL', state: 'unread', detail: 'no majority' });
+  } else {
+    var against = false, withIt = false, notes = ['composite ' + r.score + '/5'];
+    var mom = trendmxMomState(r, dir);
+    var vol = trendmxVolState(r, dir);
+    var chop = trendmxChopState(r);
+    var atr = trendmxAtrRegime(r);
+    if (mom) notes.push('momentum ' + mom);
+    if (vol) notes.push('volume ' + vol);
+    if (atr) notes.push('ATR ' + atr.regime);
+    if (chop && chop.state) notes.push('tape ' + chop.state);
+    if (mom === 'against' || vol === 'against' || (chop && chop.state === 'chop')) against = true;
+    if (atr && (atr.regime === 'DEAD' || atr.regime === 'BLOWOFF')) against = true;
+    var structWith = false;
+    try{
+      var st = tmStructureDir(r.rows4h);
+      if (st){
+        notes.push('structure ' + st);
+        if ((dir === 'long' && st === 'down') || (dir === 'short' && st === 'up')) against = true;
+        if ((dir === 'long' && st === 'up') || (dir === 'short' && st === 'down')) structWith = true;
+      }
+    }catch(eSt){}
+    if (!against && structWith && mom === 'with' && vol === 'with' && Math.abs(+r.score || 0) >= 4 && atr && atr.regime === 'HEALTHY' && chop && chop.state === 'trend') withIt = true;
+    pillars.push({ name: 'TECHNICAL', state: against ? 'against' : (withIt ? 'with' : 'flat'), detail: notes.join(' · ') });
+  }
+  var fund = dir ? trendmxFundState(r, dir) : null;
+  pillars.push({ name: 'FUNDAMENTAL', state: fund || 'unread', detail: fund ? ('fundamental stack ' + fund) : 'fundamental stack dark' });
+  var sentAgainst = false, sentWith = false, sentRead = false, sentNotes = [];
+  if (r.flow && r.flow.verdict && r.flow.verdict !== 'unreadable'){
+    sentRead = true;
+    sentNotes.push('taker ' + r.flow.verdict);
+    if (r.flow.verdict === 'against') sentAgainst = true;
+    if (r.flow.verdict === 'with') sentWith = true;
+  }
+  if (dir && typeof r.fundingPct === 'number' && isFinite(r.fundingPct) && typeof W.hgFundingAgainstMark === 'function'){
+    sentRead = true;
+    try{
+      var fm = W.hgFundingAgainstMark(r.fundingPct, dir);
+      if (fm && fm.against === true){ sentAgainst = true; sentWith = false; sentNotes.push('funding crowded'); }
+      else sentNotes.push('funding clean');
+    }catch(eFm){}
+  }
   pillars.push({ name: 'SENTIMENT', state: !sentRead ? 'unread' : (sentAgainst ? 'against' : (sentWith ? 'with' : 'flat')), detail: sentNotes.join(' · ') || 'no flow or funding' });
   var macroState = 'unread', macroBits = [];
   var macro = __tmMacro;
@@ -302,34 +356,3 @@ function trendmxColumnsHTML(rows){
     function mixedRow(r){
       try{
         if (r.unread) return '<div class="card" style="padding:8px;margin-bottom:6px"><b>' + escH(r.sym) + '</b>' + tmVenueChip(r)
-          + '<div style="opacity:.75;font-size:11px;margin-top:2px">UNREAD · CoinDCX contract with no candle series · not a setup</div></div>';
-        return '<div class="card" style="padding:8px;margin-bottom:6px"><b>' + escH(r.sym) + '</b>' + tmVenueChip(r)
-          + '<div style="opacity:.75;font-size:11px;margin-top:2px">composite ' + (r.score > 0 ? '+' : '') + r.score + '/5 · no majority — no levels minted · ADX '
-          + (isFinite(r.adx) ? (+r.adx).toFixed(1) : '—') + '</div></div>';
-      }catch(e){ return ''; }
-    }
-    function col(title, cls, titleCls, list, emptyTxt){
-      var h = '<div class="panel tm-col" style="border-top:3px solid ' + cls + '"><h3 style="margin:0 0 8px">'
-        + '<span class="' + titleCls + '">' + title + '</span> <span style="opacity:.6;font-weight:400">· ' + list.length + ' row' + (list.length === 1 ? '' : 's') + '</span></h3>';
-      if (!list.length) h += '<div class="empty" style="margin:6px 0">' + emptyTxt + '</div>';
-      else h += list.map(function(rr){
-        var dd = tmDirOf(rr);
-        if (!dd) return mixedRow(rr);
-        var plan = dd ? trendmxPlan(Object.assign({}, rr, { dir: dd })) : null;
-        var tier = trendmxRowTier(rr, plan);
-        return trendmxSetupCardHTML(rr, tier === 'clean' ? 'clean' : 'near');
-      }).join('');
-      return h + '</div>';
-    }
-    var bullS = byStrength(bull), bearS = byStrength(bear), mixedS = byStrength(mixed);
-    return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;align-items:start">'
-      + col('BULL', '#26a69a', 'pos', bullS, 'no bullish rows — composite below +2')
-      + col('BEAR', '#ef5350', 'neg', bearS, 'no bearish rows — composite above -2')
-      + col('MIXED / CHOP', '#94a3b8', '', mixedS, 'no mixed rows')
-      + '</div>';
-  }catch(e){ return ''; }
-}
-
-/* hg-v1048: the COINDCX TRENDING / FORMING board - every CoinDCX future
-   the matrix scanned, in two columns. TRENDING = the composite has a
-   majority direction (|score| >= 2); FORMING = it does not yet. Both

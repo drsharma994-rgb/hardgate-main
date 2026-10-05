@@ -1,21 +1,3 @@
-    var ok4 = Array.isArray(rows4h) && rows4h.length > 0;
-    if (!ok1 && !ok4) return out;
-
-    if (ok1){
-      var c1 = rows1d.map(function(r){ return r ? r.c : NaN; });
-      var i1 = c1.length - 1;
-      var e50 = ema(c1, 50), e200 = ema(c1, 200);
-      var cL = c1[i1], e50L = e50[i1], e200L = e200[i1];
-
-      /* 1) 1d close vs ema200 */
-      if (isFinite(cL) && isFinite(e200L)) out.comps.d1Trend = cmp(cL, e200L);
-
-      /* 2) 1d ema50 vs ema200 + fresh-cross marker (<=10 bars) */
-      if (isFinite(e50L) && isFinite(e200L)) out.comps.d1Cross = cmp(e50L, e200L);
-      /* A cross on the daily bar that is still forming does not count. */
-      var dClosed = tmClosedRows(rows1d, 86400);
-      var cClosed = dClosed.map(function(r){ return r ? r.c : NaN; });
-      var e50c = ema(cClosed, 50), e200c = ema(cClosed, 200);
       if (crossedRecently(crossOver(e50c, e200c), 10)) out.freshCross = 'GOLDEN';
       else if (crossedRecently(crossUnder(e50c, e200c), 10)) out.freshCross = 'DEATH';
 
@@ -441,3 +423,38 @@ function trendmxPlanLegacy(inp){
     }
 
     /* 5) house fallback — structure stop + structure targets when available */
+    var entry = +((inp.entry !== undefined && inp.entry !== null) ? inp.entry : lastBar.c);
+    var a = (typeof atr === 'function') ? atr(rows, TM_ATR_LEN)[rows.length - 1] : NaN;
+    if (!isFinite(entry) || entry <= 0 || !isFinite(a) || a <= 0) return null;
+    var st = tmFallbackStop(dir, entry, a, rows);
+    var risk = Math.abs(entry - st.stop);
+    if (!(risk > 0)) return null;
+    var t1 = (dir === 'long') ? entry + TM_T1_R * risk : entry - TM_T1_R * risk;
+    var t2 = (dir === 'long') ? entry + TM_T2_R * risk : entry - TM_T2_R * risk;
+    if (typeof hgStructureTargets === 'function'){
+      try{
+        var tg = hgStructureTargets(dir, entry, st.stop, rows, a, { minRr: TM_MIN_RR, style: 'swing' });
+        if (tg && isFinite(tg.t1)){
+          t1 = tg.t1;
+          if (isFinite(tg.t2)) t2 = tg.t2;
+        }
+      }catch(eTg){}
+    }
+    var fb = {
+      type: 'ATR', dir: dir, entry: entry, stop: st.stop, t1: t1, t2: t2,
+      rr1: Math.abs(t1 - entry) / risk,
+      rr2: Math.abs(t2 - entry) / risk,
+      riskPct: risk / entry * 100,
+      confirmed: null, note: st.note, planSrc: 'trendmx-fallback'
+    };
+    if (!tmValidSetup(fb)) return null;
+    return trendmxAttachMeta(fb, gate, { rows4h: rows, price: inp.price });
+  }catch(e){ return null; }
+}
+
+/* plan line, same markup as oiflow.js:
+   ENTRY <b>..</b> · STOP <b>..</b> · T1 <b>..</b> (xR) · T2 <b>..</b> (xR) · risk ..% */
+function trendmxPlanHTML(s){
+  if (!s) return '';
+  var risk = (isFinite(s.entry) && isFinite(s.stop)) ? Math.abs(s.entry - s.stop) : NaN;
+  var rr1 = isFinite(s.rr1) ? s.rr1 : ((isFinite(risk) && risk > 0) ? Math.abs(s.t1 - s.entry) / risk : NaN);

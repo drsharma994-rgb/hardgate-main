@@ -1,3 +1,12 @@
+  var out    = el.querySelector('[data-r="out"]');
+  var refs = {
+    summary: summary,
+    golden: el.querySelector('[data-r="golden"]'),
+    death: el.querySelector('[data-r="death"]'),   /* hg-v1015 */
+    cards: el.querySelector('[data-r="cards"]'),
+    near: el.querySelector('[data-r="near"]'),
+    forming: el.querySelector('[data-r="forming"]'),
+    gateclean: el.querySelector('[data-r="gateclean"]'),   /* hg-v1018 */
     conviction: el.querySelector('[data-r="conviction"]'),  /* hg-v1018 */
     perfect: el.querySelector('[data-r="perfect"]'),        /* hg-v1022 */
     fwd: el.querySelector('[data-r="fwd"]'),                /* hg-v1039: the measured book */
