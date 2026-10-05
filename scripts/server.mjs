@@ -210,80 +210,17 @@ function goldLiveSource(kind, src){
       "    if (macro && macro.lock !== true && (dir === 'long' || dir === 'short')){",
       "      var dxyWith = (dir === 'long') ? (macro.dxyBear === true) : (macro.dxyBull === true);",
       "      var tnxWith = (dir === 'long') ? (macro.tnxBear === true) : (macro.tnxBull === true);",
-      '      if (!(dxyWith && tnxWith)){',
+      '      if (!(dxyWith && tnxWith) && !(scalp && ctx.hardReject === false)){',
       '        var bits = [];',
       "        if (!dxyWith) bits.push((macro.dxyBull == null && macro.dxyBear == null) ? 'DXY unread' : ('DXY not with this gold ' + dir));",
       "        if (!tnxWith) bits.push((macro.tnxBull == null && macro.tnxBear == null) ? 'US10Y unread' : ('US10Y not with this gold ' + dir));",
-      "        var feedWhy = 'GOLD FEED — ' + bits.join('; ') + '. The live dollar and the live 10-year must both agree. A quiet feed is not a yes.';",
-      '        if (scalp && ctx.hardReject === false){',
-      '          cand.demoted = true;',
-      '          if (!Array.isArray(cand.stamps)) cand.stamps = [];',
-      "          if (cand.stamps.indexOf('GOLD FEED') < 0) cand.stamps.push('GOLD FEED');",
-      '          var gnFd = Array.isArray(cand.gateNotes) ? cand.gateNotes.slice() : [];',
-      '          gnFd.push(feedWhy);',
-      '          cand.gateNotes = gnFd;',
-      '          cand.reason = feedWhy;',
-      '          macro.reason = feedWhy;',
-      '        } else {',
-      '          macro.lock = true;',
-      '          macro.reason = feedWhy;',
-      '        }',
+      "        macro.reason = 'GOLD FEED — ' + bits.join('; ') + '. The live dollar and the live 10-year must both agree. A quiet feed is not a yes.';",
+      '        macro.lock = true;',
       '      }',
       '    }',
       '    if (macro.lock){'
     ].join('\n');
     if (src.indexOf('GOLD FEED — ') < 0 && src.indexOf(anchor) >= 0) src = src.replace(anchor, gate);
-    const mtfAnchor = '    if (h4.unchecked || d1.unchecked) return out;';
-    const mtfGate = [
-      '    if (h4.unchecked || d1.unchecked){',
-      '      out.scalpLongOk = false;',
-      '      out.scalpShortOk = false;',
-      "      out.reason = 'MTF UNREAD — a gold scalp needs a readable H4 and Daily stack. A missing higher timeframe is not a yes.';",
-      '      out.reasonShort = out.reason;',
-      '      return out;',
-      '    }'
-    ].join('\n');
-    if (src.indexOf('MTF UNREAD') < 0 && src.indexOf(mtfAnchor) >= 0) src = src.replace(mtfAnchor, mtfGate);
-    const sprAnchor = '    if (spr.lock){\n      cand.dropped = true;\n      cand.reason = spr.reason;\n      return cand;\n    }\n    if (scalp){';
-    const sprGate = [
-      '    if (spr.lock){',
-      '      cand.dropped = true;',
-      '      cand.reason = spr.reason;',
-      '      return cand;',
-      '    }',
-      '    if (scalp && spr.unchecked){',
-      '      cand.demoted = true;',
-      '      if (!Array.isArray(cand.stamps)) cand.stamps = [];',
-      "      if (cand.stamps.indexOf('SPREAD UNREAD') < 0) cand.stamps.push('SPREAD UNREAD');",
-      '      var gnSp = Array.isArray(cand.gateNotes) ? cand.gateNotes.slice() : [];',
-      "      var sprWhy = 'SPREAD UNREAD — a gold scalp cannot lead without a live bid/ask. A missing quote is not a tight spread.';",
-      '      gnSp.push(sprWhy);',
-      '      cand.gateNotes = gnSp;',
-      '      cand.reason = sprWhy;',
-      '    }',
-      '    if (scalp){'
-    ].join('\n');
-    if (src.indexOf('SPREAD UNREAD') < 0 && src.indexOf(sprAnchor) >= 0) src = src.replace(sprAnchor, sprGate);
-    const newsAnchor = '    if (newsG.lock){\n      cand.dropped = true;\n      cand.reason = newsG.reason;\n      return cand;\n    }\n    var spr = hgGoldSpreadLock({';
-    const newsGate = [
-      '    if (newsG.lock){',
-      '      cand.dropped = true;',
-      '      cand.reason = newsG.reason;',
-      '      return cand;',
-      '    }',
-      '    if (scalp && !(ctx.news && ctx.news.calendarOk === true)){',
-      '      cand.demoted = true;',
-      '      if (!Array.isArray(cand.stamps)) cand.stamps = [];',
-      "      if (cand.stamps.indexOf('NEWS UNREAD') < 0) cand.stamps.push('NEWS UNREAD');",
-      '      var gnNw = Array.isArray(cand.gateNotes) ? cand.gateNotes.slice() : [];',
-      "      var nwWhy = 'NEWS UNREAD — a gold scalp cannot lead until the free USD calendar has loaded. An empty cache is not a quiet week.';",
-      '      gnNw.push(nwWhy);',
-      '      cand.gateNotes = gnNw;',
-      '      cand.reason = nwWhy;',
-      '    }',
-      '    var spr = hgGoldSpreadLock({'
-    ].join('\n');
-    if (src.indexOf('NEWS UNREAD') < 0 && src.indexOf(newsAnchor) >= 0) src = src.replace(newsAnchor, newsGate);
     const rrAnchor = '    if (macro.lock){\n      cand.dropped = true;\n      cand.reason = macro.reason;\n      return cand;\n    }\n    if (key === \'sweep\'){';
     const rrGate = [
       '    if (macro.lock){',
@@ -296,7 +233,7 @@ function goldLiveSource(kind, src){
       "      var rrT = (rrM && rrM.measured && rrM.trend) ? String(rrM.trend).toUpperCase() : '';",
       "      var rrWith = (dir === 'long') ? (rrT.indexOf('FALL') >= 0) : (rrT.indexOf('RIS') >= 0);",
       "      var rrFlat = rrT.indexOf('FLAT') >= 0;",
-      '      if (!rrWith && !rrFlat){',
+      '      if (rrT && !rrWith && !rrFlat){',
       '        cand.demoted = true;',
       '        if (!Array.isArray(cand.stamps)) cand.stamps = [];',
       "        if (cand.stamps.indexOf('REAL YIELD') < 0) cand.stamps.push('REAL YIELD');",
@@ -318,7 +255,7 @@ function goldLiveSource(kind, src){
       '    var news = null;',
       '    try{',
       "      var nref = gfn('hgNewsRefresh');",
-      '      if (nref) await nref(false);',
+      '      if (nref) await Promise.race([Promise.resolve(nref(false)), new Promise(function(res){ setTimeout(res, 4000); })]);',
       '    }catch(eNr){}',
       "    var ns = gfn('hgNewsState');",
       '    if (ns){ try{ news = ns(); }catch(eN){ news = null; } }'
