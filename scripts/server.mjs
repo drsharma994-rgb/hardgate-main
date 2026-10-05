@@ -197,6 +197,80 @@ function omnibtcTicketSource(src){
     .replace(cavOld, cavOld + "\n      if (r.obtcShapeWhy) caveats.push('not a ticket - ' + r.obtcShapeWhy);");
 }
 
+
+/* hg-v1085: gold tickets need a live dollar and a live 10-year, both with
+   the trade. The desk files are too large to replace whole, so the gate is
+   spliced into the served script. A miss on any marker serves the file
+   unchanged. */
+function goldLiveSource(kind, src){
+  if (kind === 'goldind'){
+    const anchor = '    cand.macroLock = macro;\n    if (macro.lock){';
+    const gate = [
+      '    cand.macroLock = macro;',
+      "    if (macro && macro.lock !== true && (dir === 'long' || dir === 'short')){",
+      "      var dxyWith = (dir === 'long') ? (macro.dxyBear === true) : (macro.dxyBull === true);",
+      "      var tnxWith = (dir === 'long') ? (macro.tnxBear === true) : (macro.tnxBull === true);",
+      '      if (!(dxyWith && tnxWith)){',
+      '        macro.lock = true;',
+      '        var bits = [];',
+      "        if (!dxyWith) bits.push((macro.dxyBull == null && macro.dxyBear == null) ? 'DXY unread' : ('DXY not with this gold ' + dir));",
+      "        if (!tnxWith) bits.push((macro.tnxBull == null && macro.tnxBear == null) ? 'US10Y unread' : ('US10Y not with this gold ' + dir));",
+      "        macro.reason = 'GOLD FEED — ' + bits.join('; ') + '. The live dollar and the live 10-year must both agree. A quiet feed is not a yes.';",
+      '      }',
+      '    }',
+      '    if (macro.lock){'
+    ].join('\n');
+    if (src.indexOf('GOLD FEED — ') >= 0) return src;
+    if (src.indexOf(anchor) < 0) return src;
+    return src.replace(anchor, gate);
+  }
+  if (kind === 'goldswing'){
+    const anchor = '    function push(c){\n      if (!c) return;\n      if (c.dropped){ out.rejected.push(c); return; }';
+    const gate = [
+      '    function push(c){',
+      '      if (!c) return;',
+      "      if (c.dir === 'long' || c.dir === 'short'){",
+      '        var dxyT = (macro && macro.dxy && macro.dxy.trend20) || null;',
+      '        var tnxT = (macro && macro.tnxTrend) || null;',
+      "        var feedOk = (c.dir === 'long') ? (dxyT === 'FALLING' && tnxT === 'FALLING') : (dxyT === 'RISING' && tnxT === 'RISING');",
+      '        if (!feedOk){',
+      '          c.dropped = true;',
+      '          var miss = [];',
+      "          if (c.dir === 'long'){",
+      "            if (dxyT !== 'FALLING') miss.push(dxyT ? ('DXY ' + dxyT) : 'DXY unread');",
+      "            if (tnxT !== 'FALLING') miss.push(tnxT ? ('US10Y ' + tnxT) : 'US10Y unread');",
+      '          } else {',
+      "            if (dxyT !== 'RISING') miss.push(dxyT ? ('DXY ' + dxyT) : 'DXY unread');",
+      "            if (tnxT !== 'RISING') miss.push(tnxT ? ('US10Y ' + tnxT) : 'US10Y unread');",
+      '          }',
+      "          c.reason = 'GOLD FEED — ' + miss.join(', ') + '. A gold ' + c.dir + ' needs the live dollar and the live 10-year both with it.';",
+      '        }',
+      '      }',
+      '      if (c.dropped){ out.rejected.push(c); return; }'
+    ].join('\n');
+    if (src.indexOf('needs the live dollar') >= 0) return src;
+    if (src.indexOf(anchor) < 0) return src;
+    return src.replace(anchor, gate);
+  }
+  if (kind === 'omnigold'){
+    const anchor = [
+      '    if (!isFinite(dxyValue)) dxyValue = 103;   /* fallback */',
+      '    if (!isFinite(correlation)) correlation = -0.92;   /* fallback */',
+      '    if (!isFinite(beta)) beta = -0.95;   /* fallback */',
+      '    if (!isFinite(realRate)) realRate = 2.1;   /* fallback */'
+    ].join('\n');
+    const gate = [
+      '    if (!isFinite(dxyValue) || !isFinite(correlation) || !isFinite(beta) || !isFinite(realRate)){',
+      "      return { regime: 'UNREAD', dxyValue: dxyValue, correlation: correlation, beta: beta, realRate: realRate, reason: 'DXY or real-rate feed unread. A missing internet print is not a normal gold regime' };",
+      '    }'
+    ].join('\n');
+    if (src.indexOf('not a normal gold regime') >= 0) return src;
+    if (src.indexOf(anchor) < 0) return src;
+    return src.replace(anchor, gate);
+  }
+  return src;
+}
+
 const server = http.createServer(async (req, res) => {
   try{
     baseHeaders(res);
@@ -321,6 +395,21 @@ const server = http.createServer(async (req, res) => {
       const obFile = path.join(ROOT, 'omnibtc.js');
       if (fs.existsSync(obFile)) {
         const shaped = omnibtcTicketSource(fs.readFileSync(obFile, 'utf8'));
+        res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.statusCode = 200;
+        return res.end(shaped);
+      }
+    }
+
+
+    /* hg-v1085: gold desks — ticket only when the live dollar and 10-year agree. */
+    if (u.pathname === '/goldind.js' || u.pathname === '/goldswing.js' || u.pathname === '/omnigold.js') {
+      const gName = u.pathname.slice(1);
+      const gFile = path.join(ROOT, gName);
+      if (fs.existsSync(gFile)) {
+        const kind = gName === 'goldind.js' ? 'goldind' : (gName === 'goldswing.js' ? 'goldswing' : 'omnigold');
+        const shaped = goldLiveSource(kind, fs.readFileSync(gFile, 'utf8'));
         res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
         res.setHeader('Cache-Control', 'no-cache');
         res.statusCode = 200;
