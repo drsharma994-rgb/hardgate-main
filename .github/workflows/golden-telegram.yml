@@ -1,0 +1,40 @@
+# BATCH 1123 — Telegram every 30 minutes for new golden crosses,
+# TREND MATRIX GOLDEN CROSS, and composite +5/5 !GOLDEN.
+# Not skipped by RENDER_DISPATCH_PRIMARY. No page redirect.
+name: HARDGATE Golden Telegram
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hardgate-golden-telegram
+  cancel-in-progress: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Send new golden crosses and composite +5/5 !GOLDEN
+        run: node scripts/golden-30m.mjs
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_DISABLED: "0"
+          GOLDEN_ALERT_EVERY_MIN: "30"
+      - name: Commit golden alert state if it changed
+        run: |
+          git config user.name "hardgate-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add golden-alert-state.json
+          git diff --cached --quiet || git commit -m "chore: golden alert state [skip ci]"
+          git push
