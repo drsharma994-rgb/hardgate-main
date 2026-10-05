@@ -1,13 +1,13 @@
-/* HARDGATE — gold-combined.js (hg-v1108)
+/* HARDGATE — gold-combined.js (hg-v1109)
    One setup per gold tab. The v1105 playbook, plus the next layer:
    USDJPY as an inverse filter, the gold/silver ratio, the 2s10s curve,
    session volume profile, Heikin Ashi, Renko and KAMA. GLD tonnage is
-   unread — there is no keyless holdings feed. v1107 adds the paper-versus-physical layer that can actually be read: COMEX minus spot, and the GLD/GDX spread. Skew, lease rates, Swiss customs and the Shanghai premium stay unread. v1108 adds the gold futures curve, the gold/oil ratio, and a wider second target when a safe-haven headline is already on the tape. Dealer gamma, COMEX vault stocks, the SOFR pair and BRICS settlement stay unread. */
+   unread — there is no keyless holdings feed. v1107 adds the paper-versus-physical layer that can actually be read: COMEX minus spot, and the GLD/GDX spread. Skew, lease rates, Swiss customs and the Shanghai premium stay unread. v1108 adds the gold futures curve, the gold/oil ratio, and a wider second target when a safe-haven headline is already on the tape. Dealer gamma, COMEX vault stocks, the SOFR pair and BRICS settlement stay unread. v1109 adds a corrected Hurst exponent on the daily closes, a variance-targeted GARCH(1,1) for the second target, and a pause through the London AM and PM fixes. The auction imbalance, the mine-by-mine cost curve and the order book stay unread. */
 (function(){
 'use strict';
 var W = (typeof window !== 'undefined') ? window : globalThis;
-if (W.__hgGoldCombinedBoot === 1108) return;
-W.__hgGoldCombinedBoot = 1108;
+if (W.__hgGoldCombinedBoot === 1109) return;
+W.__hgGoldCombinedBoot = 1109;
 
 var TABS = {
   goldscalp:     { name: 'GOLD SCALP', tf: '15m', atrMult: 1.2, r1: 1.2, r2: 2 },
@@ -412,8 +412,12 @@ function newsOf(news, risk){
   return { points: 'none', why: 'calendar is clear — news does not pick the side' };
 }
 
-function gate(spec, play, fund, sent, macro, news, inter, inst, term){
+function gate(spec, play, fund, sent, macro, news, inter, inst, term, mem){
   if (play.side !== 'long' && play.side !== 'short') return { side: 'none', why: play.why, kind: '' };
+  if (mem && mem.paused) return { side: 'none', why: mem.pauseWhy, kind: '' };
+  if (mem && mem.state === 'random') return { side: 'none', why: 'Hurst ' + mem.h.toFixed(2) + ' — random walk, no trade', kind: '' };
+  if (mem && mem.state === 'trend' && (play.kind === 'value-area fade' || play.kind === 'liquidity sweep')) return { side: 'none', why: 'Hurst ' + mem.h.toFixed(2) + ' is trending — the fade is off', kind: '' };
+  if (mem && mem.state === 'fade' && play.kind === 'HTF continuation') return { side: 'none', why: 'Hurst ' + mem.h.toFixed(2) + ' is mean-reverting — the continuation is off', kind: '' };
   if (fund.block || news.block) return { side: 'none', why: fund.block ? fund.why : news.why, kind: '' };
   if (news.haven && play.side === 'short') return { side: 'none', why: 'safe-haven flow blocks the short', kind: '' };
   var mb = macroBlocks(macro, play.side);
@@ -432,10 +436,11 @@ function gate(spec, play, fund, sent, macro, news, inter, inst, term){
   if (inter && inter.usd && ((play.side === 'long' && inter.usd.trend === 'FALLING') || (play.side === 'short' && inter.usd.trend === 'RISING'))) extra += ' · USDJPY confirms';
   if (inst && inst.confirm && ((play.side === 'long' && inst.points !== 'short') || (play.side === 'short' && inst.points !== 'long'))) extra += ' · ' + inst.confirm;
   if (term && play.side === 'long' && term.confirm) extra += ' · ' + term.confirm;
+  if (mem && mem.floor && play.side === 'long') extra += ' · spot is on the miner cost floor';
   return { side: play.side, why: play.why + extra, kind: play.kind };
 }
 
-function levels(spec, play, gpr){
+function levels(spec, play, gpr, volRatio){
   var tape = play.tape;
   if (!tape || !(tape.px > 0) || !(tape.atr > 0)) return null;
   if (play.side !== 'long' && play.side !== 'short') return null;
@@ -448,9 +453,20 @@ function levels(spec, play, gpr){
   var entry = tape.px;
   var stop = play.side === 'long' ? entry - risk : entry + risk;
   var r2 = spec.r2 + ((gpr && play.side === 'long') ? 0.5 : 0);
+  var volNote = '';
+  if (volRatio >= 1.25){
+    r2 = Math.round(r2 * 1.15 * 100) / 100;
+    volNote = 'T2 widened — GARCH vol is clustered';
+  } else if (volRatio > 0 && volRatio <= 0.8){
+    var shrunk = Math.round(r2 * 0.9 * 100) / 100;
+    if (shrunk >= spec.r1 + 0.3){
+      r2 = shrunk;
+      volNote = 'T2 tightened — GARCH vol is quiet';
+    }
+  }
   var t1 = play.side === 'long' ? entry + spec.r1 * risk : entry - spec.r1 * risk;
-  var t2 = play.side === 'long' ? entry + r2 * risk : entry - spec.r2 * risk;
-  return { entry: entry, stop: stop, t1: t1, t2: t2, r2: play.side === 'long' ? r2 : spec.r2, widened: !!(gpr && play.side === 'long') };
+  var t2 = play.side === 'long' ? entry + r2 * risk : entry - r2 * risk;
+  return { entry: entry, stop: stop, t1: t1, t2: t2, r2: r2, widened: !!(gpr && play.side === 'long'), volNote: volNote };
 }
 
 function card(spec, call, lv){
@@ -463,7 +479,7 @@ function card(spec, call, lv){
   return '<div class="note"><b>' + esc(spec.name) + ' SETUP · ' + word(call.side) + '</b> · ' + esc(call.kind)
     + '<br>' + esc(call.why)
     + '<br>Entry ' + px(lv.entry) + ' · Stop ' + px(lv.stop)
-    + ' · T1 ' + px(lv.t1) + ' (' + spec.r1 + 'R) · T2 ' + px(lv.t2) + ' (' + lv.r2 + 'R)' + (lv.widened ? ' · T2 widened — geopolitical headlines' : '')
+    + ' · T1 ' + px(lv.t1) + ' (' + spec.r1 + 'R) · T2 ' + px(lv.t2) + ' (' + lv.r2 + 'R)' + (lv.widened ? ' · T2 widened — geopolitical headlines' : '') + (lv.volNote ? ' · ' + lv.volNote : '')
     + '<br><span class="dim">IUX spot, ' + esc(spec.tf) + ' close. ATR stop. Not a fill on your bid.</span></div>';
 }
 
@@ -491,13 +507,13 @@ function noiseLine(spec, play){
 function htmlFor(spec, stacks, shared){
   var play = playOf(spec, stacks, shared.season);
   var micro = microOf(spec, play);
-  var call = gate(spec, play, shared.fund, shared.sent, shared.macro, shared.news, shared.inter, shared.inst, shared.term);
-  var lv = levels(spec, call.side === play.side ? play : { side: 'none' }, !!(shared.news && shared.news.haven));
+  var call = gate(spec, play, shared.fund, shared.sent, shared.macro, shared.news, shared.inter, shared.inst, shared.term, shared.mem);
+  var lv = levels(spec, call.side === play.side ? play : { side: 'none' }, !!(shared.news && shared.news.haven), shared.mem ? shared.mem.volRatio : 0);
   var prof = profileLine(play);
   var noise = noiseLine(spec, play);
   var seasonSide = shared.season && shared.season.mode === 'q1' ? 'long' : 'none';
   var h = '<div class="note"><b>GOLD PLAYBOOK</b> · ' + esc(spec.name)
-    + '<br><span class="dim">Daily structure, sweep or value-area fade or HTF continuation, Heikin Ashi, Renko, KAMA, USDJPY, gold/silver, 2s10s, futures basis, GLD/GDX, the gold curve and gold/oil. Dealer gamma and COMEX vault stocks are unread. A split is no setup.</span></div>';
+    + '<br><span class="dim">Daily structure, sweep or value-area fade or HTF continuation, Heikin Ashi, Renko, KAMA, USDJPY, gold/silver, 2s10s, futures basis, GLD/GDX, the gold curve, gold/oil, daily Hurst and GARCH. The London fix pauses new trades. The order book is unread. A split is no setup.</span></div>';
   h += card(spec, call, lv);
   h += '<div class="cr-ind-wrap">';
   h += '<div class="kv"><span class="k">Technical</span><span class="v">' + arrow(play.side, play.why) + '</span></div>';
@@ -506,6 +522,7 @@ function htmlFor(spec, stacks, shared){
   h += '<div class="kv"><span class="k">Intermarket</span><span class="v">' + arrow(shared.inter.points, shared.inter.why) + '</span></div>';
   h += '<div class="kv"><span class="k">Institutional</span><span class="v">' + arrow(shared.inst.points, shared.inst.why) + '</span></div>';
   h += '<div class="kv"><span class="k">Curve</span><span class="v">' + arrow(shared.term.points, shared.term.why) + '</span></div>';
+  h += '<div class="kv"><span class="k">Memory</span><span class="v">' + arrow(shared.mem.points, shared.mem.why) + '</span></div>';
   h += '<div class="kv"><span class="k">Fundamental</span><span class="v">' + arrow(shared.fund.points, shared.fund.why) + '</span></div>';
   h += '<div class="kv"><span class="k">Sentiment</span><span class="v">' + arrow(shared.sent.points, shared.sent.why) + '</span></div>';
   h += '<div class="kv"><span class="k">Macro</span><span class="v">' + arrow(shared.macro.points, shared.macro.why) + '</span></div>';
@@ -901,6 +918,137 @@ async function loadTerm(){
   return termRead(cal, ratios.length ? zLast(ratios) : null);
 }
 
+
+function expectedRS(n){
+  var sum = 0, i;
+  for (i = 1; i < n; i++) sum += Math.sqrt((n - i) / i);
+  return ((n - 0.5) / n) * Math.pow(n * Math.PI / 2, -0.5) * sum;
+}
+function hurstOf(closes){
+  var r = [], i;
+  for (i = 1; i < closes.length; i++){
+    if (closes[i] > 0 && closes[i - 1] > 0) r.push(Math.log(closes[i] / closes[i - 1]));
+  }
+  if (r.length < 80) return null;
+  var lags = [8, 16, 32, 64];
+  var xs = [], ys = [], k, n, chunks, c, mean, cum, mx, mn, v, sd, rs, avg, ers;
+  for (k = 0; k < lags.length; k++){
+    n = lags[k];
+    chunks = Math.floor(r.length / n);
+    if (chunks < 2) continue;
+    rs = 0;
+    for (c = 0; c < chunks; c++){
+      mean = 0;
+      for (i = 0; i < n; i++) mean += r[c * n + i];
+      mean /= n;
+      cum = 0; mx = -Infinity; mn = Infinity; sd = 0;
+      for (i = 0; i < n; i++){
+        v = r[c * n + i];
+        cum += v - mean;
+        if (cum > mx) mx = cum;
+        if (cum < mn) mn = cum;
+        sd += (v - mean) * (v - mean);
+      }
+      sd = Math.sqrt(sd / n);
+      if (sd > 0) rs += (mx - mn) / sd;
+    }
+    avg = rs / chunks;
+    ers = expectedRS(n);
+    if (avg > 0 && ers > 0){ xs.push(Math.log(n)); ys.push(Math.log(avg / ers)); }
+  }
+  if (xs.length < 3) return null;
+  var fit = ols(ys, xs);
+  if (!fit || !isFinite(fit.b)) return null;
+  return 0.5 + fit.b;
+}
+function garchOf(closes){
+  var r = [], i;
+  for (i = 1; i < closes.length; i++){
+    if (closes[i] > 0 && closes[i - 1] > 0) r.push(Math.log(closes[i] / closes[i - 1]));
+  }
+  if (r.length < 80) return null;
+  var u = 0;
+  for (i = 0; i < r.length; i++) u += r[i] * r[i];
+  u /= r.length;
+  if (!(u > 0)) return null;
+  var alphas = [0.02, 0.05, 0.08, 0.12, 0.18];
+  var betas = [0.75, 0.82, 0.88, 0.94];
+  var best = null, bestNll = Infinity, ai, bi, alpha, beta, omega, sig, nll, t;
+  for (ai = 0; ai < alphas.length; ai++){
+    for (bi = 0; bi < betas.length; bi++){
+      alpha = alphas[ai];
+      beta = betas[bi];
+      if (alpha + beta >= 0.995) continue;
+      omega = (1 - alpha - beta) * u;
+      sig = u;
+      nll = 0;
+      for (t = 0; t < r.length; t++){
+        if (!(sig > 1e-12)){ nll = Infinity; break; }
+        nll += Math.log(sig) + (r[t] * r[t]) / sig;
+        sig = omega + alpha * r[t] * r[t] + beta * sig;
+      }
+      if (nll < bestNll) bestNll = nll, best = { alpha: alpha, beta: beta, next: sig };
+    }
+  }
+  if (!best || !(best.next > 0)) return null;
+  var tail = 20, rr = 0, from = r.length - tail;
+  for (i = from; i < r.length; i++) rr += r[i] * r[i];
+  var realized = Math.sqrt(rr / tail);
+  if (!(realized > 0)) return null;
+  return { ratio: Math.sqrt(best.next) / realized, alpha: best.alpha, beta: best.beta };
+}
+function fixWindow(date){
+  var parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(date);
+  var hh = 0, mm = 0, i;
+  for (i = 0; i < parts.length; i++){
+    if (parts[i].type === 'hour') hh = +parts[i].value;
+    if (parts[i].type === 'minute') mm = +parts[i].value;
+  }
+  var mins = hh * 60 + mm;
+  var paused = (mins >= 625 && mins <= 640) || (mins >= 895 && mins <= 915);
+  var label = (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm + ' London';
+  return { paused: paused, label: label };
+}
+function memoryOf(closes, spot, date){
+  var h = hurstOf(closes);
+  var g = garchOf(closes);
+  var fix = fixWindow(date || new Date());
+  var state = 'unread';
+  if (h !== null){
+    if (h >= 0.60) state = 'trend';
+    else if (h <= 0.35) state = 'fade';
+    else state = 'random';
+  }
+  var bits = [];
+  if (h === null) bits.push('Hurst unread');
+  else bits.push('Hurst ' + h.toFixed(2) + ' corrected R/S' + (state === 'trend' ? ' persistent' : state === 'fade' ? ' anti-persistent' : ' random walk'));
+  if (!g) bits.push('GARCH unread');
+  else bits.push('GARCH next-day vol ' + g.ratio.toFixed(2) + 'x the last 20 sessions');
+  bits.push(fix.paused ? ('LBMA fix ' + fix.label + ' — new trades paused') : ('outside the LBMA fix (' + fix.label + ')'));
+  var floor = false;
+  if (!(spot > 0)) bits.push('AISC distance unread');
+  else {
+    var gap = spot - 1539;
+    var txt = '2026 average AISC estimate 1539, spot is ' + gap.toFixed(0) + ' above it';
+    if (spot <= 1539 * 1.15){ floor = true; txt += ' — on the cost floor'; }
+    else txt += ' — not a supply squeeze';
+    bits.push(txt);
+  }
+  bits.push('90th percentile cost curve unread');
+  bits.push('order book and icebergs unread — no Level 3 feed');
+  bits.push('LBMA auction imbalance unread');
+  return {
+    h: h,
+    state: state,
+    paused: fix.paused,
+    pauseWhy: 'LBMA fix window (' + fix.label + ') — new execution is paused',
+    floor: floor,
+    volRatio: g ? g.ratio : 0,
+    points: floor ? 'long' : 'none',
+    why: bits.join(' · ')
+  };
+}
+
 async function refresh(){
   if (busy) return;
   busy = true;
@@ -945,6 +1093,10 @@ async function refresh(){
     var term = null;
     try{ term = await loadTerm(); }catch(eT){ term = null; }
     if (!term) term = termRead(null, null);
+    var daily = stacks['1d'] && stacks['1d'].rows;
+    var closes = [], ci;
+    if (daily){ for (ci = 0; ci < daily.length; ci++) if (daily[ci].c > 0) closes.push(daily[ci].c); }
+    var mem = memoryOf(closes, spot, new Date());
     var shared = {
       fund: fund,
       sent: { points: fund.cot, why: fund.cotWhy },
@@ -953,9 +1105,10 @@ async function refresh(){
       inter: inter,
       season: season,
       inst: inst,
-      term: term
+      term: term,
+      mem: mem
     };
-    var sig = [shared.fund.points, shared.sent.points, shared.macro.points, shared.news.points, inter.points, season.mode, inst.points, inst.why, term.points, String(Math.round((term.spread || 0) * 10))];
+    var sig = [shared.fund.points, shared.sent.points, shared.macro.points, shared.news.points, inter.points, season.mode, inst.points, inst.why, term.points, String(Math.round((term.spread || 0) * 10)), mem.state, mem.h === null ? "na" : mem.h.toFixed(2), mem.paused ? "fix" : "open"];
     var tf;
     for (tf in stacks){
       if (!stacks[tf]) continue;
