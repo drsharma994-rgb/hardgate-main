@@ -1,5 +1,6 @@
-/* BATCH 1128 — every 10 minutes, Telegram gets only a golden cross that
-   has just formed. A cross already sent is not repeated. */
+/* BATCH 1129 — every 10 minutes, Telegram gets only a golden cross that
+   has just formed on a coin with an active CoinDCX USDT future.
+   Binance-only coins are not sent. A cross already sent is not repeated. */
 import fs from 'fs';
 
 const STATE_FILE = 'golden-alert-state.json';
@@ -183,11 +184,28 @@ async function send(text){
   return j.result.message_id;
 }
 function loadState(){ try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch (e) { return { sent: {} }; } }
+async function coindcxBases(){
+  const r = await fetch('https://api.coindcx.com/exchange/v1/derivatives/futures/data/active_instruments');
+  const j = await r.json();
+  if (!r.ok || !Array.isArray(j)) throw new Error('coindcx instrument list failed');
+  const bases = new Set();
+  for (const pair of j){
+    const m = /^B-(.+)_USDT$/.exec(String(pair || ''));
+    if (m && m[1] && !SKIP.has(m[1])) bases.add(m[1]);
+  }
+  if (!bases.size) throw new Error('coindcx returned no active USDT futures');
+  return bases;
+}
 async function main(){
+  const listed = await coindcxBases();
   const tick = await getJson('/api/v3/ticker/24hr');
   if (!Array.isArray(tick)) throw new Error('ticker was not a list');
   const universe = tick
-    .filter(function(t){ return t && typeof t.symbol === 'string' && t.symbol.endsWith('USDT') && !SKIP.has(t.symbol.replace(/USDT$/, '')) && +t.quoteVolume > FLOOR; })
+    .filter(function(t){
+      if (!t || typeof t.symbol !== 'string' || !t.symbol.endsWith('USDT')) return false;
+      const base = t.symbol.replace(/USDT$/, '');
+      return listed.has(base) && !SKIP.has(base) && +t.quoteVolume > FLOOR;
+    })
     .sort(function(a, b){ return +b.quoteVolume - +a.quoteVolume; });
   const state = loadState();
   const sent = state.sent || {};
@@ -230,13 +248,13 @@ async function main(){
   const lines = hits.map(function(h, i){
     const p = h.plan;
     const comp = h.s.score === 5 ? ' · composite +5/5 !GOLDEN' : '';
-    return (i + 1) + '. ' + h.base + ' LONG · NEW TREND MATRIX GOLDEN CROSS · cross ' + h.s.ago + 'd ago · +' + h.s.score + '/5' + comp
+    return (i + 1) + '. ' + h.base + ' · B-' + h.base + '_USDT · LONG · NEW TREND MATRIX GOLDEN CROSS · cross ' + h.s.ago + 'd ago · +' + h.s.score + '/5' + comp
       + '\n   entry ' + px(p.entry) + ' · SL ' + px(p.stop) + ' · TP1 ' + px(p.t1) + ' (2R) · TP2 ' + px(p.t2) + ' (3.5R)';
   });
   const head = [
     'HARDGATE — NEW GOLDEN CROSS',
-    'only crosses that just formed · ' + when,
-    hits.length + ' new · scanned ' + universe.length + ' liquid USDT'
+    'CoinDCX active USDT futures only · ' + when,
+    hits.length + ' new · scanned ' + universe.length + ' CoinDCX pairs'
   ].join('\n');
   const bodyParts = lines.length ? chunks(lines) : [''];
   const ids = [];
