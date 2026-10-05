@@ -1,18 +1,3 @@
-# HARDGATE alert pipeline: replays the site's alert cycle every 15 min against
-# the live deployment and commits alert-state.json when it changed.
-#
-# Keep-alive: GitHub auto-disables scheduled workflows after 60 days of repo
-# inactivity. scripts/alert-check.mjs stamps `lastRunAt` into alert-state.json
-# at most once per 24h (older/missing stamp -> fresh ISO stamp), so the commit
-# step below produces ~1 keep-alive commit/day — NOT 96 — which is enough to
-# keep the schedule alive. The `git diff --cached --quiet || git commit` guard
-# already covers both cases: unchanged state -> no commit, stamped/changed
-# state -> commit. Email delivery failures exit the script non-zero BEFORE the
-# state is saved, so the run goes red and the alert retries next cycle.
-#
-# Dual clocks: when Render arms GH_DISPATCH_TOKEN (workflow_dispatch every 13 min),
-# set repository variable RENDER_DISPATCH_PRIMARY=true to skip scheduled runs here
-# and avoid overlapping Puppeteer sweeps against production.
 name: HARDGATE Alert Notify
 
 on:
@@ -37,9 +22,6 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          # puppeteer 25 engines are >=22.12. Node 20 + optionalDependencies
-          # silently omitted the package (run 32661351621: 106 pkgs, no
-          # node_modules/puppeteer, then a named install no-op'd).
           node-version: '22'
 
       - name: Install Puppeteer
@@ -54,15 +36,9 @@ jobs:
       - name: Run alert check against the live site
         run: node scripts/alert-check.mjs
         env:
-          # Telegram = primary alert channel (free Bot API): repo secrets
-          # TELEGRAM_TOKEN (from @BotFather) + TELEGRAM_CHAT_ID. Injected into
-          # the page so setup alerts send natively with full levels; also
-          # first channel for ticket/engine pushes (ntfy is the fallback).
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          TELEGRAM_DISABLED: "1"
-          # free ntfy.sh push fallback — repo secret NTFY_TOPIC; unset =
-          # changes are logged, push honestly skipped
+          TELEGRAM_DISABLED: "0"
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
 
       - name: Commit updated alert state if it changed
