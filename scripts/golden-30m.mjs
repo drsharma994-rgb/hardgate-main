@@ -1,13 +1,14 @@
-/* BATCH 1124 — golden Telegram every 30 minutes.
-   Binance sometimes returns an error object instead of a ticker array.
-   That threw tick.filter and the job died before any alert. */
+/* BATCH 1125 — complete golden list every 30 minutes.
+   Every liquid USDT pair (24h quote volume > $5M).
+   TREND MATRIX GOLDEN CROSS (EMA50 crossed above EMA200 within 10 daily bars)
+   and composite +5/5 !GOLDEN. Death crosses are dropped.
+   Each card has entry, SL, TP1 (2R) and TP2 (3.5R). */
 import fs from 'fs';
 
 const STATE_FILE = 'golden-alert-state.json';
 const SITE = 'https://hardgate-main.onrender.com/';
-const TOP_N = 24;
-const SKIP = new Set(['USDC','USDT','FDUSD','TUSD','BUSD','DAI','USDP','EUR','USD']);
-const FALLBACK = ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT','ADAUSDT','AVAXUSDT','LINKUSDT','TONUSDT','TRXUSDT','LTCUSDT','BCHUSDT','NEARUSDT','SUIUSDT','DOTUSDT','APTUSDT','PEPEUSDT'];
+const FLOOR = 5e6;
+const SKIP = new Set(['USDC','USDT','FDUSD','TUSD','BUSD','DAI','USDP','EUR','USD','USDE','USD1','USDD']);
 const HOSTS = ['https://data-api.binance.vision', 'https://api.binance.com'];
 
 function ema(values, len){
@@ -83,38 +84,56 @@ async function getJson(path){
     try {
       const r = await fetch(host + path);
       const j = await r.json();
-      if (!r.ok){ last = host + ' HTTP ' + r.status; continue; }
+      if (!r.ok || (j && j.code && j.msg)) { last = host + ' ' + (j && j.msg ? j.msg : r.status); continue; }
       return j;
-    } catch (e) {
-      last = (e && e.message) || String(e);
-    }
+    } catch (e) { last = (e && e.message) || String(e); }
   }
   throw new Error(last);
 }
 async function klines(symbol, interval, limit){
   const j = await getJson('/api/v3/klines?symbol=' + symbol + '&interval=' + interval + '&limit=' + limit);
-  if (!Array.isArray(j)) throw new Error(symbol + ' ' + interval + ' not candles');
-  return j.map(function(k){ return { t: Math.floor(k[0] / 1000), o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5] }; });
+  if (!Array.isArray(j)) throw new Error(symbol + ' not candles');
+  return j.map(function(k){ return { o:+k[1], h:+k[2], l:+k[3], c:+k[4] }; });
 }
-async function universe(){
-  try {
-    const tick = await getJson('/api/v3/ticker/24hr');
-    if (Array.isArray(tick)){
-      return tick
-        .filter(function(t){ return t && typeof t.symbol === 'string' && t.symbol.endsWith('USDT') && !SKIP.has(t.symbol.replace(/USDT$/, '')) && +t.quoteVolume > 2e7; })
-        .sort(function(a, b){ return +b.quoteVolume - +a.quoteVolume; })
-        .slice(0, TOP_N);
-    }
-    console.error('ticker was not a list');
-  } catch (e) {
-    console.error('ticker', e.message || e);
+function atr(rows, n){
+  n = n || 14;
+  if (!rows || rows.length < n + 1) return NaN;
+  let sum = 0;
+  for (let i = rows.length - n; i < rows.length; i++){
+    const prev = rows[i - 1], cur = rows[i];
+    sum += Math.max(cur.h - cur.l, Math.abs(cur.h - prev.c), Math.abs(cur.l - prev.c));
   }
-  return FALLBACK.map(function(s){ return { symbol: s, quoteVolume: 0 }; });
+  return sum / n;
+}
+function planOf(h4){
+  if (!h4 || h4.length < 21) return null;
+  const entry = h4[h4.length - 1].c;
+  const a = atr(h4, 14);
+  if (!(entry > 0) || !(a > 0)) return null;
+  const seg = h4.slice(Math.max(0, h4.length - 1 - 20), h4.length - 1);
+  const swing = seg.length ? Math.min.apply(null, seg.map(function(r){ return r.l; })) : NaN;
+  let stop = NaN;
+  if (isFinite(swing)){
+    const s = swing - 0.25 * a;
+    const risk = entry - s;
+    if (risk > 0 && risk <= 2.5 * a) stop = s;
+  }
+  if (!isFinite(stop) || !(entry > stop)) stop = entry - 1.5 * a;
+  const risk = entry - stop;
+  if (!(risk > 0)) return null;
+  return { entry: entry, stop: stop, t1: entry + 2 * risk, t2: entry + 3.5 * risk };
+}
+function px(n){
+  if (!isFinite(n)) return '—';
+  const a = Math.abs(n);
+  const d = a >= 1000 ? 2 : a >= 100 ? 2 : a >= 1 ? 4 : a >= 0.01 ? 5 : a >= 0.0001 ? 6 : 8;
+  return Number(n).toFixed(d);
 }
 function scoreOf(d1, h4){
   const c = d1.map(function(r){ return r.c; });
   const e50 = ema(c, 50), e200 = ema(c, 200);
   const i = c.length - 1;
+  if (!isFinite(e50[i]) || !isFinite(e200[i])) return null;
   const d1Trend = c[i] > e200[i] ? 1 : (c[i] < e200[i] ? -1 : 0);
   const d1Cross = e50[i] > e200[i] ? 1 : (e50[i] < e200[i] ? -1 : 0);
   const ago = crossedUp(e50, e200, 10);
@@ -122,60 +141,116 @@ function scoreOf(d1, h4){
   const e9 = ema(c4, 9), e21 = ema(c4, 21), e50h = ema(c4, 50);
   const j = c4.length - 1;
   let h4Cascade = 0;
-  if (e9[j] > e21[j] && e21[j] > e50h[j]) h4Cascade = 1;
-  else if (e9[j] < e21[j] && e21[j] < e50h[j]) h4Cascade = -1;
+  if (isFinite(e9[j]) && isFinite(e21[j]) && isFinite(e50h[j])){
+    if (e9[j] > e21[j] && e21[j] > e50h[j]) h4Cascade = 1;
+    else if (e9[j] < e21[j] && e21[j] < e50h[j]) h4Cascade = -1;
+  }
   const cloud = ichimokuAbove(d1);
   const adx = adxLast(d1, 14);
   const trendSum = d1Trend + d1Cross + h4Cascade + cloud;
   const adxPt = (adx >= 25) ? (trendSum > 0 ? 1 : (trendSum < 0 ? -1 : 0)) : 0;
   return { score: d1Trend + d1Cross + h4Cascade + cloud + adxPt, fresh: ago >= 0, ago: ago, px: c[i], e50: e50[i], e200: e200[i] };
 }
-function loadState(){ try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch (e) { return { sent: {} }; } }
-function saveState(state){ fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2) + '\n'); }
+async function pool(items, n, fn){
+  let cursor = 0;
+  async function worker(){
+    while (cursor < items.length){
+      const i = cursor++;
+      await fn(items[i], i);
+    }
+  }
+  await Promise.all(Array.from({ length: n }, worker));
+}
+function chunks(lines){
+  const parts = [];
+  let buf = '';
+  for (const line of lines){
+    if ((buf + '\n' + line).length > 3500){
+      parts.push(buf);
+      buf = line;
+    } else buf = buf ? buf + '\n' + line : line;
+  }
+  if (buf) parts.push(buf);
+  return parts;
+}
 async function send(text){
   const token = process.env.TELEGRAM_TOKEN || '';
   const chat = process.env.TELEGRAM_CHAT_ID || '';
-  if (!token || !chat) return { ok: false, reason: 'no token' };
+  if (!token || !chat) throw new Error('no telegram credentials');
   const res = await fetch('https://api.telegram.org/bot' + encodeURIComponent(token) + '/sendMessage', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ chat_id: chat, text: String(text).slice(0, 4096), disable_web_page_preview: true })
   });
   const j = await res.json().catch(function(){ return null; });
-  return { ok: !!(j && j.ok), id: j && j.result && j.result.message_id, reason: j && j.description };
+  if (!j || !j.ok) throw new Error((j && j.description) || 'telegram failed');
+  return j.result.message_id;
 }
+function loadState(){ try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch (e) { return { sent: {} }; } }
 async function main(){
-  const list = await universe();
+  const tick = await getJson('/api/v3/ticker/24hr');
+  if (!Array.isArray(tick)) throw new Error('ticker was not a list');
+  const universe = tick
+    .filter(function(t){ return t && typeof t.symbol === 'string' && t.symbol.endsWith('USDT') && !SKIP.has(t.symbol.replace(/USDT$/, '')) && +t.quoteVolume > FLOOR; })
+    .sort(function(a, b){ return +b.quoteVolume - +a.quoteVolume; });
   const state = loadState();
   const sent = state.sent || {};
   const hits = [];
-  for (const t of list){
+  await pool(universe, 6, async function(t){
     try {
       const d1 = await klines(t.symbol, '1d', 260);
-      const h4 = await klines(t.symbol, '4h', 80);
+      const h4 = await klines(t.symbol, '4h', 120);
       const s = scoreOf(d1, h4);
-      if (!s.fresh && s.score !== 5) continue;
-      if (!(s.e50 > s.e200)) continue;
+      if (!s || !(s.e50 > s.e200)) return;
+      if (!s.fresh && s.score !== 5) return;
+      const plan = planOf(h4);
+      if (!plan) return;
       const base = t.symbol.replace(/USDT$/, '');
-      hits.push({ base: base, s: s, plus5: s.score === 5, isNew: !sent[base] });
+      hits.push({ base: base, s: s, plan: plan, isNew: !sent[base] });
       sent[base] = { at: new Date().toISOString(), score: s.score, fresh: s.fresh, ago: s.ago };
-    } catch (e) { console.error(t.symbol, e.message || e); }
-  }
+    } catch (e) {
+      console.error(t.symbol, e.message || e);
+    }
+  });
+  hits.sort(function(a, b){
+    if (b.s.score !== a.s.score) return b.s.score - a.s.score;
+    if (a.s.fresh !== b.s.fresh) return a.s.fresh ? -1 : 1;
+    return a.base.localeCompare(b.base);
+  });
   state.sent = sent;
   state.lastRunAt = new Date().toISOString();
-  saveState(state);
-  if (!hits.length){
-    console.log('no golden cross and no composite +5/5 this run');
-    return;
-  }
-  const lines = hits.map(function(h){
-    const tag = h.isNew ? 'NEW' : 'STILL LIVE';
-    const cross = h.s.fresh ? ('golden cross ' + h.s.ago + ' daily bar(s) ago') : 'EMA50 above EMA200';
-    const comp = h.plus5 ? 'composite +5/5 !GOLDEN' : ('composite +' + h.s.score + '/5');
-    return tag + ' ' + h.base + ' LONG · ' + cross + ' · ' + comp + ' · px ' + Number(h.s.px).toFixed(4);
+  state.scanned = universe.length;
+  state.cards = hits.length;
+  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2) + '\n');
+  const when = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+  const lines = hits.map(function(h, i){
+    const labels = [];
+    if (h.s.fresh) labels.push('TREND MATRIX GOLDEN CROSS');
+    if (h.s.score === 5) labels.push('composite +5/5 !GOLDEN');
+    if (h.isNew) labels.push('NEW');
+    const cross = h.s.fresh ? ('cross ' + h.s.ago + 'd ago') : 'EMA50>EMA200';
+    const p = h.plan;
+    return (i + 1) + '. ' + h.base + ' LONG · ' + labels.join(' · ') + ' · ' + cross + ' · +' + h.s.score + '/5'
+      + '\n   entry ' + px(p.entry) + ' · SL ' + px(p.stop) + ' · TP1 ' + px(p.t1) + ' (2R) · TP2 ' + px(p.t2) + ' (3.5R)';
   });
-  const text = ['HARDGATE — TREND MATRIX GOLDEN CROSS', '30-minute check · every new golden cross · composite +5/5 !GOLDEN', '', lines.join('\n'), '', SITE].join('\n');
-  const r = await send(text);
-  console.log('telegram', r.ok ? ('sent ' + r.id) : r.reason, 'cards', hits.length);
-  if (!r.ok) process.exitCode = 1;
+  const head = [
+    'HARDGATE — TREND MATRIX GOLDEN CROSS',
+    '30-minute check · complete list · SL = 4h swing or 1.5×ATR · TP1 2R · TP2 3.5R · ' + when,
+    'scanned ' + universe.length + ' liquid USDT · ' + hits.length + ' card' + (hits.length === 1 ? '' : 's'),
+    hits.length ? '' : 'none — no fresh golden cross and no composite +5/5'
+  ].join('\n');
+  const bodyParts = lines.length ? chunks(lines) : [''];
+  const ids = [];
+  for (let p = 0; p < bodyParts.length; p++){
+    const text = [
+      head + (bodyParts.length > 1 ? (' · part ' + (p + 1) + '/' + bodyParts.length) : ''),
+      '',
+      bodyParts[p],
+      '',
+      'next check in 30 minutes',
+      SITE
+    ].join('\n');
+    ids.push(await send(text));
+  }
+  console.log('sent', ids.join(','), 'scanned', universe.length, 'cards', hits.length);
 }
 main().catch(function(e){ console.error(e); process.exit(1); });
