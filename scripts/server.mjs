@@ -220,9 +220,19 @@ function goldLiveSource(kind, src){
       '    }',
       '    if (macro.lock){'
     ].join('\n');
-    if (src.indexOf('GOLD FEED — ') >= 0) return src;
-    if (src.indexOf(anchor) < 0) return src;
-    return src.replace(anchor, gate);
+    if (src.indexOf('GOLD FEED — ') < 0 && src.indexOf(anchor) >= 0) src = src.replace(anchor, gate);
+    const mtfAnchor = '    if (h4.unchecked || d1.unchecked) return out;';
+    const mtfGate = [
+      '    if (h4.unchecked || d1.unchecked){',
+      '      out.scalpLongOk = false;',
+      '      out.scalpShortOk = false;',
+      "      out.reason = 'MTF UNREAD — a gold scalp needs a readable H4 and Daily stack. A missing higher timeframe is not a yes.';",
+      '      out.reasonShort = out.reason;',
+      '      return out;',
+      '    }'
+    ].join('\n');
+    if (src.indexOf('MTF UNREAD') < 0 && src.indexOf(mtfAnchor) >= 0) src = src.replace(mtfAnchor, mtfGate);
+    return src;
   }
   if (kind === 'goldswing'){
     const anchor = '    function push(c){\n      if (!c) return;\n      if (c.dropped){ out.rejected.push(c); return; }';
