@@ -245,6 +245,89 @@ function tmVolWitness(rows){
    Pure: no DOM, no network, never throws. Rows are {t,o,h,l,c,v} ascending.
    hg-v1019: rsi is EVIDENCE — it is NOT a composite leg; score is the same
    five legs it always was. */
+function tmBarOpenSec(row){
+  var t = row && row.t;
+  if (!isFinite(+t)) return NaN;
+  t = +t;
+  return t > 1e12 ? Math.floor(t / 1000) : t;
+}
+function tmClosedRows(rows, barSec){
+  if (!Array.isArray(rows) || rows.length < 2) return rows || [];
+  var open = tmBarOpenSec(rows[rows.length - 1]);
+  if (!isFinite(open) || open + barSec > Date.now() / 1000) return rows.slice(0, -1);
+  return rows;
+}
+function tmCascadeDir(rows4h){
+  var rows = tmClosedRows(rows4h, 14400);
+  if (!rows || rows.length < 50 || typeof ema !== 'function') return 0;
+  var c = rows.map(function(r){ return r ? r.c : NaN; });
+  var i = c.length - 1;
+  var e9 = ema(c, 9)[i], e21 = ema(c, 21)[i], e50 = ema(c, 50)[i];
+  if (!(isFinite(e9) && isFinite(e21) && isFinite(e50))) return 0;
+  if (e9 > e21 && e21 > e50) return 1;
+  if (e9 < e21 && e21 < e50) return -1;
+  return 0;
+}
+function trendmxClosedGate(r, dir){
+  var rows = tmClosedRows(r && r.rows4h, 14400);
+  if (!rows || rows.length < 210) return null;
+  return trendmxGateEval({
+    rows4h: rows, sym: r.sym, fundingPct: r.fundingPct, exchange: r.exchange, base: r.base
+  }, dir);
+}
+function trendmxSetupGrade(r, dir){
+  var reasons = [];
+  var rsiV = (r && typeof r.rsi === 'number') ? r.rsi : NaN;
+  var volDiv = r ? r.volDiv : null;
+  var volConf = r ? r.volConf : null;
+  var daily = tmClosedRows(r && r.rows1d, 86400);
+  if (daily && daily.length >= 20){
+    if (typeof rsi === 'function'){
+      var series = rsi(daily.map(function(x){ return x.c; }), 14);
+      if (series && series.length && isFinite(series[series.length - 1])) rsiV = series[series.length - 1];
+    }
+    var vol = tmVolWitness(daily);
+    volDiv = vol.div;
+    volConf = vol.conf;
+  }
+  if (dir === 'long'){
+    if (isFinite(rsiV) && rsiV < 40) reasons.push('RSI ' + rsiV.toFixed(0) + ' against');
+    if (volDiv === 'bear') reasons.push('OBV diverging');
+    if (typeof r.fundingPct === 'number' && isFinite(r.fundingPct) && r.fundingPct >= 0.04) reasons.push('funding crowded');
+    if (tmAltLongBlockedByBtc(r)) reasons.push('BTC structure down');
+  } else if (dir === 'short'){
+    if (isFinite(rsiV) && rsiV > 60) reasons.push('RSI ' + rsiV.toFixed(0) + ' against');
+    if (volDiv === 'bull') reasons.push('OBV diverging');
+    if (typeof r.fundingPct === 'number' && isFinite(r.fundingPct) && r.fundingPct <= -0.04) reasons.push('funding crowded');
+  }
+  return { grade: reasons.length ? 'SKIP' : 'TRADE', reasons: reasons, volConf: volConf };
+}
+function trendmxEmaTag(rows4h, dir){
+  var rows = tmClosedRows(rows4h, 14400);
+  if (!rows || rows.length < 30 || typeof ema !== 'function') return { state: 'waiting' };
+  var closes = rows.map(function(r){ return r ? r.c : NaN; });
+  var e9 = ema(closes, 9), e21 = ema(closes, 21);
+  var i = closes.length - 1, px = closes[i];
+  var cands = [];
+  if (dir === 'long'){
+    if (isFinite(e9[i]) && e9[i] < px) cands.push(['EMA9', e9]);
+    if (isFinite(e21[i]) && e21[i] < px) cands.push(['EMA21', e21]);
+  } else {
+    if (isFinite(e9[i]) && e9[i] > px) cands.push(['EMA9', e9]);
+    if (isFinite(e21[i]) && e21[i] > px) cands.push(['EMA21', e21]);
+  }
+  if (!cands.length) return { state: 'waiting' };
+  cands.sort(function(a, b){ return Math.abs(a[1][i] - px) - Math.abs(b[1][i] - px); });
+  var name = cands[0][0], series = cands[0][1];
+  var from = Math.max(1, rows.length - 6);
+  for (var k = from; k < rows.length; k++){
+    var level = series[k], bar = rows[k];
+    if (!bar || !isFinite(level)) continue;
+    if (dir === 'long' && bar.l <= level && bar.c > level) return { state: 'ready', ema: name };
+    if (dir === 'short' && bar.h >= level && bar.c < level) return { state: 'ready', ema: name };
+  }
+  return { state: 'waiting', ema: name };
+}
 function trendScore(rows1d, rows4h){
   var out = zeroResult();
   try{
@@ -268,8 +351,12 @@ function trendScore(rows1d, rows4h){
 
       /* 2) 1d ema50 vs ema200 + fresh-cross marker (<=10 bars) */
       if (isFinite(e50L) && isFinite(e200L)) out.comps.d1Cross = cmp(e50L, e200L);
-      if (crossedRecently(crossOver(e50, e200), 10)) out.freshCross = 'GOLDEN';
-      else if (crossedRecently(crossUnder(e50, e200), 10)) out.freshCross = 'DEATH';
+      /* A cross on the daily bar that is still forming does not count. */
+      var dClosed = tmClosedRows(rows1d, 86400);
+      var cClosed = dClosed.map(function(r){ return r ? r.c : NaN; });
+      var e50c = ema(cClosed, 50), e200c = ema(cClosed, 200);
+      if (crossedRecently(crossOver(e50c, e200c), 10)) out.freshCross = 'GOLDEN';
+      else if (crossedRecently(crossUnder(e50c, e200c), 10)) out.freshCross = 'DEATH';
 
       /* 4) ichimoku cloud on 1d */
       var st = ichimokuState(rows1d);
@@ -869,6 +956,7 @@ function trendmxConviction(row){
 /** Rows with fresh ⚡GOLDEN (EMA50/200 cross ≤10d) + bull cross + long plan + conviction. Pure. */
 function trendmxGoldenCrossSetups(rows){
   var out = [];
+  out.held = { waiting: 0, grade: 0, cascade: 0, gates: 0 };
   if (!Array.isArray(rows)) return out;
   for (var i = 0; i < rows.length; i++){
     var r = rows[i];
@@ -878,18 +966,25 @@ function trendmxGoldenCrossSetups(rows){
     if (dir !== 'long') continue;
     var conv = trendmxConviction(r);
     if (!conv) continue;
-    if (r.gate && r.gate.veto) continue;
-    var plan = trendmxPlan({ dir: dir, score: r.score, rows4h: r.rows4h, rows1h: r.rows1h, entry: r.price, gate: r.gate, comps: r.comps, sym: r.sym, fundingPct: r.fundingPct, freshCross: r.freshCross, base: r.base });
+    if (tmCascadeDir(r.rows4h) !== 1){ out.held.cascade++; continue; }
+    var gate = trendmxClosedGate(r, dir);
+    if (!gate || gate.veto || !(gate.gatesPassed >= 6)){ out.held.gates++; continue; }
+    var grade = trendmxSetupGrade(r, dir);
+    if (grade.grade !== 'TRADE'){ out.held.grade++; continue; }
+    var tag = trendmxEmaTag(r.rows4h, dir);
+    if (!tag || tag.state !== 'ready'){ out.held.waiting++; continue; }
+    var plan = trendmxPlan({ dir: dir, score: r.score, rows4h: tmClosedRows(r.rows4h, 14400), rows1h: r.rows1h, entry: r.price, gate: gate, comps: r.comps, sym: r.sym, fundingPct: r.fundingPct, freshCross: r.freshCross, base: r.base });
     if (!tmValidSetup(plan)) continue;
     out.push({
       sym: r.sym, dir: 'long', entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2,
       rr: fin(+plan.rr1) ? +plan.rr1 : TM_T1_R, score: r.score, adx: r.adx,
-      clean7: !!(plan.clean7 || (r.gate && r.gate.clean7)),
+      clean7: !!(plan.clean7 || gate.clean7),
       freshCross: 'GOLDEN', conviction: conv.label, tier: conv.tier, prime: conv.prime,
-      comps: r.comps, gateLabel: plan.gateLabel || (r.gate && r.gate.label),
-      note: '⚡GOLDEN CROSS (EMA50/200 · ≤10 daily bars) · composite ' + (r.score > 0 ? '+' : '') + r.score + '/5'
-        + (plan.gateLabel ? ' · ' + plan.gateLabel : '')
-        + (plan.entryType === 'LIMIT' ? (' · LIMIT @ 4h ' + plan.limitEma + ' · cancel if not tagged in 6×4h') : ' · entry at price, already on the 4h EMAs')
+      comps: r.comps, gateLabel: plan.gateLabel || gate.label,
+      note: '⚡GOLDEN CROSS on a closed daily bar · composite ' + (r.score > 0 ? '+' : '') + r.score + '/5'
+        + ' · 4h cascade · ' + (gate.gatesPassed || 0) + '/7'
+        + ' · TRADE'
+        + (plan.entryType === 'LIMIT' ? (' · 4h ' + plan.limitEma + ' tagged') : ' · tagged at the 4h EMAs')
     });
   }
   return out;
@@ -905,6 +1000,7 @@ function trendmxGoldenCrossSetups(rows){
    surface on the tab. Pure. */
 function trendmxDeathCrossSetups(rows){
   var out = [];
+  out.held = { waiting: 0, grade: 0, cascade: 0, gates: 0 };
   if (!Array.isArray(rows)) return out;
   for (var i = 0; i < rows.length; i++){
     var r = rows[i];
@@ -914,18 +1010,25 @@ function trendmxDeathCrossSetups(rows){
     if (dir !== 'short') continue;
     var conv = trendmxConviction(r);
     if (!conv) continue;
-    if (r.gate && r.gate.veto) continue;
-    var plan = trendmxPlan({ dir: dir, score: r.score, rows4h: r.rows4h, rows1h: r.rows1h, entry: r.price, gate: r.gate, comps: r.comps, sym: r.sym, fundingPct: r.fundingPct, freshCross: r.freshCross, base: r.base });
+    if (tmCascadeDir(r.rows4h) !== -1){ out.held.cascade++; continue; }
+    var gate = trendmxClosedGate(r, dir);
+    if (!gate || gate.veto || !(gate.gatesPassed >= 6)){ out.held.gates++; continue; }
+    var grade = trendmxSetupGrade(r, dir);
+    if (grade.grade !== 'TRADE'){ out.held.grade++; continue; }
+    var tag = trendmxEmaTag(r.rows4h, dir);
+    if (!tag || tag.state !== 'ready'){ out.held.waiting++; continue; }
+    var plan = trendmxPlan({ dir: dir, score: r.score, rows4h: tmClosedRows(r.rows4h, 14400), rows1h: r.rows1h, entry: r.price, gate: gate, comps: r.comps, sym: r.sym, fundingPct: r.fundingPct, freshCross: r.freshCross, base: r.base });
     if (!tmValidSetup(plan)) continue;
     out.push({
       sym: r.sym, dir: 'short', entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2,
       rr: fin(+plan.rr1) ? +plan.rr1 : TM_T1_R, score: r.score, adx: r.adx,
-      clean7: !!(plan.clean7 || (r.gate && r.gate.clean7)),
+      clean7: !!(plan.clean7 || gate.clean7),
       freshCross: 'DEATH', conviction: conv.label, tier: conv.tier, prime: conv.prime,
-      comps: r.comps, gateLabel: plan.gateLabel || (r.gate && r.gate.label),
-      note: '⚡DEATH CROSS (EMA50/200 · ≤10 daily bars) · composite ' + (r.score > 0 ? '+' : '') + r.score + '/5'
-        + (plan.gateLabel ? ' · ' + plan.gateLabel : '')
-        + (plan.entryType === 'LIMIT' ? (' · LIMIT @ 4h ' + plan.limitEma + ' · cancel if not tagged in 6×4h') : ' · entry at price, already on the 4h EMAs')
+      comps: r.comps, gateLabel: plan.gateLabel || gate.label,
+      note: '⚡DEATH CROSS on a closed daily bar · composite ' + r.score + '/5'
+        + ' · 4h cascade · ' + (gate.gatesPassed || 0) + '/7'
+        + ' · TRADE'
+        + (plan.entryType === 'LIMIT' ? (' · 4h ' + plan.limitEma + ' tagged') : ' · tagged at the 4h EMAs')
     });
   }
   return out;
@@ -1370,7 +1473,7 @@ async function trendmxScanCore(hooks){
               xu: item, score: ts.score, comps: ts.comps, freshCross: ts.freshCross, adx: ts.adx,
               rsi: ts.rsi,   /* hg-v1019: the momentum witness rides the row — chips/tier/collector read the stamp, never recompute */
               volDiv: ts.volDiv, volConf: ts.volConf,   /* hg-v1020: the volume witness's stamps, same seam */
-              price: r1[r1.length - 1].c, rows4h: r4, rows1h: (r1h && r1h.length) ? r1h : null,
+              price: r1[r1.length - 1].c, rows4h: r4, rows1d: r1, rows1h: (r1h && r1h.length) ? r1h : null,
               fundingPct: item.fundingPct, turnoverUsd: item.turnoverUsd, mark: item.mark
             };
             var dir = tmDirOf(row);
@@ -1537,11 +1640,20 @@ function trendmxCrossCardHTML(g){
    split changes no exposure. A desk with no tickets renders nothing. */
 function trendmxGoldenDeskHTML(golden){
   golden = golden || [];
-  if (!golden.length) return '';
+  var held = golden.held || {};
   var cards = '';
   for (var i = 0; i < Math.min(golden.length, 4); i++) cards += trendmxCrossCardHTML(golden[i]);
+  var why = golden.length ? '' : ('<div class="note">No golden setup. A card needs a closed daily cross, the 4h EMA cascade, at least 6/7 gates, a 4h EMA tag in the last 6 closed bars, and RSI, OBV and funding not against.'
+    + (held.waiting ? ' ' + held.waiting + ' waiting for the EMA tag.' : '')
+    + (held.gates ? ' ' + held.gates + ' failed the gates.' : '')
+    + (held.cascade ? ' ' + held.cascade + ' have no 4h cascade.' : '')
+    + (held.grade ? ' ' + held.grade + ' failed the TRADE grade.' : '')
+    + '</div>');
   return '<div class="panel tier-clean" style="margin:12px 0;border-left:4px solid #047857">'
-    + '<h2>⚡ GOLDEN CROSS DESK <span>EMA50/200 bull cross ≤10 daily bars · limit at 4h EMA9 or EMA21, cancelled if not tagged in 6×4h'+ ((__tmMacro && __tmMacro.btcStructure === 'down') ? ' · alt longs stood down, BTC structure is down' : '')+ '</span></h2>'
+    + '<h2>⚡ GOLDEN CROSS DESK <span>closed daily cross · 4h cascade · 6/7 gates · EMA tag · TRADE grade'
+    + ((__tmMacro && __tmMacro.btcStructure === 'down') ? ' · alt longs stood down, BTC structure is down' : '')
+    + '</span></h2>'
+    + why
     + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + cards + '</div>'
     + '</div>';
 }
@@ -2338,6 +2450,8 @@ function trendmxPaintDeskSections(refs, state){
     };
     golden = golden.filter(onVenue);
     death = death.filter(onVenue);   /* hg-v1014 */
+    golden.held = (state.golden && state.golden.held) || golden.held;
+    death.held = (state.death && state.death.held) || death.held;
   }
   var vc = state.venueCounts || null;
   if (refs.summary) refs.summary.textContent = rows.length ? trendmxSummaryLine(rows, golden, vc) : 'Idle — run a scan to build the desk.';

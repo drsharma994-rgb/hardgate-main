@@ -1,3 +1,48 @@
+   stated plainly:
+     |composite| = 5/5  (all five legs maxed the same way)
+     7/7 swing-gate clean (spread · vol-Z · EMA21 anchor · funding · regime · structure · R:R)
+     momentum witness WITH  (1D RSI on the regime side — not flat, not null)
+     volume witness WITH     (1D OBV confirms the new extreme — not flat, not null)
+     taker flow never AGAINST (WITH when readable; an unreadable flow never confirms but never disqualifies)
+     funding not crowded      (not against the direction)
+   Evidence-only: nothing here gates, moves a tier or drops a row — it only
+   earns a desk and a read-mark. A row is PERFECT, not "guaranteed". */
+function trendmxPerfectState(r){
+  if (!r || !r.gate || !r.gate.clean7 || r.gate.veto) return false;
+  if (typeof r.score !== 'number' || !isFinite(r.score)) return false;
+  if (Math.abs(r.score) !== 5) return false;
+  var dir = tmDirOf(r);
+  if (!dir) return false;
+  if (trendmxMomState(r, dir) !== 'with') return false;
+  if (trendmxVolState(r, dir) !== 'with') return false;
+  if (r.flow && r.flow.verdict === 'against') return false;
+  /* hg-v1034: the fundamental + sentiment witness — a blackout (refuse) or a
+     2+ net checked headwind (against) disqualifies PERFECT exactly like flow
+     against. WITH chips; a dark or flat board never disqualifies. */
+  var fundSt = trendmxFundState(r, dir);
+  if (fundSt === 'refuse' || fundSt === 'against') return false;
+  var fp = r.fundingPct;
+  if (typeof fp === 'number' && isFinite(fp) && typeof W.hgFundingAgainstMark === 'function'){
+    try{ var m = W.hgFundingAgainstMark(fp, dir); if (m && m.against === true) return false; }catch(e){}
+  }
+  return true;
+}
+
+/* hg-v1022: VOLATILITY REGIME — a new independent read the composite's five
+   close-derived legs cannot see: WHERE the row's own ATR sits in ITS trailing
+   distribution. hgAtrPercentile(4h,14,100) ranks the latest 4h ATR against
+   its last 100 values: <20th percentile is DEAD TAPE (chop — trend legs drift
+   but nothing trades), >80th is BLOWOFF (a move already spent), the middle
+   is HEALTHY (a trend with room to run). Evidence-only — a chip on the card,
+   never a gate, never a composite point: it informs and records, it never
+   drops a row (the hg-v700 honest-degradation rule applies on unreadable). */
+function trendmxAtrRegime(r){
+  try{
+    if (!r || !r.rows4h || !Array.isArray(r.rows4h) || r.rows4h.length < 30) return null;
+    if (typeof hgAtrPercentile !== 'function') return null;
+    var pct = hgAtrPercentile(r.rows4h, 14, 100);
+    if (!isFinite(pct)) return null;
+    if (pct < 20) return { pct: pct, regime: 'DEAD' };
     if (pct > 80) return { pct: pct, regime: 'BLOWOFF' };
     return { pct: pct, regime: 'HEALTHY' };
   }catch(e){ return null; }
@@ -210,46 +255,3 @@ function trendmxLimitClasses(rows){
 /* hg-v1018: one desk renderer serves both formation classes — the desks
    differ in WHICH bag they render and the criteria their header names,
    nothing else. An empty bag with held-off rows renders the held-off
-   verdict (never a blank desk pretending nothing qualified); an empty bag
-   with nothing held off renders nothing, by design (the hg-v1015 rule). */
-/* hg-v1019: the held-off verdict names each witness that actually fired.
-   why = {flow, mom} per class; a legacy caller passing no why is the
-   hg-v1012/hg-v1018 flow-only world, and its text stays byte-identical. */
-function trendmxHeldBits(held, why){
-  var w = why || { flow: held, mom: 0 };
-  var bits = [];
-  if (w.flow) bits.push('real Binance taker flow reads against the trend (hg-v1012)');
-  if (w.mom) bits.push('the 1D RSI momentum range has turned against the trend (hg-v1019)');
-  if (w.vol) bits.push('the 1D OBV volume trend diverges against the trend (hg-v1020)');
-  if (w.fund) bits.push('the fundamental + sentiment stack stands against the trend — a calendar blackout or 2+ net checked votes (hg-v1034)');
-  if (!bits.length) bits.push('real Binance taker flow reads against the trend (hg-v1012)');
-  return bits;
-}
-
-function trendmxLimitDeskHTML(title, crit, bag, held, why){
-  bag = (bag || []).slice(0, TM_LIMIT_DESK_CAP);
-  if (!bag.length){
-    /* every qualified row held off is a verdict, not an empty desk — name it */
-    return held
-      ? '<div class="panel" style="margin:12px 0">'
-        + '<h2>' + title + ' <span>' + crit + '</span></h2>'
-        + '<div class="note">' + held + ' qualified row' + (held === 1 ? '' : 's') + ' held off — ' + trendmxHeldBits(held, why).join('; ') + '. The rows paint in the matrix with their chips.</div></div>'
-      : '';
-  }
-  var heldTag = '';
-  if (held){
-    var w2 = why || { flow: held, mom: 0 };
-    var tags = [];
-    if (w2.flow) tags.push('taker flow against');
-    if (w2.mom) tags.push('momentum regime against');
-    if (w2.vol) tags.push('volume trend against');
-    if (w2.fund) tags.push('fundamental headwind');
-    if (!tags.length) tags.push('taker flow against');
-    heldTag = ' · ' + held + ' held off — ' + tags.join(' · ');
-  }
-  return '<div class="panel" style="margin:12px 0">'
-    + '<h2>' + title + ' <span>' + crit
-    + heldTag + '</span></h2>'
-    + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + bag.map(trendmxLimitCardHTML).join('') + '</div></div>';
-}
-

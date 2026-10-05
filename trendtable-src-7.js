@@ -1,3 +1,46 @@
+   verdict (never a blank desk pretending nothing qualified); an empty bag
+   with nothing held off renders nothing, by design (the hg-v1015 rule). */
+/* hg-v1019: the held-off verdict names each witness that actually fired.
+   why = {flow, mom} per class; a legacy caller passing no why is the
+   hg-v1012/hg-v1018 flow-only world, and its text stays byte-identical. */
+function trendmxHeldBits(held, why){
+  var w = why || { flow: held, mom: 0 };
+  var bits = [];
+  if (w.flow) bits.push('real Binance taker flow reads against the trend (hg-v1012)');
+  if (w.mom) bits.push('the 1D RSI momentum range has turned against the trend (hg-v1019)');
+  if (w.vol) bits.push('the 1D OBV volume trend diverges against the trend (hg-v1020)');
+  if (w.fund) bits.push('the fundamental + sentiment stack stands against the trend — a calendar blackout or 2+ net checked votes (hg-v1034)');
+  if (!bits.length) bits.push('real Binance taker flow reads against the trend (hg-v1012)');
+  return bits;
+}
+
+function trendmxLimitDeskHTML(title, crit, bag, held, why){
+  bag = (bag || []).slice(0, TM_LIMIT_DESK_CAP);
+  if (!bag.length){
+    /* every qualified row held off is a verdict, not an empty desk — name it */
+    return held
+      ? '<div class="panel" style="margin:12px 0">'
+        + '<h2>' + title + ' <span>' + crit + '</span></h2>'
+        + '<div class="note">' + held + ' qualified row' + (held === 1 ? '' : 's') + ' held off — ' + trendmxHeldBits(held, why).join('; ') + '. The rows paint in the matrix with their chips.</div></div>'
+      : '';
+  }
+  var heldTag = '';
+  if (held){
+    var w2 = why || { flow: held, mom: 0 };
+    var tags = [];
+    if (w2.flow) tags.push('taker flow against');
+    if (w2.mom) tags.push('momentum regime against');
+    if (w2.vol) tags.push('volume trend against');
+    if (w2.fund) tags.push('fundamental headwind');
+    if (!tags.length) tags.push('taker flow against');
+    heldTag = ' · ' + held + ' held off — ' + tags.join(' · ');
+  }
+  return '<div class="panel" style="margin:12px 0">'
+    + '<h2>' + title + ' <span>' + crit
+    + heldTag + '</span></h2>'
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + bag.map(trendmxLimitCardHTML).join('') + '</div></div>';
+}
+
 function trendmxGateCleanDeskHTML(bag, held, why){
   return trendmxLimitDeskHTML(
     'LIMIT BOARD · GATE-CLEAN DESK',
@@ -251,35 +294,3 @@ function trendmxPaintDeskSections(refs, state){
   var allRows = state.rows || [], golden = state.golden || [], death = state.death || [];
   var rows = allRows;
   if (state.venue && state.venue !== 'ALL'){
-    rows = allRows.filter(function(r){ return tmRowVenue(r) === state.venue; });
-    var onVenue = function(g){
-      for (var gi = 0; gi < allRows.length; gi++){
-        if (allRows[gi].sym === g.sym && tmRowVenue(allRows[gi]) === state.venue) return true;
-      }
-      return false;
-    };
-    golden = golden.filter(onVenue);
-    death = death.filter(onVenue);   /* hg-v1014 */
-  }
-  var vc = state.venueCounts || null;
-  if (refs.summary) refs.summary.textContent = rows.length ? trendmxSummaryLine(rows, golden, vc) : 'Idle — run a scan to build the desk.';
-  /* hg-v1015: two desks, two containers — each renders only its own cross */
-  if (refs.golden) refs.golden.innerHTML = trendmxGoldenDeskHTML(golden);
-  if (refs.death) refs.death.innerHTML = trendmxDeathDeskHTML(death);
-  var clean = [], near = [], forming = [];
-  for (var i = 0; i < rows.length; i++){
-    var r = rows[i];
-    if (!r) continue;
-    var dir = tmDirOf(r);
-    var plan = dir ? trendmxPlan(Object.assign({}, r, { dir: dir })) : null;
-    var tier = trendmxRowTier(r, plan);
-    if (tier === 'clean') clean.push(r);
-    else if (tier === 'near') near.push(r);
-    else if (r.freshCross || Math.abs(r.score) >= TM_MAJORITY || (r.gate && r.gate.gatesPassed >= 5)) forming.push(r);
-  }
-  clean.sort(function(a, b){ return Math.abs(b.score) - Math.abs(a.score); });
-  near.sort(function(a, b){ return (b.gate ? b.gate.gatesPassed : 0) - (a.gate ? a.gate.gatesPassed : 0); });
-  forming.sort(function(a, b){ return Math.abs(b.score) - Math.abs(a.score); });
-  if (refs.cards){
-    if (!clean.length){
-      refs.cards.innerHTML = (typeof hgSetupEmptyHTML === 'function')

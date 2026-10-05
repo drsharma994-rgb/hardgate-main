@@ -1,13 +1,59 @@
+    + ' · CLEAN ' + clean + ' · NEAR ' + near
+    + ((flowW + flowA) > 0 ? ' · taker flow ' + flowW + ' with / ' + flowA + ' held off' : '');
+}
+
+/* hg-v1014: one card serves both cross kinds — golden (bull, green) and
+   death (bear, red). The stamp, the strategy tag and the palette read the
+   ticket's own freshCross/dir; everything else is identical, because the
+   desks are the same bar in both directions. */
+function trendmxCrossCardHTML(g){
+  if (!g || !fin(+g.entry) || !fin(+g.stop) || !fin(+g.t1)) return '';
+  var isDeath = (g.freshCross === 'DEATH') || (g.dir === 'short');
+  var col = isDeath ? '#b91c1c' : '#047857';
+  var strat = isDeath ? 'trendmx-death' : 'trendmx-golden';
+  var tradeOn = (typeof hgToTradePlanOnclickAttr === 'function')
+    ? hgToTradePlanOnclickAttr(g.sym, g.dir, g.entry, g.stop, g.t1, { t2: g.t2, scanner: 'trendmx', strategy: strat })
+    : '';
+  var tradeBtn = tradeOn ? '<button class="toTrade" onclick="' + tradeOn + '">SEND TO TRADE PLAN →</button>' : '';
+  var bookBtn = (typeof bookBtnHTML === 'function')
+    ? bookBtnHTML(g.sym, g.dir, g.entry, g.stop, g.t1, { scanner: 'trendmx', strategy: strat, t2: g.t2 }) : '';
+  return '<div style="flex:1 1 280px;max-width:380px;border:1px solid ' + (isDeath ? 'rgba(185,28,28,.45)' : 'rgba(5,150,105,.45)') + ';border-left:4px solid ' + col + ';border-radius:8px;padding:12px;background:' + (isDeath ? 'rgba(185,28,28,.06)' : 'rgba(5,150,105,.06)') + '">'
+    + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">'
+    + '<span style="font-size:14px;font-weight:800">' + escH(g.sym) + tmVenueChip(g) + '</span>'
+    + '<span class="stamp ' + (isDeath ? 'bad' : 'pass') + '">' + (isDeath ? '⚡DEATH' : '⚡GOLDEN') + '</span>'
+    + '<span class="stamp pass">' + escH(g.conviction || g.tier || 'CONVICTION') + '</span>'
+    + '<span class="stamp ' + (isDeath ? 'bad' : 'pass') + '">' + (isDeath ? 'SHORT' : 'LONG') + '</span>'
+    + tmSmcChip(g)
+    + '</div>'
+    + '<div style="margin-top:6px;font-size:10px;color:#64748B">' + escH(g.note || '') + '</div>'
+    + '<div style="font-size:22px;font-weight:800;color:' + col + ';margin-top:6px">' + pxFmt(g.entry) + '</div>'
+    + '<div class="plan" style="margin-top:6px">' + trendmxPlanHTML(g) + '</div>'
+    + tradeBtn + bookBtn
+    + '</div>';
+}
+
+/* hg-v1015: TWO CROSS DESKS — the v1014 combined panel is split at the
+   operator's ask: the bull desk and the bear desk stand on their own, each
+   its own panel, its own palette, its own sub-line. The card renderer
    stays the shared dir-aware one (hg-v1014); a desk differs only in which
    bag it renders. The 4-card cap is the cap each half already had — the
    split changes no exposure. A desk with no tickets renders nothing. */
 function trendmxGoldenDeskHTML(golden){
   golden = golden || [];
-  if (!golden.length) return '';
+  var held = golden.held || {};
   var cards = '';
   for (var i = 0; i < Math.min(golden.length, 4); i++) cards += trendmxCrossCardHTML(golden[i]);
+  var why = golden.length ? '' : ('<div class="note">No golden setup. A card needs a closed daily cross, the 4h EMA cascade, at least 6/7 gates, a 4h EMA tag in the last 6 closed bars, and RSI, OBV and funding not against.'
+    + (held.waiting ? ' ' + held.waiting + ' waiting for the EMA tag.' : '')
+    + (held.gates ? ' ' + held.gates + ' failed the gates.' : '')
+    + (held.cascade ? ' ' + held.cascade + ' have no 4h cascade.' : '')
+    + (held.grade ? ' ' + held.grade + ' failed the TRADE grade.' : '')
+    + '</div>');
   return '<div class="panel tier-clean" style="margin:12px 0;border-left:4px solid #047857">'
-    + '<h2>⚡ GOLDEN CROSS DESK <span>EMA50/200 bull cross ≤10 daily bars · limit at 4h EMA9 or EMA21, cancelled if not tagged in 6×4h'+ ((__tmMacro && __tmMacro.btcStructure === 'down') ? ' · alt longs stood down, BTC structure is down' : '')+ '</span></h2>'
+    + '<h2>⚡ GOLDEN CROSS DESK <span>closed daily cross · 4h cascade · 6/7 gates · EMA tag · TRADE grade'
+    + ((__tmMacro && __tmMacro.btcStructure === 'down') ? ' · alt longs stood down, BTC structure is down' : '')
+    + '</span></h2>'
+    + why
     + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + cards + '</div>'
     + '</div>';
 }
@@ -242,48 +288,3 @@ function trendmxChopChipHtml(r){
    forward ledger measures it like every other mechanic): it is a FILTER that
    asks every independent confirmation to say WITH and none to say AGAINST, on
    top of a 7/7 gate-clean row at maximum composite alignment. Criteria,
-   stated plainly:
-     |composite| = 5/5  (all five legs maxed the same way)
-     7/7 swing-gate clean (spread · vol-Z · EMA21 anchor · funding · regime · structure · R:R)
-     momentum witness WITH  (1D RSI on the regime side — not flat, not null)
-     volume witness WITH     (1D OBV confirms the new extreme — not flat, not null)
-     taker flow never AGAINST (WITH when readable; an unreadable flow never confirms but never disqualifies)
-     funding not crowded      (not against the direction)
-   Evidence-only: nothing here gates, moves a tier or drops a row — it only
-   earns a desk and a read-mark. A row is PERFECT, not "guaranteed". */
-function trendmxPerfectState(r){
-  if (!r || !r.gate || !r.gate.clean7 || r.gate.veto) return false;
-  if (typeof r.score !== 'number' || !isFinite(r.score)) return false;
-  if (Math.abs(r.score) !== 5) return false;
-  var dir = tmDirOf(r);
-  if (!dir) return false;
-  if (trendmxMomState(r, dir) !== 'with') return false;
-  if (trendmxVolState(r, dir) !== 'with') return false;
-  if (r.flow && r.flow.verdict === 'against') return false;
-  /* hg-v1034: the fundamental + sentiment witness — a blackout (refuse) or a
-     2+ net checked headwind (against) disqualifies PERFECT exactly like flow
-     against. WITH chips; a dark or flat board never disqualifies. */
-  var fundSt = trendmxFundState(r, dir);
-  if (fundSt === 'refuse' || fundSt === 'against') return false;
-  var fp = r.fundingPct;
-  if (typeof fp === 'number' && isFinite(fp) && typeof W.hgFundingAgainstMark === 'function'){
-    try{ var m = W.hgFundingAgainstMark(fp, dir); if (m && m.against === true) return false; }catch(e){}
-  }
-  return true;
-}
-
-/* hg-v1022: VOLATILITY REGIME — a new independent read the composite's five
-   close-derived legs cannot see: WHERE the row's own ATR sits in ITS trailing
-   distribution. hgAtrPercentile(4h,14,100) ranks the latest 4h ATR against
-   its last 100 values: <20th percentile is DEAD TAPE (chop — trend legs drift
-   but nothing trades), >80th is BLOWOFF (a move already spent), the middle
-   is HEALTHY (a trend with room to run). Evidence-only — a chip on the card,
-   never a gate, never a composite point: it informs and records, it never
-   drops a row (the hg-v700 honest-degradation rule applies on unreadable). */
-function trendmxAtrRegime(r){
-  try{
-    if (!r || !r.rows4h || !Array.isArray(r.rows4h) || r.rows4h.length < 30) return null;
-    if (typeof hgAtrPercentile !== 'function') return null;
-    var pct = hgAtrPercentile(r.rows4h, 14, 100);
-    if (!isFinite(pct)) return null;
-    if (pct < 20) return { pct: pct, regime: 'DEAD' };

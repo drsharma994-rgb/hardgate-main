@@ -1,8 +1,8 @@
-/* BATCH 1133 — every 10 minutes, Telegram reports the CoinDCX scan.
-   A golden cross that just formed is sent with a limit at the nearer 4h
-   EMA9 or EMA21. TRADE means RSI, OBV and funding are not against the long,
-   and Bitcoin's 4h structure is not down for an alt. SKIP is still sent.
-   If none formed, Telegram still says there were no fresh crosses. */
+/* BATCH 1134 — a CoinDCX cross is sent only after the daily bar has closed,
+   the 4h cascade and at least 6 of 7 gates agree, and a closed 4h bar has
+   tagged the nearer EMA9 or EMA21. TRADE means RSI, OBV and funding are not
+   against the long and Bitcoin structure is not down for an alt. SKIP is
+   sent once. A cross that is still waiting is not sent. */
 import fs from 'fs';
 
 const STATE_FILE = 'golden-alert-state.json';
@@ -92,7 +92,13 @@ async function getJson(path){
 async function klines(symbol, interval, limit){
   const j = await getJson('/api/v3/klines?symbol=' + symbol + '&interval=' + interval + '&limit=' + limit);
   if (!Array.isArray(j)) throw new Error(symbol + ' not candles');
-  return j.map(function(k){ return { o:+k[1], h:+k[2], l:+k[3], c:+k[4], v:+k[5] }; });
+  return j.map(function(k){ return { t:+k[0], o:+k[1], h:+k[2], l:+k[3], c:+k[4], v:+k[5] }; });
+}
+function closedBars(rows, barMs){
+  if (!rows || rows.length < 2) return rows || [];
+  const last = rows[rows.length - 1];
+  if (!last || !Number.isFinite(last.t) || last.t + barMs > Date.now()) return rows.slice(0, -1);
+  return rows;
 }
 function emaLast(values, len){
   const s = ema(values, len);
@@ -165,11 +171,106 @@ async function fundingMap(){
   return map;
 }
 function btcStructureDown(h4){
+  h4 = closedBars(h4, 4 * 60 * 60 * 1000);
   if (!h4 || h4.length < 210) return null;
   const c = h4.map(function(r){ return r.c; });
   const e50 = emaLast(c, 50), e200 = emaLast(c, 200);
   if (!Number.isFinite(e50) || !Number.isFinite(e200) || e50 === e200) return null;
   return e50 < e200;
+}
+function rsiAt(closes, len, index){
+  if (index < len) return NaN;
+  return rsiLast(closes.slice(0, index + 1), len);
+}
+function volZ(rows, look){
+  look = look || 20;
+  const n = rows.length;
+  if (n < look + 1) return NaN;
+  const vs = rows.slice(n - 1 - look, n - 1).map(function(r){ return r.v; });
+  const m = vs.reduce(function(a, b){ return a + b; }, 0) / vs.length;
+  const sd = Math.sqrt(vs.reduce(function(a, b){ return a + (b - m) * (b - m); }, 0) / vs.length);
+  if (sd < 1e-8) return 0;
+  return (rows[n - 1].v - m) / sd;
+}
+function cusumAgainstLong(closes){
+  const w = closes.slice(-120);
+  if (w.length < 30) return false;
+  let mean = 0;
+  for (let i = 0; i < w.length; i++) mean += w[i];
+  mean /= w.length;
+  let sd = 0;
+  for (let i = 0; i < w.length; i++) sd += (w[i] - mean) * (w[i] - mean);
+  sd = Math.sqrt(sd / w.length) || 1;
+  let pos = 0, neg = 0, lastDir = null, barsAgo = 999;
+  for (let i = 0; i < w.length; i++){
+    const z = (w[i] - mean) / sd;
+    pos = Math.max(0, pos + z);
+    neg = Math.min(0, neg + z);
+    if (pos > 1){ lastDir = 'long'; barsAgo = w.length - 1 - i; pos = 0; }
+    if (neg < -1){ lastDir = 'short'; barsAgo = w.length - 1 - i; neg = 0; }
+  }
+  return lastDir === 'short' && barsAgo <= 20;
+}
+function gatesPass(h4, fund){
+  if (!h4 || h4.length < 210) return false;
+  const c = h4.map(function(r){ return r.c; });
+  const i = c.length - 1;
+  const e9 = emaLast(c, 9), e21 = emaLast(c, 21), e50 = emaLast(c, 50), e200 = emaLast(c, 200);
+  const a = atr(h4, 14);
+  const px = c[i];
+  const rsi = rsiLast(c, 14);
+  if (!(e9 > e21 && e21 > e50)) return false;
+  let passed = 0;
+  if (a > 0 && Math.abs(e21 - e50) >= 0.25 * a) passed++;
+  if (px > e200) passed++;
+  if (Number.isFinite(rsi) && rsi <= 70) passed++;
+  const fundMissing = !Number.isFinite(fund);
+  if (fundMissing || fund < 0.04) passed++;
+  const bar = h4[i];
+  const range = bar.h - bar.l;
+  const closePos = range > 0 ? (bar.c - bar.l) / range : 0.5;
+  const prev = rsiAt(c, 14, i - 3);
+  const slopeOK = Number.isFinite(prev) && rsi > prev;
+  const vz = volZ(h4, 20);
+  if (closePos >= 0.60 && ((Number.isFinite(vz) && vz > 0.5) || slopeOK)) passed++;
+  const seg = h4.slice(Math.max(0, i - 20), i);
+  const swing = seg.length ? Math.min.apply(null, seg.map(function(r){ return r.l; })) : NaN;
+  let stop = Number.isFinite(swing) ? swing - 0.25 * a : NaN;
+  if (!(px - stop > 0 && px - stop <= 2.5 * a)) stop = px - 1.5 * a;
+  const risk = px - stop;
+  const rr = risk > 0 ? (a * 3.5) / risk : 0;
+  if (rr >= (fundMissing ? 2.5 : 2)) passed++;
+  if (!cusumAgainstLong(c)) passed++;
+  return passed >= 6;
+}
+function crossBar(d1){
+  const c = d1.map(function(r){ return r.c; });
+  const e50 = ema(c, 50), e200 = ema(c, 200);
+  for (let i = c.length - 1; i >= 1 && i >= c.length - 10; i--){
+    if (e50[i] > e200[i] && e50[i - 1] <= e200[i - 1]) return d1[i];
+  }
+  return null;
+}
+function emaTag(h4, crossCloseMs){
+  const closes = h4.map(function(r){ return r.c; });
+  const e9 = ema(closes, 9), e21 = ema(closes, 21);
+  const i = closes.length - 1, px = closes[i];
+  const cands = [];
+  if (Number.isFinite(e9[i]) && e9[i] < px) cands.push(['EMA9', e9]);
+  if (Number.isFinite(e21[i]) && e21[i] < px) cands.push(['EMA21', e21]);
+  if (!cands.length) return { state: 'waiting' };
+  cands.sort(function(a, b){ return Math.abs(a[1][i] - px) - Math.abs(b[1][i] - px); });
+  const series = cands[0][1];
+  const after = [];
+  for (let k = 0; k < h4.length; k++) if (h4[k].t >= crossCloseMs) after.push(k);
+  let tagged = false;
+  for (let n = 0; n < Math.min(6, after.length); n++){
+    const k = after[n], level = series[k], bar = h4[k];
+    if (bar.l <= level && bar.c > level) tagged = true;
+  }
+  if (tagged) return { state: 'ready', ema: cands[0][0] };
+  if (after.length >= 6) return { state: 'expired' };
+  return { state: 'waiting' };
 }
 function atr(rows, n){
   n = n || 14;
@@ -305,26 +406,36 @@ async function main(){
   const hits = [];
   await pool(universe, 6, async function(t){
     try {
-      const d1 = await klines(t.symbol, '1d', 260);
-      const h4 = await klines(t.symbol, '4h', 260);
+      const d1 = closedBars(await klines(t.symbol, '1d', 260), 24 * 60 * 60 * 1000);
+      const h4 = closedBars(await klines(t.symbol, '4h', 260), 4 * 60 * 60 * 1000);
       const s = scoreOf(d1, h4);
-      if (!s || !(s.e50 > s.e200)) return;
-      if (!s.fresh && s.score !== 5) return;
+      if (!s || !s.fresh || !(s.e50 > s.e200)) return;
+      const bar = crossBar(d1);
+      if (!bar) return;
+      const tagState = emaTag(h4, bar.t + 24 * 60 * 60 * 1000);
+      const base = t.symbol.replace(/USDT$/, '');
+      const crossDay = new Date(bar.t).toISOString().slice(0, 10);
+      const prev = sent[base];
+      if (tagState.state === 'waiting') return;
+      if (tagState.state === 'expired'){
+        sent[base] = { at: new Date().toISOString(), score: s.score, fresh: true, ago: s.ago, crossDay: crossDay, expired: true };
+        return;
+      }
+      if (prev && prev.crossDay === crossDay && (prev.alerted || prev.expired)) return;
+      const c4 = h4.map(function(r){ return r.c; });
+      const e9 = emaLast(c4, 9), e21 = emaLast(c4, 21), e50h = emaLast(c4, 50);
+      if (!(e9 > e21 && e21 > e50h)) return;
+      const fund = funds.has(t.symbol) ? funds.get(t.symbol) : null;
+      if (!gatesPass(h4, fund)) return;
       const plan = planOf(h4);
       if (!plan) return;
-      const base = t.symbol.replace(/USDT$/, '');
-      const crossDay = new Date(Date.now() - s.ago * 86400000).toISOString().slice(0, 10);
-      const prev = sent[base];
-      const formed = s.fresh && (!prev || prev.fresh === false || (prev.crossDay && prev.crossDay !== crossDay));
-      if (s.fresh) sent[base] = { at: new Date().toISOString(), score: s.score, fresh: true, ago: s.ago, crossDay: crossDay };
-      if (!formed) return;
       const reasons = [];
       const rsi = rsiLast(d1.map(function(r){ return r.c; }), 14);
       if (Number.isFinite(rsi) && rsi < 40) reasons.push('RSI ' + rsi.toFixed(0) + ' against');
       if (obvDivergesLong(d1) === true) reasons.push('OBV diverging');
-      const fund = funds.has(t.symbol) ? funds.get(t.symbol) : null;
       if (fund != null && fund >= 0.04) reasons.push('funding crowded ' + fund.toFixed(3) + '%');
       if (base !== 'BTC' && btcDown === true) reasons.push('BTC structure down');
+      sent[base] = { at: new Date().toISOString(), score: s.score, fresh: true, ago: s.ago, crossDay: crossDay, alerted: true };
       hits.push({ base: base, s: s, plan: plan, grade: reasons.length ? 'SKIP' : 'TRADE', reasons: reasons });
     } catch (e) {
       console.error(t.symbol, e.message || e);
@@ -345,7 +456,7 @@ async function main(){
     const quiet = [
       'HARDGATE — NO FRESH CROSS',
       'CoinDCX active USDT futures · ' + new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC',
-      'no fresh crosses · scanned ' + universe.length + ' CoinDCX contracts',
+      'no qualified setup · scanned ' + universe.length + ' CoinDCX contracts',
       '',
       'next check in 10 minutes',
       SITE
@@ -360,8 +471,8 @@ async function main(){
     const comp = h.s.score === 5 ? ' · composite +5/5 !GOLDEN' : '';
     const tag = h.grade === 'TRADE' ? 'TRADE' : ('SKIP · ' + h.reasons.join(' · '));
     const entryBit = p.entryType === 'LIMIT'
-      ? ('LIMIT @ ' + p.limitEma + ' ' + px(p.entry) + ' · cancel if not tagged in 6x4h')
-      : ('entry ' + px(p.entry) + ' · already at 4h EMAs');
+      ? ('4h ' + p.limitEma + ' tagged ' + px(p.entry))
+      : ('entry ' + px(p.entry) + ' · 4h EMA tagged');
     return (i + 1) + '. ' + h.base + ' · B-' + h.base + '_USDT · LONG · NEW TREND MATRIX GOLDEN CROSS · cross ' + h.s.ago + 'd ago · +' + h.s.score + '/5' + comp + ' · ' + tag
       + '\n   ' + entryBit + ' · SL ' + px(p.stop) + ' · TP1 ' + px(p.t1) + ' (2R) · TP2 ' + px(p.t2) + ' (3.5R)';
   });

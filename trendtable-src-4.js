@@ -1,3 +1,61 @@
+/* hg-v1042: DAY-RANGE EXHAUSTION — today's range against the trailing
+   20-day mean. A crown at 85%+ consumed is chasing a move already spent. */
+function trendmxDayChipHtml(r){
+  try{
+    if (!r || !Array.isArray(r.rows4h) || r.rows4h.length < 30) return '';
+    var days = {}, i, t, key, d;
+    for (i = 0; i < r.rows4h.length; i++){
+      t = +r.rows4h[i].t; if (!isFinite(t)) continue;
+      key = String(Math.floor(t / 86400));
+      d = days[key];
+      if (!d) days[key] = { hi: r.rows4h[i].h, lo: r.rows4h[i].l };
+      else { if (+r.rows4h[i].h > d.hi) d.hi = +r.rows4h[i].h; if (+r.rows4h[i].l < d.lo) d.lo = +r.rows4h[i].l; }
+    }
+    var keys = Object.keys(days).sort(), ranges = [], k;
+    for (i = 0; i < keys.length; i++){
+      var dd = days[keys[i]];
+      if (dd.hi > dd.lo) ranges.push(dd.hi - dd.lo);
+    }
+    if (ranges.length < 5) return '';
+    var prev = ranges.slice(-21, -1);
+    if (!prev.length) return '';
+    var mean = 0;
+    for (k = 0; k < prev.length; k++) mean += prev[k];
+    mean /= prev.length;
+    if (!(mean > 0)) return '';
+    var pct = Math.round(ranges[ranges.length - 1] / mean * 100);
+    if (pct < 85) return '';
+    return '<span class="stamp bad" style="margin-left:6px" title="' + escH('day-range exhaustion (hg-v1042): ' + pct + '% of the average daily range already consumed — chasing a move that may be spent. Evidence, never a gate.') + '">DAY ' + pct + '% SPENT</span>';
+  }catch(e){ return ''; }
+}
+
+/* hg-v1042: ROUND-TRIP COST — fees as R of the stop window (the house
+   hgCryptoCostR). A crown whose fees eat over a quarter of its stop is
+   COST-HEAVY — the gold ledger measured that cohort to bleed. Evidence,
+   never a gate. */
+function trendmxCostChipHtml(r, plan){
+  try{
+    if (!plan || !isFinite(+plan.entry) || !isFinite(+plan.stop)) return '';
+    var costFn = (typeof W.hgCryptoCostR === 'function') ? W.hgCryptoCostR : null;
+    if (!costFn) return '';
+    var costR = costFn(+plan.entry, +plan.stop, 'taker', 'taker');
+    if (!isFinite(costR)) return '';
+    if (costR > 0.25){
+      return '<span class="stamp bad" style="margin-left:6px" title="' + escH('round-trip cost (hg-v1042): fees eat ' + costR.toFixed(2) + 'R of the stop window — COST-HEAVY. The gold ledger measured this cohort to bleed. Evidence, never a gate.') + '">COST-HEAVY ' + costR.toFixed(2) + 'R</span>';
+    }
+    return '<span class="stamp ok" style="margin-left:6px" title="' + escH('round-trip cost (hg-v1042): ' + costR.toFixed(2) + 'R of the stop window. Evidence, never a gate.') + '">COST ' + costR.toFixed(2) + 'R</span>';
+  }catch(e){ return ''; }
+}
+
+async function tmLoadCoinDcxContracts(){
+  var urls = [
+    '/api/coindcx/instruments',
+    '/api/proxy?url=' + encodeURIComponent('https://api.coindcx.com/exchange/v1/derivatives/futures/data/active_instruments?margin_currency_short_name[]=USDT')
+  ];
+  var last = 'coindcx list failed';
+  for (var i = 0; i < urls.length; i++){
+    try{
+      var r = await fetch(urls[i]);
       if (!r || !r.ok){ last = 'HTTP ' + (r ? r.status : '?'); continue; }
       var j = await r.json();
       var list = Array.isArray(j) ? j : (j && Array.isArray(j.data) ? j.data : (j && Array.isArray(j.instruments) ? j.instruments : null));
@@ -119,7 +177,7 @@ async function trendmxScanCore(hooks){
               xu: item, score: ts.score, comps: ts.comps, freshCross: ts.freshCross, adx: ts.adx,
               rsi: ts.rsi,   /* hg-v1019: the momentum witness rides the row — chips/tier/collector read the stamp, never recompute */
               volDiv: ts.volDiv, volConf: ts.volConf,   /* hg-v1020: the volume witness's stamps, same seam */
-              price: r1[r1.length - 1].c, rows4h: r4, rows1h: (r1h && r1h.length) ? r1h : null,
+              price: r1[r1.length - 1].c, rows4h: r4, rows1d: r1, rows1h: (r1h && r1h.length) ? r1h : null,
               fundingPct: item.fundingPct, turnoverUsd: item.turnoverUsd, mark: item.mark
             };
             var dir = tmDirOf(row);
@@ -244,40 +302,3 @@ function trendmxSummaryLine(rows, golden, venueCounts){
   return 'scanned ' + rows.length + ven
     + ' · golden ' + golden.length
     + ' · strong +' + sl + '/−' + ss + ' · fresh crosses ' + fx
-    + ' · CLEAN ' + clean + ' · NEAR ' + near
-    + ((flowW + flowA) > 0 ? ' · taker flow ' + flowW + ' with / ' + flowA + ' held off' : '');
-}
-
-/* hg-v1014: one card serves both cross kinds — golden (bull, green) and
-   death (bear, red). The stamp, the strategy tag and the palette read the
-   ticket's own freshCross/dir; everything else is identical, because the
-   desks are the same bar in both directions. */
-function trendmxCrossCardHTML(g){
-  if (!g || !fin(+g.entry) || !fin(+g.stop) || !fin(+g.t1)) return '';
-  var isDeath = (g.freshCross === 'DEATH') || (g.dir === 'short');
-  var col = isDeath ? '#b91c1c' : '#047857';
-  var strat = isDeath ? 'trendmx-death' : 'trendmx-golden';
-  var tradeOn = (typeof hgToTradePlanOnclickAttr === 'function')
-    ? hgToTradePlanOnclickAttr(g.sym, g.dir, g.entry, g.stop, g.t1, { t2: g.t2, scanner: 'trendmx', strategy: strat })
-    : '';
-  var tradeBtn = tradeOn ? '<button class="toTrade" onclick="' + tradeOn + '">SEND TO TRADE PLAN →</button>' : '';
-  var bookBtn = (typeof bookBtnHTML === 'function')
-    ? bookBtnHTML(g.sym, g.dir, g.entry, g.stop, g.t1, { scanner: 'trendmx', strategy: strat, t2: g.t2 }) : '';
-  return '<div style="flex:1 1 280px;max-width:380px;border:1px solid ' + (isDeath ? 'rgba(185,28,28,.45)' : 'rgba(5,150,105,.45)') + ';border-left:4px solid ' + col + ';border-radius:8px;padding:12px;background:' + (isDeath ? 'rgba(185,28,28,.06)' : 'rgba(5,150,105,.06)') + '">'
-    + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">'
-    + '<span style="font-size:14px;font-weight:800">' + escH(g.sym) + tmVenueChip(g) + '</span>'
-    + '<span class="stamp ' + (isDeath ? 'bad' : 'pass') + '">' + (isDeath ? '⚡DEATH' : '⚡GOLDEN') + '</span>'
-    + '<span class="stamp pass">' + escH(g.conviction || g.tier || 'CONVICTION') + '</span>'
-    + '<span class="stamp ' + (isDeath ? 'bad' : 'pass') + '">' + (isDeath ? 'SHORT' : 'LONG') + '</span>'
-    + tmSmcChip(g)
-    + '</div>'
-    + '<div style="margin-top:6px;font-size:10px;color:#64748B">' + escH(g.note || '') + '</div>'
-    + '<div style="font-size:22px;font-weight:800;color:' + col + ';margin-top:6px">' + pxFmt(g.entry) + '</div>'
-    + '<div class="plan" style="margin-top:6px">' + trendmxPlanHTML(g) + '</div>'
-    + tradeBtn + bookBtn
-    + '</div>';
-}
-
-/* hg-v1015: TWO CROSS DESKS — the v1014 combined panel is split at the
-   operator's ask: the bull desk and the bear desk stand on their own, each
-   its own panel, its own palette, its own sub-line. The card renderer

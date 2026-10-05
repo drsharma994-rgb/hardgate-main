@@ -1,3 +1,10 @@
+  if (syncBtn) syncBtn.addEventListener('click', function(){ renderAll(); setStatus('desk repainted from latest scan.'); });
+  /* the measured book renders on mount too — records from previous sessions
+     are the point of an accumulating ledger (OMNIBTC's hg-v1011 pattern). */
+  trendmxPaintFwd(refs);
+
+  function sortVal(r, k){
+    if (k === 'sym')   return r.sym;
     if (k === 'score') return r.score;
     if (k === 'gates') return (r.gate && isFinite(r.gate.gatesPassed)) ? r.gate.gatesPassed : -1;
     if (k === 'adx')   return isFinite(r.adx) ? r.adx : -Infinity;

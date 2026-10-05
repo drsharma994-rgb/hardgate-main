@@ -245,35 +245,51 @@ function tmVolWitness(rows){
    Pure: no DOM, no network, never throws. Rows are {t,o,h,l,c,v} ascending.
    hg-v1019: rsi is EVIDENCE — it is NOT a composite leg; score is the same
    five legs it always was. */
-function trendScore(rows1d, rows4h){
-  var out = zeroResult();
-  try{
-    if (typeof ema !== 'function' || typeof adx !== 'function' ||
-        typeof ichimokuState !== 'function' || typeof crossOver !== 'function' ||
-        typeof crossUnder !== 'function' || typeof crossedRecently !== 'function'){
-      return out; // indicator globals missing -> graceful zero
+function tmBarOpenSec(row){
+  var t = row && row.t;
+  if (!isFinite(+t)) return NaN;
+  t = +t;
+  return t > 1e12 ? Math.floor(t / 1000) : t;
+}
+function tmClosedRows(rows, barSec){
+  if (!Array.isArray(rows) || rows.length < 2) return rows || [];
+  var open = tmBarOpenSec(rows[rows.length - 1]);
+  if (!isFinite(open) || open + barSec > Date.now() / 1000) return rows.slice(0, -1);
+  return rows;
+}
+function tmCascadeDir(rows4h){
+  var rows = tmClosedRows(rows4h, 14400);
+  if (!rows || rows.length < 50 || typeof ema !== 'function') return 0;
+  var c = rows.map(function(r){ return r ? r.c : NaN; });
+  var i = c.length - 1;
+  var e9 = ema(c, 9)[i], e21 = ema(c, 21)[i], e50 = ema(c, 50)[i];
+  if (!(isFinite(e9) && isFinite(e21) && isFinite(e50))) return 0;
+  if (e9 > e21 && e21 > e50) return 1;
+  if (e9 < e21 && e21 < e50) return -1;
+  return 0;
+}
+function trendmxClosedGate(r, dir){
+  var rows = tmClosedRows(r && r.rows4h, 14400);
+  if (!rows || rows.length < 210) return null;
+  return trendmxGateEval({
+    rows4h: rows, sym: r.sym, fundingPct: r.fundingPct, exchange: r.exchange, base: r.base
+  }, dir);
+}
+function trendmxSetupGrade(r, dir){
+  var reasons = [];
+  var rsiV = (r && typeof r.rsi === 'number') ? r.rsi : NaN;
+  var volDiv = r ? r.volDiv : null;
+  var volConf = r ? r.volConf : null;
+  var daily = tmClosedRows(r && r.rows1d, 86400);
+  if (daily && daily.length >= 20){
+    if (typeof rsi === 'function'){
+      var series = rsi(daily.map(function(x){ return x.c; }), 14);
+      if (series && series.length && isFinite(series[series.length - 1])) rsiV = series[series.length - 1];
     }
-    var ok1 = Array.isArray(rows1d) && rows1d.length > 0;
-    var ok4 = Array.isArray(rows4h) && rows4h.length > 0;
-    if (!ok1 && !ok4) return out;
-
-    if (ok1){
-      var c1 = rows1d.map(function(r){ return r ? r.c : NaN; });
-      var i1 = c1.length - 1;
-      var e50 = ema(c1, 50), e200 = ema(c1, 200);
-      var cL = c1[i1], e50L = e50[i1], e200L = e200[i1];
-
-      /* 1) 1d close vs ema200 */
-      if (isFinite(cL) && isFinite(e200L)) out.comps.d1Trend = cmp(cL, e200L);
-
-      /* 2) 1d ema50 vs ema200 + fresh-cross marker (<=10 bars) */
-      if (isFinite(e50L) && isFinite(e200L)) out.comps.d1Cross = cmp(e50L, e200L);
-      if (crossedRecently(crossOver(e50, e200), 10)) out.freshCross = 'GOLDEN';
-      else if (crossedRecently(crossUnder(e50, e200), 10)) out.freshCross = 'DEATH';
-
-      /* 4) ichimoku cloud on 1d */
-      var st = ichimokuState(rows1d);
-      if (st && st.priceVsCloud === 'ABOVE') out.comps.cloud = 1;
-      else if (st && st.priceVsCloud === 'BELOW') out.comps.cloud = -1;
-    }
-
+    var vol = tmVolWitness(daily);
+    volDiv = vol.div;
+    volConf = vol.conf;
+  }
+  if (dir === 'long'){
+    if (isFinite(rsiV) && rsiV < 40) reasons.push('RSI ' + rsiV.toFixed(0) + ' against');
+    if (volDiv === 'bear') reasons.push('OBV diverging');

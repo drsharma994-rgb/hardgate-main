@@ -1,3 +1,16 @@
+            var up = lm > pm;
+            reads.takerFlowVerdict = up ? (dir === 'long' ? 'with' : 'against') : (dir === 'long' ? 'against' : 'with');
+          }
+        }catch(eCv){ }
+      }
+      if (Array.isArray(r.rows4h) && r.rows4h.length >= 120 && typeof hgAtrPercentile === 'function'){
+        try{ var atrP = hgAtrPercentile(r.rows4h, 14, 100); if (atrP != null){ reads.atrRegime = atrP < 20 ? 'DEAD' : (atrP > 80 ? 'BLOWOFF' : 'HEALTHY'); reads.atrPct = atrP; } }catch(eA){ }
+      }
+      try{ var st = tmStructureDir(r.rows4h); if (st) reads.structureTrend = st; }catch(eS){ }
+      if (Array.isArray(r.rows4h) && r.rows4h.length >= 21 && typeof hgSlotMeanVol === 'function'){
+        try{
+          var slot = hgSlotMeanVol(r.rows4h, 20);
+          var lv = +r.rows4h[r.rows4h.length - 1].v;
           if (slot && isFinite(slot.mean) && slot.mean > 0 && isFinite(lv) && lv > 0){
             var rvolW = lv / slot.mean;
             reads.volumeRvol = rvolW;
@@ -310,10 +323,3 @@ function mountTrendMatrix(el){
     });
   });
   btn.addEventListener('click', runScan);
-  if (syncBtn) syncBtn.addEventListener('click', function(){ renderAll(); setStatus('desk repainted from latest scan.'); });
-  /* the measured book renders on mount too — records from previous sessions
-     are the point of an accumulating ledger (OMNIBTC's hg-v1011 pattern). */
-  trendmxPaintFwd(refs);
-
-  function sortVal(r, k){
-    if (k === 'sym')   return r.sym;

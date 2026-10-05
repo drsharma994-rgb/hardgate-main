@@ -1,3 +1,30 @@
+   reads plus the world tilt, the setup card with the automation JSON,
+   and the measured-edge chip for the TRENDMX pool. Evidence, never a
+   gate. */
+function trendmxCrownPanelHTML(state){
+  try{
+    state = state || {};
+    var rows = Array.isArray(state.rows) ? state.rows.slice() : [];
+    if (!rows.length) return '';
+    rows.sort(function(a, b){ return Math.abs(+b.score || 0) - Math.abs(+a.score || 0); });
+    var crown = null, plan = null, dir = null, i, r, d;
+    for (i = 0; i < rows.length; i++){
+      r = rows[i];
+      d = tmDirOf(r);
+      if (!d) continue;
+      var p = trendmxPlan(Object.assign({}, r, { dir: d }));
+      if (p){ crown = r; plan = p; dir = d; break; }
+    }
+    if (!crown || !plan) return '';
+    var tier = trendmxRowTier(crown, plan);
+    var tierTxt = tier === 'clean' ? 'TICKET' : (tier === 'near' ? 'WATCH' : 'LEADER');
+    var conv = trendmxConviction(crown);
+    var color = dir === 'long' ? '#26a69a' : (dir === 'short' ? '#ef5350' : '#94a3b8');
+    var html = '';
+    /* ---- THE CALL ---- */
+    html += '<div class="panel" style="margin-top:10px;border-top:3px solid ' + color + '"><h3>THE CALL</h3>'
+      + '<div style="font-size:16px;font-weight:700">' + dir.toUpperCase() + ' - ' + tierTxt
+      + ' - composite ' + (crown.score > 0 ? '+' : '') + crown.score + '/5'
       + (conv ? ' - ' + conv.label : '') + '</div></div>';
     /* ---- VERDICT ---- */
     var gatesTxt = (crown.gate && isFinite(crown.gate.gatesPassed)) ? crown.gate.gatesPassed + '/7' : '?/7';
@@ -213,16 +240,3 @@ async function trendmxPerfectEvidencePass(rows){
           if (prev.length && last.length){
             var pm = prev.reduce(function(a, b){ return a + b; }, 0) / prev.length;
             var lm = last.reduce(function(a, b){ return a + b; }, 0) / last.length;
-            var up = lm > pm;
-            reads.takerFlowVerdict = up ? (dir === 'long' ? 'with' : 'against') : (dir === 'long' ? 'against' : 'with');
-          }
-        }catch(eCv){ }
-      }
-      if (Array.isArray(r.rows4h) && r.rows4h.length >= 120 && typeof hgAtrPercentile === 'function'){
-        try{ var atrP = hgAtrPercentile(r.rows4h, 14, 100); if (atrP != null){ reads.atrRegime = atrP < 20 ? 'DEAD' : (atrP > 80 ? 'BLOWOFF' : 'HEALTHY'); reads.atrPct = atrP; } }catch(eA){ }
-      }
-      try{ var st = tmStructureDir(r.rows4h); if (st) reads.structureTrend = st; }catch(eS){ }
-      if (Array.isArray(r.rows4h) && r.rows4h.length >= 21 && typeof hgSlotMeanVol === 'function'){
-        try{
-          var slot = hgSlotMeanVol(r.rows4h, 20);
-          var lv = +r.rows4h[r.rows4h.length - 1].v;

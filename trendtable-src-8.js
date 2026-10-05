@@ -1,3 +1,37 @@
+    rows = allRows.filter(function(r){ return tmRowVenue(r) === state.venue; });
+    var onVenue = function(g){
+      for (var gi = 0; gi < allRows.length; gi++){
+        if (allRows[gi].sym === g.sym && tmRowVenue(allRows[gi]) === state.venue) return true;
+      }
+      return false;
+    };
+    golden = golden.filter(onVenue);
+    death = death.filter(onVenue);   /* hg-v1014 */
+    golden.held = (state.golden && state.golden.held) || golden.held;
+    death.held = (state.death && state.death.held) || death.held;
+  }
+  var vc = state.venueCounts || null;
+  if (refs.summary) refs.summary.textContent = rows.length ? trendmxSummaryLine(rows, golden, vc) : 'Idle — run a scan to build the desk.';
+  /* hg-v1015: two desks, two containers — each renders only its own cross */
+  if (refs.golden) refs.golden.innerHTML = trendmxGoldenDeskHTML(golden);
+  if (refs.death) refs.death.innerHTML = trendmxDeathDeskHTML(death);
+  var clean = [], near = [], forming = [];
+  for (var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if (!r) continue;
+    var dir = tmDirOf(r);
+    var plan = dir ? trendmxPlan(Object.assign({}, r, { dir: dir })) : null;
+    var tier = trendmxRowTier(r, plan);
+    if (tier === 'clean') clean.push(r);
+    else if (tier === 'near') near.push(r);
+    else if (r.freshCross || Math.abs(r.score) >= TM_MAJORITY || (r.gate && r.gate.gatesPassed >= 5)) forming.push(r);
+  }
+  clean.sort(function(a, b){ return Math.abs(b.score) - Math.abs(a.score); });
+  near.sort(function(a, b){ return (b.gate ? b.gate.gatesPassed : 0) - (a.gate ? a.gate.gatesPassed : 0); });
+  forming.sort(function(a, b){ return Math.abs(b.score) - Math.abs(a.score); });
+  if (refs.cards){
+    if (!clean.length){
+      refs.cards.innerHTML = (typeof hgSetupEmptyHTML === 'function')
         ? hgSetupEmptyHTML({ title: 'No CLEAN trend tickets right now.', body: 'NEAR and FORMING rows below are watch-only. The golden and death cross desks and the limit board surface actionable rows when gates + plan align.' })   /* hg-v1015: two cross desks now */
         : '<div class="empty">No CLEAN tickets.</div>';
     } else {
@@ -246,30 +280,3 @@ function trendmxGridBlockHtml(title, gridLbl, s, callDir){
 /* hg-v1066: THE CROWN — the OMNIBTC treatment on the TREND MATRIX: a
    single bold call (the strongest majority row with a minted plan), a
    verdict line, the five-dimension complete analysis from the row's own
-   reads plus the world tilt, the setup card with the automation JSON,
-   and the measured-edge chip for the TRENDMX pool. Evidence, never a
-   gate. */
-function trendmxCrownPanelHTML(state){
-  try{
-    state = state || {};
-    var rows = Array.isArray(state.rows) ? state.rows.slice() : [];
-    if (!rows.length) return '';
-    rows.sort(function(a, b){ return Math.abs(+b.score || 0) - Math.abs(+a.score || 0); });
-    var crown = null, plan = null, dir = null, i, r, d;
-    for (i = 0; i < rows.length; i++){
-      r = rows[i];
-      d = tmDirOf(r);
-      if (!d) continue;
-      var p = trendmxPlan(Object.assign({}, r, { dir: d }));
-      if (p){ crown = r; plan = p; dir = d; break; }
-    }
-    if (!crown || !plan) return '';
-    var tier = trendmxRowTier(crown, plan);
-    var tierTxt = tier === 'clean' ? 'TICKET' : (tier === 'near' ? 'WATCH' : 'LEADER');
-    var conv = trendmxConviction(crown);
-    var color = dir === 'long' ? '#26a69a' : (dir === 'short' ? '#ef5350' : '#94a3b8');
-    var html = '';
-    /* ---- THE CALL ---- */
-    html += '<div class="panel" style="margin-top:10px;border-top:3px solid ' + color + '"><h3>THE CALL</h3>'
-      + '<div style="font-size:16px;font-weight:700">' + dir.toUpperCase() + ' - ' + tierTxt
-      + ' - composite ' + (crown.score > 0 ? '+' : '') + crown.score + '/5'
