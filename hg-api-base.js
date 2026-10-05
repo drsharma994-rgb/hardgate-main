@@ -4,8 +4,8 @@
    /port/10000/ at upload, which routes to the sandbox backend.
    On Render / localhost / GitHub Pages, we leave /api/* untouched.
    Zero deps. Load BEFORE any app script. Safe if loaded twice.
-   BATCH 1116 — a v1111 tab marked STALE (1 behind) was not loading. The
-   reload lock is cleared and the current stamp is fetched. SHIVA GOLD is loaded. */
+   BATCH 1117 — no redirect, no service-worker unregister, no cache wipe.
+   Those three were reloading the desk in a loop. */
 (function(){
   if (typeof window === 'undefined') return;
   if (window.__hgApiBaseInstalled) return;
@@ -45,49 +45,4 @@
     try { input = rewriteUrl(input); } catch(e){}
     return origFetch(input, init);
   };
-})();
-(function(){
-  if (typeof window === 'undefined' || typeof document === 'undefined') return;
-  try{
-    var ss = window.sessionStorage;
-    if (ss){
-      var i, k;
-      for (i = ss.length - 1; i >= 0; i--){
-        k = ss.key(i);
-        if (k && (k.indexOf('hg_build_reload_') === 0 || k === 'hg_sw_reload')) ss.removeItem(k);
-      }
-    }
-  }catch(e0){}
-  try{
-    if (window.caches && window.caches.keys){
-      window.caches.keys().then(function(keys){
-        keys.forEach(function(k){ window.caches.delete(k); });
-      });
-    }
-  }catch(e1){}
-  try{
-    if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations){
-      navigator.serviceWorker.getRegistrations().then(function(rs){
-        rs.forEach(function(r){ r.unregister(); });
-      });
-    }
-  }catch(e2){}
-  function add(id, src){
-    if (document.getElementById(id)) return;
-    var s = document.createElement('script');
-    s.id = id;
-    s.src = src;
-    s.async = false;
-    (document.head || document.documentElement).appendChild(s);
-  }
-  add('hgStampNow', 'build-stamp.js?v=1116');
-  add('hgShivaDesk', 'shivagold.js?v=1116');
-  add('hgShivaNav', 'shiva-nav.js?v=1116');
-  var q = window.location && window.location.search || '';
-  if (q.indexOf('bust=1116') < 0){
-    try{
-      var url = window.location.pathname + '?bust=1116';
-      window.location.replace(url);
-    }catch(e3){}
-  }
 })();
