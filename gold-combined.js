@@ -1,23 +1,33 @@
-/* HARDGATE — gold-combined.js  (hg-v1103)
-   One combined read on every gold tab. It does not mint a setup, move a
-   stop, or invent a number. Each pillar is WITH, AGAINST, MIXED or UNREAD
-   from feeds the desk already loaded. A dark feed stays unread. */
+/* HARDGATE — gold-combined.js (hg-v1104)
+   Every pillar names the setup it supports. The tab prints one setup only
+   when those sides agree. No invented price. A dark feed does not vote. */
 (function(){
 'use strict';
 var W = (typeof window !== 'undefined') ? window : globalThis;
-if (W.__hgGoldCombinedBoot) return;
-W.__hgGoldCombinedBoot = true;
+if (W.__hgGoldCombinedBoot === 1104) return;
+W.__hgGoldCombinedBoot = 1104;
 
-var TABS = ['goldscalp','goldswing','omnigold','goldpro','goldpine','goldultra','golddirection','goldcoint','goldspot'];
+var TABS = {
+  goldscalp:     { name: 'GOLD SCALP', tf: '15m', atrMult: 1.2, r1: 1.2, r2: 2, scalp: true },
+  goldswing:     { name: 'GOLD SWING', tf: '4h', atrMult: 2, r1: 2, r2: 3.5, scalp: false },
+  omnigold:      { name: 'OMNIGOLD', tf: '1h', atrMult: 1.5, r1: 1.5, r2: 2.5, scalp: false },
+  goldpro:       { name: 'GOLD PRO', tf: '1h', atrMult: 1.5, r1: 2, r2: 3, scalp: false },
+  goldpine:      { name: 'GOLD PINE', tf: '4h', atrMult: 1.8, r1: 2, r2: 3, scalp: false },
+  goldultra:     { name: 'GOLD ULTRA', tf: '15m', atrMult: 1.5, r1: 1.5, r2: 2.5, scalp: true },
+  golddirection: { name: 'GOLD DIRECTION', tf: '4h', atrMult: 2, r1: 2, r2: 4, scalp: false },
+  goldcoint:     { name: 'GOLD COINT', tf: '1d', atrMult: 1.5, r1: 2, r2: 3, scalp: false },
+  goldspot:      { name: 'GOLD SPOT', tf: '1h', atrMult: 1.2, r1: 1.2, r2: 2, scalp: false }
+};
+var HTF = { '15m': '4h', '1h': '4h', '4h': '1d', '1d': null };
 var bag = null;
-var sig = '';
 var busy = false;
 var painting = false;
 
 function gfn(n){ try{ return (typeof W[n] === 'function') ? W[n] : null; }catch(e){ return null; } }
 function fin(v){ var n = +v; return isFinite(n) ? n : NaN; }
 function esc(s){
-  return String(s == null ? '' : s).replace(/&/g,'&').replace(/</g,'<').replace(/>/g,'>').replace(/"/g,'"');
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>').replace(/"/g, '"');
 }
 function last(a){
   if (!a || !a.length) return NaN;
@@ -25,158 +35,171 @@ function last(a){
   return NaN;
 }
 function closes(rows){
-  var o = [];
-  for (var i = 0; i < (rows || []).length; i++){
-    var c = fin(rows[i] && rows[i].c);
+  var o = [], i, c;
+  for (i = 0; i < (rows || []).length; i++){
+    c = fin(rows[i] && rows[i].c);
     if (c > 0) o.push(c);
   }
   return o;
 }
+function px(n){ return isFinite(n) ? n.toFixed(2) : '—'; }
+function word(side){ return side === 'long' ? 'LONG' : side === 'short' ? 'SHORT' : 'NO SETUP'; }
+function arrow(side, why){
+  return '<b>→ ' + esc(word(side)) + '</b>' + (why ? ' · ' + esc(why) : '');
+}
+
 function stackOf(rows){
-  var ema = gfn('ema'), rsi = gfn('rsi'), atr = gfn('atr');
+  var ema = gfn('ema'), rsiFn = gfn('rsi'), atrFn = gfn('atr');
   var c = closes(rows);
-  if (!ema || !rsi || c.length < 60) return null;
+  if (!ema || !rsiFn || c.length < 60) return null;
   var e20 = last(ema(c, 20)), e50 = last(ema(c, 50));
   var e200 = c.length >= 200 ? last(ema(c, 200)) : NaN;
-  var px = c[c.length - 1];
-  var rv = last(rsi(c, 14));
-  var av = (atr && rows && rows.length > 20) ? last(atr(rows, 14)) : NaN;
-  var bull = px > e20 && e20 > e50 && (!isFinite(e200) || e50 > e200);
-  var bear = px < e20 && e20 < e50 && (!isFinite(e200) || e50 < e200);
-  return { px: px, rsi: rv, atr: av, side: bull ? 'long' : bear ? 'short' : 'mixed', full: isFinite(e200) };
-}
-function chip(state){
-  var cls = state === 'WITH' ? ' ok' : (state === 'AGAINST' ? ' bad' : '');
-  return '<span class="gpip' + cls + '">' + esc(state) + '</span>';
-}
-function row(k, v){
-  return '<div class="kv"><span class="k">' + esc(k) + '</span><span class="v">' + v + '</span></div>';
+  var price = c[c.length - 1];
+  var rv = last(rsiFn(c, 14));
+  var av = (atrFn && rows && rows.length > 20) ? last(atrFn(rows, 14)) : NaN;
+  var bull = price > e20 && e20 > e50 && (!isFinite(e200) || e50 > e200);
+  var bear = price < e20 && e20 < e50 && (!isFinite(e200) || e50 < e200);
+  return { px: price, rsi: rv, atr: av, side: bull ? 'long' : bear ? 'short' : 'mixed', full: isFinite(e200) };
 }
 
-function techRead(tf){
-  if (!tf) return { state: 'UNREAD', text: 'candles not loaded' };
-  var txt = tf.side.toUpperCase() + ' stack'
-    + (tf.full ? ' (20/50/200)' : ' (20/50, 200 unread)')
-    + (isFinite(tf.rsi) ? ' · RSI ' + tf.rsi.toFixed(0) : '')
-    + (isFinite(tf.atr) ? ' · ATR ' + tf.atr.toFixed(2) : '');
-  return { state: tf.side === 'mixed' ? 'MIXED' : 'WITH', text: txt + ' · ' + tf.px.toFixed(2) };
-}
-function techPillar(m15, h1, h4){
-  var a = techRead(m15), b = techRead(h1), c = techRead(h4);
-  if (!m15 && !h1 && !h4) return { state: 'UNREAD', lines: [['15m / 1h / 4h', 'UNREAD', 'no gold candles yet']] };
-  var sides = [m15, h1, h4].filter(Boolean).map(function(x){ return x.side; });
-  var same = sides.length && sides.every(function(s){ return s === sides[0] && s !== 'mixed'; });
-  var mixed = sides.some(function(s){ return s === 'mixed'; }) || (sides.length > 1 && !same);
-  return {
-    state: !sides.length ? 'UNREAD' : same ? 'WITH' : mixed ? 'MIXED' : 'MIXED',
-    lines: [['15m', a.state, a.text], ['1h', b.state, b.text], ['4h', c.state, c.text]]
-  };
-}
-function fundPillar(){
-  var reg = null;
-  try{ if (gfn('hgFundamentalRegime')) reg = W.hgFundamentalRegime('gold'); }catch(e){ reg = null; }
-  if (!reg || !reg.legs) return { state: 'UNREAD', lines: [['Real rates / COT / calendar', 'UNREAD', 'fundamental stack has not run']] };
-  var lines = [];
-  reg.legs.forEach(function(l){
-    if (!l) return;
-    var st = l.state !== 'checked' ? 'UNREAD' : (l.info ? 'INFO' : (l.vote === 'bull' ? 'WITH' : l.vote === 'bear' ? 'AGAINST' : 'MIXED'));
-    lines.push([l.label, st, l.text || '']);
-  });
-  var state = 'UNREAD';
-  if (reg.checked){
-    if (reg.bulls >= 2 && reg.bears === 0) state = 'WITH';
-    else if (reg.bears >= 2 && reg.bulls === 0) state = 'AGAINST';
-    else state = 'MIXED';
+function techOf(spec, stacks){
+  var own = stacks[spec.tf];
+  var higher = HTF[spec.tf] ? stacks[HTF[spec.tf]] : null;
+  if (!own) return { points: 'none', why: spec.tf + ' tape unread' };
+  if (own.side === 'mixed') return { points: 'none', why: spec.tf + ' EMA stack is mixed' + (isFinite(own.rsi) ? ' · RSI ' + own.rsi.toFixed(0) : '') };
+  if (own.side === 'long' && isFinite(own.rsi) && own.rsi >= 75) return { points: 'none', why: 'RSI ' + own.rsi.toFixed(0) + ' is stretched — not a long' };
+  if (own.side === 'short' && isFinite(own.rsi) && own.rsi <= 25) return { points: 'none', why: 'RSI ' + own.rsi.toFixed(0) + ' is washed out — not a short' };
+  if (higher && higher.side !== 'mixed' && higher.side !== own.side){
+    return { points: 'none', why: spec.tf + ' wants ' + word(own.side) + ' but ' + HTF[spec.tf] + ' is ' + word(higher.side) };
   }
-  if (reg.blackout) state = 'AGAINST';
-  return { state: state, lines: lines, note: (reg.regime || '') + (reg.blackout ? ' · event blackout' : '') };
+  var why = spec.tf + ' continuation' + (own.full ? ' · 20/50/200' : ' · 20/50') + (isFinite(own.rsi) ? ' · RSI ' + own.rsi.toFixed(0) : '');
+  if (higher && higher.side === own.side) why += ' · ' + HTF[spec.tf] + ' agrees';
+  return { points: own.side, why: why };
 }
-function sentPillar(fund, news){
-  var lines = [];
-  var cot = null;
-  if (fund && fund.lines){
-    fund.lines.forEach(function(l){ if (/COT/i.test(l[0])) cot = l; });
+
+function fundOf(reg){
+  if (!reg || !reg.legs) return { points: 'none', why: 'fundamental stack has not run', cot: 'none', cotWhy: 'COT unread' };
+  if (reg.blackout) return { points: 'none', why: 'USD event blackout — stand aside', cot: 'none', cotWhy: 'calendar blackout', block: true };
+  var cot = 'none', cotWhy = 'COT unread', i, l;
+  for (i = 0; i < reg.legs.length; i++){
+    l = reg.legs[i];
+    if (!l || !/COT/i.test(l.label || '')) continue;
+    if (l.state !== 'checked' || l.info){ cotWhy = l.text || 'COT unread'; break; }
+    cot = l.vote === 'bull' ? 'long' : l.vote === 'bear' ? 'short' : 'none';
+    cotWhy = l.text || (cot === 'none' ? 'COT neutral' : 'COT ' + word(cot));
+    break;
   }
-  lines.push(cot || ['CFTC COT', 'UNREAD', 'positioning not loaded']);
-  var fng = news && news.fng;
-  if (fng && isFinite(fin(fng.value))){
-    lines.push(['Fear & Greed', 'INFO', fin(fng.value).toFixed(0) + ' ' + (fng.classification || '') + ' — crypto weather, not a gold vote']);
-  } else {
-    lines.push(['Fear & Greed', 'UNREAD', 'not loaded — would be info only, never a gold vote']);
-  }
-  var st = cot && cot[1] !== 'UNREAD' && cot[1] !== 'INFO' ? cot[1] : 'UNREAD';
-  return { state: st, lines: lines };
+  if (!reg.checked) return { points: 'none', why: 'no checked fundamental vote', cot: cot, cotWhy: cotWhy };
+  if (reg.bulls > reg.bears) return { points: 'long', why: reg.bulls + ' bull / ' + reg.bears + ' bear', cot: cot, cotWhy: cotWhy };
+  if (reg.bears > reg.bulls) return { points: 'short', why: reg.bears + ' bear / ' + reg.bulls + ' bull', cot: cot, cotWhy: cotWhy };
+  return { points: 'none', why: 'fundamental votes are tied', cot: cot, cotWhy: cotWhy };
 }
-function macroPillar(m){
-  if (!m) return { state: 'UNREAD', lines: [['Dollar / yields / real rate', 'UNREAD', 'getGoldMacro has not run']] };
-  var lines = [];
-  lines.push(['DXY', m.dxy && m.dxy.trend20 ? 'INFO' : 'UNREAD', m.dxy ? (fin(m.dxy.value).toFixed(2) + ' · ' + (m.dxy.trend20 || 'no trend')) : 'unread']);
-  lines.push(['US 10Y', m.tnxTrend ? 'INFO' : 'UNREAD', isFinite(fin(m.tnx)) ? (fin(m.tnx).toFixed(2) + '% · ' + m.tnxTrend) : 'unread']);
-  var ry = m.realRateMeasured;
-  lines.push(['Real yield', ry && ry.measured ? 'INFO' : 'UNREAD', ry && ry.measured ? (fin(ry.level).toFixed(2) + ' · ' + (ry.trend || '')) : 'unread']);
-  lines.push(['Gold/silver', isFinite(fin(m.goldSilverRatio)) ? 'INFO' : 'UNREAD', isFinite(fin(m.goldSilverRatio)) ? fin(m.goldSilverRatio).toFixed(1) : 'unread']);
+
+function macroOf(m){
+  if (!m) return { points: 'none', why: 'dollar and yields unread' };
   var hint = m.realRateHint || 'NEUTRAL';
-  var st = hint === 'TAILWIND' ? 'WITH' : hint === 'HEADWIND' ? 'AGAINST' : (m.dxy || isFinite(fin(m.tnx)) ? 'MIXED' : 'UNREAD');
-  lines.unshift(['Real-rate hint', st, hint + (m.realRateSource ? ' · ' + m.realRateSource : '')]);
-  return { state: st, lines: lines };
+  var bit = '';
+  if (m.dxy && isFinite(fin(m.dxy.value))) bit += 'DXY ' + fin(m.dxy.value).toFixed(2) + ' ' + (m.dxy.trend20 || '');
+  if (isFinite(fin(m.tnx))) bit += (bit ? ' · ' : '') + 'US10Y ' + fin(m.tnx).toFixed(2) + '% ' + (m.tnxTrend || '');
+  if (hint === 'TAILWIND') return { points: 'long', why: 'real-rate tailwind' + (bit ? ' · ' + bit : '') };
+  if (hint === 'HEADWIND') return { points: 'short', why: 'real-rate headwind' + (bit ? ' · ' + bit : '') };
+  return { points: 'none', why: 'real-rate is neutral' + (bit ? ' · ' + bit : '') };
 }
-function microPillar(m15){
+
+function microOf(spec, stacks, tech){
+  var own = stacks[spec.tf];
+  if (!own || !(own.atr > 0)) return { points: 'none', why: spec.tf + ' ATR unread', block: false };
   var kz = null;
   try{ if (gfn('goldKillzone')) kz = W.goldKillzone(Date.now()); }catch(e){ kz = null; }
-  var lines = [];
-  lines.push(['Session', kz && kz.label ? 'INFO' : 'UNREAD', kz && kz.label ? (kz.label + ' · weight ' + kz.weight) : 'unread']);
-  if (m15 && isFinite(m15.atr) && m15.atr > 0){
-    lines.push(['15m ATR', 'INFO', m15.atr.toFixed(2) + ' on the IUX spot tape']);
-  } else {
-    lines.push(['15m ATR', 'UNREAD', 'no 15m tape']);
+  if (spec.scalp && kz && !(kz.weight > 0)){
+    return { points: 'none', why: (kz.label || 'off session') + ' — scalp stands aside', block: true };
   }
-  lines.push(['Spread', 'UNREAD', 'live IUX bid/ask is not on this feed']);
-  return { state: 'INFO', lines: lines };
-}
-function newsPillar(news, risk){
-  var lines = [];
-  if (!news && !risk) return { state: 'UNREAD', lines: [['Calendar', 'UNREAD', 'news layer not loaded']] };
-  var blackout = risk && risk.blackout === true;
-  lines.push(['USD calendar', risk && risk.unchecked ? 'UNREAD' : 'INFO',
-    blackout ? 'BLACKOUT — ' + (risk.note || 'red-folder window') : ('risk ' + ((risk && risk.risk) || 'unread') + (risk && risk.note ? ' · ' + risk.note : ''))]);
-  var evs = (news && news.events) || [];
-  var shown = 0;
-  for (var i = 0; i < evs.length && shown < 4; i++){
-    var ev = evs[i];
-    var country = String(ev.country || '').toUpperCase();
-    var title = String(ev.title || '');
-    if (country && country !== 'USD' && country !== 'US') continue;
-    if (String(ev.impact || '').toLowerCase() === 'low') continue;
-    var when = ev.t ? new Date(ev.t).toISOString().slice(5, 16).replace('T', ' ') + 'Z' : '';
-    lines.push([title || 'USD event', 'INFO', (ev.impact || '') + (when ? ' · ' + when : '')]);
-    shown++;
+  if (tech.points !== 'long' && tech.points !== 'short'){
+    return { points: 'none', why: 'no execution side until the ' + spec.tf + ' stack picks one', block: false };
   }
-  if (!shown) lines.push(['Next USD prints', risk && risk.unchecked ? 'UNREAD' : 'INFO', 'none in the loaded calendar window']);
-  var heads = (news && news.headlines) || [];
-  var hShown = 0;
-  for (var j = 0; j < heads.length && hShown < 3; j++){
-    var h = heads[j];
-    if (!/gold|xau|fed|fomc|cpi|nfp|yield|dollar|dxy|treasury|powell|inflation|war|oil/i.test(h.title || '')) continue;
-    lines.push(['Headline', (h.sentiment === 'bullish' ? 'WITH' : h.sentiment === 'bearish' ? 'AGAINST' : 'INFO'),
-      (h.source || '') + ' — ' + (h.title || '')]);
-    hShown++;
-  }
-  if (!hShown) lines.push(['Wires', 'INFO', 'loaded wires are crypto desks; no current headline names gold or the dollar']);
-  return { state: blackout ? 'AGAINST' : (risk && !risk.unchecked ? 'INFO' : 'UNREAD'), lines: lines };
+  var why = spec.tf + ' ATR ' + own.atr.toFixed(2) + ' · stop ' + spec.atrMult + '×ATR';
+  if (kz && kz.label) why += ' · ' + kz.label;
+  return { points: tech.points, why: why, block: false };
 }
 
-function htmlOf(parts){
-  var order = ['Technical','Fundamental','Sentiment','Macro','Micro','News'];
-  var h = '<div class="note"><b>COMBINED GOLD READ</b> · IUX XAUUSD spot'
-    + '<br><span class="dim">Technical, fundamental, sentiment, macro, micro and news on one board. Evidence only. This block does not print a setup and does not override the tab\'s own gates. Unread is unread.</span></div>';
+function newsOf(news, risk){
+  if (risk && risk.blackout) return { points: 'none', why: 'red-folder window — stand aside', block: true };
+  var heads = (news && news.headlines) || [];
+  var j, h, hit = null;
+  for (j = 0; j < heads.length; j++){
+    h = heads[j];
+    if (!h || !/gold|xau|fed|fomc|cpi|nfp|yield|dollar|dxy|treasury|powell|inflation/i.test(h.title || '')) continue;
+    if (h.sentiment === 'bullish' || h.sentiment === 'bearish'){ hit = h; break; }
+  }
+  if (hit){
+    return { points: hit.sentiment === 'bullish' ? 'long' : 'short', why: (hit.source || 'wire') + ' — ' + hit.title, block: false };
+  }
+  if (risk && risk.unchecked) return { points: 'none', why: 'calendar unread', block: false };
+  return { points: 'none', why: 'calendar is clear — news does not pick the side', block: false };
+}
+
+function crown(spec, tech, fund, sent, macro, micro, news){
+  var voters = [tech, fund, sent, macro];
+  var side = tech.points;
+  if (side !== 'long' && side !== 'short') return { side: 'none', why: 'technical has no setup' };
+  var i, v, agree = 1, oppose = 0;
+  for (i = 1; i < voters.length; i++){
+    v = voters[i];
+    if (!v || v.points === 'none') continue;
+    if (v.points === side) agree++;
+    else oppose++;
+  }
+  if (micro.block) return { side: 'none', why: micro.why };
+  if (news.block || fund.block) return { side: 'none', why: (news.block ? news.why : fund.why) };
+  if (news.points === 'long' || news.points === 'short'){
+    if (news.points !== side) return { side: 'none', why: 'news points ' + word(news.points) };
+    agree++;
+  }
+  if (oppose > 0) return { side: 'none', why: 'the pillars do not agree' };
+  if (agree < 2) return { side: 'none', why: 'only the tape points ' + word(side) + ' — nothing else confirms' };
+  return { side: side, why: agree + ' reads point ' + word(side), agree: agree };
+}
+
+function levels(spec, stacks, side){
+  var own = stacks[spec.tf];
+  if (!own || !(own.px > 0) || !(own.atr > 0) || (side !== 'long' && side !== 'short')) return null;
+  var risk = spec.atrMult * own.atr;
+  var entry = own.px;
+  var stop = side === 'long' ? entry - risk : entry + risk;
+  var t1 = side === 'long' ? entry + spec.r1 * risk : entry - spec.r1 * risk;
+  var t2 = side === 'long' ? entry + spec.r2 * risk : entry - spec.r2 * risk;
+  return { entry: entry, stop: stop, t1: t1, t2: t2, risk: risk };
+}
+
+function card(spec, call, lv){
+  if (call.side !== 'long' && call.side !== 'short'){
+    return '<div class="note warn"><b>' + esc(spec.name) + ' · NO SETUP</b> · ' + esc(call.why) + '</div>';
+  }
+  if (!lv){
+    return '<div class="note warn"><b>' + esc(spec.name) + ' · NO SETUP</b> · ' + word(call.side) + ' is the side, but ATR is unread so there is no price</div>';
+  }
+  return '<div class="note"><b>' + esc(spec.name) + ' SETUP · ' + word(call.side) + '</b>'
+    + ' · ' + esc(call.why)
+    + '<br>Entry ' + px(lv.entry) + ' · Stop ' + px(lv.stop)
+    + ' · T1 ' + px(lv.t1) + ' (' + spec.r1 + 'R) · T2 ' + px(lv.t2) + ' (' + spec.r2 + 'R)'
+    + '<br><span class="dim">IUX spot, ' + esc(spec.tf) + ' close. Market. Not a fill on your bid.</span></div>';
+}
+
+function htmlFor(spec, stacks, shared){
+  var tech = techOf(spec, stacks);
+  var micro = microOf(spec, stacks, tech);
+  var call = crown(spec, tech, shared.fund, shared.sent, shared.macro, micro, shared.news);
+  var lv = levels(spec, stacks, call.side);
+  var h = '<div class="note"><b>COMBINED GOLD READ</b> · ' + esc(spec.name)
+    + '<br><span class="dim">Each line is the setup that analysis supports. The card above is this tab\'s setup, and only when the sides agree. Unread does not vote.</span></div>';
+  h += card(spec, call, lv);
   h += '<div class="cr-ind-wrap">';
-  order.forEach(function(name){
-    var p = parts[name];
-    h += row(name, chip(p.state) + (p.note ? ' · ' + esc(p.note) : ''));
-    (p.lines || []).forEach(function(l){
-      h += row(l[0], chip(l[1]) + ' · ' + esc(l[2]));
-    });
-  });
+  h += '<div class="kv"><span class="k">Technical</span><span class="v">' + arrow(tech.points, tech.why) + '</span></div>';
+  h += '<div class="kv"><span class="k">Fundamental</span><span class="v">' + arrow(shared.fund.points, shared.fund.why) + '</span></div>';
+  h += '<div class="kv"><span class="k">Sentiment</span><span class="v">' + arrow(shared.sent.points, shared.sent.why) + '</span></div>';
+  h += '<div class="kv"><span class="k">Macro</span><span class="v">' + arrow(shared.macro.points, shared.macro.why) + '</span></div>';
+  h += '<div class="kv"><span class="k">Micro</span><span class="v">' + arrow(micro.points, micro.why) + '</span></div>';
+  h += '<div class="kv"><span class="k">News</span><span class="v">' + arrow(shared.news.points, shared.news.why) + '</span></div>';
   return h + '</div>';
 }
 
@@ -184,22 +207,25 @@ function paint(){
   if (painting || !bag) return;
   painting = true;
   try{
-    var html = htmlOf(bag);
-    for (var i = 0; i < TABS.length; i++){
-      var pane = document.getElementById('tab_' + TABS[i]);
+    var id, pane, slot, spec, html;
+    for (id in TABS){
+      if (!Object.prototype.hasOwnProperty.call(TABS, id)) continue;
+      pane = document.getElementById('tab_' + id);
       if (!pane) continue;
-      var slot = pane.querySelector('[data-hg-gold-combined]');
+      spec = TABS[id];
+      html = htmlFor(spec, bag.stacks, bag.shared);
+      slot = pane.querySelector('[data-hg-gold-combined]');
       if (!slot){
         slot = document.createElement('div');
         slot.setAttribute('data-hg-gold-combined', '1');
         slot.className = 'panel';
         pane.insertBefore(slot, pane.firstChild);
-      } else if (slot.parentNode === pane && pane.firstChild !== slot){
+      } else if (pane.firstChild !== slot){
         pane.insertBefore(slot, pane.firstChild);
       }
-      if (slot.getAttribute('data-sig') !== sig){
+      if (slot.getAttribute('data-sig') !== bag.sig + '|' + id){
         slot.innerHTML = html;
-        slot.setAttribute('data-sig', sig);
+        slot.setAttribute('data-sig', bag.sig + '|' + id);
       }
     }
   }catch(e){}
@@ -211,16 +237,15 @@ async function refresh(){
   busy = true;
   try{
     var candles = gfn('getGoldCandles');
-    var m15 = null, h1 = null, h4 = null;
+    var stacks = {};
     if (candles){
-      try{
-        var a = await candles('15m', 220);
-        var b = await candles('1h', 220);
-        var c = await candles('4h', 220);
-        m15 = stackOf(a && a.rows);
-        h1 = stackOf(b && b.rows);
-        h4 = stackOf(c && c.rows);
-      }catch(e1){}
+      var tfs = ['15m', '1h', '4h', '1d'];
+      for (var i = 0; i < tfs.length; i++){
+        try{
+          var got = await candles(tfs[i], 260);
+          stacks[tfs[i]] = stackOf(got && got.rows);
+        }catch(e1){ stacks[tfs[i]] = null; }
+      }
     }
     var macro = null;
     try{
@@ -234,16 +259,21 @@ async function refresh(){
     }catch(e3){ news = gfn('hgNewsState') ? W.hgNewsState() : null; }
     var risk = null;
     try{ if (gfn('hgNewsRisk')) risk = W.hgNewsRisk('XAUUSD'); }catch(e4){ risk = null; }
-    var fund = fundPillar();
-    bag = {
-      Technical: techPillar(m15, h1, h4),
-      Fundamental: fund,
-      Sentiment: sentPillar(fund, news),
-      Macro: macroPillar(macro),
-      Micro: microPillar(m15),
-      News: newsPillar(news, risk)
+    var reg = null;
+    try{ if (gfn('hgFundamentalRegime')) reg = W.hgFundamentalRegime('gold'); }catch(e5){ reg = null; }
+    var fund = fundOf(reg);
+    var shared = {
+      fund: fund,
+      sent: { points: fund.cot, why: fund.cotWhy },
+      macro: macroOf(macro),
+      news: newsOf(news, risk)
     };
-    sig = JSON.stringify(bag).slice(0, 400);
+    var sig = [shared.fund.points, shared.sent.points, shared.macro.points, shared.news.points];
+    var tf;
+    for (tf in stacks){
+      if (stacks[tf]) sig.push(tf + stacks[tf].side + String(Math.round(stacks[tf].px * 10)));
+    }
+    bag = { stacks: stacks, shared: shared, sig: sig.join('|') };
     paint();
   }catch(e){}
   busy = false;
