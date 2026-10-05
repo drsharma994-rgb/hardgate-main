@@ -31,7 +31,7 @@ function boot(extra){
   vm.createContext(ctx);
   for (const f of ['indicators.js', 'indicators2.js', 'hg-gates.js', 'hg-perfect-setup.js',
                    'hg-setup-core.js', 'crypto-position-risk.js', 'cryptogates.js',
-                   'plans.js', 'setup-ui.js', 'trendtable.js'])
+                   'plans.js', 'setup-ui.js', 'trendtable.combined.js'])
     vm.runInContext(read(f), ctx, { filename: f });
   Object.assign(ctx, extra || {});
   return ctx;
@@ -90,7 +90,7 @@ console.log('== the shared seam absent degrades to no stamps, never a crash ==')
 
 console.log('== wiring pins ==');
 {
-  const src = read('trendtable.js');
+  const src = read('trendtable.combined.js');
   ok(src.indexOf('async function trendmxPerfectEvidencePass') >= 0, 'the pass is defined');
   ok(src.indexOf('hgObtcPerfectFormation') >= 0, 'the pass consumes the OMNIBTC enrichment + predicate');
   ok(src.indexOf("binanceTakerRatio('BTCUSDT', '4h', 120)") >= 0, 'the pass fetches the real taker series');

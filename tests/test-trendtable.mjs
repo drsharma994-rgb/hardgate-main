@@ -17,7 +17,7 @@ import { swCacheOk } from './helpers/build-version.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ctx = vm.createContext(Object.create(null));
 ctx.window = ctx; // browser-style global alias the module registers onto
-for (const f of ['indicators.js', 'indicators2.js', 'setup-stack.js', 'desk-scan-universe.js', 'trendtable.js']){
+for (const f of ['indicators.js', 'indicators2.js', 'setup-stack.js', 'desk-scan-universe.js', 'trendtable.combined.js']){
   vm.runInContext(readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
 }
 const G = ctx;
@@ -447,7 +447,7 @@ const flat4 = mkRows(lin(120, 50, 0));      // pinned 4h closes
   /* missing data layer: a second, deps-less context -> honest skip, no fabricated scan */
   const ctx2 = vm.createContext(Object.create(null));
   ctx2.window = ctx2;
-  for (const f of ['indicators.js', 'indicators2.js', 'desk-scan-universe.js', 'trendtable.js']){
+  for (const f of ['indicators.js', 'indicators2.js', 'desk-scan-universe.js', 'trendtable.combined.js']){
     vm.runInContext(readFileSync(path.join(root, f), 'utf8'), ctx2, { filename: f });
   }
   const tab2 = ctx2.HG_tabs[0];
@@ -464,7 +464,7 @@ const flat4 = mkRows(lin(120, 50, 0));      // pinned 4h closes
 
 /* ---------------- wiring + cache ---------------- */
 {
-  const tt = readFileSync(path.join(root, 'trendtable.js'), 'utf8');
+  const tt = readFileSync(path.join(root, 'trendtable.combined.js'), 'utf8');
   assert(/trendmxGateEval/.test(tt), 'trend matrix gate eval wired');
   assert(/hgFormTicket/.test(tt), 'trend matrix formation ticket path');
   assert(/label: 'GATES'/.test(tt), 'GATES column in matrix table');

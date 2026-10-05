@@ -35,7 +35,7 @@ let pass = 0, fail = 0;
 function assert(c, m){ if (c){ pass++; console.log('  ok   - ' + m); } else { fail++; console.error('  FAIL - ' + m); } }
 const text = h => String(h || '').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
 
-const FILES = ['indicators.js', 'indicators2.js', 'hg-setup-core.js', 'desk-scan-universe.js', 'omniroute.js', 'trendtable.js'];
+const FILES = ['indicators.js', 'indicators2.js', 'hg-setup-core.js', 'desk-scan-universe.js', 'omniroute.js', 'trendtable.combined.js'];
 function boot(){
   const ctx = { console: { log(){}, warn(){}, error(){}, info(){}, debug(){} },
     Math, Date, Number, String, Object, Array, JSON, Error, TypeError, Promise, RegExp,
@@ -141,7 +141,7 @@ console.log('== 2) trendScore carries the stamps — the composite is byte-uncha
   const up = w.trendScore(UP1, UP4);
   assert(up.volConf === 'up' && up.volDiv === null,
          'a confirmed rise stamps the WITH side');
-  const src = fs.readFileSync(path.join(ROOT, 'trendtable.js'), 'utf8');
+  const src = fs.readFileSync(path.join(ROOT, 'trendtable.combined.js'), 'utf8');
   const sumLine = src.match(/out\.score = out\.comps[^;]+;/);
   assert(sumLine && !/vol/i.test(sumLine[0]),
          'the score sum names no volume field — the ledger\'s scale is untouched');
@@ -220,7 +220,7 @@ console.log('== 6) the chips name the verdict; the abstain states stay silent ==
   assert(w.trendmxVolChipHtml(mkRow(w, 'CHFVUSDT', 'long', { volDiv: null, volConf: null })) === ''
       && w.trendmxVolChipHtml(mkRow(w, 'CHNVUSDT', 'long', {})) === '',
          'FLAT and UNSTAMPED paint NO chip — the silent states stay silent');
-  const src6 = fs.readFileSync(path.join(ROOT, 'trendtable.js'), 'utf8');
+  const src6 = fs.readFileSync(path.join(ROOT, 'trendtable.combined.js'), 'utf8');
   assert(/trendmxMomChipHtml\(r\) \+ trendmxVolChipHtml\(r\) \+ trendmxFundingChipHtml\(r\)/.test(src6),
          'both card chip chains carry the volume witness between momentum and funding');
 }
@@ -271,7 +271,7 @@ console.log('== 8) the desk verdicts name each witness; legacy text intact; no b
          'the header tag reads "1 held off — volume trend against"');
   assert(/OBV volume trend not diverging against/.test(gc),
          'the desk criteria line names the volume bar beside the flow and momentum bars');
-  const src = fs.readFileSync(path.join(ROOT, 'trendtable.js'), 'utf8');
+  const src = fs.readFileSync(path.join(ROOT, 'trendtable.combined.js'), 'utf8');
   assert(/var TM_VOL_WIN = 20;/.test(src), 'the 20-bar windows are the stated prior');
   assert(/volDiv: ts\.volDiv, volConf: ts\.volConf/.test(src),
          'the scan row carries the volume stamps off trendScore — chips never recompute');

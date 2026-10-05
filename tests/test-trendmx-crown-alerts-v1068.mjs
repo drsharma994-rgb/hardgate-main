@@ -32,7 +32,7 @@ function boot(extra){
   vm.createContext(ctx);
   for (const f of ['indicators.js', 'indicators2.js', 'hg-gates.js', 'hg-perfect-setup.js',
                    'hg-setup-core.js', 'crypto-position-risk.js', 'cryptogates.js',
-                   'plans.js', 'setup-ui.js', 'trendtable.js', 'tabalerts.js'])
+                   'plans.js', 'setup-ui.js', 'trendtable.combined.js', 'tabalerts.js'])
     vm.runInContext(read(f), ctx, { filename: f });
   Object.assign(ctx, extra || {});
   return ctx;
@@ -84,7 +84,7 @@ console.log('== the alert collector pushes the crown as a clean7 row ==');
 
 console.log('== wiring pins ==');
 {
-  const tsrc = read('trendtable.js');
+  const tsrc = read('trendtable.combined.js');
   ok(tsrc.indexOf('function trendmxCrownState') >= 0 && tsrc.indexOf('W.trendmxCrownOfRows') >= 0, 'the crown state seams are defined');
   ok(tsrc.indexOf('fill odds') >= 0 && tsrc.indexOf('stop sensitivity') >= 0, 'the crown MICRO carries the accuracy witnesses');
   const asrc = read('tabalerts.js');

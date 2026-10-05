@@ -315,7 +315,7 @@ console.log('== wiring pins — the shipped files actually read and print it all
   ok(src.indexOf('getWorldMonitorDeskAge') >= 0 && src.indexOf('quiet hours (kill zone)') >= 0, 'the staleness seam and the ASIA kill-zone label are wired');
   const esrc = read('omnibtc-engines.js');
   ok(esrc.indexOf("binanceFunding('BTCUSDT')") >= 0, 'the gather fetches Binance BTCUSDT funding for the spread');
-  const tsrc = read('trendtable.js');
+  const tsrc = read('trendtable.combined.js');
   ok(tsrc.indexOf('function trendmxSlotChipHtml') >= 0, 'TREND MATRIX: the session chip is defined');
   ok(tsrc.indexOf('function trendmxDayChipHtml') >= 0, 'TREND MATRIX: the day-exhaustion chip is defined');
   ok(tsrc.indexOf('function trendmxCostChipHtml') >= 0, 'TREND MATRIX: the round-trip cost chip is defined');

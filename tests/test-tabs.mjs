@@ -177,7 +177,7 @@ assert(!loadErr, 'support scripts load without throwing' + (loadErr ? ' — got:
 
 loadErr = null;
 try{
-  ['squeeze.js', 'trendtable.js', 'oiflow.js', 'regime.js', 'carry.js', 'venuepremium.js', 'termbasis.js', 'goldpro.js'].forEach(load);
+  ['squeeze.js', 'trendtable.combined.js', 'oiflow.js', 'regime.js', 'carry.js', 'venuepremium.js', 'termbasis.js', 'goldpro.js'].forEach(load);
 }catch(e){ loadErr = e; }
 assert(!loadErr, 'feature-tab modules load without throwing' + (loadErr ? ' — got: ' + loadErr.message : ''));
 

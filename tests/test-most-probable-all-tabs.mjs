@@ -69,7 +69,7 @@ const MARKET_SCAN_TABS = [
 
 const MODULE_FILE = {
   brain: 'brain.js',
-  trendmx: 'trendtable.js',
+  trendmx: 'trendtable.combined.js',
   startrader: 'startradertab.js',
   omnibtc: 'omnibtc.js',
   omnipresent: 'omnipresent.js',

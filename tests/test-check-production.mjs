@@ -81,7 +81,7 @@ console.log('== alert cycle constants (README alignment) ==');
   ok(/runTrendmxCrossAlerts/.test(html), 'index runs trend matrix cross alerts on 15-min cycle');
   ok(/TRENDMX_ALERT_CYCLE_MS = 15 \* 60 \* 1000/.test(tabalerts), 'tabalerts trendmx cycle is 15 minutes');
   ok(/hgTrendmxCrossAlertsRun\(\)/.test(html), 'index calls trend matrix golden-cross alerts');
-  ok(/trendmxGoldenCrossSetups/.test(fs.readFileSync(root + 'trendtable.js', 'utf8')),
+  ok(/trendmxGoldenCrossSetups/.test(fs.readFileSync(root + 'trendtable.combined.js', 'utf8')),
     'trendtable exposes golden cross setup builder');
 }
 

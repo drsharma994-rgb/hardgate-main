@@ -23,7 +23,7 @@ console.log('== HG_VER shell ==');
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
   ok(swCacheOk(sw), 'cache matches build stamp');
   ok(sw.indexOf('gstack-brain.js') >= 0, 'sw precaches gstack-brain');
-  ok(sw.indexOf('trendtable.js') >= 0, 'sw precaches trendtable');
+  ok(sw.indexOf('trendtable.combined.js') >= 0, 'sw precaches trendtable');
 }
 
 console.log('== gstack + brain wiring ==');
@@ -47,7 +47,7 @@ console.log('== AI agent + trend matrix cross-wire ==');
   ok(/runTrendmxScout/.test(agent), 'trend scout runner wired');
   const stack = fs.readFileSync(path.join(root, 'setup-stack.js'), 'utf8');
   ok(stack.indexOf('trendmx') >= 0, 'setup-stack trend matrix FTS bump');
-  const trend = fs.readFileSync(path.join(root, 'trendtable.js'), 'utf8');
+  const trend = fs.readFileSync(path.join(root, 'trendtable.combined.js'), 'utf8');
   ok(/trendmxGateEval/.test(trend), 'trend matrix uses gate eval');
   ok(/hgFormTicket/.test(trend), 'trend matrix formation ticket path');
 }
@@ -61,7 +61,7 @@ console.log('== tab alert warm chain ==');
 
 console.log('== advanced trend matrix desk ==');
 {
-  const trend = fs.readFileSync(path.join(root, 'trendtable.js'), 'utf8');
+  const trend = fs.readFileSync(path.join(root, 'trendtable.combined.js'), 'utf8');
   /* hg-v1015: the combined v1014 panel split into two desks — GOLDEN
      CROSS DESK returns, DEATH CROSS DESK joins; behavior pins live in
      test-trendmx-cross-desks-v1015.mjs and test-trendmx-death-cross-v1014.mjs */

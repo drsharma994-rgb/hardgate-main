@@ -153,7 +153,7 @@ const run = code => vm.runInContext(code, ctx);
 let loadErr = null;
 try{
   ['indicators.js', 'indicators2.js', 'fixpack14-core.js', 'store.js', 'binance.js', 'macro.js',
-   'squeeze.js', 'trendtable.js', 'oiflow.js', 'regime.js', 'carry.js', 'goldpro.js'].forEach(load);
+   'squeeze.js', 'trendtable.combined.js', 'oiflow.js', 'regime.js', 'carry.js', 'goldpro.js'].forEach(load);
 }catch(e){ loadErr = e; }
 assert(!loadErr, 'support + feature scripts load without throwing' + (loadErr ? ' — got: ' + loadErr.message : ''));
 

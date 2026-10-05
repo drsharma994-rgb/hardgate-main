@@ -39,7 +39,7 @@ let passed = 0;
 const ok = (cond, label) => { if (!cond) throw new Error('FAIL: ' + label); passed++; console.log('  ok —', label); };
 const text = h => String(h || '').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
 
-const FILES = ['indicators.js', 'indicators2.js', 'hg-setup-core.js', 'desk-scan-universe.js', 'omniroute.js', 'trendtable.js'];
+const FILES = ['indicators.js', 'indicators2.js', 'hg-setup-core.js', 'desk-scan-universe.js', 'omniroute.js', 'trendtable.combined.js'];
 function boot(files){
   const ctx = { console: { log(){}, warn(){}, error(){} }, Math, Date, Number, String, Object, Array,
     JSON, Error, Promise, RegExp, isFinite, isNaN, parseFloat, parseInt, setTimeout, clearTimeout };
@@ -241,7 +241,7 @@ console.log('== the summary names the split ==');
 
 console.log('== honest degradation (hg-v700) ==');
 {
-  const bare = boot(['indicators.js', 'indicators2.js', 'hg-setup-core.js', 'desk-scan-universe.js', 'trendtable.js']);
+  const bare = boot(['indicators.js', 'indicators2.js', 'hg-setup-core.js', 'desk-scan-universe.js', 'trendtable.combined.js']);
   const row = mkRow('AAAUSDT', 'long', { gate: gate7() });
   const res = await bare.trendmxFlowScan([row]);
   ok(res.read === 'unavailable' && res.scanned === 0 && !row.flow, 'no hgOmniCvd / no binanceTakerRatio: unavailable, rows untouched');

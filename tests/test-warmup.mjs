@@ -178,7 +178,7 @@ console.log('== F) real layer modules publish honest warm hooks ==');
     ['news.js', 'news', 'NEWS'],
     ['liqs.js', 'liqs', 'LIQS'],
     ['squeeze.js', 'squeeze', 'SQUEEZE'],
-    ['trendtable.js', 'trendmx', 'TREND MATRIX']
+    ['trendtable.combined.js', 'trendmx', 'TREND MATRIX']
   ];
   for (const [file, id, label] of mods){
     globalThis.window = {};

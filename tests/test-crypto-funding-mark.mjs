@@ -419,7 +419,7 @@ console.log('\n10. the census, derived by call shape: which record writers carry
      omnibtc.js joined in hg-v1046: the winner leg's ticker funding rides the
      record (the desk's own funding witness); the record array is a named
      variable so the census reads the record literal, not the candidates map. */
-  const want = ['cryptoverse.js', 'ninetypercent.js', 'squeeze.js', 'oiflow.js', 'edge.js', 'omniroute.js', 'cryptoscan.js', 'engine.js', 'contract-report.js', 'trendtable.js', 'omnibtc.js'];
+  const want = ['cryptoverse.js', 'ninetypercent.js', 'squeeze.js', 'oiflow.js', 'edge.js', 'omniroute.js', 'cryptoscan.js', 'engine.js', 'contract-report.js', 'trendtable.combined.js', 'omnibtc.js'];
   for (const w of want) ok(carriers.some(c => c.startsWith(w + ' ')), w + ' hands its funding in');
   ok(carriers.some(c => c.startsWith('index.html ')), 'the SWING/SCALP publish spread carries it');
   /* the ones that do NOT, named rather than remembered: none of these has a

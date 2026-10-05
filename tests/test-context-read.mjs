@@ -158,7 +158,7 @@ console.log('\n== source contracts on the five seams behavior cannot cheaply dri
      'goldpro: real counts or none — undefined, because isFinite(null) is true and null renders 0/0');
   ok(/hgContextRead\(lvRows, lvCascade, 'gp-cascade', false\)/.test(GP), 'goldpro: read on closed lvRows');
 
-  for (const f of ['squeeze.js', 'trendtable.js', 'oiflow.js']){
+  for (const f of ['squeeze.js', 'trendtable.combined.js', 'oiflow.js']){
     ok(/contextRead/.test(read(f)) && /context AGAINST this direction/.test(read(f)),
        f + ': the read and its warning render on the card');
   }

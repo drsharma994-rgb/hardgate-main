@@ -38,7 +38,7 @@ function assert(c, m){ if (c){ pass++; console.log('  ok   - ' + m); } else { fa
 const text = h => String(h || '').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
 
 const FILES = ['indicators.js', 'indicators2.js', 'hg-setup-core.js', 'desk-scan-universe.js',
-               'omniroute.js', 'fundamental-stack.js', 'trendtable.js'];
+               'omniroute.js', 'fundamental-stack.js', 'trendtable.combined.js'];
 
 function boot(){
   const ctx = { console: { log(){}, warn(){}, error(){}, info(){}, debug(){} },

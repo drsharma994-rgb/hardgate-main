@@ -49,7 +49,7 @@ function tape(n, step, slope, t0){
 const UP = { '4h': tape(300, 14400, 0.3), '1d': tape(300, 86400, 1), '1h': tape(300, 3600, 0.1) };
 const DN = { '4h': tape(300, 14400, -0.3), '1d': tape(300, 86400, -1), '1h': tape(300, 3600, -0.1) };
 const WEAK = { '4h': tape(300, 14400, 0.3), '1d': tape(300, 86400, 0), '1h': tape(300, 3600, 0.1) };   /* flat 1d, bull 4h cascade: composite +1 */
-const ENGINE = ['indicators.js', 'indicators2.js', 'cryptogates.js', 'plans.js', 'hg-forward.js', 'trendtable.js', 'contract-report.js'];
+const ENGINE = ['indicators.js', 'indicators2.js', 'cryptogates.js', 'plans.js', 'hg-forward.js', 'trendtable.combined.js', 'contract-report.js'];
 /* the desk scanned three contracts: ETH +5, SOL -5, LTC +1 (short of the majority); BTC never scanned */
 async function scanned(files){
   const S = boot(files || ENGINE);
@@ -65,7 +65,7 @@ async function scanned(files){
 
 console.log('1. trendtable.js: the stance, one home, three states');
 {
-  const S = boot(['indicators.js', 'indicators2.js', 'trendtable.js']);
+  const S = boot(['indicators.js', 'indicators2.js', 'trendtable.combined.js']);
   const A = S.hgTrendMatrixAlign;
   ok(typeof A === 'function' && typeof S.hgTrendMatrixRowOf === 'function' && typeof S.hgTrendMatrixMark === 'function', 'hgTrendMatrixAlign, hgTrendMatrixRowOf and hgTrendMatrixMark are exported');
   ok(A(5, 'long') === 'with' && A(2, 'long') === 'with' && A(-2, 'short') === 'with' && A(-5, 'short') === 'with', 'a majority in the plan\'s direction reads WITH');
@@ -246,7 +246,7 @@ console.log('5. settled, split, folded, printed -- and nothing where no record c
 
 console.log('6. the TREND MATRIX desk\'s own records carry its composite, through the real tab (read off its published snapshot, handed in nowhere)');
 {
-  const S = boot(['indicators.js', 'indicators2.js', 'setup-stack.js', 'desk-scan-universe.js', 'hg-forward.js', 'trendtable.js']);
+  const S = boot(['indicators.js', 'indicators2.js', 'setup-stack.js', 'desk-scan-universe.js', 'hg-forward.js', 'trendtable.combined.js']);
   const now = Math.floor(Date.now() / 1000);
   const mkRows = (closes, sec) => { const rows = []; let prev = closes[0]; const t0 = Math.floor(now / sec) * sec - closes.length * sec; for (let i = 0; i < closes.length; i++){ const c = closes[i], o = prev; rows.push({ t: t0 + i * sec, o, h: Math.max(o, c) + 0.3, l: Math.min(o, c) - 0.3, c, v: 1000 }); prev = c; } return rows; };
   const lin = (n, a, st) => { const r = []; for (let i = 0; i < n; i++) r.push(a + i * st); return r; };
@@ -263,14 +263,14 @@ console.log('6. the TREND MATRIX desk\'s own records carry its composite, throug
   ok(recs.length >= 1, 'the real scan wrote ' + recs.length + ' TRENDMX record(s)');
   const snapRows = S.trendmxState().rows;
   ok(recs.every(r => typeof r.tmScore === 'number' && snapRows.some(sr => sr.sym === r.sym && sr.score === r.tmScore)), 'every record carries the composite of its own row on the board');
-  ok(!/tmScore\s*:/.test(read('trendtable.js').replace(/\/\*[\s\S]*?\*\//g, '')), 'and the desk hands nothing in: the same number twice would be a second copy of the snapshot');
+  ok(!/tmScore\s*:/.test(read('trendtable.combined.js').replace(/\/\*[\s\S]*?\*\//g, '')), 'and the desk hands nothing in: the same number twice would be a second copy of the snapshot');
   ok(recs.every(r => r.tmAlign === 'with'), 'and a plan this desk mints is always WITH its own majority (' + recs.map(r => r.tmAlign).join(',') + ')');
   ok(recs.every(r => r.tmAgeMin === 0), 'recorded at the scan that produced the row: age 0');
 }
 
 console.log('6b. the FTS setup stack reads the stance through the one home');
 {
-  const S = boot(['indicators.js', 'indicators2.js', 'cryptogates.js', 'plans.js', 'setup-stack.js', 'trendtable.js']);
+  const S = boot(['indicators.js', 'indicators2.js', 'cryptogates.js', 'plans.js', 'setup-stack.js', 'trendtable.combined.js']);
   const items = out => out.fundamental.items.filter(it => it.label === 'Trend matrix');
   const snap = { at: Date.now(), rows: [{ sym: 'ETHUSDT', score: 5, dir: 'long' }, { sym: 'SOLUSDT', score: -2, dir: 'short' }, { sym: 'LTCUSDT', score: 1, dir: null }, { sym: 'ADAUSDT', score: 3, dir: 'long' }] };
   let out = S.hgSetupStack({ dir: 'long', sym: 'ETHUSDT', asset: 'crypto', trendmx: snap });
@@ -294,12 +294,12 @@ console.log('6b. the FTS setup stack reads the stance through the one home');
 
 console.log('7. nothing is gated on the marks');
 {
-  const gateFiles = ['engine.js', 'cryptogates.js', 'hg-gates.js', 'plans.js', 'pinegate.js', 'setup-stack.js', 'brain.js', 'startradertab.js', 'omniroute.js', 'omnipresent.js', 'hg-setup-core.js', 'contract-report.js', 'trendtable.js'];
+  const gateFiles = ['engine.js', 'cryptogates.js', 'hg-gates.js', 'plans.js', 'pinegate.js', 'setup-stack.js', 'brain.js', 'startradertab.js', 'omniroute.js', 'omnipresent.js', 'hg-setup-core.js', 'contract-report.js', 'trendtable.combined.js'];
   const hits = gateFiles.filter(f => fs.existsSync(path.join(root, f)) && /\btm(Align|Score|AgeMin)\b/.test(read(f).replace(/\/\*[\s\S]*?\*\//g, '')));
   ok(hits.length === 0, 'no gate module or desk reads tmAlign / tmScore / tmAgeMin (' + (hits.join(',') || 'none') + ')');
   const fwd = read('hg-forward.js').replace(/\/\*[\s\S]*?\*\//g, '');
   ok((fwd.match(/hgTrendMatrixMark\(/g) || []).length === 1 && (fwd.match(/hgTrendMatrixAlign\(/g) || []).length === 1, 'the ledger reads the mark and the stance through one call each');
-  const tm = read('trendtable.js').replace(/\/\*[\s\S]*?\*\//g, '');
+  const tm = read('trendtable.combined.js').replace(/\/\*[\s\S]*?\*\//g, '');
   ok(!/hgFwdRecords\(|hgFwdTrendMatrixSplit/.test(tm), 'the desk reads nothing back from the ledger');
 }
 

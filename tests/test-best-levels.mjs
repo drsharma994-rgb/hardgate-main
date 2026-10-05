@@ -67,7 +67,7 @@ console.log('== wiring ==');
   ok(/structure-levels\.js/.test(sw) && /best-levels\.js/.test(sw), 'sw shell lists modules');
   ok(swCacheOk(sw), 'cache matches build stamp');
   ok(/hgBestLevels/.test(fs.readFileSync(path.join(root, 'squeeze.js'), 'utf8')), 'squeeze uses hgBestLevels');
-  ok(/hgBestLevels/.test(fs.readFileSync(path.join(root, 'trendtable.js'), 'utf8')), 'trendmx uses hgBestLevels');
+  ok(/hgBestLevels/.test(fs.readFileSync(path.join(root, 'trendtable.combined.js'), 'utf8')), 'trendmx uses hgBestLevels');
   ok(/hgBestLevels/.test(fs.readFileSync(path.join(root, 'oiflow.js'), 'utf8')), 'oiflow uses hgBestLevels');
   ok(/hgDetectOrderBlock/.test(fs.readFileSync(path.join(root, 'formation.js'), 'utf8')), 'formation POI uses OB');
 }

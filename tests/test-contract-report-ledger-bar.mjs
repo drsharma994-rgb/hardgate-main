@@ -29,7 +29,7 @@ const ok = (cond, label) => { if (!cond) throw new Error('FAIL: ' + label); pass
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 
 const ENGINES = ['indicators.js', 'indicators2.js', 'plans.js', 'structure-levels.js', 'best-levels.js',
-                 'formation.js', 'cryptogates.js', 'edge.js', 'squeeze.js', 'meanrev.js', 'trendtable.js',
+                 'formation.js', 'cryptogates.js', 'edge.js', 'squeeze.js', 'meanrev.js', 'trendtable.combined.js',
                  'liqs.js', 'reversalsniper.js', 'pinemath.js', 'pine-sub.js', 'hg-setup-core.js', 'hg-forward.js'];
 
 const SEC4H = 14400;

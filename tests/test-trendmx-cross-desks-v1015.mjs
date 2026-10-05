@@ -21,7 +21,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 let passed = 0;
 const ok = (cond, label) => { if (!cond) throw new Error('FAIL: ' + label); passed++; console.log('  ok —', label); };
 
-const FILES = ['indicators.js', 'indicators2.js', 'hg-setup-core.js', 'desk-scan-universe.js', 'omniroute.js', 'trendtable.js'];
+const FILES = ['indicators.js', 'indicators2.js', 'hg-setup-core.js', 'desk-scan-universe.js', 'omniroute.js', 'trendtable.combined.js'];
 function boot(){
   const ctx = { console: { log(){}, warn(){}, error(){} }, Math, Date, Number, String, Object, Array,
     JSON, Error, Promise, RegExp, isFinite, isNaN, parseFloat, parseInt, setTimeout, clearTimeout };
@@ -111,7 +111,7 @@ console.log('== the 4-card cap is the cap each half already had ==');
 
 console.log('== the tab mounts two containers, bull over bear ==');
 {
-  const src = fs.readFileSync(path.join(ROOT, 'trendtable.js'), 'utf8');
+  const src = fs.readFileSync(path.join(ROOT, 'trendtable.combined.js'), 'utf8');
   ok(src.indexOf('data-r="golden"') >= 0 && src.indexOf('data-r="death"') >= 0, 'both desk containers exist');
   ok(src.indexOf('data-r="golden"') < src.indexOf('data-r="death"'), 'the bear desk stands right under the bull desk');
   ok(/GOLDEN CROSS DESK/.test(src) && /DEATH CROSS DESK/.test(src), 'both desk titles wired');

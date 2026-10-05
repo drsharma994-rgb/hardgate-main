@@ -42,7 +42,7 @@ function boot(){
   vm.createContext(ctx);
   for (const f of ['indicators.js', 'indicators2.js', 'hg-gates.js', 'hg-perfect-setup.js',
                    'hg-setup-core.js', 'crypto-position-risk.js', 'cryptogates.js',
-                   'plans.js', 'setup-ui.js', 'trendtable.js'])
+                   'plans.js', 'setup-ui.js', 'trendtable.combined.js'])
     vm.runInContext(read(f), ctx, { filename: f });
   return ctx;
 }
@@ -162,7 +162,7 @@ console.log('== the chip ==');
 
 console.log('== wiring pins — the shipped file actually does it ==');
 {
-  const src = read('trendtable.js');
+  const src = read('trendtable.combined.js');
   ok(src.indexOf('var chopSt = trendmxChopState(r)') >= 0, 'the tier cap reads the trend-quality witness');
   ok(src.indexOf("if (chopSt && chopSt.state === 'chop') return 'near';") >= 0, 'a CHOP tape caps at NEAR in trendmxRowTier');
   ok(src.indexOf('trendmxCostChipHtml(r, plan) + trendmxChopChipHtml(r)') >= 0, 'the chip rides the plan chip line on the card');

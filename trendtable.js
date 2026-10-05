@@ -20,8 +20,7 @@
       i += 1;
       step();
     }).catch(function (e) {
-      try { console.error(e); } catch (e2) {} }
-    });
+      try { console.error(e); } catch (e2) {} });
   }
   step();
 })();

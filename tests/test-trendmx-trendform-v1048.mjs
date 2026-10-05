@@ -36,7 +36,7 @@ function boot(extra){
   vm.createContext(ctx);
   for (const f of ['indicators.js', 'indicators2.js', 'hg-gates.js', 'hg-perfect-setup.js',
                    'hg-setup-core.js', 'crypto-position-risk.js', 'cryptogates.js',
-                   'plans.js', 'setup-ui.js', 'trendtable.js'])
+                   'plans.js', 'setup-ui.js', 'trendtable.combined.js'])
     vm.runInContext(read(f), ctx, { filename: f });
   return ctx;
 }
@@ -115,7 +115,7 @@ console.log('== the levels: minted plan or the honest DRAFT ladder ==');
 
 console.log('== the scan merges ALL CoinDCX futures + wiring pins ==');
 {
-  const src = read('trendtable.js');
+  const src = read('trendtable.combined.js');
   ok(src.indexOf('minTurnover: 0, includeUnknown: true') >= 0, 'the scan re-reads the universe at floor 0');
   /* hg-v1074: the floor-0 pass reads the RAW CoinDCX leg, not the deduped
      merged universe (which tags one 'exchange' per base and hides CoinDCX

@@ -214,7 +214,7 @@ console.log('== 5) every crypto record map forwards the mark it had in hand (tex
   T('engine.js', /fwd\.push\(\{ sym: s0\.sym, dir: s0\.dir, entry: e0, stop: st0, t1: t10,\s*mark: \(svBar\[i\] \|\| \{\}\)\.mark, barT: \(svBar\[i\] \|\| \{\}\)\.barT,/, 'and its record map forwards both from that array at the same index');
   T('dex-screener.js', /if \(gfn\('hgFwdLastBar'\)\)\{ var lbDex = W\.hgFwdLastBar\(f\.rows\); c\.mark = lbDex\.mark; c\.barT = lbDex\.barT; \}/, 'DEX SCREENER stamps each candidate off the series it was evaluated on');
   T('dex-screener.js', /t1: c\.plan && c\.plan\.t1,\s*mark: c\.mark, barT: c\.barT,/, 'and its record map forwards both');
-  T('trendtable.js', /mark: \(c\.plan && isFinite\(\+c\.plan\.mark\) && \+c\.plan\.mark > 0\) \? \+c\.plan\.mark : undefined,\s*barT: \(typeof W\.hgFwdLastBar === 'function'\) \? W\.hgFwdLastBar\(c\.row && c\.row\.rows4h\)\.barT : undefined,/, 'TRENDMX forwards the mark trendmxAttachMeta kept and the bar off the row\'s series');
+  T('trendtable.combined.js', /mark: \(c\.plan && isFinite\(\+c\.plan\.mark\) && \+c\.plan\.mark > 0\) \? \+c\.plan\.mark : undefined,\s*barT: \(typeof W\.hgFwdLastBar === 'function'\) \? W\.hgFwdLastBar\(c\.row && c\.row\.rows4h\)\.barT : undefined,/, 'TRENDMX forwards the mark trendmxAttachMeta kept and the bar off the row\'s series');
   T('pine.js', /mark: \(isFinite\(\+sg\.price\) && \+sg\.price > 0\) \? \+sg\.price : undefined,\s*barT: \(typeof W\.hgFwdLastBar === 'function'\) \? W\.hgFwdLastBar\(sg\.rows\)\.barT : undefined,/, 'PINE forwards the signal\'s own close and its rows\' last bar');
   T('pine-sub.js', /mark: \(isFinite\(\+sg\.price\) && \+sg\.price > 0\) \? \+sg\.price : undefined,\s*barT: \(typeof W\.hgFwdLastBar === 'function'\) \? W\.hgFwdLastBar\(sg\.rows\)\.barT : undefined,/, 'PINE sub-tabs likewise');
   T('super-best.js', /var lb = \(typeof W\.hgFwdLastBar === 'function'\) \? W\.hgFwdLastBar\(c\.rows\) : \{\};\s*return \{ sym: c\.sym, dir: c\.dir, entry: \+c\.entry, stop: \+c\.stop, t1: \+c\.t1,\s*mark: \(isFinite\(\+c\.mark\) && \+c\.mark > 0\) \? \+c\.mark : lb\.mark, barT: lb\.barT,/, 'SUPER BEST forwards the pick\'s own mark, else the last bar of its rows');
@@ -290,7 +290,7 @@ console.log('== 6) the census, derived by call shape: every record writer carrie
   }
   assert(writers.length >= 27, 'the census sees the record writers (' + writers.length + ')');
   assert(bare.length === 0, 'none records without a mark carrier' + (bare.length ? ' -- BARE: ' + bare.join(', ') : ''));
-  for (const need of ['omniroute.js', 'omnipresent.js', 'squeeze.js', 'oiflow.js', 'edge.js', 'reversalsniper.js', 'brain.js', 'engine.js', 'dex-screener.js', 'trendtable.js', 'pine.js', 'pine-sub.js', 'contract-report.js', 'index.html', 'cryptoscan.js', 'cryptoverse.js', 'ninetypercent.js', 'super-best.js', 'super-sniper.js', 'omnibtc.js'])
+  for (const need of ['omniroute.js', 'omnipresent.js', 'squeeze.js', 'oiflow.js', 'edge.js', 'reversalsniper.js', 'brain.js', 'engine.js', 'dex-screener.js', 'trendtable.combined.js', 'pine.js', 'pine-sub.js', 'contract-report.js', 'index.html', 'cryptoscan.js', 'cryptoverse.js', 'ninetypercent.js', 'super-best.js', 'super-sniper.js', 'omnibtc.js'])
     assert(writers.some(w => w.startsWith(need + ' ')), 'the census counts ' + need);
 }
 

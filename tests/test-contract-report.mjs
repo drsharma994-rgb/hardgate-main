@@ -33,7 +33,7 @@ let passed = 0;
 const ok = (cond, label) => { if (!cond) throw new Error('FAIL: ' + label); passed++; console.log('  ok —', label); };
 
 const ENGINES = ['indicators.js', 'indicators2.js', 'plans.js', 'structure-levels.js', 'best-levels.js',
-                 'formation.js', 'cryptogates.js', 'edge.js', 'squeeze.js', 'meanrev.js', 'trendtable.js',
+                 'formation.js', 'cryptogates.js', 'edge.js', 'squeeze.js', 'meanrev.js', 'trendtable.combined.js',
                  'liqs.js', 'reversalsniper.js', 'pinemath.js', 'pine-sub.js'];
 
 function boot(files){

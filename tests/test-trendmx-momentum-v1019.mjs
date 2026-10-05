@@ -36,7 +36,7 @@ let pass = 0, fail = 0;
 function assert(c, m){ if (c){ pass++; console.log('  ok   - ' + m); } else { fail++; console.error('  FAIL - ' + m); } }
 const text = h => String(h || '').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
 
-const FILES = ['indicators.js', 'indicators2.js', 'hg-setup-core.js', 'desk-scan-universe.js', 'omniroute.js', 'trendtable.js'];
+const FILES = ['indicators.js', 'indicators2.js', 'hg-setup-core.js', 'desk-scan-universe.js', 'omniroute.js', 'trendtable.combined.js'];
 function boot(){
   const ctx = { console: { log(){}, warn(){}, error(){}, info(){}, debug(){} },
     Math, Date, Number, String, Object, Array, JSON, Error, TypeError, Promise, RegExp,
@@ -103,7 +103,7 @@ console.log('== 1) trendScore carries the witness — the composite is byte-unch
   const short = w.trendScore(UP1.slice(-10), UP4);
   assert(short.rsi !== short.rsi || !isFinite(short.rsi),
          'a tape too short for RSI(14) stamps NaN — the unreadable third state');
-  const src = fs.readFileSync(path.join(ROOT, 'trendtable.js'), 'utf8');
+  const src = fs.readFileSync(path.join(ROOT, 'trendtable.combined.js'), 'utf8');
   const sumLine = src.match(/out\.score = out\.comps[^;]+;/);
   assert(sumLine && !/rsi/i.test(sumLine[0]),
          'the score sum in the source names no rsi — the re-scale the ledger cannot absorb never happened');
@@ -195,7 +195,7 @@ console.log('== 5) the chips name the verdict; the abstain states stay silent ==
   const withRow = mkRow(w, 'CRDUSDT', 'long', { gate: gate7() });
   const deskCard = w.trendmxGateCleanDeskHTML([{ row: withRow, plan: w.trendmxPlan(Object.assign({}, withRow, { dir: 'long' })), dir: 'long', stack: null }], 0, { flow: 0, mom: 0 });
   assert(/MOMENTUM WITH IT/.test(deskCard), 'the desk card carries the witness chip beside the flow chip');
-  const src5 = fs.readFileSync(path.join(ROOT, 'trendtable.js'), 'utf8');
+  const src5 = fs.readFileSync(path.join(ROOT, 'trendtable.combined.js'), 'utf8');
   /* hg-v1020 repoint: the chain gained the volume witness between momentum
      and funding — the momentum witness still rides the same seam, one chip
      earlier in the order. */
@@ -254,7 +254,7 @@ console.log('== 7) the desk verdicts name each witness that fired (legacy text i
 
 console.log('== 8) the source says what shipped; no threshold moved ==');
 {
-  const src = fs.readFileSync(path.join(ROOT, 'trendtable.js'), 'utf8');
+  const src = fs.readFileSync(path.join(ROOT, 'trendtable.combined.js'), 'utf8');
   assert(/var TM_MOM_BULL_FLOOR = 40, TM_MOM_BEAR_CEIL = 60, TM_MOM_MID = 50;/.test(src),
          'the witness bands are the stated priors: bull floor 40, bear ceiling 60, midline 50');
   assert(/rsi: ts\.rsi/.test(src), 'the scan row carries the rsi stamp off trendScore — chips never recompute');

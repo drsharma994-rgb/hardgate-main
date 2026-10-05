@@ -74,7 +74,7 @@ console.log('\n== all four callers already handle a declined formation ==');
     'best-levels.js': /if \(fm && fm\.ok && fm\.hit && blValidPlan/,
     'gold-best-levels.js': /if \(!gfm \|\| !gfm\.ok \|\| !gfm\.hit\)/,
     'squeeze.js': /if \(fm && fm\.ok && fm\.hit && sqValidSetup/,
-    'trendtable.js': /if \(fm && fm\.ok && fm\.hit && tmValidSetup/
+    'trendtable.combined.js': /if \(fm && fm\.ok && fm\.hit && tmValidSetup/
   };
   for (const [f, re] of Object.entries(callers)){
     ok(re.test(fs.readFileSync(path.join(ROOT, f), 'utf8')), f + ' guards on fm.ok before using the plan');

@@ -38,7 +38,7 @@ let pass = 0, fail = 0;
 function assert(c, m){ if (c){ pass++; console.log('  ok   - ' + m); } else { fail++; console.error('  FAIL - ' + m); } }
 const text = h => String(h || '').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
 
-const FILES = ['indicators.js', 'indicators2.js', 'hg-setup-core.js', 'desk-scan-universe.js', 'omniroute.js', 'trendtable.js'];
+const FILES = ['indicators.js', 'indicators2.js', 'hg-setup-core.js', 'desk-scan-universe.js', 'omniroute.js', 'trendtable.combined.js'];
 function boot(){
   const ctx = { console: { log(){}, warn(){}, error(){}, info(){}, debug(){} },
     Math, Date, Number, String, Object, Array, JSON, Error, TypeError, Promise, RegExp,
@@ -237,7 +237,7 @@ console.log('== 7) the paint routing fills both containers; the venue filter app
 
 console.log('== 8) the mixed board is gone; the desks stand in order ==');
 {
-  const src = fs.readFileSync(path.join(ROOT, 'trendtable.js'), 'utf8');
+  const src = fs.readFileSync(path.join(ROOT, 'trendtable.combined.js'), 'utf8');
   assert(typeof boot().trendmxLimitBoardHTML === 'undefined' && !/function trendmxLimitBoardHTML/.test(src),
          'trendmxLimitBoardHTML is GONE — the mixed bag does not come back silently');
   assert(!/data-r="limit"/.test(src), 'the old container is gone from the mount skeleton');
