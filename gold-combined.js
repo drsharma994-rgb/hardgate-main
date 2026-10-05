@@ -1,13 +1,13 @@
-/* HARDGATE — gold-combined.js (hg-v1107)
+/* HARDGATE — gold-combined.js (hg-v1108)
    One setup per gold tab. The v1105 playbook, plus the next layer:
    USDJPY as an inverse filter, the gold/silver ratio, the 2s10s curve,
    session volume profile, Heikin Ashi, Renko and KAMA. GLD tonnage is
-   unread — there is no keyless holdings feed. v1107 adds the paper-versus-physical layer that can actually be read: COMEX minus spot, and the GLD/GDX spread. Skew, lease rates, Swiss customs and the Shanghai premium stay unread. */
+   unread — there is no keyless holdings feed. v1107 adds the paper-versus-physical layer that can actually be read: COMEX minus spot, and the GLD/GDX spread. Skew, lease rates, Swiss customs and the Shanghai premium stay unread. v1108 adds the gold futures curve, the gold/oil ratio, and a wider second target when a safe-haven headline is already on the tape. Dealer gamma, COMEX vault stocks, the SOFR pair and BRICS settlement stay unread. */
 (function(){
 'use strict';
 var W = (typeof window !== 'undefined') ? window : globalThis;
-if (W.__hgGoldCombinedBoot === 1107) return;
-W.__hgGoldCombinedBoot = 1107;
+if (W.__hgGoldCombinedBoot === 1108) return;
+W.__hgGoldCombinedBoot = 1108;
 
 var TABS = {
   goldscalp:     { name: 'GOLD SCALP', tf: '15m', atrMult: 1.2, r1: 1.2, r2: 2 },
@@ -412,7 +412,7 @@ function newsOf(news, risk){
   return { points: 'none', why: 'calendar is clear — news does not pick the side' };
 }
 
-function gate(spec, play, fund, sent, macro, news, inter, inst){
+function gate(spec, play, fund, sent, macro, news, inter, inst, term){
   if (play.side !== 'long' && play.side !== 'short') return { side: 'none', why: play.why, kind: '' };
   if (fund.block || news.block) return { side: 'none', why: fund.block ? fund.why : news.why, kind: '' };
   if (news.haven && play.side === 'short') return { side: 'none', why: 'safe-haven flow blocks the short', kind: '' };
@@ -422,6 +422,7 @@ function gate(spec, play, fund, sent, macro, news, inter, inst){
   if (inter && play.side === 'short' && inter.opposeShort) return { side: 'none', why: 'USDJPY is falling — the inverse filter blocks the short', kind: '' };
   if (inst && play.side === 'long' && inst.blockLong) return { side: 'none', why: inst.longWhy, kind: '' };
   if (inst && play.side === 'short' && inst.blockShort) return { side: 'none', why: inst.shortWhy, kind: '' };
+  if (term && play.side === 'short' && term.blockShort) return { side: 'none', why: term.shortWhy, kind: '' };
   if ((fund.points === 'long' || fund.points === 'short') && fund.points !== play.side) return { side: 'none', why: 'fundamentals point ' + word(fund.points), kind: '' };
   if ((sent.points === 'long' || sent.points === 'short') && sent.points !== play.side) return { side: 'none', why: 'COT points ' + word(sent.points), kind: '' };
   if ((news.points === 'long' || news.points === 'short') && news.points !== play.side) return { side: 'none', why: 'news points ' + word(news.points), kind: '' };
@@ -430,10 +431,11 @@ function gate(spec, play, fund, sent, macro, news, inter, inst){
   if (inter && play.side === 'long' && inter.curve && inter.curve.state === 'STEEPENING') extra += ' · 2s10s is steepening';
   if (inter && inter.usd && ((play.side === 'long' && inter.usd.trend === 'FALLING') || (play.side === 'short' && inter.usd.trend === 'RISING'))) extra += ' · USDJPY confirms';
   if (inst && inst.confirm && ((play.side === 'long' && inst.points !== 'short') || (play.side === 'short' && inst.points !== 'long'))) extra += ' · ' + inst.confirm;
+  if (term && play.side === 'long' && term.confirm) extra += ' · ' + term.confirm;
   return { side: play.side, why: play.why + extra, kind: play.kind };
 }
 
-function levels(spec, play){
+function levels(spec, play, gpr){
   var tape = play.tape;
   if (!tape || !(tape.px > 0) || !(tape.atr > 0)) return null;
   if (play.side !== 'long' && play.side !== 'short') return null;
@@ -445,9 +447,10 @@ function levels(spec, play){
   }
   var entry = tape.px;
   var stop = play.side === 'long' ? entry - risk : entry + risk;
+  var r2 = spec.r2 + ((gpr && play.side === 'long') ? 0.5 : 0);
   var t1 = play.side === 'long' ? entry + spec.r1 * risk : entry - spec.r1 * risk;
-  var t2 = play.side === 'long' ? entry + spec.r2 * risk : entry - spec.r2 * risk;
-  return { entry: entry, stop: stop, t1: t1, t2: t2 };
+  var t2 = play.side === 'long' ? entry + r2 * risk : entry - spec.r2 * risk;
+  return { entry: entry, stop: stop, t1: t1, t2: t2, r2: play.side === 'long' ? r2 : spec.r2, widened: !!(gpr && play.side === 'long') };
 }
 
 function card(spec, call, lv){
@@ -460,7 +463,7 @@ function card(spec, call, lv){
   return '<div class="note"><b>' + esc(spec.name) + ' SETUP · ' + word(call.side) + '</b> · ' + esc(call.kind)
     + '<br>' + esc(call.why)
     + '<br>Entry ' + px(lv.entry) + ' · Stop ' + px(lv.stop)
-    + ' · T1 ' + px(lv.t1) + ' (' + spec.r1 + 'R) · T2 ' + px(lv.t2) + ' (' + spec.r2 + 'R)'
+    + ' · T1 ' + px(lv.t1) + ' (' + spec.r1 + 'R) · T2 ' + px(lv.t2) + ' (' + lv.r2 + 'R)' + (lv.widened ? ' · T2 widened — geopolitical headlines' : '')
     + '<br><span class="dim">IUX spot, ' + esc(spec.tf) + ' close. ATR stop. Not a fill on your bid.</span></div>';
 }
 
@@ -488,13 +491,13 @@ function noiseLine(spec, play){
 function htmlFor(spec, stacks, shared){
   var play = playOf(spec, stacks, shared.season);
   var micro = microOf(spec, play);
-  var call = gate(spec, play, shared.fund, shared.sent, shared.macro, shared.news, shared.inter, shared.inst);
-  var lv = levels(spec, call.side === play.side ? play : { side: 'none' });
+  var call = gate(spec, play, shared.fund, shared.sent, shared.macro, shared.news, shared.inter, shared.inst, shared.term);
+  var lv = levels(spec, call.side === play.side ? play : { side: 'none' }, !!(shared.news && shared.news.haven));
   var prof = profileLine(play);
   var noise = noiseLine(spec, play);
   var seasonSide = shared.season && shared.season.mode === 'q1' ? 'long' : 'none';
   var h = '<div class="note"><b>GOLD PLAYBOOK</b> · ' + esc(spec.name)
-    + '<br><span class="dim">Daily structure, sweep or value-area fade or HTF continuation, Heikin Ashi, Renko, KAMA, USDJPY, gold/silver, 2s10s, futures basis, GLD/GDX. Skew, lease rates, Swiss flows and the Shanghai premium are unread. A split is no setup.</span></div>';
+    + '<br><span class="dim">Daily structure, sweep or value-area fade or HTF continuation, Heikin Ashi, Renko, KAMA, USDJPY, gold/silver, 2s10s, futures basis, GLD/GDX, the gold curve and gold/oil. Dealer gamma and COMEX vault stocks are unread. A split is no setup.</span></div>';
   h += card(spec, call, lv);
   h += '<div class="cr-ind-wrap">';
   h += '<div class="kv"><span class="k">Technical</span><span class="v">' + arrow(play.side, play.why) + '</span></div>';
@@ -502,6 +505,7 @@ function htmlFor(spec, stacks, shared){
   h += '<div class="kv"><span class="k">Noise</span><span class="v">' + arrow(noise.points, noise.why) + '</span></div>';
   h += '<div class="kv"><span class="k">Intermarket</span><span class="v">' + arrow(shared.inter.points, shared.inter.why) + '</span></div>';
   h += '<div class="kv"><span class="k">Institutional</span><span class="v">' + arrow(shared.inst.points, shared.inst.why) + '</span></div>';
+  h += '<div class="kv"><span class="k">Curve</span><span class="v">' + arrow(shared.term.points, shared.term.why) + '</span></div>';
   h += '<div class="kv"><span class="k">Fundamental</span><span class="v">' + arrow(shared.fund.points, shared.fund.why) + '</span></div>';
   h += '<div class="kv"><span class="k">Sentiment</span><span class="v">' + arrow(shared.sent.points, shared.sent.why) + '</span></div>';
   h += '<div class="kv"><span class="k">Macro</span><span class="v">' + arrow(shared.macro.points, shared.macro.why) + '</span></div>';
@@ -792,6 +796,111 @@ function institutional(basis, pair, cross){
   return { points: points, why: bits.join(' · '), blockLong: blockLong, blockShort: blockShort, longWhy: longWhy, shortWhy: shortWhy, confirm: confirm };
 }
 
+
+function goldCurveSymbols(date){
+  var months = [2, 4, 6, 8, 10, 12];
+  var letters = { 2: 'G', 4: 'J', 6: 'M', 8: 'Q', 10: 'V', 12: 'Z' };
+  var y = date.getUTCFullYear();
+  var m = date.getUTCMonth() + 1;
+  var list = [], yy, i, mon;
+  for (yy = y; yy <= y + 2 && list.length < 6; yy++){
+    for (i = 0; i < months.length && list.length < 6; i++){
+      mon = months[i];
+      if (yy === y && mon <= m) continue;
+      list.push('GC' + letters[mon] + String(yy).slice(2) + '.CMX');
+    }
+  }
+  return { front: list[0] || null, deferred: list[3] || null };
+}
+function alignedDiff(a, b){
+  if (!a || !b) return [];
+  var n = Math.min(a.length, b.length), s = [], i, x, y;
+  for (i = 0; i < n; i++){
+    x = +a[a.length - n + i];
+    y = +b[b.length - n + i];
+    if (x > 0 && y > 0) s.push(x - y);
+  }
+  return s;
+}
+function zLast(vals){
+  if (!vals || vals.length < 40) return null;
+  var i, mean = 0;
+  for (i = 0; i < vals.length; i++) mean += vals[i];
+  mean /= vals.length;
+  var sd = 0;
+  for (i = 0; i < vals.length; i++) sd += (vals[i] - mean) * (vals[i] - mean);
+  sd = Math.sqrt(sd / (vals.length - 1));
+  if (!(sd > 0)) return null;
+  return { z: (vals[vals.length - 1] - mean) / sd, last: vals[vals.length - 1] };
+}
+function termRead(cal, oil){
+  var bits = [
+    'dealer gamma unread — the GLD options chain is blocked',
+    'COMEX registered stock unread',
+    'SOFR versus the gold calendar unread',
+    'BRICS settlement unread'
+  ];
+  var blockShort = false, shortWhy = '', confirm = [];
+  if (!cal) bits.push('gold calendar unread');
+  else {
+    var txt = cal.front.replace('.CMX', '') + ' minus ' + cal.deferred.replace('.CMX', '') + ' ' + (cal.spread >= 0 ? '+' : '') + cal.spread.toFixed(1);
+    if (cal.spread > 0){
+      blockShort = true;
+      shortWhy = 'the gold curve is backwardated — that blocks the short';
+      confirm.push('curve backwardation');
+      txt += ' backwardation';
+    } else {
+      txt += ' contango';
+      if (cal.chg >= 8){
+        confirm.push('front month tightening');
+        txt += ', tightened ' + cal.chg.toFixed(1) + ' over 20 sessions';
+      } else txt += ', 20-session change ' + (cal.chg >= 0 ? '+' : '') + cal.chg.toFixed(1);
+    }
+    bits.push(txt);
+  }
+  if (!oil) bits.push('gold/oil unread');
+  else {
+    var ot = 'gold/oil ' + oil.last.toFixed(1) + ' · z ' + oil.z.toFixed(2);
+    if (oil.z >= 2){ confirm.push('gold/oil breakout'); ot += ' — above its 6-month band'; }
+    else ot += ' — inside its 6-month band';
+    bits.push(ot);
+  }
+  return {
+    points: blockShort ? 'long' : 'none',
+    why: bits.join(' · '),
+    blockShort: blockShort,
+    shortWhy: shortWhy,
+    confirm: confirm.join(', '),
+    spread: cal ? cal.spread : 0
+  };
+}
+async function loadTerm(){
+  var sym = goldCurveSymbols(new Date());
+  if (!sym.front || !sym.deferred) return termRead(null, null);
+  var front = null, back = null, gold = null, oil = null;
+  try{ front = await yahooCloses(sym.front); }catch(e1){ front = null; }
+  try{ back = await yahooCloses(sym.deferred); }catch(e2){ back = null; }
+  try{ gold = await yahooCloses('GC=F'); }catch(e3){ gold = null; }
+  try{ oil = await yahooCloses('CL=F'); }catch(e4){ oil = null; }
+  var series = alignedDiff(front, back);
+  var cal = null;
+  if (series.length >= 25){
+    var last = series[series.length - 1];
+    var prev = series[Math.max(0, series.length - 21)];
+    cal = { front: sym.front, deferred: sym.deferred, spread: last, chg: last - prev };
+  }
+  var ratios = [];
+  if (gold && oil){
+    var n = Math.min(gold.length, oil.length), i, g, o;
+    for (i = 0; i < n; i++){
+      g = +gold[gold.length - n + i];
+      o = +oil[oil.length - n + i];
+      if (g > 0 && o > 0) ratios.push(g / o);
+    }
+  }
+  return termRead(cal, ratios.length ? zLast(ratios) : null);
+}
+
 async function refresh(){
   if (busy) return;
   busy = true;
@@ -833,6 +942,9 @@ async function refresh(){
     var inst = null;
     try{ inst = await loadInstitutional(spot, usd); }catch(eI){ inst = null; }
     if (!inst) inst = institutional(null, null, null);
+    var term = null;
+    try{ term = await loadTerm(); }catch(eT){ term = null; }
+    if (!term) term = termRead(null, null);
     var shared = {
       fund: fund,
       sent: { points: fund.cot, why: fund.cotWhy },
@@ -840,9 +952,10 @@ async function refresh(){
       news: newsOf(news, risk),
       inter: inter,
       season: season,
-      inst: inst
+      inst: inst,
+      term: term
     };
-    var sig = [shared.fund.points, shared.sent.points, shared.macro.points, shared.news.points, inter.points, season.mode, inst.points, inst.why];
+    var sig = [shared.fund.points, shared.sent.points, shared.macro.points, shared.news.points, inter.points, season.mode, inst.points, inst.why, term.points, String(Math.round((term.spread || 0) * 10))];
     var tf;
     for (tf in stacks){
       if (!stacks[tf]) continue;
