@@ -2,11 +2,12 @@
    HARDGATE — setup-confirm.js
    SETUP CONFIRM tab: cross-desk confirmation before you size a trade.
 
-   Reads published scan snapshots (SWING, SCALP, EDGE, BEST, SMART $, SQUEEZE,
-   OI FLOW, BRAIN, DEX SCREENER, OMNIROUTE) and only surfaces setups where
-   multiple independent desks agree on the same symbol + direction with real
-   levels. Hard vetoes (desk suppress, post-gate, macro, direction conflict,
-   overextension) block the ticket. Never invents levels.
+   Reads published scan snapshots from crypto and gold desks and only surfaces
+   setups where multiple fresh, independent desks agree on the same symbol +
+   direction with real levels. Stale rows remain visible as context but cannot
+   vote, supply a leader, or block a fresh direction. Hard vetoes (desk
+   suppress, post-gate, macro, direction conflict, overextension) block the
+   ticket. Never invents levels or fetches market data of its own.
    ========================================================================= */
 (function(){
 'use strict';
@@ -21,6 +22,7 @@ var MIN_CONFIRM_SCORE = 8;
 var CHASE_CHG24 = 15;
 var SHOW_MAX = 18;
 var STRUCTURAL_IDS = { swing: 1, scalp: 1, edge: 1, best: 1 };
+var GOLD_STRUCTURAL_IDS = { goldswing: 1, goldscalp: 1, golddirection: 1 };
 
 var __cf = { busy: false, ran: false, ui: null, snap: null, lastCardsHtml: '' };
 
@@ -35,12 +37,27 @@ function esc(s){
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+function cfIsGold(sym){
+  try{
+    if (gfn('hgIsGoldLaneSym')) return W.hgIsGoldLaneSym(sym) === true;
+  }catch(e){}
+  return /(XAU|PAXG|GOLD)/i.test(String(sym || ''));
+}
+
+function cfSymbolKey(sym){
+  var raw = String(sym || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  /* Keep gold instruments distinct: XAUUSD, XAUUSDT, XAUTUSD and PAXGUSDT
+     have different venue bases and may not share the same ticket levels. */
+  if (cfIsGold(sym)) return 'gold:' + raw;
+  var base = gfn('hgCryptoBase') ? W.hgCryptoBase(sym) : raw;
+  return 'crypto:' + String(base || raw);
+}
+
 function cfKey(sym, dir){
-  var base = gfn('hgCryptoBase') ? W.hgCryptoBase(sym) : String(sym || '').toUpperCase();
   dir = String(dir || '').toLowerCase();
   if (dir === 'buy' || dir === 'l') dir = 'long';
   if (dir === 'sell' || dir === 's') dir = 'short';
-  return base + '|' + dir;
+  return cfSymbolKey(sym) + '|' + dir;
 }
 
 function cfNormRow(raw, meta){
@@ -53,6 +70,7 @@ function cfNormRow(raw, meta){
   row.sourceAt = meta.at || 0;
   row.sourceStale = !!meta.stale;
   row.brainTier = meta.brainTier || '';
+  row.asset = meta.asset || (cfIsGold(row.sym) ? 'gold' : 'crypto');
   if (meta.clean) row.clean = true;
   if (meta.near) { row.near = true; row.clean = false; }
   if (meta.forming) { row.forming = true; row.clean = false; row.near = false; }
@@ -82,11 +100,10 @@ function cfNormRow(raw, meta){
       W.hgSmcEnrich(row, { rows: smcRows, tab: 'SETUP CONFIRM' });
     }
   }catch(eSmc){}
-  /* v731: solidity was stamped above by hgNormalizeSetupRow, before row.smc
-     existed, so it does not account for the grade. Restamp. Safe to repeat:
-     hgSetupSolidityScore recomputes from its base every call, never accumulates. */
+  /* Reapply solidity for the asset lane after normalization. The shared row
+     normalizer defaults to crypto; a gold ticket must use the gold profile. */
   try{
-    if (row.smc && gfn('hgSetupSolidityApply')) W.hgSetupSolidityApply(row, { asset: 'crypto' });
+    if (gfn('hgSetupSolidityApply')) W.hgSetupSolidityApply(row, { asset: row.asset });
   }catch(eSol){}
   return row;
 }
@@ -225,8 +242,103 @@ var CF_SOURCES = [
       }
       return { at: s.at, rows: rows.filter(Boolean) };
     }
+  },
+  /* Gold desks publish a full scan snapshot. Harvest only their already
+     qualified leader/ticket; do not trigger a second market-data request. */
+  { id: 'goldswing', label: 'GOLD SWING', weight: 3, freshMs: 25 * 60 * 1000,
+    read: function(){ return cfGoldLedger('goldswingScan', 'goldswing', 'GOLD SWING'); }
+  },
+  { id: 'goldscalp', label: 'GOLD SCALP', weight: 2.5, freshMs: 25 * 60 * 1000,
+    read: function(){ return cfGoldLedger('goldscalpScan', 'goldscalp', 'GOLD SCALP'); }
+  },
+  { id: 'golddirection', label: 'GOLD DIRECTION', weight: 3, freshMs: 35 * 60 * 1000,
+    read: function(){
+      var s = gfn('goldDirectionScan') ? W.goldDirectionScan() : null;
+      if (!s || s.fundBlackout) return { at: s && s.at, rows: [] };
+      var rows = [], hs = ['scalp', 'swing'], i, h, pick;
+      for (i = 0; i < hs.length; i++){
+        h = s[hs[i]];
+        pick = h && h.crownedProven && h.pick;
+        if (!pick || !pick.provenBy) continue;
+        rows.push(cfNormRow(Object.assign({ sym: 'XAUUSD' }, pick), {
+          source: 'golddirection', label: 'GOLD DIRECTION', weight: 3,
+          at: s.at, clean: true, asset: 'gold'
+        }));
+      }
+      return { at: s.at, rows: rows.filter(Boolean) };
+    }
+  },
+  { id: 'goldultra', label: 'GOLD ULTRA', weight: 2.5, freshMs: 30 * 60 * 1000,
+    read: function(){
+      var s = gfn('goldUltraState') ? W.goldUltraState() : null;
+      var p = s && s.setups && s.setups.pick;
+      if (!s || s.fire !== true || s.recordOnly || !p) return { at: s && s.at, rows: [] };
+      var row = cfNormRow(Object.assign({ sym: 'XAUUSD' }, p), {
+        source: 'goldultra', label: 'GOLD ULTRA', weight: 2.5,
+        at: s.at, clean: true, asset: 'gold'
+      });
+      return { at: s.at, rows: row ? [row] : [] };
+    }
+  },
+  { id: 'omnigold1', label: 'OMNIGOLD 1', weight: 3, freshMs: 30 * 60 * 1000,
+    read: function(){
+      var sw = W.__hgOg1Last || null, sc = W.__hgOg1LastScalp || null;
+      var at = Math.max(fin(sw && sw.now) || 0, fin(sc && sc.now) || 0);
+      var runs = [{ horizon: 'SWING', r: sw }, { horizon: 'SCALP', r: sc }];
+      var rows = [], i, r, candidates, j, c;
+      for (i = 0; i < runs.length; i++){
+        r = runs[i].r;
+        var runAt = fin(r && r.now);
+        if (!(runAt > 0) || runAt > Date.now() + 5 * 60 * 1000
+            || Date.now() - runAt > 30 * 60 * 1000) continue;
+        if (!r || !r.ok || (r.sections && r.sections.s0 && !r.sections.s0.clear)) continue;
+        candidates = Array.isArray(r.candidates) ? r.candidates : [];
+        for (j = 0; j < candidates.length; j++){
+          c = candidates[j];
+          if (!c || c.demoted === true || (c.matrix && c.matrix.held)
+              || !(c.verdict && c.verdict.qualifies)) continue;
+          if (!c.gradeInfo && gfn('hgOg1Grade')) c.gradeInfo = W.hgOg1Grade(c);
+          if (!(c.gradeInfo && c.gradeInfo.tradeReady)) continue;
+          rows.push(cfNormRow(Object.assign({ sym: 'XAUUSD' }, c), {
+            source: 'omnigold1', label: 'OMNIGOLD 1 ' + runs[i].horizon,
+            weight: 3, at: runAt, clean: true, asset: 'gold'
+          }));
+        }
+      }
+      return { at: at, rows: rows.filter(Boolean) };
+    }
+  },
+  { id: 'omnigold', label: 'OMNIGOLD', weight: 3, freshMs: 35 * 60 * 1000,
+    read: function(){
+      var s = gfn('hgOgState') ? W.hgOgState() : null;
+      if (!s || !Array.isArray(s.rows)) return { at: s && s.at, rows: [] };
+      var rows = [], i, c;
+      for (i = 0; i < s.rows.length; i++){
+        c = s.rows[i];
+        if (!c || c.vetoed || c.demoted || !(c.grade && c.grade.ticket)
+            || (c.formation && c.formation.formed === false) || !c.plan) continue;
+        rows.push(cfNormRow(Object.assign({ sym: 'XAUUSD' }, c, c.plan), {
+          source: 'omnigold', label: 'OMNIGOLD', weight: 3,
+          at: s.at, clean: true, asset: 'gold'
+        }));
+      }
+      return { at: s.at, rows: rows.filter(Boolean) };
+    }
   }
 ];
+
+function cfGoldLedger(name, id, label){
+  var s = gfn(name) ? W[name]() : null;
+  if (!s || !Array.isArray(s.cands)) return { at: s && s.at, rows: [] };
+  var c = null, i;
+  for (i = 0; i < s.cands.length; i++){
+    if (s.cands[i] && s.cands[i].id === s.bestId){ c = s.cands[i]; break; }
+  }
+  if (!c || c.demoted || c.vetoed || c.dropped) return { at: s.at, rows: [] };
+  var row = cfNormRow(c, { source: id, label: label, weight: id === 'goldswing' ? 3 : 2.5,
+    at: s.at, clean: true, asset: 'gold' });
+  return { at: s.at, rows: row ? [row] : [] };
+}
 
 function hgCollect(snap){
   if (!snap) return [];
@@ -238,7 +350,9 @@ function cfHarvestAll(){
   for (i = 0; i < CF_SOURCES.length; i++){
     src = CF_SOURCES[i];
     try{ pack = src.read(); }catch(e){ pack = { at: 0, rows: [] }; }
-    stale = pack.at && (Date.now() - pack.at > (src.freshMs || FRESH_MS));
+    var at = fin(pack.at), age = Date.now() - at;
+    stale = !(at > 0) || at > Date.now() + 5 * 60 * 1000
+      || age > (src.freshMs || FRESH_MS);
     for (j = 0; j < (pack.rows || []).length; j++){
       row = pack.rows[j];
       if (!row || !row.sym || !row.dir) continue;
@@ -317,18 +431,23 @@ function cfGlobalBlockers(){
 function cfStructuralClean(hits){
   var n = 0, i;
   for (i = 0; i < hits.length; i++){
-    if (hits[i].clean && STRUCTURAL_IDS[hits[i].source]) n++;
+    if (!hits[i].sourceStale && hits[i].clean
+        && (hits[i].asset === 'gold' ? GOLD_STRUCTURAL_IDS[hits[i].source] : STRUCTURAL_IDS[hits[i].source])) n++;
   }
   return n;
 }
 
 function cfLeaderBlockers(group){
   var blockers = [], br, news, leader = group.leader;
-  br = cfBrainLookup(group.sym, group.dir);
+  var brain = gfn('__hgBrainLast') ? W.__hgBrainLast() : null;
+  var brainAge = brain ? Date.now() - fin(brain.at) : NaN;
+  var brainFresh = !!(brain && isFinite(brainAge) && brainAge >= 0
+    && brainAge <= 30 * 60 * 1000);
+  br = brainFresh ? cfBrainLookup(group.sym, group.dir) : null;
   if (br && String(br.tier || '').toUpperCase() === 'ASIDE'){
     blockers.push('BRAIN ASIDE on this symbol');
   }
-  var brOpp = cfBrainLookup(group.sym, group.dir === 'long' ? 'short' : 'long');
+  var brOpp = brainFresh ? cfBrainLookup(group.sym, group.dir === 'long' ? 'short' : 'long') : null;
   if (brOpp && (brOpp.tier === 'PRIME' || brOpp.tier === 'HIGH')){
     blockers.push('BRAIN favours the opposite side (' + String(brOpp.tier) + ')');
   }
@@ -350,15 +469,20 @@ function cfLeaderBlockers(group){
 function cfAssignTier(g){
   if (g.blockers.length) return 'BLOCKED';
   var sc = cfStructuralClean(g.hits);
-  var hasSwing = !!g.sources.swing;
-  var hasEdge = !!g.sources.edge;
-  var spine = !!(g.triple || (hasSwing && hasEdge) || sc >= 2);
+  var sw = g.sources.swing, ed = g.sources.edge;
+  var hasSwing = !!(sw && !sw.sourceStale && sw.clean);
+  var hasEdge = !!(ed && !ed.sourceStale && ed.clean);
+  var spine = g.asset === 'gold' ? sc >= 2 : !!(g.triple || (hasSwing && hasEdge) || sc >= 2);
   g.structuralClean = sc;
   g.needs = [];
   if (!spine){
-    g.needs.push('SWING+EDGE both present, TRIPLE STACK, or 2 structural CLEAN (swing/scalp/edge/best)');
+    g.needs.push(g.asset === 'gold'
+      ? '2 structural CLEAN (GOLD SWING / GOLD SCALP / GOLD DIRECTION)'
+      : 'SWING+EDGE both present, TRIPLE STACK, or 2 structural CLEAN (swing/scalp/edge/best)');
   }
-  if (sc < 1) g.needs.push('at least 1 structural desk CLEAN (swing / scalp / edge / best)');
+  if (sc < (g.asset === 'gold' ? 2 : 1)) g.needs.push(g.asset === 'gold'
+    ? '2 structural desk CLEAN (GOLD SWING / GOLD SCALP / GOLD DIRECTION)'
+    : 'at least 1 structural desk CLEAN (swing / scalp / edge / best)');
   if (g.sourceCount < MIN_CONFIRM_SOURCES) g.needs.push(MIN_CONFIRM_SOURCES + '+ independent desks');
   if (g.cleanCount < MIN_CONFIRM_CLEAN) g.needs.push(MIN_CONFIRM_CLEAN + '+ CLEAN tickets');
   if (g.score < MIN_CONFIRM_SCORE) g.needs.push('score ≥ ' + MIN_CONFIRM_SCORE);
@@ -388,6 +512,7 @@ function cfHardBlockers(group){
   var blockers = [], i, r, dirs = {}, cleanDirs = {};
   for (i = 0; i < group.hits.length; i++){
     r = group.hits[i];
+    if (r.sourceStale) continue;
     if (r.deskEdgeAction === 'suppress'){
       blockers.push('desk-edge suppress on ' + (r.sourceLabel || r.source));
       break;
@@ -402,7 +527,7 @@ function cfHardBlockers(group){
   if (dirs.long && dirs.short){
     blockers.push('direction conflict — desks disagree LONG vs SHORT');
   }
-  if (gfn('hgMacroAllowsCrypto')){
+  if (group.asset !== 'gold' && gfn('hgMacroAllowsCrypto')){
     try{
       var macro = W.hgMacroAllowsCrypto(group.sym, group.dir);
       if (macro && macro.allow === false && macro.reason) blockers.push(macro.reason);
@@ -432,7 +557,7 @@ function cfHardBlockers(group){
 function cfApplySymConflicts(groups){
   var bySym = {}, base, list, i, g, hasLong, hasShort;
   for (i = 0; i < groups.length; i++){
-    base = gfn('hgCryptoBase') ? W.hgCryptoBase(groups[i].sym) : groups[i].sym;
+    base = cfSymbolKey(groups[i].sym);
     if (!bySym[base]) bySym[base] = [];
     bySym[base].push(groups[i]);
   }
@@ -458,16 +583,17 @@ function cfApplySymConflicts(groups){
 }
 
 function cfPickLeader(hits){
-  var clean = [], near = [], i;
+  var clean = [], near = [], stale = [], i;
   for (i = 0; i < hits.length; i++){
-    if (hits[i].clean) clean.push(hits[i]);
+    if (hits[i].sourceStale) stale.push(hits[i]);
+    else if (hits[i].clean) clean.push(hits[i]);
     else if (hits[i].near || hits[i].nearClean) near.push(hits[i]);
   }
   if (gfn('hgPickMostProbable')){
     var pick = W.hgPickMostProbable(clean, near, hits[0] && hits[0].dir, null);
     if (pick && pick.row) return pick.row;
   }
-  return clean[0] || near[0] || hits[0] || null;
+  return clean[0] || near[0] || stale[0] || hits[0] || null;
 }
 
 function cfAggregate(bag){
@@ -477,7 +603,7 @@ function cfAggregate(bag){
     key = cfKey(row.sym, row.dir);
     if (!map[key]){
       map[key] = {
-        sym: row.sym, dir: row.dir, key: key,
+        sym: row.sym, dir: row.dir, asset: row.asset || (cfIsGold(row.sym) ? 'gold' : 'crypto'), key: key,
         hits: [], sources: {}, score: 0, cleanCount: 0, sourceCount: 0
       };
     }
@@ -485,23 +611,28 @@ function cfAggregate(bag){
     if (g.sources[row.source]) continue;
     g.sources[row.source] = row;
     g.hits.push(row);
-    g.score += cfScoreHit(row);
-    if (row.clean) g.cleanCount++;
-    g.sourceCount++;
+    if (!row.sourceStale){
+      g.score += cfScoreHit(row);
+      if (row.clean) g.cleanCount++;
+      g.sourceCount++;
+    }
   }
   var out = [], k, globalBlock = cfGlobalBlockers();
   for (k in map){
     if (!Object.prototype.hasOwnProperty.call(map, k)) continue;
     g = map[k];
     g.blockers = cfHardBlockers(g).concat(globalBlock);
-    g.triple = gfn('hgTripleStackMatch') ? W.hgTripleStackMatch(g.sym, g.dir) : null;
+    var tripleInputsFresh = g.asset !== 'gold' && g.sources.swing && g.sources.edge && g.sources.brain
+      && !g.sources.swing.sourceStale && !g.sources.edge.sourceStale && !g.sources.brain.sourceStale
+      && g.sources.swing.clean && g.sources.edge.clean && g.sources.brain.clean;
+    g.triple = tripleInputsFresh && gfn('hgTripleStackMatch') ? W.hgTripleStackMatch(g.sym, g.dir) : null;
     if (g.triple) g.score += 2;
     g.leader = cfPickLeader(g.hits);
     g.blockers = g.blockers.concat(cfLeaderBlockers(g));
     g.tier = cfAssignTier(g);
     g.sourceList = Object.keys(g.sources).map(function(id){
       var h = g.sources[id];
-      return (h.sourceLabel || id) + (h.clean ? ' CLEAN' : (h.near ? ' NEAR' : ' watch'));
+      return (h.sourceLabel || id) + (h.sourceStale ? ' STALE' : (h.clean ? ' CLEAN' : (h.near ? ' NEAR' : ' watch')));
     });
     out.push(g);
   }
@@ -589,7 +720,10 @@ function cfCardHtml(g){
       scanner: 'setupconfirm', strategy: 'multi-desk confirm', tier: 'clean', confirmed: true
     }) + '</div>';
   } else if (g.tier !== 'PRIME' && g.tier !== 'CONFIRMED'){
-    h += '<div class="note" style="margin-top:6px">Standing aside — structural spine (SWING+EDGE / TRIPLE STACK / 2 structural CLEAN) '
+    var spineText = g.asset === 'gold'
+      ? '2 structural CLEAN (GOLD SWING / GOLD SCALP / GOLD DIRECTION)'
+      : 'SWING+EDGE / TRIPLE STACK / 2 structural CLEAN';
+    h += '<div class="note" style="margin-top:6px">Standing aside — structural spine (' + esc(spineText) + ') '
       + 'plus ' + MIN_CONFIRM_SOURCES + ' desks, ' + MIN_CONFIRM_CLEAN + ' CLEAN, score ≥ '
       + MIN_CONFIRM_SCORE + ' required before handoff.</div>';
   }
@@ -643,7 +777,7 @@ async function cfRunScan(ui, opts){
     if (!show.length) show = groups.slice(0, SHOW_MAX);
     var html = '';
     if (!groups.length){
-      html = '<div class="empty">No desk snapshots yet — press <b>WARM DESKS</b> or run SWING / EDGE / BRAIN scans first.</div>';
+      html = '<div class="empty">No levelled desk snapshots yet — run the relevant specialist scans, then confirm from their latest results.</div>';
     } else {
       for (var i = 0; i < show.length; i++) html += cfCardHtml(show[i]);
     }
@@ -676,16 +810,16 @@ function mountSetupConfirm(el){
   if (!el) return;
   el.innerHTML =
     '<div class="panel">'
-    + '<h2>Setup Confirm <span>multi-desk agreement before you size · stop chasing single-tab noise</span></h2>'
-    + '<div class="note hg-lead" style="margin-bottom:10px">Cross-desk <b>confirmation gate</b> — not another scanner. Reads published snaps and only hands off when '
-    + '<b>SWING+EDGE agree</b> (or TRIPLE STACK, or 2 structural CLEAN) plus <b>' + MIN_CONFIRM_SOURCES + '+ desks</b>, '
+    + '<h2>Setup Confirm <span>crypto + gold · multi-desk agreement before you size</span></h2>'
+    + '<div class="note hg-lead" style="margin-bottom:10px">Cross-desk <b>confirmation gate</b> — not another scanner. Reads existing crypto and gold snapshots; only fresh, already-qualified tickets vote. Record-only rows, stale rows, and watch candidates cannot confirm a setup. A handoff needs '
+    + '<b>SWING+EDGE agree</b> (or TRIPLE STACK, or 2 structural CLEAN; gold needs 2 gold structural CLEAN) plus <b>' + MIN_CONFIRM_SOURCES + '+ desks</b>, '
     + '<b>' + MIN_CONFIRM_CLEAN + '+ CLEAN</b>, score <b>≥ ' + MIN_CONFIRM_SCORE + '</b>. Blocks: desk suppress, post-gate, BRAIN aside, '
-    + '±' + CHASE_CHG24 + '% 24h chase, macro, news lockout, stand-down, direction conflict, stale data. '
-    + '<b>PRIME</b> = TRIPLE STACK + 4 desks + 3 CLEAN. Auto-warms stale desks on confirm. No invented levels.</div>'
+    + '±' + CHASE_CHG24 + '% 24h chase, crypto macro, news lockout, stand-down, direction conflict, and stale data. '
+    + 'Gold requires two fresh structural desks; its ticket engines apply their own calendar, tape, and fundamental gates. <b>PRIME</b> = crypto TRIPLE STACK + 4 desks + 3 CLEAN. No invented levels.</div>'
     + '<div id="cfGlobal"></div>'
     + '<div class="row"><button class="btn" id="cfRun">CONFIRM SETUPS</button>'
-    + '<button class="btn secondary" id="cfWarm">FORCE WARM</button>'
-    + '<span class="note" id="cfStat">idle — warm desks or confirm from existing scans</span></div>'
+    + '<button class="btn secondary" id="cfWarm">WARM CRYPTO DESKS</button>'
+    + '<span class="note" id="cfStat">idle — reads existing desk snapshots only</span></div>'
     + '<div class="cards" id="cfCards"></div>'
     + '</div>';
   var ui = {

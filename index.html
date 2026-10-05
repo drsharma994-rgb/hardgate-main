@@ -371,7 +371,9 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 </script>
 <header class="hg-header">
   <div class="header-primary">
+
     <div class="brand">HARDGATE<span id="hgVerBadge" class="verbadge" title="build version — bumped on every deploy">v1142</span><a href="./?hgkill=1" style="font-size:10px;margin-left:8px;color:var(--gold)" title="wipe the offline cache and reload - use when the version looks old">fix old version</a><small>DELTA · COINDCX · STARTRADER · BINANCE · GOLD (PAXG) · GATES, NOT SCORES · 23+ TOOLS</small></div>
+
     <div class="xtoggle">
       <button id="xDelta" class="on" onclick="setExchange('delta')">DELTA INDIA</button>
       <button id="xCdcx" onclick="setExchange('coindcx')">COINDCX</button>
@@ -858,7 +860,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 </main>
 
 
-  <script src="build-stamp.js?v=1141"></script>
+  <script src="build-stamp.js?v=1142"></script>
   <script src="hg-setup-core.js?v=1076"></script>
   <script src="hg-perfect-setup.js?v=1076"></script>
 <script src="hghost.js?v=1076"></script>
@@ -928,7 +930,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="crypto-catalog.js?v=1076"></script>
 <script src="omniroute.js?v=1076"></script>
 <script src="dex-screener.js?v=1076"></script>
-<script src="setup-confirm.js?v=1076"></script>
+<script src="setup-confirm.js?v=1142"></script>
 <script src="combi.js?v=1076"></script>
 <script src="desk-scan-universe.js?v=1076"></script>
 <script src="reversalsniper.js?v=1076"></script>
@@ -3621,14 +3623,14 @@ const HG_NAV_GROUPS = [
      LOG tab). It's a persistent journal of BRAIN + SCALP + SWING signals
      across crypto AND gold, so COMMAND is the honest home. Also removes
      the naming clash with the SETUP LOG tab that used to be labeled 'LOG'. */
-  { id:'overview',   label:'COMMAND',  tabs:['brain','book','trade','log','signallog','news','bias','regime','trendmx','rotation','execute','startrader'] },
-  { id:'crypto',     label:'CRYPTO',   tabs:['combi','omnibtc','omnipresent','omniroute','dexscreener','setupconfirm','best','swing','scalp','edge','smart','squeeze','reversalsniper','smc','ob','trap','div','coil','apex','oiflow','liqs','onchain','chartvision','carry','venueprem','termbasis','cryptoultra','cryptoscan','cryptoverse','ninetypercent'] },
+  { id:'overview',   label:'COMMAND',  tabs:['brain','book','trade','log','setupconfirm','signallog','news','bias','regime','trendmx','rotation','execute','startrader'] },
+  { id:'crypto',     label:'CRYPTO',   tabs:['combi','omnibtc','omnipresent','omniroute','dexscreener','best','swing','scalp','edge','smart','squeeze','reversalsniper','smc','ob','trap','div','coil','apex','oiflow','liqs','onchain','chartvision','carry','venueprem','termbasis','cryptoultra','cryptoscan','cryptoverse','ninetypercent'] },
   /* v749: optigold, newgold and golddirection were in no group at all, so
      HG_GROUP_FALLBACK dropped all three into TOOLS — three gold desks filed
      next to the risk sizer and the search box. Listed here they sit with the
      rest of the gold book: composites and pick engines first, then the
      swing/scalp engines, then the context tabs. */
-  { id:'gold',       label:'GOLD',     tabs:['super-gold','omnigold','omnigold1','milligold','optigold','newgold','golddirection','goldswing','goldscalp','ganeshgold','ganeshgold','goldultra','gold','goldpro','goldspot','goldcoint','goldpine','tauric','80percent'] },
+  { id:'gold',       label:'GOLD',     tabs:['super-gold','omnigold','omnigold1','milligold','optigold','newgold','golddirection','goldswing','goldscalp','ganeshgold','goldultra','gold','goldpro','goldspot','goldcoint','goldpine','tauric','80percent'] },
   { id:'strategies', label:'MODELS',   tabs:['super-setup','super-best','super-sniper','super-book','super-calibrate','pine','pine-msb','pine-sqz','pine-smf','pine-ht','pine-smc','pine-cipher','pine-rf','pine-nw','pine-avwap','strats','meanrev','formationlab','scorecard','reliability'] },
   { id:'tools',      label:'TOOLS',    tabs:['risk','recon','basis','search','finder','tradeos','hey','aiagent'] },
 ];
@@ -4398,7 +4400,7 @@ function scheduleTabAutoScan(t){
   const seq = ++__hgTabScanSeq;
   const t0 = Date.now();
   const mustScan = (t === 'swing' || t === 'scalp' || t === 'best' || t === 'edge'
-    || t === 'omnigold' || t === 'omnigold1' || t === 'goldscalp' || t === 'goldswing' || t === 'ganeshgold' || t === 'ganeshgold'
+    || t === 'omnigold' || t === 'omnigold1' || t === 'goldscalp' || t === 'goldswing' || t === 'ganeshgold'
     || t === 'omnibtc'    /* hg-v1053: the desk's crown must reach the alert cycle even when the tab is closed */
     || t === 'trendmx');  /* hg-v1068: the matrix crown joins the same cycle */
   function blocked(){
@@ -11071,7 +11073,6 @@ try{
 <script src="./hardgate-desktop-shell.js?v=1076"></script>
 </body>
 </html>
-
 
 
 
