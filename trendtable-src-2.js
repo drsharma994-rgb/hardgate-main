@@ -1,9 +1,3 @@
-          return trendmxAttachMeta(s, gate, { rows4h: rows, price: inp.price });
-        }
-      }catch(eSmart){}
-    }
-
-    /* 5) house fallback — structure stop + structure targets when available */
     var entry = +((inp.entry !== undefined && inp.entry !== null) ? inp.entry : lastBar.c);
     var a = (typeof atr === 'function') ? atr(rows, TM_ATR_LEN)[rows.length - 1] : NaN;
     if (!isFinite(entry) || entry <= 0 || !isFinite(a) || a <= 0) return null;
@@ -354,3 +348,8 @@ function tmSmcScanPass(rows, golden, death){
    TM_FLOW_LOOK 4h windows. The candle-approximated stand-in never speaks
    here — the hg-v1009 rule: it derives from the same closes the composite
    already read, so it is not independent evidence (the caller hands the
+   taker series straight through; hgOmniCvd only returns source 'taker'
+   when enough real windows were used).
+
+   Flow AGAINST the row's own majority: the row is HELD OFF — capped at
+   NEAR (trendmxRowTier), excluded from the LIMIT BOARD and from the

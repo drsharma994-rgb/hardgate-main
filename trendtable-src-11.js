@@ -1,15 +1,3 @@
-  var prog   = el.querySelector('[data-r="prog"]');
-  var summary = el.querySelector('[data-r="summary"]');
-  var status = el.querySelector('[data-r="status"]');
-  var out    = el.querySelector('[data-r="out"]');
-  var refs = {
-    summary: summary,
-    golden: el.querySelector('[data-r="golden"]'),
-    death: el.querySelector('[data-r="death"]'),   /* hg-v1015 */
-    cards: el.querySelector('[data-r="cards"]'),
-    near: el.querySelector('[data-r="near"]'),
-    forming: el.querySelector('[data-r="forming"]'),
-    gateclean: el.querySelector('[data-r="gateclean"]'),   /* hg-v1018 */
     conviction: el.querySelector('[data-r="conviction"]'),  /* hg-v1018 */
     perfect: el.querySelector('[data-r="perfect"]'),        /* hg-v1022 */
     fwd: el.querySelector('[data-r="fwd"]'),                /* hg-v1039: the measured book */
@@ -215,8 +203,24 @@
     var t0 = Date.now();
     try{
       setProg(0.05);
-      setStatus('Scanning full universe (floor ' + floorM + 'M, Delta + CoinDCX + Binance, + ALL CoinDCX futures)...');
-      var snap = await trendmxScan({ force: true });
+      setStatus('Scanning in batches of 10...');
+      var snap = await trendmxScan({
+        force: true,
+        setProg: setProg,
+        onBatch: function(info){
+          state.rows = info.rows;
+          try {
+            trendmxStampBtcStructure(state.rows);
+            state.golden = trendmxGoldenCrossSetups(state.rows);
+            state.death = trendmxDeathCrossSetups(state.rows);
+          } catch (eB) {}
+          renderAll();
+          setProg(info.total ? info.done / info.total : 0);
+          var more = info.done < info.total;
+          setStatus('Batch ' + info.batch + ' of ' + info.batches + ' · ' + info.done + ' / ' + info.total + ' coins on the board'
+            + (more ? ' · next 10 starting' : ' · checking setups'));
+        }
+      });
       var results = (snap && snap.rows) ? snap.rows : [];
       var failed = (snap && snap.failed) ? snap.failed : 0;
       var symsLen = (snap && snap.scanned) ? snap.scanned : results.length;

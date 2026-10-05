@@ -321,3 +321,4 @@ function trendmxVolChipHtml(r){
     if (!st || st === 'flat') return '';
     if (st === 'against'){
       return '<span class="stamp bad" style="margin-left:6px" title="' + escH('trendmx volume witness (hg-v1020): the 1D OBV trend diverges against this ' + dir
+        + ' — ' + (dir === 'long' ? 'price made a higher 20-bar high on a lower OBV high: distribution under the rally' : 'price made a lower 20-bar low on a higher OBV low: accumulation under the fall')

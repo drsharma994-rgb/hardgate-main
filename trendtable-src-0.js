@@ -334,3 +334,6 @@ function trendScore(rows1d, rows4h){
     if (typeof ema !== 'function' || typeof adx !== 'function' ||
         typeof ichimokuState !== 'function' || typeof crossOver !== 'function' ||
         typeof crossUnder !== 'function' || typeof crossedRecently !== 'function'){
+      return out; // indicator globals missing -> graceful zero
+    }
+    var ok1 = Array.isArray(rows1d) && rows1d.length > 0;

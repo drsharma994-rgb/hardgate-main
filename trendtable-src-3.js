@@ -1,8 +1,3 @@
-   taker series straight through; hgOmniCvd only returns source 'taker'
-   when enough real windows were used).
-
-   Flow AGAINST the row's own majority: the row is HELD OFF — capped at
-   NEAR (trendmxRowTier), excluded from the LIMIT BOARD and from the
    forward record the board writes (the ledger measures what the desk
    judged tradeable WITH the evidence in hand), and the chip names why.
    Flow WITH: a chip, never a point — the composite's five points stay
@@ -326,3 +321,11 @@ async function trendmxScanCore(hooks){
     return fetchK(item, tf, n).then(function(rows){
       if (rows && rows.length >= minLen) return rows;
       return tmBinanceTwin(item, tf, n).then(function(twin){
+        if (twin && twin.length > ((rows && rows.length) || 0)) return twin;
+        return (rows && rows.length) ? rows : [];
+      });
+    }).catch(function(){ return []; });
+  }
+  var results = [], failed = 0;
+  for (var i = 0; i < items.length; i += CHUNK){
+    var chunk = items.slice(i, i + CHUNK);

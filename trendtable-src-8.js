@@ -1,8 +1,3 @@
-      var fm = W.hgFundingAgainstMark(r.fundingPct, dir);
-      if (fm && fm.against === true){ sentAgainst = true; sentWith = false; sentNotes.push('funding crowded'); }
-      else sentNotes.push('funding clean');
-    }catch(eFm){}
-  }
   pillars.push({ name: 'SENTIMENT', state: !sentRead ? 'unread' : (sentAgainst ? 'against' : (sentWith ? 'with' : 'flat')), detail: sentNotes.join(' · ') || 'no flow or funding' });
   var macroState = 'unread', macroBits = [];
   var macro = __tmMacro;
@@ -330,3 +325,11 @@ function trendmxColumnsHTML(rows){
     return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;align-items:start">'
       + col('BULL', '#26a69a', 'pos', bullS, 'no bullish rows — composite below +2')
       + col('BEAR', '#ef5350', 'neg', bearS, 'no bearish rows — composite above -2')
+      + col('MIXED / CHOP', '#94a3b8', '', mixedS, 'no mixed rows')
+      + '</div>';
+  }catch(e){ return ''; }
+}
+
+/* hg-v1048: the COINDCX TRENDING / FORMING board - every CoinDCX future
+   the matrix scanned, in two columns. TRENDING = the composite has a
+   majority direction (|score| >= 2); FORMING = it does not yet. Both

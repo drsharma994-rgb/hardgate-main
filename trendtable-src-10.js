@@ -1,9 +1,3 @@
-    var swingS = { dir: dir, entry: +plan.entry, stop: +plan.stop, t1: +plan.t1, t2: isFinite(+plan.t2) ? +plan.t2 : null,
-      tier: tier === 'clean' ? 'CLEAN' : 'NEAR', gates: (crown.gate && isFinite(crown.gate.gatesPassed)) ? crown.gate.gatesPassed : null };
-    html += trendmxGridBlockHtml('SWING SETUP', '4h grid', swingS, dir);
-    var scalpS = null, altS = null;
-    if (Array.isArray(crown.rows1h) && crown.rows1h.length >= 60 && typeof W.atr === 'function'){
-      var a1arr = W.atr(crown.rows1h, 14);
       var a1 = (a1arr && a1arr.length) ? +a1arr[a1arr.length - 1] : NaN;
       var p1 = +crown.rows1h[crown.rows1h.length - 1].c;
       if (isFinite(a1) && a1 > 0 && isFinite(p1)){
@@ -352,3 +346,15 @@ function mountTrendMatrix(el){
 
   var btn    = el.querySelector('[data-r="run"]');
   var syncBtn = el.querySelector('[data-r="sync"]');
+  var prog   = el.querySelector('[data-r="prog"]');
+  var summary = el.querySelector('[data-r="summary"]');
+  var status = el.querySelector('[data-r="status"]');
+  var out    = el.querySelector('[data-r="out"]');
+  var refs = {
+    summary: summary,
+    golden: el.querySelector('[data-r="golden"]'),
+    death: el.querySelector('[data-r="death"]'),   /* hg-v1015 */
+    cards: el.querySelector('[data-r="cards"]'),
+    near: el.querySelector('[data-r="near"]'),
+    forming: el.querySelector('[data-r="forming"]'),
+    gateclean: el.querySelector('[data-r="gateclean"]'),   /* hg-v1018 */

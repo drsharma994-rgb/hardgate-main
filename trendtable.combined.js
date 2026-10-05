@@ -411,7 +411,7 @@ function trendScore(rows1d, rows4h){
 /* ---------------- tab UI ---------------- */
 
 var TURNOVER_FLOOR = (typeof W.hgDeskMinTurnover === 'function') ? W.hgDeskMinTurnover() : 5e6;
-var CHUNK = 8;               // eight contracts at a time; three timeframes share the wave
+var CHUNK = 10;              // one visible batch: 10 coins, then the board updates
 var CHUNK_SLEEP_MS = 40;
 
 function tmVenueChip(item){
@@ -1490,6 +1490,18 @@ async function trendmxScanCore(hooks){
       }).catch(function(){ return null; });
     }));
     for (var j = 0; j < rs.length; j++){ if (rs[j]) results.push(rs[j]); else failed++; }
+    if (typeof hooks.onBatch === 'function'){
+      try {
+        hooks.onBatch({
+          rows: results.slice(),
+          done: Math.min(i + chunk.length, items.length),
+          total: items.length,
+          batch: Math.floor(i / CHUNK) + 1,
+          batches: Math.ceil(items.length / CHUNK),
+          failed: failed
+        });
+      } catch (eBatch) {}
+    }
     if (i + CHUNK < items.length) await sleepMs(CHUNK_SLEEP_MS);
   }
   return {
@@ -4002,8 +4014,24 @@ function mountTrendMatrix(el){
     var t0 = Date.now();
     try{
       setProg(0.05);
-      setStatus('Scanning full universe (floor ' + floorM + 'M, Delta + CoinDCX + Binance, + ALL CoinDCX futures)...');
-      var snap = await trendmxScan({ force: true });
+      setStatus('Scanning in batches of 10...');
+      var snap = await trendmxScan({
+        force: true,
+        setProg: setProg,
+        onBatch: function(info){
+          state.rows = info.rows;
+          try {
+            trendmxStampBtcStructure(state.rows);
+            state.golden = trendmxGoldenCrossSetups(state.rows);
+            state.death = trendmxDeathCrossSetups(state.rows);
+          } catch (eB) {}
+          renderAll();
+          setProg(info.total ? info.done / info.total : 0);
+          var more = info.done < info.total;
+          setStatus('Batch ' + info.batch + ' of ' + info.batches + ' · ' + info.done + ' / ' + info.total + ' coins on the board'
+            + (more ? ' · next 10 starting' : ' · checking setups'));
+        }
+      });
       var results = (snap && snap.rows) ? snap.rows : [];
       var failed = (snap && snap.failed) ? snap.failed : 0;
       var symsLen = (snap && snap.scanned) ? snap.scanned : results.length;

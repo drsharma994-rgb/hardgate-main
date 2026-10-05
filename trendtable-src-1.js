@@ -1,6 +1,3 @@
-      return out; // indicator globals missing -> graceful zero
-    }
-    var ok1 = Array.isArray(rows1d) && rows1d.length > 0;
     var ok4 = Array.isArray(rows4h) && rows4h.length > 0;
     if (!ok1 && !ok4) return out;
 
@@ -75,7 +72,7 @@
 /* ---------------- tab UI ---------------- */
 
 var TURNOVER_FLOOR = (typeof W.hgDeskMinTurnover === 'function') ? W.hgDeskMinTurnover() : 5e6;
-var CHUNK = 8;               // eight contracts at a time; three timeframes share the wave
+var CHUNK = 10;              // one visible batch: 10 coins, then the board updates
 var CHUNK_SLEEP_MS = 40;
 
 function tmVenueChip(item){
@@ -438,3 +435,9 @@ function trendmxPlanLegacy(inp){
           if (typeof hgApplyExactEntry === 'function'){
             s = hgApplyExactEntry(s, rows, { rows1h: inp.rows1h, style: s.type || 'swing', preferEdge: true }) || s;
           }
+          return trendmxAttachMeta(s, gate, { rows4h: rows, price: inp.price });
+        }
+      }catch(eSmart){}
+    }
+
+    /* 5) house fallback — structure stop + structure targets when available */

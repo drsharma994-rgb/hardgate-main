@@ -1,11 +1,3 @@
-        if (twin && twin.length > ((rows && rows.length) || 0)) return twin;
-        return (rows && rows.length) ? rows : [];
-      });
-    }).catch(function(){ return []; });
-  }
-  var results = [], failed = 0;
-  for (var i = 0; i < items.length; i += CHUNK){
-    var chunk = items.slice(i, i + CHUNK);
     if (typeof hooks.setProg === 'function') hooks.setProg((i + chunk.length) / items.length);
     var rs = await Promise.all(chunk.map(function(item){
       return Promise.all([
@@ -30,6 +22,18 @@
       }).catch(function(){ return null; });
     }));
     for (var j = 0; j < rs.length; j++){ if (rs[j]) results.push(rs[j]); else failed++; }
+    if (typeof hooks.onBatch === 'function'){
+      try {
+        hooks.onBatch({
+          rows: results.slice(),
+          done: Math.min(i + chunk.length, items.length),
+          total: items.length,
+          batch: Math.floor(i / CHUNK) + 1,
+          batches: Math.ceil(items.length / CHUNK),
+          failed: failed
+        });
+      } catch (eBatch) {}
+    }
     if (i + CHUNK < items.length) await sleepMs(CHUNK_SLEEP_MS);
   }
   return {
