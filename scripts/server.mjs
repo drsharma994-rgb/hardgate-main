@@ -232,6 +232,26 @@ function goldLiveSource(kind, src){
       '    }'
     ].join('\n');
     if (src.indexOf('MTF UNREAD') < 0 && src.indexOf(mtfAnchor) >= 0) src = src.replace(mtfAnchor, mtfGate);
+    const sprAnchor = '    if (spr.lock){\n      cand.dropped = true;\n      cand.reason = spr.reason;\n      return cand;\n    }\n    if (scalp){';
+    const sprGate = [
+      '    if (spr.lock){',
+      '      cand.dropped = true;',
+      '      cand.reason = spr.reason;',
+      '      return cand;',
+      '    }',
+      '    if (scalp && spr.unchecked){',
+      '      cand.demoted = true;',
+      '      if (!Array.isArray(cand.stamps)) cand.stamps = [];',
+      "      if (cand.stamps.indexOf('SPREAD UNREAD') < 0) cand.stamps.push('SPREAD UNREAD');",
+      '      var gnSp = Array.isArray(cand.gateNotes) ? cand.gateNotes.slice() : [];',
+      "      var sprWhy = 'SPREAD UNREAD — a gold scalp cannot lead without a live bid/ask. A missing quote is not a tight spread.';",
+      '      gnSp.push(sprWhy);',
+      '      cand.gateNotes = gnSp;',
+      '      cand.reason = sprWhy;',
+      '    }',
+      '    if (scalp){'
+    ].join('\n');
+    if (src.indexOf('SPREAD UNREAD') < 0 && src.indexOf(sprAnchor) >= 0) src = src.replace(sprAnchor, sprGate);
     return src;
   }
   if (kind === 'goldswing'){
