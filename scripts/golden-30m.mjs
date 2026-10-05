@@ -1,13 +1,14 @@
-/* BATCH 1114 — HARDGATE golden Telegram, every 30 minutes.
-   Sends every new EMA50/200 golden cross as TREND MATRIX GOLDEN CROSS,
-   and every composite +5/5 !GOLDEN. Death crosses are not sent.
-   A still-live card is sent again on the next 30-minute run. */
+/* BATCH 1124 — golden Telegram every 30 minutes.
+   Binance sometimes returns an error object instead of a ticker array.
+   That threw tick.filter and the job died before any alert. */
 import fs from 'fs';
 
 const STATE_FILE = 'golden-alert-state.json';
 const SITE = 'https://hardgate-main.onrender.com/';
-const TOP_N = 30;
+const TOP_N = 24;
 const SKIP = new Set(['USDC','USDT','FDUSD','TUSD','BUSD','DAI','USDP','EUR','USD']);
+const FALLBACK = ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT','ADAUSDT','AVAXUSDT','LINKUSDT','TONUSDT','TRXUSDT','LTCUSDT','BCHUSDT','NEARUSDT','SUIUSDT','DOTUSDT','APTUSDT','PEPEUSDT'];
+const HOSTS = ['https://data-api.binance.vision', 'https://api.binance.com'];
 
 function ema(values, len){
   const out = new Array(values.length).fill(NaN);
@@ -76,12 +77,39 @@ function adxLast(rows, len){
   for (let i = len; i < dx.length; i++) a = (a * (len - 1) + dx[i]) / len;
   return a;
 }
+async function getJson(path){
+  let last = 'no host';
+  for (const host of HOSTS){
+    try {
+      const r = await fetch(host + path);
+      const j = await r.json();
+      if (!r.ok){ last = host + ' HTTP ' + r.status; continue; }
+      return j;
+    } catch (e) {
+      last = (e && e.message) || String(e);
+    }
+  }
+  throw new Error(last);
+}
 async function klines(symbol, interval, limit){
-  const url = 'https://api.binance.com/api/v3/klines?symbol=' + symbol + '&interval=' + interval + '&limit=' + limit;
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(symbol + ' ' + interval + ' HTTP ' + r.status);
-  const j = await r.json();
+  const j = await getJson('/api/v3/klines?symbol=' + symbol + '&interval=' + interval + '&limit=' + limit);
+  if (!Array.isArray(j)) throw new Error(symbol + ' ' + interval + ' not candles');
   return j.map(function(k){ return { t: Math.floor(k[0] / 1000), o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5] }; });
+}
+async function universe(){
+  try {
+    const tick = await getJson('/api/v3/ticker/24hr');
+    if (Array.isArray(tick)){
+      return tick
+        .filter(function(t){ return t && typeof t.symbol === 'string' && t.symbol.endsWith('USDT') && !SKIP.has(t.symbol.replace(/USDT$/, '')) && +t.quoteVolume > 2e7; })
+        .sort(function(a, b){ return +b.quoteVolume - +a.quoteVolume; })
+        .slice(0, TOP_N);
+    }
+    console.error('ticker was not a list');
+  } catch (e) {
+    console.error('ticker', e.message || e);
+  }
+  return FALLBACK.map(function(s){ return { symbol: s, quoteVolume: 0 }; });
 }
 function scoreOf(d1, h4){
   const c = d1.map(function(r){ return r.c; });
@@ -100,7 +128,7 @@ function scoreOf(d1, h4){
   const adx = adxLast(d1, 14);
   const trendSum = d1Trend + d1Cross + h4Cascade + cloud;
   const adxPt = (adx >= 25) ? (trendSum > 0 ? 1 : (trendSum < 0 ? -1 : 0)) : 0;
-  return { score: d1Trend + d1Cross + h4Cascade + cloud + adxPt, fresh: ago >= 0, ago: ago, adx: adx, px: c[i], e50: e50[i], e200: e200[i] };
+  return { score: d1Trend + d1Cross + h4Cascade + cloud + adxPt, fresh: ago >= 0, ago: ago, px: c[i], e50: e50[i], e200: e200[i] };
 }
 function loadState(){ try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch (e) { return { sent: {} }; } }
 function saveState(state){ fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2) + '\n'); }
@@ -116,12 +144,11 @@ async function send(text){
   return { ok: !!(j && j.ok), id: j && j.result && j.result.message_id, reason: j && j.description };
 }
 async function main(){
-  const tick = await fetch('https://api.binance.com/api/v3/ticker/24hr').then(function(r){ return r.json(); });
-  const universe = tick.filter(function(t){ return t.symbol.endsWith('USDT') && !SKIP.has(t.symbol.replace(/USDT$/, '')) && +t.quoteVolume > 2e7; }).sort(function(a, b){ return +b.quoteVolume - +a.quoteVolume; }).slice(0, TOP_N);
+  const list = await universe();
   const state = loadState();
   const sent = state.sent || {};
   const hits = [];
-  for (const t of universe){
+  for (const t of list){
     try {
       const d1 = await klines(t.symbol, '1d', 260);
       const h4 = await klines(t.symbol, '4h', 80);
@@ -135,7 +162,11 @@ async function main(){
   }
   state.sent = sent;
   state.lastRunAt = new Date().toISOString();
-  if (!hits.length){ console.log('no golden cross and no composite +5/5 this run'); saveState(state); return; }
+  saveState(state);
+  if (!hits.length){
+    console.log('no golden cross and no composite +5/5 this run');
+    return;
+  }
   const lines = hits.map(function(h){
     const tag = h.isNew ? 'NEW' : 'STILL LIVE';
     const cross = h.s.fresh ? ('golden cross ' + h.s.ago + ' daily bar(s) ago') : 'EMA50 above EMA200';
@@ -145,8 +176,6 @@ async function main(){
   const text = ['HARDGATE — TREND MATRIX GOLDEN CROSS', '30-minute check · every new golden cross · composite +5/5 !GOLDEN', '', lines.join('\n'), '', SITE].join('\n');
   const r = await send(text);
   console.log('telegram', r.ok ? ('sent ' + r.id) : r.reason, 'cards', hits.length);
-  state.lastMessageId = r.id || null;
-  saveState(state);
   if (!r.ok) process.exitCode = 1;
 }
 main().catch(function(e){ console.error(e); process.exit(1); });
