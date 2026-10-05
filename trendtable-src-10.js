@@ -1,4 +1,27 @@
-e auto-scan read. */
+          if (slot && isFinite(slot.mean) && slot.mean > 0 && isFinite(lv) && lv > 0){
+            var rvolW = lv / slot.mean;
+            reads.volumeRvol = rvolW;
+            reads.sess = rvolW >= 0.6 ? 'participating' : 'thin';
+          }
+        }catch(eSl){ }
+      }
+      try{ if (typeof W.hgNewsRisk === 'function'){ var nw = W.hgNewsRisk(r.base || 'BTC'); if (nw && nw.blackout) reads.newsRisk = 'blackout'; } }catch(eN){ }
+      try{
+        if (typeof W.hgObtcPerfectFormation === 'function'){
+          var pick = { row: Object.assign({}, r, { entry: plan.entry, stop: plan.stop, t1: plan.t1, dir: dir }), tier: 'clean' };
+          W.hgObtcPerfectFormation(pick, reads);
+          r.perfect = pick.row.perfect === true;
+          r.perfectPlus = pick.row.perfectPlus === true;
+          r.perfectReads = pick.row.perfectReads || reads;
+        }
+      }catch(ePf){ }
+    }
+    return rows;
+  }catch(e){ try{ if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('trendmx', e); }catch(e2){ } return rows; }
+}
+
+/* hg-v1068: THE CROWN STATE — the strongest majority row with a minted
+   plan in a light shape the alert batch and the auto-scan read. */
 function trendmxCrownOfRows(rows){
   try{
     if (!Array.isArray(rows) || !rows.length) return null;
@@ -294,21 +317,3 @@ function mountTrendMatrix(el){
 
   function sortVal(r, k){
     if (k === 'sym')   return r.sym;
-    if (k === 'score') return r.score;
-    if (k === 'gates') return (r.gate && isFinite(r.gate.gatesPassed)) ? r.gate.gatesPassed : -1;
-    if (k === 'adx')   return isFinite(r.adx) ? r.adx : -Infinity;
-    if (k === 'price') return r.price;
-    return r.comps[k] || 0;
-  }
-  function passVenue(r){
-    if (!state.venue || state.venue === 'ALL') return true;
-    return tmRowVenue(r) === state.venue;
-  }
-  function passFilter(r){
-    if (!passVenue(r)) return false;
-    var dir = tmDirOf(r);
-    var plan = dir ? trendmxPlan(Object.assign({}, r, { dir: dir })) : null;
-    var tier = trendmxRowTier(r, plan);
-    if (state.filter === 'CL') return tier === 'clean';
-    if (state.filter === 'NR') return tier === 'near';
-    if (state.filter === 'GD') return r.fr

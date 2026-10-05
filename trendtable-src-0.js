@@ -4,7 +4,7 @@ TREND MATRIX tab (id 'trendmx'): multi-timeframe trend dashboard across the
 full combined universe (Delta + CoinDCX + Binance extension via xuniverse.js,
 ≥ $5M turnover floor, no top-N cap; Binance-only fallback when xu absent).
 
-Per symbol: binanceKlines 1d x260 + 4h x120 -> five signed components
+Per symbol: binanceKlines 1d x260 + 4h x260 -> five signed components. BATCH 1133: 4h history is long enough for the 7-gate matrix (210 bars). A fresh cross is a limit at the nearer 4h EMA9 or EMA21, cancelled if price does not tag it within 6 four-hour bars. An alt long is stood down while BTC 4h EMA50 is under EMA200.
 (-1/0/+1), composite score -5..+5:
   1D TREND   1d close vs ema200
   CROSS      1d ema50 vs ema200, plus fresh-cross marker (<=10 bars):
@@ -273,4 +273,7 @@ function trendScore(rows1d, rows4h){
 
       /* 4) ichimoku cloud on 1d */
       var st = ichimokuState(rows1d);
-      if (st && st.priceVsCloud === 'ABOVE') out.comps.c
+      if (st && st.priceVsCloud === 'ABOVE') out.comps.cloud = 1;
+      else if (st && st.priceVsCloud === 'BELOW') out.comps.cloud = -1;
+    }
+

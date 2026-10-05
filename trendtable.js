@@ -1,6 +1,7 @@
-/* HARDGATE trendtable loader. The desk source is stored as trendtable-src-N.js
-   because a single commit of the full file was truncated. Indirect eval keeps
-   the classic-script globals (HG_tabs, trendScore) on window. */
+/* HARDGATE trendtable loader. BATCH 1133.
+   The desk source is stored as trendtable-src-N.js because a single
+   commit of the full file was truncated. Indirect eval keeps the
+   classic-script globals (HG_tabs, trendScore) on window. */
 (function () {
   var n = 12;
   var acc = '';
@@ -11,7 +12,7 @@
       catch (e) { try { console.error('trendtable assemble', e); } catch (e2) {} }
       return;
     }
-    var url = 'trendtable-src-' + i + '.js?v=1130';
+    var url = 'trendtable-src-' + i + '.js?v=1133';
     fetch(url, { cache: 'no-store' }).then(function (r) {
       if (!r.ok) throw new Error('trendtable part ' + i + ' ' + r.status);
       return r.text();

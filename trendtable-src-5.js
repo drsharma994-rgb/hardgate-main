@@ -1,4 +1,51 @@
-="margin-left:6px">GATE-CLEAN 7/7</span>'
+   stays the shared dir-aware one (hg-v1014); a desk differs only in which
+   bag it renders. The 4-card cap is the cap each half already had — the
+   split changes no exposure. A desk with no tickets renders nothing. */
+function trendmxGoldenDeskHTML(golden){
+  golden = golden || [];
+  if (!golden.length) return '';
+  var cards = '';
+  for (var i = 0; i < Math.min(golden.length, 4); i++) cards += trendmxCrossCardHTML(golden[i]);
+  return '<div class="panel tier-clean" style="margin:12px 0;border-left:4px solid #047857">'
+    + '<h2>⚡ GOLDEN CROSS DESK <span>EMA50/200 bull cross ≤10 daily bars · limit at 4h EMA9 or EMA21, cancelled if not tagged in 6×4h'+ ((__tmMacro && __tmMacro.btcStructure === 'down') ? ' · alt longs stood down, BTC structure is down' : '')+ '</span></h2>'
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + cards + '</div>'
+    + '</div>';
+}
+
+function trendmxDeathDeskHTML(death){
+  death = death || [];
+  if (!death.length) return '';
+  var cards = '';
+  for (var i = 0; i < Math.min(death.length, 4); i++) cards += trendmxCrossCardHTML(death[i]);
+  return '<div class="panel" style="margin:12px 0;border-left:4px solid #b91c1c">'
+    + '<h2>⚡ DEATH CROSS DESK <span>EMA50/200 BEAR cross ≤10 daily bars — fresh SHORTS · conviction + valid plan · Telegram every 15m</span></h2>'
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + cards + '</div>'
+    + '</div>';
+}
+
+function trendmxLimitCardHTML(item){
+  if (!item || !item.plan) return '';
+  var p = item.plan, r = item.row, dir = item.dir;
+  var col = dir === 'long' ? '#047857' : '#dc2626';
+  var stHtml = '';
+  if (typeof hgLimitState === 'function'){
+    var a = (r.rows4h && typeof atr === 'function') ? atr(r.rows4h, TM_ATR_LEN) : null;
+    var atrL = (a && a.length) ? a[a.length - 1] : NaN;
+    var st = hgLimitState(p, r.price, atrL);
+    if (st && st.label) stHtml = '<span class="stamp" style="margin-left:6px">' + escH(st.label) + '</span>';
+  }
+  var tradeOn = (typeof hgToTradePlanOnclickAttr === 'function')
+    ? hgToTradePlanOnclickAttr(r.sym, dir, p.entry, p.stop, p.t1, { t2: p.t2, stack: item.stack, scanner: 'trendmx', strategy: 'trendmx' }) : '';
+  /* hg-v1018: the card names its own formation class — the desks are
+     separated by criteria now, and the stamp keeps the class legible where
+     a card is screenshotted or shared off the desk. */
+  /* hg-v1022: a PERFECT row carries its own stamp ahead of the class stamp —
+     the strictest confluence read, distinguished so it survives a screenshot. */
+  var perfectStamp = item.perfect
+    ? '<span class="stamp pass" style="margin-left:6px;background:#fef3c7;color:#92400e">\u2605 PERFECT</span>'
+    : '';
+  var clsStamp = (r.gate && r.gate.clean7)
+    ? '<span class="stamp" style="margin-left:6px">GATE-CLEAN 7/7</span>'
     : '<span class="stamp" style="margin-left:6px">CONVICTION ' + (r.score > 0 ? '+' : '') + r.score + '/5</span>';
   return '<div style="flex:1 1 260px;max-width:360px;border:1px solid #E2E8F0;border-left:3px solid ' + col + ';border-radius:8px;padding:10px 12px;background:#fff">'
     + '<div><b>' + escH(r.sym) + '</b>' + tmVenueChip(r) + ' · ' + dir.toUpperCase() + perfectStamp + clsStamp + stHtml + tmSmcChip(r)
@@ -240,39 +287,3 @@ function trendmxAtrRegime(r){
     var pct = hgAtrPercentile(r.rows4h, 14, 100);
     if (!isFinite(pct)) return null;
     if (pct < 20) return { pct: pct, regime: 'DEAD' };
-    if (pct > 80) return { pct: pct, regime: 'BLOWOFF' };
-    return { pct: pct, regime: 'HEALTHY' };
-  }catch(e){ return null; }
-}
-
-/* the ATR-regime chip — the volume witness's own pattern (hg-v1020): DEAD and
-   BLOWOFF name the danger; HEALTHY carries the pass chip; unreadable paints
-   NO chip. Evidence, never a gate. */
-function trendmxAtrRegimeChipHtml(r){
-  try{
-    var reg = trendmxAtrRegime(r);
-    if (!reg) return '';
-    if (reg.regime === 'DEAD'){
-      return '<span class="stamp bad" style="margin-left:6px" title="' + escH('trendmx volatility regime (hg-v1022): 4h ATR(14) sits at the ' + reg.pct.toFixed(0) + 'th percentile of its own trailing distribution — bottom-quintile chop. The trend legs drift but nothing trades here. Evidence, never a gate.') + '">ATR REGIME DEAD</span>';
-    }
-    if (reg.regime === 'BLOWOFF'){
-      return '<span class="stamp bad" style="margin-left:6px" title="' + escH('trendmx volatility regime (hg-v1022): 4h ATR(14) sits at the ' + reg.pct.toFixed(0) + 'th percentile — top-quintile blowoff, a move already spent. Evidence, never a gate.') + '">ATR REGIME BLOWOFF</span>';
-    }
-    return '<span class="stamp pass" style="margin-left:6px" title="' + escH('trendmx volatility regime (hg-v1022): 4h ATR(14) sits at the ' + reg.pct.toFixed(0) + 'th percentile — healthy volatility, a trend with room to run. Evidence, never a gate.') + '">ATR REGIME HEALTHY</span>';
-  }catch(e){ return ''; }
-}
-
-/* the volume witness's chip — the momentum chip's own pattern (hg-v1019).
-   AGAINST names the hold-off; WITH carries the pass chip; FLAT and unread
-   paint NO chip. */
-function trendmxVolChipHtml(r){
-  try{
-    var dir = tmDirOf(r);
-    var st = trendmxVolState(r, dir);
-    if (!st || st === 'flat') return '';
-    if (st === 'against'){
-      return '<span class="stamp bad" style="margin-left:6px" title="' + escH('trendmx volume witness (hg-v1020): the 1D OBV trend diverges against this ' + dir
-        + ' — ' + (dir === 'long' ? 'price made a higher 20-bar high on a lower OBV high: distribution under the rally' : 'price made a lower 20-bar low on a higher OBV low: accumulation under the fall')
-        + ' (Granville: volume must confirm). Held off the LIMIT BOARD, never CLEAN — the row paints, the reason is named.') + '">VOLUME TREND AGAINST · HELD OFF</span>';
-    }
-    return '<span class="stamp pass" style="margin-lef

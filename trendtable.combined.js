@@ -4,7 +4,7 @@ TREND MATRIX tab (id 'trendmx'): multi-timeframe trend dashboard across the
 full combined universe (Delta + CoinDCX + Binance extension via xuniverse.js,
 ≥ $5M turnover floor, no top-N cap; Binance-only fallback when xu absent).
 
-Per symbol: binanceKlines 1d x260 + 4h x120 -> five signed components
+Per symbol: binanceKlines 1d x260 + 4h x260 -> five signed components. BATCH 1133: 4h history is long enough for the 7-gate matrix (210 bars). A fresh cross is a limit at the nearer 4h EMA9 or EMA21, cancelled if price does not tag it within 6 four-hour bars. An alt long is stood down while BTC 4h EMA50 is under EMA200.
 (-1/0/+1), composite score -5..+5:
   1D TREND   1d close vs ema200
   CROSS      1d ema50 vs ema200, plus fresh-cross marker (<=10 bars):
@@ -530,22 +530,110 @@ function trendmxAttachMeta(plan, gate, extra){
    house fallback: entry = last 4h close, stop = lastSwing(4h,30) structure
    within 2.5xATR else 1.5xATR against dir, T1 = 2R, T2 = 3.5R. null when
    there is no majority direction or levels cannot be computed honestly. */
+
+function tmBaseOf(inp){
+  var b = String((inp && (inp.base || inp.sym)) || '').toUpperCase();
+  return b.replace(/^B-/, '').replace(/_USDT$/, '').replace(/USDT$/, '');
+}
+function tmAltLongBlockedByBtc(inp){
+  if (tmBaseOf(inp) === 'BTC') return false;
+  return !!((__tmMacro && __tmMacro.btcStructure === 'down'));
+}
+function trendmxStampBtcStructure(rows){
+  var st = null;
+  if (Array.isArray(rows)){
+    for (var i = 0; i < rows.length; i++){
+      if (tmBaseOf(rows[i]) !== 'BTC') continue;
+      try{ st = tmStructureDir(rows[i].rows4h); }catch(eSt){ st = null; }
+      if (st) break;
+    }
+  }
+  var prev = __tmMacro || {};
+  trendmxMacroSet({ btcFunding: prev.btcFunding != null ? prev.btcFunding : null, btcStructure: st });
+  return st;
+}
+function tmAtrLast(rows){
+  try{
+    if (!rows || typeof atr !== 'function') return NaN;
+    var a = atr(rows, 14);
+    if (!a || !a.length) return NaN;
+    var v = a[a.length - 1];
+    return isFinite(v) ? v : NaN;
+  }catch(e){ return NaN; }
+}
+function tmEmaLast(closes, len){
+  if (typeof ema !== 'function' || !closes) return NaN;
+  var series = ema(closes, len);
+  if (!series || !series.length) return NaN;
+  var v = series[series.length - 1];
+  return isFinite(v) ? v : NaN;
+}
+/* A fresh cross is not filled at the print. The order is a limit at the
+   nearer 4h EMA that price has to come back to. If price is already through
+   both, the pullback has happened and the last close is the entry. The
+   limit dies if it is not tagged within 6 four-hour bars. */
+function trendmxApplyCrossLimit(plan, inp, dir){
+  if (!plan) return null;
+  var kind = inp && inp.freshCross;
+  if (kind !== 'GOLDEN' && kind !== 'DEATH') return plan;
+  var rows = inp.rows4h;
+  if (!rows || rows.length < 21) return plan;
+  var closes = rows.map(function(r){ return r ? r.c : NaN; });
+  var px = closes[closes.length - 1];
+  var e9 = tmEmaLast(closes, 9), e21 = tmEmaLast(closes, 21);
+  if (!isFinite(px)) return plan;
+  var cands = [];
+  if (dir === 'long'){
+    if (isFinite(e9) && e9 < px) cands.push(['EMA9', e9]);
+    if (isFinite(e21) && e21 < px) cands.push(['EMA21', e21]);
+  } else {
+    if (isFinite(e9) && e9 > px) cands.push(['EMA9', e9]);
+    if (isFinite(e21) && e21 > px) cands.push(['EMA21', e21]);
+  }
+  var entry = px, emaName = 'MARKET', entryType = 'MARKET';
+  if (cands.length){
+    cands.sort(function(a, b){ return Math.abs(a[1] - px) - Math.abs(b[1] - px); });
+    entry = cands[0][1];
+    emaName = cands[0][0];
+    entryType = 'LIMIT';
+  }
+  var stop = plan.stop;
+  var a = tmAtrLast(rows);
+  if (dir === 'long' && !(entry > stop) && isFinite(a) && a > 0) stop = entry - 1.5 * a;
+  if (dir === 'short' && !(stop > entry) && isFinite(a) && a > 0) stop = entry + 1.5 * a;
+  var risk = dir === 'long' ? entry - stop : stop - entry;
+  if (!(risk > 0)) return plan;
+  var bit = entryType === 'LIMIT'
+    ? ('LIMIT @ 4h ' + emaName + ' · cancel if not tagged in 6×4h')
+    : 'price already at the 4h EMAs';
+  return Object.assign({}, plan, {
+    entry: entry, stop: stop,
+    t1: dir === 'long' ? entry + 2 * risk : entry - 2 * risk,
+    t2: dir === 'long' ? entry + 3.5 * risk : entry - 3.5 * risk,
+    rr1: 2, rr2: 3.5, riskPct: risk / entry * 100,
+    entryType: entryType, limitEma: emaName,
+    note: (plan.note ? plan.note + ' · ' : '') + bit
+  });
+}
+
 function trendmxPlan(inp){
   try{
     inp = inp || {};
     var dir = tmDirOf(inp);
     if (!dir) return null;
+    if (dir === 'long' && tmAltLongBlockedByBtc(inp)) return null;
+    var plan = null;
     if (typeof hgBestLevels === 'function'){
       var gate = inp.gate || trendmxGateEval(inp, dir);
       var bl = hgBestLevels(Object.assign({}, inp, {
         tab: 'trendmx', style: 'swing', dir: dir, gate: gate,
       }));
       if (bl && bl.ok && bl.plan && tmValidSetup(bl.plan)){
-        return trendmxAttachMeta(bl.plan, bl.gate || gate, { formationScore: bl.formationScore, rows4h: inp.rows4h, price: inp.price });
-      }
-      if (bl && bl.veto) return null;
+        plan = trendmxAttachMeta(bl.plan, bl.gate || gate, { formationScore: bl.formationScore, rows4h: inp.rows4h, price: inp.price });
+      } else if (bl && bl.veto) return null;
     }
-    return trendmxPlanLegacy(inp);
+    if (!plan) plan = trendmxPlanLegacy(inp);
+    return trendmxApplyCrossLimit(plan, inp, dir);
   }catch(e){ return null; }
 }
 
@@ -694,6 +782,8 @@ function trendmxPlanBlock(r){
   var dir = tmDirOf(r);
   if (!dir)
     return '<div class="plan">No majority direction on this row (|score| &lt; ' + TM_MAJORITY + ') — no levels.</div>';
+  if (dir === 'long' && tmAltLongBlockedByBtc(r))
+    return '<div class="plan">No long. BTC structure is down, so alt longs are stood down.</div>';
   var s = trendmxPlan(Object.assign({}, r, { dir: dir }));
   /* lazy SMC read for a row the operator expanded by hand: one row per click,
      not a repaint loop, so rows outside the scan's capped slice still get a
@@ -789,7 +879,7 @@ function trendmxGoldenCrossSetups(rows){
     var conv = trendmxConviction(r);
     if (!conv) continue;
     if (r.gate && r.gate.veto) continue;
-    var plan = trendmxPlan({ dir: dir, score: r.score, rows4h: r.rows4h, rows1h: r.rows1h, entry: r.price, gate: r.gate, comps: r.comps, sym: r.sym, fundingPct: r.fundingPct });
+    var plan = trendmxPlan({ dir: dir, score: r.score, rows4h: r.rows4h, rows1h: r.rows1h, entry: r.price, gate: r.gate, comps: r.comps, sym: r.sym, fundingPct: r.fundingPct, freshCross: r.freshCross, base: r.base });
     if (!tmValidSetup(plan)) continue;
     out.push({
       sym: r.sym, dir: 'long', entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2,
@@ -799,6 +889,7 @@ function trendmxGoldenCrossSetups(rows){
       comps: r.comps, gateLabel: plan.gateLabel || (r.gate && r.gate.label),
       note: '⚡GOLDEN CROSS (EMA50/200 · ≤10 daily bars) · composite ' + (r.score > 0 ? '+' : '') + r.score + '/5'
         + (plan.gateLabel ? ' · ' + plan.gateLabel : '')
+        + (plan.entryType === 'LIMIT' ? (' · LIMIT @ 4h ' + plan.limitEma + ' · cancel if not tagged in 6×4h') : ' · entry at price, already on the 4h EMAs')
     });
   }
   return out;
@@ -824,7 +915,7 @@ function trendmxDeathCrossSetups(rows){
     var conv = trendmxConviction(r);
     if (!conv) continue;
     if (r.gate && r.gate.veto) continue;
-    var plan = trendmxPlan({ dir: dir, score: r.score, rows4h: r.rows4h, rows1h: r.rows1h, entry: r.price, gate: r.gate, comps: r.comps, sym: r.sym, fundingPct: r.fundingPct });
+    var plan = trendmxPlan({ dir: dir, score: r.score, rows4h: r.rows4h, rows1h: r.rows1h, entry: r.price, gate: r.gate, comps: r.comps, sym: r.sym, fundingPct: r.fundingPct, freshCross: r.freshCross, base: r.base });
     if (!tmValidSetup(plan)) continue;
     out.push({
       sym: r.sym, dir: 'short', entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2,
@@ -834,6 +925,7 @@ function trendmxDeathCrossSetups(rows){
       comps: r.comps, gateLabel: plan.gateLabel || (r.gate && r.gate.label),
       note: '⚡DEATH CROSS (EMA50/200 · ≤10 daily bars) · composite ' + (r.score > 0 ? '+' : '') + r.score + '/5'
         + (plan.gateLabel ? ' · ' + plan.gateLabel : '')
+        + (plan.entryType === 'LIMIT' ? (' · LIMIT @ 4h ' + plan.limitEma + ' · cancel if not tagged in 6×4h') : ' · entry at price, already on the 4h EMAs')
     });
   }
   return out;
@@ -1258,9 +1350,12 @@ async function trendmxScanCore(hooks){
     var chunk = items.slice(i, i + CHUNK);
     if (typeof hooks.setProg === 'function') hooks.setProg((i + chunk.length) / items.length);
     var rs = await Promise.all(chunk.map(function(item){
-      return fetchK(item, '4h', 120).then(function(r4){
-          if (r4 && r4.length) return r4;
-          return tmBinanceTwin(item, '4h', 120);
+      return fetchK(item, '4h', 260).then(function(r4){
+          if (r4 && r4.length >= 210) return r4;
+          return tmBinanceTwin(item, '4h', 260).then(function(twin){
+            if (twin && twin.length > ((r4 && r4.length) || 0)) return twin;
+            return (r4 && r4.length) ? r4 : [];
+          });
         }).then(function(r4){
           if (!r4 || !r4.length) return tmUnreadRow(item);
           return Promise.all([
@@ -1301,6 +1396,7 @@ async function trendmxScan(opts){
     return __tmScanSnap;
   }
   var core = await trendmxScanCore(opts);
+  trendmxStampBtcStructure(core.rows);
   var golden = trendmxGoldenCrossSetups(core.rows);
   var death = trendmxDeathCrossSetups(core.rows);   /* hg-v1014: the mirrored desk */
   tmSmcScanPass(core.rows, golden, death);
@@ -1445,7 +1541,7 @@ function trendmxGoldenDeskHTML(golden){
   var cards = '';
   for (var i = 0; i < Math.min(golden.length, 4); i++) cards += trendmxCrossCardHTML(golden[i]);
   return '<div class="panel tier-clean" style="margin:12px 0;border-left:4px solid #047857">'
-    + '<h2>⚡ GOLDEN CROSS DESK <span>EMA50/200 BULL cross ≤10 daily bars — fresh LONGS · conviction + valid plan · Telegram every 15m</span></h2>'
+    + '<h2>⚡ GOLDEN CROSS DESK <span>EMA50/200 bull cross ≤10 daily bars · limit at 4h EMA9 or EMA21, cancelled if not tagged in 6×4h'+ ((__tmMacro && __tmMacro.btcStructure === 'down') ? ' · alt longs stood down, BTC structure is down' : '')+ '</span></h2>'
     + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + cards + '</div>'
     + '</div>';
 }

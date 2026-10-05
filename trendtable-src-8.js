@@ -1,4 +1,35 @@
- 'composite ' + (r.score > 0 ? '+' : '') + r.score + '/5',
+        ? hgSetupEmptyHTML({ title: 'No CLEAN trend tickets right now.', body: 'NEAR and FORMING rows below are watch-only. The golden and death cross desks and the limit board surface actionable rows when gates + plan align.' })   /* hg-v1015: two cross desks now */
+        : '<div class="empty">No CLEAN tickets.</div>';
+    } else {
+      var ch = '<div class="note" style="margin:0 0 10px"><b>CLEAN TICKETS</b> — 7/7 gates + valid plan + min R:R ' + TM_MIN_RR + '.</div>';
+      for (var ci = 0; ci < Math.min(clean.length, 12); ci++) ch += trendmxSetupCardHTML(clean[ci], 'clean');
+      refs.cards.innerHTML = ch;
+      trendmxPaintMiniCharts(refs.cards, clean);
+    }
+    try {
+      if (typeof W.hgMpPin === 'function'){
+        function tmWithPlan(row){
+          var d = tmDirOf(row);
+          var p = d ? trendmxPlan(Object.assign({}, row, { dir: d })) : null;
+          return p ? Object.assign({}, row, p, { dir: d }) : row;
+        }
+        W.hgMpPin('trendmx', { cands: clean.map(tmWithPlan), nearCands: near.map(tmWithPlan), closest: forming[0] ? tmWithPlan(forming[0]) : null }, null, refs.cards);
+      }
+    } catch (eMp) {}
+  }
+  if (refs.near){
+    refs.near.innerHTML = near.length
+      ? ((typeof hgSetupNearHeaderHTML === 'function' ? hgSetupNearHeaderHTML(near.length, 'trendmx') : '')
+        + near.slice(0, 8).map(function(r){ return trendmxSetupCardHTML(r, 'near'); }).join(''))
+      : '';
+  }
+  if (refs.forming){
+    refs.forming.innerHTML = (typeof hgFormingWatchHTML === 'function')
+      ? hgFormingWatchHTML(forming.slice(0, 12).map(function(r){
+          return {
+            state: (r.gate && r.gate.gatesPassed >= 5) ? 'armed' : 'idle',
+            sym: r.sym, strategy: 'TRENDMX',
+            condition: (r.freshCross ? '⚡' + r.freshCross + ' · ' : '') + 'composite ' + (r.score > 0 ? '+' : '') + r.score + '/5',
             gatesPassed: r.gate ? r.gate.gatesPassed : null, gatesTotal: 7
           };
         }), { title: 'FORMING · TREND RADAR', subtitle: 'fresh crosses + strong composite without CLEAN ticket yet' })
@@ -242,22 +273,3 @@ function trendmxCrownPanelHTML(state){
     html += '<div class="panel" style="margin-top:10px;border-top:3px solid ' + color + '"><h3>THE CALL</h3>'
       + '<div style="font-size:16px;font-weight:700">' + dir.toUpperCase() + ' - ' + tierTxt
       + ' - composite ' + (crown.score > 0 ? '+' : '') + crown.score + '/5'
-      + (conv ? ' - ' + conv.label : '') + '</div></div>';
-    /* ---- VERDICT ---- */
-    var gatesTxt = (crown.gate && isFinite(crown.gate.gatesPassed)) ? crown.gate.gatesPassed + '/7' : '?/7';
-    html += '<div class="panel" style="margin-top:10px"><h3>CROWN VERDICT <span>the desk\'s complete verdict on the leading row</span></h3>'
-      + '<div style="font-size:12px;letter-spacing:.03em">TREND MATRIX | ' + tierTxt
-      + (crown.perfectPlus ? ' | PERFECT+' : (crown.perfect ? ' | PERFECT' : '')) + ' | gates ' + gatesTxt + '</div></div>';
-    /* ---- COMPLETE ANALYSIS ---- */
-    var comps = crown.comps || {};
-    function chip(v, cls){ return '<span class="gpip' + (cls || '') + '">' + escH(v) + '</span>'; }
-    function dim(title, verdict, cls, lines){
-      if (!lines.length) return '';
-      return '<div style="margin:8px 0 2px"><b>' + title + '</b> ' + chip(verdict, cls)
-        + '<div style="font-size:11px;opacity:.9;margin-top:2px">' + lines.join(' | ') + '</div></div>';
-    }
-    var tech = [];
-    if (comps.d200 !== undefined && comps.d200 !== null) tech.push('1D vs EMA200 ' + (comps.d200 > 0 ? 'BULL' : 'BEAR'));
-    if (comps.x !== undefined && comps.x !== null) tech.push('EMA50/200 ' + (comps.x > 0 ? 'GOLDEN' : 'DEATH'));
-    if (comps.h4 !== undefined && comps.h4 !== null) tech.push('4H cascade ' + (comps.h4 > 0 ? 'bull' : 'bear'));
-    if (comps.cloud !== undefined && comps.cloud !== null) tech.push('cloud ' + (comps

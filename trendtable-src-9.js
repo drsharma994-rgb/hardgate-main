@@ -1,4 +1,22 @@
-.cloud > 0 ? 'above' : 'below'));
+      + (conv ? ' - ' + conv.label : '') + '</div></div>';
+    /* ---- VERDICT ---- */
+    var gatesTxt = (crown.gate && isFinite(crown.gate.gatesPassed)) ? crown.gate.gatesPassed + '/7' : '?/7';
+    html += '<div class="panel" style="margin-top:10px"><h3>CROWN VERDICT <span>the desk\'s complete verdict on the leading row</span></h3>'
+      + '<div style="font-size:12px;letter-spacing:.03em">TREND MATRIX | ' + tierTxt
+      + (crown.perfectPlus ? ' | PERFECT+' : (crown.perfect ? ' | PERFECT' : '')) + ' | gates ' + gatesTxt + '</div></div>';
+    /* ---- COMPLETE ANALYSIS ---- */
+    var comps = crown.comps || {};
+    function chip(v, cls){ return '<span class="gpip' + (cls || '') + '">' + escH(v) + '</span>'; }
+    function dim(title, verdict, cls, lines){
+      if (!lines.length) return '';
+      return '<div style="margin:8px 0 2px"><b>' + title + '</b> ' + chip(verdict, cls)
+        + '<div style="font-size:11px;opacity:.9;margin-top:2px">' + lines.join(' | ') + '</div></div>';
+    }
+    var tech = [];
+    if (comps.d200 !== undefined && comps.d200 !== null) tech.push('1D vs EMA200 ' + (comps.d200 > 0 ? 'BULL' : 'BEAR'));
+    if (comps.x !== undefined && comps.x !== null) tech.push('EMA50/200 ' + (comps.x > 0 ? 'GOLDEN' : 'DEATH'));
+    if (comps.h4 !== undefined && comps.h4 !== null) tech.push('4H cascade ' + (comps.h4 > 0 ? 'bull' : 'bear'));
+    if (comps.cloud !== undefined && comps.cloud !== null) tech.push('cloud ' + (comps.cloud > 0 ? 'above' : 'below'));
     if (isFinite(+crown.adx)) tech.push('ADX ' + (+crown.adx).toFixed(1));
     html += '<div class="panel" style="margin-top:10px"><h3>COMPLETE ANALYSIS <span>technical - sentimental - fundamental - macro - micro</span></h3>';
     html += dim('TECHNICAL', Math.abs(+crown.score || 0) >= 2 ? 'ALIGNED' : 'NEUTRAL', '', tech);
@@ -208,27 +226,3 @@ async function trendmxPerfectEvidencePass(rows){
         try{
           var slot = hgSlotMeanVol(r.rows4h, 20);
           var lv = +r.rows4h[r.rows4h.length - 1].v;
-          if (slot && isFinite(slot.mean) && slot.mean > 0 && isFinite(lv) && lv > 0){
-            var rvolW = lv / slot.mean;
-            reads.volumeRvol = rvolW;
-            reads.sess = rvolW >= 0.6 ? 'participating' : 'thin';
-          }
-        }catch(eSl){ }
-      }
-      try{ if (typeof W.hgNewsRisk === 'function'){ var nw = W.hgNewsRisk(r.base || 'BTC'); if (nw && nw.blackout) reads.newsRisk = 'blackout'; } }catch(eN){ }
-      try{
-        if (typeof W.hgObtcPerfectFormation === 'function'){
-          var pick = { row: Object.assign({}, r, { entry: plan.entry, stop: plan.stop, t1: plan.t1, dir: dir }), tier: 'clean' };
-          W.hgObtcPerfectFormation(pick, reads);
-          r.perfect = pick.row.perfect === true;
-          r.perfectPlus = pick.row.perfectPlus === true;
-          r.perfectReads = pick.row.perfectReads || reads;
-        }
-      }catch(ePf){ }
-    }
-    return rows;
-  }catch(e){ try{ if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('trendmx', e); }catch(e2){ } return rows; }
-}
-
-/* hg-v1068: THE CROWN STATE — the strongest majority row with a minted
-   plan in a light shape the alert batch and th

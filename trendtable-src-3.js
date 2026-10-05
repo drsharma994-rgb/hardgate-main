@@ -1,4 +1,67 @@
-rns source 'taker'
+  }catch(e){ out = ''; }
+  return out;
+}
+
+/* One pass per scan. Golden tickets carry their levels but drop their candles;
+   matrix rows carry their candles but not their levels — the two are joined
+   here by symbol. The matrix row is never given dir/entry/stop of its own:
+   trendmxPlan reads inp.entry as an entry OVERRIDE and tmDirOf reads inp.dir,
+   so writing those onto the row would change the plan the desk builds. A
+   synthetic ticket is enriched instead and only .smc is copied back. */
+function tmSmcScanPass(rows, golden, death){
+  try{
+    if (!tmSmcOn() || !Array.isArray(rows) || !rows.length) return;
+    var i, r, byRows = {};
+    for (i = 0; i < rows.length; i++){ if (rows[i] && rows[i].sym) byRows[rows[i].sym] = rows[i].rows4h; }
+    /* hg-v1014: golden AND death tickets share the one capped envelope —
+       the cap is a compute budget, not a per-desk allowance */
+    var tickets = (golden || []).concat(death || []);
+    for (i = 0; i < tickets.length && i < TM_SMC_MAX; i++){
+      if (tickets[i]) tmSmcMark(tickets[i], byRows[tickets[i].sym]);
+    }
+    var cands = [];
+    for (i = 0; i < rows.length; i++){
+      r = rows[i];
+      if (!r || r.smc || !r.rows4h || !r.rows4h.length) continue;
+      if (r.gate && r.gate.veto) continue;
+      if (!tmDirOf(r)) continue;
+      if (!(r.gate && r.gate.clean7) && !trendmxConviction(r)) continue;
+      cands.push(r);
+    }
+    /* the limit board's own rank, so the capped slice is the slice this desk
+       promotes first rather than an arbitrary universe order */
+    cands.sort(function(a, b){
+      var ra = ((a.gate && a.gate.clean7) ? 1000 : 0) + Math.abs(a.score) * 10 + ((a.gate && a.gate.gatesPassed) || 0);
+      var rb = ((b.gate && b.gate.clean7) ? 1000 : 0) + Math.abs(b.score) * 10 + ((b.gate && b.gate.gatesPassed) || 0);
+      return rb - ra;
+    });
+    for (i = 0; i < cands.length && i < TM_SMC_MAX; i++){
+      r = cands[i];
+      var dir = tmDirOf(r);
+      var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
+      if (!tmValidSetup(plan)) continue;
+      var syn = { sym: r.sym, dir: dir, entry: plan.entry, stop: plan.stop, t1: plan.t1 };
+      tmSmcMark(syn, r.rows4h);
+      if (syn.smc) r.smc = syn.smc;
+    }
+  }catch(e){}
+}
+
+/* ---------------- hg-v1012: EVIDENCE LAYER — real taker flow ----------------
+   The composite is five reads of the same closes (1D EMA200, the 50/200
+   cross, the 4H cascade, the cloud, the ADX point): five ways to agree
+   with yourself. This pass adds the read that CANNOT be derived from
+   those closes — which side is aggressing the tape. A TREND MATRIX row is
+   a multi-day swing claim, and a swing minted into five days of net
+   aggressive selling (for a long) is a claim against the crowd that is
+   actually hitting the market.
+
+   REAL Binance taker long/short flow only, read on the row's own
+   hgDeskBinanceSym twin through hgOmniCvd (omniroute.js) over the last
+   TM_FLOW_LOOK 4h windows. The candle-approximated stand-in never speaks
+   here — the hg-v1009 rule: it derives from the same closes the composite
+   already read, so it is not independent evidence (the caller hands the
+   taker series straight through; hgOmniCvd only returns source 'taker'
    when enough real windows were used).
 
    Flow AGAINST the row's own majority: the row is HELD OFF — capped at
@@ -220,55 +283,3 @@ async function tmLoadCoinDcxContracts(){
   for (var i = 0; i < urls.length; i++){
     try{
       var r = await fetch(urls[i]);
-      if (!r || !r.ok){ last = 'HTTP ' + (r ? r.status : '?'); continue; }
-      var j = await r.json();
-      var list = Array.isArray(j) ? j : (j && Array.isArray(j.data) ? j.data : (j && Array.isArray(j.instruments) ? j.instruments : null));
-      if (!list){ last = 'bad shape'; continue; }
-      var out = [];
-      for (var k = 0; k < list.length; k++){
-        var s = String((list[k] && list[k].symbol) ? list[k].symbol : (list[k] || ''));
-        if (/^B-[A-Z0-9]+_USDT$/.test(s) && out.indexOf(s) < 0) out.push(s);
-      }
-      if (out.length) return out;
-    }catch(e){ last = (e && e.message) || String(e); }
-  }
-  throw new Error(last);
-}
-function tmBinanceTwin(item, tf, n){
-  try{
-    var base = item && item.base ? String(item.base).toUpperCase() : '';
-    if (!base || typeof W.binanceKlines !== 'function') return Promise.resolve([]);
-    return W.binanceKlines(base + 'USDT', tf, n).then(function(rows){ return Array.isArray(rows) ? rows : []; }).catch(function(){ return []; });
-  }catch(e){ return Promise.resolve([]); }
-}
-function tmUnreadRow(item){
-  return {
-    sym: item && item.sym, base: item && item.base, exchange: (item && item.exchange) || 'coindcx',
-    alsoOn: item && item.alsoOn, xu: item, score: null, comps: null, freshCross: null, adx: NaN,
-    unread: true, price: null, rows4h: null, rows1h: null,
-    fundingPct: item && item.fundingPct, turnoverUsd: item && item.turnoverUsd, mark: item && item.mark
-  };
-}
-async function trendmxScanCore(hooks){
-  hooks = hooks || {};
-/* Map before asking Binance — a venue code means nothing to fapi. This is the
-   same defect fixed in desk-scan-universe.js (v431) and brain.js (v450);
-   reuse the mapping those export rather than a fifth private copy. When it is
-   unavailable the Binance leg is skipped: no usable symbol means no Binance
-   data, and inventing one is how this family started. */
-  var fetchK = (typeof W.hgDeskFetchKlines === 'function') ? W.hgDeskFetchKlines.bind(W)
-    : function(it, tf, n){
-        var bSym = (typeof W.hgDeskBinanceSym === 'function')
-          ? W.hgDeskBinanceSym(typeof it === 'string' ? { sym: it } : it)
-          : (typeof it === 'string' ? it : null);
-        return bSym ? W.binanceKlines(bSym, tf, n) : Promise.resolve([]);
-      };
-  if (typeof W.hgDeskLoadUniverse !== 'function'
-      && (typeof W.binancePerpUniverse !== 'function' || typeof W.binanceKlines !== 'function')){
-    throw new Error('missing universe layer (hgDeskLoadUniverse or binancePerpUniverse)');
-  }
-  var uniPack = await W.hgDeskLoadUniverse({ force: true, minTurnover: TURNOVER_FLOOR });
-  var items = uniPack.items || [];
-  /* hg-v1048/hg-v1074: ALL COINDCX FUTURES - the floored universe drops
-     small CoinDCX contracts, so the matrix re-reads the universe at floor 0
-     and merges in every CoinDCX future i

@@ -1,7 +1,3 @@
-loud = 1;
-      else if (st && st.priceVsCloud === 'BELOW') out.comps.cloud = -1;
-    }
-
     /* 3) 4h cascade ema9 / ema21 / ema50 */
     if (ok4){
       var c4 = rows4h.map(function(r){ return r ? r.c : NaN; });
@@ -255,22 +251,110 @@ function trendmxAttachMeta(plan, gate, extra){
    house fallback: entry = last 4h close, stop = lastSwing(4h,30) structure
    within 2.5xATR else 1.5xATR against dir, T1 = 2R, T2 = 3.5R. null when
    there is no majority direction or levels cannot be computed honestly. */
+
+function tmBaseOf(inp){
+  var b = String((inp && (inp.base || inp.sym)) || '').toUpperCase();
+  return b.replace(/^B-/, '').replace(/_USDT$/, '').replace(/USDT$/, '');
+}
+function tmAltLongBlockedByBtc(inp){
+  if (tmBaseOf(inp) === 'BTC') return false;
+  return !!((__tmMacro && __tmMacro.btcStructure === 'down'));
+}
+function trendmxStampBtcStructure(rows){
+  var st = null;
+  if (Array.isArray(rows)){
+    for (var i = 0; i < rows.length; i++){
+      if (tmBaseOf(rows[i]) !== 'BTC') continue;
+      try{ st = tmStructureDir(rows[i].rows4h); }catch(eSt){ st = null; }
+      if (st) break;
+    }
+  }
+  var prev = __tmMacro || {};
+  trendmxMacroSet({ btcFunding: prev.btcFunding != null ? prev.btcFunding : null, btcStructure: st });
+  return st;
+}
+function tmAtrLast(rows){
+  try{
+    if (!rows || typeof atr !== 'function') return NaN;
+    var a = atr(rows, 14);
+    if (!a || !a.length) return NaN;
+    var v = a[a.length - 1];
+    return isFinite(v) ? v : NaN;
+  }catch(e){ return NaN; }
+}
+function tmEmaLast(closes, len){
+  if (typeof ema !== 'function' || !closes) return NaN;
+  var series = ema(closes, len);
+  if (!series || !series.length) return NaN;
+  var v = series[series.length - 1];
+  return isFinite(v) ? v : NaN;
+}
+/* A fresh cross is not filled at the print. The order is a limit at the
+   nearer 4h EMA that price has to come back to. If price is already through
+   both, the pullback has happened and the last close is the entry. The
+   limit dies if it is not tagged within 6 four-hour bars. */
+function trendmxApplyCrossLimit(plan, inp, dir){
+  if (!plan) return null;
+  var kind = inp && inp.freshCross;
+  if (kind !== 'GOLDEN' && kind !== 'DEATH') return plan;
+  var rows = inp.rows4h;
+  if (!rows || rows.length < 21) return plan;
+  var closes = rows.map(function(r){ return r ? r.c : NaN; });
+  var px = closes[closes.length - 1];
+  var e9 = tmEmaLast(closes, 9), e21 = tmEmaLast(closes, 21);
+  if (!isFinite(px)) return plan;
+  var cands = [];
+  if (dir === 'long'){
+    if (isFinite(e9) && e9 < px) cands.push(['EMA9', e9]);
+    if (isFinite(e21) && e21 < px) cands.push(['EMA21', e21]);
+  } else {
+    if (isFinite(e9) && e9 > px) cands.push(['EMA9', e9]);
+    if (isFinite(e21) && e21 > px) cands.push(['EMA21', e21]);
+  }
+  var entry = px, emaName = 'MARKET', entryType = 'MARKET';
+  if (cands.length){
+    cands.sort(function(a, b){ return Math.abs(a[1] - px) - Math.abs(b[1] - px); });
+    entry = cands[0][1];
+    emaName = cands[0][0];
+    entryType = 'LIMIT';
+  }
+  var stop = plan.stop;
+  var a = tmAtrLast(rows);
+  if (dir === 'long' && !(entry > stop) && isFinite(a) && a > 0) stop = entry - 1.5 * a;
+  if (dir === 'short' && !(stop > entry) && isFinite(a) && a > 0) stop = entry + 1.5 * a;
+  var risk = dir === 'long' ? entry - stop : stop - entry;
+  if (!(risk > 0)) return plan;
+  var bit = entryType === 'LIMIT'
+    ? ('LIMIT @ 4h ' + emaName + ' · cancel if not tagged in 6×4h')
+    : 'price already at the 4h EMAs';
+  return Object.assign({}, plan, {
+    entry: entry, stop: stop,
+    t1: dir === 'long' ? entry + 2 * risk : entry - 2 * risk,
+    t2: dir === 'long' ? entry + 3.5 * risk : entry - 3.5 * risk,
+    rr1: 2, rr2: 3.5, riskPct: risk / entry * 100,
+    entryType: entryType, limitEma: emaName,
+    note: (plan.note ? plan.note + ' · ' : '') + bit
+  });
+}
+
 function trendmxPlan(inp){
   try{
     inp = inp || {};
     var dir = tmDirOf(inp);
     if (!dir) return null;
+    if (dir === 'long' && tmAltLongBlockedByBtc(inp)) return null;
+    var plan = null;
     if (typeof hgBestLevels === 'function'){
       var gate = inp.gate || trendmxGateEval(inp, dir);
       var bl = hgBestLevels(Object.assign({}, inp, {
         tab: 'trendmx', style: 'swing', dir: dir, gate: gate,
       }));
       if (bl && bl.ok && bl.plan && tmValidSetup(bl.plan)){
-        return trendmxAttachMeta(bl.plan, bl.gate || gate, { formationScore: bl.formationScore, rows4h: inp.rows4h, price: inp.price });
-      }
-      if (bl && bl.veto) return null;
+        plan = trendmxAttachMeta(bl.plan, bl.gate || gate, { formationScore: bl.formationScore, rows4h: inp.rows4h, price: inp.price });
+      } else if (bl && bl.veto) return null;
     }
-    return trendmxPlanLegacy(inp);
+    if (!plan) plan = trendmxPlanLegacy(inp);
+    return trendmxApplyCrossLimit(plan, inp, dir);
   }catch(e){ return null; }
 }
 
@@ -293,75 +377,3 @@ function trendmxPlanLegacy(inp){
           rows: rows, style: 'swing', a4: gate.hit.a4,
           rows1h: inp.rows1h, ticker: ticker
         });
-        if (fm && fm.ok && fm.hit && tmValidSetup(fm.hit)){
-          return trendmxAttachMeta(fm.hit, gate, { formationScore: fm.formationScore, rows4h: rows, price: inp.price });
-        }
-      }catch(eForm){}
-    }
-
-    /* 2) swing clean plan from cryptogates */
-    if (typeof hgSwingCleanPlan === 'function'){
-      try{
-        var sc = hgSwingCleanPlan(rows, ticker, dir);
-        if (tmValidSetup(sc)) return trendmxAttachMeta(sc, gate, { rows4h: rows, price: inp.price });
-      }catch(eSc){}
-    }
-
-    /* 3) structure-based hgPlanLevels with min R:R */
-    if (typeof hgPlanLevelsCore === 'function'){
-      try{
-        var pl = hgPlanLevelsCore(dir, rows, null, { minRr: TM_MIN_RR, style: 'swing', type: 'TRENDMX' });
-        if (tmValidSetup(pl)) return trendmxAttachMeta(pl, gate, { rows4h: rows, price: inp.price });
-      }catch(ePl){}
-    }
-
-    /* 4) SMART $ builder with trend-derived evidence */
-    if (typeof smartSetup === 'function'){
-      try{
-        var cls = trendmxClassify(inp, dir);
-        var s = smartSetup(cls, rows, inp.rows1h);
-        if (tmValidSetup(s)){
-          if (typeof hgApplyExactEntry === 'function'){
-            s = hgApplyExactEntry(s, rows, { rows1h: inp.rows1h, style: s.type || 'swing', preferEdge: true }) || s;
-          }
-          return trendmxAttachMeta(s, gate, { rows4h: rows, price: inp.price });
-        }
-      }catch(eSmart){}
-    }
-
-    /* 5) house fallback — structure stop + structure targets when available */
-    var entry = +((inp.entry !== undefined && inp.entry !== null) ? inp.entry : lastBar.c);
-    var a = (typeof atr === 'function') ? atr(rows, TM_ATR_LEN)[rows.length - 1] : NaN;
-    if (!isFinite(entry) || entry <= 0 || !isFinite(a) || a <= 0) return null;
-    var st = tmFallbackStop(dir, entry, a, rows);
-    var risk = Math.abs(entry - st.stop);
-    if (!(risk > 0)) return null;
-    var t1 = (dir === 'long') ? entry + TM_T1_R * risk : entry - TM_T1_R * risk;
-    var t2 = (dir === 'long') ? entry + TM_T2_R * risk : entry - TM_T2_R * risk;
-    if (typeof hgStructureTargets === 'function'){
-      try{
-        var tg = hgStructureTargets(dir, entry, st.stop, rows, a, { minRr: TM_MIN_RR, style: 'swing' });
-        if (tg && isFinite(tg.t1)){
-          t1 = tg.t1;
-          if (isFinite(tg.t2)) t2 = tg.t2;
-        }
-      }catch(eTg){}
-    }
-    var fb = {
-      type: 'ATR', dir: dir, entry: entry, stop: st.stop, t1: t1, t2: t2,
-      rr1: Math.abs(t1 - entry) / risk,
-      rr2: Math.abs(t2 - entry) / risk,
-      riskPct: risk / entry * 100,
-      confirmed: null, note: st.note, planSrc: 'trendmx-fallback'
-    };
-    if (!tmValidSetup(fb)) return null;
-    return trendmxAttachMeta(fb, gate, { rows4h: rows, price: inp.price });
-  }catch(e){ return null; }
-}
-
-/* plan line, same markup as oiflow.js:
-   ENTRY <b>..</b> · STOP <b>..</b> · T1 <b>..</b> (xR) · T2 <b>..</b> (xR) · risk ..% */
-function trendmxPlanHTML(s){
-  if (!s) return '';
-  var risk = (isFinite(s.entry) && isFinite(s.stop)) ? Math.abs(s.entry - s.stop) : NaN;
-  var

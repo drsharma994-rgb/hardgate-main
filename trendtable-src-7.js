@@ -1,4 +1,41 @@
-n unread ATR, a mixed tape, a
+function trendmxGateCleanDeskHTML(bag, held, why){
+  return trendmxLimitDeskHTML(
+    'LIMIT BOARD · GATE-CLEAN DESK',
+    'criteria: the 7/7 swing-gate matrix (spread · vol-Z · EMA21 anchor · funding · regime · structure · R:R) confirms the composite majority · exact resting limits · taker flow not against · 1D RSI momentum range not turned against · 1D OBV volume trend not diverging against · sorted by composite + gates',
+    bag, held, why);
+}
+
+function trendmxConvictionDeskHTML(bag, held, why){
+  return trendmxLimitDeskHTML(
+    'LIMIT BOARD · CONVICTION DESK',
+    'criteria: five-leg composite majority |≥2| (STRONG |≥4|) without the 7/7 stamp — 1D EMA200 · EMA50/200 cross · 4H EMA9/21/50 cascade · Ichimoku cloud · ADX strength · exact resting limits · taker flow not against · 1D RSI momentum range not turned against · 1D OBV volume trend not diverging against · ADX breaks composite ties',
+    bag, held, why);
+}
+
+/* hg-v1022: the PERFECT desk collects the rows trendmxPerfectState crowned and
+   builds a valid plan for each, ranked by |composite| then gates passed (the
+   gate-clean desk's own intra-class rank). The bag reuses the shared card
+   renderer with item.perfect set, so each card carries the ★ PERFECT stamp. */
+function trendmxPerfectSetups(rows){
+  var out = [];
+  if (!Array.isArray(rows)) return out;
+  for (var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if (!trendmxPerfectState(r)) continue;
+    var dir = tmDirOf(r);
+    var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
+    if (!tmValidSetup(plan)) continue;
+    out.push({ row: r, plan: plan, dir: dir, stack: trendmxCardStack(r, dir), perfect: true,
+               rank: Math.abs(r.score) * 10 + (r.gate.gatesPassed || 0) });
+  }
+  out.sort(function(a, b){ return b.rank - a.rank; });
+  return out;
+}
+
+
+/* hg-v1082: FIVE-PILLAR STACK — technical, fundamental, sentiment, macro, micro.
+   A FULL STACK row is one where every pillar is readable AND with the row's
+   own majority. WITH is a positive read. An unread ATR, a mixed tape, a
    missing 4h structure, and BTC funding that is merely not crowded do not
    count as WITH. Structure must agree (EMA50 vs EMA200). An against pillar
    vetoes the stack. The composite, the PERFECT predicate, and the tiers are
@@ -246,35 +283,3 @@ function trendmxPaintDeskSections(refs, state){
   if (refs.cards){
     if (!clean.length){
       refs.cards.innerHTML = (typeof hgSetupEmptyHTML === 'function')
-        ? hgSetupEmptyHTML({ title: 'No CLEAN trend tickets right now.', body: 'NEAR and FORMING rows below are watch-only. The golden and death cross desks and the limit board surface actionable rows when gates + plan align.' })   /* hg-v1015: two cross desks now */
-        : '<div class="empty">No CLEAN tickets.</div>';
-    } else {
-      var ch = '<div class="note" style="margin:0 0 10px"><b>CLEAN TICKETS</b> — 7/7 gates + valid plan + min R:R ' + TM_MIN_RR + '.</div>';
-      for (var ci = 0; ci < Math.min(clean.length, 12); ci++) ch += trendmxSetupCardHTML(clean[ci], 'clean');
-      refs.cards.innerHTML = ch;
-      trendmxPaintMiniCharts(refs.cards, clean);
-    }
-    try {
-      if (typeof W.hgMpPin === 'function'){
-        function tmWithPlan(row){
-          var d = tmDirOf(row);
-          var p = d ? trendmxPlan(Object.assign({}, row, { dir: d })) : null;
-          return p ? Object.assign({}, row, p, { dir: d }) : row;
-        }
-        W.hgMpPin('trendmx', { cands: clean.map(tmWithPlan), nearCands: near.map(tmWithPlan), closest: forming[0] ? tmWithPlan(forming[0]) : null }, null, refs.cards);
-      }
-    } catch (eMp) {}
-  }
-  if (refs.near){
-    refs.near.innerHTML = near.length
-      ? ((typeof hgSetupNearHeaderHTML === 'function' ? hgSetupNearHeaderHTML(near.length, 'trendmx') : '')
-        + near.slice(0, 8).map(function(r){ return trendmxSetupCardHTML(r, 'near'); }).join(''))
-      : '';
-  }
-  if (refs.forming){
-    refs.forming.innerHTML = (typeof hgFormingWatchHTML === 'function')
-      ? hgFormingWatchHTML(forming.slice(0, 12).map(function(r){
-          return {
-            state: (r.gate && r.gate.gatesPassed >= 5) ? 'armed' : 'idle',
-            sym: r.sym, strategy: 'TRENDMX',
-            condition: (r.freshCross ? '⚡' + r.freshCross + ' · ' : '') +

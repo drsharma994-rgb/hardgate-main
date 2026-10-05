@@ -1,8 +1,8 @@
-/* BATCH 1131 — every 10 minutes, Telegram reports the CoinDCX scan.
-   A golden cross that just formed is sent with levels. If none formed,
-   Telegram still says there were no fresh crosses. Every active CoinDCX
-   USDT future is scanned. Binance-only coins are not sent. A cross
-   already sent is not repeated. */
+/* BATCH 1133 — every 10 minutes, Telegram reports the CoinDCX scan.
+   A golden cross that just formed is sent with a limit at the nearer 4h
+   EMA9 or EMA21. TRADE means RSI, OBV and funding are not against the long,
+   and Bitcoin's 4h structure is not down for an alt. SKIP is still sent.
+   If none formed, Telegram still says there were no fresh crosses. */
 import fs from 'fs';
 
 const STATE_FILE = 'golden-alert-state.json';
@@ -92,7 +92,84 @@ async function getJson(path){
 async function klines(symbol, interval, limit){
   const j = await getJson('/api/v3/klines?symbol=' + symbol + '&interval=' + interval + '&limit=' + limit);
   if (!Array.isArray(j)) throw new Error(symbol + ' not candles');
-  return j.map(function(k){ return { o:+k[1], h:+k[2], l:+k[3], c:+k[4] }; });
+  return j.map(function(k){ return { o:+k[1], h:+k[2], l:+k[3], c:+k[4], v:+k[5] }; });
+}
+function emaLast(values, len){
+  const s = ema(values, len);
+  const v = s.length ? s[s.length - 1] : NaN;
+  return Number.isFinite(v) ? v : NaN;
+}
+function rsiLast(closes, len){
+  len = len || 14;
+  if (!closes || closes.length < len + 1) return NaN;
+  let gain = 0, loss = 0;
+  for (let i = 1; i <= len; i++){
+    const d = closes[i] - closes[i - 1];
+    if (d >= 0) gain += d; else loss -= d;
+  }
+  gain /= len; loss /= len;
+  for (let i = len + 1; i < closes.length; i++){
+    const d = closes[i] - closes[i - 1];
+    gain = (gain * (len - 1) + (d > 0 ? d : 0)) / len;
+    loss = (loss * (len - 1) + (d < 0 ? -d : 0)) / len;
+  }
+  if (!(loss > 0)) return gain > 0 ? 100 : 50;
+  return 100 - 100 / (1 + gain / loss);
+}
+function obvDivergesLong(rows){
+  const WIN = 20;
+  if (!rows || rows.length < WIN * 2) return null;
+  let acc = 0, any = false;
+  const obv = new Array(rows.length).fill(0);
+  for (let i = 0; i < rows.length; i++){
+    const v = rows[i].v > 0 ? rows[i].v : 0;
+    if (v > 0) any = true;
+    if (i > 0){
+      if (rows[i].c > rows[i - 1].c) acc += v;
+      else if (rows[i].c < rows[i - 1].c) acc -= v;
+    }
+    obv[i] = acc;
+  }
+  if (!any) return null;
+  let pHi1 = -Infinity, pHi2 = -Infinity, oHi1 = -Infinity, oHi2 = -Infinity;
+  const n = rows.length;
+  for (let i = n - WIN * 2; i < n; i++){
+    if (!(rows[i].c > 0)) continue;
+    if (i >= n - WIN){
+      if (rows[i].c > pHi2) pHi2 = rows[i].c;
+      if (obv[i] > oHi2) oHi2 = obv[i];
+    } else {
+      if (rows[i].c > pHi1) pHi1 = rows[i].c;
+      if (obv[i] > oHi1) oHi1 = obv[i];
+    }
+  }
+  if (![pHi1, pHi2, oHi1, oHi2].every(Number.isFinite)) return null;
+  return pHi2 > pHi1 && oHi2 < oHi1;
+}
+async function fundingMap(){
+  const map = new Map();
+  const hosts = ['https://fapi.binance.com', 'https://data-api.binance.vision'];
+  for (const host of hosts){
+    try {
+      const r = await fetch(host + '/fapi/v1/premiumIndex', { signal: AbortSignal.timeout(8000) });
+      const j = await r.json();
+      if (!r.ok || !Array.isArray(j)) continue;
+      for (const row of j){
+        if (row && row.symbol && row.lastFundingRate != null && Number.isFinite(+row.lastFundingRate)){
+          map.set(row.symbol, (+row.lastFundingRate) * 100);
+        }
+      }
+      if (map.size) return map;
+    } catch (e) {}
+  }
+  return map;
+}
+function btcStructureDown(h4){
+  if (!h4 || h4.length < 210) return null;
+  const c = h4.map(function(r){ return r.c; });
+  const e50 = emaLast(c, 50), e200 = emaLast(c, 200);
+  if (!Number.isFinite(e50) || !Number.isFinite(e200) || e50 === e200) return null;
+  return e50 < e200;
 }
 function atr(rows, n){
   n = n || 14;
@@ -106,21 +183,33 @@ function atr(rows, n){
 }
 function planOf(h4){
   if (!h4 || h4.length < 21) return null;
-  const entry = h4[h4.length - 1].c;
+  const last = h4[h4.length - 1].c;
   const a = atr(h4, 14);
-  if (!(entry > 0) || !(a > 0)) return null;
+  if (!(last > 0) || !(a > 0)) return null;
+  const closes = h4.map(function(r){ return r.c; });
+  const e9 = emaLast(closes, 9), e21 = emaLast(closes, 21);
+  const cands = [];
+  if (Number.isFinite(e9) && e9 < last) cands.push(['EMA9', e9]);
+  if (Number.isFinite(e21) && e21 < last) cands.push(['EMA21', e21]);
+  cands.sort(function(x, y){ return Math.abs(x[1] - last) - Math.abs(y[1] - last); });
+  let entry = last, entryType = 'MARKET', limitEma = 'MARKET';
+  if (cands.length){
+    entry = cands[0][1];
+    entryType = 'LIMIT';
+    limitEma = cands[0][0];
+  }
   const seg = h4.slice(Math.max(0, h4.length - 1 - 20), h4.length - 1);
   const swing = seg.length ? Math.min.apply(null, seg.map(function(r){ return r.l; })) : NaN;
   let stop = NaN;
-  if (isFinite(swing)){
+  if (Number.isFinite(swing)){
     const s = swing - 0.25 * a;
-    const risk = entry - s;
-    if (risk > 0 && risk <= 2.5 * a) stop = s;
+    const risk0 = entry - s;
+    if (risk0 > 0 && risk0 <= 2.5 * a) stop = s;
   }
-  if (!isFinite(stop) || !(entry > stop)) stop = entry - 1.5 * a;
+  if (!Number.isFinite(stop) || !(entry > stop)) stop = entry - 1.5 * a;
   const risk = entry - stop;
   if (!(risk > 0)) return null;
-  return { entry: entry, stop: stop, t1: entry + 2 * risk, t2: entry + 3.5 * risk };
+  return { entry: entry, stop: stop, t1: entry + 2 * risk, t2: entry + 3.5 * risk, entryType: entryType, limitEma: limitEma };
 }
 function px(n){
   if (!isFinite(n)) return '—';
@@ -210,11 +299,14 @@ async function main(){
   }).sort(function(a, b){ return b.quoteVolume - a.quoteVolume; });
   const state = loadState();
   const sent = state.sent || {};
+  const funds = await fundingMap();
+  let btcDown = null;
+  try { btcDown = btcStructureDown(await klines('BTCUSDT', '4h', 260)); } catch (e) { btcDown = null; }
   const hits = [];
   await pool(universe, 6, async function(t){
     try {
       const d1 = await klines(t.symbol, '1d', 260);
-      const h4 = await klines(t.symbol, '4h', 120);
+      const h4 = await klines(t.symbol, '4h', 260);
       const s = scoreOf(d1, h4);
       if (!s || !(s.e50 > s.e200)) return;
       if (!s.fresh && s.score !== 5) return;
@@ -226,12 +318,20 @@ async function main(){
       const formed = s.fresh && (!prev || prev.fresh === false || (prev.crossDay && prev.crossDay !== crossDay));
       if (s.fresh) sent[base] = { at: new Date().toISOString(), score: s.score, fresh: true, ago: s.ago, crossDay: crossDay };
       if (!formed) return;
-      hits.push({ base: base, s: s, plan: plan });
+      const reasons = [];
+      const rsi = rsiLast(d1.map(function(r){ return r.c; }), 14);
+      if (Number.isFinite(rsi) && rsi < 40) reasons.push('RSI ' + rsi.toFixed(0) + ' against');
+      if (obvDivergesLong(d1) === true) reasons.push('OBV diverging');
+      const fund = funds.has(t.symbol) ? funds.get(t.symbol) : null;
+      if (fund != null && fund >= 0.04) reasons.push('funding crowded ' + fund.toFixed(3) + '%');
+      if (base !== 'BTC' && btcDown === true) reasons.push('BTC structure down');
+      hits.push({ base: base, s: s, plan: plan, grade: reasons.length ? 'SKIP' : 'TRADE', reasons: reasons });
     } catch (e) {
       console.error(t.symbol, e.message || e);
     }
   });
   hits.sort(function(a, b){
+    if (a.grade !== b.grade) return a.grade === 'TRADE' ? -1 : 1;
     if (b.s.score !== a.s.score) return b.s.score - a.s.score;
     if (a.s.fresh !== b.s.fresh) return a.s.fresh ? -1 : 1;
     return a.base.localeCompare(b.base);
@@ -258,13 +358,18 @@ async function main(){
   const lines = hits.map(function(h, i){
     const p = h.plan;
     const comp = h.s.score === 5 ? ' · composite +5/5 !GOLDEN' : '';
-    return (i + 1) + '. ' + h.base + ' · B-' + h.base + '_USDT · LONG · NEW TREND MATRIX GOLDEN CROSS · cross ' + h.s.ago + 'd ago · +' + h.s.score + '/5' + comp
-      + '\n   entry ' + px(p.entry) + ' · SL ' + px(p.stop) + ' · TP1 ' + px(p.t1) + ' (2R) · TP2 ' + px(p.t2) + ' (3.5R)';
+    const tag = h.grade === 'TRADE' ? 'TRADE' : ('SKIP · ' + h.reasons.join(' · '));
+    const entryBit = p.entryType === 'LIMIT'
+      ? ('LIMIT @ ' + p.limitEma + ' ' + px(p.entry) + ' · cancel if not tagged in 6x4h')
+      : ('entry ' + px(p.entry) + ' · already at 4h EMAs');
+    return (i + 1) + '. ' + h.base + ' · B-' + h.base + '_USDT · LONG · NEW TREND MATRIX GOLDEN CROSS · cross ' + h.s.ago + 'd ago · +' + h.s.score + '/5' + comp + ' · ' + tag
+      + '\n   ' + entryBit + ' · SL ' + px(p.stop) + ' · TP1 ' + px(p.t1) + ' (2R) · TP2 ' + px(p.t2) + ' (3.5R)';
   });
   const head = [
     'HARDGATE — NEW GOLDEN CROSS',
     'CoinDCX active USDT futures only · ' + when,
-    hits.length + ' new · scanned ' + universe.length + ' CoinDCX pairs'
+    hits.length + ' new · scanned ' + universe.length + ' CoinDCX pairs',
+    'TRADE only when RSI, OBV and funding agree, and BTC structure is not down for an alt. SKIP is not a trade.'
   ].join('\n');
   const bodyParts = lines.length ? chunks(lines) : [''];
   const ids = [];

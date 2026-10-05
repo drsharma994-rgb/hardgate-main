@@ -1,4 +1,55 @@
-t missed (deduped on venue+sym).
+      if (!r || !r.ok){ last = 'HTTP ' + (r ? r.status : '?'); continue; }
+      var j = await r.json();
+      var list = Array.isArray(j) ? j : (j && Array.isArray(j.data) ? j.data : (j && Array.isArray(j.instruments) ? j.instruments : null));
+      if (!list){ last = 'bad shape'; continue; }
+      var out = [];
+      for (var k = 0; k < list.length; k++){
+        var s = String((list[k] && list[k].symbol) ? list[k].symbol : (list[k] || ''));
+        if (/^B-[A-Z0-9]+_USDT$/.test(s) && out.indexOf(s) < 0) out.push(s);
+      }
+      if (out.length) return out;
+    }catch(e){ last = (e && e.message) || String(e); }
+  }
+  throw new Error(last);
+}
+function tmBinanceTwin(item, tf, n){
+  try{
+    var base = item && item.base ? String(item.base).toUpperCase() : '';
+    if (!base || typeof W.binanceKlines !== 'function') return Promise.resolve([]);
+    return W.binanceKlines(base + 'USDT', tf, n).then(function(rows){ return Array.isArray(rows) ? rows : []; }).catch(function(){ return []; });
+  }catch(e){ return Promise.resolve([]); }
+}
+function tmUnreadRow(item){
+  return {
+    sym: item && item.sym, base: item && item.base, exchange: (item && item.exchange) || 'coindcx',
+    alsoOn: item && item.alsoOn, xu: item, score: null, comps: null, freshCross: null, adx: NaN,
+    unread: true, price: null, rows4h: null, rows1h: null,
+    fundingPct: item && item.fundingPct, turnoverUsd: item && item.turnoverUsd, mark: item && item.mark
+  };
+}
+async function trendmxScanCore(hooks){
+  hooks = hooks || {};
+/* Map before asking Binance — a venue code means nothing to fapi. This is the
+   same defect fixed in desk-scan-universe.js (v431) and brain.js (v450);
+   reuse the mapping those export rather than a fifth private copy. When it is
+   unavailable the Binance leg is skipped: no usable symbol means no Binance
+   data, and inventing one is how this family started. */
+  var fetchK = (typeof W.hgDeskFetchKlines === 'function') ? W.hgDeskFetchKlines.bind(W)
+    : function(it, tf, n){
+        var bSym = (typeof W.hgDeskBinanceSym === 'function')
+          ? W.hgDeskBinanceSym(typeof it === 'string' ? { sym: it } : it)
+          : (typeof it === 'string' ? it : null);
+        return bSym ? W.binanceKlines(bSym, tf, n) : Promise.resolve([]);
+      };
+  if (typeof W.hgDeskLoadUniverse !== 'function'
+      && (typeof W.binancePerpUniverse !== 'function' || typeof W.binanceKlines !== 'function')){
+    throw new Error('missing universe layer (hgDeskLoadUniverse or binancePerpUniverse)');
+  }
+  var uniPack = await W.hgDeskLoadUniverse({ force: true, minTurnover: TURNOVER_FLOOR });
+  var items = uniPack.items || [];
+  /* hg-v1048/hg-v1074: ALL COINDCX FUTURES - the floored universe drops
+     small CoinDCX contracts, so the matrix re-reads the universe at floor 0
+     and merges in every CoinDCX future it missed (deduped on venue+sym).
      hg-v1074 reads the RAW CoinDCX leg (hgDeskLoadCoinDCXAll), not the
      deduped merged universe: xuMergeLegs tags one 'exchange' per base and
      the higher-turnover venue wins, so a CoinDCX contract also listed on
@@ -48,9 +99,12 @@ t missed (deduped on venue+sym).
     var chunk = items.slice(i, i + CHUNK);
     if (typeof hooks.setProg === 'function') hooks.setProg((i + chunk.length) / items.length);
     var rs = await Promise.all(chunk.map(function(item){
-      return fetchK(item, '4h', 120).then(function(r4){
-          if (r4 && r4.length) return r4;
-          return tmBinanceTwin(item, '4h', 120);
+      return fetchK(item, '4h', 260).then(function(r4){
+          if (r4 && r4.length >= 210) return r4;
+          return tmBinanceTwin(item, '4h', 260).then(function(twin){
+            if (twin && twin.length > ((r4 && r4.length) || 0)) return twin;
+            return (r4 && r4.length) ? r4 : [];
+          });
         }).then(function(r4){
           if (!r4 || !r4.length) return tmUnreadRow(item);
           return Promise.all([
@@ -91,6 +145,7 @@ async function trendmxScan(opts){
     return __tmScanSnap;
   }
   var core = await trendmxScanCore(opts);
+  trendmxStampBtcStructure(core.rows);
   var golden = trendmxGoldenCrossSetups(core.rows);
   var death = trendmxDeathCrossSetups(core.rows);   /* hg-v1014: the mirrored desk */
   tmSmcScanPass(core.rows, golden, death);
@@ -226,51 +281,3 @@ function trendmxCrossCardHTML(g){
 /* hg-v1015: TWO CROSS DESKS — the v1014 combined panel is split at the
    operator's ask: the bull desk and the bear desk stand on their own, each
    its own panel, its own palette, its own sub-line. The card renderer
-   stays the shared dir-aware one (hg-v1014); a desk differs only in which
-   bag it renders. The 4-card cap is the cap each half already had — the
-   split changes no exposure. A desk with no tickets renders nothing. */
-function trendmxGoldenDeskHTML(golden){
-  golden = golden || [];
-  if (!golden.length) return '';
-  var cards = '';
-  for (var i = 0; i < Math.min(golden.length, 4); i++) cards += trendmxCrossCardHTML(golden[i]);
-  return '<div class="panel tier-clean" style="margin:12px 0;border-left:4px solid #047857">'
-    + '<h2>⚡ GOLDEN CROSS DESK <span>EMA50/200 BULL cross ≤10 daily bars — fresh LONGS · conviction + valid plan · Telegram every 15m</span></h2>'
-    + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + cards + '</div>'
-    + '</div>';
-}
-
-function trendmxDeathDeskHTML(death){
-  death = death || [];
-  if (!death.length) return '';
-  var cards = '';
-  for (var i = 0; i < Math.min(death.length, 4); i++) cards += trendmxCrossCardHTML(death[i]);
-  return '<div class="panel" style="margin:12px 0;border-left:4px solid #b91c1c">'
-    + '<h2>⚡ DEATH CROSS DESK <span>EMA50/200 BEAR cross ≤10 daily bars — fresh SHORTS · conviction + valid plan · Telegram every 15m</span></h2>'
-    + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + cards + '</div>'
-    + '</div>';
-}
-
-function trendmxLimitCardHTML(item){
-  if (!item || !item.plan) return '';
-  var p = item.plan, r = item.row, dir = item.dir;
-  var col = dir === 'long' ? '#047857' : '#dc2626';
-  var stHtml = '';
-  if (typeof hgLimitState === 'function'){
-    var a = (r.rows4h && typeof atr === 'function') ? atr(r.rows4h, TM_ATR_LEN) : null;
-    var atrL = (a && a.length) ? a[a.length - 1] : NaN;
-    var st = hgLimitState(p, r.price, atrL);
-    if (st && st.label) stHtml = '<span class="stamp" style="margin-left:6px">' + escH(st.label) + '</span>';
-  }
-  var tradeOn = (typeof hgToTradePlanOnclickAttr === 'function')
-    ? hgToTradePlanOnclickAttr(r.sym, dir, p.entry, p.stop, p.t1, { t2: p.t2, stack: item.stack, scanner: 'trendmx', strategy: 'trendmx' }) : '';
-  /* hg-v1018: the card names its own formation class — the desks are
-     separated by criteria now, and the stamp keeps the class legible where
-     a card is screenshotted or shared off the desk. */
-  /* hg-v1022: a PERFECT row carries its own stamp ahead of the class stamp —
-     the strictest confluence read, distinguished so it survives a screenshot. */
-  var perfectStamp = item.perfect
-    ? '<span class="stamp pass" style="margin-left:6px;background:#fef3c7;color:#92400e">\u2605 PERFECT</span>'
-    : '';
-  var clsStamp = (r.gate && r.gate.clean7)
-    ? '<span class="stamp" style

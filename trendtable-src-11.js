@@ -1,4 +1,21 @@
-eshCross === 'GOLDEN';
+    if (k === 'score') return r.score;
+    if (k === 'gates') return (r.gate && isFinite(r.gate.gatesPassed)) ? r.gate.gatesPassed : -1;
+    if (k === 'adx')   return isFinite(r.adx) ? r.adx : -Infinity;
+    if (k === 'price') return r.price;
+    return r.comps[k] || 0;
+  }
+  function passVenue(r){
+    if (!state.venue || state.venue === 'ALL') return true;
+    return tmRowVenue(r) === state.venue;
+  }
+  function passFilter(r){
+    if (!passVenue(r)) return false;
+    var dir = tmDirOf(r);
+    var plan = dir ? trendmxPlan(Object.assign({}, r, { dir: dir })) : null;
+    var tier = trendmxRowTier(r, plan);
+    if (state.filter === 'CL') return tier === 'clean';
+    if (state.filter === 'NR') return tier === 'near';
+    if (state.filter === 'GD') return r.freshCross === 'GOLDEN';
     if (state.filter === 'DT') return r.freshCross === 'DEATH';   /* hg-v1014 */
     if (state.filter === 'CV') return !!trendmxConviction(r);
     if (state.filter === 'SL') return r.score >= 4;

@@ -1,4 +1,39 @@
-t:6px" title="' + escH('trendmx volume witness (hg-v1020): price and OBV made the new 20-bar extreme together — the 1D volume trend confirms this ' + dir
+    if (pct > 80) return { pct: pct, regime: 'BLOWOFF' };
+    return { pct: pct, regime: 'HEALTHY' };
+  }catch(e){ return null; }
+}
+
+/* the ATR-regime chip — the volume witness's own pattern (hg-v1020): DEAD and
+   BLOWOFF name the danger; HEALTHY carries the pass chip; unreadable paints
+   NO chip. Evidence, never a gate. */
+function trendmxAtrRegimeChipHtml(r){
+  try{
+    var reg = trendmxAtrRegime(r);
+    if (!reg) return '';
+    if (reg.regime === 'DEAD'){
+      return '<span class="stamp bad" style="margin-left:6px" title="' + escH('trendmx volatility regime (hg-v1022): 4h ATR(14) sits at the ' + reg.pct.toFixed(0) + 'th percentile of its own trailing distribution — bottom-quintile chop. The trend legs drift but nothing trades here. Evidence, never a gate.') + '">ATR REGIME DEAD</span>';
+    }
+    if (reg.regime === 'BLOWOFF'){
+      return '<span class="stamp bad" style="margin-left:6px" title="' + escH('trendmx volatility regime (hg-v1022): 4h ATR(14) sits at the ' + reg.pct.toFixed(0) + 'th percentile — top-quintile blowoff, a move already spent. Evidence, never a gate.') + '">ATR REGIME BLOWOFF</span>';
+    }
+    return '<span class="stamp pass" style="margin-left:6px" title="' + escH('trendmx volatility regime (hg-v1022): 4h ATR(14) sits at the ' + reg.pct.toFixed(0) + 'th percentile — healthy volatility, a trend with room to run. Evidence, never a gate.') + '">ATR REGIME HEALTHY</span>';
+  }catch(e){ return ''; }
+}
+
+/* the volume witness's chip — the momentum chip's own pattern (hg-v1019).
+   AGAINST names the hold-off; WITH carries the pass chip; FLAT and unread
+   paint NO chip. */
+function trendmxVolChipHtml(r){
+  try{
+    var dir = tmDirOf(r);
+    var st = trendmxVolState(r, dir);
+    if (!st || st === 'flat') return '';
+    if (st === 'against'){
+      return '<span class="stamp bad" style="margin-left:6px" title="' + escH('trendmx volume witness (hg-v1020): the 1D OBV trend diverges against this ' + dir
+        + ' — ' + (dir === 'long' ? 'price made a higher 20-bar high on a lower OBV high: distribution under the rally' : 'price made a lower 20-bar low on a higher OBV low: accumulation under the fall')
+        + ' (Granville: volume must confirm). Held off the LIMIT BOARD, never CLEAN — the row paints, the reason is named.') + '">VOLUME TREND AGAINST · HELD OFF</span>';
+    }
+    return '<span class="stamp pass" style="margin-left:6px" title="' + escH('trendmx volume witness (hg-v1020): price and OBV made the new 20-bar extreme together — the 1D volume trend confirms this ' + dir
       + '. Evidence, never a composite point.') + '">VOLUME TREND WITH IT</span>';
   }catch(e){ return ''; }
 }
@@ -218,41 +253,3 @@ function trendmxLimitDeskHTML(title, crit, bag, held, why){
     + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + bag.map(trendmxLimitCardHTML).join('') + '</div></div>';
 }
 
-function trendmxGateCleanDeskHTML(bag, held, why){
-  return trendmxLimitDeskHTML(
-    'LIMIT BOARD · GATE-CLEAN DESK',
-    'criteria: the 7/7 swing-gate matrix (spread · vol-Z · EMA21 anchor · funding · regime · structure · R:R) confirms the composite majority · exact resting limits · taker flow not against · 1D RSI momentum range not turned against · 1D OBV volume trend not diverging against · sorted by composite + gates',
-    bag, held, why);
-}
-
-function trendmxConvictionDeskHTML(bag, held, why){
-  return trendmxLimitDeskHTML(
-    'LIMIT BOARD · CONVICTION DESK',
-    'criteria: five-leg composite majority |≥2| (STRONG |≥4|) without the 7/7 stamp — 1D EMA200 · EMA50/200 cross · 4H EMA9/21/50 cascade · Ichimoku cloud · ADX strength · exact resting limits · taker flow not against · 1D RSI momentum range not turned against · 1D OBV volume trend not diverging against · ADX breaks composite ties',
-    bag, held, why);
-}
-
-/* hg-v1022: the PERFECT desk collects the rows trendmxPerfectState crowned and
-   builds a valid plan for each, ranked by |composite| then gates passed (the
-   gate-clean desk's own intra-class rank). The bag reuses the shared card
-   renderer with item.perfect set, so each card carries the ★ PERFECT stamp. */
-function trendmxPerfectSetups(rows){
-  var out = [];
-  if (!Array.isArray(rows)) return out;
-  for (var i = 0; i < rows.length; i++){
-    var r = rows[i];
-    if (!trendmxPerfectState(r)) continue;
-    var dir = tmDirOf(r);
-    var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
-    if (!tmValidSetup(plan)) continue;
-    out.push({ row: r, plan: plan, dir: dir, stack: trendmxCardStack(r, dir), perfect: true,
-               rank: Math.abs(r.score) * 10 + (r.gate.gatesPassed || 0) });
-  }
-  out.sort(function(a, b){ return b.rank - a.rank; });
-  return out;
-}
-
-
-/* hg-v1082: FIVE-PILLAR STACK — technical, fundamental, sentiment, macro, micro.
-   A FULL STACK row is one where every pillar is readable AND with the row's
-   own majority. WITH is a positive read. A
