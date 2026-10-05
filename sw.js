@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v1071';
+const HG_CACHE = 'hg-v1072';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -36,7 +36,7 @@ const HG_SHELL = [
   './portfolio-allocation.js', './inc567-data-core.js', './inc567-config-loader.js', './inc567-regime-panels.js',
   './inc34-data-core.js', './backtest-tab-params.js', './data/param-drift.json', './data/desk-tab-params.json', './data/symbol-tier.json', './data/alert-precision.json',
   './recon-tab.js', './setup-activation.js', './rotation.js', './goldspot.js',
-  './gold-session.js', './goldind.js', './gold-catalog.js', './gold-seven-step.js', './goldscalp.js', './goldswing.js', './pinegoldmath.js', './goldpine.js', './signallog.js',
+  './gold-session.js', './goldind.js', './gold-catalog.js', './gold-seven-step.js', './goldscalp.js', './ganeshgold.js', './goldswing.js', './pinegoldmath.js', './goldpine.js', './signallog.js',
   './data/setup-profile.json', './data/regime-profile.json',
   './data/strategy-weights.json', './data/strategy-regime-state.json', './data/fund-config.json',
   './conviction-lock.js', './macro-feeds.js', './venuepremium.js', './formation-live.js',

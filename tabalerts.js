@@ -274,6 +274,7 @@ function tabAlertsFilterCryptoConvicted(list){
     if (s.src === 'BEST') return true;
     if (s.src === 'OMNIBTC') return true;   /* hg-v1053: the desk's own gate-clean MOST PROBABLE crown */
     if (s.src === 'TRENDMX CROWN') return true;   /* hg-v1068: the matrix's own gate-clean crown */
+    if (s.src === 'GANESH GOLD') return true;   /* hg-v1072: the firm's own A/A+ crown */
     if (s.src.indexOf('EDGE') >= 0) return true;
     if (s.src.indexOf('BRAIN') >= 0) return true;
     return false;
@@ -904,7 +905,24 @@ function collectOmnibtc(out){
   }catch(e){ /* never breaks the batch */ }
 }
 
-/* hg-v1068: the TREND MATRIX crown joins the unified batch — clean tier
+/* hg-v1072: the GANESH GOLD TICKET crown - A/A+ only, levels in the line. */
+function collectGaneshGold(out){
+  try{
+    if (typeof W.ganeshGoldState !== 'function') return;
+    var s = W.ganeshGoldState();
+    if (!s || !s.ok || !s.plan) return;
+    var p = s.plan;
+    if (p.tier !== 'TICKET') return;
+    if (!fin(+p.entry) || !fin(+p.stop) || !fin(+p.t1)) return;
+    var note = (p.grade === 'A+' ? 'STAR A+ ' : 'STAR A ') + 'pipeline ' + p.dir.toUpperCase() + ' ' + (s.style === 'scalp' ? '15m' : '4h');
+    pushSetup(out, 'GANESH GOLD', {
+      sym: 'XAUUSD', dir: p.dir, entry: +p.entry, stop: +p.stop, t1: +p.t1, t2: fin(p.t2) ? +p.t2 : undefined,
+      clean: true, tier: p.grade
+    }, { clean7: true, prime: p.grade === 'A+', note: note || null });
+  }catch(e){ /* never breaks the batch */ }
+}
+
+/* hg-v1068: the TREND MATRIX crown joins the unified batch - clean tier
    only, PERFECT badges in the note, levels for the push line. */
 function collectTrendmxCrown(out){
   try{
@@ -932,6 +950,7 @@ function hgTabAlertsCollect(win){
   try{
     collectOmnibtc(out);   /* hg-v1053: the desk's one crown, first - it is the most selective read */
     collectTrendmxCrown(out);   /* hg-v1068: the matrix's one crown, right after */
+    collectGaneshGold(out);   /* hg-v1072: the firm's one crown */
     collectCrypto(out, 'swing', 'SWING');
     collectCrypto(out, 'scalp', 'SCALP');
     collectCryptoWatch(out);
@@ -1446,6 +1465,7 @@ async function hgTrendmxCrossAlertsRun(opts){
 W.hgTabAlertsCollect = function(){ return hgTabAlertsCollect(W); };
 W.collectOmnibtc = collectOmnibtc;   /* hg-v1053: test seam */
 W.collectTrendmxCrown = collectTrendmxCrown;   /* hg-v1068: test seam */
+W.collectGaneshGold = collectGaneshGold;   /* hg-v1072: test seam */
 W.hgTabAlertsCollectGold = function(){ return hgTabAlertsCollectGold(W); };
 W.hgTabAlertsRun = function(opts){ return hgTabAlertsRun(opts || {}); };
 W.hgTabAlertsCheckLive = function(){
