@@ -1,13 +1,13 @@
-/* HARDGATE — gold-combined.js (hg-v1106)
+/* HARDGATE — gold-combined.js (hg-v1107)
    One setup per gold tab. The v1105 playbook, plus the next layer:
    USDJPY as an inverse filter, the gold/silver ratio, the 2s10s curve,
    session volume profile, Heikin Ashi, Renko and KAMA. GLD tonnage is
-   unread — there is no keyless holdings feed. A missing read is not a yes. */
+   unread — there is no keyless holdings feed. v1107 adds the paper-versus-physical layer that can actually be read: COMEX minus spot, and the GLD/GDX spread. Skew, lease rates, Swiss customs and the Shanghai premium stay unread. */
 (function(){
 'use strict';
 var W = (typeof window !== 'undefined') ? window : globalThis;
-if (W.__hgGoldCombinedBoot === 1106) return;
-W.__hgGoldCombinedBoot = 1106;
+if (W.__hgGoldCombinedBoot === 1107) return;
+W.__hgGoldCombinedBoot = 1107;
 
 var TABS = {
   goldscalp:     { name: 'GOLD SCALP', tf: '15m', atrMult: 1.2, r1: 1.2, r2: 2 },
@@ -412,7 +412,7 @@ function newsOf(news, risk){
   return { points: 'none', why: 'calendar is clear — news does not pick the side' };
 }
 
-function gate(spec, play, fund, sent, macro, news, inter){
+function gate(spec, play, fund, sent, macro, news, inter, inst){
   if (play.side !== 'long' && play.side !== 'short') return { side: 'none', why: play.why, kind: '' };
   if (fund.block || news.block) return { side: 'none', why: fund.block ? fund.why : news.why, kind: '' };
   if (news.haven && play.side === 'short') return { side: 'none', why: 'safe-haven flow blocks the short', kind: '' };
@@ -420,6 +420,8 @@ function gate(spec, play, fund, sent, macro, news, inter){
   if (mb) return { side: 'none', why: mb, kind: '' };
   if (inter && play.side === 'long' && inter.opposeLong) return { side: 'none', why: 'USDJPY is rising — the inverse filter blocks the long', kind: '' };
   if (inter && play.side === 'short' && inter.opposeShort) return { side: 'none', why: 'USDJPY is falling — the inverse filter blocks the short', kind: '' };
+  if (inst && play.side === 'long' && inst.blockLong) return { side: 'none', why: inst.longWhy, kind: '' };
+  if (inst && play.side === 'short' && inst.blockShort) return { side: 'none', why: inst.shortWhy, kind: '' };
   if ((fund.points === 'long' || fund.points === 'short') && fund.points !== play.side) return { side: 'none', why: 'fundamentals point ' + word(fund.points), kind: '' };
   if ((sent.points === 'long' || sent.points === 'short') && sent.points !== play.side) return { side: 'none', why: 'COT points ' + word(sent.points), kind: '' };
   if ((news.points === 'long' || news.points === 'short') && news.points !== play.side) return { side: 'none', why: 'news points ' + word(news.points), kind: '' };
@@ -427,6 +429,7 @@ function gate(spec, play, fund, sent, macro, news, inter){
   if (inter && play.side === 'long' && inter.ratio && inter.ratio.trend === 'FALLING') extra += ' · gold/silver falling, silver is leading';
   if (inter && play.side === 'long' && inter.curve && inter.curve.state === 'STEEPENING') extra += ' · 2s10s is steepening';
   if (inter && inter.usd && ((play.side === 'long' && inter.usd.trend === 'FALLING') || (play.side === 'short' && inter.usd.trend === 'RISING'))) extra += ' · USDJPY confirms';
+  if (inst && inst.confirm && ((play.side === 'long' && inst.points !== 'short') || (play.side === 'short' && inst.points !== 'long'))) extra += ' · ' + inst.confirm;
   return { side: play.side, why: play.why + extra, kind: play.kind };
 }
 
@@ -485,19 +488,20 @@ function noiseLine(spec, play){
 function htmlFor(spec, stacks, shared){
   var play = playOf(spec, stacks, shared.season);
   var micro = microOf(spec, play);
-  var call = gate(spec, play, shared.fund, shared.sent, shared.macro, shared.news, shared.inter);
+  var call = gate(spec, play, shared.fund, shared.sent, shared.macro, shared.news, shared.inter, shared.inst);
   var lv = levels(spec, call.side === play.side ? play : { side: 'none' });
   var prof = profileLine(play);
   var noise = noiseLine(spec, play);
   var seasonSide = shared.season && shared.season.mode === 'q1' ? 'long' : 'none';
   var h = '<div class="note"><b>GOLD PLAYBOOK</b> · ' + esc(spec.name)
-    + '<br><span class="dim">Daily structure, sweep or value-area fade or HTF continuation, Heikin Ashi, Renko, KAMA, USDJPY, gold/silver, 2s10s. GLD tonnage is unread. A split is no setup.</span></div>';
+    + '<br><span class="dim">Daily structure, sweep or value-area fade or HTF continuation, Heikin Ashi, Renko, KAMA, USDJPY, gold/silver, 2s10s, futures basis, GLD/GDX. Skew, lease rates, Swiss flows and the Shanghai premium are unread. A split is no setup.</span></div>';
   h += card(spec, call, lv);
   h += '<div class="cr-ind-wrap">';
   h += '<div class="kv"><span class="k">Technical</span><span class="v">' + arrow(play.side, play.why) + '</span></div>';
   h += '<div class="kv"><span class="k">Profile</span><span class="v">' + arrow(prof.points, prof.why) + '</span></div>';
   h += '<div class="kv"><span class="k">Noise</span><span class="v">' + arrow(noise.points, noise.why) + '</span></div>';
   h += '<div class="kv"><span class="k">Intermarket</span><span class="v">' + arrow(shared.inter.points, shared.inter.why) + '</span></div>';
+  h += '<div class="kv"><span class="k">Institutional</span><span class="v">' + arrow(shared.inst.points, shared.inst.why) + '</span></div>';
   h += '<div class="kv"><span class="k">Fundamental</span><span class="v">' + arrow(shared.fund.points, shared.fund.why) + '</span></div>';
   h += '<div class="kv"><span class="k">Sentiment</span><span class="v">' + arrow(shared.sent.points, shared.sent.why) + '</span></div>';
   h += '<div class="kv"><span class="k">Macro</span><span class="v">' + arrow(shared.macro.points, shared.macro.why) + '</span></div>';
@@ -656,6 +660,138 @@ function intermarket(usd, ratio, curve){
   return { points: points, why: bits.join(' · '), opposeLong: opposeLong, opposeShort: opposeShort, usd: usd, ratio: ratio, curve: curve };
 }
 
+
+async function yahooCloses(sym){
+  var url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + sym + '?interval=1d&range=6mo';
+  var r = await fetch('/api/proxy?url=' + encodeURIComponent(url));
+  if (!r.ok) return null;
+  var j = await r.json();
+  var q = j && j.chart && j.chart.result && j.chart.result[0] && j.chart.result[0].indicators && j.chart.result[0].indicators.quote && j.chart.result[0].indicators.quote[0];
+  if (!q || !q.close) return null;
+  return q.close.length ? q.close : null;
+}
+function lastFinite(arr){
+  var i, c;
+  if (!arr) return null;
+  for (i = arr.length - 1; i >= 0; i--){
+    c = +arr[i];
+    if (c > 0) return c;
+  }
+  return null;
+}
+function ols(y, x){
+  var n = y.length, sx = 0, sy = 0, sxx = 0, sxy = 0, i;
+  for (i = 0; i < n; i++){ sx += x[i]; sy += y[i]; sxx += x[i] * x[i]; sxy += x[i] * y[i]; }
+  var den = n * sxx - sx * sx;
+  if (!den) return null;
+  var b = (n * sxy - sx * sy) / den;
+  var a = (sy - b * sx) / n;
+  return { a: a, b: b };
+}
+function adfT(resid){
+  var n = resid.length - 1;
+  if (n < 40) return null;
+  var y = [], x = [], i;
+  for (i = 1; i < resid.length; i++){ y.push(resid[i] - resid[i - 1]); x.push(resid[i - 1]); }
+  var fit = ols(y, x);
+  if (!fit) return null;
+  var ss = 0, e;
+  for (i = 0; i < n; i++){ e = y[i] - (fit.a + fit.b * x[i]); ss += e * e; }
+  var s2 = ss / (n - 2);
+  var mean = 0;
+  for (i = 0; i < n; i++) mean += x[i];
+  mean /= n;
+  var sxx = 0;
+  for (i = 0; i < n; i++) sxx += (x[i] - mean) * (x[i] - mean);
+  if (!(sxx > 0) || !(s2 > 0)) return null;
+  return fit.b / Math.sqrt(s2 / sxx);
+}
+function pairRead(gld, gdx){
+  if (!gld || !gdx) return null;
+  var n = Math.min(gld.length, gdx.length);
+  var y = [], x = [], i, a, b;
+  for (i = 0; i < n; i++){
+    a = +gld[gld.length - n + i];
+    b = +gdx[gdx.length - n + i];
+    if (a > 0 && b > 0){ y.push(Math.log(a)); x.push(Math.log(b)); }
+  }
+  n = y.length;
+  if (n < 60) return null;
+  var fit = ols(y, x);
+  if (!fit) return null;
+  var e = [], mean = 0;
+  for (i = 0; i < n; i++){ e.push(y[i] - (fit.a + fit.b * x[i])); mean += e[i]; }
+  mean /= n;
+  var sd = 0;
+  for (i = 0; i < n; i++) sd += (e[i] - mean) * (e[i] - mean);
+  sd = Math.sqrt(sd / (n - 1));
+  if (!(sd > 0)) return null;
+  var tstat = adfT(e);
+  return { z: (e[n - 1] - mean) / sd, t: tstat, cointegrated: tstat !== null && tstat < -2.89, n: n };
+}
+async function loadInstitutional(spot, usd){
+  var fut = null, gld = null, gdx = null, eur = null;
+  try{ fut = lastFinite(await yahooCloses('GC=F')); }catch(e1){ fut = null; }
+  try{ gld = await yahooCloses('GLD'); }catch(e2){ gld = null; }
+  try{ gdx = await yahooCloses('GDX'); }catch(e3){ gdx = null; }
+  try{
+    var r = await fetch('https://api.frankfurter.app/latest?from=USD&to=EUR');
+    if (r.ok){ var j = await r.json(); eur = j && j.rates ? +j.rates.EUR : null; }
+  }catch(e4){ eur = null; }
+  var basis = (fut > 0 && spot > 0) ? { fut: fut, spot: spot, basis: fut - spot } : null;
+  var pair = pairRead(gld, gdx);
+  var cross = null;
+  if (spot > 0 && ((eur > 0) || (usd && usd.last > 0))){
+    cross = {
+      eur: eur > 0 ? spot * eur : NaN,
+      jpy: (usd && usd.last > 0) ? spot * usd.last : NaN
+    };
+  }
+  return institutional(basis, pair, cross);
+}
+function institutional(basis, pair, cross){
+  var bits = ['25-delta skew unread — no keyless COMEX options feed', 'lease rate and GOFO unread — LBMA no longer publishes them'];
+  var blockLong = false, blockShort = false, longWhy = '', shortWhy = '', confirm = '';
+  if (!basis) bits.push('EFP basis unread');
+  else {
+    var b = basis.basis;
+    var txt = 'EFP futures−spot ' + (b >= 0 ? '+' : '') + b.toFixed(1);
+    if (b < -1){
+      blockShort = true;
+      shortWhy = 'EFP is backwardated — physical bid blocks the short';
+      confirm = 'EFP backwardation';
+      txt += ' backwardation';
+    } else txt += ' contango — not physical scarcity';
+    bits.push(txt);
+  }
+  if (!pair || pair.t === null) bits.push('GLD/GDX unread');
+  else if (!pair.cointegrated) bits.push('GLD/GDX ADF t ' + pair.t.toFixed(2) + ' — not cointegrated, spread z ' + pair.z.toFixed(2) + ' is not a signal');
+  else {
+    var pz = 'GLD/GDX z ' + pair.z.toFixed(2) + ' · ADF t ' + pair.t.toFixed(2);
+    if (pair.z >= 2){
+      blockLong = true;
+      longWhy = 'GLD is rich versus GDX (z ' + pair.z.toFixed(2) + ') — the pair blocks a fresh gold long';
+      pz += ' — gold rich versus miners';
+    } else if (pair.z <= -2){
+      blockShort = true;
+      shortWhy = shortWhy || ('gold is cheap versus miners (z ' + pair.z.toFixed(2) + ') — the pair blocks the short');
+      if (!confirm) confirm = 'gold cheap versus miners';
+      pz += ' — gold cheap versus miners';
+    } else pz += ' — inside the band';
+    bits.push(pz);
+  }
+  if (cross && isFinite(cross.eur)) bits.push('XAU/EUR ' + cross.eur.toFixed(1) + ' implied — not a separate quote');
+  else bits.push('XAU/EUR unread');
+  if (cross && isFinite(cross.jpy)) bits.push('XAU/JPY ' + Math.round(cross.jpy) + ' implied — not a separate quote');
+  else bits.push('XAU/JPY unread');
+  bits.push('Swiss customs unread');
+  bits.push('Shanghai premium unread');
+  var points = 'none';
+  if (blockShort && !blockLong) points = 'long';
+  else if (blockLong && !blockShort) points = 'short';
+  return { points: points, why: bits.join(' · '), blockLong: blockLong, blockShort: blockShort, longWhy: longWhy, shortWhy: shortWhy, confirm: confirm };
+}
+
 async function refresh(){
   if (busy) return;
   busy = true;
@@ -693,15 +829,20 @@ async function refresh(){
     var ratio = ratioFrom(stacks['1d'], silver, macro);
     var inter = intermarket(usd, ratio, curve);
     var season = seasonNow();
+    var spot = (stacks['1d'] && stacks['1d'].px) || (macro && +macro.goldPx) || NaN;
+    var inst = null;
+    try{ inst = await loadInstitutional(spot, usd); }catch(eI){ inst = null; }
+    if (!inst) inst = institutional(null, null, null);
     var shared = {
       fund: fund,
       sent: { points: fund.cot, why: fund.cotWhy },
       macro: macroOf(macro),
       news: newsOf(news, risk),
       inter: inter,
-      season: season
+      season: season,
+      inst: inst
     };
-    var sig = [shared.fund.points, shared.sent.points, shared.macro.points, shared.news.points, inter.points, season.mode];
+    var sig = [shared.fund.points, shared.sent.points, shared.macro.points, shared.news.points, inter.points, season.mode, inst.points, inst.why];
     var tf;
     for (tf in stacks){
       if (!stacks[tf]) continue;
