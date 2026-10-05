@@ -317,3 +317,19 @@ function trendmxEmaTag(rows4h, dir){
     if (isFinite(e21[i]) && e21[i] > px) cands.push(['EMA21', e21]);
   }
   if (!cands.length) return { state: 'waiting' };
+  cands.sort(function(a, b){ return Math.abs(a[1][i] - px) - Math.abs(b[1][i] - px); });
+  var name = cands[0][0], series = cands[0][1];
+  var from = Math.max(1, rows.length - 6);
+  for (var k = from; k < rows.length; k++){
+    var level = series[k], bar = rows[k];
+    if (!bar || !isFinite(level)) continue;
+    if (dir === 'long' && bar.l <= level && bar.c > level) return { state: 'ready', ema: name };
+    if (dir === 'short' && bar.h >= level && bar.c < level) return { state: 'ready', ema: name };
+  }
+  return { state: 'waiting', ema: name };
+}
+function trendScore(rows1d, rows4h){
+  var out = zeroResult();
+  try{
+    if (typeof ema !== 'function' || typeof adx !== 'function' ||
+        typeof ichimokuState !== 'function' || typeof crossOver !== 'function' ||

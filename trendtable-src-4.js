@@ -1,60 +1,3 @@
-  if (typeof W.hgDeskLoadUniverse !== 'function'
-      && (typeof W.binancePerpUniverse !== 'function' || typeof W.binanceKlines !== 'function')){
-    throw new Error('missing universe layer (hgDeskLoadUniverse or binancePerpUniverse)');
-  }
-  var uniPack = await W.hgDeskLoadUniverse({ force: true, minTurnover: TURNOVER_FLOOR });
-  var items = uniPack.items || [];
-  /* hg-v1048/hg-v1074: ALL COINDCX FUTURES - the floored universe drops
-     small CoinDCX contracts, so the matrix re-reads the universe at floor 0
-     and merges in every CoinDCX future it missed (deduped on venue+sym).
-     hg-v1074 reads the RAW CoinDCX leg (hgDeskLoadCoinDCXAll), not the
-     deduped merged universe: xuMergeLegs tags one 'exchange' per base and
-     the higher-turnover venue wins, so a CoinDCX contract also listed on
-     Delta/Startrader was invisible to a ['coindcx'] filter on the merged
-     list. Every CoinDCX active_instruments contract now appears regardless.
-     The other venues keep their floor. */
-  try{
-    /* Raw CoinDCX only makes sense when a CoinDCX data source exists
-       (xuniverse.js). Guarding on xuCoinDCXRows also avoids a pointless
-       second universe fetch on the Binance-only fallback path. */
-    if (typeof W.xuCoinDCXRows === 'function' && typeof W.hgDeskLoadCoinDCXAll === 'function'){
-      var allPack = await W.hgDeskLoadCoinDCXAll({ force: false, minTurnover: 0, includeUnknown: true });
-      var cdcxAll = Array.isArray(allPack.items) ? allPack.items : [];
-      var seenU = {};
-      for (var ui = 0; ui < items.length; ui++) seenU[String(items[ui].exchange || '') + '|' + String(items[ui].sym || '')] = 1;
-      for (var uj = 0; uj < cdcxAll.length; uj++){
-        var uitem = cdcxAll[uj];
-        var uk = String(uitem.exchange || '') + '|' + String(uitem.sym || '');
-        if (!seenU[uk]){ items.push(uitem); seenU[uk] = 1; }
-      }
-    }
-  }catch(eUni){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('trendmx', eUni); }catch(eWu){} }
-  /* BATCH 1130 — the instrument list is the source of truth. Every active
-     CoinDCX USDT future is on the board, including contracts the merged
-     universe dropped because another venue won the base or the $5M floor
-     cut them. A symbol already queued is not added twice. */
-  try{
-    var cdcxSyms = await tmLoadCoinDcxContracts();
-    var seenSym = {};
-    for (var si = 0; si < items.length; si++) seenSym[String(items[si].sym || '')] = 1;
-    for (var ci2 = 0; ci2 < cdcxSyms.length; ci2++){
-      var csym = cdcxSyms[ci2];
-      if (seenSym[csym]) continue;
-      items.push({
-        sym: csym,
-        base: csym.replace(/^B-/, '').replace(/_USDT$/, ''),
-        exchange: 'coindcx',
-        turnoverUsd: null, mark: null, fundingPct: null, alsoOn: null
-      });
-      seenSym[csym] = 1;
-    }
-    uniPack.cdcxListed = cdcxSyms.length;
-  }catch(eCdx){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('trendmx', eCdx); }catch(eW2){} }
-  if (!items.length) throw new Error('universe empty' + (uniPack.note ? ' — ' + uniPack.note : ''));
-  var results = [], failed = 0;
-  for (var i = 0; i < items.length; i += CHUNK){
-    var chunk = items.slice(i, i + CHUNK);
-    if (typeof hooks.setProg === 'function') hooks.setProg((i + chunk.length) / items.length);
     var rs = await Promise.all(chunk.map(function(item){
       return fetchK(item, '4h', 260).then(function(r4){
           if (r4 && r4.length >= 210) return r4;
@@ -141,6 +84,84 @@ function tmSessionVwap(rows1h){
   }
   return (n >= 2 && vv > 0) ? pv / vv : NaN;
 }
+
+function tmWeeklyRows(rowsD){
+  if (!rowsD || rowsD.length < 20) return null;
+  var weeks = [], cur = null;
+  for (var i = 0; i < rowsD.length; i++){
+    var r = rowsD[i];
+    if (!r) continue;
+    var open = tmBarOpenSec(r);
+    if (!isFinite(open)) continue;
+    var wk = Math.floor(open / (7 * 86400));
+    if (!cur || cur.wk !== wk){
+      if (cur) weeks.push(cur);
+      cur = { wk: wk, o: r.o, h: r.h, l: r.l, c: r.c, v: r.v || 0 };
+    } else {
+      if (r.h > cur.h) cur.h = r.h;
+      if (r.l < cur.l) cur.l = r.l;
+      cur.c = r.c;
+      cur.v += r.v || 0;
+    }
+  }
+  if (cur) weeks.push(cur);
+  return weeks.length >= 8 ? weeks : null;
+}
+function tmVolumeProfile(rows){
+  if (!rows || rows.length < 40) return null;
+  var use = rows.slice(-120);
+  var lo = Infinity, hi = -Infinity, k;
+  for (k = 0; k < use.length; k++){
+    if (use[k].l < lo) lo = use[k].l;
+    if (use[k].h > hi) hi = use[k].h;
+  }
+  if (!(hi > lo)) return null;
+  var bins = 24, vol = [], step = (hi - lo) / bins;
+  for (k = 0; k < bins; k++) vol.push(0);
+  for (k = 0; k < use.length; k++){
+    var mid = (use[k].h + use[k].l + use[k].c) / 3;
+    var b = Math.max(0, Math.min(bins - 1, Math.floor((mid - lo) / step)));
+    vol[b] += use[k].v > 0 ? use[k].v : 0;
+  }
+  var total = 0, max = 0, pocI = 0, j;
+  for (j = 0; j < bins; j++){
+    total += vol[j];
+    if (vol[j] > max){ max = vol[j]; pocI = j; }
+  }
+  if (!(total > 0)) return null;
+  var need = total * 0.7, acc = vol[pocI], loI = pocI, hiI = pocI;
+  while (acc < need && (loI > 0 || hiI < bins - 1)){
+    var left = loI > 0 ? vol[loI - 1] : -1;
+    var right = hiI < bins - 1 ? vol[hiI + 1] : -1;
+    if (right >= left){ hiI++; acc += vol[hiI]; }
+    else { loI--; acc += vol[loI]; }
+  }
+  return { poc: lo + (pocI + 0.5) * step, vah: lo + (hiI + 1) * step, val: lo + loI * step };
+}
+function tmEqualSweep(rows, dir){
+  if (!rows || rows.length < 20) return false;
+  var pivots = [];
+  for (var i = 2; i < rows.length - 2; i++){
+    if (dir === 'long'){
+      if (rows[i].l < rows[i-1].l && rows[i].l < rows[i-2].l && rows[i].l <= rows[i+1].l && rows[i].l <= rows[i+2].l) pivots.push(rows[i].l);
+    } else if (rows[i].h > rows[i-1].h && rows[i].h > rows[i-2].h && rows[i].h >= rows[i+1].h && rows[i].h >= rows[i+2].h) pivots.push(rows[i].h);
+  }
+  var level = null;
+  for (var a = 0; a < pivots.length; a++){
+    for (var b = a + 1; b < pivots.length; b++){
+      var mid = (pivots[a] + pivots[b]) / 2;
+      if (mid > 0 && Math.abs(pivots[a] - pivots[b]) / mid < 0.0015) level = mid;
+    }
+  }
+  if (!(level > 0)) return false;
+  var recent = rows.slice(-6);
+  for (var r = 0; r < recent.length; r++){
+    if (dir === 'long' && recent[r].l < level && recent[r].c > level) return true;
+    if (dir === 'short' && recent[r].h > level && recent[r].c < level) return true;
+  }
+  return false;
+}
+
 function tmAtLocation(rows4, rowsD, dir){
   if (!rows4 || rows4.length < 20 || !rowsD || rowsD.length < 8) return false;
   var prev = rowsD[rowsD.length - 1];
@@ -163,8 +184,8 @@ function tmAtLocation(rows4, rowsD, dir){
       if (dir === 'short' && candle.c > candle.o && last.h >= candle.l && last.c <= candle.h) ob = true;
     }
   }
-  if (dir === 'long') return sweepLow || fvg || ob;
-  return sweepHigh || fvg || ob;
+  if (dir === 'long') return sweepLow || fvg || ob || tmEqualSweep(rows4, dir);
+  return sweepHigh || fvg || ob || tmEqualSweep(rows4, dir);
 }
 function tm15Confirm(rows, dir){
   if (!rows || rows.length < 30 || typeof hgStructure !== 'function') return false;
@@ -182,7 +203,16 @@ function tm15Confirm(rows, dir){
     if (dir === 'long' && rows[i].l < lo && rows[i].c > lo) sweep = true;
     if (dir === 'short' && rows[i].h > hi && rows[i].c < hi) sweep = true;
   }
-  return sweep && shifted;
+  if (!(sweep && shifted)) return false;
+  var shiftI = -1, level = null;
+  if (hs.lastCHoCH && hs.lastCHoCH.dir === want && (n - hs.lastCHoCH.i) <= 12){ shiftI = hs.lastCHoCH.i; level = hs.lastCHoCH.level; }
+  if (hs.lastBOS && hs.lastBOS.dir === want && (n - hs.lastBOS.i) <= 12 && hs.lastBOS.i >= shiftI){ shiftI = hs.lastBOS.i; level = hs.lastBOS.level; }
+  if (!(level > 0) || shiftI < 0) return false;
+  for (var j = shiftI; j < rows.length; j++){
+    if (dir === 'long' && rows[j].l <= level && rows[j].c > level) return true;
+    if (dir === 'short' && rows[j].h >= level && rows[j].c < level) return true;
+  }
+  return false;
 }
 function tmNewsVeto(text, base){
   if (!text || !base) return false;
@@ -199,7 +229,8 @@ async function trendmxLoadContext(rows){
     ['us2y', 'https://query1.finance.yahoo.com/v8/finance/chart/2YY%3DF?interval=1d&range=5d'],
     ['nq', 'https://query1.finance.yahoo.com/v8/finance/chart/NQ%3DF?interval=1d&range=5d'],
     ['spx', 'https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?interval=1d&range=5d'],
-    ['vix', 'https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?interval=1d&range=5d']
+    ['vix', 'https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?interval=1d&range=5d'],
+    ['gold', 'https://query1.finance.yahoo.com/v8/finance/chart/GC%3DF?interval=1d&range=5d']
   ];
   var dirs = {};
   await Promise.all(yahoo.map(function(pair){
@@ -215,6 +246,7 @@ async function trendmxLoadContext(rows){
     if (dirs.nq === false) against++; if (dirs.nq === true) withRisk++;
     if (dirs.spx === false) against++; if (dirs.spx === true) withRisk++;
     if (dirs.vix === true) against++; if (dirs.vix === false) withRisk++;
+    if (dirs.gold === true) against++; if (dirs.gold === false) withRisk++;
     ctx.riskOff = against >= 3;
     ctx.riskOn = withRisk >= 3;
   }
@@ -257,6 +289,45 @@ async function trendmxLoadContext(rows){
   var news = await tmProxyText('https://cointelegraph.com/rss');
   if (!news) news = await tmProxyText('https://www.coindesk.com/arc/outboundfeeds/rss/');
   if (news && news.length > 80){ ctx.newsOk = true; ctx.headlines = news; }
+  ctx.totalOk = false;
+  ctx.totalFalling = false;
+  ctx.altsFalling = false;
+  try {
+    var tot = await tmProxyJson('https://api.coingecko.com/api/v3/global/market_cap_chart?days=2');
+    var caps = tot && (tot.market_cap || tot.market_caps);
+    if (caps && caps.length >= 2 && caps[0][1] > 0){
+      var tchg = (caps[caps.length - 1][1] - caps[0][1]) / caps[0][1];
+      ctx.totalOk = true;
+      ctx.totalFalling = tchg < -0.01;
+      if (btcChg != null && ethChg != null) ctx.altsFalling = (tchg - btcChg) < -0.01 && ethChg < 0;
+    }
+  } catch (eTot) {}
+  if (!ctx.totalOk && btcChg != null && ethChg != null){
+    ctx.totalOk = true;
+    ctx.totalFalling = btcChg < 0 && ethChg < 0;
+    ctx.altsFalling = ethChg < btcChg - 0.01;
+  }
+  ctx.unlockOk = false;
+  ctx.unlockBases = {};
+  try {
+    var em = await tmProxyJson('https://api.llama.fi/emissions');
+    var list = Array.isArray(em) ? em : (em && em.data);
+    if (Array.isArray(list)){
+      ctx.unlockOk = true;
+      var soon = Date.now() + 48 * 60 * 60 * 1000;
+      for (var ui = 0; ui < list.length; ui++){
+        var item = list[ui] || {};
+        var token = String(item.token || item.symbol || '').toUpperCase();
+        var events = item.events || item.unlockEvents || [];
+        if (!token || !events || !events.length) continue;
+        for (var ev = 0; ev < events.length; ev++){
+          var ts = +((events[ev] && (events[ev].timestamp || events[ev].unlockDate)) || 0);
+          if (ts > 0 && ts < 1e12) ts *= 1000;
+          if (ts > Date.now() && ts < soon) ctx.unlockBases[token] = true;
+        }
+      }
+    }
+  } catch (eUn) {}
   return ctx;
 }
 async function tmOiRead(row){
@@ -304,38 +375,22 @@ async function tmFetch15(row){
   }catch(e2){}
   return null;
 }
-async function trendmxFormOne(ticket, row, ctx){
-  var bad = [];
-  var dir = ticket.dir;
-  var rows4 = tmClosedRows(row && row.rows4h, 14400);
-  var rows1 = tmClosedRows(row && row.rows1h, 3600);
-  var rowsD = tmClosedRows(row && row.rows1d, 86400);
-  if (!row || !rows4 || rows4.length < 50) return ['4h history unread'];
-  var hs = (typeof hgStructure === 'function') ? hgStructure(rows4) : null;
-  if (!hs) bad.push('structure unread');
-  else {
-    var want = dir === 'long' ? 'up' : 'down';
-    if (hs.trend !== want) bad.push('4h structure ' + (hs.trend || 'range'));
-    var n = rows4.length - 1;
-    if (hs.lastCHoCH && hs.lastCHoCH.dir && hs.lastCHoCH.dir !== want && (n - hs.lastCHoCH.i) <= 20) bad.push('CHOCH against');
-    var swings = hs.swings || [];
-    var lastHigh = null, lastLow = null;
-    for (var s = 0; s < swings.length; s++){
-      if (swings[s].type === 'HH' || swings[s].type === 'LH') lastHigh = swings[s];
-      if (swings[s].type === 'HL' || swings[s].type === 'LL') lastLow = swings[s];
-    }
-    if (dir === 'long' && (!(lastHigh && lastHigh.type === 'HH') || !(lastLow && lastLow.type === 'HL'))) bad.push('not HH/HL');
-    if (dir === 'short' && (!(lastHigh && lastHigh.type === 'LH') || !(lastLow && lastLow.type === 'LL'))) bad.push('not LH/LL');
+
+async function tmLiqRead(row){
+  var base = tmBaseOf(row);
+  var j = await tmProxyJson('https://www.okx.com/api/v5/public/liquidation-orders?instType=SWAP&uly=' + encodeURIComponent(base + '-USDT') + '&state=filled&limit=100');
+  var details = j && j.data && j.data[0] && j.data[0].details;
+  if (!Array.isArray(details)) return null;
+  var now = Date.now(), longLiq = 0, shortLiq = 0, i;
+  for (i = 0; i < details.length; i++){
+    var d = details[i] || {};
+    var ts = +d.ts || +d.time;
+    if (!(ts > 0) || now - ts > 6 * 60 * 60 * 1000) continue;
+    var sz = +d.sz || 0;
+    var side = String(d.posSide || d.side || '').toLowerCase();
+    if (side === 'long' || side === 'sell') longLiq += sz;
+    else if (side === 'short' || side === 'buy') shortLiq += sz;
   }
-  var closes = rows4.map(function(r){ return r.c; });
-  var px = closes[closes.length - 1];
-  var e20 = tmEmaLast(closes, 20), e50 = tmEmaLast(closes, 50), e200 = tmEmaLast(closes, 200);
-  if (dir === 'long' && !(px > e20 && e20 > e50 && px > e200)) bad.push('EMA 20/50/200 against');
-  if (dir === 'short' && !(px < e20 && e20 < e50 && px < e200)) bad.push('EMA 20/50/200 against');
-  var vwap = tmSessionVwap(row.rows1h);
-  if (!isFinite(vwap)) bad.push('VWAP unread');
-  else if (dir === 'long' && !(px > vwap)) bad.push('below VWAP');
-  else if (dir === 'short' && !(px < vwap)) bad.push('above VWAP');
-  var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
-  if (!isFinite(vz)) bad.push('volume unread');
-  else if (vz < 0) bad.push('volume declining');
+  return { longLiq: longLiq, shortLiq: shortLiq };
+}
+async function tm5mVolumeOk(row, dir){

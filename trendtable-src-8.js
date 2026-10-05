@@ -1,3 +1,71 @@
+        var bm = W.hgFundingAgainstMark(+macro.btcFunding, dir);
+        macroBits.push('BTC funding ' + (+macro.btcFunding).toFixed(4) + '%');
+        if (bm && bm.against === true){ mAgainst = true; macroBits[macroBits.length - 1] += ' crowded'; }
+        else macroBits[macroBits.length - 1] += ' not crowded';
+      }catch(eBm){}
+    }
+    if (macro.btcStructure){
+      macroBits.push('BTC structure ' + macro.btcStructure);
+      if ((dir === 'long' && macro.btcStructure === 'down') || (dir === 'short' && macro.btcStructure === 'up')) mAgainst = true;
+      if ((dir === 'long' && macro.btcStructure === 'up') || (dir === 'short' && macro.btcStructure === 'down')) mWith = true;
+    }
+    if (typeof W.hgMacroBias === 'function'){
+      try{
+        var mb = W.hgMacroBias(dir, r.sym);
+        if (mb && (mb.state === 'with' || mb.state === 'against')){
+          macroBits.push('desk macro ' + mb.state);
+          if (mb.state === 'against') mAgainst = true;
+          if (mb.state === 'with') mWith = true;
+        }
+      }catch(eMb){}
+    }
+    if (macroBits.length) macroState = mAgainst ? 'against' : (mWith ? 'with' : 'flat');
+  }
+  pillars.push({ name: 'MACRO', state: macroState, detail: macroBits.join(' · ') || 'BTC macro unread' });
+  var microAgainst = false, microWith = false, microRead = false, microBits = [];
+  if (r.rows4h && r.rows4h.length >= 21 && typeof W.hgSlotMeanVol === 'function'){
+    try{
+      var slot = W.hgSlotMeanVol(r.rows4h, 20);
+      var lv = +r.rows4h[r.rows4h.length - 1].v;
+      if (slot && isFinite(slot.mean) && slot.mean > 0 && isFinite(lv) && lv > 0){
+        microRead = true;
+        var rv = lv / slot.mean;
+        microBits.push('session RVOL ' + rv.toFixed(2));
+        if (rv < 0.7) microAgainst = true; else microWith = true;
+      }
+    }catch(eSl){}
+  }
+  if (dir && typeof W.hgCryptoCostR === 'function'){
+    try{
+      var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
+      if (plan && isFinite(+plan.entry) && isFinite(+plan.stop)){
+        var costR = W.hgCryptoCostR(+plan.entry, +plan.stop, 'taker', 'taker');
+        if (isFinite(costR)){
+          microRead = true;
+          microBits.push('cost ' + costR.toFixed(2) + 'R');
+          if (costR > 0.25){ microAgainst = true; microWith = false; }
+        }
+      }
+    }catch(eC){}
+  }
+  pillars.push({ name: 'MICRO', state: !microRead ? 'unread' : (microAgainst ? 'against' : (microWith ? 'with' : 'flat')), detail: microBits.join(' · ') || 'no participation or cost read' });
+  var complete = pillars.every(function(x){ return x.state === 'with'; });
+  var blocked = pillars.some(function(x){ return x.state === 'against' || x.state === 'refuse'; });
+  return { dir: dir, pillars: pillars, complete: complete, blocked: blocked };
+}
+function trendmxPillarHtml(r){
+  try{
+    var pack = trendmxFivePillars(r);
+    var chips = pack.pillars.map(function(x){
+      var cls = x.state === 'with' ? 'pass' : ((x.state === 'against' || x.state === 'refuse') ? 'bad' : 'na');
+      return '<span class="stamp ' + cls + '" title="' + escH(x.detail) + '" style="margin-right:4px">' + escH(x.name) + ' ' + escH(String(x.state).toUpperCase()) + '</span>';
+    }).join('');
+    var head = pack.complete ? 'FULL STACK' : (pack.blocked ? 'STACK VETO' : 'STACK INCOMPLETE');
+    return '<div class="note" style="margin-top:6px"><b>' + head + '</b> ' + chips + '</div>';
+  }catch(e){ return ''; }
+}
+function trendmxFullStackSetups(rows){
+  var out = [];
   if (!Array.isArray(rows)) return out;
   for (var i = 0; i < rows.length; i++){
     var r = rows[i];
@@ -262,54 +330,3 @@ function trendmxColumnsHTML(rows){
    6/7 NEAR), the house DRAFT ladder where it does not. */
 function trendmxTrendFormHTML(rows){
   try{
-    if (!Array.isArray(rows) || !rows.length) return '<div class="empty">Run a scan to classify the CoinDCX board.</div>';
-    var cdcx = [];
-    for (var i = 0; i < rows.length; i++){
-      if (rows[i] && String(tmRowVenue(rows[i])).toLowerCase() === 'coindcx') cdcx.push(rows[i]);
-    }
-    if (!cdcx.length) return '<div class="empty">No CoinDCX rows on this board.</div>';
-    var trending = [], forming = [];
-    for (i = 0; i < cdcx.length; i++){
-      var r = cdcx[i];
-      if (tmDirOf(r)) trending.push(r); else forming.push(r);
-    }
-    function byStrength(list){ return list.slice().sort(function(a, b){ return Math.abs(+b.score || 0) - Math.abs(+a.score || 0); }); }
-    /* typeof guard, not bare isFinite: isFinite(null) is TRUE and +null is 0,
-       so a null plan level would print a confident "0" (the null-formatting
-       trap this codebase has hit five times). */
-    function px(v){ return (typeof v === 'number' && isFinite(v)) ? String(v) : '--'; }
-    function lvlLine(rr, dd){
-      var plan = dd ? trendmxPlan(Object.assign({}, rr, { dir: dd })) : null;
-      if (plan){
-        var tier = trendmxRowTier(rr, plan);
-        var lvl = 'ENTRY ' + px(plan.entry) + ' - STOP ' + px(plan.stop) + ' - T1 ' + px(plan.t1)
-          + (isFinite(plan.t2) ? ' - T2 ' + px(plan.t2) : '');
-        /* hg-v1048: the tier is the label — 7/7 CLEAN and 6/7 NEAR are the
-           minted tiers; anything below the NEAR floor (or a forming row with
-           no majority, whose gate is null) is the house DRAFT ladder, never
-           a fabricated 6/7 NEAR. */
-        if (tier === 'clean') return lvl + ' - 7/7 CLEAN';
-        if (tier === 'near'){
-          var gates = (rr.gate && isFinite(rr.gate.gatesPassed)) ? rr.gate.gatesPassed : 0;
-          return lvl + ' - ' + gates + '/7 NEAR';
-        }
-        return lvl + ' - DRAFT';
-      }
-      return 'no levels - the gates have not met';
-    }
-    function cell(rr){
-      var dd = tmDirOf(rr);
-      var lean = dd ? 0 : (+rr.score > 0 ? 1 : (+rr.score < 0 ? -1 : 0));
-      var tag = dd === 'long' ? '<span class="pos">LONG</span>'
-        : dd === 'short' ? '<span class="neg">SHORT</span>'
-        : lean === 1 ? '<span class="pos">LONG-LEAN</span>'
-        : lean === -1 ? '<span class="neg">SHORT-LEAN</span>'
-        : '<span>NO LEAN</span>';
-      /* hg-v1057: the FORMING column names WHY nothing formed — a choppy tape
-         is CHOP (no trend to ride, whatever the lean), a clean directional
-         tape with a lean but no majority is EARLY FORMING, and a mixed tape
-         prints neither (no verdict). The TRENDING column is untouched: its
-         rows already have a majority. */
-      var formTag = '';
-      if (!dd){
-        var fs = trendmxChopState(rr);

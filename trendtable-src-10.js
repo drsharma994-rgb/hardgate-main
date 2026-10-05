@@ -1,3 +1,42 @@
+      var a1 = (a1arr && a1arr.length) ? +a1arr[a1arr.length - 1] : NaN;
+      var p1 = +crown.rows1h[crown.rows1h.length - 1].c;
+      if (isFinite(a1) && a1 > 0 && isFinite(p1)){
+        function tmxLadder(side){
+          return { dir: side, entry: p1, stop: side === 'long' ? p1 - 1.5 * a1 : p1 + 1.5 * a1,
+            t1: side === 'long' ? p1 + 3.5 * a1 : p1 - 3.5 * a1,
+            t2: side === 'long' ? p1 + 4.9 * a1 : p1 - 4.9 * a1,
+            tier: 'DRAFT', gates: null, source: '1h draft ladder ATR14' };
+        }
+        scalpS = tmxLadder(dir);
+        altS = tmxLadder(dir === 'long' ? 'short' : 'long');
+      }
+    }
+    html += trendmxGridBlockHtml('SCALP SETUP', '1h grid', scalpS, dir);
+    html += trendmxGridBlockHtml('SCALP SETUP - ALT SIDE', '1h grid', altS, dir);
+    /* ---- MEASURED EDGE ---- */
+    try{
+      if (typeof W.hgProvenEdgeVerdict === 'function'){
+        var v = W.hgProvenEdgeVerdict('trendmx', 'TRENDMX', { pool: 'TRENDMX', mechanic: 'TRENDMX' });
+        if (v && typeof W.hgProvenEdgeChipHtml === 'function'){
+          html += '<div class="panel" style="margin-top:10px"><h3>MEASURED EDGE <span>the TRENDMX pool\'s settled record</span></h3>'
+            + W.hgProvenEdgeChipHtml(v) + '</div>';
+        }
+      }
+    }catch(eMe){ }
+    return html;
+  }catch(e){ return ''; }
+}
+
+/* hg-v1067: THE SHARED PERFECT EVIDENCE PASS — the SAME reads bag and
+   the SAME enrichment + predicate OMNIBTC consumes (hgObtcPerfectFormation),
+   fed by the SAME external data (real Binance taker flow, Binance funding,
+   ATR percentile regime, EMA50/200 structure, session RVOL, the news
+   calendar), applied to the matrix's strongest rows. PERFECT / PERFECT+
+   on a matrix row now means byte-identically what it means on OMNIBTC.
+   Evidence, never a gate. */
+function tmStructureDir(rows){
+  try{
+    if (!Array.isArray(rows) || rows.length < 210 || typeof W.ema !== 'function') return null;
     var c = rows.map(function(x){ return x.c; });
     var e50 = W.ema(c, 50), e200 = W.ema(c, 200);
     if (!e50 || !e200 || e50.length < 2) return null;
@@ -317,21 +356,3 @@ function mountTrendMatrix(el){
     death: el.querySelector('[data-r="death"]'),   /* hg-v1015 */
     cards: el.querySelector('[data-r="cards"]'),
     near: el.querySelector('[data-r="near"]'),
-    forming: el.querySelector('[data-r="forming"]'),
-    gateclean: el.querySelector('[data-r="gateclean"]'),   /* hg-v1018 */
-    conviction: el.querySelector('[data-r="conviction"]'),  /* hg-v1018 */
-    perfect: el.querySelector('[data-r="perfect"]'),        /* hg-v1022 */
-    fwd: el.querySelector('[data-r="fwd"]'),                /* hg-v1039: the measured book */
-    trendform: el.querySelector('[data-r="trendform"]'),    /* hg-v1048: coindcx trending / forming */
-    crown: el.querySelector('[data-r="crown"]'),            /* hg-v1066: the OMNIBTC-style crown */
-    out: out,
-    status: status
-  };
-  var chips  = Array.prototype.slice.call(el.querySelectorAll('[data-f]'));
-  var vChips = Array.prototype.slice.call(el.querySelectorAll('[data-v]'));
-
-  var state = { rows: [], golden: [], death: [], filter: 'ALL', venue: 'ALL', sortKey: 'score', sortDir: -1, running: false, view: 'table' };   /* hg-v1015: death bag initialized with golden; hg-v1045: view toggle */
-  tmTab._state = state;
-
-  function setProg(f){
-    if (!prog) return;

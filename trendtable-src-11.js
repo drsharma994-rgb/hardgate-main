@@ -1,3 +1,21 @@
+    forming: el.querySelector('[data-r="forming"]'),
+    gateclean: el.querySelector('[data-r="gateclean"]'),   /* hg-v1018 */
+    conviction: el.querySelector('[data-r="conviction"]'),  /* hg-v1018 */
+    perfect: el.querySelector('[data-r="perfect"]'),        /* hg-v1022 */
+    fwd: el.querySelector('[data-r="fwd"]'),                /* hg-v1039: the measured book */
+    trendform: el.querySelector('[data-r="trendform"]'),    /* hg-v1048: coindcx trending / forming */
+    crown: el.querySelector('[data-r="crown"]'),            /* hg-v1066: the OMNIBTC-style crown */
+    out: out,
+    status: status
+  };
+  var chips  = Array.prototype.slice.call(el.querySelectorAll('[data-f]'));
+  var vChips = Array.prototype.slice.call(el.querySelectorAll('[data-v]'));
+
+  var state = { rows: [], golden: [], death: [], filter: 'ALL', venue: 'ALL', sortKey: 'score', sortDir: -1, running: false, view: 'table' };   /* hg-v1015: death bag initialized with golden; hg-v1045: view toggle */
+  tmTab._state = state;
+
+  function setProg(f){
+    if (!prog) return;
     prog.style.display = (f === null) ? 'none' : 'block';
     if (f !== null) prog.firstElementChild.style.width = (f * 100).toFixed(1) + '%';
   }

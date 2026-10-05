@@ -1,3 +1,75 @@
+/* the witness's chip — reads the row's rsi stamp exactly like the flow chip
+   reads the flow stamp (hg-v1012). AGAINST rows name the hold-off on the
+   card (nothing is dropped silently); WITH rows carry the pass chip; FLAT
+   and unread rows paint NO chip — the abstain states stay silent. */
+function trendmxMomChipHtml(r){
+  try{
+    var dir = tmDirOf(r);
+    var st = trendmxMomState(r, dir);
+    if (!st || st === 'flat') return '';
+    var rv = isFinite(r.rsi) ? r.rsi.toFixed(1) : '?';
+    if (st === 'against'){
+      return '<span class="stamp bad" style="margin-left:6px" title="' + escH('trendmx momentum witness (hg-v1019): 1D RSI(14) ' + rv
+        + (dir === 'long' ? ' has broken under the bull-range floor ' + TM_MOM_BULL_FLOOR : ' has broken over the bear-range ceiling ' + TM_MOM_BEAR_CEIL)
+        + ' — the slow composite is fighting a turned momentum regime. Held off the LIMIT BOARD, never CLEAN — the row paints, the reason is named.') + '">MOMENTUM AGAINST · HELD OFF</span>';
+    }
+    return '<span class="stamp pass" style="margin-left:6px" title="' + escH('trendmx momentum witness (hg-v1019): 1D RSI(14) ' + rv
+      + ' sits on the regime side of the ' + TM_MOM_MID + ' midline for this ' + dir
+      + '. Evidence, never a composite point.') + '">MOMENTUM WITH IT</span>';
+  }catch(e){ return ''; }
+}
+
+/* hg-v1018: ONE collection of the limit board's two formation CLASSES.
+   The old board walked the rows once, ranked gate-clean and conviction
+   rows against each other in one mixed bag (the clean7 1000-bonus made
+   the ordering a class ordering, not a quality one) and recorded them
+   under two mechanics while painting one panel. The classes are
+   collected separately here and painted on their own desks; the bars
+   themselves — gate veto, majority, valid plan, clean7-or-conviction,
+   the hg-v1012 flow hold-off — are exactly the old board's, per row. */
+function trendmxLimitClasses(rows){
+  /* hg-v1019: heldClean/heldConv stay the TOTALS the v1018 desks published;
+     heldWhy splits the reasons so each desk's verdict names only the
+     witnesses that actually fired (taker flow hg-v1012 · momentum hg-v1019
+     · volume hg-v1020). */
+  var out = { clean: [], conv: [], heldClean: 0, heldConv: 0,
+              heldWhy: { clean: { flow: 0, mom: 0, vol: 0, fund: 0 }, conv: { flow: 0, mom: 0, vol: 0, fund: 0 } } };
+  for (var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if (!r || !r.gate || r.gate.veto) continue;
+    var dir = tmDirOf(r);
+    if (!dir) continue;
+    var isClean = !!r.gate.clean7;
+    var conv = isClean ? null : trendmxConviction(r);
+    if (!isClean && !conv) continue;
+    /* hg-v1012: flow-AGAINST rows are held off the desks. The row still
+       paints in the matrix with its chip — nothing is dropped silently —
+       but the desks and the record below are what the desk judged
+       tradeable WITH the evidence in hand, and a swing minted against the
+       real aggressor flow is not it. hg-v1018: counted per class, so each
+       desk names its own held-off rows. */
+    if (r.flow && r.flow.verdict === 'against'){
+      if (isClean){ out.heldClean++; out.heldWhy.clean.flow++; }
+      else { out.heldConv++; out.heldWhy.conv.flow++; }
+      continue;
+    }
+    /* hg-v1019: THE MOMENTUM WITNESS hold-off — the same mechanic one leg
+       down. A row whose 1D RSI range has TURNED against its own majority
+       (long under the 40 bull floor, short over the 60 bear ceiling) is a
+       slow composite fighting a turned regime: held off the desks, counted
+       and named per class, still painting in the matrix with its chip.
+       WITH and FLAT and UNREAD rows pass — the witness only ever removes. */
+    if (trendmxMomState(r, dir) === 'against'){
+      if (isClean){ out.heldClean++; out.heldWhy.clean.mom++; }
+      else { out.heldConv++; out.heldWhy.conv.mom++; }
+      continue;
+    }
+    /* hg-v1020: THE VOLUME WITNESS hold-off — the same mechanic, the third
+       witness. A row whose swing volume trend DIVERGES against its own
+       majority (distribution under the rally / accumulation under the
+       fall) is held off, counted and named per class, still painting with
+       its chip. WITH, FLAT and UNREAD pass — it only ever removes. */
+    if (trendmxVolState(r, dir) === 'against'){
       if (isClean){ out.heldClean++; out.heldWhy.clean.vol++; }
       else { out.heldConv++; out.heldWhy.conv.vol++; }
       continue;
@@ -239,71 +311,3 @@ function trendmxFivePillars(r){
     var mAgainst = false, mWith = false;
     if (macro.btcFunding != null && typeof W.hgFundingAgainstMark === 'function'){
       try{
-        var bm = W.hgFundingAgainstMark(+macro.btcFunding, dir);
-        macroBits.push('BTC funding ' + (+macro.btcFunding).toFixed(4) + '%');
-        if (bm && bm.against === true){ mAgainst = true; macroBits[macroBits.length - 1] += ' crowded'; }
-        else macroBits[macroBits.length - 1] += ' not crowded';
-      }catch(eBm){}
-    }
-    if (macro.btcStructure){
-      macroBits.push('BTC structure ' + macro.btcStructure);
-      if ((dir === 'long' && macro.btcStructure === 'down') || (dir === 'short' && macro.btcStructure === 'up')) mAgainst = true;
-      if ((dir === 'long' && macro.btcStructure === 'up') || (dir === 'short' && macro.btcStructure === 'down')) mWith = true;
-    }
-    if (typeof W.hgMacroBias === 'function'){
-      try{
-        var mb = W.hgMacroBias(dir, r.sym);
-        if (mb && (mb.state === 'with' || mb.state === 'against')){
-          macroBits.push('desk macro ' + mb.state);
-          if (mb.state === 'against') mAgainst = true;
-          if (mb.state === 'with') mWith = true;
-        }
-      }catch(eMb){}
-    }
-    if (macroBits.length) macroState = mAgainst ? 'against' : (mWith ? 'with' : 'flat');
-  }
-  pillars.push({ name: 'MACRO', state: macroState, detail: macroBits.join(' · ') || 'BTC macro unread' });
-  var microAgainst = false, microWith = false, microRead = false, microBits = [];
-  if (r.rows4h && r.rows4h.length >= 21 && typeof W.hgSlotMeanVol === 'function'){
-    try{
-      var slot = W.hgSlotMeanVol(r.rows4h, 20);
-      var lv = +r.rows4h[r.rows4h.length - 1].v;
-      if (slot && isFinite(slot.mean) && slot.mean > 0 && isFinite(lv) && lv > 0){
-        microRead = true;
-        var rv = lv / slot.mean;
-        microBits.push('session RVOL ' + rv.toFixed(2));
-        if (rv < 0.7) microAgainst = true; else microWith = true;
-      }
-    }catch(eSl){}
-  }
-  if (dir && typeof W.hgCryptoCostR === 'function'){
-    try{
-      var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
-      if (plan && isFinite(+plan.entry) && isFinite(+plan.stop)){
-        var costR = W.hgCryptoCostR(+plan.entry, +plan.stop, 'taker', 'taker');
-        if (isFinite(costR)){
-          microRead = true;
-          microBits.push('cost ' + costR.toFixed(2) + 'R');
-          if (costR > 0.25){ microAgainst = true; microWith = false; }
-        }
-      }
-    }catch(eC){}
-  }
-  pillars.push({ name: 'MICRO', state: !microRead ? 'unread' : (microAgainst ? 'against' : (microWith ? 'with' : 'flat')), detail: microBits.join(' · ') || 'no participation or cost read' });
-  var complete = pillars.every(function(x){ return x.state === 'with'; });
-  var blocked = pillars.some(function(x){ return x.state === 'against' || x.state === 'refuse'; });
-  return { dir: dir, pillars: pillars, complete: complete, blocked: blocked };
-}
-function trendmxPillarHtml(r){
-  try{
-    var pack = trendmxFivePillars(r);
-    var chips = pack.pillars.map(function(x){
-      var cls = x.state === 'with' ? 'pass' : ((x.state === 'against' || x.state === 'refuse') ? 'bad' : 'na');
-      return '<span class="stamp ' + cls + '" title="' + escH(x.detail) + '" style="margin-right:4px">' + escH(x.name) + ' ' + escH(String(x.state).toUpperCase()) + '</span>';
-    }).join('');
-    var head = pack.complete ? 'FULL STACK' : (pack.blocked ? 'STACK VETO' : 'STACK INCOMPLETE');
-    return '<div class="note" style="margin-top:6px"><b>' + head + '</b> ' + chips + '</div>';
-  }catch(e){ return ''; }
-}
-function trendmxFullStackSetups(rows){
-  var out = [];

@@ -1,51 +1,3 @@
-    if (!tmSmcOn() || !Array.isArray(rows) || !rows.length) return;
-    var i, r, byRows = {};
-    for (i = 0; i < rows.length; i++){ if (rows[i] && rows[i].sym) byRows[rows[i].sym] = rows[i].rows4h; }
-    /* hg-v1014: golden AND death tickets share the one capped envelope —
-       the cap is a compute budget, not a per-desk allowance */
-    var tickets = (golden || []).concat(death || []);
-    for (i = 0; i < tickets.length && i < TM_SMC_MAX; i++){
-      if (tickets[i]) tmSmcMark(tickets[i], byRows[tickets[i].sym]);
-    }
-    var cands = [];
-    for (i = 0; i < rows.length; i++){
-      r = rows[i];
-      if (!r || r.smc || !r.rows4h || !r.rows4h.length) continue;
-      if (r.gate && r.gate.veto) continue;
-      if (!tmDirOf(r)) continue;
-      if (!(r.gate && r.gate.clean7) && !trendmxConviction(r)) continue;
-      cands.push(r);
-    }
-    /* the limit board's own rank, so the capped slice is the slice this desk
-       promotes first rather than an arbitrary universe order */
-    cands.sort(function(a, b){
-      var ra = ((a.gate && a.gate.clean7) ? 1000 : 0) + Math.abs(a.score) * 10 + ((a.gate && a.gate.gatesPassed) || 0);
-      var rb = ((b.gate && b.gate.clean7) ? 1000 : 0) + Math.abs(b.score) * 10 + ((b.gate && b.gate.gatesPassed) || 0);
-      return rb - ra;
-    });
-    for (i = 0; i < cands.length && i < TM_SMC_MAX; i++){
-      r = cands[i];
-      var dir = tmDirOf(r);
-      var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
-      if (!tmValidSetup(plan)) continue;
-      var syn = { sym: r.sym, dir: dir, entry: plan.entry, stop: plan.stop, t1: plan.t1 };
-      tmSmcMark(syn, r.rows4h);
-      if (syn.smc) r.smc = syn.smc;
-    }
-  }catch(e){}
-}
-
-/* ---------------- hg-v1012: EVIDENCE LAYER — real taker flow ----------------
-   The composite is five reads of the same closes (1D EMA200, the 50/200
-   cross, the 4H cascade, the cloud, the ADX point): five ways to agree
-   with yourself. This pass adds the read that CANNOT be derived from
-   those closes — which side is aggressing the tape. A TREND MATRIX row is
-   a multi-day swing claim, and a swing minted into five days of net
-   aggressive selling (for a long) is a claim against the crowd that is
-   actually hitting the market.
-
-   REAL Binance taker long/short flow only, read on the row's own
-   hgDeskBinanceSym twin through hgOmniCvd (omniroute.js) over the last
    TM_FLOW_LOOK 4h windows. The candle-approximated stand-in never speaks
    here — the hg-v1009 rule: it derives from the same closes the composite
    already read, so it is not independent evidence (the caller hands the
@@ -314,3 +266,60 @@ async function trendmxScanCore(hooks){
           : (typeof it === 'string' ? it : null);
         return bSym ? W.binanceKlines(bSym, tf, n) : Promise.resolve([]);
       };
+  if (typeof W.hgDeskLoadUniverse !== 'function'
+      && (typeof W.binancePerpUniverse !== 'function' || typeof W.binanceKlines !== 'function')){
+    throw new Error('missing universe layer (hgDeskLoadUniverse or binancePerpUniverse)');
+  }
+  var uniPack = await W.hgDeskLoadUniverse({ force: true, minTurnover: TURNOVER_FLOOR });
+  var items = uniPack.items || [];
+  /* hg-v1048/hg-v1074: ALL COINDCX FUTURES - the floored universe drops
+     small CoinDCX contracts, so the matrix re-reads the universe at floor 0
+     and merges in every CoinDCX future it missed (deduped on venue+sym).
+     hg-v1074 reads the RAW CoinDCX leg (hgDeskLoadCoinDCXAll), not the
+     deduped merged universe: xuMergeLegs tags one 'exchange' per base and
+     the higher-turnover venue wins, so a CoinDCX contract also listed on
+     Delta/Startrader was invisible to a ['coindcx'] filter on the merged
+     list. Every CoinDCX active_instruments contract now appears regardless.
+     The other venues keep their floor. */
+  try{
+    /* Raw CoinDCX only makes sense when a CoinDCX data source exists
+       (xuniverse.js). Guarding on xuCoinDCXRows also avoids a pointless
+       second universe fetch on the Binance-only fallback path. */
+    if (typeof W.xuCoinDCXRows === 'function' && typeof W.hgDeskLoadCoinDCXAll === 'function'){
+      var allPack = await W.hgDeskLoadCoinDCXAll({ force: false, minTurnover: 0, includeUnknown: true });
+      var cdcxAll = Array.isArray(allPack.items) ? allPack.items : [];
+      var seenU = {};
+      for (var ui = 0; ui < items.length; ui++) seenU[String(items[ui].exchange || '') + '|' + String(items[ui].sym || '')] = 1;
+      for (var uj = 0; uj < cdcxAll.length; uj++){
+        var uitem = cdcxAll[uj];
+        var uk = String(uitem.exchange || '') + '|' + String(uitem.sym || '');
+        if (!seenU[uk]){ items.push(uitem); seenU[uk] = 1; }
+      }
+    }
+  }catch(eUni){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('trendmx', eUni); }catch(eWu){} }
+  /* BATCH 1130 — the instrument list is the source of truth. Every active
+     CoinDCX USDT future is on the board, including contracts the merged
+     universe dropped because another venue won the base or the $5M floor
+     cut them. A symbol already queued is not added twice. */
+  try{
+    var cdcxSyms = await tmLoadCoinDcxContracts();
+    var seenSym = {};
+    for (var si = 0; si < items.length; si++) seenSym[String(items[si].sym || '')] = 1;
+    for (var ci2 = 0; ci2 < cdcxSyms.length; ci2++){
+      var csym = cdcxSyms[ci2];
+      if (seenSym[csym]) continue;
+      items.push({
+        sym: csym,
+        base: csym.replace(/^B-/, '').replace(/_USDT$/, ''),
+        exchange: 'coindcx',
+        turnoverUsd: null, mark: null, fundingPct: null, alsoOn: null
+      });
+      seenSym[csym] = 1;
+    }
+    uniPack.cdcxListed = cdcxSyms.length;
+  }catch(eCdx){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('trendmx', eCdx); }catch(eW2){} }
+  if (!items.length) throw new Error('universe empty' + (uniPack.note ? ' — ' + uniPack.note : ''));
+  var results = [], failed = 0;
+  for (var i = 0; i < items.length; i += CHUNK){
+    var chunk = items.slice(i, i + CHUNK);
+    if (typeof hooks.setProg === 'function') hooks.setProg((i + chunk.length) / items.length);

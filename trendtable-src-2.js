@@ -1,42 +1,3 @@
-    var ticker = trendmxTicker(inp);
-    var gate = inp.gate || trendmxGateEval(inp, dir);
-
-    /* 1) gate-clean hit + unified formation ticket (same as GATES scan) */
-    if (gate && gate.hit && !gate.veto && typeof hgFormTicket === 'function'){
-      try{
-        var fm = hgFormTicket(gate.hit, {
-          rows: rows, style: 'swing', a4: gate.hit.a4,
-          rows1h: inp.rows1h, ticker: ticker
-        });
-        if (fm && fm.ok && fm.hit && tmValidSetup(fm.hit)){
-          return trendmxAttachMeta(fm.hit, gate, { formationScore: fm.formationScore, rows4h: rows, price: inp.price });
-        }
-      }catch(eForm){}
-    }
-
-    /* 2) swing clean plan from cryptogates */
-    if (typeof hgSwingCleanPlan === 'function'){
-      try{
-        var sc = hgSwingCleanPlan(rows, ticker, dir);
-        if (tmValidSetup(sc)) return trendmxAttachMeta(sc, gate, { rows4h: rows, price: inp.price });
-      }catch(eSc){}
-    }
-
-    /* 3) structure-based hgPlanLevels with min R:R */
-    if (typeof hgPlanLevelsCore === 'function'){
-      try{
-        var pl = hgPlanLevelsCore(dir, rows, null, { minRr: TM_MIN_RR, style: 'swing', type: 'TRENDMX' });
-        if (tmValidSetup(pl)) return trendmxAttachMeta(pl, gate, { rows4h: rows, price: inp.price });
-      }catch(ePl){}
-    }
-
-    /* 4) SMART $ builder with trend-derived evidence */
-    if (typeof smartSetup === 'function'){
-      try{
-        var cls = trendmxClassify(inp, dir);
-        var s = smartSetup(cls, rows, inp.rows1h);
-        if (tmValidSetup(s)){
-          if (typeof hgApplyExactEntry === 'function'){
             s = hgApplyExactEntry(s, rows, { rows1h: inp.rows1h, style: s.type || 'swing', preferEdge: true }) || s;
           }
           return trendmxAttachMeta(s, gate, { rows4h: rows, price: inp.price });
@@ -344,3 +305,51 @@ function tmSmcChip(o){
    synthetic ticket is enriched instead and only .smc is copied back. */
 function tmSmcScanPass(rows, golden, death){
   try{
+    if (!tmSmcOn() || !Array.isArray(rows) || !rows.length) return;
+    var i, r, byRows = {};
+    for (i = 0; i < rows.length; i++){ if (rows[i] && rows[i].sym) byRows[rows[i].sym] = rows[i].rows4h; }
+    /* hg-v1014: golden AND death tickets share the one capped envelope —
+       the cap is a compute budget, not a per-desk allowance */
+    var tickets = (golden || []).concat(death || []);
+    for (i = 0; i < tickets.length && i < TM_SMC_MAX; i++){
+      if (tickets[i]) tmSmcMark(tickets[i], byRows[tickets[i].sym]);
+    }
+    var cands = [];
+    for (i = 0; i < rows.length; i++){
+      r = rows[i];
+      if (!r || r.smc || !r.rows4h || !r.rows4h.length) continue;
+      if (r.gate && r.gate.veto) continue;
+      if (!tmDirOf(r)) continue;
+      if (!(r.gate && r.gate.clean7) && !trendmxConviction(r)) continue;
+      cands.push(r);
+    }
+    /* the limit board's own rank, so the capped slice is the slice this desk
+       promotes first rather than an arbitrary universe order */
+    cands.sort(function(a, b){
+      var ra = ((a.gate && a.gate.clean7) ? 1000 : 0) + Math.abs(a.score) * 10 + ((a.gate && a.gate.gatesPassed) || 0);
+      var rb = ((b.gate && b.gate.clean7) ? 1000 : 0) + Math.abs(b.score) * 10 + ((b.gate && b.gate.gatesPassed) || 0);
+      return rb - ra;
+    });
+    for (i = 0; i < cands.length && i < TM_SMC_MAX; i++){
+      r = cands[i];
+      var dir = tmDirOf(r);
+      var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
+      if (!tmValidSetup(plan)) continue;
+      var syn = { sym: r.sym, dir: dir, entry: plan.entry, stop: plan.stop, t1: plan.t1 };
+      tmSmcMark(syn, r.rows4h);
+      if (syn.smc) r.smc = syn.smc;
+    }
+  }catch(e){}
+}
+
+/* ---------------- hg-v1012: EVIDENCE LAYER — real taker flow ----------------
+   The composite is five reads of the same closes (1D EMA200, the 50/200
+   cross, the 4H cascade, the cloud, the ADX point): five ways to agree
+   with yourself. This pass adds the read that CANNOT be derived from
+   those closes — which side is aggressing the tape. A TREND MATRIX row is
+   a multi-day swing claim, and a swing minted into five days of net
+   aggressive selling (for a long) is a claim against the crowd that is
+   actually hitting the market.
+
+   REAL Binance taker long/short flow only, read on the row's own
+   hgDeskBinanceSym twin through hgOmniCvd (omniroute.js) over the last
