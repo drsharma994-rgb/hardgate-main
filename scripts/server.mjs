@@ -619,5 +619,5 @@ if (process.env.HARDGATE_DAEMON_AUTOSTART === '1' || process.env.HARDGATE_DAEMON
   setTimeout(ping, 60000).unref?.();              /* first ping 1 min after boot */
   const t = setInterval(ping, 10 * 60 * 1000);    /* then every 10 min (< 15 min sleep threshold) */
   try{ t.unref(); }catch(e){}
-  console.log('[keep-alive] armed — self-ping every 10 min \u2192 ' + url);
+  console.log('[keep-alive] armed — self-ping every 10 min → ' + url);
 })();
