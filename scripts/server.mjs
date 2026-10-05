@@ -211,11 +211,23 @@ function goldLiveSource(kind, src){
       "      var dxyWith = (dir === 'long') ? (macro.dxyBear === true) : (macro.dxyBull === true);",
       "      var tnxWith = (dir === 'long') ? (macro.tnxBear === true) : (macro.tnxBull === true);",
       '      if (!(dxyWith && tnxWith)){',
-      '        macro.lock = true;',
       '        var bits = [];',
       "        if (!dxyWith) bits.push((macro.dxyBull == null && macro.dxyBear == null) ? 'DXY unread' : ('DXY not with this gold ' + dir));",
       "        if (!tnxWith) bits.push((macro.tnxBull == null && macro.tnxBear == null) ? 'US10Y unread' : ('US10Y not with this gold ' + dir));",
-      "        macro.reason = 'GOLD FEED — ' + bits.join('; ') + '. The live dollar and the live 10-year must both agree. A quiet feed is not a yes.';",
+      "        var feedWhy = 'GOLD FEED — ' + bits.join('; ') + '. The live dollar and the live 10-year must both agree. A quiet feed is not a yes.';",
+      '        if (scalp && ctx.hardReject === false){',
+      '          cand.demoted = true;',
+      '          if (!Array.isArray(cand.stamps)) cand.stamps = [];',
+      "          if (cand.stamps.indexOf('GOLD FEED') < 0) cand.stamps.push('GOLD FEED');",
+      '          var gnFd = Array.isArray(cand.gateNotes) ? cand.gateNotes.slice() : [];',
+      '          gnFd.push(feedWhy);',
+      '          cand.gateNotes = gnFd;',
+      '          cand.reason = feedWhy;',
+      '          macro.reason = feedWhy;',
+      '        } else {',
+      '          macro.lock = true;',
+      '          macro.reason = feedWhy;',
+      '        }',
       '      }',
       '    }',
       '    if (macro.lock){'
@@ -607,5 +619,5 @@ if (process.env.HARDGATE_DAEMON_AUTOSTART === '1' || process.env.HARDGATE_DAEMON
   setTimeout(ping, 60000).unref?.();              /* first ping 1 min after boot */
   const t = setInterval(ping, 10 * 60 * 1000);    /* then every 10 min (< 15 min sleep threshold) */
   try{ t.unref(); }catch(e){}
-  console.log('[keep-alive] armed — self-ping every 10 min → ' + url);
+  console.log('[keep-alive] armed — self-ping every 10 min \u2192 ' + url);
 })();
