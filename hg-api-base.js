@@ -1,10 +1,5 @@
 /* HARDGATE — pplx.app fullstack shim.
-   Prefixes same-origin /api/* fetches with __PORT_10000__ when running under a
-   Perplexity-hosted subdomain. The publish pipeline rewrites __PORT_10000__ →
-   /port/10000/ at upload, which routes to the sandbox backend.
-   On Render / localhost / GitHub Pages, we leave /api/* untouched.
-   Zero deps. Load BEFORE any app script. Safe if loaded twice.
-   BATCH 1122 — load SHIVA GOLD. No navigation. No worker unregister. */
+   BATCH 1124 — load SHIVA GOLD. No navigation. No worker unregister. */
 (function(){
   if (typeof window === 'undefined') return;
   if (window.__hgApiBaseInstalled) return;
@@ -49,15 +44,15 @@
   if (typeof document === 'undefined') return;
   function add(id, src){
     var old = document.getElementById(id);
-    if (old && old.getAttribute('data-v') === '1122') return;
+    if (old && old.getAttribute('data-v') === '1124') return;
     if (old) old.parentNode.removeChild(old);
     var s = document.createElement('script');
     s.id = id;
-    s.setAttribute('data-v', '1122');
+    s.setAttribute('data-v', '1124');
     s.src = src;
     s.async = false;
     (document.head || document.documentElement).appendChild(s);
   }
-  add('hgShivaDesk', 'shivagold.js?v=1122');
-  add('hgShivaNav', 'shiva-nav.js?v=1122');
+  add('hgShivaDesk', 'shivagold.js?v=1124');
+  add('hgShivaNav', 'shiva-nav.js?v=1124');
 })();

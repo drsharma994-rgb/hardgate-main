@@ -1,14 +1,14 @@
-/* BATCH 1121 — SHIVA GOLD chip, and do not leave the badge pinned at v1111.
-   No location change. No service-worker unregister. */
+/* BATCH 1124 — create the SHIVA GOLD button and its pane.
+   The desk builds tabs once, before this script arrives, so a late
+   registration never got a pane. No navigation. No worker unregister. */
 (function(){
   var W = (typeof window !== 'undefined') ? window : globalThis;
-  if (W.__hgShivaNav === 1121) return;
-  W.__hgShivaNav = 1121;
+  if (W.__hgShivaNav === 1124) return;
+  W.__hgShivaNav = 1124;
 
   function restoreVersion(){
     try{
-      if (!W.HG_BUILD) return;
-      if (W.HG_BUILD.version === 'hg-v1111') W.HG_BUILD.version = 'hg-v1112';
+      if (W.HG_BUILD && W.HG_BUILD.version === 'hg-v1111') W.HG_BUILD.version = 'hg-v1112';
       var node = document.getElementById('hgVerBadge');
       if (node && /v1111|STALE/.test(node.textContent || '')){
         node.textContent = 'v1112';
@@ -18,53 +18,67 @@
     }catch(e){}
   }
 
-  function place(){
-    var groups = W.HG_NAV_GROUPS;
-    if (!groups || !groups.length) return false;
-    var i, g, hit = false;
+  function modOf(){
+    var list = W.HG_tabs || [];
+    var i;
+    for (i = 0; i < list.length; i++){
+      if (list[i] && list[i].id === 'shivagold') return list[i];
+    }
+    return null;
+  }
+
+  function install(){
+    var nav = document.querySelector('nav');
+    var main = document.querySelector('main');
+    if (!nav || !main) return false;
+    var groups = W.HG_NAV_GROUPS || [];
+    var i, g;
     for (i = 0; i < groups.length; i++){
       g = groups[i];
       if (!g || !g.tabs) continue;
       if (g.id === 'gold' || String(g.label || '').toUpperCase() === 'GOLD'){
         if (g.tabs.indexOf('shivagold') < 0) g.tabs.unshift('shivagold');
-        hit = true;
       }
     }
     W.HG_TAB_GROUP = W.HG_TAB_GROUP || {};
     W.HG_TAB_GROUP.shivagold = 'gold';
-    if (typeof W.hgRenderGroupChips === 'function'){
-      try{ W.hgRenderGroupChips(); }catch(e){}
+    var mod = modOf();
+    if (mod){
+      W.HG_TAB_MODS = W.HG_TAB_MODS || {};
+      W.HG_TAB_MODS.shivagold = mod;
     }
-    return hit;
-  }
-
-  function ensureChip(){
-    if (document.getElementById('tabB_shivagold')) return;
-    var buttons = document.querySelectorAll('button');
-    var anchor = null, i, t;
-    for (i = 0; i < buttons.length; i++){
-      t = (buttons[i].textContent || '') + ' ' + (buttons[i].getAttribute('onclick') || '');
-      if (/goldscalp|GOLD SCALP|omnigold/i.test(t)){ anchor = buttons[i]; break; }
+    if (!document.getElementById('tab_shivagold')){
+      var pane = document.createElement('div');
+      pane.className = 'tabpane';
+      pane.id = 'tab_shivagold';
+      main.appendChild(pane);
     }
-    if (!anchor || !anchor.parentNode) return;
-    var b = document.createElement('button');
-    b.id = 'tabB_shivagold';
-    b.type = 'button';
-    b.className = anchor.className || '';
-    b.textContent = 'SHIVA GOLD';
-    b.onclick = function(){
-      if (typeof W.showTab === 'function') W.showTab('shivagold');
-    };
-    anchor.parentNode.insertBefore(b, anchor);
+    if (!document.getElementById('tabB_shivagold')){
+      var b = document.createElement('button');
+      b.id = 'tabB_shivagold';
+      b.type = 'button';
+      b.textContent = 'SHIVA GOLD';
+      b.setAttribute('data-g', 'gold');
+      b.addEventListener('click', function(){
+        if (typeof W.showTab === 'function') W.showTab('shivagold');
+        else if (typeof showTab === 'function') showTab('shivagold');
+      });
+      nav.appendChild(b);
+    }
+    try{ if (typeof hgAssignNavGroups === 'function') hgAssignNavGroups(); }catch(e1){}
+    try{ if (typeof hgLayoutNav === 'function') hgLayoutNav(); }catch(e2){}
+    try{ if (typeof hgRenderGroupChips === 'function') hgRenderGroupChips(); }catch(e3){}
+    try{ if (typeof hgPaintGroups === 'function') hgPaintGroups(); }catch(e4){}
+    return true;
   }
 
   var n = 0;
   var timer = setInterval(function(){
     n += 1;
     restoreVersion();
-    place();
-    ensureChip();
-    if (n > 40 && document.getElementById('tabB_shivagold')) clearInterval(timer);
-  }, 500);
-  restoreVersion();
+    if (install() && document.getElementById('tab_shivagold') && n > 2) clearInterval(timer);
+    if (n > 80) clearInterval(timer);
+  }, 400);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
+  else install();
 })();
