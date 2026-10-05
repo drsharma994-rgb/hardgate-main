@@ -1,0 +1,205 @@
+{
+  "sent": {
+    "BTC": {
+      "at": "2026-10-05T16:25:34.206Z",
+      "score": 5,
+      "fresh": false,
+      "ago": -1
+    },
+    "BNB": {
+      "at": "2026-10-05T16:25:34.438Z",
+      "score": 5,
+      "fresh": false,
+      "ago": -1
+    },
+    "NEAR": {
+      "at": "2026-10-05T16:25:34.536Z",
+      "score": 5,
+      "fresh": false,
+      "ago": -1
+    },
+    "SOL": {
+      "at": "2026-10-05T16:25:34.538Z",
+      "score": 5,
+      "fresh": false,
+      "ago": -1
+    },
+    "XRP": {
+      "at": "2026-10-05T16:25:34.644Z",
+      "score": 5,
+      "fresh": false,
+      "ago": -1
+    },
+    "ETH": {
+      "at": "2026-10-05T16:25:34.654Z",
+      "score": 5,
+      "fresh": false,
+      "ago": -1
+    },
+    "SUI": {
+      "at": "2026-10-05T16:25:34.669Z",
+      "score": 5,
+      "fresh": true,
+      "ago": 4
+    },
+    "ENA": {
+      "at": "2026-10-05T16:25:34.874Z",
+      "score": 5,
+      "fresh": false,
+      "ago": -1
+    },
+    "FET": {
+      "at": "2026-10-05T16:25:34.875Z",
+      "score": 5,
+      "fresh": true,
+      "ago": 3
+    },
+    "QNT": {
+      "at": "2026-10-05T16:25:34.900Z",
+      "score": 5,
+      "fresh": true,
+      "ago": 9
+    },
+    "WLD": {
+      "at": "2026-10-05T16:25:34.998Z",
+      "score": 5,
+      "fresh": false,
+      "ago": -1
+    },
+    "GTC": {
+      "at": "2026-10-05T16:25:35.000Z",
+      "score": 5,
+      "fresh": true,
+      "ago": 2
+    },
+    "PUMP": {
+      "at": "2026-10-05T16:25:35.107Z",
+      "score": 5,
+      "fresh": false,
+      "ago": -1
+    },
+    "PEPE": {
+      "at": "2026-10-05T16:25:35.130Z",
+      "score": 5,
+      "fresh": false,
+      "ago": -1
+    },
+    "AVAX": {
+      "at": "2026-10-05T16:25:35.227Z",
+      "score": 4,
+      "fresh": true,
+      "ago": 7
+    },
+    "AAVE": {
+      "at": "2026-10-05T16:25:35.340Z",
+      "score": 5,
+      "fresh": false,
+      "ago": -1
+    },
+    "MUBARAK": {
+      "at": "2026-10-05T16:25:35.360Z",
+      "score": 5,
+      "fresh": false,
+      "ago": -1
+    },
+    "LTC": {
+      "at": "2026-10-05T16:25:35.474Z",
+      "score": 5,
+      "fresh": false,
+      "ago": -1
+    },
+    "PENGU": {
+      "at": "2026-10-05T16:25:35.569Z",
+      "score": 5,
+      "fresh": false,
+      "ago": -1
+    },
+    "VIRTUAL": {
+      "at": "2026-10-05T16:25:35.819Z",
+      "score": 5,
+      "fresh": true,
+      "ago": 9
+    },
+    "STRK": {
+      "at": "2026-10-05T16:25:35.918Z",
+      "score": 5,
+      "fresh": true,
+      "ago": 0
+    },
+    "HBAR": {
+      "at": "2026-10-05T16:25:35.937Z",
+      "score": 4,
+      "fresh": true,
+      "ago": 3
+    },
+    "ORCA": {
+      "at": "2026-10-05T16:25:36.049Z",
+      "score": 5,
+      "fresh": false,
+      "ago": -1
+    },
+    "NIL": {
+      "at": "2026-10-05T16:25:36.263Z",
+      "score": 5,
+      "fresh": false,
+      "ago": -1
+    },
+    "ICP": {
+      "at": "2026-10-05T16:25:36.376Z",
+      "score": 5,
+      "fresh": false,
+      "ago": -1
+    },
+    "BEAMX": {
+      "at": "2026-10-05T16:25:36.491Z",
+      "score": 5,
+      "fresh": true,
+      "ago": 1
+    },
+    "FIL": {
+      "at": "2026-10-05T16:25:36.492Z",
+      "score": 5,
+      "fresh": true,
+      "ago": 5
+    },
+    "SKY": {
+      "at": "2026-10-05T16:25:36.725Z",
+      "score": 5,
+      "fresh": true,
+      "ago": 7
+    },
+    "RUNE": {
+      "at": "2026-10-05T16:25:37.083Z",
+      "score": 5,
+      "fresh": false,
+      "ago": -1
+    },
+    "TST": {
+      "at": "2026-10-05T16:25:37.312Z",
+      "score": 5,
+      "fresh": false,
+      "ago": -1
+    },
+    "RAY": {
+      "at": "2026-10-05T16:25:37.413Z",
+      "score": 5,
+      "fresh": false,
+      "ago": -1
+    },
+    "RENDER": {
+      "at": "2026-10-05T16:25:37.416Z",
+      "score": 5,
+      "fresh": true,
+      "ago": 3
+    },
+    "TIA": {
+      "at": "2026-10-05T16:25:37.417Z",
+      "score": 5,
+      "fresh": false,
+      "ago": -1
+    }
+  },
+  "lastRunAt": "2026-10-05T16:25:37.430Z",
+  "scanned": 80,
+  "cards": 33
+}
