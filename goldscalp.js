@@ -958,7 +958,13 @@ var GS_CSS = ''
 + '.gsx-weekend-ok,.gsx-weekend-ok{border-color:#BBF7D0;background:#F0FDF4;color:#047857}'
 + '.gsx-weekend-muted,.gsx-weekend-muted{border-color:#E2E8F0;background:#F8FAFC;color:#1E293B}'
 + '.gsx-weekend-caution,.gsx-weekend-caution{border-color:#FDE68A;background:#FFFBEB;color:#92400E}'
-+ '.gsx-weekend-warn,.gsx-weekend-warn{border-color:rgba(220,38,38,.35);background:#FEF2F2;color:#B91C1C}';
++ '.gsx-weekend-warn,.gsx-weekend-warn{border-color:rgba(220,38,38,.35);background:#FEF2F2;color:#B91C1C}'
++ '.gsx-board{grid-column:1 / -1;display:grid;grid-template-columns:minmax(300px,400px) minmax(0,1fr);gap:14px;align-items:start}'
++ '.gsx-mp-col{position:sticky;top:78px}'
++ '.gsx-mp-col .gsx-banner{margin:0}'
++ '.gsx-rest{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;align-content:start}'
++ '.gsx-nolead{border:1px dashed #FDE68A;border-radius:10px;background:#FFFBEB;padding:14px 16px;color:#0F172A}'
++ '@media(max-width:980px){.gsx-board{grid-template-columns:1fr}.gsx-mp-col{position:static}}';
 
 function gsxSt(s){ return ' style="' + s + '"'; }
 var GSX_CARD = 'background:#0F172A!important;color:#F8FAFC!important;border-color:#334155!important';
@@ -1273,6 +1279,20 @@ function bannerHTML(best, ranked){
     + '<div class="gsx-inv"><b>INVALIDATION</b> — ' + esc(best.invalidates || 'a 15m close beyond the stop') + '. Hard stop $' + pxF(best.stop) + ' — never widen it.</div>'
     + lock
     + '</div></div>';
+}
+
+/* The lead is its own column. The other candidates stay in the grid beside it.
+   When nothing is eligible to lead, the column says so and does not invent a
+   MOST PROBABLE SETUP banner. */
+function gsxBoardHtml(best, ranked, cardsHtml){
+  var lead = bannerHTML(best, ranked);
+  var col = lead
+    ? ('<aside class="gsx-mp-col" aria-label="Most probable setup">' + lead + '</aside>')
+    : ('<aside class="gsx-mp-col" aria-label="No lead">'
+      + '<div class="gsx-nolead"><div class="gsx-eye">NO LEAD</div>'
+      + '<div class="gsx-why">Nothing on this scan is eligible to lead. A demoted or vetoed card stays on the board and is not promoted.</div>'
+      + '</div></aside>');
+  return '<div class="gsx-board">' + col + '<div class="gsx-rest">' + (cardsHtml || '') + '</div></div>';
 }
 
 /* PRICE MAY HAVE WALKED THROUGH THIS PLAN ALREADY — see gswGeoLine in
@@ -3319,8 +3339,8 @@ async function runScan(ui, scanSt){
       if (display.length){
         ui.empty.style.display = 'none';
         ui.cards.innerHTML = basisHtml + mixedBanner + fundPanelHtml + aplusPack.panel + uniHtml
-          + gsOneAtATimeHtml(oneAtATime) + gsBreakevenHtml() + bannerHTML(displayBest, display)
-          + display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note, deskTape); }).join('')
+          + gsOneAtATimeHtml(oneAtATime) + gsBreakevenHtml()
+          + gsxBoardHtml(displayBest, display, display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note, deskTape); }).join(''))
           + formingLayersHtml()
           + formingNowHTML(armedAll)
           + gsRejectFunnelHTML(rejectedAll, preGateAll)
@@ -3332,6 +3352,7 @@ async function runScan(ui, scanSt){
         ui.empty.style.display = 'none';
         ui.cards.innerHTML = basisHtml + mixedBanner + fundPanelHtml + uniHtml + gsOneAtATimeHtml(oneAtATime)
           + gsBreakevenHtml()
+          + gsxBoardHtml(null, [], '')
           + (whySilent ? whySilentHTML(whySilent) : '')
           + formingLayersHtml()
           + gsRejectFunnelHTML(rejectedAll, preGateAll)
@@ -3342,7 +3363,7 @@ async function runScan(ui, scanSt){
         /* feeds failed: cards stay empty (no fabricated setups);
            the 7-step readout still prints — NO SETUP or DATA_UNAVAILABLE is
            itself the answer the playbook asks for. Catalog lives on empty. */
-        ui.cards.innerHTML = basisHtml + fundPanelHtml + uniHtml + sevenStepHtml();
+        ui.cards.innerHTML = basisHtml + fundPanelHtml + uniHtml + gsxBoardHtml(null, [], '') + sevenStepHtml();
         var catH = '';
         try{
           var cFn = gfn('hgGoldCatalogHtml');
@@ -3375,6 +3396,7 @@ async function runScan(ui, scanSt){
             visionRefresh({
               scanSt: scanSt, scanGen: visionGen, ui: ui, display: display, displayBest: displayBest,
               basisHtml: basisHtml + mixedBanner + fundPanelHtml + aplusPack.panel + uniHtml, bannerHTML: bannerHTML, cardHTML: cardHTML,
+              boardHTML: gsxBoardHtml,
               formingNowHTML: formingNowHTML, rejectedHTML: rejectedHTML, historyHTML: historyHTML,
               formingLayersHTML: formingLayersHtml,
               armedAll: armedAll, rejectedAll: rejectedAll, history: lock.store.history,

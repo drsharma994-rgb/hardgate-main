@@ -491,10 +491,13 @@ function hgChartVisionRefreshGoldCards(opts){
     var layers = '';
     if (typeof opts.formingLayersHTML === 'function'){ try{ layers = opts.formingLayersHTML() || ''; }catch(eL){ layers = ''; } }
     else if (typeof opts.formingLayersHTML === 'string') layers = opts.formingLayersHTML;
-    opts.ui.cards.innerHTML = (opts.basisHtml || '') + (typeof opts.bannerHTML === 'function' ? opts.bannerHTML(opts.displayBest, opts.display) : '')
-      + opts.display.map(function(c){
+    var cardsHtml = opts.display.map(function(c){
         return opts.cardHTML(c, !!(opts.displayBest && c.id === opts.displayBest.id), opts.seasonNote);
-      }).join('')
+      }).join('');
+    var mid = (typeof opts.boardHTML === 'function')
+      ? opts.boardHTML(opts.displayBest, opts.display, cardsHtml)
+      : ((typeof opts.bannerHTML === 'function' ? opts.bannerHTML(opts.displayBest, opts.display) : '') + cardsHtml);
+    opts.ui.cards.innerHTML = (opts.basisHtml || '') + mid
       + layers
       + (typeof opts.formingNowHTML === 'function' ? opts.formingNowHTML(opts.armedAll || []) : '')
       + (typeof opts.rejectedHTML === 'function' ? opts.rejectedHTML(opts.rejectedAll || []) : '')
