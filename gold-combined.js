@@ -1,14 +1,13 @@
-/* HARDGATE — gold-combined.js (hg-v1105)
-   One setup per gold tab, formed the way gold actually trades.
-   Daily structure first. CUSUM says trend or range. A liquidity sweep
-   or a higher-timeframe continuation. RSI divergence, not an RSI fade.
-   MACD only with the trend. ATR stop. Asia does not get a scalp continuation.
-   Dollar and real yield must not oppose. A red-folder window is no setup. */
+/* HARDGATE — gold-combined.js (hg-v1106)
+   One setup per gold tab. The v1105 playbook, plus the next layer:
+   USDJPY as an inverse filter, the gold/silver ratio, the 2s10s curve,
+   session volume profile, Heikin Ashi, Renko and KAMA. GLD tonnage is
+   unread — there is no keyless holdings feed. A missing read is not a yes. */
 (function(){
 'use strict';
 var W = (typeof window !== 'undefined') ? window : globalThis;
-if (W.__hgGoldCombinedBoot === 1105) return;
-W.__hgGoldCombinedBoot = 1105;
+if (W.__hgGoldCombinedBoot === 1106) return;
+W.__hgGoldCombinedBoot = 1106;
 
 var TABS = {
   goldscalp:     { name: 'GOLD SCALP', tf: '15m', atrMult: 1.2, r1: 1.2, r2: 2 },
@@ -91,6 +90,114 @@ function divOf(closes, rsiArr){
   return null;
 }
 
+
+function haSide(rows){
+  if (!rows || rows.length < 3) return 'none';
+  var prevO = (rows[0].o + rows[0].c) / 2, prevC = (rows[0].o + rows[0].h + rows[0].l + rows[0].c) / 4;
+  var o, c, i, last = 'none', prev = 'none';
+  for (i = 1; i < rows.length; i++){
+    c = (rows[i].o + rows[i].h + rows[i].l + rows[i].c) / 4;
+    o = (prevO + prevC) / 2;
+    prev = last;
+    last = c >= o ? 'long' : 'short';
+    prevO = o; prevC = c;
+  }
+  if (last === prev) return last;
+  return 'mixed';
+}
+function kamaLast(closes, n, fast, slow){
+  n = n || 10; fast = fast || 2; slow = slow || 30;
+  if (!closes || closes.length < n + 2) return NaN;
+  var fastSC = 2 / (fast + 1), slowSC = 2 / (slow + 1);
+  var kama = closes[n], i, j, change, vol, er, sc;
+  for (i = n + 1; i < closes.length; i++){
+    change = Math.abs(closes[i] - closes[i - n]);
+    vol = 0;
+    for (j = i - n + 1; j <= i; j++) vol += Math.abs(closes[j] - closes[j - 1]);
+    er = vol > 0 ? change / vol : 0;
+    sc = Math.pow(er * (fastSC - slowSC) + slowSC, 2);
+    kama = kama + sc * (closes[i] - kama);
+  }
+  return kama;
+}
+function vwapLast(rows){
+  var fn = gfn('vwapAt');
+  if (!fn || !rows || !rows.length) return NaN;
+  try{ return +fn(rows, rows.length - 1, 30); }catch(e){ return NaN; }
+}
+function profileCore(rows){
+  if (!rows || rows.length < 20) return null;
+  var vols = [], sumV = 0, lo = Infinity, hi = -Infinity, i, v, tp;
+  for (i = 0; i < rows.length; i++){
+    v = fin(rows[i].v);
+    if (!(v > 0)) v = 0;
+    vols.push(v); sumV += v;
+    if (rows[i].l < lo) lo = rows[i].l;
+    if (rows[i].h > hi) hi = rows[i].h;
+  }
+  if (!(sumV > 0) || !(hi > lo)) return null;
+  var bins = 24, w = (hi - lo) / bins, hist = [], b;
+  for (i = 0; i < bins; i++) hist.push(0);
+  for (i = 0; i < rows.length; i++){
+    tp = (rows[i].h + rows[i].l + rows[i].c) / 3;
+    b = Math.min(bins - 1, Math.max(0, Math.floor((tp - lo) / w)));
+    hist[b] += vols[i];
+  }
+  var pocI = 0;
+  for (i = 1; i < bins; i++) if (hist[i] > hist[pocI]) pocI = i;
+  var need = sumV * 0.7, got = hist[pocI], loI = pocI, hiI = pocI, left, right;
+  while (got < need && (loI > 0 || hiI < bins - 1)){
+    left = loI > 0 ? hist[loI - 1] : -1;
+    right = hiI < bins - 1 ? hist[hiI + 1] : -1;
+    if (right >= left){ hiI++; got += hist[hiI]; }
+    else { loI--; got += hist[loI]; }
+  }
+  return { poc: lo + (pocI + 0.5) * w, val: lo + loI * w, vah: lo + (hiI + 1) * w };
+}
+function profileOf(rows){
+  if (!rows || rows.length < 30) return null;
+  var recentN = Math.min(80, rows.length);
+  var cur = profileCore(rows.slice(rows.length - recentN));
+  if (!cur) return null;
+  var older = rows.slice(Math.max(0, rows.length - Math.min(160, rows.length)), rows.length - recentN);
+  var naked = NaN;
+  if (older.length >= 20){
+    var prev = profileCore(older);
+    if (prev){
+      var touched = false, i, bar;
+      var recent = rows.slice(rows.length - recentN);
+      for (i = 0; i < recent.length; i++){
+        bar = recent[i];
+        if (bar.l <= prev.poc && bar.h >= prev.poc){ touched = true; break; }
+      }
+      if (!touched) naked = prev.poc;
+    }
+  }
+  cur.naked = naked;
+  return cur;
+}
+function renkoSide(rows, brick){
+  if (!rows || rows.length < 5 || !(brick > 0)) return 'none';
+  var lastPx = rows[0].c, bricks = [], i, c;
+  for (i = 1; i < rows.length; i++){
+    c = rows[i].c;
+    while (c >= lastPx + brick && bricks.length < 400){ lastPx += brick; bricks.push(1); }
+    while (c <= lastPx - brick && bricks.length < 400){ lastPx -= brick; bricks.push(-1); }
+  }
+  if (bricks.length < 2) return 'none';
+  var a = bricks[bricks.length - 1], b = bricks[bricks.length - 2];
+  if (a === 1 && b === 1) return 'long';
+  if (a === -1 && b === -1) return 'short';
+  return 'mixed';
+}
+function seasonNow(){
+  var m = new Date().getUTCMonth();
+  if (m === 0 || m === 1) return { mode: 'q1', why: 'Q1 physical bid — January and February favor gold longs' };
+  if (m === 5 || m === 6) return { mode: 'summer', why: 'summer doldrums — June and July are range trades, not trends' };
+  if (m === 8) return { mode: 'sept', why: 'September — the volatility window is open' };
+  return { mode: 'none', why: 'outside Q1 and the summer doldrums' };
+}
+
 function tapeOf(rows){
   var ema = gfn('ema'), rsiFn = gfn('rsi'), atrFn = gfn('atr');
   rows = clean(rows);
@@ -113,11 +220,13 @@ function tapeOf(rows){
   try{ if (gfn('adx')) ax = last(W.adx(rows, 14).adx); }catch(e5){ ax = NaN; }
   var h0 = hist ? last(hist) : NaN;
   var h1 = (hist && hist.length > 1) ? hist[hist.length - 2] : NaN;
+  var vw = vwapLast(rows);
   return {
     rows: rows, px: price, rsi: rv, atr: av, adx: ax,
     side: bull ? 'long' : bear ? 'short' : 'mixed',
     regime: regime, cu: cu, macd: h0, macdPrev: h1, volZ: vz,
-    sweep: sweepOf(rows), div: divOf(c, rsiArr)
+    sweep: sweepOf(rows), div: divOf(c, rsiArr),
+    ha: haSide(rows), kama: kamaLast(c, 10, 2, 30), vwap: vw, profile: profileOf(rows)
   };
 }
 
@@ -146,7 +255,7 @@ function divAgainst(tape, side){
   return !!(tape.div && tape.div.side && tape.div.side !== side);
 }
 
-function playOf(spec, stacks){
+function playOf(spec, stacks, season){
   var own = stacks[spec.tf];
   var map = mapOf(spec, stacks);
   var kz = sessionNow();
@@ -155,6 +264,8 @@ function playOf(spec, stacks){
   var regime = (own.regime && own.regime.regime) || 'unknown';
   var label = (own.regime && own.regime.label) || 'REGIME UNREAD';
   var sess = kz && kz.label ? kz.label : 'session unread';
+  var summer = season && season.mode === 'summer';
+  var q1 = season && season.mode === 'q1';
 
   var sweepOk = null, sweepWhy = '';
   if (own.sweep){
@@ -171,9 +282,31 @@ function playOf(spec, stacks){
     }
   }
 
+  var fade = null;
+  var prof = own.profile;
+  if (prof && own.atr > 0 && regime !== 'trend'){
+    var above = own.px > prof.vah, below = own.px < prof.val;
+    var accepted = isFinite(own.volZ) && own.volZ >= 1;
+    var rangeOk = summer || regime === 'range' || regime === 'compression' || regime === 'weak_trend';
+    if ((above || below) && !accepted && rangeOk){
+      var fs = above ? 'short' : 'long';
+      var against = (map.side === 'long' || map.side === 'short') && map.side !== fs && regime === 'weak_trend' && !summer;
+      var risk = spec.atrMult * own.atr;
+      var room = Math.abs(own.px - prof.poc);
+      if (!against && !divAgainst(own, fs) && room >= spec.r1 * risk){
+        fade = { side: fs, why: spec.tf + ' closed ' + (above ? 'above VAH ' + px(prof.vah) : 'below VAL ' + px(prof.val))
+          + ' without volume acceptance · fade toward POC ' + px(prof.poc) + ' · ' + label };
+      }
+    }
+  }
+
   var contOk = null, contWhy = '';
+  var brick = (spec.tf === '15m' || spec.tf === '1h') ? 2 : Math.max(2, (own.atr || 2) * 0.5);
+  var rk = renkoSide(own.rows, brick);
   if (own.side === 'long' || own.side === 'short'){
-    if (quiet) contWhy = sess + ' — no continuation, Asia and off-hours are range only';
+    if (summer) contWhy = 'summer doldrums — continuation stands aside';
+    else if (q1 && own.side === 'short') contWhy = 'Q1 physical bid — no short continuation';
+    else if (quiet) contWhy = sess + ' — no continuation, Asia and off-hours are range only';
     else if (regime === 'range' || regime === 'compression') contWhy = label + ' — no trend continuation';
     else if (regime === 'volatile') contWhy = 'volatile expansion — no continuation';
     else if (regime === 'unknown') contWhy = 'regime unread';
@@ -183,20 +316,27 @@ function playOf(spec, stacks){
     else if (!macdWith(own, own.side)) contWhy = 'MACD histogram is not with the trend';
     else if (cusumAgainst(own, own.side)) contWhy = 'CUSUM flipped ' + own.cu.dir + ' ' + own.cu.barsAgo + ' bars ago';
     else if (isFinite(own.volZ) && own.volZ < -0.5) contWhy = 'volume is not behind the break (z ' + own.volZ.toFixed(1) + ')';
+    else if (own.ha !== own.side) contWhy = 'Heikin Ashi is not with the trend';
+    else if (rk !== 'none' && rk !== own.side) contWhy = 'Renko is not with the trend';
+    else if (isFinite(own.kama) && ((own.side === 'long' && own.px < own.kama) || (own.side === 'short' && own.px > own.kama))) contWhy = 'price is on the wrong side of KAMA';
+    else if (isFinite(own.vwap) && ((own.side === 'long' && own.px < own.vwap) || (own.side === 'short' && own.px > own.vwap))) contWhy = 'price is on the wrong side of VWAP';
     else {
       contOk = own.side;
       contWhy = spec.tf + ' continuation with the daily'
         + (isFinite(own.adx) ? ' · ADX ' + own.adx.toFixed(0) : '')
         + ' · ' + label
+        + ' · Heikin and Renko agree'
+        + (q1 ? ' · Q1 physical bid' : '')
         + (isFinite(own.rsi) ? ' · RSI ' + own.rsi.toFixed(0) + ' left on (not faded)' : '')
         + (isFinite(own.volZ) ? ' · volume z ' + own.volZ.toFixed(1) : ' · volume unread');
     }
   } else contWhy = spec.tf + ' EMA stack is mixed';
 
   if (sweepOk) return { side: sweepOk, why: sweepWhy, kind: 'liquidity sweep', regime: label, session: sess, tape: own };
+  if (fade) return { side: fade.side, why: fade.why, kind: 'value-area fade', regime: label, session: sess, tape: own };
   if (contOk) return { side: contOk, why: contWhy, kind: 'HTF continuation', regime: label, session: sess, tape: own };
-  var why = own.sweep ? sweepWhy : contWhy;
-  if (own.sweep && contWhy) why = sweepWhy + ' · ' + contWhy;
+  var why = sweepWhy || (fade && fade.why) || contWhy;
+  if (sweepWhy && contWhy) why = sweepWhy + ' · ' + contWhy;
   return { side: 'none', why: why, kind: '', regime: label, session: sess, tape: own };
 }
 
@@ -272,16 +412,22 @@ function newsOf(news, risk){
   return { points: 'none', why: 'calendar is clear — news does not pick the side' };
 }
 
-function gate(spec, play, fund, sent, macro, news){
+function gate(spec, play, fund, sent, macro, news, inter){
   if (play.side !== 'long' && play.side !== 'short') return { side: 'none', why: play.why, kind: '' };
   if (fund.block || news.block) return { side: 'none', why: fund.block ? fund.why : news.why, kind: '' };
   if (news.haven && play.side === 'short') return { side: 'none', why: 'safe-haven flow blocks the short', kind: '' };
   var mb = macroBlocks(macro, play.side);
   if (mb) return { side: 'none', why: mb, kind: '' };
+  if (inter && play.side === 'long' && inter.opposeLong) return { side: 'none', why: 'USDJPY is rising — the inverse filter blocks the long', kind: '' };
+  if (inter && play.side === 'short' && inter.opposeShort) return { side: 'none', why: 'USDJPY is falling — the inverse filter blocks the short', kind: '' };
   if ((fund.points === 'long' || fund.points === 'short') && fund.points !== play.side) return { side: 'none', why: 'fundamentals point ' + word(fund.points), kind: '' };
   if ((sent.points === 'long' || sent.points === 'short') && sent.points !== play.side) return { side: 'none', why: 'COT points ' + word(sent.points), kind: '' };
   if ((news.points === 'long' || news.points === 'short') && news.points !== play.side) return { side: 'none', why: 'news points ' + word(news.points), kind: '' };
-  return { side: play.side, why: play.why, kind: play.kind };
+  var extra = '';
+  if (inter && play.side === 'long' && inter.ratio && inter.ratio.trend === 'FALLING') extra += ' · gold/silver falling, silver is leading';
+  if (inter && play.side === 'long' && inter.curve && inter.curve.state === 'STEEPENING') extra += ' · 2s10s is steepening';
+  if (inter && inter.usd && ((play.side === 'long' && inter.usd.trend === 'FALLING') || (play.side === 'short' && inter.usd.trend === 'RISING'))) extra += ' · USDJPY confirms';
+  return { side: play.side, why: play.why + extra, kind: play.kind };
 }
 
 function levels(spec, play){
@@ -315,20 +461,48 @@ function card(spec, call, lv){
     + '<br><span class="dim">IUX spot, ' + esc(spec.tf) + ' close. ATR stop. Not a fill on your bid.</span></div>';
 }
 
+function profileLine(play){
+  var p = play.tape && play.tape.profile;
+  if (!p) return { points: 'none', why: 'volume profile unread — candle volume is missing' };
+  var why = 'POC ' + px(p.poc) + ' · VAL ' + px(p.val) + ' · VAH ' + px(p.vah);
+  if (isFinite(p.naked)) why += ' · naked POC ' + px(p.naked);
+  if (play.tape.px > p.vah) why += ' · price is above value';
+  else if (play.tape.px < p.val) why += ' · price is below value';
+  else why += ' · price is inside value';
+  if (play.kind === 'value-area fade') return { points: play.side, why: why + ' · fade back toward the POC' };
+  return { points: 'none', why: why };
+}
+function noiseLine(spec, play){
+  var tape = play.tape;
+  if (!tape) return { points: 'none', why: 'tape unread' };
+  var brick = (spec.tf === '15m' || spec.tf === '1h') ? 2 : Math.max(2, (tape.atr || 2) * 0.5);
+  var rk = renkoSide(tape.rows, brick);
+  var why = 'Heikin ' + (tape.ha || 'unread') + ' · Renko ' + rk + ' · KAMA ' + px(tape.kama) + ' · VWAP ' + px(tape.vwap);
+  var side = 'none';
+  if ((tape.ha === 'long' || tape.ha === 'short') && (rk === tape.ha || rk === 'none')) side = tape.ha;
+  return { points: side, why: why };
+}
 function htmlFor(spec, stacks, shared){
-  var play = playOf(spec, stacks);
+  var play = playOf(spec, stacks, shared.season);
   var micro = microOf(spec, play);
-  var call = gate(spec, play, shared.fund, shared.sent, shared.macro, shared.news);
+  var call = gate(spec, play, shared.fund, shared.sent, shared.macro, shared.news, shared.inter);
   var lv = levels(spec, call.side === play.side ? play : { side: 'none' });
+  var prof = profileLine(play);
+  var noise = noiseLine(spec, play);
+  var seasonSide = shared.season && shared.season.mode === 'q1' ? 'long' : 'none';
   var h = '<div class="note"><b>GOLD PLAYBOOK</b> · ' + esc(spec.name)
-    + '<br><span class="dim">Daily structure, CUSUM regime, liquidity sweep or HTF continuation, RSI divergence, MACD with the trend, ATR stop, session, dollar and real yield. A split is no setup.</span></div>';
+    + '<br><span class="dim">Daily structure, sweep or value-area fade or HTF continuation, Heikin Ashi, Renko, KAMA, USDJPY, gold/silver, 2s10s. GLD tonnage is unread. A split is no setup.</span></div>';
   h += card(spec, call, lv);
   h += '<div class="cr-ind-wrap">';
   h += '<div class="kv"><span class="k">Technical</span><span class="v">' + arrow(play.side, play.why) + '</span></div>';
+  h += '<div class="kv"><span class="k">Profile</span><span class="v">' + arrow(prof.points, prof.why) + '</span></div>';
+  h += '<div class="kv"><span class="k">Noise</span><span class="v">' + arrow(noise.points, noise.why) + '</span></div>';
+  h += '<div class="kv"><span class="k">Intermarket</span><span class="v">' + arrow(shared.inter.points, shared.inter.why) + '</span></div>';
   h += '<div class="kv"><span class="k">Fundamental</span><span class="v">' + arrow(shared.fund.points, shared.fund.why) + '</span></div>';
   h += '<div class="kv"><span class="k">Sentiment</span><span class="v">' + arrow(shared.sent.points, shared.sent.why) + '</span></div>';
   h += '<div class="kv"><span class="k">Macro</span><span class="v">' + arrow(shared.macro.points, shared.macro.why) + '</span></div>';
   h += '<div class="kv"><span class="k">Micro</span><span class="v">' + arrow(micro.points, micro.why) + '</span></div>';
+  h += '<div class="kv"><span class="k">Season</span><span class="v">' + arrow(seasonSide, shared.season.why) + '</span></div>';
   h += '<div class="kv"><span class="k">News</span><span class="v">' + arrow(shared.news.points, shared.news.why) + '</span></div>';
   return h + '</div>';
 }
@@ -362,6 +536,126 @@ function paint(){
   painting = false;
 }
 
+
+function isoDay(d){ return d.toISOString().slice(0, 10); }
+async function loadUsdJpy(){
+  var end = new Date();
+  var start = new Date(end.getTime() - 80 * 86400000);
+  var span = isoDay(start) + '..' + isoDay(end);
+  var urls = [
+    'https://api.frankfurter.app/' + span + '?from=USD&to=JPY',
+    'https://api.frankfurter.dev/v1/' + span + '?base=USD&symbols=JPY'
+  ];
+  var i, r, j, dates, a, b, chg;
+  for (i = 0; i < urls.length; i++){
+    try{
+      r = await fetch(urls[i]);
+      if (!r.ok) continue;
+      j = await r.json();
+      dates = Object.keys(j.rates || {}).sort();
+      if (dates.length < 8) continue;
+      a = +j.rates[dates[0]].JPY; b = +j.rates[dates[dates.length - 1]].JPY;
+      if (!(a > 0) || !(b > 0)) continue;
+      chg = (b / a - 1) * 100;
+      return { last: b, chg: chg, trend: chg > 0.4 ? 'RISING' : (chg < -0.4 ? 'FALLING' : 'FLAT') };
+    }catch(e){}
+  }
+  return null;
+}
+function csvCells(line){
+  var out = [], cur = '', q = false, i, ch;
+  for (i = 0; i < line.length; i++){
+    ch = line.charAt(i);
+    if (q){
+      if (ch === '"'){ if (line.charAt(i + 1) === '"'){ cur += '"'; i++; } else q = false; }
+      else cur += ch;
+    } else if (ch === '"') q = true;
+    else if (ch === ','){ out.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+async function loadCurve(){
+  var year = new Date().getUTCFullYear();
+  var url = 'https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/'
+    + year + '/all?type=daily_treasury_yield_curve&field_tdr_date_value=' + year + '&page&_format=csv';
+  var r = await fetch(url);
+  if (!r.ok) return null;
+  var text = await r.text();
+  var lines = text.split(/\r?\n/);
+  if (lines.length < 5) return null;
+  var header = csvCells(lines[0]);
+  var i2 = -1, i10 = -1, i;
+  for (i = 0; i < header.length; i++){
+    var h = header[i].trim().toLowerCase();
+    if (h === '2 yr') i2 = i;
+    if (h === '10 yr') i10 = i;
+  }
+  if (i2 < 0 || i10 < 0) return null;
+  var rows = [];
+  for (i = 1; i < lines.length; i++){
+    if (!lines[i] || !lines[i].trim()) continue;
+    var cells = csvCells(lines[i]);
+    var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(cells[0] || '').trim());
+    var y2 = parseFloat(cells[i2]), y10 = parseFloat(cells[i10]);
+    if (!m || !isFinite(y2) || !isFinite(y10)) continue;
+    rows.push({ t: Date.UTC(+m[3], (+m[1]) - 1, +m[2]), spread: y10 - y2 });
+  }
+  rows.sort(function(a, b){ return a.t - b.t; });
+  if (rows.length < 8) return null;
+  var last = rows[rows.length - 1].spread;
+  var prev = rows[Math.max(0, rows.length - 21)].spread;
+  var chg = last - prev;
+  var state = chg >= 0.08 ? 'STEEPENING' : (chg <= -0.08 ? 'INVERTING' : 'FLAT');
+  return { spread: last, chg: chg, state: state, inverted: last < 0 };
+}
+function ratioFrom(goldTape, silverGot, macro){
+  var series = [], sm = {}, i, r, sc, day;
+  var srows = silverGot && silverGot.rows;
+  if (goldTape && goldTape.rows && srows && srows.length){
+    for (i = 0; i < srows.length; i++){
+      r = srows[i];
+      if (r && r.c > 0 && isFinite(+r.t)) sm[Math.floor(+r.t / 86400)] = +r.c;
+    }
+    for (i = 0; i < goldTape.rows.length; i++){
+      r = goldTape.rows[i];
+      day = Math.floor(+r.t / 86400);
+      sc = sm[day];
+      if (sc > 0 && r.c > 0) series.push(r.c / sc);
+    }
+  }
+  if (series.length >= 8){
+    var lastR = series[series.length - 1];
+    var prevR = series[Math.max(0, series.length - 21)];
+    var chgR = (lastR / prevR - 1) * 100;
+    return { last: lastR, chg: chgR, trend: chgR <= -2 ? 'FALLING' : (chgR >= 2 ? 'RISING' : 'FLAT') };
+  }
+  if (macro && isFinite(+macro.goldSilverRatio) && +macro.goldSilverRatio > 0){
+    return { last: +macro.goldSilverRatio, trend: '' };
+  }
+  return null;
+}
+function intermarket(usd, ratio, curve){
+  var bits = [], opposeLong = false, opposeShort = false;
+  if (!usd) bits.push('USDJPY unread');
+  else {
+    bits.push('USDJPY ' + usd.last.toFixed(2) + ' ' + usd.trend.toLowerCase() + ' ' + (usd.chg >= 0 ? '+' : '') + usd.chg.toFixed(2) + '%');
+    if (usd.trend === 'RISING') opposeLong = true;
+    if (usd.trend === 'FALLING') opposeShort = true;
+  }
+  if (!ratio) bits.push('gold/silver unread');
+  else if (!ratio.trend) bits.push('gold/silver ' + ratio.last.toFixed(1) + ' — trend unread');
+  else bits.push('gold/silver ' + ratio.last.toFixed(1) + ' ' + ratio.trend.toLowerCase() + (ratio.trend === 'FALLING' ? ' — silver leading' : ''));
+  if (!curve) bits.push('2s10s unread');
+  else bits.push('2s10s ' + curve.spread.toFixed(2) + (curve.inverted ? ' inverted' : '') + ' ' + curve.state.toLowerCase());
+  bits.push('GLD tonnage unread');
+  var points = 'none';
+  if (opposeLong && !opposeShort) points = 'short';
+  else if (opposeShort && !opposeLong) points = 'long';
+  return { points: points, why: bits.join(' · '), opposeLong: opposeLong, opposeShort: opposeShort, usd: usd, ratio: ratio, curve: curve };
+}
+
 async function refresh(){
   if (busy) return;
   busy = true;
@@ -392,13 +686,22 @@ async function refresh(){
     var reg = null;
     try{ if (gfn('hgFundamentalRegime')) reg = W.hgFundamentalRegime('gold'); }catch(e5){ reg = null; }
     var fund = fundOf(reg);
+    var usd = null, curve = null, silver = null;
+    try{ usd = await loadUsdJpy(); }catch(eU){ usd = null; }
+    try{ curve = await loadCurve(); }catch(eC){ curve = null; }
+    try{ if (gfn('getSilverCandles')) silver = await W.getSilverCandles('1d', 40); }catch(eS){ silver = null; }
+    var ratio = ratioFrom(stacks['1d'], silver, macro);
+    var inter = intermarket(usd, ratio, curve);
+    var season = seasonNow();
     var shared = {
       fund: fund,
       sent: { points: fund.cot, why: fund.cotWhy },
       macro: macroOf(macro),
-      news: newsOf(news, risk)
+      news: newsOf(news, risk),
+      inter: inter,
+      season: season
     };
-    var sig = [shared.fund.points, shared.sent.points, shared.macro.points, shared.news.points];
+    var sig = [shared.fund.points, shared.sent.points, shared.macro.points, shared.news.points, inter.points, season.mode];
     var tf;
     for (tf in stacks){
       if (!stacks[tf]) continue;
