@@ -185,26 +185,27 @@ function hgFillProbability(rows, entry, dir, zone, maxBars){
     var lo = isFinite(zLo) ? zLo : ref;
     var hi = isFinite(zHi) ? zHi : ref;
     if (lo > hi){ var t = lo; lo = hi; hi = t; }
-    var touches = 0, trials = 0, usable = 0;
+    var touches = 0, trials = 0;
     for (var i = 10; i <= rows.length - maxBars - 1; i++){
       var touched = false;
+      var complete = true;
       for (var j = i; j < i + maxBars && j < rows.length; j++){
         var bar = rows[j];
-        if (!bar) continue;
+        if (!bar){ complete = false; continue; }
         var bl = hgFin(bar.l), bh = hgFin(bar.h);
-        /* a bar missing either side cannot answer whether it touched the
-           zone — it is skipped, not read as a touch and not read as a miss */
-        if (!isFinite(bl) || !isFinite(bh)) continue;
-        usable++;
-        if (bl <= hi && bh >= lo){ touched = true; break; }
+        /* A window with any missing side is incomplete; exclude the whole
+           window from the estimate rather than treating it as a no-fill. */
+        if (!isFinite(bl) || !isFinite(bh)){ complete = false; continue; }
+        if (bl <= hi && bh >= lo) touched = true;
       }
-      trials++;
-      if (touched) touches++;
+      if (complete){
+        trials++;
+        if (touched) touches++;
+      }
     }
-    /* trials counts windows, usable counts bars actually readable inside
-       them. A tape of holes produces trials without evidence, and reporting
-       a rate off that is the same fabrication in a different place. */
-    if (!trials || usable < maxBars) return out;
+    /* Denominator contains only confirmed touches and fully observed misses.
+       A tape of holes cannot turn unknown windows into no-fill observations. */
+    if (!trials) return out;
     out.prob = touches / trials;
     out.pct = Math.round(out.prob * 100);
     out.note = out.pct + '% of past ' + maxBars + '-bar windows touched this zone (n=' + trials + ')';
@@ -405,7 +406,10 @@ function hgRankEntryPOI(rows, dir, style, mark, atrVal, params){
       var cd = cands[i];
       if (Math.abs(mark - cd.entry) <= anchorMax) return cd;
     }
-    return cands.length ? cands[0] : null;
+    /* No candidate passed the configured distance cap. Returning the top
+       score here silently bypassed the cap and could move ENTRY to a remote
+       POI. Let the caller keep its named entry or report no POI. */
+    return null;
   }catch(e){ return null; }
 }
 
