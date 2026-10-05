@@ -1,4 +1,4 @@
-/* BATCH 1126 — every 30 minutes, Telegram gets only a golden cross that
+/* BATCH 1128 — every 10 minutes, Telegram gets only a golden cross that
    has just formed. A cross already sent is not repeated. */
 import fs from 'fs';
 
@@ -246,7 +246,7 @@ async function main(){
       '',
       bodyParts[p],
       '',
-      'next new cross check in 30 minutes',
+      'next new cross check in 10 minutes',
       SITE
     ].join('\n');
     ids.push(await send(text));

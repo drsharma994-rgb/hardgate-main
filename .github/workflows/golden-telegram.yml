@@ -1,11 +1,11 @@
-# BATCH 1123 — Telegram every 30 minutes for new golden crosses,
+# BATCH 1123 — Telegram every 10 minutes for new golden crosses,
 # TREND MATRIX GOLDEN CROSS, and composite +5/5 !GOLDEN.
 # Not skipped by RENDER_DISPATCH_PRIMARY. No page redirect.
 name: HARDGATE Golden Telegram
 
 on:
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '*/10 * * * *'
   workflow_dispatch: {}
 
 permissions:
@@ -30,7 +30,7 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_DISABLED: "0"
-          GOLDEN_ALERT_EVERY_MIN: "30"
+          GOLDEN_ALERT_EVERY_MIN: "10"
       - name: Commit golden alert state if it changed
         run: |
           git config user.name "hardgate-bot"
