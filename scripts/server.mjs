@@ -252,6 +252,66 @@ function goldLiveSource(kind, src){
       '    if (scalp){'
     ].join('\n');
     if (src.indexOf('SPREAD UNREAD') < 0 && src.indexOf(sprAnchor) >= 0) src = src.replace(sprAnchor, sprGate);
+    const newsAnchor = '    if (newsG.lock){\n      cand.dropped = true;\n      cand.reason = newsG.reason;\n      return cand;\n    }\n    var spr = hgGoldSpreadLock({';
+    const newsGate = [
+      '    if (newsG.lock){',
+      '      cand.dropped = true;',
+      '      cand.reason = newsG.reason;',
+      '      return cand;',
+      '    }',
+      '    if (scalp && !(ctx.news && ctx.news.calendarOk === true)){',
+      '      cand.demoted = true;',
+      '      if (!Array.isArray(cand.stamps)) cand.stamps = [];',
+      "      if (cand.stamps.indexOf('NEWS UNREAD') < 0) cand.stamps.push('NEWS UNREAD');",
+      '      var gnNw = Array.isArray(cand.gateNotes) ? cand.gateNotes.slice() : [];',
+      "      var nwWhy = 'NEWS UNREAD — a gold scalp cannot lead until the free USD calendar has loaded. An empty cache is not a quiet week.';",
+      '      gnNw.push(nwWhy);',
+      '      cand.gateNotes = gnNw;',
+      '      cand.reason = nwWhy;',
+      '    }',
+      '    var spr = hgGoldSpreadLock({'
+    ].join('\n');
+    if (src.indexOf('NEWS UNREAD') < 0 && src.indexOf(newsAnchor) >= 0) src = src.replace(newsAnchor, newsGate);
+    const rrAnchor = '    if (macro.lock){\n      cand.dropped = true;\n      cand.reason = macro.reason;\n      return cand;\n    }\n    if (key === \'sweep\'){';
+    const rrGate = [
+      '    if (macro.lock){',
+      '      cand.dropped = true;',
+      '      cand.reason = macro.reason;',
+      '      return cand;',
+      '    }',
+      "    if (scalp && (dir === 'long' || dir === 'short')){",
+      '      var rrM = (ctx.macro && ctx.macro.realRateMeasured) || null;',
+      "      var rrT = (rrM && rrM.measured && rrM.trend) ? String(rrM.trend).toUpperCase() : '';",
+      "      var rrWith = (dir === 'long') ? (rrT.indexOf('FALL') >= 0) : (rrT.indexOf('RIS') >= 0);",
+      "      var rrFlat = rrT.indexOf('FLAT') >= 0;",
+      '      if (!rrWith && !rrFlat){',
+      '        cand.demoted = true;',
+      '        if (!Array.isArray(cand.stamps)) cand.stamps = [];',
+      "        if (cand.stamps.indexOf('REAL YIELD') < 0) cand.stamps.push('REAL YIELD');",
+      '        var gnRr = Array.isArray(cand.gateNotes) ? cand.gateNotes.slice() : [];',
+      "        var rrWhy = rrT ? ('REAL YIELD — FRED DFII10 is ' + rrT + ', not with this gold ' + dir + '.') : 'REAL YIELD UNREAD — FRED DFII10 did not load. A missing real yield is not a tailwind.';",
+      '        gnRr.push(rrWhy);',
+      '        cand.gateNotes = gnRr;',
+      '        cand.reason = rrWhy;',
+      '      }',
+      '    }',
+      "    if (key === 'sweep'){"
+    ].join('\n');
+    if (src.indexOf('REAL YIELD') < 0 && src.indexOf(rrAnchor) >= 0) src = src.replace(rrAnchor, rrGate);
+    return src;
+  }
+  if (kind === 'goldscalp'){
+    const anchor = "    var news = null;\n    var ns = gfn('hgNewsState');\n    if (ns){ try{ news = ns(); }catch(eN){ news = null; } }";
+    const gate = [
+      '    var news = null;',
+      '    try{',
+      "      var nref = gfn('hgNewsRefresh');",
+      '      if (nref) await nref(false);',
+      '    }catch(eNr){}',
+      "    var ns = gfn('hgNewsState');",
+      '    if (ns){ try{ news = ns(); }catch(eN){ news = null; } }'
+    ].join('\n');
+    if (src.indexOf("gfn('hgNewsRefresh')") < 0 && src.indexOf(anchor) >= 0) return src.replace(anchor, gate);
     return src;
   }
   if (kind === 'goldswing'){
@@ -434,11 +494,11 @@ const server = http.createServer(async (req, res) => {
 
 
     /* hg-v1085: gold desks — ticket only when the live dollar and 10-year agree. */
-    if (u.pathname === '/goldind.js' || u.pathname === '/goldswing.js' || u.pathname === '/omnigold.js') {
+    if (u.pathname === '/goldind.js' || u.pathname === '/goldswing.js' || u.pathname === '/omnigold.js' || u.pathname === '/goldscalp.js') {
       const gName = u.pathname.slice(1);
       const gFile = path.join(ROOT, gName);
       if (fs.existsSync(gFile)) {
-        const kind = gName === 'goldind.js' ? 'goldind' : (gName === 'goldswing.js' ? 'goldswing' : 'omnigold');
+        const kind = gName === 'goldind.js' ? 'goldind' : (gName === 'goldswing.js' ? 'goldswing' : (gName === 'goldscalp.js' ? 'goldscalp' : 'omnigold'));
         const shaped = goldLiveSource(kind, fs.readFileSync(gFile, 'utf8'));
         res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
         res.setHeader('Cache-Control', 'no-cache');
