@@ -333,3 +333,4 @@ function trendScore(rows1d, rows4h){
   try{
     if (typeof ema !== 'function' || typeof adx !== 'function' ||
         typeof ichimokuState !== 'function' || typeof crossOver !== 'function' ||
+        typeof crossUnder !== 'function' || typeof crossedRecently !== 'function'){

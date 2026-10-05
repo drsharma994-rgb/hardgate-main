@@ -1,32 +1,33 @@
+        if (twin && twin.length > ((rows && rows.length) || 0)) return twin;
+        return (rows && rows.length) ? rows : [];
+      });
+    }).catch(function(){ return []; });
+  }
+  var results = [], failed = 0;
+  for (var i = 0; i < items.length; i += CHUNK){
+    var chunk = items.slice(i, i + CHUNK);
+    if (typeof hooks.setProg === 'function') hooks.setProg((i + chunk.length) / items.length);
     var rs = await Promise.all(chunk.map(function(item){
-      return fetchK(item, '4h', 260).then(function(r4){
-          if (r4 && r4.length >= 210) return r4;
-          return tmBinanceTwin(item, '4h', 260).then(function(twin){
-            if (twin && twin.length > ((r4 && r4.length) || 0)) return twin;
-            return (r4 && r4.length) ? r4 : [];
-          });
-        }).then(function(r4){
-          if (!r4 || !r4.length) return tmUnreadRow(item);
-          return Promise.all([
-            fetchK(item, '1d', 260).then(function(r1){ return (r1 && r1.length) ? r1 : tmBinanceTwin(item, '1d', 260); }),
-            fetchK(item, '1h', 120).then(function(r1h){ return (r1h && r1h.length) ? r1h : tmBinanceTwin(item, '1h', 120); })
-          ]).then(function(rr){
-            var r1 = rr[0], r1h = rr[1];
-            if (!r1 || !r1.length) return tmUnreadRow(item);
-            var ts = trendScore(r1, r4);
-            var row = {
-              sym: item.sym, base: item.base, exchange: item.exchange || 'binance', alsoOn: item.alsoOn,
-              xu: item, score: ts.score, comps: ts.comps, freshCross: ts.freshCross, adx: ts.adx,
-              rsi: ts.rsi,   /* hg-v1019: the momentum witness rides the row — chips/tier/collector read the stamp, never recompute */
-              volDiv: ts.volDiv, volConf: ts.volConf,   /* hg-v1020: the volume witness's stamps, same seam */
-              price: r1[r1.length - 1].c, rows4h: r4, rows1d: r1, rows1h: (r1h && r1h.length) ? r1h : null,
-              fundingPct: item.fundingPct, turnoverUsd: item.turnoverUsd, mark: item.mark
-            };
-            var dir = tmDirOf(row);
-            row.gate = dir ? trendmxGateEval(row, dir) : null;
-            return row;
-          });
-        }).catch(function(){ return null; });
+      return Promise.all([
+        tmFetchTf(item, '4h', 260, 210),
+        tmFetchTf(item, '1d', 260, 1),
+        tmFetchTf(item, '1h', 72, 1)
+      ]).then(function(got){
+        var r4 = got[0], r1 = got[1], r1h = got[2];
+        if (!r4 || !r4.length || !r1 || !r1.length) return tmUnreadRow(item);
+        var ts = trendScore(r1, r4);
+        var row = {
+          sym: item.sym, base: item.base, exchange: item.exchange || 'binance', alsoOn: item.alsoOn,
+          xu: item, score: ts.score, comps: ts.comps, freshCross: ts.freshCross, adx: ts.adx,
+          rsi: ts.rsi,
+          volDiv: ts.volDiv, volConf: ts.volConf,
+          price: r1[r1.length - 1].c, rows4h: r4, rows1d: r1, rows1h: (r1h && r1h.length) ? r1h : null,
+          fundingPct: item.fundingPct, turnoverUsd: item.turnoverUsd, mark: item.mark
+        };
+        var dir = tmDirOf(row);
+        row.gate = dir ? trendmxGateEval(row, dir) : null;
+        return row;
+      }).catch(function(){ return null; });
     }));
     for (var j = 0; j < rs.length; j++){ if (rs[j]) results.push(rs[j]); else failed++; }
     if (i + CHUNK < items.length) await sleepMs(CHUNK_SLEEP_MS);
@@ -250,7 +251,16 @@ async function trendmxLoadContext(rows){
     ctx.riskOff = against >= 3;
     ctx.riskOn = withRisk >= 3;
   }
-  var cal = await tmProxyJson('https://nfs.faireconomy.media/ff_calendar_thisweek.json');
+  var pack = await Promise.all([
+    tmProxyJson('https://nfs.faireconomy.media/ff_calendar_thisweek.json'),
+    tmProxyJson('https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=2'),
+    tmProxyJson('https://api.coingecko.com/api/v3/coins/ethereum/market_chart?vs_currency=usd&days=2'),
+    tmProxyJson('https://stablecoins.llama.fi/stablecoincharts/all'),
+    tmProxyText('https://cointelegraph.com/rss').then(function(t){ return t || tmProxyText('https://www.coindesk.com/arc/outboundfeeds/rss/'); }),
+    tmProxyJson('https://api.coingecko.com/api/v3/global/market_cap_chart?days=2'),
+    tmProxyJson('https://api.llama.fi/emissions')
+  ]);
+  var cal = pack[0];
   if (Array.isArray(cal)){
     ctx.calendarOk = true;
     var now = Date.now();
@@ -264,36 +274,27 @@ async function trendmxLoadContext(rows){
       if (when - now <= 2 * 60 * 60 * 1000 && now - when <= 30 * 60 * 1000) ctx.eventBlock = true;
     }
   }
-  var btcJ = await tmProxyJson('https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=2');
-  var ethJ = await tmProxyJson('https://api.coingecko.com/api/v3/coins/ethereum/market_chart?vs_currency=usd&days=2');
+  var btcJ = pack[1], ethJ = pack[2];
   var btcChg = tmCapChange(btcJ), ethChg = tmCapChange(ethJ);
   if (btcChg != null && ethChg != null){
     ctx.domOk = true;
     ctx.btcDomRising = btcChg > 0.005 && ethChg < btcChg - 0.01;
   }
-  if (Array.isArray(rows)){
-    for (var ei = 0; ei < rows.length; ei++){
-      if (tmBaseOf(rows[ei]) !== 'ETH') continue;
-      try{ ctx.ethStructure = tmStructureDir(rows[ei].rows4h); }catch(eE){ ctx.ethStructure = null; }
-      if (ctx.ethStructure) break;
-    }
-  }
-  ctx.ethOk = ctx.ethStructure === 'up' || ctx.ethStructure === 'down';
-  var stables = await tmProxyJson('https://stablecoins.llama.fi/stablecoincharts/all');
+  ctx.ethOk = false;
+  var stables = pack[3];
   if (Array.isArray(stables) && stables.length >= 2){
     var aS = stables[stables.length - 2], bS = stables[stables.length - 1];
     var aV = aS && aS.totalCirculatingUSD && +aS.totalCirculatingUSD.peggedUSD;
     var bV = bS && bS.totalCirculatingUSD && +bS.totalCirculatingUSD.peggedUSD;
     if (aV > 0 && bV > 0){ ctx.stableOk = true; ctx.stableFalling = bV < aV * 0.997; }
   }
-  var news = await tmProxyText('https://cointelegraph.com/rss');
-  if (!news) news = await tmProxyText('https://www.coindesk.com/arc/outboundfeeds/rss/');
+  var news = pack[4];
   if (news && news.length > 80){ ctx.newsOk = true; ctx.headlines = news; }
   ctx.totalOk = false;
   ctx.totalFalling = false;
   ctx.altsFalling = false;
   try {
-    var tot = await tmProxyJson('https://api.coingecko.com/api/v3/global/market_cap_chart?days=2');
+    var tot = pack[5];
     var caps = tot && (tot.market_cap || tot.market_caps);
     if (caps && caps.length >= 2 && caps[0][1] > 0){
       var tchg = (caps[caps.length - 1][1] - caps[0][1]) / caps[0][1];
@@ -310,7 +311,7 @@ async function trendmxLoadContext(rows){
   ctx.unlockOk = false;
   ctx.unlockBases = {};
   try {
-    var em = await tmProxyJson('https://api.llama.fi/emissions');
+    var em = pack[6];
     var list = Array.isArray(em) ? em : (em && em.data);
     if (Array.isArray(list)){
       ctx.unlockOk = true;
@@ -394,3 +395,19 @@ async function tmLiqRead(row){
   return { longLiq: longLiq, shortLiq: shortLiq };
 }
 async function tm5mVolumeOk(row, dir){
+  var got = null;
+  try {
+    if (typeof W.binanceKlines === 'function') got = await W.binanceKlines(tmBaseOf(row) + 'USDT', '5m', 40);
+  } catch (e) { got = null; }
+  var rows = tmClosedRows(got, 300);
+  if (!rows || rows.length < 15) return null;
+  var last = rows[rows.length - 1], avg = 0, i;
+  for (i = rows.length - 11; i < rows.length - 1; i++) avg += rows[i].v || 0;
+  avg /= 10;
+  if (!(avg > 0)) return null;
+  if (dir === 'long') return last.c >= last.o && last.v > avg;
+  return last.c <= last.o && last.v > avg;
+}
+async function tmCrowdRatio(row){
+  if (typeof W.binanceLongShort !== 'function') return null;
+  try {

@@ -1,3 +1,15 @@
+      + col('MIXED / CHOP', '#94a3b8', '', mixedS, 'no mixed rows')
+      + '</div>';
+  }catch(e){ return ''; }
+}
+
+/* hg-v1048: the COINDCX TRENDING / FORMING board - every CoinDCX future
+   the matrix scanned, in two columns. TRENDING = the composite has a
+   majority direction (|score| >= 2); FORMING = it does not yet. Both
+   print TP/SL: minted ticket levels where the plan exists (7/7 CLEAN /
+   6/7 NEAR), the house DRAFT ladder where it does not. */
+function trendmxTrendFormHTML(rows){
+  try{
     if (!Array.isArray(rows) || !rows.length) return '<div class="empty">Run a scan to classify the CoinDCX board.</div>';
     var cdcx = [];
     for (var i = 0; i < rows.length; i++){
@@ -252,9 +264,3 @@ function trendmxCrownPanelHTML(state){
       + '<div class="kv"><span class="k">Automation Blueprint</span><span class="v"><pre style="margin:4px 0;white-space:pre-wrap;font-size:10px">' + escH(jsonTxt) + '</pre>' + (tier === 'clean' ? '' : '<div class="note warn" style="margin-top:4px">formation WATCH_ONLY - the bridge must drop this payload.</div>') + '</span></div>'
       + '</div>';
     /* ---- the dual grid setups, OMNIBTC style ---- */
-    var swingS = { dir: dir, entry: +plan.entry, stop: +plan.stop, t1: +plan.t1, t2: isFinite(+plan.t2) ? +plan.t2 : null,
-      tier: tier === 'clean' ? 'CLEAN' : 'NEAR', gates: (crown.gate && isFinite(crown.gate.gatesPassed)) ? crown.gate.gatesPassed : null };
-    html += trendmxGridBlockHtml('SWING SETUP', '4h grid', swingS, dir);
-    var scalpS = null, altS = null;
-    if (Array.isArray(crown.rows1h) && crown.rows1h.length >= 60 && typeof W.atr === 'function'){
-      var a1arr = W.atr(crown.rows1h, 14);

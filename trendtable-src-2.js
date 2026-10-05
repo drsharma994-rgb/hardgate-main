@@ -1,5 +1,3 @@
-            s = hgApplyExactEntry(s, rows, { rows1h: inp.rows1h, style: s.type || 'swing', preferEdge: true }) || s;
-          }
           return trendmxAttachMeta(s, gate, { rows4h: rows, price: inp.price });
         }
       }catch(eSmart){}
@@ -353,3 +351,6 @@ function tmSmcScanPass(rows, golden, death){
 
    REAL Binance taker long/short flow only, read on the row's own
    hgDeskBinanceSym twin through hgOmniCvd (omniroute.js) over the last
+   TM_FLOW_LOOK 4h windows. The candle-approximated stand-in never speaks
+   here — the hg-v1009 rule: it derives from the same closes the composite
+   already read, so it is not independent evidence (the caller hands the

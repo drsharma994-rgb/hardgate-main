@@ -1,3 +1,13 @@
+  var prog   = el.querySelector('[data-r="prog"]');
+  var summary = el.querySelector('[data-r="summary"]');
+  var status = el.querySelector('[data-r="status"]');
+  var out    = el.querySelector('[data-r="out"]');
+  var refs = {
+    summary: summary,
+    golden: el.querySelector('[data-r="golden"]'),
+    death: el.querySelector('[data-r="death"]'),   /* hg-v1015 */
+    cards: el.querySelector('[data-r="cards"]'),
+    near: el.querySelector('[data-r="near"]'),
     forming: el.querySelector('[data-r="forming"]'),
     gateclean: el.querySelector('[data-r="gateclean"]'),   /* hg-v1018 */
     conviction: el.querySelector('[data-r="conviction"]'),  /* hg-v1018 */

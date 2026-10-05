@@ -1,3 +1,6 @@
+  var why = golden.length ? '' : ('<div class="note">No golden setup. Price has to clear structure, the 4h EMA cascade, 6/7 gates, the EMA tag, the TRADE grade, then the full stack: weekly and 4h structure, BOS, equal highs/lows, daily and weekly open, volume profile, EMA 20/50/200, VWAP, 1h, 15m sweep CHOCH and retest, 5m volume, OI, funding, positioning, liquidations, CVD, DXY yields Nasdaq S&P gold VIX, the calendar, BTC ETH BTC.D TOTAL, stables, news and the unlock calendar.'
+    + (held.waiting ? ' ' + held.waiting + ' waiting for the EMA tag.' : '')
+    + (held.gates ? ' ' + held.gates + ' failed the gates.' : '')
     + (held.cascade ? ' ' + held.cascade + ' have no 4h cascade.' : '')
     + (held.grade ? ' ' + held.grade + ' failed the TRADE grade.' : '')
     + ((held.stack && held.stack.length) ? ' ' + held.stack.slice(0, 3).map(function(x){ return x.sym + ' blocked: ' + x.reasons.slice(0, 3).join(', '); }).join(' · ') + '.' : '')
@@ -318,11 +321,3 @@ function trendmxVolChipHtml(r){
     if (!st || st === 'flat') return '';
     if (st === 'against'){
       return '<span class="stamp bad" style="margin-left:6px" title="' + escH('trendmx volume witness (hg-v1020): the 1D OBV trend diverges against this ' + dir
-        + ' — ' + (dir === 'long' ? 'price made a higher 20-bar high on a lower OBV high: distribution under the rally' : 'price made a lower 20-bar low on a higher OBV low: accumulation under the fall')
-        + ' (Granville: volume must confirm). Held off the LIMIT BOARD, never CLEAN — the row paints, the reason is named.') + '">VOLUME TREND AGAINST · HELD OFF</span>';
-    }
-    return '<span class="stamp pass" style="margin-left:6px" title="' + escH('trendmx volume witness (hg-v1020): price and OBV made the new 20-bar extreme together — the 1D volume trend confirms this ' + dir
-      + '. Evidence, never a composite point.') + '">VOLUME TREND WITH IT</span>';
-  }catch(e){ return ''; }
-}
-

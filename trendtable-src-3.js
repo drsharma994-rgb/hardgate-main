@@ -1,6 +1,3 @@
-   TM_FLOW_LOOK 4h windows. The candle-approximated stand-in never speaks
-   here — the hg-v1009 rule: it derives from the same closes the composite
-   already read, so it is not independent evidence (the caller hands the
    taker series straight through; hgOmniCvd only returns source 'taker'
    when enough real windows were used).
 
@@ -270,7 +267,13 @@ async function trendmxScanCore(hooks){
       && (typeof W.binancePerpUniverse !== 'function' || typeof W.binanceKlines !== 'function')){
     throw new Error('missing universe layer (hgDeskLoadUniverse or binancePerpUniverse)');
   }
+  var cdcxAllP = (typeof W.xuCoinDCXRows === 'function' && typeof W.hgDeskLoadCoinDCXAll === 'function')
+    ? W.hgDeskLoadCoinDCXAll({ force: false, minTurnover: 0, includeUnknown: true }).catch(function(){ return null; })
+    : Promise.resolve(null);
+  var cdcxSymP = tmLoadCoinDcxContracts().catch(function(){ return []; });
   var uniPack = await W.hgDeskLoadUniverse({ force: true, minTurnover: TURNOVER_FLOOR });
+  var allPackEarly = await cdcxAllP;
+  var cdcxSymsEarly = await cdcxSymP;
   var items = uniPack.items || [];
   /* hg-v1048/hg-v1074: ALL COINDCX FUTURES - the floored universe drops
      small CoinDCX contracts, so the matrix re-reads the universe at floor 0
@@ -285,8 +288,8 @@ async function trendmxScanCore(hooks){
     /* Raw CoinDCX only makes sense when a CoinDCX data source exists
        (xuniverse.js). Guarding on xuCoinDCXRows also avoids a pointless
        second universe fetch on the Binance-only fallback path. */
-    if (typeof W.xuCoinDCXRows === 'function' && typeof W.hgDeskLoadCoinDCXAll === 'function'){
-      var allPack = await W.hgDeskLoadCoinDCXAll({ force: false, minTurnover: 0, includeUnknown: true });
+    if (allPackEarly){
+      var allPack = allPackEarly;
       var cdcxAll = Array.isArray(allPack.items) ? allPack.items : [];
       var seenU = {};
       for (var ui = 0; ui < items.length; ui++) seenU[String(items[ui].exchange || '') + '|' + String(items[ui].sym || '')] = 1;
@@ -302,7 +305,7 @@ async function trendmxScanCore(hooks){
      universe dropped because another venue won the base or the $5M floor
      cut them. A symbol already queued is not added twice. */
   try{
-    var cdcxSyms = await tmLoadCoinDcxContracts();
+    var cdcxSyms = cdcxSymsEarly || [];
     var seenSym = {};
     for (var si = 0; si < items.length; si++) seenSym[String(items[si].sym || '')] = 1;
     for (var ci2 = 0; ci2 < cdcxSyms.length; ci2++){
@@ -319,7 +322,7 @@ async function trendmxScanCore(hooks){
     uniPack.cdcxListed = cdcxSyms.length;
   }catch(eCdx){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('trendmx', eCdx); }catch(eW2){} }
   if (!items.length) throw new Error('universe empty' + (uniPack.note ? ' — ' + uniPack.note : ''));
-  var results = [], failed = 0;
-  for (var i = 0; i < items.length; i += CHUNK){
-    var chunk = items.slice(i, i + CHUNK);
-    if (typeof hooks.setProg === 'function') hooks.setProg((i + chunk.length) / items.length);
+  function tmFetchTf(item, tf, n, minLen){
+    return fetchK(item, tf, n).then(function(rows){
+      if (rows && rows.length >= minLen) return rows;
+      return tmBinanceTwin(item, tf, n).then(function(twin){

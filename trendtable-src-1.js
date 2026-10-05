@@ -1,4 +1,3 @@
-        typeof crossUnder !== 'function' || typeof crossedRecently !== 'function'){
       return out; // indicator globals missing -> graceful zero
     }
     var ok1 = Array.isArray(rows1d) && rows1d.length > 0;
@@ -76,8 +75,8 @@
 /* ---------------- tab UI ---------------- */
 
 var TURNOVER_FLOOR = (typeof W.hgDeskMinTurnover === 'function') ? W.hgDeskMinTurnover() : 5e6;
-var CHUNK = 5;               // paced bulk fetch chunk size
-var CHUNK_SLEEP_MS = 150;
+var CHUNK = 8;               // eight contracts at a time; three timeframes share the wave
+var CHUNK_SLEEP_MS = 40;
 
 function tmVenueChip(item){
   return (typeof W.hgDeskVenueChipHTML === 'function') ? W.hgDeskVenueChipHTML(item) : '';
@@ -437,3 +436,5 @@ function trendmxPlanLegacy(inp){
         var s = smartSetup(cls, rows, inp.rows1h);
         if (tmValidSetup(s)){
           if (typeof hgApplyExactEntry === 'function'){
+            s = hgApplyExactEntry(s, rows, { rows1h: inp.rows1h, style: s.type || 'swing', preferEdge: true }) || s;
+          }
