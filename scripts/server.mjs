@@ -654,7 +654,17 @@ const server = http.createServer(async (req, res) => {
        to serve the offline shell, which is where real offline caching belongs
        — and its HG_CACHE is versioned, so it swaps atomically rather than
        file by file. */
-    res.setHeader('Cache-Control', 'no-cache');
+    /* A tab that loaded an old stamp polls build-stamp.js?fresh= and then
+       refuses a second reload. For a short window, that exact request
+       clears the saved copy and reloads the tab. The current page polls
+       ?live= and is left alone. The window ends on its own. */
+    var wipeStuck = u.pathname === '/build-stamp.js' && String(u.search || '').indexOf('fresh=') !== -1 && Date.now() < Date.parse('2026-10-05T21:30:00.000Z');
+    if (wipeStuck) {
+      res.setHeader('Clear-Site-Data', '"cache", "storage", "executionContexts"');
+      res.setHeader('Cache-Control', 'no-store');
+    } else {
+      res.setHeader('Cache-Control', 'no-cache');
+    }
     fs.createReadStream(file).pipe(res);
   }catch(e){
     try{ res.statusCode = 500; res.end('server error'); }catch(e2){}
