@@ -416,9 +416,60 @@ function goldLiveSource(kind, src){
       "      return { regime: 'UNREAD', dxyValue: dxyValue, correlation: correlation, beta: beta, realRate: realRate, reason: 'DXY or real-rate feed unread. A missing internet print is not a normal gold regime' };",
       '    }'
     ].join('\n');
-    if (src.indexOf('not a normal gold regime') >= 0) return src;
-    if (src.indexOf(anchor) < 0) return src;
-    return src.replace(anchor, gate);
+    if (src.indexOf('not a normal gold regime') < 0 && src.indexOf(anchor) >= 0) src = src.replace(anchor, gate);
+    /* hg-v1099: the lead is this tab's own measured ledger. An engine grade,
+       and a past winner sitting against today's tape, are not the crown. */
+    if (src.indexOf('function hgOgLeadMeasOk') < 0){
+      const pickFn = '  function hgOgPickFor(ranked, horizon, tapeDir){';
+      const leadFn = [
+        '  function hgOgLeadMeasOk(c){',
+        '    try{',
+        '      if (!c || !c.kind) return false;',
+        '      var fwdPaid = null;',
+        '      try { fwdPaid = hgOgForwardPaid(c.kind, c.horizon); } catch (eFp) { fwdPaid = null; }',
+        "      if (fwdPaid && fwdPaid.read === 'has paid') return true;",
+        '      var ev = hgOgReplayEvidence(c.kind);',
+        '      if (!ev || !(fin(ev.n) >= MIN_SAMPLES)) return false;',
+        '      var priced = null;',
+        '      try { priced = hgOgReplayNetAtVenue(ev); } catch (ePx) { priced = null; }',
+        '      var net = (priced && isFinite(fin(priced.net))) ? fin(priced.net) : NaN;',
+        '      if (!(net > 0)) return false;',
+        '      var hit = fin(ev.winRate), n = fin(ev.n);',
+        '      if (!isFinite(hit) || !(n > 0)) return false;',
+        '      var pBreak = 1 / (1 + OG_T1_R);',
+        '      var se = Math.sqrt(pBreak * (1 - pBreak) / n);',
+        '      var z = se > 0 ? ((hit - pBreak) / se) : 0;',
+        '      return z >= hgOgFamilyZ(OG_MECHANICS.length);',
+        '    }catch(eLm){ return false; }',
+        '  }',
+        '  function hgOgPickFor(ranked, horizon, tapeDir){'
+      ].join('\n');
+      if (src.indexOf(pickFn) < 0) return src;
+      src = src.replace(pickFn, leadFn);
+    }
+    const fund = '      if (c.fundGate && (c.fundGate.refuse === true || c.fundGate.demote === true)) continue;';
+    const fundGate = fund + '\n      if (!hgOgLeadMeasOk(c)) continue;';
+    if (src.indexOf('if (!hgOgLeadMeasOk(c)) continue;') < 0 && src.indexOf(fund) >= 0) src = src.replace(fund, fundGate);
+    src = src.replace('tapeOverride: true /* v687 omnigold-only opt-in */', 'tapeOverride: false /* v1099: a past winner against the tape is not put on top */');
+    const eng = [
+      '          var engineScalp = !pickScalp ? hgOgPickGoldEngineForMp(bridge, HORIZONS.scalp.label, scalpTape) : null;',
+      '          var engineSwing = !pickSwing ? hgOgPickGoldEngineForMp(bridge, HORIZONS.swing.label, swingTape) : null;'
+    ].join('\n');
+    const engOff = [
+      '          var engineScalp = null; /* v1099: the ledger is the only lead */',
+      '          var engineSwing = null;'
+    ].join('\n');
+    if (src.indexOf(eng) >= 0) src = src.replace(eng, engOff);
+    const apex = [
+      '          pick = hgOgPickGoldEngineFor(bridge, hzs[i], tape,',
+      '            { allowC: false, allowAgainstTape: false });'
+    ].join('\n');
+    const apexOff = '          pick = null; /* v1099: an engine grade is not the OmniGold lead */';
+    if (src.indexOf(apex) >= 0) src = src.replace(apex, apexOff);
+    const apexNote = 'no grade-A/B tape-aligned pick clears the APEX bar right now — the bar existing is the point.';
+    const apexNote2 = 'A Gold Scalp or Gold Swing grade is not the OmniGold lead. The lead has to be positive after the spread, at the 2R on the card, and past the family bar.';
+    if (src.indexOf(apexNote) >= 0) src = src.replace(apexNote, apexNote2);
+    return src;
   }
   return src;
 }
