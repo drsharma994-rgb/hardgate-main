@@ -2444,11 +2444,28 @@ function paintGoldWeekendPanel(ui, rows, nowMs, bestCandidate){
 }
 
 /* ---------------- data legs (each catch-isolated) ---------------- */
+function gsClosedRows(rows, tf, nowMs){
+  if (!Array.isArray(rows) || !rows.length) return [];
+  var sec = { '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400 }[tf];
+  if (!sec) return rows.slice();
+  var last = rows[rows.length - 1];
+  var t = last && +last.t;
+  if (!isFinite(t) || !(t > 0)) return [];
+  var openSec = t > 1e12 ? t / 1000 : t;
+  var cutoff = (isFinite(+nowMs) && +nowMs > 0) ? +nowMs : Date.now();
+  if ((openSec + sec) * 1000 > cutoff) return rows.slice(0, -1);
+  return rows.slice();
+}
+
 async function fetchGoldKlines(){
   var out = { rows15m: [], rows1h: [], rows4h: [], rows1d: [], src: {}, mixed: false, source: null, xmSymbol: null };
   var srcSet = function(tf, source, rowsKey, rows){
+    /* The XM route already applies dropForming server-side. The free macro /
+       proxy chain can return Binance's active candle, so close those rows
+       here before scoring and level formation. */
+    if (source !== 'xm-xauusd') rows = gsClosedRows(rows, tf);
+    if (!Array.isArray(rows) || !rows.length || !source) return;
     if (typeof hgGoldSrcAssign === 'function'){ hgGoldSrcAssign(out, tf, source, rowsKey, rows); return; }
-    if (!rows || !rows.length || !source) return;
     out[rowsKey] = rows;
     out.src[tf] = source;
   };
@@ -2541,6 +2558,9 @@ async function fetchDeltaXaut(){
   try{ var a = await xc(item, '15m', KL_15M); if (a && a.length) out.rows15m = a; }catch(e2){}
   try{ var b = await xc(item, '1h', KL_1H);  if (b && b.length) out.rows1h = b; }catch(e3){}
   try{ var c = await xc(item, '4h', KL_4H);  if (c && c.length) out.rows4h = c; }catch(e4){}
+  out.rows15m = gsClosedRows(out.rows15m, '15m');
+  out.rows1h = gsClosedRows(out.rows1h, '1h');
+  out.rows4h = gsClosedRows(out.rows4h, '4h');
   return out;
 }
 

@@ -7,13 +7,20 @@
       ]).then(function(got){
         var r4 = got[0], r1 = got[1], r1h = got[2];
         if (!r4 || !r4.length || !r1 || !r1.length) return tmUnreadRow(item);
-        var ts = trendScore(r1, r4);
+        /* Score, gates and plan formation must share one closed-bar snapshot.
+           The 15m confirmation and forward ledger already judge closed bars;
+           partial daily / 4H candles let the same row disagree with them. */
+        var r4c = tmClosedRows(r4, 14400);
+        var r1c = tmClosedRows(r1, 86400);
+        var r1hc = tmClosedRows(r1h, 3600);
+        if (!r4c.length || !r1c.length) return tmUnreadRow(item);
+        var ts = trendScore(r1c, r4c);
         var row = {
           sym: item.sym, base: item.base, exchange: item.exchange || 'binance', alsoOn: item.alsoOn,
           xu: item, score: ts.score, comps: ts.comps, freshCross: ts.freshCross, adx: ts.adx,
           rsi: ts.rsi,
           volDiv: ts.volDiv, volConf: ts.volConf,
-          price: r1[r1.length - 1].c, rows4h: r4, rows1d: r1, rows1h: (r1h && r1h.length) ? r1h : null,
+          price: r4c[r4c.length - 1].c, rows4h: r4c, rows1d: r1c, rows1h: r1hc.length ? r1hc : null,
           fundingPct: item.fundingPct, turnoverUsd: item.turnoverUsd, mark: item.mark
         };
         var dir = tmDirOf(row);

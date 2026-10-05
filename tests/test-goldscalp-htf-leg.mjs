@@ -57,7 +57,8 @@ function grab(src, name){
 }
 const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const F = new Function('esc', grab(gsSrc, 'gsFeedLegs') + grab(gsSrc, 'gsFeedLegNote')
-  + 'return { gsFeedLegs, gsFeedLegNote };')(esc);
+  + grab(gsSrc, 'gsClosedRows')
+  + 'return { gsFeedLegs, gsFeedLegNote, gsClosedRows };')(esc);
 const text = h => String(h).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 
 /* goldind, for the real hgGoldHtfBias */
@@ -212,6 +213,35 @@ console.log('\n5. it reports; it does not gate');
   const why = text(F.gsFeedLegNote({ rows15m: [{}], rows1h: [{}] }));
   ok(/not-disagreeing/.test(why) && /demotes more, not less/.test(why),
      'the note explains WHY an absent 4H stack demotes rather than releases');
+}
+
+/* ---------------------------------------------------------------- 6 */
+console.log('\n6. every gold venue is judged on closed bars');
+{
+  const now = Math.floor(Date.now() / 1000);
+  const tape = [
+    { t: now - 1800, o: 2400, h: 2402, l: 2398, c: 2401, v: 10 },
+    { t: now - 300, o: 2401, h: 2500, l: 2300, c: 2499, v: 100000 }
+  ];
+  const m15 = F.gsClosedRows(tape, '15m', now * 1000);
+  ok(m15.length === 1 && m15[0].c === 2401,
+     'an active 15m proxy candle is removed before setup formation');
+  const msTape = [
+    { t: (now - 7200) * 1000, o: 2400, h: 2402, l: 2398, c: 2401, v: 10 },
+    { t: (now - 300) * 1000, o: 2401, h: 2500, l: 2300, c: 2499, v: 100000 }
+  ];
+  const h1 = F.gsClosedRows(msTape, '1h', now * 1000);
+  ok(h1.length === 1 && h1[0].c === 2401,
+     'millisecond timestamps and the 1h timeframe use the same closed-bar rule');
+  ok(F.gsClosedRows([{ c: 2400 }], '15m', now * 1000).length === 0,
+     'a gold candle with no timestamp cannot be treated as a fresh setup input');
+  const fetchBody = grab(gsSrc, 'fetchGoldKlines');
+  const deltaBody = grab(gsSrc, 'fetchDeltaXaut');
+  ok(/source !== 'xm-xauusd'\) rows = gsClosedRows\(rows, tf\)/.test(fetchBody),
+     'the fallback feed drops an active bar while the XM route keeps its server-closed bars');
+  ok(/gsClosedRows\(out\.rows15m, '15m'\)/.test(deltaBody)
+       && /gsClosedRows\(out\.rows4h, '4h'\)/.test(deltaBody),
+     'the second-venue Delta leg follows the same closed-bar contract');
 }
 
 console.log('\n' + passed + ' assertions'

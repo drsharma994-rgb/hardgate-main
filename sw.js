@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v1143';
+const HG_CACHE = 'hg-v1147';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -132,8 +132,8 @@ self.addEventListener('activate', function(ev){
           return Promise.all((list || []).map(function(c){
             try {
               var u = new URL(c.url);
-              if (u.searchParams.get('hg') === '1143') return null;
-              u.searchParams.set('hg', '1143');
+              if (u.searchParams.get('hg') === '1147') return null;
+              u.searchParams.set('hg', '1147');
               if (typeof c.navigate === 'function') return c.navigate(u.toString());
             } catch (e) {}
             return null;
