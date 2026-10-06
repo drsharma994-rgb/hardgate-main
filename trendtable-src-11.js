@@ -382,6 +382,9 @@ W.trendmxRowTier = trendmxRowTier;
 W.tmLegReads = tmLegReads;                 /* hg-v1159: the composite's legs as marks */
 W.tmRecordReads = tmRecordReads;           /* hg-v1159: the one reads bag both record sites hand the ledger */
 W.tmTicketClaim = tmTicketClaim;           /* hg-v1159: the ticket claim is the board's clean tier */
+W.tmValidSetup = tmValidSetup;             /* hg-v1160: the replay harness asks the desk's own plan validity rule */
+W.HG_TM_FACTOR_SEP = HG_TM_FACTOR_SEP;     /* hg-v1160: read by the panel, the drift guard and nothing else */
+W.tmFactorSepHtml = tmFactorSepHtml;       /* hg-v1160: the replay panel, measured or not */
 /* hg-v1018: the mixed board is superseded by the two class desks — the
    collector and both renderers are the desk's behavior, exported the same
    way (the tests read them rather than re-deriving behavior) */

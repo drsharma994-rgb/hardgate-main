@@ -536,6 +536,52 @@ function tmRecordReads(r, dir){
 function tmTicketClaim(r, plan){
   return trendmxRowTier(r, plan) === 'clean';
 }
+/* hg-v1160: WHICH READS SEPARATE, ON THIS DESK'S OWN REPLAY. HG_TM_FACTOR_SEP
+   is written by scripts/trendmx-factor-separation.mjs off the walk that
+   scripts/backtest-trendmx.mjs leaves (the hg-v921 rule: a generated thing
+   writes itself) -- the same walk-then-judge shape OMNIROUTE (hg-v987) and
+   OMNIPRESENT (hg-v988) carry, on the reads this desk has recorded since
+   hg-v1159. Rendered through OMNIROUTE's one renderer (hgOmniFactorSepHtml)
+   so there is one panel for three desks. While the walk has not run the
+   literal reads measured:false and the panel SAYS so in place of a table,
+   because an empty table is not a clean bill (hg-v955); three reads are
+   forward-only (no bar archive carries them) and are named as such. Nothing
+   here gates anything: the literal is read by tmFactorSepHtml and by nothing
+   else. */
+/* --- BEGIN GENERATED HG_TM_FACTOR_SEP (scripts/trendmx-factor-separation.mjs) ---
+     Re-derive with `node scripts/trendmx-factor-separation.mjs --write`. Do not
+     hand-edit — generated literals write themselves (hg-v921). Every figure is
+     read off backtest-trendmx-results.json; the guard re-runs the generator and fails on drift. */
+  var HG_TM_FACTOR_SEP = {
+    artifact: "backtest-trendmx-results.json", n: 0, windows: 4, minSide: 20,
+    span: null,
+    measured: false,
+    tab: "TRENDMX",
+    forwardOnly: ["takerFlowWith","fundWith","postgate:veto"],
+    reads: [],
+    bound: "no bound: nothing walked",
+    note: "scripts/backtest-trendmx-results.json does not exist: the TREND MATRIX replay (scripts/backtest-trendmx.mjs) has not run on a machine that can fetch bars. Every read this desk records (hg-v1159) is unmeasured against its complement until it does; the forward ledger is the only evidence this desk has.",
+    verdicts: [],
+    leans: [],
+    inSampleVerdicts: [],
+    rows: [
+
+    ]
+  };
+  /* --- END GENERATED HG_TM_FACTOR_SEP --- */
+function tmFactorSepHtml(T){
+  try{
+    T = (T === undefined) ? HG_TM_FACTOR_SEP : T;   /* the OMNIROUTE renderer's own seam: a harness hands a literal in */
+    if (!T) return '';
+    if (T.measured !== true || !Array.isArray(T.rows) || !T.rows.length){
+      return '<div class="note" data-tm-replay="unmeasured"><b>REPLAY · NOT YET MEASURED.</b> ' + escH(T.note || 'the walk has not run')
+        + ((Array.isArray(T.forwardOnly) && T.forwardOnly.length) ? ' <span class="dim">Forward-only reads, measurable in the ledger above and nowhere else: ' + T.forwardOnly.map(escH).join(', ') + '.</span>' : '')
+        + '</div>';
+    }
+    if (typeof W.hgOmniFactorSepHtml !== 'function') return '';
+    return W.hgOmniFactorSepHtml(T) || '';
+  }catch(e){ return ''; }
+}
 function tmPostGateReads(r){
   var pg = r && r.postGate;
   if (!pg) return undefined;
@@ -3669,10 +3715,11 @@ function trendmxPaintDeskSections(refs, state){
 function trendmxPaintFwd(refs){
   if (!refs || !refs.fwd) return;
   try{
+    /* hg-v1160: the replay verdict (or the fact that there is none yet) rides under the measured book */
     if (typeof W.hgFwdPanelHTML === 'function'){
-      refs.fwd.innerHTML = W.hgFwdPanelHTML('TRENDMX') || '';
+      refs.fwd.innerHTML = (W.hgFwdPanelHTML('TRENDMX') || '') + tmFactorSepHtml();
     } else {
-      refs.fwd.innerHTML = '<div class="note">Forward ledger absent — crowns are recorded nowhere to be measured.</div>';
+      refs.fwd.innerHTML = '<div class="note">Forward ledger absent — crowns are recorded nowhere to be measured.</div>' + tmFactorSepHtml();
     }
   }catch(e){ try{ refs.fwd.innerHTML = ''; }catch(e2){} }
 }
@@ -4872,6 +4919,9 @@ W.trendmxRowTier = trendmxRowTier;
 W.tmLegReads = tmLegReads;                 /* hg-v1159: the composite's legs as marks */
 W.tmRecordReads = tmRecordReads;           /* hg-v1159: the one reads bag both record sites hand the ledger */
 W.tmTicketClaim = tmTicketClaim;           /* hg-v1159: the ticket claim is the board's clean tier */
+W.tmValidSetup = tmValidSetup;             /* hg-v1160: the replay harness asks the desk's own plan validity rule */
+W.HG_TM_FACTOR_SEP = HG_TM_FACTOR_SEP;     /* hg-v1160: read by the panel, the drift guard and nothing else */
+W.tmFactorSepHtml = tmFactorSepHtml;       /* hg-v1160: the replay panel, measured or not */
 /* hg-v1018: the mixed board is superseded by the two class desks — the
    collector and both renderers are the desk's behavior, exported the same
    way (the tests read them rather than re-deriving behavior) */

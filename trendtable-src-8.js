@@ -276,10 +276,11 @@ function trendmxPaintDeskSections(refs, state){
 function trendmxPaintFwd(refs){
   if (!refs || !refs.fwd) return;
   try{
+    /* hg-v1160: the replay verdict (or the fact that there is none yet) rides under the measured book */
     if (typeof W.hgFwdPanelHTML === 'function'){
-      refs.fwd.innerHTML = W.hgFwdPanelHTML('TRENDMX') || '';
+      refs.fwd.innerHTML = (W.hgFwdPanelHTML('TRENDMX') || '') + tmFactorSepHtml();
     } else {
-      refs.fwd.innerHTML = '<div class="note">Forward ledger absent — crowns are recorded nowhere to be measured.</div>';
+      refs.fwd.innerHTML = '<div class="note">Forward ledger absent — crowns are recorded nowhere to be measured.</div>' + tmFactorSepHtml();
     }
   }catch(e){ try{ refs.fwd.innerHTML = ''; }catch(e2){} }
 }
