@@ -28,6 +28,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { swCacheOk, HG_VER } from './helpers/build-version.mjs';
+import { goldMacroFor } from './helpers/gold-macro-fixture.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
@@ -156,16 +157,27 @@ console.log('== 3) the REAL mints: the lock drops LONGS, leaves shorts, and FLAT
   assert(shortNone.length > 0 && shortNone.every(c => c.dir === 'short'), 'REACHABILITY: seed 102 forms shorts only (' + shortNone.length + ')');
   assert(same(C.goldScalpSetups(scalpInp(102, { macro: LOCK })) || [], shortNone), 'GOLD SCALP mint: the lock is LONG-only -- ' + shortNone.length + ' shorts identical under RISING/RISING');
 
+  /* hg-v1157: the SWING path carries the hg-v1085 GOLD FEED lock (baked from the
+     server splice): a candidate is DROPPED unless the dollar AND the 10-year both
+     trend WITH it — FLAT and unread included. So on this path the baseline that
+     FORMS is the aligned snapshot, LOCK (both bullish) is still the CONVICTION
+     LOCK on a long, and FLAT is no longer "moves nothing": it is the GOLD FEED
+     drop, named. The scalp path above escapes the lock (hardReject:false). */
   const S = boot(SWING);
-  const swNone = (S.goldSwingSetups(swingInp(105)) || {}).ranked || [];
-  assert(swNone.length > 0 && swNone.every(c => c.dir === 'long'), 'REACHABILITY: the swing mint forms a LONG with no macro (' + swNone.map(c => c.stratKey).join(', ') + ')');
+  const swNone = (S.goldSwingSetups(swingInp(105, { macro: goldMacroFor('long') })) || {}).ranked || [];
+  assert(swNone.length > 0 && swNone.every(c => c.dir === 'long'), 'REACHABILITY: the swing mint forms a LONG under DXY FALLING + US10Y FALLING (' + swNone.map(c => c.stratKey).join(', ') + ')');
+  const swBare = S.goldSwingSetups(swingInp(105)) || {};
+  assert((swBare.ranked || []).length === 0 && (swBare.rejected || []).some(r => /GOLD FEED — DXY unread, US10Y unread/.test(r.reason || '')), 'GOLD SWING mint: with NO macro every candidate is dropped naming the unread feed (the hg-v1085 lock, baked hg-v1157)');
   const swLock = S.goldSwingSetups(swingInp(105, { macro: LOCK })) || {};
-  const swCl = (swLock.rejected || []).filter(r => /CONVICTION LOCK/.test(r.reason || ''));
-  assert((swLock.ranked || []).length === 0 && swCl.length >= swNone.length, 'GOLD SWING mint: the same snapshot drops every long with CONVICTION LOCK (' + swCl.length + ' rejected)');
-  assert(same((S.goldSwingSetups(swingInp(105, { macro: FLAT })) || {}).ranked || [], swNone), 'GOLD SWING mint: FLAT moves no board');
-  const swShort = (S.goldSwingSetups(swingInp(103)) || {}).ranked || [];
-  assert(swShort.length > 0 && swShort.every(c => c.dir === 'short'), 'REACHABILITY: seed 103 forms shorts (' + swShort.length + ')');
-  assert(same((S.goldSwingSetups(swingInp(103, { macro: LOCK })) || {}).ranked || [], swShort), 'GOLD SWING mint: shorts identical under RISING/RISING');
+  const swCl = (swLock.rejected || []).filter(r => /GOLD FEED — DXY RISING, US10Y RISING/.test(r.reason || ''));
+  assert((swLock.ranked || []).length === 0 && swCl.length >= swNone.length, 'GOLD SWING mint: DXY RISING + TNX RISING drops every long at the desk\'s own push() naming both legs (' + swCl.length + ' rejected) — the GOLD FEED rule speaks before the inst filter\'s CONVICTION LOCK can');
+  const swFlat = S.goldSwingSetups(swingInp(105, { macro: FLAT })) || {};
+  assert((swFlat.ranked || []).length === 0 && (swFlat.rejected || []).some(r => /GOLD FEED — DXY FLAT, US10Y FLAT/.test(r.reason || '')), 'GOLD SWING mint: a FLAT snapshot is a GOLD FEED drop on this path ("a quiet feed is not a yes") — not the no-op it is on the scalp path');
+  const swShort = (S.goldSwingSetups(swingInp(103, { macro: goldMacroFor('short') })) || {}).ranked || [];
+  assert(swShort.length > 0 && swShort.every(c => c.dir === 'short'), 'REACHABILITY: seed 103 forms shorts under RISING/RISING (' + swShort.length + ')');
+  assert(same((S.goldSwingSetups(swingInp(103, { macro: LOCK })) || {}).ranked || [], swShort), 'GOLD SWING mint: LOCK IS the aligned snapshot for a short — identical board');
+  const swShortBear = S.goldSwingSetups(swingInp(103, { macro: goldMacroFor('long') })) || {};
+  assert((swShortBear.ranked || []).length === 0 && (swShortBear.rejected || []).some(r => /GOLD FEED — DXY FALLING, US10Y FALLING/.test(r.reason || '')), 'and both legs BEARISH drop every short the same way, naming the legs');
   /* and through the APPLIER, the way the borrowing desks reach it */
   const viaApplier = C.goldScalpSetups(C.hgGoldApplyLiveFeed(scalpInp(106), { macro: LOCK })) || [];
   assert(viaApplier.length === 0 && (viaApplier.rejected || []).some(r => /CONVICTION LOCK/.test(r.reason || '')), 'the lock is reached THROUGH the applier -- the seam the three desks use');

@@ -11,6 +11,7 @@ import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { swCacheOk, HG_VER } from './helpers/build-version.mjs';
+import { goldMacroFor } from './helpers/gold-macro-fixture.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url)) + '/..';
 let passed = 0;
@@ -65,7 +66,13 @@ const CFG_SCALP = { tf: '1h', sessionHard: true, minRr: 1.5, label: 'SCALP' };
 const CFG_SWING = { tf: '4h', sessionHard: false, minRr: 2.0, label: 'SWING' };
 
 function gate(W, rows, hit, extra){
-  return (W.hgOgGates(rows, hit, extra || {}) || []).filter(g => g.key === 'inst-filter')[0];
+  /* hg-v1157: the inst filter on the native path carries the hg-v1085 GOLD FEED
+     lock (baked) — no macro drops the hit before any other gate can speak. A
+     fixture that wants to see the OTHER gates supplies the aligned legs, unless
+     it is testing the lock itself and brings its own snapshot. */
+  extra = Object.assign({}, extra || {});
+  if (!('macro' in extra) && hit && (hit.dir === 'long' || hit.dir === 'short')) extra.macro = goldMacroFor(hit.dir);
+  return (W.hgOgGates(rows, hit, extra) || []).filter(g => g.key === 'inst-filter')[0];
 }
 
 console.log('== kind map + fail-open without goldind ==');
@@ -210,7 +217,7 @@ console.log('\n== named ENTRY + stop floor stamp; never tighten vs hgOgPlanForHi
   const rows = bars(160, 4530, 3600, 7);
   const lvl = Math.round(rows[rows.length - 1].c / 10) * 10;
   const hit = { kind: 'ROUND-MAGNET', dir: 'long', level: lvl, why: 'round' };
-  const extra = { livePx: lvl + 4, nowMs: NY, sessionHard: true };
+  const extra = { livePx: lvl + 4, nowMs: NY, sessionHard: true, macro: goldMacroFor('long') };   /* hg-v1157: aligned legs (hg-v1085 lock, baked) */
   const pre = W.hgOgPlanForHit(hit, rows, extra, CFG_SCALP);
   ok(!!pre && Math.abs(pre.entry - lvl) < 1e-6, 'pre-filter plan ENTRY is hit.level');
   const stop0 = pre.stop;

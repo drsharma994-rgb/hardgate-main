@@ -38,6 +38,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { goldMacroFor } from './helpers/gold-macro-fixture.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url)) + '/..';
 let passed = 0;
@@ -91,6 +92,8 @@ function boot(file, sink){
                                 setItem: (k, v) => { store[k] = String(v); },
                                 removeItem: k => { delete store[k]; } } };
   ctx.window = ctx; ctx.globalThis = ctx; ctx.self = ctx; ctx.HG_tabs = []; ctx.HG_warmups = [];
+  /* hg-v1157: the GOLD SWING path needs the aligned dollar / 10-year legs (hg-v1085 lock, baked) */
+  if (file === 'goldswing.js') ctx.getGoldMacro = async () => goldMacroFor('short');
   ctx.location = { href: '', search: '', hash: '' };
   ctx.navigator = { userAgent: 'node', onLine: true };
   ctx.fetch = () => Promise.resolve({ ok: true, status: 200,

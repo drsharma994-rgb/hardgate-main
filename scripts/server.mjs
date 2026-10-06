@@ -198,158 +198,12 @@ function omnibtcTicketSource(src){
 }
 
 
-/* hg-v1085: gold tickets need a live dollar and a live 10-year, both with
-   the trade. The desk files are too large to replace whole, so the gate is
-   spliced into the served script. A miss on any marker serves the file
-   unchanged. */
-function goldLiveSource(kind, src){
-  if (kind === 'goldind'){
-    const anchor = '    cand.macroLock = macro;\n    if (macro.lock){';
-    const gate = [
-      '    cand.macroLock = macro;',
-      "    if (macro && macro.lock !== true && (dir === 'long' || dir === 'short')){",
-      "      var dxyWith = (dir === 'long') ? (macro.dxyBear === true) : (macro.dxyBull === true);",
-      "      var tnxWith = (dir === 'long') ? (macro.tnxBear === true) : (macro.tnxBull === true);",
-      '      if (!(dxyWith && tnxWith) && !(scalp && ctx.hardReject === false)){',
-      '        var bits = [];',
-      "        if (!dxyWith) bits.push((macro.dxyBull == null && macro.dxyBear == null) ? 'DXY unread' : ('DXY not with this gold ' + dir));",
-      "        if (!tnxWith) bits.push((macro.tnxBull == null && macro.tnxBear == null) ? 'US10Y unread' : ('US10Y not with this gold ' + dir));",
-      "        macro.reason = 'GOLD FEED — ' + bits.join('; ') + '. The live dollar and the live 10-year must both agree. A quiet feed is not a yes.';",
-      '        macro.lock = true;',
-      '      }',
-      '    }',
-      '    if (macro.lock){'
-    ].join('\n');
-    if (src.indexOf('GOLD FEED — ') < 0 && src.indexOf(anchor) >= 0) src = src.replace(anchor, gate);
-    const rrAnchor = '    if (macro.lock){\n      cand.dropped = true;\n      cand.reason = macro.reason;\n      return cand;\n    }\n    if (key === \'sweep\'){';
-    const rrGate = [
-      '    if (macro.lock){',
-      '      cand.dropped = true;',
-      '      cand.reason = macro.reason;',
-      '      return cand;',
-      '    }',
-      "    if (scalp && (dir === 'long' || dir === 'short')){",
-      '      var rrM = (ctx.macro && ctx.macro.realRateMeasured) || null;',
-      "      var rrT = (rrM && rrM.measured && rrM.trend) ? String(rrM.trend).toUpperCase() : '';",
-      "      var rrWith = (dir === 'long') ? (rrT.indexOf('FALL') >= 0) : (rrT.indexOf('RIS') >= 0);",
-      "      var rrFlat = rrT.indexOf('FLAT') >= 0;",
-      '      if (rrT && !rrWith && !rrFlat){',
-      '        cand.demoted = true;',
-      '        if (!Array.isArray(cand.stamps)) cand.stamps = [];',
-      "        if (cand.stamps.indexOf('REAL YIELD') < 0) cand.stamps.push('REAL YIELD');",
-      '        var gnRr = Array.isArray(cand.gateNotes) ? cand.gateNotes.slice() : [];',
-      "        var rrWhy = rrT ? ('REAL YIELD — FRED DFII10 is ' + rrT + ', not with this gold ' + dir + '.') : 'REAL YIELD UNREAD — FRED DFII10 did not load. A missing real yield is not a tailwind.';",
-      '        gnRr.push(rrWhy);',
-      '        cand.gateNotes = gnRr;',
-      '        cand.reason = rrWhy;',
-      '      }',
-      '    }',
-      "    if (key === 'sweep'){"
-    ].join('\n');
-    if (src.indexOf('REAL YIELD') < 0 && src.indexOf(rrAnchor) >= 0) src = src.replace(rrAnchor, rrGate);
-    return src;
-  }
-  /* hg-v1156: the goldscalp leg that used to be spliced here (hg-v1095 closed
-     bar + ACCURACY gate, hg-v1098 lead-only-on-measured) is BAKED into
-     goldscalp.js, where the suite boots it. goldscalp.js is served unchanged. */
-  if (kind === 'goldswing'){
-    const anchor = '    function push(c){\n      if (!c) return;\n      if (c.dropped){ out.rejected.push(c); return; }';
-    const gate = [
-      '    function push(c){',
-      '      if (!c) return;',
-      "      if (c.dir === 'long' || c.dir === 'short'){",
-      '        var dxyT = (macro && macro.dxy && macro.dxy.trend20) || null;',
-      '        var tnxT = (macro && macro.tnxTrend) || null;',
-      "        var feedOk = (c.dir === 'long') ? (dxyT === 'FALLING' && tnxT === 'FALLING') : (dxyT === 'RISING' && tnxT === 'RISING');",
-      '        if (!feedOk){',
-      '          c.dropped = true;',
-      '          var miss = [];',
-      "          if (c.dir === 'long'){",
-      "            if (dxyT !== 'FALLING') miss.push(dxyT ? ('DXY ' + dxyT) : 'DXY unread');",
-      "            if (tnxT !== 'FALLING') miss.push(tnxT ? ('US10Y ' + tnxT) : 'US10Y unread');",
-      '          } else {',
-      "            if (dxyT !== 'RISING') miss.push(dxyT ? ('DXY ' + dxyT) : 'DXY unread');",
-      "            if (tnxT !== 'RISING') miss.push(tnxT ? ('US10Y ' + tnxT) : 'US10Y unread');",
-      '          }',
-      "          c.reason = 'GOLD FEED — ' + miss.join(', ') + '. A gold ' + c.dir + ' needs the live dollar and the live 10-year both with it.';",
-      '        }',
-      '      }',
-      '      if (c.dropped){ out.rejected.push(c); return; }'
-    ].join('\n');
-    if (src.indexOf('needs the live dollar') >= 0) return src;
-    if (src.indexOf(anchor) < 0) return src;
-    return src.replace(anchor, gate);
-  }
-  if (kind === 'omnigold'){
-    const anchor = [
-      '    if (!isFinite(dxyValue)) dxyValue = 103;   /* fallback */',
-      '    if (!isFinite(correlation)) correlation = -0.92;   /* fallback */',
-      '    if (!isFinite(beta)) beta = -0.95;   /* fallback */',
-      '    if (!isFinite(realRate)) realRate = 2.1;   /* fallback */'
-    ].join('\n');
-    const gate = [
-      '    if (!isFinite(dxyValue) || !isFinite(correlation) || !isFinite(beta) || !isFinite(realRate)){',
-      "      return { regime: 'UNREAD', dxyValue: dxyValue, correlation: correlation, beta: beta, realRate: realRate, reason: 'DXY or real-rate feed unread. A missing internet print is not a normal gold regime' };",
-      '    }'
-    ].join('\n');
-    if (src.indexOf('not a normal gold regime') < 0 && src.indexOf(anchor) >= 0) src = src.replace(anchor, gate);
-    /* hg-v1099: the lead is this tab's own measured ledger. An engine grade,
-       and a past winner sitting against today's tape, are not the crown. */
-    if (src.indexOf('function hgOgLeadMeasOk') < 0){
-      const pickFn = '  function hgOgPickFor(ranked, horizon, tapeDir){';
-      const leadFn = [
-        '  function hgOgLeadMeasOk(c){',
-        '    try{',
-        '      if (!c || !c.kind) return false;',
-        '      var fwdPaid = null;',
-        '      try { fwdPaid = hgOgForwardPaid(c.kind, c.horizon); } catch (eFp) { fwdPaid = null; }',
-        "      if (fwdPaid && fwdPaid.read === 'has paid') return true;",
-        '      var ev = hgOgReplayEvidence(c.kind);',
-        '      if (!ev || !(fin(ev.n) >= MIN_SAMPLES)) return false;',
-        '      var priced = null;',
-        '      try { priced = hgOgReplayNetAtVenue(ev); } catch (ePx) { priced = null; }',
-        '      var net = (priced && isFinite(fin(priced.net))) ? fin(priced.net) : NaN;',
-        '      if (!(net > 0)) return false;',
-        '      var hit = fin(ev.winRate), n = fin(ev.n);',
-        '      if (!isFinite(hit) || !(n > 0)) return false;',
-        '      var pBreak = 1 / (1 + OG_T1_R);',
-        '      var se = Math.sqrt(pBreak * (1 - pBreak) / n);',
-        '      var z = se > 0 ? ((hit - pBreak) / se) : 0;',
-        '      return z >= hgOgFamilyZ(OG_MECHANICS.length);',
-        '    }catch(eLm){ return false; }',
-        '  }',
-        '  function hgOgPickFor(ranked, horizon, tapeDir){'
-      ].join('\n');
-      if (src.indexOf(pickFn) < 0) return src;
-      src = src.replace(pickFn, leadFn);
-    }
-    const fund = '      if (c.fundGate && (c.fundGate.refuse === true || c.fundGate.demote === true)) continue;';
-    const fundGate = fund + '\n      if (!hgOgLeadMeasOk(c)) continue;';
-    if (src.indexOf('if (!hgOgLeadMeasOk(c)) continue;') < 0 && src.indexOf(fund) >= 0) src = src.replace(fund, fundGate);
-    src = src.replace('tapeOverride: true /* v687 omnigold-only opt-in */', 'tapeOverride: false /* v1099: a past winner against the tape is not put on top */');
-    const eng = [
-      '          var engineScalp = !pickScalp ? hgOgPickGoldEngineForMp(bridge, HORIZONS.scalp.label, scalpTape) : null;',
-      '          var engineSwing = !pickSwing ? hgOgPickGoldEngineForMp(bridge, HORIZONS.swing.label, swingTape) : null;'
-    ].join('\n');
-    const engOff = [
-      '          var engineScalp = null; /* v1099: the ledger is the only lead */',
-      '          var engineSwing = null;'
-    ].join('\n');
-    if (src.indexOf(eng) >= 0) src = src.replace(eng, engOff);
-    const apex = [
-      '          pick = hgOgPickGoldEngineFor(bridge, hzs[i], tape,',
-      '            { allowC: false, allowAgainstTape: false });'
-    ].join('\n');
-    const apexOff = '          pick = null; /* v1099: an engine grade is not the OmniGold lead */';
-    if (src.indexOf(apex) >= 0) src = src.replace(apex, apexOff);
-    const apexNote = 'no grade-A/B tape-aligned pick clears the APEX bar right now — the bar existing is the point.';
-    const apexNote2 = 'A Gold Scalp or Gold Swing grade is not the OmniGold lead. The lead has to be positive after the spread, at the 2R on the card, and past the family bar.';
-    if (src.indexOf(apexNote) >= 0) src = src.replace(apexNote, apexNote2);
-    return src;
-  }
-  return src;
-}
-
+/* hg-v1157: the hg-v1085 / v1095 / v1098 gold gates used to be spliced into
+   goldind.js, goldswing.js, goldscalp.js and omnigold.js HERE, at serve time,
+   so the browser ran source the suite never booted (22 of 712 guards went red
+   when booted on what the browser received, hg-v1156). They live in those
+   files now and the four are served as plain static files like every other
+   script. omnibtc.js (hg-v1083) is the one file still rewritten at serve time. */
 function readSmallBody(req, max){
   return new Promise(function(resolve, reject){
     var chunks = [];
@@ -536,19 +390,6 @@ const server = http.createServer(async (req, res) => {
     }
 
 
-    /* hg-v1085: gold desks — ticket only when the live dollar and 10-year agree. */
-    if (u.pathname === '/goldind.js' || u.pathname === '/goldswing.js' || u.pathname === '/omnigold.js') {
-      const gName = u.pathname.slice(1);
-      const gFile = path.join(ROOT, gName);
-      if (fs.existsSync(gFile)) {
-        const kind = gName === 'goldind.js' ? 'goldind' : (gName === 'goldswing.js' ? 'goldswing' : 'omnigold');
-        const shaped = goldLiveSource(kind, fs.readFileSync(gFile, 'utf8'));
-        res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.statusCode = 200;
-        return res.end(shaped);
-      }
-    }
 
     /* static: resolve safely inside ROOT, index.html at '/', cleanUrls-style
        .html fallback (/x -> /x.html), no directory listings */

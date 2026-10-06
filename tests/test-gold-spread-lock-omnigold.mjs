@@ -29,6 +29,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { swCacheOk, HG_VER } from './helpers/build-version.mjs';
+import { goldMacroFor } from './helpers/gold-macro-fixture.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
@@ -144,7 +145,7 @@ console.log('== 3) OMNIGOLD: driven through the real ledger ==');
   assert(typeof W.hgGoldInstFilter === 'function' && typeof W.hgOgGates === 'function', 'goldind + omnigold booted');
   const rows = bars(80, 2400, 3600, 2);
   const hit = { kind: 'ROUND-MAGNET', dir: 'long', level: 2400, why: 't' };
-  const row = extra => (W.hgOgGates(rows, hit, Object.assign({ sessionHard: false, nowMs: NY }, extra)) || [])
+  const row = extra => (W.hgOgGates(rows, hit, Object.assign({ sessionHard: false, nowMs: NY, macro: goldMacroFor(hit.dir) }, extra)) || [])   /* hg-v1157: aligned legs (hg-v1085 lock, baked) */
                          .filter(g => g.key === 'inst-filter')[0];
   const base = row({});
   assert(base && base.pass === true, 'baseline: the filter passes this hit with no quote (not vacuous)');
@@ -160,7 +161,7 @@ console.log('== 3) OMNIGOLD: driven through the real ledger ==');
   const narrow = row({ spreadUsd: NARROW, spreadVenue: 'delta-xaut' });
   assert(narrow.pass === true && !/SPREAD/.test(narrow.why), 'a narrow proxy quote passes and says nothing');
   /* the whole ledger's other rows are untouched by the note */
-  const all = W.hgOgGates(rows, hit, { sessionHard: false, nowMs: NY, spreadUsd: WIDE, spreadVenue: 'delta-xaut' });
+  const all = W.hgOgGates(rows, hit, { sessionHard: false, nowMs: NY, spreadUsd: WIDE, spreadVenue: 'delta-xaut', macro: goldMacroFor(hit.dir) });
   assert(all.filter(g => /SPREAD WIDE/.test(g.why)).length === 1, 'exactly one row carries the note');
   /* Deliberately TEXTUAL, and says so (hg-v956): the shared -> extra -> runEval
      seams live inside the scan closure and are not lifted here; whether the
@@ -171,11 +172,11 @@ console.log('== 3) OMNIGOLD: driven through the real ledger ==');
     assert(/extra\.spreadVenue = extra\.spreadVenue \|\| shared\.spreadVenue \|\| null;/.test(og), 'and runEval falls back to it');
   }
   /* the venue reaches the filter through the ctx, not through a global */
-  const r = W.hgOgInstFilterHit(hit, rows, { sessionHard: false, nowMs: NY, spreadUsd: WIDE, spreadVenue: 'delta-xaut' });
+  const r = W.hgOgInstFilterHit(hit, rows, { sessionHard: false, nowMs: NY, spreadUsd: WIDE, spreadVenue: 'delta-xaut', macro: goldMacroFor(hit.dir) });   /* hg-v1157 */
   assert(r.spreadNote && /delta-xaut/.test(r.spreadNote), 'hgOgInstFilterHit returns the note it folds');
   assert(r.cand && r.cand.spreadLock && r.cand.spreadLock.advisory === true, 'and the candidate carries the advisory verdict');
   /* extra.quote.venue is honoured too (the global path, should anything ever write it) */
-  const r2 = W.hgOgInstFilterHit(hit, rows, { sessionHard: false, nowMs: NY, quote: { bid: 4300, ask: 4300 + WIDE, venue: 'delta-xaut' } });
+  const r2 = W.hgOgInstFilterHit(hit, rows, { sessionHard: false, nowMs: NY, quote: { bid: 4300, ask: 4300 + WIDE, venue: 'delta-xaut' }, macro: goldMacroFor(hit.dir) });
   assert(r2.dropped === false && r2.spreadNote, 'a venue on extra.quote is read as well');
 }
 
@@ -184,7 +185,7 @@ console.log('== 4) the advisory lands on c.notes (GOLD SCALP and GOLD SWING both
   const W = boot(['indicators.js', 'indicators2.js', 'goldind.js']);
   const rows = bars(80, 2400, 900, 3);
   const mk = () => ({ dir: 'long', stratKey: 'vwap', why: 't', stamps: [], gateNotes: [] });
-  const ctxOf = extra => Object.assign({ rows, nowMs: NY, scalp: false, hardReject: false }, extra);
+  const ctxOf = extra => Object.assign({ rows, nowMs: NY, scalp: false, hardReject: false, macro: goldMacroFor('long') }, extra);   /* hg-v1157: the swing path needs the aligned legs (hg-v1085 lock, baked) */
   const a = W.hgGoldInstFilter(mk(), ctxOf({ spreadUsd: WIDE, spreadVenue: 'delta-xaut' }));
   assert(a && !a.dropped, 'proxy-wide: not dropped');
   assert(Array.isArray(a.notes) && a.notes.some(n => /SPREAD WIDE/.test(n) && /delta-xaut/.test(n)), 'the advisory is on c.notes');

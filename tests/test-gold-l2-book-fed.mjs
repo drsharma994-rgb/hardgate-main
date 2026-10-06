@@ -33,6 +33,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { swCacheOk, HG_VER } from './helpers/build-version.mjs';
 import * as mjs from '../lib/delta-perp-history.mjs';
+import { goldMacroFor } from './helpers/gold-macro-fixture.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const req = createRequire(import.meta.url);
@@ -245,7 +246,7 @@ console.log('== 5) the REAL mints, driven ==');
       }
       return rows;
     }
-    return Object.assign({ rows4h: t(300, 14400, SWING_SEED, 40), rows1d: t(150, 86400, SWING_SEED + 3, 60), now: WED, news: null }, extra || {});
+    return Object.assign({ rows4h: t(300, 14400, SWING_SEED, 40), rows1d: t(150, 86400, SWING_SEED + 3, 60), now: WED, news: null, macro: goldMacroFor('short') }, extra || {});   /* hg-v1157: the swing path needs the aligned dollar / 10-year legs (hg-v1085 lock, baked) */
   }
   const board = c => [c.entry, c.stop, c.t1, c.dir, c.stratKey, !!c.demoted, !!c.vetoed].join('|');
   const bal = mjs.parseDeltaL2(BALANCED);

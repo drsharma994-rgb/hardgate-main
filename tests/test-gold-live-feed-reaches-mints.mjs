@@ -25,6 +25,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { swCacheOk, HG_VER } from './helpers/build-version.mjs';
+import { goldMacroFor } from './helpers/gold-macro-fixture.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
@@ -130,7 +131,7 @@ console.log('== 3) the REAL mints: the venue now reaches the filter ==');
   const SCALP_SEED = 102, SWING_SEED = 103, SWING_DRIFT = -0.3;   /* the hg-v970 seeds: both mint through the path that carries the filter */
   const scalpInp = extra => Object.assign({ rows15m: tapeEnding(WED, 420, 900, SCALP_SEED, 24), rows1h: tapeEnding(WED, 220, 3600, SCALP_SEED + 1, 30),
     rows4h: tapeEnding(WED, 140, 14400, SCALP_SEED + 2, 40), dailyCandles: tapeEnding(WED, 120, 86400, SCALP_SEED + 3, 60), now: WED, news: null, candleSource: 'binance-paxg' }, extra || {});
-  const swingInp = extra => Object.assign({ rows4h: tapeEnding(WED, 300, 14400, SWING_SEED, 40, SWING_DRIFT), rows1d: tapeEnding(WED, 150, 86400, SWING_SEED + 3, 60, SWING_DRIFT), now: WED, news: null }, extra || {});
+  const swingInp = extra => Object.assign({ rows4h: tapeEnding(WED, 300, 14400, SWING_SEED, 40, SWING_DRIFT), rows1d: tapeEnding(WED, 150, 86400, SWING_SEED + 3, 60, SWING_DRIFT), now: WED, news: null, macro: goldMacroFor('short') }, extra || {});   /* hg-v1157: the swing path needs the aligned dollar / 10-year legs (hg-v1085 lock, baked) */
   const board = c => [c.entry, c.stop, c.t1, c.dir, c.stratKey, !!c.demoted, !!c.vetoed].join('|');
 
   const C = boot(BASE);

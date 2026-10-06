@@ -132,9 +132,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1156',
-  pack: 'THE GOLD SCALP THE BROWSER RAN WAS NOT THE ONE THE SUITE BOOTED. Since hg-v1085 / v1095 / v1098 scripts/server.mjs rewrote goldscalp.js at serve time (closed-bar strip, an ACCURACY demote whose lead set was two keys typed into the server, conviction release, 90-minute TTL, feed warm, a scan kicked from mount) - the suite booted the file on disk, and booting it on what the browser received turned 22 of 712 files red. The goldscalp leg is baked into goldscalp.js and the file is served unchanged (the guard spawns the real server and requires byte identity); the lead set is READ off the edge table prefer rows through hgGoldEdgeAction (same two keys today, fail closed on an unreadable table) and carries a lever like every other policy on this desk (hg_gs_lead_measured_only, default ON). The goldind / goldswing / omnibtc splices remain and are pinned behaviourally so the next bake inherits a known contract. No gate loosened, no threshold moves. Tests: tests/test-gold-served-is-tested.mjs (new)',
-  built: '2026-10-07T12:00:00Z'
+  version: 'hg-v1157',
+  pack: 'THE GOLD SWING THE BROWSER RAN WAS NOT THE ONE THE SUITE BOOTED EITHER. hg-v1156 baked the GOLD SCALP leg and named what was left: the hg-v1085 GOLD FEED lock, spliced into goldind.js and goldswing.js at serve time - a candidate on the swing path (the swing mint, OMNIGOLD native row, GOLD PINE swing lane, STAR TRADER gold lane) is DROPPED unless the live dollar and the live 10-year both trend with it over 20 days, FLAT and unread included. 18 of 22 red guards were that lock, because no fixture in the suite supplied the macro it demands. Both legs are baked into the files, goldLiveSource is gone from the server, the four gold files are served byte-identical to disk (omnibtc.js is the one splice left, named), a shared fixture (tests/helpers/gold-macro-fixture.mjs) gives every swing harness the aligned legs through one home, and the guard drives the lock through the filter, the mint and the real GOLD SWING tab: no macro is an empty board with every reject naming GOLD FEED. No gate loosened, no threshold moves. Tests: tests/test-gold-served-is-tested.mjs (extended)',
+  built: '2026-10-07T15:00:00Z'
 };
 
 function hgBuildLabel(b){

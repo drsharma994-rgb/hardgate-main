@@ -28,6 +28,7 @@ import vm from 'node:vm';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { goldMacroFor } from './helpers/gold-macro-fixture.mjs';
 
 const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 let passed = 0;
@@ -160,7 +161,7 @@ console.log('\n5. GOLD SWING MINTS smcliq — behaviourally, through its own gat
     if (stopFn === DROP) ctx.hgGoldRosterStop = undefined;
     else if (stopFn !== undefined) ctx.hgGoldRosterStop = stopFn;
     let res = null;
-    try { res = ctx.goldSwingSetups({ rows4h: h4, rows1d: h4, now: now }); } catch (e){}
+    try { res = ctx.goldSwingSetups({ rows4h: h4, rows1d: h4, now: now, macro: goldMacroFor('long') }); } catch (e){}   /* hg-v1157: the swing path needs the aligned dollar / 10-year legs (hg-v1085 lock, baked) */
     const R = ((res && res.ranked) || []).filter((r) => r.stratKey === 'smcliq');
     const J = ((res && res.rejected) || []).filter((r) => r.stratKey === 'smcliq');
     return { ran: !!res, ranked: R, rejected: J };
@@ -198,7 +199,7 @@ console.log('\n5. GOLD SWING MINTS smcliq — behaviourally, through its own gat
   ctxP.hgGoldSmcLiquidityHit = hit;
   ctxP.hgGoldExtraPromotable = () => true;
   let resP = null;
-  try { resP = ctxP.goldSwingSetups({ rows4h: h4, rows1d: h4, now: now }); } catch (e){}
+  try { resP = ctxP.goldSwingSetups({ rows4h: h4, rows1d: h4, now: now, macro: goldMacroFor('long') }); } catch (e){}
   const pr = [...((resP && resP.ranked) || []), ...((resP && resP.rejected) || [])]
     .filter((r) => r.stratKey === 'smcliq');
   ok(pr.length === 1 && !pr[0].demotedWhy,
@@ -239,7 +240,7 @@ console.log('\n6. a ported mechanic is gated on the plan it SHIPS');
     level: LEVEL, entry: LEVEL, stop: STOP, why: 'port-shaped probe',
     invalidates: 'probe' }]);
   let res = null;
-  try { res = ctx.goldSwingSetups({ rows4h: h4, rows1d: h4, now: now }); } catch (e){}
+  try { res = ctx.goldSwingSetups({ rows4h: h4, rows1d: h4, now: now, macro: goldMacroFor('long') }); } catch (e){}   /* hg-v1157 */
   const R = ((res && res.ranked) || []).filter((r) => r.stratKey === 'ogmmove');
   ok(R.length === 1, 'a port whose LEVEL plan pays 1.2R reaches the board');
   ok(R.length === 1 && Math.abs(R[0].entry - LEVEL) < 1e-6,

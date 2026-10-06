@@ -32,6 +32,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { swCacheOk, HG_VER } from './helpers/build-version.mjs';
+import { goldMacroFor } from './helpers/gold-macro-fixture.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
@@ -76,6 +77,11 @@ function boot(files, wall, news, tapes){
   if (tapes){
     ctx.getXmGoldCandles = async tf => ({ rows: tapes[tf] || [], source: 'xm-xauusd' });
     ctx.getGoldCandles = async () => ({ rows: [], source: null });
+    /* hg-v1157: the swing path is DROPPED unless the live dollar and 10-year both
+       trend with the trade (the hg-v1085 lock, baked). These swing tapes form
+       SHORTS (seed 103, falling drift), so the fixture supplies the aligned legs
+       through the one helper; the scalp path escapes the lock and is untouched. */
+    if (files.indexOf('goldswing.js') >= 0) ctx.getGoldMacro = async () => goldMacroFor('short');
   }
   if (news !== undefined) ctx.hgNewsState = () => news;
   vm.createContext(ctx);
@@ -153,7 +159,7 @@ console.log('== 3) the mints stamp the instant they judged on ==');
   const W = boot(['indicators.js', 'indicators2.js', 'gold-formation.js', 'goldind.js', 'goldswing.js'], Date.now(), undefined, null);
   const got = W.goldScalpSetups({ rows15m: tapeEnding(WED, 420, 900, 102, 24), rows1h: tapeEnding(WED, 220, 3600, 103, 30), rows4h: tapeEnding(WED, 140, 14400, 104, 40), now: WED });
   assert(got.length > 0 && got.every(c => c.signalT === WED), 'the scalp mint stamps signalT = inp.now on every candidate (' + got.length + ')');
-  const sw = W.goldSwingSetups({ rows4h: tapeEnding(WED, 300, 14400, 103, 40, -0.3), rows1d: tapeEnding(WED, 150, 86400, 106, 60, -0.3), now: WED });
+  const sw = W.goldSwingSetups({ rows4h: tapeEnding(WED, 300, 14400, 103, 40, -0.3), rows1d: tapeEnding(WED, 150, 86400, 106, 60, -0.3), now: WED, macro: goldMacroFor('short') }); /* hg-v1157: the swing path needs the aligned dollar / 10-year legs (hg-v1085 lock, baked) */
   assert((sw.ranked || []).length > 0 && sw.ranked.every(c => c.signalT === WED), 'the swing mint stamps signalT = inp.now on every candidate (' + (sw.ranked || []).length + ')');
   const src = read('goldscalp.js') + read('goldswing.js');
   assert((src.match(/signalT: \(typeof c\.signalT === 'number' && isFinite\(c\.signalT\)\) \? c\.signalT : null/g) || []).length === 2, 'both publishScan copies carry the field across the publish boundary (the hg-v955 seam), null when the mint wrote none');

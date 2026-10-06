@@ -10054,6 +10054,22 @@ function hgGoldInstFilter(cand, ctx){
       macro: ctx.macro
     });
     cand.macroLock = macro;
+    /* hg-v1085 GOLD FEED lock — shipped as a serve-time splice in scripts/server.mjs
+       (goldLiveSource) and BAKED here in hg-v1157: a candidate on the swing path
+       (scalp with hardReject:false escapes) is dropped unless the live dollar AND
+       the live 10-year both trend WITH it; FLAT and unread are locks too. The
+       inst filter runs it after hgGoldMacroLock, which keeps its own name. */
+    if (macro && macro.lock !== true && (dir === 'long' || dir === 'short')){
+      var dxyWith = (dir === 'long') ? (macro.dxyBear === true) : (macro.dxyBull === true);
+      var tnxWith = (dir === 'long') ? (macro.tnxBear === true) : (macro.tnxBull === true);
+      if (!(dxyWith && tnxWith) && !(scalp && ctx.hardReject === false)){
+        var bits = [];
+        if (!dxyWith) bits.push((macro.dxyBull == null && macro.dxyBear == null) ? 'DXY unread' : ('DXY not with this gold ' + dir));
+        if (!tnxWith) bits.push((macro.tnxBull == null && macro.tnxBear == null) ? 'US10Y unread' : ('US10Y not with this gold ' + dir));
+        macro.reason = 'GOLD FEED — ' + bits.join('; ') + '. The live dollar and the live 10-year must both agree. A quiet feed is not a yes.';
+        macro.lock = true;
+      }
+    }
     if (macro.lock){
       cand.dropped = true;
       cand.reason = macro.reason;

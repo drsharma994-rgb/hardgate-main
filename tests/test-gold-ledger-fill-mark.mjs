@@ -36,6 +36,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { swCacheOk, HG_VER } from './helpers/build-version.mjs';
+import { goldMacroFor } from './helpers/gold-macro-fixture.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
@@ -93,6 +94,11 @@ function boot(files, clock, news, tapes, feed){
   if (tapes){
     ctx.getXmGoldCandles = async tf => ({ rows: tapes[tf] || [], source: feed || 'xm-xauusd' });
     ctx.getGoldCandles = async () => ({ rows: [], source: null });
+    /* hg-v1157: the swing path is DROPPED unless the live dollar and 10-year both
+       trend with the trade (the hg-v1085 lock, baked). These swing tapes form
+       SHORTS (seed 103, falling drift), so the fixture supplies the aligned legs
+       through the one helper; the scalp path escapes the lock and is untouched. */
+    if (files.indexOf('goldswing.js') >= 0) ctx.getGoldMacro = async () => goldMacroFor('short');
   }
   if (news !== undefined) ctx.hgNewsState = () => news;
   vm.createContext(ctx);

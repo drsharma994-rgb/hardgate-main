@@ -33,6 +33,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { swCacheOk, HG_VER } from './helpers/build-version.mjs';
+import { goldMacroFor } from './helpers/gold-macro-fixture.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
@@ -85,7 +86,7 @@ console.log('== 1) the real mints through the real bridge ==');
   const W = boot(SWING);
   assert(typeof W.hgGoldInlineBridge === 'function' && typeof W.goldScalpSetups === 'function' && typeof W.goldSwingSetups === 'function', 'the bridge and both mints are loaded');
   const R4 = tapeEnding(WED, 300, 14400, 103, 40, -0.3), D1 = tapeEnding(WED, 150, 86400, 106, 60, -0.3);
-  const inp = (seed, extra) => Object.assign({ rows15m: tapeEnding(WED, 420, 900, seed, 24), rows1h: tapeEnding(WED, 220, 3600, seed + 1, 30), rows4h: R4, rows1d: D1 }, extra || {});
+  const inp = (seed, extra) => Object.assign({ rows15m: tapeEnding(WED, 420, 900, seed, 24), rows1h: tapeEnding(WED, 220, 3600, seed + 1, 30), rows4h: R4, rows1d: D1, macro: goldMacroFor('short') }, extra || {});   /* hg-v1157: the swing path needs the aligned dollar / 10-year legs (hg-v1085 lock, baked) */
   const B = W.hgGoldInlineBridge(inp(102));
   assert(B && B.scalp && B.scalp.count > 0, 'seed 102: the scalp lane forms through the bridge (' + (B && B.scalp && B.scalp.count) + ')');
   assert(B && B.swing && B.swing.count > 0, 'seed 102: the swing lane forms through the bridge (' + (B && B.swing && B.swing.count) + ') -- and its count is reported even with no crownable best (best=' + (B && B.swing && B.swing.best) + ')');
@@ -96,7 +97,7 @@ console.log('== 1) the real mints through the real bridge ==');
   const L = W.hgGoldInlineBridge(inp(102, { now: Date.now(), news: SNAP }));
   assert(L.scalp && L.scalp.count === 0, 'a CPI ten minutes after the last 15m bar LOCKS the scalp lane through the bridge, wall clock or not (' + nS + ' -> ' + L.scalp.count + ')');
   assert(L.swing && L.swing.count === 0, '... and the swing lane (' + nW + ' -> ' + L.swing.count + ')');
-  const direct = W.goldSwingSetups({ rows4h: R4, rows1d: D1, now: Date.now(), news: SNAP });
+  const direct = W.goldSwingSetups({ rows4h: R4, rows1d: D1, now: Date.now(), news: SNAP, macro: goldMacroFor('short') });
   assert(direct && (direct.ranked || []).length === nW, 'the mint itself, handed the wall clock and the same snapshot, mints ' + (direct.ranked || []).length + ' -- so it is the BRIDGE that chose the signal bar, not the mint');
   const R = W.hgGoldInlineBridge(inp(102, { news: SNAP_LATER }));
   assert(R.scalp.count === nS && R.swing.count === nW, 'a release three hours out mints again on both lanes -- a gate that never opens is not a gate');

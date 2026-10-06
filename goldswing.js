@@ -1915,6 +1915,28 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
        (suppress/demote/prefer + sides reject) → cost gate (demote-only). */
     function push(c){
       if (!c) return;
+      /* hg-v1085 GOLD FEED drop — shipped as a serve-time splice in
+         scripts/server.mjs and BAKED here in hg-v1157: the swing mint drops a
+         candidate unless the 20-day dollar and 10-year trends both run WITH
+         it (long: both FALLING; short: both RISING). It speaks before the inst
+         filter, so a both-bullish long is named here, not as CONVICTION LOCK. */
+      if (c.dir === 'long' || c.dir === 'short'){
+        var dxyT = (macro && macro.dxy && macro.dxy.trend20) || null;
+        var tnxT = (macro && macro.tnxTrend) || null;
+        var feedOk = (c.dir === 'long') ? (dxyT === 'FALLING' && tnxT === 'FALLING') : (dxyT === 'RISING' && tnxT === 'RISING');
+        if (!feedOk){
+          c.dropped = true;
+          var miss = [];
+          if (c.dir === 'long'){
+            if (dxyT !== 'FALLING') miss.push(dxyT ? ('DXY ' + dxyT) : 'DXY unread');
+            if (tnxT !== 'FALLING') miss.push(tnxT ? ('US10Y ' + tnxT) : 'US10Y unread');
+          } else {
+            if (dxyT !== 'RISING') miss.push(dxyT ? ('DXY ' + dxyT) : 'DXY unread');
+            if (tnxT !== 'RISING') miss.push(tnxT ? ('US10Y ' + tnxT) : 'US10Y unread');
+          }
+          c.reason = 'GOLD FEED — ' + miss.join(', ') + '. A gold ' + c.dir + ' needs the live dollar and the live 10-year both with it.';
+        }
+      }
       if (c.dropped){ out.rejected.push(c); return; }
       if (!c.session) c.session = sessionTxt || 'n/a';
       /* hg-v977: the instant this candidate was judged on. SUPER GOLD's

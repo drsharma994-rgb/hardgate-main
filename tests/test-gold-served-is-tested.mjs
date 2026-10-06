@@ -115,7 +115,7 @@ console.log('== 1) the real server serves goldscalp.js byte-identical to disk ==
   const srvSrc = read('scripts/server.mjs');
   assert(!/kind === 'goldscalp'/.test(srvSrc), 'scripts/server.mjs carries no goldscalp rewrite leg any more');
   assert(!/u\.pathname === '\/goldscalp\.js'/.test(srvSrc), 'and /goldscalp.js is not in the gold serve-time branch');
-  assert(/kind === 'goldind'/.test(srvSrc) && /kind === 'goldswing'/.test(srvSrc), 'the goldind and goldswing legs are STILL spliced at serve time (named here; the next bake is theirs — see section 3)');
+  assert(!/goldLiveSource/.test(srvSrc) && !/kind === 'goldind'/.test(srvSrc) && !/kind === 'goldswing'/.test(srvSrc), 'hg-v1157: the goldind and goldswing legs are baked too — goldLiveSource is gone from scripts/server.mjs');
   assert(/function omnibtcTicketSource/.test(srvSrc), 'omnibtc.js is the other file still rewritten at serve time (hg-v1083) — named, not touched by this pack');
 
   const port = 18000 + (process.pid % 1000);
@@ -140,13 +140,12 @@ console.log('== 1) the real server serves goldscalp.js byte-identical to disk ==
       'GET /goldscalp.js is BYTE-IDENTICAL to goldscalp.js on disk — the browser runs what the suite boots (' + served['goldscalp.js'].body.length + ' bytes)');
     assert(served['omnigold.js'].status === 200 && served['omnigold.js'].body.equals(disk('omnigold.js')),
       'GET /omnigold.js is byte-identical too (its hg-v1099 leg was baked earlier; the splice is a no-op on it)');
-    const gi = served['goldind.js'].body.toString('utf8'), gw = served['goldswing.js'].body.toString('utf8');
-    assert(served['goldind.js'].status === 200 && !served['goldind.js'].body.equals(disk('goldind.js')) && /GOLD FEED — /.test(gi) && !/GOLD FEED — /.test(read('goldind.js')),
-      'GET /goldind.js is NOT the file on disk: the hg-v1085 GOLD FEED lock is still spliced in at serve time (reported, so it cannot be forgotten)');
-    assert(served['goldswing.js'].status === 200 && !served['goldswing.js'].body.equals(disk('goldswing.js')) && /needs the live dollar/.test(gw) && !/needs the live dollar/.test(read('goldswing.js')),
-      'GET /goldswing.js is NOT the file on disk: the hg-v1085 swing drop is still spliced in at serve time');
+    assert(served['goldind.js'].status === 200 && served['goldind.js'].body.equals(disk('goldind.js')) && /GOLD FEED — /.test(read('goldind.js')),
+      'GET /goldind.js is byte-identical to disk, and the hg-v1085 GOLD FEED lock is IN the file (hg-v1157) — not spliced on the way out');
+    assert(served['goldswing.js'].status === 200 && served['goldswing.js'].body.equals(disk('goldswing.js')) && /needs the live dollar/.test(read('goldswing.js')),
+      'GET /goldswing.js is byte-identical to disk, and the hg-v1085 swing drop is IN the file (hg-v1157)');
     assert(served['omnibtc.js'].status === 200 && !served['omnibtc.js'].body.equals(disk('omnibtc.js')),
-      'GET /omnibtc.js is NOT the file on disk either (hg-v1083 ticket-shape splice) — the fourth and last served-only file');
+      'GET /omnibtc.js is NOT the file on disk (hg-v1083 ticket-shape splice) — the ONE file still rewritten at serve time, named so the next pack finds it here and not the way hg-v1156 did');
   }
   child.kill('SIGTERM');
   await new Promise(res => { child.on('exit', () => res()); setTimeout(res, 3000); });
@@ -246,49 +245,79 @@ let LEAD_TODAY = null;
 }
 
 /* ------------------------------------------------------------------ 3 */
-console.log('== 3) the goldind / goldswing splice that remains, pinned through the server\'s own rewriter ==');
+console.log('== 3) the hg-v1085 GOLD FEED lock, in the files on disk (hg-v1157), through the filter, the mint and the real GOLD SWING tab ==');
 {
   const srvSrc = read('scripts/server.mjs');
-  const a = srvSrc.indexOf('function goldLiveSource(kind, src){');
-  const b = srvSrc.indexOf('\nfunction readSmallBody');
-  assert(a > 0 && b > a, 'goldLiveSource is still defined in scripts/server.mjs');
-  const goldLiveSource = new Function(srvSrc.slice(a, b) + '\nreturn goldLiveSource;')();
-  const rawInd = read('goldind.js'), rawSw = read('goldswing.js');
-  const servedInd = goldLiveSource('goldind', rawInd), servedSw = goldLiveSource('goldswing', rawSw);
-  assert(servedInd !== rawInd && servedSw !== rawSw, 'both legs still APPLY to the current files (anchor present) — a silent anchor miss would serve the file unchanged and drop a shipped gate');
-  assert(goldLiveSource('goldscalp', read('goldscalp.js')) === read('goldscalp.js'), 'the rewriter no longer touches goldscalp.js (no leg)');
-  assert(goldLiveSource('omnigold', read('omnigold.js')) === read('omnigold.js'), 'nor omnigold.js (its leg is idempotent on the baked file)');
+  assert(!/function goldLiveSource/.test(srvSrc), 'goldLiveSource no longer exists in scripts/server.mjs');
+  assert(/function omnibtcTicketSource/.test(srvSrc), 'omnibtcTicketSource is the one rewriter left (hg-v1083), named here');
 
-  /* the goldind lock, on the served source: a NON-scalp candidate with no macro is dropped; aligned legs pass; the scalp path (hardReject:false) escapes */
-  const G = boot({ files: ['indicators.js', 'indicators2.js', 'gold-formation.js', 'goldind.js'], sources: { 'goldind.js': servedInd } });
+  /* the goldind lock: a NON-scalp candidate with no macro is dropped; aligned legs pass; FLAT locks; the scalp path escapes */
+  const G = boot({ files: ['indicators.js', 'indicators2.js', 'gold-formation.js', 'goldind.js'] });
   const rows = tapeEnding(WED, 120, 14400, 104, 40);
   const cand = () => ({ stratKey: 'bos', dir: 'long', id: 'bos|long|2300', strategy: 'BOS', stamps: [], gateNotes: [], entry: 2300, stop: 2290, t1: 2320 });
   const noMacro = G.hgGoldInstFilter(cand(), { rows, nowMs: WED, scalp: false });
   assert(noMacro && noMacro.dropped === true && /GOLD FEED — DXY unread; US10Y unread/.test(noMacro.reason),
-    'served goldind: a swing-path long with NO macro is DROPPED — "' + String(noMacro && noMacro.reason).slice(0, 60) + '…"');
+    'goldind.js on disk: a swing-path long with NO macro is DROPPED — "' + String(noMacro && noMacro.reason).slice(0, 60) + '…"');
   const aligned = G.hgGoldInstFilter(cand(), { rows, nowMs: WED, scalp: false, macro: { dxy: { trend20: 'FALLING' }, tnxTrend: 'FALLING' } });
   assert(aligned && !(aligned.macroLock && aligned.macroLock.lock) && !/GOLD FEED/.test(String(aligned.reason || '')),
     'with DXY FALLING and US10Y FALLING (both with a gold long) the lock does not fire');
   const flat = G.hgGoldInstFilter(cand(), { rows, nowMs: WED, scalp: false, macro: { dxy: { trend20: 'FLAT' }, tnxTrend: 'FLAT' } });
-  assert(flat && flat.dropped === true && /GOLD FEED/.test(flat.reason), 'a FLAT read is a lock too ("a quiet feed is not a yes") — the contract the swing desks run under today');
+  assert(flat && flat.dropped === true && /GOLD FEED — DXY unread; US10Y unread/.test(flat.reason), 'a FLAT read is a lock too ("a quiet feed is not a yes") — and this leg WORDS a FLAT trend as "unread", because hgGoldMacroLeg gives FLAT neither a bull nor a bear verdict (the swing mint\'s own push() names it FLAT; two wordings of one rule, said here)');
+  const half = G.hgGoldInstFilter(cand(), { rows, nowMs: WED, scalp: false, macro: { dxy: { trend20: 'FALLING' }, tnxTrend: 'FLAT' } });
+  assert(half && half.dropped === true && /GOLD FEED — US10Y unread\./.test(half.reason) && !/DXY/.test(half.reason), 'one leg with and one FLAT locks, naming only the leg that is not with (' + String(half.reason).slice(0, 50) + ')');
+  const against = G.hgGoldInstFilter(cand(), { rows, nowMs: WED, scalp: false, macro: { dxy: { trend20: 'FALLING' }, tnxTrend: 'RISING' } });
+  assert(against && against.dropped === true && /GOLD FEED — US10Y not with this gold long\./.test(against.reason), 'a leg trending AGAINST is named as not with (' + String(against.reason).slice(0, 50) + ')');
+  const bothBull = G.hgGoldInstFilter(cand(), { rows, nowMs: WED, scalp: false, macro: { dxy: { trend20: 'RISING' }, tnxTrend: 'RISING' } });
+  assert(bothBull && bothBull.dropped === true && /CONVICTION LOCK/.test(bothBull.reason) && !/GOLD FEED/.test(bothBull.reason),
+    'both legs BULLISH against a long is still the hgGoldMacroLock CONVICTION LOCK — the feed rule yields to the lock that already fired and keeps its name');
   const scalpPath = G.hgGoldInstFilter(cand(), { rows, nowMs: WED, scalp: true, hardReject: false });
-  assert(scalpPath && !/GOLD FEED/.test(String(scalpPath.reason || '')), 'the GOLD SCALP path (scalp, hardReject:false) ESCAPES the lock — which is why this pack could bake GOLD SCALP alone');
-  const rawG = boot({ files: ['indicators.js', 'indicators2.js', 'gold-formation.js', 'goldind.js'] });
-  const rawNoMacro = rawG.hgGoldInstFilter(cand(), { rows, nowMs: WED, scalp: false });
-  assert(!(rawNoMacro && /GOLD FEED/.test(String(rawNoMacro.reason || ''))), 'the goldind.js ON DISK has no such lock — the suite boots a swing mint the browser does not run (named; the next bake)');
+  assert(scalpPath && !/GOLD FEED/.test(String(scalpPath.reason || '')), 'the GOLD SCALP path (scalp, hardReject:false) ESCAPES the lock');
+  const scalpHard = G.hgGoldInstFilter(cand(), { rows, nowMs: WED, scalp: true });
+  assert(scalpHard && scalpHard.dropped === true && /GOLD FEED/.test(scalpHard.reason), 'but a scalp candidate on the HARD path (OMNIGOLD native) does not — the escape is hardReject:false, not the word scalp');
 
-  /* the goldswing drop, on the served source */
-  const S = boot({ files: ['indicators.js', 'indicators2.js', 'gold-formation.js', 'goldind.js', 'goldswing.js'], sources: { 'goldind.js': servedInd, 'goldswing.js': servedSw } });
+  /* the goldswing drop at push(): the mint on disk */
+  const S = boot({ files: ['indicators.js', 'indicators2.js', 'gold-formation.js', 'goldind.js', 'goldswing.js'] });
   const swInp = extra => Object.assign({ rows4h: tapeEnding(WED, 300, 14400, 103, 40, -0.3), rows1d: tapeEnding(WED, 150, 86400, 106, 60, -0.3), now: WED, news: null }, extra || {});
   const swNone = S.goldSwingSetups(swInp()) || {};
-  assert((swNone.ranked || []).length === 0 && (swNone.rejected || []).some(r => /GOLD FEED — .*unread/.test(String(r.reason || ''))),
-    'served goldswing: with no macro the swing mint forms NOTHING and every reject names the GOLD FEED (' + (swNone.rejected || []).length + ' rejected)');
+  assert((swNone.ranked || []).length === 0 && (swNone.rejected || []).some(r => /GOLD FEED — DXY unread, US10Y unread\. A gold short needs the live dollar/.test(String(r.reason || ''))),
+    'goldswing.js on disk: with no macro the swing mint forms NOTHING and every reject names the GOLD FEED (' + (swNone.rejected || []).length + ' rejected)');
   const swShort = S.goldSwingSetups(swInp({ macro: { dxy: { trend20: 'RISING' }, tnxTrend: 'RISING' } })) || {};
   const swLong = S.goldSwingSetups(swInp({ macro: { dxy: { trend20: 'FALLING' }, tnxTrend: 'FALLING' } })) || {};
-  assert(((swShort.ranked || []).length + (swLong.ranked || []).length) > 0,
-    'with the dollar and the 10-year both aligned, the served swing mint forms again (' + (swShort.ranked || []).length + ' shorts under RISING/RISING, ' + (swLong.ranked || []).length + ' longs under FALLING/FALLING)');
-  assert((swShort.ranked || []).every(c => c.dir === 'short') && (swLong.ranked || []).every(c => c.dir === 'long'),
-    'and only the side the two legs support — the contract GOLD SWING runs under in the browser, which no fixture in this suite supplied before this guard');
+  assert((swShort.ranked || []).length > 0 && (swShort.ranked || []).every(c => c.dir === 'short'), 'under RISING/RISING the falling tape forms its shorts (' + (swShort.ranked || []).length + ')');
+  assert((swLong.ranked || []).length === 0 && (swLong.rejected || []).some(r => /GOLD FEED — DXY FALLING, US10Y FALLING/.test(String(r.reason || ''))),
+    'under FALLING/FALLING the same shorts are dropped naming both legs — only the side the two legs support forms');
+  const swHalf = S.goldSwingSetups(swInp({ macro: { dxy: { trend20: 'RISING' }, tnxTrend: 'FLAT' } })) || {};
+  assert((swHalf.ranked || []).length === 0 && (swHalf.rejected || []).some(r => /GOLD FEED — US10Y FLAT\. A gold short/.test(String(r.reason || ''))),
+    'one leg with and one FLAT drops the shorts naming only the FLAT leg — both legs are required, not either (' + (swHalf.rejected || []).length + ' rejected)');
+  /* the LONG branch of the same rule, on a tape that forms longs (seed 105, the hg-v972 long seed) */
+  const lgInp = extra => Object.assign({ rows4h: tapeEnding(WED, 300, 14400, 105, 40, -0.3), rows1d: tapeEnding(WED, 150, 86400, 108, 60, -0.3), now: WED, news: null }, extra || {});
+  const lgOk = S.goldSwingSetups(lgInp({ macro: { dxy: { trend20: 'FALLING' }, tnxTrend: 'FALLING' } })) || {};
+  assert((lgOk.ranked || []).length > 0 && (lgOk.ranked || []).every(c => c.dir === 'long'), 'REACHABILITY: seed 105 forms LONGS under FALLING/FALLING (' + (lgOk.ranked || []).length + ')');
+  const lgBull = S.goldSwingSetups(lgInp({ macro: { dxy: { trend20: 'RISING' }, tnxTrend: 'RISING' } })) || {};
+  assert((lgBull.ranked || []).length === 0 && (lgBull.rejected || []).some(r => /GOLD FEED — DXY RISING, US10Y RISING\. A gold long/.test(String(r.reason || ''))),
+    'under RISING/RISING the longs are dropped naming both legs (the long branch reads FALLING, not RISING)');
+  const lgHalf = S.goldSwingSetups(lgInp({ macro: { dxy: { trend20: 'FALLING' }, tnxTrend: 'FLAT' } })) || {};
+  assert((lgHalf.ranked || []).length === 0 && (lgHalf.rejected || []).some(r => /GOLD FEED — US10Y FLAT\. A gold long/.test(String(r.reason || ''))),
+    'one leg FALLING and one FLAT drops the longs naming only the FLAT leg');
+
+  /* the real GOLD SWING tab, headless: the board the browser shows */
+  async function swingTab(macroFn){
+    const extra = macroFn ? { getGoldMacro: macroFn } : {};
+    const W = boot({ files: ['indicators.js', 'indicators2.js', 'hg-setup-core.js', 'gold-forward-read.js', 'hg-forward.js', 'gold-formation.js', 'goldind.js', 'gold-best-levels.js', 'conviction-lock.js', 'gold-catalog.js', 'goldswing.js', 'accuracy-floor.js'],
+      tapes: { '4h': tapeEnding(WED, 300, 14400, 103, 40, -0.3), '1d': tapeEnding(WED, 150, 86400, 106, 60, -0.3), '1h': tapeEnding(WED, 220, 3600, 103, 30) }, extra });
+    const tab = W.HG_tabs.find(x => x && x.id === 'goldswing');
+    const P = pane(); tab.mount(P.pane);
+    const r = await tab.refresh();
+    const snap = W.goldswingScan();
+    return { r, cands: (snap && snap.cands) || [], rejected: (snap && snap.rejected) || [], stat: P.stubs['#gwStat'] ? P.stubs['#gwStat'].textContent : '' };
+  }
+  const tNone = await swingTab(null);
+  assert(tNone.cands.length === 0 && tNone.rejected.length > 0 && tNone.rejected.every(c => /GOLD FEED/.test(String(c.reason || ''))),
+    'GOLD SWING tab with no macro feed: an EMPTY board, every reject a GOLD FEED (' + tNone.rejected.length + ') — the board the browser has shown since 2026-10-05 whenever the dollar / 10-year feed is unread');
+  const tShort = await swingTab(async () => ({ dxy: { trend20: 'RISING' }, tnxTrend: 'RISING' }));
+  assert(tShort.cands.length > 0 && tShort.cands.every(c => c.dir === 'short'), 'GOLD SWING tab under RISING/RISING: the shorts form (' + tShort.cands.length + ')');
+  const tFlat = await swingTab(async () => ({ dxy: { trend20: 'FLAT' }, tnxTrend: 'FLAT' }));
+  assert(tFlat.cands.length === 0 && tFlat.rejected.some(c => /GOLD FEED — DXY FLAT, US10Y FLAT/.test(String(c.reason || ''))), 'GOLD SWING tab under a FLAT read: empty, and the reject names FLAT — a quiet feed is not a yes');
 }
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

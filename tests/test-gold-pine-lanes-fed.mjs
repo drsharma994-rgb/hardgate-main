@@ -33,6 +33,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { swCacheOk, HG_VER } from './helpers/build-version.mjs';
+import { goldMacroFor } from './helpers/gold-macro-fixture.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
@@ -95,30 +96,33 @@ console.log('== 1) the route delegates to the desk mint ==');
 {
   const S = boot(SWING);
   const leg = { rows4h: tapeEnding(WED, 300, 14400, 103, 40, -0.3), rows1d: tapeEnding(WED, 150, 86400, 106, 60, -0.3) };
-  const route = S.goldswingCollectCandidates(leg, { now: WED, news: null, macro: null });
-  const full = (S.goldSwingSetups(Object.assign({ now: WED, news: null }, leg)) || {}).ranked || [];
+  /* hg-v1157: the swing path needs the aligned dollar / 10-year legs (hg-v1085 lock, baked) */
+  const MAC = goldMacroFor('short');
+  const route = S.goldswingCollectCandidates(leg, { now: WED, news: null, macro: MAC });
+  const full = (S.goldSwingSetups(Object.assign({ now: WED, news: null, macro: MAC }, leg)) || {}).ranked || [];
   assert(route.length > 0 && route.some(c => !/^p[89]/.test(String(c.stratKey))), 'REACHABILITY: the route mints through the filter path (' + route.map(c => c.stratKey).join(', ') + ')');
   assert(same(route, full), 'the route returns the SAME board as goldSwingSetups -- levels, direction, demotion and every stamp (' + route.length + ' rows)');
   assert(route.every(c => (c.stamps || []).indexOf('CONF NO TRADE') >= 0 && c.demoted) && !route.some(c => (c.stamps || []).indexOf('CONF UNCHECKED') >= 0), 'the confluence scorer is FED through the route: CONF NO TRADE demotes land where CONF UNCHECKED used to read (' + route.map(c => (c.stamps || []).filter(s => /CONF/.test(s)).join('/')).join(', ') + ')');
   assert(route.every(c => (c.stamps || []).some(s => /^S23 /.test(s))), 'and the S23 regime read lands too');
-  const locked = S.goldswingCollectCandidates(leg, { now: CPI - 10 * 60000, news: SNAP });
-  const released = S.goldswingCollectCandidates(leg, { now: CPI + 3 * 3600000, news: SNAP });
+  const locked = S.goldswingCollectCandidates(leg, { now: CPI - 10 * 60000, news: SNAP, macro: MAC });
+  const released = S.goldswingCollectCandidates(leg, { now: CPI + 3 * 3600000, news: SNAP, macro: MAC });
   assert(locked.length === 0 && released.length > 0, 'the NEWS GATE is reached through the route: 10 min before CPI mints nothing, 3h after mints again (' + released.length + ')');
-  const unnamed = S.goldswingCollectCandidates(leg, { now: WED, spreadUsd: WIDE, bid: 4300.4, ask: 4301 });
-  const named = S.goldswingCollectCandidates(leg, { now: WED, spreadUsd: WIDE, bid: 4300.4, ask: 4301, spreadVenue: 'delta-xaut' });
+  const unnamed = S.goldswingCollectCandidates(leg, { now: WED, spreadUsd: WIDE, bid: 4300.4, ask: 4301, macro: MAC });
+  const named = S.goldswingCollectCandidates(leg, { now: WED, spreadUsd: WIDE, bid: 4300.4, ask: 4301, spreadVenue: 'delta-xaut', macro: MAC });
   assert(unnamed.length === 0, 'the SPREAD LOCK is reached through the route: a wide unnamed quote locks every candidate');
   assert(same(named, route) && named.every(c => (c.notes || []).some(n => /SPREAD WIDE/.test(n) && /delta-xaut/.test(n))), 'a wide PROXY quote moves no board and lands the SPREAD WIDE read on every card -- the hg-v968 venue rule now reaches this lane');
-  const booked = S.goldswingCollectCandidates(leg, { now: WED, l2OrderBook: BOOK });
+  const booked = S.goldswingCollectCandidates(leg, { now: WED, l2OrderBook: BOOK, macro: MAC });
   assert(same(booked, route) && booked.every(c => (c.notes || []).some(n => /L2 READ/.test(n))), 'the L2 book is reached through the route: a proxy book reports and moves nothing');
   const SAT = Date.UTC(2026, 3, 11, 12, 0, 0);
-  const sat = S.goldswingCollectCandidates({ rows4h: tapeEnding(SAT, 300, 14400, 103, 40, -0.3), rows1d: tapeEnding(SAT, 150, 86400, 106, 60, -0.3) }, { now: SAT });
+  const sat = S.goldswingCollectCandidates({ rows4h: tapeEnding(SAT, 300, 14400, 103, 40, -0.3), rows1d: tapeEnding(SAT, 150, 86400, 106, 60, -0.3) }, { now: SAT, macro: MAC });
   assert(sat.length > 0 && sat.every(c => c.goldShut === true), 'the hg-v953 weekend mark is reached through the route (' + sat.length + ' rows marked shut on a Saturday bar)');
   /* the daily leg reaches the mint through the route: seed 125 on a rising
      tape mints a weekly-range break ONLY when the daily bars are present */
   const leg125 = { rows4h: tapeEnding(WED, 300, 14400, 125, 40, 0.3), rows1d: tapeEnding(WED, 150, 86400, 128, 60, 0.3) };
-  const r125 = S.goldswingCollectCandidates(leg125, { now: WED });
-  const f125 = (S.goldSwingSetups(Object.assign({ now: WED }, leg125)) || {}).ranked || [];
-  const n125 = (S.goldSwingSetups({ now: WED, rows4h: leg125.rows4h }) || {}).ranked || [];
+  const MAC125 = goldMacroFor('short');   /* the weekly-range break seed 125 mints is a SHORT (the mint says so, not the drift sign) */
+  const r125 = S.goldswingCollectCandidates(leg125, { now: WED, macro: MAC125 });
+  const f125 = (S.goldSwingSetups(Object.assign({ now: WED, macro: MAC125 }, leg125)) || {}).ranked || [];
+  const n125 = (S.goldSwingSetups({ now: WED, rows4h: leg125.rows4h, macro: MAC125 }) || {}).ranked || [];
   assert(f125.length === 1 && f125[0].stratKey === 'wkbreak' && n125.length === 0, 'REACHABILITY: seed 125 mints wkbreak with the daily bars and nothing without them');
   assert(same(r125, f125), 'the route hands the DAILY bars to the mint (wkbreak forms through it)');
   assert(S.goldswingCollectCandidates(null, null).length === 0 && S.goldswingCollectCandidates({}, {}).length === 0, 'junk in, empty out, no throw');

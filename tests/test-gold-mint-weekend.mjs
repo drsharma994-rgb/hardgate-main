@@ -48,6 +48,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { goldMacroFor } from './helpers/gold-macro-fixture.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 let pass = 0, fail = 0;
@@ -137,7 +138,7 @@ function swingInp(end){
     return rows;
   }
   return { rows4h: t(300, 14400, SWING_SEED, 40), rows1d: t(150, 86400, SWING_SEED + 3, 60),
-           now: end, news: null };
+           now: end, news: null, macro: goldMacroFor('long') };   /* hg-v1157: the swing path needs the aligned dollar / 10-year legs (hg-v1085 lock, baked) */
 }
 const board = c => [c.entry, c.stop, c.t1, c.dir, c.stratKey, !!c.demoted, !!c.vetoed].join('|');
 

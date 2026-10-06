@@ -30,6 +30,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { goldMacroFor } from './helpers/gold-macro-fixture.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url)) + '/..';
 let passed = 0;
@@ -70,7 +71,7 @@ const mk = (n, seed) => {
 };
 const ROWS = mk(400, 7);
 const HIT = { kind: 'ROUND-MAGNET', dir: 'long', level: 4000 };
-const EXTRA = { livePx: 4000, nowSec: T + 400 * 3600 };
+const EXTRA = { livePx: 4000, nowSec: T + 400 * 3600, macro: goldMacroFor('long') };   /* hg-v1157: the inst filter drops a hit with no macro (hg-v1085 lock, baked) */
 const gatesOf = (C) => C.hgOgGates(ROWS, HIT, EXTRA) || [];
 const gate = (C, key) => gatesOf(C).filter(g => g && g.key === key)[0] || null;
 

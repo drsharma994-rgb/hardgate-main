@@ -35,6 +35,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { swCacheOk, HG_VER } from './helpers/build-version.mjs';
+import { goldMacroFor } from './helpers/gold-macro-fixture.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
@@ -216,7 +217,7 @@ console.log('== 5) the swing label is ornamental, and is said to be ==');
   const b = c => [c.stratKey, c.dir, c.grade, c.agree, (c.stamps || []).join('+'), (c.notes || []).length].join('|');
   let formed = 0, same = 0, tapes = 0;
   for (const [seed, drift, dseed] of [[103, -0.3, 106], [125, 0.3, 128]]){
-    const inp = () => ({ rows4h: tapeEnding(WED, 300, 14400, seed, 40, drift), rows1d: tapeEnding(WED, 150, 86400, dseed, 60, drift), now: WED });
+    const inp = () => ({ rows4h: tapeEnding(WED, 300, 14400, seed, 40, drift), rows1d: tapeEnding(WED, 150, 86400, dseed, 60, drift), now: WED, macro: goldMacroFor(drift < 0 ? 'short' : 'long') });   /* hg-v1157: the swing path needs the aligned dollar / 10-year legs (hg-v1085 lock, baked) */
     const a = W.goldSwingSetups(inp()), p = W.goldSwingSetups(Object.assign(inp(), { candleSource: 'binance-paxg' }));
     tapes++; formed += (a.ranked || []).length;
     if ((a.ranked || []).map(b).join('~') === (p.ranked || []).map(b).join('~')) same++;

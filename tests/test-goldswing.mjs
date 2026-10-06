@@ -20,6 +20,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { goldMacroFor } from './helpers/gold-macro-fixture.mjs';
 
 const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 
@@ -218,7 +219,10 @@ function makeScanEnv(rows4h, rows1d, opts){
   C.getGoldCandles = async (tf) => (tf === '4h')
     ? { rows: cloneRows(rows4h), source: 'binance-xau' }
     : { rows: cloneRows(rows1d || []), source: 'binance-xau' };
-  if (opts.macro) C.getGoldMacro = async () => opts.macro;
+  /* hg-v1157: the swing path is DROPPED unless the dollar and 10-year both trend
+     with the trade (the hg-v1085 lock, baked). A fixture that supplies no macro
+     gets the legs aligned with the side it expects (opts.dir, default long). */
+  C.getGoldMacro = async () => (opts.macro || goldMacroFor(opts.dir || 'long'));
   if (opts.news) C.hgNewsState = () => opts.news;
   if (opts.spot) C.goldspotState = () => opts.spot;
   if (opts.fng) globalThis.S = { fng: opts.fng };
@@ -355,7 +359,7 @@ console.log('== 3) weekly-range breakout fires + stays silent without a trigger 
   assert(wk && /4h close back below 2380/.test(wk.invalidates), 'invalidation names the level');
 
   /* mirrored construction -> symmetric SHORT reclaim of the prior week's high */
-  const envM = makeScanEnv(mirrorRows(wkReclaim4h(2390), 2400), mirrorRows(weekly1d(), 2400));
+  const envM = makeScanEnv(mirrorRows(wkReclaim4h(2390), 2400), mirrorRows(weekly1d(), 2400), { dir: 'short' });
   await envM.M.stubs['#gwRun']._handler();
   const wkM = envM.C.goldswingScan() && envM.C.goldswingScan().cands.find(c => c.stratKey === 'wkbreak');
   assert(!!wkM && wkM.dir === 'short' && wkM.id === 'wkbreak|short|2420',
@@ -618,7 +622,7 @@ console.log('== 8) stop / target math ==');
   assert(/stop BEHIND structure/.test(envF.M.stubs['#gwCards'].innerHTML), 'stop note says it went behind the structure (card HTML)');
 
   /* short symmetry: mirrored pullback -> stop above, targets descending */
-  const envM = makeScanEnv(mirrorRows(pullback4h(), 2400), mirrorRows(dailyBull(), 2400));
+  const envM = makeScanEnv(mirrorRows(pullback4h(), 2400), mirrorRows(dailyBull(), 2400), { dir: 'short' });
   await envM.M.stubs['#gwRun']._handler();
   const pbM = envM.C.goldswingScan() && envM.C.goldswingScan().cands.find(c => c.stratKey === 'pullback');
   assert(!!pbM && pbM.dir === 'short', 'mirrored downtrend -> pullback SHORT fires');

@@ -21,6 +21,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { goldMacroFor } from './helpers/gold-macro-fixture.mjs';
 
 const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 
@@ -79,7 +80,8 @@ function stubVp(plan){
   };
 }
 function runSwing(extra){
-  return W.goldSwingSetups(Object.assign({ rows4h: ROWS, now: NOW }, extra || {}));
+  /* hg-v1157: the swing path is dropped unless the dollar and 10-year both trend with the trade (hg-v1085 lock, baked); the stubbed VP plans here are LONGS */
+  return W.goldSwingSetups(Object.assign({ rows4h: ROWS, now: NOW, macro: goldMacroFor('long') }, extra || {}));
 }
 
 /* ---------- 1) swing floor direct drives at 4h ATR scale ---------- */

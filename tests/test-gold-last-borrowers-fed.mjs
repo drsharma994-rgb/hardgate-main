@@ -29,6 +29,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { swCacheOk, HG_VER } from './helpers/build-version.mjs';
+import { goldMacroFor } from './helpers/gold-macro-fixture.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
@@ -85,7 +86,9 @@ console.log('== 1) the OMNIGOLD bridge, driven for real ==');
      scan's own 1h / 4h legs come in as arguments. Seed 118 (a tape where the
      volume-trust rule is visible) for scalp; seed 103 falling for swing. */
   const m15 = tapeEnding(WED, 420, 900, 118, 24), r1h = tapeEnding(WED, 220, 3600, 119, 30), r4h = tapeEnding(WED, 300, 14400, 103, 40, -0.3), d1 = tapeEnding(WED, 150, 86400, 106, 60, -0.3);
+  /* hg-v1157: the swing path needs the aligned dollar / 10-year legs (hg-v1085 lock, baked) */
   function bridge(shared, label, m15x){
+    shared = Object.assign({ macro: goldMacroFor('short') }, shared || {});
     const W = boot(OG);
     W.getGoldCandles = (tf) => Promise.resolve({ rows: tf === '15m' ? (m15x || m15) : (tf === '1d' ? d1 : []), source: 'binance-paxg' });
     return W.hgOgRunGoldTabEngines(shared, r1h, r4h, label);

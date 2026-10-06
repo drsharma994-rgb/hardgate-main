@@ -10,6 +10,7 @@ import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { swCacheOk, HG_VER } from './helpers/build-version.mjs';
+import { goldMacroFor } from './helpers/gold-macro-fixture.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url)) + '/..';
 let passed = 0;
@@ -169,7 +170,7 @@ console.log('\n== inst filter: sweep without confirmation is rejected; OB trap r
   const rows = bars(80, 2400, 900, 4);
   const sweepOnly = W.hgGoldInstFilter(
     { stratKey: 'sweep', dir: 'long', id: 'sweep|long|2400', strategy: 'SWEEP', stamps: [], gateNotes: [] },
-    { rows: rows, nowMs: Date.UTC(2024, 0, 16, 14, 0, 0), scalp: true }
+    { rows: rows, nowMs: Date.UTC(2024, 0, 16, 14, 0, 0), macro: goldMacroFor('long'), scalp: true }
   );
   ok(sweepOnly && sweepOnly.dropped === true && /SWEEP BLOCK|MSS|IFVG/i.test(sweepOnly.reason),
      'sweep-only without MSS+IFVG is rejected (' + ((sweepOnly && sweepOnly.reason) || '') + ')');
@@ -183,7 +184,7 @@ console.log('\n== inst filter: sweep without confirmation is rejected; OB trap r
   const trapOb = W.hgGoldInstFilter(
     { stratKey: 'ob', dir: 'long', id: 'ob|long|2400', strategy: 'OB', stamps: [], gateNotes: [],
       obImpulseIndex: trapRows.length - 1 },
-    { rows: trapRows, nowMs: Date.UTC(2024, 0, 16, 14, 0, 0), scalp: true }
+    { rows: trapRows, nowMs: Date.UTC(2024, 0, 16, 14, 0, 0), macro: goldMacroFor('long'), scalp: true }
   );
   ok(trapOb && trapOb.dropped === true && /OB TRAP/i.test(trapOb.reason),
      'thin-volume displacement OB is discarded (' + ((trapOb && trapOb.reason) || '') + ')');
@@ -235,7 +236,7 @@ console.log('\n== spread lock: >250 points / 2.5 pips ($0.25) kills the entry ==
   const rows = bars(40, 2400, 900, 2);
   const sprDrop = W.hgGoldInstFilter(
     { stratKey: 'vwap', dir: 'long', id: 'vwap|long|2400', strategy: 'VWAP', stamps: [], gateNotes: [] },
-    { rows: rows, nowMs: Date.UTC(2024, 0, 16, 14, 0, 0), scalp: true, bid: 2400, ask: 2400.28 }
+    { rows: rows, nowMs: Date.UTC(2024, 0, 16, 14, 0, 0), macro: goldMacroFor('long'), scalp: true, bid: 2400, ask: 2400.28 }
   );
   ok(sprDrop && sprDrop.dropped === true && /SPREAD LOCK/i.test(sprDrop.reason),
      'inst filter drops on a wide quote regardless of setup strength');
@@ -262,13 +263,13 @@ console.log('\n== MTF matrix: scalp longs need H4+Daily bull; conflict locks sca
   const rows = bars(40, 2400, 900, 3);
   const longConflict = W.hgGoldInstFilter(
     { stratKey: 'vwap', dir: 'long', id: 'vwap|long|2400', strategy: 'VWAP', stamps: [], gateNotes: [] },
-    { rows: rows, nowMs: Date.UTC(2024, 0, 16, 14, 0, 0), scalp: true, rows4h: bear, rows1d: bull }
+    { rows: rows, nowMs: Date.UTC(2024, 0, 16, 14, 0, 0), macro: goldMacroFor('long'), scalp: true, rows4h: bear, rows1d: bull }
   );
   ok(longConflict && longConflict.dropped === true && /MTF CONFLICT/i.test(longConflict.reason),
      'scalp long is dropped on HTF conflict when hardReject is default (OMNIGOLD-hard)');
   const longConflictDemote = W.hgGoldInstFilter(
     { stratKey: 'vwap', dir: 'long', id: 'vwap|long|2400', strategy: 'VWAP', stamps: [], gateNotes: [] },
-    { rows: rows, nowMs: Date.UTC(2024, 0, 16, 14, 0, 0), scalp: true, hardReject: false,
+    { rows: rows, nowMs: Date.UTC(2024, 0, 16, 14, 0, 0), macro: goldMacroFor('long'), scalp: true, hardReject: false,
       rows4h: bear, rows1d: bull }
   );
   ok(longConflictDemote && !longConflictDemote.dropped && longConflictDemote.demoted
@@ -276,14 +277,14 @@ console.log('\n== MTF matrix: scalp longs need H4+Daily bull; conflict locks sca
      'GOLD SCALP hardReject:false demotes MTF conflict so cards still populate');
   const swingKeep = W.hgGoldInstFilter(
     { stratKey: 'macro', dir: 'long', id: 'macro|long|2400', strategy: 'MACRO', stamps: [], gateNotes: [] },
-    { rows: rows, nowMs: Date.UTC(2024, 0, 16, 14, 0, 0), scalp: false, hardReject: false,
+    { rows: rows, nowMs: Date.UTC(2024, 0, 16, 14, 0, 0), macro: goldMacroFor('long'), scalp: false, hardReject: false,
       rows4h: bear, rows1d: bull }
   );
   ok(swingKeep && !swingKeep.dropped,
      'Gold Wing is not locked by an HTF conflict');
   const newsDrop = W.hgGoldInstFilter(
     { stratKey: 'macro', dir: 'long', id: 'macro|long|2400', strategy: 'MACRO', stamps: [], gateNotes: [] },
-    { rows: rows, nowMs: Date.UTC(2024, 0, 16, 14, 0, 0), scalp: false, hardReject: false,
+    { rows: rows, nowMs: Date.UTC(2024, 0, 16, 14, 0, 0), macro: goldMacroFor('long'), scalp: false, hardReject: false,
       news: { loaded: true, events: [{ title: 'US CPI', impact: 'high',
         t: Math.floor(Date.UTC(2024, 0, 16, 14, 0, 0) / 1000) + 300 }] } }
   );
