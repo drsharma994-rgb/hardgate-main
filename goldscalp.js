@@ -778,7 +778,7 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
    See conviction-lock.js for merge, invalidation (STOPPED / TARGET HIT /
    EXPIRED), and anti-repaint restore semantics. */
 var CONVICTION_KEY = 'hgGoldscalpConviction';
-var CONVICTION_TTL_MS = 6*60*60*1000;
+var CONVICTION_TTL_MS = 90*60*1000;
 var CONVICTION_HIST = 8;
 
 function __lsRead(){
@@ -1881,6 +1881,65 @@ var GS_ONE_AT_A_TIME_DEFAULT = true;
 var GS_ONE_AT_A_TIME = GS_ONE_AT_A_TIME_DEFAULT;
 var GS_HELD_STAMP = 'HELD · ONE AT A TIME';
 
+/* hg-v1156: WHICH MECHANICS MAY LEAD ON THIS DESK — read, never typed.
+   The hg-v1098 instruction is "gold scalp leads only on the measured
+   mechanics": the PREFER rows of HG_GOLD_SETUP_EDGE.scalp, resolved through
+   hgGoldEdgeAction so the hg-v928 retune switch is honoured. Returns the
+   sorted key list, or NULL when the table or the reader is absent — null is
+   "no mechanic is measured", not "every mechanic is", and the ACCURACY leg
+   fails CLOSED on it (the hg-v946 GOLD ULTRA rule). */
+var GS_LEAD_MEASURED_ONLY_LS_KEY = 'hg_gs_lead_measured_only';
+var GS_LEAD_MEASURED_ONLY_DEFAULT = true;   /* hg-v1098: on instruction */
+var GS_LEAD_MEASURED_ONLY = GS_LEAD_MEASURED_ONLY_DEFAULT;
+/* The hg-v1098 instruction is a POLICY on this desk ("leads only on the
+   measured mechanics"), not a measurement of its own, and every policy this
+   desk carries has a lever (hg-v925 edge proof, hg-v928 retune, hg-v930 one at
+   a time). This is its lever: window.HG_GS_LEAD_MEASURED_ONLY overrides,
+   localStorage persists, resolved per scan so headless warms honour it.
+   OFF leaves the geometry, macro and real-yield ACCURACY checks in force —
+   only the lead-set demote and its release are withheld. */
+function gsLeadMeasuredOnlyInit(){
+  try{
+    var ovr = (typeof W !== 'undefined' && W) ? W.HG_GS_LEAD_MEASURED_ONLY : undefined;
+    if (ovr === true || ovr === false){ GS_LEAD_MEASURED_ONLY = ovr; return GS_LEAD_MEASURED_ONLY; }
+    var stored = null;
+    try { stored = localStorage.getItem(GS_LEAD_MEASURED_ONLY_LS_KEY); } catch (eL) { stored = null; }
+    if (stored === '1' || stored === 'true') GS_LEAD_MEASURED_ONLY = true;
+    else if (stored === '0' || stored === 'false') GS_LEAD_MEASURED_ONLY = false;
+    else GS_LEAD_MEASURED_ONLY = GS_LEAD_MEASURED_ONLY_DEFAULT;
+  }catch(e){ GS_LEAD_MEASURED_ONLY = GS_LEAD_MEASURED_ONLY_DEFAULT; }
+  return GS_LEAD_MEASURED_ONLY;
+}
+function gsSetLeadMeasuredOnly(on){
+  GS_LEAD_MEASURED_ONLY = (on === true);
+  try { localStorage.setItem(GS_LEAD_MEASURED_ONLY_LS_KEY, GS_LEAD_MEASURED_ONLY ? '1' : '0'); } catch (eS) {}
+  return GS_LEAD_MEASURED_ONLY;
+}
+function gsLeadKeys(){
+  try{
+    var T = (typeof W !== 'undefined' && W) ? W.HG_GOLD_SETUP_EDGE : null;
+    var act = (typeof W !== 'undefined' && W) ? W.hgGoldEdgeAction : null;
+    if (!T || !T.scalp || typeof T.scalp !== 'object' || typeof act !== 'function') return null;
+    var out = [];
+    for (var k in T.scalp){
+      if (!Object.prototype.hasOwnProperty.call(T.scalp, k)) continue;
+      if (act(T.scalp[k]) === 'prefer') out.push(k);
+    }
+    out.sort();
+    return out;
+  }catch(e){ return null; }
+}
+function gsLeadKeysLabel(keys){
+  if (!Array.isArray(keys) || !keys.length) return 'no mechanic';
+  var T = (typeof W !== 'undefined' && W) ? W.HG_GOLD_SETUP_EDGE : null;
+  var names = [];
+  for (var i = 0; i < keys.length; i++){
+    var row = T && T.scalp ? T.scalp[keys[i]] : null;
+    names.push(String((row && row.label) || keys[i]));
+  }
+  return names.join(' / ');
+}
+
 function gsOneAtATimeInit(){
   try{
     var ovr = (typeof W !== 'undefined' && W) ? W.HG_GS_ONE_AT_A_TIME : undefined;
@@ -2695,8 +2754,47 @@ async function runScan(ui, scanSt){
     setStat(ui, hadCards ? 'rescanning… previous results still showing' : 'pulling gold klines 15m/1h/4h…');
     var now = Date.now();
     var news = null;
+    try{
+      await Promise.race([
+        (async function(){
+          var nref = gfn('hgNewsRefresh');
+          if (nref) await Promise.race([Promise.resolve(nref(false)), new Promise(function(res){ setTimeout(res, 4000); })]);
+          var ns0 = gfn('hgNewsState');
+          if (ns0){ try{ news = ns0(); }catch(eN0){ news = null; } }
+          try{
+            if (news && news.fng && isFinite(+news.fng.value) && typeof S !== "undefined" && S && !S.fng){
+              S.fng = { v: +news.fng.value, c: String(news.fng.classification || "") };
+            }
+          }catch(eFg){}
+          try{
+            if (typeof S !== "undefined" && S && !S.fng && typeof fetch === "function"){
+              var fj = await Promise.race([
+                fetch("https://api.alternative.me/fng/?limit=1").then(function(r){ return r && r.ok ? r.json() : null; }),
+                new Promise(function(res){ setTimeout(function(){ res(null); }, 4000); })
+              ]);
+              var fd = fj && fj.data && fj.data[0];
+              if (fd && isFinite(+fd.value)) S.fng = { v: +fd.value, c: String(fd.value_classification || "") };
+            }
+          }catch(eFg2){}
+        })(),
+        (async function(){
+          if (!(typeof W !== "undefined" && W && !W.__hgGoldCot && typeof W.hgGoldCotParse === "function" && typeof W.hgGoldCotAssess === "function" && typeof fetch === "function")) return;
+          var cotUrl = "/api/proxy?url=" + encodeURIComponent("https://publicreporting.cftc.gov/resource/jun7-fc8e.json?$limit=160&$order=report_date_as_yyyy_mm_dd%20DESC&$where=market_and_exchange_names=%27GOLD%20-%20COMMODITY%20EXCHANGE%20INC.%27");
+          var cotRows = await Promise.race([
+            fetch(cotUrl).then(function(r){ return r && r.ok ? r.json() : null; }),
+            new Promise(function(res){ setTimeout(function(){ res(null); }, 6000); })
+          ]);
+          if (Array.isArray(cotRows)) W.__hgGoldCot = W.hgGoldCotAssess(W.hgGoldCotParse(cotRows));
+        })(),
+        (async function(){
+          var gsWarmFn = gfn('hgGoldSpotWarm');
+          if (gsWarmFn) await Promise.resolve(gsWarmFn());
+        })(),
+        new Promise(function(res){ setTimeout(res, 8000); })
+      ]);
+    }catch(eFeed){}
     var ns = gfn('hgNewsState');
-    if (ns){ try{ news = ns(); }catch(eN){ news = null; } }
+    if (ns){ try{ news = ns() || news; }catch(eN){} }
     var seasonFn = gfn('goldSeason');
     var season = seasonFn ? seasonFn(now) : null;
 
@@ -2711,6 +2809,7 @@ async function runScan(ui, scanSt){
           Promise.resolve().then(function(){ return gm(); }),
           new Promise(function(r){ setTimeout(function(){ r(null); }, 12000); })
         ]);
+        if (!ctx.macro){ var gmc = gfn('getGoldMacroCached'); if (gmc){ try{ ctx.macro = gmc() || null; }catch(eMc){ ctx.macro = null; } } }
       }catch(eM){ ctx.macro = null; }
     }
     /* Delta OI/funding history + Fed FOMC calendar (public, same-origin APIs) */
@@ -2800,6 +2899,21 @@ async function runScan(ui, scanSt){
     var stRoute = !!(scanSt && scanSt.useStartraderRouting);
     /* leg 1: primary gold feed */
     var gold = stRoute ? await fetchStartraderGoldKlines() : await fetchGoldKlines();
+    try{
+      var gsStrip = function(rows, sec){
+        if (!rows || rows.length < 31) return rows;
+        var last = rows[rows.length - 1];
+        if (!last || !isFinite(+last.t)) return rows;
+        var t = +last.t;
+        if (t > 1e12) t = Math.floor(t / 1000);
+        if (t + sec > Math.floor(Date.now() / 1000)) return rows.slice(0, -1);
+        return rows;
+      };
+      gold.rows15m = gsStrip(gold.rows15m, 900);
+      gold.rows1h = gsStrip(gold.rows1h, 3600);
+      gold.rows4h = gsStrip(gold.rows4h, 14400);
+      gold.rows1d = gsStrip(gold.rows1d, 86400);
+    }catch(eStrip){}
     /* hg-v977: the SIGNAL BAR, not the wall clock. `now` above is the scan
        clock and stays the instant for what IS wall time -- conviction age,
        the weekend-exposure countdown and demote, the scan stamp, the 7-step
@@ -2859,6 +2973,10 @@ async function runScan(ui, scanSt){
     var scalpBundle = {};
     if (ctx.macro) scalpBundle.macro = ctx.macro;
     if (ctx.macro && ctx.macro.us10yCandles) scalpBundle.us10yCandles = ctx.macro.us10yCandles;
+    if (ctx.macro && ctx.macro.tnxRows && !scalpBundle.us10yCandles) scalpBundle.us10yCandles = ctx.macro.tnxRows;
+    if (ctx.macro && ctx.macro.dxyRows && !scalpBundle.dxyCandles) scalpBundle.dxyCandles = ctx.macro.dxyRows;
+    if (ctx.macro && ctx.macro.tnxRows && !scalpBundle.tnxRows) scalpBundle.tnxRows = ctx.macro.tnxRows;
+    if (ctx.macro && ctx.macro.dxyRows && !scalpBundle.dxyRows) scalpBundle.dxyRows = ctx.macro.dxyRows;
     if (typeof W !== 'undefined' && W){
       if (W.__hgGoldTickBuffer) scalpBundle.tickBuffer = W.__hgGoldTickBuffer;
       if (W.__hgGoldL2Book) scalpBundle.l2OrderBook = W.__hgGoldL2Book;
@@ -3089,6 +3207,58 @@ async function runScan(ui, scanSt){
     if (isFinite(liveSpot) && isFinite(klineSpot) && Math.abs(klineSpot / liveSpot - 1) * 100 > 0.5){
       goldAlignLevelsToSpot(ranked, klineSpot, liveSpot);
     }
+    /* hg-v1095 / hg-v1098 ACCURACY leg — shipped for five months as a splice
+       inside scripts/server.mjs (goldLiveSource) that rewrote this file at
+       serve time, so the suite booted a GOLD SCALP the browser never ran.
+       Baked into the source in hg-v1156; the gold branch of the server is gone. */
+    try{
+      var gsAcc = 0;
+      var leadOnlyA = gsLeadMeasuredOnlyInit();
+      var leadKeysA = gsLeadKeys();
+      for (var ai = 0; ai < ranked.length; ai++){
+        var ac = ranked[ai];
+        if (!ac || ac.vetoed) continue;
+        var whyA = [];
+        var sk = String(ac.stratKey || '');
+        /* hg-v1156: the lead-eligible set is READ off the edge table's prefer
+           rows (hgGoldEdgeAction, one home) — the served splice hand-typed
+           'p6fail' / 'p9volbar', the hg-v946 prefer-book failure in the
+           server. An unreadable table is NO measured mechanic: fail closed. */
+        if (!leadOnlyA){ /* lever OFF: the lead-set demote is withheld, the checks below stand */ }
+        else if (!leadKeysA) whyA.push('ACCURACY — the edge table is unreadable, so no mechanic on this desk is measured to lead. This is not the scalp.');
+        else if (leadKeysA.indexOf(sk) < 0) whyA.push('ACCURACY — only ' + gsLeadKeysLabel(leadKeysA) + ' has held up on this desk\'s own measured record. This is not the scalp.');
+        var dirA = String(ac.dir || '');
+        var entryA = +ac.entry, stopA = +ac.stop, t1A = +ac.t1;
+        if (dirA === 'long' || dirA === 'short'){
+          if (!(isFinite(entryA) && isFinite(stopA) && isFinite(t1A))) whyA.push('ACCURACY — entry, stop, or target is not a number.');
+          else if (dirA === 'long' && !(stopA < entryA && t1A > entryA)) whyA.push('ACCURACY — long levels are on the wrong side of entry.');
+          else if (dirA === 'short' && !(stopA > entryA && t1A < entryA)) whyA.push('ACCURACY — short levels are on the wrong side of entry.');
+          else {
+            var riskA = Math.abs(entryA - stopA);
+            var rrA = riskA > 0 ? Math.abs(t1A - entryA) / riskA : 0;
+            if (!(rrA >= 1.2)) whyA.push('ACCURACY — reward is ' + rrA.toFixed(2) + 'R, under the 1.2R scalp floor.');
+          }
+        }
+        var mdA = ctx.macro || null;
+        var dxyT = (mdA && mdA.dxy && mdA.dxy.trend20) ? String(mdA.dxy.trend20) : '';
+        var tnxT = (mdA && mdA.tnxTrend) ? String(mdA.tnxTrend) : '';
+        var ryT = (mdA && mdA.realRateMeasured && mdA.realRateMeasured.trend) ? String(mdA.realRateMeasured.trend).toUpperCase() : '';
+        if (dirA === 'long' && dxyT === 'RISING' && tnxT === 'RISING') whyA.push('ACCURACY — dollar and 10-year are both rising. A gold long is the wrong scalp.');
+        if (dirA === 'short' && dxyT === 'FALLING' && tnxT === 'FALLING') whyA.push('ACCURACY — dollar and 10-year are both falling. A gold short is the wrong scalp.');
+        if (dirA === 'long' && ryT.indexOf('RIS') >= 0) whyA.push('ACCURACY — real yield is rising. A gold long is the wrong scalp.');
+        if (dirA === 'short' && ryT.indexOf('FALL') >= 0) whyA.push('ACCURACY — real yield is falling. A gold short is the wrong scalp.');
+        if (!whyA.length) continue;
+        ac.demoted = true;
+        if (!Array.isArray(ac.stamps)) ac.stamps = [];
+        if (ac.stamps.indexOf('ACCURACY') < 0) ac.stamps.push('ACCURACY');
+        var gnA = Array.isArray(ac.gateNotes) ? ac.gateNotes.slice() : [];
+        for (var wiA = 0; wiA < whyA.length; wiA++){ if (gnA.indexOf(whyA[wiA]) < 0) gnA.push(whyA[wiA]); }
+        ac.gateNotes = gnA;
+        if (!ac.reason) ac.reason = whyA[0];
+        gsAcc++;
+      }
+      if (gsAcc) legs.push('ACCURACY — ' + gsAcc + ' scalp' + (gsAcc === 1 ? '' : 's') + ' cannot lead');
+    }catch(eAcc){}
 
     /* (5) NEWS-GATE VETO — tier-1 US prints (CPI/NFP/FOMC/GDP) lock new
        convictions 30 min before / 15 min after; already-live keep running */
@@ -3129,6 +3299,21 @@ async function runScan(ui, scanSt){
        invalidation against the latest 15m close (STOPPED / TARGET HIT /
        EXPIRED); never re-pick levels for a live conviction */
     var lock = applyConviction(ranked, venueRows, now, entryVeto);
+    try{
+      if (lock && lock.store && lock.store.live){
+        for (var ri = 0; ri < ranked.length; ri++){
+          var rc = ranked[ri];
+          if (!rc || !rc.id) continue;
+          var accFail = Array.isArray(rc.stamps) && rc.stamps.indexOf('ACCURACY') >= 0;
+          if (!accFail) continue;
+          delete lock.store.live[rc.id];
+          if (rc.venue) delete lock.store.live[rc.venue + '|' + rc.id];
+          rc.locked = false;
+          if (!rc.reason) rc.reason = 'ACCURACY — this scalp is not valid on the closed bar.';
+        }
+        if (typeof saveConvictions === 'function') saveConvictions(lock.store);
+      }
+    }catch(eRel){}
     if (isFinite(liveSpot) && liveSpot > 0){
       var guarded = goldSpotGuardAfterLock(lock.store, ranked, liveSpot);
       if (guarded){
@@ -3570,7 +3755,16 @@ function goldscalpMountInto(el, scanSt, cfg){
 
 function mount(el){
   if (!el) return;
-  try{ goldscalpMountInto(el, __scan, { prefix: 'gs', showDeskNote: true }); }catch(e){ /* never throw at mount */ }
+  try{ goldscalpMountInto(el, __scan, { prefix: 'gs', showDeskNote: true }); }catch(e){}
+  try{
+    var kickN = 0;
+    var kick = function(){
+      if (!__scan || !__scan.ui) return;
+      if (__scan.busy && kickN < 40){ kickN++; setTimeout(kick, 400); return; }
+      if (!__scan.busy) runScan(__scan.ui, __scan);
+    };
+    kick();
+  }catch(eRun){}
 }
 
 /* BRAIN warm-up hook — headless scan against inert stub elements (oiflow.js
@@ -3753,7 +3947,11 @@ W.HG_tabs.push({ id: 'goldscalp', label: 'GOLD SCALP', mount: mount, refresh: go
                  /* hg-v1022: the PERFECT predicate rides the same route —
                     same guard, same reason — so tests can assert against the
                     SHIPPED function without a 20th module-scope export. */
-                 gsxPerfect: gsxPerfect });
+                 gsxPerfect: gsxPerfect,
+                 /* hg-v1156: the baked hg-v1098 lead-set lever + the table-read
+                    lead set ride the same route, same guard, same reason. */
+                 leadMeasuredOnly: gsLeadMeasuredOnlyInit, setLeadMeasuredOnly: gsSetLeadMeasuredOnly,
+                 leadKeys: gsLeadKeys });
 W.HG_warmups = W.HG_warmups || [];
 W.HG_warmups.push({ id: 'goldscalp', label: 'GOLD SCALP', run: gsWarm });
 })();

@@ -170,7 +170,7 @@ console.log('== 1) the ranker marks every free-feed leg, three states, per direc
 console.log('== 2) end to end: the real GOLD SCALP tab records the marks and the funding, the split can ask, the note prints it ==');
 async function runTab(stubs){
   const tapes = { '15m': tapeEnding(WED, 420, 900, 102, 24), '1h': tapeEnding(WED, 220, 3600, 103, 30), '4h': tapeEnding(WED, 140, 14400, 104, 40), '1d': tapeEnding(WED, 150, 86400, 106, 60, -0.3) };
-  const clock = { now: WED + 5 * 60000 };
+  const clock = { now: WED + 16 * 60000 };   /* hg-v1156: the WED bar must be CLOSED — the desk strips a forming bar */
   const W = boot(TAB_BASE, clock, tapes, stubs);
   const tab = (W.HG_tabs || []).find(t => t && t.id === 'goldscalp');
   const r1 = await tab.refresh();

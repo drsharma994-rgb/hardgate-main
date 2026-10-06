@@ -810,6 +810,21 @@ function stubEl(){
            style: {}, firstElementChild: { style: {} }, _handlers: {},
            addEventListener: function(ev, fn){ this._handler = fn; this._handlers[ev] = fn; } };
 }
+/* hg-v1156: mount KICKS the first scan (the hg-v1095 closed-bar leg, baked
+   from the server splice). A refresh or a RUN click in the same tick reads
+   'busy' — the hg-v965 normal outcome, not a failure — so a harness waits for
+   the kicked scan to publish its snapshot and never starts a second one on
+   top of it (a second scan re-locks every conviction, which the "every
+   candidate is NEW" assertions below must not see). */
+async function gsFirstScan(tab, ctxW){
+  for (let i = 0; i < 800; i++){
+    if (ctxW && typeof ctxW.goldscalpScan === 'function' && ctxW.goldscalpScan()) return 'refreshed';
+    const r = await tab.refresh();
+    if (r !== 'busy') return r;
+    await new Promise(res => setTimeout(res, 10));
+  }
+  return 'timeout';
+}
 function freshPane(){
   const stubs = {};
   const pane = {
@@ -829,8 +844,8 @@ function freshPane(){
   assert(typeof M.stubs['#gsRun']._handler === 'function', 'RUN SCAN button wired to a click handler');
   assert(/gold klines/i.test(M.stubs['#gsStat'].textContent) === false || true, 'stat line initialized (deps note tolerated)');
 
-  const r1 = await tab.refresh();
-  assert(r1 === 'refreshed', 'refresh before first run runs headless scan (got "' + r1 + '")');
+  const r1 = await gsFirstScan(tab, W);
+  assert(r1 === 'refreshed', 'mount kicks the first scan (hg-v1095/v1156); it completes as a headless scan (got "' + r1 + '")');
 
   const warm = (W.HG_warmups || []).find(t => t.id === 'goldscalp');
   let wOut = null, wThrew = null;
@@ -888,8 +903,8 @@ console.log('== 18) bare-environment never-throws sweep ==');
   let mountThrew = false;
   try { tab.mount(M2.pane); } catch(e){ mountThrew = true; }
   assert(!mountThrew, 'mount in a bare env never throws');
-  const rr = await tab.refresh();
-  assert(typeof rr === 'string', 'refresh in a bare env resolves a status string ("' + rr + '")');
+  const rr = await gsFirstScan(tab, B);
+  assert(typeof rr === 'string', 'the kicked scan / refresh in a bare env resolves a status string ("' + rr + '")');
 }
 
 /* =========================================================================
@@ -1143,6 +1158,14 @@ function loadConvictionStore(ls){
   vm.runInThisContext(fs.readFileSync(root + 'conviction-lock.js', 'utf8'), { filename: 'conviction-lock.js' });
   vm.runInThisContext(fs.readFileSync(root + 'goldscalp.js', 'utf8'), { filename: 'goldscalp.js' });
   const C = globalThis.window;
+  /* hg-v1156: the baked hg-v1098 leg demotes AND releases from the conviction
+     store every scalp that is not a PREFER row of the edge table — on this
+     tape, every scalp. The conviction lifecycle below is the hg-v930/v941
+     contract and is observable only with that lead-set policy OFF, through its
+     own lever (the hg-v925/v928/v930 shape). The geometry / macro ACCURACY
+     checks stay in force. The policy itself is pinned in
+     tests/test-gold-served-is-tested.mjs. */
+  C.HG_GS_LEAD_MEASURED_ONLY = false;
   /* tab scans use wall-clock Date.now() — pin it to a fixed London/NY-overlap
      instant so the off-session quality gate never makes these lock assertions
      time-of-day dependent (the gate itself is pinned separately in section 25) */
@@ -1160,8 +1183,8 @@ function loadConvictionStore(ls){
       && M.pane._html.indexOf('.gsx-card.long{') >= 0,
       'gsx styles injected from goldscalp.js (unscoped for tab + StarTrader embed)');
 
-  const r1 = await M.stubs['#gsRun']._handler();
-  assert(r1 === 'refreshed', 'scan 1 completes with the seeded gold feed (got "' + r1 + '")');
+  const r1 = await gsFirstScan(tab, C);
+  assert(r1 === 'refreshed', 'scan 1 (kicked by the mount) completes with the seeded gold feed (got "' + r1 + '")');
   const scan1 = C.goldscalpScan();
   /* hg-v699: on this synthetic tape every surviving candidate is measured-
      negative (rsidiv is edge-DEMOTED, sweep edge-SUPPRESSED), so nothing may
@@ -1524,6 +1547,7 @@ function rrShortRows25(){            /* short into a bearish OB with a bullish O
     vm.runInThisContext(fs.readFileSync(root + 'conviction-lock.js', 'utf8'), { filename: 'conviction-lock.js' });
     vm.runInThisContext(fs.readFileSync(root + 'goldscalp.js', 'utf8'), { filename: 'goldscalp.js' });
     const C2 = globalThis.window;
+  C2.HG_GS_LEAD_MEASURED_ONLY = false;   /* hg-v1156: see section 21 */
     const FIXED = OVLP_NOW + 30*60*1000;
     const realDateNow2 = Date.now;
     Date.now = () => FIXED;
@@ -1534,7 +1558,7 @@ function rrShortRows25(){            /* short into a bearish OB with a bullish O
     const tab2 = C2.HG_tabs.find(t => t.id === 'goldscalp');
     const M2 = freshPane();
     tab2.mount(M2.pane);
-    await M2.stubs['#gsRun']._handler();                       // scan A: veto active, empty store
+    await gsFirstScan(tab2, C2);                              // scan A (kicked by the mount): veto active, empty store
     const sA = C2.goldscalpScan();
     const liveA2 = Object.keys(loadConvictionStore(ls2).live).length;
     assert(liveA2 === 0 && sA.cands.length === 0,
@@ -1623,6 +1647,14 @@ function vwapRows26(){
   vm.runInThisContext(fs.readFileSync(root + 'conviction-lock.js', 'utf8'), { filename: 'conviction-lock.js' });
   vm.runInThisContext(fs.readFileSync(root + 'goldscalp.js', 'utf8'), { filename: 'goldscalp.js' });
   const C3 = globalThis.window;
+  /* hg-v1156: the baked hg-v1098 leg demotes AND releases from the conviction
+     store every scalp that is not a PREFER row of the edge table — on this
+     tape, every scalp. The conviction lifecycle below is the hg-v930/v941
+     contract and is observable only with that lead-set policy OFF, through its
+     own lever (the hg-v925/v928/v930 shape). The geometry / macro ACCURACY
+     checks stay in force. The policy itself is pinned in
+     tests/test-gold-served-is-tested.mjs. */
+  C3.HG_GS_LEAD_MEASURED_ONLY = false;
   const FIXED = OVLP_NOW + 30*60*1000;
   const realDateNow3 = Date.now;
   Date.now = () => FIXED;
@@ -1632,7 +1664,7 @@ function vwapRows26(){
   const tab3 = C3.HG_tabs.find(t => t.id === 'goldscalp');
   const M3 = freshPane();
   tab3.mount(M3.pane);
-  await M3.stubs['#gsRun']._handler();
+  await gsFirstScan(tab3, C3);
   const s1 = C3.goldscalpScan();
 
   /* candidates carry their numeric structure anchor (id bucket = Math.round(anchor)) */
@@ -1919,7 +1951,7 @@ function fmtLike(n, d){ return Number(n).toLocaleString('en-US', { maximumFracti
   const tab4 = C4.HG_tabs.find(t => t.id === 'goldscalp');
   const M4 = freshPane();
   tab4.mount(M4.pane);
-  await M4.stubs['#gsRun']._handler();
+  await gsFirstScan(tab4, C4);
   const wScan = C4.goldscalpScan();
 
   /* panel renders after the cards; snapshot carries the additive fields */

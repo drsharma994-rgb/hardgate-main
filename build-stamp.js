@@ -132,9 +132,9 @@
 var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var HG_BUILD = {
-  version: 'hg-v1155',
-  pack: 'GOLD SCALP RECORDS THE FREE FEEDS IT SCORES BY. The ranker has scored ten free internet feeds into this desk tally since they shipped - silver (Yahoo SI=F), the gold/silver ratio, VIX, USDJPY, the crypto Fear and Greed index, the PAXG perp funding print, the PAXG basis, the FRED / Yahoo real-rate tilt, the 4h EMA50/200 structure and the Delta gold-perp leverage cycle - and the forward record carried none of those verdicts, so nothing could ask which of them separates winners here (applied, never measured; the gap hg-v1154 closed on TREND MATRIX for the post-gate). Each leg now marks one boolean on the ranked row - true WITH the plan, false AGAINST, absent when the feed was flat or unread - the PAXG funding rate rides beside them, GOLD SCALP publish copy and record map carry both to the ledger (reads, fundingPct, fundAgainst through the one SWING G4 rule), and the desk own forward note prints the read split per leg once settled records carry a mark. Marks only: tally, grade and every gate untouched; no threshold moves. Tests: tests/test-goldscalp-free-feed-marks.mjs (new)',
-  built: '2026-10-07T06:00:00Z'
+  version: 'hg-v1156',
+  pack: 'THE GOLD SCALP THE BROWSER RAN WAS NOT THE ONE THE SUITE BOOTED. Since hg-v1085 / v1095 / v1098 scripts/server.mjs rewrote goldscalp.js at serve time (closed-bar strip, an ACCURACY demote whose lead set was two keys typed into the server, conviction release, 90-minute TTL, feed warm, a scan kicked from mount) - the suite booted the file on disk, and booting it on what the browser received turned 22 of 712 files red. The goldscalp leg is baked into goldscalp.js and the file is served unchanged (the guard spawns the real server and requires byte identity); the lead set is READ off the edge table prefer rows through hgGoldEdgeAction (same two keys today, fail closed on an unreadable table) and carries a lever like every other policy on this desk (hg_gs_lead_measured_only, default ON). The goldind / goldswing / omnibtc splices remain and are pinned behaviourally so the next bake inherits a known contract. No gate loosened, no threshold moves. Tests: tests/test-gold-served-is-tested.mjs (new)',
+  built: '2026-10-07T12:00:00Z'
 };
 
 function hgBuildLabel(b){

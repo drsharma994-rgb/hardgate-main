@@ -194,7 +194,7 @@ async function scanOnce(files, tabId, tapes, clock, feed){
 console.log('== 2) GOLD SCALP end to end: XM records, PAXG bars ==');
 {
   const tapes = { '15m': tapeEnding(WED, 420, 900, 102, 24), '1h': tapeEnding(WED, 220, 3600, 103, 30), '4h': tapeEnding(WED, 140, 14400, 104, 40), '1d': tapeEnding(WED, 150, 86400, 106, 60, -0.3) };
-  const clock = { now: WED + 5 * 60000 };
+  const clock = { now: WED + 16 * 60000 };   /* hg-v1156: the WED bar must be CLOSED — the desk strips a forming bar */
   const r = await scanOnce(BASE.concat(['goldscalp.js']), 'goldscalp', tapes, clock);
   assert(r.r === 'refreshed' && r.recs.length >= 5, 'REACHABILITY: a headless XM-fed scan ran and recorded (' + r.recs.length + ' records)');
   assert(r.recs.every(x => x.feed === 'xm-xauusd'), 'every record carries the feed its levels were priced on: xm-xauusd (' + desc(r.recs).slice(0, 60) + '...)');

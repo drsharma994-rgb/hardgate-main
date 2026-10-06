@@ -156,7 +156,7 @@ console.log('== 2) GOLD SCALP end to end ==');
 {
   const tapes = { '15m': tapeEnding(WED, 420, 900, 102, 24), '1h': tapeEnding(WED, 220, 3600, 103, 30), '4h': tapeEnding(WED, 140, 14400, 104, 40), '1d': tapeEnding(WED, 150, 86400, 106, 60, -0.3) };
   /* accuracy-floor.js carries the roster the desk note resolves its pools from */
-  const r = await scanOnce(BASE.concat(['accuracy-floor.js', 'goldscalp.js']), 'goldscalp', tapes, { now: WED + 5 * 60000 });
+  const r = await scanOnce(BASE.concat(['accuracy-floor.js', 'goldscalp.js']), 'goldscalp', tapes, { now: WED + 16 * 60000 });   /* hg-v1156: closed bar */
   assert(r.r === 'refreshed' && r.recs.length >= 5, 'REACHABILITY: a headless scan ran and recorded (' + r.recs.length + ')');
   const n = r.recs.length;
   assert(r.recs.every(x => typeof x.mark === 'number' && isFinite(x.mark) && x.mark > 0), 'every GOLD SCALP record carries the mark it was sized against');

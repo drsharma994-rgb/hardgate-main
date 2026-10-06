@@ -90,7 +90,10 @@ const CPI_LATER = { events: [{ title: 'US CPI m/m', t: WED + 3 * 3600000 }] };
    observable on a board that still forms */
 const RETAIL = { events: [{ title: 'US Retail Sales m/m', impact: 'high', t: WED + 10 * 60000 }] };
 const newsPart = c => (c.tallyParts || []).filter(p => /high-impact news window/.test(p.label || '')).map(p => p.pts).join(',');
-const NEAR = WED + 5 * 60000, FAR = WED + 6 * 3600000;
+/* hg-v1156: NEAR sits 16 min past the last bar's OPEN, so that bar is CLOSED —
+   GOLD SCALP reads closed bars only now (the hg-v1095 leg, baked); at +5 min
+   the 12:00 bar was still forming and is stripped, which is a different tape. */
+const NEAR = WED + 16 * 60000, FAR = WED + 6 * 3600000;
 const desc = cands => cands.map(c => [c.stratKey, c.dir, c.grade, c.killzone || c.session || '', (c.stamps || []).slice().sort().join('/'), c.tally].join('|')).join(' ~ ');
 async function drive(files, tabId, snapFn, wall, news, tapes){
   const W = boot(files, wall, news, tapes);
@@ -107,7 +110,7 @@ console.log('== 1) GOLD SCALP under two wall clocks ==');
   const a = await drive(files, 'goldscalp', 'goldscalpScan', NEAR, null, tapes);
   const b = await drive(files, 'goldscalp', 'goldscalpScan', FAR, null, tapes);
   assert(a.r === 'refreshed' && a.cands.length > 0, 'REACHABILITY: the headless scan ran and minted (' + a.cands.length + ' candidates)');
-  assert(desc(a.cands) === desc(b.cands), 'the board is IDENTICAL with the clock 5 min and 6 h past the bar: stratKey, dir, grade, session, stamps, tally');
+  assert(desc(a.cands) === desc(b.cands), 'the board is IDENTICAL with the clock 16 min and 6 h past the bar: stratKey, dir, grade, session, stamps, tally');
   assert(a.cands.every(c => /NY AM/.test(c.killzone || '')) && b.cands.every(c => /NY AM/.test(c.killzone || '')), 'the session stamp is the BAR session (NY AM at 12:00 GMT) under both clocks -- 6 h past the bar it used to read OFF-HOURS and downgrade two to B');
   assert(!b.cands.some(c => (c.stamps || []).indexOf('OFF-SESSION') >= 0), 'no OFF-SESSION demote under the far clock');
   assert(a.snap.at === NEAR && b.snap.at === FAR, 'the scan STAMP keeps the wall clock (it says when the scan ran)');

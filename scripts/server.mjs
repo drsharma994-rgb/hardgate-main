@@ -249,133 +249,9 @@ function goldLiveSource(kind, src){
     if (src.indexOf('REAL YIELD') < 0 && src.indexOf(rrAnchor) >= 0) src = src.replace(rrAnchor, rrGate);
     return src;
   }
-  if (kind === 'goldscalp'){
-    const anchor = "    var news = null;\n    var ns = gfn('hgNewsState');\n    if (ns){ try{ news = ns(); }catch(eN){ news = null; } }";
-    const gate = [
-      '    var news = null;',
-      '    try{',
-      '      await Promise.race([',
-      '        (async function(){',
-      "          var nref = gfn('hgNewsRefresh');",
-      '          if (nref) await Promise.race([Promise.resolve(nref(false)), new Promise(function(res){ setTimeout(res, 4000); })]);',
-      "          var ns0 = gfn('hgNewsState');",
-      '          if (ns0){ try{ news = ns0(); }catch(eN0){ news = null; } }',
-      '          try{',
-      '            if (news && news.fng && isFinite(+news.fng.value) && typeof S !== "undefined" && S && !S.fng){',
-      '              S.fng = { v: +news.fng.value, c: String(news.fng.classification || "") };',
-      '            }',
-      '          }catch(eFg){}',
-      '          try{',
-      '            if (typeof S !== "undefined" && S && !S.fng && typeof fetch === "function"){',
-      '              var fj = await Promise.race([',
-      '                fetch("https://api.alternative.me/fng/?limit=1").then(function(r){ return r && r.ok ? r.json() : null; }),',
-      '                new Promise(function(res){ setTimeout(function(){ res(null); }, 4000); })',
-      '              ]);',
-      '              var fd = fj && fj.data && fj.data[0];',
-      '              if (fd && isFinite(+fd.value)) S.fng = { v: +fd.value, c: String(fd.value_classification || "") };',
-      '            }',
-      '          }catch(eFg2){}',
-      '        })(),',
-      '        (async function(){',
-      '          if (!(typeof W !== "undefined" && W && !W.__hgGoldCot && typeof W.hgGoldCotParse === "function" && typeof W.hgGoldCotAssess === "function" && typeof fetch === "function")) return;',
-      '          var cotUrl = "/api/proxy?url=" + encodeURIComponent("https://publicreporting.cftc.gov/resource/jun7-fc8e.json?$limit=160&$order=report_date_as_yyyy_mm_dd%20DESC&$where=market_and_exchange_names=%27GOLD%20-%20COMMODITY%20EXCHANGE%20INC.%27");',
-      '          var cotRows = await Promise.race([',
-      '            fetch(cotUrl).then(function(r){ return r && r.ok ? r.json() : null; }),',
-      '            new Promise(function(res){ setTimeout(function(){ res(null); }, 6000); })',
-      '          ]);',
-      '          if (Array.isArray(cotRows)) W.__hgGoldCot = W.hgGoldCotAssess(W.hgGoldCotParse(cotRows));',
-      '        })(),',
-      '        (async function(){',
-      "          var gsWarmFn = gfn('hgGoldSpotWarm');",
-      '          if (gsWarmFn) await Promise.resolve(gsWarmFn());',
-      '        })(),',
-      '        new Promise(function(res){ setTimeout(res, 8000); })',
-      '      ]);',
-      '    }catch(eFeed){}',
-      "    var ns = gfn('hgNewsState');",
-      '    if (ns){ try{ news = ns() || news; }catch(eN){} }'
-    ].join('\n');
-    if (src.indexOf("hgGoldSpotWarm") < 0 && src.indexOf(anchor) >= 0) src = src.replace(anchor, gate);
-    const macroAnchor = "        ctx.macro = await Promise.race([\n          Promise.resolve().then(function(){ return gm(); }),\n          new Promise(function(r){ setTimeout(function(){ r(null); }, 12000); })\n        ]);";
-    const macroGate = macroAnchor + "\n        if (!ctx.macro){ var gmc = gfn('getGoldMacroCached'); if (gmc){ try{ ctx.macro = gmc() || null; }catch(eMc){ ctx.macro = null; } } }";
-    if (src.indexOf("getGoldMacroCached") < 0 && src.indexOf(macroAnchor) >= 0) src = src.replace(macroAnchor, macroGate);
-    const bundleAnchor = "    if (ctx.macro) scalpBundle.macro = ctx.macro;\n    if (ctx.macro && ctx.macro.us10yCandles) scalpBundle.us10yCandles = ctx.macro.us10yCandles;";
-    const bundleGate = bundleAnchor + "\n    if (ctx.macro && ctx.macro.tnxRows && !scalpBundle.us10yCandles) scalpBundle.us10yCandles = ctx.macro.tnxRows;\n    if (ctx.macro && ctx.macro.dxyRows && !scalpBundle.dxyCandles) scalpBundle.dxyCandles = ctx.macro.dxyRows;\n    if (ctx.macro && ctx.macro.tnxRows && !scalpBundle.tnxRows) scalpBundle.tnxRows = ctx.macro.tnxRows;\n    if (ctx.macro && ctx.macro.dxyRows && !scalpBundle.dxyRows) scalpBundle.dxyRows = ctx.macro.dxyRows;";
-    if (src.indexOf("scalpBundle.dxyRows") < 0 && src.indexOf(bundleAnchor) >= 0) src = src.replace(bundleAnchor, bundleGate);
-    const mountAnchor = "function mount(el){\n  if (!el) return;\n  try{ goldscalpMountInto(el, __scan, { prefix: 'gs', showDeskNote: true }); }catch(e){ /* never throw at mount */ }\n}";
-    const mountGate = [
-      'function mount(el){',
-      '  if (!el) return;',
-      "  try{ goldscalpMountInto(el, __scan, { prefix: 'gs', showDeskNote: true }); }catch(e){}",
-      '  try{',
-      '    var kickN = 0;',
-      '    var kick = function(){',
-      '      if (!__scan || !__scan.ui) return;',
-      '      if (__scan.busy && kickN < 40){ kickN++; setTimeout(kick, 400); return; }',
-      '      if (!__scan.busy) runScan(__scan.ui, __scan);',
-      '    };',
-      '    kick();',
-      '  }catch(eRun){}',
-      '}'
-    ].join('\n');
-    if (src.indexOf('kickN') < 0 && src.indexOf(mountAnchor) >= 0) src = src.replace(mountAnchor, mountGate);
-    const openAnchor = "    var gold = stRoute ? await fetchStartraderGoldKlines() : await fetchGoldKlines();";
-    const openGate = openAnchor + "\n    try{\n      var gsStrip = function(rows, sec){\n        if (!rows || rows.length < 31) return rows;\n        var last = rows[rows.length - 1];\n        if (!last || !isFinite(+last.t)) return rows;\n        var t = +last.t;\n        if (t > 1e12) t = Math.floor(t / 1000);\n        if (t + sec > Math.floor(Date.now() / 1000)) return rows.slice(0, -1);\n        return rows;\n      };\n      gold.rows15m = gsStrip(gold.rows15m, 900);\n      gold.rows1h = gsStrip(gold.rows1h, 3600);\n      gold.rows4h = gsStrip(gold.rows4h, 14400);\n      gold.rows1d = gsStrip(gold.rows1d, 86400);\n    }catch(eStrip){}";
-    if (src.indexOf('gsStrip') < 0 && src.indexOf(openAnchor) >= 0) src = src.replace(openAnchor, openGate);
-    const accAnchor = "    if (isFinite(liveSpot) && isFinite(klineSpot) && Math.abs(klineSpot / liveSpot - 1) * 100 > 0.5){\n      goldAlignLevelsToSpot(ranked, klineSpot, liveSpot);\n    }";
-    const accGate = accAnchor + `
-    try{
-      var gsAcc = 0;
-      for (var ai = 0; ai < ranked.length; ai++){
-        var ac = ranked[ai];
-        if (!ac || ac.vetoed) continue;
-        var whyA = [];
-        var sk = String(ac.stratKey || '');
-        if (sk !== 'p6fail' && sk !== 'p9volbar'){
-          if (sk === 'bosalign' || sk === 'ribbon') whyA.push('ACCURACY — walk-forward did not hold, so this is not the scalp.');
-          else whyA.push('ACCURACY — only a failed-break reversal or a volume-bar sweep has held up. This is not the scalp.');
-        }
-        var dirA = String(ac.dir || '');
-        var entryA = +ac.entry, stopA = +ac.stop, t1A = +ac.t1;
-        if (dirA === 'long' || dirA === 'short'){
-          if (!(isFinite(entryA) && isFinite(stopA) && isFinite(t1A))) whyA.push('ACCURACY — entry, stop, or target is not a number.');
-          else if (dirA === 'long' && !(stopA < entryA && t1A > entryA)) whyA.push('ACCURACY — long levels are on the wrong side of entry.');
-          else if (dirA === 'short' && !(stopA > entryA && t1A < entryA)) whyA.push('ACCURACY — short levels are on the wrong side of entry.');
-          else {
-            var riskA = Math.abs(entryA - stopA);
-            var rrA = riskA > 0 ? Math.abs(t1A - entryA) / riskA : 0;
-            if (!(rrA >= 1.2)) whyA.push('ACCURACY — reward is ' + rrA.toFixed(2) + 'R, under the 1.2R scalp floor.');
-          }
-        }
-        var mdA = ctx.macro || null;
-        var dxyT = (mdA && mdA.dxy && mdA.dxy.trend20) ? String(mdA.dxy.trend20) : '';
-        var tnxT = (mdA && mdA.tnxTrend) ? String(mdA.tnxTrend) : '';
-        var ryT = (mdA && mdA.realRateMeasured && mdA.realRateMeasured.trend) ? String(mdA.realRateMeasured.trend).toUpperCase() : '';
-        if (dirA === 'long' && dxyT === 'RISING' && tnxT === 'RISING') whyA.push('ACCURACY — dollar and 10-year are both rising. A gold long is the wrong scalp.');
-        if (dirA === 'short' && dxyT === 'FALLING' && tnxT === 'FALLING') whyA.push('ACCURACY — dollar and 10-year are both falling. A gold short is the wrong scalp.');
-        if (dirA === 'long' && ryT.indexOf('RIS') >= 0) whyA.push('ACCURACY — real yield is rising. A gold long is the wrong scalp.');
-        if (dirA === 'short' && ryT.indexOf('FALL') >= 0) whyA.push('ACCURACY — real yield is falling. A gold short is the wrong scalp.');
-        if (!whyA.length) continue;
-        ac.demoted = true;
-        if (!Array.isArray(ac.stamps)) ac.stamps = [];
-        if (ac.stamps.indexOf('ACCURACY') < 0) ac.stamps.push('ACCURACY');
-        var gnA = Array.isArray(ac.gateNotes) ? ac.gateNotes.slice() : [];
-        for (var wiA = 0; wiA < whyA.length; wiA++){ if (gnA.indexOf(whyA[wiA]) < 0) gnA.push(whyA[wiA]); }
-        ac.gateNotes = gnA;
-        if (!ac.reason) ac.reason = whyA[0];
-        gsAcc++;
-      }
-      if (gsAcc) legs.push('ACCURACY — ' + gsAcc + ' scalp' + (gsAcc === 1 ? '' : 's') + ' cannot lead');
-    }catch(eAcc){}`;
-    if (src.indexOf('walk-forward did not hold') < 0 && src.indexOf(accAnchor) >= 0) src = src.replace(accAnchor, accGate);
-    const ttlAnchor = "var CONVICTION_TTL_MS = 6*60*60*1000;";
-    const ttlGate = "var CONVICTION_TTL_MS = 90*60*1000;";
-    if (src.indexOf(ttlGate) < 0 && src.indexOf(ttlAnchor) >= 0) src = src.replace(ttlAnchor, ttlGate);
-    const relAnchor = "    var lock = applyConviction(ranked, venueRows, now, entryVeto);";
-    const relGate = relAnchor + "\n    try{\n      if (lock && lock.store && lock.store.live){\n        for (var ri = 0; ri < ranked.length; ri++){\n          var rc = ranked[ri];\n          if (!rc || !rc.id) continue;\n          var accFail = Array.isArray(rc.stamps) && rc.stamps.indexOf('ACCURACY') >= 0;\n          if (!accFail) continue;\n          delete lock.store.live[rc.id];\n          if (rc.venue) delete lock.store.live[rc.venue + '|' + rc.id];\n          rc.locked = false;\n          if (!rc.reason) rc.reason = 'ACCURACY — this scalp is not valid on the closed bar.';\n        }\n        if (typeof saveConvictions === 'function') saveConvictions(lock.store);\n      }\n    }catch(eRel){}";
-    if (src.indexOf('not valid on the closed bar') < 0 && src.indexOf(relAnchor) >= 0) src = src.replace(relAnchor, relGate);
-    return src;
-  }
+  /* hg-v1156: the goldscalp leg that used to be spliced here (hg-v1095 closed
+     bar + ACCURACY gate, hg-v1098 lead-only-on-measured) is BAKED into
+     goldscalp.js, where the suite boots it. goldscalp.js is served unchanged. */
   if (kind === 'goldswing'){
     const anchor = '    function push(c){\n      if (!c) return;\n      if (c.dropped){ out.rejected.push(c); return; }';
     const gate = [
@@ -661,11 +537,11 @@ const server = http.createServer(async (req, res) => {
 
 
     /* hg-v1085: gold desks — ticket only when the live dollar and 10-year agree. */
-    if (u.pathname === '/goldind.js' || u.pathname === '/goldswing.js' || u.pathname === '/omnigold.js' || u.pathname === '/goldscalp.js') {
+    if (u.pathname === '/goldind.js' || u.pathname === '/goldswing.js' || u.pathname === '/omnigold.js') {
       const gName = u.pathname.slice(1);
       const gFile = path.join(ROOT, gName);
       if (fs.existsSync(gFile)) {
-        const kind = gName === 'goldind.js' ? 'goldind' : (gName === 'goldswing.js' ? 'goldswing' : (gName === 'goldscalp.js' ? 'goldscalp' : 'omnigold'));
+        const kind = gName === 'goldind.js' ? 'goldind' : (gName === 'goldswing.js' ? 'goldswing' : 'omnigold');
         const shaped = goldLiveSource(kind, fs.readFileSync(gFile, 'utf8'));
         res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
         res.setHeader('Cache-Control', 'no-cache');
