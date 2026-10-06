@@ -353,12 +353,22 @@ const flat4 = mkRows(lin(120, 50, 0));      // pinned 4h closes
   const gi = G.crossOver(G.ema(cxAll, 50), G.ema(cxAll, 200)).lastIndexOf(true);
   const cxRows = mkRows(cxAll);
   const ts = G.trendScore(cxRows.slice(0, gi + 1 + 5), up4);
+  const cx4 = mkRows(lin(240, 50, 0.5));
+  const cx4Closes = cx4.map(r => r.c);
+  const cx4Ema9 = G.ema(cx4Closes, 9);
+  cx4[cx4.length - 1].l = cx4Ema9[cx4Ema9.length - 1] - 0.1; // a closed EMA9 retest
   const row = { sym: 'GOLDUSDT', score: ts.score, comps: ts.comps, freshCross: ts.freshCross,
-    adx: ts.adx, price: cxRows[cxRows.length - 1].c, rows4h: up4, rows1h: null };
+    adx: ts.adx, price: cxRows[cxRows.length - 1].c, rows4h: cx4, rows1h: null };
   assert(ts.freshCross === 'GOLDEN', 'fixture row has fresh golden cross');
   const conv = G.trendmxConviction(row);
   assert(conv && conv.label, 'conviction label for golden row');
+  /* The production desk requires at least 6/7 swing gates; provide a clean
+     gate result here so this unit fixture tests the cross desk's plan path. */
+  const oldSwingTryClean = G.swingTryClean;
+  G.swingTryClean = () => ({ dir: 'long', clean: true, passed: 7 });
   const setups = G.trendmxGoldenCrossSetups([row]);
+  if (oldSwingTryClean === undefined) delete G.swingTryClean;
+  else G.swingTryClean = oldSwingTryClean;
   assert(setups.length >= 1, 'golden cross row yields at least one alert setup');
   assert(setups[0].entry && setups[0].stop && setups[0].t1, 'setup has entry/stop/t1');
   assert(setups[0].dir === 'long', 'golden cross setup is long');
@@ -435,6 +445,26 @@ const flat4 = mkRows(lin(120, 50, 0));      // pinned 4h closes
   assert(rDone === 'refreshed' && uniCalls === 3,
          'the in-flight refresh itself completes -> "refreshed", no double-fetch (calls ' + uniCalls + ')');
 
+  /* Formation, score and price must all read the same closed-bar snapshot.
+     The live API includes its currently forming candle; make that partial bar
+     an extreme so the scan proves it neither moves the composite nor the 4H
+     decision mark. */
+  const openAt = Math.floor(Date.now() / 1000);
+  const forming1d = rows1d.concat([{ t: openAt, o: 100, h: 10000, l: 1, c: 9999, v: 1e9 }]);
+  const forming4h = rows4h.concat([{ t: openAt, o: 50, h: 10000, l: 1, c: 9999, v: 1e9 }]);
+  G.binanceKlines = async function(sym, tf){ return tf === '1d' ? forming1d : forming4h; };
+  const formedSnap = await G.trendmxScan({ force: true });
+  const formedRow = formedSnap && formedSnap.rows.find(function(x){ return x.sym === 'AAAUSDT'; });
+  assert(formedRow && formedRow.rows4h.length === rows4h.length && formedRow.rows1d.length === rows1d.length,
+         'trend formation removes the live 4H and 1D bars before scoring and gate evaluation');
+  assert(formedRow && formedRow.score === G.trendScore(rows1d, rows4h).score,
+         'trend composite is identical to the closed 4H/1D tapes');
+  assert(formedRow && formedRow.price === rows4h[rows4h.length - 1].c,
+         '4H plan mark is the last closed 4H close, not the prior daily close or partial candle');
+  const crown = G.trendmxCrownState();
+  assert(crown && crown.crown && crown.crown.entry === rows4h[rows4h.length - 1].c,
+         'the crowned trade plan enters from that same closed 4H mark');
+
   /* never throws: a failing data layer is reported in the tab, not rejected */
   G.binancePerpUniverse = async function(){ uniCalls++; throw new Error('universe down'); };
   let threw = null, rErr = null;
@@ -469,7 +499,10 @@ const flat4 = mkRows(lin(120, 50, 0));      // pinned 4h closes
   assert(/hgFormTicket/.test(tt), 'trend matrix formation ticket path');
   assert(/label: 'GATES'/.test(tt), 'GATES column in matrix table');
   assert(/hgDeskLoadUniverse/.test(tt), 'full universe via hgDeskLoadUniverse');
-  assert(/fetchK\(item, '1h', 120\)/.test(tt), 'scan fetches 1h klines for exact entry');
+  assert(/tmFetchTf\(item, '1h', 72, 1\)/.test(tt)
+       && /function tmFetchTf\(item, tf, n, minLen\)/.test(tt)
+       && /return fetchK\(item, tf, n\)/.test(tt),
+         'scan fetches 1h klines through the shared timeframe helper for setup formation');
   assert(/data-v="delta"/.test(tt), 'venue filter chips wired');
   /* hg-v1015: the combined FRESH CROSS DESK (v1014) split into two desks
      at the operator's ask — the original GOLDEN CROSS DESK title returns,

@@ -80,6 +80,65 @@ console.log('== the pass runs the SAME stack and stamps the SAME badges ==');
   ok(rows[3] && rows[3].sym === 'XRPUSD' && rows[3].perfect !== true, 'the pass caps at the 8 strongest rows - the rest stay unjudged');
 }
 
+console.log('== hg-v1150: the four free-feed evidence legs ride the same reads bag ==');
+{
+  const asked = { oi: 0, fh: 0, spot: 0 };
+  const readsBySym = {};
+  const W = boot({
+    binanceTakerRatio: async () => ({ series: TSERIES }),
+    binanceFunding: async () => ({ fundingPct: 0.004 }),
+    hgNewsRisk: () => ({ blackout: false }),
+    coinalyzeOIChg: async () => { asked.oi++; return { chgPct: -12 }; },
+    binanceFundingHist: async () => { asked.fh++; return [{ rate: 0.0001, t: 1 }, { rate: 0.0002, t: 2 }, { rate: 0.00015, t: 3 }]; },
+    binanceSpotTakerFlow: async () => { asked.spot++; return { series: TSERIES }; },
+    hgObtcCvdSlopeDir: () => true,
+    onchainState: () => ({ netflowZ: { z: 2.5 } }),
+    hgObtcNetflowZOf: (oc) => (oc && oc.netflowZ ? +oc.netflowZ.z : null),
+    hgNetflowGate: (sym, dir, nz) => ((nz && +nz.z > 2) ? { state: 'veto', note: 'inflow spike' } : { state: 'pass', note: 'netflow normal' }),
+    hgObtcPerfectFormation: (pick, reads) => {
+      readsBySym[pick.row.sym] = reads;
+      pick.row.perfect = true; pick.row.perfectPlus = false;
+      pick.row.perfectReads = reads;
+    }
+  });
+  const rBtc = row('BTCUSD', 3);
+  rBtc.base = 'BTC';
+  rBtc.rows4h = mkRows(220, 2, 100);       /* slope 2: a clean directional tape - chop low AND ER high */
+  const rAlt = row('PEPEUSD', 3);
+  rAlt.base = 'PEPE';
+  rAlt.rows4h = mkRows(220, 2, 100);
+  await W.trendmxPerfectEvidencePass([rBtc, rAlt]);
+  ok(asked.oi === 2 && asked.fh === 2 && asked.spot === 2, 'the free feeds are asked once per row (coinalyze OI + funding history + spot flow)');
+  const rb = readsBySym.BTCUSD, ra = readsBySym.PEPEUSD;
+  ok(rb && rb.trendQuality === 'TREND', 'the trend-quality leg reads off the row tape (clean directional tape -> TREND)');
+  ok(rb && rb.leverageState === 'RESET' && rb.oiChgPct === -12, 'the leverage-cycle leg reads RESET (OI -12%/24h, the house threshold)');
+  ok(rb && isFinite(rb.fundLatestPct) && rb.fundLatestPct > 0, 'the last funding print rides the bag in percent units');
+  ok(rb && rb.cvdContext === 'BOTH-WITH', 'the spot-vs-perp CVD context reads (both books with a long)');
+  ok(rb && rb.netflowZ === 2.5 && rb.onchainVeto === true, 'the BTC on-chain netflow veto reads for a BTC row (z 2.5 -> veto)');
+  ok(ra && ra.cvdContext === 'BOTH-WITH' && ra.leverageState === 'RESET', 'an alt row reads the same free per-symbol legs');
+  ok(ra && ra.netflowZ === undefined && ra.onchainVeto === undefined, 'the on-chain leg stays HONESTLY UNREAD on an alt row (the feed is BTC flow)');
+  /* the chop tape maps to the CHOP read - the two instruments agreeing the
+     other way (sideways rows: chop high AND efficiency near zero) */
+  const rChop = row('DOGEUSD', 3);
+  rChop.base = 'DOGE';
+  rChop.rows4h = mkRows(220, 0, 100);
+  const readsChop = {};
+  W.hgObtcPerfectFormation = (pick, reads) => { readsChop.r = reads; pick.row.perfect = true; };
+  await W.trendmxPerfectEvidencePass([rChop]);
+  ok(readsChop.r && readsChop.r.trendQuality === 'CHOP', 'a sideways tape maps to CHOP (the predicate can veto PERFECT on it)');
+  /* feeds absent -> every new leg stays honestly unread, no crash */
+  const W2 = boot({
+    binanceTakerRatio: async () => ({ series: TSERIES }),
+    hgObtcPerfectFormation: (pick, reads) => { readsChop.bare = reads; pick.row.perfect = true; }
+  });
+  const rBare = row('BTCUSD', 3);
+  rBare.base = 'BTC';
+  await W2.trendmxPerfectEvidencePass([rBare]);
+  ok(readsChop.bare && readsChop.bare.trendQuality === undefined && readsChop.bare.leverageState === undefined
+     && readsChop.bare.cvdContext === undefined && readsChop.bare.onchainVeto === undefined,
+     'feeds absent -> the new legs stay unread (the honest third state), the pass never crashes');
+}
+
 console.log('== the shared seam absent degrades to no stamps, never a crash ==');
 {
   const W = boot({});

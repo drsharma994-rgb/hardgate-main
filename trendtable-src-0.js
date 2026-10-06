@@ -317,3 +317,67 @@ function trendmxEmaTag(rows4h, dir){
     if (isFinite(e21[i]) && e21[i] > px) cands.push(['EMA21', e21]);
   }
   if (!cands.length) return { state: 'waiting' };
+  cands.sort(function(a, b){ return Math.abs(a[1][i] - px) - Math.abs(b[1][i] - px); });
+  var name = cands[0][0], series = cands[0][1];
+  var from = Math.max(1, rows.length - 6);
+  for (var k = from; k < rows.length; k++){
+    var level = series[k], bar = rows[k];
+    if (!bar || !isFinite(level)) continue;
+    if (dir === 'long' && bar.l <= level && bar.c > level) return { state: 'ready', ema: name };
+    if (dir === 'short' && bar.h >= level && bar.c < level) return { state: 'ready', ema: name };
+  }
+  return { state: 'waiting', ema: name };
+}
+function trendScore(rows1d, rows4h){
+  var out = zeroResult();
+  try{
+    if (typeof ema !== 'function' || typeof adx !== 'function' ||
+        typeof ichimokuState !== 'function' || typeof crossOver !== 'function' ||
+        typeof crossUnder !== 'function' || typeof crossedRecently !== 'function'){
+      return out; // indicator globals missing -> graceful zero
+    }
+    var ok1 = Array.isArray(rows1d) && rows1d.length > 0;
+    var ok4 = Array.isArray(rows4h) && rows4h.length > 0;
+    if (!ok1 && !ok4) return out;
+
+    if (ok1){
+      var c1 = rows1d.map(function(r){ return r ? r.c : NaN; });
+      var i1 = c1.length - 1;
+      var e50 = ema(c1, 50), e200 = ema(c1, 200);
+      var cL = c1[i1], e50L = e50[i1], e200L = e200[i1];
+
+      /* 1) 1d close vs ema200 */
+      if (isFinite(cL) && isFinite(e200L)) out.comps.d1Trend = cmp(cL, e200L);
+
+      /* 2) 1d ema50 vs ema200 + fresh-cross marker (<=10 bars) */
+      if (isFinite(e50L) && isFinite(e200L)) out.comps.d1Cross = cmp(e50L, e200L);
+      /* A cross on the daily bar that is still forming does not count. */
+      var dClosed = tmClosedRows(rows1d, 86400);
+      var cClosed = dClosed.map(function(r){ return r ? r.c : NaN; });
+      var e50c = ema(cClosed, 50), e200c = ema(cClosed, 200);
+      if (crossedRecently(crossOver(e50c, e200c), 10)) out.freshCross = 'GOLDEN';
+      else if (crossedRecently(crossUnder(e50c, e200c), 10)) out.freshCross = 'DEATH';
+
+      /* 4) ichimoku cloud on 1d */
+      var st = ichimokuState(rows1d);
+      if (st && st.priceVsCloud === 'ABOVE') out.comps.cloud = 1;
+      else if (st && st.priceVsCloud === 'BELOW') out.comps.cloud = -1;
+    }
+
+    /* 3) 4h cascade ema9 / ema21 / ema50 */
+    if (ok4){
+      var c4 = rows4h.map(function(r){ return r ? r.c : NaN; });
+      var i4 = c4.length - 1;
+      var e9 = ema(c4, 9)[i4], e21 = ema(c4, 21)[i4], e50h = ema(c4, 50)[i4];
+      if (isFinite(e9) && isFinite(e21) && isFinite(e50h)){
+        if (e9 > e21 && e21 > e50h) out.comps.h4Cascade = 1;
+        else if (e9 < e21 && e21 < e50h) out.comps.h4Cascade = -1;
+      }
+    }
+
+    /* 5) ADX strength point in the direction of the trend-sum so far */
+    if (ok1){
+      var a = adx(rows1d, 14);
+      out.adx = (a && a.adx && a.adx.length) ? a.adx[a.adx.length - 1] : NaN;
+      /* hg-v1019: THE MOMENTUM WITNESS rides the same 1D tape — RSI(14) as
+         EVIDENCE. NOT a sixth composite leg: the score sum below is

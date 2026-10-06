@@ -1,146 +1,24 @@
-  if (typeof W.hgDeskLoadUniverse !== 'function'
-      && (typeof W.binancePerpUniverse !== 'function' || typeof W.binanceKlines !== 'function')){
-    throw new Error('missing universe layer (hgDeskLoadUniverse or binancePerpUniverse)');
+  for (var i = 2; i < rows.length - 2; i++){
+    if (dir === 'long'){
+      if (rows[i].l < rows[i-1].l && rows[i].l < rows[i-2].l && rows[i].l <= rows[i+1].l && rows[i].l <= rows[i+2].l) pivots.push(rows[i].l);
+    } else if (rows[i].h > rows[i-1].h && rows[i].h > rows[i-2].h && rows[i].h >= rows[i+1].h && rows[i].h >= rows[i+2].h) pivots.push(rows[i].h);
   }
-  var uniPack = await W.hgDeskLoadUniverse({ force: true, minTurnover: TURNOVER_FLOOR });
-  var items = uniPack.items || [];
-  /* hg-v1048/hg-v1074: ALL COINDCX FUTURES - the floored universe drops
-     small CoinDCX contracts, so the matrix re-reads the universe at floor 0
-     and merges in every CoinDCX future it missed (deduped on venue+sym).
-     hg-v1074 reads the RAW CoinDCX leg (hgDeskLoadCoinDCXAll), not the
-     deduped merged universe: xuMergeLegs tags one 'exchange' per base and
-     the higher-turnover venue wins, so a CoinDCX contract also listed on
-     Delta/Startrader was invisible to a ['coindcx'] filter on the merged
-     list. Every CoinDCX active_instruments contract now appears regardless.
-     The other venues keep their floor. */
-  try{
-    /* Raw CoinDCX only makes sense when a CoinDCX data source exists
-       (xuniverse.js). Guarding on xuCoinDCXRows also avoids a pointless
-       second universe fetch on the Binance-only fallback path. */
-    if (typeof W.xuCoinDCXRows === 'function' && typeof W.hgDeskLoadCoinDCXAll === 'function'){
-      var allPack = await W.hgDeskLoadCoinDCXAll({ force: false, minTurnover: 0, includeUnknown: true });
-      var cdcxAll = Array.isArray(allPack.items) ? allPack.items : [];
-      var seenU = {};
-      for (var ui = 0; ui < items.length; ui++) seenU[String(items[ui].exchange || '') + '|' + String(items[ui].sym || '')] = 1;
-      for (var uj = 0; uj < cdcxAll.length; uj++){
-        var uitem = cdcxAll[uj];
-        var uk = String(uitem.exchange || '') + '|' + String(uitem.sym || '');
-        if (!seenU[uk]){ items.push(uitem); seenU[uk] = 1; }
-      }
+  var level = null;
+  for (var a = 0; a < pivots.length; a++){
+    for (var b = a + 1; b < pivots.length; b++){
+      var mid = (pivots[a] + pivots[b]) / 2;
+      if (mid > 0 && Math.abs(pivots[a] - pivots[b]) / mid < 0.0015) level = mid;
     }
-  }catch(eUni){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('trendmx', eUni); }catch(eWu){} }
-  /* BATCH 1130 — the instrument list is the source of truth. Every active
-     CoinDCX USDT future is on the board, including contracts the merged
-     universe dropped because another venue won the base or the $5M floor
-     cut them. A symbol already queued is not added twice. */
-  try{
-    var cdcxSyms = await tmLoadCoinDcxContracts();
-    var seenSym = {};
-    for (var si = 0; si < items.length; si++) seenSym[String(items[si].sym || '')] = 1;
-    for (var ci2 = 0; ci2 < cdcxSyms.length; ci2++){
-      var csym = cdcxSyms[ci2];
-      if (seenSym[csym]) continue;
-      items.push({
-        sym: csym,
-        base: csym.replace(/^B-/, '').replace(/_USDT$/, ''),
-        exchange: 'coindcx',
-        turnoverUsd: null, mark: null, fundingPct: null, alsoOn: null
-      });
-      seenSym[csym] = 1;
-    }
-    uniPack.cdcxListed = cdcxSyms.length;
-  }catch(eCdx){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('trendmx', eCdx); }catch(eW2){} }
-  if (!items.length) throw new Error('universe empty' + (uniPack.note ? ' — ' + uniPack.note : ''));
-  var results = [], failed = 0;
-  for (var i = 0; i < items.length; i += CHUNK){
-    var chunk = items.slice(i, i + CHUNK);
-    if (typeof hooks.setProg === 'function') hooks.setProg((i + chunk.length) / items.length);
-    var rs = await Promise.all(chunk.map(function(item){
-      return fetchK(item, '4h', 260).then(function(r4){
-          if (r4 && r4.length >= 210) return r4;
-          return tmBinanceTwin(item, '4h', 260).then(function(twin){
-            if (twin && twin.length > ((r4 && r4.length) || 0)) return twin;
-            return (r4 && r4.length) ? r4 : [];
-          });
-        }).then(function(r4){
-          if (!r4 || !r4.length) return tmUnreadRow(item);
-          return Promise.all([
-            fetchK(item, '1d', 260).then(function(r1){ return (r1 && r1.length) ? r1 : tmBinanceTwin(item, '1d', 260); }),
-            fetchK(item, '1h', 120).then(function(r1h){ return (r1h && r1h.length) ? r1h : tmBinanceTwin(item, '1h', 120); })
-          ]).then(function(rr){
-            var r1 = rr[0], r1h = rr[1];
-            if (!r1 || !r1.length) return tmUnreadRow(item);
-            var ts = trendScore(r1, r4);
-            var row = {
-              sym: item.sym, base: item.base, exchange: item.exchange || 'binance', alsoOn: item.alsoOn,
-              xu: item, score: ts.score, comps: ts.comps, freshCross: ts.freshCross, adx: ts.adx,
-              rsi: ts.rsi,   /* hg-v1019: the momentum witness rides the row — chips/tier/collector read the stamp, never recompute */
-              volDiv: ts.volDiv, volConf: ts.volConf,   /* hg-v1020: the volume witness's stamps, same seam */
-              price: r1[r1.length - 1].c, rows4h: r4, rows1d: r1, rows1h: (r1h && r1h.length) ? r1h : null,
-              fundingPct: item.fundingPct, turnoverUsd: item.turnoverUsd, mark: item.mark
-            };
-            var dir = tmDirOf(row);
-            row.gate = dir ? trendmxGateEval(row, dir) : null;
-            return row;
-          });
-        }).catch(function(){ return null; });
-    }));
-    for (var j = 0; j < rs.length; j++){ if (rs[j]) results.push(rs[j]); else failed++; }
-    if (i + CHUNK < items.length) await sleepMs(CHUNK_SLEEP_MS);
   }
-  return {
-    rows: results, failed: failed, uniLen: uniPack.rawLen || items.length,
-    scanned: items.length, at: Date.now(), note: uniPack.note, source: uniPack.source,
-    venueCounts: uniPack.venueCounts
-  };
+  if (!(level > 0)) return false;
+  var recent = rows.slice(-6);
+  for (var r = 0; r < recent.length; r++){
+    if (dir === 'long' && recent[r].l < level && recent[r].c > level) return true;
+    if (dir === 'short' && recent[r].h > level && recent[r].c < level) return true;
+  }
+  return false;
 }
 
-
-async function tmProxyJson(url){
-  try{
-    var r = await fetch('/api/proxy?url=' + encodeURIComponent(url));
-    if (!r || !r.ok) return null;
-    return await r.json();
-  }catch(e){ return null; }
-}
-async function tmProxyText(url){
-  try{
-    var r = await fetch('/api/proxy?url=' + encodeURIComponent(url));
-    if (!r || !r.ok) return null;
-    return await r.text();
-  }catch(e){ return null; }
-}
-function tmYahooDir(j){
-  try{
-    var q = j.chart.result[0].indicators.quote[0].close.filter(function(v){ return isFinite(v); });
-    if (q.length < 2) return null;
-    return q[q.length - 1] > q[q.length - 2];
-  }catch(e){ return null; }
-}
-function tmCapChange(j){
-  var caps = j && j.market_caps;
-  if (!caps || caps.length < 2) return null;
-  var a = caps[0][1], b = caps[caps.length - 1][1];
-  if (!(a > 0) || !(b > 0)) return null;
-  return (b - a) / a;
-}
-function tmSessionVwap(rows1h){
-  if (!rows1h || !rows1h.length) return NaN;
-  var day = Math.floor(Date.now() / 1000 / 86400);
-  var pv = 0, vv = 0, n = 0;
-  for (var i = 0; i < rows1h.length; i++){
-    var r = rows1h[i];
-    if (!r) continue;
-    var open = tmBarOpenSec(r);
-    if (!isFinite(open) || Math.floor(open / 86400) !== day) continue;
-    var v = r.v > 0 ? r.v : 0;
-    if (!(v > 0)) continue;
-    pv += ((r.h + r.l + r.c) / 3) * v;
-    vv += v;
-    n++;
-  }
-  return (n >= 2 && vv > 0) ? pv / vv : NaN;
-}
 function tmAtLocation(rows4, rowsD, dir){
   if (!rows4 || rows4.length < 20 || !rowsD || rowsD.length < 8) return false;
   var prev = rowsD[rowsD.length - 1];
@@ -163,8 +41,42 @@ function tmAtLocation(rows4, rowsD, dir){
       if (dir === 'short' && candle.c > candle.o && last.h >= candle.l && last.c <= candle.h) ob = true;
     }
   }
-  if (dir === 'long') return sweepLow || fvg || ob;
-  return sweepHigh || fvg || ob;
+  if (dir === 'long') return sweepLow || fvg || ob || tmEqualSweep(rows4, dir);
+  return sweepHigh || fvg || ob || tmEqualSweep(rows4, dir);
+}
+function tmSupplyDemand(rows){
+  if (!rows || rows.length < 30) return null;
+  var atr = tmAtrLast(rows);
+  if (!(atr > 0)) return null;
+  var demand = null, supply = null, k;
+  for (k = 2; k < rows.length; k++){
+    var impulse = rows[k], base = rows[k - 1];
+    var move = impulse.c - impulse.o;
+    if (move > 1.2 * atr && base.c < base.o){
+      var broken = false, n;
+      for (n = k + 1; n < rows.length; n++) if (rows[n].c < base.l) broken = true;
+      if (!broken) demand = { lo: base.l, hi: base.h };
+    }
+    if (move < -1.2 * atr && base.c > base.o){
+      var brokenS = false, m;
+      for (m = k + 1; m < rows.length; m++) if (rows[m].c > base.h) brokenS = true;
+      if (!brokenS) supply = { lo: base.l, hi: base.h };
+    }
+  }
+  if (!demand && !supply) return null;
+  return { demand: demand, supply: supply };
+}
+function tmNodeVeto(prof, px, dir, atr, vz){
+  if (!prof || !prof.hvn || !prof.hvn.length) return 'HVN/LVN unread';
+  var i, gap;
+  for (i = 0; i < prof.lvn.length; i++){
+    if (atr > 0 && Math.abs(px - prof.lvn[i]) <= 0.35 * atr && !(vz > 0.5)) return 'inside a low-volume node';
+  }
+  for (i = 0; i < prof.hvn.length; i++){
+    gap = (dir === 'long') ? (prof.hvn[i] - px) : (px - prof.hvn[i]);
+    if (atr > 0 && gap > 0 && gap <= 0.4 * atr) return dir === 'long' ? 'HVN overhead' : 'HVN underfoot';
+  }
+  return null;
 }
 function tm15Confirm(rows, dir){
   if (!rows || rows.length < 30 || typeof hgStructure !== 'function') return false;
@@ -182,14 +94,46 @@ function tm15Confirm(rows, dir){
     if (dir === 'long' && rows[i].l < lo && rows[i].c > lo) sweep = true;
     if (dir === 'short' && rows[i].h > hi && rows[i].c < hi) sweep = true;
   }
-  return sweep && shifted;
+  if (!(sweep && shifted)) return false;
+  var shiftI = -1, level = null;
+  if (hs.lastCHoCH && hs.lastCHoCH.dir === want && (n - hs.lastCHoCH.i) <= 12){ shiftI = hs.lastCHoCH.i; level = hs.lastCHoCH.level; }
+  if (hs.lastBOS && hs.lastBOS.dir === want && (n - hs.lastBOS.i) <= 12 && hs.lastBOS.i >= shiftI){ shiftI = hs.lastBOS.i; level = hs.lastBOS.level; }
+  if (!(level > 0) || shiftI < 0) return false;
+  for (var j = shiftI; j < rows.length; j++){
+    if (dir === 'long' && rows[j].l <= level && rows[j].c > level) return true;
+    if (dir === 'short' && rows[j].h >= level && rows[j].c < level) return true;
+  }
+  return false;
 }
-function tmNewsVeto(text, base){
-  if (!text || !base) return false;
-  var hay = String(text).toLowerCase();
-  var name = String(base).toLowerCase();
-  if (hay.indexOf(name) < 0) return false;
-  return /hack|exploit|unlock|delist|lawsuit|insolven|halt|sec charge|bank run/.test(hay);
+function tmHeadlineBook(text){
+  var items = String(text || '').split(/<item\b/i).slice(1);
+  var book = { marketHack: false, marketReg: false, etfOutflow: false, etfInflow: false, items: [] };
+  var i;
+  for (i = 0; i < items.length && i < 40; i++){
+    var title = items[i].replace(/<[^>]+>/g, ' ').toLowerCase();
+    book.items.push(title);
+    if (/etf outflow|outflows from .{0,20}etf|spot etf.{0,20}outflow/.test(title)) book.etfOutflow = true;
+    if (/etf inflow|inflows into .{0,20}etf|spot etf.{0,20}inflow/.test(title)) book.etfInflow = true;
+    if (/exchange hack|funds drained|stablecoin depeg|depegs/.test(title)) book.marketHack = true;
+    if (/sec charges|sec sues|crypto ban|crackdown|doj charges/.test(title)) book.marketReg = true;
+  }
+  return book.items.length ? book : null;
+}
+function tmCoinHeadline(book, base){
+  var hit = { hack: false, delist: false, listing: false, lawsuit: false };
+  if (!book || !book.items) return hit;
+  var name = String(base || '').toLowerCase();
+  if (name.length < 2) return hit;
+  var i;
+  for (i = 0; i < book.items.length; i++){
+    var title = book.items[i];
+    if (title.indexOf(name) < 0) continue;
+    if (/hack|exploit|drained/.test(title)) hit.hack = true;
+    if (/delist/.test(title)) hit.delist = true;
+    if (/will list|lists |listing /.test(title)) hit.listing = true;
+    if (/lawsuit|sec charge|charged/.test(title)) hit.lawsuit = true;
+  }
+  return hit;
 }
 async function trendmxLoadContext(rows){
   var ctx = { macroOk: false, calendarOk: false, domOk: false, ethOk: false, stableOk: false, newsOk: false, riskOff: false, riskOn: false, eventBlock: false, btcDomRising: false, ethStructure: null, stableFalling: false, headlines: '' };
@@ -199,7 +143,8 @@ async function trendmxLoadContext(rows){
     ['us2y', 'https://query1.finance.yahoo.com/v8/finance/chart/2YY%3DF?interval=1d&range=5d'],
     ['nq', 'https://query1.finance.yahoo.com/v8/finance/chart/NQ%3DF?interval=1d&range=5d'],
     ['spx', 'https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?interval=1d&range=5d'],
-    ['vix', 'https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?interval=1d&range=5d']
+    ['vix', 'https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?interval=1d&range=5d'],
+    ['gold', 'https://query1.finance.yahoo.com/v8/finance/chart/GC%3DF?interval=1d&range=5d']
   ];
   var dirs = {};
   await Promise.all(yahoo.map(function(pair){
@@ -215,10 +160,23 @@ async function trendmxLoadContext(rows){
     if (dirs.nq === false) against++; if (dirs.nq === true) withRisk++;
     if (dirs.spx === false) against++; if (dirs.spx === true) withRisk++;
     if (dirs.vix === true) against++; if (dirs.vix === false) withRisk++;
+    if (dirs.gold === true) against++; if (dirs.gold === false) withRisk++;
     ctx.riskOff = against >= 3;
     ctx.riskOn = withRisk >= 3;
   }
-  var cal = await tmProxyJson('https://nfs.faireconomy.media/ff_calendar_thisweek.json');
+  var pack = await Promise.all([
+    tmProxyJson('https://nfs.faireconomy.media/ff_calendar_thisweek.json'),
+    tmProxyJson('https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=2'),
+    tmProxyJson('https://api.coingecko.com/api/v3/coins/ethereum/market_chart?vs_currency=usd&days=2'),
+    tmProxyJson('https://stablecoins.llama.fi/stablecoincharts/all'),
+    tmProxyText('https://cointelegraph.com/rss').then(function(t){ return t || tmProxyText('https://www.coindesk.com/arc/outboundfeeds/rss/'); }),
+    tmProxyJson('https://api.coingecko.com/api/v3/global/market_cap_chart?days=2'),
+    tmProxyJson('https://api.llama.fi/emissions'),
+    tmProxyJson('https://query1.finance.yahoo.com/v8/finance/chart/IBIT?interval=1d&range=5d'),
+    tmProxyJson('https://query1.finance.yahoo.com/v8/finance/chart/FBTC?interval=1d&range=5d'),
+    tmProxyJson('https://api.alternative.me/fng/?limit=1')
+  ]);
+  var cal = pack[0];
   if (Array.isArray(cal)){
     ctx.calendarOk = true;
     var now = Date.now();
@@ -232,31 +190,89 @@ async function trendmxLoadContext(rows){
       if (when - now <= 2 * 60 * 60 * 1000 && now - when <= 30 * 60 * 1000) ctx.eventBlock = true;
     }
   }
-  var btcJ = await tmProxyJson('https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=2');
-  var ethJ = await tmProxyJson('https://api.coingecko.com/api/v3/coins/ethereum/market_chart?vs_currency=usd&days=2');
+  var btcJ = pack[1], ethJ = pack[2];
   var btcChg = tmCapChange(btcJ), ethChg = tmCapChange(ethJ);
   if (btcChg != null && ethChg != null){
     ctx.domOk = true;
     ctx.btcDomRising = btcChg > 0.005 && ethChg < btcChg - 0.01;
   }
-  if (Array.isArray(rows)){
-    for (var ei = 0; ei < rows.length; ei++){
-      if (tmBaseOf(rows[ei]) !== 'ETH') continue;
-      try{ ctx.ethStructure = tmStructureDir(rows[ei].rows4h); }catch(eE){ ctx.ethStructure = null; }
-      if (ctx.ethStructure) break;
-    }
-  }
-  ctx.ethOk = ctx.ethStructure === 'up' || ctx.ethStructure === 'down';
-  var stables = await tmProxyJson('https://stablecoins.llama.fi/stablecoincharts/all');
+  ctx.ethOk = false;
+  var stables = pack[3];
   if (Array.isArray(stables) && stables.length >= 2){
     var aS = stables[stables.length - 2], bS = stables[stables.length - 1];
     var aV = aS && aS.totalCirculatingUSD && +aS.totalCirculatingUSD.peggedUSD;
     var bV = bS && bS.totalCirculatingUSD && +bS.totalCirculatingUSD.peggedUSD;
     if (aV > 0 && bV > 0){ ctx.stableOk = true; ctx.stableFalling = bV < aV * 0.997; }
   }
-  var news = await tmProxyText('https://cointelegraph.com/rss');
-  if (!news) news = await tmProxyText('https://www.coindesk.com/arc/outboundfeeds/rss/');
-  if (news && news.length > 80){ ctx.newsOk = true; ctx.headlines = news; }
+  var news = pack[4];
+  if (news && news.length > 80){
+    ctx.newsOk = true;
+    ctx.headlines = news;
+    ctx.newsBook = tmHeadlineBook(news);
+  }
+  var ibitChg = tmYahooChange(pack[7]);
+  var fbtcChg = tmYahooChange(pack[8]);
+  ctx.etfOk = ibitChg != null && fbtcChg != null;
+  ctx.etfFalling = ctx.etfOk && ibitChg < -0.02 && fbtcChg < -0.02;
+  ctx.fngOk = false;
+  ctx.fng = null;
+  try {
+    var fngJ = pack[9];
+    var fngV = fngJ && fngJ.data && fngJ.data[0] && +fngJ.data[0].value;
+    if (isFinite(fngV)){ ctx.fngOk = true; ctx.fng = fngV; }
+  } catch (eFng) {}
+  ctx.totalOk = false;
+  ctx.totalFalling = false;
+  ctx.altsFalling = false;
+  ctx.total2Ok = false;
+  ctx.total2Falling = false;
+  ctx.total3Ok = false;
+  ctx.total3Falling = false;
+  try {
+    var tot = pack[5];
+    var caps = tot && (tot.market_cap || tot.market_caps);
+    if (caps && caps.length >= 2 && caps[0][1] > 0){
+      var tchg = (caps[caps.length - 1][1] - caps[0][1]) / caps[0][1];
+      ctx.totalOk = true;
+      ctx.totalFalling = tchg < -0.01;
+      if (btcChg != null && ethChg != null) ctx.altsFalling = (tchg - btcChg) < -0.01 && ethChg < 0;
+      var totEnds = tmSeriesEnds(tot, 'market_cap') || tmSeriesEnds(tot, 'market_caps');
+      var btcEnds = tmSeriesEnds(btcJ, 'market_caps');
+      var ethEnds = tmSeriesEnds(ethJ, 'market_caps');
+      var t2 = tmSpreadChange(totEnds, [btcEnds]);
+      var t3 = tmSpreadChange(totEnds, [btcEnds, ethEnds]);
+      ctx.total2Ok = t2 != null;
+      ctx.total2Falling = t2 != null && t2 < -0.01;
+      ctx.total3Ok = t3 != null;
+      ctx.total3Falling = t3 != null && t3 < -0.01;
+    }
+  } catch (eTot) {}
+  if (!ctx.totalOk && btcChg != null && ethChg != null){
+    ctx.totalOk = true;
+    ctx.totalFalling = btcChg < 0 && ethChg < 0;
+    ctx.altsFalling = ethChg < btcChg - 0.01;
+  }
+  ctx.unlockOk = false;
+  ctx.unlockBases = {};
+  try {
+    var em = pack[6];
+    var list = Array.isArray(em) ? em : (em && em.data);
+    if (Array.isArray(list)){
+      ctx.unlockOk = true;
+      var soon = Date.now() + 48 * 60 * 60 * 1000;
+      for (var ui = 0; ui < list.length; ui++){
+        var item = list[ui] || {};
+        var token = String(item.token || item.symbol || '').toUpperCase();
+        var events = item.events || item.unlockEvents || [];
+        if (!token || !events || !events.length) continue;
+        for (var ev = 0; ev < events.length; ev++){
+          var ts = +((events[ev] && (events[ev].timestamp || events[ev].unlockDate)) || 0);
+          if (ts > 0 && ts < 1e12) ts *= 1000;
+          if (ts > Date.now() && ts < soon) ctx.unlockBases[token] = true;
+        }
+      }
+    }
+  } catch (eUn) {}
   return ctx;
 }
 async function tmOiRead(row){
@@ -304,38 +320,120 @@ async function tmFetch15(row){
   }catch(e2){}
   return null;
 }
+
+async function tmLiqRead(row){
+  var base = tmBaseOf(row);
+  var j = await tmProxyJson('https://www.okx.com/api/v5/public/liquidation-orders?instType=SWAP&uly=' + encodeURIComponent(base + '-USDT') + '&state=filled&limit=100');
+  var details = j && j.data && j.data[0] && j.data[0].details;
+  if (!Array.isArray(details)) return null;
+  var now = Date.now(), longLiq = 0, shortLiq = 0, buckets = {}, i;
+  for (i = 0; i < details.length; i++){
+    var d = details[i] || {};
+    var ts = +d.ts || +d.time;
+    if (!(ts > 0) || now - ts > 6 * 60 * 60 * 1000) continue;
+    var sz = +d.sz || 0;
+    var side = String(d.posSide || d.side || '').toLowerCase();
+    var pxL = +d.bkPx || +d.px || +d.price;
+    if (side === 'long' || side === 'sell') longLiq += sz;
+    else if (side === 'short' || side === 'buy') shortLiq += sz;
+    if (row && row.price > 0 && pxL > 0 && sz > 0){
+      var key = Math.round(pxL / (row.price * 0.005));
+      if (!buckets[key]) buckets[key] = { price: key * row.price * 0.005, long: 0, short: 0 };
+      if (side === 'long' || side === 'sell') buckets[key].long += sz;
+      else buckets[key].short += sz;
+    }
+  }
+  var clusters = [];
+  for (var key in buckets) clusters.push(buckets[key]);
+  clusters.sort(function(x, y){ return (y.long + y.short) - (x.long + x.short); });
+  return { longLiq: longLiq, shortLiq: shortLiq, clusters: clusters.slice(0, 8) };
+}
+async function tm5mVolumeOk(row, dir){
+  var got = null;
+  try {
+    if (typeof W.binanceKlines === 'function') got = await W.binanceKlines(tmBaseOf(row) + 'USDT', '5m', 40);
+  } catch (e) { got = null; }
+  var rows = tmClosedRows(got, 300);
+  if (!rows || rows.length < 15) return null;
+  var last = rows[rows.length - 1], avg = 0, i;
+  for (i = rows.length - 11; i < rows.length - 1; i++) avg += rows[i].v || 0;
+  avg /= 10;
+  if (!(avg > 0)) return null;
+  if (dir === 'long') return last.c >= last.o && last.v > avg;
+  return last.c <= last.o && last.v > avg;
+}
+async function tmMicroOk(row, dir){
+  async function one(tf, n, sec){
+    if (typeof W.binanceKlines !== 'function') return null;
+    try {
+      var got = await W.binanceKlines(tmBaseOf(row) + 'USDT', tf, n);
+      var rows = tmClosedRows(got, sec);
+      if (!rows || rows.length < 30 || typeof hgStructure !== 'function') return null;
+      var hs = hgStructure(rows);
+      if (!hs) return null;
+      if (hs.trend === (dir === 'long' ? 'down' : 'up')) return false;
+      var last = rows[rows.length - 1];
+      if (dir === 'long' && last.c < last.o) return false;
+      if (dir === 'short' && last.c > last.o) return false;
+      return true;
+    } catch (e) { return null; }
+  }
+  var both = await Promise.all([one('3m', 80, 180), one('1m', 60, 60)]);
+  return { m3: both[0], m1: both[1] };
+}
+async function tmTradingView(row){
+  var base = tmBaseOf(row);
+  if (!base) return null;
+  async function ask(ticker){
+    var r = await fetch('/api/tv-scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbols: { tickers: [ticker] } })
+    });
+    if (!r || !r.ok) return null;
+    var j = await r.json();
+    var d = j && j.data && j.data[0] && j.data[0].d;
+    if (!d || !isFinite(+d[0])) return null;
+    return { recommend: +d[0], rsi: +d[1] };
+  }
+  try {
+    return await ask('BINANCE:' + base + 'USDT.P') || await ask('BINANCE:' + base + 'USDT');
+  } catch (e) { return null; }
+}
+async function tmTopTrader(row){
+  if (typeof W.binanceTopTraders !== 'function') return null;
+  try {
+    var ls = await W.binanceTopTraders(tmBaseOf(row) + 'USDT', '4h', 1);
+    if (!ls || !ls.latest || !isFinite(+ls.latest.ratio)) return null;
+    return +ls.latest.ratio;
+  } catch (e) { return null; }
+}
+async function tmCrowdRatio(row){
+  if (typeof W.binanceLongShort !== 'function') return null;
+  try {
+    var ls = await W.binanceLongShort(tmBaseOf(row) + 'USDT', '4h', 2);
+    if (!ls || !ls.latest || !isFinite(+ls.latest.ratio)) return null;
+    return +ls.latest.ratio;
+  } catch (e) { return null; }
+}
+
 async function trendmxFormOne(ticket, row, ctx){
-  var bad = [];
+  var hard = [];
+  var votes = [];
+  function vote(name, state){
+    votes.push({ name: name, v: state });
+  }
   var dir = ticket.dir;
   var rows4 = tmClosedRows(row && row.rows4h, 14400);
   var rows1 = tmClosedRows(row && row.rows1h, 3600);
   var rowsD = tmClosedRows(row && row.rows1d, 86400);
   if (!row || !rows4 || rows4.length < 50) return ['4h history unread'];
+  var px = rows4[rows4.length - 1].c;
   var hs = (typeof hgStructure === 'function') ? hgStructure(rows4) : null;
-  if (!hs) bad.push('structure unread');
+  var want = dir === 'long' ? 'up' : 'down';
+  if (!hs) hard.push('structure unread');
   else {
-    var want = dir === 'long' ? 'up' : 'down';
-    if (hs.trend !== want) bad.push('4h structure ' + (hs.trend || 'range'));
+    if (hs.trend !== want) hard.push('4h structure ' + (hs.trend || 'range'));
     var n = rows4.length - 1;
-    if (hs.lastCHoCH && hs.lastCHoCH.dir && hs.lastCHoCH.dir !== want && (n - hs.lastCHoCH.i) <= 20) bad.push('CHOCH against');
+    if (hs.lastCHoCH && hs.lastCHoCH.dir && hs.lastCHoCH.dir !== want && (n - hs.lastCHoCH.i) <= 20) hard.push('CHOCH against');
     var swings = hs.swings || [];
-    var lastHigh = null, lastLow = null;
-    for (var s = 0; s < swings.length; s++){
-      if (swings[s].type === 'HH' || swings[s].type === 'LH') lastHigh = swings[s];
-      if (swings[s].type === 'HL' || swings[s].type === 'LL') lastLow = swings[s];
-    }
-    if (dir === 'long' && (!(lastHigh && lastHigh.type === 'HH') || !(lastLow && lastLow.type === 'HL'))) bad.push('not HH/HL');
-    if (dir === 'short' && (!(lastHigh && lastHigh.type === 'LH') || !(lastLow && lastLow.type === 'LL'))) bad.push('not LH/LL');
-  }
-  var closes = rows4.map(function(r){ return r.c; });
-  var px = closes[closes.length - 1];
-  var e20 = tmEmaLast(closes, 20), e50 = tmEmaLast(closes, 50), e200 = tmEmaLast(closes, 200);
-  if (dir === 'long' && !(px > e20 && e20 > e50 && px > e200)) bad.push('EMA 20/50/200 against');
-  if (dir === 'short' && !(px < e20 && e20 < e50 && px < e200)) bad.push('EMA 20/50/200 against');
-  var vwap = tmSessionVwap(row.rows1h);
-  if (!isFinite(vwap)) bad.push('VWAP unread');
-  else if (dir === 'long' && !(px > vwap)) bad.push('below VWAP');
-  else if (dir === 'short' && !(px < vwap)) bad.push('above VWAP');
-  var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
-  if (!isFinite(vz)) bad.push('volume unread');
-  else if (vz < 0) bad.push('volume declining');

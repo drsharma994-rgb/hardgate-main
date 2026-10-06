@@ -186,12 +186,16 @@ assert(iNews < iOnchain && iOnchain < iRotation && iRotation < iGoldspot,
 /* ---------------- 1b. nav wiring: group membership ---------------- */
 const groupTabs = gid => run("HG_NAV_GROUPS.filter(function(g){ return g.id===" + JSON.stringify(gid) + "; })[0].tabs.join(',')");
 /* v658 renamed the LOG slot (SETUP LOG) and moved signallog into COMMAND
-   (SIGNAL LOG nav clash fix, documented at index.html HG_NAV_GROUPS). */
-assert(groupTabs('overview') === 'brain,book,trade,log,signallog,news,bias,regime,trendmx,rotation,execute,startrader',
+   (SIGNAL LOG nav clash fix, documented at index.html HG_NAV_GROUPS).
+   Later ship moves kept the shape: setupconfirm joined COMMAND (it is the
+   confirmation workflow, not a scan), and ganeshgold (the 17-step SMC/ICT
+   gold desk) joined GOLD after the scalp scanners. The pins below read
+   the shipped composition so they cannot drift silently again. */
+assert(groupTabs('overview') === 'brain,book,trade,log,setupconfirm,signallog,news,bias,regime,trendmx,rotation,execute,startrader',
   'COMMAND group: workflow then context (incl. signallog since v658)');
-assert(groupTabs('crypto') === 'combi,omnibtc,omnipresent,omniroute,dexscreener,setupconfirm,best,swing,scalp,edge,smart,squeeze,reversalsniper,smc,ob,trap,div,coil,apex,oiflow,liqs,onchain,chartvision,carry,venueprem,termbasis,cryptoultra,cryptoscan,cryptoverse,ninetypercent',
+assert(groupTabs('crypto') === 'combi,omnibtc,omnipresent,omniroute,dexscreener,best,swing,scalp,edge,smart,squeeze,reversalsniper,smc,ob,trap,div,coil,apex,oiflow,liqs,onchain,chartvision,carry,venueprem,termbasis,cryptoultra,cryptoscan,cryptoverse,ninetypercent',
   'CRYPTO group: BTC desk first, then anticipation, ranked scans → structure → flow → funding → ultra → scan');
-assert(groupTabs('gold') === 'super-gold,omnigold,omnigold1,milligold,optigold,newgold,golddirection,goldswing,goldscalp,goldultra,gold,goldpro,goldspot,goldcoint,goldpine,tauric,80percent',
+assert(groupTabs('gold') === 'super-gold,omnigold,omnigold1,milligold,optigold,newgold,golddirection,goldswing,goldscalp,ganeshgold,goldultra,gold,goldpro,goldspot,goldcoint,goldpine,tauric,80percent',
   'GOLD group: super desk first, then scanners (signallog moved to COMMAND at v658)');
 assert(run("HG_TAB_GROUP.rotation") === 'overview' && run("HG_TAB_GROUP.onchain") === 'crypto'
     && run("HG_TAB_GROUP.goldspot") === 'gold',

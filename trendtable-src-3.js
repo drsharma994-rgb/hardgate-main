@@ -1,144 +1,3 @@
-    if (!tmSmcOn() || !Array.isArray(rows) || !rows.length) return;
-    var i, r, byRows = {};
-    for (i = 0; i < rows.length; i++){ if (rows[i] && rows[i].sym) byRows[rows[i].sym] = rows[i].rows4h; }
-    /* hg-v1014: golden AND death tickets share the one capped envelope —
-       the cap is a compute budget, not a per-desk allowance */
-    var tickets = (golden || []).concat(death || []);
-    for (i = 0; i < tickets.length && i < TM_SMC_MAX; i++){
-      if (tickets[i]) tmSmcMark(tickets[i], byRows[tickets[i].sym]);
-    }
-    var cands = [];
-    for (i = 0; i < rows.length; i++){
-      r = rows[i];
-      if (!r || r.smc || !r.rows4h || !r.rows4h.length) continue;
-      if (r.gate && r.gate.veto) continue;
-      if (!tmDirOf(r)) continue;
-      if (!(r.gate && r.gate.clean7) && !trendmxConviction(r)) continue;
-      cands.push(r);
-    }
-    /* the limit board's own rank, so the capped slice is the slice this desk
-       promotes first rather than an arbitrary universe order */
-    cands.sort(function(a, b){
-      var ra = ((a.gate && a.gate.clean7) ? 1000 : 0) + Math.abs(a.score) * 10 + ((a.gate && a.gate.gatesPassed) || 0);
-      var rb = ((b.gate && b.gate.clean7) ? 1000 : 0) + Math.abs(b.score) * 10 + ((b.gate && b.gate.gatesPassed) || 0);
-      return rb - ra;
-    });
-    for (i = 0; i < cands.length && i < TM_SMC_MAX; i++){
-      r = cands[i];
-      var dir = tmDirOf(r);
-      var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
-      if (!tmValidSetup(plan)) continue;
-      var syn = { sym: r.sym, dir: dir, entry: plan.entry, stop: plan.stop, t1: plan.t1 };
-      tmSmcMark(syn, r.rows4h);
-      if (syn.smc) r.smc = syn.smc;
-    }
-  }catch(e){}
-}
-
-/* ---------------- hg-v1012: EVIDENCE LAYER — real taker flow ----------------
-   The composite is five reads of the same closes (1D EMA200, the 50/200
-   cross, the 4H cascade, the cloud, the ADX point): five ways to agree
-   with yourself. This pass adds the read that CANNOT be derived from
-   those closes — which side is aggressing the tape. A TREND MATRIX row is
-   a multi-day swing claim, and a swing minted into five days of net
-   aggressive selling (for a long) is a claim against the crowd that is
-   actually hitting the market.
-
-   REAL Binance taker long/short flow only, read on the row's own
-   hgDeskBinanceSym twin through hgOmniCvd (omniroute.js) over the last
-   TM_FLOW_LOOK 4h windows. The candle-approximated stand-in never speaks
-   here — the hg-v1009 rule: it derives from the same closes the composite
-   already read, so it is not independent evidence (the caller hands the
-   taker series straight through; hgOmniCvd only returns source 'taker'
-   when enough real windows were used).
-
-   Flow AGAINST the row's own majority: the row is HELD OFF — capped at
-   NEAR (trendmxRowTier), excluded from the LIMIT BOARD and from the
-   forward record the board writes (the ledger measures what the desk
-   judged tradeable WITH the evidence in hand), and the chip names why.
-   Flow WITH: a chip, never a point — the composite's five points stay
-   exactly what they were. Fewer than TM_FLOW_MIN_WIN readable windows
-   (hg-v1009's floor), a junk ratio series, a missing Binance twin or a
-   failed fetch: UNREAD, and what cannot be read demotes nothing (hg-v700).
-
-   ONE PASS PER SCAN over the promoted slice only — the same candidates
-   the SMC pass picks (a direction, no gate veto, clean7 or conviction),
-   the same rank, capped at the same TM_SMC_MAX-sized slice — paced in
-   CHUNK-sized chunks like the universe fetch itself. The matrix holds the
-   whole universe; fetching flow for every row would be a hundred calls
-   for rows the desk never promotes. Rows are stamped row.flow =
-   { verdict: 'with' | 'against' | 'unreadable', delta, bars, divergence,
-   sym, why? } and every render path READS the stamp — nothing recomputes
-   in a paint loop. The look, the floor and the cap are stated PRIORS, not
-   measurements; the forward record's new reads.takerFlowWith mark is how
-   the layer earns a measured one. PURE apart from the two readers it
-   calls; it reports the counts so the scan line and the tests read the
-   same object the scan acted on. */
-var TM_FLOW_LOOK = 30;      /* hgOmniCvd's own default look — five days of 4h flow, the horizon a swing row is judged on */
-var TM_FLOW_MIN_WIN = 10;   /* hg-v1009's floor: fewer readable windows than this is UNREAD, never a verdict */
-var TM_FLOW_MAX = 24;       /* the SMC pass's own cap — flow is fetched for the slice the desk promotes, never the whole universe */
-
-function trendmxFlowScan(rows){
-  var out = { with: 0, against: 0, unreadable: 0, scanned: 0, read: 'unavailable' };
-  var cvdFn = (typeof W.hgOmniCvd === 'function') ? W.hgOmniCvd : null;
-  var tkFn = (typeof W.binanceTakerRatio === 'function') ? W.binanceTakerRatio : null;
-  var symFn = (typeof W.hgDeskBinanceSym === 'function') ? W.hgDeskBinanceSym : null;
-  if (!cvdFn || !tkFn || !symFn || !Array.isArray(rows) || !rows.length) return Promise.resolve(out);
-  var cands = [], i;
-  for (i = 0; i < rows.length; i++){
-    var r = rows[i];
-    if (!r || !r.rows4h || !r.rows4h.length) continue;
-    if (r.gate && r.gate.veto) continue;
-    if (!tmDirOf(r)) continue;
-    if (!(r.gate && r.gate.clean7) && !trendmxConviction(r)) continue;
-    cands.push(r);
-  }
-  if (!cands.length) return Promise.resolve(out);
-  /* the limit board's own rank, so the capped slice is the slice this desk
-     promotes first rather than an arbitrary universe order — the SMC
-     pass's own ordering, one rank for both reads */
-  cands.sort(function(a, b){
-    var ra = ((a.gate && a.gate.clean7) ? 1000 : 0) + Math.abs(a.score) * 10 + ((a.gate && a.gate.gatesPassed) || 0);
-    var rb = ((b.gate && b.gate.clean7) ? 1000 : 0) + Math.abs(b.score) * 10 + ((b.gate && b.gate.gatesPassed) || 0);
-    return rb - ra;
-  });
-  cands = cands.slice(0, TM_FLOW_MAX);
-  out.read = 'taker';
-  var idx = 0;
-  function oneChunk(){
-    var chunk = cands.slice(idx, idx + CHUNK);
-    idx += CHUNK;
-    return Promise.all(chunk.map(function(r){
-      var dir = tmDirOf(r);
-      out.scanned++;
-      return Promise.resolve().then(function(){
-        var bSym = symFn(r);
-        if (!bSym){ r.flow = { verdict: 'unreadable', why: 'no Binance twin' }; out.unreadable++; return; }
-        return tkFn(bSym, '4h', 120).then(function(tk){
-          var series = (tk && Array.isArray(tk.series)) ? tk.series : null;
-          if (!series || !series.length){
-            r.flow = { verdict: 'unreadable', why: 'no real flow', sym: bSym }; out.unreadable++; return;
-          }
-          /* no signal-bar slice: a matrix row is minted by THIS scan, so the
-             last closed 4h bar IS its judging bar — the windows that exist
-             are the windows that had printed */
-          var cv = cvdFn(r.rows4h, TM_FLOW_LOOK, { series: series });
-          if (!cv || cv.source !== 'taker' || !isFinite(cv.delta) || cv.bars < TM_FLOW_MIN_WIN || cv.delta === 0){
-            r.flow = { verdict: 'unreadable', why: 'no real-flow verdict', sym: bSym }; out.unreadable++; return;
-          }
-          var withDir = (dir === 'long') ? (cv.delta > 0) : (cv.delta < 0);
-          r.flow = { verdict: withDir ? 'with' : 'against',
-                     delta: Math.round(cv.delta * 100) / 100, bars: cv.bars,
-                     divergence: cv.divergence || null, sym: bSym };
-          if (withDir) out.with++; else out.against++;
-        });
-      }).catch(function(){
-        try{ r.flow = { verdict: 'unreadable', why: 'fetch failed' }; out.unreadable++; }catch(e2){}
-      });
-    })).then(function(){
-      if (idx < cands.length) return sleepMs(CHUNK_SLEEP_MS).then(oneChunk);
-    });
-  }
   return oneChunk().then(function(){ return out; }, function(){ return out; });
 }
 
@@ -314,3 +173,263 @@ async function trendmxScanCore(hooks){
           : (typeof it === 'string' ? it : null);
         return bSym ? W.binanceKlines(bSym, tf, n) : Promise.resolve([]);
       };
+  if (typeof W.hgDeskLoadUniverse !== 'function'
+      && (typeof W.binancePerpUniverse !== 'function' || typeof W.binanceKlines !== 'function')){
+    throw new Error('missing universe layer (hgDeskLoadUniverse or binancePerpUniverse)');
+  }
+  var cdcxAllP = (typeof W.xuCoinDCXRows === 'function' && typeof W.hgDeskLoadCoinDCXAll === 'function')
+    ? W.hgDeskLoadCoinDCXAll({ force: false, minTurnover: 0, includeUnknown: true }).catch(function(){ return null; })
+    : Promise.resolve(null);
+  var cdcxSymP = tmLoadCoinDcxContracts().catch(function(){ return []; });
+  var uniPack = await W.hgDeskLoadUniverse({ force: true, minTurnover: TURNOVER_FLOOR });
+  var allPackEarly = await cdcxAllP;
+  var cdcxSymsEarly = await cdcxSymP;
+  var items = uniPack.items || [];
+  /* hg-v1048/hg-v1074: ALL COINDCX FUTURES - the floored universe drops
+     small CoinDCX contracts, so the matrix re-reads the universe at floor 0
+     and merges in every CoinDCX future it missed (deduped on venue+sym).
+     hg-v1074 reads the RAW CoinDCX leg (hgDeskLoadCoinDCXAll), not the
+     deduped merged universe: xuMergeLegs tags one 'exchange' per base and
+     the higher-turnover venue wins, so a CoinDCX contract also listed on
+     Delta/Startrader was invisible to a ['coindcx'] filter on the merged
+     list. Every CoinDCX active_instruments contract now appears regardless.
+     The other venues keep their floor. */
+  try{
+    /* Raw CoinDCX only makes sense when a CoinDCX data source exists
+       (xuniverse.js). Guarding on xuCoinDCXRows also avoids a pointless
+       second universe fetch on the Binance-only fallback path. */
+    if (allPackEarly){
+      var allPack = allPackEarly;
+      var cdcxAll = Array.isArray(allPack.items) ? allPack.items : [];
+      var seenU = {};
+      for (var ui = 0; ui < items.length; ui++) seenU[String(items[ui].exchange || '') + '|' + String(items[ui].sym || '')] = 1;
+      for (var uj = 0; uj < cdcxAll.length; uj++){
+        var uitem = cdcxAll[uj];
+        var uk = String(uitem.exchange || '') + '|' + String(uitem.sym || '');
+        if (!seenU[uk]){ items.push(uitem); seenU[uk] = 1; }
+      }
+    }
+  }catch(eUni){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('trendmx', eUni); }catch(eWu){} }
+  /* BATCH 1130 — the instrument list is the source of truth. Every active
+     CoinDCX USDT future is on the board, including contracts the merged
+     universe dropped because another venue won the base or the $5M floor
+     cut them. A symbol already queued is not added twice. */
+  try{
+    var cdcxSyms = cdcxSymsEarly || [];
+    var seenSym = {};
+    for (var si = 0; si < items.length; si++) seenSym[String(items[si].sym || '')] = 1;
+    for (var ci2 = 0; ci2 < cdcxSyms.length; ci2++){
+      var csym = cdcxSyms[ci2];
+      if (seenSym[csym]) continue;
+      items.push({
+        sym: csym,
+        base: csym.replace(/^B-/, '').replace(/_USDT$/, ''),
+        exchange: 'coindcx',
+        turnoverUsd: null, mark: null, fundingPct: null, alsoOn: null
+      });
+      seenSym[csym] = 1;
+    }
+    uniPack.cdcxListed = cdcxSyms.length;
+  }catch(eCdx){ try{ if (gfn('hgFwdWarn')) W.hgFwdWarn('trendmx', eCdx); }catch(eW2){} }
+  if (!items.length) throw new Error('universe empty' + (uniPack.note ? ' — ' + uniPack.note : ''));
+  function tmFetchTf(item, tf, n, minLen){
+    return fetchK(item, tf, n).then(function(rows){
+      if (rows && rows.length >= minLen) return rows;
+      return tmBinanceTwin(item, tf, n).then(function(twin){
+        if (twin && twin.length > ((rows && rows.length) || 0)) return twin;
+        return (rows && rows.length) ? rows : [];
+      });
+    }).catch(function(){ return []; });
+  }
+  var results = [], failed = 0;
+  for (var i = 0; i < items.length; i += CHUNK){
+    var chunk = items.slice(i, i + CHUNK);
+    if (typeof hooks.setProg === 'function') hooks.setProg((i + chunk.length) / items.length);
+    var rs = await Promise.all(chunk.map(function(item){
+      return Promise.all([
+        tmFetchTf(item, '4h', 260, 210),
+        tmFetchTf(item, '1d', 260, 1),
+        tmFetchTf(item, '1h', 72, 1)
+      ]).then(function(got){
+        var r4 = got[0], r1 = got[1], r1h = got[2];
+        if (!r4 || !r4.length || !r1 || !r1.length) return tmUnreadRow(item);
+        /* Score, gates and plan formation must share one closed-bar snapshot.
+           The 15m confirmation and forward ledger already judge closed bars;
+           partial daily / 4H candles let the same row disagree with them. */
+        var r4c = tmClosedRows(r4, 14400);
+        var r1c = tmClosedRows(r1, 86400);
+        var r1hc = tmClosedRows(r1h, 3600);
+        if (!r4c.length || !r1c.length) return tmUnreadRow(item);
+        var ts = trendScore(r1c, r4c);
+        var row = {
+          sym: item.sym, base: item.base, exchange: item.exchange || 'binance', alsoOn: item.alsoOn,
+          xu: item, score: ts.score, comps: ts.comps, freshCross: ts.freshCross, adx: ts.adx,
+          rsi: ts.rsi,
+          volDiv: ts.volDiv, volConf: ts.volConf,
+          price: r4c[r4c.length - 1].c, rows4h: r4c, rows1d: r1c, rows1h: r1hc.length ? r1hc : null,
+          fundingPct: item.fundingPct, turnoverUsd: item.turnoverUsd, mark: item.mark
+        };
+        var dir = tmDirOf(row);
+        row.gate = dir ? trendmxGateEval(row, dir) : null;
+        return row;
+      }).catch(function(){ return null; });
+    }));
+    for (var j = 0; j < rs.length; j++){ if (rs[j]) results.push(rs[j]); else failed++; }
+    if (typeof hooks.onBatch === 'function'){
+      try {
+        hooks.onBatch({
+          rows: results.slice(),
+          done: Math.min(i + chunk.length, items.length),
+          total: items.length,
+          batch: Math.floor(i / CHUNK) + 1,
+          batches: Math.ceil(items.length / CHUNK),
+          failed: failed
+        });
+      } catch (eBatch) {}
+    }
+    if (i + CHUNK < items.length) await sleepMs(CHUNK_SLEEP_MS);
+  }
+  return {
+    rows: results, failed: failed, uniLen: uniPack.rawLen || items.length,
+    scanned: items.length, at: Date.now(), note: uniPack.note, source: uniPack.source,
+    venueCounts: uniPack.venueCounts
+  };
+}
+
+
+async function tmProxyJson(url){
+  try{
+    var r = await fetch('/api/proxy?url=' + encodeURIComponent(url));
+    if (!r || !r.ok) return null;
+    return await r.json();
+  }catch(e){ return null; }
+}
+async function tmProxyText(url){
+  try{
+    var r = await fetch('/api/proxy?url=' + encodeURIComponent(url));
+    if (!r || !r.ok) return null;
+    return await r.text();
+  }catch(e){ return null; }
+}
+function tmYahooChange(j){
+  try{
+    var q = j.chart.result[0].indicators.quote[0].close.filter(function(v){ return isFinite(v); });
+    if (q.length < 2 || !(q[0] > 0)) return null;
+    return (q[q.length - 1] - q[0]) / q[0];
+  }catch(e){ return null; }
+}
+function tmSeriesEnds(j, key){
+  var caps = j && j[key];
+  if (!caps || caps.length < 2) return null;
+  var a = +caps[0][1], b = +caps[caps.length - 1][1];
+  if (!(a > 0) || !(b > 0)) return null;
+  return { a: a, b: b };
+}
+function tmSpreadChange(total, parts){
+  if (!total) return null;
+  var a = total.a, b = total.b, i;
+  for (i = 0; i < parts.length; i++){
+    if (!parts[i]) return null;
+    a -= parts[i].a;
+    b -= parts[i].b;
+  }
+  if (!(a > 0)) return null;
+  return (b - a) / a;
+}
+function tmYahooDir(j){
+  try{
+    var q = j.chart.result[0].indicators.quote[0].close.filter(function(v){ return isFinite(v); });
+    if (q.length < 2) return null;
+    return q[q.length - 1] > q[q.length - 2];
+  }catch(e){ return null; }
+}
+function tmCapChange(j){
+  var caps = j && j.market_caps;
+  if (!caps || caps.length < 2) return null;
+  var a = caps[0][1], b = caps[caps.length - 1][1];
+  if (!(a > 0) || !(b > 0)) return null;
+  return (b - a) / a;
+}
+function tmSessionVwap(rows1h){
+  if (!rows1h || !rows1h.length) return NaN;
+  var day = Math.floor(Date.now() / 1000 / 86400);
+  var pv = 0, vv = 0, n = 0;
+  for (var i = 0; i < rows1h.length; i++){
+    var r = rows1h[i];
+    if (!r) continue;
+    var open = tmBarOpenSec(r);
+    if (!isFinite(open) || Math.floor(open / 86400) !== day) continue;
+    var v = r.v > 0 ? r.v : 0;
+    if (!(v > 0)) continue;
+    pv += ((r.h + r.l + r.c) / 3) * v;
+    vv += v;
+    n++;
+  }
+  return (n >= 2 && vv > 0) ? pv / vv : NaN;
+}
+
+function tmWeeklyRows(rowsD){
+  if (!rowsD || rowsD.length < 20) return null;
+  var weeks = [], cur = null;
+  for (var i = 0; i < rowsD.length; i++){
+    var r = rowsD[i];
+    if (!r) continue;
+    var open = tmBarOpenSec(r);
+    if (!isFinite(open)) continue;
+    var wk = Math.floor(open / (7 * 86400));
+    if (!cur || cur.wk !== wk){
+      if (cur) weeks.push(cur);
+      cur = { wk: wk, o: r.o, h: r.h, l: r.l, c: r.c, v: r.v || 0 };
+    } else {
+      if (r.h > cur.h) cur.h = r.h;
+      if (r.l < cur.l) cur.l = r.l;
+      cur.c = r.c;
+      cur.v += r.v || 0;
+    }
+  }
+  if (cur) weeks.push(cur);
+  return weeks.length >= 8 ? weeks : null;
+}
+function tmVolumeProfile(rows){
+  if (!rows || rows.length < 40) return null;
+  var use = rows.slice(-120);
+  var lo = Infinity, hi = -Infinity, k;
+  for (k = 0; k < use.length; k++){
+    if (use[k].l < lo) lo = use[k].l;
+    if (use[k].h > hi) hi = use[k].h;
+  }
+  if (!(hi > lo)) return null;
+  var bins = 24, vol = [], step = (hi - lo) / bins;
+  for (k = 0; k < bins; k++) vol.push(0);
+  for (k = 0; k < use.length; k++){
+    var mid = (use[k].h + use[k].l + use[k].c) / 3;
+    var b = Math.max(0, Math.min(bins - 1, Math.floor((mid - lo) / step)));
+    vol[b] += use[k].v > 0 ? use[k].v : 0;
+  }
+  var total = 0, max = 0, pocI = 0, j;
+  for (j = 0; j < bins; j++){
+    total += vol[j];
+    if (vol[j] > max){ max = vol[j]; pocI = j; }
+  }
+  if (!(total > 0)) return null;
+  var need = total * 0.7, acc = vol[pocI], loI = pocI, hiI = pocI;
+  while (acc < need && (loI > 0 || hiI < bins - 1)){
+    var left = loI > 0 ? vol[loI - 1] : -1;
+    var right = hiI < bins - 1 ? vol[hiI + 1] : -1;
+    if (right >= left){ hiI++; acc += vol[hiI]; }
+    else { loI--; acc += vol[loI]; }
+  }
+  var vals = vol.filter(function(v){ return v > 0; }).slice().sort(function(a, b){ return a - b; });
+  var med = vals.length ? vals[Math.floor(vals.length / 2)] : 0;
+  var hvn = [], lvn = [];
+  for (j = 1; j < bins - 1; j++){
+    var node = lo + (j + 0.5) * step;
+    if (med > 0 && vol[j] >= med * 1.6 && vol[j] >= vol[j - 1] && vol[j] >= vol[j + 1]) hvn.push(node);
+    if (med > 0 && vol[j] > 0 && vol[j] <= med * 0.45 && vol[j] <= vol[j - 1] && vol[j] <= vol[j + 1]) lvn.push(node);
+  }
+  if (!hvn.length) hvn.push(lo + (pocI + 0.5) * step);
+  return { poc: lo + (pocI + 0.5) * step, vah: lo + (hiI + 1) * step, val: lo + loI * step, hvn: hvn, lvn: lvn };
+}
+function tmEqualSweep(rows, dir){
+  if (!rows || rows.length < 20) return false;
+  var pivots = [];

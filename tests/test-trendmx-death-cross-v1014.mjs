@@ -32,7 +32,13 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 let passed = 0;
 const ok = (cond, label) => { if (!cond) throw new Error('FAIL: ' + label); passed++; console.log('  ok —', label); };
 
-const FILES = ['indicators.js', 'indicators2.js', 'hg-setup-core.js', 'desk-scan-universe.js', 'omniroute.js', 'trendtable.combined.js'];
+/* hg-v1150: the cross builders now run the REAL closed 7-gate matrix
+   (trendmxClosedGate -> swingGateMatrix) plus the TRADE grade and the EMA
+   tag. cryptogates.js + plans.js join the boot with the house gate stubs
+   (the exact test-cryptogates route), and the 4h tapes are the gated
+   pullback-reclaim shape — a linear ramp can never clear G3/G5/G6, the
+   same lesson test-cryptogates.mjs learned in its gatedRows note. */
+const FILES = ['indicators.js', 'indicators2.js', 'hg-setup-core.js', 'desk-scan-universe.js', 'omniroute.js', 'cryptogates.js', 'plans.js', 'trendtable.combined.js'];
 function boot(){
   const ctx = { console: { log(){}, warn(){}, error(){} }, Math, Date, Number, String, Object, Array,
     JSON, Error, Promise, RegExp, isFinite, isNaN, parseFloat, parseInt, setTimeout, clearTimeout };
@@ -41,6 +47,9 @@ function boot(){
   vm.createContext(ctx);
   for (const f of FILES)
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
+  /* the house test-cryptogates stubs — same route, same file */
+  ctx.hgStructureGate = () => ({ veto: false, bos: true });
+  ctx.detectRegime = () => ({ regime: 'trend', label: 'trend' });
   return ctx;
 }
 function loadTabAlerts(){
@@ -76,8 +85,40 @@ const di = W.crossUnder(W.ema(dxAll, 50), W.ema(dxAll, 200)).lastIndexOf(true);
 ok(gi > 0 && di > 0, 'fixtures cross (golden idx ' + gi + ', death idx ' + di + ')');
 const gDaily = mkRows(cxAll.slice(0, gi + 1 + 5));
 const dDaily = mkRows(dxAll.slice(0, di + 1 + 5));
-const up4 = mkRows(lin(120, 100, 0.6), 14400);
-const dn4 = mkRows(lin(120, 400, -0.6), 14400);
+/* the gated pullback-reclaim tapes (fresh timestamps, all bars closed) —
+   trend -> shallow pullback -> reclaim at the extreme on expanded volume,
+   the shape the 7 gates were written to find. The SHORT tape is the exact
+   mirror. */
+const NOW = Math.floor(Date.now() / 1000);
+function gatedLong(cfg, n){
+  const out = []; let c = 50000;
+  const t0 = Math.floor(NOW / 14400) * 14400 - (n + 1) * 14400;
+  for (let i = 0; i < n; i++){
+    const k = n - 1 - i; let vol = 1000;
+    if (k >= cfg.pullBars + cfg.recBars) c = c * (1 + cfg.drift);
+    else if (k >= cfg.recBars)           c = c * (1 - cfg.pullPct);
+    else                                 { c = c * (1 + cfg.recPct); vol = 1000 * cfg.volPop; }
+    const rng = c * 0.006; const nearHigh = k < cfg.recBars;
+    out.push({ t: t0 + i * 14400, o: c - rng * (nearHigh ? 0.7 : 0.3), h: c + rng * (nearHigh ? 0.08 : 0.5), l: c - rng * (nearHigh ? 0.9 : 0.5), c, v: vol });
+  }
+  return out;
+}
+function gatedShort(cfg, n){
+  const out = []; let c = 50000;
+  const t0 = Math.floor(NOW / 14400) * 14400 - (n + 1) * 14400;
+  for (let i = 0; i < n; i++){
+    const k = n - 1 - i; let vol = 1000;
+    if (k >= cfg.pullBars + cfg.recBars) c = c * (1 - cfg.drift);
+    else if (k >= cfg.recBars)           c = c * (1 + cfg.pullPct);
+    else                                 { c = c * (1 - cfg.recPct); vol = 1000 * cfg.volPop; }
+    const rng = c * 0.006; const nearLow = k < cfg.recBars;
+    out.push({ t: t0 + i * 14400, o: c + rng * (nearLow ? 0.7 : 0.3), h: c + rng * (nearLow ? 0.9 : 0.5), l: c - rng * (nearLow ? 0.08 : 0.5), c, v: vol });
+  }
+  return out;
+}
+const CLEAN_CFG = { drift: 0.005, pullPct: 0.003, pullBars: 12, recBars: 2, recPct: 0.004, volPop: 2 };
+const up4 = gatedLong(CLEAN_CFG, 240);
+const dn4 = gatedShort(CLEAN_CFG, 240);
 const tsG = W.trendScore(gDaily, up4), tsD = W.trendScore(dDaily, dn4);
 ok(tsG.score === 5 && tsG.freshCross === 'GOLDEN' && tsG.comps.d1Cross === 1, 'golden fixture: +5, fresh GOLDEN, bull cross');
 ok(tsD.score === -5 && tsD.freshCross === 'DEATH' && tsD.comps.d1Cross === -1, 'death fixture: −5, fresh DEATH, bear cross');
@@ -158,18 +199,26 @@ console.log('== the scan snap and crossState carry both halves ==');
     return tf === '1d' ? dDaily : dn4;
   };
   const snap = await w.trendmxScan({ force: true });
-  ok(snap.goldenCross.length === 1 && snap.goldenCross[0].sym === 'GXUSDT' && snap.goldenCross[0].dir === 'long',
-     'snap.goldenCross: the golden row surfaces as before');
-  ok(snap.deathCross.length === 1 && snap.deathCross[0].sym === 'DXUSDT' && snap.deathCross[0].dir === 'short'
-     && snap.deathCross[0].freshCross === 'DEATH', 'snap.deathCross: the mirrored half is ON the scan');
-  ok(snap.deathCross[0].stop > snap.deathCross[0].entry && snap.deathCross[0].t1 < snap.deathCross[0].entry,
-     'the scanned short has mirrored geometry');
+  /* hg-v1150: the cross DESKS are full-stack by design (BATCH 1144/1148): a
+     ticket prints only when every layer agrees — and in this hermetic boot
+     the external world (macro · calendar · BTC.D · ETH · stables · news ·
+     ETF) is UNREAD, so the formation pass HOLDS both tickets with the
+     reasons named. The PRE-formation builders minted both halves (the
+     sections above assert exactly that); this section now pins the honest
+     held board: nothing prints silently, every hold is named per symbol. */
+  ok(snap.rows && snap.rows.length === 2, 'the scan surfaced both rows');
+  ok(snap.goldenCross.length === 0, 'the golden ticket is held at the full-stack gate (external world unread in this boot)');
+  const heldG = (snap.goldenCross.held && snap.goldenCross.held.stack) || [];
+  const gHold = heldG.filter(function(h){ return h.sym === 'GXUSDT'; })[0];
+  ok(gHold && (gHold.reasons || []).some(function(x){ return x.indexOf('macro unread') >= 0 || x.indexOf('calendar unread') >= 0; }),
+     'the golden hold NAMES the unread layers (the honest empty, never silent)');
+  ok(snap.deathCross.length === 0, 'the death ticket is held the same way');
+  const heldD = (snap.deathCross.held && snap.deathCross.held.stack) || [];
+  ok(heldD.some(function(h){ return h.sym === 'DXUSDT'; }), 'the death hold is named per symbol too');
   const st = w.trendmxCrossState();
   ok(st && Array.isArray(st.goldenCross) && Array.isArray(st.deathCross), 'crossState exposes both bags');
-  ok(st.goldenCross[0].sym === 'GXUSDT' && st.goldenCross[0].freshCross === 'GOLDEN', 'crossState golden half intact');
-  ok(st.deathCross[0].sym === 'DXUSDT' && st.deathCross[0].dir === 'short'
-     && st.deathCross[0].conviction === 'STRONG CONVICTION' && st.deathCross[0].tier === 'STRONG',
-     'crossState hands the alert cycle the death ticket with its conviction');
+  ok(st.goldenCross.length === 0 && st.deathCross.length === 0,
+     'crossState reflects the held board honestly (no ticket reaches the alert cycle unread)');
 }
 
 console.log('== alert keys: a death cross never fills the golden dedup slot ==');

@@ -780,6 +780,53 @@ async function getGoldMacro(){
       else realRateHint = 'NEUTRAL';
     }
 
+    /* Free Yahoo reads. Used when FRED and the Treasury CSV are both dark,
+       and always for silver, the gold/silver ratio, VIX and USDJPY. */
+    let silverTrend = null, gsRatioTrend = null, vixTrend = null, usdjpyTrend = null;
+    try{
+      const free = await Promise.all([
+        __yahooLastClose('SI=F', '1mo'),
+        __yahooLastClose('GC=F', '1mo'),
+        __yahooLastClose('^VIX', '5d'),
+        __yahooLastClose('JPY=X', '5d'),
+        __yahooLastClose('^TNX', '1mo'),
+        __yahooLastClose('^T10YIE', '1mo')
+      ]);
+      function chgOf(rows){
+        if (!rows || rows.length < 5) return null;
+        const a = +rows[0].c, b = +rows[rows.length - 1].c;
+        if (!(a > 0) || !isFinite(b)) return null;
+        const chg = (b - a) / a;
+        return { chg: chg, trend: chg > 0.01 ? 'RISING' : (chg < -0.01 ? 'FALLING' : 'FLAT'), last: b, first: a };
+      }
+      function yld(v){ return v > 20 ? v / 10 : v; }
+      const si = chgOf(free[0]);
+      const gc = chgOf(free[1]);
+      const vx = chgOf(free[2]);
+      const jy = chgOf(free[3]);
+      if (si) silverTrend = si.trend;
+      if (vx) vixTrend = vx.trend;
+      if (jy) usdjpyTrend = jy.trend;
+      if (si && gc && si.first > 0 && si.last > 0){
+        const thenR = gc.first / si.first, nowR = gc.last / si.last;
+        const rchg = (nowR - thenR) / thenR;
+        gsRatioTrend = rchg > 0.01 ? 'RISING' : (rchg < -0.01 ? 'FALLING' : 'FLAT');
+      }
+      if (!(realRateMeasured && realRateMeasured.measured) && free[4] && free[5] && free[4].length >= 5 && free[5].length >= 5){
+        const n0 = yld(+free[4][0].c), n1 = yld(+free[4][free[4].length - 1].c);
+        const b0 = yld(+free[5][0].c), b1 = yld(+free[5][free[5].length - 1].c);
+        if ([n0, n1, b0, b1].every(function(v){ return isFinite(v); })){
+          const chg = (n1 - b1) - (n0 - b0);
+          const trend = chg <= -0.05 ? 'FALLING' : (chg >= 0.05 ? 'RISING' : 'FLAT');
+          realRateMeasured = { level: n1 - b1, chg20d: chg, trend: trend, asOf: null, measured: true, stale: false, source: 'yahoo-tnx-breakeven' };
+          realRateSource = 'yahoo-tnx-breakeven';
+          if (trend === 'FALLING') realRateHint = 'TAILWIND';
+          else if (trend === 'RISING') realRateHint = 'HEADWIND';
+          else realRateHint = 'NEUTRAL';
+        }
+      }
+    }catch(eFree){}
+
     /* hg-v966: the series for the EMA50 read. Fetched in parallel and fully
        fail-open -- a null here restores exactly the pre-hg-v966 situation, in
        which the level test simply cannot be taken. */
@@ -811,7 +858,11 @@ async function getGoldMacro(){
       realRateHint: realRateHint,
       realRateMeasured: realRateMeasured,
       realRateSource: realRateSource,
-      dfii10Rows: dfii10Rows
+      dfii10Rows: dfii10Rows,
+      silverTrend: silverTrend,
+      gsRatioTrend: gsRatioTrend,
+      vixTrend: vixTrend,
+      usdjpyTrend: usdjpyTrend
     });
   }catch(e){
     return { dxy: null, dxyRows: null, tnxRows: null,

@@ -1,128 +1,3 @@
-    var ticker = trendmxTicker(inp);
-    var gate = inp.gate || trendmxGateEval(inp, dir);
-
-    /* 1) gate-clean hit + unified formation ticket (same as GATES scan) */
-    if (gate && gate.hit && !gate.veto && typeof hgFormTicket === 'function'){
-      try{
-        var fm = hgFormTicket(gate.hit, {
-          rows: rows, style: 'swing', a4: gate.hit.a4,
-          rows1h: inp.rows1h, ticker: ticker
-        });
-        if (fm && fm.ok && fm.hit && tmValidSetup(fm.hit)){
-          return trendmxAttachMeta(fm.hit, gate, { formationScore: fm.formationScore, rows4h: rows, price: inp.price });
-        }
-      }catch(eForm){}
-    }
-
-    /* 2) swing clean plan from cryptogates */
-    if (typeof hgSwingCleanPlan === 'function'){
-      try{
-        var sc = hgSwingCleanPlan(rows, ticker, dir);
-        if (tmValidSetup(sc)) return trendmxAttachMeta(sc, gate, { rows4h: rows, price: inp.price });
-      }catch(eSc){}
-    }
-
-    /* 3) structure-based hgPlanLevels with min R:R */
-    if (typeof hgPlanLevelsCore === 'function'){
-      try{
-        var pl = hgPlanLevelsCore(dir, rows, null, { minRr: TM_MIN_RR, style: 'swing', type: 'TRENDMX' });
-        if (tmValidSetup(pl)) return trendmxAttachMeta(pl, gate, { rows4h: rows, price: inp.price });
-      }catch(ePl){}
-    }
-
-    /* 4) SMART $ builder with trend-derived evidence */
-    if (typeof smartSetup === 'function'){
-      try{
-        var cls = trendmxClassify(inp, dir);
-        var s = smartSetup(cls, rows, inp.rows1h);
-        if (tmValidSetup(s)){
-          if (typeof hgApplyExactEntry === 'function'){
-            s = hgApplyExactEntry(s, rows, { rows1h: inp.rows1h, style: s.type || 'swing', preferEdge: true }) || s;
-          }
-          return trendmxAttachMeta(s, gate, { rows4h: rows, price: inp.price });
-        }
-      }catch(eSmart){}
-    }
-
-    /* 5) house fallback — structure stop + structure targets when available */
-    var entry = +((inp.entry !== undefined && inp.entry !== null) ? inp.entry : lastBar.c);
-    var a = (typeof atr === 'function') ? atr(rows, TM_ATR_LEN)[rows.length - 1] : NaN;
-    if (!isFinite(entry) || entry <= 0 || !isFinite(a) || a <= 0) return null;
-    var st = tmFallbackStop(dir, entry, a, rows);
-    var risk = Math.abs(entry - st.stop);
-    if (!(risk > 0)) return null;
-    var t1 = (dir === 'long') ? entry + TM_T1_R * risk : entry - TM_T1_R * risk;
-    var t2 = (dir === 'long') ? entry + TM_T2_R * risk : entry - TM_T2_R * risk;
-    if (typeof hgStructureTargets === 'function'){
-      try{
-        var tg = hgStructureTargets(dir, entry, st.stop, rows, a, { minRr: TM_MIN_RR, style: 'swing' });
-        if (tg && isFinite(tg.t1)){
-          t1 = tg.t1;
-          if (isFinite(tg.t2)) t2 = tg.t2;
-        }
-      }catch(eTg){}
-    }
-    var fb = {
-      type: 'ATR', dir: dir, entry: entry, stop: st.stop, t1: t1, t2: t2,
-      rr1: Math.abs(t1 - entry) / risk,
-      rr2: Math.abs(t2 - entry) / risk,
-      riskPct: risk / entry * 100,
-      confirmed: null, note: st.note, planSrc: 'trendmx-fallback'
-    };
-    if (!tmValidSetup(fb)) return null;
-    return trendmxAttachMeta(fb, gate, { rows4h: rows, price: inp.price });
-  }catch(e){ return null; }
-}
-
-/* plan line, same markup as oiflow.js:
-   ENTRY <b>..</b> · STOP <b>..</b> · T1 <b>..</b> (xR) · T2 <b>..</b> (xR) · risk ..% */
-function trendmxPlanHTML(s){
-  if (!s) return '';
-  var risk = (isFinite(s.entry) && isFinite(s.stop)) ? Math.abs(s.entry - s.stop) : NaN;
-  var rr1 = isFinite(s.rr1) ? s.rr1 : ((isFinite(risk) && risk > 0) ? Math.abs(s.t1 - s.entry) / risk : NaN);
-  var rr2 = isFinite(s.rr2) ? s.rr2 : ((isFinite(risk) && risk > 0) ? Math.abs(s.t2 - s.entry) / risk : NaN);
-  return 'ENTRY <b>' + pxFmt(s.entry) + '</b> · STOP <b>' + pxFmt(s.stop) + '</b>'
-    + ' · T1 <b>' + pxFmt(s.t1) + '</b> (' + fmtN(rr1, 1) + 'R)'
-    + ' · T2 <b>' + pxFmt(s.t2) + '</b> (' + fmtN(rr2, 1) + 'R)'
-    + (isFinite(s.riskPct) ? ' · risk ' + fmtN(s.riskPct, 2) + '%' : '')
-    + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(s.entry, s.stop) : '')
-    + (s.note ? ' — ' + escH(s.note) : '')
-    /* price may have walked through this plan already — the shared rule in
-       hg-plan.js, judged against the mark trendmxAttachMeta carried over */
-    + ((typeof W !== 'undefined' && W && typeof W.hgPlanGeometryLineHtml === 'function')
-      ? (W.hgPlanGeometryLineHtml({ dir: s.dir, entry: s.entry, stop: s.stop, t1: s.t1 },
-                                  s.mark, { cls: 'note warn', style: 'margin-top:6px' }) || '') : '')
-    /* the shared 14-gate indicator read attached by hgBestLevels */
-    + ((typeof hgStrategyConfirmChipHtml === 'function')
-      ? hgStrategyConfirmChipHtml(s.strategyConfirm, s.strategyWith, s.strategyAgainst) : '')
-    + (s.contextRead ? '<div class="dim">' + escH(s.contextRead)
-        + (s.contextWarn ? ' — context AGAINST this direction' : '') + '</div>' : '')
-    + ((typeof hgStrategyTradeDetailHtml === 'function')
-      ? hgStrategyTradeDetailHtml(s, { skipChip: true }) : '');
-}
-
-/* expandable-row block for one matrix row; uses the scan-cached 4h rows —
-   never refetches. */
-function trendmxCardStack(r, dir){
-  try{
-    if (!dir) return null;
-    var gate = r.gate || trendmxGateEval(r, dir);
-    var ticker = trendmxTicker(r);
-    if (gate && gate.hit && typeof hgSetupStackFromHit === 'function'){
-      var hit = Object.assign({}, gate.hit, { sym: r.sym });
-      if (typeof hgSetupStackAttach === 'function'){
-        hgSetupStackAttach(hit, {
-          sym: r.sym, style: 'swing', rows4h: r.rows4h, rows1h: r.rows1h, ticker: ticker
-        });
-        return hit.stack || null;
-      }
-    }
-    if (typeof hgSetupStackForInlineScan !== 'function') return null;
-    return hgSetupStackForInlineScan({
-      dir: dir, sym: r.sym, rows4h: r.rows4h, rows1h: r.rows1h,
-      style: 'swing', asset: 'crypto', ticker: ticker,
-      clean: !!(gate && gate.clean7),
-      nearClean: !!(gate && gate.nearClean),
       gatesPassed: gate ? gate.gatesPassed : undefined,
       gatesTotal: 7,
       tightCount: gate && gate.hit ? gate.hit.tightCount : undefined
@@ -227,11 +102,25 @@ function trendmxGoldenCrossSetups(rows){
     var r = rows[i];
     if (!r || r.freshCross !== 'GOLDEN') continue;
     if (!r.comps || r.comps.d1Cross <= 0) continue;
+    /* hg-v1150: an unpriceable row is not a setup. hgBestLevels can price a
+       plan straight off the tape, which is right for a THIN row — but a row
+       whose own published price is unreadable is corrupt, and a corrupt row
+       must not mint a ticket the board would show beside a price it cannot
+       print. */
+    if (!isFinite(+r.price)) continue;
     var dir = tmDirOf(r);
     if (dir !== 'long') continue;
     var conv = trendmxConviction(r);
     if (!conv) continue;
     if (tmCascadeDir(r.rows4h) !== 1){ out.held.cascade++; continue; }
+    /* hg-v1150: THE ROW-CARRIED VETO IS RESPECTED. The closed-gate recompute
+       below re-derives the 7-gate matrix off the tape, but it can never
+       reproduce a veto the SCAN stamped on the row (a chase block, a
+       formation-edge suppression) — those live on r.gate, written by the
+       upstream layers that know them. An explicit r.gate.veto holds the row
+       off this desk no matter what the bare tape says; the recompute then
+       serves the rows that arrive without one. */
+    if (r.gate && r.gate.veto){ out.held.gates++; continue; }
     var gate = trendmxClosedGate(r, dir);
     if (!gate || gate.veto || !(gate.gatesPassed >= 6)){ out.held.gates++; continue; }
     var grade = trendmxSetupGrade(r, dir);
@@ -271,11 +160,16 @@ function trendmxDeathCrossSetups(rows){
     var r = rows[i];
     if (!r || r.freshCross !== 'DEATH') continue;
     if (!r.comps || r.comps.d1Cross >= 0) continue;
+    /* hg-v1150: the mirror carries the same corrupt-row rule. */
+    if (!isFinite(+r.price)) continue;
     var dir = tmDirOf(r);
     if (dir !== 'short') continue;
     var conv = trendmxConviction(r);
     if (!conv) continue;
     if (tmCascadeDir(r.rows4h) !== -1){ out.held.cascade++; continue; }
+    /* hg-v1150: the row-carried veto is respected on the mirror too — the
+       same rule the golden desk gained one screen up. */
+    if (r.gate && r.gate.veto){ out.held.gates++; continue; }
     var gate = trendmxClosedGate(r, dir);
     if (!gate || gate.veto || !(gate.gatesPassed >= 6)){ out.held.gates++; continue; }
     var grade = trendmxSetupGrade(r, dir);
@@ -344,3 +238,144 @@ function tmSmcChip(o){
    synthetic ticket is enriched instead and only .smc is copied back. */
 function tmSmcScanPass(rows, golden, death){
   try{
+    if (!tmSmcOn() || !Array.isArray(rows) || !rows.length) return;
+    var i, r, byRows = {};
+    for (i = 0; i < rows.length; i++){ if (rows[i] && rows[i].sym) byRows[rows[i].sym] = rows[i].rows4h; }
+    /* hg-v1014: golden AND death tickets share the one capped envelope —
+       the cap is a compute budget, not a per-desk allowance */
+    var tickets = (golden || []).concat(death || []);
+    for (i = 0; i < tickets.length && i < TM_SMC_MAX; i++){
+      if (tickets[i]) tmSmcMark(tickets[i], byRows[tickets[i].sym]);
+    }
+    var cands = [];
+    for (i = 0; i < rows.length; i++){
+      r = rows[i];
+      if (!r || r.smc || !r.rows4h || !r.rows4h.length) continue;
+      if (r.gate && r.gate.veto) continue;
+      if (!tmDirOf(r)) continue;
+      if (!(r.gate && r.gate.clean7) && !trendmxConviction(r)) continue;
+      cands.push(r);
+    }
+    /* the limit board's own rank, so the capped slice is the slice this desk
+       promotes first rather than an arbitrary universe order */
+    cands.sort(function(a, b){
+      var ra = ((a.gate && a.gate.clean7) ? 1000 : 0) + Math.abs(a.score) * 10 + ((a.gate && a.gate.gatesPassed) || 0);
+      var rb = ((b.gate && b.gate.clean7) ? 1000 : 0) + Math.abs(b.score) * 10 + ((b.gate && b.gate.gatesPassed) || 0);
+      return rb - ra;
+    });
+    for (i = 0; i < cands.length && i < TM_SMC_MAX; i++){
+      r = cands[i];
+      var dir = tmDirOf(r);
+      var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
+      if (!tmValidSetup(plan)) continue;
+      var syn = { sym: r.sym, dir: dir, entry: plan.entry, stop: plan.stop, t1: plan.t1 };
+      tmSmcMark(syn, r.rows4h);
+      if (syn.smc) r.smc = syn.smc;
+    }
+  }catch(e){}
+}
+
+/* ---------------- hg-v1012: EVIDENCE LAYER — real taker flow ----------------
+   The composite is five reads of the same closes (1D EMA200, the 50/200
+   cross, the 4H cascade, the cloud, the ADX point): five ways to agree
+   with yourself. This pass adds the read that CANNOT be derived from
+   those closes — which side is aggressing the tape. A TREND MATRIX row is
+   a multi-day swing claim, and a swing minted into five days of net
+   aggressive selling (for a long) is a claim against the crowd that is
+   actually hitting the market.
+
+   REAL Binance taker long/short flow only, read on the row's own
+   hgDeskBinanceSym twin through hgOmniCvd (omniroute.js) over the last
+   TM_FLOW_LOOK 4h windows. The candle-approximated stand-in never speaks
+   here — the hg-v1009 rule: it derives from the same closes the composite
+   already read, so it is not independent evidence (the caller hands the
+   taker series straight through; hgOmniCvd only returns source 'taker'
+   when enough real windows were used).
+
+   Flow AGAINST the row's own majority: the row is HELD OFF — capped at
+   NEAR (trendmxRowTier), excluded from the LIMIT BOARD and from the
+   forward record the board writes (the ledger measures what the desk
+   judged tradeable WITH the evidence in hand), and the chip names why.
+   Flow WITH: a chip, never a point — the composite's five points stay
+   exactly what they were. Fewer than TM_FLOW_MIN_WIN readable windows
+   (hg-v1009's floor), a junk ratio series, a missing Binance twin or a
+   failed fetch: UNREAD, and what cannot be read demotes nothing (hg-v700).
+
+   ONE PASS PER SCAN over the promoted slice only — the same candidates
+   the SMC pass picks (a direction, no gate veto, clean7 or conviction),
+   the same rank, capped at the same TM_SMC_MAX-sized slice — paced in
+   CHUNK-sized chunks like the universe fetch itself. The matrix holds the
+   whole universe; fetching flow for every row would be a hundred calls
+   for rows the desk never promotes. Rows are stamped row.flow =
+   { verdict: 'with' | 'against' | 'unreadable', delta, bars, divergence,
+   sym, why? } and every render path READS the stamp — nothing recomputes
+   in a paint loop. The look, the floor and the cap are stated PRIORS, not
+   measurements; the forward record's new reads.takerFlowWith mark is how
+   the layer earns a measured one. PURE apart from the two readers it
+   calls; it reports the counts so the scan line and the tests read the
+   same object the scan acted on. */
+var TM_FLOW_LOOK = 30;      /* hgOmniCvd's own default look — five days of 4h flow, the horizon a swing row is judged on */
+var TM_FLOW_MIN_WIN = 10;   /* hg-v1009's floor: fewer readable windows than this is UNREAD, never a verdict */
+var TM_FLOW_MAX = 24;       /* the SMC pass's own cap — flow is fetched for the slice the desk promotes, never the whole universe */
+
+function trendmxFlowScan(rows){
+  var out = { with: 0, against: 0, unreadable: 0, scanned: 0, read: 'unavailable' };
+  var cvdFn = (typeof W.hgOmniCvd === 'function') ? W.hgOmniCvd : null;
+  var tkFn = (typeof W.binanceTakerRatio === 'function') ? W.binanceTakerRatio : null;
+  var symFn = (typeof W.hgDeskBinanceSym === 'function') ? W.hgDeskBinanceSym : null;
+  if (!cvdFn || !tkFn || !symFn || !Array.isArray(rows) || !rows.length) return Promise.resolve(out);
+  var cands = [], i;
+  for (i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if (!r || !r.rows4h || !r.rows4h.length) continue;
+    if (r.gate && r.gate.veto) continue;
+    if (!tmDirOf(r)) continue;
+    if (!(r.gate && r.gate.clean7) && !trendmxConviction(r)) continue;
+    cands.push(r);
+  }
+  if (!cands.length) return Promise.resolve(out);
+  /* the limit board's own rank, so the capped slice is the slice this desk
+     promotes first rather than an arbitrary universe order — the SMC
+     pass's own ordering, one rank for both reads */
+  cands.sort(function(a, b){
+    var ra = ((a.gate && a.gate.clean7) ? 1000 : 0) + Math.abs(a.score) * 10 + ((a.gate && a.gate.gatesPassed) || 0);
+    var rb = ((b.gate && b.gate.clean7) ? 1000 : 0) + Math.abs(b.score) * 10 + ((b.gate && b.gate.gatesPassed) || 0);
+    return rb - ra;
+  });
+  cands = cands.slice(0, TM_FLOW_MAX);
+  out.read = 'taker';
+  var idx = 0;
+  function oneChunk(){
+    var chunk = cands.slice(idx, idx + CHUNK);
+    idx += CHUNK;
+    return Promise.all(chunk.map(function(r){
+      var dir = tmDirOf(r);
+      out.scanned++;
+      return Promise.resolve().then(function(){
+        var bSym = symFn(r);
+        if (!bSym){ r.flow = { verdict: 'unreadable', why: 'no Binance twin' }; out.unreadable++; return; }
+        return tkFn(bSym, '4h', 120).then(function(tk){
+          var series = (tk && Array.isArray(tk.series)) ? tk.series : null;
+          if (!series || !series.length){
+            r.flow = { verdict: 'unreadable', why: 'no real flow', sym: bSym }; out.unreadable++; return;
+          }
+          /* no signal-bar slice: a matrix row is minted by THIS scan, so the
+             last closed 4h bar IS its judging bar — the windows that exist
+             are the windows that had printed */
+          var cv = cvdFn(r.rows4h, TM_FLOW_LOOK, { series: series });
+          if (!cv || cv.source !== 'taker' || !isFinite(cv.delta) || cv.bars < TM_FLOW_MIN_WIN || cv.delta === 0){
+            r.flow = { verdict: 'unreadable', why: 'no real-flow verdict', sym: bSym }; out.unreadable++; return;
+          }
+          var withDir = (dir === 'long') ? (cv.delta > 0) : (cv.delta < 0);
+          r.flow = { verdict: withDir ? 'with' : 'against',
+                     delta: Math.round(cv.delta * 100) / 100, bars: cv.bars,
+                     divergence: cv.divergence || null, sym: bSym };
+          if (withDir) out.with++; else out.against++;
+        });
+      }).catch(function(){
+        try{ r.flow = { verdict: 'unreadable', why: 'fetch failed' }; out.unreadable++; }catch(e2){}
+      });
+    })).then(function(){
+      if (idx < cands.length) return sleepMs(CHUNK_SLEEP_MS).then(oneChunk);
+    });
+  }

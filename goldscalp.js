@@ -1132,10 +1132,10 @@ function goldBuildAPlusCtx(ctx, gold, now, news){
     if (mcFn && ctx && ctx.macro){
       out.metalsComplex = mcFn({
         dir: 'long',
-        xagTrend: ctx.macro.silver ? null : null,
+        xagTrend: ctx.macro.silverTrend || null,
         dxy: ctx.macro.dxy,
         real10y: out.realRate,
-        ratioTrend: ctx.macro.goldSilverRatio ? null : null
+        ratioTrend: ctx.macro.gsRatioTrend || null
       });
     }
     out.cot = (typeof W !== 'undefined' && W) ? W.__hgGoldCot : null;
@@ -1238,6 +1238,18 @@ function bannerHTML(best, ranked){
   var perfectBadge = gsxPerfect(best)
     ? '<span style="display:inline-block;margin-left:8px;font-size:10px;font-weight:800;letter-spacing:.15em;color:#92400E;background:#FEF3C7;padding:2px 7px;border-radius:4px;border:1px solid #F59E0B;vertical-align:middle">\u2605 PERFECT</span>'
     : '';
+  /* hg-v1150: the ★ PERFECT⁺ badge — the shared predicate's headline tier
+     (every readable evidence leg WITH), earned by the ranker from the FREE
+     feeds the scan already holds: 4h EMA50/200 structure, the PAXG funding
+     print and the Delta gold-perp OI+funding leverage cycle. Additive by
+     design: the pinned gsxPerfect badge keeps its own semantics, and this
+     one fires only when the evidence-enriched PLUS verdict travelled on the
+     ranked row — so the banner names the max-confluence tier when the free
+     feeds earned it, and stays silent when they are unreadable or mixed. */
+  var perfectPlusBadge = '';
+  if (best.perfectPlus === true && typeof W.hgPerfectStamp === 'function'){
+    try{ perfectPlusBadge = W.hgPerfectStamp(best) || ''; }catch(ePp2){}
+  }
   /* hg-v1030: the measured edge of the PERFECT cohort rides beside the badge.
      hgPerfectCohortEdge reads the LIVE ledger and reports expR; a negative is
      said plainly and an unmeasured cohort says so — nothing is coerced toward
@@ -1255,7 +1267,7 @@ function bannerHTML(best, ranked){
     }catch(ePeSc){}
   }
   return '<div class="gsx-banner"><div class="gsx-banner-in">'
-    + '<div class="gsx-eye">MOST PROBABLE SETUP' + perfectBadge + perfectEdgeNote + '</div>'
+    + '<div class="gsx-eye">MOST PROBABLE SETUP' + perfectBadge + perfectPlusBadge + perfectEdgeNote + '</div>'
     + '<div class="gsx-dir ' + best.dir + '">' + dirUp
     + '<span>' + esc(best.strategy) + ' · ' + esc(best.venue) + (best.sym ? ' (' + esc(best.sym) + ')' : '')
     + ' · GRADE ' + esc(best.grade) + ' · ' + esc(best.killzone || '') + '</span></div>'
@@ -2444,11 +2456,28 @@ function paintGoldWeekendPanel(ui, rows, nowMs, bestCandidate){
 }
 
 /* ---------------- data legs (each catch-isolated) ---------------- */
+function gsClosedRows(rows, tf, nowMs){
+  if (!Array.isArray(rows) || !rows.length) return [];
+  var sec = { '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400 }[tf];
+  if (!sec) return rows.slice();
+  var last = rows[rows.length - 1];
+  var t = last && +last.t;
+  if (!isFinite(t) || !(t > 0)) return [];
+  var openSec = t > 1e12 ? t / 1000 : t;
+  var cutoff = (isFinite(+nowMs) && +nowMs > 0) ? +nowMs : Date.now();
+  if ((openSec + sec) * 1000 > cutoff) return rows.slice(0, -1);
+  return rows.slice();
+}
+
 async function fetchGoldKlines(){
   var out = { rows15m: [], rows1h: [], rows4h: [], rows1d: [], src: {}, mixed: false, source: null, xmSymbol: null };
   var srcSet = function(tf, source, rowsKey, rows){
+    /* The XM route already applies dropForming server-side. The free macro /
+       proxy chain can return Binance's active candle, so close those rows
+       here before scoring and level formation. */
+    if (source !== 'xm-xauusd') rows = gsClosedRows(rows, tf);
+    if (!Array.isArray(rows) || !rows.length || !source) return;
     if (typeof hgGoldSrcAssign === 'function'){ hgGoldSrcAssign(out, tf, source, rowsKey, rows); return; }
-    if (!rows || !rows.length || !source) return;
     out[rowsKey] = rows;
     out.src[tf] = source;
   };
@@ -2541,6 +2570,9 @@ async function fetchDeltaXaut(){
   try{ var a = await xc(item, '15m', KL_15M); if (a && a.length) out.rows15m = a; }catch(e2){}
   try{ var b = await xc(item, '1h', KL_1H);  if (b && b.length) out.rows1h = b; }catch(e3){}
   try{ var c = await xc(item, '4h', KL_4H);  if (c && c.length) out.rows4h = c; }catch(e4){}
+  out.rows15m = gsClosedRows(out.rows15m, '15m');
+  out.rows1h = gsClosedRows(out.rows1h, '1h');
+  out.rows4h = gsClosedRows(out.rows4h, '4h');
   return out;
 }
 

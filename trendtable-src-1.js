@@ -1,67 +1,3 @@
-  cands.sort(function(a, b){ return Math.abs(a[1][i] - px) - Math.abs(b[1][i] - px); });
-  var name = cands[0][0], series = cands[0][1];
-  var from = Math.max(1, rows.length - 6);
-  for (var k = from; k < rows.length; k++){
-    var level = series[k], bar = rows[k];
-    if (!bar || !isFinite(level)) continue;
-    if (dir === 'long' && bar.l <= level && bar.c > level) return { state: 'ready', ema: name };
-    if (dir === 'short' && bar.h >= level && bar.c < level) return { state: 'ready', ema: name };
-  }
-  return { state: 'waiting', ema: name };
-}
-function trendScore(rows1d, rows4h){
-  var out = zeroResult();
-  try{
-    if (typeof ema !== 'function' || typeof adx !== 'function' ||
-        typeof ichimokuState !== 'function' || typeof crossOver !== 'function' ||
-        typeof crossUnder !== 'function' || typeof crossedRecently !== 'function'){
-      return out; // indicator globals missing -> graceful zero
-    }
-    var ok1 = Array.isArray(rows1d) && rows1d.length > 0;
-    var ok4 = Array.isArray(rows4h) && rows4h.length > 0;
-    if (!ok1 && !ok4) return out;
-
-    if (ok1){
-      var c1 = rows1d.map(function(r){ return r ? r.c : NaN; });
-      var i1 = c1.length - 1;
-      var e50 = ema(c1, 50), e200 = ema(c1, 200);
-      var cL = c1[i1], e50L = e50[i1], e200L = e200[i1];
-
-      /* 1) 1d close vs ema200 */
-      if (isFinite(cL) && isFinite(e200L)) out.comps.d1Trend = cmp(cL, e200L);
-
-      /* 2) 1d ema50 vs ema200 + fresh-cross marker (<=10 bars) */
-      if (isFinite(e50L) && isFinite(e200L)) out.comps.d1Cross = cmp(e50L, e200L);
-      /* A cross on the daily bar that is still forming does not count. */
-      var dClosed = tmClosedRows(rows1d, 86400);
-      var cClosed = dClosed.map(function(r){ return r ? r.c : NaN; });
-      var e50c = ema(cClosed, 50), e200c = ema(cClosed, 200);
-      if (crossedRecently(crossOver(e50c, e200c), 10)) out.freshCross = 'GOLDEN';
-      else if (crossedRecently(crossUnder(e50c, e200c), 10)) out.freshCross = 'DEATH';
-
-      /* 4) ichimoku cloud on 1d */
-      var st = ichimokuState(rows1d);
-      if (st && st.priceVsCloud === 'ABOVE') out.comps.cloud = 1;
-      else if (st && st.priceVsCloud === 'BELOW') out.comps.cloud = -1;
-    }
-
-    /* 3) 4h cascade ema9 / ema21 / ema50 */
-    if (ok4){
-      var c4 = rows4h.map(function(r){ return r ? r.c : NaN; });
-      var i4 = c4.length - 1;
-      var e9 = ema(c4, 9)[i4], e21 = ema(c4, 21)[i4], e50h = ema(c4, 50)[i4];
-      if (isFinite(e9) && isFinite(e21) && isFinite(e50h)){
-        if (e9 > e21 && e21 > e50h) out.comps.h4Cascade = 1;
-        else if (e9 < e21 && e21 < e50h) out.comps.h4Cascade = -1;
-      }
-    }
-
-    /* 5) ADX strength point in the direction of the trend-sum so far */
-    if (ok1){
-      var a = adx(rows1d, 14);
-      out.adx = (a && a.adx && a.adx.length) ? a.adx[a.adx.length - 1] : NaN;
-      /* hg-v1019: THE MOMENTUM WITNESS rides the same 1D tape — RSI(14) as
-         EVIDENCE. NOT a sixth composite leg: the score sum below is
          byte-identical, so every recorded tmScore stays on its own scale
          (the hg-v1012 rule). rsi missing -> NaN, and NaN holds nothing off
          (hg-v700 honest degradation). */
@@ -92,8 +28,8 @@ function trendScore(rows1d, rows4h){
 /* ---------------- tab UI ---------------- */
 
 var TURNOVER_FLOOR = (typeof W.hgDeskMinTurnover === 'function') ? W.hgDeskMinTurnover() : 5e6;
-var CHUNK = 5;               // paced bulk fetch chunk size
-var CHUNK_SLEEP_MS = 150;
+var CHUNK = 10;              // one visible batch: 10 coins, then the board updates
+var CHUNK_SLEEP_MS = 40;
 
 function tmVenueChip(item){
   return (typeof W.hgDeskVenueChipHTML === 'function') ? W.hgDeskVenueChipHTML(item) : '';
@@ -414,3 +350,128 @@ function trendmxPlanLegacy(inp){
     if (!Array.isArray(rows) || !rows.length) return null;
     var lastBar = rows[rows.length - 1];
     if (!lastBar) return null;
+    var ticker = trendmxTicker(inp);
+    var gate = inp.gate || trendmxGateEval(inp, dir);
+
+    /* 1) gate-clean hit + unified formation ticket (same as GATES scan) */
+    if (gate && gate.hit && !gate.veto && typeof hgFormTicket === 'function'){
+      try{
+        var fm = hgFormTicket(gate.hit, {
+          rows: rows, style: 'swing', a4: gate.hit.a4,
+          rows1h: inp.rows1h, ticker: ticker
+        });
+        if (fm && fm.ok && fm.hit && tmValidSetup(fm.hit)){
+          return trendmxAttachMeta(fm.hit, gate, { formationScore: fm.formationScore, rows4h: rows, price: inp.price });
+        }
+      }catch(eForm){}
+    }
+
+    /* 2) swing clean plan from cryptogates */
+    if (typeof hgSwingCleanPlan === 'function'){
+      try{
+        var sc = hgSwingCleanPlan(rows, ticker, dir);
+        if (tmValidSetup(sc)) return trendmxAttachMeta(sc, gate, { rows4h: rows, price: inp.price });
+      }catch(eSc){}
+    }
+
+    /* 3) structure-based hgPlanLevels with min R:R */
+    if (typeof hgPlanLevelsCore === 'function'){
+      try{
+        var pl = hgPlanLevelsCore(dir, rows, null, { minRr: TM_MIN_RR, style: 'swing', type: 'TRENDMX' });
+        if (tmValidSetup(pl)) return trendmxAttachMeta(pl, gate, { rows4h: rows, price: inp.price });
+      }catch(ePl){}
+    }
+
+    /* 4) SMART $ builder with trend-derived evidence */
+    if (typeof smartSetup === 'function'){
+      try{
+        var cls = trendmxClassify(inp, dir);
+        var s = smartSetup(cls, rows, inp.rows1h);
+        if (tmValidSetup(s)){
+          if (typeof hgApplyExactEntry === 'function'){
+            s = hgApplyExactEntry(s, rows, { rows1h: inp.rows1h, style: s.type || 'swing', preferEdge: true }) || s;
+          }
+          return trendmxAttachMeta(s, gate, { rows4h: rows, price: inp.price });
+        }
+      }catch(eSmart){}
+    }
+
+    /* 5) house fallback — structure stop + structure targets when available */
+    var entry = +((inp.entry !== undefined && inp.entry !== null) ? inp.entry : lastBar.c);
+    var a = (typeof atr === 'function') ? atr(rows, TM_ATR_LEN)[rows.length - 1] : NaN;
+    if (!isFinite(entry) || entry <= 0 || !isFinite(a) || a <= 0) return null;
+    var st = tmFallbackStop(dir, entry, a, rows);
+    var risk = Math.abs(entry - st.stop);
+    if (!(risk > 0)) return null;
+    var t1 = (dir === 'long') ? entry + TM_T1_R * risk : entry - TM_T1_R * risk;
+    var t2 = (dir === 'long') ? entry + TM_T2_R * risk : entry - TM_T2_R * risk;
+    if (typeof hgStructureTargets === 'function'){
+      try{
+        var tg = hgStructureTargets(dir, entry, st.stop, rows, a, { minRr: TM_MIN_RR, style: 'swing' });
+        if (tg && isFinite(tg.t1)){
+          t1 = tg.t1;
+          if (isFinite(tg.t2)) t2 = tg.t2;
+        }
+      }catch(eTg){}
+    }
+    var fb = {
+      type: 'ATR', dir: dir, entry: entry, stop: st.stop, t1: t1, t2: t2,
+      rr1: Math.abs(t1 - entry) / risk,
+      rr2: Math.abs(t2 - entry) / risk,
+      riskPct: risk / entry * 100,
+      confirmed: null, note: st.note, planSrc: 'trendmx-fallback'
+    };
+    if (!tmValidSetup(fb)) return null;
+    return trendmxAttachMeta(fb, gate, { rows4h: rows, price: inp.price });
+  }catch(e){ return null; }
+}
+
+/* plan line, same markup as oiflow.js:
+   ENTRY <b>..</b> · STOP <b>..</b> · T1 <b>..</b> (xR) · T2 <b>..</b> (xR) · risk ..% */
+function trendmxPlanHTML(s){
+  if (!s) return '';
+  var risk = (isFinite(s.entry) && isFinite(s.stop)) ? Math.abs(s.entry - s.stop) : NaN;
+  var rr1 = isFinite(s.rr1) ? s.rr1 : ((isFinite(risk) && risk > 0) ? Math.abs(s.t1 - s.entry) / risk : NaN);
+  var rr2 = isFinite(s.rr2) ? s.rr2 : ((isFinite(risk) && risk > 0) ? Math.abs(s.t2 - s.entry) / risk : NaN);
+  return 'ENTRY <b>' + pxFmt(s.entry) + '</b> · STOP <b>' + pxFmt(s.stop) + '</b>'
+    + ' · T1 <b>' + pxFmt(s.t1) + '</b> (' + fmtN(rr1, 1) + 'R)'
+    + ' · T2 <b>' + pxFmt(s.t2) + '</b> (' + fmtN(rr2, 1) + 'R)'
+    + (isFinite(s.riskPct) ? ' · risk ' + fmtN(s.riskPct, 2) + '%' : '')
+    + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(s.entry, s.stop) : '')
+    + (s.note ? ' — ' + escH(s.note) : '')
+    /* price may have walked through this plan already — the shared rule in
+       hg-plan.js, judged against the mark trendmxAttachMeta carried over */
+    + ((typeof W !== 'undefined' && W && typeof W.hgPlanGeometryLineHtml === 'function')
+      ? (W.hgPlanGeometryLineHtml({ dir: s.dir, entry: s.entry, stop: s.stop, t1: s.t1 },
+                                  s.mark, { cls: 'note warn', style: 'margin-top:6px' }) || '') : '')
+    /* the shared 14-gate indicator read attached by hgBestLevels */
+    + ((typeof hgStrategyConfirmChipHtml === 'function')
+      ? hgStrategyConfirmChipHtml(s.strategyConfirm, s.strategyWith, s.strategyAgainst) : '')
+    + (s.contextRead ? '<div class="dim">' + escH(s.contextRead)
+        + (s.contextWarn ? ' — context AGAINST this direction' : '') + '</div>' : '')
+    + ((typeof hgStrategyTradeDetailHtml === 'function')
+      ? hgStrategyTradeDetailHtml(s, { skipChip: true }) : '');
+}
+
+/* expandable-row block for one matrix row; uses the scan-cached 4h rows —
+   never refetches. */
+function trendmxCardStack(r, dir){
+  try{
+    if (!dir) return null;
+    var gate = r.gate || trendmxGateEval(r, dir);
+    var ticker = trendmxTicker(r);
+    if (gate && gate.hit && typeof hgSetupStackFromHit === 'function'){
+      var hit = Object.assign({}, gate.hit, { sym: r.sym });
+      if (typeof hgSetupStackAttach === 'function'){
+        hgSetupStackAttach(hit, {
+          sym: r.sym, style: 'swing', rows4h: r.rows4h, rows1h: r.rows1h, ticker: ticker
+        });
+        return hit.stack || null;
+      }
+    }
+    if (typeof hgSetupStackForInlineScan !== 'function') return null;
+    return hgSetupStackForInlineScan({
+      dir: dir, sym: r.sym, rows4h: r.rows4h, rows1h: r.rows1h,
+      style: 'swing', asset: 'crypto', ticker: ticker,
+      clean: !!(gate && gate.clean7),
+      nearClean: !!(gate && gate.nearClean),

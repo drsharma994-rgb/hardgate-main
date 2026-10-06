@@ -2006,7 +2006,8 @@ function fmtLike(n, d){ return Number(n).toLocaleString('en-US', { maximumFracti
       && /WHY SILENT/.test(M4.stubs['#gsEmpty'].innerHTML)
       && /feeds failed — no 15m klines/.test(M4.stubs['#gsEmpty'].innerHTML),
          'feeds failed: empty state carries the WHY SILENT feeds-failed line');
-  assert(M4.stubs['#gsCards'].innerHTML === '', 'feeds failed: no cards rendered without data');
+  assert(!/class="card gsx-card\b/.test(M4.stubs['#gsCards'].innerHTML),
+         'feeds failed: no setup cards rendered without data (status panels may remain)');
 
   Date.now = realDateNow4;
   delete globalThis.localStorage;

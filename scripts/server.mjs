@@ -474,6 +474,59 @@ function goldLiveSource(kind, src){
   return src;
 }
 
+function readSmallBody(req, max){
+  return new Promise(function(resolve, reject){
+    var chunks = [];
+    var n = 0;
+    req.on('data', function(c){
+      n += c.length;
+      if (n > max){ reject(new Error('body')); req.destroy(); return; }
+      chunks.push(c);
+    });
+    req.on('end', function(){ resolve(Buffer.concat(chunks).toString('utf8')); });
+    req.on('error', reject);
+  });
+}
+
+/* Public TradingView crypto scanner. No account: the server posts the ticker
+   and the technical summary comes back. The browser cannot call this host. */
+async function tvScanHandler(req, res){
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
+  if (req.method !== 'POST'){ res.statusCode = 405; res.end('{"error":"POST"}'); return; }
+  var raw = '';
+  try { raw = await readSmallBody(req, 4000); }
+  catch (e) { res.statusCode = 413; res.end('{"error":"body"}'); return; }
+  var body;
+  try { body = JSON.parse(raw || '{}'); }
+  catch (e) { res.statusCode = 400; res.end('{"error":"json"}'); return; }
+  var tickers = body && body.symbols && body.symbols.tickers;
+  if (!Array.isArray(tickers) || !tickers.length || tickers.length > 2){
+    res.statusCode = 400; res.end('{"error":"ticker"}'); return;
+  }
+  for (var i = 0; i < tickers.length; i++){
+    if (!/^BINANCE:[A-Z0-9]{2,15}USDT(\.P)?$/.test(String(tickers[i]))){
+      res.statusCode = 400; res.end('{"error":"ticker"}'); return;
+    }
+  }
+  try {
+    const upstream = await fetch('https://scanner.tradingview.com/crypto/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': 'Hardgate/1.0' },
+      body: JSON.stringify({
+        symbols: { tickers: tickers },
+        columns: ['Recommend.All', 'RSI', 'EMA20', 'EMA50', 'EMA200', 'ADX']
+      })
+    });
+    const text = await upstream.text();
+    res.statusCode = upstream.ok ? 200 : 502;
+    res.end(text.slice(0, 20000));
+  } catch (e) {
+    res.statusCode = 502;
+    res.end('{"error":"tradingview"}');
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   try{
     baseHeaders(res);
@@ -486,6 +539,7 @@ const server = http.createServer(async (req, res) => {
     if (u.pathname === '/api/news/calendar') return newsCalendarHandler(req, res);
     if (u.pathname === '/api/delta/perp-history') return deltaPerpHistoryHandler(req, res);
     if (u.pathname === '/api/fed-calendar') return fedCalendarHandler(req, res);
+    if (u.pathname === '/api/tv-scan') return tvScanHandler(req, res);
     /* squeeze-watch status: armed? last cycle? fires? — no secrets, counts only */
     if (u.pathname === '/api/squeeze-watch'){
       res.setHeader('Content-Type', 'application/json; charset=utf-8');

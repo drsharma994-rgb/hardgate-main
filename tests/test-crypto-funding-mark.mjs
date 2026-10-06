@@ -426,7 +426,9 @@ console.log('\n10. the census, derived by call shape: which record writers carry
      funding figure in reach at its record site today */
   const byDesign = ['omnipresent.js', 'dex-screener.js', 'reversalsniper.js', 'brain.js', 'pine.js', 'pine-sub.js', 'super-best.js', 'super-sniper.js'];
   for (const b of byDesign) ok(bare.some(c => c.startsWith(b + ' ')), b + ' records without funding (no figure in reach at its record site) -- reported');
-  const unexplained = bare.filter(c => !byDesign.some(b => c.startsWith(b + ' ')) && !/^index\.html /.test(c) && !/^gold|^omnigold|^newgold|^optigold|^tauric|^eightypercent|^super-gold|^milligold/.test(c));
+  /* ganeshgold (hg-v1113) is the newest gold desk — XAUUSD, no funding
+     figure in reach at its record site, exactly like the other gold desks. */
+  const unexplained = bare.filter(c => !byDesign.some(b => c.startsWith(b + ' ')) && !/^index\.html /.test(c) && !/^gold|^omnigold|^newgold|^optigold|^tauric|^eightypercent|^super-gold|^milligold|^ganeshgold/.test(c));
   ok(unexplained.length === 0, 'every other bare writer is a gold desk or the inline CARD site' + (unexplained.length ? ' -- UNEXPLAINED: ' + unexplained.join(', ') : ''));
   ok(carriers.length + bare.length >= 27, 'the census sees the record writers (' + (carriers.length + bare.length) + ')');
 }

@@ -1,3 +1,18 @@
+    perfect: el.querySelector('[data-r="perfect"]'),        /* hg-v1022 */
+    fwd: el.querySelector('[data-r="fwd"]'),                /* hg-v1039: the measured book */
+    trendform: el.querySelector('[data-r="trendform"]'),    /* hg-v1048: coindcx trending / forming */
+    crown: el.querySelector('[data-r="crown"]'),            /* hg-v1066: the OMNIBTC-style crown */
+    out: out,
+    status: status
+  };
+  var chips  = Array.prototype.slice.call(el.querySelectorAll('[data-f]'));
+  var vChips = Array.prototype.slice.call(el.querySelectorAll('[data-v]'));
+
+  var state = { rows: [], crypto: [], golden: [], death: [], filter: 'ALL', venue: 'ALL', sortKey: 'score', sortDir: -1, running: false, view: 'table' };   /* hg-v1015: death bag initialized with golden; hg-v1045: view toggle */
+  tmTab._state = state;
+
+  function setProg(f){
+    if (!prog) return;
     prog.style.display = (f === null) ? 'none' : 'block';
     if (f !== null) prog.firstElementChild.style.width = (f * 100).toFixed(1) + '%';
   }
@@ -187,8 +202,36 @@
     var t0 = Date.now();
     try{
       setProg(0.05);
-      setStatus('Scanning full universe (floor ' + floorM + 'M, Delta + CoinDCX + Binance, + ALL CoinDCX futures)...');
-      var snap = await trendmxScan({ force: true });
+      setStatus('Scanning in batches of 10...');
+      var snap = await trendmxScan({
+        force: true,
+        setProg: setProg,
+        onBatch: function(info){
+          state.rows = info.rows;
+          /* hg-v1150: THE PARTIAL BOARD IS THE PUBLISHED BOARD for as long as
+             it is the one on screen. renderAll() paints the desks and the
+             desks write the forward record (trendmxLimitClasses) — and the
+             record's tmScore / tmAlign / tmAgeMin marks are read off the
+             PUBLISHED snapshot (hgTrendMatrixMark). The full publish happens
+             only at the end of trendmxScan, so every mid-scan batch painted
+             its record against a stale-or-null snapshot: tmScore undefined on
+             records whose row sat on the board with a perfectly readable
+             composite. Publish the partial rows here so a mid-scan record
+             always carries the composite of the exact row it was minted
+             from — the same row the operator saw. */
+          try { publishTrendmxSnap(info.rows); } catch (ePub) {}
+          try {
+            trendmxStampBtcStructure(state.rows);
+            state.golden = trendmxGoldenCrossSetups(state.rows);
+            state.death = trendmxDeathCrossSetups(state.rows);
+          } catch (eB) {}
+          renderAll();
+          setProg(info.total ? info.done / info.total : 0);
+          var more = info.done < info.total;
+          setStatus('Batch ' + info.batch + ' of ' + info.batches + ' · ' + info.done + ' / ' + info.total + ' coins on the board'
+            + (more ? ' · next 10 starting' : ' · checking setups'));
+        }
+      });
       var results = (snap && snap.rows) ? snap.rows : [];
       var failed = (snap && snap.failed) ? snap.failed : 0;
       var symsLen = (snap && snap.scanned) ? snap.scanned : results.length;
@@ -196,6 +239,7 @@
       var vc = (snap && snap.venueCounts) ? snap.venueCounts : {};
 
       state.rows = results;
+      state.crypto = (snap && snap.cryptoSetups) ? snap.cryptoSetups : [];
       state.golden = (snap && snap.goldenCross) ? snap.goldenCross : [];
       state.death = (snap && snap.deathCross) ? snap.deathCross : [];   /* hg-v1014 */
       state.venueCounts = vc;
@@ -275,6 +319,7 @@
   if (__tmScanSnap && __tmScanSnap.rows && __tmScanSnap.rows.length &&
       __tmScanSnap.at && (Date.now() - __tmScanSnap.at) < (5 * 60 * 1000)){
     state.rows = __tmScanSnap.rows;
+    state.crypto = __tmScanSnap.cryptoSetups || [];
     state.golden = __tmScanSnap.goldenCross || [];
     state.death = __tmScanSnap.deathCross || [];   /* hg-v1014 */
     tmTab.hasRun = true;
@@ -365,6 +410,16 @@ W.trendmxCrossState = function(){
 };
 W.trendmxState = function(){
   try{ return __tmSnap ? JSON.parse(JSON.stringify(__tmSnap)) : null; }catch(e){ return null; }
+};
+/* hg-v1150: THE SCAN ROWS, SYNC AND FULL. trendmxState() publishes the LIGHT
+   mark snapshot ({sym, score, dir, comps} — the ledger reads it) and the
+   cross state publishes the held tickets; but the desk's own last scan
+   holds FULL rows (tape · gate · witnesses · freshCross), and consumers
+   that re-run the builders on them — the AI workforce's rows fallback —
+   had no sync seam to reach them. Same rows trendmxScan returned; null
+   before the first scan. */
+W.trendmxScanRows = function(){
+  try{ return (__tmScanSnap && Array.isArray(__tmScanSnap.rows) && __tmScanSnap.rows.length) ? __tmScanSnap.rows : null; }catch(e){ return null; }
 };
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'trendmx', label: 'TREND MATRIX', mount: mountTrendMatrix, refresh: refreshTrendMatrix });

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
     var c = rows.map(function(x){ return x.c; });
     var e50 = W.ema(c, 50), e200 = W.ema(c, 200);
     if (!e50 || !e200 || e50.length < 2) return null;
@@ -38,6 +39,8 @@ async function trendmxPerfectEvidencePass(rows){
       if (!plan) continue;
       var reads = {};
       if (isFinite(+r.fundingPct)){
+=======
+>>>>>>> origin/main
         reads.venueFundingPct = +r.fundingPct;
         if (typeof hgFundingAgainstMark === 'function'){
           try{ var fam = hgFundingAgainstMark(+r.fundingPct, dir); if (fam) reads.fundingAgainst = (fam.against === true); }catch(eF){ }
@@ -84,6 +87,101 @@ async function trendmxPerfectEvidencePass(rows){
         }catch(eSl){ }
       }
       try{ if (typeof W.hgNewsRisk === 'function'){ var nw = W.hgNewsRisk(r.base || 'BTC'); if (nw && nw.blackout) reads.newsRisk = 'blackout'; } }catch(eN){ }
+      /* hg-v1150: THE FOUR REMAINING SHARED EVIDENCE LEGS — every one a FREE
+         feed, so the matrix now feeds the SAME reads bag OMNIBTC feeds and a
+         PERFECT / PERFECT+ badge means byte-identically the same thing on
+         both desks:
+           trendQuality  — the matrix's own chop witness (Choppiness Index +
+                           Kaufman ER off the row's own 4h tape; zero requests)
+           leverageState — coinalyze 24h aggregated OI % change + the last
+                           three Binance funding prints (both free, cached)
+           onchainVeto   — the BTC exchange-netflow z from the on-chain state
+                           (BTC rows only: that feed speaks about BTC flow —
+                           an alt row stays honestly UNREAD)
+           cvdContext    — Binance spot taker flow vs the perp taker ratio
+                           (both free, cached): BOTH-WITH / PERP-ONLY /
+                           SPOT-ONLY / AGAINST
+         Unreadable stays null: neither confirms nor denies (the honest
+         third state). Evidence, never a gate. */
+      try{
+        var tqSt = trendmxChopState(r);
+        if (tqSt && tqSt.state){
+          reads.trendQuality = (tqSt.state === 'chop') ? 'CHOP' : 'TREND';
+          if (isFinite(+tqSt.chop)) reads.chopVal = +tqSt.chop;
+          if (isFinite(+tqSt.er)) reads.erVal = +tqSt.er;
+        }
+      }catch(eTq2){ }
+      var bSym = (r && r.base) ? String(r.base).toUpperCase() + 'USDT' : null;
+      if (bSym){
+        var freePack = null;
+        try{
+          freePack = await Promise.allSettled([
+            (typeof W.coinalyzeOIChg === 'function') ? W.coinalyzeOIChg(bSym, 24) : Promise.resolve(null),
+            (typeof W.binanceFundingHist === 'function') ? W.binanceFundingHist(bSym, 30) : Promise.resolve(null),
+            (typeof W.binanceSpotTakerFlow === 'function') ? W.binanceSpotTakerFlow(bSym, '4h', 100) : Promise.resolve(null),
+            (typeof W.binanceTakerRatio === 'function') ? W.binanceTakerRatio(bSym, '4h', 100) : Promise.resolve(null)
+          ]);
+        }catch(eFp){ freePack = null; }
+        /* the leverage cycle — OI % change (24h) plus the last three funding
+           prints, the SAME house thresholds OMNIBTC uses: RESET (deleveraging)
+           / EXTENDED (crowded) / FLAT. Either feed unreadable = no verdict. */
+        try{
+          var oiR = (freePack && freePack[0].status === 'fulfilled') ? freePack[0].value : null;
+          var oiChg = (oiR && isFinite(+oiR.chgPct)) ? +oiR.chgPct : null;
+          var fh = (freePack && freePack[1].status === 'fulfilled') ? freePack[1].value : null;
+          var fund3 = [], fundLast = null;
+          if (Array.isArray(fh)){
+            var f3 = fh.slice(-3);
+            for (var fi2 = 0; fi2 < f3.length; fi2++){
+              if (f3[fi2] && isFinite(+f3[fi2].rate)) fund3.push((+f3[fi2].rate) * 100);  /* decimal -> percent, the house convention */
+            }
+            if (fund3.length) fundLast = fund3[fund3.length - 1];
+          }
+          if (oiChg != null) reads.oiChgPct = oiChg;
+          if (fundLast != null) reads.fundLatestPct = fundLast;
+          if (oiChg != null && fund3.length){
+            if (oiChg <= -10 || (oiChg <= 0 && fund3.some(function(f){ return f <= 0; }))) reads.leverageState = 'RESET';
+            else if (oiChg >= 15 && fundLast > 0.03) reads.leverageState = 'EXTENDED';
+            else reads.leverageState = 'FLAT';
+          }
+        }catch(eLv2){ }
+        /* the spot-vs-perp CVD context — both books' taker slopes over the
+           free Binance feeds, read against the plan's direction */
+        try{
+          if (typeof W.hgObtcCvdSlopeDir === 'function'){
+            var spotFlow = (freePack && freePack[2].status === 'fulfilled') ? freePack[2].value : null;
+            var perpTaker = (freePack && freePack[3].status === 'fulfilled') ? freePack[3].value : null;
+            var spotUp = W.hgObtcCvdSlopeDir(spotFlow && spotFlow.series);
+            var perpUp = W.hgObtcCvdSlopeDir(perpTaker && perpTaker.series);
+            if (spotUp != null && perpUp != null){
+              var spotWith = (dir === 'long') ? spotUp : !spotUp;
+              var perpWith = (dir === 'long') ? perpUp : !perpUp;
+              reads.spotCvdUp = spotUp; reads.perpCvdUp = perpUp;
+              reads.cvdContext = (spotWith && perpWith) ? 'BOTH-WITH'
+                : (perpWith && !spotWith) ? 'PERP-ONLY'
+                : (!perpWith && spotWith) ? 'SPOT-ONLY' : 'AGAINST';
+            }
+          }
+        }catch(eCv2){ }
+      }
+      /* the on-chain netflow veto — BTC rows only: the state's exchange
+         netflow z is BTC flow, and applying it to an alt row would be a
+         guess, not a read. Fail open, exactly as the predicate expects. */
+      try{
+        if (r.base === 'BTC' && typeof W.onchainState === 'function' && typeof W.hgObtcNetflowZOf === 'function'){
+          var ocSt = W.onchainState();
+          var nz = W.hgObtcNetflowZOf(ocSt);
+          if (isFinite(nz)){
+            reads.netflowZ = nz;
+            if (typeof hgNetflowGate === 'function'){
+              var ng = hgNetflowGate('BTC', dir, { z: nz });
+              if (ng && ng.state === 'veto') reads.onchainVeto = true;
+              else reads.onchainVeto = false;
+              if (ng && ng.note) reads.netflowNote = ng.note;
+            }
+          }
+        }
+      }catch(eNf2){ }
       try{
         if (typeof W.hgObtcPerfectFormation === 'function'){
           var pick = { row: Object.assign({}, r, { entry: plan.entry, stop: plan.stop, t1: plan.t1, dir: dir }), tier: 'clean' };
@@ -137,6 +235,7 @@ function hgPaintTrendmxFromSnap(){
     var el = tmTab.mountEl;
     var refs = {
       summary: el.querySelector('[data-r="summary"]'),
+      crypto: el.querySelector('[data-r="crypto"]'),
       golden: el.querySelector('[data-r="golden"]'),
       death: el.querySelector('[data-r="death"]'),   /* hg-v1015 */
       cards: el.querySelector('[data-r="cards"]'),
@@ -294,6 +393,7 @@ function mountTrendMatrix(el){
       '<div class="prog" data-r="prog"><i></i></div>' +
       '<div class="note" data-r="summary" style="margin-top:8px;font-weight:600">Idle — run a scan to build the desk.</div>' +
       '<div class="note" data-r="status" style="margin-top:4px">Press RUN SCAN to warm the full matrix + ticket desk.</div>' +
+      '<div data-r="crypto"></div>' +
       '<div data-r="golden"></div>' +
       '<div data-r="death"></div>' +   /* hg-v1015: the bear desk stands on its own, right under the bull desk */
       '<div class="cards" data-r="cards"></div>' +
@@ -330,6 +430,7 @@ function mountTrendMatrix(el){
   var out    = el.querySelector('[data-r="out"]');
   var refs = {
     summary: summary,
+    crypto: el.querySelector('[data-r="crypto"]'),
     golden: el.querySelector('[data-r="golden"]'),
     death: el.querySelector('[data-r="death"]'),   /* hg-v1015 */
     cards: el.querySelector('[data-r="cards"]'),
@@ -337,18 +438,3 @@ function mountTrendMatrix(el){
     forming: el.querySelector('[data-r="forming"]'),
     gateclean: el.querySelector('[data-r="gateclean"]'),   /* hg-v1018 */
     conviction: el.querySelector('[data-r="conviction"]'),  /* hg-v1018 */
-    perfect: el.querySelector('[data-r="perfect"]'),        /* hg-v1022 */
-    fwd: el.querySelector('[data-r="fwd"]'),                /* hg-v1039: the measured book */
-    trendform: el.querySelector('[data-r="trendform"]'),    /* hg-v1048: coindcx trending / forming */
-    crown: el.querySelector('[data-r="crown"]'),            /* hg-v1066: the OMNIBTC-style crown */
-    out: out,
-    status: status
-  };
-  var chips  = Array.prototype.slice.call(el.querySelectorAll('[data-f]'));
-  var vChips = Array.prototype.slice.call(el.querySelectorAll('[data-v]'));
-
-  var state = { rows: [], golden: [], death: [], filter: 'ALL', venue: 'ALL', sortKey: 'score', sortDir: -1, running: false, view: 'table' };   /* hg-v1015: death bag initialized with golden; hg-v1045: view toggle */
-  tmTab._state = state;
-
-  function setProg(f){
-    if (!prog) return;
