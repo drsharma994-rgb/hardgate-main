@@ -422,13 +422,281 @@
     return mean > 0 ? (+rows[rows.length - 1].v || 0) / mean : NaN;
   }
 
+
+  /* ===================== hg-v1158: THE INDICATOR STACK =====================
+     The census below marked a row USED from a hand-typed `wire` column plus
+     eight computed ids, and the `opts` it accepted was discarded (`void
+     opts`) — so COT, the news calendar, the FRED real-rate read, the session
+     windows, silver and USDJPY all read UNCHECKED on a desk whose ranker
+     scores by every one of them, and the bar-computable rows this catalog
+     itself calls CORE (Bollinger 20,2 · HV20 realized · raw volume/MA ·
+     hourly range p80) were computed nowhere. One home for the bar-computed
+     reads, read twice: by the census (USED, with the value this bar) and by
+     goldRankSetups, which stamps one THREE-STATE mark per read on the ranked
+     row under `ind:` beside the hg-v1155 `free:` marks — true WITH the plan
+     (or the named state), false AGAINST (or its opposite), ABSENT when the
+     read could not be made or sits on its own bar (RSI exactly 50, ADX in
+     TRANSITION, KER between the L1 bars). GOLD SCALP records them; the
+     ledger's read split can then ask which of them separates on this desk.
+     ADX, the squeeze, Hurst and the autocorrelation are goldind's own
+     functions CALLED, not copied. Marks only: nothing here moves a tally, a
+     grade or a gate, and the guard asserts the ranker reads none back. */
+  function _fin(v){ return (typeof v === 'number' && isFinite(v)) ? v : NaN; }
+  function _closes(rows){ var o = [], i; for (i = 0; i < rows.length; i++) o.push(_fin(rows[i] && rows[i].c)); return o; }
+  function _smaLast(arr, n){
+    if (!arr || arr.length < n) return NaN;
+    var s = 0, i, v;
+    for (i = arr.length - n; i < arr.length; i++){ v = arr[i]; if (!isFinite(v)) return NaN; s += v; }
+    return s / n;
+  }
+  function _stdev(arr){
+    if (!arr || arr.length < 2) return NaN;
+    var i, m = 0, v;
+    for (i = 0; i < arr.length; i++){ v = arr[i]; if (!isFinite(v)) return NaN; m += v; }
+    m /= arr.length;
+    var sq = 0;
+    for (i = 0; i < arr.length; i++) sq += (arr[i] - m) * (arr[i] - m);
+    return Math.sqrt(sq / arr.length);
+  }
+  function _median(arr){
+    var a = [], i;
+    for (i = 0; i < arr.length; i++) if (isFinite(arr[i])) a.push(arr[i]);
+    if (!a.length) return NaN;
+    a.sort(function(x, y){ return x - y; });
+    var m = a.length >> 1;
+    return (a.length % 2) ? a[m] : (a[m - 1] + a[m]) / 2;
+  }
+  function _pct(arr, p){
+    var a = [], i;
+    for (i = 0; i < arr.length; i++) if (isFinite(arr[i])) a.push(arr[i]);
+    if (!a.length) return NaN;
+    a.sort(function(x, y){ return x - y; });
+    var idx = Math.min(a.length - 1, Math.max(0, Math.ceil(p * a.length) - 1));
+    return a[idx];
+  }
+  /* rolling window statistic over the windows BEFORE the last one — the
+     median the last window is judged against never contains itself */
+  function _rollingMedianBefore(series, win, maxWin, fn){
+    var vals = [], end, start;
+    for (end = series.length - 1; end - win >= 0 && vals.length < maxWin; end--){
+      start = end - win;
+      vals.push(fn(series.slice(start, end)));
+    }
+    return vals.length >= 30 ? _median(vals) : NaN;
+  }
+  function _parkinson(rows){
+    var s = 0, n = 0, i, h, l;
+    for (i = 0; i < rows.length; i++){
+      h = _fin(rows[i] && rows[i].h); l = _fin(rows[i] && rows[i].l);
+      if (!(h > 0) || !(l > 0) || h < l) return NaN;
+      var x = Math.log(h / l); s += x * x; n++;
+    }
+    return n ? Math.sqrt(s / (n * 4 * Math.LN2)) : NaN;
+  }
+  var HG_GOLD_IND_TSMOM_BARS = 96;   /* 24 hours of 15m bars */
+  function hgGoldIndicatorReads(rows, opts){
+    opts = opts || {};
+    var out = { ok: false, n: Array.isArray(rows) ? rows.length : 0, why: '' };
+    try{
+      if (!Array.isArray(rows) || rows.length < 30){ out.why = 'need \u226530 bars'; return out; }
+      var n = rows.length, c = _closes(rows), last = c[n - 1], i, k;
+      if (!isFinite(last)){ out.why = 'last close unreadable'; return out; }
+      out.close = last;
+      /* #38 ADX / DMI — goldind's goldADX, called */
+      if (typeof W.goldADX === 'function'){
+        var a = W.goldADX(rows);
+        if (a && isFinite(_fin(a.adx))){
+          out.adx = a.adx; out.adxState = a.state || null;
+          out.plusDI = _fin(a.plusDI); out.minusDI = _fin(a.minusDI);
+        }
+      }
+      /* #33 SMA 20 / 50 / 200 */
+      out.sma20 = _smaLast(c, 20); out.sma50 = _smaLast(c, 50); out.sma200 = _smaLast(c, 200);
+      /* #76 Bollinger 20,2 */
+      if (isFinite(out.sma20)){
+        var sd = _stdev(c.slice(n - 20));
+        if (isFinite(sd)){
+          out.bbMid = out.sma20; out.bbUpper = out.sma20 + 2 * sd; out.bbLower = out.sma20 - 2 * sd;
+          out.bbWidthPct = out.sma20 > 0 ? (4 * sd) / out.sma20 * 100 : NaN;
+          out.bbPctB = sd > 0 ? (last - out.bbLower) / (4 * sd) : NaN;
+        }
+      }
+      /* #77 squeeze — goldind's goldVolSqueeze, called */
+      if (typeof W.goldVolSqueeze === 'function'){
+        var sq = W.goldVolSqueeze(rows);
+        if (sq && typeof sq.state === 'string') out.squeeze = sq.state;
+      }
+      /* #81 HV20 realized (log-return stdev per bar) vs the median of up to 100 earlier windows */
+      var lr = [];
+      for (i = 1; i < n; i++) lr.push((c[i] > 0 && c[i - 1] > 0) ? Math.log(c[i] / c[i - 1]) : NaN);
+      out.hv20 = _stdev(lr.slice(-20));
+      out.hv20Med = _rollingMedianBefore(lr, 20, 100, _stdev);
+      /* #82 Parkinson 20 vs its own earlier median */
+      out.park20 = _parkinson(rows.slice(-20));
+      out.park20Med = _rollingMedianBefore(rows, 20, 100, _parkinson);
+      /* #94 raw volume of the last closed bar over its 20-bar MA */
+      var vLast = _fin(rows[n - 1] && rows[n - 1].v), vs = [];
+      for (i = n - 21; i < n - 1; i++) vs.push(_fin(rows[i] && rows[i].v));
+      var vMa = _smaLast(vs, 20);
+      out.volRatio = (isFinite(vLast) && isFinite(vMa) && vMa > 0) ? vLast / vMa : NaN;
+      /* #53 TSMOM — the 24-hour return on the execution tape */
+      out.tsmom96 = (n > HG_GOLD_IND_TSMOM_BARS && isFinite(c[n - 1 - HG_GOLD_IND_TSMOM_BARS]) && c[n - 1 - HG_GOLD_IND_TSMOM_BARS] > 0)
+        ? last / c[n - 1 - HG_GOLD_IND_TSMOM_BARS] - 1 : NaN;
+      /* #91 hourly range p80 — COMPLETE UTC hours only (bars per hour from the tape's own step) */
+      try{
+        var steps = [];
+        for (i = Math.max(1, n - 12); i < n; i++) steps.push(_fin(rows[i].t) - _fin(rows[i - 1].t));
+        var step = _median(steps);
+        var perHour = (isFinite(step) && step > 0) ? Math.round(3600 / step) : 0;
+        if (perHour >= 1 && perHour <= 60){
+          var hours = {}, order = [], key, t;
+          for (i = 0; i < n; i++){
+            t = _fin(rows[i].t); if (!isFinite(t)) continue;
+            key = String(Math.floor(t / 3600));
+            if (!hours[key]){ hours[key] = { n: 0, hi: -Infinity, lo: Infinity }; order.push(key); }
+            var hh = _fin(rows[i].h), ll = _fin(rows[i].l);
+            if (!isFinite(hh) || !isFinite(ll)) continue;
+            hours[key].n++; if (hh > hours[key].hi) hours[key].hi = hh; if (ll < hours[key].lo) hours[key].lo = ll;
+          }
+          var ranges = [];
+          for (k = 0; k < order.length; k++){
+            var hr = hours[order[k]];
+            if (hr.n === perHour && isFinite(hr.hi) && isFinite(hr.lo)) ranges.push(hr.hi - hr.lo);
+          }
+          if (ranges.length >= 21){
+            out.hourRange = ranges[ranges.length - 1];
+            out.hourRangeP80 = _pct(ranges.slice(0, -1), 0.8);
+            out.hourRangeHigh = out.hourRange >= out.hourRangeP80;
+            out.hoursRead = ranges.length;
+          }
+        }
+      }catch(eHr){}
+      /* the census's own helpers: #54 RSI14 · #47 KER20 · #72/#73 ATR regime · #44 linreg slope */
+      out.rsi14 = goldRsi14(rows); out.ker20 = goldKer20(rows);
+      var atr14 = goldAtrN(rows, 14), atr50 = goldAtrN(rows, 50);
+      out.atr14 = atr14; out.atrRegime = (isFinite(atr14) && isFinite(atr50) && atr50 > 0) ? atr14 / atr50 : NaN;
+      var lg = hgGoldCatalogLinreg(rows, 50);
+      out.linregSlope = (lg && lg.ok) ? lg.slope : NaN;
+      /* #48 Hurst · #49 return autocorrelation — DAILY sessions, when the desk
+         hands its daily leg; a four-day 15m tape cannot carry 40 sessions */
+      var d = Array.isArray(opts.rows1d) ? opts.rows1d : null;
+      if (d && typeof W.hgGoldPart6Hurst === 'function'){
+        var hu = W.hgGoldPart6Hurst(d);
+        if (hu && hu.ok && isFinite(_fin(hu.H))){ out.hurst = hu.H; out.hurstRegime = hu.regime || null; }
+      }
+      if (d && typeof W.hgGoldPart6Autocorr === 'function'){
+        var ac = W.hgGoldPart6Autocorr(d);
+        if (ac && ac.ok && isFinite(_fin(ac.ac1))){ out.ac1 = ac.ac1; out.acRegime = ac.regime || null; }
+      }
+      out.ok = true;
+      return out;
+    }catch(e){ out.why = 'indicator reads threw'; return out; }
+  }
+
+  /* one mark per read, three states; direction-relative reads flip with dir,
+     state reads do not. No `ok` test here: the ranker gates on it and a
+     not-ok read carries no fields, so a second test was an unkillable
+     duplicate (the mutation pass said so) */
+  function hgGoldIndicatorMarks(ir, dir){
+    var m = {};
+    try{
+      if (!ir || (dir !== 'long' && dir !== 'short')) return m;
+      var L = (dir === 'long'), c = ir.close;
+      function side(up){ return up ? L : !L; }
+      function put(k, v){ if (v === true || v === false) m[k] = v; }
+      if (ir.adxState === 'TRENDING') put('ind:adxTrending', true);
+      else if (ir.adxState === 'CHOP') put('ind:adxTrending', false);
+      if (isFinite(ir.plusDI) && isFinite(ir.minusDI) && ir.plusDI !== ir.minusDI) put('ind:dmiWith', side(ir.plusDI > ir.minusDI));
+      if (ir.squeeze === 'ON') put('ind:bbSqueeze', true);
+      else if (ir.squeeze === 'OFF' || ir.squeeze === 'FIRED') put('ind:bbSqueeze', false);
+      if (isFinite(ir.bbPctB)) put('ind:bbOutside', ir.bbPctB > 1 || ir.bbPctB < 0);
+      if (isFinite(ir.sma20) && isFinite(c) && ir.sma20 !== c) put('ind:sma20With', side(c > ir.sma20));
+      if (isFinite(ir.sma50) && isFinite(c) && ir.sma50 !== c) put('ind:sma50With', side(c > ir.sma50));
+      if (isFinite(ir.sma200) && isFinite(c) && ir.sma200 !== c) put('ind:sma200With', side(c > ir.sma200));
+      if (isFinite(ir.hv20) && isFinite(ir.hv20Med) && ir.hv20 !== ir.hv20Med) put('ind:hvHigh', ir.hv20 > ir.hv20Med);
+      if (isFinite(ir.park20) && isFinite(ir.park20Med) && ir.park20 !== ir.park20Med) put('ind:parkHigh', ir.park20 > ir.park20Med);
+      if (isFinite(ir.volRatio) && ir.volRatio !== 1) put('ind:volAboveMa', ir.volRatio > 1);
+      if (isFinite(ir.tsmom96) && ir.tsmom96 !== 0) put('ind:tsmomWith', side(ir.tsmom96 > 0));
+      if (ir.hourRangeHigh === true || ir.hourRangeHigh === false) put('ind:hourRangeP80', ir.hourRangeHigh);
+      if (isFinite(ir.rsi14) && ir.rsi14 !== 50) put('ind:rsiWith', side(ir.rsi14 > 50));
+      if (isFinite(ir.ker20)){ if (ir.ker20 >= 0.6) put('ind:kerTrend', true); else if (ir.ker20 <= 0.3) put('ind:kerTrend', false); }
+      if (isFinite(ir.atrRegime) && ir.atrRegime !== 1) put('ind:atrExpanding', ir.atrRegime > 1);
+      if (isFinite(ir.linregSlope) && ir.linregSlope !== 0) put('ind:linregWith', side(ir.linregSlope > 0));
+      if (ir.hurstRegime === 'trending') put('ind:hurstTrending', true);
+      else if (ir.hurstRegime === 'meanrev') put('ind:hurstTrending', false);
+      if (ir.acRegime === 'momentum') put('ind:acMomentum', true);
+      else if (ir.acRegime === 'meanrev') put('ind:acMomentum', false);
+      return m;
+    }catch(e){ return {}; }
+  }
+
+  /* the card line: every read with its value and its mark; UNREAD where no
+     mark was made. Reported beside the tally, never part of it. */
+  var HG_GOLD_IND_ROWS = [
+    ['ADX14',        'ind:adxTrending',  'TRENDING',  'CHOP',        function(r){ return isFinite(r.adx) ? r.adx.toFixed(1) + (r.adxState ? ' ' + r.adxState : '') : ''; }],
+    ['DMI',          'ind:dmiWith',      'WITH',      'AGAINST',     function(r){ return (isFinite(r.plusDI) && isFinite(r.minusDI)) ? '+' + r.plusDI.toFixed(1) + ' / \u2212' + r.minusDI.toFixed(1) : ''; }],
+    ['BB 20,2',      'ind:bbOutside',    'OUTSIDE',   'INSIDE',      function(r){ return isFinite(r.bbPctB) ? '%b ' + r.bbPctB.toFixed(2) + (isFinite(r.bbWidthPct) ? ' \u00b7 width ' + r.bbWidthPct.toFixed(2) + '%' : '') : ''; }],
+    ['SQUEEZE',      'ind:bbSqueeze',    'ON',        'OFF',         function(r){ return r.squeeze || ''; }],
+    ['SMA20',        'ind:sma20With',    'WITH',      'AGAINST',     function(r){ return isFinite(r.sma20) ? r.sma20.toFixed(2) : ''; }],
+    ['SMA50',        'ind:sma50With',    'WITH',      'AGAINST',     function(r){ return isFinite(r.sma50) ? r.sma50.toFixed(2) : ''; }],
+    ['SMA200',       'ind:sma200With',   'WITH',      'AGAINST',     function(r){ return isFinite(r.sma200) ? r.sma200.toFixed(2) : 'needs 200 bars'; }],
+    ['HV20',         'ind:hvHigh',       'HIGH',      'LOW',         function(r){ return isFinite(r.hv20) ? (r.hv20 * 100).toFixed(3) + '%/bar' + (isFinite(r.hv20Med) ? ' vs med ' + (r.hv20Med * 100).toFixed(3) + '%' : '') : ''; }],
+    ['PARKINSON20',  'ind:parkHigh',     'HIGH',      'LOW',         function(r){ return isFinite(r.park20) ? (r.park20 * 100).toFixed(3) + '%' + (isFinite(r.park20Med) ? ' vs med ' + (r.park20Med * 100).toFixed(3) + '%' : '') : ''; }],
+    ['VOL/MA20',     'ind:volAboveMa',   'ABOVE',     'BELOW',       function(r){ return isFinite(r.volRatio) ? r.volRatio.toFixed(2) + '\u00d7' : ''; }],
+    ['TSMOM 24h',    'ind:tsmomWith',    'WITH',      'AGAINST',     function(r){ return isFinite(r.tsmom96) ? ((r.tsmom96 >= 0 ? '+' : '') + (r.tsmom96 * 100).toFixed(2) + '%') : ''; }],
+    ['HOUR RANGE',   'ind:hourRangeP80', '\u2265P80',  '<P80',        function(r){ return isFinite(r.hourRange) ? r.hourRange.toFixed(2) + ' vs p80 ' + r.hourRangeP80.toFixed(2) + ' (' + r.hoursRead + 'h)' : ''; }],
+    ['RSI14',        'ind:rsiWith',      'WITH',      'AGAINST',     function(r){ return isFinite(r.rsi14) ? r.rsi14.toFixed(1) : ''; }],
+    ['KER20',        'ind:kerTrend',     'TREND',     'MEANREV',     function(r){ return isFinite(r.ker20) ? r.ker20.toFixed(2) : ''; }],
+    ['ATR14/50',     'ind:atrExpanding', 'EXPANDING', 'CONTRACTING', function(r){ return isFinite(r.atrRegime) ? r.atrRegime.toFixed(2) : ''; }],
+    ['LINREG50',     'ind:linregWith',   'WITH',      'AGAINST',     function(r){ return isFinite(r.linregSlope) ? r.linregSlope.toFixed(4) + '/bar' : ''; }],
+    ['HURST (1d)',   'ind:hurstTrending','TRENDING',  'MEANREV',     function(r){ return isFinite(r.hurst) ? 'H ' + r.hurst.toFixed(2) : 'no daily leg'; }],
+    ['AC1 (1d)',     'ind:acMomentum',   'MOMENTUM',  'MEANREV',     function(r){ return isFinite(r.ac1) ? r.ac1.toFixed(2) : 'no daily leg'; }]
+  ];
+  function hgGoldIndicatorKeys(){ var o = [], i; for (i = 0; i < HG_GOLD_IND_ROWS.length; i++) o.push(HG_GOLD_IND_ROWS[i][1]); return o; }
+  function _esc(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function hgGoldIndicatorStackHtml(ir, marks){
+    try{
+      if (!ir || ir.ok !== true) return '';
+      marks = (marks && typeof marks === 'object') ? marks : {};
+      var cells = '', marked = 0, i, row, mk, tag, cls, val;
+      for (i = 0; i < HG_GOLD_IND_ROWS.length; i++){
+        row = HG_GOLD_IND_ROWS[i]; mk = marks[row[1]];
+        val = row[4](ir);
+        if (mk === true){ tag = row[2]; cls = 'ok'; marked++; }
+        else if (mk === false){ tag = row[3]; cls = 'no'; marked++; }
+        else { tag = 'UNREAD'; cls = 'na'; }
+        cells += '<span class="gsx-ind ' + cls + '" title="' + _esc(row[1]) + '"><b>' + _esc(row[0]) + '</b> ' + _esc(tag) + (val ? ' <i>' + _esc(val) + '</i>' : '') + '</span>';
+      }
+      return '<div class="note gsx-indstack" data-hg-ind-stack="1" style="margin-top:6px;font-size:11px"><b>INDICATOR STACK</b> \u00b7 '
+        + marked + ' of ' + HG_GOLD_IND_ROWS.length + ' reads marked on this record \u2014 recorded for the forward ledger\u2019s read split, not part of the tally, gates nothing.'
+        + '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">' + cells + '</div></div>';
+    }catch(e){ return ''; }
+  }
+
   /* Walk all 184 indicators + 20 L1 maps. USED = wired on GOLD SCALP /
-     GOLD SWING / OMNIGOLD, or bar-computable this print. UNCHECKED = mapped,
-     no tape. EXCLUDE never ENTER. Never invents dir. */
+     GOLD SWING / OMNIGOLD, or bar-computable this print, or READ off the scan
+     context the desk hands in (opts.ctx: macro · news · cot · now; opts.ind:
+     the indicator stack; opts.killzone: the session label) — hg-v1158, which
+     also names the free feeds that are NOT fetched instead of calling them
+     "no tape". UNCHECKED = mapped, no read. EXCLUDE never ENTER. Never
+     invents dir. */
   function hgGoldCatalogFeed(rows, opts){
     opts = opts || {};
     var used = [], unchecked = [], excluded = [];
     var hasBars = rows && rows.length >= 20;
+    /* hg-v1158: the scan context, read rather than discarded */
+    var cx = (opts.ctx && typeof opts.ctx === 'object') ? opts.ctx : null;
+    var mac = (cx && cx.macro && typeof cx.macro === 'object') ? cx.macro : null;
+    var cot = (cx && cx.cot && typeof cx.cot === 'object') ? cx.cot : null;
+    var nws = (cx && cx.news && typeof cx.news === 'object') ? cx.news : null;
+    var newsLoaded = !!(nws && (Array.isArray(nws.events) || ('caution' in nws)));
+    var ir = (opts.ind && opts.ind.ok === true) ? opts.ind : hgGoldIndicatorReads(rows, { rows1d: cx && cx.rows1d });
+    if (!ir || ir.ok !== true) ir = {};
+    var kz = (typeof opts.killzone === 'string' && opts.killzone) ? opts.killzone : '';
+    if (!kz && cx && typeof W.hgGoldKillzoneRead === 'function' && isFinite(_fin(cx.now))){
+      try{ var kzr = W.hgGoldKillzoneRead(cx.now); if (kzr && kzr.label) kz = kzr.label; }catch(eKz){ kz = ''; }
+    }
+    var rrm = (mac && mac.realRateMeasured && typeof mac.realRateMeasured === 'object') ? mac.realRateMeasured : null;
     var linreg = (rows && rows.length >= 40) ? hgGoldCatalogLinreg(rows, 50) : null;
     var crsi = (rows && rows.length >= 40) ? hgGoldCatalogConnorsRsi(rows) : null;
     var awr = (rows && rows.length >= 30) ? hgGoldCatalogAwr(rows) : null;
@@ -466,6 +734,37 @@
       }
       else if (r.id === 75 && awr && awr.ok){ status = 'USED'; note = awr.why; }
       else if (r.id === 95 && isFinite(rvol)){ status = 'USED'; note = 'RVOL20=' + rvol.toFixed(2); }
+      /* hg-v1158: the indicator stack, computed this bar */
+      else if (r.id === 33 && isFinite(ir.sma20)){
+        status = 'USED';
+        note = 'SMA20 ' + ir.sma20.toFixed(2) + (isFinite(ir.sma50) ? ' \u00b7 SMA50 ' + ir.sma50.toFixed(2) : '')
+          + (isFinite(ir.sma200) ? ' \u00b7 SMA200 ' + ir.sma200.toFixed(2) : ' \u00b7 SMA200 needs 200 bars');
+      }
+      else if (r.id === 38 && isFinite(ir.adx)){ status = 'USED'; note = 'ADX14=' + ir.adx.toFixed(1) + (ir.adxState ? ' ' + ir.adxState : '') + ' \u00b7 +DI ' + (isFinite(ir.plusDI) ? ir.plusDI.toFixed(1) : '\u2014') + ' / \u2212DI ' + (isFinite(ir.minusDI) ? ir.minusDI.toFixed(1) : '\u2014'); }
+      else if (r.id === 48 && isFinite(ir.hurst)){ status = 'USED'; note = 'Hurst(1d) H=' + ir.hurst.toFixed(2) + ' \u00b7 ' + (ir.hurstRegime || ''); }
+      else if (r.id === 49 && isFinite(ir.ac1)){ status = 'USED'; note = 'daily return ac1=' + ir.ac1.toFixed(2) + ' \u00b7 ' + (ir.acRegime || ''); }
+      else if (r.id === 53 && isFinite(ir.tsmom96)){ status = 'USED'; note = 'TSMOM 24h ' + (ir.tsmom96 >= 0 ? '+' : '') + (ir.tsmom96 * 100).toFixed(2) + '%'; }
+      else if (r.id === 76 && isFinite(ir.bbPctB)){ status = 'USED'; note = 'BB(20,2) %b ' + ir.bbPctB.toFixed(2) + (isFinite(ir.bbWidthPct) ? ' \u00b7 width ' + ir.bbWidthPct.toFixed(2) + '%' : ''); }
+      else if (r.id === 81 && isFinite(ir.hv20)){ status = 'USED'; note = 'HV20 ' + (ir.hv20 * 100).toFixed(3) + '%/bar' + (isFinite(ir.hv20Med) ? ' vs median ' + (ir.hv20Med * 100).toFixed(3) + '%' : ' (median needs 50 bars)'); }
+      else if (r.id === 82 && isFinite(ir.park20)){ status = 'USED'; note = 'Parkinson20 ' + (ir.park20 * 100).toFixed(3) + '%' + (isFinite(ir.park20Med) ? ' vs median ' + (ir.park20Med * 100).toFixed(3) + '%' : ''); }
+      else if (r.id === 91 && (ir.hourRangeHigh === true || ir.hourRangeHigh === false)){ status = 'USED'; note = 'last complete hour range ' + ir.hourRange.toFixed(2) + ' vs p80 ' + ir.hourRangeP80.toFixed(2) + ' over ' + ir.hoursRead + ' hours'; }
+      else if (r.id === 94 && isFinite(ir.volRatio)){ status = 'USED'; note = 'volume/MA20 ' + ir.volRatio.toFixed(2) + '\u00d7'; }
+      /* hg-v1158: the feeds the desk already reads this scan */
+      else if (r.id === 125 && cot && typeof cot.crowding === 'string' && cot.crowding !== 'N/A'){
+        status = 'USED';
+        note = 'COT managed money ' + cot.crowding + (isFinite(_fin(cot.zScore)) ? ' \u00b7 z=' + cot.zScore.toFixed(2) : '') + (cot.reportDate ? ' \u00b7 as-of ' + cot.reportDate : '');
+      }
+      else if (r.id === 144 && newsLoaded){ status = 'USED'; note = 'calendar snapshot loaded' + (Array.isArray(nws.events) ? ' \u00b7 ' + nws.events.length + ' events' : ' \u00b7 caution leg'); }
+      else if (r.id === 146 && rrm && rrm.measured === true){ status = 'USED'; note = 'real yield ' + String(rrm.trend || '').toLowerCase() + ' \u00b7 ' + (rrm.source || mac.realRateSource || 'measured') + (rrm.stale ? ' STALE' : ''); }
+      else if (r.id === 146 && mac){ note = 'real yield NOT measured \u2014 fallback hint ' + (mac.realRateHint || 'none') + ' only'; }
+      else if (r.id === 152 && mac && typeof mac.usdjpyTrend === 'string'){ status = 'USED'; note = 'USDJPY ' + mac.usdjpyTrend.toLowerCase() + ' \u2014 Yahoo JPY=X'; }
+      else if (r.id === 153 && mac && typeof mac.silverTrend === 'string'){ status = 'USED'; note = 'silver ' + mac.silverTrend.toLowerCase() + ' \u2014 Yahoo SI=F'; }
+      else if (r.id === 163 && kz){ status = 'USED'; note = 'session ' + kz; }
+      /* hg-v1158: free feeds this desk does NOT fetch, named rather than "no tape" */
+      else if (r.id === 87 && mac && typeof mac.vixTrend === 'string'){ note = 'VIX ' + mac.vixTrend.toLowerCase() + ' read \u00b7 GVZ unread (no ^GVZ leg in macro.js) \u2014 the ratio cannot form'; }
+      else if (r.id === 83 || r.id === 84){ note = 'no GVZ feed \u2014 ^GVZ is free on Yahoo and not fetched'; }
+      else if (r.id === 150){ note = 'no ^GSPC leg in macro.js \u2014 free on Yahoo and not fetched'; }
+      else if (r.id === 151){ note = 'no BTC series in the gold scan context'; }
       if (status === 'USED') push(used, r, status, note);
       else push(unchecked, r, status, note);
     }
@@ -479,7 +778,6 @@
       if (r.wire) push(used, r, 'USED', 'wired · ' + r.wire);
       else push(unchecked, r, 'UNCHECKED', r.sRef || 'mapped L1');
     }
-    void opts;
     return {
       used: used, unchecked: unchecked, excluded: excluded,
       usedN: used.length, uncheckedN: unchecked.length, excludedN: excluded.length,
@@ -1116,6 +1414,10 @@
   W.hgGoldCatalogAwr = hgGoldCatalogAwr;
   W.hgGoldCatalogEngine = hgGoldCatalogEngine;
   W.hgGoldCatalogFeed = hgGoldCatalogFeed;
+  W.hgGoldIndicatorReads = hgGoldIndicatorReads;      /* hg-v1158 */
+  W.hgGoldIndicatorMarks = hgGoldIndicatorMarks;      /* hg-v1158 */
+  W.hgGoldIndicatorKeys = hgGoldIndicatorKeys;        /* hg-v1158 */
+  W.hgGoldIndicatorStackHtml = hgGoldIndicatorStackHtml;   /* hg-v1158 */
   W.hgGoldCatalogApplyVerdict = hgGoldCatalogApplyVerdict;
   W.hgGoldCatalogHtml = hgGoldCatalogHtml;
   W.hgGoldUniformTape = hgGoldUniformTape;

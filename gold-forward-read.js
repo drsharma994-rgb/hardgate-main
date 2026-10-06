@@ -239,7 +239,7 @@
       if (rdPools && rdPools.length && typeof W.hgFwdReadSplitHtml === 'function'){
         var rdParts = '';
         for (var ri = 0; ri < rdPools.length; ri++) rdParts += W.hgFwdReadSplitHtml(rdPools[ri]) || '';
-        if (rdParts) rdHtml = '<div class="note" style="margin:6px 0;font-size:11px"><b>FREE-FEED LEGS</b> — the free internet feeds this desk\u2019s ranker scores by, marked WITH / AGAINST on every record at fire time; the split below counts them on settled records and gates nothing.</div>' + rdParts;
+        if (rdParts) rdHtml = '<div class="note" style="margin:6px 0;font-size:11px"><b>FREE-FEED LEGS &amp; INDICATOR STACK</b> — the free internet feeds this desk\u2019s ranker scores by (<code>free:</code>) and the bar-computed indicator reads it marks beside them (<code>ind:</code>, hg-v1158), each marked WITH / AGAINST or by its named state on every record at fire time; the split below counts them on settled records and gates nothing.</div>' + rdParts;
       }
     }catch(eRd){ rdHtml = ''; }
     return '<div class="note" style="margin:6px 0;padding:6px 9px;border-left:3px solid #94A3B8;font-size:11px">'

@@ -5476,6 +5476,21 @@ function goldRankSetups(cands, ctx){
     var season = (ctx.season && typeof ctx.season === 'object') ? ctx.season : null;
     var fng = (ctx.fng && typeof ctx.fng === 'object') ? ctx.fng : null;
     var fngV = (fng && isFinite(+fng.v)) ? +fng.v : null;
+    /* hg-v1158: THE INDICATOR STACK, computed once per scan off the series the
+       desk handed in (the 15m execution tape; the daily leg for Hurst / ACF
+       when it rides along) and marked per candidate under `ind:` beside the
+       `free:` marks below — one home in gold-catalog.js (hgGoldIndicatorReads
+       / hgGoldIndicatorMarks), read here and by the catalog census. Absent
+       helper, absent rows or a throw: no marks, never a guessed false. Marks
+       only: nothing in this ranker reads them back. */
+    var indReads = null, indMarksFn = null;
+    try{
+      var __indW = (typeof window !== 'undefined') ? window : null;
+      if (__indW && typeof __indW.hgGoldIndicatorReads === 'function' && typeof __indW.hgGoldIndicatorMarks === 'function'){
+        var __ir = __indW.hgGoldIndicatorReads(ctx.rows15m || ctx.rows, { rows1d: ctx.rows1d });
+        if (__ir && __ir.ok === true){ indReads = __ir; indMarksFn = __indW.hgGoldIndicatorMarks; }
+      }
+    }catch(eInd){ indReads = null; indMarksFn = null; }
 
     var ranked = [], i, k;
     for (i = 0; i < cands.length; i++){
@@ -5941,6 +5956,15 @@ function goldRankSetups(cands, ctx){
          onto its forward record (GOLD SCALP does; `reads` + `fundingPct`).
          Absent when no free feed spoke — a record with no marks is a record
          with no marks, never one marked false. */
+      /* hg-v1158: the indicator-stack marks for this candidate's direction,
+         through the same one helper the free-feed legs mark through */
+      if (indReads && indMarksFn){
+        try{
+          var indM = indMarksFn(indReads, c.dir), indK;
+          for (indK in indM){ if (Object.prototype.hasOwnProperty.call(indM, indK)) freeMark(indK, indM[indK]); }
+          rc.indReads = indReads;
+        }catch(eIm){}
+      }
       try{
         if (Object.keys(freeReads).length) rc.freeReads = freeReads;
         if (typeof fundRate === 'number' && isFinite(fundRate)) rc.fundingPct = fundRate;
@@ -16886,10 +16910,16 @@ function hgGoldFormingStack(inp){
       resolvedRows: inp.resolvedRows,
       pendingChange: inp.pendingChange || null
     });
+    /* hg-v1158: the catalog census this panel paints reads the scan context
+       the desk hands in (catalogCtx: macro · news · cot · now · rows1d, the
+       leader's indicator reads and its session label) — the engine used to
+       get the clock alone, so COT, the calendar, silver, USDJPY, the session
+       and the daily legs all read UNCHECKED on a board that scored by them. */
+    var __catOpts = { now: inp.now || Date.now(), ctx: inp.catalogCtx || null, ind: inp.indReads || null, killzone: inp.killzone || '' };
     out.catalog = (typeof hgGoldCatalogEngine === 'function')
-      ? hgGoldCatalogEngine(rows, { now: inp.now || Date.now() })
+      ? hgGoldCatalogEngine(rows, __catOpts)
       : ((W && typeof W.hgGoldCatalogEngine === 'function')
-        ? W.hgGoldCatalogEngine(rows, { now: inp.now || Date.now() }) : null);
+        ? W.hgGoldCatalogEngine(rows, __catOpts) : null);
     out.smcLiq = hgGoldSmcLiquidity(rows, {});
     out.smcLiq._n = rows.length;
     out.smcHit = hgGoldSmcLiquidityHit(rows, {

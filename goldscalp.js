@@ -600,6 +600,10 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
            ledger (the hg-v955 seam that dropped goldShut three times). */
         freeReads: (c.freeReads && typeof c.freeReads === 'object') ? c.freeReads : undefined,
         fundingPct: (typeof c.fundingPct === 'number' && isFinite(c.fundingPct)) ? c.fundingPct : undefined,
+        /* hg-v1158: the indicator-stack values the ranker read this scan (one
+           object per scan, shared by every row) so the card can print each
+           read beside its `ind:` mark; the marks themselves ride freeReads */
+        indReads: (c.indReads && typeof c.indReads === 'object' && c.indReads.ok === true) ? c.indReads : undefined,
         stamps: Array.isArray(c.stamps) ? c.stamps.slice() : [],
         /* hg-v977: the instant the mint judged this candidate on -- SUPER GOLD's
            sgCandSec has read `signalT` since hg-v952 and no mint ever wrote it */
@@ -1009,6 +1013,36 @@ function gsxPipAttr(ok){ return gsxSt(ok ? GSX_GPIP_OK : GSX_GPIP); }
 })();
 
 /* ---------------- renderers ---------------- */
+/* hg-v1158: the INDICATOR STACK line — gold-catalog.js owns the reads, the
+   marks and the renderer; this desk only hands it the row's own fields. An
+   absent renderer or a row with no reads prints nothing. */
+function gsIndicatorStackHtml(c){
+  try{
+    var fn = gfn('hgGoldIndicatorStackHtml');
+    if (!fn || !c || !c.indReads) return '';
+    return fn(c.indReads, c.freeReads) || '';
+  }catch(e){ return ''; }
+}
+/* hg-v1158: the catalog census is handed the scan context it used to discard
+   — the ranker ctx (macro · news · now · rows1d) with the COT snapshot the
+   ranker reads off the window put beside it — so USED means read this scan.
+   The one census on a painted board lives in the forming-layers panel
+   (goldind's hgGoldFormingStack takes catalogCtx); gsCatalogHtml renders only
+   on the feeds-failed branch, where that panel does not paint. */
+function gsCatalogCtx(ctx){
+  try{
+    if (!ctx || typeof ctx !== 'object') return null;
+    var cot = ctx.cot || ((typeof W !== 'undefined' && W) ? W.__hgGoldCot : null);
+    return cot ? Object.assign({}, ctx, { cot: cot }) : ctx;
+  }catch(e){ return ctx || null; }
+}
+function gsCatalogHtml(ctx, rows, lead){
+  try{
+    var cFn = gfn('hgGoldCatalogHtml'), cEn = gfn('hgGoldCatalogEngine');
+    if (!cFn || !cEn) return '';
+    return cFn(cEn(rows || [], { ctx: gsCatalogCtx(ctx), ind: (lead && lead.indReads) || null, killzone: (lead && lead.killzone) || '' })) || '';
+  }catch(e){ return ''; }
+}
 function tallyChips(c){
   if (!Array.isArray(c.tallyParts) || !c.tallyParts.length) return '';
   var audit = (typeof W !== 'undefined' && W) ? W.__hgGoldTallyAudit : null;
@@ -1456,6 +1490,7 @@ function cardHTML(c, isBest, season, tape){
     + chips + metaChips
     + '</div>'
     + tallyChips(c)
+    + gsIndicatorStackHtml(c)   /* hg-v1158: every bar-computed read with its mark — reported, never tallied */
     + '<div class="plan"' + gsxSt(GSX_PLAN) + '>' + (c.dir === 'long' ? 'BUY' : 'SELL') + ' <b' + gsxSt(GSX_PLAN_B) + '>$' + pxF(c.zone ? c.zone.lo : c.entry) + '–$' + pxF(c.zone ? c.zone.hi : c.entry) + '</b>'
     + ' · ENTRY <b' + gsxSt(GSX_PLAN_B) + '>$' + pxF(c.entry) + '</b>'
     + ' · STOP <b' + gsxSt(GSX_PLAN_B) + '>$' + pxF(c.stop) + '</b>'
@@ -3088,6 +3123,7 @@ async function runScan(ui, scanSt){
     ctx.rows15m = gold.rows15m;
     ctx.rows1h = gold.rows1h;
     ctx.rows4h = gold.rows4h;
+    ctx.rows1d = gold.rows1d;   /* hg-v1158: the daily leg — Hurst / ACF read sessions, not 15m bars */
     /* hg-v1024: the desk's own forward-tab — measured-edge veto (goldRankSetups)
        keys on (tab, kind) so a mechanic measured-losing on GOLD SCALP is not
        judged by GOLD SWING's records. */
@@ -3550,7 +3586,7 @@ async function runScan(ui, scanSt){
         });
       }catch(eSeven){ return ''; }
     }
-    function formingLayersHtml(){
+    function formingLayersHtml(lead){
       /* two independent panels — a throw in one must not blank the other */
       var seven = sevenStepHtml();
       var forming = '';
@@ -3562,7 +3598,11 @@ async function runScan(ui, scanSt){
           dxyRows: ctx.macro && ctx.macro.dxyRows, now: barNow,
           perpNative: ctx.perpNative,
           oiRows: ctx.perpNative && ctx.perpNative.oi,
-          fundingRows: ctx.perpNative && ctx.perpNative.funding
+          fundingRows: ctx.perpNative && ctx.perpNative.funding,
+          /* hg-v1158: the catalog census inside this panel reads the scan —
+             the ranker ctx (macro · news · rows1d, the COT snapshot beside
+             it), the leader's indicator reads and its session label */
+          catalogCtx: gsCatalogCtx(ctx), indReads: (lead && lead.indReads) || null, killzone: (lead && lead.killzone) || ''
         })) || '';
       }catch(eFs){ forming = ''; }
       return seven + forming;
@@ -3573,7 +3613,7 @@ async function runScan(ui, scanSt){
         ui.cards.innerHTML = basisHtml + mixedBanner + fundPanelHtml + aplusPack.panel + uniHtml
           + gsOneAtATimeHtml(oneAtATime) + gsBreakevenHtml()
           + gsxBoardHtml(displayBest, display, display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note, deskTape); }).join(''))
-          + formingLayersHtml()
+          + formingLayersHtml(displayBest || display[0])
           + formingNowHTML(armedAll)
           + gsRejectFunnelHTML(rejectedAll, preGateAll)
           + rejectedHTML(rejectedAll)
@@ -3586,7 +3626,7 @@ async function runScan(ui, scanSt){
           + gsBreakevenHtml()
           + gsxBoardHtml(null, [], '')
           + (whySilent ? whySilentHTML(whySilent) : '')
-          + formingLayersHtml()
+          + formingLayersHtml(null)
           + gsRejectFunnelHTML(rejectedAll, preGateAll)
           + rejectedHTML(rejectedAll)
           + formingNowHTML(armedAll)
@@ -3596,12 +3636,7 @@ async function runScan(ui, scanSt){
            the 7-step readout still prints — NO SETUP or DATA_UNAVAILABLE is
            itself the answer the playbook asks for. Catalog lives on empty. */
         ui.cards.innerHTML = basisHtml + fundPanelHtml + uniHtml + gsxBoardHtml(null, [], '') + sevenStepHtml();
-        var catH = '';
-        try{
-          var cFn = gfn('hgGoldCatalogHtml');
-          var cEn = gfn('hgGoldCatalogEngine');
-          if (cFn && cEn) catH = cFn(cEn([], {}));
-        }catch(eCatE){}
+        var catH = gsCatalogHtml(ctx, gold.rows15m, null);   /* hg-v1158: the census reads the context even when the board is empty */
         if (whySilent) ui.empty.innerHTML = '<b>WHY SILENT</b> — ' + esc(whySilent) + catH;
         else if (catH) ui.empty.innerHTML = catH;
         ui.empty.style.display = 'block';

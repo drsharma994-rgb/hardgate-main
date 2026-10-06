@@ -150,7 +150,13 @@ localStorage. Never throws.
      cannot turn the record store into a dumping ground; a read the desk
      names is a read the desk can compute at fire time. Nothing reads
      `reads` to gate: the split it feeds is reported beside the replay row. */
-  var FWD_READS_MAX = 16, FWD_READ_KEY = /^[A-Za-z0-9][A-Za-z0-9:_. -]{0,47}$/;
+  /* hg-v1158: 16 -> 32. GOLD SCALP marks ten `free:` legs (hg-v1155) and
+     eighteen `ind:` reads now; the normaliser keeps the first N keys in SORTED
+     order, and `ind:` sorts after `free:`, so at 16 only six of the eighteen
+     indicator marks would ever have landed — twelve dropped silently on every
+     record, the hg-v955 shape inside the cap meant to stop a dumping ground.
+     Still bounded; the guard asserts the whole GOLD SCALP set fits with room. */
+  var FWD_READS_MAX = 32, FWD_READ_KEY = /^[A-Za-z0-9][A-Za-z0-9:_. -]{0,47}$/;
   function hgFwdReadsNormalize(reads){
     if (!reads || typeof reads !== 'object' || Array.isArray(reads)) return undefined;
     var out = null, n = 0, k;

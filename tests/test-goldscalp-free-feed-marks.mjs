@@ -225,7 +225,9 @@ console.log('== 4) one home: written in the ranker, carried by the two seams, re
 {
   const gi = strip(read('goldind.js')), gs = strip(read('goldscalp.js')), gf = strip(read('gold-forward-read.js'));
   const writes = (gi.match(/freeMark\(/g) || []).length;
-  assert(writes === 8, 'the ranker writes its ten marks through one helper at seven sites (freeLeg marks silver, ratio, VIX and USDJPY through one) — ' + (writes - 1) + ' call sites + the definition');
+  /* hg-v1158: the indicator-stack loop is the eighth call site — it hands the
+     `ind:` marks through the SAME helper, which is the point */
+  assert(writes === 9, 'the ranker writes its marks through one helper at eight sites (freeLeg marks silver, ratio, VIX and USDJPY through one; the hg-v1158 ind: loop is the eighth) — ' + (writes - 1) + ' call sites + the definition');
   assert(/rc\.freeReads = freeReads;/.test(gi) && /rc\.fundingPct = fundRate;/.test(gi), 'the ranked row carries freeReads and the funding rate');
   assert(!/c\.freeReads|rc\.freeReads\s*[^=]/.test(gi.replace('rc.freeReads = freeReads;', '')), 'goldind READS freeReads nowhere — the marks gate nothing in the ranker');
   assert(/freeReads: \(c\.freeReads && typeof c\.freeReads === 'object'\) \? c\.freeReads : undefined,/.test(gs), 'GOLD SCALP publish copy carries freeReads (the hg-v955 seam)');
