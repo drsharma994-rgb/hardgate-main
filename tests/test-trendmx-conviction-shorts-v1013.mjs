@@ -126,7 +126,8 @@ console.log('== the promoted slice (SMC + taker flow) covers conviction shorts =
   w.hgFwdRecordScan = (tab, tf, list) => { rec = { list }; return list.length; };
   const cls2 = w.trendmxLimitClasses([row]);   /* hg-v1018 */
   const html = w.trendmxConvictionDeskHTML(cls2.conv, cls2.heldConv);
-  ok((rec === null) && cls2.heldConv === 1 && text(html).indexOf('held off') >= 0, 'and the short is held off the conviction desk, named, unrecorded');
+  /* hg-v1159: a hold-off nobody records is one nobody can measure — the held row is RECORDED with ticket:false and the witness mark false */
+  ok(rec && rec.list.length === 1 && rec.list[0].ticket === false && rec.list[0].reads && rec.list[0].reads.takerFlowWith === false && cls2.heldConv === 1 && text(html).indexOf('held off') >= 0, 'and the short is held off the conviction desk, named, and recorded with ticket:false and takerFlowWith FALSE (hg-v1159)');
 }
 
 console.log('== the golden desk stays long-only by design ==');

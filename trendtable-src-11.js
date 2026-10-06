@@ -271,9 +271,10 @@
               rows4h: crh4,
               fundingPct: (typeof cr.fundingPct === 'number' && isFinite(cr.fundingPct)) ? cr.fundingPct : undefined,
               mechanic: trendmxPerfectState(cr) ? 'PERFECT' : 'CLEAN',
-              /* hg-v1154: a post-gate veto withholds the ticket claim here too, and the mark rides */
-              ticket: !tmPostGateVeto(cr),
-              reads: tmPostGateReads(cr)
+              /* hg-v1154 / hg-v1159: the ticket claim is the board's own CLEAN tier here too — a
+                 7/7 row the board caps at NEAR under a witness is recorded and is NO ticket */
+              ticket: tmTicketClaim(cr, cplan),
+              reads: tmRecordReads(cr, cdir)
             });
           }
           if (recRows.length) W.hgFwdRecordScan('TRENDMX', '4h', recRows, { horizonBars: 20 });
@@ -378,6 +379,9 @@ W.trendmxAtrRegimeChipHtml = trendmxAtrRegimeChipHtml;
 W.tmVolWitness = tmVolWitness;             /* the pure 1D-tape read, exported for the tests */
 W.trendmxFundingChipHtml = trendmxFundingChipHtml;
 W.trendmxRowTier = trendmxRowTier;
+W.tmLegReads = tmLegReads;                 /* hg-v1159: the composite's legs as marks */
+W.tmRecordReads = tmRecordReads;           /* hg-v1159: the one reads bag both record sites hand the ledger */
+W.tmTicketClaim = tmTicketClaim;           /* hg-v1159: the ticket claim is the board's clean tier */
 /* hg-v1018: the mixed board is superseded by the two class desks — the
    collector and both renderers are the desk's behavior, exported the same
    way (the tests read them rather than re-deriving behavior) */

@@ -234,13 +234,15 @@ console.log('== 7) the forward log: volWith rides the reads seam ==');
   const flatAll = mkRow(w, 'FAVUSDT', 'short', { volDiv: null, volConf: null, rsi: 55 });
   const held = mkRow(w, 'OUTVUSDT', 'long', { gate: gate7(), volDiv: 'bear', volConf: null });
   w.trendmxLimitClasses([withV, flatAll, held]);
-  assert(rec && rec.list.length === 2, 'the held row never reaches the record — two recorded, not three');
+  assert(rec && rec.list.length === 3, 'hg-v1159: the held row REACHES the record — three recorded, the held one with ticket:false');
   const bySym = {};
   rec.list.forEach(r => { bySym[r.sym] = r; });
   assert(bySym.WVVUSDT.reads && bySym.WVVUSDT.reads.volWith === true && !bySym.WVVUSDT.reads.momWith,
          'a volume-confirming row records volWith (momentum abstained — reads accrue per witness)');
-  assert(bySym.FAVUSDT.reads === undefined,
-         'a row every witness abstained on records NO reads object — NOT RECORDED, the honest third state');
+  assert(!(bySym.FAVUSDT.reads && ('volWith' in bySym.FAVUSDT.reads || 'momWith' in bySym.FAVUSDT.reads)),
+         'a row every witness abstained on records NO witness mark — NOT RECORDED, the honest third state (hg-v1159: the composite legs ride the bag; the witness keys stay absent)');
+  assert(bySym.OUTVUSDT && bySym.OUTVUSDT.ticket === false && bySym.OUTVUSDT.reads && bySym.OUTVUSDT.reads.volWith === false,
+         'hg-v1159: the volume-held row is recorded with ticket:false and volWith FALSE');
   assert(bySym.WVVUSDT.mechanic === 'TM-CLEAN7' && rec.opts.horizonBars === 20,
          'mechanics and horizon byte-identical — the ledger stays comparable');
 }

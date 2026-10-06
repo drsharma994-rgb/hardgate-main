@@ -80,7 +80,9 @@ function trendmxLimitClasses(rows){
   var out = { clean: [], conv: [], heldClean: 0, heldConv: 0,
               heldWhy: { clean: { flow: 0, mom: 0, vol: 0, fund: 0, postgate: 0 }, conv: { flow: 0, mom: 0, vol: 0, fund: 0, postgate: 0 } },
               /* hg-v1154: the post-gate-vetoed rows, kept so they are RECORDED (ticket:false) and never shown */
-              heldPostGate: [] };
+              heldPostGate: [],
+              /* hg-v1159: the rows the four witnesses held off, kept for the same reason (heldBy names the witness) */
+              heldWitness: [] };
   for (var i = 0; i < rows.length; i++){
     var r = rows[i];
     if (!r || !r.gate || r.gate.veto) continue;
@@ -95,10 +97,15 @@ function trendmxLimitClasses(rows){
        tradeable WITH the evidence in hand, and a swing minted against the
        real aggressor flow is not it. hg-v1018: counted per class, so each
        desk names its own held-off rows. */
+    /* hg-v1159: the witness that holds a row off is NAMED here and the row
+       is kept (with its plan, when one prices) so the record below carries
+       it with ticket:false and the witness mark false — as hg-v1154 did for
+       the post-gate veto. The counts and the desks are unchanged. */
+    var heldBy = null;
     if (r.flow && r.flow.verdict === 'against'){
       if (isClean){ out.heldClean++; out.heldWhy.clean.flow++; }
       else { out.heldConv++; out.heldWhy.conv.flow++; }
-      continue;
+      heldBy = 'flow';
     }
     /* hg-v1019: THE MOMENTUM WITNESS hold-off — the same mechanic one leg
        down. A row whose 1D RSI range has TURNED against its own majority
@@ -106,20 +113,20 @@ function trendmxLimitClasses(rows){
        slow composite fighting a turned regime: held off the desks, counted
        and named per class, still painting in the matrix with its chip.
        WITH and FLAT and UNREAD rows pass — the witness only ever removes. */
-    if (trendmxMomState(r, dir) === 'against'){
+    if (!heldBy && trendmxMomState(r, dir) === 'against'){
       if (isClean){ out.heldClean++; out.heldWhy.clean.mom++; }
       else { out.heldConv++; out.heldWhy.conv.mom++; }
-      continue;
+      heldBy = 'mom';
     }
     /* hg-v1020: THE VOLUME WITNESS hold-off — the same mechanic, the third
        witness. A row whose swing volume trend DIVERGES against its own
        majority (distribution under the rally / accumulation under the
        fall) is held off, counted and named per class, still painting with
        its chip. WITH, FLAT and UNREAD pass — it only ever removes. */
-    if (trendmxVolState(r, dir) === 'against'){
+    if (!heldBy && trendmxVolState(r, dir) === 'against'){
       if (isClean){ out.heldClean++; out.heldWhy.clean.vol++; }
       else { out.heldConv++; out.heldWhy.conv.vol++; }
-      continue;
+      heldBy = 'vol';
     }
     /* hg-v1034: THE FUNDAMENTAL + SENTIMENT WITNESS hold-off — the fourth
        witness, the ONLY one that reads off-chart evidence (on-chain, the
@@ -128,14 +135,18 @@ function trendmxLimitClasses(rows){
        held off both class desks, counted per class under the fund reason,
        still painting with its chip. WITH, FLAT and a dark board pass — it
        only ever removes, and one witness never flips. */
-    var fundSt = trendmxFundState(r, dir);
+    var fundSt = heldBy ? null : trendmxFundState(r, dir);
     if (fundSt === 'refuse' || fundSt === 'against'){
       if (isClean){ out.heldClean++; out.heldWhy.clean.fund++; }
       else { out.heldConv++; out.heldWhy.conv.fund++; }
-      continue;
+      heldBy = 'fund';
     }
     var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
     if (!tmValidSetup(plan)) continue;
+    if (heldBy){
+      out.heldWitness.push({ row: r, plan: plan, dir: dir, stack: null, rank: 0, isClean: isClean, heldBy: heldBy });
+      continue;
+    }
     /* hg-v1154: THE POST-GATE WITNESS hold-off -- the fifth witness, and the only
        one that is the SWING desk's own rule rather than a read of this desk's.
        A vetoed row is held off both class desks, counted and named per class,
@@ -172,7 +183,8 @@ function trendmxLimitClasses(rows){
      resolve like the merely-convicted ones, that distinction is not doing
      work. Fields byte-identical to the mixed board's record. */
   /* hg-v1154: the post-gate-vetoed rows ride into the record and nowhere else */
-  var cands = out.clean.concat(out.conv).concat(out.heldPostGate);
+  /* hg-v1159: and the witness-held rows, for the same reason */
+  var cands = out.clean.concat(out.conv).concat(out.heldPostGate).concat(out.heldWitness);
   try {
     if (typeof W.hgFwdRecordScan === 'function' && cands.length){
       W.hgFwdRecordScan('TRENDMX', '4h', cands.map(function(c){
@@ -192,36 +204,17 @@ function trendmxLimitClasses(rows){
                     absent when the flow never spoke (NOT RECORDED, the third
                     state). Flow-AGAINST rows never reach this map: they were
                     held off above. The split is the layer's measurement. */
-                 reads: (function(){
-                   var rd = {};
-                   if (c.row && c.row.flow && c.row.flow.verdict === 'with') rd.takerFlowWith = true;
-                   /* hg-v1019: the momentum witness's read-mark rides the same
-                      hg-v989 seam — true when the 1D RSI regime backed the row
-                      at fire time, absent when the witness abstained or could
-                      not read (NOT RECORDED, the third state). Momentum-AGAINST
-                      rows never reach this map: they were held off above. */
-                   if (trendmxMomState(c.row, c.dir) === 'with') rd.momWith = true;
-                   /* hg-v1020: the volume witness's read-mark — true when the
-                      swing OBV trend CONFIRMED the row's new extreme at fire
-                      time, absent when it abstained or could not read. */
-                   if (trendmxVolState(c.row, c.dir) === 'with') rd.volWith = true;
-                   /* hg-v1034: the fundamental + sentiment read-mark — true
-                      when the house stack backed the row (2+ net with) at
-                      fire time, absent when it was silent or dark. Against /
-                      refuse rows never reach this map (held off above). */
-                   if (trendmxFundState(c.row, c.dir) === 'with') rd.fundWith = true;
-                   /* hg-v1154: the SWING post-gate verdict -- true VETOED, false passed,
-                      absent when unchecked or un-run (the third state) */
-                   var pgr = tmPostGateReads(c.row);
-                   if (pgr) rd['postgate:veto'] = pgr['postgate:veto'];
-                   return Object.keys(rd).length ? rd : undefined;
-                 })(),
+                 /* hg-v1159: every witness state (true WITH / false AGAINST / absent
+                    abstained), the hg-v1154 post-gate verdict and the five composite
+                    legs, through the ONE reads helper both record sites call */
+                 reads: tmRecordReads(c.row, c.dir),
                  /* hg-v995: the composite is NOT handed in here -- the ledger reads it off
                     this desk's own published snapshot (hgTrendMatrixMark), the same row the
                     board painted, so a second copy would be the same number twice */
                  mechanic: (c.row && c.row.gate && c.row.gate.clean7) ? 'TM-CLEAN7' : 'TM-CONVICTION',
-                 /* hg-v1154: a post-gate veto withholds the ticket claim; the record stays */
-                 ticket: !!(c.row && c.row.gate && c.row.gate.clean7) && !tmPostGateVeto(c.row),
+                 /* hg-v1154 / hg-v1159: the ticket claim is the board's own CLEAN tier — a
+                    post-gate veto or any witness hold-off withholds it; the record stays */
+                 ticket: tmTicketClaim(c.row, c.plan),
                  /* hg-v1022: the PERFECT read-mark — true when the row met the
                     strictest confluence bar at fire time, absent otherwise. The
                     split is how the PERFECT desk earns a measured outcome. */

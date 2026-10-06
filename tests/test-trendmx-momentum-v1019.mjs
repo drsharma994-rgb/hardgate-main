@@ -213,13 +213,15 @@ console.log('== 6) the forward log: momWith rides the reads seam, held rows neve
   const flowAndMom = mkRow(w, 'BMUSDT', 'long', { gate: gate7(), flow: { verdict: 'with', bars: 30 } });
   const held = mkRow(w, 'OUTUSDT', 'long', { gate: gate7(), rsi: 30 });
   w.trendmxLimitClasses([withR, flatR, flowAndMom, held]);
-  assert(rec && rec.list.length === 3, 'the held row never reaches the record — three setups recorded, not four');
+  assert(rec && rec.list.length === 4, 'hg-v1159: the held row REACHES the record — four recorded, the held one with ticket:false');
   const bySym = {};
   rec.list.forEach(r => { bySym[r.sym] = r; });
   assert(bySym.WITUSDT.reads && bySym.WITUSDT.reads.momWith === true && !bySym.WITUSDT.reads.takerFlowWith,
          'a momentum-WITH row records the momWith read-mark');
-  assert(bySym.FLSUSDT.reads === undefined,
-         'a FLAT row records NO reads object — the abstain state is NOT RECORDED, the honest third state');
+  assert(!(bySym.FLSUSDT.reads && ('momWith' in bySym.FLSUSDT.reads)),
+         'a FLAT row records NO momWith mark — the abstain state is NOT RECORDED, the honest third state (hg-v1159: the composite legs ride the bag; the witness key stays absent)');
+  assert(bySym.OUTUSDT && bySym.OUTUSDT.ticket === false && bySym.OUTUSDT.reads && bySym.OUTUSDT.reads.momWith === false,
+         'hg-v1159: the momentum-held row is recorded with ticket:false and momWith FALSE — the complement the ledger never had');
   assert(bySym.BMUSDT.reads && bySym.BMUSDT.reads.momWith === true && bySym.BMUSDT.reads.takerFlowWith === true,
          'flow-with and momentum-with accrue on the ONE reads seam');
   assert(bySym.WITUSDT.mechanic === 'TM-CLEAN7' && rec.opts.horizonBars === 20,

@@ -141,7 +141,8 @@ console.log('== the demote — held off, never CLEAN, never recorded ==');
   /* hg-v1018: a held-off clean7 row belongs to the GATE-CLEAN desk */
   const clsHeld = w.trendmxLimitClasses([row]);
   const html = w.trendmxGateCleanDeskHTML(clsHeld.clean, clsHeld.heldClean);
-  ok(rec === 'unset' || rec === null, 'no forward record when every qualified row is held off');
+  /* hg-v1159: the held-off row IS recorded — ticket:false, the flow mark false — so the hold-off can be measured */
+  ok(rec && rec !== 'unset' && rec.list.length === 1 && rec.list[0].ticket === false && rec.list[0].reads && rec.list[0].reads.takerFlowWith === false, 'the held-off row is recorded with ticket:false and takerFlowWith FALSE (hg-v1159; it was unrecorded before)');
   ok(clsHeld.heldClean === 1 && clsHeld.clean.length === 0,
      'the held-off clean7 row is counted on its own class (hg-v1018)');
   ok(text(html).indexOf('held off') >= 0 && text(html).indexOf('taker flow') >= 0,
@@ -182,7 +183,8 @@ console.log('== UNREAD demotes nothing (hg-v700) ==');
     w.hgFwdRecordScan = (tab, tf, list) => { rec = { list }; return list.length; };
     const clsU = w.trendmxLimitClasses([row]);   /* hg-v1018: collector records, desk renders */
     const html = w.trendmxGateCleanDeskHTML(clsU.clean, clsU.heldClean);
-    ok(rec && rec.list.length === 1 && rec.list[0].reads === undefined, k + ': desk keeps the row, records no read-mark');
+    /* hg-v1159: the composite legs ride the bag on every record; the FLOW mark is what an unread flow must not carry */
+    ok(rec && rec.list.length === 1 && !(rec.list[0].reads && ('takerFlowWith' in rec.list[0].reads)), k + ': desk keeps the row, records no flow read-mark');
     ok(text(html).indexOf('TAKER FLOW UNREAD') >= 0, k + ': the UNREAD chip says the desk looked and could not read');
   }
   /* no Binance twin */

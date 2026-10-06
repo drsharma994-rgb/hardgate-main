@@ -83,6 +83,75 @@ async function tmFeedRow(row, dir, rows4h){
   }
 }
 function tmPostGateVeto(r){ return !!(r && r.postGate && r.postGate.state === 'veto'); }
+
+/* hg-v1159: THE WITNESSES AND THE LEGS, RECORDED AS THREE-STATE MARKS.
+   Four witnesses have held rows off the class desks since hg-v1012 / v1019 /
+   v1020 / v1034 and the record map only ever saw the rows they let through,
+   marked `true` — so the ledger could compare WITH against SILENT and never
+   against AGAINST, and what the hold-offs remove was unmeasurable by
+   construction (the hg-v966 trap, four times). The composite rode every
+   record as one number (tmScore, hg-v995) and never as its five legs. This
+   is the one home for the reads bag both record sites hand the ledger:
+     takerFlowWith · momWith · volWith · fundWith · trendQualityWith
+        true  = the witness backed the row (WITH / TREND)
+        false = it stood against (AGAINST · REFUSE · CHOP)
+        absent = it abstained or could not read (FLAT / UNREAD — never a
+                 guessed false, hg-v989's third state)
+     tm:d1Trend · tm:cross · tm:cascade · tm:cloud · tm:adx
+        each leg of trendScore's composite, true when its sign is the row's
+        direction, false when it opposes, absent at zero
+     tm:adxStrong — the ADX >= 25 strength bar itself, true / false / absent
+     tm:freshCross — a GOLDEN / DEATH cross inside 10 bars, true with the
+        row's direction, false against, absent when none
+     postgate:veto — the hg-v1154 SWING post-gate verdict, unchanged
+   Marks only: nothing here moves a tier, a plan or a desk. The ledger's read
+   split asks, out of sample, which of them separates. */
+function tmLegReads(r, dir){
+  var out = {};
+  if (!r || (dir !== 'long' && dir !== 'short')) return out;
+  var sgn = (dir === 'long') ? 1 : -1;
+  var c = (r.comps && typeof r.comps === 'object') ? r.comps : null;
+  function leg(key, v){
+    if (typeof v !== 'number' || !isFinite(v) || v === 0) return;
+    out[key] = (v * sgn) > 0;
+  }
+  if (c){
+    leg('tm:d1Trend', c.d1Trend); leg('tm:cross', c.d1Cross); leg('tm:cascade', c.h4Cascade);
+    leg('tm:cloud', c.cloud); leg('tm:adx', c.adxPt);
+  }
+  if (typeof r.adx === 'number' && isFinite(r.adx)) out['tm:adxStrong'] = r.adx >= 25;
+  if (r.freshCross === 'GOLDEN') out['tm:freshCross'] = (dir === 'long');
+  else if (r.freshCross === 'DEATH') out['tm:freshCross'] = (dir === 'short');
+  return out;
+}
+function tmRecordReads(r, dir){
+  var rd = {};
+  if (!r) return undefined;
+  dir = dir || tmDirOf(r);
+  if (r.flow && r.flow.verdict === 'with') rd.takerFlowWith = true;
+  else if (r.flow && r.flow.verdict === 'against') rd.takerFlowWith = false;
+  var ms = trendmxMomState(r, dir);
+  if (ms === 'with') rd.momWith = true; else if (ms === 'against') rd.momWith = false;
+  var vs = trendmxVolState(r, dir);
+  if (vs === 'with') rd.volWith = true; else if (vs === 'against') rd.volWith = false;
+  var fs = trendmxFundState(r, dir);
+  if (fs === 'with') rd.fundWith = true; else if (fs === 'against' || fs === 'refuse') rd.fundWith = false;
+  var cs = trendmxChopState(r);
+  if (cs && cs.state === 'trend') rd.trendQualityWith = true; else if (cs && cs.state === 'chop') rd.trendQualityWith = false;
+  var pgr = tmPostGateReads(r);
+  if (pgr) rd['postgate:veto'] = pgr['postgate:veto'];
+  var legs = tmLegReads(r, dir), k;
+  for (k in legs){ if (Object.prototype.hasOwnProperty.call(legs, k)) rd[k] = legs[k]; }
+  return Object.keys(rd).length ? rd : undefined;
+}
+/* hg-v1159: the TICKET claim on a record is the board's own CLEAN tier — the
+   one rule (trendmxRowTier) that already caps a row at NEAR under every
+   witness and the post-gate veto. The crown recorder (hg-v1039) claimed
+   ticket:true on every 7/7 row the board itself showed as NEAR; both sites
+   read this now. */
+function tmTicketClaim(r, plan){
+  return trendmxRowTier(r, plan) === 'clean';
+}
 function tmPostGateReads(r){
   var pg = r && r.postGate;
   if (!pg) return undefined;
