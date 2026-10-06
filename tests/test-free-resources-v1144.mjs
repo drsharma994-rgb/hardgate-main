@@ -108,8 +108,9 @@ console.log('== the GOLD SCALP free-resources panel reads every free feed ==');
 
 console.log('== wiring pins ==');
 {
-  const t = read('trendtable-src-10.js');
-  ok(t.indexOf('deribitVolState') >= 0 && t.indexOf('coinglassClusters') >= 0 && t.indexOf('venuePremiumPct') >= 0, 'the pass reads all three free resources');
+  /* the pass body straddles the part 9 -> 10 split: the dvol/cluster reads live in part 9, the premium line right after the funding assignment in part 10 */
+  const t9 = read('trendtable-src-9.js'), t10 = read('trendtable-src-10.js');
+  ok(t9.indexOf('deribitVolState') >= 0 && t9.indexOf('coinglassClusters') >= 0 && t10.indexOf('venuePremiumPct') >= 0, 'the pass reads all three free resources');
   const c = read('trendtable-src-9.js');
   ok(c.indexOf('pfR.dvolVal') >= 0, 'the crown renders the bag');
   const g = read('gold-free-evidence.js');

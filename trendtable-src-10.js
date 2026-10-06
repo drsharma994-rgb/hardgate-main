@@ -1,63 +1,11 @@
-<<<<<<< HEAD
-    var c = rows.map(function(x){ return x.c; });
-    var e50 = W.ema(c, 50), e200 = W.ema(c, 200);
-    if (!e50 || !e200 || e50.length < 2) return null;
-    var a = e50[e50.length - 1], b = e200[e200.length - 1];
-    if (!isFinite(a) || !isFinite(b) || a === b) return null;
-    return a > b ? 'up' : 'down';
-  }catch(e){ return null; }
-}
-
-async function trendmxPerfectEvidencePass(rows){
-  try{
-    if (!Array.isArray(rows) || !rows.length) return rows;
-    var capped = rows.slice().sort(function(a, b){ return Math.abs(+b.score || 0) - Math.abs(+a.score || 0); }).slice(0, 8);
-    var taker = null, binFund = null;
-    /* hg-v1144: the free resources - Deribit options vol (public) and the
-       Coinglass free-tier clusters - read once per pass, attached per row. */
-    var dvol = null;
-    try{ if (typeof W.deribitVolState === 'function') dvol = W.deribitVolState(); }catch(eDv){ }
-    var cg = null;
-    try{ if (typeof W.coinglassClusters !== 'undefined' && W.coinglassClusters) cg = W.coinglassClusters; }catch(eCg){ }
-    try{ if (typeof W.binanceTakerRatio === 'function') taker = await W.binanceTakerRatio('BTCUSDT', '4h', 120); }catch(eT){ }
-    try{ if (typeof W.binanceFunding === 'function'){ var bf = await W.binanceFunding('BTCUSDT'); binFund = (bf && isFinite(+bf.fundingPct)) ? +bf.fundingPct : null; } }catch(eB){ }
-    var btcStructure = null;
-    for (var bi = 0; bi < rows.length; bi++){
-      var br = rows[bi];
-      var bbase = String(br.base || br.sym || '').toUpperCase();
-      if (bbase === 'BTC' || bbase.indexOf('BTC') === 0){
-        try{ btcStructure = tmStructureDir(br.rows4h); }catch(eBs){ btcStructure = null; }
-        if (btcStructure) break;
-      }
-    }
-    trendmxMacroSet({ btcFunding: binFund, btcStructure: btcStructure });
-    for (var i = 0; i < capped.length; i++){
-      var r = capped[i];
-      var dir = tmDirOf(r);
-      if (!dir) continue;
-      var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
-      if (!plan) continue;
-      var reads = {};
-      if (isFinite(+r.fundingPct)){
-=======
->>>>>>> origin/main
         reads.venueFundingPct = +r.fundingPct;
+      /* hg-v1144: venue premium = venue funding minus the Binance twin */
+      if (binFund != null) reads.venuePremiumPct = +reads.venueFundingPct - binFund;
         if (typeof hgFundingAgainstMark === 'function'){
           try{ var fam = hgFundingAgainstMark(+r.fundingPct, dir); if (fam) reads.fundingAgainst = (fam.against === true); }catch(eF){ }
         }
       }
       if (binFund != null) reads.btcFundingBinance = binFund;
-      /* hg-v1144: venue premium = venue funding minus the Binance twin */
-      if (isFinite(reads.venueFundingPct) && binFund != null) reads.venuePremiumPct = +reads.venueFundingPct - binFund;
-      if (dvol && isFinite(+dvol.dvol)){ reads.dvolVal = +dvol.dvol; reads.dvolRegime = dvol.regime || null; }
-      if (cg){
-        try{
-          var base = String(r.base || r.sym || '').replace(/[^A-Z0-9]/g, '').toUpperCase();
-          var cell = cg[base] || cg[base + 'USDT'] || cg[base + 'USD'];
-          var usd = cell && (isFinite(+cell.usd) ? +cell.usd : (isFinite(+cell.total) ? +cell.total : (isFinite(+cell.liqUsd) ? +cell.liqUsd : NaN)));
-          if (isFinite(usd)) reads.liqClusterUsd = usd;
-        }catch(eLc){ }
-      }
       if (taker && Array.isArray(taker.series) && taker.series.length >= 30){
         try{
           var half = Math.floor(taker.series.length / 2);
