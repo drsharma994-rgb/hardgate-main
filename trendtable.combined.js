@@ -317,6 +317,7 @@ function trendmxEmaTag(rows4h, dir){
     if (isFinite(e21[i]) && e21[i] > px) cands.push(['EMA21', e21]);
   }
   if (!cands.length) return { state: 'waiting' };
+
   cands.sort(function(a, b){ return Math.abs(a[1][i] - px) - Math.abs(b[1][i] - px); });
   var name = cands[0][0], series = cands[0][1];
   var from = Math.max(1, rows.length - 6);
@@ -733,6 +734,7 @@ function trendmxPlanLegacy(inp){
     if (!Array.isArray(rows) || !rows.length) return null;
     var lastBar = rows[rows.length - 1];
     if (!lastBar) return null;
+
     var ticker = trendmxTicker(inp);
     var gate = inp.gate || trendmxGateEval(inp, dir);
 
@@ -1079,6 +1081,7 @@ function tmSmcChip(o){
    synthetic ticket is enriched instead and only .smc is copied back. */
 function tmSmcScanPass(rows, golden, death){
   try{
+
     if (!tmSmcOn() || !Array.isArray(rows) || !rows.length) return;
     var i, r, byRows = {};
     for (i = 0; i < rows.length; i++){ if (rows[i] && rows[i].sym) byRows[rows[i].sym] = rows[i].rows4h; }
@@ -1395,6 +1398,7 @@ async function trendmxScanCore(hooks){
           : (typeof it === 'string' ? it : null);
         return bSym ? W.binanceKlines(bSym, tf, n) : Promise.resolve([]);
       };
+
   if (typeof W.hgDeskLoadUniverse !== 'function'
       && (typeof W.binancePerpUniverse !== 'function' || typeof W.binanceKlines !== 'function')){
     throw new Error('missing universe layer (hgDeskLoadUniverse or binancePerpUniverse)');
@@ -1736,6 +1740,7 @@ async function trendmxFormOne(ticket, row, ctx){
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
   if (!isFinite(vz)) bad.push('volume unread');
   else if (vz < 0) bad.push('volume declining');
+
   if (!tmAtLocation(rows4, rowsD, dir)) bad.push('no sweep, FVG or order block');
   if (!rows1 || rows1.length < 40 || typeof hgStructure !== 'function') bad.push('1h unread');
   else {
@@ -2042,6 +2047,7 @@ function trendmxMomState(r, dir){
   var rv = (r && typeof r.rsi === 'number' && isFinite(r.rsi)) ? r.rsi : NaN;
   if (!isFinite(rv)) return null;
   if (dir === 'long'){
+
     if (rv < TM_MOM_BULL_FLOOR) return 'against';
     return rv >= TM_MOM_MID ? 'with' : 'flat';
   }
@@ -2357,6 +2363,7 @@ function trendmxLimitClasses(rows){
        fall) is held off, counted and named per class, still painting with
        its chip. WITH, FLAT and UNREAD pass — it only ever removes. */
     if (trendmxVolState(r, dir) === 'against'){
+
       if (isClean){ out.heldClean++; out.heldWhy.clean.vol++; }
       else { out.heldConv++; out.heldWhy.conv.vol++; }
       continue;
@@ -2666,6 +2673,7 @@ function trendmxPillarHtml(r){
 }
 function trendmxFullStackSetups(rows){
   var out = [];
+
   if (!Array.isArray(rows)) return out;
   for (var i = 0; i < rows.length; i++){
     var r = rows[i];
@@ -2981,6 +2989,7 @@ function trendmxTrendFormHTML(rows){
       var formTag = '';
       if (!dd){
         var fs = trendmxChopState(rr);
+
         if (fs && fs.state === 'chop') formTag = ' · CHOP';
         else if (fs && fs.state === 'trend') formTag = ' · EARLY FORMING';
       }
@@ -3070,6 +3079,7 @@ function trendmxCrownPanelHTML(state){
       + (crown.perfectPlus ? ' | PERFECT+' : (crown.perfect ? ' | PERFECT' : '')) + ' | gates ' + gatesTxt + '</div></div>';
     /* ---- COMPLETE ANALYSIS ---- */
     var comps = crown.comps || {};
+    var pfR = crown.perfectReads || {};   /* hg-v1144: the free-resource bag from the shared-perfect pass */
     function chip(v, cls){ return '<span class="gpip' + (cls || '') + '">' + escH(v) + '</span>'; }
     function dim(title, verdict, cls, lines){
       if (!lines.length) return '';
@@ -3082,6 +3092,7 @@ function trendmxCrownPanelHTML(state){
     if (comps.h4 !== undefined && comps.h4 !== null) tech.push('4H cascade ' + (comps.h4 > 0 ? 'bull' : 'bear'));
     if (comps.cloud !== undefined && comps.cloud !== null) tech.push('cloud ' + (comps.cloud > 0 ? 'above' : 'below'));
     if (isFinite(+crown.adx)) tech.push('ADX ' + (+crown.adx).toFixed(1));
+    if (isFinite(+pfR.dvolVal)) tech.push('DVOL ' + (+pfR.dvolVal).toFixed(1) + (pfR.dvolRegime ? ' ' + String(pfR.dvolRegime) : ''));
     html += '<div class="panel" style="margin-top:10px"><h3>COMPLETE ANALYSIS <span>technical - sentimental - fundamental - macro - micro</span></h3>';
     html += dim('TECHNICAL', Math.abs(+crown.score || 0) >= 2 ? 'ALIGNED' : 'NEUTRAL', '', tech);
     var sent = [];
@@ -3122,6 +3133,8 @@ function trendmxCrownPanelHTML(state){
       if (isFinite(costR)) mic.push('cost ' + costR.toFixed(2) + 'R' + (costR > 0.25 ? ' - COST-HEAVY' : ''));
     }
     if (isFinite(+crown.price) && isFinite(+plan.entry)) mic.push('mark dist ' + (((+crown.price - +plan.entry) / +plan.entry) * 100).toFixed(1) + '%');
+    if (isFinite(+pfR.venuePremiumPct)) mic.push('venue premium ' + (pfR.venuePremiumPct >= 0 ? '+' : '') + (+pfR.venuePremiumPct).toFixed(4) + '%');
+    if (isFinite(+pfR.liqClusterUsd)) mic.push('liq cluster ' + (+pfR.liqClusterUsd).toFixed(0) + ' USD');
     if (Array.isArray(crown.rows4h) && crown.rows4h.length >= 45 && typeof hgFillProbability === 'function' && isFinite(+plan.entry)){
       try{ var fp = hgFillProbability(crown.rows4h, +plan.entry, dir, null, 12); if (fp && fp.pct != null && isFinite(fp.pct)) mic.push('fill odds ' + Math.round(fp.pct) + '%'); }catch(eFp){ }
     }
@@ -3229,6 +3242,7 @@ function trendmxCrownPanelHTML(state){
 function tmStructureDir(rows){
   try{
     if (!Array.isArray(rows) || rows.length < 210 || typeof W.ema !== 'function') return null;
+
     var c = rows.map(function(x){ return x.c; });
     var e50 = W.ema(c, 50), e200 = W.ema(c, 200);
     if (!e50 || !e200 || e50.length < 2) return null;
@@ -3243,6 +3257,12 @@ async function trendmxPerfectEvidencePass(rows){
     if (!Array.isArray(rows) || !rows.length) return rows;
     var capped = rows.slice().sort(function(a, b){ return Math.abs(+b.score || 0) - Math.abs(+a.score || 0); }).slice(0, 8);
     var taker = null, binFund = null;
+    /* hg-v1144: the free resources - Deribit options vol (public) and the
+       Coinglass free-tier clusters - read once per pass, attached per row. */
+    var dvol = null;
+    try{ if (typeof W.deribitVolState === 'function') dvol = W.deribitVolState(); }catch(eDv){ }
+    var cg = null;
+    try{ if (typeof W.coinglassClusters !== 'undefined' && W.coinglassClusters) cg = W.coinglassClusters; }catch(eCg){ }
     try{ if (typeof W.binanceTakerRatio === 'function') taker = await W.binanceTakerRatio('BTCUSDT', '4h', 120); }catch(eT){ }
     try{ if (typeof W.binanceFunding === 'function'){ var bf = await W.binanceFunding('BTCUSDT'); binFund = (bf && isFinite(+bf.fundingPct)) ? +bf.fundingPct : null; } }catch(eB){ }
     var btcStructure = null;
@@ -3269,6 +3289,17 @@ async function trendmxPerfectEvidencePass(rows){
         }
       }
       if (binFund != null) reads.btcFundingBinance = binFund;
+      /* hg-v1144: venue premium = venue funding minus the Binance twin */
+      if (isFinite(reads.venueFundingPct) && binFund != null) reads.venuePremiumPct = +reads.venueFundingPct - binFund;
+      if (dvol && isFinite(+dvol.dvol)){ reads.dvolVal = +dvol.dvol; reads.dvolRegime = dvol.regime || null; }
+      if (cg){
+        try{
+          var base = String(r.base || r.sym || '').replace(/[^A-Z0-9]/g, '').toUpperCase();
+          var cell = cg[base] || cg[base + 'USDT'] || cg[base + 'USD'];
+          var usd = cell && (isFinite(+cell.usd) ? +cell.usd : (isFinite(+cell.total) ? +cell.total : (isFinite(+cell.liqUsd) ? +cell.liqUsd : NaN)));
+          if (isFinite(usd)) reads.liqClusterUsd = usd;
+        }catch(eLc){ }
+      }
       if (taker && Array.isArray(taker.series) && taker.series.length >= 30){
         try{
           var half = Math.floor(taker.series.length / 2);
@@ -3566,6 +3597,7 @@ function mountTrendMatrix(el){
 
   function setProg(f){
     if (!prog) return;
+
     prog.style.display = (f === null) ? 'none' : 'block';
     if (f !== null) prog.firstElementChild.style.width = (f * 100).toFixed(1) + '%';
   }

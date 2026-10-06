@@ -87,6 +87,7 @@ function trendmxCrownPanelHTML(state){
       + (crown.perfectPlus ? ' | PERFECT+' : (crown.perfect ? ' | PERFECT' : '')) + ' | gates ' + gatesTxt + '</div></div>';
     /* ---- COMPLETE ANALYSIS ---- */
     var comps = crown.comps || {};
+    var pfR = crown.perfectReads || {};   /* hg-v1144: the free-resource bag from the shared-perfect pass */
     function chip(v, cls){ return '<span class="gpip' + (cls || '') + '">' + escH(v) + '</span>'; }
     function dim(title, verdict, cls, lines){
       if (!lines.length) return '';
@@ -99,6 +100,7 @@ function trendmxCrownPanelHTML(state){
     if (comps.h4 !== undefined && comps.h4 !== null) tech.push('4H cascade ' + (comps.h4 > 0 ? 'bull' : 'bear'));
     if (comps.cloud !== undefined && comps.cloud !== null) tech.push('cloud ' + (comps.cloud > 0 ? 'above' : 'below'));
     if (isFinite(+crown.adx)) tech.push('ADX ' + (+crown.adx).toFixed(1));
+    if (isFinite(+pfR.dvolVal)) tech.push('DVOL ' + (+pfR.dvolVal).toFixed(1) + (pfR.dvolRegime ? ' ' + String(pfR.dvolRegime) : ''));
     html += '<div class="panel" style="margin-top:10px"><h3>COMPLETE ANALYSIS <span>technical - sentimental - fundamental - macro - micro</span></h3>';
     html += dim('TECHNICAL', Math.abs(+crown.score || 0) >= 2 ? 'ALIGNED' : 'NEUTRAL', '', tech);
     var sent = [];
@@ -139,6 +141,8 @@ function trendmxCrownPanelHTML(state){
       if (isFinite(costR)) mic.push('cost ' + costR.toFixed(2) + 'R' + (costR > 0.25 ? ' - COST-HEAVY' : ''));
     }
     if (isFinite(+crown.price) && isFinite(+plan.entry)) mic.push('mark dist ' + (((+crown.price - +plan.entry) / +plan.entry) * 100).toFixed(1) + '%');
+    if (isFinite(+pfR.venuePremiumPct)) mic.push('venue premium ' + (pfR.venuePremiumPct >= 0 ? '+' : '') + (+pfR.venuePremiumPct).toFixed(4) + '%');
+    if (isFinite(+pfR.liqClusterUsd)) mic.push('liq cluster ' + (+pfR.liqClusterUsd).toFixed(0) + ' USD');
     if (Array.isArray(crown.rows4h) && crown.rows4h.length >= 45 && typeof hgFillProbability === 'function' && isFinite(+plan.entry)){
       try{ var fp = hgFillProbability(crown.rows4h, +plan.entry, dir, null, 12); if (fp && fp.pct != null && isFinite(fp.pct)) mic.push('fill odds ' + Math.round(fp.pct) + '%'); }catch(eFp){ }
     }

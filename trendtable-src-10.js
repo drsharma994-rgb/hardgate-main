@@ -12,6 +12,12 @@ async function trendmxPerfectEvidencePass(rows){
     if (!Array.isArray(rows) || !rows.length) return rows;
     var capped = rows.slice().sort(function(a, b){ return Math.abs(+b.score || 0) - Math.abs(+a.score || 0); }).slice(0, 8);
     var taker = null, binFund = null;
+    /* hg-v1144: the free resources - Deribit options vol (public) and the
+       Coinglass free-tier clusters - read once per pass, attached per row. */
+    var dvol = null;
+    try{ if (typeof W.deribitVolState === 'function') dvol = W.deribitVolState(); }catch(eDv){ }
+    var cg = null;
+    try{ if (typeof W.coinglassClusters !== 'undefined' && W.coinglassClusters) cg = W.coinglassClusters; }catch(eCg){ }
     try{ if (typeof W.binanceTakerRatio === 'function') taker = await W.binanceTakerRatio('BTCUSDT', '4h', 120); }catch(eT){ }
     try{ if (typeof W.binanceFunding === 'function'){ var bf = await W.binanceFunding('BTCUSDT'); binFund = (bf && isFinite(+bf.fundingPct)) ? +bf.fundingPct : null; } }catch(eB){ }
     var btcStructure = null;
@@ -38,6 +44,17 @@ async function trendmxPerfectEvidencePass(rows){
         }
       }
       if (binFund != null) reads.btcFundingBinance = binFund;
+      /* hg-v1144: venue premium = venue funding minus the Binance twin */
+      if (isFinite(reads.venueFundingPct) && binFund != null) reads.venuePremiumPct = +reads.venueFundingPct - binFund;
+      if (dvol && isFinite(+dvol.dvol)){ reads.dvolVal = +dvol.dvol; reads.dvolRegime = dvol.regime || null; }
+      if (cg){
+        try{
+          var base = String(r.base || r.sym || '').replace(/[^A-Z0-9]/g, '').toUpperCase();
+          var cell = cg[base] || cg[base + 'USDT'] || cg[base + 'USD'];
+          var usd = cell && (isFinite(+cell.usd) ? +cell.usd : (isFinite(+cell.total) ? +cell.total : (isFinite(+cell.liqUsd) ? +cell.liqUsd : NaN)));
+          if (isFinite(usd)) reads.liqClusterUsd = usd;
+        }catch(eLc){ }
+      }
       if (taker && Array.isArray(taker.series) && taker.series.length >= 30){
         try{
           var half = Math.floor(taker.series.length / 2);
