@@ -1,3 +1,7 @@
+    html += '<div class="panel" style="margin-top:10px"><h3>SETUP CARD <span>the OMNIBTC template on the matrix crown</span></h3>'
+      + '<div class="kv"><span class="k">Market Thesis</span><span class="v">' + escH(thesis) + '</span></div>'
+      + '<div class="kv"><span class="k">Bias</span><span class="v ' + (dir === 'long' ? 'pos' : 'neg') + '">' + dir.toUpperCase() + '</span></div>'
+      + '<div class="kv"><span class="k">Entry Zone</span><span class="v">[' + (+plan.entry).toFixed(2) + ']' + (isFinite(aV) ? ' +/- ' + (0.25 * aV).toFixed(2) : '') + '</span></div>'
       + '<div class="kv"><span class="k">Invalidation (SL)</span><span class="v">' + (+plan.stop).toFixed(2) + '</span></div>'
       + '<div class="kv"><span class="k">Targets (TP)</span><span class="v">TP1 ' + (+plan.t1).toFixed(2) + ' | TP2 ' + (isFinite(+plan.t2) ? (+plan.t2).toFixed(2) : 'n/a') + ' | TP3 ' + tp3Txt + '</span></div>'
       + '<div class="kv"><span class="k">Automation Blueprint</span><span class="v"><pre style="margin:4px 0;white-space:pre-wrap;font-size:10px">' + escH(jsonTxt) + '</pre>' + (tier === 'clean' ? '' : '<div class="note warn" style="margin-top:4px">formation WATCH_ONLY - the bridge must drop this payload.</div>') + '</span></div>'
@@ -170,6 +174,7 @@ function hgPaintTrendmxFromSnap(){
     var el = tmTab.mountEl;
     var refs = {
       summary: el.querySelector('[data-r="summary"]'),
+      crypto: el.querySelector('[data-r="crypto"]'),
       golden: el.querySelector('[data-r="golden"]'),
       death: el.querySelector('[data-r="death"]'),   /* hg-v1015 */
       cards: el.querySelector('[data-r="cards"]'),
@@ -327,6 +332,7 @@ function mountTrendMatrix(el){
       '<div class="prog" data-r="prog"><i></i></div>' +
       '<div class="note" data-r="summary" style="margin-top:8px;font-weight:600">Idle — run a scan to build the desk.</div>' +
       '<div class="note" data-r="status" style="margin-top:4px">Press RUN SCAN to warm the full matrix + ticket desk.</div>' +
+      '<div data-r="crypto"></div>' +
       '<div data-r="golden"></div>' +
       '<div data-r="death"></div>' +   /* hg-v1015: the bear desk stands on its own, right under the bull desk */
       '<div class="cards" data-r="cards"></div>' +
@@ -355,8 +361,3 @@ function mountTrendMatrix(el){
     });
   }
 
-  var btn    = el.querySelector('[data-r="run"]');
-  var syncBtn = el.querySelector('[data-r="sync"]');
-  var prog   = el.querySelector('[data-r="prog"]');
-  var summary = el.querySelector('[data-r="summary"]');
-  var status = el.querySelector('[data-r="status"]');

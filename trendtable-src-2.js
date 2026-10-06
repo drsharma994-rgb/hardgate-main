@@ -1,14 +1,3 @@
-  var rr2 = isFinite(s.rr2) ? s.rr2 : ((isFinite(risk) && risk > 0) ? Math.abs(s.t2 - s.entry) / risk : NaN);
-  return 'ENTRY <b>' + pxFmt(s.entry) + '</b> · STOP <b>' + pxFmt(s.stop) + '</b>'
-    + ' · T1 <b>' + pxFmt(s.t1) + '</b> (' + fmtN(rr1, 1) + 'R)'
-    + ' · T2 <b>' + pxFmt(s.t2) + '</b> (' + fmtN(rr2, 1) + 'R)'
-    + (isFinite(s.riskPct) ? ' · risk ' + fmtN(s.riskPct, 2) + '%' : '')
-    + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(s.entry, s.stop) : '')
-    + (s.note ? ' — ' + escH(s.note) : '')
-    /* price may have walked through this plan already — the shared rule in
-       hg-plan.js, judged against the mark trendmxAttachMeta carried over */
-    + ((typeof W !== 'undefined' && W && typeof W.hgPlanGeometryLineHtml === 'function')
-      ? (W.hgPlanGeometryLineHtml({ dir: s.dir, entry: s.entry, stop: s.stop, t1: s.t1 },
                                   s.mark, { cls: 'note warn', style: 'margin-top:6px' }) || '') : '')
     /* the shared 14-gate indicator read attached by hgBestLevels */
     + ((typeof hgStrategyConfirmChipHtml === 'function')
@@ -358,3 +347,28 @@ function trendmxFlowScan(rows){
     cands.push(r);
   }
   if (!cands.length) return Promise.resolve(out);
+  /* the limit board's own rank, so the capped slice is the slice this desk
+     promotes first rather than an arbitrary universe order — the SMC
+     pass's own ordering, one rank for both reads */
+  cands.sort(function(a, b){
+    var ra = ((a.gate && a.gate.clean7) ? 1000 : 0) + Math.abs(a.score) * 10 + ((a.gate && a.gate.gatesPassed) || 0);
+    var rb = ((b.gate && b.gate.clean7) ? 1000 : 0) + Math.abs(b.score) * 10 + ((b.gate && b.gate.gatesPassed) || 0);
+    return rb - ra;
+  });
+  cands = cands.slice(0, TM_FLOW_MAX);
+  out.read = 'taker';
+  var idx = 0;
+  function oneChunk(){
+    var chunk = cands.slice(idx, idx + CHUNK);
+    idx += CHUNK;
+    return Promise.all(chunk.map(function(r){
+      var dir = tmDirOf(r);
+      out.scanned++;
+      return Promise.resolve().then(function(){
+        var bSym = symFn(r);
+        if (!bSym){ r.flow = { verdict: 'unreadable', why: 'no Binance twin' }; out.unreadable++; return; }
+        return tkFn(bSym, '4h', 120).then(function(tk){
+          var series = (tk && Array.isArray(tk.series)) ? tk.series : null;
+          if (!series || !series.length){
+            r.flow = { verdict: 'unreadable', why: 'no real flow', sym: bSym }; out.unreadable++; return;
+          }

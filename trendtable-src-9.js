@@ -1,3 +1,26 @@
+    if (!Array.isArray(rows) || !rows.length) return '<div class="empty">No rows to group.</div>';
+    var bull = [], bear = [], mixed = [], i, r, d;
+    for (i = 0; i < rows.length; i++){
+      r = rows[i];
+      d = tmDirOf(r);
+      if (d === 'long') bull.push(r);
+      else if (d === 'short') bear.push(r);
+      else mixed.push(r);
+    }
+    function byStrength(list){
+      return list.slice().sort(function(a, b){
+        var pa = Math.abs(+a.score || 0), pb = Math.abs(+b.score || 0);
+        if (pb !== pa) return pb - pa;
+        var ga = (a.gate && isFinite(a.gate.gatesPassed)) ? a.gate.gatesPassed : -1;
+        var gb = (b.gate && isFinite(b.gate.gatesPassed)) ? b.gate.gatesPassed : -1;
+        return gb - ga;
+      });
+    }
+    /* a direction-less row cannot mint levels, so the mixed column prints a
+       compact honest row instead of a setup card */
+    function mixedRow(r){
+      try{
+        if (r.unread) return '<div class="card" style="padding:8px;margin-bottom:6px"><b>' + escH(r.sym) + '</b>' + tmVenueChip(r)
           + '<div style="opacity:.75;font-size:11px;margin-top:2px">UNREAD · CoinDCX contract with no candle series · not a setup</div></div>';
         return '<div class="card" style="padding:8px;margin-bottom:6px"><b>' + escH(r.sym) + '</b>' + tmVenueChip(r)
           + '<div style="opacity:.75;font-size:11px;margin-top:2px">composite ' + (r.score > 0 ? '+' : '') + r.score + '/5 · no majority — no levels minted · ADX '
@@ -278,7 +301,3 @@ function trendmxCrownPanelHTML(state){
       gates: gatesTxt, formation: tier === 'clean' ? 'CLEAN' : 'WATCH_ONLY', measured: 'UNREAD',
       exitPolicy: 'scale50_t1_be_trail', ts: Math.floor(Date.now() / 1000) };
     var jsonTxt = JSON.stringify(payload, null, 2);
-    html += '<div class="panel" style="margin-top:10px"><h3>SETUP CARD <span>the OMNIBTC template on the matrix crown</span></h3>'
-      + '<div class="kv"><span class="k">Market Thesis</span><span class="v">' + escH(thesis) + '</span></div>'
-      + '<div class="kv"><span class="k">Bias</span><span class="v ' + (dir === 'long' ? 'pos' : 'neg') + '">' + dir.toUpperCase() + '</span></div>'
-      + '<div class="kv"><span class="k">Entry Zone</span><span class="v">[' + (+plan.entry).toFixed(2) + ']' + (isFinite(aV) ? ' +/- ' + (0.25 * aV).toFixed(2) : '') + '</span></div>'

@@ -1,6 +1,12 @@
+  var btn    = el.querySelector('[data-r="run"]');
+  var syncBtn = el.querySelector('[data-r="sync"]');
+  var prog   = el.querySelector('[data-r="prog"]');
+  var summary = el.querySelector('[data-r="summary"]');
+  var status = el.querySelector('[data-r="status"]');
   var out    = el.querySelector('[data-r="out"]');
   var refs = {
     summary: summary,
+    crypto: el.querySelector('[data-r="crypto"]'),
     golden: el.querySelector('[data-r="golden"]'),
     death: el.querySelector('[data-r="death"]'),   /* hg-v1015 */
     cards: el.querySelector('[data-r="cards"]'),
@@ -18,7 +24,7 @@
   var chips  = Array.prototype.slice.call(el.querySelectorAll('[data-f]'));
   var vChips = Array.prototype.slice.call(el.querySelectorAll('[data-v]'));
 
-  var state = { rows: [], golden: [], death: [], filter: 'ALL', venue: 'ALL', sortKey: 'score', sortDir: -1, running: false, view: 'table' };   /* hg-v1015: death bag initialized with golden; hg-v1045: view toggle */
+  var state = { rows: [], crypto: [], golden: [], death: [], filter: 'ALL', venue: 'ALL', sortKey: 'score', sortDir: -1, running: false, view: 'table' };   /* hg-v1015: death bag initialized with golden; hg-v1045: view toggle */
   tmTab._state = state;
 
   function setProg(f){
@@ -237,6 +243,7 @@
       var vc = (snap && snap.venueCounts) ? snap.venueCounts : {};
 
       state.rows = results;
+      state.crypto = (snap && snap.cryptoSetups) ? snap.cryptoSetups : [];
       state.golden = (snap && snap.goldenCross) ? snap.goldenCross : [];
       state.death = (snap && snap.deathCross) ? snap.deathCross : [];   /* hg-v1014 */
       state.venueCounts = vc;
@@ -316,6 +323,7 @@
   if (__tmScanSnap && __tmScanSnap.rows && __tmScanSnap.rows.length &&
       __tmScanSnap.at && (Date.now() - __tmScanSnap.at) < (5 * 60 * 1000)){
     state.rows = __tmScanSnap.rows;
+    state.crypto = __tmScanSnap.cryptoSetups || [];
     state.golden = __tmScanSnap.goldenCross || [];
     state.death = __tmScanSnap.deathCross || [];   /* hg-v1014 */
     tmTab.hasRun = true;

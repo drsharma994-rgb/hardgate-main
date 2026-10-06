@@ -1,13 +1,3 @@
-      if (crossedRecently(crossOver(e50c, e200c), 10)) out.freshCross = 'GOLDEN';
-      else if (crossedRecently(crossUnder(e50c, e200c), 10)) out.freshCross = 'DEATH';
-
-      /* 4) ichimoku cloud on 1d */
-      var st = ichimokuState(rows1d);
-      if (st && st.priceVsCloud === 'ABOVE') out.comps.cloud = 1;
-      else if (st && st.priceVsCloud === 'BELOW') out.comps.cloud = -1;
-    }
-
-    /* 3) 4h cascade ema9 / ema21 / ema50 */
     if (ok4){
       var c4 = rows4h.map(function(r){ return r ? r.c : NaN; });
       var i4 = c4.length - 1;
@@ -458,3 +448,14 @@ function trendmxPlanHTML(s){
   if (!s) return '';
   var risk = (isFinite(s.entry) && isFinite(s.stop)) ? Math.abs(s.entry - s.stop) : NaN;
   var rr1 = isFinite(s.rr1) ? s.rr1 : ((isFinite(risk) && risk > 0) ? Math.abs(s.t1 - s.entry) / risk : NaN);
+  var rr2 = isFinite(s.rr2) ? s.rr2 : ((isFinite(risk) && risk > 0) ? Math.abs(s.t2 - s.entry) / risk : NaN);
+  return 'ENTRY <b>' + pxFmt(s.entry) + '</b> · STOP <b>' + pxFmt(s.stop) + '</b>'
+    + ' · T1 <b>' + pxFmt(s.t1) + '</b> (' + fmtN(rr1, 1) + 'R)'
+    + ' · T2 <b>' + pxFmt(s.t2) + '</b> (' + fmtN(rr2, 1) + 'R)'
+    + (isFinite(s.riskPct) ? ' · risk ' + fmtN(s.riskPct, 2) + '%' : '')
+    + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(s.entry, s.stop) : '')
+    + (s.note ? ' — ' + escH(s.note) : '')
+    /* price may have walked through this plan already — the shared rule in
+       hg-plan.js, judged against the mark trendmxAttachMeta carried over */
+    + ((typeof W !== 'undefined' && W && typeof W.hgPlanGeometryLineHtml === 'function')
+      ? (W.hgPlanGeometryLineHtml({ dir: s.dir, entry: s.entry, stop: s.stop, t1: s.t1 },

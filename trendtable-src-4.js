@@ -1,57 +1,3 @@
-  return (b - a) / a;
-}
-function tmYahooDir(j){
-  try{
-    var q = j.chart.result[0].indicators.quote[0].close.filter(function(v){ return isFinite(v); });
-    if (q.length < 2) return null;
-    return q[q.length - 1] > q[q.length - 2];
-  }catch(e){ return null; }
-}
-function tmCapChange(j){
-  var caps = j && j.market_caps;
-  if (!caps || caps.length < 2) return null;
-  var a = caps[0][1], b = caps[caps.length - 1][1];
-  if (!(a > 0) || !(b > 0)) return null;
-  return (b - a) / a;
-}
-function tmSessionVwap(rows1h){
-  if (!rows1h || !rows1h.length) return NaN;
-  var day = Math.floor(Date.now() / 1000 / 86400);
-  var pv = 0, vv = 0, n = 0;
-  for (var i = 0; i < rows1h.length; i++){
-    var r = rows1h[i];
-    if (!r) continue;
-    var open = tmBarOpenSec(r);
-    if (!isFinite(open) || Math.floor(open / 86400) !== day) continue;
-    var v = r.v > 0 ? r.v : 0;
-    if (!(v > 0)) continue;
-    pv += ((r.h + r.l + r.c) / 3) * v;
-    vv += v;
-    n++;
-  }
-  return (n >= 2 && vv > 0) ? pv / vv : NaN;
-}
-
-function tmWeeklyRows(rowsD){
-  if (!rowsD || rowsD.length < 20) return null;
-  var weeks = [], cur = null;
-  for (var i = 0; i < rowsD.length; i++){
-    var r = rowsD[i];
-    if (!r) continue;
-    var open = tmBarOpenSec(r);
-    if (!isFinite(open)) continue;
-    var wk = Math.floor(open / (7 * 86400));
-    if (!cur || cur.wk !== wk){
-      if (cur) weeks.push(cur);
-      cur = { wk: wk, o: r.o, h: r.h, l: r.l, c: r.c, v: r.v || 0 };
-    } else {
-      if (r.h > cur.h) cur.h = r.h;
-      if (r.l < cur.l) cur.l = r.l;
-      cur.c = r.c;
-      cur.v += r.v || 0;
-    }
-  }
-  if (cur) weeks.push(cur);
   return weeks.length >= 8 ? weeks : null;
 }
 function tmVolumeProfile(rows){
@@ -421,3 +367,47 @@ async function tmLiqRead(row){
   for (i = 0; i < details.length; i++){
     var d = details[i] || {};
     var ts = +d.ts || +d.time;
+    if (!(ts > 0) || now - ts > 6 * 60 * 60 * 1000) continue;
+    var sz = +d.sz || 0;
+    var side = String(d.posSide || d.side || '').toLowerCase();
+    var pxL = +d.bkPx || +d.px || +d.price;
+    if (side === 'long' || side === 'sell') longLiq += sz;
+    else if (side === 'short' || side === 'buy') shortLiq += sz;
+    if (row && row.price > 0 && pxL > 0 && sz > 0){
+      var key = Math.round(pxL / (row.price * 0.005));
+      if (!buckets[key]) buckets[key] = { price: key * row.price * 0.005, long: 0, short: 0 };
+      if (side === 'long' || side === 'sell') buckets[key].long += sz;
+      else buckets[key].short += sz;
+    }
+  }
+  var clusters = [];
+  for (var key in buckets) clusters.push(buckets[key]);
+  clusters.sort(function(x, y){ return (y.long + y.short) - (x.long + x.short); });
+  return { longLiq: longLiq, shortLiq: shortLiq, clusters: clusters.slice(0, 8) };
+}
+async function tm5mVolumeOk(row, dir){
+  var got = null;
+  try {
+    if (typeof W.binanceKlines === 'function') got = await W.binanceKlines(tmBaseOf(row) + 'USDT', '5m', 40);
+  } catch (e) { got = null; }
+  var rows = tmClosedRows(got, 300);
+  if (!rows || rows.length < 15) return null;
+  var last = rows[rows.length - 1], avg = 0, i;
+  for (i = rows.length - 11; i < rows.length - 1; i++) avg += rows[i].v || 0;
+  avg /= 10;
+  if (!(avg > 0)) return null;
+  if (dir === 'long') return last.c >= last.o && last.v > avg;
+  return last.c <= last.o && last.v > avg;
+}
+async function tmMicroOk(row, dir){
+  async function one(tf, n, sec){
+    if (typeof W.binanceKlines !== 'function') return null;
+    try {
+      var got = await W.binanceKlines(tmBaseOf(row) + 'USDT', tf, n);
+      var rows = tmClosedRows(got, sec);
+      if (!rows || rows.length < 30 || typeof hgStructure !== 'function') return null;
+      var hs = hgStructure(rows);
+      if (!hs) return null;
+      if (hs.trend === (dir === 'long' ? 'down' : 'up')) return false;
+      var last = rows[rows.length - 1];
+      if (dir === 'long' && last.c < last.o) return false;

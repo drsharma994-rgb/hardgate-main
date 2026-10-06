@@ -355,3 +355,13 @@ function trendScore(rows1d, rows4h){
       var dClosed = tmClosedRows(rows1d, 86400);
       var cClosed = dClosed.map(function(r){ return r ? r.c : NaN; });
       var e50c = ema(cClosed, 50), e200c = ema(cClosed, 200);
+      if (crossedRecently(crossOver(e50c, e200c), 10)) out.freshCross = 'GOLDEN';
+      else if (crossedRecently(crossUnder(e50c, e200c), 10)) out.freshCross = 'DEATH';
+
+      /* 4) ichimoku cloud on 1d */
+      var st = ichimokuState(rows1d);
+      if (st && st.priceVsCloud === 'ABOVE') out.comps.cloud = 1;
+      else if (st && st.priceVsCloud === 'BELOW') out.comps.cloud = -1;
+    }
+
+    /* 3) 4h cascade ema9 / ema21 / ema50 */

@@ -1,3 +1,31 @@
+    return '<span class="stamp bad" style="margin-left:6px" title="' + escH('trend-quality witness (hg-v1057): this 4h tape reads CHOP ' + chopTxt
+      + ' and efficiency ratio ' + erTxt
+      + ' — the trend matrix\'s own trend-quality measure says there is no trend to ride. Capped at NEAR, never CLEAN — evidence, never a gate.') + '">CHOP ' + chopTxt + ' · ER ' + erTxt + '</span>';
+  }catch(e){ return ''; }
+}
+
+/* hg-v1022: THE PERFECT SETUP tier — the strictest confluence read the desk
+   can honestly print. NOT a new composite leg and NOT a win guarantee (the
+   forward ledger measures it like every other mechanic): it is a FILTER that
+   asks every independent confirmation to say WITH and none to say AGAINST, on
+   top of a 7/7 gate-clean row at maximum composite alignment. Criteria,
+   stated plainly:
+     |composite| = 5/5  (all five legs maxed the same way)
+     7/7 swing-gate clean (spread · vol-Z · EMA21 anchor · funding · regime · structure · R:R)
+     momentum witness WITH  (1D RSI on the regime side — not flat, not null)
+     volume witness WITH     (1D OBV confirms the new extreme — not flat, not null)
+     taker flow never AGAINST (WITH when readable; an unreadable flow never confirms but never disqualifies)
+     funding not crowded      (not against the direction)
+   Evidence-only: nothing here gates, moves a tier or drops a row — it only
+   earns a desk and a read-mark. A row is PERFECT, not "guaranteed". */
+function trendmxPerfectState(r){
+  if (!r || !r.gate || !r.gate.clean7 || r.gate.veto) return false;
+  if (typeof r.score !== 'number' || !isFinite(r.score)) return false;
+  if (Math.abs(r.score) !== 5) return false;
+  var dir = tmDirOf(r);
+  if (!dir) return false;
+  if (trendmxMomState(r, dir) !== 'with') return false;
+  if (trendmxVolState(r, dir) !== 'with') return false;
   if (r.flow && r.flow.verdict === 'against') return false;
   /* hg-v1034: the fundamental + sentiment witness — a blackout (refuse) or a
      2+ net checked headwind (against) disqualifies PERFECT exactly like flow
@@ -291,30 +319,3 @@ function trendmxGateCleanDeskHTML(bag, held, why){
 function trendmxConvictionDeskHTML(bag, held, why){
   return trendmxLimitDeskHTML(
     'LIMIT BOARD · CONVICTION DESK',
-    'criteria: five-leg composite majority |≥2| (STRONG |≥4|) without the 7/7 stamp — 1D EMA200 · EMA50/200 cross · 4H EMA9/21/50 cascade · Ichimoku cloud · ADX strength · exact resting limits · taker flow not against · 1D RSI momentum range not turned against · 1D OBV volume trend not diverging against · ADX breaks composite ties',
-    bag, held, why);
-}
-
-/* hg-v1022: the PERFECT desk collects the rows trendmxPerfectState crowned and
-   builds a valid plan for each, ranked by |composite| then gates passed (the
-   gate-clean desk's own intra-class rank). The bag reuses the shared card
-   renderer with item.perfect set, so each card carries the ★ PERFECT stamp. */
-function trendmxPerfectSetups(rows){
-  var out = [];
-  if (!Array.isArray(rows)) return out;
-  for (var i = 0; i < rows.length; i++){
-    var r = rows[i];
-    if (!trendmxPerfectState(r)) continue;
-    var dir = tmDirOf(r);
-    var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
-    if (!tmValidSetup(plan)) continue;
-    out.push({ row: r, plan: plan, dir: dir, stack: trendmxCardStack(r, dir), perfect: true,
-               rank: Math.abs(r.score) * 10 + (r.gate.gatesPassed || 0) });
-  }
-  out.sort(function(a, b){ return b.rank - a.rank; });
-  return out;
-}
-
-
-/* hg-v1082: FIVE-PILLAR STACK — technical, fundamental, sentiment, macro, micro.
-   A FULL STACK row is one where every pillar is readable AND with the row's

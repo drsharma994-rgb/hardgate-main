@@ -1,3 +1,25 @@
+  /* hg-v1012: real taker flow AGAINST the row's own majority caps the row
+     at NEAR — it paints, the chip names why, it can never be CLEAN or sit
+     on the LIMIT BOARD (the same leadership pattern as the omni principal
+     above it). An unread flow caps nothing. */
+  if (r.flow && r.flow.verdict === 'against') return 'near';
+  /* hg-v1019: the momentum witness caps the same way — a row whose 1D RSI
+     range has TURNED against its direction can never be CLEAN. An unread
+     or abstaining witness caps nothing. */
+  if (trendmxMomState(r, tmDirOf(r)) === 'against') return 'near';
+  /* hg-v1020: and the volume witness — a swing rally the OBV trend refuses
+     to confirm (or a fall it refuses to join) caps at NEAR the same way. */
+  if (trendmxVolState(r, tmDirOf(r)) === 'against') return 'near';
+  /* hg-v1034: the fundamental + sentiment witness caps the same way — a row
+     whose coin sits in a red-folder blackout (refuse) or against a 2+ net
+     checked headwind (against) can never be CLEAN. */
+  var fundSt = trendmxFundState(r, tmDirOf(r));
+  if (fundSt === 'refuse' || fundSt === 'against') return 'near';
+  /* hg-v1057: the trend-quality witness caps the same way — a row whose own
+     4h tape is CHOPPY (Choppiness >= 61.8 AND Efficiency Ratio < 0.3, the two
+     instruments agreeing) can never be CLEAN: this desk trades trends and
+     that tape has none to ride. Mixed or unreadable caps nothing (fail open
+     — one instrument alone is not a verdict). */
   var chopSt = trendmxChopState(r);
   if (chopSt && chopSt.state === 'chop') return 'near';
   if (plan && tmValidSetup(plan) && r.gate && r.gate.clean7) return 'clean';
@@ -72,12 +94,28 @@ function trendmxCrossCardHTML(g){
    stays the shared dir-aware one (hg-v1014); a desk differs only in which
    bag it renders. The 4-card cap is the cap each half already had — the
    split changes no exposure. A desk with no tickets renders nothing. */
+
+function trendmxCryptoDeskHTML(list){
+  list = list || [];
+  var held = list.held || {};
+  var cards = '';
+  for (var i = 0; i < Math.min(list.length, 6); i++) cards += trendmxCrossCardHTML(list[i]);
+  var why = list.length ? '' : ('<div class="note">No crypto setup. The coin needs 4h structure, a sweep or fair-value gap or order block, relative strength versus BTC, open interest and CVD with the trade, a 15m sweep and change of character, and 8 confluence votes with none against.'
+    + ((held.stack && held.stack.length) ? ' ' + held.stack.slice(0, 4).map(function(x){ return x.sym + ': ' + x.reasons.slice(0, 2).join(', '); }).join(' · ') + '.' : '')
+    + '</div>');
+  return '<div class="panel" style="margin:12px 0;border-left:4px solid #0369a1">'
+    + '<h2>CRYPTO SETUPS <span>structure · relative strength · OI · CVD · 15m trigger · 8 confluence votes, none against</span></h2>'
+    + why
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + cards + '</div>'
+    + '</div>';
+}
+
 function trendmxGoldenDeskHTML(golden){
   golden = golden || [];
   var held = golden.held || {};
   var cards = '';
   for (var i = 0; i < Math.min(golden.length, 4); i++) cards += trendmxCrossCardHTML(golden[i]);
-  var why = golden.length ? '' : ('<div class="note">No golden setup. Price has to clear structure, the 4h EMA cascade, 6/7 gates, the EMA tag, the TRADE grade, then the full stack: weekly and 4h structure, BOS, equal highs/lows, daily and weekly open, volume profile, HVN and LVN, supply and demand, EMA 20/50/200, VWAP, 1h, 15m sweep CHOCH and retest, 5m volume, 3m and 1m structure, OI, funding, positioning, liquidation clusters, CVD, DXY yields Nasdaq S&P gold VIX, the calendar, BTC ETH BTC.D TOTAL TOTAL2 TOTAL3, ETF flows, stables, headlines, listings and the unlock calendar. The TradingView technical summary has to agree.'
+  var why = golden.length ? '' : ('<div class="note">No golden setup. A cross still has to clear the 4h cascade, 6/7 gates, the EMA tag and the TRADE grade, then the crypto formation: structure, relative strength versus BTC, open interest, CVD, the 15m sweep, and at least 8 confluence votes with none against.'
     + (held.waiting ? ' ' + held.waiting + ' waiting for the EMA tag.' : '')
     + (held.gates ? ' ' + held.gates + ' failed the gates.' : '')
     + (held.cascade ? ' ' + held.cascade + ' have no 4h cascade.' : '')
@@ -312,31 +350,3 @@ function trendmxChopChipHtml(r){
     if (!st || st.state !== 'chop') return '';
     var chopTxt = isFinite(st.chop) ? st.chop.toFixed(0) : '?';
     var erTxt = isFinite(st.er) ? st.er.toFixed(2) : '?';
-    return '<span class="stamp bad" style="margin-left:6px" title="' + escH('trend-quality witness (hg-v1057): this 4h tape reads CHOP ' + chopTxt
-      + ' and efficiency ratio ' + erTxt
-      + ' — the trend matrix\'s own trend-quality measure says there is no trend to ride. Capped at NEAR, never CLEAN — evidence, never a gate.') + '">CHOP ' + chopTxt + ' · ER ' + erTxt + '</span>';
-  }catch(e){ return ''; }
-}
-
-/* hg-v1022: THE PERFECT SETUP tier — the strictest confluence read the desk
-   can honestly print. NOT a new composite leg and NOT a win guarantee (the
-   forward ledger measures it like every other mechanic): it is a FILTER that
-   asks every independent confirmation to say WITH and none to say AGAINST, on
-   top of a 7/7 gate-clean row at maximum composite alignment. Criteria,
-   stated plainly:
-     |composite| = 5/5  (all five legs maxed the same way)
-     7/7 swing-gate clean (spread · vol-Z · EMA21 anchor · funding · regime · structure · R:R)
-     momentum witness WITH  (1D RSI on the regime side — not flat, not null)
-     volume witness WITH     (1D OBV confirms the new extreme — not flat, not null)
-     taker flow never AGAINST (WITH when readable; an unreadable flow never confirms but never disqualifies)
-     funding not crowded      (not against the direction)
-   Evidence-only: nothing here gates, moves a tier or drops a row — it only
-   earns a desk and a read-mark. A row is PERFECT, not "guaranteed". */
-function trendmxPerfectState(r){
-  if (!r || !r.gate || !r.gate.clean7 || r.gate.veto) return false;
-  if (typeof r.score !== 'number' || !isFinite(r.score)) return false;
-  if (Math.abs(r.score) !== 5) return false;
-  var dir = tmDirOf(r);
-  if (!dir) return false;
-  if (trendmxMomState(r, dir) !== 'with') return false;
-  if (trendmxVolState(r, dir) !== 'with') return false;

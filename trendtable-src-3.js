@@ -1,28 +1,3 @@
-  /* the limit board's own rank, so the capped slice is the slice this desk
-     promotes first rather than an arbitrary universe order — the SMC
-     pass's own ordering, one rank for both reads */
-  cands.sort(function(a, b){
-    var ra = ((a.gate && a.gate.clean7) ? 1000 : 0) + Math.abs(a.score) * 10 + ((a.gate && a.gate.gatesPassed) || 0);
-    var rb = ((b.gate && b.gate.clean7) ? 1000 : 0) + Math.abs(b.score) * 10 + ((b.gate && b.gate.gatesPassed) || 0);
-    return rb - ra;
-  });
-  cands = cands.slice(0, TM_FLOW_MAX);
-  out.read = 'taker';
-  var idx = 0;
-  function oneChunk(){
-    var chunk = cands.slice(idx, idx + CHUNK);
-    idx += CHUNK;
-    return Promise.all(chunk.map(function(r){
-      var dir = tmDirOf(r);
-      out.scanned++;
-      return Promise.resolve().then(function(){
-        var bSym = symFn(r);
-        if (!bSym){ r.flow = { verdict: 'unreadable', why: 'no Binance twin' }; out.unreadable++; return; }
-        return tkFn(bSym, '4h', 120).then(function(tk){
-          var series = (tk && Array.isArray(tk.series)) ? tk.series : null;
-          if (!series || !series.length){
-            r.flow = { verdict: 'unreadable', why: 'no real flow', sym: bSym }; out.unreadable++; return;
-          }
           /* no signal-bar slice: a matrix row is minted by THIS scan, so the
              last closed 4h bar IS its judging bar — the windows that exist
              are the windows that had printed */
@@ -379,3 +354,57 @@ function tmSpreadChange(total, parts){
     b -= parts[i].b;
   }
   if (!(a > 0)) return null;
+  return (b - a) / a;
+}
+function tmYahooDir(j){
+  try{
+    var q = j.chart.result[0].indicators.quote[0].close.filter(function(v){ return isFinite(v); });
+    if (q.length < 2) return null;
+    return q[q.length - 1] > q[q.length - 2];
+  }catch(e){ return null; }
+}
+function tmCapChange(j){
+  var caps = j && j.market_caps;
+  if (!caps || caps.length < 2) return null;
+  var a = caps[0][1], b = caps[caps.length - 1][1];
+  if (!(a > 0) || !(b > 0)) return null;
+  return (b - a) / a;
+}
+function tmSessionVwap(rows1h){
+  if (!rows1h || !rows1h.length) return NaN;
+  var day = Math.floor(Date.now() / 1000 / 86400);
+  var pv = 0, vv = 0, n = 0;
+  for (var i = 0; i < rows1h.length; i++){
+    var r = rows1h[i];
+    if (!r) continue;
+    var open = tmBarOpenSec(r);
+    if (!isFinite(open) || Math.floor(open / 86400) !== day) continue;
+    var v = r.v > 0 ? r.v : 0;
+    if (!(v > 0)) continue;
+    pv += ((r.h + r.l + r.c) / 3) * v;
+    vv += v;
+    n++;
+  }
+  return (n >= 2 && vv > 0) ? pv / vv : NaN;
+}
+
+function tmWeeklyRows(rowsD){
+  if (!rowsD || rowsD.length < 20) return null;
+  var weeks = [], cur = null;
+  for (var i = 0; i < rowsD.length; i++){
+    var r = rowsD[i];
+    if (!r) continue;
+    var open = tmBarOpenSec(r);
+    if (!isFinite(open)) continue;
+    var wk = Math.floor(open / (7 * 86400));
+    if (!cur || cur.wk !== wk){
+      if (cur) weeks.push(cur);
+      cur = { wk: wk, o: r.o, h: r.h, l: r.l, c: r.c, v: r.v || 0 };
+    } else {
+      if (r.h > cur.h) cur.h = r.h;
+      if (r.l < cur.l) cur.l = r.l;
+      cur.c = r.c;
+      cur.v += r.v || 0;
+    }
+  }
+  if (cur) weeks.push(cur);

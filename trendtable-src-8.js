@@ -1,3 +1,30 @@
+    'criteria: five-leg composite majority |≥2| (STRONG |≥4|) without the 7/7 stamp — 1D EMA200 · EMA50/200 cross · 4H EMA9/21/50 cascade · Ichimoku cloud · ADX strength · exact resting limits · taker flow not against · 1D RSI momentum range not turned against · 1D OBV volume trend not diverging against · ADX breaks composite ties',
+    bag, held, why);
+}
+
+/* hg-v1022: the PERFECT desk collects the rows trendmxPerfectState crowned and
+   builds a valid plan for each, ranked by |composite| then gates passed (the
+   gate-clean desk's own intra-class rank). The bag reuses the shared card
+   renderer with item.perfect set, so each card carries the ★ PERFECT stamp. */
+function trendmxPerfectSetups(rows){
+  var out = [];
+  if (!Array.isArray(rows)) return out;
+  for (var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if (!trendmxPerfectState(r)) continue;
+    var dir = tmDirOf(r);
+    var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
+    if (!tmValidSetup(plan)) continue;
+    out.push({ row: r, plan: plan, dir: dir, stack: trendmxCardStack(r, dir), perfect: true,
+               rank: Math.abs(r.score) * 10 + (r.gate.gatesPassed || 0) });
+  }
+  out.sort(function(a, b){ return b.rank - a.rank; });
+  return out;
+}
+
+
+/* hg-v1082: FIVE-PILLAR STACK — technical, fundamental, sentiment, macro, micro.
+   A FULL STACK row is one where every pillar is readable AND with the row's
    own majority. WITH is a positive read. An unread ATR, a mixed tape, a
    missing 4h structure, and BTC funding that is merely not crowded do not
    count as WITH. Structure must agree (EMA50 vs EMA200). An against pillar
@@ -229,6 +256,7 @@ function trendmxPaintDeskSections(refs, state){
   var vc = state.venueCounts || null;
   if (refs.summary) refs.summary.textContent = rows.length ? trendmxSummaryLine(rows, golden, vc) : 'Idle — run a scan to build the desk.';
   /* hg-v1015: two desks, two containers — each renders only its own cross */
+  if (refs.crypto) refs.crypto.innerHTML = trendmxCryptoDeskHTML(state.crypto || []);
   if (refs.golden) refs.golden.innerHTML = trendmxGoldenDeskHTML(golden);
   if (refs.death) refs.death.innerHTML = trendmxDeathDeskHTML(death);
   var clean = [], near = [], forming = [];
@@ -333,26 +361,3 @@ function trendmxPaintFwd(refs){
    gates, same evidence — a different reading order. */
 function trendmxColumnsHTML(rows){
   try{
-    if (!Array.isArray(rows) || !rows.length) return '<div class="empty">No rows to group.</div>';
-    var bull = [], bear = [], mixed = [], i, r, d;
-    for (i = 0; i < rows.length; i++){
-      r = rows[i];
-      d = tmDirOf(r);
-      if (d === 'long') bull.push(r);
-      else if (d === 'short') bear.push(r);
-      else mixed.push(r);
-    }
-    function byStrength(list){
-      return list.slice().sort(function(a, b){
-        var pa = Math.abs(+a.score || 0), pb = Math.abs(+b.score || 0);
-        if (pb !== pa) return pb - pa;
-        var ga = (a.gate && isFinite(a.gate.gatesPassed)) ? a.gate.gatesPassed : -1;
-        var gb = (b.gate && isFinite(b.gate.gatesPassed)) ? b.gate.gatesPassed : -1;
-        return gb - ga;
-      });
-    }
-    /* a direction-less row cannot mint levels, so the mixed column prints a
-       compact honest row instead of a setup card */
-    function mixedRow(r){
-      try{
-        if (r.unread) return '<div class="card" style="padding:8px;margin-bottom:6px"><b>' + escH(r.sym) + '</b>' + tmVenueChip(r)

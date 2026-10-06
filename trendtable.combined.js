@@ -2059,114 +2059,118 @@ async function tmCrowdRatio(row){
 }
 
 async function trendmxFormOne(ticket, row, ctx){
-  var bad = [];
+  var hard = [];
+  var votes = [];
+  function vote(name, state){
+    votes.push({ name: name, v: state });
+  }
   var dir = ticket.dir;
   var rows4 = tmClosedRows(row && row.rows4h, 14400);
   var rows1 = tmClosedRows(row && row.rows1h, 3600);
   var rowsD = tmClosedRows(row && row.rows1d, 86400);
   if (!row || !rows4 || rows4.length < 50) return ['4h history unread'];
+  var px = rows4[rows4.length - 1].c;
   var hs = (typeof hgStructure === 'function') ? hgStructure(rows4) : null;
-  if (!hs) bad.push('structure unread');
+  var want = dir === 'long' ? 'up' : 'down';
+  if (!hs) hard.push('structure unread');
   else {
-    var want = dir === 'long' ? 'up' : 'down';
-    if (hs.trend !== want) bad.push('4h structure ' + (hs.trend || 'range'));
+    if (hs.trend !== want) hard.push('4h structure ' + (hs.trend || 'range'));
     var n = rows4.length - 1;
-    if (hs.lastCHoCH && hs.lastCHoCH.dir && hs.lastCHoCH.dir !== want && (n - hs.lastCHoCH.i) <= 20) bad.push('CHOCH against');
+    if (hs.lastCHoCH && hs.lastCHoCH.dir && hs.lastCHoCH.dir !== want && (n - hs.lastCHoCH.i) <= 20) hard.push('CHOCH against');
     var swings = hs.swings || [];
-    var lastHigh = null, lastLow = null;
-    for (var s = 0; s < swings.length; s++){
-      if (swings[s].type === 'HH' || swings[s].type === 'LH') lastHigh = swings[s];
-      if (swings[s].type === 'HL' || swings[s].type === 'LL') lastLow = swings[s];
+    var lastHigh = null, lastLow = null, si;
+    for (si = 0; si < swings.length; si++){
+      if (swings[si].type === 'HH' || swings[si].type === 'LH') lastHigh = swings[si];
+      if (swings[si].type === 'HL' || swings[si].type === 'LL') lastLow = swings[si];
     }
-    if (dir === 'long' && (!(lastHigh && lastHigh.type === 'HH') || !(lastLow && lastLow.type === 'HL'))) bad.push('not HH/HL');
-    if (dir === 'short' && (!(lastHigh && lastHigh.type === 'LH') || !(lastLow && lastLow.type === 'LL'))) bad.push('not LH/LL');
+    if (dir === 'long' && (!(lastHigh && lastHigh.type === 'HH') || !(lastLow && lastLow.type === 'HL'))) hard.push('not HH/HL');
+    if (dir === 'short' && (!(lastHigh && lastHigh.type === 'LH') || !(lastLow && lastLow.type === 'LL'))) hard.push('not LH/LL');
+    if (!hs.lastBOS || hs.lastBOS.dir !== want || (n - hs.lastBOS.i) > 30) hard.push('no recent BOS');
   }
   var closes = rows4.map(function(r){ return r.c; });
-  var px = closes[closes.length - 1];
   var e20 = tmEmaLast(closes, 20), e50 = tmEmaLast(closes, 50), e200 = tmEmaLast(closes, 200);
-  if (dir === 'long' && !(px > e20 && e20 > e50 && px > e200)) bad.push('EMA 20/50/200 against');
-  if (dir === 'short' && !(px < e20 && e20 < e50 && px < e200)) bad.push('EMA 20/50/200 against');
+  if (dir === 'long' && !(px > e20 && e20 > e50 && px > e200)) hard.push('EMA 20/50/200 against');
+  if (dir === 'short' && !(px < e20 && e20 < e50 && px < e200)) hard.push('EMA 20/50/200 against');
   var vwap = tmSessionVwap(row.rows1h);
-  if (!isFinite(vwap)) bad.push('VWAP unread');
-  else if (dir === 'long' && !(px > vwap)) bad.push('below VWAP');
-  else if (dir === 'short' && !(px < vwap)) bad.push('above VWAP');
+  if (!isFinite(vwap)) hard.push('VWAP unread');
+  else if (dir === 'long' && !(px > vwap)) hard.push('below VWAP');
+  else if (dir === 'short' && !(px < vwap)) hard.push('above VWAP');
   var vz = (typeof volZ === 'function') ? volZ(rows4, 20) : NaN;
-  if (!isFinite(vz)) bad.push('volume unread');
-  else if (vz < 0) bad.push('volume declining');
-  if (!tmAtLocation(rows4, rowsD, dir)) bad.push('no sweep, FVG or order block');
-  if (!rows1 || rows1.length < 40 || typeof hgStructure !== 'function') bad.push('1h unread');
-  else {
-    var h1 = hgStructure(rows1);
-    if (h1 && h1.trend === (dir === 'long' ? 'down' : 'up')) bad.push('1h structure against');
-  }
-  if (!ctx || ctx.macroOk !== true) bad.push('macro unread');
-  else if (dir === 'long' && ctx.riskOff) bad.push('macro risk-off');
-  else if (dir === 'short' && ctx.riskOn) bad.push('macro risk-on');
-  if (!ctx || ctx.calendarOk !== true) bad.push('calendar unread');
-  else if (ctx.eventBlock) bad.push('high-impact USD event');
-  if (tmBaseOf(row) !== 'BTC'){
-    if (!ctx || ctx.domOk !== true) bad.push('BTC.D unread');
-    else if (dir === 'long' && ctx.btcDomRising) bad.push('BTC.D rising');
-  }
-  if (!ctx || ctx.ethOk !== true) bad.push('ETH structure unread');
-  else if (dir === 'long' && ctx.ethStructure === 'down' && tmBaseOf(row) !== 'BTC' && tmBaseOf(row) !== 'ETH') bad.push('ETH structure down');
-  if (!ctx || ctx.stableOk !== true) bad.push('stablecoin liquidity unread');
-  else if (dir === 'long' && ctx.stableFalling) bad.push('stablecoin liquidity falling');
-  if (!ctx || ctx.newsOk !== true || !ctx.newsBook) bad.push('news unread');
-  else {
-    var hit = tmCoinHeadline(ctx.newsBook, tmBaseOf(row));
-    if (dir === 'long' && (ctx.newsBook.marketHack || ctx.newsBook.marketReg || ctx.newsBook.etfOutflow)) bad.push('market headline against longs');
-    if (dir === 'long' && (hit.hack || hit.delist || hit.lawsuit)) bad.push('coin headline against');
-    if (dir === 'short' && hit.listing) bad.push('fresh listing against a short');
-  }
-  if (!ctx || ctx.etfOk !== true) bad.push('ETF unread');
-  else if (dir === 'long' && ctx.etfFalling && !(ctx.newsBook && ctx.newsBook.etfInflow)) bad.push('ETF proxies falling');
+  if (!isFinite(vz)) hard.push('volume unread');
+  else if (vz < 0) hard.push('volume declining');
+  if (!tmAtLocation(rows4, rowsD, dir)) hard.push('no sweep, FVG or order block');
   var a = tmAtrLast(rows4);
   var risk = Math.abs(+ticket.entry - +ticket.stop);
-  if (!(a > 0) || !(risk >= 0.8 * a && risk <= 2.5 * a)) bad.push('stop outside ATR');
-  if (!hs || !hs.lastBOS || hs.lastBOS.dir !== (dir === 'long' ? 'up' : 'down') || ((rows4.length - 1) - hs.lastBOS.i) > 30) bad.push('no recent BOS');
+  if (!(a > 0) || !(risk >= 0.8 * a && risk <= 2.5 * a)) hard.push('stop outside ATR');
+  if (typeof row.fundingPct !== 'number' || !isFinite(row.fundingPct)) hard.push('funding unread');
+  else if (dir === 'long' && row.fundingPct >= 0.04) hard.push('funding crowded long');
+  else if (dir === 'short' && row.fundingPct <= -0.04) hard.push('funding crowded short');
+  if (tmBaseOf(row) !== 'BTC'){
+    var coinRet = tmFourHourReturn(row.rows4h);
+    if (coinRet == null || !ctx || ctx.btcRet == null) hard.push('relative strength unread');
+    else if (dir === 'long' && (coinRet - ctx.btcRet) < -0.01) hard.push('weaker than BTC');
+    else if (dir === 'short' && (coinRet - ctx.btcRet) > 0.01) hard.push('stronger than BTC');
+  }
+  if (row.mark > 0 && px > 0){
+    var basis = (row.mark - px) / px;
+    if (dir === 'long' && basis > 0.0015) hard.push('perp basis rich');
+    if (dir === 'short' && basis < -0.0015) hard.push('perp basis cheap');
+  }
+  var zones = tmSupplyDemand(rows4);
+  if (zones && dir === 'long' && zones.supply && px >= zones.supply.lo && px <= zones.supply.hi) hard.push('inside supply');
+  if (zones && dir === 'short' && zones.demand && px >= zones.demand.lo && px <= zones.demand.hi) hard.push('inside demand');
+  if (!ctx || ctx.calendarOk !== true) hard.push('calendar unread');
+  else if (ctx.eventBlock) hard.push('high-impact USD event');
+  if (ctx && ctx.newsBook){
+    var hit = tmCoinHeadline(ctx.newsBook, tmBaseOf(row));
+    if (dir === 'long' && (hit.hack || hit.delist || hit.lawsuit)) hard.push('coin headline against');
+    if (dir === 'long' && (ctx.newsBook.marketHack || ctx.newsBook.marketReg)) hard.push('market headline against longs');
+    if (dir === 'short' && hit.listing) hard.push('fresh listing against a short');
+  }
+  if (ctx && ctx.unlockOk === true && ctx.unlockBases && ctx.unlockBases[tmBaseOf(row)]) hard.push('token unlock within 48h');
+  if (tmBaseOf(row) !== 'BTC' && ctx && ctx.domOk === true && dir === 'long' && ctx.btcDomRising) hard.push('BTC.D rising');
+  if (ctx && ctx.ethOk === true && dir === 'long' && ctx.ethStructure === 'down' && tmBaseOf(row) !== 'BTC' && tmBaseOf(row) !== 'ETH') hard.push('ETH structure down');
+  if (ctx && ctx.stableOk === true && dir === 'long' && ctx.stableFalling) hard.push('stablecoin liquidity falling');
+  if (ctx && ctx.totalOk === true && dir === 'long' && (ctx.totalFalling || ctx.altsFalling) && tmBaseOf(row) !== 'BTC') hard.push('TOTAL / alts falling');
+  if (ctx && ctx.macroOk === true && dir === 'long' && ctx.riskOff) hard.push('macro risk-off');
+  if (ctx && ctx.macroOk === true && dir === 'short' && ctx.riskOn) hard.push('macro risk-on');
+  if (hard.length) return hard;
+
   var weeks = tmWeeklyRows(row.rows1d || rowsD);
-  if (!weeks || typeof hgStructure !== 'function') bad.push('weekly unread');
+  if (!weeks) vote('weekly unread', 0);
   else {
-    var wst = hgStructure(weeks);
-    if (wst && wst.trend === (dir === 'long' ? 'down' : 'up')) bad.push('weekly structure against');
+    var wst = (typeof hgStructure === 'function') ? hgStructure(weeks) : null;
+    if (!wst) vote('weekly', 0);
+    else vote('weekly structure', (wst.trend === (dir === 'long' ? 'down' : 'up')) ? -1 : 1);
   }
   var today = row.rows1d && row.rows1d[row.rows1d.length - 1];
   var dayOpen = today ? today.o : NaN;
   var weekOpen = weeks ? weeks[weeks.length - 1].o : NaN;
-  if (dir === 'long' && !(px > dayOpen)) bad.push('below daily open');
-  if (dir === 'long' && !(px > weekOpen)) bad.push('below weekly open');
-  if (dir === 'short' && !(px < dayOpen)) bad.push('above daily open');
-  if (dir === 'short' && !(px < weekOpen)) bad.push('above weekly open');
+  if (!(dayOpen > 0)) vote('daily open', 0);
+  else vote('daily open', (dir === 'long' ? px > dayOpen : px < dayOpen) ? 1 : -1);
+  if (!(weekOpen > 0)) vote('weekly open', 0);
+  else vote('weekly open', (dir === 'long' ? px > weekOpen : px < weekOpen) ? 1 : -1);
   var prof = tmVolumeProfile(rows4);
-  if (!prof) bad.push('volume profile unread');
-  else if (dir === 'long' && px < prof.val) bad.push('below value area');
-  else if (dir === 'long' && px > prof.vah && !(vz > 0)) bad.push('VAH break on declining volume');
-  else if (dir === 'short' && px > prof.vah) bad.push('above value area');
-  else if (dir === 'short' && px < prof.val && !(vz > 0)) bad.push('VAL break on declining volume');
+  if (!prof) vote('volume profile', 0);
+  else if (dir === 'long' && px < prof.val) vote('below value area', -1);
+  else if (dir === 'long' && px > prof.vah && !(vz > 0)) vote('VAH break on declining volume', -1);
+  else if (dir === 'short' && px > prof.vah) vote('above value area', -1);
+  else if (dir === 'short' && px < prof.val && !(vz > 0)) vote('VAL break on declining volume', -1);
+  else vote('value area', 1);
   var node = tmNodeVeto(prof, px, dir, a, vz);
-  if (node) bad.push(node);
-  var zones = tmSupplyDemand(rows4);
-  if (!zones) bad.push('supply/demand unread');
-  else if (dir === 'long'){
-    if (zones.supply && px >= zones.supply.lo && px <= zones.supply.hi) bad.push('inside supply');
-    if (!zones.demand || px < zones.demand.lo || px > zones.demand.hi + a) bad.push('not at demand');
-  } else {
-    if (zones.demand && px >= zones.demand.lo && px <= zones.demand.hi) bad.push('inside demand');
-    if (!zones.supply || px > zones.supply.hi || px < zones.supply.lo - a) bad.push('not at supply');
+  vote(node || 'volume nodes', node ? -1 : 1);
+  if (!zones) vote('supply/demand', 0);
+  else if (dir === 'long' && zones.demand && px >= zones.demand.lo && px <= zones.demand.hi + a) vote('at demand', 1);
+  else if (dir === 'short' && zones.supply && px <= zones.supply.hi && px >= zones.supply.lo - a) vote('at supply', 1);
+  else vote('supply/demand', 0);
+  if (!rows1 || rows1.length < 40 || typeof hgStructure !== 'function') vote('1h', 0);
+  else {
+    var h1 = hgStructure(rows1);
+    vote('1h structure', (h1 && h1.trend === (dir === 'long' ? 'down' : 'up')) ? -1 : 1);
   }
-  if (typeof row.fundingPct !== 'number' || !isFinite(row.fundingPct)) bad.push('funding unread');
-  else if (dir === 'long' && row.fundingPct >= 0.04) bad.push('funding crowded long');
-  else if (dir === 'short' && row.fundingPct <= -0.04) bad.push('funding crowded short');
-  if (!ctx || ctx.totalOk !== true) bad.push('total market unread');
-  else if (dir === 'long' && (ctx.totalFalling || ctx.altsFalling) && tmBaseOf(row) !== 'BTC') bad.push('TOTAL / alts falling');
-  if (!ctx || ctx.total2Ok !== true) bad.push('TOTAL2 unread');
-  else if (dir === 'long' && ctx.total2Falling && tmBaseOf(row) !== 'BTC') bad.push('TOTAL2 falling');
-  if (!ctx || ctx.total3Ok !== true) bad.push('TOTAL3 unread');
-  else if (dir === 'long' && ctx.total3Falling && tmBaseOf(row) !== 'BTC' && tmBaseOf(row) !== 'ETH') bad.push('TOTAL3 falling');
-  if (!ctx || ctx.unlockOk !== true) bad.push('unlock calendar unread');
-  else if (ctx.unlockBases && ctx.unlockBases[tmBaseOf(row)]) bad.push('token unlock within 48h');
-  if (bad.length) return bad;
+  var localAgainst = votes.filter(function(v){ return v.v < 0; });
+  if (localAgainst.length) return localAgainst.map(function(v){ return v.name; });
+
   var net = await Promise.all([
     tmCvdVerdict(row, dir),
     tmOiRead(row),
@@ -2178,39 +2182,116 @@ async function trendmxFormOne(ticket, row, ctx){
     tmTradingView(row)
   ]);
   var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7];
-  if (cvd !== 'with') bad.push(cvd === 'against' ? 'CVD against' : 'CVD unread');
-  if (!oi) bad.push('OI unread');
-  else if (dir === 'long' && !((oi.priceUp && oi.oiUp) || (oi.priceDown && oi.oiDown))) bad.push('OI not confirming the rise');
-  else if (dir === 'short' && !(oi.priceDown && oi.oiUp)) bad.push('OI not confirming the drop');
-  else if (dir === 'long' && oi.priceUp && oi.oiDown) bad.push('OI falling, short covering not new longs');
-  if (!m15) bad.push('15m unread');
-  else if (!tm15Confirm(m15, dir)) bad.push('15m no sweep and CHOCH');
-  if (crowd == null) bad.push('long/short positioning unread');
-  else if (dir === 'long' && crowd >= 1.8 && row.fundingPct > 0) bad.push('longs crowded');
-  else if (dir === 'short' && crowd <= 0.7 && row.fundingPct < 0) bad.push('shorts crowded');
-  if (!liq) bad.push('liquidations unread');
-  else if (dir === 'long' && liq.shortLiq > liq.longLiq * 2 && liq.shortLiq > 0 && prof && px > prof.poc) bad.push('short-liquidation spike into strength');
-  else if (dir === 'short' && liq.longLiq > liq.shortLiq * 2 && liq.longLiq > 0 && prof && px < prof.poc) bad.push('long-liquidation spike into weakness');
-  if (liq && liq.clusters && liq.clusters.length){
-    var top = liq.clusters[0];
-    if (top.price > 0 && Math.abs(px - top.price) / px < 0.004) bad.push('inside liquidation cluster');
-    var over = false, under = false, ci;
-    for (ci = 0; ci < liq.clusters.length && !(over && under); ci++){
-      var cl = liq.clusters[ci];
-      if (!over && dir === 'long' && cl.long > cl.short * 2 && cl.price > px && a > 0 && (cl.price - px) <= 0.5 * a){ bad.push('long-liquidation cluster overhead'); over = true; }
-      if (!under && dir === 'short' && cl.short > cl.long * 2 && cl.price < px && a > 0 && (px - cl.price) <= 0.5 * a){ bad.push('short-liquidation cluster underfoot'); under = true; }
+  if (cvd !== 'with') hard.push(cvd === 'against' ? 'CVD against' : 'CVD unread');
+  if (!oi) hard.push('OI unread');
+  else if (dir === 'long' && oi.priceUp && oi.oiDown) hard.push('OI falling, short covering not new longs');
+  else if (dir === 'long' && !((oi.priceUp && oi.oiUp) || (oi.priceDown && oi.oiDown))) hard.push('OI not confirming the rise');
+  else if (dir === 'short' && !(oi.priceDown && oi.oiUp)) hard.push('OI not confirming the drop');
+  if (!m15) hard.push('15m unread');
+  else if (!tm15Confirm(m15, dir)) hard.push('15m no sweep and CHOCH');
+  if (hard.length) return hard;
+
+  if (crowd == null) vote('positioning', 0);
+  else if (dir === 'long' && crowd >= 1.8 && row.fundingPct > 0) vote('longs crowded', -1);
+  else if (dir === 'short' && crowd <= 0.7 && row.fundingPct < 0) vote('shorts crowded', -1);
+  else vote('positioning', 1);
+  if (!liq) vote('liquidations', 0);
+  else if (dir === 'long' && liq.shortLiq > liq.longLiq * 2 && liq.shortLiq > 0 && prof && px > prof.poc) vote('short-liquidation spike', -1);
+  else if (dir === 'short' && liq.longLiq > liq.shortLiq * 2 && liq.longLiq > 0 && prof && px < prof.poc) vote('long-liquidation spike', -1);
+  else if (liq.clusters && liq.clusters[0] && liq.clusters[0].price > 0 && Math.abs(px - liq.clusters[0].price) / px < 0.004) vote('inside liquidation cluster', -1);
+  else vote(tmLiqSwept(rows4, liq, dir) ? 'liquidation sweep' : 'liquidation map', 1);
+  if (m5 == null) vote('5m', 0);
+  else vote('5m volume', m5 === true ? 1 : -1);
+  if (!micro || micro.m3 == null) vote('3m', 0);
+  else vote('3m structure', micro.m3 === true ? 1 : -1);
+  if (!ctx || ctx.total2Ok !== true) vote('TOTAL2', 0);
+  else if (dir === 'long' && ctx.total2Falling && tmBaseOf(row) !== 'BTC') vote('TOTAL2 falling', -1);
+  else vote('TOTAL2', 1);
+  if (!ctx || ctx.total3Ok !== true) vote('TOTAL3', 0);
+  else if (dir === 'long' && ctx.total3Falling && tmBaseOf(row) !== 'BTC' && tmBaseOf(row) !== 'ETH') vote('TOTAL3 falling', -1);
+  else vote('TOTAL3', 1);
+  if (!ctx || ctx.etfOk !== true) vote('ETF', 0);
+  else if (dir === 'long' && ctx.etfFalling && !(ctx.newsBook && ctx.newsBook.etfInflow)) vote('ETF proxies falling', -1);
+  else vote('ETF', 1);
+  if (!tv) vote('TradingView', 0);
+  else if (dir === 'long' && tv.recommend < 0) vote('TradingView against', -1);
+  else if (dir === 'short' && tv.recommend > 0) vote('TradingView against', -1);
+  else vote('TradingView', 1);
+
+  var against = votes.filter(function(v){ return v.v < 0; });
+  if (against.length) return against.map(function(v){ return v.name; });
+  var got = votes.filter(function(v){ return v.v > 0; }).length;
+  if (got < 8) return ['confluence ' + got + '/' + votes.length + ', need 8'];
+  ticket.confluence = got + '/' + votes.length;
+  return [];
+}
+
+function tmFourHourReturn(rows){
+  var c = tmClosedRows(rows, 14400);
+  if (!c || c.length < 7 || !(c[c.length - 7].c > 0)) return null;
+  return (c[c.length - 1].c - c[c.length - 7].c) / c[c.length - 7].c;
+}
+function tmLiqSwept(rows4, liq, dir){
+  if (!rows4 || !liq || !liq.clusters) return false;
+  var recent = rows4.slice(-4), i, k;
+  for (i = 0; i < liq.clusters.length; i++){
+    var cl = liq.clusters[i];
+    if (!(cl.price > 0)) continue;
+    for (k = 0; k < recent.length; k++){
+      if (dir === 'long' && cl.long >= cl.short && recent[k].l < cl.price && recent[k].c > cl.price) return true;
+      if (dir === 'short' && cl.short >= cl.long && recent[k].h > cl.price && recent[k].c < cl.price) return true;
     }
   }
-  if (m5 == null) bad.push('5m unread');
-  else if (m5 !== true) bad.push('5m volume not confirming');
-  if (!micro || micro.m3 == null) bad.push('3m unread');
-  else if (micro.m3 !== true) bad.push('3m structure against');
-  if (!micro || micro.m1 == null) bad.push('1m unread');
-  else if (micro.m1 !== true) bad.push('1m structure against');
-  if (!tv) bad.push('TradingView unread');
-  else if (dir === 'long' && tv.recommend < 0) bad.push('TradingView against');
-  else if (dir === 'short' && tv.recommend > 0) bad.push('TradingView against');
-  return bad;
+  return false;
+}
+function trendmxCryptoCandidates(rows){
+  var bag = [];
+  if (!Array.isArray(rows) || typeof hgStructure !== 'function'){
+    bag.held = { stack: [] };
+    return bag;
+  }
+  var i;
+  for (i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if (!r || !r.rows4h || !r.comps) continue;
+    var dir = tmDirOf(r);
+    if (dir !== 'long' && dir !== 'short') continue;
+    if (dir === 'long' && tmAltLongBlockedByBtc(r)) continue;
+    if (dir === 'long' && !(r.score >= 2)) continue;
+    if (dir === 'short' && !(r.score <= -2)) continue;
+    var rows4 = tmClosedRows(r.rows4h, 14400);
+    var rowsD = tmClosedRows(r.rows1d, 86400);
+    if (!rows4 || rows4.length < 50 || !tmAtLocation(rows4, rowsD, dir)) continue;
+    var hs = hgStructure(rows4);
+    if (!hs || hs.trend !== (dir === 'long' ? 'up' : 'down')) continue;
+    var plan = trendmxPlan({
+      dir: dir, score: r.score, rows4h: rows4, rows1h: r.rows1h, entry: r.price,
+      gate: r.gate, comps: r.comps, sym: r.sym, fundingPct: r.fundingPct,
+      freshCross: r.freshCross, base: r.base
+    });
+    if (!plan || !isFinite(+plan.entry) || !isFinite(+plan.stop) || !isFinite(+plan.t1)) continue;
+    if (typeof tmValidSetup === 'function' && !tmValidSetup(plan)) continue;
+    bag.push({
+      sym: r.sym, dir: dir, entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2,
+      rr: isFinite(+plan.rr1) ? +plan.rr1 : TM_T1_R, score: r.score, adx: r.adx,
+      freshCross: r.freshCross || '', conviction: 'CRYPTO', tier: 'CRYPTO', comps: r.comps,
+      rank: Math.abs(+r.score || 0) * 10 + (r.freshCross ? 8 : 0) + ((r.gate && r.gate.clean7) ? 6 : 0),
+      note: 'crypto · composite ' + (r.score > 0 ? '+' : '') + r.score + '/5' + (r.freshCross ? (' · ' + r.freshCross) : '')
+    });
+  }
+  bag.sort(function(a, b){ return b.rank - a.rank; });
+  var out = [], seen = {}, nL = 0, nS = 0;
+  for (i = 0; i < bag.length; i++){
+    var key = bag[i].sym + '|' + bag[i].dir;
+    if (seen[key]) continue;
+    if (bag[i].dir === 'long' && nL >= 6) continue;
+    if (bag[i].dir === 'short' && nS >= 4) continue;
+    seen[key] = 1;
+    if (bag[i].dir === 'long') nL++; else nS++;
+    out.push(bag[i]);
+  }
+  out.held = { stack: [] };
+  return out;
 }
 
 function tmStampEth(ctx, rows){
@@ -2227,9 +2308,17 @@ function tmStampEth(ctx, rows){
   return ctx;
 }
 
-async function trendmxFormationPass(golden, death, rows, ctxReady){
+async function trendmxFormationPass(golden, death, rows, ctxReady, crypto){
   var ctx = ctxReady || await trendmxLoadContext(rows);
   if (!ctx.ethOk) tmStampEth(ctx, rows);
+  ctx.btcRet = null;
+  if (Array.isArray(rows)){
+    for (var bi = 0; bi < rows.length; bi++){
+      if (tmBaseOf(rows[bi]) !== 'BTC') continue;
+      ctx.btcRet = tmFourHourReturn(rows[bi].rows4h);
+      if (ctx.btcRet != null) break;
+    }
+  }
   async function keep(list){
     var out = [];
     out.held = (list && list.held) ? list.held : { waiting: 0, grade: 0, cascade: 0, gates: 0 };
@@ -2246,7 +2335,10 @@ async function trendmxFormationPass(golden, death, rows, ctxReady){
         var bad = [];
         try{ bad = await trendmxFormOne(ticket, row, ctx); }catch(eOne){ bad = ['formation unread']; }
         if (bad.length) out.held.stack.push({ sym: ticket.sym, reasons: bad });
-        else { ticket.note = (ticket.note || '') + ' · full stack'; out.push(ticket); }
+        else {
+          ticket.note = (ticket.note || '') + (ticket.confluence ? (' · confluence ' + ticket.confluence) : ' · full stack');
+          out.push(ticket);
+        }
       }
     }
     var workers = [];
@@ -2255,8 +2347,8 @@ async function trendmxFormationPass(golden, death, rows, ctxReady){
     await Promise.all(workers);
     return out;
   }
-  var both = await Promise.all([keep(golden || []), keep(death || [])]);
-  return { golden: both[0], death: both[1] };
+  var both = await Promise.all([keep(golden || []), keep(death || []), keep(crypto || [])]);
+  return { golden: both[0], death: both[1], crypto: both[2] };
 }
 
 async function trendmxScan(opts){
@@ -2282,18 +2374,22 @@ async function trendmxScan(opts){
   try{
     var ctx = await ctxP;
     tmStampEth(ctx, core.rows);
-    var formed = await trendmxFormationPass(golden, death, core.rows, ctx);
+    var crypto = trendmxCryptoCandidates(core.rows);
+    var formed = await trendmxFormationPass(golden, death, core.rows, ctx, crypto);
     golden = formed.golden;
     death = formed.death;
+    crypto = formed.crypto;
   }catch(eForm){
     golden = [];
     golden.held = { waiting: 0, grade: 0, cascade: 0, gates: 0, stack: [{ sym: 'desk', reasons: ['formation pass failed'] }] };
     death = [];
     death.held = { stack: [] };
+    crypto = [];
+    crypto.held = { stack: [] };
   }
   __tmScanSnap = {
     at: core.at, rows: core.rows, failed: core.failed, uniLen: core.uniLen, scanned: core.scanned,
-    goldenCross: golden, deathCross: death, note: core.note, source: core.source, venueCounts: core.venueCounts,
+    goldenCross: golden, deathCross: death, cryptoSetups: crypto, note: core.note, source: core.source, venueCounts: core.venueCounts,
     flow: flow
   };
   publishTrendmxSnap(core.rows);
@@ -2418,12 +2514,28 @@ function trendmxCrossCardHTML(g){
    stays the shared dir-aware one (hg-v1014); a desk differs only in which
    bag it renders. The 4-card cap is the cap each half already had — the
    split changes no exposure. A desk with no tickets renders nothing. */
+
+function trendmxCryptoDeskHTML(list){
+  list = list || [];
+  var held = list.held || {};
+  var cards = '';
+  for (var i = 0; i < Math.min(list.length, 6); i++) cards += trendmxCrossCardHTML(list[i]);
+  var why = list.length ? '' : ('<div class="note">No crypto setup. The coin needs 4h structure, a sweep or fair-value gap or order block, relative strength versus BTC, open interest and CVD with the trade, a 15m sweep and change of character, and 8 confluence votes with none against.'
+    + ((held.stack && held.stack.length) ? ' ' + held.stack.slice(0, 4).map(function(x){ return x.sym + ': ' + x.reasons.slice(0, 2).join(', '); }).join(' · ') + '.' : '')
+    + '</div>');
+  return '<div class="panel" style="margin:12px 0;border-left:4px solid #0369a1">'
+    + '<h2>CRYPTO SETUPS <span>structure · relative strength · OI · CVD · 15m trigger · 8 confluence votes, none against</span></h2>'
+    + why
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + cards + '</div>'
+    + '</div>';
+}
+
 function trendmxGoldenDeskHTML(golden){
   golden = golden || [];
   var held = golden.held || {};
   var cards = '';
   for (var i = 0; i < Math.min(golden.length, 4); i++) cards += trendmxCrossCardHTML(golden[i]);
-  var why = golden.length ? '' : ('<div class="note">No golden setup. Price has to clear structure, the 4h EMA cascade, 6/7 gates, the EMA tag, the TRADE grade, then the full stack: weekly and 4h structure, BOS, equal highs/lows, daily and weekly open, volume profile, HVN and LVN, supply and demand, EMA 20/50/200, VWAP, 1h, 15m sweep CHOCH and retest, 5m volume, 3m and 1m structure, OI, funding, positioning, liquidation clusters, CVD, DXY yields Nasdaq S&P gold VIX, the calendar, BTC ETH BTC.D TOTAL TOTAL2 TOTAL3, ETF flows, stables, headlines, listings and the unlock calendar. The TradingView technical summary has to agree.'
+  var why = golden.length ? '' : ('<div class="note">No golden setup. A cross still has to clear the 4h cascade, 6/7 gates, the EMA tag and the TRADE grade, then the crypto formation: structure, relative strength versus BTC, open interest, CVD, the 15m sweep, and at least 8 confluence votes with none against.'
     + (held.waiting ? ' ' + held.waiting + ' waiting for the EMA tag.' : '')
     + (held.gates ? ' ' + held.gates + ' failed the gates.' : '')
     + (held.cascade ? ' ' + held.cascade + ' have no 4h cascade.' : '')
@@ -3237,6 +3349,7 @@ function trendmxPaintDeskSections(refs, state){
   var vc = state.venueCounts || null;
   if (refs.summary) refs.summary.textContent = rows.length ? trendmxSummaryLine(rows, golden, vc) : 'Idle — run a scan to build the desk.';
   /* hg-v1015: two desks, two containers — each renders only its own cross */
+  if (refs.crypto) refs.crypto.innerHTML = trendmxCryptoDeskHTML(state.crypto || []);
   if (refs.golden) refs.golden.innerHTML = trendmxGoldenDeskHTML(golden);
   if (refs.death) refs.death.innerHTML = trendmxDeathDeskHTML(death);
   var clean = [], near = [], forming = [];
@@ -3820,6 +3933,7 @@ function hgPaintTrendmxFromSnap(){
     var el = tmTab.mountEl;
     var refs = {
       summary: el.querySelector('[data-r="summary"]'),
+      crypto: el.querySelector('[data-r="crypto"]'),
       golden: el.querySelector('[data-r="golden"]'),
       death: el.querySelector('[data-r="death"]'),   /* hg-v1015 */
       cards: el.querySelector('[data-r="cards"]'),
@@ -3977,6 +4091,7 @@ function mountTrendMatrix(el){
       '<div class="prog" data-r="prog"><i></i></div>' +
       '<div class="note" data-r="summary" style="margin-top:8px;font-weight:600">Idle — run a scan to build the desk.</div>' +
       '<div class="note" data-r="status" style="margin-top:4px">Press RUN SCAN to warm the full matrix + ticket desk.</div>' +
+      '<div data-r="crypto"></div>' +
       '<div data-r="golden"></div>' +
       '<div data-r="death"></div>' +   /* hg-v1015: the bear desk stands on its own, right under the bull desk */
       '<div class="cards" data-r="cards"></div>' +
@@ -4013,6 +4128,7 @@ function mountTrendMatrix(el){
   var out    = el.querySelector('[data-r="out"]');
   var refs = {
     summary: summary,
+    crypto: el.querySelector('[data-r="crypto"]'),
     golden: el.querySelector('[data-r="golden"]'),
     death: el.querySelector('[data-r="death"]'),   /* hg-v1015 */
     cards: el.querySelector('[data-r="cards"]'),
@@ -4030,7 +4146,7 @@ function mountTrendMatrix(el){
   var chips  = Array.prototype.slice.call(el.querySelectorAll('[data-f]'));
   var vChips = Array.prototype.slice.call(el.querySelectorAll('[data-v]'));
 
-  var state = { rows: [], golden: [], death: [], filter: 'ALL', venue: 'ALL', sortKey: 'score', sortDir: -1, running: false, view: 'table' };   /* hg-v1015: death bag initialized with golden; hg-v1045: view toggle */
+  var state = { rows: [], crypto: [], golden: [], death: [], filter: 'ALL', venue: 'ALL', sortKey: 'score', sortDir: -1, running: false, view: 'table' };   /* hg-v1015: death bag initialized with golden; hg-v1045: view toggle */
   tmTab._state = state;
 
   function setProg(f){
@@ -4249,6 +4365,7 @@ function mountTrendMatrix(el){
       var vc = (snap && snap.venueCounts) ? snap.venueCounts : {};
 
       state.rows = results;
+      state.crypto = (snap && snap.cryptoSetups) ? snap.cryptoSetups : [];
       state.golden = (snap && snap.goldenCross) ? snap.goldenCross : [];
       state.death = (snap && snap.deathCross) ? snap.deathCross : [];   /* hg-v1014 */
       state.venueCounts = vc;
@@ -4328,6 +4445,7 @@ function mountTrendMatrix(el){
   if (__tmScanSnap && __tmScanSnap.rows && __tmScanSnap.rows.length &&
       __tmScanSnap.at && (Date.now() - __tmScanSnap.at) < (5 * 60 * 1000)){
     state.rows = __tmScanSnap.rows;
+    state.crypto = __tmScanSnap.cryptoSetups || [];
     state.golden = __tmScanSnap.goldenCross || [];
     state.death = __tmScanSnap.deathCross || [];   /* hg-v1014 */
     tmTab.hasRun = true;
