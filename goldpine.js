@@ -75,9 +75,18 @@ function fmtF(n, d){
 }
 
 var SRC_LABEL = { 'binance-xau': 'BINANCE XAUUSDT', 'binance-paxg': 'BINANCE PAXGUSDT',
-  'twelvedata': 'TWELVE DATA', 'yahoo': 'IUX XAUUSD' };
+  'twelvedata': 'TWELVE DATA', 'yahoo': 'YAHOO GC=F' };
 
 async function fetchGoldBars(){
+  /* hg-v1161: a direct PAXG fallback leaves the shared chain, so it is anchored
+     here through the one home (gold-iux.js) exactly as getGoldCandles anchors
+     its own packs. Module absent or anchor unreadable: the feed's own bars.
+     Inside the function on purpose: the suite lifts this function alone. */
+  var iuxFn = gfn('hgGoldIuxApplyRows');
+  async function iuxRows(rows){
+    if (!iuxFn || !rows || !rows.length) return rows;
+    try{ var o = await iuxFn(rows, 'binance-paxg'); return (o && o.length) ? o : rows; }catch(eIx){ return rows; }
+  }
   /* hg-v979: srcByTf names the feed of EACH leg, for the ledger; `source`
      stays the first leg's label as it always was */
   var out = { rows15m: [], rows1h: [], rows4h: [], rows1d: [], source: null, srcByTf: {} };
@@ -100,16 +109,16 @@ async function fetchGoldBars(){
   var bk = gfn('binanceKlines');
   if (bk){
     if (!out.rows15m.length){
-      try{ var p = await bk('PAXGUSDT', '15m', KL_15M); if (p && p.length){ out.rows15m = p; out.source = out.source || 'binance-paxg'; out.srcByTf['15m'] = 'binance-paxg'; } }catch(e5){}
+      try{ var p = await bk('PAXGUSDT', '15m', KL_15M); if (p && p.length){ p = await iuxRows(p); out.rows15m = p; out.source = out.source || 'binance-paxg'; out.srcByTf['15m'] = 'binance-paxg'; } }catch(e5){}
     }
     if (!out.rows1h.length){
-      try{ var q = await bk('PAXGUSDT', '1h', KL_1H);  if (q && q.length){ out.rows1h = q; out.srcByTf['1h'] = 'binance-paxg'; } }catch(e6){}
+      try{ var q = await bk('PAXGUSDT', '1h', KL_1H);  if (q && q.length){ q = await iuxRows(q); out.rows1h = q; out.srcByTf['1h'] = 'binance-paxg'; } }catch(e6){}
     }
     if (!out.rows4h.length){
-      try{ var z = await bk('PAXGUSDT', '4h', KL_4H);  if (z && z.length){ out.rows4h = z; out.source = out.source || 'binance-paxg'; out.srcByTf['4h'] = 'binance-paxg'; } }catch(e7){}
+      try{ var z = await bk('PAXGUSDT', '4h', KL_4H);  if (z && z.length){ z = await iuxRows(z); out.rows4h = z; out.source = out.source || 'binance-paxg'; out.srcByTf['4h'] = 'binance-paxg'; } }catch(e7){}
     }
     if (!out.rows1d.length){
-      try{ var y = await bk('PAXGUSDT', '1d', KL_1D);  if (y && y.length) out.rows1d = y; }catch(e8){}
+      try{ var y = await bk('PAXGUSDT', '1d', KL_1D);  if (y && y.length) out.rows1d = await iuxRows(y); }catch(e8){}
     }
   }
   return out;
@@ -564,6 +573,8 @@ function runGoldPineScan(bars, ctx){
 
   var levels = lvFn ? lvFn(bars.rows1d, bars.rows15m) : {};
   var source = SRC_LABEL[bars.source] || bars.source || 'GOLD';
+  /* hg-v1161: a feed moved onto the IUX anchor says so; the label is derived, never typed */
+  try{ var ixf = gfn('hgGoldIuxFeedLabel'); if (ixf) source = ixf(bars.source, source); }catch(eIx){}
   var macro = ctx.macro || null;
   var spot = ctx.spot || null;
   try{

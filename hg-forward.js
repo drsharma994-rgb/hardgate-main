@@ -501,6 +501,16 @@ localStorage. Never throws.
          enum records NOTHING. */
       vwapDevPct: (typeof rec.vwapDevPct === 'number' && isFinite(rec.vwapDevPct)) ? rec.vwapDevPct : undefined,
       bbSqueeze: (rec.bbSqueeze === 'SQUEEZE' || rec.bbSqueeze === 'NORMAL' || rec.bbSqueeze === 'EXPANSION') ? rec.bbSqueeze : undefined,
+      /* hg-v1161: THE PERCENT THE RECORD'S FEED BARS WERE MOVED ONTO THE IUX
+         ANCHOR at fire time (gold-iux.js, one home). A number: zero is a READ
+         zero (the feed sat on the anchor, or beyond the window and was left
+         alone); beyond 5% in either direction is a caller this log does not
+         understand (the anchor refuses past 2.5%) and records NOTHING; a
+         broker feed or an unmeasured one records nothing. The record settles
+         on the same feed re-anchored at each fetch, so the drift of this
+         number between fire and settle is the residual error, and a record
+         that carries it can be asked. */
+      iuxShiftPct: (typeof rec.iuxShiftPct === 'number' && isFinite(rec.iuxShiftPct) && Math.abs(rec.iuxShiftPct) <= 5) ? rec.iuxShiftPct : undefined,
       state: 'open', r: null, settledT: null,
       at: isFinite(fin(rec.at)) ? fin(rec.at) : barT
     };
@@ -2381,6 +2391,19 @@ localStorage. Never throws.
           }
           return out;
         }
+        /* hg-v1161: the IUX move of the record's feed, from the one home. A
+           desk that hands a number in wins; otherwise the shared state for the
+           feed the record names. No feed, no module, no measurement: absent. */
+        function iuxOf(c){
+          if (c && typeof c.iuxShiftPct === 'number' && isFinite(c.iuxShiftPct)) return c.iuxShiftPct;
+          var feed = (c && typeof c.feed === 'string' && c.feed) ? c.feed
+                   : ((typeof o.feed === 'string' && o.feed) ? o.feed : null);
+          if (!feed || typeof W.hgGoldIuxShiftOf !== 'function') return undefined;
+          try {
+            var v = W.hgGoldIuxShiftOf(feed);
+            return (typeof v === 'number' && isFinite(v)) ? v : undefined;
+          } catch (eIx){ return undefined; }
+        }
         var added = 0, i, c;
         for (i = 0; i < cands.length; i++){
           c = cands[i];
@@ -2426,6 +2449,7 @@ localStorage. Never throws.
                dropped it — the `mark` defect above, repeated. Absent stays
                absent: a caller that marks nothing records nothing. */
             goldShut: c.goldShut,
+            iuxShiftPct: iuxOf(c),   /* hg-v1161 */
             /* hg-v984: the crypto macro alt filter's verdict at fire time. A
                desk that read it hands it in (CRYPTOVERSE, 90PERCENT: the same
                read the card shows, so card and record agree by construction);

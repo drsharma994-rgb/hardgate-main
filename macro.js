@@ -432,6 +432,22 @@ const GOLD_RES_YAHOO   = {
   '1d':  { i: '1d',  r: '1y',  agg: 0 }
 };
 
+/* hg-v1161: every gold pack leaves this chain on the IUX anchor, through the
+   ONE home (gold-iux.js) -- a pure scale of o/h/l/c onto gold-api spot when
+   the feed sits 0.05%..2.5% off it, nothing otherwise, never a mutation of
+   the fetcher's own rows. The anchored pack is what is cached, and a pack
+   already carrying `iux` is never anchored twice. With the module absent or
+   the anchor unreadable the pack is the feed's own bars, as before. */
+async function __goldIuxApply(pack){
+  try{
+    const f = (typeof hgGoldIuxApply === 'function') ? hgGoldIuxApply
+            : ((typeof globalThis !== 'undefined' && typeof globalThis.hgGoldIuxApply === 'function') ? globalThis.hgGoldIuxApply : null);
+    if (!f) return pack;
+    const out = await f(pack);
+    return (out && Array.isArray(out.rows) && out.rows.length) ? out : pack;
+  }catch(e){ return pack; }
+}
+
 /* Gold candles, ordered fallback:
      Binance XAUUSDT TradFi perp -> Binance PAXGUSDT -> Twelve Data XAU/USD
      -> Yahoo GC=F via /api/proxy.
@@ -447,7 +463,7 @@ async function getGoldCandles(res, count){
     try{
       if (typeof binanceKlines === 'function' && GOLD_RES_BINANCE[res]){
         const rows = await binanceKlines('XAUUSDT', GOLD_RES_BINANCE[res], count);
-        if (rows && rows.length) return __macroCachePut(key, { rows: rows.slice(-count), source: 'binance-xau' });
+        if (rows && rows.length) return __macroCachePut(key, await __goldIuxApply({ rows: rows.slice(-count), source: 'binance-xau' }));
       }
     }catch(e){}
 
@@ -455,7 +471,7 @@ async function getGoldCandles(res, count){
     try{
       if (typeof binanceKlines === 'function' && GOLD_RES_BINANCE[res]){
         const rows = await binanceKlines('PAXGUSDT', GOLD_RES_BINANCE[res], count);
-        if (rows && rows.length) return __macroCachePut(key, { rows: rows.slice(-count), source: 'binance-paxg' });
+        if (rows && rows.length) return __macroCachePut(key, await __goldIuxApply({ rows: rows.slice(-count), source: 'binance-paxg' }));
       }
     }catch(e){}
 
@@ -479,7 +495,7 @@ async function getGoldCandles(res, count){
           }).filter(function(r){
             return isFinite(r.t) && isFinite(r.o) && isFinite(r.h) && isFinite(r.l) && isFinite(r.c);
           }).sort(function(a,b){ return a.t - b.t; });
-          if (rows.length) return __macroCachePut(key, { rows: rows.slice(-count), source: 'twelvedata' });
+          if (rows.length) return __macroCachePut(key, await __goldIuxApply({ rows: rows.slice(-count), source: 'twelvedata' }));
         }
       }
     }catch(e){}
@@ -491,7 +507,7 @@ async function getGoldCandles(res, count){
         const yurl = 'https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=' + ymap.i + '&range=' + ymap.r;
         let rows = __parseYahooChart(await __yahooViaProxy(yurl));
         if (rows.length && ymap.agg) rows = resampleRows(rows, ymap.agg);
-        if (rows.length) return __macroCachePut(key, { rows: rows.slice(-count), source: 'yahoo' });
+        if (rows.length) return __macroCachePut(key, await __goldIuxApply({ rows: rows.slice(-count), source: 'yahoo' }));
       }
     }catch(e){}
 

@@ -437,12 +437,18 @@ async function loadRows(res, count){
   if (got && got.rows && got.rows.length) return { rows: got.rows, source: got.source || res };
   return { rows: null, source: null };
 }
+/* hg-v1161: the two direct Binance legs are anchored through the one home
+   (gold-iux.js) like every other gold pack; module absent, the feed's own bars */
+async function iuxRows(rows, feed){
+  if (typeof W.hgGoldIuxApplyRows !== 'function' || !rows || !rows.length) return rows;
+  try{ var o = await W.hgGoldIuxApplyRows(rows, feed); return (o && o.length) ? o : rows; }catch(eIx){ return rows; }
+}
 async function loadFast(interval, count){
   if (typeof W.binanceKlines !== 'function') return { rows: null, source: null };
   var rows = await timed(W.binanceKlines('XAUUSDT', interval, count), 8000);
-  if (rows && rows.length) return { rows: rows, source: 'binance-xau ' + interval };
+  if (rows && rows.length) return { rows: await iuxRows(rows, 'binance-xau'), source: 'binance-xau ' + interval };
   rows = await timed(W.binanceKlines('PAXGUSDT', interval, count), 8000);
-  if (rows && rows.length) return { rows: rows, source: 'binance-paxg ' + interval };
+  if (rows && rows.length) return { rows: await iuxRows(rows, 'binance-paxg'), source: 'binance-paxg ' + interval };
   return { rows: null, source: null };
 }
 function bumpBadge(){

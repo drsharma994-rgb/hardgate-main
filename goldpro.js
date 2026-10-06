@@ -237,8 +237,13 @@ function lrow(gid, name, detail, stampCls, stampTxt){
   return '<div class="lrow"><span class="gid">' + esc(gid) + '</span><span class="gname">' + esc(name) + '</span>'
        + '<span class="gdetail">' + esc(detail) + '</span><span class="stamp ' + stampCls + '">' + esc(stampTxt) + '</span></div>';
 }
-var SRC_LABEL = { 'binance-xau': 'BINANCE XAU', 'binance-paxg': 'BINANCE PAXG', 'twelvedata': 'TWELVE DATA', 'yahoo': 'IUX XAUUSD' };
-function srcLabel(src){ return SRC_LABEL[src] || (src ? String(src).toUpperCase() : 'NONE'); }
+var SRC_LABEL = { 'binance-xau': 'BINANCE XAU', 'binance-paxg': 'BINANCE PAXG', 'twelvedata': 'TWELVE DATA', 'yahoo': 'YAHOO GC=F' };
+function srcLabel(src){
+  var base = SRC_LABEL[src] || (src ? String(src).toUpperCase() : 'NONE');
+  /* hg-v1161: a feed moved onto the IUX anchor says so; derived from the one home, never typed */
+  try{ var ixf = (typeof window !== 'undefined' && typeof window.hgGoldIuxFeedLabel === 'function') ? window.hgGoldIuxFeedLabel : null; if (ixf && src) return ixf(src, base); }catch(eIx){}
+  return base;
+}
 
 function setNote(ui, msg, warn){
   if (!ui || !ui.note) return;

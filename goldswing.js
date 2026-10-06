@@ -194,14 +194,19 @@ function goldTapeChipHtml(c, tape){
 }
 
 var SRC_LABEL = { 'binance-xau': 'BINANCE XAUUSDT', 'binance-paxg': 'BINANCE PAXGUSDT',
-                  'twelvedata': 'TWELVE DATA XAU/USD', 'yahoo': 'IUX XAUUSD',
+                  'twelvedata': 'TWELVE DATA XAU/USD', 'yahoo': 'YAHOO GC=F',
                   'delta-xaut': 'DELTA XAUTUSD', 'xm-xauusd': 'XM XAUUSD' };
 var ST_GOLD_SYM = 'XAUUSD';
-function venueLabel(src){ return SRC_LABEL[src] || 'PAXGUSDT · BINANCE'; }
+function venueLabel(src){
+  var base = SRC_LABEL[src] || 'PAXGUSDT · BINANCE';
+  /* hg-v1161: a feed moved onto the IUX anchor says so; derived from the one home, never typed */
+  try{ var ixf = gfn('hgGoldIuxFeedLabel'); if (ixf && src) return ixf(src, base); }catch(eIx){}
+  return base;
+}
 function stGoldVenueLabel(goldSource){
   try{
     if (goldSource === 'xm-xauusd') return 'XM ' + ST_GOLD_SYM;
-    if (goldSource && SRC_LABEL[goldSource]) return 'STAR TRADER ' + ST_GOLD_SYM + ' · ' + SRC_LABEL[goldSource];
+    if (goldSource && SRC_LABEL[goldSource]) return 'STAR TRADER ' + ST_GOLD_SYM + ' · ' + venueLabel(goldSource);
   }catch(e){}
   return 'STAR TRADER ' + ST_GOLD_SYM;
 }
@@ -283,11 +288,21 @@ async function goldLiveSpotRef(klineHint){
   try{
     var ctrl = new AbortController();
     var t = setTimeout(function(){ ctrl.abort(); }, 10000);
-    var r = await fetch('https://api.gold-api.com/price/XAU', { signal: ctrl.signal, cache: 'no-store' });
-    clearTimeout(t);
-    if (!r.ok) return NaN;
-    var j = await r.json();
-    var p = j && +j.price;
+    /* hg-v1161: the anchor is loaded ONCE, by gold-iux.js (45s cache, one in
+       flight); this desk reads it through that home and keeps its own
+       gold-api.com fetch only for a page where the module is absent. */
+    var p = NaN, af = gfn('hgGoldIuxAnchor');
+    if (af){
+      clearTimeout(t);
+      var an = await af();
+      p = (an && isFinite(+an.px)) ? +an.px : NaN;
+    } else {
+      var r = await fetch('https://api.gold-api.com/price/XAU', { signal: ctrl.signal, cache: 'no-store' });
+      clearTimeout(t);
+      if (!r.ok) return NaN;
+      var j = await r.json();
+      p = j && +j.price;
+    }
     if (!(isFinite(p) && p > 0)) return NaN;
     if (isFinite(klineHint) && klineHint > 0 && Math.abs(p / klineHint - 1) * 100 > 8) return NaN;
     return p;
@@ -1503,6 +1518,15 @@ function paintGoldWeekendPanel(ui, rows, nowMs, bestCandidate){
 
 /* ---------------- data legs (each catch-isolated) ---------------- */
 async function fetchGoldKlines(){
+  /* hg-v1161: a direct PAXG fallback leaves the shared chain, so it is anchored
+     here through the one home (gold-iux.js) exactly as getGoldCandles anchors
+     its own packs. Module absent or anchor unreadable: the feed's own bars.
+     Inside the function on purpose: the suite lifts this function alone. */
+  var iuxFn = gfn('hgGoldIuxApplyRows');
+  async function iuxRows(rows){
+    if (!iuxFn || !rows || !rows.length) return rows;
+    try{ var o = await iuxFn(rows, 'binance-paxg'); return (o && o.length) ? o : rows; }catch(eIx){ return rows; }
+  }
   var out = { rows4h: [], rows1d: [], src: {}, mixed: false, source: null, xmSymbol: null };
   var srcSet = function(tf, source, rowsKey, rows){
     if (typeof hgGoldSrcAssign === 'function'){ hgGoldSrcAssign(out, tf, source, rowsKey, rows); return; }
@@ -1535,8 +1559,8 @@ async function fetchGoldKlines(){
   if (!out.rows4h.length){
     var bk = gfn('binanceKlines');
     if (bk){
-      try{ var p = await bk('PAXGUSDT', '4h', KL_4H); if (p && p.length) srcSet('4h', 'binance-paxg', 'rows4h', p); }catch(e3){}
-      try{ var q = await bk('PAXGUSDT', '1d', KL_1D); if (q && q.length) srcSet('1d', 'binance-paxg', 'rows1d', q); }catch(e4){}
+      try{ var p = await bk('PAXGUSDT', '4h', KL_4H); if (p && p.length) srcSet('4h', 'binance-paxg', 'rows4h', await iuxRows(p)); }catch(e3){}
+      try{ var q = await bk('PAXGUSDT', '1d', KL_1D); if (q && q.length) srcSet('1d', 'binance-paxg', 'rows1d', await iuxRows(q)); }catch(e4){}
     }
   }
   if (typeof hgGoldSrcFinalize === 'function') return hgGoldSrcFinalize(out, '4h');

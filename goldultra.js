@@ -1927,6 +1927,15 @@ var __ui = null, __last = null, __busy = false;
 function setStat(ui, s, bad){ try{ if (ui && ui.stat){ ui.stat.textContent = s; ui.stat.style.color = bad ? '#DC2626' : ''; } }catch(e){} }
 function gfn(name){ try{ if (typeof W[name] === 'function') return W[name]; }catch(e){} return null; }
 async function fetchRows(){
+  /* hg-v1161: a direct PAXG fallback leaves the shared chain, so it is anchored
+     here through the one home (gold-iux.js) exactly as getGoldCandles anchors
+     its own packs. Module absent or anchor unreadable: the feed's own bars.
+     Inside the function on purpose: the suite lifts this function alone. */
+  var iuxFn = gfn('hgGoldIuxApplyRows');
+  async function iuxRows(rows){
+    if (!iuxFn || !rows || !rows.length) return rows;
+    try{ var o = await iuxFn(rows, 'binance-paxg'); return (o && o.length) ? o : rows; }catch(eIx){ return rows; }
+  }
   /* hg-v979: srcByTf names the feed of EACH leg (the ledger settles a record
      only on bars of the feed its levels were priced on); `src` stays the
      display label it always was. A leg whose source is unnamed names none. */
@@ -1939,9 +1948,9 @@ async function fetchRows(){
     try{ var d1 = await ggc('1d', 260); if (d1 && d1.rows && d1.rows.length){ out.rows1d = d1.rows; if (feedOf(d1)) out.srcByTf['1d'] = feedOf(d1); } }catch(e6){}
   }
   if (bk){
-    if (!out.rows15m.length){ try{ var p = await bk('PAXGUSDT', '15m', KL_15M); if (p && p.length){ out.rows15m = p; out.src = 'binance-paxg'; out.srcByTf['15m'] = 'binance-paxg'; } }catch(e3){} }
-    if (!out.rows1h.length){ try{ var q = await bk('PAXGUSDT', '1h', KL_1H); if (q && q.length){ out.rows1h = q; out.srcByTf['1h'] = 'binance-paxg'; } }catch(e4){} }
-    if (!out.rows4h.length){ try{ var z = await bk('PAXGUSDT', '4h', 220); if (z && z.length){ out.rows4h = z; out.srcByTf['4h'] = 'binance-paxg'; } }catch(e7){} }
+    if (!out.rows15m.length){ try{ var p = await bk('PAXGUSDT', '15m', KL_15M); if (p && p.length){ p = await iuxRows(p); out.rows15m = p; out.src = 'binance-paxg'; out.srcByTf['15m'] = 'binance-paxg'; } }catch(e3){} }
+    if (!out.rows1h.length){ try{ var q = await bk('PAXGUSDT', '1h', KL_1H); if (q && q.length){ q = await iuxRows(q); out.rows1h = q; out.srcByTf['1h'] = 'binance-paxg'; } }catch(e4){} }
+    if (!out.rows4h.length){ try{ var z = await bk('PAXGUSDT', '4h', 220); if (z && z.length){ z = await iuxRows(z); out.rows4h = z; out.srcByTf['4h'] = 'binance-paxg'; } }catch(e7){} }
   }
   return out;
 }

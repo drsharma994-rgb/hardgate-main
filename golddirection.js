@@ -367,6 +367,15 @@ var GD_CSS = ''
 
 /* ---------------- feeds (the gold desks' own chain, catch-isolated) ---------------- */
 async function fetchGoldKlines(){
+  /* hg-v1161: a direct PAXG fallback leaves the shared chain, so it is anchored
+     here through the one home (gold-iux.js) exactly as getGoldCandles anchors
+     its own packs. Module absent or anchor unreadable: the feed's own bars.
+     Inside the function on purpose: the suite lifts this function alone. */
+  var iuxFn = gfn('hgGoldIuxApplyRows');
+  async function iuxRows(rows){
+    if (!iuxFn || !rows || !rows.length) return rows;
+    try{ var o = await iuxFn(rows, 'binance-paxg'); return (o && o.length) ? o : rows; }catch(eIx){ return rows; }
+  }
   var out = { rows15m: [], rows1h: [], rows4h: [], rows1d: [], src: {}, source: null };
   function srcSet(tf, source, key, rows){
     if (!rows || !rows.length) return;
@@ -382,10 +391,10 @@ async function fetchGoldKlines(){
   }
   var bk = gfn('binanceKlines');
   if (bk){
-    if (!out.rows15m.length){ try{ var p = await bk('PAXGUSDT', '15m', KL_15M); if (p && p.length) srcSet('15m', 'binance-paxg', 'rows15m', p); }catch(e5){} }
-    if (!out.rows1h.length){  try{ var q = await bk('PAXGUSDT', '1h', KL_1H);  if (q && q.length) srcSet('1h', 'binance-paxg', 'rows1h', q); }catch(e6){} }
-    if (!out.rows4h.length){  try{ var z = await bk('PAXGUSDT', '4h', KL_4H);  if (z && z.length) srcSet('4h', 'binance-paxg', 'rows4h', z); }catch(e7){} }
-    if (!out.rows1d.length){  try{ var y = await bk('PAXGUSDT', '1d', KL_1D); if (y && y.length) srcSet('1d', 'binance-paxg', 'rows1d', y); }catch(e8){} }
+    if (!out.rows15m.length){ try{ var p = await bk('PAXGUSDT', '15m', KL_15M); if (p && p.length) srcSet('15m', 'binance-paxg', 'rows15m', await iuxRows(p)); }catch(e5){} }
+    if (!out.rows1h.length){  try{ var q = await bk('PAXGUSDT', '1h', KL_1H);  if (q && q.length) srcSet('1h', 'binance-paxg', 'rows1h', await iuxRows(q)); }catch(e6){} }
+    if (!out.rows4h.length){  try{ var z = await bk('PAXGUSDT', '4h', KL_4H);  if (z && z.length) srcSet('4h', 'binance-paxg', 'rows4h', await iuxRows(z)); }catch(e7){} }
+    if (!out.rows1d.length){  try{ var y = await bk('PAXGUSDT', '1d', KL_1D); if (y && y.length) srcSet('1d', 'binance-paxg', 'rows1d', await iuxRows(y)); }catch(e8){} }
   }
   out.source = out.src['15m'] || out.src['1h'] || out.src['4h'] || null;
   return out;

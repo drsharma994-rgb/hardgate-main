@@ -178,6 +178,35 @@
     }catch(e){ return ''; }
   }
 
+  /* hg-v1161: how many of this desk's records were priced on a feed moved
+     onto the IUX anchor (gold-iux.js), and by how much. Reports; silent
+     while no record carries the number -- an empty line is not a clean one.
+     The residual error of the anchor is the drift of that move between
+     fire and settle, which only a record carrying the move can measure. */
+  function hgGoldFwdIuxHtml(pools){
+    try{
+      if (!Array.isArray(pools) || !pools.length || typeof W.hgFwdRecords !== 'function') return '';
+      var all = [], moved = [], i, j, recs, v;
+      for (i = 0; i < pools.length; i++){
+        recs = W.hgFwdRecords(pools[i]) || [];
+        for (j = 0; j < recs.length; j++){
+          v = recs[j] && recs[j].iuxShiftPct;
+          if (typeof v !== 'number' || !isFinite(v)) continue;
+          all.push(v);
+          if (v !== 0) moved.push(Math.abs(v));
+        }
+      }
+      if (!all.length) return '';
+      moved.sort(function(a, b){ return a - b; });
+      var med = moved.length ? moved[Math.floor(moved.length / 2)] : 0;
+      var max = moved.length ? moved[moved.length - 1] : 0;
+      return '<div class="note" style="margin:6px 0;font-size:11px"><b>IUX ANCHOR</b> \u2014 ' + all.length
+        + ' record' + (all.length === 1 ? '' : 's') + ' priced on a feed measured against the IUX anchor (gold-api spot); '
+        + moved.length + ' had the bars moved onto it (median ' + med.toFixed(2) + '%, max ' + max.toFixed(2)
+        + '%), ' + (all.length - moved.length) + ' sat on it. Settlement re-anchors the same feed on each fetch; the drift of that move between fire and settle is the residual error. Gates nothing.</div>';
+    }catch(eIx){ return ''; }
+  }
+
   function hgGoldFwdNote(tabId, mechanic, feed){
     var r = hgGoldFwdRead(tabId, mechanic);
     /* hg-v979: the wait line does not depend on a verdict -- a desk with
@@ -248,6 +277,7 @@
       + hgGoldFwdFillHtml(r.stat)
       + evHtml
       + rdHtml
+      + hgGoldFwdIuxHtml(hgGoldFwdPools(tabId))
       + heldHtml;
   }
 
@@ -258,5 +288,6 @@
   W.hgGoldFwdRead = hgGoldFwdRead;
   W.hgGoldFwdNote = hgGoldFwdNote;
   W.hgGoldFwdFeedHeldHtml = hgGoldFwdFeedHeldHtml;
+  W.hgGoldFwdIuxHtml = hgGoldFwdIuxHtml;
   W.hgGoldFwdFillHtml = hgGoldFwdFillHtml;
 })(typeof window !== 'undefined' ? window : this);

@@ -1420,7 +1420,13 @@
     if (xau) p = p.then(function(r){ if (r.rows.length) return r; return Promise.resolve(xau('1h', count, { preferDeltaXaut: true })).then(function(rows){ return { rows: rows || [], source: srcLabel() || 'delta-xaut' }; }).catch(function(){ return r; }); });
     if (xm) p = p.then(function(r){ if (r.rows.length) return r; return Promise.resolve(xm('1h', count)).then(function(x){ return x && x.rows && x.rows.length ? { rows: x.rows, source: x.source || 'xm-xauusd' } : r; }).catch(function(){ return r; }); });
     if (ggc) p = p.then(function(r){ if (r.rows.length) return r; return Promise.resolve(ggc('1h', count)).then(function(x){ return x && x.rows && x.rows.length ? { rows: x.rows, source: x.source || 'gold' } : r; }).catch(function(){ return r; }); });
-    if (bk) p = p.then(function(r){ if (r.rows.length) return r; return Promise.resolve(bk('PAXGUSDT', '1h', count)).then(function(rows){ return rows && rows.length ? { rows: rows, source: 'binance-paxg' } : r; }).catch(function(){ return r; }); });
+    /* hg-v1161: the direct PAXG leg is anchored through the one home (gold-iux.js) like every other gold pack; absent module, the feed's own bars */
+    if (bk) p = p.then(function(r){ if (r.rows.length) return r; return Promise.resolve(bk('PAXGUSDT', '1h', count)).then(function(rows){
+      if (!(rows && rows.length)) return r;
+      var ixf = gfn('hgGoldIuxApplyRows');
+      return Promise.resolve(ixf ? ixf(rows, 'binance-paxg') : rows).catch(function(){ return rows; })
+        .then(function(r2){ return { rows: (r2 && r2.length) ? r2 : rows, source: 'binance-paxg' }; });
+    }).catch(function(){ return r; }); });
     return p.then(function(r){
       var basis = NaN;
       try{ if (W.S && isFinite(fin(W.S.goldBasisPct))) basis = fin(W.S.goldBasisPct); }catch(e){}

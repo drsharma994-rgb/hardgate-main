@@ -5719,10 +5719,12 @@ terse status, and never launches a first-time scan on a global refresh.
     'binance-paxg':'BINANCE PAXGUSDT (tokenised gold)',
     'binance-xaut':'BINANCE XAUTUSDT (tokenised gold)',
     'twelvedata':  'TWELVE DATA XAU/USD',
-    'yahoo':       'IUX XAUUSD'
+    'yahoo':       'YAHOO GC=F'
   };
   function hgOgSrcLabel(src){
     var k = String(src || '');
+    /* hg-v1161: a feed moved onto the IUX anchor says so (derived from the one home, never typed) */
+    try{ var ixf = gfn('hgGoldIuxFeedLabel'); if (ixf && k && OG_SRC_LABEL[k]) return ixf(k, OG_SRC_LABEL[k]); }catch(eIx){}
     return OG_SRC_LABEL[k] || (k || 'none');
   }
   /* True only for a feed that IS the instrument a spot-gold broker quotes. */
@@ -5776,8 +5778,14 @@ terse status, and never launches a first-time scan on a global refresh.
             return Promise.resolve().then(function(){ return bk ? bk('PAXGUSDT', tf, n) : null; })
               .catch(function(){ return null; })
               .then(function(c){
-                if (c && c.length) return { rows: trim(c), source: 'binance-paxg', feed: 'binance-paxg' };
-                return { rows: [], source: null, feed: null };
+                if (!(c && c.length)) return { rows: [], source: null, feed: null };
+                /* hg-v1161: the direct PAXG leg is anchored through the one home like every other gold pack */
+                var ixf = gfn('hgGoldIuxApplyRows');
+                return Promise.resolve(ixf ? ixf(c, 'binance-paxg') : c).catch(function(){ return c; })
+                  .then(function(c2){
+                    c = (c2 && c2.length) ? c2 : c;
+                    return { rows: trim(c), source: 'binance-paxg', feed: 'binance-paxg' };
+                  });
               });
           });
       });
