@@ -1,59 +1,3 @@
-async function tmTradingView(row){
-  var base = tmBaseOf(row);
-  if (!base) return null;
-  async function ask(ticker){
-    var r = await fetch('/api/tv-scan', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ symbols: { tickers: [ticker] } })
-    });
-    if (!r || !r.ok) return null;
-    var j = await r.json();
-    var d = j && j.data && j.data[0] && j.data[0].d;
-    if (!d || !isFinite(+d[0])) return null;
-    return { recommend: +d[0], rsi: +d[1] };
-  }
-  try {
-    return await ask('BINANCE:' + base + 'USDT.P') || await ask('BINANCE:' + base + 'USDT');
-  } catch (e) { return null; }
-}
-async function tmTopTrader(row){
-  if (typeof W.binanceTopTraders !== 'function') return null;
-  try {
-    var ls = await W.binanceTopTraders(tmBaseOf(row) + 'USDT', '4h', 1);
-    if (!ls || !ls.latest || !isFinite(+ls.latest.ratio)) return null;
-    return +ls.latest.ratio;
-  } catch (e) { return null; }
-}
-async function tmCrowdRatio(row){
-  if (typeof W.binanceLongShort !== 'function') return null;
-  try {
-    var ls = await W.binanceLongShort(tmBaseOf(row) + 'USDT', '4h', 2);
-    if (!ls || !ls.latest || !isFinite(+ls.latest.ratio)) return null;
-    return +ls.latest.ratio;
-  } catch (e) { return null; }
-}
-
-async function trendmxFormOne(ticket, row, ctx){
-  var hard = [];
-  var votes = [];
-  function vote(name, state){
-    votes.push({ name: name, v: state });
-  }
-  var dir = ticket.dir;
-  var rows4 = tmClosedRows(row && row.rows4h, 14400);
-  var rows1 = tmClosedRows(row && row.rows1h, 3600);
-  var rowsD = tmClosedRows(row && row.rows1d, 86400);
-  if (!row || !rows4 || rows4.length < 50) return ['4h history unread'];
-  var px = rows4[rows4.length - 1].c;
-  var hs = (typeof hgStructure === 'function') ? hgStructure(rows4) : null;
-  var want = dir === 'long' ? 'up' : 'down';
-  if (!hs) hard.push('structure unread');
-  else {
-    if (hs.trend !== want) hard.push('4h structure ' + (hs.trend || 'range'));
-    var n = rows4.length - 1;
-    if (hs.lastCHoCH && hs.lastCHoCH.dir && hs.lastCHoCH.dir !== want && (n - hs.lastCHoCH.i) <= 20) hard.push('CHOCH against');
-    var swings = hs.swings || [];
     var lastHigh = null, lastLow = null, si;
     for (si = 0; si < swings.length; si++){
       if (swings[si].type === 'HH' || swings[si].type === 'LH') lastHigh = swings[si];
@@ -395,3 +339,55 @@ function trendmxCompPipsHtml(comps){
   comps = comps || {};
   return ''
     + '<span class="gpip ' + (comps.d1Trend > 0 ? 'ok' : (comps.d1Trend < 0 ? 'bad' : '')) + '" title="1D trend">1D</span>'
+    + '<span class="gpip ' + (comps.d1Cross > 0 ? 'ok' : (comps.d1Cross < 0 ? 'bad' : '')) + '" title="EMA cross">X</span>'
+    + '<span class="gpip ' + (comps.h4Cascade > 0 ? 'ok' : (comps.h4Cascade < 0 ? 'bad' : '')) + '" title="4H cascade">4H</span>'
+    + '<span class="gpip ' + (comps.cloud > 0 ? 'ok' : (comps.cloud < 0 ? 'bad' : '')) + '" title="Cloud">CL</span>'
+    + '<span class="gpip ' + (comps.adxPt !== 0 ? 'ok' : '') + '" title="ADX strength">ADX</span>';
+}
+
+function trendmxRowTier(r, plan){
+  if (!r) return 'forming';
+  if (plan && plan.omniDemoted) return 'near';
+  if (r.gate && r.gate.veto) return 'forming';
+  /* hg-v1012: real taker flow AGAINST the row's own majority caps the row
+     at NEAR — it paints, the chip names why, it can never be CLEAN or sit
+     on the LIMIT BOARD (the same leadership pattern as the omni principal
+     above it). An unread flow caps nothing. */
+  if (r.flow && r.flow.verdict === 'against') return 'near';
+  /* hg-v1019: the momentum witness caps the same way — a row whose 1D RSI
+     range has TURNED against its direction can never be CLEAN. An unread
+     or abstaining witness caps nothing. */
+  if (trendmxMomState(r, tmDirOf(r)) === 'against') return 'near';
+  /* hg-v1020: and the volume witness — a swing rally the OBV trend refuses
+     to confirm (or a fall it refuses to join) caps at NEAR the same way. */
+  if (trendmxVolState(r, tmDirOf(r)) === 'against') return 'near';
+  /* hg-v1034: the fundamental + sentiment witness caps the same way — a row
+     whose coin sits in a red-folder blackout (refuse) or against a 2+ net
+     checked headwind (against) can never be CLEAN. */
+  var fundSt = trendmxFundState(r, tmDirOf(r));
+  if (fundSt === 'refuse' || fundSt === 'against') return 'near';
+  /* hg-v1057: the trend-quality witness caps the same way — a row whose own
+     4h tape is CHOPPY (Choppiness >= 61.8 AND Efficiency Ratio < 0.3, the two
+     instruments agreeing) can never be CLEAN: this desk trades trends and
+     that tape has none to ride. Mixed or unreadable caps nothing (fail open
+     — one instrument alone is not a verdict). */
+  var chopSt = trendmxChopState(r);
+  if (chopSt && chopSt.state === 'chop') return 'near';
+  if (plan && tmValidSetup(plan) && r.gate && r.gate.clean7) return 'clean';
+  if (r.gate && r.gate.nearClean) return 'near';
+  return 'forming';
+}
+
+function trendmxSummaryLine(rows, golden, venueCounts){
+  rows = rows || [];
+  golden = golden || [];
+  var sl = 0, ss = 0, fx = 0, clean = 0, near = 0, flowW = 0, flowA = 0;
+  for (var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if (!r) continue;
+    if (r.score >= 4) sl++;
+    if (r.score <= -4) ss++;
+    if (r.freshCross) fx++;
+    /* hg-v1012: the flow split, read off the stamps the scan left — the
+       summary names the evidence the same way the cards do */
+    if (r.flow && r.flow.verdict === 'with') flowW++;

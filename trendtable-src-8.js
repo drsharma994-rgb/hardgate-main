@@ -1,83 +1,3 @@
-    'criteria: the 7/7 swing-gate matrix (spread · vol-Z · EMA21 anchor · funding · regime · structure · R:R) confirms the composite majority · exact resting limits · taker flow not against · 1D RSI momentum range not turned against · 1D OBV volume trend not diverging against · sorted by composite + gates',
-    bag, held, why);
-}
-
-function trendmxConvictionDeskHTML(bag, held, why){
-  return trendmxLimitDeskHTML(
-    'LIMIT BOARD · CONVICTION DESK',
-    'criteria: five-leg composite majority |≥2| (STRONG |≥4|) without the 7/7 stamp — 1D EMA200 · EMA50/200 cross · 4H EMA9/21/50 cascade · Ichimoku cloud · ADX strength · exact resting limits · taker flow not against · 1D RSI momentum range not turned against · 1D OBV volume trend not diverging against · ADX breaks composite ties',
-    bag, held, why);
-}
-
-/* hg-v1022: the PERFECT desk collects the rows trendmxPerfectState crowned and
-   builds a valid plan for each, ranked by |composite| then gates passed (the
-   gate-clean desk's own intra-class rank). The bag reuses the shared card
-   renderer with item.perfect set, so each card carries the ★ PERFECT stamp. */
-function trendmxPerfectSetups(rows){
-  var out = [];
-  if (!Array.isArray(rows)) return out;
-  for (var i = 0; i < rows.length; i++){
-    var r = rows[i];
-    if (!trendmxPerfectState(r)) continue;
-    var dir = tmDirOf(r);
-    var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
-    if (!tmValidSetup(plan)) continue;
-    out.push({ row: r, plan: plan, dir: dir, stack: trendmxCardStack(r, dir), perfect: true,
-               rank: Math.abs(r.score) * 10 + (r.gate.gatesPassed || 0) });
-  }
-  out.sort(function(a, b){ return b.rank - a.rank; });
-  return out;
-}
-
-
-/* hg-v1082: FIVE-PILLAR STACK — technical, fundamental, sentiment, macro, micro.
-   A FULL STACK row is one where every pillar is readable AND with the row's
-   own majority. WITH is a positive read. An unread ATR, a mixed tape, a
-   missing 4h structure, and BTC funding that is merely not crowded do not
-   count as WITH. Structure must agree (EMA50 vs EMA200). An against pillar
-   vetoes the stack. The composite, the PERFECT predicate, and the tiers are
-   unchanged. A stricter desk, not a profit claim. */
-var __tmMacro = null;
-function trendmxMacroSet(snap){ __tmMacro = snap || null; return __tmMacro; }
-function trendmxFivePillars(r){
-  r = r || {};
-  var dir = tmDirOf(r);
-  var pillars = [];
-  if (!dir){
-    pillars.push({ name: 'TECHNICAL', state: 'unread', detail: 'no majority' });
-  } else {
-    var against = false, withIt = false, notes = ['composite ' + r.score + '/5'];
-    var mom = trendmxMomState(r, dir);
-    var vol = trendmxVolState(r, dir);
-    var chop = trendmxChopState(r);
-    var atr = trendmxAtrRegime(r);
-    if (mom) notes.push('momentum ' + mom);
-    if (vol) notes.push('volume ' + vol);
-    if (atr) notes.push('ATR ' + atr.regime);
-    if (chop && chop.state) notes.push('tape ' + chop.state);
-    if (mom === 'against' || vol === 'against' || (chop && chop.state === 'chop')) against = true;
-    if (atr && (atr.regime === 'DEAD' || atr.regime === 'BLOWOFF')) against = true;
-    var structWith = false;
-    try{
-      var st = tmStructureDir(r.rows4h);
-      if (st){
-        notes.push('structure ' + st);
-        if ((dir === 'long' && st === 'down') || (dir === 'short' && st === 'up')) against = true;
-        if ((dir === 'long' && st === 'up') || (dir === 'short' && st === 'down')) structWith = true;
-      }
-    }catch(eSt){}
-    if (!against && structWith && mom === 'with' && vol === 'with' && Math.abs(+r.score || 0) >= 4 && atr && atr.regime === 'HEALTHY' && chop && chop.state === 'trend') withIt = true;
-    pillars.push({ name: 'TECHNICAL', state: against ? 'against' : (withIt ? 'with' : 'flat'), detail: notes.join(' · ') });
-  }
-  var fund = dir ? trendmxFundState(r, dir) : null;
-  pillars.push({ name: 'FUNDAMENTAL', state: fund || 'unread', detail: fund ? ('fundamental stack ' + fund) : 'fundamental stack dark' });
-  var sentAgainst = false, sentWith = false, sentRead = false, sentNotes = [];
-  if (r.flow && r.flow.verdict && r.flow.verdict !== 'unreadable'){
-    sentRead = true;
-    sentNotes.push('taker ' + r.flow.verdict);
-    if (r.flow.verdict === 'against') sentAgainst = true;
-    if (r.flow.verdict === 'with') sentWith = true;
-  }
   if (dir && typeof r.fundingPct === 'number' && isFinite(r.fundingPct) && typeof W.hgFundingAgainstMark === 'function'){
     sentRead = true;
     try{
@@ -362,3 +282,90 @@ function trendmxPaintFwd(refs){
 }
 
 /* hg-v1045: THE BULL / BEAR COLUMN VIEW — the full matrix regrouped into
+   three columns by the row's own majority direction (composite >= +2 BULL,
+   <= -2 BEAR, everything between MIXED / CHOP). Each column reuses the desk's
+   own card renderer, ordered by |composite| then gates. Same rows, same
+   gates, same evidence — a different reading order. */
+function trendmxColumnsHTML(rows){
+  try{
+    if (!Array.isArray(rows) || !rows.length) return '<div class="empty">No rows to group.</div>';
+    var bull = [], bear = [], mixed = [], i, r, d;
+    for (i = 0; i < rows.length; i++){
+      r = rows[i];
+      d = tmDirOf(r);
+      if (d === 'long') bull.push(r);
+      else if (d === 'short') bear.push(r);
+      else mixed.push(r);
+    }
+    function byStrength(list){
+      return list.slice().sort(function(a, b){
+        var pa = Math.abs(+a.score || 0), pb = Math.abs(+b.score || 0);
+        if (pb !== pa) return pb - pa;
+        var ga = (a.gate && isFinite(a.gate.gatesPassed)) ? a.gate.gatesPassed : -1;
+        var gb = (b.gate && isFinite(b.gate.gatesPassed)) ? b.gate.gatesPassed : -1;
+        return gb - ga;
+      });
+    }
+    /* a direction-less row cannot mint levels, so the mixed column prints a
+       compact honest row instead of a setup card */
+    function mixedRow(r){
+      try{
+        if (r.unread) return '<div class="card" style="padding:8px;margin-bottom:6px"><b>' + escH(r.sym) + '</b>' + tmVenueChip(r)
+          + '<div style="opacity:.75;font-size:11px;margin-top:2px">UNREAD · CoinDCX contract with no candle series · not a setup</div></div>';
+        return '<div class="card" style="padding:8px;margin-bottom:6px"><b>' + escH(r.sym) + '</b>' + tmVenueChip(r)
+          + '<div style="opacity:.75;font-size:11px;margin-top:2px">composite ' + (r.score > 0 ? '+' : '') + r.score + '/5 · no majority — no levels minted · ADX '
+          + (isFinite(r.adx) ? (+r.adx).toFixed(1) : '—') + '</div></div>';
+      }catch(e){ return ''; }
+    }
+    function col(title, cls, titleCls, list, emptyTxt){
+      var h = '<div class="panel tm-col" style="border-top:3px solid ' + cls + '"><h3 style="margin:0 0 8px">'
+        + '<span class="' + titleCls + '">' + title + '</span> <span style="opacity:.6;font-weight:400">· ' + list.length + ' row' + (list.length === 1 ? '' : 's') + '</span></h3>';
+      if (!list.length) h += '<div class="empty" style="margin:6px 0">' + emptyTxt + '</div>';
+      else h += list.map(function(rr){
+        var dd = tmDirOf(rr);
+        if (!dd) return mixedRow(rr);
+        var plan = dd ? trendmxPlan(Object.assign({}, rr, { dir: dd })) : null;
+        var tier = trendmxRowTier(rr, plan);
+        return trendmxSetupCardHTML(rr, tier === 'clean' ? 'clean' : 'near');
+      }).join('');
+      return h + '</div>';
+    }
+    var bullS = byStrength(bull), bearS = byStrength(bear), mixedS = byStrength(mixed);
+    return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;align-items:start">'
+      + col('BULL', '#26a69a', 'pos', bullS, 'no bullish rows — composite below +2')
+      + col('BEAR', '#ef5350', 'neg', bearS, 'no bearish rows — composite above -2')
+      + col('MIXED / CHOP', '#94a3b8', '', mixedS, 'no mixed rows')
+      + '</div>';
+  }catch(e){ return ''; }
+}
+
+/* hg-v1048: the COINDCX TRENDING / FORMING board - every CoinDCX future
+   the matrix scanned, in two columns. TRENDING = the composite has a
+   majority direction (|score| >= 2); FORMING = it does not yet. Both
+   print TP/SL: minted ticket levels where the plan exists (7/7 CLEAN /
+   6/7 NEAR), the house DRAFT ladder where it does not. */
+function trendmxTrendFormHTML(rows){
+  try{
+    if (!Array.isArray(rows) || !rows.length) return '<div class="empty">Run a scan to classify the CoinDCX board.</div>';
+    var cdcx = [];
+    for (var i = 0; i < rows.length; i++){
+      if (rows[i] && String(tmRowVenue(rows[i])).toLowerCase() === 'coindcx') cdcx.push(rows[i]);
+    }
+    if (!cdcx.length) return '<div class="empty">No CoinDCX rows on this board.</div>';
+    var trending = [], forming = [];
+    for (i = 0; i < cdcx.length; i++){
+      var r = cdcx[i];
+      if (tmDirOf(r)) trending.push(r); else forming.push(r);
+    }
+    function byStrength(list){ return list.slice().sort(function(a, b){ return Math.abs(+b.score || 0) - Math.abs(+a.score || 0); }); }
+    /* typeof guard, not bare isFinite: isFinite(null) is TRUE and +null is 0,
+       so a null plan level would print a confident "0" (the null-formatting
+       trap this codebase has hit five times). */
+    function px(v){ return (typeof v === 'number' && isFinite(v)) ? String(v) : '--'; }
+    function lvlLine(rr, dd){
+      var plan = dd ? trendmxPlan(Object.assign({}, rr, { dir: dd })) : null;
+      if (plan){
+        var tier = trendmxRowTier(rr, plan);
+        var lvl = 'ENTRY ' + px(plan.entry) + ' - STOP ' + px(plan.stop) + ' - T1 ' + px(plan.t1)
+          + (isFinite(plan.t2) ? ' - T2 ' + px(plan.t2) : '');
+        /* hg-v1048: the tier is the label — 7/7 CLEAN and 6/7 NEAR are the

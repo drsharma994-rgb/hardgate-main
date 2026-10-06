@@ -1,55 +1,3 @@
-    + '<span class="gpip ' + (comps.d1Cross > 0 ? 'ok' : (comps.d1Cross < 0 ? 'bad' : '')) + '" title="EMA cross">X</span>'
-    + '<span class="gpip ' + (comps.h4Cascade > 0 ? 'ok' : (comps.h4Cascade < 0 ? 'bad' : '')) + '" title="4H cascade">4H</span>'
-    + '<span class="gpip ' + (comps.cloud > 0 ? 'ok' : (comps.cloud < 0 ? 'bad' : '')) + '" title="Cloud">CL</span>'
-    + '<span class="gpip ' + (comps.adxPt !== 0 ? 'ok' : '') + '" title="ADX strength">ADX</span>';
-}
-
-function trendmxRowTier(r, plan){
-  if (!r) return 'forming';
-  if (plan && plan.omniDemoted) return 'near';
-  if (r.gate && r.gate.veto) return 'forming';
-  /* hg-v1012: real taker flow AGAINST the row's own majority caps the row
-     at NEAR — it paints, the chip names why, it can never be CLEAN or sit
-     on the LIMIT BOARD (the same leadership pattern as the omni principal
-     above it). An unread flow caps nothing. */
-  if (r.flow && r.flow.verdict === 'against') return 'near';
-  /* hg-v1019: the momentum witness caps the same way — a row whose 1D RSI
-     range has TURNED against its direction can never be CLEAN. An unread
-     or abstaining witness caps nothing. */
-  if (trendmxMomState(r, tmDirOf(r)) === 'against') return 'near';
-  /* hg-v1020: and the volume witness — a swing rally the OBV trend refuses
-     to confirm (or a fall it refuses to join) caps at NEAR the same way. */
-  if (trendmxVolState(r, tmDirOf(r)) === 'against') return 'near';
-  /* hg-v1034: the fundamental + sentiment witness caps the same way — a row
-     whose coin sits in a red-folder blackout (refuse) or against a 2+ net
-     checked headwind (against) can never be CLEAN. */
-  var fundSt = trendmxFundState(r, tmDirOf(r));
-  if (fundSt === 'refuse' || fundSt === 'against') return 'near';
-  /* hg-v1057: the trend-quality witness caps the same way — a row whose own
-     4h tape is CHOPPY (Choppiness >= 61.8 AND Efficiency Ratio < 0.3, the two
-     instruments agreeing) can never be CLEAN: this desk trades trends and
-     that tape has none to ride. Mixed or unreadable caps nothing (fail open
-     — one instrument alone is not a verdict). */
-  var chopSt = trendmxChopState(r);
-  if (chopSt && chopSt.state === 'chop') return 'near';
-  if (plan && tmValidSetup(plan) && r.gate && r.gate.clean7) return 'clean';
-  if (r.gate && r.gate.nearClean) return 'near';
-  return 'forming';
-}
-
-function trendmxSummaryLine(rows, golden, venueCounts){
-  rows = rows || [];
-  golden = golden || [];
-  var sl = 0, ss = 0, fx = 0, clean = 0, near = 0, flowW = 0, flowA = 0;
-  for (var i = 0; i < rows.length; i++){
-    var r = rows[i];
-    if (!r) continue;
-    if (r.score >= 4) sl++;
-    if (r.score <= -4) ss++;
-    if (r.freshCross) fx++;
-    /* hg-v1012: the flow split, read off the stamps the scan left — the
-       summary names the evidence the same way the cards do */
-    if (r.flow && r.flow.verdict === 'with') flowW++;
     else if (r.flow && r.flow.verdict === 'against') flowA++;
     var dir = tmDirOf(r);
     var plan = dir ? trendmxPlan(Object.assign({}, r, { dir: dir })) : null;
@@ -350,3 +298,64 @@ function trendmxChopState(r){
   return { chop: chop, er: er, state: state };
 }
 
+/* hg-v1057: the trend-quality chip — the momentum chip's own pattern.
+   CHOP prints the bad stamp with BOTH measured values (a cap is never
+   silent); TREND and mixed/unreadable paint NO chip (evidence, never a
+   brag, and a mixed tape is not a verdict). */
+function trendmxChopChipHtml(r){
+  try{
+    var st = trendmxChopState(r);
+    if (!st || st.state !== 'chop') return '';
+    var chopTxt = isFinite(st.chop) ? st.chop.toFixed(0) : '?';
+    var erTxt = isFinite(st.er) ? st.er.toFixed(2) : '?';
+    return '<span class="stamp bad" style="margin-left:6px" title="' + escH('trend-quality witness (hg-v1057): this 4h tape reads CHOP ' + chopTxt
+      + ' and efficiency ratio ' + erTxt
+      + ' — the trend matrix\'s own trend-quality measure says there is no trend to ride. Capped at NEAR, never CLEAN — evidence, never a gate.') + '">CHOP ' + chopTxt + ' · ER ' + erTxt + '</span>';
+  }catch(e){ return ''; }
+}
+
+/* hg-v1022: THE PERFECT SETUP tier — the strictest confluence read the desk
+   can honestly print. NOT a new composite leg and NOT a win guarantee (the
+   forward ledger measures it like every other mechanic): it is a FILTER that
+   asks every independent confirmation to say WITH and none to say AGAINST, on
+   top of a 7/7 gate-clean row at maximum composite alignment. Criteria,
+   stated plainly:
+     |composite| = 5/5  (all five legs maxed the same way)
+     7/7 swing-gate clean (spread · vol-Z · EMA21 anchor · funding · regime · structure · R:R)
+     momentum witness WITH  (1D RSI on the regime side — not flat, not null)
+     volume witness WITH     (1D OBV confirms the new extreme — not flat, not null)
+     taker flow never AGAINST (WITH when readable; an unreadable flow never confirms but never disqualifies)
+     funding not crowded      (not against the direction)
+   Evidence-only: nothing here gates, moves a tier or drops a row — it only
+   earns a desk and a read-mark. A row is PERFECT, not "guaranteed". */
+function trendmxPerfectState(r){
+  if (!r || !r.gate || !r.gate.clean7 || r.gate.veto) return false;
+  if (typeof r.score !== 'number' || !isFinite(r.score)) return false;
+  if (Math.abs(r.score) !== 5) return false;
+  var dir = tmDirOf(r);
+  if (!dir) return false;
+  if (trendmxMomState(r, dir) !== 'with') return false;
+  if (trendmxVolState(r, dir) !== 'with') return false;
+  if (r.flow && r.flow.verdict === 'against') return false;
+  /* hg-v1034: the fundamental + sentiment witness — a blackout (refuse) or a
+     2+ net checked headwind (against) disqualifies PERFECT exactly like flow
+     against. WITH chips; a dark or flat board never disqualifies. */
+  var fundSt = trendmxFundState(r, dir);
+  if (fundSt === 'refuse' || fundSt === 'against') return false;
+  var fp = r.fundingPct;
+  if (typeof fp === 'number' && isFinite(fp) && typeof W.hgFundingAgainstMark === 'function'){
+    try{ var m = W.hgFundingAgainstMark(fp, dir); if (m && m.against === true) return false; }catch(e){}
+  }
+  return true;
+}
+
+/* hg-v1022: VOLATILITY REGIME — a new independent read the composite's five
+   close-derived legs cannot see: WHERE the row's own ATR sits in ITS trailing
+   distribution. hgAtrPercentile(4h,14,100) ranks the latest 4h ATR against
+   its last 100 values: <20th percentile is DEAD TAPE (chop — trend legs drift
+   but nothing trades), >80th is BLOWOFF (a move already spent), the middle
+   is HEALTHY (a trend with room to run). Evidence-only — a chip on the card,
+   never a gate, never a composite point: it informs and records, it never
+   drops a row (the hg-v700 honest-degradation rule applies on unreadable). */
+function trendmxAtrRegime(r){
+  try{

@@ -1,64 +1,3 @@
-/* hg-v1057: the trend-quality chip — the momentum chip's own pattern.
-   CHOP prints the bad stamp with BOTH measured values (a cap is never
-   silent); TREND and mixed/unreadable paint NO chip (evidence, never a
-   brag, and a mixed tape is not a verdict). */
-function trendmxChopChipHtml(r){
-  try{
-    var st = trendmxChopState(r);
-    if (!st || st.state !== 'chop') return '';
-    var chopTxt = isFinite(st.chop) ? st.chop.toFixed(0) : '?';
-    var erTxt = isFinite(st.er) ? st.er.toFixed(2) : '?';
-    return '<span class="stamp bad" style="margin-left:6px" title="' + escH('trend-quality witness (hg-v1057): this 4h tape reads CHOP ' + chopTxt
-      + ' and efficiency ratio ' + erTxt
-      + ' — the trend matrix\'s own trend-quality measure says there is no trend to ride. Capped at NEAR, never CLEAN — evidence, never a gate.') + '">CHOP ' + chopTxt + ' · ER ' + erTxt + '</span>';
-  }catch(e){ return ''; }
-}
-
-/* hg-v1022: THE PERFECT SETUP tier — the strictest confluence read the desk
-   can honestly print. NOT a new composite leg and NOT a win guarantee (the
-   forward ledger measures it like every other mechanic): it is a FILTER that
-   asks every independent confirmation to say WITH and none to say AGAINST, on
-   top of a 7/7 gate-clean row at maximum composite alignment. Criteria,
-   stated plainly:
-     |composite| = 5/5  (all five legs maxed the same way)
-     7/7 swing-gate clean (spread · vol-Z · EMA21 anchor · funding · regime · structure · R:R)
-     momentum witness WITH  (1D RSI on the regime side — not flat, not null)
-     volume witness WITH     (1D OBV confirms the new extreme — not flat, not null)
-     taker flow never AGAINST (WITH when readable; an unreadable flow never confirms but never disqualifies)
-     funding not crowded      (not against the direction)
-   Evidence-only: nothing here gates, moves a tier or drops a row — it only
-   earns a desk and a read-mark. A row is PERFECT, not "guaranteed". */
-function trendmxPerfectState(r){
-  if (!r || !r.gate || !r.gate.clean7 || r.gate.veto) return false;
-  if (typeof r.score !== 'number' || !isFinite(r.score)) return false;
-  if (Math.abs(r.score) !== 5) return false;
-  var dir = tmDirOf(r);
-  if (!dir) return false;
-  if (trendmxMomState(r, dir) !== 'with') return false;
-  if (trendmxVolState(r, dir) !== 'with') return false;
-  if (r.flow && r.flow.verdict === 'against') return false;
-  /* hg-v1034: the fundamental + sentiment witness — a blackout (refuse) or a
-     2+ net checked headwind (against) disqualifies PERFECT exactly like flow
-     against. WITH chips; a dark or flat board never disqualifies. */
-  var fundSt = trendmxFundState(r, dir);
-  if (fundSt === 'refuse' || fundSt === 'against') return false;
-  var fp = r.fundingPct;
-  if (typeof fp === 'number' && isFinite(fp) && typeof W.hgFundingAgainstMark === 'function'){
-    try{ var m = W.hgFundingAgainstMark(fp, dir); if (m && m.against === true) return false; }catch(e){}
-  }
-  return true;
-}
-
-/* hg-v1022: VOLATILITY REGIME — a new independent read the composite's five
-   close-derived legs cannot see: WHERE the row's own ATR sits in ITS trailing
-   distribution. hgAtrPercentile(4h,14,100) ranks the latest 4h ATR against
-   its last 100 values: <20th percentile is DEAD TAPE (chop — trend legs drift
-   but nothing trades), >80th is BLOWOFF (a move already spent), the middle
-   is HEALTHY (a trend with room to run). Evidence-only — a chip on the card,
-   never a gate, never a composite point: it informs and records, it never
-   drops a row (the hg-v700 honest-degradation rule applies on unreadable). */
-function trendmxAtrRegime(r){
-  try{
     if (!r || !r.rows4h || !Array.isArray(r.rows4h) || r.rows4h.length < 30) return null;
     if (typeof hgAtrPercentile !== 'function') return null;
     var pct = hgAtrPercentile(r.rows4h, 14, 100);
@@ -322,3 +261,83 @@ function trendmxLimitDeskHTML(title, crit, bag, held, why){
 function trendmxGateCleanDeskHTML(bag, held, why){
   return trendmxLimitDeskHTML(
     'LIMIT BOARD · GATE-CLEAN DESK',
+    'criteria: the 7/7 swing-gate matrix (spread · vol-Z · EMA21 anchor · funding · regime · structure · R:R) confirms the composite majority · exact resting limits · taker flow not against · 1D RSI momentum range not turned against · 1D OBV volume trend not diverging against · sorted by composite + gates',
+    bag, held, why);
+}
+
+function trendmxConvictionDeskHTML(bag, held, why){
+  return trendmxLimitDeskHTML(
+    'LIMIT BOARD · CONVICTION DESK',
+    'criteria: five-leg composite majority |≥2| (STRONG |≥4|) without the 7/7 stamp — 1D EMA200 · EMA50/200 cross · 4H EMA9/21/50 cascade · Ichimoku cloud · ADX strength · exact resting limits · taker flow not against · 1D RSI momentum range not turned against · 1D OBV volume trend not diverging against · ADX breaks composite ties',
+    bag, held, why);
+}
+
+/* hg-v1022: the PERFECT desk collects the rows trendmxPerfectState crowned and
+   builds a valid plan for each, ranked by |composite| then gates passed (the
+   gate-clean desk's own intra-class rank). The bag reuses the shared card
+   renderer with item.perfect set, so each card carries the ★ PERFECT stamp. */
+function trendmxPerfectSetups(rows){
+  var out = [];
+  if (!Array.isArray(rows)) return out;
+  for (var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if (!trendmxPerfectState(r)) continue;
+    var dir = tmDirOf(r);
+    var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
+    if (!tmValidSetup(plan)) continue;
+    out.push({ row: r, plan: plan, dir: dir, stack: trendmxCardStack(r, dir), perfect: true,
+               rank: Math.abs(r.score) * 10 + (r.gate.gatesPassed || 0) });
+  }
+  out.sort(function(a, b){ return b.rank - a.rank; });
+  return out;
+}
+
+
+/* hg-v1082: FIVE-PILLAR STACK — technical, fundamental, sentiment, macro, micro.
+   A FULL STACK row is one where every pillar is readable AND with the row's
+   own majority. WITH is a positive read. An unread ATR, a mixed tape, a
+   missing 4h structure, and BTC funding that is merely not crowded do not
+   count as WITH. Structure must agree (EMA50 vs EMA200). An against pillar
+   vetoes the stack. The composite, the PERFECT predicate, and the tiers are
+   unchanged. A stricter desk, not a profit claim. */
+var __tmMacro = null;
+function trendmxMacroSet(snap){ __tmMacro = snap || null; return __tmMacro; }
+function trendmxFivePillars(r){
+  r = r || {};
+  var dir = tmDirOf(r);
+  var pillars = [];
+  if (!dir){
+    pillars.push({ name: 'TECHNICAL', state: 'unread', detail: 'no majority' });
+  } else {
+    var against = false, withIt = false, notes = ['composite ' + r.score + '/5'];
+    var mom = trendmxMomState(r, dir);
+    var vol = trendmxVolState(r, dir);
+    var chop = trendmxChopState(r);
+    var atr = trendmxAtrRegime(r);
+    if (mom) notes.push('momentum ' + mom);
+    if (vol) notes.push('volume ' + vol);
+    if (atr) notes.push('ATR ' + atr.regime);
+    if (chop && chop.state) notes.push('tape ' + chop.state);
+    if (mom === 'against' || vol === 'against' || (chop && chop.state === 'chop')) against = true;
+    if (atr && (atr.regime === 'DEAD' || atr.regime === 'BLOWOFF')) against = true;
+    var structWith = false;
+    try{
+      var st = tmStructureDir(r.rows4h);
+      if (st){
+        notes.push('structure ' + st);
+        if ((dir === 'long' && st === 'down') || (dir === 'short' && st === 'up')) against = true;
+        if ((dir === 'long' && st === 'up') || (dir === 'short' && st === 'down')) structWith = true;
+      }
+    }catch(eSt){}
+    if (!against && structWith && mom === 'with' && vol === 'with' && Math.abs(+r.score || 0) >= 4 && atr && atr.regime === 'HEALTHY' && chop && chop.state === 'trend') withIt = true;
+    pillars.push({ name: 'TECHNICAL', state: against ? 'against' : (withIt ? 'with' : 'flat'), detail: notes.join(' · ') });
+  }
+  var fund = dir ? trendmxFundState(r, dir) : null;
+  pillars.push({ name: 'FUNDAMENTAL', state: fund || 'unread', detail: fund ? ('fundamental stack ' + fund) : 'fundamental stack dark' });
+  var sentAgainst = false, sentWith = false, sentRead = false, sentNotes = [];
+  if (r.flow && r.flow.verdict && r.flow.verdict !== 'unreadable'){
+    sentRead = true;
+    sentNotes.push('taker ' + r.flow.verdict);
+    if (r.flow.verdict === 'against') sentAgainst = true;
+    if (r.flow.verdict === 'with') sentWith = true;
+  }

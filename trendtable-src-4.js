@@ -1,36 +1,3 @@
-  for (k = 0; k < bins; k++) vol.push(0);
-  for (k = 0; k < use.length; k++){
-    var mid = (use[k].h + use[k].l + use[k].c) / 3;
-    var b = Math.max(0, Math.min(bins - 1, Math.floor((mid - lo) / step)));
-    vol[b] += use[k].v > 0 ? use[k].v : 0;
-  }
-  var total = 0, max = 0, pocI = 0, j;
-  for (j = 0; j < bins; j++){
-    total += vol[j];
-    if (vol[j] > max){ max = vol[j]; pocI = j; }
-  }
-  if (!(total > 0)) return null;
-  var need = total * 0.7, acc = vol[pocI], loI = pocI, hiI = pocI;
-  while (acc < need && (loI > 0 || hiI < bins - 1)){
-    var left = loI > 0 ? vol[loI - 1] : -1;
-    var right = hiI < bins - 1 ? vol[hiI + 1] : -1;
-    if (right >= left){ hiI++; acc += vol[hiI]; }
-    else { loI--; acc += vol[loI]; }
-  }
-  var vals = vol.filter(function(v){ return v > 0; }).slice().sort(function(a, b){ return a - b; });
-  var med = vals.length ? vals[Math.floor(vals.length / 2)] : 0;
-  var hvn = [], lvn = [];
-  for (j = 1; j < bins - 1; j++){
-    var node = lo + (j + 0.5) * step;
-    if (med > 0 && vol[j] >= med * 1.6 && vol[j] >= vol[j - 1] && vol[j] >= vol[j + 1]) hvn.push(node);
-    if (med > 0 && vol[j] > 0 && vol[j] <= med * 0.45 && vol[j] <= vol[j - 1] && vol[j] <= vol[j + 1]) lvn.push(node);
-  }
-  if (!hvn.length) hvn.push(lo + (pocI + 0.5) * step);
-  return { poc: lo + (pocI + 0.5) * step, vah: lo + (hiI + 1) * step, val: lo + loI * step, hvn: hvn, lvn: lvn };
-}
-function tmEqualSweep(rows, dir){
-  if (!rows || rows.length < 20) return false;
-  var pivots = [];
   for (var i = 2; i < rows.length - 2; i++){
     if (dir === 'long'){
       if (rows[i].l < rows[i-1].l && rows[i].l < rows[i-2].l && rows[i].l <= rows[i+1].l && rows[i].l <= rows[i+2].l) pivots.push(rows[i].l);
@@ -414,3 +381,59 @@ async function tmMicroOk(row, dir){
   var both = await Promise.all([one('3m', 80, 180), one('1m', 60, 60)]);
   return { m3: both[0], m1: both[1] };
 }
+async function tmTradingView(row){
+  var base = tmBaseOf(row);
+  if (!base) return null;
+  async function ask(ticker){
+    var r = await fetch('/api/tv-scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbols: { tickers: [ticker] } })
+    });
+    if (!r || !r.ok) return null;
+    var j = await r.json();
+    var d = j && j.data && j.data[0] && j.data[0].d;
+    if (!d || !isFinite(+d[0])) return null;
+    return { recommend: +d[0], rsi: +d[1] };
+  }
+  try {
+    return await ask('BINANCE:' + base + 'USDT.P') || await ask('BINANCE:' + base + 'USDT');
+  } catch (e) { return null; }
+}
+async function tmTopTrader(row){
+  if (typeof W.binanceTopTraders !== 'function') return null;
+  try {
+    var ls = await W.binanceTopTraders(tmBaseOf(row) + 'USDT', '4h', 1);
+    if (!ls || !ls.latest || !isFinite(+ls.latest.ratio)) return null;
+    return +ls.latest.ratio;
+  } catch (e) { return null; }
+}
+async function tmCrowdRatio(row){
+  if (typeof W.binanceLongShort !== 'function') return null;
+  try {
+    var ls = await W.binanceLongShort(tmBaseOf(row) + 'USDT', '4h', 2);
+    if (!ls || !ls.latest || !isFinite(+ls.latest.ratio)) return null;
+    return +ls.latest.ratio;
+  } catch (e) { return null; }
+}
+
+async function trendmxFormOne(ticket, row, ctx){
+  var hard = [];
+  var votes = [];
+  function vote(name, state){
+    votes.push({ name: name, v: state });
+  }
+  var dir = ticket.dir;
+  var rows4 = tmClosedRows(row && row.rows4h, 14400);
+  var rows1 = tmClosedRows(row && row.rows1h, 3600);
+  var rowsD = tmClosedRows(row && row.rows1d, 86400);
+  if (!row || !rows4 || rows4.length < 50) return ['4h history unread'];
+  var px = rows4[rows4.length - 1].c;
+  var hs = (typeof hgStructure === 'function') ? hgStructure(rows4) : null;
+  var want = dir === 'long' ? 'up' : 'down';
+  if (!hs) hard.push('structure unread');
+  else {
+    if (hs.trend !== want) hard.push('4h structure ' + (hs.trend || 'range'));
+    var n = rows4.length - 1;
+    if (hs.lastCHoCH && hs.lastCHoCH.dir && hs.lastCHoCH.dir !== want && (n - hs.lastCHoCH.i) <= 20) hard.push('CHOCH against');
+    var swings = hs.swings || [];

@@ -1,17 +1,3 @@
-      var i4 = c4.length - 1;
-      var e9 = ema(c4, 9)[i4], e21 = ema(c4, 21)[i4], e50h = ema(c4, 50)[i4];
-      if (isFinite(e9) && isFinite(e21) && isFinite(e50h)){
-        if (e9 > e21 && e21 > e50h) out.comps.h4Cascade = 1;
-        else if (e9 < e21 && e21 < e50h) out.comps.h4Cascade = -1;
-      }
-    }
-
-    /* 5) ADX strength point in the direction of the trend-sum so far */
-    if (ok1){
-      var a = adx(rows1d, 14);
-      out.adx = (a && a.adx && a.adx.length) ? a.adx[a.adx.length - 1] : NaN;
-      /* hg-v1019: THE MOMENTUM WITNESS rides the same 1D tape — RSI(14) as
-         EVIDENCE. NOT a sixth composite leg: the score sum below is
          byte-identical, so every recorded tmScore stays on its own scale
          (the hg-v1012 rule). rsi missing -> NaN, and NaN holds nothing off
          (hg-v700 honest degradation). */
@@ -460,3 +446,32 @@ function trendmxPlanHTML(s){
                                   s.mark, { cls: 'note warn', style: 'margin-top:6px' }) || '') : '')
     /* the shared 14-gate indicator read attached by hgBestLevels */
     + ((typeof hgStrategyConfirmChipHtml === 'function')
+      ? hgStrategyConfirmChipHtml(s.strategyConfirm, s.strategyWith, s.strategyAgainst) : '')
+    + (s.contextRead ? '<div class="dim">' + escH(s.contextRead)
+        + (s.contextWarn ? ' — context AGAINST this direction' : '') + '</div>' : '')
+    + ((typeof hgStrategyTradeDetailHtml === 'function')
+      ? hgStrategyTradeDetailHtml(s, { skipChip: true }) : '');
+}
+
+/* expandable-row block for one matrix row; uses the scan-cached 4h rows —
+   never refetches. */
+function trendmxCardStack(r, dir){
+  try{
+    if (!dir) return null;
+    var gate = r.gate || trendmxGateEval(r, dir);
+    var ticker = trendmxTicker(r);
+    if (gate && gate.hit && typeof hgSetupStackFromHit === 'function'){
+      var hit = Object.assign({}, gate.hit, { sym: r.sym });
+      if (typeof hgSetupStackAttach === 'function'){
+        hgSetupStackAttach(hit, {
+          sym: r.sym, style: 'swing', rows4h: r.rows4h, rows1h: r.rows1h, ticker: ticker
+        });
+        return hit.stack || null;
+      }
+    }
+    if (typeof hgSetupStackForInlineScan !== 'function') return null;
+    return hgSetupStackForInlineScan({
+      dir: dir, sym: r.sym, rows4h: r.rows4h, rows1h: r.rows1h,
+      style: 'swing', asset: 'crypto', ticker: ticker,
+      clean: !!(gate && gate.clean7),
+      nearClean: !!(gate && gate.nearClean),

@@ -1,23 +1,3 @@
-      note: 'CLEAN = 7/7 + plan + min R:R. The golden/death cross desks + the two limit class desks (gate-clean / conviction) promote the best rows. NEAR/FORMING are watch-only.'   /* hg-v1015 / hg-v1018 */
-    });
-  }
-
-  var btn    = el.querySelector('[data-r="run"]');
-  var syncBtn = el.querySelector('[data-r="sync"]');
-  var prog   = el.querySelector('[data-r="prog"]');
-  var summary = el.querySelector('[data-r="summary"]');
-  var status = el.querySelector('[data-r="status"]');
-  var out    = el.querySelector('[data-r="out"]');
-  var refs = {
-    summary: summary,
-    crypto: el.querySelector('[data-r="crypto"]'),
-    golden: el.querySelector('[data-r="golden"]'),
-    death: el.querySelector('[data-r="death"]'),   /* hg-v1015 */
-    cards: el.querySelector('[data-r="cards"]'),
-    near: el.querySelector('[data-r="near"]'),
-    forming: el.querySelector('[data-r="forming"]'),
-    gateclean: el.querySelector('[data-r="gateclean"]'),   /* hg-v1018 */
-    conviction: el.querySelector('[data-r="conviction"]'),  /* hg-v1018 */
     perfect: el.querySelector('[data-r="perfect"]'),        /* hg-v1022 */
     fwd: el.querySelector('[data-r="fwd"]'),                /* hg-v1039: the measured book */
     trendform: el.querySelector('[data-r="trendform"]'),    /* hg-v1048: coindcx trending / forming */
@@ -228,6 +208,18 @@
         setProg: setProg,
         onBatch: function(info){
           state.rows = info.rows;
+          /* hg-v1150: THE PARTIAL BOARD IS THE PUBLISHED BOARD for as long as
+             it is the one on screen. renderAll() paints the desks and the
+             desks write the forward record (trendmxLimitClasses) — and the
+             record's tmScore / tmAlign / tmAgeMin marks are read off the
+             PUBLISHED snapshot (hgTrendMatrixMark). The full publish happens
+             only at the end of trendmxScan, so every mid-scan batch painted
+             its record against a stale-or-null snapshot: tmScore undefined on
+             records whose row sat on the board with a perfectly readable
+             composite. Publish the partial rows here so a mid-scan record
+             always carries the composite of the exact row it was minted
+             from — the same row the operator saw. */
+          try { publishTrendmxSnap(info.rows); } catch (ePub) {}
           try {
             trendmxStampBtcStructure(state.rows);
             state.golden = trendmxGoldenCrossSetups(state.rows);
@@ -418,6 +410,16 @@ W.trendmxCrossState = function(){
 };
 W.trendmxState = function(){
   try{ return __tmSnap ? JSON.parse(JSON.stringify(__tmSnap)) : null; }catch(e){ return null; }
+};
+/* hg-v1150: THE SCAN ROWS, SYNC AND FULL. trendmxState() publishes the LIGHT
+   mark snapshot ({sym, score, dir, comps} — the ledger reads it) and the
+   cross state publishes the held tickets; but the desk's own last scan
+   holds FULL rows (tape · gate · witnesses · freshCross), and consumers
+   that re-run the builders on them — the AI workforce's rows fallback —
+   had no sync seam to reach them. Same rows trendmxScan returned; null
+   before the first scan. */
+W.trendmxScanRows = function(){
+  try{ return (__tmScanSnap && Array.isArray(__tmScanSnap.rows) && __tmScanSnap.rows.length) ? __tmScanSnap.rows : null; }catch(e){ return null; }
 };
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'trendmx', label: 'TREND MATRIX', mount: mountTrendMatrix, refresh: refreshTrendMatrix });

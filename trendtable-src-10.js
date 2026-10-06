@@ -1,94 +1,3 @@
-      gates: gatesTxt, formation: tier === 'clean' ? 'CLEAN' : 'WATCH_ONLY', measured: 'UNREAD',
-      exitPolicy: 'scale50_t1_be_trail', ts: Math.floor(Date.now() / 1000) };
-    var jsonTxt = JSON.stringify(payload, null, 2);
-    html += '<div class="panel" style="margin-top:10px"><h3>SETUP CARD <span>the OMNIBTC template on the matrix crown</span></h3>'
-      + '<div class="kv"><span class="k">Market Thesis</span><span class="v">' + escH(thesis) + '</span></div>'
-      + '<div class="kv"><span class="k">Bias</span><span class="v ' + (dir === 'long' ? 'pos' : 'neg') + '">' + dir.toUpperCase() + '</span></div>'
-      + '<div class="kv"><span class="k">Entry Zone</span><span class="v">[' + (+plan.entry).toFixed(2) + ']' + (isFinite(aV) ? ' +/- ' + (0.25 * aV).toFixed(2) : '') + '</span></div>'
-      + '<div class="kv"><span class="k">Invalidation (SL)</span><span class="v">' + (+plan.stop).toFixed(2) + '</span></div>'
-      + '<div class="kv"><span class="k">Targets (TP)</span><span class="v">TP1 ' + (+plan.t1).toFixed(2) + ' | TP2 ' + (isFinite(+plan.t2) ? (+plan.t2).toFixed(2) : 'n/a') + ' | TP3 ' + tp3Txt + '</span></div>'
-      + '<div class="kv"><span class="k">Automation Blueprint</span><span class="v"><pre style="margin:4px 0;white-space:pre-wrap;font-size:10px">' + escH(jsonTxt) + '</pre>' + (tier === 'clean' ? '' : '<div class="note warn" style="margin-top:4px">formation WATCH_ONLY - the bridge must drop this payload.</div>') + '</span></div>'
-      + '</div>';
-    /* ---- the dual grid setups, OMNIBTC style ---- */
-    var swingS = { dir: dir, entry: +plan.entry, stop: +plan.stop, t1: +plan.t1, t2: isFinite(+plan.t2) ? +plan.t2 : null,
-      tier: tier === 'clean' ? 'CLEAN' : 'NEAR', gates: (crown.gate && isFinite(crown.gate.gatesPassed)) ? crown.gate.gatesPassed : null };
-    html += trendmxGridBlockHtml('SWING SETUP', '4h grid', swingS, dir);
-    var scalpS = null, altS = null;
-    if (Array.isArray(crown.rows1h) && crown.rows1h.length >= 60 && typeof W.atr === 'function'){
-      var a1arr = W.atr(crown.rows1h, 14);
-      var a1 = (a1arr && a1arr.length) ? +a1arr[a1arr.length - 1] : NaN;
-      var p1 = +crown.rows1h[crown.rows1h.length - 1].c;
-      if (isFinite(a1) && a1 > 0 && isFinite(p1)){
-        function tmxLadder(side){
-          return { dir: side, entry: p1, stop: side === 'long' ? p1 - 1.5 * a1 : p1 + 1.5 * a1,
-            t1: side === 'long' ? p1 + 3.5 * a1 : p1 - 3.5 * a1,
-            t2: side === 'long' ? p1 + 4.9 * a1 : p1 - 4.9 * a1,
-            tier: 'DRAFT', gates: null, source: '1h draft ladder ATR14' };
-        }
-        scalpS = tmxLadder(dir);
-        altS = tmxLadder(dir === 'long' ? 'short' : 'long');
-      }
-    }
-    html += trendmxGridBlockHtml('SCALP SETUP', '1h grid', scalpS, dir);
-    html += trendmxGridBlockHtml('SCALP SETUP - ALT SIDE', '1h grid', altS, dir);
-    /* ---- MEASURED EDGE ---- */
-    try{
-      if (typeof W.hgProvenEdgeVerdict === 'function'){
-        var v = W.hgProvenEdgeVerdict('trendmx', 'TRENDMX', { pool: 'TRENDMX', mechanic: 'TRENDMX' });
-        if (v && typeof W.hgProvenEdgeChipHtml === 'function'){
-          html += '<div class="panel" style="margin-top:10px"><h3>MEASURED EDGE <span>the TRENDMX pool\'s settled record</span></h3>'
-            + W.hgProvenEdgeChipHtml(v) + '</div>';
-        }
-      }
-    }catch(eMe){ }
-    return html;
-  }catch(e){ return ''; }
-}
-
-/* hg-v1067: THE SHARED PERFECT EVIDENCE PASS — the SAME reads bag and
-   the SAME enrichment + predicate OMNIBTC consumes (hgObtcPerfectFormation),
-   fed by the SAME external data (real Binance taker flow, Binance funding,
-   ATR percentile regime, EMA50/200 structure, session RVOL, the news
-   calendar), applied to the matrix's strongest rows. PERFECT / PERFECT+
-   on a matrix row now means byte-identically what it means on OMNIBTC.
-   Evidence, never a gate. */
-function tmStructureDir(rows){
-  try{
-    if (!Array.isArray(rows) || rows.length < 210 || typeof W.ema !== 'function') return null;
-    var c = rows.map(function(x){ return x.c; });
-    var e50 = W.ema(c, 50), e200 = W.ema(c, 200);
-    if (!e50 || !e200 || e50.length < 2) return null;
-    var a = e50[e50.length - 1], b = e200[e200.length - 1];
-    if (!isFinite(a) || !isFinite(b) || a === b) return null;
-    return a > b ? 'up' : 'down';
-  }catch(e){ return null; }
-}
-
-async function trendmxPerfectEvidencePass(rows){
-  try{
-    if (!Array.isArray(rows) || !rows.length) return rows;
-    var capped = rows.slice().sort(function(a, b){ return Math.abs(+b.score || 0) - Math.abs(+a.score || 0); }).slice(0, 8);
-    var taker = null, binFund = null;
-    try{ if (typeof W.binanceTakerRatio === 'function') taker = await W.binanceTakerRatio('BTCUSDT', '4h', 120); }catch(eT){ }
-    try{ if (typeof W.binanceFunding === 'function'){ var bf = await W.binanceFunding('BTCUSDT'); binFund = (bf && isFinite(+bf.fundingPct)) ? +bf.fundingPct : null; } }catch(eB){ }
-    var btcStructure = null;
-    for (var bi = 0; bi < rows.length; bi++){
-      var br = rows[bi];
-      var bbase = String(br.base || br.sym || '').toUpperCase();
-      if (bbase === 'BTC' || bbase.indexOf('BTC') === 0){
-        try{ btcStructure = tmStructureDir(br.rows4h); }catch(eBs){ btcStructure = null; }
-        if (btcStructure) break;
-      }
-    }
-    trendmxMacroSet({ btcFunding: binFund, btcStructure: btcStructure });
-    for (var i = 0; i < capped.length; i++){
-      var r = capped[i];
-      var dir = tmDirOf(r);
-      if (!dir) continue;
-      var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
-      if (!plan) continue;
-      var reads = {};
-      if (isFinite(+r.fundingPct)){
         reads.venueFundingPct = +r.fundingPct;
         if (typeof hgFundingAgainstMark === 'function'){
           try{ var fam = hgFundingAgainstMark(+r.fundingPct, dir); if (fam) reads.fundingAgainst = (fam.against === true); }catch(eF){ }
@@ -124,6 +33,101 @@ async function trendmxPerfectEvidencePass(rows){
         }catch(eSl){ }
       }
       try{ if (typeof W.hgNewsRisk === 'function'){ var nw = W.hgNewsRisk(r.base || 'BTC'); if (nw && nw.blackout) reads.newsRisk = 'blackout'; } }catch(eN){ }
+      /* hg-v1150: THE FOUR REMAINING SHARED EVIDENCE LEGS — every one a FREE
+         feed, so the matrix now feeds the SAME reads bag OMNIBTC feeds and a
+         PERFECT / PERFECT+ badge means byte-identically the same thing on
+         both desks:
+           trendQuality  — the matrix's own chop witness (Choppiness Index +
+                           Kaufman ER off the row's own 4h tape; zero requests)
+           leverageState — coinalyze 24h aggregated OI % change + the last
+                           three Binance funding prints (both free, cached)
+           onchainVeto   — the BTC exchange-netflow z from the on-chain state
+                           (BTC rows only: that feed speaks about BTC flow —
+                           an alt row stays honestly UNREAD)
+           cvdContext    — Binance spot taker flow vs the perp taker ratio
+                           (both free, cached): BOTH-WITH / PERP-ONLY /
+                           SPOT-ONLY / AGAINST
+         Unreadable stays null: neither confirms nor denies (the honest
+         third state). Evidence, never a gate. */
+      try{
+        var tqSt = trendmxChopState(r);
+        if (tqSt && tqSt.state){
+          reads.trendQuality = (tqSt.state === 'chop') ? 'CHOP' : 'TREND';
+          if (isFinite(+tqSt.chop)) reads.chopVal = +tqSt.chop;
+          if (isFinite(+tqSt.er)) reads.erVal = +tqSt.er;
+        }
+      }catch(eTq2){ }
+      var bSym = (r && r.base) ? String(r.base).toUpperCase() + 'USDT' : null;
+      if (bSym){
+        var freePack = null;
+        try{
+          freePack = await Promise.allSettled([
+            (typeof W.coinalyzeOIChg === 'function') ? W.coinalyzeOIChg(bSym, 24) : Promise.resolve(null),
+            (typeof W.binanceFundingHist === 'function') ? W.binanceFundingHist(bSym, 30) : Promise.resolve(null),
+            (typeof W.binanceSpotTakerFlow === 'function') ? W.binanceSpotTakerFlow(bSym, '4h', 100) : Promise.resolve(null),
+            (typeof W.binanceTakerRatio === 'function') ? W.binanceTakerRatio(bSym, '4h', 100) : Promise.resolve(null)
+          ]);
+        }catch(eFp){ freePack = null; }
+        /* the leverage cycle — OI % change (24h) plus the last three funding
+           prints, the SAME house thresholds OMNIBTC uses: RESET (deleveraging)
+           / EXTENDED (crowded) / FLAT. Either feed unreadable = no verdict. */
+        try{
+          var oiR = (freePack && freePack[0].status === 'fulfilled') ? freePack[0].value : null;
+          var oiChg = (oiR && isFinite(+oiR.chgPct)) ? +oiR.chgPct : null;
+          var fh = (freePack && freePack[1].status === 'fulfilled') ? freePack[1].value : null;
+          var fund3 = [], fundLast = null;
+          if (Array.isArray(fh)){
+            var f3 = fh.slice(-3);
+            for (var fi2 = 0; fi2 < f3.length; fi2++){
+              if (f3[fi2] && isFinite(+f3[fi2].rate)) fund3.push((+f3[fi2].rate) * 100);  /* decimal -> percent, the house convention */
+            }
+            if (fund3.length) fundLast = fund3[fund3.length - 1];
+          }
+          if (oiChg != null) reads.oiChgPct = oiChg;
+          if (fundLast != null) reads.fundLatestPct = fundLast;
+          if (oiChg != null && fund3.length){
+            if (oiChg <= -10 || (oiChg <= 0 && fund3.some(function(f){ return f <= 0; }))) reads.leverageState = 'RESET';
+            else if (oiChg >= 15 && fundLast > 0.03) reads.leverageState = 'EXTENDED';
+            else reads.leverageState = 'FLAT';
+          }
+        }catch(eLv2){ }
+        /* the spot-vs-perp CVD context — both books' taker slopes over the
+           free Binance feeds, read against the plan's direction */
+        try{
+          if (typeof W.hgObtcCvdSlopeDir === 'function'){
+            var spotFlow = (freePack && freePack[2].status === 'fulfilled') ? freePack[2].value : null;
+            var perpTaker = (freePack && freePack[3].status === 'fulfilled') ? freePack[3].value : null;
+            var spotUp = W.hgObtcCvdSlopeDir(spotFlow && spotFlow.series);
+            var perpUp = W.hgObtcCvdSlopeDir(perpTaker && perpTaker.series);
+            if (spotUp != null && perpUp != null){
+              var spotWith = (dir === 'long') ? spotUp : !spotUp;
+              var perpWith = (dir === 'long') ? perpUp : !perpUp;
+              reads.spotCvdUp = spotUp; reads.perpCvdUp = perpUp;
+              reads.cvdContext = (spotWith && perpWith) ? 'BOTH-WITH'
+                : (perpWith && !spotWith) ? 'PERP-ONLY'
+                : (!perpWith && spotWith) ? 'SPOT-ONLY' : 'AGAINST';
+            }
+          }
+        }catch(eCv2){ }
+      }
+      /* the on-chain netflow veto — BTC rows only: the state's exchange
+         netflow z is BTC flow, and applying it to an alt row would be a
+         guess, not a read. Fail open, exactly as the predicate expects. */
+      try{
+        if (r.base === 'BTC' && typeof W.onchainState === 'function' && typeof W.hgObtcNetflowZOf === 'function'){
+          var ocSt = W.onchainState();
+          var nz = W.hgObtcNetflowZOf(ocSt);
+          if (isFinite(nz)){
+            reads.netflowZ = nz;
+            if (typeof hgNetflowGate === 'function'){
+              var ng = hgNetflowGate('BTC', dir, { z: nz });
+              if (ng && ng.state === 'veto') reads.onchainVeto = true;
+              else reads.onchainVeto = false;
+              if (ng && ng.note) reads.netflowNote = ng.note;
+            }
+          }
+        }
+      }catch(eNf2){ }
       try{
         if (typeof W.hgObtcPerfectFormation === 'function'){
           var pick = { row: Object.assign({}, r, { entry: plan.entry, stop: plan.stop, t1: plan.t1, dir: dir }), tier: 'clean' };
@@ -360,3 +364,23 @@ function mountTrendMatrix(el){
   if (typeof hgSetupPaintDesk === 'function'){
     hgSetupPaintDesk(el.querySelector('#trendmxDesk'), {
       kind: 'trendmx', tab: 'TREND MATRIX',
+      note: 'CLEAN = 7/7 + plan + min R:R. The golden/death cross desks + the two limit class desks (gate-clean / conviction) promote the best rows. NEAR/FORMING are watch-only.'   /* hg-v1015 / hg-v1018 */
+    });
+  }
+
+  var btn    = el.querySelector('[data-r="run"]');
+  var syncBtn = el.querySelector('[data-r="sync"]');
+  var prog   = el.querySelector('[data-r="prog"]');
+  var summary = el.querySelector('[data-r="summary"]');
+  var status = el.querySelector('[data-r="status"]');
+  var out    = el.querySelector('[data-r="out"]');
+  var refs = {
+    summary: summary,
+    crypto: el.querySelector('[data-r="crypto"]'),
+    golden: el.querySelector('[data-r="golden"]'),
+    death: el.querySelector('[data-r="death"]'),   /* hg-v1015 */
+    cards: el.querySelector('[data-r="cards"]'),
+    near: el.querySelector('[data-r="near"]'),
+    forming: el.querySelector('[data-r="forming"]'),
+    gateclean: el.querySelector('[data-r="gateclean"]'),   /* hg-v1018 */
+    conviction: el.querySelector('[data-r="conviction"]'),  /* hg-v1018 */

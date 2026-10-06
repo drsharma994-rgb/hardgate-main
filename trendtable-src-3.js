@@ -1,19 +1,3 @@
-          if (!cv || cv.source !== 'taker' || !isFinite(cv.delta) || cv.bars < TM_FLOW_MIN_WIN || cv.delta === 0){
-            r.flow = { verdict: 'unreadable', why: 'no real-flow verdict', sym: bSym }; out.unreadable++; return;
-          }
-          var withDir = (dir === 'long') ? (cv.delta > 0) : (cv.delta < 0);
-          r.flow = { verdict: withDir ? 'with' : 'against',
-                     delta: Math.round(cv.delta * 100) / 100, bars: cv.bars,
-                     divergence: cv.divergence || null, sym: bSym };
-          if (withDir) out.with++; else out.against++;
-        });
-      }).catch(function(){
-        try{ r.flow = { verdict: 'unreadable', why: 'fetch failed' }; out.unreadable++; }catch(e2){}
-      });
-    })).then(function(){
-      if (idx < cands.length) return sleepMs(CHUNK_SLEEP_MS).then(oneChunk);
-    });
-  }
   return oneChunk().then(function(){ return out; }, function(){ return out; });
 }
 
@@ -416,3 +400,36 @@ function tmVolumeProfile(rows){
   }
   if (!(hi > lo)) return null;
   var bins = 24, vol = [], step = (hi - lo) / bins;
+  for (k = 0; k < bins; k++) vol.push(0);
+  for (k = 0; k < use.length; k++){
+    var mid = (use[k].h + use[k].l + use[k].c) / 3;
+    var b = Math.max(0, Math.min(bins - 1, Math.floor((mid - lo) / step)));
+    vol[b] += use[k].v > 0 ? use[k].v : 0;
+  }
+  var total = 0, max = 0, pocI = 0, j;
+  for (j = 0; j < bins; j++){
+    total += vol[j];
+    if (vol[j] > max){ max = vol[j]; pocI = j; }
+  }
+  if (!(total > 0)) return null;
+  var need = total * 0.7, acc = vol[pocI], loI = pocI, hiI = pocI;
+  while (acc < need && (loI > 0 || hiI < bins - 1)){
+    var left = loI > 0 ? vol[loI - 1] : -1;
+    var right = hiI < bins - 1 ? vol[hiI + 1] : -1;
+    if (right >= left){ hiI++; acc += vol[hiI]; }
+    else { loI--; acc += vol[loI]; }
+  }
+  var vals = vol.filter(function(v){ return v > 0; }).slice().sort(function(a, b){ return a - b; });
+  var med = vals.length ? vals[Math.floor(vals.length / 2)] : 0;
+  var hvn = [], lvn = [];
+  for (j = 1; j < bins - 1; j++){
+    var node = lo + (j + 0.5) * step;
+    if (med > 0 && vol[j] >= med * 1.6 && vol[j] >= vol[j - 1] && vol[j] >= vol[j + 1]) hvn.push(node);
+    if (med > 0 && vol[j] > 0 && vol[j] <= med * 0.45 && vol[j] <= vol[j - 1] && vol[j] <= vol[j + 1]) lvn.push(node);
+  }
+  if (!hvn.length) hvn.push(lo + (pocI + 0.5) * step);
+  return { poc: lo + (pocI + 0.5) * step, vah: lo + (hiI + 1) * step, val: lo + loI * step, hvn: hvn, lvn: lvn };
+}
+function tmEqualSweep(rows, dir){
+  if (!rows || rows.length < 20) return false;
+  var pivots = [];

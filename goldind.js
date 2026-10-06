@@ -5835,6 +5835,68 @@ function goldRankSetups(cands, ctx){
           if (__nwPf && __nwPf.risk) pfReads.newsRisk = __nwPf.risk;
           if (rc.sessionFloor && typeof rc.sessionFloor.verdict === 'string') pfReads.sess = rc.sessionFloor.verdict;
           if (isFinite(+ctx.rvol)) pfReads.volumeRvol = +ctx.rvol;
+          /* hg-v1150: three further evidence legs, every one a FREE feed the
+             scan ALREADY fetched — zero new requests. Unreadable stays
+             absent: never mint or deny on a missing feed. Evidence, never a
+             gate — the shared predicate reads the same keys every desk
+             feeds, so PERFECT means the same thing on gold as on crypto:
+               structureTrend — EMA50/200 off the desk's own 4h tape (220
+                                bars on the scalp feed), the same read the
+                                shared predicate consumes on OMNIBTC
+               fundingAgainst — the PAXG perp funding print (the gold
+                                complex's most liquid perp funding feed)
+               leverageState — the Delta gold-perp OI 24h change plus its
+                                last funding prints: RESET / EXTENDED / FLAT
+                                with the house thresholds (positioning reads,
+                                not price reads — the XAUT/spot basis never
+                                enters this leg) */
+          try{
+            if (ctx && Array.isArray(ctx.rows4h) && ctx.rows4h.length >= 210){
+              var pfC4 = ctx.rows4h.map(function(x){ return +x.c; });
+              var pfE50 = _ema(pfC4, 50), pfE200 = _ema(pfC4, 200);
+              if (pfE50 && pfE200 && pfE50.length && pfE200.length){
+                var pfA4 = pfE50[pfE50.length - 1], pfB4 = pfE200[pfE200.length - 1];
+                if (isFinite(pfA4) && isFinite(pfB4) && pfA4 !== pfB4) pfReads.structureTrend = (pfA4 > pfB4) ? 'up' : 'down';
+              }
+            }
+          }catch(eSt4){}
+          try{
+            if (isFinite(+ctx.fundingRate) && typeof window !== 'undefined' && typeof window.hgFundingAgainstMark === 'function'){
+              var pfFam = window.hgFundingAgainstMark(+ctx.fundingRate, rc.dir);
+              if (pfFam) pfReads.fundingAgainst = (pfFam.against === true);
+            }
+          }catch(eFa4){}
+          try{
+            var pfOi = (ctx && ctx.perpNative && Array.isArray(ctx.perpNative.oi)) ? ctx.perpNative.oi : null;
+            var pfFu = (ctx && ctx.perpNative && Array.isArray(ctx.perpNative.funding)) ? ctx.perpNative.funding : null;
+            if (pfOi && pfOi.length >= 3){
+              var pfOv = pfOi.filter(function(p){ return p && isFinite(+p.t) && isFinite(+p.c) && +p.c > 0; });
+              if (pfOv.length >= 3){
+                var pfLastOi = pfOv[pfOv.length - 1];
+                var pfCutoff = +pfLastOi.t - 24 * 3600;
+                var pfPrevOi = null;
+                for (var pfI4 = 0; pfI4 < pfOv.length; pfI4++){
+                  if (+pfOv[pfI4].t <= pfCutoff) pfPrevOi = pfOv[pfI4];
+                }
+                if (pfPrevOi && +pfPrevOi.c > 0){
+                  var pfChg4 = (+pfLastOi.c - +pfPrevOi.c) / +pfPrevOi.c * 100;
+                  pfReads.oiChgPct = pfChg4;
+                  var pfFuLast3 = [];
+                  if (pfFu){
+                    var pfFv = pfFu.filter(function(p){ return p && isFinite(+p.c); });
+                    var pfSl3 = pfFv.slice(-3);
+                    for (var pfJ4 = 0; pfJ4 < pfSl3.length; pfJ4++) pfFuLast3.push(+pfSl3[pfJ4].c);
+                  }
+                  if (pfFuLast3.length){
+                    pfReads.fundLatestPct = pfFuLast3[pfFuLast3.length - 1];
+                    if (pfChg4 <= -10 || (pfChg4 <= 0 && pfFuLast3.some(function(f){ return f <= 0; }))) pfReads.leverageState = 'RESET';
+                    else if (pfChg4 >= 15 && pfFuLast3[pfFuLast3.length - 1] > 0.03) pfReads.leverageState = 'EXTENDED';
+                    else pfReads.leverageState = 'FLAT';
+                  }
+                }
+              }
+            }
+          }catch(eLv4){}
           pf = pfFn(rc, pfReads);
         }
         rc.perfect = (pf && pf.perfect) ? true : undefined;

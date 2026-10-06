@@ -1,90 +1,3 @@
-   three columns by the row's own majority direction (composite >= +2 BULL,
-   <= -2 BEAR, everything between MIXED / CHOP). Each column reuses the desk's
-   own card renderer, ordered by |composite| then gates. Same rows, same
-   gates, same evidence — a different reading order. */
-function trendmxColumnsHTML(rows){
-  try{
-    if (!Array.isArray(rows) || !rows.length) return '<div class="empty">No rows to group.</div>';
-    var bull = [], bear = [], mixed = [], i, r, d;
-    for (i = 0; i < rows.length; i++){
-      r = rows[i];
-      d = tmDirOf(r);
-      if (d === 'long') bull.push(r);
-      else if (d === 'short') bear.push(r);
-      else mixed.push(r);
-    }
-    function byStrength(list){
-      return list.slice().sort(function(a, b){
-        var pa = Math.abs(+a.score || 0), pb = Math.abs(+b.score || 0);
-        if (pb !== pa) return pb - pa;
-        var ga = (a.gate && isFinite(a.gate.gatesPassed)) ? a.gate.gatesPassed : -1;
-        var gb = (b.gate && isFinite(b.gate.gatesPassed)) ? b.gate.gatesPassed : -1;
-        return gb - ga;
-      });
-    }
-    /* a direction-less row cannot mint levels, so the mixed column prints a
-       compact honest row instead of a setup card */
-    function mixedRow(r){
-      try{
-        if (r.unread) return '<div class="card" style="padding:8px;margin-bottom:6px"><b>' + escH(r.sym) + '</b>' + tmVenueChip(r)
-          + '<div style="opacity:.75;font-size:11px;margin-top:2px">UNREAD · CoinDCX contract with no candle series · not a setup</div></div>';
-        return '<div class="card" style="padding:8px;margin-bottom:6px"><b>' + escH(r.sym) + '</b>' + tmVenueChip(r)
-          + '<div style="opacity:.75;font-size:11px;margin-top:2px">composite ' + (r.score > 0 ? '+' : '') + r.score + '/5 · no majority — no levels minted · ADX '
-          + (isFinite(r.adx) ? (+r.adx).toFixed(1) : '—') + '</div></div>';
-      }catch(e){ return ''; }
-    }
-    function col(title, cls, titleCls, list, emptyTxt){
-      var h = '<div class="panel tm-col" style="border-top:3px solid ' + cls + '"><h3 style="margin:0 0 8px">'
-        + '<span class="' + titleCls + '">' + title + '</span> <span style="opacity:.6;font-weight:400">· ' + list.length + ' row' + (list.length === 1 ? '' : 's') + '</span></h3>';
-      if (!list.length) h += '<div class="empty" style="margin:6px 0">' + emptyTxt + '</div>';
-      else h += list.map(function(rr){
-        var dd = tmDirOf(rr);
-        if (!dd) return mixedRow(rr);
-        var plan = dd ? trendmxPlan(Object.assign({}, rr, { dir: dd })) : null;
-        var tier = trendmxRowTier(rr, plan);
-        return trendmxSetupCardHTML(rr, tier === 'clean' ? 'clean' : 'near');
-      }).join('');
-      return h + '</div>';
-    }
-    var bullS = byStrength(bull), bearS = byStrength(bear), mixedS = byStrength(mixed);
-    return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;align-items:start">'
-      + col('BULL', '#26a69a', 'pos', bullS, 'no bullish rows — composite below +2')
-      + col('BEAR', '#ef5350', 'neg', bearS, 'no bearish rows — composite above -2')
-      + col('MIXED / CHOP', '#94a3b8', '', mixedS, 'no mixed rows')
-      + '</div>';
-  }catch(e){ return ''; }
-}
-
-/* hg-v1048: the COINDCX TRENDING / FORMING board - every CoinDCX future
-   the matrix scanned, in two columns. TRENDING = the composite has a
-   majority direction (|score| >= 2); FORMING = it does not yet. Both
-   print TP/SL: minted ticket levels where the plan exists (7/7 CLEAN /
-   6/7 NEAR), the house DRAFT ladder where it does not. */
-function trendmxTrendFormHTML(rows){
-  try{
-    if (!Array.isArray(rows) || !rows.length) return '<div class="empty">Run a scan to classify the CoinDCX board.</div>';
-    var cdcx = [];
-    for (var i = 0; i < rows.length; i++){
-      if (rows[i] && String(tmRowVenue(rows[i])).toLowerCase() === 'coindcx') cdcx.push(rows[i]);
-    }
-    if (!cdcx.length) return '<div class="empty">No CoinDCX rows on this board.</div>';
-    var trending = [], forming = [];
-    for (i = 0; i < cdcx.length; i++){
-      var r = cdcx[i];
-      if (tmDirOf(r)) trending.push(r); else forming.push(r);
-    }
-    function byStrength(list){ return list.slice().sort(function(a, b){ return Math.abs(+b.score || 0) - Math.abs(+a.score || 0); }); }
-    /* typeof guard, not bare isFinite: isFinite(null) is TRUE and +null is 0,
-       so a null plan level would print a confident "0" (the null-formatting
-       trap this codebase has hit five times). */
-    function px(v){ return (typeof v === 'number' && isFinite(v)) ? String(v) : '--'; }
-    function lvlLine(rr, dd){
-      var plan = dd ? trendmxPlan(Object.assign({}, rr, { dir: dd })) : null;
-      if (plan){
-        var tier = trendmxRowTier(rr, plan);
-        var lvl = 'ENTRY ' + px(plan.entry) + ' - STOP ' + px(plan.stop) + ' - T1 ' + px(plan.t1)
-          + (isFinite(plan.t2) ? ' - T2 ' + px(plan.t2) : '');
-        /* hg-v1048: the tier is the label — 7/7 CLEAN and 6/7 NEAR are the
            minted tiers; anything below the NEAR floor (or a forming row with
            no majority, whose gate is null) is the house DRAFT ladder, never
            a fabricated 6/7 NEAR. */
@@ -304,3 +217,94 @@ function trendmxCrownPanelHTML(state){
     var venue = tmRowVenue(crown);
     var payload = { v: 1, id: 'TMX-' + String(crown.sym), venue: venue, symbol: crown.sym,
       side: dir, entry: +plan.entry, stop: +plan.stop, t1: +plan.t1, t2: isFinite(+plan.t2) ? +plan.t2 : null,
+      gates: gatesTxt, formation: tier === 'clean' ? 'CLEAN' : 'WATCH_ONLY', measured: 'UNREAD',
+      exitPolicy: 'scale50_t1_be_trail', ts: Math.floor(Date.now() / 1000) };
+    var jsonTxt = JSON.stringify(payload, null, 2);
+    html += '<div class="panel" style="margin-top:10px"><h3>SETUP CARD <span>the OMNIBTC template on the matrix crown</span></h3>'
+      + '<div class="kv"><span class="k">Market Thesis</span><span class="v">' + escH(thesis) + '</span></div>'
+      + '<div class="kv"><span class="k">Bias</span><span class="v ' + (dir === 'long' ? 'pos' : 'neg') + '">' + dir.toUpperCase() + '</span></div>'
+      + '<div class="kv"><span class="k">Entry Zone</span><span class="v">[' + (+plan.entry).toFixed(2) + ']' + (isFinite(aV) ? ' +/- ' + (0.25 * aV).toFixed(2) : '') + '</span></div>'
+      + '<div class="kv"><span class="k">Invalidation (SL)</span><span class="v">' + (+plan.stop).toFixed(2) + '</span></div>'
+      + '<div class="kv"><span class="k">Targets (TP)</span><span class="v">TP1 ' + (+plan.t1).toFixed(2) + ' | TP2 ' + (isFinite(+plan.t2) ? (+plan.t2).toFixed(2) : 'n/a') + ' | TP3 ' + tp3Txt + '</span></div>'
+      + '<div class="kv"><span class="k">Automation Blueprint</span><span class="v"><pre style="margin:4px 0;white-space:pre-wrap;font-size:10px">' + escH(jsonTxt) + '</pre>' + (tier === 'clean' ? '' : '<div class="note warn" style="margin-top:4px">formation WATCH_ONLY - the bridge must drop this payload.</div>') + '</span></div>'
+      + '</div>';
+    /* ---- the dual grid setups, OMNIBTC style ---- */
+    var swingS = { dir: dir, entry: +plan.entry, stop: +plan.stop, t1: +plan.t1, t2: isFinite(+plan.t2) ? +plan.t2 : null,
+      tier: tier === 'clean' ? 'CLEAN' : 'NEAR', gates: (crown.gate && isFinite(crown.gate.gatesPassed)) ? crown.gate.gatesPassed : null };
+    html += trendmxGridBlockHtml('SWING SETUP', '4h grid', swingS, dir);
+    var scalpS = null, altS = null;
+    if (Array.isArray(crown.rows1h) && crown.rows1h.length >= 60 && typeof W.atr === 'function'){
+      var a1arr = W.atr(crown.rows1h, 14);
+      var a1 = (a1arr && a1arr.length) ? +a1arr[a1arr.length - 1] : NaN;
+      var p1 = +crown.rows1h[crown.rows1h.length - 1].c;
+      if (isFinite(a1) && a1 > 0 && isFinite(p1)){
+        function tmxLadder(side){
+          return { dir: side, entry: p1, stop: side === 'long' ? p1 - 1.5 * a1 : p1 + 1.5 * a1,
+            t1: side === 'long' ? p1 + 3.5 * a1 : p1 - 3.5 * a1,
+            t2: side === 'long' ? p1 + 4.9 * a1 : p1 - 4.9 * a1,
+            tier: 'DRAFT', gates: null, source: '1h draft ladder ATR14' };
+        }
+        scalpS = tmxLadder(dir);
+        altS = tmxLadder(dir === 'long' ? 'short' : 'long');
+      }
+    }
+    html += trendmxGridBlockHtml('SCALP SETUP', '1h grid', scalpS, dir);
+    html += trendmxGridBlockHtml('SCALP SETUP - ALT SIDE', '1h grid', altS, dir);
+    /* ---- MEASURED EDGE ---- */
+    try{
+      if (typeof W.hgProvenEdgeVerdict === 'function'){
+        var v = W.hgProvenEdgeVerdict('trendmx', 'TRENDMX', { pool: 'TRENDMX', mechanic: 'TRENDMX' });
+        if (v && typeof W.hgProvenEdgeChipHtml === 'function'){
+          html += '<div class="panel" style="margin-top:10px"><h3>MEASURED EDGE <span>the TRENDMX pool\'s settled record</span></h3>'
+            + W.hgProvenEdgeChipHtml(v) + '</div>';
+        }
+      }
+    }catch(eMe){ }
+    return html;
+  }catch(e){ return ''; }
+}
+
+/* hg-v1067: THE SHARED PERFECT EVIDENCE PASS — the SAME reads bag and
+   the SAME enrichment + predicate OMNIBTC consumes (hgObtcPerfectFormation),
+   fed by the SAME external data (real Binance taker flow, Binance funding,
+   ATR percentile regime, EMA50/200 structure, session RVOL, the news
+   calendar), applied to the matrix's strongest rows. PERFECT / PERFECT+
+   on a matrix row now means byte-identically what it means on OMNIBTC.
+   Evidence, never a gate. */
+function tmStructureDir(rows){
+  try{
+    if (!Array.isArray(rows) || rows.length < 210 || typeof W.ema !== 'function') return null;
+    var c = rows.map(function(x){ return x.c; });
+    var e50 = W.ema(c, 50), e200 = W.ema(c, 200);
+    if (!e50 || !e200 || e50.length < 2) return null;
+    var a = e50[e50.length - 1], b = e200[e200.length - 1];
+    if (!isFinite(a) || !isFinite(b) || a === b) return null;
+    return a > b ? 'up' : 'down';
+  }catch(e){ return null; }
+}
+
+async function trendmxPerfectEvidencePass(rows){
+  try{
+    if (!Array.isArray(rows) || !rows.length) return rows;
+    var capped = rows.slice().sort(function(a, b){ return Math.abs(+b.score || 0) - Math.abs(+a.score || 0); }).slice(0, 8);
+    var taker = null, binFund = null;
+    try{ if (typeof W.binanceTakerRatio === 'function') taker = await W.binanceTakerRatio('BTCUSDT', '4h', 120); }catch(eT){ }
+    try{ if (typeof W.binanceFunding === 'function'){ var bf = await W.binanceFunding('BTCUSDT'); binFund = (bf && isFinite(+bf.fundingPct)) ? +bf.fundingPct : null; } }catch(eB){ }
+    var btcStructure = null;
+    for (var bi = 0; bi < rows.length; bi++){
+      var br = rows[bi];
+      var bbase = String(br.base || br.sym || '').toUpperCase();
+      if (bbase === 'BTC' || bbase.indexOf('BTC') === 0){
+        try{ btcStructure = tmStructureDir(br.rows4h); }catch(eBs){ btcStructure = null; }
+        if (btcStructure) break;
+      }
+    }
+    trendmxMacroSet({ btcFunding: binFund, btcStructure: btcStructure });
+    for (var i = 0; i < capped.length; i++){
+      var r = capped[i];
+      var dir = tmDirOf(r);
+      if (!dir) continue;
+      var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
+      if (!plan) continue;
+      var reads = {};
+      if (isFinite(+r.fundingPct)){
