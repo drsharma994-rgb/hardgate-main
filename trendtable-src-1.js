@@ -1,5 +1,3 @@
-    if (ok4){
-      var c4 = rows4h.map(function(r){ return r ? r.c : NaN; });
       var i4 = c4.length - 1;
       var e9 = ema(c4, 9)[i4], e21 = ema(c4, 21)[i4], e50h = ema(c4, 50)[i4];
       if (isFinite(e9) && isFinite(e21) && isFinite(e50h)){
@@ -459,3 +457,6 @@ function trendmxPlanHTML(s){
        hg-plan.js, judged against the mark trendmxAttachMeta carried over */
     + ((typeof W !== 'undefined' && W && typeof W.hgPlanGeometryLineHtml === 'function')
       ? (W.hgPlanGeometryLineHtml({ dir: s.dir, entry: s.entry, stop: s.stop, t1: s.t1 },
+                                  s.mark, { cls: 'note warn', style: 'margin-top:6px' }) || '') : '')
+    /* the shared 14-gate indicator read attached by hgBestLevels */
+    + ((typeof hgStrategyConfirmChipHtml === 'function')

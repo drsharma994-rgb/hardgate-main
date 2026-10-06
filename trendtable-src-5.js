@@ -1,10 +1,3 @@
-      if (dir === 'short' && last.c > last.o) return false;
-      return true;
-    } catch (e) { return null; }
-  }
-  var both = await Promise.all([one('3m', 80, 180), one('1m', 60, 60)]);
-  return { m3: both[0], m1: both[1] };
-}
 async function tmTradingView(row){
   var base = tmBaseOf(row);
   if (!base) return null;
@@ -22,6 +15,14 @@ async function tmTradingView(row){
   }
   try {
     return await ask('BINANCE:' + base + 'USDT.P') || await ask('BINANCE:' + base + 'USDT');
+  } catch (e) { return null; }
+}
+async function tmTopTrader(row){
+  if (typeof W.binanceTopTraders !== 'function') return null;
+  try {
+    var ls = await W.binanceTopTraders(tmBaseOf(row) + 'USDT', '4h', 1);
+    if (!ls || !ls.latest || !isFinite(+ls.latest.ratio)) return null;
+    return +ls.latest.ratio;
   } catch (e) { return null; }
 }
 async function tmCrowdRatio(row){
@@ -154,9 +155,10 @@ async function trendmxFormOne(ticket, row, ctx){
     tmLiqRead(row),
     tm5mVolumeOk(row, dir),
     tmMicroOk(row, dir),
-    tmTradingView(row)
+    tmTradingView(row),
+    tmTopTrader(row)
   ]);
-  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7];
+  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8];
   if (cvd !== 'with') hard.push(cvd === 'against' ? 'CVD against' : 'CVD unread');
   if (!oi) hard.push('OI unread');
   else if (dir === 'long' && oi.priceUp && oi.oiDown) hard.push('OI falling, short covering not new longs');
@@ -192,6 +194,16 @@ async function trendmxFormOne(ticket, row, ctx){
   else if (dir === 'long' && tv.recommend < 0) vote('TradingView against', -1);
   else if (dir === 'short' && tv.recommend > 0) vote('TradingView against', -1);
   else vote('TradingView', 1);
+  if (top == null) vote('top traders', 0);
+  else if (dir === 'long' && top >= 2.2) vote('top traders crowded long', -1);
+  else if (dir === 'short' && top <= 0.55) vote('top traders crowded short', -1);
+  else if (dir === 'long' && top > 1) vote('top traders', 1);
+  else if (dir === 'short' && top < 1) vote('top traders', 1);
+  else vote('top traders flat', -1);
+  if (!ctx || ctx.fngOk !== true) vote('fear and greed', 0);
+  else if (dir === 'long' && ctx.fng >= 80) vote('extreme greed', -1);
+  else if (dir === 'short' && ctx.fng <= 20) vote('extreme fear', -1);
+  else vote('fear and greed', 1);
 
   var against = votes.filter(function(v){ return v.v < 0; });
   if (against.length) return against.map(function(v){ return v.name; });
@@ -383,13 +395,3 @@ function trendmxCompPipsHtml(comps){
   comps = comps || {};
   return ''
     + '<span class="gpip ' + (comps.d1Trend > 0 ? 'ok' : (comps.d1Trend < 0 ? 'bad' : '')) + '" title="1D trend">1D</span>'
-    + '<span class="gpip ' + (comps.d1Cross > 0 ? 'ok' : (comps.d1Cross < 0 ? 'bad' : '')) + '" title="EMA cross">X</span>'
-    + '<span class="gpip ' + (comps.h4Cascade > 0 ? 'ok' : (comps.h4Cascade < 0 ? 'bad' : '')) + '" title="4H cascade">4H</span>'
-    + '<span class="gpip ' + (comps.cloud > 0 ? 'ok' : (comps.cloud < 0 ? 'bad' : '')) + '" title="Cloud">CL</span>'
-    + '<span class="gpip ' + (comps.adxPt !== 0 ? 'ok' : '') + '" title="ADX strength">ADX</span>';
-}
-
-function trendmxRowTier(r, plan){
-  if (!r) return 'forming';
-  if (plan && plan.omniDemoted) return 'near';
-  if (r.gate && r.gate.veto) return 'forming';

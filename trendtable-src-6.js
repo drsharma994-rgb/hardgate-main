@@ -1,3 +1,13 @@
+    + '<span class="gpip ' + (comps.d1Cross > 0 ? 'ok' : (comps.d1Cross < 0 ? 'bad' : '')) + '" title="EMA cross">X</span>'
+    + '<span class="gpip ' + (comps.h4Cascade > 0 ? 'ok' : (comps.h4Cascade < 0 ? 'bad' : '')) + '" title="4H cascade">4H</span>'
+    + '<span class="gpip ' + (comps.cloud > 0 ? 'ok' : (comps.cloud < 0 ? 'bad' : '')) + '" title="Cloud">CL</span>'
+    + '<span class="gpip ' + (comps.adxPt !== 0 ? 'ok' : '') + '" title="ADX strength">ADX</span>';
+}
+
+function trendmxRowTier(r, plan){
+  if (!r) return 'forming';
+  if (plan && plan.omniDemoted) return 'near';
+  if (r.gate && r.gate.veto) return 'forming';
   /* hg-v1012: real taker flow AGAINST the row's own majority caps the row
      at NEAR — it paints, the chip names why, it can never be CLEAN or sit
      on the LIMIT BOARD (the same leadership pattern as the omni principal
@@ -340,13 +350,3 @@ function trendmxChopState(r){
   return { chop: chop, er: er, state: state };
 }
 
-/* hg-v1057: the trend-quality chip — the momentum chip's own pattern.
-   CHOP prints the bad stamp with BOTH measured values (a cap is never
-   silent); TREND and mixed/unreadable paint NO chip (evidence, never a
-   brag, and a mixed tape is not a verdict). */
-function trendmxChopChipHtml(r){
-  try{
-    var st = trendmxChopState(r);
-    if (!st || st.state !== 'chop') return '';
-    var chopTxt = isFinite(st.chop) ? st.chop.toFixed(0) : '?';
-    var erTxt = isFinite(st.er) ? st.er.toFixed(2) : '?';

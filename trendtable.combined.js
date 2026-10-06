@@ -962,25 +962,11 @@ function trendmxGoldenCrossSetups(rows){
     var r = rows[i];
     if (!r || r.freshCross !== 'GOLDEN') continue;
     if (!r.comps || r.comps.d1Cross <= 0) continue;
-    /* hg-v1150: an unpriceable row is not a setup. hgBestLevels can price a
-       plan straight off the tape, which is right for a THIN row — but a row
-       whose own published price is unreadable is corrupt, and a corrupt row
-       must not mint a ticket the board would show beside a price it cannot
-       print. */
-    if (!isFinite(+r.price)) continue;
     var dir = tmDirOf(r);
     if (dir !== 'long') continue;
     var conv = trendmxConviction(r);
     if (!conv) continue;
     if (tmCascadeDir(r.rows4h) !== 1){ out.held.cascade++; continue; }
-    /* hg-v1150: THE ROW-CARRIED VETO IS RESPECTED. The closed-gate recompute
-       below re-derives the 7-gate matrix off the tape, but it can never
-       reproduce a veto the SCAN stamped on the row (a chase block, a
-       formation-edge suppression) — those live on r.gate, written by the
-       upstream layers that know them. An explicit r.gate.veto holds the row
-       off this desk no matter what the bare tape says; the recompute then
-       serves the rows that arrive without one. */
-    if (r.gate && r.gate.veto){ out.held.gates++; continue; }
     var gate = trendmxClosedGate(r, dir);
     if (!gate || gate.veto || !(gate.gatesPassed >= 6)){ out.held.gates++; continue; }
     var grade = trendmxSetupGrade(r, dir);
@@ -1020,16 +1006,11 @@ function trendmxDeathCrossSetups(rows){
     var r = rows[i];
     if (!r || r.freshCross !== 'DEATH') continue;
     if (!r.comps || r.comps.d1Cross >= 0) continue;
-    /* hg-v1150: the mirror carries the same corrupt-row rule. */
-    if (!isFinite(+r.price)) continue;
     var dir = tmDirOf(r);
     if (dir !== 'short') continue;
     var conv = trendmxConviction(r);
     if (!conv) continue;
     if (tmCascadeDir(r.rows4h) !== -1){ out.held.cascade++; continue; }
-    /* hg-v1150: the row-carried veto is respected on the mirror too — the
-       same rule the golden desk gained one screen up. */
-    if (r.gate && r.gate.veto){ out.held.gates++; continue; }
     var gate = trendmxClosedGate(r, dir);
     if (!gate || gate.veto || !(gate.gatesPassed >= 6)){ out.held.gates++; continue; }
     var grade = trendmxSetupGrade(r, dir);
@@ -1849,7 +1830,8 @@ async function trendmxLoadContext(rows){
     tmProxyJson('https://api.coingecko.com/api/v3/global/market_cap_chart?days=2'),
     tmProxyJson('https://api.llama.fi/emissions'),
     tmProxyJson('https://query1.finance.yahoo.com/v8/finance/chart/IBIT?interval=1d&range=5d'),
-    tmProxyJson('https://query1.finance.yahoo.com/v8/finance/chart/FBTC?interval=1d&range=5d')
+    tmProxyJson('https://query1.finance.yahoo.com/v8/finance/chart/FBTC?interval=1d&range=5d'),
+    tmProxyJson('https://api.alternative.me/fng/?limit=1')
   ]);
   var cal = pack[0];
   if (Array.isArray(cal)){
@@ -1889,6 +1871,13 @@ async function trendmxLoadContext(rows){
   var fbtcChg = tmYahooChange(pack[8]);
   ctx.etfOk = ibitChg != null && fbtcChg != null;
   ctx.etfFalling = ctx.etfOk && ibitChg < -0.02 && fbtcChg < -0.02;
+  ctx.fngOk = false;
+  ctx.fng = null;
+  try {
+    var fngJ = pack[9];
+    var fngV = fngJ && fngJ.data && fngJ.data[0] && +fngJ.data[0].value;
+    if (isFinite(fngV)){ ctx.fngOk = true; ctx.fng = fngV; }
+  } catch (eFng) {}
   ctx.totalOk = false;
   ctx.totalFalling = false;
   ctx.altsFalling = false;
@@ -2068,6 +2057,14 @@ async function tmTradingView(row){
     return await ask('BINANCE:' + base + 'USDT.P') || await ask('BINANCE:' + base + 'USDT');
   } catch (e) { return null; }
 }
+async function tmTopTrader(row){
+  if (typeof W.binanceTopTraders !== 'function') return null;
+  try {
+    var ls = await W.binanceTopTraders(tmBaseOf(row) + 'USDT', '4h', 1);
+    if (!ls || !ls.latest || !isFinite(+ls.latest.ratio)) return null;
+    return +ls.latest.ratio;
+  } catch (e) { return null; }
+}
 async function tmCrowdRatio(row){
   if (typeof W.binanceLongShort !== 'function') return null;
   try {
@@ -2198,9 +2195,10 @@ async function trendmxFormOne(ticket, row, ctx){
     tmLiqRead(row),
     tm5mVolumeOk(row, dir),
     tmMicroOk(row, dir),
-    tmTradingView(row)
+    tmTradingView(row),
+    tmTopTrader(row)
   ]);
-  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7];
+  var cvd = net[0], oi = net[1], m15 = net[2], crowd = net[3], liq = net[4], m5 = net[5], micro = net[6], tv = net[7], top = net[8];
   if (cvd !== 'with') hard.push(cvd === 'against' ? 'CVD against' : 'CVD unread');
   if (!oi) hard.push('OI unread');
   else if (dir === 'long' && oi.priceUp && oi.oiDown) hard.push('OI falling, short covering not new longs');
@@ -2236,6 +2234,16 @@ async function trendmxFormOne(ticket, row, ctx){
   else if (dir === 'long' && tv.recommend < 0) vote('TradingView against', -1);
   else if (dir === 'short' && tv.recommend > 0) vote('TradingView against', -1);
   else vote('TradingView', 1);
+  if (top == null) vote('top traders', 0);
+  else if (dir === 'long' && top >= 2.2) vote('top traders crowded long', -1);
+  else if (dir === 'short' && top <= 0.55) vote('top traders crowded short', -1);
+  else if (dir === 'long' && top > 1) vote('top traders', 1);
+  else if (dir === 'short' && top < 1) vote('top traders', 1);
+  else vote('top traders flat', -1);
+  if (!ctx || ctx.fngOk !== true) vote('fear and greed', 0);
+  else if (dir === 'long' && ctx.fng >= 80) vote('extreme greed', -1);
+  else if (dir === 'short' && ctx.fng <= 20) vote('extreme fear', -1);
+  else vote('fear and greed', 1);
 
   var against = votes.filter(function(v){ return v.v < 0; });
   if (against.length) return against.map(function(v){ return v.name; });
@@ -3899,101 +3907,6 @@ async function trendmxPerfectEvidencePass(rows){
         }catch(eSl){ }
       }
       try{ if (typeof W.hgNewsRisk === 'function'){ var nw = W.hgNewsRisk(r.base || 'BTC'); if (nw && nw.blackout) reads.newsRisk = 'blackout'; } }catch(eN){ }
-      /* hg-v1150: THE FOUR REMAINING SHARED EVIDENCE LEGS — every one a FREE
-         feed, so the matrix now feeds the SAME reads bag OMNIBTC feeds and a
-         PERFECT / PERFECT+ badge means byte-identically the same thing on
-         both desks:
-           trendQuality  — the matrix's own chop witness (Choppiness Index +
-                           Kaufman ER off the row's own 4h tape; zero requests)
-           leverageState — coinalyze 24h aggregated OI % change + the last
-                           three Binance funding prints (both free, cached)
-           onchainVeto   — the BTC exchange-netflow z from the on-chain state
-                           (BTC rows only: that feed speaks about BTC flow —
-                           an alt row stays honestly UNREAD)
-           cvdContext    — Binance spot taker flow vs the perp taker ratio
-                           (both free, cached): BOTH-WITH / PERP-ONLY /
-                           SPOT-ONLY / AGAINST
-         Unreadable stays null: neither confirms nor denies (the honest
-         third state). Evidence, never a gate. */
-      try{
-        var tqSt = trendmxChopState(r);
-        if (tqSt && tqSt.state){
-          reads.trendQuality = (tqSt.state === 'chop') ? 'CHOP' : 'TREND';
-          if (isFinite(+tqSt.chop)) reads.chopVal = +tqSt.chop;
-          if (isFinite(+tqSt.er)) reads.erVal = +tqSt.er;
-        }
-      }catch(eTq2){ }
-      var bSym = (r && r.base) ? String(r.base).toUpperCase() + 'USDT' : null;
-      if (bSym){
-        var freePack = null;
-        try{
-          freePack = await Promise.allSettled([
-            (typeof W.coinalyzeOIChg === 'function') ? W.coinalyzeOIChg(bSym, 24) : Promise.resolve(null),
-            (typeof W.binanceFundingHist === 'function') ? W.binanceFundingHist(bSym, 30) : Promise.resolve(null),
-            (typeof W.binanceSpotTakerFlow === 'function') ? W.binanceSpotTakerFlow(bSym, '4h', 100) : Promise.resolve(null),
-            (typeof W.binanceTakerRatio === 'function') ? W.binanceTakerRatio(bSym, '4h', 100) : Promise.resolve(null)
-          ]);
-        }catch(eFp){ freePack = null; }
-        /* the leverage cycle — OI % change (24h) plus the last three funding
-           prints, the SAME house thresholds OMNIBTC uses: RESET (deleveraging)
-           / EXTENDED (crowded) / FLAT. Either feed unreadable = no verdict. */
-        try{
-          var oiR = (freePack && freePack[0].status === 'fulfilled') ? freePack[0].value : null;
-          var oiChg = (oiR && isFinite(+oiR.chgPct)) ? +oiR.chgPct : null;
-          var fh = (freePack && freePack[1].status === 'fulfilled') ? freePack[1].value : null;
-          var fund3 = [], fundLast = null;
-          if (Array.isArray(fh)){
-            var f3 = fh.slice(-3);
-            for (var fi2 = 0; fi2 < f3.length; fi2++){
-              if (f3[fi2] && isFinite(+f3[fi2].rate)) fund3.push((+f3[fi2].rate) * 100);  /* decimal -> percent, the house convention */
-            }
-            if (fund3.length) fundLast = fund3[fund3.length - 1];
-          }
-          if (oiChg != null) reads.oiChgPct = oiChg;
-          if (fundLast != null) reads.fundLatestPct = fundLast;
-          if (oiChg != null && fund3.length){
-            if (oiChg <= -10 || (oiChg <= 0 && fund3.some(function(f){ return f <= 0; }))) reads.leverageState = 'RESET';
-            else if (oiChg >= 15 && fundLast > 0.03) reads.leverageState = 'EXTENDED';
-            else reads.leverageState = 'FLAT';
-          }
-        }catch(eLv2){ }
-        /* the spot-vs-perp CVD context — both books' taker slopes over the
-           free Binance feeds, read against the plan's direction */
-        try{
-          if (typeof W.hgObtcCvdSlopeDir === 'function'){
-            var spotFlow = (freePack && freePack[2].status === 'fulfilled') ? freePack[2].value : null;
-            var perpTaker = (freePack && freePack[3].status === 'fulfilled') ? freePack[3].value : null;
-            var spotUp = W.hgObtcCvdSlopeDir(spotFlow && spotFlow.series);
-            var perpUp = W.hgObtcCvdSlopeDir(perpTaker && perpTaker.series);
-            if (spotUp != null && perpUp != null){
-              var spotWith = (dir === 'long') ? spotUp : !spotUp;
-              var perpWith = (dir === 'long') ? perpUp : !perpUp;
-              reads.spotCvdUp = spotUp; reads.perpCvdUp = perpUp;
-              reads.cvdContext = (spotWith && perpWith) ? 'BOTH-WITH'
-                : (perpWith && !spotWith) ? 'PERP-ONLY'
-                : (!perpWith && spotWith) ? 'SPOT-ONLY' : 'AGAINST';
-            }
-          }
-        }catch(eCv2){ }
-      }
-      /* the on-chain netflow veto — BTC rows only: the state's exchange
-         netflow z is BTC flow, and applying it to an alt row would be a
-         guess, not a read. Fail open, exactly as the predicate expects. */
-      try{
-        if (r.base === 'BTC' && typeof W.onchainState === 'function' && typeof W.hgObtcNetflowZOf === 'function'){
-          var ocSt = W.onchainState();
-          var nz = W.hgObtcNetflowZOf(ocSt);
-          if (isFinite(nz)){
-            reads.netflowZ = nz;
-            if (typeof hgNetflowGate === 'function'){
-              var ng = hgNetflowGate('BTC', dir, { z: nz });
-              if (ng && ng.state === 'veto') reads.onchainVeto = true;
-              else reads.onchainVeto = false;
-              if (ng && ng.note) reads.netflowNote = ng.note;
-            }
-          }
-        }
-      }catch(eNf2){ }
       try{
         if (typeof W.hgObtcPerfectFormation === 'function'){
           var pick = { row: Object.assign({}, r, { entry: plan.entry, stop: plan.stop, t1: plan.t1, dir: dir }), tier: 'clean' };
@@ -4460,18 +4373,6 @@ function mountTrendMatrix(el){
         setProg: setProg,
         onBatch: function(info){
           state.rows = info.rows;
-          /* hg-v1150: THE PARTIAL BOARD IS THE PUBLISHED BOARD for as long as
-             it is the one on screen. renderAll() paints the desks and the
-             desks write the forward record (trendmxLimitClasses) — and the
-             record's tmScore / tmAlign / tmAgeMin marks are read off the
-             PUBLISHED snapshot (hgTrendMatrixMark). The full publish happens
-             only at the end of trendmxScan, so every mid-scan batch painted
-             its record against a stale-or-null snapshot: tmScore undefined on
-             records whose row sat on the board with a perfectly readable
-             composite. Publish the partial rows here so a mid-scan record
-             always carries the composite of the exact row it was minted
-             from — the same row the operator saw. */
-          try { publishTrendmxSnap(info.rows); } catch (ePub) {}
           try {
             trendmxStampBtcStructure(state.rows);
             state.golden = trendmxGoldenCrossSetups(state.rows);
@@ -4662,16 +4563,6 @@ W.trendmxCrossState = function(){
 };
 W.trendmxState = function(){
   try{ return __tmSnap ? JSON.parse(JSON.stringify(__tmSnap)) : null; }catch(e){ return null; }
-};
-/* hg-v1150: THE SCAN ROWS, SYNC AND FULL. trendmxState() publishes the LIGHT
-   mark snapshot ({sym, score, dir, comps} — the ledger reads it) and the
-   cross state publishes the held tickets; but the desk's own last scan
-   holds FULL rows (tape · gate · witnesses · freshCross), and consumers
-   that re-run the builders on them — the AI workforce's rows fallback —
-   had no sync seam to reach them. Same rows trendmxScan returned; null
-   before the first scan. */
-W.trendmxScanRows = function(){
-  try{ return (__tmScanSnap && Array.isArray(__tmScanSnap.rows) && __tmScanSnap.rows.length) ? __tmScanSnap.rows : null; }catch(e){ return null; }
 };
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'trendmx', label: 'TREND MATRIX', mount: mountTrendMatrix, refresh: refreshTrendMatrix });

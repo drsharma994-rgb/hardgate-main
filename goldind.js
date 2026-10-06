@@ -5535,6 +5535,8 @@ function goldRankSetups(cands, ctx){
           macroLabel = 'FRED DFII10 ' + (macro.realRateMeasured.trend || '').toLowerCase()
             + (macro.realRateMeasured.asOf ? (' (asOf ' + macro.realRateMeasured.asOf + ')') : '');
           if (macro.realRateMeasured.stale) macroLabel += ' STALE';
+        } else if (macro.realRateSource === 'yahoo-tnx-breakeven' && macro.realRateMeasured && macro.realRateMeasured.measured){
+          macroLabel = 'real yield ' + (macro.realRateMeasured.trend || '').toLowerCase() + ' — 10y minus breakeven, Yahoo';
         } else if (macro.realRateSource !== 'fred-dfii10'){
           macroLabel += ' [fallback hint — not measured]';
         }
@@ -5578,6 +5580,31 @@ function goldRankSetups(cands, ctx){
           parts.push({ label: 'crypto fear & greed ' + fngV + ' — extreme greed, risk-on weighs on gold', pts: 1 });
           tally += 1;
         }
+      }
+      var freeAgainst = 0;
+      function freeLeg(ok, against, label){
+        if (ok){ parts.push({ label: label, pts: 1, leg: 'free' }); tally += 1; }
+        else if (against){ parts.push({ label: label, pts: -1, leg: 'free' }); tally -= 1; freeAgainst++; }
+      }
+      if (macro && macro.silverTrend && macro.silverTrend !== 'FLAT'){
+        var silWith = (c.dir === 'long' && macro.silverTrend === 'RISING') || (c.dir === 'short' && macro.silverTrend === 'FALLING');
+        var silAgainst = (c.dir === 'long' && macro.silverTrend === 'FALLING') || (c.dir === 'short' && macro.silverTrend === 'RISING');
+        freeLeg(silWith, silAgainst, 'silver ' + String(macro.silverTrend).toLowerCase() + ' — Yahoo SI=F');
+      }
+      if (macro && macro.gsRatioTrend && macro.gsRatioTrend !== 'FLAT'){
+        var ratioWith = (c.dir === 'long' && macro.gsRatioTrend === 'FALLING') || (c.dir === 'short' && macro.gsRatioTrend === 'RISING');
+        var ratioAgainst = (c.dir === 'long' && macro.gsRatioTrend === 'RISING') || (c.dir === 'short' && macro.gsRatioTrend === 'FALLING');
+        freeLeg(ratioWith, ratioAgainst, 'gold/silver ratio ' + String(macro.gsRatioTrend).toLowerCase() + ' — Yahoo GC=F / SI=F');
+      }
+      if (macro && macro.vixTrend === 'RISING'){
+        freeLeg(c.dir === 'long', c.dir === 'short', 'VIX rising — Yahoo ^VIX, fear bid for gold');
+      } else if (macro && macro.vixTrend === 'FALLING'){
+        freeLeg(c.dir === 'short', c.dir === 'long', 'VIX falling — Yahoo ^VIX, risk-on weighs on gold');
+      }
+      if (macro && macro.usdjpyTrend && macro.usdjpyTrend !== 'FLAT'){
+        var jpyWith = (c.dir === 'long' && macro.usdjpyTrend === 'FALLING') || (c.dir === 'short' && macro.usdjpyTrend === 'RISING');
+        var jpyAgainst = (c.dir === 'long' && macro.usdjpyTrend === 'RISING') || (c.dir === 'short' && macro.usdjpyTrend === 'FALLING');
+        freeLeg(jpyWith, jpyAgainst, 'USDJPY ' + String(macro.usdjpyTrend).toLowerCase() + ' — Yahoo JPY=X');
       }
       if (c.pdZone === 'DISCOUNT' && c.dir === 'long'){
         parts.push({ label: 'premium/discount — price in discount zone of the 20-bar range (buy-the-dip bias)', pts: 1 });
@@ -5687,6 +5714,7 @@ function goldRankSetups(cands, ctx){
       for (k in c){ if (Object.prototype.hasOwnProperty.call(c, k)) rc[k] = c[k]; }
       rc.tally = tally;
       rc.tallyParts = parts;
+      if (freeAgainst > 0) rc.oppose = (isFinite(+rc.oppose) ? +rc.oppose : 0) + freeAgainst;
       try{
         var gradeFn = (typeof window !== 'undefined' && window.hgGoldGradeFromScore) ? window.hgGoldGradeFromScore : null;
         if (gradeFn){
@@ -5807,68 +5835,6 @@ function goldRankSetups(cands, ctx){
           if (__nwPf && __nwPf.risk) pfReads.newsRisk = __nwPf.risk;
           if (rc.sessionFloor && typeof rc.sessionFloor.verdict === 'string') pfReads.sess = rc.sessionFloor.verdict;
           if (isFinite(+ctx.rvol)) pfReads.volumeRvol = +ctx.rvol;
-          /* hg-v1150: three further evidence legs, every one a FREE feed the
-             scan ALREADY fetched — zero new requests. Unreadable stays
-             absent: never mint or deny on a missing feed. Evidence, never a
-             gate — the shared predicate reads the same keys every desk
-             feeds, so PERFECT means the same thing on gold as on crypto:
-               structureTrend — EMA50/200 off the desk's own 4h tape (220
-                                bars on the scalp feed), the same read the
-                                shared predicate consumes on OMNIBTC
-               fundingAgainst — the PAXG perp funding print (the gold
-                                complex's most liquid perp funding feed)
-               leverageState — the Delta gold-perp OI 24h change plus its
-                                last funding prints: RESET / EXTENDED / FLAT
-                                with the house thresholds (positioning reads,
-                                not price reads — the XAUT/spot basis never
-                                enters this leg) */
-          try{
-            if (ctx && Array.isArray(ctx.rows4h) && ctx.rows4h.length >= 210){
-              var pfC4 = ctx.rows4h.map(function(x){ return +x.c; });
-              var pfE50 = _ema(pfC4, 50), pfE200 = _ema(pfC4, 200);
-              if (pfE50 && pfE200 && pfE50.length && pfE200.length){
-                var pfA4 = pfE50[pfE50.length - 1], pfB4 = pfE200[pfE200.length - 1];
-                if (isFinite(pfA4) && isFinite(pfB4) && pfA4 !== pfB4) pfReads.structureTrend = (pfA4 > pfB4) ? 'up' : 'down';
-              }
-            }
-          }catch(eSt4){}
-          try{
-            if (isFinite(+ctx.fundingRate) && typeof window !== 'undefined' && typeof window.hgFundingAgainstMark === 'function'){
-              var pfFam = window.hgFundingAgainstMark(+ctx.fundingRate, rc.dir);
-              if (pfFam) pfReads.fundingAgainst = (pfFam.against === true);
-            }
-          }catch(eFa4){}
-          try{
-            var pfOi = (ctx && ctx.perpNative && Array.isArray(ctx.perpNative.oi)) ? ctx.perpNative.oi : null;
-            var pfFu = (ctx && ctx.perpNative && Array.isArray(ctx.perpNative.funding)) ? ctx.perpNative.funding : null;
-            if (pfOi && pfOi.length >= 3){
-              var pfOv = pfOi.filter(function(p){ return p && isFinite(+p.t) && isFinite(+p.c) && +p.c > 0; });
-              if (pfOv.length >= 3){
-                var pfLastOi = pfOv[pfOv.length - 1];
-                var pfCutoff = +pfLastOi.t - 24 * 3600;
-                var pfPrevOi = null;
-                for (var pfI4 = 0; pfI4 < pfOv.length; pfI4++){
-                  if (+pfOv[pfI4].t <= pfCutoff) pfPrevOi = pfOv[pfI4];
-                }
-                if (pfPrevOi && +pfPrevOi.c > 0){
-                  var pfChg4 = (+pfLastOi.c - +pfPrevOi.c) / +pfPrevOi.c * 100;
-                  pfReads.oiChgPct = pfChg4;
-                  var pfFuLast3 = [];
-                  if (pfFu){
-                    var pfFv = pfFu.filter(function(p){ return p && isFinite(+p.c); });
-                    var pfSl3 = pfFv.slice(-3);
-                    for (var pfJ4 = 0; pfJ4 < pfSl3.length; pfJ4++) pfFuLast3.push(+pfSl3[pfJ4].c);
-                  }
-                  if (pfFuLast3.length){
-                    pfReads.fundLatestPct = pfFuLast3[pfFuLast3.length - 1];
-                    if (pfChg4 <= -10 || (pfChg4 <= 0 && pfFuLast3.some(function(f){ return f <= 0; }))) pfReads.leverageState = 'RESET';
-                    else if (pfChg4 >= 15 && pfFuLast3[pfFuLast3.length - 1] > 0.03) pfReads.leverageState = 'EXTENDED';
-                    else pfReads.leverageState = 'FLAT';
-                  }
-                }
-              }
-            }
-          }catch(eLv4){}
           pf = pfFn(rc, pfReads);
         }
         rc.perfect = (pf && pf.perfect) ? true : undefined;

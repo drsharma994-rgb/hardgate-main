@@ -1132,10 +1132,10 @@ function goldBuildAPlusCtx(ctx, gold, now, news){
     if (mcFn && ctx && ctx.macro){
       out.metalsComplex = mcFn({
         dir: 'long',
-        xagTrend: ctx.macro.silver ? null : null,
+        xagTrend: ctx.macro.silverTrend || null,
         dxy: ctx.macro.dxy,
         real10y: out.realRate,
-        ratioTrend: ctx.macro.goldSilverRatio ? null : null
+        ratioTrend: ctx.macro.gsRatioTrend || null
       });
     }
     out.cot = (typeof W !== 'undefined' && W) ? W.__hgGoldCot : null;
@@ -1238,18 +1238,6 @@ function bannerHTML(best, ranked){
   var perfectBadge = gsxPerfect(best)
     ? '<span style="display:inline-block;margin-left:8px;font-size:10px;font-weight:800;letter-spacing:.15em;color:#92400E;background:#FEF3C7;padding:2px 7px;border-radius:4px;border:1px solid #F59E0B;vertical-align:middle">\u2605 PERFECT</span>'
     : '';
-  /* hg-v1150: the ★ PERFECT⁺ badge — the shared predicate's headline tier
-     (every readable evidence leg WITH), earned by the ranker from the FREE
-     feeds the scan already holds: 4h EMA50/200 structure, the PAXG funding
-     print and the Delta gold-perp OI+funding leverage cycle. Additive by
-     design: the pinned gsxPerfect badge keeps its own semantics, and this
-     one fires only when the evidence-enriched PLUS verdict travelled on the
-     ranked row — so the banner names the max-confluence tier when the free
-     feeds earned it, and stays silent when they are unreadable or mixed. */
-  var perfectPlusBadge = '';
-  if (best.perfectPlus === true && typeof W.hgPerfectStamp === 'function'){
-    try{ perfectPlusBadge = W.hgPerfectStamp(best) || ''; }catch(ePp2){}
-  }
   /* hg-v1030: the measured edge of the PERFECT cohort rides beside the badge.
      hgPerfectCohortEdge reads the LIVE ledger and reports expR; a negative is
      said plainly and an unmeasured cohort says so — nothing is coerced toward
@@ -1267,7 +1255,7 @@ function bannerHTML(best, ranked){
     }catch(ePeSc){}
   }
   return '<div class="gsx-banner"><div class="gsx-banner-in">'
-    + '<div class="gsx-eye">MOST PROBABLE SETUP' + perfectBadge + perfectPlusBadge + perfectEdgeNote + '</div>'
+    + '<div class="gsx-eye">MOST PROBABLE SETUP' + perfectBadge + perfectEdgeNote + '</div>'
     + '<div class="gsx-dir ' + best.dir + '">' + dirUp
     + '<span>' + esc(best.strategy) + ' · ' + esc(best.venue) + (best.sym ? ' (' + esc(best.sym) + ')' : '')
     + ' · GRADE ' + esc(best.grade) + ' · ' + esc(best.killzone || '') + '</span></div>'

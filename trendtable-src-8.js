@@ -1,3 +1,10 @@
+    'criteria: the 7/7 swing-gate matrix (spread · vol-Z · EMA21 anchor · funding · regime · structure · R:R) confirms the composite majority · exact resting limits · taker flow not against · 1D RSI momentum range not turned against · 1D OBV volume trend not diverging against · sorted by composite + gates',
+    bag, held, why);
+}
+
+function trendmxConvictionDeskHTML(bag, held, why){
+  return trendmxLimitDeskHTML(
+    'LIMIT BOARD · CONVICTION DESK',
     'criteria: five-leg composite majority |≥2| (STRONG |≥4|) without the 7/7 stamp — 1D EMA200 · EMA50/200 cross · 4H EMA9/21/50 cascade · Ichimoku cloud · ADX strength · exact resting limits · taker flow not against · 1D RSI momentum range not turned against · 1D OBV volume trend not diverging against · ADX breaks composite ties',
     bag, held, why);
 }
@@ -355,9 +362,3 @@ function trendmxPaintFwd(refs){
 }
 
 /* hg-v1045: THE BULL / BEAR COLUMN VIEW — the full matrix regrouped into
-   three columns by the row's own majority direction (composite >= +2 BULL,
-   <= -2 BEAR, everything between MIXED / CHOP). Each column reuses the desk's
-   own card renderer, ordered by |composite| then gates. Same rows, same
-   gates, same evidence — a different reading order. */
-function trendmxColumnsHTML(rows){
-  try{

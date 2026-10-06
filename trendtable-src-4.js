@@ -1,15 +1,3 @@
-  return weeks.length >= 8 ? weeks : null;
-}
-function tmVolumeProfile(rows){
-  if (!rows || rows.length < 40) return null;
-  var use = rows.slice(-120);
-  var lo = Infinity, hi = -Infinity, k;
-  for (k = 0; k < use.length; k++){
-    if (use[k].l < lo) lo = use[k].l;
-    if (use[k].h > hi) hi = use[k].h;
-  }
-  if (!(hi > lo)) return null;
-  var bins = 24, vol = [], step = (hi - lo) / bins;
   for (k = 0; k < bins; k++) vol.push(0);
   for (k = 0; k < use.length; k++){
     var mid = (use[k].h + use[k].l + use[k].c) / 3;
@@ -218,7 +206,8 @@ async function trendmxLoadContext(rows){
     tmProxyJson('https://api.coingecko.com/api/v3/global/market_cap_chart?days=2'),
     tmProxyJson('https://api.llama.fi/emissions'),
     tmProxyJson('https://query1.finance.yahoo.com/v8/finance/chart/IBIT?interval=1d&range=5d'),
-    tmProxyJson('https://query1.finance.yahoo.com/v8/finance/chart/FBTC?interval=1d&range=5d')
+    tmProxyJson('https://query1.finance.yahoo.com/v8/finance/chart/FBTC?interval=1d&range=5d'),
+    tmProxyJson('https://api.alternative.me/fng/?limit=1')
   ]);
   var cal = pack[0];
   if (Array.isArray(cal)){
@@ -258,6 +247,13 @@ async function trendmxLoadContext(rows){
   var fbtcChg = tmYahooChange(pack[8]);
   ctx.etfOk = ibitChg != null && fbtcChg != null;
   ctx.etfFalling = ctx.etfOk && ibitChg < -0.02 && fbtcChg < -0.02;
+  ctx.fngOk = false;
+  ctx.fng = null;
+  try {
+    var fngJ = pack[9];
+    var fngV = fngJ && fngJ.data && fngJ.data[0] && +fngJ.data[0].value;
+    if (isFinite(fngV)){ ctx.fngOk = true; ctx.fng = fngV; }
+  } catch (eFng) {}
   ctx.totalOk = false;
   ctx.totalFalling = false;
   ctx.altsFalling = false;
@@ -411,3 +407,10 @@ async function tmMicroOk(row, dir){
       if (hs.trend === (dir === 'long' ? 'down' : 'up')) return false;
       var last = rows[rows.length - 1];
       if (dir === 'long' && last.c < last.o) return false;
+      if (dir === 'short' && last.c > last.o) return false;
+      return true;
+    } catch (e) { return null; }
+  }
+  var both = await Promise.all([one('3m', 80, 180), one('1m', 60, 60)]);
+  return { m3: both[0], m1: both[1] };
+}

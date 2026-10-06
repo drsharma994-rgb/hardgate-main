@@ -1,7 +1,3 @@
-          /* no signal-bar slice: a matrix row is minted by THIS scan, so the
-             last closed 4h bar IS its judging bar — the windows that exist
-             are the windows that had printed */
-          var cv = cvdFn(r.rows4h, TM_FLOW_LOOK, { series: series });
           if (!cv || cv.source !== 'taker' || !isFinite(cv.delta) || cv.bars < TM_FLOW_MIN_WIN || cv.delta === 0){
             r.flow = { verdict: 'unreadable', why: 'no real-flow verdict', sym: bSym }; out.unreadable++; return;
           }
@@ -408,3 +404,15 @@ function tmWeeklyRows(rowsD){
     }
   }
   if (cur) weeks.push(cur);
+  return weeks.length >= 8 ? weeks : null;
+}
+function tmVolumeProfile(rows){
+  if (!rows || rows.length < 40) return null;
+  var use = rows.slice(-120);
+  var lo = Infinity, hi = -Infinity, k;
+  for (k = 0; k < use.length; k++){
+    if (use[k].l < lo) lo = use[k].l;
+    if (use[k].h > hi) hi = use[k].h;
+  }
+  if (!(hi > lo)) return null;
+  var bins = 24, vol = [], step = (hi - lo) / bins;

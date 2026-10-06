@@ -365,3 +365,5 @@ function trendScore(rows1d, rows4h){
     }
 
     /* 3) 4h cascade ema9 / ema21 / ema50 */
+    if (ok4){
+      var c4 = rows4h.map(function(r){ return r ? r.c : NaN; });

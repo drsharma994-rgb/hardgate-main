@@ -1,3 +1,13 @@
+/* hg-v1057: the trend-quality chip — the momentum chip's own pattern.
+   CHOP prints the bad stamp with BOTH measured values (a cap is never
+   silent); TREND and mixed/unreadable paint NO chip (evidence, never a
+   brag, and a mixed tape is not a verdict). */
+function trendmxChopChipHtml(r){
+  try{
+    var st = trendmxChopState(r);
+    if (!st || st.state !== 'chop') return '';
+    var chopTxt = isFinite(st.chop) ? st.chop.toFixed(0) : '?';
+    var erTxt = isFinite(st.er) ? st.er.toFixed(2) : '?';
     return '<span class="stamp bad" style="margin-left:6px" title="' + escH('trend-quality witness (hg-v1057): this 4h tape reads CHOP ' + chopTxt
       + ' and efficiency ratio ' + erTxt
       + ' — the trend matrix\'s own trend-quality measure says there is no trend to ride. Capped at NEAR, never CLEAN — evidence, never a gate.') + '">CHOP ' + chopTxt + ' · ER ' + erTxt + '</span>';
@@ -312,10 +322,3 @@ function trendmxLimitDeskHTML(title, crit, bag, held, why){
 function trendmxGateCleanDeskHTML(bag, held, why){
   return trendmxLimitDeskHTML(
     'LIMIT BOARD · GATE-CLEAN DESK',
-    'criteria: the 7/7 swing-gate matrix (spread · vol-Z · EMA21 anchor · funding · regime · structure · R:R) confirms the composite majority · exact resting limits · taker flow not against · 1D RSI momentum range not turned against · 1D OBV volume trend not diverging against · sorted by composite + gates',
-    bag, held, why);
-}
-
-function trendmxConvictionDeskHTML(bag, held, why){
-  return trendmxLimitDeskHTML(
-    'LIMIT BOARD · CONVICTION DESK',

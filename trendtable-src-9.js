@@ -1,3 +1,9 @@
+   three columns by the row's own majority direction (composite >= +2 BULL,
+   <= -2 BEAR, everything between MIXED / CHOP). Each column reuses the desk's
+   own card renderer, ordered by |composite| then gates. Same rows, same
+   gates, same evidence — a different reading order. */
+function trendmxColumnsHTML(rows){
+  try{
     if (!Array.isArray(rows) || !rows.length) return '<div class="empty">No rows to group.</div>';
     var bull = [], bear = [], mixed = [], i, r, d;
     for (i = 0; i < rows.length; i++){
@@ -298,6 +304,3 @@ function trendmxCrownPanelHTML(state){
     var venue = tmRowVenue(crown);
     var payload = { v: 1, id: 'TMX-' + String(crown.sym), venue: venue, symbol: crown.sym,
       side: dir, entry: +plan.entry, stop: +plan.stop, t1: +plan.t1, t2: isFinite(+plan.t2) ? +plan.t2 : null,
-      gates: gatesTxt, formation: tier === 'clean' ? 'CLEAN' : 'WATCH_ONLY', measured: 'UNREAD',
-      exitPolicy: 'scale50_t1_be_trail', ts: Math.floor(Date.now() / 1000) };
-    var jsonTxt = JSON.stringify(payload, null, 2);
