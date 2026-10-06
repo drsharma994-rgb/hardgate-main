@@ -46,6 +46,13 @@ function boot(){
                    'hg-forward.js','hg-gates.js','hg-plan.js','omniroute.js','omnigold.js']){
     vm.runInContext(read(f), ctx, { filename: f });
   }
+  /* hg-v1099 (BATCH 1099): hgOgPickFor crowns only a kind the tab's OWN
+     measured ledger has paid for (forward 'has paid', or a replay row net
+     positive past the family bar). The fixtures in this file are about the
+     ORDERING among tickets, so the ledger is stubbed to have paid for every
+     kind; the rule itself is pinned in test-omnigold-most-probable.mjs. */
+  ctx.hgFwdPool = function(){ return new Proxy({}, { get: function(){ return { samples: 40, hit: 0.7 }; } }); };
+  ctx.hgOmniPoolRead = function(){ return { read: 'has paid', z: 4, bar: 3 }; };
   return ctx;
 }
 const W = boot();

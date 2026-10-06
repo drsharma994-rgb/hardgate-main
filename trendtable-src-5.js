@@ -354,6 +354,9 @@ function trendmxRowTier(r, plan){
      on the LIMIT BOARD (the same leadership pattern as the omni principal
      above it). An unread flow caps nothing. */
   if (r.flow && r.flow.verdict === 'against') return 'near';
+  /* hg-v1154: the SWING post-gate policy on the gates this desk borrows -- a vetoed
+     row keeps its levels and is watch-only (the shared card prints no handoff there) */
+  if (tmPostGateVeto(r)) return 'near';
   /* hg-v1019: the momentum witness caps the same way — a row whose 1D RSI
      range has TURNED against its direction can never be CLEAN. An unread
      or abstaining witness caps nothing. */

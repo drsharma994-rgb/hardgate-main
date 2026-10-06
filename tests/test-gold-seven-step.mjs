@@ -294,7 +294,11 @@ console.log('== vision repaint keeps the 7-STEP + FORMING LAYERS block ==');
      hg-v1005 re-point: GOLD SWING's feeds-failed branch gained the same
      board. The guarded fact stands — the 7-step readout still prints on
      that branch on both desks. */
-  ok(/basisHtml( \+ fundPanelHtml)? \+ uniHtml \+ sevenStepHtml\(\)/.test(gs) && /basisHtml( \+ fundPanelHtml)? \+ uniHtml \+ sevenStepHtml\(\)/.test(gw), 'feeds-failed / nothing-armed branch still prints the 7-step readout');
+  /* hg-v1154 re-point: GOLD SCALP's feeds-failed branch paints the empty
+     GSX board (gsxBoardHtml(null, [], '')) between the universe line and the
+     readout; the readout itself is still the last thing on that branch. */
+  const feedsFailedRe = /basisHtml( \+ fundPanelHtml)? \+ uniHtml( \+ gsxBoardHtml\(null, \[\], ''\))? \+ sevenStepHtml\(\)/;
+  ok(feedsFailedRe.test(gs) && feedsFailedRe.test(gw), 'feeds-failed / nothing-armed branch still prints the 7-step readout');
 }
 
 console.log('== desks wired + deploy stamp ==');

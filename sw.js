@@ -8,11 +8,7 @@
    ========================================================================= */
 'use strict';
 
-<<<<<<< HEAD
-const HG_CACHE = 'hg-v1153';
-=======
-const HG_CACHE = 'hg-v1150';
->>>>>>> origin/main
+const HG_CACHE = 'hg-v1154';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */

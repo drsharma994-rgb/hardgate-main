@@ -140,7 +140,7 @@
         '<td>' + trendmxCompPipsHtml(r.comps) + '</td>' +
         '<td><b>' + r.sym + '</b>' + tmVenueChip(r) + '</td>' +
         '<td class="' + scls + '"><b>' + (sc > 0 ? '+' : '') + sc + '</b></td>' +
-        '<td><span class="gpip ' + gateCls + '">' + escH(gateTxt) + '</span></td>' +
+        '<td><span class="gpip ' + gateCls + '">' + escH(gateTxt) + '</span>' + tmPostGateChip(r) + '</td>' +
         '<td>' + tri(r.comps.d1Trend, '▲ UP', '▼ DOWN') + '</td>' +
         '<td><span class="' + xcls + '">' + xtxt + '</span>' + fx + '</td>' +
         '<td>' + tri(r.comps.h4Cascade, '▲ ALIGN', '▼ INVERSE') + '</td>' +
@@ -271,7 +271,9 @@
               rows4h: crh4,
               fundingPct: (typeof cr.fundingPct === 'number' && isFinite(cr.fundingPct)) ? cr.fundingPct : undefined,
               mechanic: trendmxPerfectState(cr) ? 'PERFECT' : 'CLEAN',
-              ticket: true
+              /* hg-v1154: a post-gate veto withholds the ticket claim here too, and the mark rides */
+              ticket: !tmPostGateVeto(cr),
+              reads: tmPostGateReads(cr)
             });
           }
           if (recRows.length) W.hgFwdRecordScan('TRENDMX', '4h', recRows, { horizonBars: 20 });
@@ -338,6 +340,8 @@ W.trendmxClassify = trendmxClassify;
 W.hgTrendMatrixAlign = hgTrendMatrixAlign;   /* hg-v995 */
 W.hgTrendMatrixRowOf = hgTrendMatrixRowOf;
 W.hgTrendMatrixMark = hgTrendMatrixMark;
+W.tmPostGateRead = tmPostGateRead;     /* hg-v1154 */
+W.tmPostGateReads = tmPostGateReads;   /* hg-v1154 */
 W.trendmxPlan = trendmxPlan;
 W.trendmxPlanHTML = trendmxPlanHTML;
 W.trendmxPlanBlock = trendmxPlanBlock;

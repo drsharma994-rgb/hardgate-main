@@ -288,7 +288,11 @@ function cryptoGateRows(rows4h, rows1h, rows15m, ticker){
       return row('TREND MATRIX', { state: d ? 'signal' : 'idle', dir: d, passed: Math.abs(snap.score), total: 5,
         detail: 'composite ' + (snap.score > 0 ? '+' : '') + snap.score + '/5'
           + (d ? '' : ' — short of the majority either way')
-          + (ev.length ? ' · ' + ev.join(' · ') : '') + ' · TREND MATRIX scan row' });
+          + (ev.length ? ' · ' + ev.join(' · ') : '') + ' · TREND MATRIX scan row'
+          /* hg-v1154: the desk's shared post-gate verdict on that row, when it ran */
+          + (snap.postGate === 'veto' ? ' · post-gate VETO' + (snap.postGateReason ? ' (' + snap.postGateReason + ')' : '')
+            : snap.postGate === 'pass' ? ' · post-gate PASS'
+            : snap.postGate === 'unchecked' ? ' · post-gate UNCHECKED' : '') });
     }
     var ts = W.trendScore(null, rows4h);
     var casc = (ts && ts.comps) ? ts.comps.h4Cascade : 0;

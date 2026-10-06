@@ -271,7 +271,8 @@ const re = /<script\b(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script>/gi;
 const blocks = [];
 let m;
 while ((m = re.exec(html)) !== null){ if (m[1].trim()) blocks.push(m[1]); }
-assert(blocks.length === 5, 'B: index.html yields exactly 5 non-empty inline <script> blocks (got ' + blocks.length + ')');
+/* hg-v1142 added the one-link cache nuker as a sixth inline block (hg-v1154 re-pins) */
+assert(blocks.length === 6, 'B: index.html yields exactly 6 non-empty inline <script> blocks (got ' + blocks.length + ')');
 
 loadErr = null;
 try{

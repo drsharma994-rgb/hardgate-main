@@ -302,8 +302,9 @@ console.log('== 4) the census, derived from source ==');
     writers.push(f);
     if (!(w.some(sp => /\bmark\s*:/.test(sp)) || /\.mark = /.test(s) || /\bmark:\s*\(/.test(s) || /\bmark:\s*c\.mark/.test(s))) bare.push(f);
   }
-  const EXP = ['eightypercent.js', 'golddirection.js', 'goldpine.js', 'goldpro.js', 'goldscalp.js', 'goldswing.js', 'goldultra.js', 'newgold.js', 'omnigold.js', 'omnigold1.js', 'optigold.js', 'super-gold.js', 'tauric.js'].sort();
-  assert(JSON.stringify(writers.sort()) === JSON.stringify(EXP), 'the thirteen gold writers (' + writers.join(', ') + ')');
+  /* fourteen since hg-v1154: GANESH GOLD (hg-v1072) records ticket rows */
+  const EXP = ['eightypercent.js', 'ganeshgold.js', 'golddirection.js', 'goldpine.js', 'goldpro.js', 'goldscalp.js', 'goldswing.js', 'goldultra.js', 'newgold.js', 'omnigold.js', 'omnigold1.js', 'optigold.js', 'super-gold.js', 'tauric.js'].sort();
+  assert(JSON.stringify(writers.sort()) === JSON.stringify(EXP), 'the fourteen gold writers (' + writers.join(', ') + ')');
   assert(bare.length === 0, 'every one carries a mark on its record path' + (bare.length ? ' -- BARE: ' + bare.join(', ') : ''));
 }
 

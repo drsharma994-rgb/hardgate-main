@@ -50,7 +50,7 @@ async function push(subject, body) {
   }
   const r = await sendTelegramMessage(text);
   if (r.skipped) {
-    console.log('[heartbeat] no TELEGRAM_TOKEN/TELEGRAM_CHAT_ID — printing instead');
+    console.log('[heartbeat] ' + (r.filtered ? 'withheld by the Telegram keep rule' : 'no TELEGRAM_TOKEN/TELEGRAM_CHAT_ID') + ' — printing instead');
     console.log(text);
     return 'printed';
   }

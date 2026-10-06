@@ -25,6 +25,86 @@
   return out;
 }
 
+/* ---------------- hg-v1154: the free positioning feeds, through the rules that already read them ----------------
+   SWING, whose 7/7 gates this desk borrows, has run every CLEAN hit through
+   hgPostGateSetupVeto since hg-v197 -- flow trap (Binance taker ratio · depth
+   imbalance · spot taker flow · Bybit positioning cross), BTC relative
+   strength, stale momentum, regime overlay, on-chain alt gate, calibration --
+   all public, free feeds the data layer already fetches and caches. And G4 on
+   a contract whose venue reports no funding read nothing unless the ticker
+   carried the Binance twin (hgEnrichTickerFundingTwin, hg-v197). This desk
+   did neither, so a TM "7/7 CLEAN" was a weaker claim than SWING's under the
+   same label. The hg-v1012 flow witness below reads the taker ratio on its
+   own; the shared rule is the SWING policy in full and is called, not
+   restated. A vetoed row is the FIFTH witness hold-off (counted and named per
+   class like the other four), keeps its levels, moves to the watch tier (the
+   shared card prints no handoff there), and -- unlike the other witnesses --
+   is still RECORDED with ticket:false and reads['postgate:veto'] = true, so
+   the ledger can ask whether the veto separates on this desk; a passed row
+   records false; unchecked or un-run records nothing. Runs only on rows with
+   a gate hit. With the shared rule absent the board reads as before. */
+function tmGetCandlesFn(){
+  if (typeof W.getCandles === 'function') return function(sym, tf, n){ return W.getCandles(sym, tf, n); };
+  if (typeof W.binanceKlines === 'function') return function(sym, tf, n){ return W.binanceKlines(sym, tf, n); };
+  return null;
+}
+async function tmEnrichFunding(row){
+  var ticker = trendmxTicker(row);
+  if (typeof W.hgEnrichTickerFundingTwin !== 'function') return ticker;
+  try{
+    var t2 = await W.hgEnrichTickerFundingTwin(ticker);
+    if (t2 && typeof t2.fundingPct === 'number' && isFinite(t2.fundingPct)){
+      row.fundingPct = t2.fundingPct;
+      if (t2.fundingTwin) row.fundingTwin = t2.fundingTwin;
+    }
+  }catch(e){}
+  return trendmxTicker(row);
+}
+function tmPostGateRead(qv){
+  if (!qv || typeof qv !== 'object') return undefined;
+  if (qv.ok === false){
+    return { state: 'veto', reason: qv.reason || 'post-gate veto', tag: qv.tag || null, flowDetail: qv.flowDetail || null };
+  }
+  if (qv.unchecked === true){
+    return { state: 'unchecked', reasons: Array.isArray(qv.uncheckedReasons) ? qv.uncheckedReasons.slice() : [], flowDetail: qv.flowDetail || null };
+  }
+  return { state: 'pass', flowDetail: qv.flowDetail || null, rsEdge: (typeof qv.rsEdge === 'number' && isFinite(qv.rsEdge)) ? qv.rsEdge : null };
+}
+async function tmFeedRow(row, dir, rows4h){
+  var ticker = await tmEnrichFunding(row);
+  row.gate = trendmxGateEval(row, dir);
+  if (!row.gate || !row.gate.hit || typeof W.hgPostGateSetupVeto !== 'function') return;
+  try{
+    var qv = await W.hgPostGateSetupVeto(ticker, row.gate.hit, rows4h, 'swing', tmGetCandlesFn());
+    row.postGate = tmPostGateRead(qv);
+    if (qv && qv.ok && typeof W.hgApplyCryptoPostGate === 'function') W.hgApplyCryptoPostGate(row.gate.hit, qv);
+  }catch(e){
+    row.postGate = { state: 'unchecked', reasons: ['post-gate threw: ' + ((e && e.message) || e)], flowDetail: null };
+  }
+}
+function tmPostGateVeto(r){ return !!(r && r.postGate && r.postGate.state === 'veto'); }
+function tmPostGateReads(r){
+  var pg = r && r.postGate;
+  if (!pg) return undefined;
+  if (pg.state === 'veto') return { 'postgate:veto': true };
+  if (pg.state === 'pass') return { 'postgate:veto': false };
+  return undefined;   /* unchecked: nothing was tested, nothing is recorded */
+}
+function tmPostGateLabel(r){
+  var pg = r && r.postGate;
+  if (!pg) return '';
+  if (pg.state === 'veto') return 'POST-GATE VETO · ' + String(pg.reason || 'veto');
+  if (pg.state === 'pass') return 'POST-GATE PASS';
+  return 'POST-GATE UNCHECKED';
+}
+function tmPostGateChip(r){
+  var pg = r && r.postGate;
+  if (!pg) return '';
+  if (pg.state === 'veto') return ' <span class="gpip bad" title="' + escH(pg.reason || '') + '">PG VETO</span>';
+  if (pg.state === 'pass') return ' <span class="gpip ok">PG ✓</span>';
+  return ' <span class="gpip">PG ?</span>';
+}
+
 /* ---------------- tab UI ---------------- */
 
 var TURNOVER_FLOOR = (typeof W.hgDeskMinTurnover === 'function') ? W.hgDeskMinTurnover() : 5e6;

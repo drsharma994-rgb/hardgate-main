@@ -126,6 +126,7 @@ function trendmxSetupCardHTML(r, tier){
   if (plan) mini.push(['ENTRY', pxFmt(plan.entry)], ['R:R', fmtN(plan.rr1, 1) + 'R']);
   var gates = [];
   if (r.gate) gates.push([r.gate.label, r.gate.clean7 && !r.gate.veto]);
+  if (r.postGate) gates.push([tmPostGateLabel(r), r.postGate.state === 'pass']);
   if (typeof hgSetupCardHTML !== 'function'){
     return '<div class="card ' + dir + '"><b>' + escH(r.sym) + '</b>' + tmVenueChip(r) + ' · ' + dir.toUpperCase() + '</div>';
   }
@@ -140,7 +141,9 @@ function trendmxSetupCardHTML(r, tier){
     bookMeta: { scanner: 'trendmx', strategy: 'trendmx', t2: plan ? plan.t2 : null,
       venue: (typeof W.hgDeskVenueLabel === 'function') ? W.hgDeskVenueLabel(r.exchange) : 'BINANCE',
       visionChip: r.visionChip, visionNextBar: r.visionNextBar, visionNextMove: r.visionNextMove, visionPrediction: r.visionPrediction },
-    note: tier !== 'clean' ? (tier === 'near' ? '6/7 NEAR — watch only, not a ticket.' : 'FORMING — trend signal without CLEAN ticket.') : null
+    note: tmPostGateVeto(r)
+      ? (tmPostGateLabel(r) + ' — watch only, not a ticket. The SWING post-gate policy (flow trap · BTC RS · stale momentum) on the gates this desk borrows; levels kept, handoffs withheld, recorded for the ledger.')
+      : (tier !== 'clean' ? (tier === 'near' ? '6/7 NEAR — watch only, not a ticket.' : 'FORMING — trend signal without CLEAN ticket.') : null)
   });
 }
 

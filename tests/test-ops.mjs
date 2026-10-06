@@ -330,12 +330,12 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
   process.env.TELEGRAM_TOKEN = 'tok'; process.env.TELEGRAM_CHAT_ID = '42';
   let tgSent, tgCall = null;
   await withFetch(async (url, opts) => { tgCall = { url, opts }; return fetchOk('{}', 200)(url, opts); },
-    async () => { tgSent = await sendTelegramCi('hello'); });
+    async () => { tgSent = await sendTelegramCi('TREND MATRIX GOLDEN CROSS hello'); });
   ok(tgSent === 'sent' && tgCall && tgCall.url.indexOf('api.telegram.org/bot') >= 0
      && tgCall.url.indexOf('tok') >= 0 && JSON.parse(tgCall.opts.body).chat_id === '42',
      'telegram: posts sendMessage to the bot endpoint with the chat id');
   let tgFail;
-  await withFetch(fetchOk('{}', 403), async () => { tgFail = await sendTelegramCi('x'); });
+  await withFetch(fetchOk('{}', 403), async () => { tgFail = await sendTelegramCi('GOLDEN CROSS x'); });
   ok(typeof tgFail === 'string' && tgFail.indexOf('failed') === 0, 'telegram: non-2xx -> honest failure string');
   process.env.TELEGRAM_DISABLED = '1';
   let disSent;
@@ -346,7 +346,7 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
   /* cascade: telegram success short-circuits ntfy; telegram failure falls through */
   let casc1, ntfyCalls = 0;
   await withFetch(async () => { ntfyCalls++; return { status: 200, text: async () => '{}', headers: { get: () => null } }; },
-    async () => { casc1 = await sendAlertCi('t', 'b'); });
+    async () => { casc1 = await sendAlertCi('TREND MATRIX GOLDEN CROSS', 'b'); });
   ok(casc1 === 'telegram: sent' && ntfyCalls === 1, 'cascade: telegram success is the whole result, ntfy untouched');
   delete process.env.TELEGRAM_TOKEN; delete process.env.TELEGRAM_CHAT_ID;
   delete process.env.NTFY_TOPIC;

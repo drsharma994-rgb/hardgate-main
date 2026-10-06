@@ -164,8 +164,10 @@ console.log('\n5. wired into both tabs, and failing open');
 {
   const gs = fs.readFileSync(root + 'goldscalp.js', 'utf8');
   const og = fs.readFileSync(root + 'omnigold.js', 'utf8');
-  ok(/\+ gsBreakevenHtml\(\) \+ bannerHTML/.test(gs), 'GOLD SCALP renders it above the cards');
-  ok(/\+ gsBreakevenHtml\(\)\n\s+\+ \(whySilent/.test(gs), 'and on the silent branch too');
+  /* hg-v1154 re-point: the cards are painted through gsxBoardHtml(...) now,
+     and the breakeven line sits immediately above that board on both branches. */
+  ok(/\+ gsBreakevenHtml\(\)\n\s+\+ gsxBoardHtml\(displayBest/.test(gs), 'GOLD SCALP renders it above the cards');
+  ok(/\+ gsBreakevenHtml\(\)\n\s+\+ gsxBoardHtml\(null, \[\], ''\)\n\s+\+ \(whySilent/.test(gs), 'and on the silent branch too');
   ok(/function gsBreakevenHtml\(\)\{[\s\S]{0,400}?catch\s*\(e\)\s*\{ return ''; \}/.test(gs),
      'through a shim that returns \'\' when goldind is absent rather than throwing');
   ok(/function hgOgBreakevenPanelHtml\(\)\{[\s\S]{0,400}?catch\s*\(e\)\s*\{ return ''; \}/.test(og),

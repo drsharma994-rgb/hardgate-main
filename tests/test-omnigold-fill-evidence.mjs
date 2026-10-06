@@ -149,16 +149,21 @@ console.log('== the measurement itself ==');
   const wasFar = looseFill(holeFar, below, 'long', null, 12);
   ok(baseFar.pct === 0 && wasFar.pct === 100,
      `the +v reading took an unreachable zone from 0% to ${wasFar.pct}% on null lows alone`);
-  ok(F.hgFillProbability(holeFar, below, 'long', null, 12).pct === 0,
-     'the shipped function still says 0%: a bar with no low did not trade there');
+  /* hg-v1154 re-point: the shipped rule EXCLUDES any 12-bar window with a
+     missing side rather than reading the hole as a no-fill; with one bar in
+     seven holed, no window is complete, so the tape measures NOTHING — the
+     n/a sentinel, never a fabricated 0% or 100%. */
+  const nowFar = F.hgFillProbability(holeFar, below, 'long', null, 12);
+  ok(nowFar.pct === null && nowFar.prob === null && nowFar.note === 'fill history n/a',
+     'the shipped function measures nothing on a tape where every window has a hole — n/a, not 0% and not 100%');
 
   const holeMid = mk(200, 3); for (let i = 0; i < holeMid.length; i += 3) holeMid[i].l = null;
   const wasMid = looseFill(holeMid, mid, 'long', null, 12);
   ok(wasMid.pct > baseMid.pct + 25,
      `and a real zone from ${baseMid.pct}% to ${wasMid.pct}% with one bar in three missing its low`);
   const nowMid = F.hgFillProbability(holeMid, mid, 'long', null, 12);
-  ok(Math.abs(nowMid.pct - baseMid.pct) <= 5,
-     `the shipped function reads ${nowMid.pct}% — within five points of the clean tape's ${baseMid.pct}%`);
+  ok(nowMid.pct === null && nowMid.note === 'fill history n/a',
+     'one bar in three holed leaves no complete window: the shipped function reads n/a, not an inflated figure');
 
   /* the asymmetry is what identifies this as the defect rather than noise:
      a null HIGH fails the other half of the test, so it never inflated */
@@ -168,9 +173,14 @@ console.log('== the measurement itself ==');
      `under the +v reading a null HIGH moved the same tape the other way (${wasHi.pct}% vs ${baseMid.pct}%) — `
      + 'one-directional inflation, not symmetric noise');
   const nowHi = F.hgFillProbability(holeHi, mid, 'long', null, 12);
-  ok(nowHi.pct === nowMid.pct,
-     `and the shipped function treats the two holes identically (${nowHi.pct}% both ways) — a bar `
+  ok(nowHi.pct === nowMid.pct && nowHi.pct === null,
+     'and the shipped function treats the two holes identically (n/a both ways) — a bar '
      + 'missing either side answers nothing');
+  /* a SPARSE hole still measures: one bar in forty missing leaves complete windows */
+  const holeSparse = mk(200, 3); for (let i = 5; i < holeSparse.length; i += 40) holeSparse[i].l = null;
+  const nowSparse = F.hgFillProbability(holeSparse, mid, 'long', null, 12);
+  ok(isFinite(nowSparse.pct) && Math.abs(nowSparse.pct - baseMid.pct) <= 15 && /n=\d+/.test(nowSparse.note),
+     `a sparse hole still measures on the complete windows — ${nowSparse.pct}% against the clean ${baseMid.pct}%`);
 
   /* --- 4. a tape with nothing readable reports nothing --- */
   const allHoles = mk(200, 3);

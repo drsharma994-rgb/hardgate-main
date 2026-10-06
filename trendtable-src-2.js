@@ -32,6 +32,11 @@ function trendmxPlanBlock(r){
   /* hg-v1012: the evidence layer beside the plan an operator expanded to
      inspect — the stamps the scan left, never recomputed here */
   inner += trendmxFlowChipHtml(r) + trendmxFundingChipHtml(r);
+  if (r.postGate) inner += ' <span class="gpip ' + (r.postGate.state === 'pass' ? 'ok' : (r.postGate.state === 'veto' ? 'bad' : '')) + '">' + escH(tmPostGateLabel(r)) + '</span>';
+  /* hg-v1154: a vetoed plan keeps its levels and prints the reason where the two handoffs were */
+  if (tmPostGateVeto(r)){
+    return '<div class="plan">' + inner + stackHtml + ' <span class="note warn">handoffs withheld — post-gate veto (SWING policy on the gates this desk borrows)</span></div>';
+  }
   var tradeOnclick = (s && (typeof hgToTradePlanOnclickAttr === 'function' || typeof toTrade === 'function'))
     ? ((typeof hgToTradePlanOnclickAttr === 'function')
       ? hgToTradePlanOnclickAttr(r.sym, s.dir, s.entry, s.stop, s.t1, { t2: s.t2, stack: tmStack, scanner: 'trendmx', strategy: 'trendmx' })

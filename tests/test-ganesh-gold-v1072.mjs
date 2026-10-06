@@ -140,4 +140,71 @@ console.log('== wiring pins ==');
   ok(al.indexOf('function collectGaneshGold') >= 0 && al.indexOf("if (s.src === 'GANESH GOLD') return true;") >= 0, 'the crown joins the Telegram batch');
 }
 
+/* hg-v1154: the gold calendar reaches this desk. It wrote ticket:true XAUUSD
+   rows with no weekend or news reference at all, on a chain that ends in
+   24/7 proxies (the hg-v949 contamination). The gate is read on the LAST
+   CLOSED execution bar through the one shared pairing (hgGoldGateAt); a
+   shut or locked bar withholds the TICKET CLAIM only -- levels kept, card
+   reads HELD, the row is still recorded ticket:false with the mark. Driven
+   on the real scan with the gate stubbed both ways, and the route itself on
+   the real calendar. */
+console.log('== hg-v1154: the gold calendar withholds the TICKET claim, marks the row, keeps the levels ==');
+{
+  const cap = {};
+  const shutGate = () => ({ atMs: 1, weekend: { inWeekend: true, why: 'gold weekend: Fri 22:00 - Sun 22:00 UTC' }, news: null });
+  const Ws = boot(Object.assign({}, stubs, { hgFwdRecordScan: (tab, tf, cands) => { cap.tab = tab; cap.cands = cands; }, hgGoldGateAt: shutGate }));
+  const snapS = await Ws.ganeshGoldScan({ style: 'scalp' });
+  ok(snapS.ok === true && snapS.plan && snapS.plan.dir === 'long', 'REACHABILITY: the same long tape still crowns a plan under a shut calendar');
+  ok(snapS.plan.held && /GOLD SHUT/.test(snapS.plan.held), 'the plan is HELD and says why (' + snapS.plan.held + ')');
+  ok(snapS.plan.tier === 'WATCH' && snapS.plan.ticketWithheld === true, 'the TICKET claim is withheld (tier WATCH), not the plan');
+  ok(isFinite(snapS.plan.entry) && isFinite(snapS.plan.stop) && snapS.plan.stop < snapS.plan.entry, 'the levels are kept');
+  ok(cap.tab === 'GANESHGOLD' && cap.cands && cap.cands.length === 1, 'the row is STILL recorded (the population stays separable)');
+  const r = cap.cands[0];
+  ok(r.ticket === false && r.goldShut === true && /gold weekend/i.test(r.goldShutWhy), 'recorded ticket:false with the weekend mark and its reason');
+  ok(r.signalT === snapS.ev.lastT * 1000 && r.sym === 'XAUUSD', 'dated on the last closed execution bar (seconds in, milliseconds on the row)');
+  const html = Ws.ganeshGoldState() && JSON.stringify(Ws.ganeshGoldState());
+  ok(/GOLD SHUT/.test(html), 'the snapshot carries the hold for the card');
+
+  /* open calendar: the ticket stands, the row is marked OPEN (false, not absent) */
+  const cap2 = {};
+  const openGate = () => ({ atMs: 1, weekend: { inWeekend: false }, news: null });
+  const Wo = boot(Object.assign({}, stubs, { hgFwdRecordScan: (tab, tf, cands) => { cap2.cands = cands; }, hgGoldGateAt: openGate }));
+  const snapO = await Wo.ganeshGoldScan({ style: 'scalp' });
+  ok(snapO.plan && !snapO.plan.held && snapO.plan.tier === 'TICKET', 'an open bar holds nothing: TICKET stands');
+  ok(cap2.cands && cap2.cands[0].ticket === true && cap2.cands[0].goldShut === false && cap2.cands[0].goldShutWhy === undefined,
+     'recorded ticket:true, marked OPEN, no reason to carry');
+
+  /* a tier-1 news lock withholds the same way */
+  const cap3 = {};
+  const newsGate = () => ({ atMs: 1, weekend: { inWeekend: false }, news: { locked: true, why: 'CPI in 12 min' } });
+  const Wn = boot(Object.assign({}, stubs, { hgFwdRecordScan: (tab, tf, cands) => { cap3.cands = cands; }, hgGoldGateAt: newsGate }));
+  const snapN = await Wn.ganeshGoldScan({ style: 'scalp' });
+  ok(snapN.plan && /NEWS LOCK/.test(snapN.plan.held) && snapN.plan.tier === 'WATCH', 'a tier-1 news window withholds the claim too');
+  ok(cap3.cands && cap3.cands[0].ticket === false && cap3.cands[0].goldShut === false, 'and the row records ticket:false with the weekend read it had (open)');
+
+  /* FAIL OPEN: no gate loaded -> no hold, no mark, ticket unchanged (the pre-pack row) */
+  const cap4 = {};
+  const W0 = boot(Object.assign({}, stubs, { hgFwdRecordScan: (tab, tf, cands) => { cap4.cands = cands; } }));
+  const snap0 = await W0.ganeshGoldScan({ style: 'scalp' });
+  ok(snap0.plan && !snap0.plan.held && cap4.cands && cap4.cands[0].ticket === true && cap4.cands[0].goldShut === undefined,
+     'FAIL OPEN: no calendar -> nothing withheld, row unmarked');
+
+  /* the census route, on the REAL calendar */
+  const Wc = boot(stubs);
+  for (const f of ['gold-formation.js']) vm.runInContext(read(f), Wc, { filename: f });
+  const SAT = Date.UTC(2026, 3, 11, 12, 0, 0), WED = Date.UTC(2026, 3, 8, 12, 0, 0);
+  ok(typeof Wc.ggWeekendVerdict === 'function', 'the route is exported for the coverage reporter');
+  ok(!!Wc.ggWeekendVerdict(SAT) && Wc.ggWeekendVerdict(WED) === null, 'the route tells a Saturday from a Wednesday');
+  ok(!!Wc.ggWeekendVerdict(Math.floor(SAT / 1000)), 'seconds are read as seconds');
+  ok(Wc.ggWeekendVerdict(0) === null && Wc.ggWeekendVerdict(null) === null && Wc.ggWeekendVerdict('x') === null, 'epoch zero, null and junk yield no verdict');
+  ok(Wc.hgGoldWeekendProbeRoute('ggWeekendVerdict') === 'verified', 'the coverage reporter VERIFIES the route');
+  const row = (Wc.HG_GOLD_WEEKEND_MINTERS || []).find(m => m.tab === 'ganeshgold');
+  ok(row && row.verdictFn === 'ggWeekendVerdict' && row.probe === 'ganeshGoldState', 'the census lists the desk with this route');
+  ok(typeof (Wc.HG_GOLD_NEWS_ROUTES || {}).ganeshgold === 'string', 'and the news census names its route');
+
+  /* the session leg reads the bar's own clock, not 1970 */
+  const src = read('ganeshgold.js');
+  ok(/function ggBarMs/.test(src) && /var ms = ggBarMs\(t\); if \(ms === null\) return 'UNREAD';/.test(src), 'sessOf reads seconds as seconds (was new Date(seconds) = 1970)');
+}
+
 console.log('\ntest-ganesh-gold-v1072: ' + passed + ' passed, 0 failed');

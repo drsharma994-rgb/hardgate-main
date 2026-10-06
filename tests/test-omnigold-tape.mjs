@@ -50,6 +50,13 @@ function boot(){
                    'hg-forward.js','hg-gates.js','hg-plan.js','omniroute.js','omnigold.js']){
     vm.runInContext(read(f), ctx, { filename: f });
   }
+  /* hg-v1099 (BATCH 1099): hgOgPickFor crowns only a kind the tab's OWN
+     measured ledger has paid for (forward 'has paid', or a replay row net
+     positive past the family bar). The fixtures in this file are about the
+     ORDERING among tickets, so the ledger is stubbed to have paid for every
+     kind; the rule itself is pinned in test-omnigold-most-probable.mjs. */
+  ctx.hgFwdPool = function(){ return new Proxy({}, { get: function(){ return { samples: 40, hit: 0.7 }; } }); };
+  ctx.hgOmniPoolRead = function(){ return { read: 'has paid', z: 4, bar: 3 }; };
   return ctx;
 }
 
@@ -185,9 +192,13 @@ console.log('== scan wires per-horizon tape into picks ==');
   ok(/hgOgPickWatchFor\([^,]+, HORIZONS\.scalp\.label, scalpTape\)/.test(GOLD)
       && /hgOgPickWatchFor\([^,]+, HORIZONS\.swing\.label, swingTape\)/.test(GOLD),
      'WATCH picks are also per-horizon');
-  ok(/hgOgPickGoldEngineForMp\(bridge, HORIZONS\.scalp\.label, scalpTape\)/.test(GOLD)
-      && /hgOgPickGoldEngineForMp\(bridge, HORIZONS\.swing\.label, swingTape\)/.test(GOLD),
-     'GOLD SCALP/SWING engine fallback follows that horizon\'s tape');
+  /* v1099 (BATCH 1099): the GOLD SCALP / SWING engine grade is no longer a
+     fallback lead on this desk — the ledger is the only lead — so the two
+     engine picks are nulled at the site that used to call the engine with
+     that horizon's tape. The pin follows that decision. */
+  ok(/var engineScalp = null; \/\* v1099/.test(GOLD) && /var engineSwing = null;/.test(GOLD)
+      && !/hgOgPickGoldEngineForMp\(bridge, HORIZONS\.scalp\.label, scalpTape\)/.test(GOLD),
+     'GOLD SCALP/SWING engine fallback is withdrawn as a lead (v1099), per horizon');
   ok(/hgOgZonesPanel\(res\.scalp\.rows, res\.scalp\.livePx, (deskTape|scalpTape)\)/.test(GOLD),
      'NEXT GOLD LEVELS still filters against a one-sided desk tape');
   ok(/__og\.tape && __og\.tape\.desk/.test(GOLD),

@@ -247,8 +247,9 @@ console.log('\n== Part 4: getGoldMacro shape, realRateHint, Yahoo last resort ==
      given. Both are nullable and null here, because these fixtures stub the
      scalar legs only -- which is the point of listing them: the shape says the
      supplier offers them even when a route cannot fill them. */
-  const SHAPE = ['dfii10Rows', 'dxy', 'dxyOfficial', 'dxyRows', 'goldPx', 'goldSilverRatio', 'realRateHint', 'realRateMeasured', 'realRateSource',
-    'realYield10Y', 'realYieldChange20Pct', 'realYieldTrend', 'silver', 'tnx', 'tnxChange20Pct', 'tnxRows', 'tnxSource', 'tnxTrend'];
+  /* BATCH 1152 added gsRatioTrend, silverTrend, usdjpyTrend and vixTrend (hg-v1154 re-pins the shape) */
+  const SHAPE = ['dfii10Rows', 'dxy', 'dxyOfficial', 'dxyRows', 'goldPx', 'goldSilverRatio', 'gsRatioTrend', 'realRateHint', 'realRateMeasured', 'realRateSource',
+    'realYield10Y', 'realYieldChange20Pct', 'realYieldTrend', 'silver', 'silverTrend', 'tnx', 'tnxChange20Pct', 'tnxRows', 'tnxSource', 'tnxTrend', 'usdjpyTrend', 'vixTrend'];
 
   const m = await macroOnly(macroRoutes('falling', FALLING_YIELDS, 50), async () => synthRows(10, 4000));
   assert(Object.keys(m).sort().join('|') === SHAPE.join('|'), 'exact return shape keys: ' + SHAPE.join(', '));

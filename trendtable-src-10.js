@@ -215,7 +215,10 @@ function publishTrendmxSnap(rows){
     __tmSnap = {
       at: Date.now(),
       rows: rows.map(function(r){
-        return { sym: r.sym, score: r.score, dir: tmDirOf(r), comps: r.comps || null };
+        return { sym: r.sym, score: r.score, dir: tmDirOf(r), comps: r.comps || null,
+                 /* hg-v1154: the shared post-gate verdict on this row, read by CONTRACT REPORT */
+                 postGate: r.postGate ? r.postGate.state : undefined,
+                 postGateReason: (r.postGate && r.postGate.state === 'veto') ? (r.postGate.reason || null) : undefined };
       })
     };
   }catch(e){ __tmSnap = null; }

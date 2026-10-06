@@ -78,7 +78,9 @@ function trendmxLimitClasses(rows){
      witnesses that actually fired (taker flow hg-v1012 · momentum hg-v1019
      · volume hg-v1020). */
   var out = { clean: [], conv: [], heldClean: 0, heldConv: 0,
-              heldWhy: { clean: { flow: 0, mom: 0, vol: 0, fund: 0 }, conv: { flow: 0, mom: 0, vol: 0, fund: 0 } } };
+              heldWhy: { clean: { flow: 0, mom: 0, vol: 0, fund: 0, postgate: 0 }, conv: { flow: 0, mom: 0, vol: 0, fund: 0, postgate: 0 } },
+              /* hg-v1154: the post-gate-vetoed rows, kept so they are RECORDED (ticket:false) and never shown */
+              heldPostGate: [] };
   for (var i = 0; i < rows.length; i++){
     var r = rows[i];
     if (!r || !r.gate || r.gate.veto) continue;
@@ -134,6 +136,18 @@ function trendmxLimitClasses(rows){
     }
     var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
     if (!tmValidSetup(plan)) continue;
+    /* hg-v1154: THE POST-GATE WITNESS hold-off -- the fifth witness, and the only
+       one that is the SWING desk's own rule rather than a read of this desk's.
+       A vetoed row is held off both class desks, counted and named per class,
+       still painting with its chip -- and unlike the other four it is kept here
+       so the record below carries it with ticket:false, because a veto nobody
+       records is a veto nobody can measure. PASS and UNCHECKED pass. */
+    if (tmPostGateVeto(r)){
+      if (isClean){ out.heldClean++; out.heldWhy.clean.postgate++; }
+      else { out.heldConv++; out.heldWhy.conv.postgate++; }
+      out.heldPostGate.push({ row: r, plan: plan, dir: dir, stack: null, rank: 0, isClean: isClean });
+      continue;
+    }
     var item = { row: r, plan: plan, dir: dir, stack: trendmxCardStack(r, dir) };
     if (isClean){
       /* the old board's intra-class rank, unchanged: composite, then gates */
@@ -157,7 +171,8 @@ function trendmxLimitClasses(rows){
      clean7, which is the tab's own claim about quality: if the 7/7 rows
      resolve like the merely-convicted ones, that distinction is not doing
      work. Fields byte-identical to the mixed board's record. */
-  var cands = out.clean.concat(out.conv);
+  /* hg-v1154: the post-gate-vetoed rows ride into the record and nowhere else */
+  var cands = out.clean.concat(out.conv).concat(out.heldPostGate);
   try {
     if (typeof W.hgFwdRecordScan === 'function' && cands.length){
       W.hgFwdRecordScan('TRENDMX', '4h', cands.map(function(c){
@@ -195,13 +210,18 @@ function trendmxLimitClasses(rows){
                       fire time, absent when it was silent or dark. Against /
                       refuse rows never reach this map (held off above). */
                    if (trendmxFundState(c.row, c.dir) === 'with') rd.fundWith = true;
+                   /* hg-v1154: the SWING post-gate verdict -- true VETOED, false passed,
+                      absent when unchecked or un-run (the third state) */
+                   var pgr = tmPostGateReads(c.row);
+                   if (pgr) rd['postgate:veto'] = pgr['postgate:veto'];
                    return Object.keys(rd).length ? rd : undefined;
                  })(),
                  /* hg-v995: the composite is NOT handed in here -- the ledger reads it off
                     this desk's own published snapshot (hgTrendMatrixMark), the same row the
                     board painted, so a second copy would be the same number twice */
                  mechanic: (c.row && c.row.gate && c.row.gate.clean7) ? 'TM-CLEAN7' : 'TM-CONVICTION',
-                 ticket: !!(c.row && c.row.gate && c.row.gate.clean7),
+                 /* hg-v1154: a post-gate veto withholds the ticket claim; the record stays */
+                 ticket: !!(c.row && c.row.gate && c.row.gate.clean7) && !tmPostGateVeto(c.row),
                  /* hg-v1022: the PERFECT read-mark — true when the row met the
                     strictest confluence bar at fire time, absent otherwise. The
                     split is how the PERFECT desk earns a measured outcome. */
@@ -227,6 +247,7 @@ function trendmxHeldBits(held, why){
   if (w.mom) bits.push('the 1D RSI momentum range has turned against the trend (hg-v1019)');
   if (w.vol) bits.push('the 1D OBV volume trend diverges against the trend (hg-v1020)');
   if (w.fund) bits.push('the fundamental + sentiment stack stands against the trend — a calendar blackout or 2+ net checked votes (hg-v1034)');
+  if (w.postgate) bits.push('the SWING post-gate rule refused the row — flow trap, BTC relative strength or stale momentum on the free feeds (hg-v1154); recorded, not shown');
   if (!bits.length) bits.push('real Binance taker flow reads against the trend (hg-v1012)');
   return bits;
 }
@@ -249,6 +270,7 @@ function trendmxLimitDeskHTML(title, crit, bag, held, why){
     if (w2.mom) tags.push('momentum regime against');
     if (w2.vol) tags.push('volume trend against');
     if (w2.fund) tags.push('fundamental headwind');
+    if (w2.postgate) tags.push('SWING post-gate rule refused the row (recorded, not shown; hg-v1154)');
     if (!tags.length) tags.push('taker flow against');
     heldTag = ' · ' + held + ' held off — ' + tags.join(' · ');
   }

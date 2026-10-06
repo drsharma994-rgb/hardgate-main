@@ -20,8 +20,71 @@ function fin(v){ return (typeof v === 'number' && isFinite(v)); }
 var MIN_RR = { scalp: 1.2, swing: 1.5 };
 var __gg = { snap: null, busy: false, run: null, ranOnce: false, lastBar: 0 };
 
+/* hg-v1154: the bar instant, read once. Candle rows carry `t` in SECONDS on
+   this chain (the ledger and every gold desk read them so); `new Date(+t)`
+   on a seconds value is January 1970, which is what sessOf() had been
+   judging the session leg on. Seconds or milliseconds in, milliseconds
+   out; an unreadable or epoch-zero instant is NO instant (the +null === 0
+   trap), never 1970. */
+function ggBarMs(t){
+  var n = +t;
+  if (!isFinite(n) || n <= 0) return null;
+  return n < 1e12 ? n * 1000 : n;
+}
+/* hg-v1154: the gold calendar on THIS desk. GANESH GOLD writes ticket:true
+   XAUUSD rows into the forward ledger and had no weekend or news reference
+   of any kind, on a chain that ends in 24/7 proxies (hg-v949's
+   contamination). The rule lives once, in gold-formation.js (hgGoldGateAt:
+   both calendars on ONE instant, hg-v964); this file carries lookup guards
+   and no calendar of its own. The route answers truthy-when-shut /
+   null-when-open, the shape the coverage reporter calls (hg-v952). */
+function ggWeekendVerdict(atMs){
+  try{
+    var f = W.hgGoldWeekendVerdict;
+    if (typeof f !== 'function') return null;
+    var ms = ggBarMs(atMs);
+    if (ms === null) return null;
+    var v = f(ms);
+    return (v && v.inWeekend === true) ? v : null;
+  }catch(e){ return null; }
+}
+function ggGateAt(atMs){
+  try{
+    var ms = ggBarMs(atMs);
+    if (ms === null) return null;
+    var f = W.hgGoldGateAt;
+    if (typeof f === 'function') return f(ms);
+    var wf = W.hgGoldWeekendVerdict;
+    return { atMs: ms, weekend: (typeof wf === 'function') ? wf(ms) : null, news: null };
+  }catch(e){ return null; }
+}
+/* What the calendar withholds: the TICKET CLAIM and nothing else. The plan
+   keeps its levels, grade and R:R, paints as HELD, and its record is still
+   written -- ticket:false, with the weekend mark -- so the population can be
+   separated later (hg-v955). Fails OPEN: no gate, no hold. */
+function ggHold(plan, gate){
+  if (!plan || !gate) return plan;
+  var why = null;
+  if (gate.weekend && gate.weekend.inWeekend === true) why = 'GOLD SHUT - ' + (gate.weekend.why || 'gold weekend');
+  else if (gate.news && gate.news.locked === true) why = 'NEWS LOCK - ' + (gate.news.why || 'tier-1 gold news window');
+  if (!why) return plan;
+  plan.held = why;
+  if (plan.tier === 'TICKET'){ plan.tier = 'WATCH'; plan.ticketWithheld = true; }
+  return plan;
+}
+/* hg-v979: the feed the levels were priced on -- the shell's per-timeframe
+   record, the same one the DATA chip reads. Absent stays absent. */
+function ggFeed(tf){
+  try{
+    var S = W.S;
+    var v = (S && S.goldSrcByTf) ? S.goldSrcByTf[tf] : null;
+    return (typeof v === 'string' && v) ? v : undefined;
+  }catch(e){ return undefined; }
+}
+
 function sessOf(t){
-  try{ var h = new Date(+t).getUTCHours();
+  try{ var ms = ggBarMs(t); if (ms === null) return 'UNREAD';
+    var h = new Date(ms).getUTCHours();
     if (h < 8) return 'ASIA'; if (h < 12) return 'LONDON';
     if (h < 16) return 'NY-OVERLAP'; if (h < 21) return 'NEW YORK'; return 'LATE';
   }catch(e){ return 'UNREAD'; }
@@ -134,6 +197,12 @@ async function ganeshGoldEval(style){
   var ctx = (style === 'scalp') ? (h4 && h4.length >= 60 ? h4 : ex) : ex;
   var atrEx = atrVal(ex), atrCtx = atrVal(ctx);
   var px = +ex[ex.length - 1].c, lastT = +ex[ex.length - 1].t;
+  /* hg-v1154: the shared tape-sanity rule (gold-tape-sanity.js) on the
+     execution series -- a stale, gapped or non-continuous tape is said on
+     the card rather than graded as if it were whole. '' when the rule is
+     absent or the tape is clean. */
+  var tapeNote = '';
+  try{ if (typeof W.hgGoldTapeNotes === 'function') tapeNote = String(W.hgGoldTapeNotes(ex, exTf) || ''); }catch(eTn){ tapeNote = ''; }
   var swEx = swings(ex, 3), swCtx = swings(ctx, 3);
   var lv = dayLevels(day), ab = asiaBox(ex);
   var hs = swCtx.hs.slice(-3), ls = swCtx.ls.slice(-3);
@@ -204,7 +273,8 @@ async function ganeshGoldEval(style){
     lv: lv, ab: ab, sellLiq: sellLiq, buyLiq: buyLiq, eqH: eqH, eqL: eqL, pd: pd, mid: mid,
     sweptSell: sweptSell, sweptBuy: sweptBuy, disp: disp, mssUp: mssUp, mssDown: mssDown,
     fvg: fvg, ob: ob, zone: zone, retest: retest, vw: vw, atrRegime: atrRegime, vp: vp,
-    sq: sq, dxT: dxT, tnxT: tnxT, news: news, sess: sess, lastT: lastT, rangeHi: rangeHi, rangeLo: rangeLo };
+    sq: sq, dxT: dxT, tnxT: tnxT, news: news, sess: sess, lastT: lastT, rangeHi: rangeHi, rangeLo: rangeLo,
+    tapeNote: tapeNote };
   return { ok: true, ev: ev };
 }
 
@@ -268,20 +338,39 @@ async function ganeshGoldScan(opts){
     var ev = r.ev;
     var mL = modelGrade(ev, 'long'), mS = modelGrade(ev, 'short');
     var pL = planFor(ev, mL), pS = planFor(ev, mS);
+    /* hg-v1154: both calendars on the LAST CLOSED execution bar, never the
+       wall clock (hg-v952 / hg-v978) -- a Monday re-run over Friday's bars
+       gives Friday's answer. */
+    var barMs = ggBarMs(ev.lastT), gate = ggGateAt(barMs);
+    pL = ggHold(pL, gate); pS = ggHold(pS, gate);
     var pick = null, plan = null, alt = null;
     if (pL && pL.tier === 'TICKET' && (!pS || pS.tier !== 'TICKET' || (pS.rr1 < pL.rr1))){ pick = 'long'; plan = pL; alt = pS; }
     else if (pS && pS.tier === 'TICKET'){ pick = 'short'; plan = pS; alt = pL; }
     else if (pL && (pL.grade === 'A' || pL.grade === 'A+')){ pick = 'long'; plan = pL; alt = pS; }
     else if (pS && (pS.grade === 'A' || pS.grade === 'A+')){ pick = 'short'; plan = pS; alt = pL; }
     __gg.snap = { ok: true, at: Date.now(), style: style, ev: ev, mL: mL, mS: mS,
-      planL: pL, planS: pS, pick: pick, plan: plan, alt: alt };
-    /* the forward record: one mint per closed bar, TICKET only */
+      planL: pL, planS: pS, pick: pick, plan: plan, alt: alt, gate: gate };
+    /* the forward record: one mint per closed bar, TICKET only -- and
+       (hg-v1154) a ticket the calendar WITHHELD, written ticket:false with
+       the weekend mark, so the weekend population is separable rather than
+       silently absent. */
     try{
-      if (plan && plan.tier === 'TICKET' && typeof W.hgFwdRecordScan === 'function' && ev.lastT !== __gg.lastBar){
+      var shutRead = (gate && gate.weekend && (gate.weekend.inWeekend === true || gate.weekend.inWeekend === false))
+        ? gate.weekend.inWeekend : undefined;
+      if (plan && (plan.tier === 'TICKET' || plan.ticketWithheld === true) && typeof W.hgFwdRecordScan === 'function' && ev.lastT !== __gg.lastBar){
         __gg.lastBar = ev.lastT;
         W.hgFwdRecordScan('GANESHGOLD', (style === 'scalp') ? '15m' : '4h', [{
           sym: 'XAUUSD', dir: plan.dir, entry: +plan.entry, stop: +plan.stop,
           t1: fin(plan.t1) ? +plan.t1 : undefined, t2: fin(plan.t2) ? +plan.t2 : undefined,
+          /* hg-v1154: dated on the bar the model read (hg-v978), the feed
+             those bars came from (hg-v979), and the gold calendar's verdict
+             on that bar -- absent when the calendar could not read it,
+             never a guessed false. */
+          signalT: barMs !== null ? barMs : undefined,
+          feed: ggFeed((style === 'scalp') ? '15m' : '4h'),
+          goldShut: shutRead,
+          goldShutWhy: (shutRead === true && gate.weekend.why) ? String(gate.weekend.why) : undefined,
+          held: plan.held || undefined,
           /* hg-v1150: THE MARK CARRIER — the ledger census requires every
              record writer to carry the price the plan was minted against
              (without it the fill-aware settlement stands aside, and a limit
@@ -289,7 +378,7 @@ async function ganeshGoldScan(opts){
              the last closed tape price the whole model read. */
           mark: fin(ev.px) ? +ev.px : undefined,
           mechanic: 'GANESHGOLD-' + (style === 'scalp' ? 'SCALP' : 'SWING'),
-          ticket: true, style: 'ganeshgold-' + style
+          ticket: plan.ticketWithheld !== true, style: 'ganeshgold-' + style
         }]);
       }
     }catch(eRec){ }
@@ -336,9 +425,21 @@ function modelHtml(title, m, plan){
   }
   var head = '<div class="panel" style="margin-top:10px"><h3>' + title + ' <span>' + m.n + '/12 legs - grade ' + (m.grade || 'NONE') + '</span></h3>';
   if (plan){
-    head += '<div style="font-size:12px;margin-bottom:6px">' + (plan.tier === 'TICKET' ? 'TICKET' : (plan.tier === 'WATCH' ? 'WATCH ONLY' : 'no plan')) + (plan.ok ? '' : ' - R:R below the style minimum') + '</div>';
+    head += '<div style="font-size:12px;margin-bottom:6px">' + (plan.held ? ('HELD - ' + escH(plan.held)) : (plan.tier === 'TICKET' ? 'TICKET' : (plan.tier === 'WATCH' ? 'WATCH ONLY' : 'no plan'))) + (plan.ok ? '' : ' - R:R below the style minimum') + '</div>';
   }
   return head + rows.join('') + '</div>';
+}
+
+/* hg-v1154: the shared ANTI-CHASE geometry verdict (hg-plan.js) on the
+   crowned plan against the mark it was priced on -- a stop already breached
+   or a target already behind the entry is said on the card. '' when the rule
+   is absent or the geometry is sound. */
+function ggGeoLine(p, snap){
+  try{
+    if (typeof W.hgPlanGeometryLineHtml !== 'function' || !p || !snap || !snap.ev) return '';
+    return W.hgPlanGeometryLineHtml({ dir: p.dir, entry: p.entry, stop: p.stop, t1: p.t1 },
+                                    fin(snap.ev.px) ? snap.ev.px : NaN, { cls: 'note warn', style: 'margin-top:6px' }) || '';
+  }catch(e){ return ''; }
 }
 
 function callHtml(snap){
@@ -347,7 +448,9 @@ function callHtml(snap){
     var p = snap.plan;
     var color = p.dir === 'long' ? '#26a69a' : '#ef5350';
     var html = '<div class="panel" style="margin-top:10px;border-top:3px solid ' + color + '"><h3>THE CALL</h3>'
-      + '<div style="font-size:16px;font-weight:700">' + p.dir.toUpperCase() + ' - ' + (p.tier === 'TICKET' ? 'TICKET' : 'WATCH ONLY') + ' - XAUUSD - ' + (snap.style === 'scalp' ? 'SCALP 15m' : 'SWING 4h') + ' - grade ' + p.grade + '</div></div>';
+      + '<div style="font-size:16px;font-weight:700">' + p.dir.toUpperCase() + ' - ' + (p.held ? 'HELD' : (p.tier === 'TICKET' ? 'TICKET' : 'WATCH ONLY')) + ' - XAUUSD - ' + (snap.style === 'scalp' ? 'SCALP 15m' : 'SWING 4h') + ' - grade ' + p.grade + '</div>'
+      + (p.held ? '<div class="note warn" style="margin-top:4px">' + escH(p.held) + ' - the TICKET claim is withheld on the bar the model read; levels kept, recorded ticket:false for the ledger.</div>' : '')
+      + '</div>';
     var payload = { v: 1, id: 'GG-XAUUSD', venue: 'delta', symbol: 'XAUUSD', side: p.dir,
       entry: +p.entry, stop: +p.stop, t1: fin(p.t1) ? +p.t1 : null, t2: fin(p.t2) ? +p.t2 : null,
       style: snap.style, grade: p.grade, rr1: fin(p.rr1) ? +p.rr1.toFixed(2) : null,
@@ -359,6 +462,7 @@ function callHtml(snap){
       + '<div class="kv"><span class="k">Invalidation (SL)</span><span class="v">' + p.stop.toFixed(2) + ' - beyond the sweep extreme + 0.5xATR buffer</span></div>'
       + '<div class="kv"><span class="k">Targets</span><span class="v">TP1 ' + (fin(p.t1) ? p.t1.toFixed(2) + ' (nearest liquidity)' : 'n/a') + ' | TP2 ' + (fin(p.t2) ? p.t2.toFixed(2) + ' (equal highs/lows or week level)' : 'n/a') + ' | TP3 ' + (fin(p.t3) ? p.t3.toFixed(2) + ' (HTF swing)' : 'n/a') + '</span></div>'
       + '<div class="kv"><span class="k">R:R</span><span class="v">' + (fin(p.rr1) ? p.rr1.toFixed(1) + 'R to TP1' : 'UNREAD') + (fin(p.rr2) ? ' / ' + p.rr2.toFixed(1) + 'R to TP2' : '') + '</span></div>'
+      + ggGeoLine(p, snap)
       + '<div class="kv"><span class="k">Risk</span><span class="v">0.25-1% of equity per trade - sized from the SL, never the target</span></div>'
       + '<div class="kv"><span class="k">Automation Blueprint</span><span class="v"><pre style="margin:4px 0;white-space:pre-wrap;font-size:10px">' + escH(JSON.stringify(payload, null, 2)) + '</pre>' + (p.tier === 'TICKET' ? '' : '<div class="note warn" style="margin-top:4px">formation WATCH ONLY - the bridge must drop this payload.</div>') + '</span></div>'
       + '</div>';
@@ -371,7 +475,8 @@ function paint(el, snap){
     el.innerHTML = '<div class="note warn" style="margin-top:10px">' + escH(snap.note || 'scan failed') + '</div>';
     return;
   }
-  var html = callHtml(snap)
+  var html = (snap.ev && snap.ev.tapeNote ? snap.ev.tapeNote : '')   /* hg-v1154: the tape-sanity note leads */
+    + callHtml(snap)
     + pipelineHtml(snap)
     + modelHtml('GOLD LONG MODEL', snap.mL, snap.planL)
     + modelHtml('GOLD SHORT MODEL', snap.mS, snap.planS);
@@ -443,6 +548,7 @@ W.ganeshGoldState = function(){ try{ return __gg.snap ? JSON.parse(JSON.stringif
 W.ganeshGoldScan = ganeshGoldScan;
 W.ganeshGoldEval = ganeshGoldEval;
 W.ganeshGoldWarm = ganeshGoldWarm;
+W.ggWeekendVerdict = ggWeekendVerdict;   /* hg-v1154: the census route */
 
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'ganeshgold', label: 'GANESH GOLD', mount: mount, refresh: ganeshGoldRefresh });

@@ -45,7 +45,7 @@
   function add(id, src){
     var old = document.getElementById(id);
     if (old && old.getAttribute('data-v') === '1124') return;
-    if (old) old.parentNode.removeChild(old);
+    if (old && old.parentNode) old.parentNode.removeChild(old);   /* hg-v1154: a detached or stubbed node has no parent */
     var s = document.createElement('script');
     s.id = id;
     s.setAttribute('data-v', '1124');

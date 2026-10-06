@@ -49,8 +49,11 @@ assert.ok(/HG_SOLIDITY_VERSION = 'v(687|68[8-9]|69\d|[7-9]\d\d|\d{4,})'/.test(so
 
 /* --- structural: omnigold opts into tape-override --- */
 const omnigold = readFileSync(resolve(ROOT, 'omnigold.js'), 'utf8');
-assert.ok(/tapeOverride: true \/\* v687 omnigold-only opt-in \*\//.test(omnigold),
-  'omnigold passes tapeOverride: true');
+/* v1099 withdrew the opt-in: a past winner against the tape is not put on
+   top of the OMNIGOLD desk. The helper still honours tapeOverride (runtime
+   section below); the desk no longer asks for it, and the pin says so. */
+assert.ok(/tapeOverride: false \/\* v1099/.test(omnigold) && !/tapeOverride:\s*true/.test(omnigold),
+  'omnigold no longer opts into tapeOverride (v1099)');
 
 /* --- structural: omniroute + rsniper do NOT opt into tape-override --- */
 const omniroute = readFileSync(resolve(ROOT, 'omniroute.js'), 'utf8');

@@ -100,7 +100,9 @@ function boot(){
     [...htmlSrc.matchAll(/<script[^>]+src\s*=\s*["']([^"']+)["']/gi)]
       .map(m => m[1].split('?')[0].replace(/^\.\//, '')));
   const loadedByPage = f => pageScripts.has(f);
-  const all = fs.readdirSync(ROOT).filter(f => f.endsWith('.js') && f !== 'sw.js').sort();
+  /* hg-v1154: trendtable-src-N.js are the twelve fragments the server concatenates into
+     /trendtable.js (hg-v1080); none is a script on its own, the combined file is */
+  const all = fs.readdirSync(ROOT).filter(f => f.endsWith('.js') && f !== 'sw.js' && !/^trendtable-src-\d+\.js$/.test(f)).sort();
   const nodeOnly = all.filter(f => !loadedByPage(f) && NODE_ONLY.test(fs.readFileSync(path.join(ROOT, f), 'utf8')));
   const files = all.filter(f => nodeOnly.indexOf(f) < 0);
   const failed = [];

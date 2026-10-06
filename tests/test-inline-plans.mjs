@@ -178,7 +178,8 @@ while ((m = re.exec(html)) !== null){ if (m[1].trim()) blocks.push(m[1]); }
    anything. Three separate test files carried the same stale number.
    Corrected to 5 in hg-v762, with the same kind of exemption already
    written out for block 1. */
-assert(blocks.length === 5, 'index.html yields exactly 5 non-empty inline <script> blocks (got ' + blocks.length + ')');
+/* hg-v1142 added the one-link cache nuker as a sixth inline block (hg-v1154 re-pins) */
+assert(blocks.length === 6, 'index.html yields exactly 6 non-empty inline <script> blocks (got ' + blocks.length + ')');
 assert(/\?diag=1/.test(blocks[0]), 'and the first of them is the ?diag=1 probe, ahead of every app script');
 
 loadErr = null;

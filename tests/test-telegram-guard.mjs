@@ -41,8 +41,15 @@ globalThis.fetch = async (url) => {
   fetchUrl = String(url);
   return { ok: true, json: async () => ({ ok: true }) };
 };
-const r = await sendTelegramMessage('hello');
+const r = await sendTelegramMessage('TREND MATRIX GOLDEN CROSS hello');
 ok(r.ok === true && fetchUrl.indexOf('api.telegram.org') >= 0, 'sendTelegramMessage posts to bot API');
+/* hg-v1154: a message the hg-v1113 keep rule withholds is SKIPPED and says so —
+   never ok:true, never a fetch. The old shape let the pipeline heartbeat
+   print "telegram: sent" on a no-pulse alert it had silently dropped. */
+fetchUrl = '';
+const rf = await sendTelegramMessage('hello, nothing golden here');
+ok(rf.ok === false && rf.skipped === true && rf.filtered === true && /filtered/.test(rf.reason) && fetchUrl === '',
+   'a withheld message is skipped+filtered with the reason named, and nothing is fetched');
 globalThis.fetch = origFetch;
 
 process.env.TELEGRAM_DISABLED = 'yes';

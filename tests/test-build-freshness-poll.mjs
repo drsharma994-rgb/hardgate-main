@@ -156,34 +156,40 @@ const settle = () => new Promise(r => setTimeout(r, 15));
   await settle();
 
   eq(env.fetched.length, 1, 'one tick, one request');
-  ok(/[?&]fresh=\d+/.test(env.fetched[0].url),
+  /* hg-v1154: the current page probes ?live= (the server keeps ?fresh= as the
+     stuck-tab clear window and leaves a live probe alone). Either spelling is
+     a cache-buster; what matters is that one is there. */
+  ok(/[?&](?:fresh|live)=\d+/.test(env.fetched[0].url),
     'the polled request is cache-busted — got ' + env.fetched[0].url);
   eq(env.fetched[0].opts && env.fetched[0].opts.cache, 'no-store',
     'the polled request is no-store — a cached answer would always read "fresh"');
 }
 
 /* =====================================================================
-   4. End to end: a deploy lands, the clock ticks, the tab reloads.
-      This is the whole point of the pack.
+   4. End to end: a deploy lands, the clock ticks, the tab READS STALE.
+      BATCH 1140 ("stop the version reload loop") removed the automatic
+      reload: hgBuildMaybeReload returns false for every input, and a tab
+      that finds a newer build renders STALE and leaves the reload to the
+      person (or the service worker's own update). The poll must still SEE
+      the new build — that is the half of hg-v958 that stands.
    ===================================================================== */
 {
   const env = boot({ readyState: 'complete', liveVersion: AHEAD });
   await settle();
-  /* boot already saw the newer build and reloaded once; clear that and
-     prove the POLL path reaches the reload on its own */
   env.reloads.length = 0;
   env.G.sessionStorage.data = {};
 
   env.intervals[0].fn();
   await settle();
-  eq(env.reloads.length, 1, 'a tick that finds a newer build reloads the tab');
-  ok(env.G.sessionStorage.data['hg_build_reload_' + AHEAD] === '1',
-    'the reload is recorded against the live version it saw');
+  eq(env.G.HG_BUILD_FRESHNESS && env.G.HG_BUILD_FRESHNESS.state, 'stale',
+    'a tick that finds a newer build reads STALE');
+  eq(env.G.HG_BUILD_FRESHNESS.live, AHEAD, 'and names the live build it saw');
+  eq(env.reloads.length, 0, 'and does NOT reload the tab (BATCH 1140: no automatic reload)');
 
-  /* and it does not loop: the next fifty ticks must not reload again */
+  /* and it never loops: fifty further ticks reload nothing either */
   for (let i = 0; i < 50; i++) env.intervals[0].fn();
   await settle();
-  eq(env.reloads.length, 1, 'fifty further ticks on the same live version do NOT reload again');
+  eq(env.reloads.length, 0, 'fifty further ticks on a newer live version still reload nothing');
 }
 
 /* =====================================================================
@@ -216,43 +222,32 @@ const settle = () => new Promise(r => setTimeout(r, 15));
 }
 
 /* =====================================================================
-   7. The reload must not land on someone's typing.
-      Polling makes the reload ~100x more frequent, so this is new risk
-      this pack introduces and must carry.
+   7. The automatic reload is gone (BATCH 1140), and the seam says so:
+      hgBuildMaybeReload answers false for every input, runs no reload
+      function, writes no key — whatever the focus, whatever the document.
+      The editing guard it used to consult still exists and still reads
+      honestly, so a future pack that brings a reload back has its guard.
    ===================================================================== */
 {
   const G = boot({}).G;
   const stale = { state: 'stale', live: 'hg-v999' };
   const mkStore = () => ({ data: {}, getItem(k){ return this.data[k] || null; }, setItem(k, v){ this.data[k] = String(v); } });
 
-  for (const tag of ['INPUT', 'TEXTAREA', 'SELECT']){
+  for (const doc of [{ activeElement: { tagName: 'INPUT' } }, { activeElement: { tagName: 'DIV' } },
+                     { get activeElement(){ throw new Error('blocked'); } }, undefined]){
     const store = mkStore();
     let fired = false;
-    eq(G.hgBuildMaybeReload(stale, store, () => { fired = true; }, { activeElement: { tagName: tag } }), false,
-      'focus in a ' + tag + ' withholds the automatic reload');
-    ok(!fired, 'and the reload really did not run for ' + tag);
-    eq(store.data['hg_build_reload_hg-v999'], undefined,
-      'the key is NOT written for ' + tag + ' — the update is deferred, not lost');
+    eq(G.hgBuildMaybeReload(stale, store, () => { fired = true; }, doc), false,
+      'hgBuildMaybeReload answers false (' + (doc ? JSON.stringify(Object.keys(doc)) : 'no document') + ')');
+    ok(!fired, 'and runs no reload');
+    eq(store.data['hg_build_reload_hg-v999'], undefined, 'and writes no key');
   }
 
-  const ceStore = mkStore();
-  eq(G.hgBuildMaybeReload(stale, ceStore, () => {}, { activeElement: { tagName: 'DIV', isContentEditable: true } }), false,
-    'a contenteditable element withholds the reload too');
-
-  /* a later attempt, once focus has left the field, must go through —
-     this is what proves "deferred" rather than "lost" */
-  let late = false;
-  eq(G.hgBuildMaybeReload(stale, ceStore, () => { late = true; }, { activeElement: { tagName: 'DIV' } }), true,
-    'once focus leaves the field the deferred reload goes through');
-  ok(late, 'and it really ran');
-
-  /* FAILS OPEN — an unreadable document must never become a new lockout.
-
-     hgBuildEditingNow(null) falls back to G.document, so asserting it inside
-     a harness that HAS a document tests nothing: the no-document branch is
-     never reached and a fail-CLOSED mutation of it survives. (It did — the
-     mutation pass caught this assertion being vacuous.) The only honest test
-     is a context with no document at all. */
+  eq(G.hgBuildEditingNow({}), false, 'a document with no activeElement is not editing');
+  eq(G.hgBuildEditingNow({ get activeElement(){ throw new Error('blocked'); } }), false,
+    'a THROWING document is not editing — fails open');
+  eq(G.hgBuildEditingNow({ activeElement: { tagName: 'BODY' } }), false, 'body focus is not editing');
+  eq(G.hgBuildEditingNow({ activeElement: { tagName: 'TEXTAREA' } }), true, 'a textarea focus IS editing');
   {
     const bare = { console: { log(){}, warn(){}, error(){} },
                    Promise, Date, Math, JSON, String, Number, Object, Array, RegExp, isFinite, Error };
@@ -261,23 +256,7 @@ const settle = () => new Promise(r => setTimeout(r, 15));
     vm.runInContext(STAMP, bare, { filename: 'build-stamp.js' });
     eq(bare.document, undefined, 'the bare context really has no document — or the next line is vacuous');
     eq(bare.hgBuildEditingNow(null), false, 'with NO document anywhere, nothing is editing');
-    const bareStore = { data: {}, getItem(k){ return this.data[k] || null; }, setItem(k, v){ this.data[k] = String(v); } };
-    let bareFired = false;
-    eq(bare.hgBuildMaybeReload({ state: 'stale', live: 'hg-v999' }, bareStore, () => { bareFired = true; }), true,
-      'and a stale build still reloads with no document to consult');
-    ok(bareFired, 'the reload really ran in the documentless context');
   }
-  eq(G.hgBuildEditingNow({}), false, 'a document with no activeElement is not editing');
-  eq(G.hgBuildEditingNow({ get activeElement(){ throw new Error('blocked'); } }), false,
-    'a THROWING document is not editing — fails open');
-  eq(G.hgBuildEditingNow({ activeElement: { tagName: 'BODY' } }), false, 'body focus is not editing');
-
-  const openStore = mkStore();
-  let openFired = false;
-  eq(G.hgBuildMaybeReload(stale, openStore, () => { openFired = true; },
-      { get activeElement(){ throw new Error('blocked'); } }), true,
-    'a throwing document still reloads — an unreadable guard is not a reason to withhold an update');
-  ok(openFired, 'and it ran');
 }
 
 /* =====================================================================

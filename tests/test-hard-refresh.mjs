@@ -191,7 +191,7 @@ const groupTabs = gid => run("HG_NAV_GROUPS.filter(function(g){ return g.id===" 
    confirmation workflow, not a scan), and ganeshgold (the 17-step SMC/ICT
    gold desk) joined GOLD after the scalp scanners. The pins below read
    the shipped composition so they cannot drift silently again. */
-assert(groupTabs('overview') === 'brain,book,trade,log,setupconfirm,signallog,news,bias,regime,trendmx,rotation,execute,startrader',
+assert(groupTabs('overview') === 'brain,book,trade,log,signallog,setupconfirm,news,bias,regime,trendmx,rotation,execute,startrader',
   'COMMAND group: workflow then context (incl. signallog since v658)');
 assert(groupTabs('crypto') === 'combi,omnibtc,omnipresent,omniroute,dexscreener,best,swing,scalp,edge,smart,squeeze,reversalsniper,smc,ob,trap,div,coil,apex,oiflow,liqs,onchain,chartvision,carry,venueprem,termbasis,cryptoultra,cryptoscan,cryptoverse,ninetypercent',
   'CRYPTO group: BTC desk first, then anticipation, ranked scans → structure → flow → funding → ultra → scan');

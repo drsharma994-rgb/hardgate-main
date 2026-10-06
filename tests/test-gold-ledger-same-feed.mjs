@@ -454,10 +454,11 @@ console.log('== 5) the census, derived from source ==');
   /* thirteen: hg-v978's census read the entry point by NAME and could not see
      GOLD PINE, which records through a local alias -- so that desk's rows
      carried neither bar nor feed until this pack */
-  const EXP_WRITERS = ['eightypercent.js', 'golddirection.js', 'goldpine.js', 'goldpro.js', 'goldscalp.js', 'goldswing.js', 'goldultra.js', 'newgold.js', 'omnigold.js', 'omnigold1.js', 'optigold.js', 'super-gold.js', 'tauric.js'].sort();
+  /* fourteen since hg-v1154: GANESH GOLD (hg-v1072) names its feed on the row */
+  const EXP_WRITERS = ['eightypercent.js', 'ganeshgold.js', 'golddirection.js', 'goldpine.js', 'goldpro.js', 'goldscalp.js', 'goldswing.js', 'goldultra.js', 'newgold.js', 'omnigold.js', 'omnigold1.js', 'optigold.js', 'super-gold.js', 'tauric.js'].sort();
   assert(JSON.stringify(resolvers.sort()) === JSON.stringify(EXP_RESOLVERS), 'the files that settle XAUUSD records are exactly the nine expected (' + resolvers.join(', ') + ')');
   assert(bareResolve.length === 0, 'every XAUUSD resolve names a feed (4 args, or 3 on the multi entry)' + (bareResolve.length ? ' -- BARE: ' + bareResolve.join(' | ') : ''));
-  assert(JSON.stringify(writers.sort()) === JSON.stringify(EXP_WRITERS), 'the files that write gold records are exactly the thirteen expected (' + writers.join(', ') + ')');
+  assert(JSON.stringify(writers.sort()) === JSON.stringify(EXP_WRITERS), 'the files that write gold records are exactly the fourteen expected (' + writers.join(', ') + ')');
   assert(bareWrite.length === 0, 'every one of them names a feed on the row' + (bareWrite.length ? ' -- BARE: ' + bareWrite.join(', ') : ''));
   /* the crypto resolvers are deliberately untouched: they name no feed and
      settle as before -- asserted so a later pack knows it was a choice */

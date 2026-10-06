@@ -270,8 +270,9 @@ async function trendmxScanCore(hooks){
           fundingPct: item.fundingPct, turnoverUsd: item.turnoverUsd, mark: item.mark
         };
         var dir = tmDirOf(row);
-        row.gate = dir ? trendmxGateEval(row, dir) : null;
-        return row;
+        if (!dir){ row.gate = null; return row; }
+        /* hg-v1154: funding twin -> gates -> shared post-gate, on this row's own series */
+        return tmFeedRow(row, dir, r4c).then(function(){ return row; });
       }).catch(function(){ return null; });
     }));
     for (var j = 0; j < rs.length; j++){ if (rs[j]) results.push(rs[j]); else failed++; }

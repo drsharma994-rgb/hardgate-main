@@ -105,7 +105,7 @@ async function sendNtfy(topic, title, body) {
 async function sendTelegramCi(text) {
   if (telegramAlertsDisabled()) return 'skipped: TELEGRAM_DISABLED';
   const r = await sendTelegramMessage(text);
-  if (r.skipped) return 'skipped: no TELEGRAM_TOKEN/TELEGRAM_CHAT_ID secrets configured';
+  if (r.skipped) return r.filtered ? 'skipped: ' + r.reason : 'skipped: no TELEGRAM_TOKEN/TELEGRAM_CHAT_ID secrets configured';
   if (r.ok) return 'sent';
   const reason = r.reason || 'unknown';
   return 'failed: ' + reason

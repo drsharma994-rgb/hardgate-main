@@ -409,6 +409,86 @@ function trendScore(rows1d, rows4h){
   return out;
 }
 
+/* ---------------- hg-v1154: the free positioning feeds, through the rules that already read them ----------------
+   SWING, whose 7/7 gates this desk borrows, has run every CLEAN hit through
+   hgPostGateSetupVeto since hg-v197 -- flow trap (Binance taker ratio · depth
+   imbalance · spot taker flow · Bybit positioning cross), BTC relative
+   strength, stale momentum, regime overlay, on-chain alt gate, calibration --
+   all public, free feeds the data layer already fetches and caches. And G4 on
+   a contract whose venue reports no funding read nothing unless the ticker
+   carried the Binance twin (hgEnrichTickerFundingTwin, hg-v197). This desk
+   did neither, so a TM "7/7 CLEAN" was a weaker claim than SWING's under the
+   same label. The hg-v1012 flow witness below reads the taker ratio on its
+   own; the shared rule is the SWING policy in full and is called, not
+   restated. A vetoed row is the FIFTH witness hold-off (counted and named per
+   class like the other four), keeps its levels, moves to the watch tier (the
+   shared card prints no handoff there), and -- unlike the other witnesses --
+   is still RECORDED with ticket:false and reads['postgate:veto'] = true, so
+   the ledger can ask whether the veto separates on this desk; a passed row
+   records false; unchecked or un-run records nothing. Runs only on rows with
+   a gate hit. With the shared rule absent the board reads as before. */
+function tmGetCandlesFn(){
+  if (typeof W.getCandles === 'function') return function(sym, tf, n){ return W.getCandles(sym, tf, n); };
+  if (typeof W.binanceKlines === 'function') return function(sym, tf, n){ return W.binanceKlines(sym, tf, n); };
+  return null;
+}
+async function tmEnrichFunding(row){
+  var ticker = trendmxTicker(row);
+  if (typeof W.hgEnrichTickerFundingTwin !== 'function') return ticker;
+  try{
+    var t2 = await W.hgEnrichTickerFundingTwin(ticker);
+    if (t2 && typeof t2.fundingPct === 'number' && isFinite(t2.fundingPct)){
+      row.fundingPct = t2.fundingPct;
+      if (t2.fundingTwin) row.fundingTwin = t2.fundingTwin;
+    }
+  }catch(e){}
+  return trendmxTicker(row);
+}
+function tmPostGateRead(qv){
+  if (!qv || typeof qv !== 'object') return undefined;
+  if (qv.ok === false){
+    return { state: 'veto', reason: qv.reason || 'post-gate veto', tag: qv.tag || null, flowDetail: qv.flowDetail || null };
+  }
+  if (qv.unchecked === true){
+    return { state: 'unchecked', reasons: Array.isArray(qv.uncheckedReasons) ? qv.uncheckedReasons.slice() : [], flowDetail: qv.flowDetail || null };
+  }
+  return { state: 'pass', flowDetail: qv.flowDetail || null, rsEdge: (typeof qv.rsEdge === 'number' && isFinite(qv.rsEdge)) ? qv.rsEdge : null };
+}
+async function tmFeedRow(row, dir, rows4h){
+  var ticker = await tmEnrichFunding(row);
+  row.gate = trendmxGateEval(row, dir);
+  if (!row.gate || !row.gate.hit || typeof W.hgPostGateSetupVeto !== 'function') return;
+  try{
+    var qv = await W.hgPostGateSetupVeto(ticker, row.gate.hit, rows4h, 'swing', tmGetCandlesFn());
+    row.postGate = tmPostGateRead(qv);
+    if (qv && qv.ok && typeof W.hgApplyCryptoPostGate === 'function') W.hgApplyCryptoPostGate(row.gate.hit, qv);
+  }catch(e){
+    row.postGate = { state: 'unchecked', reasons: ['post-gate threw: ' + ((e && e.message) || e)], flowDetail: null };
+  }
+}
+function tmPostGateVeto(r){ return !!(r && r.postGate && r.postGate.state === 'veto'); }
+function tmPostGateReads(r){
+  var pg = r && r.postGate;
+  if (!pg) return undefined;
+  if (pg.state === 'veto') return { 'postgate:veto': true };
+  if (pg.state === 'pass') return { 'postgate:veto': false };
+  return undefined;   /* unchecked: nothing was tested, nothing is recorded */
+}
+function tmPostGateLabel(r){
+  var pg = r && r.postGate;
+  if (!pg) return '';
+  if (pg.state === 'veto') return 'POST-GATE VETO · ' + String(pg.reason || 'veto');
+  if (pg.state === 'pass') return 'POST-GATE PASS';
+  return 'POST-GATE UNCHECKED';
+}
+function tmPostGateChip(r){
+  var pg = r && r.postGate;
+  if (!pg) return '';
+  if (pg.state === 'veto') return ' <span class="gpip bad" title="' + escH(pg.reason || '') + '">PG VETO</span>';
+  if (pg.state === 'pass') return ' <span class="gpip ok">PG ✓</span>';
+  return ' <span class="gpip">PG ?</span>';
+}
+
 /* ---------------- tab UI ---------------- */
 
 var TURNOVER_FLOOR = (typeof W.hgDeskMinTurnover === 'function') ? W.hgDeskMinTurnover() : 5e6;
@@ -894,6 +974,11 @@ function trendmxPlanBlock(r){
   /* hg-v1012: the evidence layer beside the plan an operator expanded to
      inspect — the stamps the scan left, never recomputed here */
   inner += trendmxFlowChipHtml(r) + trendmxFundingChipHtml(r);
+  if (r.postGate) inner += ' <span class="gpip ' + (r.postGate.state === 'pass' ? 'ok' : (r.postGate.state === 'veto' ? 'bad' : '')) + '">' + escH(tmPostGateLabel(r)) + '</span>';
+  /* hg-v1154: a vetoed plan keeps its levels and prints the reason where the two handoffs were */
+  if (tmPostGateVeto(r)){
+    return '<div class="plan">' + inner + stackHtml + ' <span class="note warn">handoffs withheld — post-gate veto (SWING policy on the gates this desk borrows)</span></div>';
+  }
   var tradeOnclick = (s && (typeof hgToTradePlanOnclickAttr === 'function' || typeof toTrade === 'function'))
     ? ((typeof hgToTradePlanOnclickAttr === 'function')
       ? hgToTradePlanOnclickAttr(r.sym, s.dir, s.entry, s.stop, s.t1, { t2: s.t2, stack: tmStack, scanner: 'trendmx', strategy: 'trendmx' })
@@ -1514,8 +1599,9 @@ async function trendmxScanCore(hooks){
           fundingPct: item.fundingPct, turnoverUsd: item.turnoverUsd, mark: item.mark
         };
         var dir = tmDirOf(row);
-        row.gate = dir ? trendmxGateEval(row, dir) : null;
-        return row;
+        if (!dir){ row.gate = null; return row; }
+        /* hg-v1154: funding twin -> gates -> shared post-gate, on this row's own series */
+        return tmFeedRow(row, dir, r4c).then(function(){ return row; });
       }).catch(function(){ return null; });
     }));
     for (var j = 0; j < rs.length; j++){ if (rs[j]) results.push(rs[j]); else failed++; }
@@ -2474,6 +2560,9 @@ function trendmxRowTier(r, plan){
      on the LIMIT BOARD (the same leadership pattern as the omni principal
      above it). An unread flow caps nothing. */
   if (r.flow && r.flow.verdict === 'against') return 'near';
+  /* hg-v1154: the SWING post-gate policy on the gates this desk borrows -- a vetoed
+     row keeps its levels and is watch-only (the shared card prints no handoff there) */
+  if (tmPostGateVeto(r)) return 'near';
   /* hg-v1019: the momentum witness caps the same way — a row whose 1D RSI
      range has TURNED against its direction can never be CLEAN. An unread
      or abstaining witness caps nothing. */
@@ -2954,7 +3043,9 @@ function trendmxLimitClasses(rows){
      witnesses that actually fired (taker flow hg-v1012 · momentum hg-v1019
      · volume hg-v1020). */
   var out = { clean: [], conv: [], heldClean: 0, heldConv: 0,
-              heldWhy: { clean: { flow: 0, mom: 0, vol: 0, fund: 0 }, conv: { flow: 0, mom: 0, vol: 0, fund: 0 } } };
+              heldWhy: { clean: { flow: 0, mom: 0, vol: 0, fund: 0, postgate: 0 }, conv: { flow: 0, mom: 0, vol: 0, fund: 0, postgate: 0 } },
+              /* hg-v1154: the post-gate-vetoed rows, kept so they are RECORDED (ticket:false) and never shown */
+              heldPostGate: [] };
   for (var i = 0; i < rows.length; i++){
     var r = rows[i];
     if (!r || !r.gate || r.gate.veto) continue;
@@ -3010,6 +3101,18 @@ function trendmxLimitClasses(rows){
     }
     var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
     if (!tmValidSetup(plan)) continue;
+    /* hg-v1154: THE POST-GATE WITNESS hold-off -- the fifth witness, and the only
+       one that is the SWING desk's own rule rather than a read of this desk's.
+       A vetoed row is held off both class desks, counted and named per class,
+       still painting with its chip -- and unlike the other four it is kept here
+       so the record below carries it with ticket:false, because a veto nobody
+       records is a veto nobody can measure. PASS and UNCHECKED pass. */
+    if (tmPostGateVeto(r)){
+      if (isClean){ out.heldClean++; out.heldWhy.clean.postgate++; }
+      else { out.heldConv++; out.heldWhy.conv.postgate++; }
+      out.heldPostGate.push({ row: r, plan: plan, dir: dir, stack: null, rank: 0, isClean: isClean });
+      continue;
+    }
     var item = { row: r, plan: plan, dir: dir, stack: trendmxCardStack(r, dir) };
     if (isClean){
       /* the old board's intra-class rank, unchanged: composite, then gates */
@@ -3033,7 +3136,8 @@ function trendmxLimitClasses(rows){
      clean7, which is the tab's own claim about quality: if the 7/7 rows
      resolve like the merely-convicted ones, that distinction is not doing
      work. Fields byte-identical to the mixed board's record. */
-  var cands = out.clean.concat(out.conv);
+  /* hg-v1154: the post-gate-vetoed rows ride into the record and nowhere else */
+  var cands = out.clean.concat(out.conv).concat(out.heldPostGate);
   try {
     if (typeof W.hgFwdRecordScan === 'function' && cands.length){
       W.hgFwdRecordScan('TRENDMX', '4h', cands.map(function(c){
@@ -3071,13 +3175,18 @@ function trendmxLimitClasses(rows){
                       fire time, absent when it was silent or dark. Against /
                       refuse rows never reach this map (held off above). */
                    if (trendmxFundState(c.row, c.dir) === 'with') rd.fundWith = true;
+                   /* hg-v1154: the SWING post-gate verdict -- true VETOED, false passed,
+                      absent when unchecked or un-run (the third state) */
+                   var pgr = tmPostGateReads(c.row);
+                   if (pgr) rd['postgate:veto'] = pgr['postgate:veto'];
                    return Object.keys(rd).length ? rd : undefined;
                  })(),
                  /* hg-v995: the composite is NOT handed in here -- the ledger reads it off
                     this desk's own published snapshot (hgTrendMatrixMark), the same row the
                     board painted, so a second copy would be the same number twice */
                  mechanic: (c.row && c.row.gate && c.row.gate.clean7) ? 'TM-CLEAN7' : 'TM-CONVICTION',
-                 ticket: !!(c.row && c.row.gate && c.row.gate.clean7),
+                 /* hg-v1154: a post-gate veto withholds the ticket claim; the record stays */
+                 ticket: !!(c.row && c.row.gate && c.row.gate.clean7) && !tmPostGateVeto(c.row),
                  /* hg-v1022: the PERFECT read-mark — true when the row met the
                     strictest confluence bar at fire time, absent otherwise. The
                     split is how the PERFECT desk earns a measured outcome. */
@@ -3103,6 +3212,7 @@ function trendmxHeldBits(held, why){
   if (w.mom) bits.push('the 1D RSI momentum range has turned against the trend (hg-v1019)');
   if (w.vol) bits.push('the 1D OBV volume trend diverges against the trend (hg-v1020)');
   if (w.fund) bits.push('the fundamental + sentiment stack stands against the trend — a calendar blackout or 2+ net checked votes (hg-v1034)');
+  if (w.postgate) bits.push('the SWING post-gate rule refused the row — flow trap, BTC relative strength or stale momentum on the free feeds (hg-v1154); recorded, not shown');
   if (!bits.length) bits.push('real Binance taker flow reads against the trend (hg-v1012)');
   return bits;
 }
@@ -3125,6 +3235,7 @@ function trendmxLimitDeskHTML(title, crit, bag, held, why){
     if (w2.mom) tags.push('momentum regime against');
     if (w2.vol) tags.push('volume trend against');
     if (w2.fund) tags.push('fundamental headwind');
+    if (w2.postgate) tags.push('SWING post-gate rule refused the row (recorded, not shown; hg-v1154)');
     if (!tags.length) tags.push('taker flow against');
     heldTag = ' · ' + held + ' held off — ' + tags.join(' · ');
   }
@@ -3346,6 +3457,7 @@ function trendmxSetupCardHTML(r, tier){
   if (plan) mini.push(['ENTRY', pxFmt(plan.entry)], ['R:R', fmtN(plan.rr1, 1) + 'R']);
   var gates = [];
   if (r.gate) gates.push([r.gate.label, r.gate.clean7 && !r.gate.veto]);
+  if (r.postGate) gates.push([tmPostGateLabel(r), r.postGate.state === 'pass']);
   if (typeof hgSetupCardHTML !== 'function'){
     return '<div class="card ' + dir + '"><b>' + escH(r.sym) + '</b>' + tmVenueChip(r) + ' · ' + dir.toUpperCase() + '</div>';
   }
@@ -3360,7 +3472,9 @@ function trendmxSetupCardHTML(r, tier){
     bookMeta: { scanner: 'trendmx', strategy: 'trendmx', t2: plan ? plan.t2 : null,
       venue: (typeof W.hgDeskVenueLabel === 'function') ? W.hgDeskVenueLabel(r.exchange) : 'BINANCE',
       visionChip: r.visionChip, visionNextBar: r.visionNextBar, visionNextMove: r.visionNextMove, visionPrediction: r.visionPrediction },
-    note: tier !== 'clean' ? (tier === 'near' ? '6/7 NEAR — watch only, not a ticket.' : 'FORMING — trend signal without CLEAN ticket.') : null
+    note: tmPostGateVeto(r)
+      ? (tmPostGateLabel(r) + ' — watch only, not a ticket. The SWING post-gate policy (flow trap · BTC RS · stale momentum) on the gates this desk borrows; levels kept, handoffs withheld, recorded for the ledger.')
+      : (tier !== 'clean' ? (tier === 'near' ? '6/7 NEAR — watch only, not a ticket.' : 'FORMING — trend signal without CLEAN ticket.') : null)
   });
 }
 
@@ -4137,7 +4251,10 @@ function publishTrendmxSnap(rows){
     __tmSnap = {
       at: Date.now(),
       rows: rows.map(function(r){
-        return { sym: r.sym, score: r.score, dir: tmDirOf(r), comps: r.comps || null };
+        return { sym: r.sym, score: r.score, dir: tmDirOf(r), comps: r.comps || null,
+                 /* hg-v1154: the shared post-gate verdict on this row, read by CONTRACT REPORT */
+                 postGate: r.postGate ? r.postGate.state : undefined,
+                 postGateReason: (r.postGate && r.postGate.state === 'veto') ? (r.postGate.reason || null) : undefined };
       })
     };
   }catch(e){ __tmSnap = null; }
@@ -4451,7 +4568,7 @@ function mountTrendMatrix(el){
         '<td>' + trendmxCompPipsHtml(r.comps) + '</td>' +
         '<td><b>' + r.sym + '</b>' + tmVenueChip(r) + '</td>' +
         '<td class="' + scls + '"><b>' + (sc > 0 ? '+' : '') + sc + '</b></td>' +
-        '<td><span class="gpip ' + gateCls + '">' + escH(gateTxt) + '</span></td>' +
+        '<td><span class="gpip ' + gateCls + '">' + escH(gateTxt) + '</span>' + tmPostGateChip(r) + '</td>' +
         '<td>' + tri(r.comps.d1Trend, '▲ UP', '▼ DOWN') + '</td>' +
         '<td><span class="' + xcls + '">' + xtxt + '</span>' + fx + '</td>' +
         '<td>' + tri(r.comps.h4Cascade, '▲ ALIGN', '▼ INVERSE') + '</td>' +
@@ -4582,7 +4699,9 @@ function mountTrendMatrix(el){
               rows4h: crh4,
               fundingPct: (typeof cr.fundingPct === 'number' && isFinite(cr.fundingPct)) ? cr.fundingPct : undefined,
               mechanic: trendmxPerfectState(cr) ? 'PERFECT' : 'CLEAN',
-              ticket: true
+              /* hg-v1154: a post-gate veto withholds the ticket claim here too, and the mark rides */
+              ticket: !tmPostGateVeto(cr),
+              reads: tmPostGateReads(cr)
             });
           }
           if (recRows.length) W.hgFwdRecordScan('TRENDMX', '4h', recRows, { horizonBars: 20 });
@@ -4649,6 +4768,8 @@ W.trendmxClassify = trendmxClassify;
 W.hgTrendMatrixAlign = hgTrendMatrixAlign;   /* hg-v995 */
 W.hgTrendMatrixRowOf = hgTrendMatrixRowOf;
 W.hgTrendMatrixMark = hgTrendMatrixMark;
+W.tmPostGateRead = tmPostGateRead;     /* hg-v1154 */
+W.tmPostGateReads = tmPostGateReads;   /* hg-v1154 */
 W.trendmxPlan = trendmxPlan;
 W.trendmxPlanHTML = trendmxPlanHTML;
 W.trendmxPlanBlock = trendmxPlanBlock;

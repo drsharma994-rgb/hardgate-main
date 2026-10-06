@@ -911,7 +911,14 @@
        one -- the contamination mechanism hg-v949 measured on NEW GOLD,
        running in two more ledgers. They MARK, on the TAURIC precedent. */
     { desk: 'GOLD DIRECTION', tab: 'golddirection', probe: 'hgGoldDirectionRecordForward', via: 'per-record, the 1h signal bar; marked on the ticket row, not withheld', verdictFn: 'gdWeekendVerdict' },
-    { desk: 'GOLD ULTRA',  tab: 'goldultra', probe: 'goldUltraState',  via: 'per-record, the 15m signal bar; marked on the ticket row, not withheld', verdictFn: 'guWeekendVerdict' }
+    { desk: 'GOLD ULTRA',  tab: 'goldultra', probe: 'goldUltraState',  via: 'per-record, the 15m signal bar; marked on the ticket row, not withheld', verdictFn: 'guWeekendVerdict' },
+    /* hg-v1154: GANESH GOLD (hg-v1072) joined the GOLD group writing
+       ticket:true XAUUSD rows with no calendar of any kind -- the census
+       guard named it. It reads both calendars through hgGoldGateAt on the
+       last closed execution bar; a shut or news-locked bar WITHHOLDS the
+       TICKET claim (the card reads HELD, the row records ticket:false with
+       the mark) and keeps the levels. */
+    { desk: 'GANESH GOLD', tab: 'ganeshgold', probe: 'ganeshGoldState', via: 'per-scan, the last closed execution bar through hgGoldGateAt; TICKET claim withheld, recorded ticket:false and marked', verdictFn: 'ggWeekendVerdict' }
   ];
 
   /* hg-v954: THE CENSUS, because the list above was ITSELF HAND-TYPED.
@@ -1241,6 +1248,7 @@
      `news: null` sites this pack fixed would have read BROKEN, because a gate
      that answers the same way on both instants is not a gate. */
   var HG_GOLD_NEWS_ROUTES = {
+    ganeshgold:    'hgGoldGateAt on the last closed execution bar, paired with the weekend rule; TICKET claim withheld (hg-v1154)',
     goldultra:     'per-lane 15m signal bar, live hgNewsState snapshot (hg-v963)',
     golddirection: 'per-lane signal bar (15m scalp / 4h swing), live snapshot (hg-v963)',
     goldscalp:     'ctx.news + ctx.nowMs through hgGoldInstFilter',

@@ -186,8 +186,9 @@ console.log('== 4) the other five desks say which bar they read ==');
   const goldFiles = fs.readdirSync(ROOT).filter(f => /gold|tauric|eightypercent|optigold|super-gold/.test(f) && f.endsWith('.js'));
   const recorders = goldFiles.filter(f => /hgFwdRecordScan\(/.test(strip(read(f))));
   const bare = recorders.filter(f => !/barT|signalT/.test(strip(read(f))));
-  const EXPECTED = ['golddirection.js', 'goldpro.js', 'goldscalp.js', 'goldswing.js', 'goldultra.js', 'newgold.js', 'optigold.js', 'super-gold.js'];
-  assert(recorders.slice().sort().join(',') === EXPECTED.join(','), 'the gold files that record through this entry point are exactly the eight expected (OMNIGOLD, TAURIC and 80PERCENT write records by another route): ' + recorders.sort().join(', '));
+  /* nine since hg-v1154: GANESH GOLD (hg-v1072) dates its row on the last closed execution bar (signalT) */
+  const EXPECTED = ['ganeshgold.js', 'golddirection.js', 'goldpro.js', 'goldscalp.js', 'goldswing.js', 'goldultra.js', 'newgold.js', 'optigold.js', 'super-gold.js'];
+  assert(recorders.slice().sort().join(',') === EXPECTED.join(','), 'the gold files that record through this entry point are exactly the nine expected (OMNIGOLD, TAURIC and 80PERCENT write records by another route): ' + recorders.sort().join(', '));
   assert(bare.length === 0, 'every one of them names a bar or forwards the instant (bare: ' + (bare.join(', ') || 'none') + ')');
 }
 

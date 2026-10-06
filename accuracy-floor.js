@@ -129,6 +129,7 @@ var HG_ACCURACY_TABS = {
   goldswing:      ['GOLDSWING'],
   goldultra:      ['GOLDULTRA'],
   goldpro:        ['GOLDPRO'],
+  ganeshgold:     ['GANESHGOLD'],   /* hg-v1072 desk, hg-v1154 joins the roster */
   goldpine:       [{ prefix: 'GOLDPINE:' }],
   golddirection:  ['GOLDDIRECTION'],
   newgold:        [{ prefix: 'NEWGOLD:' }],
