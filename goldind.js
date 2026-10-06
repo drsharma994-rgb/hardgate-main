@@ -5497,6 +5497,24 @@ function goldRankSetups(cands, ctx){
         }
       }
       var parts = [], tally = 0;
+      /* hg-v1155: THE FREE-FEED LEGS, RECORDED. Every leg below that reads a
+         free internet feed (Yahoo SI=F / GC=F / ^VIX / JPY=X, the crypto
+         Fear & Greed index, the PAXG perp funding and basis, the FRED / Yahoo
+         real-rate tilt, and the 4h structure + Delta leverage cycle the
+         PERFECT predicate reads) has moved this tally since it shipped, and
+         no record ever carried its verdict — so nothing could ask whether
+         any of them separates winners on this desk (the hg-v955 shape: a
+         read applied and never measured). Each leg marks ONE boolean here —
+         true WITH the plan, false AGAINST it, ABSENT when the feed was flat
+         or unread (hg-v989's third state; never a guessed false) — and the
+         record carries them under `reads`, where the ledger's read split
+         counts them on settled records. Marks only: the tally, the grade
+         and every gate are untouched, asserted by the guard. */
+      var freeReads = {};
+      /* every caller hands a boolean expression; the ledger normaliser is the
+         one place that refuses anything else (a check here would be a second
+         copy of it — the unkillable duplicate hg-v972 removed) */
+      function freeMark(key, v){ freeReads[key] = v; }
       var agree = isFinite(c.agree) ? c.agree
                 : (c.reads ? ((c.dir === 'long') ? c.reads.long : c.reads.short) : 0);
       if (agree > 0){
@@ -5543,6 +5561,7 @@ function goldRankSetups(cands, ctx){
         parts.push({ label: macroLabel + (mWhy.length ? ' (' + mWhy.join(', ') + ')' : '')
                        + ' — ' + (mPts > 0 ? 'favors ' + c.dir + 's' : 'works against ' + c.dir + 's'), pts: mPts, leg: 'macro' });
         tally += mPts;
+        freeMark('free:macroTilt', mPts > 0);   /* hg-v1155 */
       }
       if (verdict === 'longs-crowding' || verdict === 'shorts-crowding'){
         var pPts, pLab;
@@ -5555,6 +5574,7 @@ function goldRankSetups(cands, ctx){
         }
         parts.push({ label: pLab, pts: pPts });
         tally += pPts;
+        freeMark('free:paxgBasis', pPts > 0);   /* hg-v1155 */
       }
       var fundRate = (ctx.fundingRate !== undefined && ctx.fundingRate !== null)
         ? __normFundingPct(ctx.fundingRate) : NaN;
@@ -5566,6 +5586,7 @@ function goldRankSetups(cands, ctx){
             : ('perp funding headwind — you pay the crowd on ' + c.dir + 's');
           parts.push({ label: fLab + ' (' + fundRate.toFixed(4) + '%/interval)', pts: fPts });
           tally += fPts;
+          freeMark('free:perpFunding', fPts > 0);   /* hg-v1155 */
         }
       }
       if (season && season.bias === 'STRONG' && c.dir === 'long'){
@@ -5581,30 +5602,34 @@ function goldRankSetups(cands, ctx){
           tally += 1;
         }
       }
+      /* hg-v1155: a readable Fear & Greed print marks whether its extreme
+         favoured this direction (the only way the leg ever scores) */
+      if (fngV !== null) freeMark('free:fearGreed', (fngV <= 25 && c.dir === 'long') || (fngV >= 75 && c.dir === 'short'));
       var freeAgainst = 0;
-      function freeLeg(ok, against, label){
+      function freeLeg(ok, against, label, key){
         if (ok){ parts.push({ label: label, pts: 1, leg: 'free' }); tally += 1; }
         else if (against){ parts.push({ label: label, pts: -1, leg: 'free' }); tally -= 1; freeAgainst++; }
+        if (key) freeMark(key, !!ok);   /* hg-v1155: a FLAT trend never reaches this helper, so it marks nothing */
       }
       if (macro && macro.silverTrend && macro.silverTrend !== 'FLAT'){
         var silWith = (c.dir === 'long' && macro.silverTrend === 'RISING') || (c.dir === 'short' && macro.silverTrend === 'FALLING');
         var silAgainst = (c.dir === 'long' && macro.silverTrend === 'FALLING') || (c.dir === 'short' && macro.silverTrend === 'RISING');
-        freeLeg(silWith, silAgainst, 'silver ' + String(macro.silverTrend).toLowerCase() + ' — Yahoo SI=F');
+        freeLeg(silWith, silAgainst, 'silver ' + String(macro.silverTrend).toLowerCase() + ' — Yahoo SI=F', 'free:silver');
       }
       if (macro && macro.gsRatioTrend && macro.gsRatioTrend !== 'FLAT'){
         var ratioWith = (c.dir === 'long' && macro.gsRatioTrend === 'FALLING') || (c.dir === 'short' && macro.gsRatioTrend === 'RISING');
         var ratioAgainst = (c.dir === 'long' && macro.gsRatioTrend === 'RISING') || (c.dir === 'short' && macro.gsRatioTrend === 'FALLING');
-        freeLeg(ratioWith, ratioAgainst, 'gold/silver ratio ' + String(macro.gsRatioTrend).toLowerCase() + ' — Yahoo GC=F / SI=F');
+        freeLeg(ratioWith, ratioAgainst, 'gold/silver ratio ' + String(macro.gsRatioTrend).toLowerCase() + ' — Yahoo GC=F / SI=F', 'free:gsRatio');
       }
       if (macro && macro.vixTrend === 'RISING'){
-        freeLeg(c.dir === 'long', c.dir === 'short', 'VIX rising — Yahoo ^VIX, fear bid for gold');
+        freeLeg(c.dir === 'long', c.dir === 'short', 'VIX rising — Yahoo ^VIX, fear bid for gold', 'free:vix');
       } else if (macro && macro.vixTrend === 'FALLING'){
-        freeLeg(c.dir === 'short', c.dir === 'long', 'VIX falling — Yahoo ^VIX, risk-on weighs on gold');
+        freeLeg(c.dir === 'short', c.dir === 'long', 'VIX falling — Yahoo ^VIX, risk-on weighs on gold', 'free:vix');
       }
       if (macro && macro.usdjpyTrend && macro.usdjpyTrend !== 'FLAT'){
         var jpyWith = (c.dir === 'long' && macro.usdjpyTrend === 'FALLING') || (c.dir === 'short' && macro.usdjpyTrend === 'RISING');
         var jpyAgainst = (c.dir === 'long' && macro.usdjpyTrend === 'RISING') || (c.dir === 'short' && macro.usdjpyTrend === 'FALLING');
-        freeLeg(jpyWith, jpyAgainst, 'USDJPY ' + String(macro.usdjpyTrend).toLowerCase() + ' — Yahoo JPY=X');
+        freeLeg(jpyWith, jpyAgainst, 'USDJPY ' + String(macro.usdjpyTrend).toLowerCase() + ' — Yahoo JPY=X', 'free:usdjpy');
       }
       if (c.pdZone === 'DISCOUNT' && c.dir === 'long'){
         parts.push({ label: 'premium/discount — price in discount zone of the 20-bar range (buy-the-dip bias)', pts: 1 });
@@ -5898,11 +5923,28 @@ function goldRankSetups(cands, ctx){
             }
           }catch(eLv4){}
           pf = pfFn(rc, pfReads);
+          /* hg-v1155: the two PERFECT evidence legs that are free feeds of
+             their own mark too — 4h EMA50/200 structure with the plan, and
+             the Delta gold-perp leverage cycle reading EXTENDED (the state the
+             predicate counts against) */
+          if (pfReads.structureTrend === 'up' || pfReads.structureTrend === 'down')
+            freeMark('free:structure4h', (pfReads.structureTrend === 'up') === (rc.dir === 'long'));
+          if (pfReads.leverageState === 'EXTENDED' || pfReads.leverageState === 'RESET' || pfReads.leverageState === 'FLAT')
+            freeMark('free:leverageExtended', pfReads.leverageState === 'EXTENDED');
         }
         rc.perfect = (pf && pf.perfect) ? true : undefined;
         rc.perfectPlus = (pf && pf.plus) ? true : undefined;
         if (pf && pf.why && pf.why.length) rc.perfectWhy = pf.why;
       }catch(ePf){}
+      /* hg-v1155: the free-feed marks and the PAXG funding rate this ranker
+         read ride the ranked row, so a desk's publish copy can carry them
+         onto its forward record (GOLD SCALP does; `reads` + `fundingPct`).
+         Absent when no free feed spoke — a record with no marks is a record
+         with no marks, never one marked false. */
+      try{
+        if (Object.keys(freeReads).length) rc.freeReads = freeReads;
+        if (typeof fundRate === 'number' && isFinite(fundRate)) rc.fundingPct = fundRate;
+      }catch(eFr){}
       /* hg-v1024: MEASURED-EDGE veto in the RANKER. OMNIGOLD/NEW GOLD already
          demote measured-losing mechanics through gold-formation.js; the core
          ranked desks (SCALP/SWING/ULTRA/PINE/SUPER-GOLD/GOLD-DIRECTION) ranked

@@ -594,6 +594,12 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
         /* hg-v1030: the PERFECT⁺ headline flag (goldRankSetups) — carries so the
            banner and the ledger record the max-confluence sub-tier. */
         perfectPlus: (c.perfectPlus === true) ? true : undefined,
+        /* hg-v1155: the free-feed read marks (goldRankSetups, booleans only)
+           and the PAXG funding rate the ranker read — carried across the
+           publish boundary so the record map below can hand them to the
+           ledger (the hg-v955 seam that dropped goldShut three times). */
+        freeReads: (c.freeReads && typeof c.freeReads === 'object') ? c.freeReads : undefined,
+        fundingPct: (typeof c.fundingPct === 'number' && isFinite(c.fundingPct)) ? c.fundingPct : undefined,
         stamps: Array.isArray(c.stamps) ? c.stamps.slice() : [],
         /* hg-v977: the instant the mint judged this candidate on -- SUPER GOLD's
            sgCandSec has read `signalT` since hg-v952 and no mint ever wrote it */
@@ -709,6 +715,15 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
                    chased: c.chased, chaseCode: c.chaseCode,
                    /* hg-v1030: the PERFECT⁺ headline read-mark (property access) */
                    perfectPlus: c.perfectPlus,
+                   /* hg-v1155: the free-feed read marks the ranker stamped
+                      (silver · gold/silver ratio · VIX · USDJPY · Fear & Greed ·
+                      PAXG funding · PAXG basis · macro tilt · 4h structure ·
+                      leverage cycle — true WITH, false AGAINST, absent unread)
+                      and the PAXG funding rate it read, so the ledger's read
+                      split and funding split can ask which free feed separates
+                      on this desk. Property access only (the lifted-map test). */
+                   reads: c.freeReads,
+                   fundingPct: c.fundingPct,
                    /* hg-v1030: the ICT killzone the setup fired in (the cand's
                       killzone label) + the round-trip cost as a fraction of R —
                       property access only, so the lifted-map test stays
