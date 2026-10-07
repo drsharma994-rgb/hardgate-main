@@ -623,7 +623,117 @@ function collectPineUniverse(bars, mode, scanOpts, source){
     var s = setupFromUniverseItem(item, mode, source);
     if (s) list.push(s);
   });
+  /* hg-v1164: the record-only layers, on the same series, after the ten */
+  list = list.concat(gpRecordLayerSetups(rows, mode, source));
   return list;
+}
+
+/* =======================================================================
+   hg-v1164: RECORD-ONLY PINE LAYERS, AND THE ONE WAY OUT OF RECORD-ONLY.
+
+   pinegoldmath.js mints the five new layers (Supertrend, Ichimoku TK cross,
+   Donchian 20/10, EMA 8/21 + RSI50, Keltner pullback) in a table of their
+   own and stamps them record-only + demoted. This desk carries them across
+   the setupFromEval seam (which names what it keeps and drops the rest --
+   the hg-v955 seam, so the stamp is re-applied here from the item), writes
+   them into the ledger like any other row (hgGpRecord, mechanic = the layer
+   label, pool GOLDPINE:<mode>), prints their levels, and WITHHOLDS the two
+   handoffs and the MOST PROBABLE pin.
+
+   The release is a measurement, not a switch: hgFwdStats for that mechanic
+   on that lane, read through hgFwdJudgeSample (the one judge every desk's
+   measured-edge gate reads, hg-v982), at the house floor HG_GOLD_FWD_MIN_JUDGE
+   -- at or over the floor AND paying (expectancy over zero on the sample the
+   judge chose, fill-aware when that clears the floor on its own) releases the
+   row: it forms like the ten layers above it. Measured and not paying stays
+   record-only and says so; under the floor says how far. With no ledger
+   loaded nothing can be measured and nothing is released. The solidity
+   grader's G6 / KILLED still read the same pool, so a layer that measures
+   badly is vetoed or removed exactly as any other kind. */
+function gpRecordFloor(){
+  var f = +W.HG_GOLD_FWD_MIN_JUDGE;
+  return (isFinite(f) && f > 0) ? f : 20;
+}
+function gpRecordLayerJudge(s, mode){
+  if (!s) return s;
+  var floor = gpRecordFloor();
+  var j = { n: 0, expR: NaN, floor: floor, fillAware: false, measured: false, paying: false, unfilled: 0 };
+  s.recordJudge = j;
+  try{
+    var st = gfn('hgFwdStats'), js = gfn('hgFwdJudgeSample');
+    if (!st || !js) return s;
+    var stats = st('GOLDPINE:' + mode, hgGpKind(s), false);
+    var k = js(stats, floor);
+    if (!k || !fin(+k.n)){
+      j.n = (stats && fin(+stats.samples)) ? +stats.samples : 0;
+      return s;
+    }
+    j.n = +k.n; j.expR = fin(+k.expR) ? +k.expR : NaN; j.fillAware = !!k.fillAware;
+    j.unfilled = fin(+k.unfilled) ? +k.unfilled : 0;
+    j.measured = true;
+    j.paying = isFinite(j.expR) && j.expR > 0;
+    if (j.paying){
+      s.recordOnly = false;
+      s.recordReleased = true;
+      s.demoted = false;
+      s.demotedWhy = undefined;
+    } else {
+      s.demotedWhy = 'RECORD ONLY \u2014 ' + hgGpKind(s) + ' measured ' + j.n + ' settled at '
+        + (isFinite(j.expR) ? ((j.expR >= 0 ? '+' : '\u2212') + Math.abs(j.expR).toFixed(3)) : '?') + 'R on this desk, not paying';
+    }
+  }catch(e){}
+  return s;
+}
+function gpRecordLayerSetups(rows, mode, source){
+  var out = [];
+  try{
+    var fn = gfn('pineGoldRecordLayerSetups');
+    if (typeof fn !== 'function' || !rows || !rows.length) return out;
+    var items = fn(rows, mode) || [];
+    for (var i = 0; i < items.length; i++){
+      var it = items[i];
+      if (!it || !it.recordOnly) continue;
+      var s = setupFromUniverseItem(it, mode, source);
+      if (!s) continue;
+      s.recordOnly = true;
+      s.recordLayer = it.recordLayer || null;
+      s.recordTwin = it.recordTwin || null;
+      s.demoted = true;
+      s.demotedWhy = it.demotedWhy || ('RECORD ONLY \u2014 ' + hgGpKind(s) + ' has no measured record on this desk');
+      gpRecordLayerJudge(s, mode);
+      out.push(s);
+    }
+  }catch(e){}
+  return out;
+}
+/** The rows the MOST PROBABLE pin may choose from: never a record-only one. */
+function gpMayLead(s){ return !!(s && !s.recordOnly); }
+function gpSgnR(v){ return (isFinite(v) ? ((v >= 0 ? '+' : '\u2212') + Math.abs(v).toFixed(3)) : '?') + 'R'; }
+function gpRecordTwinLine(s){
+  if (!s || !s.recordTwin) return '';
+  var fn = gfn('hgGoldSiblingRecord');
+  var rec = (fn && s.recordLayer) ? fn(s.recordLayer) : null;
+  if (!rec) return ' Nearest OMNIGOLD mechanic ' + esc(String(s.recordTwin)) + ': no gate-clear record to quote.';
+  return ' Nearest measured twin: OMNIGOLD ' + esc(String(rec.twin)) + ', gate-clear n=' + rec.n + ', ' + rec.settled + ' settled, '
+    + gpSgnR(rec.netXm) + ' net at XM, z ' + (fin(+rec.zBreakeven) ? ((+rec.zBreakeven >= 0 ? '+' : '\u2212') + Math.abs(+rec.zBreakeven).toFixed(2)) : '?')
+    + ' \u2014 OMNIGOLD\u2019s gates and 1h horizon, not this desk\u2019s record.';
+}
+function gpRecordChipHtml(s){
+  if (!s) return '';
+  var j = s.recordJudge || {};
+  if (s.recordReleased) return ' <span class="gpip" title="released by the forward ledger: ' + j.n + ' settled at ' + gpSgnR(j.expR) + (j.fillAware ? ' (fill-aware)' : '') + '">MEASURED \u00b7 ' + j.n + ' settled ' + gpSgnR(j.expR) + '</span>';
+  if (!s.recordOnly) return '';
+  return ' <span class="gpip" title="' + esc(String(s.demotedWhy || 'record only')) + '">RECORD ONLY \u00b7 ' + (j.measured ? ('measured ' + j.n + ' at ' + gpSgnR(j.expR)) : (j.n + ' of ' + j.floor + ' settled')) + '</span>';
+}
+function gpRecordNoteHtml(s){
+  var j = s.recordJudge || {};
+  var floor = fin(+j.floor) ? +j.floor : gpRecordFloor();
+  return '<div class="note warn" style="margin-top:8px">NO TRADE HANDOFF \u2014 RECORD ONLY. ' + esc(hgGpKind(s))
+    + ' is a new Pine layer with no measured record on this desk: '
+    + (j.measured ? ('measured ' + j.n + ' settled at ' + gpSgnR(j.expR) + ', not paying') : (j.n + ' of ' + floor + ' settled'))
+    + '. Every signal bar is recorded under GOLDPINE:' + esc(String(s.mode || 'swing'))
+    + '; the handoff and the MOST PROBABLE pin open only when the ledger reads it paying at or over ' + floor
+    + ' settled. The levels are shown to be read, not sent.' + gpRecordTwinLine(s) + '</div>';
 }
 
 /* hg-v950: the shared gold calendar, read from a SERIES' last closed bar,
@@ -1036,7 +1146,9 @@ function gpHandoffBlock(s){
   var smcChip = '';
   try{ if (typeof W.hgSmcChipHtml === 'function') smcChip = W.hgSmcChipHtml(s) || ''; }catch(eSmcC){ smcChip = ''; }
   var block = gpHandoffBlock(s);
-  var actions = block
+  var actions = s.recordOnly
+    ? gpRecordNoteHtml(s)   /* hg-v1164: record-only withholds both handoffs */
+    : block
     ? ('<div class="note warn" style="margin-top:8px">NO TRADE HANDOFF — R:R '
        + fmtF(block.rr, 2) + ' is below this desk\u2019s ' + fmtF(block.floor, 2)
        + ' floor for ' + esc(String(s.mode || 'swing')).toUpperCase()
@@ -1053,7 +1165,7 @@ function gpHandoffBlock(s){
 
   return '<div class="panel ' + cls + ' tier-' + tier + '" style="margin-bottom:12px">'
     + '<h2>XAUUSD <span>' + esc(s.dir.toUpperCase()) + ' · ' + modeLabel + ' · Grade ' + esc(s.grade)
-    + rankBadge + badge + gpTapeChipHtml(s) + gpMintMarkChipHtml(s) + gpFundChipHtml(s)
+    + rankBadge + badge + gpTapeChipHtml(s) + gpMintMarkChipHtml(s) + gpRecordChipHtml(s) + gpFundChipHtml(s)
     + ((typeof W.hgBookStampChip === 'function')
       ? W.hgBookStampChip('XAUUSD', s.dir, { scanner: 'goldpine', strategy: s.mode || 'goldpine', klass: 'metals', fund: 'gold' })
       : '')
@@ -1202,8 +1314,30 @@ function mount(el){
       /* Only tape-aligned rows may be pinned as the leader. When that
          empties a ranked list the panel says so rather than vanishing —
          a silent desk is the thing this family keeps having to fix. */
-      var mpList = gpTapeAligned(swingTop.concat(scalpTop));
-      var ranked = swingTop.length + scalpTop.length;
+      /* hg-v1164: a record-only layer never leads; it is counted and named */
+      var mpList = gpTapeAligned(swingTop.concat(scalpTop).filter(gpMayLead));
+      var ranked = swingTop.filter(gpMayLead).length + scalpTop.filter(gpMayLead).length;
+      var recordRows = result.swing.concat(result.scalp).filter(function(s){ return s && s.recordOnly; });
+      var releasedRows = result.swing.concat(result.scalp).filter(function(s){ return s && s.recordReleased; });
+      var recordNote = recordRows.length
+        ? ('<div class="note">' + recordRows.length + ' RECORD-ONLY Pine layer' + (recordRows.length === 1 ? '' : 's')
+           + ' on this scan (' + recordRows.map(function(s){ return esc(hgGpKind(s)) + ' ' + esc(String(s.dir).toUpperCase()); }).join(' \u00b7 ')
+           + ') \u2014 recorded under GOLDPINE, withheld from MOST PROBABLE and the handoff until the ledger measures it paying.</div>')
+        : '';
+      if (releasedRows.length) recordNote += '<div class="note">' + releasedRows.length + ' Pine layer' + (releasedRows.length === 1 ? '' : 's')
+        + ' released by the forward ledger (' + releasedRows.map(function(s){ return esc(hgGpKind(s)); }).join(' \u00b7 ') + ').</div>';
+      /* hg-v1164: a demoted row sinks below the two-card cut (hg-v1005), so a
+         record-only layer that fired would never be SEEN; it paints in a
+         section of its own, below the two lanes, as a full card with the
+         handoff withheld -- visible, recorded, not led. A row that did make
+         the cut (a thin board) is not painted twice. */
+      var recordSection = '';
+      var recordShown = recordRows.filter(function(s){ return swingTop.indexOf(s) < 0 && scalpTop.indexOf(s) < 0; });
+      if (recordShown.length){
+        recordSection = '<div class="panel"><h2>GOLD PINE \u2014 RECORD-ONLY LAYERS <span>' + recordShown.length
+          + ' fired this scan \u00b7 recorded under GOLDPINE \u00b7 not led, not sent until measured</span></h2></div>'
+          + recordShown.map(function(s){ return cardHTML(s, 0); }).join('');
+      }
       var heldNote = (ranked && !mpList.length)
         ? ('<div class="note warn">MOST PROBABLE stands empty \u2014 every ranked formation on this scan '
            + 'points against the gold tape (4H ' + esc(tapeSwing || 'unread')
@@ -1234,13 +1368,14 @@ function mount(el){
           + ' The sections stay empty until the window clears; the board below still shows the '
           + 'stack\'s full read.</div>';
       }
-      var html = fundNote + gpFundPanelHtml() + tapeNote + heldNote + killedNote
+      var html = fundNote + gpFundPanelHtml() + tapeNote + heldNote + killedNote + recordNote
         + sectionHTML('GOLD PINE — SWING SETUPS (4H)', swingTop,
           'No swing formations — check gold feed (4h bars). Layers need ~280×4h for full Pine stack.',
           { total: result.swing.length })
         + sectionHTML('GOLD PINE — SCALP SETUPS (15m)', scalpTop,
           'No scalp formations — check gold feed (15m bars). Native strategies need 15m/1h/4h legs.',
           { total: result.scalp.length })
+        + recordSection
         + gpCatalogHtml(result, bars);   /* hg-v1162: one census */
 
       if (out) out.innerHTML = html;
@@ -1248,6 +1383,7 @@ function mount(el){
       var dt = ((Date.now() - t0) / 1000).toFixed(1);
       if (stat) stat.textContent = 'done · top ' + swingTop.length + '/' + result.swing.length + ' swing · top '
         + scalpTop.length + '/' + result.scalp.length + ' scalp'
+        + (recordRows.length ? (' · ' + recordRows.length + ' record-only') : '')
         + (result.fundBlackout ? ' · EVENT BLACKOUT — no fresh formations' : '') + ' · ' + dt + 's';
       setProg(null);
       return 'refreshed';
@@ -1344,6 +1480,8 @@ W.goldPineState = function(){
 W.gpWeekendVerdict = gpWeekendVerdict;
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'goldpine', label: 'GOLD PINE', mount: mount, refresh: goldPineRefresh,
-                 fundamentalChip: gpFundChipHtml, fundPanelHtml: gpFundPanelHtml });
+                 fundamentalChip: gpFundChipHtml, fundPanelHtml: gpFundPanelHtml,
+                 /* hg-v1164: the release judge and the lead predicate ride the registration (hg-v967) */
+                 recordLayerJudge: gpRecordLayerJudge, mayLead: gpMayLead });
 
 })();

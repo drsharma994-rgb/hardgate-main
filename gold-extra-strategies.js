@@ -517,6 +517,11 @@ var HG_GOLD_SIBLING_TWIN = {
   goldwopen: 'WEEKLY-OPEN',
   goldfib:   'FIB-618',
   goldpivot: 'PIVOT-REJECT',
+  /* hg-v1164: GOLD PINE's record-only Ichimoku TK-cross layer -- the one of
+     the five new layers with an EXACT OMNIGOLD mechanic (ICHI-KUMO); the
+     record quoted on that card is this twin's gate-clear history, through the
+     same home every other twin is quoted through. Keyed by the layer id. */
+  ichimoku:  'ICHI-KUMO',
   /* hg-v942 roster ports -- the twin IS the mechanic here, not a near
      relative, because detection is OMNIGOLD's own function. The record is
      still OMNIGOLD's gates and 1h horizon, so it is still quoted as a twin. */
@@ -574,6 +579,7 @@ var HG_GOLD_SIBLING_RECORD = {
   'CUSUM-SHIFT': { n: 44, settled: 32, winRate: 0.3438, grossR: 0.0918, netXm: 0.0707, tCluster: 0.58, zBreakeven: 0.13, minRr: 2, breakevenPct: 33.3 },
   'EQH-SWEEP': { n: 41, settled: 41, winRate: 0.3659, grossR: 0.0976, netXm: 0.0159, tCluster: 0.36, zBreakeven: 0.44, minRr: 2, breakevenPct: 33.3 },
   'FIB-618': { n: 132, settled: 127, winRate: 0.2992, grossR: -0.0872, netXm: -0.1306, tCluster: -0.9, zBreakeven: -0.82, minRr: 2, breakevenPct: 33.3 },
+  'ICHI-KUMO': { n: 106, settled: 89, winRate: 0.2697, grossR: -0.134, netXm: -0.1608, tCluster: -1.22, zBreakeven: -1.27, minRr: 2, breakevenPct: 33.3 },
   'LONDON-FIX': { n: 87, settled: 69, winRate: 0.2464, grossR: -0.2052, netXm: -0.2332, tCluster: -1.76, zBreakeven: -1.53, minRr: 2, breakevenPct: 33.3 },
   'MMOVE': { n: 204, settled: 177, winRate: 0.3559, grossR: 0.0836, netXm: 0.0587, tCluster: 1.54, zBreakeven: 0.64, minRr: 2, breakevenPct: 33.3 },
   'P5-DRIVE': { n: 48, settled: 41, winRate: 0.3902, grossR: 0.2146, netXm: 0.1796, tCluster: 1.55, zBreakeven: 0.77, minRr: 2, breakevenPct: 33.3 },

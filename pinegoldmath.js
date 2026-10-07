@@ -665,6 +665,230 @@ function pineGoldUniverse(primaryRows, opts){
   return { setups: out, confluence: conf, at: Date.now() };
 }
 
+/* =======================================================================
+   hg-v1164: RECORD-ONLY GOLD PINE LAYERS.
+
+   Asked for new gold Pine layers after hg-v1163 said why none was added: on
+   the measured record a new detector is an unmeasured gate (hg-v966) or
+   noise with a label (hg-v987 / v945 / v922). The honest form, the hg-v933
+   precedent, is a mechanic that MINTS, is RECORDED beside an outcome on
+   every signal bar, PRINTS its levels -- and cannot lead and cannot be
+   handed over until the forward ledger has measured it paying. These five
+   are that: bar-only ports of the Pine scripts a gold trader runs, kept in
+   a table of their OWN so the ten layers above, the confluence rows and
+   every existing record stay byte-identical (pineGoldEvalDir walks
+   PINE_GOLD_LAYERS for isNew / isRecent, so a new entry THERE would move the
+   confluence tier of every row the moment one of these fired).
+
+   Each detector fires ONLY on the last closed bar (newLong / newShort on
+   that bar, barsAgo 0, no context state), so a signal is recorded once, on
+   its own bar, and never re-recorded three bars later at a stale entry.
+   Twins: ICHI-KUMO is the one exact OMNIGOLD mechanic among them, and its
+   gate-clear record is quoted on the card through hgGoldSiblingRecord
+   (hg-v934); the daily-pivot bounce is NOT ported -- its twin PIVOT-REJECT
+   is a measured failure past the veto bar (zBreakeven -2.69), the hg-v934
+   refusal, and this desk has no measured-edge gate that would hold it. */
+var PINE_GOLD_RECORD_LAYERS = [
+  { id: 'supertrend', label: 'Supertrend 10x3', fn: 'pineGoldSupertrend', minBars: 60,
+    opts: { atrLen: 10, mult: 3 }, twin: null },
+  { id: 'ichimoku', label: 'Ichimoku TK Cross', fn: 'pineGoldIchimoku', minBars: 120,
+    opts: { tenkan: 9, kijun: 26, senkou: 52 }, twin: 'ICHI-KUMO' },
+  { id: 'donchian', label: 'Donchian 20/10', fn: 'pineGoldDonchian', minBars: 60,
+    opts: { entryLen: 20, exitLen: 10 }, twin: null },
+  { id: 'emacross', label: 'EMA 8/21 + RSI50', fn: 'pineGoldEmaCrossRsi', minBars: 60,
+    opts: { fast: 8, slow: 21, rsiLen: 14, swing: 5 }, twin: null },
+  { id: 'keltner', label: 'Keltner Pullback', fn: 'pineGoldKeltnerPullback', minBars: 80,
+    opts: { emaLen: 20, atrLen: 10, mult: 1.5, trendLen: 50, slopeBars: 5 }, twin: null }
+];
+
+function pgrNum(v){ return (typeof v === 'number' && isFinite(v)) ? v : NaN; }
+function pgrHighest(rows, from, to, key){
+  var m = -Infinity;
+  for (var i = from; i <= to; i++){ var v = pgrNum(rows[i] && rows[i][key]); if (!isFinite(v)) return NaN; if (v > m) m = v; }
+  return (m === -Infinity) ? NaN : m;
+}
+function pgrLowest(rows, from, to, key){
+  var m = Infinity;
+  for (var i = from; i <= to; i++){ var v = pgrNum(rows[i] && rows[i][key]); if (!isFinite(v)) return NaN; if (v < m) m = v; }
+  return (m === Infinity) ? NaN : m;
+}
+/* ONE result shape for the five: the signal bar's close is the entry, the
+   mechanic's own level is the stop, and the ladder is the one every Pine
+   layer above carries (2R / 3.5R through pineGoldBuildPlan's resHint path).
+   A stop on the wrong side of the entry, or no distance at all, is no signal. */
+function pgrResult(dir, entry, stop, extra){
+  entry = pgrNum(entry); stop = pgrNum(stop);
+  if (!dir || !isFinite(entry) || !isFinite(stop)) return { dir: null };
+  if (dir === 'long' && !(stop < entry)) return { dir: null };
+  if (dir === 'short' && !(stop > entry)) return { dir: null };
+  var risk = Math.abs(entry - stop);
+  var out = Object.assign({
+    dir: dir, newLong: dir === 'long', newShort: dir === 'short', barsAgo: 0,
+    price: entry, entry: entry, stop: stop,
+    t1: dir === 'long' ? entry + 2 * risk : entry - 2 * risk,
+    t2: dir === 'long' ? entry + 3.5 * risk : entry - 3.5 * risk,
+    recordOnly: true
+  }, extra || {});
+  return out;
+}
+
+/* Supertrend (ATR 10, multiplier 3): the band flips on the last closed bar.
+   Stop is the band the flip put under / over price. */
+function pineGoldSupertrend(rows, opts){
+  opts = opts || {};
+  var len = opts.atrLen || 10, mult = opts.mult || 3;
+  try{
+    var atrFn = gfn('atr') || gfn('pineAtr');
+    if (typeof atrFn !== 'function' || !rows || rows.length < len + 5) return { dir: null };
+    var a = atrFn(rows, len), n = rows.length;
+    var fU = NaN, fL = NaN, dir = 0, prevDir = 0, i;
+    for (i = 0; i < n; i++){
+      var r = rows[i], av = pgrNum(a[i]);
+      var h = pgrNum(r.h), l = pgrNum(r.l), c = pgrNum(r.c);
+      if (!isFinite(av) || !isFinite(h) || !isFinite(l) || !isFinite(c)) continue;
+      var hl2 = (h + l) / 2, up = hl2 + mult * av, dn = hl2 - mult * av;
+      var pc = pgrNum(rows[i - 1] && rows[i - 1].c);
+      var nU = (!isFinite(fU) || up < fU || (isFinite(pc) && pc > fU)) ? up : fU;
+      var nL = (!isFinite(fL) || dn > fL || (isFinite(pc) && pc < fL)) ? dn : fL;
+      prevDir = dir;
+      if (dir === 0) dir = (c > nU) ? 1 : -1;
+      else if (dir === 1) dir = (c < nL) ? -1 : 1;
+      else dir = (c > nU) ? 1 : -1;
+      fU = nU; fL = nL;
+    }
+    var last = rows[n - 1];
+    if (dir === 1 && prevDir === -1) return pgrResult('long', last.c, fL, { trend: 1, band: fL });
+    if (dir === -1 && prevDir === 1) return pgrResult('short', last.c, fU, { trend: -1, band: fU });
+    return { dir: null, trend: dir };
+  }catch(e){ return { dir: null }; }
+}
+
+/* Ichimoku: Tenkan crosses Kijun on the last closed bar with the close on
+   the same side of the Kumo (Senkou A / B projected from 26 bars back).
+   Stop is the Kijun. */
+function pineGoldIchimoku(rows, opts){
+  opts = opts || {};
+  var tL = opts.tenkan || 9, kL = opts.kijun || 26, sL = opts.senkou || 52;
+  try{
+    var n = rows ? rows.length : 0;
+    if (n < sL + kL + 2) return { dir: null };
+    function mid(i, len){ var hh = pgrHighest(rows, i - len + 1, i, 'h'), ll = pgrLowest(rows, i - len + 1, i, 'l'); return (hh + ll) / 2; }
+    var i = n - 1, j = n - 2;
+    var tk = mid(i, tL), kj = mid(i, kL), tkP = mid(j, tL), kjP = mid(j, kL);
+    var ci = i - kL;   /* the cloud under bar i was drawn from bar i-26 */
+    var sA = (mid(ci, tL) + mid(ci, kL)) / 2, sB = mid(ci, sL);
+    var c = pgrNum(rows[i].c);
+    if (![tk, kj, tkP, kjP, sA, sB, c].every(isFinite)) return { dir: null };
+    var cloudTop = Math.max(sA, sB), cloudBot = Math.min(sA, sB);
+    if (tk > kj && tkP <= kjP && c > cloudTop) return pgrResult('long', c, kj, { tenkan: tk, kijun: kj, cloud: [cloudBot, cloudTop] });
+    if (tk < kj && tkP >= kjP && c < cloudBot) return pgrResult('short', c, kj, { tenkan: tk, kijun: kj, cloud: [cloudBot, cloudTop] });
+    return { dir: null };
+  }catch(e){ return { dir: null }; }
+}
+
+/* Donchian 20 / 10 (the Turtle S1 shape): the last closed bar is the FIRST
+   close beyond the prior 20-bar channel; the stop is the prior 10-bar
+   channel on the other side (the exit channel). */
+function pineGoldDonchian(rows, opts){
+  opts = opts || {};
+  var eL = opts.entryLen || 20, xL = opts.exitLen || 10;
+  try{
+    var n = rows ? rows.length : 0;
+    if (n < eL + xL + 3) return { dir: null };
+    var i = n - 1;
+    var hi = pgrHighest(rows, i - eL, i - 1, 'h'), lo = pgrLowest(rows, i - eL, i - 1, 'l');
+    var c = pgrNum(rows[i].c);
+    if (![hi, lo, c].every(isFinite)) return { dir: null };
+    /* the FIRST breakout: none of the prior exit-channel bars (10) closed
+       beyond ITS OWN 20-bar channel on that side -- the Turtle takes one
+       entry per breakout and the next only after the exit channel has been
+       given back, which this state-free read approximates. */
+    function brokeBefore(side){
+      for (var k = i - xL; k < i; k++){
+        if (k - eL < 0) return true;   /* channel unreadable: no claim */
+        var ck = pgrNum(rows[k].c);
+        var lvl = side === 'long' ? pgrHighest(rows, k - eL, k - 1, 'h') : pgrLowest(rows, k - eL, k - 1, 'l');
+        if (!isFinite(ck) || !isFinite(lvl)) return true;
+        if (side === 'long' ? ck > lvl : ck < lvl) return true;
+      }
+      return false;
+    }
+    if (c > hi && !brokeBefore('long')) return pgrResult('long', c, pgrLowest(rows, i - xL, i - 1, 'l'), { channel: [lo, hi] });
+    if (c < lo && !brokeBefore('short')) return pgrResult('short', c, pgrHighest(rows, i - xL, i - 1, 'h'), { channel: [lo, hi] });
+    return { dir: null };
+  }catch(e){ return { dir: null }; }
+}
+
+/* EMA 8 / 21 cross with RSI 14 on the right side of 50 on the cross bar.
+   Stop is the prior 5-bar swing on the other side. */
+function pineGoldEmaCrossRsi(rows, opts){
+  opts = opts || {};
+  var fL = opts.fast || 8, sL = opts.slow || 21, rL = opts.rsiLen || 14, sw = opts.swing || 5;
+  try{
+    var emaFn = gfn('ema') || gfn('pineEma'), rsiFn = gfn('rsi') || gfn('pineRsi');
+    var n = rows ? rows.length : 0;
+    if (typeof emaFn !== 'function' || typeof rsiFn !== 'function' || n < sL + sw + 3) return { dir: null };
+    var closes = rows.map(function(r){ return r.c; });
+    var ef = emaFn(closes, fL), es = emaFn(closes, sL), rs = rsiFn(closes, rL);
+    var i = n - 1;
+    var f = pgrNum(ef[i]), s = pgrNum(es[i]), fP = pgrNum(ef[i - 1]), sP = pgrNum(es[i - 1]), r = pgrNum(rs[i]), c = pgrNum(closes[i]);
+    if (![f, s, fP, sP, r, c].every(isFinite)) return { dir: null };
+    if (f > s && fP <= sP && r > 50) return pgrResult('long', c, pgrLowest(rows, i - sw, i - 1, 'l'), { fast: f, slow: s, rsi: r });
+    if (f < s && fP >= sP && r < 50) return pgrResult('short', c, pgrHighest(rows, i - sw, i - 1, 'h'), { fast: f, slow: s, rsi: r });
+    return { dir: null };
+  }catch(e){ return { dir: null }; }
+}
+
+/* Keltner pullback: EMA 50 rising over 5 bars, the PRIOR bar reached the
+   lower band (EMA 20 - 1.5 x ATR 10), the last closed bar closes back
+   above it and up. Stop is the pullback low. Mirrored for shorts. */
+function pineGoldKeltnerPullback(rows, opts){
+  opts = opts || {};
+  var eL = opts.emaLen || 20, aL = opts.atrLen || 10, m = opts.mult || 1.5, tL = opts.trendLen || 50, sb = opts.slopeBars || 5;
+  try{
+    var emaFn = gfn('ema') || gfn('pineEma'), atrFn = gfn('atr') || gfn('pineAtr');
+    var n = rows ? rows.length : 0;
+    if (typeof emaFn !== 'function' || typeof atrFn !== 'function' || n < tL + sb + 3) return { dir: null };
+    var closes = rows.map(function(r){ return r.c; });
+    var mid = emaFn(closes, eL), tr = emaFn(closes, tL), a = atrFn(rows, aL);
+    var i = n - 1, j = n - 2;
+    var lo = pgrNum(mid[j]) - m * pgrNum(a[j]), hi = pgrNum(mid[j]) + m * pgrNum(a[j]);
+    var loI = pgrNum(mid[i]) - m * pgrNum(a[i]), hiI = pgrNum(mid[i]) + m * pgrNum(a[i]);
+    var t0 = pgrNum(tr[i]), t1 = pgrNum(tr[i - sb]);
+    var c = pgrNum(rows[i].c), o = pgrNum(rows[i].o), lJ = pgrNum(rows[j].l), hJ = pgrNum(rows[j].h), lI = pgrNum(rows[i].l), hI = pgrNum(rows[i].h);
+    if (![lo, hi, loI, hiI, t0, t1, c, o, lJ, hJ, lI, hI].every(isFinite)) return { dir: null };
+    if (t0 > t1 && lJ <= lo && c > loI && c > o) return pgrResult('long', c, Math.min(lJ, lI), { band: [loI, hiI] });
+    if (t0 < t1 && hJ >= hi && c < hiI && c < o) return pgrResult('short', c, Math.max(hJ, hI), { band: [loI, hiI] });
+    return { dir: null };
+  }catch(e){ return { dir: null }; }
+}
+
+/* The record-only setups for one lane: every layer in the table that fired
+   on the last closed bar, built through the SAME pineGoldLayerSetup the ten
+   layers above use, then stamped. Stamped rather than tiered, because the
+   tier is what the signal is (a fresh flip IS primary); what it is not is
+   measured. `demoted` is the hg-v1005 field sortSetups and the shared pick
+   already sink; `recordOnly` is the field the desk reads to withhold the two
+   handoffs and the pin, and to ask the ledger whether to release it. */
+function pineGoldRecordLayerSetups(rows, mode){
+  var out = [];
+  if (!rows || !rows.length) return out;
+  for (var i = 0; i < PINE_GOLD_RECORD_LAYERS.length; i++){
+    var layer = PINE_GOLD_RECORD_LAYERS[i];
+    var res = pineGoldRunLayer(layer, rows);
+    if (!res || !res.dir) continue;
+    var s = pineGoldLayerSetup(layer, res, res.dir, rows, mode);
+    if (!s) continue;
+    s.recordOnly = true;
+    s.recordLayer = layer.id;
+    s.recordTwin = layer.twin || null;
+    s.demoted = true;
+    s.demotedWhy = 'RECORD ONLY — ' + layer.label + ' has no measured record on this desk';
+    out.push(s);
+  }
+  return out;
+}
+
 function pineGoldLevelsFromBars(rows1d, rows15m){
   var lv = { pdh: NaN, pdl: NaN, asiaHi: NaN, asiaLo: NaN };
   if (rows1d && rows1d.length >= 2){
@@ -689,6 +913,13 @@ function pineGoldLevelsFromBars(rows1d, rows15m){
 }
 
 G.PINE_GOLD_LAYERS = PINE_GOLD_LAYERS;
+G.PINE_GOLD_RECORD_LAYERS = PINE_GOLD_RECORD_LAYERS;   /* hg-v1164 */
+G.pineGoldRecordLayerSetups = pineGoldRecordLayerSetups;
+G.pineGoldSupertrend = pineGoldSupertrend;
+G.pineGoldIchimoku = pineGoldIchimoku;
+G.pineGoldDonchian = pineGoldDonchian;
+G.pineGoldEmaCrossRsi = pineGoldEmaCrossRsi;
+G.pineGoldKeltnerPullback = pineGoldKeltnerPullback;
 G.PINE_GOLD_SCAN = PINE_GOLD_SCAN;
 G.PINE_GOLD_MAX = PINE_GOLD_MAX;
 G.PINE_GOLD_TIER = PINE_GOLD_TIER;
@@ -706,7 +937,9 @@ if (typeof module !== 'undefined' && module.exports){
   module.exports = {
     PINE_GOLD_LAYERS, PINE_GOLD_SCAN, PINE_GOLD_MAX, PINE_GOLD_TIER, pineGoldConfluence, pineGoldHtfBias,
     pineGoldGrade, pineGoldLevelsFromBars, pineGoldEvalDir, pineGoldNativeBundle, pineGoldOuZscore,
-    pineGoldUniverse, pineGoldLayerSetup
+    pineGoldUniverse, pineGoldLayerSetup,
+    PINE_GOLD_RECORD_LAYERS, pineGoldRecordLayerSetups, pineGoldSupertrend, pineGoldIchimoku,
+    pineGoldDonchian, pineGoldEmaCrossRsi, pineGoldKeltnerPullback
   };
 }
 
