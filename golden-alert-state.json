@@ -323,7 +323,7 @@
       "expired": true
     },
     "FLUX": {
-      "at": "2026-10-07T01:52:24.049Z",
+      "at": "2026-10-07T02:02:11.708Z",
       "score": 5,
       "fresh": true,
       "ago": 3,
@@ -493,7 +493,7 @@
       "expired": true
     }
   },
-  "lastRunAt": "2026-10-07T01:52:45.684Z",
+  "lastRunAt": "2026-10-07T02:02:26.364Z",
   "scanned": 504,
   "cards": 0
 }
