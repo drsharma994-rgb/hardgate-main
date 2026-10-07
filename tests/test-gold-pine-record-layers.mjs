@@ -210,8 +210,8 @@ console.log('== 2) the table: its own home, the ten layers and the universe unto
 {
   const W = boot(MATH_BASE);
   const T = W.PINE_GOLD_RECORD_LAYERS;
-  assert(Array.isArray(T) && T.length === 5 && T.map(l => l.id).join(',') === LAYER_IDS.join(','), 'five record-only layers in their own table (' + T.map(l => l.id).join(' · ') + ')');
-  assert(T.every(l => l.label === LABELS[l.id] && typeof W[l.fn] === 'function' && l.minBars > 0 && l.opts), 'each names its label, its detector and its minimum bars');
+  assert(Array.isArray(T) && T.length === 8 && T.slice(0, 5).map(l => l.id).join(',') === LAYER_IDS.join(',') && T.slice(5).map(l => l.id).join(',') === 'macd,psar,stoch', 'the five hg-v1164 record-only layers lead their own table, the three hg-v1166 ones follow (' + T.map(l => l.id).join(' · ') + ')');
+  assert(T.every(l => (LABELS[l.id] ? l.label === LABELS[l.id] : typeof l.label === 'string') && typeof W[l.fn] === 'function' && l.minBars > 0 && l.opts), 'each names its label, its detector and its minimum bars');
   assert(T.find(l => l.id === 'ichimoku').twin === 'ICHI-KUMO' && T.filter(l => l.twin).length === 1, 'Ichimoku names its exact OMNIGOLD twin ICHI-KUMO; the other four name none');
   assert(!T.some(l => /pivot/i.test(l.id) || /PIVOT-REJECT/.test(String(l.twin))), 'the daily-pivot bounce is NOT in the table (its twin PIVOT-REJECT is a measured failure past the veto bar)');
   assert(W.PINE_GOLD_LAYERS.length === 10 && !W.PINE_GOLD_LAYERS.some(l => LAYER_IDS.includes(l.id)), 'PINE_GOLD_LAYERS still holds the ten and none of the five');
@@ -409,7 +409,9 @@ console.log('== 4) the release is a measurement ==');
 /* ------------------------------------------------------------------ 5 */
 console.log('== 5) nothing gated, one home, stamps ==');
 {
-  for (const f of ['hg-gates.js', 'cryptogates.js', 'engine.js', 'goldind.js', 'gold-best-levels.js', 'gold-formation.js', 'hg-forward.js', 'hg-solidity.js', 'plans.js']){
+  /* hg-v1166: goldind.js MINTS the record layers on GOLD SCALP now (record-only,
+     through the one judge), so it names the field -- the gate modules still do not */
+  for (const f of ['hg-gates.js', 'cryptogates.js', 'engine.js', 'gold-best-levels.js', 'gold-formation.js', 'hg-forward.js', 'hg-solidity.js', 'plans.js']){
     assert(!/recordOnly|recordReleased|PINE_GOLD_RECORD_LAYERS/.test(strip(read(f))), f + ' never names a record-only field');
   }
   const gp = strip(read('goldpine.js'));
@@ -417,7 +419,7 @@ console.log('== 5) nothing gated, one home, stamps ==');
     assert(!/recordOnly|recordReleased/.test(body(gp, h)), h.replace('function ', '').replace('(', '') + ' does not read the record-only mark (the pin exclusion lives at the pin site through gpMayLead; textual)');
   }
   assert((gp.match(/gpMayLead\)/g) || []).length >= 2, 'the pin list and its count both pass through gpMayLead');
-  assert(/HG_GOLD_FWD_MIN_JUDGE/.test(body(gp, 'function gpRecordFloor(')) && (gp.match(/hgFwdJudgeSample/g) || []).length >= 1, 'the release reads the house floor and the one judge (hgFwdJudgeSample), no bar of its own');
+  assert(/pineGoldRecordJudge/.test(body(gp, 'function gpRecordLayerJudge(')) && !/hgFwdJudgeSample/.test(gp) && /HG_GOLD_FWD_MIN_JUDGE/.test(body(strip(read('pinegoldmath.js')), 'function pineGoldRecordFloor(')) && /hgFwdJudgeSample/.test(body(strip(read('pinegoldmath.js')), 'function pineGoldRecordJudge(')), 'the release delegates to the ONE judge in pinegoldmath.js (hg-v1166), which reads the house floor and hgFwdJudgeSample, no bar of its own');
   const bs = read('build-stamp.js');
   assert(bs.includes("version: '" + HG_VER + "'"), 'build-stamp.js version is ' + HG_VER);
   assert(swCacheOk(read('sw.js')), 'sw.js HG_CACHE is ' + HG_VER);

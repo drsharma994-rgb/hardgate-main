@@ -4058,6 +4058,48 @@ function goldScalpSetups(inp){
       }
     }catch(eXtra){}
 
+    /* --- 1d4) hg-v1166 GOLD PINE RECORD LAYERS, MINTED RECORD-ONLY ---------
+       The eight bar-only Pine ports pinegoldmath.js carries (hg-v1164 five,
+       hg-v1166 three) fire through this desk's OWN mint: __gsCand still
+       demands two agreeing reads and a majority, the levels are snapped,
+       the R:R floor, the inst filter, the edge table and every later gate
+       run exactly as for any candidate. They mint RECORD-ONLY -- demoted,
+       both handoffs withheld on the card -- and every signal bar is recorded
+       under GOLDSCALP with the layer as its mechanic, so the forward ledger
+       measures each on THIS desk. The ONE record-only judge (pinegoldmath.js,
+       the rule GOLD PINE has read since hg-v1164) releases a layer only when
+       the ledger reads it paying at or over HG_GOLD_FWD_MIN_JUDGE settled.
+       pinegoldmath absent: nothing mints here, exactly as before. */
+    try{
+      var pgrHitsFn = (typeof window !== 'undefined') ? window.pineGoldRecordLayerHits : null;
+      var pgrJudgeFn = (typeof window !== 'undefined') ? window.pineGoldRecordJudge : null;
+      if (typeof pgrHitsFn === 'function'){
+        var pgrHits = pgrHitsFn(rows) || [];
+        for (var pgi = 0; pgi < pgrHits.length; pgi++){
+          var ph = pgrHits[pgi];
+          if (!ph || !ph.dir || !ph.kind || !isFinite(ph.stop) || !isFinite(ph.entry)) continue;
+          var pCand = __gsCand(ph.kind, ph.dir, D, ph.stop, __gsSnapLvls(D, ph.dir),
+            ph.why, ph.invalidates || 'setup structure broken', null, ph.entry);
+          if (!pCand) continue;
+          if (!pCand.dropped){
+            pCand.entry = ph.entry;
+            pCand.stop = ph.stop;
+            pCand.strategy = ph.label;
+            if (!Array.isArray(pCand.stamps)) pCand.stamps = [];
+            pCand.stamps.push('PINE PORT \u00b7 RECORD ONLY');
+            pCand.recordOnly = true;
+            pCand.recordLayer = ph.id;
+            pCand.recordTwin = ph.twin || null;
+            pCand.demoted = true;
+            pCand.demotedWhy = 'RECORD ONLY \u2014 ' + ph.label + ' has no measured record on this desk';
+            if (typeof pgrJudgeFn === 'function')
+              pgrJudgeFn(pCand, 'GOLDSCALP', String(ph.kind).toUpperCase().slice(0, 28));
+          }
+          out.push(pCand);
+        }
+      }
+    }catch(ePgr){}
+
     /* --- 1d2) SESSION SILVER BULLET (Asia→London / NY open window) --- */
     try{
       if (!D.__sessionBound){
@@ -5491,7 +5533,12 @@ var HG_GOLD_FREE_KEYS = ['free:macroTilt', 'free:paxgBasis', 'free:perpFunding',
                          /* hg-v1165: four more free Yahoo legs (macro.js) -- directional like
                             silver: miners outrunning gold, gold outrunning copper and crude,
                             and a rising euro are each WITH a gold long. Scored nowhere. */
-                         'free:minersGold', 'free:goldCopper', 'free:goldOil', 'free:eurusd'];
+                         'free:minersGold', 'free:goldCopper', 'free:goldOil', 'free:eurusd',
+                         /* hg-v1166: TIP (real yields falling lifts it: WITH a long when RISING),
+                            gold/platinum (the haven ratio, like gold/copper), and two STATE reads
+                            -- the yuan's 20-day direction and the 10y-3m curve slope -- neither
+                            WITH nor AGAINST a direction by construction. Scored nowhere. */
+                         'free:tip', 'free:goldPlatinum', 'free:usdcnyRising', 'free:curveSteepening'];
 /* the correlation band a state mark needs to read: inside it the read is
    UNREAD (absent), not a weak yes */
 var HG_GOLD_CORR_BAND = 0.3;
@@ -5532,6 +5579,13 @@ function hgGoldFreeFeedVerdicts(ctx, dir){
       trendLeg('free:goldCopper', macro.goldCopperTrend, true);
       trendLeg('free:goldOil', macro.goldOilTrend, true);
       trendLeg('free:eurusd', macro.eurusdTrend, true);
+      /* hg-v1166 */
+      trendLeg('free:tip', macro.tipTrend, true);
+      trendLeg('free:goldPlatinum', macro.goldPlatinumTrend, true);
+      if (macro.usdcnyTrend === 'RISING') m['free:usdcnyRising'] = true;
+      else if (macro.usdcnyTrend === 'FALLING') m['free:usdcnyRising'] = false;
+      if (macro.curveSlopeTrend === 'STEEPENING') m['free:curveSteepening'] = true;
+      else if (macro.curveSlopeTrend === 'FLATTENING') m['free:curveSteepening'] = false;
       /* hg-v1163: state reads -- direction-neutral, three states */
       if (macro.gvzTrend === 'RISING') m['free:gvzRising'] = true;
       else if (macro.gvzTrend === 'FALLING') m['free:gvzRising'] = false;
@@ -5584,7 +5638,12 @@ var HG_GOLD_FREE_ROWS = [
   ['MINERS/GOLD',     'free:minersGold',       'Yahoo GDX / GC=F 20d', 'WITH', 'AGAINST'],
   ['GOLD/COPPER',     'free:goldCopper',       'Yahoo GC=F / HG=F 20d', 'WITH', 'AGAINST'],
   ['GOLD/OIL',        'free:goldOil',          'Yahoo GC=F / CL=F 20d', 'WITH', 'AGAINST'],
-  ['EURUSD',          'free:eurusd',           'Yahoo EURUSD=X 20d', 'WITH', 'AGAINST']
+  ['EURUSD',          'free:eurusd',           'Yahoo EURUSD=X 20d', 'WITH', 'AGAINST'],
+  /* hg-v1166 */
+  ['TIPS (TIP)',      'free:tip',              'Yahoo TIP 20d (rises as real yields fall)', 'WITH', 'AGAINST'],
+  ['GOLD/PLATINUM',   'free:goldPlatinum',     'Yahoo GC=F / PL=F 20d', 'WITH', 'AGAINST'],
+  ['USDCNY',          'free:usdcnyRising',     'Yahoo USDCNY=X 20d (the yuan)', 'RISING', 'FALLING'],
+  ['CURVE 10Y-3M',    'free:curveSteepening',  'Yahoo ^TNX minus ^IRX, 20d change in the slope', 'STEEPENING', 'FLATTENING']
 ];
 function hgGoldFreeFeedLineHtml(marks, opts){
   try{

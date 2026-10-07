@@ -698,8 +698,23 @@ var PINE_GOLD_RECORD_LAYERS = [
   { id: 'emacross', label: 'EMA 8/21 + RSI50', fn: 'pineGoldEmaCrossRsi', minBars: 60,
     opts: { fast: 8, slow: 21, rsiLen: 14, swing: 5 }, twin: null },
   { id: 'keltner', label: 'Keltner Pullback', fn: 'pineGoldKeltnerPullback', minBars: 80,
-    opts: { emaLen: 20, atrLen: 10, mult: 1.5, trendLen: 50, slopeBars: 5 }, twin: null }
+    opts: { emaLen: 20, atrLen: 10, mult: 1.5, trendLen: 50, slopeBars: 5 }, twin: null },
+  /* hg-v1166: three more bar-only Pine ports a gold trader runs, the same
+     shape as the five above -- fire ONLY on the last closed bar, a wrong-side
+     stop is no signal, record-only until the ledger measures them paying.
+     None has an exact OMNIGOLD twin: STOCHRSI-TURN reads a StochRSI turn, not
+     the plain Stochastic cross, and a loose analogy is not a twin (hg-v943). */
+  { id: 'macd', label: 'MACD Cross', fn: 'pineGoldMacdCross', minBars: 60,
+    opts: { fast: 12, slow: 26, signal: 9, swing: 5 }, twin: null },
+  { id: 'psar', label: 'Parabolic SAR Flip', fn: 'pineGoldPsarFlip', minBars: 60,
+    opts: { step: 0.02, max: 0.2 }, twin: null },
+  { id: 'stoch', label: 'Stochastic Cross', fn: 'pineGoldStochCross', minBars: 60,
+    opts: { kLen: 14, kSmooth: 3, dLen: 3, ob: 80, os: 20, swing: 5 }, twin: null }
 ];
+/* hg-v1165's majority mark is the majority of the FIVE hg-v1164 layers --
+   records written since then carry that meaning, so the three hg-v1166
+   layers mark their own states and do not move the majority's population. */
+var PINE_GOLD_MAJORITY_IDS = ['supertrend', 'ichimoku', 'donchian', 'emacross', 'keltner'];
 
 function pgrNum(v){ return (typeof v === 'number' && isFinite(v)) ? v : NaN; }
 function pgrHighest(rows, from, to, key){
@@ -863,6 +878,207 @@ function pineGoldKeltnerPullback(rows, opts){
   }catch(e){ return { dir: null }; }
 }
 
+/* hg-v1166: the series the three new layers read, stated once each */
+function pgrMacdSeries(rows, fL, sL, gL){
+  var emaFn = gfn('ema') || gfn('pineEma');
+  if (typeof emaFn !== 'function' || !rows || !rows.length) return null;
+  var closes = rows.map(function(r){ return r.c; });
+  var ef = emaFn(closes, fL), es = emaFn(closes, sL);
+  var macd = closes.map(function(_, i){ var a = pgrNum(ef[i]), b = pgrNum(es[i]); return (isFinite(a) && isFinite(b)) ? a - b : NaN; });
+  var sig = emaFn(macd.map(function(v){ return isFinite(v) ? v : 0; }), gL);
+  return { macd: macd, sig: sig };
+}
+function pgrPsarSeries(rows, step, max){
+  var n = rows ? rows.length : 0;
+  if (n < 3) return null;
+  var sar = new Array(n), up = new Array(n);
+  var h0 = pgrNum(rows[0].h), l0 = pgrNum(rows[0].l), h1 = pgrNum(rows[1].h), l1 = pgrNum(rows[1].l);
+  if (![h0, l0, h1, l1].every(isFinite)) return null;
+  var isUp = pgrNum(rows[1].c) >= pgrNum(rows[0].c);
+  var ep = isUp ? Math.max(h0, h1) : Math.min(l0, l1), af = step, s = isUp ? Math.min(l0, l1) : Math.max(h0, h1);
+  sar[0] = NaN; up[0] = null; sar[1] = s; up[1] = isUp;
+  for (var i = 2; i < n; i++){
+    var h = pgrNum(rows[i].h), l = pgrNum(rows[i].l), hP = pgrNum(rows[i - 1].h), lP = pgrNum(rows[i - 1].l);
+    if (![h, l, hP, lP].every(isFinite)) return null;
+    var ns = s + af * (ep - s);
+    if (isUp){
+      ns = Math.min(ns, lP, pgrNum(rows[i - 2].l));
+      if (l < ns){ isUp = false; ns = ep; ep = l; af = step; }
+      else if (h > ep){ ep = h; af = Math.min(max, af + step); }
+    } else {
+      ns = Math.max(ns, hP, pgrNum(rows[i - 2].h));
+      if (h > ns){ isUp = true; ns = ep; ep = h; af = step; }
+      else if (l < ep){ ep = l; af = Math.min(max, af + step); }
+    }
+    s = ns; sar[i] = s; up[i] = isUp;
+  }
+  return { sar: sar, up: up };
+}
+function pgrStochSeries(rows, kLen, kSm, dLen){
+  var n = rows ? rows.length : 0;
+  if (n < kLen + kSm + dLen + 2) return null;
+  var raw = new Array(n), k = new Array(n), d = new Array(n), i, j, acc;
+  for (i = 0; i < n; i++){
+    if (i < kLen - 1){ raw[i] = NaN; continue; }
+    var hh = pgrHighest(rows, i - kLen + 1, i, 'h'), ll = pgrLowest(rows, i - kLen + 1, i, 'l'), c = pgrNum(rows[i].c);
+    raw[i] = (isFinite(hh) && isFinite(ll) && isFinite(c) && hh > ll) ? (c - ll) / (hh - ll) * 100 : NaN;
+  }
+  function sma(src, len, out){
+    for (i = 0; i < n; i++){
+      if (i < len - 1){ out[i] = NaN; continue; }
+      acc = 0;
+      for (j = i - len + 1; j <= i; j++){ if (!isFinite(src[j])){ acc = NaN; break; } acc += src[j]; }
+      out[i] = isFinite(acc) ? acc / len : NaN;
+    }
+  }
+  sma(raw, kSm, k); sma(k, dLen, d);
+  return { k: k, d: d };
+}
+/* MACD 12 / 26 / 9: the MACD line crosses its signal on the last closed bar
+   (the plain Pine strategy: the histogram changes sign). Stop is the prior
+   5-bar swing on the other side. No zero-line filter: on a cycling tape every
+   bullish cross sits under zero and every bearish one over it, so that
+   variant fires nothing to measure. */
+function pineGoldMacdCross(rows, opts){
+  opts = opts || {};
+  var fL = opts.fast || 12, sL = opts.slow || 26, gL = opts.signal || 9, sw = opts.swing || 5;
+  try{
+    var n = rows ? rows.length : 0;
+    if (n < sL + gL + sw + 3) return { dir: null };
+    var S = pgrMacdSeries(rows, fL, sL, gL);
+    if (!S) return { dir: null };
+    var i = n - 1;
+    var m = pgrNum(S.macd[i]), g = pgrNum(S.sig[i]), mP = pgrNum(S.macd[i - 1]), gP = pgrNum(S.sig[i - 1]), c = pgrNum(rows[i].c);
+    if (![m, g, mP, gP, c].every(isFinite)) return { dir: null };
+    if (m > g && mP <= gP) return pgrResult('long', c, pgrLowest(rows, i - sw, i - 1, 'l'), { macd: m, signal: g, hist: m - g });
+    if (m < g && mP >= gP) return pgrResult('short', c, pgrHighest(rows, i - sw, i - 1, 'h'), { macd: m, signal: g, hist: m - g });
+    return { dir: null };
+  }catch(e){ return { dir: null }; }
+}
+/* Parabolic SAR (0.02 step, 0.2 max): the SAR flips to the other side of
+   price on the last closed bar. Stop is the new SAR. */
+function pineGoldPsarFlip(rows, opts){
+  opts = opts || {};
+  var step = opts.step || 0.02, max = opts.max || 0.2;
+  try{
+    var n = rows ? rows.length : 0;
+    if (n < 20) return { dir: null };
+    var S = pgrPsarSeries(rows, step, max);
+    if (!S) return { dir: null };
+    var i = n - 1, c = pgrNum(rows[i].c), s = pgrNum(S.sar[i]);
+    if (!isFinite(c) || !isFinite(s)) return { dir: null };
+    if (S.up[i] === true && S.up[i - 1] === false) return pgrResult('long', c, s, { sar: s });
+    if (S.up[i] === false && S.up[i - 1] === true) return pgrResult('short', c, s, { sar: s });
+    return { dir: null, trend: S.up[i] === true ? 1 : -1 };
+  }catch(e){ return { dir: null }; }
+}
+/* Stochastic 14 / 3 / 3: %K crosses %D on the last closed bar out of the
+   oversold band (prior %K under 20) for a long, out of the overbought band
+   (prior %K over 80) for a short. Stop is the prior 5-bar swing. */
+function pineGoldStochCross(rows, opts){
+  opts = opts || {};
+  var kL = opts.kLen || 14, kS = opts.kSmooth || 3, dL = opts.dLen || 3, ob = opts.ob || 80, os = opts.os || 20, sw = opts.swing || 5;
+  try{
+    var n = rows ? rows.length : 0;
+    if (n < kL + kS + dL + sw + 3) return { dir: null };
+    var S = pgrStochSeries(rows, kL, kS, dL);
+    if (!S) return { dir: null };
+    var i = n - 1;
+    var k = pgrNum(S.k[i]), d = pgrNum(S.d[i]), kP = pgrNum(S.k[i - 1]), dP = pgrNum(S.d[i - 1]), c = pgrNum(rows[i].c);
+    if (![k, d, kP, dP, c].every(isFinite)) return { dir: null };
+    if (k > d && kP <= dP && kP < os) return pgrResult('long', c, pgrLowest(rows, i - sw, i - 1, 'l'), { k: k, d: d });
+    if (k < d && kP >= dP && kP > ob) return pgrResult('short', c, pgrHighest(rows, i - sw, i - 1, 'h'), { k: k, d: d });
+    return { dir: null };
+  }catch(e){ return { dir: null }; }
+}
+
+/* hg-v1166: every record layer that fired on the last closed bar of a
+   series, as plain hits for a desk's OWN mint (GOLD SCALP / GOLD SWING
+   consume these through their extras seam and price them through their own
+   gates). `kind` is the stratKey those desks record under. */
+function pineGoldRecordLayerHits(rows){
+  var out = [];
+  if (!rows || !rows.length) return out;
+  for (var i = 0; i < PINE_GOLD_RECORD_LAYERS.length; i++){
+    var layer = PINE_GOLD_RECORD_LAYERS[i];
+    var res = pineGoldRunLayer(layer, rows);
+    if (!res || !res.dir || !isFinite(pgrNum(res.entry)) || !isFinite(pgrNum(res.stop))) continue;
+    out.push({ id: layer.id, kind: 'pine_' + layer.id, label: layer.label, dir: res.dir,
+               entry: res.entry, stop: res.stop, twin: layer.twin || null,
+               why: layer.label + ' fired on the last closed bar (Pine port, record-only until measured)',
+               invalidates: 'the ' + layer.label + ' stop level' });
+  }
+  return out;
+}
+
+/* hg-v1166: THE ONE RECORD-ONLY JUDGE (hg-v949: one rule, one home).
+   GOLD PINE carried this rule since hg-v1164 (gpRecordLayerJudge); GOLD
+   SCALP and GOLD SWING mint the same layers now and read the same rule here
+   rather than a second copy. Reads hgFwdStats(pool, mechanic) through
+   hgFwdJudgeSample -- the one judge every measured-edge gate reads (hg-v982),
+   fill-aware when that clears the floor on its own -- at HG_GOLD_FWD_MIN_JUDGE
+   read at call time. At or over the floor AND paying releases the row; measured
+   and not paying stays record-only and says so; under the floor says how far;
+   with no ledger loaded nothing is measured and nothing is released. */
+function pineGoldRecordFloor(){
+  var f = +G.HG_GOLD_FWD_MIN_JUDGE;
+  return (isFinite(f) && f > 0) ? f : 20;
+}
+function pineGoldRecordJudge(s, pool, mechanic){
+  if (!s) return s;
+  var floor = pineGoldRecordFloor();
+  var j = { n: 0, expR: NaN, floor: floor, fillAware: false, measured: false, paying: false, unfilled: 0, pool: String(pool || ''), mechanic: String(mechanic || '') };
+  s.recordJudge = j;
+  try{
+    var st = gfn('hgFwdStats'), js = gfn('hgFwdJudgeSample');
+    if (!st || !js) return s;
+    var stats = st(pool, mechanic, false);
+    var k = js(stats, floor);
+    if (!k || !fin(+k.n)){
+      j.n = (stats && fin(+stats.samples)) ? +stats.samples : 0;
+      return s;
+    }
+    j.n = +k.n; j.expR = fin(+k.expR) ? +k.expR : NaN; j.fillAware = !!k.fillAware;
+    j.unfilled = fin(+k.unfilled) ? +k.unfilled : 0;
+    j.measured = true;
+    j.paying = isFinite(j.expR) && j.expR > 0;
+    if (j.paying){
+      s.recordOnly = false;
+      s.recordReleased = true;
+      s.demoted = false;
+      s.demotedWhy = undefined;
+    } else {
+      s.demotedWhy = 'RECORD ONLY \u2014 ' + String(mechanic) + ' measured ' + j.n + ' settled at '
+        + (isFinite(j.expR) ? ((j.expR >= 0 ? '+' : '\u2212') + Math.abs(j.expR).toFixed(3)) : '?') + 'R on this desk, not paying';
+    }
+  }catch(e){}
+  return s;
+}
+/* the one chip and the one withheld-handoff note for a record-only row on a
+   desk that mints it (GOLD SCALP / GOLD SWING); GOLD PINE keeps its own
+   wording with the same judge behind it */
+function pineGoldSgnR(v){ return (isFinite(v) ? ((v >= 0 ? '+' : '\u2212') + Math.abs(v).toFixed(3)) : '?') + 'R'; }
+function pineGoldRecordChipHtml(s){
+  if (!s) return '';
+  var j = s.recordJudge || {};
+  function e(x){ return String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  if (s.recordReleased) return '<span class="gpip ok" data-hg-record-chip="released" title="released by the forward ledger: ' + j.n + ' settled at ' + pineGoldSgnR(j.expR) + (j.fillAware ? ' (fill-aware)' : '') + '">MEASURED \u00b7 ' + j.n + ' settled ' + pineGoldSgnR(j.expR) + '</span>';
+  if (!s.recordOnly) return '';
+  return '<span class="gpip" data-hg-record-chip="record-only" title="' + e(String(s.demotedWhy || 'record only')) + '">RECORD ONLY \u00b7 ' + (j.measured ? ('measured ' + j.n + ' at ' + pineGoldSgnR(j.expR)) : (j.n + ' of ' + (fin(+j.floor) ? j.floor : pineGoldRecordFloor()) + ' settled')) + '</span>';
+}
+function pineGoldRecordNoteHtml(s, pool){
+  if (!s || !s.recordOnly) return '';
+  var j = s.recordJudge || {};
+  var floor = fin(+j.floor) ? +j.floor : pineGoldRecordFloor();
+  function e(x){ return String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  return '<div class="note warn" data-hg-record-note="1" style="margin-top:8px">NO TRADE HANDOFF \u2014 RECORD ONLY. ' + e(String(s.strategy || s.recordLayer || 'this Pine layer'))
+    + ' is a Pine port with no measured record on this desk: '
+    + (j.measured ? ('measured ' + j.n + ' settled at ' + pineGoldSgnR(j.expR) + ', not paying') : (j.n + ' of ' + floor + ' settled'))
+    + '. Every signal bar is recorded under ' + e(String(pool || j.pool || 'this desk'))
+    + '; the handoffs and the MOST PROBABLE pin open only when the ledger reads it paying at or over ' + floor
+    + ' settled. The levels are shown to be read, not sent.</div>';
+}
+
 /* The record-only setups for one lane: every layer in the table that fired
    on the last closed bar, built through the SAME pineGoldLayerSetup the ten
    layers above use, then stamped. Stamped rather than tiered, because the
@@ -906,7 +1122,9 @@ function pineGoldRecordLayerSetups(rows, mode){
    majority separates winners on each desk. Nothing scores on any of it. */
 function pgrStateOf(res){ return res && (res.dir === 'long' || res.dir === 'short') ? res.dir : null; }
 function pineGoldLayerStates(rows){
-  var out = { ok: false, supertrend: null, ichimoku: null, donchian: null, emacross: null, keltner: null, readable: 0, agreeLong: 0, agreeShort: 0 };
+  var out = { ok: false, supertrend: null, ichimoku: null, donchian: null, emacross: null, keltner: null,
+              /* hg-v1166 */ macd: null, psar: null, stoch: null, allLong: 0, allShort: 0,
+              readable: 0, agreeLong: 0, agreeShort: 0 };
   try{
     if (!rows || rows.length < 60) return out;
     var n = rows.length, i = n - 1;
@@ -957,10 +1175,34 @@ function pineGoldLayerStates(rows){
         }
       }
     }catch(eK){}
+    /* hg-v1166: the MACD line against its signal, the close against the SAR,
+       %K against %D -- each neither at equality */
+    try{
+      var mO = layerOpts('macd'), MS = pgrMacdSeries(rows, mO.fast || 12, mO.slow || 26, mO.signal || 9);
+      if (MS){
+        var mm = pgrNum(MS.macd[i]), mg = pgrNum(MS.sig[i]);
+        if (isFinite(mm) && isFinite(mg)){ if (mm > mg) out.macd = 'long'; else if (mm < mg) out.macd = 'short'; }
+      }
+    }catch(eM){}
+    try{
+      var pO = layerOpts('psar'), PS = pgrPsarSeries(rows, pO.step || 0.02, pO.max || 0.2);
+      if (PS){
+        var ps = pgrNum(PS.sar[i]);
+        if (isFinite(ps)){ if (c > ps) out.psar = 'long'; else if (c < ps) out.psar = 'short'; }
+      }
+    }catch(eP){}
+    try{
+      var sO = layerOpts('stoch'), SS = pgrStochSeries(rows, sO.kLen || 14, sO.kSmooth || 3, sO.dLen || 3);
+      if (SS){
+        var sk = pgrNum(SS.k[i]), sd = pgrNum(SS.d[i]);
+        if (isFinite(sk) && isFinite(sd)){ if (sk > sd) out.stoch = 'long'; else if (sk < sd) out.stoch = 'short'; }
+      }
+    }catch(eS){}
     PINE_GOLD_RECORD_LAYERS.forEach(function(l){
       var v = out[l.id];
-      if (v === 'long'){ out.readable++; out.agreeLong++; }
-      else if (v === 'short'){ out.readable++; out.agreeShort++; }
+      var core = PINE_GOLD_MAJORITY_IDS.indexOf(l.id) >= 0;
+      if (v === 'long'){ out.readable++; out.allLong++; if (core) out.agreeLong++; }
+      else if (v === 'short'){ out.readable++; out.allShort++; if (core) out.agreeShort++; }
     });
     out.ok = true;
   }catch(e){ out.ok = false; }
@@ -1001,7 +1243,7 @@ function pineGoldStackLineHtml(states, marks){
     });
     var mj = marks['pine:majorityWith'];
     var mjTag = mj === true ? 'WITH' : (mj === false ? 'AGAINST' : 'SPLIT');
-    cells += '<span class="gsx-ind ' + (mj === true ? 'ok' : (mj === false ? 'no' : 'na')) + '" title="pine:majorityWith — at least three of the readable states"><b>MAJORITY</b> ' + mjTag + ' ' + states.agreeLong + 'L/' + states.agreeShort + 'S</span>';
+    cells += '<span class="gsx-ind ' + (mj === true ? 'ok' : (mj === false ? 'no' : 'na')) + '" title="pine:majorityWith — at least three of the five hg-v1164 layers (the hg-v1166 layers mark their own states and do not move this majority)"><b>MAJORITY</b> ' + mjTag + ' ' + states.agreeLong + 'L/' + states.agreeShort + 'S</span>';
     return '<div class="note gsx-pinestack" data-hg-pine-stack="1" style="margin-top:6px;font-size:11px"><b>PINE STACK</b> · '
       + states.readable + ' of ' + PINE_GOLD_RECORD_LAYERS.length + ' gold Pine layers readable on this tape'
       + ' — recorded for the forward ledger’s read split, not part of this desk’s score, gates nothing.'
@@ -1041,6 +1283,16 @@ G.pineGoldDonchian = pineGoldDonchian;
 G.pineGoldEmaCrossRsi = pineGoldEmaCrossRsi;
 G.pineGoldKeltnerPullback = pineGoldKeltnerPullback;
 G.pineGoldLayerStates = pineGoldLayerStates;   /* hg-v1165 */
+/* hg-v1166 */
+G.pineGoldMacdCross = pineGoldMacdCross;
+G.pineGoldPsarFlip = pineGoldPsarFlip;
+G.pineGoldStochCross = pineGoldStochCross;
+G.pineGoldRecordLayerHits = pineGoldRecordLayerHits;
+G.pineGoldRecordJudge = pineGoldRecordJudge;
+G.pineGoldRecordFloor = pineGoldRecordFloor;
+G.pineGoldRecordChipHtml = pineGoldRecordChipHtml;
+G.pineGoldRecordNoteHtml = pineGoldRecordNoteHtml;
+G.PINE_GOLD_MAJORITY_IDS = PINE_GOLD_MAJORITY_IDS;
 G.pineGoldPineMarks = pineGoldPineMarks;
 G.pineGoldStackLineHtml = pineGoldStackLineHtml;
 G.PINE_GOLD_MAJORITY = PINE_GOLD_MAJORITY;
@@ -1064,7 +1316,9 @@ if (typeof module !== 'undefined' && module.exports){
     pineGoldUniverse, pineGoldLayerSetup,
     PINE_GOLD_RECORD_LAYERS, pineGoldRecordLayerSetups, pineGoldSupertrend, pineGoldIchimoku,
     pineGoldDonchian, pineGoldEmaCrossRsi, pineGoldKeltnerPullback,
-    pineGoldLayerStates, pineGoldPineMarks, pineGoldStackLineHtml, PINE_GOLD_MAJORITY
+    pineGoldLayerStates, pineGoldPineMarks, pineGoldStackLineHtml, PINE_GOLD_MAJORITY,
+    pineGoldMacdCross, pineGoldPsarFlip, pineGoldStochCross, pineGoldRecordLayerHits,
+    pineGoldRecordJudge, pineGoldRecordFloor, pineGoldRecordChipHtml, pineGoldRecordNoteHtml, PINE_GOLD_MAJORITY_IDS
   };
 }
 

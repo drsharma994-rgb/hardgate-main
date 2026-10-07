@@ -619,6 +619,13 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
            object per scan, shared by every row) so the card can print each
            read beside its `ind:` mark; the marks themselves ride freeReads */
         indReads: (c.indReads && typeof c.indReads === 'object' && c.indReads.ok === true) ? c.indReads : undefined,
+        /* hg-v1166: the record-only Pine ports -- a re-ranker that cannot see
+           these would promote a row this desk withholds */
+        demotedWhy: (typeof c.demotedWhy === 'string') ? c.demotedWhy : null,
+        recordOnly: !!c.recordOnly,
+        recordLayer: (typeof c.recordLayer === 'string') ? c.recordLayer : null,
+        recordReleased: !!c.recordReleased,
+        recordJudge: (c.recordJudge && typeof c.recordJudge === 'object') ? c.recordJudge : null,
         stamps: Array.isArray(c.stamps) ? c.stamps.slice() : [],
         /* hg-v977: the instant the mint judged this candidate on -- SUPER GOLD's
            sgCandSec has read `signalT` since hg-v952 and no mint ever wrote it */
@@ -714,7 +721,8 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
                       inch before it). */
                    sess: c.sess, orb: c.orb,
                    mechanic: String(c.stratKey || c.strategy || 'UNKNOWN').toUpperCase().slice(0, 28),
-                   ticket: (c.grade === 'A' || c.grade === 'clean' || !!c.locked),
+                   /* hg-v1166: a record-only Pine port never claims a ticket */
+                   ticket: (c.grade === 'A' || c.grade === 'clean' || !!c.locked) && !c.recordOnly,
                    /* hg-v1022: the PERFECT read-mark — true when this record met
                       the strictest confluence bar at fire time (leader-not-vetoed
                       · grade A · no opposing reads · strictly positive tally),
@@ -1048,6 +1056,21 @@ function gsPineStackLineHtml(c){
     var fn = gfn('pineGoldStackLineHtml');
     if (!fn || !c || !c.pineStates) return '';
     return fn(c.pineStates, c.freeReads) || '';
+  }catch(e){ return ''; }
+}
+/* hg-v1166: the record-only chip and withheld-handoff note, one home each */
+function gsRecordChipHtml(c){
+  try{
+    var fn = gfn('pineGoldRecordChipHtml');
+    if (!fn || !c || !(c.recordOnly || c.recordReleased)) return '';
+    return fn(c) || '';
+  }catch(e){ return ''; }
+}
+function gsRecordNoteHtml(c){
+  try{
+    var fn = gfn('pineGoldRecordNoteHtml');
+    if (!fn || !c || !c.recordOnly) return '';
+    return fn(c, 'GOLDSCALP') || '';
   }catch(e){ return ''; }
 }
 function gsIndicatorStackHtml(c){
@@ -1477,9 +1500,12 @@ function cardHTML(c, isBest, season, tape){
     ? '<div class="note gsx-heldone"><b>HELD &mdash; ONE POSITION AT A TIME</b> &middot; a gold '
       + 'conviction is already live, so this setup cannot be booked or sent to TRADE PLAN. '
       + 'Its levels and reasoning stand; it is released when the book is flat.</div>' : '';
-  var tradeBtn = (tradeOnclick && !heldOne)
+  /* hg-v1166: a record-only Pine port keeps its levels and loses both handoffs */
+  var recOnly = !!c.recordOnly;
+  var recordNoteLine = recOnly ? gsRecordNoteHtml(c) : '';
+  var tradeBtn = (tradeOnclick && !heldOne && !recOnly)
     ? '<button class="toTrade" onclick="' + tradeOnclick + '">SEND TO TRADE PLAN →</button>' : '';
-  var bookBtn = (typeof bookBtnHTML === 'function' && c.sym && !heldOne)
+  var bookBtn = (typeof bookBtnHTML === 'function' && c.sym && !heldOne && !recOnly)
     ? bookBtnHTML(c.sym, c.dir, c.entry, c.stop, c.t1, { scanner: 'goldscalp', strategy: 'goldscalp', klass: 'metals', fund: 'gold', t2: c.t2, stack: c.stack }) : '';
   var stackHtml = (c.stack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(c.stack) : '';
   var metaChips = '';
@@ -1521,6 +1547,7 @@ function cardHTML(c, isBest, season, tape){
     + gsFundChipHtml(c)
     + gsSessionChipHtml(c)
     + gsTakerFlowChipHtml(c)   /* hg-v1011: the flow verdict the scan stamped — reads the stamp, never recomputes */
+    + gsRecordChipHtml(c)      /* hg-v1166: RECORD ONLY / MEASURED on a Pine port */
     + chips + metaChips
     + '</div>'
     + tallyChips(c)
@@ -1542,6 +1569,7 @@ function cardHTML(c, isBest, season, tape){
     + gateLine
     + rrNoteLine
     + heldOneLine
+    + recordNoteLine
     + uncheckedLine
     + xautBasisLine
     + lockLine

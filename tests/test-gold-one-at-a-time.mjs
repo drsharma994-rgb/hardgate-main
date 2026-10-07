@@ -190,9 +190,11 @@ console.log('\n7. the handoff is the enforcement, not the demote');
 {
   const src = fs.readFileSync(root + 'goldscalp.js', 'utf8');
   ok(/var heldOne = !!c\.heldOneAtATime;/.test(src), 'the card reads the flag');
-  ok(/var tradeBtn = \(tradeOnclick && !heldOne\)/.test(src),
+  /* hg-v1166: match the RULE (the held flag withholds the button), not its
+     braces -- the record-only port joined the same condition */
+  ok(/var tradeBtn = \(tradeOnclick && !heldOne/.test(src),
      'SEND TO TRADE PLAN is withheld on a held card');
-  ok(/var bookBtn = \(typeof bookBtnHTML === 'function' && c\.sym && !heldOne\)/.test(src),
+  ok(/var bookBtn = \(typeof bookBtnHTML === 'function' && c\.sym && !heldOne/.test(src),
      'and so is ADD TO BOOK — hg-v611 proved a demote alone does not remove them');
   ok(/\+ heldOneLine\n/.test(src), 'and the space where they were says why, rather than going blank');
   ok(/cannot be booked or sent to TRADE PLAN/.test(src), 'in words, on the card itself');

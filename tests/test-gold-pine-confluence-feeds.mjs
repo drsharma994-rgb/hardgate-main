@@ -146,11 +146,11 @@ console.log('== 1) macro.js: the four legs ==');
 console.log('== 2) the home: sixteen keys, four more legs, the ranker scores nothing on them ==');
 {
   const W = boot(RANK_BASE);
-  assert(W.HG_GOLD_FREE_KEYS.length === 16 && NEW4.every(k => W.HG_GOLD_FREE_KEYS.indexOf(k) >= 0), 'the key list carries the four hg-v1165 legs (16 keys)');
+  assert(W.HG_GOLD_FREE_KEYS.length === 20 && NEW4.every(k => W.HG_GOLD_FREE_KEYS.indexOf(k) >= 0), 'the key list carries the four hg-v1165 legs (20 keys since hg-v1166)');
   const L = W.hgGoldFreeFeedVerdicts(FEEDS_ALL, 'long'), S = W.hgGoldFreeFeedVerdicts(FEEDS_ALL, 'short');
   assert(NEW4.every(k => L[k] === EXP4_LONG[k]), 'on a long: miners/gold RISING and gold/oil RISING read WITH, gold/copper FALLING and EURUSD FALLING read AGAINST (' + JSON.stringify(NEW4.map(k => L[k])) + ')');
   assert(NEW4.every(k => S[k] === !EXP4_LONG[k]), 'on a short every leg reads the mirror');
-  assert(Object.keys(L).length === 16 && Object.keys(S).length === 16, 'sixteen keys, no stowaway');
+  assert(Object.keys(L).length === 16 && Object.keys(S).length === 16, 'sixteen keys on this snapshot (the four hg-v1166 legs are absent on it), no stowaway');
   const flat = W.hgGoldFreeFeedVerdicts({ macro: Object.assign({}, MACRO_ALL, { minersGoldTrend: 'FLAT', goldCopperTrend: null, goldOilTrend: 'up', eurusdTrend: undefined }) }, 'long');
   assert(NEW4.every(k => flat[k] === undefined), 'FLAT, null, a junk string and absent each mark NOTHING');
   /* the ranker: identical tally and parts with and without the four legs */
@@ -172,7 +172,7 @@ console.log('== 3) the Pine stack: states, marks, the majority, the line ==');
   const up = []; let px = 2300; const t0 = Math.floor(WED / 1000) - 300 * 900;
   for (let i = 0; i < 300; i++){ const o = px, c = o + 1.5 + Math.sin(i / 9) * 0.4; up.push({ t: t0 + i * 900, o, h: Math.max(o, c) + 0.5, l: Math.min(o, c) - 0.5, c, v: 1000 }); px = c; }
   const su = W.pineGoldLayerStates(up);
-  assert(su.ok === true && LAYER_IDS.every(id => su[id] === 'long') && su.readable === 5 && su.agreeLong === 5 && su.agreeShort === 0, 'a clean uptrend: all five states LONG (' + LAYER_IDS.map(id => su[id]).join('/') + ')');
+  assert(su.ok === true && LAYER_IDS.every(id => su[id] === 'long') && su.readable === 8 && su.agreeLong === 5 && su.agreeShort === 0, 'a clean uptrend: all five hg-v1164 states LONG, eight readable with the hg-v1166 three (' + LAYER_IDS.map(id => su[id]).join('/') + ')');
   const sd = W.pineGoldLayerStates(mirror(up));
   assert(sd.ok === true && LAYER_IDS.every(id => sd[id] === 'short') && sd.agreeShort === 5, 'the mirrored tape: all five SHORT');
   /* a dead-flat tape: the midline, the cross and the Keltner mid read neither */
@@ -191,7 +191,7 @@ console.log('== 3) the Pine stack: states, marks, the majority, the line ==');
   assert(sb.ok === true && sb.keltner === null, 'so the Keltner state reads NEITHER (the slope leg is part of the rule)');
   /* marks */
   const mL = W.pineGoldPineMarks(su, 'long'), mS = W.pineGoldPineMarks(su, 'short');
-  assert(PINE_KEYS.every(k => mL[k] === true) && Object.keys(mL).length === 6, 'all-long states on a long: six marks, all WITH');
+  assert(PINE_KEYS.every(k => mL[k] === true) && Object.keys(mL).length === 9, 'all-long states on a long: the six hg-v1165 marks all WITH (nine with the hg-v1166 three)');
   assert(PINE_KEYS.every(k => mS[k] === false), 'the same states on a short: six marks, all AGAINST');
   const mixed = { ok: true, supertrend: 'long', ichimoku: null, donchian: 'short', emacross: 'long', keltner: null, readable: 3, agreeLong: 2, agreeShort: 1 };
   const mM = W.pineGoldPineMarks(mixed, 'long');
@@ -202,7 +202,7 @@ console.log('== 3) the Pine stack: states, marks, the majority, the line ==');
   assert(Object.keys(W.pineGoldPineMarks(null, 'long')).length === 0 && Object.keys(W.pineGoldPineMarks({ ok: false }, 'long')).length === 0 && Object.keys(W.pineGoldPineMarks(su, 'x')).length === 0, 'no states, a failed read or no direction mark nothing');
   /* the line */
   const html = W.pineGoldStackLineHtml(mixed, mM);
-  assert(/data-hg-pine-stack="1"/.test(html) && /PINE STACK/.test(html) && /3 of 5 gold Pine layers readable/.test(html), 'the line carries its marker and the readable count');
+  assert(/data-hg-pine-stack="1"/.test(html) && /PINE STACK/.test(html) && /3 of 8 gold Pine layers readable/.test(html), 'the line carries its marker and the readable count (of eight since hg-v1166)');
   assert(/Supertrend 10x3<\/b> LONG/.test(html) && /Ichimoku TK Cross<\/b> UNREAD/.test(html) && /MAJORITY<\/b> SPLIT 2L\/1S/.test(html) && /gates nothing/.test(html), 'each layer prints its state (UNREAD where neither), the majority prints SPLIT with the tally, and the line says it gates nothing');
   assert(/MAJORITY<\/b> WITH/.test(W.pineGoldStackLineHtml(su, mL)) && /MAJORITY<\/b> AGAINST/.test(W.pineGoldStackLineHtml(su, mS)), 'a majority prints WITH or AGAINST by the marks');
   assert(W.pineGoldStackLineHtml(null, mL) === '' && W.pineGoldStackLineHtml({ ok: false }, {}) === '', 'no states: no line');
@@ -385,7 +385,7 @@ console.log('== 5) the cap, nothing gated, the census, stamps ==');
   assert(why === 'recorded' && rec && Object.keys(rec.reads).length === 64, 'the ledger keeps 64 reads per record now (a 70-key hand-in keeps 64, the store is still not a dumping ground)');
   const Wr = boot(RANK_BASE.concat(PINE_MATH));
   const KEYS = Wr.HG_GOLD_FREE_KEYS.length + 2 + Object.keys(Wr.hgGoldIndicatorMarks(Wr.hgGoldIndicatorReads(tapeEnding(WED, 300, 900, 102, 24, 0), { rows1d: tapeEnding(WED, 280, 86400, 105, 60, 20) }), 'long')).length + PINE_KEYS.length;
-  assert(KEYS <= 64 && KEYS > 32, 'sixteen free: + two PERFECT + the indicator stack + six pine: = ' + KEYS + ' keys: over the old cap of 32, inside 64');
+  assert(KEYS <= 64 && KEYS > 32, 'twenty free: + two PERFECT + the indicator stack + six of the nine pine: = ' + KEYS + ' keys: over the old cap of 32, inside 64');
   for (const f of ['hg-gates.js', 'cryptogates.js', 'engine.js', 'gold-best-levels.js', 'gold-formation.js', 'hg-solidity.js', 'plans.js']){
     assert(!/['"]pine:|pineStates|minersGold|goldCopper|goldOil|eurusdTrend/.test(strip(read(f))), f + ' names no hg-v1165 mark');
   }

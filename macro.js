@@ -848,6 +848,13 @@ async function getGoldMacro(){
        EURUSD (the dollar's other side). Each is a 20-day ratio or level trend
        through the same band every other leg reads; reads, never scores. */
     let minersGoldTrend = null, goldCopperTrend = null, goldOilTrend = null, eurusdTrend = null;
+    /* hg-v1166: four more. TIP (the iShares TIPS ETF: its price rises as real
+       yields fall, the one free daily real-rate read beside FRED), gold
+       against platinum (GC=F / PL=F, the haven-versus-industrial-metal ratio
+       the copper leg reads from the other side), USDCNY=X (the yuan, the
+       largest physical bid's currency) and the 10y-minus-3m slope (^TNX -
+       ^IRX: 10y/2y is not free on Yahoo; said in the catalog). */
+    let tipTrend = null, goldPlatinumTrend = null, usdcnyTrend = null, curveSlopeTrend = null, curveSlopeChg = null;
     try{
       const free = await Promise.all([
         __yahooLastClose('SI=F', '1mo'),
@@ -862,7 +869,11 @@ async function getGoldMacro(){
         __yahooLastClose('GDX', '1mo'),
         __yahooLastClose('HG=F', '1mo'),
         __yahooLastClose('CL=F', '1mo'),
-        __yahooLastClose('EURUSD=X', '1mo')
+        __yahooLastClose('EURUSD=X', '1mo'),
+        __yahooLastClose('TIP', '1mo'),
+        __yahooLastClose('PL=F', '1mo'),
+        __yahooLastClose('USDCNY=X', '1mo'),
+        __yahooLastClose('^IRX', '1mo')
       ]);
       function chgOf(rows){
         if (!rows || rows.length < 5) return null;
@@ -898,6 +909,23 @@ async function getGoldMacro(){
       goldOilTrend = ratioTrendOf(free[1], free[11]);
       const eu = chgOf(free[12]);
       if (eu) eurusdTrend = eu.trend;
+      /* hg-v1166 */
+      const tp = chgOf(free[13]);
+      if (tp) tipTrend = tp.trend;
+      goldPlatinumTrend = ratioTrendOf(free[1], free[14]);
+      const cn = chgOf(free[15]);
+      if (cn) usdcnyTrend = cn.trend;
+      /* the slope in yield points: a 20-day change of a tenth of a point or
+         more steepens or flattens; inside it the curve read is FLAT. ^IRX is
+         a discount yield in percent like ^TNX; both pass the same yld() */
+      if (free[4] && free[16] && free[4].length >= 5 && free[16].length >= 5){
+        const t0 = yld(+free[4][0].c), t1 = yld(+free[4][free[4].length - 1].c);
+        const i0 = yld(+free[16][0].c), i1 = yld(+free[16][free[16].length - 1].c);
+        if ([t0, t1, i0, i1].every(function(v){ return isFinite(v); })){
+          curveSlopeChg = (t1 - i1) - (t0 - i0);
+          curveSlopeTrend = curveSlopeChg >= 0.10 ? 'STEEPENING' : (curveSlopeChg <= -0.10 ? 'FLATTENING' : 'FLAT');
+        }
+      }
       if (si && gc && si.first > 0 && si.last > 0){
         const thenR = gc.first / si.first, nowR = gc.last / si.last;
         const rchg = (nowR - thenR) / thenR;
@@ -964,7 +992,13 @@ async function getGoldMacro(){
       minersGoldTrend: minersGoldTrend,
       goldCopperTrend: goldCopperTrend,
       goldOilTrend: goldOilTrend,
-      eurusdTrend: eurusdTrend
+      eurusdTrend: eurusdTrend,
+      /* hg-v1166 */
+      tipTrend: tipTrend,
+      goldPlatinumTrend: goldPlatinumTrend,
+      usdcnyTrend: usdcnyTrend,
+      curveSlopeTrend: curveSlopeTrend,
+      curveSlopeChg: curveSlopeChg
     });
   }catch(e){
     return { dxy: null, dxyRows: null, tnxRows: null,

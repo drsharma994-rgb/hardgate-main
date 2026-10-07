@@ -757,6 +757,10 @@
       else if (r.id === 144 && newsLoaded){ status = 'USED'; note = 'calendar snapshot loaded' + (Array.isArray(nws.events) ? ' \u00b7 ' + nws.events.length + ' events' : ' \u00b7 caution leg'); }
       else if (r.id === 146 && rrm && rrm.measured === true){ status = 'USED'; note = 'real yield ' + String(rrm.trend || '').toLowerCase() + ' \u00b7 ' + (rrm.source || mac.realRateSource || 'measured') + (rrm.stale ? ' STALE' : ''); }
       else if (r.id === 146 && mac){ note = 'real yield NOT measured \u2014 fallback hint ' + (mac.realRateHint || 'none') + ' only'; }
+      /* hg-v1166: 10y/2y is not a free Yahoo series; the 10y-3m slope (^TNX
+         minus ^IRX) is read and marked as free:curveSteepening instead -- a
+         different read, so this row stays UNCHECKED and says what was read */
+      else if (r.id === 147 && mac && typeof mac.curveSlopeTrend === 'string'){ note = '10Y/2Y not free \u2014 the 10Y-3M slope (^TNX minus ^IRX) is read instead: ' + mac.curveSlopeTrend.toLowerCase() + ', recorded as free:curveSteepening'; }
       else if (r.id === 152 && mac && (typeof mac.usdjpyTrend === 'string' || typeof mac.goldOilTrend === 'string' || typeof mac.goldCopperTrend === 'string')){
         status = 'USED';
         note = [typeof mac.usdjpyTrend === 'string' ? 'USDJPY ' + mac.usdjpyTrend.toLowerCase() + ' (JPY=X)' : null,

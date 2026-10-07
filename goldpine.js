@@ -665,34 +665,13 @@ function gpRecordFloor(){
   return (isFinite(f) && f > 0) ? f : 20;
 }
 function gpRecordLayerJudge(s, mode){
+  /* hg-v1166: ONE home -- pineGoldRecordJudge (pinegoldmath.js) is the rule
+     GOLD SCALP and GOLD SWING read for the same layers; a second copy here
+     would be a second rule (hg-v949). The pool and mechanic are this desk's. */
   if (!s) return s;
-  var floor = gpRecordFloor();
-  var j = { n: 0, expR: NaN, floor: floor, fillAware: false, measured: false, paying: false, unfilled: 0 };
-  s.recordJudge = j;
-  try{
-    var st = gfn('hgFwdStats'), js = gfn('hgFwdJudgeSample');
-    if (!st || !js) return s;
-    var stats = st('GOLDPINE:' + mode, hgGpKind(s), false);
-    var k = js(stats, floor);
-    if (!k || !fin(+k.n)){
-      j.n = (stats && fin(+stats.samples)) ? +stats.samples : 0;
-      return s;
-    }
-    j.n = +k.n; j.expR = fin(+k.expR) ? +k.expR : NaN; j.fillAware = !!k.fillAware;
-    j.unfilled = fin(+k.unfilled) ? +k.unfilled : 0;
-    j.measured = true;
-    j.paying = isFinite(j.expR) && j.expR > 0;
-    if (j.paying){
-      s.recordOnly = false;
-      s.recordReleased = true;
-      s.demoted = false;
-      s.demotedWhy = undefined;
-    } else {
-      s.demotedWhy = 'RECORD ONLY \u2014 ' + hgGpKind(s) + ' measured ' + j.n + ' settled at '
-        + (isFinite(j.expR) ? ((j.expR >= 0 ? '+' : '\u2212') + Math.abs(j.expR).toFixed(3)) : '?') + 'R on this desk, not paying';
-    }
-  }catch(e){}
-  return s;
+  var fn = gfn('pineGoldRecordJudge');
+  if (typeof fn !== 'function'){ s.recordJudge = { n: 0, expR: NaN, floor: gpRecordFloor(), fillAware: false, measured: false, paying: false, unfilled: 0 }; return s; }
+  return fn(s, 'GOLDPINE:' + mode, hgGpKind(s));
 }
 function gpRecordLayerSetups(rows, mode, source){
   var out = [];

@@ -638,7 +638,25 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
           : null,
         /* hg-v977: the instant the mint judged this candidate on -- SUPER GOLD's
            sgCandSec has read `signalT` since hg-v952 and no mint ever wrote it */
-        signalT: (typeof c.signalT === 'number' && isFinite(c.signalT)) ? c.signalT : null
+        signalT: (typeof c.signalT === 'number' && isFinite(c.signalT)) ? c.signalT : null,
+        /* hg-v1166: the hg-v1155 gap, closed -- the free-feed read marks, the
+           PAXG funding print the ranker read, the indicator-stack values and
+           the Pine states cross the publish boundary so the record map below
+           can hand them to the ledger (the hg-v955 seam) and a re-ranker
+           downstream sees what this desk read. Booleans only in freeReads. */
+        freeReads: (c.freeReads && typeof c.freeReads === 'object') ? c.freeReads : undefined,
+        fundingPct: (typeof c.fundingPct === 'number' && isFinite(c.fundingPct)) ? c.fundingPct : undefined,
+        indReads: (c.indReads && typeof c.indReads === 'object' && c.indReads.ok === true) ? c.indReads : undefined,
+        pineStates: (c.pineStates && typeof c.pineStates === 'object' && c.pineStates.ok === true) ? c.pineStates : undefined,
+        /* hg-v1166: the record-only Pine ports and the demote that carries
+           them -- a re-ranker that cannot see these would promote a row this
+           desk withholds */
+        demoted: !!c.demoted,
+        demotedWhy: (typeof c.demotedWhy === 'string') ? c.demotedWhy : null,
+        recordOnly: !!c.recordOnly,
+        recordLayer: (typeof c.recordLayer === 'string') ? c.recordLayer : null,
+        recordReleased: !!c.recordReleased,
+        recordJudge: (c.recordJudge && typeof c.recordJudge === 'object') ? c.recordJudge : null
       });
     }
     /* FORWARD LOG, split by STRATEGY. This desk runs several distinct setups
@@ -676,7 +694,12 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
                       sized against; null (no mark) stays absent. */
                    mark: c.mark,
                    mechanic: String(c.stratKey || c.strategy || 'UNKNOWN').toUpperCase().slice(0, 28),
-                   ticket: (c.grade === 'A' || c.grade === 'clean' || !!c.locked),
+                   /* hg-v1166: a record-only Pine port never claims a ticket */
+                   ticket: (c.grade === 'A' || c.grade === 'clean' || !!c.locked) && !c.recordOnly,
+                   /* hg-v1166: the free-feed marks (pine: and ind: included) and
+                      the funding print, property access only (the lifted map) */
+                   reads: c.freeReads,
+                   fundingPct: c.fundingPct,
                    perfect: c.perfect,
                    chased: c.chased, chaseCode: c.chaseCode,
                    /* hg-v1030: the PERFECT⁺ headline read-mark (property access) */
@@ -1282,9 +1305,13 @@ function cardHTML(c, isBest, season, tape){
       : ('toTrade(' + JSON.stringify(c.sym) + ',' + JSON.stringify(c.dir) + ',' + c.entry + ',' + c.stop + ',' + c.t1 + ')')
         .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'))
     : '';
-  var tradeBtn = tradeOnclick
+  /* hg-v1166: a record-only Pine port keeps its levels and loses both
+     handoffs (hg-v930: a hold that leaves the buttons live is a suggestion) */
+  var recOnly = !!c.recordOnly;
+  var recordNoteLine = recOnly ? gwRecordNoteHtml(c) : '';
+  var tradeBtn = (tradeOnclick && !recOnly)
     ? '<button class="toTrade" onclick="' + tradeOnclick + '">SEND TO TRADE PLAN →</button>' : '';
-  var bookBtn = (typeof bookBtnHTML === 'function' && c.sym)
+  var bookBtn = (typeof bookBtnHTML === 'function' && c.sym && !recOnly)
     ? bookBtnHTML(c.sym, c.dir, c.entry, c.stop, c.t1, { scanner: 'goldswing', strategy: 'goldswing', klass: 'metals', fund: 'gold', t2: c.t2, stack: c.stack }) : '';
   var stackHtml = (c.stack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(c.stack) : '';
   var metaChips = '';
@@ -1345,9 +1372,13 @@ function cardHTML(c, isBest, season, tape){
     + '<span class="gpip ' + gradeCls + '"' + gswPipAttr(gradeCls === 'ok') + '>GRADE ' + c.grade + '</span>'
     + goldTapeChipHtml(c, tape)
     + gwFundChipHtml(c)   /* hg-v1005: the fundamental-stack verdict chip */
+    + gwRecordChipHtml(c) /* hg-v1166: RECORD ONLY / MEASURED on a Pine port */
     + chips + metaChips
     + '</div>'
     + tallyChips(c)
+    + gwFreeFeedLineHtml(c)     /* hg-v1166: every free-feed mark this desk read (the hg-v1155 gap) */
+    + gwIndicatorStackHtml(c)   /* hg-v1166: the indicator stack off the 4h tape */
+    + gwPineStackLineHtml(c)    /* hg-v1166: the Pine stack, reported, never tallied */
     + '<div class="plan"' + gswSt(GSW_PLAN) + '>' + (c.dir === 'long' ? 'BUY' : 'SELL') + ' <b' + gswSt(GSW_PLAN_B) + '>$' + pxF(c.zone ? c.zone.lo : c.entry) + '–$' + pxF(c.zone ? c.zone.hi : c.entry) + '</b>'
     + ' · ENTRY <b' + gswSt(GSW_PLAN_B) + '>$' + pxF(c.entry) + '</b>'
     + ' · STOP <b' + gswSt(GSW_PLAN_B) + '>$' + pxF(c.stop) + '</b>'
@@ -1366,9 +1397,48 @@ function cardHTML(c, isBest, season, tape){
     + lockLine
     + newsBanner + notes + seasonLine
     + stackHtml
+    + recordNoteLine
     + tradeBtn
     + bookBtn
     + '</div>';
+}
+/* hg-v1166: the three read lines and the record-only chip / note, each
+   delegating to its one home (goldind.js, gold-catalog.js, pinegoldmath.js);
+   absent home, no line */
+function gwFreeFeedLineHtml(c){
+  try{
+    var fn = gfn('hgGoldFreeFeedLineHtml');
+    if (!fn || !c || !c.freeReads || typeof c.freeReads !== 'object') return '';
+    return fn(c.freeReads, { fundingPct: c.fundingPct }) || '';
+  }catch(e){ return ''; }
+}
+function gwIndicatorStackHtml(c){
+  try{
+    var fn = gfn('hgGoldIndicatorStackHtml');
+    if (!fn || !c || !c.indReads) return '';
+    return fn(c.indReads, c.freeReads) || '';
+  }catch(e){ return ''; }
+}
+function gwPineStackLineHtml(c){
+  try{
+    var fn = gfn('pineGoldStackLineHtml');
+    if (!fn || !c || !c.pineStates) return '';
+    return fn(c.pineStates, c.freeReads) || '';
+  }catch(e){ return ''; }
+}
+function gwRecordChipHtml(c){
+  try{
+    var fn = gfn('pineGoldRecordChipHtml');
+    if (!fn || !c || !(c.recordOnly || c.recordReleased)) return '';
+    return fn(c) || '';
+  }catch(e){ return ''; }
+}
+function gwRecordNoteHtml(c){
+  try{
+    var fn = gfn('pineGoldRecordNoteHtml');
+    if (!fn || !c || !c.recordOnly) return '';
+    return fn(c, 'GOLDSWING') || '';
+  }catch(e){ return ''; }
 }
 
 function rejectedHTML(rejected){
@@ -2719,6 +2789,47 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
         }
       }
     }catch(eXtraSw){}
+
+    /* --- hg-v1166 GOLD PINE RECORD LAYERS, MINTED RECORD-ONLY -----------
+       The same eight Pine ports on this desk's 4h tape, through mkCand and
+       push() -- the confluence ledger, the GOLD FEED drop, the inst filter,
+       the stop-width floor, the edge table and the cost gate all run. They
+       mint RECORD-ONLY under GOLDSWING with the layer as mechanic and are
+       released by the ONE record-only judge in pinegoldmath.js when the
+       ledger reads them paying on THIS desk. See goldind.js 1d4. */
+    try{
+      var pgrHitsSw = gfn('pineGoldRecordLayerHits'), pgrJudgeSw = gfn('pineGoldRecordJudge');
+      if (typeof pgrHitsSw === 'function'){
+        var pgrHitsS = pgrHitsSw(rows4) || [];
+        var pgsi, phS, pCandS, pEntryS;
+        for (pgsi = 0; pgsi < pgrHitsS.length; pgsi++){
+          phS = pgrHitsS[pgsi];
+          if (!phS || !phS.dir || !phS.kind || !isFinite(phS.stop) || !isFinite(phS.entry)) continue;
+          pEntryS = +phS.entry;
+          pCandS = mkCand(phS.kind, phS.dir, pEntryS, phS.stop, { lo: pEntryS, hi: pEntryS },
+                          phS.why, phS.invalidates || 'setup structure broken',
+                          { side: phS.dir, tag: phS.kind, label: phS.why });
+          if (!pCandS) continue;
+          if (!pCandS.dropped){
+            pCandS.entry = phS.entry;
+            pCandS.stop = phS.stop;
+            pCandS.strategy = phS.label;
+            if (!Array.isArray(pCandS.stamps)) pCandS.stamps = [];
+            pCandS.stamps.push('PINE PORT \u00b7 RECORD ONLY');
+            pCandS.recordOnly = true;
+            pCandS.recordLayer = phS.id;
+            pCandS.recordTwin = phS.twin || null;
+            pCandS.demoted = true;
+            pCandS.demotedWhy = 'RECORD ONLY \u2014 ' + phS.label + ' has no measured record on this desk';
+            if (typeof pgrJudgeSw === 'function')
+              pgrJudgeSw(pCandS, 'GOLDSWING', String(phS.kind).toUpperCase().slice(0, 28));
+          } else if (!pCandS.strategy){
+            pCandS.strategy = phS.label;
+          }
+          push(pCandS);
+        }
+      }
+    }catch(ePgrSw){}
 
     /* --- hg-v945 SMC LIQUIDITY SWEEP, MINTED AND NOT ONLY STAMPED --------
        EQH-SWEEP is one of the nine mechanics on MILLI GOLD's DERIVED roster
