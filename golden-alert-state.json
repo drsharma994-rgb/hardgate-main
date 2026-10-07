@@ -250,7 +250,7 @@
       "expired": true
     },
     "SENT": {
-      "at": "2026-10-07T13:52:45.297Z",
+      "at": "2026-10-07T14:02:33.693Z",
       "score": 5,
       "fresh": true,
       "ago": 2,
@@ -495,7 +495,7 @@
       "expired": true
     }
   },
-  "lastRunAt": "2026-10-07T13:52:59.659Z",
+  "lastRunAt": "2026-10-07T14:02:45.001Z",
   "scanned": 504,
   "cards": 0
 }
