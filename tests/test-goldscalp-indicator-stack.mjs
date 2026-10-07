@@ -178,8 +178,8 @@ console.log('== 2) the marks: three states, direction mirror, ledger shape ==');
   /* hg-v1163 added COT, GVZ and the two correlations: fourteen free: + eighteen
      ind: = 32, EXACTLY the cap -- the next mark needs the cap moved first */
   /* hg-v1165: four more legs and the cap moved 32 -> 64 first */
-  assert(FREE_KEYS.length === 22 && KEYS.length + FREE_KEYS.length <= 64, 'twenty-two free: + eighteen ind: = ' + (KEYS.length + FREE_KEYS.length) + ' fits the 64-per-record cap');
-  assert(KEYS.length + FREE_KEYS.length > 16 && KEYS.every(k => k > 'free:') && FREE_KEYS.length - 2 === 20, 'and would NOT have fit the old 16 — every ind: key sorts AFTER free:, so at 16 only two of the eighteen indicator marks would have landed and sixteen would have been dropped silently');
+  assert(FREE_KEYS.length === 25 && KEYS.length + FREE_KEYS.length <= 64, 'twenty-five free: + eighteen ind: = ' + (KEYS.length + FREE_KEYS.length) + ' fits the 64-per-record cap');
+  assert(KEYS.length + FREE_KEYS.length > 16 && KEYS.every(k => k > 'free:') && FREE_KEYS.length - 2 === 23, 'and would NOT have fit the old 16 — every ind: key sorts AFTER free:, so at 16 only two of the eighteen indicator marks would have landed and sixteen would have been dropped silently');
   const L = W.hgGoldIndicatorMarks(ir, 'long'), S = W.hgGoldIndicatorMarks(ir, 'short');
   const DIRECTIONAL = ['ind:dmiWith', 'ind:sma20With', 'ind:sma50With', 'ind:sma200With', 'ind:tsmomWith', 'ind:rsiWith', 'ind:linregWith'];
   const STATE = KEYS.filter(k => DIRECTIONAL.indexOf(k) < 0);

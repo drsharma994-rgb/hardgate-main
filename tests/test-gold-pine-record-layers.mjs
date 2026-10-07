@@ -210,9 +210,9 @@ console.log('== 2) the table: its own home, the ten layers and the universe unto
 {
   const W = boot(MATH_BASE);
   const T = W.PINE_GOLD_RECORD_LAYERS;
-  assert(Array.isArray(T) && T.length === 8 && T.slice(0, 5).map(l => l.id).join(',') === LAYER_IDS.join(',') && T.slice(5).map(l => l.id).join(',') === 'macd,psar,stoch', 'the five hg-v1164 record-only layers lead their own table, the three hg-v1166 ones follow (' + T.map(l => l.id).join(' · ') + ')');
+  assert(Array.isArray(T) && T.length === 12 && T.slice(0, 5).map(l => l.id).join(',') === LAYER_IDS.join(',') && T.slice(5, 8).map(l => l.id).join(',') === 'macd,psar,stoch' && T.slice(8).map(l => l.id).join(',') === 'chandelier,hullma,cci,aroon', 'the five hg-v1164 record-only layers lead their own table, the three hg-v1166 and the four hg-v1167 ones follow (' + T.map(l => l.id).join(' · ') + ')');
   assert(T.every(l => (LABELS[l.id] ? l.label === LABELS[l.id] : typeof l.label === 'string') && typeof W[l.fn] === 'function' && l.minBars > 0 && l.opts), 'each names its label, its detector and its minimum bars');
-  assert(T.find(l => l.id === 'ichimoku').twin === 'ICHI-KUMO' && T.filter(l => l.twin).length === 1, 'Ichimoku names its exact OMNIGOLD twin ICHI-KUMO; the other four name none');
+  assert(T.find(l => l.id === 'ichimoku').twin === 'ICHI-KUMO' && T.slice(0, 5).filter(l => l.twin).length === 1, 'Ichimoku names its exact OMNIGOLD twin ICHI-KUMO; the other four of the five name none');
   assert(!T.some(l => /pivot/i.test(l.id) || /PIVOT-REJECT/.test(String(l.twin))), 'the daily-pivot bounce is NOT in the table (its twin PIVOT-REJECT is a measured failure past the veto bar)');
   assert(W.PINE_GOLD_LAYERS.length === 10 && !W.PINE_GOLD_LAYERS.some(l => LAYER_IDS.includes(l.id)), 'PINE_GOLD_LAYERS still holds the ten and none of the five');
   const src = strip(read('pinegoldmath.js'));

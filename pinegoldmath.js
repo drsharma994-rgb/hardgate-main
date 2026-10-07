@@ -709,7 +709,22 @@ var PINE_GOLD_RECORD_LAYERS = [
   { id: 'psar', label: 'Parabolic SAR Flip', fn: 'pineGoldPsarFlip', minBars: 60,
     opts: { step: 0.02, max: 0.2 }, twin: null },
   { id: 'stoch', label: 'Stochastic Cross', fn: 'pineGoldStochCross', minBars: 60,
-    opts: { kLen: 14, kSmooth: 3, dLen: 3, ob: 80, os: 20, swing: 5 }, twin: null }
+    opts: { kLen: 14, kSmooth: 3, dLen: 3, ob: 80, os: 20, swing: 5 }, twin: null },
+  /* hg-v1167: four more, the same shape. The Chandelier Exit and the Hull MA
+     turn name no OMNIGOLD twin. The CCI re-entry IS the rule OMNIGOLD runs as
+     CCI-EXTREME (CCI 20 back inside +/-100 from an extreme on the last closed
+     bar), so it names that twin and quotes its gate-clear record. The Aroon
+     cross names none (DI-CROSS reads +DI against -DI, a different series). The
+     TTM squeeze is NOT here: the ten-layer table above already carries it as
+     Squeeze Mom, and a second copy would be a second rule (hg-v949). */
+  { id: 'chandelier', label: 'Chandelier Exit', fn: 'pineGoldChandelierExit', minBars: 60,
+    opts: { len: 22, mult: 3 }, twin: null },
+  { id: 'hullma', label: 'Hull MA Turn', fn: 'pineGoldHullTurn', minBars: 60,
+    opts: { len: 20, swing: 5 }, twin: null },
+  { id: 'cci', label: 'CCI Re-entry', fn: 'pineGoldCciReentry', minBars: 60,
+    opts: { len: 20, band: 100, swing: 5 }, twin: 'CCI-EXTREME' },
+  { id: 'aroon', label: 'Aroon Cross', fn: 'pineGoldAroonCross', minBars: 60,
+    opts: { len: 25, swing: 5 }, twin: null }
 ];
 /* hg-v1165's majority mark is the majority of the FIVE hg-v1164 layers --
    records written since then carry that meaning, so the three hg-v1166
@@ -992,6 +1007,168 @@ function pineGoldStochCross(rows, opts){
   }catch(e){ return { dir: null }; }
 }
 
+/* hg-v1167: the series the four new layers read, stated once each */
+function pgrWma(src, len){
+  var n = src.length, out = new Array(n), i, j, acc, w, den = len * (len + 1) / 2;
+  for (i = 0; i < n; i++){
+    if (i < len - 1){ out[i] = NaN; continue; }
+    acc = 0; w = 1;
+    for (j = i - len + 1; j <= i; j++, w++){ var v = pgrNum(src[j]); if (!isFinite(v)){ acc = NaN; break; } acc += v * w; }
+    out[i] = isFinite(acc) ? acc / den : NaN;
+  }
+  return out;
+}
+/* Hull MA: WMA(2 x WMA(n/2) - WMA(n), sqrt(n)) */
+function pgrHullSeries(rows, len){
+  var n = rows ? rows.length : 0;
+  if (n < len + 5) return null;
+  var closes = rows.map(function(r){ return pgrNum(r.c); });
+  var half = Math.max(1, Math.round(len / 2)), sq = Math.max(1, Math.round(Math.sqrt(len)));
+  var a = pgrWma(closes, half), b = pgrWma(closes, len);
+  var diff = closes.map(function(_, i){ var x = pgrNum(a[i]), y = pgrNum(b[i]); return (isFinite(x) && isFinite(y)) ? 2 * x - y : NaN; });
+  return pgrWma(diff, sq);
+}
+/* CCI (typical price, 0.015 x mean deviation), Lambert's own */
+function pgrCciSeries(rows, len){
+  var n = rows ? rows.length : 0;
+  if (n < len + 2) return null;
+  var tp = new Array(n), out = new Array(n), i, k, s, m, md;
+  for (i = 0; i < n; i++){
+    var h = pgrNum(rows[i].h), l = pgrNum(rows[i].l), c = pgrNum(rows[i].c);
+    tp[i] = (h + l + c) / 3;   /* pgrNum reads a null price as NaN already */
+  }
+  for (i = 0; i < n; i++){
+    if (i < len - 1){ out[i] = NaN; continue; }
+    s = 0;
+    for (k = i - len + 1; k <= i; k++){ if (!isFinite(tp[k])){ s = NaN; break; } s += tp[k]; }
+    if (!isFinite(s)){ out[i] = NaN; continue; }
+    m = s / len; md = 0;
+    for (k = i - len + 1; k <= i; k++) md += Math.abs(tp[k] - m);
+    md /= len;
+    out[i] = (md > 0) ? (tp[i] - m) / (0.015 * md) : NaN;
+  }
+  return out;
+}
+/* Chandelier Exit (everget's Pine): the long trail is the 22-bar high minus
+   3 x ATR 22 and ratchets up while price holds above it; the short trail the
+   mirror; the direction flips when a close crosses the OTHER trail */
+function pgrChandelierSeries(rows, len, mult){
+  var atrFn = gfn('atr') || gfn('pineAtr');
+  var n = rows ? rows.length : 0;
+  if (typeof atrFn !== 'function' || n < len + 5) return null;
+  var a = atrFn(rows, len);
+  var longS = new Array(n), shortS = new Array(n), dir = new Array(n), i;
+  for (i = 0; i < n; i++){
+    var av = pgrNum(a[i]), c = pgrNum(rows[i].c), pc = pgrNum(rows[i - 1] && rows[i - 1].c);
+    if (i < len - 1 || !isFinite(av) || !isFinite(c)){ longS[i] = NaN; shortS[i] = NaN; dir[i] = 0; continue; }
+    var hh = pgrHighest(rows, i - len + 1, i, 'h'), ll = pgrLowest(rows, i - len + 1, i, 'l');
+    if (!isFinite(hh) || !isFinite(ll)){ longS[i] = NaN; shortS[i] = NaN; dir[i] = 0; continue; }
+    var ls = hh - mult * av, ss = ll + mult * av;
+    var pls = pgrNum(longS[i - 1]), pss = pgrNum(shortS[i - 1]);
+    if (isFinite(pls) && isFinite(pc) && pc > pls) ls = Math.max(ls, pls);
+    if (isFinite(pss) && isFinite(pc) && pc < pss) ss = Math.min(ss, pss);
+    longS[i] = ls; shortS[i] = ss;
+    var pd = dir[i - 1] || 0;
+    if (isFinite(pss) && c > pss) dir[i] = 1;
+    else if (isFinite(pls) && c < pls) dir[i] = -1;
+    else dir[i] = pd;
+  }
+  return { longStop: longS, shortStop: shortS, dir: dir };
+}
+/* Aroon: up = 100 x (len - bars since the len-bar high) / len, down the mirror */
+function pgrAroonSeries(rows, len){
+  var n = rows ? rows.length : 0;
+  if (n < len + 2) return null;
+  var up = new Array(n), dn = new Array(n), i, k;
+  for (i = 0; i < n; i++){
+    if (i < len){ up[i] = NaN; dn[i] = NaN; continue; }
+    var hi = -Infinity, lo = Infinity, hiAt = -1, loAt = -1, bad = false;
+    for (k = i - len; k <= i; k++){
+      var h = pgrNum(rows[k].h), l = pgrNum(rows[k].l);
+      if (!isFinite(h) || !isFinite(l)){ bad = true; break; }
+      if (h >= hi){ hi = h; hiAt = k; }
+      if (l <= lo){ lo = l; loAt = k; }
+    }
+    if (bad){ up[i] = NaN; dn[i] = NaN; continue; }
+    up[i] = 100 * (len - (i - hiAt)) / len;
+    dn[i] = 100 * (len - (i - loAt)) / len;
+  }
+  return { up: up, down: dn };
+}
+/* Chandelier Exit 22 x 3: the direction flips on the last closed bar. Stop is
+   the trail the flip put under / over price. */
+function pineGoldChandelierExit(rows, opts){
+  opts = opts || {};
+  var len = opts.len || 22, mult = opts.mult || 3;
+  try{
+    var n = rows ? rows.length : 0;
+    if (n < len + 5) return { dir: null };
+    var S = pgrChandelierSeries(rows, len, mult);
+    if (!S) return { dir: null };
+    var i = n - 1, c = pgrNum(rows[i].c);
+    if (!isFinite(c)) return { dir: null };
+    if (S.dir[i] === 1 && S.dir[i - 1] === -1) return pgrResult('long', c, S.longStop[i], { trail: S.longStop[i] });
+    if (S.dir[i] === -1 && S.dir[i - 1] === 1) return pgrResult('short', c, S.shortStop[i], { trail: S.shortStop[i] });
+    return { dir: null, trend: S.dir[i] };
+  }catch(e){ return { dir: null }; }
+}
+/* Hull MA 20: the HMA turns up on the last closed bar (rising now, not rising
+   the bar before) for a long, the mirror for a short. Stop is the prior
+   5-bar swing on the other side. */
+function pineGoldHullTurn(rows, opts){
+  opts = opts || {};
+  var len = opts.len || 20, sw = opts.swing || 5;
+  try{
+    var n = rows ? rows.length : 0;
+    if (n < len + sw + 5) return { dir: null };
+    var H = pgrHullSeries(rows, len);
+    if (!H) return { dir: null };
+    var i = n - 1;
+    var h0 = pgrNum(H[i]), h1 = pgrNum(H[i - 1]), h2 = pgrNum(H[i - 2]), c = pgrNum(rows[i].c);
+    if (![h0, h1, h2, c].every(isFinite)) return { dir: null };
+    if (h0 > h1 && h1 <= h2) return pgrResult('long', c, pgrLowest(rows, i - sw, i - 1, 'l'), { hma: h0 });
+    if (h0 < h1 && h1 >= h2) return pgrResult('short', c, pgrHighest(rows, i - sw, i - 1, 'h'), { hma: h0 });
+    return { dir: null };
+  }catch(e){ return { dir: null }; }
+}
+/* CCI 20 re-entry (the rule OMNIGOLD runs as CCI-EXTREME): the prior bar's
+   CCI sat beyond +/-100 and the last closed bar's is back inside -- below
+   -100 then inside is a long, above +100 then inside a short. Stop is the
+   prior 5-bar swing. */
+function pineGoldCciReentry(rows, opts){
+  opts = opts || {};
+  var len = opts.len || 20, band = opts.band || 100, sw = opts.swing || 5;
+  try{
+    var n = rows ? rows.length : 0;
+    if (n < len + sw + 3) return { dir: null };
+    var C = pgrCciSeries(rows, len);
+    if (!C) return { dir: null };
+    var i = n - 1, v = pgrNum(C[i]), p = pgrNum(C[i - 1]), c = pgrNum(rows[i].c);
+    if (![v, p, c].every(isFinite)) return { dir: null };
+    if (p <= -band && v > -band) return pgrResult('long', c, pgrLowest(rows, i - sw, i - 1, 'l'), { cci: v, prev: p });
+    if (p >= band && v < band) return pgrResult('short', c, pgrHighest(rows, i - sw, i - 1, 'h'), { cci: v, prev: p });
+    return { dir: null };
+  }catch(e){ return { dir: null }; }
+}
+/* Aroon 25: Aroon Up crosses above Aroon Down on the last closed bar for a
+   long, the mirror for a short. Stop is the prior 5-bar swing. */
+function pineGoldAroonCross(rows, opts){
+  opts = opts || {};
+  var len = opts.len || 25, sw = opts.swing || 5;
+  try{
+    var n = rows ? rows.length : 0;
+    if (n < len + sw + 3) return { dir: null };
+    var A = pgrAroonSeries(rows, len);
+    if (!A) return { dir: null };
+    var i = n - 1;
+    var u = pgrNum(A.up[i]), d = pgrNum(A.down[i]), uP = pgrNum(A.up[i - 1]), dP = pgrNum(A.down[i - 1]), c = pgrNum(rows[i].c);
+    if (![u, d, uP, dP, c].every(isFinite)) return { dir: null };
+    if (u > d && uP <= dP) return pgrResult('long', c, pgrLowest(rows, i - sw, i - 1, 'l'), { up: u, down: d });
+    if (u < d && uP >= dP) return pgrResult('short', c, pgrHighest(rows, i - sw, i - 1, 'h'), { up: u, down: d });
+    return { dir: null };
+  }catch(e){ return { dir: null }; }
+}
+
 /* hg-v1166: every record layer that fired on the last closed bar of a
    series, as plain hits for a desk's OWN mint (GOLD SCALP / GOLD SWING
    consume these through their extras seam and price them through their own
@@ -1123,7 +1300,8 @@ function pineGoldRecordLayerSetups(rows, mode){
 function pgrStateOf(res){ return res && (res.dir === 'long' || res.dir === 'short') ? res.dir : null; }
 function pineGoldLayerStates(rows){
   var out = { ok: false, supertrend: null, ichimoku: null, donchian: null, emacross: null, keltner: null,
-              /* hg-v1166 */ macd: null, psar: null, stoch: null, allLong: 0, allShort: 0,
+              /* hg-v1166 */ macd: null, psar: null, stoch: null,
+              /* hg-v1167 */ chandelier: null, hullma: null, cci: null, aroon: null, allLong: 0, allShort: 0,
               readable: 0, agreeLong: 0, agreeShort: 0 };
   try{
     if (!rows || rows.length < 60) return out;
@@ -1198,6 +1376,33 @@ function pineGoldLayerStates(rows){
         if (isFinite(sk) && isFinite(sd)){ if (sk > sd) out.stoch = 'long'; else if (sk < sd) out.stoch = 'short'; }
       }
     }catch(eS){}
+    /* hg-v1167: the side of the Chandelier trail, the Hull slope, the CCI
+       sign, Aroon Up against Aroon Down -- each neither at equality */
+    try{
+      var cO = layerOpts('chandelier'), CS = pgrChandelierSeries(rows, cO.len || 22, cO.mult || 3);
+      if (CS){ if (CS.dir[i] === 1) out.chandelier = 'long'; else if (CS.dir[i] === -1) out.chandelier = 'short'; }
+    }catch(eC){}
+    try{
+      var hO = layerOpts('hullma'), HS = pgrHullSeries(rows, hO.len || 20);
+      if (HS){
+        var hh0 = pgrNum(HS[i]), hh1 = pgrNum(HS[i - 1]);
+        if (isFinite(hh0) && isFinite(hh1)){ if (hh0 > hh1) out.hullma = 'long'; else if (hh0 < hh1) out.hullma = 'short'; }
+      }
+    }catch(eH){}
+    try{
+      var ccO = layerOpts('cci'), CC = pgrCciSeries(rows, ccO.len || 20);
+      if (CC){
+        var cv = pgrNum(CC[i]);
+        if (isFinite(cv)){ if (cv > 0) out.cci = 'long'; else if (cv < 0) out.cci = 'short'; }
+      }
+    }catch(eCc){}
+    try{
+      var aO = layerOpts('aroon'), AS = pgrAroonSeries(rows, aO.len || 25);
+      if (AS){
+        var au = pgrNum(AS.up[i]), ad = pgrNum(AS.down[i]);
+        if (isFinite(au) && isFinite(ad)){ if (au > ad) out.aroon = 'long'; else if (au < ad) out.aroon = 'short'; }
+      }
+    }catch(eA){}
     PINE_GOLD_RECORD_LAYERS.forEach(function(l){
       var v = out[l.id];
       var core = PINE_GOLD_MAJORITY_IDS.indexOf(l.id) >= 0;
@@ -1243,7 +1448,7 @@ function pineGoldStackLineHtml(states, marks){
     });
     var mj = marks['pine:majorityWith'];
     var mjTag = mj === true ? 'WITH' : (mj === false ? 'AGAINST' : 'SPLIT');
-    cells += '<span class="gsx-ind ' + (mj === true ? 'ok' : (mj === false ? 'no' : 'na')) + '" title="pine:majorityWith — at least three of the five hg-v1164 layers (the hg-v1166 layers mark their own states and do not move this majority)"><b>MAJORITY</b> ' + mjTag + ' ' + states.agreeLong + 'L/' + states.agreeShort + 'S</span>';
+    cells += '<span class="gsx-ind ' + (mj === true ? 'ok' : (mj === false ? 'no' : 'na')) + '" title="pine:majorityWith — at least three of the five hg-v1164 layers (the hg-v1166 and hg-v1167 layers mark their own states and do not move this majority)"><b>MAJORITY</b> ' + mjTag + ' ' + states.agreeLong + 'L/' + states.agreeShort + 'S</span>';
     return '<div class="note gsx-pinestack" data-hg-pine-stack="1" style="margin-top:6px;font-size:11px"><b>PINE STACK</b> · '
       + states.readable + ' of ' + PINE_GOLD_RECORD_LAYERS.length + ' gold Pine layers readable on this tape'
       + ' — recorded for the forward ledger’s read split, not part of this desk’s score, gates nothing.'
@@ -1288,6 +1493,12 @@ G.pineGoldMacdCross = pineGoldMacdCross;
 G.pineGoldPsarFlip = pineGoldPsarFlip;
 G.pineGoldStochCross = pineGoldStochCross;
 G.pineGoldRecordLayerHits = pineGoldRecordLayerHits;
+/* hg-v1167 */
+G.pineGoldChandelierExit = pineGoldChandelierExit;
+G.pineGoldHullTurn = pineGoldHullTurn;
+G.pineGoldCciReentry = pineGoldCciReentry;
+G.pineGoldAroonCross = pineGoldAroonCross;
+G.pineGoldChandelierSeries = pgrChandelierSeries;   /* the trails, for a guard that pins the stop to its own trail */
 G.pineGoldRecordJudge = pineGoldRecordJudge;
 G.pineGoldRecordFloor = pineGoldRecordFloor;
 G.pineGoldRecordChipHtml = pineGoldRecordChipHtml;
@@ -1318,7 +1529,8 @@ if (typeof module !== 'undefined' && module.exports){
     pineGoldDonchian, pineGoldEmaCrossRsi, pineGoldKeltnerPullback,
     pineGoldLayerStates, pineGoldPineMarks, pineGoldStackLineHtml, PINE_GOLD_MAJORITY,
     pineGoldMacdCross, pineGoldPsarFlip, pineGoldStochCross, pineGoldRecordLayerHits,
-    pineGoldRecordJudge, pineGoldRecordFloor, pineGoldRecordChipHtml, pineGoldRecordNoteHtml, PINE_GOLD_MAJORITY_IDS
+    pineGoldRecordJudge, pineGoldRecordFloor, pineGoldRecordChipHtml, pineGoldRecordNoteHtml, PINE_GOLD_MAJORITY_IDS,
+    pineGoldChandelierExit, pineGoldHullTurn, pineGoldCciReentry, pineGoldAroonCross, pineGoldChandelierSeries: pgrChandelierSeries
   };
 }
 

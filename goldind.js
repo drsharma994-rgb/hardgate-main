@@ -5538,7 +5538,12 @@ var HG_GOLD_FREE_KEYS = ['free:macroTilt', 'free:paxgBasis', 'free:perpFunding',
                             gold/platinum (the haven ratio, like gold/copper), and two STATE reads
                             -- the yuan's 20-day direction and the 10y-3m curve slope -- neither
                             WITH nor AGAINST a direction by construction. Scored nowhere. */
-                         'free:tip', 'free:goldPlatinum', 'free:usdcnyRising', 'free:curveSteepening'];
+                         'free:tip', 'free:goldPlatinum', 'free:usdcnyRising', 'free:curveSteepening',
+                         /* hg-v1167: gold/palladium (directional, like gold/platinum) and two STATE
+                            reads -- credit appetite (HYG / LQD rising is risk being bought) and the
+                            GLD volume print against its 20-session mean (HIGH / LOW, NORMAL unread).
+                            Scored nowhere. */
+                         'free:goldPalladium', 'free:creditRiskOn', 'free:gldVolumeHigh'];
 /* the correlation band a state mark needs to read: inside it the read is
    UNREAD (absent), not a weak yes */
 var HG_GOLD_CORR_BAND = 0.3;
@@ -5586,6 +5591,12 @@ function hgGoldFreeFeedVerdicts(ctx, dir){
       else if (macro.usdcnyTrend === 'FALLING') m['free:usdcnyRising'] = false;
       if (macro.curveSlopeTrend === 'STEEPENING') m['free:curveSteepening'] = true;
       else if (macro.curveSlopeTrend === 'FLATTENING') m['free:curveSteepening'] = false;
+      /* hg-v1167 */
+      trendLeg('free:goldPalladium', macro.goldPalladiumTrend, true);
+      if (macro.creditTrend === 'RISING') m['free:creditRiskOn'] = true;
+      else if (macro.creditTrend === 'FALLING') m['free:creditRiskOn'] = false;
+      if (macro.gldVolumeState === 'HIGH') m['free:gldVolumeHigh'] = true;
+      else if (macro.gldVolumeState === 'LOW') m['free:gldVolumeHigh'] = false;
       /* hg-v1163: state reads -- direction-neutral, three states */
       if (macro.gvzTrend === 'RISING') m['free:gvzRising'] = true;
       else if (macro.gvzTrend === 'FALLING') m['free:gvzRising'] = false;
@@ -5643,7 +5654,11 @@ var HG_GOLD_FREE_ROWS = [
   ['TIPS (TIP)',      'free:tip',              'Yahoo TIP 20d (rises as real yields fall)', 'WITH', 'AGAINST'],
   ['GOLD/PLATINUM',   'free:goldPlatinum',     'Yahoo GC=F / PL=F 20d', 'WITH', 'AGAINST'],
   ['USDCNY',          'free:usdcnyRising',     'Yahoo USDCNY=X 20d (the yuan)', 'RISING', 'FALLING'],
-  ['CURVE 10Y-3M',    'free:curveSteepening',  'Yahoo ^TNX minus ^IRX, 20d change in the slope', 'STEEPENING', 'FLATTENING']
+  ['CURVE 10Y-3M',    'free:curveSteepening',  'Yahoo ^TNX minus ^IRX, 20d change in the slope', 'STEEPENING', 'FLATTENING'],
+  /* hg-v1167 */
+  ['GOLD/PALLADIUM',  'free:goldPalladium',    'Yahoo GC=F / PA=F 20d', 'WITH', 'AGAINST'],
+  ['CREDIT HYG/LQD',  'free:creditRiskOn',     'Yahoo HYG / LQD 20d (risk appetite)', 'RISK-ON', 'RISK-OFF'],
+  ['GLD VOLUME',      'free:gldVolumeHigh',    'Yahoo GLD last complete session vs its 20-session mean', 'HIGH', 'LOW']
 ];
 function hgGoldFreeFeedLineHtml(marks, opts){
   try{

@@ -628,6 +628,27 @@ function __corrDailyReturns(a, b, n){
   }catch(e){ return null; }
 }
 
+/* hg-v1167: the last COMPLETE daily bar's volume against the mean of the
+   `len` complete bars before it. Yahoo prints the current session's bar while
+   it is still open, with a partial volume that would read LOW on every scan,
+   so a bar dated on today's UTC date is not read. null under len+1 complete
+   bars, on a non-positive volume in the base, or on an unreadable volume. */
+function __lastCompleteVolumeRel(rows, len, nowMs){
+  try{
+    if (!Array.isArray(rows) || rows.length < len + 1) return null;
+    const now = new Date(isFinite(+nowMs) ? +nowMs : Date.now());
+    const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const done = rows.filter(function(r){ const ms = (+r.t < 1e12 ? +r.t * 1000 : +r.t); return isFinite(ms) && ms < today; });
+    if (done.length < len + 1) return null;
+    const last = +done[done.length - 1].v;
+    if (!isFinite(last) || last < 0) return null;
+    let base = 0;
+    for (let i = done.length - 1 - len; i < done.length - 1; i++){ const v = +done[i].v; if (!(v > 0)) return null; base += v; }
+    base /= len;
+    return base > 0 ? last / base : null;
+  }catch(e){ return null; }
+}
+
 async function __yahooLastClose(symbol, range){
   try{
     const rows = __parseYahooChart(await __yahooViaProxy(
@@ -855,6 +876,13 @@ async function getGoldMacro(){
        largest physical bid's currency) and the 10y-minus-3m slope (^TNX -
        ^IRX: 10y/2y is not free on Yahoo; said in the catalog). */
     let tipTrend = null, goldPlatinumTrend = null, usdcnyTrend = null, curveSlopeTrend = null, curveSlopeChg = null;
+    /* hg-v1167: three more. Credit appetite (HYG / LQD, high yield against
+       investment grade: the ratio rises when risk is being bought), gold
+       against palladium (GC=F / PA=F, the other platinum-group ratio) and the
+       GLD volume print -- the SPDR gold ETF's last COMPLETE session against
+       its prior 20 sessions. Volume is participation, not tonnage; the
+       catalog's ETF-flows row stays unchecked and says so. */
+    let creditTrend = null, goldPalladiumTrend = null, gldVolumeRel = null, gldVolumeState = null;
     try{
       const free = await Promise.all([
         __yahooLastClose('SI=F', '1mo'),
@@ -873,7 +901,11 @@ async function getGoldMacro(){
         __yahooLastClose('TIP', '1mo'),
         __yahooLastClose('PL=F', '1mo'),
         __yahooLastClose('USDCNY=X', '1mo'),
-        __yahooLastClose('^IRX', '1mo')
+        __yahooLastClose('^IRX', '1mo'),
+        __yahooLastClose('HYG', '1mo'),
+        __yahooLastClose('LQD', '1mo'),
+        __yahooLastClose('PA=F', '1mo'),
+        __yahooLastClose('GLD', '3mo')
       ]);
       function chgOf(rows){
         if (!rows || rows.length < 5) return null;
@@ -925,6 +957,14 @@ async function getGoldMacro(){
           curveSlopeChg = (t1 - i1) - (t0 - i0);
           curveSlopeTrend = curveSlopeChg >= 0.10 ? 'STEEPENING' : (curveSlopeChg <= -0.10 ? 'FLATTENING' : 'FLAT');
         }
+      }
+      /* hg-v1167 */
+      creditTrend = ratioTrendOf(free[17], free[18]);
+      goldPalladiumTrend = ratioTrendOf(free[1], free[19]);
+      const gv = __lastCompleteVolumeRel(free[20], 20, Date.now());
+      if (gv !== null){
+        gldVolumeRel = gv;
+        gldVolumeState = gv >= 1.5 ? 'HIGH' : (gv <= 0.5 ? 'LOW' : 'NORMAL');
       }
       if (si && gc && si.first > 0 && si.last > 0){
         const thenR = gc.first / si.first, nowR = gc.last / si.last;
@@ -998,7 +1038,12 @@ async function getGoldMacro(){
       goldPlatinumTrend: goldPlatinumTrend,
       usdcnyTrend: usdcnyTrend,
       curveSlopeTrend: curveSlopeTrend,
-      curveSlopeChg: curveSlopeChg
+      curveSlopeChg: curveSlopeChg,
+      /* hg-v1167 */
+      creditTrend: creditTrend,
+      goldPalladiumTrend: goldPalladiumTrend,
+      gldVolumeRel: gldVolumeRel,
+      gldVolumeState: gldVolumeState
     });
   }catch(e){
     return { dxy: null, dxyRows: null, tnxRows: null,

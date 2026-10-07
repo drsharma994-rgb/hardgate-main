@@ -761,6 +761,10 @@
          minus ^IRX) is read and marked as free:curveSteepening instead -- a
          different read, so this row stays UNCHECKED and says what was read */
       else if (r.id === 147 && mac && typeof mac.curveSlopeTrend === 'string'){ note = '10Y/2Y not free \u2014 the 10Y-3M slope (^TNX minus ^IRX) is read instead: ' + mac.curveSlopeTrend.toLowerCase() + ', recorded as free:curveSteepening'; }
+      /* hg-v1167: ETF flows (tonnage) are not a free series; the GLD volume
+         print is read in their place -- participation, not flows -- so this
+         row stays UNCHECKED and says what was read */
+      else if (r.id === 133 && mac && isFinite(_fin(mac.gldVolumeRel))){ note = 'ETF flows not free \u2014 GLD volume is read instead: ' + mac.gldVolumeRel.toFixed(2) + '\u00d7 its 20-session mean (' + String(mac.gldVolumeState || '').toLowerCase() + '; participation, not tonnage), recorded as free:gldVolumeHigh'; }
       else if (r.id === 152 && mac && (typeof mac.usdjpyTrend === 'string' || typeof mac.goldOilTrend === 'string' || typeof mac.goldCopperTrend === 'string')){
         status = 'USED';
         note = [typeof mac.usdjpyTrend === 'string' ? 'USDJPY ' + mac.usdjpyTrend.toLowerCase() + ' (JPY=X)' : null,

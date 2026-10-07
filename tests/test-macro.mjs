@@ -253,7 +253,7 @@ console.log('\n== Part 4: getGoldMacro shape, realRateHint, Yahoo last resort ==
   /* hg-v1163 added the gold vol index, the VIX level and the two correlations */
   SHAPE.push('gvzTrend', 'gvzLast', 'vixLast', 'goldSpxCorr20', 'goldBtcCorr20');
   /* hg-v1165 added the miners/gold, gold/copper, gold/oil ratio trends and EURUSD */
-  SHAPE.push('minersGoldTrend', 'goldCopperTrend', 'goldOilTrend', 'eurusdTrend'); /* hg-v1166 */ SHAPE.push('tipTrend', 'goldPlatinumTrend', 'usdcnyTrend', 'curveSlopeTrend', 'curveSlopeChg'); SHAPE.sort();
+  SHAPE.push('minersGoldTrend', 'goldCopperTrend', 'goldOilTrend', 'eurusdTrend'); /* hg-v1166 */ SHAPE.push('tipTrend', 'goldPlatinumTrend', 'usdcnyTrend', 'curveSlopeTrend', 'curveSlopeChg'); /* hg-v1167 */ SHAPE.push('creditTrend', 'goldPalladiumTrend', 'gldVolumeRel', 'gldVolumeState'); SHAPE.sort();
 
   const m = await macroOnly(macroRoutes('falling', FALLING_YIELDS, 50), async () => synthRows(10, 4000));
   assert(Object.keys(m).sort().join('|') === SHAPE.join('|'), 'exact return shape keys: ' + SHAPE.join(', '));

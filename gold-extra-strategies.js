@@ -522,6 +522,11 @@ var HG_GOLD_SIBLING_TWIN = {
      record quoted on that card is this twin's gate-clear history, through the
      same home every other twin is quoted through. Keyed by the layer id. */
   ichimoku:  'ICHI-KUMO',
+  /* hg-v1167: the CCI re-entry record layer runs the rule OMNIGOLD runs as
+     CCI-EXTREME (CCI 20 back inside +/-100 from an extreme on the last closed
+     bar), so its card quotes that twin's gate-clear record. Keyed by the
+     layer id; the Chandelier, Hull and Aroon layers name no twin. */
+  cci:       'CCI-EXTREME',
   /* hg-v942 roster ports -- the twin IS the mechanic here, not a near
      relative, because detection is OMNIGOLD's own function. The record is
      still OMNIGOLD's gates and 1h horizon, so it is still quoted as a twin. */
@@ -576,6 +581,7 @@ function hgGoldRosterTabGaps(){
    reason. `npm run gold:siblings` is the read-only drift check. */
 var HG_GOLD_SIBLING_RECORD = {
   'BOS-RETEST': { n: 83, settled: 74, winRate: 0.3378, grossR: 0.0367, netXm: 0.0027, tCluster: 0.3, zBreakeven: 0.08, minRr: 2, breakevenPct: 33.3 },
+  'CCI-EXTREME': { n: 327, settled: 322, winRate: 0.3385, grossR: 0.0265, netXm: -0.033, tCluster: 0.43, zBreakeven: 0.2, minRr: 2, breakevenPct: 33.3 },
   'CUSUM-SHIFT': { n: 44, settled: 32, winRate: 0.3438, grossR: 0.0918, netXm: 0.0707, tCluster: 0.58, zBreakeven: 0.13, minRr: 2, breakevenPct: 33.3 },
   'EQH-SWEEP': { n: 41, settled: 41, winRate: 0.3659, grossR: 0.0976, netXm: 0.0159, tCluster: 0.36, zBreakeven: 0.44, minRr: 2, breakevenPct: 33.3 },
   'FIB-618': { n: 132, settled: 127, winRate: 0.2992, grossR: -0.0872, netXm: -0.1306, tCluster: -0.9, zBreakeven: -0.82, minRr: 2, breakevenPct: 33.3 },
