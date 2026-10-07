@@ -161,10 +161,10 @@
       "ago": -1
     },
     "BEAMX": {
-      "at": "2026-10-06T23:56:13.941Z",
+      "at": "2026-10-07T04:08:42.252Z",
       "score": 5,
       "fresh": true,
-      "ago": 1,
+      "ago": 2,
       "crossDay": "2026-10-04",
       "expired": true
     },
@@ -250,18 +250,20 @@
       "expired": true
     },
     "SENT": {
-      "at": "2026-10-05T19:06:17.262Z",
+      "at": "2026-10-07T04:08:41.276Z",
       "score": 5,
       "fresh": true,
-      "ago": 1,
-      "crossDay": "2026-10-04"
+      "ago": 2,
+      "crossDay": "2026-10-04",
+      "expired": true
     },
     "ARK": {
-      "at": "2026-10-05T19:06:16.356Z",
+      "at": "2026-10-07T04:08:43.574Z",
       "score": 3,
       "fresh": true,
-      "ago": 6,
-      "crossDay": "2026-09-29"
+      "ago": 7,
+      "crossDay": "2026-09-29",
+      "expired": true
     },
     "ARKM": {
       "at": "2026-10-05T19:06:16.797Z",
@@ -493,7 +495,7 @@
       "expired": true
     }
   },
-  "lastRunAt": "2026-10-07T03:59:13.589Z",
+  "lastRunAt": "2026-10-07T04:08:59.206Z",
   "scanned": 504,
   "cards": 0
 }
