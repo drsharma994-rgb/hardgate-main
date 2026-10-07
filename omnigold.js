@@ -14297,8 +14297,23 @@ terse status, and never launches a first-time scan on a global refresh.
         +  '<button type="button" class="btn og-xm-send" data-og-key="' + esc(ogTradeKey(c)) + '">SEND TICKET TO XM</button>'
         +  '</div>';
     }
+    /* hg-v1163: the two read lines close the card, below the gates and the handoff */
+    h += hgOgReadsHtml(c);
     h += '</div>';
     return h;
+  }
+  /* hg-v1163: the renderers live with the rules (goldind.js / gold-catalog.js);
+     this desk hands each the card's own fields. A card with no reads prints nothing. */
+  function hgOgReadsHtml(c){
+    try {
+      if (!c) return '';
+      var out = '';
+      var ff = gfn('hgGoldFreeFeedLineHtml');
+      if (ff && c.freeReads && typeof c.freeReads === 'object') out += ff(c.freeReads, {}) || '';
+      var st = gfn('hgGoldIndicatorStackHtml');
+      if (st && c.indReads) out += st(c.indReads, c.freeReads) || '';
+      return out;
+    } catch (e) { return ''; }
   }
 
   function renderPooled(pool, label, minRr, fwdTab){
@@ -14684,6 +14699,42 @@ terse status, and never launches a first-time scan on a global refresh.
            in-sample pool measures the raw mechanic, so the forward pool must
            measure the same thing or the two cannot be compared. The ticket flag
            rides along so the gates can be judged separately later. */
+        /* hg-v1163: THE FREE FEEDS AND THE INDICATOR STACK, AS MARKS, on every
+           OMNIGOLD record. This desk's own 35-gate ledger decides the ticket;
+           what it never recorded is what the gold stack's free feeds (the
+           real-rate tilt, PAXG basis, Fear & Greed, silver, the gold/silver
+           ratio, VIX, USDJPY, COT, GVZ, the gold-SPX and gold-BTC
+           correlations) and the bar-computed indicator stack read at fire
+           time -- so the ledger could never ask which of them separates on
+           this desk. One home each (hgGoldFreeFeedVerdicts in goldind.js;
+           hgGoldIndicatorReads / Marks in gold-catalog.js), read ONCE per
+           horizon off this horizon's own closed rows with the daily leg the
+           MTF matrix already fetched. The PAXG funding print is NOT read
+           here: this desk never fetches the Binance leg, and the Delta
+           gold-perp funding it does hold is a different print -- absent is
+           honest, a conflated rate is not. Marks only: no gate, no grade, no
+           plan reads them. */
+        var ogRdCtx = null, ogRdIr = null;
+        var ogRdFv = gfn('hgGoldFreeFeedVerdicts'), ogRdIm = gfn('hgGoldIndicatorMarks'), ogRdIrFn = gfn('hgGoldIndicatorReads');
+        try {
+          var ogRdW = W();
+          var ogRdSpot = null; try { var ogRdGs = gfn('goldspotState'); ogRdSpot = ogRdGs ? (ogRdGs() || null) : null; } catch (eGs) { ogRdSpot = null; }
+          ogRdCtx = { macro: shared.macro || null, spot: ogRdSpot,
+                      fng: (ogRdW && ogRdW.S && ogRdW.S.fng && isFinite(+ogRdW.S.fng.v)) ? ogRdW.S.fng : undefined,
+                      cot: (ogRdW && ogRdW.__hgGoldCot && typeof ogRdW.__hgGoldCot === 'object') ? ogRdW.__hgGoldCot : undefined };
+          if (ogRdIrFn && ogRdIm && rows.length){ var ogRdIr0 = ogRdIrFn(rows, { rows1d: shared.rows1d }); if (ogRdIr0 && ogRdIr0.ok === true) ogRdIr = ogRdIr0; }
+        } catch (eRd) { ogRdCtx = null; ogRdIr = null; }
+        function ogReadsOf(c){
+          try {
+            if (!c || (c.dir !== 'long' && c.dir !== 'short')) return undefined;
+            var m = {}, any = false, k, fv, im;
+            if (ogRdFv && ogRdCtx){ fv = ogRdFv(ogRdCtx, c.dir); for (k in fv){ if (Object.prototype.hasOwnProperty.call(fv, k) && (fv[k] === true || fv[k] === false)){ m[k] = fv[k]; any = true; } } }
+            if (ogRdIr){ im = ogRdIm(ogRdIr, c.dir); for (k in im){ if (Object.prototype.hasOwnProperty.call(im, k) && (im[k] === true || im[k] === false)){ m[k] = im[k]; any = true; } } c.indReads = ogRdIr; }
+            return any ? m : undefined;
+          } catch (eRo) { return undefined; }
+        }
+        for (var rdI = 0; rdI < cands.length; rdI++){ if (cands[rdI] && cands[rdI].plan) cands[rdI].freeReads = ogReadsOf(cands[rdI]); }
+
         var fwdRecord = gfn('hgFwdRecord');
         if (fwdRecord && rows.length){
           var barT = num(rows[rows.length - 1].t);
@@ -14701,6 +14752,8 @@ terse status, and never launches a first-time scan on a global refresh.
                 dir: c.dir, entry: c.plan.entry, stop: c.plan.stop, t1: c.plan.t1,
                 barT: barT, horizonBars: cfg.horizonBars, ticket: !!(c.grade && c.grade.ticket),
                 feed: (got && typeof got.feed === 'string' && got.feed) ? got.feed : undefined,   /* hg-v979 */
+                /* hg-v1163: the free-feed and indicator-stack marks (no funding: see above) */
+                reads: (c.freeReads && typeof c.freeReads === 'object') ? c.freeReads : undefined,
                 /* EVERY GATE PASSED EXCEPT THE ONE UNDER TEST.
 
                    measured-edge promotes a mechanic on twenty settled

@@ -240,7 +240,7 @@ console.log('== 4) one home: written in the ranker, carried by the two seams, re
   const files = fs.readdirSync(ROOT).filter(f => /\.js$/.test(f));
   /* hg-v1162: GOLD PINE and 80PERCENT CARRY and RENDER the marks (their
      own guard proves neither gates on them); no other file touches them */
-  const CARRIERS = ['goldpine.js', 'eightypercent.js'];
+  const CARRIERS = ['goldpine.js', 'eightypercent.js', 'omnigold.js', 'ganeshgold.js'];   /* hg-v1163: two more carriers */
   const readers = files.filter(f => f !== 'goldind.js' && f !== 'goldscalp.js' && CARRIERS.indexOf(f) < 0 && /freeReads/.test(strip(read(f))));
   assert(readers.length === 0, 'no file beyond the two hg-v1162 carriers reads freeReads (' + readers.join(', ') + ')');
   for (const g of ['hg-gates.js', 'cryptogates.js', 'gold-formation.js', 'hg-solidity.js', 'conviction-lock.js', 'hg-forward.js'])

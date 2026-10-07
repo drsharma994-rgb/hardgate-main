@@ -268,8 +268,38 @@ async function ganeshGoldEval(style){
   }catch(e){}
   var news = null;
   try{ if (typeof W.hgNewsRisk === 'function'){ var nw = W.hgNewsRisk('XAUUSD'); if (nw && nw.blackout) news = 'BLACKOUT'; else news = 'CLEAR'; } }catch(e){}
+  /* hg-v1163: THE FREE FEEDS AND THE INDICATOR STACK, read once per eval so the
+     plan this model crowns records what the gold stack's free internet feeds
+     and the bar-computed stack said on the bar it read -- the macro snapshot
+     (cached first, a bounded fetch when none), the spot read, Fear & Greed,
+     COT and the PAXG funding print, each through the one home the other
+     gold desks read (hgGoldFreeFeedVerdicts / hgGoldIndicatorReads), the
+     stack off the execution tape with the daily leg beside it. Every leg
+     fails open to absent; nothing in the twelve-step model reads them. */
+  var feeds = { macro: null, spot: null, fng: undefined, cot: undefined, fundingRate: undefined };
+  try{ var mc = (typeof W.getGoldMacroCached === 'function') ? W.getGoldMacroCached() : null; if (mc && typeof mc === 'object') feeds.macro = mc; }catch(e){}
+  try{
+    if (!feeds.macro && typeof W.getGoldMacro === 'function'){
+      var mg = await Promise.race([Promise.resolve().then(function(){ return W.getGoldMacro(); }).catch(function(){ return null; }),
+                                   new Promise(function(r){ setTimeout(function(){ r(null); }, 6000); })]);
+      if (mg && typeof mg === 'object') feeds.macro = mg;
+    }
+  }catch(e){}
+  try{ if (typeof W.goldspotState === 'function') feeds.spot = W.goldspotState() || null; }catch(e){}
+  try{ if (W.S && W.S.fng && isFinite(+W.S.fng.v)) feeds.fng = W.S.fng; }catch(e){}
+  try{ if (W.__hgGoldCot && typeof W.__hgGoldCot === 'object') feeds.cot = W.__hgGoldCot; }catch(e){}
+  try{
+    if (typeof W.binanceFunding === 'function'){
+      var fr = await Promise.race([Promise.resolve().then(function(){ return W.binanceFunding('PAXGUSDT'); }).catch(function(){ return null; }),
+                                   new Promise(function(r){ setTimeout(function(){ r(null); }, 6000); })]);
+      if (fr && typeof fr.fundingPct === 'number' && isFinite(fr.fundingPct)) feeds.fundingRate = fr.fundingPct;
+    }
+  }catch(e){}
+  var ir = null;
+  try{ if (typeof W.hgGoldIndicatorReads === 'function'){ var ir0 = W.hgGoldIndicatorReads(ex, { rows1d: day }); if (ir0 && ir0.ok === true) ir = ir0; } }catch(e){ ir = null; }
   var sess = sessOf(lastT);
   var ev = { style: style, px: px, atrEx: atrEx, atrCtx: atrCtx, htfBias: htfBias, struct: struct,
+    feeds: feeds, ir: ir,
     lv: lv, ab: ab, sellLiq: sellLiq, buyLiq: buyLiq, eqH: eqH, eqL: eqL, pd: pd, mid: mid,
     sweptSell: sweptSell, sweptBuy: sweptBuy, disp: disp, mssUp: mssUp, mssDown: mssDown,
     fvg: fvg, ob: ob, zone: zone, retest: retest, vw: vw, atrRegime: atrRegime, vp: vp,
@@ -327,6 +357,37 @@ function planFor(ev, m){
   }catch(e){ return null; }
 }
 
+/* hg-v1163: the marks on ONE plan, through the one home each; booleans
+   only, absent when nothing read. Nothing reads them back. */
+function ggMarkPlan(plan, ev){
+  try{
+    if (!plan || (plan.dir !== 'long' && plan.dir !== 'short') || !ev) return false;
+    var m = {}, any = false, k;
+    if (typeof W.hgGoldFreeFeedVerdicts === 'function' && ev.feeds){
+      var fv = W.hgGoldFreeFeedVerdicts(ev.feeds, plan.dir);
+      for (k in fv){ if (Object.prototype.hasOwnProperty.call(fv, k) && (fv[k] === true || fv[k] === false)){ m[k] = fv[k]; any = true; } }
+    }
+    if (ev.ir && typeof W.hgGoldIndicatorMarks === 'function'){
+      var im = W.hgGoldIndicatorMarks(ev.ir, plan.dir);
+      for (k in im){ if (Object.prototype.hasOwnProperty.call(im, k) && (im[k] === true || im[k] === false)){ m[k] = im[k]; any = true; } }
+      plan.indReads = ev.ir;
+    }
+    if (any) plan.freeReads = m;
+    var fp = (typeof W.hgGoldFreeFeedFunding === 'function') ? W.hgGoldFreeFeedFunding(ev.feeds) : NaN;
+    if (typeof fp === 'number' && isFinite(fp)) plan.fundingPct = fp;
+    return any;
+  }catch(e){ return false; }
+}
+function ggReadsHtml(p){
+  try{
+    if (!p) return '';
+    var h = '';
+    if (typeof W.hgGoldFreeFeedLineHtml === 'function' && p.freeReads && typeof p.freeReads === 'object') h += W.hgGoldFreeFeedLineHtml(p.freeReads, { fundingPct: p.fundingPct }) || '';
+    if (typeof W.hgGoldIndicatorStackHtml === 'function' && p.indReads) h += W.hgGoldIndicatorStackHtml(p.indReads, p.freeReads) || '';
+    return h;
+  }catch(e){ return ''; }
+}
+
 async function ganeshGoldScan(opts){
   opts = opts || {};
   var style = (opts.style === 'swing') ? 'swing' : 'scalp';
@@ -338,6 +399,7 @@ async function ganeshGoldScan(opts){
     var ev = r.ev;
     var mL = modelGrade(ev, 'long'), mS = modelGrade(ev, 'short');
     var pL = planFor(ev, mL), pS = planFor(ev, mS);
+    ggMarkPlan(pL, ev); ggMarkPlan(pS, ev);   /* hg-v1163 */
     /* hg-v1154: both calendars on the LAST CLOSED execution bar, never the
        wall clock (hg-v952 / hg-v978) -- a Monday re-run over Friday's bars
        gives Friday's answer. */
@@ -377,6 +439,10 @@ async function ganeshGoldScan(opts){
              that never filled could be settled as a market order). ev.px is
              the last closed tape price the whole model read. */
           mark: fin(ev.px) ? +ev.px : undefined,
+          /* hg-v1163: the free-feed + indicator-stack marks and the PAXG funding
+             print (the ledger derives the G4 verdict from it) */
+          reads: (plan.freeReads && typeof plan.freeReads === 'object') ? plan.freeReads : undefined,
+          fundingPct: (typeof plan.fundingPct === 'number' && isFinite(plan.fundingPct)) ? plan.fundingPct : undefined,
           mechanic: 'GANESHGOLD-' + (style === 'scalp' ? 'SCALP' : 'SWING'),
           ticket: plan.ticketWithheld !== true, style: 'ganeshgold-' + style
         }]);
@@ -463,6 +529,7 @@ function callHtml(snap){
       + '<div class="kv"><span class="k">Targets</span><span class="v">TP1 ' + (fin(p.t1) ? p.t1.toFixed(2) + ' (nearest liquidity)' : 'n/a') + ' | TP2 ' + (fin(p.t2) ? p.t2.toFixed(2) + ' (equal highs/lows or week level)' : 'n/a') + ' | TP3 ' + (fin(p.t3) ? p.t3.toFixed(2) + ' (HTF swing)' : 'n/a') + '</span></div>'
       + '<div class="kv"><span class="k">R:R</span><span class="v">' + (fin(p.rr1) ? p.rr1.toFixed(1) + 'R to TP1' : 'UNREAD') + (fin(p.rr2) ? ' / ' + p.rr2.toFixed(1) + 'R to TP2' : '') + '</span></div>'
       + ggGeoLine(p, snap)
+      + ggReadsHtml(p)   /* hg-v1163 */
       + '<div class="kv"><span class="k">Risk</span><span class="v">0.25-1% of equity per trade - sized from the SL, never the target</span></div>'
       + '<div class="kv"><span class="k">Automation Blueprint</span><span class="v"><pre style="margin:4px 0;white-space:pre-wrap;font-size:10px">' + escH(JSON.stringify(payload, null, 2)) + '</pre>' + (p.tier === 'TICKET' ? '' : '<div class="note warn" style="margin-top:4px">formation WATCH ONLY - the bridge must drop this payload.</div>') + '</span></div>'
       + '</div>';

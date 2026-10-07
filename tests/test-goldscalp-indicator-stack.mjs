@@ -175,8 +175,10 @@ console.log('== 2) the marks: three states, direction mirror, ledger shape ==');
   const KEYS = W.hgGoldIndicatorKeys();
   assert(KEYS.length === 18 && KEYS.every(k => /^ind:/.test(k)) && new Set(KEYS).size === 18, '18 named ind: keys, unique');
   assert(KEYS.every(k => KEY_RE.test(k)), 'every key passes the ledger normaliser\'s key shape');
-  assert(FREE_KEYS.length === 10 && KEYS.length + FREE_KEYS.length <= 32, 'ten free: + eighteen ind: = ' + (KEYS.length + FREE_KEYS.length) + ' fits the widened 32-per-record cap');
-  assert(KEYS.length + FREE_KEYS.length > 16 && KEYS.every(k => k > 'free:') && FREE_KEYS.length + 6 === 16, 'and would NOT have fit the old 16 — every ind: key sorts AFTER free:, so at 16 only six of the eighteen indicator marks would have landed and twelve would have been dropped silently');
+  /* hg-v1163 added COT, GVZ and the two correlations: fourteen free: + eighteen
+     ind: = 32, EXACTLY the cap -- the next mark needs the cap moved first */
+  assert(FREE_KEYS.length === 14 && KEYS.length + FREE_KEYS.length <= 32, 'fourteen free: + eighteen ind: = ' + (KEYS.length + FREE_KEYS.length) + ' fits the widened 32-per-record cap (exactly at it: the next mark moves the cap first)');
+  assert(KEYS.length + FREE_KEYS.length > 16 && KEYS.every(k => k > 'free:') && FREE_KEYS.length + 2 === 16, 'and would NOT have fit the old 16 — every ind: key sorts AFTER free:, so at 16 only two of the eighteen indicator marks would have landed and sixteen would have been dropped silently');
   const L = W.hgGoldIndicatorMarks(ir, 'long'), S = W.hgGoldIndicatorMarks(ir, 'short');
   const DIRECTIONAL = ['ind:dmiWith', 'ind:sma20With', 'ind:sma50With', 'ind:sma200With', 'ind:tsmomWith', 'ind:rsiWith', 'ind:linregWith'];
   const STATE = KEYS.filter(k => DIRECTIONAL.indexOf(k) < 0);
@@ -240,7 +242,9 @@ console.log('== 3) the census reads the scan context; the free feeds it does not
   const f3 = W.hgGoldCatalogFeed(T['15m'], { ctx: Object.assign({}, ctx, { cot: { crowding: 'N/A', note: 'no COT rows' }, news: null }) });
   assert(!usedIds(f3).has(125) && !usedIds(f3).has(144), 'a COT with no rows and a null calendar stay UNCHECKED');
   assert(/GVZ unread/.test(noteOf(f1, 87)) && /VIX rising read/.test(noteOf(f1, 87)), 'GVZ/VIX ratio: the VIX half is read, the GVZ half is named unread');
-  assert(/\^GVZ is free on Yahoo and not fetched/.test(noteOf(f1, 83)) && /\^GSPC leg/.test(noteOf(f1, 150)) && /no BTC series/.test(noteOf(f1, 151)), 'the free feeds this desk does not fetch are NAMED (GVZ, ^GSPC, BTC), not called "no tape"');
+  /* hg-v1163: the three legs are fetched now (macro.js); a snapshot without
+     them still names each as unread rather than "no tape" */
+  assert(/GVZ unread this snapshot/.test(noteOf(f1, 83)) && /SPX correlation unread/.test(noteOf(f1, 150)) && /BTC correlation unread/.test(noteOf(f1, 151)), 'a snapshot without the three hg-v1163 legs names each as unread (GVZ, ^GSPC, BTC), not "no tape"');
   /* the census reads the stack through the one home: a hand-in wins, the same arithmetic otherwise */
   const ir = W.hgGoldIndicatorReads(T['15m'], { rows1d: T['1d'] });
   const f4 = W.hgGoldCatalogFeed(T['15m'], { ctx, ind: ir });

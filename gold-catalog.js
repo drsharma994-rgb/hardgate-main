@@ -760,11 +760,25 @@
       else if (r.id === 152 && mac && typeof mac.usdjpyTrend === 'string'){ status = 'USED'; note = 'USDJPY ' + mac.usdjpyTrend.toLowerCase() + ' \u2014 Yahoo JPY=X'; }
       else if (r.id === 153 && mac && typeof mac.silverTrend === 'string'){ status = 'USED'; note = 'silver ' + mac.silverTrend.toLowerCase() + ' \u2014 Yahoo SI=F'; }
       else if (r.id === 163 && kz){ status = 'USED'; note = 'session ' + kz; }
+      /* hg-v1163: the three legs hg-v1158 named as not fetched, read off the
+         macro snapshot now (macro.js ^GVZ, ^GSPC, BTC-USD). A snapshot from
+         before the legs, or one whose leg failed, reads as before. */
+      else if ((r.id === 83 || r.id === 84) && mac && isFinite(_fin(mac.gvzLast))){
+        status = 'USED';
+        note = (r.id === 83)
+          ? ('GVZ ' + mac.gvzLast.toFixed(2) + (typeof mac.gvzTrend === 'string' ? ' \u00b7 20d ' + mac.gvzTrend.toLowerCase() : '') + ' \u2014 Yahoo ^GVZ')
+          : ('1\u03c3 one-day move ' + (mac.gvzLast / Math.sqrt(252)).toFixed(2) + '% from GVZ ' + mac.gvzLast.toFixed(2));
+      }
+      else if (r.id === 87 && mac && isFinite(_fin(mac.gvzLast)) && isFinite(_fin(mac.vixLast)) && mac.vixLast > 0){
+        status = 'USED'; note = 'GVZ/VIX ' + (mac.gvzLast / mac.vixLast).toFixed(2) + ' (' + mac.gvzLast.toFixed(1) + ' / ' + mac.vixLast.toFixed(1) + ')';
+      }
+      else if (r.id === 150 && mac && isFinite(_fin(mac.goldSpxCorr20))){ status = 'USED'; note = 'gold\u2013SPX 20d return corr ' + (mac.goldSpxCorr20 >= 0 ? '+' : '') + mac.goldSpxCorr20.toFixed(2) + ' \u2014 Yahoo GC=F / ^GSPC'; }
+      else if (r.id === 151 && mac && isFinite(_fin(mac.goldBtcCorr20))){ status = 'USED'; note = 'gold\u2013BTC 20d return corr ' + (mac.goldBtcCorr20 >= 0 ? '+' : '') + mac.goldBtcCorr20.toFixed(2) + ' \u2014 Yahoo GC=F / BTC-USD'; }
       /* hg-v1158: free feeds this desk does NOT fetch, named rather than "no tape" */
-      else if (r.id === 87 && mac && typeof mac.vixTrend === 'string'){ note = 'VIX ' + mac.vixTrend.toLowerCase() + ' read \u00b7 GVZ unread (no ^GVZ leg in macro.js) \u2014 the ratio cannot form'; }
-      else if (r.id === 83 || r.id === 84){ note = 'no GVZ feed \u2014 ^GVZ is free on Yahoo and not fetched'; }
-      else if (r.id === 150){ note = 'no ^GSPC leg in macro.js \u2014 free on Yahoo and not fetched'; }
-      else if (r.id === 151){ note = 'no BTC series in the gold scan context'; }
+      else if (r.id === 87 && mac && typeof mac.vixTrend === 'string'){ note = 'VIX ' + mac.vixTrend.toLowerCase() + ' read \u00b7 GVZ unread (no ^GVZ leg this snapshot) \u2014 the ratio cannot form'; }
+      else if (r.id === 83 || r.id === 84){ note = 'GVZ unread this snapshot \u2014 ^GVZ is a free Yahoo leg (macro.js, hg-v1163)'; }
+      else if (r.id === 150){ note = 'gold\u2013SPX correlation unread this snapshot \u2014 ^GSPC is a free Yahoo leg (macro.js, hg-v1163)'; }
+      else if (r.id === 151){ note = 'gold\u2013BTC correlation unread this snapshot \u2014 BTC-USD is a free Yahoo leg (macro.js, hg-v1163)'; }
       if (status === 'USED') push(used, r, status, note);
       else push(unchecked, r, status, note);
     }

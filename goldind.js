@@ -5481,7 +5481,16 @@ function hgGoldApplyConfluence(cand, ctx){
    ranker used to mark such junk false; the tally never scored it either way).
    Marks only: nothing here gates. */
 var HG_GOLD_FREE_KEYS = ['free:macroTilt', 'free:paxgBasis', 'free:perpFunding', 'free:fearGreed',
-                         'free:silver', 'free:gsRatio', 'free:vix', 'free:usdjpy'];
+                         'free:silver', 'free:gsRatio', 'free:vix', 'free:usdjpy',
+                         /* hg-v1163: the COT caution the ranker scores and three STATE reads it
+                            does not -- the gold vol index trend, the gold-SPX and gold-BTC 20-day
+                            return correlations (free Yahoo legs, hg-v1158's named gap). A state
+                            read is not WITH or AGAINST a direction; it marks the regime the plan
+                            fired in, so the ledger can ask whether the regime separates. */
+                         'free:cotAgainst', 'free:gvzRising', 'free:spxCorrPositive', 'free:btcCorrPositive'];
+/* the correlation band a state mark needs to read: inside it the read is
+   UNREAD (absent), not a weak yes */
+var HG_GOLD_CORR_BAND = 0.3;
 function hgGoldFreeFeedVerdicts(ctx, dir){
   var m = {};
   try{
@@ -5514,7 +5523,26 @@ function hgGoldFreeFeedVerdicts(ctx, dir){
       trendLeg('free:gsRatio', macro.gsRatioTrend, false);
       trendLeg('free:vix', macro.vixTrend, true);
       trendLeg('free:usdjpy', macro.usdjpyTrend, false);
+      /* hg-v1163: state reads -- direction-neutral, three states */
+      if (macro.gvzTrend === 'RISING') m['free:gvzRising'] = true;
+      else if (macro.gvzTrend === 'FALLING') m['free:gvzRising'] = false;
+      function corrMark(key, v){
+        if (typeof v !== 'number' || !isFinite(v)) return;
+        if (v >= HG_GOLD_CORR_BAND) m[key] = true;
+        else if (v <= -HG_GOLD_CORR_BAND) m[key] = false;
+      }
+      corrMark('free:spxCorrPositive', macro.goldSpxCorr20);
+      corrMark('free:btcCorrPositive', macro.goldBtcCorr20);
     }
+    /* hg-v1163: the COT managed-money caution the ranker has scored since
+       hg-v559 -- crowded on THIS plan's side is true (the caution fires),
+       crowded on the other side is false, no crowding or no snapshot is
+       absent. The desk's own snapshot wins; the window's is the fallback the
+       ranker always read. */
+    var cot = (ctx.cot && typeof ctx.cot === 'object') ? ctx.cot
+            : ((typeof window !== 'undefined' && window.__hgGoldCot && typeof window.__hgGoldCot === 'object') ? window.__hgGoldCot : null);
+    if (cot && cot.crowding === 'SPEC CROWDED LONG') m['free:cotAgainst'] = L;
+    else if (cot && cot.crowding === 'SPEC CROWDED SHORT') m['free:cotAgainst'] = !L;
   }catch(e){}
   return m;
 }
@@ -5530,14 +5558,19 @@ function hgGoldFreeFeedFunding(ctx){
    parts: every free feed with its verdict, UNREAD where no mark was made.
    Reported, never scored. */
 var HG_GOLD_FREE_ROWS = [
-  ['REAL-RATE TILT',  'free:macroTilt',    'FRED DFII10 / Yahoo 10y minus breakeven'],
-  ['PAXG BASIS',      'free:paxgBasis',    'spot-perp crowding'],
-  ['PAXG FUNDING',    'free:perpFunding',  'Binance PAXGUSDT perp'],
-  ['FEAR & GREED',    'free:fearGreed',    'alternative.me crypto index'],
-  ['SILVER',          'free:silver',       'Yahoo SI=F 20d'],
-  ['GOLD/SILVER',     'free:gsRatio',      'Yahoo GC=F / SI=F 20d'],
-  ['VIX',             'free:vix',          'Yahoo ^VIX 20d'],
-  ['USDJPY',          'free:usdjpy',       'Yahoo JPY=X 20d']
+  ['REAL-RATE TILT',  'free:macroTilt',    'FRED DFII10 / Yahoo 10y minus breakeven', 'WITH', 'AGAINST'],
+  ['PAXG BASIS',      'free:paxgBasis',    'spot-perp crowding', 'WITH', 'AGAINST'],
+  ['PAXG FUNDING',    'free:perpFunding',  'Binance PAXGUSDT perp', 'WITH', 'AGAINST'],
+  ['FEAR & GREED',    'free:fearGreed',    'alternative.me crypto index', 'WITH', 'AGAINST'],
+  ['SILVER',          'free:silver',       'Yahoo SI=F 20d', 'WITH', 'AGAINST'],
+  ['GOLD/SILVER',     'free:gsRatio',      'Yahoo GC=F / SI=F 20d', 'WITH', 'AGAINST'],
+  ['VIX',             'free:vix',          'Yahoo ^VIX 20d', 'WITH', 'AGAINST'],
+  ['USDJPY',          'free:usdjpy',       'Yahoo JPY=X 20d', 'WITH', 'AGAINST'],
+  /* hg-v1163: the caution and the three state reads carry their own two words */
+  ['COT',             'free:cotAgainst',       'CFTC managed money crowding, weekly', 'CROWDED THIS SIDE', 'CROWDED OTHER SIDE'],
+  ['GVZ',             'free:gvzRising',        'Yahoo ^GVZ 20d (gold vol index)', 'RISING', 'FALLING'],
+  ['GOLD-SPX CORR',   'free:spxCorrPositive',  'Yahoo GC=F vs ^GSPC, 20 daily returns', 'POSITIVE', 'NEGATIVE'],
+  ['GOLD-BTC CORR',   'free:btcCorrPositive',  'Yahoo GC=F vs BTC-USD, 20 daily returns', 'POSITIVE', 'NEGATIVE']
 ];
 function hgGoldFreeFeedLineHtml(marks, opts){
   try{
@@ -5547,8 +5580,8 @@ function hgGoldFreeFeedLineHtml(marks, opts){
     var cells = '', marked = 0, i, row, mk, tag, cls;
     for (i = 0; i < HG_GOLD_FREE_ROWS.length; i++){
       row = HG_GOLD_FREE_ROWS[i]; mk = marks[row[1]];
-      if (mk === true){ tag = 'WITH'; cls = 'ok'; marked++; }
-      else if (mk === false){ tag = 'AGAINST'; cls = 'no'; marked++; }
+      if (mk === true){ tag = row[3]; cls = 'ok'; marked++; }
+      else if (mk === false){ tag = row[4]; cls = 'no'; marked++; }
       else { tag = 'UNREAD'; cls = 'na'; }
       cells += '<span class="gsx-ind ' + cls + '" title="' + __e(row[1] + ' — ' + row[2]) + '"><b>' + __e(row[0]) + '</b> ' + __e(tag) + '</span>';
     }
@@ -5794,13 +5827,12 @@ function goldRankSetups(cands, ctx){
           }
         }
       }catch(e){}
+      /* hg-v1163: the COT caution is the home's verdict (crowded on this
+         plan's side); the three state reads the home also marks (GVZ, the
+         two correlations) score NOTHING here -- unmeasured */
       try{
-        var cotCtx = (typeof window !== 'undefined') ? window.__hgGoldCot : null;
-        if (cotCtx && cotCtx.crowding === 'SPEC CROWDED LONG' && c.dir === 'long'){
-          parts.push({ label: 'COT spec crowded long — weekly positioning caution (informational)', pts: -1 });
-          tally -= 1;
-        } else if (cotCtx && cotCtx.crowding === 'SPEC CROWDED SHORT' && c.dir === 'short'){
-          parts.push({ label: 'COT spec crowded short — weekly positioning caution (informational)', pts: -1 });
+        if (fv['free:cotAgainst'] === true){
+          parts.push({ label: 'COT spec crowded ' + c.dir + ' — weekly positioning caution (informational)', pts: -1 });
           tally -= 1;
         }
       }catch(eCot){}

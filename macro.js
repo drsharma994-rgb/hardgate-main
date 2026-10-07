@@ -596,6 +596,38 @@ async function getUST10YCandles(count){
 }
 
 /* Last daily closes of a Yahoo symbol, via the /api/proxy last-resort path. Nullable. */
+/* hg-v1163: the Pearson correlation of the last N daily log returns two
+   Yahoo series share, ALIGNED BY UTC DATE (BTC prints on days gold does not;
+   an unaligned zip would pair Saturday's bitcoin with Friday's gold). Null
+   under 10 shared returns, on a non-finite close, or on a flat series (a
+   zero variance is no correlation, not a correlation of zero). Pure. */
+function __corrDailyReturns(a, b, n){
+  try{
+    if (!Array.isArray(a) || !Array.isArray(b)) return null;
+    const dayOf = r => Math.floor(+r.t / 86400);
+    const mapB = new Map();
+    for (const r of b){ if (r && isFinite(+r.c) && +r.c > 0) mapB.set(dayOf(r), +r.c); }
+    const pa = [], pb = [];
+    for (const r of a){
+      if (!r || !isFinite(+r.c) || !(+r.c > 0)) continue;
+      const cb = mapB.get(dayOf(r));
+      if (cb === undefined) continue;
+      pa.push(+r.c); pb.push(cb);
+    }
+    const ra = [], rb = [];
+    for (let i = 1; i < pa.length; i++){ ra.push(Math.log(pa[i] / pa[i - 1])); rb.push(Math.log(pb[i] / pb[i - 1])); }
+    const k = Math.min(ra.length, n || 20);
+    if (k < 10) return null;
+    const xa = ra.slice(-k), xb = rb.slice(-k);
+    const ma = xa.reduce((s, v) => s + v, 0) / k, mb = xb.reduce((s, v) => s + v, 0) / k;
+    let sxy = 0, sxx = 0, syy = 0;
+    for (let i = 0; i < k; i++){ const dx = xa[i] - ma, dy = xb[i] - mb; sxy += dx * dy; sxx += dx * dx; syy += dy * dy; }
+    if (!(sxx > 0) || !(syy > 0)) return null;
+    const c = sxy / Math.sqrt(sxx * syy);
+    return isFinite(c) ? Math.max(-1, Math.min(1, c)) : null;
+  }catch(e){ return null; }
+}
+
 async function __yahooLastClose(symbol, range){
   try{
     const rows = __parseYahooChart(await __yahooViaProxy(
@@ -799,6 +831,16 @@ async function getGoldMacro(){
     /* Free Yahoo reads. Used when FRED and the Treasury CSV are both dark,
        and always for silver, the gold/silver ratio, VIX and USDJPY. */
     let silverTrend = null, gsRatioTrend = null, vixTrend = null, usdjpyTrend = null;
+    /* hg-v1163: the three free Yahoo legs hg-v1158's census named as "free
+       on Yahoo and not fetched" -- the gold vol index ^GVZ (its level and 20d
+       trend; a 1-sigma one-day move follows from the level), the gold-SPX
+       20-day return correlation (^GSPC against GC=F: positive reads gold as
+       a risk asset, negative as the haven) and the gold-BTC 20-day return
+       correlation (BTC-USD, which trades the days gold does not; aligned by
+       UTC date). Reads, never scores: the ranker marks them and tallies
+       nothing on them until the forward ledger has measured whether any of
+       them separates. */
+    let gvzTrend = null, gvzLast = null, vixLast = null, goldSpxCorr20 = null, goldBtcCorr20 = null;
     try{
       const free = await Promise.all([
         __yahooLastClose('SI=F', '1mo'),
@@ -806,7 +848,10 @@ async function getGoldMacro(){
         __yahooLastClose('^VIX', '5d'),
         __yahooLastClose('JPY=X', '5d'),
         __yahooLastClose('^TNX', '1mo'),
-        __yahooLastClose('^T10YIE', '1mo')
+        __yahooLastClose('^T10YIE', '1mo'),
+        __yahooLastClose('^GVZ', '1mo'),
+        __yahooLastClose('^GSPC', '1mo'),
+        __yahooLastClose('BTC-USD', '1mo')
       ]);
       function chgOf(rows){
         if (!rows || rows.length < 5) return null;
@@ -821,8 +866,12 @@ async function getGoldMacro(){
       const vx = chgOf(free[2]);
       const jy = chgOf(free[3]);
       if (si) silverTrend = si.trend;
-      if (vx) vixTrend = vx.trend;
+      if (vx){ vixTrend = vx.trend; vixLast = vx.last; }
       if (jy) usdjpyTrend = jy.trend;
+      const gz = chgOf(free[6]);
+      if (gz){ gvzTrend = gz.trend; gvzLast = gz.last; }
+      goldSpxCorr20 = __corrDailyReturns(free[1], free[7], 20);
+      goldBtcCorr20 = __corrDailyReturns(free[1], free[8], 20);
       if (si && gc && si.first > 0 && si.last > 0){
         const thenR = gc.first / si.first, nowR = gc.last / si.last;
         const rchg = (nowR - thenR) / thenR;
@@ -878,7 +927,13 @@ async function getGoldMacro(){
       silverTrend: silverTrend,
       gsRatioTrend: gsRatioTrend,
       vixTrend: vixTrend,
-      usdjpyTrend: usdjpyTrend
+      usdjpyTrend: usdjpyTrend,
+      /* hg-v1163 */
+      gvzTrend: gvzTrend,
+      gvzLast: gvzLast,
+      vixLast: vixLast,
+      goldSpxCorr20: goldSpxCorr20,
+      goldBtcCorr20: goldBtcCorr20
     });
   }catch(e){
     return { dxy: null, dxyRows: null, tnxRows: null,
@@ -914,6 +969,7 @@ function getGoldMacroCached(){
 if (typeof window !== 'undefined'){
   window.macroGoldPlan = macroGoldPlan;
   window.getGoldMacroCached = getGoldMacroCached;
+  window.hgCorrDailyReturns = __corrDailyReturns;   /* hg-v1163: pure, exported for the guard */
   window.getSilverCandles = getSilverCandles;
   window.getUST10YCandles = getUST10YCandles;
 }

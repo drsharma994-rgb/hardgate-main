@@ -1031,6 +1031,17 @@ function gsxPipAttr(ok){ return gsxSt(ok ? GSX_GPIP_OK : GSX_GPIP); }
 /* hg-v1158: the INDICATOR STACK line — gold-catalog.js owns the reads, the
    marks and the renderer; this desk only hands it the row's own fields. An
    absent renderer or a row with no reads prints nothing. */
+/* hg-v1163: the FREE FEEDS line beside the stack -- the tally chips already
+   print the legs that SCORE; this line prints every free-feed mark the row
+   carries, the three state reads (GVZ, the two correlations) included,
+   which score nothing and so appear nowhere else. */
+function gsFreeFeedLineHtml(c){
+  try{
+    var fn = gfn('hgGoldFreeFeedLineHtml');
+    if (!fn || !c || !c.freeReads || typeof c.freeReads !== 'object') return '';
+    return fn(c.freeReads, { fundingPct: c.fundingPct }) || '';
+  }catch(e){ return ''; }
+}
 function gsIndicatorStackHtml(c){
   try{
     var fn = gfn('hgGoldIndicatorStackHtml');
@@ -1505,6 +1516,7 @@ function cardHTML(c, isBest, season, tape){
     + chips + metaChips
     + '</div>'
     + tallyChips(c)
+    + gsFreeFeedLineHtml(c)     /* hg-v1163: every free-feed mark, the state reads included */
     + gsIndicatorStackHtml(c)   /* hg-v1158: every bar-computed read with its mark — reported, never tallied */
     + '<div class="plan"' + gsxSt(GSX_PLAN) + '>' + (c.dir === 'long' ? 'BUY' : 'SELL') + ' <b' + gsxSt(GSX_PLAN_B) + '>$' + pxF(c.zone ? c.zone.lo : c.entry) + '–$' + pxF(c.zone ? c.zone.hi : c.entry) + '</b>'
     + ' · ENTRY <b' + gsxSt(GSX_PLAN_B) + '>$' + pxF(c.entry) + '</b>'
