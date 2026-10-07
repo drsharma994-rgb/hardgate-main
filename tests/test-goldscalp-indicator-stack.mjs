@@ -177,8 +177,9 @@ console.log('== 2) the marks: three states, direction mirror, ledger shape ==');
   assert(KEYS.every(k => KEY_RE.test(k)), 'every key passes the ledger normaliser\'s key shape');
   /* hg-v1163 added COT, GVZ and the two correlations: fourteen free: + eighteen
      ind: = 32, EXACTLY the cap -- the next mark needs the cap moved first */
-  assert(FREE_KEYS.length === 14 && KEYS.length + FREE_KEYS.length <= 32, 'fourteen free: + eighteen ind: = ' + (KEYS.length + FREE_KEYS.length) + ' fits the widened 32-per-record cap (exactly at it: the next mark moves the cap first)');
-  assert(KEYS.length + FREE_KEYS.length > 16 && KEYS.every(k => k > 'free:') && FREE_KEYS.length + 2 === 16, 'and would NOT have fit the old 16 — every ind: key sorts AFTER free:, so at 16 only two of the eighteen indicator marks would have landed and sixteen would have been dropped silently');
+  /* hg-v1165: four more legs and the cap moved 32 -> 64 first */
+  assert(FREE_KEYS.length === 18 && KEYS.length + FREE_KEYS.length <= 64, 'eighteen free: + eighteen ind: = ' + (KEYS.length + FREE_KEYS.length) + ' fits the 64-per-record cap');
+  assert(KEYS.length + FREE_KEYS.length > 16 && KEYS.every(k => k > 'free:') && FREE_KEYS.length - 2 === 16, 'and would NOT have fit the old 16 — every ind: key sorts AFTER free:, so at 16 only two of the eighteen indicator marks would have landed and sixteen would have been dropped silently');
   const L = W.hgGoldIndicatorMarks(ir, 'long'), S = W.hgGoldIndicatorMarks(ir, 'short');
   const DIRECTIONAL = ['ind:dmiWith', 'ind:sma20With', 'ind:sma50With', 'ind:sma200With', 'ind:tsmomWith', 'ind:rsiWith', 'ind:linregWith'];
   const STATE = KEYS.filter(k => DIRECTIONAL.indexOf(k) < 0);
@@ -235,7 +236,7 @@ console.log('== 3) the census reads the scan context; the free feeds it does not
   assert(/COT managed money SPEC CROWDED LONG · z=2\.30 · as-of 2026-04-07/.test(noteOf(f1, 125)), 'COT names its crowding, z and as-of');
   assert(/calendar snapshot loaded · 1 events/.test(noteOf(f1, 144)), 'the calendar names its event count');
   assert(/Hurst\(1d\) H=/.test(noteOf(f1, 48)) && /daily return ac1=/.test(noteOf(f1, 49)), 'Hurst and ACF read the daily leg the context carries');
-  assert(/silver rising — Yahoo SI=F/.test(noteOf(f1, 153)) && /USDJPY falling — Yahoo JPY=X/.test(noteOf(f1, 152)) && /session NY AM/.test(noteOf(f1, 163)), 'silver, USDJPY and the session name their reads');
+  assert(/silver rising — Yahoo SI=F/.test(noteOf(f1, 153)) && /USDJPY falling \(JPY=X\)/.test(noteOf(f1, 152)) && /session NY AM/.test(noteOf(f1, 163)), 'silver, USDJPY and the session name their reads');
   assert(!u1.has(146) && /NOT measured — fallback hint TAILWIND only/.test(noteOf(f1, 146)), 'the real yield stays UNCHECKED on a fallback hint and SAYS so — a hint is not a measurement');
   const f2 = W.hgGoldCatalogFeed(T['15m'], { ctx: Object.assign({}, ctx, { macro: Object.assign({}, MACRO, { realRateMeasured: { measured: true, trend: 'FALLING', source: 'fred-dfii10' } }) }) });
   assert(usedIds(f2).has(146) && /real yield falling · fred-dfii10/.test(noteOf(f2, 146)), 'a MEASURED real yield reads USED naming its source');
@@ -340,7 +341,7 @@ console.log('== 6) one home: nothing reads the marks back ==');
     assert(!/ind:(adx|dmi|bb|sma|hv|park|vol|tsmom|hour|rsi|ker|atr|linreg|hurst|ac)/.test(strip(read(g))), g + ' names no indicator mark');
   assert(!/freeReads|indReads/.test(strip(read('goldswing.js'))), 'GOLD SWING still forwards neither bag — the hg-v1155 swing gap is still a known one, not a drift');
   const hf = strip(read('hg-forward.js'));
-  assert(/FWD_READS_MAX = 32/.test(hf), 'the ledger cap reads 32');
+  assert(/FWD_READS_MAX = 64/.test(hf), 'the ledger cap reads 64 (hg-v1165)');
 }
 
 /* ------------------------------------------------------------------ 7 */

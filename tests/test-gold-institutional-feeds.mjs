@@ -90,6 +90,8 @@ const RANK_BASE = ['indicators.js', 'indicators2.js', 'fixpack14-core.js', 'hg-m
                    'goldind.js', 'gold-catalog.js', 'formation.js', 'plans.js', 'hg-gates.js', 'hg-plan.js', 'omniroute.js', 'setup-ui.js', 'hg-setup-core.js'];
 const FREE8 = ['free:macroTilt', 'free:paxgBasis', 'free:perpFunding', 'free:fearGreed', 'free:silver', 'free:gsRatio', 'free:vix', 'free:usdjpy'];
 const NEW4 = ['free:cotAgainst', 'free:gvzRising', 'free:spxCorrPositive', 'free:btcCorrPositive'];
+/* hg-v1165 added four more legs the MACRO_ALL fixture here does not carry */
+const NEW1165 = ['free:minersGold', 'free:goldCopper', 'free:goldOil', 'free:eurusd'];
 const MACRO_ALL = { silverTrend: 'RISING', gsRatioTrend: 'FALLING', vixTrend: 'RISING', usdjpyTrend: 'FALLING',
                     realRateHint: 'TAILWIND', dxy: { trend20: 'FALLING' }, tnxTrend: 'RISING', realRateSource: 'yahoo',
                     gvzTrend: 'RISING', gvzLast: 18.4, vixLast: 15.2, goldSpxCorr20: 0.45, goldBtcCorr20: -0.52 };
@@ -150,10 +152,10 @@ console.log('== 1) macro.js: the correlation helper and the three legs ==');
 console.log('== 2) the home: four more marks; the ranker scores nothing on the three state reads ==');
 {
   const W = boot(RANK_BASE);
-  assert(W.HG_GOLD_FREE_KEYS.length === 12 && NEW4.every(k => W.HG_GOLD_FREE_KEYS.indexOf(k) >= 0), 'the key list carries the four hg-v1163 reads');
+  assert(W.HG_GOLD_FREE_KEYS.length === 16 && NEW4.every(k => W.HG_GOLD_FREE_KEYS.indexOf(k) >= 0), 'the key list carries the four hg-v1163 reads (sixteen keys since hg-v1165)');
   const L = W.hgGoldFreeFeedVerdicts(FEEDS_ALL, 'long'), S = W.hgGoldFreeFeedVerdicts(FEEDS_ALL, 'short');
   assert(NEW4.every(k => L[k] === EXP_LONG[k]) && NEW4.every(k => S[k] === EXP_SHORT[k]), 'COT crowded long reads CROWDED THIS SIDE on a long and the other side on a short; GVZ rising, SPX corr positive and BTC corr negative read the same state either way');
-  assert(Object.keys(L).length === 12 && Object.keys(S).length === 12, 'twelve keys, no stowaway');
+  assert(Object.keys(L).length === 12 && Object.keys(S).length === 12, 'twelve keys on a snapshot without the hg-v1165 legs, no stowaway');
   const flat = W.hgGoldFreeFeedVerdicts({ macro: { gvzTrend: 'FLAT', goldSpxCorr20: 0.1, goldBtcCorr20: -0.29 }, cot: { crowding: 'N/A' } }, 'long');
   assert(Object.keys(flat).length === 0, 'a FLAT GVZ, a correlation inside ±0.30 and a COT with no crowding mark NOTHING');
   const junk = W.hgGoldFreeFeedVerdicts({ macro: { gvzTrend: 'UP', goldSpxCorr20: '0.8', goldBtcCorr20: null }, cot: 'x' }, 'long');
@@ -194,7 +196,7 @@ console.log('== 2) the home: four more marks; the ranker scores nothing on the t
   }
   assert(bad === 0, 'the ranked row\'s twelve free-feed marks EQUAL the home\'s verdicts on all ' + n + ' grid cases');
   const line = W.hgGoldFreeFeedLineHtml(L, { fundingPct: -0.05 });
-  assert(/12 of 12 free internet feeds read/.test(line) && /CROWDED THIS SIDE/.test(line) && /GVZ<\/b> RISING/.test(line) && /GOLD-SPX CORR<\/b> POSITIVE/.test(line) && /GOLD-BTC CORR<\/b> NEGATIVE/.test(line), 'the line prints the four reads in their own words');
+  assert(/12 of 16 free internet feeds read/.test(line) && /CROWDED THIS SIDE/.test(line) && /GVZ<\/b> RISING/.test(line) && /GOLD-SPX CORR<\/b> POSITIVE/.test(line) && /GOLD-BTC CORR<\/b> NEGATIVE/.test(line), 'the line prints the four reads in their own words');
 }
 
 /* ------------------------------------------------------------------ 3 */
@@ -342,7 +344,7 @@ console.log('== 5) GOLD SCALP and GOLD PINE carry the twelve keys ==');
   const snap = W.goldscalpScan();
   assert(snap && snap.cands && snap.cands.length >= 1, 'REACHABILITY: GOLD SCALP formed ' + (snap && snap.cands ? snap.cands.length : 0) + ' candidates');
   const recs = W.hgFwdRecords('GOLDSCALP') || [];
-  assert(recs.length >= 1 && recs.every(x => x.reads && W.HG_GOLD_FREE_KEYS.every(k => x.reads[k] !== undefined)), 'every GOLD SCALP record carries all twelve free-feed keys');
+  assert(recs.length >= 1 && recs.every(x => x.reads && W.HG_GOLD_FREE_KEYS.every(k => x.reads[k] !== undefined || NEW1165.indexOf(k) >= 0)), 'every GOLD SCALP record carries all twelve hg-v1163 free-feed keys (the hg-v1165 legs are absent on this snapshot)');
   assert(recs.every(x => x.reads['free:gvzRising'] === true && x.reads['free:spxCorrPositive'] === true && x.reads['free:btcCorrPositive'] === false && x.reads['free:cotAgainst'] === (x.dir === 'long')), 'the state reads read the same both ways; COT crowded long is CROWDED THIS SIDE on longs only');
   let html = String(el.innerHTML);
   for (const k of ['#gsOut', '#gsCards', '#gsBody']) html += String(el.querySelector(k).innerHTML);
@@ -360,7 +362,7 @@ console.log('== 5) GOLD SCALP and GOLD PINE carry the twelve keys ==');
   const t1 = Date.now();
   while (Date.now() - t1 < 20000){ await settle(2); if (/^done|^error|^failed/.test(elP.querySelector('#goldPineStat').textContent)) break; }
   const recsP = Wp.hgFwdRecords('GOLDPINE:scalp').concat(Wp.hgFwdRecords('GOLDPINE:swing'));
-  assert(recsP.length >= 2 && recsP.every(x => x.reads && Wp.HG_GOLD_FREE_KEYS.every(k => x.reads[k] !== undefined)), 'every GOLD PINE record carries all twelve free-feed keys (' + recsP.length + ' records)');
+  assert(recsP.length >= 2 && recsP.every(x => x.reads && Wp.HG_GOLD_FREE_KEYS.every(k => x.reads[k] !== undefined || NEW1165.indexOf(k) >= 0)), 'every GOLD PINE record carries all twelve hg-v1163 free-feed keys (' + recsP.length + ' records)');
 }
 
 /* ------------------------------------------------------------------ 6 */
@@ -384,10 +386,10 @@ console.log('== 7) fail-open, the cap, no gate, stamps ==');
   const W = boot(['hg-forward.js', 'goldind.js', 'gold-catalog.js', 'indicators.js', 'indicators2.js']);
   const reads = {}; for (const k of W.HG_GOLD_FREE_KEYS) reads[k] = true; for (const k of W.hgGoldIndicatorKeys()) reads[k] = false;
   reads['free:structure4h'] = true; reads['free:leverageExtended'] = false;
-  assert(Object.keys(reads).length === 32, 'twelve free-feed legs + the two PERFECT legs + eighteen indicator reads = 32 keys');
+  assert(Object.keys(reads).length === 36, 'sixteen free-feed legs + the two PERFECT legs + eighteen indicator reads = 36 keys (hg-v1165 moved the cap to 64 before adding its legs)');
   const why = W.hgFwdRecord({ tab: 'CAPTEST', mechanic: 'x', sym: 'XAUUSD', tf: '15m', dir: 'long', entry: 2300, stop: 2290, t1: 2320, barT: Math.floor(WED / 1000), reads });
   const rec = (W.hgFwdRecords('CAPTEST') || [])[0];
-  assert(why === 'recorded' && rec && Object.keys(rec.reads).length === 32, 'the ledger keeps every one of the 32 — exactly at its cap; the next mark moves the cap first (' + (rec ? Object.keys(rec.reads).length : 0) + ' kept)');
+  assert(why === 'recorded' && rec && Object.keys(rec.reads).length === 36, 'the ledger keeps every one of the 36 — inside the hg-v1165 cap of 64 (' + (rec ? Object.keys(rec.reads).length : 0) + ' kept)');
   for (const g of ['hg-gates.js', 'cryptogates.js', 'gold-formation.js', 'hg-solidity.js', 'conviction-lock.js', 'hg-forward.js', 'gold-best-levels.js', 'omnigold.js', 'ganeshgold.js', 'goldscalp.js', 'goldpine.js'])
     assert(!/free:(cotAgainst|gvzRising|spxCorrPositive|btcCorrPositive)/.test(strip(read(g))), g + ' names none of the four new marks (nothing gates on them)');
   const gi = strip(read('goldind.js'));

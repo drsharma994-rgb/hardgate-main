@@ -74,10 +74,10 @@ console.log('1. the ledger: booleans only, three states per read, bounded keys')
   ok(JSON.stringify(by.AUSD.reads) === JSON.stringify({ 'ev:stretched': true, 'gate:x': false }), 'ONLY the two booleans survive: 1, 0, "no", "", {}, null are dropped, never coerced; an illegal key and an over-long key are dropped (' + JSON.stringify(by.AUSD.reads) + ')');
   ok(by.BUSD.reads['ev:stretched'] === false, 'false is a real mark (the read was asked and not carried)');
   ok(by.CUSD.reads === undefined && by.DUSD.reads === undefined && by.EUSD.reads === undefined, 'no reads, junk-only reads and an array all record NOTHING -- absent, not an empty object');
-  const many = {}; for (let i = 0; i < 40; i++) many['r' + String(i).padStart(2, '0')] = true;   /* hg-v1158: cap 16 -> 32 */
+  const many = {}; for (let i = 0; i < 70; i++) many['r' + String(i).padStart(2, '0')] = true;   /* hg-v1158: cap 16 -> 32; hg-v1165: 32 -> 64 */
   S.hgFwdRecordScan('T', '1h', [row('FUSD', many)], { horizonBars: 20 });
   const f = S.hgFwdRecords('T').filter(r => r.sym === 'FUSD')[0];
-  ok(Object.keys(f.reads).length === 32, 'a caller handing in 40 reads keeps 32 -- the store is not a dumping ground (' + Object.keys(f.reads).length + ')');
+  ok(Object.keys(f.reads).length === 64, 'a caller handing in 70 reads keeps 64 -- the store is not a dumping ground (' + Object.keys(f.reads).length + ')');
   /* settle through the real resolver: A and B win, C loses; D and E carry no reads */
   const win = [{ t: bar + sec, o: 100, h: 103, l: 99.5, c: 102.5 }], lose = [{ t: bar + sec, o: 100, h: 100.5, l: 98.5, c: 98.7 }];
   S.hgFwdResolve('AUSD', '1h', win); S.hgFwdResolve('BUSD', '1h', lose); S.hgFwdResolve('CUSD', '1h', win); S.hgFwdResolve('DUSD', '1h', win);

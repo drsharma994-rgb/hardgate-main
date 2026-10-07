@@ -297,9 +297,12 @@ async function ganeshGoldEval(style){
   }catch(e){}
   var ir = null;
   try{ if (typeof W.hgGoldIndicatorReads === 'function'){ var ir0 = W.hgGoldIndicatorReads(ex, { rows1d: day }); if (ir0 && ir0.ok === true) ir = ir0; } }catch(e){ ir = null; }
+  /* hg-v1165: the Pine stack on the execution tape */
+  var ps = null;
+  try{ if (typeof W.pineGoldLayerStates === 'function'){ var ps0 = W.pineGoldLayerStates(ex); if (ps0 && ps0.ok === true) ps = ps0; } }catch(e){ ps = null; }
   var sess = sessOf(lastT);
   var ev = { style: style, px: px, atrEx: atrEx, atrCtx: atrCtx, htfBias: htfBias, struct: struct,
-    feeds: feeds, ir: ir,
+    feeds: feeds, ir: ir, ps: ps,
     lv: lv, ab: ab, sellLiq: sellLiq, buyLiq: buyLiq, eqH: eqH, eqL: eqL, pd: pd, mid: mid,
     sweptSell: sweptSell, sweptBuy: sweptBuy, disp: disp, mssUp: mssUp, mssDown: mssDown,
     fvg: fvg, ob: ob, zone: zone, retest: retest, vw: vw, atrRegime: atrRegime, vp: vp,
@@ -372,6 +375,11 @@ function ggMarkPlan(plan, ev){
       for (k in im){ if (Object.prototype.hasOwnProperty.call(im, k) && (im[k] === true || im[k] === false)){ m[k] = im[k]; any = true; } }
       plan.indReads = ev.ir;
     }
+    if (ev.ps && typeof W.pineGoldPineMarks === 'function'){   /* hg-v1165 */
+      var pm = W.pineGoldPineMarks(ev.ps, plan.dir);
+      for (k in pm){ if (Object.prototype.hasOwnProperty.call(pm, k) && (pm[k] === true || pm[k] === false)){ m[k] = pm[k]; any = true; } }
+      plan.pineStates = ev.ps;
+    }
     if (any) plan.freeReads = m;
     var fp = (typeof W.hgGoldFreeFeedFunding === 'function') ? W.hgGoldFreeFeedFunding(ev.feeds) : NaN;
     if (typeof fp === 'number' && isFinite(fp)) plan.fundingPct = fp;
@@ -384,6 +392,7 @@ function ggReadsHtml(p){
     var h = '';
     if (typeof W.hgGoldFreeFeedLineHtml === 'function' && p.freeReads && typeof p.freeReads === 'object') h += W.hgGoldFreeFeedLineHtml(p.freeReads, { fundingPct: p.fundingPct }) || '';
     if (typeof W.hgGoldIndicatorStackHtml === 'function' && p.indReads) h += W.hgGoldIndicatorStackHtml(p.indReads, p.freeReads) || '';
+    if (typeof W.pineGoldStackLineHtml === 'function' && p.pineStates) h += W.pineGoldStackLineHtml(p.pineStates, p.freeReads) || '';   /* hg-v1165 */
     return h;
   }catch(e){ return ''; }
 }

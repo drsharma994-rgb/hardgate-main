@@ -5487,7 +5487,11 @@ var HG_GOLD_FREE_KEYS = ['free:macroTilt', 'free:paxgBasis', 'free:perpFunding',
                             return correlations (free Yahoo legs, hg-v1158's named gap). A state
                             read is not WITH or AGAINST a direction; it marks the regime the plan
                             fired in, so the ledger can ask whether the regime separates. */
-                         'free:cotAgainst', 'free:gvzRising', 'free:spxCorrPositive', 'free:btcCorrPositive'];
+                         'free:cotAgainst', 'free:gvzRising', 'free:spxCorrPositive', 'free:btcCorrPositive',
+                         /* hg-v1165: four more free Yahoo legs (macro.js) -- directional like
+                            silver: miners outrunning gold, gold outrunning copper and crude,
+                            and a rising euro are each WITH a gold long. Scored nowhere. */
+                         'free:minersGold', 'free:goldCopper', 'free:goldOil', 'free:eurusd'];
 /* the correlation band a state mark needs to read: inside it the read is
    UNREAD (absent), not a weak yes */
 var HG_GOLD_CORR_BAND = 0.3;
@@ -5523,6 +5527,11 @@ function hgGoldFreeFeedVerdicts(ctx, dir){
       trendLeg('free:gsRatio', macro.gsRatioTrend, false);
       trendLeg('free:vix', macro.vixTrend, true);
       trendLeg('free:usdjpy', macro.usdjpyTrend, false);
+      /* hg-v1165: the four ratio / level legs, WITH a long when RISING */
+      trendLeg('free:minersGold', macro.minersGoldTrend, true);
+      trendLeg('free:goldCopper', macro.goldCopperTrend, true);
+      trendLeg('free:goldOil', macro.goldOilTrend, true);
+      trendLeg('free:eurusd', macro.eurusdTrend, true);
       /* hg-v1163: state reads -- direction-neutral, three states */
       if (macro.gvzTrend === 'RISING') m['free:gvzRising'] = true;
       else if (macro.gvzTrend === 'FALLING') m['free:gvzRising'] = false;
@@ -5570,7 +5579,12 @@ var HG_GOLD_FREE_ROWS = [
   ['COT',             'free:cotAgainst',       'CFTC managed money crowding, weekly', 'CROWDED THIS SIDE', 'CROWDED OTHER SIDE'],
   ['GVZ',             'free:gvzRising',        'Yahoo ^GVZ 20d (gold vol index)', 'RISING', 'FALLING'],
   ['GOLD-SPX CORR',   'free:spxCorrPositive',  'Yahoo GC=F vs ^GSPC, 20 daily returns', 'POSITIVE', 'NEGATIVE'],
-  ['GOLD-BTC CORR',   'free:btcCorrPositive',  'Yahoo GC=F vs BTC-USD, 20 daily returns', 'POSITIVE', 'NEGATIVE']
+  ['GOLD-BTC CORR',   'free:btcCorrPositive',  'Yahoo GC=F vs BTC-USD, 20 daily returns', 'POSITIVE', 'NEGATIVE'],
+  /* hg-v1165 */
+  ['MINERS/GOLD',     'free:minersGold',       'Yahoo GDX / GC=F 20d', 'WITH', 'AGAINST'],
+  ['GOLD/COPPER',     'free:goldCopper',       'Yahoo GC=F / HG=F 20d', 'WITH', 'AGAINST'],
+  ['GOLD/OIL',        'free:goldOil',          'Yahoo GC=F / CL=F 20d', 'WITH', 'AGAINST'],
+  ['EURUSD',          'free:eurusd',           'Yahoo EURUSD=X 20d', 'WITH', 'AGAINST']
 ];
 function hgGoldFreeFeedLineHtml(marks, opts){
   try{
@@ -5625,6 +5639,18 @@ function goldRankSetups(cands, ctx){
         if (__ir && __ir.ok === true){ indReads = __ir; indMarksFn = __indW.hgGoldIndicatorMarks; }
       }
     }catch(eInd){ indReads = null; indMarksFn = null; }
+    /* hg-v1165: THE PINE STACK, the five gold Pine layers' states on the same
+       execution tape, read once per scan through pinegoldmath.js's one home
+       and marked per candidate under `pine:` beside `free:` and `ind:`.
+       Absent helper, absent rows or a throw: no marks. Marks only. */
+    var pineStates = null, pineMarksFn = null;
+    try{
+      var __pnW = (typeof window !== 'undefined') ? window : null;
+      if (__pnW && typeof __pnW.pineGoldLayerStates === 'function' && typeof __pnW.pineGoldPineMarks === 'function'){
+        var __ps = __pnW.pineGoldLayerStates(ctx.rows15m || ctx.rows);
+        if (__ps && __ps.ok === true){ pineStates = __ps; pineMarksFn = __pnW.pineGoldPineMarks; }
+      }
+    }catch(ePn){ pineStates = null; pineMarksFn = null; }
 
     var ranked = [], i, k;
     for (i = 0; i < cands.length; i++){
@@ -6074,6 +6100,14 @@ function goldRankSetups(cands, ctx){
           for (indK in indM){ if (Object.prototype.hasOwnProperty.call(indM, indK)) freeMark(indK, indM[indK]); }
           rc.indReads = indReads;
         }catch(eIm){}
+      }
+      /* hg-v1165: the Pine-stack marks for this candidate's direction */
+      if (pineStates && pineMarksFn){
+        try{
+          var pnM = pineMarksFn(pineStates, c.dir), pnK;
+          for (pnK in pnM){ if (Object.prototype.hasOwnProperty.call(pnM, pnK)) freeMark(pnK, pnM[pnK]); }
+          rc.pineStates = pineStates;
+        }catch(ePm){}
       }
       try{
         if (Object.keys(freeReads).length) rc.freeReads = freeReads;

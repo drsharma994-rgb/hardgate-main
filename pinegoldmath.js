@@ -889,6 +889,126 @@ function pineGoldRecordLayerSetups(rows, mode){
   return out;
 }
 
+/* =======================================================================
+   hg-v1165: THE PINE STACK AS A CONFLUENCE OF READS, NOT A VOTE.
+
+   Asked to use the five gold Pine layers (hg-v1164) on OMNIGOLD, GOLD
+   SCALP, GOLD PINE and GANESH GOLD "to form a confluence", the measured
+   record still says a new weight is an unmeasured gate (hg-v966) or noise
+   with a label (hg-v987 / v945 / v922). So the confluence enters the way
+   every other read has since hg-v1155: each layer's STATE on the desk's
+   own execution tape -- the side the Supertrend band sits on, Tenkan
+   against Kijun with the close against the Kumo, the close against the
+   Donchian midline, EMA 8 against EMA 21, the close against the Keltner
+   mid with the EMA 50 slope -- marked three-state (WITH / AGAINST / absent)
+   on every record, with a sixth mark for the majority of the readable
+   states. The ledger can then ask, out of sample, whether any layer or the
+   majority separates winners on each desk. Nothing scores on any of it. */
+function pgrStateOf(res){ return res && (res.dir === 'long' || res.dir === 'short') ? res.dir : null; }
+function pineGoldLayerStates(rows){
+  var out = { ok: false, supertrend: null, ichimoku: null, donchian: null, emacross: null, keltner: null, readable: 0, agreeLong: 0, agreeShort: 0 };
+  try{
+    if (!rows || rows.length < 60) return out;
+    var n = rows.length, i = n - 1;
+    var c = pgrNum(rows[i].c);
+    if (!isFinite(c)) return out;
+    var layerOpts = function(id){ var l = PINE_GOLD_RECORD_LAYERS.filter(function(x){ return x.id === id; })[0]; return (l && l.opts) || {}; };
+    /* supertrend: the side of the band after the last closed bar */
+    var st = pineGoldSupertrend(rows, layerOpts('supertrend'));
+    if (st && (st.trend === 1 || st.trend === -1)) out.supertrend = st.trend === 1 ? 'long' : 'short';
+    /* ichimoku: tenkan against kijun, the close against the cloud of 26 bars back */
+    try{
+      var io = layerOpts('ichimoku'), tL = io.tenkan || 9, kL = io.kijun || 26, sL = io.senkou || 52;
+      if (n >= sL + kL + 2){
+        var mid = function(j, len){ var hh = pgrHighest(rows, j - len + 1, j, 'h'), ll = pgrLowest(rows, j - len + 1, j, 'l'); return (hh + ll) / 2; };
+        var tk = mid(i, tL), kj = mid(i, kL), ci = i - kL;
+        var sA = (mid(ci, tL) + mid(ci, kL)) / 2, sB = mid(ci, sL);
+        if ([tk, kj, sA, sB].every(isFinite)){
+          if (tk > kj && c > Math.max(sA, sB)) out.ichimoku = 'long';
+          else if (tk < kj && c < Math.min(sA, sB)) out.ichimoku = 'short';
+        }
+      }
+    }catch(eI){}
+    /* donchian: the close against the midline of the prior 20-bar channel */
+    try{
+      var dO = layerOpts('donchian'), eL = dO.entryLen || 20;
+      var hi = pgrHighest(rows, i - eL, i - 1, 'h'), lo = pgrLowest(rows, i - eL, i - 1, 'l');
+      if (isFinite(hi) && isFinite(lo) && hi > lo){
+        var dm = (hi + lo) / 2;
+        if (c > dm) out.donchian = 'long'; else if (c < dm) out.donchian = 'short';
+      }
+    }catch(eD){}
+    /* ema cross: EMA 8 against EMA 21 */
+    try{
+      var emaFn = gfn('ema') || gfn('pineEma');
+      var xO = layerOpts('emacross'), fL = xO.fast || 8, sl = xO.slow || 21;
+      if (typeof emaFn === 'function'){
+        var closes = rows.map(function(r){ return r.c; });
+        var ef = emaFn(closes, fL), es = emaFn(closes, sl);
+        var f = pgrNum(ef[i]), s = pgrNum(es[i]);
+        if (isFinite(f) && isFinite(s)){ if (f > s) out.emacross = 'long'; else if (f < s) out.emacross = 'short'; }
+        /* keltner: the close against the EMA 20 mid with the EMA 50 slope agreeing */
+        var kO = layerOpts('keltner'), mL = kO.emaLen || 20, tLn = kO.trendLen || 50, sb = kO.slopeBars || 5;
+        var km = emaFn(closes, mL), kt = emaFn(closes, tLn);
+        var m0 = pgrNum(km[i]), t0 = pgrNum(kt[i]), t1 = pgrNum(kt[i - sb]);
+        if (isFinite(m0) && isFinite(t0) && isFinite(t1)){
+          if (c > m0 && t0 > t1) out.keltner = 'long';
+          else if (c < m0 && t0 < t1) out.keltner = 'short';
+        }
+      }
+    }catch(eK){}
+    PINE_GOLD_RECORD_LAYERS.forEach(function(l){
+      var v = out[l.id];
+      if (v === 'long'){ out.readable++; out.agreeLong++; }
+      else if (v === 'short'){ out.readable++; out.agreeShort++; }
+    });
+    out.ok = true;
+  }catch(e){ out.ok = false; }
+  return out;
+}
+/* six three-state marks for one direction: one per layer (WITH when the
+   layer's state is the plan's side, AGAINST when the other side, absent
+   when the layer reads neither) and the majority of the readable states
+   (at least three of the five with the plan is true, at least three
+   against is false, anything else absent) */
+var PINE_GOLD_MAJORITY = 3;
+function pineGoldPineMarks(states, dir){
+  var m = {};
+  if (!states || states.ok !== true || (dir !== 'long' && dir !== 'short')) return m;
+  PINE_GOLD_RECORD_LAYERS.forEach(function(l){
+    var v = states[l.id];
+    if (v === 'long' || v === 'short') m['pine:' + l.id + 'With'] = (v === dir);
+  });
+  var withN = dir === 'long' ? states.agreeLong : states.agreeShort;
+  var againstN = dir === 'long' ? states.agreeShort : states.agreeLong;
+  if (withN >= PINE_GOLD_MAJORITY) m['pine:majorityWith'] = true;
+  else if (againstN >= PINE_GOLD_MAJORITY) m['pine:majorityWith'] = false;
+  return m;
+}
+/* the card line: every layer's state and the majority, UNREAD where the
+   layer read neither; reported, never scored */
+function pineGoldStackLineHtml(states, marks){
+  try{
+    if (!states || states.ok !== true) return '';
+    marks = (marks && typeof marks === 'object') ? marks : {};
+    function e(x){ return String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    var cells = '';
+    PINE_GOLD_RECORD_LAYERS.forEach(function(l){
+      var v = states[l.id], mk = marks['pine:' + l.id + 'With'];
+      var tag = v ? v.toUpperCase() : 'UNREAD';
+      var cls = (mk === true) ? 'ok' : (mk === false ? 'no' : 'na');
+      cells += '<span class="gsx-ind ' + cls + '" title="' + e('pine:' + l.id + 'With — ' + l.label + ' state on this tape') + '"><b>' + e(l.label) + '</b> ' + e(tag) + '</span>';
+    });
+    var mj = marks['pine:majorityWith'];
+    var mjTag = mj === true ? 'WITH' : (mj === false ? 'AGAINST' : 'SPLIT');
+    cells += '<span class="gsx-ind ' + (mj === true ? 'ok' : (mj === false ? 'no' : 'na')) + '" title="pine:majorityWith — at least three of the readable states"><b>MAJORITY</b> ' + mjTag + ' ' + states.agreeLong + 'L/' + states.agreeShort + 'S</span>';
+    return '<div class="note gsx-pinestack" data-hg-pine-stack="1" style="margin-top:6px;font-size:11px"><b>PINE STACK</b> · '
+      + states.readable + ' of ' + PINE_GOLD_RECORD_LAYERS.length + ' gold Pine layers readable on this tape'
+      + ' — recorded for the forward ledger’s read split, not part of this desk’s score, gates nothing.'
+      + '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">' + cells + '</div></div>';
+  }catch(e){ return ''; }
+}
+
 function pineGoldLevelsFromBars(rows1d, rows15m){
   var lv = { pdh: NaN, pdl: NaN, asiaHi: NaN, asiaLo: NaN };
   if (rows1d && rows1d.length >= 2){
@@ -920,6 +1040,10 @@ G.pineGoldIchimoku = pineGoldIchimoku;
 G.pineGoldDonchian = pineGoldDonchian;
 G.pineGoldEmaCrossRsi = pineGoldEmaCrossRsi;
 G.pineGoldKeltnerPullback = pineGoldKeltnerPullback;
+G.pineGoldLayerStates = pineGoldLayerStates;   /* hg-v1165 */
+G.pineGoldPineMarks = pineGoldPineMarks;
+G.pineGoldStackLineHtml = pineGoldStackLineHtml;
+G.PINE_GOLD_MAJORITY = PINE_GOLD_MAJORITY;
 G.PINE_GOLD_SCAN = PINE_GOLD_SCAN;
 G.PINE_GOLD_MAX = PINE_GOLD_MAX;
 G.PINE_GOLD_TIER = PINE_GOLD_TIER;
@@ -939,7 +1063,8 @@ if (typeof module !== 'undefined' && module.exports){
     pineGoldGrade, pineGoldLevelsFromBars, pineGoldEvalDir, pineGoldNativeBundle, pineGoldOuZscore,
     pineGoldUniverse, pineGoldLayerSetup,
     PINE_GOLD_RECORD_LAYERS, pineGoldRecordLayerSetups, pineGoldSupertrend, pineGoldIchimoku,
-    pineGoldDonchian, pineGoldEmaCrossRsi, pineGoldKeltnerPullback
+    pineGoldDonchian, pineGoldEmaCrossRsi, pineGoldKeltnerPullback,
+    pineGoldLayerStates, pineGoldPineMarks, pineGoldStackLineHtml, PINE_GOLD_MAJORITY
   };
 }
 

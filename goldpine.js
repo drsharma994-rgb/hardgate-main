@@ -275,6 +275,11 @@ function gpMarkReads(list, mode, bars, ctx){
       try{ var got = irFn(rows, { rows1d: bars.rows1d }); if (got && got.ok === true) ir = got; }catch(eIr){ ir = null; }
     }
     var fp = fpFn ? fpFn(ctx) : NaN;
+    /* hg-v1165: the Pine stack on the lane's own tape */
+    var psFn = gfn('pineGoldLayerStates'), pmFn = gfn('pineGoldPineMarks'), ps = null;
+    if (psFn && pmFn && rows && rows.length){
+      try{ var ps0 = psFn(rows); if (ps0 && ps0.ok === true) ps = ps0; }catch(ePs){ ps = null; }
+    }
     var marked = 0, i, s, k, m, any;
     for (i = 0; i < list.length; i++){
       s = list[i];
@@ -289,6 +294,11 @@ function gpMarkReads(list, mode, bars, ctx){
         var im = imFn(ir, s.dir);
         for (k in im){ if (Object.prototype.hasOwnProperty.call(im, k) && (im[k] === true || im[k] === false)){ m[k] = im[k]; any = true; } }
         s.indReads = ir;
+      }
+      if (ps){
+        var pm = pmFn(ps, s.dir);
+        for (k in pm){ if (Object.prototype.hasOwnProperty.call(pm, k) && (pm[k] === true || pm[k] === false)){ m[k] = pm[k]; any = true; } }
+        s.pineStates = ps;
       }
       if (any){ s.freeReads = m; marked++; }
       if (typeof fp === 'number' && isFinite(fp) && s.fundingPct === undefined) s.fundingPct = fp;
@@ -917,6 +927,8 @@ function gpReadsHtml(s){
     if (ff && s.freeReads && typeof s.freeReads === 'object') h += ff(s.freeReads, { fundingPct: s.fundingPct }) || '';
     var st = gfn('hgGoldIndicatorStackHtml');
     if (st && s.indReads) h += st(s.indReads, s.freeReads) || '';
+    var pn = gfn('pineGoldStackLineHtml');   /* hg-v1165 */
+    if (pn && s.pineStates) h += pn(s.pineStates, s.freeReads) || '';
     return h;
   }catch(e){ return ''; }
 }

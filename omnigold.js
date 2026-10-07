@@ -14312,6 +14312,8 @@ terse status, and never launches a first-time scan on a global refresh.
       if (ff && c.freeReads && typeof c.freeReads === 'object') out += ff(c.freeReads, {}) || '';
       var st = gfn('hgGoldIndicatorStackHtml');
       if (st && c.indReads) out += st(c.indReads, c.freeReads) || '';
+      var pn = gfn('pineGoldStackLineHtml');   /* hg-v1165 */
+      if (pn && c.pineStates) out += pn(c.pineStates, c.freeReads) || '';
       return out;
     } catch (e) { return ''; }
   }
@@ -14714,8 +14716,11 @@ terse status, and never launches a first-time scan on a global refresh.
            gold-perp funding it does hold is a different print -- absent is
            honest, a conflated rate is not. Marks only: no gate, no grade, no
            plan reads them. */
-        var ogRdCtx = null, ogRdIr = null;
+        var ogRdCtx = null, ogRdIr = null, ogRdPs = null;
         var ogRdFv = gfn('hgGoldFreeFeedVerdicts'), ogRdIm = gfn('hgGoldIndicatorMarks'), ogRdIrFn = gfn('hgGoldIndicatorReads');
+        /* hg-v1165: the Pine stack on this horizon's own rows */
+        var ogRdPsFn = gfn('pineGoldLayerStates'), ogRdPm = gfn('pineGoldPineMarks');
+        try { if (ogRdPsFn && ogRdPm && rows.length){ var ogRdPs0 = ogRdPsFn(rows); if (ogRdPs0 && ogRdPs0.ok === true) ogRdPs = ogRdPs0; } } catch (ePs) { ogRdPs = null; }
         try {
           var ogRdW = W();
           var ogRdSpot = null; try { var ogRdGs = gfn('goldspotState'); ogRdSpot = ogRdGs ? (ogRdGs() || null) : null; } catch (eGs) { ogRdSpot = null; }
@@ -14730,6 +14735,7 @@ terse status, and never launches a first-time scan on a global refresh.
             var m = {}, any = false, k, fv, im;
             if (ogRdFv && ogRdCtx){ fv = ogRdFv(ogRdCtx, c.dir); for (k in fv){ if (Object.prototype.hasOwnProperty.call(fv, k) && (fv[k] === true || fv[k] === false)){ m[k] = fv[k]; any = true; } } }
             if (ogRdIr){ im = ogRdIm(ogRdIr, c.dir); for (k in im){ if (Object.prototype.hasOwnProperty.call(im, k) && (im[k] === true || im[k] === false)){ m[k] = im[k]; any = true; } } c.indReads = ogRdIr; }
+            if (ogRdPs){ var pm = ogRdPm(ogRdPs, c.dir); for (k in pm){ if (Object.prototype.hasOwnProperty.call(pm, k) && (pm[k] === true || pm[k] === false)){ m[k] = pm[k]; any = true; } } c.pineStates = ogRdPs; }
             return any ? m : undefined;
           } catch (eRo) { return undefined; }
         }

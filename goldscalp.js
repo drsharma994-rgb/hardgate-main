@@ -1042,6 +1042,14 @@ function gsFreeFeedLineHtml(c){
     return fn(c.freeReads, { fundingPct: c.fundingPct }) || '';
   }catch(e){ return ''; }
 }
+/* hg-v1165: the Pine stack the ranker read on this scan's tape */
+function gsPineStackLineHtml(c){
+  try{
+    var fn = gfn('pineGoldStackLineHtml');
+    if (!fn || !c || !c.pineStates) return '';
+    return fn(c.pineStates, c.freeReads) || '';
+  }catch(e){ return ''; }
+}
 function gsIndicatorStackHtml(c){
   try{
     var fn = gfn('hgGoldIndicatorStackHtml');
@@ -1518,6 +1526,7 @@ function cardHTML(c, isBest, season, tape){
     + tallyChips(c)
     + gsFreeFeedLineHtml(c)     /* hg-v1163: every free-feed mark, the state reads included */
     + gsIndicatorStackHtml(c)   /* hg-v1158: every bar-computed read with its mark — reported, never tallied */
+    + gsPineStackLineHtml(c)    /* hg-v1165: the five gold Pine layers' states, reported, never tallied */
     + '<div class="plan"' + gsxSt(GSX_PLAN) + '>' + (c.dir === 'long' ? 'BUY' : 'SELL') + ' <b' + gsxSt(GSX_PLAN_B) + '>$' + pxF(c.zone ? c.zone.lo : c.entry) + '–$' + pxF(c.zone ? c.zone.hi : c.entry) + '</b>'
     + ' · ENTRY <b' + gsxSt(GSX_PLAN_B) + '>$' + pxF(c.entry) + '</b>'
     + ' · STOP <b' + gsxSt(GSX_PLAN_B) + '>$' + pxF(c.stop) + '</b>'

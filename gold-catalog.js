@@ -757,7 +757,15 @@
       else if (r.id === 144 && newsLoaded){ status = 'USED'; note = 'calendar snapshot loaded' + (Array.isArray(nws.events) ? ' \u00b7 ' + nws.events.length + ' events' : ' \u00b7 caution leg'); }
       else if (r.id === 146 && rrm && rrm.measured === true){ status = 'USED'; note = 'real yield ' + String(rrm.trend || '').toLowerCase() + ' \u00b7 ' + (rrm.source || mac.realRateSource || 'measured') + (rrm.stale ? ' STALE' : ''); }
       else if (r.id === 146 && mac){ note = 'real yield NOT measured \u2014 fallback hint ' + (mac.realRateHint || 'none') + ' only'; }
-      else if (r.id === 152 && mac && typeof mac.usdjpyTrend === 'string'){ status = 'USED'; note = 'USDJPY ' + mac.usdjpyTrend.toLowerCase() + ' \u2014 Yahoo JPY=X'; }
+      else if (r.id === 152 && mac && (typeof mac.usdjpyTrend === 'string' || typeof mac.goldOilTrend === 'string' || typeof mac.goldCopperTrend === 'string')){
+        status = 'USED';
+        note = [typeof mac.usdjpyTrend === 'string' ? 'USDJPY ' + mac.usdjpyTrend.toLowerCase() + ' (JPY=X)' : null,
+                typeof mac.goldOilTrend === 'string' ? 'gold/oil ' + mac.goldOilTrend.toLowerCase() + ' (GC=F / CL=F)' : null,
+                typeof mac.goldCopperTrend === 'string' ? 'gold/copper ' + mac.goldCopperTrend.toLowerCase() + ' (GC=F / HG=F)' : null].filter(Boolean).join(' \u00b7 ') + ' \u2014 Yahoo 20d';
+      }
+      /* hg-v1165: the miners and the euro leg */
+      else if (r.id === 154 && mac && typeof mac.minersGoldTrend === 'string'){ status = 'USED'; note = 'GDX / GC=F 20d ' + mac.minersGoldTrend.toLowerCase() + ' \u2014 Yahoo'; }
+      else if (r.id === 155 && mac && typeof mac.eurusdTrend === 'string'){ status = 'USED'; note = 'EURUSD 20d ' + mac.eurusdTrend.toLowerCase() + ' (XAUEUR through EURUSD=X) \u2014 Yahoo'; }
       else if (r.id === 153 && mac && typeof mac.silverTrend === 'string'){ status = 'USED'; note = 'silver ' + mac.silverTrend.toLowerCase() + ' \u2014 Yahoo SI=F'; }
       else if (r.id === 163 && kz){ status = 'USED'; note = 'session ' + kz; }
       /* hg-v1163: the three legs hg-v1158 named as not fetched, read off the

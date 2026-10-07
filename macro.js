@@ -841,6 +841,13 @@ async function getGoldMacro(){
        nothing on them until the forward ledger has measured whether any of
        them separates. */
     let gvzTrend = null, gvzLast = null, vixLast = null, goldSpxCorr20 = null, goldBtcCorr20 = null;
+    /* hg-v1165: four more free Yahoo legs a gold trader reads and this stack
+       never fetched -- the gold miners against gold (GDX / GC=F, the miners
+       lead the metal when the bid is real), gold against copper (GC=F / HG=F,
+       the haven-versus-growth ratio), gold against crude (GC=F / CL=F) and
+       EURUSD (the dollar's other side). Each is a 20-day ratio or level trend
+       through the same band every other leg reads; reads, never scores. */
+    let minersGoldTrend = null, goldCopperTrend = null, goldOilTrend = null, eurusdTrend = null;
     try{
       const free = await Promise.all([
         __yahooLastClose('SI=F', '1mo'),
@@ -851,7 +858,11 @@ async function getGoldMacro(){
         __yahooLastClose('^T10YIE', '1mo'),
         __yahooLastClose('^GVZ', '1mo'),
         __yahooLastClose('^GSPC', '1mo'),
-        __yahooLastClose('BTC-USD', '1mo')
+        __yahooLastClose('BTC-USD', '1mo'),
+        __yahooLastClose('GDX', '1mo'),
+        __yahooLastClose('HG=F', '1mo'),
+        __yahooLastClose('CL=F', '1mo'),
+        __yahooLastClose('EURUSD=X', '1mo')
       ]);
       function chgOf(rows){
         if (!rows || rows.length < 5) return null;
@@ -872,6 +883,21 @@ async function getGoldMacro(){
       if (gz){ gvzTrend = gz.trend; gvzLast = gz.last; }
       goldSpxCorr20 = __corrDailyReturns(free[1], free[7], 20);
       goldBtcCorr20 = __corrDailyReturns(free[1], free[8], 20);
+      /* hg-v1165: a ratio's 20-day change through the one band (the gold/
+         silver ratio's own arithmetic, stated once); null when either leg is
+         dark or a first close is not positive */
+      function ratioTrendOf(num, den){
+        const a = chgOf(num), b = chgOf(den);
+        if (!a || !b || !(a.first > 0) || !(b.first > 0) || !(a.last > 0) || !(b.last > 0)) return null;
+        const thenR = a.first / b.first, nowR = a.last / b.last;
+        const rchg = (nowR - thenR) / thenR;
+        return rchg > 0.01 ? 'RISING' : (rchg < -0.01 ? 'FALLING' : 'FLAT');
+      }
+      minersGoldTrend = ratioTrendOf(free[9], free[1]);
+      goldCopperTrend = ratioTrendOf(free[1], free[10]);
+      goldOilTrend = ratioTrendOf(free[1], free[11]);
+      const eu = chgOf(free[12]);
+      if (eu) eurusdTrend = eu.trend;
       if (si && gc && si.first > 0 && si.last > 0){
         const thenR = gc.first / si.first, nowR = gc.last / si.last;
         const rchg = (nowR - thenR) / thenR;
@@ -933,7 +959,12 @@ async function getGoldMacro(){
       gvzLast: gvzLast,
       vixLast: vixLast,
       goldSpxCorr20: goldSpxCorr20,
-      goldBtcCorr20: goldBtcCorr20
+      goldBtcCorr20: goldBtcCorr20,
+      /* hg-v1165 */
+      minersGoldTrend: minersGoldTrend,
+      goldCopperTrend: goldCopperTrend,
+      goldOilTrend: goldOilTrend,
+      eurusdTrend: eurusdTrend
     });
   }catch(e){
     return { dxy: null, dxyRows: null, tnxRows: null,

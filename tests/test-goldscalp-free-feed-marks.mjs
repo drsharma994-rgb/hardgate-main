@@ -229,7 +229,7 @@ console.log('== 4) one home: written in the ranker, carried by the two seams, re
      SAME helper, which is the point. hg-v1162: the eight free-feed legs mark
      through ONE loop over the one home's verdicts (hgGoldFreeFeedVerdicts),
      so the sites are: that loop, the two PERFECT legs, the ind: loop. */
-  assert(writes === 5, 'the ranker writes its marks through one helper at four sites (the free-feed verdict loop, structure4h, leverageExtended, the ind: loop) — ' + (writes - 1) + ' call sites + the definition');
+  assert(writes === 6, 'the ranker writes its marks through one helper at five sites (the free-feed verdict loop, structure4h, leverageExtended, the ind: loop, the pine: loop) — ' + (writes - 1) + ' call sites + the definition');
   assert(/var fv = hgGoldFreeFeedVerdicts\(ctx, c\.dir\)/.test(gi), 'hg-v1162: the free-feed verdicts come from the one home');
   assert(/rc\.freeReads = freeReads;/.test(gi) && /rc\.fundingPct = fundRate;/.test(gi), 'the ranked row carries freeReads and the funding rate');
   assert(!/c\.freeReads|rc\.freeReads\s*[^=]/.test(gi.replace('rc.freeReads = freeReads;', '')), 'goldind READS freeReads nowhere — the marks gate nothing in the ranker');
